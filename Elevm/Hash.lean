@@ -261,6 +261,12 @@ def Array.app {ξ : Type u} (k : Nat) (f : ξ → ξ) (ws : Array ξ) : Array ξ
 @[inline] def B64.rol (xs : B64) (y : Nat) : B64 :=
   (xs <<< y.toUInt64) ||| (xs >>> (64 - y).toUInt64)
 
+-- The polymorphic permutation below (`θ`/`ρπ`/`χ`/`ι`/`f`, with the
+-- `keccakf_rotc`/`keccakf_piln` tables and `B64.rol`) is the retained
+-- reference transcription of the C original. Production hashing goes
+-- through the specialized `fB64` further down; keep this block as the
+-- readable spec the unrolled indices were generated from (the same
+-- retention convention as `blake2MixTable`).
 def θ {ξ : Type u} [XorOp ξ] [Inhabited ξ]
   (rol : ξ → Nat → ξ) (ws : Array ξ) : Array ξ :=
   let prep (x : Nat) : ξ :=
@@ -338,11 +344,150 @@ def f {ξ : Type u} [XorOp ξ] [Complement ξ] [HAnd ξ ξ ξ] [Inhabited ξ]
       aux n <| ι (23 - n) rdnc <| χ <| ρπ rol <| θ rol ws
   aux 24 ws
 
+@[inline] private def rolc (x : B64) (n : UInt64) : B64 :=
+  (x <<< n) ||| (x >>> (64 - n))
+
+/-- The 5x5 keccak lane state as 25 unboxed scalars (lane (x, y) is
+field `a(x + 5*y)`), so a round never touches the heap. -/
+structure StateB64 where
+  (a0 a1 a2 a3 a4 : B64)
+  (a5 a6 a7 a8 a9 : B64)
+  (a10 a11 a12 a13 a14 : B64)
+  (a15 a16 a17 a18 a19 : B64)
+  (a20 a21 a22 a23 a24 : B64)
+
+private def roundB64 (rc : B64) (s : StateB64) : StateB64 :=
+  let c0 := s.a0 ^^^ s.a5 ^^^ s.a10 ^^^ s.a15 ^^^ s.a20
+  let c1 := s.a1 ^^^ s.a6 ^^^ s.a11 ^^^ s.a16 ^^^ s.a21
+  let c2 := s.a2 ^^^ s.a7 ^^^ s.a12 ^^^ s.a17 ^^^ s.a22
+  let c3 := s.a3 ^^^ s.a8 ^^^ s.a13 ^^^ s.a18 ^^^ s.a23
+  let c4 := s.a4 ^^^ s.a9 ^^^ s.a14 ^^^ s.a19 ^^^ s.a24
+  let d0 := c4 ^^^ rolc c1 1
+  let d1 := c0 ^^^ rolc c2 1
+  let d2 := c1 ^^^ rolc c3 1
+  let d3 := c2 ^^^ rolc c4 1
+  let d4 := c3 ^^^ rolc c0 1
+  let a0 := s.a0 ^^^ d0
+  let a1 := s.a1 ^^^ d1
+  let a2 := s.a2 ^^^ d2
+  let a3 := s.a3 ^^^ d3
+  let a4 := s.a4 ^^^ d4
+  let a5 := s.a5 ^^^ d0
+  let a6 := s.a6 ^^^ d1
+  let a7 := s.a7 ^^^ d2
+  let a8 := s.a8 ^^^ d3
+  let a9 := s.a9 ^^^ d4
+  let a10 := s.a10 ^^^ d0
+  let a11 := s.a11 ^^^ d1
+  let a12 := s.a12 ^^^ d2
+  let a13 := s.a13 ^^^ d3
+  let a14 := s.a14 ^^^ d4
+  let a15 := s.a15 ^^^ d0
+  let a16 := s.a16 ^^^ d1
+  let a17 := s.a17 ^^^ d2
+  let a18 := s.a18 ^^^ d3
+  let a19 := s.a19 ^^^ d4
+  let a20 := s.a20 ^^^ d0
+  let a21 := s.a21 ^^^ d1
+  let a22 := s.a22 ^^^ d2
+  let a23 := s.a23 ^^^ d3
+  let a24 := s.a24 ^^^ d4
+  let b0 := a0
+  let b10 := rolc a1 1
+  let b7 := rolc a10 3
+  let b11 := rolc a7 6
+  let b17 := rolc a11 10
+  let b18 := rolc a17 15
+  let b3 := rolc a18 21
+  let b5 := rolc a3 28
+  let b16 := rolc a5 36
+  let b8 := rolc a16 45
+  let b21 := rolc a8 55
+  let b24 := rolc a21 2
+  let b4 := rolc a24 14
+  let b15 := rolc a4 27
+  let b23 := rolc a15 41
+  let b19 := rolc a23 56
+  let b13 := rolc a19 8
+  let b12 := rolc a13 25
+  let b2 := rolc a12 43
+  let b20 := rolc a2 62
+  let b14 := rolc a20 18
+  let b22 := rolc a14 39
+  let b9 := rolc a22 61
+  let b6 := rolc a9 20
+  let b1 := rolc a6 44
+  let e0 := b0 ^^^ ((~~~ b1) &&& b2)
+  let e1 := b1 ^^^ ((~~~ b2) &&& b3)
+  let e2 := b2 ^^^ ((~~~ b3) &&& b4)
+  let e3 := b3 ^^^ ((~~~ b4) &&& b0)
+  let e4 := b4 ^^^ ((~~~ b0) &&& b1)
+  let e5 := b5 ^^^ ((~~~ b6) &&& b7)
+  let e6 := b6 ^^^ ((~~~ b7) &&& b8)
+  let e7 := b7 ^^^ ((~~~ b8) &&& b9)
+  let e8 := b8 ^^^ ((~~~ b9) &&& b5)
+  let e9 := b9 ^^^ ((~~~ b5) &&& b6)
+  let e10 := b10 ^^^ ((~~~ b11) &&& b12)
+  let e11 := b11 ^^^ ((~~~ b12) &&& b13)
+  let e12 := b12 ^^^ ((~~~ b13) &&& b14)
+  let e13 := b13 ^^^ ((~~~ b14) &&& b10)
+  let e14 := b14 ^^^ ((~~~ b10) &&& b11)
+  let e15 := b15 ^^^ ((~~~ b16) &&& b17)
+  let e16 := b16 ^^^ ((~~~ b17) &&& b18)
+  let e17 := b17 ^^^ ((~~~ b18) &&& b19)
+  let e18 := b18 ^^^ ((~~~ b19) &&& b15)
+  let e19 := b19 ^^^ ((~~~ b15) &&& b16)
+  let e20 := b20 ^^^ ((~~~ b21) &&& b22)
+  let e21 := b21 ^^^ ((~~~ b22) &&& b23)
+  let e22 := b22 ^^^ ((~~~ b23) &&& b24)
+  let e23 := b23 ^^^ ((~~~ b24) &&& b20)
+  let e24 := b24 ^^^ ((~~~ b20) &&& b21)
+  ⟨e0 ^^^ rc, e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e14, e15, e16, e17, e18, e19, e20, e21, e22, e23, e24⟩
+
+/-- keccak-f[1600] monomorphized to `B64`: 24 unrolled rounds over 25
+scalar locals. Semantically identical to `f B64.rdnc · B64.rol` over the
+reference transcription above; round constants are read from `B64.rdnc`
+(literal constants trigger a Lean-4.23 codegen bug: the duplicated constant
+0x8000000080008081 is CSE'd into a shared boxed value and the C emitter then
+issues `lean_inc` on an unboxed uint64, which does not compile). -/
+def fB64 (ws : Array B64) : Array B64 :=
+  let s : StateB64 :=
+    ⟨ws[0]!, ws[1]!, ws[2]!, ws[3]!, ws[4]!,
+     ws[5]!, ws[6]!, ws[7]!, ws[8]!, ws[9]!,
+     ws[10]!, ws[11]!, ws[12]!, ws[13]!, ws[14]!,
+     ws[15]!, ws[16]!, ws[17]!, ws[18]!, ws[19]!,
+     ws[20]!, ws[21]!, ws[22]!, ws[23]!, ws[24]!⟩
+  let s := roundB64 (B64.rdnc[0]!) s
+  let s := roundB64 (B64.rdnc[1]!) s
+  let s := roundB64 (B64.rdnc[2]!) s
+  let s := roundB64 (B64.rdnc[3]!) s
+  let s := roundB64 (B64.rdnc[4]!) s
+  let s := roundB64 (B64.rdnc[5]!) s
+  let s := roundB64 (B64.rdnc[6]!) s
+  let s := roundB64 (B64.rdnc[7]!) s
+  let s := roundB64 (B64.rdnc[8]!) s
+  let s := roundB64 (B64.rdnc[9]!) s
+  let s := roundB64 (B64.rdnc[10]!) s
+  let s := roundB64 (B64.rdnc[11]!) s
+  let s := roundB64 (B64.rdnc[12]!) s
+  let s := roundB64 (B64.rdnc[13]!) s
+  let s := roundB64 (B64.rdnc[14]!) s
+  let s := roundB64 (B64.rdnc[15]!) s
+  let s := roundB64 (B64.rdnc[16]!) s
+  let s := roundB64 (B64.rdnc[17]!) s
+  let s := roundB64 (B64.rdnc[18]!) s
+  let s := roundB64 (B64.rdnc[19]!) s
+  let s := roundB64 (B64.rdnc[20]!) s
+  let s := roundB64 (B64.rdnc[21]!) s
+  let s := roundB64 (B64.rdnc[22]!) s
+  let s := roundB64 (B64.rdnc[23]!) s
+  #[s.a0, s.a1, s.a2, s.a3, s.a4, s.a5, s.a6, s.a7, s.a8, s.a9, s.a10, s.a11, s.a12, s.a13, s.a14, s.a15, s.a16, s.a17, s.a18, s.a19, s.a20, s.a21, s.a22, s.a23, s.a24]
+
 def B8L.run : Fin 17 → B8L → Array B64 → B256
   | wc, b0 :: b1 :: b2 :: b3 :: b4 :: b5 :: b6 :: b7 :: bs, ws =>
     let t : B64 := B8s.toB64 b7 b6 b5 b4 b3 b2 b1 b0
     let ws' := Array.app wc (· ^^^ t) ws
-    B8L.run (wc + 1) bs <| if wc = 16 then (f B64.rdnc ws' B64.rol) else ws'
+    B8L.run (wc + 1) bs <| if wc = 16 then fB64 ws' else ws'
   | wc, bs, ws =>
     let us := (bs ++ [(1 : B8)]).takeD 8 (0 : B8)
     let t : B64 :=
@@ -352,7 +497,7 @@ def B8L.run : Fin 17 → B8L → Array B64 → B256
     let s : B64 := (8 : B64) <<< 60
     let temp0 := Array.app wc (· ^^^ t) ws
     let temp1 := Array.app 16 (· ^^^ s) temp0
-    let ws' := f B64.rdnc temp1 B64.rol
+    let ws' := fB64 temp1
     ⟨ ⟨B64.reverse (ws'[0]!), B64.reverse (ws'[1]!)⟩,
       ⟨B64.reverse (ws'[2]!), B64.reverse (ws'[3]!)⟩ ⟩
 
@@ -369,7 +514,7 @@ def ByteArray.run (bnd n : Nat) (wc : Fin 17) (bs : ByteArray) (ws : Array B64) 
     let t : B64 := B8s.toB64 b7 b6 b5 b4 b3 b2 b1 b0
     let ws' := Array.app wc (UInt64.xor · t) ws
     ByteArray.run bnd (n - 8) (wc + 1) bs <|
-      if wc = 16 then (f B64.rdnc ws' B64.rol) else ws'
+      if wc = 16 then fB64 ws' else ws'
   else
     let rec aux (bnd : Nat) (bs : ByteArray) : Nat → Nat → List B8
       | _, 0 => [] -- unreachable code
@@ -390,7 +535,7 @@ def ByteArray.run (bnd n : Nat) (wc : Fin 17) (bs : ByteArray) (ws : Array B64) 
     let s : B64 := (8 : B64) <<< 60
     let temp0 := Array.app wc (· ^^^ t) ws
     let temp1 := Array.app 16 (· ^^^ s) temp0
-    let ws' := f B64.rdnc temp1 B64.rol
+    let ws' := fB64 temp1
     ⟨ ⟨B64.reverse (ws'[0]!), B64.reverse (ws'[1]!)⟩,
       ⟨B64.reverse (ws'[2]!), B64.reverse (ws'[3]!)⟩ ⟩
 
