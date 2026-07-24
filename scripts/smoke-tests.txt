@@ -18,7 +18,6 @@ GeneralStateTests/VMTests/vmIOandFlowOperations/pc.json
 GeneralStateTests/VMTests/vmIOandFlowOperations/pop.json
 GeneralStateTests/VMTests/vmLogTest/log0.json
 GeneralStateTests/VMTests/vmLogTest/log2.json
-GeneralStateTests/VMTests/vmPerformance/loopMul.json
 GeneralStateTests/VMTests/vmPerformance/performanceTester.json
 GeneralStateTests/VMTests/vmTests/calldataload.json
 GeneralStateTests/VMTests/vmTests/suicide.json
