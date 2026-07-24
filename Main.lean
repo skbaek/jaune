@@ -487,6 +487,11 @@ def processU256Vector : (Nat × Lean.Json) → IO Bool
       | "keccak" => match argsJ with
         | [arg] => pure (some ((← Lean.Json.toIoB8L arg).keccak))
         | _ => pure none
+      | "keccak_ba" => match argsJ with
+        | [arg] => do
+          let bs ← Lean.Json.toIoB8L arg
+          pure (some (ByteArray.keccak 0 bs.length ⟨bs.toArray⟩))
+        | _ => pure none
       | "ofB8L" => match argsJ with
         | [arg] => pure (some (B8L.toB256 (← Lean.Json.toIoB8L arg)))
         | _ => pure none

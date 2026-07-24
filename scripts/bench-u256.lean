@@ -84,3 +84,14 @@ def main : IO Unit := do
   -- the EIP-152 reference vectors.
   bench "sha256" 100000 nonce (fun i x => B8L.sha256 (x + i.toB256).toB8L)
   benchBlake2 "blake2f-12" 100000 nonce 12
+  -- Keccak rows (keccak/bytelayer arc).  Each iteration hashes a fresh
+  -- digest-dependent byte list, so the call cannot be hoisted.  The rows
+  -- deliberately include B8L construction and traversal: that marshalling is
+  -- part of the memory-fed keccak path under measurement.  `keccak64` is the
+  -- storage-slot shape (one permutation); `keccak512` spans four permutations
+  -- and three full-rate blocks.
+  bench "keccak64" 100000 nonce
+    (fun i x => B8L.keccak ((x + i.toB256).toB8L ++ (x - i.toB256).toB8L))
+  bench "keccak512" 20000 nonce
+    (fun i x => B8L.keccak ((List.range 16).flatMap
+      (fun j => (x + (16 * i + j).toB256).toB8L)))

@@ -8,6 +8,7 @@ The formulas below were re-derived from the manifest-pinned Prague EELS sources:
 import argparse
 import json
 import random
+import sys
 from pathlib import Path
 
 import generator_common
@@ -52,7 +53,7 @@ def parse_args():
 
 def main():
     parser, args = parse_args()
-    manifest, _, _ = generator_common.load_generator_source(
+    manifest, _, source_root = generator_common.load_generator_source(
         parser, args.manifest, args.execution_specs
     )
     revision = manifest["execution_specs"]["commit"]
@@ -97,6 +98,27 @@ def main():
                          ("00" * 32, "290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e563"),
                          ("00" * 64, "ad3228b676f7d3cd4284a5443f17f1962b36e491b30a40b2405849e597ba5fb5")]:
         vs.append({"op": "keccak", "args": ["0x" + data], "expected": "0x" + digest})
+    # Boundary coverage for the Lean absorption drivers, which branch on the
+    # 8-byte lane and the 136-byte keccak-256 rate: lane boundaries, the
+    # 135/136/137 rate seam (the 0x01 and 0x80 padding bits share one byte at
+    # length 135 mod 136), multi-block inputs, and fixed-seed random lengths.
+    # Digests come from the manifest-pinned EELS keccak256 running inside the
+    # frozen oracle venv.  Both Lean entry points must agree with it, so each
+    # case is emitted twice: op "keccak" drives B8L.keccak and op "keccak_ba"
+    # drives ByteArray.keccak.
+    generator_common.require_known_packages(parser, manifest)
+    sys.path.insert(0, str(source_root))
+    from ethereum.crypto.hash import keccak256
+    keccak_lengths = [1, 7, 8, 9, 16, 31, 32, 33, 55, 56, 63, 64, 65,
+                      127, 128, 135, 136, 137, 168, 200, 255, 256, 271,
+                      272, 273, 511, 512, 544, 1000, 1088]
+    keccak_lengths += sorted(rng.randrange(0, 4096) for _ in range(10))
+    for n in keccak_lengths:
+        data = bytes(rng.getrandbits(8) for _ in range(n))
+        arg = "0x" + data.hex()
+        digest = "0x" + keccak256(data).hex()
+        vs.append({"op": "keccak", "args": [arg], "expected": digest})
+        vs.append({"op": "keccak_ba", "args": [arg], "expected": digest})
     out = {"header": {"eels_revision": revision, "seed": SEED,
                       "sources": ["arithmetic.py", "comparison.py", "bitwise.py", "keccak.py", "gas.py"]},
            "vectors": vs}
