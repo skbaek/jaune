@@ -258,7 +258,7 @@ def Array.app {ξ : Type u} (k : Nat) (f : ξ → ξ) (ws : Array ξ) : Array ξ
 -- def Bits.rol {n} (xs : Bits n) (y : Nat) : Bits n :=
 --   Bits.or (xs.shl y) (xs.shr (n - y))
 
-def B64.rol (xs : B64) (y : Nat) : B64 :=
+@[inline] def B64.rol (xs : B64) (y : Nat) : B64 :=
   (xs <<< y.toUInt64) ||| (xs >>> (64 - y).toUInt64)
 
 def θ {ξ : Type u} [XorOp ξ] [Inhabited ξ]
