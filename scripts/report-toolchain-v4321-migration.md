@@ -50,9 +50,31 @@ and is immune to regressions of the emitter path. Only its comment changed.
 | `check.sh --smoke` | 174 files match baseline (173 PASS / 1 expected FAIL) | 1 m 33 s |
 | `check.sh --bls` | 29 files match baseline (29 PASS) | 2 m 31 s |
 | Python tooling unit tests | 77/78 — see note | 13 s |
-| legacy `check.sh --full` (~30 min) | **deferred, user-owned** | — |
+| legacy `check.sh --full` | **2,983 files match baseline (2,978 PASS / 5 expected FAIL)** | see note |
 
 No classification changed anywhere. No baseline was rebased.
+
+**Legacy FULL note — timing drift was a measurement artifact, not a regression.**
+FULL was run to completion on this exact commit and its classification matches
+the committed baseline exactly. It reported six informational per-file timing
+DRIFT lines, the worst nominally 622×. Those are spurious. The run consumed
+**1,838 s user CPU against the baseline's 1,794 s summed file time (+2.5%,
+i.e. parity)** but took 3 h 01 m wall at 17% CPU: the host was swap-thrashing
+(8,435 MB of 9,216 MB swap in use), largely because two Lean LSP worker
+processes holding mathlib environments (~900 MB RSS each) were alive for the
+whole run. Re-timed in isolation on the same binary, every flagged file is at or
+better than baseline:
+
+| file | during FULL | isolated | baseline |
+|---|---:|---:|---:|
+| `stStaticCall/StaticcallToPrecompileFromTransaction.json` | 1058.1 s | 1.25 s | 1.70 s |
+| `stStackTests/stackOverflowM1PUSH.json` | 499.4 s | 0.31 s | 3.01 s |
+| `stRandom2/randomStatetest476.json` | 973.5 s | 0.33 s | 4.27 s |
+
+Operational lesson for future long gates on this host: do not run a multi-file
+fixture tier concurrently with live Lean LSP servers, and treat per-file wall
+times from a contended run as unusable. Whole-run user CPU versus the baseline's
+summed file time is the robust cross-check.
 
 **Python note.** `test_u256_explicit_path_with_spaces_is_deterministic` fails.
 It reproduces identically on unmigrated `main` at `f9dda7d` (verified in a
