@@ -18,6 +18,8 @@ from unittest.mock import patch
 SCRIPTS_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS_DIR))
 
+import env_doctor
+
 
 def load_module(name: str, path: Path):
     spec = importlib.util.spec_from_file_location(name, path)
@@ -46,15 +48,11 @@ def make_checkout(path: Path) -> str:
     git(path, "config", "user.email", "test@example.com")
     git(path, "config", "user.name", "Test")
     git(path, "config", "commit.gpgsign", "false")
-    for relative in (
-        "src/ethereum/crypto/kzg.py",
-        "src/ethereum/prague/vm/instructions/arithmetic.py",
-        "src/ethereum/prague/vm/instructions/comparison.py",
-        "src/ethereum/prague/vm/instructions/bitwise.py",
-        "src/ethereum/prague/vm/instructions/keccak.py",
-        "src/ethereum/prague/vm/gas.py",
-    ):
-        target = path / relative
+    # bootstrap_oracle only checks that these exist, so inert files suffice
+    # here; the layout itself comes from env_doctor so it cannot drift from
+    # what the generators require.
+    for relative in env_doctor.GENERATOR_SOURCE_LAYOUT:
+        target = path / "src" / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("# synthetic source\n")
     git(path, "add", ".")

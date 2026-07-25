@@ -16,6 +16,27 @@ from unittest.mock import patch
 SCRIPTS_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS_DIR))
 
+import env_doctor
+
+# Most files in the synthetic checkout only have to exist, so an inert comment
+# is an honest stand-in.  ethereum/crypto/hash.py is different: the generator
+# imports keccak256 from it and hashes real byte strings, so this one has to
+# compute genuine Keccak-256 or the generator cannot run.  It wraps pycryptodome
+# exactly as the pinned EELS module does instead of reimplementing the
+# permutation, so the fixture cannot become a second, independent opinion about
+# what Keccak-256 is.  The digests it produces are never shipped: the checked-in
+# vectors come from the real pinned checkout.
+SYNTHETIC_STUB = "# synthetic pinned source\n"
+SYNTHETIC_HASH_MODULE = '''\
+"""Synthetic stand-in for the pinned EELS ethereum.crypto.hash module."""
+from Crypto.Hash import keccak
+from ethereum_types.bytes import Bytes, Bytes32
+
+
+def keccak256(buffer: Bytes | bytearray) -> Bytes32:
+    return Bytes32(keccak.new(digest_bits=256).update(buffer).digest())
+'''
+
 
 def load_module(name: str, path: Path):
     spec = importlib.util.spec_from_file_location(name, path)
@@ -43,17 +64,14 @@ def make_checkout(path: Path) -> str:
     git(path, "config", "user.email", "test@example.com")
     git(path, "config", "user.name", "Test")
     git(path, "config", "commit.gpgsign", "false")
-    for relative in (
-        "src/ethereum/crypto/kzg.py",
-        "src/ethereum/prague/vm/instructions/arithmetic.py",
-        "src/ethereum/prague/vm/instructions/comparison.py",
-        "src/ethereum/prague/vm/instructions/bitwise.py",
-        "src/ethereum/prague/vm/instructions/keccak.py",
-        "src/ethereum/prague/vm/gas.py",
-    ):
-        target = path / relative
+    for relative in env_doctor.GENERATOR_SOURCE_LAYOUT:
+        target = path / "src" / relative
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text("# synthetic pinned source\n")
+        target.write_text(
+            SYNTHETIC_HASH_MODULE
+            if relative == "ethereum/crypto/hash.py"
+            else SYNTHETIC_STUB
+        )
     git(path, "add", ".")
     git(path, "commit", "-q", "-m", "pinned")
     return git(path, "rev-parse", "HEAD")
@@ -184,6 +202,62 @@ class GeneratorTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("revision mismatch", result.stderr)
             self.assertFalse((root / "must-not-exist.json").exists())
+
+    def test_checkout_missing_a_generator_source_is_clear_failure(self):
+        # The generator imports ethereum.crypto.hash at run time, well after the
+        # checkout is validated.  It has to be part of the declared layout, or a
+        # checkout missing it is reported as an opaque ModuleNotFoundError from
+        # the middle of generation rather than as a checkout problem.
+        self.assertIn("ethereum/crypto/hash.py", env_doctor.GENERATOR_SOURCE_LAYOUT)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            checkout = root / "checkout"
+            commit = make_checkout(checkout)
+            manifest_path = root / "sources.json"
+            make_manifest(manifest_path, commit)
+            (checkout / "src" / "ethereum" / "crypto" / "hash.py").unlink()
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS_DIR / "gen-u256-vectors.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--execution-specs",
+                    str(checkout),
+                    "--output",
+                    str(root / "must-not-exist.json"),
+                ],
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("expected Prague generator sources", result.stderr)
+            self.assertIn("ethereum/crypto/hash.py", result.stderr)
+            self.assertNotIn("ModuleNotFoundError", result.stderr)
+            self.assertFalse((root / "must-not-exist.json").exists())
+
+    def test_synthetic_checkout_keccak_matches_the_pinned_formula(self):
+        # The synthetic ethereum.crypto.hash has to agree with the pinned EELS
+        # module, not merely satisfy the import: these are the standard
+        # Keccak-256 digests (not SHA3-256) the generator also hardcodes.
+        with tempfile.TemporaryDirectory() as tmp:
+            checkout = Path(tmp) / "checkout"
+            make_checkout(checkout)
+            try:
+                keccak256 = load_module(
+                    "synthetic_eels_hash",
+                    checkout / "src" / "ethereum" / "crypto" / "hash.py",
+                ).keccak256
+            finally:
+                sys.modules.pop("synthetic_eels_hash", None)
+        self.assertEqual(
+            keccak256(b"").hex(),
+            "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+        )
+        self.assertEqual(
+            keccak256(bytes(32)).hex(),
+            "290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e563",
+        )
 
     def test_bls_package_checks_report_missing_and_wrong_versions(self):
         manifest = {

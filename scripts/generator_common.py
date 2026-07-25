@@ -48,15 +48,11 @@ def load_generator_source(
     execution_specs = Path(os.path.abspath(os.fspath(selected)))
     source_root = execution_specs / "src"
 
-    required_layout = (
-        "ethereum/crypto/kzg.py",
-        "ethereum/prague/vm/instructions/arithmetic.py",
-        "ethereum/prague/vm/instructions/comparison.py",
-        "ethereum/prague/vm/instructions/bitwise.py",
-        "ethereum/prague/vm/instructions/keccak.py",
-        "ethereum/prague/vm/gas.py",
-    )
-    missing = [relative for relative in required_layout if not (source_root / relative).is_file()]
+    missing = [
+        relative
+        for relative in env_doctor.GENERATOR_SOURCE_LAYOUT
+        if not (source_root / relative).is_file()
+    ]
     if missing:
         parser.error(
             f"{execution_specs} is not an execution-specs checkout with the "

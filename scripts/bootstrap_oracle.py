@@ -75,16 +75,10 @@ def validate_inputs(manifest: dict, manifest_path: Path, execution_specs: Path) 
         for check in env_doctor.check_execution_specs(manifest, execution_specs)
         if check.status != env_doctor.STATUS_OK
     ]
-    required_layout = (
-        "src/ethereum/crypto/kzg.py",
-        "src/ethereum/prague/vm/instructions/arithmetic.py",
-        "src/ethereum/prague/vm/instructions/comparison.py",
-        "src/ethereum/prague/vm/instructions/bitwise.py",
-        "src/ethereum/prague/vm/instructions/keccak.py",
-        "src/ethereum/prague/vm/gas.py",
-    )
     missing_layout = [
-        relative for relative in required_layout if not (execution_specs / relative).is_file()
+        f"src/{relative}"
+        for relative in env_doctor.GENERATOR_SOURCE_LAYOUT
+        if not (execution_specs / "src" / relative).is_file()
     ]
     if missing_layout:
         checkout_problems.append(
