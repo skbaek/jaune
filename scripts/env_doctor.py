@@ -45,6 +45,21 @@ STATUS_OK = "ok"
 STATUS_MISSING = "missing"
 STATUS_FAIL = "fail"
 
+# Paths under the execution-specs ``src/`` tree that ELEVM's generators read or
+# import.  bootstrap_oracle.py and generator_common.py both refuse a checkout
+# missing any of them, and the synthetic checkouts in scripts/tests are built
+# from this same tuple, so a new generator dependency is recorded in one place
+# instead of drifting between the checks and the fixtures.
+GENERATOR_SOURCE_LAYOUT = (
+    "ethereum/crypto/hash.py",
+    "ethereum/crypto/kzg.py",
+    "ethereum/prague/vm/instructions/arithmetic.py",
+    "ethereum/prague/vm/instructions/comparison.py",
+    "ethereum/prague/vm/instructions/bitwise.py",
+    "ethereum/prague/vm/instructions/keccak.py",
+    "ethereum/prague/vm/gas.py",
+)
+
 
 @dataclass
 class Check:
