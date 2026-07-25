@@ -740,7 +740,8 @@ def initCodeCost (len : Nat) : Nat :=
   gasInitCodeWordCost * (ceilDiv len 32)
 
 instance {a b : Adr} : Decidable (a = b) := by
-  rw [Prod.ext_iff]; apply instDecidableAnd
+  rw [show (a = b) ↔ (a.1 = b.1 ∧ a.2 = b.2) from Prod.ext_iff]
+  apply instDecidableAnd
 
 instance : Hashable Adr := ⟨fun x => x.2.2⟩
 -- The storage-slot hash must depend on the key, not only the address: mix the
@@ -1871,7 +1872,10 @@ lemma Std.TreeMap.eq_empty_iff_isEmpty {α : Type u} {β : Type v}
   refine' ⟨_, eq_empty_of_isEmpty⟩; intro h; cases h; rfl
 
 instance {stor : Stor} : Decidable (stor = .empty) := by
-  simp only [Stor.empty]; rw [Std.TreeMap.eq_empty_iff_isEmpty]; infer_instance
+  simp only [Stor.empty]
+  rw [show (stor = Std.TreeMap.empty) ↔ (stor.isEmpty = true) from
+        Std.TreeMap.eq_empty_iff_isEmpty]
+  infer_instance
 
 instance {ac : Acct} : Decidable (ac = .nil) := by
   rw [Acct.ext_iff, Acct.nil]; apply instDecidableAnd

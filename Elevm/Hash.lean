@@ -447,9 +447,16 @@ private def roundB64 (rc : B64) (s : StateB64) : StateB64 :=
 /-- keccak-f[1600] monomorphized to `B64`: 24 unrolled rounds over 25
 scalar locals. Semantically identical to `f B64.rdnc · B64.rol` over the
 reference transcription above; round constants are read from `B64.rdnc`
-(literal constants trigger a Lean-4.23 codegen bug: the duplicated constant
-0x8000000080008081 is CSE'd into a shared boxed value and the C emitter then
-issues `lean_inc` on an unboxed uint64, which does not compile). -/
+rather than written as literals.
+
+That read began as a workaround for a Lean-4.23 codegen bug (the duplicated
+constant 0x8000000080008081 was CSE'd into a shared boxed value and the C
+emitter then issued `lean_inc` on an unboxed uint64, which did not compile).
+The bug is fixed as of the v4.32.1 toolchain: `scripts/repro-lean423-uint64-cse.lean`
+now passes both of its documented compile steps and runs. The `B64.rdnc` read is
+retained deliberately — it costs nothing measurable (the permutation is a few
+percent of busy time with it) and is immune to regressions of the emitter path.
+Do not rewrite the rounds back to literal constants. -/
 def fB64 (ws : Array B64) : Array B64 :=
   let s : StateB64 :=
     ⟨ws[0]!, ws[1]!, ws[2]!, ws[3]!, ws[4]!,

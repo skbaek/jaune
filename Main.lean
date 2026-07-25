@@ -516,7 +516,8 @@ def main : List String → IO Unit
     if !(← runU256VectorFile pathStr) then IO.Process.exit 1
   | "--vectors" :: addrStr :: pathStr :: [] => do
     let addrStr2 := remove0x addrStr
-    let paddedAddrStr := String.mk (List.replicate (40 - addrStr2.length) '0') ++ addrStr2
+    let paddedAddrStr :=
+      String.ofList (List.replicate (40 - addrStr2.length) '0') ++ addrStr2
     let addr ← (Hex.toAdr? paddedAddrStr).toIO "invalid address"
     if !(← runVectorFile addr pathStr) then
       IO.Process.exit 1

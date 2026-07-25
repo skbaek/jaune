@@ -13,11 +13,15 @@ Not a Lake target and not imported by anything; compile manually:
 
 Expected on v4.23.0: clang error at the `lean_inc(...)` line
 (`incompatible integer to pointer conversion ... 'uint64_t' ... 'lean_object *'`).
-Expected on a fixed toolchain: both commands succeed. Likely fixed by the
-uint64 IR-typing rework in Lean 4.29.0 (leanprover/lean4#12465) — unverified;
-this file is the toolchain-migration canary for exactly that question (see
-`~/plans/toolchain-migration-notes.md`). `-Dcompiler.extract_closed=false`
+Expected on a fixed toolchain: both commands succeed. `-Dcompiler.extract_closed=false`
 does NOT avoid the bug on v4.23.0.
+
+Resolved during the v4.32.1 migration: on v4.23.0 both the failure above and its
+exact `lean_inc` line reproduce; on v4.32.1 both commands succeed, the program
+links and runs, and the generated C contains no `lean_inc` on an unboxed
+`uint64_t`. Retained as a regression canary for future toolchain bumps. The
+`B64.rdnc` read in `Elevm/Hash.lean`'s `fB64` is kept regardless — see the
+doc comment there.
 
 The shape mirrors `fB64`/`roundB64`: a non-inline function taking a `UInt64`
 round constant and returning a scalar-field structure, called with a

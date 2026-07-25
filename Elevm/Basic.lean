@@ -4,8 +4,12 @@
 import Mathlib.Data.Nat.Basic
 import Mathlib.Data.List.Lemmas
 import Mathlib.Data.List.TakeDrop
+-- `List.length_dropWhile_le` (used in `EC.lean`) reached us transitively from
+-- another `Mathlib.Data.List` module before mathlib v4.32.1; import it directly.
+import Mathlib.Data.List.TakeWhile
 import Mathlib.Data.UInt
 import Mathlib.Tactic.NormNum
+import Std.Tactic.BVDecide
 -- import Mathlib.Util.Notation3
 -- import Mathlib.Data.Vector.Basic
 
@@ -20,7 +24,7 @@ abbrev B8L : Type := List B8
 abbrev B8A : Type := Array B8
 
 instance : LinearOrder B8 where
-  lt_iff_le_not_ge a b := Nat.lt_iff_le_not_le
+  lt_iff_le_not_ge a b := Nat.lt_iff_le_and_not_ge
   le_refl a := Nat.le_refl _
   le_trans a b c h1 h2 := Nat.le_trans h1 h2
   le_antisymm a b h1 h2 := by
@@ -30,7 +34,7 @@ instance : LinearOrder B8 where
   toDecidableLE := λ a b => Nat.decLe _ _
 
 instance : LinearOrder B16 where
-  lt_iff_le_not_ge a b := Nat.lt_iff_le_not_le
+  lt_iff_le_not_ge a b := Nat.lt_iff_le_and_not_ge
   le_refl a := Nat.le_refl _
   le_trans a b c h1 h2 := Nat.le_trans h1 h2
   le_antisymm a b h1 h2 := by
@@ -40,7 +44,7 @@ instance : LinearOrder B16 where
   toDecidableLE := λ a b => Nat.decLe _ _
 
 instance : LinearOrder B32 where
-  lt_iff_le_not_ge a b := Nat.lt_iff_le_not_le
+  lt_iff_le_not_ge a b := Nat.lt_iff_le_and_not_ge
   le_refl a := Nat.le_refl _
   le_trans a b c h1 h2 := Nat.le_trans h1 h2
   le_antisymm a b h1 h2 := by
@@ -50,7 +54,7 @@ instance : LinearOrder B32 where
   toDecidableLE := λ a b => Nat.decLe _ _
 
 instance : LinearOrder B64 where
-  lt_iff_le_not_ge a b := Nat.lt_iff_le_not_le
+  lt_iff_le_not_ge a b := Nat.lt_iff_le_and_not_ge
   le_refl a := Nat.le_refl _
   le_trans a b c h1 h2 := Nat.le_trans h1 h2
   le_antisymm a b h1 h2 := by
@@ -95,10 +99,12 @@ def B128.max : B128 := ⟨.max, .max⟩
 def B256.max : B256 := ⟨.max, .max⟩
 
 instance {x y : B128} : Decidable (x = y) := by
-  rw [@Prod.ext_iff B64 B64 x y]; apply instDecidableAnd
+  rw [show (x = y) ↔ (x.1 = y.1 ∧ x.2 = y.2) from Prod.ext_iff]
+  apply instDecidableAnd
 
 instance {x y : B256} : Decidable (x = y) := by
-  rw [@Prod.ext_iff B128 B128 x y]; apply instDecidableAnd
+  rw [show (x = y) ↔ (x.1 = y.1 ∧ x.2 = y.2) from Prod.ext_iff]
+  apply instDecidableAnd
 
 def B128.LT (x y : B128) : Prop :=
   x.1 < y.1 ∨ (x.1 = y.1 ∧ x.2 < y.2)
@@ -148,7 +154,7 @@ def B8.highs (x : B8) : B8 := (x >>> 4)
 def B8.lows (x : B8) : B8 := (x &&& 0x0F)
 
 def B8.toHex (x : B8) : String :=
-  ⟨[x.highs.toHexit, x.lows.toHexit]⟩
+  String.ofList [x.highs.toHexit, x.lows.toHexit]
 
 def B8L.toHex (bs : B8L) : String :=
   List.foldr (λ b s => B8.toHex b ++ s) "" bs
@@ -555,7 +561,7 @@ def B4L.toB8L.go : B8L → B8L → Option B8L
 def B4L.toB8L (xs : B8L) : Option B8L := B4L.toB8L.go [] xs
 
 def Hex.toB8L (s : String) : Option B8L :=
-  s.data.mapM Hexit.toB4 >>= B4L.toB8L
+  s.toList.mapM Hexit.toB4 >>= B4L.toB8L
 
 def Option.toIO {ξ} (o : Option ξ)
   (msg : String := "error : option-to-IO lift failed, input is 'none'") :
@@ -645,21 +651,24 @@ def List.toStrings {ξ} (f : ξ -> List String) (xs : List ξ) : List String :=
 
 def B4L.toHex : B8L → String
   | [] => ""
-  | [b] => ⟨[b.toHexit]⟩
-  | b :: bs => ⟨[b.toHexit] ++ (toHex bs).data⟩
+  | [b] => String.ofList [b.toHexit]
+  | b :: bs => String.ofList ([b.toHexit] ++ (toHex bs).toList)
 def IO.throw {ξ} (s : String) : IO ξ := MonadExcept.throw <| IO.Error.userError s
 
-def IO.remove0x : String → IO String
-  | ⟨'0' :: 'x' :: s⟩ => return ⟨s⟩
+def IO.remove0x (s : String) : IO String :=
+  match s.toList with
+  | '0' :: 'x' :: cs => return String.ofList cs
   | _ => IO.throw "prefix not 0x"
 
-def Option.remove0x : String → Option String
-  | ⟨'0' :: 'x' :: s⟩ => return ⟨s⟩
+def Option.remove0x (s : String) : Option String :=
+  match s.toList with
+  | '0' :: 'x' :: cs => return String.ofList cs
   | _ => .none
 
-def remove0x : String → String
-  | ⟨'0' :: 'x' :: s⟩ => ⟨s⟩
-  | s => s
+def remove0x (s : String) : String :=
+  match s.toList with
+  | '0' :: 'x' :: cs => String.ofList cs
+  | _ => s
 
 def B8s.toB16 (a b : B8) : B16 :=
   let high : B16 := a.toB16
@@ -833,7 +842,6 @@ lemma Nat.mod_two_pow_add_div_two_pow {k m n : ℕ} :
     (k % 2 ^ (m + n)) / (2 ^ n) = k / 2 ^ n % 2 ^ m := by
   have eq := @Nat.mod_two_pow_add k m n
   apply Eq.trans <| congr_arg (· / 2 ^ n) eq
-  simp only []
   rw [
     Nat.add_div_of_dvd_of_lt (Nat.dvd_mul_left _ _),
 
@@ -1455,7 +1463,7 @@ def Array.writeD {ξ : Type u} (xs : Array ξ) (n : ℕ) : List ξ → Array ξ
   | [] => xs
   | y :: ys =>
     if h : n < xs.size
-    then let xs' := xs.setN n y
+    then let xs' := xs.set n y h
          writeD xs' (n + 1) ys
     else xs
 
@@ -1633,7 +1641,7 @@ def List.chunks {ξ} (m : Nat) : List ξ → List (List ξ) := List.chunksCore m
 
 def String.chunks : Nat → String → List String
   | 0, _ => []
-  | m + 1, s => (List.chunks m s.data).map String.mk
+  | m + 1, s => (List.chunks m s.toList).map String.ofList
 
 mutual
 
@@ -1745,7 +1753,7 @@ def Nat.toHex (n : Nat) : String :=
       if n < 16
       then [n.toHexit]
       else (n % 16).toHexit :: aux (n / 16)
-  ⟨.reverse <| aux n⟩
+  String.ofList <| .reverse <| aux n
 
 def List.maxD {ξ} [Max ξ] : List ξ → ξ → ξ
   | [], y => y

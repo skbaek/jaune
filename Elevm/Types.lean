@@ -105,7 +105,7 @@ lemma B256.toNat_lt (x : B256) : x.toNat < 2 ^ 256 := by
 lemma B64.zero_or {x : B64} : (0 ||| x) = x := UInt64.zero_or
 
 lemma B128.zero_or {x : B128} : (0 ||| x) = x := by
-  rw [B128.or_eq]; apply Prod.ext <;> {simp}
+  rw [B128.or_eq]; apply Prod.ext <;> exact B64.zero_or
 
 lemma Nat.add_div_of_dvd {a b c : Nat} (c_pos : 0 < c) (c_dvd : c ∣ a)  :
     (a + b) / c = a / c + b / c := by
@@ -223,16 +223,17 @@ lemma B128.sub_eq (x y : B128) :
 lemma B256.sub_eq (x y : B256) :
   x - y = ⟨(x.1 - y.1) - (if x.2 < y.2 then 1 else 0), x.2 - y.2⟩ := rfl
 
-def B128.add_eq (x y : B128) :
+lemma B128.add_eq (x y : B128) :
   x + y = ⟨x.1 + y.1 + if x.2 + y.2 < x.2 then 1 else 0, x.2 + y.2⟩ := rfl
 
-def B256.add_eq (x y : B256) :
+lemma B256.add_eq (x y : B256) :
   x + y = ⟨x.1 + y.1 + if x.2 + y.2 < x.2 then 1 else 0, x.2 + y.2⟩ := rfl
 
 lemma B128.zero_add (n : B128) : 0 + n = n := by
   rw [B128.add_eq];
   simp only [
-    Prod.fst_zero, _root_.zero_add, Prod.snd_zero,
+    show ((0 : B128).1) = 0 from rfl, _root_.zero_add,
+    show ((0 : B128).2) = 0 from rfl,
     UInt64.not_lt_zero, ↓reduceIte, add_zero, Prod.mk.eta
   ]
 
@@ -757,7 +758,8 @@ instance : DecidableLE B128 :=
   fun a b => by rw [B128.le_iff]; infer_instance
 
 instance : DecidableEq B128 :=
-  fun a b => by rw [Prod.ext_iff]; infer_instance
+  fun a b => by
+    rw [show (a = b) ↔ (a.1 = b.1 ∧ a.2 = b.2) from Prod.ext_iff]; infer_instance
 
 instance : DecidableLT B256 :=
   fun a b => by rw [B256.lt_iff]; infer_instance
@@ -766,7 +768,8 @@ instance : DecidableLE B256 :=
   fun a b => by rw [B256.le_iff]; infer_instance
 
 instance : DecidableEq B256 :=
-  fun a b => by rw [Prod.ext_iff]; infer_instance
+  fun a b => by
+    rw [show (a = b) ↔ (a.1 = b.1 ∧ a.2 = b.2) from Prod.ext_iff]; infer_instance
 
 instance : Ord B128 where
   compare a b := compareOfLessAndEq a b
@@ -781,6 +784,12 @@ instance : LinearOrder B128 where
 instance : LinearOrder B256 where
   le_total := B256.le_total
   toDecidableLE := instDecidableLEB256
+  -- `Min B256` resolves to the pre-existing `B256.min` instance from
+  -- `Basic.lean` (used by execution's fee/gas clamping), not this class's
+  -- default `min` field. `B256.min a b` is literally `if a ≤ b then a else b`,
+  -- but unfolding it needs default transparency, which the `min_def` auto-param
+  -- tactic does not use — so discharge the field explicitly.
+  min_def a b := rfl
 
 def Adr.LE (x y : Adr) : Prop :=
   x.1 < y.1 ∨ (x.1 = y.1 ∧ x.2 ≤ y.2)
@@ -854,7 +863,8 @@ instance : DecidableLE Adr :=
   fun a b => by rw [Adr.le_iff]; infer_instance
 
 instance : DecidableEq Adr :=
-  fun a b => by rw [Prod.ext_iff]; infer_instance
+  fun a b => by
+    rw [show (a = b) ↔ (a.1 = b.1 ∧ a.2 = b.2) from Prod.ext_iff]; infer_instance
 
 instance : Ord Adr where
   compare a b := compareOfLessAndEq a b
@@ -996,7 +1006,7 @@ def Adr.toHex (a : Adr) : String := a.1.toHex ++ a.2.toHex
 instance : ToString Adr := ⟨Adr.toHex⟩
 
 def String.dropZeroes (s : String) : String :=
-  match ⟨s.data.dropWhile (· == '0')⟩ with
+  match String.ofList (s.toList.dropWhile (· == '0')) with
   | "" => "0"
   | s => s
 
