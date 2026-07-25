@@ -86,6 +86,24 @@ scope here. Also note this suite must be run with the frozen oracle interpreter
 (`~/execution-specs/venv/bin/python`, 3.11.9) — bare system `python3` masks the
 real error with a "py-ecc is not installed" message.
 
+**Post-Step 1 tooling follow-up — resolved.** The independently reviewed fix at
+`b0f5f0bbad9a6a9935cfab5ee277dd1442f95e87` single-sources the generator
+checkout layout, includes the required `src/ethereum/crypto/hash.py` module in
+the synthetic oracle fixture, and makes missing declared sources fail during
+the up-front layout check. The named recovery branch
+`claude/objective-jackson-213da2` was pushed before merge. It was merged into
+`codex/migration` by `f3679ea03858645edd0269c61ffb60fb834d41be` without
+conflicts. On that merge candidate:
+
+- `/Users/agent/execution-specs/venv/bin/python -m unittest discover -s scripts/tests`:
+  **80/80 PASS** in 14.366 s (14.44 s wall);
+- `scripts/check-hygiene.sh`: **PASS**, all 2 allowlisted occurrences and no new
+  `dbg_trace`/`sorry` under `Elevm/` (0.03 s wall).
+
+This follow-up changes Python tooling and tests only. It does not change Lean
+source, the Step 1 binary, fixture classifications, protocol behavior, or
+Blanc's immutable ELeVM pin.
+
 ## Performance: fixture level (the authoritative basis)
 
 Summed per-file report seconds, `check.sh` instruments unchanged.
