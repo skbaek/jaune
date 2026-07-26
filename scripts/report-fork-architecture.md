@@ -1,9 +1,13 @@
-# Step 2 architecture note — the multi-fork API
+# Architecture note — the multi-fork API
 
-Date: 2026-07-26 (Asia/Seoul). Plan: `~/plans/migration.md`, Step 2.
+Date: 2026-07-26 (Asia/Seoul), amended 2026-07-27 for Step 4.
+Plan: `~/plans/migration.md`, Step 2.
 
 This note fixes the public fork API. Per the plan, a material redesign of
 anything named here is a human-attention stop condition from this point on.
+Later steps amend it only by filling in rule data the Step-2 shape already
+anticipated; the entry points and the way rules reach the interpreter are
+unchanged.
 
 ## The three separated ideas
 
@@ -33,13 +37,15 @@ failing lookup; `none` reports `UnsupportedForkError` rather than answering with
 another fork's rules, because running Osaka blocks under Prague semantics would
 turn a missing implementation into a silent consensus fault.
 
-Today only `prague` resolves. `osaka`, `bpo1`, and `bpo2` are declared
-identities without rules.
+`prague` and `osaka` resolve; `bpo1` and `bpo2` are declared identities without
+rules. Osaka resolving does not mean Osaka is complete — see "Osaka's state"
+below.
 
 ## What `ForkRules` carries
 
 ```
 ForkRules := { fork : Fork, blob : BlobSchedule, code : CodeLimits,
+               modexp : ModexpRules, op : OpcodeRules,
                precompiles : List Adr }
 ```
 
@@ -49,18 +55,41 @@ ForkRules := { fork : Fork, blob : BlobSchedule, code : CodeLimits,
   change to these three numbers, which is why they are data and not code.
 - `code : CodeLimits` — `maxCodeSize`, `maxInitCodeSize` (EIP-170, EIP-3860).
   Formerly globals of the same names.
+- `modexp : ModexpRules` (added in Step 4) — `maxLength`, `flatComplexity`,
+  `complexityCoeff`, `iterationCoeff`, `gasDivisor`, `minGas`. Every number the
+  `MODEXP` pricing reads, so EIP-7823's input bound and EIP-7883's repricing are
+  a second record rather than a branch inside the precompile.
+- `op : OpcodeRules` (added in Step 4) — currently just `clz`. An opcode this
+  record switches off has an undefined byte at that fork, so reaching it is an
+  invalid instruction. Decoding stays fork-independent; the check is in
+  `Rinst.runCore`, before the operand pop, so instruction positions and every
+  downstream statement about them do not depend on which rules are running.
 - `precompiles : List Adr` — the activation set, written out against the
   specification's address table. Formerly the hard-wired range in
   `Adr.isPrecomp`, which stated a Prague fact at a use site. Precompile sets are
   not contiguous in general (Osaka's P256VERIFY sits at 0x100), so the rule is
   carried as the set itself. `ForkRules.isPrecomp` is the membership predicate.
+  Step 4 also made EIP-2929's pre-warmed access list in `prepareMessage` read
+  this field, which was the last surviving literal copy of the Prague set.
 - `fork` — provenance for reports and error messages, not a dispatch key.
 
-Categories deliberately **not** added yet, because no implemented rule varies
-along them and a placeholder field would be Osaka behaviour smuggled into Step
-2: MODEXP bounds and gas schedule (Step 4), CLZ opcode availability (Step 4),
-P256VERIFY activation (Step 4, an entry appended to `precompiles`), transaction
-gas cap (Step 5), and block RLP size limit (Step 5).
+Categories still **not** added, because no implemented rule varies along them:
+transaction gas cap (Step 5), blob base-fee reserve price (Step 5), block RLP
+size limit (Step 5), and per-transaction blob count limit (Step 5; see the
+step-4 report — it is in the EELS Prague-to-Osaka diff but not in the plan's
+anticipated Step-5 checklist).
+
+## Osaka's state
+
+`Fork.osaka.rules?` resolves from Step 4 onward, and its rule data is Prague's
+except for the three VM-level changes that step implemented: the `MODEXP`
+schedule and bound, `CLZ`, and `P256VERIFY`. The rest of Osaka's
+execution-layer delta is still Prague-valued until Step 5 lands it.
+
+That intermediate state is deliberate and is why `check-mainnet.sh` still
+refuses `--suite osaka` as a whole: the only Osaka fixtures run as gates are the
+per-EIP subtrees reached through `--suite osaka --dir`, and each of those is
+all-PASS. Nothing reports Osaka as conformant before it is.
 
 ## How rules reach the interpreter
 

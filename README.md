@@ -33,9 +33,17 @@ requirements.
 - **Tested fork:** Prague. ELEVM's frozen legacy corpus remains a regression
   instrument. The canonical current-mainnet lane is the separately installed
   `execution-specs` `tests@v20.0.1` release; its strict generated manifests
-  currently activate Prague (`scripts/check-mainnet.sh --suite prague` or the
-  deterministic `--suite smoke`) and inventory later forks/transitions without
-  executing them.
+  activate Prague as a whole suite (`scripts/check-mainnet.sh --suite prague`,
+  or the deterministic `--suite smoke`) and inventory later forks and
+  transitions.
+- **Osaka is in progress and not claimed as supported.** Its VM-level delta is
+  implemented — EIP-7823 and EIP-7883 (`MODEXP` input bounds and repricing),
+  EIP-7939 (`CLZ`), and EIP-7951 (`P256VERIFY`) — and each of those EIPs' own
+  fixture subtrees passes in full under
+  `scripts/check-mainnet.sh --suite osaka --dir <subtree>`. The transaction,
+  blob-fee, and block-validation delta is not implemented, so `--suite osaka`
+  as a whole is deliberately refused rather than run and reported. BPO1 and
+  BPO2 remain identities without rules.
 - **Reference:** mirrors [execution-specs](https://github.com/ethereum/execution-specs)
   `mainnet` at commit
   [`4198…7694`](https://github.com/ethereum/execution-specs/tree/4198b9c5996713b268aed602739d5aa40e277694)
