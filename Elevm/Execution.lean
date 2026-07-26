@@ -4449,13 +4449,33 @@ def Block.toStrings (block : Block) : List String :=
 
 instance : ToString Block := ⟨String.joinln ∘ Block.toStrings⟩
 
-/-- The child's excess blob gas. The set point is read from the *child's* blob
-schedule, which is what makes a BPO transition take effect on the first block
-of the new schedule rather than one block late. -/
+/-- The child's excess blob gas.
+
+Every parameter is read from the *child's* blob schedule, which is what makes a
+BPO transition take effect on the first block of the new schedule rather than
+one block late. Osaka's EIP-7918 branch also reads both fees from the parent
+header: the blob fee at the parent's excess and the execution base fee the
+parent actually carried. -/
 def calculateExcessBlobGas (blob : BlobSchedule) (parentHeader : Header) : Nat :=
   let parentBlobGas : Nat :=
     parentHeader.excessBlobGas + parentHeader.blobGasUsed
-  parentBlobGas - blob.target
+  if parentBlobGas < blob.target then
+    0
+  else
+    match blob.reserveBaseCost with
+    | none =>
+      parentBlobGas - blob.target
+    | some reserveBaseCost =>
+      let targetBlobGasPrice :=
+        gasPerBlob *
+          calculate_blob_gas_price blob parentHeader.excessBlobGas
+      let baseBlobTxPrice :=
+        reserveBaseCost * parentHeader.baseFeePerGas
+      if baseBlobTxPrice > targetBlobGasPrice then
+        parentHeader.excessBlobGas +
+          parentHeader.blobGasUsed * (blob.max - blob.target) / blob.max
+      else
+        parentBlobGas - blob.target
 
 /-- The absolute upper bound on a block gas limit. A gas limit is a 63-bit
 quantity: `2 ^ 63` and above is out of range no matter what the parent's limit
@@ -6534,6 +6554,28 @@ private def guardBlockAt (timestamp : Nat) : Block :=
     ommers := []
     wds := []
   }
+
+-- EIP-7918 uses a strict price comparison. At the 16-wei equality boundary
+-- the ordinary target subtraction still applies; one wei above it activates
+-- the reserve branch. Prague has no reserve branch at the same inputs.
+private def guardBlobParent (baseFee blobGasUsed : Nat) : Header :=
+  { guardTestHeader with
+    baseFeePerGas := baseFee
+    blobGasUsed := blobGasUsed
+    excessBlobGas := 0 }
+
+#guard calculateExcessBlobGas osakaBlobSchedule
+  (guardBlobParent 16 osakaBlobSchedule.target) = 0
+#guard calculateExcessBlobGas osakaBlobSchedule
+  (guardBlobParent 17 osakaBlobSchedule.target) = 262144
+#guard calculateExcessBlobGas pragueBlobSchedule
+  (guardBlobParent 17 pragueBlobSchedule.target) = 0
+-- The early below-target return wins even in the reserve-price regime.
+#guard calculateExcessBlobGas osakaBlobSchedule
+  (guardBlobParent 1000000 (osakaBlobSchedule.target - 1)) = 0
+-- Immediately above target, the ordinary branch subtracts the exact target.
+#guard calculateExcessBlobGas osakaBlobSchedule
+  (guardBlobParent 16 (osakaBlobSchedule.target + gasPerBlob)) = gasPerBlob
 
 #guard hasTag unsupportedForkTag <|
   stateTransitionAt .bpo1 guardEmptyChain (guardBlockAt 0)

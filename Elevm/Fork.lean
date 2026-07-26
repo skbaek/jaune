@@ -83,6 +83,9 @@ structure BlobSchedule : Type where
   max : Nat
   /-- `BLOB_BASE_FEE_UPDATE_FRACTION`: the blob base-fee decay constant. -/
   baseFeeUpdateFraction : Nat
+  /-- EIP-7918's `BLOB_BASE_COST`, or `none` before its reserve-price branch
+  activates. -/
+  reserveBaseCost : Option Nat
 deriving DecidableEq, Repr
 
 /-- Deployed-code and initcode size limits (EIP-170 and EIP-3860). -/
@@ -179,6 +182,7 @@ def pragueBlobSchedule : BlobSchedule := {
   target := 0xC0000 -- 786432
   max := 1179648
   baseFeeUpdateFraction := 5007716
+  reserveBaseCost := none
 }
 
 /-- Prague's code size limits. -/
@@ -253,6 +257,7 @@ def osakaBlobSchedule : BlobSchedule := {
   target := 6 * 131072
   max := 9 * 131072
   baseFeeUpdateFraction := 5007716
+  reserveBaseCost := some (2 ^ 13)
 }
 
 /-- Osaka caps a transaction's gas limit at `2 ^ 24` (EIP-7825). -/
@@ -439,6 +444,7 @@ private def guardHasTag {α : Type} (tag : String) (e : Except String α) : Bool
 #guard pragueRules.blob.target = 786432
 #guard pragueRules.blob.max = 1179648
 #guard pragueRules.blob.baseFeeUpdateFraction = 5007716
+#guard pragueRules.blob.reserveBaseCost = none
 #guard pragueRules.code.maxCodeSize = 24576
 #guard pragueRules.code.maxInitCodeSize = 2 * pragueRules.code.maxCodeSize
 #guard pragueRules.tx.maxGas = none
@@ -456,14 +462,16 @@ private def guardHasTag {α : Type} (tag : String) (e : Except String α) : Bool
 #guard ¬ pragueRules.isPrecomp (0x12 : Adr)
 #guard ¬ pragueRules.isPrecomp (0x100 : Adr)
 
--- Osaka shares every rule value with Prague except the ones EIP-7607's
--- execution-layer delta actually moves. The shared blob schedule is stated as
--- the EIP-7892 blob-count product rather than assumed.
+-- Osaka shares the Prague blob target/max/update fraction, stated through the
+-- EIP-7892 blob-count product rather than assumed, and adds EIP-7918's reserve
+-- base cost.
 #guard osakaRules.fork = .osaka
-#guard osakaRules.blob = pragueRules.blob
 #guard osakaRules.code = pragueRules.code
 #guard osakaBlobSchedule.target = 786432
 #guard osakaBlobSchedule.max = 1179648
+#guard osakaBlobSchedule.baseFeeUpdateFraction =
+  pragueBlobSchedule.baseFeeUpdateFraction
+#guard osakaBlobSchedule.reserveBaseCost = some 8192
 #guard osakaRules.tx.maxGas = some (2 ^ 24)
 #guard osakaRules.modexp.maxLength = some 1024
 #guard osakaRules.modexp.flatComplexity = some 16
