@@ -158,13 +158,14 @@ def actualExceptionDiagnostic (err : String) : String :=
   | none => "<unknown canonical identity>"
 
 /-- Decode enough of a fixture block to select its parent snapshot, then run
-the public block-import API. Both failure channels of `addBlockToChain` are
-collapsed only after they have been handled explicitly. -/
-def evaluateFixtureBlock (store : ChainStore) (blockRlp : B8L) :
+the public block-import API at the fork this fixture suite named. Both failure
+channels of `addBlockToChainAt` are collapsed only after they have been handled
+explicitly. -/
+def evaluateFixtureBlock (f : Fork) (store : ChainStore) (blockRlp : B8L) :
     Except String (B256 × BlockChain) := do
   let ⟨block, blockHeaderHash⟩ ← rlpToBlock blockRlp
   let parent ← store.findParent block.header.parentHash
-  match addBlockToChain parent blockRlp with
+  match addBlockToChainAt f parent blockRlp with
   | .error err => .error err
   | .ok (.inr err) => .error err
   | .ok (.inl child) => .ok ⟨blockHeaderHash, child⟩
@@ -187,7 +188,7 @@ def requireExpectedFailure (idx : Nat) (chainname : String)
 /-- Process every fixture block in list order while deriving ancestry only
 from each decoded header's `parentHash`. Expected-invalid blocks are checked
 exactly, leave the snapshot store unchanged, and never stop later blocks. -/
-def processBlockJsons (store : ChainStore) :
+def processBlockJsons (f : Fork) (store : ChainStore) :
   List (Nat × Lean.Json) → IO ChainStore
   | ⟨idx, blockJson⟩ :: rest => do
     -- Hand-authored blockchain fixtures carry `chainname`; blockchain tests
@@ -206,7 +207,7 @@ def processBlockJsons (store : ChainStore) :
         | .ok expected => pure (some expected)
         | .error err =>
           .throw s!"BLOCK #{idx} ({chainname}) has invalid expectException: {err}"
-    match evaluateFixtureBlock store blockRlp with
+    match evaluateFixtureBlock f store blockRlp with
     | .error err =>
       match expected? with
       | none =>
@@ -214,17 +215,17 @@ def processBlockJsons (store : ChainStore) :
           raw actual: {repr err}\ncanonical actual: {actualExceptionDiagnostic err}"
       | some expected =>
         requireExpectedFailure idx chainname expected err
-        processBlockJsons store rest
+        processBlockJsons f store rest
     | .ok ⟨tipHash, child⟩ =>
       match expected? with
       | some expected =>
         .throw s!"BLOCK #{idx} ({chainname}) was expected invalid but imported\n\
           expected: {expected.map FixtureException.toString}\ncomputed tip: {tipHash}"
       | none =>
-        processBlockJsons (store.addResult (.ok ⟨tipHash, child⟩)) rest
+        processBlockJsons f (store.addResult (.ok ⟨tipHash, child⟩)) rest
   | [] => .ok store
 
-def runBlockchainStTest : (Nat × String × Lean.Json) → IO Unit
+def runBlockchainStTest (f : Fork) : (Nat × String × Lean.Json) → IO Unit
   | ⟨idx, name, json⟩ => do
     .println s!"TEST NAME : {name}"
     .println s!"TEST INDEX : {idx}"
@@ -257,7 +258,7 @@ def runBlockchainStTest : (Nat × String × Lean.Json) → IO Unit
     }
 
     let blockJsons ← json.find "blocks" >>= Lean.Json.toIoList
-    let store ← processBlockJsons (.init gbh_hash chain) blockJsons.putIndex
+    let store ← processBlockJsons f (.init gbh_hash chain) blockJsons.putIndex
     let lastBlockHash ← json.find "lastblockhash" >>= Lean.Json.toIoB256
     let chain ← (store.findLast lastBlockHash).toIO
     let lastBlock ← chain.blocks.getLast?.toIO "error : no last block "
@@ -271,7 +272,11 @@ def runBlockchainStTest : (Nat × String × Lean.Json) → IO Unit
       (postStateRoot = chain.state.root)
       s!"error : end state root does not match\n  expected : {postStateRoot}\n  computed : {chain.state.root}"
 
-def fixtureCaseSelected (network : String) (testIdx : Option Nat)
+/-- Select the cases whose fixture `network` label is exactly the requested
+fork's label. Selection is by label equality, as before; the fork is now a
+parsed value rather than an arbitrary string, so an unknown label cannot reach
+this point. -/
+def fixtureCaseSelected (f : Fork) (testIdx : Option Nat)
     (incls excls : List String) : (Nat × String × Lean.Json) → IO Bool
   | ⟨idx, name, json⟩ => do
     if let some specIdx := testIdx then
@@ -281,9 +286,9 @@ def fixtureCaseSelected (network : String) (testIdx : Option Nat)
     if name ∈ excls then
       return false
     let caseNetwork ← json.find "network" >>= Lean.Json.toIoString
-    return caseNetwork = network
+    return caseNetwork = f.toString
 
-def runTestFile (network : String) (testIdx : Option Nat)
+def runTestFile (f : Fork) (testIdx : Option Nat)
   (incls excls : List String) (idxPath : Nat × String) : IO Unit := do
   let fileIdx := idxPath.fst
   let path := idxPath.snd
@@ -291,14 +296,14 @@ def runTestFile (network : String) (testIdx : Option Nat)
   .println s!"TEST FILE #{fileIdx} : {path}\n"
   let rb ← readJsonFile path >>= Lean.Json.toIoRBNode
   let js := rb.toArray.toList.putIndex
-  let selected ← js.filterM <| fixtureCaseSelected network testIdx incls excls
-  .println s!"NETWORK : {network}"
+  let selected ← js.filterM <| fixtureCaseSelected f testIdx incls excls
+  .println s!"NETWORK : {f}"
   .println s!"SELECTED CASES : {selected.length}"
   .println s!"SKIPPED CASES : {js.length - selected.length}"
   .guard (¬ selected.isEmpty)
     s!"ERROR : zero cases match the combined network/name/index filters \
-       (network = {network}) in {path}"
-  let _ ← selected.mapM runBlockchainStTest
+       (network = {f}) in {path}"
+  let _ ← selected.mapM (runBlockchainStTest f)
   .ok ()
 
 def getTestNames (incls excls : List String) :
@@ -331,6 +336,22 @@ def getNetwork : List String → Option String
   | "--network" :: network :: _ => some network
   | _ :: opts => getNetwork opts
   | [] => none
+
+/-- Resolve `--network` to a supported protocol fork.
+
+Strict by construction: the label must be one this build knows, and an
+unrecognised one aborts rather than quietly running Prague. Omitting the option
+still means Prague, which is what every committed gate passes explicitly. -/
+def getFork (opts : List String) : IO Fork :=
+  match getNetwork opts with
+  | none => .ok .prague
+  | some label =>
+    match Fork.ofString? label with
+    | some f => .ok f
+    | none =>
+      .throw
+        s!"error : unknown --network label {repr label}; supported labels are \
+           {Fork.all.map Fork.toString}"
 
 def getFiles (path : System.FilePath) : IO (List System.FilePath) := do
   if (← System.FilePath.isDir path) then
@@ -525,7 +546,7 @@ def main : List String → IO Unit
     verbosityRef.set (List.contains opts "--verbose")
     let testIdx : Option Nat := getTestIndex opts
     let skip : Option Nat := getSkip opts
-    let network := (getNetwork opts).getD "Prague"
+    let f ← getFork opts
     let ⟨incls, excls⟩ := getTestNames [] [] opts
     let files ← getFiles path
     let files :=
@@ -534,7 +555,7 @@ def main : List String → IO Unit
       | some n => files.drop n
     let _ ←
       List.mapM
-        (runTestFile network testIdx incls excls)
+        (runTestFile f testIdx incls excls)
         (files.map System.FilePath.toString).putIndex
     pure ()
   | _ => IO.throw "error : invalid arguments"

@@ -636,7 +636,8 @@ def gHashopcode : Nat := 3
 def gasPerBlob : Nat := 2 ^ 17
 def gasStorageUpdate := 5000
 def gasEcrecover : Nat := 3000
-def maxCodeSize : Nat := 24576 -- 0x00006000
+-- `maxCodeSize` and `maxInitCodeSize` are fork rules, not global constants:
+-- see `ForkRules.code` in `Elevm/Fork.lean`.
 def gNewAccount : Nat := 25000
 def gasSelfDestructNewAccount : Nat := 25000
 def gasCallValue : Nat := 9000
@@ -677,14 +678,12 @@ def setCodeTxMagic : B8L := [0x05]
 def beaconRootsAddress : Adr := 0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02
 def systemAddress : Adr := 0xfffffffffffffffffffffffffffffffffffffffe
 def systemTransactionGas : Nat := 30000000
-def maxInitCodeSize : Nat := maxCodeSize * 2
-def maxBlobGasPerBlock : Nat := 1179648
 def versionedHashVersionKzg : B8 := 0x01
 def eoaDelegationMarker : B8L := [0xEF, 0x01, 0x00]
-def blobBaseFeeUpdateFraction : Nat := 5007716
 def gasBlake2PerRound : Nat := 1
 def eoaDelegatedCodeLength : Nat := 23
-def targetBlobGasPerBlock : Nat := 0xC0000 -- U64(786432)
+-- The blob target, ceiling, and base-fee update fraction are fork rules, not
+-- global constants: see `ForkRules.blob` in `Elevm/Fork.lean`.
 def elasticityMultiplier : Nat := 2
 def gasLimitAdjustmentFactor : Nat := 1024
 def gasLimitMinimum : Nat := 5000
@@ -794,6 +793,12 @@ structure Log : Type where
   (data : B8L)
 
 structure BenvStat : Type where
+  /-- The rules this block runs under.
+  Carrying them here, rather than as an extra argument, is what keeps a single
+  interpreter: every function that already sees a `BenvStat` -- directly, or
+  through `Benv`, `Msg`, or `Sevm` -- can read the active rules without a
+  signature change, and nothing anywhere needs to know which fork it is. -/
+  rules : ForkRules
   chainId : B64
   origState : State
   blockGasLimit : Nat
@@ -1382,6 +1387,7 @@ def Msg.toStrings (msg : Msg) : List String  :=
 
 def BenvStat.toStrings (bs : BenvStat) : List String :=
   fork "BLOCK ENVIRONMENT" [
+    [s!"FORK : {bs.rules.fork}"],
     [s!"CHAIN ID : {bs.chainId}"],
     [s!"BLOCK GAS LIMIT : {bs.blockGasLimit}"],
     fork "BLOCK HASHES" (bs.blockHashes.map (mkSingleton ∘ B256.toHex)),
@@ -1421,8 +1427,9 @@ def Evm.toStrings (evm : Evm) : List String :=
       (metaView.accessedStorageKeys.toList.map (fun kv => [s!"{kv.fst.toHex} : {B256.toHex kv.snd}"]))
   ]
 
-abbrev Adr.isPrecomp (a : Adr) : Prop :=
-  1 ≤ a.toNat ∧ a.toNat ≤ 17
+-- Precompile activation is a fork rule and lives with the rules:
+-- `ForkRules.isPrecomp` in `Elevm/Fork.lean` replaces what used to be a
+-- hard-wired `1 ≤ a.toNat ∧ a.toNat ≤ 17` range stated here.
 
 def safeSub {ξ} [Sub ξ] [LE ξ] [DecidableLE ξ] (x y : ξ) : Option ξ :=
   if y ≤ x then some (x - y) else none
@@ -1707,8 +1714,8 @@ def fakeExp (fac num den : Nat) : Nat :=
   let out := fakeExpAux num den 1 (fac * den) lim
   out / den
 
-def calculate_blob_gas_price (excessBlobGas : Nat) : Nat :=
-  fakeExp 1 excessBlobGas blobBaseFeeUpdateFraction
+def calculate_blob_gas_price (blob : BlobSchedule) (excessBlobGas : Nat) : Nat :=
+  fakeExp 1 excessBlobGas blob.baseFeeUpdateFraction
 
 def Mach.push (x : B256) (mach : Mach) : Footprint.Outcome Mach Unit :=
   if mach.stack.length < 1024
@@ -2184,7 +2191,8 @@ def Rinst.runCore
     let y : B256 := sevm.tenvStat.blobVersionedHashes.getD x.toNat 0
     chargeGas gHashopcode devm >>= Devm.push y
   | .blobbasefee => do
-    let fee := calculate_blob_gas_price sevm.benvStat.excessBlobGas
+    let fee :=
+      calculate_blob_gas_price sevm.benvStat.rules.blob sevm.benvStat.excessBlobGas
     pushItem fee.toB256 gBase devm
   | .balance => liftMachMetaWorldExecution Rinst.balanceCore devm
   | .origin => pushItem sevm.tenvStat.origin.toB256 gBase devm
@@ -2443,6 +2451,7 @@ def Rinst.run (evm : Evm) := Rinst.runCore evm.pc evm.dyna evm.sta
 
 instance : Inhabited BenvStat := ⟨
   {
+    rules := pragueRules
     chainId := 0
     origState := .empty
     blockGasLimit := 0
@@ -3456,14 +3465,15 @@ def processCreateMessage.msg (msg : Msg) : Msg :=
   let benv := benv.incrNonce adr
   msg.withBenv benv
 
-def processCreateMessage.chargeCodeGas (devm : Devm) : Execution :=
+def processCreateMessage.chargeCodeGas (rules : ForkRules) (devm : Devm) :
+    Execution :=
   let contractCode := devm.output
   let contractCodeGas := contractCode.length * gasCodeDeposit
   match contractCode with
   | 0xEF :: _ => .error ⟨"InvalidContractPrefix", devm⟩
   | _ => do
     let devm ← chargeGas contractCodeGas devm
-    if maxCodeSize < contractCode.length
+    if rules.code.maxCodeSize < contractCode.length
     then .error ⟨"OutOfGasError", devm⟩
     else .ok devm
 
@@ -3613,7 +3623,7 @@ mutual
       | .none =>
         Fueled.mapResult executeCode.handleError <| exec evm lim
       | .some adr =>
-        if !msg.disablePrecompiles && adr.isPrecomp then
+        if !msg.disablePrecompiles && msg.benv.stat.rules.isPrecomp adr then
           Fueled.ofExcept <| executeCode.handleError <| executePrecomp evm adr
         else
           Fueled.mapResult executeCode.handleError <| exec evm lim
@@ -3643,7 +3653,7 @@ mutual
     | lim + 1 => do
       let evm ← processMessage (processCreateMessage.msg msg) lim
       if evm.error.isNone then
-        match processCreateMessage.chargeCodeGas evm with
+        match processCreateMessage.chargeCodeGas msg.benv.stat.rules evm with
         | .ok evm => Fueled.ok <| evm.setCode msg.currentTarget ⟨⟨evm.output⟩⟩
         | .error ⟨err, evm⟩ =>
           if isExceptionalHalt err
@@ -3669,7 +3679,7 @@ mutual
     | lim + 1 => do
       let calldata ← Fueled.ok <| devm.memory.data.sliceD memoryIndex memorySize 0
       Fueled.assert
-        (memorySize ≤ maxInitCodeSize)
+        (memorySize ≤ sevm.benvStat.rules.code.maxInitCodeSize)
         ⟨"OutOfGasError", devm⟩
       let devm ← Fueled.ok <| addAccessedAddress devm newAddress
       let createMsgGas ← Fueled.ok <| except64th devm.gasLeft
@@ -4246,10 +4256,13 @@ def Block.toStrings (block : Block) : List String :=
 
 instance : ToString Block := ⟨String.joinln ∘ Block.toStrings⟩
 
-def calculateExcessBlobGas (parentHeader : Header) : Nat :=
+/-- The child's excess blob gas. The set point is read from the *child's* blob
+schedule, which is what makes a BPO transition take effect on the first block
+of the new schedule rather than one block late. -/
+def calculateExcessBlobGas (blob : BlobSchedule) (parentHeader : Header) : Nat :=
   let parentBlobGas : Nat :=
     parentHeader.excessBlobGas + parentHeader.blobGasUsed
-  parentBlobGas - targetBlobGasPerBlock
+  parentBlobGas - blob.target
 
 /-- The absolute upper bound on a block gas limit. A gas limit is a 63-bit
 quantity: `2 ^ 63` and above is out of range no matter what the parent's limit
@@ -4334,7 +4347,7 @@ def calculateBaseFeePerGas
         targetFeeGasDelta / baseFeeMaxChangeDenominator
       .ok <| parentBaseFeePerGas - baseFeePerGasDelta
 
-def validateHeader (chain : BlockChain) (header : Header) :
+def validateHeader (rules : ForkRules) (chain : BlockChain) (header : Header) :
   Except String Unit := do
   let parent ← chain.blocks.getLast?.toExcept "No parent block found"
   let blockParentHash := (Header.toBLT parent.header).toB8L.keccak
@@ -4358,10 +4371,10 @@ def validateHeader (chain : BlockChain) (header : Header) :
       parent.header.gasLimit
       parent.header.gasUsed
       parent.header.baseFeePerGas
-  if header.excessBlobGas ≠ calculateExcessBlobGas parent.header then do
+  if header.excessBlobGas ≠ calculateExcessBlobGas rules.blob parent.header then do
     .error
       s!"{excessBlobGasTag} : excess blob gas = {header.excessBlobGas} ≠ \
-         expected = {calculateExcessBlobGas parent.header}"
+         expected = {calculateExcessBlobGas rules.blob parent.header}"
   if header.gasUsed > header.gasLimit then do
     .error
       s!"{gasUsedOverflowTag} : gas used = {header.gasUsed} > \
@@ -4744,7 +4757,7 @@ def checkTransactionGasLimits
     (benv : Benv) (blockOut : BlockOutput) (tx : Tx) :
     Except String Nat :=
   let gasAvailable := benv.stat.blockGasLimit - blockOut.blockGasUsed
-  let blobGasAvailable := maxBlobGasPerBlock - blockOut.blobGasUsed
+  let blobGasAvailable := benv.stat.rules.blob.max - blockOut.blobGasUsed
   if tx.gas > gasAvailable then
     .error
       s!"{gasAllowanceExceededTag} : transaction gas = {tx.gas} > \
@@ -4824,7 +4837,8 @@ def checkTransactionBlobData
         s!"{type3InvalidBlobVersionedHashTag} : a blob versioned hash has \
            a version byte other than {versionedHashVersionKzg}"
     else
-      let blobGasPrice := calculate_blob_gas_price benv.stat.excessBlobGas
+      let blobGasPrice :=
+        calculate_blob_gas_price benv.stat.rules.blob benv.stat.excessBlobGas
       if maxBlobFee < blobGasPrice then
         .error "InsufficientMaxFeePerBlobGasError : insufficient max fee per blob gas"
       else
@@ -4927,17 +4941,18 @@ def calculateIntrinsicCost (tx: Tx) : Nat × Nat :=
     callDataFloorGasCost
   ⟩
 
-def checkInitcodeSize (receiver : Option Adr) (dataLength : Nat) :
-    Except String Unit :=
-  if receiver.isNone && dataLength > maxInitCodeSize then
+def checkInitcodeSize (code : CodeLimits) (receiver : Option Adr)
+    (dataLength : Nat) : Except String Unit :=
+  if receiver.isNone && dataLength > code.maxInitCodeSize then
     .error
       s!"{initcodeSizeExceededTag} : initcode is {dataLength} bytes, \
-         exceeding the {maxInitCodeSize}-byte maximum"
+         exceeding the {code.maxInitCodeSize}-byte maximum"
   else
     .ok ()
 
 -- validate_transaction
-def validateTransaction (tx : Tx) : Except String (Nat × Nat) := do
+def validateTransaction (rules : ForkRules) (tx : Tx) :
+    Except String (Nat × Nat) := do
   let ⟨intrinsicGas, callDataFloorGasCost⟩ := calculateIntrinsicCost tx
   if max intrinsicGas callDataFloorGasCost > tx.gas
     then
@@ -4947,7 +4962,7 @@ def validateTransaction (tx : Tx) : Except String (Nat × Nat) := do
            {max intrinsicGas callDataFloorGasCost}"
   if tx.nonce = B64.max
     then .error s!"{nonceIsMaxTag} : transaction nonce is 2^64 - 1"
-  checkInitcodeSize tx.type.receiver? tx.data.length
+  checkInitcodeSize rules.code tx.type.receiver? tx.data.length
   .ok ⟨intrinsicGas, callDataFloorGasCost⟩
 
 def prepareMessage (benv: Benv) (tenv: Tenv) (tx: Tx) :
@@ -4992,8 +5007,9 @@ def prepareMessage (benv: Benv) (tenv: Tenv) (tx: Tx) :
   }
 
 -- calculate_data_fee
-def calculate_data_fee (excess_blob_gas: Nat) (tx: Tx) : Nat :=
-  calculateTotalBlobGas tx * calculate_blob_gas_price excess_blob_gas
+def calculate_data_fee (blob : BlobSchedule) (excess_blob_gas: Nat) (tx: Tx) :
+    Nat :=
+  calculateTotalBlobGas tx * calculate_blob_gas_price blob excess_blob_gas
 
 def getTxHash (tx : Tx) : B256 := tx.toBLT.toB8L.keccak
 
@@ -5072,6 +5088,7 @@ private def fixtureTestBenv (blockGasLimit : Nat := 10000000) : Benv :=
     state := .empty
     createdAccounts := .emptyWithCapacity
     stat := {
+      rules := pragueRules
       chainId := 1
       origState := .empty
       blockGasLimit := blockGasLimit
@@ -5091,11 +5108,23 @@ private def fixtureTestAccount
   { nonce := nonce, bal := bal, stor := .empty, code := code }
 
 #guard hasTag intrinsicGasTooLowTag <|
-  validateTransaction {fixtureTestTx with gas := txBaseCost - 1}
+  validateTransaction pragueRules {fixtureTestTx with gas := txBaseCost - 1}
 #guard hasTag nonceIsMaxTag <|
-  validateTransaction {fixtureTestTx with nonce := B64.max}
+  validateTransaction pragueRules {fixtureTestTx with nonce := B64.max}
 #guard hasTag initcodeSizeExceededTag <|
-  checkInitcodeSize none (maxInitCodeSize + 1)
+  checkInitcodeSize pragueRules.code none (pragueRules.code.maxInitCodeSize + 1)
+
+-- The initcode bound comes from the rules record, not from a global: a smaller
+-- limit rejects an initcode the Prague limit accepts, at the same boundary.
+private def guardTightCodeLimits : CodeLimits :=
+  { maxCodeSize := 100, maxInitCodeSize := 200 }
+
+#guard (checkInitcodeSize pragueRules.code none 200).toOption.isSome
+#guard (checkInitcodeSize guardTightCodeLimits none 200).toOption.isSome
+#guard hasTag initcodeSizeExceededTag <|
+  checkInitcodeSize guardTightCodeLimits none 201
+-- A non-creation transaction is unaffected by the limit under either schedule.
+#guard (checkInitcodeSize guardTightCodeLimits (some 0) 100000).toOption.isSome
 
 #guard hasTag priorityGreaterThanMaxFeeTag <|
   checkTransactionDynamicGasFee 1 1 2 1
@@ -5145,7 +5174,8 @@ def processTransaction
   let benv := benv.beginTransaction
   let bout ← .ok {bout with
     transactionsTrie := bout.transactionsTrie.insert (BLT.b8s index.toB8L).toB8L tx}
-  let ⟨intrinsicGas, calldataFloorGasCost⟩ ← validateTransaction tx
+  let ⟨intrinsicGas, calldataFloorGasCost⟩ ←
+    validateTransaction benv.stat.rules tx
   let ⟨
     sender,
     effectiveGasPrice,
@@ -5154,7 +5184,7 @@ def processTransaction
   ⟩ ← checkTransaction benv bout tx
   let blobGasFee :=
     if tx.isTypeThree
-    then calculate_data_fee benv.stat.excessBlobGas tx
+    then calculate_data_fee benv.stat.rules.blob benv.stat.excessBlobGas tx
     else 0
   let effectiveGasFee := tx.gas * effectiveGasPrice
   let gas := tx.gas - intrinsicGas
@@ -5704,8 +5734,10 @@ def stateTransitionChecks (bout : BlockOutput) (header : Header)
       s!"{requestsHashTag} : computed requests hash = {requestsHash} ≠ \
          header requests hash = {header.requestsHash}"
 
-def initBenvStat (chain : BlockChain) (header : Header) : BenvStat :=
+def initBenvStat (rules : ForkRules) (chain : BlockChain) (header : Header) :
+    BenvStat :=
   {
+    rules := rules,
     chainId := chain.chainId,
     origState := chain.state,
     blockGasLimit := header.gasLimit,
@@ -5719,11 +5751,11 @@ def initBenvStat (chain : BlockChain) (header : Header) : BenvStat :=
     parentBeaconBlockRoot := header.parentBeaconBlockRoot
   }
 
-def initBenv (chain : BlockChain) (header : Header) : Benv :=
+def initBenv (rules : ForkRules) (chain : BlockChain) (header : Header) : Benv :=
   {
     state := chain.state,
     createdAccounts := .emptyWithCapacity,
-    stat := initBenvStat chain header
+    stat := initBenvStat rules chain header
   }
 
 def getTransactionsRoot (bout : BlockOutput) : B256 :=
@@ -5757,11 +5789,15 @@ def stateTransitionOmmersCheck (ommers : List Header) : Except String Unit := do
 def appendBlock (blks : List Block) (blk : Block) : List Block :=
   (blk :: blks.reverse.take 254).reverse
 
-def stateTransition (ch : BlockChain) (block : Block) :
+/-- The block state transition under an explicit rule set.
+
+This is the whole implementation; every other state-transition entry point
+below only decides *which* rules to hand it. -/
+def stateTransitionWith (rules : ForkRules) (ch : BlockChain) (block : Block) :
   Except String BlockChain := do
-  validateHeader ch block.header
+  validateHeader rules ch block.header
   stateTransitionOmmersCheck block.ommers
-  let benv : Benv := initBenv ch block.header
+  let benv : Benv := initBenv rules ch block.header
   let ⟨st, bout⟩ ← applyBody benv block.txs block.wds
   let blockStateRoot : B256 := st.root
   let transactionsRoot : B256 := getTransactionsRoot bout
@@ -5773,6 +5809,30 @@ def stateTransition (ch : BlockChain) (block : Block) :
     transactionsRoot blockStateRoot receiptRoot
     blockLogsBloom withdrawalsRoot requestsHash
   .ok ⟨appendBlock ch.blocks block, st, ch.chainId⟩
+
+/-- The block state transition at an explicitly named fork.
+
+This is the entry point for static fixture suites, which state their fork
+rather than deriving it. A fork whose rules this build does not implement
+fails here with `UnsupportedForkError`; it never falls back to Prague. -/
+def stateTransitionAt (f : Fork) (ch : BlockChain) (block : Block) :
+    Except String BlockChain := do
+  stateTransitionWith (← f.rules) ch block
+
+/-- The block state transition on a configured chain, deriving the active fork
+from the block's timestamp and the chain's activation schedule. -/
+def stateTransitionUsing (cfg : ChainConfig) (ch : BlockChain) (block : Block) :
+    Except String BlockChain := do
+  stateTransitionWith (← cfg.rulesAt block.header.timestamp) ch block
+
+/-- The Prague state transition.
+
+Retained with its original name, type, and behaviour. Prague is permanent
+supported protocol, not scaffolding, and downstream proofs state their results
+about this name. -/
+def stateTransition (ch : BlockChain) (block : Block) :
+  Except String BlockChain :=
+  stateTransitionWith pragueRules ch block
 
 def BLT.toExStrWithdrawal : BLT → Except String Withdrawal
   | .list [
@@ -6111,17 +6171,158 @@ private def shortWidthScalar : B8L := 0x01 :: List.replicate 30 0x00
 #guard ¬ hasTag rlpStructureTag (B8L.toExStrTx [0x05])
 #guard (B8L.toExStrTx [0x05]).toOption.isNone
 
-def addBlockToChain (chain : BlockChain) (blockRlp : B8L) :
-  Except String (BlockChain ⊕ String) := do
-  let ⟨block, blockHeaderHash⟩ ← rlpToBlock blockRlp
+/-- Block import from an already-decoded block, under an explicit rule set.
+
+Split out so that a configured chain can read the block's timestamp to select
+its rules without decoding the RLP a second time. The two failure channels are
+unchanged: `.error` is a harness-level failure, `.inr` is a block this chain
+rejects. -/
+private def addBlockToChainCore (rules : ForkRules) (chain : BlockChain)
+    (block : Block) (blockHeaderHash : B256) :
+    Except String (BlockChain ⊕ String) := do
   cprint "\nSTATE BEFORE TRANSITION :"
   cprint s!"{chain.state}"
   if (Header.toBLT block.header).toB8L.keccak ≠ blockHeaderHash then do
     .error "ERROR : incorrect block header hash"
   let chain ←
-    match stateTransition chain block with
+    match stateTransitionWith rules chain block with
     | .error err => return (.inr err)
     | .ok chain => .ok chain
   cprint s!"\nSTATE AFTER TRANSITION :"
   cprint s!"{chain.state}"
   .ok (.inl chain)
+
+/-- Block import under an explicit rule set. -/
+def addBlockToChainWith (rules : ForkRules) (chain : BlockChain)
+    (blockRlp : B8L) : Except String (BlockChain ⊕ String) := do
+  let ⟨block, blockHeaderHash⟩ ← rlpToBlock blockRlp
+  addBlockToChainCore rules chain block blockHeaderHash
+
+/-- Block import at an explicitly named fork, for static fixture suites.
+
+An unimplemented fork fails on the `.error` channel: it is a limitation of this
+build, not a verdict that the block is invalid, and must never be recorded as
+one. -/
+def addBlockToChainAt (f : Fork) (chain : BlockChain) (blockRlp : B8L) :
+    Except String (BlockChain ⊕ String) := do
+  addBlockToChainWith (← f.rules) chain blockRlp
+
+/-- Block import on a configured chain, deriving the active fork from the
+block's own timestamp and the chain's activation schedule. -/
+def addBlockToChainUsing (cfg : ChainConfig) (chain : BlockChain)
+    (blockRlp : B8L) : Except String (BlockChain ⊕ String) := do
+  let ⟨block, blockHeaderHash⟩ ← rlpToBlock blockRlp
+  let rules ← cfg.rulesAt block.header.timestamp
+  addBlockToChainCore rules chain block blockHeaderHash
+
+/-- Prague block import.
+
+Retained with its original name, type, and behaviour; downstream proofs state
+their results about this name. -/
+def addBlockToChain (chain : BlockChain) (blockRlp : B8L) :
+  Except String (BlockChain ⊕ String) :=
+  addBlockToChainWith pragueRules chain blockRlp
+
+---------------- FORK ARCHITECTURE CHECKS ----------------
+
+-- The Prague entry points are not merely *compatible* with the rules-explicit
+-- core at Prague: they are that core, for every input. `rfl` is the point --
+-- an equality on sample data would leave room for a wrapper that diverges
+-- somewhere else, and downstream proofs state their results about these names.
+
+example (ch : BlockChain) (block : Block) :
+    stateTransition ch block = stateTransitionWith pragueRules ch block := rfl
+
+example (ch : BlockChain) (block : Block) :
+    stateTransitionAt .prague ch block = stateTransition ch block := rfl
+
+example (chain : BlockChain) (blockRlp : B8L) :
+    addBlockToChain chain blockRlp
+      = addBlockToChainWith pragueRules chain blockRlp := rfl
+
+example (chain : BlockChain) (blockRlp : B8L) :
+    addBlockToChainAt .prague chain blockRlp = addBlockToChain chain blockRlp :=
+  rfl
+
+-- A block whose fork this build cannot run is refused, and refused *before*
+-- anything is decoded or executed, so an unimplemented fork can never be
+-- mistaken for a rule this build actually applied.
+
+private def guardEmptyChain : BlockChain :=
+  { blocks := [], state := .empty, chainId := 1 }
+
+private def guardTestHeader : Header := {
+  parentHash := 0
+  ommersHash := emptyOmmerHash
+  coinbase := 0
+  stateRoot := 0
+  txsRoot := 0
+  receiptRoot := 0
+  bloom := List.replicate 256 (0 : B8)
+  difficulty := 0
+  number := 1
+  gasLimit := 30000000
+  gasUsed := 0
+  timestamp := 0
+  extraData := []
+  prevRandao := 0
+  nonce := 0
+  baseFeePerGas := 7
+  withdrawalsRoot := 0
+  blobGasUsed := 0
+  excessBlobGas := 0
+  parentBeaconBlockRoot := 0
+  requestsHash := none
+}
+
+private def guardBlockAt (timestamp : Nat) : Block :=
+  {
+    header := { guardTestHeader with timestamp := timestamp }
+    txs := []
+    ommers := []
+    wds := []
+  }
+
+#guard hasTag unsupportedForkTag <|
+  stateTransitionAt .osaka guardEmptyChain (guardBlockAt 0)
+#guard hasTag unsupportedForkTag <|
+  stateTransitionAt .bpo1 guardEmptyChain (guardBlockAt 0)
+#guard hasTag unsupportedForkTag <|
+  stateTransitionAt .bpo2 guardEmptyChain (guardBlockAt 0)
+
+-- Prague reaches the real checks instead: this chain has no parent block, so
+-- the verdict is a header failure, not a missing implementation.
+#guard ¬ hasTag unsupportedForkTag
+  (stateTransitionAt .prague guardEmptyChain (guardBlockAt 0))
+
+-- On the block-import API an unsupported fork is a harness failure (`.error`),
+-- never a block-rejection verdict (`.ok (.inr _)`): a fork this build has not
+-- implemented says nothing about whether the block is valid.
+#guard hasTag unsupportedForkTag <| addBlockToChainAt .osaka guardEmptyChain []
+#guard (addBlockToChainAt .osaka guardEmptyChain []).toOption.isNone
+#guard errOf (addBlockToChainAt .osaka guardEmptyChain [])
+  = errOf (addBlockToChainAt .osaka guardEmptyChain (List.replicate 64 (0xFF : B8)))
+
+-- A configured chain selects rules from the block's own timestamp. On this
+-- schedule the only difference between the two blocks is the timestamp, and it
+-- alone decides which rules are applied.
+
+private def guardOsakaAt100 : ChainConfig :=
+  ChainConfig.mk 1 [⟨.prague, 0⟩, ⟨.osaka, 100⟩]
+
+#guard ¬ hasTag unsupportedForkTag
+  (stateTransitionUsing guardOsakaAt100 guardEmptyChain (guardBlockAt 99))
+#guard hasTag unsupportedForkTag <|
+  stateTransitionUsing guardOsakaAt100 guardEmptyChain (guardBlockAt 100)
+
+-- A Prague-only configuration is the Prague wrapper, at every timestamp.
+#guard errOf (stateTransitionUsing (ChainConfig.pragueOnly 1) guardEmptyChain
+    (guardBlockAt 0))
+  = errOf (stateTransition guardEmptyChain (guardBlockAt 0))
+#guard errOf (stateTransitionUsing (ChainConfig.pragueOnly 1) guardEmptyChain
+    (guardBlockAt 999999999))
+  = errOf (stateTransition guardEmptyChain (guardBlockAt 999999999))
+
+-- An unusable schedule fails before it selects anything.
+#guard hasTag invalidChainConfigTag <|
+  stateTransitionUsing (ChainConfig.mk 1 []) guardEmptyChain (guardBlockAt 0)
