@@ -1054,6 +1054,7 @@ def depositEventLayoutTag : String := "DepositEventLayoutError"
 
 /-- A mandatory protocol system-contract call reverted, threw, or ran out of gas. -/
 def systemContractCallFailedTag : String := "SystemContractCallFailedError"
+def blockRlpSizeExceededTag : String := "BlockRlpSizeExceededError"
 
 /-- Every block-rejection tag. The single source of truth for the distinctness
 checks, and for `isBlockException`. -/
@@ -1064,7 +1065,8 @@ def blockExceptionTags : List String :=
     extraDataTooBigTag, unknownParentTag, unknownParentZeroTag,
     stateRootTag, transactionsRootTag, receiptsRootTag, logBloomTag,
     withdrawalsRootTag, headerNonceTag, excessBlobGasTag, blobGasUsedTag,
-    requestsHashTag, depositEventLayoutTag, systemContractCallFailedTag ]
+    requestsHashTag, depositEventLayoutTag, systemContractCallFailedTag,
+    blockRlpSizeExceededTag ]
 
 /-- Is this error one of the precise block-rejection reasons? -/
 def isBlockException (err : String) : Bool :=
@@ -1074,8 +1076,8 @@ def isBlockException (err : String) : Bool :=
 -- a tag up to a fixed " : ", so a tag that prefixed another could be read as
 -- the wrong reason -- and one reason read as another is precisely the defect
 -- this vocabulary exists to remove.
-#guard blockExceptionTags.length = 23
-#guard blockExceptionTags.eraseDups.length = 23
+#guard blockExceptionTags.length = 24
+#guard blockExceptionTags.eraseDups.length = 24
 #guard blockExceptionTags.all fun t =>
   (blockExceptionTags.filter fun u => t.isPrefixOf u).length = 1
 
@@ -6241,6 +6243,31 @@ def rlpToBlock (rlp : B8L) : Except String (Block × B256) := do
       s!"{rlpRoundTripTag} : decoded block does not re-encode byte-for-byte"
   .ok ⟨block, (Header.toBLT block.header).toB8L.keccak⟩
 
+/-- Check EIP-7934 against the authoritative original RLP byte length.
+
+This deliberately takes evidence, not a decoded `Block`: re-encoding would
+discard the distinction between the bytes a peer supplied and a reconstructed
+canonical value. The block-import path performs its existing strict decode and
+byte-for-byte canonical round trip before treating this as a consensus
+rejection. -/
+def checkBlockRlpSize (limits : BlockLimits) (rawSize : Nat) :
+    Except String Unit :=
+  match limits.maxRlpSize with
+  | none => .ok ()
+  | some maxRlpSize =>
+    if rawSize > maxRlpSize then
+      .error
+        s!"{blockRlpSizeExceededTag} : original block RLP is {rawSize} bytes > \
+           maximum = {maxRlpSize}"
+    else
+      .ok ()
+
+#guard (checkBlockRlpSize osakaRules.block (8388608 - 1)).toOption.isSome
+#guard (checkBlockRlpSize osakaRules.block 8388608).toOption.isSome
+#guard hasTag blockRlpSizeExceededTag <|
+  checkBlockRlpSize osakaRules.block (8388608 + 1)
+#guard (checkBlockRlpSize pragueRules.block (8388608 + 1)).toOption.isSome
+
 --------------- STRICT BLOCK/LEGACY DECODER REGRESSION CHECKS ---------------
 
 private def withdrawalDecoderVector
@@ -6475,12 +6502,18 @@ its rules without decoding the RLP a second time. The two failure channels are
 unchanged: `.error` is a harness-level failure, `.inr` is a block this chain
 rejects. -/
 private def addBlockToChainCore (rules : ForkRules) (chain : BlockChain)
-    (block : Block) (blockHeaderHash : B256) :
+    (block : Block) (blockHeaderHash : B256) (rawRlpSize : Nat) :
     Except String (BlockChain ⊕ String) := do
   cprint "\nSTATE BEFORE TRANSITION :"
   cprint s!"{chain.state}"
   if (Header.toBLT block.header).toB8L.keccak ≠ blockHeaderHash then do
     .error "ERROR : incorrect block header hash"
+  -- Strict decode/round-trip and the independent header-hash evidence above
+  -- are harness prerequisites. Among consensus checks EIP-7934 is first,
+  -- before `stateTransitionWith` reaches header validation, exactly as EELS.
+  match checkBlockRlpSize rules.block rawRlpSize with
+  | .error err => return .inr err
+  | .ok () => pure ()
   let chain ←
     match stateTransitionWith rules chain block with
     | .error err => return (.inr err)
@@ -6493,7 +6526,7 @@ private def addBlockToChainCore (rules : ForkRules) (chain : BlockChain)
 def addBlockToChainWith (rules : ForkRules) (chain : BlockChain)
     (blockRlp : B8L) : Except String (BlockChain ⊕ String) := do
   let ⟨block, blockHeaderHash⟩ ← rlpToBlock blockRlp
-  addBlockToChainCore rules chain block blockHeaderHash
+  addBlockToChainCore rules chain block blockHeaderHash blockRlp.length
 
 /-- Block import at an explicitly named fork, for static fixture suites.
 
@@ -6510,7 +6543,7 @@ def addBlockToChainUsing (cfg : ChainConfig) (chain : BlockChain)
     (blockRlp : B8L) : Except String (BlockChain ⊕ String) := do
   let ⟨block, blockHeaderHash⟩ ← rlpToBlock blockRlp
   let rules ← cfg.rulesAt block.header.timestamp
-  addBlockToChainCore rules chain block blockHeaderHash
+  addBlockToChainCore rules chain block blockHeaderHash blockRlp.length
 
 /-- Prague block import.
 

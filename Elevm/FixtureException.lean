@@ -16,12 +16,12 @@
 
 import Elevm.Execution
 
-/-- The canonical vocabulary used for the selected Prague corpus, spanning the
-`BlockException` and `TransactionException` namespaces.  It comprises the
-published identities observed in the pinned lane plus distinct internal
-classifications needed for precise current-fixture routes.  The list and
-guards below make a vocabulary change explicit rather than silently accepting
-an unknown token. -/
+/-- The canonical vocabulary used by the selected Prague and Osaka corpora,
+spanning the `BlockException` and `TransactionException` namespaces. It
+comprises the published identities observed in the pinned lane plus distinct
+internal classifications needed for precise current-fixture routes. The list
+and guards below make a vocabulary change explicit rather than silently
+accepting an unknown token. -/
 inductive FixtureException where
   -- BlockException.*
   | blockExtraDataTooBig
@@ -43,6 +43,7 @@ inductive FixtureException where
   | blockInvalidTransactionsRoot
   | blockInvalidWithdrawalsRoot
   | blockRlpInvalidFieldOverflow64
+  | blockRlpBlockLimitExceeded
   | blockRlpStructuresEncoding
   | blockRlpWithdrawalsNotRead
   | blockUnknownParent
@@ -93,6 +94,7 @@ def all : List FixtureException :=
     blockInvalidTransactionsRoot,
     blockInvalidWithdrawalsRoot,
     blockRlpInvalidFieldOverflow64,
+    blockRlpBlockLimitExceeded,
     blockRlpStructuresEncoding,
     blockRlpWithdrawalsNotRead,
     blockUnknownParent,
@@ -141,6 +143,7 @@ def toString : FixtureException → String
   | blockInvalidTransactionsRoot => "BlockException.INVALID_TRANSACTIONS_ROOT"
   | blockInvalidWithdrawalsRoot => "BlockException.INVALID_WITHDRAWALS_ROOT"
   | blockRlpInvalidFieldOverflow64 => "BlockException.RLP_INVALID_FIELD_OVERFLOW_64"
+  | blockRlpBlockLimitExceeded => "BlockException.RLP_BLOCK_LIMIT_EXCEEDED"
   | blockRlpStructuresEncoding => "BlockException.RLP_STRUCTURES_ENCODING"
   | blockRlpWithdrawalsNotRead => "BlockException.RLP_WITHDRAWALS_NOT_READ"
   | blockUnknownParent => "BlockException.UNKNOWN_PARENT"
@@ -285,6 +288,7 @@ def actualRoutes : List ActualRoute :=
     (systemContractCallFailedTag, blockSystemContractCallFailed),
     (withdrawalsRootTag, blockInvalidWithdrawalsRoot),
     (requestsHashTag, blockInvalidRequests),
+    (blockRlpSizeExceededTag, blockRlpBlockLimitExceeded),
     (rlpFieldOverflow64Tag, blockRlpInvalidFieldOverflow64),
     (rlpWithdrawalsNotReadTag, blockRlpWithdrawalsNotRead),
     (rlpStructureTag, blockRlpStructuresEncoding),
@@ -355,14 +359,14 @@ end FixtureException
 
 open FixtureException
 
--- The vocabulary is exactly the generated Prague inventory plus the current
--- typed-transaction chain-ID identity.
-#guard all.length = 42
+-- The vocabulary is the reviewed current-mainnet identity set reached by the
+-- supported static Prague and Osaka lanes.
+#guard all.length = 43
 
 -- `toString` is injective, so no two identities collapse to one token.
-#guard (all.map toString).eraseDups.length = 42
+#guard (all.map toString).eraseDups.length = 43
 
--- `toString`/`ofString?` round trip on all 42, in both directions.
+-- `toString`/`ofString?` round trip on all 43, in both directions.
 #guard all.all (fun e => ofString? e.toString == some e)
 #guard all.all (fun e => (ofString? e.toString).all (fun e' => e'.toString == e.toString))
 
@@ -557,9 +561,9 @@ def routedRlpTags : List String :=
     rlpFixedWidthTag, rlpFieldOverflow256Tag, rlpLeadingZerosTag,
     rlpRoundTripTag ]
 
-#guard actualRoutes.length = 51
-#guard (actualRoutes.map Prod.fst).eraseDups.length = 51
-#guard (actualRoutes.map Prod.snd).eraseDups.length = 42
+#guard actualRoutes.length = 52
+#guard (actualRoutes.map Prod.fst).eraseDups.length = 52
+#guard (actualRoutes.map Prod.snd).eraseDups.length = 43
 #guard actualRoutes.all fun r =>
   blockExceptionTags.contains r.fst || routedRlpTags.contains r.fst ||
     transactionExceptionTags.contains r.fst ||
@@ -572,7 +576,7 @@ def routedRlpTags : List String :=
 #guard transactionExceptionTags.eraseDups.length = 20
 #guard transactionExceptionTags.all fun t => (actualRoutes.map Prod.fst).contains t
 
--- Coverage in the fixture-to-producer direction: every one of the 42
+-- Coverage in the fixture-to-producer direction: every one of the 43
 -- identities generated from the Prague corpus has at least one actual route.
 -- A newly observed expected identity therefore cannot silently remain
 -- unclassifiable.
