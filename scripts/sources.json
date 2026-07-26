@@ -47,6 +47,32 @@
     },
     "_comment_metadata": "Release-identity fields recorded inside the archive's own .meta/fixtures.ini ([fixtures] section). Fast-mode verification confirms the extracted tree carries this exact provenance; the values are pinned here rather than derived from release_tag because the upstream git ref (tests-v5.4.0) differs from the release download tag (v5.4.0)."
   },
+  "current_mainnet": {
+    "release_tag": "tests@v20.0.1",
+    "release_commit": "87aba1a38a476b31f819a2390eb481527e6dc683",
+    "release_url": "https://github.com/ethereum/execution-specs/releases/tag/tests%40v20.0.1",
+    "archive_url": "https://github.com/ethereum/execution-specs/releases/download/tests%40v20.0.1/fixtures.tar.gz",
+    "archive_filename": "fixtures.tar.gz",
+    "archive_sha256": "3586193db06d4d5745d5e90b3c3008c2255a4e19ccd8f11a3ce887aec8c0b17c",
+    "default_env_var": "EEST_MAINNET_ROOT",
+    "default_subpath_from_home": "eest-mainnet-v20.0.1",
+    "fixtures_subpath": "fixtures",
+    "expected_top_level_dirs": [
+      "blockchain_tests",
+      "blockchain_tests_engine",
+      "blockchain_tests_engine_x",
+      "blockchain_tests_sync",
+      "state_tests",
+      "transaction_tests"
+    ],
+    "metadata_json_file_subpath": ".meta/index.json",
+    "metadata_json_expected": {
+      "root_hash": "0xcb8bab604063f937b1af3bd809aa5c38edfd43b23792c387b9c326c2a17e5cf1",
+      "created_at": "2026-07-15T13:03:38.793320Z",
+      "test_count": 239839
+    },
+    "_comment": "The canonical current-mainnet lane. The GitHub release API resolves this immutable target commit and uploaded asset digest; the archive's .meta/index.json provides the independently checked fixture-tree root hash, generation time, and test count."
+  },
   "python_oracle": {
     "intended_version": "3.11.9",
     "patch_policy": "exact",

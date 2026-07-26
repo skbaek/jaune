@@ -3,7 +3,8 @@
 
 Checks the manifest in scripts/sources.json against the local filesystem and
 Git state: execution-specs, the nested ethereum/tests + LegacyTests checkout,
-the EEST release archive/extraction, and the Python oracle venv when present.
+the frozen EEST and current-mainnet release archives/extractions, and the
+Python oracle venv when present.
 The EEST checks are fast by default (archive hash, expected layout, --bls tier
 directories, and the release provenance in fixtures/.meta/fixtures.ini);
 --eest-deep additionally streams the archive and compares it file-by-file
@@ -592,6 +593,41 @@ def _check_eest_bls_tier(spec: dict, fixtures_root: Path) -> list[Check]:
     ]
 
 
+def check_current_mainnet_metadata(spec: dict, fixtures_root: Path) -> list[Check]:
+    """Verify the release index fields emitted by the current fixture publisher."""
+    subpath = spec.get("metadata_json_file_subpath")
+    expected = spec.get("metadata_json_expected")
+    if not subpath or not isinstance(expected, dict):
+        return []
+    try:
+        relative = safe_member_relpath(subpath)
+    except UnsafeArchiveMember as error:
+        return [Check("current-mainnet: fixture metadata", STATUS_FAIL, str(error))]
+    path = fixtures_root / Path(*relative.parts)
+    if not path.is_file():
+        return [Check("current-mainnet: fixture metadata", STATUS_MISSING, f"not found: {path}")]
+    try:
+        actual = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as error:
+        return [Check("current-mainnet: fixture metadata", STATUS_FAIL, f"could not parse {path}: {error}")]
+    if not isinstance(actual, dict):
+        return [Check("current-mainnet: fixture metadata", STATUS_FAIL, "release index is not a JSON object")]
+    mismatches = [
+        f"{key}: expected {want!r}, got {actual.get(key)!r}"
+        for key, want in expected.items()
+        if actual.get(key) != want
+    ]
+    if mismatches:
+        return [Check("current-mainnet: fixture metadata", STATUS_FAIL, "; ".join(mismatches))]
+    return [
+        Check(
+            "current-mainnet: fixture metadata",
+            STATUS_OK,
+            ", ".join(f"{key}={value}" for key, value in expected.items()),
+        )
+    ]
+
+
 def deep_compare_eest(manifest: dict, eest_root: Path) -> list[Check]:
     """Read-only deep verification: compare the extracted fixture tree against
     the verified release archive strongly enough to detect changed, missing,
@@ -743,6 +779,28 @@ def deep_compare_eest(manifest: dict, eest_root: Path) -> list[Check]:
         checks.append(Check("eest deep: tree vs archive", STATUS_OK, summary))
 
     return checks
+
+
+def _renamed_checks(checks: list[Check], old: str, new: str) -> list[Check]:
+    """Reuse the release-archive verifier while keeping doctor output precise."""
+    return [Check(check.name.replace(old, new), check.status, check.detail) for check in checks]
+
+
+def check_current_mainnet(manifest: dict, mainnet_root: Path) -> list[Check]:
+    """Check the separately installed canonical current-mainnet fixture lane."""
+    spec = manifest["current_mainnet"]
+    checks = check_eest({"eest": spec}, mainnet_root)
+    checks = _renamed_checks(checks, "eest", "current-mainnet")
+    fixtures_root = mainnet_root / spec["fixtures_subpath"]
+    if fixtures_root.is_dir():
+        checks.extend(check_current_mainnet_metadata(spec, fixtures_root))
+    return checks
+
+
+def deep_compare_current_mainnet(manifest: dict, mainnet_root: Path) -> list[Check]:
+    """Deep-check the current-mainnet tree against its pinned release asset."""
+    checks = deep_compare_eest({"eest": manifest["current_mainnet"]}, mainnet_root)
+    return _renamed_checks(checks, "eest", "current-mainnet")
 
 
 def check_python_oracle(
@@ -958,6 +1016,13 @@ def build_parser() -> argparse.ArgumentParser:
         "ELEVM_FIXTURES, which points directly at a tier's leaf fixture dir)",
     )
     parser.add_argument(
+        "--mainnet-root",
+        type=Path,
+        default=None,
+        help="current-mainnet install root containing fixtures.tar.gz and extracted "
+        "fixtures/ (default: $EEST_MAINNET_ROOT or ~/eest-mainnet-v20.0.1)",
+    )
+    parser.add_argument(
         "--venv",
         type=Path,
         default=None,
@@ -975,6 +1040,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="additionally deep-verify the extracted EEST tree against the "
         "release archive (hashes every file; slower but detects changed, "
         "missing, and extra fixtures). Ignored with --legacy-only.",
+    )
+    parser.add_argument(
+        "--mainnet-deep",
+        action="store_true",
+        help="additionally deep-verify the current-mainnet fixture tree against "
+        "its release archive. Ignored with --legacy-only.",
     )
     parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     return parser
@@ -1004,6 +1075,18 @@ def main(argv: list[str]) -> int:
     else:
         eest_root = Path.home() / manifest["eest"]["default_subpath_from_home"]
 
+    if args.mainnet_root is not None and "current_mainnet" not in manifest:
+        print("error: --mainnet-root requires a current_mainnet manifest section", file=sys.stderr)
+        return 2
+    if args.mainnet_root is not None:
+        mainnet_root = args.mainnet_root.expanduser()
+    elif os.environ.get("EEST_MAINNET_ROOT"):
+        mainnet_root = Path(os.environ["EEST_MAINNET_ROOT"]).expanduser()
+    elif "current_mainnet" in manifest:
+        mainnet_root = Path.home() / manifest["current_mainnet"]["default_subpath_from_home"]
+    else:
+        mainnet_root = None
+
     venv_path = args.venv or (execution_specs_root / "venv")
 
     checks: list[Check] = []
@@ -1014,6 +1097,10 @@ def main(argv: list[str]) -> int:
         checks.extend(check_eest(manifest, eest_root))
         if args.eest_deep:
             checks.extend(deep_compare_eest(manifest, eest_root))
+        if mainnet_root is not None:
+            checks.extend(check_current_mainnet(manifest, mainnet_root))
+        if args.mainnet_deep and mainnet_root is not None:
+            checks.extend(deep_compare_current_mainnet(manifest, mainnet_root))
         checks.extend(check_python_oracle(manifest, venv_path, args.manifest))
 
     ok = all(check.status == STATUS_OK for check in checks)

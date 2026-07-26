@@ -157,7 +157,13 @@ instance : ToString FixtureException := ⟨toString⟩
 folding, no prefix acceptance. An unrecognized token is `none`, which every
 caller must treat as a failure. -/
 def ofString? (s : String) : Option FixtureException :=
-  all.find? (fun e => e.toString = s)
+  match s with
+  -- EIP-7623 names a separate *reason* for the same transaction-level
+  -- rejection. Current fixtures list it as an alternative to the pre-existing
+  -- intrinsic-gas identity; ELeVM's Prague validator reports the latter.
+  | "TransactionException.INTRINSIC_GAS_BELOW_FLOOR_GAS_COST" =>
+    some txIntrinsicGasTooLow
+  | _ => all.find? (fun e => e.toString = s)
 
 /-- The delimiter separating the alternatives of an `expectException` set. -/
 def delimiter : String := "|"

@@ -30,10 +30,12 @@ requirements.
 
 ## Verification status
 
-- **Tested fork:** Prague. ELEVM is a Prague-only executable specification; the
-  fixture harness runs every case with `--network Prague`, so fixtures whose
-  cases demand non-Prague (fork-transition) execution are out of scope by
-  design.
+- **Tested fork:** Prague. ELEVM's frozen legacy corpus remains a regression
+  instrument. The canonical current-mainnet lane is the separately installed
+  `execution-specs` `tests@v20.0.1` release; its strict generated manifests
+  currently activate Prague (`scripts/check-mainnet.sh --suite prague` or the
+  deterministic `--suite smoke`) and inventory later forks/transitions without
+  executing them.
 - **Reference:** mirrors [execution-specs](https://github.com/ethereum/execution-specs)
   `mainnet` at commit
   [`4198…7694`](https://github.com/ethereum/execution-specs/tree/4198b9c5996713b268aed602739d5aa40e277694)
@@ -44,6 +46,8 @@ requirements.
   [`scripts/vectors/SOURCES.md`](scripts/vectors/SOURCES.md):
   - *legacy* — `ethereum/tests` @ `3129f16` (plus its `LegacyTests` @ `2339b9a`);
   - *EEST* — release `v5.4.0` (SHA-256 `92cf1b47…`).
+  - *current mainnet* — `execution-specs` `tests@v20.0.1` @ `87aba1a`, asset
+    SHA-256 `3586193d…`; installed separately at `~/eest-mainnet-v20.0.1`.
 - **Conformance tiers** ([`scripts/check.sh`](scripts/check.sh)), each compared
   against a committed baseline. The gate passes iff **every** file's PASS/FAIL
   matches its baseline — a regression gate, not an all-green one:

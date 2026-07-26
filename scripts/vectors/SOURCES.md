@@ -33,6 +33,29 @@ downloads the EEST release, the full legacy corpus, or the frozen oracle
 packages. Run the bootstrap and long fixture tiers locally only when their
 network, disk, and runtime requirements above are available.
 
+## Canonical current-mainnet lane
+
+The current conformance source is
+[`execution-specs` `tests@v20.0.1`](https://github.com/ethereum/execution-specs/releases/tag/tests%40v20.0.1),
+resolved to commit `87aba1a38a476b31f819a2390eb481527e6dc683`. Its official
+`fixtures.tar.gz` asset has SHA-256
+`3586193db06d4d5745d5e90b3c3008c2255a4e19ccd8f11a3ce887aec8c0b17c`.
+Install it separately from frozen EEST material:
+
+```sh
+python3 scripts/bootstrap_mainnet.py                 # ~/eest-mainnet-v20.0.1
+python3 scripts/env_doctor.py --mainnet-root ~/eest-mainnet-v20.0.1 --mainnet-deep
+```
+
+The asset is verified before extraction. Its `fixtures/.meta/index.json` is
+also checked for the publisher's root hash, timestamp, and case count. Generate
+or verify the exact suite/exclusion inventory with
+`scripts/gen_mainnet_manifest.py`; never edit `scripts/mainnet/manifests.json`
+by hand. `scripts/check-mainnet.sh --suite smoke` and `--suite prague` execute
+only generated Prague entries with an explicit `--network Prague`; Osaka, BPO,
+and transition labels remain inventoried and fail closed until their owning
+migration steps activate them.
+
 ## Legacy fixture Git bootstrap
 
 [`scripts/bootstrap_legacy.py`](../bootstrap_legacy.py) safely creates the

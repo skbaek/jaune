@@ -109,6 +109,18 @@ def make_manifest(path: Path, **overrides) -> dict:
             "metadata_file_subpath": ".meta/fixtures.ini",
             "metadata_expected": {"ref": "refs/tags/tests-v0", "build": "stable"},
         },
+        "current_mainnet": {
+            "release_tag": "tests@v0.0.0",
+            "release_commit": "3" * 40,
+            "release_url": "https://example.invalid/tests@v0.0.0",
+            "archive_url": "https://example.invalid/current-fixtures.tar.gz",
+            "archive_filename": "fixtures.tar.gz",
+            "archive_sha256": "3" * 64,
+            "default_env_var": "EEST_MAINNET_ROOT",
+            "default_subpath_from_home": "eest-mainnet-v0.0.0",
+            "fixtures_subpath": "fixtures",
+            "expected_top_level_dirs": ["blockchain_tests"],
+        },
         "python_oracle": {
             "intended_version": "3.11.9",
             "patch_policy": "exact",
@@ -610,6 +622,13 @@ class MainCliTests(unittest.TestCase):
         (eest_root / "fixtures" / "blockchain_tests").mkdir(parents=True)
         (eest_root / "fixtures" / "state_tests").mkdir(parents=True)
 
+        mainnet_root = tmp / "eest-mainnet-v0.0.0"
+        mainnet_root.mkdir()
+        mainnet_archive = mainnet_root / "fixtures.tar.gz"
+        mainnet_archive.write_bytes(b"synthetic current-mainnet archive")
+        mainnet_hash = env_doctor.sha256_file(mainnet_archive)
+        (mainnet_root / "fixtures" / "blockchain_tests").mkdir(parents=True)
+
         venv = tmp / "venv"
         make_fake_venv(venv, "3.11.9", {"py-ecc": "8.0.0", "coincurve": "20.0.0"})
 
@@ -641,13 +660,25 @@ class MainCliTests(unittest.TestCase):
                 "fixtures_subpath": "fixtures",
                 "expected_top_level_dirs": ["blockchain_tests", "state_tests"],
             },
+            current_mainnet={
+                "release_tag": "tests@v0.0.0",
+                "release_commit": "3" * 40,
+                "release_url": "https://example.invalid/tests@v0.0.0",
+                "archive_url": "https://example.invalid/current-fixtures.tar.gz",
+                "archive_filename": "fixtures.tar.gz",
+                "archive_sha256": mainnet_hash,
+                "default_env_var": "EEST_MAINNET_ROOT",
+                "default_subpath_from_home": "eest-mainnet-v0.0.0",
+                "fixtures_subpath": "fixtures",
+                "expected_top_level_dirs": ["blockchain_tests"],
+            },
         )
-        return manifest_path, execution_specs, eest_root, venv
+        return manifest_path, execution_specs, eest_root, mainnet_root, venv
 
     def test_full_environment_json_ok(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            manifest_path, execution_specs, eest_root, venv = self._build_good_environment(tmp_path)
+            manifest_path, execution_specs, eest_root, mainnet_root, venv = self._build_good_environment(tmp_path)
             buf = io.StringIO()
             with redirect_stdout(buf):
                 rc = env_doctor.main(
@@ -655,6 +686,7 @@ class MainCliTests(unittest.TestCase):
                         "--manifest", str(manifest_path),
                         "--execution-specs", str(execution_specs),
                         "--eest-root", str(eest_root),
+                        "--mainnet-root", str(mainnet_root),
                         "--venv", str(venv),
                         "--json",
                     ]
@@ -667,7 +699,7 @@ class MainCliTests(unittest.TestCase):
     def test_legacy_only_skips_deferred_eest_and_python(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            manifest_path, execution_specs, _, _ = self._build_good_environment(
+            manifest_path, execution_specs, _, _, _ = self._build_good_environment(
                 tmp_path
             )
             missing = tmp_path / "deliberately-missing"
@@ -731,7 +763,7 @@ class MainCliTests(unittest.TestCase):
     def test_one_dirty_component_breaks_full_environment(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            manifest_path, execution_specs, eest_root, venv = self._build_good_environment(tmp_path)
+            manifest_path, execution_specs, eest_root, mainnet_root, venv = self._build_good_environment(tmp_path)
             (execution_specs / "file.txt").write_text("dirtied\n")
             buf = io.StringIO()
             with redirect_stdout(buf):
@@ -740,6 +772,7 @@ class MainCliTests(unittest.TestCase):
                         "--manifest", str(manifest_path),
                         "--execution-specs", str(execution_specs),
                         "--eest-root", str(eest_root),
+                        "--mainnet-root", str(mainnet_root),
                         "--venv", str(venv),
                         "--json",
                     ]

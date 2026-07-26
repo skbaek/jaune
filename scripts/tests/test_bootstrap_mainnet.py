@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Synthetic tests for scripts/bootstrap_eest.py.
+"""Synthetic tests for scripts/bootstrap_mainnet.py.
 
 Every archive is a tiny locally-built tar.gz served over a file:// URL. The
-suite never contacts the network or reads/writes the user's real EEST
+suite never contacts the network or reads/writes the user's real CURRENT MAINNET
 destination.
 """
 from __future__ import annotations
@@ -34,13 +34,14 @@ def _load(name: str):
 
 
 env_doctor = _load("env_doctor")
-bootstrap = _load("bootstrap_eest")
+bootstrap = _load("bootstrap_mainnet")
 
 
 _BLS_G1 = "fixtures/blockchain_tests/prague/eip2537_bls_12_381_precompiles/test_valid.json"
 _BLS_BLOB = "fixtures/blockchain_tests/cancun/eip4844_blobs/test_valid_inputs.json"
 
 VALID_FILES = {
+    "fixtures/.meta/index.json": b'{"root_hash":"0xsynthetic","test_count":4}\n',
     "fixtures/.meta/fixtures.ini": (
         b"; a comment\n[fixtures]\nref = refs/tags/tests-v0\nbuild = stable\n"
     ),
@@ -96,13 +97,7 @@ def base_manifest(archive_url: str, archive_sha: str) -> dict:
             "default_env_var": "EEST_ROOT",
             "default_subpath_from_home": "eest-fixtures",
             "fixtures_subpath": "fixtures",
-            "expected_top_level_dirs": ["blockchain_tests", "state_tests"],
-            "bls_tier_subpaths": [
-                "blockchain_tests/prague/eip2537_bls_12_381_precompiles",
-                "blockchain_tests/cancun/eip4844_blobs",
-            ],
-            "metadata_file_subpath": ".meta/fixtures.ini",
-            "metadata_expected": {"ref": "refs/tags/tests-v0", "build": "stable"},
+            "expected_top_level_dirs": ["blockchain_tests"],
         },
         "current_mainnet": {
             "release_tag": "tests@v0.0.0",
@@ -114,7 +109,15 @@ def base_manifest(archive_url: str, archive_sha: str) -> dict:
             "default_env_var": "EEST_MAINNET_ROOT",
             "default_subpath_from_home": "eest-mainnet-v0.0.0",
             "fixtures_subpath": "fixtures",
-            "expected_top_level_dirs": ["blockchain_tests"],
+            "expected_top_level_dirs": ["blockchain_tests", "state_tests"],
+            "bls_tier_subpaths": [
+                "blockchain_tests/prague/eip2537_bls_12_381_precompiles",
+                "blockchain_tests/cancun/eip4844_blobs",
+            ],
+            "metadata_file_subpath": ".meta/fixtures.ini",
+            "metadata_expected": {"ref": "refs/tags/tests-v0", "build": "stable"},
+            "metadata_json_file_subpath": ".meta/index.json",
+            "metadata_json_expected": {"root_hash": "0xsynthetic", "test_count": 4},
         },
         "python_oracle": {
             "intended_version": "3.11.9",
@@ -139,7 +142,7 @@ class Scenario:
         sha_override: str | None = None,
     ):
         self.root = root
-        self.archive_source = root / "download source" / "fixtures_stable.tar.gz"
+        self.archive_source = root / "download source" / "fixtures.tar.gz"
         self.archive_source.parent.mkdir(parents=True)
         real_sha = write_archive(
             self.archive_source,
@@ -152,7 +155,7 @@ class Scenario:
             self.archive_source.as_uri(), self.archive_sha
         )
         self.manifest_path.write_text(json.dumps(self.manifest_data))
-        self.eest_root = root / "eest-fixtures"
+        self.mainnet_root = root / "eest-mainnet-v0.0.0"
 
     def write_manifest(self, data: dict) -> None:
         self.manifest_data = data
@@ -163,7 +166,7 @@ class Scenario:
         self.archive_source.write_bytes(data)
 
 
-class BootstrapEestTests(unittest.TestCase):
+class BootstrapMainnetTests(unittest.TestCase):
     def run_cli(self, scenario: Scenario, *extra: str) -> tuple[int, str, str]:
         stdout, stderr = io.StringIO(), io.StringIO()
         with redirect_stdout(stdout), redirect_stderr(stderr):
@@ -171,19 +174,19 @@ class BootstrapEestTests(unittest.TestCase):
                 [
                     "--manifest",
                     str(scenario.manifest_path),
-                    "--eest-root",
-                    str(scenario.eest_root),
+                    "--mainnet-root",
+                    str(scenario.mainnet_root),
                     *extra,
                 ]
             )
         return rc, stdout.getvalue(), stderr.getvalue()
 
     def assert_no_staging_or_part(self, scenario: Scenario) -> None:
-        if scenario.eest_root.exists():
+        if scenario.mainnet_root.exists():
             self.assertEqual(
-                list(scenario.eest_root.glob(".fixtures.bootstrap-*")), []
+                list(scenario.mainnet_root.glob(".fixtures.bootstrap-*")), []
             )
-            self.assertEqual(list(scenario.eest_root.glob("*.part")), [])
+            self.assertEqual(list(scenario.mainnet_root.glob("*.part")), [])
 
     # ----- correct extraction & idempotence -------------------------------
 
@@ -194,20 +197,20 @@ class BootstrapEestTests(unittest.TestCase):
             self.assertEqual(rc, 0, stderr)
             self.assertIn("OK — installed", stdout)
 
-            fixtures = scenario.eest_root / "fixtures"
+            fixtures = scenario.mainnet_root / "fixtures"
             self.assertTrue(
                 (
                     fixtures
                     / "blockchain_tests/prague/eip2537_bls_12_381_precompiles/test_valid.json"
                 ).is_file()
             )
-            self.assertTrue((scenario.eest_root / "fixtures_stable.tar.gz").is_file())
+            self.assertTrue((scenario.mainnet_root / "fixtures.tar.gz").is_file())
             self.assert_no_staging_or_part(scenario)
 
             # The doctor recognises the produced tree, fast checks and deep.
-            checks = env_doctor.check_eest(scenario.manifest_data, scenario.eest_root)
-            deep = env_doctor.deep_compare_eest(
-                scenario.manifest_data, scenario.eest_root
+            checks = env_doctor.check_current_mainnet(scenario.manifest_data, scenario.mainnet_root)
+            deep = env_doctor.deep_compare_current_mainnet(
+                scenario.manifest_data, scenario.mainnet_root
             )
             self.assertTrue(all(c.status == "ok" for c in checks), checks)
             self.assertTrue(all(c.status == "ok" for c in deep), deep)
@@ -232,13 +235,13 @@ class BootstrapEestTests(unittest.TestCase):
     def test_reuses_prepositioned_verified_archive_offline(self):
         with tempfile.TemporaryDirectory() as tmp:
             scenario = Scenario(Path(tmp))
-            scenario.eest_root.mkdir()
+            scenario.mainnet_root.mkdir()
             # Pre-place the verified archive; then break the URL entirely.
-            (scenario.eest_root / "fixtures_stable.tar.gz").write_bytes(
+            (scenario.mainnet_root / "fixtures.tar.gz").write_bytes(
                 scenario.archive_source.read_bytes()
             )
             manifest = json.loads(scenario.manifest_path.read_text())
-            manifest["eest"]["archive_url"] = "http://example.invalid/nope.tar.gz"
+            manifest["current_mainnet"]["archive_url"] = "http://example.invalid/nope.tar.gz"
             scenario.write_manifest(manifest)
 
             rc, stdout, stderr = self.run_cli(scenario)
@@ -253,16 +256,16 @@ class BootstrapEestTests(unittest.TestCase):
             self.assertEqual(rc, 0, stderr)
             self.assertIn("DRY RUN", stdout)
             self.assertIn("Would download", stdout)
-            self.assertFalse(scenario.eest_root.exists())
+            self.assertFalse(scenario.mainnet_root.exists())
 
     def test_paths_with_spaces(self):
         with tempfile.TemporaryDirectory() as tmp:
             scenario = Scenario(Path(tmp))
-            scenario.eest_root = Path(tmp) / "eest fixtures with spaces"
+            scenario.mainnet_root = Path(tmp) / "mainnet fixtures with spaces"
             rc, stdout, stderr = self.run_cli(scenario)
             self.assertEqual(rc, 0, stderr)
             self.assertTrue(
-                (scenario.eest_root / "fixtures/state_tests/example/test_state.json").is_file()
+                (scenario.mainnet_root / "fixtures/state_tests/example/test_state.json").is_file()
             )
 
     # ----- checksum & transport failures ----------------------------------
@@ -273,7 +276,7 @@ class BootstrapEestTests(unittest.TestCase):
             rc, _, stderr = self.run_cli(scenario)
             self.assertEqual(rc, 1)
             self.assertIn("checksum verification", stderr)
-            self.assertFalse((scenario.eest_root / "fixtures").exists())
+            self.assertFalse((scenario.mainnet_root / "fixtures").exists())
             self.assert_no_staging_or_part(scenario)
 
     def test_truncated_download_refuses(self):
@@ -283,20 +286,20 @@ class BootstrapEestTests(unittest.TestCase):
             rc, _, stderr = self.run_cli(scenario)
             self.assertEqual(rc, 1)
             self.assertIn("bootstrap failed safely", stderr)
-            self.assertFalse((scenario.eest_root / "fixtures").exists())
+            self.assertFalse((scenario.mainnet_root / "fixtures").exists())
             self.assert_no_staging_or_part(scenario)
 
     def test_corrupt_cached_archive_is_refused_not_overwritten(self):
         with tempfile.TemporaryDirectory() as tmp:
             scenario = Scenario(Path(tmp))
-            scenario.eest_root.mkdir()
-            corrupt = scenario.eest_root / "fixtures_stable.tar.gz"
+            scenario.mainnet_root.mkdir()
+            corrupt = scenario.mainnet_root / "fixtures.tar.gz"
             corrupt.write_bytes(b"not the real archive")
             rc, _, stderr = self.run_cli(scenario)
             self.assertEqual(rc, 1)
             self.assertIn("does not verify", stderr)
             self.assertEqual(corrupt.read_bytes(), b"not the real archive")
-            self.assertFalse((scenario.eest_root / "fixtures").exists())
+            self.assertFalse((scenario.mainnet_root / "fixtures").exists())
 
     # ----- malicious archive members --------------------------------------
 
@@ -311,7 +314,7 @@ class BootstrapEestTests(unittest.TestCase):
             self.assertEqual(rc, 1)
             self.assertIn("unsafe archive", stderr)
             self.assertFalse(Path("/etc/evil").exists())
-            self.assertFalse((scenario.eest_root / "fixtures").exists())
+            self.assertFalse((scenario.mainnet_root / "fixtures").exists())
             self.assert_no_staging_or_part(scenario)
 
     def test_traversal_member_refused(self):
@@ -342,7 +345,7 @@ class BootstrapEestTests(unittest.TestCase):
             rc, _, stderr = self.run_cli(scenario)
             self.assertEqual(rc, 1)
             self.assertIn("link", stderr)
-            self.assertFalse((scenario.eest_root / "fixtures").exists())
+            self.assertFalse((scenario.mainnet_root / "fixtures").exists())
 
     def test_hardlink_member_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -371,9 +374,9 @@ class BootstrapEestTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             scenario = Scenario(Path(tmp))
             # A structurally incomplete tree: only one top-level dir, no metadata.
-            partial = scenario.eest_root / "fixtures" / "blockchain_tests"
+            partial = scenario.mainnet_root / "fixtures" / "blockchain_tests"
             partial.mkdir(parents=True)
-            marker = scenario.eest_root / "fixtures" / "keep.txt"
+            marker = scenario.mainnet_root / "fixtures" / "keep.txt"
             marker.write_text("do not touch\n")
             rc, _, stderr = self.run_cli(scenario)
             self.assertEqual(rc, 1)
@@ -386,8 +389,8 @@ class BootstrapEestTests(unittest.TestCase):
             scenario = Scenario(Path(tmp))
             self.assertEqual(self.run_cli(scenario)[0], 0)
             # Corrupt the provenance file; a rerun must refuse, not "fix" it.
-            meta = scenario.eest_root / "fixtures/.meta/fixtures.ini"
-            meta.write_text("[fixtures]\nref = refs/tags/tampered\nbuild = stable\n")
+            meta = scenario.mainnet_root / "fixtures/.meta/index.json"
+            meta.write_text('{"root_hash":"0xtampered","test_count":4}\n')
             rc, _, stderr = self.run_cli(scenario)
             self.assertEqual(rc, 1)
             self.assertIn("refusing existing fixture tree", stderr)
@@ -398,7 +401,7 @@ class BootstrapEestTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             scenario = Scenario(Path(tmp))
             manifest = json.loads(scenario.manifest_path.read_text())
-            manifest["eest"]["archive_sha256"] = "xyz"
+            manifest["current_mainnet"]["archive_sha256"] = "xyz"
             scenario.write_manifest(manifest)
             rc, _, stderr = self.run_cli(scenario)
             self.assertEqual(rc, 2)
@@ -408,7 +411,7 @@ class BootstrapEestTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             scenario = Scenario(Path(tmp))
             manifest = json.loads(scenario.manifest_path.read_text())
-            manifest["eest"]["archive_filename"] = "../escape.tar.gz"
+            manifest["current_mainnet"]["archive_filename"] = "../escape.tar.gz"
             scenario.write_manifest(manifest)
             rc, _, stderr = self.run_cli(scenario)
             self.assertEqual(rc, 2)
@@ -417,15 +420,15 @@ class BootstrapEestTests(unittest.TestCase):
     def test_explicit_archive_cache_precedes_default(self):
         with tempfile.TemporaryDirectory() as tmp:
             scenario = Scenario(Path(tmp))
-            cache = Path(tmp) / "shared cache" / "fixtures_stable.tar.gz"
-            with mock.patch.dict(os.environ, {"EEST_ROOT": str(scenario.eest_root)}, clear=False):
+            cache = Path(tmp) / "shared cache" / "fixtures.tar.gz"
+            with mock.patch.dict(os.environ, {"EEST_MAINNET_ROOT": str(scenario.mainnet_root)}, clear=False):
                 self.assertEqual(
-                    bootstrap.archive_cache_from_args(cache, scenario.eest_root, scenario.manifest_data),
+                    bootstrap.archive_cache_from_args(cache, scenario.mainnet_root, scenario.manifest_data),
                     Path(os.path.abspath(cache)),
                 )
                 self.assertEqual(
-                    bootstrap.archive_cache_from_args(None, scenario.eest_root, scenario.manifest_data),
-                    scenario.eest_root / "fixtures_stable.tar.gz",
+                    bootstrap.archive_cache_from_args(None, scenario.mainnet_root, scenario.manifest_data),
+                    scenario.mainnet_root / "fixtures.tar.gz",
                 )
 
 

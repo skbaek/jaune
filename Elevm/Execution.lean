@@ -3681,7 +3681,6 @@ mutual
       Fueled.assert
         (memorySize ≤ sevm.benvStat.rules.code.maxInitCodeSize)
         ⟨"OutOfGasError", devm⟩
-      let devm ← Fueled.ok <| addAccessedAddress devm newAddress
       let createMsgGas ← Fueled.ok <| except64th devm.gasLeft
       let devm ← Fueled.ok <| devm.withGasLeft (devm.gasLeft - createMsgGas)
       assertDynamic sevm devm
@@ -3698,6 +3697,7 @@ mutual
           target.code.size ≠ 0 ∨
           target.stor.size ≠ 0 ) then
         return (← devm.push 0)
+      let devm ← Fueled.ok <| addAccessedAddress devm newAddress
       let childMsg : Msg ← Fueled.ok <| {
         benv := Benv.mk devm.state devm.createdAccounts sevm.benvStat
         tenv := {transientStorage := devm.transientStorage, stat := sevm.tenvStat}
