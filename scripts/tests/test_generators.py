@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import importlib.util
 import json
 import os
@@ -16,6 +17,7 @@ from unittest.mock import patch
 SCRIPTS_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS_DIR))
 
+import bootstrap_oracle
 import env_doctor
 
 # Most files in the synthetic checkout only have to exist, so an inert comment
@@ -37,6 +39,41 @@ def keccak256(buffer: Bytes | bytearray) -> Bytes32:
     return Bytes32(keccak.new(digest_bits=256).update(buffer).digest())
 '''
 
+# The frozen oracle closure the generator run path needs: the manifest package
+# pins it enforces via require_known_packages, plus the modules the pinned EELS
+# hash module imports.  The whole lock is the unit here, exactly as
+# scripts/oracle/requirements.lock treats it, so these tests ask for all of it
+# rather than for a per-test subset.
+ORACLE_PACKAGES = {"py-ecc": "8.0.0", "coincurve": "20.0.0"}
+ORACLE_MODULES = ("Crypto.Hash.keccak", "ethereum_types.bytes")
+
+ORACLE_PROBE = """\
+import json
+import sys
+from importlib import import_module
+from importlib.metadata import version
+
+modules, packages = json.loads(sys.argv[1])
+for name in modules:
+    import_module(name)
+for name, expected in packages.items():
+    actual = version(name)
+    if actual != expected:
+        raise SystemExit(f"{name} {actual} != {expected}")
+"""
+
+# Imported off the checkout's src root under the frozen oracle interpreter,
+# which is the same code path the generator itself uses.
+SYNTHETIC_KECCAK_PROBE = """\
+import json
+import sys
+
+sys.path.insert(0, sys.argv[1])
+from ethereum.crypto.hash import keccak256
+
+print(json.dumps([keccak256(b"").hex(), keccak256(bytes(32)).hex()]))
+"""
+
 
 def load_module(name: str, path: Path):
     spec = importlib.util.spec_from_file_location(name, path)
@@ -48,6 +85,69 @@ def load_module(name: str, path: Path):
 
 
 common = load_module("generator_common", SCRIPTS_DIR / "generator_common.py")
+
+
+def interpreter_has_oracle_closure(python: str) -> bool:
+    expectations = json.dumps([list(ORACLE_MODULES), ORACLE_PACKAGES])
+    try:
+        result = subprocess.run(
+            [python, "-c", ORACLE_PROBE, expectations],
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return False
+    return result.returncode == 0
+
+
+@functools.lru_cache(maxsize=None)
+def find_oracle_interpreter() -> tuple[str | None, str]:
+    """Locate an interpreter with the frozen oracle closure.
+
+    Returns ``(interpreter, "")`` or ``(None, skip_reason)``.  The interpreter
+    running this suite is preferred, so the documented
+    ``<execution-specs>/venv/bin/python -m unittest ...`` form needs no lookup;
+    otherwise the manifest-default oracle venv is used, which is the same
+    checkout-and-venv resolution bootstrap_oracle.py performs.
+    """
+    if interpreter_has_oracle_closure(sys.executable):
+        return sys.executable, ""
+    # Only the venv lookup needs the real manifest.  Manifest validity is
+    # test_env_doctor's assertion, not this module's, so a broken manifest is
+    # reported there and skips here instead of failing the same defect twice.
+    try:
+        manifest = env_doctor.load_manifest(SCRIPTS_DIR / "sources.json")
+    except env_doctor.ManifestError as error:
+        return None, (
+            f"cannot locate the frozen oracle venv because the manifest is "
+            f"unreadable ({error}); this suite's interpreter "
+            f"({sys.executable}) does not provide the oracle closure either"
+        )
+    execution_specs = bootstrap_oracle.execution_specs_from_args(None, manifest)
+    venv_python = (
+        bootstrap_oracle.venv_from_args(None, execution_specs) / "bin" / "python"
+    )
+    if interpreter_has_oracle_closure(str(venv_python)):
+        return str(venv_python), ""
+    wanted = ", ".join(
+        [f"{name} {expected}" for name, expected in ORACLE_PACKAGES.items()]
+        + list(ORACLE_MODULES)
+    )
+    return None, (
+        f"no frozen oracle interpreter: neither this suite's interpreter "
+        f"({sys.executable}) nor the manifest-default oracle venv "
+        f"({venv_python}) provides {wanted}. Create the venv with "
+        f"scripts/bootstrap_oracle.py, or run this suite as "
+        f"'<execution-specs>/venv/bin/python -m unittest discover -s "
+        f"scripts/tests'."
+    )
+
+
+def require_oracle_interpreter(test: unittest.TestCase) -> str:
+    interpreter, reason = find_oracle_interpreter()
+    if interpreter is None:
+        test.skipTest(reason)
+    return interpreter
 
 
 def git(path: Path, *args: str) -> str:
@@ -109,7 +209,7 @@ def make_manifest(path: Path, commit: str) -> None:
             "package_manager": "uv",
             "requirements_lock": "oracle/requirements.lock",
             "requirements_lock_sha256": "4" * 64,
-            "known_packages": {"py-ecc": "8.0.0", "coincurve": "20.0.0"},
+            "known_packages": dict(ORACLE_PACKAGES),
             "full_lock_status": "locked",
         },
     }
@@ -118,6 +218,10 @@ def make_manifest(path: Path, commit: str) -> None:
 
 class GeneratorTests(unittest.TestCase):
     def test_u256_explicit_path_with_spaces_is_deterministic(self):
+        # A full generator run, so it needs the frozen oracle closure: the
+        # manifest package gate and the pinned keccak256 import both come after
+        # the checkout is validated.
+        python = require_oracle_interpreter(self)
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             checkout = root / "execution specs"
@@ -130,7 +234,7 @@ class GeneratorTests(unittest.TestCase):
             for output in (output_one, output_two):
                 subprocess.run(
                     [
-                        sys.executable,
+                        python,
                         str(SCRIPTS_DIR / "gen-u256-vectors.py"),
                         "--manifest",
                         str(manifest),
@@ -176,6 +280,9 @@ class GeneratorTests(unittest.TestCase):
             self.assertEqual(selected, checkout)
 
     def test_wrong_checkout_revision_is_clear_failure(self):
+        # Checkout validation precedes the package gate and the pinned import,
+        # so this failure mode is interpreter-independent: run it under whatever
+        # interpreter runs the suite rather than requiring the oracle venv.
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             checkout = root / "checkout"
@@ -207,7 +314,8 @@ class GeneratorTests(unittest.TestCase):
         # The generator imports ethereum.crypto.hash at run time, well after the
         # checkout is validated.  It has to be part of the declared layout, or a
         # checkout missing it is reported as an opaque ModuleNotFoundError from
-        # the middle of generation rather than as a checkout problem.
+        # the middle of generation rather than as a checkout problem.  That
+        # rejection is also interpreter-independent, for the reason above.
         self.assertIn("ethereum/crypto/hash.py", env_doctor.GENERATOR_SOURCE_LAYOUT)
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -239,24 +347,27 @@ class GeneratorTests(unittest.TestCase):
     def test_synthetic_checkout_keccak_matches_the_pinned_formula(self):
         # The synthetic ethereum.crypto.hash has to agree with the pinned EELS
         # module, not merely satisfy the import: these are the standard
-        # Keccak-256 digests (not SHA3-256) the generator also hardcodes.
+        # Keccak-256 digests (not SHA3-256) the generator also hardcodes.  The
+        # fixture wraps pycryptodome, so this needs the frozen oracle closure
+        # too, and it is imported the way the generator imports it.
+        python = require_oracle_interpreter(self)
         with tempfile.TemporaryDirectory() as tmp:
             checkout = Path(tmp) / "checkout"
             make_checkout(checkout)
-            try:
-                keccak256 = load_module(
-                    "synthetic_eels_hash",
-                    checkout / "src" / "ethereum" / "crypto" / "hash.py",
-                ).keccak256
-            finally:
-                sys.modules.pop("synthetic_eels_hash", None)
+            digests = json.loads(
+                subprocess.run(
+                    [python, "-c", SYNTHETIC_KECCAK_PROBE, str(checkout / "src")],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ).stdout
+            )
         self.assertEqual(
-            keccak256(b"").hex(),
-            "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
-        )
-        self.assertEqual(
-            keccak256(bytes(32)).hex(),
-            "290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e563",
+            digests,
+            [
+                "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+                "290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e563",
+            ],
         )
 
     def test_bls_package_checks_report_missing_and_wrong_versions(self):

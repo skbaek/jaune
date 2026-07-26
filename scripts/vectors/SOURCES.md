@@ -211,6 +211,29 @@ Any changed resolved version, changed generator bytes, local-path entry, or
 need to loosen the execution-specs pin requires review rather than silently
 updating the manifest's recorded lock hash.
 
+## Interpreter for the unit-test suite
+
+Most of `scripts/tests` is standard-library only, but two tests in
+`test_generators.py` run the U256 generator and the pinned `keccak256` for
+real, so they need the frozen oracle closure that `requirements.lock` pins for
+generator execution. Run the suite with that interpreter to get full coverage:
+
+```sh
+"$EELS_ROOT/venv/bin/python" -m unittest discover -s scripts/tests
+```
+
+Plain `python3 -m unittest discover -s scripts/tests` is also green. The two
+tests accept the interpreter running the suite when it already has the closure,
+fall back to the manifest-default `<execution-specs>/venv/bin/python`, and
+otherwise skip with a message naming that venv and `scripts/bootstrap_oracle.py`
+instead of failing. `OK (skipped=2)` therefore means the oracle venv was not
+discoverable, not that the generators are unverified — create the venv as
+above and rerun for the full 80.
+
+The remaining generator tests stay on whichever interpreter runs the suite on
+purpose: they assert checkout-validation refusals, which happen before the
+package gate and the pinned import and are interpreter-independent.
+
 ## BLS constants generator
 
 `Elevm/BLSConst.lean` is generated from the following pinned local sources:

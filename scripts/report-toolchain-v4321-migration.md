@@ -84,7 +84,9 @@ drift: `make_checkout()` builds a synthetic execution-specs tree containing
 `gen-u256-vectors.py` imports `ethereum.crypto.hash`. Tracked separately; out of
 scope here. Also note this suite must be run with the frozen oracle interpreter
 (`~/execution-specs/venv/bin/python`, 3.11.9) — bare system `python3` masks the
-real error with a "py-ecc is not installed" message.
+real error with a "py-ecc is not installed" message. That masking is itself
+resolved by the interpreter follow-up recorded below; this paragraph is kept as
+the original observation.
 
 **Post-Step 1 tooling follow-up — resolved.** The independently reviewed fix at
 `b0f5f0bbad9a6a9935cfab5ee277dd1442f95e87` single-sources the generator
@@ -103,6 +105,34 @@ conflicts. On that merge candidate:
 This follow-up changes Python tooling and tests only. It does not change Lean
 source, the Step 1 binary, fixture classifications, protocol behavior, or
 Blanc's immutable ELeVM pin.
+
+**Interpreter follow-up — resolved.** The oracle-interpreter requirement left by
+the fix above was implicit: under bare system `python3`,
+`test_u256_explicit_path_with_spaces_is_deterministic` and
+`test_synthetic_checkout_keccak_matches_the_pinned_formula` errored (exit 2 from
+the `py-ecc` gate under `check=True`, and `ModuleNotFoundError: No module named
+'Crypto'` respectively) rather than stating what they needed. Both now resolve an
+interpreter carrying the frozen oracle closure — preferring the interpreter
+running the suite, then the manifest-default `<execution-specs>/venv/bin/python`
+resolved through the existing `bootstrap_oracle` helpers — and skip with a
+message naming that venv and `scripts/bootstrap_oracle.py` when neither is
+available. The gate catalogue and `scripts/vectors/SOURCES.md` now state the
+expected interpreter. Measured on `codex/migration` at `839f442`:
+
+- `/Users/agent/execution-specs/venv/bin/python -m unittest discover -s scripts/tests`:
+  **80/80 PASS** in 14.379 s (14.47 s wall);
+- `python3 -m unittest discover -s scripts/tests`: **80/80 PASS** in 10.628 s
+  (10.72 s wall) — previously 2 errors;
+- same command with `EELS_ROOT` unresolvable, standing in for a checkout with no
+  oracle venv: **OK (skipped=2)**, the documented clean-checkout result;
+- `scripts/check-hygiene.sh`: **PASS**, all 2 allowlisted occurrences and no new
+  `dbg_trace`/`sorry` under `Elevm/` (0.04 s wall).
+
+`OK (skipped=2)` is an incomplete gate, not a pass: it means no oracle venv was
+discoverable. Only the oracle interpreter, or a discoverable oracle venv, gives
+the full 80. This follow-up likewise changes Python tests and documentation
+only — no Lean source, generator semantics, pinned-revision handling, committed
+vectors, or manifest content.
 
 ## Performance: fixture level (the authoritative basis)
 
