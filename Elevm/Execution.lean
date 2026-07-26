@@ -48,7 +48,9 @@ def AccessList.toStrings (al : AccessList) : List String :=
 
 -- class Authorization
 structure Auth : Type where
-  chainId : B64
+  -- EIP-7702 authorization chain IDs are uint256 values.  A value other than
+  -- the execution chain ID (or zero) makes only this tuple inapplicable.
+  chainId : B256
   address : Adr
   nonce : B64
   yParity : Nat
@@ -899,6 +901,7 @@ def initcodeSizeExceededTag : String := "InitcodeSizeExceededError"
 def insufficientAccountFundsTag : String := "InsufficientAccountFundsError"
 def insufficientMaxFeePerGasTag : String := "InsufficientMaxFeePerGasError"
 def intrinsicGasTooLowTag : String := "IntrinsicGasTooLowError"
+def invalidChainIdTag : String := "InvalidChainIdError"
 def nonceIsMaxTag : String := "NonceIsMaxError"
 def nonceMismatchTooHighTag : String := "NonceMismatchTooHighError"
 def nonceMismatchTooLowTag : String := "NonceMismatchTooLowError"
@@ -909,18 +912,21 @@ def type3ContractCreationTag : String := "Type3ContractCreationError"
 def type3InvalidBlobVersionedHashTag : String :=
   "Type3InvalidBlobVersionedHashError"
 def type3ZeroBlobsTag : String := "Type3ZeroBlobsError"
+def type4ContractCreationTag : String := "Type4ContractCreationError"
+def emptyAuthorizationListTag : String := "EmptyAuthorizationListError"
 
 def transactionExceptionTags : List String :=
   [ gasPriceProductOverflowTag, gasAllowanceExceededTag,
     initcodeSizeExceededTag, insufficientAccountFundsTag,
-    insufficientMaxFeePerGasTag, intrinsicGasTooLowTag, nonceIsMaxTag,
+    insufficientMaxFeePerGasTag, intrinsicGasTooLowTag, invalidChainIdTag, nonceIsMaxTag,
     nonceMismatchTooHighTag, nonceMismatchTooLowTag,
     priorityGreaterThanMaxFeeTag, senderNotEoaTag,
     type3BlobCountExceededTag, type3ContractCreationTag,
-    type3InvalidBlobVersionedHashTag, type3ZeroBlobsTag ]
+    type3InvalidBlobVersionedHashTag, type3ZeroBlobsTag,
+    type4ContractCreationTag, emptyAuthorizationListTag ]
 
-#guard transactionExceptionTags.length = 15
-#guard transactionExceptionTags.eraseDups.length = 15
+#guard transactionExceptionTags.length = 18
+#guard transactionExceptionTags.eraseDups.length = 18
 #guard transactionExceptionTags.all fun t =>
   (transactionExceptionTags.filter fun u => t.isPrefixOf u).length = 1
 
@@ -930,7 +936,7 @@ def isInvalidTransaction (err : String) : Bool :=
     "InvalidSignatureError",
     "TransactionTypeError",
     "InsufficientMaxFeePerBlobGasError",
-    "EmptyAuthorizationListError"
+    emptyAuthorizationListTag
   ] (hasErrorType err)
 
 ------------------- BLOCK-REJECTION REASONS --------------------
@@ -1014,6 +1020,12 @@ def blobGasUsedTag : String := "BlobGasUsedError"
 /-- The computed requests hash disagrees with the header. -/
 def requestsHashTag : String := "RequestsHashError"
 
+/-- A deposit-contract log has the wrong ABI layout for an EIP-6110 request. -/
+def depositEventLayoutTag : String := "DepositEventLayoutError"
+
+/-- A mandatory protocol system-contract call reverted, threw, or ran out of gas. -/
+def systemContractCallFailedTag : String := "SystemContractCallFailedError"
+
 /-- Every block-rejection tag. The single source of truth for the distinctness
 checks, and for `isBlockException`. -/
 def blockExceptionTags : List String :=
@@ -1023,7 +1035,7 @@ def blockExceptionTags : List String :=
     extraDataTooBigTag, unknownParentTag, unknownParentZeroTag,
     stateRootTag, transactionsRootTag, receiptsRootTag, logBloomTag,
     withdrawalsRootTag, headerNonceTag, excessBlobGasTag, blobGasUsedTag,
-    requestsHashTag ]
+    requestsHashTag, depositEventLayoutTag, systemContractCallFailedTag ]
 
 /-- Is this error one of the precise block-rejection reasons? -/
 def isBlockException (err : String) : Bool :=
@@ -1033,8 +1045,8 @@ def isBlockException (err : String) : Bool :=
 -- a tag up to a fixed " : ", so a tag that prefixed another could be read as
 -- the wrong reason -- and one reason read as another is precisely the defect
 -- this vocabulary exists to remove.
-#guard blockExceptionTags.length = 21
-#guard blockExceptionTags.eraseDups.length = 21
+#guard blockExceptionTags.length = 23
+#guard blockExceptionTags.eraseDups.length = 23
 #guard blockExceptionTags.all fun t =>
   (blockExceptionTags.filter fun u => t.isPrefixOf u).length = 1
 
@@ -3691,13 +3703,13 @@ mutual
            sevm.depth = 0 ) then
         return (← (devm.withGasLeft (devm.gasLeft + createMsgGas)).push 0)
       let devm ← Fueled.ok <| devm.incrNonce sevm.currentTarget
+      let devm ← Fueled.ok <| addAccessedAddress devm newAddress
       if
         ( let target := devm.state.get newAddress
           target.nonce ≠ (0 : B64) ∨
           target.code.size ≠ 0 ∨
           target.stor.size ≠ 0 ) then
         return (← devm.push 0)
-      let devm ← Fueled.ok <| addAccessedAddress devm newAddress
       let childMsg : Msg ← Fueled.ok <| {
         benv := Benv.mk devm.state devm.createdAccounts sevm.benvStat
         tenv := {transientStorage := devm.transientStorage, stat := sevm.tenvStat}
@@ -4573,12 +4585,15 @@ def recoverAuthority (auth : Auth) : Except String Adr := do
           .b8s auth.address.toB8L,
           .b8s auth.nonce.toB8L.sig
         ]
-  (secp256k1.recover signingHash yParity.toBool r s ).toExcept "sender recovery failed"
+  -- EIP-7702 invalidates an authorization tuple, not its enclosing
+  -- transaction: a recovery failure is therefore handled by
+  -- `setDelegationStep` exactly like the other invalid-signature forms.
+  (secp256k1.recover signingHash yParity.toBool r s ).toExcept "InvalidSignatureError"
 
 def setDelegationStep
     (auth : Auth) (msg : Msg) (refundCounter : B256) :
     Except String (Msg × B256) := do
-  if auth.chainId != msg.benv.stat.chainId && auth.chainId != 0 then
+  if auth.chainId != msg.benv.stat.chainId.toB256 && auth.chainId != 0 then
     .ok ⟨msg, refundCounter⟩
   else if auth.nonce = B64.max then
     .ok ⟨msg, refundCounter⟩
@@ -4858,8 +4873,20 @@ def checkTransactionReceiver (tx : Tx) : Except String Unit :=
 def checkTransactionAuthorizationList (tx : Tx) : Except String Unit :=
   match tx.type with
   | .four _ _ _ _ _ [] =>
-    .error "EmptyAuthorizationListError : empty authorization list"
+    .error s!"{emptyAuthorizationListTag} : empty authorization list"
   | _ => .ok ()
+
+def checkTransactionChainId (benv : Benv) (tx : Tx) : Except String Unit :=
+  match tx.type with
+  | .zero _ _ =>
+    if tx.v < 35 || (tx.v - 35) / 2 = benv.stat.chainId.toNat then .ok ()
+    else .error s!"{invalidChainIdTag} : transaction chain ID = {(tx.v - 35) / 2}"
+  | .one chainId _ _ _
+  | .two chainId _ _ _ _
+  | .three chainId _ _ _ _ _ _
+  | .four chainId _ _ _ _ _ =>
+    if chainId = benv.stat.chainId then .ok ()
+    else .error s!"{invalidChainIdTag} : transaction chain ID = {chainId}"
 
 def checkTransactionSenderCode (senderAccount : Acct) :
     Except String Unit :=
@@ -4889,8 +4916,9 @@ def checkTransactionSenderAccount
 
 -- check_transaction
 def checkTransaction (benv : Benv) (blockOut : BlockOutput) (tx : Tx) :
-  Except String (Adr × Nat × List B256 × Nat) := do
+    Except String (Adr × Nat × List B256 × Nat) := do
   let txBlobGasUsed ← checkTransactionGasLimits benv blockOut tx
+  checkTransactionChainId benv tx
   let senderAddress ← recoverSender benv.stat.chainId tx
   let senderAccount := benv.state.get senderAddress
   let ⟨effectiveGasPrice, maxGasFee⟩ ← checkTransactionGasFee benv tx
@@ -5303,7 +5331,7 @@ def BLT.toExStrAuth : BLT → Except String Auth
       .b8s r,
       .b8s s
     ] => do
-      let chainId ← chainId.toRlpB64 "authorization chainId"
+      let chainId ← chainId.toRlpB256 "authorization chainId"
       let address ← address.toRlpAdr "authorization address"
       let nonce ← nonce.toRlpB64 "authorization nonce"
       let yParity ← yParity.toRlpNat "authorization yParity" 32
@@ -5477,6 +5505,8 @@ def B8L.toExStrTx : B8L → Except String Tx
       let maxPriorityFee ← maxPriorityFee.toRlpNat "type-4 transaction maxPriorityFee" 32
       let maxFee ← maxFee.toRlpNat "type-4 transaction maxFee" 32
       let gas ← gas.toRlpNat "type-4 transaction gas" 32
+      if receiver.isEmpty then
+        .error s!"{type4ContractCreationTag} : type-4 transaction receiver is empty"
       let receiver ← receiver.toRlpAdr "type-4 transaction receiver"
       let value ← value.toRlpNat "type-4 transaction value" 32
       let accessList ← accessList.toExStrAccessList
@@ -5556,32 +5586,32 @@ def processSystemTransaction (benv : Benv)
 
 def extractDepositData (data : B8L) : Except String B8L := do
   if data.length != depositEventLength then
-    .error "InvalidBlock : Invalid deposit event data length"
+    .error s!"{depositEventLayoutTag} : invalid deposit event data length"
   if data.sliceToNat 0 32 ≠ pubkeyOffset then
-    .error "InvalidBlock : Invalid pubkey offset in deposit log"
+    .error s!"{depositEventLayoutTag} : invalid pubkey offset in deposit log"
   if data.sliceToNat 32 32 ≠ withdrawalCredentialsOffset then
-    .error "InvalidBlock : Invalid withdrawal credentials offset in deposit log"
+    .error s!"{depositEventLayoutTag} : invalid withdrawal credentials offset in deposit log"
   if data.sliceToNat 64 32 ≠ amountOffset then
-    .error "InvalidBlock : Invalid amount offset in deposit log"
+    .error s!"{depositEventLayoutTag} : invalid amount offset in deposit log"
   if data.sliceToNat 96 32 ≠ signatureOffset then
-    .error "InvalidBlock : Invalid signature offset in deposit log"
+    .error s!"{depositEventLayoutTag} : invalid signature offset in deposit log"
   if data.sliceToNat 128 32 ≠ indexOffset then
-    .error "InvalidBlock : Invalid index offset in deposit log"
+    .error s!"{depositEventLayoutTag} : invalid index offset in deposit log"
   if data.sliceToNat pubkeyOffset 32 ≠ pubkeySize then
-    .error "InvalidBlock : Invalid pubkey size in deposit log"
+    .error s!"{depositEventLayoutTag} : invalid pubkey size in deposit log"
   let pubkey : B8L := data.slice! (pubkeyOffset + 32) pubkeySize
   if data.sliceToNat withdrawalCredentialsOffset 32 ≠ withdrawalCredentialsSize then
-    .error "InvalidBlock : Invalid withdrawal credentials size in deposit log"
+    .error s!"{depositEventLayoutTag} : invalid withdrawal credentials size in deposit log"
   let withdrawalCredentials : B8L :=
     data.slice! (withdrawalCredentialsOffset + 32) withdrawalCredentialsSize
   if data.sliceToNat amountOffset 32 ≠ amountSize then
-    .error "InvalidBlock : Invalid amount size in deposit log"
+    .error s!"{depositEventLayoutTag} : invalid amount size in deposit log"
   let amount : B8L := data.slice! (amountOffset + 32) amountSize
   if data.sliceToNat signatureOffset 32 ≠ signatureSize then
-    .error "InvalidBlock : Invalid signature size in deposit log"
+    .error s!"{depositEventLayoutTag} : invalid signature size in deposit log"
   let signature : B8L := data.slice! (signatureOffset + 32) signatureSize
   if data.sliceToNat indexOffset 32 ≠ indexSize then
-    .error "InvalidBlock : Invalid index size in deposit log"
+    .error s!"{depositEventLayoutTag} : invalid index size in deposit log"
   let index : B8L := data.slice! (indexOffset + 32) indexSize
   .ok (pubkey ++ withdrawalCredentials ++ amount ++ signature ++ index)
 
@@ -5616,7 +5646,8 @@ def processCheckedSystemTransaction
   let ⟨state, systemTxOutput⟩ ←
     processSystemTransaction benv target systemContractCode data
   if systemTxOutput.error.isSome then
-    .error s!"InvalidBlock : System contract ({target.toHex}) call failed: {systemTxOutput.error.get!}"
+    .error s!"{systemContractCallFailedTag} : system contract ({target.toHex}) call failed: \
+      {systemTxOutput.error.get!}"
   .ok ⟨state, systemTxOutput⟩
 
 def processGeneralPurposeRequests
@@ -5690,7 +5721,10 @@ def getLast256BlockHashes (chain : BlockChain) : List B256 :=
     (hash :: hashes).reverse
 
 def computeRequestsHash (requests : List B8L) : B256 :=
-  let hashes := requests.map (fun r => r.keccak.toB8L)
+  -- EIP-7685 commits the SHA-256 digest of each type-prefixed request, then
+  -- hashes their concatenation once more.  This is deliberately not the EVM
+  -- Keccak primitive used by transaction and trie commitments.
+  let hashes := requests.map (fun r => r.sha256.toB8L)
   B8L.sha256 <| List.flatten hashes
 
 def State.root (w : State) : B256 :=
@@ -6148,12 +6182,12 @@ private def shortWidthScalar : B8L := 0x01 :: List.replicate 30 0x00
 #guard hasTag rlpFixedWidthTag <|
   B8L.toExStrTx <| type3Vector [0x01] testRecipient (List.replicate 31 0x33)
 
--- Authorizations: exact address width, bounded chainId and nonce, bounded
+-- Authorizations: exact address width, a uint256 chainId, bounded nonce and
 -- r/s, and the six-field list shape.
 #guard hasTag rlpFixedWidthTag <| B8L.toExStrTx <| type4Vector testRecipient <|
   authOf [0x01] (List.replicate 21 0x11) [0x01] fullWidthScalar fullWidthScalar
-#guard hasTag rlpFieldOverflow64Tag <| B8L.toExStrTx <| type4Vector testRecipient <|
-  authOf nineByteScalar testRecipient [0x01] fullWidthScalar fullWidthScalar
+#guard (B8L.toExStrTx <| type4Vector testRecipient <|
+  authOf nineByteScalar testRecipient [0x01] fullWidthScalar fullWidthScalar).toOption.isSome
 #guard hasTag rlpFieldOverflow64Tag <| B8L.toExStrTx <| type4Vector testRecipient <|
   authOf [0x01] testRecipient nineByteScalar fullWidthScalar fullWidthScalar
 #guard hasTag rlpFieldOverflow256Tag <| B8L.toExStrTx <| type4Vector testRecipient <|

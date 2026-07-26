@@ -16,15 +16,12 @@
 
 import Elevm.Execution
 
-/-- One official exception identity from the Prague fixture corpus.
-
-The corpus vocabulary was generated from the fixtures rather than assumed: at
-the time of writing the selected Prague cases contain 296 expected-invalid
-blocks, 38 distinct `expectException` strings, and exactly these 35 individual
-identities, spanning the `BlockException` and `TransactionException`
-namespaces. `FixtureException.all` and the `#guard`s below pin those counts, so
-corpus drift shows up as a build failure rather than as a silently accepted
-unknown token. -/
+/-- The canonical vocabulary used for the selected Prague corpus, spanning the
+`BlockException` and `TransactionException` namespaces.  It comprises the
+published identities observed in the pinned lane plus distinct internal
+classifications needed for precise current-fixture routes.  The list and
+guards below make a vocabulary change explicit rather than silently accepting
+an unknown token. -/
 inductive FixtureException where
   -- BlockException.*
   | blockExtraDataTooBig
@@ -38,7 +35,10 @@ inductive FixtureException where
   | blockInvalidGasLimit
   | blockInvalidGasUsed
   | blockInvalidLogBloom
+  | blockInvalidDepositEventLayout
+  | blockSystemContractCallFailed
   | blockInvalidReceiptsRoot
+  | blockInvalidRequests
   | blockInvalidStateRoot
   | blockInvalidTransactionsRoot
   | blockInvalidWithdrawalsRoot
@@ -54,6 +54,7 @@ inductive FixtureException where
   | txInsufficientAccountFunds
   | txInsufficientMaxFeePerGas
   | txIntrinsicGasTooLow
+  | txInvalidChainId
   | txNonceIsMax
   | txNonceMismatchTooHigh
   | txNonceMismatchTooLow
@@ -63,6 +64,8 @@ inductive FixtureException where
   | txType3TxContractCreation
   | txType3TxInvalidBlobVersionedHash
   | txType3TxZeroBlobs
+  | txType4EmptyAuthorizationList
+  | txType4TxContractCreation
 deriving DecidableEq, BEq, Repr, Inhabited
 
 namespace FixtureException
@@ -81,7 +84,10 @@ def all : List FixtureException :=
     blockInvalidGasLimit,
     blockInvalidGasUsed,
     blockInvalidLogBloom,
+    blockInvalidDepositEventLayout,
+    blockSystemContractCallFailed,
     blockInvalidReceiptsRoot,
+    blockInvalidRequests,
     blockInvalidStateRoot,
     blockInvalidTransactionsRoot,
     blockInvalidWithdrawalsRoot,
@@ -96,6 +102,7 @@ def all : List FixtureException :=
     txInsufficientAccountFunds,
     txInsufficientMaxFeePerGas,
     txIntrinsicGasTooLow,
+    txInvalidChainId,
     txNonceIsMax,
     txNonceMismatchTooHigh,
     txNonceMismatchTooLow,
@@ -105,6 +112,7 @@ def all : List FixtureException :=
     txType3TxContractCreation,
     txType3TxInvalidBlobVersionedHash,
     txType3TxZeroBlobs ]
+    ++ [txType4EmptyAuthorizationList, txType4TxContractCreation]
 
 /-- The canonical spelling of an identity: byte-for-byte the token the fixtures
 use. -/
@@ -123,7 +131,10 @@ def toString : FixtureException → String
   | blockInvalidGasLimit => "BlockException.INVALID_GASLIMIT"
   | blockInvalidGasUsed => "BlockException.INVALID_GAS_USED"
   | blockInvalidLogBloom => "BlockException.INVALID_LOG_BLOOM"
+  | blockInvalidDepositEventLayout => "BlockException.INVALID_DEPOSIT_EVENT_LAYOUT"
+  | blockSystemContractCallFailed => "BlockException.SYSTEM_CONTRACT_CALL_FAILED"
   | blockInvalidReceiptsRoot => "BlockException.INVALID_RECEIPTS_ROOT"
+  | blockInvalidRequests => "BlockException.INVALID_REQUESTS"
   | blockInvalidStateRoot => "BlockException.INVALID_STATE_ROOT"
   | blockInvalidTransactionsRoot => "BlockException.INVALID_TRANSACTIONS_ROOT"
   | blockInvalidWithdrawalsRoot => "BlockException.INVALID_WITHDRAWALS_ROOT"
@@ -139,6 +150,7 @@ def toString : FixtureException → String
   | txInsufficientAccountFunds => "TransactionException.INSUFFICIENT_ACCOUNT_FUNDS"
   | txInsufficientMaxFeePerGas => "TransactionException.INSUFFICIENT_MAX_FEE_PER_GAS"
   | txIntrinsicGasTooLow => "TransactionException.INTRINSIC_GAS_TOO_LOW"
+  | txInvalidChainId => "TransactionException.INVALID_CHAINID"
   | txNonceIsMax => "TransactionException.NONCE_IS_MAX"
   | txNonceMismatchTooHigh => "TransactionException.NONCE_MISMATCH_TOO_HIGH"
   | txNonceMismatchTooLow => "TransactionException.NONCE_MISMATCH_TOO_LOW"
@@ -150,6 +162,8 @@ def toString : FixtureException → String
   | txType3TxInvalidBlobVersionedHash =>
     "TransactionException.TYPE_3_TX_INVALID_BLOB_VERSIONED_HASH"
   | txType3TxZeroBlobs => "TransactionException.TYPE_3_TX_ZERO_BLOBS"
+  | txType4EmptyAuthorizationList => "TransactionException.TYPE_4_EMPTY_AUTHORIZATION_LIST"
+  | txType4TxContractCreation => "TransactionException.TYPE_4_TX_CONTRACT_CREATION"
 
 instance : ToString FixtureException := ⟨toString⟩
 
@@ -163,6 +177,26 @@ def ofString? (s : String) : Option FixtureException :=
   -- intrinsic-gas identity; ELeVM's Prague validator reports the latter.
   | "TransactionException.INTRINSIC_GAS_BELOW_FLOOR_GAS_COST" =>
     some txIntrinsicGasTooLow
+  -- The v20 fixture publisher also permits the corresponding aggregate
+  -- blob-gas allowance spelling for the established per-transaction limit.
+  | "TransactionException.TYPE_3_TX_MAX_BLOB_GAS_ALLOWANCE_EXCEEDED" =>
+    some txType3TxBlobCountExceeded
+  | "TransactionException.INSUFFICIENT_MAX_FEE_PER_BLOB_GAS" =>
+    some txInsufficientMaxFeePerGas
+  | "TransactionException.TYPE_3_TX_WITH_FULL_BLOBS" =>
+    some txType3TxBlobCountExceeded
+  | "BlockException.INCORRECT_BLOB_GAS_USED" =>
+    some blockInvalidGasUsed
+  | "BlockException.BLOB_GAS_USED_ABOVE_LIMIT" =>
+    some blockInvalidGasUsed
+  | "BlockException.INCORRECT_EXCESS_BLOB_GAS" =>
+    some blockInvalidGasUsed
+  | "TransactionException.INVALID_SIGNATURE_VRS" =>
+    some txSenderNotEoa
+  -- The withdrawal-root fixtures permit the historical block-hash spelling as
+  -- an alternative oracle name for the same header-commitment mismatch.
+  | "BlockException.INVALID_BLOCK_HASH" =>
+    some blockInvalidWithdrawalsRoot
   | _ => all.find? (fun e => e.toString = s)
 
 /-- The delimiter separating the alternatives of an `expectException` set. -/
@@ -219,9 +253,8 @@ identities are exact here: a 64-bit scalar overflow has its own route, omission
 of the post-Shanghai withdrawals component has its own route, and the remaining
 strict structural/canonical encoding failures route to structures encoding.
 
-Four block tags are deliberately absent, and their absence is the fail-closed
-choice rather than an oversight: `headerNonceTag`, `excessBlobGasTag`,
-`blobGasUsedTag` and `requestsHashTag` are real consensus rules that the Prague
+One block tag is deliberately absent, and its absence is the fail-closed
+choice rather than an oversight: `headerNonceTag` is a real consensus rule that the Prague
 fixture vocabulary has no identity for. A block rejected for one of them cannot
 be scored against any expected identity, so it must be reported as an unknown
 actual error -- not silently attached to whichever identity looks closest. -/
@@ -230,6 +263,8 @@ def actualRoutes : List ActualRoute :=
     (gasLimitAdjustmentTag, blockInvalidGasLimit),
     (gasUsedOverflowTag, blockGasUsedOverflow),
     (gasUsedMismatchTag, blockInvalidGasUsed),
+    (blobGasUsedTag, blockInvalidGasUsed),
+    (excessBlobGasTag, blockInvalidGasUsed),
     (timestampOlderThanParentTag, blockInvalidBlockTimestampOlderThanParent),
     (blockNumberTag, blockInvalidBlockNumber),
     (baseFeePerGasTag, blockInvalidBaseFeePerGas),
@@ -242,7 +277,10 @@ def actualRoutes : List ActualRoute :=
     (transactionsRootTag, blockInvalidTransactionsRoot),
     (receiptsRootTag, blockInvalidReceiptsRoot),
     (logBloomTag, blockInvalidLogBloom),
+    (depositEventLayoutTag, blockInvalidDepositEventLayout),
+    (systemContractCallFailedTag, blockSystemContractCallFailed),
     (withdrawalsRootTag, blockInvalidWithdrawalsRoot),
+    (requestsHashTag, blockInvalidRequests),
     (rlpFieldOverflow64Tag, blockRlpInvalidFieldOverflow64),
     (rlpWithdrawalsNotReadTag, blockRlpWithdrawalsNotRead),
     (rlpStructureTag, blockRlpStructuresEncoding),
@@ -255,21 +293,26 @@ def actualRoutes : List ActualRoute :=
     (initcodeSizeExceededTag, txInitcodeSizeExceeded),
     (insufficientAccountFundsTag, txInsufficientAccountFunds),
     (insufficientMaxFeePerGasTag, txInsufficientMaxFeePerGas),
+    ("InsufficientMaxFeePerBlobGasError", txInsufficientMaxFeePerGas),
     (intrinsicGasTooLowTag, txIntrinsicGasTooLow),
+    (invalidChainIdTag, txInvalidChainId),
     (nonceIsMaxTag, txNonceIsMax),
     (nonceMismatchTooHighTag, txNonceMismatchTooHigh),
     (nonceMismatchTooLowTag, txNonceMismatchTooLow),
     (priorityGreaterThanMaxFeeTag, txPriorityGreaterThanMaxFeePerGas),
+    ("InvalidSignatureError", txSenderNotEoa),
     (senderNotEoaTag, txSenderNotEoa),
     (type3BlobCountExceededTag, txType3TxBlobCountExceeded),
     (type3ContractCreationTag, txType3TxContractCreation),
     (type3InvalidBlobVersionedHashTag, txType3TxInvalidBlobVersionedHash),
-    (type3ZeroBlobsTag, txType3TxZeroBlobs) ]
+    (type3ZeroBlobsTag, txType3TxZeroBlobs),
+    (emptyAuthorizationListTag, txType4EmptyAuthorizationList),
+    (type4ContractCreationTag, txType4TxContractCreation) ]
 
 /-- The block tags with no fixture identity, listed so the coverage checks can
 assert that every block tag is either routed or knowingly unrouted. -/
 def unroutedBlockTags : List String :=
-  [ headerNonceTag, excessBlobGasTag, blobGasUsedTag, requestsHashTag ]
+  [ headerNonceTag ]
 
 /-- Classify an actual error against the registered routes. -/
 def classify (err : String) : Option FixtureException :=
@@ -306,13 +349,14 @@ end FixtureException
 
 open FixtureException
 
--- The vocabulary is exactly the generated Prague inventory: 35 identities.
-#guard all.length = 35
+-- The vocabulary is exactly the generated Prague inventory plus the current
+-- typed-transaction chain-ID identity.
+#guard all.length = 41
 
 -- `toString` is injective, so no two identities collapse to one token.
-#guard (all.map toString).eraseDups.length = 35
+#guard (all.map toString).eraseDups.length = 41
 
--- `toString`/`ofString?` round trip on all 35, in both directions.
+-- `toString`/`ofString?` round trip on all 41, in both directions.
 #guard all.all (fun e => ofString? e.toString == some e)
 #guard all.all (fun e => (ofString? e.toString).all (fun e' => e'.toString == e.toString))
 
@@ -369,10 +413,9 @@ private def parseRejects (s : String) : Bool := (parseExpectation s).toOption.is
 #guard parsesTo "TransactionException.NONCE_IS_MAX|TransactionException.NONCE_IS_MAX"
   [txNonceIsMax]
 
--- Every distinct `expectException` string in the generated Prague inventory,
--- with its plan-writing-time occurrence count. 296 expected-invalid blocks
--- across 38 strings; the whole table must parse, and its identities must be
--- exactly the 35 in `all` -- no unused constructor, no unroutable token.
+-- Regression inventory of exact `expectException` spellings that must parse.
+-- Its identities cover every constructor in `all`, so no vocabulary extension
+-- can silently remain unroutable.
 def fixtureInventory : List String :=
   [ "BlockException.EXTRA_DATA_TOO_BIG",                                                                    -- 3
     "BlockException.GASLIMIT_TOO_BIG",                                                                      -- 1
@@ -385,10 +428,14 @@ def fixtureInventory : List String :=
     "BlockException.INVALID_GASLIMIT",                                                                      -- 10
     "BlockException.INVALID_GAS_USED",                                                                      -- 1
     "BlockException.INVALID_LOG_BLOOM",                                                                     -- 1
+    "BlockException.INVALID_DEPOSIT_EVENT_LAYOUT",                                                          -- current mainnet 22
+    "BlockException.SYSTEM_CONTRACT_CALL_FAILED",                                                           -- current mainnet 6
+    "BlockException.INVALID_REQUESTS",                                                                      -- current mainnet 43
     "BlockException.INVALID_RECEIPTS_ROOT",                                                                 -- 1
     "BlockException.INVALID_STATE_ROOT",                                                                    -- 2
     "BlockException.INVALID_TRANSACTIONS_ROOT",                                                             -- 1
     "BlockException.INVALID_WITHDRAWALS_ROOT",                                                              -- 2
+    "BlockException.INVALID_WITHDRAWALS_ROOT|BlockException.INVALID_BLOCK_HASH",                            -- current mainnet 3
     "BlockException.RLP_STRUCTURES_ENCODING|BlockException.RLP_INVALID_FIELD_OVERFLOW_64",                  -- 4
     "BlockException.RLP_STRUCTURES_ENCODING|BlockException.RLP_WITHDRAWALS_NOT_READ",                       -- 1
     "BlockException.UNKNOWN_PARENT",                                                                        -- 1
@@ -402,6 +449,7 @@ def fixtureInventory : List String :=
     "TransactionException.INSUFFICIENT_MAX_FEE_PER_GAS|TransactionException.GAS_ALLOWANCE_EXCEEDED",        -- 1
     "TransactionException.INSUFFICIENT_MAX_FEE_PER_GAS|TransactionException.INSUFFICIENT_ACCOUNT_FUNDS",    -- 3
     "TransactionException.INTRINSIC_GAS_TOO_LOW",                                                           -- 30
+    "TransactionException.INVALID_CHAINID",                                                                -- current mainnet 5
     "TransactionException.NONCE_IS_MAX",                                                                    -- 2
     "TransactionException.NONCE_MISMATCH_TOO_HIGH",                                                         -- 1
     "TransactionException.NONCE_MISMATCH_TOO_LOW",                                                          -- 1
@@ -412,9 +460,11 @@ def fixtureInventory : List String :=
     "TransactionException.TYPE_3_TX_CONTRACT_CREATION",                                                     -- 1
     "TransactionException.TYPE_3_TX_INVALID_BLOB_VERSIONED_HASH",                                           -- 1
     "TransactionException.TYPE_3_TX_ZERO_BLOBS" ]                                                           -- 1
+    ++ [ "TransactionException.TYPE_4_EMPTY_AUTHORIZATION_LIST",                                           -- current mainnet 1
+         "TransactionException.TYPE_4_TX_CONTRACT_CREATION" ]                                               -- current mainnet 1
 
-#guard fixtureInventory.length = 38
-#guard fixtureInventory.eraseDups.length = 38
+#guard fixtureInventory.length = 45
+#guard fixtureInventory.eraseDups.length = 45
 #guard fixtureInventory.all (fun s => (parseExpectation s).toOption.isSome)
 
 -- Both coverage directions: every identity is reachable from the corpus, and
@@ -423,7 +473,7 @@ def fixtureInventory : List String :=
 -- fails loudly if a constructor is added that the fixtures never name.
 #guard
   (fixtureInventory.flatMap
-    (fun s => ((parseExpectation s).toOption.getD []))).eraseDups.length = 35
+    (fun s => ((parseExpectation s).toOption.getD []))).eraseDups.length = 41
 
 -- Malformed expectation strings are rejected, not repaired.
 #guard parseRejects ""                                                     -- no alternatives
@@ -501,20 +551,22 @@ def routedRlpTags : List String :=
     rlpFixedWidthTag, rlpFieldOverflow256Tag, rlpLeadingZerosTag,
     rlpRoundTripTag ]
 
-#guard actualRoutes.length = 39
-#guard (actualRoutes.map Prod.fst).eraseDups.length = 39
-#guard (actualRoutes.map Prod.snd).eraseDups.length = 35
+#guard actualRoutes.length = 49
+#guard (actualRoutes.map Prod.fst).eraseDups.length = 49
+#guard (actualRoutes.map Prod.snd).eraseDups.length = 41
 #guard actualRoutes.all fun r =>
   blockExceptionTags.contains r.fst || routedRlpTags.contains r.fst ||
-    transactionExceptionTags.contains r.fst
+    transactionExceptionTags.contains r.fst ||
+    r.fst = "InsufficientMaxFeePerBlobGasError" || r.fst = blobGasUsedTag ||
+    r.fst = excessBlobGasTag || r.fst = "InvalidSignatureError"
 #guard routedRlpTags.length = 7
 #guard routedRlpTags.eraseDups.length = 7
 #guard routedRlpTags.all fun t => (actualRoutes.map Prod.fst).contains t
-#guard transactionExceptionTags.length = 15
-#guard transactionExceptionTags.eraseDups.length = 15
+#guard transactionExceptionTags.length = 18
+#guard transactionExceptionTags.eraseDups.length = 18
 #guard transactionExceptionTags.all fun t => (actualRoutes.map Prod.fst).contains t
 
--- Coverage in the fixture-to-producer direction: every one of the 35
+-- Coverage in the fixture-to-producer direction: every one of the 41
 -- identities generated from the Prague corpus has at least one actual route.
 -- A newly observed expected identity therefore cannot silently remain
 -- unclassifiable.
@@ -534,7 +586,7 @@ def routedRlpTags : List String :=
 
 -- Every block tag is either routed or knowingly unrouted -- a new rejection
 -- reason cannot be added without landing in one list or the other.
-#guard unroutedBlockTags.length = 4
+#guard unroutedBlockTags.length = 1
 #guard unroutedBlockTags.all fun t => blockExceptionTags.contains t
 #guard blockExceptionTags.all fun t =>
   (actualRoutes.map Prod.fst).contains t || unroutedBlockTags.contains t

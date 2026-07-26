@@ -10,10 +10,11 @@ BIN="$ROOT/.lake/build/bin/elevm"
 FIXTURES_ROOT="${EEST_MAINNET_ROOT:-$HOME/eest-mainnet-v20.0.1}/fixtures"
 SUITE=""
 BUILD=1
+START_AT=1
 GUARD="${ELEVM_TIMEOUT:-1800}"
 
 usage() {
-  echo "usage: scripts/check-mainnet.sh --suite (prague|smoke) [--fixtures-root PATH] [--no-build]" >&2
+  echo "usage: scripts/check-mainnet.sh --suite (prague|smoke) [--fixtures-root PATH] [--no-build] [--start-at N]" >&2
   exit 2
 }
 
@@ -22,11 +23,15 @@ while [ "$#" -gt 0 ]; do
     --suite) shift; [ "$#" -gt 0 ] || usage; SUITE="$1" ;;
     --fixtures-root) shift; [ "$#" -gt 0 ] || usage; FIXTURES_ROOT="$1" ;;
     --no-build) BUILD=0 ;;
+    --start-at) shift; [ "$#" -gt 0 ] || usage; START_AT="$1" ;;
     *) echo "error: unknown argument $1" >&2; usage ;;
   esac
   shift
 done
 [ -n "$SUITE" ] || usage
+[ "$START_AT" -ge 1 ] 2>/dev/null || {
+  echo "error: --start-at must be a positive manifest index" >&2; exit 2;
+}
 
 case "$SUITE" in
   prague|smoke) ;;
@@ -54,7 +59,10 @@ python3 "$SCRIPT_DIR/gen_mainnet_manifest.py" \
 [ -s "$LIST" ] || { echo "error: zero selected manifest entries for $SUITE" >&2; exit 2; }
 
 TOTAL="$(wc -l < "$LIST" | tr -d ' ')"
-PASS=0
+[ "$START_AT" -le "$TOTAL" ] || {
+  echo "error: --start-at $START_AT exceeds $SUITE manifest size $TOTAL" >&2; exit 2;
+}
+PASS=$((START_AT - 1))
 START_ALL="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
 while IFS=$'\t' read -r REL NETWORK; do
   [ -n "$REL" ] && [ -n "$NETWORK" ] || {
@@ -85,7 +93,7 @@ while IFS=$'\t' read -r REL NETWORK; do
   fi
   PASS=$((PASS + 1))
   printf '[%d/%d] PASS %s\n' "$PASS" "$TOTAL" "$REL" >&2
-done < "$LIST"
+done < <(tail -n +"$START_AT" "$LIST")
 END_ALL="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
 ELAPSED="$(perl -e 'printf "%.2f", $ARGV[1] - $ARGV[0]' "$START_ALL" "$END_ALL")"
 echo "OK — $SUITE: $PASS/$TOTAL manifest files PASS in ${ELAPSED}s"

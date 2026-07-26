@@ -67,8 +67,12 @@ def Lean.Json.toAcct : Lean.Json → IO Acct
     let bal ← Lean.Json.toIoB256P bal_json
     let nonce ← Lean.Json.toIoB64P nonce_json
     let code ← Lean.Json.toIoB8L code_json
-    let stor ← List.mapM aux stor_json.toArray.toList
-    return ⟨nonce, bal, Std.TreeMap.ofList stor _, code.toByteArray⟩
+    let storPairs ← List.mapM aux stor_json.toArray.toList
+    -- Ethereum's state trie has no entries for zero-valued storage slots.  The
+    -- JSON fixtures may spell such a slot explicitly in `pre`, so normalize
+    -- through `Stor.set` rather than retaining a non-canonical map entry.
+    let stor := storPairs.foldl (fun s ⟨key, value⟩ => s.set key value) .empty
+    return ⟨nonce, bal, stor, code.toByteArray⟩
   | _ => .throw "cannot parse account (not .obj)"
 
 def Lean.Json.toWorld (j : Lean.Json) : IO State := do
