@@ -9,18 +9,20 @@ ROOT="$(dirname "$SCRIPT_DIR")"
 BIN="$ROOT/.lake/build/bin/elevm"
 FIXTURES_ROOT="${EEST_MAINNET_ROOT:-$HOME/eest-mainnet-v20.0.1}/fixtures"
 SUITE=""
+SUBDIR=""
 BUILD=1
 START_AT=1
 GUARD="${ELEVM_TIMEOUT:-1800}"
 
 usage() {
-  echo "usage: scripts/check-mainnet.sh --suite (prague|smoke) [--fixtures-root PATH] [--no-build] [--start-at N]" >&2
+  echo "usage: scripts/check-mainnet.sh (--suite (prague|smoke) | --dir REL --suite SUITE) [--fixtures-root PATH] [--no-build] [--start-at N]" >&2
   exit 2
 }
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --suite) shift; [ "$#" -gt 0 ] || usage; SUITE="$1" ;;
+    --dir) shift; [ "$#" -gt 0 ] || usage; SUBDIR="$1" ;;
     --fixtures-root) shift; [ "$#" -gt 0 ] || usage; FIXTURES_ROOT="$1" ;;
     --no-build) BUILD=0 ;;
     --start-at) shift; [ "$#" -gt 0 ] || usage; START_AT="$1" ;;
@@ -33,13 +35,31 @@ done
   echo "error: --start-at must be a positive manifest index" >&2; exit 2;
 }
 
-case "$SUITE" in
-  prague|smoke) ;;
-  osaka|bpo1|bpo2|transitions|full)
-    echo "error: suite $SUITE is inventoried but inactive until its owning migration step" >&2
-    exit 2 ;;
-  *) echo "error: unknown suite $SUITE" >&2; exit 2 ;;
-esac
+# `--dir` restricts a suite to one subtree of the pinned archive.  It is a
+# targeted instrument for landing one semantic change at a time, not a way to
+# reach an inactive suite as a whole: the entries still come from the generated
+# manifest, every one of them still has to PASS, and an empty or unlisted
+# selection is an error.  Suites that have no acceptance gate yet are reachable
+# only through it.
+if [ -n "$SUBDIR" ]; then
+  case "$SUITE" in
+    prague|smoke|osaka|bpo1|bpo2) ;;
+    transitions|full)
+      echo "error: suite $SUITE has no per-directory form" >&2; exit 2 ;;
+    *) echo "error: unknown suite $SUITE" >&2; exit 2 ;;
+  esac
+  case "$SUBDIR" in
+    /*|*..*) echo "error: --dir must be a relative path inside blockchain_tests" >&2; exit 2 ;;
+  esac
+else
+  case "$SUITE" in
+    prague|smoke) ;;
+    osaka|bpo1|bpo2|transitions|full)
+      echo "error: suite $SUITE is inventoried but inactive until its owning migration step" >&2
+      exit 2 ;;
+    *) echo "error: unknown suite $SUITE" >&2; exit 2 ;;
+  esac
+fi
 
 [ -d "$FIXTURES_ROOT/blockchain_tests" ] || {
   echo "error: current-mainnet blockchain fixture root not found: $FIXTURES_ROOT/blockchain_tests" >&2
@@ -57,6 +77,30 @@ trap 'rm -f "$LIST"' EXIT
 python3 "$SCRIPT_DIR/gen_mainnet_manifest.py" \
   --fixtures-root "$FIXTURES_ROOT" --check --emit-suite "$SUITE" > "$LIST"
 [ -s "$LIST" ] || { echo "error: zero selected manifest entries for $SUITE" >&2; exit 2; }
+
+if [ -n "$SUBDIR" ]; then
+  [ -d "$FIXTURES_ROOT/blockchain_tests/$SUBDIR" ] || {
+    echo "error: --dir subtree not found: blockchain_tests/$SUBDIR" >&2; exit 2;
+  }
+  SELECTED="$(mktemp)"
+  trap 'rm -f "$LIST" "$SELECTED"' EXIT
+  grep -E "^${SUBDIR%/}/" "$LIST" > "$SELECTED" || true
+  [ -s "$SELECTED" ] || {
+    echo "error: zero $SUITE manifest entries under blockchain_tests/$SUBDIR" >&2
+    exit 2
+  }
+  # An unlisted .json inside the subtree means the subtree mixes fork labels or
+  # the manifest is stale; either way it must not be skipped silently.
+  ON_DISK="$(find "$FIXTURES_ROOT/blockchain_tests/${SUBDIR%/}" -name '*.json' | wc -l | tr -d ' ')"
+  IN_MANIFEST="$(wc -l < "$SELECTED" | tr -d ' ')"
+  [ "$ON_DISK" -eq "$IN_MANIFEST" ] || {
+    echo "error: blockchain_tests/$SUBDIR holds $ON_DISK fixture files but the $SUITE manifest lists $IN_MANIFEST" >&2
+    exit 2
+  }
+  mv "$SELECTED" "$LIST"
+  trap 'rm -f "$LIST"' EXIT
+  SUITE="$SUITE:$SUBDIR"
+fi
 
 TOTAL="$(wc -l < "$LIST" | tr -d ' ')"
 [ "$START_AT" -le "$TOTAL" ] || {

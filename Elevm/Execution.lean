@@ -871,11 +871,19 @@ def Benv.beginTransaction (benv : Benv) : Benv :=
 def hasErrorType (err errType : String) : Bool :=
   err = errType || String.isPrefixOf (errType ++ " : ") err
 
+-- EIP-7823 rejects an oversized `MODEXP` length header with a bare
+-- `ExceptionalHalt` rather than one of the specification's named subclasses.
+-- It is given its own tag here because every other exceptional halt this build
+-- can report is already distinguishable by name, and reusing `OutOfGasError`
+-- for a check that never inspects the gas counter would misreport it.
+def modexpInputLimitTag : String := "ModexpInputLimitExceeded"
+
 abbrev isExceptionalHalt (err : String) : Prop :=
   List.any [
     "StackUnderflowError",
     "StackOverflowError",
     "OutOfGasError",
+    modexpInputLimitTag,
     "InvalidOpcode",
     "InvalidJumpDestError",
     "StackDepthLimitError",
@@ -2921,13 +2929,15 @@ def B8L.sliceToNat (data : B8L) (start : Nat) (length : Nat) : Nat :=
 
 -- def complexity
 def modexpComplexity
-  (baseLength modulusLength : Nat) : Nat :=
+  (m : ModexpRules) (baseLength modulusLength : Nat) : Nat :=
   let maxLength := max baseLength modulusLength
   let words := ceilDiv maxLength 8
-  words ^ 2
+  match m.flatComplexity with
+  | some flat => if maxLength ≤ 32 then flat else m.complexityCoeff * words ^ 2
+  | none => m.complexityCoeff * words ^ 2
 
 -- def iterations
-def modexpIterations (expLength : Nat) (expHead : Nat) : Nat :=
+def modexpIterations (m : ModexpRules) (expLength : Nat) (expHead : Nat) : Nat :=
   let bitsPart : Nat := (Nat.log2 expHead)
   let count :=
     if expLength ≤ 32
@@ -2937,26 +2947,43 @@ def modexpIterations (expLength : Nat) (expHead : Nat) : Nat :=
       else
         bitsPart
     else
-      let lengthPart := 8 * (expLength - 32)
+      let lengthPart := m.iterationCoeff * (expLength - 32)
       lengthPart + bitsPart
 
   max count 1
 
 -- def gas_cost
 def modexpGascost
-  (baseLength modulusLength expLength expHead : Nat) : Nat :=
-  let mulComplexity := modexpComplexity baseLength modulusLength
-  let iterationCount := modexpIterations expLength expHead
-  let cost := (mulComplexity * iterationCount) / 3
-  max 200 cost
+  (m : ModexpRules) (baseLength modulusLength expLength expHead : Nat) : Nat :=
+  let mulComplexity := modexpComplexity m baseLength modulusLength
+  let iterationCount := modexpIterations m expLength expHead
+  let cost := (mulComplexity * iterationCount) / m.gasDivisor
+  max m.minGas cost
+
+/-- EIP-7823's bound on the three `MODEXP` length headers.
+
+The check is part of the gas phase and precedes charging, so an oversized
+header is an exceptional halt that consumes the frame's gas rather than a
+priced computation. `none` reproduces the pre-Osaka behaviour of accepting any
+header. -/
+def modexpLengthsInBounds
+    (m : ModexpRules) (baseLength expLength modulusLength : Nat) : Bool :=
+  match m.maxLength with
+  | none => true
+  | some bound =>
+    baseLength ≤ bound && expLength ≤ bound && modulusLength ≤ bound
 
 def executeModexp (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
+  let m : ModexpRules := evm.sta.benvStat.rules.modexp
   let baseLength : Nat := B8L.sliceToNat data 0 32
   let expLength : Nat := B8L.sliceToNat data 32 32
   let modulusLength : Nat := B8L.sliceToNat data 64 32
+  if ¬ modexpLengthsInBounds m baseLength expLength modulusLength then
+    .error modexpInputLimitTag 0
+  else
   let expHead : Nat := B8L.sliceToNat data (96 + baseLength) (min 32 expLength)
-  let cost : Nat := modexpGascost baseLength modulusLength expLength expHead
+  let cost : Nat := modexpGascost m baseLength modulusLength expLength expHead
   PrecompResult.chargeGas cost evm fun () =>
     if baseLength = 0 ∧ modulusLength = 0 then .ok cost []
     else
@@ -2967,6 +2994,45 @@ def executeModexp (evm : Evm) : PrecompResult :=
         if modulus = 0 then List.replicate modulusLength (0x00 : B8)
         else (Nat.powMod base exp modulus).toB8L.pack modulusLength
       .ok cost output
+
+-- MODEXP boundary guards.  The schedules themselves are checked against
+-- authoritative upstream vectors (`modexp_eip2565.json` for Prague and
+-- `modexp_eip7883.json` for Osaka); these pin the points where EIP-7883 and
+-- EIP-7823 change behaviour, which a vector corpus can silently stop covering.
+
+-- The multiplication complexity agrees at the 32-byte boundary and diverges
+-- immediately above it, where Osaka charges the doubled quadratic term.
+#guard modexpComplexity pragueModexpRules 32 32 = 16
+#guard modexpComplexity osakaModexpRules 32 32 = 16
+#guard modexpComplexity pragueModexpRules 33 0 = 25
+#guard modexpComplexity osakaModexpRules 33 0 = 50
+#guard modexpComplexity osakaModexpRules 0 32 = 16
+#guard modexpComplexity osakaModexpRules 0 33 = 50
+-- Below the boundary the flat term is what Osaka charges, not the quadratic
+-- one Prague would have used.
+#guard modexpComplexity pragueModexpRules 8 8 = 1
+#guard modexpComplexity osakaModexpRules 8 8 = 16
+
+-- The exponent-length term doubles above 32 bytes; at or below it, both forks
+-- read the same `bit_length - 1` of the exponent head.
+#guard modexpIterations pragueModexpRules 32 0 = 1
+#guard modexpIterations osakaModexpRules 32 0 = 1
+#guard modexpIterations pragueModexpRules 33 0 = 8
+#guard modexpIterations osakaModexpRules 33 0 = 16
+#guard modexpIterations osakaModexpRules 64 0 = 512
+#guard modexpIterations pragueModexpRules 8 255 = 7
+#guard modexpIterations osakaModexpRules 8 255 = 7
+
+-- The floor rises from 200 to 500.
+#guard modexpGascost pragueModexpRules 32 32 32 0 = 200
+#guard modexpGascost osakaModexpRules 32 32 32 0 = 500
+
+-- EIP-7823 bounds every header at 1024 and only from Osaka.
+#guard modexpLengthsInBounds pragueModexpRules 1025 1025 1025
+#guard modexpLengthsInBounds osakaModexpRules 1024 1024 1024
+#guard ¬ modexpLengthsInBounds osakaModexpRules 1025 0 0
+#guard ¬ modexpLengthsInBounds osakaModexpRules 0 1025 0
+#guard ¬ modexpLengthsInBounds osakaModexpRules 0 0 1025
 
 def executeEcadd (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
@@ -6318,24 +6384,24 @@ private def guardBlockAt (timestamp : Nat) : Block :=
   }
 
 #guard hasTag unsupportedForkTag <|
-  stateTransitionAt .osaka guardEmptyChain (guardBlockAt 0)
-#guard hasTag unsupportedForkTag <|
   stateTransitionAt .bpo1 guardEmptyChain (guardBlockAt 0)
 #guard hasTag unsupportedForkTag <|
   stateTransitionAt .bpo2 guardEmptyChain (guardBlockAt 0)
 
--- Prague reaches the real checks instead: this chain has no parent block, so
--- the verdict is a header failure, not a missing implementation.
+-- Prague and Osaka reach the real checks instead: this chain has no parent
+-- block, so the verdict is a header failure, not a missing implementation.
 #guard ¬ hasTag unsupportedForkTag
   (stateTransitionAt .prague guardEmptyChain (guardBlockAt 0))
+#guard ¬ hasTag unsupportedForkTag
+  (stateTransitionAt .osaka guardEmptyChain (guardBlockAt 0))
 
 -- On the block-import API an unsupported fork is a harness failure (`.error`),
 -- never a block-rejection verdict (`.ok (.inr _)`): a fork this build has not
 -- implemented says nothing about whether the block is valid.
-#guard hasTag unsupportedForkTag <| addBlockToChainAt .osaka guardEmptyChain []
-#guard (addBlockToChainAt .osaka guardEmptyChain []).toOption.isNone
-#guard errOf (addBlockToChainAt .osaka guardEmptyChain [])
-  = errOf (addBlockToChainAt .osaka guardEmptyChain (List.replicate 64 (0xFF : B8)))
+#guard hasTag unsupportedForkTag <| addBlockToChainAt .bpo1 guardEmptyChain []
+#guard (addBlockToChainAt .bpo1 guardEmptyChain []).toOption.isNone
+#guard errOf (addBlockToChainAt .bpo1 guardEmptyChain [])
+  = errOf (addBlockToChainAt .bpo1 guardEmptyChain (List.replicate 64 (0xFF : B8)))
 
 -- A configured chain selects rules from the block's own timestamp. On this
 -- schedule the only difference between the two blocks is the timestamp, and it
@@ -6344,10 +6410,20 @@ private def guardBlockAt (timestamp : Nat) : Block :=
 private def guardOsakaAt100 : ChainConfig :=
   ChainConfig.mk 1 [⟨.prague, 0⟩, ⟨.osaka, 100⟩]
 
+private def guardBpo1At100 : ChainConfig :=
+  ChainConfig.mk 1 [⟨.prague, 0⟩, ⟨.bpo1, 100⟩]
+
+#guard ¬ hasTag unsupportedForkTag
+  (stateTransitionUsing guardBpo1At100 guardEmptyChain (guardBlockAt 99))
+#guard hasTag unsupportedForkTag <|
+  stateTransitionUsing guardBpo1At100 guardEmptyChain (guardBlockAt 100)
+
+-- Both sides of an implemented activation run; neither is refused for want of
+-- rules.
 #guard ¬ hasTag unsupportedForkTag
   (stateTransitionUsing guardOsakaAt100 guardEmptyChain (guardBlockAt 99))
-#guard hasTag unsupportedForkTag <|
-  stateTransitionUsing guardOsakaAt100 guardEmptyChain (guardBlockAt 100)
+#guard ¬ hasTag unsupportedForkTag
+  (stateTransitionUsing guardOsakaAt100 guardEmptyChain (guardBlockAt 100))
 
 -- A Prague-only configuration is the Prague wrapper, at every timestamp.
 #guard errOf (stateTransitionUsing (ChainConfig.pragueOnly 1) guardEmptyChain

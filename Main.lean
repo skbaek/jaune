@@ -364,7 +364,8 @@ def getFiles (path : System.FilePath) : IO (List System.FilePath) := do
   else
     return [path]
 
-def createMinimalEvm (adr : Adr) (input : B8L) (gasLimit : Nat) : Evm := {
+def createMinimalEvm
+    (rules : ForkRules) (adr : Adr) (input : B8L) (gasLimit : Nat) : Evm := {
   pc := 0
   sta := {
     caller := default
@@ -379,7 +380,7 @@ def createMinimalEvm (adr : Adr) (input : B8L) (gasLimit : Nat) : Evm := {
     shouldTransferValue := false
     isStatic := false
     disablePrecompiles := false
-    benvStat := default
+    benvStat := { (default : BenvStat) with rules := rules }
     tenvStat := default
   }
   dyna := {
@@ -406,7 +407,7 @@ def createMinimalEvm (adr : Adr) (input : B8L) (gasLimit : Nat) : Evm := {
   }
 }
 
-def processVector (adr : Adr) : (Nat × Lean.Json) → IO Bool
+def processVector (rules : ForkRules) (adr : Adr) : (Nat × Lean.Json) → IO Bool
   | ⟨idx, json⟩ => do
     let name ← (json.find? "Name" >>= Lean.Json.toString?).toIO s!"missing Name at index {idx}"
     let inputStr ← (json.find? "Input" >>= Lean.Json.toString?).toIO s!"missing Input for {name}"
@@ -421,7 +422,7 @@ def processVector (adr : Adr) : (Nat × Lean.Json) → IO Bool
         let gs := toString g
         (String.toNat? gs).toIO s!"invalid Gas for {name}"
       else pure 0
-    let evm := createMinimalEvm adr input 0xffffffffffff
+    let evm := createMinimalEvm rules adr input 0xffffffffffff
     let res := precompileRun evm adr
     match expected? with
     | some expected =>
@@ -445,10 +446,21 @@ def processVector (adr : Adr) : (Nat × Lean.Json) → IO Bool
         .println s!"FAIL\t{name}\t(expected error, got ok out={output.toHex})"
         return false
 
-def runVectorFile (addr : Adr) (path : String) : IO Bool := do
+/-- Run one precompile vector file at `addr` under `f`'s rules.
+
+The activation check is part of the gate, not a convenience: a vector file
+listed against a fork whose rules do not carry its address is a manifest
+error, and reporting it as such is what stops a fork-gated precompile from
+being silently exercised under a fork that does not have it. -/
+def runVectorFile (f : Fork) (addr : Adr) (path : String) : IO Bool := do
+  let rules ← IO.ofExcept f.rules
+  if ¬ rules.isPrecomp addr then
+    IO.println
+      s!"RED — vectors: no precompile is active at {addr.toHex} under {f}"
+    return false
   let rb ← readJsonFile path >>= Lean.Json.toIoList
   let js := rb.putIndex
-  let results ← js.mapM (processVector addr)
+  let results ← js.mapM (processVector rules addr)
   let mut passes := 0
   for pass in results do
     if pass then passes := passes + 1
@@ -539,12 +551,13 @@ def runU256VectorFile (path : String) : IO Bool := do
 def main : List String → IO Unit
   | "--u256" :: pathStr :: [] => do
     if !(← runU256VectorFile pathStr) then IO.Process.exit 1
-  | "--vectors" :: addrStr :: pathStr :: [] => do
+  | "--vectors" :: addrStr :: pathStr :: opts => do
     let addrStr2 := remove0x addrStr
     let paddedAddrStr :=
       String.ofList (List.replicate (40 - addrStr2.length) '0') ++ addrStr2
     let addr ← (Hex.toAdr? paddedAddrStr).toIO "invalid address"
-    if !(← runVectorFile addr pathStr) then
+    let f ← getFork opts
+    if !(← runVectorFile f addr pathStr) then
       IO.Process.exit 1
   | path :: opts => do
     verbosityRef.set (List.contains opts "--verbose")

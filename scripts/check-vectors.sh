@@ -65,7 +65,14 @@ PRECOMPILE_FILES=(
   fail-blsMapG2.json
 )
 
-EXPECTED_FILES=("${CONTROL_FILES[@]}" "${PRECOMPILE_FILES[@]}")
+# Vectors that only hold under Osaka rules.  They are a separate group because
+# each one is run with an explicit --network and would legitimately fail under
+# Prague, which prices MODEXP differently.
+OSAKA_FILES=(
+  modexp_eip7883.json
+)
+
+EXPECTED_FILES=("${CONTROL_FILES[@]}" "${PRECOMPILE_FILES[@]}" "${OSAKA_FILES[@]}")
 
 # The word-operation oracle is deliberately run by check-u256.sh, not through
 # the precompile address dispatch above.  Keep it listed here so this manifest
@@ -81,6 +88,16 @@ AUXILIARY_FILES=(
 #   jq '.[0:32]' blsG1MultiExp.json > scripts/vectors/blsG1MultiExp.head.json
 #   jq '.[0:32]' blsG2MultiExp.json > scripts/vectors/blsG2MultiExp.head.json
 
+# The fork whose rules each file is stated against.  Every file is run with an
+# explicit --network so that a repriced or newly activated precompile is tested
+# under the rules that define it, never under whatever the binary defaults to.
+get_fork() {
+  case "$1" in
+    modexp_eip7883.json) echo "Osaka" ;;
+    *) echo "Prague" ;;
+  esac
+}
+
 get_addr() {
   case "$1" in
     bn256Add.json) echo "06" ;;
@@ -88,6 +105,7 @@ get_addr() {
     bn256Pairing.json) echo "08" ;;
     blake2F.json) echo "09" ;;
     modexp_eip2565.json) echo "05" ;;
+    modexp_eip7883.json) echo "05" ;;
     pointEvaluation.json) echo "0a" ;;
     add_G1_bls.json|fail-add_G1_bls.json|blsG1Add.json|fail-blsG1Add.json) echo "0b" ;;
     mul_G1_bls.json|fail-mul_G1_bls.json|msm_G1_bls.head.json|fail-msm_G1_bls.json|blsG1Mul.json|fail-blsG1Mul.json|blsG1MultiExp.head.json|fail-blsG1MultiExp.json) echo "0c" ;;
@@ -105,6 +123,15 @@ is_control_file() {
   local control
   for control in "${CONTROL_FILES[@]}"; do
     [ "$file" = "$control" ] && return 0
+  done
+  return 1
+}
+
+is_osaka_file() {
+  local file="$1"
+  local osaka
+  for osaka in "${OSAKA_FILES[@]}"; do
+    [ "$file" = "$osaka" ] && return 0
   done
   return 1
 }
@@ -130,12 +157,14 @@ configuration_errors=0
 run_vector_file() {
   local file="$1"
   local addr
+  local fork
   local path
   local runner_status
   local verdict
   local group
 
   addr="$(get_addr "$file")"
+  fork="$(get_fork "$file")"
   path="$VECTORS_DIR/$file"
   if [ ! -f "$path" ]; then
     printf 'MISSING\t%s\n' "$file" | tee -a "$REPORT"
@@ -150,11 +179,13 @@ run_vector_file() {
 
   if is_control_file "$file"; then
     group="control"
+  elif is_osaka_file "$file"; then
+    group="osaka"
   else
     group="BLS/point-eval"
   fi
-  printf 'Running %s at address %s\n' "$file" "$addr" | tee -a "$REPORT"
-  "$BIN" --vectors "$addr" "$path" | tee -a "$REPORT"
+  printf 'Running %s at address %s under %s\n' "$file" "$addr" "$fork" | tee -a "$REPORT"
+  "$BIN" --vectors "$addr" "$path" --network "$fork" | tee -a "$REPORT"
   runner_status=${PIPESTATUS[0]}
   if [ "$runner_status" -eq 0 ]; then
     verdict="OK"
@@ -176,6 +207,11 @@ done
 
 printf '%s\n' '--- Running BLS and point-evaluation files ---' | tee -a "$REPORT"
 for file in "${PRECOMPILE_FILES[@]}"; do
+  run_vector_file "$file"
+done
+
+printf '%s\n' '--- Running Osaka files ---' | tee -a "$REPORT"
+for file in "${OSAKA_FILES[@]}"; do
   run_vector_file "$file"
 done
 

@@ -93,6 +93,33 @@ structure CodeLimits : Type where
   maxInitCodeSize : Nat
 deriving DecidableEq, Repr
 
+/-- The `MODEXP` input bounds and gas schedule (EIP-198, EIP-2565, EIP-7823,
+and EIP-7883).
+
+Every number the precompile's pricing reads lives here, so a repricing fork is
+a new record rather than a branch inside the precompile. -/
+structure ModexpRules : Type where
+  /-- EIP-7823: the largest value each of the three length headers may take.
+  `none` before Osaka, where a header of any size was accepted and only the
+  gas schedule bounded the work. -/
+  maxLength : Option Nat
+  /-- EIP-7883: the flat multiplication complexity charged when
+  `max baseLength modulusLength ≤ 32`. `none` before Osaka, where the
+  quadratic term applied at every size. -/
+  flatComplexity : Option Nat
+  /-- The multiplier on `words ^ 2` in the multiplication complexity. -/
+  complexityCoeff : Nat
+  /-- The per-byte weight of the exponent-length term beyond the first 32
+  bytes. -/
+  iterationCoeff : Nat
+  /-- `GQUADDIVISOR`: the divisor applied to the complexity/iteration product.
+  EIP-7883 removes the division by folding it into the other coefficients, so
+  Osaka carries `1` rather than dropping the field. -/
+  gasDivisor : Nat
+  /-- The gas floor charged however cheap the computed cost is. -/
+  minGas : Nat
+deriving DecidableEq, Repr
+
 /-- Everything the interpreter needs to know about *which* rules it is running.
 
 Execution reads this record and nothing else about the fork. The `fork` field
@@ -105,6 +132,8 @@ structure ForkRules : Type where
   blob : BlobSchedule
   /-- Deployed-code and initcode size limits. -/
   code : CodeLimits
+  /-- The `MODEXP` input bounds and gas schedule. -/
+  modexp : ModexpRules
   /-- The addresses at which a precompiled contract is active. -/
   precompiles : List Adr
 deriving DecidableEq
@@ -132,6 +161,16 @@ def pragueBlobSchedule : BlobSchedule := {
 def pragueCodeLimits : CodeLimits := {
   maxCodeSize := 24576 -- 0x6000
   maxInitCodeSize := 49152 -- 2 * 0x6000
+}
+
+/-- Prague's `MODEXP` schedule: EIP-2565 unchanged since Berlin. -/
+def pragueModexpRules : ModexpRules := {
+  maxLength := none
+  flatComplexity := none
+  complexityCoeff := 1
+  iterationCoeff := 8
+  gasDivisor := 3
+  minGas := 200
 }
 
 /-- The precompiles active at Prague: 0x01 through 0x11, contiguous.
@@ -164,10 +203,52 @@ def pragueRules : ForkRules := {
   fork := .prague
   blob := pragueBlobSchedule
   code := pragueCodeLimits
+  modexp := pragueModexpRules
   precompiles := praguePrecompiles
 }
 
 instance : Inhabited ForkRules := ⟨pragueRules⟩
+
+/-- Osaka's blob schedule.
+
+EIP-7892 restates the schedule as blob *counts* — `BLOB_SCHEDULE_TARGET = 6`
+and `BLOB_SCHEDULE_MAX = 9`, each multiplied by `GAS_PER_BLOB = 2 ^ 17` — which
+evaluates to exactly the three numbers Prague already used. The
+reparameterisation is what BPO1 and BPO2 later vary; Osaka itself does not move
+the blob schedule. -/
+def osakaBlobSchedule : BlobSchedule := {
+  target := 6 * 131072
+  max := 9 * 131072
+  baseFeeUpdateFraction := 5007716
+}
+
+/-- Osaka's `MODEXP` schedule: EIP-7823 bounds the three length headers and
+EIP-7883 raises the price.
+
+The repricing replaces the `words ^ 2 / 3` shape with `2 * words ^ 2` above 32
+bytes and a flat `16` at or below it, doubles the exponent-length weight, and
+lifts the floor from 200 to 500. -/
+def osakaModexpRules : ModexpRules := {
+  maxLength := some 1024
+  flatComplexity := some 16
+  complexityCoeff := 2
+  iterationCoeff := 16
+  gasDivisor := 1
+  minGas := 500
+}
+
+/-- The Osaka rule set.
+
+Only the fields Osaka actually moves differ from Prague; the shared ones are
+named through Prague's definitions so that a later Prague correction cannot
+silently desynchronise the two. -/
+def osakaRules : ForkRules := {
+  fork := .osaka
+  blob := osakaBlobSchedule
+  code := pragueCodeLimits
+  modexp := osakaModexpRules
+  precompiles := praguePrecompiles
+}
 
 /-- Error tag for a fork whose identity is known but whose rules this build
 does not implement. -/
@@ -181,7 +262,7 @@ because Osaka is unfinished would turn a missing implementation into a silent
 consensus fault. -/
 def Fork.rules? : Fork → Option ForkRules
   | .prague => some pragueRules
-  | .osaka => none
+  | .osaka => some osakaRules
   | .bpo1 => none
   | .bpo2 => none
 
@@ -272,8 +353,7 @@ def rulesAt (cfg : ChainConfig) (timestamp : Nat) : Except String ForkRules := d
   (← cfg.forkAt timestamp).rules
 
 /-- The configuration of a chain that is at Prague from genesis and never
-transitions. This is the only schedule whose every fork is executable in this
-build. -/
+transitions. -/
 def pragueOnly (chainId : B64) : ChainConfig :=
   { chainId := chainId, activations := [⟨.prague, 0⟩] }
 
@@ -309,6 +389,10 @@ private def guardHasTag {α : Type} (tag : String) (e : Except String α) : Bool
 #guard pragueRules.blob.baseFeeUpdateFraction = 5007716
 #guard pragueRules.code.maxCodeSize = 24576
 #guard pragueRules.code.maxInitCodeSize = 2 * pragueRules.code.maxCodeSize
+#guard pragueRules.modexp.maxLength = none
+#guard pragueRules.modexp.flatComplexity = none
+#guard pragueRules.modexp.gasDivisor = 3
+#guard pragueRules.modexp.minGas = 200
 
 -- Prague's precompile activation set is exactly 0x01 through 0x11, which is
 -- what the former `1 ≤ a.toNat ∧ a.toNat ≤ 17` range said.
@@ -318,14 +402,29 @@ private def guardHasTag {α : Type} (tag : String) (e : Except String α) : Bool
 #guard ¬ pragueRules.isPrecomp (0x12 : Adr)
 #guard ¬ pragueRules.isPrecomp (0x100 : Adr)
 
--- Only Prague is executable in this build; the others are identities without
--- rules, and asking for them fails rather than falling back.
+-- Osaka shares every rule value with Prague except the ones EIP-7607's
+-- execution-layer delta actually moves. The shared blob schedule is stated as
+-- the EIP-7892 blob-count product rather than assumed.
+#guard osakaRules.fork = .osaka
+#guard osakaRules.blob = pragueRules.blob
+#guard osakaRules.code = pragueRules.code
+#guard osakaBlobSchedule.target = 786432
+#guard osakaBlobSchedule.max = 1179648
+#guard osakaRules.modexp.maxLength = some 1024
+#guard osakaRules.modexp.flatComplexity = some 16
+#guard osakaRules.modexp.complexityCoeff = 2
+#guard osakaRules.modexp.iterationCoeff = 2 * pragueRules.modexp.iterationCoeff
+#guard osakaRules.modexp.gasDivisor = 1
+#guard osakaRules.modexp.minGas = 500
+
+-- Prague and Osaka are executable in this build; the BPO forks are identities
+-- without rules, and asking for them fails rather than falling back.
 #guard Fork.prague.rules?.isSome
-#guard Fork.osaka.rules?.isNone
+#guard Fork.osaka.rules?.isSome
 #guard Fork.bpo1.rules?.isNone
 #guard Fork.bpo2.rules?.isNone
 #guard Fork.prague.rules = .ok pragueRules
-#guard guardHasTag unsupportedForkTag Fork.osaka.rules
+#guard Fork.osaka.rules = .ok osakaRules
 #guard guardHasTag unsupportedForkTag Fork.bpo1.rules
 #guard guardHasTag unsupportedForkTag Fork.bpo2.rules
 
@@ -363,7 +462,9 @@ private def guardSchedule : ChainConfig :=
 -- A configured chain reports the same unsupported-fork error as an explicit
 -- one; a schedule may name a fork this build cannot yet run.
 #guard guardSchedule.rulesAt 0 = .ok pragueRules
-#guard guardHasTag unsupportedForkTag (guardSchedule.rulesAt 100)
+#guard guardSchedule.rulesAt 99 = .ok pragueRules
+#guard guardSchedule.rulesAt 100 = .ok osakaRules
+#guard guardHasTag unsupportedForkTag (guardSchedule.rulesAt 200)
 #guard guardHasTag unsupportedForkTag (guardSchedule.rulesAt 300)
 #guard (ChainConfig.pragueOnly 1).rulesAt 0 = .ok pragueRules
 #guard (ChainConfig.pragueOnly 1).rulesAt 999999 = .ok pragueRules

@@ -320,3 +320,22 @@ Source commit: [`06b23b4293950d8c08b624b90f310d1e918048e8`](https://github.com/e
 | --- | --- | --- |
 | [`blsG1MultiExp.json`](https://raw.githubusercontent.com/ethereum/go-ethereum/06b23b4293950d8c08b624b90f310d1e918048e8/core/vm/testdata/precompiles/blsG1MultiExp.json) | `b2603f681b9695e6ceb3cc7562c3c922b6db709882c26e84050774c0db7ce33a` | `blsG1MultiExp.head.json` |
 | [`blsG2MultiExp.json`](https://raw.githubusercontent.com/ethereum/go-ethereum/06b23b4293950d8c08b624b90f310d1e918048e8/core/vm/testdata/precompiles/blsG2MultiExp.json) | `f9b3fabe719b89883be935d7482805ac1fe734419e5ec77707dc262b0fdad926` | `blsG2MultiExp.head.json` |
+
+## Osaka precompile vectors
+
+These are committed verbatim rather than sampled: each is in the same size
+class as the already-vendored `modexp_eip2565.json` and BLS files.
+
+Source commit: [`ca1f2e4d38f4e94676981bb9251239a5d490b004`](https://github.com/ethereum/go-ethereum/tree/ca1f2e4d38f4e94676981bb9251239a5d490b004)
+
+| Source | SHA-256 | Committed file |
+| --- | --- | --- |
+| [`modexp_eip7883.json`](https://raw.githubusercontent.com/ethereum/go-ethereum/ca1f2e4d38f4e94676981bb9251239a5d490b004/core/vm/testdata/precompiles/modexp_eip7883.json) | `b66970a383617ebbd036460547e555967b1ce953e3d2a2f5969d5fdff1719983` | `modexp_eip7883.json` |
+
+Unlike every other vector file, these hold only under Osaka rules, so
+`scripts/check-vectors.sh` runs each of them with an explicit `--network`. The
+two MODEXP files are complementary rather than alternative — `modexp_eip2565`
+is the Prague schedule and `modexp_eip7883` the Osaka one — and each fails
+wholesale under the other fork. `elevm --vectors` additionally refuses a file
+whose address is not a precompile under the requested fork, so a vector can
+never be exercised under rules that do not activate its address.
