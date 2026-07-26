@@ -308,6 +308,7 @@ def actualRoutes : List ActualRoute :=
     ("InvalidSignatureError", txSenderNotEoa),
     (senderNotEoaTag, txSenderNotEoa),
     (type3BlobCountExceededTag, txType3TxBlobCountExceeded),
+    (type3BlobCountLimitExceededTag, txType3TxBlobCountExceeded),
     (type3ContractCreationTag, txType3TxContractCreation),
     (type3InvalidBlobVersionedHashTag, txType3TxInvalidBlobVersionedHash),
     (type3ZeroBlobsTag, txType3TxZeroBlobs),
@@ -556,8 +557,8 @@ def routedRlpTags : List String :=
     rlpFixedWidthTag, rlpFieldOverflow256Tag, rlpLeadingZerosTag,
     rlpRoundTripTag ]
 
-#guard actualRoutes.length = 50
-#guard (actualRoutes.map Prod.fst).eraseDups.length = 50
+#guard actualRoutes.length = 51
+#guard (actualRoutes.map Prod.fst).eraseDups.length = 51
 #guard (actualRoutes.map Prod.snd).eraseDups.length = 42
 #guard actualRoutes.all fun r =>
   blockExceptionTags.contains r.fst || routedRlpTags.contains r.fst ||
@@ -567,8 +568,8 @@ def routedRlpTags : List String :=
 #guard routedRlpTags.length = 7
 #guard routedRlpTags.eraseDups.length = 7
 #guard routedRlpTags.all fun t => (actualRoutes.map Prod.fst).contains t
-#guard transactionExceptionTags.length = 19
-#guard transactionExceptionTags.eraseDups.length = 19
+#guard transactionExceptionTags.length = 20
+#guard transactionExceptionTags.eraseDups.length = 20
 #guard transactionExceptionTags.all fun t => (actualRoutes.map Prod.fst).contains t
 
 -- Coverage in the fixture-to-producer direction: every one of the 42

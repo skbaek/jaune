@@ -933,6 +933,8 @@ def nonceMismatchTooLowTag : String := "NonceMismatchTooLowError"
 def priorityGreaterThanMaxFeeTag : String := "PriorityGreaterThanMaxFeeError"
 def senderNotEoaTag : String := "SenderNotEoaError"
 def type3BlobCountExceededTag : String := "Type3BlobCountExceededError"
+def type3BlobCountLimitExceededTag : String :=
+  "Type3BlobCountLimitExceededError"
 def type3ContractCreationTag : String := "Type3ContractCreationError"
 def type3InvalidBlobVersionedHashTag : String :=
   "Type3InvalidBlobVersionedHashError"
@@ -947,12 +949,13 @@ def transactionExceptionTags : List String :=
     intrinsicGasTooLowTag, invalidChainIdTag, nonceIsMaxTag, nonceMismatchTooHighTag,
     nonceMismatchTooLowTag,
     priorityGreaterThanMaxFeeTag, senderNotEoaTag,
-    type3BlobCountExceededTag, type3ContractCreationTag,
+    type3BlobCountExceededTag, type3BlobCountLimitExceededTag,
+    type3ContractCreationTag,
     type3InvalidBlobVersionedHashTag, type3ZeroBlobsTag,
     type4ContractCreationTag, emptyAuthorizationListTag ]
 
-#guard transactionExceptionTags.length = 19
-#guard transactionExceptionTags.eraseDups.length = 19
+#guard transactionExceptionTags.length = 20
+#guard transactionExceptionTags.eraseDups.length = 20
 #guard transactionExceptionTags.all fun t =>
   (transactionExceptionTags.filter fun u => t.isPrefixOf u).length = 1
 
@@ -5041,14 +5044,28 @@ def checkTransactionGasFee (benv : Benv) (tx : Tx) :
     checkTransactionDynamicGasFee benv.stat.baseFeePerGas tx.gas
       maxPriorityFee maxFee
 
+/-- Enforce the fork's per-transaction blob-count limit, when one is active. -/
+def checkTransactionBlobCount (limits : TransactionLimits)
+    (blobHashes : List B256) : Except String Unit :=
+  match limits.maxBlobCount with
+  | none => .ok ()
+  | some maxBlobCount =>
+    if blobHashes.length > maxBlobCount then
+      .error
+        s!"{type3BlobCountLimitExceededTag} : transaction has \
+           {blobHashes.length} blobs > maximum = {maxBlobCount}"
+    else
+      .ok ()
+
 def checkTransactionBlobData
     (benv : Benv) (tx : Tx) (maxGasFee : Nat) :
     Except String (Nat × List B256) :=
   match tx.type with
-  | .three _ _ _ _ _ maxBlobFee blobHashes =>
+  | .three _ _ _ _ _ maxBlobFee blobHashes => do
     if blobHashes.isEmpty then
       .error s!"{type3ZeroBlobsTag} : no blob hashes in type-3 transaction"
-    else if List.any blobHashes (λ bvh => bvh.toB8L[0]! ≠ versionedHashVersionKzg) then
+    checkTransactionBlobCount benv.stat.rules.tx blobHashes
+    if List.any blobHashes (λ bvh => bvh.toB8L[0]! ≠ versionedHashVersionKzg) then
       .error
         s!"{type3InvalidBlobVersionedHashTag} : a blob versioned hash has \
            a version byte other than {versionedHashVersionKzg}"
@@ -5411,6 +5428,14 @@ private def guardTightCodeLimits : CodeLimits :=
 #guard hasTag type3ZeroBlobsTag <|
   checkTransactionBlobData fixtureTestBenv
     {fixtureTestTx with type := .three 1 1 10 0 [] 1 []} 10
+#guard (checkTransactionBlobCount osakaRules.tx
+  (List.replicate 5 (0 : B256))).toOption.isSome
+#guard (checkTransactionBlobCount osakaRules.tx
+  (List.replicate 6 (0 : B256))).toOption.isSome
+#guard hasTag type3BlobCountLimitExceededTag <|
+  checkTransactionBlobCount osakaRules.tx (List.replicate 7 (0 : B256))
+#guard (checkTransactionBlobCount pragueRules.tx
+  (List.replicate 7 (0 : B256))).toOption.isSome
 #guard hasTag type3InvalidBlobVersionedHashTag <|
   checkTransactionBlobData fixtureTestBenv
     {fixtureTestTx with type := .three 1 1 10 0 [] 1 [0]} 10

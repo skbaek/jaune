@@ -100,10 +100,12 @@ deriving DecidableEq, Repr
 
 `none` states that a limit is not active at the fork; it is not an unbounded
 sentinel. This lets Prague retain its exact validation path while Osaka adds
-EIP-7825 without a fork comparison at the use site. -/
+EIP-7825 and EIP-7594 without a fork comparison at either use site. -/
 structure TransactionLimits : Type where
   /-- EIP-7825: the largest gas limit a transaction may specify. -/
   maxGas : Option Nat
+  /-- EIP-7594: the largest number of blobs one type-3 transaction may carry. -/
+  maxBlobCount : Option Nat
 deriving DecidableEq, Repr
 
 /-- The `MODEXP` input bounds and gas schedule (EIP-198, EIP-2565, EIP-7823,
@@ -191,9 +193,9 @@ def pragueCodeLimits : CodeLimits := {
   maxInitCodeSize := 49152 -- 2 * 0x6000
 }
 
-/-- Prague has no per-transaction gas cap. -/
+/-- Prague has neither Osaka per-transaction limit. -/
 def pragueTransactionLimits : TransactionLimits :=
-  { maxGas := none }
+  { maxGas := none, maxBlobCount := none }
 
 /-- Prague's `MODEXP` schedule: EIP-2565 unchanged since Berlin. -/
 def pragueModexpRules : ModexpRules := {
@@ -260,9 +262,10 @@ def osakaBlobSchedule : BlobSchedule := {
   reserveBaseCost := some (2 ^ 13)
 }
 
-/-- Osaka caps a transaction's gas limit at `2 ^ 24` (EIP-7825). -/
+/-- Osaka caps transaction gas at `2 ^ 24` (EIP-7825) and blobs at six
+(EIP-7594). -/
 def osakaTransactionLimits : TransactionLimits :=
-  { maxGas := some 16777216 }
+  { maxGas := some 16777216, maxBlobCount := some 6 }
 
 /-- Osaka's `MODEXP` schedule: EIP-7823 bounds the three length headers and
 EIP-7883 raises the price.
@@ -448,6 +451,7 @@ private def guardHasTag {α : Type} (tag : String) (e : Except String α) : Bool
 #guard pragueRules.code.maxCodeSize = 24576
 #guard pragueRules.code.maxInitCodeSize = 2 * pragueRules.code.maxCodeSize
 #guard pragueRules.tx.maxGas = none
+#guard pragueRules.tx.maxBlobCount = none
 #guard pragueRules.modexp.maxLength = none
 #guard pragueRules.modexp.flatComplexity = none
 #guard pragueRules.modexp.gasDivisor = 3
@@ -473,6 +477,7 @@ private def guardHasTag {α : Type} (tag : String) (e : Except String α) : Bool
   pragueBlobSchedule.baseFeeUpdateFraction
 #guard osakaBlobSchedule.reserveBaseCost = some 8192
 #guard osakaRules.tx.maxGas = some (2 ^ 24)
+#guard osakaRules.tx.maxBlobCount = some 6
 #guard osakaRules.modexp.maxLength = some 1024
 #guard osakaRules.modexp.flatComplexity = some 16
 #guard osakaRules.modexp.complexityCoeff = 2
