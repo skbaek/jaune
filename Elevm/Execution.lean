@@ -1,4 +1,5 @@
 import Elevm.Types
+import Elevm.Fork
 import Elevm.EC
 import Elevm.BLS
 import Elevm.Hash

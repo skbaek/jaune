@@ -2,6 +2,7 @@
 -- Import modules here that should be built as part of the library.
 import Elevm.Basic
 import Elevm.Types
+import Elevm.Fork
 import Elevm.Hash
 import Elevm.EC
 import Elevm.BLSConst
