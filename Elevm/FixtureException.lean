@@ -54,6 +54,7 @@ inductive FixtureException where
   | txInsufficientAccountFunds
   | txInsufficientMaxFeePerGas
   | txIntrinsicGasTooLow
+  | txGasLimitExceedsMaximum
   | txInvalidChainId
   | txNonceIsMax
   | txNonceMismatchTooHigh
@@ -102,6 +103,7 @@ def all : List FixtureException :=
     txInsufficientAccountFunds,
     txInsufficientMaxFeePerGas,
     txIntrinsicGasTooLow,
+    txGasLimitExceedsMaximum,
     txInvalidChainId,
     txNonceIsMax,
     txNonceMismatchTooHigh,
@@ -150,6 +152,8 @@ def toString : FixtureException → String
   | txInsufficientAccountFunds => "TransactionException.INSUFFICIENT_ACCOUNT_FUNDS"
   | txInsufficientMaxFeePerGas => "TransactionException.INSUFFICIENT_MAX_FEE_PER_GAS"
   | txIntrinsicGasTooLow => "TransactionException.INTRINSIC_GAS_TOO_LOW"
+  | txGasLimitExceedsMaximum =>
+    "TransactionException.GAS_LIMIT_EXCEEDS_MAXIMUM"
   | txInvalidChainId => "TransactionException.INVALID_CHAINID"
   | txNonceIsMax => "TransactionException.NONCE_IS_MAX"
   | txNonceMismatchTooHigh => "TransactionException.NONCE_MISMATCH_TOO_HIGH"
@@ -295,6 +299,7 @@ def actualRoutes : List ActualRoute :=
     (insufficientMaxFeePerGasTag, txInsufficientMaxFeePerGas),
     ("InsufficientMaxFeePerBlobGasError", txInsufficientMaxFeePerGas),
     (intrinsicGasTooLowTag, txIntrinsicGasTooLow),
+    (transactionGasLimitExceededTag, txGasLimitExceedsMaximum),
     (invalidChainIdTag, txInvalidChainId),
     (nonceIsMaxTag, txNonceIsMax),
     (nonceMismatchTooHighTag, txNonceMismatchTooHigh),
@@ -351,12 +356,12 @@ open FixtureException
 
 -- The vocabulary is exactly the generated Prague inventory plus the current
 -- typed-transaction chain-ID identity.
-#guard all.length = 41
+#guard all.length = 42
 
 -- `toString` is injective, so no two identities collapse to one token.
-#guard (all.map toString).eraseDups.length = 41
+#guard (all.map toString).eraseDups.length = 42
 
--- `toString`/`ofString?` round trip on all 41, in both directions.
+-- `toString`/`ofString?` round trip on all 42, in both directions.
 #guard all.all (fun e => ofString? e.toString == some e)
 #guard all.all (fun e => (ofString? e.toString).all (fun e' => e'.toString == e.toString))
 
@@ -551,9 +556,9 @@ def routedRlpTags : List String :=
     rlpFixedWidthTag, rlpFieldOverflow256Tag, rlpLeadingZerosTag,
     rlpRoundTripTag ]
 
-#guard actualRoutes.length = 49
-#guard (actualRoutes.map Prod.fst).eraseDups.length = 49
-#guard (actualRoutes.map Prod.snd).eraseDups.length = 41
+#guard actualRoutes.length = 50
+#guard (actualRoutes.map Prod.fst).eraseDups.length = 50
+#guard (actualRoutes.map Prod.snd).eraseDups.length = 42
 #guard actualRoutes.all fun r =>
   blockExceptionTags.contains r.fst || routedRlpTags.contains r.fst ||
     transactionExceptionTags.contains r.fst ||
@@ -562,11 +567,11 @@ def routedRlpTags : List String :=
 #guard routedRlpTags.length = 7
 #guard routedRlpTags.eraseDups.length = 7
 #guard routedRlpTags.all fun t => (actualRoutes.map Prod.fst).contains t
-#guard transactionExceptionTags.length = 18
-#guard transactionExceptionTags.eraseDups.length = 18
+#guard transactionExceptionTags.length = 19
+#guard transactionExceptionTags.eraseDups.length = 19
 #guard transactionExceptionTags.all fun t => (actualRoutes.map Prod.fst).contains t
 
--- Coverage in the fixture-to-producer direction: every one of the 41
+-- Coverage in the fixture-to-producer direction: every one of the 42
 -- identities generated from the Prague corpus has at least one actual route.
 -- A newly observed expected identity therefore cannot silently remain
 -- unclassifiable.

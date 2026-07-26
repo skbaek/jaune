@@ -93,6 +93,16 @@ structure CodeLimits : Type where
   maxInitCodeSize : Nat
 deriving DecidableEq, Repr
 
+/-- Per-transaction protocol limits.
+
+`none` states that a limit is not active at the fork; it is not an unbounded
+sentinel. This lets Prague retain its exact validation path while Osaka adds
+EIP-7825 without a fork comparison at the use site. -/
+structure TransactionLimits : Type where
+  /-- EIP-7825: the largest gas limit a transaction may specify. -/
+  maxGas : Option Nat
+deriving DecidableEq, Repr
+
 /-- The `MODEXP` input bounds and gas schedule (EIP-198, EIP-2565, EIP-7823,
 and EIP-7883).
 
@@ -142,6 +152,8 @@ structure ForkRules : Type where
   blob : BlobSchedule
   /-- Deployed-code and initcode size limits. -/
   code : CodeLimits
+  /-- Per-transaction limits. -/
+  tx : TransactionLimits
   /-- The `MODEXP` input bounds and gas schedule. -/
   modexp : ModexpRules
   /-- Which fork-gated opcodes are defined. -/
@@ -174,6 +186,10 @@ def pragueCodeLimits : CodeLimits := {
   maxCodeSize := 24576 -- 0x6000
   maxInitCodeSize := 49152 -- 2 * 0x6000
 }
+
+/-- Prague has no per-transaction gas cap. -/
+def pragueTransactionLimits : TransactionLimits :=
+  { maxGas := none }
 
 /-- Prague's `MODEXP` schedule: EIP-2565 unchanged since Berlin. -/
 def pragueModexpRules : ModexpRules := {
@@ -218,6 +234,7 @@ def pragueRules : ForkRules := {
   fork := .prague
   blob := pragueBlobSchedule
   code := pragueCodeLimits
+  tx := pragueTransactionLimits
   modexp := pragueModexpRules
   op := pragueOpcodeRules
   precompiles := praguePrecompiles
@@ -237,6 +254,10 @@ def osakaBlobSchedule : BlobSchedule := {
   max := 9 * 131072
   baseFeeUpdateFraction := 5007716
 }
+
+/-- Osaka caps a transaction's gas limit at `2 ^ 24` (EIP-7825). -/
+def osakaTransactionLimits : TransactionLimits :=
+  { maxGas := some 16777216 }
 
 /-- Osaka's `MODEXP` schedule: EIP-7823 bounds the three length headers and
 EIP-7883 raises the price.
@@ -275,6 +296,7 @@ def osakaRules : ForkRules := {
   fork := .osaka
   blob := osakaBlobSchedule
   code := pragueCodeLimits
+  tx := osakaTransactionLimits
   modexp := osakaModexpRules
   op := osakaOpcodeRules
   precompiles := osakaPrecompiles
@@ -419,6 +441,7 @@ private def guardHasTag {α : Type} (tag : String) (e : Except String α) : Bool
 #guard pragueRules.blob.baseFeeUpdateFraction = 5007716
 #guard pragueRules.code.maxCodeSize = 24576
 #guard pragueRules.code.maxInitCodeSize = 2 * pragueRules.code.maxCodeSize
+#guard pragueRules.tx.maxGas = none
 #guard pragueRules.modexp.maxLength = none
 #guard pragueRules.modexp.flatComplexity = none
 #guard pragueRules.modexp.gasDivisor = 3
@@ -441,6 +464,7 @@ private def guardHasTag {α : Type} (tag : String) (e : Except String α) : Bool
 #guard osakaRules.code = pragueRules.code
 #guard osakaBlobSchedule.target = 786432
 #guard osakaBlobSchedule.max = 1179648
+#guard osakaRules.tx.maxGas = some (2 ^ 24)
 #guard osakaRules.modexp.maxLength = some 1024
 #guard osakaRules.modexp.flatComplexity = some 16
 #guard osakaRules.modexp.complexityCoeff = 2

@@ -923,6 +923,8 @@ def gasAllowanceExceededTag : String := "GasAllowanceExceededError"
 def initcodeSizeExceededTag : String := "InitcodeSizeExceededError"
 def insufficientAccountFundsTag : String := "InsufficientAccountFundsError"
 def insufficientMaxFeePerGasTag : String := "InsufficientMaxFeePerGasError"
+def transactionGasLimitExceededTag : String :=
+  "TransactionGasLimitExceededError"
 def intrinsicGasTooLowTag : String := "IntrinsicGasTooLowError"
 def invalidChainIdTag : String := "InvalidChainIdError"
 def nonceIsMaxTag : String := "NonceIsMaxError"
@@ -941,15 +943,16 @@ def emptyAuthorizationListTag : String := "EmptyAuthorizationListError"
 def transactionExceptionTags : List String :=
   [ gasPriceProductOverflowTag, gasAllowanceExceededTag,
     initcodeSizeExceededTag, insufficientAccountFundsTag,
-    insufficientMaxFeePerGasTag, intrinsicGasTooLowTag, invalidChainIdTag, nonceIsMaxTag,
-    nonceMismatchTooHighTag, nonceMismatchTooLowTag,
+    insufficientMaxFeePerGasTag, transactionGasLimitExceededTag,
+    intrinsicGasTooLowTag, invalidChainIdTag, nonceIsMaxTag, nonceMismatchTooHighTag,
+    nonceMismatchTooLowTag,
     priorityGreaterThanMaxFeeTag, senderNotEoaTag,
     type3BlobCountExceededTag, type3ContractCreationTag,
     type3InvalidBlobVersionedHashTag, type3ZeroBlobsTag,
     type4ContractCreationTag, emptyAuthorizationListTag ]
 
-#guard transactionExceptionTags.length = 18
-#guard transactionExceptionTags.eraseDups.length = 18
+#guard transactionExceptionTags.length = 19
+#guard transactionExceptionTags.eraseDups.length = 19
 #guard transactionExceptionTags.all fun t =>
   (transactionExceptionTags.filter fun u => t.isPrefixOf u).length = 1
 
@@ -5156,19 +5159,44 @@ def checkInitcodeSize (code : CodeLimits) (receiver : Option Adr)
   else
     .ok ()
 
+/-- Enforce the fork's per-transaction gas cap, when one is active. -/
+def checkTransactionGasCap (limits : TransactionLimits) (gas : Nat) :
+    Except String Unit :=
+  match limits.maxGas with
+  | none => .ok ()
+  | some maxGas =>
+    if gas > maxGas then
+      .error
+        s!"{transactionGasLimitExceededTag} : transaction gas = {gas} > \
+           maximum = {maxGas}"
+    else
+      .ok ()
+
 -- validate_transaction
 def validateTransaction (rules : ForkRules) (tx : Tx) :
     Except String (Nat × Nat) := do
   let ⟨intrinsicGas, callDataFloorGasCost⟩ := calculateIntrinsicCost tx
   if max intrinsicGas callDataFloorGasCost > tx.gas
-    then
-      .error
-        s!"{intrinsicGasTooLowTag} : transaction gas = {tx.gas} < \
-           max intrinsic/calldata floor cost = \
-           {max intrinsicGas callDataFloorGasCost}"
-  if tx.nonce = B64.max
-    then .error s!"{nonceIsMaxTag} : transaction nonce is 2^64 - 1"
-  checkInitcodeSize rules.code tx.type.receiver? tx.data.length
+  then
+    .error
+      s!"{intrinsicGasTooLowTag} : transaction gas = {tx.gas} < \
+         max intrinsic/calldata floor cost = \
+         {max intrinsicGas callDataFloorGasCost}"
+  match rules.tx.maxGas with
+  | none =>
+    -- Keep Prague's established error precedence byte-for-byte: before Osaka
+    -- this build checked the nonce before initcode size. The validity set is
+    -- the same as EELS, while multiply-invalid legacy fixtures retain their
+    -- existing diagnostic identity.
+    if tx.nonce = B64.max then
+      .error s!"{nonceIsMaxTag} : transaction nonce is 2^64 - 1"
+    checkInitcodeSize rules.code tx.type.receiver? tx.data.length
+  | some _ =>
+    -- Osaka follows EELS: initcode, EIP-7825 gas cap, then nonce.
+    checkInitcodeSize rules.code tx.type.receiver? tx.data.length
+    checkTransactionGasCap rules.tx tx.gas
+    if tx.nonce = B64.max then
+      .error s!"{nonceIsMaxTag} : transaction nonce is 2^64 - 1"
   .ok ⟨intrinsicGas, callDataFloorGasCost⟩
 
 def prepareMessage (benv: Benv) (tenv: Tenv) (tx: Tx) :
@@ -5322,6 +5350,15 @@ private def fixtureTestAccount
   validateTransaction pragueRules {fixtureTestTx with nonce := B64.max}
 #guard hasTag initcodeSizeExceededTag <|
   checkInitcodeSize pragueRules.code none (pragueRules.code.maxInitCodeSize + 1)
+
+-- EIP-7825 is inclusive at `2 ^ 24`, and absent at Prague.
+#guard (checkTransactionGasCap osakaRules.tx (2 ^ 24 - 1)).toOption.isSome
+#guard (checkTransactionGasCap osakaRules.tx (2 ^ 24)).toOption.isSome
+#guard hasTag transactionGasLimitExceededTag <|
+  checkTransactionGasCap osakaRules.tx (2 ^ 24 + 1)
+#guard (checkTransactionGasCap pragueRules.tx (2 ^ 24 + 1)).toOption.isSome
+#guard hasTag transactionGasLimitExceededTag <|
+  validateTransaction osakaRules {fixtureTestTx with gas := 2 ^ 24 + 1}
 
 -- The initcode bound comes from the rules record, not from a global: a smaller
 -- limit rejects an initcode the Prague limit accepts, at the same boundary.
