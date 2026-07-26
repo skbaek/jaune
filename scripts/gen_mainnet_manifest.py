@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parent
 DEFAULT_SOURCES = ROOT / "sources.json"
 DEFAULT_OUTPUT = ROOT / "mainnet" / "manifests.json"
 SUPPORTED_STATIC = ("Prague", "Osaka", "BPO1", "BPO2")
-SMOKE_FILE_COUNT = 32
+SMOKE_FILE_COUNT = 16
 
 
 class InventoryError(Exception):
@@ -34,6 +34,11 @@ def file_digest(names: list[str]) -> str:
     """Stable compact witness for the exact cases in one fixture file."""
     payload = "\n".join(names).encode()
     return hashlib.sha256(payload).hexdigest()
+
+
+def smoke_rank(release_commit: str, entry: dict) -> str:
+    """Pinned seed plus path makes the small smoke sample reproducible."""
+    return hashlib.sha256(f"{release_commit}:{entry['path']}".encode()).hexdigest()
 
 
 def read_cases(path: Path) -> tuple[str, list[str]]:
@@ -104,12 +109,16 @@ def inventory(fixtures_root: Path, sources: dict) -> dict:
         for label in SUPPORTED_STATIC
     }
     prague_files = suites["prague"]["files"]
+    smoke_files = sorted(
+        prague_files,
+        key=lambda entry: smoke_rank(sources["current_mainnet"]["release_commit"], entry),
+    )[:SMOKE_FILE_COUNT]
     suites["smoke"] = {
         "network": "Prague",
-        "selection_rule": f"first {SMOKE_FILE_COUNT} Prague files in bytewise path order",
-        "files": prague_files[:SMOKE_FILE_COUNT],
-        "file_count": min(SMOKE_FILE_COUNT, len(prague_files)),
-        "case_count": sum(entry["case_count"] for entry in prague_files[:SMOKE_FILE_COUNT]),
+        "selection_rule": f"lowest {SMOKE_FILE_COUNT} SHA-256 ranks of release_commit:path",
+        "files": smoke_files,
+        "file_count": len(smoke_files),
+        "case_count": sum(entry["case_count"] for entry in smoke_files),
     }
 
     transition_labels = {label: grouped[label] for label in sorted(grouped) if "To" in label}
