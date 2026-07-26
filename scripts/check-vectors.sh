@@ -66,10 +66,12 @@ PRECOMPILE_FILES=(
 )
 
 # Vectors that only hold under Osaka rules.  They are a separate group because
-# each one is run with an explicit --network and would legitimately fail under
-# Prague, which prices MODEXP differently.
+# each one is run with an explicit --network and could not run under Prague:
+# modexp_eip7883.json reprices MODEXP, and p256Verify.json is at an address
+# Prague does not activate at all.
 OSAKA_FILES=(
   modexp_eip7883.json
+  p256Verify.json
 )
 
 EXPECTED_FILES=("${CONTROL_FILES[@]}" "${PRECOMPILE_FILES[@]}" "${OSAKA_FILES[@]}")
@@ -93,7 +95,7 @@ AUXILIARY_FILES=(
 # under the rules that define it, never under whatever the binary defaults to.
 get_fork() {
   case "$1" in
-    modexp_eip7883.json) echo "Osaka" ;;
+    modexp_eip7883.json|p256Verify.json) echo "Osaka" ;;
     *) echo "Prague" ;;
   esac
 }
@@ -106,6 +108,7 @@ get_addr() {
     blake2F.json) echo "09" ;;
     modexp_eip2565.json) echo "05" ;;
     modexp_eip7883.json) echo "05" ;;
+    p256Verify.json) echo "0100" ;;
     pointEvaluation.json) echo "0a" ;;
     add_G1_bls.json|fail-add_G1_bls.json|blsG1Add.json|fail-blsG1Add.json) echo "0b" ;;
     mul_G1_bls.json|fail-mul_G1_bls.json|msm_G1_bls.head.json|fail-msm_G1_bls.json|blsG1Mul.json|fail-blsG1Mul.json|blsG1MultiExp.head.json|fail-blsG1MultiExp.json) echo "0c" ;;

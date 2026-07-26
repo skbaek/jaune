@@ -331,6 +331,13 @@ Source commit: [`ca1f2e4d38f4e94676981bb9251239a5d490b004`](https://github.com/e
 | Source | SHA-256 | Committed file |
 | --- | --- | --- |
 | [`modexp_eip7883.json`](https://raw.githubusercontent.com/ethereum/go-ethereum/ca1f2e4d38f4e94676981bb9251239a5d490b004/core/vm/testdata/precompiles/modexp_eip7883.json) | `b66970a383617ebbd036460547e555967b1ce953e3d2a2f5969d5fdff1719983` | `modexp_eip7883.json` |
+| [`p256Verify.json`](https://raw.githubusercontent.com/ethereum/go-ethereum/ca1f2e4d38f4e94676981bb9251239a5d490b004/core/vm/testdata/precompiles/p256Verify.json) | `72be71957c3e4292d874b3e2a6a2fc2142524433b01cb9a9552b9bb2528c214d` | `p256Verify.json` |
+
+`p256Verify.json` is 782 cases, 567 accepting and 215 rejecting, and its case
+names record that most of them are derived from Google's Wycheproof
+`ecdsa_secp256r1_sha256` suites. It is the substantive oracle for the
+`P256VERIFY` implementation, which is why it is vendored whole rather than
+sampled.
 
 Unlike every other vector file, these hold only under Osaka rules, so
 `scripts/check-vectors.sh` runs each of them with an explicit `--network`. The

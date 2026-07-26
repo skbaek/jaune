@@ -652,6 +652,7 @@ def gHashopcode : Nat := 3
 def gasPerBlob : Nat := 2 ^ 17
 def gasStorageUpdate := 5000
 def gasEcrecover : Nat := 3000
+def gasP256Verify : Nat := 6900
 -- `maxCodeSize` and `maxInitCodeSize` are fork rules, not global constants:
 -- see `ForkRules.code` in `Elevm/Fork.lean`.
 def gNewAccount : Nat := 25000
@@ -2985,6 +2986,29 @@ def executeEcrecover (evm : Evm) : PrecompResult :=
         | .none => .ok gasEcrecover []
         | some adr => .ok gasEcrecover adr.toB256.toB8L
 
+/-- EIP-7951 `P256VERIFY`.
+
+Two properties of the specification are easy to lose and are deliberate here.
+The flat fee is charged before the input is looked at, so a malformed call costs
+the same as a well-formed one.  And every rejection -- wrong input length,
+out-of-range component, off-curve key, bad signature -- returns empty output
+successfully rather than halting, so a caller distinguishes them only by the
+returned data size. -/
+def executeP256Verify (evm : Evm) : PrecompResult :=
+  let data := evm.sta.data
+  PrecompResult.chargeGas gasP256Verify evm fun () =>
+    if data.length ≠ 160 then .ok gasP256Verify []
+    else
+      let msgHash : Nat := B8L.toNat <| data.sliceD 0 32 (0 : B8)
+      let r : Nat := B8L.toNat <| data.sliceD 32 32 (0 : B8)
+      let s : Nat := B8L.toNat <| data.sliceD 64 32 (0 : B8)
+      let qx : Nat := B8L.toNat <| data.sliceD 96 32 (0 : B8)
+      let qy : Nat := B8L.toNat <| data.sliceD 128 32 (0 : B8)
+      if secp256r1.verify msgHash r s qx qy then
+        .ok gasP256Verify (1 : Nat).toB256.toB8L
+      else
+        .ok gasP256Verify []
+
 def executeSha256 (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
   let cost : Nat := 60 + (12 * (ceilDiv data.length 32))
@@ -3540,6 +3564,7 @@ def precompileRun (evm : Evm) : Adr → PrecompResult
   | 15 => executeBls12Pairing evm -- 0xF
   | 16 => executeBls12MapFpToG1 evm -- 0x10
   | 17 => executeBls12MapFp2ToG2 evm -- 0x11
+  | 256 => executeP256Verify evm -- 0x100
   | n => .error s!"ERROR : precompiled contract {n} does not exist" 0
 
 def applyPrecompResult (evm : Evm) (res : PrecompResult) : Execution :=
@@ -5165,9 +5190,12 @@ def prepareMessage (benv: Benv) (tenv: Tenv) (tx: Tx) :
         benv.state.getCode target,
         target
       ⟩
+  -- EIP-2929 pre-warms every precompile, so the set comes from the active
+  -- rules rather than from a literal run of addresses: at Osaka that is what
+  -- makes a call to P256VERIFY cost warm access like the other seventeen.
   let accessedAddresses : AdrSet :=
     tenv.stat.accessListAddresses.insertMany
-      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, tenv.stat.origin, currentTarget]
+      (benv.stat.rules.precompiles ++ [tenv.stat.origin, currentTarget])
   .ok {
     benv := benv,
     tenv := tenv,

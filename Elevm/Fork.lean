@@ -256,6 +256,16 @@ def osakaModexpRules : ModexpRules := {
 /-- Osaka's opcode set: EIP-7939 assigns `CLZ` to 0x1E. -/
 def osakaOpcodeRules : OpcodeRules := { clz := true }
 
+/-- The precompiles active at Osaka: Prague's contiguous block plus EIP-7951's
+`P256VERIFY`.
+
+It sits at 0x100 rather than continuing the run, which is exactly why the
+activation set is carried as a set: appending one address is the whole rule,
+and no bound anywhere has to learn about the gap. -/
+def osakaPrecompiles : List Adr := praguePrecompiles ++ [
+  0x100 -- P256VERIFY
+]
+
 /-- The Osaka rule set.
 
 Only the fields Osaka actually moves differ from Prague; the shared ones are
@@ -267,7 +277,7 @@ def osakaRules : ForkRules := {
   code := pragueCodeLimits
   modexp := osakaModexpRules
   op := osakaOpcodeRules
-  precompiles := praguePrecompiles
+  precompiles := osakaPrecompiles
 }
 
 /-- Error tag for a fork whose identity is known but whose rules this build
@@ -438,6 +448,18 @@ private def guardHasTag {α : Type} (tag : String) (e : Except String α) : Bool
 #guard osakaRules.modexp.gasDivisor = 1
 #guard osakaRules.modexp.minGas = 500
 #guard osakaRules.op.clz = true
+
+-- P256VERIFY is appended, so Prague's seventeen keep their addresses and the
+-- eighteenth is reachable only under Osaka rules. Nothing in between becomes a
+-- precompile by widening a range.
+#guard osakaRules.precompiles.length = 18
+#guard osakaRules.precompiles.take 17 = pragueRules.precompiles
+#guard osakaRules.isPrecomp (0x100 : Adr)
+#guard ¬ pragueRules.isPrecomp (0x100 : Adr)
+#guard ¬ osakaRules.isPrecomp (0x12 : Adr)
+#guard ¬ osakaRules.isPrecomp (0xFF : Adr)
+#guard ¬ osakaRules.isPrecomp (0x101 : Adr)
+#guard (List.range' 1 17).all (fun n => osakaRules.isPrecomp (Nat.toAdr n))
 
 -- Prague and Osaka are executable in this build; the BPO forks are identities
 -- without rules, and asking for them fails rather than falling back.

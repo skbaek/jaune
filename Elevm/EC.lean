@@ -851,3 +851,85 @@ def recover (h : B256) (v : Bool) (r : B256) (s : B256) : Option Adr :=
     recoverAffine h v r s
 
 end secp256k1
+
+/-! ## secp256r1 (NIST P-256), for EIP-7951's `P256VERIFY`
+
+The curve constants are the ones the specification's reference implementation
+names (`SECP256R1P`, `SECP256R1N`, `SECP256R1A`, `SECP256R1B`); the base point
+is the standard one, and `#guard`s below check it lies on the curve and has the
+stated order rather than taking the literals on trust.
+
+Unlike secp256k1 this curve has `a ≠ 0`, so the Jacobian formulas above -- which
+are the `shortw-jacobian-0` family -- do not apply to it.  Scalar multiplication
+therefore goes through the generic affine ladder that `EllipticCurve.mulBy`
+already selects for `a ≠ 0`.  Introducing a general-`a` Jacobian doubling would
+be a performance change to shared curve code, which is out of scope here.
+-/
+namespace secp256r1
+
+def prime : Nat :=
+  0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF
+
+def curveOrder : Nat :=
+  0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
+
+abbrev Coord : Type := FinField prime
+
+/-- The curve coefficient `a`, which is `prime - 3`. -/
+abbrev coeffA : Coord :=
+  .ofNat 0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFC
+
+/-- The curve coefficient `b`. -/
+abbrev coeffB : Coord :=
+  .ofNat 0x5AC635D8AA3A93E7B3EBBD55769886BC651D06B0CC53B0F63BCE3C3E27D2604B
+
+abbrev Point : Type := EllipticCurve Coord coeffA coeffB
+
+/-- The infinity representative this file uses for every curve. -/
+abbrev infinity : Point := ⟨0, 0⟩
+
+def generator : Point :=
+  ⟨
+    .ofNat 0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296,
+    .ofNat 0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5
+  ⟩
+
+/-- EIP-7951's signature verification.
+
+Arguments are the raw 256-bit words the precompile reads, so every domain
+condition is checked here rather than assumed: the signature components must be
+non-zero and below the group order, the public-key coordinates below the field
+prime, the key must not be the infinity representative, and it must satisfy the
+curve equation.  The cofactor is 1, so a point on the curve is in the
+prime-order group and no separate subgroup check exists.
+
+`false` covers every failure, which is what the precompile needs: EIP-7951
+returns empty output for an invalid signature and for malformed input alike. -/
+def verify (msgHash r s qx qy : Nat) : Bool :=
+  if r = 0 ∨ curveOrder ≤ r then false
+  else if s = 0 ∨ curveOrder ≤ s then false
+  else if prime ≤ qx ∨ prime ≤ qy then false
+  else if qx = 0 ∧ qy = 0 then false
+  else
+    let q : Point := ⟨.ofNat qx, .ofNat qy⟩
+    if ¬ q.isOnCurve then false
+    else
+      let sInv : FinField curveOrder := FinField.inv (.ofNat s)
+      let u1 : Nat := (sInv * .ofNat msgHash).val
+      let u2 : Nat := (sInv * .ofNat r).val
+      let p : Point :=
+        EllipticCurve.mulBy generator u1 + EllipticCurve.mulBy q u2
+      if p = infinity then false
+      else p.x.val % curveOrder = r
+
+end secp256r1
+
+-- The base point is on the curve, and multiplying it by the stated group order
+-- reaches infinity: a transcription error in any of the six curve literals
+-- would have to survive both.
+#guard secp256r1.generator.isOnCurve
+#guard EllipticCurve.mulBy secp256r1.generator secp256r1.curveOrder
+  = secp256r1.infinity
+#guard EllipticCurve.mulBy secp256r1.generator (secp256r1.curveOrder + 1)
+  = secp256r1.generator
+#guard secp256r1.coeffA.val + 3 = secp256r1.prime
