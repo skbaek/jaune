@@ -1224,6 +1224,7 @@ inductive Rinst : Type
   | shl -- 0x1B / 2 / 1 / logical shift left operation.
   | shr -- 0x1C / 2 / 1 / logical shift right operation.
   | sar -- 0x1D / 2 / 1 / arithmetic (signed) shift right operation.
+  | clz -- 0x1E / 1 / 1 / count leading zero bits (Osaka and later only).
   | kec -- 0x20 / 2 / 1 / compute Keccak-256 hash.
   | address -- 0x30 / 0 / 1 / Get the Addr of the currently executing account.
   | balance -- 0x31 / 1 / 1 / Get the balance of the specified account.
@@ -1318,6 +1319,7 @@ def Rinst.toString : Rinst → String
   | shr => "SHR"
   | shl => "SHL"
   | sar => "SAR"
+  | clz => "CLZ"
   | kec => "KEC"
   | address => "ADDRESS"
   | balance => "BALANCE"
@@ -1403,6 +1405,11 @@ def B8.toRinst : B8 → Option Rinst
   | 0x1b => some .shl -- 0x1b / 2 / 1 / logical shift left operation.
   | 0x1c => some .shr -- 0x1c / 2 / 1 / logical shift right operation.
   | 0x1d => some .sar -- 0x1d / 2 / 1 / arithmetic (signed) shift right operation.
+  -- 0x1e decodes at every fork; whether it is a defined instruction is a rule,
+  -- checked by `Rinst.runCore` against `ForkRules.op`.  Decoding stays
+  -- fork-independent so that instruction positions -- and every downstream
+  -- statement about them -- do not depend on which rules are running.
+  | 0x1e => some .clz -- 0x1e / 1 / 1 / count leading zero bits.
   | 0x20 => some .kec -- 0x20 / 2 / 1 / compute Keccak-256 hash.
   | 0x30 => some .address -- 0x30 / 0 / 1 / Get the address of the currently executing account.
   | 0x31 => some .balance -- 0x31 / 1 / 1 / Get the balance of the specified account.

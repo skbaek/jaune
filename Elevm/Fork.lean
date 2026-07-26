@@ -120,6 +120,16 @@ structure ModexpRules : Type where
   minGas : Nat
 deriving DecidableEq, Repr
 
+/-- Opcodes whose availability changes along the supported transition chain.
+
+An opcode this record switches off is not merely unimplemented: its byte is
+undefined at that fork, so a contract reaching it halts on an invalid
+instruction exactly as it would on any other unassigned byte. -/
+structure OpcodeRules : Type where
+  /-- EIP-7939 `CLZ` (0x1E), new at Osaka. -/
+  clz : Bool
+deriving DecidableEq, Repr
+
 /-- Everything the interpreter needs to know about *which* rules it is running.
 
 Execution reads this record and nothing else about the fork. The `fork` field
@@ -134,6 +144,8 @@ structure ForkRules : Type where
   code : CodeLimits
   /-- The `MODEXP` input bounds and gas schedule. -/
   modexp : ModexpRules
+  /-- Which fork-gated opcodes are defined. -/
+  op : OpcodeRules
   /-- The addresses at which a precompiled contract is active. -/
   precompiles : List Adr
 deriving DecidableEq
@@ -173,6 +185,9 @@ def pragueModexpRules : ModexpRules := {
   minGas := 200
 }
 
+/-- Prague's opcode set: 0x1E is still an unassigned byte. -/
+def pragueOpcodeRules : OpcodeRules := { clz := false }
+
 /-- The precompiles active at Prague: 0x01 through 0x11, contiguous.
 
 Written out rather than computed from a range so that the set stays readable
@@ -204,6 +219,7 @@ def pragueRules : ForkRules := {
   blob := pragueBlobSchedule
   code := pragueCodeLimits
   modexp := pragueModexpRules
+  op := pragueOpcodeRules
   precompiles := praguePrecompiles
 }
 
@@ -237,6 +253,9 @@ def osakaModexpRules : ModexpRules := {
   minGas := 500
 }
 
+/-- Osaka's opcode set: EIP-7939 assigns `CLZ` to 0x1E. -/
+def osakaOpcodeRules : OpcodeRules := { clz := true }
+
 /-- The Osaka rule set.
 
 Only the fields Osaka actually moves differ from Prague; the shared ones are
@@ -247,6 +266,7 @@ def osakaRules : ForkRules := {
   blob := osakaBlobSchedule
   code := pragueCodeLimits
   modexp := osakaModexpRules
+  op := osakaOpcodeRules
   precompiles := praguePrecompiles
 }
 
@@ -393,6 +413,7 @@ private def guardHasTag {α : Type} (tag : String) (e : Except String α) : Bool
 #guard pragueRules.modexp.flatComplexity = none
 #guard pragueRules.modexp.gasDivisor = 3
 #guard pragueRules.modexp.minGas = 200
+#guard pragueRules.op.clz = false
 
 -- Prague's precompile activation set is exactly 0x01 through 0x11, which is
 -- what the former `1 ≤ a.toNat ∧ a.toNat ≤ 17` range said.
@@ -416,6 +437,7 @@ private def guardHasTag {α : Type} (tag : String) (e : Except String α) : Bool
 #guard osakaRules.modexp.iterationCoeff = 2 * pragueRules.modexp.iterationCoeff
 #guard osakaRules.modexp.gasDivisor = 1
 #guard osakaRules.modexp.minGas = 500
+#guard osakaRules.op.clz = true
 
 -- Prague and Osaka are executable in this build; the BPO forks are identities
 -- without rules, and asking for them fails rather than falling back.

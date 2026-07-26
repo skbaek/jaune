@@ -596,6 +596,20 @@ def B256.zerocount (x : B256) : Nat → Nat
 
 def B256.bytecount (x : B256) : Nat := 32 - (B256.zerocount x 32)
 
+/-- Leading zero bits of one 64-bit limb; 64 for zero. -/
+def B64.leadingZeros (x : B64) : Nat :=
+  if x = 0 then 64 else 63 - Nat.log2 x.toNat
+
+/-- Leading zero bits of a 256-bit word; 256 for zero.
+
+This is EIP-7939's `256 - x.bit_length()` stated directly, and it is computed
+limb by limb so that a word is never widened to a bignum to be measured. -/
+def B256.leadingZeros (x : B256) : Nat :=
+  if x.1.1 ≠ 0 then B64.leadingZeros x.1.1
+  else if x.1.2 ≠ 0 then 64 + B64.leadingZeros x.1.2
+  else if x.2.1 ≠ 0 then 128 + B64.leadingZeros x.2.1
+  else 192 + B64.leadingZeros x.2.2
+
 def toKeyVal (pr : Adr × Acct) : B8L × B8L :=
   let ad := pr.fst
   let ac := pr.snd
@@ -2344,6 +2358,14 @@ def Rinst.runCore
   | .shl => applyBinary (fun x y => y <<< x.toNat) gVerylow devm
   | .shr => applyBinary (fun x y => y >>> x.toNat) gVerylow devm
   | .sar => applyBinary (fun x y => B256.arithShiftRight y x.toNat) gVerylow devm
+  | .clz =>
+    -- The availability check comes before the pop, so under rules without
+    -- EIP-7939 a `CLZ` byte behaves exactly like any other undefined opcode:
+    -- an invalid instruction regardless of what the stack holds.
+    if sevm.benvStat.rules.op.clz then
+      applyUnary (fun x => (B256.leadingZeros x).toB256) gLow devm
+    else
+      .error ⟨"InvalidOpcode", devm⟩
   | .kec => do
     let ⟨memory_start_index, devm⟩ ← devm.popToNat
     let ⟨size, devm⟩ ← devm.popToNat
@@ -2614,6 +2636,71 @@ instance : Inhabited Evm := ⟨
     dyna := default
   }
 ⟩
+
+-- EIP-7939 `CLZ` guards.
+
+-- The counted quantity is `256 - x.bit_length()`, so every limb boundary and
+-- both extremes are pinned rather than left to the fixture corpus.
+#guard B256.leadingZeros (Nat.toB256 0) = 256
+#guard B256.leadingZeros (Nat.toB256 1) = 255
+#guard B256.leadingZeros (Nat.toB256 2) = 254
+#guard B256.leadingZeros (Nat.toB256 3) = 254
+#guard B256.leadingZeros (Nat.toB256 255) = 248
+#guard B256.leadingZeros (Nat.toB256 256) = 247
+#guard B256.leadingZeros (Nat.toB256 (2 ^ 63)) = 192
+#guard B256.leadingZeros (Nat.toB256 (2 ^ 64)) = 191
+#guard B256.leadingZeros (Nat.toB256 (2 ^ 127)) = 128
+#guard B256.leadingZeros (Nat.toB256 (2 ^ 128)) = 127
+#guard B256.leadingZeros (Nat.toB256 (2 ^ 191)) = 64
+#guard B256.leadingZeros (Nat.toB256 (2 ^ 192)) = 63
+#guard B256.leadingZeros (Nat.toB256 (2 ^ 255)) = 0
+#guard B256.leadingZeros B256.max = 0
+-- A power of two and the all-ones word below it are the two words with the
+-- same bit length, so they must count the same number of leading zeros.
+#guard (List.range 256).all
+  (fun n => B256.leadingZeros (Nat.toB256 (2 ^ n)) = 255 - n)
+#guard (List.range 256).all
+  (fun n => B256.leadingZeros (Nat.toB256 (2 ^ (n + 1) - 1)) = 255 - n)
+
+private def guardSevmWith (rules : ForkRules) : Sevm :=
+  { (default : Sevm) with
+    benvStat := { (default : BenvStat) with rules := rules } }
+
+private def guardClz (rules : ForkRules) (gasLeft : Nat) (stack : List B256) :
+    Execution :=
+  Rinst.runCore 0 (((default : Devm).withGasLeft gasLeft).withStack stack)
+    (guardSevmWith rules) .clz
+
+private def guardClzErr (e : Execution) : String :=
+  match e with
+  | .error ⟨err, _⟩ => err
+  | .ok _ => "unexpected success"
+
+-- Under Osaka the opcode pops one word, charges `LOW`, and pushes the count.
+#guard (guardClz osakaRules 100 [0]).toOption.map Devm.stack
+  = some [Nat.toB256 256]
+#guard (guardClz osakaRules 100 [1]).toOption.map Devm.stack
+  = some [Nat.toB256 255]
+#guard (guardClz osakaRules 100 [B256.max]).toOption.map Devm.stack
+  = some [Nat.toB256 0]
+#guard (guardClz osakaRules 100 [0]).toOption.map Devm.gasLeft = some (100 - gLow)
+#guard gLow = 5
+
+-- The rest of the stack is untouched and only the top word is consumed.
+#guard (guardClz osakaRules 100 [0, 7]).toOption.map Devm.stack
+  = some [Nat.toB256 256, Nat.toB256 7]
+
+-- Under Prague 0x1E is an unassigned byte, so it is an invalid instruction
+-- whatever the stack and gas hold -- not a stack or gas failure, and not a
+-- silent success.
+#guard guardClzErr (guardClz pragueRules 100 [0]) = "InvalidOpcode"
+#guard guardClzErr (guardClz pragueRules 100 []) = "InvalidOpcode"
+#guard guardClzErr (guardClz pragueRules 0 [0]) = "InvalidOpcode"
+
+-- Under Osaka the same two degenerate inputs reach the real failures instead.
+#guard guardClzErr (guardClz osakaRules 100 []) = "StackUnderflowError"
+#guard guardClzErr (guardClz osakaRules (gLow - 1) [0]) = "OutOfGasError"
+#guard (guardClz osakaRules gLow [0]).toOption.map Devm.gasLeft = some 0
 
 instance : Inhabited Execution := ⟨.ok default⟩
 
