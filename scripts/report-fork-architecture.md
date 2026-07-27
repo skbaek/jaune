@@ -37,24 +37,30 @@ failing lookup; `none` reports `UnsupportedForkError` rather than answering with
 another fork's rules, because running Osaka blocks under Prague semantics would
 turn a missing implementation into a silent consensus fault.
 
-`prague` and `osaka` resolve; `bpo1` and `bpo2` are declared identities without
-rules. Osaka resolving does not mean Osaka is complete — see "Osaka's state"
-below.
+`prague` and `osaka` resolve with complete static execution rules; `bpo1` and
+`bpo2` are declared identities without rules. Their schedules and configured
+activation belong to Step 6.
 
 ## What `ForkRules` carries
 
 ```
 ForkRules := { fork : Fork, blob : BlobSchedule, code : CodeLimits,
+               tx : TransactionLimits, block : BlockLimits,
                modexp : ModexpRules, op : OpcodeRules,
                precompiles : List Adr }
 ```
 
-- `blob : BlobSchedule` — `target`, `max`, `baseFeeUpdateFraction`. Formerly the
-  globals `targetBlobGasPerBlock`, `maxBlobGasPerBlock`, and
-  `blobBaseFeeUpdateFraction`. BPO1/BPO2 are, on the execution layer, exactly a
-  change to these three numbers, which is why they are data and not code.
+- `blob : BlobSchedule` — `target`, `max`, `baseFeeUpdateFraction`, and
+  `reserveBaseCost`. The first three replace the former blob-gas globals;
+  `reserveBaseCost : Option Nat` activates EIP-7918 without a fork branch.
+  BPO1/BPO2 remain data-only reparameterisations of this schedule.
 - `code : CodeLimits` — `maxCodeSize`, `maxInitCodeSize` (EIP-170, EIP-3860).
   Formerly globals of the same names.
+- `tx : TransactionLimits` (added in Step 5) — optional `maxGas` and
+  `maxBlobCount`. Prague states both limits as inactive; Osaka carries EIP-7825
+  and EIP-7594's `2^24` and `6` boundaries.
+- `block : BlockLimits` (added in Step 5) — optional `maxRlpSize`. Osaka carries
+  EIP-7934's 8,388,608-byte maximum on the original input encoding.
 - `modexp : ModexpRules` (added in Step 4) — `maxLength`, `flatComplexity`,
   `complexityCoeff`, `iterationCoeff`, `gasDivisor`, `minGas`. Every number the
   `MODEXP` pricing reads, so EIP-7823's input bound and EIP-7883's repricing are
@@ -73,23 +79,19 @@ ForkRules := { fork : Fork, blob : BlobSchedule, code : CodeLimits,
   this field, which was the last surviving literal copy of the Prague set.
 - `fork` — provenance for reports and error messages, not a dispatch key.
 
-Categories still **not** added, because no implemented rule varies along them:
-transaction gas cap (Step 5), blob base-fee reserve price (Step 5), block RLP
-size limit (Step 5), and per-transaction blob count limit (Step 5; see the
-step-4 report — it is in the EELS Prague-to-Osaka diff but not in the plan's
-anticipated Step-5 checklist).
+Every static Prague/Osaka execution category identified by the pinned EELS diff
+is now rule data. Categories still not present are future schedule/activation
+facts: BPO1/BPO2 blob parameters and named mainnet timestamps belong to Step 6,
+not to the static Osaka rule record.
 
 ## Osaka's state
 
-`Fork.osaka.rules?` resolves from Step 4 onward, and its rule data is Prague's
-except for the three VM-level changes that step implemented: the `MODEXP`
-schedule and bound, `CLZ`, and `P256VERIFY`. The rest of Osaka's
-execution-layer delta is still Prague-valued until Step 5 lands it.
-
-That intermediate state is deliberate and is why `check-mainnet.sh` still
-refuses `--suite osaka` as a whole: the only Osaka fixtures run as gates are the
-per-EIP subtrees reached through `--suite osaka --dir`, and each of those is
-all-PASS. Nothing reports Osaka as conformant before it is.
+`Fork.osaka.rules?` resolves to the complete static Osaka execution rule set:
+Step 4's `MODEXP`, `CLZ`, and `P256VERIFY` delta plus Step 5's transaction gas
+cap, six-blob transaction limit, blob reserve-price formula, and original block
+RLP limit. `check-mainnet.sh --suite osaka` is active only because all 2,514
+manifest files (17,323 cases) pass. BPO identities and transition-labelled
+fixtures remain inactive until Step 6 supplies their authoritative schedules.
 
 ## How rules reach the interpreter
 
@@ -117,9 +119,11 @@ Rule consumers, and where each reads its rule:
 | consumer | rule |
 |---|---|
 | `BLOBBASEFEE` in `Rinst.runCore` | `sevm.benvStat.rules.blob` |
-| `calculateExcessBlobGas` (via `validateHeader`) | `rules.blob` |
+| `calculateExcessBlobGas` (via `validateHeader`) | `rules.blob`, including `reserveBaseCost` |
 | `checkTransactionGasLimits` | `benv.stat.rules.blob.max` |
-| `checkTransactionBlobData` | `benv.stat.rules.blob` |
+| `checkTransactionGasCap` (via `validateTransaction`) | `rules.tx.maxGas` |
+| `checkTransactionBlobData` | `benv.stat.rules.blob` and `rules.tx.maxBlobCount` |
+| `checkBlockRlpSize` (via `addBlockToChainCore`) | `rules.block.maxRlpSize` plus original byte length |
 | `calculate_data_fee` (via `processTransaction`) | `benv.stat.rules.blob` |
 | `processCreateMessage.chargeCodeGas` | `rules.code.maxCodeSize` |
 | `genericCreate` | `sevm.benvStat.rules.code.maxInitCodeSize` |
@@ -150,8 +154,9 @@ addBlockToChain      :               BlockChain → B8L → Except String (Block
 ```
 
 `addBlockToChainCore` sits under the `addBlockToChain*` family and takes an
-already-decoded block, so `…Using` can read the block's timestamp to select
-rules without decoding the RLP twice.
+already-decoded block plus the authoritative original RLP length. Thus `…Using`
+can read the block timestamp without decoding twice, while EIP-7934 never
+measures a shorter re-encoding. The public entry-point signatures are unchanged.
 
 ### The Prague wrappers are the core, not a copy
 

@@ -36,14 +36,14 @@ requirements.
   activate Prague as a whole suite (`scripts/check-mainnet.sh --suite prague`,
   or the deterministic `--suite smoke`) and inventory later forks and
   transitions.
-- **Osaka is in progress and not claimed as supported.** Its VM-level delta is
-  implemented — EIP-7823 and EIP-7883 (`MODEXP` input bounds and repricing),
-  EIP-7939 (`CLZ`), and EIP-7951 (`P256VERIFY`) — and each of those EIPs' own
-  fixture subtrees passes in full under
-  `scripts/check-mainnet.sh --suite osaka --dir <subtree>`. The transaction,
-  blob-fee, and block-validation delta is not implemented, so `--suite osaka`
-  as a whole is deliberately refused rather than run and reported. BPO1 and
-  BPO2 remain identities without rules.
+- **Static Osaka is supported.** Its complete execution delta is implemented:
+  EIP-7823 and EIP-7883 (`MODEXP` bounds/repricing), EIP-7939 (`CLZ`), EIP-7951
+  (`P256VERIFY`), EIP-7825 (transaction gas cap), EIP-7594 (six blobs per
+  transaction), EIP-7918 (blob reserve price), and EIP-7934 (original block-RLP
+  size). `scripts/check-mainnet.sh --suite osaka` is a strict all-PASS gate;
+  the pinned manifest is 2,514/2,514 files (17,323 cases). BPO1/BPO2 rule data,
+  configured activation, and transition suites remain deliberately inactive
+  until Step 6.
 - **Reference:** mirrors [execution-specs](https://github.com/ethereum/execution-specs)
   `mainnet` at commit
   [`4198…7694`](https://github.com/ethereum/execution-specs/tree/4198b9c5996713b268aed602739d5aa40e277694)
@@ -63,7 +63,7 @@ requirements.
   | tier | files | committed baseline |
   |---|---|---|
   | `--depth` | 67 | all PASS |
-  | `--smoke` | 175 | 174 PASS, 1 FAIL |
+  | `--smoke` | 174 | 173 PASS, 1 FAIL |
   | `--bls` | 29 | all PASS (hand-authored target) |
   | `--full` | 2983 | 2978 PASS, 5 FAIL |
 
