@@ -141,7 +141,7 @@ The complete ordered ledger before this report-only commit is:
 ELeVM: aa8724a 34a42fa b0f5f0b 24d0c5b f3679ea a291c79 377ef61 1d0e060
        839f442 78fea35 52f5107 306f4c8 6b23493 c61ff3b 28a35b6 bc20ef9
        e1f9eda feb7128 1bfbfc0 0196ace f4dbe2e c2a4a20 598046f f27b9af
-       a40871b f2e275b 394ee6f ce9426a
+       a40871b f2e275b 394ee6f ce9426a b34bdc2
 Blanc: fd07b41 ae97841 46fc74f 92ebe94 18a08d9 78d9d02 50bec5d 0d8e2de
        9e66c9c a66fd9d 36c4ec3
 ```
