@@ -15,7 +15,7 @@ START_AT=1
 GUARD="${ELEVM_TIMEOUT:-1800}"
 
 usage() {
-  echo "usage: scripts/check-mainnet.sh (--suite (prague|smoke) | --dir REL --suite SUITE) [--fixtures-root PATH] [--no-build] [--start-at N]" >&2
+  echo "usage: scripts/check-mainnet.sh (--suite (prague|osaka|smoke) | --dir REL --suite SUITE) [--fixtures-root PATH] [--no-build] [--start-at N]" >&2
   exit 2
 }
 
@@ -53,8 +53,8 @@ if [ -n "$SUBDIR" ]; then
   esac
 else
   case "$SUITE" in
-    prague|smoke) ;;
-    osaka|bpo1|bpo2|transitions|full)
+    prague|osaka|smoke) ;;
+    bpo1|bpo2|transitions|full)
       echo "error: suite $SUITE is inventoried but inactive until its owning migration step" >&2
       exit 2 ;;
     *) echo "error: unknown suite $SUITE" >&2; exit 2 ;;
