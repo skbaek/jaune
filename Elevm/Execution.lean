@@ -6635,47 +6635,157 @@ private def guardBlobParent (baseFee blobGasUsed : Nat) : Header :=
 #guard calculateExcessBlobGas osakaBlobSchedule
   (guardBlobParent 16 (osakaBlobSchedule.target + gasPerBlob)) = gasPerBlob
 
-#guard hasTag unsupportedForkTag <|
-  stateTransitionAt .bpo1 guardEmptyChain (guardBlockAt 0)
-#guard hasTag unsupportedForkTag <|
-  stateTransitionAt .bpo2 guardEmptyChain (guardBlockAt 0)
+-- A BPO fork moves the target, so the same parent implies a different child
+-- excess blob gas at each of the three schedules. With `baseFeePerGas = 16`
+-- EIP-7918's reserve branch stays inactive, so what is being compared here is
+-- the target alone.
+#guard calculateExcessBlobGas osakaBlobSchedule
+  (guardBlobParent 16 (21 * 131072)) = 1966080
+#guard calculateExcessBlobGas bpo1BlobSchedule
+  (guardBlobParent 16 (21 * 131072)) = 1441792
+#guard calculateExcessBlobGas bpo2BlobSchedule
+  (guardBlobParent 16 (21 * 131072)) = 917504
 
--- Prague and Osaka reach the real checks instead: this chain has no parent
--- block, so the verdict is a header failure, not a missing implementation.
-#guard ¬ hasTag unsupportedForkTag
-  (stateTransitionAt .prague guardEmptyChain (guardBlockAt 0))
-#guard ¬ hasTag unsupportedForkTag
-  (stateTransitionAt .osaka guardEmptyChain (guardBlockAt 0))
+-- Each fork's own target is its below-target boundary: one gas below it the
+-- excess resets to zero, and at it the subtraction is exact.
+#guard calculateExcessBlobGas bpo1BlobSchedule
+  (guardBlobParent 16 (bpo1BlobSchedule.target - 1)) = 0
+#guard calculateExcessBlobGas bpo1BlobSchedule
+  (guardBlobParent 16 bpo1BlobSchedule.target) = 0
+#guard calculateExcessBlobGas bpo1BlobSchedule
+  (guardBlobParent 16 (bpo1BlobSchedule.target + gasPerBlob)) = gasPerBlob
+#guard calculateExcessBlobGas bpo2BlobSchedule
+  (guardBlobParent 16 (bpo2BlobSchedule.target - 1)) = 0
+#guard calculateExcessBlobGas bpo2BlobSchedule
+  (guardBlobParent 16 (bpo2BlobSchedule.target + gasPerBlob)) = gasPerBlob
+-- Osaka is above its own target where BPO1 is still below its larger one.
+#guard calculateExcessBlobGas osakaBlobSchedule
+  (guardBlobParent 16 (bpo1BlobSchedule.target - 1)) = 524287
 
--- On the block-import API an unsupported fork is a harness failure (`.error`),
--- never a block-rejection verdict (`.ok (.inr _)`): a fork this build has not
--- implemented says nothing about whether the block is valid.
-#guard hasTag unsupportedForkTag <| addBlockToChainAt .bpo1 guardEmptyChain []
-#guard (addBlockToChainAt .bpo1 guardEmptyChain []).toOption.isNone
-#guard errOf (addBlockToChainAt .bpo1 guardEmptyChain [])
-  = errOf (addBlockToChainAt .bpo1 guardEmptyChain (List.replicate 64 (0xFF : B8)))
+-- EIP-7892 keeps every BPO ratio at two thirds, so the reserve branch itself
+-- is schedule-independent even though the branch it replaces is not.
+#guard [osakaBlobSchedule, bpo1BlobSchedule, bpo2BlobSchedule].map
+    (fun blob => calculateExcessBlobGas blob (guardBlobParent 17 (21 * 131072)))
+  = [917504, 917504, 917504]
 
--- A configured chain selects rules from the block's own timestamp. On this
--- schedule the only difference between the two blocks is the timestamp, and it
--- alone decides which rules are applied.
+-- Every declared fork now runs; none is refused for want of rules. This chain
+-- has no parent block, so each verdict is a header failure instead.
+#guard Fork.all.all (fun f => ¬ hasTag unsupportedForkTag
+  (stateTransitionAt f guardEmptyChain (guardBlockAt 0)))
+#guard Fork.all.all (fun f => ¬ hasTag unsupportedForkTag
+  (addBlockToChainAt f guardEmptyChain (guardBlockAt 0).toBLT.toB8L))
 
-private def guardOsakaAt100 : ChainConfig :=
-  ChainConfig.mk 1 [⟨.prague, 0⟩, ⟨.osaka, 100⟩]
+-- A one-block chain whose parent is the only input to the child's expected
+-- excess blob gas. Everything the header checks before that rule is satisfied
+-- by construction, so a mismatch here is reported as the blob rule it is.
+private def guardParentHeader : Header :=
+  { guardTestHeader with
+    number := 0
+    baseFeePerGas := 16
+    blobGasUsed := 21 * 131072 }
 
-private def guardBpo1At100 : ChainConfig :=
-  ChainConfig.mk 1 [⟨.prague, 0⟩, ⟨.bpo1, 100⟩]
+private def guardParentChain : BlockChain :=
+  { blocks := [{ header := guardParentHeader, txs := [], ommers := [], wds := [] }]
+    state := .empty
+    chainId := 1 }
 
-#guard ¬ hasTag unsupportedForkTag
-  (stateTransitionUsing guardBpo1At100 guardEmptyChain (guardBlockAt 99))
-#guard hasTag unsupportedForkTag <|
-  stateTransitionUsing guardBpo1At100 guardEmptyChain (guardBlockAt 100)
+private def guardChildBlock (timestamp excessBlobGas : Nat) : Block :=
+  { header := { guardTestHeader with
+      number := guardParentHeader.number + 1
+      timestamp := timestamp
+      excessBlobGas := excessBlobGas
+      parentHash := (Header.toBLT guardParentHeader).toB8L.keccak }
+    txs := []
+    ommers := []
+    wds := [] }
 
--- Both sides of an implemented activation run; neither is refused for want of
--- rules.
-#guard ¬ hasTag unsupportedForkTag
-  (stateTransitionUsing guardOsakaAt100 guardEmptyChain (guardBlockAt 99))
-#guard ¬ hasTag unsupportedForkTag
-  (stateTransitionUsing guardOsakaAt100 guardEmptyChain (guardBlockAt 100))
+-- The explicit API applies the fork it is given, and only that fork accepts
+-- its own expected value.
+#guard ¬ hasTag excessBlobGasTag
+  (stateTransitionAt .osaka guardParentChain (guardChildBlock 1 1966080))
+#guard hasTag excessBlobGasTag <|
+  stateTransitionAt .bpo1 guardParentChain (guardChildBlock 1 1966080)
+#guard ¬ hasTag excessBlobGasTag
+  (stateTransitionAt .bpo1 guardParentChain (guardChildBlock 1 1441792))
+#guard ¬ hasTag excessBlobGasTag
+  (stateTransitionAt .bpo2 guardParentChain (guardChildBlock 1 917504))
+
+-- A configured chain selects rules from the block's own timestamp. Between
+-- these blocks nothing differs but the timestamp, and it alone decides which
+-- schedule the header is judged against: the block immediately before an
+-- activation still runs the old rules, and the activation block itself already
+-- runs the new ones.
+
+private def guardChainSchedule : ChainConfig :=
+  ChainConfig.mk 1 [⟨.prague, 0⟩, ⟨.osaka, 100⟩, ⟨.bpo1, 200⟩, ⟨.bpo2, 300⟩]
+
+#guard ¬ hasTag excessBlobGasTag
+  (stateTransitionUsing guardChainSchedule guardParentChain
+    (guardChildBlock 199 1966080))
+#guard hasTag excessBlobGasTag <|
+  stateTransitionUsing guardChainSchedule guardParentChain
+    (guardChildBlock 200 1966080)
+#guard ¬ hasTag excessBlobGasTag
+  (stateTransitionUsing guardChainSchedule guardParentChain
+    (guardChildBlock 200 1441792))
+#guard hasTag excessBlobGasTag <|
+  stateTransitionUsing guardChainSchedule guardParentChain
+    (guardChildBlock 299 917504)
+#guard ¬ hasTag excessBlobGasTag
+  (stateTransitionUsing guardChainSchedule guardParentChain
+    (guardChildBlock 300 917504))
+
+-- Across a sequence of blocks crossing all three activations, one fixed
+-- expectation is correct exactly on the segment whose schedule produced it.
+-- Prague and Osaka share a target, so the first BPO boundary is the first
+-- place the sequence changes.
+#guard [0, 99, 100, 199, 200, 299, 300, 400].map (fun timestamp =>
+    !hasTag excessBlobGasTag
+      (stateTransitionUsing guardChainSchedule guardParentChain
+        (guardChildBlock timestamp 1441792)))
+  = [false, false, false, false, true, true, false, false]
+
+-- Selecting rules from the schedule is the same thing as naming the fork the
+-- schedule selects -- including the expected value quoted in the diagnostic.
+#guard errOf (stateTransitionUsing guardChainSchedule guardParentChain
+    (guardChildBlock 250 0))
+  = errOf (stateTransitionAt .bpo1 guardParentChain (guardChildBlock 250 0))
+#guard errOf (stateTransitionUsing guardChainSchedule guardParentChain
+    (guardChildBlock 350 0))
+  = errOf (stateTransitionAt .bpo2 guardParentChain (guardChildBlock 350 0))
+#guard errOf (stateTransitionUsing guardChainSchedule guardParentChain
+    (guardChildBlock 250 0))
+  ≠ errOf (stateTransitionAt .osaka guardParentChain (guardChildBlock 250 0))
+
+-- Block import agrees with the state transition on which fork a timestamp
+-- selects, and a transition label is just another way to write the schedule.
+-- A rejected block reports on the `.inr` channel, so its verdict is read from
+-- there rather than from the harness-failure channel.
+private def importErrOf : Except String (BlockChain ⊕ String) → String
+  | .error err => err
+  | .ok (.inr err) => err
+  | .ok (.inl _) => "unexpected import"
+
+private def guardOsakaToBpo1Config : ChainConfig :=
+  (⟨.osaka, .bpo1, 15000⟩ : ForkTransition).chainConfig 1
+
+private def guardChildRlp (timestamp excessBlobGas : Nat) : B8L :=
+  (guardChildBlock timestamp excessBlobGas).toBLT.toB8L
+
+#guard hasErrorType (importErrOf (addBlockToChainUsing guardOsakaToBpo1Config
+  guardParentChain (guardChildRlp 15000 0))) excessBlobGasTag
+#guard importErrOf (addBlockToChainUsing guardOsakaToBpo1Config guardParentChain
+    (guardChildRlp 15000 0))
+  = importErrOf (addBlockToChainAt .bpo1 guardParentChain
+    (guardChildRlp 15000 0))
+#guard importErrOf (addBlockToChainUsing guardOsakaToBpo1Config guardParentChain
+    (guardChildRlp 14999 0))
+  = importErrOf (addBlockToChainAt .osaka guardParentChain
+    (guardChildRlp 14999 0))
+#guard importErrOf (addBlockToChainUsing guardOsakaToBpo1Config guardParentChain
+    (guardChildRlp 15000 0))
+  ≠ importErrOf (addBlockToChainUsing guardOsakaToBpo1Config guardParentChain
+    (guardChildRlp 14999 0))
 
 -- A Prague-only configuration is the Prague wrapper, at every timestamp.
 #guard errOf (stateTransitionUsing (ChainConfig.pragueOnly 1) guardEmptyChain

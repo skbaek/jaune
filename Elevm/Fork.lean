@@ -329,8 +329,50 @@ def osakaRules : ForkRules := {
   precompiles := osakaPrecompiles
 }
 
+/-- BPO1's blob schedule (EIP-7892's first blob-parameter-only fork).
+
+A BPO fork is, on the execution layer, *only* these numbers. The pinned EELS
+revision confirms it: the entire `osaka` to `bpo1` module diff outside
+docstrings and import formatting is `BLOB_SCHEDULE_TARGET` 6 to 10,
+`BLOB_SCHEDULE_MAX` 9 to 15, and `BLOB_BASE_FEE_UPDATE_FRACTION` 5007716 to
+8346193. The counts are multiplied by `GAS_PER_BLOB = 2 ^ 17` here because
+`BlobSchedule` carries gas, not blobs. -/
+def bpo1BlobSchedule : BlobSchedule := {
+  target := 10 * 131072
+  max := 15 * 131072
+  baseFeeUpdateFraction := 8346193
+  reserveBaseCost := osakaBlobSchedule.reserveBaseCost
+}
+
+/-- BPO2's blob schedule: the same three numbers moved again, to 14 blobs, 21
+blobs, and 11684671. -/
+def bpo2BlobSchedule : BlobSchedule := {
+  target := 14 * 131072
+  max := 21 * 131072
+  baseFeeUpdateFraction := 11684671
+  reserveBaseCost := osakaBlobSchedule.reserveBaseCost
+}
+
+/-- The BPO1 rule set: Osaka's rules with Osaka's blob schedule replaced.
+
+Written as an update of `osakaRules` rather than as a fresh record so that the
+"blob parameter only" claim is enforced by construction. A later Osaka
+correction reaches BPO1 automatically, and no BPO fork can silently acquire an
+execution rule of its own. -/
+def bpo1Rules : ForkRules :=
+  { osakaRules with fork := .bpo1, blob := bpo1BlobSchedule }
+
+/-- The BPO2 rule set: Osaka's rules with BPO2's blob schedule. -/
+def bpo2Rules : ForkRules :=
+  { osakaRules with fork := .bpo2, blob := bpo2BlobSchedule }
+
 /-- Error tag for a fork whose identity is known but whose rules this build
-does not implement. -/
+does not implement.
+
+Every fork this build declares now resolves, so nothing reaches this branch
+today. It is retained because it is the only correct answer for the next
+declared-but-unimplemented fork: falling back to another fork's rules would
+turn a missing implementation into a silent consensus fault. -/
 def unsupportedForkTag : String := "UnsupportedForkError"
 
 /-- The single place where a fork identity becomes rule data.
@@ -342,8 +384,8 @@ consensus fault. -/
 def Fork.rules? : Fork → Option ForkRules
   | .prague => some pragueRules
   | .osaka => some osakaRules
-  | .bpo1 => none
-  | .bpo2 => none
+  | .bpo1 => some bpo1Rules
+  | .bpo2 => some bpo2Rules
 
 /-- `Fork.rules?` as a failing lookup, with the error every explicit-fork entry
 point reports for an unimplemented fork. -/
@@ -438,6 +480,140 @@ def pragueOnly (chainId : B64) : ChainConfig :=
 
 end ChainConfig
 
+/-- Mainnet's activation timestamps, read from the `FORK_CRITERIA` of the EELS
+fork modules at the pinned fixture-release revision.
+
+They are recorded as named constants, and used only by `mainnetChainConfig`
+below, because an activation timestamp is a fact about one chain and never a
+rule: nothing in `ForkRules` may learn them. -/
+def mainnetPragueTimestamp : Nat := 1746612311
+
+/-- Mainnet's Osaka activation (EIP-7607), 2025-12-03 21:49:11 UTC. -/
+def mainnetOsakaTimestamp : Nat := 1764798551
+
+/-- Mainnet's BPO1 activation, 2025-12-09 14:21:11 UTC. -/
+def mainnetBpo1Timestamp : Nat := 1765290071
+
+/-- Mainnet's BPO2 activation, 2026-01-07 01:01:11 UTC. -/
+def mainnetBpo2Timestamp : Nat := 1767747671
+
+/-- Ethereum mainnet, over the chain of forks this build supports.
+
+The supported transition chain begins at Prague, so Prague is the schedule's
+floor rather than an activation: this build has no pre-Prague rules to run
+before `mainnetPragueTimestamp`, and a schedule may not name rules that do not
+exist. `mainnetPragueTimestamp` records the real activation for provenance and
+is checked against the schedule below. -/
+def mainnetChainConfig : ChainConfig := {
+  chainId := 1
+  activations := [
+    ⟨.prague, 0⟩,
+    ⟨.osaka, mainnetOsakaTimestamp⟩,
+    ⟨.bpo1, mainnetBpo1Timestamp⟩,
+    ⟨.bpo2, mainnetBpo2Timestamp⟩
+  ]
+}
+
+/-- One activation boundary, as named by a fixture `network` label of the form
+`<before>To<after>AtTime<n>`.
+
+A transition is a *schedule*, not a fork: it is turned into a `ChainConfig` by
+`chainConfig` below, and execution then reads rules from the block timestamp
+exactly as it does on a configured chain. -/
+structure ForkTransition : Type where
+  /-- The fork active from genesis up to, but excluding, `timestamp`. -/
+  before : Fork
+  /-- The fork active from `timestamp` onwards. -/
+  after : Fork
+  /-- The activation timestamp. -/
+  timestamp : Nat
+deriving DecidableEq, Repr
+
+namespace ForkTransition
+
+/-- Split on the *only* occurrence of `sep`. A second occurrence is a parse
+failure rather than a choice of split point. -/
+private def splitPair? (sep s : String) : Option (String × String) :=
+  match s.splitOn sep with
+  | [before, after] => some ⟨before, after⟩
+  | _ => none
+
+/-- The `AtTime` suffix is a decimal count of seconds, optionally abbreviated
+with a `k` for the thousands the fixture labels actually use. -/
+private def timestampOfString? (s : String) : Option Nat :=
+  match s.splitOn "k" with
+  | [digits, ""] => digits.toNat?.map (· * 1000)
+  | [digits] => digits.toNat?
+  | _ => none
+
+private def timestampToString (timestamp : Nat) : String :=
+  if timestamp ≠ 0 ∧ timestamp % 1000 = 0 then
+    s!"{timestamp / 1000}k"
+  else
+    ToString.toString timestamp
+
+/-- The canonical label. -/
+def toString (t : ForkTransition) : String :=
+  s!"{t.before}To{t.after}AtTime{timestampToString t.timestamp}"
+
+instance : ToString ForkTransition := ⟨ForkTransition.toString⟩
+
+/-- Strict label parsing. Both fork names must be forks this build knows, so a
+historical transition such as `CancunToPragueAtTime15k` fails here rather than
+being run through one of its endpoints. -/
+def ofString? (label : String) : Option ForkTransition := do
+  let ⟨forkLabels, timeLabel⟩ ← splitPair? "AtTime" label
+  let timestamp ← timestampOfString? timeLabel
+  let ⟨beforeLabel, afterLabel⟩ ← splitPair? "To" forkLabels
+  let before ← Fork.ofString? beforeLabel
+  let after ← Fork.ofString? afterLabel
+  return ⟨before, after, timestamp⟩
+
+/-- The schedule a transition label names.
+
+Whether it is *usable* is `ChainConfig.validate`'s answer, not this function's:
+a label may name an activation at genesis or a backwards step, and those are
+rejected where every other unusable schedule is. -/
+def chainConfig (chainId : B64) (t : ForkTransition) : ChainConfig :=
+  { chainId := chainId, activations := [⟨t.before, 0⟩, ⟨t.after, t.timestamp⟩] }
+
+end ForkTransition
+
+/-- What a fixture suite's `network` label names: one static fork, or one
+supported transition schedule.
+
+Static suites keep passing an explicit `Fork` to the explicit-fork entry
+points; only a transition builds a `ChainConfig` and lets the block timestamp
+choose. -/
+inductive NetworkSpec : Type
+  | static (f : Fork)
+  | transition (t : ForkTransition)
+deriving DecidableEq, Repr
+
+namespace NetworkSpec
+
+/-- The canonical label. -/
+def toString : NetworkSpec → String
+  | .static f => f.toString
+  | .transition t => t.toString
+
+instance : ToString NetworkSpec := ⟨NetworkSpec.toString⟩
+
+/-- Strict label parsing: a static fork name first, then a transition label.
+Anything else is `none`, at every caller. -/
+def ofString? (label : String) : Option NetworkSpec :=
+  match Fork.ofString? label with
+  | some f => some (.static f)
+  | none => (ForkTransition.ofString? label).map .transition
+
+/-- The forks a label can select. A static label can only ever run its own
+fork; a transition can run either endpoint, depending on the block. -/
+def forks : NetworkSpec → List Fork
+  | .static f => [f]
+  | .transition t => [t.before, t.after]
+
+end NetworkSpec
+
 -- Guard helper. `Execution.lean` has the same pair for its own `#guard`s, but
 -- it sits downstream of this file, so the check is restated rather than
 -- imported backwards.
@@ -519,16 +695,46 @@ private def guardHasTag {α : Type} (tag : String) (e : Except String α) : Bool
 #guard ¬ osakaRules.isPrecomp (0x101 : Adr)
 #guard (List.range' 1 17).all (fun n => osakaRules.isPrecomp (Nat.toAdr n))
 
--- Prague and Osaka are executable in this build; the BPO forks are identities
--- without rules, and asking for them fails rather than falling back.
-#guard Fork.prague.rules?.isSome
-#guard Fork.osaka.rules?.isSome
-#guard Fork.bpo1.rules?.isNone
-#guard Fork.bpo2.rules?.isNone
+-- A BPO fork is Osaka with three different blob numbers. These two guards say
+-- exactly that, and they say it about the whole record: undoing the identity
+-- and the blob schedule must give Osaka back, so no BPO fork can acquire a
+-- transaction limit, opcode, precompile, or gas rule of its own.
+#guard { bpo1Rules with fork := .osaka, blob := osakaBlobSchedule } = osakaRules
+#guard { bpo2Rules with fork := .osaka, blob := osakaBlobSchedule } = osakaRules
+#guard bpo1Rules.fork = .bpo1
+#guard bpo2Rules.fork = .bpo2
+
+-- The three moving numbers, as blob counts times `GAS_PER_BLOB`, and the
+-- reserve base cost EIP-7918 introduced at Osaka and no BPO fork changes.
+#guard bpo1Rules.blob.target = 10 * 131072
+#guard bpo1Rules.blob.max = 15 * 131072
+#guard bpo1Rules.blob.baseFeeUpdateFraction = 8346193
+#guard bpo2Rules.blob.target = 14 * 131072
+#guard bpo2Rules.blob.max = 21 * 131072
+#guard bpo2Rules.blob.baseFeeUpdateFraction = 11684671
+#guard bpo1Rules.blob.reserveBaseCost = some 8192
+#guard bpo2Rules.blob.reserveBaseCost = some 8192
+
+-- Each fork's blob schedule is distinct from its neighbour's, and the target
+-- and ceiling both move strictly upwards along the supported chain.
+#guard osakaBlobSchedule ≠ bpo1BlobSchedule
+#guard bpo1BlobSchedule ≠ bpo2BlobSchedule
+#guard [pragueBlobSchedule, osakaBlobSchedule, bpo1BlobSchedule,
+    bpo2BlobSchedule].map BlobSchedule.target = [786432, 786432, 1310720, 1835008]
+#guard [pragueBlobSchedule, osakaBlobSchedule, bpo1BlobSchedule,
+    bpo2BlobSchedule].map BlobSchedule.max = [1179648, 1179648, 1966080, 2752512]
+#guard [pragueBlobSchedule, osakaBlobSchedule, bpo1BlobSchedule,
+    bpo2BlobSchedule].map BlobSchedule.baseFeeUpdateFraction
+  = [5007716, 5007716, 8346193, 11684671]
+
+-- Every declared fork resolves in this build, so `Fork.rules` is total here and
+-- the unsupported-fork branch is unreachable rather than merely untaken.
+#guard Fork.all.all (fun f => f.rules?.isSome)
+#guard Fork.all.all (fun f => (f.rules?.map ForkRules.fork) = some f)
 #guard Fork.prague.rules = .ok pragueRules
 #guard Fork.osaka.rules = .ok osakaRules
-#guard guardHasTag unsupportedForkTag Fork.bpo1.rules
-#guard guardHasTag unsupportedForkTag Fork.bpo2.rules
+#guard Fork.bpo1.rules = .ok bpo1Rules
+#guard Fork.bpo2.rules = .ok bpo2Rules
 
 -- A usable schedule is non-empty, starts at genesis, and moves strictly
 -- forward in both time and fork order.
@@ -561,17 +767,121 @@ private def guardSchedule : ChainConfig :=
 #guard guardSchedule.forkAt 300 = .ok .bpo2
 #guard guardSchedule.forkAt 1000000 = .ok .bpo2
 
--- A configured chain reports the same unsupported-fork error as an explicit
--- one; a schedule may name a fork this build cannot yet run.
+-- The whole supported chain is now executable, so every point of the schedule
+-- resolves to rules, and each segment resolves to its own.
 #guard guardSchedule.rulesAt 0 = .ok pragueRules
 #guard guardSchedule.rulesAt 99 = .ok pragueRules
 #guard guardSchedule.rulesAt 100 = .ok osakaRules
-#guard guardHasTag unsupportedForkTag (guardSchedule.rulesAt 200)
-#guard guardHasTag unsupportedForkTag (guardSchedule.rulesAt 300)
+#guard guardSchedule.rulesAt 199 = .ok osakaRules
+#guard guardSchedule.rulesAt 200 = .ok bpo1Rules
+#guard guardSchedule.rulesAt 299 = .ok bpo1Rules
+#guard guardSchedule.rulesAt 300 = .ok bpo2Rules
 #guard (ChainConfig.pragueOnly 1).rulesAt 0 = .ok pragueRules
 #guard (ChainConfig.pragueOnly 1).rulesAt 999999 = .ok pragueRules
+
+-- The blob schedule a block runs under is decided by its timestamp alone, and
+-- the three BPO-visible numbers change at exactly the two BPO boundaries.
+#guard (guardSchedule.rulesAt 199).map (ForkRules.blob) = .ok osakaBlobSchedule
+#guard (guardSchedule.rulesAt 200).map (ForkRules.blob) = .ok bpo1BlobSchedule
+#guard (guardSchedule.rulesAt 299).map (ForkRules.blob) = .ok bpo1BlobSchedule
+#guard (guardSchedule.rulesAt 300).map (ForkRules.blob) = .ok bpo2BlobSchedule
 
 -- An invalid schedule fails before any fork is selected, rather than silently
 -- resolving to whichever activation happens to sort first.
 #guard guardHasTag invalidChainConfigTag ((ChainConfig.mk 1 []).forkAt 0)
 #guard guardHasTag invalidChainConfigTag ((ChainConfig.mk 1 []).rulesAt 0)
+
+-- Mainnet's schedule is usable, and each of its recorded activation timestamps
+-- is a boundary: the second before it still runs the old rules.
+#guard mainnetChainConfig.validate.toOption.isSome
+#guard mainnetChainConfig.chainId = 1
+#guard mainnetChainConfig.forkAt 0 = .ok .prague
+#guard mainnetChainConfig.forkAt mainnetPragueTimestamp = .ok .prague
+#guard mainnetChainConfig.forkAt (mainnetOsakaTimestamp - 1) = .ok .prague
+#guard mainnetChainConfig.forkAt mainnetOsakaTimestamp = .ok .osaka
+#guard mainnetChainConfig.forkAt (mainnetBpo1Timestamp - 1) = .ok .osaka
+#guard mainnetChainConfig.forkAt mainnetBpo1Timestamp = .ok .bpo1
+#guard mainnetChainConfig.forkAt (mainnetBpo2Timestamp - 1) = .ok .bpo1
+#guard mainnetChainConfig.forkAt mainnetBpo2Timestamp = .ok .bpo2
+#guard mainnetChainConfig.rulesAt mainnetBpo2Timestamp = .ok bpo2Rules
+#guard mainnetChainConfig.activations.map ForkActivation.fork = Fork.all
+
+-- The mainnet activations are strictly ordered in the same direction as the
+-- fork chain, which is the fact `validate` enforces and the reason the four
+-- timestamps may not be reordered by a later edit.
+#guard mainnetPragueTimestamp < mainnetOsakaTimestamp
+#guard mainnetOsakaTimestamp < mainnetBpo1Timestamp
+#guard mainnetBpo1Timestamp < mainnetBpo2Timestamp
+
+-- Transition labels parse into schedules. Both endpoints must be forks this
+-- build knows: a historical transition names one it does not.
+#guard ForkTransition.ofString? "PragueToOsakaAtTime15k"
+  = some ⟨.prague, .osaka, 15000⟩
+#guard ForkTransition.ofString? "OsakaToBPO1AtTime15k"
+  = some ⟨.osaka, .bpo1, 15000⟩
+#guard ForkTransition.ofString? "BPO1ToBPO2AtTime15k"
+  = some ⟨.bpo1, .bpo2, 15000⟩
+#guard ForkTransition.ofString? "PragueToOsakaAtTime15000"
+  = some ⟨.prague, .osaka, 15000⟩
+#guard (ForkTransition.ofString? "CancunToPragueAtTime15k").isNone
+#guard (ForkTransition.ofString? "BPO2ToBPO3AtTime15k").isNone
+#guard (ForkTransition.ofString? "ShanghaiToCancunAtTime15k").isNone
+#guard (ForkTransition.ofString? "Prague").isNone
+#guard (ForkTransition.ofString? "PragueToOsaka").isNone
+#guard (ForkTransition.ofString? "PragueToOsakaAtTime").isNone
+#guard (ForkTransition.ofString? "PragueToOsakaAtTimek").isNone
+#guard (ForkTransition.ofString? "PragueToOsakaAtTime15kk").isNone
+#guard (ForkTransition.ofString? "PragueToOsakaAtTime15k ").isNone
+#guard (ForkTransition.ofString? "PragueToOsakaToBPO1AtTime15k").isNone
+#guard (ForkTransition.ofString? "PragueToOsakaAtTime15kAtTime20k").isNone
+
+-- Labels round-trip through the canonical printer, which is what lets fixture
+-- case selection stay an exact string comparison.
+private def guardTransitions : List ForkTransition := [
+  ⟨.prague, .osaka, 15000⟩, ⟨.osaka, .bpo1, 15000⟩, ⟨.bpo1, .bpo2, 15000⟩,
+  ⟨.prague, .bpo2, 1⟩, ⟨.osaka, .bpo2, 1234567⟩
+]
+
+#guard guardTransitions.all
+  (fun t => ForkTransition.ofString? t.toString = some t)
+#guard (⟨.prague, .osaka, 15000⟩ : ForkTransition).toString
+  = "PragueToOsakaAtTime15k"
+#guard (⟨.osaka, .bpo1, 1234567⟩ : ForkTransition).toString
+  = "OsakaToBPO1AtTime1234567"
+
+-- A transition is a schedule: the `before` fork runs from genesis and the
+-- `after` fork from the named timestamp, with no third possibility.
+private def guardOsakaToBpo1 : ForkTransition := ⟨.osaka, .bpo1, 15000⟩
+
+#guard (guardOsakaToBpo1.chainConfig 1).validate.toOption.isSome
+#guard (guardOsakaToBpo1.chainConfig 1).rulesAt 0 = .ok osakaRules
+#guard (guardOsakaToBpo1.chainConfig 1).rulesAt 14999 = .ok osakaRules
+#guard (guardOsakaToBpo1.chainConfig 1).rulesAt 15000 = .ok bpo1Rules
+#guard (guardOsakaToBpo1.chainConfig 1).rulesAt 15001 = .ok bpo1Rules
+#guard (guardOsakaToBpo1.chainConfig 7).chainId = 7
+
+-- A parseable label may still name an unusable schedule; it is refused where
+-- every other unusable schedule is, rather than at the parser.
+#guard ForkTransition.ofString? "OsakaToPragueAtTime15k"
+  = some ⟨.osaka, .prague, 15000⟩
+#guard guardHasTag invalidChainConfigTag
+  (((⟨.osaka, .prague, 15000⟩ : ForkTransition).chainConfig 1).rulesAt 0)
+#guard guardHasTag invalidChainConfigTag
+  (((⟨.prague, .osaka, 0⟩ : ForkTransition).chainConfig 1).rulesAt 0)
+
+-- A `network` label is either a static fork or a transition, and the two
+-- parsers do not overlap.
+#guard NetworkSpec.ofString? "Prague" = some (.static .prague)
+#guard NetworkSpec.ofString? "BPO2" = some (.static .bpo2)
+#guard NetworkSpec.ofString? "OsakaToBPO1AtTime15k"
+  = some (.transition ⟨.osaka, .bpo1, 15000⟩)
+#guard (NetworkSpec.ofString? "Cancun").isNone
+#guard (NetworkSpec.ofString? "CancunToPragueAtTime15k").isNone
+#guard (NetworkSpec.ofString? "").isNone
+#guard Fork.all.all
+  (fun f => NetworkSpec.ofString? f.toString = some (.static f))
+#guard guardTransitions.all
+  (fun t => NetworkSpec.ofString? (NetworkSpec.transition t).toString
+    = some (.transition t))
+#guard (NetworkSpec.static .osaka).forks = [.osaka]
+#guard (NetworkSpec.transition guardOsakaToBpo1).forks = [.osaka, .bpo1]
