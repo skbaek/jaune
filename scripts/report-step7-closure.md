@@ -4,18 +4,19 @@ Date: 2026-07-27 (Asia/Seoul). Plan: `~/plans/migration.md`, Step 7.
 
 ## Candidate identity and status
 
-This is a **documentation/evidence checkpoint, not a merge**.  The verified
-candidate is ELeVM `ce9426a0e72b77362f117fdc0a6475b1a683fb48` on
+This is the final documentation/evidence checkpoint before the explicitly
+authorised fast-forward integration.  The verified
+candidate is ELeVM `b34bdc269f21bd243e0693749822f0e28e827b2e` on
 `codex/migration` and Blanc `36c4ec37b656bafe457bcf99653bc4a1053071fa` on
 `codex/migration`.  Both began this step clean and equal to their respective
 `origin/codex/migration` tips.  ELeVM's last semantic checkpoint is
 `a40871bc69df5159f6edc7fc7c3e928675b9f54d`; the later ELeVM commits add the
 transition harness and documentation only.
 
-The final two long conformance gates are deliberately **user-owned and still
-pending**.  Consequently this report is not a green merge verdict.  It records
-the exact commands and binary identity that the owner must use below; no
-baseline, manifest, or exclusion was changed to avoid those gates.
+The final two user-owned long conformance gates completed successfully on the
+exact candidate.  This report records their terminal verdicts and timings
+below.  No baseline, manifest, or exclusion was changed to obtain either
+verdict.
 
 ## Locked inputs and provenance
 
@@ -49,8 +50,8 @@ unparameterised public wrappers remain Prague wrappers.
 | smoke (Prague sample) | 16 | 28 | 16/16 PASS |
 | Osaka | 2,514 | 17,323 | 2,514/2,514 PASS |
 | transitions: Prague→Osaka, Osaka→BPO1, BPO1→BPO2 | 13 | 109 | 13/13 PASS |
-| Prague | 2,573 | 16,573 | pending as a component of `full` |
-| full union | 5,100 | 34,005 | user-owned pending |
+| Prague | 2,573 | 16,573 | PASS as a component of `full` |
+| full union | 5,100 | 34,005 | 5,100/5,100 PASS |
 
 The upstream release contains no bare static BPO1/BPO2 files.  Those selectors
 refuse zero-case runs; their 47 BPO-transition cases are covered by the
@@ -94,6 +95,8 @@ python3 scripts/gen_mainnet_manifest.py \
 | current smoke | 16/16 PASS in 0.54 s |
 | current Osaka | 2,514/2,514 PASS in 498.47 s |
 | current transitions | 13/13 PASS in 15.62 s |
+| frozen legacy FULL | 2,983 classifications match: 2,978 PASS / 5 expected FAIL; 31.41 min wall |
+| current-mainnet FULL | 5,100/5,100 files PASS, 34,005 cases; 1,130.13 s harness / 18.92 min wall |
 | ELeVM and Blanc LSP diagnostics | clean on `Fork.lean`, `Execution.lean`, `Main.lean`, and `Blanc/Solvent.lean` |
 | Blanc build and audit | build succeeds; 4/4 protected theorems clean |
 
@@ -104,24 +107,21 @@ exactly `[propext, Classical.choice, Quot.sound]` and no warning:
 Step-0 Blanc revision `f0d4616f22bb7e6a192860cc701fa813d06843d9`; their
 statements are unchanged.
 
-## Required user-owned long gates
+## Final user-owned long-gate evidence
 
-Run these serially, with no competing Lean-LSP-heavy workload, on the exact
-candidate commit above; preserve their complete reports and final verdicts.
+Both gates ran serially on the exact candidate after one build.
 
-```
-cd ~/elevm
-git checkout ce9426a0e72b77362f117fdc0a6475b1a683fb48
-lake build
-scripts/check.sh --full --no-build
-scripts/check-mainnet.sh --suite full --no-build
-```
+| command | terminal verdict | wall / CPU evidence |
+|---|---|---|
+| `scripts/check.sh --full --no-build` | `OK — full: 2983 files match baseline (2978 PASS, 5 FAIL)` | 31.41 min wall; 30.59 min user; 0.41 min system |
+| `scripts/check-mainnet.sh --suite full --no-build` | `OK — full: 5100/5100 manifest files PASS in 1130.13s` | 18.92 min wall; 18.34 min user; 0.43 min system |
 
-The first must match the frozen legacy baseline (2,983 files: 2,978 PASS and
-5 expected FAIL); the second must PASS every manifested supported case and
-reject no entry for being unknown or zero-selected.  A red result must be
-returned to its owning semantic step with the first failing file as reproducer;
-do not rebase a baseline or change an exclusion during closure.
+The legacy result is an exact comparison with the frozen baseline, not an
+all-PASS claim.  Its baseline was deliberately **not regenerated**: replacing
+it with an observed closure run would erase the independent regression oracle
+and is expressly forbidden by the migration plan.  The fresh, gitignored
+`scripts/report-full.txt` retains the last per-file observations.  The current
+lane has no expected-failure baseline; every manifested supported case passed.
 
 ## Retained performance decision
 
@@ -156,5 +156,6 @@ deleted.
 No legacy baseline, bootstrap implementation, strict current manifest,
 `Hash.fB64`, or unrelated allocator/refcount code changed in this checkpoint.
 The old fixture lane remains a frozen regression corpus and v20.0.1 remains the
-canonical current-mainnet source.  The only human decision pending is the two
-long-gate verdicts followed by protected-branch integration approval.
+canonical current-mainnet source.  The user supplied both long-gate verdicts
+and explicitly authorised fast-forward integration into `main` plus deletion
+of the dedicated migration branches.  No semantic or conformance work remains.
