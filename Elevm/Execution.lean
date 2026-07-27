@@ -3798,9 +3798,7 @@ def callMsg
 
 /-!
 Flattened interpreter core.  All frame-local definitions below are
-non-recursive and fuel-free; `execFlat` is the temporary checkpoint-one name
-of the single fueled driver.  The swap-and-delete checkpoint renames it to
-`exec`.
+non-recursive and fuel-free; `exec` is the single fueled driver.
 -/
 
 /-- The message passed to a CREATE/CREATE2 child.  This named barrier is the
@@ -4170,475 +4168,51 @@ def Evm.step (evm : Evm) : Step :=
   | .some (.jump j) => Step.ofJump (j.run evm)
   | .some (.last l) => .halt (l.run evm.sta evm.dyna)
 
-/-- Checkpoint-one name for the single recursive driver. -/
-def execFlat : Evm → Nat → Fueled (String × Devm) Devm
+/-- The single recursive interpreter driver. -/
+def exec : Evm → Nat → Fueled (String × Devm) Devm
   | _, 0 => Fueled.exhausted
   | evm, lim + 1 =>
     match evm.step with
     | .halt ex => Fueled.ofExcept ex
-    | .cont pc devm => execFlat ⟨pc, evm.sta, devm⟩ lim
+    | .cont pc devm => exec ⟨pc, evm.sta, devm⟩ lim
     | .spawn frame rsm pc =>
       match frame.enter with
       | .done r =>
         match rsm.run r with
         | .error e => Fueled.ofExcept (.error e)
-        | .ok devm => execFlat ⟨pc, evm.sta, devm⟩ lim
+        | .ok devm => exec ⟨pc, evm.sta, devm⟩ lim
       | .run child =>
-        match (execFlat child lim).run with
+        match (exec child lim).run with
         | .none => Fueled.exhausted
         | .some raw =>
           match rsm.run (frame.settle raw) with
           | .error e => Fueled.ofExcept (.error e)
-          | .ok devm => execFlat ⟨pc, evm.sta, devm⟩ lim
+          | .ok devm => exec ⟨pc, evm.sta, devm⟩ lim
   termination_by _ lim => lim
 
-def runFrameFlat (frame : Frame) (lim : Nat) :
+def runFrame (frame : Frame) (lim : Nat) :
     Fueled (String × State × AdrSet × Tra) Devm :=
   match frame.enter with
   | .done r => Fueled.ofExcept r
-  | .run evm => Fueled.mapResult frame.settle (execFlat evm lim)
+  | .run evm => Fueled.mapResult frame.settle (exec evm lim)
 
-mutual
 
-  /-
-  BLANC MIGRATION NOTE:
-  The eight mutually recursive definitions below used to encode recursion-fuel
-  exhaustion as the semantic error string `"RecursionLimit"`.  They now return
-  `Fueled`: `none` means fuel exhaustion, while `some (.ok ...)` and
-  `some (.error ...)` are exactly the previous completed semantic results.
+def executeCode (msg : Msg) (lim : Nat) :
+    Fueled (String × State × AdrSet × Tra) Devm :=
+  match executeCode.enter msg with
+  | .inl evm => Fueled.mapResult executeCode.handleError (exec evm lim)
+  | .inr raw => Fueled.ofExcept (executeCode.handleError raw)
 
-  Consequently, downstream correspondence proofs should replace
-  `Except.Lim`/`Except.Fit` and `≠ "RecursionLimit"` plumbing with the outer
-  `Option` shape.  In particular, a completed run is witnessed by an equation
-  of the form `exec evm lim = some ex`.  `Fueled.mapResult` below preserves
-  exhaustion while applying the pre-existing semantic error-state adapters.
-  -/
+def processMessage (msg : Msg) (lim : Nat) :
+    Fueled (String × State × AdrSet × Tra) Devm :=
+  runFrame (Frame.ofCall msg) lim
 
-  def executeCode (msg : Msg) :
-    Nat → Fueled (String × State × AdrSet × Tra) Devm
-    | 0 => Fueled.exhausted
-    | lim + 1 => do
-      let evm : Evm := initEvm msg
-      match msg.codeAddress with
-      | .none =>
-        Fueled.mapResult executeCode.handleError <| exec evm lim
-      | .some adr =>
-        if !msg.disablePrecompiles && msg.benv.stat.rules.isPrecomp adr then
-          Fueled.ofExcept <| executeCode.handleError <| executePrecomp evm adr
-        else
-          Fueled.mapResult executeCode.handleError <| exec evm lim
-  termination_by lim => lim
+def processCreateMessage (msg : Msg) (lim : Nat) :
+    Fueled (String × State × AdrSet × Tra) Devm :=
+  runFrame (Frame.ofCreate msg) lim
 
-  def processMessage (msg : Msg) :
-    Nat → Fueled (String × State × AdrSet × Tra) Devm
-    | 0 => Fueled.exhausted
-    | lim + 1 => do
-      /- In the original reference python implementation, there is a test here that
-         checks the msg.depth value, and fails with a "stack depth limit error" if
-         it is larger than 1024. However, due to the way processMessage is defined
-         and used, there is no way msg.depth ever has a value larger than 1024, and
-         the error reporting is a dead code path that never will never get used, so
-         it is omitted here.  -/
-      let benv ← msg.benvAfterTransfer
-      let evm ← executeCode (msg.withBenv benv) lim
-      if evm.error.isSome then
-        Fueled.ok <| evm.rollback msg.benv.state msg.tenv.transientStorage
-      else
-        Fueled.ok evm
-  termination_by lim => lim
 
-  def processCreateMessage (msg : Msg) :
-    Nat → Fueled (String × State × AdrSet × Tra) Devm
-    | 0 => Fueled.exhausted
-    | lim + 1 => do
-      let evm ← processMessage (processCreateMessage.msg msg) lim
-      if evm.error.isNone then
-        match processCreateMessage.chargeCodeGas msg.benv.stat.rules evm with
-        | .ok evm => Fueled.ok <| evm.setCode msg.currentTarget ⟨⟨evm.output⟩⟩
-        | .error ⟨err, evm⟩ =>
-          if isExceptionalHalt err
-          then
-            Fueled.ok <|
-              processCreateMessage.exceptionalHalt evm err
-                msg.benv.state
-                msg.tenv.transientStorage
-          else
-            Fueled.error ⟨err, evm.state, evm.createdAccounts, evm.transientStorage⟩
-      else
-        Fueled.ok <| evm.rollback msg.benv.state msg.tenv.transientStorage
-  termination_by lim => lim
-
-  def genericCreate
-    (sevm : Sevm)
-    (devm : Devm)
-    (endowment : B256)
-    (newAddress : Adr)
-    (memoryIndex : Nat)
-    (memorySize : Nat) : Nat → Fueled (String × Devm) Devm
-    | 0 => Fueled.exhausted
-    | lim + 1 => do
-      let calldata ← Fueled.ok <| devm.memory.data.sliceD memoryIndex memorySize 0
-      Fueled.assert
-        (memorySize ≤ sevm.benvStat.rules.code.maxInitCodeSize)
-        ⟨"OutOfGasError", devm⟩
-      let createMsgGas ← Fueled.ok <| except64th devm.gasLeft
-      let devm ← Fueled.ok <| devm.withGasLeft (devm.gasLeft - createMsgGas)
-      assertDynamic sevm devm
-      let devm ← Fueled.ok <| devm.withReturnData []
-      let sender ← Fueled.ok <| devm.state.get sevm.currentTarget
-      if ( sender.bal < endowment ∨
-           sender.nonce = B64.max ∨
-           sevm.depth = 0 ) then
-        return (← (devm.withGasLeft (devm.gasLeft + createMsgGas)).push 0)
-      let devm ← Fueled.ok <| devm.incrNonce sevm.currentTarget
-      let devm ← Fueled.ok <| addAccessedAddress devm newAddress
-      if
-        ( let target := devm.state.get newAddress
-          target.nonce ≠ (0 : B64) ∨
-          target.code.size ≠ 0 ∨
-          target.stor.size ≠ 0 ) then
-        return (← devm.push 0)
-      let childMsg : Msg ← Fueled.ok <| {
-        benv := Benv.mk devm.state devm.createdAccounts sevm.benvStat
-        tenv := {transientStorage := devm.transientStorage, stat := sevm.tenvStat}
-        caller := sevm.currentTarget
-        target := .none
-        gas := createMsgGas
-        value := endowment
-        data := []
-        code := .mk <| .mk calldata
-        currentTarget := newAddress
-        depth := sevm.depth - 1
-        codeAddress := .none
-        shouldTransferValue := true
-        isStatic := false
-        accessedAddresses := devm.accessedAddresses
-        accessedStorageKeys := devm.accessedStorageKeys
-        disablePrecompiles := false
-      }
-      let child ← Fueled.mapResult (liftToExecution devm) <|
-        processCreateMessage childMsg lim
-      if child.error.isSome then
-        (incorporateChildOnError devm child child.output).push 0
-      else
-        (incorporateChildOnSuccess devm child []).push newAddress.toB256
-  termination_by lim => lim
-
-  def genericCall
-    (sevm: Sevm)
-    (devm: Devm)
-    (gas: Nat)
-    (value: B256)
-    (caller: Adr)
-    (target: Adr)
-    (codeAddress: Adr)
-    (shouldTransferValue: Bool)
-    (isStaticcall: Bool)
-    (input_index:  Nat)
-    (input_size:   Nat)
-    (output_index: Nat)
-    (output_size:  Nat)
-    (code : ByteArray)
-    (disablePrecompiles: Bool) : Nat → Fueled (String × Devm) Devm
-    | 0 => Fueled.exhausted
-    | lim + 1 => do
-      let evm1 ← Fueled.ok (devm.withReturnData [])
-      if (sevm.depth = 0) then
-        return (← (evm1.withGasLeft (evm1.gasLeft + gas)).push 0)
-      let calldata ← Fueled.ok <| evm1.memory.data.sliceD input_index input_size 0
-      let (childMsg : Msg) ← Fueled.ok <|
-        callMsg sevm evm1 gas value caller target codeAddress
-          shouldTransferValue isStaticcall calldata code disablePrecompiles
-      let child ← Fueled.mapResult (liftToExecution evm1) <|
-        processMessage childMsg lim
-      let actualOutput := child.output.take output_size
-      if child.error.isSome then
-        let evm2 ← (incorporateChildOnError evm1 child child.output).push 0
-        Fueled.ok <| evm2.memWrite output_index actualOutput
-      else
-        let evm2 ← (incorporateChildOnSuccess evm1 child child.output).push 1
-        Fueled.ok <| evm2.memWrite output_index actualOutput
-  termination_by lim => lim
-
-  def Xinst.run (sevm : Sevm) (devm : Devm) :
-      Xinst → Nat → Fueled (String × Devm) Devm
-    |  _, 0 => Fueled.exhausted
-    | .create, lim + 1 => do
-      let ⟨endowment, devm⟩ ← devm.pop
-      let ⟨memoryIndex, devm⟩ ← devm.popToNat
-      let ⟨memorySize, devm⟩ ← devm.popToNat
-      let extendCost ← Fueled.ok <| devm.extCost [⟨memoryIndex, memorySize⟩]
-      let initCodeCost ← Fueled.ok <| gasInitCodeWordCost * (ceilDiv memorySize 32)
-      let devm ← chargeGas (gasCreate + extendCost + initCodeCost) devm
-      let devm ← Fueled.ok <| devm.memExtends [⟨memoryIndex, memorySize⟩]
-      let newAddress ← Fueled.ok <|
-        compute_contract_address
-          sevm.currentTarget
-          (devm.state.get sevm.currentTarget).nonce
-      genericCreate
-        sevm
-        devm
-        endowment
-        newAddress
-        memoryIndex
-        memorySize
-        lim
-    | .create2, lim + 1 => do
-      let ⟨endowment, devm⟩ ← devm.pop
-      let ⟨memoryIndex, devm⟩ ← devm.popToNat
-      let ⟨memorySize, devm⟩ ← devm.popToNat
-      let ⟨salt, devm⟩ ← devm.pop
-      let extendCost ← Fueled.ok <| devm.extCost [⟨memoryIndex, memorySize⟩]
-      let initCodeHashCost ← Fueled.ok <|
-        gasKeccak256Word * ceilDiv memorySize 32
-      let initCodeCost ← Fueled.ok <|
-        gasInitCodeWordCost * (ceilDiv memorySize 32)
-      let devm ←
-        chargeGas
-          (gasCreate + initCodeHashCost + extendCost + initCodeCost)
-          devm
-      let devm ← Fueled.ok <| devm.memExtends [⟨memoryIndex, memorySize⟩]
-      let newAddress ← Fueled.ok <|
-        create2NewAddress
-          sevm.currentTarget
-          salt
-          (devm.memory.data.sliceD memoryIndex memorySize 0)
-      genericCreate
-        sevm
-        devm
-        endowment
-        newAddress
-        memoryIndex
-        memorySize
-        lim
-    | .call, lim + 1 => do
-      let ⟨gas, devm⟩ ← devm.pop
-      let ⟨callee, devm⟩ ← devm.popToAdr
-      let ⟨value, devm⟩ ← devm.pop
-      let ⟨inputIndex, devm⟩ ← devm.popToNat
-      let ⟨inputSize, devm⟩ ← devm.popToNat
-      let ⟨outputIndex, devm⟩ ← devm.popToNat
-      let ⟨outputSize, devm⟩ ← devm.popToNat
-      let extendCost ← Fueled.ok <|
-        devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-      let preAccessCost ← Fueled.ok <| access_cost callee devm.accessedAddresses
-      let devm ← Fueled.ok <| addAccessedAddress devm callee
-      let ⟨disablePrecompiles, _, code, delegatedAccessGasCost, devm⟩ ← Fueled.ok <|
-        accessDelegation devm callee
-      let accessCost ← Fueled.ok <| preAccessCost + delegatedAccessGasCost
-      let createCost ← Fueled.ok <|
-        if (¬ (devm.getAcct callee).Empty) ∨ value = 0
-        then 0
-        else gNewAccount
-      let transferCost ← Fueled.ok <| if value = 0 then 0 else gasCallValue
-      let ⟨msgCallCost, msgCallStipend⟩ ← Fueled.ok <|
-        calculateMsgCallGas
-          value.toNat
-          gas.toNat
-          devm.gasLeft
-          extendCost
-          (accessCost + createCost + transferCost)
-      let devm ← chargeGas (msgCallCost + extendCost) devm
-      Fueled.assert (!sevm.isStatic ∨ value = 0) ⟨"WriteInStaticContext", devm⟩
-      let devm ← Fueled.ok <|
-        devm.memExtends
-          [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-      let senderBal ← Fueled.ok <| (devm.getAcct sevm.currentTarget).bal
-      if senderBal < value then
-        let devm ← devm.push 0
-        Fueled.ok ((devm.withReturnData []).withGasLeft (devm.gasLeft + msgCallStipend))
-      else
-        genericCall
-          sevm
-          devm
-          msgCallStipend
-          value
-          sevm.currentTarget
-          callee
-          callee
-          true
-          false
-          inputIndex
-          inputSize
-          outputIndex
-          outputSize
-          code
-          disablePrecompiles
-          lim
-    | .callcode, lim + 1 => do
-      let ⟨gas, devm⟩ ← devm.pop
-      let ⟨codeAddress, devm⟩ ← devm.popToAdr
-      let ⟨value, devm⟩ ← devm.pop
-      let ⟨inputIndex, devm⟩ ← devm.popToNat
-      let ⟨inputSize, devm⟩ ← devm.popToNat
-      let ⟨outputIndex, devm⟩ ← devm.popToNat
-      let ⟨outputSize, devm⟩ ← devm.popToNat
-      let extendCost ← Fueled.ok <|
-        devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-      let preAccessCost ← Fueled.ok <| access_cost codeAddress devm.accessedAddresses
-      let devm ← Fueled.ok <| addAccessedAddress devm codeAddress
-      let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ ← Fueled.ok <|
-        accessDelegation devm codeAddress
-      let accessCost ← Fueled.ok <| preAccessCost + delegatedAccessGasCost
-      let transferCost ← Fueled.ok <| if value = 0 then 0 else gasCallValue
-      let ⟨msgCallCost, msgCallStipend⟩ ← Fueled.ok <|
-        calculateMsgCallGas
-          value.toNat
-          gas.toNat
-          devm.gasLeft
-          extendCost
-          (accessCost + transferCost)
-      let devm ← chargeGas (msgCallCost + extendCost) devm
-      let devm ← Fueled.ok <|
-        devm.memExtends
-          [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-      let senderBal ← Fueled.ok (devm.getAcct sevm.currentTarget).bal
-      if senderBal < value
-      then
-        let devm ← devm.push 0
-        Fueled.ok <|
-          (devm.withGasLeft (devm.gasLeft + msgCallStipend)).withReturnData []
-      else
-        genericCall
-          sevm
-          devm
-          msgCallStipend
-          value
-          sevm.currentTarget
-          sevm.currentTarget
-          newCodeAddress
-          true
-          false
-          inputIndex
-          inputSize
-          outputIndex
-          outputSize
-          code
-          disablePrecompiles
-          lim
-    | .delcall, lim + 1 => do
-      let ⟨gas, devm⟩ ← devm.pop
-      let ⟨codeAddress, devm⟩ ← devm.popToAdr
-      let ⟨inputIndex, devm⟩ ← devm.popToNat
-      let ⟨inputSize, devm⟩ ← devm.popToNat
-      let ⟨outputIndex, devm⟩ ← devm.popToNat
-      let ⟨outputSize, devm⟩ ← devm.popToNat
-      let extendCost ← Fueled.ok <|
-        devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-      let preAccessCost ← Fueled.ok <| access_cost codeAddress devm.accessedAddresses
-      let devm ← Fueled.ok <| addAccessedAddress devm codeAddress
-      let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ ← Fueled.ok <|
-        accessDelegation devm codeAddress
-      let accessCost ← Fueled.ok <| preAccessCost + delegatedAccessGasCost
-      let ⟨msgCallCost, msgCallStipend⟩ ← Fueled.ok <|
-        calculateMsgCallGas
-          0
-          gas.toNat
-          devm.gasLeft
-          extendCost
-          accessCost
-      let devm ← chargeGas (msgCallCost + extendCost) devm
-      let devm ← Fueled.ok <|
-        devm.memExtends
-          [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-      genericCall
-        sevm
-        devm
-        msgCallStipend
-        sevm.value
-        sevm.caller
-        sevm.currentTarget
-        newCodeAddress
-        false
-        false
-        inputIndex
-        inputSize
-        outputIndex
-        outputSize
-        code
-        disablePrecompiles
-        lim
-    | .statcall, lim + 1 => do
-      let ⟨gas, devm⟩ ← devm.pop
-      let ⟨target, devm⟩ ← devm.popToAdr
-      let ⟨inputIndex, devm⟩ ← devm.popToNat
-      let ⟨inputSize, devm⟩ ← devm.popToNat
-      let ⟨outputIndex, devm⟩ ← devm.popToNat
-      let ⟨outputSize, devm⟩ ← devm.popToNat
-      let extendCost ← Fueled.ok <|
-        devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-      let preAccessCost ← Fueled.ok <| access_cost target devm.accessedAddresses
-      let devm ← Fueled.ok <| addAccessedAddress devm target
-      let ⟨disablePrecompiles, _, code, delegatedAccessGasCost, devm⟩ ←
-        Fueled.ok <| accessDelegation devm target
-      let accessCost ← Fueled.ok <| preAccessCost + delegatedAccessGasCost
-      let ⟨msgCallCost, msgCallStipend⟩ ← Fueled.ok <|
-        calculateMsgCallGas
-          0
-          gas.toNat
-          devm.gasLeft
-          extendCost
-          accessCost
-      let devm ← chargeGas (msgCallCost + extendCost) devm
-      let devm ← Fueled.ok <|
-        devm.memExtends
-          [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-      genericCall
-        sevm
-        devm
-        msgCallStipend
-        0
-        sevm.currentTarget
-        target
-        target
-        true
-        true
-        inputIndex
-        inputSize
-        outputIndex
-        outputSize
-        code
-        disablePrecompiles
-        lim
-  termination_by _ lim => lim
-
-  def Ninst.run (evm : Evm) :
-      -- Completed results retain the old `Execution` payload under `some`.
-      Ninst → Nat → Fueled (String × Devm) Devm
-    | .push xs _, _ => do
-      let evm' ← chargeGas (if xs = [] then gBase else gVerylow) evm.dyna
-      -- (evm'.push xs.toB256).withPc (evm.pc + xs.length + 1)
-      evm'.push xs.toB256 --).withPc (evm.pc + xs.length + 1)
-    | .reg r, _ =>
-      --(r.run evm).withPc (evm.pc + 1)
-      Fueled.ofExcept <| r.run evm
-    | .exec _, 0 => Fueled.exhausted
-    | .exec x, lim + 1 =>
-      -- (Xinst.run evm.sta evm.dyna x lim).withPc (evm.pc + 1)
-      Xinst.run evm.sta evm.dyna x lim
-  termination_by _ lim => lim
-
-  def exec : Evm → Nat → Fueled (String × Devm) Devm
-    | _, 0 => Fueled.exhausted
-    | evm, lim + 1 => do
-      -- let mut evm := evm
-      -- showLim lim evm
-      let i ← Fueled.ofExcept <|
-        (evm.getInst).toExcept ⟨"InvalidOpcode", evm.dyna⟩
-      -- showStep evm i
-      match i with
-      | .next n =>
-        let devm ← n.run evm lim
-        exec ⟨evm.pc + n.size, evm.sta, devm⟩ lim
-      | .jump j =>
-        let ⟨pc, devm⟩ ← j.run evm
-        exec ⟨pc, evm.sta, devm⟩ lim
-      | .last l => Fueled.ofExcept <| l.run evm.sta evm.dyna
-  termination_by _ lim => lim
-
-end
-
-/-! Focused executable checks for the checkpoint-one flattened core. -/
+/-! Focused executable checks for the flattened core and public wrappers. -/
 
 private def flattenGuardCode (bytes : B8L) : ByteArray := .mk <| .mk bytes
 
@@ -4657,11 +4231,10 @@ private def flattenGuardSummary
   | .some (.ok devm) => some ⟨devm.error, devm.stack, devm.output⟩
   | _ => none
 
--- Arithmetic loop: both drivers spend one unit per instruction and exhaust.
+-- Arithmetic loop: the driver spends one unit per instruction and exhausts.
 private def flattenGuardArithmeticLoop : Bool :=
   let msg := flattenGuardMsg [0x5B, 0x60, 0x00, 0x56] 1000 8
-  (execFlat (initEvm msg) 20).run.isNone &&
-    (exec (initEvm msg) 20).run.isNone
+  (exec (initEvm msg) 20).run.isNone
 
 #guard flattenGuardArithmeticLoop
 
@@ -4678,14 +4251,14 @@ private def flattenGuardNestedCallMsg : Msg :=
     benv := benv
   }
 
-private def flattenGuardNestedCallNew :=
-  flattenGuardSummary (runFrameFlat (Frame.ofCall flattenGuardNestedCallMsg) 200)
+private def flattenGuardNestedCallDirect :=
+  flattenGuardSummary (runFrame (Frame.ofCall flattenGuardNestedCallMsg) 200)
 
-private def flattenGuardNestedCallOld :=
+private def flattenGuardNestedCallPublic :=
   flattenGuardSummary (processMessage flattenGuardNestedCallMsg 200)
 
-#guard flattenGuardNestedCallNew = flattenGuardNestedCallOld
-#guard flattenGuardNestedCallNew.map (fun x => x.2.1.head?) = some (some 1)
+#guard flattenGuardNestedCallDirect = flattenGuardNestedCallPublic
+#guard flattenGuardNestedCallDirect.map (fun x => x.2.1.head?) = some (some 1)
 
 -- CREATE collision: a nonempty target code short-circuits with stack word 0.
 private def flattenGuardCreateCollision : Bool :=
@@ -4735,7 +4308,7 @@ private def flattenGuardDepthZero : Bool :=
 -- A PUSH with zero gas halts through the frozen OutOfGasError channel.
 private def flattenGuardOog : Bool :=
   let msg := flattenGuardMsg [0x60, 0x01, 0x00] 0 8
-  match (execFlat (initEvm msg) 10).run with
+  match (exec (initEvm msg) 10).run with
   | .some (.error ⟨err, _⟩) => err == "OutOfGasError"
   | _ => false
 
@@ -4748,7 +4321,7 @@ private def flattenGuardRevert : Bool :=
       [ 0x60, 0x2A, 0x60, 0x00, 0x52,
         0x60, 0x20, 0x60, 0x00, 0xFD ]
       1000 8
-  match (runFrameFlat (Frame.ofCall msg) 100).run with
+  match (runFrame (Frame.ofCall msg) 100).run with
   | .some (.ok devm) =>
     devm.error == some "Revert" &&
       devm.output.length == 32 &&
