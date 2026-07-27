@@ -15,7 +15,7 @@ START_AT=1
 GUARD="${ELEVM_TIMEOUT:-1800}"
 
 usage() {
-  echo "usage: scripts/check-mainnet.sh (--suite (prague|osaka|smoke) | --dir REL --suite SUITE) [--fixtures-root PATH] [--no-build] [--start-at N]" >&2
+  echo "usage: scripts/check-mainnet.sh (--suite (prague|osaka|transitions|smoke|full) | --dir REL --suite SUITE) [--fixtures-root PATH] [--no-build] [--start-at N]" >&2
   exit 2
 }
 
@@ -35,17 +35,30 @@ done
   echo "error: --start-at must be a positive manifest index" >&2; exit 2;
 }
 
+# The pinned release publishes no fixture whose `network` is a bare `BPO1` or
+# `BPO2`: every BPO case in it is a transition case, and those are the
+# `transitions` suite.  Refusing the two static BPO suites is therefore not a
+# step that has yet to happen -- it is the archive's shape.  Reporting an
+# all-PASS verdict over zero selected files would be exactly the permissive
+# oracle this harness exists to prevent.
+bpo_refusal() {
+  LABEL="$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"
+  echo "error: suite $1 selects no file: the pinned release publishes no fixture whose network is $LABEL." >&2
+  echo "       $LABEL rules are exercised by --suite transitions (OsakaToBPO1AtTime15k, BPO1ToBPO2AtTime15k)." >&2
+  exit 2
+}
+
 # `--dir` restricts a suite to one subtree of the pinned archive.  It is a
-# targeted instrument for landing one semantic change at a time, not a way to
-# reach an inactive suite as a whole: the entries still come from the generated
-# manifest, every one of them still has to PASS, and an empty or unlisted
-# selection is an error.  Suites that have no acceptance gate yet are reachable
-# only through it.
+# targeted instrument for landing one semantic change at a time: the entries
+# still come from the generated manifest, every one of them still has to PASS,
+# and an empty or unlisted selection is an error.
 if [ -n "$SUBDIR" ]; then
   case "$SUITE" in
-    prague|smoke|osaka|bpo1|bpo2) ;;
-    transitions|full)
-      echo "error: suite $SUITE has no per-directory form" >&2; exit 2 ;;
+    prague|smoke|osaka|transitions) ;;
+    bpo1|bpo2) bpo_refusal "$SUITE" ;;
+    full)
+      echo "error: suite full has no per-directory form; name the component suite" >&2
+      exit 2 ;;
     *) echo "error: unknown suite $SUITE" >&2; exit 2 ;;
   esac
   case "$SUBDIR" in
@@ -53,10 +66,8 @@ if [ -n "$SUBDIR" ]; then
   esac
 else
   case "$SUITE" in
-    prague|osaka|smoke) ;;
-    bpo1|bpo2|transitions|full)
-      echo "error: suite $SUITE is inventoried but inactive until its owning migration step" >&2
-      exit 2 ;;
+    prague|osaka|transitions|smoke|full) ;;
+    bpo1|bpo2) bpo_refusal "$SUITE" ;;
     *) echo "error: unknown suite $SUITE" >&2; exit 2 ;;
   esac
 fi
@@ -112,8 +123,14 @@ while IFS=$'\t' read -r REL NETWORK; do
   [ -n "$REL" ] && [ -n "$NETWORK" ] || {
     echo "error: malformed generated manifest entry" >&2; exit 2;
   }
-  case "$NETWORK" in Prague|Osaka|BPO1|BPO2) ;; *)
-    echo "error: unknown manifest network $NETWORK" >&2; exit 2;; esac
+  # The static forks and the transition labels whose endpoints are both
+  # supported.  A label this list does not name must never reach the binary:
+  # the binary would refuse it, but the manifest is what is meant to be exact.
+  case "$NETWORK" in
+    Prague|Osaka|BPO1|BPO2) ;;
+    PragueToOsakaAtTime15k|OsakaToBPO1AtTime15k|BPO1ToBPO2AtTime15k) ;;
+    *) echo "error: unknown manifest network $NETWORK" >&2; exit 2;;
+  esac
   FILE="$FIXTURES_ROOT/blockchain_tests/$REL"
   [ -f "$FILE" ] || { echo "error: missing manifest fixture file: $FILE" >&2; exit 2; }
   set +e
