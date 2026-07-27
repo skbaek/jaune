@@ -1,6 +1,6 @@
 # Architecture note — the multi-fork API
 
-Date: 2026-07-26 (Asia/Seoul), amended 2026-07-27 for Step 4.
+Date: 2026-07-26 (Asia/Seoul), amended 2026-07-27 for Steps 4, 5, and 6.
 Plan: `~/plans/migration.md`, Step 2.
 
 This note fixes the public fork API. Per the plan, a material redesign of
@@ -37,9 +37,24 @@ failing lookup; `none` reports `UnsupportedForkError` rather than answering with
 another fork's rules, because running Osaka blocks under Prague semantics would
 turn a missing implementation into a silent consensus fault.
 
-`prague` and `osaka` resolve with complete static execution rules; `bpo1` and
-`bpo2` are declared identities without rules. Their schedules and configured
-activation belong to Step 6.
+All four forks now resolve. `prague` and `osaka` carry complete static
+execution rules; `bpo1` and `bpo2` are `osakaRules` with one field replaced:
+
+```
+bpo1Rules = { osakaRules with fork := .bpo1, blob := bpo1BlobSchedule }
+bpo2Rules = { osakaRules with fork := .bpo2, blob := bpo2BlobSchedule }
+```
+
+Writing them as record updates is what makes "blob parameter only" a property
+of the code rather than a claim about it: a guard undoes the update and
+requires the whole record to equal `osakaRules`, so no BPO fork can acquire a
+rule of its own, and a later Osaka correction reaches both automatically.
+
+Since every declared fork resolves, `Fork.rules`'s `UnsupportedForkError`
+branch is now unreachable in this build. It is retained deliberately: it is the
+only correct answer for the next declared-but-unimplemented fork, and the
+guards that used to exercise it now assert that the whole supported chain
+resolves instead.
 
 ## What `ForkRules` carries
 
@@ -90,8 +105,41 @@ not to the static Osaka rule record.
 Step 4's `MODEXP`, `CLZ`, and `P256VERIFY` delta plus Step 5's transaction gas
 cap, six-blob transaction limit, blob reserve-price formula, and original block
 RLP limit. `check-mainnet.sh --suite osaka` is active only because all 2,514
-manifest files (17,323 cases) pass. BPO identities and transition-labelled
-fixtures remain inactive until Step 6 supplies their authoritative schedules.
+manifest files (17,323 cases) pass.
+
+## Labels, schedules, and the named mainnet configuration
+
+Step 6 completed activation. Three additions, all in `Elevm/Fork.lean`:
+
+| name | role |
+|---|---|
+| `ForkTransition` | one activation boundary: `before`, `after`, `timestamp` |
+| `NetworkSpec` | what a fixture `network` label names: `.static f` or `.transition t` |
+| `mainnetChainConfig` | mainnet's own schedule, with its four activation timestamps |
+
+`ForkTransition.ofString?` parses the `<before>To<after>AtTime<n>` labels the
+fixtures use, strictly: exactly one `AtTime`, exactly one `To`, a decimal
+timestamp with the fixtures' optional `k` thousands suffix, and both endpoints
+parseable by `Fork.ofString?`. A historical label such as
+`CancunToPragueAtTime15k` therefore fails at the parser rather than being run
+through one of its endpoints. `ForkTransition.chainConfig` turns the parsed
+label into the schedule it describes; whether that schedule is *usable* stays
+`ChainConfig.validate`'s answer, so a label naming an activation at genesis or
+a backwards step is refused where every other unusable schedule is.
+
+`mainnetChainConfig` is the one place mainnet timestamps appear. The supported
+chain begins at Prague, so Prague is the schedule's floor rather than an
+activation — this build has no pre-Prague rules to run before it, and a
+schedule may not name rules that do not exist. `mainnetPragueTimestamp` records
+the real activation for provenance and is checked against the schedule.
+
+## Prague's and Osaka's shared blob schedule
+
+`pragueBlobSchedule` and `osakaBlobSchedule` carry the same target and ceiling,
+which is why the first *observable* blob-schedule boundary on the supported
+chain is Osaka to BPO1. This is a fact about the protocol (EIP-7892 restates
+Osaka's schedule without moving it), not a shortcut: the two records stay
+separate, and Osaka's is stated through the EIP's blob-count product.
 
 ## How rules reach the interpreter
 
@@ -175,15 +223,32 @@ so no wrapper can diverge from the core somewhere untested. Prague is permanent
 supported protocol, not scaffolding, and Blanc's four protected theorems state
 their results about these unwrapped names.
 
+### Which entry point a fixture uses
+
+`Main.lean` resolves `--network` to a `NetworkSpec` and dispatches on it:
+`.static f` imports at `addBlockToChainAt f`, `.transition t` imports through
+`addBlockToChainUsing (t.chainConfig chainId)`. Static suites therefore keep
+naming their fork explicitly, and only a transition lets the block's timestamp
+choose — which is the whole content of a transition fixture, and the reason a
+transition label may not be forced through one static endpoint.
+
+`--vectors` keeps the static-only resolution (`getFork`): one vector file runs
+at one fork, so a transition label there is an error rather than an ambiguity.
+
 ## Strictness
 
 - Unknown fork label → `Fork.ofString?` gives `none`; `Main.lean`'s `getFork`
   aborts. There is no case folding and no fallback to Prague.
+- Unknown *network* label → `NetworkSpec.ofString?` gives `none` after trying
+  both the static and the transition grammar; the fixture runner aborts.
 - Declared but unimplemented fork → `UnsupportedForkError`, raised while
   resolving rules, before anything is decoded or executed. On the block-import
   API this is the harness `.error` channel, never a `.inr` block-rejection
   verdict: a fork this build has not implemented says nothing about whether the
-  block is valid.
+  block is valid. No fork this build declares is in that state today.
+- A fixture that declares its own blob schedule is checked against the rules
+  the run will apply, for every fork the label can select. The archive, not
+  this repository, is the authority for the numbers a BPO fork consists of.
 - Unusable schedule → `InvalidChainConfigError`. A schedule must be non-empty,
   active from timestamp 0, and strictly increasing in both timestamp and fork
   order. Equal timestamps would make the active fork depend on list order, and a
@@ -199,5 +264,14 @@ their proof sites, and reusable lemmas were **generalised over rules** —
 `{rules : ForkRules}` binders on `chargeCodeGas_*`, `validateTransaction_*` —
 rather than being copied per fork, as the plan's design decision 6 requires.
 
-Mainnet activation timestamps appear nowhere in this step. When Step 6 adds
-them, they belong in a named mainnet `ChainConfig`, never in `ForkRules`.
+Adding BPO1 and BPO2 required no Blanc repair at all, which is the clearest
+evidence that they are data: nothing downstream reads a blob schedule.
+
+Blanc's solvency results are now stated over an arbitrary `ForkRules`
+(`stateTransitionWith_inv_solvent`, `addBlockToChainWith_inv_solvent`), with
+the named-fork and configured-chain entry points as instances and the two
+protected Prague theorems as the `pragueRules` instance of the same proof.
+`BlockChain.ReachUsing` is reachability along a configured chain, so a sequence
+crossing Prague, Osaka, BPO1, and BPO2 is one induction rather than one
+relation per fork. The four protected statements are textually unchanged and
+each still has exactly `[propext, Classical.choice, Quot.sound]`.

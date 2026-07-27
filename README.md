@@ -30,20 +30,28 @@ requirements.
 
 ## Verification status
 
-- **Tested fork:** Prague. ELEVM's frozen legacy corpus remains a regression
-  instrument. The canonical current-mainnet lane is the separately installed
+- **Supported forks:** Prague, Osaka, BPO1, and BPO2, plus the transitions
+  between them. ELEVM's frozen legacy corpus remains a regression instrument.
+  The canonical current-mainnet lane is the separately installed
   `execution-specs` `tests@v20.0.1` release; its strict generated manifests
   activate Prague as a whole suite (`scripts/check-mainnet.sh --suite prague`,
-  or the deterministic `--suite smoke`) and inventory later forks and
-  transitions.
+  or the deterministic `--suite smoke`).
 - **Static Osaka is supported.** Its complete execution delta is implemented:
   EIP-7823 and EIP-7883 (`MODEXP` bounds/repricing), EIP-7939 (`CLZ`), EIP-7951
   (`P256VERIFY`), EIP-7825 (transaction gas cap), EIP-7594 (six blobs per
   transaction), EIP-7918 (blob reserve price), and EIP-7934 (original block-RLP
   size). `scripts/check-mainnet.sh --suite osaka` is a strict all-PASS gate;
-  the pinned manifest is 2,514/2,514 files (17,323 cases). BPO1/BPO2 rule data,
-  configured activation, and transition suites remain deliberately inactive
-  until Step 6.
+  the pinned manifest is 2,514/2,514 files (17,323 cases).
+- **BPO1 and BPO2 are supported as rule data** (EIP-7892): each is Osaka with a
+  different blob target, ceiling, and base-fee update fraction, and nothing
+  else. A chain selects them from its own activation schedule, so a fixture
+  labelled `OsakaToBPO1AtTime15k` runs through the configured block-import API
+  and each block's timestamp chooses its rules.
+  `scripts/check-mainnet.sh --suite transitions` is a strict all-PASS gate over
+  the 13 files (109 cases) whose transition labels name two supported forks.
+  The pinned release publishes no fixture whose network is a bare `BPO1` or
+  `BPO2`, so `--suite bpo1` and `--suite bpo2` select nothing and are refused
+  rather than reported as vacuously green.
 - **Reference:** mirrors [execution-specs](https://github.com/ethereum/execution-specs)
   `mainnet` at commit
   [`4198…7694`](https://github.com/ethereum/execution-specs/tree/4198b9c5996713b268aed602739d5aa40e277694)
