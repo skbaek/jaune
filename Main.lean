@@ -53,6 +53,14 @@ def Lean.Json.toIoB256P (j : Json) : IO B256 := do
   let xs ← (Hex.toB8L x).toIO ""
   return (B8L.toB256 xs)
 
+/-- Read a hex *quantity*, which unlike a byte string may have an odd number of
+digits. Used for the small schedule numbers a fixture states about itself. -/
+def Lean.Json.toIoHexNat (j : Json) : IO Nat := do
+  let x ← toIoString j >>= .remove0x
+  if x.isEmpty then .throw "error : empty hex quantity"
+  let nibbles ← (x.toList.mapM Hexit.toB4).toIO s!"error : invalid hex quantity {x}"
+  return nibbles.foldl (fun acc nibble => (acc * 16) + nibble.toNat) 0
+
 def Lean.Json.toAcct : Lean.Json → IO Acct
   | .obj r => do
     let aux (xy : String × Lean.Json) : IO (B256 × B256) := do
@@ -162,14 +170,23 @@ def actualExceptionDiagnostic (err : String) : String :=
   | none => "<unknown canonical identity>"
 
 /-- Decode enough of a fixture block to select its parent snapshot, then run
-the public block-import API at the fork this fixture suite named. Both failure
-channels of `addBlockToChainAt` are collapsed only after they have been handled
-explicitly. -/
-def evaluateFixtureBlock (f : Fork) (store : ChainStore) (blockRlp : B8L) :
-    Except String (B256 × BlockChain) := do
+the public block-import API the fixture's `network` label names. Both failure
+channels of the import are collapsed only after they have been handled
+explicitly.
+
+A static label names its fork outright and imports at it. A transition label
+is a *schedule*, so its blocks go through the configured entry point and each
+one's own timestamp decides which rules it runs under -- which is the whole
+content of a transition fixture. -/
+def evaluateFixtureBlock (spec : NetworkSpec) (chainId : B64) (store : ChainStore)
+    (blockRlp : B8L) : Except String (B256 × BlockChain) := do
   let ⟨block, blockHeaderHash⟩ ← rlpToBlock blockRlp
   let parent ← store.findParent block.header.parentHash
-  match addBlockToChainAt f parent blockRlp with
+  let imported :=
+    match spec with
+    | .static f => addBlockToChainAt f parent blockRlp
+    | .transition t => addBlockToChainUsing (t.chainConfig chainId) parent blockRlp
+  match imported with
   | .error err => .error err
   | .ok (.inr err) => .error err
   | .ok (.inl child) => .ok ⟨blockHeaderHash, child⟩
@@ -192,7 +209,7 @@ def requireExpectedFailure (idx : Nat) (chainname : String)
 /-- Process every fixture block in list order while deriving ancestry only
 from each decoded header's `parentHash`. Expected-invalid blocks are checked
 exactly, leave the snapshot store unchanged, and never stop later blocks. -/
-def processBlockJsons (f : Fork) (store : ChainStore) :
+def processBlockJsons (spec : NetworkSpec) (chainId : B64) (store : ChainStore) :
   List (Nat × Lean.Json) → IO ChainStore
   | ⟨idx, blockJson⟩ :: rest => do
     -- Hand-authored blockchain fixtures carry `chainname`; blockchain tests
@@ -211,7 +228,7 @@ def processBlockJsons (f : Fork) (store : ChainStore) :
         | .ok expected => pure (some expected)
         | .error err =>
           .throw s!"BLOCK #{idx} ({chainname}) has invalid expectException: {err}"
-    match evaluateFixtureBlock f store blockRlp with
+    match evaluateFixtureBlock spec chainId store blockRlp with
     | .error err =>
       match expected? with
       | none =>
@@ -219,20 +236,51 @@ def processBlockJsons (f : Fork) (store : ChainStore) :
           raw actual: {repr err}\ncanonical actual: {actualExceptionDiagnostic err}"
       | some expected =>
         requireExpectedFailure idx chainname expected err
-        processBlockJsons f store rest
+        processBlockJsons spec chainId store rest
     | .ok ⟨tipHash, child⟩ =>
       match expected? with
       | some expected =>
         .throw s!"BLOCK #{idx} ({chainname}) was expected invalid but imported\n\
           expected: {expected.map FixtureException.toString}\ncomputed tip: {tipHash}"
       | none =>
-        processBlockJsons f (store.addResult (.ok ⟨tipHash, child⟩)) rest
+        processBlockJsons spec chainId (store.addResult (.ok ⟨tipHash, child⟩)) rest
   | [] => .ok store
 
-def runBlockchainStTest (f : Fork) : (Nat × String × Lean.Json) → IO Unit
+/-- Check a fixture's own declared blob schedule against the rules this run
+will apply.
+
+Current-mainnet fixtures state the target, ceiling, and base-fee update
+fraction of every fork they use, as blob counts. Reading them here turns each
+such fixture into an oracle for this build's `BlobSchedule` data -- which is
+all a BPO fork consists of -- instead of trusting that both were transcribed
+from the specification the same way. Older fixture families carry no `config`
+section; where the declaration exists it is checked exactly, and requiring it
+to exist on the current lane is the manifest generator's job. -/
+def checkFixtureBlobSchedule (spec : NetworkSpec) (json : Lean.Json) : IO Unit := do
+  let some config := json.find? "config" | pure ()
+  let some schedule := config.find? "blobSchedule" | pure ()
+  for f in spec.forks do
+    let declared ← (schedule.find? f.toString).toIO
+      s!"error : fixture declares a blob schedule but no entry for {f}"
+    let target ← declared.find "target" >>= Lean.Json.toIoHexNat
+    let ceiling ← declared.find "max" >>= Lean.Json.toIoHexNat
+    let fraction ← declared.find "baseFeeUpdateFraction" >>= Lean.Json.toIoHexNat
+    let rules ← IO.ofExcept f.rules
+    .guard (rules.blob.target = target * gasPerBlob)
+      s!"error : {f} blob target = {rules.blob.target}, fixture declares \
+         {target} blobs = {target * gasPerBlob}"
+    .guard (rules.blob.max = ceiling * gasPerBlob)
+      s!"error : {f} blob maximum = {rules.blob.max}, fixture declares \
+         {ceiling} blobs = {ceiling * gasPerBlob}"
+    .guard (rules.blob.baseFeeUpdateFraction = fraction)
+      s!"error : {f} blob base-fee update fraction = \
+         {rules.blob.baseFeeUpdateFraction}, fixture declares {fraction}"
+
+def runBlockchainStTest (spec : NetworkSpec) : (Nat × String × Lean.Json) → IO Unit
   | ⟨idx, name, json⟩ => do
     .println s!"TEST NAME : {name}"
     .println s!"TEST INDEX : {idx}"
+    checkFixtureBlobSchedule spec json
 
     let gbh_json ← json.find "genesisBlockHeader"
     let gbh ← gbh_json.toHeader
@@ -262,7 +310,9 @@ def runBlockchainStTest (f : Fork) : (Nat × String × Lean.Json) → IO Unit
     }
 
     let blockJsons ← json.find "blocks" >>= Lean.Json.toIoList
-    let store ← processBlockJsons f (.init gbh_hash chain) blockJsons.putIndex
+    let store ←
+      processBlockJsons spec chainId.toUInt64 (.init gbh_hash chain)
+        blockJsons.putIndex
     let lastBlockHash ← json.find "lastblockhash" >>= Lean.Json.toIoB256
     let chain ← (store.findLast lastBlockHash).toIO
     let lastBlock ← chain.blocks.getLast?.toIO "error : no last block "
@@ -277,10 +327,10 @@ def runBlockchainStTest (f : Fork) : (Nat × String × Lean.Json) → IO Unit
       s!"error : end state root does not match\n  expected : {postStateRoot}\n  computed : {chain.state.root}"
 
 /-- Select the cases whose fixture `network` label is exactly the requested
-fork's label. Selection is by label equality, as before; the fork is now a
-parsed value rather than an arbitrary string, so an unknown label cannot reach
-this point. -/
-def fixtureCaseSelected (f : Fork) (testIdx : Option Nat)
+one. Selection is by label equality, as before; the label is now a parsed
+value rather than an arbitrary string, so an unknown one cannot reach this
+point, and a transition label matches only its own canonical spelling. -/
+def fixtureCaseSelected (spec : NetworkSpec) (testIdx : Option Nat)
     (incls excls : List String) : (Nat × String × Lean.Json) → IO Bool
   | ⟨idx, name, json⟩ => do
     if let some specIdx := testIdx then
@@ -290,9 +340,9 @@ def fixtureCaseSelected (f : Fork) (testIdx : Option Nat)
     if name ∈ excls then
       return false
     let caseNetwork ← json.find "network" >>= Lean.Json.toIoString
-    return caseNetwork = f.toString
+    return caseNetwork = spec.toString
 
-def runTestFile (f : Fork) (testIdx : Option Nat)
+def runTestFile (spec : NetworkSpec) (testIdx : Option Nat)
   (incls excls : List String) (idxPath : Nat × String) : IO Unit := do
   let fileIdx := idxPath.fst
   let path := idxPath.snd
@@ -300,14 +350,14 @@ def runTestFile (f : Fork) (testIdx : Option Nat)
   .println s!"TEST FILE #{fileIdx} : {path}\n"
   let rb ← readJsonFile path >>= Lean.Json.toIoRBNode
   let js := rb.toArray.toList.putIndex
-  let selected ← js.filterM <| fixtureCaseSelected f testIdx incls excls
-  .println s!"NETWORK : {f}"
+  let selected ← js.filterM <| fixtureCaseSelected spec testIdx incls excls
+  .println s!"NETWORK : {spec}"
   .println s!"SELECTED CASES : {selected.length}"
   .println s!"SKIPPED CASES : {js.length - selected.length}"
   .guard (¬ selected.isEmpty)
     s!"ERROR : zero cases match the combined network/name/index filters \
-       (network = {f}) in {path}"
-  let _ ← selected.mapM (runBlockchainStTest f)
+       (network = {spec}) in {path}"
+  let _ ← selected.mapM (runBlockchainStTest spec)
   .ok ()
 
 def getTestNames (incls excls : List String) :
@@ -345,7 +395,11 @@ def getNetwork : List String → Option String
 
 Strict by construction: the label must be one this build knows, and an
 unrecognised one aborts rather than quietly running Prague. Omitting the option
-still means Prague, which is what every committed gate passes explicitly. -/
+still means Prague, which is what every committed gate passes explicitly.
+
+This is the *static* resolution, used where only one rule set can apply -- a
+precompile vector file runs at one fork, so a transition label is an error
+here rather than an ambiguity. -/
 def getFork (opts : List String) : IO Fork :=
   match getNetwork opts with
   | none => .ok .prague
@@ -356,6 +410,24 @@ def getFork (opts : List String) : IO Fork :=
       .throw
         s!"error : unknown --network label {repr label}; supported labels are \
            {Fork.all.map Fork.toString}"
+
+/-- Resolve `--network` to the fixture network a suite names: a static fork or
+a supported transition schedule.
+
+A transition's schedule is validated here, before any fixture is read, so a
+label that parses but does not determine an unambiguous fork at every block --
+an activation at genesis, or one that runs the fork chain backwards -- is
+refused up front rather than once per case. -/
+def getNetworkSpec (opts : List String) : IO NetworkSpec := do
+  let some label := getNetwork opts | return .static .prague
+  let some spec := NetworkSpec.ofString? label
+    | .throw
+        s!"error : unknown --network label {repr label}; supported labels are \
+           {Fork.all.map Fork.toString} and transitions of the form \
+           <fork>To<fork>AtTime<seconds>"
+  if let .transition t := spec then
+    IO.ofExcept (t.chainConfig 1).validate
+  return spec
 
 def getFiles (path : System.FilePath) : IO (List System.FilePath) := do
   if (← System.FilePath.isDir path) then
@@ -563,7 +635,7 @@ def main : List String → IO Unit
     verbosityRef.set (List.contains opts "--verbose")
     let testIdx : Option Nat := getTestIndex opts
     let skip : Option Nat := getSkip opts
-    let f ← getFork opts
+    let spec ← getNetworkSpec opts
     let ⟨incls, excls⟩ := getTestNames [] [] opts
     let files ← getFiles path
     let files :=
@@ -572,7 +644,7 @@ def main : List String → IO Unit
       | some n => files.drop n
     let _ ←
       List.mapM
-        (runTestFile f testIdx incls excls)
+        (runTestFile spec testIdx incls excls)
         (files.map System.FilePath.toString).putIndex
     pure ()
   | _ => IO.throw "error : invalid arguments"
