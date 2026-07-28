@@ -1465,7 +1465,7 @@ theorem executeCode.handleError_ok_gasLe {raw : Execution} {devm : Devm}
         omega
       · nomatch h
 
-theorem chargeGas_result_gasLe (cost : Nat) (devm : Devm) :
+@[simp] theorem chargeGas_result_gasLe (cost : Nat) (devm : Devm) :
     (chargeGas cost devm).gasLeft ≤ devm.gasLeft := by
   rw [chargeGas_def]
   by_cases hc : cost ≤ devm.gasLeft
@@ -1473,3 +1473,885 @@ theorem chargeGas_result_gasLe (cost : Nat) (devm : Devm) :
       Devm.setMach_gasLeft]
     omega
   · simp [safeSub, hc, Execution.gasLeft]
+
+/-! ## Gas non-increase
+
+The corpus above constrains successful results only, but the driver hands a
+child's *whole* result back to its parent. `executeCode.handleError` turns a
+`"Revert"` error into a *successful* frame result carrying the reverting frame's
+leftover gas, and `Resume.run` adds that back to the parent, so driver
+monotonicity has to bound the error branch too. (The other two error shapes are
+free: an exceptional halt is rewritten to zero gas, and any remaining tag stays
+an `.error`, which `Resume.run` cannot turn into a resumed parent.)
+
+The device is one compositional bind lemma. `resultGas proj e` reads the gas out
+of whichever branch `e` takes, and the bind lemmas peel a single `bind`, leaving
+the tail as an *unconditional* obligation measured against the intermediate
+`Devm`. Walks therefore chain without threading equations through hypotheses,
+which is what keeps this second corpus to a fraction of the size of the first.
+-/
+
+/-- The gas reported by a `Devm`-threading step, in whichever branch it takes.
+`proj` reads the `Devm` out of a successful payload. -/
+def resultGas {α : Type} (proj : α → Devm) : Except (String × Devm) α → Nat
+  | .error p => p.2.gasLeft
+  | .ok a => (proj a).gasLeft
+
+@[simp] theorem resultGas_error {α : Type} (proj : α → Devm) (p : String × Devm) :
+    resultGas proj (.error p) = p.2.gasLeft := rfl
+
+@[simp] theorem resultGas_ok {α : Type} (proj : α → Devm) (a : α) :
+    resultGas proj (.ok a) = (proj a).gasLeft := rfl
+
+@[simp] theorem resultGas_id (ex : Execution) : resultGas id ex = ex.gasLeft := by
+  cases ex <;> rfl
+
+/-- Peel one `bind` whose payload is a `_ × Devm` pair. The tail obligation is
+measured against the intermediate `Devm`, so it is this lemma again one level
+down. -/
+theorem gasLe_bind_snd {α : Type} {n : Nat}
+    {e : Except (String × Devm) (α × Devm)} {f : α × Devm → Execution}
+    (he : resultGas Prod.snd e ≤ n)
+    (hf : ∀ a : α × Devm, Execution.gasLeft (f a) ≤ a.2.gasLeft) :
+    Execution.gasLeft (e >>= f) ≤ n := by
+  cases e with
+  | error p => exact he
+  | ok a => exact Nat.le_trans (hf a) he
+
+/-- Peel one `bind` whose payload is a bare `Devm`. -/
+theorem gasLe_bind_id {n : Nat} {e : Execution} {f : Devm → Execution}
+    (he : e.gasLeft ≤ n) (hf : ∀ d : Devm, Execution.gasLeft (f d) ≤ d.gasLeft) :
+    Execution.gasLeft (e >>= f) ≤ n := by
+  cases e with
+  | error p => exact he
+  | ok d => exact Nat.le_trans (hf d) he
+
+/-- Peel a `bind` whose payload carries no `Devm` at all — an `Except.assert`
+guard, or an `.ok` of a pure value. The current `Devm` simply survives it. -/
+theorem gasLe_bind_const {α : Type} {n : Nat} {devm : Devm}
+    {e : Except (String × Devm) α} {f : α → Execution}
+    (he : resultGas (fun _ => devm) e ≤ n)
+    (hf : ∀ a : α, Execution.gasLeft (f a) ≤ devm.gasLeft) :
+    Execution.gasLeft (e >>= f) ≤ n := by
+  cases e with
+  | error p => exact he
+  | ok a => exact Nat.le_trans (hf a) he
+
+@[simp] theorem resultGas_assert {p : Prop} [Decidable p] {devm : Devm}
+    (msg : String) :
+    resultGas (fun _ => devm) (Except.assert p ⟨msg, devm⟩) = devm.gasLeft := by
+  unfold Except.assert
+  split <;> rfl
+
+/-! ### The `Mach` layer of the non-increase corpus -/
+
+/-- The `Mach`-level analogue of `resultGas`, for the primitives defined by a
+footprint lift. -/
+def machResultGas {α : Type} : Footprint.Outcome Mach α → Nat
+  | .error p => p.2.gasLeft
+  | .ok p => p.2.gasLeft
+
+theorem liftMach_resultGas {α : Type} (core : Mach → Footprint.Outcome Mach α)
+    (devm : Devm) :
+    resultGas Prod.snd (liftMach core devm) = machResultGas (core devm.mach) := by
+  unfold liftMach Footprint.liftOutcome
+  cases core devm.mach <;> rfl
+
+theorem liftMachExecution_resultGas (core : Mach → Footprint.Outcome Mach Unit)
+    (devm : Devm) :
+    (liftMachExecution core devm).gasLeft = machResultGas (core devm.mach) := by
+  unfold liftMachExecution Footprint.toExecution liftMach Footprint.liftOutcome
+  cases core devm.mach <;> rfl
+
+namespace Mach
+
+@[simp] theorem pop_machResultGas (mach : Mach) :
+    machResultGas mach.pop = mach.gasLeft := by
+  rcases mach with ⟨stack, memory, gasLeft⟩
+  cases stack <;> rfl
+
+@[simp] theorem popToNat_machResultGas (mach : Mach) :
+    machResultGas mach.popToNat = mach.gasLeft := by
+  rcases mach with ⟨stack, memory, gasLeft⟩
+  cases stack <;> rfl
+
+@[simp] theorem popToAdr_machResultGas (mach : Mach) :
+    machResultGas mach.popToAdr = mach.gasLeft := by
+  rcases mach with ⟨stack, memory, gasLeft⟩
+  cases stack <;> rfl
+
+@[simp] theorem popN_machResultGas (n : Nat) (mach : Mach) :
+    machResultGas (mach.popN n) = mach.gasLeft := by
+  induction n generalizing mach with
+  | zero => rfl
+  | succ n ih =>
+    rcases mach with ⟨stack, memory, gasLeft⟩
+    cases stack with
+    | nil => rfl
+    | cons x xs =>
+      have ih' := ih ⟨xs, memory, gasLeft⟩
+      rcases hp : Mach.popN ⟨xs, memory, gasLeft⟩ n with ⟨err, m⟩ | ⟨ys, m⟩ <;>
+        rw [hp] at ih' <;>
+        simpa only [Mach.popN, Mach.pop, hp, machResultGas] using ih'
+
+@[simp] theorem push_machResultGas (x : B256) (mach : Mach) :
+    machResultGas (Mach.push x mach) = mach.gasLeft := by
+  unfold Mach.push
+  split <;> rfl
+
+@[simp] theorem chargeGas_machResultGas (c : Nat) (mach : Mach) :
+    machResultGas (Mach.chargeGas c mach) ≤ mach.gasLeft := by
+  unfold Mach.chargeGas safeSub
+  by_cases hc : c ≤ mach.gasLeft
+  · simp only [if_pos hc, machResultGas]
+    omega
+  · simp only [if_neg hc, machResultGas]
+    omega
+
+@[simp] theorem pushItem_machResultGas (x : B256) (c : Nat) (mach : Mach) :
+    machResultGas (Mach.pushItem x c mach) ≤ mach.gasLeft := by
+  unfold Mach.pushItem
+  have hc := Mach.chargeGas_machResultGas c mach
+  rcases hg : Mach.chargeGas c mach with ⟨err, m⟩ | ⟨u, m⟩ <;> rw [hg] at hc <;>
+    simp only [machResultGas] at hc
+  · exact hc
+  · exact Nat.le_trans (Nat.le_of_eq (push_machResultGas x m)) hc
+
+@[simp] theorem applyUnary_machResultGas (f : B256 → B256) (c : Nat) (mach : Mach) :
+    machResultGas (Mach.applyUnary f c mach) ≤ mach.gasLeft := by
+  unfold Mach.applyUnary
+  have hp := Mach.pop_machResultGas mach
+  rcases hg : mach.pop with ⟨err, m⟩ | ⟨x, m⟩ <;> rw [hg] at hp <;>
+    simp only [machResultGas] at hp ⊢
+  · exact Nat.le_of_eq hp
+  · exact Nat.le_trans (pushItem_machResultGas _ _ m) (Nat.le_of_eq hp)
+
+@[simp] theorem applyBinary_machResultGas (f : B256 → B256 → B256) (c : Nat)
+    (mach : Mach) :
+    machResultGas (Mach.applyBinary f c mach) ≤ mach.gasLeft := by
+  unfold Mach.applyBinary
+  have hp := Mach.pop_machResultGas mach
+  rcases hg : mach.pop with ⟨err, m⟩ | ⟨x, m1⟩ <;> rw [hg] at hp <;>
+    simp only [machResultGas] at hp ⊢
+  · exact Nat.le_of_eq hp
+  · have hq := Mach.pop_machResultGas m1
+    rcases hg1 : m1.pop with ⟨err, m⟩ | ⟨y, m2⟩ <;> rw [hg1] at hq <;>
+      simp only [machResultGas] at hq ⊢
+    · omega
+    · exact Nat.le_trans (pushItem_machResultGas _ _ m2) (by omega)
+
+@[simp] theorem applyTernary_machResultGas (f : B256 → B256 → B256 → B256) (c : Nat)
+    (mach : Mach) :
+    machResultGas (Mach.applyTernary f c mach) ≤ mach.gasLeft := by
+  unfold Mach.applyTernary
+  have hp := Mach.pop_machResultGas mach
+  rcases hg : mach.pop with ⟨err, m⟩ | ⟨x, m1⟩ <;> rw [hg] at hp <;>
+    simp only [machResultGas] at hp ⊢
+  · exact Nat.le_of_eq hp
+  · have hq := Mach.pop_machResultGas m1
+    rcases hg1 : m1.pop with ⟨err, m⟩ | ⟨y, m2⟩ <;> rw [hg1] at hq <;>
+      simp only [machResultGas] at hq ⊢
+    · omega
+    · have hr := Mach.pop_machResultGas m2
+      rcases hg2 : m2.pop with ⟨err, m⟩ | ⟨z, m3⟩ <;> rw [hg2] at hr <;>
+        simp only [machResultGas] at hr ⊢
+      · omega
+      · exact Nat.le_trans (pushItem_machResultGas _ _ m3) (by omega)
+
+end Mach
+
+/-! ### The `Devm` layer of the non-increase corpus -/
+
+@[simp] theorem Devm.pop_resultGas (devm : Devm) :
+    resultGas Prod.snd devm.pop = devm.gasLeft := by
+  rw [Devm.pop, liftMach_resultGas, Mach.pop_machResultGas]
+  rfl
+
+@[simp] theorem Devm.popToNat_resultGas (devm : Devm) :
+    resultGas Prod.snd devm.popToNat = devm.gasLeft := by
+  rw [Devm.popToNat, liftMach_resultGas, Mach.popToNat_machResultGas]
+  rfl
+
+@[simp] theorem Devm.popToAdr_resultGas (devm : Devm) :
+    resultGas Prod.snd devm.popToAdr = devm.gasLeft := by
+  rw [Devm.popToAdr, liftMach_resultGas, Mach.popToAdr_machResultGas]
+  rfl
+
+@[simp] theorem Devm.popN_resultGas (devm : Devm) (n : Nat) :
+    resultGas Prod.snd (devm.popN n) = devm.gasLeft := by
+  rw [Devm.popN, liftMach_resultGas, Mach.popN_machResultGas]
+  rfl
+
+@[simp] theorem Devm.push_gasLe (x : B256) (devm : Devm) :
+    (devm.push x).gasLeft = devm.gasLeft := by
+  rw [Devm.push, liftMachExecution_resultGas, Mach.push_machResultGas]
+  rfl
+
+@[simp] theorem pushItem_gasLe (x : B256) (c : Nat) (devm : Devm) :
+    (pushItem x c devm).gasLeft ≤ devm.gasLeft := by
+  rw [pushItem, liftMachExecution_resultGas]
+  exact Mach.pushItem_machResultGas x c devm.mach
+
+@[simp] theorem applyUnary_gasLe (f : B256 → B256) (c : Nat) (devm : Devm) :
+    (applyUnary f c devm).gasLeft ≤ devm.gasLeft := by
+  rw [applyUnary, liftMachExecution_resultGas]
+  exact Mach.applyUnary_machResultGas f c devm.mach
+
+@[simp] theorem applyBinary_gasLe (f : B256 → B256 → B256) (c : Nat) (devm : Devm) :
+    (applyBinary f c devm).gasLeft ≤ devm.gasLeft := by
+  rw [applyBinary, liftMachExecution_resultGas]
+  exact Mach.applyBinary_machResultGas f c devm.mach
+
+@[simp] theorem applyTernary_gasLe (f : B256 → B256 → B256 → B256) (c : Nat)
+    (devm : Devm) :
+    (applyTernary f c devm).gasLeft ≤ devm.gasLeft := by
+  rw [applyTernary, liftMachExecution_resultGas]
+  exact Mach.applyTernary_machResultGas f c devm.mach
+
+@[simp] theorem Devm.pop_map_snd_gasLe (devm : Devm) :
+    Execution.gasLeft (devm.pop <&> Prod.snd) = devm.gasLeft := by
+  have h := Devm.pop_resultGas devm
+  rcases hp : devm.pop with ⟨err, d⟩ | ⟨x, d⟩ <;> rw [hp] at h <;>
+    simp only [resultGas_error, resultGas_ok] at h
+  · exact h
+  · exact h
+
+/-- The general form of the peeling lemma, for the bodies whose payload carries
+its `Devm` somewhere other than the second component. -/
+theorem gasLe_bind {α : Type} {n : Nat} {proj : α → Devm}
+    {e : Except (String × Devm) α} {f : α → Execution}
+    (he : resultGas proj e ≤ n)
+    (hf : ∀ a : α, Execution.gasLeft (f a) ≤ (proj a).gasLeft) :
+    Execution.gasLeft (e >>= f) ≤ n := by
+  cases e with
+  | error p => exact he
+  | ok a => exact Nat.le_trans (hf a) he
+
+/-- The fully general peeling lemma, for bodies that do not end in a bare
+`Devm` — `Jinst.runCore` returns a `Nat × Devm` jump target. -/
+theorem gasLe_bind_gen {α β : Type} {n : Nat} {proj : α → Devm} {proj' : β → Devm}
+    {e : Except (String × Devm) α} {f : α → Except (String × Devm) β}
+    (he : resultGas proj e ≤ n)
+    (hf : ∀ a : α, resultGas proj' (f a) ≤ (proj a).gasLeft) :
+    resultGas proj' (e >>= f) ≤ n := by
+  cases e with
+  | error p => exact he
+  | ok a => exact Nat.le_trans (hf a) he
+
+@[simp] theorem assertDynamic_resultGas (sevm : Sevm) (devm : Devm) :
+    resultGas (fun _ => devm) (assertDynamic sevm devm) = devm.gasLeft :=
+  resultGas_assert _
+
+/-- The `Mach × Meta` analogue of `machResultGas`, for `Rinst.balanceCore`. -/
+def machMetaResultGas {α : Type} : Footprint.Outcome (Mach × Meta) α → Nat
+  | .error p => p.2.1.gasLeft
+  | .ok p => p.2.1.gasLeft
+
+theorem liftMachMetaExecution_resultGas
+    (core : Mach → Meta → Footprint.Outcome (Mach × Meta) Unit) (devm : Devm) :
+    (liftMachMetaExecution core devm).gasLeft =
+      machMetaResultGas (core devm.mach devm.meta) := by
+  rcases h : core devm.mach devm.meta with ⟨err, view⟩ | ⟨u, view⟩ <;>
+    simp only [liftMachMetaExecution, Footprint.toExecution, liftMachMeta,
+      Footprint.liftOutcome, h, machMetaResultGas] <;> rfl
+
+theorem Rinst.balanceCore_machMetaResultGas (world : World) (mach : Mach) (view : Meta) :
+    machMetaResultGas (Rinst.balanceCore world mach view) ≤ mach.gasLeft := by
+  have hp := Mach.pop_machResultGas mach
+  have hc : ∀ (c : Nat) (m : Mach), machResultGas (Mach.chargeGas c m) ≤ m.gasLeft :=
+    Mach.chargeGas_machResultGas
+  have hs : ∀ (x : B256) (m : Mach), machResultGas (Mach.push x m) = m.gasLeft :=
+    Mach.push_machResultGas
+  unfold Rinst.balanceCore
+  split
+  · rename_i err m heq
+    rw [heq] at hp
+    simpa only [machResultGas, machMetaResultGas] using Nat.le_of_eq hp
+  · rename_i x m1 heq
+    rw [heq] at hp
+    simp only [machResultGas] at hp
+    dsimp only
+    split
+    · rename_i err m2 heq2
+      have := hc (if x.toAdr ∈ view.accessedAddresses then gasWarmAccess
+        else gasColdAccountAccess) m1
+      rw [heq2] at this
+      simp only [machResultGas] at this
+      simp only [machMetaResultGas]
+      omega
+    · rename_i u m2 heq2
+      have h2 := hc (if x.toAdr ∈ view.accessedAddresses then gasWarmAccess
+        else gasColdAccountAccess) m1
+      rw [heq2] at h2
+      simp only [machResultGas] at h2
+      split
+      · rename_i err m3 heq3
+        have h3 := hs (world.state.get x.toAdr).bal m2
+        rw [heq3] at h3
+        simp only [machResultGas] at h3
+        simp only [machMetaResultGas]
+        omega
+      · rename_i u2 m3 heq3
+        have h3 := hs (world.state.get x.toAdr).bal m2
+        rw [heq3] at h3
+        simp only [machResultGas] at h3
+        simp only [machMetaResultGas]
+        omega
+
+/-- Every `Rinst` body leaves at most the gas it started with, in *either*
+branch. The successful branch is already covered strictly by
+`Rinst.runCore_gasLt`; this is the error branch the `"Revert"` path needs. -/
+theorem Rinst.runCore_gasLe (pc : Nat) (devm : Devm) (sevm : Sevm) (r : Rinst) :
+    (Rinst.runCore pc devm sevm r).gasLeft ≤ devm.gasLeft := by
+  cases r <;> simp only [Rinst.runCore]
+  all_goals first
+    | exact pushItem_gasLe _ _ _
+    | exact applyUnary_gasLe _ _ _
+    | exact applyBinary_gasLe _ _ _
+    | exact applyTernary_gasLe _ _ _
+    | skip
+  case balance =>
+    rw [liftMachMetaWorldExecution, liftMachMetaExecution_resultGas]
+    exact Rinst.balanceCore_machMetaResultGas _ _ _
+  case clz =>
+    split
+    · exact applyUnary_gasLe _ _ _
+    · simp
+  case pop =>
+    exact gasLe_bind_id (Nat.le_of_eq (Devm.pop_map_snd_gasLe devm))
+      (fun d => chargeGas_result_gasLe _ d)
+  case blobhash =>
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨x, d1⟩
+    exact gasLe_bind_id (chargeGas_result_gasLe _ _)
+      (fun d => Nat.le_of_eq (Devm.push_gasLe _ d))
+  case calldataload =>
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨x, d1⟩
+    exact gasLe_bind_id (chargeGas_result_gasLe _ _)
+      (fun d => Nat.le_of_eq (Devm.push_gasLe _ d))
+  case blockhash =>
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨x, d1⟩
+    exact gasLe_bind_id (chargeGas_result_gasLe _ _)
+      (fun d => Nat.le_of_eq (Devm.push_gasLe _ d))
+  case gas =>
+    exact gasLe_bind_id (chargeGas_result_gasLe _ _)
+      (fun d => Nat.le_of_eq (Devm.push_gasLe _ d))
+  case exp =>
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨x, d1⟩
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨y, d2⟩
+    exact gasLe_bind_id (chargeGas_result_gasLe _ _)
+      (fun d => Nat.le_of_eq (Devm.push_gasLe _ d))
+  case tload =>
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨x, d1⟩
+    exact pushItem_gasLe _ _ _
+  case mload =>
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨x, d1⟩
+    refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
+    intro d2
+    simp
+  case kec =>
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨x, d1⟩
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨y, d2⟩
+    refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
+    intro d3
+    simp
+  case mstore =>
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨x, d1⟩
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨y, d2⟩
+    refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
+    intro d3
+    simp
+  case mstore8 =>
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨x, d1⟩
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨y, d2⟩
+    refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
+    intro d3
+    simp
+  case calldatacopy | codecopy | mcopy =>
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨x, d1⟩
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨y, d2⟩
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨z, d3⟩
+    refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
+    intro d4
+    simp
+  case retdatacopy =>
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨x, d1⟩
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨y, d2⟩
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨z, d3⟩
+    refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
+    intro d4
+    split
+    · exact gasLe_bind_const (devm := d4) (by simp) (fun _ => by simp)
+    · simp
+  case extcodesize | extcodehash =>
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨adr, d1⟩
+    split
+    · exact gasLe_bind_id (chargeGas_result_gasLe _ _)
+        (fun d => Nat.le_of_eq (Devm.push_gasLe _ d))
+    · exact gasLe_bind_id
+        (Nat.le_trans (chargeGas_result_gasLe _ _)
+          (Nat.le_of_eq (addAccessedAddress_gasLeft _ _)))
+        (fun d => Nat.le_of_eq (Devm.push_gasLe _ d))
+  case sload =>
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨key, d1⟩
+    split
+    · exact gasLe_bind_id (chargeGas_result_gasLe _ _)
+        (fun d => Nat.le_of_eq (Devm.push_gasLe _ d))
+    · exact gasLe_bind_id
+        (Nat.le_trans (chargeGas_result_gasLe _ _)
+          (Nat.le_of_eq (addAccessedStorageKey_gasLeft _ _ _)))
+        (fun d => Nat.le_of_eq (Devm.push_gasLe _ d))
+  case extcodecopy =>
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨adr, d1⟩
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨x, d2⟩
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨y, d3⟩
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨z, d4⟩
+    split
+    · exact gasLe_bind_id (chargeGas_result_gasLe _ _) (fun d => by simp)
+    · exact gasLe_bind_id
+        (Nat.le_trans (chargeGas_result_gasLe _ _)
+          (Nat.le_of_eq (addAccessedAddress_gasLeft _ _)))
+        (fun d => by simp)
+  case swap n =>
+    refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
+    intro d1
+    split <;> simp
+  case dup n =>
+    refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
+    intro d1
+    split
+    · simp
+    · exact Nat.le_of_eq (Devm.push_gasLe _ _)
+  case tstore =>
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨key, d1⟩
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨val, d2⟩
+    refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
+    intro d3
+    refine gasLe_bind_const (devm := d3) (by simp) ?_
+    intro _
+    simp
+  case log n =>
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨x, d1⟩
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨y, d2⟩
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨topics, d3⟩
+    refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
+    intro d4
+    refine gasLe_bind_const (devm := d4) (by simp) ?_
+    intro _
+    simp
+  case sstore =>
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨key, d1⟩
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨val, d2⟩
+    refine gasLe_bind_const (devm := d2) (by simp) ?_
+    intro _
+    refine gasLe_bind (proj := Prod.fst) ?_ ?_
+    · simp only [resultGas_ok]
+      split <;> simp
+    · rintro ⟨d3, cost2⟩
+      refine gasLe_bind_const (devm := d3) (by simp) ?_
+      intro _
+      refine gasLe_bind_id (by simp) ?_
+      intro d4
+      refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
+      intro d5
+      refine gasLe_bind_const (devm := d5) (by simp) ?_
+      intro _
+      simp
+
+theorem Jinst.runCore_gasLe (pc : Nat) (devm : Devm) (sevm : Sevm) (j : Jinst) :
+    resultGas Prod.snd (Jinst.runCore pc devm sevm j) ≤ devm.gasLeft := by
+  cases j <;> simp only [Jinst.runCore]
+  case jumpdest =>
+    exact gasLe_bind_gen (proj := id) (by simp) (fun d => by simp)
+  case jump =>
+    refine gasLe_bind_gen (proj := Prod.snd) (by simp) ?_
+    rintro ⟨dest, d1⟩
+    refine gasLe_bind_gen (proj := id) (by simp) ?_
+    intro d2
+    refine gasLe_bind_gen (proj := fun _ : Unit => d2) (by simp) ?_
+    intro _
+    simp
+  case jumpi =>
+    refine gasLe_bind_gen (proj := Prod.snd) (by simp) ?_
+    rintro ⟨dest, d1⟩
+    refine gasLe_bind_gen (proj := Prod.snd) (by simp) ?_
+    rintro ⟨cond, d2⟩
+    refine gasLe_bind_gen (proj := id) (by simp) ?_
+    intro d3
+    split
+    · exact gasLe_bind_gen (proj := fun _ : Nat => d3) (by simp) (fun _ => by simp)
+    · refine gasLe_bind_gen (proj := fun _ : Unit => d3) (by simp) ?_
+      intro _
+      exact gasLe_bind_gen (proj := fun _ : Nat => d3) (by simp) (fun _ => by simp)
+
+@[simp] theorem Devm.subBal_gasLeft {devm devm' : Devm} {a : Adr} {v : B256}
+    (h : devm.subBal a v = some devm') : devm'.gasLeft = devm.gasLeft := by
+  unfold Devm.subBal at h
+  rcases hs : devm.state.subBal a v with _ | state <;> rw [hs] at h <;>
+    simp only [bind, Option.bind, Option.some.injEq] at h
+  · nomatch h
+  · rw [← h, Devm.withState_gasLeft]
+
+@[simp] theorem Devm.setBal_gasLeft (devm : Devm) (a : Adr) (v : B256) :
+    (devm.setBal a v).gasLeft = devm.gasLeft := rfl
+
+@[simp] theorem addAccountToDelete_gasLeft (devm : Devm) (a : Adr) :
+    (addAccountToDelete devm a).gasLeft = devm.gasLeft := rfl
+
+@[simp] theorem Devm.addBal_gasLeft (devm : Devm) (a : Adr) (v : B256) :
+    (devm.addBal a v).gasLeft = devm.gasLeft := rfl
+
+@[simp] theorem Devm.withOutput_gasLeft (devm : Devm) (output : B8L) :
+    (devm.withOutput output).gasLeft = devm.gasLeft := rfl
+
+/-- The halting instructions. `.rev` is the reason this whole layer exists: it
+is the sole producer of the `"Revert"` tag, the one error `handleError` turns
+back into a successful frame result carrying live gas. -/
+theorem Linst.run_gasLe (sevm : Sevm) (devm : Devm) (l : Linst) :
+    Execution.gasLeft (Linst.run sevm devm l) ≤ devm.gasLeft := by
+  cases l <;> simp only [Linst.run]
+  case stop => simp
+  case ret =>
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨x, d1⟩
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨y, d2⟩
+    refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
+    intro d3
+    simp
+  case rev =>
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨x, d1⟩
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨y, d2⟩
+    refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
+    intro d3
+    simp
+  case dest =>
+    refine gasLe_bind_snd (by simp) ?_
+    rintro ⟨donee, d1⟩
+    refine gasLe_bind_const (devm := d1) (by simp) ?_
+    intro donorBal
+    refine gasLe_bind (proj := Prod.fst) ?_ ?_
+    · simp only [resultGas_ok]
+      split <;> simp
+    · rintro ⟨d2, cost2⟩
+      refine gasLe_bind_const (devm := d2) (by simp) ?_
+      intro cost3
+      refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
+      intro d3
+      refine gasLe_bind_const (devm := d3) (by simp) ?_
+      intro _
+      refine gasLe_bind_id ?_ ?_
+      · rcases hb : d3.subBal sevm.currentTarget donorBal with _ | d4
+        · simp [Option.toExcept]
+        · simp [Option.toExcept, Devm.subBal_gasLeft hb]
+      · intro d4
+        refine gasLe_bind_id (by simp) ?_
+        intro d5
+        split <;> simp
+
+/-! ## The `Xinst` halt branch
+
+`Xinst` is the one family whose error branch resists the `resultGas` walk. A
+call-type instruction that short-circuits at depth 0 hands the stipend *back*,
+so the `Devm` in `(evm1.withGasLeft (evm1.gasLeft + gas)).push 0` carries more
+gas than the intermediate it came from; the bound is recoverable only from the
+charge equation the compositional device deliberately discards.
+
+What the driver actually needs is weaker than a gas bound. `handleError`
+manufactures a live-gas frame result out of exactly one tag, `"Revert"`, and
+every error an `Xinst` can raise is a stack or gas fault — `"Revert"` is
+produced at a single site in the whole interpreter, `Linst.run .rev`. So the
+`Xinst` family discharges the settlement obligation by tag rather than by
+arithmetic, which is a walk with no arithmetic in it at all. -/
+
+/-- No branch of this outcome reports the `"Revert"` tag. -/
+def NoRevertOut {α : Type} : Except (String × Devm) α → Prop
+  | .error p => p.1 ≠ "Revert"
+  | .ok _ => True
+
+/-- The `Mach`-level analogue, for the footprint-lifted primitives. -/
+def MachNoRevert {α : Type} : Footprint.Outcome Mach α → Prop
+  | .error q => q.1 ≠ "Revert"
+  | .ok _ => True
+
+theorem noRevert_ok {α : Type} (a : α) : NoRevertOut (.ok a) := trivial
+
+theorem noRevert_bind {α β : Type} {e : Except (String × Devm) α}
+    {f : α → Except (String × Devm) β}
+    (he : NoRevertOut e) (hf : ∀ a, NoRevertOut (f a)) :
+    NoRevertOut (e >>= f) := by
+  cases e with
+  | error q => exact he
+  | ok a => exact hf a
+
+theorem liftMach_noRevert {α : Type} {core : Mach → Footprint.Outcome Mach α}
+    {devm : Devm} (h : MachNoRevert (core devm.mach)) :
+    NoRevertOut (liftMach core devm) := by
+  unfold liftMach Footprint.liftOutcome
+  rcases hc : core devm.mach with ⟨err, m⟩ | ⟨v, m⟩ <;> rw [hc] at h
+  · exact h
+  · trivial
+
+theorem liftMachExecution_noRevert {core : Mach → Footprint.Outcome Mach Unit}
+    {devm : Devm} (h : MachNoRevert (core devm.mach)) :
+    NoRevertOut (liftMachExecution core devm) := by
+  unfold liftMachExecution Footprint.toExecution liftMach Footprint.liftOutcome
+  rcases hc : core devm.mach with ⟨err, m⟩ | ⟨v, m⟩ <;> rw [hc] at h
+  · exact h
+  · trivial
+
+theorem Mach.pop_noRevert (mach : Mach) : MachNoRevert mach.pop := by
+  unfold Mach.pop
+  split
+  · show ("StackUnderflowError" : String) ≠ "Revert"
+    decide
+  · trivial
+
+theorem Mach.popToNat_noRevert (mach : Mach) : MachNoRevert mach.popToNat := by
+  have h := Mach.pop_noRevert mach
+  unfold Mach.popToNat
+  rcases hp : mach.pop with ⟨e⟩ | ⟨x, m⟩ <;> rw [hp] at h
+  · exact h
+  · trivial
+
+theorem Mach.popToAdr_noRevert (mach : Mach) : MachNoRevert mach.popToAdr := by
+  have h := Mach.pop_noRevert mach
+  unfold Mach.popToAdr
+  rcases hp : mach.pop with ⟨e⟩ | ⟨x, m⟩ <;> rw [hp] at h
+  · exact h
+  · trivial
+
+theorem Mach.push_noRevert (x : B256) (mach : Mach) :
+    MachNoRevert (Mach.push x mach) := by
+  unfold Mach.push
+  split
+  · trivial
+  · show ("StackOverflowError" : String) ≠ "Revert"
+    decide
+
+theorem Mach.chargeGas_noRevert (c : Nat) (mach : Mach) :
+    MachNoRevert (Mach.chargeGas c mach) := by
+  unfold Mach.chargeGas
+  split
+  · show ("OutOfGasError" : String) ≠ "Revert"
+    decide
+  · trivial
+
+theorem Devm.pop_noRevert (devm : Devm) : NoRevertOut devm.pop :=
+  liftMach_noRevert (Mach.pop_noRevert devm.mach)
+
+theorem Devm.popToNat_noRevert (devm : Devm) : NoRevertOut devm.popToNat :=
+  liftMach_noRevert (Mach.popToNat_noRevert devm.mach)
+
+theorem Devm.popToAdr_noRevert (devm : Devm) : NoRevertOut devm.popToAdr :=
+  liftMach_noRevert (Mach.popToAdr_noRevert devm.mach)
+
+theorem Devm.push_noRevert (x : B256) (devm : Devm) : NoRevertOut (devm.push x) :=
+  liftMachExecution_noRevert (Mach.push_noRevert x devm.mach)
+
+theorem chargeGas_noRevert (c : Nat) (devm : Devm) : NoRevertOut (chargeGas c devm) :=
+  liftMachExecution_noRevert (Mach.chargeGas_noRevert c devm.mach)
+
+theorem assert_noRevert {p : Prop} [Decidable p] {msg : String} {devm : Devm}
+    (h : msg ≠ "Revert") :
+    NoRevertOut (Except.assert p (⟨msg, devm⟩ : String × Devm)) := by
+  unfold Except.assert
+  split
+  · trivial
+  · exact h
+
+theorem assertDynamic_noRevert (sevm : Sevm) (devm : Devm) :
+    NoRevertOut (assertDynamic sevm devm) := by
+  unfold assertDynamic
+  exact assert_noRevert (by decide)
+
+/-- The `XStep` form of the tag obligation. A spawn carries no outcome of its
+own, so it owes nothing. -/
+def XStep.NoRevert : XStep → Prop
+  | .done ex => NoRevertOut ex
+  | .spawn _ _ => True
+
+/-- The obligation on an `XStep`-valued body, before `XStep.ofExcept` collapses
+its error branch into a `.done`. -/
+def xstepNoRevert : Except (String × Devm) XStep → Prop
+  | .error p => p.1 ≠ "Revert"
+  | .ok step => step.NoRevert
+
+theorem XStep.ofExcept_noRevert {x : Except (String × Devm) XStep}
+    (h : xstepNoRevert x) : (XStep.ofExcept x).NoRevert := by
+  cases x with
+  | error p => exact h
+  | ok step => exact h
+
+theorem xstepNoRevert_bind {α : Type} {e : Except (String × Devm) α}
+    {f : α → Except (String × Devm) XStep}
+    (he : NoRevertOut e) (hf : ∀ a, xstepNoRevert (f a)) :
+    xstepNoRevert (e >>= f) := by
+  cases e with
+  | error p => exact he
+  | ok a => exact hf a
+
+theorem genericCall.step_noRevert
+    (sevm : Sevm) (devm : Devm) (gas : Nat) (value : B256)
+    (caller target codeAddress : Adr) (shouldTransferValue isStaticcall : Bool)
+    (inputIndex inputSize outputIndex outputSize : Nat)
+    (code : ByteArray) (disablePrecompiles : Bool) :
+    (genericCall.step sevm devm gas value caller target codeAddress
+      shouldTransferValue isStaticcall inputIndex inputSize outputIndex
+      outputSize code disablePrecompiles).NoRevert := by
+  unfold genericCall.step
+  split
+  · exact XStep.ofExcept_noRevert
+      (xstepNoRevert_bind (Devm.push_noRevert _ _) (fun _ => trivial))
+  · trivial
+
+theorem genericCreate.step_noRevert
+    (sevm : Sevm) (devm : Devm) (endowment : B256) (newAddress : Adr)
+    (memoryIndex memorySize : Nat) :
+    (genericCreate.step sevm devm endowment newAddress memoryIndex
+      memorySize).NoRevert := by
+  unfold genericCreate.step
+  apply XStep.ofExcept_noRevert
+  refine xstepNoRevert_bind (assert_noRevert (by decide)) ?_
+  intro _
+  refine xstepNoRevert_bind (assertDynamic_noRevert _ _) ?_
+  intro _
+  dsimp only
+  split
+  · exact xstepNoRevert_bind (Devm.push_noRevert _ _) (fun _ => trivial)
+  · split
+    · exact xstepNoRevert_bind (Devm.push_noRevert _ _) (fun _ => trivial)
+    · trivial
+
+theorem Xinst.step_noRevert (sevm : Sevm) (devm : Devm) (x : Xinst) :
+    (Xinst.step sevm devm x).NoRevert := by
+  cases x <;> simp only [Xinst.step] <;> apply XStep.ofExcept_noRevert
+  case create =>
+    refine xstepNoRevert_bind (Devm.pop_noRevert _) ?_
+    rintro ⟨endowment, d1⟩
+    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
+    rintro ⟨memoryIndex, d2⟩
+    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
+    rintro ⟨memorySize, d3⟩
+    refine xstepNoRevert_bind (chargeGas_noRevert _ _) ?_
+    intro d4
+    exact genericCreate.step_noRevert _ _ _ _ _ _
+  case create2 =>
+    refine xstepNoRevert_bind (Devm.pop_noRevert _) ?_
+    rintro ⟨endowment, d1⟩
+    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
+    rintro ⟨memoryIndex, d2⟩
+    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
+    rintro ⟨memorySize, d3⟩
+    refine xstepNoRevert_bind (Devm.pop_noRevert _) ?_
+    rintro ⟨salt, d4⟩
+    refine xstepNoRevert_bind (chargeGas_noRevert _ _) ?_
+    intro d5
+    exact genericCreate.step_noRevert _ _ _ _ _ _
+  case call =>
+    refine xstepNoRevert_bind (Devm.pop_noRevert _) ?_
+    rintro ⟨gas, d1⟩
+    refine xstepNoRevert_bind (Devm.popToAdr_noRevert _) ?_
+    rintro ⟨callee, d2⟩
+    refine xstepNoRevert_bind (Devm.pop_noRevert _) ?_
+    rintro ⟨value, d3⟩
+    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
+    rintro ⟨inputIndex, d4⟩
+    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
+    rintro ⟨inputSize, d5⟩
+    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
+    rintro ⟨outputIndex, d6⟩
+    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
+    rintro ⟨outputSize, d7⟩
+    refine xstepNoRevert_bind (chargeGas_noRevert _ _) ?_
+    intro d8
+    refine xstepNoRevert_bind (assert_noRevert (by decide)) ?_
+    intro _
+    split
+    · exact xstepNoRevert_bind (Devm.push_noRevert _ _) (fun _ => trivial)
+    · exact genericCall.step_noRevert _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+  case callcode =>
+    refine xstepNoRevert_bind (Devm.pop_noRevert _) ?_
+    rintro ⟨gas, d1⟩
+    refine xstepNoRevert_bind (Devm.popToAdr_noRevert _) ?_
+    rintro ⟨codeAddress, d2⟩
+    refine xstepNoRevert_bind (Devm.pop_noRevert _) ?_
+    rintro ⟨value, d3⟩
+    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
+    rintro ⟨inputIndex, d4⟩
+    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
+    rintro ⟨inputSize, d5⟩
+    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
+    rintro ⟨outputIndex, d6⟩
+    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
+    rintro ⟨outputSize, d7⟩
+    refine xstepNoRevert_bind (chargeGas_noRevert _ _) ?_
+    intro d8
+    split
+    · exact xstepNoRevert_bind (Devm.push_noRevert _ _) (fun _ => trivial)
+    · exact genericCall.step_noRevert _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+  case delcall =>
+    refine xstepNoRevert_bind (Devm.pop_noRevert _) ?_
+    rintro ⟨gas, d1⟩
+    refine xstepNoRevert_bind (Devm.popToAdr_noRevert _) ?_
+    rintro ⟨codeAddress, d2⟩
+    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
+    rintro ⟨inputIndex, d3⟩
+    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
+    rintro ⟨inputSize, d4⟩
+    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
+    rintro ⟨outputIndex, d5⟩
+    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
+    rintro ⟨outputSize, d6⟩
+    refine xstepNoRevert_bind (chargeGas_noRevert _ _) ?_
+    intro d7
+    exact genericCall.step_noRevert _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+  case statcall =>
+    refine xstepNoRevert_bind (Devm.pop_noRevert _) ?_
+    rintro ⟨gas, d1⟩
+    refine xstepNoRevert_bind (Devm.popToAdr_noRevert _) ?_
+    rintro ⟨target, d2⟩
+    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
+    rintro ⟨inputIndex, d3⟩
+    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
+    rintro ⟨inputSize, d4⟩
+    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
+    rintro ⟨outputIndex, d5⟩
+    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
+    rintro ⟨outputSize, d6⟩
+    refine xstepNoRevert_bind (chargeGas_noRevert _ _) ?_
+    intro d7
+    exact genericCall.step_noRevert _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
