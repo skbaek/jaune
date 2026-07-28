@@ -1,5 +1,16 @@
 # Step 2 sufficiency handoff — 2026-07-28
 
+> **SUPERSEDED — Step 2 is complete.** Everything listed below as remaining was
+> finished in commits `6215a8f` and `17556bf`. See
+> `scripts/report-sufficient-step2.md` for the outcome, the corpus census, the
+> gate verdicts, and the Step-3 handoff. This note is kept only as a record of
+> the session boundary; do not work from its "Remaining Step 2 work" list.
+>
+> Two of its statements no longer apply in the current environment: the
+> `~/elanc/.work-sufficient/Sufficiency.lean` mirror is unnecessary
+> (`~/elevm` is directly writable), and the plan's `.ok`-only monotonicity
+> statement turned out to be too weak — see the report's *Unexpected findings*.
+
 ## Request and governing plan
 
 - User request: perform **Step 2** from `/Users/agent/plans/sufficient.md`.
