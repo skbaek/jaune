@@ -1145,3 +1145,331 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
           (sevm.code.sliceD codeStart size (Linst.toB8 .stop)))
       (by intros; unfold gVerylow; omega)
       (by intros; simp only [Devm.memWrite_gasLeft]) h
+
+theorem Jinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
+    (j : Jinst) {pc' : Nat} {devm' : Devm}
+    (h : Jinst.runCore pc devm sevm j = .ok (pc', devm')) :
+    devm'.gasLeft < devm.gasLeft := by
+  cases j
+  case jumpdest =>
+    exact Jinst.runCore_jumpdest_gasLt h
+  case jump =>
+    simp only [Jinst.runCore] at h
+    obtain ⟨⟨destination, d1⟩, h1, h⟩ := Except.bind_eq_ok h
+    obtain ⟨d2, h2, h⟩ := Except.bind_eq_ok h
+    obtain ⟨_, _hassert, h3⟩ := Except.bind_eq_ok h
+    simp only [Except.ok.injEq, Prod.mk.injEq] at h3
+    have e1 := Devm.pop_gasLeft h1
+    have e2 := chargeGas_gasLeft h2
+    dsimp only at e1 e2
+    rw [← h3.2]
+    unfold gMid at e2
+    omega
+  case jumpi =>
+    simp only [Jinst.runCore] at h
+    obtain ⟨⟨destination, d1⟩, h1, h⟩ := Except.bind_eq_ok h
+    obtain ⟨⟨condition, d2⟩, h2, h⟩ := Except.bind_eq_ok h
+    obtain ⟨d3, h3, h⟩ := Except.bind_eq_ok h
+    have e1 := Devm.pop_gasLeft h1
+    have e2 := Devm.pop_gasLeft h2
+    have e3 := chargeGas_gasLeft h3
+    dsimp only at h e1 e2 e3
+    split at h
+    · obtain ⟨nextPc, _hpc, h4⟩ := Except.bind_eq_ok h
+      simp only [Except.ok.injEq, Prod.mk.injEq] at h4
+      rw [← h4.2]
+      unfold gHigh at e3
+      omega
+    · obtain ⟨_, _hassert, h⟩ := Except.bind_eq_ok h
+      obtain ⟨nextPc, _hpc, h4⟩ := Except.bind_eq_ok h
+      simp only [Except.ok.injEq, Prod.mk.injEq] at h4
+      rw [← h4.2]
+      unfold gHigh at e3
+      omega
+
+theorem except64th_le (n : Nat) : except64th n ≤ n := by
+  unfold except64th
+  omega
+
+@[simp] theorem processCreateMessage.msg_gas (msg : Msg) :
+    (processCreateMessage.msg msg).gas = msg.gas := rfl
+
+theorem genericCreate.step_gasDecreasing
+    (sevm : Sevm) (devm : Devm) (endowment : B256)
+    (newAddress : Adr) (memoryIndex memorySize : Nat) {n : Nat}
+    (hn : devm.gasLeft < n) :
+    XStep.GasDecreasing n
+      (genericCreate.step sevm devm endowment newAddress memoryIndex memorySize) := by
+  unfold genericCreate.step
+  apply XStep.ofExcept_gasDecreasing
+  intro step hstep
+  obtain ⟨_, _hsize, hstep⟩ := Except.bind_eq_ok hstep
+  dsimp only at hstep
+  obtain ⟨_, _hdynamic, hstep⟩ := Except.bind_eq_ok hstep
+  split at hstep
+  · obtain ⟨d1, hpush, hstep⟩ := Except.bind_eq_ok hstep
+    simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
+    rw [← hstep]
+    intro devm' hd
+    simp only [Except.ok.injEq] at hd
+    rw [← hd, Devm.push_gasLeft hpush, Devm.withGasLeft_gasLeft,
+      Devm.withReturnData_gasLeft, Devm.withGasLeft_gasLeft]
+    have hle := except64th_le devm.gasLeft
+    omega
+  · split at hstep
+    · obtain ⟨d1, hpush, hstep⟩ := Except.bind_eq_ok hstep
+      simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
+      rw [← hstep]
+      intro devm' hd
+      simp only [Except.ok.injEq] at hd
+      rw [← hd, Devm.push_gasLeft hpush, addAccessedAddress_gasLeft,
+        Devm.incrNonce_gasLeft, Devm.withReturnData_gasLeft,
+        Devm.withGasLeft_gasLeft]
+      omega
+    · simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
+      rw [← hstep]
+      show (Frame.ofCreate _).inner.gas + Resume.parentGas _ < n
+      simp only [Frame.ofCreate, processCreateMessage.msg_gas, createMsg,
+        Resume.parentGas, addAccessedAddress_gasLeft,
+        Devm.incrNonce_gasLeft, Devm.withReturnData_gasLeft,
+        Devm.withGasLeft_gasLeft]
+      have hle := except64th_le devm.gasLeft
+      omega
+
+theorem Xinst.step_create_gasDecreasing (sevm : Sevm) (devm : Devm) :
+    (Xinst.step sevm devm .create).GasDecreasing devm.gasLeft := by
+  simp only [Xinst.step]
+  apply XStep.ofExcept_gasDecreasing
+  intro step hstep
+  obtain ⟨⟨endowment, d1⟩, h1, hstep⟩ := Except.bind_eq_ok hstep
+  obtain ⟨⟨memoryIndex, d2⟩, h2, hstep⟩ := Except.bind_eq_ok hstep
+  obtain ⟨⟨memorySize, d3⟩, h3, hstep⟩ := Except.bind_eq_ok hstep
+  obtain ⟨d4, h4, hstep⟩ := Except.bind_eq_ok hstep
+  simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
+  rw [← hstep]
+  apply genericCreate.step_gasDecreasing
+  have e1 := Devm.pop_gasLeft h1
+  have e2 := Devm.popToNat_gasLeft h2
+  have e3 := Devm.popToNat_gasLeft h3
+  have e4 := chargeGas_gasLeft h4
+  dsimp only at e1 e2 e3 e4
+  rw [Devm.memExtends_gasLeft]
+  unfold gasCreate at e4
+  omega
+
+theorem Xinst.step_create2_gasDecreasing (sevm : Sevm) (devm : Devm) :
+    (Xinst.step sevm devm .create2).GasDecreasing devm.gasLeft := by
+  simp only [Xinst.step]
+  apply XStep.ofExcept_gasDecreasing
+  intro step hstep
+  obtain ⟨⟨endowment, d1⟩, h1, hstep⟩ := Except.bind_eq_ok hstep
+  obtain ⟨⟨memoryIndex, d2⟩, h2, hstep⟩ := Except.bind_eq_ok hstep
+  obtain ⟨⟨memorySize, d3⟩, h3, hstep⟩ := Except.bind_eq_ok hstep
+  obtain ⟨⟨salt, d4⟩, h4, hstep⟩ := Except.bind_eq_ok hstep
+  obtain ⟨d5, h5, hstep⟩ := Except.bind_eq_ok hstep
+  simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
+  rw [← hstep]
+  apply genericCreate.step_gasDecreasing
+  have e1 := Devm.pop_gasLeft h1
+  have e2 := Devm.popToNat_gasLeft h2
+  have e3 := Devm.popToNat_gasLeft h3
+  have e4 := Devm.pop_gasLeft h4
+  have e5 := chargeGas_gasLeft h5
+  dsimp only at e1 e2 e3 e4 e5
+  rw [Devm.memExtends_gasLeft]
+  unfold gasCreate at e5
+  omega
+
+theorem Xinst.step_callcode_gasDecreasing (sevm : Sevm) (devm : Devm) :
+    (Xinst.step sevm devm .callcode).GasDecreasing devm.gasLeft := by
+  simp only [Xinst.step]
+  apply XStep.ofExcept_gasDecreasing
+  intro step hstep
+  obtain ⟨⟨gas, d1⟩, p1, hstep⟩ := Except.bind_eq_ok hstep
+  obtain ⟨⟨codeAddress, d2⟩, p2, hstep⟩ := Except.bind_eq_ok hstep
+  obtain ⟨⟨value, d3⟩, p3, hstep⟩ := Except.bind_eq_ok hstep
+  obtain ⟨⟨inputIndex, d4⟩, p4, hstep⟩ := Except.bind_eq_ok hstep
+  obtain ⟨⟨inputSize, d5⟩, p5, hstep⟩ := Except.bind_eq_ok hstep
+  obtain ⟨⟨outputIndex, d6⟩, p6, hstep⟩ := Except.bind_eq_ok hstep
+  obtain ⟨⟨outputSize, d7⟩, p7, hstep⟩ := Except.bind_eq_ok hstep
+  dsimp only at hstep
+  have e1 := Devm.pop_gasLeft p1
+  have e2 := Devm.popToAdr_gasLeft p2
+  have e3 := Devm.pop_gasLeft p3
+  have e4 := Devm.popToNat_gasLeft p4
+  have e5 := Devm.popToNat_gasLeft p5
+  have e6 := Devm.popToNat_gasLeft p6
+  have e7 := Devm.popToNat_gasLeft p7
+  dsimp only at e2 e3 e4 e5 e6 e7
+  have eA :
+      (accessDelegation (addAccessedAddress d7 codeAddress) codeAddress).2.2.2.2.gasLeft
+        = devm.gasLeft := by
+    rw [accessDelegation_gasLeft, addAccessedAddress_gasLeft]
+    omega
+  have hstip :
+      (if value.toNat = 0 then 0 else gCallStipend) <
+        ((access_cost codeAddress d7.accessedAddresses +
+            (accessDelegation (addAccessedAddress d7 codeAddress)
+              codeAddress).2.2.2.1) +
+          if value = 0 then 0 else gasCallValue) +
+        d7.extCost [(inputIndex, inputSize), (outputIndex, outputSize)] := by
+    have hac := gasWarmAccess_le_access_cost codeAddress d7.accessedAddresses
+    by_cases hv : value = 0
+    · have : value.toNat = 0 := by rw [hv]; rfl
+      rw [if_pos this]
+      unfold gasWarmAccess at hac
+      omega
+    · rw [if_neg hv]
+      unfold gCallStipend gasCallValue at *
+      split <;> omega
+  obtain ⟨d8, pcharge, hstep⟩ := Except.bind_eq_ok hstep
+  have key := call_charge_stipend_lt (devm := devm) hstip eA pcharge
+  split at hstep
+  · obtain ⟨d9, ppush, hstep⟩ := Except.bind_eq_ok hstep
+    simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
+    rw [← hstep]
+    intro devm' hd
+    simp only [Except.ok.injEq] at hd
+    rw [← hd, Devm.withReturnData_gasLeft, Devm.withGasLeft_gasLeft,
+      Devm.push_gasLeft ppush, Devm.memExtends_gasLeft]
+    exact key
+  · simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
+    rw [← hstep]
+    apply genericCall.step_gasDecreasing
+    rw [Devm.memExtends_gasLeft]
+    exact key
+
+theorem Xinst.step_delcall_gasDecreasing (sevm : Sevm) (devm : Devm) :
+    (Xinst.step sevm devm .delcall).GasDecreasing devm.gasLeft := by
+  simp only [Xinst.step]
+  apply XStep.ofExcept_gasDecreasing
+  intro step hstep
+  obtain ⟨⟨gas, d1⟩, p1, hstep⟩ := Except.bind_eq_ok hstep
+  obtain ⟨⟨codeAddress, d2⟩, p2, hstep⟩ := Except.bind_eq_ok hstep
+  obtain ⟨⟨inputIndex, d3⟩, p3, hstep⟩ := Except.bind_eq_ok hstep
+  obtain ⟨⟨inputSize, d4⟩, p4, hstep⟩ := Except.bind_eq_ok hstep
+  obtain ⟨⟨outputIndex, d5⟩, p5, hstep⟩ := Except.bind_eq_ok hstep
+  obtain ⟨⟨outputSize, d6⟩, p6, hstep⟩ := Except.bind_eq_ok hstep
+  dsimp only at hstep
+  have e1 := Devm.pop_gasLeft p1
+  have e2 := Devm.popToAdr_gasLeft p2
+  have e3 := Devm.popToNat_gasLeft p3
+  have e4 := Devm.popToNat_gasLeft p4
+  have e5 := Devm.popToNat_gasLeft p5
+  have e6 := Devm.popToNat_gasLeft p6
+  dsimp only at e2 e3 e4 e5 e6
+  have eA :
+      (accessDelegation (addAccessedAddress d6 codeAddress) codeAddress).2.2.2.2.gasLeft
+        = devm.gasLeft := by
+    rw [accessDelegation_gasLeft, addAccessedAddress_gasLeft]
+    omega
+  have hstip :
+      (if (0 : Nat) = 0 then 0 else gCallStipend) <
+        (access_cost codeAddress d6.accessedAddresses +
+          (accessDelegation (addAccessedAddress d6 codeAddress)
+            codeAddress).2.2.2.1) +
+        d6.extCost [(inputIndex, inputSize), (outputIndex, outputSize)] := by
+    simp only [if_pos]
+    have hac := access_cost_pos codeAddress d6.accessedAddresses
+    omega
+  obtain ⟨d7, pcharge, hstep⟩ := Except.bind_eq_ok hstep
+  have key := call_charge_stipend_lt (devm := devm) hstip eA pcharge
+  simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
+  rw [← hstep]
+  apply genericCall.step_gasDecreasing
+  rw [Devm.memExtends_gasLeft]
+  exact key
+
+theorem Xinst.step_statcall_gasDecreasing (sevm : Sevm) (devm : Devm) :
+    (Xinst.step sevm devm .statcall).GasDecreasing devm.gasLeft := by
+  simp only [Xinst.step]
+  apply XStep.ofExcept_gasDecreasing
+  intro step hstep
+  obtain ⟨⟨gas, d1⟩, p1, hstep⟩ := Except.bind_eq_ok hstep
+  obtain ⟨⟨target, d2⟩, p2, hstep⟩ := Except.bind_eq_ok hstep
+  obtain ⟨⟨inputIndex, d3⟩, p3, hstep⟩ := Except.bind_eq_ok hstep
+  obtain ⟨⟨inputSize, d4⟩, p4, hstep⟩ := Except.bind_eq_ok hstep
+  obtain ⟨⟨outputIndex, d5⟩, p5, hstep⟩ := Except.bind_eq_ok hstep
+  obtain ⟨⟨outputSize, d6⟩, p6, hstep⟩ := Except.bind_eq_ok hstep
+  dsimp only at hstep
+  have e1 := Devm.pop_gasLeft p1
+  have e2 := Devm.popToAdr_gasLeft p2
+  have e3 := Devm.popToNat_gasLeft p3
+  have e4 := Devm.popToNat_gasLeft p4
+  have e5 := Devm.popToNat_gasLeft p5
+  have e6 := Devm.popToNat_gasLeft p6
+  dsimp only at e2 e3 e4 e5 e6
+  have eA :
+      (accessDelegation (addAccessedAddress d6 target) target).2.2.2.2.gasLeft
+        = devm.gasLeft := by
+    rw [accessDelegation_gasLeft, addAccessedAddress_gasLeft]
+    omega
+  have hstip :
+      (if (0 : Nat) = 0 then 0 else gCallStipend) <
+        (access_cost target d6.accessedAddresses +
+          (accessDelegation (addAccessedAddress d6 target) target).2.2.2.1) +
+        d6.extCost [(inputIndex, inputSize), (outputIndex, outputSize)] := by
+    simp only [if_pos]
+    have hac := access_cost_pos target d6.accessedAddresses
+    omega
+  obtain ⟨d7, pcharge, hstep⟩ := Except.bind_eq_ok hstep
+  have key := call_charge_stipend_lt (devm := devm) hstip eA pcharge
+  simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
+  rw [← hstep]
+  apply genericCall.step_gasDecreasing
+  rw [Devm.memExtends_gasLeft]
+  exact key
+
+theorem Xinst.step_gasDecreasing (sevm : Sevm) (devm : Devm) (x : Xinst) :
+    (Xinst.step sevm devm x).GasDecreasing devm.gasLeft := by
+  cases x
+  case create => exact Xinst.step_create_gasDecreasing sevm devm
+  case create2 => exact Xinst.step_create2_gasDecreasing sevm devm
+  case call => exact Xinst.step_call_gasDecreasing sevm devm
+  case callcode => exact Xinst.step_callcode_gasDecreasing sevm devm
+  case delcall => exact Xinst.step_delcall_gasDecreasing sevm devm
+  case statcall => exact Xinst.step_statcall_gasDecreasing sevm devm
+
+theorem executePrecomp_gasLe (evm : Evm) (adr : Adr) :
+    (executePrecomp evm adr).gasLeft ≤ evm.dyna.gasLeft := by
+  unfold executePrecomp applyPrecompResult
+  cases precompileRun evm adr with
+  | error msg cost =>
+    simp only [Execution.gasLeft_error, Devm.withGasLeft_gasLeft]
+    omega
+  | ok cost output =>
+    simp only [Execution.gasLeft_ok]
+    simp only [Devm.withOutput, Devm.setMeta_gasLeft,
+      Devm.withGasLeft_gasLeft]
+    omega
+
+theorem executeCode.handleError_ok_gasLe {raw : Execution} {devm : Devm}
+    (h : executeCode.handleError raw = .ok devm) :
+    devm.gasLeft ≤ raw.gasLeft := by
+  cases raw with
+  | ok d =>
+    simp only [executeCode.handleError, Except.ok.injEq] at h
+    rw [← h]
+    simp only [Execution.gasLeft_ok]
+    omega
+  | error e =>
+    simp only [executeCode.handleError] at h
+    split at h
+    · simp only [Except.ok.injEq] at h
+      rw [← h, Devm.setMeta_gasLeft, Devm.withGasLeft_gasLeft]
+      omega
+    · split at h
+      · simp only [Except.ok.injEq] at h
+        rw [← h, Devm.withError_gasLeft]
+        simp only [Execution.gasLeft_error]
+        omega
+      · nomatch h
+
+theorem chargeGas_result_gasLe (cost : Nat) (devm : Devm) :
+    (chargeGas cost devm).gasLeft ≤ devm.gasLeft := by
+  rw [chargeGas_def]
+  by_cases hc : cost ≤ devm.gasLeft
+  · simp only [safeSub, hc, if_pos, Execution.gasLeft_ok,
+      Devm.setMach_gasLeft]
+    omega
+  · simp [safeSub, hc, Execution.gasLeft]
