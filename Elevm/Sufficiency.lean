@@ -2671,19 +2671,19 @@ not hand its parent back more gas than it was given. -/
 /-- Driver monotonicity. Stated over the settlement obligation rather than over
 raw gas, because that is the only thing a parent can extract from a child's
 result and it is what both routes of the halting corpus establish. -/
-theorem exec_settledGasLe : ∀ (lim : Nat) (evm : Evm) {raw : Execution},
-    (exec evm lim).run = some raw → raw.SettledGasLe evm.dyna.gasLeft := by
+theorem execCore_settledGasLe : ∀ (lim : Nat) (evm : Evm) {raw : Execution},
+    (execCore evm lim).run = some raw → raw.SettledGasLe evm.dyna.gasLeft := by
   intro lim
   induction lim with
   | zero =>
     intro evm raw h
-    rw [exec] at h
+    rw [execCore] at h
     simp only [Fueled.exhausted_run] at h
     nomatch h
   | succ lim ih =>
     intro evm raw h
     have hstep := Evm.step_gasBound evm
-    rw [exec] at h
+    rw [execCore] at h
     rcases hs : evm.step with ⟨ex⟩ | ⟨pc, devm⟩ | ⟨frame, rsm, pc⟩
     · rw [hs] at h hstep
       simp only [Fueled.ofExcept_run, Option.some.injEq] at h
@@ -2713,7 +2713,7 @@ theorem exec_settledGasLe : ∀ (lim : Nat) (evm : Evm) {raw : Execution},
           exact (ih _ h).mono (show d1.gasLeft ≤ evm.dyna.gasLeft by omega)
       · rw [he] at h
         dsimp only at h
-        rcases hc : (exec child lim).run with _ | raw'
+        rcases hc : (execCore child lim).run with _ | raw'
         · rw [hc] at h
           simp only [Fueled.exhausted_run] at h
           nomatch h
@@ -2738,8 +2738,8 @@ theorem exec_settledGasLe : ∀ (lim : Nat) (evm : Evm) {raw : Execution},
 /-- **Sufficiency.** Fuel strictly greater than the frame's remaining gas always
 carries the driver to a result. The base case is vacuous: the hypothesis forces
 `lim > 0`. -/
-theorem exec_run_isSome : ∀ (lim : Nat) (evm : Evm),
-    evm.dyna.gasLeft < lim → ∃ raw : Execution, (exec evm lim).run = some raw := by
+theorem execCore_run_isSome : ∀ (lim : Nat) (evm : Evm),
+    evm.dyna.gasLeft < lim → ∃ raw : Execution, (execCore evm lim).run = some raw := by
   intro lim
   induction lim with
   | zero =>
@@ -2748,7 +2748,7 @@ theorem exec_run_isSome : ∀ (lim : Nat) (evm : Evm),
   | succ lim ih =>
     intro evm h
     have hstep := Evm.step_gasBound evm
-    rw [exec]
+    rw [execCore]
     rcases hs : evm.step with ⟨ex⟩ | ⟨pc, devm⟩ | ⟨frame, rsm, pc⟩ <;>
       rw [hs] at hstep <;> simp only [Step.GasBound] at hstep <;> dsimp only
     · exact ⟨ex, rfl⟩
@@ -2769,23 +2769,23 @@ theorem exec_run_isSome : ∀ (lim : Nat) (evm : Evm),
         rcases hrun : rsm.run (frame.settle raw') with ⟨e⟩ | d1 <;> dsimp only
         · exact ⟨.error e, rfl⟩
         · obtain ⟨d0, hd0, hgas2⟩ := Resume.run_ok_gasLeft hrun
-          have hsettled := exec_settledGasLe lim child hraw'
+          have hsettled := execCore_settledGasLe lim child hraw'
           rw [hgas] at hsettled
           have hle : d0.gasLeft ≤ frame.inner.gas := Frame.settle_gasLe hsettled hd0
           have hlt : d1.gasLeft < lim := by omega
           exact ih _ hlt
 
-theorem exec_ne_exhausted (evm : Evm) (lim : Nat) (h : evm.dyna.gasLeft < lim) :
-    exec evm lim ≠ Fueled.exhausted := by
-  obtain ⟨raw, hraw⟩ := exec_run_isSome lim evm h
+theorem execCore_ne_exhausted (evm : Evm) (lim : Nat) (h : evm.dyna.gasLeft < lim) :
+    execCore evm lim ≠ Fueled.exhausted := by
+  obtain ⟨raw, hraw⟩ := execCore_run_isSome lim evm h
   intro hcon
   rw [hcon] at hraw
   simp only [Fueled.exhausted_run] at hraw
   nomatch hraw
 
-/-- The form Step 3 consumes. The additive constant is **1**: seeding the driver
-with `gasLeft + 1` is always enough, so the total `exec` can discharge the
-`Option` with this witness. -/
-theorem exec_succ_ne_exhausted (evm : Evm) :
-    exec evm (evm.dyna.gasLeft + 1) ≠ Fueled.exhausted :=
-  exec_ne_exhausted evm (evm.dyna.gasLeft + 1) (Nat.lt_succ_self _)
+/-- The form the total `exec` consumes. The additive constant is **1**: seeding
+the driver with `gasLeft + 1` is always enough, so the total wrapper can
+discharge the `Option` with this witness. -/
+theorem execCore_succ_ne_exhausted (evm : Evm) :
+    execCore evm (evm.dyna.gasLeft + 1) ≠ Fueled.exhausted :=
+  execCore_ne_exhausted evm (evm.dyna.gasLeft + 1) (Nat.lt_succ_self _)

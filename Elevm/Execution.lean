@@ -3798,7 +3798,7 @@ def callMsg
 
 /-!
 Flattened interpreter core.  All frame-local definitions below are
-non-recursive and fuel-free; `exec` is the single fueled driver.
+non-recursive and fuel-free; `execCore` is the single fueled driver.
 -/
 
 /-- The message passed to a CREATE/CREATE2 child.  This named barrier is the
@@ -4168,39 +4168,43 @@ def Evm.step (evm : Evm) : Step :=
   | .some (.jump j) => Step.ofJump (j.run evm)
   | .some (.last l) => .halt (l.run evm.sta evm.dyna)
 
-/-- The single recursive interpreter driver. -/
-def exec : Evm → Nat → Fueled (String × Devm) Devm
+/-- The single recursive interpreter driver, structurally recursive on its fuel
+parameter and therefore obliged to report exhaustion as an outcome.
+
+`Elevm.Sufficiency` proves that fuel seeded from the frame's remaining gas is
+always enough, and wraps this function as the total `exec`. -/
+def execCore : Evm → Nat → Fueled (String × Devm) Devm
   | _, 0 => Fueled.exhausted
   | evm, lim + 1 =>
     match evm.step with
     | .halt ex => Fueled.ofExcept ex
-    | .cont pc devm => exec ⟨pc, evm.sta, devm⟩ lim
+    | .cont pc devm => execCore ⟨pc, evm.sta, devm⟩ lim
     | .spawn frame rsm pc =>
       match frame.enter with
       | .done r =>
         match rsm.run r with
         | .error e => Fueled.ofExcept (.error e)
-        | .ok devm => exec ⟨pc, evm.sta, devm⟩ lim
+        | .ok devm => execCore ⟨pc, evm.sta, devm⟩ lim
       | .run child =>
-        match (exec child lim).run with
+        match (execCore child lim).run with
         | .none => Fueled.exhausted
         | .some raw =>
           match rsm.run (frame.settle raw) with
           | .error e => Fueled.ofExcept (.error e)
-          | .ok devm => exec ⟨pc, evm.sta, devm⟩ lim
+          | .ok devm => execCore ⟨pc, evm.sta, devm⟩ lim
   termination_by _ lim => lim
 
 def runFrame (frame : Frame) (lim : Nat) :
     Fueled (String × State × AdrSet × Tra) Devm :=
   match frame.enter with
   | .done r => Fueled.ofExcept r
-  | .run evm => Fueled.mapResult frame.settle (exec evm lim)
+  | .run evm => Fueled.mapResult frame.settle (execCore evm lim)
 
 
 def executeCode (msg : Msg) (lim : Nat) :
     Fueled (String × State × AdrSet × Tra) Devm :=
   match executeCode.enter msg with
-  | .inl evm => Fueled.mapResult executeCode.handleError (exec evm lim)
+  | .inl evm => Fueled.mapResult executeCode.handleError (execCore evm lim)
   | .inr raw => Fueled.ofExcept (executeCode.handleError raw)
 
 def processMessage (msg : Msg) (lim : Nat) :
@@ -4234,7 +4238,7 @@ private def flattenGuardSummary
 -- Arithmetic loop: the driver spends one unit per instruction and exhausts.
 private def flattenGuardArithmeticLoop : Bool :=
   let msg := flattenGuardMsg [0x5B, 0x60, 0x00, 0x56] 1000 8
-  (exec (initEvm msg) 20).run.isNone
+  (execCore (initEvm msg) 20).run.isNone
 
 #guard flattenGuardArithmeticLoop
 
@@ -4308,7 +4312,7 @@ private def flattenGuardDepthZero : Bool :=
 -- A PUSH with zero gas halts through the frozen OutOfGasError channel.
 private def flattenGuardOog : Bool :=
   let msg := flattenGuardMsg [0x60, 0x01, 0x00] 0 8
-  match (exec (initEvm msg) 10).run with
+  match (execCore (initEvm msg) 10).run with
   | .some (.error ⟨err, _⟩) => err == "OutOfGasError"
   | _ => false
 
