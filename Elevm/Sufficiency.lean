@@ -684,3 +684,464 @@ theorem Jinst.runCore_jumpdest_gasLt {pc : Nat} {devm : Devm} {sevm : Sevm}
   unfold gJumpdest at e1
   rw [← h.2]
   omega
+
+/-! ## Strict-decrease corpus: reusable short walks -/
+
+theorem pushItem_gasLt {x : B256} {c : Nat} {devm devm' : Devm}
+    (hc : 0 < c) (h : pushItem x c devm = .ok devm') :
+    devm'.gasLeft < devm.gasLeft := by
+  have e := pushItem_gasLeft h
+  omega
+
+theorem applyUnary_gasLt {f : B256 → B256} {c : Nat} {devm devm' : Devm}
+    (hc : 0 < c) (h : applyUnary f c devm = .ok devm') :
+    devm'.gasLeft < devm.gasLeft := by
+  have e := applyUnary_gasLeft h
+  omega
+
+theorem applyBinary_gasLt {f : B256 → B256 → B256} {c : Nat}
+    {devm devm' : Devm} (hc : 0 < c)
+    (h : applyBinary f c devm = .ok devm') :
+    devm'.gasLeft < devm.gasLeft := by
+  have e := applyBinary_gasLeft h
+  omega
+
+theorem applyTernary_gasLt {f : B256 → B256 → B256 → B256} {c : Nat}
+    {devm devm' : Devm} (hc : 0 < c)
+    (h : applyTernary f c devm = .ok devm') :
+    devm'.gasLeft < devm.gasLeft := by
+  have e := applyTernary_gasLeft h
+  omega
+
+theorem popChargePush_gasLt (pre : Devm)
+    (cost : B256 → Devm → Nat) (value : B256 → Devm → B256)
+    (hpos : ∀ x d, 0 < cost x d) {post : Devm}
+    (h : (do
+      let ⟨x, d⟩ ← pre.pop
+      let d' ← chargeGas (cost x d) d
+      d'.push (value x d')) = .ok post) :
+    post.gasLeft < pre.gasLeft := by
+  obtain ⟨⟨x, d⟩, hp, h⟩ := Except.bind_eq_ok h
+  obtain ⟨d', hc, hpush⟩ := Except.bind_eq_ok h
+  have ep := Devm.pop_gasLeft hp
+  have ec := chargeGas_gasLeft hc
+  have eq := Devm.push_gasLeft hpush
+  have hcpos := hpos x d
+  omega
+
+theorem pop2ChargePush_gasLt (pre : Devm)
+    (cost : B256 → B256 → Devm → Nat)
+    (value : B256 → B256 → Devm → B256)
+    (hpos : ∀ x y d, 0 < cost x y d) {post : Devm}
+    (h : (do
+      let ⟨x, d⟩ ← pre.pop
+      let ⟨y, d⟩ ← d.pop
+      let d' ← chargeGas (cost x y d) d
+      d'.push (value x y d')) = .ok post) :
+    post.gasLeft < pre.gasLeft := by
+  obtain ⟨⟨x, d1⟩, h1, h⟩ := Except.bind_eq_ok h
+  obtain ⟨⟨y, d2⟩, h2, h⟩ := Except.bind_eq_ok h
+  obtain ⟨d3, h3, h4⟩ := Except.bind_eq_ok h
+  have e1 := Devm.pop_gasLeft h1
+  have e2 := Devm.pop_gasLeft h2
+  have e3 := chargeGas_gasLeft h3
+  have e4 := Devm.push_gasLeft h4
+  have hp := hpos x y d2
+  omega
+
+theorem popNat3ChargePure_gasLt (pre : Devm)
+    (cost : Nat → Nat → Nat → Devm → Nat)
+    (next : Nat → Nat → Nat → Devm → Devm)
+    (hpos : ∀ x y z d, 0 < cost x y z d) {post : Devm}
+    (hnext : ∀ x y z d, (next x y z d).gasLeft = d.gasLeft)
+    (h : (do
+      let ⟨x, d⟩ ← pre.popToNat
+      let ⟨y, d⟩ ← d.popToNat
+      let ⟨z, d⟩ ← d.popToNat
+      let d' ← chargeGas (cost x y z d) d
+      .ok (next x y z d')) = .ok post) :
+    post.gasLeft < pre.gasLeft := by
+  obtain ⟨⟨x, d1⟩, h1, h⟩ := Except.bind_eq_ok h
+  obtain ⟨⟨y, d2⟩, h2, h⟩ := Except.bind_eq_ok h
+  obtain ⟨⟨z, d3⟩, h3, h⟩ := Except.bind_eq_ok h
+  obtain ⟨d4, h4, h5⟩ := Except.bind_eq_ok h
+  simp only [Except.ok.injEq] at h5
+  have e1 := Devm.popToNat_gasLeft h1
+  have e2 := Devm.popToNat_gasLeft h2
+  have e3 := Devm.popToNat_gasLeft h3
+  have e4 := chargeGas_gasLeft h4
+  have ep := hpos x y z d3
+  rw [← h5, hnext]
+  omega
+
+theorem popNatPopChargePure_gasLt (pre : Devm)
+    (cost : Nat → B256 → Devm → Nat)
+    (next : Nat → B256 → Devm → Devm)
+    (hpos : ∀ x y d, 0 < cost x y d) {post : Devm}
+    (hnext : ∀ x y d, (next x y d).gasLeft = d.gasLeft)
+    (h : (do
+      let ⟨x, d⟩ ← pre.popToNat
+      let ⟨y, d⟩ ← d.pop
+      let d' ← chargeGas (cost x y d) d
+      .ok (next x y d')) = .ok post) :
+    post.gasLeft < pre.gasLeft := by
+  obtain ⟨⟨x, d1⟩, h1, h⟩ := Except.bind_eq_ok h
+  obtain ⟨⟨y, d2⟩, h2, h⟩ := Except.bind_eq_ok h
+  obtain ⟨d3, h3, h4⟩ := Except.bind_eq_ok h
+  simp only [Except.ok.injEq] at h4
+  have e1 := Devm.popToNat_gasLeft h1
+  have e2 := Devm.pop_gasLeft h2
+  have e3 := chargeGas_gasLeft h3
+  have ep := hpos x y d2
+  rw [← h4, hnext]
+  omega
+
+theorem Rinst.balance_runCore_gasLt {pc : Nat} {devm devm' : Devm}
+    {sevm : Sevm}
+    (h : Rinst.runCore pc devm sevm .balance = .ok devm') :
+    devm'.gasLeft < devm.gasLeft := by
+  simp only [Rinst.runCore] at h
+  obtain ⟨u, view', hcore, hout⟩ := liftMachMetaWorldExecution_ok h
+  unfold Rinst.balanceCore at hcore
+  cases hp : devm.mach.pop with
+  | error e => simp [hp] at hcore
+  | ok p =>
+    rcases p with ⟨x, mach1⟩
+    simp only [hp] at hcore
+    by_cases hw : x.toAdr ∈ devm.meta.accessedAddresses
+    · simp only [hw, if_pos] at hcore
+      cases hc : Mach.chargeGas gasWarmAccess mach1 with
+      | error e => simp [hc] at hcore
+      | ok p =>
+        rcases p with ⟨u2, mach2⟩
+        simp only [hc] at hcore
+        cases hpush : Mach.push (devm.world.state.get x.toAdr).bal mach2 with
+        | error e => simp [hpush] at hcore
+        | ok p =>
+          rcases p with ⟨u3, mach3⟩
+          simp only [hpush, Except.ok.injEq, Prod.mk.injEq] at hcore
+          have ep := Mach.pop_gasLeft hp
+          have ec := Mach.chargeGas_gasLeft hc
+          have eq := Mach.push_gasLeft hpush
+          have hv : view'.1.gasLeft = mach3.gasLeft :=
+            congrArg Mach.gasLeft (congrArg Prod.fst hcore.2).symm
+          rw [hout, hv]
+          change mach3.gasLeft < devm.mach.gasLeft
+          unfold gasWarmAccess at ec
+          omega
+    · simp only [hw, if_false] at hcore
+      cases hc : Mach.chargeGas gasColdAccountAccess mach1 with
+      | error e => simp [hc] at hcore
+      | ok p =>
+        rcases p with ⟨u2, mach2⟩
+        simp only [hc] at hcore
+        cases hpush : Mach.push (devm.world.state.get x.toAdr).bal mach2 with
+        | error e => simp [hpush] at hcore
+        | ok p =>
+          rcases p with ⟨u3, mach3⟩
+          simp only [hpush, Except.ok.injEq, Prod.mk.injEq] at hcore
+          have ep := Mach.pop_gasLeft hp
+          have ec := Mach.chargeGas_gasLeft hc
+          have eq := Mach.push_gasLeft hpush
+          have hv : view'.1.gasLeft = mach3.gasLeft :=
+            congrArg Mach.gasLeft (congrArg Prod.fst hcore.2).symm
+          rw [hout, hv]
+          change mach3.gasLeft < devm.mach.gasLeft
+          unfold gasColdAccountAccess at ec
+          omega
+
+theorem popAdrAccessChargePush_gasLt (pre : Devm)
+    (value : Adr → Devm → B256) {post : Devm}
+    (h : (do
+      let ⟨adr, d⟩ ← pre.popToAdr
+      let d' ←
+        if adr ∈ d.accessedAddresses then chargeGas gasWarmAccess d
+        else chargeGas gasColdAccountAccess (addAccessedAddress d adr)
+      d'.push (value adr d')) = .ok post) :
+    post.gasLeft < pre.gasLeft := by
+  obtain ⟨⟨adr, d1⟩, h1, h⟩ := Except.bind_eq_ok h
+  have e1 := Devm.popToAdr_gasLeft h1
+  dsimp only at h e1
+  split at h
+  · obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
+    have e2 := chargeGas_gasLeft h2
+    have e3 := Devm.push_gasLeft h3
+    unfold gasWarmAccess at e2
+    omega
+  · obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
+    have e2 := chargeGas_gasLeft h2
+    rw [addAccessedAddress_gasLeft] at e2
+    have e3 := Devm.push_gasLeft h3
+    unfold gasColdAccountAccess at e2
+    omega
+
+theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
+    (r : Rinst) {devm' : Devm}
+    (h : Rinst.runCore pc devm sevm r = .ok devm') :
+    devm'.gasLeft < devm.gasLeft := by
+  cases r <;> simp only [Rinst.runCore] at h
+  all_goals first
+    | exact applyBinary_gasLt (by decide) h
+    | exact applyUnary_gasLt (by decide) h
+    | exact applyTernary_gasLt (by decide) h
+    | exact pushItem_gasLt (by decide) h
+    | skip
+  case exp =>
+    exact pop2ChargePush_gasLt devm
+      (fun _ exponent _ => gExp + gExpbyte * exponent.bytecount)
+      (fun base exponent _ => B256.bexp base exponent)
+      (by intros; unfold gExp; omega) h
+  case clz =>
+    split at h
+    · exact applyUnary_gasLt (by decide) h
+    · simp at h
+  case kec =>
+    obtain ⟨⟨start, d1⟩, h1, h⟩ := Except.bind_eq_ok h
+    obtain ⟨⟨size, d2⟩, h2, h⟩ := Except.bind_eq_ok h
+    obtain ⟨d3, h3, h4⟩ := Except.bind_eq_ok h
+    have e1 := Devm.popToNat_gasLeft h1
+    have e2 := Devm.popToNat_gasLeft h2
+    have e3 := chargeGas_gasLeft h3
+    have e4 := Devm.push_gasLeft h4
+    dsimp only at e1 e2 e3 e4
+    rw [Devm.memRead_gasLeft] at e4
+    unfold gKeccak256 at e3
+    omega
+  case balance =>
+    apply Rinst.balance_runCore_gasLt (pc := pc) (sevm := sevm)
+    simpa only [Rinst.runCore] using h
+  case calldataload =>
+    exact popChargePush_gasLt devm
+      (fun _ _ => gVerylow)
+      (fun start _ => B8L.toB256 <| sevm.data.sliceD start.toNat 32 0)
+      (by intros; decide) h
+  case calldatacopy =>
+    exact popNat3ChargePure_gasLt devm
+      (fun memoryStart _ size d =>
+        gVerylow + gasCopy * ceilDiv size 32 + d.extCost [(memoryStart, size)])
+      (fun memoryStart dataStart size d =>
+        d.memWrite memoryStart (sevm.data.sliceD dataStart size 0))
+      (by intros; unfold gVerylow; omega)
+      (by intros; simp only [Devm.memWrite_gasLeft]) h
+  case retdatacopy =>
+    obtain ⟨⟨memoryStart, d1⟩, h1, h⟩ := Except.bind_eq_ok h
+    obtain ⟨⟨returnStart, d2⟩, h2, h⟩ := Except.bind_eq_ok h
+    obtain ⟨⟨size, d3⟩, h3, h⟩ := Except.bind_eq_ok h
+    obtain ⟨d4, h4, h⟩ := Except.bind_eq_ok h
+    have e1 := Devm.popToNat_gasLeft h1
+    have e2 := Devm.popToNat_gasLeft h2
+    have e3 := Devm.popToNat_gasLeft h3
+    have e4 := chargeGas_gasLeft h4
+    dsimp only at h e1 e2 e3 e4
+    split at h
+    · nomatch h
+    · simp only [Except.ok.injEq] at h
+      rw [← h, Devm.memWrite_gasLeft]
+      unfold gVerylow at e4
+      omega
+  case extcodecopy =>
+    obtain ⟨⟨adr, d1⟩, h1, h⟩ := Except.bind_eq_ok h
+    obtain ⟨⟨memoryStart, d2⟩, h2, h⟩ := Except.bind_eq_ok h
+    obtain ⟨⟨codeStart, d3⟩, h3, h⟩ := Except.bind_eq_ok h
+    obtain ⟨⟨size, d4⟩, h4, h⟩ := Except.bind_eq_ok h
+    have e1 := Devm.popToAdr_gasLeft h1
+    have e2 := Devm.popToNat_gasLeft h2
+    have e3 := Devm.popToNat_gasLeft h3
+    have e4 := Devm.popToNat_gasLeft h4
+    dsimp only at h e1 e2 e3 e4
+    split at h
+    · obtain ⟨d5, h5, h6⟩ := Except.bind_eq_ok h
+      simp only [Except.ok.injEq] at h6
+      have e5 := chargeGas_gasLeft h5
+      rw [← h6, Devm.memWrite_gasLeft]
+      unfold gasWarmAccess at e5
+      omega
+    · obtain ⟨d5, h5, h6⟩ := Except.bind_eq_ok h
+      simp only [Except.ok.injEq] at h6
+      have e5 := chargeGas_gasLeft h5
+      rw [addAccessedAddress_gasLeft] at e5
+      rw [← h6, Devm.memWrite_gasLeft]
+      unfold gasColdAccountAccess at e5
+      omega
+  case extcodesize =>
+    apply Rinst.runCore_extcodesize_gasLt (pc := pc) (sevm := sevm)
+    simpa only [Rinst.runCore] using h
+  case extcodehash =>
+    exact popAdrAccessChargePush_gasLt devm
+      (fun adr d =>
+        let account := d.getAcct adr
+        if account.Empty then 0
+        else ByteArray.keccak 0 account.code.size account.code) h
+  case blockhash =>
+    exact popChargePush_gasLt devm
+      (fun _ _ => gBlockhash)
+      (fun blockNumberWord _ =>
+        if sevm.benvStat.number ≤ blockNumberWord.toNat ∨
+            blockNumberWord.toNat + 256 < sevm.benvStat.number then 0
+        else sevm.benvStat.blockHashes.getD
+          (sevm.benvStat.blockHashes.length -
+            (sevm.benvStat.number - blockNumberWord.toNat)) 0)
+      (by intros; unfold gBlockhash; omega) h
+  case blobhash =>
+    exact popChargePush_gasLt devm
+      (fun _ _ => gHashopcode)
+      (fun index _ => sevm.tenvStat.blobVersionedHashes.getD index.toNat 0)
+      (by intros; unfold gHashopcode; omega) h
+  case pop =>
+    cases hp : devm.pop with
+    | error e =>
+      change Except.bind (Except.map Prod.snd devm.pop) (chargeGas gBase) =
+        .ok devm' at h
+      simp only [hp, Except.map, Except.bind] at h
+      nomatch h
+    | ok p =>
+      have e1 := Devm.pop_gasLeft hp
+      change Except.bind (Except.map Prod.snd devm.pop) (chargeGas gBase) =
+        .ok devm' at h
+      simp only [hp, Except.map, Except.bind] at h
+      have e2 := chargeGas_gasLeft h
+      unfold gBase at e2
+      omega
+  case mload =>
+    obtain ⟨⟨start, d1⟩, h1, h⟩ := Except.bind_eq_ok h
+    obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
+    have e1 := Devm.popToNat_gasLeft h1
+    have e2 := chargeGas_gasLeft h2
+    have e3 := Devm.push_gasLeft h3
+    dsimp only at e1 e2 e3
+    rw [Devm.memRead_gasLeft] at e3
+    unfold gVerylow at e2
+    omega
+  case mstore =>
+    apply Rinst.runCore_mstore_gasLt (pc := pc) (sevm := sevm)
+    simpa only [Rinst.runCore] using h
+  case mstore8 =>
+    exact popNatPopChargePure_gasLt devm
+      (fun start _ d => gVerylow + d.extCost [(start, 1)])
+      (fun start value d => d.memWrite start [value.2.2.toUInt8])
+      (by intros; unfold gVerylow; omega)
+      (by intros; simp only [Devm.memWrite_gasLeft]) h
+  case mcopy =>
+    exact popNat3ChargePure_gasLt devm
+      (fun destinationStart sourceStart size d =>
+        gVerylow + gasCopy * ceilDiv size 32 +
+          d.extCost [(sourceStart, size), (destinationStart, size)])
+      (fun destinationStart sourceStart size d =>
+        (d.memRead sourceStart size).2.memWrite destinationStart
+          (d.memRead sourceStart size).1)
+      (by intros; unfold gVerylow; omega)
+      (by intros; simp only [Devm.memWrite_gasLeft, Devm.memRead_gasLeft]) h
+  case sstore =>
+    obtain ⟨⟨key, d1⟩, h1, h⟩ := Except.bind_eq_ok h
+    obtain ⟨⟨value, d2⟩, h2, h⟩ := Except.bind_eq_ok h
+    obtain ⟨_, hStipend, h⟩ := Except.bind_eq_ok h
+    have _hStipend := Except.assert_eq_ok hStipend
+    obtain ⟨gasPair, hPair, h⟩ := Except.bind_eq_ok h
+    obtain ⟨cost, hCost, h⟩ := Except.bind_eq_ok h
+    obtain ⟨d3, hRefund, h⟩ := Except.bind_eq_ok h
+    obtain ⟨d4, hCharge, h⟩ := Except.bind_eq_ok h
+    obtain ⟨_, _hDynamic, hFinal⟩ := Except.bind_eq_ok h
+    simp only [Except.ok.injEq] at hPair hCost hRefund hFinal
+    have e1 := Devm.pop_gasLeft h1
+    have e2 := Devm.pop_gasLeft h2
+    have e3 := chargeGas_gasLeft hCharge
+    have hPairGas : gasPair.1.gasLeft = d2.gasLeft := by
+      rw [← hPair]
+      split <;> simp only [addAccessedStorageKey_gasLeft]
+    have hRefundGas : d3.gasLeft = d2.gasLeft := by
+      rw [← hRefund, Devm.withRefundCounter_gasLeft, hPairGas]
+    have hCostPos : 0 < cost := by
+      rw [← hCost]
+      split
+      · split
+        · unfold gasStorageSet
+          omega
+        · unfold gasStorageUpdate gasColdSload
+          omega
+      · unfold gasWarmAccess
+        omega
+    dsimp only at e1 e2 hFinal
+    rw [← hFinal, Devm.setStorVal_gasLeft]
+    omega
+  case sload =>
+    obtain ⟨⟨key, d1⟩, h1, h⟩ := Except.bind_eq_ok h
+    have e1 := Devm.pop_gasLeft h1
+    dsimp only at h e1
+    split at h
+    · obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
+      have e2 := chargeGas_gasLeft h2
+      have e3 := Devm.push_gasLeft h3
+      unfold gasWarmAccess at e2
+      omega
+    · obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
+      have e2 := chargeGas_gasLeft h2
+      rw [addAccessedStorageKey_gasLeft] at e2
+      have e3 := Devm.push_gasLeft h3
+      unfold gasColdSload at e2
+      omega
+  case tload =>
+    obtain ⟨⟨key, d1⟩, h1, h2⟩ := Except.bind_eq_ok h
+    have e1 := Devm.pop_gasLeft h1
+    have e2 := pushItem_gasLt (by unfold gasWarmAccess; omega) h2
+    dsimp only at e1 e2
+    omega
+  case tstore =>
+    obtain ⟨⟨key, d1⟩, h1, h⟩ := Except.bind_eq_ok h
+    obtain ⟨⟨value, d2⟩, h2, h⟩ := Except.bind_eq_ok h
+    obtain ⟨d3, h3, h⟩ := Except.bind_eq_ok h
+    obtain ⟨_, _hassert, h4⟩ := Except.bind_eq_ok h
+    simp only [Except.ok.injEq] at h4
+    have e1 := Devm.pop_gasLeft h1
+    have e2 := Devm.pop_gasLeft h2
+    have e3 := chargeGas_gasLeft h3
+    dsimp only at e1 e2 e3
+    rw [← h4, Devm.setTransVal_gasLeft]
+    unfold gasWarmAccess at e3
+    omega
+  case gas =>
+    obtain ⟨d1, h1, h2⟩ := Except.bind_eq_ok h
+    have e1 := chargeGas_gasLeft h1
+    have e2 := Devm.push_gasLeft h2
+    unfold gBase at e1
+    omega
+  case dup i =>
+    obtain ⟨d1, h1, h⟩ := Except.bind_eq_ok h
+    have e1 := chargeGas_gasLeft h1
+    split at h
+    · nomatch h
+    · have e2 := Devm.push_gasLeft h
+      unfold gVerylow at e1
+      omega
+  case swap i =>
+    obtain ⟨d1, h1, h⟩ := Except.bind_eq_ok h
+    have e1 := chargeGas_gasLeft h1
+    split at h
+    · nomatch h
+    · simp only [Except.ok.injEq] at h
+      rw [← h, Devm.withStack_gasLeft]
+      unfold gVerylow at e1
+      omega
+  case log topicCount =>
+    obtain ⟨⟨start, d1⟩, h1, h⟩ := Except.bind_eq_ok h
+    obtain ⟨⟨size, d2⟩, h2, h⟩ := Except.bind_eq_ok h
+    obtain ⟨⟨topics, d3⟩, h3, h⟩ := Except.bind_eq_ok h
+    obtain ⟨d4, h4, h⟩ := Except.bind_eq_ok h
+    obtain ⟨_, _hassert, h5⟩ := Except.bind_eq_ok h
+    simp only [Except.ok.injEq] at h5
+    have e1 := Devm.popToNat_gasLeft h1
+    have e2 := Devm.popToNat_gasLeft h2
+    have e3 := Devm.popN_gasLeft h3
+    have e4 := chargeGas_gasLeft h4
+    dsimp only at e1 e2 e3 e4 h5
+    rw [← h5, Devm.addLog_gasLeft, Devm.memRead_gasLeft]
+    unfold gLog at e4
+    omega
+  case codecopy =>
+    exact popNat3ChargePure_gasLt devm
+      (fun memoryStart _ size d =>
+        gVerylow + gasCopy * ceilDiv size 32 + d.extCost [(memoryStart, size)])
+      (fun memoryStart codeStart size d =>
+        d.memWrite memoryStart
+          (sevm.code.sliceD codeStart size (Linst.toB8 .stop)))
+      (by intros; unfold gVerylow; omega)
+      (by intros; simp only [Devm.memWrite_gasLeft]) h
