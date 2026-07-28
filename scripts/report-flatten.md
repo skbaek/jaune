@@ -99,6 +99,8 @@ wall times or intentionally omitted when the script has no aggregate timer.
 | current transitions | PASS, 13/13 files, 109 cases (15.16 s) |
 | Blanc `lake build` | PASS, 907 jobs (about 7 s wall) |
 | Blanc exact axiom audit | PASS, 4/4 protected theorems |
+| legacy FULL (user-run) | PASS, baseline 2,978 PASS / 5 expected FAIL (2,983 files; 1,807.12 s summed per-file) |
+| current mainnet FULL (user-run) | PASS, 5,100/5,100 manifest files; terminal timing not retained |
 
 The four-family evidence sweep was repeated three times on the final binary;
 all selected fixtures passed.  Best summed per-file seconds were
@@ -125,7 +127,8 @@ new axiom.
 | Blanc | `0086a49`, `614ef3c`, `70d4595`, `30fce1c` | Step-3 diagnostic/recovery checkpoints | pushed, explicitly diagnostic |
 | Blanc | `39ed4a3` | thin wrappers; Common/Solvent green | pushed green tip |
 | ELeVM | `fed6c71` | records final Step-3 report | pushed documentation tip |
-| ELeVM | this report's commit | Step-4 closure evidence | committed locally; push pending explicit authorization |
+| ELeVM | `78a83dc` | Step-4 short-gate closure evidence | pushed |
+| ELeVM | this update's commit | records user-run FULL verdicts | pending commit/push |
 
 ## Deliberate deviations and deferred work
 
@@ -140,7 +143,7 @@ frame-entry side conditions.  It remains out of scope here.
 
 ## User-owned closure gates and merge handoff
 
-The two required final gates are intentionally **not run by this agent**:
+The two required final gates were run sequentially by the user on the exact candidate with Lean LSP workers stopped:
 
 ```sh
 cd ~/elevm
@@ -148,8 +151,7 @@ scripts/check.sh --full --no-build
 scripts/check-mainnet.sh --suite full --no-build
 ```
 
-Run them sequentially on this exact candidate with Lean LSP workers stopped.
-They must match their baselines before merging.  This report does not merge,
+Both passed: the legacy run matched its baseline (2,978 PASS / 5 expected FAIL across 2,983 files), and current mainnet FULL passed all 5,100 manifest files.  The technical closure gates are therefore complete.  This report does not merge,
 rebase, or squash either branch.  After both verdicts are recorded, the exact
 proposed merge tips are ELeVM `fed6c71` plus this documentation commit and
 Blanc `39ed4a3`; Blanc deliberately continues to pin the immutable semantic
