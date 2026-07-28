@@ -2355,3 +2355,437 @@ theorem Xinst.step_noRevert (sevm : Sevm) (devm : Devm) (x : Xinst) :
     refine xstepNoRevert_bind (chargeGas_noRevert _ _) ?_
     intro d7
     exact genericCall.step_noRevert _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+/-! ## Settling a finished frame
+
+`Frame.settle` turns a child's raw result into the value its parent resumes
+from, and it is where the two halting routes above are consumed. Stating the
+obligation once, as `Execution.SettledGasLe`, is what lets the driver stay
+ignorant of which route a given instruction family took. -/
+
+/-- What a halting outcome owes the parent frame: whatever
+`executeCode.handleError` can turn into a *successful* frame result reports at
+most `n` gas. An exceptional halt is rewritten to zero gas, and every remaining
+tag stays an `.error`, which `Resume.run` cannot turn into a resumed parent. -/
+def Execution.SettledGasLe (n : Nat) (ex : Execution) : Prop :=
+  ∀ d : Devm, executeCode.handleError ex = .ok d → d.gasLeft ≤ n
+
+theorem Execution.SettledGasLe.mono {m n : Nat} {ex : Execution} (h : m ≤ n)
+    (hs : ex.SettledGasLe m) : ex.SettledGasLe n :=
+  fun d hd => Nat.le_trans (hs d hd) h
+
+/-- The route the `Rinst`/`Jinst`/`Linst` corpus takes. -/
+theorem Execution.settledGasLe_of_gasLe {n : Nat} {ex : Execution}
+    (h : ex.gasLeft ≤ n) : ex.SettledGasLe n :=
+  fun _ hd => Nat.le_trans (executeCode.handleError_ok_gasLe hd) h
+
+/-- The route the `Xinst` family takes: bound the successful branch, and rule
+out the one tag that would let an error carry live gas through. -/
+theorem Execution.settledGasLe_of_noRevert {n : Nat} {ex : Execution}
+    (hok : ∀ d, ex = .ok d → d.gasLeft ≤ n) (hnr : NoRevertOut ex) :
+    ex.SettledGasLe n := by
+  intro d hd
+  cases ex with
+  | ok d0 =>
+    simp only [executeCode.handleError, Except.ok.injEq] at hd
+    rw [← hd]
+    exact hok d0 rfl
+  | error p =>
+    obtain ⟨err, evm⟩ := p
+    simp only [executeCode.handleError] at hd
+    split at hd
+    · simp only [Except.ok.injEq] at hd
+      rw [← hd, Devm.setMeta_gasLeft, Devm.withGasLeft_gasLeft]
+      omega
+    · split at hd
+      · rename_i hrev
+        exact absurd hrev hnr
+      · nomatch hd
+
+theorem processCreateMessage.chargeCodeGas_gasLe (rules : ForkRules) (devm : Devm) :
+    (processCreateMessage.chargeCodeGas rules devm).gasLeft ≤ devm.gasLeft := by
+  unfold processCreateMessage.chargeCodeGas
+  dsimp only
+  split
+  · simp
+  · refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
+    intro d
+    split <;> simp
+
+theorem processMessage.settle_ok_gasLe {msg : Msg}
+    {r : Except (String × State × AdrSet × Tra) Devm} {d : Devm}
+    (h : processMessage.settle msg r = .ok d) :
+    ∃ d0, r = .ok d0 ∧ d.gasLeft ≤ d0.gasLeft := by
+  cases r with
+  | error e =>
+    exact absurd h (by simp [processMessage.settle, bind, Except.bind])
+  | ok d0 =>
+    refine ⟨d0, rfl, ?_⟩
+    simp only [processMessage.settle, bind, Except.bind] at h
+    split at h
+    · simp only [Except.ok.injEq] at h
+      rw [← h, Devm.rollback_gasLeft]
+    · simp only [Except.ok.injEq] at h
+      rw [← h]
+
+theorem processCreateMessage.settle_ok_gasLe {msg : Msg}
+    {r : Except (String × State × AdrSet × Tra) Devm} {d : Devm}
+    (h : processCreateMessage.settle msg r = .ok d) :
+    ∃ d0, r = .ok d0 ∧ d.gasLeft ≤ d0.gasLeft := by
+  cases r with
+  | error e =>
+    exact absurd h (by simp [processCreateMessage.settle, bind, Except.bind])
+  | ok d0 =>
+    refine ⟨d0, rfl, ?_⟩
+    simp only [processCreateMessage.settle, bind, Except.bind] at h
+    split at h
+    · have hc := processCreateMessage.chargeCodeGas_gasLe msg.benv.stat.rules d0
+      rcases hcc : processCreateMessage.chargeCodeGas msg.benv.stat.rules d0 with
+          ⟨err, d1⟩ | d1 <;> rw [hcc] at hc h <;>
+        simp only [Execution.gasLeft_error, Execution.gasLeft_ok] at hc <;>
+        dsimp only at h
+      · split at h
+        · simp only [Except.ok.injEq] at h
+          rw [← h]
+          unfold processCreateMessage.exceptionalHalt
+          rw [Devm.setMeta_gasLeft, Devm.withGasLeft_gasLeft]
+          omega
+        · nomatch h
+      · simp only [Except.ok.injEq] at h
+        rw [← h, Devm.setCode_gasLeft]
+        exact hc
+    · simp only [Except.ok.injEq] at h
+      rw [← h, Devm.rollback_gasLeft]
+
+theorem Frame.settleMsg_ok_gasLe {f : Frame}
+    {r : Except (String × State × AdrSet × Tra) Devm} {d : Devm}
+    (h : f.settleMsg r = .ok d) : ∃ d0, r = .ok d0 ∧ d.gasLeft ≤ d0.gasLeft := by
+  unfold Frame.settleMsg at h
+  dsimp only at h
+  split at h
+  · obtain ⟨d1, h1, hle1⟩ := processCreateMessage.settle_ok_gasLe h
+    obtain ⟨d0, h0, hle0⟩ := processMessage.settle_ok_gasLe h1
+    exact ⟨d0, h0, Nat.le_trans hle1 hle0⟩
+  · exact processMessage.settle_ok_gasLe h
+
+theorem Frame.settle_gasLe {f : Frame} {raw : Execution} {n : Nat} {d : Devm}
+    (hraw : raw.SettledGasLe n) (h : f.settle raw = .ok d) : d.gasLeft ≤ n := by
+  unfold Frame.settle at h
+  obtain ⟨d0, h0, hle⟩ := Frame.settleMsg_ok_gasLe h
+  exact Nat.le_trans hle (hraw d0 h0)
+
+/-! ## Entering a frame
+
+A frame either hands the child exactly the inner message's gas, or resolves
+without running a child at all — and in that case its result is a settled
+precompile outcome, which the settlement bound already covers. -/
+
+@[simp] theorem Msg.withBenv_gas (msg : Msg) (benv : Benv) :
+    (msg.withBenv benv).gas = msg.gas := rfl
+
+@[simp] theorem initEvm_gasLeft (msg : Msg) :
+    (initEvm msg).dyna.gasLeft = msg.gas := rfl
+
+theorem executeCode.enter_inl_gasLeft {msg : Msg} {evm : Evm}
+    (h : executeCode.enter msg = .inl evm) : evm.dyna.gasLeft = msg.gas := by
+  unfold executeCode.enter at h
+  dsimp only at h
+  split at h
+  · simp only [Sum.inl.injEq] at h
+    rw [← h, initEvm_gasLeft]
+  · split at h
+    · nomatch h
+    · simp only [Sum.inl.injEq] at h
+      rw [← h, initEvm_gasLeft]
+
+theorem executeCode.enter_inr_gasLe {msg : Msg} {raw : Execution}
+    (h : executeCode.enter msg = .inr raw) : raw.gasLeft ≤ msg.gas := by
+  unfold executeCode.enter at h
+  dsimp only at h
+  split at h
+  · nomatch h
+  · split at h
+    · simp only [Sum.inr.injEq] at h
+      rw [← h]
+      exact executePrecomp_gasLe _ _
+    · nomatch h
+
+theorem Frame.enter_run_gasLeft {f : Frame} {child : Evm}
+    (h : f.enter = .run child) : child.dyna.gasLeft = f.inner.gas := by
+  unfold Frame.enter at h
+  split at h
+  · nomatch h
+  · split at h
+    · rename_i evm henter
+      simp only [FrameEntry.run.injEq] at h
+      rw [← h, executeCode.enter_inl_gasLeft henter, Msg.withBenv_gas]
+    · nomatch h
+
+theorem Frame.enter_done_gasLe {f : Frame}
+    {r : Except (String × State × AdrSet × Tra) Devm} {d : Devm}
+    (h : f.enter = .done r) (hd : r = .ok d) : d.gasLeft ≤ f.inner.gas := by
+  unfold Frame.enter at h
+  split at h
+  · simp only [FrameEntry.done.injEq] at h
+    rw [← h] at hd
+    obtain ⟨d0, h0, -⟩ := Frame.settleMsg_ok_gasLe hd
+    nomatch h0
+  · split at h
+    · nomatch h
+    · rename_i raw henter
+      simp only [FrameEntry.done.injEq] at h
+      rw [← h] at hd
+      exact Frame.settle_gasLe
+        (Execution.settledGasLe_of_gasLe
+          (Nat.le_trans (executeCode.enter_inr_gasLe henter)
+            (Nat.le_of_eq (Msg.withBenv_gas _ _)))) hd
+
+/-! ## Resuming a parent
+
+`Resume.run_ok_gasLeft` already pins the successful result at
+`rsm.parentGas + child.gasLeft`. The bound below covers the error branch as
+well, which the driver needs because a resume that overflows the parent's stack
+still produces a raw result the *grandparent* has to settle. -/
+
+@[simp] theorem incorporateChildOnError_gasLeft (parent child : Devm) (rd : B8L) :
+    (incorporateChildOnError parent child rd).gasLeft =
+      parent.gasLeft + child.gasLeft := rfl
+
+@[simp] theorem incorporateChildOnSuccess_gasLeft (parent child : Devm) (rd : B8L) :
+    (incorporateChildOnSuccess parent child rd).gasLeft =
+      parent.gasLeft + child.gasLeft := rfl
+
+theorem Resume.run_gasLe {rsm : Resume}
+    {r : Except (String × State × AdrSet × Tra) Devm} {m : Nat}
+    (hr : ∀ d, r = .ok d → d.gasLeft ≤ m) :
+    Execution.gasLeft (rsm.run r) ≤ rsm.parentGas + m := by
+  cases rsm with
+  | create parent newAddress =>
+    cases r with
+    | error e =>
+      simp only [Resume.run, liftToExecution, bind, Except.bind,
+        Execution.gasLeft_error, Resume.parentGas, Devm.setWorld_gasLeft,
+        Devm.withCreatedAccounts_gasLeft]
+      omega
+    | ok child =>
+      have hc := hr child rfl
+      simp only [Resume.run, liftToExecution, bind, Except.bind, Resume.parentGas]
+      split <;> simp only [Devm.push_gasLe, incorporateChildOnError_gasLeft,
+        incorporateChildOnSuccess_gasLeft] <;> omega
+  | call parent outputIndex outputSize =>
+    cases r with
+    | error e =>
+      simp only [Resume.run, liftToExecution, bind, Except.bind,
+        Execution.gasLeft_error, Resume.parentGas, Devm.setWorld_gasLeft,
+        Devm.withCreatedAccounts_gasLeft]
+      omega
+    | ok child =>
+      have hc := hr child rfl
+      simp only [Resume.run, liftToExecution, bind, Except.bind, Resume.parentGas]
+      split <;>
+        refine gasLe_bind_id ?_ (fun d => by simp) <;>
+        simp only [Devm.push_gasLe, incorporateChildOnError_gasLeft,
+          incorporateChildOnSuccess_gasLeft] <;> omega
+
+/-! ## The step-level obligation
+
+One statement covering all three outcomes of `Evm.step`, so that the driver
+induction has a single hypothesis to consume. -/
+
+/-- What one step of the driver owes, measured against the frame's gas at the
+start of the step. -/
+def Step.GasBound (n : Nat) : Step → Prop
+  | .halt ex => ex.SettledGasLe n
+  | .cont _ devm => devm.gasLeft < n
+  | .spawn frame rsm _ => frame.inner.gas + rsm.parentGas < n
+
+theorem Step.ofExecution_gasBound {pc n : Nat} {ex : Execution}
+    (hok : ∀ d, ex = .ok d → d.gasLeft < n) (hset : ex.SettledGasLe n) :
+    (Step.ofExecution pc ex).GasBound n := by
+  cases ex with
+  | error e => exact hset
+  | ok d => exact hok d rfl
+
+theorem Step.ofJump_gasBound {n : Nat} {x : Except (String × Devm) (Nat × Devm)}
+    (hok : ∀ p, x = .ok p → p.2.gasLeft < n) (hle : resultGas Prod.snd x ≤ n) :
+    (Step.ofJump x).GasBound n := by
+  cases x with
+  | error e => exact Execution.settledGasLe_of_gasLe hle
+  | ok p => exact hok p rfl
+
+theorem XStep.toStep_gasBound {pc n : Nat} {step : XStep}
+    (hdec : step.GasDecreasing n) (hnr : step.NoRevert) :
+    (XStep.toStep pc step).GasBound n := by
+  cases step with
+  | done ex =>
+    refine Step.ofExecution_gasBound hdec ?_
+    exact Execution.settledGasLe_of_noRevert
+      (fun d hd => Nat.le_of_lt (hdec d hd)) hnr
+  | spawn frame rsm => exact hdec
+
+theorem Ninst.step_push_gasLt {xs : B8L} {evm : Evm} {devm : Devm}
+    (h : (chargeGas (if xs = [] then gBase else gVerylow) evm.dyna >>=
+      Devm.push xs.toB256) = .ok devm) : devm.gasLeft < evm.dyna.gasLeft := by
+  obtain ⟨d1, h1, h2⟩ := Except.bind_eq_ok h
+  have e1 := chargeGas_gasLeft h1
+  have e2 := Devm.push_gasLeft h2
+  have hpos : 0 < (if xs = [] then gBase else gVerylow) := by
+    split <;> decide
+  omega
+
+theorem Ninst.step_gasBound (evm : Evm) (n : Ninst) :
+    (Ninst.step evm n).GasBound evm.dyna.gasLeft := by
+  cases n with
+  | push xs b =>
+    refine Step.ofExecution_gasBound (fun d hd => Ninst.step_push_gasLt hd) ?_
+    refine Execution.settledGasLe_of_gasLe ?_
+    exact gasLe_bind_id (chargeGas_result_gasLe _ _)
+      (fun d => Nat.le_of_eq (Devm.push_gasLe _ d))
+  | reg r =>
+    refine Step.ofExecution_gasBound
+      (fun d hd => Rinst.runCore_gasLt evm.pc evm.dyna evm.sta r hd) ?_
+    exact Execution.settledGasLe_of_gasLe
+      (Rinst.runCore_gasLe evm.pc evm.dyna evm.sta r)
+  | exec x =>
+    exact XStep.toStep_gasBound (Xinst.step_gasDecreasing evm.sta evm.dyna x)
+      (Xinst.step_noRevert evm.sta evm.dyna x)
+
+theorem Evm.step_gasBound (evm : Evm) : evm.step.GasBound evm.dyna.gasLeft := by
+  unfold Evm.step
+  split
+  · exact Execution.settledGasLe_of_gasLe (Nat.le_of_eq rfl)
+  · exact Ninst.step_gasBound evm _
+  · rename_i j _
+    exact Step.ofJump_gasBound
+      (fun p hp => Jinst.runCore_gasLt evm.pc evm.dyna evm.sta j hp)
+      (Jinst.runCore_gasLe evm.pc evm.dyna evm.sta j)
+  · rename_i l _
+    exact Execution.settledGasLe_of_gasLe (Linst.run_gasLe evm.sta evm.dyna l)
+
+/-! ## The driver
+
+Both theorems go by structural induction on the fuel, and monotonicity has to
+come first: sufficiency needs to know that a child which ran to completion did
+not hand its parent back more gas than it was given. -/
+
+/-- Driver monotonicity. Stated over the settlement obligation rather than over
+raw gas, because that is the only thing a parent can extract from a child's
+result and it is what both routes of the halting corpus establish. -/
+theorem exec_settledGasLe : ∀ (lim : Nat) (evm : Evm) {raw : Execution},
+    (exec evm lim).run = some raw → raw.SettledGasLe evm.dyna.gasLeft := by
+  intro lim
+  induction lim with
+  | zero =>
+    intro evm raw h
+    rw [exec] at h
+    simp only [Fueled.exhausted_run] at h
+    nomatch h
+  | succ lim ih =>
+    intro evm raw h
+    have hstep := Evm.step_gasBound evm
+    rw [exec] at h
+    rcases hs : evm.step with ⟨ex⟩ | ⟨pc, devm⟩ | ⟨frame, rsm, pc⟩
+    · rw [hs] at h hstep
+      simp only [Fueled.ofExcept_run, Option.some.injEq] at h
+      rw [← h]
+      exact hstep
+    · rw [hs] at h hstep
+      simp only [Step.GasBound] at hstep
+      exact (ih _ h).mono (Nat.le_of_lt hstep)
+    · rw [hs] at h hstep
+      simp only [Step.GasBound] at hstep
+      dsimp only at h
+      rcases he : frame.enter with r | child
+      · rw [he] at h
+        dsimp only at h
+        have hres := Resume.run_gasLe (rsm := rsm) (m := frame.inner.gas)
+          (fun d hd => Frame.enter_done_gasLe he hd)
+        rcases hrun : rsm.run r with ⟨e⟩ | d1
+        · rw [hrun] at h hres
+          simp only [Fueled.ofExcept_run, Option.some.injEq] at h
+          simp only [Execution.gasLeft_error] at hres
+          rw [← h]
+          refine Execution.settledGasLe_of_gasLe ?_
+          simp only [Execution.gasLeft_error]
+          omega
+        · rw [hrun] at h hres
+          simp only [Execution.gasLeft_ok] at hres
+          exact (ih _ h).mono (show d1.gasLeft ≤ evm.dyna.gasLeft by omega)
+      · rw [he] at h
+        dsimp only at h
+        rcases hc : (exec child lim).run with _ | raw'
+        · rw [hc] at h
+          simp only [Fueled.exhausted_run] at h
+          nomatch h
+        · rw [hc] at h
+          dsimp only at h
+          have hchild := ih child hc
+          rw [Frame.enter_run_gasLeft he] at hchild
+          have hres := Resume.run_gasLe (rsm := rsm) (r := frame.settle raw')
+            (m := frame.inner.gas) (fun d hd => Frame.settle_gasLe hchild hd)
+          rcases hrun : rsm.run (frame.settle raw') with ⟨e⟩ | d1
+          · rw [hrun] at h hres
+            simp only [Fueled.ofExcept_run, Option.some.injEq] at h
+            simp only [Execution.gasLeft_error] at hres
+            rw [← h]
+            refine Execution.settledGasLe_of_gasLe ?_
+            simp only [Execution.gasLeft_error]
+            omega
+          · rw [hrun] at h hres
+            simp only [Execution.gasLeft_ok] at hres
+            exact (ih _ h).mono (show d1.gasLeft ≤ evm.dyna.gasLeft by omega)
+
+/-- **Sufficiency.** Fuel strictly greater than the frame's remaining gas always
+carries the driver to a result. The base case is vacuous: the hypothesis forces
+`lim > 0`. -/
+theorem exec_run_isSome : ∀ (lim : Nat) (evm : Evm),
+    evm.dyna.gasLeft < lim → ∃ raw : Execution, (exec evm lim).run = some raw := by
+  intro lim
+  induction lim with
+  | zero =>
+    intro evm h
+    omega
+  | succ lim ih =>
+    intro evm h
+    have hstep := Evm.step_gasBound evm
+    rw [exec]
+    rcases hs : evm.step with ⟨ex⟩ | ⟨pc, devm⟩ | ⟨frame, rsm, pc⟩ <;>
+      rw [hs] at hstep <;> simp only [Step.GasBound] at hstep <;> dsimp only
+    · exact ⟨ex, rfl⟩
+    · have hlt : devm.gasLeft < lim := by omega
+      exact ih _ hlt
+    · rcases he : frame.enter with r | child <;> dsimp only
+      · rcases hrun : rsm.run r with ⟨e⟩ | d1 <;> dsimp only
+        · exact ⟨.error e, rfl⟩
+        · obtain ⟨d0, hd0, hgas⟩ := Resume.run_ok_gasLeft hrun
+          have hle : d0.gasLeft ≤ frame.inner.gas := Frame.enter_done_gasLe he hd0
+          have hlt : d1.gasLeft < lim := by omega
+          exact ih _ hlt
+      · have hgas : child.dyna.gasLeft = frame.inner.gas := Frame.enter_run_gasLeft he
+        have hchildlt : child.dyna.gasLeft < lim := by omega
+        obtain ⟨raw', hraw'⟩ := ih child hchildlt
+        rw [hraw']
+        dsimp only
+        rcases hrun : rsm.run (frame.settle raw') with ⟨e⟩ | d1 <;> dsimp only
+        · exact ⟨.error e, rfl⟩
+        · obtain ⟨d0, hd0, hgas2⟩ := Resume.run_ok_gasLeft hrun
+          have hsettled := exec_settledGasLe lim child hraw'
+          rw [hgas] at hsettled
+          have hle : d0.gasLeft ≤ frame.inner.gas := Frame.settle_gasLe hsettled hd0
+          have hlt : d1.gasLeft < lim := by omega
+          exact ih _ hlt
+
+theorem exec_ne_exhausted (evm : Evm) (lim : Nat) (h : evm.dyna.gasLeft < lim) :
+    exec evm lim ≠ Fueled.exhausted := by
+  obtain ⟨raw, hraw⟩ := exec_run_isSome lim evm h
+  intro hcon
+  rw [hcon] at hraw
+  simp only [Fueled.exhausted_run] at hraw
+  nomatch hraw
+
+/-- The form Step 3 consumes. The additive constant is **1**: seeding the driver
+with `gasLeft + 1` is always enough, so the total `exec` can discharge the
+`Option` with this witness. -/
+theorem exec_succ_ne_exhausted (evm : Evm) :
+    exec evm (evm.dyna.gasLeft + 1) ≠ Fueled.exhausted :=
+  exec_ne_exhausted evm (evm.dyna.gasLeft + 1) (Nat.lt_succ_self _)
