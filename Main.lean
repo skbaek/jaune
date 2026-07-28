@@ -1,4 +1,6 @@
 import «Elevm».Execution
+import «Elevm».Sufficiency
+import «Elevm».Transaction
 import «Elevm».FixtureException
 import «Elevm».ChainStore
 

@@ -14,7 +14,7 @@
 -- match, and no "any RLP error is good enough" fallback -- those are what let a
 -- block be rejected for the wrong reason and still be scored as a pass.
 
-import Elevm.Execution
+import Elevm.Transaction
 
 /-- The canonical vocabulary used by the selected Prague and Osaka corpora,
 spanning the `BlockException` and `TransactionException` namespaces. It
