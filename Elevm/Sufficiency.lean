@@ -2789,3 +2789,267 @@ discharge the `Option` with this witness. -/
 theorem execCore_succ_ne_exhausted (evm : Evm) :
     execCore evm (evm.dyna.gasLeft + 1) ≠ Fueled.exhausted :=
   execCore_ne_exhausted evm (evm.dyna.gasLeft + 1) (Nat.lt_succ_self _)
+
+/-! ## The total interpreter
+
+Everything below is fuel-free. `execCore` survives as the structurally
+recursive definition downstream proofs reason over, but no consumer has to
+thread a fuel parameter or handle an exhaustion outcome any more. -/
+
+/-- The fuel budget seeded from a frame's remaining gas. The additive constant
+is the one `execCore_succ_ne_exhausted` proves sufficient: **1**. -/
+def sufficientLim (gas : Nat) : Nat := gas + 1
+
+theorem execCore_run_sufficientLim_isSome (evm : Evm) :
+    ((execCore evm (sufficientLim evm.dyna.gasLeft)).run).isSome := by
+  obtain ⟨raw, hraw⟩ :=
+    execCore_run_isSome (sufficientLim evm.dyna.gasLeft) evm (Nat.lt_succ_self _)
+  rw [hraw]
+  rfl
+
+/-- **The total interpreter.** Fuel is an implementation detail: the driver is
+seeded from the frame's own remaining gas and `execCore_run_sufficientLim_isSome`
+discharges the resulting `Option` at the definition site. -/
+def exec (evm : Evm) : Except (String × Devm) Devm :=
+  ((execCore evm (sufficientLim evm.dyna.gasLeft)).run).get
+    (execCore_run_sufficientLim_isSome evm)
+
+/-- **Bridge equation.** The driver at the seeded budget returns exactly the
+total result, so no downstream proof has to manipulate `Option.get`. -/
+theorem execCore_run_sufficientLim (evm : Evm) :
+    (execCore evm (sufficientLim evm.dyna.gasLeft)).run = some (exec evm) :=
+  (Option.some_get _).symm
+
+/-- More fuel never changes a result the driver already reached. This is what
+makes the seeded budget an implementation detail rather than a semantic choice:
+every budget past the frame's gas gives the same answer, so replacing the old
+`gas + 50` seeding by `sufficientLim gas` is observationally neutral. -/
+theorem execCore_run_mono :
+    ∀ (lim : Nat) (evm : Evm) {lim' : Nat} {raw : Execution}, lim ≤ lim' →
+      (execCore evm lim).run = some raw → (execCore evm lim').run = some raw := by
+  intro lim
+  induction lim with
+  | zero =>
+    intro evm lim' raw _ h
+    rw [execCore] at h
+    simp only [Fueled.exhausted_run] at h
+    nomatch h
+  | succ lim ih =>
+    intro evm lim' raw hle h
+    obtain ⟨m, rfl⟩ : ∃ m, lim' = m + 1 := by
+      cases lim' with
+      | zero => omega
+      | succ m => exact ⟨m, rfl⟩
+    have hle' : lim ≤ m := by omega
+    rw [execCore] at h
+    rw [execCore]
+    rcases hs : evm.step with ⟨ex⟩ | ⟨pc, devm⟩ | ⟨frame, rsm, pc⟩ <;>
+      rw [hs] at h <;> dsimp only at h ⊢
+    · exact h
+    · exact ih _ hle' h
+    · rcases he : frame.enter with r | child <;> rw [he] at h <;>
+        dsimp only at h ⊢
+      · rcases hrun : rsm.run r with ⟨e⟩ | d1 <;> rw [hrun] at h <;>
+          dsimp only at h ⊢
+        · exact h
+        · exact ih _ hle' h
+      · rcases hc : (execCore child lim).run with _ | raw'
+        · rw [hc] at h
+          simp only [Fueled.exhausted_run] at h
+          nomatch h
+        · rw [hc] at h
+          rw [ih _ hle' hc]
+          dsimp only at h ⊢
+          rcases hrun : rsm.run (frame.settle raw') with ⟨e⟩ | d1 <;>
+            rw [hrun] at h <;> dsimp only at h ⊢
+          · exact h
+          · exact ih _ hle' h
+
+/-- The downstream bridge at an arbitrary sufficient budget. -/
+theorem execCore_run_of_lt {evm : Evm} {lim : Nat} (h : evm.dyna.gasLeft < lim) :
+    (execCore evm lim).run = some (exec evm) :=
+  execCore_run_mono _ evm h (execCore_run_sufficientLim evm)
+
+/-- Reading a fueled result off as the total one: the shape a proof stated over
+`execCore` uses to transfer to `exec`. -/
+theorem exec_eq_of_run {evm : Evm} {lim : Nat} {raw : Execution}
+    (hlt : evm.dyna.gasLeft < lim) (h : (execCore evm lim).run = some raw) :
+    exec evm = raw := by
+  rw [execCore_run_of_lt hlt] at h
+  exact Option.some.inj h
+
+/-! ## The total frame wrappers
+
+These are the public entry points. They lost their `lim` parameter and their
+`Fueled` result type together: a frame is entered, the driver runs to a
+definite result, and the frame settles it. -/
+
+def runFrame (frame : Frame) : Except (String × State × AdrSet × Tra) Devm :=
+  match frame.enter with
+  | .done r => r
+  | .run evm => frame.settle (exec evm)
+
+def executeCode (msg : Msg) : Except (String × State × AdrSet × Tra) Devm :=
+  match executeCode.enter msg with
+  | .inl evm => executeCode.handleError (exec evm)
+  | .inr raw => executeCode.handleError raw
+
+def processMessage (msg : Msg) : Except (String × State × AdrSet × Tra) Devm :=
+  runFrame (Frame.ofCall msg)
+
+def processCreateMessage (msg : Msg) :
+    Except (String × State × AdrSet × Tra) Devm :=
+  runFrame (Frame.ofCreate msg)
+
+theorem runFrame_of_done {frame : Frame}
+    {r : Except (String × State × AdrSet × Tra) Devm} (h : frame.enter = .done r) :
+    runFrame frame = r := by
+  rw [runFrame, h]
+
+theorem runFrame_of_run {frame : Frame} {evm : Evm} (h : frame.enter = .run evm) :
+    runFrame frame = frame.settle (exec evm) := by
+  rw [runFrame, h]
+
+/-! ## Focused executable checks for the total entry points
+
+These mirror the flatten arc's representative states — arithmetic loop, nested
+CALL, CREATE collision, precompile under both dispatch paths, depth-zero
+short-circuit, out-of-gas halt, REVERT with output — but drive them through the
+fuel-free API. `Elevm.Execution` keeps the checks that pin `execCore` itself,
+including the one that shows fuel really can run out when it is not seeded from
+the frame's gas.
+
+`private` declarations do not cross module boundaries, so the two helpers this
+block shares with `Elevm.Execution` are restated here. Keep them in step with
+their counterparts at `Elevm/Execution.lean:4203`. -/
+
+private def totalGuardCode (bytes : B8L) : ByteArray := .mk <| .mk bytes
+
+private def totalGuardMsg (bytes : B8L) (gas depth : Nat) : Msg :=
+  {
+    (default : Msg) with
+    gas := gas
+    code := totalGuardCode bytes
+    depth := depth
+  }
+
+private def totalGuardSummary
+    (r : Except (String × State × AdrSet × Tra) Devm) :
+    Option (Option String × List B256 × B8L × Nat) :=
+  match r with
+  | .ok devm => some ⟨devm.error, devm.stack, devm.output, devm.gasLeft⟩
+  | .error _ => none
+
+-- Arithmetic loop: the state that exhausted `execCore` at fuel 20 now runs to a
+-- definite out-of-gas result, because the seeded budget is provably sufficient.
+private def totalGuardArithmeticLoop : Bool :=
+  let msg := totalGuardMsg [0x5B, 0x60, 0x00, 0x56] 1000 8
+  match exec (initEvm msg), processMessage msg with
+  | .error ⟨err, _⟩, .ok devm =>
+    err == "OutOfGasError" &&
+      devm.error == some "OutOfGasError" &&
+      devm.gasLeft == 0
+  | _, _ => false
+
+#guard totalGuardArithmeticLoop
+
+-- Nested CALL: run a parent that calls address 0x20, whose code is STOP.
+private def totalGuardNestedCallMsg : Msg :=
+  let child : Adr := 0x20
+  let state := State.setCode .empty child (totalGuardCode [0x00])
+  let benv := {(default : Benv) with state := state}
+  {
+    (totalGuardMsg
+      [ 0x60, 0x00, 0x60, 0x00, 0x60, 0x00, 0x60, 0x00,
+        0x60, 0x00, 0x60, 0x20, 0x61, 0x03, 0xE8, 0xF1, 0x00 ]
+      100000 8) with
+    benv := benv
+  }
+
+private def totalGuardNestedCallDirect :=
+  totalGuardSummary (runFrame (Frame.ofCall totalGuardNestedCallMsg))
+
+private def totalGuardNestedCallPublic :=
+  totalGuardSummary (processMessage totalGuardNestedCallMsg)
+
+#guard totalGuardNestedCallDirect = totalGuardNestedCallPublic
+#guard totalGuardNestedCallDirect.map
+    (fun x => ((x.2.1.head?, x.2.2.2) : Option B256 × Nat)) =
+  some (some 1, 97379)
+
+-- CREATE collision, reached the way a transaction reaches it: a frame executes
+-- CREATE at an address that already carries code, so the child is never
+-- spawned, the reserved `createGas` is not returned, and 0 is pushed.
+private def totalGuardCreateCollisionCreator : Adr := 0x30
+
+private def totalGuardCreateCollisionMsg : Msg :=
+  let created := compute_contract_address totalGuardCreateCollisionCreator 0
+  let state := State.setCode .empty created (totalGuardCode [0x00])
+  {
+    (totalGuardMsg [0x60, 0x00, 0x60, 0x00, 0x60, 0x00, 0xF0, 0x00] 100000 8) with
+    benv := {(default : Benv) with state := state}
+    currentTarget := totalGuardCreateCollisionCreator
+  }
+
+private def totalGuardCreateCollision : Bool :=
+  match processMessage totalGuardCreateCollisionMsg with
+  | .ok devm =>
+    devm.error == none && devm.stack.head? == some 0 && devm.gasLeft == 1062
+  | .error _ => false
+
+#guard totalGuardCreateCollision
+
+-- Precompile dispatch is taken normally and bypassed when explicitly disabled:
+-- the enabled path pays ecrecover's 3,000 gas without ever entering the driver.
+private def totalGuardPrecompileMsg (disabled : Bool) : Msg :=
+  {
+    (totalGuardMsg [] 10000 8) with
+    target := some 1
+    currentTarget := 1
+    codeAddress := some 1
+    disablePrecompiles := disabled
+  }
+
+private def totalGuardPrecompileDispatch : Bool :=
+  match
+      processMessage (totalGuardPrecompileMsg false),
+      processMessage (totalGuardPrecompileMsg true) with
+  | .ok viaPrecomp, .ok viaCode => viaPrecomp.gasLeft == 7000 && viaCode.gasLeft == 10000
+  | _, _ => false
+
+#guard totalGuardPrecompileDispatch
+
+-- Depth zero prevents spawning: the same parent that gets failure word 1 at
+-- depth 8 gets 0 at depth 0, with the call never reaching the driver.
+private def totalGuardDepthZero : Bool :=
+  match processMessage {totalGuardNestedCallMsg with depth := 0} with
+  | .ok devm => devm.stack.head? == some 0 && devm.gasLeft == 97379
+  | .error _ => false
+
+#guard totalGuardDepthZero
+
+-- A PUSH with zero gas halts through the frozen OutOfGasError channel.
+private def totalGuardOog : Bool :=
+  let msg := totalGuardMsg [0x60, 0x01, 0x00] 0 8
+  match exec (initEvm msg) with
+  | .error ⟨err, _⟩ => err == "OutOfGasError"
+  | .ok _ => false
+
+#guard totalGuardOog
+
+-- REVERT retains the 32-byte memory slice and becomes a settled frame result.
+private def totalGuardRevert : Bool :=
+  let msg :=
+    totalGuardMsg
+      [ 0x60, 0x2A, 0x60, 0x00, 0x52,
+        0x60, 0x20, 0x60, 0x00, 0xFD ]
+      1000 8
+  match runFrame (Frame.ofCall msg) with
+  | .ok devm =>
+    devm.error == some "Revert" &&
+      devm.output.length == 32 &&
+      devm.output.getLast? == some 0x2A &&
+      devm.gasLeft == 982
+  | .error _ => false
+
+#guard totalGuardRevert

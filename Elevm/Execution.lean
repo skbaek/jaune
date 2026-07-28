@@ -4194,29 +4194,11 @@ def execCore : Evm → Nat → Fueled (String × Devm) Devm
           | .ok devm => execCore ⟨pc, evm.sta, devm⟩ lim
   termination_by _ lim => lim
 
-def runFrame (frame : Frame) (lim : Nat) :
-    Fueled (String × State × AdrSet × Tra) Devm :=
-  match frame.enter with
-  | .done r => Fueled.ofExcept r
-  | .run evm => Fueled.mapResult frame.settle (execCore evm lim)
+/-! Focused executable checks for the flattened core.
 
-
-def executeCode (msg : Msg) (lim : Nat) :
-    Fueled (String × State × AdrSet × Tra) Devm :=
-  match executeCode.enter msg with
-  | .inl evm => Fueled.mapResult executeCode.handleError (execCore evm lim)
-  | .inr raw => Fueled.ofExcept (executeCode.handleError raw)
-
-def processMessage (msg : Msg) (lim : Nat) :
-    Fueled (String × State × AdrSet × Tra) Devm :=
-  runFrame (Frame.ofCall msg) lim
-
-def processCreateMessage (msg : Msg) (lim : Nat) :
-    Fueled (String × State × AdrSet × Tra) Devm :=
-  runFrame (Frame.ofCreate msg) lim
-
-
-/-! Focused executable checks for the flattened core and public wrappers. -/
+The frame wrappers these once also covered (`runFrame`, `executeCode`,
+`processMessage`, `processCreateMessage`) are total and therefore live in
+`Elevm.Sufficiency`; their checks moved with them. -/
 
 private def flattenGuardCode (bytes : B8L) : ByteArray := .mk <| .mk bytes
 
@@ -4228,41 +4210,12 @@ private def flattenGuardMsg (bytes : B8L) (gas depth : Nat) : Msg :=
     depth := depth
   }
 
-private def flattenGuardSummary
-    (r : Fueled (String × State × AdrSet × Tra) Devm) :
-    Option (Option String × List B256 × B8L) :=
-  match r.run with
-  | .some (.ok devm) => some ⟨devm.error, devm.stack, devm.output⟩
-  | _ => none
-
 -- Arithmetic loop: the driver spends one unit per instruction and exhausts.
 private def flattenGuardArithmeticLoop : Bool :=
   let msg := flattenGuardMsg [0x5B, 0x60, 0x00, 0x56] 1000 8
   (execCore (initEvm msg) 20).run.isNone
 
 #guard flattenGuardArithmeticLoop
-
--- Nested CALL: run a parent that calls address 0x20, whose code is STOP.
-private def flattenGuardNestedCallMsg : Msg :=
-  let child : Adr := 0x20
-  let state := State.setCode .empty child (flattenGuardCode [0x00])
-  let benv := {(default : Benv) with state := state}
-  {
-    (flattenGuardMsg
-      [ 0x60, 0x00, 0x60, 0x00, 0x60, 0x00, 0x60, 0x00,
-        0x60, 0x00, 0x60, 0x20, 0x61, 0x03, 0xE8, 0xF1, 0x00 ]
-      100000 8) with
-    benv := benv
-  }
-
-private def flattenGuardNestedCallDirect :=
-  flattenGuardSummary (runFrame (Frame.ofCall flattenGuardNestedCallMsg) 200)
-
-private def flattenGuardNestedCallPublic :=
-  flattenGuardSummary (processMessage flattenGuardNestedCallMsg 200)
-
-#guard flattenGuardNestedCallDirect = flattenGuardNestedCallPublic
-#guard flattenGuardNestedCallDirect.map (fun x => x.2.1.head?) = some (some 1)
 
 -- CREATE collision: a nonempty target code short-circuits with stack word 0.
 private def flattenGuardCreateCollision : Bool :=
@@ -4317,22 +4270,6 @@ private def flattenGuardOog : Bool :=
   | _ => false
 
 #guard flattenGuardOog
-
--- REVERT retains the 32-byte memory slice and becomes a settled frame result.
-private def flattenGuardRevert : Bool :=
-  let msg :=
-    flattenGuardMsg
-      [ 0x60, 0x2A, 0x60, 0x00, 0x52,
-        0x60, 0x20, 0x60, 0x00, 0xFD ]
-      1000 8
-  match (runFrame (Frame.ofCall msg) 100).run with
-  | .some (.ok devm) =>
-    devm.error == some "Revert" &&
-      devm.output.length == 32 &&
-      devm.output.getLast? == some 0x2A
-  | _ => false
-
-#guard flattenGuardRevert
 
 instance {w a} : Decidable (Dead w a) := by
   simp [Dead]
