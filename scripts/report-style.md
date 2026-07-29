@@ -129,13 +129,16 @@ hygiene OK (1 allowlisted); u256 21,593/21,593; patch 10/10; depth 67/67;
 smoke 174 baseline-exact (173 PASS + 1 expected FAIL); bls 29/29 baseline;
 ec differential oracle PASS; vectors 44/44 + controls 5/5 (manifest exact);
 mainnet smoke 16/16; transitions 13/13; osaka 2,514/2,514 (123.35 s, --jobs
-auto); prague 2,573/2,573 (169.60 s, --jobs auto); python unittest 110 OK;
-blanc axiom audit 4/4 **exact**. Parallel timings reference-only per GATES.md.
+auto); prague 2,573/2,573 (169.60 s, --jobs auto); **current-mainnet full
+5,100/5,100 (263.58 s, --jobs auto)**; python unittest 110 OK; blanc axiom
+audit 4/4 **exact**. Parallel timings reference-only per GATES.md.
 
-**Deferred long gates, owner: user** — `check.sh --full` (~31 min sequential /
-~15 min parallel) and `check-mainnet.sh --suite full` (~5 min parallel). Both
-must pass on the exact candidates before merge. Lean LSP workers were reaped
-before the long suites per the swap rule.
+**Deferred long gate, owner: user** — `check.sh --full` only (~31 min
+sequential / ~15 min parallel; latency-bound by `CALLBlake2f_MaxRounds`, so
+it stays above the ten-minute threshold even parallel). It must pass on the
+exact candidates before merge. The mainnet `--suite full` closure gate was
+run inline per the catalogue's parallel-mode guidance. Lean LSP workers were
+reaped before the long suites per the swap rule.
 
 ## Escalations and recommendations
 
