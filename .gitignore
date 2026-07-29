@@ -1,2 +1,4 @@
 /.lake
 /scripts/report-*.txt
+__pycache__/
+*.pyc
