@@ -62,14 +62,6 @@ lemma Nat.div_two_pow_mod_two_pow (k m n : Nat) :
 lemma Nat.toNat_toAdr (n : Nat) : n.toAdr.toNat = n ↾ 160 := by
   simp only [Nat.toAdr, Adr.toNat]; rw [toNat_toB32, toNat_toB128]
   apply Nat.or_eq_lo_add
---
--- lemma B64.toNat_mul_add_toNat_lt_size (x y : B64) :
---     x.toNat * (2 ^ 64) + y.toNat < 2 ^ 128 := by
---   have h : 2 ^ 128 = (UInt64.size - 1) * (2 ^ 64) + UInt64.size := by rfl
---   rw [h]; clear h
---   apply Nat.add_lt_add_of_le_of_lt _ (UInt64.toNat_lt_size _)
---   apply Nat.mul_le_mul_right
---   apply @Nat.le_pred_of_lt _ (UInt64.size) <| UInt64.toNat_lt_size _
 
 
 lemma toB32_toNat {x : B32} : x.toNat.toB32 = x := UInt32.ofNat_toNat
@@ -207,7 +199,6 @@ lemma B128.toNat_inj (xs ys : B128) : xs.toNat = ys.toNat ↔ xs = ys := by
 lemma lo_toB128 (n : Nat) : (n ↾ 128).toB128 = n.toB128 := by
   rw [← B128.toNat_inj, toNat_toB128, toNat_toB128, Nat.lo_lo]
 
---lemma toB128_eq_iff_mod_eq_toNat (a : Nat) (b : B128) :
 lemma toB128_eq_iff_lo_eq_toNat (a : Nat) (b : B128) :
     a.toB128 = b ↔ a ↾ 128 = b.toNat := by
   constructor <;> intro h
@@ -589,17 +580,6 @@ lemma B64.toNat_sub {a b : B64} :
   rw [Nat.sub_add_comm <| Nat.le_of_lt B64.toNat_lt]
   rfl
 
--- lemma Nat.add_sub_mod_eq_sub {k m n : Nat}
---     (hm : m < k) (h : n ≤ m) : (k + m - n) % k = m - n := by
---   rw [Nat.add_sub_assoc h, Nat.add_mod_left, Nat.mod_eq_of_lt]
---   apply lt_of_le_of_lt (Nat.sub_le _ _) hm
---
--- lemma Nat.add_sub_mod_eq_add_sub {k m n : Nat}
---     (hn : n ≤ k) (h : m < n) : (k + m - n) % k = k + m - n := by
---   rw [Nat.mod_eq_of_lt]
---   apply Nat.sub_lt_right_of_lt_add (by omega)
---   apply Nat.add_lt_add_left h
-
 lemma Nat.add_mul_self_mod (x y z : ℕ) : (x + y * z) % z = x % z := by
   induction y with
   | zero => simp
@@ -615,21 +595,6 @@ lemma Nat.sub_mod_eq_sub_mod_right {a d c b : Nat}
     rw [Nat.add_sub_assoc (Nat.le_mul_of_pos_right _ (by omega))]
     rw [Nat.add_sub_assoc (Nat.le_mul_of_pos_right _ (by omega))]
     apply Nat.add_mod_eq_add_mod_right _ eq
-
-
-  -- by_cases h : d = 0
-  -- · simp [h] at eq; rw [eq]
-  -- · rw [← add_mul_self_mod _ c d]
-  --   rw [← add_mul_self_mod (b - c) c d]
-  --   rw [← Nat.sub_add_comm le_a]
-  --   rw [← Nat.sub_add_comm le_b]
-  --   have hd : 0 < d := by
-  --     cases d
-  --     · cases h rfl
-  --     · simp
-  --   rw [Nat.add_sub_assoc (Nat.le_mul_of_pos_right _ hd)]
-  --   rw [Nat.add_sub_assoc (Nat.le_mul_of_pos_right _ hd)]
-  --   apply Nat.add_mod_eq_add_mod_right _ eq
 
 lemma B64.toNat_zero : B64.toNat 0 = 0 := rfl
 lemma B64.toNat_one : B64.toNat 1 = 1 := rfl
@@ -884,42 +849,6 @@ lemma Adr.lt_irrefl (x : Adr) : ¬ x < x := by
   intro h; rcases h with h | h <;> simp at h
 
 
--- lemma B128.toNat_sub (a b : B128) :
---     (a - b).toNat = (2 ^ 128 + a.toNat - b.toNat) % 2 ^ 128 := by
---   rw [B128.sub_eq]; simp only [B128.toNat]
---   rw [
---     @Nat.concat_modsub_concat 64 64 a.1.toNat a.2.toNat b.1.toNat b.2.toNat
---       (UInt64.toNat_lt_size _)
---       (UInt64.toNat_lt_size _)
---       (UInt64.toNat_lt_size _)
---   ]
---   apply congr_arg₂ _ _ (by rw [UInt64.toNat_sub'])
---   apply congr_arg₂ _ _ rfl
---   by_cases h : a.2 < b.2
---   · rw [if_pos h, if_pos (UInt64.lt_iff_toNat_lt.mp h)]; clear h
---     rw [UInt64.toNat_sub', UInt64.toNat_one, UInt64.toNat_sub']
---     rcases _root_.le_or_gt b.1.toNat a.1.toNat with h | h
---     · rw [Nat.add_sub_mod_eq_sub (UInt64.toNat_lt_pow _) h]
---       rw [← Nat.add_sub_assoc h]
---     · rw [Nat.add_sub_mod_eq_add_sub (Nat.le_of_lt (UInt64.toNat_lt_pow b.1)) h]
---       have h' : 2 ^ 64 + UInt64.toNat a.1 - UInt64.toNat b.1 < 2 ^ 64 := by
---         apply Nat.sub_lt_right_of_lt_add
---         · apply Nat.le_of_lt
---           apply lt_of_lt_of_le (UInt64.toNat_lt_size _) (Nat.le_add_right _ _)
---         · apply Nat.add_lt_add_left h
---       have h'' : 1 ≤ 2 ^ 64 + UInt64.toNat a.1 - UInt64.toNat b.1 := by
---         apply Nat.succ_le_of_lt
---         apply
---           lt_of_lt_of_le
---             (Nat.zero_lt_sub_of_lt (UInt64.toNat_lt_pow b.1))
---             (by omega)
---       rw [Nat.add_sub_mod_eq_sub h' h'']
---       rw [← Nat.sub_add_eq, Nat.add_sub_mod_eq_add_sub]
---       · apply Nat.succ_le_of_lt <| UInt64.toNat_lt_pow _
---       · apply lt_trans h <| Nat.lt_succ_self _
---   · rw [if_neg h, if_neg (mt UInt64.lt_iff_toNat_lt.mpr h)]
---     rw [Nat.sub_zero, UInt64.sub_zero, UInt64.toNat_sub']
-
 theorem B256.sub_add_cancel {x y : B256} : x - y + y = x := by
   apply B256.toNat_inj
   simp only [B256.toNat_add, B256.toNat_sub]
@@ -951,55 +880,6 @@ lemma toAdr_toNat (a : Adr) : a.toNat.toAdr = a := by
       rfl
     rw [eq, B128.zero_or]
     apply toB128_toNat
-
--- lemma Adr'.toAdr_toNat (a : Adr') : a.toNat.toAdr' = a := by
---   have aux : ∀ x : Nat, x * (2 ^ 128) = x * (2 ^ 64) * (2 ^ 64) := by
---     intro x; rw [Nat.mul_assoc]
---   simp only [Nat.toAdr', Adr'.toNat]
---   have h_high :
---       ((a.high.toNat * 2 ^ 128 + a.mid.toNat * 2 ^ 64 + a.low.toNat) / 2 ^ 128).toUInt32 = a.high := by
---   -- rw [Nat.add_assoc, Nat.add_div_of_dvd_of_lt]
---   -- · have h_lt := B64.toNat_mul_add_toNat_lt_size a.mid a.low
---   --   rw [Nat.div_eq_of_lt h_lt, Nat.mul_div_cancel _ (Nat.two_pow_pos _)]
---   --   apply UInt32.ofNat_toNat
---   -- · apply Nat.dvd_mul_left
---   -- · apply B64.toNat_mul_add_toNat_lt_size
---     sorry
---   rw [h_high]; clear h_high
---   have h_mid :
---       ((a.high.toNat * 2 ^ 128 + a.mid.toNat * 2 ^ 64 + a.low.toNat) / 2 ^ 64).toUInt64 = a.mid := by
---     rw [Nat.add_div_of_dvd_of_lt _ (UInt64.toNat_lt_size _)]
---
---
---     · rw [Nat.div_eq_of_lt <| UInt64.toNat_lt_size a.low, Nat.add_zero]
---       have h_dvd : 2 ^ 64 ∣ UInt32.toNat a.high * 2 ^ 128 := by
---         rw [aux]; apply Nat.dvd_mul_left
---       rw [Nat.add_div_of_dvd_of_dvd h_dvd (Nat.dvd_mul_left _ _) (Nat.two_pow_pos _)]
---       rw [Nat.mul_div_cancel _ (Nat.two_pow_pos _)]
---
---       rw [aux, Nat.mul_div_cancel _ (Nat.two_pow_pos _)]
---
---       simp
---
---     · rw [aux]; apply Nat.dvd_add <;> apply Nat.dvd_mul_left
---   rw [h_mid]; clear h_mid
---   simp
-
--- def Adr.compare (a b : Adr) : Ordering :=
---   match Ord.compare a.1 b.1 with
---   | .eq => Ord.compare a.2 b.2
---   | o => o
-
--- def Adr.compare : Adr → Adr → Ordering
---   | ⟨xh, xm, xl⟩, ⟨yh, ym, yl⟩ =>
---     match Ord.compare xh yh with
---     | .eq =>
---       match Ord.compare xm ym with
---       | .eq => Ord.compare xl yl
---       | o => o
---     | o => o
-
---instance : Ord Adr := {compare := Adr.compare}
 
 def Adr.toHex (a : Adr) : String := a.1.toHex ++ a.2.toHex
 
@@ -1056,8 +936,6 @@ def Acct.toStrings (s : String) (a : Acct) : List String :=
   fork s [
     [s!"BAL : 0x{a.bal.toHex.dropZeroes}"],
     [s!"NONCE : 0x{a.nonce.toHex.dropZeroes}"],
-    --longB8LToStrings "code" a.code.toList,
-    --fork "CODE" [String.chunks 64 <| B8L.toHex a.code.toList],
     fork "CODE" [codeStrings],
     a.stor.toStrings
   ]
@@ -1289,7 +1167,6 @@ inductive Linst : Type
   | ret -- 0xf3 / 2 / 0 / Halt execution and return output data.
   | rev -- 0xfd / 2 / 0 / Halt execution and revert State changes, returning output data.
   | dest -- 0xff / 1 / 0 / Halt execution and destroy the current contract, transferring remaining Ether to a specified Addr.
-  -- | invalid -- 0xFE / 0 / 0 / Designated invalid instruction.
 deriving DecidableEq
 
 
@@ -1377,7 +1254,6 @@ def Linst.toString : Linst → String
   | .dest => "SELFDESTRUCT"
   | .rev => "REVERT"
   | .ret => "RETURN"
-  -- | .invalid => "INVALID"
 
 def B8.toRinst : B8 → Option Rinst
   | 0x01 => some .add -- 0x01 / 2 / 1 / addition operation.

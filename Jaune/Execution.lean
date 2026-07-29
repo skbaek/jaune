@@ -1983,7 +1983,6 @@ def Benv.setStorVal (benv : Benv) (adr : Adr) (key val : B256) : Benv :=
   {benv with state := benv.state.setStorVal adr key val}
 
 def Devm.setStorVal (devm : Devm) (adr : Adr) (key val : B256) : Devm :=
-  --devm.withBenv (devm.benv.setStorVal adr key val)
   devm.withState (devm.state.setStorVal adr key val)
 
 def Tra.setStorVal (tra : Tra) (adr : Adr) (key val : B256) : Tra :=
@@ -2763,20 +2762,13 @@ def Jinst.run (evm : Evm) (j : Jinst) : Except (String × Devm) (Nat × Devm) :=
 def State.bal (w : State) (a : Adr) : B256 := (w.get a).bal
 
 def State.setBal (st : State) (adr : Adr) (val : B256) : State :=
-  -- let acct := wor.get adr
-  --wor.set adr {acct with bal := val}
   st.set adr <| (st.get adr).withBal val
 
 def State.addBal (st : State) (adr : Adr) (val : B256) : State :=
-  -- let acct := wor.get adr
-  -- wor.set adr {acct with bal := acct.bal + val}
   st.setBal adr <| (st.bal adr + val)
 
 
 def State.subBal (st : State) (adr : Adr) (val : B256) : Option State :=
-  -- let acct := wor.get adr
-  -- if acct.bal < val
-  -- else wor.set adr {acct with bal := acct.bal - val}
   if st.bal adr < val
   then .none
   else st.setBal adr (st.bal adr - val)
@@ -2791,28 +2783,14 @@ def Benv.subBal (benv : Benv) (adr : Adr) (val : B256) : Option Benv := do
 def Benv.addBal (benv : Benv) (adr : Adr) (val : B256) : Benv :=
   benv.withState (benv.state.addBal adr val)
 
--- def Msg.setBal (msg : Msg) (adr : Adr) (val : B256) : Msg :=
---   {msg with benv := msg.benv.setBal adr val}
-
 def Devm.setBal (devm : Devm) (adr : Adr) (val : B256) : Devm :=
-  --{devm with benv := devm.benv.setBal adr val}
   devm.withState (devm.state.setBal adr val)
 
--- def Msg.subBal (msg : Msg) (adr : Adr) (val : B256) : Option Msg := do
---   let benv ← msg.benv.subBal adr val
---   some {msg with benv := benv}
-
 def Devm.subBal (devm : Devm) (adr : Adr) (val : B256) : Option Devm := do
-  -- let benv ← devm.benv.subBal adr val
-  -- some {devm with benv := benv}
   let state ← devm.state.subBal adr val
   some <| devm.withState state
 
---def Msg.addBal (msg : Msg) (adr : Adr) (val : B256) : Msg :=
---  {msg with benv := msg.benv.addBal adr val}
-
 def Devm.addBal (devm : Devm) (adr : Adr) (val : B256) : Devm :=
-  --{devm with benv := devm.benv.addBal adr val}
   devm.withState (devm.state.addBal adr val)
 
 def Linst.run (sevm : Sevm) (devm : Devm) :
@@ -2939,17 +2917,10 @@ def State.setStor (w : State) (a : Adr) (s : Stor) : State :=
 def Benv.setStor (benv : Benv) (adr : Adr) (stor : Stor) : Benv :=
   {benv with state := benv.state.setStor adr stor}
 
--- def Evm.setBenv (evm : Evm) (benv : Benv) : Evm :=
---   {evm with msg := {evm.msg with benv := benv}}
---
--- def Msg.setStor (msg : Msg) (adr : Adr) (stor : Stor) : Msg :=
---   {msg with benv := msg.benv.setStor adr stor}
-
 def Msg.setCode (msg : Msg) (adr : Adr) (code : ByteArray) : Msg :=
   {msg with benv := {msg.benv with state := msg.benv.state.setCode adr code}}
 
 def Devm.setCode (devm : Devm) (adr : Adr) (code : ByteArray) : Devm :=
-  --{devm with benv := {devm.benv with state := devm.benv.state.setCode adr code}}
   devm.withState (devm.state.setCode adr code)
 
 def Devm.rollback (devm : Devm) (wor : State) (tra : Tra) : Devm :=
@@ -3237,7 +3208,6 @@ def spit_le_to_B64 (data : B8L) : Nat → Nat → List B64
     let word := B8L.toB64 wordBytes.reverse
     word :: spit_le_to_B64 data (start + 8) num_words
 
--- def get_blake2_parameters
 def getBlake2Parameters (data : B8L) :
   Nat × List B64 × List B64 × B64 × B64 × Nat :=
   let rounds := B8L.sliceToNat data 0 4
@@ -3531,24 +3501,6 @@ def executePairingCheck (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
   let cost := (34000 * (data.length / 192)) + 45000
   PrecompResult.chargeGas cost evm fun () =>
-    -- let inner : Except (String × Nat) (Nat × B8L) := do
-    --   if data.length % 192 ≠ 0 then throw ⟨"OutOfGasError", cost⟩
-    --   let mut result : BNF12 := 1
-    --   for i in List.range (data.length / 192) do
-    --     let p : BNP ←
-    --       catchWithOOGPrecomp cost (hasErrorType · "InvalidParameter") <|
-    --         B8L.toExStrBNP (data.slice! (i * 192) 64)
-    --     let q : BNP2 ←
-    --       catchWithOOGPrecomp cost (hasErrorType · "InvalidParameter") <|
-    --         B8L.toExStrBNP2 (data.slice! (i * 192 + 64) 128)
-    --     if p * altBn128CurveOrder ≠ ⟨0, 0⟩ then throw ⟨"OutOfGasError", cost⟩
-    --     if q * altBn128CurveOrder ≠ ⟨0, 0⟩ then throw ⟨"OutOfGasError", cost⟩
-    --     let pairResult ← match pairing q p with
-    --                      | some v => pure v
-    --                      | none => throw ⟨"ValueError", cost⟩
-    --     result := result * pairResult
-    --   let output : B8L := if result = 1 then (1 : Nat).toB256.toB8L else (0 : Nat).toB256.toB8L
-    --   pure (cost, output)
     let inner := executePairingCheckInner data cost
     match inner with
     | .ok ⟨cost, output⟩ => .ok cost output
@@ -3631,7 +3583,6 @@ def isValidDelegation (code: ByteArray) : Prop :=
 
 instance {code} : Decidable (isValidDelegation code) := instDecidableAnd
 
--- get_delegated_code_address
 def getDelegatedCodeAddress (code : ByteArray) : Option Adr :=
   if isValidDelegation code
   then
@@ -3641,7 +3592,6 @@ def getDelegatedCodeAddress (code : ByteArray) : Option Adr :=
 
 instance : Inhabited Adr := ⟨0⟩
 
--- access_delegation
 def accessDelegation (devm : Devm) (adr : Adr) :
   Bool × Adr × ByteArray × Nat × Devm :=
   let state := devm.state
@@ -4334,7 +4284,6 @@ def Test.toStrings (t : Test) : List String :=
     fork "lastblockhash" [t.lbh.toStrings],
     fork "network" [t.network.toStrings],
     fork "pre" [t.pre.toStrings],
-    --[s!"postRoot {t.postRoot.toHex}"],
     fork "sealEngine" [t.sealEngine.toStrings]
   ]
 
@@ -4781,7 +4730,6 @@ def Tx.signingHash (tx : Tx) : Option B256 :=
             .list <| auths.map Auth.toBLT
           ]
 
--- recover_sender
 def recoverSender (chain_id: B64) (tx: Tx) : Except String Adr := do
   let r := tx.r.toB256
   let s := tx.s.toB256
@@ -4807,7 +4755,6 @@ def recoverSender (chain_id: B64) (tx: Tx) : Except String Adr := do
     .assert (v < 2) "InvalidSignatureError"
     (secp256k1.recover signingHash v.toBool r s).toExcept "sender recovery failed"
 
--- recover_authority
 def recoverAuthority (auth : Auth) : Except String Adr := do
   let yParity := auth.yParity
   let r := auth.r

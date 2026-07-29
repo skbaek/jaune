@@ -10,8 +10,6 @@ import Mathlib.Data.List.TakeWhile
 import Mathlib.Data.UInt
 import Mathlib.Tactic.NormNum
 import Std.Tactic.BVDecide
--- import Mathlib.Util.Notation3
--- import Mathlib.Data.Vector.Basic
 
 instance : @Zero Bool := ⟨false⟩
 instance : @One Bool := ⟨true⟩
@@ -90,9 +88,6 @@ def B128.lowBit  (x : B128) : Bool := x.2.lowBit
 
 def B256.highBit (x : B256) : Bool := x.1.highBit
 def B256.lowBit  (x : B256) : Bool := x.2.lowBit
-
--- instance : HAppend B64 B64 B128 := ⟨λ xs ys => ⟨xs, ys⟩⟩
--- instance : HAppend B128 B128 B256 := ⟨λ xs ys => ⟨xs, ys⟩⟩
 
 def B64.max : B64 := 0xFFFFFFFFFFFFFFFF
 def B128.max : B128 := ⟨.max, .max⟩
@@ -369,12 +364,6 @@ def B32.toB8L (x : B32) : B8L :=
 def B64.toB8L (x : B64) : B8L :=
   B32.toB8L (x >>> 32).toB32 ++ B32.toB8L x.toB32
 
--- def B64.toB8L (x : B64) : B8L :=
---   [ (x >>> 56).toUInt8, (x >>> 48).toUInt8,
---     (x >>> 40).toUInt8, (x >>> 32).toUInt8,
---     (x >>> 24).toUInt8, (x >>> 16).toUInt8,
---     (x >>> 8).toUInt8, x.toUInt8 ]
-
 def B64.reverse (w : B64) : B64 :=
   ((w <<< 56) &&& (0xFF00000000000000 : B64)) |||
   ((w <<< 40) &&& (0x00FF000000000000 : B64)) |||
@@ -428,16 +417,6 @@ def B256.signext (x y : B256) : B256 :=
       ((B256.max >>> (256 - (8 * (x.toNat + 1)))) &&& y)
   else y
 
--- theorem List.length_dropWhile_le {ξ : Type u} (xs : List ξ) (f : ξ → Bool) :
---     (dropWhile f xs ).length ≤ xs.length := by
---   induction xs with
---   | nil => simp
---   | cons x xs ih =>
---     by_cases h : f x
---     · rw [List.dropWhile_cons_of_pos h]
---       apply le_trans ih; simp
---     · rw [List.dropWhile_cons_of_neg h]
---
 instance {ξ : Type u} {ρ : ξ → Prop} {xs : List ξ}
     [d : ∀ x : ξ, Decidable (ρ x)] : Decidable (xs.Forall ρ) := by
   induction xs with
@@ -580,20 +559,6 @@ def List.compare {ξ : Type u} [Ord ξ] : List ξ → List ξ → Ordering
     | o => o
 instance {ξ : Type u} [Ord ξ] : Ord (List ξ) := ⟨List.compare⟩
 
--- def B128.compare : B128 → B128 → Ordering
---   | ⟨x, y⟩, ⟨x', y'⟩ =>
---     match Ord.compare x x' with
---     | .eq => Ord.compare y y'
---     | o => o
--- instance : Ord B128 := ⟨B128.compare⟩
---
--- def B256.compare : B256 → B256 → Ordering
---   | ⟨x, y⟩, ⟨x', y'⟩ =>
---     match Ord.compare x x' with
---     | .eq => Ord.compare y y'
---     | o => o
--- instance : Ord B256 := ⟨B256.compare⟩
-
 def B8.compareLows (x y : B8) : Ordering :=
   Ord.compare x.lows y.lows
 
@@ -700,17 +665,6 @@ def B8s.toB64 (a b c d e f g h : B8) : B64 :=
   (g64 <<< 8)  |||
   h64
 
--- def B8s.toB128
---   (x0 x1 x2 x3 x4 x5 x6 x7 y0 y1 y2 y3 y4 y5 y6 y7 : B8) : B128 :=
---   ⟨ B8s.toB64 x0 x1 x2 x3 x4 x5 x6 x7,
---     B8s.toB64 y0 y1 y2 y3 y4 y5 y6 y7 ⟩
---
--- def B8s.toB256
---   ( x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 xA xB xC xD xE xF
---     y0 y1 y2 y3 y4 y5 y6 y7 y8 y9 yA yB yC yD yE yF : B8 ) : B256 :=
---   ⟨ B8s.toB128 x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 xA xB xC xD xE xF,
---     B8s.toB128 y0 y1 y2 y3 y4 y5 y6 y7 y8 y9 yA yB yC yD yE yF ⟩
-
 
 
 def B8L.toB16 (xs : B8L) : B16 :=
@@ -757,9 +711,6 @@ def Hex.toB64? (hx : String) : Option B64 := do
 
 def Hex.toB256? (hx : String) : Option B256 := do
   Hex.toB8L hx >>= B8L.toB256?
--- def B8L.toB64 (xs : B8L) : B64 :=
---   let v := xs.pack 8
---   B8s.toB64 v[0]! v[1]! v[2]! v[3]! v[4]! v[5]! v[6]! v[7]!
 
 lemma B16.length_toB8L (x : B16) : x.toB8L.length = 2 := rfl
 lemma B32.length_toB8L (x : B32) : x.toB8L.length = 4 := rfl

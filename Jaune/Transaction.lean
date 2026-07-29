@@ -106,7 +106,6 @@ def Tx.isTypeFour (tx : Tx) : Bool :=
   | .four _ _ _ _ _ _ => true
   | _ => false
 
--- calculate_total_blob_gas
 def calculateTotalBlobGas (tx: Tx) : Nat :=
   match tx.type with
   | .three _ _ _ _ _ _ blobHashes => gasPerBlob * blobHashes.length
@@ -293,7 +292,6 @@ def checkTransactionSenderAccount
   else
     checkTransactionSenderCode senderAccount
 
--- check_transaction
 def checkTransaction (benv : Benv) (blockOut : BlockOutput) (tx : Tx) :
     Except String (Adr × Nat × List B256 × Nat) := do
   let txBlobGasUsed ← checkTransactionGasLimits benv blockOut tx
@@ -370,7 +368,6 @@ def checkTransactionGasCap (limits : TransactionLimits) (gas : Nat) :
     else
       .ok ()
 
--- validate_transaction
 def validateTransaction (rules : ForkRules) (tx : Tx) :
     Except String (Nat × Nat) := do
   let ⟨intrinsicGas, callDataFloorGasCost⟩ := calculateIntrinsicCost tx
@@ -441,7 +438,6 @@ def prepareMessage (benv: Benv) (tenv: Tenv) (tx: Tx) :
     disablePrecompiles := false
   }
 
--- calculate_data_fee
 def calculate_data_fee (blob : BlobSchedule) (excess_blob_gas: Nat) (tx: Tx) :
     Nat :=
   calculateTotalBlobGas tx * calculate_blob_gas_price blob excess_blob_gas
@@ -467,7 +463,6 @@ def Receipt.toBLT (r : Receipt) : BLT :=
     .list (r.logs.map Log.toBLT)
   ]
 
--- make_receipt
 def makeReceipt
   (tx: Tx)
   (error: Option String)
@@ -613,7 +608,6 @@ private def guardTightCodeLimits : CodeLimits :=
     (fixtureTestAccount 0 100 (ByteArray.mk #[0x01])) fixtureTestTx 0
 
 
--- process_transaction
 def processTransaction
   (benv: Benv) (bout : BlockOutput)
   (tx: Tx) (index : Nat) : Except String (State × BlockOutput) := do
@@ -708,7 +702,6 @@ def processWithdrawalsState (st : State) (wds : List Withdrawal) : State :=
     st
     wds
 
--- def process_withdrawal
 def processWithdrawals
   (benv : Benv) (bout : BlockOutput) (wds : List Withdrawal) : State × BlockOutput :=
   let trie := processWithdrawalsTrie bout.withdrawalsTrie wds
@@ -995,7 +988,6 @@ def processSystemTransactionMsg (benv : Benv) (tenv : Tenv)
     disablePrecompiles := false
   }
 
--- process_system_transaction
 -- The single boundary shared by all four system transactions (beacon roots,
 -- history storage, withdrawal requests, consolidation requests), so each takes
 -- its own input state as the original state.
@@ -1039,7 +1031,6 @@ def extractDepositData (data : B8L) : Except String B8L := do
   let index : B8L := data.slice! (indexOffset + 32) indexSize
   .ok (pubkey ++ withdrawalCredentials ++ amount ++ signature ++ index)
 
--- parse_deposit_requests
 def parseDepositRequests
   (bout : BlockOutput) : Except String B8L := do
   let mut depositRequests : B8L := []
@@ -1134,7 +1125,6 @@ def applyBody
   cprint "\n================================ PROCESS GENERAL PURPOSE REQUESTS ================================\n"
   processGeneralPurposeRequests (benvTxs.withState stWds) boutWds
 
--- get_last256_block_hashes
 def getLast256BlockHashes (chain : BlockChain) : List B256 :=
   match chain.blocks.reverse.take 255 with
   | [] => []

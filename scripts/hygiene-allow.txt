@@ -14,7 +14,3 @@
 # `cprint` and `Except.print` are its only sinks and both gate on it. Covers
 # both occurrences (Basic.lean:1786 in cprint, Basic.lean:1789 in Except.print).
 Jaune/Basic.lean dbg_trace msg
-
-# Not a live `sorry`: a commented-out proof sketch inside a disabled lemma body
-# (the Adr'/toNat block in Types.lean), retained as a development note.
-Jaune/Types.lean -- sorry

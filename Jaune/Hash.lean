@@ -9,7 +9,7 @@ namespace ripemd160
 -- RIPEMD-160 hash function. Ported from David Turner's
 -- C implementation (https://github.com/DaveCTurner/tiny-ripemd160)
 
--- ripemf160_shifts
+-- ripemd160_shifts
 def shiftLists : List B32L :=
   [
     [11, 14, 15, 12, 5, 8, 7, 9, 11, 13, 14, 15, 6, 7, 9, 8],
@@ -254,9 +254,6 @@ def Array.app {ξ : Type u} (k : Nat) (f : ξ → ξ) (ws : Array ξ) : Array ξ
   match ws[k]? with
   | none => panic "Array.app out of bounds"
   | some x => ws.set! k (f x)
-
--- def Bits.rol {n} (xs : Bits n) (y : Nat) : Bits n :=
---   Bits.or (xs.shl y) (xs.shr (n - y))
 
 @[inline] def B64.rol (xs : B64) (y : Nat) : B64 :=
   (xs <<< y.toUInt64) ||| (xs >>> (64 - y).toUInt64)
