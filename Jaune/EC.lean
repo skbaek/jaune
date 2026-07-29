@@ -2,8 +2,8 @@
 -- precompiled EVM contracts. Unless otherwise noted, definitions
 -- are ported from execution-specs and the libraries it uses.
 
-import Elevm.Types
-import Elevm.Hash
+import Jaune.Types
+import Jaune.Hash
 
 
 

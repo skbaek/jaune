@@ -1,6 +1,6 @@
 -- Types.lean : types used by both executable and abstract semantics of EVM and Blanc.
 
-import Elevm.Basic
+import Jaune.Basic
 import Std.Data.TreeMap.Lemmas
 
 
@@ -1096,7 +1096,7 @@ def Hex.toAdr? (hx : String) : Option Adr := Hex.toB8L hx >>= B8L.toAdr?
 --
 -- The helpers below are the pure shape checks, one per shape the consensus
 -- fields actually have. They are deliberately value-level and error-free:
--- `Elevm/Execution.lean` wraps each one with the tagged error naming the
+-- `Jaune/Execution.lean` wraps each one with the tagged error naming the
 -- precise reason, which is what a fixture exception identity is mapped from.
 
 /-- A fixed-width field: the length must equal `n` exactly. -/

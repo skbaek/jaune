@@ -6,8 +6,8 @@
 -- Execution.lean). Mirrors the BN254 conventions already in EC.lean /
 -- Execution.lean (BNF/BNP/B8L.toExStrBNP) rather than generalizing them.
 
-import Elevm.EC
-import Elevm.BLSConst
+import Jaune.EC
+import Jaune.BLSConst
 
 -- py_ecc.fields.field_properties.field_properties["bls12_381"]["field_modulus"];
 -- equal to the pre-existing (unused) `bls12Prime` constant in EC.lean.

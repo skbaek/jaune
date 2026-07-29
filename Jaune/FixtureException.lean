@@ -2,7 +2,7 @@
 -- exception identities, and the fail-closed matcher built on it.
 --
 -- This module is fixture-runner infrastructure, not EVM semantics: it is
--- imported by `Main.lean` only, and deliberately not from the `Elevm` library
+-- imported by `Main.lean` only, and deliberately not from the `Jaune` library
 -- root, so that no proof client depends on it.
 --
 -- A fixture's `expectException` is a `|`-separated set of *allowed* official
@@ -14,7 +14,7 @@
 -- match, and no "any RLP error is good enough" fallback -- those are what let a
 -- block be rejected for the wrong reason and still be scored as a pass.
 
-import Elevm.Transaction
+import Jaune.Transaction
 
 /-- The canonical vocabulary used by the selected Prague and Osaka corpora,
 spanning the `BlockException` and `TransactionException` namespaces. It
@@ -181,7 +181,7 @@ def ofString? (s : String) : Option FixtureException :=
   match s with
   -- EIP-7623 names a separate *reason* for the same transaction-level
   -- rejection. Current fixtures list it as an alternative to the pre-existing
-  -- intrinsic-gas identity; ELeVM's Prague validator reports the latter.
+  -- intrinsic-gas identity; Jaune's Prague validator reports the latter.
   | "TransactionException.INTRINSIC_GAS_BELOW_FLOOR_GAS_COST" =>
     some txIntrinsicGasTooLow
   -- The v20 fixture publisher also permits the corresponding aggregate
@@ -249,7 +249,7 @@ must fail the fixture rather than be waved through. -/
 def classifyWith (routes : List ActualRoute) (err : String) : Option FixtureException :=
   (routes.find? (fun r => hasErrorType err r.fst)).map Prod.snd
 
-/-- The routes from ELeVM's actual errors to canonical identities.
+/-- The routes from Jaune's actual errors to canonical identities.
 
 Registering a route is a claim that a specific producer raises a specific
 official identity. The header, post-transition, transaction-validation and RLP

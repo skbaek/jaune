@@ -1,14 +1,14 @@
-import Elevm.Execution
+import Jaune.Execution
 
 /-!
 # A sufficient fuel bound for the interpreter driver
 
-`Elevm.Execution` defines the interpreter driver structurally recursive on a
+`Jaune.Execution` defines the interpreter driver structurally recursive on a
 fuel parameter, so it must report exhaustion as a possible outcome. This module
 proves that fuel seeded from the frame's remaining gas is always sufficient, and
 uses that proof to give the driver and its frame wrappers a total type.
 
-It sits between `Elevm.Execution` (the driver) and `Elevm.Transaction` (its
+It sits between `Jaune.Execution` (the driver) and `Jaune.Transaction` (its
 first consumer) so that the consumers can be stated against the total API.
 
 ## The measure
@@ -2915,13 +2915,13 @@ theorem runFrame_of_run {frame : Frame} {evm : Evm} (h : frame.enter = .run evm)
 These mirror the flatten arc's representative states — arithmetic loop, nested
 CALL, CREATE collision, precompile under both dispatch paths, depth-zero
 short-circuit, out-of-gas halt, REVERT with output — but drive them through the
-fuel-free API. `Elevm.Execution` keeps the checks that pin `execCore` itself,
+fuel-free API. `Jaune.Execution` keeps the checks that pin `execCore` itself,
 including the one that shows fuel really can run out when it is not seeded from
 the frame's gas.
 
 `private` declarations do not cross module boundaries, so the two helpers this
-block shares with `Elevm.Execution` are restated here. Keep them in step with
-their counterparts at `Elevm/Execution.lean:4203`. -/
+block shares with `Jaune.Execution` are restated here. Keep them in step with
+their counterparts at `Jaune/Execution.lean:4203`. -/
 
 private def totalGuardCode (bytes : B8L) : ByteArray := .mk <| .mk bytes
 

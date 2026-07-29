@@ -21,7 +21,7 @@
 -- in `Basic.lean` builds indented report sections and has nothing to do with
 -- protocol forks.
 
-import Elevm.Types
+import Jaune.Types
 
 /-- One protocol rule set in the supported transition chain.
 

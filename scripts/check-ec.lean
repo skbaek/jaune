@@ -1,14 +1,14 @@
-import Elevm.EC
-import Elevm.BLS
+import Jaune.EC
+import Jaune.BLS
 
 /-!
 Elliptic-curve differential oracle.
 
 Run with `scripts/check-ec.sh`.  Like `scripts/bench-ec.lean`, this file is not
 a Lake target: the wrapper compiles it with `lean -c` plus `leanc -O2` and links
-it against the native objects Lake already recorded for the `elevm` executable.
+it against the native objects Lake already recorded for the `jaune` executable.
 
-**This file is test-only.  Nothing under `Elevm/` may ever import it.**  It
+**This file is test-only.  Nothing under `Jaune/` may ever import it.**  It
 carries a private copy of the affine curve algorithm as it stands before the
 elliptic-curve optimization work (`refDouble`, `refAdd`, `refMulBy`,
 `refRecover`), so that a later Jacobian/joint-projective rewrite of the public

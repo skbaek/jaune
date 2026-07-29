@@ -3,7 +3,7 @@
 --
 -- Like `FixtureException`, this module is fixture-runner infrastructure, not
 -- EVM semantics: it is imported by `Main.lean` only, and deliberately not from
--- the `Elevm` library root, so that no proof client depends on it.
+-- the `Jaune` library root, so that no proof client depends on it.
 --
 -- The old runner treats a fixture's blocks as one linear chain, so block N is
 -- always evaluated against the chain left by block N-1, whatever parent block
@@ -28,7 +28,7 @@
 -- The store is keyed with the existing `Ord B256` order via `Std.TreeMap`;
 -- deliberately no `Hashable B256` instance is introduced for the harness.
 
-import Elevm.FixtureException
+import Jaune.FixtureException
 
 /-- The hash of a chain's tip block header: the key under which this snapshot
 is (or would be) stored. `none` only for a chain with no blocks at all, which

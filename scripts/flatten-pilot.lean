@@ -1,8 +1,8 @@
 /-
   Step-1 pilot for `~/plans/flatten.md` ("Flatten the interpreter recursion").
 
-  This file is DELIBERATELY OUTSIDE the `Elevm` library root: `lakefile.lean`
-  declares `lean_lib «Elevm»` with the default glob (root module only), so a
+  This file is DELIBERATELY OUTSIDE the `Jaune` library root: `lakefile.lean`
+  declares `lean_lib «Jaune»` with the default glob (root module only), so a
   file under `scripts/` is never elaborated by `lake build`.  Elaborate it with
 
       lake env lean scripts/flatten-pilot.lean
@@ -25,7 +25,7 @@
   the *idiom*, not the transcription.  Step 2 transcribes all six.
 -/
 
-import Elevm
+import Jaune
 import Mathlib.Util.CountHeartbeats
 
 set_option maxHeartbeats 1000000

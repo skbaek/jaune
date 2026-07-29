@@ -1,6 +1,6 @@
 /-!
 Standalone repro of the Lean v4.23.0 codegen bug worked around in
-`Elevm/Hash.lean` (`fB64`): when one function contains duplicated large
+`Jaune/Hash.lean` (`fB64`): when one function contains duplicated large
 `UInt64` literals, the compiler CSEs them into a shared value and the C
 emitter issues `lean_inc` on an unboxed `uint64_t`, so the generated C does
 not compile. Elaboration is clean — LSP diagnostics do not catch this; only
@@ -20,7 +20,7 @@ Resolved during the v4.32.1 migration: on v4.23.0 both the failure above and its
 exact `lean_inc` line reproduce; on v4.32.1 both commands succeed, the program
 links and runs, and the generated C contains no `lean_inc` on an unboxed
 `uint64_t`. Retained as a regression canary for future toolchain bumps. The
-`B64.rdnc` read in `Elevm/Hash.lean`'s `fB64` is kept regardless — see the
+`B64.rdnc` read in `Jaune/Hash.lean`'s `fB64` is kept regardless — see the
 doc comment there.
 
 The shape mirrors `fB64`/`roundB64`: a non-inline function taking a `UInt64`

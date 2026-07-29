@@ -1,8 +1,8 @@
-import Elevm.Types
-import Elevm.Fork
-import Elevm.EC
-import Elevm.BLS
-import Elevm.Hash
+import Jaune.Types
+import Jaune.Fork
+import Jaune.EC
+import Jaune.BLS
+import Jaune.Hash
 
 /-
 Design note #1: primitive signatures of the form
@@ -24,7 +24,7 @@ Design note #2: All semantics definitions must obey the following guideline:
   - named defs for messages/records that would bloat contexts.
 
 This guideline exists to prevent context bloat & facilitate downstream
-verificaiton work. It should be considered a style contract between `elevm`
+verificaiton work. It should be considered a style contract between `jaune`
 and the projects which depend on it, including `blanc`.
 -/
 
@@ -654,7 +654,7 @@ def gasStorageUpdate := 5000
 def gasEcrecover : Nat := 3000
 def gasP256Verify : Nat := 6900
 -- `maxCodeSize` and `maxInitCodeSize` are fork rules, not global constants:
--- see `ForkRules.code` in `Elevm/Fork.lean`.
+-- see `ForkRules.code` in `Jaune/Fork.lean`.
 def gNewAccount : Nat := 25000
 def gasSelfDestructNewAccount : Nat := 25000
 def gasCallValue : Nat := 9000
@@ -700,7 +700,7 @@ def eoaDelegationMarker : B8L := [0xEF, 0x01, 0x00]
 def gasBlake2PerRound : Nat := 1
 def eoaDelegatedCodeLength : Nat := 23
 -- The blob target, ceiling, and base-fee update fraction are fork rules, not
--- global constants: see `ForkRules.blob` in `Elevm/Fork.lean`.
+-- global constants: see `ForkRules.blob` in `Jaune/Fork.lean`.
 def elasticityMultiplier : Nat := 2
 def gasLimitAdjustmentFactor : Nat := 1024
 def gasLimitMinimum : Nat := 5000
@@ -975,7 +975,7 @@ def isInvalidTransaction (err : String) : Bool :=
 -- exactly what let a block be rejected for the wrong reason and still be scored
 -- as a pass: the official fixture vocabulary names ~17 distinct block
 -- identities, and one string cannot be mapped to them. Each tag below is the
--- sole producer of its reason, so `Elevm/FixtureException.lean` can route it to
+-- sole producer of its reason, so `Jaune/FixtureException.lean` can route it to
 -- one identity.
 --
 -- Tags follow the `hasErrorType` convention: a bare tag, or a tag opening
@@ -1088,14 +1088,14 @@ def isBlockException (err : String) : Bool :=
 
 ------------------- STRICT CONSENSUS-FIELD DECODERS --------------------
 
--- The `Except`-level face of the strict shape checks in `Elevm/Types.lean`.
+-- The `Except`-level face of the strict shape checks in `Jaune/Types.lean`.
 -- Each helper names one precise reason a consensus field can be malformed, in
 -- the `hasErrorType` tag convention the rest of the executable uses: a bare tag,
 -- or a tag followed by " : " and free diagnostic text. The tags are separate
 -- because the official fixture identities are separate -- a scalar wider than
 -- 64 bits is `RLP_INVALID_FIELD_OVERFLOW_64`, a wrong list shape is
 -- `RLP_STRUCTURES_ENCODING` -- so one generic `"DecodingError"` covering both
--- cannot be classified. `Elevm/FixtureException.lean` routes these exact tags;
+-- cannot be classified. `Jaune/FixtureException.lean` routes these exact tags;
 -- adding a new decoder rejection therefore requires an explicit route there.
 
 /-- An RLP item is not the list/string structure the field requires. -/
@@ -1471,7 +1471,7 @@ def Evm.toStrings (evm : Evm) : List String :=
   ]
 
 -- Precompile activation is a fork rule and lives with the rules:
--- `ForkRules.isPrecomp` in `Elevm/Fork.lean` replaces what used to be a
+-- `ForkRules.isPrecomp` in `Jaune/Fork.lean` replaces what used to be a
 -- hard-wired `1 ≤ a.toNat ∧ a.toNat ≤ 17` range stated here.
 
 def safeSub {ξ} [Sub ξ] [LE ξ] [DecidableLE ξ] (x y : ξ) : Option ξ :=
@@ -4171,7 +4171,7 @@ def Evm.step (evm : Evm) : Step :=
 /-- The single recursive interpreter driver, structurally recursive on its fuel
 parameter and therefore obliged to report exhaustion as an outcome.
 
-`Elevm.Sufficiency` proves that fuel seeded from the frame's remaining gas is
+`Jaune.Sufficiency` proves that fuel seeded from the frame's remaining gas is
 always enough, and wraps this function as the total `exec`. -/
 def execCore : Evm → Nat → Fueled (String × Devm) Devm
   | _, 0 => Fueled.exhausted
@@ -4198,7 +4198,7 @@ def execCore : Evm → Nat → Fueled (String × Devm) Devm
 
 The frame wrappers these once also covered (`runFrame`, `executeCode`,
 `processMessage`, `processCreateMessage`) are total and therefore live in
-`Elevm.Sufficiency`; their checks moved with them. -/
+`Jaune.Sufficiency`; their checks moved with them. -/
 
 private def flattenGuardCode (bytes : B8L) : ByteArray := .mk <| .mk bytes
 

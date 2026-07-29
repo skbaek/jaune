@@ -1,12 +1,12 @@
-import Elevm.EC
-import Elevm.BLS
+import Jaune.EC
+import Jaune.BLS
 
 /-!
 Elliptic-curve microbenchmark instrument.
 
 Compile and run with `scripts/run-bench-ec.sh <label>`.  That wrapper uses
 standalone `lean -c` followed by `leanc -O2` and links against the native
-objects Lake already recorded for the `elevm` executable; this benchmark is not
+objects Lake already recorded for the `jaune` executable; this benchmark is not
 a Lake target and never times interpreted reduction.
 
 Discipline, following `scripts/bench-u256.lean`:
@@ -69,7 +69,7 @@ def benchSigR : Nat :=
 def benchSigS : Nat :=
   0x785e45c2c421b3c98018897863ac53b03f278b2888e4d38ac35a5b2ff2293b32
 
--- coincurve recovery id 0, i.e. even y, i.e. ELeVM's `v = false`.
+-- coincurve recovery id 0, i.e. even y, i.e. Jaune's `v = false`.
 def benchSigV : Bool := false
 
 -- Fixed scalar pattern, reduced per curve at use sites.

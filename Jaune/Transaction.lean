@@ -1,19 +1,19 @@
-import Elevm.Sufficiency
+import Jaune.Sufficiency
 
 /-!
 # Transaction, block, and chain processing
 
 This module holds every declaration that consumes the interpreter driver
-defined in `Elevm.Execution`, starting at `processMessageCall.create`, together
+defined in `Jaune.Execution`, starting at `processMessageCall.create`, together
 with the transaction, block, and chain-level machinery built on top of it. It
-was split out of `Elevm.Execution` verbatim so that `Elevm.Sufficiency` can sit
+was split out of `Jaune.Execution` verbatim so that `Jaune.Sufficiency` can sit
 between the driver and its first consumer.
 -/
 
 /- `private` declarations do not cross module boundaries, so the two `#guard`
-helpers that the moved text shares with `Elevm.Execution` are restated here
+helpers that the moved text shares with `Jaune.Execution` are restated here
 rather than being made public. Keep them in step with their counterparts at
-`Elevm/Execution.lean:1219`. -/
+`Jaune/Execution.lean:1219`. -/
 
 private def errOf {α : Type} : Except String α → String
   | .error e => e
