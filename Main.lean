@@ -25,17 +25,17 @@ def Lean.Json.toIoString : Lean.Json → IO String
   | .str s => return s
   | _ => IO.throw "not a string"
 
-def Lean.Json.toIoB8L (j : Json) : IO B8L := do
+def Lean.Json.toIoBytes (j : Json) : IO Bytes := do
   let x ← toIoString j >>= .remove0x
-  (Hex.toB8L x).toIO ""
+  (Hex.toBytes x).toIO ""
 
 def Lean.Json.toIoAdr (j : Json) : IO Adr := do
   let x ← toIoString j >>= .remove0x
   (Hex.toAdr? x).toIO ""
 
-def Lean.Json.toIoB64 (j : Json) : IO B64 := do
+def Lean.Json.toIoB64 (j : Json) : IO UInt64 := do
   let x ← toIoString j >>= .remove0x
-  (Hex.toB64? x).toIO
+  (Hex.toUInt64? x).toIO
 
 def Lean.Json.toB256? (j : Json) : Option B256 := do
   let x ← toString? j >>= .remove0x
@@ -45,15 +45,15 @@ def Lean.Json.toIoB256 (j : Json) : IO B256 := do
   let x ← toIoString j >>= .remove0x
   (Hex.toB256? x).toIO ""
 
-def Lean.Json.toIoB64P (j : Json) : IO B64 := do
+def Lean.Json.toIoB64P (j : Json) : IO UInt64 := do
   let x ← toIoString j >>= .remove0x
-  let xs ← (Hex.toB8L x).toIO ""
-  return (B8L.toB64 xs)
+  let xs ← (Hex.toBytes x).toIO ""
+  return (Bytes.toUInt64 xs)
 
 def Lean.Json.toIoB256P (j : Json) : IO B256 := do
   let x ← toIoString j >>= .remove0x
-  let xs ← (Hex.toB8L x).toIO ""
-  return (B8L.toB256 xs)
+  let xs ← (Hex.toBytes x).toIO ""
+  return (Bytes.toB256 xs)
 
 /-- Read a hex *quantity*, which unlike a byte string may have an odd number of
 digits. Used for the small schedule numbers a fixture states about itself. -/
@@ -67,8 +67,8 @@ def Lean.Json.toAcct : Lean.Json → IO Acct
   | .obj r => do
     let aux (xy : String × Lean.Json) : IO (B256 × B256) := do
       let x ← .remove0x xy.fst
-      let bs ← (Hex.toB8L x).toIO ""
-      let bs' ← xy.snd.toIoB8L
+      let bs ← (Hex.toBytes x).toIO ""
+      let bs' ← xy.snd.toIoBytes
       return ⟨bs.toB256, bs'.toB256⟩
     let bal_json ← (r.get? "balance").toIO ""
     let nonce_json ← (r.get? "nonce").toIO ""
@@ -76,7 +76,7 @@ def Lean.Json.toAcct : Lean.Json → IO Acct
     let stor_json ← (r.get? "storage").toIO "" >>= Lean.Json.toIoRBNode
     let bal ← Lean.Json.toIoB256P bal_json
     let nonce ← Lean.Json.toIoB64P nonce_json
-    let code ← Lean.Json.toIoB8L code_json
+    let code ← Lean.Json.toIoBytes code_json
     let storPairs ← List.mapM aux stor_json.toArray.toList
     -- Ethereum's state trie has no entries for zero-valued storage slots.  The
     -- JSON fixtures may spell such a slot explicitly in `pre`, so normalize
@@ -102,8 +102,8 @@ def Lean.Json.find : String → Lean.Json → IO Lean.Json
   | k, .obj r => (r.get? k).toIO s!"ERROR : FAILED JSON RETRIEVAL WITH KEY : {k}"
   | k, _ => .throw s!"ERROR : INPUT JSON IS NOT OBJECT, FAILED RETRIEVAL WITH KEY : {k}"
 
-def getTxExMap (j : Lean.Json) : IO (Option String × B8L) := do
-  let rlp ← j.find "rlp" >>= Lean.Json.toIoB8L
+def getTxExMap (j : Lean.Json) : IO (Option String × Bytes) := do
+  let rlp ← j.find "rlp" >>= Lean.Json.toIoBytes
   match j.find? "expectException" with
   | .none => pure ⟨.none, rlp⟩
   | .some exj => do
@@ -117,19 +117,19 @@ def Lean.Json.toHeader (json : Lean.Json) : IO Header := do
   let stateRoot ← json.find "stateRoot" >>= Lean.Json.toIoB256
   let txsRoot ← json.find "transactionsTrie" >>= Lean.Json.toIoB256
   let receiptRoot ← json.find "receiptTrie" >>= Lean.Json.toIoB256
-  let bloom ← json.find "bloom" >>= Lean.Json.toIoB8L
-  let difficulty ← (json.find "difficulty" >>= Lean.Json.toIoB8L) <&> B8L.toNat
-  let number ← (json.find "number" >>= Lean.Json.toIoB8L) <&> B8L.toNat
-  let gasLimit ← (json.find "gasLimit" >>= Lean.Json.toIoB8L) <&> B8L.toNat
-  let gasUsed ← (json.find "gasUsed" >>= Lean.Json.toIoB8L) <&> B8L.toNat
-  let timestamp ← (json.find "timestamp" >>= Lean.Json.toIoB8L) <&> B8L.toNat
-  let extraData ← json.find "extraData" >>= Lean.Json.toIoB8L
+  let bloom ← json.find "bloom" >>= Lean.Json.toIoBytes
+  let difficulty ← (json.find "difficulty" >>= Lean.Json.toIoBytes) <&> Bytes.toNat
+  let number ← (json.find "number" >>= Lean.Json.toIoBytes) <&> Bytes.toNat
+  let gasLimit ← (json.find "gasLimit" >>= Lean.Json.toIoBytes) <&> Bytes.toNat
+  let gasUsed ← (json.find "gasUsed" >>= Lean.Json.toIoBytes) <&> Bytes.toNat
+  let timestamp ← (json.find "timestamp" >>= Lean.Json.toIoBytes) <&> Bytes.toNat
+  let extraData ← json.find "extraData" >>= Lean.Json.toIoBytes
   let prevRandao ← json.find "mixHash" >>= Lean.Json.toIoB256
   let nonce ← json.find "nonce" >>= Lean.Json.toIoB64
-  let baseFeePerGas ← (json.find "baseFeePerGas" >>= Lean.Json.toIoB8L) <&> B8L.toNat
+  let baseFeePerGas ← (json.find "baseFeePerGas" >>= Lean.Json.toIoBytes) <&> Bytes.toNat
   let withdrawalsRoot ← json.find "withdrawalsRoot" >>= Lean.Json.toIoB256
-  let blobGasUsed ← (json.find "blobGasUsed" >>= Lean.Json.toIoB8L) <&> B8L.toNat
-  let excessBlobGas ← (json.find "excessBlobGas" >>= Lean.Json.toIoB8L) <&> B8L.toNat
+  let blobGasUsed ← (json.find "blobGasUsed" >>= Lean.Json.toIoBytes) <&> Bytes.toNat
+  let excessBlobGas ← (json.find "excessBlobGas" >>= Lean.Json.toIoBytes) <&> Bytes.toNat
   let parentBeaconBlockRoot ← json.find "parentBeaconBlockRoot" >>= Lean.Json.toIoB256
   let requestsHash := (json.find? "requestsHash" >>= Lean.Json.toB256?)
   .ok {
@@ -180,8 +180,8 @@ A static label names its fork outright and imports at it. A transition label
 is a *schedule*, so its blocks go through the configured entry point and each
 one's own timestamp decides which rules it runs under -- which is the whole
 content of a transition fixture. -/
-def evaluateFixtureBlock (spec : NetworkSpec) (chainId : B64) (store : ChainStore)
-    (blockRlp : B8L) : Except String (B256 × BlockChain) := do
+def evaluateFixtureBlock (spec : NetworkSpec) (chainId : UInt64) (store : ChainStore)
+    (blockRlp : Bytes) : Except String (B256 × BlockChain) := do
   let ⟨block, blockHeaderHash⟩ ← rlpToBlock blockRlp
   let parent ← store.findParent block.header.parentHash
   let imported :=
@@ -211,7 +211,7 @@ def requireExpectedFailure (idx : Nat) (chainname : String)
 /-- Process every fixture block in list order while deriving ancestry only
 from each decoded header's `parentHash`. Expected-invalid blocks are checked
 exactly, leave the snapshot store unchanged, and never stop later blocks. -/
-def processBlockJsons (spec : NetworkSpec) (chainId : B64) (store : ChainStore) :
+def processBlockJsons (spec : NetworkSpec) (chainId : UInt64) (store : ChainStore) :
   List (Nat × Lean.Json) → IO ChainStore
   | ⟨idx, blockJson⟩ :: rest => do
     -- Hand-authored blockchain fixtures carry `chainname`; blockchain tests
@@ -288,14 +288,14 @@ def runBlockchainStTest (spec : NetworkSpec) : (Nat × String × Lean.Json) → 
     let gbh ← gbh_json.toHeader
     let gb : Block := {header := gbh, txs := [], ommers := [], wds := []}
     let gbh_hash ← gbh_json.find "hash" >>= Lean.Json.toIoB256
-    let gbh_hash' := (BLT.toB8L (Header.toBLT gbh)).keccak
+    let gbh_hash' := (BLT.toBytes (Header.toBLT gbh)).keccak
 
     .guard
       (gbh_hash = gbh_hash')
       s!"error : genesis block header hash, expected = {gbh_hash}, computed = {gbh_hash'}"
 
-    let genesisRLP ← json.find "genesisRLP" >>= Lean.Json.toIoB8L
-    let genesisRLP' := gb.toBLT.toB8L
+    let genesisRLP ← json.find "genesisRLP" >>= Lean.Json.toIoBytes
+    let genesisRLP' := gb.toBLT.toBytes
     .guard (genesisRLP = genesisRLP') "error : unexpected genesis block RLP."
     let (chainId : Nat) ←
       match gbh_json.find? "chainId" with
@@ -318,7 +318,7 @@ def runBlockchainStTest (spec : NetworkSpec) : (Nat × String × Lean.Json) → 
     let lastBlockHash ← json.find "lastblockhash" >>= Lean.Json.toIoB256
     let chain ← (store.findLast lastBlockHash).toIO
     let lastBlock ← chain.blocks.getLast?.toIO "error : no last block "
-    let lastBlockHash' := (Header.toBLT lastBlock.header).toB8L.keccak
+    let lastBlockHash' := (Header.toBLT lastBlock.header).toBytes.keccak
     .guard
       (lastBlockHash = lastBlockHash')
       s!"error : last block hash does not match\n  expected : {lastBlockHash}\n  computed : {lastBlockHash'}"
@@ -439,7 +439,7 @@ def getFiles (path : System.FilePath) : IO (List System.FilePath) := do
     return [path]
 
 def createMinimalEvm
-    (rules : ForkRules) (adr : Adr) (input : B8L) (gasLimit : Nat) : Evm := {
+    (rules : ForkRules) (adr : Adr) (input : Bytes) (gasLimit : Nat) : Evm := {
   pc := 0
   sta := {
     caller := default
@@ -485,11 +485,11 @@ def processVector (rules : ForkRules) (adr : Adr) : (Nat × Lean.Json) → IO Bo
   | ⟨idx, json⟩ => do
     let name ← (json.find? "Name" >>= Lean.Json.toString?).toIO s!"missing Name at index {idx}"
     let inputStr ← (json.find? "Input" >>= Lean.Json.toString?).toIO s!"missing Input for {name}"
-    let input ← (Hex.toB8L <| remove0x inputStr).toIO s!"invalid Input hex for {name}"
+    let input ← (Hex.toBytes <| remove0x inputStr).toIO s!"invalid Input hex for {name}"
     let isPositive := (json.find? "Expected").isSome
     let expected? ← if isPositive then
         let expStr ← (json.find? "Expected" >>= Lean.Json.toString?).toIO s!"missing Expected for {name}"
-        some <$> (Hex.toB8L <| remove0x expStr).toIO s!"invalid Expected hex for {name}"
+        some <$> (Hex.toBytes <| remove0x expStr).toIO s!"invalid Expected hex for {name}"
       else pure none
     let gas ← if isPositive then
         let g ← (json.find? "Gas").toIO s!"missing Gas for {name}"
@@ -575,11 +575,11 @@ def b256VectorResult (op : String) (xs : List B256) : Option B256 :=
   | "or", [x, y] => some (x ||| y)
   | "xor", [x, y] => some (x ^^^ y)
   | "not", [x] => some (~~~ x)
-  | "byte", [x, y] => some (List.getD y.toB8L x.toNat 0).toB256
+  | "byte", [x, y] => some (List.getD y.toBytes x.toNat 0).toB256
   | "shl", [x, y] => some (y <<< x.toNat)
   | "shr", [x, y] => some (y >>> x.toNat)
   | "sar", [x, y] => some (B256.arithShiftRight y x.toNat)
-  | "codec", [x] => some x.toB8L.toB256
+  | "codec", [x] => some x.toBytes.toB256
   | "bytecount", [x] => some x.bytecount.toB256
   | "exp_gas", [x] => some (gExp + gExpbyte * x.bytecount).toB256
   | _, _ => none
@@ -596,15 +596,15 @@ def processU256Vector : (Nat × Lean.Json) → IO Bool
         pure n.toB256
     let actual? ← match op with
       | "keccak" => match argsJ with
-        | [arg] => pure (some ((← Lean.Json.toIoB8L arg).keccak))
+        | [arg] => pure (some ((← Lean.Json.toIoBytes arg).keccak))
         | _ => pure none
       | "keccak_ba" => match argsJ with
         | [arg] => do
-          let bs ← Lean.Json.toIoB8L arg
+          let bs ← Lean.Json.toIoBytes arg
           pure (some (ByteArray.keccak 0 bs.length ⟨bs.toArray⟩))
         | _ => pure none
       | "ofB8L" => match argsJ with
-        | [arg] => pure (some (B8L.toB256 (← Lean.Json.toIoB8L arg)))
+        | [arg] => pure (some (Bytes.toB256 (← Lean.Json.toIoBytes arg)))
         | _ => pure none
       | _ => pure (b256VectorResult op (← argsJ.mapM Lean.Json.toIoB256))
     match actual? with

@@ -81,7 +81,7 @@ namespace Devm
 @[simp] theorem withRefundCounter_gasLeft (devm : Devm) (rc : Int) :
     (devm.withRefundCounter rc).gasLeft = devm.gasLeft := rfl
 
-@[simp] theorem withReturnData_gasLeft (devm : Devm) (returnData : B8L) :
+@[simp] theorem withReturnData_gasLeft (devm : Devm) (returnData : Bytes) :
     (devm.withReturnData returnData).gasLeft = devm.gasLeft := rfl
 
 @[simp] theorem withError_gasLeft (devm : Devm) (error : Option String) :
@@ -93,7 +93,7 @@ namespace Devm
 @[simp] theorem withState_gasLeft (devm : Devm) (state : State) :
     (devm.withState state).gasLeft = devm.gasLeft := rfl
 
-@[simp] theorem memWrite_gasLeft (devm : Devm) (idx : Nat) (val : B8L) :
+@[simp] theorem memWrite_gasLeft (devm : Devm) (idx : Nat) (val : Bytes) :
     (devm.memWrite idx val).gasLeft = devm.gasLeft := rfl
 
 @[simp] theorem memExtends_gasLeft (devm : Devm) (pairs : List (Nat × Nat)) :
@@ -897,7 +897,7 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
   case calldataload =>
     exact popChargePush_gasLt devm
       (fun _ _ => gVerylow)
-      (fun start _ => B8L.toB256 <| sevm.data.sliceD start.toNat 32 0)
+      (fun start _ => Bytes.toB256 <| sevm.data.sliceD start.toNat 32 0)
       (by intros; decide) h
   case calldatacopy =>
     exact popNat3ChargePure_gasLt devm
@@ -1126,7 +1126,7 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
         gVerylow + gasCopy * ceilDiv size 32 + d.extCost [(memoryStart, size)])
       (fun memoryStart codeStart size d =>
         d.memWrite memoryStart
-          (sevm.code.sliceD codeStart size (Linst.toB8 .stop)))
+          (sevm.code.sliceD codeStart size (Linst.toUInt8 .stop)))
       (by intros; unfold gVerylow; omega)
       (by intros; simp only [Devm.memWrite_gasLeft]) h
 
@@ -2016,7 +2016,7 @@ theorem Jinst.runCore_gasLe (pc : Nat) (devm : Devm) (sevm : Sevm) (j : Jinst) :
 @[simp] theorem Devm.addBal_gasLeft (devm : Devm) (a : Adr) (v : B256) :
     (devm.addBal a v).gasLeft = devm.gasLeft := rfl
 
-@[simp] theorem Devm.withOutput_gasLeft (devm : Devm) (output : B8L) :
+@[simp] theorem Devm.withOutput_gasLeft (devm : Devm) (output : Bytes) :
     (devm.withOutput output).gasLeft = devm.gasLeft := rfl
 
 /-- The halting instructions. `.rev` is the reason this whole layer exists: it
@@ -2521,11 +2521,11 @@ theorem Frame.enter_done_gasLe {f : Frame}
 well, which the driver needs because a resume that overflows the parent's stack
 still produces a raw result the *grandparent* has to settle. -/
 
-@[simp] theorem incorporateChildOnError_gasLeft (parent child : Devm) (rd : B8L) :
+@[simp] theorem incorporateChildOnError_gasLeft (parent child : Devm) (rd : Bytes) :
     (incorporateChildOnError parent child rd).gasLeft =
       parent.gasLeft + child.gasLeft := rfl
 
-@[simp] theorem incorporateChildOnSuccess_gasLeft (parent child : Devm) (rd : B8L) :
+@[simp] theorem incorporateChildOnSuccess_gasLeft (parent child : Devm) (rd : Bytes) :
     (incorporateChildOnSuccess parent child rd).gasLeft =
       parent.gasLeft + child.gasLeft := rfl
 
@@ -2597,7 +2597,7 @@ theorem XStep.toStep_gasBound {pc n : Nat} {step : XStep}
       (fun d hd => Nat.le_of_lt (hdec d hd)) hnr
   | spawn frame rsm => exact hdec
 
-theorem Ninst.step_push_gasLt {xs : B8L} {evm : Evm} {devm : Devm}
+theorem Ninst.step_push_gasLt {xs : Bytes} {evm : Evm} {devm : Devm}
     (h : (chargeGas (if xs = [] then gBase else gVerylow) evm.dyna >>=
       Devm.push xs.toB256) = .ok devm) : devm.gasLeft < evm.dyna.gasLeft := by
   obtain ⟨d1, h1, h2⟩ := Except.bind_eq_ok h
@@ -2888,9 +2888,9 @@ the frame's gas.
 block shares with `Jaune.Execution` are restated here. Keep them in step with
 their counterparts at `Jaune/Execution.lean:4203`. -/
 
-private def totalGuardCode (bytes : B8L) : ByteArray := .mk <| .mk bytes
+private def totalGuardCode (bytes : Bytes) : ByteArray := .mk <| .mk bytes
 
-private def totalGuardMsg (bytes : B8L) (gas depth : Nat) : Msg :=
+private def totalGuardMsg (bytes : Bytes) (gas depth : Nat) : Msg :=
   {
     (default : Msg) with
     gas := gas
@@ -2900,7 +2900,7 @@ private def totalGuardMsg (bytes : B8L) (gas depth : Nat) : Msg :=
 
 private def totalGuardSummary
     (r : Except (String × State × AdrSet × Tra) Devm) :
-    Option (Option String × List B256 × B8L × Nat) :=
+    Option (Option String × List B256 × Bytes × Nat) :=
   match r with
   | .ok devm => some ⟨devm.error, devm.stack, devm.output, devm.gasLeft⟩
   | .error _ => none

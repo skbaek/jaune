@@ -5,19 +5,19 @@ import Std.Data.TreeMap.Lemmas
 
 
 
-def Adr : Type := B32 × B128
+def Adr : Type := UInt32 × B128
 
 def Adr.toNat (x : Adr) : Nat :=
   (x.1.toNat <<< 128) ||| x.2.toNat
 
 def Nat.toAdr (n : Nat) : Adr :=
-  ⟨(n >>> 128).toB32, n.toB128⟩
+  ⟨(n >>> 128).toUInt32, n.toB128⟩
 
 instance {n} : OfNat Adr n := ⟨n.toAdr⟩
 
-lemma toNat_toB16 {n : ℕ} : B16.toNat n.toB16 = n ↾ 16 := UInt16.toNat_ofNat
-lemma toNat_toB32 {n : ℕ} : B32.toNat n.toB32 = n ↾ 32 := UInt32.toNat_ofNat
-lemma toNat_toB64 {n : ℕ} : B64.toNat (n.toB64) = n ↾ 64 := UInt64.toNat_ofNat
+lemma toNat_toUInt16 {n : ℕ} : UInt16.toNat n.toUInt16 = n ↾ 16 := UInt16.toNat_ofNat
+lemma toNat_toUInt32 {n : ℕ} : UInt32.toNat n.toUInt32 = n ↾ 32 := UInt32.toNat_ofNat
+lemma toNat_toUInt64 {n : ℕ} : UInt64.toNat (n.toUInt64) = n ↾ 64 := UInt64.toNat_ofNat
 
 lemma Nat.lo_lo_of_le {k m n : Nat} (le : m ≤ n) :
     (k ↾ m) ↾ n = k ↾ m := mod_mod_of_dvd' <| Nat.pow_dvd_pow _ le
@@ -39,17 +39,17 @@ lemma Nat.or_eq_lo_add {k m n : Nat} :
   apply Nat.hi_or_lo
 
 lemma toNat_toB128 (n : Nat) : n.toB128.toNat = n ↾ 128 := by
-  simp only [Nat.toB128, B128.toNat]; rw [toNat_toB64, toNat_toB64]
+  simp only [Nat.toB128, B128.toNat]; rw [toNat_toUInt64, toNat_toUInt64]
   apply Nat.or_eq_lo_add
 
 lemma Nat.toNat_toAdr (n : Nat) : n.toAdr.toNat = n ↾ 160 := by
-  simp only [Nat.toAdr, Adr.toNat]; rw [toNat_toB32, toNat_toB128]
+  simp only [Nat.toAdr, Adr.toNat]; rw [toNat_toUInt32, toNat_toB128]
   apply Nat.or_eq_lo_add
 
 
-lemma toB32_toNat {x : B32} : x.toNat.toB32 = x := UInt32.ofNat_toNat
+lemma toUInt32_toNat {x : UInt32} : x.toNat.toUInt32 = x := UInt32.ofNat_toNat
 
-lemma toB64_or (a b : Nat) : (a ||| b).toB64 = a.toB64 ||| b.toB64 :=
+lemma toUInt64_or (a b : Nat) : (a ||| b).toUInt64 = a.toUInt64 ||| b.toUInt64 :=
   UInt64.ofNat_or a b
 
 lemma B128.or_eq (x y : B128) :
@@ -57,7 +57,7 @@ lemma B128.or_eq (x y : B128) :
 
 lemma toB128_or (a b : Nat) : (a ||| b).toB128 = a.toB128 ||| b.toB128 := by
   simp only [Nat.toB128]
-  rw [B128.or_eq, toB64_or, Nat.shiftRight_or_distrib, toB64_or]
+  rw [B128.or_eq, toUInt64_or, Nat.shiftRight_or_distrib, toUInt64_or]
 
 lemma Nat.shiftLeft_lt_of_lt {a b n : Nat} (h : a < 2 ^ n) :
     (a <<< b) < (2 ^ (n + b)) := by
@@ -66,29 +66,24 @@ lemma Nat.shiftLeft_lt_of_lt {a b n : Nat} (h : a < 2 ^ n) :
 
 lemma B128.toNat_lt {x : B128} : x.toNat < 2 ^ 128 := by
   simp only [B128.toNat]; apply Nat.or_lt_two_pow
-  · apply Nat.shiftLeft_lt_of_lt B64.toNat_lt
-  · apply lt_trans B64.toNat_lt; omega
+  · apply Nat.shiftLeft_lt_of_lt (UInt64.toNat_lt _)
+  · apply lt_trans (UInt64.toNat_lt _); omega
 
 lemma B256.toNat_lt (x : B256) : x.toNat < 2 ^ 256 := by
   simp only [B256.toNat]; apply Nat.or_lt_two_pow
   · apply Nat.shiftLeft_lt_of_lt B128.toNat_lt
   · apply lt_trans B128.toNat_lt; omega
 
-lemma B64.zero_or {x : B64} : (0 ||| x) = x := UInt64.zero_or
-
 lemma B128.zero_or {x : B128} : (0 ||| x) = x := by
-  rw [B128.or_eq]; apply Prod.ext <;> exact B64.zero_or
+  rw [B128.or_eq]; apply Prod.ext <;> exact UInt64.zero_or
 
 lemma Nat.div_eq_zero_of_lt {k x : Nat} (h : x < k) : x / k = 0 := by
   rw [Nat.div_eq_zero_iff_lt (by omega)]; apply h
 
-lemma B64.lt_iff_toNat_lt {a b : B64} : a < b ↔ a.toNat < b.toNat :=
-  UInt64.lt_iff_toNat_lt
-
-lemma B8.toNat_add (a b : B8) : (a + b).toNat = (a.toNat + b.toNat) ↾ 8 :=
+lemma UInt8.toNat_add_lo (a b : UInt8) : (a + b).toNat = (a.toNat + b.toNat) ↾ 8 :=
   UInt8.toNat_add a b
 
-lemma B64.toNat_add (a b : B64) : (a + b).toNat = (a.toNat + b.toNat) ↾ 64 :=
+lemma UInt64.toNat_add_lo (a b : UInt64) : (a + b).toNat = (a.toNat + b.toNat) ↾ 64 :=
   UInt64.toNat_add a b
 
 lemma Nat.lo_eq_of_lt {a b : ℕ} (h : a < (2 ^ b)) : a ↾ b = a :=
@@ -103,15 +98,15 @@ lemma Nat.add_mod_eq_add_sub {k m n : Nat} (m_lt : m < k)
     apply Nat.add_lt_add m_lt n_lt
   simp [Nat.mod_eq_of_lt d_lt]
 
-lemma B64.toNat_overflow {x y : B64} :
+lemma UInt64.toNat_overflow {x y : UInt64} :
     x + y < x ↔ 2 ^ 64 ≤ x.toNat + y.toNat := by
-  rw [B64.lt_iff_toNat_lt, B64.toNat_add]
+  rw [UInt64.lt_iff_toNat_lt, UInt64.toNat_add_lo]
   by_cases h : x.toNat + y.toNat < 2 ^ 64
   · rw [Nat.lo_eq_of_lt h]
     apply iff_of_false <;> omega
   · rw [not_lt] at h; apply iff_of_true _ h
-    have x_lt := @B64.toNat_lt x
-    have y_lt := @B64.toNat_lt y
+    have x_lt := @UInt64.toNat_lt x
+    have y_lt := @UInt64.toNat_lt y
     rw [Nat.lo, Nat.add_mod_eq_add_sub x_lt y_lt h]
     omega
 
@@ -126,18 +121,18 @@ lemma ite_eq_ite_of_iff {α} {p q : Prop} [Decidable p] [Decidable q]
   · rw [if_pos h, if_pos (pq.mp h)]
   · rw [if_neg h, if_neg (mt pq.mpr h)]
 
-lemma toB64_toNat (x : B64) : x.toNat.toB64 = x :=
+lemma toUInt64_toNat (x : UInt64) : x.toNat.toUInt64 = x :=
   UInt64.ofNat_toNat
 
-lemma B64.ofNat_eq_iff_mod_eq_toNat (a : Nat) (b : B64) :
-    a.toB64 = b ↔ a ↾ 64 = b.toNat :=
+lemma UInt64.ofNat_eq_iff_lo_eq_toNat (a : Nat) (b : UInt64) :
+    a.toUInt64 = b ↔ a ↾ 64 = b.toNat :=
   UInt64.ofNat_eq_iff_mod_eq_toNat a b
 
 lemma Nat.lo_lo {m n : Nat} : (m ↾ n) ↾ n = m ↾ n :=
   Nat.mod_mod _ _
 
-lemma lo_toB64 (n : Nat) : (n ↾ 64).toB64 = n.toB64 := by
-  rw [← B64.toNat_inj, toNat_toB64, toNat_toB64, Nat.lo_lo]
+lemma lo_toUInt64 (n : Nat) : (n ↾ 64).toUInt64 = n.toUInt64 := by
+  rw [← UInt64.toNat_inj, toNat_toUInt64, toNat_toUInt64, Nat.lo_lo]
 
 lemma Nat.or_lo {k m n : Nat} : (m ||| n) ↾ k = (m ↾ k) ||| (n ↾ k) :=
   Nat.or_mod_two_pow
@@ -146,9 +141,9 @@ lemma toB128_toNat (x : B128) : x.toNat.toB128 = x := by
   simp only [B128.toNat, Nat.toB128]
   apply congr_arg₂
   · rw [Nat.shiftRight_or_distrib, Nat.shiftLeft_shiftRight]
-    rw [Nat.shiftRight_eq_zero _ _ B64.toNat_lt, Nat.or_zero, toB64_toNat]
-  · rw [← lo_toB64, Nat.or_lo, Nat.shl_lo_eq_zero_of_le (by omega)]
-    rw [Nat.zero_or, lo_toB64, toB64_toNat]
+    rw [Nat.shiftRight_eq_zero _ _ (UInt64.toNat_lt _), Nat.or_zero, toUInt64_toNat]
+  · rw [← lo_toUInt64, Nat.or_lo, Nat.shl_lo_eq_zero_of_le (by omega)]
+    rw [Nat.zero_or, lo_toUInt64, toUInt64_toNat]
 
 lemma B128.toNat_inj (xs ys : B128) : xs.toNat = ys.toNat ↔ xs = ys := by
   constructor <;> intro h
@@ -231,8 +226,6 @@ lemma B256.lt_or_eq_of_le {n m : B256} (h : n ≤ m) : n < m ∨ n = m := by
     · left; right; refine ⟨h.1, h'⟩
     · right; apply Prod.ext h.1 h'
 
-lemma B64.le_of_lt {a b : B64} : a < b → a ≤ b := UInt64.le_of_lt
-
 lemma B128.le_refl (x : B128) : x ≤ x := by
   right; refine ⟨rfl, UInt64.le_refl _⟩
 
@@ -242,7 +235,7 @@ lemma B256.le_refl (x : B256) : x ≤ x := by
 lemma B128.le_of_lt_or_eq {n m : B128} (h : n < m ∨ n = m) : n ≤ m := by
   rcases h with (h | ⟨h, h'⟩) | h
   · left; apply h
-  · right; refine' ⟨h, B64.le_of_lt h'⟩
+  · right; refine' ⟨h, UInt64.le_of_lt h'⟩
   · rw [h]; apply le_refl
 
 lemma B128.lt_iff (x y : B128) :
@@ -314,10 +307,10 @@ lemma B128.toNat_lt_toNat {a b : B128} (h : a < b) :
     a.toNat < b.toNat := by
   rcases a with ⟨_, _⟩; rcases b with ⟨_, _⟩
   rcases h with h | h <;> simp at h
-  · rw [B64.lt_iff_toNat_lt] at h
-    apply Nat.shl_or_lt_shl_or_of_left h B64.toNat_lt B64.toNat_lt
-  · rw [h.1]; apply Nat.shl_or_lt_shl_or_of_right _ B64.toNat_lt
-    rw [← B64.lt_iff_toNat_lt]; apply h.2
+  · rw [UInt64.lt_iff_toNat_lt] at h
+    apply Nat.shl_or_lt_shl_or_of_left h (UInt64.toNat_lt _) (UInt64.toNat_lt _)
+  · rw [h.1]; apply Nat.shl_or_lt_shl_or_of_right _ (UInt64.toNat_lt _)
+    rw [← UInt64.lt_iff_toNat_lt]; apply h.2
 
 lemma B128.toNat_le_toNat {a b : B128} (h : a ≤ b) : a.toNat ≤ b.toNat := by
   rcases B128.lt_or_eq_of_le h with h | h
@@ -419,13 +412,13 @@ lemma Nat.lo_add_lo (m n k : ℕ) : (m ↾ k + n) ↾ k = (m + n) ↾ k :=
 lemma B128.toNat_add (x y : B128) :
     (x + y).toNat = (x.toNat + y.toNat) ↾ 128 := by
   rw [B128.add_eq]; simp only [B128.toNat]
-  rw [Nat.shl_or_add_shl_or_lo_add B64.toNat_lt B64.toNat_lt]
-  apply congr_arg₂ _ (congr_arg₂ _ _ rfl) (B64.toNat_add _ _)
-  rw [B64.toNat_add, B64.toNat_add, Nat.lo_add_lo]
+  rw [Nat.shl_or_add_shl_or_lo_add (UInt64.toNat_lt _) (UInt64.toNat_lt _)]
+  apply congr_arg₂ _ (congr_arg₂ _ _ rfl) (UInt64.toNat_add_lo _ _)
+  rw [UInt64.toNat_add_lo, UInt64.toNat_add_lo, Nat.lo_add_lo]
   apply congr_arg₂ _ (congr_arg₂ _ rfl _) rfl
-  rw [← ite_not, @ite_distrib _ _ B64.toNat]
+  rw [← ite_not, @ite_distrib _ _ UInt64.toNat]
   apply ite_eq_ite_of_iff _ rfl rfl
-  simp [B64.toNat_overflow]
+  simp [UInt64.toNat_overflow]
 
 lemma B128.toNat_overflow {x y : B128} :
     x + y < x ↔ 2 ^ 128 ≤ x.toNat + y.toNat := by
@@ -454,26 +447,25 @@ theorem B256.add_comm {xs ys : B256} : xs + ys = ys + xs := by
   apply B256.toNat_inj
   rw [B256.toNat_add, B256.toNat_add, Nat.add_comm]
 
-lemma toB32_toB64 (n : B32) : n.toB64.toB32 = n :=
+lemma toUInt32_toUInt64 (n : UInt32) : n.toUInt64.toUInt32 = n :=
   UInt32.toUInt32_toUInt64 n
 
-def B256.toAdr (x : B256) : Adr := ⟨x.1.2.toB32, x.2⟩
+def B256.toAdr (x : B256) : Adr := ⟨x.1.2.toUInt32, x.2⟩
 
-def Adr.toB256 (a : Adr) : B256 := ⟨⟨0, a.1.toB64⟩, a.2⟩
+def Adr.toB256 (a : Adr) : B256 := ⟨⟨0, a.1.toUInt64⟩, a.2⟩
 
 lemma toAdr_toB256 (a : Adr) : a.toB256.toAdr = a := by
-  simp [Adr.toB256, B256.toAdr, toB32_toB64]
+  simp [Adr.toB256, B256.toAdr, toUInt32_toUInt64]
 
 theorem Adr.toB256_inj {x y : Adr} (eq : x.toB256 = y.toB256) : x = y := by
   rw [← toAdr_toB256 x, ← toAdr_toB256 y, eq]
 
 
-lemma B64.toNat_sub {a b : B64} :
+lemma UInt64.toNat_sub_lo {a b : UInt64} :
     (a - b).toNat = (2 ^ 64 + a.toNat - b.toNat) ↾ 64 := by
   apply Eq.trans (UInt64.toNat_sub _ _)
   apply congr_arg₂ _ _ rfl
-  rw [Nat.sub_add_comm <| Nat.le_of_lt B64.toNat_lt]
-  rfl
+  rw [Nat.sub_add_comm <| Nat.le_of_lt (UInt64.toNat_lt _)]
 
 lemma Nat.add_mul_self_mod (x y z : ℕ) : (x + y * z) % z = x % z := by
   induction y with
@@ -491,24 +483,21 @@ lemma Nat.sub_mod_eq_sub_mod_right {a d c b : Nat}
     rw [Nat.add_sub_assoc (Nat.le_mul_of_pos_right _ (by omega))]
     apply Nat.add_mod_eq_add_mod_right _ eq
 
-lemma B64.toNat_zero : B64.toNat 0 = 0 := rfl
-lemma B64.toNat_one : B64.toNat 1 = 1 := rfl
-
 lemma Nat.two_pow_add_lo (x y : Nat) : (2 ^ x + y) ↾ x = y ↾ x :=
   Nat.add_mod_left _ _
 
 lemma B128.toNat_sub {a b : B128} :
     (a - b).toNat = (2 ^ 128 + a.toNat - b.toNat) ↾ 128 := by
   rw [B128.sub_eq]; simp only [B128.toNat]
-  rw [Nat.add_shl_or_sub_shl_or_lo_add B64.toNat_lt B64.toNat_lt B64.toNat_lt]
-  apply congr_arg₂ _ (congr_arg₂ _ _ rfl) B64.toNat_sub
-  simp only [B64.toNat_sub]
-  rw [@ite_distrib _ _ B64.toNat, B64.toNat_one, B64.toNat_zero]
-  rw [← ite_eq_ite_of_iff B64.lt_iff_toNat_lt rfl rfl]
+  rw [Nat.add_shl_or_sub_shl_or_lo_add (UInt64.toNat_lt _) (UInt64.toNat_lt _) (UInt64.toNat_lt _)]
+  apply congr_arg₂ _ (congr_arg₂ _ _ rfl) UInt64.toNat_sub_lo
+  simp only [UInt64.toNat_sub_lo]
+  rw [@ite_distrib _ _ UInt64.toNat, UInt64.toNat_one, UInt64.toNat_zero]
+  rw [← ite_eq_ite_of_iff UInt64.lt_iff_toNat_lt rfl rfl]
   apply Nat.sub_mod_eq_sub_mod_right
   · rw [Nat.add_mod_left]; apply Nat.lo_lo
   · split <;> omega
-  · have _ := @B64.toNat_lt b.1; split <;> omega
+  · have _ := @UInt64.toNat_lt b.1; split <;> omega
 
 lemma B128.toNat_zero : B128.toNat 0 = 0 := rfl
 lemma B128.toNat_one : B128.toNat 1 = 1 := rfl
@@ -767,7 +756,7 @@ lemma toAdr_toNat (a : Adr) : a.toNat.toAdr = a := by
   apply Prod.ext <;> simp
   · rw [Nat.shiftRight_or_distrib, Nat.shiftLeft_shiftRight]
     rw [Nat.shiftRight_eq_zero _ _ B128.toNat_lt, Nat.or_zero]
-    apply toB32_toNat
+    apply toUInt32_toNat
   · rw [toB128_or]
     have eq : (a.1.toNat <<< 128).toB128 = 0 := by
       rw [toB128_eq_iff_lo_eq_toNat]
@@ -809,7 +798,7 @@ instance : ToString Stor := ⟨String.joinln ∘ Stor.toStrings⟩
 
 @[ext]
 structure Acct where
-  (nonce : B64)
+  (nonce : UInt64)
   (bal : B256)
   (stor : Stor)
   (code : ByteArray)
@@ -824,9 +813,9 @@ def Acct.toStrings (s : String) (a : Acct) : List String :=
     if sz = 0 then
       []
     else if sz ≤ 32 then
-      [s!"{B8L.toHex xs} ({sz} bytes)"]
+      [s!"{Bytes.toHex xs} ({sz} bytes)"]
     else
-      [s!"{B8L.toHex (xs.take 32)}... ({sz} bytes)"]
+      [s!"{Bytes.toHex (xs.take 32)}... ({sz} bytes)"]
 
   fork s [
     [s!"BAL : 0x{a.bal.toHex.dropZeroes}"],
@@ -843,27 +832,27 @@ instance : ToString Acct := ⟨fun a => String.joinln (Acct.toStrings "account" 
 -- caller already supplies exactly twenty bytes -- `ByteArray.sliceD _ 20`, the
 -- low twenty bytes of a keccak hash, or a checked consensus field -- so the
 -- rejection is new only for untrusted input.
-def B8L.toAdr? : B8L → Option Adr
+def Bytes.toAdr? : Bytes → Option Adr
   | x0 :: x1 :: x2 :: x3 ::
     y0 :: y1 :: y2 :: y3 ::
     y4 :: y5 :: y6 :: y7 ::
     z0 :: z1 :: z2 :: z3 ::
     z4 :: z5 :: z6 :: z7 :: [] =>
     some ⟨
-      B8s.toB32 x0 x1 x2 x3,
-      B8s.toB64 y0 y1 y2 y3 y4 y5 y6 y7,
-      B8s.toB64 z0 z1 z2 z3 z4 z5 z6 z7,
+      UInt32.ofBytes x0 x1 x2 x3,
+      UInt64.ofBytes y0 y1 y2 y3 y4 y5 y6 y7,
+      UInt64.ofBytes z0 z1 z2 z3 z4 z5 z6 z7,
     ⟩
   | _ => none
 
-def Hex.toAdr? (hx : String) : Option Adr := Hex.toB8L hx >>= B8L.toAdr?
+def Hex.toAdr? (hx : String) : Option Adr := Hex.toBytes hx >>= Bytes.toAdr?
 
 ------------------- STRICT CONSENSUS-FIELD DECODING --------------------
 
 -- RLP bytes are untrusted consensus input, so a field's *shape* must be
 -- checked before its value is converted, never after. The conversions
--- themselves (`B8L.toB64`, `B8L.toB256`) pad or truncate to a fixed width
--- through `B8L.pack`, which silently turns a nine-byte withdrawal index into a
+-- themselves (`Bytes.toUInt64`, `Bytes.toB256`) pad or truncate to a fixed width
+-- through `Bytes.pack`, which silently turns a nine-byte withdrawal index into a
 -- plausible eight-byte one; the encode-and-compare round trip then reports the
 -- corruption as a generic RLP mismatch, long after the value was lost.
 --
@@ -873,7 +862,7 @@ def Hex.toAdr? (hx : String) : Option Adr := Hex.toB8L hx >>= B8L.toAdr?
 -- precise reason, which is what a fixture exception identity is mapped from.
 
 /-- A fixed-width field: the length must equal `n` exactly. -/
-def B8L.toFixed? (n : Nat) (xs : B8L) : Option B8L :=
+def Bytes.toFixed? (n : Nat) (xs : Bytes) : Option Bytes :=
   if xs.length = n then some xs else none
 
 /-- Is this a canonical unsigned scalar of at most `n` bytes?
@@ -882,27 +871,27 @@ Two independent conditions, both required by RLP: the width must fit, and the
 encoding must be canonical -- zero is the empty byte string, and a nonempty
 scalar never begins with a zero byte. `Execution.lean` distinguishes the two
 failures, since only one of them is a field-overflow. -/
-def B8L.isCanonicalScalar (n : Nat) (xs : B8L) : Bool :=
-  (xs.length ≤ n) && (xs.head? != some (0 : B8))
+def Bytes.isCanonicalScalar (n : Nat) (xs : Bytes) : Bool :=
+  (xs.length ≤ n) && (xs.head? != some (0 : UInt8))
 
 /-- A canonical unsigned scalar of at most `n` bytes, as a `Nat`. -/
-def B8L.toScalarNat? (n : Nat) (xs : B8L) : Option Nat :=
+def Bytes.toScalarNat? (n : Nat) (xs : Bytes) : Option Nat :=
   if xs.isCanonicalScalar n then some xs.toNat else none
 
 /-- A canonical 64-bit scalar: at most eight bytes, hence converted without
-truncation. Note this is *not* `B8L.toB64?`, which demands exactly eight bytes
+truncation. Note this is *not* `Bytes.toUInt64?`, which demands exactly eight bytes
 and so rejects every valid small integer. -/
-def B8L.toScalarB64? (xs : B8L) : Option B64 :=
-  if xs.isCanonicalScalar 8 then some xs.toB64 else none
+def Bytes.toScalarB64? (xs : Bytes) : Option UInt64 :=
+  if xs.isCanonicalScalar 8 then some xs.toUInt64 else none
 
 /-- A canonical 256-bit scalar: at most thirty-two bytes, hence converted
 without truncation. -/
-def B8L.toScalarB256? (xs : B8L) : Option B256 :=
+def Bytes.toScalarB256? (xs : Bytes) : Option B256 :=
   if xs.isCanonicalScalar 32 then some xs.toB256 else none
 
 /-- An optional contract-creation receiver: either empty, meaning creation, or
 exactly twenty bytes. Anything else is malformed rather than a creation. -/
-def B8L.toReceiver? : B8L → Option (Option Adr)
+def Bytes.toReceiver? : Bytes → Option (Option Adr)
   | [] => some none
   | xs => xs.toAdr?.map some
 
@@ -912,64 +901,64 @@ def B8L.toReceiver? : B8L → Option (Option Adr)
 -- the 19/20/21-byte address cases.
 
 -- Fixed width: only the exact length is accepted, on both sides.
-#guard (B8L.toFixed? 0 []).isSome
-#guard (B8L.toFixed? 0 [0x00]).isNone
-#guard (B8L.toFixed? 4 [0x01, 0x02, 0x03]).isNone                    -- n-1
-#guard (B8L.toFixed? 4 [0x01, 0x02, 0x03, 0x04]).isSome              -- n
-#guard (B8L.toFixed? 4 [0x01, 0x02, 0x03, 0x04, 0x05]).isNone        -- n+1
+#guard (Bytes.toFixed? 0 []).isSome
+#guard (Bytes.toFixed? 0 [0x00]).isNone
+#guard (Bytes.toFixed? 4 [0x01, 0x02, 0x03]).isNone                    -- n-1
+#guard (Bytes.toFixed? 4 [0x01, 0x02, 0x03, 0x04]).isSome              -- n
+#guard (Bytes.toFixed? 4 [0x01, 0x02, 0x03, 0x04, 0x05]).isNone        -- n+1
 -- A fixed-width field is bytes, not a number: leading zeroes are content.
-#guard (B8L.toFixed? 4 [0x00, 0x00, 0x00, 0x00]).isSome
+#guard (Bytes.toFixed? 4 [0x00, 0x00, 0x00, 0x00]).isSome
 
 -- Canonical scalars: the empty string is zero, a leading zero byte is not.
-#guard B8L.toScalarNat? 8 [] = some 0                                -- 0 bytes
-#guard B8L.toScalarNat? 8 [0x01] = some 1                            -- 1 byte
-#guard B8L.toScalarNat? 8 (List.replicate 8 (0xFF : B8)) = some (2 ^ 64 - 1)
-#guard (B8L.toScalarNat? 8 (List.replicate 9 (0xFF : B8))).isNone    -- n+1
-#guard (B8L.toScalarNat? 8 [0x00]).isNone                            -- zero, not empty
-#guard (B8L.toScalarNat? 8 [0x00, 0x01]).isNone                      -- leading zero
-#guard B8L.toScalarNat? 8 [0x01, 0x00] = some 256                    -- trailing zero is fine
+#guard Bytes.toScalarNat? 8 [] = some 0                                -- 0 bytes
+#guard Bytes.toScalarNat? 8 [0x01] = some 1                            -- 1 byte
+#guard Bytes.toScalarNat? 8 (List.replicate 8 (0xFF : UInt8)) = some (2 ^ 64 - 1)
+#guard (Bytes.toScalarNat? 8 (List.replicate 9 (0xFF : UInt8))).isNone    -- n+1
+#guard (Bytes.toScalarNat? 8 [0x00]).isNone                            -- zero, not empty
+#guard (Bytes.toScalarNat? 8 [0x00, 0x01]).isNone                      -- leading zero
+#guard Bytes.toScalarNat? 8 [0x01, 0x00] = some 256                    -- trailing zero is fine
 
 -- 64-bit scalars convert every accepted width without truncating.
-#guard (B8L.toScalarB64? []).map B64.toNat = some 0
-#guard (B8L.toScalarB64? [0x01]).map B64.toNat = some 1
-#guard (B8L.toScalarB64? [0x01, 0x00]).map B64.toNat = some 256
-#guard (B8L.toScalarB64? (List.replicate 8 (0xFF : B8))).map B64.toNat
+#guard (Bytes.toScalarB64? []).map UInt64.toNat = some 0
+#guard (Bytes.toScalarB64? [0x01]).map UInt64.toNat = some 1
+#guard (Bytes.toScalarB64? [0x01, 0x00]).map UInt64.toNat = some 256
+#guard (Bytes.toScalarB64? (List.replicate 8 (0xFF : UInt8))).map UInt64.toNat
   = some (2 ^ 64 - 1)                                                -- n
-#guard (B8L.toScalarB64? (0x01 :: List.replicate 8 (0x00 : B8))).isNone  -- n+1
+#guard (Bytes.toScalarB64? (0x01 :: List.replicate 8 (0x00 : UInt8))).isNone  -- n+1
 -- The nine-byte withdrawal-index case: rejected outright, and emphatically not
--- accepted as the eight-byte value `B8L.toB64` would have truncated it to.
-#guard (B8L.toB64 (0x01 :: List.replicate 8 (0x00 : B8))).toNat = 0
-#guard (B8L.toScalarB64? [0x00]).isNone
+-- accepted as the eight-byte value `Bytes.toUInt64` would have truncated it to.
+#guard (Bytes.toUInt64 (0x01 :: List.replicate 8 (0x00 : UInt8))).toNat = 0
+#guard (Bytes.toScalarB64? [0x00]).isNone
 
 -- 256-bit scalars, same shape one width up.
-#guard (B8L.toScalarB256? []).map B256.toNat = some 0
-#guard (B8L.toScalarB256? [0x01]).map B256.toNat = some 1
-#guard (B8L.toScalarB256? (List.replicate 32 (0xFF : B8))).map B256.toNat
+#guard (Bytes.toScalarB256? []).map B256.toNat = some 0
+#guard (Bytes.toScalarB256? [0x01]).map B256.toNat = some 1
+#guard (Bytes.toScalarB256? (List.replicate 32 (0xFF : UInt8))).map B256.toNat
   = some (2 ^ 256 - 1)                                               -- n
-#guard (B8L.toScalarB256? (List.replicate 33 (0xFF : B8))).isNone     -- n+1
-#guard (B8L.toScalarB256? [0x00, 0x01]).isNone
+#guard (Bytes.toScalarB256? (List.replicate 33 (0xFF : UInt8))).isNone     -- n+1
+#guard (Bytes.toScalarB256? [0x00, 0x01]).isNone
 
 -- Addresses: exactly twenty bytes, with 19 and 21 both rejected.
-#guard (B8L.toAdr? (List.replicate 19 (0x11 : B8))).isNone
-#guard (B8L.toAdr? (List.replicate 20 (0x11 : B8))).isSome
-#guard (B8L.toAdr? (List.replicate 21 (0x11 : B8))).isNone
-#guard (B8L.toAdr? []).isNone
+#guard (Bytes.toAdr? (List.replicate 19 (0x11 : UInt8))).isNone
+#guard (Bytes.toAdr? (List.replicate 20 (0x11 : UInt8))).isSome
+#guard (Bytes.toAdr? (List.replicate 21 (0x11 : UInt8))).isNone
+#guard (Bytes.toAdr? []).isNone
 -- The twenty accepted bytes are the address, in order.
-#guard (B8L.toAdr? (List.replicate 20 (0x11 : B8))).map Adr.toHex
+#guard (Bytes.toAdr? (List.replicate 20 (0x11 : UInt8))).map Adr.toHex
   = some (String.join <| List.replicate 20 "11")
 -- The overlong case used to decode to the address of its twenty-byte prefix.
-#guard (B8L.toAdr? (List.replicate 20 (0x11 : B8) ++ [0x22])).isNone
+#guard (Bytes.toAdr? (List.replicate 20 (0x11 : UInt8) ++ [0x22])).isNone
 
 -- Optional creation receivers: empty is creation, twenty bytes is a call, and
 -- every other width is malformed rather than silently one of the two.
-#guard (B8L.toReceiver? []) = some none
-#guard ((B8L.toReceiver? (List.replicate 20 (0x11 : B8))).map (Option.map Adr.toHex))
+#guard (Bytes.toReceiver? []) = some none
+#guard ((Bytes.toReceiver? (List.replicate 20 (0x11 : UInt8))).map (Option.map Adr.toHex))
   = some (some (String.join <| List.replicate 20 "11"))
-#guard (B8L.toReceiver? (List.replicate 19 (0x11 : B8))).isNone
-#guard (B8L.toReceiver? (List.replicate 21 (0x11 : B8))).isNone
-#guard (B8L.toReceiver? [0x00]).isNone
+#guard (Bytes.toReceiver? (List.replicate 19 (0x11 : UInt8))).isNone
+#guard (Bytes.toReceiver? (List.replicate 21 (0x11 : UInt8))).isNone
+#guard (Bytes.toReceiver? [0x00]).isNone
 
-def Adr.toB8L (a : Adr) : B8L := a.1.toB8L ++ a.2.toB8L
+def Adr.toBytes (a : Adr) : Bytes := a.1.toBytes ++ a.2.toBytes
 
 inductive Rinst : Type
   | add -- 0x01 / 2 / 1 / addition operation.
@@ -1150,7 +1139,7 @@ def Linst.toString : Linst → String
   | .rev => "REVERT"
   | .ret => "RETURN"
 
-def B8.toRinst : B8 → Option Rinst
+def UInt8.toRinst : UInt8 → Option Rinst
   | 0x01 => some .add -- 0x01 / 2 / 1 / addition operation.
   | 0x02 => some .mul -- 0x02 / 2 / 1 / multiplication operation.
   | 0x03 => some .sub -- 0x03 / 2 / 1 / subtraction operation.
@@ -1260,7 +1249,7 @@ def B8.toRinst : B8 → Option Rinst
   | 0xA4 => some (.log 4)
   | _ => none
 
-def B8.toXinst : B8 → Option Xinst
+def UInt8.toXinst : UInt8 → Option Xinst
   | 0xF0 => some .create
   | 0xF1 => some .call
   | 0xF2 => some .callcode
@@ -1269,26 +1258,26 @@ def B8.toXinst : B8 → Option Xinst
   | 0xFA => some .statcall
   | _    => none
 
-def B8.toJinst : B8 → Option Jinst
+def UInt8.toJinst : UInt8 → Option Jinst
   | 0x56 => some .jump
   | 0x57 => some .jumpi
   | 0x5B => some .jumpdest
   | _    => none
 
-def B8.toLinst : B8 → Option Linst
+def UInt8.toLinst : UInt8 → Option Linst
   | 0x00 => some .stop
   | 0xF3 => some .ret
   | 0xFD => some .rev
   | 0xFF => some .dest
   | _ => none
 
-def Linst.toB8 : Linst → B8
+def Linst.toUInt8 : Linst → UInt8
   | .stop => 0x00
   | .ret => 0xF3
   | .rev => 0xFD
   | .dest => 0xFF
 
-def Jinst.toB8 : Jinst → B8
+def Jinst.toUInt8 : Jinst → UInt8
   | jump => 0x56     -- 0x56 / 1 / 0 / Unconditional jump.
   | jumpi => 0x57    -- 0x57 / 2 / 0 / Conditional jump.
   | jumpdest => 0x5B -- 0x5b / 0 / 0 / Mark a valid jump destination.

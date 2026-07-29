@@ -410,7 +410,7 @@ configuration says when a particular chain switched to it. Mainnet timestamps
 belong in a named configuration built from this structure, never inside rule
 semantics. -/
 structure ChainConfig : Type where
-  chainId : B64
+  chainId : UInt64
   activations : List ForkActivation
 deriving DecidableEq, Repr
 
@@ -475,7 +475,7 @@ def rulesAt (cfg : ChainConfig) (timestamp : Nat) : Except String ForkRules := d
 
 /-- The configuration of a chain that is at Prague from genesis and never
 transitions. -/
-def pragueOnly (chainId : B64) : ChainConfig :=
+def pragueOnly (chainId : UInt64) : ChainConfig :=
   { chainId := chainId, activations := [⟨.prague, 0⟩] }
 
 end ChainConfig
@@ -574,7 +574,7 @@ def ofString? (label : String) : Option ForkTransition := do
 Whether it is *usable* is `ChainConfig.validate`'s answer, not this function's:
 a label may name an activation at genesis or a backwards step, and those are
 rejected where every other unusable schedule is. -/
-def chainConfig (chainId : B64) (t : ForkTransition) : ChainConfig :=
+def chainConfig (chainId : UInt64) (t : ForkTransition) : ChainConfig :=
   { chainId := chainId, activations := [⟨t.before, 0⟩, ⟨t.after, t.timestamp⟩] }
 
 end ForkTransition

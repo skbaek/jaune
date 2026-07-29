@@ -604,8 +604,8 @@ instance {F} [Zero F] [DecidableEq F] [HAdd F F F] [HSub F F F]
   HMul (EllipticCurve F a b) Nat (EllipticCurve F a b) :=
   ⟨EllipticCurve.mulBy⟩
 
-def BNP.toB8L (p : BNP) : B8L :=
-  p.x.val.toB8L.pack 32 ++ p.y.val.toB8L.pack 32
+def BNP.toBytes (p : BNP) : Bytes :=
+  p.x.val.toBytes.pack 32 ++ p.y.val.toBytes.pack 32
 
 
 -- def twist(pt: Optimized_Point3D[FQP]) -> Optimized_Point3D[FQ12]:
@@ -785,8 +785,8 @@ private def recoverAffine
   if O = ⟨0, 0⟩ then none
   let Q : Point :=
     EllipticCurve.mulBy O rInv
-  let hash := B8L.keccak <| Q.x.val.toB256.toB8L ++ Q.y.val.toB256.toB8L
-  B8L.toAdr? <| List.drop 12 <| hash.toB8L
+  let hash := Bytes.keccak <| Q.x.val.toB256.toBytes ++ Q.y.val.toB256.toBytes
+  Bytes.toAdr? <| List.drop 12 <| hash.toBytes
 
 /-!
 The valid-domain recovery equation is
@@ -845,8 +845,8 @@ def recover (h : B256) (v : Bool) (r : B256) (s : B256) : Option Adr :=
     let qJacobian := jointMul R generator rCoefficient gCoefficient
     if EllipticCurve.Jacobian.isInfinity qJacobian then none
     let Q : Point := EllipticCurve.Jacobian.toAffine qJacobian
-    let hash := B8L.keccak <| Q.x.val.toB256.toB8L ++ Q.y.val.toB256.toB8L
-    B8L.toAdr? <| List.drop 12 <| hash.toB8L
+    let hash := Bytes.keccak <| Q.x.val.toB256.toBytes ++ Q.y.val.toB256.toBytes
+    Bytes.toAdr? <| List.drop 12 <| hash.toBytes
   else
     recoverAffine h v r s
 

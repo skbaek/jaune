@@ -22,15 +22,15 @@ revisions via fixture wall-clocks (`vmPerformance/loopExp.json`), not this
 row.
 
 The `codec` row (step 5) bundles encode and decode: it times
-`B256.toB8L` followed by `B8L.toB256` on a 32-byte list, because the
+`B256.toBytes` followed by `Bytes.toB256` on a 32-byte list, because the
 decoder needs a fresh byte list per iteration and a hoistable constant
-input would be optimized out of the loop.  `B256.toB8L` is unchanged by
+input would be optimized out of the loop.  `B256.toBytes` is unchanged by
 step 5, so the row's delta across revisions is still attributable to the
 decoder alone; the encode half is a fixed additive offset.
 -/
 
 def sample : B256 :=
-  (0x123456789abcdef0 : B64).toB256 <<< 128 ||| 0xfedcba9876543211
+  (0x123456789abcdef0 : UInt64).toB256 <<< 128 ||| 0xfedcba9876543211
 
 def drive (n : Nat) (seed : B256) (f : Nat → B256 → B256) : B256 :=
   go n seed where
@@ -48,20 +48,20 @@ def bench (label : String) (iterations : Nat) (nonce : Nat)
   let finish ← IO.monoNanosNow
   IO.println s!"{label}\t{(finish - start) / iterations} ns/op\titerations={iterations}\tsink={sink.toHex}"
 
-@[noinline] def forceB8L (x : B8L) : IO B8L := pure x
+@[noinline] def forceB8L (x : Bytes) : IO Bytes := pure x
 
 -- BLAKE2b compression driver: the same forced-sequencing discipline as
 -- `bench`, but the loop output is a byte list, and each iteration's digest is
 -- folded back into the next iteration's message so the call cannot be hoisted.
 def benchBlake2 (label : String) (iterations : Nat) (nonce : Nat)
     (numRounds : Nat) : IO Unit := do
-  let h : List B64 := blake2IV
-  let rec go : Nat → List B64 → List B64
+  let h : List UInt64 := blake2IV
+  let rec go : Nat → List UInt64 → List UInt64
     | 0, m => m
     | k + 1, m =>
       let out := (bCompress numRounds h m 0 0 false).getD []
-      go k (m.set 0 ((B8L.toB64 (out.take 8)) ^^^ (k.toUInt64)))
-  let m0 : List B64 := (List.range 16).map (fun i => (nonce + i).toUInt64)
+      go k (m.set 0 ((Bytes.toUInt64 (out.take 8)) ^^^ (k.toUInt64)))
+  let m0 : List UInt64 := (List.range 16).map (fun i => (nonce + i).toUInt64)
   let start ← IO.monoNanosNow
   let sink ← forceB8L
     ((bCompress numRounds h (go iterations m0) 0 0 false).getD [])
@@ -77,21 +77,21 @@ def main : IO Unit := do
   bench "div-2^128" 20000 nonce (fun i x => x / ((1 : Nat).toB256 <<< 128) + sample + i.toB256)
   bench "div-3" 20000 nonce (fun i x => x / 3 + sample + i.toB256)
   bench "exp" 100 nonce (fun i x => B256.bexp x (i + 1).toB256)
-  bench "codec" 200000 nonce (fun i x => (x + i.toB256).toB8L.toB256)
+  bench "codec" 200000 nonce (fun i x => (x + i.toB256).toBytes.toB256)
   -- Step-6 precompile inner-loop rows.  `sha256` hashes a fresh 32-byte list
   -- per iteration (one padded chunk, so one full 64-round compression);
   -- `blake2f-12` runs one 12-round BLAKE2b compression, the round count of
   -- the EIP-152 reference vectors.
-  bench "sha256" 100000 nonce (fun i x => B8L.sha256 (x + i.toB256).toB8L)
+  bench "sha256" 100000 nonce (fun i x => Bytes.sha256 (x + i.toB256).toBytes)
   benchBlake2 "blake2f-12" 100000 nonce 12
   -- Keccak rows (keccak/bytelayer arc).  Each iteration hashes a fresh
   -- digest-dependent byte list, so the call cannot be hoisted.  The rows
-  -- deliberately include B8L construction and traversal: that marshalling is
+  -- deliberately include Bytes construction and traversal: that marshalling is
   -- part of the memory-fed keccak path under measurement.  `keccak64` is the
   -- storage-slot shape (one permutation); `keccak512` spans four permutations
   -- and three full-rate blocks.
   bench "keccak64" 100000 nonce
-    (fun i x => B8L.keccak ((x + i.toB256).toB8L ++ (x - i.toB256).toB8L))
+    (fun i x => Bytes.keccak ((x + i.toB256).toBytes ++ (x - i.toB256).toBytes))
   bench "keccak512" 20000 nonce
-    (fun i x => B8L.keccak ((List.range 16).flatMap
-      (fun j => (x + (16 * i + j).toB256).toB8L)))
+    (fun i x => Bytes.keccak ((List.range 16).flatMap
+      (fun j => (x + (16 * i + j).toB256).toBytes)))

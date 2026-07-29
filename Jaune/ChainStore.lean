@@ -34,7 +34,7 @@ import Jaune.FixtureException
 is (or would be) stored. `none` only for a chain with no blocks at all, which
 the runner never constructs (genesis is always block zero). -/
 def BlockChain.tipHash? (chain : BlockChain) : Option B256 :=
-  chain.blocks.getLast?.map fun b => (Header.toBLT b.header).toB8L.keccak
+  chain.blocks.getLast?.map fun b => (Header.toBLT b.header).toBytes.keccak
 
 /-- Immutable `BlockChain` snapshots indexed by the hash of their tip block
 header. -/
@@ -118,7 +118,7 @@ end ChainStore
 /-- A minimal header whose identity is pinned by its parent hash, height, and a
 one-byte `extraData` tag; everything else is zero. Distinct tags give distinct
 keccak hashes, which is all the store looks at. -/
-private def synthHeader (parentHash : B256) (number : Nat) (tag : B8L) : Header :=
+private def synthHeader (parentHash : B256) (number : Nat) (tag : Bytes) : Header :=
   { parentHash := parentHash
     ommersHash := 0
     coinbase := 0
@@ -141,18 +141,18 @@ private def synthHeader (parentHash : B256) (number : Nat) (tag : B8L) : Header 
     parentBeaconBlockRoot := 0
     requestsHash := none }
 
-private def synthBlock (parentHash : B256) (number : Nat) (tag : B8L) : Block :=
+private def synthBlock (parentHash : B256) (number : Nat) (tag : Bytes) : Block :=
   { header := synthHeader parentHash number tag, txs := [], ommers := [], wds := [] }
 
 private def synthHash (b : Block) : B256 :=
-  (Header.toBLT b.header).toB8L.keccak
+  (Header.toBLT b.header).toBytes.keccak
 
 private def chainOf (blocks : List Block) : BlockChain :=
   { blocks := blocks, state := .empty, chainId := 1 }
 
 /-- The tag trail of a snapshot: enough to tell every synthetic snapshot from
 every other one in a decidable `#guard`. -/
-private def tagsOf (chain : BlockChain) : List B8L :=
+private def tagsOf (chain : BlockChain) : List Bytes :=
   chain.blocks.map (fun b => b.header.extraData)
 
 private def gB : Block := synthBlock 0 0 [0x60]
@@ -183,7 +183,7 @@ private def store1 : ChainStore := (store0.insert a1H a1C).insert b1H b1C
 private def store2 : ChainStore := (store1.insert a2H a2C).insert b2H b2C
 
 /-- The snapshot under `hash`, read as its tag trail. -/
-private def findTags (store : ChainStore) (hash : B256) : Option (List B8L) :=
+private def findTags (store : ChainStore) (hash : B256) : Option (List Bytes) :=
   (store.find? hash).map tagsOf
 
 /-- `r` is a rejection whose error classifies to exactly the canonical identity

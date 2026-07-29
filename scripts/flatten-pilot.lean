@@ -388,7 +388,7 @@ subjects. -/
 
 #count_heartbeats in
 /-- Ordinary path, bind idiom: a successful PUSH step exposes its two seams. -/
-theorem invPushBind {evm : Evm} {xs : B8L} {h : xs.length ≤ 32} {pc devm'}
+theorem invPushBind {evm : Evm} {xs : Bytes} {h : xs.length ≤ 32} {pc devm'}
     (hi : evm.getInst = .some (.next (.push xs h)))
     (hs : evmStepBind evm = .cont pc devm') :
     ∃ d, chargeGas (if xs = [] then gBase else gVerylow) evm.dyna = .ok d ∧
@@ -404,7 +404,7 @@ theorem invPushBind {evm : Evm} {xs : B8L} {h : xs.length ≤ 32} {pc devm'}
 
 #count_heartbeats in
 /-- Ordinary path, `let` idiom: same statement, same tactic script. -/
-theorem invPushLet {evm : Evm} {xs : B8L} {h : xs.length ≤ 32} {pc devm'}
+theorem invPushLet {evm : Evm} {xs : Bytes} {h : xs.length ≤ 32} {pc devm'}
     (hi : evm.getInst = .some (.next (.push xs h)))
     (hs : evmStepLet evm = .cont pc devm') :
     ∃ d, chargeGas (if xs = [] then gBase else gVerylow) evm.dyna = .ok d ∧

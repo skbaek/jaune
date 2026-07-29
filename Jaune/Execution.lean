@@ -52,7 +52,7 @@ structure Auth : Type where
   -- the execution chain ID (or zero) makes only this tuple inapplicable.
   chainId : B256
   address : Adr
-  nonce : B64
+  nonce : UInt64
   yParity : Nat
   r : B256
   s : B256
@@ -64,20 +64,20 @@ inductive TxType : Type
     (receiver : Option Adr)
   -- EIP-2930
   | one
-    (chainId : B64)
+    (chainId : UInt64)
     (gasPrice : Nat)
     (receiver : Option Adr)
     (accessList : AccessList)
   -- EIP-1559
   | two
-    (chainId : B64)
+    (chainId : UInt64)
     (maxPriorityFee : Nat)
     (maxFee : Nat)
     (receiver : Option Adr)
     (accessList : AccessList)
   -- EIP-4844
   | three
-    (chainId : B64)
+    (chainId : UInt64)
     (maxPriorityFee : Nat)
     (maxFee : Nat)
     (receiver : Adr)
@@ -85,7 +85,7 @@ inductive TxType : Type
     (maxBlobFee : Nat)
     (blobHashes : List B256)
   | four
-    (chainId : B64)
+    (chainId : UInt64)
     (maxPriorityFee : Nat)
     (maxFee : Nat)
     (receiver : Adr)
@@ -93,8 +93,8 @@ inductive TxType : Type
     (auths : List Auth)
 
 structure Withdrawal : Type where
-  (globalIndex : B64)
-  (validatorIndex : B64)
+  (globalIndex : UInt64)
+  (validatorIndex : UInt64)
   (recipient : Adr)
   (amount : B256)
 
@@ -105,15 +105,15 @@ structure Header : Type where
   stateRoot : B256
   txsRoot : B256
   receiptRoot : B256
-  bloom : B8L
+  bloom : Bytes
   difficulty : Nat
   number : Nat
   gasLimit : Nat
   gasUsed : Nat
   timestamp : Nat
-  extraData : B8L
+  extraData : Bytes
   prevRandao : B256
-  nonce : B64
+  nonce : UInt64
   baseFeePerGas : Nat
   withdrawalsRoot : B256
   blobGasUsed : Nat
@@ -150,51 +150,51 @@ instance : ToString Header := ⟨String.joinln ∘ Header.toStrings⟩
 
 def Header.toBLT (header : Header) : BLT :=
   BLT.list <| [
-    BLT.b8s header.parentHash.toB8L,
-    BLT.b8s header.ommersHash.toB8L,
-    BLT.b8s header.coinbase.toB8L,
-    BLT.b8s header.stateRoot.toB8L,
-    BLT.b8s header.txsRoot.toB8L,
-    BLT.b8s header.receiptRoot.toB8L,
-    BLT.b8s header.bloom,
-    BLT.b8s header.difficulty.toB8L,
-    BLT.b8s header.number.toB8L,
-    BLT.b8s header.gasLimit.toB8L,
-    BLT.b8s header.gasUsed.toB8L,
-    BLT.b8s header.timestamp.toB8L,
-    BLT.b8s header.extraData,
-    BLT.b8s header.prevRandao.toB8L,
-    BLT.b8s header.nonce.toB8L,
-    BLT.b8s header.baseFeePerGas.toB8L,
-    BLT.b8s header.withdrawalsRoot.toB8L,
-    BLT.b8s header.blobGasUsed.toB8L,
-    BLT.b8s header.excessBlobGas.toB8L,
-    BLT.b8s header.parentBeaconBlockRoot.toB8L
+    BLT.bytes header.parentHash.toBytes,
+    BLT.bytes header.ommersHash.toBytes,
+    BLT.bytes header.coinbase.toBytes,
+    BLT.bytes header.stateRoot.toBytes,
+    BLT.bytes header.txsRoot.toBytes,
+    BLT.bytes header.receiptRoot.toBytes,
+    BLT.bytes header.bloom,
+    BLT.bytes header.difficulty.toBytes,
+    BLT.bytes header.number.toBytes,
+    BLT.bytes header.gasLimit.toBytes,
+    BLT.bytes header.gasUsed.toBytes,
+    BLT.bytes header.timestamp.toBytes,
+    BLT.bytes header.extraData,
+    BLT.bytes header.prevRandao.toBytes,
+    BLT.bytes header.nonce.toBytes,
+    BLT.bytes header.baseFeePerGas.toBytes,
+    BLT.bytes header.withdrawalsRoot.toBytes,
+    BLT.bytes header.blobGasUsed.toBytes,
+    BLT.bytes header.excessBlobGas.toBytes,
+    BLT.bytes header.parentBeaconBlockRoot.toBytes
   ] ++
     match header.requestsHash with
     | none => []
-    | some rh => [BLT.b8s rh.toB8L]
+    | some rh => [BLT.bytes rh.toBytes]
 
 structure Tx : Type where
-  (nonce : B64)
+  (nonce : UInt64)
   (gas : Nat)
     (value : Nat)
-  (data : B8L)
+  (data : Bytes)
   (v : Nat)
-  (r : B8L)
-  (s : B8L)
+  (r : Bytes)
+  (s : Bytes)
   (type : TxType)
 
 structure Block : Type where
   header : Header
-  txs : List (B8L ⊕ Tx)
+  txs : List (Bytes ⊕ Tx)
   ommers : List Header
   wds : List Withdrawal
 
 structure BlockChain : Type where
   blocks : List Block
   state : State
-  chainId : B64
+  chainId : UInt64
 
 def TxType.receiver? : TxType → Option Adr
   | .zero _ receiver => receiver
@@ -217,103 +217,103 @@ def Tx.auths (tx : Tx) : List Auth :=
   | .four _ _ _ _ _ auths => auths
   | _ => []
 
-def B8L.sig (bs : B8L) : B8L := List.dropWhile (· = 0) bs
+def Bytes.sig (bs : Bytes) : Bytes := List.dropWhile (· = 0) bs
 
 def AccessList.toBLT (al : AccessList) : BLT :=
   let aux : Adr × List B256 → BLT
   | ⟨adr, words⟩ =>
-    .list [.b8s adr.toB8L, .list (words.map (.b8s ∘ B256.toB8L))]
+    .list [.bytes adr.toBytes, .list (words.map (.bytes ∘ B256.toBytes))]
   .list (al.map aux)
 
 def Auth.toBLT (auth : Auth) : BLT :=
   .list [
-    .b8s auth.chainId.toB8L.sig,
-    .b8s <| auth.address.toB8L,
-    .b8s auth.nonce.toNat.toB8L,
-    .b8s auth.yParity.toB8L,
+    .bytes auth.chainId.toBytes.sig,
+    .bytes <| auth.address.toBytes,
+    .bytes auth.nonce.toNat.toBytes,
+    .bytes auth.yParity.toBytes,
     -- `r` and `s` are RLP scalars, so they must re-encode minimally: a fixed
     -- 32-byte encoding diverges from the canonical bytes whenever a signature
     -- scalar has a leading zero byte, corrupting both the type-4 signing hash
     -- and the transactions trie.
-    .b8s auth.r.toB8L.sig,
-    .b8s auth.s.toB8L.sig,
+    .bytes auth.r.toBytes.sig,
+    .bytes auth.s.toBytes.sig,
   ]
 
 def Tx.toBLT (tx : Tx) : BLT :=
   match tx.type with
   | .zero gasPrice receiver =>
     .list [
-      .b8s tx.nonce.toNat.toB8L,
-      .b8s gasPrice.toB8L,
-      .b8s tx.gas.toB8L,
-      .b8s <| receiver.rec [] Adr.toB8L,
-      .b8s tx.value.toB8L,
-      .b8s tx.data,
-      .b8s tx.v.toB8L,
-      .b8s (trimZero tx.r),
-      .b8s (trimZero tx.s),
+      .bytes tx.nonce.toNat.toBytes,
+      .bytes gasPrice.toBytes,
+      .bytes tx.gas.toBytes,
+      .bytes <| receiver.rec [] Adr.toBytes,
+      .bytes tx.value.toBytes,
+      .bytes tx.data,
+      .bytes tx.v.toBytes,
+      .bytes (trimZero tx.r),
+      .bytes (trimZero tx.s),
     ]
   | .one chainId gasPrice receiver accessList =>
     .list [
-      .b8s chainId.toB8L.sig,
-      .b8s tx.nonce.toNat.toB8L,
-      .b8s gasPrice.toB8L,
-      .b8s tx.gas.toB8L,
-      .b8s <| receiver.rec [] Adr.toB8L,
-      .b8s tx.value.toB8L,
-      .b8s tx.data,
+      .bytes chainId.toBytes.sig,
+      .bytes tx.nonce.toNat.toBytes,
+      .bytes gasPrice.toBytes,
+      .bytes tx.gas.toBytes,
+      .bytes <| receiver.rec [] Adr.toBytes,
+      .bytes tx.value.toBytes,
+      .bytes tx.data,
       accessList.toBLT,
-      .b8s tx.v.toB8L,
-      .b8s (trimZero tx.r),
-      .b8s (trimZero tx.s)
+      .bytes tx.v.toBytes,
+      .bytes (trimZero tx.r),
+      .bytes (trimZero tx.s)
     ]
   | .two chainId maxPriorityFee maxFee receiver accessList =>
     .list [
-      .b8s chainId.toB8L.sig,
-      .b8s tx.nonce.toNat.toB8L,
-      .b8s maxPriorityFee.toB8L,
-      .b8s maxFee.toB8L,
-      .b8s tx.gas.toB8L,
-      .b8s <| receiver.rec [] Adr.toB8L,
-      .b8s tx.value.toB8L,
-      .b8s tx.data,
+      .bytes chainId.toBytes.sig,
+      .bytes tx.nonce.toNat.toBytes,
+      .bytes maxPriorityFee.toBytes,
+      .bytes maxFee.toBytes,
+      .bytes tx.gas.toBytes,
+      .bytes <| receiver.rec [] Adr.toBytes,
+      .bytes tx.value.toBytes,
+      .bytes tx.data,
       accessList.toBLT,
-      .b8s tx.v.toB8L,
-      .b8s (trimZero tx.r),
-      .b8s (trimZero tx.s)
+      .bytes tx.v.toBytes,
+      .bytes (trimZero tx.r),
+      .bytes (trimZero tx.s)
     ]
   | .three chainId maxPriorityFee maxFee receiver accessList maxBlobFee blobHashes =>
     .list [
-      .b8s chainId.toB8L.sig,
-      .b8s tx.nonce.toNat.toB8L,
-      .b8s maxPriorityFee.toB8L,
-      .b8s maxFee.toB8L,
-      .b8s tx.gas.toB8L,
-      .b8s receiver.toB8L,
-      .b8s tx.value.toB8L,
-      .b8s tx.data,
+      .bytes chainId.toBytes.sig,
+      .bytes tx.nonce.toNat.toBytes,
+      .bytes maxPriorityFee.toBytes,
+      .bytes maxFee.toBytes,
+      .bytes tx.gas.toBytes,
+      .bytes receiver.toBytes,
+      .bytes tx.value.toBytes,
+      .bytes tx.data,
       accessList.toBLT,
-      .b8s maxBlobFee.toB8L,
-      .list <| blobHashes.map <| .b8s ∘ B256.toB8L,
-      .b8s tx.v.toB8L,
-      .b8s (trimZero tx.r),
-      .b8s (trimZero tx.s)
+      .bytes maxBlobFee.toBytes,
+      .list <| blobHashes.map <| .bytes ∘ B256.toBytes,
+      .bytes tx.v.toBytes,
+      .bytes (trimZero tx.r),
+      .bytes (trimZero tx.s)
     ]
   | .four chainId maxPriorityFee maxFee receiver accessList auths =>
     .list [
-      .b8s chainId.toB8L.sig,
-      .b8s tx.nonce.toNat.toB8L,
-      .b8s maxPriorityFee.toB8L,
-      .b8s maxFee.toB8L,
-      .b8s tx.gas.toB8L,
-      .b8s receiver.toB8L,
-      .b8s tx.value.toB8L,
-      .b8s tx.data,
+      .bytes chainId.toBytes.sig,
+      .bytes tx.nonce.toNat.toBytes,
+      .bytes maxPriorityFee.toBytes,
+      .bytes maxFee.toBytes,
+      .bytes tx.gas.toBytes,
+      .bytes receiver.toBytes,
+      .bytes tx.value.toBytes,
+      .bytes tx.data,
       accessList.toBLT,
       .list <| auths.map <| Auth.toBLT,
-      .b8s tx.v.toB8L,
-      .b8s (trimZero tx.r),
-      .b8s (trimZero tx.s)
+      .bytes tx.v.toBytes,
+      .bytes (trimZero tx.r),
+      .bytes (trimZero tx.s)
     ]
 
 def Auth.toStrings (auth : Auth) : List String :=
@@ -340,7 +340,7 @@ def TxType.toStrings : TxType → List String
       [s!"receiver : {toString receiver}"]
     ]
   | one
-    (chainId : B64)
+    (chainId : UInt64)
     (gasPrice : Nat)
     (receiver : Option Adr)
     (accessList : AccessList) =>
@@ -351,7 +351,7 @@ def TxType.toStrings : TxType → List String
       accessList.toStrings
     ]
   | two
-    (chainId : B64)
+    (chainId : UInt64)
     (maxPriorityFee : Nat)
     (maxFee : Nat)
     (receiver : Option Adr)
@@ -364,7 +364,7 @@ def TxType.toStrings : TxType → List String
       accessList.toStrings
     ]
   | three
-    (chainId : B64)
+    (chainId : UInt64)
     (maxPriorityFee : Nat)
     (maxFee : Nat)
     (receiver : Adr)
@@ -381,7 +381,7 @@ def TxType.toStrings : TxType → List String
       fork "blob hashes" (blobHashes.map <| fun bh => [bh.toHex])
     ]
   | four
-    (chainId : B64)
+    (chainId : UInt64)
     (maxPriorityFee : Nat)
     (maxFee : Nat)
     (receiver : Adr)
@@ -412,16 +412,16 @@ def Tx.toStrings (tx : Tx) : List String :=
 
 instance : ToString Tx := ⟨String.joinln ∘ Tx.toStrings⟩
 
-def B8LOrTxToBLT : B8L ⊕ Tx → BLT
-  | .inl bs => BLT.b8s bs
+def B8LOrTxToBLT : Bytes ⊕ Tx → BLT
+  | .inl bs => BLT.bytes bs
   | .inr tx => tx.toBLT
 
 def Withdrawal.toBLT (wd : Withdrawal) : BLT :=
   BLT.list [
-    BLT.b8s wd.globalIndex.toB8L.sig,
-    BLT.b8s wd.validatorIndex.toB8L.sig,
-    BLT.b8s wd.recipient.toB8L,
-    BLT.b8s wd.amount.toB8L.sig
+    BLT.bytes wd.globalIndex.toBytes.sig,
+    BLT.bytes wd.validatorIndex.toBytes.sig,
+    BLT.bytes wd.recipient.toBytes,
+    BLT.bytes wd.amount.toBytes.sig
   ]
 
 def Block.toBLT (block : Block) : BLT :=
@@ -450,52 +450,52 @@ def TxType.blobHashes : TxType → List B256
 def Tx.blobHashes (tx : Tx) : List B256 := tx.type.blobHashes
 
 -- nibbles-to-bytes maps
-abbrev NTB := Std.TreeMap (List B8) (List B8) (@List.compare _ ⟨B8.compareLows⟩)
+abbrev NTB := Std.TreeMap (List UInt8) (List UInt8) (@List.compare _ ⟨UInt8.compareLows⟩)
 
 def NTB.toStrings (s : NTB) : List String :=
   let kvs := s.toArray.toList
-  let kvToStrings : B8L × B8L → List String :=
-    λ nb => [s!"{B4L.toHex (nb.fst.map B8.lows)} : {nb.snd.toHex}"]
+  let kvToStrings : Bytes × Bytes → List String :=
+    λ nb => [s!"{B4L.toHex (nb.fst.map UInt8.lows)} : {nb.snd.toHex}"]
   fork "NTB" (kvs.map kvToStrings)
 
-def hpAux : B8L → (Option B8 × B8L)
+def hpAux : Bytes → (Option UInt8 × Bytes)
   | [] => ⟨none, []⟩
   | n :: ns =>
     match hpAux ns with
     | ⟨none, bs⟩ => ⟨some n, bs⟩
     | ⟨some m, bs⟩ => ⟨none, ((n <<< 4) ||| m.lows) :: bs⟩
 
-def hp (ns : B8L) (t : Bool) : B8L :=
+def hp (ns : Bytes) (t : Bool) : Bytes :=
   match hpAux ns with
   | ⟨none, bs⟩ => (cond t (0x20) 0) :: bs
   | ⟨some n, bs⟩ => ((cond t 0x30 0x10) ||| n.lows) :: bs
 
-def B8L.commonPrefix : B8L → B8L → B8L
+def Bytes.commonPrefix : Bytes → Bytes → Bytes
   | [], _ => []
   | _, [] => []
   | n :: ns, n' :: ns' =>
-    if n = n' then n :: B8L.commonPrefix ns ns'
+    if n = n' then n :: Bytes.commonPrefix ns ns'
     else []
 
-def commonPrefix (n : B8) (ns : B8L) : List B8L → Option B8L
+def commonPrefix (n : UInt8) (ns : Bytes) : List Bytes → Option Bytes
   | [] => some (n :: ns)
   | ns' :: nss =>
-    match B8L.commonPrefix (n :: ns) ns' with
+    match Bytes.commonPrefix (n :: ns) ns' with
     | [] => none
     | (n' :: ns'') => commonPrefix n' ns'' nss
 
 def NTB.empty : NTB := Std.TreeMap.empty
 
-def sansPrefix : B8L → B8L → Option B8L
+def sansPrefix : Bytes → Bytes → Option Bytes
   | [], ns => some ns
   | _, [] => none
   | n :: ns, n' :: ns' =>
     if n = n' then sansPrefix ns ns' else none
 
-def insertSansPrefix (pfx : B8L) (m : NTB) (ns : B8L) (bs : B8L) : Option NTB := do
+def insertSansPrefix (pfx : Bytes) (m : NTB) (ns : Bytes) (bs : Bytes) : Option NTB := do
   (m.insert · bs) <$> sansPrefix pfx ns
 
-def NTB.factor (m : NTB) : Option (B8L × NTB) := do
+def NTB.factor (m : NTB) : Option (Bytes × NTB) := do
   let ((n :: ns) :: nss) ← some (m.toList.map Prod.fst) | none
   let pfx ← commonPrefix n ns nss
   let m' ← Std.TreeMap.foldlM (insertSansPrefix pfx) NTB.empty m
@@ -513,7 +513,7 @@ def NTBs.empty : NTBs :=
     .empty, .empty, .empty, .empty,
     .empty, .empty, .empty, .empty ⟩
 
-def NTBs.update (js : NTBs) (f : NTB → NTB) (k : B8) : NTBs :=
+def NTBs.update (js : NTBs) (f : NTB → NTB) (k : UInt8) : NTBs :=
   match k.toBools with
   | ⟨_, _, _, _, 0, 0, 0, 0⟩ => { js with x0 := f js.x0}
   | ⟨_, _, _, _, 0, 0, 0, 1⟩ => { js with x1 := f js.x1}
@@ -532,7 +532,7 @@ def NTBs.update (js : NTBs) (f : NTB → NTB) (k : B8) : NTBs :=
   | ⟨_, _, _, _, 1, 1, 1, 0⟩ => { js with xE := f js.xE}
   | ⟨_, _, _, _, 1, 1, 1, 1⟩ => { js with xF := f js.xF}
 
-def NTBs.insert (js : NTBs) : B8L → B8L → NTBs
+def NTBs.insert (js : NTBs) : Bytes → Bytes → NTBs
   | [], _ => js
   | n :: ns, bs => js.update (Std.TreeMap.insert · ns bs) n
 
@@ -543,23 +543,23 @@ def Std.TreeMap.isSingleton {K V : Type} (cmp : K → K → Ordering)
 mutual
 
   def nodeComp : Nat → NTB → BLT
-    | 0, _ => .b8s []
+    | 0, _ => .bytes []
     | k + 1, j =>
       if j.isEmpty
-      then .b8s []
+      then .bytes []
       else let r := structComp k j
-           if r.toB8L.length < 32
+           if r.toBytes.length < 32
            then r
-           else .b8s <| r.toB8L.keccak.toB8L
+           else .bytes <| r.toBytes.keccak.toBytes
 
   def structComp : Nat → NTB → BLT
-    | 0, _ => .b8s []
+    | 0, _ => .bytes []
     | k + 1, j =>
       if j.isEmpty
-            then .b8s []       else if j.isSingleton
+            then .bytes []       else if j.isSingleton
            then match j.toList with
-                | [(k, v)] => .list [.b8s (hp k 1), .b8s v]
-                | _ => .b8s []            else match j.factor with
+                | [(k, v)] => .list [.bytes (hp k 1), .bytes v]
+                | _ => .bytes []            else match j.factor with
                 | none =>
                   let js := Std.TreeMap.foldl NTBs.insert NTBs.empty j
                   .list [ nodeComp k js.x0, nodeComp k js.x1, nodeComp k js.x2,
@@ -567,8 +567,8 @@ mutual
                           nodeComp k js.x6, nodeComp k js.x7, nodeComp k js.x8,
                           nodeComp k js.x9, nodeComp k js.xA, nodeComp k js.xB,
                           nodeComp k js.xC, nodeComp k js.xD, nodeComp k js.xE,
-                          nodeComp k js.xF, .b8s (j.getD [] []) ]
-                | some (pfx, j') => .list [.b8s (hp pfx 0), nodeComp k j']
+                          nodeComp k js.xF, .bytes (j.getD [] []) ]
+                | some (pfx, j') => .list [.bytes (hp pfx 0), nodeComp k j']
 
 end
 
@@ -578,16 +578,16 @@ def NTB.maxKeyLength (j : NTB) : Nat :=
 def collapse (j : NTB) : BLT := structComp (2 * (j.maxKeyLength + 1)) j
 
 def trie (j : NTB) : B256 :=
-  B8L.keccak <| (collapse j).toB8L
+  Bytes.keccak <| (collapse j).toBytes
 
-def B256.toBLT (w : B256) : BLT := .b8s w.toB8L
+def B256.toBLT (w : B256) : BLT := .bytes w.toBytes
 
 def Stor.toNTB (s : Stor) : NTB :=
   let f : NTB → B256 → B256 → NTB :=
     λ j k v =>
       j.insert
-        k.keccak.toB4s
-        ((BLT.toB8L <| .b8s <| B8L.sig <| v.toB8L))
+        k.keccak.toNibbles
+        ((BLT.toBytes <| .bytes <| Bytes.sig <| v.toBytes))
   Std.TreeMap.foldl f NTB.empty s
 
 def B256.zerocount (x : B256) : Nat → Nat
@@ -597,7 +597,7 @@ def B256.zerocount (x : B256) : Nat → Nat
 def B256.bytecount (x : B256) : Nat := 32 - (B256.zerocount x 32)
 
 /-- Leading zero bits of one 64-bit limb; 64 for zero. -/
-def B64.leadingZeros (x : B64) : Nat :=
+def UInt64.leadingZeros (x : UInt64) : Nat :=
   if x = 0 then 64 else 63 - Nat.log2 x.toNat
 
 /-- Leading zero bits of a 256-bit word; 256 for zero.
@@ -605,22 +605,22 @@ def B64.leadingZeros (x : B64) : Nat :=
 This is EIP-7939's `256 - x.bit_length()` stated directly, and it is computed
 limb by limb so that a word is never widened to a bignum to be measured. -/
 def B256.leadingZeros (x : B256) : Nat :=
-  if x.1.1 ≠ 0 then B64.leadingZeros x.1.1
-  else if x.1.2 ≠ 0 then 64 + B64.leadingZeros x.1.2
-  else if x.2.1 ≠ 0 then 128 + B64.leadingZeros x.2.1
-  else 192 + B64.leadingZeros x.2.2
+  if x.1.1 ≠ 0 then UInt64.leadingZeros x.1.1
+  else if x.1.2 ≠ 0 then 64 + UInt64.leadingZeros x.1.2
+  else if x.2.1 ≠ 0 then 128 + UInt64.leadingZeros x.2.1
+  else 192 + UInt64.leadingZeros x.2.2
 
-def toKeyVal (pr : Adr × Acct) : B8L × B8L :=
+def toKeyVal (pr : Adr × Acct) : Bytes × Bytes :=
   let ad := pr.fst
   let ac := pr.snd
   ⟨
-    ad.toB8L.keccak.toB4s,
+    ad.toBytes.keccak.toNibbles,
     let val' :=
-      BLT.toB8L <| .list [
-        .b8s (ac.nonce.toB8L.sig),
-        .b8s (ac.bal.toB8L.sig),
+      BLT.toBytes <| .list [
+        .bytes (ac.nonce.toBytes.sig),
+        .bytes (ac.bal.toBytes.sig),
         B256.toBLT (trie ac.stor.toNTB),
-        B256.toBLT <| (B8L.keccak ac.code.toList)
+        B256.toBLT <| (Bytes.keccak ac.code.toList)
       ]
     val'
   ⟩
@@ -684,19 +684,19 @@ def txAccessListAddressCost : Nat := 2400
 def txAccessListStorageKeyCost : Nat := 1900
 def floorCalldataCost : Nat := 10
 def standardCallDataTokenCost : Nat := 4
-def depositRequestType : B8L := [0]
-def withdrawalRequestType : B8L := [1]
-def consolidationRequestType : B8L := [2]
+def depositRequestType : Bytes := [0]
+def withdrawalRequestType : Bytes := [1]
+def consolidationRequestType : Bytes := [2]
 def withdrawalRequestPredeployAddress : Adr := 0x00000961Ef480Eb55e80D19ad83579A64c007002
 def consolidationRequestPredeployAddress : Adr := 0x0000BBdDc7CE488642fb579F8B00f3a590007251
 def historyStorageAddress : Adr := 0x0000F90827F1C53a10cb7A02335B175320002935
-def emptyOmmerHash : B256 := (BLT.list []).toB8L.keccak
-def setCodeTxMagic : B8L := [0x05]
+def emptyOmmerHash : B256 := (BLT.list []).toBytes.keccak
+def setCodeTxMagic : Bytes := [0x05]
 def beaconRootsAddress : Adr := 0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02
 def systemAddress : Adr := 0xfffffffffffffffffffffffffffffffffffffffe
 def systemTransactionGas : Nat := 30000000
-def versionedHashVersionKzg : B8 := 0x01
-def eoaDelegationMarker : B8L := [0xEF, 0x01, 0x00]
+def versionedHashVersionKzg : UInt8 := 0x01
+def eoaDelegationMarker : Bytes := [0xEF, 0x01, 0x00]
 def gasBlake2PerRound : Nat := 1
 def eoaDelegatedCodeLength : Nat := 23
 -- The blob target, ceiling, and base-fee update fraction are fork rules, not
@@ -799,7 +799,7 @@ def calculateMemoryGasCost (memSize : Nat) : Nat :=
   linearCost + quadraticCost
 
 structure Mem : Type where
-  data : Array B8
+  data : Array UInt8
   size : Nat
 
 def Mem.empty : Mem := ⟨.empty, 0⟩
@@ -807,7 +807,7 @@ def Mem.empty : Mem := ⟨.empty, 0⟩
 structure Log : Type where
   (address : Adr)
   (topics : List B256)
-  (data : B8L)
+  (data : Bytes)
 
 structure BenvStat : Type where
   /-- The rules this block runs under.
@@ -816,7 +816,7 @@ structure BenvStat : Type where
   through `Benv`, `Msg`, or `Sevm` -- can read the active rules without a
   signature change, and nothing anywhere needs to know which fork it is. -/
   rules : ForkRules
-  chainId : B64
+  chainId : UInt64
   origState : State
   blockGasLimit : Nat
   blockHashes: List B256
@@ -859,7 +859,7 @@ structure Msg : Type where
   currentTarget: Adr
   gas: Nat
   value: B256
-  data: B8L
+  data: Bytes
   codeAddress: Option Adr
   code: ByteArray
   depth: Nat
@@ -1121,65 +1121,65 @@ def rlpStructureError (name : String) (detail : String) : String :=
   s!"{rlpStructureTag} : {name} : {detail}"
 
 /-- A fixed-width field: exactly `n` bytes, no more and no fewer. -/
-def B8L.toRlpFixed (name : String) (n : Nat) (xs : B8L) : Except String B8L :=
+def Bytes.toRlpFixed (name : String) (n : Nat) (xs : Bytes) : Except String Bytes :=
   (xs.toFixed? n).toExcept
     s!"{rlpFixedWidthTag} : {name} must be exactly {n} bytes, but is {xs.length}"
 
-/-- A fixed-width 32-byte hash or root, as a `B256`. `B8L.toB256?` is already an
+/-- A fixed-width 32-byte hash or root, as a `B256`. `Bytes.toB256?` is already an
 exact-width decoder, so this adds the precise reason rather than a check. Note
 these fields are *bytes*, not scalars: a root may legitimately begin with a zero
 byte, so the canonical-scalar rule must not be applied to them. -/
-def B8L.toRlpHash (name : String) (xs : B8L) : Except String B256 :=
+def Bytes.toRlpHash (name : String) (xs : Bytes) : Except String B256 :=
   xs.toB256?.toExcept
     s!"{rlpFixedWidthTag} : {name} must be exactly 32 bytes, but is {xs.length}"
 
-/-- A fixed-width 8-byte field, as a `B64`. Like `toRlpHash`, this is bytes
+/-- A fixed-width 8-byte field, as a `UInt64`. Like `toRlpHash`, this is bytes
 rather than a scalar: the header nonce is eight bytes of zeroes, not empty. -/
-def B8L.toRlpFixedB64 (name : String) (xs : B8L) : Except String B64 :=
-  xs.toB64?.toExcept
+def Bytes.toRlpFixedB64 (name : String) (xs : Bytes) : Except String UInt64 :=
+  xs.toUInt64?.toExcept
     s!"{rlpFixedWidthTag} : {name} must be exactly 8 bytes, but is {xs.length}"
 
 /-- The canonicality half of scalar checking, shared by every width. The
 overflow tag is a parameter because the width is what the official vocabulary
 distinguishes, while non-canonical encoding is one reason at every width. -/
-private def rlpScalarBytes (overflowTag name : String) (n : Nat) (xs : B8L) :
-  Except String B8L := do
+private def rlpScalarBytes (overflowTag name : String) (n : Nat) (xs : Bytes) :
+  Except String Bytes := do
   if xs.length > n then
     .error
       s!"{overflowTag} : {name} scalar is {xs.length} bytes, \
          exceeding its {n}-byte width"
-  if xs.head? = some (0 : B8) then
+  if xs.head? = some (0 : UInt8) then
     .error
-      s!"{rlpLeadingZerosTag} : {name} scalar 0x{B8L.toHex xs} \
+      s!"{rlpLeadingZerosTag} : {name} scalar 0x{Bytes.toHex xs} \
          is not canonically encoded (leading zero byte)"
   .ok xs
 
 /-- A canonical unsigned scalar of at most `n` bytes, as a `Nat`. Overflow is
 reported against the 256-bit identity, this being the widest scalar the
 consensus fields have; a field modelled as 64 bits must use `toRlpB64`. -/
-def B8L.toRlpNat (name : String) (n : Nat) (xs : B8L) : Except String Nat := do
+def Bytes.toRlpNat (name : String) (n : Nat) (xs : Bytes) : Except String Nat := do
   let xs ← rlpScalarBytes rlpFieldOverflow256Tag name n xs
   .ok xs.toNat
 
 /-- A canonical 64-bit scalar: at most eight bytes, converted without
 truncation. -/
-def B8L.toRlpB64 (name : String) (xs : B8L) : Except String B64 := do
+def Bytes.toRlpB64 (name : String) (xs : Bytes) : Except String UInt64 := do
   let xs ← rlpScalarBytes rlpFieldOverflow64Tag name 8 xs
-  .ok xs.toB64
+  .ok xs.toUInt64
 
 /-- A canonical 256-bit scalar: at most thirty-two bytes, converted without
 truncation. -/
-def B8L.toRlpB256 (name : String) (xs : B8L) : Except String B256 := do
+def Bytes.toRlpB256 (name : String) (xs : Bytes) : Except String B256 := do
   let xs ← rlpScalarBytes rlpFieldOverflow256Tag name 32 xs
   .ok xs.toB256
 
 /-- An address field: exactly twenty bytes. -/
-def B8L.toRlpAdr (name : String) (xs : B8L) : Except String Adr :=
+def Bytes.toRlpAdr (name : String) (xs : Bytes) : Except String Adr :=
   xs.toAdr?.toExcept
     s!"{rlpFixedWidthTag} : {name} must be exactly 20 bytes, but is {xs.length}"
 
 /-- An optional contract-creation receiver: empty, or exactly twenty bytes. -/
-def B8L.toRlpReceiver (name : String) (xs : B8L) : Except String (Option Adr) :=
+def Bytes.toRlpReceiver (name : String) (xs : Bytes) : Except String (Option Adr) :=
   xs.toReceiver?.toExcept
     s!"{rlpFixedWidthTag} : {name} must be empty or exactly 20 bytes, \
        but is {xs.length}"
@@ -1215,41 +1215,41 @@ private def hasTag {α : Type} (tag : String) (e : Except String α) : Bool :=
   hasErrorType (errOf e) tag
 
 -- Fixed-width fields: both the short and the long side are width errors.
-#guard (B8L.toRlpFixed "root" 32 (List.replicate 32 (0x11 : B8))).toOption.isSome
-#guard hasTag rlpFixedWidthTag (B8L.toRlpFixed "root" 32 (List.replicate 31 (0x11 : B8)))
-#guard hasTag rlpFixedWidthTag (B8L.toRlpFixed "root" 32 (List.replicate 33 (0x11 : B8)))
+#guard (Bytes.toRlpFixed "root" 32 (List.replicate 32 (0x11 : UInt8))).toOption.isSome
+#guard hasTag rlpFixedWidthTag (Bytes.toRlpFixed "root" 32 (List.replicate 31 (0x11 : UInt8)))
+#guard hasTag rlpFixedWidthTag (Bytes.toRlpFixed "root" 32 (List.replicate 33 (0x11 : UInt8)))
 
 -- 64-bit scalars: accepted widths convert exactly, nine bytes is an overflow
 -- rather than a truncation, and a leading zero is a distinct reason from an
 -- overflow. This is the withdrawal-index case.
-#guard (B8L.toRlpB64 "index" []).toOption.map B64.toNat = some 0
-#guard (B8L.toRlpB64 "index" (List.replicate 8 (0xFF : B8))).toOption.map B64.toNat
+#guard (Bytes.toRlpB64 "index" []).toOption.map UInt64.toNat = some 0
+#guard (Bytes.toRlpB64 "index" (List.replicate 8 (0xFF : UInt8))).toOption.map UInt64.toNat
   = some (2 ^ 64 - 1)
 #guard hasTag rlpFieldOverflow64Tag
-  (B8L.toRlpB64 "index" (0x01 :: List.replicate 8 (0x00 : B8)))
-#guard hasTag rlpLeadingZerosTag (B8L.toRlpB64 "index" [0x00, 0x01])
-#guard ¬ hasTag rlpFieldOverflow64Tag (B8L.toRlpB64 "index" [0x00, 0x01])
+  (Bytes.toRlpB64 "index" (0x01 :: List.replicate 8 (0x00 : UInt8)))
+#guard hasTag rlpLeadingZerosTag (Bytes.toRlpB64 "index" [0x00, 0x01])
+#guard ¬ hasTag rlpFieldOverflow64Tag (Bytes.toRlpB64 "index" [0x00, 0x01])
 #guard ¬ hasTag rlpLeadingZerosTag
-  (B8L.toRlpB64 "index" (0x01 :: List.replicate 8 (0x00 : B8)))
+  (Bytes.toRlpB64 "index" (0x01 :: List.replicate 8 (0x00 : UInt8)))
 
 -- 256-bit scalars: same reasons, one width up, under the 256-bit overflow tag.
-#guard (B8L.toRlpB256 "amount" (List.replicate 32 (0xFF : B8))).toOption.map B256.toNat
+#guard (Bytes.toRlpB256 "amount" (List.replicate 32 (0xFF : UInt8))).toOption.map B256.toNat
   = some (2 ^ 256 - 1)
 #guard hasTag rlpFieldOverflow256Tag
-  (B8L.toRlpB256 "amount" (List.replicate 33 (0x01 : B8)))
-#guard hasTag rlpLeadingZerosTag (B8L.toRlpB256 "amount" [0x00, 0x01])
-#guard (B8L.toRlpNat "value" 32 (List.replicate 32 (0xFF : B8))).toOption
+  (Bytes.toRlpB256 "amount" (List.replicate 33 (0x01 : UInt8)))
+#guard hasTag rlpLeadingZerosTag (Bytes.toRlpB256 "amount" [0x00, 0x01])
+#guard (Bytes.toRlpNat "value" 32 (List.replicate 32 (0xFF : UInt8))).toOption
   = some (2 ^ 256 - 1)
-#guard hasTag rlpFieldOverflow256Tag (B8L.toRlpNat "value" 32 (List.replicate 33 (0x01 : B8)))
+#guard hasTag rlpFieldOverflow256Tag (Bytes.toRlpNat "value" 32 (List.replicate 33 (0x01 : UInt8)))
 
 -- Addresses and optional receivers: a width error, never a silent creation.
-#guard (B8L.toRlpAdr "recipient" (List.replicate 20 (0x11 : B8))).toOption.isSome
-#guard hasTag rlpFixedWidthTag (B8L.toRlpAdr "recipient" (List.replicate 19 (0x11 : B8)))
-#guard hasTag rlpFixedWidthTag (B8L.toRlpAdr "recipient" (List.replicate 21 (0x11 : B8)))
-#guard hasTag rlpFixedWidthTag (B8L.toRlpAdr "recipient" [])
-#guard (B8L.toRlpReceiver "receiver" []).toOption = some none
-#guard (B8L.toRlpReceiver "receiver" (List.replicate 20 (0x11 : B8))).toOption.isSome
-#guard hasTag rlpFixedWidthTag (B8L.toRlpReceiver "receiver" (List.replicate 21 (0x11 : B8)))
+#guard (Bytes.toRlpAdr "recipient" (List.replicate 20 (0x11 : UInt8))).toOption.isSome
+#guard hasTag rlpFixedWidthTag (Bytes.toRlpAdr "recipient" (List.replicate 19 (0x11 : UInt8)))
+#guard hasTag rlpFixedWidthTag (Bytes.toRlpAdr "recipient" (List.replicate 21 (0x11 : UInt8)))
+#guard hasTag rlpFixedWidthTag (Bytes.toRlpAdr "recipient" [])
+#guard (Bytes.toRlpReceiver "receiver" []).toOption = some none
+#guard (Bytes.toRlpReceiver "receiver" (List.replicate 20 (0x11 : UInt8))).toOption.isSome
+#guard hasTag rlpFixedWidthTag (Bytes.toRlpReceiver "receiver" (List.replicate 21 (0x11 : UInt8)))
 
 -- A structure failure is its own reason, not a width or overflow one.
 #guard hasErrorType (rlpStructureError "block" "expected a 4-item list") rlpStructureTag
@@ -1265,9 +1265,9 @@ structure Mach : Type where
 structure Meta : Type where
   logs : List Log
   refundCounter : Int
-  output : B8L
+  output : Bytes
   accountsToDelete : AdrSet
-  returnData : B8L
+  returnData : Bytes
   error : Option String
   accessedAddresses : AdrSet
   accessedStorageKeys : KeySet
@@ -1289,9 +1289,9 @@ def Devm.memory (devm : Devm) : Mem := devm.mach.memory
 def Devm.gasLeft (devm : Devm) : Nat := devm.mach.gasLeft
 def Devm.logs (devm : Devm) : List Log := devm.meta.logs
 def Devm.refundCounter (devm : Devm) : Int := devm.meta.refundCounter
-def Devm.output (devm : Devm) : B8L := devm.meta.output
+def Devm.output (devm : Devm) : Bytes := devm.meta.output
 def Devm.accountsToDelete (devm : Devm) : AdrSet := devm.meta.accountsToDelete
-def Devm.returnData (devm : Devm) : B8L := devm.meta.returnData
+def Devm.returnData (devm : Devm) : Bytes := devm.meta.returnData
 def Devm.error (devm : Devm) : Option String := devm.meta.error
 def Devm.accessedAddresses (devm : Devm) : AdrSet := devm.meta.accessedAddresses
 def Devm.accessedStorageKeys (devm : Devm) : KeySet := devm.meta.accessedStorageKeys
@@ -1314,7 +1314,7 @@ structure Sevm : Type where
   currentTarget : Adr
   gas : Nat
   value : B256
-  data : B8L
+  data : Bytes
   codeAddress : Option Adr
   code : ByteArray
   depth : Nat
@@ -1345,13 +1345,13 @@ def Devm.withLogs (devm : Devm) (logs : List Log) : Devm :=
 def Devm.withRefundCounter (devm : Devm) (refundCounter : Int) : Devm :=
   devm.setMeta {devm.meta with refundCounter := refundCounter}
 
-def Devm.withOutput (devm : Devm) (output : B8L) : Devm :=
+def Devm.withOutput (devm : Devm) (output : Bytes) : Devm :=
   devm.setMeta {devm.meta with output := output}
 
 def Devm.withAccountsToDelete (devm : Devm) (accountsToDelete : AdrSet) : Devm :=
   devm.setMeta {devm.meta with accountsToDelete := accountsToDelete}
 
-def Devm.withReturnData (devm : Devm) (returnData : B8L) : Devm :=
+def Devm.withReturnData (devm : Devm) (returnData : Bytes) : Devm :=
   devm.setMeta {devm.meta with returnData := returnData}
 
 def Devm.withError (devm : Devm) (error : Option String) : Devm :=
@@ -1375,7 +1375,7 @@ def Stack.toStrings (stack : List B256) : List String :=
 
 def Mem.toStrings (mem : Mem) : List String :=
   fork "MEM" [
-    String.chunks 64 <| B8L.toHex mem.data.toList
+    String.chunks 64 <| Bytes.toHex mem.data.toList
   ]
 
 def mkSingleton {ξ : Type u} : ξ → List ξ
@@ -1403,7 +1403,7 @@ def Msg.toStrings (msg : Msg) : List String  :=
     [s!"value : {msg.value.toHex}"],
     [s!"data : {msg.data.toHex}"],
     [s!"code address : {(msg.codeAddress.rec "None" Adr.toHex : String)}"],
-    fork "CODE" [String.chunks 64 <| B8L.toHex msg.code.toList],
+    fork "CODE" [String.chunks 64 <| Bytes.toHex msg.code.toList],
     [s!"depth : {msg.depth}"],
     [s!"should transfer value : {msg.shouldTransferValue}"],
     [s!"is static : {msg.isStatic}"],
@@ -1440,7 +1440,7 @@ def Evm.toStrings (evm : Evm) : List String :=
     [s!"PC : {evm.pc}"],
     Stack.toStrings mach.stack,
     Mem.toStrings mach.memory,
-    [s!"CODE : {B8L.toHex evm.sta.code.toList}"],
+    [s!"CODE : {Bytes.toHex evm.sta.code.toList}"],
     [s!"GAS LEFT : {mach.gasLeft}"],
     fork "LOGS" (metaView.logs.map Log.toStrings),
     [s!"REFUND COUNTER : {metaView.refundCounter}"],
@@ -1606,7 +1606,7 @@ theorem chargeGas_def (cost : Nat) (devm : Devm) :
 inductive Ninst : Type
   | reg : Rinst → Ninst
   | exec : Xinst → Ninst
-  | push : ∀ bs : B8L, bs.length ≤ 32 → Ninst
+  | push : ∀ bs : Bytes, bs.length ≤ 32 → Ninst
 
 def Ninst.toOpString : Ninst → String
   | reg o => Rinst.toString o
@@ -1617,7 +1617,7 @@ def Ninst.toString : Ninst → String
   | reg o => Rinst.toString o
   | exec o => Xinst.toString o
   | push [] _ => "PUSH0"
-  | push bs _ => "PUSH" ++ bs.length.repr ++ " " ++ B8L.toHex bs
+  | push bs _ => "PUSH" ++ bs.length.repr ++ " " ++ Bytes.toHex bs
 
 instance : ToString Ninst := ⟨Ninst.toString⟩
 instance : Repr Ninst := ⟨λ i _ => i.toString⟩
@@ -1630,7 +1630,7 @@ inductive Inst : Type
 inductive InstType
   | R | X | J | L | P
 
-def B8.toInstType (b : B8) : InstType :=
+def UInt8.toInstType (b : UInt8) : InstType :=
   match b.highs with
   | 0x00 => if b.lows = 0x00 then .L else .R
   | 0x05 =>
@@ -1654,7 +1654,7 @@ lemma Nat.hi_le (a b : Nat) : a ↿ b ≤ a := by
   rw [hi, shiftLeft_eq, shiftRight_eq_div_pow]
   apply Nat.div_mul_le_self
 
-lemma B8.lt_of_highs_lt_highs (x y : B8) (lt : x.highs < y.highs) : x < y := by
+lemma UInt8.lt_of_highs_lt_highs (x y : UInt8) (lt : x.highs < y.highs) : x < y := by
   rw [UInt8.lt_iff_toNat_lt]
   have lt' : x.toNat < (x.toNat ↿ 4) + 16 := by
     conv => lhs; rw [← Nat.hi_or_lo x.toNat 4]; rfl
@@ -1674,18 +1674,18 @@ lemma B8.lt_of_highs_lt_highs (x y : B8) (lt : x.highs < y.highs) : x < y := by
   have le' : (y.toNat ↿ 4) ≤ y.toNat := Nat.hi_le _ _
   apply Nat.lt_of_lt_of_le lt' <| Nat.le_trans le le'
 
-lemma le_of_toInstType_eq_p (b : B8) (h : b.toInstType = .P) :
+lemma le_of_toInstType_eq_p (b : UInt8) (h : b.toInstType = .P) :
     b.toNat ≤ 127 := by
   apply Nat.le_of_lt_succ
   apply (@UInt8.lt_iff_toNat_lt b 0x80).mp
-  apply B8.lt_of_highs_lt_highs
-  simp [B8.toInstType] at h; split at h
+  apply UInt8.lt_of_highs_lt_highs
+  simp [UInt8.toInstType] at h; split at h
   · split at h <;> cases h
-  · rename (B8.highs _ =  _) => heq; rw [heq]
+  · rename (UInt8.highs _ =  _) => heq; rw [heq]
     apply (@UInt8.lt_iff_toNat_lt 5 8).mpr; simp
-  · rename (B8.highs _ =  _) => heq; rw [heq]
+  · rename (UInt8.highs _ =  _) => heq; rw [heq]
     apply (@UInt8.lt_iff_toNat_lt 6 8).mpr; simp
-  · rename (B8.highs _ =  _) => heq; rw [heq]
+  · rename (UInt8.highs _ =  _) => heq; rw [heq]
     apply (@UInt8.lt_iff_toNat_lt 7 8).mpr; simp
   · split at h <;> cases h
   · cases h
@@ -1693,7 +1693,7 @@ lemma le_of_toInstType_eq_p (b : B8) (h : b.toInstType = .P) :
 def ByteArray.getInst (code : ByteArray) (pc : Nat) : Option Inst :=
   if pc < code.size
   then
-    let b : B8 := code.get! pc
+    let b : UInt8 := code.get! pc
     match h : b.toInstType with
     | .R => b.toRinst <&> (.next ∘ .reg)
     | .X => b.toXinst <&> (.next ∘ .exec)
@@ -1701,7 +1701,7 @@ def ByteArray.getInst (code : ByteArray) (pc : Nat) : Option Inst :=
     | .L => b.toLinst <&> .last
     | .P =>
       let le := le_of_toInstType_eq_p b h
-      let bs : B8L := code.sliceD (pc + 1) (b.toNat - 95) 0
+      let bs : Bytes := code.sliceD (pc + 1) (b.toNat - 95) 0
       let le' : bs.length ≤ 32 := by
         simp [bs, ByteArray.length_sliceD, le]
       some <| .next <| .push bs le'
@@ -1984,7 +1984,7 @@ def ceil32 (n : Nat) : Nat :=
   | 0 => n
   | m@(_ + 1) => n + 32 - m
 
-def Mem.write (μ : Mem) (n : ℕ) : B8L → Mem
+def Mem.write (μ : Mem) (n : ℕ) : Bytes → Mem
   | [] => μ
   | xs@(_ :: _) =>
     if n + xs.length ≤ μ.size
@@ -1993,12 +1993,12 @@ def Mem.write (μ : Mem) (n : ℕ) : B8L → Mem
       then
         ⟨Array.writeD μ.data n xs, μ.size⟩
       else
-        let blank : Array B8 := Array.replicate (n + xs.length) 0x00
+        let blank : Array UInt8 := Array.replicate (n + xs.length) 0x00
         ⟨Array.writeD (Array.copyD μ.data blank) n xs, μ.size⟩
 
     else
       let newSize := ceil32 (n + xs.length)
-      let blank : Array B8 := Array.replicate newSize 0x00
+      let blank : Array UInt8 := Array.replicate newSize 0x00
       ⟨Array.writeD (Array.copyD μ.data blank) n xs, newSize⟩
 
 def Mem.extend (μ : Mem) (index size : Nat) : Mem :=
@@ -2007,7 +2007,7 @@ def Mem.extend (μ : Mem) (index size : Nat) : Mem :=
 def Mem.extends (μ : Mem) (pairs : List (Nat × Nat)) : Mem :=
   ⟨μ.data, memExtsSize μ.size pairs⟩
 
-def Mem.read (μ : Mem) (index size : ℕ) : B8L × Mem :=
+def Mem.read (μ : Mem) (index size : ℕ) : Bytes × Mem :=
   ⟨μ.data.sliceD index size 0, μ.extend index size⟩
 
 def Dead (w : State) (a : Adr) : Prop :=
@@ -2015,13 +2015,13 @@ def Dead (w : State) (a : Adr) : Prop :=
   | none => True
   | some x => x.Empty
 
-def Mach.memWrite (mach : Mach) (idx : Nat) (val : B8L) : Mach :=
+def Mach.memWrite (mach : Mach) (idx : Nat) (val : Bytes) : Mach :=
   {mach with memory := mach.memory.write idx val}
 
-def Devm.memWrite (devm : Devm) (idx : Nat) (val : B8L) : Devm :=
+def Devm.memWrite (devm : Devm) (idx : Nat) (val : Bytes) : Devm :=
   liftMachPure (Mach.memWrite · idx val) devm
 
-def Devm.memRead (devm : Devm) (index size : Nat) : B8L × Devm :=
+def Devm.memRead (devm : Devm) (index size : Nat) : Bytes × Devm :=
   let ⟨val, mem⟩ := devm.memory.read index size
   ⟨val, devm.withMemory mem⟩
 
@@ -2198,7 +2198,7 @@ def Rinst.runCore
   | .calldataload => do
     let ⟨start_index, devm⟩ ← devm.pop
     let devm' ← chargeGas gVerylow devm
-    let value := B8L.toB256 <| sevm.data.sliceD start_index.toNat 32 0
+    let value := Bytes.toB256 <| sevm.data.sliceD start_index.toNat 32 0
     devm'.push value
   | .calldatasize => pushItem sevm.data.length.toB256 gBase devm
   | .calldatacopy => do
@@ -2220,7 +2220,7 @@ def Rinst.runCore
     let copy_gas_cost := gasCopy * words
     let extend_memory_cost := devm.extCost [⟨memory_start_index, size⟩]
     let devm ← chargeGas (gVerylow + copy_gas_cost + extend_memory_cost) devm
-    let value := sevm.code.sliceD code_start_index size (Linst.toB8 .stop)
+    let value := sevm.code.sliceD code_start_index size (Linst.toUInt8 .stop)
     .ok (devm.memWrite memory_start_index value)
   | .gasprice => pushItem sevm.tenvStat.gasPrice.toB256 gBase devm
   | .extcodesize => do
@@ -2247,7 +2247,7 @@ def Rinst.runCore
           (gasColdAccountAccess + copy_gas_cost + extend_memory_cost)
           (addAccessedAddress devm adr)
     let code := devm.getCode adr
-    let value := code.sliceD code_start_index size (Linst.toB8 .stop)
+    let value := code.sliceD code_start_index size (Linst.toUInt8 .stop)
     .ok (devm.memWrite memory_start_index value)
   | .retdatasize => pushItem devm.returnData.length.toB256 gBase devm
   | .retdatacopy => do
@@ -2288,13 +2288,13 @@ def Rinst.runCore
     let extend_memory_cost := devm.extCost [⟨start_index, 32⟩]
     let devm ← chargeGas (gVerylow + extend_memory_cost) devm
     let ⟨value, devm⟩ := devm.memRead start_index 32
-    devm.push (B8L.toB256 value)
+    devm.push (Bytes.toB256 value)
   | .mstore => do
     let ⟨start_index, devm⟩ ← devm.popToNat
     let ⟨value, devm⟩ ← devm.pop
     let extend_memory_cost := devm.extCost [⟨start_index, 32⟩]
     let devm ← chargeGas (gVerylow + extend_memory_cost) devm
-    .ok <| devm.memWrite start_index value.toB8L
+    .ok <| devm.memWrite start_index value.toBytes
   | .mstore8 => do
     let ⟨start_index, devm⟩ ← devm.popToNat
     let ⟨value, devm⟩ ← devm.pop
@@ -2317,7 +2317,7 @@ def Rinst.runCore
   | .signextend => applyBinary B256.signext gLow devm
   | .pop => (devm.pop <&> Prod.snd) >>= chargeGas gBase
   | .byte =>
-    applyBinary (λ x y => (List.getD y.toB8L x.toNat 0).toB256) gVerylow devm
+    applyBinary (λ x y => (List.getD y.toBytes x.toNat 0).toB256) gVerylow devm
   | .shl => applyBinary (fun x y => y <<< x.toNat) gVerylow devm
   | .shr => applyBinary (fun x y => y >>> x.toNat) gVerylow devm
   | .sar => applyBinary (fun x y => B256.arithShiftRight y x.toNat) gVerylow devm
@@ -2681,7 +2681,7 @@ def noPushBefore (cd : ByteArray) : Nat → Nat → Bool
     else noPushBefore cd k m
 
 def jumpable (cd : ByteArray) (k : Nat) : Bool :=
-  if cd.get! k = (Jinst.toB8 .jumpdest)
+  if cd.get! k = (Jinst.toUInt8 .jumpdest)
   then noPushBefore cd k 32
   else false
 
@@ -2805,7 +2805,7 @@ def calculateMsgCallGas
     let gas' := min gas (except64th (gas_left - memory_cost - extra_gas))
     ⟨gas' + extra_gas, gas' + call_stipend⟩
 
-def incorporateChildOnError (parent child : Devm) (returnData : B8L) : Devm :=
+def incorporateChildOnError (parent child : Devm) (returnData : Bytes) : Devm :=
   let parent := parent.setMach
     {parent.mach with gasLeft := parent.gasLeft + child.gasLeft}
   let parent := parent.setMeta
@@ -2817,7 +2817,7 @@ def incorporateChildOnError (parent child : Devm) (returnData : B8L) : Devm :=
       state := child.state
       transientStorage := child.transientStorage}
 
-def incorporateChildOnSuccess (parent child : Devm) (returnData : B8L) : Devm :=
+def incorporateChildOnSuccess (parent child : Devm) (returnData : Bytes) : Devm :=
   let parent := parent.setMach
     {parent.mach with gasLeft := parent.gasLeft + child.gasLeft}
   let parent := parent.setMeta
@@ -2834,16 +2834,16 @@ def incorporateChildOnSuccess (parent child : Devm) (returnData : B8L) : Devm :=
       state := child.state
       transientStorage := child.transientStorage}
 
-def compute_contract_address (sender : Adr) (nonce : B64) : Adr :=
-  let LA : B8L :=
-    BLT.toB8L <| .list [.b8s sender.toB8L, .b8s nonce.toB8L.sig]
-  (B8L.keccak LA).toAdr
+def compute_contract_address (sender : Adr) (nonce : UInt64) : Adr :=
+  let LA : Bytes :=
+    BLT.toBytes <| .list [.bytes sender.toBytes, .bytes nonce.toBytes.sig]
+  (Bytes.keccak LA).toAdr
 
 def create2NewAddress
-  (sender : Adr) (salt : B256) (initCode : B8L): Adr :=
-  let LA : B8L :=
-    (0xFF : B8) :: (sender.toB8L ++ salt.toB8L ++ initCode.keccak.toB8L)
-  (B8L.keccak LA).toAdr
+  (sender : Adr) (salt : B256) (initCode : Bytes): Adr :=
+  let LA : Bytes :=
+    (0xFF : UInt8) :: (sender.toBytes ++ salt.toBytes ++ initCode.keccak.toBytes)
+  (Bytes.keccak LA).toAdr
 
 def State.incrNonce (w : State) (a : Adr) : State :=
   let ac := w.get a
@@ -2892,7 +2892,7 @@ def liftToExecution (devm : Devm)
 
 inductive PrecompResult
 | error (msg : String) (cost : Nat)
-| ok (cost : Nat) (output : B8L)
+| ok (cost : Nat) (output : Bytes)
 
 def PrecompResult.chargeGas (cost : Nat) (evm : Evm)
     (pr : Unit → PrecompResult) : PrecompResult :=
@@ -2901,16 +2901,16 @@ def PrecompResult.chargeGas (cost : Nat) (evm : Evm)
 def executeEcrecover (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
   PrecompResult.chargeGas gasEcrecover evm fun () =>
-    let h := B8L.toB256 <| data.sliceD 0 32 (0x00 : B8)
-    let v_opt := match (B8L.toB256 <| data.sliceD 32 32 (0x00 : B8)) with
+    let h := Bytes.toB256 <| data.sliceD 0 32 (0x00 : UInt8)
+    let v_opt := match (Bytes.toB256 <| data.sliceD 32 32 (0x00 : UInt8)) with
                  | 0x1B => some false
                  | 0x1C => some true
                  | _ => none
     match v_opt with
     | none => .ok gasEcrecover []
     | some v =>
-      let r := B8L.toB256 <| data.sliceD 64 32 (0x00 : B8)
-      let s := B8L.toB256 <| data.sliceD 96 32 (0x00 : B8)
+      let r := Bytes.toB256 <| data.sliceD 64 32 (0x00 : UInt8)
+      let s := Bytes.toB256 <| data.sliceD 96 32 (0x00 : UInt8)
       if r = 0 ∨ s = 0 ∨
          r ≥ secp256k1.curveOrder.toB256 ∨
          s ≥ secp256k1.curveOrder.toB256 then
@@ -2918,7 +2918,7 @@ def executeEcrecover (evm : Evm) : PrecompResult :=
       else
         match secp256k1.recover h v r s with
         | .none => .ok gasEcrecover []
-        | some adr => .ok gasEcrecover adr.toB256.toB8L
+        | some adr => .ok gasEcrecover adr.toB256.toBytes
 
 /-- EIP-7951 `P256VERIFY`.
 
@@ -2933,27 +2933,27 @@ def executeP256Verify (evm : Evm) : PrecompResult :=
   PrecompResult.chargeGas gasP256Verify evm fun () =>
     if data.length ≠ 160 then .ok gasP256Verify []
     else
-      let msgHash : Nat := B8L.toNat <| data.sliceD 0 32 (0 : B8)
-      let r : Nat := B8L.toNat <| data.sliceD 32 32 (0 : B8)
-      let s : Nat := B8L.toNat <| data.sliceD 64 32 (0 : B8)
-      let qx : Nat := B8L.toNat <| data.sliceD 96 32 (0 : B8)
-      let qy : Nat := B8L.toNat <| data.sliceD 128 32 (0 : B8)
+      let msgHash : Nat := Bytes.toNat <| data.sliceD 0 32 (0 : UInt8)
+      let r : Nat := Bytes.toNat <| data.sliceD 32 32 (0 : UInt8)
+      let s : Nat := Bytes.toNat <| data.sliceD 64 32 (0 : UInt8)
+      let qx : Nat := Bytes.toNat <| data.sliceD 96 32 (0 : UInt8)
+      let qy : Nat := Bytes.toNat <| data.sliceD 128 32 (0 : UInt8)
       if secp256r1.verify msgHash r s qx qy then
-        .ok gasP256Verify (1 : Nat).toB256.toB8L
+        .ok gasP256Verify (1 : Nat).toB256.toBytes
       else
         .ok gasP256Verify []
 
 def executeSha256 (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
   let cost : Nat := 60 + (12 * (ceilDiv data.length 32))
-  PrecompResult.chargeGas cost evm fun () => .ok cost (B8L.sha256 data).toB8L
+  PrecompResult.chargeGas cost evm fun () => .ok cost (Bytes.sha256 data).toBytes
 
 def executeRipemd160 (evm : Evm) : PrecompResult :=
-  let data : B8L := evm.sta.data
+  let data : Bytes := evm.sta.data
   let cost : Nat := 600 + (120 * (ceilDiv data.length 32))
   PrecompResult.chargeGas cost evm fun () =>
-    let hash : B8L := data.ripemd160
-    let output : B8L := B256.toB8L <| (B8L.toB256 <| hash)
+    let hash : Bytes := data.ripemd160
+    let output : Bytes := B256.toBytes <| (Bytes.toB256 <| hash)
     .ok cost output
 
 def executeId (evm : Evm) : PrecompResult :=
@@ -2961,7 +2961,7 @@ def executeId (evm : Evm) : PrecompResult :=
   let cost := 15 + (3 * (ceilDiv data.length 32))
   PrecompResult.chargeGas cost evm fun () => .ok cost data
 
-def B8L.sliceToNat (data : B8L) (start : Nat) (length : Nat) : Nat :=
+def Bytes.sliceToNat (data : Bytes) (start : Nat) (length : Nat) : Nat :=
   match data.drop start with
   | [] => 0
   | tail@(_ :: _)=>
@@ -2969,8 +2969,8 @@ def B8L.sliceToNat (data : B8L) (start : Nat) (length : Nat) : Nat :=
     then
       if tail.all (· = 0)
       then 0
-      else B8L.toNat <| tail.takeD length (0 : B8)
-    else B8L.toNat <| tail.take length
+      else Bytes.toNat <| tail.takeD length (0 : UInt8)
+    else Bytes.toNat <| tail.take length
 
 -- def complexity
 def modexpComplexity
@@ -3021,23 +3021,23 @@ def modexpLengthsInBounds
 def executeModexp (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
   let m : ModexpRules := evm.sta.benvStat.rules.modexp
-  let baseLength : Nat := B8L.sliceToNat data 0 32
-  let expLength : Nat := B8L.sliceToNat data 32 32
-  let modulusLength : Nat := B8L.sliceToNat data 64 32
+  let baseLength : Nat := Bytes.sliceToNat data 0 32
+  let expLength : Nat := Bytes.sliceToNat data 32 32
+  let modulusLength : Nat := Bytes.sliceToNat data 64 32
   if ¬ modexpLengthsInBounds m baseLength expLength modulusLength then
     .error modexpInputLimitTag 0
   else
-  let expHead : Nat := B8L.sliceToNat data (96 + baseLength) (min 32 expLength)
+  let expHead : Nat := Bytes.sliceToNat data (96 + baseLength) (min 32 expLength)
   let cost : Nat := modexpGascost m baseLength modulusLength expLength expHead
   PrecompResult.chargeGas cost evm fun () =>
     if baseLength = 0 ∧ modulusLength = 0 then .ok cost []
     else
-      let base : Nat := B8L.sliceToNat data 96 baseLength
-      let exp : Nat := B8L.sliceToNat data (96 + baseLength) expLength
-      let modulus : Nat := B8L.sliceToNat data (96 + baseLength + expLength) modulusLength
+      let base : Nat := Bytes.sliceToNat data 96 baseLength
+      let exp : Nat := Bytes.sliceToNat data (96 + baseLength) expLength
+      let modulus : Nat := Bytes.sliceToNat data (96 + baseLength + expLength) modulusLength
       let output :=
-        if modulus = 0 then List.replicate modulusLength (0x00 : B8)
-        else (Nat.powMod base exp modulus).toB8L.pack modulusLength
+        if modulus = 0 then List.replicate modulusLength (0x00 : UInt8)
+        else (Nat.powMod base exp modulus).toBytes.pack modulusLength
       .ok cost output
 
 -- MODEXP boundary guards.  The schedules themselves are checked against
@@ -3082,10 +3082,10 @@ def executeModexp (evm : Evm) : PrecompResult :=
 def executeEcadd (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
   PrecompResult.chargeGas 150 evm fun () =>
-    let x0 : Nat := B8L.toNat <| data.sliceD 0 32 (0 : B8)
-    let y0 : Nat := B8L.toNat <| data.sliceD 32 32 (0 : B8)
-    let x1 : Nat := B8L.toNat <| data.sliceD 64 32 (0 : B8)
-    let y1 : Nat := B8L.toNat <| data.sliceD 96 32 (0 : B8)
+    let x0 : Nat := Bytes.toNat <| data.sliceD 0 32 (0 : UInt8)
+    let y0 : Nat := Bytes.toNat <| data.sliceD 32 32 (0 : UInt8)
+    let x1 : Nat := Bytes.toNat <| data.sliceD 64 32 (0 : UInt8)
+    let y1 : Nat := Bytes.toNat <| data.sliceD 96 32 (0 : UInt8)
     if ¬ (x0 < altBn128Prime ∧ y0 < altBn128Prime ∧ x1 < altBn128Prime ∧ y1 < altBn128Prime) then
       .error "OutOfGasError" 150
     else
@@ -3094,28 +3094,28 @@ def executeEcadd (evm : Evm) : PrecompResult :=
       | some p0 =>
         match BNP.mk? x1 y1 with
         | none => .error "OutOfGasError" 150
-        | some p1 => .ok 150 (BNP.toB8L (p0 + p1))
+        | some p1 => .ok 150 (BNP.toBytes (p0 + p1))
 
 def executeEcmul (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
   PrecompResult.chargeGas 6000 evm fun () =>
-    let x : Nat := B8L.toNat <| data.sliceD 0 32 (0 : B8)
-    let y : Nat := B8L.toNat <| data.sliceD 32 32 (0 : B8)
-    let n : Nat := B8L.toNat <| data.sliceD 64 32 (0 : B8)
+    let x : Nat := Bytes.toNat <| data.sliceD 0 32 (0 : UInt8)
+    let y : Nat := Bytes.toNat <| data.sliceD 32 32 (0 : UInt8)
+    let n : Nat := Bytes.toNat <| data.sliceD 64 32 (0 : UInt8)
     if ¬ (x < altBn128Prime ∧ y < altBn128Prime) then
       .error "OutOfGasError" 6000
     else
       match BNP.mk? x y with
       | none => .error "OutOfGasError" 6000
-      | some p => .ok 6000 (BNP.toB8L (p * n))
+      | some p => .ok 6000 (BNP.toBytes (p * n))
 
-def b2R1 : B64 := 32
-def b2R2 : B64 := 24
-def b2R3 : B64 := 16
-def b2R4 : B64 := 63
-def b2MaskBits : B64 := 0xFFFFFFFFFFFFFFFF
+def b2R1 : UInt64 := 32
+def b2R2 : UInt64 := 24
+def b2R3 : UInt64 := 16
+def b2R4 : UInt64 := 63
+def b2MaskBits : UInt64 := 0xFFFFFFFFFFFFFFFF
 
-def blake2IV : List B64 :=
+def blake2IV : List UInt64 :=
   [
     0x6A09E667F3BCC908,
     0xBB67AE8584CAA73B,
@@ -3156,55 +3156,55 @@ def blake2Sigma : Array (Array Nat) :=
   ]
 
 -- def spit_le_to_uint
-def spit_le_to_B64 (data : B8L) : Nat → Nat → List B64
+def readLeUInt64Words (data : Bytes) : Nat → Nat → List UInt64
   | _, 0 => []
   | start, num_words + 1 =>
-    let wordBytes := data.sliceD start 8 (0x00 : B8)
-    let word := B8L.toB64 wordBytes.reverse
-    word :: spit_le_to_B64 data (start + 8) num_words
+    let wordBytes := data.sliceD start 8 (0x00 : UInt8)
+    let word := Bytes.toUInt64 wordBytes.reverse
+    word :: readLeUInt64Words data (start + 8) num_words
 
-def getBlake2Parameters (data : B8L) :
-  Nat × List B64 × List B64 × B64 × B64 × Nat :=
-  let rounds := B8L.sliceToNat data 0 4
-  let h := spit_le_to_B64 data 4 8
-  let m := spit_le_to_B64 data 68 16
-  let t := spit_le_to_B64 data 196 2
-  let f := B8L.toNat <| data.drop 212
+def getBlake2Parameters (data : Bytes) :
+  Nat × List UInt64 × List UInt64 × UInt64 × UInt64 × Nat :=
+  let rounds := Bytes.sliceToNat data 0 4
+  let h := readLeUInt64Words data 4 8
+  let m := readLeUInt64Words data 68 16
+  let t := readLeUInt64Words data 196 2
+  let f := Bytes.toNat <| data.drop 212
   ⟨rounds, h, m, t.getD 0 0, t.getD 1 0, f⟩
 
-def b2wR1 : B64 := 32
-def b2wR2 : B64 := 40
-def b2wR3 : B64 := 48
-def b2wR4 : B64 := 1
+def b2wR1 : UInt64 := 32
+def b2wR2 : UInt64 := 40
+def b2wR3 : UInt64 := 48
+def b2wR4 : UInt64 := 1
 
 -- def G
 -- The four touched words are read once, mixed entirely in local scalars, and
 -- written back once: the intermediate `set!`/`get!` round trips of the
 -- transcribed reference version are redundant, since every word re-read is
 -- the value just computed.
-def Blake2.g (v : Array B64) (a b c d : Nat) (x y : B64) : Array B64 :=
-  let va : B64 := v[a]!
-  let vb : B64 := v[b]!
-  let vc : B64 := v[c]!
-  let vd : B64 := v[d]!
-  let va : B64 := va + vb + x
-  let s : B64 := vd ^^^ va
-  let vd : B64 := (s >>> b2R1) ^^^ (s <<< b2wR1)
-  let vc : B64 := vc + vd
-  let s : B64 := vb ^^^ vc
-  let vb : B64 := (s >>> b2R2) ^^^ (s <<< b2wR2)
-  let va : B64 := va + vb + y
-  let s : B64 := vd ^^^ va
-  let vd : B64 := (s >>> b2R3) ^^^ (s <<< b2wR3)
-  let vc : B64 := vc + vd
-  let s : B64 := vb ^^^ vc
-  let vb : B64 := (s >>> b2R4) ^^^ (s <<< b2wR4)
+def Blake2.g (v : Array UInt64) (a b c d : Nat) (x y : UInt64) : Array UInt64 :=
+  let va : UInt64 := v[a]!
+  let vb : UInt64 := v[b]!
+  let vc : UInt64 := v[c]!
+  let vd : UInt64 := v[d]!
+  let va : UInt64 := va + vb + x
+  let s : UInt64 := vd ^^^ va
+  let vd : UInt64 := (s >>> b2R1) ^^^ (s <<< b2wR1)
+  let vc : UInt64 := vc + vd
+  let s : UInt64 := vb ^^^ vc
+  let vb : UInt64 := (s >>> b2R2) ^^^ (s <<< b2wR2)
+  let va : UInt64 := va + vb + y
+  let s : UInt64 := vd ^^^ va
+  let vd : UInt64 := (s >>> b2R3) ^^^ (s <<< b2wR3)
+  let vc : UInt64 := vc + vd
+  let s : UInt64 := vb ^^^ vc
+  let vb : UInt64 := (s >>> b2R4) ^^^ (s <<< b2wR4)
   (((v.set! a va).set! b vb).set! c vc).set! d vd
 
 -- One full mixing round, with `blake2MixTable` unrolled into literal word
 -- indices; `m` is an `Array` so the message words are indexed rather than
 -- walked as a list.
-def Blake2.round (m : Array B64) (s : Array Nat) (v : Array B64) : Array B64 :=
+def Blake2.round (m : Array UInt64) (s : Array Nat) (v : Array UInt64) : Array UInt64 :=
   let v := Blake2.g v 0 4 8 12 (m[s[0]!]!) (m[s[1]!]!)
   let v := Blake2.g v 1 5 9 13 (m[s[2]!]!) (m[s[3]!]!)
   let v := Blake2.g v 2 6 10 14 (m[s[4]!]!) (m[s[5]!]!)
@@ -3215,7 +3215,7 @@ def Blake2.round (m : Array B64) (s : Array Nat) (v : Array B64) : Array B64 :=
   Blake2.g v 3 4 9 14 (m[s[14]!]!) (m[s[15]!]!)
 
 -- `n` counts rounds remaining out of `k`, so the round index is `k - n`.
-def Blake2.rounds (m : Array B64) (k : Nat) : Nat → Array B64 → Array B64
+def Blake2.rounds (m : Array UInt64) (k : Nat) : Nat → Array UInt64 → Array UInt64
   | 0, v => v
   | n + 1, v =>
     let r := k - (n + 1)
@@ -3223,9 +3223,9 @@ def Blake2.rounds (m : Array B64) (k : Nat) : Nat → Array B64 → Array B64
 
 -- compress
 def bCompress (numRounds : Nat)
-  (h m : List B64) (t0 t1 : B64) (f : Bool) : Option B8L := do
-  let v14 : B64 := blake2IV.getD 6 0
-  let v : List B64 :=
+  (h m : List UInt64) (t0 t1 : UInt64) (f : Bool) : Option Bytes := do
+  let v14 : UInt64 := blake2IV.getD 6 0
+  let v : List UInt64 :=
     h.take 8 ++
     (blake2IV).take 4 ++ [
       .xor t0 (blake2IV.getD 4 0),
@@ -3239,7 +3239,7 @@ def bCompress (numRounds : Nat)
   let v := arr.toList
   let resultMsgWords :=
     (List.range 8).map <| fun i => h[i]! ^^^ v[i]! ^^^ v[(i + 8)]!
-  List.flatten <| resultMsgWords.map (fun n => n.toB8L.reverse.takeD 8 (0x00 : B8))
+  List.flatten <| resultMsgWords.map (fun n => n.toBytes.reverse.takeD 8 (0x00 : UInt8))
 
 -- blake2f
 def executeBlake2F (evm : Evm) : PrecompResult :=
@@ -3278,7 +3278,7 @@ def executePointEval (evm : Evm) : PrecompResult :=
       else
         match verifyKzgProof commitment z y proof with
         | .ok true =>
-          .ok gasPointEval ((4096 : Nat).toB256.toB8L ++ blsModulus.toB256.toB8L)
+          .ok gasPointEval ((4096 : Nat).toB256.toBytes ++ blsModulus.toB256.toBytes)
         | _ => .error "KZGProofError" gasPointEval
 
 def gasBlsG1Add : Nat := 375
@@ -3294,8 +3294,8 @@ def executeBls12G1Add (evm : Evm) : PrecompResult :=
   if data.length ≠ 256 then .error "InvalidParameter" 0
   else
     PrecompResult.chargeGas gasBlsG1Add evm fun () =>
-      match B8L.toExStrBLSP (data.take 128), B8L.toExStrBLSP (data.drop 128) with
-      | .ok p1, .ok p2 => .ok gasBlsG1Add (BLSP.toB8L (p1 + p2))
+      match Bytes.toExStrBLSP (data.take 128), Bytes.toExStrBLSP (data.drop 128) with
+      | .ok p1, .ok p2 => .ok gasBlsG1Add (BLSP.toBytes (p1 + p2))
       | _, _ => .error "OutOfGasError" gasBlsG1Add
 
 -- bls12_g1_msm
@@ -3309,7 +3309,7 @@ def executeBls12G1Msm (evm : Evm) : PrecompResult :=
     let gasCost := (k * gasBlsG1Mul * discount) / 1000
     PrecompResult.chargeGas gasCost evm fun () =>
       match decodeG1MsmPairs data with
-      | .ok pairs => .ok gasCost (g1MsmSum pairs).toB8L
+      | .ok pairs => .ok gasCost (g1MsmSum pairs).toBytes
       | .error _ => .error "OutOfGasError" gasCost
 
 -- bls12_g2_add
@@ -3318,8 +3318,8 @@ def executeBls12G2Add (evm : Evm) : PrecompResult :=
   if data.length ≠ 512 then .error "InvalidParameter" 0
   else
     PrecompResult.chargeGas gasBlsG2Add evm fun () =>
-      match B8L.toExStrBLSP2 (data.take 256), B8L.toExStrBLSP2 (data.drop 256) with
-      | .ok p1, .ok p2 => .ok gasBlsG2Add (BLSP2.toB8L (p1 + p2))
+      match Bytes.toExStrBLSP2 (data.take 256), Bytes.toExStrBLSP2 (data.drop 256) with
+      | .ok p1, .ok p2 => .ok gasBlsG2Add (BLSP2.toBytes (p1 + p2))
       | _, _ => .error "OutOfGasError" gasBlsG2Add
 
 -- def bls12_g2_msm
@@ -3333,7 +3333,7 @@ def executeBls12G2Msm (evm : Evm) : PrecompResult :=
     let gasCost := (k * gasBlsG2Mul * discount) / 1000
     PrecompResult.chargeGas gasCost evm fun () =>
       match decodeG2MsmPairs data with
-      | .ok pairs => .ok gasCost (g2MsmSum pairs).toB8L
+      | .ok pairs => .ok gasCost (g2MsmSum pairs).toBytes
       | .error _ => .error "OutOfGasError" gasCost
 
 -- def bls12_map_fp_to_g1(evm : Evm) -> None :
@@ -3342,12 +3342,12 @@ def executeBls12MapFpToG1 (evm : Evm) : PrecompResult :=
   if data.length ≠ 64 then .error "InvalidParameter" 0
   else
     PrecompResult.chargeGas gasBlsG1Map evm fun () =>
-      match B8L.toExStrBLSF data with
-      | .ok fp => .ok gasBlsG1Map (BLSP.toB8L (blsMapFpToG1 fp))
+      match Bytes.toExStrBLSF data with
+      | .ok fp => .ok gasBlsG1Map (BLSP.toBytes (blsMapFpToG1 fp))
       | .error _ => .error "OutOfGasError" gasBlsG1Map
 
 -- def bytes_to_g1(data : Bytes) -> Point3D[FQ]:
-def B8L.toExStrBNP (data : B8L) : Except String BNP := do
+def Bytes.toExStrBNP (data : Bytes) : Except String BNP := do
   if data.length ≠ 64 then
     .error "InvalidParameter : input should be 64 bytes long"
   let x := data.sliceToNat 0 32
@@ -3360,7 +3360,7 @@ def B8L.toExStrBNP (data : B8L) : Except String BNP := do
     "InvalidParameter : point is not on curve"
 
 -- def bytes_to_g2(data : Bytes) -> Point3D[FQ2]:
-def B8L.toExStrBNP2 (data : B8L) : Except String BNP2 := do
+def Bytes.toExStrBNP2 (data : Bytes) : Except String BNP2 := do
   if data.length ≠ 128 then
     .error "InvalidParameter : input should be 128 bytes long"
   let x0 := data.sliceToNat 0 32
@@ -3388,26 +3388,26 @@ def executeBls12MapFp2ToG2 (evm : Evm) : PrecompResult :=
   if data.length ≠ 128 then .error "InvalidParameter" 0
   else
     PrecompResult.chargeGas gasBlsG2Map evm fun () =>
-      match B8L.toExStrBLSF2 data with
-      | .ok fp2 => .ok gasBlsG2Map (BLSP2.toB8L (blsMapFp2ToG2 fp2))
+      match Bytes.toExStrBLSF2 data with
+      | .ok fp2 => .ok gasBlsG2Map (BLSP2.toBytes (blsMapFp2ToG2 fp2))
       | .error _ => .error "OutOfGasError" gasBlsG2Map
 
-def executeBls12PairingInner (data : B8L) (cost : Nat) :
-    Except (String × Nat) (Nat × B8L) := do
+def executeBls12PairingInner (data : Bytes) (cost : Nat) :
+    Except (String × Nat) (Nat × Bytes) := do
   let mut result : BLSF12 := 1
   for i in List.range (data.length / 384) do
     let p : BLSP ←
       catchWithOOGPrecomp cost (hasErrorType · "InvalidParameter") <|
-        B8L.toExStrBLSP (data.slice! (i * 384) 128) true
+        Bytes.toExStrBLSP (data.slice! (i * 384) 128) true
     let q : BLSP2 ←
       catchWithOOGPrecomp cost (hasErrorType · "InvalidParameter") <|
-        B8L.toExStrBLSP2 (data.slice! (i * 384 + 128) 256) true
+        Bytes.toExStrBLSP2 (data.slice! (i * 384 + 128) 256) true
     let pairResult ← match blsPairing q p with
                      | some v => pure v
                      | none => throw ⟨"ValueError", cost⟩
     result := result * pairResult
-  let output : B8L :=
-    if result = 1 then (1 : Nat).toB256.toB8L else (0 : Nat).toB256.toB8L
+  let output : Bytes :=
+    if result = 1 then (1 : Nat).toB256.toBytes else (0 : Nat).toB256.toBytes
   pure (cost, output)
 
 -- def bls12_pairing(evm : Evm) -> None :
@@ -3423,24 +3423,24 @@ def executeBls12Pairing (evm : Evm) : PrecompResult :=
       | .ok ⟨cost, output⟩ => .ok cost output
       | .error ⟨msg, cost⟩ => .error msg cost
 
-def executePairingCheckInner (data : B8L) (cost : Nat) :
-    Except (String × Nat) (Nat × B8L) := do
+def executePairingCheckInner (data : Bytes) (cost : Nat) :
+    Except (String × Nat) (Nat × Bytes) := do
   if data.length % 192 ≠ 0 then throw ⟨"OutOfGasError", cost⟩
   let mut result : BNF12 := 1
   for i in List.range (data.length / 192) do
     let p : BNP ←
       catchWithOOGPrecomp cost (hasErrorType · "InvalidParameter") <|
-        B8L.toExStrBNP (data.slice! (i * 192) 64)
+        Bytes.toExStrBNP (data.slice! (i * 192) 64)
     let q : BNP2 ←
       catchWithOOGPrecomp cost (hasErrorType · "InvalidParameter") <|
-        B8L.toExStrBNP2 (data.slice! (i * 192 + 64) 128)
+        Bytes.toExStrBNP2 (data.slice! (i * 192 + 64) 128)
     if p * altBn128CurveOrder ≠ ⟨0, 0⟩ then throw ⟨"OutOfGasError", cost⟩
     if q * altBn128CurveOrder ≠ ⟨0, 0⟩ then throw ⟨"OutOfGasError", cost⟩
     let pairResult ← match pairing q p with
                      | some v => pure v
                      | none => throw ⟨"ValueError", cost⟩
     result := result * pairResult
-  let output : B8L := if result = 1 then (1 : Nat).toB256.toB8L else (0 : Nat).toB256.toB8L
+  let output : Bytes := if result = 1 then (1 : Nat).toB256.toBytes else (0 : Nat).toB256.toBytes
   pure (cost, output)
 
 def executePairingCheck (evm : Evm) : PrecompResult :=
@@ -3493,21 +3493,21 @@ def Inst.toString : Inst → String
   | .last l => l.toString
 
 def State.getStor (w : State) (a : Adr) : Stor := (w.get a).stor
-def State.getNonce (w : State) (a : Adr) : B64 := (w.get a).nonce
+def State.getNonce (w : State) (a : Adr) : UInt64 := (w.get a).nonce
 def State.getCode (w : State) (a : Adr) : ByteArray := (w.get a).code
 
 instance : ToString Log := ⟨String.joinln ∘ Log.toStrings⟩
 
 def isValidDelegation (code: ByteArray) : Prop :=
   code.size = eoaDelegatedCodeLength ∧
-  code.sliceD 0 3 (0 : B8) = eoaDelegationMarker
+  code.sliceD 0 3 (0 : UInt8) = eoaDelegationMarker
 
 instance {code} : Decidable (isValidDelegation code) := instDecidableAnd
 
 def getDelegatedCodeAddress (code : ByteArray) : Option Adr :=
   if isValidDelegation code
   then
-    let adrBytes := code.sliceD eoaDelegationMarker.length 20 (0 : B8)
+    let adrBytes := code.sliceD eoaDelegationMarker.length 20 (0 : UInt8)
     adrBytes.toAdr?
   else none
 
@@ -3520,7 +3520,7 @@ def accessDelegation (devm : Devm) (adr : Adr) :
   if isValidDelegation code
   then
     let adr :=
-      (code.sliceD eoaDelegationMarker.length 20 (0 : B8)).toAdr?.get!
+      (code.sliceD eoaDelegationMarker.length 20 (0 : UInt8)).toAdr?.get!
     let accessGasCost := access_cost adr devm.accessedAddresses
     let devm := addAccessedAddress devm adr
     let code := state.getCode adr
@@ -3645,7 +3645,7 @@ def callMsg
     (codeAddress: Adr)
     (shouldTransferValue: Bool)
     (isStaticcall: Bool)
-    (calldata: B8L)
+    (calldata: Bytes)
     (code : ByteArray)
     (disablePrecompiles: Bool) : Msg :=
   {
@@ -3676,7 +3676,7 @@ non-recursive and fuel-free; `execFueled` is the single fueled driver.
 CREATE-family counterpart of `callMsg`. -/
 def createMsg
     (sevm : Sevm) (devm : Devm) (createGas : Nat) (endowment : B256)
-    (newAddress : Adr) (calldata : B8L) : Msg :=
+    (newAddress : Adr) (calldata : Bytes) : Msg :=
   {
     benv := Benv.mk devm.state devm.createdAccounts sevm.benvStat
     tenv := {transientStorage := devm.transientStorage, stat := sevm.tenvStat}
@@ -3830,14 +3830,14 @@ def genericCreate.step
     assertDynamic sevm devm
     let devm := devm.withReturnData []
     let sender := devm.state.get sevm.currentTarget
-    if sender.bal < endowment ∨ sender.nonce = B64.max ∨ sevm.depth = 0 then
+    if sender.bal < endowment ∨ sender.nonce = UInt64.max ∨ sevm.depth = 0 then
       let devm ← (devm.withGasLeft (devm.gasLeft + createGas)).push 0
       return .done (.ok devm)
     let devm := devm.incrNonce sevm.currentTarget
     let devm := addAccessedAddress devm newAddress
     if
       (let target := devm.state.get newAddress
-       target.nonce ≠ (0 : B64) ∨
+       target.nonce ≠ (0 : UInt64) ∨
        target.code.size ≠ 0 ∨
        target.stor.size ≠ 0) then
       let devm ← devm.push 0
@@ -4071,9 +4071,9 @@ The frame wrappers these once also covered (`runFrame`, `executeCode`,
 `processMessage`, `processCreateMessage`) are total and therefore live in
 `Jaune.Sufficiency`; their checks moved with them. -/
 
-private def flattenGuardCode (bytes : B8L) : ByteArray := .mk <| .mk bytes
+private def flattenGuardCode (bytes : Bytes) : ByteArray := .mk <| .mk bytes
 
-private def flattenGuardMsg (bytes : B8L) (gas depth : Nat) : Msg :=
+private def flattenGuardMsg (bytes : Bytes) (gas depth : Nat) : Msg :=
   {
     (default : Msg) with
     gas := gas
@@ -4161,16 +4161,16 @@ def KeySet.toStrings (ks : KeySet) : List String :=
 instance : ToString KeySet := ⟨λ ks => String.joinln <| ks.toStrings⟩
 
 def correctBlobHashVersion (h : B256) : Prop :=
-  h.toB8L[0]! = 0x01
+  h.toBytes[0]! = 0x01
 
 instance : DecidablePred correctBlobHashVersion := by
   intro h; simp [correctBlobHashVersion]; infer_instance
 
 def Log.toBLT (l : Log) : BLT :=
   .list [
-    .b8s l.address.toB8L,
+    .bytes l.address.toBytes,
     .list (l.topics.map B256.toBLT),
-    .b8s l.data
+    .bytes l.data
   ]
 
 def List.putIndex {ξ : Type u} (xs : List ξ) : List (Nat × ξ) :=
@@ -4210,41 +4210,41 @@ def Test.toStrings (t : Test) : List String :=
 
 instance : ToString Test := ⟨String.joinln ∘ Test.toStrings⟩
 
-def B8L.toByteArray (xs : B8L) : ByteArray := .mk <| .mk xs
+def Bytes.toByteArray (xs : Bytes) : ByteArray := .mk <| .mk xs
 
 instance : ToString State := ⟨String.joinln ∘ State.toStrings⟩
 instance : ToString BLT := ⟨String.joinln ∘ BLT.toStrings⟩
 
-def toKeyVal' (pr : B8L × B8L) : B8L × B8L :=
+def toKeyVal' (pr : Bytes × Bytes) : Bytes × Bytes :=
   let ad := pr.fst
   let ac := pr.snd
-  ⟨B8L.toB4s ad, ac⟩
+  ⟨Bytes.toNibbles ad, ac⟩
 
-def receiptRoot (w : List (B8L × B8L)) : B256 :=
-  let keyVals : List (B8L × B8L) := (List.map toKeyVal' w)
+def receiptRoot (w : List (Bytes × Bytes)) : B256 :=
+  let keyVals : List (Bytes × Bytes) := (List.map toKeyVal' w)
   let finalNTB : NTB := Std.TreeMap.ofList keyVals _
   trie finalNTB
 
-def addIndexToBloom (hash : B8L) (index : Nat) (bloom : B8L) : B8L :=
-  let bitToSet : B16 :=
-    (B8s.toB16 (hash.getD index 0) (hash.getD (index + 1) 0)) &&& (0x07FF : B16)
-  let bitIndex : B16 := 0x07FF - bitToSet
+def addIndexToBloom (hash : Bytes) (index : Nat) (bloom : Bytes) : Bytes :=
+  let bitToSet : UInt16 :=
+    (UInt16.ofBytes (hash.getD index 0) (hash.getD (index + 1) 0)) &&& (0x07FF : UInt16)
+  let bitIndex : UInt16 := 0x07FF - bitToSet
   let byteIndex : Nat := (bitIndex / 8).toNat
-  let bitValue : B8 := 0x01 <<< (0x07 - (bitIndex.lows &&& 0x07))
-  let origValue : B8 := bloom.getD byteIndex 0
+  let bitValue : UInt8 := 0x01 <<< (0x07 - (bitIndex.lows &&& 0x07))
+  let origValue : UInt8 := bloom.getD byteIndex 0
   bloom.set byteIndex (origValue ||| bitValue)
 
-def addEntryToBloom (bloom : B8L) (entry : B8L) : B8L :=
-  let hash := (B8L.keccak entry).toB8L
+def addEntryToBloom (bloom : Bytes) (entry : Bytes) : Bytes :=
+  let hash := (Bytes.keccak entry).toBytes
   addIndexToBloom hash 4 <|
   addIndexToBloom hash 2 <|
   addIndexToBloom hash 0 bloom
 
-def addLogToBloom (bloom : B8L) (log : Log) : B8L :=
-  let bloom' := addEntryToBloom bloom log.address.toB8L
-  List.foldl addEntryToBloom bloom' (log.topics.map B256.toB8L)
+def addLogToBloom (bloom : Bytes) (log : Log) : Bytes :=
+  let bloom' := addEntryToBloom bloom log.address.toBytes
+  List.foldl addEntryToBloom bloom' (log.topics.map B256.toBytes)
 
-def logsBloom (l : List Log) : B8L :=
+def logsBloom (l : List Log) : Bytes :=
   List.foldl addLogToBloom (List.replicate 256 0x00) l
 
 def Withdrawal.toStrings (wd : Withdrawal) : List String :=
@@ -4259,26 +4259,26 @@ instance : ToString Withdrawal := ⟨String.joinln ∘ Withdrawal.toStrings⟩
 
 def BLT.toExStrHeader : BLT → Except String Header
   | .list (
-      .b8s parentHash ::
-      .b8s ommersHash ::
-      .b8s coinbase ::
-      .b8s stateRoot ::
-      .b8s txsRoot ::
-      .b8s receiptRoot ::
-      .b8s bloom ::
-      .b8s difficulty ::
-      .b8s number ::
-      .b8s gasLimit ::
-      .b8s gasUsed ::
-      .b8s timestamp ::
-      .b8s extraData ::
-      .b8s prevRandao ::
-      .b8s nonce ::
-      .b8s baseFeePerGas ::
-      .b8s withdrawalsRoot ::
-      .b8s blobGasUsed ::
-      .b8s excessBlobGas ::
-      .b8s parentBeaconBlockRoot ::
+      .bytes parentHash ::
+      .bytes ommersHash ::
+      .bytes coinbase ::
+      .bytes stateRoot ::
+      .bytes txsRoot ::
+      .bytes receiptRoot ::
+      .bytes bloom ::
+      .bytes difficulty ::
+      .bytes number ::
+      .bytes gasLimit ::
+      .bytes gasUsed ::
+      .bytes timestamp ::
+      .bytes extraData ::
+      .bytes prevRandao ::
+      .bytes nonce ::
+      .bytes baseFeePerGas ::
+      .bytes withdrawalsRoot ::
+      .bytes blobGasUsed ::
+      .bytes excessBlobGas ::
+      .bytes parentBeaconBlockRoot ::
       tail
     ) => do
       -- Every field is checked for shape before its value is converted. The
@@ -4314,7 +4314,7 @@ def BLT.toExStrHeader : BLT → Except String Header
       let requestsHash : Option B256 ←
         match tail with
         | [] => .ok none
-        | [.b8s requestsHash] =>
+        | [.bytes requestsHash] =>
           (requestsHash.toRlpHash "header requestsHash").map some
         | _ =>
           .error <| rlpStructureError "header"
@@ -4347,7 +4347,7 @@ def BLT.toExStrHeader : BLT → Except String Header
       "expected a list of 20 or 21 byte-string fields"
 
 def Block.toStrings (block : Block) : List String :=
-  let aux : B8L ⊕ Tx → List String
+  let aux : Bytes ⊕ Tx → List String
     | .inl xs => fork "Encoded Tx" [String.chunks 80 xs.toHex]
     | .inr tx => tx.toStrings
   fork "BLOCK" [
@@ -4473,7 +4473,7 @@ def calculateBaseFeePerGas
 def validateHeader (rules : ForkRules) (chain : BlockChain) (header : Header) :
   Except String Unit := do
   let parent ← chain.blocks.getLast?.toExcept "No parent block found"
-  let blockParentHash := (Header.toBLT parent.header).toB8L.keccak
+  let blockParentHash := (Header.toBLT parent.header).toBytes.keccak
   -- Parentage is settled first. Every check below reads the parent's header, so
   -- a block naming a parent this chain does not end with is not a block with a
   -- bad timestamp or a bad base fee -- it is a block that cannot be placed at
@@ -4537,7 +4537,7 @@ structure MsgCallOutput : Type where
   logs : List Log
   accountsToDelete : AdrSet
   error: Option String
-  returnData : B8L
+  returnData : Bytes
 
 def Except.bimap
   {ε : Type u0} {δ : Type u1} {ξ : Type u2} {υ : Type u3}
@@ -4558,100 +4558,100 @@ def Tx.signingHash (tx : Tx) : Option B256 :=
     then
       -- signing_hash_pre155
       some <|
-        B8L.keccak <|
-          BLT.toB8L <|
+        Bytes.keccak <|
+          BLT.toBytes <|
             .list [
-              .b8s tx.nonce.toB8L.sig,
-              .b8s gasPrice.toB8L,
-              .b8s tx.gas.toB8L,
-              .b8s ((receiver <&> Adr.toB8L).getD []),
-              .b8s tx.value.toB8L,
-              .b8s tx.data
+              .bytes tx.nonce.toBytes.sig,
+              .bytes gasPrice.toBytes,
+              .bytes tx.gas.toBytes,
+              .bytes ((receiver <&> Adr.toBytes).getD []),
+              .bytes tx.value.toBytes,
+              .bytes tx.data
             ]
     else do
       -- signing_hash155
       let chainId : Nat := (tx.v - 35) / 2
       some <|
-        B8L.keccak <|
-          BLT.toB8L <|
+        Bytes.keccak <|
+          BLT.toBytes <|
             .list [
-              .b8s tx.nonce.toB8L.sig,
-              .b8s gasPrice.toB8L,
-              .b8s tx.gas.toB8L,
-              .b8s ((receiver <&> Adr.toB8L).getD []),
-              .b8s tx.value.toB8L,
-              .b8s tx.data,
-              .b8s chainId.toB8L,
-              .b8s [],
-              .b8s []
+              .bytes tx.nonce.toBytes.sig,
+              .bytes gasPrice.toBytes,
+              .bytes tx.gas.toBytes,
+              .bytes ((receiver <&> Adr.toBytes).getD []),
+              .bytes tx.value.toBytes,
+              .bytes tx.data,
+              .bytes chainId.toBytes,
+              .bytes [],
+              .bytes []
             ]
   -- def signing_hash2930
   | .one chainId gasPrice receiver accessList =>
-    B8L.keccak <|
-      .cons (0x01 : B8) <|
-        BLT.toB8L <|
+    Bytes.keccak <|
+      .cons (0x01 : UInt8) <|
+        BLT.toBytes <|
           .list [
-            .b8s chainId.toB8L.sig,
-            .b8s tx.nonce.toB8L.sig,
-            .b8s gasPrice.toB8L,
-            .b8s tx.gas.toB8L,
-            .b8s ((receiver <&> Adr.toB8L).getD []),
-            .b8s tx.value.toB8L,
-            .b8s tx.data,
+            .bytes chainId.toBytes.sig,
+            .bytes tx.nonce.toBytes.sig,
+            .bytes gasPrice.toBytes,
+            .bytes tx.gas.toBytes,
+            .bytes ((receiver <&> Adr.toBytes).getD []),
+            .bytes tx.value.toBytes,
+            .bytes tx.data,
             accessList.toBLT
           ]
   -- signing_hash1559
   | .two chainId maxPriorityFee maxFee receiver accessList =>
-    B8L.keccak <|
-      .cons (0x02 : B8) <|
-        BLT.toB8L <|
+    Bytes.keccak <|
+      .cons (0x02 : UInt8) <|
+        BLT.toBytes <|
           .list [
-            .b8s chainId.toB8L.sig,
-            .b8s tx.nonce.toB8L.sig,
-            .b8s maxPriorityFee.toB8L,
-            .b8s maxFee.toB8L,
-            .b8s tx.gas.toB8L,
-            .b8s ((receiver <&> Adr.toB8L).getD []),
-            .b8s tx.value.toB8L,
-            .b8s tx.data,
+            .bytes chainId.toBytes.sig,
+            .bytes tx.nonce.toBytes.sig,
+            .bytes maxPriorityFee.toBytes,
+            .bytes maxFee.toBytes,
+            .bytes tx.gas.toBytes,
+            .bytes ((receiver <&> Adr.toBytes).getD []),
+            .bytes tx.value.toBytes,
+            .bytes tx.data,
             accessList.toBLT
           ]
   -- def signing_hash4844
   | .three chainId maxPriorityFee maxFee receiver accessList maxBlobFee blobHashes =>
-    B8L.keccak <|
-      .cons (0x03 : B8) <|
-        BLT.toB8L <|
+    Bytes.keccak <|
+      .cons (0x03 : UInt8) <|
+        BLT.toBytes <|
           .list [
-            .b8s chainId.toB8L.sig,
-            .b8s tx.nonce.toB8L.sig,
-            .b8s maxPriorityFee.toB8L,
-            .b8s maxFee.toB8L,
-            .b8s tx.gas.toB8L,
-            .b8s receiver.toB8L,
-            .b8s tx.value.toB8L,
-            .b8s tx.data,
+            .bytes chainId.toBytes.sig,
+            .bytes tx.nonce.toBytes.sig,
+            .bytes maxPriorityFee.toBytes,
+            .bytes maxFee.toBytes,
+            .bytes tx.gas.toBytes,
+            .bytes receiver.toBytes,
+            .bytes tx.value.toBytes,
+            .bytes tx.data,
             accessList.toBLT,
-            .b8s maxBlobFee.toB8L,
-            .list <| blobHashes.map <| .b8s ∘ B256.toB8L
+            .bytes maxBlobFee.toBytes,
+            .list <| blobHashes.map <| .bytes ∘ B256.toBytes
           ]
   | .four chainId maxPriorityFee maxFee receiver accessList auths =>
-    B8L.keccak <|
-      .cons (0x04 : B8) <|
-        BLT.toB8L <|
+    Bytes.keccak <|
+      .cons (0x04 : UInt8) <|
+        BLT.toBytes <|
           .list [
-            .b8s chainId.toB8L.sig,
-            .b8s tx.nonce.toB8L.sig,
-            .b8s maxPriorityFee.toB8L,
-            .b8s maxFee.toB8L,
-            .b8s tx.gas.toB8L,
-            .b8s receiver.toB8L,
-            .b8s tx.value.toB8L,
-            .b8s tx.data,
+            .bytes chainId.toBytes.sig,
+            .bytes tx.nonce.toBytes.sig,
+            .bytes maxPriorityFee.toBytes,
+            .bytes maxFee.toBytes,
+            .bytes tx.gas.toBytes,
+            .bytes receiver.toBytes,
+            .bytes tx.value.toBytes,
+            .bytes tx.data,
             accessList.toBLT,
             .list <| auths.map Auth.toBLT
           ]
 
-def recoverSender (chain_id: B64) (tx: Tx) : Except String Adr := do
+def recoverSender (chain_id: UInt64) (tx: Tx) : Except String Adr := do
   let r := tx.r.toB256
   let s := tx.s.toB256
   if (r = 0 ∨ secp256k1.curveOrder.toB256 ≤ r) then
@@ -4687,12 +4687,12 @@ def recoverAuthority (auth : Auth) : Except String Adr := do
   ) then
     .error "InvalidSignatureError"
   let signingHash : B256 :=
-    B8L.keccak <|
+    Bytes.keccak <|
       List.append setCodeTxMagic <|
-        BLT.toB8L <| .list [
-          .b8s auth.chainId.toB8L.sig,
-          .b8s auth.address.toB8L,
-          .b8s auth.nonce.toB8L.sig
+        BLT.toBytes <| .list [
+          .bytes auth.chainId.toBytes.sig,
+          .bytes auth.address.toBytes,
+          .bytes auth.nonce.toBytes.sig
         ]
   -- EIP-7702 invalidates an authorization tuple, not its enclosing
   -- transaction: a recovery failure is therefore handled by
@@ -4704,7 +4704,7 @@ def setDelegationStep
     Except String (Msg × B256) := do
   if auth.chainId != msg.benv.stat.chainId.toB256 && auth.chainId != 0 then
     .ok ⟨msg, refundCounter⟩
-  else if auth.nonce = B64.max then
+  else if auth.nonce = UInt64.max then
     .ok ⟨msg, refundCounter⟩
   else
     match recoverAuthority auth with
@@ -4732,7 +4732,7 @@ def setDelegationStep
           if auth.address = 0 then
             .empty
           else
-            (eoaDelegationMarker ++ auth.address.toB8L).toByteArray
+            (eoaDelegationMarker ++ auth.address.toBytes).toByteArray
         let msg := msg.setCode authority codeToSet
         let msg := msg.incrNonce authority
         .ok ⟨msg, refundCounter⟩

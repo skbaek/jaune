@@ -178,8 +178,8 @@ def refRecover (h : B256) (v : Bool) (r : B256) (s : B256) : Option Adr := do
   let O : secp256k1.Point := refSub sR zG
   if O = ⟨0, 0⟩ then none
   let Q : secp256k1.Point := refMulBy O rInv
-  let hash := B8L.keccak <| Q.x.val.toB256.toB8L ++ Q.y.val.toB256.toB8L
-  B8L.toAdr? <| List.drop 12 <| hash.toB8L
+  let hash := Bytes.keccak <| Q.x.val.toB256.toBytes ++ Q.y.val.toB256.toBytes
+  Bytes.toAdr? <| List.drop 12 <| hash.toBytes
 
 /-! ## Harness -/
 

@@ -10,7 +10,7 @@ namespace ripemd160
 -- C implementation (https://github.com/DaveCTurner/tiny-ripemd160)
 
 -- ripemd160_shifts
-def shiftLists : List B32L :=
+def shiftLists : List (List UInt32) :=
   [
     [11, 14, 15, 12, 5, 8, 7, 9, 11, 13, 14, 15, 6, 7, 9, 8],
     [12, 13, 11, 15, 6, 9, 9, 7, 12, 15, 11, 13, 7, 8, 7, 7],
@@ -20,11 +20,11 @@ def shiftLists : List B32L :=
   ]
 
 -- ripemd160_constants_left
-def constantsLeft : B32L :=
+def constantsLeft : (List UInt32) :=
   [0x00000000, 0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xa953fd4e]
 
 -- ripemd160_constants_right
-def constantsRight : B32L :=
+def constantsRight : (List UInt32) :=
   [0x50a28be6, 0x5c4dd124, 0x6d703ef3, 0x7a6d76e9, 0x00000000]
 
 -- ripemd160_fns_left
@@ -37,20 +37,20 @@ def rho : List Nat :=
   [ 0x7, 0x4, 0xd, 0x1, 0xa, 0x6, 0xf, 0x3,
     0xc, 0x0, 0x9, 0x5, 0x2, 0xe, 0xb, 0x8 ]
 
-def computeLine (digest : B32L) (chunk : B32L) (index : List Nat)
-  (shiftss : List B32L) (ks : B32L) (fns : List Nat) : Id B32L := do
+def computeLine (digest : (List UInt32)) (chunk : (List UInt32)) (index : List Nat)
+  (shiftss : List (List UInt32)) (ks : (List UInt32)) (fns : List Nat) : Id (List UInt32) := do
   let mut index := index
-  let mut w0 : B32 := digest[0]!
-  let mut w1 : B32 := digest[1]!
-  let mut w2 : B32 := digest[2]!
-  let mut w3 : B32 := digest[3]!
-  let mut w4 : B32 := digest[4]!
+  let mut w0 : UInt32 := digest[0]!
+  let mut w1 : UInt32 := digest[1]!
+  let mut w2 : UInt32 := digest[2]!
+  let mut w3 : UInt32 := digest[3]!
+  let mut w4 : UInt32 := digest[4]!
   for round in [0, 1, 2, 3, 4] do
-    let shifts : B32L := shiftss[round]!
-    let k : B32 := ks[round]!
+    let shifts : (List UInt32) := shiftss[round]!
+    let k : UInt32 := ks[round]!
     let fn : Nat := fns[round]!
     for i in List.range 16 do
-      let mut tmp : B32 :=
+      let mut tmp : UInt32 :=
         match fn with
         | 1 => w1 ^^^ w2 ^^^ w3
         | 2 => (w1 &&& w2) ||| (~~~ w1 &&& w3)
@@ -58,23 +58,23 @@ def computeLine (digest : B32L) (chunk : B32L) (index : List Nat)
         | 4 => (w1 &&& w3) ||| (w2 &&& ~~~ w3)
         | _ => w1 ^^^ (w2 ||| ~~~ w3)
       tmp := tmp + w0 + (chunk[(index[i]!)]!) + k
-      tmp := B32.rol tmp (shifts[index[i]!]!) + w4
+      tmp := UInt32.rol tmp (shifts[index[i]!]!) + w4
       w0 := w4
       w4 := w3
-      w3 := B32.rol w2 10
+      w3 := UInt32.rol w2 10
       w2 := w1
       w1 := tmp
     index := index.map (fun i => rho[i]!)
   return [w0, w1, w2, w3, w4]
 
-def updateDigest (digest : B32L) (chunk : B32L) : Id B32L := do
+def updateDigest (digest : (List UInt32)) (chunk : (List UInt32)) : Id (List UInt32) := do
   let indexLeft : List Nat := List.range 16
-  let wordsLeft : B32L ←
+  let wordsLeft : (List UInt32) ←
     computeLine digest chunk indexLeft shiftLists constantsLeft fnsLeft
   let indexRight : List Nat :=
     [ 0x05, 0x0e, 0x07, 0x00, 0x09, 0x02, 0x0b, 0x04,
       0x0d, 0x06, 0x0f, 0x08, 0x01, 0x0a, 0x03, 0x0c ]
-  let wordsRight : B32L ←
+  let wordsRight : (List UInt32) ←
     computeLine digest chunk indexRight
       shiftLists constantsRight fnsRight
   return [
@@ -85,40 +85,40 @@ def updateDigest (digest : B32L) (chunk : B32L) : Id B32L := do
     digest[0]! + wordsLeft[1]! + wordsRight[2]!
   ]
 
-def B8L.toB32Rev : B8L → B32L
+def Bytes.toUInt32Rev : Bytes → (List UInt32)
   | (b0 :: b1 :: b2 :: b3 :: bs) =>
-    B8s.toB32 b3 b2 b1 b0 :: B8L.toB32Rev bs
+    UInt32.ofBytes b3 b2 b1 b0 :: Bytes.toUInt32Rev bs
   | _ => []
 
-def processChunks (digest : B32L) (data : B8L) (lenSfx : B32L) : Nat → B32L
+def processChunks (digest : (List UInt32)) (data : Bytes) (lenSfx : (List UInt32)) : Nat → (List UInt32)
   | 0 =>
     if data.length > 55 then
-      let penultChunk : B32L :=
-        B8L.toB32Rev (List.takeD 64 (data ++ [0x80]) 0)
+      let penultChunk : (List UInt32) :=
+        Bytes.toUInt32Rev (List.takeD 64 (data ++ [0x80]) 0)
       let digest' := updateDigest digest penultChunk
-      let lastChunk : B32L := List.replicate 14 (0 : B32) ++ lenSfx
+      let lastChunk : (List UInt32) := List.replicate 14 (0 : UInt32) ++ lenSfx
       updateDigest digest' lastChunk
     else
-      let lastChunk : B32L :=
-        B8L.toB32Rev (List.takeD 56 (data ++ [0x80]) 0) ++ lenSfx
+      let lastChunk : (List UInt32) :=
+        Bytes.toUInt32Rev (List.takeD 56 (data ++ [0x80]) 0) ++ lenSfx
       updateDigest digest lastChunk
   | n + 1 =>
     let ⟨pfx, data'⟩ := data.splitAt 64
-    let chunk : B32L := B8L.toB32Rev pfx
+    let chunk : (List UInt32) := Bytes.toUInt32Rev pfx
     let digest' := updateDigest digest chunk
     processChunks digest' data' lenSfx n
 
-def run (data : B8L) : B8L := do
-  let initDigest : B32L :=
+def run (data : Bytes) : Bytes := do
+  let initDigest : (List UInt32) :=
     [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0]
-  let len : B32 := data.length.toUInt32
-  let digest : B32L :=
+  let len : UInt32 := data.length.toUInt32
+  let digest : (List UInt32) :=
     processChunks initDigest data [len <<< 3, len >>> 29] (data.length / 64)
-  List.foldr (fun x acc => x.toB8L.reverse ++ acc) [] digest
+  List.foldr (fun x acc => x.toBytes.reverse ++ acc) [] digest
 
 end ripemd160
 
-def B8L.ripemd160 : B8L → B8L := ripemd160.run
+def Bytes.ripemd160 : Bytes → Bytes := ripemd160.run
 
 
 
@@ -132,25 +132,25 @@ namespace SHA256
 -- The eight-word initial state, length-indexed so the whole SHA-256 state is
 -- statically an eight-word `Vector`. That makes the finaliser's projection
 -- total (see `run`): there is no "wrong number of words" case to fall back on.
-def initChunk : Vector B32 8 :=
+def initChunk : Vector UInt32 8 :=
   ⟨#[ 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
       0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19 ], rfl⟩
 
-def B8L.toChunks (lenB8L : B8L) : Nat → B8L → Nat → List B8A
+def Bytes.toChunks (lenBytes : Bytes) : Nat → Bytes → Nat → List (Array UInt8)
   | 0, _, _ => []
   | _ + 1, _, 0 =>
-    [((Array.replicate 64 0x00).set! 0 0x80).writeD 56 lenB8L]
+    [((Array.replicate 64 0x00).set! 0 0x80).writeD 56 lenBytes]
   | k + 1, xs, len' + 64 =>
       let ⟨pfx, xs'⟩ := List.splitToArray 64 xs 0
-      let xss := B8L.toChunks lenB8L k xs' len'
+      let xss := Bytes.toChunks lenBytes k xs' len'
       pfx :: xss
   | _ + 1, xs, _ + 56 =>
     [ ⟨xs ++ (0x80 :: List.replicate (64 - (xs.length + 1)) 0x00)⟩,
-      ⟨(List.replicate (56 : Nat) 0x00) ++ lenB8L⟩ ]
+      ⟨(List.replicate (56 : Nat) 0x00) ++ lenBytes⟩ ]
   | _ + 1, xs, _ =>
-    [⟨xs ++ (0x80 :: List.replicate (64 - (xs.length + 9)) 0x00) ++ lenB8L⟩]
+    [⟨xs ++ (0x80 :: List.replicate (64 - (xs.length + 9)) 0x00) ++ lenBytes⟩]
 
-def roundConstants : B32A :=
+def roundConstants : (Array UInt32) :=
  #[ 0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
     0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
     0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
@@ -173,40 +173,40 @@ def roundConstants : B32A :=
 -- and the message schedule `w` is updated in place. `n` counts rounds
 -- remaining, so the round index is `t = 64 - n`; rounds `t < 16` read the
 -- chunk, later rounds extend the schedule.
-def rounds (p : B8A) :
-  Nat → B32A → B32 → B32 → B32 → B32 → B32 → B32 → B32 → B32 → B32A
+def rounds (p : (Array UInt8)) :
+  Nat → (Array UInt32) → UInt32 → UInt32 → UInt32 → UInt32 → UInt32 → UInt32 → UInt32 → UInt32 → (Array UInt32)
   | 0, _, a, b, c, d, e, f, g, h => ⟨[a, b, c, d, e, f, g, h]⟩
   | n + 1, w, a, b, c, d, e, f, g, h =>
     let t : Nat := 64 - (n + 1)
     let j : Nat := t % 16
-    let wj : B32 :=
+    let wj : UInt32 :=
       if t < 16 then
-        B8s.toB32
+        UInt32.ofBytes
           (p.getD (4 * j) 0)
           (p.getD ((4 * j) + 1) 0)
           (p.getD ((4 * j) + 2) 0)
           (p.getD ((4 * j) + 3) 0)
       else
-        let x1 : B32 := w.getD ((j + 1) % 16) 0
-        let x14 : B32 := w.getD ((j + 14) % 16) 0
-        let s0 : B32 :=
-          (B32.ror x1 7) ^^^ (B32.ror x1 18) ^^^ (x1 >>> 3)
-        let s1 : B32 :=
-          (B32.ror x14 17) ^^^ (B32.ror x14 19) ^^^ (x14 >>> 10)
+        let x1 : UInt32 := w.getD ((j + 1) % 16) 0
+        let x14 : UInt32 := w.getD ((j + 14) % 16) 0
+        let s0 : UInt32 :=
+          (UInt32.ror x1 7) ^^^ (UInt32.ror x1 18) ^^^ (x1 >>> 3)
+        let s1 : UInt32 :=
+          (UInt32.ror x14 17) ^^^ (UInt32.ror x14 19) ^^^ (x14 >>> 10)
         (w.getD j 0) + s0 + (w.getD ((j + 9) % 16) 0) + s1
     let w' := Array.set! w j wj
-    let s1 : B32 :=
-      (B32.ror e 6) ^^^ (B32.ror e 11) ^^^ (B32.ror e 25)
-    let ch : B32 := (e &&& f) ^^^ ((~~~ e) &&& g)
-    let temp1 : B32 := h + s1 + ch + (roundConstants[t]!) + wj
-    let s0 : B32 :=
-      (B32.ror a 2) ^^^ (B32.ror a 13) ^^^ (B32.ror a 22)
-    let maj : B32 := (a &&& b) ^^^ (a &&& c) ^^^ (b &&& c)
-    let temp2 : B32 := s0 + maj
+    let s1 : UInt32 :=
+      (UInt32.ror e 6) ^^^ (UInt32.ror e 11) ^^^ (UInt32.ror e 25)
+    let ch : UInt32 := (e &&& f) ^^^ ((~~~ e) &&& g)
+    let temp1 : UInt32 := h + s1 + ch + (roundConstants[t]!) + wj
+    let s0 : UInt32 :=
+      (UInt32.ror a 2) ^^^ (UInt32.ror a 13) ^^^ (UInt32.ror a 22)
+    let maj : UInt32 := (a &&& b) ^^^ (a &&& c) ^^^ (b &&& c)
+    let temp2 : UInt32 := s0 + maj
     rounds p n w' (temp1 + temp2) a b c (d + temp1) e f g
 
-def consumeChunk (h : Vector B32 8) (p : B8A) : Vector B32 8 :=
-  let h' : B32A :=
+def consumeChunk (h : Vector UInt32 8) (p : (Array UInt8)) : Vector UInt32 8 :=
+  let h' : (Array UInt32) :=
     rounds p 64 (Array.replicate 16 0)
       h[0] h[1] h[2] h[3] h[4] h[5] h[6] h[7]
   ⟨
@@ -222,24 +222,24 @@ def consumeChunk (h : Vector B32 8) (p : B8A) : Vector B32 8 :=
     ], rfl
   ⟩
 
-def run (data : B8L) : B256 :=
+def run (data : Bytes) : B256 :=
   -- `data` is a list, so its length is an O(n) walk: take it once.
   let len : Nat := data.length
-  let xss : List B8A :=
-    B8L.toChunks
-      (B64.toB8L (len * 8).toUInt64)
+  let xss : List (Array UInt8) :=
+    Bytes.toChunks
+      (UInt64.toBytes (len * 8).toUInt64)
       (len / 64).succ
       data
       len
   -- `hash` is length-indexed at 8, so the eight projections below are total:
   -- the earlier "wrong number of 32-bit words" fallback is now unreachable by
   -- construction and has been removed rather than masked by a trace.
-  let hash : Vector B32 8 := List.foldl consumeChunk initChunk xss
+  let hash : Vector UInt32 8 := List.foldl consumeChunk initChunk xss
   B32s.toB256 hash[0] hash[1] hash[2] hash[3] hash[4] hash[5] hash[6] hash[7]
 
 end SHA256
 
-def B8L.sha256 : B8L → B256 := SHA256.run
+def Bytes.sha256 : Bytes → B256 := SHA256.run
 
 
 
@@ -255,11 +255,11 @@ def Array.app {ξ : Type u} (k : Nat) (f : ξ → ξ) (ws : Array ξ) : Array ξ
   | none => panic "Array.app out of bounds"
   | some x => ws.set! k (f x)
 
-@[inline] def B64.rol (xs : B64) (y : Nat) : B64 :=
+@[inline] def UInt64.rol (xs : UInt64) (y : Nat) : UInt64 :=
   (xs <<< y.toUInt64) ||| (xs >>> (64 - y).toUInt64)
 
 -- The polymorphic permutation below (`θ`/`ρπ`/`χ`/`ι`/`f`, with the
--- `keccakf_rotc`/`keccakf_piln` tables and `B64.rol`) is the retained
+-- `keccakf_rotc`/`keccakf_piln` tables and `UInt64.rol`) is the retained
 -- reference transcription of the C original. Production hashing goes
 -- through the specialized `fB64` further down; keep this block as the
 -- readable spec the unrolled indices were generated from (the same
@@ -284,7 +284,7 @@ def θ {ξ : Type u} [XorOp ξ] [Inhabited ξ]
       outer bc i <| inner t i 5 ws
   outer initVec 5 ws
 
-def B64.rdnc : Array B64 :=
+def UInt64.rdnc : Array UInt64 :=
   #[ 0x0000000000000001, 0x0000000000008082, 0x800000000000808a, 0x8000000080008000,
      0x000000000000808b, 0x0000000080000001, 0x8000000080008081, 0x8000000000008009,
      0x000000000000008a, 0x0000000000000088, 0x0000000080008009, 0x000000008000000a,
@@ -341,19 +341,19 @@ def f {ξ : Type u} [XorOp ξ] [Complement ξ] [HAnd ξ ξ ξ] [Inhabited ξ]
       aux n <| ι (23 - n) rdnc <| χ <| ρπ rol <| θ rol ws
   aux 24 ws
 
-@[inline] private def rolc (x : B64) (n : UInt64) : B64 :=
+@[inline] private def rolc (x : UInt64) (n : UInt64) : UInt64 :=
   (x <<< n) ||| (x >>> (64 - n))
 
 /-- The 5x5 keccak lane state as 25 unboxed scalars (lane (x, y) is
 field `a(x + 5*y)`), so a round never touches the heap. -/
 structure StateB64 where
-  (a0 a1 a2 a3 a4 : B64)
-  (a5 a6 a7 a8 a9 : B64)
-  (a10 a11 a12 a13 a14 : B64)
-  (a15 a16 a17 a18 a19 : B64)
-  (a20 a21 a22 a23 a24 : B64)
+  (a0 a1 a2 a3 a4 : UInt64)
+  (a5 a6 a7 a8 a9 : UInt64)
+  (a10 a11 a12 a13 a14 : UInt64)
+  (a15 a16 a17 a18 a19 : UInt64)
+  (a20 a21 a22 a23 a24 : UInt64)
 
-private def roundB64 (rc : B64) (s : StateB64) : StateB64 :=
+private def roundB64 (rc : UInt64) (s : StateB64) : StateB64 :=
   let c0 := s.a0 ^^^ s.a5 ^^^ s.a10 ^^^ s.a15 ^^^ s.a20
   let c1 := s.a1 ^^^ s.a6 ^^^ s.a11 ^^^ s.a16 ^^^ s.a21
   let c2 := s.a2 ^^^ s.a7 ^^^ s.a12 ^^^ s.a17 ^^^ s.a22
@@ -441,93 +441,93 @@ private def roundB64 (rc : B64) (s : StateB64) : StateB64 :=
   let e24 := b24 ^^^ ((~~~ b20) &&& b21)
   ⟨e0 ^^^ rc, e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e14, e15, e16, e17, e18, e19, e20, e21, e22, e23, e24⟩
 
-/-- keccak-f[1600] monomorphized to `B64`: 24 unrolled rounds over 25
-scalar locals. Semantically identical to `f B64.rdnc · B64.rol` over the
-reference transcription above; round constants are read from `B64.rdnc`
+/-- keccak-f[1600] monomorphized to `UInt64`: 24 unrolled rounds over 25
+scalar locals. Semantically identical to `f UInt64.rdnc · UInt64.rol` over the
+reference transcription above; round constants are read from `UInt64.rdnc`
 rather than written as literals.
 
 That read began as a workaround for a Lean-4.23 codegen bug (the duplicated
 constant 0x8000000080008081 was CSE'd into a shared boxed value and the C
 emitter then issued `lean_inc` on an unboxed uint64, which did not compile).
 The bug is fixed as of the v4.32.1 toolchain: `scripts/repro-lean423-uint64-cse.lean`
-now passes both of its documented compile steps and runs. The `B64.rdnc` read is
+now passes both of its documented compile steps and runs. The `UInt64.rdnc` read is
 retained deliberately — it costs nothing measurable (the permutation is a few
 percent of busy time with it) and is immune to regressions of the emitter path.
 Do not rewrite the rounds back to literal constants. -/
-def fB64 (ws : Array B64) : Array B64 :=
+def fB64 (ws : Array UInt64) : Array UInt64 :=
   let s : StateB64 :=
     ⟨ws[0]!, ws[1]!, ws[2]!, ws[3]!, ws[4]!,
      ws[5]!, ws[6]!, ws[7]!, ws[8]!, ws[9]!,
      ws[10]!, ws[11]!, ws[12]!, ws[13]!, ws[14]!,
      ws[15]!, ws[16]!, ws[17]!, ws[18]!, ws[19]!,
      ws[20]!, ws[21]!, ws[22]!, ws[23]!, ws[24]!⟩
-  let s := roundB64 (B64.rdnc[0]!) s
-  let s := roundB64 (B64.rdnc[1]!) s
-  let s := roundB64 (B64.rdnc[2]!) s
-  let s := roundB64 (B64.rdnc[3]!) s
-  let s := roundB64 (B64.rdnc[4]!) s
-  let s := roundB64 (B64.rdnc[5]!) s
-  let s := roundB64 (B64.rdnc[6]!) s
-  let s := roundB64 (B64.rdnc[7]!) s
-  let s := roundB64 (B64.rdnc[8]!) s
-  let s := roundB64 (B64.rdnc[9]!) s
-  let s := roundB64 (B64.rdnc[10]!) s
-  let s := roundB64 (B64.rdnc[11]!) s
-  let s := roundB64 (B64.rdnc[12]!) s
-  let s := roundB64 (B64.rdnc[13]!) s
-  let s := roundB64 (B64.rdnc[14]!) s
-  let s := roundB64 (B64.rdnc[15]!) s
-  let s := roundB64 (B64.rdnc[16]!) s
-  let s := roundB64 (B64.rdnc[17]!) s
-  let s := roundB64 (B64.rdnc[18]!) s
-  let s := roundB64 (B64.rdnc[19]!) s
-  let s := roundB64 (B64.rdnc[20]!) s
-  let s := roundB64 (B64.rdnc[21]!) s
-  let s := roundB64 (B64.rdnc[22]!) s
-  let s := roundB64 (B64.rdnc[23]!) s
+  let s := roundB64 (UInt64.rdnc[0]!) s
+  let s := roundB64 (UInt64.rdnc[1]!) s
+  let s := roundB64 (UInt64.rdnc[2]!) s
+  let s := roundB64 (UInt64.rdnc[3]!) s
+  let s := roundB64 (UInt64.rdnc[4]!) s
+  let s := roundB64 (UInt64.rdnc[5]!) s
+  let s := roundB64 (UInt64.rdnc[6]!) s
+  let s := roundB64 (UInt64.rdnc[7]!) s
+  let s := roundB64 (UInt64.rdnc[8]!) s
+  let s := roundB64 (UInt64.rdnc[9]!) s
+  let s := roundB64 (UInt64.rdnc[10]!) s
+  let s := roundB64 (UInt64.rdnc[11]!) s
+  let s := roundB64 (UInt64.rdnc[12]!) s
+  let s := roundB64 (UInt64.rdnc[13]!) s
+  let s := roundB64 (UInt64.rdnc[14]!) s
+  let s := roundB64 (UInt64.rdnc[15]!) s
+  let s := roundB64 (UInt64.rdnc[16]!) s
+  let s := roundB64 (UInt64.rdnc[17]!) s
+  let s := roundB64 (UInt64.rdnc[18]!) s
+  let s := roundB64 (UInt64.rdnc[19]!) s
+  let s := roundB64 (UInt64.rdnc[20]!) s
+  let s := roundB64 (UInt64.rdnc[21]!) s
+  let s := roundB64 (UInt64.rdnc[22]!) s
+  let s := roundB64 (UInt64.rdnc[23]!) s
   #[s.a0, s.a1, s.a2, s.a3, s.a4, s.a5, s.a6, s.a7, s.a8, s.a9, s.a10, s.a11, s.a12, s.a13, s.a14, s.a15, s.a16, s.a17, s.a18, s.a19, s.a20, s.a21, s.a22, s.a23, s.a24]
 
-def B8L.run : Fin 17 → B8L → Array B64 → B256
+def Bytes.run : Fin 17 → Bytes → Array UInt64 → B256
   | wc, b0 :: b1 :: b2 :: b3 :: b4 :: b5 :: b6 :: b7 :: bs, ws =>
-    let t : B64 := B8s.toB64 b7 b6 b5 b4 b3 b2 b1 b0
+    let t : UInt64 := UInt64.ofBytes b7 b6 b5 b4 b3 b2 b1 b0
     let ws' := Array.app wc (· ^^^ t) ws
-    B8L.run (wc + 1) bs <| if wc = 16 then fB64 ws' else ws'
+    Bytes.run (wc + 1) bs <| if wc = 16 then fB64 ws' else ws'
   | wc, bs, ws =>
-    let us := (bs ++ [(1 : B8)]).takeD 8 (0 : B8)
-    let t : B64 :=
-      B8s.toB64
+    let us := (bs ++ [(1 : UInt8)]).takeD 8 (0 : UInt8)
+    let t : UInt64 :=
+      UInt64.ofBytes
         (us[7]!) (us[6]!) (us[5]!) (us[4]!)
         (us[3]!) (us[2]!) (us[1]!) (us[0]!)
-    let s : B64 := (8 : B64) <<< 60
+    let s : UInt64 := (8 : UInt64) <<< 60
     let temp0 := Array.app wc (· ^^^ t) ws
     let temp1 := Array.app 16 (· ^^^ s) temp0
     let ws' := fB64 temp1
-    ⟨ ⟨B64.reverse (ws'[0]!), B64.reverse (ws'[1]!)⟩,
-      ⟨B64.reverse (ws'[2]!), B64.reverse (ws'[3]!)⟩ ⟩
+    ⟨ ⟨UInt64.reverse (ws'[0]!), UInt64.reverse (ws'[1]!)⟩,
+      ⟨UInt64.reverse (ws'[2]!), UInt64.reverse (ws'[3]!)⟩ ⟩
 
-def ByteArray.run (bnd n : Nat) (wc : Fin 17) (bs : ByteArray) (ws : Array B64) : B256 :=
+def ByteArray.run (bnd n : Nat) (wc : Fin 17) (bs : ByteArray) (ws : Array UInt64) : B256 :=
   if 7 < n then
-    let b0 : B8 := bs[(bnd - n)]!
-    let b1 : B8 := bs[(bnd - (n - 1))]!
-    let b2 : B8 := bs[(bnd - (n - 2))]!
-    let b3 : B8 := bs[(bnd - (n - 3))]!
-    let b4 : B8 := bs[(bnd - (n - 4))]!
-    let b5 : B8 := bs[(bnd - (n - 5))]!
-    let b6 : B8 := bs[(bnd - (n - 6))]!
-    let b7 : B8 := bs[(bnd - (n - 7))]!
-    let t : B64 := B8s.toB64 b7 b6 b5 b4 b3 b2 b1 b0
+    let b0 : UInt8 := bs[(bnd - n)]!
+    let b1 : UInt8 := bs[(bnd - (n - 1))]!
+    let b2 : UInt8 := bs[(bnd - (n - 2))]!
+    let b3 : UInt8 := bs[(bnd - (n - 3))]!
+    let b4 : UInt8 := bs[(bnd - (n - 4))]!
+    let b5 : UInt8 := bs[(bnd - (n - 5))]!
+    let b6 : UInt8 := bs[(bnd - (n - 6))]!
+    let b7 : UInt8 := bs[(bnd - (n - 7))]!
+    let t : UInt64 := UInt64.ofBytes b7 b6 b5 b4 b3 b2 b1 b0
     let ws' := Array.app wc (UInt64.xor · t) ws
     ByteArray.run bnd (n - 8) (wc + 1) bs <|
       if wc = 16 then fB64 ws' else ws'
   else
-    let rec aux (bnd : Nat) (bs : ByteArray) : Nat → Nat → List B8
+    let rec aux (bnd : Nat) (bs : ByteArray) : Nat → Nat → List UInt8
       | _, 0 => [] -- unreachable code
       | 0, n + 1 => 1 :: List.replicate n 0
       | m + 1, n + 1 =>
         (bs.get! (bnd - (m + 1))) :: aux bnd bs m n
     let us := aux bnd bs n 8
-    let t : B64 :=
-      B8s.toB64
+    let t : UInt64 :=
+      UInt64.ofBytes
         (us.getD 7 0)
         (us.getD 6 0)
         (us.getD 5 0)
@@ -536,19 +536,19 @@ def ByteArray.run (bnd n : Nat) (wc : Fin 17) (bs : ByteArray) (ws : Array B64) 
         (us.getD 2 0)
         (us.getD 1 0)
         (us.getD 0 0)
-    let s : B64 := (8 : B64) <<< 60
+    let s : UInt64 := (8 : UInt64) <<< 60
     let temp0 := Array.app wc (· ^^^ t) ws
     let temp1 := Array.app 16 (· ^^^ s) temp0
     let ws' := fB64 temp1
-    ⟨ ⟨B64.reverse (ws'[0]!), B64.reverse (ws'[1]!)⟩,
-      ⟨B64.reverse (ws'[2]!), B64.reverse (ws'[3]!)⟩ ⟩
+    ⟨ ⟨UInt64.reverse (ws'[0]!), UInt64.reverse (ws'[1]!)⟩,
+      ⟨UInt64.reverse (ws'[2]!), UInt64.reverse (ws'[3]!)⟩ ⟩
 
 end KECCAK
 
-def B8L.keccak (bs : B8L) : B256 :=
-  KECCAK.B8L.run (0 : Fin 17) bs <| .replicate 25 0
+def Bytes.keccak (bs : Bytes) : B256 :=
+  KECCAK.Bytes.run (0 : Fin 17) bs <| .replicate 25 0
 
 def ByteArray.keccak (loc sz : Nat) (bs : ByteArray) : B256 :=
   KECCAK.ByteArray.run (loc + sz) sz (0 : Fin 17) bs <| .replicate 25 0
 
-def B256.keccak (x : B256) : B256 := B8L.keccak <| x.toB8L
+def B256.keccak (x : B256) : B256 := Bytes.keccak <| x.toBytes
