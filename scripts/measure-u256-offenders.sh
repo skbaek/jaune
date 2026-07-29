@@ -13,7 +13,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
-FIXTURES="${ELEVM_FIXTURES:-$HOME/execution-specs/tests/fixtures/ethereum_tests/BlockchainTests}"
+FIXTURES="${JAUNE_FIXTURES:-$HOME/execution-specs/tests/fixtures/ethereum_tests/BlockchainTests}"
 
 usage() {
   echo "usage: scripts/measure-u256-offenders.sh <label> [--no-build]" >&2
@@ -36,7 +36,7 @@ if [ $# -eq 2 ]; then
   NO_BUILD=1
 fi
 
-OUT_DIR="${ELEVM_REPORT_DIR:-$SCRIPT_DIR}"
+OUT_DIR="${JAUNE_REPORT_DIR:-$SCRIPT_DIR}"
 mkdir -p "$OUT_DIR"
 
 run_measurement() {

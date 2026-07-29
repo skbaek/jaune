@@ -14,7 +14,7 @@ non-default locations, or `--manifest` to check against a different manifest
 file entirely. Its `EEST_ROOT` override is a doctor-specific variable naming
 the top-level EEST install directory (containing the archive and its
 extracted `fixtures/` tree); it is distinct from `scripts/check.sh`'s
-`ELEVM_FIXTURES`, which instead points directly at a tier's leaf fixture
+`JAUNE_FIXTURES`, which instead points directly at a tier's leaf fixture
 directory.
 
 The EEST checks come in two depths. The default *fast* check verifies the
@@ -111,7 +111,7 @@ python3 scripts/env_doctor.py --legacy-only \
 Omit `--legacy-only` to also diagnose the EEST and Python components handled
 by later portability steps.
 
-The test harness's existing `ELEVM_FIXTURES` override is unchanged and points
+The test harness's existing `JAUNE_FIXTURES` override is unchanged and points
 directly to `BlockchainTests`, not to the execution-specs root.
 
 ## EEST blockchain fixtures (`--bls` tier)
@@ -259,7 +259,7 @@ package gate and the pinned import and are interpreter-independent.
 
 ## BLS constants generator
 
-`Elevm/BLSConst.lean` is generated from the following pinned local sources:
+`Jaune/BLSConst.lean` is generated from the following pinned local sources:
 
 - execution-specs commit
   [`4198b9c5996713b268aed602739d5aa40e277694`](https://github.com/ethereum/execution-specs/tree/4198b9c5996713b268aed602739d5aa40e277694)
@@ -272,7 +272,7 @@ producing output:
 ```sh
 EELS_ROOT="$HOME/execution-specs"
 "$EELS_ROOT/venv/bin/python" scripts/gen-bls-consts.py \
-  --execution-specs "$EELS_ROOT" --output Elevm/BLSConst.lean
+  --execution-specs "$EELS_ROOT" --output Jaune/BLSConst.lean
 ```
 
 `EELS_ROOT` may be used instead of the command-line option. To verify the
@@ -281,7 +281,7 @@ committed constants without replacing them:
 ```sh
 "$EELS_ROOT/venv/bin/python" scripts/gen-bls-consts.py \
   --execution-specs "$EELS_ROOT" --output /tmp/BLSConst.lean
-cmp /tmp/BLSConst.lean Elevm/BLSConst.lean
+cmp /tmp/BLSConst.lean Jaune/BLSConst.lean
 ```
 
 ## U256 differential vectors
@@ -343,6 +343,6 @@ Unlike every other vector file, these hold only under Osaka rules, so
 `scripts/check-vectors.sh` runs each of them with an explicit `--network`. The
 two MODEXP files are complementary rather than alternative — `modexp_eip2565`
 is the Prague schedule and `modexp_eip7883` the Osaka one — and each fails
-wholesale under the other fork. `elevm --vectors` additionally refuses a file
+wholesale under the other fork. `jaune --vectors` additionally refuses a file
 whose address is not a precompile under the requested fork, so a vector can
 never be exercised under rules that do not activate its address.

@@ -1,5 +1,5 @@
 # Runtime dependency closure of the pinned execution-specs checkout used by
-# ELEVM's deterministic generators.  Every package is fixed to the version
+# Jaune's deterministic generators.  Every package is fixed to the version
 # observed in the known-good Python 3.11.9 environment; listing the complete
 # closure here prevents a later resolver run from silently selecting newer
 # transitive packages.  Generate the complete hashed lock with:

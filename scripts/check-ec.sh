@@ -2,7 +2,7 @@
 # Elliptic-curve differential-oracle gate.
 #
 # Compiles scripts/check-ec.lean through Lean C generation and leanc -O2 and
-# links it against the native objects Lake already recorded for the `elevm`
+# links it against the native objects Lake already recorded for the `jaune`
 # executable, the same way scripts/run-bench-ec.sh does.  The checker exits 0
 # if and only if every pinned, differential, and identity case passes; there is
 # no skip or unknown outcome.  The last line of output is the verdict.
@@ -11,11 +11,11 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
-REPORT="${ELEVM_REPORT_DIR:-$SCRIPT_DIR}/report-ec.txt"
+REPORT="${JAUNE_REPORT_DIR:-$SCRIPT_DIR}/report-ec.txt"
 
-TRACE="$ROOT/.lake/build/bin/elevm.trace"
+TRACE="$ROOT/.lake/build/bin/jaune.trace"
 if [ ! -f "$TRACE" ]; then
-  echo "RED — ec: needs the existing elevm native dependency objects; run 'lake build' or a check.sh gate first"
+  echo "RED — ec: needs the existing jaune native dependency objects; run 'lake build' or a check.sh gate first"
   exit 1
 fi
 
@@ -35,7 +35,7 @@ command = next(item["message"] for item in trace["log"] if ".c.o.export" in item
 objects = [arg for arg in shlex.split(command)
            if ".c.o" in arg and not arg.endswith("/ir/Main.c.o.export")]
 if not objects:
-    raise SystemExit("no native dependency objects found in elevm trace")
+    raise SystemExit("no native dependency objects found in jaune trace")
 with open(sys.argv[2], "w") as out:
     for obj in objects:
         out.write(shlex.quote(obj) + "\n")

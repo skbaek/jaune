@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Safely bootstrap ELEVM's Git-backed legacy fixture sources.
+"""Safely bootstrap Jaune's Git-backed legacy fixture sources.
 
 The command consumes scripts/sources.json, installs execution-specs plus the
 ignored nested ethereum/tests checkout and its required LegacyTests submodule,

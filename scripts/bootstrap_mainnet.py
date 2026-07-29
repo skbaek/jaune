@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Safely bootstrap ELEVM's current-mainnet fixture release.
+"""Safely bootstrap Jaune's current-mainnet fixture release.
 
 The command consumes the current_mainnet fields of scripts/sources.json, obtains the
 pinned execution-spec-tests archive (reusing an already-verified copy or
@@ -220,7 +220,7 @@ def _download_archive(url: str, part_path: Path, expected_sha: str) -> None:
     promoted. Removes the partial file on any failure."""
     digest = hashlib.sha256()
     try:
-        request = urllib.request.Request(url, headers={"User-Agent": "elevm-bootstrap"})
+        request = urllib.request.Request(url, headers={"User-Agent": "jaune-bootstrap"})
         with urllib.request.urlopen(request) as response, part_path.open("wb") as out:
             while True:
                 chunk = response.read(_STREAM_CHUNK)

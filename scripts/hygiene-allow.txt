@@ -1,8 +1,8 @@
-# elevm source-hygiene allowlist — consumed by scripts/check-hygiene.sh.
+# Jaune source-hygiene allowlist — consumed by scripts/check-hygiene.sh.
 #
 # Each non-comment line is "<relpath> <normalised source line>" naming a
 # CURRENTLY-COMMITTED occurrence of a forbidden pattern (dbg_trace / sorry)
-# under Elevm/ that is deliberately retained. The gate fails on any occurrence
+# under Jaune/ that is deliberately retained. The gate fails on any occurrence
 # NOT listed here, so a new stray dbg_trace or sorry cannot enter unnoticed.
 #
 # Keep a justification comment above every entry. When the underlying code is
@@ -13,8 +13,8 @@
 # closed-term extraction (see the doc comment above `verbose` in Basic.lean).
 # `cprint` and `Except.print` are its only sinks and both gate on it. Covers
 # both occurrences (Basic.lean:1786 in cprint, Basic.lean:1789 in Except.print).
-Elevm/Basic.lean dbg_trace msg
+Jaune/Basic.lean dbg_trace msg
 
 # Not a live `sorry`: a commented-out proof sketch inside a disabled lemma body
 # (the Adr'/toNat block in Types.lean), retained as a development note.
-Elevm/Types.lean -- sorry
+Jaune/Types.lean -- sorry

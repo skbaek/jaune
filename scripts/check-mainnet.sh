@@ -6,13 +6,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
-BIN="$ROOT/.lake/build/bin/elevm"
+BIN="$ROOT/.lake/build/bin/jaune"
 FIXTURES_ROOT="${EEST_MAINNET_ROOT:-$HOME/eest-mainnet-v20.0.1}/fixtures"
 SUITE=""
 SUBDIR=""
 BUILD=1
 START_AT=1
-GUARD="${ELEVM_TIMEOUT:-1800}"
+GUARD="${JAUNE_TIMEOUT:-1800}"
 
 usage() {
   echo "usage: scripts/check-mainnet.sh (--suite (prague|osaka|transitions|smoke|full) | --dir REL --suite SUITE) [--fixtures-root PATH] [--no-build] [--start-at N]" >&2
@@ -76,12 +76,12 @@ fi
   echo "error: current-mainnet blockchain fixture root not found: $FIXTURES_ROOT/blockchain_tests" >&2
   exit 2
 }
-[ "$GUARD" -gt 0 ] 2>/dev/null || { echo "error: ELEVM_TIMEOUT must be positive" >&2; exit 2; }
+[ "$GUARD" -gt 0 ] 2>/dev/null || { echo "error: JAUNE_TIMEOUT must be positive" >&2; exit 2; }
 
 if [ "$BUILD" -eq 1 ]; then
-  (cd "$ROOT" && lake build elevm)
+  (cd "$ROOT" && lake build jaune)
 fi
-[ -x "$BIN" ] || { echo "error: elevm binary not found: $BIN" >&2; exit 2; }
+[ -x "$BIN" ] || { echo "error: jaune binary not found: $BIN" >&2; exit 2; }
 
 LIST="$(mktemp)"
 trap 'rm -f "$LIST"' EXIT

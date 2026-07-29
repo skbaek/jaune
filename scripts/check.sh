@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fixture-test harness for elevm (REFACTOR.md Phase 0, step 0.1).
+# Fixture-test harness for Jaune (REFACTOR.md Phase 0, step 0.1).
 #
 # Usage: scripts/check.sh (--depth | --smoke | --full | --patch | --rlp4 | --bls | --dir <path>) [--report <path>] [--rebase] [--no-build]
 #
@@ -23,7 +23,7 @@
 #                 default scripts/report-<tier>.txt
 #   --rebase      accept the current results as the new committed baseline
 #                 (rejected for --patch/--rlp4: their desired result is fixed)
-#   --no-build    skip `lake build elevm`
+#   --no-build    skip `lake build jaune`
 #
 # --patch and --rlp4 are target gates, not baseline-comparison tiers: each
 # succeeds if and only if every listed file is PASS. They have no baseline and
@@ -36,18 +36,18 @@
 # justifications.
 #
 # Environment:
-#   ELEVM_FIXTURES  fixture root (default:
+#   JAUNE_FIXTURES  fixture root (default:
 #                   ~/execution-specs/tests/fixtures/ethereum_tests/BlockchainTests;
 #                   for --bls: ~/eest-fixtures/fixtures/blockchain_tests, the
 #                   pinned EEST release snapshot — see scripts/vectors/SOURCES.md)
-#   ELEVM_TIMEOUT   per-file wall-clock GUARD in seconds (default: 1800). Not a
+#   JAUNE_TIMEOUT   per-file wall-clock GUARD in seconds (default: 1800). Not a
 #                   classifier — see below.
 #
 # Classification contract
 # -----------------------
 # Every fixture file must run to completion, and the only classifications are
 # PASS and FAIL. Correctness is the sole pass/fail axis; wall time is never
-# one. A failing test makes elevm throw and abort the whole invocation, so
+# one. A failing test makes jaune throw and abort the whole invocation, so
 # each fixture file runs in its own process.
 #
 # That process runs under a per-file wall-clock GUARD (a perl alarm; macOS has
@@ -77,7 +77,7 @@ set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
-BIN="$ROOT/.lake/build/bin/elevm"
+BIN="$ROOT/.lake/build/bin/jaune"
 
 usage() {
   echo "usage: scripts/check.sh (--depth | --smoke | --full | --patch | --rlp4 | --bls | --dir <path>) [--report <path>] [--rebase] [--no-build]" >&2
@@ -115,11 +115,11 @@ done
 # default fixture root. The wall-clock guard is uniform across tiers: it is a
 # hang detector, not a per-tier performance budget.
 if [ "$TIER" = "bls" ]; then
-  FIXTURES="${ELEVM_FIXTURES:-$HOME/eest-fixtures/fixtures/blockchain_tests}"
+  FIXTURES="${JAUNE_FIXTURES:-$HOME/eest-fixtures/fixtures/blockchain_tests}"
 else
-  FIXTURES="${ELEVM_FIXTURES:-$HOME/execution-specs/tests/fixtures/ethereum_tests/BlockchainTests}"
+  FIXTURES="${JAUNE_FIXTURES:-$HOME/execution-specs/tests/fixtures/ethereum_tests/BlockchainTests}"
 fi
-GUARD="${ELEVM_TIMEOUT:-1800}"
+GUARD="${JAUNE_TIMEOUT:-1800}"
 
 # Target-gate tiers succeed iff every listed file is PASS; they have no
 # baseline and never rebase.
@@ -198,13 +198,13 @@ if [ "$TOTAL" -eq 0 ]; then
 fi
 
 if [ "$BUILD" -eq 1 ]; then
-  if ! (cd "$ROOT" && lake build elevm); then
-    echo "REGRESSION — $TIER: lake build elevm failed"
+  if ! (cd "$ROOT" && lake build jaune); then
+    echo "REGRESSION — $TIER: lake build jaune failed"
     exit 1
   fi
 fi
 if [ ! -x "$BIN" ]; then
-  echo "REGRESSION — $TIER: elevm binary not found: $BIN"
+  echo "REGRESSION — $TIER: jaune binary not found: $BIN"
   exit 1
 fi
 
@@ -220,7 +220,7 @@ while IFS= read -r REL; do
   [ -n "$REL" ] || continue
   I=$((I + 1))
   START="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
-  # Guard runner (macOS has no coreutils timeout): fork elevm, alarm the
+  # Guard runner (macOS has no coreutils timeout): fork jaune, alarm the
   # parent, SIGKILL the child on trip and exit 142 *normally* — exiting rather
   # than dying by SIGALRM keeps bash's "Alarm clock" job-control notice off
   # this script's stderr, so a guard trip is announced only by the HARNESS

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create ELEVM's frozen Python 3.11.9 generator/oracle environment.
+"""Create Jaune's frozen Python 3.11.9 generator/oracle environment.
 
 The command consumes scripts/sources.json and the hash-locked requirements
 file referenced by it.  It never installs the execution-specs checkout as a

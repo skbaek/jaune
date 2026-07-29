@@ -1,12 +1,25 @@
-# ELEVM
+# Jaune
 
-[![CI](https://github.com/skbaek/elevm/actions/workflows/ci.yml/badge.svg)](https://github.com/skbaek/elevm/actions/workflows/ci.yml)
+[![CI](https://github.com/skbaek/jaune/actions/workflows/ci.yml/badge.svg)](https://github.com/skbaek/jaune/actions/workflows/ci.yml)
 
-Executable Lean EVM (ELEVM) is an implementation of the Ethereum Virtual Machine 
-(EVM) in the Lean 4 theorem prover. ELEVM can run EVM state tests in the standard JSON 
-format of [execution spec tests](https://github.com/ethereum/execution-spec-tests). 
-It passes all general state tests used by the latest version[^1] of 
-[execution-specs](https://github.com/ethereum/execution-specs) on the `mainnet` branch.
+**Jaune** is the executable formal specification of the EVM: the role the
+Yellow Paper once played, rebuilt as a Lean 4 artifact you can run, test, and
+prove against. It mirrors
+[execution-specs](https://github.com/ethereum/execution-specs) at mainnet head,
+passes 2633/2634 GeneralStateTests, and is MIT-licensed. Its semantics are
+demonstrated sufficient for real verification: a WETH implementation's solvency
+is proven over every reachable chain state, through a verified compiler, with
+no `sorry` and no `native_decide` in the trusted path.
+
+Jaune's first version was written directly from the Yellow Paper — the original
+WETH solvency proof ran against that semantics — and was later rebuilt on
+execution-specs to stay fork-current.
+
+Jaune can run EVM state tests in the standard JSON format of
+[execution spec tests](https://github.com/ethereum/execution-spec-tests). It
+passes all general state tests used by the latest version[^1] of
+[execution-specs](https://github.com/ethereum/execution-specs) on the `mainnet`
+branch.
 
 ## Prerequisite
 
@@ -18,7 +31,7 @@ You need to have [elan](https://github.com/leanprover/elan) installed.
 
 ## Usage
 
-`lake exe elevm /path/to/test`
+`lake exe jaune /path/to/test`
 
 ## External test fixtures
 
@@ -31,7 +44,7 @@ requirements.
 ## Verification status
 
 - **Supported forks:** Prague, Osaka, BPO1, and BPO2, plus the transitions
-  between them. ELEVM's frozen legacy corpus remains a regression instrument.
+  between them. Jaune's frozen legacy corpus remains a regression instrument.
   The canonical current-mainnet lane is the separately installed
   `execution-specs` `tests@v20.0.1` release; its strict generated manifests
   activate Prague as a whole suite (`scripts/check-mainnet.sh --suite prague`,
@@ -91,13 +104,13 @@ tests create only tiny synthetic Git repositories and fixture archives in their
 temporary workspace; CI never downloads the EEST release or a complete legacy
 fixture corpus. A separate no-toolchain hygiene job
 ([`scripts/check-hygiene.sh`](scripts/check-hygiene.sh)) fails the build if any
-`dbg_trace` or `sorry` appears under `Elevm/` outside the justified allowlist
+`dbg_trace` or `sorry` appears under `Jaune/` outside the justified allowlist
 ([`scripts/hygiene-allow.txt`](scripts/hygiene-allow.txt)).
 
 The workflows intentionally use maintained major-version action tags
 (`actions/checkout@v6`, `actions/setup-python@v5`, and
 `leanprover/lean-action@v1`) instead of immutable commit SHAs. Review the
 corresponding official action release notes before a tag update, and keep that
-policy consistent within ELEVM.
+policy consistent within Jaune.
 
 [^1]:As of 2025/09/19, commit [`4198...7694`](https://github.com/ethereum/execution-specs/tree/4198b9c5996713b268aed602739d5aa40e277694)

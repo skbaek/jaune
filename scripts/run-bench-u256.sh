@@ -20,9 +20,9 @@ case "$LABEL" in
     ;;
 esac
 
-TRACE="$ROOT/.lake/build/bin/elevm.trace"
+TRACE="$ROOT/.lake/build/bin/jaune.trace"
 if [ ! -f "$TRACE" ]; then
-  echo "benchmark needs the existing elevm native dependency objects; run a normal check.sh gate first" >&2
+  echo "benchmark needs the existing jaune native dependency objects; run a normal check.sh gate first" >&2
   exit 1
 fi
 
@@ -62,14 +62,14 @@ objects = [obj for obj in (from_inputs(trace) or from_log(trace))
            if obj.endswith(".c.o") or obj.endswith(".c.o.export")]
 objects = [obj for obj in objects if not obj.endswith("/ir/Main.c.o.export")]
 if not objects:
-    raise SystemExit("no native dependency objects found in elevm trace")
+    raise SystemExit("no native dependency objects found in jaune trace")
 with open(sys.argv[2], "w") as out:
     for obj in objects:
         out.write(shlex.quote(obj) + "\n")
 PY
 
 lake env leanc -O2 -o "$TMP/bench-u256" "$TMP/bench-u256.c" @"$TMP/objects.rsp"
-REPORT="${ELEVM_REPORT_DIR:-$SCRIPT_DIR}/report-$LABEL-bench-u256.txt"
+REPORT="${JAUNE_REPORT_DIR:-$SCRIPT_DIR}/report-$LABEL-bench-u256.txt"
 mkdir -p "$(dirname "$REPORT")"
 "$TMP/bench-u256" | tee "$REPORT"
 echo "OK — U256 benchmark recorded in $REPORT"

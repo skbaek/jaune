@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Generate Elevm/BLSConst.lean from py_ecc's BLS12-381 constants.
+"""Generate Jaune/BLSConst.lean from py_ecc's BLS12-381 constants.
 
 Run with the frozen oracle venv associated with the configured EELS checkout:
 
     "$EELS_ROOT/venv/bin/python" scripts/gen-bls-consts.py \
-        --execution-specs "$EELS_ROOT" --output Elevm/BLSConst.lean
+        --execution-specs "$EELS_ROOT" --output Jaune/BLSConst.lean
 
 Every constant needed by the EIP-2537 MAP precompiles (Step 7) is read
 directly from py_ecc.optimized_bls12_381 here and emitted as plain `Nat`

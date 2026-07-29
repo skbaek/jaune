@@ -15,7 +15,7 @@
 # harness error that aborts the tier.
 #
 # Documented exclusions — files present in the fixture directories but
-# deliberately absent from scripts/bls-tests.txt. elevm is a Prague-only
+# deliberately absent from scripts/bls-tests.txt. Jaune is a Prague-only
 # executable specification by design; fixtures whose cases demand non-Prague
 # execution are out of scope, and their failure under a forced run is
 # intended behavior, not a gap:
@@ -30,7 +30,7 @@
 # point-evaluation files are the Step-8/9 scope.)
 # Unit-level coverage of the precompile semantics behind the exclusions is
 # green in the vector harness: scripts/check-vectors.sh runs every EIP-2537
-# vector file and all 122 consensus KZG vectors through `elevm --vectors`.
+# vector file and all 122 consensus KZG vectors through `jaune --vectors`.
 PASS	6.68s	cancun/eip4844_blobs/test_call_opcode_types.json
 PASS	101.72s	cancun/eip4844_blobs/test_external_vectors.json
 PASS	1.03s	cancun/eip4844_blobs/test_invalid_inputs.json

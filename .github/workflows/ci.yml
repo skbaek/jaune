@@ -18,7 +18,7 @@ concurrency:
 
 # This repository intentionally follows maintained major-version action tags
 # rather than commit SHAs. Review upstream release notes before changing a tag;
-# keep this policy consistent across ELEVM workflows.
+# keep this policy consistent across Jaune workflows.
 jobs:
   portability:
     runs-on: ubuntu-24.04
@@ -40,8 +40,8 @@ jobs:
       - uses: actions/checkout@v6
       # No Lean toolchain needed — a fail-closed grep gate against a committed
       # allowlist (scripts/hygiene-allow.txt) so no new dbg_trace / sorry can
-      # enter Elevm/ unnoticed.
-      - name: Source-hygiene gate (no stray dbg_trace / sorry under Elevm/)
+      # enter Jaune/ unnoticed.
+      - name: Source-hygiene gate (no stray dbg_trace / sorry under Jaune/)
         run: scripts/check-hygiene.sh
 
   build:

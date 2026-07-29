@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Source-hygiene gate for elevm (CI lint tier).
+# Source-hygiene gate for Jaune (CI lint tier).
 #
-# Fails if any forbidden pattern appears under Elevm/ that is not recorded in
+# Fails if any forbidden pattern appears under Jaune/ that is not recorded in
 # the committed allowlist scripts/hygiene-allow.txt. Forbidden patterns:
 #
 #   dbg_trace   stray debug tracing left on a code path
@@ -16,7 +16,7 @@
 #   <relpath> <source line, leading/trailing space trimmed, runs collapsed>
 # and compared as a whole line against the allowlist. That survives edits above
 # the line, but forces re-review if the matched text itself changes. Paths
-# under Elevm/ contain no spaces, so the single-space join is unambiguous.
+# under Jaune/ contain no spaces, so the single-space join is unambiguous.
 #
 # Usage: scripts/check-hygiene.sh
 #
@@ -29,7 +29,7 @@ set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
-SRC_DIR="Elevm"
+SRC_DIR="Jaune"
 ALLOW="$SCRIPT_DIR/hygiene-allow.txt"
 PATTERN='dbg_trace|\bsorry\b'
 

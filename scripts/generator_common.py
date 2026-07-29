@@ -1,4 +1,4 @@
-"""Shared manifest-backed configuration for ELEVM's Python generators."""
+"""Shared manifest-backed configuration for Jaune's Python generators."""
 from __future__ import annotations
 
 import argparse

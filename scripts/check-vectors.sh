@@ -4,10 +4,10 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
-BIN="$ROOT/.lake/build/bin/elevm"
+BIN="$ROOT/.lake/build/bin/jaune"
 
 if [ ! -x "$BIN" ]; then
-  echo "ERROR: elevm binary not found. Run 'lake build' first."
+  echo "ERROR: jaune binary not found. Run 'lake build' first."
   exit 1
 fi
 

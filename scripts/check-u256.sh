@@ -4,10 +4,10 @@
 set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
-BIN="$ROOT/.lake/build/bin/elevm"
+BIN="$ROOT/.lake/build/bin/jaune"
 VECTORS="$SCRIPT_DIR/vectors/u256.json"
 if [ ! -x "$BIN" ]; then
-  echo "RED — u256: elevm binary not found; build the executable first"
+  echo "RED — u256: jaune binary not found; build the executable first"
   exit 1
 fi
 if [ ! -f "$VECTORS" ]; then

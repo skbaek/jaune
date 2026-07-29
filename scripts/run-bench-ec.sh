@@ -4,7 +4,7 @@
 #
 # Same native-link discipline as scripts/run-bench-u256.sh: the benchmark is not
 # a Lake target, so it reuses the dependency objects recorded by Lake's most
-# recent `elevm` executable link.
+# recent `jaune` executable link.
 
 set -euo pipefail
 
@@ -24,9 +24,9 @@ case "$LABEL" in
     ;;
 esac
 
-TRACE="$ROOT/.lake/build/bin/elevm.trace"
+TRACE="$ROOT/.lake/build/bin/jaune.trace"
 if [ ! -f "$TRACE" ]; then
-  echo "benchmark needs the existing elevm native dependency objects; run a normal check.sh gate first" >&2
+  echo "benchmark needs the existing jaune native dependency objects; run a normal check.sh gate first" >&2
   exit 1
 fi
 
@@ -45,14 +45,14 @@ command = next(item["message"] for item in trace["log"] if ".c.o.export" in item
 objects = [arg for arg in shlex.split(command)
            if ".c.o" in arg and not arg.endswith("/ir/Main.c.o.export")]
 if not objects:
-    raise SystemExit("no native dependency objects found in elevm trace")
+    raise SystemExit("no native dependency objects found in jaune trace")
 with open(sys.argv[2], "w") as out:
     for obj in objects:
         out.write(shlex.quote(obj) + "\n")
 PY
 
 lake env leanc -O2 -o "$TMP/bench-ec" "$TMP/bench-ec.c" @"$TMP/objects.rsp"
-REPORT="${ELEVM_REPORT_DIR:-$SCRIPT_DIR}/report-$LABEL-bench-ec.txt"
+REPORT="${JAUNE_REPORT_DIR:-$SCRIPT_DIR}/report-$LABEL-bench-ec.txt"
 mkdir -p "$(dirname "$REPORT")"
 "$TMP/bench-ec" | tee "$REPORT"
 echo "OK — EC benchmark recorded in $REPORT"

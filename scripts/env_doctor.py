@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only diagnostic for ELEVM's external-source environment.
+"""Read-only diagnostic for Jaune's external-source environment.
 
 Checks the manifest in scripts/sources.json against the local filesystem and
 Git state: execution-specs, the nested ethereum/tests + LegacyTests checkout,
@@ -46,7 +46,7 @@ STATUS_OK = "ok"
 STATUS_MISSING = "missing"
 STATUS_FAIL = "fail"
 
-# Paths under the execution-specs ``src/`` tree that ELEVM's generators read or
+# Paths under the execution-specs ``src/`` tree that Jaune's generators read or
 # import.  bootstrap_oracle.py and generator_common.py both refuse a checkout
 # missing any of them, and the synthetic checkouts in scripts/tests are built
 # from this same tuple, so a new generator dependency is recorded in one place
@@ -1013,7 +1013,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="EEST install root containing the archive and extracted fixtures/ "
         "(default: $EEST_ROOT or ~/eest-fixtures; distinct from check.sh's "
-        "ELEVM_FIXTURES, which points directly at a tier's leaf fixture dir)",
+        "JAUNE_FIXTURES, which points directly at a tier's leaf fixture dir)",
     )
     parser.add_argument(
         "--mainnet-root",

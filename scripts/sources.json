@@ -1,5 +1,5 @@
 {
-  "_comment": "Machine-readable lock for ELEVM's external bootstrap inputs. Consumed by scripts/env_doctor.py and (from Step 2 onward) the bootstrap tooling. Documented in scripts/vectors/SOURCES.md. Do not duplicate these literals elsewhere; update this file and let consumers read it.",
+  "_comment": "Machine-readable lock for Jaune's external bootstrap inputs. Consumed by scripts/env_doctor.py and (from Step 2 onward) the bootstrap tooling. Documented in scripts/vectors/SOURCES.md. Do not duplicate these literals elsewhere; update this file and let consumers read it.",
   "schema_version": 1,
   "execution_specs": {
     "repo_url": "https://github.com/ethereum/execution-specs.git",
@@ -27,7 +27,7 @@
     "default_env_var": "EEST_ROOT",
     "default_subpath_from_home": "eest-fixtures",
     "fixtures_subpath": "fixtures",
-    "_comment_env_var": "EEST_ROOT names the top-level install directory containing the archive and its extracted fixtures/ tree. It is distinct from scripts/check.sh's ELEVM_FIXTURES, which instead points directly at a tier's leaf fixture directory (and already defaults to <EEST_ROOT>/fixtures/blockchain_tests for --bls). The two variables are not interchangeable.",
+    "_comment_env_var": "EEST_ROOT names the top-level install directory containing the archive and its extracted fixtures/ tree. It is distinct from scripts/check.sh's JAUNE_FIXTURES, which instead points directly at a tier's leaf fixture directory (and already defaults to <EEST_ROOT>/fixtures/blockchain_tests for --bls). The two variables are not interchangeable.",
     "_comment_layout": "Every member of the archive is a regular file whose path begins with the fixtures_subpath prefix, so extracting into <EEST_ROOT> yields <EEST_ROOT>/fixtures/. The archive contains no directory, symlink, hardlink, or special members; the safe extractor and deep verifier reject anything else.",
     "expected_top_level_dirs": [
       "blockchain_tests",
