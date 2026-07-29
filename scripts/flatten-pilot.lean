@@ -339,46 +339,46 @@ def evmStepLet (evm : Evm) : Step :=
 
 /-! ## 3.  The single fueled driver.
 
-One recursive function, `termination_by lim`.  Fuel is burnt exactly once per
+One recursive function, `termination_by fuel`.  Fuel is burnt exactly once per
 interpreter step, which is exactly what the old `exec` burnt; the 5-6 wrapper
 units the old tower burnt at every frame entry are gone. -/
 
 #count_heartbeats in
 def drive : Nat → Evm → Fueled (String × Devm) Devm
   | 0, _ => Fueled.exhausted
-  | lim + 1, evm =>
+  | fuel + 1, evm =>
     match evmStepBind evm with
     | .halt ex => Fueled.ofExcept ex
-    | .cont pc devm => drive lim ⟨pc, evm.sta, devm⟩
+    | .cont pc devm => drive fuel ⟨pc, evm.sta, devm⟩
     | .spawn f rsm pc =>
       match f.enter with
       | .done r =>
         match rsm.run r with
         | .error e => Fueled.ofExcept (.error e)
-        | .ok devm => drive lim ⟨pc, evm.sta, devm⟩
+        | .ok devm => drive fuel ⟨pc, evm.sta, devm⟩
       | .run cevm =>
-        match (drive lim cevm).run with
+        match (drive fuel cevm).run with
         | .none => Fueled.exhausted
         | .some raw =>
           match rsm.run (f.settle raw) with
           | .error e => Fueled.ofExcept (.error e)
-          | .ok devm => drive lim ⟨pc, evm.sta, devm⟩
-  termination_by lim => lim
+          | .ok devm => drive fuel ⟨pc, evm.sta, devm⟩
+  termination_by fuel => fuel
 
 /-- The non-recursive frame wrapper the two public entry points use. -/
-def runFrame (f : Frame) (lim : Nat) :
+def runFrame (f : Frame) (fuel : Nat) :
     Fueled (String × State × AdrSet × Tra) Devm :=
   match f.enter with
   | .done r => Fueled.ofExcept r
-  | .run evm => Fueled.mapResult f.settle (drive lim evm)
+  | .run evm => Fueled.mapResult f.settle (drive fuel evm)
 
-def processMessage' (msg : Msg) (lim : Nat) :
+def processMessage' (msg : Msg) (fuel : Nat) :
     Fueled (String × State × AdrSet × Tra) Devm :=
-  runFrame (Frame.ofCall msg) lim
+  runFrame (Frame.ofCall msg) fuel
 
-def processCreateMessage' (msg : Msg) (lim : Nat) :
+def processCreateMessage' (msg : Msg) (fuel : Nat) :
     Fueled (String × State × AdrSet × Tra) Devm :=
-  runFrame (Frame.ofCreate msg) lim
+  runFrame (Frame.ofCreate msg) fuel
 
 /-! ## 4.  Toy inversion proofs, in the shape Blanc performs them.
 
@@ -448,13 +448,13 @@ theorem invCallLet {sevm : Sevm} {devm : Devm} {f : Frame} {rsm : Resume}
 
 #count_heartbeats in
 /-- Toy driver inversion: the shape Blanc's adequacy proof performs at every
-recursion site.  A completed run at fuel `lim+1` is decided by the step
+recursion site.  A completed run at fuel `fuel+1` is decided by the step
 outcome, and each branch hands back a strictly smaller-fuel completed run. -/
-theorem invDrive {lim : Nat} {evm : Evm} {ex : Execution}
-    (hd : drive (lim + 1) evm = Fueled.ofExcept ex) :
+theorem invDrive {fuel : Nat} {evm : Evm} {ex : Execution}
+    (hd : drive (fuel + 1) evm = Fueled.ofExcept ex) :
     (evmStepBind evm = .halt ex) ∨
     (∃ pc devm, evmStepBind evm = .cont pc devm ∧
-      drive lim ⟨pc, evm.sta, devm⟩ = Fueled.ofExcept ex) ∨
+      drive fuel ⟨pc, evm.sta, devm⟩ = Fueled.ofExcept ex) ∨
     (∃ f rsm pc, evmStepBind evm = .spawn f rsm pc) := by
   rw [drive] at hd
   split at hd

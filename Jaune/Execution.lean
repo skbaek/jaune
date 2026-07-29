@@ -470,17 +470,17 @@ def hp (ns : B8L) (t : Bool) : B8L :=
   | ⟨none, bs⟩ => (cond t (0x20) 0) :: bs
   | ⟨some n, bs⟩ => ((cond t 0x30 0x10) ||| n.lows) :: bs
 
-def commonPrefixCore : B8L → B8L → B8L
+def B8L.commonPrefix : B8L → B8L → B8L
   | [], _ => []
   | _, [] => []
   | n :: ns, n' :: ns' =>
-    if n = n' then n :: commonPrefixCore ns ns'
+    if n = n' then n :: B8L.commonPrefix ns ns'
     else []
 
 def commonPrefix (n : B8) (ns : B8L) : List B8L → Option B8L
   | [] => some (n :: ns)
   | ns' :: nss =>
-    match commonPrefixCore (n :: ns) ns' with
+    match B8L.commonPrefix (n :: ns) ns' with
     | [] => none
     | (n' :: ns'') => commonPrefix n' ns'' nss
 
@@ -1712,15 +1712,15 @@ def Evm.getInst (evm : Evm) : Option Inst :=
   ByteArray.getInst evm.sta.code evm.pc
 
 def fakeExpAux (num den i : Nat) : Nat → Nat → Nat
-  | _, 0 => panic! "error : recursion limit reached for fake exponentiation"
+  | _, 0 => panic! "error : fuel exhausted in fake exponentiation"
   | 0, _ => 0
-  | numAcc, lim + 1 =>
+  | numAcc, fuel + 1 =>
     let numAcc' := (numAcc * num) / (den * i)
-    numAcc + fakeExpAux num den (i + 1) numAcc' lim
+    numAcc + fakeExpAux num den (i + 1) numAcc' fuel
 
 def fakeExp (fac num den : Nat) : Nat :=
-  let lim := (max (fac * num) <| num * num) + 2
-  let out := fakeExpAux num den 1 (fac * den) lim
+  let fuel := (max (fac * num) <| num * num) + 2
+  let out := fakeExpAux num den 1 (fac * den) fuel
   out / den
 
 def calculate_blob_gas_price (blob : BlobSchedule) (excessBlobGas : Nat) : Nat :=
@@ -3669,7 +3669,7 @@ def callMsg
 
 /-!
 Flattened interpreter core.  All frame-local definitions below are
-non-recursive and fuel-free; `execCore` is the single fueled driver.
+non-recursive and fuel-free; `execFueled` is the single fueled driver.
 -/
 
 /-- The message passed to a CREATE/CREATE2 child.  This named barrier is the
@@ -4044,26 +4044,26 @@ parameter and therefore obliged to report exhaustion as an outcome.
 
 `Jaune.Sufficiency` proves that fuel seeded from the frame's remaining gas is
 always enough, and wraps this function as the total `exec`. -/
-def execCore : Evm → Nat → Fueled (String × Devm) Devm
+def execFueled : Evm → Nat → Fueled (String × Devm) Devm
   | _, 0 => Fueled.exhausted
-  | evm, lim + 1 =>
+  | evm, fuel + 1 =>
     match evm.step with
     | .halt ex => Fueled.ofExcept ex
-    | .cont pc devm => execCore ⟨pc, evm.sta, devm⟩ lim
+    | .cont pc devm => execFueled ⟨pc, evm.sta, devm⟩ fuel
     | .spawn frame rsm pc =>
       match frame.enter with
       | .done r =>
         match rsm.run r with
         | .error e => Fueled.ofExcept (.error e)
-        | .ok devm => execCore ⟨pc, evm.sta, devm⟩ lim
+        | .ok devm => execFueled ⟨pc, evm.sta, devm⟩ fuel
       | .run child =>
-        match (execCore child lim).run with
+        match (execFueled child fuel).run with
         | .none => Fueled.exhausted
         | .some raw =>
           match rsm.run (frame.settle raw) with
           | .error e => Fueled.ofExcept (.error e)
-          | .ok devm => execCore ⟨pc, evm.sta, devm⟩ lim
-  termination_by _ lim => lim
+          | .ok devm => execFueled ⟨pc, evm.sta, devm⟩ fuel
+  termination_by _ fuel => fuel
 
 /-! Focused executable checks for the flattened core.
 
@@ -4084,7 +4084,7 @@ private def flattenGuardMsg (bytes : B8L) (gas depth : Nat) : Msg :=
 -- Arithmetic loop: the driver spends one unit per instruction and exhausts.
 private def flattenGuardArithmeticLoop : Bool :=
   let msg := flattenGuardMsg [0x5B, 0x60, 0x00, 0x56] 1000 8
-  (execCore (initEvm msg) 20).run.isNone
+  (execFueled (initEvm msg) 20).run.isNone
 
 #guard flattenGuardArithmeticLoop
 
@@ -4136,7 +4136,7 @@ private def flattenGuardDepthZero : Bool :=
 -- A PUSH with zero gas halts through the frozen OutOfGasError channel.
 private def flattenGuardOog : Bool :=
   let msg := flattenGuardMsg [0x60, 0x01, 0x00] 0 8
-  match (execCore (initEvm msg) 10).run with
+  match (execFueled (initEvm msg) 10).run with
   | .some (.error ⟨err, _⟩) => err == "OutOfGasError"
   | _ => false
 

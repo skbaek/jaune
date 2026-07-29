@@ -1519,18 +1519,18 @@ mutual
 
 end
 
-def List.chunksCore {ξ} (m : Nat) : Nat → List ξ → List (List ξ)
+def List.chunks.go {ξ} (m : Nat) : Nat → List ξ → List (List ξ)
   | _, [] => []
   | 0, x :: xs =>
-    match chunksCore m m xs with
+    match List.chunks.go m m xs with
     | [] => [[], [x]]
     | ys :: yss => [] :: (x :: ys) :: yss
   | n + 1, x :: xs =>
-    match chunksCore m n xs with
+    match List.chunks.go m n xs with
     | [] => [[x]]
     | ys :: yss => (x :: ys) :: yss
 
-def List.chunks {ξ} (m : Nat) : List ξ → List (List ξ) := List.chunksCore m (m + 1)
+def List.chunks {ξ} (m : Nat) : List ξ → List (List ξ) := List.chunks.go m (m + 1)
 
 def String.chunks : Nat → String → List String
   | 0, _ => []

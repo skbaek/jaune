@@ -2645,19 +2645,19 @@ not hand its parent back more gas than it was given. -/
 /-- Driver monotonicity. Stated over the settlement obligation rather than over
 raw gas, because that is the only thing a parent can extract from a child's
 result and it is what both routes of the halting corpus establish. -/
-theorem execCore_settledGasLe : ∀ (lim : Nat) (evm : Evm) {raw : Execution},
-    (execCore evm lim).run = some raw → raw.SettledGasLe evm.dyna.gasLeft := by
-  intro lim
-  induction lim with
+theorem execFueled_settledGasLe : ∀ (fuel : Nat) (evm : Evm) {raw : Execution},
+    (execFueled evm fuel).run = some raw → raw.SettledGasLe evm.dyna.gasLeft := by
+  intro fuel
+  induction fuel with
   | zero =>
     intro evm raw h
-    rw [execCore] at h
+    rw [execFueled] at h
     simp only [Fueled.exhausted_run] at h
     nomatch h
-  | succ lim ih =>
+  | succ fuel ih =>
     intro evm raw h
     have hstep := Evm.step_gasBound evm
-    rw [execCore] at h
+    rw [execFueled] at h
     rcases hs : evm.step with ⟨ex⟩ | ⟨pc, devm⟩ | ⟨frame, rsm, pc⟩
     · rw [hs] at h hstep
       simp only [Fueled.ofExcept_run, Option.some.injEq] at h
@@ -2687,7 +2687,7 @@ theorem execCore_settledGasLe : ∀ (lim : Nat) (evm : Evm) {raw : Execution},
           exact (ih _ h).mono (show d1.gasLeft ≤ evm.dyna.gasLeft by omega)
       · rw [he] at h
         dsimp only at h
-        rcases hc : (execCore child lim).run with _ | raw'
+        rcases hc : (execFueled child fuel).run with _ | raw'
         · rw [hc] at h
           simp only [Fueled.exhausted_run] at h
           nomatch h
@@ -2711,47 +2711,47 @@ theorem execCore_settledGasLe : ∀ (lim : Nat) (evm : Evm) {raw : Execution},
 
 /-- **Sufficiency.** Fuel strictly greater than the frame's remaining gas always
 carries the driver to a result. The base case is vacuous: the hypothesis forces
-`lim > 0`. -/
-theorem execCore_run_isSome : ∀ (lim : Nat) (evm : Evm),
-    evm.dyna.gasLeft < lim → ∃ raw : Execution, (execCore evm lim).run = some raw := by
-  intro lim
-  induction lim with
+`fuel > 0`. -/
+theorem execFueled_run_isSome : ∀ (fuel : Nat) (evm : Evm),
+    evm.dyna.gasLeft < fuel → ∃ raw : Execution, (execFueled evm fuel).run = some raw := by
+  intro fuel
+  induction fuel with
   | zero =>
     intro evm h
     omega
-  | succ lim ih =>
+  | succ fuel ih =>
     intro evm h
     have hstep := Evm.step_gasBound evm
-    rw [execCore]
+    rw [execFueled]
     rcases hs : evm.step with ⟨ex⟩ | ⟨pc, devm⟩ | ⟨frame, rsm, pc⟩ <;>
       rw [hs] at hstep <;> simp only [Step.GasBound] at hstep <;> dsimp only
     · exact ⟨ex, rfl⟩
-    · have hlt : devm.gasLeft < lim := by omega
+    · have hlt : devm.gasLeft < fuel := by omega
       exact ih _ hlt
     · rcases he : frame.enter with r | child <;> dsimp only
       · rcases hrun : rsm.run r with ⟨e⟩ | d1 <;> dsimp only
         · exact ⟨.error e, rfl⟩
         · obtain ⟨d0, hd0, hgas⟩ := Resume.run_ok_gasLeft hrun
           have hle : d0.gasLeft ≤ frame.inner.gas := Frame.enter_done_gasLe he hd0
-          have hlt : d1.gasLeft < lim := by omega
+          have hlt : d1.gasLeft < fuel := by omega
           exact ih _ hlt
       · have hgas : child.dyna.gasLeft = frame.inner.gas := Frame.enter_run_gasLeft he
-        have hchildlt : child.dyna.gasLeft < lim := by omega
+        have hchildlt : child.dyna.gasLeft < fuel := by omega
         obtain ⟨raw', hraw'⟩ := ih child hchildlt
         rw [hraw']
         dsimp only
         rcases hrun : rsm.run (frame.settle raw') with ⟨e⟩ | d1 <;> dsimp only
         · exact ⟨.error e, rfl⟩
         · obtain ⟨d0, hd0, hgas2⟩ := Resume.run_ok_gasLeft hrun
-          have hsettled := execCore_settledGasLe lim child hraw'
+          have hsettled := execFueled_settledGasLe fuel child hraw'
           rw [hgas] at hsettled
           have hle : d0.gasLeft ≤ frame.inner.gas := Frame.settle_gasLe hsettled hd0
-          have hlt : d1.gasLeft < lim := by omega
+          have hlt : d1.gasLeft < fuel := by omega
           exact ih _ hlt
 
-theorem execCore_ne_exhausted (evm : Evm) (lim : Nat) (h : evm.dyna.gasLeft < lim) :
-    execCore evm lim ≠ Fueled.exhausted := by
-  obtain ⟨raw, hraw⟩ := execCore_run_isSome lim evm h
+theorem execFueled_ne_exhausted (evm : Evm) (fuel : Nat) (h : evm.dyna.gasLeft < fuel) :
+    execFueled evm fuel ≠ Fueled.exhausted := by
+  obtain ⟨raw, hraw⟩ := execFueled_run_isSome fuel evm h
   intro hcon
   rw [hcon] at hraw
   simp only [Fueled.exhausted_run] at hraw
@@ -2760,63 +2760,63 @@ theorem execCore_ne_exhausted (evm : Evm) (lim : Nat) (h : evm.dyna.gasLeft < li
 /-- The form the total `exec` consumes. The additive constant is **1**: seeding
 the driver with `gasLeft + 1` is always enough, so the total wrapper can
 discharge the `Option` with this witness. -/
-theorem execCore_succ_ne_exhausted (evm : Evm) :
-    execCore evm (evm.dyna.gasLeft + 1) ≠ Fueled.exhausted :=
-  execCore_ne_exhausted evm (evm.dyna.gasLeft + 1) (Nat.lt_succ_self _)
+theorem execFueled_succ_ne_exhausted (evm : Evm) :
+    execFueled evm (evm.dyna.gasLeft + 1) ≠ Fueled.exhausted :=
+  execFueled_ne_exhausted evm (evm.dyna.gasLeft + 1) (Nat.lt_succ_self _)
 
 /-! ## The total interpreter
 
-Everything below is fuel-free. `execCore` survives as the structurally
+Everything below is fuel-free. `execFueled` survives as the structurally
 recursive definition downstream proofs reason over, but no consumer has to
 thread a fuel parameter or handle an exhaustion outcome any more. -/
 
 /-- The fuel budget seeded from a frame's remaining gas. The additive constant
-is the one `execCore_succ_ne_exhausted` proves sufficient: **1**. -/
-def sufficientLim (gas : Nat) : Nat := gas + 1
+is the one `execFueled_succ_ne_exhausted` proves sufficient: **1**. -/
+def sufficientFuel (gas : Nat) : Nat := gas + 1
 
-theorem execCore_run_sufficientLim_isSome (evm : Evm) :
-    ((execCore evm (sufficientLim evm.dyna.gasLeft)).run).isSome := by
+theorem execFueled_run_sufficientFuel_isSome (evm : Evm) :
+    ((execFueled evm (sufficientFuel evm.dyna.gasLeft)).run).isSome := by
   obtain ⟨raw, hraw⟩ :=
-    execCore_run_isSome (sufficientLim evm.dyna.gasLeft) evm (Nat.lt_succ_self _)
+    execFueled_run_isSome (sufficientFuel evm.dyna.gasLeft) evm (Nat.lt_succ_self _)
   rw [hraw]
   rfl
 
 /-- **The total interpreter.** Fuel is an implementation detail: the driver is
-seeded from the frame's own remaining gas and `execCore_run_sufficientLim_isSome`
+seeded from the frame's own remaining gas and `execFueled_run_sufficientFuel_isSome`
 discharges the resulting `Option` at the definition site. -/
 def exec (evm : Evm) : Except (String × Devm) Devm :=
-  ((execCore evm (sufficientLim evm.dyna.gasLeft)).run).get
-    (execCore_run_sufficientLim_isSome evm)
+  ((execFueled evm (sufficientFuel evm.dyna.gasLeft)).run).get
+    (execFueled_run_sufficientFuel_isSome evm)
 
 /-- **Bridge equation.** The driver at the seeded budget returns exactly the
 total result, so no downstream proof has to manipulate `Option.get`. -/
-theorem execCore_run_sufficientLim (evm : Evm) :
-    (execCore evm (sufficientLim evm.dyna.gasLeft)).run = some (exec evm) :=
+theorem execFueled_run_sufficientFuel (evm : Evm) :
+    (execFueled evm (sufficientFuel evm.dyna.gasLeft)).run = some (exec evm) :=
   (Option.some_get _).symm
 
 /-- More fuel never changes a result the driver already reached. This is what
 makes the seeded budget an implementation detail rather than a semantic choice:
 every budget past the frame's gas gives the same answer, so replacing the old
-`gas + 50` seeding by `sufficientLim gas` is observationally neutral. -/
-theorem execCore_run_mono :
-    ∀ (lim : Nat) (evm : Evm) {lim' : Nat} {raw : Execution}, lim ≤ lim' →
-      (execCore evm lim).run = some raw → (execCore evm lim').run = some raw := by
-  intro lim
-  induction lim with
+`gas + 50` seeding by `sufficientFuel gas` is observationally neutral. -/
+theorem execFueled_run_mono :
+    ∀ (fuel : Nat) (evm : Evm) {fuel' : Nat} {raw : Execution}, fuel ≤ fuel' →
+      (execFueled evm fuel).run = some raw → (execFueled evm fuel').run = some raw := by
+  intro fuel
+  induction fuel with
   | zero =>
-    intro evm lim' raw _ h
-    rw [execCore] at h
+    intro evm fuel' raw _ h
+    rw [execFueled] at h
     simp only [Fueled.exhausted_run] at h
     nomatch h
-  | succ lim ih =>
-    intro evm lim' raw hle h
-    obtain ⟨m, rfl⟩ : ∃ m, lim' = m + 1 := by
-      cases lim' with
+  | succ fuel ih =>
+    intro evm fuel' raw hle h
+    obtain ⟨m, rfl⟩ : ∃ m, fuel' = m + 1 := by
+      cases fuel' with
       | zero => omega
       | succ m => exact ⟨m, rfl⟩
-    have hle' : lim ≤ m := by omega
-    rw [execCore] at h
-    rw [execCore]
+    have hle' : fuel ≤ m := by omega
+    rw [execFueled] at h
+    rw [execFueled]
     rcases hs : evm.step with ⟨ex⟩ | ⟨pc, devm⟩ | ⟨frame, rsm, pc⟩ <;>
       rw [hs] at h <;> dsimp only at h ⊢
     · exact h
@@ -2827,7 +2827,7 @@ theorem execCore_run_mono :
           dsimp only at h ⊢
         · exact h
         · exact ih _ hle' h
-      · rcases hc : (execCore child lim).run with _ | raw'
+      · rcases hc : (execFueled child fuel).run with _ | raw'
         · rw [hc] at h
           simp only [Fueled.exhausted_run] at h
           nomatch h
@@ -2840,21 +2840,21 @@ theorem execCore_run_mono :
           · exact ih _ hle' h
 
 /-- The downstream bridge at an arbitrary sufficient budget. -/
-theorem execCore_run_of_lt {evm : Evm} {lim : Nat} (h : evm.dyna.gasLeft < lim) :
-    (execCore evm lim).run = some (exec evm) :=
-  execCore_run_mono _ evm h (execCore_run_sufficientLim evm)
+theorem execFueled_run_of_lt {evm : Evm} {fuel : Nat} (h : evm.dyna.gasLeft < fuel) :
+    (execFueled evm fuel).run = some (exec evm) :=
+  execFueled_run_mono _ evm h (execFueled_run_sufficientFuel evm)
 
 /-- Reading a fueled result off as the total one: the shape a proof stated over
-`execCore` uses to transfer to `exec`. -/
-theorem exec_eq_of_run {evm : Evm} {lim : Nat} {raw : Execution}
-    (hlt : evm.dyna.gasLeft < lim) (h : (execCore evm lim).run = some raw) :
+`execFueled` uses to transfer to `exec`. -/
+theorem exec_eq_of_run {evm : Evm} {fuel : Nat} {raw : Execution}
+    (hlt : evm.dyna.gasLeft < fuel) (h : (execFueled evm fuel).run = some raw) :
     exec evm = raw := by
-  rw [execCore_run_of_lt hlt] at h
+  rw [execFueled_run_of_lt hlt] at h
   exact Option.some.inj h
 
 /-! ## The total frame wrappers
 
-These are the public entry points. They lost their `lim` parameter and their
+These are the public entry points. They lost their `fuel` parameter and their
 `Fueled` result type together: a frame is entered, the driver runs to a
 definite result, and the frame settles it. -/
 
@@ -2880,7 +2880,7 @@ def processCreateMessage (msg : Msg) :
 These mirror the flatten arc's representative states — arithmetic loop, nested
 CALL, CREATE collision, precompile under both dispatch paths, depth-zero
 short-circuit, out-of-gas halt, REVERT with output — but drive them through the
-fuel-free API. `Jaune.Execution` keeps the checks that pin `execCore` itself,
+fuel-free API. `Jaune.Execution` keeps the checks that pin `execFueled` itself,
 including the one that shows fuel really can run out when it is not seeded from
 the frame's gas.
 
@@ -2905,7 +2905,7 @@ private def totalGuardSummary
   | .ok devm => some ⟨devm.error, devm.stack, devm.output, devm.gasLeft⟩
   | .error _ => none
 
--- Arithmetic loop: the state that exhausted `execCore` at fuel 20 now runs to a
+-- Arithmetic loop: the state that exhausted `execFueled` at fuel 20 now runs to a
 -- definite out-of-gas result, because the seeded budget is provably sufficient.
 private def totalGuardArithmeticLoop : Bool :=
   let msg := totalGuardMsg [0x5B, 0x60, 0x00, 0x56] 1000 8

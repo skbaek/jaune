@@ -1645,7 +1645,7 @@ Split out so that a configured chain can read the block's timestamp to select
 its rules without decoding the RLP a second time. The two failure channels are
 unchanged: `.error` is a harness-level failure, `.inr` is a block this chain
 rejects. -/
-private def addBlockToChainCore (rules : ForkRules) (chain : BlockChain)
+private def addBlockToChain.go (rules : ForkRules) (chain : BlockChain)
     (block : Block) (blockHeaderHash : B256) (rawRlpSize : Nat) :
     Except String (BlockChain ⊕ String) := do
   cprint "\nSTATE BEFORE TRANSITION :"
@@ -1670,7 +1670,7 @@ private def addBlockToChainCore (rules : ForkRules) (chain : BlockChain)
 def addBlockToChainWith (rules : ForkRules) (chain : BlockChain)
     (blockRlp : B8L) : Except String (BlockChain ⊕ String) := do
   let ⟨block, blockHeaderHash⟩ ← rlpToBlock blockRlp
-  addBlockToChainCore rules chain block blockHeaderHash blockRlp.length
+  addBlockToChain.go rules chain block blockHeaderHash blockRlp.length
 
 /-- Block import at an explicitly named fork, for static fixture suites.
 
@@ -1687,7 +1687,7 @@ def addBlockToChainUsing (cfg : ChainConfig) (chain : BlockChain)
     (blockRlp : B8L) : Except String (BlockChain ⊕ String) := do
   let ⟨block, blockHeaderHash⟩ ← rlpToBlock blockRlp
   let rules ← cfg.rulesAt block.header.timestamp
-  addBlockToChainCore rules chain block blockHeaderHash blockRlp.length
+  addBlockToChain.go rules chain block blockHeaderHash blockRlp.length
 
 /-- Prague block import.
 
