@@ -31,9 +31,30 @@ fi
 python3 - "$TRACE" "$TMP/objects.rsp" <<'PY'
 import json, shlex, sys
 trace = json.load(open(sys.argv[1]))
-command = next(item["message"] for item in trace["log"] if ".c.o.export" in item.get("message", ""))
-objects = [arg for arg in shlex.split(command)
-           if ".c.o" in arg and not arg.endswith("/ir/Main.c.o.export")]
+
+
+def from_inputs(trace):
+    """Lake >= 5.0 (trace schema 2025-09-10) records the link inputs
+    structurally and passes the linker a response file, so the object paths are
+    no longer present in the logged command line."""
+    for entry in trace.get("inputs", []):
+        if isinstance(entry, list) and len(entry) == 2 and entry[0] == "linkObjs":
+            return [path for path, _hash in entry[1]]
+    return []
+
+
+def from_log(trace):
+    """Older Lake spelled the whole linker invocation into the build log."""
+    for item in trace.get("log", []):
+        message = item.get("message", "")
+        if ".c.o.export" in message:
+            return [arg for arg in shlex.split(message) if ".c.o" in arg]
+    return []
+
+
+objects = [obj for obj in (from_inputs(trace) or from_log(trace))
+           if obj.endswith(".c.o") or obj.endswith(".c.o.export")]
+objects = [obj for obj in objects if not obj.endswith("/ir/Main.c.o.export")]
 if not objects:
     raise SystemExit("no native dependency objects found in jaune trace")
 with open(sys.argv[2], "w") as out:
