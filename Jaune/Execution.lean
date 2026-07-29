@@ -610,7 +610,7 @@ def B256.leadingZeros (x : B256) : Nat :=
   else if x.2.1 ≠ 0 then 128 + UInt64.leadingZeros x.2.1
   else 192 + UInt64.leadingZeros x.2.2
 
-def toKeyVal (pr : Adr × Acct) : Bytes × Bytes :=
+def accountToKeyVal (pr : Adr × Acct) : Bytes × Bytes :=
   let ad := pr.fst
   let ac := pr.snd
   ⟨
@@ -1723,7 +1723,7 @@ def fakeExp (fac num den : Nat) : Nat :=
   let out := fakeExpAux num den 1 (fac * den) fuel
   out / den
 
-def calculate_blob_gas_price (blob : BlobSchedule) (excessBlobGas : Nat) : Nat :=
+def calculateBlobGasPrice (blob : BlobSchedule) (excessBlobGas : Nat) : Nat :=
   fakeExp 1 excessBlobGas blob.baseFeeUpdateFraction
 
 def Mach.push (x : B256) (mach : Mach) : Footprint.Outcome Mach Unit :=
@@ -1846,7 +1846,7 @@ theorem pushItem_def (x : B256) (c : Nat) (devm : Devm) :
   | none => rfl
   | some gas => dsimp only
 
-def access_cost (x : Adr) (a : AdrSet) : Nat :=
+def accessCost (x : Adr) (a : AdrSet) : Nat :=
   if x ∈ a then gasWarmAccess else gasColdAccountAccess
 
 def Meta.addAccessedAddress (view : Meta) (a : Adr) : Meta :=
@@ -2135,7 +2135,7 @@ def Evm.contract (evm : Evm) : Adr := evm.sta.currentTarget
 def assertDynamic (sevm : Sevm) (devm : Devm) : Except (String × Devm) Unit :=
   Except.assert (!sevm.isStatic) ⟨s!"WriteInStaticContext", devm⟩
 
-def sstore_new_refund_counter (new_value : B256)
+def sstoreNewRefundCounter (new_value : B256)
     (original_value : B256) (current_value : B256) (rc : Int) : Int :=
   if current_value ≠ new_value then
     let rc' :=
@@ -2189,7 +2189,7 @@ def Rinst.runCore
     chargeGas gHashopcode devm >>= Devm.push y
   | .blobbasefee => do
     let fee :=
-      calculate_blob_gas_price sevm.benvStat.rules.blob sevm.benvStat.excessBlobGas
+      calculateBlobGasPrice sevm.benvStat.rules.blob sevm.benvStat.excessBlobGas
     pushItem fee.toB256 gBase devm
   | .balance => liftMachMetaWorldExecution Rinst.balanceCore devm
   | .origin => pushItem sevm.tenvStat.origin.toB256 gBase devm
@@ -2304,12 +2304,12 @@ def Rinst.runCore
   | .gas => do
     let devm ← chargeGas gBase devm
     devm.push devm.gasLeft.toB256
-  | .eq => applyBinary .eq_check gVerylow devm
-  | .lt => applyBinary .lt_check gVerylow devm
-  | .gt => applyBinary .gt_check gVerylow devm
-  | .slt => applyBinary .slt_check gVerylow devm
-  | .sgt => applyBinary .sgt_check gVerylow devm
-  | .iszero => applyUnary (.eq_check · 0) gVerylow devm
+  | .eq => applyBinary .eqCheck gVerylow devm
+  | .lt => applyBinary .ltCheck gVerylow devm
+  | .gt => applyBinary .gtCheck gVerylow devm
+  | .slt => applyBinary .sltCheck gVerylow devm
+  | .sgt => applyBinary .sgtCheck gVerylow devm
+  | .iszero => applyUnary (.eqCheck · 0) gVerylow devm
   | .not => applyUnary (~~~ ·) gVerylow devm
   | .and => applyBinary B256.and gVerylow devm
   | .or => applyBinary B256.or gVerylow devm
@@ -2400,7 +2400,7 @@ def Rinst.runCore
       else
         gasCost2 + gasWarmAccess
     let devm ← .ok <| devm.withRefundCounter <|
-      sstore_new_refund_counter
+      sstoreNewRefundCounter
         new_value
         original_value
         current_value
@@ -2834,7 +2834,7 @@ def incorporateChildOnSuccess (parent child : Devm) (returnData : Bytes) : Devm 
       state := child.state
       transientStorage := child.transientStorage}
 
-def compute_contract_address (sender : Adr) (nonce : UInt64) : Adr :=
+def computeContractAddress (sender : Adr) (nonce : UInt64) : Adr :=
   let LA : Bytes :=
     BLT.toBytes <| .list [.bytes sender.toBytes, .bytes nonce.toBytes.sig]
   (Bytes.keccak LA).toAdr
@@ -2998,7 +2998,7 @@ def modexpIterations (m : ModexpRules) (expLength : Nat) (expHead : Nat) : Nat :
   max count 1
 
 -- def gas_cost
-def modexpGascost
+def modexpGasCost
   (m : ModexpRules) (baseLength modulusLength expLength expHead : Nat) : Nat :=
   let mulComplexity := modexpComplexity m baseLength modulusLength
   let iterationCount := modexpIterations m expLength expHead
@@ -3028,7 +3028,7 @@ def executeModexp (evm : Evm) : PrecompResult :=
     .error modexpInputLimitTag 0
   else
   let expHead : Nat := Bytes.sliceToNat data (96 + baseLength) (min 32 expLength)
-  let cost : Nat := modexpGascost m baseLength modulusLength expLength expHead
+  let cost : Nat := modexpGasCost m baseLength modulusLength expLength expHead
   PrecompResult.chargeGas cost evm fun () =>
     if baseLength = 0 ∧ modulusLength = 0 then .ok cost []
     else
@@ -3069,8 +3069,8 @@ def executeModexp (evm : Evm) : PrecompResult :=
 #guard modexpIterations osakaModexpRules 8 255 = 7
 
 -- The floor rises from 200 to 500.
-#guard modexpGascost pragueModexpRules 32 32 32 0 = 200
-#guard modexpGascost osakaModexpRules 32 32 32 0 = 500
+#guard modexpGasCost pragueModexpRules 32 32 32 0 = 200
+#guard modexpGasCost osakaModexpRules 32 32 32 0 = 500
 
 -- EIP-7823 bounds every header at 1024 and only from Osaka.
 #guard modexpLengthsInBounds pragueModexpRules 1025 1025 1025
@@ -3172,10 +3172,10 @@ def getBlake2Parameters (data : Bytes) :
   let f := Bytes.toNat <| data.drop 212
   ⟨rounds, h, m, t.getD 0 0, t.getD 1 0, f⟩
 
-def b2wR1 : UInt64 := 32
-def b2wR2 : UInt64 := 40
-def b2wR3 : UInt64 := 48
-def b2wR4 : UInt64 := 1
+def blake2R1 : UInt64 := 32
+def blake2R2 : UInt64 := 40
+def blake2R3 : UInt64 := 48
+def blake2R4 : UInt64 := 1
 
 -- def G
 -- The four touched words are read once, mixed entirely in local scalars, and
@@ -3189,16 +3189,16 @@ def Blake2.g (v : Array UInt64) (a b c d : Nat) (x y : UInt64) : Array UInt64 :=
   let vd : UInt64 := v[d]!
   let va : UInt64 := va + vb + x
   let s : UInt64 := vd ^^^ va
-  let vd : UInt64 := (s >>> b2R1) ^^^ (s <<< b2wR1)
+  let vd : UInt64 := (s >>> b2R1) ^^^ (s <<< blake2R1)
   let vc : UInt64 := vc + vd
   let s : UInt64 := vb ^^^ vc
-  let vb : UInt64 := (s >>> b2R2) ^^^ (s <<< b2wR2)
+  let vb : UInt64 := (s >>> b2R2) ^^^ (s <<< blake2R2)
   let va : UInt64 := va + vb + y
   let s : UInt64 := vd ^^^ va
-  let vd : UInt64 := (s >>> b2R3) ^^^ (s <<< b2wR3)
+  let vd : UInt64 := (s >>> b2R3) ^^^ (s <<< blake2R3)
   let vc : UInt64 := vc + vd
   let s : UInt64 := vb ^^^ vc
-  let vb : UInt64 := (s >>> b2R4) ^^^ (s <<< b2wR4)
+  let vb : UInt64 := (s >>> b2R4) ^^^ (s <<< blake2R4)
   (((v.set! a va).set! b vb).set! c vc).set! d vd
 
 -- One full mixing round, with `blake2MixTable` unrolled into literal word
@@ -3521,7 +3521,7 @@ def accessDelegation (devm : Devm) (adr : Adr) :
   then
     let adr :=
       (code.sliceD eoaDelegationMarker.length 20 (0 : UInt8)).toAdr?.get!
-    let accessGasCost := access_cost adr devm.accessedAddresses
+    let accessGasCost := accessCost adr devm.accessedAddresses
     let devm := addAccessedAddress devm adr
     let code := state.getCode adr
     ⟨true, adr, code, accessGasCost, devm⟩
@@ -3875,7 +3875,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
       let devm ← chargeGas (gasCreate + extendCost + initCodeCost) devm
       let devm := devm.memExtends [⟨memoryIndex, memorySize⟩]
       let newAddress :=
-        compute_contract_address
+        computeContractAddress
           sevm.currentTarget (devm.state.get sevm.currentTarget).nonce
       return genericCreate.step
         sevm devm endowment newAddress memoryIndex memorySize
@@ -3908,7 +3908,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
       let ⟨outputSize, devm⟩ ← devm.popToNat
       let extendCost :=
         devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-      let preAccessCost := access_cost callee devm.accessedAddresses
+      let preAccessCost := accessCost callee devm.accessedAddresses
       let devm := addAccessedAddress devm callee
       let ⟨disablePrecompiles, _, code, delegatedAccessGasCost, devm⟩ :=
         accessDelegation devm callee
@@ -3947,7 +3947,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
       let ⟨outputSize, devm⟩ ← devm.popToNat
       let extendCost :=
         devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-      let preAccessCost := access_cost codeAddress devm.accessedAddresses
+      let preAccessCost := accessCost codeAddress devm.accessedAddresses
       let devm := addAccessedAddress devm codeAddress
       let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
         accessDelegation devm codeAddress
@@ -3981,7 +3981,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
       let ⟨outputSize, devm⟩ ← devm.popToNat
       let extendCost :=
         devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-      let preAccessCost := access_cost codeAddress devm.accessedAddresses
+      let preAccessCost := accessCost codeAddress devm.accessedAddresses
       let devm := addAccessedAddress devm codeAddress
       let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
         accessDelegation devm codeAddress
@@ -4006,7 +4006,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
       let ⟨outputSize, devm⟩ ← devm.popToNat
       let extendCost :=
         devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-      let preAccessCost := access_cost target devm.accessedAddresses
+      let preAccessCost := accessCost target devm.accessedAddresses
       let devm := addAccessedAddress devm target
       let ⟨disablePrecompiles, _, code, delegatedAccessGasCost, devm⟩ :=
         accessDelegation devm target
@@ -4215,13 +4215,13 @@ def Bytes.toByteArray (xs : Bytes) : ByteArray := .mk <| .mk xs
 instance : ToString State := ⟨String.joinln ∘ State.toStrings⟩
 instance : ToString BLT := ⟨String.joinln ∘ BLT.toStrings⟩
 
-def toKeyVal' (pr : Bytes × Bytes) : Bytes × Bytes :=
+def nibbleKey (pr : Bytes × Bytes) : Bytes × Bytes :=
   let ad := pr.fst
   let ac := pr.snd
   ⟨Bytes.toNibbles ad, ac⟩
 
 def receiptRoot (w : List (Bytes × Bytes)) : B256 :=
-  let keyVals : List (Bytes × Bytes) := (List.map toKeyVal' w)
+  let keyVals : List (Bytes × Bytes) := (List.map nibbleKey w)
   let finalNTB : NTB := Std.TreeMap.ofList keyVals _
   trie finalNTB
 
@@ -4378,7 +4378,7 @@ def calculateExcessBlobGas (blob : BlobSchedule) (parentHeader : Header) : Nat :
     | some reserveBaseCost =>
       let targetBlobGasPrice :=
         gasPerBlob *
-          calculate_blob_gas_price blob parentHeader.excessBlobGas
+          calculateBlobGasPrice blob parentHeader.excessBlobGas
       let baseBlobTxPrice :=
         reserveBaseCost * parentHeader.baseFeePerGas
       if baseBlobTxPrice > targetBlobGasPrice then

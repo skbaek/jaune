@@ -338,7 +338,7 @@ def UInt32.toBytes (x : UInt32) : Bytes :=
 def UInt64.toBytes (x : UInt64) : Bytes :=
   UInt32.toBytes (x >>> 32).toUInt32 ++ UInt32.toBytes x.toUInt32
 
-def UInt64.reverse (w : UInt64) : UInt64 :=
+def UInt64.byteswap (w : UInt64) : UInt64 :=
   ((w <<< 56) &&& (0xFF00000000000000 : UInt64)) |||
   ((w <<< 40) &&& (0x00FF000000000000 : UInt64)) |||
   ((w <<< 24) &&& (0x0000FF0000000000 : UInt64)) |||
@@ -354,10 +354,10 @@ def B256.toBytes (x : B256) : Bytes := x.1.toBytes ++ x.2.toBytes
 def List.ekat {ξ : Type u} (n : Nat) (xs : List ξ) : List ξ :=
   (xs.reverse.take n).reverse
 
-def List.ekatD {ξ : Type u} (n : Nat) (xs : List ξ) (x : ξ) : List ξ :=
+def List.takeRightD {ξ : Type u} (n : Nat) (xs : List ξ) (x : ξ) : List ξ :=
   (xs.reverse.takeD n x).reverse
 
-def Bytes.pack (xs : Bytes) (n : Nat) : Bytes := List.ekatD n xs 0
+def Bytes.pack (xs : Bytes) (n : Nat) : Bytes := List.takeRightD n xs 0
 
 def B128.toNat (x : B128) : Nat := (x.1.toNat <<< 64) ||| x.2.toNat
 def B256.toNat (x : B256) : Nat := (x.1.toNat <<< 128) ||| x.2.toNat
@@ -436,18 +436,18 @@ def B256.smod (xs ys : B256) : B256 :=
   else let mod := (abs xs) % (abs ys)
        if isNeg xs then neg mod else mod
 
-def UInt64.teg (xs : UInt64) (n : Nat) : Bool :=
+def UInt64.testBit (xs : UInt64) (n : Nat) : Bool :=
   ((xs >>> n.toUInt64) &&& 0x0000000000000001) != 0
 
-def B128.teg (xs : B128) (n : Nat) : Bool :=
+def B128.testBit (xs : B128) (n : Nat) : Bool :=
   if n < 64
-  then xs.2.teg n
-  else xs.1.teg (n - 64)
+  then xs.2.testBit n
+  else xs.1.testBit (n - 64)
 
-def B256.teg (xs : B256) (n : Nat) : Bool :=
+def B256.testBit (xs : B256) (n : Nat) : Bool :=
   if n < 128
-  then xs.2.teg n
-  else xs.1.teg (n - 128)
+  then xs.2.testBit n
+  else xs.1.testBit (n - 128)
 
 /-- Efficient modular exponentiation using the square-and-multiply algorithm -/
 def Nat.powMod (base exp m : Nat) : Nat :=
@@ -681,7 +681,7 @@ theorem List.takeD_eq_self {ξ : Type u} {n : ℕ} {xs : List ξ} (x : ξ)
   rw [takeD_eq_take x <| le_of_eq h, take_of_length_le <| le_of_eq h.symm]
 
 lemma Bytes.pack_eq_self {xs n} (h : xs.length = n) : Bytes.pack xs n = xs := by
-  simp only [pack, List.ekatD]
+  simp only [pack, List.takeRightD]
   rw [List.takeD_eq_self]
   · apply List.reverse_reverse
   · rw [List.length_reverse, h]
@@ -1512,11 +1512,11 @@ end
 
 def Lean.Json.toString (j : Lean.Json) : String := String.joinln j.toStrings
 
-def B256.lt_check  (x y : B256) : B256 := if x < y then 1 else 0
-def B256.gt_check  (x y : B256) : B256 := if x > y then 1 else 0
-def B256.slt_check (x y : B256) : B256 := if B256.Slt x y then 1 else 0
-def B256.sgt_check (x y : B256) : B256 := if B256.Sgt x y then 1 else 0
-def B256.eq_check  (x y : B256) : B256 := if x = y then 1 else 0
+def B256.ltCheck  (x y : B256) : B256 := if x < y then 1 else 0
+def B256.gtCheck  (x y : B256) : B256 := if x > y then 1 else 0
+def B256.sltCheck (x y : B256) : B256 := if B256.Slt x y then 1 else 0
+def B256.sgtCheck (x y : B256) : B256 := if B256.Sgt x y then 1 else 0
+def B256.eqCheck  (x y : B256) : B256 := if x = y then 1 else 0
 
 def ceilDiv (m n : Nat) := m / n + if m % n = 0 then 0 else 1
 

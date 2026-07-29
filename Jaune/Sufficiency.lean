@@ -448,13 +448,13 @@ because a warm access alone costs 100 and a value-bearing call pays
 This single lemma discharges all three call outcomes: the depth-0 refund, the
 insufficient-balance refund, and the spawn itself. -/
 
-theorem access_cost_pos (x : Adr) (a : AdrSet) : 0 < access_cost x a := by
-  unfold access_cost gasWarmAccess gasColdAccountAccess
+theorem access_cost_pos (x : Adr) (a : AdrSet) : 0 < accessCost x a := by
+  unfold accessCost gasWarmAccess gasColdAccountAccess
   split <;> omega
 
 theorem gasWarmAccess_le_access_cost (x : Adr) (a : AdrSet) :
-    gasWarmAccess ≤ access_cost x a := by
-  unfold access_cost gasWarmAccess gasColdAccountAccess
+    gasWarmAccess ≤ accessCost x a := by
+  unfold accessCost gasWarmAccess gasColdAccountAccess
   split <;> omega
 
 theorem calculateMsgCallGas_stipend_lt
@@ -583,7 +583,7 @@ theorem Xinst.step_call_gasDecreasing (sevm : Sevm) (devm : Devm) :
   -- a value-bearing call pays `gasCallValue` against a `gCallStipend` stipend.
   have hstip :
       (if value.toNat = 0 then 0 else gCallStipend) <
-        ((access_cost callee d7.accessedAddresses +
+        ((accessCost callee d7.accessedAddresses +
               (accessDelegation (addAccessedAddress d7 callee) callee).2.2.2.1 +
             if ¬((accessDelegation (addAccessedAddress d7 callee) callee).2.2.2.2.getAcct
                     callee).Empty ∨ value = 0 then 0 else gNewAccount) +
@@ -1292,7 +1292,7 @@ theorem Xinst.step_callcode_gasDecreasing (sevm : Sevm) (devm : Devm) :
     omega
   have hstip :
       (if value.toNat = 0 then 0 else gCallStipend) <
-        ((access_cost codeAddress d7.accessedAddresses +
+        ((accessCost codeAddress d7.accessedAddresses +
             (accessDelegation (addAccessedAddress d7 codeAddress)
               codeAddress).2.2.2.1) +
           if value = 0 then 0 else gasCallValue) +
@@ -1349,7 +1349,7 @@ theorem Xinst.step_delcall_gasDecreasing (sevm : Sevm) (devm : Devm) :
     omega
   have hstip :
       (if (0 : Nat) = 0 then 0 else gCallStipend) <
-        (access_cost codeAddress d6.accessedAddresses +
+        (accessCost codeAddress d6.accessedAddresses +
           (accessDelegation (addAccessedAddress d6 codeAddress)
             codeAddress).2.2.2.1) +
         d6.extCost [(inputIndex, inputSize), (outputIndex, outputSize)] := by
@@ -1390,7 +1390,7 @@ theorem Xinst.step_statcall_gasDecreasing (sevm : Sevm) (devm : Devm) :
     omega
   have hstip :
       (if (0 : Nat) = 0 then 0 else gCallStipend) <
-        (access_cost target d6.accessedAddresses +
+        (accessCost target d6.accessedAddresses +
           (accessDelegation (addAccessedAddress d6 target) target).2.2.2.1) +
         d6.extCost [(inputIndex, inputSize), (outputIndex, outputSize)] := by
     simp only [if_pos]
@@ -2948,7 +2948,7 @@ private def totalGuardNestedCallPublic :=
 private def totalGuardCreateCollisionCreator : Adr := 0x30
 
 private def totalGuardCreateCollisionMsg : Msg :=
-  let created := compute_contract_address totalGuardCreateCollisionCreator 0
+  let created := computeContractAddress totalGuardCreateCollisionCreator 0
   let state := State.setCode .empty created (totalGuardCode [0x00])
   {
     (totalGuardMsg [0x60, 0x00, 0x60, 0x00, 0x60, 0x00, 0xF0, 0x00] 100000 8) with

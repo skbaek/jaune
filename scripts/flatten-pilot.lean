@@ -228,7 +228,7 @@ def xstepCallBind (sevm : Sevm) (devm : Devm) : XStep :=
     let ⟨outputSize, devm⟩ ← devm.popToNat
     let extendCost ← .ok <|
       devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-    let preAccessCost ← .ok <| access_cost callee devm.accessedAddresses
+    let preAccessCost ← .ok <| accessCost callee devm.accessedAddresses
     let devm ← .ok <| addAccessedAddress devm callee
     let ⟨disablePrecompiles, _, code, delegatedAccessGasCost, devm⟩ ← .ok <|
       accessDelegation devm callee
@@ -267,7 +267,7 @@ def xstepCallLet (sevm : Sevm) (devm : Devm) : XStep :=
     let ⟨outputSize, devm⟩ ← devm.popToNat
     let extendCost :=
       devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-    let preAccessCost := access_cost callee devm.accessedAddresses
+    let preAccessCost := accessCost callee devm.accessedAddresses
     let devm := addAccessedAddress devm callee
     let ⟨disablePrecompiles, _, code, delegatedAccessGasCost, devm⟩ :=
       accessDelegation devm callee

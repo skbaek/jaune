@@ -226,7 +226,7 @@ def checkTransactionBlobData
            a version byte other than {versionedHashVersionKzg}"
     else
       let blobGasPrice :=
-        calculate_blob_gas_price benv.stat.rules.blob benv.stat.excessBlobGas
+        calculateBlobGasPrice benv.stat.rules.blob benv.stat.excessBlobGas
       if maxBlobFee < blobGasPrice then
         .error "InsufficientMaxFeePerBlobGasError : insufficient max fee per blob gas"
       else
@@ -395,7 +395,7 @@ def prepareMessage (benv: Benv) (tenv: Tenv) (tx: Tx) :
     Adr × Bytes × ByteArray × Option Adr :=
     match tx.type.receiver? with
     | none => ⟨
-        compute_contract_address
+        computeContractAddress
           tenv.stat.origin
           (benv.state.getNonce tenv.stat.origin - 1),
         [],
@@ -433,9 +433,9 @@ def prepareMessage (benv: Benv) (tenv: Tenv) (tx: Tx) :
     disablePrecompiles := false
   }
 
-def calculate_data_fee (blob : BlobSchedule) (excess_blob_gas: Nat) (tx: Tx) :
+def calculateDataFee (blob : BlobSchedule) (excess_blob_gas: Nat) (tx: Tx) :
     Nat :=
-  calculateTotalBlobGas tx * calculate_blob_gas_price blob excess_blob_gas
+  calculateTotalBlobGas tx * calculateBlobGasPrice blob excess_blob_gas
 
 def getTxHash (tx : Tx) : B256 := tx.toBLT.toBytes.keccak
 
@@ -625,7 +625,7 @@ def processTransaction
   ⟩ ← checkTransaction benv bout tx
   let blobGasFee :=
     if tx.isTypeThree
-    then calculate_data_fee benv.stat.rules.blob benv.stat.excessBlobGas tx
+    then calculateDataFee benv.stat.rules.blob benv.stat.excessBlobGas tx
     else 0
   let effectiveGasFee := tx.gas * effectiveGasPrice
   let gas := tx.gas - intrinsicGas
@@ -1137,7 +1137,7 @@ def computeRequestsHash (requests : List Bytes) : B256 :=
   Bytes.sha256 <| List.flatten hashes
 
 def State.root (w : State) : B256 :=
-  let keyVals := (List.map toKeyVal w.toList)
+  let keyVals := (List.map accountToKeyVal w.toList)
   let finalNTB : NTB := Std.TreeMap.ofList keyVals _
   trie finalNTB
 

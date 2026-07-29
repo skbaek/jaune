@@ -82,7 +82,7 @@ def Bytes.toExStrBLSP2 (data : Bytes) (subgroupCheck : Bool := false) : Except S
   pure p
 
 def BLSF2.toBytes (x : BLSF2) : Bytes :=
-  let cs := List.ekatD 2 x.val (0 : BLSF)
+  let cs := List.takeRightD 2 x.val (0 : BLSF)
   let c1 := cs[0]!
   let c0 := cs[1]!
   c0.val.toBytes.pack 64 ++ c1.val.toBytes.pack 64
@@ -196,8 +196,8 @@ def BLSP.toBLSP12 : BLSP → BLSP12
 -- Unlike the BN254 twist in EC.lean (which multiplies by w^2 / w^3),
 -- py_ecc's BLS12-381 twist divides the coordinates by w^2 / w^3.
 def blsTwist (p : BLSP2) : BLSP12 :=
-  let xs := List.ekatD 2 p.x.val (0 : BLSF)
-  let ys := List.ekatD 2 p.y.val (0 : BLSF)
+  let xs := List.takeRightD 2 p.x.val (0 : BLSF)
+  let ys := List.takeRightD 2 p.y.val (0 : BLSF)
   let x1 := xs[0]!
   let x0 := xs[1]!
   let y1 := ys[0]!
@@ -305,7 +305,7 @@ def blsSgn0F (x : BLSF) : Nat := x.val % 2
 
 -- Fp2: sign_0 or (zero_0 and sign_1), coeffs in (c0, c1) order.
 def blsSgn0F2 (x : BLSF2) : Nat :=
-  let cs := List.ekatD 2 x.val (0 : BLSF)
+  let cs := List.takeRightD 2 x.val (0 : BLSF)
   let c1 := cs[0]!
   let c0 := cs[1]!
   if c0.val % 2 = 1 then 1
@@ -474,7 +474,7 @@ def blsPPlus1Div4 : Nat := (blsPrime + 1) / 4
 def blsG1PointAtInfinity : Bytes := (0xc0 : UInt8) :: List.replicate 47 (0 : UInt8)
 
 -- point_compression.POW_2_381; the top three ZCash flag bits sit above it.
-def blsPow2_381 : Nat := 2 ^ 381
+def blsTwoPow381 : Nat := 2 ^ 381
 
 -- def decompress_G1(z: G1Compressed) -> G1Uncompressed:
 -- 48-byte compressed G1 point with the (c_flag, b_flag, a_flag, x) bit layout.
@@ -488,13 +488,13 @@ def decompressG1 (data : Bytes) : Except String BLSP := do
   -- c_flag == 1 indicates the compressed form.
   if !cFlag then .error "InvalidParameter : c_flag should be 1"
   -- is_point_at_infinity(z): z % 2^381 == 0.
-  let isInf := z % blsPow2_381 = 0
+  let isInf := z % blsTwoPow381 = 0
   if bFlag ≠ isInf then .error "InvalidParameter : b_flag mismatch"
   if isInf then
     if aFlag then .error "InvalidParameter : infinity a_flag should be 0"
     pure ⟨0, 0⟩
   else
-    let x := z % blsPow2_381
+    let x := z % blsTwoPow381
     if x ≥ blsPrime then
       .error "InvalidParameter : x should be less than field modulus"
     let xf : BLSF := FinField.ofNat x

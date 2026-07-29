@@ -2,7 +2,7 @@ import Jaune.Basic
 
 
 
-namespace ripemd160
+namespace RIPEMD160
 
 ------------------------------ RIPEMD-160 ------------------------------
 
@@ -116,9 +116,9 @@ def run (data : Bytes) : Bytes := do
     processChunks initDigest data [len <<< 3, len >>> 29] (data.length / 64)
   List.foldr (fun x acc => x.toBytes.reverse ++ acc) [] digest
 
-end ripemd160
+end RIPEMD160
 
-def Bytes.ripemd160 : Bytes → Bytes := ripemd160.run
+def Bytes.ripemd160 : Bytes → Bytes := RIPEMD160.run
 
 
 
@@ -250,18 +250,18 @@ def Bytes.sha256 : Bytes → B256 := SHA256.run
 
 namespace KECCAK
 
-def Array.app {ξ : Type u} (k : Nat) (f : ξ → ξ) (ws : Array ξ) : Array ξ :=
+def Array.modify! {ξ : Type u} (k : Nat) (f : ξ → ξ) (ws : Array ξ) : Array ξ :=
   match ws[k]? with
-  | none => panic "Array.app out of bounds"
+  | none => panic "Array.modify! out of bounds"
   | some x => ws.set! k (f x)
 
 @[inline] def UInt64.rol (xs : UInt64) (y : Nat) : UInt64 :=
   (xs <<< y.toUInt64) ||| (xs >>> (64 - y).toUInt64)
 
 -- The polymorphic permutation below (`θ`/`ρπ`/`χ`/`ι`/`f`, with the
--- `keccakf_rotc`/`keccakf_piln` tables and `UInt64.rol`) is the retained
+-- `rotc`/`piln` tables and `UInt64.rol`) is the retained
 -- reference transcription of the C original. Production hashing goes
--- through the specialized `fB64` further down; keep this block as the
+-- through the specialized `f1600` further down; keep this block as the
 -- readable spec the unrolled indices were generated from (the same
 -- retention convention as `blake2MixTable`).
 def θ {ξ : Type u} [XorOp ξ] [Inhabited ξ]
@@ -276,7 +276,7 @@ def θ {ξ : Type u} [XorOp ξ] [Inhabited ξ]
     ⟨#[prep 0, prep 1, prep 2, prep 3, prep 4], rfl⟩
   let rec inner (t : ξ) (i : Nat) : Nat → Array ξ → Array ξ
     | 0, ws => ws
-    | j + 1, ws => inner t i j <| Array.app ((j * 5) + i) (· ^^^ t) ws
+    | j + 1, ws => inner t i j <| Array.modify! ((j * 5) + i) (· ^^^ t) ws
   let rec outer (bc : Vector ξ 5) : Nat → Array ξ → Array ξ
     | 0, ws => ws
     | i + 1, ws =>
@@ -284,7 +284,7 @@ def θ {ξ : Type u} [XorOp ξ] [Inhabited ξ]
       outer bc i <| inner t i 5 ws
   outer initVec 5 ws
 
-def UInt64.rdnc : Array UInt64 :=
+def rndc : Array UInt64 :=
   #[ 0x0000000000000001, 0x0000000000008082, 0x800000000000808a, 0x8000000080008000,
      0x000000000000808b, 0x0000000080000001, 0x8000000080008081, 0x8000000000008009,
      0x000000000000008a, 0x0000000000000088, 0x0000000080008009, 0x000000008000000a,
@@ -292,11 +292,11 @@ def UInt64.rdnc : Array UInt64 :=
      0x8000000000008002, 0x8000000000000080, 0x000000000000800a, 0x800000008000000a,
      0x8000000080008081, 0x8000000000008080, 0x0000000080000001, 0x8000000080008008 ]
 
-def keccakf_rotc : Array Nat :=
+def rotc : Array Nat :=
   #[ 1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 2, 14,
      27, 41, 56, 8, 25, 43, 62, 18, 39, 61, 20, 44 ]
 
-def keccakf_piln : Array Nat :=
+def piln : Array Nat :=
   #[ 10, 7, 11, 17, 18, 3, 5, 16, 8, 21, 24, 4,
      15, 23, 19, 13, 12, 2, 20, 14, 22, 9, 6, 1 ]
 
@@ -305,8 +305,8 @@ def ρπ {ξ : Type u} [Inhabited ξ]  (rol : ξ → Nat → ξ) (ws : Array ξ)
     | 0, _, ws => ws
     | k + 1, t, ws =>
       let i := 23 - k
-      let j := keccakf_piln[i]!
-      let ws' := ws.set! j (rol t <| keccakf_rotc[i]!)
+      let j := piln[i]!
+      let ws' := ws.set! j (rol t <| rotc[i]!)
       aux k (ws[j]!) ws'
   aux 24 (ws[1]!) ws
 
@@ -316,7 +316,7 @@ def χ {ξ : Type u} [XorOp ξ] [Complement ξ] [HAnd ξ ξ ξ] [Inhabited ξ]
     | 0 => ws
     | i + 1 =>
       let ws' :=
-        Array.app (j + i)
+        Array.modify! (j + i)
           (· ^^^ ((~~~ bc[(i + 1) % 5]!) &&& (bc[(i + 2) % 5]!))) ws
       inner ws' bc j i
   let rec outer (ws : Array ξ) : Nat → Array ξ
@@ -330,15 +330,15 @@ def χ {ξ : Type u} [XorOp ξ] [Complement ξ] [HAnd ξ ξ ξ] [Inhabited ξ]
   outer ws 5
 
 def ι {ξ : Type u} [XorOp ξ] [Inhabited ξ]
-  (round : Nat) (rdnc : Array ξ) (ws : Array ξ) : Array ξ :=
-  Array.app 0 (· ^^^ rdnc[round]!) ws
+  (round : Nat) (rndc : Array ξ) (ws : Array ξ) : Array ξ :=
+  Array.modify! 0 (· ^^^ rndc[round]!) ws
 
 def f {ξ : Type u} [XorOp ξ] [Complement ξ] [HAnd ξ ξ ξ] [Inhabited ξ]
-  (rdnc : Array ξ) (ws : Array ξ) (rol : ξ → Nat → ξ) : Array ξ :=
+  (rndc : Array ξ) (ws : Array ξ) (rol : ξ → Nat → ξ) : Array ξ :=
   let rec aux : Nat → Array ξ → Array ξ
     | 0, ws => ws
     | n + 1, ws =>
-      aux n <| ι (23 - n) rdnc <| χ <| ρπ rol <| θ rol ws
+      aux n <| ι (23 - n) rndc <| χ <| ρπ rol <| θ rol ws
   aux 24 ws
 
 @[inline] private def rolc (x : UInt64) (n : UInt64) : UInt64 :=
@@ -346,14 +346,14 @@ def f {ξ : Type u} [XorOp ξ] [Complement ξ] [HAnd ξ ξ ξ] [Inhabited ξ]
 
 /-- The 5x5 keccak lane state as 25 unboxed scalars (lane (x, y) is
 field `a(x + 5*y)`), so a round never touches the heap. -/
-structure StateB64 where
+structure State1600 where
   (a0 a1 a2 a3 a4 : UInt64)
   (a5 a6 a7 a8 a9 : UInt64)
   (a10 a11 a12 a13 a14 : UInt64)
   (a15 a16 a17 a18 a19 : UInt64)
   (a20 a21 a22 a23 a24 : UInt64)
 
-private def roundB64 (rc : UInt64) (s : StateB64) : StateB64 :=
+private def round1600 (rc : UInt64) (s : State1600) : State1600 :=
   let c0 := s.a0 ^^^ s.a5 ^^^ s.a10 ^^^ s.a15 ^^^ s.a20
   let c1 := s.a1 ^^^ s.a6 ^^^ s.a11 ^^^ s.a16 ^^^ s.a21
   let c2 := s.a2 ^^^ s.a7 ^^^ s.a12 ^^^ s.a17 ^^^ s.a22
@@ -442,56 +442,56 @@ private def roundB64 (rc : UInt64) (s : StateB64) : StateB64 :=
   ⟨e0 ^^^ rc, e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e14, e15, e16, e17, e18, e19, e20, e21, e22, e23, e24⟩
 
 /-- keccak-f[1600] monomorphized to `UInt64`: 24 unrolled rounds over 25
-scalar locals. Semantically identical to `f UInt64.rdnc · UInt64.rol` over the
-reference transcription above; round constants are read from `UInt64.rdnc`
+scalar locals. Semantically identical to `f rndc · UInt64.rol` over the
+reference transcription above; round constants are read from `rndc`
 rather than written as literals.
 
 That read began as a workaround for a Lean-4.23 codegen bug (the duplicated
 constant 0x8000000080008081 was CSE'd into a shared boxed value and the C
 emitter then issued `lean_inc` on an unboxed uint64, which did not compile).
 The bug is fixed as of the v4.32.1 toolchain: `scripts/repro-lean423-uint64-cse.lean`
-now passes both of its documented compile steps and runs. The `UInt64.rdnc` read is
+now passes both of its documented compile steps and runs. The `rndc` read is
 retained deliberately — it costs nothing measurable (the permutation is a few
 percent of busy time with it) and is immune to regressions of the emitter path.
 Do not rewrite the rounds back to literal constants. -/
-def fB64 (ws : Array UInt64) : Array UInt64 :=
-  let s : StateB64 :=
+def f1600 (ws : Array UInt64) : Array UInt64 :=
+  let s : State1600 :=
     ⟨ws[0]!, ws[1]!, ws[2]!, ws[3]!, ws[4]!,
      ws[5]!, ws[6]!, ws[7]!, ws[8]!, ws[9]!,
      ws[10]!, ws[11]!, ws[12]!, ws[13]!, ws[14]!,
      ws[15]!, ws[16]!, ws[17]!, ws[18]!, ws[19]!,
      ws[20]!, ws[21]!, ws[22]!, ws[23]!, ws[24]!⟩
-  let s := roundB64 (UInt64.rdnc[0]!) s
-  let s := roundB64 (UInt64.rdnc[1]!) s
-  let s := roundB64 (UInt64.rdnc[2]!) s
-  let s := roundB64 (UInt64.rdnc[3]!) s
-  let s := roundB64 (UInt64.rdnc[4]!) s
-  let s := roundB64 (UInt64.rdnc[5]!) s
-  let s := roundB64 (UInt64.rdnc[6]!) s
-  let s := roundB64 (UInt64.rdnc[7]!) s
-  let s := roundB64 (UInt64.rdnc[8]!) s
-  let s := roundB64 (UInt64.rdnc[9]!) s
-  let s := roundB64 (UInt64.rdnc[10]!) s
-  let s := roundB64 (UInt64.rdnc[11]!) s
-  let s := roundB64 (UInt64.rdnc[12]!) s
-  let s := roundB64 (UInt64.rdnc[13]!) s
-  let s := roundB64 (UInt64.rdnc[14]!) s
-  let s := roundB64 (UInt64.rdnc[15]!) s
-  let s := roundB64 (UInt64.rdnc[16]!) s
-  let s := roundB64 (UInt64.rdnc[17]!) s
-  let s := roundB64 (UInt64.rdnc[18]!) s
-  let s := roundB64 (UInt64.rdnc[19]!) s
-  let s := roundB64 (UInt64.rdnc[20]!) s
-  let s := roundB64 (UInt64.rdnc[21]!) s
-  let s := roundB64 (UInt64.rdnc[22]!) s
-  let s := roundB64 (UInt64.rdnc[23]!) s
+  let s := round1600 (rndc[0]!) s
+  let s := round1600 (rndc[1]!) s
+  let s := round1600 (rndc[2]!) s
+  let s := round1600 (rndc[3]!) s
+  let s := round1600 (rndc[4]!) s
+  let s := round1600 (rndc[5]!) s
+  let s := round1600 (rndc[6]!) s
+  let s := round1600 (rndc[7]!) s
+  let s := round1600 (rndc[8]!) s
+  let s := round1600 (rndc[9]!) s
+  let s := round1600 (rndc[10]!) s
+  let s := round1600 (rndc[11]!) s
+  let s := round1600 (rndc[12]!) s
+  let s := round1600 (rndc[13]!) s
+  let s := round1600 (rndc[14]!) s
+  let s := round1600 (rndc[15]!) s
+  let s := round1600 (rndc[16]!) s
+  let s := round1600 (rndc[17]!) s
+  let s := round1600 (rndc[18]!) s
+  let s := round1600 (rndc[19]!) s
+  let s := round1600 (rndc[20]!) s
+  let s := round1600 (rndc[21]!) s
+  let s := round1600 (rndc[22]!) s
+  let s := round1600 (rndc[23]!) s
   #[s.a0, s.a1, s.a2, s.a3, s.a4, s.a5, s.a6, s.a7, s.a8, s.a9, s.a10, s.a11, s.a12, s.a13, s.a14, s.a15, s.a16, s.a17, s.a18, s.a19, s.a20, s.a21, s.a22, s.a23, s.a24]
 
 def Bytes.run : Fin 17 → Bytes → Array UInt64 → B256
   | wc, b0 :: b1 :: b2 :: b3 :: b4 :: b5 :: b6 :: b7 :: bs, ws =>
     let t : UInt64 := UInt64.ofBytes b7 b6 b5 b4 b3 b2 b1 b0
-    let ws' := Array.app wc (· ^^^ t) ws
-    Bytes.run (wc + 1) bs <| if wc = 16 then fB64 ws' else ws'
+    let ws' := Array.modify! wc (· ^^^ t) ws
+    Bytes.run (wc + 1) bs <| if wc = 16 then f1600 ws' else ws'
   | wc, bs, ws =>
     let us := (bs ++ [(1 : UInt8)]).takeD 8 (0 : UInt8)
     let t : UInt64 :=
@@ -499,11 +499,11 @@ def Bytes.run : Fin 17 → Bytes → Array UInt64 → B256
         (us[7]!) (us[6]!) (us[5]!) (us[4]!)
         (us[3]!) (us[2]!) (us[1]!) (us[0]!)
     let s : UInt64 := (8 : UInt64) <<< 60
-    let temp0 := Array.app wc (· ^^^ t) ws
-    let temp1 := Array.app 16 (· ^^^ s) temp0
-    let ws' := fB64 temp1
-    ⟨ ⟨UInt64.reverse (ws'[0]!), UInt64.reverse (ws'[1]!)⟩,
-      ⟨UInt64.reverse (ws'[2]!), UInt64.reverse (ws'[3]!)⟩ ⟩
+    let temp0 := Array.modify! wc (· ^^^ t) ws
+    let temp1 := Array.modify! 16 (· ^^^ s) temp0
+    let ws' := f1600 temp1
+    ⟨ ⟨UInt64.byteswap (ws'[0]!), UInt64.byteswap (ws'[1]!)⟩,
+      ⟨UInt64.byteswap (ws'[2]!), UInt64.byteswap (ws'[3]!)⟩ ⟩
 
 def ByteArray.run (bnd n : Nat) (wc : Fin 17) (bs : ByteArray) (ws : Array UInt64) : B256 :=
   if 7 < n then
@@ -516,9 +516,9 @@ def ByteArray.run (bnd n : Nat) (wc : Fin 17) (bs : ByteArray) (ws : Array UInt6
     let b6 : UInt8 := bs[(bnd - (n - 6))]!
     let b7 : UInt8 := bs[(bnd - (n - 7))]!
     let t : UInt64 := UInt64.ofBytes b7 b6 b5 b4 b3 b2 b1 b0
-    let ws' := Array.app wc (UInt64.xor · t) ws
+    let ws' := Array.modify! wc (UInt64.xor · t) ws
     ByteArray.run bnd (n - 8) (wc + 1) bs <|
-      if wc = 16 then fB64 ws' else ws'
+      if wc = 16 then f1600 ws' else ws'
   else
     let rec aux (bnd : Nat) (bs : ByteArray) : Nat → Nat → List UInt8
       | _, 0 => [] -- unreachable code
@@ -537,11 +537,11 @@ def ByteArray.run (bnd n : Nat) (wc : Fin 17) (bs : ByteArray) (ws : Array UInt6
         (us.getD 1 0)
         (us.getD 0 0)
     let s : UInt64 := (8 : UInt64) <<< 60
-    let temp0 := Array.app wc (· ^^^ t) ws
-    let temp1 := Array.app 16 (· ^^^ s) temp0
-    let ws' := fB64 temp1
-    ⟨ ⟨UInt64.reverse (ws'[0]!), UInt64.reverse (ws'[1]!)⟩,
-      ⟨UInt64.reverse (ws'[2]!), UInt64.reverse (ws'[3]!)⟩ ⟩
+    let temp0 := Array.modify! wc (· ^^^ t) ws
+    let temp1 := Array.modify! 16 (· ^^^ s) temp0
+    let ws' := f1600 temp1
+    ⟨ ⟨UInt64.byteswap (ws'[0]!), UInt64.byteswap (ws'[1]!)⟩,
+      ⟨UInt64.byteswap (ws'[2]!), UInt64.byteswap (ws'[3]!)⟩ ⟩
 
 end KECCAK
 
