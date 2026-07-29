@@ -959,15 +959,6 @@ def transactionExceptionTags : List String :=
 #guard transactionExceptionTags.all fun t =>
   (transactionExceptionTags.filter fun u => t.isPrefixOf u).length = 1
 
-def isInvalidTransaction (err : String) : Bool :=
-  List.any transactionExceptionTags (hasErrorType err) ||
-  List.any [
-    "InvalidSignatureError",
-    "TransactionTypeError",
-    "InsufficientMaxFeePerBlobGasError",
-    emptyAuthorizationListTag
-  ] (hasErrorType err)
-
 ------------------- BLOCK-REJECTION REASONS --------------------
 
 -- One tag per reason a header or a post-transition check can reject a block.
@@ -1366,12 +1357,6 @@ def Devm.withReturnData (devm : Devm) (returnData : B8L) : Devm :=
 def Devm.withError (devm : Devm) (error : Option String) : Devm :=
   devm.setMeta {devm.meta with error := error}
 
-def Devm.withAccessedAddresses (devm : Devm) (accessedAddresses : AdrSet) : Devm :=
-  devm.setMeta {devm.meta with accessedAddresses := accessedAddresses}
-
-def Devm.withAccessedStorageKeys (devm : Devm) (accessedStorageKeys : KeySet) : Devm :=
-  devm.setMeta {devm.meta with accessedStorageKeys := accessedStorageKeys}
-
 def Devm.withCreatedAccounts (devm : Devm) (createdAccounts : AdrSet) : Devm :=
   devm.setMeta {devm.meta with createdAccounts := createdAccounts}
 
@@ -1669,25 +1654,6 @@ lemma Nat.hi_le (a b : Nat) : a ↿ b ≤ a := by
   rw [hi, shiftLeft_eq, shiftRight_eq_div_pow]
   apply Nat.div_mul_le_self
 
-lemma B8.shl_highs_or_lows_eq_self (x : B8) : (x.highs <<< 4) ||| x.lows = x := by
-  apply UInt8.toNat_inj.mp
-  unfold B8.lows
-  rw [UInt8.toNat_or]
-  rw [UInt8.toNat_and]
-  have rw : UInt8.toNat 15 = 15 := by rfl
-  rw [rw]; clear rw
-  rw [Nat.and_two_pow_sub_one_eq_mod _ 4]
-  have hh := Nat.hi_or_lo
-  rw [UInt8.toNat_shiftLeft]
-  unfold B8.highs
-  rw [UInt8.toNat_shiftRight]
-  have rw : (UInt8.toNat 4 % 8) = 4 := by rfl
-  rw [rw]; clear rw
-  have hh := Nat.hi_le x.toNat 4
-  rw [Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt _ (UInt8.toNat_lt x))]
-  · apply Nat.hi_or_lo
-  · apply Nat.hi_le
-
 lemma B8.lt_of_highs_lt_highs (x y : B8) (lt : x.highs < y.highs) : x < y := by
   rw [UInt8.lt_iff_toNat_lt]
   have lt' : x.toNat < (x.toNat ↿ 4) + 16 := by
@@ -1889,19 +1855,11 @@ def Meta.addAccessedAddress (view : Meta) (a : Adr) : Meta :=
 def addAccessedAddress (devm : Devm) (a : Adr) : Devm :=
   liftMachMetaPure (fun mach view => (mach, view.addAccessedAddress a)) devm
 
-theorem addAccessedAddress_def (devm : Devm) (a : Adr) :
-    addAccessedAddress devm a =
-      devm.withAccessedAddresses (devm.accessedAddresses.insert a) := rfl
-
 def Meta.addAccessedStorageKey (view : Meta) (a : Adr) (k : B256) : Meta :=
   {view with accessedStorageKeys := view.accessedStorageKeys.insert ⟨a, k⟩}
 
 def addAccessedStorageKey (devm : Devm) (a : Adr) (k : B256) : Devm :=
   liftMachMetaPure (fun mach view => (mach, view.addAccessedStorageKey a k)) devm
-
-theorem addAccessedStorageKey_def (devm : Devm) (a : Adr) (k : B256) :
-    addAccessedStorageKey devm a k =
-      devm.withAccessedStorageKeys (devm.accessedStorageKeys.insert ⟨a, k⟩) := rfl
 
 def addAccountToDelete (devm : Devm) (a : Adr) : Devm :=
   devm.withAccountsToDelete (devm.accountsToDelete.insert a)
@@ -2072,9 +2030,6 @@ def Mach.memExtends (mach : Mach) (pairs : List (Nat × Nat)) : Mach :=
 
 def Devm.memExtends (devm : Devm) (pairs : List (Nat × Nat)) : Devm :=
   liftMachPure (Mach.memExtends · pairs) devm
-
-theorem Devm.memExtends_def (devm : Devm) (pairs : List (Nat × Nat)) :
-    devm.memExtends pairs = (devm.withMemory <| devm.memory.extends pairs) := rfl
 
 def Meta.addLog (view : Meta) (log : Log) : Meta :=
   {view with logs := view.logs ++ [log]}
@@ -3391,15 +3346,6 @@ def executeBls12MapFpToG1 (evm : Evm) : PrecompResult :=
       | .ok fp => .ok gasBlsG1Map (BLSP.toB8L (blsMapFpToG1 fp))
       | .error _ => .error "OutOfGasError" gasBlsG1Map
 
-def catchWithOOG {ξ : Type U} (devm : Devm) (cond : String → Bool) :
-  Except String ξ → Except (String × Devm) ξ
-  | .ok v => .ok v
-  | .error e =>
-    if cond e then
-      .error ⟨"OutOfGasError", devm⟩
-    else
-      .error ⟨e, devm⟩
-
 -- def bytes_to_g1(data : Bytes) -> Point3D[FQ]:
 def B8L.toExStrBNP (data : B8L) : Except String BNP := do
   if data.length ≠ 64 then
@@ -3551,31 +3497,6 @@ def State.getNonce (w : State) (a : Adr) : B64 := (w.get a).nonce
 def State.getCode (w : State) (a : Adr) : ByteArray := (w.get a).code
 
 instance : ToString Log := ⟨String.joinln ∘ Log.toStrings⟩
-
-def List.toStringSingleQuote {ξ : Type u} [inst : ToString ξ] : List ξ → String
-  | [] => "[]"
-  | [x] => "['" ++ toString x ++ "']"
-  | x::xs => xs.foldl (· ++ ", '" ++ toString · ++ "'") ("['" ++ toString x ++ "'") |>.push ']'
-
-def stepString (evm : Evm) (i : Inst) : String :=
-  "step(" ++
-    s!"pc({evm.pc}), " ++
-    s!"gas({evm.dyna.gasLeft}), " ++
-    s!"op(\"{i.toOpString}\"), " ++
-    s!"depth({evm.sta.depth}), " ++
-    s!"{List.toStringSingleQuote <| evm.dyna.stack.map (fun x => "0x" ++ x.toHex.dropZeroes)}" ++
-  ")."
-
-def showStep (evm : Evm) (i : Inst) : Except (Evm × String) Unit :=
-  if verbose ()
-  then do
-    .print (stepString evm i)
-    .ok ()
-  else .ok ()
-
-def showLim (lim : Nat) (evm : Evm) : Except (Evm × String) Unit := do
-  if lim % 100000 = 0 then
-    .print s!"Recursion limit = {lim}, gas left = {evm.dyna.gasLeft}"
 
 def isValidDelegation (code: ByteArray) : Prop :=
   code.size = eoaDelegatedCodeLength ∧

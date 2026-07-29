@@ -101,11 +101,6 @@ def Tx.isTypeThree (tx : Tx) : Bool :=
   | .three _ _ _ _ _ _ _ => true
   | _ => false
 
-def Tx.isTypeFour (tx : Tx) : Bool :=
-  match tx.type with
-  | .four _ _ _ _ _ _ => true
-  | _ => false
-
 def calculateTotalBlobGas (tx: Tx) : Nat :=
   match tx.type with
   | .three _ _ _ _ _ _ blobHashes => gasPerBlob * blobHashes.length

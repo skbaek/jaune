@@ -383,16 +383,6 @@ def List.ekat {ξ : Type u} (n : Nat) (xs : List ξ) : List ξ :=
 def List.ekatD {ξ : Type u} (n : Nat) (xs : List ξ) (x : ξ) : List ξ :=
   (xs.reverse.takeD n x).reverse
 
-theorem List.length_takeD {ξ : Type u} (n : Nat) (xs : List ξ) (x : ξ) :
-    (List.takeD n xs x).length = n := by
-  induction n generalizing xs with
-  | zero => simp
-  | succ n ih => simp --; apply ih
-
-theorem List.length_ekatD {ξ : Type u} (n : Nat) (xs : List ξ) (x : ξ) :
-    (List.ekatD n xs x).length = n := by
-  apply Eq.trans List.length_reverse
-  apply Eq.trans (List.length_takeD _ _ _) rfl
 def B8L.pack (xs : B8L) (n : Nat) : B8L := List.ekatD n xs 0
 
 def B128.toNat (x : B128) : Nat := (x.1.toNat <<< 64) ||| x.2.toNat
@@ -596,12 +586,6 @@ def addCommas  (ss : List String) : List (List String) -> Option (List String)
     let ssc' ← addCommas ss' sss'
     ssc ++ ssc'
 
-def mkProlog (s : String) : List (List String) → Option (List String)
-  | [] => some [s]
-  | (ss :: sss) => do
-    let ssc ← addCommas ss sss
-    (s ++ "(") :: (ssc.map pad ++ [")"])
-
 def fork (s : String) : List (List String) → List String
   | [[s']] => [s ++ "──" ++ s']
   | sss => s :: padss sss
@@ -776,31 +760,6 @@ lemma Nat.mod_two_pow_add {k m n : ℕ} :
    rw [← Nat.pow_succ]
    rw [Nat.mod_two_pow_succ]
 
-lemma Nat.add_div_of_dvd_of_dvd {a b c : ℕ} (ha : c ∣ a) (hb : c ∣ b) (hc : 0 < c) :
-    (a + b) / c = a / c + b / c := by
-  rw [Nat.add_div hc, if_neg]
-  · rfl
-  · rw [Nat.mod_eq_zero_of_dvd ha, Nat.mod_eq_zero_of_dvd hb]
-    intro h; cases lt_of_lt_of_le hc h
-
-lemma Nat.add_div_of_dvd_of_lt {a b c : ℕ} (ha : c ∣ a) (hb : b < c) :
-    (a + b) / c = a / c + b / c := by
-  rw [Nat.add_div (zero_lt_of_lt hb), if_neg]
-  · rfl
-  · rw [Nat.mod_eq_zero_of_dvd ha, Nat.mod_eq_of_lt hb]; simp [hb]
-
-lemma Nat.mod_two_pow_add_div_two_pow {k m n : ℕ} :
-    (k % 2 ^ (m + n)) / (2 ^ n) = k / 2 ^ n % 2 ^ m := by
-  have eq := @Nat.mod_two_pow_add k m n
-  apply Eq.trans <| congr_arg (· / 2 ^ n) eq
-  rw [
-    Nat.add_div_of_dvd_of_lt (Nat.dvd_mul_left _ _),
-
-    Nat.mul_div_cancel,
-    (@Nat.div_eq_zero_iff_lt (2 ^ n) (k % 2 ^ n) (by omega)).mpr
-      (Nat.mod_lt _ (by omega))
-  ] <;> omega
-
 lemma Nat.mod_two_pow_mul_two_pow {k m n : Nat} :
     (k % 2 ^ m) * 2 ^ n = (k * 2 ^ n) % 2 ^ (m + n) := by
   rw [Nat.mod_two_pow_add, Nat.mul_div_cancel]
@@ -818,11 +777,6 @@ lemma Nat.shl_lo_eq_zero_of_le {k m n : Nat} (h : m ≤ n) :
   apply Nat.mod_eq_zero_of_dvd
   apply Nat.dvd_mul_left_of_dvd
   apply Nat.pow_dvd_pow _ h
-
-lemma Nat.mod_two_shiftLeft {k m n : Nat} :
-    (k % 2 ^ m) <<< n = (k <<< n) % 2 ^ (m + n) := by
-  simp [Nat.shiftLeft_eq]
-  apply Nat.mod_two_pow_mul_two_pow
 
 lemma Nat.exists_eq_shiftLeft_of_dvd {n x} (hx : 2 ^ n ∣ x) :
     ∃ y, x = y <<< n := by
@@ -1385,18 +1339,6 @@ lemma B8L.toB256_go_append_toB8L (l3 l2 l1 l0 y : B64) (tail : B8L) :
   simp only [B64.toB8L, B32.toB8L, B16.toB8L, List.cons_append, List.nil_append]
   rw [B8L.toB256_go_eight_cons, B8s.toB64_eq_toB64]
   exact congrArg (fun z => B8L.toB256.go l2 l1 l0 z tail) (B64.toB64_toB8L y)
-
-lemma B128.toB128_toB8L (x : B128) : x.toB8L.toB128 = x := by
-  simp only [B8L.toB128]
-  have h_len := B128.length_toB8L x
-  rw [B8L.pack_eq_self h_len]
-  simp only [B128.toB8L]
-  have h_take := @List.take_length_append _ x.1.toB8L x.2.toB8L
-  rw [B64.length_toB8L] at h_take
-  have h_drop := @List.drop_length_append _ x.1.toB8L x.2.toB8L
-  rw [B64.length_toB8L] at h_drop
-  rw [h_take, h_drop]
-  simp [B64.toB64_toB8L]
 
 lemma B256.toB256_toB8L (x : B256) : x.toB8L.toB256 = x := by
   show B8L.toB256.go 0 0 0 0 (B256.toB8L x) = ((x.1.1, x.1.2), (x.2.1, x.2.2))

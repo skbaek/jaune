@@ -42,32 +42,12 @@ lemma toNat_toB128 (n : Nat) : n.toB128.toNat = n ↾ 128 := by
   simp only [Nat.toB128, B128.toNat]; rw [toNat_toB64, toNat_toB64]
   apply Nat.or_eq_lo_add
 
-lemma Nat.div_two_pow_mod_two_pow (k m n : Nat) :
-    (k / (2 ^ m)) % (2 ^ n) = (k % (2 ^ (m + n))) / (2 ^ m) := by
-  induction m generalizing k n with
-  | zero => simp
-  | succ m ih =>
-    have h : (k / 2 ^ (m + 1)) = ((k / 2) / 2 ^ m) := by
-      rw [Nat.pow_succ, Nat.mul_comm, Nat.div_div_eq_div_mul]
-    rw [h, ih]; clear h
-    rw [Nat.pow_succ, Nat.mul_comm, ← Nat.div_div_eq_div_mul]
-    have h : m + 1 + n = m + n + 1 := by omega
-    rw [h]; clear h
-    apply congr_arg₂ _ _ rfl
-    rw [Nat.mod_two_pow_succ]
-    rw [@Nat.add_div _ _ 2 (by omega), if_neg]
-    · rw [Nat.mod_div_self, Nat.mul_div_cancel _ (by omega)]; rfl
-    · simp [Nat.mul_mod_left, Nat.mod_lt]
-
 lemma Nat.toNat_toAdr (n : Nat) : n.toAdr.toNat = n ↾ 160 := by
   simp only [Nat.toAdr, Adr.toNat]; rw [toNat_toB32, toNat_toB128]
   apply Nat.or_eq_lo_add
 
 
 lemma toB32_toNat {x : B32} : x.toNat.toB32 = x := UInt32.ofNat_toNat
-
-lemma toB32_or (a b : Nat) : (a ||| b).toB32 = a.toB32 ||| b.toB32 :=
-  UInt32.ofNat_or a b
 
 lemma toB64_or (a b : Nat) : (a ||| b).toB64 = a.toB64 ||| b.toB64 :=
   UInt64.ofNat_or a b
@@ -99,22 +79,8 @@ lemma B64.zero_or {x : B64} : (0 ||| x) = x := UInt64.zero_or
 lemma B128.zero_or {x : B128} : (0 ||| x) = x := by
   rw [B128.or_eq]; apply Prod.ext <;> exact B64.zero_or
 
-lemma Nat.add_div_of_dvd {a b c : Nat} (c_pos : 0 < c) (c_dvd : c ∣ a)  :
-    (a + b) / c = a / c + b / c := by
-  rw [Nat.add_div c_pos, if_neg, Nat.add_zero]
-  rw [not_le, Nat.mod_eq_zero_of_dvd c_dvd, Nat.zero_add]
-  apply Nat.mod_lt _ c_pos
-
 lemma Nat.div_eq_zero_of_lt {k x : Nat} (h : x < k) : x / k = 0 := by
   rw [Nat.div_eq_zero_iff_lt (by omega)]; apply h
-
-lemma Nat.add_div_of_dvd_of_lt' {a b c : Nat} (c_dvd : c ∣ a) (b_lt : b < c) :
-    (a + b) / c = a / c := by
-  rw [Nat.add_div_of_dvd (zero_lt_of_lt b_lt) c_dvd]
-  simp [Nat.div_eq_zero_of_lt b_lt]
-
-lemma toB64_add (a b : Nat) :
-    (a + b).toB64 = a.toB64 + b.toB64 := UInt64.ofNat_add a b
 
 lemma B64.lt_iff_toNat_lt {a b : B64} : a < b ↔ a.toNat < b.toNat :=
   UInt64.lt_iff_toNat_lt
@@ -160,13 +126,6 @@ lemma ite_eq_ite_of_iff {α} {p q : Prop} [Decidable p] [Decidable q]
   · rw [if_pos h, if_pos (pq.mp h)]
   · rw [if_neg h, if_neg (mt pq.mpr h)]
 
-lemma toB128_add (a b : Nat) : (a + b).toB128 = a.toB128 + b.toB128 := by
-  simp only [Nat.toB128, Nat.shiftRight_eq_div_pow]
-  rw [Nat.add_div (by omega)]; apply congr_arg₂ _ _ (toB64_add _ _)
-  simp only [toB64_add]; apply congr_arg₂ _ rfl
-  apply Eq.trans ite_distrib <| ite_eq_ite_of_iff _ rfl rfl
-  rw [← Nat.lo, ← Nat.lo, B64.toNat_overflow, toNat_toB64, toNat_toB64]
-
 lemma toB64_toNat (x : B64) : x.toNat.toB64 = x :=
   UInt64.ofNat_toNat
 
@@ -204,9 +163,6 @@ lemma toB128_eq_iff_lo_eq_toNat (a : Nat) (b : B128) :
   constructor <;> intro h
   · rw [← h, toNat_toB128]
   · rw [← B128.toNat_inj, ← h, toNat_toB128]
-
-lemma B128.zero_1 : (0 : B128).1 = 0 := rfl
-lemma B128.zero_2 : (0 : B128).2 = 0 := rfl
 
 lemma B128.sub_eq (x y : B128) :
   x - y = ⟨(x.1 - y.1) - (if x.2 < y.2 then 1 else 0), x.2 - y.2⟩ := rfl
@@ -254,66 +210,12 @@ theorem B256.toNat_toB256_of_lt {n : Nat} (h : n < 2 ^ 256) :
 theorem B256.toNat_mul (x y : B256) :
     (x * y).toNat = (x.toNat * y.toNat) ↾ 256 := B256.toNat_toB256 _
 
-theorem B256.div_zero (x : B256) : x / 0 = 0 := by
-  show (B256.divMod x 0).fst = 0; rw [B256.divMod, if_pos rfl]
-
-theorem B256.mod_zero (x : B256) : x % 0 = 0 := by
-  show (B256.divMod x 0).snd = 0; rw [B256.divMod, if_pos rfl]
-
-theorem B256.toNat_div {x y : B256} (h : y ≠ 0) :
-    (x / y).toNat = x.toNat / y.toNat := by
-  show (B256.divMod x y).fst.toNat = _
-  rw [B256.divMod, if_neg h]
-  exact B256.toNat_toB256_of_lt
-    (Nat.lt_of_le_of_lt (Nat.div_le_self _ _) (B256.toNat_lt x))
-
 theorem B256.toNat_mod {x y : B256} (h : y ≠ 0) :
     (x % y).toNat = x.toNat % y.toNat := by
   show (B256.divMod x y).snd.toNat = _
   rw [B256.divMod, if_neg h]
   exact B256.toNat_toB256_of_lt
     (Nat.lt_of_le_of_lt (Nat.mod_le _ _) (B256.toNat_lt x))
-
-theorem Nat.powMod.go_eq {m : Nat} (hm : 1 < m) :
-    ∀ e b res, res < m → Nat.powMod.go m e b res = res * b ^ e % m := by
-  intro e
-  induction e using Nat.strong_induction_on with
-  | _ e ih =>
-    intro b res hres
-    match e with
-    | 0 => rw [Nat.powMod.go]; rw [Nat.pow_zero, Nat.mul_one, Nat.mod_eq_of_lt hres]
-    | n + 1 =>
-      rw [Nat.powMod.go]
-      have hlt : (n + 1) / 2 < n + 1 := Nat.div_lt_self (by omega) (by omega)
-      have hres' : (if (n + 1) % 2 = 1 then res * b % m else res) < m := by
-        split
-        · exact Nat.mod_lt _ (by omega)
-        · exact hres
-      rw [ih _ hlt _ _ hres']
-      rw [Nat.mul_mod _ (((b * b) % m) ^ ((n + 1) / 2)), ← Nat.pow_mod]
-      rw [show b * b = b ^ 2 from (Nat.pow_two b).symm, ← Nat.pow_mul]
-      rw [← Nat.mul_mod]
-      rcases Nat.mod_two_eq_zero_or_one n with he | he
-      · -- n even, so n + 1 is odd
-        have hpar : (n + 1) % 2 = 1 := by omega
-        have hk : 2 * ((n + 1) / 2) = n := by omega
-        rw [if_pos hpar, hk, Nat.mul_mod, Nat.mod_mod, ← Nat.mul_mod]
-        rw [Nat.mul_assoc, ← Nat.pow_succ']
-      · -- n odd, so n + 1 is even
-        have hpar : ¬ ((n + 1) % 2 = 1) := by omega
-        have hk : 2 * ((n + 1) / 2) = n + 1 := by omega
-        rw [if_neg hpar, hk]
-
-theorem Nat.powMod_eq {b e m : Nat} (hm : 1 < m) :
-    Nat.powMod b e m = b ^ e % m := by
-  unfold Nat.powMod
-  rw [if_neg (by omega), Nat.powMod.go_eq hm _ _ _ hm, Nat.one_mul]
-
-theorem B256.toNat_bexp (x y : B256) :
-    (x ^ y).toNat = (x.toNat ^ y.toNat) ↾ 256 := by
-  show (B256.bexp x y).toNat = _
-  rw [B256.bexp, B256.toNat_toB256, Nat.powMod_eq (by omega)]
-  exact Nat.mod_mod _ _
 
 lemma B128.lt_or_eq_of_le {n m : B128} (h : n ≤ m) : n < m ∨ n = m := by
   rcases h with h | h
@@ -536,13 +438,6 @@ lemma B128.toNat_overflow {x y : B128} :
     have y_lt := @B128.toNat_lt y
     rw [Nat.lo, Nat.add_mod_eq_add_sub x_lt y_lt h]
     omega
-
-lemma toB256_add (a b : Nat) : (a + b).toB256 = a.toB256 + b.toB256 := by
-  simp only [Nat.toB256, Nat.shiftRight_eq_div_pow]
-  rw [Nat.add_div (by omega)]; apply congr_arg₂ _ _ (toB128_add _ _)
-  simp only [toB128_add]; apply congr_arg₂ _ rfl
-  apply Eq.trans ite_distrib <| ite_eq_ite_of_iff _ rfl rfl
-  rw [← Nat.lo, ← Nat.lo, B128.toNat_overflow, toNat_toB128, toNat_toB128]
 
 lemma B256.toNat_add (x y : B256) :
     (x + y).toNat = (x.toNat + y.toNat) ↾ 256 := by

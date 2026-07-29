@@ -146,14 +146,6 @@ theorem chargeGas_gasLeft {c : Nat} {devm devm' : Devm}
     omega
   · exact absurd h (by simp [safeSub, if_neg hle])
 
-theorem chargeGas_gasLt {c : Nat} {devm devm' : Devm} (hc : 0 < c)
-    (h : chargeGas c devm = .ok devm') : devm'.gasLeft < devm.gasLeft := by
-  have := chargeGas_gasLeft h; omega
-
-theorem chargeGas_gasLe {c : Nat} {devm devm' : Devm}
-    (h : chargeGas c devm = .ok devm') : devm'.gasLeft ≤ devm.gasLeft := by
-  have := chargeGas_gasLeft h; omega
-
 /-! ## Stack primitives
 
 Pushing and popping never touch `gasLeft`. These are the inversion forms the
@@ -625,14 +617,6 @@ theorem Xinst.step_call_gasDecreasing (sevm : Sevm) (devm : Devm) :
     apply genericCall.step_gasDecreasing
     rw [Devm.memExtends_gasLeft]
     exact key
-
-theorem Rinst.runCore_add_gasLt {pc : Nat} {devm : Devm} {sevm : Sevm}
-    {devm' : Devm} (h : Rinst.runCore pc devm sevm .add = .ok devm') :
-    devm'.gasLeft < devm.gasLeft := by
-  simp only [Rinst.runCore] at h
-  have hg := applyBinary_gasLeft h
-  unfold gVerylow at hg
-  omega
 
 theorem Rinst.runCore_mstore_gasLt {pc : Nat} {devm : Devm} {sevm : Sevm}
     {devm' : Devm} (h : Rinst.runCore pc devm sevm .mstore = .ok devm') :
@@ -2107,16 +2091,6 @@ def MachNoRevert {α : Type} : Footprint.Outcome Mach α → Prop
   | .error q => q.1 ≠ "Revert"
   | .ok _ => True
 
-theorem noRevert_ok {α : Type} (a : α) : NoRevertOut (.ok a) := trivial
-
-theorem noRevert_bind {α β : Type} {e : Except (String × Devm) α}
-    {f : α → Except (String × Devm) β}
-    (he : NoRevertOut e) (hf : ∀ a, NoRevertOut (f a)) :
-    NoRevertOut (e >>= f) := by
-  cases e with
-  | error q => exact he
-  | ok a => exact hf a
-
 theorem liftMach_noRevert {α : Type} {core : Mach → Footprint.Outcome Mach α}
     {devm : Devm} (h : MachNoRevert (core devm.mach)) :
     NoRevertOut (liftMach core devm) := by
@@ -2900,15 +2874,6 @@ def processMessage (msg : Msg) : Except (String × State × AdrSet × Tra) Devm 
 def processCreateMessage (msg : Msg) :
     Except (String × State × AdrSet × Tra) Devm :=
   runFrame (Frame.ofCreate msg)
-
-theorem runFrame_of_done {frame : Frame}
-    {r : Except (String × State × AdrSet × Tra) Devm} (h : frame.enter = .done r) :
-    runFrame frame = r := by
-  rw [runFrame, h]
-
-theorem runFrame_of_run {frame : Frame} {evm : Evm} (h : frame.enter = .run evm) :
-    runFrame frame = frame.settle (exec evm) := by
-  rw [runFrame, h]
 
 /-! ## Focused executable checks for the total entry points
 
