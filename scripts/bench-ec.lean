@@ -109,7 +109,12 @@ def bench (label : String) (iterations : Nat) (f : Nat → Nat → Nat) : IO Uni
 
 -- Address expected from the benchmark tuple, cross-checked against
 -- libsecp256k1 and EELS by `scripts/check-ec.lean`.
-def benchSigAdr : String := "fcad0b19bb29d4674531d6f115237e16afce377c"
+def benchSigAdr : Nat := 0xfcad0b19bb29d4674531d6f115237e16afce377c
+
+-- Rendering only. `String.drop` yields a `String.Slice`, which has no
+-- `DecidableEq`, so an address is never compared in this form; `Adr.toNat` is
+-- the comparison, matching `checkAdr` in `scripts/check-ec.lean`.
+def adrHex (a : Adr) : String := "0x" ++ (a.toB256.toHex.drop 24)
 
 def main : IO UInt32 := do
   -- Preflight, outside every timed region: the recovery row is only meaningful
@@ -122,11 +127,10 @@ def main : IO UInt32 := do
     IO.println "ERROR: the benchmark signature tuple does not recover"
     return 1
   | some adr =>
-    let got := adr.toB256.toHex.drop 24
-    if got ≠ benchSigAdr then
-      IO.println s!"ERROR: benchmark tuple recovered 0x{got}, expected 0x{benchSigAdr}"
+    if adr.toNat ≠ benchSigAdr then
+      IO.println s!"ERROR: benchmark tuple recovered {adrHex adr}, expected {adrHex benchSigAdr.toAdr}"
       return 1
-    IO.println s!"# recover tuple recovers 0x{got} (full successful path)"
+    IO.println s!"# recover tuple recovers {adrHex adr} (full successful path)"
   if !bn254G2Generator.isOnCurve then
     IO.println "ERROR: the pinned BN254 G2 benchmark generator is not on curve"
     return 1
