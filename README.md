@@ -77,6 +77,11 @@ requirements.
   - *EEST* — release `v5.4.0` (SHA-256 `92cf1b47…`).
   - *current mainnet* — `execution-specs` `tests@v20.0.1` @ `87aba1a`, asset
     SHA-256 `3586193d…`; installed separately at `~/eest-mainnet-v20.0.1`.
+- **Gate catalogue** — [`scripts/GATES.md`](scripts/GATES.md) is the
+  authoritative reference for every verification gate: exact commands, pass
+  criteria, runtimes, and which gate to reach for when. Both fixture harnesses
+  take `--jobs auto` to run in parallel, which roughly halves the legacy corpus
+  and quarters the current-mainnet one.
 - **Conformance tiers** ([`scripts/check.sh`](scripts/check.sh)), each compared
   against a committed baseline. The gate passes iff **every** file's PASS/FAIL
   matches its baseline — a regression gate, not an all-green one:
