@@ -35,10 +35,13 @@ a baseline with `--rebase`, investigating a performance regression, or producing
 timing evidence for a report. A contended run's TIME column reflects scheduling,
 not the fixture. Parallel mode enforces this — it refuses `--rebase` outright.
 
-**Long gates are evidence obligations, not optional.** Gates expected to exceed
-ten minutes are normally deferred to the user unless the task explicitly
-authorizes them, but a deferred long gate needs a named owner and must pass
-before merge. It never substitutes for the cheap gates above.
+**Long gates are evidence obligations, not optional.** An action expected to
+exceed 1,000 seconds — judged as you will actually run it, parallel mode
+included — is deferred to the user unless the task explicitly authorizes it; a
+deferred long gate needs a named owner and must pass before merge. Everything
+under the threshold runs inline (use background execution when one command
+would outlast a foreground tool call), and a deferred gate never substitutes
+for the cheap gates above.
 
 ## The `--jobs` contract
 
@@ -164,12 +167,13 @@ executable inputs.
 | `scripts/check-mainnet.sh --suite full` | strict all-PASS, whole manifest | 5,100 | ~20.8 min | **~5.0 min** |
 | `scripts/check.sh --full` | every legacy fixture vs baseline | 2,983 | ~31.1 min | ~15.0 min |
 
-Judge the ten-minute long-gate deferral threshold against the gate as you will
-actually run it. With `--jobs auto` the three current-mainnet suites drop well
-under it and should be run inline rather than deferred by reflex — the whole
-manifest costs about five minutes. **Only `check.sh --full` stays genuinely
-long**, because one indivisible fixture dominates it and parallelism cannot
-touch that.
+Judge the 1,000-second deferral threshold against the gate as you will
+actually run it. At `--jobs auto` every row above comes in under it — legacy
+`--full` lands near ~900 s, latency-bound by one indivisible fixture that
+parallelism cannot touch — so all four run inline rather than deferred by
+reflex. Only a **sequential** legacy `check.sh --full` (~31 min) crosses the
+threshold, and a sequential run is called for only when its per-file timings
+are themselves the evidence.
 
 The two `--full` gates are the exact-candidate closure pair. **Neither may be
 replaced by its smoke tier.**
