@@ -30,10 +30,11 @@ Choose the gate by what you changed, cheapest falsifier first:
 | harness / generators | `python3 -m unittest discover -s scripts/tests` | `python3 scripts/env_doctor.py` |
 | anything Blanc consumes | `cd ~/blanc && lake build && scripts/check.sh --no-build` | — |
 
-**Use sequential (omit `--jobs`) when the timings themselves matter:** recording
-a baseline with `--rebase`, investigating a performance regression, or producing
-timing evidence for a report. A contended run's TIME column reflects scheduling,
-not the fixture. Parallel mode enforces this — it refuses `--rebase` outright.
+**Use sequential (omit `--jobs`) when the timings themselves matter:** writing a
+baseline with `--rebase` or `--refresh-times`, investigating a performance
+regression, or producing timing evidence for a report. A contended run's TIME
+column reflects scheduling, not the fixture. Parallel mode enforces this — it
+refuses both writing modes outright.
 
 **Long gates are evidence obligations, not optional.** An action expected to
 exceed 1,000 seconds — judged as you will actually run it, parallel mode
@@ -53,10 +54,11 @@ stays the script-level default; parallel is an explicit per-invocation choice.
 
 What parallel mode changes:
 
-- **Timings become reference-only.** `--rebase` is refused and the DRIFT
-  comparison is skipped entirely rather than computed and suppressed. The gate
-  itself is unaffected — it only ever compared STATUS. `check-vectors.sh` has no
-  baseline to protect, so it just marks the verdict line.
+- **Timings become reference-only.** `--rebase` and `--refresh-times` are both
+  refused and the DRIFT comparison is skipped entirely rather than computed and
+  suppressed. The gate itself is unaffected — it only ever compared STATUS.
+  `check-vectors.sh` has no baseline to protect, so it just marks the verdict
+  line.
 - **The per-file guard rises 1800s → 2000s.** This is the sole thing a parallel
   run still decides for real; it remains a hang detector, never a performance
   budget. An explicit `JAUNE_TIMEOUT` still wins. `check-vectors.sh` differs: it
@@ -220,6 +222,42 @@ non-PASS entry.
 
 Every gate's last line is a single unambiguous verdict, and every gate exits 0
 if and only if it passed.
+
+## Writing a `check.sh` baseline: two verbs
+
+A baseline line is `STATUS<TAB>TIME<TAB>path`, and the two columns have
+different status: STATUS is the gate, TIME is reference data. So the two reasons
+to rewrite a baseline get two different flags. Both are sequential-only, and
+both are refused for the `--patch`/`--rlp4` target gates and for the
+hand-maintained `--bls` baseline.
+
+| flag | means | on a classification change |
+|---|---|---|
+| `--rebase` | "the classifications legitimately changed; accept them" | absorbs it, after printing a `REBASE — <file>: <old> -> <new>` line for each |
+| `--refresh-times` | "the classifications are identical, the code got faster; refresh the reference times" | **writes nothing**, prints the differing files, exits nonzero |
+
+`--rebase` is rare and consequential — it is the one operation that can make a
+regression disappear, which is why it now prints the delta it absorbs instead of
+a bare `OK`. `--refresh-times` is the safe, mechanical case: it runs the tier,
+compares STATUS through the ordinary comparison, and only then writes a baseline
+that keeps the committed STATUS and path columns and takes TIME from the new
+run. It re-checks that property on the bytes it is about to write, so
+"timing-only" is verified rather than asserted. A refusal from it is a finding —
+report it; do not route around it with `--rebase`.
+
+Refreshing TIME is not cosmetic. Parallel dispatch is longest-first, **seeded
+from the committed baseline's TIME column**, so after an optimization that
+changes which fixture is slowest, a stale TIME column schedules the wrong
+fixture first and gives back part of the speedup. Note also that no DRIFT line
+appears when a fixture gets *faster* — DRIFT fires only above 2× its reference —
+so nothing else prompts the refresh.
+
+Verdict lines:
+
+```
+OK — full: 2983 files STATUS-identical to baseline; TIME column refreshed
+OK — depth: baseline rebased with 67 files, 1 classification change(s) absorbed (67 PASS, 0 FAIL)
+```
 
 ## Rules
 

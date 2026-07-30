@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fixture-test harness for Jaune (REFACTOR.md Phase 0, step 0.1).
 #
-# Usage: scripts/check.sh (--depth | --smoke | --full | --patch | --rlp4 | --bls | --dir <path>) [--report <path>] [--rebase] [--no-build] [--jobs <n>|auto]
+# Usage: scripts/check.sh (--depth | --smoke | --full | --patch | --rlp4 | --bls | --dir <path>) [--report <path>] [--rebase | --refresh-times] [--no-build] [--jobs <n>|auto]
 #
 #   --depth       run the fuel/call-depth stress set (scripts/depth-tests.txt)
 #   --smoke       run the smoke set (scripts/smoke-tests.txt)
@@ -21,8 +21,13 @@
 #                 selected file PASSes
 #   --report <p>  write this run's report to <p> instead of overwriting the
 #                 default scripts/report-<tier>.txt
-#   --rebase      accept the current results as the new committed baseline
+#   --rebase      accept the current results as the new committed baseline,
+#                 printing the classification delta it absorbs
 #                 (rejected for --patch/--rlp4: their desired result is fixed)
+#   --refresh-times
+#                 refresh only the baseline's TIME column: run the tier, require
+#                 the STATUS column to be identical to the committed baseline,
+#                 and refuse to write anything if it is not
 #   --no-build    skip `lake build jaune`
 #   --jobs <n>    run <n> fixtures concurrently (default 1 = sequential).
 #                 `auto` resolves to the machine's logical-core count. See
@@ -73,6 +78,29 @@
 # The gate passes iff every file's classification equals the committed
 # baseline's — NOT iff every file passes. Any classification change is a
 # regression.
+#
+# Writing the baseline: two verbs, deliberately separate
+# ------------------------------------------------------
+# The two columns have different status, so the two reasons to rewrite a
+# baseline deserve different answers.
+#
+#   --rebase        "the classifications legitimately changed; accept them."
+#                   Rare and consequential. It absorbs whatever it is given, so
+#                   it now prints the classification delta it is about to
+#                   absorb; a reviewer sees exactly what was accepted, and the
+#                   commit message writes itself.
+#   --refresh-times "the classifications are identical, the code got faster,
+#                   refresh the reference times." Safe and mechanical. It
+#                   compares STATUS first and writes nothing at all unless every
+#                   file matches, so it cannot absorb a regression. The written
+#                   baseline keeps the committed STATUS and path columns and
+#                   takes TIME from this run.
+#
+# Refreshing TIME is not cosmetic: parallel dispatch is longest-first, seeded
+# from the committed baseline's TIME column, so a stale time column schedules
+# the wrong fixture first. Both verbs are sequential-only, for the reason given
+# under Parallel dispatch, and both are rejected for the target gates and for
+# the hand-maintained bls baseline.
 #
 # Parallel dispatch (--jobs)
 # --------------------------
@@ -130,7 +158,7 @@ ROOT="$(dirname "$SCRIPT_DIR")"
 BIN="$ROOT/.lake/build/bin/jaune"
 
 usage() {
-  echo "usage: scripts/check.sh (--depth | --smoke | --full | --patch | --rlp4 | --bls | --dir <path>) [--report <path>] [--rebase] [--no-build] [--jobs <n>|auto]" >&2
+  echo "usage: scripts/check.sh (--depth | --smoke | --full | --patch | --rlp4 | --bls | --dir <path>) [--report <path>] [--rebase | --refresh-times] [--no-build] [--jobs <n>|auto]" >&2
   exit 2
 }
 
@@ -147,6 +175,7 @@ all_cores() {
 TIER=""
 DIR_PATH=""
 REBASE=0
+REFRESH=0
 BUILD=1
 REPORT_PATH=""
 JOBS=1
@@ -170,6 +199,7 @@ while [ $# -gt 0 ]; do
       JOBS="$1"
       ;;
     --rebase) REBASE=1 ;;
+    --refresh-times) REFRESH=1 ;;
     --no-build) BUILD=0 ;;
     *) echo "unknown argument: $1" >&2; usage ;;
   esac
@@ -214,15 +244,26 @@ case "$TIER" in
   patch|rlp4) IS_TARGET=1 ;;
   *)          IS_TARGET=0 ;;
 esac
-if [ "$IS_TARGET" -eq 1 ] && [ "$REBASE" -eq 1 ]; then
-  echo "usage error: --rebase is not supported for the $TIER target gate; its desired result is fixed at all-PASS" >&2
+if [ "$REBASE" -eq 1 ] && [ "$REFRESH" -eq 1 ]; then
+  echo "usage error: --rebase and --refresh-times are mutually exclusive; --rebase accepts new classifications, --refresh-times refuses them" >&2
+  exit 2
+fi
+
+# Name the verb in the usage errors below, so a --refresh-times refusal is never
+# reported as though --rebase had been asked for.
+if [ "$REFRESH" -eq 1 ]; then WRITE_FLAG="--refresh-times"; else WRITE_FLAG="--rebase"; fi
+WRITES=$((REBASE + REFRESH))
+
+if [ "$IS_TARGET" -eq 1 ] && [ "$WRITES" -eq 1 ]; then
+  echo "usage error: $WRITE_FLAG is not supported for the $TIER target gate; its desired result is fixed at all-PASS" >&2
   exit 2
 fi
 
 # The bls tier compares against a committed hand-authored target baseline;
-# accepting observed results wholesale would defeat it.
-if [ "$TIER" = "bls" ] && [ "$REBASE" -eq 1 ]; then
-  echo "usage error: --rebase is not supported for the bls tier; its baseline is a hand-maintained target — edit scripts/baseline-bls.txt directly" >&2
+# accepting observed results wholesale would defeat it, and its TIME column is
+# hand-recorded prose-annotated reference data, not harness output.
+if [ "$TIER" = "bls" ] && [ "$WRITES" -eq 1 ]; then
+  echo "usage error: $WRITE_FLAG is not supported for the bls tier; its baseline is a hand-maintained target — edit scripts/baseline-bls.txt directly" >&2
   exit 2
 fi
 
@@ -230,8 +271,8 @@ fi
 # must never become baseline reference data. Rejecting outright rather than
 # ignoring: a silently-dropped --rebase would leave the operator believing the
 # baseline had been refreshed.
-if [ "$JOBS" -gt 1 ] && [ "$REBASE" -eq 1 ]; then
-  echo "usage error: --rebase is not supported with --jobs > 1; a parallel run's TIME column is contended and would corrupt the baseline's reference times — rebase from a sequential run" >&2
+if [ "$JOBS" -gt 1 ] && [ "$WRITES" -eq 1 ]; then
+  echo "usage error: $WRITE_FLAG is not supported with --jobs > 1; a parallel run's TIME column is contended and would corrupt the baseline's reference times — run it sequentially" >&2
   exit 2
 fi
 
@@ -457,15 +498,20 @@ if [ "$IS_TARGET" -eq 1 ]; then
   exit 1
 fi
 
-if [ "$REBASE" -eq 1 ]; then
-  # STATUS and TIME are regenerated together; the times become this machine's
-  # reference data.
-  cp "$REPORT" "$BASELINE"
-  echo "OK — $TIER: baseline rebased with $TOTAL files ($SUMMARY)"
-  exit 0
-fi
-
 if [ ! -f "$BASELINE" ]; then
+  # Bootstrapping: --rebase is how a baseline comes into existence, so it still
+  # writes here — there is simply no delta to print.
+  if [ "$REBASE" -eq 1 ]; then
+    cp "$REPORT" "$BASELINE"
+    echo "OK — $TIER: baseline created with $TOTAL files; no prior baseline, so no classification delta ($SUMMARY)"
+    exit 0
+  fi
+  # --refresh-times refreshes an existing reference; it never creates one,
+  # because with nothing to compare against it could not honour its contract.
+  if [ "$REFRESH" -eq 1 ]; then
+    echo "REGRESSION — $TIER: --refresh-times needs a committed baseline to compare against; none at $BASELINE"
+    exit 1
+  fi
   if [ "$TIER" = "dir" ]; then
     if [ "$NFAIL" -eq 0 ]; then
       echo "OK — dir: $TOTAL files, all PASS, no baseline ($SUMMARY)"
@@ -491,6 +537,14 @@ grep -v -e '^[[:space:]]*#' -e '^[[:space:]]*$' "$BASELINE" > "$CMP_DIR/baseline
 MALFORMED="$(awk -F'\t' 'NF != 3 { print FILENAME ":" FNR ": " $0 }' "$CMP_DIR/baseline-raw")"
 if [ -n "$MALFORMED" ]; then
   printf '%s\n' "$MALFORMED" >&2
+  # --rebase is also the repair for a malformed baseline, and it was reachable
+  # before this check until the write moved below the comparison. Keep it
+  # reachable, and say plainly that no delta could be computed.
+  if [ "$REBASE" -eq 1 ]; then
+    cp "$REPORT" "$BASELINE"
+    echo "OK — $TIER: baseline rebased with $TOTAL files; the prior baseline was malformed, so no classification delta could be computed ($SUMMARY)"
+    exit 0
+  fi
   if [ "$TIER" = "bls" ]; then
     HINT="it is hand-maintained, never rebased — add the missing TIME column by hand"
   else
@@ -529,12 +583,66 @@ CHANGES="$(awk -F'\t' '
   END { for (file in base) print base[file] "\tMISSING\t" file }
 ' "$CMP_DIR/baseline" "$CMP_DIR/report")"
 
-if [ -z "$CHANGES" ]; then
+if [ -n "$CHANGES" ]; then
+  NCHANGED="$(printf '%s\n' "$CHANGES" | grep -c .)"
+else
+  NCHANGED=0
+fi
+
+# --rebase absorbs whatever it is given, so it says out loud what that is. Both
+# historical uses moved exactly one line (TIMEOUT -> PASS, an optimization
+# letting a fixture finish); with this output a reviewer sees what was accepted.
+if [ "$REBASE" -eq 1 ]; then
+  if [ "$NCHANGED" -eq 0 ]; then
+    echo "REBASE — $TIER: no classification changes to absorb; only the TIME column moves"
+  else
+    printf '%s\n' "$CHANGES" | while IFS="$(printf '\t')" read -r OLD NEW REL; do
+      printf 'REBASE — %s: %s -> %s\n' "$REL" "$OLD" "$NEW"
+    done
+  fi
+  # STATUS and TIME are regenerated together; the times become this machine's
+  # reference data.
+  cp "$REPORT" "$BASELINE"
+  echo "OK — $TIER: baseline rebased with $TOTAL files, $NCHANGED classification change(s) absorbed ($SUMMARY)"
+  exit 0
+fi
+
+# --refresh-times requires the STATUS column to be identical already. On any
+# difference it writes nothing: absorbing a regression is precisely what this
+# mode exists in order not to do, and the refusal is the finding.
+if [ "$REFRESH" -eq 1 ]; then
+  if [ "$NCHANGED" -ne 0 ]; then
+    printf '%s\n' "$CHANGES" | while IFS="$(printf '\t')" read -r OLD NEW REL; do
+      printf 'CHANGE — %s: %s -> %s\n' "$REL" "$OLD" "$NEW"
+    done
+    echo "REGRESSION — $TIER: $NCHANGED classification change(s) vs baseline; --refresh-times wrote nothing; see $REPORT"
+    exit 1
+  fi
+  # STATUS and path come from the committed baseline, TIME from this run.
+  # Comment and blank lines pass through untouched.
+  awk -F'\t' -v OFS='\t' '
+    NR == FNR { nt[$3] = $2; next }
+    $0 ~ /^[[:space:]]*#/ || $0 ~ /^[[:space:]]*$/ { print $0; next }
+    { if ($3 in nt) $2 = nt[$3]; print $1, $2, $3 }
+  ' "$REPORT" "$BASELINE" > "$CMP_DIR/refreshed"
+  # "TIME-only" is checked, not claimed: the rewritten file's STATUS and path
+  # columns must be byte-identical to the ones already committed.
+  grep -v -e '^[[:space:]]*#' -e '^[[:space:]]*$' "$CMP_DIR/refreshed" \
+    | cut -f1,3 > "$CMP_DIR/refreshed-status"
+  if ! cmp -s "$CMP_DIR/refreshed-status" "$CMP_DIR/baseline"; then
+    echo "HARNESS ERROR — $TIER: the refreshed baseline's STATUS/path columns differ from the committed ones; nothing written"
+    exit 1
+  fi
+  cp "$CMP_DIR/refreshed" "$BASELINE"
+  echo "OK — $TIER: $TOTAL files STATUS-identical to baseline; TIME column refreshed"
+  exit 0
+fi
+
+if [ "$NCHANGED" -eq 0 ]; then
   echo "OK — $TIER: $TOTAL files match baseline ($SUMMARY)"
   exit 0
 fi
 
-NCHANGED="$(printf '%s\n' "$CHANGES" | grep -c .)"
 printf '%s\n' "$CHANGES" | while IFS="$(printf '\t')" read -r OLD NEW REL; do
   printf 'CHANGE — %s: %s -> %s\n' "$REL" "$OLD" "$NEW"
 done
