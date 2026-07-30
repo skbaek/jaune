@@ -95,7 +95,10 @@ It depends on which bound the suite is under, and the corpora differ:
   longest indivisible fixture, not by the job count. That fixture is now
   `VMTests/vmPerformance/loopMul.json` at 372.5s sequential — 33% of the serial
   total and 4.5x the second-longest file. Measured 462s at `--jobs auto` (10)
-  on 2026-07-31. Only making *that* fixture faster moves this number.
+  on 2026-07-31. Only making *that* fixture faster moves this number. ("Serial
+  total" here and below means the sum of the per-file TIME column, 1,145.8s — a
+  lower bound on sequential wall time, not a measured one; see the catalogue
+  table's note.)
 
   Until 2026-07-31 the dominant fixture was `stTimeConsuming/CALLBlake2f_MaxRounds`
   at 711s (~41% of a 3,338s serial total), which held the makespan near 900s
@@ -179,19 +182,29 @@ executable inputs.
 | `scripts/check-mainnet.sh --suite osaka` | strict all-PASS | 2,514 | ~8 min | **~2.3 min** |
 | `scripts/check-mainnet.sh --suite prague` | strict all-PASS | 2,573 | ~12 min | **~3.0 min** |
 | `scripts/check-mainnet.sh --suite full` | strict all-PASS, whole manifest | 5,100 | ~20.8 min | **~5.0 min** |
-| `scripts/check.sh --full` | every legacy fixture vs baseline | 2,983 | ~19 min | **~7.7 min** |
+| `scripts/check.sh --full` | every legacy fixture vs baseline | 2,983 | **≥ 19 min** | **7.7 min** |
 
-The legacy `--full` figures are from 2026-07-31, after the BLAKE2b unboxing:
-1,145.8 s of summed per-file time sequentially, 462 s measured wall at
-`--jobs auto`. Before it they were ~3,338 s and ~900 s.
+**Read the two legacy `--full` cells differently — they have different
+provenances.** The parallel cell is a measured wall time: 462 s at `--jobs auto`,
+2026-07-31. The sequential cell is **not** a measured wall time; it is
+1,145.8 s of *summed per-file fixture time* taken from the refreshed TIME
+column, which is a **lower bound** on wall time — a sequential run also pays
+2,983 process spawns plus harness overhead on top. Treat it as "at least 19
+min". Before the BLAKE2b unboxing the corresponding figures were ≥ 3,338 s
+summed and ~900 s measured.
 
-Judge the 1,000-second deferral threshold against the gate as you will
-actually run it. At `--jobs auto` every row above comes in under it — legacy
-`--full` now lands near ~460 s, latency-bound by one indivisible fixture that
-parallelism cannot touch — so all four run inline rather than deferred by
-reflex. A **sequential** legacy `check.sh --full` now also comes in under the
-threshold at ~19 min, where it used to sit above it; a sequential run is still
-called for only when its per-file timings are themselves the evidence.
+Judge the 1,000-second deferral threshold against the gate as you will actually
+run it. At `--jobs auto` every row above comes in under it — legacy `--full`
+lands near ~460 s, latency-bound by one indivisible fixture that parallelism
+cannot touch — so all four run inline rather than deferred by reflex.
+**A sequential legacy `check.sh --full` remains above the threshold and still
+requires explicit authorization**: its lower bound alone, 1,145.8 s, exceeds
+1,000 s. A sequential run is still called for only when its per-file timings are
+themselves the evidence.
+
+**The BLAKE2b unboxing changed no deferral status.** The parallel run was already
+under the threshold before it (~900 s) and the sequential run was already above
+it; the arc made both faster without moving either across the line.
 
 The two `--full` gates are the exact-candidate closure pair. **Neither may be
 replaced by its smoke tier.**

@@ -233,6 +233,9 @@ average allowed to fall to 1.41 before launch.
 | `VMTests/vmPerformance/loopMul.json` | 390.17 s | **372.50 s** | 1.05x |
 | sum of the TIME column | 3,337.9 s | **1,145.8 s** | 2.91x |
 
+The TIME-column sum is a lower bound on sequential wall time, not a measurement
+of it; see *What the refresh bought* below.
+
 `loopMul` is now the corpus's longest fixture, 4.5x ahead of the second-longest
 (`static_Call50000_sha256`, 83.39 s). No DRIFT line appeared. The refreshed
 baseline was committed alone, as a timing-only change.
@@ -247,15 +250,29 @@ OK — full: 2983 files match baseline (2978 PASS, 5 FAIL; --jobs 10, timings re
 WALL = 462 s
 ```
 
-| | before the arc | after |
-|---|---:|---:|
-| sequential `--full` (sum of per-file time) | 3,337.9 s | **1,145.8 s** |
-| parallel `--full` at `--jobs auto` | ~900 s | **462 s** |
+| | before the arc | after | provenance |
+|---|---:|---:|---|
+| sequential `--full` | ≥ 3,337.9 s | **≥ 1,145.8 s** | sum of the per-file TIME column — a *lower bound* on wall time, not a measurement |
+| parallel `--full` at `--jobs auto` | ~900 s | **462 s** | measured wall time |
+
+**No deferral status changed.** The sequential run was above `planning.md` §6's
+1,000-second threshold before this arc and is still above it — its lower bound
+alone, 1,145.8 s, exceeds 1,000 s — so it still requires explicit authorization.
+The parallel run was already under the threshold (~900 s) and still is. The arc
+made both faster without moving either across the line, exactly as the plan's
+*Verified starting point* predicted ("Sequential `--full` falls from ~31 min to
+~21 min and therefore still sits above `planning.md` §6's 1,000-second
+threshold").
+
+No sequential wall time was measured for this arc, and deliberately so: that
+would have been a third long action where the plan authorizes exactly two.
 
 The 2,978 PASS / 5 FAIL split is the corpus's five known legacy FAILs, unmoved.
 `GATES.md` and `check.sh`'s header comment were corrected accordingly: they
 stated that `CALLBlake2f_MaxRounds` was ~41% of the serial total and that the
-parallel makespan was 99.6% that one fixture, which this arc falsified. The
+parallel makespan was 99.6% that one fixture, which this arc falsified. Both now
+also label the sequential figure as a summed-fixture-time lower bound and state
+that a sequential `--full` remains above the deferral threshold. The
 shape of the claim survives — `--full` is still latency-bound by one indivisible
 fixture that parallelism cannot touch — but the fixture is now `loopMul` at
 372.5 s and 33% of the serial total.

@@ -148,6 +148,14 @@
 #     measured 2026-07-31. Before the BLAKE2b unboxing the holder of that
 #     position was a 766s fixture at 41% of the total, and the makespan was
 #     886s at 4 jobs and 899s at 8 — same shape, different file.
+#
+#     "Serial total" means the sum of the per-file TIME column: 1145.8s as of
+#     2026-07-31, down from 3337.9s. That is a LOWER BOUND on sequential wall
+#     time, not a measurement of it — a sequential run also pays 2983 process
+#     spawns and harness overhead. A sequential --full therefore still sits
+#     above the 1000s deferral threshold and still needs explicit
+#     authorization; only the parallel run is under it, as it already was
+#     before the unboxing.
 #   - Throughput-bound (the current-mainnet suites: 90% of files run under
 #     0.15s, so process spawn dominates) improves substantially: 435s at 4
 #     jobs, 299s at 10.
