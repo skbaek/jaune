@@ -439,17 +439,6 @@ def calculateDataFee (blob : BlobSchedule) (excess_blob_gas: Nat) (tx: Tx) :
 
 def getTxHash (tx : Tx) : B256 := tx.toBLT.toBytes.keccak
 
-def Receipt.toStrings (r : Receipt) : List String :=
-  fork "RECEIPT" [
-    [s!"SUCCEEDED: {r.succeeded}"],
-    [s!"GAS USED: {r.gasUsed}"],
-    fork "BLOOM" [r.bloom.toHex.chunks 64],
-    fork "LOGS" (r.logs.map Log.toStrings)
-  ]
-
-instance : ToString Receipt where
-  toString := String.joinln ∘ Receipt.toStrings
-
 def Receipt.toBLT (r : Receipt) : BLT :=
   .list [
     .bytes (if r.succeeded then [0x01] else []),
@@ -1095,13 +1084,11 @@ def applyTransactions :
 def applyBody
   (benv : Benv) (txs : List (Bytes ⊕ Tx)) (wds : List Withdrawal) :
   Except String (State × BlockOutput) := do
-  cprint "\n================================ BEACON ROOTS TX ================================\n"
   let ⟨stBeacon, _⟩ ←
     processUncheckedSystemTransaction benv
       beaconRootsAddress
       benv.stat.parentBeaconBlockRoot.toBytes
   let benvBeacon : Benv := benv.withState stBeacon
-  cprint "\n================================ HISTORY STORAGE TX ================================\n"
   let lastHash ←
      benvBeacon.stat.blockHashes.getLast?.toExcept "ERROR : block hashes is empty"
   let ⟨stHistory, _⟩ ←
@@ -1109,15 +1096,10 @@ def applyBody
       historyStorageAddress
       lastHash.toBytes
   let benvHistory := benvBeacon.withState stHistory
-  cprint "\n================================ MAIN TXS ================================\n"
   let ⟨benvTxs, boutTxs⟩ ←
     applyTransactions (← txs.mapM decodeTx).putIndex benvHistory .init
-  cprint s!"\nSTATE AFTER TEST TXS :"
-  cprint s!"{benvTxs.state}"
-  cprint "\n================================ PROCESS WITHDRAWALS ================================\n"
   let ⟨stWds, boutWds⟩ :=
     processWithdrawals benvTxs boutTxs wds
-  cprint "\n================================ PROCESS GENERAL PURPOSE REQUESTS ================================\n"
   processGeneralPurposeRequests (benvTxs.withState stWds) boutWds
 
 def getLast256BlockHashes (chain : BlockChain) : List B256 :=
@@ -1648,8 +1630,6 @@ rejects. -/
 private def addBlockToChain.go (rules : ForkRules) (chain : BlockChain)
     (block : Block) (blockHeaderHash : B256) (rawRlpSize : Nat) :
     Except String (BlockChain ⊕ String) := do
-  cprint "\nSTATE BEFORE TRANSITION :"
-  cprint s!"{chain.state}"
   if (Header.toBLT block.header).toBytes.keccak ≠ blockHeaderHash then do
     .error "ERROR : incorrect block header hash"
   -- Strict decode/round-trip and the independent header-hash evidence above
@@ -1662,8 +1642,6 @@ private def addBlockToChain.go (rules : ForkRules) (chain : BlockChain)
     match stateTransitionWith rules chain block with
     | .error err => return (.inr err)
     | .ok chain => .ok chain
-  cprint s!"\nSTATE AFTER TRANSITION :"
-  cprint s!"{chain.state}"
   .ok (.inl chain)
 
 /-- Block import under an explicit rule set. -/

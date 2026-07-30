@@ -526,52 +526,6 @@ instance {ξ : Type u} [Ord ξ] : Ord (List ξ) := ⟨List.compare⟩
 def UInt8.compareLows (x y : UInt8) : Ordering :=
   Ord.compare x.lows y.lows
 
-def pad : String → String
-  | s => "  " ++ s
-
-def padMid : String -> String
-  | s => "│ " ++ s
-
-def padsMid : List String → List String
-  | [] => []
-  | s :: ss => ("├─" ++ s) :: ss.map padMid
-
-def padsEnd : List String → List String
-  | [] => []
-  | s :: ss => ("└─" ++ s) :: ss.map pad
-
-def padss : List (List String) -> List String
-  | [] => []
-  | [ss] => padsEnd ss
-  | ss :: sss => padsMid ss ++ padss sss
-
-def addComma (ss : List String) : Option (List String) :=
-  let rec aux (s : String) : List String -> List String
-    | [] => [s ++ ","]
-    | s' :: ss' => s :: (aux s' ss')
-  match ss with
-  | [] => none
-  | s :: ss' => some <| aux s ss'
-
-def addCommas  (ss : List String) : List (List String) -> Option (List String)
-  | [] => ss
-  | ss' :: sss' => do
-    let ssc ← addComma ss
-    let ssc' ← addCommas ss' sss'
-    ssc ++ ssc'
-
-def fork (s : String) : List (List String) → List String
-  | [[s']] => [s ++ "──" ++ s']
-  | sss => s :: padss sss
-
-def encloseStrings : List String → List String
-  | [] => ["[]"]
-  | [s] => ["[" ++ s ++ "]"]
-  | ss => "┌─" :: ss.map padMid ++ ["└─"]
-
-def List.toStrings {ξ} (f : ξ -> List String) (xs : List ξ) : List String :=
-  encloseStrings (xs.map f).flatten
-
 def B4L.toHex : Bytes → String
   | [] => ""
   | [b] => String.ofList [b.toHexit]
@@ -1461,56 +1415,11 @@ def String.chunks : Nat → String → List String
   | 0, _ => []
   | m + 1, s => (List.chunks m s.toList).map String.ofList
 
-mutual
-
-  def BLT.toStrings : BLT → List String
-    | .bytes bs => fork "[Bytes]" [(List.chunks 31 bs).map Bytes.toHex]
-    | .list rs => fork "[LIST]" (BLTs.toStringss rs)
-
-  def BLTs.toStringss : List BLT → List (List String)
-    | [] => []
-    | r :: rs => r.toStrings :: BLTs.toStringss rs
-
-end
-
-instance : ToString BLT := ⟨String.joinln ∘ BLT.toStrings⟩
-
 def readJsonFile (filename : System.FilePath) : IO Lean.Json := do
   let contents ← IO.FS.readFile filename
   match Lean.Json.parse contents with
   | .ok json => pure json
   | .error err => throw (IO.userError err)
-
-mutual
-
-  partial def StringJson.toStrings : (String × Lean.Json) → List String
-    | ⟨n, j⟩ =>
-      (fork n [Lean.Json.toStrings j])
-
-  partial def StringJsons.toStrings : List ((_ : String) × Lean.Json) → List String
-    | [] => []
-    | ⟨n, j⟩ :: njs =>
-      (fork n [Lean.Json.toStrings j]) ++ StringJsons.toStrings njs
-
-  partial def Lean.Jsons.toStrings : List Lean.Json → List String
-    | [] => []
-    | j :: js => Lean.Json.toStrings j ++ Lean.Jsons.toStrings js
-
-  partial def Lean.Json.toStrings : Lean.Json → List String
-    | .null => ["NULL"]
-    | .bool b => [s!"BOOL : {b}"]
-    | .num n => [s!"NUM : {n}"]
-    | .str s =>
-       fork "STR" [s.chunks 80]
-    | .arr js =>
-      fork "ARR" (js.toList.map Lean.Json.toStrings)
-    | .obj m => do
-      let kvs := m.toArray.toList
-      fork "OBJ" (kvs.map StringJson.toStrings)
-
-end
-
-def Lean.Json.toString (j : Lean.Json) : String := String.joinln j.toStrings
 
 def B256.ltCheck  (x y : B256) : B256 := if x < y then 1 else 0
 def B256.gtCheck  (x y : B256) : B256 := if x > y then 1 else 0
@@ -1576,40 +1485,3 @@ def Nat.toHex (n : Nat) : String :=
 def List.maxD {ξ} [Max ξ] : List ξ → ξ → ξ
   | [], y => y
   | x :: xs, y => maxD xs (max x y)
-
-/-- Global verbosity flag, set once at startup (see `main`). Threading a `vb :
-Bool` through every execution definition was noise, so it lives here instead. -/
-initialize verbosityRef : IO.Ref Bool ← IO.mkRef false
-
-@[never_extract] unsafe def verboseImpl (_ : Unit) : Bool :=
-  unsafeBaseIO verbosityRef.get
-
-/-- Ambient verbosity flag. Logically the constant `false`; at runtime it reads
-`verbosityRef`, which `main` sets once from `--verbose` before any execution
-runs. Three precautions keep the read from being evaluated before `main` sets
-the flag (which would lock in the `mkRef` default forever):
-
-1. The `Unit` argument — a nullary `def` would be a CAF, forced once at
-   module-load time.
-2. `@[never_extract]` on `verboseImpl` — otherwise the compiler lifts the
-   closed term `verboseImpl ()` out of function bodies into a module-init
-   constant (closed-term extraction), evaluating it at load time.
-3. `@[never_extract]` on `verbose` and `cprint` — same protection at the
-   source level, e.g. for the closed subterm `cprint "some literal"`.
-
-Note `never_extract` is shallow: it protects terms that *directly mention* the
-marked constant. A fully-closed application further up the call chain (e.g.
-`f 42` where `f` transitively calls `cprint`) would still be extracted and
-init-evaluated with verbosity off. Fine here, since every execution call takes
-runtime data. Also keep the set-once discipline: do not mutate `verbosityRef`
-after startup, or pure readers see inconsistent values. -/
-@[never_extract, implemented_by verboseImpl] def verbose (_ : Unit) : Bool :=
-  false
-
-@[never_extract]
-def cprint {m : Type → Type v}  [inst : Monad m] (msg : String) : m Unit := do
-  if verbose () then do
-    dbg_trace msg
-
-def Except.print {ξ : Type} (msg : String) : Except ξ Unit := do
-  dbg_trace msg

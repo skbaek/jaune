@@ -788,14 +788,6 @@ lemma Std.TreeMap.eq_empty_of_isEmpty {α : Type u} {β : Type v}
   · simp [Std.DTreeMap.Internal.Impl.isEmpty] at h
   · rfl
 
-def Stor.toStrings (s : Stor) : List String :=
-  let kvs := s.toArray.toList
-  let kvToStrings : B256 × B256 → List String :=
-    λ nb => [s!"0x{(B256.toHex nb.fst).dropZeroes} : 0x{(B256.toHex nb.snd).dropZeroes}"]
-  fork "STOR" (kvs.map kvToStrings)
-
-instance : ToString Stor := ⟨String.joinln ∘ Stor.toStrings⟩
-
 @[ext]
 structure Acct where
   (nonce : UInt64)
@@ -806,25 +798,6 @@ structure Acct where
 def Acct.withBal (a : Acct) (bal : B256) : Acct :=
   {a with bal := bal}
 
-def Acct.toStrings (s : String) (a : Acct) : List String :=
-  let codeStrings : List String :=
-    let xs := a.code.toList
-    let sz := xs.length
-    if sz = 0 then
-      []
-    else if sz ≤ 32 then
-      [s!"{Bytes.toHex xs} ({sz} bytes)"]
-    else
-      [s!"{Bytes.toHex (xs.take 32)}... ({sz} bytes)"]
-
-  fork s [
-    [s!"BAL : 0x{a.bal.toHex.dropZeroes}"],
-    [s!"NONCE : 0x{a.nonce.toHex.dropZeroes}"],
-    fork "CODE" [codeStrings],
-    a.stor.toStrings
-  ]
-
-instance : ToString Acct := ⟨fun a => String.joinln (Acct.toStrings "account" a)⟩
 -- An address is exactly twenty bytes. The trailing `[]` is load-bearing: a
 -- twenty-one-byte list is a malformed address, not an address with a tail to
 -- ignore. Accepting the prefix let an overlong RLP field survive decoding and

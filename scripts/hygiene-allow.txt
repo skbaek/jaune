@@ -7,10 +7,3 @@
 #
 # Keep a justification comment above every entry. When the underlying code is
 # removed, delete its entry (the gate warns about stale entries).
-
-# Deliberate, off-by-default verbose-logging facility. `verbose ()` returns
-# false at runtime and is @[never_extract]/@[implemented_by]-protected against
-# closed-term extraction (see the doc comment above `verbose` in Basic.lean).
-# `cprint` and `Except.print` are its only sinks and both gate on it. Covers
-# both occurrences (Basic.lean:1786 in cprint, Basic.lean:1789 in Except.print).
-Jaune/Basic.lean dbg_trace msg

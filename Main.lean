@@ -648,7 +648,6 @@ def main : List String → IO Unit
     if !(← runVectorFile f addr pathStr) then
       IO.Process.exit 1
   | path :: opts => do
-    verbosityRef.set (List.contains opts "--verbose")
     let testIdx : Option Nat := getTestIndex opts
     let skip : Option Nat := getSkip opts
     let spec ← getNetworkSpec opts

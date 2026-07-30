@@ -30,21 +30,7 @@ and the projects which depend on it, including `blanc`.
 
 abbrev AccessList : Type := List (Adr × List B256)
 
-instance : ToString AccessList := ⟨@List.toString _ _⟩
-
 abbrev State : Type := Std.TreeMap Adr Acct compare
-
-def State.toStrings (w : State) : List String :=
-  let kvs := w.toArray.toList
-  let kvToStrings : Adr × Acct → List String :=
-    fun x => Acct.toStrings ("0x" ++ x.fst.toHex.dropZeroes) x.snd
-  fork "STATE" (kvs.map kvToStrings)
-
-def AccessItem.toStrings : (Adr × List B256) → List String
-  | ⟨a, ks⟩ => fork a.toHex <| ks.map <| fun k => [k.toHex]
-
-def AccessList.toStrings (al : AccessList) : List String :=
-    fork "ACCESS LIST" <| al.map <| AccessItem.toStrings
 
 -- class Authorization
 structure Auth : Type where
@@ -120,33 +106,6 @@ structure Header : Type where
   excessBlobGas : Nat
   parentBeaconBlockRoot : B256
   requestsHash : Option B256
-
-def Header.toStrings (header : Header) : List String :=
-  fork "header" [
-    [s!"parent hash : {header.parentHash}"],
-    [s!"ommers hash : {header.ommersHash}"],
-    [s!"coinbase : {header.coinbase}"],
-    [s!"stateRoot : {header.stateRoot}"],
-    [s!"transactions root : {header.txsRoot}"],
-    [s!"receipt root : {header.receiptRoot}"],
-    [s!"bloom : {header.bloom.toHex}"],
-    [s!"difficulty : {header.difficulty}"],
-    [s!"number : {header.number}"],
-    [s!"gas limit : {header.gasLimit}"],
-    [s!"gas used : {header.gasUsed}"],
-    [s!"timestamp : {header.timestamp}"],
-    [s!"extra data : {header.extraData.toHex}"],
-    [s!"prevRandao : {header.prevRandao}"],
-    [s!"nonce : {header.nonce}"],
-    [s!"base fee per gas : {header.baseFeePerGas}"],
-    [s!"withdrawals root : {header.withdrawalsRoot}"],
-    [s!"blob gas used : {header.blobGasUsed}"],
-    [s!"excess blob gas : {header.excessBlobGas}"],
-    [s!"parent beacon block root : {header.parentBeaconBlockRoot}"],
-    [s!"requests Hash : {header.requestsHash}"],
-  ]
-
-instance : ToString Header := ⟨String.joinln ∘ Header.toStrings⟩
 
 def Header.toBLT (header : Header) : BLT :=
   BLT.list <| [
@@ -316,102 +275,6 @@ def Tx.toBLT (tx : Tx) : BLT :=
       .bytes (trimZero tx.s)
     ]
 
-def Auth.toStrings (auth : Auth) : List String :=
-  fork
-    "auth"
-    [
-      [s!"chain ID : {auth.chainId}"],
-      [s!"address : {auth.address}"],
-      [s!"nonce : {auth.nonce.toHex}"],
-      [s!"y parity : {auth.yParity}"],
-      [s!"r : {auth.r.toHex}"],
-      [s!"s : {auth.s.toHex}"]
-    ]
-
-def Auths.toStrings (al : List Auth) : List String :=
-    fork "auth list" <| al.map <| Auth.toStrings
-
-def TxType.toStrings : TxType → List String
-  | zero
-    (gasPrice : Nat)
-    (receiver : Option Adr) =>
-    fork "Type-0" [
-      [s!"gas price : {gasPrice.repr}"],
-      [s!"receiver : {toString receiver}"]
-    ]
-  | one
-    (chainId : UInt64)
-    (gasPrice : Nat)
-    (receiver : Option Adr)
-    (accessList : AccessList) =>
-    fork "Type-1" [
-      [s!"chain ID : {chainId}"],
-      [s!"gas price : {gasPrice.repr}"],
-      [s!"receiver : {toString receiver}"],
-      accessList.toStrings
-    ]
-  | two
-    (chainId : UInt64)
-    (maxPriorityFee : Nat)
-    (maxFee : Nat)
-    (receiver : Option Adr)
-    (accessList : AccessList) =>
-    fork "Type-2" [
-      [s!"chain ID : {chainId}"],
-      [s!"max priority fee : {maxPriorityFee.repr}"],
-      [s!"max fee : {maxFee.repr}"],
-      [s!"receiver : {toString receiver}"],
-      accessList.toStrings
-    ]
-  | three
-    (chainId : UInt64)
-    (maxPriorityFee : Nat)
-    (maxFee : Nat)
-    (receiver : Adr)
-    (accessList : AccessList)
-    (maxBlobFee : Nat)
-    (blobHashes : List B256) =>
-    fork "Type-3" [
-      [s!"chain ID : {chainId}"],
-      [s!"max priority fee : {maxPriorityFee.repr}"],
-      [s!"max fee : {maxFee.repr}"],
-      [s!"receiver : {toString receiver}"],
-      accessList.toStrings,
-      [s!"max blob fee : {maxBlobFee.repr}"],
-      fork "blob hashes" (blobHashes.map <| fun bh => [bh.toHex])
-    ]
-  | four
-    (chainId : UInt64)
-    (maxPriorityFee : Nat)
-    (maxFee : Nat)
-    (receiver : Adr)
-    (accessList : AccessList)
-    (auths : List Auth) =>
-    fork "Type-4" [
-      [s!"chain ID : {chainId}"],
-      [s!"max priority fee : {maxPriorityFee.repr}"],
-      [s!"max fee : {maxFee.repr}"],
-      [s!"receiver : {toString receiver}"],
-      accessList.toStrings,
-      Auths.toStrings auths
-    ]
-
-instance : ToString TxType := ⟨String.joinln ∘ TxType.toStrings⟩
-
-def Tx.toStrings (tx : Tx) : List String :=
-  fork "tx" [
-    [s!"nonce : {tx.nonce.toHex}"],
-    [s!"gas limit : {tx.gas}"],
-    [s!"value : {tx.value.repr}"],
-    [s!"calldata : {tx.data.toHex}"],
-    [s!"v : {tx.v}"],
-    [s!"r : {tx.r.toHex}"],
-    [s!"s : {tx.s.toHex}"],
-    tx.type.toStrings
-  ]
-
-instance : ToString Tx := ⟨String.joinln ∘ Tx.toStrings⟩
-
 def B8LOrTxToBLT : Bytes ⊕ Tx → BLT
   | .inl bs => BLT.bytes bs
   | .inr tx => tx.toBLT
@@ -451,12 +314,6 @@ def Tx.blobHashes (tx : Tx) : List B256 := tx.type.blobHashes
 
 -- nibbles-to-bytes maps
 abbrev NTB := Std.TreeMap (List UInt8) (List UInt8) (@List.compare _ ⟨UInt8.compareLows⟩)
-
-def NTB.toStrings (s : NTB) : List String :=
-  let kvs := s.toArray.toList
-  let kvToStrings : Bytes × Bytes → List String :=
-    λ nb => [s!"{B4L.toHex (nb.fst.map UInt8.lows)} : {nb.snd.toHex}"]
-  fork "NTB" (kvs.map kvToStrings)
 
 def hpAux : Bytes → (Option UInt8 × Bytes)
   | [] => ⟨none, []⟩
@@ -1365,95 +1222,6 @@ def Devm.withState (devm : Devm) (state : State) : Devm :=
 
 def Devm.withTransientStorage (devm : Devm) (transientStorage : Tra) : Devm :=
   devm.setWorld {devm.world with transientStorage := transientStorage}
-
-def Stack.toStrings (stack : List B256) : List String :=
-  fork "STACK" [
-    ["-------------------------- STACK TOP ---------------------------"] ++
-    stack.map B256.toHex ++
-    ["------------------------- STACK BOTTOM -------------------------"]
-  ]
-
-def Mem.toStrings (mem : Mem) : List String :=
-  fork "MEM" [
-    String.chunks 64 <| Bytes.toHex mem.data.toList
-  ]
-
-def mkSingleton {ξ : Type u} : ξ → List ξ
-  | x => [x]
-
-def Log.toStrings (l : Log) : List String :=
-  fork "log" [
-    [s!"address : {l.address.toHex}"],
-    fork "topics" (l.topics.map (mkSingleton ∘ B256.toHex)),
-    fork "data" [String.chunks 64 l.data.toHex]
-  ]
-
-def Tra.toStrings (tra : Tra) : List String :=
-  fork "TRANSIENT STORAGE" <| tra.toList.map <|
-    fun kv =>
-      fork kv.fst.toHex <| kv.snd.toList.map <|
-        mkSingleton ∘ fun kv' => s!"{kv'.fst.toHex} : {B256.toHex kv'.snd}"
-
-def Msg.toStrings (msg : Msg) : List String  :=
-  fork "MESSAGE" [
-    [s!"caller : {msg.caller.toHex}"],
-    [s!"target : {(msg.target.rec "NONE" Adr.toHex : String)}"],
-    [s!"current target : {msg.currentTarget.toHex}"],
-    [s!"gas : {msg.gas}"],
-    [s!"value : {msg.value.toHex}"],
-    [s!"data : {msg.data.toHex}"],
-    [s!"code address : {(msg.codeAddress.rec "None" Adr.toHex : String)}"],
-    fork "CODE" [String.chunks 64 <| Bytes.toHex msg.code.toList],
-    [s!"depth : {msg.depth}"],
-    [s!"should transfer value : {msg.shouldTransferValue}"],
-    [s!"is static : {msg.isStatic}"],
-    fork "ACCESSED ADDRESSES"
-      (msg.accessedAddresses.toList.map (mkSingleton ∘ Adr.toHex)),
-    fork "ACCESSED STORAGE KEYS"
-      (msg.accessedStorageKeys.toList.map (fun kv => [s!"{kv.fst.toHex} : {B256.toHex kv.snd}"]))
-  ]
-
-def BenvStat.toStrings (bs : BenvStat) : List String :=
-  fork "BLOCK ENVIRONMENT" [
-    [s!"FORK : {bs.rules.fork}"],
-    [s!"CHAIN ID : {bs.chainId}"],
-    [s!"BLOCK GAS LIMIT : {bs.blockGasLimit}"],
-    fork "BLOCK HASHES" (bs.blockHashes.map (mkSingleton ∘ B256.toHex)),
-    [s!"COINBASE : {bs.coinbase}"],
-    [s!"BASE FEE PER GAS : {bs.baseFeePerGas}"],
-    [s!"TIME : {bs.time.toHex}"],
-    [s!"PREVRANDAO : {bs.prevRandao.toHex}"],
-    [s!"EXCESS BLOB GAS : {bs.excessBlobGas}"],
-    [s!"PARENT BEACON BLOCK ROOT : {bs.parentBeaconBlockRoot.toHex}"]
-  ]
-
-def Benv.toStrings (benv : Benv) : List String :=
-  fork "BLOCK ENVIRONMENT" [
-    fork "STATE" [State.toStrings benv.state],
-    fork "STAT" [benv.stat.toStrings]
-  ]
-
-def Evm.toStrings (evm : Evm) : List String :=
-  let mach := evm.dyna.mach
-  let metaView := evm.dyna.meta
-  fork "EVM" [
-    [s!"PC : {evm.pc}"],
-    Stack.toStrings mach.stack,
-    Mem.toStrings mach.memory,
-    [s!"CODE : {Bytes.toHex evm.sta.code.toList}"],
-    [s!"GAS LEFT : {mach.gasLeft}"],
-    fork "LOGS" (metaView.logs.map Log.toStrings),
-    [s!"REFUND COUNTER : {metaView.refundCounter}"],
-    ["MSG : *print unimplemented*"], --Msg.toStrings evm.msg,
-    [s!"output : {metaView.output.toHex}"],
-    fork "ACCOUNTS TO DELETE"
-      (metaView.accountsToDelete.toList.map (mkSingleton ∘ Adr.toHex)),
-    [s!"return data : {metaView.returnData.toHex}"],
-    fork "ACCESSED ADDRESSES"
-      (metaView.accessedAddresses.toList.map (mkSingleton ∘ Adr.toHex)),
-    fork "ACCESSED STORAGE KEYS"
-      (metaView.accessedStorageKeys.toList.map (fun kv => [s!"{kv.fst.toHex} : {B256.toHex kv.snd}"]))
-  ]
 
 -- Precompile activation is a fork rule and lives with the rules:
 -- `ForkRules.isPrecomp` in `Jaune/Fork.lean` replaces what used to be a
@@ -3496,8 +3264,6 @@ def State.getStor (w : State) (a : Adr) : Stor := (w.get a).stor
 def State.getNonce (w : State) (a : Adr) : UInt64 := (w.get a).nonce
 def State.getCode (w : State) (a : Adr) : ByteArray := (w.get a).code
 
-instance : ToString Log := ⟨String.joinln ∘ Log.toStrings⟩
-
 def isValidDelegation (code: ByteArray) : Prop :=
   code.size = eoaDelegatedCodeLength ∧
   code.sliceD 0 3 (0 : UInt8) = eoaDelegationMarker
@@ -4153,13 +3919,6 @@ def State.code (w : State) (a : Adr) : ByteArray :=
   | none => ByteArray.mk #[]
   | some x => x.code
 
-def KeySet.toStrings (ks : KeySet) : List String :=
-  let f : (Adr × B256) → List String :=
-    fun | ⟨a, x⟩ => [s!"{a.toHex} : {x.toHex}"]
-  fork "KeySet" <| ks.toList.map f
-
-instance : ToString KeySet := ⟨λ ks => String.joinln <| ks.toStrings⟩
-
 def correctBlobHashVersion (h : B256) : Prop :=
   h.toBytes[0]! = 0x01
 
@@ -4195,25 +3954,7 @@ structure Test where
   (post : ExpectedWorldState)
   (sealEngine : Lean.Json)
 
-def Test.toStrings (t : Test) : List String :=
-  fork "test" [
-    [s!"test name : {t.name}"],
-    fork "info" [t.info.toStrings],
-    fork "blocks" [t.blocks.toStrings],
-    fork "genesisBlockHeader" [t.gbh.toStrings],
-    fork "genesisRLP" [t.grlp.toStrings],
-    fork "lastblockhash" [t.lbh.toStrings],
-    fork "network" [t.network.toStrings],
-    fork "pre" [t.pre.toStrings],
-    fork "sealEngine" [t.sealEngine.toStrings]
-  ]
-
-instance : ToString Test := ⟨String.joinln ∘ Test.toStrings⟩
-
 def Bytes.toByteArray (xs : Bytes) : ByteArray := .mk <| .mk xs
-
-instance : ToString State := ⟨String.joinln ∘ State.toStrings⟩
-instance : ToString BLT := ⟨String.joinln ∘ BLT.toStrings⟩
 
 def nibbleKey (pr : Bytes × Bytes) : Bytes × Bytes :=
   let ad := pr.fst
@@ -4246,16 +3987,6 @@ def addLogToBloom (bloom : Bytes) (log : Log) : Bytes :=
 
 def logsBloom (l : List Log) : Bytes :=
   List.foldl addLogToBloom (List.replicate 256 0x00) l
-
-def Withdrawal.toStrings (wd : Withdrawal) : List String :=
-  fork "withdrawal" [
-    [s!"global index : 0x{wd.globalIndex.toHex}"],
-    [s!"validator index : 0x{wd.validatorIndex.toHex}"],
-    [s!"recipient : 0x{wd.recipient.toHex}"],
-    [s!"amount : 0x{wd.amount.toHex}"]
-  ]
-
-instance : ToString Withdrawal := ⟨String.joinln ∘ Withdrawal.toStrings⟩
 
 def BLT.toExStrHeader : BLT → Except String Header
   | .list (
@@ -4345,19 +4076,6 @@ def BLT.toExStrHeader : BLT → Except String Header
   | _ =>
     .error <| rlpStructureError "header"
       "expected a list of 20 or 21 byte-string fields"
-
-def Block.toStrings (block : Block) : List String :=
-  let aux : Bytes ⊕ Tx → List String
-    | .inl xs => fork "Encoded Tx" [String.chunks 80 xs.toHex]
-    | .inr tx => tx.toStrings
-  fork "BLOCK" [
-    Header.toStrings block.header,
-    fork "TXS" <| block.txs.map aux,
-    fork "OMMERS" <| block.ommers.map Header.toStrings,
-    fork "WDS" <| block.wds.map Withdrawal.toStrings
-  ]
-
-instance : ToString Block := ⟨String.joinln ∘ Block.toStrings⟩
 
 /-- The child's excess blob gas.
 
