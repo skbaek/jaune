@@ -91,11 +91,20 @@ third is sub-second.
 
 It depends on which bound the suite is under, and the corpora differ:
 
-- **Legacy `--full` is latency-bound.** One indivisible fixture
-  (`CALLBlake2f_MaxRounds`, a single Prague case) is ~41% of the serial total,
-  and the parallel makespan is 99.6% that one fixture. It is therefore *flat* in
-  the job count — 886s at 4 jobs, 899s at 8. Only making that fixture faster
-  moves this number.
+- **Legacy `--full` is latency-bound.** Its makespan is set by the single
+  longest indivisible fixture, not by the job count. That fixture is now
+  `VMTests/vmPerformance/loopMul.json` at 372.5s sequential — 33% of the serial
+  total and 4.5x the second-longest file. Measured 462s at `--jobs auto` (10)
+  on 2026-07-31. Only making *that* fixture faster moves this number.
+
+  Until 2026-07-31 the dominant fixture was `stTimeConsuming/CALLBlake2f_MaxRounds`
+  at 711s (~41% of a 3,338s serial total), which held the makespan near 900s
+  regardless of workers. Unboxing the BLAKE2b working vector took it to 75.9s
+  (see `scripts/report-blake2f.md`), which is why the bound moved. The lesson
+  generalizes: when one file caps this gate, the number only moves by making
+  that file faster — and when it does, the committed TIME column must be
+  refreshed or dispatch keeps scheduling the old order (see [Writing a
+  `check.sh` baseline](#writing-a-checksh-baseline-two-verbs)).
 - **The vector suite was latency-bound until its dominant file was sharded.**
   `blsPairing.json` alone was ~367s of a ~458s sequential total (80%), which set
   the makespan floor no matter how many workers ran: 382s at 10 jobs, a 1.2x
@@ -117,12 +126,15 @@ not the remedy: when one file caps a parallel gate, ask what is inside it.
 each a pure function of its own input. Batches split; the only cost is the
 discipline of proving the parts still cover the whole.
 
-`CALLBlake2f_MaxRounds` is a **single computation**. The file holds two fork
-variants of one case, `--network Prague` selects exactly one, and that case is
-one block containing one transaction: a single BLAKE2F call at maximum rounds.
-Its 711s is contiguous work with no independent units inside it, so no partition
-of it exists and sharding has nothing to offer `--full`. Only making that
-computation faster moves that number.
+`loopMul.json` — like `CALLBlake2f_MaxRounds.json` before it — is a **single
+computation**: one block, one transaction, contiguous work with no independent
+units inside it. No partition of it exists and sharding has nothing to offer
+`--full`. Only making that computation faster moves that number.
+
+That is exactly what happened to the previous holder of this position.
+`CALLBlake2f_MaxRounds` was 711s of contiguous BLAKE2F rounds; replacing the
+boxed `Array UInt64` working vector with a flat scalar structure made it 75.9s
+and handed the bound to `loopMul`. Sharding was never the remedy for either.
 
 Efficiency cores run this workload ~5x slower than performance cores, but you
 cannot steer work away from them: there is no affinity API, and the scheduler
@@ -167,15 +179,19 @@ executable inputs.
 | `scripts/check-mainnet.sh --suite osaka` | strict all-PASS | 2,514 | ~8 min | **~2.3 min** |
 | `scripts/check-mainnet.sh --suite prague` | strict all-PASS | 2,573 | ~12 min | **~3.0 min** |
 | `scripts/check-mainnet.sh --suite full` | strict all-PASS, whole manifest | 5,100 | ~20.8 min | **~5.0 min** |
-| `scripts/check.sh --full` | every legacy fixture vs baseline | 2,983 | ~31.1 min | ~15.0 min |
+| `scripts/check.sh --full` | every legacy fixture vs baseline | 2,983 | ~19 min | **~7.7 min** |
+
+The legacy `--full` figures are from 2026-07-31, after the BLAKE2b unboxing:
+1,145.8 s of summed per-file time sequentially, 462 s measured wall at
+`--jobs auto`. Before it they were ~3,338 s and ~900 s.
 
 Judge the 1,000-second deferral threshold against the gate as you will
 actually run it. At `--jobs auto` every row above comes in under it — legacy
-`--full` lands near ~900 s, latency-bound by one indivisible fixture that
+`--full` now lands near ~460 s, latency-bound by one indivisible fixture that
 parallelism cannot touch — so all four run inline rather than deferred by
-reflex. Only a **sequential** legacy `check.sh --full` (~31 min) crosses the
-threshold, and a sequential run is called for only when its per-file timings
-are themselves the evidence.
+reflex. A **sequential** legacy `check.sh --full` now also comes in under the
+threshold at ~19 min, where it used to sit above it; a sequential run is still
+called for only when its per-file timings are themselves the evidence.
 
 The two `--full` gates are the exact-candidate closure pair. **Neither may be
 replaced by its smoke tier.**

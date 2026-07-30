@@ -62,7 +62,8 @@
 # That process runs under a per-file wall-clock GUARD (a perl alarm; macOS has
 # no coreutils timeout). The guard is not a classification: it is a
 # "this should never fire" hang detector. The slowest fixture in the corpus
-# runs ~763 s, so the 1800 s default has better than 2x headroom. If the guard
+# runs ~373 s (loopMul, as of 2026-07-31; it was ~763 s until the BLAKE2b
+# unboxing), so the 1800 s default has better than 4x headroom. If the guard
 # ever trips, the run prints a HARNESS ERROR, aborts the tier immediately, and
 # exits nonzero — no classification is recorded for that file, and no report
 # or baseline can absorb the event.
@@ -111,14 +112,17 @@
 # What parallel mode changes:
 #
 #   * Timings become reference-only. A contended run's TIME column reflects
-#     scheduling, not the fixture, so --rebase is rejected outright and the
-#     DRIFT comparison is skipped entirely rather than computed and suppressed.
-#     The gate itself is unaffected — it only ever compared STATUS.
+#     scheduling, not the fixture, so --rebase and --refresh-times are both
+#     rejected outright and the DRIFT comparison is skipped entirely rather
+#     than computed and suppressed. The gate itself is unaffected — it only
+#     ever compared STATUS.
 #   * The guard rises to 2000s (from 1800s). This is the sole thing a parallel
 #     run still decides for real. Measured contention on this class of machine
 #     is 1.16x at 4 concurrent and 1.65x at 8, so the slowest fixture lands
-#     near 875s and 1250s respectively; 2000s clears both while still tripping
-#     long before anything pathological.
+#     near 430s and 615s respectively; 2000s clears both with room to spare
+#     while still tripping long before anything pathological. (The 2000s figure
+#     was set when the slowest fixture was 766s and landed near 875s/1250s; it
+#     is left as-is — a hang detector wants headroom, not tightness.)
 #   * Dispatch order becomes longest-first, seeded from the committed
 #     baseline's TIME column when one exists. This matters: the corpus is
 #     dominated by a single indivisible fixture, and starting it late adds its
@@ -138,9 +142,12 @@
 #
 # What the job count is worth depends on which bound a tier is under:
 #
-#   - Latency-bound (--full: one 766s fixture is 41% of the serial total) is
-#     flat in the job count. 886s at 4 jobs, 899s at 8. The makespan is that
-#     one fixture finishing alone, and no number of workers changes it.
+#   - Latency-bound (--full: one 373s fixture, loopMul, is 33% of the serial
+#     total) is flat in the job count. The makespan is that one fixture
+#     finishing alone, and no number of workers changes it: 462s at 10 jobs
+#     measured 2026-07-31. Before the BLAKE2b unboxing the holder of that
+#     position was a 766s fixture at 41% of the total, and the makespan was
+#     886s at 4 jobs and 899s at 8 — same shape, different file.
 #   - Throughput-bound (the current-mainnet suites: 90% of files run under
 #     0.15s, so process spawn dominates) improves substantially: 435s at 4
 #     jobs, 299s at 10.
