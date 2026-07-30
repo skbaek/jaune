@@ -7,6 +7,8 @@ import Jaune.Hash
 import Jaune.EC
 import Jaune.BLSConst
 import Jaune.BLS
+import Jaune.Machine
+import Jaune.Precompiles
 import Jaune.Execution
 import Jaune.Sufficiency
 import Jaune.Transaction
