@@ -9,6 +9,10 @@
 import Jaune.EC
 import Jaune.BLSConst
 
+namespace Jaune
+
+open Jaune
+
 -- py_ecc.fields.field_properties.field_properties["bls12_381"]["field_modulus"];
 -- equal to the pre-existing (unused) `bls12Prime` constant in EC.lean.
 abbrev blsPrime : Nat := bls12Prime
@@ -566,3 +570,5 @@ def verifyKzgProof (commitment z y proof : Bytes) : Except String Bool := do
 -- def kzg_commitment_to_versioned_hash(commitment): 0x01 || sha256(c)[1:].
 def kzgCommitmentToVersionedHash (commitment : Bytes) : Bytes :=
   (0x01 : UInt8) :: ((Bytes.sha256 commitment).toBytes.drop 1)
+
+end Jaune

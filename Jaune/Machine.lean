@@ -4,6 +4,10 @@ import Jaune.EC
 import Jaune.BLS
 import Jaune.Hash
 
+namespace Jaune
+
+open Jaune _root_.Nat
+
 /-
 Design note #1: primitive signatures of the form
 
@@ -2594,3 +2598,5 @@ def liftToExecution (devm : Devm)
       {devm.world with state := state, transientStorage := tra}
     .error ⟨err, devm'⟩
   | .ok devm' => .ok devm'
+
+end Jaune

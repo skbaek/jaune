@@ -11,6 +11,10 @@ import Mathlib.Data.UInt
 import Mathlib.Tactic.NormNum
 import Std.Tactic.BVDecide
 
+namespace Jaune
+
+open Jaune _root_.List _root_.Nat
+
 instance : @Zero Bool := ⟨false⟩
 instance : @One Bool := ⟨true⟩
 
@@ -390,12 +394,12 @@ instance {ξ : Type u} {ρ : ξ → Prop} {xs : List ξ}
 def List.drop? {ξ : Type u} : Nat → List ξ → Option (List ξ)
   | 0, xs => some xs
   | _ + 1, [] => none
-  | n + 1, _ :: xs => xs.drop? n
+  | n + 1, _ :: xs => drop? n xs
 
 def List.take? {ξ : Type u} : Nat → List ξ → Option (List ξ)
   | 0, _ => some []
   | _ + 1, [] => none
-  | n + 1, x :: xs => (x :: ·) <$> xs.take? n
+  | n + 1, x :: xs => (x :: ·) <$> take? n xs
 
 def List.slice? {ξ : Type u} (xs : List ξ) (m n : Nat) : Option (List ξ) :=
   drop? m xs >>= take? n
@@ -812,7 +816,7 @@ lemma Nat.concat_modsub_concat {m n x x' y y' : Nat}
         (2 ^ m + x - y) * 2 ^ n + x' - y' := by
     have h : y * 2 ^ n ≤ 2 ^ (m + n) + x * 2 ^ n := by
       apply le_trans _ (Nat.le_add_right _ _); rw [Nat.pow_add]
-      apply mul_le_mul_right; apply Nat.le_of_lt hy
+      apply _root_.Nat.mul_le_mul_right; apply Nat.le_of_lt hy
     rw [← Nat.add_assoc, ← Nat.sub_sub, Nat.sub_add_comm h]
     rw [Nat.mul_sub_right_distrib, Nat.add_mul, Nat.pow_add]
   rw [h]; clear h
@@ -1485,3 +1489,5 @@ def Nat.toHex (n : Nat) : String :=
 def List.maxD {ξ} [Max ξ] : List ξ → ξ → ξ
   | [], y => y
   | x :: xs, y => maxD xs (max x y)
+
+end Jaune

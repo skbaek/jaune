@@ -1,5 +1,9 @@
 import Jaune.Basic
 
+namespace Jaune
+
+open Jaune
+
 
 
 namespace RIPEMD160
@@ -552,3 +556,5 @@ def ByteArray.keccak (loc sz : Nat) (bs : ByteArray) : B256 :=
   KECCAK.ByteArray.run (loc + sz) sz (0 : Fin 17) bs <| .replicate 25 0
 
 def B256.keccak (x : B256) : B256 := Bytes.keccak <| x.toBytes
+
+end Jaune

@@ -5,6 +5,10 @@
 import Jaune.Types
 import Jaune.Hash
 
+namespace Jaune
+
+open Jaune
+
 
 
 abbrev altBn128Prime : Nat :=
@@ -933,3 +937,5 @@ end secp256r1
 #guard EllipticCurve.mulBy secp256r1.generator (secp256r1.curveOrder + 1)
   = secp256r1.generator
 #guard secp256r1.coeffA.val + 3 = secp256r1.prime
+
+end Jaune

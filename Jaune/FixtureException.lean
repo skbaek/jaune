@@ -16,6 +16,8 @@
 
 import Jaune.Transaction
 
+namespace Jaune
+
 /-- The canonical vocabulary used by the selected Prague and Osaka corpora,
 spanning the `BlockException` and `TransactionException` namespaces. It
 comprises the published identities observed in the pinned lane plus distinct
@@ -704,3 +706,5 @@ private def matchesWith (routes : List ActualRoute)
 #guard (matchesExpectation "NotAnIdentity" "InvalidGasLimitAbsolute").toOption.isNone
 #guard (matchesExpectation "BlockException.GASLIMIT_TOO_BIG" "InvalidBlock").toOption.isNone
 #guard (matchesExpectation "BlockException.GASLIMIT_TOO_BIG" "").toOption.isNone
+
+end Jaune

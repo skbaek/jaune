@@ -1,6 +1,8 @@
 import Jaune.Basic
 import Jaune.Execution
 
+open Jaune
+
 /-!
 Step-1 U256 microbenchmark instrument.
 

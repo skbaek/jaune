@@ -1,6 +1,8 @@
 import Jaune.EC
 import Jaune.BLS
 
+open Jaune
+
 /-!
 Elliptic-curve differential oracle.
 

@@ -12,3 +12,7 @@ import Jaune.Precompiles
 import Jaune.Execution
 import Jaune.Sufficiency
 import Jaune.Transaction
+
+namespace Jaune
+
+end Jaune

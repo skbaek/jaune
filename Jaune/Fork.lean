@@ -23,6 +23,8 @@
 
 import Jaune.Types
 
+namespace Jaune
+
 /-- One protocol rule set in the supported transition chain.
 
 The chain begins at Prague; earlier mainnet forks are out of scope and are not
@@ -885,3 +887,5 @@ private def guardOsakaToBpo1 : ForkTransition := ⟨.osaka, .bpo1, 15000⟩
     = some (.transition t))
 #guard (NetworkSpec.static .osaka).forks = [.osaka]
 #guard (NetworkSpec.transition guardOsakaToBpo1).forks = [.osaka, .bpo1]
+
+end Jaune

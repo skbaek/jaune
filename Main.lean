@@ -4,6 +4,8 @@ import «Jaune».Transaction
 import «Jaune».FixtureException
 import «Jaune».ChainStore
 
+open Jaune
+
 
 
 ----------------- JSON DECODING HELPERS ------------------

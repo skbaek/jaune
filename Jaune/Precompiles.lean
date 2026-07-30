@@ -1,5 +1,9 @@
 import Jaune.Machine
 
+namespace Jaune
+
+open Jaune
+
 inductive PrecompResult
 | error (msg : String) (cost : Nat)
 | ok (cost : Nat) (output : Bytes)
@@ -812,3 +816,5 @@ def applyPrecompResult (evm : Evm) (res : PrecompResult) : Execution :=
 
 def executePrecomp (evm : Evm) (adr : Adr) : Execution :=
   applyPrecompResult evm (precompileRun evm adr)
+
+end Jaune

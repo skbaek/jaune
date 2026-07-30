@@ -1,5 +1,9 @@
 import Jaune.Sufficiency
 
+namespace Jaune
+
+open Jaune
+
 /-!
 # Transaction, block, and chain processing
 
@@ -1920,3 +1924,5 @@ private def guardChildRlp (timestamp excessBlobGas : Nat) : Bytes :=
 -- An unusable schedule fails before it selects anything.
 #guard hasTag invalidChainConfigTag <|
   stateTransitionUsing (ChainConfig.mk 1 []) guardEmptyChain (guardBlockAt 0)
+
+end Jaune

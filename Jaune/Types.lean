@@ -3,6 +3,10 @@
 import Jaune.Basic
 import Std.Data.TreeMap.Lemmas
 
+namespace Jaune
+
+open Jaune _root_.Nat
+
 
 
 def Adr : Type := UInt32 × B128
@@ -1262,3 +1266,5 @@ def Jinst.toString : Jinst → String
   | .jump => "JUMP"
   | .jumpdest => "JUMPDEST"
   | .jumpi => "JUMPI"
+
+end Jaune

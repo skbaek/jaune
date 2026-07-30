@@ -1,5 +1,9 @@
 import Jaune.Execution
 
+namespace Jaune
+
+open Jaune
+
 /-!
 # A sufficient fuel bound for the interpreter driver
 
@@ -3018,3 +3022,5 @@ private def totalGuardRevert : Bool :=
   | .error _ => false
 
 #guard totalGuardRevert
+
+end Jaune

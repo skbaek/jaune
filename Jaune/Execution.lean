@@ -1,5 +1,9 @@
 import Jaune.Precompiles
 
+namespace Jaune
+
+open Jaune
+
 
 private def rlpTags : List String :=
   [ rlpStructureTag, rlpFixedWidthTag, rlpFieldOverflow64Tag,
@@ -1288,3 +1292,5 @@ def setDelegation (msg : Msg) : Except String (Msg × B256) := do
         code := msg.benv.state.getCode ca
       }
   .ok ⟨msg, refundCounter⟩
+
+end Jaune

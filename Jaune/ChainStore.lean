@@ -30,6 +30,10 @@
 
 import Jaune.FixtureException
 
+namespace Jaune
+
+open Jaune
+
 /-- The hash of a chain's tip block header: the key under which this snapshot
 is (or would be) stored. `none` only for a chain with no blocks at all, which
 the runner never constructs (genesis is always block zero). -/
@@ -255,3 +259,5 @@ private def store3' : ChainStore :=
 -- Re-inserting an existing hash replaces rather than duplicates.
 #guard ((store2.insert a2H a2C).size) = store2.size
 #guard findTags (store2.insert a2H a2C) a2H == findTags store2 a2H
+
+end Jaune

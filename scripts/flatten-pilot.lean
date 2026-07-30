@@ -28,6 +28,8 @@
 import Jaune
 import Mathlib.Util.CountHeartbeats
 
+open Jaune
+
 set_option maxHeartbeats 1000000
 set_option Elab.async false
 
