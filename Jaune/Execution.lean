@@ -3171,6 +3171,36 @@ def Blake2.roundsVec (m : Array UInt64) (k : Nat) :
     Blake2.roundsVec m k n
       (Blake2.roundVec m (blake2Sigma[r % blake2Sigma.size]!) w)
 
+-- The two theorems below use an explicit `simp only` set rather than a bare
+-- `simp`. A bare `simp` closes them too, but discharges the `0 < 16` / `1 < 16`
+-- side conditions of `getElem!_pos` with `Nat.ofNat_pos` and `Nat.one_lt_ofNat`,
+-- which are proved classically; the `Nat.reduceLT` simproc decides the same
+-- literal comparisons without them. That keeps both axiom sets at exactly
+-- `[propext, Quot.sound]`.
+
+/-- The unboxed round agrees with the reference `Blake2.round`: bridging the
+working vector to an array commutes with a single round. -/
+theorem Blake2.roundVec_toArray (m : Array UInt64) (s : Array Nat)
+    (w : Blake2.Vec) :
+    (Blake2.roundVec m s w).toArray = Blake2.round m s w.toArray := by
+  cases w
+  simp only [Blake2.Vec.toArray, Blake2.roundVec, Blake2.round, Blake2.g,
+    List.size_toArray, List.length_cons, List.length_nil, Nat.zero_add,
+    Nat.reduceAdd, getElem!_pos, List.getElem_toArray,
+    List.getElem_cons_zero, Nat.reduceLT, List.getElem_cons_succ,
+    Array.set!_eq_setIfInBounds, List.setIfInBounds_toArray,
+    List.set_cons_zero, List.set_cons_succ, Nat.lt_add_one]
+
+/-- The unboxed rounds loop agrees with the reference `Blake2.rounds`, for
+every round budget `k` and every count `n` of rounds remaining. -/
+theorem Blake2.roundsVec_toArray (m : Array UInt64) (k n : Nat)
+    (w : Blake2.Vec) :
+    (Blake2.roundsVec m k n w).toArray = Blake2.rounds m k n w.toArray := by
+  induction n generalizing w with
+  | zero => rfl
+  | succ n ih =>
+    simp only [Blake2.roundsVec, Blake2.rounds, ih, Blake2.roundVec_toArray]
+
 -- compress
 def bCompress (numRounds : Nat)
   (h m : List UInt64) (t0 t1 : UInt64) (f : Bool) : Option Bytes := do
