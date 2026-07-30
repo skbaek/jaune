@@ -539,6 +539,15 @@ def runVectorFile (f : Fork) (addr : Adr) (path : String) : IO Bool := do
   for pass in results do
     if pass then passes := passes + 1
   let total := results.length
+  -- `passes == total` is vacuously true at zero cases, so a file that parses to
+  -- an empty list would otherwise report a green verdict over nothing at all.
+  -- That is the permissive oracle this gate exists to prevent: an empty vector
+  -- file means the manifest and the corpus disagree, not that there is nothing
+  -- to check.
+  if total == 0 then
+    IO.println
+      s!"RED — vectors: 0/0 PASS, target not met: {path} holds no cases; an empty vector file is a manifest error, never a vacuous pass"
+    return false
   if passes == total then
     .println s!"OK — vectors: {passes}/{total} PASS"
     return true
@@ -617,6 +626,11 @@ def runU256VectorFile (path : String) : IO Bool := do
   let js ← readJsonFile path >>= Lean.Json.toIoU256Vectors
   let results ← js.putIndex.mapM processU256Vector
   let passes := results.count true
+  -- Same vacuous-pass hole as runVectorFile, same answer.
+  if results.length == 0 then
+    IO.println
+      s!"RED — u256: 0/0 PASS, target not met: {path} holds no cases; an empty vector file is a manifest error, never a vacuous pass"
+    return false
   if passes == results.length then
     IO.println s!"OK — u256: {passes}/{results.length} PASS"; return true
   else

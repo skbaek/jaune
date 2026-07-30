@@ -12,11 +12,11 @@ All commands are run from `~/jaune` unless stated otherwise.
 ## If you are an agent, start here
 
 **For routine checks — "did my last edit break anything?" — pass `--jobs auto`.**
-The two fixture harnesses (`check.sh`, `check-mainnet.sh`) run sequentially by
-default and take roughly 2–4x longer that way. That default is deliberate and
-correct for the scripts (see [The `--jobs` contract](#the---jobs-contract)), but
-it is the wrong default for development work. Saving that time is the entire
-reason parallel mode exists; use it.
+Three harnesses take it — `check.sh`, `check-mainnet.sh`, `check-vectors.sh` —
+and all three run sequentially by default, which costs roughly 2–5x. That default
+is deliberate and correct for the scripts (see [The `--jobs`
+contract](#the---jobs-contract)), but it is the wrong default for development
+work. Saving that time is the entire reason parallel mode exists; use it.
 
 Choose the gate by what you changed, cheapest falsifier first:
 
@@ -42,46 +42,82 @@ before merge. It never substitutes for the cheap gates above.
 
 ## The `--jobs` contract
 
-`check.sh` and `check-mainnet.sh` accept `--jobs <n>|auto`; `auto` resolves to
-the machine's logical-core count. **Sequential (`--jobs 1`) is the default and
-its behaviour is untouched** — same guard, same ordering, same authoritative
-timings. Sequential is cleaner in every respect except speed, so it stays the
-script-level default; parallel is an explicit per-invocation choice.
+`check.sh`, `check-mainnet.sh`, and `check-vectors.sh` accept `--jobs <n>|auto`;
+`auto` resolves to the machine's logical-core count. **Sequential (`--jobs 1`) is
+the default and its behaviour is untouched** — same guard, same ordering, same
+authoritative timings. Sequential is cleaner in every respect except speed, so it
+stays the script-level default; parallel is an explicit per-invocation choice.
 
 What parallel mode changes:
 
 - **Timings become reference-only.** `--rebase` is refused and the DRIFT
   comparison is skipped entirely rather than computed and suppressed. The gate
-  itself is unaffected — it only ever compared STATUS.
+  itself is unaffected — it only ever compared STATUS. `check-vectors.sh` has no
+  baseline to protect, so it just marks the verdict line.
 - **The per-file guard rises 1800s → 2000s.** This is the sole thing a parallel
   run still decides for real; it remains a hang detector, never a performance
-  budget. An explicit `JAUNE_TIMEOUT` still wins.
+  budget. An explicit `JAUNE_TIMEOUT` still wins. `check-vectors.sh` differs: it
+  has no guard at all sequentially, and applies a 3600s one only in parallel,
+  because its sequential path streams each runner's output as it goes — a hang is
+  visible there, but a parallel run assembles its output at the end, where a hang
+  and slow progress look alike until the guard distinguishes them.
 - **Dispatch becomes longest-first**, seeded from the committed baseline's TIME
   column. No fixture names are hardcoded; if the slowest fixture changes, the
   next sequential `--rebase` updates the order automatically.
+  `check-vectors.sh` has no baseline, so it seeds from a small reference-time
+  table (`get_weight`) naming only its files that are not near-instant; an
+  unnamed file sorts last. A stale weight there costs makespan, never
+  correctness.
 - **`check-mainnet.sh` runs the whole selection instead of stopping at the first
   failure**, and reports every failure. It also writes
   `scripts/report-mainnet-<suite>.txt`, which the sequential path does not.
 
 What it does not change: the report is reassembled in **sequential order**, not
 completion order, so a report from either mode diffs cleanly against the same
-baseline.
+baseline. For `check-vectors.sh` this holds for stdout as well as the report:
+both modes emit the same bytes in the same manifest order, so two runs differ
+only in the verdict line's wall time and its `--jobs` marker.
 
-Only these two harnesses take `--jobs`. `check-u256.sh`, `check-vectors.sh`,
-`check-ec.sh`, and `check-hygiene.sh` do not.
+Only these three harnesses take `--jobs`. `check-u256.sh`, `check-ec.sh`, and
+`check-hygiene.sh` do not — the first two are single-process oracles and the
+third is sub-second.
 
 ### What the job count is worth
 
-It depends on which bound the suite is under, and the two corpora differ:
+It depends on which bound the suite is under, and the corpora differ:
 
 - **Legacy `--full` is latency-bound.** One indivisible fixture
   (`CALLBlake2f_MaxRounds`, a single Prague case) is ~41% of the serial total,
   and the parallel makespan is 99.6% that one fixture. It is therefore *flat* in
   the job count — 886s at 4 jobs, 899s at 8. Only making that fixture faster
   moves this number.
+- **The vector suite was latency-bound until its dominant file was sharded.**
+  `blsPairing.json` alone was ~367s of a ~458s sequential total (80%), which set
+  the makespan floor no matter how many workers ran: 382s at 10 jobs, a 1.2x
+  saving. It is now run as eight balanced shards holding exactly its 106 cases
+  (see `scripts/vectors/SOURCES.md`), which drops the gate to ~90s at
+  `--jobs auto`. Measured makespan for that file's work alone: 367s unsharded,
+  83s at 8 shards, 82s at 24, 78s at 53 — the machine's aggregate-throughput
+  ceiling is ~78s, so 8 shards is within 7% of the floor and more shards buy
+  almost nothing.
 - **Current-mainnet suites are throughput-bound.** ~90% of their fixtures run
   under 0.15s, so process spawn dominates and the suite scales with cores:
   435s at 4 jobs, 328s at 8, 299s at 10.
+
+The two latency-bound cases look alike and are not, so do not read the vector
+suite's fix as a plan for `--full`. What carries over is the diagnostic question,
+not the remedy: when one file caps a parallel gate, ask what is inside it.
+
+`blsPairing.json` was a **batch** — one process holding 106 independent cases,
+each a pure function of its own input. Batches split; the only cost is the
+discipline of proving the parts still cover the whole.
+
+`CALLBlake2f_MaxRounds` is a **single computation**. The file holds two fork
+variants of one case, `--network Prague` selects exactly one, and that case is
+one block containing one transaction: a single BLAKE2F call at maximum rounds.
+Its 711s is contiguous work with no independent units inside it, so no partition
+of it exists and sharding has nothing to offer `--full`. Only making that
+computation faster moves that number.
 
 Efficiency cores run this workload ~5x slower than performance cores, but you
 cannot steer work away from them: there is no affinity API, and the scheduler
@@ -116,7 +152,7 @@ executable inputs.
 | `scripts/check.sh --smoke` | broad conformance vs baseline | 174 classifications | ~2 min |
 | `scripts/check.sh --bls` | BLS12-381 + point-evaluation vs hand-authored target baseline | 29 | ~2 min |
 | `scripts/check-ec.sh` | EC differential oracle (pinned, differential, identity cases) | — | compiles a Lean checker first |
-| `scripts/check-vectors.sh` | generated vector conformance + controls | 44 files, 5 controls | ~8 min |
+| `scripts/check-vectors.sh` | generated vector conformance + controls + declared-case-count coverage | 51 files, 1,824 cases, 5 controls | ~7.8 min; **~1.5 min at `--jobs auto`** |
 | `cd ~/blanc && lake build && scripts/check.sh --no-build` | downstream elaboration + protected-theorem/axiom audit | ~907 jobs | ~7 s build |
 
 ### Long sequentially — but mostly not long in parallel
@@ -145,6 +181,7 @@ replaced by its smoke tier.**
 | `python3 scripts/env_doctor.py` | validate the configured legacy/EELS/oracle environment |
 | `python3 scripts/env_doctor.py --mainnet-root "$HOME/eest-mainnet-v20.0.1" --mainnet-deep` | validate external fixture identities |
 | `python3 scripts/gen_mainnet_manifest.py --fixtures-root "$HOME/eest-mainnet-v20.0.1/fixtures" --check` | exact current-manifest identity |
+| `python3 scripts/gen-vector-shards.py --check` | the `blsPairing` shards are an exact partition of their source |
 
 Python generators run under the frozen oracle venv
 `~/execution-specs/venv/bin/python`. Generated vectors must come from
@@ -162,6 +199,15 @@ Two different contracts, and confusing them is the most common misreading:
   (gitignored).
 - **`check-mainnet.sh` suites and `check.sh --patch`/`--rlp4` are all-PASS
   targets.** Any non-PASS fails. They have no baseline to rebase.
+- **`check-vectors.sh` is an all-PASS target that also checks coverage.** Every
+  manifest file must pass *and* must run the number of cases the manifest
+  declares for it, cross-checked against the count the runner reports. A file
+  that quietly lost cases would otherwise pass while testing less than it
+  claims — the runner reports `n/n` for whatever it finds. A file with no
+  declared count is a configuration error, not an unchecked file, which is what
+  forces a newly added vector to state its size. The binary independently
+  refuses a vector file holding no cases rather than reporting a vacuous `0/0`
+  pass.
 
 `--bls` is a middle case: it compares against a committed baseline like a tier,
 but that baseline is a hand-authored *target*, so `--rebase` is refused — edit

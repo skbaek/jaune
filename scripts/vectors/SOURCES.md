@@ -321,6 +321,46 @@ Source commit: [`06b23b4293950d8c08b624b90f310d1e918048e8`](https://github.com/e
 | [`blsG1MultiExp.json`](https://raw.githubusercontent.com/ethereum/go-ethereum/06b23b4293950d8c08b624b90f310d1e918048e8/core/vm/testdata/precompiles/blsG1MultiExp.json) | `b2603f681b9695e6ceb3cc7562c3c922b6db709882c26e84050774c0db7ce33a` | `blsG1MultiExp.head.json` |
 | [`blsG2MultiExp.json`](https://raw.githubusercontent.com/ethereum/go-ethereum/06b23b4293950d8c08b624b90f310d1e918048e8/core/vm/testdata/precompiles/blsG2MultiExp.json) | `f9b3fabe719b89883be935d7482805ac1fe734419e5ec77707dc262b0fdad926` | `blsG2MultiExp.head.json` |
 
+## Sharded vectors
+
+`blsPairing.json` is committed in full, but `scripts/check-vectors.sh` does not
+run it directly: it runs the eight `blsPairing.shardN.json` files, which hold
+exactly its 106 cases between them. The source stays committed so that the
+partition remains checkable.
+
+This is a *partition*, not a sample, and the distinction is the whole point. The
+`.head.json` files above are truncations — they deliberately run fewer cases than
+their source. The shards run every case the source has; sharding changes only how
+many processes the work is spread across. It exists because one process is an
+indivisible unit of latency: unsharded, this file alone was ~80% of that gate's
+sequential wall time and no job count could split it.
+
+Splitting is sound because a vector case is independent of every other case in
+its file. `processVector` in `Main.lean` builds a fresh minimal EVM per case from
+that case's own Input/Expected/Gas and evaluates a pure term, so a file's verdict
+is exactly the conjunction of its cases' verdicts, and splitting a conjunction
+across processes cannot change it.
+
+Regenerate and verify with the committed generator, never by hand:
+
+```bash
+python3 scripts/gen-vector-shards.py            # rewrite the shards
+python3 scripts/gen-vector-shards.py --check    # verify the committed ones
+```
+
+`--check` compares the shards against the source as a multiset of canonical case
+encodings, so a dropped case, a duplicated case, an extra case, and two shards
+sharing one case are all failures. Independently of the generator,
+`scripts/check-vectors.sh` pins each shard's case count and cross-checks it
+against the count the runner reports, so a shard that lost cases fails the gate
+even if the generator is never run.
+
+Shards are balanced by input length rather than cut into contiguous slices:
+pairing cost scales with the number of pairs and the source is sorted ascending
+by pair count, so contiguous slices would put every heavy case in the last shard
+and roughly double the gate's makespan. Case order across shards is therefore not
+the source's order, which the independence argument above makes irrelevant.
+
 ## Osaka precompile vectors
 
 These are committed verbatim rather than sampled: each is in the same size
