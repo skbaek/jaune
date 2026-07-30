@@ -2945,6 +2945,13 @@ def blake2R2 : UInt64 := 40
 def blake2R3 : UInt64 := 48
 def blake2R4 : UInt64 := 1
 
+-- `Blake2.g`, `Blake2.round`, and `Blake2.rounds` below are the readable
+-- reference specification of the compression round. They are no longer on the
+-- execution path — `Blake2.roundVec` and `Blake2.roundsVec` are — and they are
+-- not dead code either: `Blake2.roundVec_toArray` and
+-- `Blake2.roundsVec_toArray` prove that the unboxed implementation agrees with
+-- them. Those theorems are the reason this block stays.
+
 -- def G
 -- The four touched words are read once, mixed entirely in local scalars, and
 -- written back once: the intermediate `set!`/`get!` round trips of the
@@ -2989,6 +2996,181 @@ def Blake2.rounds (m : Array UInt64) (k : Nat) : Nat → Array UInt64 → Array 
     let r := k - (n + 1)
     Blake2.rounds m k n (Blake2.round m (blake2Sigma[r % blake2Sigma.size]!) v)
 
+/-- The sixteen BLAKE2b working words held as separate unboxed `UInt64`
+scalars, so a compression round never touches the heap. `Array UInt64` stores
+*boxed* elements, so every `Array.set!` in `Blake2.g` is a heap allocation and
+a later free; a round is eight `Blake2.g` calls and therefore costs 32 of each.
+This mirrors `Jaune/Hash.lean`'s `State1600`, which holds keccak's 25 lanes the
+same way for the same reason. -/
+structure Blake2.Vec where
+  (v0 v1 v2 v3 : UInt64)
+  (v4 v5 v6 v7 : UInt64)
+  (v8 v9 v10 v11 : UInt64)
+  (v12 v13 v14 v15 : UInt64)
+
+/-- Bridge from the unboxed working vector to the `Array UInt64` the reference
+definitions operate on. It is used by the equivalence theorems and once per
+compression, never inside a round. -/
+def Blake2.Vec.toArray (w : Blake2.Vec) : Array UInt64 :=
+  #[w.v0, w.v1, w.v2, w.v3, w.v4, w.v5, w.v6, w.v7,
+    w.v8, w.v9, w.v10, w.v11, w.v12, w.v13, w.v14, w.v15]
+
+/-- `Blake2.round` transliterated onto `Blake2.Vec`: the same eight mixes, in
+the same order, over the same literal word indices, with each `Blake2.g` body
+inlined as scalar `let` bindings. The message and sigma words are still read
+out of arrays — a read does not allocate, only `set!` does. The mix temporary
+is named `q` rather than `Blake2.g`'s `s`, which here names the sigma row.
+`Blake2.roundVec_toArray` proves this agrees with `Blake2.round`. -/
+def Blake2.roundVec (m : Array UInt64) (s : Array Nat) (w : Blake2.Vec) :
+    Blake2.Vec :=
+  let v0 := w.v0
+  let v1 := w.v1
+  let v2 := w.v2
+  let v3 := w.v3
+  let v4 := w.v4
+  let v5 := w.v5
+  let v6 := w.v6
+  let v7 := w.v7
+  let v8 := w.v8
+  let v9 := w.v9
+  let v10 := w.v10
+  let v11 := w.v11
+  let v12 := w.v12
+  let v13 := w.v13
+  let v14 := w.v14
+  let v15 := w.v15
+  -- Blake2.g v 0 4 8 12 (m[s[0]!]!) (m[s[1]!]!)
+  let x := m[s[0]!]!
+  let y := m[s[1]!]!
+  let v0 := v0 + v4 + x
+  let q := v12 ^^^ v0
+  let v12 := (q >>> b2R1) ^^^ (q <<< blake2R1)
+  let v8 := v8 + v12
+  let q := v4 ^^^ v8
+  let v4 := (q >>> b2R2) ^^^ (q <<< blake2R2)
+  let v0 := v0 + v4 + y
+  let q := v12 ^^^ v0
+  let v12 := (q >>> b2R3) ^^^ (q <<< blake2R3)
+  let v8 := v8 + v12
+  let q := v4 ^^^ v8
+  let v4 := (q >>> b2R4) ^^^ (q <<< blake2R4)
+  -- Blake2.g v 1 5 9 13 (m[s[2]!]!) (m[s[3]!]!)
+  let x := m[s[2]!]!
+  let y := m[s[3]!]!
+  let v1 := v1 + v5 + x
+  let q := v13 ^^^ v1
+  let v13 := (q >>> b2R1) ^^^ (q <<< blake2R1)
+  let v9 := v9 + v13
+  let q := v5 ^^^ v9
+  let v5 := (q >>> b2R2) ^^^ (q <<< blake2R2)
+  let v1 := v1 + v5 + y
+  let q := v13 ^^^ v1
+  let v13 := (q >>> b2R3) ^^^ (q <<< blake2R3)
+  let v9 := v9 + v13
+  let q := v5 ^^^ v9
+  let v5 := (q >>> b2R4) ^^^ (q <<< blake2R4)
+  -- Blake2.g v 2 6 10 14 (m[s[4]!]!) (m[s[5]!]!)
+  let x := m[s[4]!]!
+  let y := m[s[5]!]!
+  let v2 := v2 + v6 + x
+  let q := v14 ^^^ v2
+  let v14 := (q >>> b2R1) ^^^ (q <<< blake2R1)
+  let v10 := v10 + v14
+  let q := v6 ^^^ v10
+  let v6 := (q >>> b2R2) ^^^ (q <<< blake2R2)
+  let v2 := v2 + v6 + y
+  let q := v14 ^^^ v2
+  let v14 := (q >>> b2R3) ^^^ (q <<< blake2R3)
+  let v10 := v10 + v14
+  let q := v6 ^^^ v10
+  let v6 := (q >>> b2R4) ^^^ (q <<< blake2R4)
+  -- Blake2.g v 3 7 11 15 (m[s[6]!]!) (m[s[7]!]!)
+  let x := m[s[6]!]!
+  let y := m[s[7]!]!
+  let v3 := v3 + v7 + x
+  let q := v15 ^^^ v3
+  let v15 := (q >>> b2R1) ^^^ (q <<< blake2R1)
+  let v11 := v11 + v15
+  let q := v7 ^^^ v11
+  let v7 := (q >>> b2R2) ^^^ (q <<< blake2R2)
+  let v3 := v3 + v7 + y
+  let q := v15 ^^^ v3
+  let v15 := (q >>> b2R3) ^^^ (q <<< blake2R3)
+  let v11 := v11 + v15
+  let q := v7 ^^^ v11
+  let v7 := (q >>> b2R4) ^^^ (q <<< blake2R4)
+  -- Blake2.g v 0 5 10 15 (m[s[8]!]!) (m[s[9]!]!)
+  let x := m[s[8]!]!
+  let y := m[s[9]!]!
+  let v0 := v0 + v5 + x
+  let q := v15 ^^^ v0
+  let v15 := (q >>> b2R1) ^^^ (q <<< blake2R1)
+  let v10 := v10 + v15
+  let q := v5 ^^^ v10
+  let v5 := (q >>> b2R2) ^^^ (q <<< blake2R2)
+  let v0 := v0 + v5 + y
+  let q := v15 ^^^ v0
+  let v15 := (q >>> b2R3) ^^^ (q <<< blake2R3)
+  let v10 := v10 + v15
+  let q := v5 ^^^ v10
+  let v5 := (q >>> b2R4) ^^^ (q <<< blake2R4)
+  -- Blake2.g v 1 6 11 12 (m[s[10]!]!) (m[s[11]!]!)
+  let x := m[s[10]!]!
+  let y := m[s[11]!]!
+  let v1 := v1 + v6 + x
+  let q := v12 ^^^ v1
+  let v12 := (q >>> b2R1) ^^^ (q <<< blake2R1)
+  let v11 := v11 + v12
+  let q := v6 ^^^ v11
+  let v6 := (q >>> b2R2) ^^^ (q <<< blake2R2)
+  let v1 := v1 + v6 + y
+  let q := v12 ^^^ v1
+  let v12 := (q >>> b2R3) ^^^ (q <<< blake2R3)
+  let v11 := v11 + v12
+  let q := v6 ^^^ v11
+  let v6 := (q >>> b2R4) ^^^ (q <<< blake2R4)
+  -- Blake2.g v 2 7 8 13 (m[s[12]!]!) (m[s[13]!]!)
+  let x := m[s[12]!]!
+  let y := m[s[13]!]!
+  let v2 := v2 + v7 + x
+  let q := v13 ^^^ v2
+  let v13 := (q >>> b2R1) ^^^ (q <<< blake2R1)
+  let v8 := v8 + v13
+  let q := v7 ^^^ v8
+  let v7 := (q >>> b2R2) ^^^ (q <<< blake2R2)
+  let v2 := v2 + v7 + y
+  let q := v13 ^^^ v2
+  let v13 := (q >>> b2R3) ^^^ (q <<< blake2R3)
+  let v8 := v8 + v13
+  let q := v7 ^^^ v8
+  let v7 := (q >>> b2R4) ^^^ (q <<< blake2R4)
+  -- Blake2.g v 3 4 9 14 (m[s[14]!]!) (m[s[15]!]!)
+  let x := m[s[14]!]!
+  let y := m[s[15]!]!
+  let v3 := v3 + v4 + x
+  let q := v14 ^^^ v3
+  let v14 := (q >>> b2R1) ^^^ (q <<< blake2R1)
+  let v9 := v9 + v14
+  let q := v4 ^^^ v9
+  let v4 := (q >>> b2R2) ^^^ (q <<< blake2R2)
+  let v3 := v3 + v4 + y
+  let q := v14 ^^^ v3
+  let v14 := (q >>> b2R3) ^^^ (q <<< blake2R3)
+  let v9 := v9 + v14
+  let q := v4 ^^^ v9
+  let v4 := (q >>> b2R4) ^^^ (q <<< blake2R4)
+  ⟨v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15⟩
+
+/-- `Blake2.rounds` over the unboxed working vector, with the same `k - (n + 1)`
+round index and the same sigma-row lookup. -/
+def Blake2.roundsVec (m : Array UInt64) (k : Nat) :
+    Nat → Blake2.Vec → Blake2.Vec
+  | 0, w => w
+  | n + 1, w =>
+    let r := k - (n + 1)
+    Blake2.roundsVec m k n
+      (Blake2.roundVec m (blake2Sigma[r % blake2Sigma.size]!) w)
+
 -- compress
 def bCompress (numRounds : Nat)
   (h m : List UInt64) (t0 t1 : UInt64) (f : Bool) : Option Bytes := do
@@ -2999,11 +3181,20 @@ def bCompress (numRounds : Nat)
       .xor t0 (blake2IV.getD 4 0),
       .xor t1 (blake2IV.getD 5 0),
       if f then .xor v14 b2MaskBits else v14,
-      (blake2IV.getD 7 0),
-      0
+      (blake2IV.getD 7 0)
     ]
 
-  let arr := Blake2.rounds ⟨m⟩ numRounds numRounds ⟨v⟩
+  -- The initial words are loaded into unboxed scalars once, so the rounds
+  -- themselves never allocate. The seventeenth word this list used to carry
+  -- was written and never read — `Blake2.round` touches indices 0–15 and the
+  -- tail below reads 0–15 — so it is no longer built; dropping a trailing
+  -- element leaves indices 0–15 of `v` unchanged.
+  let ini : Array UInt64 := ⟨v⟩
+  let w : Blake2.Vec :=
+    ⟨ini[0]!, ini[1]!, ini[2]!, ini[3]!, ini[4]!, ini[5]!, ini[6]!, ini[7]!,
+      ini[8]!, ini[9]!, ini[10]!, ini[11]!, ini[12]!, ini[13]!, ini[14]!,
+      ini[15]!⟩
+  let arr := (Blake2.roundsVec ⟨m⟩ numRounds numRounds w).toArray
   let v := arr.toList
   let resultMsgWords :=
     (List.range 8).map <| fun i => h[i]! ^^^ v[i]! ^^^ v[(i + 8)]!
