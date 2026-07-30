@@ -8,10 +8,13 @@
   on `codex/silence`, pinning that Jaune commit.
 - Toolchain: `leanprover/lean4:v4.32.1`.
 
-Jaune's source candidate is published at `origin/codex/silence`. Blanc's
-candidate is locally committed and green, but the execution environment's
-egress reviewer rejected its non-protected-branch push. That publication-only
-gap is recorded as a green handoff; it is not a source or verification failure.
+Both ordinary branches are published exactly at their local tips. Jaune's
+published branch includes the source candidate plus documentation-only closure
+commits; Blanc's published tip is
+`12c2ccf68fb2d36a351556c8d67f652008e9be54` and pins the immutable Jaune source
+commit `c9808a575bb97491f64b178630e5616c7cee5350`. Earlier egress-review
+rejections were publication-only and are retained in the step report as
+historical evidence; they are resolved and are not an active handoff.
 
 ## Complete deletion inventory
 
@@ -212,8 +215,9 @@ The only diagnostic observed during a build is the pre-existing
 | Repository | Branch | Commit | Purpose | Gates before commit | Pushed | Diagnostic |
 |---|---|---|---|---|---|---|
 | Jaune | `codex/silence` | `c9808a575bb97491f64b178630e5616c7cee5350` | Delete tracing machinery and allowlist row | 1,764-job build, LSP, hygiene, U256, PATCH, RLP4, DEPTH, Python; full Step-1 battery before handoff | yes | no |
-| Blanc | `codex/silence` | `41ce8f5c221738c91785b02f46669679c37bac7b` | Normal Lake pin bump to published Jaune candidate | Three-way pin agreement; expected breakage census | no | yes |
-| Blanc | `codex/silence` | `12c2ccf68fb2d36a351556c8d67f652008e9be54` | Shorten stale solvent-proof preambles | LSP goals/diagnostics, 909-job build, exact 4/4 axiom audit | no (egress denied) | no |
+| Blanc | `codex/silence` | `41ce8f5c221738c91785b02f46669679c37bac7b` | Normal Lake pin bump to published Jaune candidate | Three-way pin agreement; expected breakage census | yes | yes |
+| Blanc | `codex/silence` | `12c2ccf68fb2d36a351556c8d67f652008e9be54` | Shorten stale solvent-proof preambles | LSP goals/diagnostics, 909-job build, exact 4/4 axiom audit | yes | no |
+| Jaune | `codex/silence` | `95473d77e83939dc54b3d7b5f75055a7d1ab2897` | Document the closure evidence | Full exact-candidate battery; hygiene 0 | yes | no |
 
 No history was rewritten, no protected/default branch was merged, and the
 diagnostic pin checkpoint retains Blanc main
@@ -234,6 +238,6 @@ diagnostic pin checkpoint retains Blanc main
   for comparison. This arc made no change to it.
 - No new defect was found that requires an `integrity.md` repair.
 
-Human decisions remaining are publication of Blanc's already-green ordinary
-branch if the environment permits it, followed by the user-owned merge order:
-Jaune first, Blanc second.
+The arc is green and complete. The only human decision remaining is protected
+branch integration: merge Jaune first, then Blanc so Blanc's pinned Jaune
+source commit resolves. No merge was performed by the arc.
