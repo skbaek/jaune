@@ -3394,4 +3394,338 @@ def EvmError.render : EvmError → String
       rlpFieldOverflow256Tag, rlpLeadingZerosTag, rlpWithdrawalsNotReadTag,
       rlpRoundTripTag ]
 
+--------------- CANONICALITY THROUGH EXECUTION (P0.4, STEP 4) ---------------
+
+-- The state-helper half of the preservation corpus: result-carrier predicates
+-- for the two execution carriers, and preservation through every named
+-- machine-level mutator. The predicates are generic in the error-message
+-- component -- the machine or saved state a failure carries is what must stay
+-- canonical, never the text riding beside it -- which also means no
+-- stringly-typed carrier is respelled here.
+
+/-- Canonicality of a machine-level result, on both channels.
+
+The error channel always carries the machine that failed, which execution will
+keep using, so it is unconditionally obliged to be canonical. The ok channel's
+payload varies by operation (a bare machine, a popped value paired with one, a
+unit), so its obligation is the caller's predicate. -/
+def Except.CanonicalOn {ρ α : Type} (P : α → Prop) :
+    Except (ρ × Devm) α → Prop
+  | .ok a => P a
+  | .error e => e.2.Canonical
+
+/-- Canonicality of a whole-machine execution result on both channels. -/
+abbrev Execution.Canonical (x : Execution) : Prop :=
+  x.CanonicalOn Devm.Canonical
+
+/-- Canonicality of a frame-settlement result.
+
+The settlement carrier's error channel holds the saved state and transient
+storage the parent will be rolled back to or rebuilt from
+(`liftToExecution`), so both components must be canonical; a settled machine
+is obliged outright. -/
+def Except.CanonicalSettle {ρ : Type} :
+    Except (ρ × State × AdrSet × Tra) Devm → Prop
+  | .ok devm => devm.Canonical
+  | .error e => State.Canonical e.2.1 ∧ Tra.Canonical e.2.2.2
+
+/-- Sequencing preserves canonicality: the compositional lemma the whole
+interpreter corpus threads through. Nothing about a particular operation is
+here -- only that `Except.bind` takes the error channel through unchanged and
+feeds an ok payload to the continuation. -/
+theorem Except.CanonicalOn.bind {ρ α β : Type} {P : α → Prop} {Q : β → Prop}
+    {x : Except (ρ × Devm) α} {f : α → Except (ρ × Devm) β}
+    (hx : x.CanonicalOn P) (hf : ∀ a, P a → (f a).CanonicalOn Q) :
+    (x >>= f).CanonicalOn Q := by
+  cases x with
+  | error e => exact hx
+  | ok a => exact hf a hx
+
+theorem Except.CanonicalOn.map {ρ α β : Type} {P : α → Prop} {Q : β → Prop}
+    {x : Except (ρ × Devm) α} {f : α → β}
+    (hx : x.CanonicalOn P) (hf : ∀ a, P a → Q (f a)) :
+    (x <&> f).CanonicalOn Q := by
+  cases x with
+  | error e => exact hx
+  | ok a => exact hf a hx
+
+theorem Except.CanonicalOn.imp {ρ α : Type} {P Q : α → Prop}
+    {x : Except (ρ × Devm) α}
+    (hx : x.CanonicalOn P) (hf : ∀ a, P a → Q a) : x.CanonicalOn Q := by
+  cases x with
+  | error e => exact hx
+  | ok a => exact hf a hx
+
+theorem Except.canonicalOn_assert {p : Prop} [inst : Decidable p] {ρ : Type}
+    {e : ρ × Devm} (h : e.2.Canonical) :
+    (Except.assert p e).CanonicalOn (fun _ => True) := by
+  unfold Except.assert
+  split
+  · trivial
+  · exact h
+
+/-- Transport along an unchanged world: every operation that touches only the
+computational (`Mach`) or bookkeeping (`Meta`) component preserves
+canonicality by this single observation. -/
+theorem Devm.Canonical.of_world_eq {devm devm' : Devm}
+    (h : devm.Canonical) (hw : devm'.world = devm.world) :
+    devm'.Canonical := by
+  show World.Canonical devm'.world
+  rw [hw]
+  exact h
+
+-- The lifted footprint combinators: everything routed through them keeps the
+-- world untouched on both channels.
+
+theorem liftMach_canonicalOn {α : Type}
+    {core : Mach → Footprint.Outcome Mach α} {devm : Devm}
+    (h : devm.Canonical) :
+    (liftMach core devm).CanonicalOn (fun a => a.2.Canonical) := by
+  unfold liftMach Footprint.liftOutcome
+  split <;> exact h.of_world_eq rfl
+
+theorem liftMachMeta_canonicalOn {α : Type}
+    {core : Mach → Meta → Footprint.Outcome (Mach × Meta) α} {devm : Devm}
+    (h : devm.Canonical) :
+    (liftMachMeta core devm).CanonicalOn (fun a => a.2.Canonical) := by
+  unfold liftMachMeta Footprint.liftOutcome
+  split <;> exact h.of_world_eq rfl
+
+theorem Footprint.toExecution_canonical
+    {x : Except _ (Unit × Devm)}
+    (hx : x.CanonicalOn (fun a => a.2.Canonical)) :
+    (Footprint.toExecution x).Canonical := by
+  cases x with
+  | error e => exact hx
+  | ok a => exact hx
+
+theorem liftMachExecution_canonical
+    {core : Mach → Footprint.Outcome Mach Unit} {devm : Devm}
+    (h : devm.Canonical) : (liftMachExecution core devm).Canonical :=
+  Footprint.toExecution_canonical (liftMach_canonicalOn h)
+
+theorem liftMachMetaExecution_canonical
+    {core : Mach → Meta → Footprint.Outcome (Mach × Meta) Unit} {devm : Devm}
+    (h : devm.Canonical) : (liftMachMetaExecution core devm).Canonical :=
+  Footprint.toExecution_canonical (liftMachMeta_canonicalOn h)
+
+theorem liftMachMetaWorldExecution_canonical
+    {core : World → Mach → Meta → Footprint.Outcome (Mach × Meta) Unit}
+    {devm : Devm} (h : devm.Canonical) :
+    (liftMachMetaWorldExecution core devm).Canonical :=
+  liftMachMetaExecution_canonical h
+
+theorem liftMachPure_canonical {core : Mach → Mach} {devm : Devm}
+    (h : devm.Canonical) : (liftMachPure core devm).Canonical :=
+  h.of_world_eq rfl
+
+theorem liftMachMetaPure_canonical {core : Mach → Meta → Mach × Meta}
+    {devm : Devm} (h : devm.Canonical) :
+    (liftMachMetaPure core devm).Canonical :=
+  h.of_world_eq rfl
+
+-- The named stack, gas, memory, and bookkeeping operations, each an instance
+-- of the combinator facts above.
+
+theorem chargeGas_canonical {c : Nat} {devm : Devm} (h : devm.Canonical) :
+    (chargeGas c devm).Canonical :=
+  liftMachExecution_canonical h
+
+theorem Devm.push_canonical {x : B256} {devm : Devm} (h : devm.Canonical) :
+    (devm.push x).Canonical :=
+  liftMachExecution_canonical h
+
+theorem Devm.pop_canonicalOn {devm : Devm} (h : devm.Canonical) :
+    devm.pop.CanonicalOn (fun a => a.2.Canonical) :=
+  liftMach_canonicalOn h
+
+theorem Devm.popToNat_canonicalOn {devm : Devm} (h : devm.Canonical) :
+    devm.popToNat.CanonicalOn (fun a => a.2.Canonical) :=
+  liftMach_canonicalOn h
+
+theorem Devm.popToAdr_canonicalOn {devm : Devm} (h : devm.Canonical) :
+    devm.popToAdr.CanonicalOn (fun a => a.2.Canonical) :=
+  liftMach_canonicalOn h
+
+theorem Devm.popN_canonicalOn {devm : Devm} {n : Nat} (h : devm.Canonical) :
+    (devm.popN n).CanonicalOn (fun a => a.2.Canonical) :=
+  liftMach_canonicalOn h
+
+theorem pushItem_canonical {x : B256} {c : Nat} {devm : Devm}
+    (h : devm.Canonical) : (pushItem x c devm).Canonical :=
+  liftMachExecution_canonical h
+
+theorem applyUnary_canonical {f : B256 → B256} {c : Nat} {devm : Devm}
+    (h : devm.Canonical) : (applyUnary f c devm).Canonical :=
+  liftMachExecution_canonical h
+
+theorem applyBinary_canonical {f : B256 → B256 → B256} {c : Nat} {devm : Devm}
+    (h : devm.Canonical) : (applyBinary f c devm).Canonical :=
+  liftMachExecution_canonical h
+
+theorem applyTernary_canonical {f : B256 → B256 → B256 → B256} {c : Nat}
+    {devm : Devm} (h : devm.Canonical) : (applyTernary f c devm).Canonical :=
+  liftMachExecution_canonical h
+
+theorem Devm.memWrite_canonical {devm : Devm} {idx : Nat} {val : Bytes}
+    (h : devm.Canonical) : (devm.memWrite idx val).Canonical :=
+  liftMachPure_canonical h
+
+theorem Devm.memExtends_canonical {devm : Devm} {pairs : List (Nat × Nat)}
+    (h : devm.Canonical) : (devm.memExtends pairs).Canonical :=
+  liftMachPure_canonical h
+
+theorem Devm.memRead_canonical {devm : Devm} {index size : Nat}
+    (h : devm.Canonical) : (devm.memRead index size).2.Canonical := by
+  unfold Devm.memRead
+  rcases devm.memory.read index size with ⟨val, mem⟩
+  exact h.of_world_eq rfl
+
+theorem Devm.addLog_canonical {devm : Devm} {log : Log}
+    (h : devm.Canonical) : (devm.addLog log).Canonical :=
+  liftMachMetaPure_canonical h
+
+theorem addAccessedAddress_canonical {devm : Devm} {a : Adr}
+    (h : devm.Canonical) : (addAccessedAddress devm a).Canonical :=
+  h.of_world_eq rfl
+
+theorem addAccessedStorageKey_canonical {devm : Devm} {a : Adr} {k : B256}
+    (h : devm.Canonical) : (addAccessedStorageKey devm a k).Canonical :=
+  h.of_world_eq rfl
+
+theorem addAccountToDelete_canonical {devm : Devm} {a : Adr}
+    (h : devm.Canonical) : (addAccountToDelete devm a).Canonical :=
+  h.of_world_eq rfl
+
+theorem assertDynamic_canonicalOn {sevm : Sevm} {devm : Devm}
+    (h : devm.Canonical) :
+    (assertDynamic sevm devm).CanonicalOn (fun _ => True) :=
+  Except.canonicalOn_assert h
+
+-- The world-changing machine mutators, each discharged by the Step-3 state
+-- and transient-storage ladder.
+
+theorem Devm.Canonical.setStorVal {devm : Devm} (h : devm.Canonical)
+    (adr : Adr) (k v : B256) : (devm.setStorVal adr k v).Canonical :=
+  h.withState (State.Canonical.setStorVal h.1 adr k v)
+
+theorem Devm.Canonical.setTransVal {devm : Devm} (h : devm.Canonical)
+    (adr : Adr) (k v : B256) : (devm.setTransVal adr k v).Canonical :=
+  h.withTransientStorage (Tra.Canonical.setStorVal h.2 adr k v)
+
+theorem Devm.Canonical.setBal {devm : Devm} (h : devm.Canonical)
+    (adr : Adr) (v : B256) : (devm.setBal adr v).Canonical :=
+  h.withState (State.Canonical.setBal h.1 adr v)
+
+theorem Devm.Canonical.addBal {devm : Devm} (h : devm.Canonical)
+    (adr : Adr) (v : B256) : (devm.addBal adr v).Canonical :=
+  h.withState (State.Canonical.addBal h.1 adr v)
+
+theorem Devm.Canonical.subBal {devm devm' : Devm} (h : devm.Canonical)
+    {adr : Adr} {v : B256} (hs : devm.subBal adr v = some devm') :
+    devm'.Canonical := by
+  unfold Devm.subBal at hs
+  cases hw : devm.state.subBal adr v with
+  | none => rw [hw] at hs; exact absurd hs (by simp [bind, Option.bind])
+  | some w =>
+    rw [hw] at hs
+    simp only [bind, Option.bind, Option.some.injEq] at hs
+    rw [← hs]
+    exact h.withState (State.Canonical.subBal h.1 hw)
+
+theorem Devm.Canonical.incrNonce {devm : Devm} (h : devm.Canonical)
+    (adr : Adr) : (devm.incrNonce adr).Canonical :=
+  h.withState (State.Canonical.incrNonce h.1 adr)
+
+theorem Devm.Canonical.setCode {devm : Devm} (h : devm.Canonical)
+    (adr : Adr) (cd : ByteArray) : (devm.setCode adr cd).Canonical :=
+  h.withState (State.Canonical.setCode h.1 adr cd)
+
+-- The block-environment and message mutators used by frame construction,
+-- delegation, and transaction processing.
+
+theorem Benv.Canonical.withState {benv : Benv} (h : benv.Canonical)
+    {st : State} (hs : st.Canonical) : (benv.withState st).Canonical :=
+  ⟨hs, h.2⟩
+
+theorem Benv.Canonical.setBal {benv : Benv} (h : benv.Canonical)
+    (adr : Adr) (v : B256) : (benv.setBal adr v).Canonical :=
+  ⟨State.Canonical.setBal h.1 adr v, h.2⟩
+
+theorem Benv.Canonical.addBal {benv : Benv} (h : benv.Canonical)
+    (adr : Adr) (v : B256) : (benv.addBal adr v).Canonical :=
+  ⟨State.Canonical.addBal h.1 adr v, h.2⟩
+
+theorem Benv.Canonical.subBal {benv benv' : Benv} (h : benv.Canonical)
+    {adr : Adr} {v : B256} (hs : benv.subBal adr v = some benv') :
+    benv'.Canonical := by
+  unfold Benv.subBal at hs
+  cases hw : benv.state.subBal adr v with
+  | none => rw [hw] at hs; exact absurd hs (by simp [bind, Option.bind])
+  | some w =>
+    rw [hw] at hs
+    simp only [bind, Option.bind, Option.some.injEq] at hs
+    rw [← hs]
+    exact h.withState (State.Canonical.subBal h.1 hw)
+
+theorem Benv.Canonical.incrNonce {benv : Benv} (h : benv.Canonical)
+    (adr : Adr) : (benv.incrNonce adr).Canonical :=
+  ⟨State.Canonical.incrNonce h.1 adr, h.2⟩
+
+theorem Benv.Canonical.setStor {benv : Benv} (h : benv.Canonical)
+    (adr : Adr) {s : Stor} (hs : Stor.Canonical s) :
+    (benv.setStor adr s).Canonical :=
+  ⟨State.Canonical.setStor h.1 adr hs, h.2⟩
+
+theorem Benv.Canonical.setStorVal {benv : Benv} (h : benv.Canonical)
+    (adr : Adr) (k v : B256) : (benv.setStorVal adr k v).Canonical :=
+  ⟨State.Canonical.setStorVal h.1 adr k v, h.2⟩
+
+/-- Opening a transaction saves the current state as the transaction-original
+state, so a canonical environment stays canonical on both components. -/
+theorem Benv.Canonical.beginTransaction {benv : Benv} (h : benv.Canonical) :
+    benv.beginTransaction.Canonical :=
+  ⟨h.1, h.1⟩
+
+theorem Benv.Canonical.addCreatedAccount {benv : Benv} (h : benv.Canonical)
+    (adr : Adr) : (addCreatedAccount benv adr).Canonical :=
+  ⟨h.1, h.2⟩
+
+theorem Tenv.Canonical.setTransVal {tenv : Tenv} (h : tenv.Canonical)
+    (adr : Adr) (k v : B256) : (tenv.setTransVal adr k v).Canonical :=
+  Tra.Canonical.setStorVal h adr k v
+
+theorem Msg.Canonical.withBenv {msg : Msg} (h : msg.Canonical)
+    {benv : Benv} (hb : benv.Canonical) : (msg.withBenv benv).Canonical :=
+  ⟨hb, h.2⟩
+
+theorem Msg.Canonical.incrNonce {msg : Msg} (h : msg.Canonical)
+    (adr : Adr) : (msg.incrNonce adr).Canonical :=
+  ⟨⟨State.Canonical.incrNonce h.1.1 adr, h.1.2⟩, h.2⟩
+
+theorem Msg.Canonical.setCode {msg : Msg} (h : msg.Canonical)
+    (adr : Adr) (cd : ByteArray) : (msg.setCode adr cd).Canonical :=
+  ⟨⟨State.Canonical.setCode h.1.1 adr cd, h.1.2⟩, h.2⟩
+
+-- Child incorporation and the settlement-to-execution bridge: the parent's
+-- world is replaced wholesale, so only the incoming state's canonicality
+-- matters. These are the exact joints through which a frame's result
+-- re-enters its parent.
+
+theorem incorporateChildOnError_canonical {parent child : Devm}
+    (hc : child.Canonical) (rd : Bytes) :
+    (incorporateChildOnError parent child rd).Canonical :=
+  ⟨hc.1, hc.2⟩
+
+theorem incorporateChildOnSuccess_canonical {parent child : Devm}
+    (hc : child.Canonical) (rd : Bytes) :
+    (incorporateChildOnSuccess parent child rd).Canonical :=
+  ⟨hc.1, hc.2⟩
+
+theorem liftToExecution_canonical {devm : Devm} {r}
+    (hr : Except.CanonicalSettle r) : (liftToExecution devm r).Canonical := by
+  cases r with
+  | error e => exact ⟨hr.1, hr.2⟩
+  | ok devm' => exact hr
+
 end Jaune
