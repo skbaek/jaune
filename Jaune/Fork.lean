@@ -939,6 +939,27 @@ transitions. -/
 def pragueOnly (chainId : UInt64) : ChainConfig :=
   { chainId := chainId, activations := [⟨.prague, 0⟩] }
 
+-- The two `pragueOnly` bridge facts below exist for downstream proof clients
+-- (Blanc's `BlockChain.Reach.toReachUsing` connects the fixed-Prague
+-- reachability ladder to the configured one): a Prague-only schedule is valid
+-- for every chain identity and selects Prague's rules at every timestamp, and
+-- a client should consume these rather than unfold `validate`/`forkAt`
+-- (fixed decision 10).
+
+/-- A Prague-only schedule is a valid schedule for every chain identity:
+`validate` never reads `chainId`, and the singleton activation list has no
+step to reject. -/
+theorem pragueOnly_validate (chainId : UInt64) :
+    (pragueOnly chainId).validate = .ok () := rfl
+
+theorem pragueOnly_valid (chainId : UInt64) : (pragueOnly chainId).Valid :=
+  valid_iff.mpr (pragueOnly_validate chainId)
+
+/-- A Prague-only schedule selects Prague's rules at every timestamp: its
+single activation floor is 0, so no timestamp precedes the supported era. -/
+theorem pragueOnly_rulesAt (chainId : UInt64) (timestamp : Nat) :
+    (pragueOnly chainId).rulesAt timestamp = .ok pragueRules := rfl
+
 end ChainConfig
 
 /-- Mainnet's activation timestamps, read from the `FORK_CRITERIA` of the EELS
