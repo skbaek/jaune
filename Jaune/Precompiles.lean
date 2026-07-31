@@ -333,7 +333,7 @@ def blake2R4 : UInt64 := 1
 -- written back once: the intermediate `set!`/`get!` round trips of the
 -- transcribed reference version are redundant, since every word re-read is
 -- the value just computed.
-def Blake2.g (v : Array UInt64) (a b c d : Nat) (x y : UInt64) : Array UInt64 :=
+private def Blake2.g (v : Array UInt64) (a b c d : Nat) (x y : UInt64) : Array UInt64 :=
   let va : UInt64 := v[a]!
   let vb : UInt64 := v[b]!
   let vc : UInt64 := v[c]!
@@ -355,7 +355,7 @@ def Blake2.g (v : Array UInt64) (a b c d : Nat) (x y : UInt64) : Array UInt64 :=
 -- One full mixing round, with `blake2MixTable` unrolled into literal word
 -- indices; `m` is an `Array` so the message words are indexed rather than
 -- walked as a list.
-def Blake2.round (m : Array UInt64) (s : Array Nat) (v : Array UInt64) : Array UInt64 :=
+private def Blake2.round (m : Array UInt64) (s : Array Nat) (v : Array UInt64) : Array UInt64 :=
   let v := Blake2.g v 0 4 8 12 (m[s[0]!]!) (m[s[1]!]!)
   let v := Blake2.g v 1 5 9 13 (m[s[2]!]!) (m[s[3]!]!)
   let v := Blake2.g v 2 6 10 14 (m[s[4]!]!) (m[s[5]!]!)
@@ -366,7 +366,7 @@ def Blake2.round (m : Array UInt64) (s : Array Nat) (v : Array UInt64) : Array U
   Blake2.g v 3 4 9 14 (m[s[14]!]!) (m[s[15]!]!)
 
 -- `n` counts rounds remaining out of `k`, so the round index is `k - n`.
-def Blake2.rounds (m : Array UInt64) (k : Nat) : Nat → Array UInt64 → Array UInt64
+private def Blake2.rounds (m : Array UInt64) (k : Nat) : Nat → Array UInt64 → Array UInt64
   | 0, v => v
   | n + 1, v =>
     let r := k - (n + 1)
@@ -397,7 +397,7 @@ inlined as scalar `let` bindings. The message and sigma words are still read
 out of arrays — a read does not allocate, only `set!` does. The mix temporary
 is named `q` rather than `Blake2.g`'s `s`, which here names the sigma row.
 `Blake2.roundVec_toArray` proves this agrees with `Blake2.round`. -/
-def Blake2.roundVec (m : Array UInt64) (s : Array Nat) (w : Blake2.Vec) :
+private def Blake2.roundVec (m : Array UInt64) (s : Array Nat) (w : Blake2.Vec) :
     Blake2.Vec :=
   let v0 := w.v0
   let v1 := w.v1
@@ -539,7 +539,7 @@ def Blake2.roundVec (m : Array UInt64) (s : Array Nat) (w : Blake2.Vec) :
 
 /-- `Blake2.rounds` over the unboxed working vector, with the same `k - (n + 1)`
 round index and the same sigma-row lookup. -/
-def Blake2.roundsVec (m : Array UInt64) (k : Nat) :
+private def Blake2.roundsVec (m : Array UInt64) (k : Nat) :
     Nat → Blake2.Vec → Blake2.Vec
   | 0, w => w
   | n + 1, w =>
