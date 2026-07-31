@@ -464,16 +464,6 @@ def Fork.rules? : Fork → Option ForkRules
   | .bpo1 => some bpo1Rules
   | .bpo2 => some bpo2Rules
 
-/-- `Fork.rules?` as a failing lookup, with the error every explicit-fork entry
-point reports for an unimplemented fork. -/
-def Fork.rules (f : Fork) : Except String ForkRules :=
-  match f.rules? with
-  | some rules => .ok rules
-  | none =>
-    .error
-      s!"{unsupportedForkTag} : fork {f} is a declared protocol fork whose \
-         execution rules are not implemented in this build"
-
 /-- Every rule set a fork identity resolves to is structurally usable.
 
 This is what makes `ForkRules.Valid` free at the fork-selected entry points:
@@ -488,13 +478,6 @@ theorem Fork.rules?_valid {f : Fork} {r : ForkRules} (h : f.rules? = some r) :
   · exact osakaRules_valid
   · exact bpo1Rules_valid
   · exact bpo2Rules_valid
-
-theorem Fork.rules_valid {f : Fork} {r : ForkRules} (h : f.rules = .ok r) :
-    r.Valid := by
-  rw [Fork.rules] at h
-  cases hr : f.rules? with
-  | none => rw [hr] at h; cases h
-  | some r' => rw [hr] at h; cases h; exact Fork.rules?_valid hr
 
 /-- A fork's rules become active at this timestamp. -/
 structure ForkActivation : Type where
@@ -708,6 +691,36 @@ def SupportError.render : SupportError → String
 #guard ChainContextError.render (.invalidForkRules .zeroModexpGasDivisor)
   = "InvalidForkRulesError : the MODEXP gas divisor is zero"
 
+/-- `Fork.rules?` as a failing lookup, with the typed reason every
+explicit-fork entry point reports for an unimplemented fork. Declared here,
+after the support vocabulary, because Step 10 made the reason a constructor:
+the rendered message is byte-for-byte the one this function always emitted. -/
+def Fork.rules (f : Fork) : Except SupportError ForkRules :=
+  match f.rules? with
+  | some rules => .ok rules
+  | none => .error (.unsupportedFork f)
+
+theorem Fork.rules_valid {f : Fork} {r : ForkRules} (h : f.rules = .ok r) :
+    r.Valid := by
+  rw [Fork.rules] at h
+  cases hr : f.rules? with
+  | none => rw [hr] at h; cases h
+  | some r' => rw [hr] at h; cases h; exact Fork.rules?_valid hr
+
+/-- Why a configured fork or rules lookup failed: the schedule itself is not a
+usable context, or the input is outside the supported domain. The two channels
+stay distinct because the import layer routes them distinctly -- neither may
+ever read as a candidate-block verdict. -/
+inductive RulesLookupError : Type
+  | context (reason : ChainContextError)
+  | support (reason : SupportError)
+deriving DecidableEq, Repr
+
+/-- The one renderer for `RulesLookupError`: pure delegation. -/
+def RulesLookupError.render : RulesLookupError → String
+  | .context reason => reason.render
+  | .support reason => reason.render
+
 --------------- THE CHECKED ARBITRARY-RULE CONSTRUCTOR ---------------
 
 /-- The first structural premise a rule record fails, or `none` if it fails
@@ -825,19 +838,14 @@ namespace ChainConfig
 and fork order. Equal timestamps would make the active fork depend on list
 order, and a non-increasing fork sequence would describe a chain that goes
 backwards. -/
-private def validateSteps : List ForkActivation → Except String Unit
+private def validateSteps : List ForkActivation → Except ChainContextError Unit
   | [] => .ok ()
   | [_] => .ok ()
   | prev :: next :: rest => do
     if next.timestamp ≤ prev.timestamp then
-      .error
-        s!"{invalidChainConfigTag} : activation timestamps must strictly \
-           increase, but {next.fork} at {next.timestamp} does not follow \
-           {prev.fork} at {prev.timestamp}"
+      .error (.nonIncreasingActivations prev next)
     if next.fork.index ≤ prev.fork.index then
-      .error
-        s!"{invalidChainConfigTag} : activations must move forward through the \
-           fork order, but {next.fork} does not follow {prev.fork}"
+      .error (.nonForwardActivations prev next)
     validateSteps (next :: rest)
 
 /-- A schedule is usable when it covers every block unambiguously: it names at
@@ -846,10 +854,9 @@ fork order. There is deliberately no requirement that the first activation
 begin at timestamp 0 -- a configuration may support only eras from some later
 floor onward, and a timestamp before that floor is `SupportError.unsupportedEra`
 (from `forkAt` below), never `InvalidChainConfigError`. -/
-def validate (cfg : ChainConfig) : Except String Unit := do
+def validate (cfg : ChainConfig) : Except ChainContextError Unit := do
   match cfg.activations with
-  | [] =>
-    .error s!"{invalidChainConfigTag} : the activation schedule is empty"
+  | [] => .error .emptySchedule
   | _ :: _ =>
     validateSteps cfg.activations
 
@@ -864,8 +871,9 @@ one and timestamps that precede this configuration's earliest supported era.
 A timestamp before the first activation is `SupportError.unsupportedEra`, not
 an invalid configuration: the schedule is exactly as usable as any other, this
 build simply does not implement anything before its declared floor. -/
-def forkAt (cfg : ChainConfig) (timestamp : Nat) : Except String Fork := do
-  cfg.validate
+def forkAt (cfg : ChainConfig) (timestamp : Nat) :
+    Except RulesLookupError Fork := do
+  Except.mapError RulesLookupError.context cfg.validate
   match cfg.forkAt? timestamp with
   | some f => .ok f
   | none =>
@@ -873,12 +881,13 @@ def forkAt (cfg : ChainConfig) (timestamp : Nat) : Except String Fork := do
     -- `head?` always finds the floor; the fallback is unreachable in practice
     -- but keeps this total without threading a nonemptiness proof through.
     let floor := (cfg.activations.head?.map (·.timestamp)).getD 0
-    Except.mapError SupportError.render (.error (.unsupportedEra timestamp floor))
+    .error (.support (.unsupportedEra timestamp floor))
 
 /-- The rules active at `timestamp`. Fails if the schedule is unusable or if
 the selected fork's rules are not implemented. -/
-def rulesAt (cfg : ChainConfig) (timestamp : Nat) : Except String ForkRules := do
-  (← cfg.forkAt timestamp).rules
+def rulesAt (cfg : ChainConfig) (timestamp : Nat) :
+    Except RulesLookupError ForkRules := do
+  Except.mapError RulesLookupError.support (← cfg.forkAt timestamp).rules
 
 /-- Every rule set a configured lookup produces is structurally usable, so the
 configured entry points carry `ForkRules.Valid` without checking for it. -/
@@ -887,7 +896,15 @@ theorem rulesAt_valid {cfg : ChainConfig} {timestamp : Nat} {r : ForkRules}
   rw [ChainConfig.rulesAt] at h
   cases hf : cfg.forkAt timestamp with
   | error e => rw [hf] at h; cases h
-  | ok f => rw [hf] at h; exact Fork.rules_valid h
+  | ok f =>
+    rw [hf] at h
+    simp only [bind, Except.bind] at h
+    cases hr : f.rules with
+    | error e => rw [hr] at h; simp [Except.mapError] at h
+    | ok rr =>
+      rw [hr] at h
+      simp only [Except.mapError, Except.ok.injEq] at h
+      exact h ▸ Fork.rules_valid hr
 
 /-- A schedule that `validate` accepts, as a decidable proposition.
 
@@ -1065,16 +1082,21 @@ def forks : NetworkSpec → List Fork
 
 end NetworkSpec
 
--- Guard helper. `Execution.lean` has the same pair for its own `#guard`s, but
--- it sits downstream of this file, so the check is restated rather than
--- imported backwards.
-private def guardErrOf {α : Type} : Except String α → String
-  | .error e => e
-  | .ok _ => "unexpected success"
+-- Guard helpers: the boundary checks below match typed reasons directly.
+private def ctxFails {α : Type} (p : ChainContextError → Bool) :
+    Except ChainContextError α → Bool
+  | .error e => p e
+  | .ok _ => false
 
-private def guardHasTag {α : Type} (tag : String) (e : Except String α) : Bool :=
-  let err := guardErrOf e
-  err = tag || String.isPrefixOf (tag ++ " : ") err
+private def lookupFails {α : Type} (p : RulesLookupError → Bool) :
+    Except RulesLookupError α → Bool
+  | .error e => p e
+  | .ok _ => false
+
+private def isContextL : RulesLookupError → Bool
+  | .context _ => true | _ => false
+private def isEraL : RulesLookupError → Bool
+  | .support (.unsupportedEra _ _) => true | _ => false
 
 -- Fork labels round-trip, and nothing else parses.
 #guard Fork.all.all (fun f => Fork.ofString? f.toString = some f)
@@ -1192,16 +1214,16 @@ private def guardHasTag {α : Type} (tag : String) (e : Except String α) : Bool
 -- from some later floor onward, and that is a usable schedule, not an invalid
 -- one -- `ChainConfig.forkAt` is where a too-early timestamp is refused.
 #guard (ChainConfig.pragueOnly 1).validate.toOption.isSome
-#guard guardHasTag invalidChainConfigTag (ChainConfig.mk 1 []).validate
+#guard (ChainConfig.mk 1 []).validate = .error .emptySchedule
 #guard (ChainConfig.mk 1 [⟨.prague, 1⟩]).validate.toOption.isSome
-#guard guardHasTag invalidChainConfigTag
-  (ChainConfig.mk 1 [⟨.prague, 0⟩, ⟨.osaka, 0⟩]).validate
-#guard guardHasTag invalidChainConfigTag
-  (ChainConfig.mk 1 [⟨.prague, 0⟩, ⟨.osaka, 100⟩, ⟨.bpo1, 100⟩]).validate
-#guard guardHasTag invalidChainConfigTag
-  (ChainConfig.mk 1 [⟨.osaka, 0⟩, ⟨.prague, 100⟩]).validate
-#guard guardHasTag invalidChainConfigTag
-  (ChainConfig.mk 1 [⟨.prague, 0⟩, ⟨.osaka, 100⟩, ⟨.osaka, 200⟩]).validate
+#guard (ChainConfig.mk 1 [⟨.prague, 0⟩, ⟨.osaka, 0⟩]).validate
+  = .error (.nonIncreasingActivations ⟨.prague, 0⟩ ⟨.osaka, 0⟩)
+#guard (ChainConfig.mk 1 [⟨.prague, 0⟩, ⟨.osaka, 100⟩, ⟨.bpo1, 100⟩]).validate
+  = .error (.nonIncreasingActivations ⟨.osaka, 100⟩ ⟨.bpo1, 100⟩)
+#guard (ChainConfig.mk 1 [⟨.osaka, 0⟩, ⟨.prague, 100⟩]).validate
+  = .error (.nonForwardActivations ⟨.osaka, 0⟩ ⟨.prague, 100⟩)
+#guard (ChainConfig.mk 1 [⟨.prague, 0⟩, ⟨.osaka, 100⟩, ⟨.osaka, 200⟩]).validate
+  = .error (.nonForwardActivations ⟨.osaka, 100⟩ ⟨.osaka, 200⟩)
 #guard (ChainConfig.mk 1 [⟨.prague, 0⟩, ⟨.osaka, 100⟩, ⟨.bpo1, 200⟩,
   ⟨.bpo2, 300⟩]).validate.toOption.isSome
 
@@ -1229,13 +1251,13 @@ private def guardFloorSchedule : ChainConfig :=
   ChainConfig.mk 1 [⟨.prague, 1000⟩, ⟨.osaka, 2000⟩]
 
 #guard guardFloorSchedule.validate.toOption.isSome
-#guard guardHasTag unsupportedEraTag (guardFloorSchedule.forkAt 999)
+#guard lookupFails isEraL (guardFloorSchedule.forkAt 999)
 #guard guardFloorSchedule.forkAt 999
-  = .error (SupportError.render (.unsupportedEra 999 1000))
+  = .error (.support (.unsupportedEra 999 1000))
 #guard guardFloorSchedule.forkAt 1000 = .ok .prague
 #guard guardFloorSchedule.forkAt 1999 = .ok .prague
 #guard guardFloorSchedule.forkAt 2000 = .ok .osaka
-#guard ¬ guardHasTag invalidChainConfigTag (guardFloorSchedule.forkAt 999)
+#guard ¬ lookupFails isContextL (guardFloorSchedule.forkAt 999)
 
 -- The whole supported chain is now executable, so every point of the schedule
 -- resolves to rules, and each segment resolves to its own.
@@ -1258,8 +1280,8 @@ private def guardFloorSchedule : ChainConfig :=
 
 -- An invalid schedule fails before any fork is selected, rather than silently
 -- resolving to whichever activation happens to sort first.
-#guard guardHasTag invalidChainConfigTag ((ChainConfig.mk 1 []).forkAt 0)
-#guard guardHasTag invalidChainConfigTag ((ChainConfig.mk 1 []).rulesAt 0)
+#guard (ChainConfig.mk 1 []).forkAt 0 = .error (.context .emptySchedule)
+#guard (ChainConfig.mk 1 []).rulesAt 0 = .error (.context .emptySchedule)
 
 -- Mainnet's schedule is usable, and each of its recorded activation timestamps
 -- is a boundary: the second before it still runs the old rules. Genesis, and
@@ -1270,11 +1292,11 @@ private def guardFloorSchedule : ChainConfig :=
 #guard mainnetChainConfig.Valid
 #guard ¬ (ChainConfig.mk 1 []).Valid
 #guard mainnetChainConfig.chainId = 1
-#guard guardHasTag unsupportedEraTag (mainnetChainConfig.forkAt 0)
-#guard guardHasTag unsupportedEraTag
+#guard lookupFails isEraL (mainnetChainConfig.forkAt 0)
+#guard lookupFails isEraL
   (mainnetChainConfig.forkAt (mainnetPragueTimestamp - 1))
 #guard mainnetChainConfig.forkAt (mainnetPragueTimestamp - 1)
-  = .error (SupportError.render (.unsupportedEra (mainnetPragueTimestamp - 1)
+  = .error (.support (.unsupportedEra (mainnetPragueTimestamp - 1)
       mainnetPragueTimestamp))
 #guard mainnetChainConfig.forkAt mainnetPragueTimestamp = .ok .prague
 #guard mainnetChainConfig.forkAt (mainnetOsakaTimestamp - 1) = .ok .prague
@@ -1344,9 +1366,9 @@ private def guardOsakaToBpo1 : ForkTransition := ⟨.osaka, .bpo1, 15000⟩
 -- every other unusable schedule is, rather than at the parser.
 #guard ForkTransition.ofString? "OsakaToPragueAtTime15k"
   = some ⟨.osaka, .prague, 15000⟩
-#guard guardHasTag invalidChainConfigTag
+#guard lookupFails isContextL
   (((⟨.osaka, .prague, 15000⟩ : ForkTransition).chainConfig 1).rulesAt 0)
-#guard guardHasTag invalidChainConfigTag
+#guard lookupFails isContextL
   (((⟨.prague, .osaka, 0⟩ : ForkTransition).chainConfig 1).rulesAt 0)
 
 -- A `network` label is either a static fork or a transition, and the two
@@ -1366,29 +1388,24 @@ private def guardOsakaToBpo1 : ForkTransition := ⟨.osaka, .bpo1, 15000⟩
 #guard (NetworkSpec.static .osaka).forks = [.osaka]
 #guard (NetworkSpec.transition guardOsakaToBpo1).forks = [.osaka, .bpo1]
 
--- The three renderer arms that already have a live producer agree with it
--- byte for byte. This is the property Steps 9 and 10 must preserve when the
--- producers themselves start returning typed reasons, and it is checked here
--- against the real function rather than against a transcription of it.
+-- The producers now return the reasons themselves; what remains to pin here is
+-- that rendering a live producer's reason still yields the exact goldens.
 #guard (match (ChainConfig.mk 1 []).validate with
-  | .error e => e == ChainContextError.render .emptySchedule
+  | .error e => e.render == "InvalidChainConfigError : the activation schedule is empty"
   | .ok _ => false)
 #guard (match (ChainConfig.mk 1 [⟨.prague, 0⟩, ⟨.osaka, 0⟩]).validate with
-  | .error e =>
-    e == ChainContextError.render (.nonIncreasingActivations ⟨.prague, 0⟩ ⟨.osaka, 0⟩)
+  | .error e => e.render ==
+      "InvalidChainConfigError : activation timestamps must strictly increase, \
+       but Osaka at 0 does not follow Prague at 0"
   | .ok _ => false)
-#guard (match (ChainConfig.mk 1 [⟨.osaka, 0⟩, ⟨.prague, 9⟩]).validate with
-  | .error e =>
-    e == ChainContextError.render (.nonForwardActivations ⟨.osaka, 0⟩ ⟨.prague, 9⟩)
-  | .ok _ => false)
-
--- `forkAt`'s new unsupported-era arm agrees with `SupportError.render` too,
--- against the real function rather than a transcription of it.
 #guard (match guardFloorSchedule.forkAt 999 with
-  | .error e => e == SupportError.render (.unsupportedEra 999 1000)
+  | .error e => e.render ==
+      "UnsupportedEraError : timestamp 999 precedes the earliest era this \
+       configuration supports, which begins at 1000"
   | .ok _ => false)
 #guard (match mainnetChainConfig.forkAt 0 with
-  | .error e => e == SupportError.render (.unsupportedEra 0 mainnetPragueTimestamp)
+  | .error e => e ==
+      .support (.unsupportedEra 0 mainnetPragueTimestamp)
   | .ok _ => false)
 
 end Jaune

@@ -30,7 +30,7 @@
 # step that discharges a row deletes it (or rewrites it as KEEP) and
 # lowers the budget in the same commit.
 #
-# pending-budget: 41
+# pending-budget: 10
 #
 # At the branch point nothing was discharged: Step 1 inventories, it does
 # not repair. The KEEP rows below are Step 8's, and they are all the BLAKE2b
@@ -191,22 +191,8 @@ R3 Jaune/Precompiles.lean out of arrays — a read does not allocate, only `set!
 # ---- R4 : Jaune/Basic.lean ----
 
 # ---- R4 : Jaune/Execution.lean ----
-R4 Jaune/Execution.lean Except String Nat := do  ## PENDING(step10) re-owned by Step 9: producer/consumer is Step-10 scope (strict decoders, header checks, or the string-side classifier the Transaction/FixtureException layers still read); the VM layer no longer calls it
-R4 Jaune/Execution.lean Except String Unit := do  ## PENDING(step10) re-owned by Step 9: producer/consumer is Step-10 scope (strict decoders, header checks, or the string-side classifier the Transaction/FixtureException layers still read); the VM layer no longer calls it
-R4 Jaune/Execution.lean def checkGasLimit (gasLimit parentGasLimit : Nat) : Except String Unit := do  ## PENDING(step10) stringly carrier in a strict decoder or header check; retyped with the codec/validation errors
-R4 Jaune/Execution.lean hasErrorType (errOf e) tag  ## PENDING(step10) re-owned by Step 9: producer/consumer is Step-10 scope (strict decoders, header checks, or the string-side classifier the Transaction/FixtureException layers still read); the VM layer no longer calls it
-R4 Jaune/Execution.lean private def errOf {α : Type} : Except String α → String  ## PENDING(step10) re-owned by Step 9: producer/consumer is Step-10 scope (strict decoders, header checks, or the string-side classifier the Transaction/FixtureException layers still read); the VM layer no longer calls it
-R4 Jaune/Execution.lean private def hasTag {α : Type} (tag : String) (e : Except String α) : Bool :=  ## PENDING(step10) re-owned by Step 9: producer/consumer is Step-10 scope (strict decoders, header checks, or the string-side classifier the Transaction/FixtureException layers still read); the VM layer no longer calls it
 
 # ---- R4 : Jaune/Fork.lean ----
-R4 Jaune/Fork.lean def Fork.rules (f : Fork) : Except String ForkRules :=  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
-R4 Jaune/Fork.lean def forkAt (cfg : ChainConfig) (timestamp : Nat) : Except String Fork := do  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
-R4 Jaune/Fork.lean def rulesAt (cfg : ChainConfig) (timestamp : Nat) : Except String ForkRules := do  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
-R4 Jaune/Fork.lean def validate (cfg : ChainConfig) : Except String Unit := do  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
-R4 Jaune/Fork.lean err = tag || String.isPrefixOf (tag ++ " : ") err  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
-R4 Jaune/Fork.lean private def guardErrOf {α : Type} : Except String α → String  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
-R4 Jaune/Fork.lean private def guardHasTag {α : Type} (tag : String) (e : Except String α) : Bool :=  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
-R4 Jaune/Fork.lean private def validateSteps : List ForkActivation → Except String Unit  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
 
 # ---- R4 : Jaune/Machine.lean ----
 R4 Jaune/Machine.lean #guard blockExceptionTags.all fun t => ¬ hasErrorType t "InvalidBlock"  ## PENDING(step10) re-owned by Step 9: producer/consumer is Step-10 scope (strict decoders, header checks, or the string-side classifier the Transaction/FixtureException layers still read); the VM layer no longer calls it
@@ -222,24 +208,10 @@ R4 Jaune/Machine.lean err = errType || String.isPrefixOf (errType ++ " : ") err 
 # ---- R4 : Jaune/Sufficiency.lean ----
 
 # ---- R4 : Jaune/Transaction.lean ----
+R4 Jaune/Transaction.lean (blockRlp : Bytes) : Except String (BlockChain ⊕ String) :=  ## KEEP(adapter=addBlockToChainWithE/addBlockToChainUsingE, bridge=addBlockToChainWith_eq_ok_inl) Step-10 legacy renderer adapters: ImportOutcome.renderLegacy over the typed import cores; retained because Blanc's protected addBlockToChain_preserves_solvent is their Prague instance
+R4 Jaune/Transaction.lean Except String (BlockChain ⊕ String)  ## KEEP(adapter=ImportOutcome.renderLegacy, bridge=addBlockToChainCanonical_eq_ok_inl) the one renderer collapsing a typed import result onto the legacy channels; every legacy import adapter goes through it
+R4 Jaune/Transaction.lean private def errorText? {α : Type} : Except String α → Option String  ## KEEP(guard-only) golden-text probe reading a legacy adapter's rendered error for #guard renderer goldens; classification never reads it
 R4 Jaune/Transaction.lean def rlpToBlock (rlp : Bytes) : Except String (Block × B256) :=  ## KEEP(adapter=rlpToBlockE, bridge=rlpToBlock_eq_ok_iff) Step-10 legacy renderer adapter: byte-identical mapError DecodeError.render over the typed core; retained by name and type because Blanc's protected addBlockToChain_preserves_solvent quantifies over this equation
-R4 Jaune/Transaction.lean #guard hasErrorType (importErrOf (addBlockToChainUsing guardOsakaToBpo1Config  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
-R4 Jaune/Transaction.lean (blockRlp : Bytes) : Except String (BlockChain ⊕ String) := do  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
-R4 Jaune/Transaction.lean (bout : BlockOutput) : Except String Bytes := do  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
-R4 Jaune/Transaction.lean (tx: Tx) (index : Nat) : Except String (State × BlockOutput) := do  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
 R4 Jaune/Transaction.lean Except String (BlockChain ⊕ String) :=  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
-R4 Jaune/Transaction.lean Except String (BlockChain ⊕ String) := do  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
-R4 Jaune/Transaction.lean Except String (State × BlockOutput) := do  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
-R4 Jaune/Transaction.lean Except String (State × MsgCallOutput) := do  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
 R4 Jaune/Transaction.lean Except String BlockChain :=  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
 R4 Jaune/Transaction.lean Except String BlockChain := do  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
-R4 Jaune/Transaction.lean Except String Msg := do  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
-R4 Jaune/Transaction.lean Except String Unit :=  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
-R4 Jaune/Transaction.lean Except String Unit := do  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
-R4 Jaune/Transaction.lean List (Nat × Tx) → Benv → BlockOutput → Except String (Benv × BlockOutput)  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
-R4 Jaune/Transaction.lean def extractDepositData (data : Bytes) : Except String Bytes := do  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
-R4 Jaune/Transaction.lean def stateTransitionOmmersCheck (ommers : List Header) : Except String Unit := do  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
-R4 Jaune/Transaction.lean hasErrorType (errOf e) tag  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
-R4 Jaune/Transaction.lean private def errOf {α : Type} : Except String α → String  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
-R4 Jaune/Transaction.lean private def hasTag {α : Type} (tag : String) (e : Except String α) : Bool :=  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
-R4 Jaune/Transaction.lean private def importErrOf : Except String (BlockChain ⊕ String) → String  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors

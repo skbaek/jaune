@@ -228,17 +228,17 @@ whole content of a transition fixture -- and the schedule's usability and
 chain identity are checked first, in the order `addBlockToChainUsing` checks
 them. -/
 def fixtureImportRules (spec : NetworkSpec) (chainId : UInt64)
-    (parent : CheckedBlockChain) (header : Header) : Except String ForkRules := do
+    (parent : CheckedBlockChain) (header : Header) : Except ImportFailure ForkRules := do
   match spec with
-  | .static f => f.rules
+  | .static f => Except.mapError ImportFailure.support f.rules
   | .transition t =>
-    -- Exactly what `addBlockToChainUsing` checks, in its order: the schedule
+    -- Exactly what `addBlockToChainUsingE` checks, in its order: the schedule
     -- is usable, it names this chain, and only then does the candidate's own
     -- timestamp select the rules.
     let cfg := t.chainConfig chainId
-    cfg.validate
-    Except.mapError ChainContextError.render (cfg.checkChainId parent.val)
-    cfg.rulesAt header.timestamp
+    Except.mapError ImportFailure.context cfg.validate
+    Except.mapError ImportFailure.context (cfg.checkChainId parent.val)
+    Except.mapError ImportFailure.ofLookup (cfg.rulesAt header.timestamp)
 
 /-- Strictly decode a fixture block once, select its parent snapshot by the
 decoded `parentHash`, and import it into that snapshot through the checked
@@ -259,11 +259,11 @@ def evaluateFixtureBlock (spec : NetworkSpec) (chainId : UInt64) (store : ChainS
     | .error err => .error err
     | .ok parent =>
       match fixtureImportRules spec chainId parent block.header with
-      | .error err => .error err
+      | .error failure => .error failure.render
       | .ok rules =>
         match him : addBlockToChainChecked rules parent (CanonicalBlock.ofDecode hd) with
-        | .error err => .error err
-        | .ok (.inr err) => .error err
+        | .error failure => .error failure.render
+        | .ok (.inr rejection) => .error rejection.render
         | .ok (.inl _) => .ok (CheckedBlockChain.ofImport him)
 
 def requireExpectedFailure (idx : Nat) (chainname : String)
@@ -342,7 +342,7 @@ def checkFixtureBlobSchedule (spec : NetworkSpec) (json : Lean.Json) : IO Unit :
     let target ← declared.find "target" >>= Lean.Json.toIoHexNat
     let ceiling ← declared.find "max" >>= Lean.Json.toIoHexNat
     let fraction ← declared.find "baseFeeUpdateFraction" >>= Lean.Json.toIoHexNat
-    let rules ← IO.ofExcept f.rules
+    let rules ← IO.ofExcept (f.rules.mapError SupportError.render)
     .guard (rules.blob.target = target * gasPerBlob)
       s!"error : {f} blob target = {rules.blob.target}, fixture declares \
          {target} blobs = {target * gasPerBlob}"
@@ -531,7 +531,8 @@ def getNetworkSpec (opts : List String) : IO NetworkSpec := do
            {Fork.all.map Fork.toString} and transitions of the form \
            <fork>To<fork>AtTime<seconds>"
   if let .transition t := spec then
-    IO.ofExcept (ChainConfig.mk 0 t.activations).validate
+    IO.ofExcept ((ChainConfig.mk 0 t.activations).validate.mapError
+      ChainContextError.render)
   return spec
 
 def getFiles (path : System.FilePath) : IO (List System.FilePath) := do
@@ -630,7 +631,7 @@ listed against a fork whose rules do not carry its address is a manifest
 error, and reporting it as such is what stops a fork-gated precompile from
 being silently exercised under a fork that does not have it. -/
 def runVectorFile (f : Fork) (addr : Adr) (path : String) : IO Bool := do
-  let rules ← IO.ofExcept f.rules
+  let rules ← IO.ofExcept (f.rules.mapError SupportError.render)
   if ¬ rules.isPrecomp addr then
     IO.println
       s!"RED — vectors: no precompile is active at {addr.toHex} under {f}"

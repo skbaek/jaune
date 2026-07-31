@@ -17,18 +17,6 @@ was split out of `Jaune.Execution` verbatim so that `Jaune.Sufficiency` can sit
 between the driver and its first consumer.
 -/
 
-/- `private` declarations do not cross module boundaries, so the two `#guard`
-helpers that the moved text shares with `Jaune.Execution` are restated here
-rather than being made public. Keep them in step with their counterparts at
-`Jaune/Execution.lean:1219`. -/
-
-private def errOf {α : Type} : Except String α → String
-  | .error e => e
-  | .ok _ => "unexpected success"
-
-private def hasTag {α : Type} (tag : String) (e : Except String α) : Bool :=
-  hasErrorType (errOf e) tag
-
 --------- TYPED SEMANTIC REASONS: TRANSACTION, BLOCK, IMPORT ---------
 
 -- Declarations, renderers, and golden guards only; no producer is migrated
@@ -254,6 +242,16 @@ def ImportFailure.render : ImportFailure → String
   | .internal reason => reason.render
   | .vm reason => reason.render
 
+/-- A failed configured rules lookup is an operational import failure on the
+matching channel: context stays context, support stays support. -/
+def ImportFailure.ofLookup : RulesLookupError → ImportFailure
+  | .context reason => .context reason
+  | .support reason => .support reason
+
+@[simp] theorem ImportFailure.render_ofLookup (e : RulesLookupError) :
+    (ImportFailure.ofLookup e).render = e.render := by
+  cases e <;> rfl
+
 /-- Why a candidate block is rejected.
 
 The inner channel: every arm is a consensus verdict about the candidate, and
@@ -437,19 +435,20 @@ theorem TransitionError.render_split (e : TransitionError) :
   ¬ (BlockValidationError.all.map BlockValidationError.tag).contains t
 
 def processMessageCall.create (msg : Msg) :
-  Except String (State × MsgCallOutput) := do
+  Except EvmError (State × MsgCallOutput) := do
   let benv := msg.benv
   let isCollision : Bool :=
     accountHasCodeOrNonce benv.state msg.currentTarget || accountHasStorage benv.state msg.currentTarget
   if isCollision then
     return ⟨benv.state, ⟨0, 0, [], .emptyWithCapacity, .some (.halt (.addressCollision .none)), []⟩⟩
   else
-    let evm ← Except.bimap (fun e => EvmError.render e.1) id (processCreateMessage msg)
+    let evm ← Except.bimap Prod.fst id (processCreateMessage msg)
     let logs := if evm.error.isNone then evm.logs else []
     let accountsToDelete := if evm.error.isNone then evm.accountsToDelete else .emptyWithCapacity
     let refundCounter ←
       if evm.error.isNone then
-       (Int.toNat? evm.refundCounter).toExcept "ERROR : refund counter is negative"
+       (Int.toNat? evm.refundCounter).toExcept
+         (EvmError.internal (.invariant (.text "refund counter is negative")))
       else
         .ok 0
     .ok ⟨
@@ -465,13 +464,12 @@ def processMessageCall.create (msg : Msg) :
     ⟩
 
 def processMessageCall.call (msg : Msg) :
-  Except String (State × MsgCallOutput) := do
+  Except EvmError (State × MsgCallOutput) := do
   let (⟨msgDelegation, refundDelegation⟩ : Msg × Nat) ←
     if msg.tenv.stat.auths.isEmpty then
       .ok (⟨msg, 0⟩ : Msg × Nat)
     else do
-      let ⟨msgDelegation, setDelegationValue⟩ ←
-        Except.mapError EvmError.render (setDelegation msg)
+      let ⟨msgDelegation, setDelegationValue⟩ ← setDelegation msg
       .ok ⟨msgDelegation, setDelegationValue.toNat⟩
   let msgPc :=
     match getDelegatedCodeAddress msgDelegation.code with
@@ -484,10 +482,11 @@ def processMessageCall.call (msg : Msg) :
         code := msgDelegation.benv.state.getCode dca,
         codeAddress := some dca
       }
-  let evm ← Except.bimap (fun e => EvmError.render e.1) id (processMessage msgPc)
+  let evm ← Except.bimap Prod.fst id (processMessage msgPc)
   let refundProcessMessage ←
     if evm.error.isNone then
-      (Int.toNat? evm.refundCounter).toExcept "ERROR : refund counter is negative"
+      (Int.toNat? evm.refundCounter).toExcept
+        (EvmError.internal (.invariant (.text "refund counter is negative")))
     else
       .ok 0
   let logs := if evm.error.isNone then evm.logs else []
@@ -505,7 +504,7 @@ def processMessageCall.call (msg : Msg) :
   ⟩
 
 def processMessageCall (msg : Msg) :
-    Except String (State × MsgCallOutput) := do
+    Except EvmError (State × MsgCallOutput) := do
   if msg.target.isNone then
     processMessageCall.create msg
   else
@@ -817,7 +816,7 @@ def validateTransaction (rules : ForkRules) (tx : Tx) :
   .ok ⟨intrinsicGas, callDataFloorGasCost⟩
 
 def prepareMessage (benv: Benv) (tenv: Tenv) (tx: Tx) :
-  Except String Msg := do
+  Except TransitionError Msg := do
   let ⟨currentTarget, msgData, code, codeAddress⟩ :
     Adr × Bytes × ByteArray × Option Adr :=
     match tx.type.receiver? with
@@ -1033,7 +1032,7 @@ private def guardTightCodeLimits : CodeLimits :=
 
 def processTransaction
   (benv: Benv) (bout : BlockOutput)
-  (tx: Tx) (index : Nat) : Except String (State × BlockOutput) := do
+  (tx: Tx) (index : Nat) : Except TransitionError (State × BlockOutput) := do
   -- NOTE: linearized into a straight `let ← .ok (…)` / `let := …` chain
   -- (no `mut`/`for`) so the block inverts cleanly with `of_bind_eq_ok` and the
   -- `bout` bookkeeping stays opaque.  Definitionally equal to the previous
@@ -1044,13 +1043,13 @@ def processTransaction
   let bout ← .ok {bout with
     transactionsTrie := bout.transactionsTrie.insert (BLT.bytes index.toBytes).toBytes tx}
   let ⟨intrinsicGas, calldataFloorGasCost⟩ ←
-    Except.mapError TxValidationError.render (validateTransaction benv.stat.rules tx)
+    Except.mapError TransitionError.transaction (validateTransaction benv.stat.rules tx)
   let ⟨
     sender,
     effectiveGasPrice,
     blobVersionedHashes,
     txBlobGasUsed
-  ⟩ ← Except.mapError TransitionError.render (checkTransaction benv bout tx)
+  ⟩ ← checkTransaction benv bout tx
   let blobGasFee :=
     if tx.isTypeThree
     then calculateDataFee benv.stat.rules.blob benv.stat.excessBlobGas tx
@@ -1059,7 +1058,7 @@ def processTransaction
   let gas := tx.gas - intrinsicGas
   let state : State := benv.state.incrNonce sender
   let state ← (state.subBal sender (effectiveGasFee + blobGasFee).toB256).toExcept
-    "ERROR : balance underflow"
+    (TransitionError.internal (.invariant (.text "balance underflow")))
   let preaccessedAddresses : AdrSet :=
     .ofList (benv.stat.coinbase :: tx.accessList.map Prod.fst)
   let preaccessedStorageKeys : KeySet :=
@@ -1079,10 +1078,11 @@ def processTransaction
     }
   }
   let msg ← prepareMessage {benv with state := state} tenv tx
-  let ⟨state, txOutput⟩ ← processMessageCall msg
+  let ⟨state, txOutput⟩ ← Except.mapError TransitionError.vm (processMessageCall msg)
   let txGasUsedBeforeRefund := tx.gas - txOutput.gasLeft
   let refundCounter : Nat ←
-    (Int.toNat? txOutput.refundCounter).toExcept "ERROR : refund counter is negative"
+    (Int.toNat? txOutput.refundCounter).toExcept
+      (TransitionError.internal (.invariant (.text "refund counter is negative")))
   let txGasRefund : Nat :=
     min (txGasUsedBeforeRefund / 5) refundCounter
   let txGasUsedAfterRefund : Nat :=
@@ -1512,84 +1512,94 @@ def processSystemTransactionMsg (benv : Benv) (tenv : Tenv)
 -- its own input state as the original state.
 def processSystemTransaction (benv : Benv)
   (target : Adr) (code : ByteArray) (data : Bytes) :
-  Except String (State × MsgCallOutput) := do
+  Except EvmError (State × MsgCallOutput) := do
   let benv := benv.beginTransaction
   let txEnv : Tenv := processSystemTransactionTenv benv
   let systemTxMsg : Msg :=
     processSystemTransactionMsg benv txEnv target data code
   processMessageCall systemTxMsg
 
-def extractDepositData (data : Bytes) : Except String Bytes := do
+def extractDepositData (data : Bytes) : Except BlockValidationError Bytes := do
   if data.length != depositEventLength then
-    .error s!"{depositEventLayoutTag} : invalid deposit event data length"
+    .error (.depositEventLayout (.text "invalid deposit event data length"))
   if data.sliceToNat 0 32 ≠ pubkeyOffset then
-    .error s!"{depositEventLayoutTag} : invalid pubkey offset in deposit log"
+    .error (.depositEventLayout (.text "invalid pubkey offset in deposit log"))
   if data.sliceToNat 32 32 ≠ withdrawalCredentialsOffset then
-    .error s!"{depositEventLayoutTag} : invalid withdrawal credentials offset in deposit log"
+    .error (.depositEventLayout (.text "invalid withdrawal credentials offset in deposit log"))
   if data.sliceToNat 64 32 ≠ amountOffset then
-    .error s!"{depositEventLayoutTag} : invalid amount offset in deposit log"
+    .error (.depositEventLayout (.text "invalid amount offset in deposit log"))
   if data.sliceToNat 96 32 ≠ signatureOffset then
-    .error s!"{depositEventLayoutTag} : invalid signature offset in deposit log"
+    .error (.depositEventLayout (.text "invalid signature offset in deposit log"))
   if data.sliceToNat 128 32 ≠ indexOffset then
-    .error s!"{depositEventLayoutTag} : invalid index offset in deposit log"
+    .error (.depositEventLayout (.text "invalid index offset in deposit log"))
   if data.sliceToNat pubkeyOffset 32 ≠ pubkeySize then
-    .error s!"{depositEventLayoutTag} : invalid pubkey size in deposit log"
+    .error (.depositEventLayout (.text "invalid pubkey size in deposit log"))
   let pubkey : Bytes := data.slice! (pubkeyOffset + 32) pubkeySize
   if data.sliceToNat withdrawalCredentialsOffset 32 ≠ withdrawalCredentialsSize then
-    .error s!"{depositEventLayoutTag} : invalid withdrawal credentials size in deposit log"
+    .error (.depositEventLayout (.text "invalid withdrawal credentials size in deposit log"))
   let withdrawalCredentials : Bytes :=
     data.slice! (withdrawalCredentialsOffset + 32) withdrawalCredentialsSize
   if data.sliceToNat amountOffset 32 ≠ amountSize then
-    .error s!"{depositEventLayoutTag} : invalid amount size in deposit log"
+    .error (.depositEventLayout (.text "invalid amount size in deposit log"))
   let amount : Bytes := data.slice! (amountOffset + 32) amountSize
   if data.sliceToNat signatureOffset 32 ≠ signatureSize then
-    .error s!"{depositEventLayoutTag} : invalid signature size in deposit log"
+    .error (.depositEventLayout (.text "invalid signature size in deposit log"))
   let signature : Bytes := data.slice! (signatureOffset + 32) signatureSize
   if data.sliceToNat indexOffset 32 ≠ indexSize then
-    .error s!"{depositEventLayoutTag} : invalid index size in deposit log"
+    .error (.depositEventLayout (.text "invalid index size in deposit log"))
   let index : Bytes := data.slice! (indexOffset + 32) indexSize
   .ok (pubkey ++ withdrawalCredentials ++ amount ++ signature ++ index)
 
 def parseDepositRequests
-  (bout : BlockOutput) : Except String Bytes := do
+  (bout : BlockOutput) : Except TransitionError Bytes := do
   let mut depositRequests : Bytes := []
   for key in bout.receiptKeys do
     let ⟨_, receipt⟩  ←
-      bout.receiptsTrie[key]?.toExcept "ERROR : receipt not found"
+      bout.receiptsTrie[key]?.toExcept
+        (TransitionError.internal (.invariant (.text "receipt not found")))
     for log in receipt.logs do
       if (
         log.address = depositContractAddress ∧
         log.topics[0]? = some depositEventSignatureHash
       ) then
-        let request ← extractDepositData log.data
+        let request ← Except.mapError TransitionError.block (extractDepositData log.data)
         depositRequests := depositRequests ++ request
   .ok depositRequests
 
 def processUncheckedSystemTransaction
   (benv : Benv) (target : Adr) (data : Bytes) :
-  Except String (State × MsgCallOutput) := do
+  Except EvmError (State × MsgCallOutput) := do
   let systemContractCode : ByteArray := benv.state.getCode target
   processSystemTransaction benv target systemContractCode data
 
 def processCheckedSystemTransaction
   (benv : Benv) (target : Adr) (data : Bytes) :
-  Except String (State × MsgCallOutput) := do
+  Except TransitionError (State × MsgCallOutput) := do
   let systemContractCode : ByteArray := benv.state.getCode target
+  -- A mis-provisioned chain: the mandatory system contract holds no code. Its
+  -- official Osaka identity (SYSTEM_CONTRACT_EMPTY) is outside this build's
+  -- reviewed vocabulary, and the retired string carried the broad
+  -- "InvalidBlock" category, which was never classifiable -- so the reason is
+  -- typed internal and fails closed. Unobserved in every corpus; the spelling
+  -- change is recorded by the Step-10 report.
   if systemContractCode.isEmpty then
-    .error s!"InvalidBlock : System contract address {target.toHex} does not contain code"
+    .error <| .internal <| .invariant <|
+      .text s!"system contract address {target.toHex} holds no code"
   let ⟨state, systemTxOutput⟩ ←
-    processSystemTransaction benv target systemContractCode data
+    Except.mapError TransitionError.vm
+      (processSystemTransaction benv target systemContractCode data)
   -- P0.6 item 3: the failure text is extracted by the total match, never by a
   -- partial projection out of the optional error field.
   match systemTxOutput.error with
   | some err =>
-    .error s!"{systemContractCallFailedTag} : system contract ({target.toHex}) call failed: \
+    .error <| .block <| .systemContractCallFailed <| .text
+      s!"system contract ({target.toHex}) call failed: \
       {err.render}"
   | none => .ok ⟨state, systemTxOutput⟩
 
 def processGeneralPurposeRequests
   (benv : Benv) (bout : BlockOutput) :
-  Except String (State × BlockOutput) := do
+  Except TransitionError (State × BlockOutput) := do
   let depositRequests ← parseDepositRequests bout
   let mut requestsFromExecution : List Bytes := bout.requests
   if depositRequests.length > 0 then
@@ -1613,7 +1623,7 @@ def processGeneralPurposeRequests
   .ok ⟨state, {bout with requests := requestsFromExecution}⟩
 
 def applyTransactions :
-    List (Nat × Tx) → Benv → BlockOutput → Except String (Benv × BlockOutput)
+    List (Nat × Tx) → Benv → BlockOutput → Except TransitionError (Benv × BlockOutput)
   | [], benv, bout => .ok (benv, bout)
   | ⟨i, tx⟩ :: txis, benv , bout => do
     let ⟨st, bout'⟩ ← processTransaction benv bout tx i
@@ -1621,23 +1631,24 @@ def applyTransactions :
 
 def applyBody
   (benv : Benv) (txs : List (Bytes ⊕ Tx)) (wds : List Withdrawal) :
-  Except String (State × BlockOutput) := do
+  Except TransitionError (State × BlockOutput) := do
   let ⟨stBeacon, _⟩ ←
-    processUncheckedSystemTransaction benv
-      beaconRootsAddress
-      benv.stat.parentBeaconBlockRoot.toBytes
+    Except.mapError TransitionError.vm <|
+      processUncheckedSystemTransaction benv
+        beaconRootsAddress
+        benv.stat.parentBeaconBlockRoot.toBytes
   let benvBeacon : Benv := benv.withState stBeacon
   let lastHash ←
-     benvBeacon.stat.blockHashes.getLast?.toExcept "ERROR : block hashes is empty"
+     benvBeacon.stat.blockHashes.getLast?.toExcept
+       (TransitionError.internal (.invariant (.text "block hashes is empty")))
   let ⟨stHistory, _⟩ ←
-    processUncheckedSystemTransaction benvBeacon
-      historyStorageAddress
-      lastHash.toBytes
+    Except.mapError TransitionError.vm <|
+      processUncheckedSystemTransaction benvBeacon
+        historyStorageAddress
+        lastHash.toBytes
   let benvHistory := benvBeacon.withState stHistory
   let ⟨benvTxs, boutTxs⟩ ←
-    applyTransactions
-      (← txs.mapM (fun e => Except.mapError TransitionError.render (decodeTx e))).putIndex
-      benvHistory .init
+    applyTransactions (← txs.mapM decodeTx).putIndex benvHistory .init
   let ⟨stWds, boutWds⟩ :=
     processWithdrawals benvTxs boutTxs wds
   processGeneralPurposeRequests (benvTxs.withState stWds) boutWds
@@ -1929,40 +1940,210 @@ def State.root (w : State) : B256 :=
   let finalNTB : NTB := Std.TreeMap.ofList keyVals _
   trie finalNTB
 
+/-- The absolute upper bound on a block gas limit. A gas limit is a 63-bit
+quantity: `2 ^ 63` and above is out of range no matter what the parent's limit
+was, which is why the fixtures name it separately from a limit that merely
+moved too far from its parent. -/
+def gasLimitMaximum : Nat := 2 ^ 63
+
+/-- Check a block's gas limit against the absolute bound and against its
+parent, reporting *which* rule failed.
+
+Relocated from `Jaune/Execution.lean` by Step 10, with `calculateBaseFeePerGas`
+and `validateHeader` below: their reasons are `BlockValidationError`
+constructors, whose frozen home is this module (design report §6), and their
+only consumer is `stateTransitionWith`'s core here -- the same
+producer-follows-type relocation Step 9 recorded for the BLS decoders.
+
+The absolute bound is tested first, and that order is the point: a limit just
+above `2 ^ 63` can still sit inside the parent-relative window (it does exactly
+that when the parent's limit is `2 ^ 63 - 1`), so testing the window first would
+report the adjustment rule for a block whose real defect is an out-of-range gas
+limit -- the right verdict for the wrong reason. -/
+def checkGasLimit (gasLimit parentGasLimit : Nat) :
+    Except BlockValidationError Unit := do
+  if gasLimit ≥ gasLimitMaximum then
+    .error <| .gasLimitTooBig <| .text
+      s!"gas limit = {gasLimit} ≥ \
+         absolute maximum = {gasLimitMaximum}"
+  let maxAdjustmentDelta := parentGasLimit / gasLimitAdjustmentFactor
+  if gasLimit ≥ parentGasLimit + maxAdjustmentDelta then
+    .error <| .gasLimitAdjustment <| .text
+      s!"gas limit = {gasLimit} ≥ parent gas limit \
+         = {parentGasLimit} + max adjustment delta = {maxAdjustmentDelta}"
+  if gasLimit ≤ parentGasLimit - maxAdjustmentDelta then
+    .error <| .gasLimitAdjustment <| .text
+      s!"gas limit = {gasLimit} ≤ parent gas limit \
+         = {parentGasLimit} - max adjustment delta = {maxAdjustmentDelta}"
+  if gasLimit < gasLimitMinimum then
+    .error <| .gasLimitAdjustment <| .text
+      s!"gas limit = {gasLimit} < \
+         minimum = {gasLimitMinimum}"
+
+--------------- GAS-LIMIT BOUNDARY CHECKS ----------------
+
+-- Constructor-level matcher for the block-validation boundary guards.
+private def blkFails {α : Type} (p : BlockValidationError → Bool) :
+    Except BlockValidationError α → Bool
+  | .error e => p e
+  | .ok _ => false
+
+-- The absolute bound, at its exact boundary. These are the real numbers from
+-- `bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json`, whose genesis gas limit
+-- is `2 ^ 63 - 1` and whose block claims `2 ^ 63`. Note the parent-relative
+-- window *accepts* that block -- one step up from a parent of `2 ^ 63 - 1` is
+-- well within a delta of `(2 ^ 63 - 1) / 1024` -- so the absolute bound is the
+-- only rule that rejects it, and it must be the one that reports.
+#guard blkFails (fun | .gasLimitTooBig _ => true | _ => false)
+  (checkGasLimit (2 ^ 63) (2 ^ 63 - 1))
+#guard ¬ blkFails (fun | .gasLimitAdjustment _ => true | _ => false)
+  (checkGasLimit (2 ^ 63) (2 ^ 63 - 1))
+-- One below the bound, same parent: accepted. This is the maximum gas limit any
+-- valid block in the corpus carries, so the bound may not be one lower.
+#guard (checkGasLimit (2 ^ 63 - 1) (2 ^ 63 - 1)).toOption.isSome
+-- Far above the bound, where the window would also reject: still too big.
+#guard blkFails (fun | .gasLimitTooBig _ => true | _ => false)
+  (checkGasLimit (2 ^ 64) 3141592)
+
+-- The parent-relative window and the minimum, each at its boundary, all
+-- reporting the adjustment rule rather than the absolute one.
+#guard (checkGasLimit 3141592 3141592).toOption.isSome              -- unchanged
+#guard blkFails (fun | .gasLimitAdjustment _ => true | _ => false)
+  (checkGasLimit (3141592 + 3067) 3141592)
+#guard (checkGasLimit (3141592 + 3066) 3141592).toOption.isSome     -- just inside
+#guard blkFails (fun | .gasLimitAdjustment _ => true | _ => false)
+  (checkGasLimit (3141592 - 3067) 3141592)
+#guard (checkGasLimit (3141592 - 3066) 3141592).toOption.isSome     -- just inside
+#guard blkFails (fun | .gasLimitAdjustment _ => true | _ => false)
+  (checkGasLimit 4999 5000)                                         -- below minimum
+#guard (checkGasLimit gasLimitMinimum 5000).toOption.isSome
+
+def calculateBaseFeePerGas
+  (blockGasLimit parentGasLimit parentGasUsed parentBaseFeePerGas : Nat) :
+  Except BlockValidationError Nat := do
+  let parentGasTarget := parentGasLimit / elasticityMultiplier
+  checkGasLimit blockGasLimit parentGasLimit
+  if parentGasUsed = parentGasTarget
+  then .ok parentBaseFeePerGas
+  else
+    if parentGasUsed > parentGasTarget
+    then
+      let gasUsedDelta := parentGasUsed - parentGasTarget
+      let parentFeeGasDelta := parentBaseFeePerGas * gasUsedDelta
+      let targetFeeGasDelta := parentFeeGasDelta / parentGasTarget
+      let baseFeePerGasDelta :=
+        max (targetFeeGasDelta / baseFeeMaxChangeDenominator) 1
+      .ok <| parentBaseFeePerGas + baseFeePerGasDelta
+    else
+      let gasUsedDelta := parentGasTarget - parentGasUsed
+      let parentFeeGasDelta := parentBaseFeePerGas * gasUsedDelta
+      let targetFeeGasDelta := parentFeeGasDelta / parentGasTarget
+      let baseFeePerGasDelta :=
+        targetFeeGasDelta / baseFeeMaxChangeDenominator
+      .ok <| parentBaseFeePerGas - baseFeePerGasDelta
+
+def validateHeader (rules : ForkRules) (chain : BlockChain) (header : Header) :
+  Except TransitionError Unit := do
+  -- An empty snapshot names no parent to validate against. The runner can
+  -- never supply one (a checked snapshot is nonempty by construction), so
+  -- this is a caller-context invariant breach, typed internal and fail-closed
+  -- -- never a candidate verdict. Step 10 replaced the untagged legacy string
+  -- "No parent block found" here; the arm is unobserved in every corpus.
+  let parent ← chain.blocks.getLast?.toExcept
+    (.internal (.invariant (.text "no parent block found")))
+  let blockParentHash := (Header.toBLT parent.header).toBytes.keccak
+  -- Parentage is settled first. Every check below reads the parent's header, so
+  -- a block naming a parent this chain does not end with is not a block with a
+  -- bad timestamp or a bad base fee -- it is a block that cannot be placed at
+  -- all, and reporting any later rule for it would name the wrong defect. The
+  -- all-zero hash is called out separately because it names no block at all,
+  -- rather than naming some block this chain has not got.
+  if header.parentHash ≠ blockParentHash then do
+    if header.parentHash = 0 then
+      .error <| .block <| .unknownParentZero <| .text
+        s!"parent hash is the all-zero hash, \
+           which names no block"
+    .error <| .block <| .unknownParent <| .text
+      s!"parent hash = {header.parentHash} names no known \
+         block; this chain ends at {blockParentHash}"
+  let expectedBaseFeePerGas ←
+    Except.mapError TransitionError.block <|
+      calculateBaseFeePerGas
+        header.gasLimit
+        parent.header.gasLimit
+        parent.header.gasUsed
+        parent.header.baseFeePerGas
+  if header.excessBlobGas ≠ calculateExcessBlobGas rules.blob parent.header then do
+    .error <| .block <| .excessBlobGas <| .text
+      s!"excess blob gas = {header.excessBlobGas} ≠ \
+         expected = {calculateExcessBlobGas rules.blob parent.header}"
+  if header.gasUsed > header.gasLimit then do
+    .error <| .block <| .gasUsedOverflow <| .text
+      s!"gas used = {header.gasUsed} > \
+         gas limit = {header.gasLimit}"
+  if expectedBaseFeePerGas ≠ header.baseFeePerGas then do
+    .error <| .block <| .baseFeePerGas <| .text
+      s!"base fee per gas = {header.baseFeePerGas} ≠ \
+         expected = {expectedBaseFeePerGas}"
+  if header.timestamp ≤ parent.header.timestamp then do
+    .error <| .block <| .timestampOlderThanParent <| .text
+      s!"timestamp = {header.timestamp} ≤ \
+         parent timestamp = {parent.header.timestamp}"
+  if header.number ≠ parent.header.number + 1 then do
+    .error <| .block <| .blockNumber <| .text
+      s!"number = {header.number} ≠ \
+         parent number + 1 = {parent.header.number + 1}"
+  if header.extraData.length > 32 then do
+    .error <| .block <| .extraDataTooBig <| .text
+      s!"extra data is {header.extraData.length} bytes, \
+         exceeding the 32-byte maximum"
+  if header.difficulty ≠ 0 then do
+    .error <| .block <| .difficultyOverParis <| .text
+      s!"difficulty = {header.difficulty} ≠ 0, \
+         which is impossible after Paris"
+  if header.nonce ≠ 0 then do
+    .error <| .block <| .headerNonce <| .text
+      s!"nonce = {header.nonce} ≠ 0, \
+         which is impossible after Paris"
+  if header.ommersHash ≠ emptyOmmerHash then do
+    .error <| .block <| .ommersOverParis <| .text
+      s!"ommers hash = {header.ommersHash} ≠ \
+         empty-list hash = {emptyOmmerHash}, which is impossible after Paris"
+
 def stateTransitionChecks (bout : BlockOutput) (header : Header)
     (transactionsRoot blockStateRoot receiptRoot : B256)
     (blockLogsBloom : Bytes) (withdrawalsRoot requestsHash : B256) :
-    Except String Unit := do
+    Except BlockValidationError Unit := do
   if bout.blockGasUsed ≠ header.gasUsed then
-    .error
-      s!"{gasUsedMismatchTag} : computed block gas used = {bout.blockGasUsed} ≠ \
+    .error <| .gasUsedMismatch <| .text
+      s!"computed block gas used = {bout.blockGasUsed} ≠ \
          header block gas used = {header.gasUsed}"
   if transactionsRoot ≠ header.txsRoot then
-    .error
-      s!"{transactionsRootTag} : computed transactions root = {transactionsRoot} \
+    .error <| .transactionsRoot <| .text
+      s!"computed transactions root = {transactionsRoot} \
          ≠ header transactions root = {header.txsRoot}"
   if blockStateRoot ≠ header.stateRoot then
-    .error
-      s!"{stateRootTag} : computed state root = {blockStateRoot} ≠ \
+    .error <| .stateRoot <| .text
+      s!"computed state root = {blockStateRoot} ≠ \
          header state root = {header.stateRoot}"
   if receiptRoot ≠ header.receiptRoot then
-    .error
-      s!"{receiptsRootTag} : computed receipts root = {receiptRoot} ≠ \
+    .error <| .receiptsRoot <| .text
+      s!"computed receipts root = {receiptRoot} ≠ \
          header receipts root = {header.receiptRoot}"
   if blockLogsBloom ≠ header.bloom then
-    .error
-      s!"{logBloomTag} : computed logs bloom ≠ header logs bloom"
+    .error <| .logBloom <| .text
+      s!"computed logs bloom ≠ header logs bloom"
   if withdrawalsRoot ≠ header.withdrawalsRoot then
-    .error
-      s!"{withdrawalsRootTag} : computed withdrawals root = {withdrawalsRoot} ≠ \
+    .error <| .withdrawalsRoot <| .text
+      s!"computed withdrawals root = {withdrawalsRoot} ≠ \
          header withdrawals root = {header.withdrawalsRoot}"
   if bout.blobGasUsed ≠ header.blobGasUsed then
-    .error
-      s!"{blobGasUsedTag} : computed blob gas used = {bout.blobGasUsed} ≠ \
+    .error <| .blobGasUsed <| .text
+      s!"computed blob gas used = {bout.blobGasUsed} ≠ \
          header blob gas used = {header.blobGasUsed}"
   if some requestsHash ≠ header.requestsHash then
-    .error
-      s!"{requestsHashTag} : computed requests hash = {requestsHash} ≠ \
+    .error <| .requestsHash <| .text
+      s!"computed requests hash = {requestsHash} ≠ \
          header requests hash = {header.requestsHash}"
 
 def initBenvStat (rules : ForkRules) (chain : BlockChain) (header : Header) :
@@ -2011,10 +2192,11 @@ def getWithdrawalsRoot (bout : BlockOutput) : B256 :=
     ⟨arg.fst.toNibbles, arg.snd.toBLT.toBytes⟩
   trie <| Std.TreeMap.ofList (List.map aux bout.withdrawalsTrie.toList) _
 
-def stateTransitionOmmersCheck (ommers : List Header) : Except String Unit := do
+def stateTransitionOmmersCheck (ommers : List Header) :
+    Except BlockValidationError Unit := do
   if ¬ommers.isEmpty then do
-    .error
-      s!"{ommersOverParisTag} : block body contains {ommers.length} ommer(s), \
+    .error <| .ommersOverParis <| .text
+      s!"block body contains {ommers.length} ommer(s), \
          which is impossible after Paris"
 
 def appendBlock (blks : List Block) (blk : Block) : List Block :=
@@ -2095,14 +2277,14 @@ theorem BlockChain.retainedHistoryValid_appendBlock {chain chain' : BlockChain}
         List.length_cons, List.length_nil]
       omega
 
-/-- The block state transition under an explicit rule set.
-
-This is the whole implementation; every other state-transition entry point
-below only decides *which* rules to hand it. -/
-def stateTransitionWith (rules : ForkRules) (ch : BlockChain) (block : Block) :
-  Except String BlockChain := do
+/-- The block state transition under an explicit rule set: the typed canonical
+core. Every other state-transition entry point below only decides *which*
+rules to hand it, and the retained stringly names are renderer adapters over
+this one function. -/
+def stateTransitionE (rules : ForkRules) (ch : BlockChain) (block : Block) :
+  Except TransitionError BlockChain := do
   validateHeader rules ch block.header
-  stateTransitionOmmersCheck block.ommers
+  Except.mapError TransitionError.block (stateTransitionOmmersCheck block.ommers)
   let benv : Benv := initBenv rules ch block.header
   let ⟨st, bout⟩ ← applyBody benv block.txs block.wds
   let blockStateRoot : B256 := st.root
@@ -2111,10 +2293,25 @@ def stateTransitionWith (rules : ForkRules) (ch : BlockChain) (block : Block) :
   let blockLogsBloom : Bytes := logsBloom bout.blockLogs
   let withdrawalsRoot : B256 := getWithdrawalsRoot bout
   let requestsHash := computeRequestsHash bout.requests
-  stateTransitionChecks bout block.header
-    transactionsRoot blockStateRoot receiptRoot
-    blockLogsBloom withdrawalsRoot requestsHash
+  Except.mapError TransitionError.block <|
+    stateTransitionChecks bout block.header
+      transactionsRoot blockStateRoot receiptRoot
+      blockLogsBloom withdrawalsRoot requestsHash
   .ok ⟨appendBlock ch.blocks block, st, ch.chainId⟩
+
+/-- Legacy renderer adapter over `stateTransitionE`, byte-identical on every
+input. Retained by name and type: Blanc's protected theorems and this
+module's `rfl` identities are stated over it (design report §3.1). -/
+def stateTransitionWith (rules : ForkRules) (ch : BlockChain) (block : Block) :
+  Except String BlockChain :=
+  (stateTransitionE rules ch block).mapError TransitionError.render
+
+/-- The adapter adds rendering and nothing else. -/
+theorem stateTransitionWith_eq_ok_iff {rules : ForkRules} {ch ch' : BlockChain}
+    {block : Block} :
+    stateTransitionWith rules ch block = .ok ch'
+      ↔ stateTransitionE rules ch block = .ok ch' :=
+  Except.mapError_eq_ok_iff
 
 /-- The block state transition at an explicitly named fork.
 
@@ -2123,7 +2320,7 @@ rather than deriving it. A fork whose rules this build does not implement
 fails here with `UnsupportedForkError`; it never falls back to Prague. -/
 def stateTransitionAt (f : Fork) (ch : BlockChain) (block : Block) :
     Except String BlockChain := do
-  stateTransitionWith (← f.rules) ch block
+  stateTransitionWith (← Except.mapError SupportError.render f.rules) ch block
 
 /-- Whether a configuration's declared chain identity agrees with a snapshot's.
 
@@ -2151,7 +2348,9 @@ anything else -- P0.1's fix -- then proceeds exactly as before. -/
 def stateTransitionUsing (cfg : ChainConfig) (ch : BlockChain) (block : Block) :
     Except String BlockChain := do
   Except.mapError ChainContextError.render (cfg.checkChainId ch)
-  stateTransitionWith (← cfg.rulesAt block.header.timestamp) ch block
+  stateTransitionWith
+    (← Except.mapError RulesLookupError.render (cfg.rulesAt block.header.timestamp))
+    ch block
 
 /-- The Prague state transition.
 
@@ -2641,18 +2840,18 @@ theorem CanonicalBlock.decodeTx_inr {cb : CanonicalBlock} {tx : Tx}
 
 /-- The state transition on a canonical outer block.
 
-Definitionally the raw core applied to the envelope's block, so every result
-about `stateTransitionWith` transfers to it by `rfl` and no proof has to be
+Definitionally the typed core applied to the envelope's block, so every result
+about `stateTransitionE` transfers to it by `rfl` and no proof has to be
 restated. What it adds is at the type level: a caller of this entry point
 cannot supply a block that no strict decode ever produced. -/
 def stateTransitionCanonical (rules : ForkRules) (ch : BlockChain)
     (cb : CanonicalBlock) :
-    Except String BlockChain :=
-  stateTransitionWith rules ch cb.block
+    Except TransitionError BlockChain :=
+  stateTransitionE rules ch cb.block
 
 theorem stateTransitionCanonical_eq (rules : ForkRules) (ch : BlockChain)
     (cb : CanonicalBlock) :
-    stateTransitionCanonical rules ch cb = stateTransitionWith rules ch cb.block :=
+    stateTransitionCanonical rules ch cb = stateTransitionE rules ch cb.block :=
   rfl
 
 --------------- THE CHECKED CHAIN SNAPSHOT ---------------
@@ -2886,20 +3085,20 @@ canonical value. The block-import path performs its existing strict decode and
 byte-for-byte canonical round trip before treating this as a consensus
 rejection. -/
 def checkBlockRlpSize (limits : BlockLimits) (rawSize : Nat) :
-    Except String Unit :=
+    Except BlockValidationError Unit :=
   match limits.maxRlpSize with
   | none => .ok ()
   | some maxRlpSize =>
     if rawSize > maxRlpSize then
-      .error
-        s!"{blockRlpSizeExceededTag} : original block RLP is {rawSize} bytes > \
+      .error <| .blockRlpSizeExceeded <| .text
+        s!"original block RLP is {rawSize} bytes > \
            maximum = {maxRlpSize}"
     else
       .ok ()
 
 #guard (checkBlockRlpSize osakaRules.block (8388608 - 1)).toOption.isSome
 #guard (checkBlockRlpSize osakaRules.block 8388608).toOption.isSome
-#guard hasTag blockRlpSizeExceededTag <|
+#guard blkFails (fun | .blockRlpSizeExceeded _ => true | _ => false) <|
   checkBlockRlpSize osakaRules.block (8388608 + 1)
 #guard (checkBlockRlpSize pragueRules.block (8388608 + 1)).toOption.isSome
 
@@ -3181,40 +3380,80 @@ are harness prerequisites, discharged before an envelope can exist at all;
 among consensus checks EIP-7934 is first, before `stateTransitionWith` reaches
 header validation, exactly as EELS. The two failure channels are unchanged:
 `.error` is a harness-level failure, `.inr` is a block this chain rejects. -/
+def addBlockToChainCanonicalE (rules : ForkRules) (chain : BlockChain)
+    (cb : CanonicalBlock) : Except ImportFailure (ImportOutcome BlockChain) :=
+  match checkBlockRlpSize rules.block cb.rawSize with
+  | .error err => .ok (.inr (.block err))
+  | .ok () =>
+    match stateTransitionE rules chain cb.block with
+    | .error e =>
+      match e.split with
+      | .inl failure => .error failure
+      | .inr rejection => .ok (.inr rejection)
+    | .ok chain' => .ok (.inl chain')
+
+/-- Collapse a typed import result onto the legacy stringly channels: the
+operational failure renders on the outer `.error`, the candidate rejection on
+the inner `.inr`. This is the single renderer every legacy import adapter
+goes through. -/
+def ImportOutcome.renderLegacy :
+    Except ImportFailure (ImportOutcome BlockChain) →
+    Except String (BlockChain ⊕ String)
+  | .error failure => .error failure.render
+  | .ok (.inl chain) => .ok (.inl chain)
+  | .ok (.inr rejection) => .ok (.inr rejection.render)
+
+/-- Legacy renderer adapter over the canonical-envelope import core. -/
 def addBlockToChainCanonical (rules : ForkRules) (chain : BlockChain)
     (cb : CanonicalBlock) :
-    Except String (BlockChain ⊕ String) := do
-  match checkBlockRlpSize rules.block cb.rawSize with
-  | .error err => return .inr err
-  | .ok () => pure ()
-  let chain ←
-    match stateTransitionWith rules chain cb.block with
-    | .error err => return (.inr err)
-    | .ok chain => .ok chain
-  .ok (.inl chain)
+    Except String (BlockChain ⊕ String) :=
+  ImportOutcome.renderLegacy (addBlockToChainCanonicalE rules chain cb)
 
-/-- Block import under an explicit rule set: the raw compatibility wrapper.
+/-- Block import from raw bytes under an explicit rule set: the typed core of
+the raw compatibility wrapper. It carries no evidence, so it validates on
+every call (fixed decision 2) -- strict decode plus the exact round trip --
+and hands the checked core an envelope built from that decode alone.
 
-It carries no evidence, so it validates on every call (fixed decision 2) --
-strict decode plus the exact round trip -- and hands the checked core an
-envelope built from that decode alone. -/
+Channel decision, per the Step-1 producer/channel matrix: every strict decode
+failure of the candidate bytes is a *candidate rejection* (`.inr .decode`),
+because the audited fixture ordering scores each of the seven decode reasons
+as a block exception. The legacy wrapper's old habit of reporting them on the
+outer channel was the accidental nesting design report §8 names, and is
+deliberately not preserved. `RawImportFailure.strictDecode` therefore retains
+no producer on this path; it remains the declared ingress channel for a
+future decoder whose failures are *not* candidate verdicts. -/
+def addBlockToChainWithE (rules : ForkRules) (chain : BlockChain)
+    (blockRlp : Bytes) : Except ImportFailure (ImportOutcome BlockChain) :=
+  match h : rlpToBlockE blockRlp with
+  | .error reason => .ok (.inr (.decode reason))
+  | .ok ⟨_, _⟩ =>
+    addBlockToChainCanonicalE rules chain
+      (CanonicalBlock.ofDecode (rlpToBlock_eq_ok_iff.mpr h))
+
+/-- Legacy renderer adapter over `addBlockToChainWithE`. Retained by name and
+type: Blanc's protected `addBlockToChain_preserves_solvent` is its Prague
+instance. Same rendered diagnostics; the decode-failure channel moved from
+the outer `.error` to the inner `.inr` deliberately (see the core's docstring
+and the Step-10 report). -/
 def addBlockToChainWith (rules : ForkRules) (chain : BlockChain)
-    (blockRlp : Bytes) : Except String (BlockChain ⊕ String) := do
-  match h : rlpToBlock blockRlp with
-  | .error err => .error err
-  | .ok ⟨_, _⟩ => addBlockToChainCanonical rules chain (CanonicalBlock.ofDecode h)
+    (blockRlp : Bytes) : Except String (BlockChain ⊕ String) :=
+  ImportOutcome.renderLegacy (addBlockToChainWithE rules chain blockRlp)
 
-/-- Block import at an explicitly named fork, for static fixture suites.
+/-- Typed block import at an explicitly named fork. An unimplemented fork
+fails on the outer channel: it is a limitation of this build, not a verdict
+that the block is invalid, and can never be recorded as one. -/
+def addBlockToChainAtE (f : Fork) (chain : BlockChain) (blockRlp : Bytes) :
+    Except ImportFailure (ImportOutcome BlockChain) := do
+  addBlockToChainWithE (← Except.mapError ImportFailure.support f.rules)
+    chain blockRlp
 
-An unimplemented fork fails on the `.error` channel: it is a limitation of this
-build, not a verdict that the block is invalid, and must never be recorded as
-one. -/
+/-- Legacy renderer adapter over `addBlockToChainAtE`. -/
 def addBlockToChainAt (f : Fork) (chain : BlockChain) (blockRlp : Bytes) :
-    Except String (BlockChain ⊕ String) := do
-  addBlockToChainWith (← f.rules) chain blockRlp
+    Except String (BlockChain ⊕ String) :=
+  ImportOutcome.renderLegacy (addBlockToChainAtE f chain blockRlp)
 
-/-- Block import on a configured chain, deriving the active fork from the
-block's own timestamp and the chain's activation schedule.
+/-- Typed block import on a configured chain, deriving the active fork from
+the block's own timestamp and the chain's activation schedule.
 
 Checks schedule usability and chain identity before touching the candidate
 bytes at all -- P0.1 and P0.5's frozen ordering (design report §3.3): a
@@ -3223,15 +3462,23 @@ what the caller supplied as a block, so it must not depend on decoding
 succeeding first. The era a decoded timestamp falls in is checked after
 decode, inside `cfg.rulesAt` below, because no timestamp exists before
 decode. -/
-def addBlockToChainUsing (cfg : ChainConfig) (chain : BlockChain)
-    (blockRlp : Bytes) : Except String (BlockChain ⊕ String) := do
-  cfg.validate
-  Except.mapError ChainContextError.render (cfg.checkChainId chain)
-  match h : rlpToBlock blockRlp with
-  | .error err => .error err
+def addBlockToChainUsingE (cfg : ChainConfig) (chain : BlockChain)
+    (blockRlp : Bytes) : Except ImportFailure (ImportOutcome BlockChain) := do
+  Except.mapError ImportFailure.context cfg.validate
+  Except.mapError ImportFailure.context (cfg.checkChainId chain)
+  match h : rlpToBlockE blockRlp with
+  | .error reason => .ok (.inr (.decode reason))
   | .ok ⟨block, _⟩ =>
-    let rules ← cfg.rulesAt block.header.timestamp
-    addBlockToChainCanonical rules chain (CanonicalBlock.ofDecode h)
+    let rules ←
+      Except.mapError ImportFailure.ofLookup
+        (cfg.rulesAt block.header.timestamp)
+    addBlockToChainCanonicalE rules chain
+      (CanonicalBlock.ofDecode (rlpToBlock_eq_ok_iff.mpr h))
+
+/-- Legacy renderer adapter over `addBlockToChainUsingE`. -/
+def addBlockToChainUsing (cfg : ChainConfig) (chain : BlockChain)
+    (blockRlp : Bytes) : Except String (BlockChain ⊕ String) :=
+  ImportOutcome.renderLegacy (addBlockToChainUsingE cfg chain blockRlp)
 
 /-- Prague block import.
 
@@ -3248,19 +3495,25 @@ def addBlockToChain (chain : BlockChain) (blockRlp : Bytes) :
 -- can invert an import with these and never unfold `CanonicalBlock`,
 -- `addBlockToChainCanonical`, or the raw wrapper's dependent match.
 
-/-- A raw import whose bytes do not strictly decode fails on the outer channel
-with exactly the decoder's own diagnostic. -/
+/-- A raw import whose bytes do not strictly decode *rejects the candidate*
+with exactly the decoder's own diagnostic. Before Step 10 the same diagnostic
+rode the outer harness channel -- the accidental nesting design report §8
+records -- so the channel here is a deliberate move, and the rendered message
+is unchanged. -/
 theorem addBlockToChainWith_decode_error {rules : ForkRules} {chain : BlockChain}
     {blockRlp : Bytes} {err : String} (h : rlpToBlock blockRlp = .error err) :
-    addBlockToChainWith rules chain blockRlp = .error err := by
-  unfold addBlockToChainWith
+    addBlockToChainWith rules chain blockRlp = .ok (.inr err) := by
+  unfold rlpToBlock at h
+  rw [Except.mapError_eq_error_iff] at h
+  obtain ⟨reason, hre, rfl⟩ := h
+  unfold addBlockToChainWith addBlockToChainWithE
   split
   · rename_i e he
-    rw [h] at he
-    simp only [Except.error.injEq] at he
-    exact he ▸ rfl
-  · rename_i b s hb
-    rw [h] at hb
+    rw [hre] at he
+    cases he
+    rfl
+  · rename_i b hs hb
+    rw [hre] at hb
     exact absurd hb (by simp)
 
 /-- A raw import whose bytes strictly decode is the checked core on the
@@ -3271,19 +3524,38 @@ theorem addBlockToChainWith_eq_canonical {rules : ForkRules} {chain : BlockChain
     (h : rlpToBlock blockRlp = .ok ⟨block, hash⟩) :
     addBlockToChainWith rules chain blockRlp
       = addBlockToChainCanonical rules chain (CanonicalBlock.ofDecode h) := by
-  unfold addBlockToChainWith
+  have hE := rlpToBlock_eq_ok_iff.mp h
+  unfold addBlockToChainWith addBlockToChainWithE
   split
   · rename_i e he
-    rw [h] at he
+    rw [hE] at he
     exact absurd he (by simp)
-  · rename_i f s hb
-    rw [h] at hb
+  · rename_i f sh hb
+    rw [hE] at hb
     simp only [Except.ok.injEq, Prod.mk.injEq] at hb
     obtain ⟨rfl, rfl⟩ := hb
     rfl
 
+/-- Inversion of the typed canonical-envelope import core. -/
+theorem addBlockToChainCanonicalE_eq_ok_inl {rules : ForkRules}
+    {chain chain' : BlockChain} {cb : CanonicalBlock}
+    (h : addBlockToChainCanonicalE rules chain cb = .ok (.inl chain')) :
+    checkBlockRlpSize rules.block cb.rawSize = .ok () ∧
+      stateTransitionE rules chain cb.block = .ok chain' := by
+  unfold addBlockToChainCanonicalE at h
+  split at h
+  · simp at h
+  · rename_i u hsize
+    split at h
+    · split at h <;> simp_all
+    · rename_i hst
+      simp only [Except.ok.injEq, Sum.inl.injEq] at h
+      exact ⟨hsize, h ▸ hst⟩
+
 /-- Full inversion of a successful raw import: strict decode, then EIP-7934
-against the *supplied* byte length, then the transition -- in that order. -/
+against the *supplied* byte length, then the transition -- in that order.
+Stated over the legacy names, so a downstream stringly client (Blanc) can
+invert an import without unfolding the typed core. -/
 theorem addBlockToChainWith_eq_ok_inl {rules : ForkRules}
     {chain chain' : BlockChain} {blockRlp : Bytes}
     (h : addBlockToChainWith rules chain blockRlp = .ok (.inl chain')) :
@@ -3292,19 +3564,22 @@ theorem addBlockToChainWith_eq_ok_inl {rules : ForkRules}
       checkBlockRlpSize rules.block blockRlp.length = .ok () ∧
       stateTransitionWith rules chain block = .ok chain' := by
   unfold addBlockToChainWith at h
-  split at h
-  · exact absurd h (by simp)
-  · rename_i block hash hd
-    refine ⟨block, hash, hd, ?_⟩
-    unfold addBlockToChainCanonical at h
-    split at h
-    · simp only [pure, Except.pure, Except.ok.injEq, reduceCtorEq] at h
-    · rename_i hsize
-      split at h
-      · simp only [pure, Except.pure, Except.ok.injEq, reduceCtorEq] at h
-      · rename_i hstw
-        simp only [Bind.bind, Except.bind, Except.ok.injEq, Sum.inl.injEq] at h
-        exact ⟨hsize, h ▸ hstw⟩
+  cases hE : addBlockToChainWithE rules chain blockRlp with
+  | error f => rw [hE] at h; exact absurd h (by simp [ImportOutcome.renderLegacy])
+  | ok outcome =>
+    rw [hE] at h
+    cases outcome with
+    | inr r => exact absurd h (by simp [ImportOutcome.renderLegacy])
+    | inl ch =>
+      simp only [ImportOutcome.renderLegacy, Except.ok.injEq, Sum.inl.injEq] at h
+      subst h
+      unfold addBlockToChainWithE at hE
+      split at hE
+      · exact absurd hE (by simp)
+      · rename_i block hash hd
+        obtain ⟨hsize, hst⟩ := addBlockToChainCanonicalE_eq_ok_inl hE
+        exact ⟨block, hash, rlpToBlock_eq_ok_iff.mpr hd, hsize,
+          stateTransitionWith_eq_ok_iff.mpr hst⟩
 
 ---------------- FORK ARCHITECTURE CHECKS ----------------
 
@@ -3422,11 +3697,19 @@ private def guardBlobParent (baseFee blobGasUsed : Nat) : Header :=
   = [917504, 917504, 917504]
 
 -- Every declared fork now runs; none is refused for want of rules. This chain
--- has no parent block, so each verdict is a header failure instead.
-#guard Fork.all.all (fun f => ¬ hasTag unsupportedForkTag
-  (stateTransitionAt f guardEmptyChain (guardBlockAt 0)))
-#guard Fork.all.all (fun f => ¬ hasTag unsupportedForkTag
-  (addBlockToChainAt f guardEmptyChain (guardBlockAt 0).toBLT.toBytes))
+-- has no parent block, so each verdict is the fail-closed no-parent invariant
+-- on the outer operational channel -- never a support failure.
+#guard Fork.all.all (fun f =>
+  match addBlockToChainAtE f guardEmptyChain (guardBlockAt 0).toBLT.toBytes with
+  | .error (.support _) => false
+  | _ => true)
+#guard Fork.all.all (fun f =>
+  match f.rules with
+  | .error _ => false
+  | .ok rules =>
+    match stateTransitionE rules guardEmptyChain (guardBlockAt 0) with
+    | .error (.internal _) => true
+    | _ => false)
 
 -- A one-block chain whose parent is the only input to the child's expected
 -- excess blob gas. Everything the header checks before that rule is satisfied
@@ -3524,16 +3807,51 @@ private def guardCheckedChain : BlockChain :=
 #guard guardCheckedChain.check.map
   (fun cc => (ConfiguredChain.of? ⟨1, []⟩ cc).isSome) = some false
 
+-- Constructor-level matchers for the transition and import boundary guards.
+private def transitionBlobVerdict {α : Type} : Except TransitionError α → Bool
+  | .error (.block (.excessBlobGas _)) => true
+  | _ => false
+
+/-- The verdict of a typed import, with the accepted chain erased: exactly the
+part of the outcome the boundary guards compare, on a carrier that has
+decidable equality. -/
+private def verdictOf : Except ImportFailure (ImportOutcome BlockChain) →
+    Option (ImportFailure ⊕ BlockRejection)
+  | .error f => some (.inl f)
+  | .ok (.inr r) => some (.inr r)
+  | .ok (.inl _) => none
+
+/-- Guard-only golden probe: the rendered text a legacy adapter reports on its
+error channel. Used by the `#guard` renderer goldens below and by nothing
+else; classification never reads it. -/
+private def errorText? {α : Type} : Except String α → Option String
+  | .error e => some e
+  | .ok _ => none
+
+/-- The rule set an explicit fork or a schedule selects, applied through the
+typed transition core: what the fork-selection boundary guards compare. -/
+private def transitionAtE (f : Fork) (ch : BlockChain) (block : Block) :
+    Except TransitionError BlockChain :=
+  match f.rules with
+  | .error _ => .error (.internal (.assertion .none))
+  | .ok rules => stateTransitionE rules ch block
+
+private def transitionUsingE (cfg : ChainConfig) (ch : BlockChain)
+    (block : Block) : Except TransitionError BlockChain :=
+  match cfg.rulesAt block.header.timestamp with
+  | .error _ => .error (.internal (.assertion .none))
+  | .ok rules => stateTransitionE rules ch block
+
 -- The explicit API applies the fork it is given, and only that fork accepts
 -- its own expected value.
-#guard ¬ hasTag excessBlobGasTag
-  (stateTransitionAt .osaka guardParentChain (guardChildBlock 1 1966080))
-#guard hasTag excessBlobGasTag <|
-  stateTransitionAt .bpo1 guardParentChain (guardChildBlock 1 1966080)
-#guard ¬ hasTag excessBlobGasTag
-  (stateTransitionAt .bpo1 guardParentChain (guardChildBlock 1 1441792))
-#guard ¬ hasTag excessBlobGasTag
-  (stateTransitionAt .bpo2 guardParentChain (guardChildBlock 1 917504))
+#guard ¬ transitionBlobVerdict
+  (transitionAtE .osaka guardParentChain (guardChildBlock 1 1966080))
+#guard transitionBlobVerdict <|
+  transitionAtE .bpo1 guardParentChain (guardChildBlock 1 1966080)
+#guard ¬ transitionBlobVerdict
+  (transitionAtE .bpo1 guardParentChain (guardChildBlock 1 1441792))
+#guard ¬ transitionBlobVerdict
+  (transitionAtE .bpo2 guardParentChain (guardChildBlock 1 917504))
 
 -- A configured chain selects rules from the block's own timestamp. Between
 -- these blocks nothing differs but the timestamp, and it alone decides which
@@ -3544,20 +3862,20 @@ private def guardCheckedChain : BlockChain :=
 private def guardChainSchedule : ChainConfig :=
   ChainConfig.mk 1 [⟨.prague, 0⟩, ⟨.osaka, 100⟩, ⟨.bpo1, 200⟩, ⟨.bpo2, 300⟩]
 
-#guard ¬ hasTag excessBlobGasTag
-  (stateTransitionUsing guardChainSchedule guardParentChain
+#guard ¬ transitionBlobVerdict
+  (transitionUsingE guardChainSchedule guardParentChain
     (guardChildBlock 199 1966080))
-#guard hasTag excessBlobGasTag <|
-  stateTransitionUsing guardChainSchedule guardParentChain
+#guard transitionBlobVerdict <|
+  transitionUsingE guardChainSchedule guardParentChain
     (guardChildBlock 200 1966080)
-#guard ¬ hasTag excessBlobGasTag
-  (stateTransitionUsing guardChainSchedule guardParentChain
+#guard ¬ transitionBlobVerdict
+  (transitionUsingE guardChainSchedule guardParentChain
     (guardChildBlock 200 1441792))
-#guard hasTag excessBlobGasTag <|
-  stateTransitionUsing guardChainSchedule guardParentChain
+#guard transitionBlobVerdict <|
+  transitionUsingE guardChainSchedule guardParentChain
     (guardChildBlock 299 917504)
-#guard ¬ hasTag excessBlobGasTag
-  (stateTransitionUsing guardChainSchedule guardParentChain
+#guard ¬ transitionBlobVerdict
+  (transitionUsingE guardChainSchedule guardParentChain
     (guardChildBlock 300 917504))
 
 -- Across a sequence of blocks crossing all three activations, one fixed
@@ -3565,64 +3883,64 @@ private def guardChainSchedule : ChainConfig :=
 -- Prague and Osaka share a target, so the first BPO boundary is the first
 -- place the sequence changes.
 #guard [0, 99, 100, 199, 200, 299, 300, 400].map (fun timestamp =>
-    !hasTag excessBlobGasTag
-      (stateTransitionUsing guardChainSchedule guardParentChain
+    !transitionBlobVerdict
+      (transitionUsingE guardChainSchedule guardParentChain
         (guardChildBlock timestamp 1441792)))
   = [false, false, false, false, true, true, false, false]
 
 -- Selecting rules from the schedule is the same thing as naming the fork the
--- schedule selects -- including the expected value quoted in the diagnostic.
-#guard errOf (stateTransitionUsing guardChainSchedule guardParentChain
+-- schedule selects -- including the expected value quoted in the diagnostic,
+-- compared here through the legacy adapters' rendered goldens.
+#guard errorText? (stateTransitionUsing guardChainSchedule guardParentChain
     (guardChildBlock 250 0))
-  = errOf (stateTransitionAt .bpo1 guardParentChain (guardChildBlock 250 0))
-#guard errOf (stateTransitionUsing guardChainSchedule guardParentChain
+  = errorText? (stateTransitionAt .bpo1 guardParentChain (guardChildBlock 250 0))
+#guard errorText? (stateTransitionUsing guardChainSchedule guardParentChain
     (guardChildBlock 350 0))
-  = errOf (stateTransitionAt .bpo2 guardParentChain (guardChildBlock 350 0))
-#guard errOf (stateTransitionUsing guardChainSchedule guardParentChain
+  = errorText? (stateTransitionAt .bpo2 guardParentChain (guardChildBlock 350 0))
+#guard errorText? (stateTransitionUsing guardChainSchedule guardParentChain
     (guardChildBlock 250 0))
-  ≠ errOf (stateTransitionAt .osaka guardParentChain (guardChildBlock 250 0))
+  ≠ errorText? (stateTransitionAt .osaka guardParentChain (guardChildBlock 250 0))
 
 -- Block import agrees with the state transition on which fork a timestamp
 -- selects, and a transition label is just another way to write the schedule.
--- A rejected block reports on the `.inr` channel, so its verdict is read from
--- there rather than from the harness-failure channel.
-private def importErrOf : Except String (BlockChain ⊕ String) → String
-  | .error err => err
-  | .ok (.inr err) => err
-  | .ok (.inl _) => "unexpected import"
-
+-- A rejected block reports on the typed rejection channel, and the verdicts
+-- are compared as constructors.
 private def guardOsakaToBpo1Config : ChainConfig :=
   (⟨.osaka, .bpo1, 15000⟩ : ForkTransition).chainConfig 1
 
 private def guardChildRlp (timestamp excessBlobGas : Nat) : Bytes :=
   (guardChildBlock timestamp excessBlobGas).toBLT.toBytes
 
-#guard hasErrorType (importErrOf (addBlockToChainUsing guardOsakaToBpo1Config
-  guardParentChain (guardChildRlp 15000 0))) excessBlobGasTag
-#guard importErrOf (addBlockToChainUsing guardOsakaToBpo1Config guardParentChain
+#guard (match verdictOf (addBlockToChainUsingE guardOsakaToBpo1Config
+    guardParentChain (guardChildRlp 15000 0)) with
+  | some (.inr (.block (.excessBlobGas _))) => true
+  | _ => false)
+#guard verdictOf (addBlockToChainUsingE guardOsakaToBpo1Config guardParentChain
     (guardChildRlp 15000 0))
-  = importErrOf (addBlockToChainAt .bpo1 guardParentChain
+  = verdictOf (addBlockToChainAtE .bpo1 guardParentChain
     (guardChildRlp 15000 0))
-#guard importErrOf (addBlockToChainUsing guardOsakaToBpo1Config guardParentChain
+#guard verdictOf (addBlockToChainUsingE guardOsakaToBpo1Config guardParentChain
     (guardChildRlp 14999 0))
-  = importErrOf (addBlockToChainAt .osaka guardParentChain
+  = verdictOf (addBlockToChainAtE .osaka guardParentChain
     (guardChildRlp 14999 0))
-#guard importErrOf (addBlockToChainUsing guardOsakaToBpo1Config guardParentChain
+#guard verdictOf (addBlockToChainUsingE guardOsakaToBpo1Config guardParentChain
     (guardChildRlp 15000 0))
-  ≠ importErrOf (addBlockToChainUsing guardOsakaToBpo1Config guardParentChain
+  ≠ verdictOf (addBlockToChainUsingE guardOsakaToBpo1Config guardParentChain
     (guardChildRlp 14999 0))
 
 -- A Prague-only configuration is the Prague wrapper, at every timestamp.
-#guard errOf (stateTransitionUsing (ChainConfig.pragueOnly 1) guardEmptyChain
+#guard errorText? (stateTransitionUsing (ChainConfig.pragueOnly 1) guardEmptyChain
     (guardBlockAt 0))
-  = errOf (stateTransition guardEmptyChain (guardBlockAt 0))
-#guard errOf (stateTransitionUsing (ChainConfig.pragueOnly 1) guardEmptyChain
+  = errorText? (stateTransition guardEmptyChain (guardBlockAt 0))
+#guard errorText? (stateTransitionUsing (ChainConfig.pragueOnly 1) guardEmptyChain
     (guardBlockAt 999999999))
-  = errOf (stateTransition guardEmptyChain (guardBlockAt 999999999))
+  = errorText? (stateTransition guardEmptyChain (guardBlockAt 999999999))
 
--- An unusable schedule fails before it selects anything.
-#guard hasTag invalidChainConfigTag <|
-  stateTransitionUsing (ChainConfig.mk 1 []) guardEmptyChain (guardBlockAt 0)
+-- An unusable schedule fails before it selects anything, with the exact
+-- context golden.
+#guard errorText?
+    (stateTransitionUsing (ChainConfig.mk 1 []) guardEmptyChain (guardBlockAt 0))
+  = some (ChainContextError.render .emptySchedule)
 
 -- P0.1 acceptance evidence: configured success cannot happen across
 -- contradictory chain identities, and a successful configured transition
@@ -3643,7 +3961,8 @@ theorem stateTransitionWith_preserves_chainId
     {rules : ForkRules} {ch : BlockChain} {block : Block} {ch' : BlockChain}
     (h : stateTransitionWith rules ch block = .ok ch') :
     ch'.chainId = ch.chainId := by
-  unfold stateTransitionWith at h
+  rw [stateTransitionWith_eq_ok_iff] at h
+  unfold stateTransitionE at h
   obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
   obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
   obtain ⟨⟨st, bout⟩, _, h⟩ := Except.bind_eq_ok h
@@ -3667,7 +3986,8 @@ theorem stateTransitionUsing_eq_of_chainId_eq
     {cfg : ChainConfig} {ch : BlockChain} {block : Block}
     (heq : cfg.chainId = ch.chainId) :
     stateTransitionUsing cfg ch block
-      = (cfg.rulesAt block.header.timestamp).bind
+      = (Except.mapError RulesLookupError.render
+          (cfg.rulesAt block.header.timestamp)).bind
           (fun rules => stateTransitionWith rules ch block) := by
   unfold stateTransitionUsing ChainConfig.checkChainId
   simp [heq, Except.mapError, Bind.bind, Except.bind]
@@ -3676,29 +3996,42 @@ theorem addBlockToChainUsing_success_chainId_eq
     {cfg : ChainConfig} {chain : BlockChain} {blockRlp : Bytes} {chain' : BlockChain}
     (h : addBlockToChainUsing cfg chain blockRlp = .ok (.inl chain')) :
     cfg.chainId = chain.chainId := by
-  unfold addBlockToChainUsing at h
-  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  unfold addBlockToChainUsing addBlockToChainUsingE at h
   by_contra hne
-  simp [ChainConfig.checkChainId, hne, Except.mapError, Bind.bind, Except.bind] at h
+  cases hv : cfg.validate with
+  | error e =>
+    rw [hv] at h
+    simp [Except.mapError, Bind.bind, Except.bind,
+      ImportOutcome.renderLegacy] at h
+  | ok u =>
+    cases u
+    rw [hv] at h
+    simp [ChainConfig.checkChainId, hne, Except.mapError, Bind.bind,
+      Except.bind, ImportOutcome.renderLegacy] at h
 
 theorem addBlockToChainUsing_preserves_chainId
     {cfg : ChainConfig} {chain : BlockChain} {blockRlp : Bytes} {chain' : BlockChain}
     (h : addBlockToChainUsing cfg chain blockRlp = .ok (.inl chain')) :
     chain'.chainId = chain.chainId := by
   unfold addBlockToChainUsing at h
-  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
-  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
-  split at h
-  · exact absurd h (by simp)
-  · obtain ⟨rules, _, h⟩ := Except.bind_eq_ok h
-    unfold addBlockToChainCanonical at h
-    split at h
-    · simp only [pure, Except.pure, Except.ok.injEq, reduceCtorEq] at h
-    · split at h
-      · simp only [pure, Except.pure, Except.ok.injEq, reduceCtorEq] at h
-      · rename_i hstw
-        simp only [Bind.bind, Except.bind, Except.ok.injEq, Sum.inl.injEq] at h
-        exact stateTransitionWith_preserves_chainId (h ▸ hstw)
+  cases hE : addBlockToChainUsingE cfg chain blockRlp with
+  | error f => rw [hE] at h; simp [ImportOutcome.renderLegacy] at h
+  | ok outcome =>
+    rw [hE] at h
+    cases outcome with
+    | inr r => simp [ImportOutcome.renderLegacy] at h
+    | inl ch =>
+      simp only [ImportOutcome.renderLegacy, Except.ok.injEq, Sum.inl.injEq] at h
+      subst h
+      unfold addBlockToChainUsingE at hE
+      obtain ⟨_, _, hE⟩ := Except.bind_eq_ok hE
+      obtain ⟨_, _, hE⟩ := Except.bind_eq_ok hE
+      split at hE
+      · simp at hE
+      · obtain ⟨rules, _, hE⟩ := Except.bind_eq_ok hE
+        obtain ⟨_, hst⟩ := addBlockToChainCanonicalE_eq_ok_inl hE
+        exact stateTransitionWith_preserves_chainId
+          (stateTransitionWith_eq_ok_iff.mpr hst)
 
 -- P0.1 negative guards: config ID 7 against a chain ID 1 snapshot, matching
 -- the acceptance evidence's own example. The mismatch is a context failure on
@@ -3708,19 +4041,17 @@ theorem addBlockToChainUsing_preserves_chainId
 -- mismatch rather than a decode error, because the check runs first.
 private def guardMismatchConfig : ChainConfig := ChainConfig.mk 7 [⟨.prague, 0⟩]
 
-#guard hasTag chainIdMismatchTag <|
-  stateTransitionUsing guardMismatchConfig guardEmptyChain (guardBlockAt 0)
-#guard errOf (stateTransitionUsing guardMismatchConfig guardEmptyChain (guardBlockAt 0))
-  = ChainContextError.render (.chainIdMismatch 7 1)
-#guard hasTag chainIdMismatchTag <|
-  addBlockToChainUsing guardMismatchConfig guardParentChain [0xFF]
-#guard importErrOf (addBlockToChainUsing guardMismatchConfig guardParentChain [0xFF])
-  = ChainContextError.render (.chainIdMismatch 7 1)
--- The same malformed bytes, past a matching-ID configuration, fail on the
--- ordinary decode path instead -- confirming the mismatch guard above is what
--- changed the verdict, not something incidental to the garbage input.
-#guard hasTag rlpStructureTag <|
-  addBlockToChainUsing guardOsakaToBpo1Config guardParentChain [0xFF]
+#guard errorText?
+    (stateTransitionUsing guardMismatchConfig guardEmptyChain (guardBlockAt 0))
+  = some (ChainContextError.render (.chainIdMismatch 7 1))
+#guard verdictOf (addBlockToChainUsingE guardMismatchConfig guardParentChain [0xFF])
+  = some (.inl (.context (.chainIdMismatch 7 1)))
+-- The same malformed bytes, past a matching-ID configuration, are rejected on
+-- the ordinary decode channel instead -- confirming the mismatch guard above
+-- is what changed the verdict, not something incidental to the garbage input.
+#guard verdictOf (addBlockToChainUsingE guardOsakaToBpo1Config guardParentChain [0xFF])
+  = some (.inr (.decode
+      (DecodeError.structure "block RLP" "cannot decode the outer RLP item")))
 
 
 --------------- CANONICALITY THROUGH EXECUTION (P0.4, STEP 4) ---------------
@@ -3765,7 +4096,7 @@ theorem processMessageCall.call_canonical {msg : Msg} (h : msg.Canonical)
           exact hcan.1))
   · -- delegation processed first
     obtain ⟨w, hw, hp⟩ := Except.bind_eq_ok hp
-    have hwc := setDelegation_canonical h (Except.mapError_eq_ok_iff.mp hw)
+    have hwc := setDelegation_canonical h hw
     obtain ⟨wm, wv⟩ := w
     obtain ⟨x0, hx0, hp⟩ := Except.bind_eq_ok hp
     cases hx0
@@ -3820,7 +4151,7 @@ theorem processTransaction_canonical {benv : Benv} (h : benv.Canonical)
   have hmsgc : msg.Canonical :=
     prepareMessage_canonical (by exact ⟨hst1c, h.1⟩)
       (by exact Tra.canonical_empty) hmsg
-  have hqc := processMessageCall_canonical hmsgc hq
+  have hqc := processMessageCall_canonical hmsgc (Except.mapError_eq_ok_iff.mp hq)
   exact State.Canonical.foldl_destroyAccount
     (State.Canonical.addBal (State.Canonical.addBal hqc _ _) _ _)
 
@@ -3861,7 +4192,7 @@ theorem processCheckedSystemTransaction_canonical {benv : Benv}
     split at hp
     · nomatch hp
     · cases hp
-      exact processSystemTransaction_canonical h hq
+      exact processSystemTransaction_canonical h (Except.mapError_eq_ok_iff.mp hq)
 
 theorem processGeneralPurposeRequests_canonical {benv : Benv}
     (h : benv.Canonical) {bout : BlockOutput} {p}
@@ -3908,9 +4239,10 @@ theorem applyBody_canonical {benv : Benv} (h : benv.Canonical)
   obtain ⟨txsD, _, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨q3, hq3, hp⟩ := Except.bind_eq_ok hp
   have hb1 : q1.1.Canonical :=
-    processUncheckedSystemTransaction_canonical h hq1
+    processUncheckedSystemTransaction_canonical h (Except.mapError_eq_ok_iff.mp hq1)
   have hb2 : q2.1.Canonical :=
-    processUncheckedSystemTransaction_canonical (by exact ⟨hb1, h.2⟩) hq2
+    processUncheckedSystemTransaction_canonical (by exact ⟨hb1, h.2⟩)
+      (Except.mapError_eq_ok_iff.mp hq2)
   have hb3 : q3.1.Canonical :=
     applyTransactions_canonical _ (by exact ⟨hb2, h.2⟩) hq3
   exact processGeneralPurposeRequests_canonical
@@ -3922,7 +4254,8 @@ the input chain's. -/
 theorem stateTransitionWith_canonical {rules : ForkRules} {ch : BlockChain}
     (h : ch.Canonical) {block : Block} {ch'}
     (hp : stateTransitionWith rules ch block = .ok ch') : ch'.Canonical := by
-  unfold stateTransitionWith at hp
+  rw [stateTransitionWith_eq_ok_iff] at hp
+  unfold stateTransitionE at hp
   obtain ⟨u1, _, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨u2, _, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
@@ -4057,7 +4390,8 @@ theorem stateTransitionWith_eq_ok {rules : ForkRules} {ch ch' : BlockChain}
     validateHeader rules ch block.header = .ok () ∧
       ch'.blocks = appendBlock ch.blocks block ∧
       ch'.state.root = block.header.stateRoot := by
-  unfold stateTransitionWith at h
+  rw [stateTransitionWith_eq_ok_iff] at h
+  unfold stateTransitionE at h
   obtain ⟨u1, hvh, h⟩ := Except.bind_eq_ok h
   obtain ⟨u2, _, h⟩ := Except.bind_eq_ok h
   obtain ⟨q, _, h⟩ := Except.bind_eq_ok h
@@ -4065,7 +4399,8 @@ theorem stateTransitionWith_eq_ok {rules : ForkRules} {ch ch' : BlockChain}
   cases u1
   cases u3
   cases h
-  exact ⟨hvh, rfl, stateTransitionChecks_stateRoot hchk⟩
+  exact ⟨hvh, rfl,
+    stateTransitionChecks_stateRoot (Except.mapError_eq_ok_iff.mp hchk)⟩
 
 /-- The whole output witness of a successful transition from a checked
 snapshot, assembled from what the transition already established: `Step 4`'s
@@ -4087,18 +4422,18 @@ theorem BlockChain.validContext_of_transition {rules : ForkRules}
 --------------- CHECKED TRANSITION AND IMPORT CORES ---------------
 
 /-- The checked transition core: it accepts only a checked snapshot and a
-canonical envelope, and it is definitionally the raw core on their values, so
-every existing result about `stateTransitionWith` transfers by `rfl`. Its
-output witness is `CheckedBlockChain.ofTransition` below. -/
+canonical envelope, and it is definitionally the typed core on their values,
+so every result about `stateTransitionE` transfers by `rfl`. Its output
+witness is `CheckedBlockChain.ofTransition` below. -/
 def stateTransitionChecked (rules : ForkRules) (cc : CheckedBlockChain)
     (cb : CanonicalBlock) :
-    Except String BlockChain :=
-  stateTransitionWith rules cc.val cb.block
+    Except TransitionError BlockChain :=
+  stateTransitionE rules cc.val cb.block
 
 theorem stateTransitionChecked_eq (rules : ForkRules) (cc : CheckedBlockChain)
     (cb : CanonicalBlock) :
     stateTransitionChecked rules cc cb
-      = stateTransitionWith rules cc.val cb.block := rfl
+      = stateTransitionE rules cc.val cb.block := rfl
 
 /-- The checked output of a successful checked transition.
 
@@ -4110,10 +4445,14 @@ def CheckedBlockChain.ofTransition {rules : ForkRules} {cc : CheckedBlockChain}
     {cb : CanonicalBlock} {ch' : BlockChain}
     (h : stateTransitionChecked rules cc cb = .ok ch') : CheckedBlockChain :=
   CheckedBlockChain.ofEvidence ch' cb.block
-    (BlockChain.validContext_of_transition h).1
-    (BlockChain.validContext_of_transition h).2.1
-    (BlockChain.validContext_of_transition h).2.2.1
-    (BlockChain.validContext_of_transition h).2.2.2
+    (BlockChain.validContext_of_transition
+      (stateTransitionWith_eq_ok_iff.mpr h)).1
+    (BlockChain.validContext_of_transition
+      (stateTransitionWith_eq_ok_iff.mpr h)).2.1
+    (BlockChain.validContext_of_transition
+      (stateTransitionWith_eq_ok_iff.mpr h)).2.2.1
+    (BlockChain.validContext_of_transition
+      (stateTransitionWith_eq_ok_iff.mpr h)).2.2.2
 
 theorem CheckedBlockChain.ofTransition_val {rules : ForkRules}
     {cc : CheckedBlockChain} {cb : CanonicalBlock} {ch' : BlockChain}
@@ -4125,30 +4464,35 @@ theorem CheckedBlockChain.ofTransition_tip {rules : ForkRules}
     (h : stateTransitionChecked rules cc cb = .ok ch') :
     (CheckedBlockChain.ofTransition h).tip = cb.block := rfl
 
-/-- Inversion of the checked import core, mirroring the raw wrapper's. -/
+/-- Inversion of the legacy canonical-envelope import adapter, stated over the
+legacy transition name for stringly clients. -/
 theorem addBlockToChainCanonical_eq_ok_inl {rules : ForkRules}
     {chain chain' : BlockChain} {cb : CanonicalBlock}
     (h : addBlockToChainCanonical rules chain cb = .ok (.inl chain')) :
     checkBlockRlpSize rules.block cb.rawSize = .ok () ∧
       stateTransitionWith rules chain cb.block = .ok chain' := by
   unfold addBlockToChainCanonical at h
-  split at h
-  · simp only [pure, Except.pure, Except.ok.injEq, reduceCtorEq] at h
-  · rename_i hsize
-    split at h
-    · simp only [pure, Except.pure, Except.ok.injEq, reduceCtorEq] at h
-    · rename_i hstw
-      simp only [Bind.bind, Except.bind, Except.ok.injEq, Sum.inl.injEq] at h
-      exact ⟨hsize, h ▸ hstw⟩
+  cases hE : addBlockToChainCanonicalE rules chain cb with
+  | error f => rw [hE] at h; exact absurd h (by simp [ImportOutcome.renderLegacy])
+  | ok outcome =>
+    rw [hE] at h
+    cases outcome with
+    | inr r => exact absurd h (by simp [ImportOutcome.renderLegacy])
+    | inl ch =>
+      simp only [ImportOutcome.renderLegacy, Except.ok.injEq, Sum.inl.injEq] at h
+      subst h
+      obtain ⟨hsize, hst⟩ := addBlockToChainCanonicalE_eq_ok_inl hE
+      exact ⟨hsize, stateTransitionWith_eq_ok_iff.mpr hst⟩
 
 /-- The checked import core: a checked snapshot in, and on the accepting
 channel a snapshot whose witness is `CheckedBlockChain.ofImport`. The
-validation order is the frozen one, unchanged -- this is the raw checked core
-with a checked input type. -/
+validation order is the frozen one, unchanged -- this is the typed canonical
+core with a checked input type, and it is the two-level shape P0.7 prescribes:
+`Except ImportFailure (CheckedBlockChain-producing outcome ⊕ BlockRejection)`. -/
 def addBlockToChainChecked (rules : ForkRules) (cc : CheckedBlockChain)
     (cb : CanonicalBlock) :
-    Except String (BlockChain ⊕ String) :=
-  addBlockToChainCanonical rules cc.val cb
+    Except ImportFailure (ImportOutcome BlockChain) :=
+  addBlockToChainCanonicalE rules cc.val cb
 
 /-- The checked output of a successful checked import. -/
 def CheckedBlockChain.ofImport {rules : ForkRules} {cc : CheckedBlockChain}
@@ -4156,7 +4500,7 @@ def CheckedBlockChain.ofImport {rules : ForkRules} {cc : CheckedBlockChain}
     (h : addBlockToChainChecked rules cc cb = .ok (.inl ch')) : CheckedBlockChain :=
   CheckedBlockChain.ofTransition
     (rules := rules) (cc := cc) (cb := cb)
-    (addBlockToChainCanonical_eq_ok_inl h).2
+    (addBlockToChainCanonicalE_eq_ok_inl h).2
 
 theorem CheckedBlockChain.ofImport_val {rules : ForkRules} {cc : CheckedBlockChain}
     {cb : CanonicalBlock} {ch' : BlockChain}
@@ -4175,36 +4519,50 @@ entry point performs is discharged by the pair's own witness rather than
 repeated, and the snapshot is not rechecked at all; what remains is the rule
 lookup, which is the only part that depends on the candidate's timestamp. -/
 def stateTransitionConfigured (pc : ConfiguredChain) (cb : CanonicalBlock) :
-    Except String BlockChain := do
-  stateTransitionWith (← pc.config.rulesAt cb.block.header.timestamp)
-    pc.chain.val cb.block
+    Except RulesLookupError (Except TransitionError BlockChain) := do
+  let rules ← pc.config.rulesAt cb.block.header.timestamp
+  .ok (stateTransitionE rules pc.chain.val cb.block)
 
 /-- The configured checked path agrees with the raw configured entry point on
-every input: what it drops is exactly the check its witness already carries. -/
+every input, through the renderer: what it drops is exactly the check its
+witness already carries. Replaces the pre-Step-10 same-carrier equation. -/
 theorem stateTransitionConfigured_eq (pc : ConfiguredChain) (cb : CanonicalBlock) :
-    stateTransitionConfigured pc cb
+    (match stateTransitionConfigured pc cb with
+      | .error e => .error e.render
+      | .ok r => r.mapError TransitionError.render)
       = stateTransitionUsing pc.config pc.chain.val cb.block := by
   unfold stateTransitionConfigured stateTransitionUsing
   rw [pc.checkChainId_eq_ok]
-  rfl
+  simp only [bind, Except.bind, Except.mapError]
+  cases hr : pc.config.rulesAt cb.block.header.timestamp <;>
+    simp [Except.mapError, stateTransitionWith]
 
 /-- The checked output of a successful configured checked transition. -/
 def CheckedBlockChain.ofConfiguredTransition {pc : ConfiguredChain}
-    {cb : CanonicalBlock} {ch' : BlockChain}
-    (h : stateTransitionConfigured pc cb = .ok ch') : CheckedBlockChain :=
+    {cb : CanonicalBlock} {r : Except TransitionError BlockChain} {ch' : BlockChain}
+    (h : stateTransitionConfigured pc cb = .ok r) (hr : r = .ok ch') :
+    CheckedBlockChain :=
   CheckedBlockChain.ofEvidence ch' cb.block
     (by
-      obtain ⟨_, _, hst⟩ := Except.bind_eq_ok h
-      exact (BlockChain.validContext_of_transition (cc := pc.chain) hst).1)
+      obtain ⟨rules, _, hst⟩ := Except.bind_eq_ok h
+      simp only [Except.ok.injEq] at hst
+      exact (BlockChain.validContext_of_transition (cc := pc.chain)
+        (stateTransitionWith_eq_ok_iff.mpr (hst ▸ hr))).1)
     (by
-      obtain ⟨_, _, hst⟩ := Except.bind_eq_ok h
-      exact (BlockChain.validContext_of_transition (cc := pc.chain) hst).2.1)
+      obtain ⟨rules, _, hst⟩ := Except.bind_eq_ok h
+      simp only [Except.ok.injEq] at hst
+      exact (BlockChain.validContext_of_transition (cc := pc.chain)
+        (stateTransitionWith_eq_ok_iff.mpr (hst ▸ hr))).2.1)
     (by
-      obtain ⟨_, _, hst⟩ := Except.bind_eq_ok h
-      exact (BlockChain.validContext_of_transition (cc := pc.chain) hst).2.2.1)
+      obtain ⟨rules, _, hst⟩ := Except.bind_eq_ok h
+      simp only [Except.ok.injEq] at hst
+      exact (BlockChain.validContext_of_transition (cc := pc.chain)
+        (stateTransitionWith_eq_ok_iff.mpr (hst ▸ hr))).2.2.1)
     (by
-      obtain ⟨_, _, hst⟩ := Except.bind_eq_ok h
-      exact (BlockChain.validContext_of_transition (cc := pc.chain) hst).2.2.2)
+      obtain ⟨rules, _, hst⟩ := Except.bind_eq_ok h
+      simp only [Except.ok.injEq] at hst
+      exact (BlockChain.validContext_of_transition (cc := pc.chain)
+        (stateTransitionWith_eq_ok_iff.mpr (hst ▸ hr))).2.2.2)
 
 --------------- CHECKED/RAW BRIDGES (FOR STEP 11) ---------------
 
@@ -4220,16 +4578,26 @@ theorem stateTransitionChecked_eq_raw (rules : ForkRules) (cc : CheckedBlockChai
 theorem addBlockToChainChecked_eq_raw (rules : ForkRules) (cc : CheckedBlockChain)
     (cb : CanonicalBlock) :
     addBlockToChainChecked rules cc cb
-      = addBlockToChainCanonical rules cc.val cb := rfl
+      = addBlockToChainCanonicalE rules cc.val cb := rfl
 
-/-- A raw import of bytes into a checked snapshot's value is the checked
+/-- A raw typed import of bytes into a checked snapshot's value is the checked
 import of the envelope those bytes decode to. -/
-theorem addBlockToChainWith_eq_checked {rules : ForkRules} {cc : CheckedBlockChain}
+theorem addBlockToChainWithE_eq_checked {rules : ForkRules} {cc : CheckedBlockChain}
     {blockRlp : Bytes} {block : Block} {hash : B256}
     (h : rlpToBlock blockRlp = .ok ⟨block, hash⟩) :
-    addBlockToChainWith rules cc.val blockRlp
-      = addBlockToChainChecked rules cc (CanonicalBlock.ofDecode h) :=
-  addBlockToChainWith_eq_canonical h
+    addBlockToChainWithE rules cc.val blockRlp
+      = addBlockToChainChecked rules cc (CanonicalBlock.ofDecode h) := by
+  have hE := rlpToBlock_eq_ok_iff.mp h
+  unfold addBlockToChainWithE addBlockToChainChecked
+  split
+  · rename_i e he
+    rw [hE] at he
+    exact absurd he (by simp)
+  · rename_i f sh hb
+    rw [hE] at hb
+    simp only [Except.ok.injEq, Prod.mk.injEq] at hb
+    obtain ⟨rfl, rfl⟩ := hb
+    rfl
 
 /-- Any snapshot a checked value carries passes the checker, so a raw client
 that checks first and a checked client that never rechecks agree on which
