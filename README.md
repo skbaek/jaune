@@ -100,6 +100,48 @@ requirements.
   (`GeneralStateTests/stEIP1559/intrinsicCancun.json`); each is the committed
   expected classification (see the per-tier `scripts/baseline-*.txt`).
 
+## Semantic integrity
+
+Jaune closes the P0 semantic-integrity gaps identified in review — chain-ID
+agreement, prestate/tip binding, wire-vs-freely-constructed transactions,
+canonical state/structural representation, fail-closed era support before a
+chain's earliest implemented fork, removal of non-fuel panic/partial paths,
+and typed internal errors. See
+[`scripts/report-integrity.md`](scripts/report-integrity.md) for the full
+closure report.
+
+- **Checked entry points are the recommended API.** `CheckedBlockChain` binds
+  an executable snapshot to canonical state, validated hash-linked/
+  consecutively numbered retained history (sufficient for `BLOCKHASH`), and
+  tip-state-root agreement; `ConfiguredChain` additionally validates a
+  `ChainConfig`'s activation schedule and its chain-ID agreement with the
+  snapshot, once. Repeated transitions and imports reuse these witnesses
+  instead of recomputing a trie root on every call. `rlpToCanonicalBlock` is
+  the checked wire ingress: a successful decode proves both the strict
+  outer-block decoder image and the exact `block.toBLT.toBytes = raw` round
+  trip, so a hand-built `Block`/`Header`/`Tx` cannot be certified through it.
+- **Raw compatibility entry points remain** — `stateTransitionWith/At/Using`,
+  `addBlockToChainWith/At/Using`, `stateTransition`, `addBlockToChain`,
+  `rlpToBlock`, and friends — for existing callers and proof statements that
+  name them by type. They validate configured chain-ID agreement and
+  schedule usability up front, but a raw call does not itself recompute the
+  checked-snapshot invariants above on every invocation; build and store a
+  `CheckedBlockChain`/`ConfiguredChain` once and drive repeated execution
+  from it instead.
+- **Configured execution fails closed** before a chain's earliest
+  implemented era rather than assuming every schedule's first activation
+  sits at timestamp zero; the failing call reports which era is unsupported
+  as a typed `SupportError`, not a silent default.
+- **Core semantics uses typed errors, not strings.**
+  `ChainContextError`, `DecodeError`, `EvmError`, `TxValidationError`,
+  `BlockValidationError`, and `InternalError` are the internal
+  discriminants that producers construct directly; `String` remains only at
+  external parsing/rendering/fixture-compatibility boundaries.
+  [`scripts/check-integrity.sh`](scripts/check-integrity.sh) enforces this
+  as a shrink-only gate over panic, raw bang operations, and stringly-typed
+  semantic carriers in `Jaune.lean`'s import closure — see
+  [`scripts/GATES.md`](scripts/GATES.md).
+
 ## Portability checks in CI
 
 CI preserves the ordinary Lean build and separately runs the standard-library
