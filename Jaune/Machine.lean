@@ -2599,4 +2599,262 @@ def liftToExecution (devm : Devm)
     .error ⟨err, devm'⟩
   | .ok devm' => .ok devm'
 
+--------------- TYPED SEMANTIC REASONS: CODEC AND VM ---------------
+
+-- Declarations, renderers, and golden guards only; no producer is migrated
+-- here and no rendered message changes. Steps 9 and 10 move the producers.
+--
+-- Placement is frozen by `scripts/report-integrity-design.md` section 6. All
+-- four types below live in this module because their carriers and tag
+-- vocabularies do: the strict field decoders and their seven tags, the
+-- exceptional-halt vocabulary, and the low-level machine result are all
+-- declared above. The precompile and cryptographic reasons live here too,
+-- rather than in `Jaune/Precompiles.lean`, because a precompile failure must
+-- be able to inhabit the machine result declared upstream of that module; a
+-- reason type declared downstream could not. `Jaune/Precompiles.lean` keeps
+-- only its own helpers and, from Step 9, its renderer arms.
+
+/-- Why strict decoding rejected a value.
+
+One constructor per reason in the strict tag vocabulary above, which is
+already one producer per reason, so this is a lift rather than a redesign. The
+`" : "` detail each decoder emits today -- the field label and the measured
+width -- rides in the diagnostic payload; Step 10 may promote a particular
+detail to a typed fact when it migrates that producer. -/
+inductive DecodeError : Type
+  /-- An item is not the list or string structure the field requires. -/
+  | rlpStructure (detail : ErrorDetail)
+  /-- A fixed-width field is not exactly as wide as it must be. -/
+  | fixedWidth (detail : ErrorDetail)
+  /-- A scalar modelled as 64 bits does not fit in eight bytes. -/
+  | fieldOverflow64 (detail : ErrorDetail)
+  /-- A scalar modelled as 256 bits does not fit in thirty-two bytes. -/
+  | fieldOverflow256 (detail : ErrorDetail)
+  /-- A scalar is within its width but not canonically encoded. -/
+  | leadingZeros (detail : ErrorDetail)
+  /-- A Prague block body omitted the withdrawals component. -/
+  | withdrawalsNotRead (detail : ErrorDetail)
+  /-- Local field shapes decoded, but the canonical re-encoding differs. -/
+  | roundTrip (detail : ErrorDetail)
+deriving DecidableEq, Repr
+
+/-- The tag a decode reason renders under. -/
+def DecodeError.tag : DecodeError → String
+  | .rlpStructure _ => rlpStructureTag
+  | .fixedWidth _ => rlpFixedWidthTag
+  | .fieldOverflow64 _ => rlpFieldOverflow64Tag
+  | .fieldOverflow256 _ => rlpFieldOverflow256Tag
+  | .leadingZeros _ => rlpLeadingZerosTag
+  | .withdrawalsNotRead _ => rlpWithdrawalsNotReadTag
+  | .roundTrip _ => rlpRoundTripTag
+
+/-- The diagnostic payload of a decode reason. -/
+def DecodeError.detail : DecodeError → ErrorDetail
+  | .rlpStructure d | .fixedWidth d | .fieldOverflow64 d
+  | .fieldOverflow256 d | .leadingZeros d | .withdrawalsNotRead d
+  | .roundTrip d => d
+
+/-- The one renderer for `DecodeError`. -/
+def DecodeError.render (e : DecodeError) : String :=
+  renderTagged e.tag e.detail
+
+/-- Every decode reason, for the completeness guards. -/
+def DecodeError.all : List DecodeError :=
+  [ .rlpStructure .none, .fixedWidth .none, .fieldOverflow64 .none,
+    .fieldOverflow256 .none, .leadingZeros .none,
+    .withdrawalsNotRead .none, .roundTrip .none ]
+
+/-- A reason the machine stops a frame with no gas returned and its state
+changes rolled back.
+
+Exactly the vocabulary declared above, one constructor per reason. Reverting
+is deliberately *not* one of these: it is a separate arm of `EvmError`,
+because it settles gas and returndata differently. -/
+inductive ExceptionalHalt : Type
+  | stackUnderflow (detail : ErrorDetail)
+  | stackOverflow (detail : ErrorDetail)
+  | outOfGas (detail : ErrorDetail)
+  | modexpInputLimit (detail : ErrorDetail)
+  | invalidOpcode (detail : ErrorDetail)
+  | invalidJumpDest (detail : ErrorDetail)
+  | stackDepthLimit (detail : ErrorDetail)
+  | writeInStaticContext (detail : ErrorDetail)
+  | outOfBoundsRead (detail : ErrorDetail)
+  | invalidParameter (detail : ErrorDetail)
+  | invalidContractPrefix (detail : ErrorDetail)
+  | addressCollision (detail : ErrorDetail)
+  | kzgProof (detail : ErrorDetail)
+deriving DecidableEq, Repr
+
+/-- The tag an exceptional halt renders under. -/
+def ExceptionalHalt.tag : ExceptionalHalt → String
+  | .stackUnderflow _ => "StackUnderflowError"
+  | .stackOverflow _ => "StackOverflowError"
+  | .outOfGas _ => "OutOfGasError"
+  | .modexpInputLimit _ => modexpInputLimitTag
+  | .invalidOpcode _ => "InvalidOpcode"
+  | .invalidJumpDest _ => "InvalidJumpDestError"
+  | .stackDepthLimit _ => "StackDepthLimitError"
+  | .writeInStaticContext _ => "WriteInStaticContext"
+  | .outOfBoundsRead _ => "OutOfBoundsRead"
+  | .invalidParameter _ => "InvalidParameter"
+  | .invalidContractPrefix _ => "InvalidContractPrefix"
+  | .addressCollision _ => "AddressCollision"
+  | .kzgProof _ => "KZGProofError"
+
+/-- The diagnostic payload of an exceptional halt. -/
+def ExceptionalHalt.detail : ExceptionalHalt → ErrorDetail
+  | .stackUnderflow d | .stackOverflow d | .outOfGas d
+  | .modexpInputLimit d | .invalidOpcode d | .invalidJumpDest d
+  | .stackDepthLimit d | .writeInStaticContext d | .outOfBoundsRead d
+  | .invalidParameter d | .invalidContractPrefix d | .addressCollision d
+  | .kzgProof d => d
+
+/-- The one renderer for `ExceptionalHalt`. -/
+def ExceptionalHalt.render (e : ExceptionalHalt) : String :=
+  renderTagged e.tag e.detail
+
+/-- Every exceptional-halt reason, for the completeness guards. -/
+def ExceptionalHalt.all : List ExceptionalHalt :=
+  [ .stackUnderflow .none, .stackOverflow .none, .outOfGas .none,
+    .modexpInputLimit .none, .invalidOpcode .none, .invalidJumpDest .none,
+    .stackDepthLimit .none, .writeInStaticContext .none,
+    .outOfBoundsRead .none, .invalidParameter .none,
+    .invalidContractPrefix .none, .addressCollision .none, .kzgProof .none ]
+
+/-- The tag a reverting frame reports. Exact, never a prefix match: reverting
+is the one outcome that keeps its remaining gas. -/
+def revertTag : String := "Revert"
+
+/-- The tag an authorization or signature recovery reports when the signature
+itself is malformed. Named because an EIP-7702 authorization tuple is ignored
+on exactly this reason and on no other. -/
+def invalidSignatureTag : String := "InvalidSignatureError"
+
+/-- The tag a curve-point compression helper reports on failure. -/
+def pointCompressionTag : String := "bCompress failed"
+
+/-- The tag a pairing or field helper reports when its input is on the curve
+but the operation has no value. -/
+def cryptoValueTag : String := "ValueError"
+
+/-- The tag reserved for a broken internal invariant. It is not a consensus
+identity and must never classify as an expected block or transaction
+rejection. -/
+def internalErrorTag : String := "ERROR"
+
+/-- Why a precompile or a cryptographic helper rejected its input, for the
+reasons that are not already exceptional halts.
+
+Gas exhaustion, a malformed parameter, and a failed KZG proof are exceptional
+halts and stay in `ExceptionalHalt`; these three are the remainder. -/
+inductive CryptoError : Type
+  /-- A signature is not a well-formed secp256k1 signature. -/
+  | invalidSignature (detail : ErrorDetail)
+  /-- A curve point could not be compressed. -/
+  | pointCompression (detail : ErrorDetail)
+  /-- A pairing or field operation has no value for this input. -/
+  | value (detail : ErrorDetail)
+deriving DecidableEq, Repr
+
+/-- The one renderer for `CryptoError`. -/
+def CryptoError.render : CryptoError → String
+  | .invalidSignature d => renderTagged invalidSignatureTag d
+  | .pointCompression d => renderTagged pointCompressionTag d
+  | .value d => renderTagged cryptoValueTag d
+
+/-- A broken internal invariant.
+
+Distinct from every consensus reason on purpose: it means this build is
+wrong, not that the input is. It fails closed -- it can never be stored as a
+settled exceptional halt, and it can never be scored as an expected
+rejection. -/
+inductive InternalError : Type
+  /-- An assertion that the implementation believed unreachable. -/
+  | assertion (detail : ErrorDetail)
+  /-- A stated invariant of the implementation did not hold. -/
+  | invariant (detail : ErrorDetail)
+deriving DecidableEq, Repr
+
+/-- The one renderer for `InternalError`. -/
+def InternalError.render : InternalError → String
+  | .assertion d => renderTagged "AssertionError" d
+  | .invariant d => renderTagged internalErrorTag d
+
+/-- Everything the machine can fail with.
+
+The four arms are the four settlements: an exceptional halt zeroes gas and
+rolls back, reverting keeps gas and returns data, a cryptographic reason is
+converted by the precompile boundary, and an internal fault propagates out of
+consensus entirely. Today the distinction is recovered from rendered text;
+this type makes it a constructor. -/
+inductive EvmError : Type
+  | halt (reason : ExceptionalHalt)
+  | revert
+  | crypto (reason : CryptoError)
+  | internal (reason : InternalError)
+deriving DecidableEq, Repr
+
+/-- The one renderer for `EvmError`. -/
+def EvmError.render : EvmError → String
+  | .halt reason => reason.render
+  | .revert => revertTag
+  | .crypto reason => reason.render
+  | .internal reason => reason.render
+
+-- Golden guards, one representative per renderer constructor. Each pins the
+-- exact rendered bytes of a message this executable emits today.
+#guard DecodeError.all.map DecodeError.tag
+  = [ "RlpStructureError", "RlpFixedWidthError", "RlpFieldOverflow64Error",
+      "RlpFieldOverflow256Error", "RlpLeadingZerosError",
+      "RlpWithdrawalsNotReadError", "RlpRoundTripError" ]
+#guard DecodeError.all.length = 7
+#guard DecodeError.render (.rlpStructure (.text "withdrawals : expected a list"))
+  = "RlpStructureError : withdrawals : expected a list"
+#guard DecodeError.render (.fixedWidth (.text "root must be exactly 32 bytes, but is 31"))
+  = "RlpFixedWidthError : root must be exactly 32 bytes, but is 31"
+#guard DecodeError.render (.fieldOverflow64 .none) = "RlpFieldOverflow64Error"
+#guard DecodeError.render (.fieldOverflow256 .none) = "RlpFieldOverflow256Error"
+#guard DecodeError.render (.leadingZeros .none) = "RlpLeadingZerosError"
+#guard DecodeError.render (.withdrawalsNotRead .none) = "RlpWithdrawalsNotReadError"
+#guard DecodeError.render (.roundTrip .none) = "RlpRoundTripError"
+
+#guard ExceptionalHalt.all.map ExceptionalHalt.tag
+  = [ "StackUnderflowError", "StackOverflowError", "OutOfGasError",
+      "ModexpInputLimitExceeded", "InvalidOpcode", "InvalidJumpDestError",
+      "StackDepthLimitError", "WriteInStaticContext", "OutOfBoundsRead",
+      "InvalidParameter", "InvalidContractPrefix", "AddressCollision",
+      "KZGProofError" ]
+#guard ExceptionalHalt.all.length = 13
+#guard ExceptionalHalt.all.eraseDups.length = 13
+#guard ExceptionalHalt.render (.outOfGas .none) = "OutOfGasError"
+#guard ExceptionalHalt.render (.invalidParameter (.text "invalid field element"))
+  = "InvalidParameter : invalid field element"
+#guard ExceptionalHalt.render (.writeInStaticContext (.text "SSTORE"))
+  = "WriteInStaticContext : SSTORE"
+
+#guard CryptoError.render (.invalidSignature .none) = "InvalidSignatureError"
+#guard CryptoError.render (.invalidSignature (.text "bad s"))
+  = "InvalidSignatureError : bad s"
+#guard CryptoError.render (.pointCompression .none) = "bCompress failed"
+#guard CryptoError.render (.value .none) = "ValueError"
+
+#guard InternalError.render (.assertion .none) = "AssertionError"
+#guard InternalError.render (.invariant (.text "refund counter is negative"))
+  = "ERROR : refund counter is negative"
+#guard InternalError.render (.invariant (.text "block hashes is empty"))
+  = "ERROR : block hashes is empty"
+
+#guard EvmError.render .revert = "Revert"
+#guard EvmError.render (.halt (.stackUnderflow .none)) = "StackUnderflowError"
+#guard EvmError.render (.crypto (.value .none)) = "ValueError"
+#guard EvmError.render (.internal (.assertion .none)) = "AssertionError"
+
+-- The seven decode tags the typed reasons render under are exactly the seven
+-- the strict decoders emit today, in the order the vocabulary declares them.
+#guard DecodeError.all.map DecodeError.tag
+  = [ rlpStructureTag, rlpFixedWidthTag, rlpFieldOverflow64Tag,
+      rlpFieldOverflow256Tag, rlpLeadingZerosTag, rlpWithdrawalsNotReadTag,
+      rlpRoundTripTag ]
+
 end Jaune

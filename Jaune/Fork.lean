@@ -888,4 +888,159 @@ private def guardOsakaToBpo1 : ForkTransition := ⟨.osaka, .bpo1, 15000⟩
 #guard (NetworkSpec.static .osaka).forks = [.osaka]
 #guard (NetworkSpec.transition guardOsakaToBpo1).forks = [.osaka, .bpo1]
 
+------------------ TYPED SEMANTIC REASONS: CONTEXT ------------------
+
+-- P0.7 of ~/plans/integrity.md replaces text used as a semantic discriminant
+-- with typed reasons. This block lands declarations, renderers, and golden
+-- guards only. No producer is migrated here and no rendered message changes:
+-- every renderer below reproduces the message its future producer emits
+-- today, byte for byte. Steps 9 and 10 move the producers; until then a
+-- producer that already builds a typed reason crosses back to the legacy
+-- carrier with `Except.mapError`, applied to the renderer named here.
+--
+-- Placement is frozen by `scripts/report-integrity-design.md` section 6.
+-- Context and support reasons live in this module because
+-- `ChainConfig.validate`, `ChainConfig.forkAt`, `ChainConfig.rulesAt`, and
+-- `Fork.rules` are their first producers, and this module imports only
+-- `Jaune/Types.lean`, so nothing downstream can create an import cycle by
+-- naming them. The shared diagnostic vocabulary is declared here for the same
+-- reason: this is the most upstream module that names an error tag.
+
+/-- Diagnostic-only context text carried beneath a typed reason.
+
+Only a renderer may read it. No semantic branch, no routing decision, and no
+fixture classifier is permitted to inspect it -- constructor identity is the
+discriminant, and this is the free text that follows it. It is deliberately
+its own two-constructor type rather than an optional string: an optional
+string is precisely the carrier the semantic-integrity gate keeps out of the
+`Jaune.lean` import closure, and this is not an error channel. -/
+inductive ErrorDetail : Type
+  | none
+  | text (s : String)
+deriving DecidableEq, Repr, Inhabited
+
+/-- The rendering convention every tag in this executable already follows: a
+bare tag, or a tag opening free diagnostic text at a fixed `" : "`. Every
+renderer in the typed skeleton goes through this one function, so a tag can
+never acquire a second spelling. -/
+def renderTagged (tag : String) : ErrorDetail → String
+  | .none => tag
+  | .text s => s!"{tag} : {s}"
+
+#guard renderTagged "SomeTag" .none = "SomeTag"
+#guard renderTagged "SomeTag" (.text "why") = "SomeTag : why"
+
+/-- Error tag for a configured call whose chain identity contradicts the
+snapshot it was handed.
+
+Separate from `invalidChainConfigTag`: the schedule can be perfectly valid and
+still describe a different chain than the snapshot. Nothing produces it yet --
+Step 2 of the arc adds the check -- and it is deliberately not routed to any
+fixture identity, because a contradictory caller context is not evidence that
+a candidate block is invalid. -/
+def chainIdMismatchTag : String := "ChainIdMismatchError"
+
+/-- Error tag for a timestamp that precedes the first activation of an
+otherwise valid schedule.
+
+Separate from `invalidChainConfigTag` for the reason P0.5 gives: a block from
+an era this build does not implement is outside the declared domain, not a
+malformed configuration, and never an invalid block. Nothing produces it yet;
+Step 2 adds it together with the nonzero mainnet floor. -/
+def unsupportedEraTag : String := "UnsupportedEraError"
+
+/-- Why a configuration, or the pairing of a configuration with a snapshot, is
+not a usable execution context.
+
+This is the outer channel: none of these is a verdict about a candidate
+block. -/
+inductive ChainContextError : Type
+  /-- The activation schedule names no fork at all. -/
+  | emptySchedule
+  /-- Two adjacent activations do not move strictly forward in time. -/
+  | nonIncreasingActivations (prev next : ForkActivation)
+  /-- Two adjacent activations do not move forward through the fork order. -/
+  | nonForwardActivations (prev next : ForkActivation)
+  /-- The configured chain identity is not the snapshot's. -/
+  | chainIdMismatch (configured actual : UInt64)
+deriving DecidableEq, Repr
+
+/-- The one renderer for `ChainContextError`.
+
+The first three arms reproduce today's `ChainConfig.validate` messages exactly;
+the golden guards below pin them against the live producer as well as against
+the literal text. -/
+def ChainContextError.render : ChainContextError → String
+  | .emptySchedule =>
+    s!"{invalidChainConfigTag} : the activation schedule is empty"
+  | .nonIncreasingActivations prev next =>
+    s!"{invalidChainConfigTag} : activation timestamps must strictly \
+       increase, but {next.fork} at {next.timestamp} does not follow \
+       {prev.fork} at {prev.timestamp}"
+  | .nonForwardActivations prev next =>
+    s!"{invalidChainConfigTag} : activations must move forward through the \
+       fork order, but {next.fork} does not follow {prev.fork}"
+  | .chainIdMismatch configured actual =>
+    s!"{chainIdMismatchTag} : the configuration names chain \
+       {configured.toNat}, but the snapshot is chain {actual.toNat}"
+
+/-- Why an input is outside the domain this build implements.
+
+Not a configuration fault and not a block verdict: the configuration may be
+exactly right and the block perfectly valid, and this build still cannot say
+what executing it means. -/
+inductive SupportError : Type
+  /-- A declared fork whose rules are not implemented in this build. -/
+  | unsupportedFork (fork : Fork)
+  /-- A timestamp before the earliest era this configuration supports. -/
+  | unsupportedEra (timestamp floor : Nat)
+deriving DecidableEq, Repr
+
+/-- The one renderer for `SupportError`. The first arm reproduces today's
+`Fork.rules` message exactly. -/
+def SupportError.render : SupportError → String
+  | .unsupportedFork f =>
+    s!"{unsupportedForkTag} : fork {f} is a declared protocol fork whose \
+       execution rules are not implemented in this build"
+  | .unsupportedEra timestamp floor =>
+    s!"{unsupportedEraTag} : timestamp {timestamp} precedes the earliest \
+       era this configuration supports, which begins at {floor}"
+
+-- Golden guards, one representative per constructor. Each pins the exact
+-- rendered bytes, so a later step cannot change an externally observed
+-- message by accident while migrating a producer.
+#guard ChainContextError.render .emptySchedule
+  = "InvalidChainConfigError : the activation schedule is empty"
+#guard ChainContextError.render (.nonIncreasingActivations ⟨.prague, 5⟩ ⟨.osaka, 5⟩)
+  = "InvalidChainConfigError : activation timestamps must strictly increase, \
+     but Osaka at 5 does not follow Prague at 5"
+#guard ChainContextError.render (.nonForwardActivations ⟨.osaka, 5⟩ ⟨.prague, 9⟩)
+  = "InvalidChainConfigError : activations must move forward through the fork \
+     order, but Prague does not follow Osaka"
+#guard ChainContextError.render (.chainIdMismatch 7 1)
+  = "ChainIdMismatchError : the configuration names chain 7, but the snapshot \
+     is chain 1"
+#guard SupportError.render (.unsupportedFork .osaka)
+  = "UnsupportedForkError : fork Osaka is a declared protocol fork whose \
+     execution rules are not implemented in this build"
+#guard SupportError.render (.unsupportedEra 100 200)
+  = "UnsupportedEraError : timestamp 100 precedes the earliest era this \
+     configuration supports, which begins at 200"
+
+-- The three renderer arms that already have a live producer agree with it
+-- byte for byte. This is the property Steps 9 and 10 must preserve when the
+-- producers themselves start returning typed reasons, and it is checked here
+-- against the real function rather than against a transcription of it.
+#guard (match (ChainConfig.mk 1 []).validate with
+  | .error e => e == ChainContextError.render .emptySchedule
+  | .ok _ => false)
+#guard (match (ChainConfig.mk 1 [⟨.prague, 0⟩, ⟨.osaka, 0⟩]).validate with
+  | .error e =>
+    e == ChainContextError.render (.nonIncreasingActivations ⟨.prague, 0⟩ ⟨.osaka, 0⟩)
+  | .ok _ => false)
+#guard (match (ChainConfig.mk 1 [⟨.osaka, 0⟩, ⟨.prague, 9⟩]).validate with
+  | .error e =>
+    e == ChainContextError.render (.nonForwardActivations ⟨.osaka, 0⟩ ⟨.prague, 9⟩)
+  | .ok _ => false)
+
 end Jaune

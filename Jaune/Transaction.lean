@@ -1925,4 +1925,303 @@ private def guardChildRlp (timestamp excessBlobGas : Nat) : Bytes :=
 #guard hasTag invalidChainConfigTag <|
   stateTransitionUsing (ChainConfig.mk 1 []) guardEmptyChain (guardBlockAt 0)
 
+--------- TYPED SEMANTIC REASONS: TRANSACTION, BLOCK, IMPORT ---------
+
+-- Declarations, renderers, and golden guards only; no producer is migrated
+-- here and no rendered message changes. Step 10 moves the producers.
+--
+-- Placement is frozen by `scripts/report-integrity-design.md` section 6:
+-- every transition and import entry point is in this module, so the two
+-- validation vocabularies and the three failure sums belong here. Their tag
+-- constants stay where they are declared, in `Jaune/Machine.lean`, and this
+-- module reads them; a tag and the constructor that renders under it are
+-- pinned to each other by the golden guards below.
+
+/-- Why a transaction is not admissible in the block that contains it.
+
+One constructor per reason in the transaction-rejection vocabulary, which is
+already one producer per reason and one official fixture identity per reason.
+Nonce direction, intrinsic gas, and the 256-bit gas-price product stay
+distinct for exactly the reason the vocabulary keeps them distinct. -/
+inductive TxValidationError : Type
+  | gasPriceProductOverflow (detail : ErrorDetail)
+  | gasAllowanceExceeded (detail : ErrorDetail)
+  | initcodeSizeExceeded (detail : ErrorDetail)
+  | insufficientAccountFunds (detail : ErrorDetail)
+  | insufficientMaxFeePerGas (detail : ErrorDetail)
+  | transactionGasLimitExceeded (detail : ErrorDetail)
+  | intrinsicGasTooLow (detail : ErrorDetail)
+  | invalidChainId (detail : ErrorDetail)
+  | nonceIsMax (detail : ErrorDetail)
+  | nonceMismatchTooHigh (detail : ErrorDetail)
+  | nonceMismatchTooLow (detail : ErrorDetail)
+  | priorityGreaterThanMaxFee (detail : ErrorDetail)
+  | senderNotEoa (detail : ErrorDetail)
+  | type3BlobCountExceeded (detail : ErrorDetail)
+  | type3BlobCountLimitExceeded (detail : ErrorDetail)
+  | type3ContractCreation (detail : ErrorDetail)
+  | type3InvalidBlobVersionedHash (detail : ErrorDetail)
+  | type3ZeroBlobs (detail : ErrorDetail)
+  | type4ContractCreation (detail : ErrorDetail)
+  | emptyAuthorizationList (detail : ErrorDetail)
+deriving DecidableEq, Repr
+
+/-- The tag a transaction-rejection reason renders under. -/
+def TxValidationError.tag : TxValidationError → String
+  | .gasPriceProductOverflow _ => gasPriceProductOverflowTag
+  | .gasAllowanceExceeded _ => gasAllowanceExceededTag
+  | .initcodeSizeExceeded _ => initcodeSizeExceededTag
+  | .insufficientAccountFunds _ => insufficientAccountFundsTag
+  | .insufficientMaxFeePerGas _ => insufficientMaxFeePerGasTag
+  | .transactionGasLimitExceeded _ => transactionGasLimitExceededTag
+  | .intrinsicGasTooLow _ => intrinsicGasTooLowTag
+  | .invalidChainId _ => invalidChainIdTag
+  | .nonceIsMax _ => nonceIsMaxTag
+  | .nonceMismatchTooHigh _ => nonceMismatchTooHighTag
+  | .nonceMismatchTooLow _ => nonceMismatchTooLowTag
+  | .priorityGreaterThanMaxFee _ => priorityGreaterThanMaxFeeTag
+  | .senderNotEoa _ => senderNotEoaTag
+  | .type3BlobCountExceeded _ => type3BlobCountExceededTag
+  | .type3BlobCountLimitExceeded _ => type3BlobCountLimitExceededTag
+  | .type3ContractCreation _ => type3ContractCreationTag
+  | .type3InvalidBlobVersionedHash _ => type3InvalidBlobVersionedHashTag
+  | .type3ZeroBlobs _ => type3ZeroBlobsTag
+  | .type4ContractCreation _ => type4ContractCreationTag
+  | .emptyAuthorizationList _ => emptyAuthorizationListTag
+
+/-- The diagnostic payload of a transaction-rejection reason. -/
+def TxValidationError.detail : TxValidationError → ErrorDetail
+  | .gasPriceProductOverflow d | .gasAllowanceExceeded d
+  | .initcodeSizeExceeded d | .insufficientAccountFunds d
+  | .insufficientMaxFeePerGas d | .transactionGasLimitExceeded d
+  | .intrinsicGasTooLow d | .invalidChainId d | .nonceIsMax d
+  | .nonceMismatchTooHigh d | .nonceMismatchTooLow d
+  | .priorityGreaterThanMaxFee d | .senderNotEoa d
+  | .type3BlobCountExceeded d | .type3BlobCountLimitExceeded d
+  | .type3ContractCreation d | .type3InvalidBlobVersionedHash d
+  | .type3ZeroBlobs d | .type4ContractCreation d
+  | .emptyAuthorizationList d => d
+
+/-- The one renderer for `TxValidationError`. -/
+def TxValidationError.render (e : TxValidationError) : String :=
+  renderTagged e.tag e.detail
+
+/-- Every transaction-rejection reason, for the completeness guards. -/
+def TxValidationError.all : List TxValidationError :=
+  [ .gasPriceProductOverflow .none, .gasAllowanceExceeded .none,
+    .initcodeSizeExceeded .none, .insufficientAccountFunds .none,
+    .insufficientMaxFeePerGas .none, .transactionGasLimitExceeded .none,
+    .intrinsicGasTooLow .none, .invalidChainId .none, .nonceIsMax .none,
+    .nonceMismatchTooHigh .none, .nonceMismatchTooLow .none,
+    .priorityGreaterThanMaxFee .none, .senderNotEoa .none,
+    .type3BlobCountExceeded .none, .type3BlobCountLimitExceeded .none,
+    .type3ContractCreation .none, .type3InvalidBlobVersionedHash .none,
+    .type3ZeroBlobs .none, .type4ContractCreation .none,
+    .emptyAuthorizationList .none ]
+
+/-- Why a header or a post-transition check rejects a block.
+
+One constructor per reason in the block-rejection vocabulary. A bare
+"some consensus rule failed" is exactly what let a block be rejected for the
+wrong reason and still be scored as a pass, which is why each reason is its
+own constructor here as it is its own tag there. -/
+inductive BlockValidationError : Type
+  | gasLimitTooBig (detail : ErrorDetail)
+  | gasLimitAdjustment (detail : ErrorDetail)
+  | gasUsedOverflow (detail : ErrorDetail)
+  | gasUsedMismatch (detail : ErrorDetail)
+  | timestampOlderThanParent (detail : ErrorDetail)
+  | blockNumber (detail : ErrorDetail)
+  | baseFeePerGas (detail : ErrorDetail)
+  | difficultyOverParis (detail : ErrorDetail)
+  | ommersOverParis (detail : ErrorDetail)
+  | extraDataTooBig (detail : ErrorDetail)
+  | unknownParent (detail : ErrorDetail)
+  | unknownParentZero (detail : ErrorDetail)
+  | stateRoot (detail : ErrorDetail)
+  | transactionsRoot (detail : ErrorDetail)
+  | receiptsRoot (detail : ErrorDetail)
+  | logBloom (detail : ErrorDetail)
+  | withdrawalsRoot (detail : ErrorDetail)
+  | headerNonce (detail : ErrorDetail)
+  | excessBlobGas (detail : ErrorDetail)
+  | blobGasUsed (detail : ErrorDetail)
+  | requestsHash (detail : ErrorDetail)
+  | depositEventLayout (detail : ErrorDetail)
+  | systemContractCallFailed (detail : ErrorDetail)
+  | blockRlpSizeExceeded (detail : ErrorDetail)
+deriving DecidableEq, Repr
+
+/-- The tag a block-rejection reason renders under. -/
+def BlockValidationError.tag : BlockValidationError → String
+  | .gasLimitTooBig _ => gasLimitTooBigTag
+  | .gasLimitAdjustment _ => gasLimitAdjustmentTag
+  | .gasUsedOverflow _ => gasUsedOverflowTag
+  | .gasUsedMismatch _ => gasUsedMismatchTag
+  | .timestampOlderThanParent _ => timestampOlderThanParentTag
+  | .blockNumber _ => blockNumberTag
+  | .baseFeePerGas _ => baseFeePerGasTag
+  | .difficultyOverParis _ => difficultyOverParisTag
+  | .ommersOverParis _ => ommersOverParisTag
+  | .extraDataTooBig _ => extraDataTooBigTag
+  | .unknownParent _ => unknownParentTag
+  | .unknownParentZero _ => unknownParentZeroTag
+  | .stateRoot _ => stateRootTag
+  | .transactionsRoot _ => transactionsRootTag
+  | .receiptsRoot _ => receiptsRootTag
+  | .logBloom _ => logBloomTag
+  | .withdrawalsRoot _ => withdrawalsRootTag
+  | .headerNonce _ => headerNonceTag
+  | .excessBlobGas _ => excessBlobGasTag
+  | .blobGasUsed _ => blobGasUsedTag
+  | .requestsHash _ => requestsHashTag
+  | .depositEventLayout _ => depositEventLayoutTag
+  | .systemContractCallFailed _ => systemContractCallFailedTag
+  | .blockRlpSizeExceeded _ => blockRlpSizeExceededTag
+
+/-- The diagnostic payload of a block-rejection reason. -/
+def BlockValidationError.detail : BlockValidationError → ErrorDetail
+  | .gasLimitTooBig d | .gasLimitAdjustment d | .gasUsedOverflow d
+  | .gasUsedMismatch d | .timestampOlderThanParent d | .blockNumber d
+  | .baseFeePerGas d | .difficultyOverParis d | .ommersOverParis d
+  | .extraDataTooBig d | .unknownParent d | .unknownParentZero d
+  | .stateRoot d | .transactionsRoot d | .receiptsRoot d | .logBloom d
+  | .withdrawalsRoot d | .headerNonce d | .excessBlobGas d
+  | .blobGasUsed d | .requestsHash d | .depositEventLayout d
+  | .systemContractCallFailed d | .blockRlpSizeExceeded d => d
+
+/-- The one renderer for `BlockValidationError`. -/
+def BlockValidationError.render (e : BlockValidationError) : String :=
+  renderTagged e.tag e.detail
+
+/-- Every block-rejection reason, for the completeness guards. -/
+def BlockValidationError.all : List BlockValidationError :=
+  [ .gasLimitTooBig .none, .gasLimitAdjustment .none, .gasUsedOverflow .none,
+    .gasUsedMismatch .none, .timestampOlderThanParent .none,
+    .blockNumber .none, .baseFeePerGas .none, .difficultyOverParis .none,
+    .ommersOverParis .none, .extraDataTooBig .none, .unknownParent .none,
+    .unknownParentZero .none, .stateRoot .none, .transactionsRoot .none,
+    .receiptsRoot .none, .logBloom .none, .withdrawalsRoot .none,
+    .headerNonce .none, .excessBlobGas .none, .blobGasUsed .none,
+    .requestsHash .none, .depositEventLayout .none,
+    .systemContractCallFailed .none, .blockRlpSizeExceeded .none ]
+
+/-- Why an import could not be attempted, or could not be trusted.
+
+The outer channel. None of these is a verdict about the candidate block, and
+none may ever be scored as an expected consensus rejection: a contradictory
+caller context, an unimplemented era, a harness fault, or a broken internal
+invariant all mean the question was not answered, not that the answer was
+"invalid". -/
+inductive ImportFailure : Type
+  /-- The configuration, or its pairing with the snapshot, is unusable. -/
+  | context (reason : ChainContextError)
+  /-- The input is outside the domain this build implements. -/
+  | support (reason : SupportError)
+  /-- The surrounding harness could not supply what the import needs. -/
+  | harness (detail : ErrorDetail)
+  /-- A stated invariant of this build did not hold. -/
+  | internal (reason : InternalError)
+deriving DecidableEq, Repr
+
+/-- The one renderer for `ImportFailure`. -/
+def ImportFailure.render : ImportFailure → String
+  | .context reason => reason.render
+  | .support reason => reason.render
+  | .harness detail => renderTagged internalErrorTag detail
+  | .internal reason => reason.render
+
+/-- Why a candidate block is rejected.
+
+The inner channel: every arm is a consensus verdict about the candidate, and
+every arm carries a reason with an official fixture identity. The `decode`
+arm exists because the audited ordering treats some strict-decode failures as
+block rejection rather than as ingress failure; Step 10 assigns each decode
+reason to this arm or to `RawImportFailure.strictDecode` deliberately, reason
+by reason, and never by inheriting today's nesting. -/
+inductive BlockRejection : Type
+  | transaction (reason : TxValidationError)
+  | block (reason : BlockValidationError)
+  | decode (reason : DecodeError)
+deriving DecidableEq, Repr
+
+/-- The one renderer for `BlockRejection`. -/
+def BlockRejection.render : BlockRejection → String
+  | .transaction reason => reason.render
+  | .block reason => reason.render
+  | .decode reason => reason.render
+
+/-- The result of an import that was actually attempted: an extended chain, or
+a rejected candidate.
+
+Parameterised in the chain representation so that the compatibility wrapper
+and the checked core share one shape. Step 6 introduces the checked snapshot
+and instantiates this at it; until then it is instantiated at `BlockChain`. -/
+abbrev ImportOutcome (chain : Type) : Type := chain ⊕ BlockRejection
+
+/-- Why an import from raw bytes could not produce an outcome at all.
+
+Ingress failure is explicit here rather than nested inside the operational
+channel by accident. -/
+inductive RawImportFailure : Type
+  | strictDecode (reason : DecodeError)
+  | operational (reason : ImportFailure)
+deriving DecidableEq, Repr
+
+/-- The one renderer for `RawImportFailure`. -/
+def RawImportFailure.render : RawImportFailure → String
+  | .strictDecode reason => reason.render
+  | .operational reason => reason.render
+
+-- Golden guards. Each vocabulary is pinned constructor-by-constructor to the
+-- tag it renders under, so a migrated producer cannot silently change an
+-- externally observed message or route a reason to the wrong identity.
+#guard TxValidationError.all.length = 20
+#guard TxValidationError.all.eraseDups.length = 20
+#guard TxValidationError.all.map TxValidationError.tag = transactionExceptionTags
+#guard (TxValidationError.all.map TxValidationError.tag).eraseDups.length = 20
+#guard TxValidationError.render (.nonceMismatchTooHigh .none)
+  = "NonceMismatchTooHighError"
+#guard TxValidationError.render (.intrinsicGasTooLow (.text "needs 21000, has 20999"))
+  = "IntrinsicGasTooLowError : needs 21000, has 20999"
+
+#guard BlockValidationError.all.length = 24
+#guard BlockValidationError.all.eraseDups.length = 24
+#guard BlockValidationError.all.map BlockValidationError.tag = blockExceptionTags
+#guard (BlockValidationError.all.map BlockValidationError.tag).eraseDups.length = 24
+#guard BlockValidationError.render (.stateRoot .none) = "StateRootError"
+#guard BlockValidationError.render (.blockRlpSizeExceeded (.text "1 byte over the limit"))
+  = "BlockRlpSizeExceededError : 1 byte over the limit"
+
+#guard ImportFailure.render (.context .emptySchedule)
+  = "InvalidChainConfigError : the activation schedule is empty"
+#guard ImportFailure.render (.context (.chainIdMismatch 7 1))
+  = "ChainIdMismatchError : the configuration names chain 7, but the snapshot \
+     is chain 1"
+#guard ImportFailure.render (.support (.unsupportedEra 100 200))
+  = "UnsupportedEraError : timestamp 100 precedes the earliest era this \
+     configuration supports, which begins at 200"
+#guard ImportFailure.render (.harness (.text "lastblockhash names no imported snapshot"))
+  = "ERROR : lastblockhash names no imported snapshot"
+#guard ImportFailure.render (.internal (.invariant (.text "receipt not found")))
+  = "ERROR : receipt not found"
+
+#guard BlockRejection.render (.transaction (.senderNotEoa .none)) = "SenderNotEoaError"
+#guard BlockRejection.render (.block (.logBloom .none)) = "LogBloomError"
+#guard BlockRejection.render (.decode (.roundTrip .none)) = "RlpRoundTripError"
+
+#guard RawImportFailure.render (.strictDecode (.rlpStructure .none))
+  = "RlpStructureError"
+#guard RawImportFailure.render (.operational (.support (.unsupportedFork .osaka)))
+  = "UnsupportedForkError : fork Osaka is a declared protocol fork whose \
+     execution rules are not implemented in this build"
+
+-- No block-rejection or transaction-rejection tag is readable as the broad
+-- category it replaces, and the two vocabularies do not overlap. These are the
+-- constructor-level restatements of the distinctness facts the tag lists
+-- already carry, and they are what makes exhaustive matching a faithful
+-- replacement for prefix matching.
+#guard (TxValidationError.all.map TxValidationError.tag).all fun t =>
+  ¬ (BlockValidationError.all.map BlockValidationError.tag).contains t
+
 end Jaune
