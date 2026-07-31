@@ -291,6 +291,23 @@ def Frame.ofCall (msg : Msg) : Frame := ⟨msg, msg, false⟩
 def Frame.ofCreate (msg : Msg) : Frame :=
   ⟨msg, processCreateMessage.msg msg, true⟩
 
+/-- Both saved states a call frame can restore from are canonical.
+
+A `Frame` holds two messages and `Frame.settleMsg` can roll back to either:
+`processMessage.settle` restores the *inner* message's saved pair, and a create
+whose code-deposit charge fails restores the *outer* one. The invariant
+therefore has to name both, which is exactly the "every saved parent/rollback
+state" clause of P0.4 item 5. Statement only -- Step 4 of
+`~/plans/integrity.md` owns the preservation proofs. -/
+def Frame.Canonical (f : Frame) : Prop :=
+  Msg.Canonical f.outer ∧ Msg.Canonical f.inner
+
+instance {f : Frame} : Decidable (Frame.Canonical f) := by
+  unfold Frame.Canonical; infer_instance
+
+theorem Frame.canonical_ofCall {msg : Msg} (h : Msg.Canonical msg) :
+    Frame.Canonical (Frame.ofCall msg) := ⟨h, h⟩
+
 def processMessage.settle (msg : Msg)
     (r : Except (String × State × AdrSet × Tra) Devm) :
     Except (String × State × AdrSet × Tra) Devm := do

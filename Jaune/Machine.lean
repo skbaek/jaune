@@ -566,6 +566,20 @@ def elasticityMultiplier : Nat := 2
 def gasLimitAdjustmentFactor : Nat := 1024
 def gasLimitMinimum : Nat := 5000
 def baseFeeMaxChangeDenominator := 8
+-- The three interpreter divisors that are global constants rather than rule
+-- data. Their positivity is a closed fact, not a hypothesis anything carries:
+-- `ForkRules.Valid` deliberately says nothing about them, because no caller can
+-- supply a different value. `elasticityMultiplier` divides at
+-- `Execution.calculateBaseFeePerGas`, `gasLimitAdjustmentFactor` at
+-- `Execution.checkGasLimit`, and `baseFeeMaxChangeDenominator` twice more in
+-- `calculateBaseFeePerGas`. `gasPerBlob` multiplies rather than divides, but
+-- its positivity is what keeps the blob-fee product nonzero.
+theorem elasticityMultiplier_pos : 0 < elasticityMultiplier := by decide
+theorem gasLimitAdjustmentFactor_pos : 0 < gasLimitAdjustmentFactor := by decide
+theorem baseFeeMaxChangeDenominator_pos : 0 < baseFeeMaxChangeDenominator := by
+  decide
+theorem gasPerBlob_pos : 0 < gasPerBlob := by decide
+
 def perEmptyAccountCost := 25000
 def perAuthBaseCost := 12500
 def txBaseCost : Nat := 21000
@@ -2977,6 +2991,116 @@ theorem Tra.Canonical.getD {τ : Tra} (h : Tra.Canonical τ) (a : Adr) :
 theorem Tra.Canonical.setStorVal {τ : Tra} (h : Tra.Canonical τ) (a : Adr)
     (k v : B256) : Tra.Canonical (τ.setStorVal a k v) :=
   h.set a ((h.getD a).set k v)
+
+--------------- THE EXECUTION-STATE INVARIANT VOCABULARY ---------------
+
+-- Statements only. This is the vocabulary Step 4 of `~/plans/integrity.md`
+-- proves the preservation corpus in; nothing here asserts that any interpreter
+-- step preserves anything, and no such theorem is stated ahead of its proof.
+--
+-- What the vocabulary has to cover is every state a running machine can *commit
+-- to or restore from*, which is three distinct things and not one:
+--
+--   1. the current state, in `Devm.world`;
+--   2. the original state, in `BenvStat.origState`, which `SLOAD`'s original
+--      value and the gas refund rules read long after it stopped being
+--      current; and
+--   3. every saved parent state, which in this interpreter lives in the frame's
+--      `Msg` -- `msg.benv.state` and `msg.tenv.transientStorage` are exactly the
+--      pair `Devm.rollback` restores at `processMessage.settle` and
+--      `processCreateMessage.settle`.
+--
+-- Transient storage is carried alongside the world state everywhere, so each
+-- predicate below pairs `State.Canonical` with `Tra.Canonical` rather than
+-- treating transient storage as an afterthought.
+
+/-- A machine world -- current state and transient storage -- is canonical. -/
+def World.Canonical (w : World) : Prop :=
+  State.Canonical w.state ∧ Tra.Canonical w.transientStorage
+
+/-- The dynamic machine's world is canonical. -/
+def Devm.Canonical (devm : Devm) : Prop := World.Canonical devm.world
+
+/-- The block environment's *original* state is canonical. Separate from the
+current one because it outlives it. -/
+def BenvStat.Canonical (stat : BenvStat) : Prop := State.Canonical stat.origState
+
+/-- A block environment: its current state and its original state. -/
+def Benv.Canonical (benv : Benv) : Prop :=
+  State.Canonical benv.state ∧ BenvStat.Canonical benv.stat
+
+def Tenv.Canonical (tenv : Tenv) : Prop := Tra.Canonical tenv.transientStorage
+
+/-- A message: the parent state and transient storage saved for rollback,
+together with the original state they were derived from. This is the carrier
+of point 3 above -- `msg.benv.state` and `msg.tenv.transientStorage` are what a
+failing frame restores. -/
+def Msg.Canonical (msg : Msg) : Prop :=
+  Benv.Canonical msg.benv ∧ Tenv.Canonical msg.tenv
+
+/-- The static half of an executing frame contributes only the original
+state. -/
+def Sevm.Canonical (sevm : Sevm) : Prop := BenvStat.Canonical sevm.benvStat
+
+/-- A whole executing frame: current world plus original state. -/
+def Evm.Canonical (evm : Evm) : Prop :=
+  Sevm.Canonical evm.sta ∧ Devm.Canonical evm.dyna
+
+/-- A chain snapshot's state. Step 6's `ValidContext` adds the tip, root, and
+retained-history conjuncts on top of this one. -/
+def BlockChain.Canonical (ch : BlockChain) : Prop := State.Canonical ch.state
+
+instance {w : World} : Decidable (World.Canonical w) := by
+  unfold World.Canonical; infer_instance
+instance {devm : Devm} : Decidable (Devm.Canonical devm) := by
+  unfold Devm.Canonical; infer_instance
+instance {stat : BenvStat} : Decidable (BenvStat.Canonical stat) := by
+  unfold BenvStat.Canonical; infer_instance
+instance {benv : Benv} : Decidable (Benv.Canonical benv) := by
+  unfold Benv.Canonical; infer_instance
+instance {tenv : Tenv} : Decidable (Tenv.Canonical tenv) := by
+  unfold Tenv.Canonical; infer_instance
+instance {msg : Msg} : Decidable (Msg.Canonical msg) := by
+  unfold Msg.Canonical; infer_instance
+instance {sevm : Sevm} : Decidable (Sevm.Canonical sevm) := by
+  unfold Sevm.Canonical; infer_instance
+instance {evm : Evm} : Decidable (Evm.Canonical evm) := by
+  unfold Evm.Canonical; infer_instance
+instance {ch : BlockChain} : Decidable (BlockChain.Canonical ch) := by
+  unfold BlockChain.Canonical; infer_instance
+
+-- The record-surgery facts that hold by projection alone. These are not
+-- interpreter theorems -- each is the observation that a setter touches exactly
+-- the field its name says -- and they exist so Step 4 never has to unfold a
+-- `Devm` to make progress.
+
+theorem Devm.canonical_iff {devm : Devm} :
+    Devm.Canonical devm
+      ↔ State.Canonical devm.state ∧ Tra.Canonical devm.transientStorage :=
+  Iff.rfl
+
+theorem Devm.Canonical.withState {devm : Devm} (h : Devm.Canonical devm)
+    {w : State} (hw : State.Canonical w) : Devm.Canonical (devm.withState w) :=
+  ⟨hw, h.2⟩
+
+theorem Devm.Canonical.withTransientStorage {devm : Devm}
+    (h : Devm.Canonical devm) {τ : Tra} (hτ : Tra.Canonical τ) :
+    Devm.Canonical (devm.withTransientStorage τ) :=
+  ⟨h.1, hτ⟩
+
+/-- Restoring a saved parent state is canonical exactly when what was saved
+was. The current world is irrelevant, which is the point of a rollback. -/
+theorem Devm.canonical_rollback {devm : Devm} {w : State} {τ : Tra}
+    (hw : State.Canonical w) (hτ : Tra.Canonical τ) :
+    Devm.Canonical (devm.rollback w τ) :=
+  ⟨hw, hτ⟩
+
+/-- A message's saved pair is exactly what `Devm.rollback` is fed at both
+settlement sites, so a canonical message restores a canonical machine. -/
+theorem Msg.Canonical.rollback {msg : Msg} (h : Msg.Canonical msg)
+    (devm : Devm) :
+    Devm.Canonical (devm.rollback msg.benv.state msg.tenv.transientStorage) :=
+  ⟨h.1.1, h.2⟩
 
 --------------- NEGATIVE REGRESSIONS ---------------
 

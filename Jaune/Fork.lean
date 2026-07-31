@@ -189,6 +189,45 @@ abbrev ForkRules.isPrecomp (rules : ForkRules) (a : Adr) : Prop :=
 instance {rules : ForkRules} {a : Adr} : Decidable (rules.isPrecomp a) :=
   List.instDecidableMemOfLawfulBEq _ _
 
+--------------- STRUCTURALLY USABLE RULE PARAMETERS ---------------
+
+-- `ForkRules` is a plain record, so nothing in its *type* stops a caller from
+-- handing execution a zero divisor. The predicates below name exactly the
+-- structural facts the semantics divides or subtracts by. They are not
+-- consensus validity: a rule set can satisfy every one of them and still
+-- describe no real fork. They are the facts a total function needs.
+
+/-- The blob schedule's parameters are usable by the blob-fee arithmetic.
+
+Three conditions, one per place the schedule reaches division or `Nat`
+subtraction:
+- `baseFeeUpdateFraction` is `fakeExp`'s denominator, in both `(numAcc * num) /
+  (den * i)` and the final `out / den`;
+- `max` is the divisor on EIP-7918's reserve-price branch of
+  `calculateExcessBlobGas`; and
+- `target ≤ max` keeps `max - target` on that same branch a real difference
+  rather than a truncated `Nat` subtraction, which an inverted schedule would
+  silently answer with `0`. -/
+def BlobSchedule.Valid (b : BlobSchedule) : Prop :=
+  0 < b.baseFeeUpdateFraction ∧ 0 < b.max ∧ b.target ≤ b.max
+
+instance {b : BlobSchedule} : Decidable b.Valid := by
+  unfold BlobSchedule.Valid; infer_instance
+
+/-- The rule set's parameters are usable by the semantics that reads them.
+
+Beyond the blob schedule this adds `MODEXP`'s `GQUADDIVISOR`, the one other
+fork-carried number the semantics divides by. Every other divisor in the
+interpreter -- `elasticityMultiplier`, `gasLimitAdjustmentFactor`,
+`baseFeeMaxChangeDenominator` -- is a global constant rather than rule data, so
+its positivity is a closed fact proved next to it in `Jaune/Machine.lean` and
+not a hypothesis anything must carry. -/
+def ForkRules.Valid (r : ForkRules) : Prop :=
+  r.blob.Valid ∧ 0 < r.modexp.gasDivisor
+
+instance {r : ForkRules} : Decidable r.Valid := by
+  unfold ForkRules.Valid; infer_instance
+
 /-- Prague's blob schedule (EIP-4844 as amended for Prague). -/
 def pragueBlobSchedule : BlobSchedule := {
   target := 0xC0000 -- 786432
@@ -368,6 +407,42 @@ def bpo1Rules : ForkRules :=
 def bpo2Rules : ForkRules :=
   { osakaRules with fork := .bpo2, blob := bpo2BlobSchedule }
 
+-- Every named rule set carries the structural witness, so no in-tree execution
+-- path ever needs to check it. `decide` is the whole proof: the predicates are
+-- decidable and the parameters are literals.
+
+theorem pragueBlobSchedule_valid : pragueBlobSchedule.Valid := by decide
+theorem osakaBlobSchedule_valid : osakaBlobSchedule.Valid := by decide
+theorem bpo1BlobSchedule_valid : bpo1BlobSchedule.Valid := by decide
+theorem bpo2BlobSchedule_valid : bpo2BlobSchedule.Valid := by decide
+
+theorem pragueRules_valid : pragueRules.Valid := by decide
+theorem osakaRules_valid : osakaRules.Valid := by decide
+theorem bpo1Rules_valid : bpo1Rules.Valid := by decide
+theorem bpo2Rules_valid : bpo2Rules.Valid := by decide
+
+-- The three premises, spelled out once per named schedule, so a future
+-- reparameterisation that zeroes a divisor or inverts the target/ceiling pair
+-- fails here rather than inside `fakeExp`.
+#guard 0 < pragueBlobSchedule.baseFeeUpdateFraction
+#guard 0 < osakaBlobSchedule.baseFeeUpdateFraction
+#guard 0 < bpo1BlobSchedule.baseFeeUpdateFraction
+#guard 0 < bpo2BlobSchedule.baseFeeUpdateFraction
+#guard pragueBlobSchedule.target ≤ pragueBlobSchedule.max
+#guard osakaBlobSchedule.target ≤ osakaBlobSchedule.max
+#guard bpo1BlobSchedule.target ≤ bpo1BlobSchedule.max
+#guard bpo2BlobSchedule.target ≤ bpo2BlobSchedule.max
+#guard 0 < pragueModexpRules.gasDivisor
+#guard 0 < osakaModexpRules.gasDivisor
+-- A zero divisor and an inverted schedule are both refused.
+#guard ¬ ({ pragueBlobSchedule with baseFeeUpdateFraction := 0 } : BlobSchedule).Valid
+#guard ¬ ({ pragueBlobSchedule with max := 0 } : BlobSchedule).Valid
+#guard ¬ ({ pragueBlobSchedule with
+              target := pragueBlobSchedule.max + 1 } : BlobSchedule).Valid
+#guard ¬ ({ pragueRules with
+              modexp := { pragueModexpRules with gasDivisor := 0 } }
+            : ForkRules).Valid
+
 /-- Error tag for a fork whose identity is known but whose rules this build
 does not implement.
 
@@ -398,6 +473,28 @@ def Fork.rules (f : Fork) : Except String ForkRules :=
     .error
       s!"{unsupportedForkTag} : fork {f} is a declared protocol fork whose \
          execution rules are not implemented in this build"
+
+/-- Every rule set a fork identity resolves to is structurally usable.
+
+This is what makes `ForkRules.Valid` free at the fork-selected entry points:
+`stateTransitionAt`, `addBlockToChainAt`, and everything reached through
+`ChainConfig.rulesAt` obtain their rules from here, so they carry the witness
+without checking for it. Only a caller supplying a rule record of its own has
+anything to prove. -/
+theorem Fork.rules?_valid {f : Fork} {r : ForkRules} (h : f.rules? = some r) :
+    r.Valid := by
+  cases f <;> rw [Fork.rules?] at h <;> cases h
+  · exact pragueRules_valid
+  · exact osakaRules_valid
+  · exact bpo1Rules_valid
+  · exact bpo2Rules_valid
+
+theorem Fork.rules_valid {f : Fork} {r : ForkRules} (h : f.rules = .ok r) :
+    r.Valid := by
+  rw [Fork.rules] at h
+  cases hr : f.rules? with
+  | none => rw [hr] at h; cases h
+  | some r' => rw [hr] at h; cases h; exact Fork.rules?_valid hr
 
 /-- A fork's rules become active at this timestamp. -/
 structure ForkActivation : Type where
@@ -488,6 +585,32 @@ malformed configuration, and never an invalid block. Produced by
 `ChainConfig.forkAt`, together with the nonzero mainnet floor. -/
 def unsupportedEraTag : String := "UnsupportedEraError"
 
+/-- Error tag for an explicitly supplied rule record whose parameters the
+semantics cannot use.
+
+Separate from `invalidChainConfigTag`: the schedule is not at fault, and
+separate from `unsupportedEraTag`: the era is implemented. Produced only by
+`ValidRules.check`, the checked entry point for a caller-built `ForkRules`;
+every fork-selected path obtains rules that already carry the witness.
+Deliberately not routed to any fixture identity -- invalid rule parameters are
+never evidence that a candidate block is invalid. -/
+def invalidForkRulesTag : String := "InvalidForkRulesError"
+
+/-- Which structural premise a supplied `ForkRules` fails.
+
+Typed rather than a message: the reason is a fact about the record, and only
+`ChainContextError.render` may turn it into text. -/
+inductive RuleDefect : Type
+  /-- `fakeExp`'s denominator is zero. -/
+  | zeroBlobBaseFeeUpdateFraction
+  /-- EIP-7918's reserve-price branch would divide by a zero blob ceiling. -/
+  | zeroBlobMax
+  /-- The blob target exceeds the ceiling, so `max - target` truncates to `0`. -/
+  | blobTargetAboveMax (target max : Nat)
+  /-- `MODEXP`'s `GQUADDIVISOR` is zero. -/
+  | zeroModexpGasDivisor
+deriving DecidableEq, Repr
+
 /-- Why a configuration, or the pairing of a configuration with a snapshot, is
 not a usable execution context.
 
@@ -502,6 +625,8 @@ inductive ChainContextError : Type
   | nonForwardActivations (prev next : ForkActivation)
   /-- The configured chain identity is not the snapshot's. -/
   | chainIdMismatch (configured actual : UInt64)
+  /-- A supplied rule record carries a parameter the semantics cannot use. -/
+  | invalidForkRules (defect : RuleDefect)
 deriving DecidableEq, Repr
 
 /-- The one renderer for `ChainContextError`.
@@ -522,6 +647,15 @@ def ChainContextError.render : ChainContextError → String
   | .chainIdMismatch configured actual =>
     s!"{chainIdMismatchTag} : the configuration names chain \
        {configured.toNat}, but the snapshot is chain {actual.toNat}"
+  | .invalidForkRules defect =>
+    renderTagged invalidForkRulesTag <| .text <|
+      match defect with
+      | .zeroBlobBaseFeeUpdateFraction =>
+        "the blob base-fee update fraction is zero"
+      | .zeroBlobMax => "the blob gas ceiling is zero"
+      | .blobTargetAboveMax target max =>
+        s!"the blob gas target {target} exceeds the ceiling {max}"
+      | .zeroModexpGasDivisor => "the MODEXP gas divisor is zero"
 
 /-- Why an input is outside the domain this build implements.
 
@@ -565,6 +699,124 @@ def SupportError.render : SupportError → String
 #guard SupportError.render (.unsupportedEra 100 200)
   = "UnsupportedEraError : timestamp 100 precedes the earliest era this \
      configuration supports, which begins at 200"
+#guard ChainContextError.render (.invalidForkRules .zeroBlobBaseFeeUpdateFraction)
+  = "InvalidForkRulesError : the blob base-fee update fraction is zero"
+#guard ChainContextError.render (.invalidForkRules .zeroBlobMax)
+  = "InvalidForkRulesError : the blob gas ceiling is zero"
+#guard ChainContextError.render (.invalidForkRules (.blobTargetAboveMax 9 4))
+  = "InvalidForkRulesError : the blob gas target 9 exceeds the ceiling 4"
+#guard ChainContextError.render (.invalidForkRules .zeroModexpGasDivisor)
+  = "InvalidForkRulesError : the MODEXP gas divisor is zero"
+
+--------------- THE CHECKED ARBITRARY-RULE CONSTRUCTOR ---------------
+
+/-- The first structural premise a rule record fails, or `none` if it fails
+none. The order is the order the premises are stated in `ForkRules.Valid`, so
+one defect is reported rather than a list. -/
+def ForkRules.defect? (r : ForkRules) : Option RuleDefect :=
+  if r.blob.baseFeeUpdateFraction = 0 then
+    some .zeroBlobBaseFeeUpdateFraction
+  else if r.blob.max = 0 then
+    some .zeroBlobMax
+  else if r.blob.max < r.blob.target then
+    some (.blobTargetAboveMax r.blob.target r.blob.max)
+  else if r.modexp.gasDivisor = 0 then
+    some .zeroModexpGasDivisor
+  else
+    none
+
+/-- `defect?` decides `Valid`: it answers `none` exactly on the valid records,
+so the check below neither over- nor under-reports. -/
+theorem ForkRules.defect?_eq_none_iff {r : ForkRules} :
+    r.defect? = none ↔ r.Valid := by
+  rw [ForkRules.defect?, ForkRules.Valid, BlobSchedule.Valid]
+  split
+  · simp_all
+  · split
+    · simp_all
+    · split
+      · simp_all
+      · split
+        · simp_all
+        · simp_all; omega
+
+/-- A rule set together with the proof that its parameters are usable.
+
+This is what an entry point should demand of a caller-supplied `ForkRules`:
+the witness travels with the record instead of being rechecked, or worse,
+assumed. The named fork rules are exported as `ValidRules` below, so nothing
+in-tree pays for the check. -/
+structure ValidRules : Type where
+  rules : ForkRules
+  valid : rules.Valid
+
+/-- The checked constructor for an arbitrary explicit rule record. It is the
+only way to obtain a `ValidRules` from a record this module did not build. -/
+def ValidRules.check (r : ForkRules) : Except ChainContextError ValidRules :=
+  match h : r.defect? with
+  | some defect => .error (.invalidForkRules defect)
+  | none => .ok ⟨r, ForkRules.defect?_eq_none_iff.mp h⟩
+
+theorem ValidRules.check_eq_ok_iff {r : ForkRules} :
+    (∃ vr, ValidRules.check r = .ok vr) ↔ r.Valid := by
+  constructor
+  · rintro ⟨vr, h⟩
+    rw [ValidRules.check] at h
+    split at h
+    · cases h
+    · rename_i hd; cases h; exact ForkRules.defect?_eq_none_iff.mp hd
+  · intro hv
+    refine ⟨⟨r, hv⟩, ?_⟩
+    rw [ValidRules.check]
+    split
+    · rename_i hd
+      exact absurd (ForkRules.defect?_eq_none_iff.mpr hv) (by simp [hd])
+    · rfl
+
+/-- The named rule sets, with their witnesses attached. -/
+def pragueValidRules : ValidRules := ⟨pragueRules, pragueRules_valid⟩
+def osakaValidRules : ValidRules := ⟨osakaRules, osakaRules_valid⟩
+def bpo1ValidRules : ValidRules := ⟨bpo1Rules, bpo1Rules_valid⟩
+def bpo2ValidRules : ValidRules := ⟨bpo2Rules, bpo2Rules_valid⟩
+
+/-- A fork identity resolves straight to checked rules. -/
+def Fork.validRules? (f : Fork) : Option ValidRules :=
+  match h : f.rules? with
+  | some r => some ⟨r, Fork.rules?_valid h⟩
+  | none => none
+
+theorem Fork.validRules?_rules (f : Fork) :
+    (f.validRules?.map ValidRules.rules) = f.rules? := by
+  rw [Fork.validRules?]; split <;> simp_all
+
+-- The check accepts every named rule set and reports the first defect of a
+-- record that carries one.
+#guard (ValidRules.check pragueRules).toOption.isSome
+#guard (ValidRules.check osakaRules).toOption.isSome
+#guard (ValidRules.check bpo1Rules).toOption.isSome
+#guard (ValidRules.check bpo2Rules).toOption.isSome
+#guard ValidRules.check
+    { pragueRules with
+      blob := { pragueBlobSchedule with baseFeeUpdateFraction := 0 } }
+  |>.toOption.isNone
+#guard ({ pragueRules with
+          blob := { pragueBlobSchedule with baseFeeUpdateFraction := 0 } }
+        : ForkRules).defect? = some .zeroBlobBaseFeeUpdateFraction
+#guard ({ pragueRules with blob := { pragueBlobSchedule with max := 0 } }
+        : ForkRules).defect? = some .zeroBlobMax
+#guard ({ pragueRules with
+          blob := { pragueBlobSchedule with
+                    target := pragueBlobSchedule.max + 1 } }
+        : ForkRules).defect?
+  = some (.blobTargetAboveMax (pragueBlobSchedule.max + 1) pragueBlobSchedule.max)
+#guard ({ pragueRules with
+          modexp := { pragueModexpRules with gasDivisor := 0 } }
+        : ForkRules).defect? = some .zeroModexpGasDivisor
+#guard pragueRules.defect?.isNone
+-- The boundary: target equal to the ceiling is usable, one above it is not.
+#guard ({ pragueRules with
+          blob := { pragueBlobSchedule with
+                    target := pragueBlobSchedule.max } } : ForkRules).defect?.isNone
 
 
 namespace ChainConfig
@@ -627,6 +879,23 @@ def forkAt (cfg : ChainConfig) (timestamp : Nat) : Except String Fork := do
 the selected fork's rules are not implemented. -/
 def rulesAt (cfg : ChainConfig) (timestamp : Nat) : Except String ForkRules := do
   (← cfg.forkAt timestamp).rules
+
+/-- Every rule set a configured lookup produces is structurally usable, so the
+configured entry points carry `ForkRules.Valid` without checking for it. -/
+theorem rulesAt_valid {cfg : ChainConfig} {timestamp : Nat} {r : ForkRules}
+    (h : cfg.rulesAt timestamp = .ok r) : r.Valid := by
+  rw [ChainConfig.rulesAt] at h
+  cases hf : cfg.forkAt timestamp with
+  | error e => rw [hf] at h; cases h
+  | ok f => rw [hf] at h; exact Fork.rules_valid h
+
+-- There is deliberately no `ChainConfig.validRulesAt` packaging a `ValidRules`
+-- behind the configured lookup's current error channel: its signature would be
+-- a new stringly-typed carrier, which is exactly what `check-integrity.sh` R4
+-- keeps out of this closure, and the allowlist is a shrink-only budget with
+-- nothing spare. The witness is available on demand from `rulesAt_valid` above,
+-- and packaging it at the configured entry points belongs with the
+-- error-carrier retyping in Step 10.
 
 /-- The configuration of a chain that is at Prague from genesis and never
 transitions. -/
