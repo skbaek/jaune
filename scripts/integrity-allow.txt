@@ -30,11 +30,11 @@
 # step that discharges a row deletes it (or rewrites it as KEEP) and
 # lowers the budget in the same commit.
 #
-# pending-budget: 218
+# pending-budget: 169
 #
-# At the branch point nothing is discharged yet: Step 1 inventories, it
-# does not repair. There are therefore zero KEEP rows, and the gate's
-# whole value here is that it fails on any NEW occurrence.
+# At the branch point nothing was discharged: Step 1 inventories, it does
+# not repair. The KEEP rows below are Step 8's, and they are all the BLAKE2b
+# compression kernel: see the Step-8 note at the end of this header.
 #
 # ---------------------------------------------------------------------------
 # AUDIT NOTE, recorded by Step 1 and binding on Steps 7 and 8.
@@ -83,6 +83,42 @@
 # bounds test (OOB destination is semantically false); noPushBefore and
 # ByteArray.getInst read through their existing tests with proof-indexed
 # access; the four simple projections are total matches/head? reads.
+#
+# DISCHARGED by Step 8 (2026-08-01): all 152 crypto/helper rows are gone or
+# rewritten KEEP, and the closure now holds no explicit abort at all.
+#
+#   - Jaune/Hash.lean (91 rows, deleted). `KECCAK.Array.modify!` and its
+#     out-of-bounds branch no longer exist. Keccak's state is a
+#     `Vector UInt64 25`, SHA-256's schedule a `Vector UInt32 16` under a
+#     round budget `n <= 64`, RIPEMD-160's tables `Vector`s with `Fin 16`
+#     permutation entries. The reference transcription is polymorphic over the
+#     25-lane vector and needs no `Inhabited` fallback; `KECCAK.piln_lt`
+#     decides that every pi-table entry names a lane. Ranged
+#     `ByteArray.keccak` carries `loc + sz <= bs.size` into the sponge and
+#     materialises the zero extension once when it does not hold.
+#   - Jaune/EC.lean (4) and Jaune/BLS.lean (6), deleted. Coefficients are read
+#     through `List.takeRightV`, which pads on the left to a fixed width. For
+#     BN254's `twist` that also CORRECTS the arithmetic on a trimmed
+#     coordinate; the three BLS sites were already padding and only gain the
+#     proof.
+#   - Jaune/Basic.lean (5, deleted). `Bytes.toUInt16` reads through
+#     `Bytes.packV`; `ByteArray.sliceD` reads through its own bounds test;
+#     `List.splitToArray.aux` carries `idx + sz = array.size` and writes with
+#     `Array.set`; `Array.copyD` writes with the total `Array.setIfInBounds`
+#     and owes `Array.size_copyD` for the length half of its contract.
+#   - Jaune/Precompiles.lean (46 rows -> 43 KEEP). The BLAKE2b kernel is
+#     frozen by ~/jaune/scripts/report-integrity-design.md §9 and is NOT
+#     reopened: `Blake2.g`/`round`/`rounds` are the reference the equivalence
+#     theorems are stated against, and `Blake2.roundVec`/`roundsVec` are the
+#     unboxed implementation those theorems cover. What Step 8 added is the
+#     checked wrapper the plan requires around them: `bCompress` now REJECTS a
+#     chaining value that is not eight words or a message that is not sixteen,
+#     rather than padding it, and builds the working vector from
+#     length-indexed inputs. `length_readLeUInt64Words` is why the
+#     precompile's 213-byte check always satisfies that; `blake2Sigma_size`,
+#     `size_blake2Sigma_row`, `size_blake2Sigma_get` and `blake2Sigma_lt`
+#     decide the table facts the kernel's indexed reads rest on. Every KEEP
+#     row below names that wrapper and one of those theorems.
 # ---------------------------------------------------------------------------
 
 
@@ -93,9 +129,6 @@
 # ---- R3 : Jaune/BLS.lean ----
 
 # ---- R3 : Jaune/Basic.lean ----
-R3 Jaune/Basic.lean aux (idx + 1) (array.set! idx item) sz list  ## PENDING(step8,wrapper) size-by-construction array/byte helper; owes a size lemma or proof-indexed access
-R3 Jaune/Basic.lean then xs.get! m :: ByteArray.sliceD xs (m + 1) n d  ## PENDING(step8,wrapper) size-by-construction array/byte helper; owes a size lemma or proof-indexed access
-R3 Jaune/Basic.lean λ ysn x => ⟨Array.set! ysn.fst ysn.snd x, ysn.snd + 1⟩  ## PENDING(step8,wrapper) size-by-construction array/byte helper; owes a size lemma or proof-indexed access
 
 # ---- R3 : Jaune/EC.lean ----
 
@@ -106,52 +139,49 @@ R3 Jaune/Basic.lean λ ysn x => ⟨Array.set! ysn.fst ysn.snd x, ysn.snd + 1⟩ 
 # ---- R3 : Jaune/Machine.lean ----
 
 # ---- R3 : Jaune/Precompiles.lean ----
-R3 Jaune/Precompiles.lean (((v.set! a va).set! b vb).set! c vc).set! d vd  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean (Blake2.roundVec m (blake2Sigma[r % blake2Sigma.size]!) w)  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean (List.range 8).map <| fun i => h[i]! ^^^ v[i]! ^^^ v[(i + 8)]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean *boxed* elements, so every `Array.set!` in `Blake2.g` is a heap allocation and  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean -- Blake2.g v 0 4 8 12 (m[s[0]!]!) (m[s[1]!]!)  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean -- Blake2.g v 0 5 10 15 (m[s[8]!]!) (m[s[9]!]!)  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean -- Blake2.g v 1 5 9 13 (m[s[2]!]!) (m[s[3]!]!)  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean -- Blake2.g v 1 6 11 12 (m[s[10]!]!) (m[s[11]!]!)  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean -- Blake2.g v 2 6 10 14 (m[s[4]!]!) (m[s[5]!]!)  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean -- Blake2.g v 2 7 8 13 (m[s[12]!]!) (m[s[13]!]!)  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean -- Blake2.g v 3 4 9 14 (m[s[14]!]!) (m[s[15]!]!)  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean -- Blake2.g v 3 7 11 15 (m[s[6]!]!) (m[s[7]!]!)  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean -- written back once: the intermediate `set!`/`get!` round trips of the  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean Blake2.g v 3 4 9 14 (m[s[14]!]!) (m[s[15]!]!)  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean Blake2.rounds m k n (Blake2.round m (blake2Sigma[r % blake2Sigma.size]!) v)  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean ini[15]!⟩  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean ini[8]!, ini[9]!, ini[10]!, ini[11]!, ini[12]!, ini[13]!, ini[14]!,  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean let v := Blake2.g v 0 4 8 12 (m[s[0]!]!) (m[s[1]!]!)  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean let v := Blake2.g v 0 5 10 15 (m[s[8]!]!) (m[s[9]!]!)  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean let v := Blake2.g v 1 5 9 13 (m[s[2]!]!) (m[s[3]!]!)  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean let v := Blake2.g v 1 6 11 12 (m[s[10]!]!) (m[s[11]!]!)  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean let v := Blake2.g v 2 6 10 14 (m[s[4]!]!) (m[s[5]!]!)  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean let v := Blake2.g v 2 7 8 13 (m[s[12]!]!) (m[s[13]!]!)  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean let v := Blake2.g v 3 7 11 15 (m[s[6]!]!) (m[s[7]!]!)  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean let va : UInt64 := v[a]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean let vb : UInt64 := v[b]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean let vc : UInt64 := v[c]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean let vd : UInt64 := v[d]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean let x := m[s[0]!]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean let x := m[s[10]!]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean let x := m[s[12]!]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean let x := m[s[14]!]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean let x := m[s[2]!]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean let x := m[s[4]!]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean let x := m[s[6]!]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean let x := m[s[8]!]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean let y := m[s[11]!]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean let y := m[s[13]!]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean let y := m[s[15]!]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean let y := m[s[1]!]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean let y := m[s[3]!]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean let y := m[s[5]!]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean let y := m[s[7]!]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean let y := m[s[9]!]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean out of arrays — a read does not allocate, only `set!` does. The mix temporary  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Precompiles.lean ⟨ini[0]!, ini[1]!, ini[2]!, ini[3]!, ini[4]!, ini[5]!, ini[6]!, ini[7]!,  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
+R3 Jaune/Precompiles.lean (((v.set! a va).set! b vb).set! c vc).set! d vd  ## KEEP(wrapper=bCompress, theorem=Blake2.roundVec_toArray) Blake2.g/round/rounds -- the retained reference transcription, off the execution path; every read is of a sixteen-word vector supplied by the checked wrapper, and the equivalence theorem is stated against these definitions
+R3 Jaune/Precompiles.lean (Blake2.roundVec m (blake2Sigma[r % blake2Sigma.size]!) w)  ## KEEP(wrapper=bCompress, theorem=size_blake2Sigma_get) Blake2.roundsVec -- the unboxed rounds loop; the selected sigma row has sixteen entries
+R3 Jaune/Precompiles.lean (blake2Sigma[r % blake2Sigma.size]!).size = 16 := by  ## KEEP(wrapper=bCompress, theorem=size_blake2Sigma_get) the statement of the bounds theorem itself: it is about the kernel's own read and cannot avoid naming it
+R3 Jaune/Precompiles.lean *boxed* elements, so every `Array.set!` in `Blake2.g` is a heap allocation and  ## KEEP(wrapper=bCompress, theorem=Blake2.roundVec_toArray) Blake2.g/round/rounds -- the retained reference transcription, off the execution path; every read is of a sixteen-word vector supplied by the checked wrapper, and the equivalence theorem is stated against these definitions
+R3 Jaune/Precompiles.lean -- Blake2.g v 0 4 8 12 (m[s[0]!]!) (m[s[1]!]!)  ## KEEP(wrapper=bCompress, theorem=size_blake2Sigma_get) Blake2.roundVec -- the unboxed compression round; bCompress rejects any message that is not sixteen words, blake2Sigma_lt bounds every sigma entry by 16, and size_blake2Sigma_get gives the row its width
+R3 Jaune/Precompiles.lean -- Blake2.g v 0 5 10 15 (m[s[8]!]!) (m[s[9]!]!)  ## KEEP(wrapper=bCompress, theorem=size_blake2Sigma_get) Blake2.roundVec -- the unboxed compression round; bCompress rejects any message that is not sixteen words, blake2Sigma_lt bounds every sigma entry by 16, and size_blake2Sigma_get gives the row its width
+R3 Jaune/Precompiles.lean -- Blake2.g v 1 5 9 13 (m[s[2]!]!) (m[s[3]!]!)  ## KEEP(wrapper=bCompress, theorem=size_blake2Sigma_get) Blake2.roundVec -- the unboxed compression round; bCompress rejects any message that is not sixteen words, blake2Sigma_lt bounds every sigma entry by 16, and size_blake2Sigma_get gives the row its width
+R3 Jaune/Precompiles.lean -- Blake2.g v 1 6 11 12 (m[s[10]!]!) (m[s[11]!]!)  ## KEEP(wrapper=bCompress, theorem=size_blake2Sigma_get) Blake2.roundVec -- the unboxed compression round; bCompress rejects any message that is not sixteen words, blake2Sigma_lt bounds every sigma entry by 16, and size_blake2Sigma_get gives the row its width
+R3 Jaune/Precompiles.lean -- Blake2.g v 2 6 10 14 (m[s[4]!]!) (m[s[5]!]!)  ## KEEP(wrapper=bCompress, theorem=size_blake2Sigma_get) Blake2.roundVec -- the unboxed compression round; bCompress rejects any message that is not sixteen words, blake2Sigma_lt bounds every sigma entry by 16, and size_blake2Sigma_get gives the row its width
+R3 Jaune/Precompiles.lean -- Blake2.g v 2 7 8 13 (m[s[12]!]!) (m[s[13]!]!)  ## KEEP(wrapper=bCompress, theorem=size_blake2Sigma_get) Blake2.roundVec -- the unboxed compression round; bCompress rejects any message that is not sixteen words, blake2Sigma_lt bounds every sigma entry by 16, and size_blake2Sigma_get gives the row its width
+R3 Jaune/Precompiles.lean -- Blake2.g v 3 4 9 14 (m[s[14]!]!) (m[s[15]!]!)  ## KEEP(wrapper=bCompress, theorem=size_blake2Sigma_get) Blake2.roundVec -- the unboxed compression round; bCompress rejects any message that is not sixteen words, blake2Sigma_lt bounds every sigma entry by 16, and size_blake2Sigma_get gives the row its width
+R3 Jaune/Precompiles.lean -- Blake2.g v 3 7 11 15 (m[s[6]!]!) (m[s[7]!]!)  ## KEEP(wrapper=bCompress, theorem=size_blake2Sigma_get) Blake2.roundVec -- the unboxed compression round; bCompress rejects any message that is not sixteen words, blake2Sigma_lt bounds every sigma entry by 16, and size_blake2Sigma_get gives the row its width
+R3 Jaune/Precompiles.lean -- written back once: the intermediate `set!`/`get!` round trips of the  ## KEEP(wrapper=bCompress, theorem=Blake2.roundVec_toArray) Blake2.g/round/rounds -- the retained reference transcription, off the execution path; every read is of a sixteen-word vector supplied by the checked wrapper, and the equivalence theorem is stated against these definitions
+R3 Jaune/Precompiles.lean Blake2.g v 3 4 9 14 (m[s[14]!]!) (m[s[15]!]!)  ## KEEP(wrapper=bCompress, theorem=Blake2.roundVec_toArray) Blake2.g/round/rounds -- the retained reference transcription, off the execution path; every read is of a sixteen-word vector supplied by the checked wrapper, and the equivalence theorem is stated against these definitions
+R3 Jaune/Precompiles.lean Blake2.rounds m k n (Blake2.round m (blake2Sigma[r % blake2Sigma.size]!) v)  ## KEEP(wrapper=bCompress, theorem=Blake2.roundsVec_toArray) Blake2.rounds -- reference rounds loop, off the execution path; the sigma row it selects has sixteen entries by size_blake2Sigma_get
+R3 Jaune/Precompiles.lean let v := Blake2.g v 0 4 8 12 (m[s[0]!]!) (m[s[1]!]!)  ## KEEP(wrapper=bCompress, theorem=Blake2.roundVec_toArray) Blake2.g/round/rounds -- the retained reference transcription, off the execution path; every read is of a sixteen-word vector supplied by the checked wrapper, and the equivalence theorem is stated against these definitions
+R3 Jaune/Precompiles.lean let v := Blake2.g v 0 5 10 15 (m[s[8]!]!) (m[s[9]!]!)  ## KEEP(wrapper=bCompress, theorem=Blake2.roundVec_toArray) Blake2.g/round/rounds -- the retained reference transcription, off the execution path; every read is of a sixteen-word vector supplied by the checked wrapper, and the equivalence theorem is stated against these definitions
+R3 Jaune/Precompiles.lean let v := Blake2.g v 1 5 9 13 (m[s[2]!]!) (m[s[3]!]!)  ## KEEP(wrapper=bCompress, theorem=Blake2.roundVec_toArray) Blake2.g/round/rounds -- the retained reference transcription, off the execution path; every read is of a sixteen-word vector supplied by the checked wrapper, and the equivalence theorem is stated against these definitions
+R3 Jaune/Precompiles.lean let v := Blake2.g v 1 6 11 12 (m[s[10]!]!) (m[s[11]!]!)  ## KEEP(wrapper=bCompress, theorem=Blake2.roundVec_toArray) Blake2.g/round/rounds -- the retained reference transcription, off the execution path; every read is of a sixteen-word vector supplied by the checked wrapper, and the equivalence theorem is stated against these definitions
+R3 Jaune/Precompiles.lean let v := Blake2.g v 2 6 10 14 (m[s[4]!]!) (m[s[5]!]!)  ## KEEP(wrapper=bCompress, theorem=Blake2.roundVec_toArray) Blake2.g/round/rounds -- the retained reference transcription, off the execution path; every read is of a sixteen-word vector supplied by the checked wrapper, and the equivalence theorem is stated against these definitions
+R3 Jaune/Precompiles.lean let v := Blake2.g v 2 7 8 13 (m[s[12]!]!) (m[s[13]!]!)  ## KEEP(wrapper=bCompress, theorem=Blake2.roundVec_toArray) Blake2.g/round/rounds -- the retained reference transcription, off the execution path; every read is of a sixteen-word vector supplied by the checked wrapper, and the equivalence theorem is stated against these definitions
+R3 Jaune/Precompiles.lean let v := Blake2.g v 3 7 11 15 (m[s[6]!]!) (m[s[7]!]!)  ## KEEP(wrapper=bCompress, theorem=Blake2.roundVec_toArray) Blake2.g/round/rounds -- the retained reference transcription, off the execution path; every read is of a sixteen-word vector supplied by the checked wrapper, and the equivalence theorem is stated against these definitions
+R3 Jaune/Precompiles.lean let va : UInt64 := v[a]!  ## KEEP(wrapper=bCompress, theorem=Blake2.roundVec_toArray) Blake2.g/round/rounds -- the retained reference transcription, off the execution path; every read is of a sixteen-word vector supplied by the checked wrapper, and the equivalence theorem is stated against these definitions
+R3 Jaune/Precompiles.lean let vb : UInt64 := v[b]!  ## KEEP(wrapper=bCompress, theorem=Blake2.roundVec_toArray) Blake2.g/round/rounds -- the retained reference transcription, off the execution path; every read is of a sixteen-word vector supplied by the checked wrapper, and the equivalence theorem is stated against these definitions
+R3 Jaune/Precompiles.lean let vc : UInt64 := v[c]!  ## KEEP(wrapper=bCompress, theorem=Blake2.roundVec_toArray) Blake2.g/round/rounds -- the retained reference transcription, off the execution path; every read is of a sixteen-word vector supplied by the checked wrapper, and the equivalence theorem is stated against these definitions
+R3 Jaune/Precompiles.lean let vd : UInt64 := v[d]!  ## KEEP(wrapper=bCompress, theorem=Blake2.roundVec_toArray) Blake2.g/round/rounds -- the retained reference transcription, off the execution path; every read is of a sixteen-word vector supplied by the checked wrapper, and the equivalence theorem is stated against these definitions
+R3 Jaune/Precompiles.lean let x := m[s[0]!]!  ## KEEP(wrapper=bCompress, theorem=size_blake2Sigma_get) Blake2.roundVec -- the unboxed compression round; bCompress rejects any message that is not sixteen words, blake2Sigma_lt bounds every sigma entry by 16, and size_blake2Sigma_get gives the row its width
+R3 Jaune/Precompiles.lean let x := m[s[10]!]!  ## KEEP(wrapper=bCompress, theorem=size_blake2Sigma_get) Blake2.roundVec -- the unboxed compression round; bCompress rejects any message that is not sixteen words, blake2Sigma_lt bounds every sigma entry by 16, and size_blake2Sigma_get gives the row its width
+R3 Jaune/Precompiles.lean let x := m[s[12]!]!  ## KEEP(wrapper=bCompress, theorem=size_blake2Sigma_get) Blake2.roundVec -- the unboxed compression round; bCompress rejects any message that is not sixteen words, blake2Sigma_lt bounds every sigma entry by 16, and size_blake2Sigma_get gives the row its width
+R3 Jaune/Precompiles.lean let x := m[s[14]!]!  ## KEEP(wrapper=bCompress, theorem=size_blake2Sigma_get) Blake2.roundVec -- the unboxed compression round; bCompress rejects any message that is not sixteen words, blake2Sigma_lt bounds every sigma entry by 16, and size_blake2Sigma_get gives the row its width
+R3 Jaune/Precompiles.lean let x := m[s[2]!]!  ## KEEP(wrapper=bCompress, theorem=size_blake2Sigma_get) Blake2.roundVec -- the unboxed compression round; bCompress rejects any message that is not sixteen words, blake2Sigma_lt bounds every sigma entry by 16, and size_blake2Sigma_get gives the row its width
+R3 Jaune/Precompiles.lean let x := m[s[4]!]!  ## KEEP(wrapper=bCompress, theorem=size_blake2Sigma_get) Blake2.roundVec -- the unboxed compression round; bCompress rejects any message that is not sixteen words, blake2Sigma_lt bounds every sigma entry by 16, and size_blake2Sigma_get gives the row its width
+R3 Jaune/Precompiles.lean let x := m[s[6]!]!  ## KEEP(wrapper=bCompress, theorem=size_blake2Sigma_get) Blake2.roundVec -- the unboxed compression round; bCompress rejects any message that is not sixteen words, blake2Sigma_lt bounds every sigma entry by 16, and size_blake2Sigma_get gives the row its width
+R3 Jaune/Precompiles.lean let x := m[s[8]!]!  ## KEEP(wrapper=bCompress, theorem=size_blake2Sigma_get) Blake2.roundVec -- the unboxed compression round; bCompress rejects any message that is not sixteen words, blake2Sigma_lt bounds every sigma entry by 16, and size_blake2Sigma_get gives the row its width
+R3 Jaune/Precompiles.lean let y := m[s[11]!]!  ## KEEP(wrapper=bCompress, theorem=size_blake2Sigma_get) Blake2.roundVec -- the unboxed compression round; bCompress rejects any message that is not sixteen words, blake2Sigma_lt bounds every sigma entry by 16, and size_blake2Sigma_get gives the row its width
+R3 Jaune/Precompiles.lean let y := m[s[13]!]!  ## KEEP(wrapper=bCompress, theorem=size_blake2Sigma_get) Blake2.roundVec -- the unboxed compression round; bCompress rejects any message that is not sixteen words, blake2Sigma_lt bounds every sigma entry by 16, and size_blake2Sigma_get gives the row its width
+R3 Jaune/Precompiles.lean let y := m[s[15]!]!  ## KEEP(wrapper=bCompress, theorem=size_blake2Sigma_get) Blake2.roundVec -- the unboxed compression round; bCompress rejects any message that is not sixteen words, blake2Sigma_lt bounds every sigma entry by 16, and size_blake2Sigma_get gives the row its width
+R3 Jaune/Precompiles.lean let y := m[s[1]!]!  ## KEEP(wrapper=bCompress, theorem=size_blake2Sigma_get) Blake2.roundVec -- the unboxed compression round; bCompress rejects any message that is not sixteen words, blake2Sigma_lt bounds every sigma entry by 16, and size_blake2Sigma_get gives the row its width
+R3 Jaune/Precompiles.lean let y := m[s[3]!]!  ## KEEP(wrapper=bCompress, theorem=size_blake2Sigma_get) Blake2.roundVec -- the unboxed compression round; bCompress rejects any message that is not sixteen words, blake2Sigma_lt bounds every sigma entry by 16, and size_blake2Sigma_get gives the row its width
+R3 Jaune/Precompiles.lean let y := m[s[5]!]!  ## KEEP(wrapper=bCompress, theorem=size_blake2Sigma_get) Blake2.roundVec -- the unboxed compression round; bCompress rejects any message that is not sixteen words, blake2Sigma_lt bounds every sigma entry by 16, and size_blake2Sigma_get gives the row its width
+R3 Jaune/Precompiles.lean let y := m[s[7]!]!  ## KEEP(wrapper=bCompress, theorem=size_blake2Sigma_get) Blake2.roundVec -- the unboxed compression round; bCompress rejects any message that is not sixteen words, blake2Sigma_lt bounds every sigma entry by 16, and size_blake2Sigma_get gives the row its width
+R3 Jaune/Precompiles.lean let y := m[s[9]!]!  ## KEEP(wrapper=bCompress, theorem=size_blake2Sigma_get) Blake2.roundVec -- the unboxed compression round; bCompress rejects any message that is not sixteen words, blake2Sigma_lt bounds every sigma entry by 16, and size_blake2Sigma_get gives the row its width
+R3 Jaune/Precompiles.lean out of arrays — a read does not allocate, only `set!` does. The mix temporary  ## KEEP(wrapper=bCompress, theorem=Blake2.roundVec_toArray) Blake2.g/round/rounds -- the retained reference transcription, off the execution path; every read is of a sixteen-word vector supplied by the checked wrapper, and the equivalence theorem is stated against these definitions
 
 # ---- R3 : Jaune/Transaction.lean ----
 

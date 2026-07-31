@@ -269,6 +269,27 @@ def blake2Sigma : Array (Array Nat) :=
     #[10, 2, 8, 4, 7, 6, 1, 5, 15, 11, 9, 14, 3, 12, 13, 0]
   ]
 
+-- The three size facts the BLAKE2b wrapper is built on. The compression kernel
+-- indexes the message by a sigma entry, so what it needs is that the table has
+-- ten rows, that every row has sixteen entries, and that every entry names a
+-- message word; all three are decided from the table rather than assumed of it.
+theorem blake2Sigma_size : blake2Sigma.size = 10 := rfl
+
+theorem size_blake2Sigma_row :
+    ∀ i, (h : i < blake2Sigma.size) → blake2Sigma[i].size = 16 := by decide
+
+theorem blake2Sigma_lt :
+    ∀ i, (h : i < blake2Sigma.size) →
+      ∀ j, (hj : j < blake2Sigma[i].size) → blake2Sigma[i][j] < 16 := by decide
+
+/-- The sigma row the rounds loop actually selects has sixteen entries. -/
+theorem size_blake2Sigma_get (r : Nat) :
+    (blake2Sigma[r % blake2Sigma.size]!).size = 16 := by
+  have h : r % blake2Sigma.size < blake2Sigma.size :=
+    Nat.mod_lt _ (by rw [blake2Sigma_size]; omega)
+  rw [getElem!_pos blake2Sigma (r % blake2Sigma.size) h]
+  exact size_blake2Sigma_row _ h
+
 -- def spit_le_to_uint
 def readLeUInt64Words (data : Bytes) : Nat → Nat → List UInt64
   | _, 0 => []
@@ -276,6 +297,15 @@ def readLeUInt64Words (data : Bytes) : Nat → Nat → List UInt64
     let wordBytes := data.sliceD start 8 (0x00 : UInt8)
     let word := Bytes.toUInt64 wordBytes.reverse
     word :: readLeUInt64Words data (start + 8) num_words
+
+/-- The reader produces exactly the number of words asked for, whatever the
+input length: it is the fact that lets `executeBlake2F`'s 213-byte check stand
+in for the chaining value and message widths `bCompress` requires. -/
+theorem length_readLeUInt64Words (data : Bytes) (start n : Nat) :
+    (readLeUInt64Words data start n).length = n := by
+  induction n generalizing start with
+  | zero => rfl
+  | succ n ih => simp [readLeUInt64Words, ih]
 
 def getBlake2Parameters (data : Bytes) :
   Nat × List UInt64 × List UInt64 × UInt64 × UInt64 × Nat :=
@@ -547,34 +577,59 @@ theorem Blake2.roundsVec_toArray (m : Array UInt64) (k n : Nat)
   | succ n ih =>
     simp only [Blake2.roundsVec, Blake2.rounds, ih, Blake2.roundVec_toArray]
 
--- compress
-def bCompress (numRounds : Nat)
-  (h m : List UInt64) (t0 t1 : UInt64) (f : Bool) : Option Bytes := do
-  let v14 : UInt64 := blake2IV.getD 6 0
-  let v : List UInt64 :=
-    h.take 8 ++
-    (blake2IV).take 4 ++ [
-      .xor t0 (blake2IV.getD 4 0),
-      .xor t1 (blake2IV.getD 5 0),
-      if f then .xor v14 b2MaskBits else v14,
-      (blake2IV.getD 7 0)
-    ]
+/-- The working vector bridged to an array always has sixteen entries: it is a
+sixteen-field structure, so this holds of the fields rather than of a length
+that has to be maintained. -/
+theorem Blake2.size_toArray (w : Blake2.Vec) : w.toArray.size = 16 := rfl
 
-  -- The initial words are loaded into unboxed scalars once, so the rounds
-  -- themselves never allocate. The seventeenth word this list used to carry
-  -- was written and never read — `Blake2.round` touches indices 0–15 and the
-  -- tail below reads 0–15 — so it is no longer built; dropping a trailing
-  -- element leaves indices 0–15 of `v` unchanged.
-  let ini : Array UInt64 := ⟨v⟩
-  let w : Blake2.Vec :=
-    ⟨ini[0]!, ini[1]!, ini[2]!, ini[3]!, ini[4]!, ini[5]!, ini[6]!, ini[7]!,
-      ini[8]!, ini[9]!, ini[10]!, ini[11]!, ini[12]!, ini[13]!, ini[14]!,
-      ini[15]!⟩
-  let arr := (Blake2.roundsVec ⟨m⟩ numRounds numRounds w).toArray
-  let v := arr.toList
-  let resultMsgWords :=
-    (List.range 8).map <| fun i => h[i]! ^^^ v[i]! ^^^ v[(i + 8)]!
-  List.flatten <| resultMsgWords.map (fun n => n.toBytes.reverse.takeD 8 (0x00 : UInt8))
+-- compress
+--
+-- This is the checked wrapper the compression kernel sits behind. The kernel
+-- (`Blake2.roundsVec`, and the reference `Blake2.rounds` its equivalence is
+-- stated against) reads sixteen message words per round through a sigma row,
+-- and those reads are in range exactly when the message is sixteen words and
+-- the chaining value eight. Rather than assume that of the caller, this
+-- rejects anything else outright — the widths are then types, and every read
+-- below is total. `length_readLeUInt64Words` is why `executeBlake2F`'s
+-- 213-byte check always satisfies it, and `size_blake2Sigma_get` /
+-- `blake2Sigma_lt` are the corresponding facts for the table the kernel
+-- indexes with.
+def bCompress (numRounds : Nat)
+  (h m : List UInt64) (t0 t1 : UInt64) (f : Bool) : Option Bytes :=
+  if hh : h.length = 8 then
+    if hm : m.length = 16 then
+      let hv : Vector UInt64 8 := ⟨h.toArray, by simp [hh]⟩
+      let mv : Vector UInt64 16 := ⟨m.toArray, by simp [hm]⟩
+      let v14 : UInt64 := blake2IV.getD 6 0
+      -- The initial words are loaded into unboxed scalars once, so the rounds
+      -- themselves never allocate. The seventeenth word this list used to
+      -- carry was written and never read — `Blake2.round` touches indices 0–15
+      -- and the tail below reads 0–15 — so it is no longer built.
+      let v : Vector UInt64 16 :=
+        #v[ hv[0], hv[1], hv[2], hv[3], hv[4], hv[5], hv[6], hv[7],
+            blake2IV.getD 0 0, blake2IV.getD 1 0,
+            blake2IV.getD 2 0, blake2IV.getD 3 0,
+            .xor t0 (blake2IV.getD 4 0),
+            .xor t1 (blake2IV.getD 5 0),
+            if f then .xor v14 b2MaskBits else v14,
+            (blake2IV.getD 7 0) ]
+      let w : Blake2.Vec :=
+        ⟨v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7],
+         v[8], v[9], v[10], v[11], v[12], v[13], v[14], v[15]⟩
+      let out : Vector UInt64 16 :=
+        ⟨(Blake2.roundsVec mv.toArray numRounds numRounds w).toArray,
+         Blake2.size_toArray _⟩
+      let resultMsgWords : Vector UInt64 8 :=
+        Vector.ofFn fun i => hv[i.val] ^^^ out[i.val] ^^^ out[i.val + 8]
+      some <| List.flatten <| resultMsgWords.toList.map
+        (fun n => n.toBytes.reverse.takeD 8 (0x00 : UInt8))
+    else none
+  else none
+
+-- The precompile's own length check is what makes the widths above hold; these
+-- pin that the reader really does produce eight and sixteen words.
+#guard (readLeUInt64Words (List.replicate 213 (0x00 : UInt8)) 4 8).length = 8
+#guard (readLeUInt64Words (List.replicate 213 (0x00 : UInt8)) 68 16).length = 16
 
 -- blake2f
 def executeBlake2F (evm : Evm) : PrecompResult :=

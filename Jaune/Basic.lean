@@ -1284,16 +1284,33 @@ def Array.writeD {ξ : Type u} (xs : Array ξ) (n : ℕ) : List ξ → Array ξ
          writeD xs' (n + 1) ys
     else xs
 
+/-- Overwrite the front of `ys` with `xs`, keeping `ys`'s length: entries of
+`xs` past the end of `ys` are dropped. That "what fits" contract is
+`Array.setIfInBounds`'s, so the write is total by the function it calls rather
+than by a convention about the caller, and `Array.size_copyD` states the length
+half of it. -/
 def Array.copyD {ξ : Type u} (xs ys : Array ξ) : Array ξ :=
   let f : (Array ξ × Nat) → ξ → (Array ξ × Nat) :=
-    λ ysn x => ⟨Array.set! ysn.fst ysn.snd x, ysn.snd + 1⟩
+    λ ysn x => ⟨Array.setIfInBounds ysn.fst ysn.snd x, ysn.snd + 1⟩
   (Array.foldl f ⟨ys, 0⟩ xs).fst
+
+theorem Array.size_copyD {ξ : Type u} (xs ys : Array ξ) :
+    (Array.copyD xs ys).size = ys.size := by
+  have key : ∀ (l : List ξ) (a : Array ξ) (n : Nat),
+      (List.foldl
+        (fun (ysn : Array ξ × Nat) x => (ysn.fst.setIfInBounds ysn.snd x, ysn.snd + 1))
+        (a, n) l).fst.size = a.size := by
+    intro l
+    induction l with
+    | nil => intro a n; rfl
+    | cons x l ih => intro a n; simp [ih]
+  simpa [Array.copyD, Array.foldl_toList] using key xs.toList ys 0
 
 def ByteArray.sliceD (xs : ByteArray) : Nat → Nat → UInt8 → Bytes
   | _, 0, _ => []
   | m, n + 1, d =>
-    if m < xs.size
-    then xs.get! m :: ByteArray.sliceD xs (m + 1) n d
+    if h : m < xs.size
+    then xs[m] :: ByteArray.sliceD xs (m + 1) n d
     else List.replicate (n + 1) d
 
 lemma ByteArray.length_sliceD (xs : ByteArray) (m n : Nat) (d : UInt8) :
@@ -1513,14 +1530,23 @@ def B32s.toB128 (x0 x1 y0 y1 : UInt32) : B128 :=
 def B32s.toB256 (x0 x1 x2 x3 y0 y1 y2 y3: UInt32) : B256 :=
   ⟨B32s.toB128 x0 x1 x2 x3, B32s.toB128 y0 y1 y2 y3⟩
 
+/-- Take the first `sz` entries of `xs` into an array of exactly `sz` slots,
+padded with `x`, and return the rest of the list.
+
+The worker carries `idx + sz = array.size`: the slots still to be written are
+exactly the ones still to be filled. That equation is what makes each write
+proof-indexed — the invariant used to live in the shape of the recursion and
+be trusted. -/
 def List.splitToArray {ξ : Type u}
   (sz : Nat) (xs : List ξ) (x : ξ) : Array ξ × List ξ :=
-  let rec aux : Nat → Array ξ → Nat → List ξ → Array ξ × List ξ
-    | _, array, _, [] => ⟨array, []⟩
-    | _, array, 0, list => ⟨array, list⟩
-    | idx, array, sz + 1, item :: list =>
-      aux (idx + 1) (array.set! idx item) sz list
-  aux 0 (.replicate sz x) sz xs
+  let rec aux : (idx : Nat) → (array : Array ξ) → (sz : Nat) →
+      idx + sz = array.size → List ξ → Array ξ × List ξ
+    | _, array, _, _, [] => ⟨array, []⟩
+    | _, array, 0, _, list => ⟨array, list⟩
+    | idx, array, sz + 1, h, item :: list =>
+      aux (idx + 1) (array.set idx item (by omega)) sz
+        (by rw [Array.size_set]; omega) list
+  aux 0 (.replicate sz x) sz (by simp) xs
 
 def Nat.toHexit : Nat → Char
   | 0 => '0'
