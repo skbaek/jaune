@@ -35,7 +35,7 @@ def processMessageCall.create (msg : Msg) :
   let isCollision : Bool :=
     accountHasCodeOrNonce benv.state msg.currentTarget || accountHasStorage benv.state msg.currentTarget
   if isCollision then
-    return ⟨benv.state, ⟨0, 0, [], .emptyWithCapacity, "AddressCollision", []⟩⟩
+    return ⟨benv.state, ⟨0, 0, [], .emptyWithCapacity, .some (.halt (.addressCollision .none)), []⟩⟩
   else
     let evm ← Except.bimap (fun e => EvmError.render e.1) id (processCreateMessage msg)
     let logs := if evm.error.isNone then evm.logs else []
@@ -63,7 +63,8 @@ def processMessageCall.call (msg : Msg) :
     if msg.tenv.stat.auths.isEmpty then
       .ok (⟨msg, 0⟩ : Msg × Nat)
     else do
-      let ⟨msgDelegation, setDelegationValue⟩ ← setDelegation msg
+      let ⟨msgDelegation, setDelegationValue⟩ ←
+        Except.mapError EvmError.render (setDelegation msg)
       .ok ⟨msgDelegation, setDelegationValue.toNat⟩
   let msgPc :=
     match getDelegatedCodeAddress msgDelegation.code with
@@ -300,7 +301,8 @@ def checkTransaction (benv : Benv) (blockOut : BlockOutput) (tx : Tx) :
     Except String (Adr × Nat × List B256 × Nat) := do
   let txBlobGasUsed ← checkTransactionGasLimits benv blockOut tx
   checkTransactionChainId benv tx
-  let senderAddress ← recoverSender benv.stat.chainId tx
+  let senderAddress ←
+    Except.mapError CryptoError.render (recoverSender benv.stat.chainId tx)
   let senderAccount := benv.state.get senderAddress
   let ⟨effectiveGasPrice, maxGasFee⟩ ← checkTransactionGasFee benv tx
   let ⟨maxGasFee, blobVersionedHashes⟩ ←
@@ -458,7 +460,7 @@ def Receipt.toBLT (r : Receipt) : BLT :=
 
 def makeReceipt
   (tx: Tx)
-  (error: Option String)
+  (error: Option SettledHalt)
   (gasUsed: Nat)
   (logs: List Log) : Fin 5 × Receipt :=
   let receipt : Receipt := {
@@ -1133,7 +1135,7 @@ def processCheckedSystemTransaction
   match systemTxOutput.error with
   | some err =>
     .error s!"{systemContractCallFailedTag} : system contract ({target.toHex}) call failed: \
-      {err}"
+      {err.render}"
   | none => .ok ⟨state, systemTxOutput⟩
 
 def processGeneralPurposeRequests
@@ -3553,7 +3555,7 @@ theorem processMessageCall.call_canonical {msg : Msg} (h : msg.Canonical)
           exact hcan.1))
   · -- delegation processed first
     obtain ⟨w, hw, hp⟩ := Except.bind_eq_ok hp
-    have hwc := setDelegation_canonical h hw
+    have hwc := setDelegation_canonical h (Except.mapError_eq_ok_iff.mp hw)
     obtain ⟨wm, wv⟩ := w
     obtain ⟨x0, hx0, hp⟩ := Except.bind_eq_ok hp
     cases hx0

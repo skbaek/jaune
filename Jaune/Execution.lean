@@ -134,9 +134,9 @@ def processCreateMessage.chargeCodeGas (rules : ForkRules) (devm : Devm) :
     else .ok devm
 
 def processCreateMessage.exceptionalHalt
-    (devm : Devm) (err : String) (st : State) (tra : Tra) : Devm :=
+    (devm : Devm) (reason : ExceptionalHalt) (st : State) (tra : Tra) : Devm :=
   let devm := (devm.rollback st tra).withGasLeft 0
-  devm.setMeta {devm.meta with output := [], error := .some err}
+  devm.setMeta {devm.meta with output := [], error := .some (.halt reason)}
 
 def initSevm (msg : Msg) : Sevm :=
   {
@@ -203,9 +203,8 @@ def executeCode.handleError :
   | .ok evm => .ok evm
   | .error ⟨.halt reason, evm⟩ =>
     let evm := evm.withGasLeft 0
-    .ok (evm.setMeta
-      {evm.meta with output := [], error := some (ExceptionalHalt.render reason)})
-  | .error ⟨.revert, evm⟩ => .ok (evm.withError (some "Revert"))
+    .ok (evm.setMeta {evm.meta with output := [], error := some (.halt reason)})
+  | .error ⟨.revert, evm⟩ => .ok (evm.withError (some .revert))
   | .error ⟨.crypto reason, evm⟩ =>
     .error ⟨.crypto reason, evm.state, evm.createdAccounts, evm.transientStorage⟩
   | .error ⟨.internal reason, evm⟩ =>
@@ -329,7 +328,7 @@ def processCreateMessage.settle (msg : Msg)
     | .ok evm => .ok (evm.setCode msg.currentTarget ⟨⟨evm.output⟩⟩)
     | .error ⟨.halt reason, evm⟩ =>
       .ok
-        (processCreateMessage.exceptionalHalt evm (ExceptionalHalt.render reason)
+        (processCreateMessage.exceptionalHalt evm reason
           msg.benv.state msg.tenv.transientStorage)
     | .error ⟨.revert, evm⟩ =>
       .error ⟨.revert, evm.state, evm.createdAccounts, evm.transientStorage⟩
@@ -1156,7 +1155,7 @@ structure MsgCallOutput : Type where
   refundCounter : Int
   logs : List Log
   accountsToDelete : AdrSet
-  error: Option String
+  error: Option SettledHalt
   returnData : Bytes
 
 def Except.bimap
@@ -1271,32 +1270,34 @@ def Tx.signingHash (tx : Tx) : Option B256 :=
             .list <| auths.map Auth.toBLT
           ]
 
-def recoverSender (chain_id: UInt64) (tx: Tx) : Except String Adr := do
+def recoverSender (chain_id: UInt64) (tx: Tx) : Except CryptoError Adr := do
   let r := tx.r.toB256
   let s := tx.s.toB256
   if (r = 0 ∨ secp256k1.curveOrder.toB256 ≤ r) then
-    .error "InvalidSignatureError : bad r"
+    .error (.invalidSignature (.text "bad r"))
   if (s = 0 ∨ secp256k1.curveOrder.toB256 / 2 < s) then
-    .error "InvalidSignatureError : bad s"
+    .error (.invalidSignature (.text "bad s"))
   let v := tx.v
   let signingHash ←
-    tx.signingHash.toExcept "InvalidSignatureError : signing hash is None"
+    tx.signingHash.toExcept (.invalidSignature (.text "signing hash is None"))
   match tx.type with
   | .zero _ _ =>
     if v = 27 ∨ v = 28
     then
       (secp256k1.recover signingHash (v - 27).toBool r s).toExcept
-        "sender recovery failed"
+        (.invalidSignature (.text "sender recovery failed"))
     else
       let chain_id_x2 := (chain_id.toNat) * (2)
-      .assert (v = 35 + chain_id_x2 ∨ v = 36 + chain_id_x2) "InvalidSignatureError : bad v"
+      .assert (v = 35 + chain_id_x2 ∨ v = 36 + chain_id_x2)
+        (CryptoError.invalidSignature (.text "bad v"))
       (secp256k1.recover signingHash (v - 35 - chain_id_x2).toBool r s).toExcept
-        "sender recovery failed"
+        (.invalidSignature (.text "sender recovery failed"))
   | _ =>
-    .assert (v < 2) "InvalidSignatureError"
-    (secp256k1.recover signingHash v.toBool r s).toExcept "sender recovery failed"
+    .assert (v < 2) (CryptoError.invalidSignature .none)
+    (secp256k1.recover signingHash v.toBool r s).toExcept
+      (.invalidSignature (.text "sender recovery failed"))
 
-def recoverAuthority (auth : Auth) : Except String Adr := do
+def recoverAuthority (auth : Auth) : Except CryptoError Adr := do
   let yParity := auth.yParity
   let r := auth.r
   let s := auth.s
@@ -1305,7 +1306,7 @@ def recoverAuthority (auth : Auth) : Except String Adr := do
     r = 0 ∨  secp256k1.curveOrder.toB256 ≤ r ∨
     s = 0 ∨ (secp256k1.curveOrder.toB256 / 2) < s
   ) then
-    .error "InvalidSignatureError"
+    .error (.invalidSignature .none)
   let signingHash : B256 :=
     Bytes.keccak <|
       List.append setCodeTxMagic <|
@@ -1317,22 +1318,22 @@ def recoverAuthority (auth : Auth) : Except String Adr := do
   -- EIP-7702 invalidates an authorization tuple, not its enclosing
   -- transaction: a recovery failure is therefore handled by
   -- `setDelegationStep` exactly like the other invalid-signature forms.
-  (secp256k1.recover signingHash yParity.toBool r s ).toExcept "InvalidSignatureError"
+  (secp256k1.recover signingHash yParity.toBool r s ).toExcept (.invalidSignature .none)
 
 def setDelegationStep
     (auth : Auth) (msg : Msg) (refundCounter : B256) :
-    Except String (Msg × B256) := do
+    Except EvmError (Msg × B256) := do
   if auth.chainId != msg.benv.stat.chainId.toB256 && auth.chainId != 0 then
     .ok ⟨msg, refundCounter⟩
   else if auth.nonce = UInt64.max then
     .ok ⟨msg, refundCounter⟩
   else
     match recoverAuthority auth with
-    | .error err =>
-      if err = "InvalidSignatureError" then
-        .ok ⟨msg, refundCounter⟩
-      else
-        .error err
+    | .error (.invalidSignature _) =>
+      -- EIP-7702 invalidates the authorization tuple on exactly this reason
+      -- and on no other: the tuple is skipped and processing continues.
+      .ok ⟨msg, refundCounter⟩
+    | .error err => .error (.crypto err)
     | .ok authority =>
       let msg := {msg with accessedAddresses := msg.accessedAddresses.insert authority}
       let authorityAccount : Acct :=
@@ -1357,18 +1358,21 @@ def setDelegationStep
         let msg := msg.incrNonce authority
         .ok ⟨msg, refundCounter⟩
 
-def setDelegationLoop : List Auth → Msg → B256 → Except String (Msg × B256)
+def setDelegationLoop : List Auth → Msg → B256 → Except EvmError (Msg × B256)
   | [], msg, refundCounter => .ok ⟨msg, refundCounter⟩
   | auth :: auths, msg, refundCounter => do
     let ⟨msg, refundCounter⟩ ← setDelegationStep auth msg refundCounter
     setDelegationLoop auths msg refundCounter
 
-def setDelegation (msg : Msg) : Except String (Msg × B256) := do
+def setDelegation (msg : Msg) : Except EvmError (Msg × B256) := do
   let ⟨msg, refundCounter⟩ ← setDelegationLoop msg.tenv.stat.auths msg 0
   let msg ←
     match msg.codeAddress with
     | none =>
-      .error "InvalidBlock : Invalid type 4 transaction: no target"
+      -- Unreachable: a validated type-4 transaction has a receiver, so its
+      -- message always carries a code address. A breach is an internal
+      -- invariant failure and must fail closed, never read as a block verdict.
+      .error (.internal (.invariant (.text "Invalid type 4 transaction: no target")))
     | some ca =>
       .ok {
         msg with
@@ -1427,9 +1431,9 @@ theorem processCreateMessage.chargeCodeGas_canonical {rules : ForkRules}
 /-- An exceptional create halt restores the saved pair; the failing machine
 contributes nothing to the world. -/
 theorem processCreateMessage.exceptionalHalt_canonical {devm : Devm}
-    (err : String) {st : State} {tra : Tra}
+    (reason : ExceptionalHalt) {st : State} {tra : Tra}
     (hst : State.Canonical st) (htra : Tra.Canonical tra) :
-    (processCreateMessage.exceptionalHalt devm err st tra).Canonical :=
+    (processCreateMessage.exceptionalHalt devm reason st tra).Canonical :=
   Devm.Canonical.of_world_eq (Devm.canonical_rollback (devm := devm) hst htra) rfl
 
 theorem initSevm_canonical {msg : Msg} (h : msg.Canonical) :
@@ -1673,9 +1677,8 @@ theorem setDelegationStep_canonical {auth : Auth} {msg : Msg} {rc : B256}
   · split at hp
     · cases hp; exact h
     · split at hp
-      · split at hp
-        · cases hp; exact h
-        · nomatch hp
+      · cases hp; exact h
+      · nomatch hp
       · dsimp only at hp
         split at hp
         · cases hp; exact h

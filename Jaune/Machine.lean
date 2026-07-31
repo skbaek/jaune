@@ -1621,7 +1621,7 @@ structure Meta : Type where
   output : Bytes
   accountsToDelete : AdrSet
   returnData : Bytes
-  error : Option String
+  error : Option SettledHalt
   accessedAddresses : AdrSet
   accessedStorageKeys : KeySet
   createdAccounts : AdrSet
@@ -1645,7 +1645,7 @@ def Devm.refundCounter (devm : Devm) : Int := devm.meta.refundCounter
 def Devm.output (devm : Devm) : Bytes := devm.meta.output
 def Devm.accountsToDelete (devm : Devm) : AdrSet := devm.meta.accountsToDelete
 def Devm.returnData (devm : Devm) : Bytes := devm.meta.returnData
-def Devm.error (devm : Devm) : Option String := devm.meta.error
+def Devm.error (devm : Devm) : Option SettledHalt := devm.meta.error
 def Devm.accessedAddresses (devm : Devm) : AdrSet := devm.meta.accessedAddresses
 def Devm.accessedStorageKeys (devm : Devm) : KeySet := devm.meta.accessedStorageKeys
 def Devm.state (devm : Devm) : State := devm.world.state
@@ -1707,7 +1707,7 @@ def Devm.withAccountsToDelete (devm : Devm) (accountsToDelete : AdrSet) : Devm :
 def Devm.withReturnData (devm : Devm) (returnData : Bytes) : Devm :=
   devm.setMeta {devm.meta with returnData := returnData}
 
-def Devm.withError (devm : Devm) (error : Option String) : Devm :=
+def Devm.withError (devm : Devm) (error : Option SettledHalt) : Devm :=
   devm.setMeta {devm.meta with error := error}
 
 def Devm.withCreatedAccounts (devm : Devm) (createdAccounts : AdrSet) : Devm :=

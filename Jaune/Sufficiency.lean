@@ -88,7 +88,7 @@ namespace Devm
 @[simp] theorem withReturnData_gasLeft (devm : Devm) (returnData : Bytes) :
     (devm.withReturnData returnData).gasLeft = devm.gasLeft := rfl
 
-@[simp] theorem withError_gasLeft (devm : Devm) (error : Option String) :
+@[simp] theorem withError_gasLeft (devm : Devm) (error : Option SettledHalt) :
     (devm.withError error).gasLeft = devm.gasLeft := rfl
 
 @[simp] theorem withCreatedAccounts_gasLeft (devm : Devm) (as : AdrSet) :
@@ -2905,7 +2905,7 @@ private def totalGuardMsg (bytes : Bytes) (gas depth : Nat) : Msg :=
 
 private def totalGuardSummary
     (r : Except (EvmError × State × AdrSet × Tra) Devm) :
-    Option (Option String × List B256 × Bytes × Nat) :=
+    Option (Option SettledHalt × List B256 × Bytes × Nat) :=
   match r with
   | .ok devm => some ⟨devm.error, devm.stack, devm.output, devm.gasLeft⟩
   | .error _ => none
@@ -2917,7 +2917,7 @@ private def totalGuardArithmeticLoop : Bool :=
   match exec (initEvm msg), processMessage msg with
   | .error ⟨err, _⟩, .ok devm =>
     err == .halt (.outOfGas .none) &&
-      devm.error == some "OutOfGasError" &&
+      devm.error == some (.halt (.outOfGas .none)) &&
       devm.gasLeft == 0
   | _, _ => false
 
@@ -3016,7 +3016,7 @@ private def totalGuardRevert : Bool :=
       1000 8
   match runFrame (Frame.ofCall msg) with
   | .ok devm =>
-    devm.error == some "Revert" &&
+    devm.error == some .revert &&
       devm.output.length == 32 &&
       devm.output.getLast? == some 0x2A &&
       devm.gasLeft == 982
