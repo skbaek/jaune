@@ -964,6 +964,113 @@ def Bytes.toReceiver? : Bytes → Option (Option Adr)
 #guard (Bytes.toReceiver? (List.replicate 21 (0x11 : UInt8))).isNone
 #guard (Bytes.toReceiver? [0x00]).isNone
 
+--------------- CHECKED JSON QUANTITY DECODING ----------------
+
+-- Test-fixture JSON states quantities in its own syntax, which is *not* RLP's
+-- minimal-scalar syntax: a fixture may write a balance with leading zero bytes,
+-- or the empty string for zero, and both are well formed there. Only the width
+-- conversion is shared with the strict consensus-field decoders above; the
+-- canonicality half deliberately is not, because imposing a leading-zero rule
+-- here would reject inputs the pinned source calls valid.
+--
+-- What was wrong was the other direction. The fixture parser converted these
+-- fields with the raw `Bytes.toUInt64` / `Bytes.toB256`, which pad short values
+-- and silently *truncate* long ones -- a thirty-three-byte balance became its
+-- low 256 bits and a nine-byte nonce its rightmost eight bytes, with no error
+-- and no trace. The two decoders below keep the short-value acceptance and
+-- reject the over-long input outright, which is the whole change.
+
+/-- A JSON quantity of at most eight bytes, converted without truncation.
+Unlike `Bytes.toUInt64?` it accepts every shorter width, and unlike
+`Bytes.toScalarB64?` it imposes no leading-zero rule. -/
+def Bytes.toQuantityB64? (xs : Bytes) : Option UInt64 :=
+  if xs.length ≤ 8 then some xs.toUInt64 else none
+
+/-- A JSON quantity of at most thirty-two bytes, converted without
+truncation. -/
+def Bytes.toQuantityB256? (xs : Bytes) : Option B256 :=
+  if xs.length ≤ 32 then some xs.toB256 else none
+
+-- Parser soundness. Acceptance is exactly "the width fits", the accepted value
+-- is exactly the old conversion -- so nothing a fixture previously parsed can
+-- change value -- and rejection is exactly "the width does not fit".
+
+theorem Bytes.toQuantityB64?_eq_some_iff {xs : Bytes} {v : UInt64} :
+    Bytes.toQuantityB64? xs = some v ↔ xs.length ≤ 8 ∧ xs.toUInt64 = v := by
+  rw [Bytes.toQuantityB64?]; split <;> simp_all
+
+theorem Bytes.toQuantityB64?_eq_none_iff {xs : Bytes} :
+    Bytes.toQuantityB64? xs = none ↔ 8 < xs.length := by
+  rw [Bytes.toQuantityB64?]; split <;> simp_all
+
+theorem Bytes.toQuantityB256?_eq_some_iff {xs : Bytes} {v : B256} :
+    Bytes.toQuantityB256? xs = some v ↔ xs.length ≤ 32 ∧ xs.toB256 = v := by
+  rw [Bytes.toQuantityB256?]; split <;> simp_all
+
+theorem Bytes.toQuantityB256?_eq_none_iff {xs : Bytes} :
+    Bytes.toQuantityB256? xs = none ↔ 32 < xs.length := by
+  rw [Bytes.toQuantityB256?]; split <;> simp_all
+
+/-- Round trip through the canonical fixed-width encoder. -/
+theorem Bytes.toQuantityB64?_toBytes (x : UInt64) :
+    Bytes.toQuantityB64? (UInt64.toBytes x) = some x := by
+  rw [Bytes.toQuantityB64?, if_pos (by rw [UInt64.length_toBytes])]
+  rw [UInt64.toUInt64_toBytes]
+
+theorem Bytes.toQuantityB256?_toBytes (x : B256) :
+    Bytes.toQuantityB256? x.toBytes = some x := by
+  rw [Bytes.toQuantityB256?, if_pos (by rw [B256.length_toBytes])]
+  rw [B256.toB256_toBytes]
+
+/-- Strictly weaker than the exact-width decoder: whatever `Bytes.toUInt64?`
+accepts, this accepts with the same value. -/
+theorem Bytes.toQuantityB64?_of_toUInt64? {xs : Bytes} {v : UInt64}
+    (h : Bytes.toUInt64? xs = some v) : Bytes.toQuantityB64? xs = some v := by
+  rw [Bytes.toUInt64?] at h; split at h
+  · rw [Bytes.toQuantityB64?, if_pos (by omega)]; exact h
+  · cases h
+
+/-- And strictly weaker than the RLP scalar decoder, whose extra condition is
+the leading-zero rule this one deliberately drops. -/
+theorem Bytes.toQuantityB64?_of_toScalarB64? {xs : Bytes} {v : UInt64}
+    (h : Bytes.toScalarB64? xs = some v) : Bytes.toQuantityB64? xs = some v := by
+  rw [Bytes.toScalarB64?] at h; split at h
+  · rename_i hc
+    rw [Bytes.isCanonicalScalar] at hc
+    rw [Bytes.toQuantityB64?, if_pos (by simp_all)]; exact h
+  · cases h
+
+theorem Bytes.toQuantityB256?_of_toScalarB256? {xs : Bytes} {v : B256}
+    (h : Bytes.toScalarB256? xs = some v) : Bytes.toQuantityB256? xs = some v := by
+  rw [Bytes.toScalarB256?] at h; split at h
+  · rename_i hc
+    rw [Bytes.isCanonicalScalar] at hc
+    rw [Bytes.toQuantityB256?, if_pos (by simp_all)]; exact h
+  · cases h
+
+-- Boundaries at 0, 1, n, and n+1 bytes, plus the leading-zero cases that must
+-- stay accepted here even though the RLP scalar decoders reject them.
+#guard (Bytes.toQuantityB64? []).map UInt64.toNat = some 0
+#guard (Bytes.toQuantityB64? [0x00]).map UInt64.toNat = some 0
+#guard (Bytes.toQuantityB64? [0x00, 0x01]).map UInt64.toNat = some 1
+#guard (Bytes.toScalarB64? [0x00, 0x01]).isNone
+#guard (Bytes.toQuantityB64? (List.replicate 8 (0xFF : UInt8))).map UInt64.toNat
+  = some (2 ^ 64 - 1)                                                  -- n
+#guard (Bytes.toQuantityB64? (0x01 :: List.replicate 8 (0x00 : UInt8))).isNone -- n+1
+-- The nine-byte nonce, which the old converter turned into a plausible zero.
+#guard (Bytes.toUInt64 (0x01 :: List.replicate 8 (0x00 : UInt8))).toNat = 0
+
+#guard (Bytes.toQuantityB256? []).map B256.toNat = some 0
+#guard (Bytes.toQuantityB256? [0x00]).map B256.toNat = some 0
+#guard (Bytes.toQuantityB256? [0x00, 0x01]).map B256.toNat = some 1
+#guard (Bytes.toScalarB256? [0x00, 0x01]).isNone
+#guard (Bytes.toQuantityB256? (List.replicate 32 (0xFF : UInt8))).map B256.toNat
+  = some (2 ^ 256 - 1)                                                 -- n
+#guard (Bytes.toQuantityB256? (List.replicate 33 (0xFF : UInt8))).isNone -- n+1
+-- The thirty-three-byte balance, likewise silently truncated before.
+#guard (Bytes.toB256 (0x01 :: List.replicate 32 (0x00 : UInt8))).toNat = 0
+#guard (Bytes.toQuantityB256? (0x01 :: List.replicate 32 (0x00 : UInt8))).isNone
+
 def Adr.toBytes (a : Adr) : Bytes := a.1.toBytes ++ a.2.toBytes
 
 inductive Rinst : Type

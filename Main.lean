@@ -47,15 +47,34 @@ def Lean.Json.toIoB256 (j : Json) : IO B256 := do
   let x ← toIoString j >>= .remove0x
   (Hex.toB256? x).toIO ""
 
-def Lean.Json.toIoB64P (j : Json) : IO UInt64 := do
-  let x ← toIoString j >>= .remove0x
-  let xs ← (Hex.toBytes x).toIO ""
-  return (Bytes.toUInt64 xs)
+-- Fixture JSON quantities: any width up to the field's own, and no
+-- leading-zero rule, because JSON quantity syntax is not RLP minimal-scalar
+-- syntax. These replace a pair that converted through the raw
+-- `Bytes.toUInt64` / `Bytes.toB256`, which pad short values and silently
+-- *truncate* long ones -- so an over-wide prestate field used to become a
+-- plausible in-range one with no error at all. `Bytes.toQuantityB64?` and
+-- `Bytes.toQuantityB256?` accept exactly the same short values and reject the
+-- over-long input; see the soundness theorems in `Jaune/Types.lean`.
 
-def Lean.Json.toIoB256P (j : Json) : IO B256 := do
+def Lean.Json.toIoQuantityB64 (field : String) (j : Json) : IO UInt64 := do
   let x ← toIoString j >>= .remove0x
-  let xs ← (Hex.toBytes x).toIO ""
-  return (Bytes.toB256 xs)
+  let xs ← (Hex.toBytes x).toIO s!"error : {field} is not a hex byte string"
+  (Bytes.toQuantityB64? xs).toIO
+    s!"error : {field} is {xs.length} bytes wide, exceeding the 8-byte maximum"
+
+def Lean.Json.toIoQuantityB256 (field : String) (j : Json) : IO B256 := do
+  let x ← toIoString j >>= .remove0x
+  let xs ← (Hex.toBytes x).toIO s!"error : {field} is not a hex byte string"
+  (Bytes.toQuantityB256? xs).toIO
+    s!"error : {field} is {xs.length} bytes wide, exceeding the 32-byte maximum"
+
+/-- The same decoder for a quantity that arrives as a JSON *key* rather than a
+value. The `0x` prefix stays mandatory, exactly as before. -/
+def Hex.toIoQuantityB256 (field : String) (h : String) : IO B256 := do
+  let x ← IO.remove0x h
+  let xs ← (Hex.toBytes x).toIO s!"error : {field} is not a hex byte string"
+  (Bytes.toQuantityB256? xs).toIO
+    s!"error : {field} is {xs.length} bytes wide, exceeding the 32-byte maximum"
 
 /-- Read a hex *quantity*, which unlike a byte string may have an odd number of
 digits. Used for the small schedule numbers a fixture states about itself. -/
@@ -68,33 +87,37 @@ def Lean.Json.toIoHexNat (j : Json) : IO Nat := do
 def Lean.Json.toAcct : Lean.Json → IO Acct
   | .obj r => do
     let aux (xy : String × Lean.Json) : IO (B256 × B256) := do
-      let x ← .remove0x xy.fst
-      let bs ← (Hex.toBytes x).toIO ""
-      let bs' ← xy.snd.toIoBytes
-      return ⟨bs.toB256, bs'.toB256⟩
+      let key ← Hex.toIoQuantityB256 "storage key" xy.fst
+      let value ← Lean.Json.toIoQuantityB256 "storage value" xy.snd
+      return ⟨key, value⟩
     let bal_json ← (r.get? "balance").toIO ""
     let nonce_json ← (r.get? "nonce").toIO ""
     let code_json ← (r.get? "code").toIO ""
     let stor_json ← (r.get? "storage").toIO "" >>= Lean.Json.toIoRBNode
-    let bal ← Lean.Json.toIoB256P bal_json
-    let nonce ← Lean.Json.toIoB64P nonce_json
+    let bal ← Lean.Json.toIoQuantityB256 "balance" bal_json
+    let nonce ← Lean.Json.toIoQuantityB64 "nonce" nonce_json
     let code ← Lean.Json.toIoBytes code_json
     let storPairs ← List.mapM aux stor_json.toArray.toList
     -- Ethereum's state trie has no entries for zero-valued storage slots.  The
     -- JSON fixtures may spell such a slot explicitly in `pre`, so normalize
-    -- through `Stor.set` rather than retaining a non-canonical map entry.
-    let stor := storPairs.foldl (fun s ⟨key, value⟩ => s.set key value) .empty
-    return ⟨nonce, bal, stor, code.toByteArray⟩
+    -- through the canonical smart constructor rather than retaining a
+    -- non-canonical map entry; `Stor.canonical_ofList` is the witness.
+    return ⟨nonce, bal, Stor.ofList storPairs, code.toByteArray⟩
   | _ => .throw "cannot parse account (not .obj)"
 
+-- The prestate is built through `State.ofList`, i.e. through `State.set`, so
+-- `State.canonical_ofList` applies: every account comes out of `toAcct`, whose
+-- storage is a `Stor.ofList` and hence canonical. An explicit `Acct.nil` or an
+-- explicitly zero-valued slot in `pre` is dropped rather than stored, which is
+-- what keeps the parsed state's trie root the committed one.
 def Lean.Json.toWorld (j : Lean.Json) : IO State := do
-  let aux : State → (String × Lean.Json) → IO State :=
-    fun | w, ⟨s, j⟩ => do
-      let adr ← (Hex.toAdr? <| remove0x s).toIO ""
-      let acct ← j.toAcct
-      pure <| w.set adr acct
+  let aux (xy : String × Lean.Json) : IO (Adr × Acct) := do
+    let adr ← (Hex.toAdr? <| remove0x xy.fst).toIO ""
+    let acct ← xy.snd.toAcct
+    return ⟨adr, acct⟩
   let ob ← j.toIoRBNode
-  List.foldlM aux .empty ob.toArray.toList
+  let entries ← List.mapM aux ob.toArray.toList
+  return State.ofList entries
 
 def Lean.Json.find? : String → Lean.Json → Option Lean.Json
   | k, .obj r => r.get? k
