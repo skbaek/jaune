@@ -13,47 +13,63 @@ namespace RIPEMD160
 -- RIPEMD-160 hash function. Ported from David Turner's
 -- C implementation (https://github.com/DaveCTurner/tiny-ripemd160)
 
+-- Every table below is length-indexed, and the two permutation tables carry
+-- `Fin 16` entries rather than `Nat`, so a word index cannot leave its chunk:
+-- the invariant the C original documents in a comment is the type here, and
+-- every read in this section is total without a bounds test.
+
 -- ripemd160_shifts
-def shiftLists : List (List UInt32) :=
-  [
-    [11, 14, 15, 12, 5, 8, 7, 9, 11, 13, 14, 15, 6, 7, 9, 8],
-    [12, 13, 11, 15, 6, 9, 9, 7, 12, 15, 11, 13, 7, 8, 7, 7],
-    [13, 15, 14, 11, 7, 7, 6, 8, 13, 14, 13, 12, 5, 5, 6, 9],
-    [14, 11, 12, 14, 8, 6, 5, 5, 15, 12, 15, 14, 9, 9, 8, 6],
-    [15, 12, 13, 13, 9, 5, 8, 6, 14, 11, 12, 11, 8, 6, 5, 5]
+def shiftLists : Vector (Vector UInt32 16) 5 :=
+  #v[
+    #v[11, 14, 15, 12, 5, 8, 7, 9, 11, 13, 14, 15, 6, 7, 9, 8],
+    #v[12, 13, 11, 15, 6, 9, 9, 7, 12, 15, 11, 13, 7, 8, 7, 7],
+    #v[13, 15, 14, 11, 7, 7, 6, 8, 13, 14, 13, 12, 5, 5, 6, 9],
+    #v[14, 11, 12, 14, 8, 6, 5, 5, 15, 12, 15, 14, 9, 9, 8, 6],
+    #v[15, 12, 13, 13, 9, 5, 8, 6, 14, 11, 12, 11, 8, 6, 5, 5]
   ]
 
 -- ripemd160_constants_left
-def constantsLeft : (List UInt32) :=
-  [0x00000000, 0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xa953fd4e]
+def constantsLeft : Vector UInt32 5 :=
+  #v[0x00000000, 0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xa953fd4e]
 
 -- ripemd160_constants_right
-def constantsRight : (List UInt32) :=
-  [0x50a28be6, 0x5c4dd124, 0x6d703ef3, 0x7a6d76e9, 0x00000000]
+def constantsRight : Vector UInt32 5 :=
+  #v[0x50a28be6, 0x5c4dd124, 0x6d703ef3, 0x7a6d76e9, 0x00000000]
 
 -- ripemd160_fns_left
-def fnsLeft : List Nat := [1, 2, 3, 4, 5]
+def fnsLeft : Vector Nat 5 := #v[1, 2, 3, 4, 5]
 
 -- ripemd160_fns_right
-def fnsRight : List Nat := [5, 4, 3, 2, 1]
+def fnsRight : Vector Nat 5 := #v[5, 4, 3, 2, 1]
 
-def rho : List Nat :=
-  [ 0x7, 0x4, 0xd, 0x1, 0xa, 0x6, 0xf, 0x3,
-    0xc, 0x0, 0x9, 0x5, 0x2, 0xe, 0xb, 0x8 ]
+def rho : Vector (Fin 16) 16 :=
+  #v[ 0x7, 0x4, 0xd, 0x1, 0xa, 0x6, 0xf, 0x3,
+      0xc, 0x0, 0x9, 0x5, 0x2, 0xe, 0xb, 0x8 ]
 
-def computeLine (digest : (List UInt32)) (chunk : (List UInt32)) (index : List Nat)
-  (shiftss : List (List UInt32)) (ks : (List UInt32)) (fns : List Nat) : Id (List UInt32) := do
+def indexLeft : Vector (Fin 16) 16 :=
+  #v[ 0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7,
+      0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf ]
+
+def indexRight : Vector (Fin 16) 16 :=
+  #v[ 0x05, 0x0e, 0x07, 0x00, 0x09, 0x02, 0x0b, 0x04,
+      0x0d, 0x06, 0x0f, 0x08, 0x01, 0x0a, 0x03, 0x0c ]
+
+def computeLine (digest : Vector UInt32 5) (chunk : Vector UInt32 16)
+  (index : Vector (Fin 16) 16) (shiftss : Vector (Vector UInt32 16) 5)
+  (ks : Vector UInt32 5) (fns : Vector Nat 5) : Id (Vector UInt32 5) := do
   let mut index := index
-  let mut w0 : UInt32 := digest[0]!
-  let mut w1 : UInt32 := digest[1]!
-  let mut w2 : UInt32 := digest[2]!
-  let mut w3 : UInt32 := digest[3]!
-  let mut w4 : UInt32 := digest[4]!
-  for round in [0, 1, 2, 3, 4] do
-    let shifts : (List UInt32) := shiftss[round]!
-    let k : UInt32 := ks[round]!
-    let fn : Nat := fns[round]!
-    for i in List.range 16 do
+  let mut w0 : UInt32 := digest[0]
+  let mut w1 : UInt32 := digest[1]
+  let mut w2 : UInt32 := digest[2]
+  let mut w3 : UInt32 := digest[3]
+  let mut w4 : UInt32 := digest[4]
+  for round in ([0, 1, 2, 3, 4] : List (Fin 5)) do
+    let shifts : Vector UInt32 16 := shiftss[round.val]
+    let k : UInt32 := ks[round.val]
+    let fn : Nat := fns[round.val]
+    -- the round walks the permutation itself, so the loop index never has to
+    -- be looked up in it
+    for i in index.toList do
       let mut tmp : UInt32 :=
         match fn with
         | 1 => w1 ^^^ w2 ^^^ w3
@@ -61,32 +77,29 @@ def computeLine (digest : (List UInt32)) (chunk : (List UInt32)) (index : List N
         | 3 => (w1 ||| ~~~ w2) ^^^ w3
         | 4 => (w1 &&& w3) ||| (w2 &&& ~~~ w3)
         | _ => w1 ^^^ (w2 ||| ~~~ w3)
-      tmp := tmp + w0 + (chunk[(index[i]!)]!) + k
-      tmp := UInt32.rol tmp (shifts[index[i]!]!) + w4
+      tmp := tmp + w0 + chunk[i.val] + k
+      tmp := UInt32.rol tmp shifts[i.val] + w4
       w0 := w4
       w4 := w3
       w3 := UInt32.rol w2 10
       w2 := w1
       w1 := tmp
-    index := index.map (fun i => rho[i]!)
-  return [w0, w1, w2, w3, w4]
+    index := index.map (fun i => rho[i.val])
+  return #v[w0, w1, w2, w3, w4]
 
-def updateDigest (digest : (List UInt32)) (chunk : (List UInt32)) : Id (List UInt32) := do
-  let indexLeft : List Nat := List.range 16
-  let wordsLeft : (List UInt32) ←
+def updateDigest (digest : Vector UInt32 5) (chunk : Vector UInt32 16) :
+    Id (Vector UInt32 5) := do
+  let wordsLeft : Vector UInt32 5 ←
     computeLine digest chunk indexLeft shiftLists constantsLeft fnsLeft
-  let indexRight : List Nat :=
-    [ 0x05, 0x0e, 0x07, 0x00, 0x09, 0x02, 0x0b, 0x04,
-      0x0d, 0x06, 0x0f, 0x08, 0x01, 0x0a, 0x03, 0x0c ]
-  let wordsRight : (List UInt32) ←
+  let wordsRight : Vector UInt32 5 ←
     computeLine digest chunk indexRight
       shiftLists constantsRight fnsRight
-  return [
-    digest[1]! + wordsLeft[2]! + wordsRight[3]!,
-    digest[2]! + wordsLeft[3]! + wordsRight[4]!,
-    digest[3]! + wordsLeft[4]! + wordsRight[0]!,
-    digest[4]! + wordsLeft[0]! + wordsRight[1]!,
-    digest[0]! + wordsLeft[1]! + wordsRight[2]!
+  return #v[
+    digest[1] + wordsLeft[2] + wordsRight[3],
+    digest[2] + wordsLeft[3] + wordsRight[4],
+    digest[3] + wordsLeft[4] + wordsRight[0],
+    digest[4] + wordsLeft[0] + wordsRight[1],
+    digest[0] + wordsLeft[1] + wordsRight[2]
   ]
 
 def Bytes.toUInt32Rev : Bytes → (List UInt32)
@@ -94,31 +107,54 @@ def Bytes.toUInt32Rev : Bytes → (List UInt32)
     UInt32.ofBytes b3 b2 b1 b0 :: Bytes.toUInt32Rev bs
   | _ => []
 
-def processChunks (digest : (List UInt32)) (data : Bytes) (lenSfx : (List UInt32)) : Nat → (List UInt32)
+/-- The sixteen big-endian-reversed words of one 64-byte chunk. Bytes past the
+end of `bs` read as zero, which is exactly what the `List.takeD`-padded input
+of the caller supplied; on a full 64-byte prefix this is
+`Bytes.toUInt32Rev bs` word for word. -/
+def Bytes.toChunk (bs : Bytes) : Vector UInt32 16 :=
+  Vector.ofFn fun i =>
+    UInt32.ofBytes
+      (bs.getD (4 * i.val + 3) 0) (bs.getD (4 * i.val + 2) 0)
+      (bs.getD (4 * i.val + 1) 0) (bs.getD (4 * i.val) 0)
+
+/-- The final chunk: fourteen message words followed by the two length words.
+-/
+def Bytes.toChunkWithLen (bs : Bytes) (l0 l1 : UInt32) : Vector UInt32 16 :=
+  Vector.ofFn fun i =>
+    if i.val < 14 then (Bytes.toChunk bs)[i.val]
+    else if i.val = 14 then l0 else l1
+
+def processChunks (digest : Vector UInt32 5) (data : Bytes) (l0 l1 : UInt32) :
+    Nat → Vector UInt32 5
   | 0 =>
     if data.length > 55 then
-      let penultChunk : (List UInt32) :=
-        Bytes.toUInt32Rev (List.takeD 64 (data ++ [0x80]) 0)
+      let penultChunk : Vector UInt32 16 := Bytes.toChunk (data ++ [0x80])
       let digest' := updateDigest digest penultChunk
-      let lastChunk : (List UInt32) := List.replicate 14 (0 : UInt32) ++ lenSfx
+      let lastChunk : Vector UInt32 16 :=
+        #v[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, l0, l1]
       updateDigest digest' lastChunk
     else
-      let lastChunk : (List UInt32) :=
-        Bytes.toUInt32Rev (List.takeD 56 (data ++ [0x80]) 0) ++ lenSfx
+      let lastChunk : Vector UInt32 16 :=
+        Bytes.toChunkWithLen (data ++ [0x80]) l0 l1
       updateDigest digest lastChunk
   | n + 1 =>
     let ⟨pfx, data'⟩ := data.splitAt 64
-    let chunk : (List UInt32) := Bytes.toUInt32Rev pfx
+    let chunk : Vector UInt32 16 := Bytes.toChunk pfx
     let digest' := updateDigest digest chunk
-    processChunks digest' data' lenSfx n
+    processChunks digest' data' l0 l1 n
 
 def run (data : Bytes) : Bytes := do
-  let initDigest : (List UInt32) :=
-    [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0]
+  let initDigest : Vector UInt32 5 :=
+    #v[0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0]
   let len : UInt32 := data.length.toUInt32
-  let digest : (List UInt32) :=
-    processChunks initDigest data [len <<< 3, len >>> 29] (data.length / 64)
-  List.foldr (fun x acc => x.toBytes.reverse ++ acc) [] digest
+  let digest : Vector UInt32 5 :=
+    processChunks initDigest data (len <<< 3) (len >>> 29) (data.length / 64)
+  List.foldr (fun x acc => x.toBytes.reverse ++ acc) [] digest.toList
+
+-- On a full 64-byte chunk the length-indexed reader agrees, word for word,
+-- with the list transcription it replaced.
+#guard (Bytes.toChunk ((List.range 64).map Nat.toUInt8)).toList
+        = Bytes.toUInt32Rev ((List.range 64).map Nat.toUInt8)
 
 end RIPEMD160
 
@@ -143,7 +179,7 @@ def initChunk : Vector UInt32 8 :=
 def Bytes.toChunks (lenBytes : Bytes) : Nat → Bytes → Nat → List (Array UInt8)
   | 0, _, _ => []
   | _ + 1, _, 0 =>
-    [((Array.replicate 64 0x00).set! 0 0x80).writeD 56 lenBytes]
+    [((Array.replicate 64 (0x00 : UInt8)).set 0 0x80 (by simp)).writeD 56 lenBytes]
   | k + 1, xs, len' + 64 =>
       let ⟨pfx, xs'⟩ := List.splitToArray 64 xs 0
       let xss := Bytes.toChunks lenBytes k xs' len'
@@ -154,8 +190,8 @@ def Bytes.toChunks (lenBytes : Bytes) : Nat → Bytes → Nat → List (Array UI
   | _ + 1, xs, _ =>
     [⟨xs ++ (0x80 :: List.replicate (64 - (xs.length + 9)) 0x00) ++ lenBytes⟩]
 
-def roundConstants : (Array UInt32) :=
- #[ 0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
+def roundConstants : Vector UInt32 64 :=
+ #v[ 0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
     0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
     0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
     0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
@@ -177,10 +213,15 @@ def roundConstants : (Array UInt32) :=
 -- and the message schedule `w` is updated in place. `n` counts rounds
 -- remaining, so the round index is `t = 64 - n`; rounds `t < 16` read the
 -- chunk, later rounds extend the schedule.
+--
+-- The schedule is a sixteen-word `Vector` and the round budget carries
+-- `n ≤ 64`, so both the schedule write and the round-constant read are
+-- proof-indexed: `t = 64 - (n + 1) < 64` and `j = t % 16 < 16` are the only
+-- facts needed, and both are arithmetic rather than convention.
 def rounds (p : (Array UInt8)) :
-  Nat → (Array UInt32) → UInt32 → UInt32 → UInt32 → UInt32 → UInt32 → UInt32 → UInt32 → UInt32 → (Array UInt32)
-  | 0, _, a, b, c, d, e, f, g, h => ⟨[a, b, c, d, e, f, g, h]⟩
-  | n + 1, w, a, b, c, d, e, f, g, h =>
+  (n : Nat) → n ≤ 64 → Vector UInt32 16 → UInt32 → UInt32 → UInt32 → UInt32 → UInt32 → UInt32 → UInt32 → UInt32 → Vector UInt32 8
+  | 0, _, _, a, b, c, d, e, f, g, h => #v[a, b, c, d, e, f, g, h]
+  | n + 1, hn, w, a, b, c, d, e, f, g, h =>
     let t : Nat := 64 - (n + 1)
     let j : Nat := t % 16
     let wj : UInt32 :=
@@ -198,33 +239,32 @@ def rounds (p : (Array UInt8)) :
         let s1 : UInt32 :=
           (UInt32.ror x14 17) ^^^ (UInt32.ror x14 19) ^^^ (x14 >>> 10)
         (w.getD j 0) + s0 + (w.getD ((j + 9) % 16) 0) + s1
-    let w' := Array.set! w j wj
+    let w' := w.set j wj (Nat.mod_lt _ (by omega))
     let s1 : UInt32 :=
       (UInt32.ror e 6) ^^^ (UInt32.ror e 11) ^^^ (UInt32.ror e 25)
     let ch : UInt32 := (e &&& f) ^^^ ((~~~ e) &&& g)
-    let temp1 : UInt32 := h + s1 + ch + (roundConstants[t]!) + wj
+    let temp1 : UInt32 :=
+      h + s1 + ch + (roundConstants[t]'(Nat.sub_lt (by omega) (by omega))) + wj
     let s0 : UInt32 :=
       (UInt32.ror a 2) ^^^ (UInt32.ror a 13) ^^^ (UInt32.ror a 22)
     let maj : UInt32 := (a &&& b) ^^^ (a &&& c) ^^^ (b &&& c)
     let temp2 : UInt32 := s0 + maj
-    rounds p n w' (temp1 + temp2) a b c (d + temp1) e f g
+    rounds p n (by omega) w' (temp1 + temp2) a b c (d + temp1) e f g
 
 def consumeChunk (h : Vector UInt32 8) (p : (Array UInt8)) : Vector UInt32 8 :=
-  let h' : (Array UInt32) :=
-    rounds p 64 (Array.replicate 16 0)
+  let h' : Vector UInt32 8 :=
+    rounds p 64 (by omega) (Vector.replicate 16 0)
       h[0] h[1] h[2] h[3] h[4] h[5] h[6] h[7]
-  ⟨
-    #[
-      h[0] + h'[0]!,
-      h[1] + h'[1]!,
-      h[2] + h'[2]!,
-      h[3] + h'[3]!,
-      h[4] + h'[4]!,
-      h[5] + h'[5]!,
-      h[6] + h'[6]!,
-      h[7] + h'[7]!
-    ], rfl
-  ⟩
+  #v[
+    h[0] + h'[0],
+    h[1] + h'[1],
+    h[2] + h'[2],
+    h[3] + h'[3],
+    h[4] + h'[4],
+    h[5] + h'[5],
+    h[6] + h'[6],
+    h[7] + h'[7]
+  ]
 
 def run (data : Bytes) : B256 :=
   -- `data` is a list, so its length is an O(n) walk: take it once.
@@ -254,13 +294,16 @@ def Bytes.sha256 : Bytes → B256 := SHA256.run
 
 namespace KECCAK
 
-def Array.modify! {ξ : Type u} (k : Nat) (f : ξ → ξ) (ws : Array ξ) : Array ξ :=
-  match ws[k]? with
-  | none => panic "Array.modify! out of bounds"
-  | some x => ws.set! k (f x)
-
 @[inline] def UInt64.rol (xs : UInt64) (y : Nat) : UInt64 :=
   (xs <<< y.toUInt64) ||| (xs >>> (64 - y).toUInt64)
+
+/-- XOR `t` into lane `k` of a keccak state. The lane index is carried with its
+proof, so this is total: there is no out-of-range case to divert and nothing to
+abort into. It replaces the file's former unchecked in-place lane modifier,
+whose out-of-bounds branch was the last explicit abort in the library. -/
+@[inline] def xorLane {ξ : Type u} [XorOp ξ]
+  (ws : Vector ξ 25) (k : Nat) (h : k < 25) (t : ξ) : Vector ξ 25 :=
+  ws.set k (ws[k] ^^^ t) h
 
 -- The polymorphic permutation below (`θ`/`ρπ`/`χ`/`ι`/`f`, with the
 -- `rotc`/`piln` tables and `UInt64.rol`) is the retained
@@ -268,82 +311,98 @@ def Array.modify! {ξ : Type u} (k : Nat) (f : ξ → ξ) (ws : Array ξ) : Arra
 -- through the specialized `f1600` further down; keep this block as the
 -- readable spec the unrolled indices were generated from (the same
 -- retention convention as `blake2MixTable`).
-def θ {ξ : Type u} [XorOp ξ] [Inhabited ξ]
-  (rol : ξ → Nat → ξ) (ws : Array ξ) : Array ξ :=
-  let prep (x : Nat) : ξ :=
-    ws[x]! ^^^
-    ws[(x + 5)]! ^^^
-    ws[(x + 10)]! ^^^
-    ws[(x + 15)]! ^^^
-    ws[(x + 20)]!
+--
+-- The state is a `Vector ξ 25` rather than an `Array ξ`: keccak-f[1600] has
+-- exactly twenty-five lanes, so the size is part of the specification, and
+-- every index below is discharged by arithmetic against it. Nothing here
+-- reads a lane it has not proved exists, and no `Inhabited ξ` fallback is
+-- needed any more — its former role was to supply the value of a read that
+-- could not happen.
+def θ {ξ : Type u} [XorOp ξ]
+  (rol : ξ → Nat → ξ) (ws : Vector ξ 25) : Vector ξ 25 :=
+  let prep (x : Nat) (h : x < 5) : ξ :=
+    ws[x] ^^^
+    ws[(x + 5)] ^^^
+    ws[(x + 10)] ^^^
+    ws[(x + 15)] ^^^
+    ws[(x + 20)]
   let initVec : Vector ξ 5 :=
-    ⟨#[prep 0, prep 1, prep 2, prep 3, prep 4], rfl⟩
-  let rec inner (t : ξ) (i : Nat) : Nat → Array ξ → Array ξ
-    | 0, ws => ws
-    | j + 1, ws => inner t i j <| Array.modify! ((j * 5) + i) (· ^^^ t) ws
-  let rec outer (bc : Vector ξ 5) : Nat → Array ξ → Array ξ
-    | 0, ws => ws
-    | i + 1, ws =>
-      let t : ξ := bc.get (.ofNat _ (i + 4)) ^^^ rol (bc.get (.ofNat _ (i + 1))) 1
-      outer bc i <| inner t i 5 ws
-  outer initVec 5 ws
-
-def rndc : Array UInt64 :=
-  #[ 0x0000000000000001, 0x0000000000008082, 0x800000000000808a, 0x8000000080008000,
-     0x000000000000808b, 0x0000000080000001, 0x8000000080008081, 0x8000000000008009,
-     0x000000000000008a, 0x0000000000000088, 0x0000000080008009, 0x000000008000000a,
-     0x000000008000808b, 0x800000000000008b, 0x8000000000008089, 0x8000000000008003,
-     0x8000000000008002, 0x8000000000000080, 0x000000000000800a, 0x800000008000000a,
-     0x8000000080008081, 0x8000000000008080, 0x0000000080000001, 0x8000000080008008 ]
-
-def rotc : Array Nat :=
-  #[ 1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 2, 14,
-     27, 41, 56, 8, 25, 43, 62, 18, 39, 61, 20, 44 ]
-
-def piln : Array Nat :=
-  #[ 10, 7, 11, 17, 18, 3, 5, 16, 8, 21, 24, 4,
-     15, 23, 19, 13, 12, 2, 20, 14, 22, 9, 6, 1 ]
-
-def ρπ {ξ : Type u} [Inhabited ξ]  (rol : ξ → Nat → ξ) (ws : Array ξ) : Array ξ :=
-  let rec aux : Nat → ξ → Array ξ → Array ξ
+    #v[prep 0 (by omega), prep 1 (by omega), prep 2 (by omega),
+       prep 3 (by omega), prep 4 (by omega)]
+  let rec inner (t : ξ) (i : Nat) (hi : i < 5) :
+      (j : Nat) → j ≤ 5 → Vector ξ 25 → Vector ξ 25
     | 0, _, ws => ws
-    | k + 1, t, ws =>
+    | j + 1, hj, ws =>
+      inner t i hi j (by omega) <| xorLane ws ((j * 5) + i) (by omega) t
+  let rec outer (bc : Vector ξ 5) :
+      (i : Nat) → i ≤ 5 → Vector ξ 25 → Vector ξ 25
+    | 0, _, ws => ws
+    | i + 1, hi, ws =>
+      let t : ξ := bc[(i + 4) % 5] ^^^ rol bc[(i + 1) % 5] 1
+      outer bc i (by omega) <| inner t i (by omega) 5 (by omega) ws
+  outer initVec 5 (by omega) ws
+
+def rndc : Vector UInt64 24 :=
+  #v[ 0x0000000000000001, 0x0000000000008082, 0x800000000000808a, 0x8000000080008000,
+      0x000000000000808b, 0x0000000080000001, 0x8000000080008081, 0x8000000000008009,
+      0x000000000000008a, 0x0000000000000088, 0x0000000080008009, 0x000000008000000a,
+      0x000000008000808b, 0x800000000000008b, 0x8000000000008089, 0x8000000000008003,
+      0x8000000000008002, 0x8000000000000080, 0x000000000000800a, 0x800000008000000a,
+      0x8000000080008081, 0x8000000000008080, 0x0000000080000001, 0x8000000080008008 ]
+
+def rotc : Vector Nat 24 :=
+  #v[ 1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 2, 14,
+      27, 41, 56, 8, 25, 43, 62, 18, 39, 61, 20, 44 ]
+
+def piln : Vector Nat 24 :=
+  #v[ 10, 7, 11, 17, 18, 3, 5, 16, 8, 21, 24, 4,
+      15, 23, 19, 13, 12, 2, 20, 14, 22, 9, 6, 1 ]
+
+/-- Every entry of the π lane table names a lane of the 25-lane state. This is
+the fact that makes `ρπ`'s data-dependent write total; it is decided from the
+table rather than assumed of it. -/
+theorem piln_lt : ∀ i, (h : i < 24) → piln[i] < 25 := by decide
+
+def ρπ {ξ : Type u} (rol : ξ → Nat → ξ) (ws : Vector ξ 25) : Vector ξ 25 :=
+  let rec aux : (k : Nat) → k ≤ 24 → ξ → Vector ξ 25 → Vector ξ 25
+    | 0, _, _, ws => ws
+    | k + 1, hk, t, ws =>
       let i := 23 - k
-      let j := piln[i]!
-      let ws' := ws.set! j (rol t <| rotc[i]!)
-      aux k (ws[j]!) ws'
-  aux 24 (ws[1]!) ws
+      let j := piln[i]'(by omega)
+      let hj : j < 25 := piln_lt i (by omega)
+      aux k (by omega) ws[j] (ws.set j (rol t <| rotc[i]'(by omega)) hj)
+  aux 24 (by omega) ws[1] ws
 
-def χ {ξ : Type u} [XorOp ξ] [Complement ξ] [HAnd ξ ξ ξ] [Inhabited ξ]
-  (ws : Array ξ) : Array ξ :=
-  let rec inner (ws : Array ξ) (bc : Array ξ) (j : Nat) : Nat → Array ξ
-    | 0 => ws
-    | i + 1 =>
+def χ {ξ : Type u} [XorOp ξ] [Complement ξ] [HAnd ξ ξ ξ]
+  (ws : Vector ξ 25) : Vector ξ 25 :=
+  let rec inner (bc : Vector ξ 5) (j : Nat) (hj : j + 5 ≤ 25) :
+      (i : Nat) → i ≤ 5 → Vector ξ 25 → Vector ξ 25
+    | 0, _, ws => ws
+    | i + 1, hi, ws =>
       let ws' :=
-        Array.modify! (j + i)
-          (· ^^^ ((~~~ bc[(i + 1) % 5]!) &&& (bc[(i + 2) % 5]!))) ws
-      inner ws' bc j i
-  let rec outer (ws : Array ξ) : Nat → Array ξ
-    | 0 => ws
-    | k + 1 =>
-      let j := k * 5
-      let f : Nat → ξ := λ x => ws[j + x]!
-      let bc : Array ξ := #[f 0, f 1, f 2, f 3, f 4]
-      let ws' : Array ξ := inner ws bc j 5
-      outer ws' k
-  outer ws 5
+        xorLane ws (j + i) (by omega) ((~~~ bc[(i + 1) % 5]) &&& bc[(i + 2) % 5])
+      inner bc j hj i (by omega) ws'
+  let rec outer : (k : Nat) → k ≤ 5 → Vector ξ 25 → Vector ξ 25
+    | 0, _, ws => ws
+    | k + 1, hk, ws =>
+      let bc : Vector ξ 5 :=
+        #v[ws[k * 5], ws[k * 5 + 1], ws[k * 5 + 2], ws[k * 5 + 3], ws[k * 5 + 4]]
+      outer k (by omega) <| inner bc (k * 5) (by omega) 5 (by omega) ws
+  outer 5 (by omega) ws
 
-def ι {ξ : Type u} [XorOp ξ] [Inhabited ξ]
-  (round : Nat) (rndc : Array ξ) (ws : Array ξ) : Array ξ :=
-  Array.modify! 0 (· ^^^ rndc[round]!) ws
+def ι {ξ : Type u} [XorOp ξ]
+  (round : Nat) (h : round < 24) (rndc : Vector ξ 24) (ws : Vector ξ 25) :
+    Vector ξ 25 :=
+  xorLane ws 0 (by omega) rndc[round]
 
-def f {ξ : Type u} [XorOp ξ] [Complement ξ] [HAnd ξ ξ ξ] [Inhabited ξ]
-  (rndc : Array ξ) (ws : Array ξ) (rol : ξ → Nat → ξ) : Array ξ :=
-  let rec aux : Nat → Array ξ → Array ξ
-    | 0, ws => ws
-    | n + 1, ws =>
-      aux n <| ι (23 - n) rndc <| χ <| ρπ rol <| θ rol ws
-  aux 24 ws
+def f {ξ : Type u} [XorOp ξ] [Complement ξ] [HAnd ξ ξ ξ]
+  (rndc : Vector ξ 24) (ws : Vector ξ 25) (rol : ξ → Nat → ξ) : Vector ξ 25 :=
+  let rec aux : (n : Nat) → n ≤ 24 → Vector ξ 25 → Vector ξ 25
+    | 0, _, ws => ws
+    | n + 1, hn, ws =>
+      aux n (by omega) <|
+        ι (23 - n) (by omega) rndc <| χ <| ρπ rol <| θ rol ws
+  aux 24 (by omega) ws
 
 @[inline] private def rolc (x : UInt64) (n : UInt64) : UInt64 :=
   (x <<< n) ||| (x >>> (64 - n))
@@ -457,79 +516,95 @@ The bug is fixed as of the v4.32.1 toolchain: `scripts/repro-lean423-uint64-cse.
 now passes both of its documented compile steps and runs. The `rndc` read is
 retained deliberately — it costs nothing measurable (the permutation is a few
 percent of busy time with it) and is immune to regressions of the emitter path.
-Do not rewrite the rounds back to literal constants. -/
-def f1600 (ws : Array UInt64) : Array UInt64 :=
-  let s : State1600 :=
-    ⟨ws[0]!, ws[1]!, ws[2]!, ws[3]!, ws[4]!,
-     ws[5]!, ws[6]!, ws[7]!, ws[8]!, ws[9]!,
-     ws[10]!, ws[11]!, ws[12]!, ws[13]!, ws[14]!,
-     ws[15]!, ws[16]!, ws[17]!, ws[18]!, ws[19]!,
-     ws[20]!, ws[21]!, ws[22]!, ws[23]!, ws[24]!⟩
-  let s := round1600 (rndc[0]!) s
-  let s := round1600 (rndc[1]!) s
-  let s := round1600 (rndc[2]!) s
-  let s := round1600 (rndc[3]!) s
-  let s := round1600 (rndc[4]!) s
-  let s := round1600 (rndc[5]!) s
-  let s := round1600 (rndc[6]!) s
-  let s := round1600 (rndc[7]!) s
-  let s := round1600 (rndc[8]!) s
-  let s := round1600 (rndc[9]!) s
-  let s := round1600 (rndc[10]!) s
-  let s := round1600 (rndc[11]!) s
-  let s := round1600 (rndc[12]!) s
-  let s := round1600 (rndc[13]!) s
-  let s := round1600 (rndc[14]!) s
-  let s := round1600 (rndc[15]!) s
-  let s := round1600 (rndc[16]!) s
-  let s := round1600 (rndc[17]!) s
-  let s := round1600 (rndc[18]!) s
-  let s := round1600 (rndc[19]!) s
-  let s := round1600 (rndc[20]!) s
-  let s := round1600 (rndc[21]!) s
-  let s := round1600 (rndc[22]!) s
-  let s := round1600 (rndc[23]!) s
-  #[s.a0, s.a1, s.a2, s.a3, s.a4, s.a5, s.a6, s.a7, s.a8, s.a9, s.a10, s.a11, s.a12, s.a13, s.a14, s.a15, s.a16, s.a17, s.a18, s.a19, s.a20, s.a21, s.a22, s.a23, s.a24]
+Do not rewrite the rounds back to literal constants.
 
-def Bytes.run : Fin 17 → Bytes → Array UInt64 → B256
+The state is a `Vector UInt64 25` — the twenty-five lanes keccak-f[1600] is
+defined over. `Vector` is a single-field wrapper around `Array` with an erased
+size proof, so the runtime representation is exactly the `Array UInt64` this
+took before: the type records the size, it does not change it. (The boxed-array
+boundary this crosses per permutation is a recorded performance observation,
+`~/plans/lean-eval-proposal.md`, and is deliberately not addressed here.) -/
+def f1600 (ws : Vector UInt64 25) : Vector UInt64 25 :=
+  let s : State1600 :=
+    ⟨ws[0], ws[1], ws[2], ws[3], ws[4],
+     ws[5], ws[6], ws[7], ws[8], ws[9],
+     ws[10], ws[11], ws[12], ws[13], ws[14],
+     ws[15], ws[16], ws[17], ws[18], ws[19],
+     ws[20], ws[21], ws[22], ws[23], ws[24]⟩
+  let s := round1600 (rndc[0]) s
+  let s := round1600 (rndc[1]) s
+  let s := round1600 (rndc[2]) s
+  let s := round1600 (rndc[3]) s
+  let s := round1600 (rndc[4]) s
+  let s := round1600 (rndc[5]) s
+  let s := round1600 (rndc[6]) s
+  let s := round1600 (rndc[7]) s
+  let s := round1600 (rndc[8]) s
+  let s := round1600 (rndc[9]) s
+  let s := round1600 (rndc[10]) s
+  let s := round1600 (rndc[11]) s
+  let s := round1600 (rndc[12]) s
+  let s := round1600 (rndc[13]) s
+  let s := round1600 (rndc[14]) s
+  let s := round1600 (rndc[15]) s
+  let s := round1600 (rndc[16]) s
+  let s := round1600 (rndc[17]) s
+  let s := round1600 (rndc[18]) s
+  let s := round1600 (rndc[19]) s
+  let s := round1600 (rndc[20]) s
+  let s := round1600 (rndc[21]) s
+  let s := round1600 (rndc[22]) s
+  let s := round1600 (rndc[23]) s
+  #v[s.a0, s.a1, s.a2, s.a3, s.a4, s.a5, s.a6, s.a7, s.a8, s.a9, s.a10, s.a11, s.a12, s.a13, s.a14, s.a15, s.a16, s.a17, s.a18, s.a19, s.a20, s.a21, s.a22, s.a23, s.a24]
+
+def Bytes.run : Fin 17 → Bytes → Vector UInt64 25 → B256
   | wc, b0 :: b1 :: b2 :: b3 :: b4 :: b5 :: b6 :: b7 :: bs, ws =>
     let t : UInt64 := UInt64.ofBytes b7 b6 b5 b4 b3 b2 b1 b0
-    let ws' := Array.modify! wc (· ^^^ t) ws
+    let ws' := xorLane ws wc.val (by omega) t
     Bytes.run (wc + 1) bs <| if wc = 16 then f1600 ws' else ws'
   | wc, bs, ws =>
-    let us := (bs ++ [(1 : UInt8)]).takeD 8 (0 : UInt8)
+    -- `takeD` pads to exactly eight, so the eight reads below are total
+    let us : Vector UInt8 8 :=
+      ⟨((bs ++ [(1 : UInt8)]).takeD 8 (0 : UInt8)).toArray, by simp⟩
     let t : UInt64 :=
       UInt64.ofBytes
-        (us[7]!) (us[6]!) (us[5]!) (us[4]!)
-        (us[3]!) (us[2]!) (us[1]!) (us[0]!)
+        (us[7]) (us[6]) (us[5]) (us[4])
+        (us[3]) (us[2]) (us[1]) (us[0])
     let s : UInt64 := (8 : UInt64) <<< 60
-    let temp0 := Array.modify! wc (· ^^^ t) ws
-    let temp1 := Array.modify! 16 (· ^^^ s) temp0
+    let temp0 := xorLane ws wc.val (by omega) t
+    let temp1 := xorLane temp0 16 (by omega) s
     let ws' := f1600 temp1
-    ⟨ ⟨UInt64.byteswap (ws'[0]!), UInt64.byteswap (ws'[1]!)⟩,
-      ⟨UInt64.byteswap (ws'[2]!), UInt64.byteswap (ws'[3]!)⟩ ⟩
+    ⟨ ⟨UInt64.byteswap (ws'[0]), UInt64.byteswap (ws'[1])⟩,
+      ⟨UInt64.byteswap (ws'[2]), UInt64.byteswap (ws'[3])⟩ ⟩
 
-def ByteArray.run (bnd n : Nat) (wc : Fin 17) (bs : ByteArray) (ws : Array UInt64) : B256 :=
-  if 7 < n then
-    let b0 : UInt8 := bs[(bnd - n)]!
-    let b1 : UInt8 := bs[(bnd - (n - 1))]!
-    let b2 : UInt8 := bs[(bnd - (n - 2))]!
-    let b3 : UInt8 := bs[(bnd - (n - 3))]!
-    let b4 : UInt8 := bs[(bnd - (n - 4))]!
-    let b5 : UInt8 := bs[(bnd - (n - 5))]!
-    let b6 : UInt8 := bs[(bnd - (n - 6))]!
-    let b7 : UInt8 := bs[(bnd - (n - 7))]!
+/-- The ranged sponge. `bnd` is the end of the range being absorbed and `n` the
+number of bytes still to absorb, so `n ≤ bnd ≤ bs.size` is the invariant that
+makes every byte read total; both bounds travel with the recursion instead of
+being asserted at the call site. -/
+def ByteArray.run (bnd : Nat) (bs : ByteArray) (hb : bnd ≤ bs.size) :
+    (n : Nat) → n ≤ bnd → Fin 17 → Vector UInt64 25 → B256 :=
+  fun n hn wc ws =>
+  if h7 : 7 < n then
+    let b0 : UInt8 := bs[(bnd - n)]'(by omega)
+    let b1 : UInt8 := bs[(bnd - (n - 1))]'(by omega)
+    let b2 : UInt8 := bs[(bnd - (n - 2))]'(by omega)
+    let b3 : UInt8 := bs[(bnd - (n - 3))]'(by omega)
+    let b4 : UInt8 := bs[(bnd - (n - 4))]'(by omega)
+    let b5 : UInt8 := bs[(bnd - (n - 5))]'(by omega)
+    let b6 : UInt8 := bs[(bnd - (n - 6))]'(by omega)
+    let b7 : UInt8 := bs[(bnd - (n - 7))]'(by omega)
     let t : UInt64 := UInt64.ofBytes b7 b6 b5 b4 b3 b2 b1 b0
-    let ws' := Array.modify! wc (UInt64.xor · t) ws
-    ByteArray.run bnd (n - 8) (wc + 1) bs <|
+    let ws' := xorLane ws wc.val (by omega) t
+    ByteArray.run bnd bs hb (n - 8) (by omega) (wc + 1) <|
       if wc = 16 then f1600 ws' else ws'
   else
-    let rec aux (bnd : Nat) (bs : ByteArray) : Nat → Nat → List UInt8
-      | _, 0 => [] -- unreachable code
-      | 0, n + 1 => 1 :: List.replicate n 0
-      | m + 1, n + 1 =>
-        (bs.get! (bnd - (m + 1))) :: aux bnd bs m n
-    let us := aux bnd bs n 8
+    let rec aux (bnd : Nat) (bs : ByteArray) (hb : bnd ≤ bs.size) :
+        (m : Nat) → m ≤ bnd → Nat → List UInt8
+      | _, _, 0 => [] -- unreachable code
+      | 0, _, n + 1 => 1 :: List.replicate n 0
+      | m + 1, hm, n + 1 =>
+        bs[(bnd - (m + 1))]'(by omega) :: aux bnd bs hb m (by omega) n
+    let us := aux bnd bs hb n hn 8
     let t : UInt64 :=
       UInt64.ofBytes
         (us.getD 7 0)
@@ -541,19 +616,40 @@ def ByteArray.run (bnd n : Nat) (wc : Fin 17) (bs : ByteArray) (ws : Array UInt6
         (us.getD 1 0)
         (us.getD 0 0)
     let s : UInt64 := (8 : UInt64) <<< 60
-    let temp0 := Array.modify! wc (· ^^^ t) ws
-    let temp1 := Array.modify! 16 (· ^^^ s) temp0
+    let temp0 := xorLane ws wc.val (by omega) t
+    let temp1 := xorLane temp0 16 (by omega) s
     let ws' := f1600 temp1
-    ⟨ ⟨UInt64.byteswap (ws'[0]!), UInt64.byteswap (ws'[1]!)⟩,
-      ⟨UInt64.byteswap (ws'[2]!), UInt64.byteswap (ws'[3]!)⟩ ⟩
+    ⟨ ⟨UInt64.byteswap (ws'[0]), UInt64.byteswap (ws'[1])⟩,
+      ⟨UInt64.byteswap (ws'[2]), UInt64.byteswap (ws'[3])⟩ ⟩
+  termination_by n => n
 
 end KECCAK
 
 def Bytes.keccak (bs : Bytes) : B256 :=
   KECCAK.Bytes.run (0 : Fin 17) bs <| .replicate 25 0
 
+/-- keccak over the `sz` bytes of `bs` starting at `loc`.
+
+The range is not restricted by the type, so the out-of-range case is closed
+explicitly rather than left to a partial read: bytes past the end of `bs` are
+absorbed as zero, and the zero extension is materialised once, up front, so the
+in-range path — the only one any in-tree caller takes, since all three pass
+`loc = 0` and `sz = bs.size` — carries its bound as a proof and tests nothing
+per byte. -/
 def ByteArray.keccak (loc sz : Nat) (bs : ByteArray) : B256 :=
-  KECCAK.ByteArray.run (loc + sz) sz (0 : Fin 17) bs <| .replicate 25 0
+  if h : loc + sz ≤ bs.size then
+    KECCAK.ByteArray.run (loc + sz) bs h sz (by omega) (0 : Fin 17) <|
+      .replicate 25 0
+  else
+    KECCAK.ByteArray.run (loc + sz)
+      (bs ++ ⟨Array.replicate (loc + sz - bs.size) 0⟩)
+      (by
+        have hpad :
+            ((⟨Array.replicate (loc + sz - bs.size) 0⟩ : ByteArray)).size
+              = loc + sz - bs.size := Array.size_replicate
+        rw [ByteArray.size_append, hpad]
+        omega)
+      sz (by omega) (0 : Fin 17) <| .replicate 25 0
 
 def B256.keccak (x : B256) : B256 := Bytes.keccak <| x.toBytes
 

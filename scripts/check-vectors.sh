@@ -181,6 +181,9 @@ EXPECTED_FILES=("${CONTROL_FILES[@]}" "${PRECOMPILE_FILES[@]}" "${OSAKA_FILES[@]
 # genuinely unlisted JSON file without also rejecting these.
 #
 #   u256.json       run by check-u256.sh, not through the precompile dispatch.
+#   fake-exp.json   run by check-fake-exp.sh, likewise: a differential grid
+#                   against the pinned EELS `taylor_exponential`, not a
+#                   precompile vector file this gate could dispatch.
 #   blsPairing.json the shard source.  Its 106 cases run as the eight
 #                   blsPairing.shardN.json entries above, which are an exact
 #                   partition of it — verified by
@@ -189,6 +192,7 @@ EXPECTED_FILES=("${CONTROL_FILES[@]}" "${PRECOMPILE_FILES[@]}" "${OSAKA_FILES[@]
 #                   but it stays committed so the partition remains checkable.
 AUXILIARY_FILES=(
   u256.json
+  fake-exp.json
   blsPairing.json
 )
 

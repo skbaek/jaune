@@ -30,7 +30,7 @@
 # step that discharges a row deletes it (or rewrites it as KEEP) and
 # lowers the budget in the same commit.
 #
-# pending-budget: 321
+# pending-budget: 230
 #
 # At the branch point nothing is discharged yet: Step 1 inventories, it
 # does not repair. There are therefore zero KEEP rows, and the gate's
@@ -87,7 +87,6 @@
 
 
 # ---- R2 : Jaune/Hash.lean ----
-R2 Jaune/Hash.lean | none => panic "Array.modify! out of bounds"  ## PENDING(step8,remove) KECCAK.Array.modify! out-of-bounds panic
 
 # ---- R2 : Jaune/Machine.lean ----
 
@@ -115,96 +114,6 @@ R3 Jaune/EC.lean let y1 := ys[1]!  ## PENDING(step8,totalize) twist coefficient 
 # ---- R3 : Jaune/Execution.lean ----
 
 # ---- R3 : Jaune/Hash.lean ----
-R3 Jaune/Hash.lean (bs.get! (bnd - (m + 1))) :: aux bnd bs m n  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean (us[3]!) (us[2]!) (us[1]!) (us[0]!)  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean (us[7]!) (us[6]!) (us[5]!) (us[4]!)  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean (· ^^^ ((~~~ bc[(i + 1) % 5]!) &&& (bc[(i + 2) % 5]!))) ws  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean Array.modify! (j + i)  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean Array.modify! 0 (· ^^^ rndc[round]!) ws  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean [((Array.replicate 64 0x00).set! 0 0x80).writeD 56 lenBytes]  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean aux 24 (ws[1]!) ws  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean aux k (ws[j]!) ws'  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean def Array.modify! {ξ : Type u} (k : Nat) (f : ξ → ξ) (ws : Array ξ) : Array ξ :=  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean digest[0]! + wordsLeft[1]! + wordsRight[2]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean digest[1]! + wordsLeft[2]! + wordsRight[3]!,  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean digest[2]! + wordsLeft[3]! + wordsRight[4]!,  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean digest[3]! + wordsLeft[4]! + wordsRight[0]!,  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean digest[4]! + wordsLeft[0]! + wordsRight[1]!,  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean h[0] + h'[0]!,  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean h[1] + h'[1]!,  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean h[2] + h'[2]!,  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean h[3] + h'[3]!,  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean h[4] + h'[4]!,  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean h[5] + h'[5]!,  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean h[6] + h'[6]!,  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean h[7] + h'[7]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean index := index.map (fun i => rho[i]!)  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let b0 : UInt8 := bs[(bnd - n)]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let b1 : UInt8 := bs[(bnd - (n - 1))]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let b2 : UInt8 := bs[(bnd - (n - 2))]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let b3 : UInt8 := bs[(bnd - (n - 3))]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let b4 : UInt8 := bs[(bnd - (n - 4))]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let b5 : UInt8 := bs[(bnd - (n - 5))]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let b6 : UInt8 := bs[(bnd - (n - 6))]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let b7 : UInt8 := bs[(bnd - (n - 7))]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let f : Nat → ξ := λ x => ws[j + x]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let fn : Nat := fns[round]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let j := piln[i]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let k : UInt32 := ks[round]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let mut w0 : UInt32 := digest[0]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let mut w1 : UInt32 := digest[1]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let mut w2 : UInt32 := digest[2]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let mut w3 : UInt32 := digest[3]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let mut w4 : UInt32 := digest[4]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let s := round1600 (rndc[0]!) s  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let s := round1600 (rndc[10]!) s  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let s := round1600 (rndc[11]!) s  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let s := round1600 (rndc[12]!) s  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let s := round1600 (rndc[13]!) s  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let s := round1600 (rndc[14]!) s  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let s := round1600 (rndc[15]!) s  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let s := round1600 (rndc[16]!) s  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let s := round1600 (rndc[17]!) s  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let s := round1600 (rndc[18]!) s  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let s := round1600 (rndc[19]!) s  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let s := round1600 (rndc[1]!) s  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let s := round1600 (rndc[20]!) s  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let s := round1600 (rndc[21]!) s  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let s := round1600 (rndc[22]!) s  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let s := round1600 (rndc[23]!) s  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let s := round1600 (rndc[2]!) s  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let s := round1600 (rndc[3]!) s  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let s := round1600 (rndc[4]!) s  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let s := round1600 (rndc[5]!) s  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let s := round1600 (rndc[6]!) s  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let s := round1600 (rndc[7]!) s  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let s := round1600 (rndc[8]!) s  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let s := round1600 (rndc[9]!) s  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let shifts : (List UInt32) := shiftss[round]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let temp0 := Array.modify! wc (· ^^^ t) ws  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let temp1 : UInt32 := h + s1 + ch + (roundConstants[t]!) + wj  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let temp1 := Array.modify! 16 (· ^^^ s) temp0  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let w' := Array.set! w j wj  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let ws' := Array.modify! wc (UInt64.xor · t) ws  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let ws' := Array.modify! wc (· ^^^ t) ws  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean let ws' := ws.set! j (rol t <| rotc[i]!)  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean tmp := UInt32.rol tmp (shifts[index[i]!]!) + w4  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean tmp := tmp + w0 + (chunk[(index[i]!)]!) + k  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean ws[(x + 10)]! ^^^  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean ws[(x + 15)]! ^^^  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean ws[(x + 20)]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean ws[(x + 5)]! ^^^  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean ws[10]!, ws[11]!, ws[12]!, ws[13]!, ws[14]!,  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean ws[15]!, ws[16]!, ws[17]!, ws[18]!, ws[19]!,  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean ws[20]!, ws[21]!, ws[22]!, ws[23]!, ws[24]!⟩  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean ws[5]!, ws[6]!, ws[7]!, ws[8]!, ws[9]!,  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean ws[x]! ^^^  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean | j + 1, ws => inner t i j <| Array.modify! ((j * 5) + i) (· ^^^ t) ws  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean | none => panic "Array.modify! out of bounds"  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean | some x => ws.set! k (f x)  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean ⟨ ⟨UInt64.byteswap (ws'[0]!), UInt64.byteswap (ws'[1]!)⟩,  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean ⟨UInt64.byteswap (ws'[2]!), UInt64.byteswap (ws'[3]!)⟩ ⟩  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/Hash.lean ⟨ws[0]!, ws[1]!, ws[2]!, ws[3]!, ws[4]!,  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
 
 # ---- R3 : Jaune/Machine.lean ----
 
