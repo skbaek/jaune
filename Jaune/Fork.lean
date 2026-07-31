@@ -906,8 +906,8 @@ instance (cfg : ChainConfig) : Decidable cfg.Valid := by
 theorem valid_iff {cfg : ChainConfig} : cfg.Valid ↔ cfg.validate = .ok () := by
   unfold ChainConfig.Valid
   cases h : cfg.validate with
-  | error e => simp [h, Except.toOption]
-  | ok u => cases u; simp [h, Except.toOption]
+  | error e => simp [Except.toOption]
+  | ok u => cases u; simp [Except.toOption]
 
 -- There is deliberately no `ChainConfig.validRulesAt` packaging a `ValidRules`
 -- behind the configured lookup's current error channel: its signature would be

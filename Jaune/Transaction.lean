@@ -2251,8 +2251,8 @@ theorem CheckedBlockChain.ofEvidence_tip {chain : BlockChain} {tip : Block}
 def CheckedBlockChain.ofValidContext {chain : BlockChain}
     (h : chain.ValidContext) : CheckedBlockChain :=
   CheckedBlockChain.ofEvidence chain (chain.blocks.getLast h.1)
-    (List.getLast?_eq_getLast h.1) h.2.2.1 h.2.1
-    (h.2.2.2 _ (List.getLast?_eq_getLast h.1))
+    (List.getLast?_eq_some_getLast h.1) h.2.2.1 h.2.1
+    (h.2.2.2 _ (List.getLast?_eq_some_getLast h.1))
 
 /-- The defensive checker, in the frozen order: nonempty history, canonical
 state, valid retained ancestry, then the state root computed once and compared
@@ -2305,22 +2305,41 @@ prestate to a checked snapshot. It demands what `Main.lean` never checked --
 that the prestate is canonical and that its root is the one the genesis header
 commits to -- and it demands that genesis be block zero, which is what makes
 the retained-history coverage clause true of the chain it starts. -/
+def CheckedBlockChain.ofGenesis (cb : CanonicalBlock) (state : State)
+    (chainId : UInt64) (hnum : cb.block.header.number = 0)
+    (hcanon : state.Canonical) (hroot : state.root = cb.block.header.stateRoot) :
+    CheckedBlockChain :=
+  CheckedBlockChain.ofEvidence ⟨[cb.block], state, chainId⟩ cb.block rfl
+    ⟨List.IsChain.singleton _,
+      by
+        intro b hb
+        rw [List.mem_singleton.mp hb]
+        exact cb.rlpCanonical.1,
+      Or.inr (by
+        intro b hb
+        rw [Option.mem_def, List.head?_cons, Option.some.injEq] at hb
+        rw [← hb]
+        exact hnum)⟩
+    hcanon hroot
+
+theorem CheckedBlockChain.ofGenesis_val {cb : CanonicalBlock} {state : State}
+    {chainId : UInt64} {hnum hcanon hroot} :
+    (CheckedBlockChain.ofGenesis cb state chainId hnum hcanon hroot).val
+      = ⟨[cb.block], state, chainId⟩ := rfl
+
+theorem CheckedBlockChain.ofGenesis_tip {cb : CanonicalBlock} {state : State}
+    {chainId : UInt64} {hnum hcanon hroot} :
+    (CheckedBlockChain.ofGenesis cb state chainId hnum hcanon hroot).tip
+      = cb.block := rfl
+
+/-- The decidable form, for a caller that does not want to case on the three
+conditions itself. The proof-taking `ofGenesis` above is what the fixture
+runner uses, so that the prestate's root is computed exactly once. -/
 def CheckedBlockChain.ofGenesis? (cb : CanonicalBlock) (state : State)
     (chainId : UInt64) : Option CheckedBlockChain :=
   if h : cb.block.header.number = 0 ∧ state.Canonical ∧
       state.root = cb.block.header.stateRoot then
-    some (CheckedBlockChain.ofEvidence ⟨[cb.block], state, chainId⟩ cb.block rfl
-      ⟨List.IsChain.singleton _,
-        by
-          intro b hb
-          rw [List.mem_singleton.mp hb]
-          exact cb.rlpCanonical.1,
-        Or.inr (by
-          intro b hb
-          rw [Option.mem_def, List.head?_cons, Option.some.injEq] at hb
-          rw [← hb]
-          exact h.1)⟩
-      h.2.1 h.2.2)
+    some (CheckedBlockChain.ofGenesis cb state chainId h.1 h.2.1 h.2.2)
   else
     none
 

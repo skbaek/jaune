@@ -196,27 +196,51 @@ def actualExceptionDiagnostic (err : String) : String :=
   | some actual => actual.toString
   | none => "<unknown canonical identity>"
 
-/-- Decode enough of a fixture block to select its parent snapshot, then run
-the public block-import API the fixture's `network` label names. Both failure
-channels of the import are collapsed only after they have been handled
-explicitly.
+/-- The rules this fixture's `network` label applies to a candidate.
 
-A static label names its fork outright and imports at it. A transition label
-is a *schedule*, so its blocks go through the configured entry point and each
-one's own timestamp decides which rules it runs under -- which is the whole
-content of a transition fixture. -/
+A static label names its fork outright. A transition label is a *schedule*, so
+each block's own timestamp decides which rules it runs under -- which is the
+whole content of a transition fixture -- and the schedule's usability and
+chain identity are checked first, in the order `addBlockToChainUsing` checks
+them. -/
+def fixtureImportRules (spec : NetworkSpec) (chainId : UInt64)
+    (parent : CheckedBlockChain) (header : Header) : Except String ForkRules := do
+  match spec with
+  | .static f => f.rules
+  | .transition t =>
+    -- Exactly what `addBlockToChainUsing` checks, in its order: the schedule
+    -- is usable, it names this chain, and only then does the candidate's own
+    -- timestamp select the rules.
+    let cfg := t.chainConfig chainId
+    cfg.validate
+    Except.mapError ChainContextError.render (cfg.checkChainId parent.val)
+    cfg.rulesAt header.timestamp
+
+/-- Strictly decode a fixture block once, select its parent snapshot by the
+decoded `parentHash`, and import it into that snapshot through the checked
+core. Both failure channels are collapsed only after being handled explicitly.
+
+The parent is a `CheckedBlockChain`, so its integrity is evidence rather than
+a recomputation, and the child snapshot this returns carries the same evidence
+-- built from the checks the import already performed. -/
 def evaluateFixtureBlock (spec : NetworkSpec) (chainId : UInt64) (store : ChainStore)
-    (blockRlp : Bytes) : Except String (B256 × BlockChain) := do
-  let ⟨block, blockHeaderHash⟩ ← rlpToBlock blockRlp
-  let parent ← store.findParent block.header.parentHash
-  let imported :=
-    match spec with
-    | .static f => addBlockToChainAt f parent blockRlp
-    | .transition t => addBlockToChainUsing (t.chainConfig chainId) parent blockRlp
-  match imported with
+    (blockRlp : Bytes) : Except String CheckedBlockChain :=
+  match hd : rlpToBlock blockRlp with
   | .error err => .error err
-  | .ok (.inr err) => .error err
-  | .ok (.inl child) => .ok ⟨blockHeaderHash, child⟩
+  | .ok ⟨block, _⟩ =>
+    -- One strict decode, kept as the canonical envelope the checked import
+    -- core consumes; the parent is already a checked snapshot, so no state
+    -- root is recomputed for it.
+    match store.findParent block.header.parentHash with
+    | .error err => .error err
+    | .ok parent =>
+      match fixtureImportRules spec chainId parent block.header with
+      | .error err => .error err
+      | .ok rules =>
+        match him : addBlockToChainChecked rules parent (CanonicalBlock.ofDecode hd) with
+        | .error err => .error err
+        | .ok (.inr err) => .error err
+        | .ok (.inl _) => .ok (CheckedBlockChain.ofImport him)
 
 def requireExpectedFailure (idx : Nat) (chainname : String)
     (expected : List FixtureException) (err : String) : IO Unit := do
@@ -264,13 +288,14 @@ def processBlockJsons (spec : NetworkSpec) (chainId : UInt64) (store : ChainStor
       | some expected =>
         requireExpectedFailure idx chainname expected err
         processBlockJsons spec chainId store rest
-    | .ok ⟨tipHash, child⟩ =>
+    | .ok child =>
       match expected? with
       | some expected =>
         .throw s!"BLOCK #{idx} ({chainname}) was expected invalid but imported\n\
-          expected: {expected.map FixtureException.toString}\ncomputed tip: {tipHash}"
+          expected: {expected.map FixtureException.toString}\n\
+          computed tip: {child.tipHash}"
       | none =>
-        processBlockJsons spec chainId (store.addResult (.ok ⟨tipHash, child⟩)) rest
+        processBlockJsons spec chainId (store.addResult (.ok child)) rest
   | [] => .ok store
 
 /-- Check a fixture's own declared blob schedule against the rules this run
@@ -329,29 +354,52 @@ def runBlockchainStTest (spec : NetworkSpec) : (Nat × String × Lean.Json) → 
 
     let preState ← json.find "pre" >>= Lean.Json.toWorld
 
-    let chain : BlockChain :=
-    {
-      blocks := [gb]
-      state := preState
-      chainId := chainId.toUInt64
-    }
+    -- P0.2 item 6. The genesis block enters through the same strict decoder
+    -- every candidate does, rather than being trusted because a hand-built
+    -- record re-encodes to itself, and the declared hash and the parsed
+    -- prestate are compared against *that* decoded genesis. The prestate root
+    -- check is the one this runner never made: without it the whole chain
+    -- executes from a world its own genesis header does not commit to.
+    let genesisEnvelope ← (CanonicalBlock.ofRlp? genesisRLP).toIO
+      "error : genesis RLP is not canonical block RLP"
+    .guard (genesisEnvelope.headerHash = gbh_hash)
+      s!"error : decoded genesis header hash does not match\n  \
+         expected : {gbh_hash}\n  computed : {genesisEnvelope.headerHash}"
+    let genesisStateRoot := genesisEnvelope.block.header.stateRoot
+    -- The prestate's root is computed here, once, and the proof of the
+    -- comparison is what builds the checked snapshot -- so nothing downstream
+    -- recomputes it, and no unchecked genesis snapshot can be built at all.
+    let preStateRoot := preState.root
+    let genesisChecked ←
+      if hnum : genesisEnvelope.block.header.number = 0 then
+        if hcanon : preState.Canonical then
+          if hroot : preStateRoot = genesisStateRoot then
+            pure (CheckedBlockChain.ofGenesis genesisEnvelope preState
+              chainId.toUInt64 hnum hcanon hroot)
+          else
+            .throw s!"error : genesis prestate root does not match the genesis \
+              header\n  expected : {genesisStateRoot}\n  computed : {preStateRoot}"
+        else
+          .throw "error : genesis prestate is not a canonical world"
+      else
+        .throw s!"error : genesis block number = \
+          {genesisEnvelope.block.header.number}, expected 0"
 
     let blockJsons ← json.find "blocks" >>= Lean.Json.toIoList
     let store ←
-      processBlockJsons spec chainId.toUInt64 (.init gbh_hash chain)
+      processBlockJsons spec chainId.toUInt64 (.init genesisChecked)
         blockJsons.putIndex
     let lastBlockHash ← json.find "lastblockhash" >>= Lean.Json.toIoB256
     let chain ← (store.findLast lastBlockHash).toIO
-    let lastBlock ← chain.blocks.getLast?.toIO "error : no last block "
-    let lastBlockHash' := (Header.toBLT lastBlock.header).toBytes.keccak
+    let lastBlockHash' := chain.tipHash
     .guard
       (lastBlockHash = lastBlockHash')
       s!"error : last block hash does not match\n  expected : {lastBlockHash}\n  computed : {lastBlockHash'}"
 
     let postStateRoot ← getPostStateRoot json
     .guard
-      (postStateRoot = chain.state.root)
-      s!"error : end state root does not match\n  expected : {postStateRoot}\n  computed : {chain.state.root}"
+      (postStateRoot = chain.val.state.root)
+      s!"error : end state root does not match\n  expected : {postStateRoot}\n  computed : {chain.val.state.root}"
 
 /-- Select the cases whose fixture `network` label is exactly the requested
 one. Selection is by label equality, as before; the label is now a parsed
