@@ -3940,6 +3940,14 @@ theorem Rinst.run_canonical {evm : Evm} (h : evm.dyna.Canonical) (r : Rinst) :
     (Rinst.run evm r).Canonical :=
   Rinst.runCore_canonical evm.pc evm.sta h r
 
+/-- Destroying any list of accounts preserves canonicality; transaction
+settlement folds `destroyAccount` over the accounts-to-delete set. -/
+theorem State.Canonical.foldl_destroyAccount {l : List Adr} {w : State}
+    (h : w.Canonical) : (l.foldl Jaune.destroyAccount w).Canonical := by
+  induction l generalizing w with
+  | nil => exact h
+  | cons a l ih => exact ih (h.destroyAccount a)
+
 /-- Jump instructions never touch the world; the payload carries the new
 program counter beside the machine. -/
 theorem Jinst.runCore_canonicalOn (pc : Nat) {devm : Devm} (sevm : Sevm)

@@ -2355,4 +2355,233 @@ def RawImportFailure.render : RawImportFailure → String
 #guard (TxValidationError.all.map TxValidationError.tag).all fun t =>
   ¬ (BlockValidationError.all.map BlockValidationError.tag).contains t
 
+--------------- CANONICALITY THROUGH EXECUTION (P0.4, STEP 4) ---------------
+
+-- Checkpoint 3: canonicality through message-call processing, transaction
+-- processing, system transactions, withdrawals, the block body, and the raw
+-- successful block transition. Every lemma states the success channel; the
+-- error channel at this layer carries no state.
+
+theorem processMessageCall.create_canonical {msg : Msg} (h : msg.Canonical)
+    {p} (hp : processMessageCall.create msg = .ok p) :
+    State.Canonical p.1 := by
+  unfold processMessageCall.create at hp
+  dsimp only at hp
+  split at hp
+  · cases hp
+    exact h.1.1
+  · obtain ⟨evm, hevm, hp⟩ := Except.bind_eq_ok hp
+    have hcan := processCreateMessage_ok_canonical h (Except.bimap_id_eq_ok hevm)
+    split at hp <;>
+      (obtain ⟨rc, _, hp⟩ := Except.bind_eq_ok hp
+       cases hp
+       exact hcan.1)
+
+theorem processMessageCall.call_canonical {msg : Msg} (h : msg.Canonical)
+    {p} (hp : processMessageCall.call msg = .ok p) :
+    State.Canonical p.1 := by
+  unfold processMessageCall.call at hp
+  dsimp only at hp
+  split at hp
+  · -- no authorizations: the join point receives the message unchanged
+    obtain ⟨x0, hx0, hp⟩ := Except.bind_eq_ok hp
+    cases hx0
+    dsimp only at hp
+    split at hp <;>
+      (obtain ⟨evm, hevm, hp⟩ := Except.bind_eq_ok hp
+       have hcan := processMessage_ok_canonical (by exact h)
+         (Except.bimap_id_eq_ok hevm)
+       split at hp <;>
+         (obtain ⟨rc, _, hp⟩ := Except.bind_eq_ok hp
+          cases hp
+          exact hcan.1))
+  · -- delegation processed first
+    obtain ⟨w, hw, hp⟩ := Except.bind_eq_ok hp
+    have hwc := setDelegation_canonical h hw
+    obtain ⟨wm, wv⟩ := w
+    obtain ⟨x0, hx0, hp⟩ := Except.bind_eq_ok hp
+    cases hx0
+    dsimp only at hp
+    split at hp <;>
+      (obtain ⟨evm, hevm, hp⟩ := Except.bind_eq_ok hp
+       have hcan := processMessage_ok_canonical (by exact hwc)
+         (Except.bimap_id_eq_ok hevm)
+       split at hp <;>
+         (obtain ⟨rc, _, hp⟩ := Except.bind_eq_ok hp
+          cases hp
+          exact hcan.1))
+
+/-- A successful message call leaves a canonical state, for both the create
+and the call route. -/
+theorem processMessageCall_canonical {msg : Msg} (h : msg.Canonical)
+    {p} (hp : processMessageCall msg = .ok p) : State.Canonical p.1 := by
+  unfold processMessageCall at hp
+  split at hp
+  · exact processMessageCall.create_canonical h hp
+  · exact processMessageCall.call_canonical h hp
+
+theorem prepareMessage_canonical {benv : Benv} {tenv : Tenv} {tx : Tx}
+    (hb : benv.Canonical) (ht : tenv.Canonical) {msg : Msg}
+    (hm : prepareMessage benv tenv tx = .ok msg) : msg.Canonical := by
+  unfold prepareMessage at hm
+  cases hm
+  exact ⟨hb, ht⟩
+
+/-- A successful transaction leaves a canonical state: the fee movements go
+through `incrNonce`/`subBal`/`addBal`, the call itself through
+`processMessageCall`, and settlement folds `destroyAccount`. -/
+theorem processTransaction_canonical {benv : Benv} (h : benv.Canonical)
+    {bout : BlockOutput} {tx : Tx} {index : Nat} {p}
+    (hp : processTransaction benv bout tx index = .ok p) :
+    State.Canonical p.1 := by
+  unfold processTransaction at hp
+  obtain ⟨b1, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨ig, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨ck, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨st1, hst1, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨msg, hmsg, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨rc, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨b2, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨b3, _, hp⟩ := Except.bind_eq_ok hp
+  cases hp
+  have hst1c : st1.Canonical :=
+    State.Canonical.subBal
+      (by exact State.Canonical.incrNonce (by exact h.1) _)
+      (Option.toExcept_eq_ok hst1)
+  have hmsgc : msg.Canonical :=
+    prepareMessage_canonical (by exact ⟨hst1c, h.1⟩)
+      (by exact Tra.canonical_empty) hmsg
+  have hqc := processMessageCall_canonical hmsgc hq
+  exact State.Canonical.foldl_destroyAccount
+    (State.Canonical.addBal (State.Canonical.addBal hqc _ _) _ _)
+
+theorem processWithdrawalsState_canonical {st : State} (h : st.Canonical)
+    (wds : List Withdrawal) : (processWithdrawalsState st wds).Canonical := by
+  unfold processWithdrawalsState
+  induction wds generalizing st with
+  | nil => exact h
+  | cons w l ih => exact ih (State.Canonical.addBal h _ _)
+
+/-- The single boundary all four system transactions share. -/
+theorem processSystemTransaction_canonical {benv : Benv} (h : benv.Canonical)
+    {target : Adr} {code : ByteArray} {data : Bytes} {p}
+    (hp : processSystemTransaction benv target code data = .ok p) :
+    State.Canonical p.1 := by
+  unfold processSystemTransaction at hp
+  exact processMessageCall_canonical
+    (by exact ⟨⟨h.1, h.1⟩, Tra.canonical_empty⟩) hp
+
+theorem processUncheckedSystemTransaction_canonical {benv : Benv}
+    (h : benv.Canonical) {target : Adr} {data : Bytes} {p}
+    (hp : processUncheckedSystemTransaction benv target data = .ok p) :
+    State.Canonical p.1 :=
+  processSystemTransaction_canonical h hp
+
+theorem processCheckedSystemTransaction_canonical {benv : Benv}
+    (h : benv.Canonical) {target : Adr} {data : Bytes} {p}
+    (hp : processCheckedSystemTransaction benv target data = .ok p) :
+    State.Canonical p.1 := by
+  unfold processCheckedSystemTransaction at hp
+  dsimp only at hp
+  split at hp
+  · obtain ⟨u, hu, hp⟩ := Except.bind_eq_ok hp
+    nomatch hu
+  · obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
+    obtain ⟨qs, qo⟩ := q
+    dsimp only at hp
+    split at hp
+    · obtain ⟨u, hu, hp⟩ := Except.bind_eq_ok hp
+      nomatch hu
+    · cases hp
+      exact processSystemTransaction_canonical h hq
+
+theorem processGeneralPurposeRequests_canonical {benv : Benv}
+    (h : benv.Canonical) {bout : BlockOutput} {p}
+    (hp : processGeneralPurposeRequests benv bout = .ok p) :
+    State.Canonical p.1 := by
+  unfold processGeneralPurposeRequests at hp
+  obtain ⟨dr, _, hp⟩ := Except.bind_eq_ok hp
+  dsimp only at hp
+  split at hp <;>
+    (obtain ⟨q1, hq1, hp⟩ := Except.bind_eq_ok hp
+     obtain ⟨q1s, q1o⟩ := q1
+     dsimp only at hp
+     split at hp <;>
+       (obtain ⟨q2, hq2, hp⟩ := Except.bind_eq_ok hp
+        obtain ⟨q2s, q2o⟩ := q2
+        dsimp only at hp
+        split at hp <;>
+          (cases hp
+           exact processCheckedSystemTransaction_canonical
+             (by exact ⟨processCheckedSystemTransaction_canonical h hq1, h.2⟩)
+             hq2)))
+
+theorem applyTransactions_canonical :
+    ∀ (txis : List (Nat × Tx)) {benv : Benv}, benv.Canonical →
+      ∀ {bout : BlockOutput} {p},
+        applyTransactions txis benv bout = .ok p → p.1.Canonical
+  | [], _, h, _, _, hp => by cases hp; exact h
+  | txi :: txis, benv, h, bout, p, hp => by
+    unfold applyTransactions at hp
+    obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
+    exact applyTransactions_canonical txis
+      (by exact ⟨processTransaction_canonical h hq, h.2⟩) hp
+
+/-- A successful block body leaves a canonical state: system transactions,
+ordinary transactions, withdrawals, and general-purpose requests all
+preserve the invariant. -/
+theorem applyBody_canonical {benv : Benv} (h : benv.Canonical)
+    {txs : List (Bytes ⊕ Tx)} {wds : List Withdrawal} {p}
+    (hp : applyBody benv txs wds = .ok p) : State.Canonical p.1 := by
+  unfold applyBody at hp
+  obtain ⟨q1, hq1, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨lh, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨q2, hq2, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨txsD, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨q3, hq3, hp⟩ := Except.bind_eq_ok hp
+  have hb1 : q1.1.Canonical :=
+    processUncheckedSystemTransaction_canonical h hq1
+  have hb2 : q2.1.Canonical :=
+    processUncheckedSystemTransaction_canonical (by exact ⟨hb1, h.2⟩) hq2
+  have hb3 : q3.1.Canonical :=
+    applyTransactions_canonical _ (by exact ⟨hb2, h.2⟩) hq3
+  exact processGeneralPurposeRequests_canonical
+    (by exact ⟨processWithdrawalsState_canonical hb3.1 _, hb3.2⟩) hp
+
+/-- **Raw successful block transition preserves canonicality.** The output
+chain's execution state is the body's final state, and its original state is
+the input chain's. -/
+theorem stateTransitionWith_canonical {rules : ForkRules} {ch : BlockChain}
+    (h : ch.Canonical) {block : Block} {ch'}
+    (hp : stateTransitionWith rules ch block = .ok ch') : ch'.Canonical := by
+  unfold stateTransitionWith at hp
+  obtain ⟨u1, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨u2, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨u3, _, hp⟩ := Except.bind_eq_ok hp
+  cases hp
+  exact applyBody_canonical (by exact ⟨h, h⟩) hq
+
+theorem stateTransitionAt_canonical {f : Fork} {ch : BlockChain}
+    (h : ch.Canonical) {block : Block} {ch'}
+    (hp : stateTransitionAt f ch block = .ok ch') : ch'.Canonical := by
+  unfold stateTransitionAt at hp
+  obtain ⟨r, _, hp⟩ := Except.bind_eq_ok hp
+  exact stateTransitionWith_canonical h hp
+
+theorem stateTransition_canonical {ch : BlockChain} (h : ch.Canonical)
+    {block : Block} {ch'} (hp : stateTransition ch block = .ok ch') :
+    ch'.Canonical :=
+  stateTransitionWith_canonical h hp
+
+/-- Configured successful transition preserves canonicality. -/
+theorem stateTransitionUsing_canonical {cfg : ChainConfig} {ch : BlockChain}
+    (h : ch.Canonical) {block : Block} {ch'}
+    (hp : stateTransitionUsing cfg ch block = .ok ch') : ch'.Canonical := by
+  unfold stateTransitionUsing at hp
+  obtain ⟨u1, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨r, _, hp⟩ := Except.bind_eq_ok hp
+  exact stateTransitionWith_canonical h hp
+
 end Jaune

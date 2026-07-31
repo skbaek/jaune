@@ -1592,6 +1592,56 @@ theorem createMsg_canonical {sevm : Sevm} {devm : Devm}
     (createMsg sevm devm createGas endowment newAddress calldata).Canonical :=
   ⟨⟨hd.1, hs⟩, hd.2⟩
 
+/-- One EIP-7702 authorization step preserves the message invariant on its
+success channel: every arm returns the message unchanged up to bookkeeping
+fields outside the invariant, or applies `setCode`/`incrNonce`. The error
+channel carries no state. -/
+theorem setDelegationStep_canonical {auth : Auth} {msg : Msg} {rc : B256}
+    (h : msg.Canonical) {p} (hp : setDelegationStep auth msg rc = .ok p) :
+    p.1.Canonical := by
+  unfold setDelegationStep at hp
+  split at hp
+  · cases hp; exact h
+  · split at hp
+    · cases hp; exact h
+    · split at hp
+      · split at hp
+        · cases hp; exact h
+        · nomatch hp
+      · dsimp only at hp
+        split at hp
+        · cases hp; exact h
+        · split at hp
+          · cases hp; exact h
+          · cases hp
+            exact Msg.Canonical.incrNonce (Msg.Canonical.setCode h _ _) _
+
+theorem setDelegationLoop_canonical :
+    ∀ (auths : List Auth) {msg : Msg} {rc : B256}, msg.Canonical →
+      ∀ {p}, setDelegationLoop auths msg rc = .ok p → p.1.Canonical
+  | [], _, _, h, _, hp => by cases hp; exact h
+  | auth :: auths, msg, rc, h, p, hp => by
+    unfold setDelegationLoop at hp
+    rcases hq : setDelegationStep auth msg rc with e | q <;> rw [hq] at hp
+    · nomatch hp
+    · exact setDelegationLoop_canonical auths
+        (setDelegationStep_canonical h hq) hp
+
+/-- Processing an authorization list preserves the message invariant; the
+final code refresh is outside the invariant. -/
+theorem setDelegation_canonical {msg : Msg} (h : msg.Canonical)
+    {p} (hp : setDelegation msg = .ok p) : p.1.Canonical := by
+  unfold setDelegation at hp
+  rcases hq : setDelegationLoop msg.tenv.stat.auths msg 0 with e | q <;>
+    rw [hq] at hp
+  · nomatch hp
+  · have hq1 := setDelegationLoop_canonical _ h hq
+    simp only [bind, Except.bind] at hp
+    split at hp
+    · nomatch hp
+    · cases hp
+      exact hq1
+
 /-- The CREATE-family step: the only world change on the parent's side is the
 sender nonce increment, through its named mutator; the child frame is built
 over the parent's world and the frame's original state. -/

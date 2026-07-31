@@ -3023,4 +3023,72 @@ private def totalGuardRevert : Bool :=
 
 #guard totalGuardRevert
 
+--------------- CANONICALITY THROUGH EXECUTION (P0.4, STEP 4) ---------------
+
+-- Checkpoint 3, first slice: the fuel-free wrappers inherit canonicality
+-- from `execFueled_run_canonical` through the seeded-budget bridge.
+
+/-- Inversion for the `Option.toExcept` lifts that thread the transaction
+chain: a successful lift pins the option. -/
+theorem Option.toExcept_eq_ok {ξ : Type u} {υ : Type v} {x : ξ} {o : Option υ}
+    {v : υ} (h : Option.toExcept x o = .ok v) : o = some v := by
+  cases o with
+  | none => nomatch h
+  | some w => cases h; rfl
+
+/-- **The total interpreter preserves canonicality** on both channels. -/
+theorem exec_canonical {evm : Evm} (h : evm.Canonical) :
+    Execution.Canonical (exec evm) :=
+  execFueled_run_canonical _ evm h (execFueled_run_sufficientFuel evm)
+
+theorem runFrame_canonicalSettle {frame : Frame} (hf : frame.Canonical) :
+    (runFrame frame).CanonicalSettle := by
+  unfold runFrame
+  have hent := Frame.enter_canonical hf
+  rcases he : frame.enter with r | evm <;> rw [he] at hent
+  · exact hent
+  · exact Frame.settle_canonicalSettle hf (exec_canonical hent)
+
+theorem executeCode_canonicalSettle {msg : Msg} (hm : msg.Canonical) :
+    (executeCode msg).CanonicalSettle := by
+  unfold executeCode
+  have hent := executeCode.enter_canonical hm
+  rcases he : executeCode.enter msg with evm | raw <;> rw [he] at hent
+  · exact executeCode.handleError_canonicalSettle (exec_canonical hent)
+  · exact executeCode.handleError_canonicalSettle hent
+
+theorem processMessage_canonicalSettle {msg : Msg} (hm : msg.Canonical) :
+    (processMessage msg).CanonicalSettle :=
+  runFrame_canonicalSettle (Frame.canonical_ofCall hm)
+
+theorem processCreateMessage_canonicalSettle {msg : Msg} (hm : msg.Canonical) :
+    (processCreateMessage msg).CanonicalSettle :=
+  runFrame_canonicalSettle (Frame.canonical_ofCreate hm)
+
+-- The eq-conditioned forms downstream walks consume without spelling the
+-- message, plus the inversion for the `bimap Prod.fst id` error-erasure the
+-- transaction layer applies to both.
+
+theorem processMessage_ok_canonical {msg : Msg} (hm : msg.Canonical) {d : Devm}
+    (h : processMessage msg = .ok d) : d.Canonical := by
+  have hs := processMessage_canonicalSettle hm
+  rw [h] at hs
+  exact hs
+
+theorem processCreateMessage_ok_canonical {msg : Msg} (hm : msg.Canonical)
+    {d : Devm} (h : processCreateMessage msg = .ok d) : d.Canonical := by
+  have hs := processCreateMessage_canonicalSettle hm
+  rw [h] at hs
+  exact hs
+
+theorem Except.bimap_id_eq_ok {ε : Type u0} {δ : Type u1} {ξ : Type u2}
+    {f : ε → δ} {x : Except ε ξ} {v : ξ}
+    (h : Except.bimap f id x = .ok v) : x = .ok v := by
+  cases x with
+  | error e => nomatch h
+  | ok a =>
+    injection h with h2
+    rw [← h2]
+    rfl
+
 end Jaune
