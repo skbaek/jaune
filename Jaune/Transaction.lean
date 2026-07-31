@@ -1679,6 +1679,156 @@ theorem CanonicalBlock.ofRlp?_eq_none {raw : Bytes} {err : String}
     exact absurd hb (by simp)
   · rfl
 
+--------------- CHECKED SEMANTIC CONSTRUCTORS ---------------
+
+-- The open `Header`/`Tx`/`Withdrawal`/`Block` records stay exactly as they
+-- are, for proofs and for negative construction. What follows is the *checked*
+-- ingress beside them: one wrapper per record, each with a private
+-- constructor and a decidable admission test, so a hand-built value is
+-- certified against the very predicate the strict decoder establishes -- never
+-- trimmed, normalised, or defaulted into shape (fixed decision 1).
+
+/-- A header certified wire-well-formed. -/
+structure CheckedHeader : Type where
+  private mk ::
+  val : Header
+  wireWellFormed : val.WireWellFormed
+
+/-- Certify a hand-built header, or refuse it. -/
+def CheckedHeader.ofHeader? (h : Header) : Option CheckedHeader :=
+  if hw : h.WireWellFormed then some ⟨h, hw⟩ else none
+
+/-- Certification from the strict decoder, with no second test. -/
+def CheckedHeader.ofDecode {blt : BLT} {h : Header}
+    (hd : blt.toExStrHeader = .ok h) : CheckedHeader :=
+  ⟨h, BLT.toExStrHeader_wireWellFormed hd⟩
+
+/-- A withdrawal certified wire-well-formed. -/
+structure CheckedWithdrawal : Type where
+  private mk ::
+  val : Withdrawal
+  wireWellFormed : val.WireWellFormed
+
+def CheckedWithdrawal.ofWithdrawal? (w : Withdrawal) : Option CheckedWithdrawal :=
+  if hw : w.WireWellFormed then some ⟨w, hw⟩ else none
+
+def CheckedWithdrawal.ofDecode {blt : BLT} {w : Withdrawal}
+    (hd : blt.toExStrWithdrawal = .ok w) : CheckedWithdrawal :=
+  ⟨w, BLT.toExStrWithdrawal_wireWellFormed hd⟩
+
+/-- A certified block-body transaction slot.
+
+Its decoded side carries a wire-well-formed *legacy* transaction; its opaque
+side carries typed envelope bytes, which stay undecoded until the existing
+decode point inside `applyBody`, so no error precedence moves. There is no
+third shape: a decoded *typed* transaction can never be a slot, because a
+typed transaction's canonical block encoding is its envelope byte followed by
+its payload rather than the legacy list. Admitting one is precisely the
+`.inr Tx` trust bypass P0.3 removes; `Tx.toTypedEnvelope?` is the way a
+hand-built typed transaction becomes a slot. -/
+structure TxEnvelope : Type where
+  private mk ::
+  entry : Bytes ⊕ Tx
+  wellFormed : TxEntry.WireWellFormed entry
+
+/-- The opaque typed slot. Nothing is decoded here. -/
+def TxEnvelope.ofTypedBytes (bs : Bytes) : TxEnvelope := ⟨.inl bs, trivial⟩
+
+/-- The decoded legacy slot, from the strict decoder's own equation. -/
+def TxEnvelope.ofLegacyDecode {ls : List BLT} {tx : Tx}
+    (h : (BLT.list ls).toExStrTx = .ok tx) : TxEnvelope :=
+  ⟨.inr tx, BLT.toExStrTx_list_wireWellFormed h⟩
+
+/-- The raw compatibility constructor: it carries no evidence, so it validates
+once, here, rather than leaving a slot to be trusted later. -/
+def TxEnvelope.ofEntry? (e : Bytes ⊕ Tx) : Option TxEnvelope :=
+  if h : TxEntry.WireWellFormed e then some ⟨e, h⟩ else none
+
+/-- The envelope byte a typed transaction is carried under; `none` for legacy,
+which has no envelope. -/
+def TxType.envelopeByte : TxType → Option UInt8
+  | .zero _ _ => none
+  | .one _ _ _ _ => some 0x01
+  | .two _ _ _ _ _ => some 0x02
+  | .three _ _ _ _ _ _ _ => some 0x03
+  | .four _ _ _ _ _ _ => some 0x04
+
+/-- A hand-built typed transaction's route into a block body: its envelope
+byte followed by its payload. Placing the same record directly as a decoded
+slot would re-encode it through the legacy list, corrupting both the
+transactions trie and the signing hash -- which is why that route does not
+exist. Legacy transactions have no envelope and are refused here; they enter
+as decoded slots through `TxEnvelope.ofEntry?`. -/
+def Tx.toTypedEnvelope? (tx : Tx) : Option TxEnvelope :=
+  tx.type.envelopeByte.map fun b => TxEnvelope.ofTypedBytes (b :: tx.toBLT.toBytes)
+
+/-- A block certified structurally canonical componentwise. -/
+structure CheckedBlock : Type where
+  private mk ::
+  val : Block
+  rlpCanonical : val.RlpCanonical
+
+def CheckedBlock.ofBlock? (b : Block) : Option CheckedBlock :=
+  if h : b.RlpCanonical then some ⟨b, h⟩ else none
+
+/-- Assemble a block from already-certified parts. No admission test is needed
+because every part carries its own. -/
+def CheckedBlock.ofParts (header : CheckedHeader) (txs : List TxEnvelope)
+    (ommers : List CheckedHeader) (wds : List CheckedWithdrawal) : CheckedBlock :=
+  { val :=
+      { header := header.val
+        txs := txs.map TxEnvelope.entry
+        ommers := ommers.map CheckedHeader.val
+        wds := wds.map CheckedWithdrawal.val }
+    rlpCanonical := by
+      refine ⟨header.wireWellFormed, ?_, ?_, ?_⟩
+      · intro o ho
+        obtain ⟨c, _, rfl⟩ := List.mem_map.mp ho
+        exact c.wireWellFormed
+      · intro w hw
+        obtain ⟨c, _, rfl⟩ := List.mem_map.mp hw
+        exact c.wireWellFormed
+      · intro e he
+        obtain ⟨c, _, rfl⟩ := List.mem_map.mp he
+        exact c.wellFormed }
+
+/-- Every canonical outer block is a checked block. -/
+def CanonicalBlock.toChecked (cb : CanonicalBlock) : CheckedBlock :=
+  ⟨cb.block, cb.rlpCanonical⟩
+
+theorem CanonicalBlock.toChecked_val (cb : CanonicalBlock) :
+    cb.toChecked.val = cb.block := rfl
+
+/-- P0.3's trust bypass, discharged rather than relocated.
+
+`decodeTx (.inr tx) = .ok tx` still holds -- revalidating a decoder-produced
+legacy transaction late in `applyBody` is exactly what the plan forbids -- but
+on the checked path it is no longer an *assumption*. Every decoded slot of a
+canonical outer block is a wire-well-formed legacy transaction, so what
+`decodeTx` returns there is certified, and the ingress side can no longer be
+handed an uncertified `.inr Tx` at all. -/
+theorem CanonicalBlock.decodeTx_inr {cb : CanonicalBlock} {tx : Tx}
+    (h : Sum.inr tx ∈ cb.block.txs) :
+    decodeTx (.inr tx) = .ok tx ∧
+      Tx.WireWellFormed tx ∧ tx.type.isLegacy = true :=
+  ⟨rfl, cb.rlpCanonical.2.2.2 _ h⟩
+
+/-- The state transition on a canonical outer block.
+
+Definitionally the raw core applied to the envelope's block, so every result
+about `stateTransitionWith` transfers to it by `rfl` and no proof has to be
+restated. What it adds is at the type level: a caller of this entry point
+cannot supply a block that no strict decode ever produced. -/
+def stateTransitionCanonical (rules : ForkRules) (ch : BlockChain)
+    (cb : CanonicalBlock) :
+    Except String BlockChain :=
+  stateTransitionWith rules ch cb.block
+
+theorem stateTransitionCanonical_eq (rules : ForkRules) (ch : BlockChain)
+    (cb : CanonicalBlock) :
+    stateTransitionCanonical rules ch cb = stateTransitionWith rules ch cb.block :=
+  rfl
+
 /-- Check EIP-7934 against the authoritative original RLP byte length.
 
 This deliberately takes evidence, not a decoded `Block`: re-encoding would
@@ -2008,6 +2158,71 @@ their results about this name. -/
 def addBlockToChain (chain : BlockChain) (blockRlp : Bytes) :
   Except String (BlockChain ⊕ String) :=
   addBlockToChainWith pragueRules chain blockRlp
+
+--------------- IMPORT BRIDGE AND INVERSION LEMMAS ---------------
+
+-- Stated entirely over `rlpToBlock`, `checkBlockRlpSize` and
+-- `stateTransitionWith`. A downstream proof client -- Blanc, in practice --
+-- can invert an import with these and never unfold `CanonicalBlock`,
+-- `addBlockToChainCanonical`, or the raw wrapper's dependent match.
+
+/-- A raw import whose bytes do not strictly decode fails on the outer channel
+with exactly the decoder's own diagnostic. -/
+theorem addBlockToChainWith_decode_error {rules : ForkRules} {chain : BlockChain}
+    {blockRlp : Bytes} {err : String} (h : rlpToBlock blockRlp = .error err) :
+    addBlockToChainWith rules chain blockRlp = .error err := by
+  unfold addBlockToChainWith
+  split
+  · rename_i e he
+    rw [h] at he
+    simp only [Except.error.injEq] at he
+    exact he ▸ rfl
+  · rename_i b s hb
+    rw [h] at hb
+    exact absurd hb (by simp)
+
+/-- A raw import whose bytes strictly decode is the checked core on the
+envelope that decode produces. This is the bridge: the wrapper adds
+validation, and nothing else. -/
+theorem addBlockToChainWith_eq_canonical {rules : ForkRules} {chain : BlockChain}
+    {blockRlp : Bytes} {block : Block} {hash : B256}
+    (h : rlpToBlock blockRlp = .ok ⟨block, hash⟩) :
+    addBlockToChainWith rules chain blockRlp
+      = addBlockToChainCanonical rules chain (CanonicalBlock.ofDecode h) := by
+  unfold addBlockToChainWith
+  split
+  · rename_i e he
+    rw [h] at he
+    exact absurd he (by simp)
+  · rename_i f s hb
+    rw [h] at hb
+    simp only [Except.ok.injEq, Prod.mk.injEq] at hb
+    obtain ⟨rfl, rfl⟩ := hb
+    rfl
+
+/-- Full inversion of a successful raw import: strict decode, then EIP-7934
+against the *supplied* byte length, then the transition -- in that order. -/
+theorem addBlockToChainWith_eq_ok_inl {rules : ForkRules}
+    {chain chain' : BlockChain} {blockRlp : Bytes}
+    (h : addBlockToChainWith rules chain blockRlp = .ok (.inl chain')) :
+    ∃ block hash,
+      rlpToBlock blockRlp = .ok ⟨block, hash⟩ ∧
+      checkBlockRlpSize rules.block blockRlp.length = .ok () ∧
+      stateTransitionWith rules chain block = .ok chain' := by
+  unfold addBlockToChainWith at h
+  split at h
+  · exact absurd h (by simp)
+  · rename_i block hash hd
+    refine ⟨block, hash, hd, ?_⟩
+    unfold addBlockToChainCanonical at h
+    split at h
+    · simp only [pure, Except.pure, Except.ok.injEq, reduceCtorEq] at h
+    · rename_i hsize
+      split at h
+      · simp only [pure, Except.pure, Except.ok.injEq, reduceCtorEq] at h
+      · rename_i hstw
+        simp only [Bind.bind, Except.bind, Except.ok.injEq, Sum.inl.injEq] at h
+        exact ⟨hsize, h ▸ hstw⟩
 
 ---------------- FORK ARCHITECTURE CHECKS ----------------
 
@@ -2943,5 +3158,78 @@ private def wireGuardWithdrawal (amount : B256) : Withdrawal :=
   (fun tx => decide (TxEntry.WireWellFormed (.inr tx))) = some false
 #guard (Bytes.toExStrTx (type2Vector [0x0a] testRecipient [0x02])).toOption.map
   (fun tx => decide (TxEntry.WireWellFormed (.inr tx))) = some false
+
+--------------- CHECKED-CONSTRUCTOR AND ENVELOPE CHECKS ---------------
+
+-- A checked constructor admits what the decoder would produce and refuses
+-- everything else outright. It never trims, normalises, or defaults a
+-- hand-built value into shape.
+#guard (CheckedHeader.ofHeader? guardTestHeader).isSome
+#guard (CheckedHeader.ofHeader? { guardTestHeader with bloom := [] }).isNone
+#guard (CheckedHeader.ofHeader? { guardTestHeader with gasUsed := 2 ^ 256 }).isNone
+#guard (CheckedHeader.ofHeader?
+  { guardTestHeader with excessBlobGas := 2 ^ 64 }).isNone
+#guard (CheckedWithdrawal.ofWithdrawal?
+  (wireGuardWithdrawal (2 ^ 64 - 1 : Nat).toB256)).isSome
+#guard (CheckedWithdrawal.ofWithdrawal?
+  (wireGuardWithdrawal (2 ^ 64 : Nat).toB256)).isNone
+
+-- A decoded legacy transaction is a legitimate block-body slot and has no
+-- typed envelope; a typed transaction is the exact mirror image. This is the
+-- pair of facts that leaves no direct trusted `.inr Tx` anywhere on the
+-- checked path.
+#guard (BLT.toExStrTx canonicalLegacyVector).toOption.map
+  (fun tx => (TxEnvelope.ofEntry? (.inr tx)).isSome) = some true
+#guard (BLT.toExStrTx canonicalLegacyVector).toOption.map
+  (fun tx => (Tx.toTypedEnvelope? tx).isSome) = some false
+#guard (Bytes.toExStrTx (type2Vector [0x0a] testRecipient [0x02])).toOption.map
+  (fun tx => (TxEnvelope.ofEntry? (.inr tx)).isSome) = some false
+#guard (Bytes.toExStrTx (type2Vector [0x0a] testRecipient [0x02])).toOption.map
+  (fun tx => (Tx.toTypedEnvelope? tx).isSome) = some true
+
+-- ...and the typed route reproduces the exact envelope bytes it came from, so
+-- commitment bytes are unchanged for a transaction that makes the round trip
+-- through the checked constructor rather than the decoder.
+private def typedEnvelopeBytes? (bs : Bytes) : Option Bytes :=
+  (Bytes.toExStrTx bs).toOption.bind fun tx =>
+    (Tx.toTypedEnvelope? tx).bind fun env =>
+      match env.entry with
+      | .inl ys => some ys
+      | .inr _ => none
+
+#guard typedEnvelopeBytes?
+  (type1Vector [0x01] [0x01] testRecipient [0x01]
+    (accessListOf testRecipient testStorageKey))
+    = some (type1Vector [0x01] [0x01] testRecipient [0x01]
+        (accessListOf testRecipient testStorageKey))
+#guard typedEnvelopeBytes? (type2Vector [0x0a] testRecipient [0x02])
+  = some (type2Vector [0x0a] testRecipient [0x02])
+#guard typedEnvelopeBytes? (type3Vector [0x01] testRecipient testBlobHash)
+  = some (type3Vector [0x01] testRecipient testBlobHash)
+#guard typedEnvelopeBytes? (type4Vector testRecipient goodAuth)
+  = some (type4Vector testRecipient goodAuth)
+
+-- A block carrying a *typed* transaction as a decoded slot cannot be
+-- certified: its canonical encoding is not the legacy list it would be
+-- re-encoded through.
+#guard (CheckedBlock.ofBlock? (guardBlockAt 0)).isSome
+#guard (Bytes.toExStrTx (type2Vector [0x0a] testRecipient [0x02])).toOption.map
+  (fun tx => (CheckedBlock.ofBlock? { guardBlockAt 0 with txs := [.inr tx] }).isSome)
+    = some false
+#guard (BLT.toExStrTx canonicalLegacyVector).toOption.map
+  (fun tx => (CheckedBlock.ofBlock? { guardBlockAt 0 with txs := [.inr tx] }).isSome)
+    = some true
+#guard (CheckedBlock.ofBlock?
+  { guardBlockAt 0 with header := { guardTestHeader with bloom := [] } }).isNone
+
+-- The envelope exists exactly for bytes that strictly decode and re-encode,
+-- and the size it reports is the supplied one.
+#guard (CanonicalBlock.ofRlp? (guardBlockAt 0).toBLT.toBytes).isSome
+#guard (CanonicalBlock.ofRlp? [0xFF]).isNone
+#guard (CanonicalBlock.ofRlp? (guardBlockAt 0).toBLT.toBytes).map
+  CanonicalBlock.rawSize = some (guardBlockAt 0).toBLT.toBytes.length
+#guard (CanonicalBlock.ofRlp? (guardBlockAt 0).toBLT.toBytes).map
+  CanonicalBlock.headerHash
+    = some (Header.toBLT (guardBlockAt 0).header).toBytes.keccak
 
 end Jaune
