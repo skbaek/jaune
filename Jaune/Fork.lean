@@ -889,6 +889,26 @@ theorem rulesAt_valid {cfg : ChainConfig} {timestamp : Nat} {r : ForkRules}
   | error e => rw [hf] at h; cases h
   | ok f => rw [hf] at h; exact Fork.rules_valid h
 
+/-- A schedule that `validate` accepts, as a decidable proposition.
+
+This is the `Prop` face of `ChainConfig.validate`, and it exists for the
+proof-carrying configured chain (P0.1 item 4): a witness that a schedule has
+already been checked travels with the pair, so a repeated configured client
+neither rechecks it nor silently proceeds with one that was never checked. It
+deliberately says nothing about `chainId`; agreement with a snapshot is
+`checkChainId`'s separate question. -/
+def Valid (cfg : ChainConfig) : Prop :=
+  cfg.validate.toOption.isSome = true
+
+instance (cfg : ChainConfig) : Decidable cfg.Valid := by
+  unfold ChainConfig.Valid; infer_instance
+
+theorem valid_iff {cfg : ChainConfig} : cfg.Valid ↔ cfg.validate = .ok () := by
+  unfold ChainConfig.Valid
+  cases h : cfg.validate with
+  | error e => simp [h, Except.toOption]
+  | ok u => cases u; simp [h, Except.toOption]
+
 -- There is deliberately no `ChainConfig.validRulesAt` packaging a `ValidRules`
 -- behind the configured lookup's current error channel: its signature would be
 -- a new stringly-typed carrier, which is exactly what `check-integrity.sh` R4
@@ -1247,6 +1267,8 @@ private def guardFloorSchedule : ChainConfig :=
 -- this build's declared domain -- the exact P0.5 fix, since Jaune implements
 -- no pre-Prague era and must not silently answer those blocks as Prague.
 #guard mainnetChainConfig.validate.toOption.isSome
+#guard mainnetChainConfig.Valid
+#guard ¬ (ChainConfig.mk 1 []).Valid
 #guard mainnetChainConfig.chainId = 1
 #guard guardHasTag unsupportedEraTag (mainnetChainConfig.forkAt 0)
 #guard guardHasTag unsupportedEraTag

@@ -1585,15 +1585,16 @@ This is the whole reason the checked transition never has to re-derive
 ancestry: the child's `validateHeader` already established both halves of
 `Block.Links` against the parent header, and the canonical envelope already
 established the child header's wire well-formedness. -/
-theorem BlockChain.retainedHistoryValid_appendBlock {chain : BlockChain}
-    {tip blk : Block} {st : State} {cid : UInt64}
+theorem BlockChain.retainedHistoryValid_appendBlock {chain chain' : BlockChain}
+    {tip blk : Block}
     (hv : chain.RetainedHistoryValid) (htip : chain.blocks.getLast? = some tip)
-    (hlink : Block.Links tip blk) (hwire : blk.header.WireWellFormed) :
-    BlockChain.RetainedHistoryValid ⟨appendBlock chain.blocks blk, st, cid⟩ := by
+    (hlink : Block.Links tip blk) (hwire : blk.header.WireWellFormed)
+    (hb : chain'.blocks = appendBlock chain.blocks blk) :
+    chain'.RetainedHistoryValid := by
   have hsuf : (chain.blocks.reverse.take 254).reverse <:+ chain.blocks :=
     Block.take_reverse_suffix _ _
-  have hblocks : (BlockChain.mk (appendBlock chain.blocks blk) st cid).blocks
-      = (chain.blocks.reverse.take 254).reverse ++ [blk] := appendBlock_eq _ _
+  have hblocks : chain'.blocks = (chain.blocks.reverse.take 254).reverse ++ [blk] := by
+    rw [hb, appendBlock_eq]
   obtain ⟨kept, hkept⟩ := Block.take_reverse_eq_cons (n := 254) (by omega) htip
   have hkeptlast : ((chain.blocks.reverse.take 254).reverse).getLast? = some tip := by
     rw [List.getLast?_reverse, hkept]; rfl
@@ -2171,6 +2172,210 @@ theorem stateTransitionCanonical_eq (rules : ForkRules) (ch : BlockChain)
     (cb : CanonicalBlock) :
     stateTransitionCanonical rules ch cb = stateTransitionWith rules ch cb.block :=
   rfl
+
+--------------- THE CHECKED CHAIN SNAPSHOT ---------------
+
+-- P0.2. A `BlockChain` is a freely constructible triple, so nothing stops a
+-- caller pairing a real tip with an unrelated world. The tip header's
+-- `stateRoot` is the authenticated identity of the prestate every child
+-- executes from, and `initBenv` reads `chain.state` directly, so without that
+-- link "the state transition from this chain tip" is not a statement about
+-- anything. What follows is the checked snapshot the expensive checks are
+-- paid for once, and the proof-carrying constructors that carry the witness
+-- forward instead of recomputing it (fixed decision 2).
+
+/-- The snapshot's world commits to its own tip header. -/
+def BlockChain.TipStateAgrees (chain : BlockChain) : Prop :=
+  ∀ tip ∈ chain.blocks.getLast?, chain.state.root = tip.header.stateRoot
+
+instance (chain : BlockChain) : Decidable chain.TipStateAgrees := by
+  unfold BlockChain.TipStateAgrees; infer_instance
+
+/-- Everything an executable snapshot must satisfy, in the order the checker
+tests it (design report §5): nonempty history, canonical execution state,
+valid retained ancestry, and only then the tip/root comparison that costs a
+trie root. The conjunction is right-nested in exactly that order, so the
+derived decision procedure short-circuits in it -- and because nonemptiness
+comes first, tip/root agreement is never vacuously true on an empty chain. -/
+def BlockChain.ValidContext (chain : BlockChain) : Prop :=
+  chain.blocks ≠ [] ∧ chain.Canonical ∧
+    chain.RetainedHistoryValid ∧ chain.TipStateAgrees
+
+instance (chain : BlockChain) : Decidable chain.ValidContext := by
+  unfold BlockChain.ValidContext; infer_instance
+
+/-- A chain snapshot that is safe to execute from, with its tip named
+explicitly.
+
+The explicit `tip` and `tip_is_last` are what keep every consumer total: no
+partial projection, no defaulting lookup, no `Fin` arithmetic, and
+nonemptiness comes free. The constructor is private; the only routes in are
+`BlockChain.check` (which pays for the checks), `CheckedBlockChain.ofEvidence`
+(which demands them as proofs), and the transition/genesis constructors built
+on it. -/
+structure CheckedBlockChain : Type where
+  private mk ::
+  /-- The snapshot itself. -/
+  val : BlockChain
+  /-- Its tip block, named rather than projected. -/
+  tip : Block
+  /-- The tip really is the last block. -/
+  tip_is_last : val.blocks.getLast? = some tip
+  /-- Its retained ancestry supports `BLOCKHASH`. -/
+  retainedHistory : val.RetainedHistoryValid
+  /-- Its world carries no noncanonical entry. -/
+  canonicalState : val.state.Canonical
+  /-- Its world is the one the tip header commits to. -/
+  tipStateRoot : val.state.root = tip.header.stateRoot
+
+/-- The proof-carrying constructor. Nothing is computed here: every field is
+evidence, so a caller that already holds the witness -- a successful checked
+transition, for instance -- pays no trie root to package its result. -/
+def CheckedBlockChain.ofEvidence (chain : BlockChain) (tip : Block)
+    (htip : chain.blocks.getLast? = some tip)
+    (hhist : chain.RetainedHistoryValid) (hcanon : chain.state.Canonical)
+    (hroot : chain.state.root = tip.header.stateRoot) : CheckedBlockChain :=
+  ⟨chain, tip, htip, hhist, hcanon, hroot⟩
+
+theorem CheckedBlockChain.ofEvidence_val {chain : BlockChain} {tip : Block}
+    {htip hhist hcanon hroot} :
+    (CheckedBlockChain.ofEvidence chain tip htip hhist hcanon hroot).val
+      = chain := rfl
+
+theorem CheckedBlockChain.ofEvidence_tip {chain : BlockChain} {tip : Block}
+    {htip hhist hcanon hroot} :
+    (CheckedBlockChain.ofEvidence chain tip htip hhist hcanon hroot).tip
+      = tip := rfl
+
+/-- Package a snapshot whose context has already been decided. -/
+def CheckedBlockChain.ofValidContext {chain : BlockChain}
+    (h : chain.ValidContext) : CheckedBlockChain :=
+  CheckedBlockChain.ofEvidence chain (chain.blocks.getLast h.1)
+    (List.getLast?_eq_getLast h.1) h.2.2.1 h.2.1
+    (h.2.2.2 _ (List.getLast?_eq_getLast h.1))
+
+/-- The defensive checker, in the frozen order: nonempty history, canonical
+state, valid retained ancestry, then the state root computed once and compared
+with the tip's. A snapshot that fails any of them yields no checked value at
+all, so there is nothing for a caller to ignore. -/
+def BlockChain.check (chain : BlockChain) : Option CheckedBlockChain :=
+  if h : chain.ValidContext then
+    some (CheckedBlockChain.ofValidContext h)
+  else
+    none
+
+theorem BlockChain.check_isSome_iff {chain : BlockChain} :
+    chain.check.isSome = true ↔ chain.ValidContext := by
+  unfold BlockChain.check
+  split <;> simp_all
+
+theorem BlockChain.check_eq_none {chain : BlockChain} (h : ¬ chain.ValidContext) :
+    chain.check = none := by
+  unfold BlockChain.check
+  split
+  · exact absurd (by assumption) h
+  · rfl
+
+/-- Every checked snapshot satisfies the context its checker tests for; the
+two routes in agree on what they mean. -/
+theorem CheckedBlockChain.validContext (cc : CheckedBlockChain) :
+    cc.val.ValidContext := by
+  refine ⟨?_, cc.canonicalState, cc.retainedHistory, ?_⟩
+  · intro h
+    have ht := cc.tip_is_last
+    rw [h] at ht
+    simp at ht
+  · intro t ht
+    rw [cc.tip_is_last, Option.mem_def, Option.some.injEq] at ht
+    rw [← ht]
+    exact cc.tipStateRoot
+
+theorem CheckedBlockChain.check_val (cc : CheckedBlockChain) :
+    cc.val.check.isSome = true :=
+  BlockChain.check_isSome_iff.mpr cc.validContext
+
+/-- The snapshot's key: the hash of the tip header it is proved to end with.
+Total, because the tip is a field rather than a lookup -- which is what lets
+`ChainStore` derive every key instead of accepting one. -/
+def CheckedBlockChain.tipHash (cc : CheckedBlockChain) : B256 :=
+  cc.tip.header.hash
+
+/-- Genesis: the only route from a canonical genesis envelope and a parsed
+prestate to a checked snapshot. It demands what `Main.lean` never checked --
+that the prestate is canonical and that its root is the one the genesis header
+commits to -- and it demands that genesis be block zero, which is what makes
+the retained-history coverage clause true of the chain it starts. -/
+def CheckedBlockChain.ofGenesis? (cb : CanonicalBlock) (state : State)
+    (chainId : UInt64) : Option CheckedBlockChain :=
+  if h : cb.block.header.number = 0 ∧ state.Canonical ∧
+      state.root = cb.block.header.stateRoot then
+    some (CheckedBlockChain.ofEvidence ⟨[cb.block], state, chainId⟩ cb.block rfl
+      ⟨List.IsChain.singleton _,
+        by
+          intro b hb
+          rw [List.mem_singleton.mp hb]
+          exact cb.rlpCanonical.1,
+        Or.inr (by
+          intro b hb
+          rw [Option.mem_def, List.head?_cons, Option.some.injEq] at hb
+          rw [← hb]
+          exact h.1)⟩
+      h.2.1 h.2.2)
+  else
+    none
+
+theorem CheckedBlockChain.ofGenesis?_eq_some {cb : CanonicalBlock} {state : State}
+    {chainId : UInt64} {cc : CheckedBlockChain}
+    (h : CheckedBlockChain.ofGenesis? cb state chainId = some cc) :
+    cc.val = ⟨[cb.block], state, chainId⟩ ∧ cc.tip = cb.block := by
+  unfold CheckedBlockChain.ofGenesis? at h
+  split at h
+  · simp only [Option.some.injEq] at h
+    subst h
+    exact ⟨rfl, rfl⟩
+  · exact absurd h (by simp)
+
+--------------- THE CONFIGURED CHAIN ---------------
+
+/-- A configured chain: a validated schedule, a checked snapshot, and the
+evidence that they name the same chain.
+
+P0.1 item 4. The three facts a configured entry point would otherwise recheck
+on every call -- schedule usability, snapshot integrity, chain-ID agreement --
+are established once, here, before any candidate bytes exist. The raw
+configured wrappers keep checking on every call, because they carry no
+proof. -/
+structure ConfiguredChain : Type where
+  private mk ::
+  config : ChainConfig
+  chain : CheckedBlockChain
+  validSchedule : config.Valid
+  chainId_eq : config.chainId = chain.val.chainId
+
+/-- The checked constructor: the only route to a configured chain. -/
+def ConfiguredChain.of? (cfg : ChainConfig) (cc : CheckedBlockChain) :
+    Option ConfiguredChain :=
+  if h : cfg.Valid ∧ cfg.chainId = cc.val.chainId then
+    some ⟨cfg, cc, h.1, h.2⟩
+  else
+    none
+
+theorem ConfiguredChain.of?_eq_some {cfg : ChainConfig} {cc : CheckedBlockChain}
+    {pc : ConfiguredChain} (h : ConfiguredChain.of? cfg cc = some pc) :
+    pc.config = cfg ∧ pc.chain = cc := by
+  unfold ConfiguredChain.of? at h
+  split at h
+  · simp only [Option.some.injEq] at h
+    subst h
+    exact ⟨rfl, rfl⟩
+  · exact absurd h (by simp)
+
+/-- A configured chain never disagrees with itself: the chain-ID check the raw
+configured entry points perform is redundant on this path, by construction. -/
+theorem ConfiguredChain.checkChainId_eq_ok (pc : ConfiguredChain) :
+    pc.config.checkChainId pc.chain.val = .ok () := by
+  unfold ChainConfig.checkChainId
+  rw [if_pos pc.chainId_eq]
 
 /-- Check EIP-7934 against the authoritative original RLP byte length.
 
@@ -2752,6 +2957,38 @@ private def guardHistoryChild : Block := guardChildBlock 1 1966080
 #guard (getLast256BlockHashes
   (guardHistoryChain [guardParentBlock, guardHistoryChild])).length = 3
 #guard (getLast256BlockHashes (guardHistoryChain [])).length = 0
+
+-- P0.2, the snapshot half. A snapshot whose world is not the one its tip
+-- header commits to is refused by the checker, before any candidate header or
+-- body is looked at; so is an empty one, which must never pass vacuously.
+-- Only the checked value carries a tip hash, and it is derived, not supplied.
+
+private def guardCheckedBlock : Block :=
+  { header := { guardParentHeader with stateRoot := State.root (Std.TreeMap.empty : State) }
+    txs := [], ommers := [], wds := [] }
+
+private def guardCheckedChain : BlockChain :=
+  { blocks := [guardCheckedBlock], state := .empty, chainId := 1 }
+
+#guard guardCheckedChain.check.isSome
+-- The genesis header of the history guards commits to root 0, which no state
+-- has: a real tip with an unrelated world.
+#guard (guardHistoryChain [guardParentBlock]).check.isNone
+#guard { guardCheckedChain with blocks := [] : BlockChain }.check.isNone
+-- Retained history is part of the context, so a snapshot that fails it fails
+-- the checker even when its tip and root agree.
+#guard { guardCheckedChain with
+  blocks := [guardCheckedBlock, guardCheckedBlock] : BlockChain }.check.isNone
+#guard guardCheckedChain.check.map CheckedBlockChain.tipHash
+  = some guardCheckedBlock.header.hash
+-- The configured pair demands a validated schedule and an agreeing identity.
+#guard guardCheckedChain.check.map
+  (fun cc => (ConfiguredChain.of? mainnetChainConfig cc).isSome) = some true
+#guard guardCheckedChain.check.map
+  (fun cc => (ConfiguredChain.of? ⟨7, mainnetChainConfig.activations⟩ cc).isSome)
+    = some false
+#guard guardCheckedChain.check.map
+  (fun cc => (ConfiguredChain.of? ⟨1, []⟩ cc).isSome) = some false
 
 -- The explicit API applies the fork it is given, and only that fork accepts
 -- its own expected value.
@@ -3478,6 +3715,292 @@ theorem stateTransitionUsing_canonical {cfg : ChainConfig} {ch : BlockChain}
   obtain ⟨u1, _, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨r, _, hp⟩ := Except.bind_eq_ok hp
   exact stateTransitionWith_canonical h hp
+
+--------------- THE CHECKED TRANSITION (P0.2, STEP 6) ---------------
+
+-- What the raw transition already establishes, read back out of it. Nothing
+-- here re-executes or recomputes anything: `validateHeader` has already
+-- compared the child's parent hash and number against the parent header, and
+-- `stateTransitionChecks` has already compared the computed post-state root
+-- against the child header's. Those two comparisons are exactly the halves of
+-- a checked snapshot's witness the transition does not otherwise carry, so
+-- the checked core constructs its output from them rather than paying for a
+-- second trie root.
+
+-- `validateHeader` is a `do` block of guards, so its elaboration is a nest of
+-- join points under `have`-bound continuations. Zeta-expanding all of them at
+-- once duplicates each continuation twice per level, and the resulting term is
+-- large enough to exhaust `simp`'s step budget -- which is a limit that may
+-- not be raised. Peeling one binder at a time keeps the shared term small.
+private theorem letFun_apply {α : Sort u} {β : α → Sort v} (a : α)
+    (f : (x : α) → β x) : letFun a f = f a := rfl
+
+/-- Header validation establishes both halves of `Block.Links` against the
+chain's tip. -/
+theorem validateHeader_links {rules : ForkRules} {chain : BlockChain}
+    {header : Header} {tip : Block} (htip : chain.blocks.getLast? = some tip)
+    (h : validateHeader rules chain header = .ok ()) :
+    header.parentHash = tip.header.hash ∧
+      header.number = tip.header.number + 1 := by
+  unfold validateHeader at h
+  obtain ⟨parent, hpar, h⟩ := Except.bind_eq_ok h
+  rw [htip] at hpar
+  simp only [Option.toExcept, Except.ok.injEq] at hpar
+  subst hpar
+  dsimp only at h
+  by_cases hph : header.parentHash = tip.header.hash
+  · rw [if_neg (by simpa [Header.hash] using hph)] at h
+    refine ⟨hph, ?_⟩
+    obtain ⟨bf, hbf, h⟩ := Except.bind_eq_ok h
+    by_cases h1 : header.excessBlobGas ≠ calculateExcessBlobGas rules.blob tip.header
+    · rw [if_pos h1] at h
+      obtain ⟨_, hb, _⟩ := Except.bind_eq_ok h
+      exact absurd hb (by simp)
+    rw [if_neg h1] at h
+    by_cases h2 : header.gasUsed > header.gasLimit
+    · rw [if_pos h2] at h
+      obtain ⟨_, hb, _⟩ := Except.bind_eq_ok h
+      exact absurd hb (by simp)
+    rw [if_neg h2] at h
+    by_cases h3 : bf ≠ header.baseFeePerGas
+    · rw [if_pos h3] at h
+      obtain ⟨_, hb, _⟩ := Except.bind_eq_ok h
+      exact absurd hb (by simp)
+    rw [if_neg h3] at h
+    by_cases h4 : header.timestamp ≤ tip.header.timestamp
+    · rw [if_pos h4] at h
+      obtain ⟨_, hb, _⟩ := Except.bind_eq_ok h
+      exact absurd hb (by simp)
+    rw [if_neg h4] at h
+    by_cases h5 : header.number ≠ tip.header.number + 1
+    · rw [if_pos h5] at h
+      obtain ⟨_, hb, _⟩ := Except.bind_eq_ok h
+      exact absurd hb (by simp)
+    · simpa using h5
+  · exfalso
+    rw [if_pos (by simpa [Header.hash] using hph)] at h
+    by_cases hz : header.parentHash = 0
+    · rw [if_pos hz] at h
+      obtain ⟨_, hb, _⟩ := Except.bind_eq_ok h
+      exact absurd hb (by simp)
+    · rw [if_neg hz] at h
+      obtain ⟨_, hb, _⟩ := Except.bind_eq_ok h
+      exact absurd hb (by simp)
+
+/-- The block checks establish the computed post-state root against the child
+header's own -- which is exactly the tip/root agreement the resulting snapshot
+needs, already paid for. -/
+theorem stateTransitionChecks_stateRoot {bout : BlockOutput} {header : Header}
+    {transactionsRoot blockStateRoot receiptRoot : B256} {blockLogsBloom : Bytes}
+    {withdrawalsRoot requestsHash : B256}
+    (h : stateTransitionChecks bout header transactionsRoot blockStateRoot
+      receiptRoot blockLogsBloom withdrawalsRoot requestsHash = .ok ()) :
+    blockStateRoot = header.stateRoot := by
+  unfold stateTransitionChecks at h
+  dsimp only at h
+  by_cases h1 : bout.blockGasUsed ≠ header.gasUsed
+  · rw [if_pos h1] at h
+    obtain ⟨_, hb, _⟩ := Except.bind_eq_ok h
+    exact absurd hb (by simp)
+  rw [if_neg h1] at h
+  by_cases h2 : transactionsRoot ≠ header.txsRoot
+  · rw [if_pos h2] at h
+    obtain ⟨_, hb, _⟩ := Except.bind_eq_ok h
+    exact absurd hb (by simp)
+  rw [if_neg h2] at h
+  by_cases h3 : blockStateRoot ≠ header.stateRoot
+  · rw [if_pos h3] at h
+    obtain ⟨_, hb, _⟩ := Except.bind_eq_ok h
+    exact absurd hb (by simp)
+  · simpa using h3
+
+/-- Inversion of a successful raw transition: header validation passed, the
+result's blocks are the parent's with this block appended, and its state is
+the one the child header commits to. -/
+theorem stateTransitionWith_eq_ok {rules : ForkRules} {ch ch' : BlockChain}
+    {block : Block} (h : stateTransitionWith rules ch block = .ok ch') :
+    validateHeader rules ch block.header = .ok () ∧
+      ch'.blocks = appendBlock ch.blocks block ∧
+      ch'.state.root = block.header.stateRoot := by
+  unfold stateTransitionWith at h
+  obtain ⟨u1, hvh, h⟩ := Except.bind_eq_ok h
+  obtain ⟨u2, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨q, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨u3, hchk, h⟩ := Except.bind_eq_ok h
+  cases u1
+  cases u3
+  cases h
+  exact ⟨hvh, rfl, stateTransitionChecks_stateRoot hchk⟩
+
+/-- The whole output witness of a successful transition from a checked
+snapshot, assembled from what the transition already established: `Step 4`'s
+canonicality preservation, header validation's parent link, the checked
+envelope's wire well-formedness, and the block checks' own state-root
+comparison. No root is recomputed. -/
+theorem BlockChain.validContext_of_transition {rules : ForkRules}
+    {cc : CheckedBlockChain} {cb : CanonicalBlock} {ch' : BlockChain}
+    (h : stateTransitionWith rules cc.val cb.block = .ok ch') :
+    ch'.blocks.getLast? = some cb.block ∧ ch'.RetainedHistoryValid ∧
+      ch'.state.Canonical ∧ ch'.state.root = cb.block.header.stateRoot := by
+  obtain ⟨hvh, hblocks, hroot⟩ := stateTransitionWith_eq_ok h
+  obtain ⟨hph, hnum⟩ := validateHeader_links cc.tip_is_last hvh
+  refine ⟨?_, ?_, stateTransitionWith_canonical cc.canonicalState h, hroot⟩
+  · rw [hblocks]; exact appendBlock_getLast? _ _
+  · exact BlockChain.retainedHistoryValid_appendBlock cc.retainedHistory
+      cc.tip_is_last ⟨hnum, hph⟩ cb.rlpCanonical.1 hblocks
+
+--------------- CHECKED TRANSITION AND IMPORT CORES ---------------
+
+/-- The checked transition core: it accepts only a checked snapshot and a
+canonical envelope, and it is definitionally the raw core on their values, so
+every existing result about `stateTransitionWith` transfers by `rfl`. Its
+output witness is `CheckedBlockChain.ofTransition` below. -/
+def stateTransitionChecked (rules : ForkRules) (cc : CheckedBlockChain)
+    (cb : CanonicalBlock) :
+    Except String BlockChain :=
+  stateTransitionWith rules cc.val cb.block
+
+theorem stateTransitionChecked_eq (rules : ForkRules) (cc : CheckedBlockChain)
+    (cb : CanonicalBlock) :
+    stateTransitionChecked rules cc cb
+      = stateTransitionWith rules cc.val cb.block := rfl
+
+/-- The checked output of a successful checked transition.
+
+This is the P0.2 fast path: the returned snapshot's four facts are proofs, not
+computations, so a repeated client pays exactly one state-root computation --
+the one `stateTransitionChecks` already performed on the child -- and never a
+second one on the parent. -/
+def CheckedBlockChain.ofTransition {rules : ForkRules} {cc : CheckedBlockChain}
+    {cb : CanonicalBlock} {ch' : BlockChain}
+    (h : stateTransitionChecked rules cc cb = .ok ch') : CheckedBlockChain :=
+  CheckedBlockChain.ofEvidence ch' cb.block
+    (BlockChain.validContext_of_transition h).1
+    (BlockChain.validContext_of_transition h).2.1
+    (BlockChain.validContext_of_transition h).2.2.1
+    (BlockChain.validContext_of_transition h).2.2.2
+
+theorem CheckedBlockChain.ofTransition_val {rules : ForkRules}
+    {cc : CheckedBlockChain} {cb : CanonicalBlock} {ch' : BlockChain}
+    (h : stateTransitionChecked rules cc cb = .ok ch') :
+    (CheckedBlockChain.ofTransition h).val = ch' := rfl
+
+theorem CheckedBlockChain.ofTransition_tip {rules : ForkRules}
+    {cc : CheckedBlockChain} {cb : CanonicalBlock} {ch' : BlockChain}
+    (h : stateTransitionChecked rules cc cb = .ok ch') :
+    (CheckedBlockChain.ofTransition h).tip = cb.block := rfl
+
+/-- Inversion of the checked import core, mirroring the raw wrapper's. -/
+theorem addBlockToChainCanonical_eq_ok_inl {rules : ForkRules}
+    {chain chain' : BlockChain} {cb : CanonicalBlock}
+    (h : addBlockToChainCanonical rules chain cb = .ok (.inl chain')) :
+    checkBlockRlpSize rules.block cb.rawSize = .ok () ∧
+      stateTransitionWith rules chain cb.block = .ok chain' := by
+  unfold addBlockToChainCanonical at h
+  split at h
+  · simp only [pure, Except.pure, Except.ok.injEq, reduceCtorEq] at h
+  · rename_i hsize
+    split at h
+    · simp only [pure, Except.pure, Except.ok.injEq, reduceCtorEq] at h
+    · rename_i hstw
+      simp only [Bind.bind, Except.bind, Except.ok.injEq, Sum.inl.injEq] at h
+      exact ⟨hsize, h ▸ hstw⟩
+
+/-- The checked import core: a checked snapshot in, and on the accepting
+channel a snapshot whose witness is `CheckedBlockChain.ofImport`. The
+validation order is the frozen one, unchanged -- this is the raw checked core
+with a checked input type. -/
+def addBlockToChainChecked (rules : ForkRules) (cc : CheckedBlockChain)
+    (cb : CanonicalBlock) :
+    Except String (BlockChain ⊕ String) :=
+  addBlockToChainCanonical rules cc.val cb
+
+/-- The checked output of a successful checked import. -/
+def CheckedBlockChain.ofImport {rules : ForkRules} {cc : CheckedBlockChain}
+    {cb : CanonicalBlock} {ch' : BlockChain}
+    (h : addBlockToChainChecked rules cc cb = .ok (.inl ch')) : CheckedBlockChain :=
+  CheckedBlockChain.ofTransition
+    (rules := rules) (cc := cc) (cb := cb)
+    (addBlockToChainCanonical_eq_ok_inl h).2
+
+theorem CheckedBlockChain.ofImport_val {rules : ForkRules} {cc : CheckedBlockChain}
+    {cb : CanonicalBlock} {ch' : BlockChain}
+    (h : addBlockToChainChecked rules cc cb = .ok (.inl ch')) :
+    (CheckedBlockChain.ofImport h).val = ch' := rfl
+
+theorem CheckedBlockChain.ofImport_tip {rules : ForkRules} {cc : CheckedBlockChain}
+    {cb : CanonicalBlock} {ch' : BlockChain}
+    (h : addBlockToChainChecked rules cc cb = .ok (.inl ch')) :
+    (CheckedBlockChain.ofImport h).tip = cb.block := rfl
+
+--------------- CONFIGURED CHECKED ENTRY POINTS ---------------
+
+/-- The configured checked transition. The chain-ID check the raw configured
+entry point performs is discharged by the pair's own witness rather than
+repeated, and the snapshot is not rechecked at all; what remains is the rule
+lookup, which is the only part that depends on the candidate's timestamp. -/
+def stateTransitionConfigured (pc : ConfiguredChain) (cb : CanonicalBlock) :
+    Except String BlockChain := do
+  stateTransitionWith (← pc.config.rulesAt cb.block.header.timestamp)
+    pc.chain.val cb.block
+
+/-- The configured checked path agrees with the raw configured entry point on
+every input: what it drops is exactly the check its witness already carries. -/
+theorem stateTransitionConfigured_eq (pc : ConfiguredChain) (cb : CanonicalBlock) :
+    stateTransitionConfigured pc cb
+      = stateTransitionUsing pc.config pc.chain.val cb.block := by
+  unfold stateTransitionConfigured stateTransitionUsing
+  rw [pc.checkChainId_eq_ok]
+  rfl
+
+/-- The checked output of a successful configured checked transition. -/
+def CheckedBlockChain.ofConfiguredTransition {pc : ConfiguredChain}
+    {cb : CanonicalBlock} {ch' : BlockChain}
+    (h : stateTransitionConfigured pc cb = .ok ch') : CheckedBlockChain :=
+  CheckedBlockChain.ofEvidence ch' cb.block
+    (by
+      obtain ⟨_, _, hst⟩ := Except.bind_eq_ok h
+      exact (BlockChain.validContext_of_transition (cc := pc.chain) hst).1)
+    (by
+      obtain ⟨_, _, hst⟩ := Except.bind_eq_ok h
+      exact (BlockChain.validContext_of_transition (cc := pc.chain) hst).2.1)
+    (by
+      obtain ⟨_, _, hst⟩ := Except.bind_eq_ok h
+      exact (BlockChain.validContext_of_transition (cc := pc.chain) hst).2.2.1)
+    (by
+      obtain ⟨_, _, hst⟩ := Except.bind_eq_ok h
+      exact (BlockChain.validContext_of_transition (cc := pc.chain) hst).2.2.2)
+
+--------------- CHECKED/RAW BRIDGES (FOR STEP 11) ---------------
+
+-- Stated so a downstream proof client can move between the raw names its
+-- theorems are written about and the checked ones, without unfolding either
+-- structure.
+
+theorem stateTransitionChecked_eq_raw (rules : ForkRules) (cc : CheckedBlockChain)
+    (cb : CanonicalBlock) :
+    stateTransitionChecked rules cc cb
+      = stateTransitionCanonical rules cc.val cb := rfl
+
+theorem addBlockToChainChecked_eq_raw (rules : ForkRules) (cc : CheckedBlockChain)
+    (cb : CanonicalBlock) :
+    addBlockToChainChecked rules cc cb
+      = addBlockToChainCanonical rules cc.val cb := rfl
+
+/-- A raw import of bytes into a checked snapshot's value is the checked
+import of the envelope those bytes decode to. -/
+theorem addBlockToChainWith_eq_checked {rules : ForkRules} {cc : CheckedBlockChain}
+    {blockRlp : Bytes} {block : Block} {hash : B256}
+    (h : rlpToBlock blockRlp = .ok ⟨block, hash⟩) :
+    addBlockToChainWith rules cc.val blockRlp
+      = addBlockToChainChecked rules cc (CanonicalBlock.ofDecode h) :=
+  addBlockToChainWith_eq_canonical h
+
+/-- Any snapshot a checked value carries passes the checker, so a raw client
+that checks first and a checked client that never rechecks agree on which
+snapshots are executable. -/
+theorem BlockChain.check_eq_some_of_checked (cc : CheckedBlockChain) :
+    cc.val.check.isSome = true := cc.check_val
 
 --------------- WIRE-STRUCTURAL PREDICATE BOUNDARY CHECKS ---------------
 
