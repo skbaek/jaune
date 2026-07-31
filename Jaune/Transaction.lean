@@ -1,4 +1,7 @@
 import Jaune.Sufficiency
+-- `List.IsChain` itself is Batteries; its infix/suffix closure lemmas, which
+-- the retained-history predicate below reasons with, are Mathlib's.
+import Mathlib.Data.List.Chain
 
 namespace Jaune
 
@@ -1190,6 +1193,272 @@ def getLast256BlockHashes (chain : BlockChain) : List B256 :=
       (block :: blocks).map <| fun x => x.header.parentHash
     (hash :: hashes).reverse
 
+--------------- RETAINED HISTORY ---------------
+
+-- P0.2's history half. `getLast256BlockHashes` recomputes only the tip's own
+-- header hash and reads every other entry out of a retained block's
+-- `parentHash` field, so the ancestry `BLOCKHASH` reports is only as
+-- trustworthy as those fields. The predicates below say exactly what has to
+-- hold of a snapshot's retained suffix for the lookup to be correct, and the
+-- theorems after them prove it is -- for a full window, for an early chain,
+-- and at the truncated boundary.
+
+/-- Two adjacent retained blocks: consecutive numbering and an authenticated
+parent-hash link. This carries clauses (1) and (2) of the design report's
+`RetainedHistoryValid`; clause (2) is what makes the `BLOCKHASH` window
+provable at all, because every entry below the tip *is* one of these fields. -/
+def Block.Links (prev next : Block) : Prop :=
+  next.header.number = prev.header.number + 1 ∧
+  next.header.parentHash = prev.header.hash
+
+instance (prev next : Block) : Decidable (Block.Links prev next) := by
+  unfold Block.Links; infer_instance
+
+/-- The retained window a snapshot's execution actually reads, oldest-first:
+the 255 newest blocks. `appendBlock` keeps exactly that many, so for a chain
+built by state transitions this is the whole block list. -/
+def BlockChain.retained (chain : BlockChain) : List Block :=
+  (chain.blocks.reverse.take 255).reverse
+
+/-- A snapshot's retained history is valid when its blocks are consecutively
+numbered and hash-linked, their headers are wire-representable, and it covers
+enough ancestry for the `BLOCKHASH` window: either 255 blocks are retained, or
+the chain still begins at block zero. The last clause is the design report's
+"retention of at least `min 255 n`" written in terms of the oldest retained
+header, which is the form the window proof consumes. -/
+def BlockChain.RetainedHistoryValid (chain : BlockChain) : Prop :=
+  chain.blocks.IsChain Block.Links ∧
+  (∀ b ∈ chain.blocks, b.header.WireWellFormed) ∧
+  (255 ≤ chain.blocks.length ∨ ∀ b ∈ chain.blocks.head?, b.header.number = 0)
+
+instance (chain : BlockChain) : Decidable (chain.RetainedHistoryValid) := by
+  unfold BlockChain.RetainedHistoryValid; infer_instance
+
+/-- The shape of the hash list, stated once so no later proof has to unfold
+the `match`: the retained blocks' `parentHash` fields, oldest-first, followed
+by the tip's own recomputed header hash. -/
+theorem getLast256BlockHashes_eq {chain : BlockChain} {b : Block} {bs : List Block}
+    (hN : chain.blocks.reverse.take 255 = b :: bs) :
+    getLast256BlockHashes chain
+      = chain.retained.map (fun x => x.header.parentHash) ++ [b.header.hash] := by
+  unfold getLast256BlockHashes BlockChain.retained
+  rw [hN]
+  simp [Header.hash, List.map_reverse]
+
+/-- Below the tip, every entry is a retained block's `parentHash` field. -/
+theorem getLast256BlockHashes_getD_lt {chain : BlockChain} {b : Block}
+    {bs : List Block} (hN : chain.blocks.reverse.take 255 = b :: bs) {j : Nat}
+    (hj : j < chain.retained.length) :
+    (getLast256BlockHashes chain).getD j 0
+      = chain.retained[j].header.parentHash := by
+  rw [getLast256BlockHashes_eq hN, List.getD,
+    List.getElem?_append_left (by simpa using hj),
+    List.getElem?_eq_getElem (by simpa using hj)]
+  simp
+
+/-- The last entry is the tip's own recomputed header hash. -/
+theorem getLast256BlockHashes_getD_last {chain : BlockChain} {b : Block}
+    {bs : List Block} (hN : chain.blocks.reverse.take 255 = b :: bs) :
+    (getLast256BlockHashes chain).getD chain.retained.length 0 = b.header.hash := by
+  rw [getLast256BlockHashes_eq hN, List.getD,
+    List.getElem?_append_right (by simp)]
+  simp
+
+/-- Consecutive numbering in closed form: the `i`th retained block sits `i`
+above the oldest one. -/
+theorem Block.isChain_number {l : List Block} (h : l.IsChain Block.Links) :
+    ∀ {i : Nat} (hi : i < l.length) (h0 : 0 < l.length),
+      l[i].header.number = l[0].header.number + i := by
+  intro i
+  induction i with
+  | zero => intro _ _; rfl
+  | succ n ih =>
+    intro hi h0
+    have hlink := (List.isChain_iff_getElem.mp h) n (by omega)
+    rw [hlink.1, ih (by omega) h0]
+    omega
+
+/-- The authenticated link: every retained block's `parentHash` is the true
+header hash of the block below it. -/
+theorem Block.isChain_parentHash {l : List Block} (h : l.IsChain Block.Links)
+    {i : Nat} (hi : i + 1 < l.length) :
+    l[i + 1].header.parentHash = l[i].header.hash :=
+  ((List.isChain_iff_getElem.mp h) i hi).2
+
+/-- Consecutive numbering makes the height a key: a retained history holds at
+most one block per height. -/
+theorem Block.isChain_number_inj {l : List Block} (h : l.IsChain Block.Links)
+    {x y : Block} (hx : x ∈ l) (hy : y ∈ l)
+    (hn : x.header.number = y.header.number) : x = y := by
+  obtain ⟨i, hi, rfl⟩ := List.mem_iff_getElem.mp hx
+  obtain ⟨j, hj, rfl⟩ := List.mem_iff_getElem.mp hy
+  have h0 : 0 < l.length := by omega
+  have hxi := Block.isChain_number h hi h0
+  have hyj := Block.isChain_number h hj h0
+  have hij : i = j := by omega
+  subst hij; rfl
+
+/-- A newest-first window, read back oldest-first, is a suffix. -/
+theorem Block.take_reverse_suffix (l : List Block) (n : Nat) :
+    (l.reverse.take n).reverse <:+ l := by
+  have h : l.reverse.take n <+: l.reverse := List.take_prefix _ _
+  simpa using List.reverse_prefix.mp (by simpa using h)
+
+/-- The retained window is a suffix of the block list. -/
+theorem BlockChain.retained_suffix (chain : BlockChain) :
+    chain.retained <:+ chain.blocks :=
+  Block.take_reverse_suffix _ _
+
+/-- A nonempty list's newest-first window is headed by its last element. -/
+theorem Block.take_reverse_eq_cons {l : List Block} {x : Block} {n : Nat}
+    (hn : 0 < n) (h : l.getLast? = some x) :
+    ∃ bs, l.reverse.take n = x :: bs := by
+  obtain ⟨m, rfl⟩ : ∃ m, n = m + 1 := ⟨n - 1, by omega⟩
+  have hr : l.reverse.head? = some x := by
+    rw [List.head?_reverse]; exact h
+  match hl : l.reverse with
+  | [] => rw [hl] at hr; simp at hr
+  | y :: ys =>
+    rw [hl] at hr
+    simp only [List.head?_cons, Option.some.injEq] at hr
+    subst hr
+    exact ⟨ys.take m, rfl⟩
+
+/-- A nonempty chain's retained window is headed, newest-first, by its tip. -/
+theorem BlockChain.take_reverse_eq_cons {chain : BlockChain} {tip : Block}
+    (h : chain.blocks.getLast? = some tip) :
+    ∃ bs, chain.blocks.reverse.take 255 = tip :: bs :=
+  Block.take_reverse_eq_cons (by omega) h
+
+theorem BlockChain.retained_length (chain : BlockChain) :
+    chain.retained.length = min 255 chain.blocks.length := by
+  unfold BlockChain.retained
+  simp
+
+/-- Below the retention bound nothing is dropped, so the oldest retained block
+is the chain's own first block. -/
+theorem BlockChain.retained_eq_blocks {chain : BlockChain}
+    (h : chain.blocks.length ≤ 255) : chain.retained = chain.blocks := by
+  unfold BlockChain.retained
+  rw [List.take_of_length_le (by simpa using h)]
+  simp
+
+/-- The `BLOCKHASH` window theorem.
+
+For a snapshot with valid retained history and a child block being executed at
+`number = tip.number + 1`, every height the opcode admits --
+`blockNumber < number ≤ blockNumber + 256` -- resolves to an authenticated
+ancestry hash: either the true header keccak of a retained block at exactly
+that height, or, one step below the oldest retained block, that block's own
+`parentHash`. The second case is what makes the list reach 256 entries from
+255 retained blocks; it is the only entry whose subject the snapshot no longer
+carries, and it is authenticated by the retained header that names it.
+
+Both truncated and early-chain windows are covered: with 255 blocks retained
+the window's lower end is exactly the oldest retained block's parent, and
+below the retention bound the chain still starts at block zero, so no admitted
+height falls off the list and the index never truncates. -/
+theorem getLast256BlockHashes_window {chain : BlockChain}
+    (hv : chain.RetainedHistoryValid) {tip : Block}
+    (htip : chain.blocks.getLast? = some tip) {number blockNumber : Nat}
+    (hnum : number = tip.header.number + 1)
+    (hlo : blockNumber < number) (hhi : number ≤ blockNumber + 256) :
+    (∃ b ∈ chain.retained, b.header.number = blockNumber ∧
+        (getLast256BlockHashes chain).getD
+          ((getLast256BlockHashes chain).length - (number - blockNumber)) 0
+            = b.header.hash) ∨
+      (∃ oldest ∈ chain.retained.head?, blockNumber + 1 = oldest.header.number ∧
+        (getLast256BlockHashes chain).getD
+          ((getLast256BlockHashes chain).length - (number - blockNumber)) 0
+            = oldest.header.parentHash) := by
+  obtain ⟨bs, hN⟩ := BlockChain.take_reverse_eq_cons htip
+  have hEq := getLast256BlockHashes_eq hN
+  have hRdef : chain.retained = (tip :: bs).reverse := by
+    unfold BlockChain.retained; rw [hN]
+  have hm : chain.retained.length = bs.length + 1 := by rw [hRdef]; simp
+  have h0 : 0 < chain.retained.length := by omega
+  have hchain : chain.retained.IsChain Block.Links :=
+    hv.1.suffix chain.retained_suffix
+  have hlast? : chain.retained.getLast? = some tip := by
+    rw [hRdef, List.getLast?_reverse]; rfl
+  have hlast : chain.retained[chain.retained.length - 1] = tip := by
+    rw [List.getLast?_eq_getElem?, List.getElem?_eq_getElem (by omega)] at hlast?
+    exact Option.some.inj hlast?
+  have htipnum : tip.header.number
+      = chain.retained[0].header.number + (chain.retained.length - 1) := by
+    have hnum0 :=
+      Block.isChain_number hchain (i := chain.retained.length - 1) (by omega) h0
+    rw [hlast] at hnum0
+    exact hnum0
+  have hhead : chain.retained.head? = some chain.retained[0] := by
+    rw [List.head?_eq_getElem?, List.getElem?_eq_getElem h0]
+  have hlen1 : (getLast256BlockHashes chain).length = chain.retained.length + 1 := by
+    rw [getLast256BlockHashes_eq hN]; simp
+  -- Coverage: no admitted height falls below the oldest retained block's own
+  -- parent. With a full window that is the arithmetic of 255 retained blocks;
+  -- below it, the chain still starts at block zero.
+  have hcov : chain.retained[0].header.number ≤ blockNumber + 1 := by
+    rcases Nat.lt_or_ge chain.blocks.length 255 with hlen | hlen
+    · have hret : chain.retained = chain.blocks :=
+        chain.retained_eq_blocks (by omega)
+      have hzero := hv.2.2.resolve_left (by omega) chain.retained[0]
+        (by rw [← hret]; exact hhead)
+      omega
+    · have h255 : chain.retained.length = 255 := by
+        rw [chain.retained_length]; omega
+      omega
+  rcases Nat.lt_or_ge blockNumber chain.retained[0].header.number with hc | hc
+  · -- The truncated boundary: the entry is the oldest retained block's own
+    -- authenticated `parentHash`, and it is the only such entry.
+    right
+    refine ⟨chain.retained[0], hhead, by omega, ?_⟩
+    have hidx : (getLast256BlockHashes chain).length - (number - blockNumber) = 0 := by
+      omega
+    rw [hidx, getLast256BlockHashes_getD_lt hN h0]
+  · -- A height the window still retains a block for.
+    left
+    obtain ⟨k, hk⟩ : ∃ k, blockNumber = chain.retained[0].header.number + k :=
+      ⟨blockNumber - chain.retained[0].header.number, by omega⟩
+    have hidx : (getLast256BlockHashes chain).length - (number - blockNumber)
+        = k + 1 := by omega
+    rcases Nat.lt_or_ge (k + 1) chain.retained.length with hlt | hge
+    · refine ⟨chain.retained[k], List.getElem_mem (by omega), ?_, ?_⟩
+      · have := Block.isChain_number hchain (i := k) (by omega) h0
+        omega
+      · rw [hidx, getLast256BlockHashes_getD_lt hN hlt,
+          Block.isChain_parentHash hchain hlt]
+    · have hkeq : k + 1 = chain.retained.length := by omega
+      refine ⟨tip, hlast ▸ List.getElem_mem (by omega), by omega, ?_⟩
+      rw [hidx, hkeq, getLast256BlockHashes_getD_last hN]
+
+/-- The consumer form of the window theorem: whenever the requested height is
+one the retained history still holds a block for, `BLOCKHASH` returns that
+block's true header keccak -- never a stale, defaulted, or off-by-one entry. -/
+theorem getLast256BlockHashes_of_mem_retained {chain : BlockChain}
+    (hv : chain.RetainedHistoryValid) {tip b : Block}
+    (htip : chain.blocks.getLast? = some tip) (hb : b ∈ chain.retained)
+    {number : Nat} (hnum : number = tip.header.number + 1)
+    (hlo : b.header.number < number) (hhi : number ≤ b.header.number + 256) :
+    (getLast256BlockHashes chain).getD
+      ((getLast256BlockHashes chain).length - (number - b.header.number)) 0
+        = b.header.hash := by
+  have hchain : chain.retained.IsChain Block.Links :=
+    hv.1.suffix chain.retained_suffix
+  rcases getLast256BlockHashes_window hv htip hnum hlo hhi with
+    ⟨b', hb', hnum', hval⟩ | ⟨oldest, hold, hnum', _⟩
+  · rw [hval, Block.isChain_number_inj hchain hb' hb hnum']
+  · -- The boundary entry names a height *below* every retained block, so it
+    -- cannot be the height of one.
+    exfalso
+    obtain ⟨i, hi, rfl⟩ := List.mem_iff_getElem.mp hb
+    have h0 : 0 < chain.retained.length := by omega
+    have hhead : chain.retained.head? = some chain.retained[0] := by
+      rw [List.head?_eq_getElem?, List.getElem?_eq_getElem h0]
+    rw [hhead, Option.mem_def, Option.some.injEq] at hold
+    subst hold
+    have := Block.isChain_number hchain hi h0
+    omega
+
 def computeRequestsHash (requests : List Bytes) : B256 :=
   -- EIP-7685 commits the SHA-256 digest of each type-prefixed request, then
   -- hashes their concatenation once more.  This is deliberately not the EVM
@@ -1292,6 +1561,80 @@ def stateTransitionOmmersCheck (ommers : List Header) : Except String Unit := do
 
 def appendBlock (blks : List Block) (blk : Block) : List Block :=
   (blk :: blks.reverse.take 254).reverse
+
+/-- Retention, measured: the 254 newest blocks kept, oldest-first, then the
+new one. -/
+theorem appendBlock_eq (blks : List Block) (blk : Block) :
+    appendBlock blks blk = (blks.reverse.take 254).reverse ++ [blk] := by
+  unfold appendBlock
+  simp
+
+theorem appendBlock_getLast? (blks : List Block) (blk : Block) :
+    (appendBlock blks blk).getLast? = some blk := by
+  rw [appendBlock_eq]
+  simp
+
+theorem appendBlock_ne_nil (blks : List Block) (blk : Block) :
+    appendBlock blks blk ≠ [] := by
+  rw [appendBlock_eq]
+  simp
+
+/-- Retained-history validity is preserved by an append that links to the tip.
+
+This is the whole reason the checked transition never has to re-derive
+ancestry: the child's `validateHeader` already established both halves of
+`Block.Links` against the parent header, and the canonical envelope already
+established the child header's wire well-formedness. -/
+theorem BlockChain.retainedHistoryValid_appendBlock {chain : BlockChain}
+    {tip blk : Block} {st : State} {cid : UInt64}
+    (hv : chain.RetainedHistoryValid) (htip : chain.blocks.getLast? = some tip)
+    (hlink : Block.Links tip blk) (hwire : blk.header.WireWellFormed) :
+    BlockChain.RetainedHistoryValid ⟨appendBlock chain.blocks blk, st, cid⟩ := by
+  have hsuf : (chain.blocks.reverse.take 254).reverse <:+ chain.blocks :=
+    Block.take_reverse_suffix _ _
+  have hblocks : (BlockChain.mk (appendBlock chain.blocks blk) st cid).blocks
+      = (chain.blocks.reverse.take 254).reverse ++ [blk] := appendBlock_eq _ _
+  obtain ⟨kept, hkept⟩ := Block.take_reverse_eq_cons (n := 254) (by omega) htip
+  have hkeptlast : ((chain.blocks.reverse.take 254).reverse).getLast? = some tip := by
+    rw [List.getLast?_reverse, hkept]; rfl
+  refine ⟨?_, ?_, ?_⟩
+  · rw [hblocks]
+    refine (hv.1.suffix hsuf).append (List.IsChain.singleton _) ?_
+    intro x hx y hy
+    rw [hkeptlast, Option.mem_def, Option.some.injEq] at hx
+    rw [List.head?_cons, Option.mem_def, Option.some.injEq] at hy
+    subst hx; subst hy
+    exact hlink
+  · rw [hblocks]
+    intro b hb
+    rcases List.mem_append.mp hb with h | h
+    · exact hv.2.1 b (hsuf.subset h)
+    · rw [List.mem_singleton.mp h]; exact hwire
+  · -- Coverage: either the append filled the window, or the chain still
+    -- begins where it began.
+    rcases Nat.lt_or_ge chain.blocks.length 254 with hlen | hlen
+    · right
+      have hne : chain.blocks ≠ [] := by
+        intro h; rw [h] at htip; simp at htip
+      obtain ⟨x, xs, hcb⟩ : ∃ x xs, chain.blocks = x :: xs := by
+        cases hc : chain.blocks with
+        | nil => exact absurd hc hne
+        | cons y ys => exact ⟨y, ys, rfl⟩
+      have hall : (chain.blocks.reverse.take 254).reverse = chain.blocks := by
+        rw [List.take_of_length_le (by simpa using Nat.le_of_lt hlen)]
+        simp
+      have hzero := hv.2.2.resolve_left (by omega)
+      rw [hblocks, hall, hcb]
+      intro b hb
+      simp only [List.cons_append, List.head?_cons, Option.mem_def,
+        Option.some.injEq] at hb
+      subst hb
+      exact hzero _ (by rw [hcb]; rfl)
+    · left
+      rw [hblocks]
+      simp only [List.length_append, List.length_reverse, List.length_take,
+        List.length_cons, List.length_nil]
+      omega
 
 /-- The block state transition under an explicit rule set.
 
@@ -2369,6 +2712,46 @@ private def guardChildBlock (timestamp excessBlobGas : Nat) : Block :=
     txs := []
     ommers := []
     wds := [] }
+
+-- P0.2, the history half: `RetainedHistoryValid` has teeth, and is decided
+-- rather than assumed. A genesis-rooted chain whose blocks are consecutively
+-- numbered and hash-linked passes; break either half of the link, or start a
+-- short chain above block zero, and it fails.
+
+private def guardHistoryChain (blocks : List Block) : BlockChain :=
+  { blocks := blocks, state := .empty, chainId := 1 }
+
+private def guardParentBlock : Block :=
+  { header := guardParentHeader, txs := [], ommers := [], wds := [] }
+
+private def guardHistoryChild : Block := guardChildBlock 1 1966080
+
+#guard (guardHistoryChain [guardParentBlock]).RetainedHistoryValid
+#guard (guardHistoryChain [guardParentBlock, guardHistoryChild]).RetainedHistoryValid
+-- A short chain that does not begin at block zero cannot cover the window.
+#guard ¬ (guardHistoryChain [guardHistoryChild]).RetainedHistoryValid
+-- A broken parent-hash link, with the numbering left intact.
+#guard ¬ (guardHistoryChain [guardParentBlock,
+  { guardHistoryChild with
+      header := { guardHistoryChild.header with parentHash := 0 } }]).RetainedHistoryValid
+-- A broken number, with the hash link left intact.
+#guard ¬ (guardHistoryChain [guardParentBlock,
+  { guardHistoryChild with
+      header := { guardHistoryChild.header with number := 5 } }]).RetainedHistoryValid
+-- A header that no strict decode could have produced (a short bloom).
+#guard ¬ (guardHistoryChain [{ guardParentBlock with
+  header := { guardParentHeader with bloom := [] } }]).RetainedHistoryValid
+
+-- Retention, as measured in design report §3.6: `appendBlock` keeps exactly
+-- 255 blocks, and the hash list it feeds reaches 256 entries because the
+-- oldest retained block contributes its `parentHash` as well.
+#guard (appendBlock (List.replicate 300 guardParentBlock) guardHistoryChild).length = 255
+#guard (appendBlock (List.replicate 3 guardParentBlock) guardHistoryChild).length = 4
+#guard (getLast256BlockHashes
+  (guardHistoryChain (List.replicate 300 guardParentBlock))).length = 256
+#guard (getLast256BlockHashes
+  (guardHistoryChain [guardParentBlock, guardHistoryChild])).length = 3
+#guard (getLast256BlockHashes (guardHistoryChain [])).length = 0
 
 -- The explicit API applies the fork it is given, and only that fork accepts
 -- its own expected value.

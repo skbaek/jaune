@@ -138,6 +138,15 @@ def Header.toBLT (header : Header) : BLT :=
     | none => []
     | some rh => [BLT.bytes rh.toBytes]
 
+/-- A header's identity: the keccak of its canonical RLP encoding.
+
+This is the value a child block's `parentHash` names, the key a snapshot is
+stored under, and the value `BLOCKHASH` returns. It is written out inline at
+several older call sites; those keep their spelling, and this is the name the
+checked chain vocabulary states its results about. -/
+def Header.hash (header : Header) : B256 :=
+  (Header.toBLT header).toBytes.keccak
+
 structure Tx : Type where
   (nonce : UInt64)
   (gas : Nat)
