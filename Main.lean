@@ -421,7 +421,12 @@ a supported transition schedule.
 A transition's schedule is validated here, before any fixture is read, so a
 label that parses but does not determine an unambiguous fork at every block --
 an activation at genesis, or one that runs the fork chain backwards -- is
-refused up front rather than once per case. -/
+refused up front rather than once per case. This checks schedule shape only,
+through `ForkTransition.activations`, before any fixture is read -- so there is
+no real chain ID to check against yet. `ChainConfig.validate` never reads
+`chainId` at all, so the `0` below is not a second, independently-chosen chain
+identity, only a placeholder the check cannot see; the actual chain ID, read
+per fixture, is threaded separately by `evaluateFixtureBlock`. -/
 def getNetworkSpec (opts : List String) : IO NetworkSpec := do
   let some label := getNetwork opts | return .static .prague
   let some spec := NetworkSpec.ofString? label
@@ -430,7 +435,7 @@ def getNetworkSpec (opts : List String) : IO NetworkSpec := do
            {Fork.all.map Fork.toString} and transitions of the form \
            <fork>To<fork>AtTime<seconds>"
   if let .transition t := spec then
-    IO.ofExcept (t.chainConfig 1).validate
+    IO.ofExcept (ChainConfig.mk 0 t.activations).validate
   return spec
 
 def getFiles (path : System.FilePath) : IO (List System.FilePath) := do

@@ -1248,10 +1248,32 @@ def stateTransitionAt (f : Fork) (ch : BlockChain) (block : Block) :
     Except String BlockChain := do
   stateTransitionWith (← f.rules) ch block
 
+/-- Whether a configuration's declared chain identity agrees with a snapshot's.
+
+P0.1: a configuration can be a perfectly valid, perfectly usable schedule and
+still name a different chain than the snapshot it is handed. This is separate
+from `ChainConfig.validate`, which never inspects `chainId` at all, and it is
+the outer context channel, not a verdict about any candidate block -- a
+contradictory caller context is not evidence that a block is invalid.
+Declared here, downstream of `Jaune/Fork.lean`, because this is the first
+module where `BlockChain` exists alongside `ChainConfig` (design report §6).
+Neither configured entry point below may proceed past a mismatch: this check
+runs first in both, and it never repairs a mismatch by preferring one side. -/
+def ChainConfig.checkChainId (cfg : ChainConfig) (chain : BlockChain) :
+    Except ChainContextError Unit :=
+  if cfg.chainId = chain.chainId then
+    .ok ()
+  else
+    .error (.chainIdMismatch cfg.chainId chain.chainId)
+
 /-- The block state transition on a configured chain, deriving the active fork
-from the block's timestamp and the chain's activation schedule. -/
+from the block's timestamp and the chain's activation schedule.
+
+Checks the configuration against the snapshot's chain identity before doing
+anything else -- P0.1's fix -- then proceeds exactly as before. -/
 def stateTransitionUsing (cfg : ChainConfig) (ch : BlockChain) (block : Block) :
     Except String BlockChain := do
+  Except.mapError ChainContextError.render (cfg.checkChainId ch)
   stateTransitionWith (← cfg.rulesAt block.header.timestamp) ch block
 
 /-- The Prague state transition.
@@ -1664,9 +1686,19 @@ def addBlockToChainAt (f : Fork) (chain : BlockChain) (blockRlp : Bytes) :
   addBlockToChainWith (← f.rules) chain blockRlp
 
 /-- Block import on a configured chain, deriving the active fork from the
-block's own timestamp and the chain's activation schedule. -/
+block's own timestamp and the chain's activation schedule.
+
+Checks schedule usability and chain identity before touching the candidate
+bytes at all -- P0.1 and P0.5's frozen ordering (design report §3.3): a
+contradictory or unusable configuration is a context failure regardless of
+what the caller supplied as a block, so it must not depend on decoding
+succeeding first. The era a decoded timestamp falls in is checked after
+decode, inside `cfg.rulesAt` below, because no timestamp exists before
+decode. -/
 def addBlockToChainUsing (cfg : ChainConfig) (chain : BlockChain)
     (blockRlp : Bytes) : Except String (BlockChain ⊕ String) := do
+  cfg.validate
+  Except.mapError ChainContextError.render (cfg.checkChainId chain)
   let ⟨block, blockHeaderHash⟩ ← rlpToBlock blockRlp
   let rules ← cfg.rulesAt block.header.timestamp
   addBlockToChain.go rules chain block blockHeaderHash blockRlp.length
@@ -1924,6 +1956,105 @@ private def guardChildRlp (timestamp excessBlobGas : Nat) : Bytes :=
 -- An unusable schedule fails before it selects anything.
 #guard hasTag invalidChainConfigTag <|
   stateTransitionUsing (ChainConfig.mk 1 []) guardEmptyChain (guardBlockAt 0)
+
+-- P0.1 acceptance evidence: configured success cannot happen across
+-- contradictory chain identities, and a successful configured transition
+-- preserves the identity it started with.
+
+theorem stateTransitionUsing_success_chainId_eq
+    {cfg : ChainConfig} {ch : BlockChain} {block : Block} {ch' : BlockChain}
+    (h : stateTransitionUsing cfg ch block = .ok ch') :
+    cfg.chainId = ch.chainId := by
+  by_contra hne
+  simp [stateTransitionUsing, ChainConfig.checkChainId, hne, Except.mapError,
+    Bind.bind, Except.bind] at h
+
+/-- Every successful `stateTransitionWith` copies the input snapshot's chain
+identity into its output unconditionally -- the shared fact both configured
+entry points' preservation theorems reduce to. -/
+theorem stateTransitionWith_preserves_chainId
+    {rules : ForkRules} {ch : BlockChain} {block : Block} {ch' : BlockChain}
+    (h : stateTransitionWith rules ch block = .ok ch') :
+    ch'.chainId = ch.chainId := by
+  unfold stateTransitionWith at h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨⟨st, bout⟩, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  simp only [Except.ok.injEq] at h
+  rw [← h]
+
+theorem stateTransitionUsing_preserves_chainId
+    {cfg : ChainConfig} {ch : BlockChain} {block : Block} {ch' : BlockChain}
+    (h : stateTransitionUsing cfg ch block = .ok ch') :
+    ch'.chainId = ch.chainId := by
+  unfold stateTransitionUsing at h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨rules, _, h⟩ := Except.bind_eq_ok h
+  exact stateTransitionWith_preserves_chainId h
+
+/-- A same-ID configured transition is exactly the rule-selected core: the
+identity check Step 2 adds is a no-op whenever the caller's IDs already agree,
+so no previously-agreeing caller observes any behavioral change. -/
+theorem stateTransitionUsing_eq_of_chainId_eq
+    {cfg : ChainConfig} {ch : BlockChain} {block : Block}
+    (heq : cfg.chainId = ch.chainId) :
+    stateTransitionUsing cfg ch block
+      = (cfg.rulesAt block.header.timestamp).bind
+          (fun rules => stateTransitionWith rules ch block) := by
+  unfold stateTransitionUsing ChainConfig.checkChainId
+  simp [heq, Except.mapError, Bind.bind, Except.bind]
+
+theorem addBlockToChainUsing_success_chainId_eq
+    {cfg : ChainConfig} {chain : BlockChain} {blockRlp : Bytes} {chain' : BlockChain}
+    (h : addBlockToChainUsing cfg chain blockRlp = .ok (.inl chain')) :
+    cfg.chainId = chain.chainId := by
+  unfold addBlockToChainUsing at h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  by_contra hne
+  simp [ChainConfig.checkChainId, hne, Except.mapError, Bind.bind, Except.bind] at h
+
+theorem addBlockToChainUsing_preserves_chainId
+    {cfg : ChainConfig} {chain : BlockChain} {blockRlp : Bytes} {chain' : BlockChain}
+    (h : addBlockToChainUsing cfg chain blockRlp = .ok (.inl chain')) :
+    chain'.chainId = chain.chainId := by
+  unfold addBlockToChainUsing at h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨⟨block, blockHeaderHash⟩, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨rules, _, h⟩ := Except.bind_eq_ok h
+  unfold addBlockToChain.go at h
+  split_ifs at h with hheq
+  · simp [Bind.bind, Except.bind] at h
+  · split at h
+    · simp only [pure, Except.pure, Except.ok.injEq, reduceCtorEq] at h
+    · split at h
+      · simp only [pure, Except.pure, Except.ok.injEq, reduceCtorEq] at h
+      · rename_i hstw
+        simp only [Bind.bind, Except.bind, Except.ok.injEq, Sum.inl.injEq] at h
+        exact stateTransitionWith_preserves_chainId (h ▸ hstw)
+
+-- P0.1 negative guards: config ID 7 against a chain ID 1 snapshot, matching
+-- the acceptance evidence's own example. The mismatch is a context failure on
+-- the outer channel -- never `.inr`, so never scored as an invalid block --
+-- and it fires before decoding even touches the candidate bytes: `[0xFF]` is
+-- not valid block RLP at all, yet `addBlockToChainUsing` still reports the
+-- mismatch rather than a decode error, because the check runs first.
+private def guardMismatchConfig : ChainConfig := ChainConfig.mk 7 [⟨.prague, 0⟩]
+
+#guard hasTag chainIdMismatchTag <|
+  stateTransitionUsing guardMismatchConfig guardEmptyChain (guardBlockAt 0)
+#guard errOf (stateTransitionUsing guardMismatchConfig guardEmptyChain (guardBlockAt 0))
+  = ChainContextError.render (.chainIdMismatch 7 1)
+#guard hasTag chainIdMismatchTag <|
+  addBlockToChainUsing guardMismatchConfig guardParentChain [0xFF]
+#guard importErrOf (addBlockToChainUsing guardMismatchConfig guardParentChain [0xFF])
+  = ChainContextError.render (.chainIdMismatch 7 1)
+-- The same malformed bytes, past a matching-ID configuration, fail on the
+-- ordinary decode path instead -- confirming the mismatch guard above is what
+-- changed the verdict, not something incidental to the garbage input.
+#guard hasTag rlpStructureTag <|
+  addBlockToChainUsing guardOsakaToBpo1Config guardParentChain [0xFF]
 
 --------- TYPED SEMANTIC REASONS: TRANSACTION, BLOCK, IMPORT ---------
 
