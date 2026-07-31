@@ -913,6 +913,38 @@ def BLT.toExStrHeader : BLT → Except String Header
     .error <| rlpStructureError "header"
       "expected a list of 20 or 21 byte-string fields"
 
+/-- Strict header-decoder soundness (P0.3/P0.4). Every header this decoder
+produces satisfies `Header.WireWellFormed`, which is what makes that predicate
+a *lift* of the decoder rather than an independently invented policy: it holds
+of exactly the values the wire can deliver. -/
+theorem BLT.toExStrHeader_wireWellFormed {blt : BLT} {hdr : Header}
+    (h : blt.toExStrHeader = .ok hdr) : hdr.WireWellFormed := by
+  unfold BLT.toExStrHeader at h
+  split at h
+  · simp only [Except.bind_eq_ok_iff] at h
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, hbl, _, hdf, _, hnb,
+      _, hgl, _, hgu, _, hts, _, _, _, _, _, hbf, _, _, bgu, _, ebg, _,
+      _, _, hm⟩ := h
+    have hb := Bytes.toRlpFixed_eq_ok hbl
+    have h2 := Bytes.toRlpNat_lt_two_pow_256 hdf
+    have h3 := Bytes.toRlpNat_lt_two_pow_256 hnb
+    have h4 := Bytes.toRlpNat_lt_two_pow_256 hgl
+    have h5 := Bytes.toRlpNat_lt_two_pow_256 hgu
+    have h6 := Bytes.toRlpNat_lt_two_pow_256 hts
+    have h7 := Bytes.toRlpNat_lt_two_pow_256 hbf
+    have h8 : bgu.toNat < 2 ^ 64 := bgu.toNat_lt
+    have h9 : ebg.toNat < 2 ^ 64 := ebg.toNat_lt
+    split at hm
+    · simp only [Except.bind_eq_ok_iff, Except.ok.injEq] at hm
+      obtain ⟨_, _, rfl⟩ := hm
+      exact ⟨hb, h2, h3, h4, h5, h6, h7, h8, h9⟩
+    · simp only [Except.bind_eq_ok_iff, Except.ok.injEq] at hm
+      obtain ⟨_, _, rfl⟩ := hm
+      exact ⟨hb, h2, h3, h4, h5, h6, h7, h8, h9⟩
+    · simp only [Except.bind_eq_ok_iff] at hm
+      exact absurd hm (by simp)
+  · exact absurd h (by simp)
+
 /-- The child's excess blob gas.
 
 Every parameter is read from the *child's* blob schedule, which is what makes a

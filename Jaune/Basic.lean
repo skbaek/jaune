@@ -1304,6 +1304,35 @@ def Bytes.toNat (bs : Bytes) : Nat :=
     | b :: bs => aux ((acc * 256) + b.toNat) bs
   aux 0 bs
 
+/-- The width bound every strict scalar decoder relies on: a byte string of `n`
+bytes denotes a value below `256 ^ n`. Stated on the accumulator so the
+induction carries; the accumulator is the value read so far, and each further
+byte multiplies its bound by 256. -/
+theorem Bytes.toNat.aux_lt (bs : Bytes) (acc : Nat) :
+    Bytes.toNat.aux acc bs < (acc + 1) * 256 ^ bs.length := by
+  induction bs generalizing acc with
+  | nil => simp [Bytes.toNat.aux]
+  | cons b bs ih =>
+    have hb : b.toNat < 256 := b.toNat_lt
+    have hstep := ih (acc * 256 + b.toNat)
+    have hmono : (acc * 256 + b.toNat + 1) * 256 ^ bs.length
+        ≤ (acc + 1) * (256 * 256 ^ bs.length) := by
+      rw [← Nat.mul_assoc]
+      exact Nat.mul_le_mul_right _ (by omega)
+    have hlt : Bytes.toNat.aux (acc * 256 + b.toNat) bs
+        < (acc + 1) * (256 * 256 ^ bs.length) := Nat.lt_of_lt_of_le hstep hmono
+    simpa [Bytes.toNat.aux, List.length_cons, Nat.pow_succ'] using hlt
+
+/-- A byte string of `n` bytes denotes a value below `256 ^ n`. -/
+theorem Bytes.toNat_lt (bs : Bytes) : bs.toNat < 256 ^ bs.length := by
+  simpa [Bytes.toNat] using Bytes.toNat.aux_lt bs 0
+
+/-- The form the field decoders use: an at-most-`n`-byte string is below
+`256 ^ n`. -/
+theorem Bytes.toNat_lt_of_length_le {bs : Bytes} {n : Nat} (h : bs.length ≤ n) :
+    bs.toNat < 256 ^ n :=
+  Nat.lt_of_lt_of_le bs.toNat_lt (Nat.pow_le_pow_right (by omega) h)
+
 def Nat.toBytes (n : Nat) : Bytes :=
   let rec aux (acc : Bytes) : Nat → Bytes
   | 0 => acc

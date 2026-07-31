@@ -754,6 +754,17 @@ def BLT.toExStrAuth : BLT → Except String Auth
     .error <| rlpStructureError "authorization"
       "expected a list of six byte-string fields"
 
+/-- Strict authorisation-decoder soundness. -/
+theorem BLT.toExStrAuth_wireWellFormed {blt : BLT} {a : Auth}
+    (h : blt.toExStrAuth = .ok a) : a.WireWellFormed := by
+  unfold BLT.toExStrAuth at h
+  split at h
+  · repeat obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+    simp only [Except.ok.injEq] at h
+    subst h
+    exact Bytes.toRlpNat_lt_two_pow_256 (by assumption)
+  · exact absurd h (by simp)
+
 def Bytes.toExStrTx : Bytes → Except String Tx
   | [] =>
     .error <| rlpStructureError "typed transaction"
@@ -933,6 +944,70 @@ def Bytes.toExStrTx : Bytes → Except String Tx
       .error <| rlpStructureError "type-4 transaction"
         "expected a list of thirteen fields"
     | x, _ => .error s!"ERROR : type-{x} txs do not exist, decoding failed"
+
+/-- Strict typed-transaction-decoder soundness. Every transaction the typed
+envelope decoder produces satisfies `Tx.WireWellFormed`, for each of the four
+implemented envelope types. Together with `BLT.toExStrTx_legacy_wireWellFormed`
+below this is what makes the structural predicate a lift of the decoders. -/
+theorem Bytes.toExStrTx_wireWellFormed {xs : Bytes} {tx : Tx}
+    (h : xs.toExStrTx = .ok tx) : tx.WireWellFormed := by
+  unfold Bytes.toExStrTx at h
+  split at h
+  · exact absurd h (by simp)
+  · split at h
+    -- type 1 (EIP-2930)
+    · repeat obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+      simp only [Except.ok.injEq] at h
+      subst h
+      refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
+        first
+          | exact Bytes.toRlpNat_lt_two_pow_256 (by assumption)
+          | exact Bytes.toRlpB256_eq_ok (by assumption)
+    · exact absurd h (by simp)
+    -- type 2 (EIP-1559)
+    · repeat obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+      simp only [Except.ok.injEq] at h
+      subst h
+      refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
+        first
+          | exact Bytes.toRlpNat_lt_two_pow_256 (by assumption)
+          | exact Bytes.toRlpB256_eq_ok (by assumption)
+    · exact absurd h (by simp)
+    -- type 3 (EIP-4844). The mandatory-receiver guard is a join point, so the
+    -- chain has to be split at it before the remaining binds peel.
+    · repeat obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+      dsimp only at h
+      split at h
+      · obtain ⟨_, herr, _⟩ := Except.bind_eq_ok h
+        exact absurd herr (by simp)
+      · repeat obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+        simp only [Except.ok.injEq] at h
+        subst h
+        refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
+          first
+            | exact Bytes.toRlpNat_lt_two_pow_256 (by assumption)
+            | exact Bytes.toRlpB256_eq_ok (by assumption)
+    · exact absurd h (by simp)
+    -- type 4 (EIP-7702)
+    · repeat obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+      dsimp only at h
+      split at h
+      · obtain ⟨_, herr, _⟩ := Except.bind_eq_ok h
+        exact absurd herr (by simp)
+      · repeat obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+        simp only [Except.ok.injEq] at h
+        subst h
+        refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?auths⟩
+        case auths =>
+          intro a ha
+          obtain ⟨blt, hblt⟩ := List.mapM_except_eq_ok_mem (by assumption) a ha
+          exact BLT.toExStrAuth_wireWellFormed hblt
+        all_goals
+          first
+            | exact Bytes.toRlpNat_lt_two_pow_256 (by assumption)
+            | exact Bytes.toRlpB256_eq_ok (by assumption)
+    · exact absurd h (by simp)
+    · exact absurd h (by simp)
 
 def decodeTx : Bytes ⊕ Tx → Except String Tx
   | .inl xs => xs.toExStrTx
@@ -1311,6 +1386,19 @@ def BLT.toExStrWithdrawal : BLT → Except String Withdrawal
     .error <| rlpStructureError "withdrawal"
       "expected a list of four byte-string fields"
 
+/-- Strict withdrawal-decoder soundness: the amount a decoded withdrawal
+carries always fits its 64-bit wire type, even though the field is 256 bits
+wide. -/
+theorem BLT.toExStrWithdrawal_wireWellFormed {blt : BLT} {w : Withdrawal}
+    (h : blt.toExStrWithdrawal = .ok w) : w.WireWellFormed := by
+  unfold BLT.toExStrWithdrawal at h
+  split at h
+  · repeat obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+    simp only [Except.ok.injEq] at h
+    subst h
+    exact UInt64.toNat_toB256_high _
+  · exact absurd h (by simp)
+
 def BLT.toExStrTx : BLT → Except String Tx
   | .list [
       .bytes nonce,
@@ -1349,6 +1437,26 @@ def BLT.toExStrTx : BLT → Except String Tx
       "expected a list of nine byte-string fields"
   | .bytes xs => xs.toExStrTx
 
+/-- Strict legacy-transaction-decoder soundness. A *list*-shaped transaction
+item is the legacy route, so what it yields is both wire-well-formed and of
+legacy type -- which is exactly `TxEntry.WireWellFormed` on the decoded side of
+a block body's transaction slot. The typed route reaches this decoder only
+through a byte string, and never produces a `.zero` transaction. -/
+theorem BLT.toExStrTx_list_wireWellFormed {bs : List BLT} {tx : Tx}
+    (h : (BLT.list bs).toExStrTx = .ok tx) :
+    Tx.WireWellFormed tx ∧ tx.type.isLegacy = true := by
+  unfold BLT.toExStrTx at h
+  split at h
+  · repeat obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+    simp only [Except.ok.injEq] at h
+    subst h
+    refine ⟨⟨?_, ?_, ?_, ?_, ?_, ?_⟩, rfl⟩ <;>
+      first
+        | exact Bytes.toRlpNat_lt_two_pow_256 (by assumption)
+        | exact Bytes.toRlpB256_eq_ok (by assumption)
+  · exact absurd h (by simp)
+  · exact absurd (by assumption : BLT.list bs = BLT.bytes _) (by simp)
+
 def BLT.toExStrBlock : BLT → Except String Block
   | BLT.list [
       HeaderBLT,
@@ -1375,6 +1483,40 @@ def BLT.toExStrBlock : BLT → Except String Block
   | _ =>
     .error <| rlpStructureError "block"
       "expected [header, transactions, ommers, withdrawals] lists"
+
+/-- Strict block-decoder soundness: a decoded block is structurally canonical
+componentwise. Note what this deliberately does *not* say about a byte-string
+transaction slot -- it stays opaque here, and is decoded at the existing point
+inside `applyBody`, so the staged typed-transaction rule (design report §7) is
+preserved and no error precedence moves. -/
+theorem BLT.toExStrBlock_rlpCanonical {blt : BLT} {b : Block}
+    (h : blt.toExStrBlock = .ok b) : b.RlpCanonical := by
+  unfold BLT.toExStrBlock at h
+  split at h
+  · repeat obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+    simp only [Except.ok.injEq] at h
+    subst h
+    refine ⟨BLT.toExStrHeader_wireWellFormed (by assumption), ?_, ?_, ?_⟩
+    · intro o ho
+      obtain ⟨blt', hblt'⟩ := List.mapM_except_eq_ok_mem (by assumption) o ho
+      exact BLT.toExStrHeader_wireWellFormed hblt'
+    · intro w hw
+      obtain ⟨blt', hblt'⟩ := List.mapM_except_eq_ok_mem (by assumption) w hw
+      exact BLT.toExStrWithdrawal_wireWellFormed hblt'
+    · intro e he
+      obtain ⟨blt', hblt'⟩ := List.mapM_except_eq_ok_mem (by assumption) e he
+      cases blt' with
+      | bytes ys =>
+        simp only [Except.ok.injEq] at hblt'
+        subst hblt'
+        trivial
+      | list ls =>
+        obtain ⟨tx, htx, he'⟩ := Except.bind_eq_ok hblt'
+        simp only [Except.ok.injEq] at he'
+        subst he'
+        exact BLT.toExStrTx_list_wireWellFormed htx
+  · exact absurd h (by simp)
+  · exact absurd h (by simp)
 
 /-
 rlpToBlock is equivalent to json_to_block from execution-specs.
@@ -2583,5 +2725,68 @@ theorem stateTransitionUsing_canonical {cfg : ChainConfig} {ch : BlockChain}
   obtain ⟨u1, _, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨r, _, hp⟩ := Except.bind_eq_ok hp
   exact stateTransitionWith_canonical h hp
+
+--------------- WIRE-STRUCTURAL PREDICATE BOUNDARY CHECKS ---------------
+
+-- The structural predicates are decidable by finite inspection, so their
+-- boundaries are checked by evaluation rather than asserted. Each pair below
+-- is the exact wire width the strict decoder enforces: the widest accepted
+-- value, then one step past it.
+
+#guard decide (Header.WireWellFormed guardTestHeader)
+#guard ¬ decide
+  (Header.WireWellFormed { guardTestHeader with bloom := List.replicate 255 0 })
+#guard ¬ decide
+  (Header.WireWellFormed { guardTestHeader with bloom := List.replicate 257 0 })
+#guard decide
+  (Header.WireWellFormed { guardTestHeader with difficulty := 2 ^ 256 - 1 })
+#guard ¬ decide
+  (Header.WireWellFormed { guardTestHeader with difficulty := 2 ^ 256 })
+#guard decide
+  (Header.WireWellFormed { guardTestHeader with gasLimit := 2 ^ 256 - 1 })
+#guard ¬ decide (Header.WireWellFormed { guardTestHeader with gasLimit := 2 ^ 256 })
+#guard decide
+  (Header.WireWellFormed { guardTestHeader with blobGasUsed := 2 ^ 64 - 1 })
+#guard ¬ decide
+  (Header.WireWellFormed { guardTestHeader with blobGasUsed := 2 ^ 64 })
+#guard decide
+  (Header.WireWellFormed { guardTestHeader with excessBlobGas := 2 ^ 64 - 1 })
+#guard ¬ decide
+  (Header.WireWellFormed { guardTestHeader with excessBlobGas := 2 ^ 64 })
+
+private def wireGuardWithdrawal (amount : B256) : Withdrawal :=
+  { globalIndex := 0, validatorIndex := 0, recipient := 0, amount := amount }
+
+-- EIP-4895's 64-bit Gwei amount, at its exact boundary in the 256-bit field.
+#guard decide
+  (Withdrawal.WireWellFormed (wireGuardWithdrawal (2 ^ 64 - 1 : Nat).toB256))
+#guard ¬ decide
+  (Withdrawal.WireWellFormed (wireGuardWithdrawal (2 ^ 64 : Nat).toB256))
+
+-- A decoder-produced legacy transaction is structurally certifiable; the same
+-- record with a noncanonical or overwide signature scalar, or an overwide
+-- value, is not.
+#guard (BLT.toExStrTx canonicalLegacyVector).toOption.map
+  (fun tx => decide tx.WireWellFormed) = some true
+#guard (BLT.toExStrTx canonicalLegacyVector).toOption.map
+  (fun tx => decide (Tx.WireWellFormed { tx with r := 0x00 :: tx.r })) = some false
+#guard (BLT.toExStrTx canonicalLegacyVector).toOption.map
+  (fun tx => decide (Tx.WireWellFormed { tx with s := List.replicate 33 0x01 }))
+    = some false
+#guard (BLT.toExStrTx canonicalLegacyVector).toOption.map
+  (fun tx => decide (Tx.WireWellFormed { tx with value := 2 ^ 256 })) = some false
+
+-- P0.3's headline negative case. A decoded legacy transaction is a legitimate
+-- decoded block-body slot; a *typed* transaction is not, because a typed
+-- transaction's canonical block encoding is its envelope byte followed by its
+-- payload, never the legacy list. This is what forecloses a direct trusted
+-- `.inr Tx` on the checked path.
+#guard (BLT.toExStrTx canonicalLegacyVector).toOption.map
+  (fun tx => decide (TxEntry.WireWellFormed (.inr tx))) = some true
+#guard (Bytes.toExStrTx
+    (type1Vector [0x01] [0x01] testRecipient [0x01] (.list []))).toOption.map
+  (fun tx => decide (TxEntry.WireWellFormed (.inr tx))) = some false
+#guard (Bytes.toExStrTx (type2Vector [0x0a] testRecipient [0x02])).toOption.map
+  (fun tx => decide (TxEntry.WireWellFormed (.inr tx))) = some false
 
 end Jaune

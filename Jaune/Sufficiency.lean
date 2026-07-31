@@ -372,15 +372,11 @@ theorem applyTernary_gasLeft {f : B256 → B256 → B256 → B256} {c : Nat}
 /-! ## Walking an instruction body
 
 Every instruction body is a `do` chain in `Except (String × Devm)`. Peeling one
-`bind` at a time with this lemma is what keeps the walks free of the fragile
-`split`-and-`rename_i` idiom: the scrutinee never has to be written out, so a
-cost expression can be arbitrarily large without the proof mentioning it. -/
-
-theorem Except.bind_eq_ok {ε α β : Type} {e : Except ε α} {f : α → Except ε β}
-    {b : β} (h : e >>= f = .ok b) : ∃ a, e = .ok a ∧ f a = .ok b := by
-  cases e with
-  | error err => exact absurd h (by simp [bind, Except.bind])
-  | ok a => exact ⟨a, rfl, h⟩
+`bind` at a time with `Except.bind_eq_ok` -- declared in `Jaune/Machine.lean`,
+where the strict field decoders invert the same way -- is what keeps the walks
+free of the fragile `split`-and-`rename_i` idiom: the scrutinee never has to be
+written out, so a cost expression can be arbitrarily large without the proof
+mentioning it. -/
 
 theorem Except.assert_eq_ok {p : Prop} [Decidable p] {ε : Type} {e : ε} {u : Unit}
     (h : Except.assert p e = .ok u) : p := by
