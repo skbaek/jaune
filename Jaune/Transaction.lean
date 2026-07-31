@@ -227,7 +227,9 @@ def checkTransactionBlobData
     if blobHashes.isEmpty then
       .error s!"{type3ZeroBlobsTag} : no blob hashes in type-3 transaction"
     checkTransactionBlobCount benv.stat.rules.tx blobHashes
-    if List.any blobHashes (λ bvh => bvh.toBytes[0]! ≠ versionedHashVersionKzg) then
+    -- P0.6 item 3: the version byte is read through the total `head?`, never a
+    -- partial index into the fixed 32-byte hash encoding.
+    if List.any blobHashes (λ bvh => bvh.toBytes.head? ≠ some versionedHashVersionKzg) then
       .error
         s!"{type3InvalidBlobVersionedHashTag} : a blob versioned hash has \
            a version byte other than {versionedHashVersionKzg}"
@@ -1126,10 +1128,13 @@ def processCheckedSystemTransaction
     .error s!"InvalidBlock : System contract address {target.toHex} does not contain code"
   let ⟨state, systemTxOutput⟩ ←
     processSystemTransaction benv target systemContractCode data
-  if systemTxOutput.error.isSome then
+  -- P0.6 item 3: the failure text is extracted by the total match, never by a
+  -- partial projection out of the optional error field.
+  match systemTxOutput.error with
+  | some err =>
     .error s!"{systemContractCallFailedTag} : system contract ({target.toHex}) call failed: \
-      {systemTxOutput.error.get!}"
-  .ok ⟨state, systemTxOutput⟩
+      {err}"
+  | none => .ok ⟨state, systemTxOutput⟩
 
 def processGeneralPurposeRequests
   (benv : Benv) (bout : BlockOutput) :
@@ -3642,8 +3647,7 @@ theorem processCheckedSystemTransaction_canonical {benv : Benv}
     obtain ⟨qs, qo⟩ := q
     dsimp only at hp
     split at hp
-    · obtain ⟨u, hu, hp⟩ := Except.bind_eq_ok hp
-      nomatch hu
+    · nomatch hp
     · cases hp
       exact processSystemTransaction_canonical h hq
 

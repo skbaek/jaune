@@ -102,15 +102,17 @@ def accessDelegation (devm : Devm) (adr : Adr) :
   Bool × Adr × ByteArray × Nat × Devm :=
   let state := devm.state
   let code := state.getCode adr
-  if isValidDelegation code
-  then
-    let adr :=
-      (code.sliceD eoaDelegationMarker.length 20 (0 : UInt8)).toAdr?.get!
+  -- P0.6 item 3: the delegated address is extracted by the total match below,
+  -- never by a partial projection. `getDelegatedCodeAddress` answers `some`
+  -- exactly on valid delegation designators, so the `none` arm is the ordinary
+  -- no-delegation path.
+  match getDelegatedCodeAddress code with
+  | some adr =>
     let accessGasCost := accessCost adr devm.accessedAddresses
     let devm := addAccessedAddress devm adr
     let code := state.getCode adr
     ⟨true, adr, code, accessGasCost, devm⟩
-  else ⟨false, adr, code, 0, devm⟩
+  | none => ⟨false, adr, code, 0, devm⟩
 
 def processCreateMessage.msg (msg : Msg) : Msg :=
   let adr := msg.currentTarget
@@ -744,6 +746,30 @@ private def flattenGuardOog : Bool :=
 
 #guard flattenGuardOog
 
+-- P0.6 item 2 regressions: JUMP and JUMPI to a destination beyond the end of
+-- code render the legacy InvalidJumpDestError through the ordinary error
+-- channel, with nothing written by a host-level partial read (typed
+-- construction is Step 9). The destination read is total; out of range is
+-- semantically `false`.
+private def flattenGuardJumpOob : Bool :=
+  -- PUSH1 0xFF; JUMP — destination 255 is out of range for 3 bytes of code.
+  let msg := flattenGuardMsg [0x60, 0xFF, 0x56] 100 8
+  match (execFueled (initEvm msg) 10).run with
+  | .some (.error ⟨err, _⟩) => err == "InvalidJumpDestError"
+  | _ => false
+
+#guard flattenGuardJumpOob
+
+private def flattenGuardJumpiOob : Bool :=
+  -- PUSH1 0x01 (condition); PUSH1 0xFF (destination); JUMPI — taken branch,
+  -- destination 255 is out of range for 5 bytes of code.
+  let msg := flattenGuardMsg [0x60, 0x01, 0x60, 0xFF, 0x57] 100 8
+  match (execFueled (initEvm msg) 10).run with
+  | .some (.error ⟨err, _⟩) => err == "InvalidJumpDestError"
+  | _ => false
+
+#guard flattenGuardJumpiOob
+
 instance {w a} : Decidable (Dead w a) := by
   simp [Dead]
   cases w[a]?
@@ -755,8 +781,11 @@ def State.code (w : State) (a : Adr) : ByteArray :=
   | none => ByteArray.mk #[]
   | some x => x.code
 
+-- P0.6 item 3: the leading byte of the fixed 32-byte hash is read through the
+-- total `head?`, never a partial index; an (unrepresentable) empty byte list
+-- would simply fail the predicate.
 def correctBlobHashVersion (h : B256) : Prop :=
-  h.toBytes[0]! = 0x01
+  h.toBytes.head? = some 0x01
 
 instance : DecidablePred correctBlobHashVersion := by
   intro h; simp [correctBlobHashVersion]; infer_instance

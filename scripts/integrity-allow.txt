@@ -30,7 +30,7 @@
 # step that discharges a row deletes it (or rewrites it as KEEP) and
 # lowers the budget in the same commit.
 #
-# pending-budget: 329
+# pending-budget: 322
 #
 # At the branch point nothing is discharged yet: Step 1 inventories, it
 # does not repair. There are therefore zero KEEP rows, and the gate's
@@ -107,8 +107,6 @@ R3 Jaune/EC.lean let y0 := ys[0]!  ## PENDING(step8,totalize) twist coefficient 
 R3 Jaune/EC.lean let y1 := ys[1]!  ## PENDING(step8,totalize) twist coefficient read from a possibly short list; owes a fixed-size input or an explicit checked failure
 
 # ---- R3 : Jaune/Execution.lean ----
-R3 Jaune/Execution.lean (code.sliceD eoaDelegationMarker.length 20 (0 : UInt8)).toAdr?.get!  ## PENDING(step7,match) simple partial projection; replaced by an explicit pattern match
-R3 Jaune/Execution.lean h.toBytes[0]! = 0x01  ## PENDING(step7,match) simple partial projection; replaced by an explicit pattern match
 
 # ---- R3 : Jaune/Hash.lean ----
 R3 Jaune/Hash.lean (bs.get! (bnd - (m + 1))) :: aux bnd bs m n  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
@@ -203,9 +201,6 @@ R3 Jaune/Hash.lean ⟨UInt64.byteswap (ws'[2]!), UInt64.byteswap (ws'[3]!)⟩ �
 R3 Jaune/Hash.lean ⟨ws[0]!, ws[1]!, ws[2]!, ws[3]!, ws[4]!,  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
 
 # ---- R3 : Jaune/Machine.lean ----
-R3 Jaune/Machine.lean if cd.get! k = (Jinst.toUInt8 .jumpdest)  ## PENDING(step7,proof-indexed) code read in getInst/noPushBefore/jumpable; out of range must mean false, never a partial read
-R3 Jaune/Machine.lean let b : UInt8 := code.get! pc  ## PENDING(step7,proof-indexed) code read in getInst/noPushBefore/jumpable; out of range must mean false, never a partial read
-R3 Jaune/Machine.lean then let b := cd.get! k  ## PENDING(step7,proof-indexed) code read in getInst/noPushBefore/jumpable; out of range must mean false, never a partial read
 
 # ---- R3 : Jaune/Precompiles.lean ----
 R3 Jaune/Precompiles.lean (((v.set! a va).set! b vb).set! c vc).set! d vd  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
@@ -256,8 +251,6 @@ R3 Jaune/Precompiles.lean out of arrays — a read does not allocate, only `set!
 R3 Jaune/Precompiles.lean ⟨ini[0]!, ini[1]!, ini[2]!, ini[3]!, ini[4]!, ini[5]!, ini[6]!, ini[7]!,  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
 
 # ---- R3 : Jaune/Transaction.lean ----
-R3 Jaune/Transaction.lean if List.any blobHashes (λ bvh => bvh.toBytes[0]! ≠ versionedHashVersionKzg) then  ## PENDING(step7,match) simple partial projection; replaced by an explicit pattern match
-R3 Jaune/Transaction.lean {systemTxOutput.error.get!}"  ## PENDING(step7,match) simple partial projection; replaced by an explicit pattern match
 
 # ---- R4 : Jaune/BLS.lean ----
 R4 Jaune/BLS.lean def Bytes.toExStrBLSF (data : Bytes) : Except String BLSF := do  ## PENDING(step9) stringly carrier in a precompile-facing decoder; retyped with the crypto errors

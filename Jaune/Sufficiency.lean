@@ -480,8 +480,8 @@ covering a spawn and both of its refund branches. -/
 @[simp] theorem accessDelegation_gasLeft (devm : Devm) (adr : Adr) :
     (accessDelegation devm adr).2.2.2.2.gasLeft = devm.gasLeft := by
   unfold accessDelegation
-  by_cases hd : isValidDelegation (devm.state.getCode adr) <;>
-    simp only [hd, if_pos, if_neg, not_false_iff, addAccessedAddress_gasLeft]
+  dsimp only
+  split <;> simp only [addAccessedAddress_gasLeft]
 
 /-- The step-level obligation for a call-type instruction, measured against the
 frame's gas at the start of the step.

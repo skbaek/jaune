@@ -1668,9 +1668,9 @@ lemma le_of_toInstType_eq_p (b : UInt8) (h : b.toInstType = .P) :
   · cases h
 
 def ByteArray.getInst (code : ByteArray) (pc : Nat) : Option Inst :=
-  if pc < code.size
+  if hpc : pc < code.size
   then
-    let b : UInt8 := code.get! pc
+    let b : UInt8 := code[pc]
     match h : b.toInstType with
     | .R => b.toRinst <&> (.next ∘ .reg)
     | .X => b.toXinst <&> (.next ∘ .exec)
@@ -2648,8 +2648,8 @@ def noPushBefore (cd : ByteArray) : Nat → Nat → Bool
   | 0, _ => true
   | _, 0 => true
   | k + 1, m + 1 =>
-    if k < cd.size
-    then let b := cd.get! k
+    if hk : k < cd.size
+    then let b := cd[k]
          if (b < (0x7F - m.toUInt8) || 0x7F < b)
          then noPushBefore cd k m
          else if noPushBefore cd k 32
@@ -2658,9 +2658,20 @@ def noPushBefore (cd : ByteArray) : Nat → Nat → Bool
     else noPushBefore cd k m
 
 def jumpable (cd : ByteArray) (k : Nat) : Bool :=
-  if cd.get! k = (Jinst.toUInt8 .jumpdest)
-  then noPushBefore cd k 32
+  if hk : k < cd.size
+  then
+    if cd[k] = (Jinst.toUInt8 .jumpdest)
+    then noPushBefore cd k 32
+    else false
   else false
+
+-- P0.6 item 2: an out-of-range jump destination is *semantically* unjumpable.
+-- The read is total and proof-indexed; out of range means `false`, never a
+-- host-level partial read. In range, behaviour is unchanged.
+#guard jumpable ⟨#[0x5B]⟩ 0 = true
+#guard jumpable ⟨#[0x5B]⟩ 1 = false
+#guard jumpable ⟨#[0x5B]⟩ (2 ^ 64) = false
+#guard jumpable ⟨#[]⟩ 0 = false
 
 def Jinst.runCore (pc : Nat) (devm : Devm) (sevm : Sevm) :
     Jinst → Except (String × Devm) (Nat × Devm)
