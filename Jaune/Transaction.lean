@@ -37,7 +37,7 @@ def processMessageCall.create (msg : Msg) :
   if isCollision then
     return ⟨benv.state, ⟨0, 0, [], .emptyWithCapacity, "AddressCollision", []⟩⟩
   else
-    let evm ← Except.bimap Prod.fst id (processCreateMessage msg)
+    let evm ← Except.bimap (fun e => EvmError.render e.1) id (processCreateMessage msg)
     let logs := if evm.error.isNone then evm.logs else []
     let accountsToDelete := if evm.error.isNone then evm.accountsToDelete else .emptyWithCapacity
     let refundCounter ←
@@ -76,7 +76,7 @@ def processMessageCall.call (msg : Msg) :
         code := msgDelegation.benv.state.getCode dca,
         codeAddress := some dca
       }
-  let evm ← Except.bimap Prod.fst id (processMessage msgPc)
+  let evm ← Except.bimap (fun e => EvmError.render e.1) id (processMessage msgPc)
   let refundProcessMessage ←
     if evm.error.isNone then
       (Int.toNat? evm.refundCounter).toExcept "ERROR : refund counter is negative"

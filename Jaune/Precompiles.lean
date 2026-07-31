@@ -5,12 +5,12 @@ namespace Jaune
 open Jaune
 
 inductive PrecompResult
-| error (msg : String) (cost : Nat)
+| error (reason : EvmError) (cost : Nat)
 | ok (cost : Nat) (output : Bytes)
 
 def PrecompResult.chargeGas (cost : Nat) (evm : Evm)
     (pr : Unit → PrecompResult) : PrecompResult :=
-  if cost ≤ evm.dyna.gasLeft then pr () else .error "OutOfGasError" 0
+  if cost ≤ evm.dyna.gasLeft then pr () else .error (.halt (.outOfGas .none)) 0
 
 def executeEcrecover (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
@@ -139,7 +139,7 @@ def executeModexp (evm : Evm) : PrecompResult :=
   let expLength : Nat := Bytes.sliceToNat data 32 32
   let modulusLength : Nat := Bytes.sliceToNat data 64 32
   if ¬ modexpLengthsInBounds m baseLength expLength modulusLength then
-    .error modexpInputLimitTag 0
+    .error (.halt (.modexpInputLimit .none)) 0
   else
   let expHead : Nat := Bytes.sliceToNat data (96 + baseLength) (min 32 expLength)
   let cost : Nat := modexpGasCost m baseLength modulusLength expLength expHead
@@ -201,13 +201,13 @@ def executeEcadd (evm : Evm) : PrecompResult :=
     let x1 : Nat := Bytes.toNat <| data.sliceD 64 32 (0 : UInt8)
     let y1 : Nat := Bytes.toNat <| data.sliceD 96 32 (0 : UInt8)
     if ¬ (x0 < altBn128Prime ∧ y0 < altBn128Prime ∧ x1 < altBn128Prime ∧ y1 < altBn128Prime) then
-      .error "OutOfGasError" 150
+      .error (.halt (.outOfGas .none)) 150
     else
       match BNP.mk? x0 y0 with
-      | none => .error "OutOfGasError" 150
+      | none => .error (.halt (.outOfGas .none)) 150
       | some p0 =>
         match BNP.mk? x1 y1 with
-        | none => .error "OutOfGasError" 150
+        | none => .error (.halt (.outOfGas .none)) 150
         | some p1 => .ok 150 (BNP.toBytes (p0 + p1))
 
 def executeEcmul (evm : Evm) : PrecompResult :=
@@ -217,10 +217,10 @@ def executeEcmul (evm : Evm) : PrecompResult :=
     let y : Nat := Bytes.toNat <| data.sliceD 32 32 (0 : UInt8)
     let n : Nat := Bytes.toNat <| data.sliceD 64 32 (0 : UInt8)
     if ¬ (x < altBn128Prime ∧ y < altBn128Prime) then
-      .error "OutOfGasError" 6000
+      .error (.halt (.outOfGas .none)) 6000
     else
       match BNP.mk? x y with
-      | none => .error "OutOfGasError" 6000
+      | none => .error (.halt (.outOfGas .none)) 6000
       | some p => .ok 6000 (BNP.toBytes (p * n))
 
 def b2R1 : UInt64 := 32
@@ -634,7 +634,7 @@ def bCompress (numRounds : Nat)
 -- blake2f
 def executeBlake2F (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
-  if data.length ≠ 213 then .error "InvalidParameter" 0
+  if data.length ≠ 213 then .error (.halt (.invalidParameter .none)) 0
   else
     let ⟨rounds, h, m, t0, t1, fn⟩ := getBlake2Parameters data
     let cost := gasBlake2PerRound * rounds
@@ -643,12 +643,12 @@ def executeBlake2F (evm : Evm) : PrecompResult :=
       | 0 =>
         match bCompress rounds h m t0 t1 false with
         | some output => .ok cost output
-        | none => .error "bCompress failed" cost
+        | none => .error (.crypto (.pointCompression .none)) cost
       | 1 =>
         match bCompress rounds h m t0 t1 true with
         | some output => .ok cost output
-        | none => .error "bCompress failed" cost
-      | _ => .error "InvalidParameter" cost
+        | none => .error (.crypto (.pointCompression .none)) cost
+      | _ => .error (.halt (.invalidParameter .none)) cost
 
 -- Precompile-facing BLS12-381 byte decoders, relocated here from
 -- `Jaune/BLS.lean` by the typed-error migration: their rejection reasons are
@@ -810,7 +810,7 @@ def gasPointEval : Nat := 50000
 -- def point_evaluation(evm : Evm) -> None:
 def executePointEval (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
-  if data.length ≠ 192 then .error "KZGProofError" 0
+  if data.length ≠ 192 then .error (.halt (.kzgProof .none)) 0
   else
     PrecompResult.chargeGas gasPointEval evm fun () =>
       let versionedHash := data.take 32
@@ -819,12 +819,12 @@ def executePointEval (evm : Evm) : PrecompResult :=
       let commitment := (data.drop 96).take 48
       let proof := (data.drop 144).take 48
       if kzgCommitmentToVersionedHash commitment ≠ versionedHash then
-        .error "KZGProofError" gasPointEval
+        .error (.halt (.kzgProof .none)) gasPointEval
       else
         match verifyKzgProof commitment z y proof with
         | .ok true =>
           .ok gasPointEval ((4096 : Nat).toB256.toBytes ++ blsModulus.toB256.toBytes)
-        | _ => .error "KZGProofError" gasPointEval
+        | _ => .error (.halt (.kzgProof .none)) gasPointEval
 
 def gasBlsG1Add : Nat := 375
 def gasBlsG1Mul : Nat := 12000
@@ -836,18 +836,19 @@ def gasBlsG2Map : Nat := 23800
 -- bls12_g1_add
 def executeBls12G1Add (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
-  if data.length ≠ 256 then .error "InvalidParameter" 0
+  if data.length ≠ 256 then .error (.halt (.invalidParameter .none)) 0
   else
     PrecompResult.chargeGas gasBlsG1Add evm fun () =>
       match Bytes.toExStrBLSP (data.take 128), Bytes.toExStrBLSP (data.drop 128) with
       | .ok p1, .ok p2 => .ok gasBlsG1Add (BLSP.toBytes (p1 + p2))
-      | _, _ => .error "OutOfGasError" gasBlsG1Add
+      | _, _ => .error (.halt (.outOfGas .none)) gasBlsG1Add
 
 -- bls12_g1_msm
 def executeBls12G1Msm (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
   if data.length = 0 ∨ data.length % g1MsmLengthPerPair ≠ 0 then
-    .error s!"InvalidParameter : {data.length} is not a valid input length" 0
+    .error (.halt (.invalidParameter
+      (.text s!"{data.length} is not a valid input length"))) 0
   else
     let k := data.length / g1MsmLengthPerPair
     let discount := List.getD g1KDiscount (k - 1) g1MaxDiscount
@@ -855,23 +856,24 @@ def executeBls12G1Msm (evm : Evm) : PrecompResult :=
     PrecompResult.chargeGas gasCost evm fun () =>
       match decodeG1MsmPairs data with
       | .ok pairs => .ok gasCost (g1MsmSum pairs).toBytes
-      | .error _ => .error "OutOfGasError" gasCost
+      | .error _ => .error (.halt (.outOfGas .none)) gasCost
 
 -- bls12_g2_add
 def executeBls12G2Add (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
-  if data.length ≠ 512 then .error "InvalidParameter" 0
+  if data.length ≠ 512 then .error (.halt (.invalidParameter .none)) 0
   else
     PrecompResult.chargeGas gasBlsG2Add evm fun () =>
       match Bytes.toExStrBLSP2 (data.take 256), Bytes.toExStrBLSP2 (data.drop 256) with
       | .ok p1, .ok p2 => .ok gasBlsG2Add (BLSP2.toBytes (p1 + p2))
-      | _, _ => .error "OutOfGasError" gasBlsG2Add
+      | _, _ => .error (.halt (.outOfGas .none)) gasBlsG2Add
 
 -- def bls12_g2_msm
 def executeBls12G2Msm (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
   if data.length = 0 ∨ data.length % g2MsmLengthPerPair ≠ 0 then
-    .error s!"InvalidParameter : {data.length} is not a valid input length" 0
+    .error (.halt (.invalidParameter
+      (.text s!"{data.length} is not a valid input length"))) 0
   else
     let k := data.length / g2MsmLengthPerPair
     let discount := List.getD g2KDiscount (k - 1) g2MaxDiscount
@@ -879,17 +881,17 @@ def executeBls12G2Msm (evm : Evm) : PrecompResult :=
     PrecompResult.chargeGas gasCost evm fun () =>
       match decodeG2MsmPairs data with
       | .ok pairs => .ok gasCost (g2MsmSum pairs).toBytes
-      | .error _ => .error "OutOfGasError" gasCost
+      | .error _ => .error (.halt (.outOfGas .none)) gasCost
 
 -- def bls12_map_fp_to_g1(evm : Evm) -> None :
 def executeBls12MapFpToG1 (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
-  if data.length ≠ 64 then .error "InvalidParameter" 0
+  if data.length ≠ 64 then .error (.halt (.invalidParameter .none)) 0
   else
     PrecompResult.chargeGas gasBlsG1Map evm fun () =>
       match Bytes.toExStrBLSF data with
       | .ok fp => .ok gasBlsG1Map (BLSP.toBytes (blsMapFpToG1 fp))
-      | .error _ => .error "OutOfGasError" gasBlsG1Map
+      | .error _ => .error (.halt (.outOfGas .none)) gasBlsG1Map
 
 -- def bytes_to_g1(data : Bytes) -> Point3D[FQ]:
 def Bytes.toExStrBNP (data : Bytes) : Except ExceptionalHalt BNP := do
@@ -923,23 +925,24 @@ def Bytes.toExStrBNP2 (data : Bytes) : Except ExceptionalHalt BNP2 := do
     (.invalidParameter (.text "point is not on curve"))
 
 def catchWithOOGPrecomp {ξ} (cost : Nat) (cond : ExceptionalHalt → Bool) :
-  Except ExceptionalHalt ξ → Except (String × Nat) ξ
+  Except ExceptionalHalt ξ → Except (EvmError × Nat) ξ
   | .ok v => .ok v
   | .error e =>
-    if cond e then .error ⟨"OutOfGasError", cost⟩ else .error ⟨e.render, cost⟩
+    if cond e then .error ⟨.halt (.outOfGas .none), cost⟩
+    else .error ⟨.halt e, cost⟩
 
 -- def bls12_map_fp2_to_g2(evm : Evm) -> None :
 def executeBls12MapFp2ToG2 (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
-  if data.length ≠ 128 then .error "InvalidParameter" 0
+  if data.length ≠ 128 then .error (.halt (.invalidParameter .none)) 0
   else
     PrecompResult.chargeGas gasBlsG2Map evm fun () =>
       match Bytes.toExStrBLSF2 data with
       | .ok fp2 => .ok gasBlsG2Map (BLSP2.toBytes (blsMapFp2ToG2 fp2))
-      | .error _ => .error "OutOfGasError" gasBlsG2Map
+      | .error _ => .error (.halt (.outOfGas .none)) gasBlsG2Map
 
 def executeBls12PairingInner (data : Bytes) (cost : Nat) :
-    Except (String × Nat) (Nat × Bytes) := do
+    Except (EvmError × Nat) (Nat × Bytes) := do
   let mut result : BLSF12 := 1
   for i in List.range (data.length / 384) do
     let p : BLSP ←
@@ -950,7 +953,7 @@ def executeBls12PairingInner (data : Bytes) (cost : Nat) :
         Bytes.toExStrBLSP2 (data.slice! (i * 384 + 128) 256) true
     let pairResult ← match blsPairing q p with
                      | some v => pure v
-                     | none => throw ⟨"ValueError", cost⟩
+                     | none => throw ⟨.crypto (.value .none), cost⟩
     result := result * pairResult
   let output : Bytes :=
     if result = 1 then (1 : Nat).toB256.toBytes else (0 : Nat).toB256.toBytes
@@ -960,7 +963,8 @@ def executeBls12PairingInner (data : Bytes) (cost : Nat) :
 def executeBls12Pairing (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
   if data.length = 0 ∨ data.length % 384 ≠ 0 then
-    .error s!"InvalidParameter : {data.length} is not a valid input length" 0
+    .error (.halt (.invalidParameter
+      (.text s!"{data.length} is not a valid input length"))) 0
   else
     let k := data.length / 384
     let gasCost := (32600 * k + 37700)
@@ -970,8 +974,8 @@ def executeBls12Pairing (evm : Evm) : PrecompResult :=
       | .error ⟨msg, cost⟩ => .error msg cost
 
 def executePairingCheckInner (data : Bytes) (cost : Nat) :
-    Except (String × Nat) (Nat × Bytes) := do
-  if data.length % 192 ≠ 0 then throw ⟨"OutOfGasError", cost⟩
+    Except (EvmError × Nat) (Nat × Bytes) := do
+  if data.length % 192 ≠ 0 then throw ⟨.halt (.outOfGas .none), cost⟩
   let mut result : BNF12 := 1
   for i in List.range (data.length / 192) do
     let p : BNP ←
@@ -980,11 +984,11 @@ def executePairingCheckInner (data : Bytes) (cost : Nat) :
     let q : BNP2 ←
       catchWithOOGPrecomp cost ExceptionalHalt.isInvalidParameter <|
         Bytes.toExStrBNP2 (data.slice! (i * 192 + 64) 128)
-    if p * altBn128CurveOrder ≠ ⟨0, 0⟩ then throw ⟨"OutOfGasError", cost⟩
-    if q * altBn128CurveOrder ≠ ⟨0, 0⟩ then throw ⟨"OutOfGasError", cost⟩
+    if p * altBn128CurveOrder ≠ ⟨0, 0⟩ then throw ⟨.halt (.outOfGas .none), cost⟩
+    if q * altBn128CurveOrder ≠ ⟨0, 0⟩ then throw ⟨.halt (.outOfGas .none), cost⟩
     let pairResult ← match pairing q p with
                      | some v => pure v
-                     | none => throw ⟨"ValueError", cost⟩
+                     | none => throw ⟨.crypto (.value .none), cost⟩
     result := result * pairResult
   let output : Bytes := if result = 1 then (1 : Nat).toB256.toBytes else (0 : Nat).toB256.toBytes
   pure (cost, output)
@@ -1017,7 +1021,8 @@ def precompileRun (evm : Evm) : Adr → PrecompResult
   | 16 => executeBls12MapFpToG1 evm -- 0x10
   | 17 => executeBls12MapFp2ToG2 evm -- 0x11
   | 256 => executeP256Verify evm -- 0x100
-  | n => .error s!"ERROR : precompiled contract {n} does not exist" 0
+  | n => .error (.internal (.invariant
+      (.text s!"precompiled contract {n} does not exist"))) 0
 
 def applyPrecompResult (evm : Evm) (res : PrecompResult) : Execution :=
   match res with

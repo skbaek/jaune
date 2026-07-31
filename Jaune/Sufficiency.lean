@@ -50,7 +50,7 @@ def Execution.gasLeft : Execution → Nat
 @[simp] theorem Execution.gasLeft_ok (devm : Devm) :
     Execution.gasLeft (.ok devm) = devm.gasLeft := rfl
 
-@[simp] theorem Execution.gasLeft_error (e : String × Devm) :
+@[simp] theorem Execution.gasLeft_error (e : EvmError × Devm) :
     Execution.gasLeft (.error e) = e.2.gasLeft := rfl
 
 /-! ## Gas-preserving state updates
@@ -371,7 +371,7 @@ theorem applyTernary_gasLeft {f : B256 → B256 → B256 → B256} {c : Nat}
 
 /-! ## Walking an instruction body
 
-Every instruction body is a `do` chain in `Except (String × Devm)`. Peeling one
+Every instruction body is a `do` chain in `Except (EvmError × Devm)`. Peeling one
 `bind` at a time with `Except.bind_eq_ok` -- declared in `Jaune/Machine.lean`,
 where the strict field decoders invert the same way -- is what keeps the walks
 free of the fragile `split`-and-`rename_i` idiom: the scrutinee never has to be
@@ -401,7 +401,7 @@ def Resume.parentGas : Resume → Nat
   | .call parent _ _ => parent.gasLeft
 
 theorem Resume.run_ok_gasLeft {rsm : Resume}
-    {r : Except (String × State × AdrSet × Tra) Devm} {devm' : Devm}
+    {r : Except (EvmError × State × AdrSet × Tra) Devm} {devm' : Devm}
     (h : rsm.run r = .ok devm') :
     ∃ child : Devm, r = .ok child ∧
       devm'.gasLeft = rsm.parentGas + child.gasLeft := by
@@ -497,7 +497,7 @@ def XStep.GasDecreasing (n : Nat) : XStep → Prop
   | .done ex => ∀ devm', ex = .ok devm' → devm'.gasLeft < n
   | .spawn frame rsm => frame.inner.gas + rsm.parentGas < n
 
-theorem XStep.ofExcept_gasDecreasing {n : Nat} {x : Except (String × Devm) XStep}
+theorem XStep.ofExcept_gasDecreasing {n : Nat} {x : Except (EvmError × Devm) XStep}
     (h : ∀ step, x = .ok step → step.GasDecreasing n) :
     (XStep.ofExcept x).GasDecreasing n := by
   cases x with
@@ -1437,17 +1437,19 @@ theorem executeCode.handleError_ok_gasLe {raw : Execution} {devm : Devm}
     simp only [Execution.gasLeft_ok]
     omega
   | error e =>
-    simp only [executeCode.handleError] at h
-    split at h
-    · simp only [Except.ok.injEq] at h
+    obtain ⟨err, d0⟩ := e
+    cases err with
+    | halt reason =>
+      simp only [executeCode.handleError, Except.ok.injEq] at h
       rw [← h, Devm.setMeta_gasLeft, Devm.withGasLeft_gasLeft]
       omega
-    · split at h
-      · simp only [Except.ok.injEq] at h
-        rw [← h, Devm.withError_gasLeft]
-        simp only [Execution.gasLeft_error]
-        omega
-      · nomatch h
+    | revert =>
+      simp only [executeCode.handleError, Except.ok.injEq] at h
+      rw [← h, Devm.withError_gasLeft]
+      simp only [Execution.gasLeft_error]
+      omega
+    | crypto reason => exact absurd h (by simp [executeCode.handleError])
+    | internal reason => exact absurd h (by simp [executeCode.handleError])
 
 @[simp] theorem chargeGas_result_gasLe (cost : Nat) (devm : Devm) :
     (chargeGas cost devm).gasLeft ≤ devm.gasLeft := by
@@ -1477,11 +1479,11 @@ which is what keeps this second corpus to a fraction of the size of the first.
 
 /-- The gas reported by a `Devm`-threading step, in whichever branch it takes.
 `proj` reads the `Devm` out of a successful payload. -/
-def resultGas {α : Type} (proj : α → Devm) : Except (String × Devm) α → Nat
+def resultGas {α : Type} (proj : α → Devm) : Except (EvmError × Devm) α → Nat
   | .error p => p.2.gasLeft
   | .ok a => (proj a).gasLeft
 
-@[simp] theorem resultGas_error {α : Type} (proj : α → Devm) (p : String × Devm) :
+@[simp] theorem resultGas_error {α : Type} (proj : α → Devm) (p : EvmError × Devm) :
     resultGas proj (.error p) = p.2.gasLeft := rfl
 
 @[simp] theorem resultGas_ok {α : Type} (proj : α → Devm) (a : α) :
@@ -1494,7 +1496,7 @@ def resultGas {α : Type} (proj : α → Devm) : Except (String × Devm) α → 
 measured against the intermediate `Devm`, so it is this lemma again one level
 down. -/
 theorem gasLe_bind_snd {α : Type} {n : Nat}
-    {e : Except (String × Devm) (α × Devm)} {f : α × Devm → Execution}
+    {e : Except (EvmError × Devm) (α × Devm)} {f : α × Devm → Execution}
     (he : resultGas Prod.snd e ≤ n)
     (hf : ∀ a : α × Devm, Execution.gasLeft (f a) ≤ a.2.gasLeft) :
     Execution.gasLeft (e >>= f) ≤ n := by
@@ -1513,7 +1515,7 @@ theorem gasLe_bind_id {n : Nat} {e : Execution} {f : Devm → Execution}
 /-- Peel a `bind` whose payload carries no `Devm` at all — an `Except.assert`
 guard, or an `.ok` of a pure value. The current `Devm` simply survives it. -/
 theorem gasLe_bind_const {α : Type} {n : Nat} {devm : Devm}
-    {e : Except (String × Devm) α} {f : α → Execution}
+    {e : Except (EvmError × Devm) α} {f : α → Execution}
     (he : resultGas (fun _ => devm) e ≤ n)
     (hf : ∀ a : α, Execution.gasLeft (f a) ≤ devm.gasLeft) :
     Execution.gasLeft (e >>= f) ≤ n := by
@@ -1522,7 +1524,7 @@ theorem gasLe_bind_const {α : Type} {n : Nat} {devm : Devm}
   | ok a => exact Nat.le_trans (hf a) he
 
 @[simp] theorem resultGas_assert {p : Prop} [Decidable p] {devm : Devm}
-    (msg : String) :
+    (msg : EvmError) :
     resultGas (fun _ => devm) (Except.assert p ⟨msg, devm⟩) = devm.gasLeft := by
   unfold Except.assert
   split <;> rfl
@@ -1703,7 +1705,7 @@ end Mach
 /-- The general form of the peeling lemma, for the bodies whose payload carries
 its `Devm` somewhere other than the second component. -/
 theorem gasLe_bind {α : Type} {n : Nat} {proj : α → Devm}
-    {e : Except (String × Devm) α} {f : α → Execution}
+    {e : Except (EvmError × Devm) α} {f : α → Execution}
     (he : resultGas proj e ≤ n)
     (hf : ∀ a : α, Execution.gasLeft (f a) ≤ (proj a).gasLeft) :
     Execution.gasLeft (e >>= f) ≤ n := by
@@ -1714,7 +1716,7 @@ theorem gasLe_bind {α : Type} {n : Nat} {proj : α → Devm}
 /-- The fully general peeling lemma, for bodies that do not end in a bare
 `Devm` — `Jinst.runCore` returns a `Nat × Devm` jump target. -/
 theorem gasLe_bind_gen {α β : Type} {n : Nat} {proj : α → Devm} {proj' : β → Devm}
-    {e : Except (String × Devm) α} {f : α → Except (String × Devm) β}
+    {e : Except (EvmError × Devm) α} {f : α → Except (EvmError × Devm) β}
     (he : resultGas proj e ≤ n)
     (hf : ∀ a : α, resultGas proj' (f a) ≤ (proj a).gasLeft) :
     resultGas proj' (e >>= f) ≤ n := by
@@ -2082,13 +2084,13 @@ produced at a single site in the whole interpreter, `Linst.run .rev`. So the
 arithmetic, which is a walk with no arithmetic in it at all. -/
 
 /-- No branch of this outcome reports the `"Revert"` tag. -/
-def NoRevertOut {α : Type} : Except (String × Devm) α → Prop
-  | .error p => p.1 ≠ "Revert"
+def NoRevertOut {α : Type} : Except (EvmError × Devm) α → Prop
+  | .error p => p.1 ≠ .revert
   | .ok _ => True
 
 /-- The `Mach`-level analogue, for the footprint-lifted primitives. -/
 def MachNoRevert {α : Type} : Footprint.Outcome Mach α → Prop
-  | .error q => q.1 ≠ "Revert"
+  | .error q => q.1 ≠ .revert
   | .ok _ => True
 
 theorem liftMach_noRevert {α : Type} {core : Mach → Footprint.Outcome Mach α}
@@ -2110,7 +2112,7 @@ theorem liftMachExecution_noRevert {core : Mach → Footprint.Outcome Mach Unit}
 theorem Mach.pop_noRevert (mach : Mach) : MachNoRevert mach.pop := by
   unfold Mach.pop
   split
-  · show ("StackUnderflowError" : String) ≠ "Revert"
+  · show EvmError.halt (.stackUnderflow .none) ≠ .revert
     decide
   · trivial
 
@@ -2133,14 +2135,14 @@ theorem Mach.push_noRevert (x : B256) (mach : Mach) :
   unfold Mach.push
   split
   · trivial
-  · show ("StackOverflowError" : String) ≠ "Revert"
+  · show EvmError.halt (.stackOverflow .none) ≠ .revert
     decide
 
 theorem Mach.chargeGas_noRevert (c : Nat) (mach : Mach) :
     MachNoRevert (Mach.chargeGas c mach) := by
   unfold Mach.chargeGas
   split
-  · show ("OutOfGasError" : String) ≠ "Revert"
+  · show EvmError.halt (.outOfGas .none) ≠ .revert
     decide
   · trivial
 
@@ -2159,9 +2161,9 @@ theorem Devm.push_noRevert (x : B256) (devm : Devm) : NoRevertOut (devm.push x) 
 theorem chargeGas_noRevert (c : Nat) (devm : Devm) : NoRevertOut (chargeGas c devm) :=
   liftMachExecution_noRevert (Mach.chargeGas_noRevert c devm.mach)
 
-theorem assert_noRevert {p : Prop} [Decidable p] {msg : String} {devm : Devm}
-    (h : msg ≠ "Revert") :
-    NoRevertOut (Except.assert p (⟨msg, devm⟩ : String × Devm)) := by
+theorem assert_noRevert {p : Prop} [Decidable p] {msg : EvmError} {devm : Devm}
+    (h : msg ≠ .revert) :
+    NoRevertOut (Except.assert p (⟨msg, devm⟩ : EvmError × Devm)) := by
   unfold Except.assert
   split
   · trivial
@@ -2180,18 +2182,18 @@ def XStep.NoRevert : XStep → Prop
 
 /-- The obligation on an `XStep`-valued body, before `XStep.ofExcept` collapses
 its error branch into a `.done`. -/
-def xstepNoRevert : Except (String × Devm) XStep → Prop
-  | .error p => p.1 ≠ "Revert"
+def xstepNoRevert : Except (EvmError × Devm) XStep → Prop
+  | .error p => p.1 ≠ .revert
   | .ok step => step.NoRevert
 
-theorem XStep.ofExcept_noRevert {x : Except (String × Devm) XStep}
+theorem XStep.ofExcept_noRevert {x : Except (EvmError × Devm) XStep}
     (h : xstepNoRevert x) : (XStep.ofExcept x).NoRevert := by
   cases x with
   | error p => exact h
   | ok step => exact h
 
-theorem xstepNoRevert_bind {α : Type} {e : Except (String × Devm) α}
-    {f : α → Except (String × Devm) XStep}
+theorem xstepNoRevert_bind {α : Type} {e : Except (EvmError × Devm) α}
+    {f : α → Except (EvmError × Devm) XStep}
     (he : NoRevertOut e) (hf : ∀ a, xstepNoRevert (f a)) :
     xstepNoRevert (e >>= f) := by
   cases e with
@@ -2366,15 +2368,14 @@ theorem Execution.settledGasLe_of_noRevert {n : Nat} {ex : Execution}
     exact hok d0 rfl
   | error p =>
     obtain ⟨err, evm⟩ := p
-    simp only [executeCode.handleError] at hd
-    split at hd
-    · simp only [Except.ok.injEq] at hd
+    cases err with
+    | halt reason =>
+      simp only [executeCode.handleError, Except.ok.injEq] at hd
       rw [← hd, Devm.setMeta_gasLeft, Devm.withGasLeft_gasLeft]
       omega
-    · split at hd
-      · rename_i hrev
-        exact absurd hrev hnr
-      · nomatch hd
+    | revert => exact absurd rfl hnr
+    | crypto reason => exact absurd hd (by simp [executeCode.handleError])
+    | internal reason => exact absurd hd (by simp [executeCode.handleError])
 
 theorem processCreateMessage.chargeCodeGas_gasLe (rules : ForkRules) (devm : Devm) :
     (processCreateMessage.chargeCodeGas rules devm).gasLeft ≤ devm.gasLeft := by
@@ -2387,7 +2388,7 @@ theorem processCreateMessage.chargeCodeGas_gasLe (rules : ForkRules) (devm : Dev
     split <;> simp
 
 theorem processMessage.settle_ok_gasLe {msg : Msg}
-    {r : Except (String × State × AdrSet × Tra) Devm} {d : Devm}
+    {r : Except (EvmError × State × AdrSet × Tra) Devm} {d : Devm}
     (h : processMessage.settle msg r = .ok d) :
     ∃ d0, r = .ok d0 ∧ d.gasLeft ≤ d0.gasLeft := by
   cases r with
@@ -2403,7 +2404,7 @@ theorem processMessage.settle_ok_gasLe {msg : Msg}
       rw [← h]
 
 theorem processCreateMessage.settle_ok_gasLe {msg : Msg}
-    {r : Except (String × State × AdrSet × Tra) Devm} {d : Devm}
+    {r : Except (EvmError × State × AdrSet × Tra) Devm} {d : Devm}
     (h : processCreateMessage.settle msg r = .ok d) :
     ∃ d0, r = .ok d0 ∧ d.gasLeft ≤ d0.gasLeft := by
   cases r with
@@ -2416,23 +2417,27 @@ theorem processCreateMessage.settle_ok_gasLe {msg : Msg}
     · have hc := processCreateMessage.chargeCodeGas_gasLe msg.benv.stat.rules d0
       rcases hcc : processCreateMessage.chargeCodeGas msg.benv.stat.rules d0 with
           ⟨err, d1⟩ | d1 <;> rw [hcc] at hc h <;>
-        simp only [Execution.gasLeft_error, Execution.gasLeft_ok] at hc <;>
-        dsimp only at h
-      · split at h
-        · simp only [Except.ok.injEq] at h
+        simp only [Execution.gasLeft_error, Execution.gasLeft_ok] at hc
+      · cases err with
+        | halt reason =>
+          dsimp only at h
+          simp only [Except.ok.injEq] at h
           rw [← h]
           unfold processCreateMessage.exceptionalHalt
           rw [Devm.setMeta_gasLeft, Devm.withGasLeft_gasLeft]
           omega
-        · nomatch h
-      · simp only [Except.ok.injEq] at h
+        | revert => nomatch h
+        | crypto reason => nomatch h
+        | internal reason => nomatch h
+      · dsimp only at h
+        simp only [Except.ok.injEq] at h
         rw [← h, Devm.setCode_gasLeft]
         exact hc
     · simp only [Except.ok.injEq] at h
       rw [← h, Devm.rollback_gasLeft]
 
 theorem Frame.settleMsg_ok_gasLe {f : Frame}
-    {r : Except (String × State × AdrSet × Tra) Devm} {d : Devm}
+    {r : Except (EvmError × State × AdrSet × Tra) Devm} {d : Devm}
     (h : f.settleMsg r = .ok d) : ∃ d0, r = .ok d0 ∧ d.gasLeft ≤ d0.gasLeft := by
   unfold Frame.settleMsg at h
   dsimp only at h
@@ -2496,7 +2501,7 @@ theorem Frame.enter_run_gasLeft {f : Frame} {child : Evm}
     · nomatch h
 
 theorem Frame.enter_done_gasLe {f : Frame}
-    {r : Except (String × State × AdrSet × Tra) Devm} {d : Devm}
+    {r : Except (EvmError × State × AdrSet × Tra) Devm} {d : Devm}
     (h : f.enter = .done r) (hd : r = .ok d) : d.gasLeft ≤ f.inner.gas := by
   unfold Frame.enter at h
   split at h
@@ -2530,7 +2535,7 @@ still produces a raw result the *grandparent* has to settle. -/
       parent.gasLeft + child.gasLeft := rfl
 
 theorem Resume.run_gasLe {rsm : Resume}
-    {r : Except (String × State × AdrSet × Tra) Devm} {m : Nat}
+    {r : Except (EvmError × State × AdrSet × Tra) Devm} {m : Nat}
     (hr : ∀ d, r = .ok d → d.gasLeft ≤ m) :
     Execution.gasLeft (rsm.run r) ≤ rsm.parentGas + m := by
   cases rsm with
@@ -2580,7 +2585,7 @@ theorem Step.ofExecution_gasBound {pc n : Nat} {ex : Execution}
   | error e => exact hset
   | ok d => exact hok d rfl
 
-theorem Step.ofJump_gasBound {n : Nat} {x : Except (String × Devm) (Nat × Devm)}
+theorem Step.ofJump_gasBound {n : Nat} {x : Except (EvmError × Devm) (Nat × Devm)}
     (hok : ∀ p, x = .ok p → p.2.gasLeft < n) (hle : resultGas Prod.snd x ≤ n) :
     (Step.ofJump x).GasBound n := by
   cases x with
@@ -2784,7 +2789,7 @@ theorem execFueled_run_sufficientFuel_isSome (evm : Evm) :
 /-- **The total interpreter.** Fuel is an implementation detail: the driver is
 seeded from the frame's own remaining gas and `execFueled_run_sufficientFuel_isSome`
 discharges the resulting `Option` at the definition site. -/
-def exec (evm : Evm) : Except (String × Devm) Devm :=
+def exec (evm : Evm) : Except (EvmError × Devm) Devm :=
   ((execFueled evm (sufficientFuel evm.dyna.gasLeft)).run).get
     (execFueled_run_sufficientFuel_isSome evm)
 
@@ -2858,21 +2863,21 @@ These are the public entry points. They lost their `fuel` parameter and their
 `Fueled` result type together: a frame is entered, the driver runs to a
 definite result, and the frame settles it. -/
 
-def runFrame (frame : Frame) : Except (String × State × AdrSet × Tra) Devm :=
+def runFrame (frame : Frame) : Except (EvmError × State × AdrSet × Tra) Devm :=
   match frame.enter with
   | .done r => r
   | .run evm => frame.settle (exec evm)
 
-def executeCode (msg : Msg) : Except (String × State × AdrSet × Tra) Devm :=
+def executeCode (msg : Msg) : Except (EvmError × State × AdrSet × Tra) Devm :=
   match executeCode.enter msg with
   | .inl evm => executeCode.handleError (exec evm)
   | .inr raw => executeCode.handleError raw
 
-def processMessage (msg : Msg) : Except (String × State × AdrSet × Tra) Devm :=
+def processMessage (msg : Msg) : Except (EvmError × State × AdrSet × Tra) Devm :=
   runFrame (Frame.ofCall msg)
 
 def processCreateMessage (msg : Msg) :
-    Except (String × State × AdrSet × Tra) Devm :=
+    Except (EvmError × State × AdrSet × Tra) Devm :=
   runFrame (Frame.ofCreate msg)
 
 /-! ## Focused executable checks for the total entry points
@@ -2899,7 +2904,7 @@ private def totalGuardMsg (bytes : Bytes) (gas depth : Nat) : Msg :=
   }
 
 private def totalGuardSummary
-    (r : Except (String × State × AdrSet × Tra) Devm) :
+    (r : Except (EvmError × State × AdrSet × Tra) Devm) :
     Option (Option String × List B256 × Bytes × Nat) :=
   match r with
   | .ok devm => some ⟨devm.error, devm.stack, devm.output, devm.gasLeft⟩
@@ -2911,7 +2916,7 @@ private def totalGuardArithmeticLoop : Bool :=
   let msg := totalGuardMsg [0x5B, 0x60, 0x00, 0x56] 1000 8
   match exec (initEvm msg), processMessage msg with
   | .error ⟨err, _⟩, .ok devm =>
-    err == "OutOfGasError" &&
+    err == .halt (.outOfGas .none) &&
       devm.error == some "OutOfGasError" &&
       devm.gasLeft == 0
   | _, _ => false
@@ -2997,7 +3002,7 @@ private def totalGuardDepthZero : Bool :=
 private def totalGuardOog : Bool :=
   let msg := totalGuardMsg [0x60, 0x01, 0x00] 0 8
   match exec (initEvm msg) with
-  | .error ⟨err, _⟩ => err == "OutOfGasError"
+  | .error ⟨err, _⟩ => err == .halt (.outOfGas .none)
   | .ok _ => false
 
 #guard totalGuardOog

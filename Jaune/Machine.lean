@@ -11,7 +11,7 @@ open Jaune _root_.Nat
 /-
 Design note #1: primitive signatures of the form
 
-  `Devm → Except (String × Devm) (α × Devm)`
+  `Devm → Except (EvmError × Devm) (α × Devm)`
 
 are deliberately made isomorphic to `EStateM String Devm α`. Future edits shall
 not break this isomorphism. In the future, the codebase may migrate to explicit
@@ -777,23 +777,6 @@ def hasErrorType (err errType : String) : Bool :=
 -- for a check that never inspects the gas counter would misreport it.
 def modexpInputLimitTag : String := "ModexpInputLimitExceeded"
 
-abbrev isExceptionalHalt (err : String) : Prop :=
-  List.any [
-    "StackUnderflowError",
-    "StackOverflowError",
-    "OutOfGasError",
-    modexpInputLimitTag,
-    "InvalidOpcode",
-    "InvalidJumpDestError",
-    "StackDepthLimitError",
-    "WriteInStaticContext",
-    "OutOfBoundsRead",
-    "InvalidParameter",
-    "InvalidContractPrefix",
-    "AddressCollision",
-    "KZGProofError"
-  ] (hasErrorType err)
-
 ---------------- TRANSACTION-REJECTION REASONS -----------------
 
 -- These tags are the transaction analogue of `blockExceptionTags` below:
@@ -853,7 +836,7 @@ def transactionExceptionTags : List String :=
 -- sole producer of its reason, so `Jaune/FixtureException.lean` can route it to
 -- one identity.
 --
--- Tags follow the `hasErrorType` convention: a bare tag, or a tag opening
+-- Tags follow the `renderTagged` convention: a bare tag, or a tag opening
 -- diagnostic text at a fixed " : ". Detail text after the delimiter is free.
 
 /-- `gasLimit` is at or above the absolute `2 ^ 63` bound. Distinct from
@@ -932,7 +915,7 @@ def systemContractCallFailedTag : String := "SystemContractCallFailedError"
 def blockRlpSizeExceededTag : String := "BlockRlpSizeExceededError"
 
 /-- Every block-rejection tag. The single source of truth for the distinctness
-checks, and for `isBlockException`. -/
+checks, and for the string-side block-exception classifier. -/
 def blockExceptionTags : List String :=
   [ gasLimitTooBigTag, gasLimitAdjustmentTag, gasUsedOverflowTag,
     gasUsedMismatchTag, timestampOlderThanParentTag, blockNumberTag,
@@ -947,7 +930,7 @@ def blockExceptionTags : List String :=
 def isBlockException (err : String) : Bool :=
   List.any blockExceptionTags (hasErrorType err)
 
--- The tags are distinct, and none is a prefix of another. `hasErrorType` reads
+-- The tags are distinct, and none is a prefix of another. The classifier reads
 -- a tag up to a fixed " : ", so a tag that prefixed another could be read as
 -- the wrong reason -- and one reason read as another is precisely the defect
 -- this vocabulary exists to remove.
@@ -965,7 +948,7 @@ def isBlockException (err : String) : Bool :=
 
 -- The `Except`-level face of the strict shape checks in `Jaune/Types.lean`.
 -- Each helper names one precise reason a consensus field can be malformed, in
--- the `hasErrorType` tag convention the rest of the executable uses: a bare tag,
+-- the `renderTagged` tag convention the rest of the executable uses: a bare tag,
 -- or a tag followed by " : " and free diagnostic text. The tags are separate
 -- because the official fixture identities are separate -- a scalar wider than
 -- 64 bits is `RLP_INVALID_FIELD_OVERFLOW_64`, a wrong list shape is
@@ -1331,7 +1314,7 @@ instance (b : Block) : Decidable (Block.RlpCanonical b) := by
 --------------- STRICT DECODER REGRESSION CHECKS ----------------
 
 -- Each reason is reported under its own tag, and each tag is recognized by the
--- `hasErrorType` convention the classifier reads -- an exact tag, or a tag
+-- `renderTagged` convention the classifier reads -- an exact tag, or a tag
 -- opening detail text at " : ". Accepted values are checked too: the point of
 -- rejecting a nine-byte index is to keep the eight-byte ones exact.
 
@@ -1743,12 +1726,12 @@ def Devm.withTransientStorage (devm : Devm) (transientStorage : Tra) : Devm :=
 def safeSub {ξ} [Sub ξ] [LE ξ] [DecidableLE ξ] (x y : ξ) : Option ξ :=
   if y ≤ x then some (x - y) else none
 
-abbrev Execution : Type := Except (String × Devm) Devm
+abbrev Execution : Type := Except (EvmError × Devm) Devm
 
 /-- A normalized result for a footprint-restricted core.  Both branches retain
     the core mutable state so a lift can reattach changes made before an error. -/
 abbrev Footprint.Outcome (σ α : Type) : Type :=
-  Except (String × σ) (α × σ)
+  Except (EvmError × σ) (α × σ)
 
 namespace Footprint
 
@@ -1756,13 +1739,13 @@ namespace Footprint
     state to the original flat `Devm`. -/
 def liftOutcome (get : Devm → σ) (set : Devm → σ → Devm)
     (core : σ → Outcome σ α) (devm : Devm) :
-    Except (String × Devm) (α × Devm) :=
+    Except (EvmError × Devm) (α × Devm) :=
   match core (get devm) with
   | .error (err, view) => .error (err, set devm view)
   | .ok (value, view) => .ok (value, set devm view)
 
 /-- Forget the unit payload of a lifted normalized outcome. -/
-def toExecution (outcome : Except (String × Devm) (Unit × Devm)) : Execution :=
+def toExecution (outcome : Except (EvmError × Devm) (Unit × Devm)) : Execution :=
   match outcome with
   | .error err => .error err
   | .ok (_, devm) => .ok devm
@@ -1771,7 +1754,7 @@ end Footprint
 
 /-- Lift a Mach-only payload core. -/
 def liftMach (core : Mach → Footprint.Outcome Mach α) (devm : Devm) :
-    Except (String × Devm) (α × Devm) :=
+    Except (EvmError × Devm) (α × Devm) :=
   Footprint.liftOutcome Devm.mach Devm.setMach core devm
 
 /-- Lift a pure Mach-only update. -/
@@ -1786,7 +1769,7 @@ def liftMachExecution (core : Mach → Footprint.Outcome Mach Unit)
 /-- Lift a Mach+Meta payload core.  The mutable output contains no `World`. -/
 def liftMachMeta
     (core : Mach → Meta → Footprint.Outcome (Mach × Meta) α)
-    (devm : Devm) : Except (String × Devm) (α × Devm) :=
+    (devm : Devm) : Except (EvmError × Devm) (α × Devm) :=
   Footprint.liftOutcome
     (fun d => (d.mach, d.meta))
     (fun d view => { d with mach := view.1, «meta» := view.2 })
@@ -1868,7 +1851,7 @@ end Fueled
 
 def Mach.chargeGas (cost : Nat) (mach : Mach) : Footprint.Outcome Mach Unit :=
   match safeSub mach.gasLeft cost with
-  | none => .error ("OutOfGasError", mach)
+  | none => .error (.halt (.outOfGas .none), mach)
   | some gas => .ok ((), {mach with gasLeft := gas})
 
 def chargeGas (cost : Nat) (devm : Devm) : Execution :=
@@ -1877,7 +1860,7 @@ def chargeGas (cost : Nat) (devm : Devm) : Execution :=
 theorem chargeGas_def (cost : Nat) (devm : Devm) :
     chargeGas cost devm = (do
       match safeSub devm.gasLeft cost with
-      | none => .error ⟨"OutOfGasError", devm⟩
+      | none => .error ⟨.halt (.outOfGas .none), devm⟩
       | some gas => .ok (devm.setMach {devm.mach with gasLeft := gas})) := by
   rcases devm with ⟨⟨stack, memory, gasLeft⟩, view, world⟩
   simp only [chargeGas, Mach.chargeGas, liftMachExecution, liftMach,
@@ -2179,7 +2162,7 @@ theorem calculateBlobGasPrice_spec_corpusMax (blob : BlobSchedule)
 def Mach.push (x : B256) (mach : Mach) : Footprint.Outcome Mach Unit :=
   if mach.stack.length < 1024
   then .ok ⟨(), {mach with stack := x :: mach.stack}⟩
-  else .error ⟨"StackOverflowError", mach⟩
+  else .error ⟨.halt (.stackOverflow .none), mach⟩
 
 def Devm.push (x : B256) (devm : Devm) : Execution :=
   liftMachExecution (Mach.push x) devm
@@ -2187,7 +2170,7 @@ def Devm.push (x : B256) (devm : Devm) : Execution :=
 theorem Devm.push_def (x : B256) (devm : Devm) : Devm.push x devm = (do
     .assert
       (devm.stack.length < 1024)
-      ⟨"StackOverflowError", devm⟩
+      ⟨.halt (.stackOverflow .none), devm⟩
     .ok (devm.setMach {devm.mach with stack := x :: devm.stack})) := by
   rcases devm with ⟨⟨stack, memory, gasLeft⟩, view, world⟩
   simp only [Devm.push, Mach.push, liftMachExecution, liftMach, Footprint.toExecution,
@@ -2196,15 +2179,15 @@ theorem Devm.push_def (x : B256) (devm : Devm) : Devm.push x devm = (do
 
 def Mach.pop (mach : Mach) : Footprint.Outcome Mach B256 :=
   match mach.stack with
-  | [] => .error ⟨"StackUnderflowError", mach⟩
+  | [] => .error ⟨.halt (.stackUnderflow .none), mach⟩
   | x :: xs => .ok ⟨x, {mach with stack := xs}⟩
 
-def Devm.pop (devm : Devm) : Except (String × Devm) (B256 × Devm) :=
+def Devm.pop (devm : Devm) : Except (EvmError × Devm) (B256 × Devm) :=
   liftMach Mach.pop devm
 
 theorem Devm.pop_def (devm : Devm) : Devm.pop devm = (do
     match devm.stack with
-    | [] => .error ⟨"StackUnderflowError", devm⟩
+    | [] => .error ⟨.halt (.stackUnderflow .none), devm⟩
     | x :: xs => .ok ⟨x, devm.setMach {devm.mach with stack := xs}⟩) := by
   rcases devm with ⟨⟨stack, memory, gasLeft⟩, view, world⟩
   cases stack <;> rfl
@@ -2217,7 +2200,7 @@ def Mach.popToNat (mach : Mach) : Footprint.Outcome Mach Nat :=
   | .error err => .error err
   | .ok ⟨x, mach'⟩ => .ok ⟨x.toNat, mach'⟩
 
-def Devm.popToNat (devm : Devm) : Except (String × Devm) (Nat × Devm) :=
+def Devm.popToNat (devm : Devm) : Except (EvmError × Devm) (Nat × Devm) :=
   liftMach Mach.popToNat devm
 
 theorem Devm.popToNat_def (devm : Devm) :
@@ -2230,7 +2213,7 @@ def Mach.popToAdr (mach : Mach) : Footprint.Outcome Mach Adr :=
   | .error err => .error err
   | .ok ⟨x, mach'⟩ => .ok ⟨x.toAdr, mach'⟩
 
-def Devm.popToAdr (devm : Devm) : Except (String × Devm) (Adr × Devm) :=
+def Devm.popToAdr (devm : Devm) : Except (EvmError × Devm) (Adr × Devm) :=
   liftMach Mach.popToAdr devm
 
 theorem Devm.popToAdr_def (devm : Devm) :
@@ -2249,7 +2232,7 @@ def Mach.popN (mach : Mach) : Nat → Footprint.Outcome Mach (List B256)
       | .ok ⟨xs, mach''⟩ => .ok ⟨x :: xs, mach''⟩
 
 def Devm.popN (devm : Devm) (n : Nat) :
-    Except (String × Devm) (List B256 × Devm) :=
+    Except (EvmError × Devm) (List B256 × Devm) :=
   liftMach (Mach.popN · n) devm
 
 theorem Devm.popN_def (devm : Devm) (n : Nat) : devm.popN n =
@@ -2582,8 +2565,8 @@ def List.swap {ξ} : List ξ → Nat → Option (List ξ)
 
 def Evm.contract (evm : Evm) : Adr := evm.sta.currentTarget
 
-def assertDynamic (sevm : Sevm) (devm : Devm) : Except (String × Devm) Unit :=
-  Except.assert (!sevm.isStatic) ⟨s!"WriteInStaticContext", devm⟩
+def assertDynamic (sevm : Sevm) (devm : Devm) : Except (EvmError × Devm) Unit :=
+  Except.assert (!sevm.isStatic) ⟨.halt (.writeInStaticContext .none), devm⟩
 
 def sstoreNewRefundCounter (new_value : B256)
     (original_value : B256) (current_value : B256) (rc : Int) : Int :=
@@ -2709,7 +2692,7 @@ def Rinst.runCore
     let extend_memory_cost := devm.extCost [⟨memory_start_index, size⟩]
     let devm ← chargeGas (gVerylow + copy_gas_cost + extend_memory_cost) devm
     if (devm.returnData.length < return_data_start_index + size) then
-      .error ⟨"OutOfBoundsRead", devm⟩
+      .error ⟨.halt (.outOfBoundsRead .none), devm⟩
     let value :=
       devm.returnData.sliceD return_data_start_index size 0
     .ok (devm.memWrite memory_start_index value)
@@ -2778,7 +2761,7 @@ def Rinst.runCore
     if sevm.benvStat.rules.op.clz then
       applyUnary (fun x => (B256.leadingZeros x).toB256) gLow devm
     else
-      .error ⟨"InvalidOpcode", devm⟩
+      .error ⟨.halt (.invalidOpcode .none), devm⟩
   | .kec => do
     let ⟨memory_start_index, devm⟩ ← devm.popToNat
     let ⟨size, devm⟩ ← devm.popToNat
@@ -2805,12 +2788,12 @@ def Rinst.runCore
   | .swap n => do
     let devm ← chargeGas gVerylow devm
     match List.swap devm.stack n with
-    | none => .error ⟨"StackUnderflowError", devm⟩
+    | none => .error ⟨.halt (.stackUnderflow .none), devm⟩
     | some stack => .ok (devm.withStack stack)
   | .dup n => do
     let devm ← chargeGas gVerylow devm
     match devm.stack[n]? with
-    | none => .error ⟨"StackUnderflowError", devm⟩
+    | none => .error ⟨.halt (.stackUnderflow .none), devm⟩
     | some word => devm.push word
   | .sload => do
     let ⟨key, devm⟩ ← devm.pop
@@ -2831,7 +2814,7 @@ def Rinst.runCore
     let ⟨new_value, devm⟩ ← devm.pop
     .assert
       (gCallStipend < devm.gasLeft)
-      ⟨"OutOfGasError", devm⟩
+      ⟨.halt (.outOfGas .none), devm⟩
     let ct := sevm.currentTarget
     let original_value := getOrigStorVal sevm ct key
     let current_value := devm.getStorVal ct key
@@ -3086,7 +3069,7 @@ private def guardClz (rules : ForkRules) (gasLeft : Nat) (stack : List B256) :
 
 private def guardClzErr (e : Execution) : String :=
   match e with
-  | .error ⟨err, _⟩ => err
+  | .error ⟨err, _⟩ => err.render
   | .ok _ => "unexpected success"
 
 -- Under Osaka the opcode pops one word, charges `LOW`, and pushes the count.
@@ -3147,7 +3130,7 @@ def jumpable (cd : ByteArray) (k : Nat) : Bool :=
 #guard jumpable ⟨#[]⟩ 0 = false
 
 def Jinst.runCore (pc : Nat) (devm : Devm) (sevm : Sevm) :
-    Jinst → Except (String × Devm) (Nat × Devm)
+    Jinst → Except (EvmError × Devm) (Nat × Devm)
   | .jumpdest => do
     let devm' ← chargeGas gJumpdest devm
     .ok ⟨pc + 1, devm'⟩
@@ -3156,7 +3139,7 @@ def Jinst.runCore (pc : Nat) (devm : Devm) (sevm : Sevm) :
     let devm'' ← chargeGas gMid devm'
     .assert
       (jumpable sevm.code jump_dest.toNat)
-      ⟨"InvalidJumpDestError", devm''⟩
+      ⟨.halt (.invalidJumpDest .none), devm''⟩
     .ok ⟨jump_dest.toNat, devm''⟩
   | .jumpi => do
     let ⟨dest, devm'⟩ ← devm.pop
@@ -3168,11 +3151,11 @@ def Jinst.runCore (pc : Nat) (devm : Devm) (sevm : Sevm) :
       else
         .assert
           (jumpable sevm.code dest.toNat)
-          ⟨"InvalidJumpDestError", devm'''⟩
+          ⟨.halt (.invalidJumpDest .none), devm'''⟩
         .ok dest.toNat
     .ok ⟨pc', devm'''⟩
 
-def Jinst.run (evm : Evm) (j : Jinst) : Except (String × Devm) (Nat × Devm) :=
+def Jinst.run (evm : Evm) (j : Jinst) : Except (EvmError × Devm) (Nat × Devm) :=
   Jinst.runCore evm.pc evm.dyna evm.sta j
 
 def State.bal (w : State) (a : Adr) : B256 := (w.get a).bal
@@ -3210,7 +3193,7 @@ def Devm.addBal (devm : Devm) (adr : Adr) (val : B256) : Devm :=
   devm.withState (devm.state.addBal adr val)
 
 def Linst.run (sevm : Sevm) (devm : Devm) :
-    Linst → Except (String × Devm) Devm
+    Linst → Except (EvmError × Devm) Devm
   | .stop => .ok devm
   | .rev => do
     let ⟨memory_start_index, devm⟩ ← devm.popToNat
@@ -3219,7 +3202,7 @@ def Linst.run (sevm : Sevm) (devm : Devm) :
     let devm ← chargeGas extend_memory_cost devm
     let ⟨output, devm⟩ := devm.memRead memory_start_index size
     let devm := devm.withOutput output
-    .error ⟨"Revert", devm⟩
+    .error ⟨.revert, devm⟩
   | .ret => do
     let ⟨index, devm⟩ ← devm.popToNat
     let ⟨size, devm⟩ ← devm.popToNat
@@ -3247,7 +3230,7 @@ def Linst.run (sevm : Sevm) (devm : Devm) :
     assertDynamic sevm devm
     let devm ←
       (devm.subBal donor donorBal).toExcept
-        ⟨"ERROR : InsufficientBalanceError", devm⟩
+        ⟨.internal (.invariant (.text "InsufficientBalanceError")), devm⟩
     let devm ← .ok <| devm.addBal donee donorBal
     if donor ∈ devm.createdAccounts then
       .ok (addAccountToDelete (devm.setBal donor 0) donor)
@@ -3343,7 +3326,7 @@ def Devm.rollback (devm : Devm) (wor : State) (tra : Tra) : Devm :=
   devm.setWorld {devm.world with state := wor, transientStorage := tra}
 
 def liftToExecution (devm : Devm)
-  (f : Except (String × State × AdrSet × Tra) Devm) : Execution := do
+  (f : Except (EvmError × State × AdrSet × Tra) Devm) : Execution := do
   match f with
   | .error ⟨err, state, createdAccounts, tra⟩ =>
     let devm' := (devm.withCreatedAccounts createdAccounts).setWorld

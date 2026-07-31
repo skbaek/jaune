@@ -126,11 +126,11 @@ def processCreateMessage.chargeCodeGas (rules : ForkRules) (devm : Devm) :
   let contractCode := devm.output
   let contractCodeGas := contractCode.length * gasCodeDeposit
   match contractCode with
-  | 0xEF :: _ => .error ⟨"InvalidContractPrefix", devm⟩
+  | 0xEF :: _ => .error ⟨.halt (.invalidContractPrefix .none), devm⟩
   | _ => do
     let devm ← chargeGas contractCodeGas devm
     if rules.code.maxCodeSize < contractCode.length
-    then .error ⟨"OutOfGasError", devm⟩
+    then .error ⟨.halt (.outOfGas .none), devm⟩
     else .ok devm
 
 def processCreateMessage.exceptionalHalt
@@ -188,30 +188,31 @@ def initEvm (msg : Msg) : Evm :=
   }
 
 def Msg.benvAfterTransfer (msg : Msg) :
-    Except (String × State × AdrSet × Tra) Benv :=
+    Except (EvmError × State × AdrSet × Tra) Benv :=
   if msg.shouldTransferValue then do
     let benv ←
       (msg.benv.subBal msg.caller msg.value).toExcept
-        ⟨"AssertionError", msg.benv.state, msg.benv.createdAccounts, msg.tenv.transientStorage⟩
+        ⟨.internal (.assertion .none), msg.benv.state, msg.benv.createdAccounts,
+          msg.tenv.transientStorage⟩
     .ok <| benv.addBal msg.currentTarget msg.value
   else
     .ok msg.benv
 
 def executeCode.handleError :
-    Execution → Except (String × State × AdrSet × Tra) Devm
+    Execution → Except (EvmError × State × AdrSet × Tra) Devm
   | .ok evm => .ok evm
-  | .error ⟨err, evm⟩ =>
-    if isExceptionalHalt err
-    then
-      let evm := evm.withGasLeft 0
-      .ok (evm.setMeta {evm.meta with output := [], error := some err})
-    else
-      if err = "Revert"
-      then .ok (evm.withError (some "Revert"))
-      else .error ⟨err, evm.state, evm.createdAccounts, evm.transientStorage⟩
+  | .error ⟨.halt reason, evm⟩ =>
+    let evm := evm.withGasLeft 0
+    .ok (evm.setMeta
+      {evm.meta with output := [], error := some (ExceptionalHalt.render reason)})
+  | .error ⟨.revert, evm⟩ => .ok (evm.withError (some "Revert"))
+  | .error ⟨.crypto reason, evm⟩ =>
+    .error ⟨.crypto reason, evm.state, evm.createdAccounts, evm.transientStorage⟩
+  | .error ⟨.internal reason, evm⟩ =>
+    .error ⟨.internal reason, evm.state, evm.createdAccounts, evm.transientStorage⟩
 
 def Execution.withPc (pc : Nat) (exn : Execution) :
-     Except (String × Devm) (Nat × Devm) := do
+     Except (EvmError × Devm) (Nat × Devm) := do
   let devm ← exn
   .ok ⟨pc, devm⟩
 
@@ -311,8 +312,8 @@ theorem Frame.canonical_ofCall {msg : Msg} (h : Msg.Canonical msg) :
     Frame.Canonical (Frame.ofCall msg) := ⟨h, h⟩
 
 def processMessage.settle (msg : Msg)
-    (r : Except (String × State × AdrSet × Tra) Devm) :
-    Except (String × State × AdrSet × Tra) Devm := do
+    (r : Except (EvmError × State × AdrSet × Tra) Devm) :
+    Except (EvmError × State × AdrSet × Tra) Devm := do
   let evm ← r
   if evm.error.isSome then
     .ok (evm.rollback msg.benv.state msg.tenv.transientStorage)
@@ -320,30 +321,34 @@ def processMessage.settle (msg : Msg)
     .ok evm
 
 def processCreateMessage.settle (msg : Msg)
-    (r : Except (String × State × AdrSet × Tra) Devm) :
-    Except (String × State × AdrSet × Tra) Devm := do
+    (r : Except (EvmError × State × AdrSet × Tra) Devm) :
+    Except (EvmError × State × AdrSet × Tra) Devm := do
   let evm ← r
   if evm.error.isNone then
     match processCreateMessage.chargeCodeGas msg.benv.stat.rules evm with
     | .ok evm => .ok (evm.setCode msg.currentTarget ⟨⟨evm.output⟩⟩)
-    | .error ⟨err, evm⟩ =>
-      if isExceptionalHalt err then
-        .ok
-          (processCreateMessage.exceptionalHalt evm err
-            msg.benv.state msg.tenv.transientStorage)
-      else
-        .error ⟨err, evm.state, evm.createdAccounts, evm.transientStorage⟩
+    | .error ⟨.halt reason, evm⟩ =>
+      .ok
+        (processCreateMessage.exceptionalHalt evm (ExceptionalHalt.render reason)
+          msg.benv.state msg.tenv.transientStorage)
+    | .error ⟨.revert, evm⟩ =>
+      .error ⟨.revert, evm.state, evm.createdAccounts, evm.transientStorage⟩
+    | .error ⟨.crypto reason, evm⟩ =>
+      .error ⟨.crypto reason, evm.state, evm.createdAccounts, evm.transientStorage⟩
+    | .error ⟨.internal reason, evm⟩ =>
+      .error ⟨.internal reason, evm.state, evm.createdAccounts,
+        evm.transientStorage⟩
   else
     .ok (evm.rollback msg.benv.state msg.tenv.transientStorage)
 
 def Frame.settleMsg (f : Frame)
-    (r : Except (String × State × AdrSet × Tra) Devm) :
-    Except (String × State × AdrSet × Tra) Devm :=
+    (r : Except (EvmError × State × AdrSet × Tra) Devm) :
+    Except (EvmError × State × AdrSet × Tra) Devm :=
   let r := processMessage.settle f.inner r
   if f.isCreate then processCreateMessage.settle f.outer r else r
 
 def Frame.settle (f : Frame) (raw : Execution) :
-    Except (String × State × AdrSet × Tra) Devm :=
+    Except (EvmError × State × AdrSet × Tra) Devm :=
   f.settleMsg (executeCode.handleError raw)
 
 def executeCode.enter (msg : Msg) : Evm ⊕ Execution :=
@@ -357,7 +362,7 @@ def executeCode.enter (msg : Msg) : Evm ⊕ Execution :=
       .inl evm
 
 inductive FrameEntry : Type
-  | done (r : Except (String × State × AdrSet × Tra) Devm)
+  | done (r : Except (EvmError × State × AdrSet × Tra) Devm)
   | run (evm : Evm)
 
 def Frame.enter (f : Frame) : FrameEntry :=
@@ -379,7 +384,7 @@ inductive Resume : Type
   | call (parent : Devm) (outputIndex outputSize : Nat)
 
 def Resume.run :
-    Resume → Except (String × State × AdrSet × Tra) Devm → Execution
+    Resume → Except (EvmError × State × AdrSet × Tra) Devm → Execution
   | .create parent newAddress, r => do
     let child ← liftToExecution parent r
     if child.error.isSome then
@@ -400,7 +405,7 @@ inductive XStep : Type
   | done (ex : Execution)
   | spawn (frame : Frame) (rsm : Resume)
 
-def XStep.ofExcept : Except (String × Devm) XStep → XStep
+def XStep.ofExcept : Except (EvmError × Devm) XStep → XStep
   | .error e => .done (.error e)
   | .ok step => step
 
@@ -413,7 +418,7 @@ def Step.ofExecution (pc : Nat) : Execution → Step
   | .error e => .halt (.error e)
   | .ok devm => .cont pc devm
 
-def Step.ofJump : Except (String × Devm) (Nat × Devm) → Step
+def Step.ofJump : Except (EvmError × Devm) (Nat × Devm) → Step
   | .error e => .halt (.error e)
   | .ok ⟨pc, devm⟩ => .cont pc devm
 
@@ -428,7 +433,7 @@ def genericCreate.step
     let calldata := devm.memory.data.sliceD memoryIndex memorySize 0
     Except.assert
       (memorySize ≤ sevm.benvStat.rules.code.maxInitCodeSize)
-      ⟨"OutOfGasError", devm⟩
+      ⟨.halt (.outOfGas .none), devm⟩
     let createGas := except64th devm.gasLeft
     let devm := devm.withGasLeft (devm.gasLeft - createGas)
     assertDynamic sevm devm
@@ -524,7 +529,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
         calculateMsgCallGas value.toNat gas.toNat devm.gasLeft extendCost
           (accessCost + createCost + transferCost)
       let devm ← chargeGas (msgCallCost + extendCost) devm
-      Except.assert (!sevm.isStatic ∨ value = 0) ⟨"WriteInStaticContext", devm⟩
+      Except.assert (!sevm.isStatic ∨ value = 0) ⟨.halt (.writeInStaticContext .none), devm⟩
       let devm :=
         devm.memExtends
           [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
@@ -638,7 +643,7 @@ def Ninst.step (evm : Evm) (n : Ninst) : Step :=
 
 def Evm.step (evm : Evm) : Step :=
   match evm.getInst with
-  | .none => .halt (.error ⟨"InvalidOpcode", evm.dyna⟩)
+  | .none => .halt (.error ⟨.halt (.invalidOpcode .none), evm.dyna⟩)
   | .some (.next n) => Ninst.step evm n
   | .some (.jump j) => Step.ofJump (j.run evm)
   | .some (.last l) => .halt (l.run evm.sta evm.dyna)
@@ -648,7 +653,7 @@ parameter and therefore obliged to report exhaustion as an outcome.
 
 `Jaune.Sufficiency` proves that fuel seeded from the frame's remaining gas is
 always enough, and wraps this function as the total `exec`. -/
-def execFueled : Evm → Nat → Fueled (String × Devm) Devm
+def execFueled : Evm → Nat → Fueled (EvmError × Devm) Devm
   | _, 0 => Fueled.exhausted
   | evm, fuel + 1 =>
     match evm.step with
@@ -741,7 +746,7 @@ private def flattenGuardDepthZero : Bool :=
 private def flattenGuardOog : Bool :=
   let msg := flattenGuardMsg [0x60, 0x01, 0x00] 0 8
   match (execFueled (initEvm msg) 10).run with
-  | .some (.error ⟨err, _⟩) => err == "OutOfGasError"
+  | .some (.error ⟨err, _⟩) => err == .halt (.outOfGas .none)
   | _ => false
 
 #guard flattenGuardOog
@@ -755,7 +760,7 @@ private def flattenGuardJumpOob : Bool :=
   -- PUSH1 0xFF; JUMP — destination 255 is out of range for 3 bytes of code.
   let msg := flattenGuardMsg [0x60, 0xFF, 0x56] 100 8
   match (execFueled (initEvm msg) 10).run with
-  | .some (.error ⟨err, _⟩) => err == "InvalidJumpDestError"
+  | .some (.error ⟨err, _⟩) => err == .halt (.invalidJumpDest .none)
   | _ => false
 
 #guard flattenGuardJumpOob
@@ -765,7 +770,7 @@ private def flattenGuardJumpiOob : Bool :=
   -- destination 255 is out of range for 5 bytes of code.
   let msg := flattenGuardMsg [0x60, 0x01, 0x60, 0xFF, 0x57] 100 8
   match (execFueled (initEvm msg) 10).run with
-  | .some (.error ⟨err, _⟩) => err == "InvalidJumpDestError"
+  | .some (.error ⟨err, _⟩) => err == .halt (.invalidJumpDest .none)
   | _ => false
 
 #guard flattenGuardJumpiOob
@@ -1482,11 +1487,10 @@ theorem executeCode.handleError_canonicalSettle {raw}
   unfold executeCode.handleError
   split
   · exact hr
-  · split
-    · exact Devm.Canonical.of_world_eq hr rfl
-    · split
-      · exact Devm.Canonical.of_world_eq hr rfl
-      · exact ⟨hr.1, hr.2⟩
+  · exact Devm.Canonical.of_world_eq hr rfl
+  · exact Devm.Canonical.of_world_eq hr rfl
+  · exact ⟨hr.1, hr.2⟩
+  · exact ⟨hr.1, hr.2⟩
 
 theorem processMessage.settle_canonicalSettle {msg : Msg} (hm : msg.Canonical)
     {r} (hr : Except.CanonicalSettle r) :
@@ -1501,7 +1505,15 @@ theorem processCreateMessage.settle_canonicalSettle {msg : Msg}
     (processCreateMessage.settle msg r).CanonicalSettle := by
   refine Except.CanonicalSettle.bind hr fun d hd => ?_
   split
-  · split
+  · have hcanon : ∀ {e : EvmError} {d' : Devm},
+        processCreateMessage.chargeCodeGas msg.benv.stat.rules d
+          = .error (e, d') → d'.Canonical := by
+      intro e d' heq
+      have hc := processCreateMessage.chargeCodeGas_canonical
+        (rules := msg.benv.stat.rules) hd
+      rw [heq] at hc
+      exact hc
+    split
     · next d' heq =>
         have hok : d'.Canonical := by
           have hc := processCreateMessage.chargeCodeGas_canonical
@@ -1509,15 +1521,10 @@ theorem processCreateMessage.settle_canonicalSettle {msg : Msg}
           rw [heq] at hc
           exact hc
         exact Devm.Canonical.setCode hok _ _
-    · next err d' heq =>
-        have hce : d'.Canonical := by
-          have hc := processCreateMessage.chargeCodeGas_canonical
-            (rules := msg.benv.stat.rules) hd
-          rw [heq] at hc
-          exact hc
-        split
-        · exact processCreateMessage.exceptionalHalt_canonical _ hm.1.1 hm.2
-        · exact ⟨hce.1, hce.2⟩
+    · exact processCreateMessage.exceptionalHalt_canonical _ hm.1.1 hm.2
+    · next d' heq => exact ⟨(hcanon heq).1, (hcanon heq).2⟩
+    · next d' heq => exact ⟨(hcanon heq).1, (hcanon heq).2⟩
+    · next d' heq => exact ⟨(hcanon heq).1, (hcanon heq).2⟩
   · exact Msg.Canonical.rollback hm d
 
 /-- Both restoration targets of a frame settlement are covered: the inner

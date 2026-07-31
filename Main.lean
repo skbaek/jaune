@@ -612,7 +612,7 @@ def processVector (rules : ForkRules) (adr : Adr) : (Nat × Lean.Json) → IO Bo
           .println s!"FAIL\t{name}\t(expected out={expected.toHex} gas={gas}, got out={output.toHex} gas={cost})"
           return false
       | .error err _ =>
-        .println s!"FAIL\t{name}\t(expected out={expected.toHex}, got error {err})"
+        .println s!"FAIL\t{name}\t(expected out={expected.toHex}, got error {err.render})"
         return false
     | none =>
       match res with
