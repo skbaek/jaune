@@ -1537,6 +1537,148 @@ def rlpToBlock (rlp : Bytes) : Except String (Block × B256) := do
       s!"{rlpRoundTripTag} : decoded block does not re-encode byte-for-byte"
   .ok ⟨block, (Header.toBLT block.header).toBytes.keccak⟩
 
+--------------- THE CANONICAL OUTER-BLOCK ENVELOPE ---------------
+
+/-- The hash `rlpToBlock` returns is always the keccak of the decoded header's
+canonical encoding. It is therefore *derivable* from the decoded block and was
+never independent evidence, which is why the import core below takes an
+envelope instead of a separate hash argument. -/
+theorem rlpToBlock_headerHash {raw : Bytes} {block : Block} {hash : B256}
+    (h : rlpToBlock raw = .ok ⟨block, hash⟩) :
+    hash = (Header.toBLT block.header).toBytes.keccak := by
+  unfold rlpToBlock at h
+  repeat obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  dsimp only at h
+  split at h
+  · obtain ⟨_, herr, _⟩ := Except.bind_eq_ok h
+    exact absurd herr (by simp)
+  · simp only [Except.ok.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, rfl⟩ := h
+    rfl
+
+/-- A successful strict decode proves the decoded block re-encodes to exactly
+the bytes supplied -- P0.3's first acceptance criterion. -/
+theorem rlpToBlock_canonical {raw : Bytes} {block : Block} {hash : B256}
+    (h : rlpToBlock raw = .ok ⟨block, hash⟩) : block.toBLT.toBytes = raw := by
+  unfold rlpToBlock at h
+  repeat obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  dsimp only at h
+  split at h
+  · obtain ⟨_, herr, _⟩ := Except.bind_eq_ok h
+    exact absurd herr (by simp)
+  · rename_i hne
+    simp only [Except.ok.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, _⟩ := h
+    exact (not_not.mp hne).symm
+
+/-- A successful strict decode is structurally sound. -/
+theorem rlpToBlock_rlpCanonical {raw : Bytes} {block : Block} {hash : B256}
+    (h : rlpToBlock raw = .ok ⟨block, hash⟩) : block.RlpCanonical := by
+  unfold rlpToBlock at h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨b, hb, h⟩ := Except.bind_eq_ok h
+  dsimp only at h
+  split at h
+  · obtain ⟨_, herr, _⟩ := Except.bind_eq_ok h
+    exact absurd herr (by simp)
+  · simp only [Except.ok.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, _⟩ := h
+    exact BLT.toExStrBlock_rlpCanonical hb
+
+/-- A canonical outer block: the bytes a peer supplied, the block the strict
+decoder produced from them, and the two pieces of evidence that make the pair
+trustworthy -- that the block *is* the strict decoder's image of those bytes,
+and that it re-encodes to them byte for byte.
+
+The constructor is private. The only ways to obtain one are the strict decoder
+(`CanonicalBlock.ofRlp?`) and the evidence-taking smart constructor
+(`CanonicalBlock.ofDecode`), which demands the decoder equation itself, so a
+caller cannot fabricate the evidence fields. Eliminators are exported:
+`raw`, `block`, `headerHash`, `rawSize`, and the theorems below.
+
+`raw` is retained rather than reconstructed because EIP-7934 depends on the
+*supplied* size; re-encoding is evidence of canonicality, never a substitute
+for the size observation (fixed decision 4). -/
+structure CanonicalBlock : Type where
+  private mk ::
+  /-- The original RLP bytes. -/
+  raw : Bytes
+  /-- The block the strict decoder produced from `raw`. -/
+  block : Block
+  /-- Strict-decoder-image evidence. -/
+  decoded :
+    rlpToBlock raw = .ok ⟨block, (Header.toBLT block.header).toBytes.keccak⟩
+  /-- Exact re-encoding evidence. -/
+  canonical : block.toBLT.toBytes = raw
+
+/-- The checked smart constructor: an envelope may only be built from the
+strict decoder's own equation. -/
+def CanonicalBlock.ofDecode {raw : Bytes} {block : Block} {hash : B256}
+    (h : rlpToBlock raw = .ok ⟨block, hash⟩) : CanonicalBlock :=
+  { raw := raw
+    block := block
+    decoded := by rw [rlpToBlock_headerHash h] at h; exact h
+    canonical := rlpToBlock_canonical h }
+
+/-- Strict decode of untrusted bytes into the envelope. The diagnostic on the
+failure side is exactly the one `rlpToBlock` produces; this constructor adds no
+second decoder and no second vocabulary. -/
+def CanonicalBlock.ofRlp? (raw : Bytes) : Option CanonicalBlock :=
+  match h : rlpToBlock raw with
+  | .ok ⟨_, _⟩ => some (CanonicalBlock.ofDecode h)
+  | .error _ => none
+
+/-- The block header hash, *derived* from the envelope. -/
+def CanonicalBlock.headerHash (cb : CanonicalBlock) : B256 :=
+  (Header.toBLT cb.block.header).toBytes.keccak
+
+/-- The authoritative original RLP size, the one EIP-7934 observes. -/
+def CanonicalBlock.rawSize (cb : CanonicalBlock) : Nat := cb.raw.length
+
+/-- Envelope inversion for downstream proofs: an envelope is exactly a
+successful `rlpToBlock`. Stated so a client never has to unfold the structure
+or the decoder. -/
+theorem CanonicalBlock.rlpToBlock_eq (cb : CanonicalBlock) :
+    rlpToBlock cb.raw = .ok ⟨cb.block, cb.headerHash⟩ := cb.decoded
+
+/-- Structural soundness of the envelope. -/
+theorem CanonicalBlock.rlpCanonical (cb : CanonicalBlock) :
+    cb.block.RlpCanonical :=
+  rlpToBlock_rlpCanonical cb.decoded
+
+/-- The envelope's re-encoding, as an eliminator. -/
+theorem CanonicalBlock.toBytes_eq (cb : CanonicalBlock) :
+    cb.block.toBLT.toBytes = cb.raw := cb.canonical
+
+theorem CanonicalBlock.rawSize_eq (cb : CanonicalBlock) :
+    cb.rawSize = cb.raw.length := rfl
+
+/-- Introduction: strict decode succeeds exactly when an envelope exists, and
+the envelope it yields carries those very bytes and that very block. -/
+theorem CanonicalBlock.ofRlp?_eq_some {raw : Bytes} {block : Block} {hash : B256}
+    (h : rlpToBlock raw = .ok ⟨block, hash⟩) :
+    ∃ cb : CanonicalBlock,
+      CanonicalBlock.ofRlp? raw = some cb ∧ cb.raw = raw ∧ cb.block = block := by
+  unfold CanonicalBlock.ofRlp?
+  split
+  · rename_i f s hb
+    rw [h] at hb
+    simp only [Except.ok.injEq, Prod.mk.injEq] at hb
+    obtain ⟨rfl, rfl⟩ := hb
+    exact ⟨_, rfl, rfl, rfl⟩
+  · rename_i err herr
+    rw [h] at herr
+    exact absurd herr (by simp)
+
+theorem CanonicalBlock.ofRlp?_eq_none {raw : Bytes} {err : String}
+    (h : rlpToBlock raw = .error err) : CanonicalBlock.ofRlp? raw = none := by
+  unfold CanonicalBlock.ofRlp?
+  split
+  · rename_i b hb
+    rw [h] at hb
+    exact absurd hb (by simp)
+  · rfl
+
 /-- Check EIP-7934 against the authoritative original RLP byte length.
 
 This deliberately takes evidence, not a decoded `Block`: re-encoding would
@@ -1789,34 +1931,46 @@ private def shortWidthScalar : Bytes := 0x01 :: List.replicate 30 0x00
 #guard ¬ hasTag rlpStructureTag (Bytes.toExStrTx [0x05])
 #guard (Bytes.toExStrTx [0x05]).toOption.isNone
 
-/-- Block import from an already-decoded block, under an explicit rule set.
+/-- Block import from a canonical outer-block envelope, under an explicit rule
+set. This is the checked import core; every public import path below is a
+named raw compatibility wrapper that validates its bytes and then calls it.
 
-Split out so that a configured chain can read the block's timestamp to select
-its rules without decoding the RLP a second time. The two failure channels are
-unchanged: `.error` is a harness-level failure, `.inr` is a block this chain
-rejects. -/
-private def addBlockToChain.go (rules : ForkRules) (chain : BlockChain)
-    (block : Block) (blockHeaderHash : B256) (rawRlpSize : Nat) :
+Both quantities the previous three-argument shape received as *independent*
+parameters are now derived from the envelope: the header hash is
+`cb.headerHash`, computed from the decoded header, and the EIP-7934 size is
+`cb.rawSize`, the length of the bytes the peer actually supplied. That shape's
+first act was to reject a block whose recomputed header hash differed from the
+supplied one, a comparison that was tautological at every call site (design
+report §3.4); with the envelope there is nothing left to compare, so the check
+is *removed* rather than preserved as a no-op.
+
+Check precedence is unchanged. Strict decode and the byte-for-byte round trip
+are harness prerequisites, discharged before an envelope can exist at all;
+among consensus checks EIP-7934 is first, before `stateTransitionWith` reaches
+header validation, exactly as EELS. The two failure channels are unchanged:
+`.error` is a harness-level failure, `.inr` is a block this chain rejects. -/
+def addBlockToChainCanonical (rules : ForkRules) (chain : BlockChain)
+    (cb : CanonicalBlock) :
     Except String (BlockChain ⊕ String) := do
-  if (Header.toBLT block.header).toBytes.keccak ≠ blockHeaderHash then do
-    .error "ERROR : incorrect block header hash"
-  -- Strict decode/round-trip and the independent header-hash evidence above
-  -- are harness prerequisites. Among consensus checks EIP-7934 is first,
-  -- before `stateTransitionWith` reaches header validation, exactly as EELS.
-  match checkBlockRlpSize rules.block rawRlpSize with
+  match checkBlockRlpSize rules.block cb.rawSize with
   | .error err => return .inr err
   | .ok () => pure ()
   let chain ←
-    match stateTransitionWith rules chain block with
+    match stateTransitionWith rules chain cb.block with
     | .error err => return (.inr err)
     | .ok chain => .ok chain
   .ok (.inl chain)
 
-/-- Block import under an explicit rule set. -/
+/-- Block import under an explicit rule set: the raw compatibility wrapper.
+
+It carries no evidence, so it validates on every call (fixed decision 2) --
+strict decode plus the exact round trip -- and hands the checked core an
+envelope built from that decode alone. -/
 def addBlockToChainWith (rules : ForkRules) (chain : BlockChain)
     (blockRlp : Bytes) : Except String (BlockChain ⊕ String) := do
-  let ⟨block, blockHeaderHash⟩ ← rlpToBlock blockRlp
-  addBlockToChain.go rules chain block blockHeaderHash blockRlp.length
+  match h : rlpToBlock blockRlp with
+  | .error err => .error err
+  | .ok ⟨_, _⟩ => addBlockToChainCanonical rules chain (CanonicalBlock.ofDecode h)
 
 /-- Block import at an explicitly named fork, for static fixture suites.
 
@@ -1841,9 +1995,11 @@ def addBlockToChainUsing (cfg : ChainConfig) (chain : BlockChain)
     (blockRlp : Bytes) : Except String (BlockChain ⊕ String) := do
   cfg.validate
   Except.mapError ChainContextError.render (cfg.checkChainId chain)
-  let ⟨block, blockHeaderHash⟩ ← rlpToBlock blockRlp
-  let rules ← cfg.rulesAt block.header.timestamp
-  addBlockToChain.go rules chain block blockHeaderHash blockRlp.length
+  match h : rlpToBlock blockRlp with
+  | .error err => .error err
+  | .ok ⟨block, _⟩ =>
+    let rules ← cfg.rulesAt block.header.timestamp
+    addBlockToChainCanonical rules chain (CanonicalBlock.ofDecode h)
 
 /-- Prague block import.
 
@@ -2163,12 +2319,11 @@ theorem addBlockToChainUsing_preserves_chainId
   unfold addBlockToChainUsing at h
   obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
   obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
-  obtain ⟨⟨block, blockHeaderHash⟩, _, h⟩ := Except.bind_eq_ok h
-  obtain ⟨rules, _, h⟩ := Except.bind_eq_ok h
-  unfold addBlockToChain.go at h
-  split_ifs at h with hheq
-  · simp [Bind.bind, Except.bind] at h
-  · split at h
+  split at h
+  · exact absurd h (by simp)
+  · obtain ⟨rules, _, h⟩ := Except.bind_eq_ok h
+    unfold addBlockToChainCanonical at h
+    split at h
     · simp only [pure, Except.pure, Except.ok.injEq, reduceCtorEq] at h
     · split at h
       · simp only [pure, Except.pure, Except.ok.injEq, reduceCtorEq] at h
