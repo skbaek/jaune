@@ -1,0 +1,1691 @@
+{
+ "_provenance": {
+  "generator": "scripts/gen-fake-exp-vectors.py",
+  "execution_specs_commit": "4198b9c5996713b268aed602739d5aa40e277694",
+  "oracle": "ethereum.utils.numeric.taylor_exponential",
+  "seed": "0xfa4e20260731",
+  "max_feasible_corpus_excess": "0xe760000"
+ },
+ "vectors": [
+  {
+   "factor": "1",
+   "numerator": "0",
+   "denominator": "1",
+   "expected": "1",
+   "note": "reference"
+  },
+  {
+   "factor": "1",
+   "numerator": "1",
+   "denominator": "1",
+   "expected": "2",
+   "note": "reference"
+  },
+  {
+   "factor": "1",
+   "numerator": "2",
+   "denominator": "1",
+   "expected": "6",
+   "note": "reference"
+  },
+  {
+   "factor": "2",
+   "numerator": "5",
+   "denominator": "1",
+   "expected": "287",
+   "note": "reference"
+  },
+  {
+   "factor": "1",
+   "numerator": "50",
+   "denominator": "1",
+   "expected": "5184612586559446279969",
+   "note": "reference"
+  },
+  {
+   "factor": "1",
+   "numerator": "500",
+   "denominator": "1",
+   "expected": "14035921953953184113454321196918463076680173643900439051033085008440692090952464150072916397829743720610364877779055283903315617614577975027319121554104609130784887955748123247779863333615539742685443400045737277047344",
+   "note": "reference"
+  },
+  {
+   "factor": "3",
+   "numerator": "7",
+   "denominator": "2",
+   "expected": "95",
+   "note": "reference"
+  },
+  {
+   "factor": "10",
+   "numerator": "100",
+   "denominator": "3",
+   "expected": "2995458532051986",
+   "note": "reference"
+  },
+  {
+   "factor": "1",
+   "numerator": "0",
+   "denominator": "8346193",
+   "expected": "1",
+   "note": "BPO1 grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "1",
+   "denominator": "8346193",
+   "expected": "1",
+   "note": "BPO1 grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "8346192",
+   "denominator": "8346193",
+   "expected": "2",
+   "note": "BPO1 grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "8346193",
+   "denominator": "8346193",
+   "expected": "2",
+   "note": "BPO1 grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "8346194",
+   "denominator": "8346193",
+   "expected": "2",
+   "note": "BPO1 grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "25038579",
+   "denominator": "8346193",
+   "expected": "20",
+   "note": "BPO1 grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "83461930",
+   "denominator": "8346193",
+   "expected": "22026",
+   "note": "BPO1 grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "400617264",
+   "denominator": "8346193",
+   "expected": "701673591209754739358",
+   "note": "BPO1 grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "131072",
+   "denominator": "8346193",
+   "expected": "1",
+   "note": "BPO1 blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "262144",
+   "denominator": "8346193",
+   "expected": "1",
+   "note": "BPO1 blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "393216",
+   "denominator": "8346193",
+   "expected": "1",
+   "note": "BPO1 blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "786432",
+   "denominator": "8346193",
+   "expected": "1",
+   "note": "BPO1 blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "1179648",
+   "denominator": "8346193",
+   "expected": "1",
+   "note": "BPO1 blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "2752512",
+   "denominator": "8346193",
+   "expected": "1",
+   "note": "BPO1 blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "13107200",
+   "denominator": "8346193",
+   "expected": "4",
+   "note": "BPO1 blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "100007936",
+   "denominator": "8346193",
+   "expected": "159925",
+   "note": "BPO1 blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "242614272",
+   "denominator": "8346193",
+   "expected": "4211562125831",
+   "note": "BPO1 blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "242614272",
+   "denominator": "8346193",
+   "expected": "4211562125831",
+   "note": "BPO1 corpus-max-feasible"
+  },
+  {
+   "factor": "1",
+   "numerator": "806006716",
+   "denominator": "8346193",
+   "expected": "872150137282893985695751403989068389940353",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "261243861",
+   "denominator": "8346193",
+   "expected": "39249543484177",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "161813408",
+   "denominator": "8346193",
+   "expected": "263006854",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "546049061",
+   "denominator": "8346193",
+   "expected": "25922950085720607373999198918",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "477236328",
+   "denominator": "8346193",
+   "expected": "6807868340708546776468246",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "575168042",
+   "denominator": "8346193",
+   "expected": "848968835811823220212479240298",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "86839575",
+   "denominator": "8346193",
+   "expected": "33014",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "792730141",
+   "denominator": "8346193",
+   "expected": "177723210407060324317598665333717349717402",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "294331276",
+   "denominator": "8346193",
+   "expected": "2067947715393436",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "789472823",
+   "denominator": "8346193",
+   "expected": "120295527028870288238961059061776315551208",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "342714698",
+   "denominator": "8346193",
+   "expected": "681040322465827313",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "208021552",
+   "denominator": "8346193",
+   "expected": "66743605244",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "265845495",
+   "denominator": "8346193",
+   "expected": "68120968896945",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "764770484",
+   "denominator": "8346193",
+   "expected": "6235370947606884305051195543010587262772",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "178307190",
+   "denominator": "8346193",
+   "expected": "1897674244",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "187383794",
+   "denominator": "8346193",
+   "expected": "5630190769",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "703392239",
+   "denominator": "8346193",
+   "expected": "3990643166570606469236374485305897717",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "692139921",
+   "denominator": "8346193",
+   "expected": "1036401624652632831709743522943674935",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "15285395",
+   "denominator": "8346193",
+   "expected": "6",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "66157152",
+   "denominator": "8346193",
+   "expected": "2770",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "350041200",
+   "denominator": "8346193",
+   "expected": "1638353625491519426",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "102436521",
+   "denominator": "8346193",
+   "expected": "213938",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "820133766",
+   "denominator": "8346193",
+   "expected": "4739067094404069046515121964840517257741591",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "220057139",
+   "denominator": "8346193",
+   "expected": "282281168307",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "293020763",
+   "denominator": "8346193",
+   "expected": "1767449274542358",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "279400337",
+   "denominator": "8346193",
+   "expected": "345626914615653",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "332573575",
+   "denominator": "8346193",
+   "expected": "202059414752948676",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "359273858",
+   "denominator": "8346193",
+   "expected": "4952555711632694186",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "698759310",
+   "denominator": "8346193",
+   "expected": "2290700194865423591891093630383686389",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "161379806",
+   "denominator": "8346193",
+   "expected": "249691966",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "37092195",
+   "denominator": "8346193",
+   "expected": "85",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "108460305",
+   "denominator": "8346193",
+   "expected": "440287",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "170785503",
+   "denominator": "8346193",
+   "expected": "770602446",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "758458968",
+   "denominator": "8346193",
+   "expected": "2927132024534007355809947996068026979293",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "759625528",
+   "denominator": "8346193",
+   "expected": "3366234035555539397795470092289811569886",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "11364511",
+   "denominator": "8346193",
+   "expected": "3",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "666031608",
+   "denominator": "8346193",
+   "expected": "45392174553963968213872998502623495",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "560468161",
+   "denominator": "8346193",
+   "expected": "145875668997541177892749183618",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "333131388",
+   "denominator": "8346193",
+   "expected": "216025446889480834",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "799955273",
+   "denominator": "8346193",
+   "expected": "422380809642883053716502276538604837551117",
+   "note": "BPO1 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "0",
+   "denominator": "11684671",
+   "expected": "1",
+   "note": "BPO2 grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "1",
+   "denominator": "11684671",
+   "expected": "1",
+   "note": "BPO2 grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "11684670",
+   "denominator": "11684671",
+   "expected": "2",
+   "note": "BPO2 grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "11684671",
+   "denominator": "11684671",
+   "expected": "2",
+   "note": "BPO2 grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "11684672",
+   "denominator": "11684671",
+   "expected": "2",
+   "note": "BPO2 grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "35054013",
+   "denominator": "11684671",
+   "expected": "20",
+   "note": "BPO2 grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "116846710",
+   "denominator": "11684671",
+   "expected": "22026",
+   "note": "BPO2 grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "560864208",
+   "denominator": "11684671",
+   "expected": "701673591209751564215",
+   "note": "BPO2 grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "131072",
+   "denominator": "11684671",
+   "expected": "1",
+   "note": "BPO2 blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "262144",
+   "denominator": "11684671",
+   "expected": "1",
+   "note": "BPO2 blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "393216",
+   "denominator": "11684671",
+   "expected": "1",
+   "note": "BPO2 blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "786432",
+   "denominator": "11684671",
+   "expected": "1",
+   "note": "BPO2 blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "1179648",
+   "denominator": "11684671",
+   "expected": "1",
+   "note": "BPO2 blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "2752512",
+   "denominator": "11684671",
+   "expected": "1",
+   "note": "BPO2 blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "13107200",
+   "denominator": "11684671",
+   "expected": "3",
+   "note": "BPO2 blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "100007936",
+   "denominator": "11684671",
+   "expected": "5212",
+   "note": "BPO2 blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "242614272",
+   "denominator": "11684671",
+   "expected": "1041019391",
+   "note": "BPO2 blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "242614272",
+   "denominator": "11684671",
+   "expected": "1041019391",
+   "note": "BPO2 corpus-max-feasible"
+  },
+  {
+   "factor": "1",
+   "numerator": "1131013794",
+   "denominator": "11684671",
+   "expected": "1089903641627428256238872148845728512833512",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "32392960",
+   "denominator": "11684671",
+   "expected": "15",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "984007680",
+   "denominator": "11684671",
+   "expected": "3745261036164452392274320455005475112",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "532499973",
+   "denominator": "11684671",
+   "expected": "61929356890587703498",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "463218319",
+   "denominator": "11684671",
+   "expected": "164757114118509627",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "758195733",
+   "denominator": "11684671",
+   "expected": "15154098956077614827009752738",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "81333285",
+   "denominator": "11684671",
+   "expected": "1054",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "547217666",
+   "denominator": "11684671",
+   "expected": "218233821709178158760",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "102286129",
+   "denominator": "11684671",
+   "expected": "6335",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "911626747",
+   "denominator": "11684671",
+   "expected": "7642510781738713818701321656753789",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "990360887",
+   "denominator": "11684671",
+   "expected": "6450855970002173262903187813550147105",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "40245260",
+   "denominator": "11684671",
+   "expected": "31",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "762724800",
+   "denominator": "11684671",
+   "expected": "22328829121945290049465590320",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "126636462",
+   "denominator": "11684671",
+   "expected": "50910",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "443695870",
+   "denominator": "11684671",
+   "expected": "30991034999168744",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "1097231217",
+   "denominator": "11684671",
+   "expected": "60500817384550935098441214598573171565502",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "70461789",
+   "denominator": "11684671",
+   "expected": "415",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "1101608559",
+   "denominator": "11684671",
+   "expected": "87994955587922955346235256337991358111533",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "33812046",
+   "denominator": "11684671",
+   "expected": "18",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "1001355221",
+   "denominator": "11684671",
+   "expected": "16529261963106489872146395549907298465",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "925857293",
+   "denominator": "11684671",
+   "expected": "25831839017920309633274518013083040",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "9031066",
+   "denominator": "11684671",
+   "expected": "2",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "155591303",
+   "denominator": "11684671",
+   "expected": "606735",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "1088693492",
+   "denominator": "11684671",
+   "expected": "29136144360084659179857562027716930327887",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "286271404",
+   "denominator": "11684671",
+   "expected": "43661834935",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "720749896",
+   "denominator": "11684671",
+   "expected": "614819508090289724629664950",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "689532049",
+   "denominator": "11684671",
+   "expected": "42505620612175956031327676",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "968892625",
+   "denominator": "11684671",
+   "expected": "1027276847376354174419189553653702564",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "521650817",
+   "denominator": "11684671",
+   "expected": "24471264531466323149",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "296443713",
+   "denominator": "11684671",
+   "expected": "104276194115",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "520577985",
+   "denominator": "11684671",
+   "expected": "22324488532354361622",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "620006858",
+   "denominator": "11684671",
+   "expected": "110749611920956339243616",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "398451807",
+   "denominator": "11684671",
+   "expected": "645074762209430",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "300196220",
+   "denominator": "11684671",
+   "expected": "143766570246",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "448867679",
+   "denominator": "11684671",
+   "expected": "48245995399211404",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "23952003",
+   "denominator": "11684671",
+   "expected": "7",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "994269349",
+   "denominator": "11684671",
+   "expected": "9013357621037386857899421397676193716",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "1066455591",
+   "denominator": "11684671",
+   "expected": "4344065679538320779340126876809880887865",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "732991798",
+   "denominator": "11684671",
+   "expected": "1752884163932122911063836740",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "797897933",
+   "denominator": "11684671",
+   "expected": "453082026234407956942074600323",
+   "note": "BPO2 random"
+  },
+  {
+   "factor": "1",
+   "numerator": "0",
+   "denominator": "5007716",
+   "expected": "1",
+   "note": "Osaka grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "1",
+   "denominator": "5007716",
+   "expected": "1",
+   "note": "Osaka grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "5007715",
+   "denominator": "5007716",
+   "expected": "2",
+   "note": "Osaka grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "5007716",
+   "denominator": "5007716",
+   "expected": "2",
+   "note": "Osaka grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "5007717",
+   "denominator": "5007716",
+   "expected": "2",
+   "note": "Osaka grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "15023148",
+   "denominator": "5007716",
+   "expected": "20",
+   "note": "Osaka grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "50077160",
+   "denominator": "5007716",
+   "expected": "22026",
+   "note": "Osaka grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "240370368",
+   "denominator": "5007716",
+   "expected": "701673591209735742078",
+   "note": "Osaka grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "131072",
+   "denominator": "5007716",
+   "expected": "1",
+   "note": "Osaka blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "262144",
+   "denominator": "5007716",
+   "expected": "1",
+   "note": "Osaka blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "393216",
+   "denominator": "5007716",
+   "expected": "1",
+   "note": "Osaka blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "786432",
+   "denominator": "5007716",
+   "expected": "1",
+   "note": "Osaka blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "1179648",
+   "denominator": "5007716",
+   "expected": "1",
+   "note": "Osaka blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "2752512",
+   "denominator": "5007716",
+   "expected": "1",
+   "note": "Osaka blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "13107200",
+   "denominator": "5007716",
+   "expected": "13",
+   "note": "Osaka blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "100007936",
+   "denominator": "5007716",
+   "expected": "471188276",
+   "note": "Osaka blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "242614272",
+   "denominator": "5007716",
+   "expected": "1098342643171911460576",
+   "note": "Osaka blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "242614272",
+   "denominator": "5007716",
+   "expected": "1098342643171911460576",
+   "note": "Osaka corpus-max-feasible"
+  },
+  {
+   "factor": "1",
+   "numerator": "88353352",
+   "denominator": "5007716",
+   "expected": "45967401",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "445162112",
+   "denominator": "5007716",
+   "expected": "404307577587255890206688972766566850552",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "311104550",
+   "denominator": "5007716",
+   "expected": "956228028753524728393998155",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "201852929",
+   "denominator": "5007716",
+   "expected": "320411308663796215",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "387096786",
+   "denominator": "5007716",
+   "expected": "3723855910743924912864799153112973",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "52154210",
+   "denominator": "5007716",
+   "expected": "33348",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "148147504",
+   "denominator": "5007716",
+   "expected": "7048577977312",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "65786215",
+   "denominator": "5007716",
+   "expected": "507356",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "50582414",
+   "denominator": "5007716",
+   "expected": "24364",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "352881237",
+   "denominator": "5007716",
+   "expected": "4014645947764519729443270874908",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "22727716",
+   "denominator": "5007716",
+   "expected": "93",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "342654479",
+   "denominator": "5007716",
+   "expected": "520872017248457808066357435730",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "45304704",
+   "denominator": "5007716",
+   "expected": "8492",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "78122838",
+   "denominator": "5007716",
+   "expected": "5959474",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "150341452",
+   "denominator": "5007716",
+   "expected": "10923750834643",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "410494165",
+   "denominator": "5007716",
+   "expected": "398228207412194847142768206868341630",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "424040325",
+   "denominator": "5007716",
+   "expected": "5955573493136297910700707028232538833",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "497787434",
+   "denominator": "5007716",
+   "expected": "14813108645964566726719059531781090134709187",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "104016426",
+   "denominator": "5007716",
+   "expected": "1049134144",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "19926495",
+   "denominator": "5007716",
+   "expected": "53",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "359416272",
+   "denominator": "5007716",
+   "expected": "14804664435717739682133986693256",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "280882039",
+   "denominator": "5007716",
+   "expected": "2288296631209412562558483",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "225481027",
+   "denominator": "5007716",
+   "expected": "35880303338553842690",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "151008208",
+   "denominator": "5007716",
+   "expected": "12479472866384",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "120891645",
+   "denominator": "5007716",
+   "expected": "30502500269",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "352577395",
+   "denominator": "5007716",
+   "expected": "3778300836553967368112980436474",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "5455938",
+   "denominator": "5007716",
+   "expected": "2",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "45853107",
+   "denominator": "5007716",
+   "expected": "9475",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "385347487",
+   "denominator": "5007716",
+   "expected": "2625940029495472516198692994075962",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "42324758",
+   "denominator": "5007716",
+   "expected": "4684",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "130774479",
+   "denominator": "5007716",
+   "expected": "219495102180",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "494872809",
+   "denominator": "5007716",
+   "expected": "8277042278779261330997454344724657731459782",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "484139254",
+   "denominator": "5007716",
+   "expected": "970525493611800267974058856860942548694153",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "115580103",
+   "denominator": "5007716",
+   "expected": "10560673818",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "213883528",
+   "denominator": "5007716",
+   "expected": "3540481122480897173",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "438506263",
+   "denominator": "5007716",
+   "expected": "107024439500211823817159072418139873192",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "244729215",
+   "denominator": "5007716",
+   "expected": "1675546206301920121513",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "194344985",
+   "denominator": "5007716",
+   "expected": "71545269660538555",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "281411908",
+   "denominator": "5007716",
+   "expected": "2543696212163507402554842",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "385472459",
+   "denominator": "5007716",
+   "expected": "2692297252764590270379623365326832",
+   "note": "Osaka random"
+  },
+  {
+   "factor": "1",
+   "numerator": "0",
+   "denominator": "5007716",
+   "expected": "1",
+   "note": "Prague grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "1",
+   "denominator": "5007716",
+   "expected": "1",
+   "note": "Prague grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "5007715",
+   "denominator": "5007716",
+   "expected": "2",
+   "note": "Prague grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "5007716",
+   "denominator": "5007716",
+   "expected": "2",
+   "note": "Prague grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "5007717",
+   "denominator": "5007716",
+   "expected": "2",
+   "note": "Prague grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "15023148",
+   "denominator": "5007716",
+   "expected": "20",
+   "note": "Prague grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "50077160",
+   "denominator": "5007716",
+   "expected": "22026",
+   "note": "Prague grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "240370368",
+   "denominator": "5007716",
+   "expected": "701673591209735742078",
+   "note": "Prague grid"
+  },
+  {
+   "factor": "1",
+   "numerator": "131072",
+   "denominator": "5007716",
+   "expected": "1",
+   "note": "Prague blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "262144",
+   "denominator": "5007716",
+   "expected": "1",
+   "note": "Prague blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "393216",
+   "denominator": "5007716",
+   "expected": "1",
+   "note": "Prague blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "786432",
+   "denominator": "5007716",
+   "expected": "1",
+   "note": "Prague blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "1179648",
+   "denominator": "5007716",
+   "expected": "1",
+   "note": "Prague blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "2752512",
+   "denominator": "5007716",
+   "expected": "1",
+   "note": "Prague blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "13107200",
+   "denominator": "5007716",
+   "expected": "13",
+   "note": "Prague blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "100007936",
+   "denominator": "5007716",
+   "expected": "471188276",
+   "note": "Prague blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "242614272",
+   "denominator": "5007716",
+   "expected": "1098342643171911460576",
+   "note": "Prague blob-step"
+  },
+  {
+   "factor": "1",
+   "numerator": "242614272",
+   "denominator": "5007716",
+   "expected": "1098342643171911460576",
+   "note": "Prague corpus-max-feasible"
+  },
+  {
+   "factor": "1",
+   "numerator": "206419768",
+   "denominator": "5007716",
+   "expected": "797567102896968732",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "82266478",
+   "denominator": "5007716",
+   "expected": "13632183",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "175791957",
+   "denominator": "5007716",
+   "expected": "1760225938131019",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "391404911",
+   "denominator": "5007716",
+   "expected": "8802687351277301719492122575447266",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "407810517",
+   "denominator": "5007716",
+   "expected": "233019614243240084560603195761338419",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "158219272",
+   "denominator": "5007716",
+   "expected": "52671564150901",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "72619224",
+   "denominator": "5007716",
+   "expected": "1985668",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "129716564",
+   "denominator": "5007716",
+   "expected": "177695769932",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "190644337",
+   "denominator": "5007716",
+   "expected": "34169765370246039",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "325795269",
+   "denominator": "5007716",
+   "expected": "17972768878086053235997500746",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "333787756",
+   "denominator": "5007716",
+   "expected": "88667389473395407927678223587",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "170972857",
+   "denominator": "5007716",
+   "expected": "672406137464888",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "376512891",
+   "denominator": "5007716",
+   "expected": "449887488376440434421734790957953",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "286205326",
+   "denominator": "5007716",
+   "expected": "6624829686460972027288999",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "146284583",
+   "denominator": "5007716",
+   "expected": "4858917989338",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "29457906",
+   "denominator": "5007716",
+   "expected": "358",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "491582113",
+   "denominator": "5007716",
+   "expected": "4290316761328705603957751649263973479676245",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "69398538",
+   "denominator": "5007716",
+   "expected": "1043740",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "286386092",
+   "denominator": "5007716",
+   "expected": "6868338018181882934883222",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "82078892",
+   "denominator": "5007716",
+   "expected": "13130976",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "168021205",
+   "denominator": "5007716",
+   "expected": "372949015717115",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "437266159",
+   "denominator": "5007716",
+   "expected": "83547770570419369175243458318619554502",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "317199498",
+   "denominator": "5007716",
+   "expected": "3229581244843488462430449859",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "28440068",
+   "denominator": "5007716",
+   "expected": "292",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "500071694",
+   "denominator": "5007716",
+   "expected": "23374848184566626202928856487460300497928362",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "127737796",
+   "denominator": "5007716",
+   "expected": "119692878489",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "310597251",
+   "denominator": "5007716",
+   "expected": "864103834121550147337373594",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "123702575",
+   "denominator": "5007716",
+   "expected": "53470410584",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "283790907",
+   "denominator": "5007716",
+   "expected": "4090572361381133267654798",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "150261242",
+   "denominator": "5007716",
+   "expected": "10750175846348",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "25025260",
+   "denominator": "5007716",
+   "expected": "148",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "339803880",
+   "denominator": "5007716",
+   "expected": "294789934581938758433958204744",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "395736080",
+   "denominator": "5007716",
+   "expected": "20904326423406817589309196673479534",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "245577761",
+   "denominator": "5007716",
+   "expected": "1984936479965051025268",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "325014375",
+   "denominator": "5007716",
+   "expected": "15377718576571565175492098005",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "337113073",
+   "denominator": "5007716",
+   "expected": "172247229840056509043157714163",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "469066896",
+   "denominator": "5007716",
+   "expected": "47847115577112051648522755515185656825435",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "5864500",
+   "denominator": "5007716",
+   "expected": "3",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "395895434",
+   "denominator": "5007716",
+   "expected": "21580234713107702380244031486793137",
+   "note": "Prague random"
+  },
+  {
+   "factor": "1",
+   "numerator": "238865380",
+   "denominator": "5007716",
+   "expected": "519535170920043923229",
+   "note": "Prague random"
+  }
+ ]
+}

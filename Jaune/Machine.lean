@@ -1688,20 +1688,189 @@ def ByteArray.getInst (code : ByteArray) (pc : Nat) : Option Inst :=
 def Evm.getInst (evm : Evm) : Option Inst :=
   ByteArray.getInst evm.sta.code evm.pc
 
-def fakeExpAux (num den i : Nat) : Nat → Nat → Nat
-  | _, 0 => panic! "error : fuel exhausted in fake exponentiation"
-  | 0, _ => 0
-  | numAcc, fuel + 1 =>
-    let numAcc' := (numAcc * num) / (den * i)
-    numAcc + fakeExpAux num den (i + 1) numAcc' fuel
+/-- EELS `taylor_exponential`'s accumulator loop as a *well-founded* recursion
+(P0.6 item 1): `fakeExpAux num den i numAcc` is the sum of the series continued
+from state `(i, numAcc)`. There is no fuel and no failure branch.
 
+Termination is by the lexicographic measure `(num + 1 - i, numAcc)`: while
+`i ≤ num` the first component falls; once `i > num`, either `den * i = 0` (a
+zero denominator — excluded from the semantic domain by `BlobSchedule.Valid` —
+zeroes the accumulator immediately under `Nat` division) or `num < den * i`
+strictly shrinks a positive accumulator. -/
+def fakeExpAux (num den i numAcc : Nat) : Nat :=
+  if _h : numAcc = 0 then 0
+  else numAcc + fakeExpAux num den (i + 1) (numAcc * num / (den * i))
+termination_by (num + 1 - i, numAcc)
+decreasing_by
+  rcases Nat.lt_or_ge i (num + 1) with hi | hi
+  · exact Prod.Lex.left _ _ (by omega)
+  · have h0 : num + 1 - i = 0 := by omega
+    have h1 : num + 1 - (i + 1) = 0 := by omega
+    rw [h0, h1]
+    apply Prod.Lex.right
+    rcases Nat.eq_zero_or_pos (den * i) with hd | hd
+    · rw [hd, Nat.div_zero]
+      exact Nat.pos_of_ne_zero _h
+    · rw [Nat.div_lt_iff_lt_mul hd]
+      have hden : 0 < den := Nat.pos_of_ne_zero (by rintro rfl; simp at hd)
+      have hlt : num < den * i := by
+        have hle : i ≤ den * i := Nat.le_mul_of_pos_left i hden
+        omega
+      exact mul_lt_mul_of_pos_left hlt (Nat.pos_of_ne_zero _h)
+
+@[simp] theorem fakeExpAux_zero (num den i : Nat) :
+    fakeExpAux num den i 0 = 0 := by
+  unfold fakeExpAux
+  simp
+
+/-- The EELS recurrence equation — for *every* `Nat` numerator, including the
+U64 maximum; nothing here evaluates the series. -/
+theorem fakeExpAux_succ {numAcc : Nat} (h : numAcc ≠ 0) (num den i : Nat) :
+    fakeExpAux num den i numAcc
+      = numAcc + fakeExpAux num den (i + 1) (numAcc * num / (den * i)) := by
+  conv_lhs => unfold fakeExpAux
+  simp [h]
+
+/-- The EELS accumulator recurrence as a predicate on candidate functions:
+`f i numAcc` plays the role of the series sum continued from `(i, numAcc)`. -/
+def FakeExpSpec (num den : Nat) (f : Nat → Nat → Nat) : Prop :=
+  (∀ i, f i 0 = 0) ∧
+  ∀ i numAcc, numAcc ≠ 0 →
+    f i numAcc = numAcc + f (i + 1) (numAcc * num / (den * i))
+
+/-- `fakeExpAux` satisfies the recurrence. -/
+theorem fakeExpAux_spec (num den : Nat) :
+    FakeExpSpec num den (fakeExpAux num den) :=
+  ⟨fakeExpAux_zero num den,
+   fun i numAcc h => fakeExpAux_succ (numAcc := numAcc) h num den i⟩
+
+/-- Uniqueness: the recurrence has exactly one solution, so `fakeExpAux` is
+*the* EELS accumulator function. -/
+theorem fakeExpAux_spec_unique {num den : Nat} {f : Nat → Nat → Nat}
+    (hf : FakeExpSpec num den f) : f = fakeExpAux num den := by
+  funext i numAcc
+  induction i, numAcc using fakeExpAux.induct num den with
+  | case1 i => rw [hf.1, fakeExpAux_zero]
+  | case2 i numAcc h ih => rw [hf.2 i numAcc h, ih, ← fakeExpAux_succ h]
+
+/-- The pre-integrity fuelled worker as a *total* `Option`-valued reference:
+`none` exactly where the old implementation exhausted its guessed fuel bound.
+This is the only sanctioned old/new bridge; nothing executes it. -/
+def fakeExpAuxRef? (num den i : Nat) : Nat → Nat → Option Nat
+  | _, 0 => none
+  | 0, _ => some 0
+  | numAcc, fuel + 1 =>
+    (fakeExpAuxRef? num den (i + 1) (numAcc * num / (den * i)) fuel).map
+      (numAcc + ·)
+
+/-- The accumulator sequence from `(i, numAcc)` reaches zero strictly before
+the fuel runs out — the precise domain on which the old worker answered. -/
+def reachesZeroBeforeFuel (num den : Nat) : Nat → Nat → Nat → Bool
+  | _, _, 0 => false
+  | _, 0, _ => true
+  | i, numAcc, fuel + 1 =>
+    reachesZeroBeforeFuel num den (i + 1) (numAcc * num / (den * i)) fuel
+
+/-- The reference worker answers exactly on `reachesZeroBeforeFuel`. -/
+theorem fakeExpAuxRef?_isSome (num den : Nat) :
+    ∀ fuel i numAcc, (fakeExpAuxRef? num den i numAcc fuel).isSome
+      = reachesZeroBeforeFuel num den i numAcc fuel := by
+  intro fuel
+  induction fuel with
+  | zero => intro i numAcc; cases numAcc <;> rfl
+  | succ fuel ih =>
+    intro i numAcc
+    cases numAcc with
+    | zero => rfl
+    | succ n => simp [fakeExpAuxRef?, reachesZeroBeforeFuel, ih]
+
+/-- Wherever the old fuelled computation completed, it computed exactly the
+total well-founded value. -/
+theorem fakeExpAuxRef?_eq_some {num den : Nat} :
+    ∀ {fuel i numAcc}, reachesZeroBeforeFuel num den i numAcc fuel = true →
+      fakeExpAuxRef? num den i numAcc fuel
+        = some (fakeExpAux num den i numAcc) := by
+  intro fuel
+  induction fuel with
+  | zero =>
+    intro i numAcc h
+    cases numAcc <;> simp [reachesZeroBeforeFuel] at h
+  | succ fuel ih =>
+    intro i numAcc h
+    cases numAcc with
+    | zero => simp [fakeExpAuxRef?]
+    | succ n =>
+      rw [fakeExpAux_succ (Nat.succ_ne_zero n)]
+      simp only [fakeExpAuxRef?]
+      rw [ih (by simpa [reachesZeroBeforeFuel] using h)]
+      rfl
+
+/-- EELS `taylor_exponential`: approximates `fac * e ^ (num / den)`. Total for
+every input; the semantic domain additionally demands a positive denominator
+through `BlobSchedule.Valid`. -/
 def fakeExp (fac num den : Nat) : Nat :=
-  let fuel := (max (fac * num) <| num * num) + 2
-  let out := fakeExpAux num den 1 (fac * den) fuel
-  out / den
+  fakeExpAux num den 1 (fac * den) / den
 
 def calculateBlobGasPrice (blob : BlobSchedule) (excessBlobGas : Nat) : Nat :=
   fakeExp 1 excessBlobGas blob.baseFeeUpdateFraction
+
+/-- The public EELS `calculate_blob_gas_price` equation, through the
+recurrence function rather than through evaluation (`MIN_BLOB_GASPRICE = 1`). -/
+theorem calculateBlobGasPrice_eq (blob : BlobSchedule) (excess : Nat) :
+    calculateBlobGasPrice blob excess
+      = fakeExpAux excess blob.baseFeeUpdateFraction 1
+          (1 * blob.baseFeeUpdateFraction) / blob.baseFeeUpdateFraction := rfl
+
+/-- Under a validated schedule the denominator is positive and the price is
+the value of the *unique* solution of the EELS recurrence — for every `Nat`
+excess. Nothing here evaluates the series. -/
+theorem calculateBlobGasPrice_spec (blob : BlobSchedule) (hv : blob.Valid)
+    (excess : Nat) :
+    0 < blob.baseFeeUpdateFraction ∧
+    ∀ f, FakeExpSpec excess blob.baseFeeUpdateFraction f →
+      calculateBlobGasPrice blob excess
+        = f 1 (1 * blob.baseFeeUpdateFraction) / blob.baseFeeUpdateFraction := by
+  refine ⟨hv.1, fun f hf => ?_⟩
+  rw [calculateBlobGasPrice_eq, fakeExpAux_spec_unique hf]
+
+/-- The U64-maximum numerator, pinned explicitly: the acceptance case the plan
+forbids executing is covered by the non-evaluating theorem above. -/
+theorem calculateBlobGasPrice_spec_u64max (blob : BlobSchedule)
+    (hv : blob.Valid) :
+    0 < blob.baseFeeUpdateFraction ∧
+    ∀ f, FakeExpSpec (2 ^ 64 - 1) blob.baseFeeUpdateFraction f →
+      calculateBlobGasPrice blob (2 ^ 64 - 1)
+        = f 1 (1 * blob.baseFeeUpdateFraction) / blob.baseFeeUpdateFraction :=
+  calculateBlobGasPrice_spec blob hv (2 ^ 64 - 1)
+
+/-- The maximum `excessBlobGas` present in the pinned current-mainnet fixture
+corpus (`0xfffffffffffe0000`, reached only by invalid-header fixtures that are
+rejected before any price calculation), likewise pinned non-evaluatingly. -/
+theorem calculateBlobGasPrice_spec_corpusMax (blob : BlobSchedule)
+    (hv : blob.Valid) :
+    0 < blob.baseFeeUpdateFraction ∧
+    ∀ f, FakeExpSpec 0xfffffffffffe0000 blob.baseFeeUpdateFraction f →
+      calculateBlobGasPrice blob 0xfffffffffffe0000
+        = f 1 (1 * blob.baseFeeUpdateFraction) / blob.baseFeeUpdateFraction :=
+  calculateBlobGasPrice_spec blob hv 0xfffffffffffe0000
+
+-- Reference points computed from the pinned EELS `taylor_exponential`
+-- (execution-specs 4198b9c5…, byte-identical at the current-mainnet source
+-- commit 87aba1a3…). The committed differential grid is
+-- scripts/vectors/fake-exp.json, checked by scripts/check-fake-exp.sh.
+#guard fakeExp 1 0 5007716 = 1                    -- numerator zero
+#guard fakeExp 1 1 5007716 = 1
+#guard fakeExp 1 5007715 5007716 = 2
+#guard fakeExp 1 5007716 5007716 = 2              -- e^1
+#guard fakeExp 1 (3 * 5007716) 5007716 = 20       -- e^3
+#guard fakeExp 1 (10 * 5007716) 5007716 = 22026   -- e^10
+#guard fakeExp 2 5 1 = 287                        -- 2e^5
+#guard fakeExp 1 50 1 = 5184612586559446279969    -- e^50
+-- The maximum *feasible* corpus excess, 0xe760000 = 1851 blobs' worth of gas,
+-- against all three canonical fraction values (Prague and Osaka share one).
+#guard fakeExp 1 0xe760000 5007716 = 1098342643171911460576
+#guard fakeExp 1 0xe760000 8346193 = 4211562125831
+#guard fakeExp 1 0xe760000 11684671 = 1041019391
 
 def Mach.push (x : B256) (mach : Mach) : Footprint.Outcome Mach Unit :=
   if mach.stack.length < 1024

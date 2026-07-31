@@ -30,7 +30,7 @@
 # step that discharges a row deletes it (or rewrites it as KEEP) and
 # lowers the budget in the same commit.
 #
-# pending-budget: 322
+# pending-budget: 321
 #
 # At the branch point nothing is discharged yet: Step 1 inventories, it
 # does not repair. There are therefore zero KEEP rows, and the gate's
@@ -76,6 +76,13 @@
 # `< size` test, and both `Option.get!` sites (Execution.lean:108 delegation,
 # Transaction.lean:1053 system-call error) are guarded by a validity/isSome
 # test immediately above. Step 7 owns all of these.
+#
+# DISCHARGED by Step 7 (2026-07-31): the fakeExpAux fuel panic is gone — the
+# loop is a well-founded recursion with recurrence/uniqueness theorems and the
+# scripts/check-fake-exp.sh differential oracle; jumpable carries the missing
+# bounds test (OOB destination is semantically false); noPushBefore and
+# ByteArray.getInst read through their existing tests with proof-indexed
+# access; the four simple projections are total matches/head? reads.
 # ---------------------------------------------------------------------------
 
 
@@ -83,7 +90,6 @@
 R2 Jaune/Hash.lean | none => panic "Array.modify! out of bounds"  ## PENDING(step8,remove) KECCAK.Array.modify! out-of-bounds panic
 
 # ---- R2 : Jaune/Machine.lean ----
-R2 Jaune/Machine.lean | _, 0 => panic! "error : fuel exhausted in fake exponentiation"  ## PENDING(step7,remove) fakeExpAux fuel panic; replaced by a well-founded loop
 
 # ---- R3 : Jaune/BLS.lean ----
 R3 Jaune/BLS.lean let c0 := cs[1]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem

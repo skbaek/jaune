@@ -24,6 +24,7 @@ Choose the gate by what you changed, cheapest falsifier first:
 |---|---|---|
 | anything at all | `scripts/check-hygiene.sh` + `scripts/check-integrity.sh` + `lake build` | — |
 | U256/word/hash primitives | `scripts/check-u256.sh` | `scripts/check.sh --smoke --no-build --jobs auto` |
+| blob-fee arithmetic (fake exponential) | `scripts/check-fake-exp.sh` | `scripts/check-mainnet.sh --suite transitions --no-build --jobs auto` |
 | EC / precompiles | `scripts/check-ec.sh`, `scripts/check.sh --bls --no-build --jobs auto` | `scripts/check-mainnet.sh --suite prague --no-build --jobs auto` |
 | interpreter / gas / state | `scripts/check.sh --depth --no-build --jobs auto` | `scripts/check.sh --smoke --no-build --jobs auto` |
 | fork / block validity | `scripts/check-mainnet.sh --suite transitions --no-build --jobs auto` | `scripts/check-mainnet.sh --suite osaka --no-build --jobs auto` |
@@ -83,9 +84,9 @@ baseline. For `check-vectors.sh` this holds for stdout as well as the report:
 both modes emit the same bytes in the same manifest order, so two runs differ
 only in the verdict line's wall time and its `--jobs` marker.
 
-Only these three harnesses take `--jobs`. `check-u256.sh`, `check-ec.sh`, and
-`check-hygiene.sh` do not — the first two are single-process oracles and the
-third is sub-second.
+Only these three harnesses take `--jobs`. `check-u256.sh`, `check-fake-exp.sh`,
+`check-ec.sh`, and `check-hygiene.sh` do not — the first three are
+single-process oracles and the fourth is sub-second.
 
 ### What the job count is worth
 
@@ -156,9 +157,10 @@ executable inputs.
 | gate | proves | scale | time |
 |---|---|---|---|
 | `scripts/check-hygiene.sh` | source/forbidden-token hygiene, allowlist in `hygiene-allow.txt` | — | sub-second |
-| `scripts/check-integrity.sh` | no panic / raw bang op / stringly semantic carrier in `Jaune.lean`'s import closure, allowlist in `integrity-allow.txt` | 329 rows | sub-second |
+| `scripts/check-integrity.sh` | no panic / raw bang op / stringly semantic carrier in `Jaune.lean`'s import closure, allowlist in `integrity-allow.txt` | 321 rows | sub-second |
 | `lake build` | integration elaboration | ~1,760 jobs | ~8 s |
 | `scripts/check-u256.sh` | differential word/hash oracle | 21,593 cases | sub-second |
+| `scripts/check-fake-exp.sh` | fake-exponential differential oracle vs the pinned EELS `taylor_exponential` (blob base fee) | 240 cases | sub-second |
 | `scripts/check.sh --patch` | the ten historical FAIL files, fixed all-PASS target | 10 | sub-second |
 | `scripts/check.sh --rlp4` | four invalid-RLP/header files, subset of `--patch` | 4 | sub-second |
 | `scripts/check-mainnet.sh --suite smoke` | current-mainnet smoke | 16 | sub-second |

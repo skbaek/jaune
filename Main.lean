@@ -714,9 +714,50 @@ def runU256VectorFile (path : String) : IO Bool := do
   else
     IO.println s!"RED — u256: {passes}/{results.length} PASS, target not met"; return false
 
+-- Step-7 fake-exponential differential mode: every case carries the expected
+-- value the pinned EELS `taylor_exponential` computed (see
+-- scripts/gen-fake-exp-vectors.py); the binary evaluates the total `fakeExp`.
+-- All four fields are decimal strings, so the grid is not bounded by B256.
+def processFakeExpVector : (Nat × Lean.Json) → IO Bool
+  | ⟨idx, json⟩ => do
+    let get : String → IO Nat := fun field => do
+      let s ← (json.find? field >>= Lean.Json.toString?).toIO
+        s!"fake-exp vector {idx}: missing or non-string {field}"
+      (String.toNat? s).toIO s!"fake-exp vector {idx}: non-decimal {field}"
+    let fac ← get "factor"
+    let num ← get "numerator"
+    let den ← get "denominator"
+    let expected ← get "expected"
+    let actual := fakeExp fac num den
+    if actual = expected then
+      IO.println s!"PASS\t{idx}\tfakeExp {fac} {num} {den}"
+      return true
+    else
+      IO.println
+        s!"FAIL\t{idx}\tfakeExp {fac} {num} {den}\texpected={expected}\tactual={actual}"
+      return false
+
+def runFakeExpVectorFile (path : String) : IO Bool := do
+  -- Same {"vectors": [...]} envelope as the U256 oracle file.
+  let js ← readJsonFile path >>= Lean.Json.toIoU256Vectors
+  let results ← js.putIndex.mapM processFakeExpVector
+  let passes := results.count true
+  -- Same vacuous-pass hole as runVectorFile, same answer.
+  if results.length == 0 then
+    IO.println
+      s!"RED — fake-exp: 0/0 PASS, target not met: {path} holds no cases; an empty vector file is a manifest error, never a vacuous pass"
+    return false
+  if passes == results.length then
+    IO.println s!"OK — fake-exp: {passes}/{results.length} PASS"; return true
+  else
+    IO.println s!"RED — fake-exp: {passes}/{results.length} PASS, target not met"
+    return false
+
 def main : List String → IO Unit
   | "--u256" :: pathStr :: [] => do
     if !(← runU256VectorFile pathStr) then IO.Process.exit 1
+  | "--fake-exp" :: pathStr :: [] => do
+    if !(← runFakeExpVectorFile pathStr) then IO.Process.exit 1
   | "--vectors" :: addrStr :: pathStr :: opts => do
     let addrStr2 := remove0x addrStr
     let paddedAddrStr :=
