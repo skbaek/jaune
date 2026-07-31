@@ -573,11 +573,6 @@ def IO.remove0x (s : String) : IO String :=
   | '0' :: 'x' :: cs => return String.ofList cs
   | _ => IO.throw "prefix not 0x"
 
-def Option.remove0x (s : String) : Option String :=
-  match s.toList with
-  | '0' :: 'x' :: cs => return String.ofList cs
-  | _ => .none
-
 def remove0x (s : String) : String :=
   match s.toList with
   | '0' :: 'x' :: cs => String.ofList cs

@@ -39,51 +39,9 @@ def blsB2 : BLSF2 := BLSF2.mk 4 4
 
 abbrev BLSP2 : Type := EllipticCurve BLSF2 (0 : BLSF2) blsB2
 
--- def bytes_to_fq(data : Bytes) -> FQ:
-def Bytes.toExStrBLSF (data : Bytes) : Except String BLSF := do
-  if data.length ≠ 64 then
-    .error "InvalidParameter : input should be 64 bytes long"
-  let x := Bytes.toNat data
-  if x ≥ blsPrime then
-    .error "InvalidParameter : invalid field element"
-  pure (FinField.ofNat x)
-
--- def bytes_to_g1(data : Bytes) -> Point3D[FQ]:
-def Bytes.toExStrBLSP (data : Bytes) (subgroupCheck : Bool := false) : Except String BLSP := do
-  if data.length ≠ 128 then
-    .error "InvalidParameter : input should be 128 bytes long"
-  let x ← Bytes.toExStrBLSF (data.take 64)
-  let y ← Bytes.toExStrBLSF (data.drop 64)
-  let p ← (EllipticCurve.mk? x y).toExcept
-    "InvalidParameter : point is not on curve"
-  if subgroupCheck then
-    if (p.mulBy blsCurveOrder) ≠ ⟨0, 0⟩ then
-      .error "InvalidParameter : subgroup check failed"
-  pure p
-
 -- def g1_to_bytes(g1_point : Point3D[FQ]) -> Bytes:
 def BLSP.toBytes (p : BLSP) : Bytes :=
   p.x.val.toBytes.pack 64 ++ p.y.val.toBytes.pack 64
-
-def Bytes.toExStrBLSF2 (data : Bytes) : Except String BLSF2 := do
-  if data.length ≠ 128 then
-    .error "InvalidParameter : input should be 128 bytes long"
-  let c0 ← Bytes.toExStrBLSF (data.take 64)
-  let c1 ← Bytes.toExStrBLSF (data.drop 64)
-  pure ⟨trimZero [c1, c0]⟩
-
--- def bytes_to_g2(data : Bytes) -> Point3D[FQ2]:
-def Bytes.toExStrBLSP2 (data : Bytes) (subgroupCheck : Bool := false) : Except String BLSP2 := do
-  if data.length ≠ 256 then
-    .error "InvalidParameter : input should be 256 bytes long"
-  let x ← Bytes.toExStrBLSF2 (data.take 128)
-  let y ← Bytes.toExStrBLSF2 (data.drop 128)
-  let p ← (EllipticCurve.mk? x y).toExcept
-    "InvalidParameter : point is not on curve"
-  if subgroupCheck then
-    if (p.mulBy blsCurveOrder) ≠ ⟨0, 0⟩ then
-      .error "InvalidParameter : subgroup check failed"
-  pure p
 
 -- `takeRightV` is `takeRightD` with its width in the type: the same
 -- left-padding, which restores exactly the leading zeros `trimZero` removed,
@@ -98,39 +56,11 @@ def BLSF2.toBytes (x : BLSF2) : Bytes :=
 def BLSP2.toBytes (p : BLSP2) : Bytes :=
   p.x.toBytes ++ p.y.toBytes
 
-def decodeG1MsmPairs (data : Bytes) : Except String (List (BLSP × Nat)) :=
-  let rec aux (fuel : Nat) (acc : List (BLSP × Nat)) (bs : Bytes) : Except String (List (BLSP × Nat)) :=
-    match fuel with
-    | 0 => .ok acc.reverse
-    | fuel' + 1 =>
-      if bs.isEmpty then .ok acc.reverse
-      else if bs.length < 160 then
-        .error "InvalidParameter : remaining bytes less than 160"
-      else do
-        let p ← Bytes.toExStrBLSP (bs.take 128) true
-        let s := Bytes.toNat ((bs.drop 128).take 32)
-        aux fuel' ((p, s) :: acc) (bs.drop 160)
-  aux data.length [] data
-
 def g1MsmSum (pairs : List (BLSP × Nat)) : BLSP :=
   let rec aux (acc : BLSP) : List (BLSP × Nat) → BLSP
     | [] => acc
     | (p, s) :: ps => aux (acc + p.mulBy s) ps
   aux ⟨0, 0⟩ pairs
-
-def decodeG2MsmPairs (data : Bytes) : Except String (List (BLSP2 × Nat)) :=
-  let rec aux (fuel : Nat) (acc : List (BLSP2 × Nat)) (bs : Bytes) : Except String (List (BLSP2 × Nat)) :=
-    match fuel with
-    | 0 => .ok acc.reverse
-    | fuel' + 1 =>
-      if bs.isEmpty then .ok acc.reverse
-      else if bs.length < 288 then
-        .error "InvalidParameter : remaining bytes less than 288"
-      else do
-        let p ← Bytes.toExStrBLSP2 (bs.take 256) true
-        let s := Bytes.toNat ((bs.drop 256).take 32)
-        aux fuel' ((p, s) :: acc) (bs.drop 288)
-  aux data.length [] data
 
 def g2MsmSum (pairs : List (BLSP2 × Nat)) : BLSP2 :=
   let rec aux (acc : BLSP2) : List (BLSP2 × Nat) → BLSP2
@@ -157,11 +87,8 @@ def blsG1GenDoubleY : Nat :=
 def blsG1GenDouble : BLSP := ⟨FinField.ofNat blsG1GenDoubleX, FinField.ofNat blsG1GenDoubleY⟩
 
 #guard blsG1Generator.isOnCurve
-#guard (Bytes.toExStrBLSP (BLSP.toBytes blsG1Generator)).toOption = some blsG1Generator
 #guard blsG1Generator.double = blsG1GenDouble
 #guard (blsG1Generator + blsG1Generator) = blsG1GenDouble
-#guard
-  (Bytes.toExStrBLSP (List.replicate 128 (0 : UInt8))).toOption = some (⟨0, 0⟩ : BLSP)
 #guard BLSP.toBytes (⟨0, 0⟩ : BLSP) = List.replicate 128 (0 : UInt8)
 #guard (blsG1Generator.mulBy blsCurveOrder) = ⟨0, 0⟩
 
@@ -180,7 +107,6 @@ def blsG2Generator : BLSP2 :=
   ⟨BLSF2.mk blsG2GenX0 blsG2GenX1, BLSF2.mk blsG2GenY0 blsG2GenY1⟩
 
 #guard blsG2Generator.isOnCurve
-#guard (Bytes.toExStrBLSP2 (BLSP2.toBytes blsG2Generator)).toOption = some blsG2Generator
 #guard BLSP2.toBytes (⟨0, 0⟩ : BLSP2) = List.replicate 256 (0 : UInt8)
 #guard (blsG2Generator.mulBy blsCurveOrder) = ⟨0, 0⟩
 
@@ -490,60 +416,6 @@ def blsG1PointAtInfinity : Bytes := (0xc0 : UInt8) :: List.replicate 47 (0 : UIn
 -- point_compression.POW_2_381; the top three ZCash flag bits sit above it.
 def blsTwoPow381 : Nat := 2 ^ 381
 
--- def decompress_G1(z: G1Compressed) -> G1Uncompressed:
--- 48-byte compressed G1 point with the (c_flag, b_flag, a_flag, x) bit layout.
-def decompressG1 (data : Bytes) : Except String BLSP := do
-  if data.length ≠ 48 then
-    .error "InvalidParameter : compressed G1 should be 48 bytes"
-  let z := Bytes.toNat data
-  let cFlag := z.testBit 383  -- most significant bit
-  let bFlag := z.testBit 382
-  let aFlag := z.testBit 381
-  -- c_flag == 1 indicates the compressed form.
-  if !cFlag then .error "InvalidParameter : c_flag should be 1"
-  -- is_point_at_infinity(z): z % 2^381 == 0.
-  let isInf := z % blsTwoPow381 = 0
-  if bFlag ≠ isInf then .error "InvalidParameter : b_flag mismatch"
-  if isInf then
-    if aFlag then .error "InvalidParameter : infinity a_flag should be 0"
-    pure ⟨0, 0⟩
-  else
-    let x := z % blsTwoPow381
-    if x ≥ blsPrime then
-      .error "InvalidParameter : x should be less than field modulus"
-    let xf : BLSF := FinField.ofNat x
-    -- Y^2 = X^3 + b, b = 4; y = (x^3 + b)^((p+1)/4).
-    let rhs := xf ^ 3 + 4
-    let y := rhs ^ blsPPlus1Div4
-    if y ^ 2 ≠ rhs then
-      .error "InvalidParameter : the given point is not on G1"
-    -- Choose the y whose leftmost bit equals a_flag: (y * 2) // p.
-    let yLead := (y.val * 2) / blsPrime
-    let aBit := if aFlag then 1 else 0
-    pure ⟨xf, if yLead ≠ aBit then -y else y⟩
-
--- def validate_kzg_g1(b) followed by pubkey_to_G1: decode + KeyValidate
--- (non-infinity, subgroup check), returning the decompressed point.
-def decodeKzgG1 (data : Bytes) : Except String BLSP :=
-  if data = blsG1PointAtInfinity then
-    pure ⟨0, 0⟩
-  else do
-    let p ← decompressG1 data
-    if p = ⟨0, 0⟩ then
-      .error "InvalidParameter : point is at infinity"
-    if p.mulBy blsCurveOrder ≠ ⟨0, 0⟩ then
-      .error "InvalidParameter : subgroup check failed"
-    pure p
-
--- def bytes_to_bls_field(b): 32-byte big-endian scalar, must be < BLS_MODULUS.
-def bytesToBlsField (data : Bytes) : Except String Nat := do
-  if data.length ≠ 32 then
-    .error "InvalidParameter : field element should be 32 bytes"
-  let v := Bytes.toNat data
-  if v ≥ blsModulus then
-    .error "InvalidParameter : field element >= BLS modulus"
-  pure v
-
 -- Decompressed KZG_SETUP_G2_MONOMIAL_1 (kzg.py:71) as an affine G2 point.
 def kzgSetupG2Monomial1P : BLSP2 :=
   let ((x0, x1), (y0, y1)) := BLSConst.kzgSetupG2Monomial1
@@ -568,14 +440,6 @@ def verifyKzgProofImpl (commitment : BLSP) (z y : Nat) (proof : BLSP) : Bool :=
   | some t1, some t2 =>
       (t1 * t2) ^ ((blsPrime ^ 12 - 1) / blsCurveOrder) = 1
   | _, _ => false
-
--- def verify_kzg_proof(commitment_bytes, z_bytes, y_bytes, proof_bytes).
-def verifyKzgProof (commitment z y proof : Bytes) : Except String Bool := do
-  let comm ← decodeKzgG1 commitment
-  let zf ← bytesToBlsField z
-  let yf ← bytesToBlsField y
-  let prf ← decodeKzgG1 proof
-  pure (verifyKzgProofImpl comm zf yf prf)
 
 -- def kzg_commitment_to_versioned_hash(commitment): 0x01 || sha256(c)[1:].
 def kzgCommitmentToVersionedHash (commitment : Bytes) : Bytes :=

@@ -10,6 +10,15 @@ open Jaune
 
 ----------------- JSON DECODING HELPERS ------------------
 
+/-- Strip a mandatory `0x` prefix, or fail. This lives in the harness rather
+than `Jaune/Basic.lean` because it is fixture-JSON syntax handling, not
+library semantics, and its optional result is a parse channel that has no
+business inside the semantic import closure. -/
+def Option.remove0x (s : String) : Option String :=
+  match s.toList with
+  | '0' :: 'x' :: cs => return String.ofList cs
+  | _ => .none
+
 def Lean.Json.toIoList : Lean.Json → IO (List Json)
   | .arr a => return a.toList
   | _ => IO.throw "not an array"
@@ -196,6 +205,21 @@ def actualExceptionDiagnostic (err : String) : String :=
   | some actual => actual.toString
   | none => "<unknown canonical identity>"
 
+/-- Golden-message capture for `~/plans/integrity.md` P0.7.
+
+When `JAUNE_MSG_LOG` names a file, every fixture-observed rendered rejection
+message — the raw diagnostic text an expected-invalid block actually failed
+with — is appended to it, one message per line. The typed-error migration
+(Steps 9–10) uses two full-tier captures, one before and one after each
+producer change, to prove the observed rendered diagnostics are byte-identical.
+Off (the ordinary case), this is a single environment probe per rejection. -/
+def logObservedMessage (err : String) : IO Unit := do
+  match (← IO.getEnv "JAUNE_MSG_LOG") with
+  | none => pure ()
+  | some path =>
+    IO.FS.withFile path .append fun h =>
+      h.putStr ((err.replace "\n" "\\n") ++ "\n")
+
 /-- The rules this fixture's `network` label applies to a candidate.
 
 A static label names its fork outright. A transition label is a *schedule*, so
@@ -244,6 +268,7 @@ def evaluateFixtureBlock (spec : NetworkSpec) (chainId : UInt64) (store : ChainS
 
 def requireExpectedFailure (idx : Nat) (chainname : String)
     (expected : List FixtureException) (err : String) : IO Unit := do
+  logObservedMessage err
   match FixtureException.classify err with
   | none =>
     .throw s!"BLOCK #{idx} ({chainname}) failed with an unknown actual error\n\

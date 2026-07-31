@@ -30,7 +30,7 @@
 # step that discharges a row deletes it (or rewrites it as KEEP) and
 # lowers the budget in the same commit.
 #
-# pending-budget: 169
+# pending-budget: 153
 #
 # At the branch point nothing was discharged: Step 1 inventories, it does
 # not repair. The KEEP rows below are Step 8's, and they are all the BLAKE2b
@@ -187,21 +187,8 @@ R3 Jaune/Precompiles.lean out of arrays — a read does not allocate, only `set!
 # ---- R3 : Jaune/Transaction.lean ----
 
 # ---- R4 : Jaune/BLS.lean ----
-R4 Jaune/BLS.lean def Bytes.toExStrBLSF (data : Bytes) : Except String BLSF := do  ## PENDING(step9) stringly carrier in a precompile-facing decoder; retyped with the crypto errors
-R4 Jaune/BLS.lean def Bytes.toExStrBLSF2 (data : Bytes) : Except String BLSF2 := do  ## PENDING(step9) stringly carrier in a precompile-facing decoder; retyped with the crypto errors
-R4 Jaune/BLS.lean def Bytes.toExStrBLSP (data : Bytes) (subgroupCheck : Bool := false) : Except String BLSP := do  ## PENDING(step9) stringly carrier in a precompile-facing decoder; retyped with the crypto errors
-R4 Jaune/BLS.lean def Bytes.toExStrBLSP2 (data : Bytes) (subgroupCheck : Bool := false) : Except String BLSP2 := do  ## PENDING(step9) stringly carrier in a precompile-facing decoder; retyped with the crypto errors
-R4 Jaune/BLS.lean def bytesToBlsField (data : Bytes) : Except String Nat := do  ## PENDING(step9) stringly carrier in a precompile-facing decoder; retyped with the crypto errors
-R4 Jaune/BLS.lean def decodeG1MsmPairs (data : Bytes) : Except String (List (BLSP × Nat)) :=  ## PENDING(step9) stringly carrier in a precompile-facing decoder; retyped with the crypto errors
-R4 Jaune/BLS.lean def decodeG2MsmPairs (data : Bytes) : Except String (List (BLSP2 × Nat)) :=  ## PENDING(step9) stringly carrier in a precompile-facing decoder; retyped with the crypto errors
-R4 Jaune/BLS.lean def decodeKzgG1 (data : Bytes) : Except String BLSP :=  ## PENDING(step9) stringly carrier in a precompile-facing decoder; retyped with the crypto errors
-R4 Jaune/BLS.lean def decompressG1 (data : Bytes) : Except String BLSP := do  ## PENDING(step9) stringly carrier in a precompile-facing decoder; retyped with the crypto errors
-R4 Jaune/BLS.lean def verifyKzgProof (commitment z y proof : Bytes) : Except String Bool := do  ## PENDING(step9) stringly carrier in a precompile-facing decoder; retyped with the crypto errors
-R4 Jaune/BLS.lean let rec aux (fuel : Nat) (acc : List (BLSP × Nat)) (bs : Bytes) : Except String (List (BLSP × Nat)) :=  ## PENDING(step9) stringly carrier in a precompile-facing decoder; retyped with the crypto errors
-R4 Jaune/BLS.lean let rec aux (fuel : Nat) (acc : List (BLSP2 × Nat)) (bs : Bytes) : Except String (List (BLSP2 × Nat)) :=  ## PENDING(step9) stringly carrier in a precompile-facing decoder; retyped with the crypto errors
 
 # ---- R4 : Jaune/Basic.lean ----
-R4 Jaune/Basic.lean def Option.remove0x (s : String) : Option String :=  ## PENDING(step9) stringly VM/frame/precompile carrier or halt-reason branch; retyped with the typed halt carrier
 
 # ---- R4 : Jaune/Execution.lean ----
 R4 Jaune/Execution.lean #guard hasErrorType (rlpStructureError "block" "expected a 4-item list") rlpStructureTag  ## PENDING(step9) stringly VM/frame/precompile carrier or halt-reason branch; retyped with the typed halt carrier
@@ -293,10 +280,7 @@ R4 Jaune/Machine.lean error : Option String  ## PENDING(step9) stringly VM/frame
 
 # ---- R4 : Jaune/Precompiles.lean ----
 R4 Jaune/Precompiles.lean Except (String × Nat) (Nat × Bytes) := do  ## PENDING(step9) stringly VM/frame/precompile carrier or halt-reason branch; retyped with the typed halt carrier
-R4 Jaune/Precompiles.lean Except String ξ → Except (String × Nat) ξ  ## PENDING(step9) stringly VM/frame/precompile carrier or halt-reason branch; retyped with the typed halt carrier
-R4 Jaune/Precompiles.lean catchWithOOGPrecomp cost (hasErrorType · "InvalidParameter") <|  ## PENDING(step9) stringly VM/frame/precompile carrier or halt-reason branch; retyped with the typed halt carrier
-R4 Jaune/Precompiles.lean def Bytes.toExStrBNP (data : Bytes) : Except String BNP := do  ## PENDING(step9) stringly VM/frame/precompile carrier or halt-reason branch; retyped with the typed halt carrier
-R4 Jaune/Precompiles.lean def Bytes.toExStrBNP2 (data : Bytes) : Except String BNP2 := do  ## PENDING(step9) stringly VM/frame/precompile carrier or halt-reason branch; retyped with the typed halt carrier
+R4 Jaune/Precompiles.lean Except ExceptionalHalt ξ → Except (String × Nat) ξ  ## PENDING(step9) stringly VM/frame/precompile carrier or halt-reason branch; retyped with the typed halt carrier
 
 # ---- R4 : Jaune/Sufficiency.lean ----
 R4 Jaune/Sufficiency.lean (r : Except (String × State × AdrSet × Tra) Devm) :  ## PENDING(step9) stringly VM/frame/precompile carrier or halt-reason branch; retyped with the typed halt carrier
