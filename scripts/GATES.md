@@ -22,7 +22,7 @@ Choose the gate by what you changed, cheapest falsifier first:
 
 | you changed | run this first | then, before pushing |
 |---|---|---|
-| anything at all | `scripts/check-hygiene.sh` + `lake build` | — |
+| anything at all | `scripts/check-hygiene.sh` + `scripts/check-integrity.sh` + `lake build` | — |
 | U256/word/hash primitives | `scripts/check-u256.sh` | `scripts/check.sh --smoke --no-build --jobs auto` |
 | EC / precompiles | `scripts/check-ec.sh`, `scripts/check.sh --bls --no-build --jobs auto` | `scripts/check-mainnet.sh --suite prague --no-build --jobs auto` |
 | interpreter / gas / state | `scripts/check.sh --depth --no-build --jobs auto` | `scripts/check.sh --smoke --no-build --jobs auto` |
@@ -156,13 +156,14 @@ executable inputs.
 | gate | proves | scale | time |
 |---|---|---|---|
 | `scripts/check-hygiene.sh` | source/forbidden-token hygiene, allowlist in `hygiene-allow.txt` | — | sub-second |
+| `scripts/check-integrity.sh` | no panic / raw bang op / stringly semantic carrier in `Jaune.lean`'s import closure, allowlist in `integrity-allow.txt` | 329 rows | sub-second |
 | `lake build` | integration elaboration | ~1,760 jobs | ~8 s |
 | `scripts/check-u256.sh` | differential word/hash oracle | 21,593 cases | sub-second |
 | `scripts/check.sh --patch` | the ten historical FAIL files, fixed all-PASS target | 10 | sub-second |
 | `scripts/check.sh --rlp4` | four invalid-RLP/header files, subset of `--patch` | 4 | sub-second |
 | `scripts/check-mainnet.sh --suite smoke` | current-mainnet smoke | 16 | sub-second |
 | `scripts/check.sh --depth` | fuel/call-depth stress set | 67 | ~13 s |
-| `python3 -m unittest discover -s scripts/tests` | harness/generator unit tests | 110 tests | ~13 s |
+| `python3 -m unittest discover -s scripts/tests` | harness/generator unit tests | 121 tests | ~13 s |
 | `scripts/check-mainnet.sh --suite transitions` | fork-transition validity | 13 files / 109 cases | ~8–15 s |
 
 ### Medium — before a commit or push candidate
@@ -243,6 +244,18 @@ Two different contracts, and confusing them is the most common misreading:
   forces a newly added vector to state its size. The binary independently
   refuses a vector file holding no cases rather than reporting a vacuous `0/0`
   pass.
+
+- **`scripts/check-integrity.sh` is a shrink-only budget.** It inventories
+  `panic`, raw bang operations, and stringly-typed semantic error carriers over
+  the exact local module import closure of `Jaune.lean`, computed transitively
+  rather than hardcoded, and every occurrence must match an exact row in
+  `scripts/integrity-allow.txt`. A **new** occurrence fails. `PENDING` rows —
+  known defects with an owning step — are counted against a declared
+  `# pending-budget:` line that may only decrease, so a step cannot discharge
+  one defect and quietly introduce another. Absence of `partial def`,
+  `implemented_by`, and `dbg_trace` is asserted outright: the gate refuses an
+  allowlist that carries a row for them at all. Use `--list` to regenerate the
+  inventory and `--pending` to read the full pending set.
 
 `--bls` is a middle case: it compares against a committed baseline like a tier,
 but that baseline is a hand-authored *target*, so `--rebase` is refused — edit
