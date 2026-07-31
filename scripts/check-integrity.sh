@@ -30,7 +30,13 @@
 #       closure, except exact allowlist rows.
 #
 #   R4  No stringly-typed semantic error carrier or string-driven semantic
-#       branch in the closure, except exact allowlist rows.
+#       branch, except exact allowlist rows. Since Step 10 completed the
+#       typed-error migration, R4's scope is the closure PLUS the runner
+#       boundary (Jaune/ChainStore.lean, Jaune/FixtureException.lean,
+#       Main.lean), every remaining row is a reviewed KEEP -- a named legacy
+#       renderer adapter or an external parser/JSON boundary -- and the gate
+#       refuses an R4 PENDING row outright: a new stringly semantic carrier
+#       can no longer be deferred, only reviewed in or rejected.
 #
 # An allowlist row is matched line-number-independently: each occurrence is
 # normalised to
@@ -123,6 +129,13 @@ while stack:
 
 closure_files = sorted(path_of(m) for m in closure)
 
+# The post-Step-10 scope of R4: the closure plus the runner boundary, where
+# the fixture parser and the CLI renderer live. Strings there are legitimate
+# only at exact-listed parser/renderer lines.
+r4_files = sorted(set(closure_files)
+                  | {"Jaune/ChainStore.lean", "Jaune/FixtureException.lean",
+                     "Main.lean"})
+
 # R1 is scoped to the whole library plus Main.lean, not just the closure:
 # silence.md removed these from every Jaune source file and this gate keeps
 # them out of all of them. scripts/*.lean are Lean metaprograms over `Expr`
@@ -147,7 +160,7 @@ RULES = [
     # MsgCallOutput.error; hasErrorType/isExceptionalHalt/isBlockException are
     # the prefix-match branch primitives; String.isPrefixOf and an exact
     # comparison against a quoted literal cover the hand-rolled variants.
-    ("R4", closure_files,
+    ("R4", r4_files,
      re.compile(r'Except\s+String'
                 r'|Except\s*\(\s*String\s*×'
                 r'|String\s*×\s*Devm'
@@ -213,6 +226,17 @@ if [ "$BADR1" -ne 0 ]; then
   exit 1
 fi
 
+# Step 10 completed the typed-error migration: every remaining R4 row is a
+# reviewed KEEP (a named legacy renderer adapter or an external parser
+# boundary). An R4 PENDING row would mean a new stringly semantic carrier was
+# deferred rather than reviewed; the gate refuses it outright.
+BADR4="$(grep -vE '^[[:space:]]*(#|$)' "$ALLOW" | grep '^R4 ' | grep -c '## *PENDING' || true)"
+if [ "$BADR4" -ne 0 ]; then
+  echo "INTEGRITY — the allowlist carries $BADR4 R4 PENDING row(s); since Step 10 a stringly semantic carrier is KEEP-reviewed or removed, never deferred"
+  echo "REGRESSION — integrity: R4 (typed error carriers) admits no PENDING disposition"
+  exit 1
+fi
+
 PENDING="$(grep -vE '^[[:space:]]*(#|$)' "$ALLOW" | grep -c '## *PENDING' || true)"
 PENDING_MAX="$(grep -E '^# *pending-budget:' "$ALLOW" | head -1 \
   | sed -E 's/^# *pending-budget:[[:space:]]*//')"
@@ -251,5 +275,5 @@ if [ "$PENDING" -gt "$PENDING_MAX" ]; then
 fi
 
 NHITS="$(printf '%s\n' "$HITS" | grep -c .)"
-echo "OK — integrity: all $NHITS occurrence(s) in the Jaune.lean import closure are allowlisted; $PENDING pending (budget $PENDING_MAX); no new ones"
+echo "OK — integrity: all $NHITS occurrence(s) in the audited scope (Jaune.lean closure + runner boundary for R4) are allowlisted; $PENDING pending (budget $PENDING_MAX); no new ones"
 exit 0

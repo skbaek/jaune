@@ -90,43 +90,45 @@ def insert (store : ChainStore) (chain : CheckedBlockChain) : ChainStore :=
 /-- The parent snapshot a decoded block must be evaluated against: the one
 stored under the block's own `header.parentHash`.
 
-A miss is an explicit unknown-parent failure carrying the exact Step 6/9
-producer tag, so the runner can score it against the fixture's expected
-identities: the all-zero parent hash names no block at all
-(`BlockException.UNKNOWN_PARENT_ZERO`), while any other missing hash names a
-block this store has not imported (`BlockException.UNKNOWN_PARENT`). -/
+A miss is an explicit typed unknown-parent rejection, so the runner can score
+it against the fixture's expected identities by constructor: the all-zero
+parent hash names no block at all (`BlockException.UNKNOWN_PARENT_ZERO`),
+while any other missing hash names a block this store has not imported
+(`BlockException.UNKNOWN_PARENT`). The rendered diagnostics are byte-for-byte
+the Step 6/9 ones. -/
 def findParent (store : ChainStore) (parentHash : B256) :
-    Except String CheckedBlockChain :=
+    Except BlockValidationError CheckedBlockChain :=
   match store.find? parentHash with
   | some chain => .ok chain
   | none =>
     if parentHash = 0 then
-      .error
-        s!"{unknownParentZeroTag} : parent hash is the all-zero hash, \
+      .error <| .unknownParentZero <| .text
+        s!"parent hash is the all-zero hash, \
            which names no block"
     else
-      .error
-        s!"{unknownParentTag} : parent hash = {parentHash} names no \
+      .error <| .unknownParent <| .text
+        s!"parent hash = {parentHash} names no \
            imported snapshot"
 
 /-- Fold one block-evaluation outcome into the store. A successful import
 inserts the child snapshot under its tip hash; a rejected block inserts
 nothing, so the store -- and therefore every existing branch -- is unchanged by
-construction. The error is passed through untouched for the caller to classify
-against the fixture's expected identities. -/
+construction. The rejection reason is not consumed here: the caller scores it
+against the fixture's expected identities by constructor. -/
 def addResult (store : ChainStore) :
-  Except String CheckedBlockChain → ChainStore
-  | .ok chain => store.insert chain
-  | .error _ => store
+  ImportOutcome CheckedBlockChain → ChainStore
+  | .inl chain => store.insert chain
+  | .inr _ => store
 
 /-- The final snapshot named by the fixture's `lastblockhash`, whose tip hash
-and post-state root the runner must always check. A miss here is a runner-level
-failure, not a consensus rejection: it deliberately carries no canonical
-exception tag, so it can never be scored as an expected block exception. -/
+and post-state root the runner must always check. A miss here is a
+harness-level operational failure, not a consensus rejection: `ImportFailure`
+has no fixture identity by type, so it can never be scored as an expected
+block exception. The render is byte-for-byte the old `ERROR : ...` line. -/
 def findLast (store : ChainStore) (lastBlockHash : B256) :
-    Except String CheckedBlockChain :=
+    Except ImportFailure CheckedBlockChain :=
   (store.find? lastBlockHash).toExcept
-    s!"ERROR : lastblockhash = {lastBlockHash} names no imported snapshot"
+    (.harness (.text s!"lastblockhash = {lastBlockHash} names no imported snapshot"))
 
 end ChainStore
 
@@ -246,12 +248,12 @@ private def findTags? (store? : Option ChainStore) (hash : B256) :
     Option (List Bytes) :=
   store?.bind (fun store => findTags store hash)
 
-/-- `r` is a rejection whose error classifies to exactly the canonical identity
-`e`. -/
-private def rejectsAs (r : Except String CheckedBlockChain) (e : FixtureException) :
-    Bool :=
+/-- `r` is a rejection whose typed reason classifies to exactly the canonical
+identity `e`. -/
+private def rejectsAs (r : Except BlockValidationError CheckedBlockChain)
+    (e : FixtureException) : Bool :=
   match r with
-  | .error msg => FixtureException.classify msg == some e
+  | .error reason => FixtureException.ofBlockValidationError reason == some e
   | .ok _ => false
 
 -- Initialization: exactly the genesis snapshot, under the key the snapshot
@@ -285,7 +287,8 @@ private def rejectsAs (r : Except String CheckedBlockChain) (e : FixtureExceptio
 -- the count is what it was.
 private def store3? : Option ChainStore :=
   store2?.map (fun s =>
-    s.addResult (.error s!"{intrinsicGasTooLowTag} : synthetic rejection of B3"))
+    s.addResult (.inr (.transaction
+      (.intrinsicGasTooLow (.text "synthetic rejection of B3")))))
 
 #guard store3?.map ChainStore.size == store2?.map ChainStore.size
 #guard store3?.map (fun s => (s.find? b3H).isNone) == some true
@@ -298,7 +301,7 @@ private def store3? : Option ChainStore :=
 private def store3'? : Option ChainStore := do
   let s ← store2?
   let b3 ← b3C
-  pure (s.addResult (.ok b3))
+  pure (s.addResult (.inl b3))
 
 #guard store3'?.map ChainStore.size
   == store2?.map (fun s => ChainStore.size s + 1)
@@ -323,9 +326,16 @@ private def store3'? : Option ChainStore := do
 #guard store2?.map (fun s => (s.findLast a2H).toOption.map (fun cc => tagsOf cc.val))
   == some (some [[0x60], [0xA1], [0xA2]])
 #guard store2?.map (fun s => (s.findLast b3H).toOption.isNone) == some true
+-- A `findLast` miss is an `ImportFailure`, which has no classification arm at
+-- all; the guard pins the constructor and its byte-identical render.
 #guard store2?.map (fun s =>
   match s.findLast b3H with
-  | .error msg => (FixtureException.classify msg).isNone
+  | .error (.harness _) => true
+  | _ => false) == some true
+#guard store2?.map (fun s =>
+  match s.findLast b3H with
+  | .error f => f.render ==
+      s!"ERROR : lastblockhash = {b3H} names no imported snapshot"
   | .ok _ => false) == some true
 
 -- Re-inserting an existing snapshot replaces rather than duplicates.

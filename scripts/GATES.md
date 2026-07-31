@@ -157,7 +157,7 @@ executable inputs.
 | gate | proves | scale | time |
 |---|---|---|---|
 | `scripts/check-hygiene.sh` | source/forbidden-token hygiene, allowlist in `hygiene-allow.txt` | — | sub-second |
-| `scripts/check-integrity.sh` | no panic / raw bang op / stringly semantic carrier in `Jaune.lean`'s import closure, allowlist in `integrity-allow.txt` | 123 rows, 80 pending | sub-second |
+| `scripts/check-integrity.sh` | no panic / raw bang op / stringly semantic carrier in `Jaune.lean`'s import closure (R4 also covers the runner boundary), allowlist in `integrity-allow.txt` | 56 rows, 0 pending | sub-second |
 | `lake build` | integration elaboration | ~1,760 jobs | ~8 s |
 | `scripts/check-u256.sh` | differential word/hash oracle | 21,593 cases | sub-second |
 | `scripts/check-fake-exp.sh` | fake-exponential differential oracle vs the pinned EELS `taylor_exponential` (blob base fee) | 240 cases | sub-second |

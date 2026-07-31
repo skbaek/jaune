@@ -30,7 +30,7 @@
 # step that discharges a row deletes it (or rewrites it as KEEP) and
 # lowers the budget in the same commit.
 #
-# pending-budget: 10
+# pending-budget: 0
 #
 # At the branch point nothing was discharged: Step 1 inventories, it does
 # not repair. The KEEP rows below are Step 8's, and they are all the BLAKE2b
@@ -86,6 +86,17 @@
 #
 # DISCHARGED by Step 8 (2026-08-01): all 152 crypto/helper rows are gone or
 # rewritten KEEP, and the closure now holds no explicit abort at all.
+#
+# DISCHARGED by Steps 9-10 (2026-08-01): every R4 stringly-carrier row.
+# Step 9 retyped the VM/frame/precompile carrier (EvmError and its family);
+# Step 10 retyped the codec, transaction-validation, header/block, fork/config,
+# and import producers and made fixture classification a constructor match.
+# The pending budget is 0 and R4 now admits no PENDING disposition at all:
+# what remains are reviewed KEEP rows -- the named legacy renderer adapters
+# (rlpToBlock, stateTransition family, addBlockToChain family, and their two
+# shared carrier helpers), guard-only golden probes, and the runner-boundary
+# parser lines that read external fixture/CLI input, never a rendered
+# diagnostic of this build.
 #
 #   - Jaune/Hash.lean (91 rows, deleted). `KECCAK.Array.modify!` and its
 #     out-of-bounds branch no longer exist. Keccak's state is a
@@ -195,13 +206,6 @@ R3 Jaune/Precompiles.lean out of arrays — a read does not allocate, only `set!
 # ---- R4 : Jaune/Fork.lean ----
 
 # ---- R4 : Jaune/Machine.lean ----
-R4 Jaune/Machine.lean #guard blockExceptionTags.all fun t => ¬ hasErrorType t "InvalidBlock"  ## PENDING(step10) re-owned by Step 9: producer/consumer is Step-10 scope (strict decoders, header checks, or the string-side classifier the Transaction/FixtureException layers still read); the VM layer no longer calls it
-R4 Jaune/Machine.lean #guard ¬ isBlockException "InvalidBlock : gas limit is wrong"  ## PENDING(step10) re-owned by Step 9: producer/consumer is Step-10 scope (strict decoders, header checks, or the string-side classifier the Transaction/FixtureException layers still read); the VM layer no longer calls it
-R4 Jaune/Machine.lean #guard ¬ isBlockException "InvalidBlock"  ## PENDING(step10) re-owned by Step 9: producer/consumer is Step-10 scope (strict decoders, header checks, or the string-side classifier the Transaction/FixtureException layers still read); the VM layer no longer calls it
-R4 Jaune/Machine.lean List.any blockExceptionTags (hasErrorType err)  ## PENDING(step10) re-owned by Step 9: producer/consumer is Step-10 scope (strict decoders, header checks, or the string-side classifier the Transaction/FixtureException layers still read); the VM layer no longer calls it
-R4 Jaune/Machine.lean def hasErrorType (err errType : String) : Bool :=  ## PENDING(step10) re-owned by Step 9: producer/consumer is Step-10 scope (strict decoders, header checks, or the string-side classifier the Transaction/FixtureException layers still read); the VM layer no longer calls it
-R4 Jaune/Machine.lean def isBlockException (err : String) : Bool :=  ## PENDING(step10) re-owned by Step 9: producer/consumer is Step-10 scope (strict decoders, header checks, or the string-side classifier the Transaction/FixtureException layers still read); the VM layer no longer calls it
-R4 Jaune/Machine.lean err = errType || String.isPrefixOf (errType ++ " : ") err  ## PENDING(step10) re-owned by Step 9: producer/consumer is Step-10 scope (strict decoders, header checks, or the string-side classifier the Transaction/FixtureException layers still read); the VM layer no longer calls it
 
 # ---- R4 : Jaune/Precompiles.lean ----
 
@@ -212,6 +216,16 @@ R4 Jaune/Transaction.lean (blockRlp : Bytes) : Except String (BlockChain ⊕ Str
 R4 Jaune/Transaction.lean Except String (BlockChain ⊕ String)  ## KEEP(adapter=ImportOutcome.renderLegacy, bridge=addBlockToChainCanonical_eq_ok_inl) the one renderer collapsing a typed import result onto the legacy channels; every legacy import adapter goes through it
 R4 Jaune/Transaction.lean private def errorText? {α : Type} : Except String α → Option String  ## KEEP(guard-only) golden-text probe reading a legacy adapter's rendered error for #guard renderer goldens; classification never reads it
 R4 Jaune/Transaction.lean def rlpToBlock (rlp : Bytes) : Except String (Block × B256) :=  ## KEEP(adapter=rlpToBlockE, bridge=rlpToBlock_eq_ok_iff) Step-10 legacy renderer adapter: byte-identical mapError DecodeError.render over the typed core; retained by name and type because Blanc's protected addBlockToChain_preserves_solvent quantifies over this equation
-R4 Jaune/Transaction.lean Except String (BlockChain ⊕ String) :=  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
-R4 Jaune/Transaction.lean Except String BlockChain :=  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
-R4 Jaune/Transaction.lean Except String BlockChain := do  ## PENDING(step10) stringly carrier or string-driven branch; retyped with the codec/validation/import errors
+R4 Jaune/Transaction.lean Except String (BlockChain ⊕ String) :=  ## KEEP(adapter=addBlockToChainCanonicalE/addBlockToChainAtE + addBlockToChain, bridge=addBlockToChainCanonical_eq_ok_inl) Step-10 legacy renderer adapters (addBlockToChainCanonical/At/addBlockToChain): ImportOutcome.renderLegacy over the typed import cores; addBlockToChain is the name Blanc's protected theorem states
+R4 Jaune/Transaction.lean Except String BlockChain :=  ## KEEP(adapter=stateTransitionE, bridge=stateTransitionWith_eq_ok_iff) Step-10 legacy renderer adapters (stateTransitionWith/stateTransition): mapError TransitionError.render over the typed core; the names Blanc's protected theorems and the frozen rfl identities state
+R4 Jaune/Transaction.lean Except String BlockChain := do  ## KEEP(adapter=stateTransitionE, bridge=stateTransitionWith_eq_ok_iff) Step-10 legacy renderer adapters (stateTransitionAt/stateTransitionUsing): fork/schedule selection composed over the stateTransitionWith adapter; byte-identical renders
+
+# ---- R4 : Jaune/FixtureException.lean ----
+R4 Jaune/FixtureException.lean def parseExpectation (s : String) : Except String (List FixtureException) := do  ## KEEP(parser=expectException) the one external-string parser: reads the fixture's own expectException label, never a rendered diagnostic of this build
+
+# ---- R4 : Main.lean ----
+R4 Main.lean def Except.toIO {ξ : Type} : Except String ξ → IO ξ  ## KEEP(boundary=CLI) lifts an already-rendered harness error into IO; rendering happened at a typed boundary
+R4 Main.lean def Lean.Json.toString? : Lean.Json → Option String  ## KEEP(parser=JSON) fixture-JSON field accessor; not an error channel
+R4 Main.lean def Option.remove0x (s : String) : Option String :=  ## KEEP(parser=JSON) fixture-JSON hex-prefix syntax; not an error channel
+R4 Main.lean def getNetwork : List String → Option String  ## KEEP(parser=CLI) command-line option accessor; not an error channel
+R4 Main.lean def getTxExMap (j : Lean.Json) : IO (Option String × Bytes) := do  ## KEEP(parser=expectException) carries the fixture's raw expectException label to parseExpectation; not an error channel

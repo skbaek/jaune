@@ -767,9 +767,6 @@ def Benv.withState (benv : Benv) (st : State) : Benv :=
 def Benv.beginTransaction (benv : Benv) : Benv :=
   {benv with stat := {benv.stat with origState := benv.state}}
 
-def hasErrorType (err errType : String) : Bool :=
-  err = errType || String.isPrefixOf (errType ++ " : ") err
-
 -- EIP-7823 rejects an oversized `MODEXP` length header with a bare
 -- `ExceptionalHalt` rather than one of the specification's named subclasses.
 -- It is given its own tag here because every other exceptional halt this build
@@ -922,7 +919,7 @@ def systemContractCallFailedTag : String := "SystemContractCallFailedError"
 def blockRlpSizeExceededTag : String := "BlockRlpSizeExceededError"
 
 /-- Every block-rejection tag. The single source of truth for the distinctness
-checks, and for the string-side block-exception classifier. -/
+checks and the whole-list constructor/tag pin. -/
 def blockExceptionTags : List String :=
   [ gasLimitTooBigTag, gasLimitAdjustmentTag, gasUsedOverflowTag,
     gasUsedMismatchTag, timestampOlderThanParentTag, blockNumberTag,
@@ -933,23 +930,14 @@ def blockExceptionTags : List String :=
     requestsHashTag, depositEventLayoutTag, systemContractCallFailedTag,
     blockRlpSizeExceededTag ]
 
-/-- Is this error one of the precise block-rejection reasons? -/
-def isBlockException (err : String) : Bool :=
-  List.any blockExceptionTags (hasErrorType err)
-
--- The tags are distinct, and none is a prefix of another. The classifier reads
--- a tag up to a fixed " : ", so a tag that prefixed another could be read as
--- the wrong reason -- and one reason read as another is precisely the defect
--- this vocabulary exists to remove.
+-- The tags are distinct, and none is a prefix of another, so no rendered
+-- reason can be read as another by any " : "-delimited reader -- and none is
+-- the broad category the vocabulary replaced.
 #guard blockExceptionTags.length = 24
 #guard blockExceptionTags.eraseDups.length = 24
 #guard blockExceptionTags.all fun t =>
   (blockExceptionTags.filter fun u => t.isPrefixOf u).length = 1
-
--- No tag is readable as the broad category it replaces, in either direction.
-#guard blockExceptionTags.all fun t => ¬ hasErrorType t "InvalidBlock"
-#guard ¬ isBlockException "InvalidBlock"
-#guard ¬ isBlockException "InvalidBlock : gas limit is wrong"
+#guard blockExceptionTags.all fun t => t ≠ "InvalidBlock"
 
 ------------------- STRICT CONSENSUS-FIELD DECODERS --------------------
 

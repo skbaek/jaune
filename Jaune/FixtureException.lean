@@ -7,12 +7,19 @@
 --
 -- A fixture's `expectException` is a `|`-separated set of *allowed* official
 -- exception identities. The runner must parse that set, classify the actual
--- error as exactly one canonical identity, and accept only set membership.
--- Everything here therefore fails closed: unknown expected identities, unknown
--- actual errors, and broad categories such as a bare `InvalidBlock` are
--- failures, never successes. There is deliberately no `contains`, no suffix
--- match, and no "any RLP error is good enough" fallback -- those are what let a
--- block be rejected for the wrong reason and still be scored as a pass.
+-- rejection as exactly one canonical identity, and accept only set
+-- membership. Everything here therefore fails closed: unknown expected
+-- identities, unmapped actual reasons, and broad categories such as a bare
+-- `InvalidBlock` are failures, never successes.
+--
+-- Since Step 10 of ~/plans/integrity.md, the actual side is classified by
+-- **constructor**: `FixtureException.ofBlockRejection` maps each typed
+-- rejection reason directly to its official identity (or to `none`, failing
+-- closed). The only string this module still parses is the fixture's own
+-- external `expectException` label. No rendered diagnostic is ever read back:
+-- the retired `classify`/`actualRoutes` prefix table is gone, and an
+-- `ImportFailure` -- context, support, harness, internal, or VM -- has no
+-- mapping at all, by type, so it can never score as an expected rejection.
 
 import Jaune.Transaction
 
@@ -178,7 +185,9 @@ instance : ToString FixtureException := ⟨toString⟩
 
 /-- Exact inverse of `toString`. Exact means exact: no trimming, no case
 folding, no prefix acceptance. An unrecognized token is `none`, which every
-caller must treat as a failure. -/
+caller must treat as a failure. This is the one place this module reads a
+string, and it is the fixture's own external label -- never a rendered
+diagnostic of this build. -/
 def ofString? (s : String) : Option FixtureException :=
   match s with
   -- EIP-7623 names a separate *reason* for the same transaction-level
@@ -234,126 +243,114 @@ def parseExpectation (s : String) : Except String (List FixtureException) := do
         | none => .error s!"unknown expected exception identity {repr tok} in {repr s}"
   .ok es.eraseDups
 
-/-- A registered route from an actual internal error to the one canonical
-identity it means.
+------------------- CONSTRUCTOR CLASSIFICATION --------------------
 
-The `String` is an error *tag*: it matches an actual error either exactly, or
-as a prefix ending at the fixed `" : "` delimiter, so a producer may keep
-detailed internal text after the tag. This is `hasErrorType`, the same
-convention the rest of the executable already uses. -/
-abbrev ActualRoute : Type := String × FixtureException
+-- Each mapping below is a total, exhaustive constructor match: registering an
+-- arm is a claim that a specific typed reason carries a specific official
+-- identity, and `none` is the deliberate fail-closed disposition of a reason
+-- the reviewed vocabulary has no identity for. Adding a rejection constructor
+-- upstream cannot compile without landing in one of these matches.
 
-/-- Classify an actual error using an explicit route table.
+/-- The official identity of a strict-decode rejection. All seven reasons are
+candidate verdicts in the audited ordering; several deliberately share the
+official `RLP_STRUCTURES_ENCODING` identity while staying distinct reasons
+internally. -/
+def ofDecodeError : DecodeError → Option FixtureException
+  | .rlpStructure _ => some blockRlpStructuresEncoding
+  | .fixedWidth _ => some blockRlpStructuresEncoding
+  | .fieldOverflow64 _ => some blockRlpInvalidFieldOverflow64
+  | .fieldOverflow256 _ => some blockRlpStructuresEncoding
+  | .leadingZeros _ => some blockRlpStructuresEncoding
+  | .withdrawalsNotRead _ => some blockRlpWithdrawalsNotRead
+  | .roundTrip _ => some blockRlpStructuresEncoding
 
-Recognizes *only* explicitly registered exact messages or tag-prefixes; there is
-no substring, suffix, or category fallback. An unregistered error is `none` and
-must fail the fixture rather than be waved through. -/
-def classifyWith (routes : List ActualRoute) (err : String) : Option FixtureException :=
-  (routes.find? (fun r => hasErrorType err r.fst)).map Prod.snd
+/-- The official identity of a transaction-validation rejection. Every one of
+the twenty-one reasons has an identity; the blob-fee reason shares
+`INSUFFICIENT_MAX_FEE_PER_GAS` with the execution-fee reason, and both
+blob-count reasons share `TYPE_3_TX_BLOB_COUNT_EXCEEDED`, exactly as the
+retired string routes said. -/
+def ofTxValidationError : TxValidationError → Option FixtureException
+  | .gasPriceProductOverflow _ => some txGasLimitPriceProductOverflow
+  | .gasAllowanceExceeded _ => some txGasAllowanceExceeded
+  | .initcodeSizeExceeded _ => some txInitcodeSizeExceeded
+  | .insufficientAccountFunds _ => some txInsufficientAccountFunds
+  | .insufficientMaxFeePerGas _ => some txInsufficientMaxFeePerGas
+  | .insufficientMaxFeePerBlobGas _ => some txInsufficientMaxFeePerGas
+  | .transactionGasLimitExceeded _ => some txGasLimitExceedsMaximum
+  | .intrinsicGasTooLow _ => some txIntrinsicGasTooLow
+  | .invalidChainId _ => some txInvalidChainId
+  | .nonceIsMax _ => some txNonceIsMax
+  | .nonceMismatchTooHigh _ => some txNonceMismatchTooHigh
+  | .nonceMismatchTooLow _ => some txNonceMismatchTooLow
+  | .priorityGreaterThanMaxFee _ => some txPriorityGreaterThanMaxFeePerGas
+  | .senderNotEoa _ => some txSenderNotEoa
+  | .type3BlobCountExceeded _ => some txType3TxBlobCountExceeded
+  | .type3BlobCountLimitExceeded _ => some txType3TxBlobCountExceeded
+  | .type3ContractCreation _ => some txType3TxContractCreation
+  | .type3InvalidBlobVersionedHash _ => some txType3TxInvalidBlobVersionedHash
+  | .type3ZeroBlobs _ => some txType3TxZeroBlobs
+  | .type4ContractCreation _ => some txType4TxContractCreation
+  | .emptyAuthorizationList _ => some txType4EmptyAuthorizationList
 
-/-- The routes from Jaune's actual errors to canonical identities.
+/-- The official identity of a block-validation rejection.
 
-Registering a route is a claim that a specific producer raises a specific
-official identity. The header, post-transition, transaction-validation and RLP
-producers are now precise enough for that claim. In particular, nonce direction,
-intrinsic gas, the 256-bit gas-price product, and each type-3 rule have distinct
-tags rather than sharing a broad `InvalidTransaction` string. The three RLP
-identities are exact here: a 64-bit scalar overflow has its own route, omission
-of the post-Shanghai withdrawals component has its own route, and the remaining
-strict structural/canonical encoding failures route to structures encoding.
-
-One block tag is deliberately absent, and its absence is the fail-closed
-choice rather than an oversight: `headerNonceTag` is a real consensus rule that the Prague
-fixture vocabulary has no identity for. A block rejected for one of them cannot
+One reason is deliberately unmapped, and its `none` is the fail-closed choice
+rather than an oversight: `headerNonce` is a real consensus rule that the
+Prague fixture vocabulary has no identity for. A block rejected for it cannot
 be scored against any expected identity, so it must be reported as an unknown
-actual error -- not silently attached to whichever identity looks closest. -/
-def actualRoutes : List ActualRoute :=
-  [ (gasLimitTooBigTag, blockGasLimitTooBig),
-    (gasLimitAdjustmentTag, blockInvalidGasLimit),
-    (gasUsedOverflowTag, blockGasUsedOverflow),
-    (gasUsedMismatchTag, blockInvalidGasUsed),
-    (blobGasUsedTag, blockInvalidGasUsed),
-    (excessBlobGasTag, blockInvalidGasUsed),
-    (timestampOlderThanParentTag, blockInvalidBlockTimestampOlderThanParent),
-    (blockNumberTag, blockInvalidBlockNumber),
-    (baseFeePerGasTag, blockInvalidBaseFeePerGas),
-    (difficultyOverParisTag, blockImportImpossibleDifficultyOverParis),
-    (ommersOverParisTag, blockImportImpossibleUnclesOverParis),
-    (extraDataTooBigTag, blockExtraDataTooBig),
-    (unknownParentTag, blockUnknownParent),
-    (unknownParentZeroTag, blockUnknownParentZero),
-    (stateRootTag, blockInvalidStateRoot),
-    (transactionsRootTag, blockInvalidTransactionsRoot),
-    (receiptsRootTag, blockInvalidReceiptsRoot),
-    (logBloomTag, blockInvalidLogBloom),
-    (depositEventLayoutTag, blockInvalidDepositEventLayout),
-    (systemContractCallFailedTag, blockSystemContractCallFailed),
-    (withdrawalsRootTag, blockInvalidWithdrawalsRoot),
-    (requestsHashTag, blockInvalidRequests),
-    (blockRlpSizeExceededTag, blockRlpBlockLimitExceeded),
-    (rlpFieldOverflow64Tag, blockRlpInvalidFieldOverflow64),
-    (rlpWithdrawalsNotReadTag, blockRlpWithdrawalsNotRead),
-    (rlpStructureTag, blockRlpStructuresEncoding),
-    (rlpFixedWidthTag, blockRlpStructuresEncoding),
-    (rlpFieldOverflow256Tag, blockRlpStructuresEncoding),
-    (rlpLeadingZerosTag, blockRlpStructuresEncoding),
-    (rlpRoundTripTag, blockRlpStructuresEncoding),
-    (gasPriceProductOverflowTag, txGasLimitPriceProductOverflow),
-    (gasAllowanceExceededTag, txGasAllowanceExceeded),
-    (initcodeSizeExceededTag, txInitcodeSizeExceeded),
-    (insufficientAccountFundsTag, txInsufficientAccountFunds),
-    (insufficientMaxFeePerGasTag, txInsufficientMaxFeePerGas),
-    (insufficientMaxFeePerBlobGasTag, txInsufficientMaxFeePerGas),
-    (intrinsicGasTooLowTag, txIntrinsicGasTooLow),
-    (transactionGasLimitExceededTag, txGasLimitExceedsMaximum),
-    (invalidChainIdTag, txInvalidChainId),
-    (nonceIsMaxTag, txNonceIsMax),
-    (nonceMismatchTooHighTag, txNonceMismatchTooHigh),
-    (nonceMismatchTooLowTag, txNonceMismatchTooLow),
-    (priorityGreaterThanMaxFeeTag, txPriorityGreaterThanMaxFeePerGas),
-    ("InvalidSignatureError", txSenderNotEoa),
-    (senderNotEoaTag, txSenderNotEoa),
-    (type3BlobCountExceededTag, txType3TxBlobCountExceeded),
-    (type3BlobCountLimitExceededTag, txType3TxBlobCountExceeded),
-    (type3ContractCreationTag, txType3TxContractCreation),
-    (type3InvalidBlobVersionedHashTag, txType3TxInvalidBlobVersionedHash),
-    (type3ZeroBlobsTag, txType3TxZeroBlobs),
-    (emptyAuthorizationListTag, txType4EmptyAuthorizationList),
-    (type4ContractCreationTag, txType4TxContractCreation) ]
+actual reason -- not silently attached to whichever identity looks closest. -/
+def ofBlockValidationError : BlockValidationError → Option FixtureException
+  | .gasLimitTooBig _ => some blockGasLimitTooBig
+  | .gasLimitAdjustment _ => some blockInvalidGasLimit
+  | .gasUsedOverflow _ => some blockGasUsedOverflow
+  | .gasUsedMismatch _ => some blockInvalidGasUsed
+  | .timestampOlderThanParent _ => some blockInvalidBlockTimestampOlderThanParent
+  | .blockNumber _ => some blockInvalidBlockNumber
+  | .baseFeePerGas _ => some blockInvalidBaseFeePerGas
+  | .difficultyOverParis _ => some blockImportImpossibleDifficultyOverParis
+  | .ommersOverParis _ => some blockImportImpossibleUnclesOverParis
+  | .extraDataTooBig _ => some blockExtraDataTooBig
+  | .unknownParent _ => some blockUnknownParent
+  | .unknownParentZero _ => some blockUnknownParentZero
+  | .stateRoot _ => some blockInvalidStateRoot
+  | .transactionsRoot _ => some blockInvalidTransactionsRoot
+  | .receiptsRoot _ => some blockInvalidReceiptsRoot
+  | .logBloom _ => some blockInvalidLogBloom
+  | .withdrawalsRoot _ => some blockInvalidWithdrawalsRoot
+  | .headerNonce _ => none
+  | .excessBlobGas _ => some blockInvalidGasUsed
+  | .blobGasUsed _ => some blockInvalidGasUsed
+  | .requestsHash _ => some blockInvalidRequests
+  | .depositEventLayout _ => some blockInvalidDepositEventLayout
+  | .systemContractCallFailed _ => some blockSystemContractCallFailed
+  | .blockRlpSizeExceeded _ => some blockRlpBlockLimitExceeded
 
-/-- The block tags with no fixture identity, listed so the coverage checks can
-assert that every block tag is either routed or knowingly unrouted. -/
-def unroutedBlockTags : List String :=
-  [ headerNonceTag ]
+/-- The official identity of a sender-recovery rejection. Only a malformed
+signature has one; the other cryptographic reasons fail closed. -/
+def ofCryptoError : CryptoError → Option FixtureException
+  | .invalidSignature _ => some txSenderNotEoa
+  | .pointCompression _ => none
+  | .value _ => none
 
-/-- Classify an actual error against the registered routes. -/
-def classify (err : String) : Option FixtureException :=
-  classifyWith actualRoutes err
+/-- The classifier: each typed candidate-rejection reason maps directly to at
+most one official identity. This is total over `BlockRejection`, so every
+rejection arm is deliberately assigned; an `ImportFailure` has no arm here at
+all, which is what makes "a context, support, harness, internal, or VM
+failure can never score as an expected rejection" a fact about types rather
+than a convention about strings. -/
+def ofBlockRejection : BlockRejection → Option FixtureException
+  | .transaction reason => ofTxValidationError reason
+  | .block reason => ofBlockValidationError reason
+  | .decode reason => ofDecodeError reason
+  | .senderRecovery reason => ofCryptoError reason
 
-/-- The matcher: succeed only when the one identity classified from the actual
-error is a member of the parsed expected set. (`matches` itself is a reserved
-token in Lean, hence the name.) -/
-def matchesSet (expected : List FixtureException) (actual : String) : Bool :=
-  match classify actual with
+/-- The matcher: succeed only when the one identity of the actual rejection is
+a member of the parsed expected set. (`matches` itself is a reserved token in
+Lean, hence the name.) -/
+def matchesSet (expected : List FixtureException) (actual : BlockRejection) : Bool :=
+  match ofBlockRejection actual with
   | none => false
   | some a => expected.contains a
-
-/-- The string-level matcher, with the diagnostics the runner needs on failure:
-both the raw actual error and its canonical reading (or the fact that it has
-none). Returns the matched identity so a caller can report *which* alternative
-was hit. -/
-def matchesExpectation (expected actual : String) : Except String FixtureException := do
-  let es ← parseExpectation expected
-  match classify actual with
-  | none =>
-    .error s!"unknown actual error {repr actual} : it maps to no canonical \
-              exception identity, expected one of {es.map toString}"
-  | some a =>
-    if es.contains a then
-      .ok a
-    else
-      .error s!"exception mismatch : actual {repr actual} is {a.toString}, \
-                expected one of {es.map toString}"
 
 end FixtureException
 
@@ -500,211 +497,88 @@ def fixtureInventory : List String :=
 #guard parseRejects "InvalidBlock"                                         -- old broad category
 #guard parseRejects "BlockException.INVALID_GASLIMIT|InvalidBlock"
 
--- The classifier's route semantics, exercised against a synthetic table: the
--- real `actualRoutes` is still empty by design.
-private def sampleRoutes : List ActualRoute :=
-  [ ("InvalidGasLimitAbsolute", blockGasLimitTooBig),
-    ("InvalidGasLimitAdjustment", blockInvalidGasLimit) ]
+----------------- CONSTRUCTOR-CLASSIFICATION CHECKS ------------------
 
--- An exact message, and a tag-prefix ending at the fixed " : " delimiter.
-#guard classifyWith sampleRoutes "InvalidGasLimitAbsolute" == some blockGasLimitTooBig
-#guard classifyWith sampleRoutes "InvalidGasLimitAbsolute : gasLimit = 2^63"
-  == some blockGasLimitTooBig
-#guard classifyWith sampleRoutes "InvalidGasLimitAdjustment : delta too large"
-  == some blockInvalidGasLimit
+-- Totality of the deliberate assignment: every decode and transaction reason
+-- has an identity; exactly one block reason (the header nonce) is knowingly
+-- unmapped; and of the cryptographic reasons only the malformed signature
+-- classifies.
+#guard DecodeError.all.all (fun e => (ofDecodeError e).isSome)
+#guard TxValidationError.all.all (fun e => (ofTxValidationError e).isSome)
+#guard (BlockValidationError.all.filter
+  (fun e => (ofBlockValidationError e).isNone)).length = 1
+#guard (ofBlockValidationError (.headerNonce .none)).isNone
+#guard (ofBlockValidationError (.headerNonce (.text "detail"))).isNone
+#guard (ofCryptoError (.invalidSignature .none)) == some txSenderNotEoa
+#guard (ofCryptoError (.pointCompression .none)).isNone
+#guard (ofCryptoError (.value .none)).isNone
 
--- A registered tag is not a substring or suffix matcher, and the delimiter is
--- fixed: only " : " opens the detail text.
-#guard (classifyWith sampleRoutes "InvalidGasLimitAbsolute: gasLimit").isNone
-#guard (classifyWith sampleRoutes "InvalidGasLimitAbsoluteX").isNone
-#guard (classifyWith sampleRoutes "Error: InvalidGasLimitAbsolute").isNone
-#guard (classifyWith sampleRoutes "wrapped InvalidGasLimitAbsolute : detail").isNone
-
--- The strict block-RLP routes are one-to-one at the producer boundary. In
--- particular, the two withdrawal-index overflows cannot be confused with the
--- later re-encoding invariant, and an omitted withdrawals list cannot be
--- mistaken for an arbitrary malformed list.
-#guard classify
-  s!"{rlpFieldOverflow64Tag} : withdrawal globalIndex scalar is 9 bytes"
-    == some blockRlpInvalidFieldOverflow64
-#guard classify
-  s!"{rlpWithdrawalsNotReadTag} : post-Shanghai block body omits the withdrawals list"
-    == some blockRlpWithdrawalsNotRead
-#guard classify
-  s!"{rlpStructureTag} : block : expected four items"
-    == some blockRlpStructuresEncoding
-#guard classify
-  s!"{rlpRoundTripTag} : decoded block does not re-encode byte-for-byte"
-    == some blockRlpStructuresEncoding
-#guard (classifyWith sampleRoutes "").isNone
-
--- Unregistered errors do not classify. In particular the old broad strings the
--- current oracle accepts must never become an identity by themselves.
-#guard (classifyWith sampleRoutes "InvalidBlock").isNone
-#guard (classifyWith sampleRoutes "InvalidBlock : some detail").isNone
-#guard (classifyWith sampleRoutes "InvalidTransaction").isNone
-#guard (classifyWith sampleRoutes "DecodingError : unexpected list length").isNone
-#guard (classifyWith sampleRoutes "EncodingError").isNone
-
--- The real route table is complete, but `classify` still recognizes nothing it
--- has not been told about.
-#guard (classify "InvalidBlock").isNone
-#guard (classify "InvalidTransaction").isNone
-#guard (classify "InvalidTransaction : some detail").isNone
-#guard (classify "RlpError : arbitrary malformed input").isNone
-#guard (classify "InvalidGasLimitAbsolute").isNone
-
--- Each route key is a real producer tag and is registered once. Several
--- distinct structural/canonical RLP failures intentionally share the official
--- `RLP_STRUCTURES_ENCODING` identity, but a single actual tag still has only
--- one canonical reading.
-def routedRlpTags : List String :=
-  [ rlpFieldOverflow64Tag, rlpWithdrawalsNotReadTag, rlpStructureTag,
-    rlpFixedWidthTag, rlpFieldOverflow256Tag, rlpLeadingZerosTag,
-    rlpRoundTripTag ]
-
-#guard actualRoutes.length = 52
-#guard (actualRoutes.map Prod.fst).eraseDups.length = 52
-#guard (actualRoutes.map Prod.snd).eraseDups.length = 43
-#guard actualRoutes.all fun r =>
-  blockExceptionTags.contains r.fst || routedRlpTags.contains r.fst ||
-    transactionExceptionTags.contains r.fst ||
-    r.fst = insufficientMaxFeePerBlobGasTag || r.fst = blobGasUsedTag ||
-    r.fst = excessBlobGasTag || r.fst = "InvalidSignatureError"
-#guard routedRlpTags.length = 7
-#guard routedRlpTags.eraseDups.length = 7
-#guard routedRlpTags.all fun t => (actualRoutes.map Prod.fst).contains t
-#guard transactionExceptionTags.length = 21
-#guard transactionExceptionTags.eraseDups.length = 21
-#guard transactionExceptionTags.all fun t => (actualRoutes.map Prod.fst).contains t
+-- Classification reads the constructor, never the diagnostic payload: any
+-- detail text yields the same identity.
+#guard ofBlockRejection (.block (.gasLimitTooBig .none))
+  == ofBlockRejection (.block (.gasLimitTooBig (.text "gas limit = 2^63")))
+#guard ofBlockRejection (.transaction (.intrinsicGasTooLow (.text "x")))
+  == some txIntrinsicGasTooLow
+#guard ofBlockRejection (.decode (.fieldOverflow64 (.text "nine bytes")))
+  == some blockRlpInvalidFieldOverflow64
+#guard ofBlockRejection (.senderRecovery (.invalidSignature (.text "bad v")))
+  == some txSenderNotEoa
 
 -- Coverage in the fixture-to-producer direction: every one of the 43
--- identities generated from the Prague corpus has at least one actual route.
--- A newly observed expected identity therefore cannot silently remain
--- unclassifiable.
-#guard all.all fun e => actualRoutes.any fun r => r.snd == e
-
--- Coverage in the producer-to-fixture direction: each registered actual prefix
--- occurs once and classifies to exactly its declared identity, both bare and
--- with detail after the fixed delimiter.
-#guard actualRoutes.all fun r =>
-  (actualRoutes.filter fun r' => hasErrorType r.fst r'.fst).length = 1
-#guard actualRoutes.all fun r =>
-  (actualRoutes.filter fun r' =>
-    hasErrorType s!"{r.fst} : producer detail" r'.fst).length = 1
-#guard actualRoutes.all fun r =>
-  classify r.fst == some r.snd &&
-    classify s!"{r.fst} : producer detail" == some r.snd
-
--- Every block tag is either routed or knowingly unrouted -- a new rejection
--- reason cannot be added without landing in one list or the other.
-#guard unroutedBlockTags.length = 1
-#guard unroutedBlockTags.all fun t => blockExceptionTags.contains t
-#guard blockExceptionTags.all fun t =>
-  (actualRoutes.map Prod.fst).contains t || unroutedBlockTags.contains t
-#guard unroutedBlockTags.all fun t => ¬ (actualRoutes.map Prod.fst).contains t
-
--- Every producer tag classifies to its own identity, bare and with detail.
-#guard classify gasLimitTooBigTag == some blockGasLimitTooBig
-#guard classify s!"{gasLimitTooBigTag} : gas limit = 9223372036854775808 ≥ \
-  absolute maximum = 9223372036854775808" == some blockGasLimitTooBig
-#guard classify gasLimitAdjustmentTag == some blockInvalidGasLimit
-#guard classify s!"{gasLimitAdjustmentTag} : detail" == some blockInvalidGasLimit
-#guard classify s!"{unknownParentTag} : detail" == some blockUnknownParent
-#guard classify s!"{unknownParentZeroTag} : detail" == some blockUnknownParentZero
-#guard classify s!"{gasUsedOverflowTag} : detail" == some blockGasUsedOverflow
-#guard classify s!"{gasUsedMismatchTag} : detail" == some blockInvalidGasUsed
-#guard classify s!"{ommersOverParisTag} : detail"
-  == some blockImportImpossibleUnclesOverParis
-#guard classify s!"{difficultyOverParisTag} : detail"
-  == some blockImportImpossibleDifficultyOverParis
-#guard classify s!"{stateRootTag} : detail" == some blockInvalidStateRoot
-
--- Every transaction producer reaches its exact official identity. The full
--- route-table checks above cover all fifteen; these representatives pin the
--- distinctions that previously shared broad strings.
-#guard classify s!"{intrinsicGasTooLowTag} : detail" == some txIntrinsicGasTooLow
-#guard classify s!"{nonceIsMaxTag} : detail" == some txNonceIsMax
-#guard classify s!"{nonceMismatchTooLowTag} : detail" == some txNonceMismatchTooLow
-#guard classify s!"{nonceMismatchTooHighTag} : detail" == some txNonceMismatchTooHigh
-#guard classify s!"{gasPriceProductOverflowTag} : detail"
-  == some txGasLimitPriceProductOverflow
-#guard classify s!"{type3ZeroBlobsTag} : detail" == some txType3TxZeroBlobs
-#guard classify s!"{type3BlobCountExceededTag} : detail"
-  == some txType3TxBlobCountExceeded
-#guard classify s!"{type3ContractCreationTag} : detail"
-  == some txType3TxContractCreation
-#guard classify s!"{type3InvalidBlobVersionedHashTag} : detail"
-  == some txType3TxInvalidBlobVersionedHash
+-- identities is reachable from some typed rejection constructor, so a newly
+-- observed expected identity cannot silently remain unclassifiable.
+#guard all.all fun e =>
+  TxValidationError.all.any (fun r => ofTxValidationError r == some e) ||
+  BlockValidationError.all.any (fun r => ofBlockValidationError r == some e) ||
+  DecodeError.all.any (fun r => ofDecodeError r == some e) ||
+  ofCryptoError (.invalidSignature .none) == some e
 
 -- The pairs the fixtures insist are different reasons really do land on
--- different identities. These are the distinctions the whole step exists for:
--- an out-of-range gas limit is not a gas limit that drifted from its parent,
--- a header claiming more gas than it allows is not a header whose claim
--- disagrees with execution, and a zero parent hash is not an unknown one.
-#guard classify gasLimitTooBigTag != classify gasLimitAdjustmentTag
-#guard classify gasUsedOverflowTag != classify gasUsedMismatchTag
-#guard classify unknownParentTag != classify unknownParentZeroTag
-#guard classify nonceMismatchTooLowTag != classify nonceMismatchTooHighTag
-#guard classify intrinsicGasTooLowTag != classify gasAllowanceExceededTag
+-- different identities. These are the distinctions the whole vocabulary
+-- exists for: an out-of-range gas limit is not a gas limit that drifted from
+-- its parent, a header claiming more gas than it allows is not a header whose
+-- claim disagrees with execution, and a zero parent hash is not an unknown
+-- one.
+#guard ofBlockValidationError (.gasLimitTooBig .none)
+  != ofBlockValidationError (.gasLimitAdjustment .none)
+#guard ofBlockValidationError (.gasUsedOverflow .none)
+  != ofBlockValidationError (.gasUsedMismatch .none)
+#guard ofBlockValidationError (.unknownParent .none)
+  != ofBlockValidationError (.unknownParentZero .none)
+#guard ofTxValidationError (.nonceMismatchTooLow .none)
+  != ofTxValidationError (.nonceMismatchTooHigh .none)
+#guard ofTxValidationError (.intrinsicGasTooLow .none)
+  != ofTxValidationError (.gasAllowanceExceeded .none)
 
--- The knowingly unrouted rules classify to nothing, so a block rejected for one
--- of them fails loudly instead of borrowing a neighbouring identity.
-#guard unroutedBlockTags.all fun t => (classify t).isNone
-#guard unroutedBlockTags.all fun t => (classify s!"{t} : detail").isNone
-
--- Strict RLP failures are routed, but broad legacy decoder categories remain
--- unclassifiable.
-#guard classify rlpStructureTag == some blockRlpStructuresEncoding
-#guard classify rlpFieldOverflow64Tag == some blockRlpInvalidFieldOverflow64
-#guard (classify "DecodingError").isNone
-#guard (classify "EncodingError").isNone
+-- The distinct strict-decode reasons that share the official structures
+-- identity still share it -- deliberately -- while the 64-bit overflow and
+-- the omitted-withdrawals reasons keep their own.
+#guard ofDecodeError (.rlpStructure .none) == some blockRlpStructuresEncoding
+#guard ofDecodeError (.roundTrip .none) == some blockRlpStructuresEncoding
+#guard ofDecodeError (.leadingZeros .none) == some blockRlpStructuresEncoding
+#guard ofDecodeError (.fieldOverflow64 .none) == some blockRlpInvalidFieldOverflow64
+#guard ofDecodeError (.withdrawalsNotRead .none) == some blockRlpWithdrawalsNotRead
 
 -- The matcher is set membership on the one classified identity -- never
--- "some failure occurred". Shown against the synthetic table so the semantics
--- are pinned before `actualRoutes` is filled in.
-private def matchesWith (routes : List ActualRoute)
-  (expected : List FixtureException) (actual : String) : Bool :=
-  match classifyWith routes actual with
-  | none => false
-  | some a => expected.contains a
-
-#guard matchesWith sampleRoutes [blockGasLimitTooBig] "InvalidGasLimitAbsolute"
-#guard matchesWith sampleRoutes [blockInvalidGasLimit, blockGasLimitTooBig]
-  "InvalidGasLimitAbsolute : detail"
--- The right kind of failure, but not the expected identity: still a failure.
-#guard ¬ matchesWith sampleRoutes [blockInvalidGasLimit] "InvalidGasLimitAbsolute"
--- An unclassifiable error never matches, no matter how broad the expected set.
-#guard ¬ matchesWith sampleRoutes all "InvalidBlock"
-#guard ¬ matchesWith sampleRoutes all "InvalidBlock : gas limit is wrong"
--- An empty expected set matches nothing; `parseExpectation` cannot produce one.
-#guard ¬ matchesWith sampleRoutes [] "InvalidGasLimitAbsolute"
-
--- The real route table, end to end. An unregistered error still matches
--- nothing, however broad the expected set.
-#guard ¬ matchesSet all "InvalidGasLimitAbsolute"
-#guard ¬ matchesSet all "InvalidBlock : gas limit is wrong"
-
--- The `GasLimitHigherThan2p63m1` case, from producer to verdict: the real error
--- text `checkGasLimit` raises for that fixture's numbers, matched against the
--- expectation string the fixture actually carries.
+-- "some failure occurred".
 #guard matchesSet [blockGasLimitTooBig]
-  s!"{gasLimitTooBigTag} : gas limit = 9223372036854775808 ≥ \
-     absolute maximum = 9223372036854775808"
-#guard
-  (matchesExpectation "BlockException.GASLIMIT_TOO_BIG"
-    s!"{gasLimitTooBigTag} : gas limit = 9223372036854775808 ≥ \
-       absolute maximum = 9223372036854775808").toOption
-  == some blockGasLimitTooBig
+  (.block (.gasLimitTooBig (.text "gas limit = 9223372036854775808 ≥ \
+     absolute maximum = 9223372036854775808")))
+-- The right kind of failure, but not the expected identity: still a failure.
+#guard ¬ matchesSet [blockInvalidGasLimit] (.block (.gasLimitTooBig .none))
+-- An unmapped reason never matches, no matter how broad the expected set.
+#guard ¬ matchesSet all (.block (.headerNonce .none))
+#guard ¬ matchesSet all (.senderRecovery (.pointCompression .none))
+-- An empty expected set matches nothing; `parseExpectation` cannot produce one.
+#guard ¬ matchesSet [] (.block (.gasLimitTooBig .none))
+
+-- The `GasLimitHigherThan2p63m1` case, from typed reason to verdict, against
+-- the expectation string the fixture actually carries.
+#guard (parseExpectation "BlockException.GASLIMIT_TOO_BIG").toOption.all
+  (fun expected => matchesSet expected (.block (.gasLimitTooBig .none)))
 -- The same rejection against the *adjustment* expectation is still a failure:
 -- the block was rejected, but not for the reason the fixture names.
-#guard (matchesExpectation "BlockException.INVALID_GASLIMIT"
-  s!"{gasLimitTooBigTag} : detail").toOption.isNone
-
--- `matchesExpectation` fails closed on every channel: unknown expected token,
--- unknown actual error, and a classified-but-unexpected identity.
-#guard (matchesExpectation "NotAnIdentity" "InvalidGasLimitAbsolute").toOption.isNone
-#guard (matchesExpectation "BlockException.GASLIMIT_TOO_BIG" "InvalidBlock").toOption.isNone
-#guard (matchesExpectation "BlockException.GASLIMIT_TOO_BIG" "").toOption.isNone
+#guard (parseExpectation "BlockException.INVALID_GASLIMIT").toOption.all
+  (fun expected => ¬ matchesSet expected (.block (.gasLimitTooBig .none)))
 
 end Jaune

@@ -200,10 +200,6 @@ def Except.toIO {ξ : Type} : Except String ξ → IO ξ
   | .ok x => .ok x
   | .error err => .throw err
 
-def actualExceptionDiagnostic (err : String) : String :=
-  match FixtureException.classify err with
-  | some actual => actual.toString
-  | none => "<unknown canonical identity>"
 
 /-- Golden-message capture for `~/plans/integrity.md` P0.7.
 
@@ -242,34 +238,46 @@ def fixtureImportRules (spec : NetworkSpec) (chainId : UInt64)
 
 /-- Strictly decode a fixture block once, select its parent snapshot by the
 decoded `parentHash`, and import it into that snapshot through the checked
-core. Both failure channels are collapsed only after being handled explicitly.
+core. The result is the canonical two-level shape: an operational
+`ImportFailure` on the outer channel -- which the runner can only ever report
+as a harness fault, never score -- and a typed candidate verdict on the inner
+one. Nothing is rendered here; text appears only at the logging and reporting
+boundary.
 
 The parent is a `CheckedBlockChain`, so its integrity is evidence rather than
 a recomputation, and the child snapshot this returns carries the same evidence
 -- built from the checks the import already performed. -/
 def evaluateFixtureBlock (spec : NetworkSpec) (chainId : UInt64) (store : ChainStore)
-    (blockRlp : Bytes) : Except String CheckedBlockChain :=
-  match hd : rlpToBlock blockRlp with
-  | .error err => .error err
+    (blockRlp : Bytes) : Except ImportFailure (ImportOutcome CheckedBlockChain) :=
+  match hd : rlpToBlockE blockRlp with
+  | .error reason => .ok (.inr (.decode reason))
   | .ok ⟨block, _⟩ =>
     -- One strict decode, kept as the canonical envelope the checked import
     -- core consumes; the parent is already a checked snapshot, so no state
     -- root is recomputed for it.
     match store.findParent block.header.parentHash with
-    | .error err => .error err
+    | .error reason => .ok (.inr (.block reason))
     | .ok parent =>
       match fixtureImportRules spec chainId parent block.header with
-      | .error failure => .error failure.render
+      | .error failure => .error failure
       | .ok rules =>
-        match him : addBlockToChainChecked rules parent (CanonicalBlock.ofDecode hd) with
-        | .error failure => .error failure.render
-        | .ok (.inr rejection) => .error rejection.render
-        | .ok (.inl _) => .ok (CheckedBlockChain.ofImport him)
+        match him : addBlockToChainChecked rules parent
+            (CanonicalBlock.ofDecode (rlpToBlock_eq_ok_iff.mpr hd)) with
+        | .error failure => .error failure
+        | .ok (.inr rejection) => .ok (.inr rejection)
+        | .ok (.inl _) => .ok (.inl (CheckedBlockChain.ofImport him))
 
+/-- Score one failed block evaluation against the fixture's expected set.
+
+`err` is the rendered diagnostic (logged for the golden corpus and echoed in
+reports); `actual?` is the constructor classification -- `none` for an
+operational `ImportFailure`, which has no classification by type, and for the
+knowingly unmapped rejection reasons. Classification never reads `err`. -/
 def requireExpectedFailure (idx : Nat) (chainname : String)
-    (expected : List FixtureException) (err : String) : IO Unit := do
+    (expected : List FixtureException) (err : String)
+    (actual? : Option FixtureException) : IO Unit := do
   logObservedMessage err
-  match FixtureException.classify err with
+  match actual? with
   | none =>
     .throw s!"BLOCK #{idx} ({chainname}) failed with an unknown actual error\n\
       raw actual: {repr err}\ncanonical actual: <unknown>\n\
@@ -305,22 +313,36 @@ def processBlockJsons (spec : NetworkSpec) (chainId : UInt64) (store : ChainStor
         | .error err =>
           .throw s!"BLOCK #{idx} ({chainname}) has invalid expectException: {err}"
     match evaluateFixtureBlock spec chainId store blockRlp with
-    | .error err =>
+    | .error failure =>
+      -- An operational failure: the question was not answered, so this can
+      -- never satisfy an expected exception -- with or without an
+      -- expectation, the fixture fails.
       match expected? with
       | none =>
         .throw s!"BLOCK #{idx} ({chainname}) was expected valid but failed\n\
-          raw actual: {repr err}\ncanonical actual: {actualExceptionDiagnostic err}"
+          raw actual: {repr failure.render}\ncanonical actual: <unknown canonical identity>"
       | some expected =>
-        requireExpectedFailure idx chainname expected err
+        requireExpectedFailure idx chainname expected failure.render none
         processBlockJsons spec chainId store rest
-    | .ok child =>
+    | .ok (.inr rejection) =>
+      match expected? with
+      | none =>
+        .throw s!"BLOCK #{idx} ({chainname}) was expected valid but failed\n\
+          raw actual: {repr rejection.render}\ncanonical actual: \
+          {((FixtureException.ofBlockRejection rejection).map
+             FixtureException.toString).getD "<unknown canonical identity>"}"
+      | some expected =>
+        requireExpectedFailure idx chainname expected rejection.render
+          (FixtureException.ofBlockRejection rejection)
+        processBlockJsons spec chainId store rest
+    | .ok (.inl child) =>
       match expected? with
       | some expected =>
         .throw s!"BLOCK #{idx} ({chainname}) was expected invalid but imported\n\
           expected: {expected.map FixtureException.toString}\n\
           computed tip: {child.tipHash}"
       | none =>
-        processBlockJsons spec chainId (store.addResult (.ok child)) rest
+        processBlockJsons spec chainId (store.addResult (.inl child)) rest
   | [] => .ok store
 
 /-- Check a fixture's own declared blob schedule against the rules this run
@@ -415,7 +437,7 @@ def runBlockchainStTest (spec : NetworkSpec) : (Nat × String × Lean.Json) → 
       processBlockJsons spec chainId.toUInt64 (.init genesisChecked)
         blockJsons.putIndex
     let lastBlockHash ← json.find "lastblockhash" >>= Lean.Json.toIoB256
-    let chain ← (store.findLast lastBlockHash).toIO
+    let chain ← ((store.findLast lastBlockHash).mapError ImportFailure.render).toIO
     let lastBlockHash' := chain.tipHash
     .guard
       (lastBlockHash = lastBlockHash')
