@@ -1310,4 +1310,497 @@ def setDelegation (msg : Msg) : Except String (Msg × B256) := do
       }
   .ok ⟨msg, refundCounter⟩
 
+--------------- CANONICALITY THROUGH EXECUTION (P0.4, STEP 4) ---------------
+
+-- Checkpoint 2, frame half: canonicality through delegation access, message
+-- initialisation, frame enter/settle/resume, the step machinery, and the
+-- fueled driver. Restoration sources are exactly the ones the invariant
+-- carries: a message's saved pair (`Frame.Canonical`, both messages), a
+-- settlement error payload (`Except.CanonicalSettle`), and a child world
+-- incorporated wholesale.
+
+/-- Delegation access touches only the accessed-address set. Stated over the
+projection because callers consume the result through an irrefutable `let`. -/
+theorem accessDelegation_canonical {devm : Devm} (h : devm.Canonical)
+    (adr : Adr) : (accessDelegation devm adr).2.2.2.2.Canonical := by
+  unfold accessDelegation
+  dsimp only
+  split
+  · exact Devm.Canonical.of_world_eq h rfl
+  · exact h
+
+/-- The eq-conditioned form, for walks that destructure the tuple. -/
+theorem accessDelegation_eq_canonical {devm d' : Devm} {adr : Adr} {b : Bool}
+    {a2 : Adr} {code : ByteArray} {n : Nat} (h : devm.Canonical)
+    (heq : accessDelegation devm adr = (b, a2, code, n, d')) : d'.Canonical := by
+  have hc := accessDelegation_canonical h adr
+  rw [heq] at hc
+  exact hc
+
+/-- The create-message initialiser clears the child's storage, marks it
+created, and bumps its nonce -- all through named canonical mutators. -/
+theorem processCreateMessage.msg_canonical {msg : Msg} (h : msg.Canonical) :
+    (processCreateMessage.msg msg).Canonical :=
+  Msg.Canonical.withBenv h
+    (Benv.Canonical.incrNonce
+      (Benv.Canonical.addCreatedAccount
+        (Benv.Canonical.setStor h.1 _ Stor.canonical_empty) _) _)
+
+theorem processCreateMessage.chargeCodeGas_canonical {rules : ForkRules}
+    {devm : Devm} (h : devm.Canonical) :
+    (processCreateMessage.chargeCodeGas rules devm).Canonical := by
+  unfold processCreateMessage.chargeCodeGas
+  dsimp only
+  split
+  · exact h
+  · refine Except.CanonicalOn.bind (liftMachExecution_canonical h) fun d hd => ?_
+    split
+    · exact hd
+    · exact hd
+
+/-- An exceptional create halt restores the saved pair; the failing machine
+contributes nothing to the world. -/
+theorem processCreateMessage.exceptionalHalt_canonical {devm : Devm}
+    (err : String) {st : State} {tra : Tra}
+    (hst : State.Canonical st) (htra : Tra.Canonical tra) :
+    (processCreateMessage.exceptionalHalt devm err st tra).Canonical :=
+  Devm.Canonical.of_world_eq (Devm.canonical_rollback (devm := devm) hst htra) rfl
+
+theorem initSevm_canonical {msg : Msg} (h : msg.Canonical) :
+    (initSevm msg).Canonical := h.1.2
+
+theorem initDevm_canonical {msg : Msg} (h : msg.Canonical) :
+    (initDevm msg).Canonical := ⟨h.1.1, h.2⟩
+
+theorem initEvm_canonical {msg : Msg} (h : msg.Canonical) :
+    (initEvm msg).Canonical := ⟨h.1.2, h.1.1, h.2⟩
+
+/-- A successful pre-execution value transfer moves balances through
+`subBal`/`addBal` only. -/
+theorem Msg.benvAfterTransfer_ok_canonical {msg : Msg} (h : msg.Canonical)
+    {benv : Benv} (hb : msg.benvAfterTransfer = .ok benv) : benv.Canonical := by
+  unfold Msg.benvAfterTransfer at hb
+  split at hb
+  · cases hsb : msg.benv.subBal msg.caller msg.value with
+    | none =>
+      rw [hsb] at hb
+      exact absurd hb (by simp [Option.toExcept, bind, Except.bind])
+    | some b1 =>
+      rw [hsb] at hb
+      simp only [Option.toExcept, bind, Except.bind, Except.ok.injEq] at hb
+      rw [← hb]
+      exact Benv.Canonical.addBal (Benv.Canonical.subBal h.1 hsb) _ _
+  · cases hb
+    exact h.1
+
+/-- A failed pre-execution transfer reports exactly the message's saved
+pair, which the invariant already covers. -/
+theorem Msg.benvAfterTransfer_error_canonical {msg : Msg} (h : msg.Canonical)
+    {e} (he : msg.benvAfterTransfer = .error e) :
+    State.Canonical e.2.1 ∧ Tra.Canonical e.2.2.2 := by
+  unfold Msg.benvAfterTransfer at he
+  split at he
+  · cases hsb : msg.benv.subBal msg.caller msg.value with
+    | none =>
+      rw [hsb] at he
+      simp only [Option.toExcept, bind, Except.bind, Except.error.injEq] at he
+      rw [← he]
+      exact ⟨h.1.1, h.2⟩
+    | some b1 =>
+      rw [hsb] at he
+      exact absurd he (by simp [Option.toExcept, bind, Except.bind])
+  · exact absurd he (by simp)
+
+/-- Settling an execution result preserves canonicality on both channels: a
+halt zeroes gas and clears output (machine-only), a revert marks the error
+(machine-only), and everything else forwards the failing machine's world into
+the settlement payload. -/
+theorem executeCode.handleError_canonicalSettle {raw}
+    (hr : Execution.Canonical raw) :
+    (executeCode.handleError raw).CanonicalSettle := by
+  unfold executeCode.handleError
+  split
+  · exact hr
+  · split
+    · exact Devm.Canonical.of_world_eq hr rfl
+    · split
+      · exact Devm.Canonical.of_world_eq hr rfl
+      · exact ⟨hr.1, hr.2⟩
+
+theorem processMessage.settle_canonicalSettle {msg : Msg} (hm : msg.Canonical)
+    {r} (hr : Except.CanonicalSettle r) :
+    (processMessage.settle msg r).CanonicalSettle := by
+  refine Except.CanonicalSettle.bind hr fun d hd => ?_
+  split
+  · exact Msg.Canonical.rollback hm d
+  · exact hd
+
+theorem processCreateMessage.settle_canonicalSettle {msg : Msg}
+    (hm : msg.Canonical) {r} (hr : Except.CanonicalSettle r) :
+    (processCreateMessage.settle msg r).CanonicalSettle := by
+  refine Except.CanonicalSettle.bind hr fun d hd => ?_
+  split
+  · split
+    · next d' heq =>
+        have hok : d'.Canonical := by
+          have hc := processCreateMessage.chargeCodeGas_canonical
+            (rules := msg.benv.stat.rules) hd
+          rw [heq] at hc
+          exact hc
+        exact Devm.Canonical.setCode hok _ _
+    · next err d' heq =>
+        have hce : d'.Canonical := by
+          have hc := processCreateMessage.chargeCodeGas_canonical
+            (rules := msg.benv.stat.rules) hd
+          rw [heq] at hc
+          exact hc
+        split
+        · exact processCreateMessage.exceptionalHalt_canonical _ hm.1.1 hm.2
+        · exact ⟨hce.1, hce.2⟩
+  · exact Msg.Canonical.rollback hm d
+
+/-- Both restoration targets of a frame settlement are covered: the inner
+message at `processMessage.settle`, and the outer one when a create fails its
+code-deposit charge. -/
+theorem Frame.settleMsg_canonicalSettle {f : Frame} (hf : f.Canonical)
+    {r} (hr : Except.CanonicalSettle r) :
+    (f.settleMsg r).CanonicalSettle := by
+  unfold Frame.settleMsg
+  split
+  · exact processCreateMessage.settle_canonicalSettle hf.1
+      (processMessage.settle_canonicalSettle hf.2 hr)
+  · exact processMessage.settle_canonicalSettle hf.2 hr
+
+theorem Frame.settle_canonicalSettle {f : Frame} (hf : f.Canonical)
+    {raw} (hraw : Execution.Canonical raw) :
+    (f.settle raw).CanonicalSettle :=
+  Frame.settleMsg_canonicalSettle hf (executeCode.handleError_canonicalSettle hraw)
+
+theorem Frame.canonical_ofCreate {msg : Msg} (h : msg.Canonical) :
+    (Frame.ofCreate msg).Canonical :=
+  ⟨h, processCreateMessage.msg_canonical h⟩
+
+/-- Code entry either starts a machine over the message's world or finishes a
+precompile without ever touching it. -/
+theorem executeCode.enter_canonical {msg : Msg} (h : msg.Canonical) :
+    Sum.elim Evm.Canonical Execution.Canonical (executeCode.enter msg) := by
+  unfold executeCode.enter
+  split
+  · exact initEvm_canonical h
+  · split
+    · exact executePrecomp_canonical (initDevm_canonical h) _
+    · exact initEvm_canonical h
+
+/-- What a frame entry must preserve: a finished settlement carries canonical
+restoration data, a started machine is canonical outright. -/
+def FrameEntry.Canonical : FrameEntry → Prop
+  | .done r => r.CanonicalSettle
+  | .run evm => evm.Canonical
+
+theorem Frame.enter_canonical {f : Frame} (hf : f.Canonical) :
+    f.enter.Canonical := by
+  unfold Frame.enter
+  rcases hbt : f.inner.benvAfterTransfer with e | benv
+  · exact Frame.settleMsg_canonicalSettle hf
+      (Msg.benvAfterTransfer_error_canonical hf.2 hbt)
+  · have hm : (f.inner.withBenv benv).Canonical :=
+      Msg.Canonical.withBenv hf.2 (Msg.benvAfterTransfer_ok_canonical hf.2 hbt)
+    have hent := executeCode.enter_canonical hm
+    dsimp only
+    rcases henter : executeCode.enter (f.inner.withBenv benv) with evm | raw <;>
+      rw [henter] at hent
+    · exact hent
+    · exact Frame.settle_canonicalSettle hf hent
+
+/-- Resuming a parent needs only the settlement's canonicality: the error
+branch rebuilds the world entirely from the settlement payload, and child
+incorporation takes the child's world wholesale. The parent's own world is
+never a restoration source. -/
+theorem Resume.run_canonical {rsm : Resume} {r} (hr : Except.CanonicalSettle r) :
+    Execution.Canonical (rsm.run r) := by
+  cases rsm with
+  | create parent newAddress =>
+    refine Except.CanonicalOn.bind (liftToExecution_canonical hr) fun c hc => ?_
+    split
+    · exact liftMachExecution_canonical (incorporateChildOnError_canonical hc _)
+    · exact liftMachExecution_canonical (incorporateChildOnSuccess_canonical hc _)
+  | call parent outputIndex outputSize =>
+    refine Except.CanonicalOn.bind (liftToExecution_canonical hr) fun c hc => ?_
+    split
+    · refine Except.CanonicalOn.bind
+        (liftMachExecution_canonical (incorporateChildOnError_canonical hc _))
+        fun d hd => ?_
+      exact Devm.Canonical.of_world_eq hd rfl
+    · refine Except.CanonicalOn.bind
+        (liftMachExecution_canonical (incorporateChildOnSuccess_canonical hc _))
+        fun d hd => ?_
+      exact Devm.Canonical.of_world_eq hd rfl
+
+/-- What one extended step must preserve. The spawn arm carries only the
+frame: `Resume.run_canonical` shows the parent machine is not needed. -/
+def XStep.Canonical : XStep → Prop
+  | .done ex => Execution.Canonical ex
+  | .spawn frame _ => frame.Canonical
+
+/-- What one step must preserve. -/
+def Step.Canonical : Step → Prop
+  | .halt ex => Execution.Canonical ex
+  | .cont _ devm => devm.Canonical
+  | .spawn frame _ _ => frame.Canonical
+
+theorem XStep.ofExcept_canonical {x} (hx : x.CanonicalOn XStep.Canonical) :
+    (XStep.ofExcept x).Canonical := by
+  cases x with
+  | error e => exact hx
+  | ok s => exact hx
+
+theorem Step.ofExecution_canonical (pc : Nat) {x}
+    (hx : Execution.Canonical x) : (Step.ofExecution pc x).Canonical := by
+  cases x with
+  | error e => exact hx
+  | ok devm => exact hx
+
+theorem Step.ofJump_canonical {x}
+    (hx : x.CanonicalOn (fun a => a.2.Canonical)) :
+    (Step.ofJump x).Canonical := by
+  cases x with
+  | error e => exact hx
+  | ok a => exact hx
+
+theorem XStep.toStep_canonical (pc : Nat) {s : XStep} (hs : s.Canonical) :
+    (XStep.toStep pc s).Canonical := by
+  cases s with
+  | done ex => exact Step.ofExecution_canonical pc hs
+  | spawn frame rsm => exact hs
+
+/-- The child message of a call-type instruction lives on the caller's world
+and the frame's original state. -/
+theorem callMsg_canonical {sevm : Sevm} {evm1 : Devm}
+    (hs : sevm.Canonical) (hd : evm1.Canonical)
+    (gas : Nat) (value : B256) (caller target codeAddress : Adr)
+    (shouldTransferValue isStaticcall : Bool) (calldata : Bytes)
+    (code : ByteArray) (disablePrecompiles : Bool) :
+    (callMsg sevm evm1 gas value caller target codeAddress
+      shouldTransferValue isStaticcall calldata code
+      disablePrecompiles).Canonical :=
+  ⟨⟨hd.1, hs⟩, hd.2⟩
+
+theorem createMsg_canonical {sevm : Sevm} {devm : Devm}
+    (hs : sevm.Canonical) (hd : devm.Canonical)
+    (createGas : Nat) (endowment : B256) (newAddress : Adr)
+    (calldata : Bytes) :
+    (createMsg sevm devm createGas endowment newAddress calldata).Canonical :=
+  ⟨⟨hd.1, hs⟩, hd.2⟩
+
+/-- The CREATE-family step: the only world change on the parent's side is the
+sender nonce increment, through its named mutator; the child frame is built
+over the parent's world and the frame's original state. -/
+theorem genericCreate.step_canonical {sevm : Sevm} {devm : Devm}
+    (hs : sevm.Canonical) (hd : devm.Canonical) (endowment : B256)
+    (newAddress : Adr) (memoryIndex memorySize : Nat) :
+    (genericCreate.step sevm devm endowment newAddress memoryIndex
+      memorySize).Canonical := by
+  unfold genericCreate.step
+  refine XStep.ofExcept_canonical ?_
+  refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
+  refine Except.CanonicalOn.bind
+    (Except.canonicalOn_assert (by exact hd)) fun _ _ => ?_
+  dsimp only
+  split
+  · refine Except.CanonicalOn.bind
+      (liftMachExecution_canonical (by exact hd)) fun d hd1 => ?_
+    exact hd1
+  · split
+    · refine Except.CanonicalOn.bind
+        (liftMachExecution_canonical
+          (by exact Devm.Canonical.of_world_eq (Devm.Canonical.incrNonce hd _) rfl))
+        fun d hd1 => ?_
+      exact hd1
+    · refine Except.canonicalOn_ok ?_
+      exact Frame.canonical_ofCreate
+        (createMsg_canonical hs
+          (by exact Devm.Canonical.of_world_eq (Devm.Canonical.incrNonce hd _) rfl)
+          _ _ _ _)
+
+/-- The CALL-family step never changes the parent world: it either refunds
+the stipend at depth zero or spawns the child frame. -/
+theorem genericCall.step_canonical {sevm : Sevm} {devm : Devm}
+    (hs : sevm.Canonical) (hd : devm.Canonical) (gas : Nat) (value : B256)
+    (caller target codeAddress : Adr) (shouldTransferValue isStaticcall : Bool)
+    (inputIndex inputSize outputIndex outputSize : Nat)
+    (code : ByteArray) (disablePrecompiles : Bool) :
+    (genericCall.step sevm devm gas value caller target codeAddress
+      shouldTransferValue isStaticcall inputIndex inputSize outputIndex
+      outputSize code disablePrecompiles).Canonical := by
+  unfold genericCall.step
+  dsimp only
+  split
+  · refine XStep.ofExcept_canonical ?_
+    refine Except.CanonicalOn.bind
+      (liftMachExecution_canonical (by exact hd)) fun d hd1 => ?_
+    exact hd1
+  · exact Frame.canonical_ofCall
+      (callMsg_canonical hs (by exact hd) _ _ _ _ _ _ _ _ _ _)
+
+theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
+    (hs : sevm.Canonical) (hd : devm.Canonical) (x : Xinst) :
+    (Xinst.step sevm devm x).Canonical := by
+  cases x <;> simp only [Xinst.step]
+  case create =>
+    refine XStep.ofExcept_canonical ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
+    refine Except.CanonicalOn.bind (liftMachExecution_canonical hc) fun d hd1 => ?_
+    exact Except.canonicalOn_ok
+      (genericCreate.step_canonical hs (by exact hd1) _ _ _ _)
+  case create2 =>
+    refine XStep.ofExcept_canonical ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn hc) fun e he => ?_
+    refine Except.CanonicalOn.bind (liftMachExecution_canonical he) fun d hd1 => ?_
+    exact Except.canonicalOn_ok
+      (genericCreate.step_canonical hs (by exact hd1) _ _ _ _)
+  case call =>
+    refine XStep.ofExcept_canonical ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn hc) fun d hd1 => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn hd1) fun e he => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn he) fun f hf => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn hf) fun g hg => ?_
+    refine Except.CanonicalOn.bind
+      (liftMachExecution_canonical (accessDelegation_canonical (by exact hg) _))
+      fun d2 hd2 => ?_
+    refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd2) fun _ _ => ?_
+    split
+    · refine Except.CanonicalOn.bind
+        (liftMachExecution_canonical (by exact hd2)) fun d3 hd3 => ?_
+      exact hd3
+    · exact Except.canonicalOn_ok
+        (genericCall.step_canonical hs (by exact hd2)
+          _ _ _ _ _ _ _ _ _ _ _ _ _)
+  case callcode =>
+    refine XStep.ofExcept_canonical ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn hc) fun d hd1 => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn hd1) fun e he => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn he) fun f hf => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn hf) fun g hg => ?_
+    refine Except.CanonicalOn.bind
+      (liftMachExecution_canonical (accessDelegation_canonical (by exact hg) _))
+      fun d2 hd2 => ?_
+    split
+    · refine Except.CanonicalOn.bind
+        (liftMachExecution_canonical (by exact hd2)) fun d3 hd3 => ?_
+      exact hd3
+    · exact Except.canonicalOn_ok
+        (genericCall.step_canonical hs (by exact hd2)
+          _ _ _ _ _ _ _ _ _ _ _ _ _)
+  case delcall =>
+    refine XStep.ofExcept_canonical ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn hc) fun d hd1 => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn hd1) fun e he => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn he) fun f hf => ?_
+    refine Except.CanonicalOn.bind
+      (liftMachExecution_canonical (accessDelegation_canonical (by exact hf) _))
+      fun d2 hd2 => ?_
+    exact Except.canonicalOn_ok
+      (genericCall.step_canonical hs (by exact hd2)
+        _ _ _ _ _ _ _ _ _ _ _ _ _)
+  case statcall =>
+    refine XStep.ofExcept_canonical ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn hc) fun d hd1 => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn hd1) fun e he => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn he) fun f hf => ?_
+    refine Except.CanonicalOn.bind
+      (liftMachExecution_canonical (accessDelegation_canonical (by exact hf) _))
+      fun d2 hd2 => ?_
+    exact Except.canonicalOn_ok
+      (genericCall.step_canonical hs (by exact hd2)
+        _ _ _ _ _ _ _ _ _ _ _ _ _)
+
+theorem Ninst.step_canonical {evm : Evm} (h : evm.Canonical) (n : Ninst) :
+    (Ninst.step evm n).Canonical := by
+  cases n with
+  | push xs prf =>
+    refine Step.ofExecution_canonical _ ?_
+    exact Except.CanonicalOn.bind (liftMachExecution_canonical h.2)
+      fun d hd => liftMachExecution_canonical hd
+  | reg r => exact Step.ofExecution_canonical _ (Rinst.run_canonical h.2 r)
+  | exec x => exact XStep.toStep_canonical _ (Xinst.step_canonical h.1 h.2 x)
+
+/-- One interpreter step preserves the invariant: whatever the step decides --
+halt, continue, or spawn -- every state it hands on is canonical. -/
+theorem Evm.step_canonical {evm : Evm} (h : evm.Canonical) :
+    evm.step.Canonical := by
+  unfold Evm.step
+  split
+  · exact h.2
+  · exact Ninst.step_canonical h _
+  · exact Step.ofJump_canonical (Jinst.run_canonicalOn h.2 _)
+  · exact Linst.run_canonical h.2 _
+
+/-- **Canonicality through the fueled interpreter.** Any result the driver
+reaches from a canonical frame is canonical, on both channels. The induction
+mirrors `execFueled_run_mono`; the spawn arm threads `Frame.enter_canonical`,
+`Frame.settle_canonicalSettle`, and `Resume.run_canonical`, so no parent
+world is ever needed as a restoration source. -/
+theorem execFueled_run_canonical :
+    ∀ (fuel : Nat) (evm : Evm), evm.Canonical →
+      ∀ {raw : Execution}, (execFueled evm fuel).run = some raw →
+        Execution.Canonical raw := by
+  intro fuel
+  induction fuel with
+  | zero =>
+    intro evm _ raw h
+    rw [execFueled] at h
+    simp only [Fueled.exhausted_run] at h
+    nomatch h
+  | succ fuel ih =>
+    intro evm hevm raw h
+    have hst := Evm.step_canonical hevm
+    rw [execFueled] at h
+    rcases hs : evm.step with ⟨ex⟩ | ⟨pc, devm⟩ | ⟨frame, rsm, pc⟩ <;>
+      rw [hs] at h hst <;> dsimp only at h
+    · simp only [Fueled.ofExcept_run, Option.some.injEq] at h
+      rw [← h]
+      exact hst
+    · exact ih ⟨pc, evm.sta, devm⟩ ⟨hevm.1, hst⟩ h
+    · have hent := Frame.enter_canonical hst
+      rcases he : frame.enter with r | child <;> rw [he] at h hent <;>
+        dsimp only at h
+      · have hcan := Resume.run_canonical (rsm := rsm) hent
+        rcases hrun : rsm.run r with ⟨e⟩ | d1 <;> rw [hrun] at h hcan <;>
+          dsimp only at h
+        · simp only [Fueled.ofExcept_run, Option.some.injEq] at h
+          rw [← h]
+          exact hcan
+        · exact ih ⟨pc, evm.sta, d1⟩ ⟨hevm.1, hcan⟩ h
+      · rcases hc : (execFueled child fuel).run with _ | raw2
+        · rw [hc] at h
+          simp only [Fueled.exhausted_run] at h
+          nomatch h
+        · rw [hc] at h
+          dsimp only at h
+          have hsettle := Frame.settle_canonicalSettle hst (ih child hent hc)
+          have hcan := Resume.run_canonical (rsm := rsm) hsettle
+          rcases hrun : rsm.run (frame.settle raw2) with ⟨e⟩ | d1 <;>
+            rw [hrun] at h hcan <;> dsimp only at h
+          · simp only [Fueled.ofExcept_run, Option.some.injEq] at h
+            rw [← h]
+            exact hcan
+          · exact ih ⟨pc, evm.sta, d1⟩ ⟨hevm.1, hcan⟩ h
+
 end Jaune

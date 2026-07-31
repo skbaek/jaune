@@ -817,4 +817,16 @@ def applyPrecompResult (evm : Evm) (res : PrecompResult) : Execution :=
 def executePrecomp (evm : Evm) (adr : Adr) : Execution :=
   applyPrecompResult evm (precompileRun evm adr)
 
+/-- Precompiles never touch the world: a `PrecompResult` carries only a cost
+and an output, and `applyPrecompResult` applies them with `withGasLeft` and
+`withOutput` on both channels. -/
+theorem applyPrecompResult_canonical {evm : Evm} (h : evm.dyna.Canonical)
+    (res : PrecompResult) : (applyPrecompResult evm res).Canonical := by
+  unfold applyPrecompResult
+  split <;> exact Devm.Canonical.of_world_eq h rfl
+
+theorem executePrecomp_canonical {evm : Evm} (h : evm.dyna.Canonical)
+    (adr : Adr) : (executePrecomp evm adr).Canonical :=
+  applyPrecompResult_canonical h (precompileRun evm adr)
+
 end Jaune

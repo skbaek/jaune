@@ -3728,4 +3728,283 @@ theorem liftToExecution_canonical {devm : Devm} {r}
   | error e => exact ⟨hr.1, hr.2⟩
   | ok devm' => exact hr
 
+-- Checkpoint 2 of the corpus: through the instruction arms. First the intro
+-- forms and the settle-carrier sequencing lemma, then a descent tactic for
+-- the homogeneous machine-level `do`-chains.
+
+theorem Except.canonicalOn_ok {ρ α : Type} {P : α → Prop} {a : α} (h : P a) :
+    (Except.ok a : Except (ρ × Devm) α).CanonicalOn P := h
+
+theorem Except.canonicalOn_error {ρ α : Type} {P : α → Prop} {e : ρ × Devm}
+    (h : e.2.Canonical) :
+    (Except.error e : Except (ρ × Devm) α).CanonicalOn P := h
+
+/-- `.ok a >>= f` is `f a` by iota, so sequencing after a pure binding needs
+no case split. Stated so the descent tactic can skip the abstraction. -/
+theorem Except.canonicalOn_bind_ok {ρ α β : Type} {P : β → Prop} {a : α}
+    {f : α → Except (ρ × Devm) β} (h : (f a).CanonicalOn P) :
+    ((Except.ok a : Except (ρ × Devm) α) >>= f).CanonicalOn P := h
+
+/-- Sequencing on the settlement carrier: the error channel passes through
+unchanged, an ok machine feeds the continuation. -/
+theorem Except.CanonicalSettle.bind {ρ : Type}
+    {x : Except (ρ × State × AdrSet × Tra) Devm}
+    {f : Devm → Except (ρ × State × AdrSet × Tra) Devm}
+    (hx : x.CanonicalSettle) (hf : ∀ d, d.Canonical → (f d).CanonicalSettle) :
+    (x >>= f).CanonicalSettle := by
+  cases x with
+  | error e => exact hx
+  | ok d => exact hf d hx
+
+/-- The eq-conditioned form of `Devm.memRead_canonical`, matching the
+hypothesis a `split` on the destructuring `let` leaves behind. -/
+theorem Devm.memRead_eq_canonical {devm d' : Devm} {i s : Nat} {val : Bytes}
+    (h : devm.Canonical) (heq : devm.memRead i s = (val, d')) :
+    d'.Canonical := by
+  have hm := Devm.memRead_canonical (index := i) (size := s) h
+  rw [heq] at hm
+  exact hm
+
+/-- Canonicality through every register-instruction arm. Only `SSTORE` and
+`TSTORE` change the world, each through its named mutator; every other arm is
+world-preserving by construction. The four arms that destructure `memRead`
+with an irrefutable `let` are walked by hand, because that match does not
+reduce over an opaque scrutinee. -/
+theorem Rinst.runCore_canonical (pc : Nat) {devm : Devm} (sevm : Sevm)
+    (h : devm.Canonical) (r : Rinst) :
+    (Rinst.runCore pc devm sevm r).Canonical := by
+  cases r <;> simp only [Rinst.runCore]
+  case mload =>
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) ?_
+    rintro ⟨start, d1⟩ h1
+    refine Except.CanonicalOn.bind (liftMachExecution_canonical h1) ?_
+    intro d2 h2
+    rcases hread : d2.memRead start 32 with ⟨val, d3⟩
+    exact liftMachExecution_canonical (Devm.memRead_eq_canonical h2 hread)
+  case kec =>
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) ?_
+    rintro ⟨start, d1⟩ h1
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h1) ?_
+    rintro ⟨size, d2⟩ h2
+    refine Except.CanonicalOn.bind (liftMachExecution_canonical h2) ?_
+    intro d3 h3
+    rcases hread : d3.memRead start size with ⟨arg, d4⟩
+    exact liftMachExecution_canonical (Devm.memRead_eq_canonical h3 hread)
+  case mcopy =>
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) ?_
+    rintro ⟨dest, d1⟩ h1
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h1) ?_
+    rintro ⟨src, d2⟩ h2
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h2) ?_
+    rintro ⟨len, d3⟩ h3
+    refine Except.CanonicalOn.bind (liftMachExecution_canonical h3) ?_
+    intro d4 h4
+    rcases hread : d4.memRead src len with ⟨val, d5⟩
+    exact (Devm.memRead_eq_canonical h4 hread).of_world_eq rfl
+  case log =>
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) ?_
+    rintro ⟨start, d1⟩ h1
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h1) ?_
+    rintro ⟨size, d2⟩ h2
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h2) ?_
+    rintro ⟨topics, d3⟩ h3
+    refine Except.CanonicalOn.bind (liftMachExecution_canonical h3) ?_
+    intro d4 h4
+    refine Except.CanonicalOn.bind (Except.canonicalOn_assert h4) ?_
+    intro u _
+    rcases hread : d4.memRead start size with ⟨data, d5⟩
+    exact (Devm.memRead_eq_canonical h4 hread).of_world_eq rfl
+  all_goals try exact liftMachExecution_canonical h
+  all_goals try exact liftMachMetaWorldExecution_canonical h
+  case exp =>
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+    exact Except.CanonicalOn.bind (liftMachExecution_canonical hb)
+      fun d hd => liftMachExecution_canonical hd
+  case clz =>
+    split
+    · exact liftMachExecution_canonical h
+    · exact h
+  case calldataload =>
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+    exact Except.CanonicalOn.bind (liftMachExecution_canonical ha)
+      fun d hd => liftMachExecution_canonical hd
+  case calldatacopy =>
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
+    exact Except.CanonicalOn.bind (liftMachExecution_canonical hc)
+      fun d hd => Devm.Canonical.of_world_eq hd rfl
+  case codecopy =>
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
+    exact Except.CanonicalOn.bind (liftMachExecution_canonical hc)
+      fun d hd => Devm.Canonical.of_world_eq hd rfl
+  case extcodesize =>
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+    split <;>
+      exact Except.CanonicalOn.bind
+        (liftMachExecution_canonical (Devm.Canonical.of_world_eq ha rfl))
+        fun d hd => liftMachExecution_canonical hd
+  case extcodecopy =>
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn hc) fun e he => ?_
+    split <;>
+      exact Except.CanonicalOn.bind
+        (liftMachExecution_canonical (Devm.Canonical.of_world_eq he rfl))
+        fun d hd => Devm.Canonical.of_world_eq hd rfl
+  case retdatacopy =>
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
+    refine Except.CanonicalOn.bind (liftMachExecution_canonical hc) fun d hd => ?_
+    split
+    · exact Except.CanonicalOn.bind
+        (Except.canonicalOn_error (P := fun _ => True) hd)
+        fun _ _ => Devm.Canonical.of_world_eq hd rfl
+    · exact Devm.Canonical.of_world_eq hd rfl
+  case extcodehash =>
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+    split <;>
+      exact Except.CanonicalOn.bind
+        (liftMachExecution_canonical (Devm.Canonical.of_world_eq ha rfl))
+        fun d hd => liftMachExecution_canonical hd
+  case blockhash =>
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+    exact Except.CanonicalOn.bind (liftMachExecution_canonical ha)
+      fun d hd => liftMachExecution_canonical hd
+  case blobhash =>
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+    exact Except.CanonicalOn.bind (liftMachExecution_canonical ha)
+      fun d hd => liftMachExecution_canonical hd
+  case pop =>
+    exact Except.CanonicalOn.bind
+      (Except.CanonicalOn.map (liftMach_canonicalOn h) fun _ ha => ha)
+      fun d hd => liftMachExecution_canonical hd
+  case mstore =>
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+    exact Except.CanonicalOn.bind (liftMachExecution_canonical hb)
+      fun d hd => Devm.Canonical.of_world_eq hd rfl
+  case mstore8 =>
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+    exact Except.CanonicalOn.bind (liftMachExecution_canonical hb)
+      fun d hd => Devm.Canonical.of_world_eq hd rfl
+  case sload =>
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+    split <;>
+      exact Except.CanonicalOn.bind
+        (liftMachExecution_canonical (Devm.Canonical.of_world_eq ha rfl))
+        fun d hd => liftMachExecution_canonical hd
+  case sstore =>
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+    refine Except.CanonicalOn.bind (Except.canonicalOn_assert hb) fun _ _ => ?_
+    split <;>
+      (refine Except.canonicalOn_bind_ok ?_
+       refine Except.canonicalOn_bind_ok ?_
+       refine Except.canonicalOn_bind_ok ?_
+       refine Except.CanonicalOn.bind
+         (liftMachExecution_canonical (Devm.Canonical.of_world_eq hb rfl))
+         fun d hd => ?_
+       refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
+       exact Devm.Canonical.setStorVal hd _ _ _)
+  case tload =>
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+    exact liftMachExecution_canonical ha
+  case tstore =>
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+    refine Except.CanonicalOn.bind (liftMachExecution_canonical hb) fun d hd => ?_
+    refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
+    exact Devm.Canonical.setTransVal hd _ _ _
+  case gas =>
+    exact Except.CanonicalOn.bind (liftMachExecution_canonical h)
+      fun d hd => liftMachExecution_canonical hd
+  case dup =>
+    refine Except.CanonicalOn.bind (liftMachExecution_canonical h) fun d hd => ?_
+    split
+    · exact hd
+    · exact liftMachExecution_canonical hd
+  case swap =>
+    refine Except.CanonicalOn.bind (liftMachExecution_canonical h) fun d hd => ?_
+    split
+    · exact hd
+    · exact Devm.Canonical.of_world_eq hd rfl
+
+theorem Rinst.run_canonical {evm : Evm} (h : evm.dyna.Canonical) (r : Rinst) :
+    (Rinst.run evm r).Canonical :=
+  Rinst.runCore_canonical evm.pc evm.sta h r
+
+/-- Jump instructions never touch the world; the payload carries the new
+program counter beside the machine. -/
+theorem Jinst.runCore_canonicalOn (pc : Nat) {devm : Devm} (sevm : Sevm)
+    (h : devm.Canonical) (j : Jinst) :
+    (Jinst.runCore pc devm sevm j).CanonicalOn (fun a => a.2.Canonical) := by
+  cases j <;> simp only [Jinst.runCore]
+  case jumpdest =>
+    refine Except.CanonicalOn.bind (liftMachExecution_canonical h)
+      fun d hd => ?_
+    exact hd
+  case jump =>
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+    refine Except.CanonicalOn.bind (liftMachExecution_canonical ha) fun d hd => ?_
+    refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
+    exact hd
+  case jumpi =>
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+    refine Except.CanonicalOn.bind (liftMachExecution_canonical hb) fun d hd => ?_
+    split
+    · exact Except.canonicalOn_bind_ok hd
+    · refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
+      exact Except.canonicalOn_bind_ok hd
+
+theorem Jinst.run_canonicalOn {evm : Evm} (h : evm.dyna.Canonical) (j : Jinst) :
+    (Jinst.run evm j).CanonicalOn (fun a => a.2.Canonical) :=
+  Jinst.runCore_canonicalOn evm.pc evm.sta h j
+
+/-- Canonicality through the halting instructions. `SELFDESTRUCT` is the one
+world-changing arm, and it factors through `subBal`/`addBal`/`setBal`. -/
+theorem Linst.run_canonical {sevm : Sevm} {devm : Devm}
+    (h : devm.Canonical) (l : Linst) :
+    Execution.Canonical (Linst.run sevm devm l) := by
+  cases l <;> simp only [Linst.run]
+  case stop => exact h
+  case rev =>
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+    refine Except.CanonicalOn.bind (liftMachExecution_canonical hb) fun d hd => ?_
+    rcases hread : d.memRead a.1 b.1 with ⟨out, d'⟩
+    exact (Devm.memRead_eq_canonical hd hread).of_world_eq rfl
+  case ret =>
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+    refine Except.CanonicalOn.bind (liftMachExecution_canonical hb) fun d hd => ?_
+    rcases hread : d.memRead a.1 b.1 with ⟨out, d'⟩
+    exact (Devm.memRead_eq_canonical hd hread).of_world_eq rfl
+  case dest =>
+    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+    refine Except.canonicalOn_bind_ok ?_
+    refine Except.canonicalOn_bind_ok ?_
+    split <;>
+      (refine Except.canonicalOn_bind_ok ?_
+       refine Except.CanonicalOn.bind
+         (liftMachExecution_canonical (Devm.Canonical.of_world_eq ha rfl))
+         fun d hd => ?_
+       refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
+       refine Except.CanonicalOn.bind (P := Devm.Canonical) ?_ fun d' hd' => ?_
+       · cases hs : d.subBal sevm.currentTarget (a.2.getAcct sevm.currentTarget).bal with
+         | none => exact hd
+         | some d1 => exact Devm.Canonical.subBal hd hs
+       · refine Except.canonicalOn_bind_ok ?_
+         split
+         · exact Devm.Canonical.of_world_eq
+             (Devm.Canonical.setBal (Devm.Canonical.addBal hd' a.1 _) _ 0) rfl
+         · exact Devm.Canonical.addBal hd' a.1 _)
+
 end Jaune
