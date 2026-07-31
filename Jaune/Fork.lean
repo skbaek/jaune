@@ -419,6 +419,154 @@ deriving DecidableEq, Repr
 /-- Error tag for a schedule that does not determine an unambiguous fork. -/
 def invalidChainConfigTag : String := "InvalidChainConfigError"
 
+------------------ TYPED SEMANTIC REASONS: CONTEXT ------------------
+
+-- P0.7 of ~/plans/integrity.md replaces text used as a semantic discriminant
+-- with typed reasons. Declared here, ahead of `ChainConfig`, precisely so its
+-- own producers can build them directly: Step 2 of the integrity arc (P0.1,
+-- P0.5) wires `ChainConfig.validate` and `ChainConfig.forkAt` below to
+-- construct these reasons and cross back to the legacy `String`-carrying
+-- `Except` with `Except.mapError`, applied to the renderer named here -- never
+-- a hand-written duplicate of its text. `ChainConfig.checkChainId`
+-- (`Jaune/Transaction.lean`, the first module downstream where `BlockChain`
+-- exists alongside `ChainConfig`) does the same for `chainIdMismatch`. The
+-- remaining producer corpus (~100 other `String`-carrying `Except` sites) is
+-- untouched until Steps 9 and 10; every renderer arm without a producer yet
+-- still reproduces the exact byte-for-byte message its future producer will
+-- emit.
+--
+-- Placement is frozen by `scripts/report-integrity-design.md` section 6.
+-- Context and support reasons live in this module because
+-- `ChainConfig.validate`, `ChainConfig.forkAt`, `ChainConfig.rulesAt`, and
+-- `Fork.rules` are their first producers, and this module imports only
+-- `Jaune/Types.lean`, so nothing downstream can create an import cycle by
+-- naming them. The shared diagnostic vocabulary is declared here for the same
+-- reason: this is the most upstream module that names an error tag. It
+-- precedes `ChainConfig` itself in this file so `validate`/`forkAt` can name
+-- it directly.
+
+/-- Diagnostic-only context text carried beneath a typed reason.
+
+Only a renderer may read it. No semantic branch, no routing decision, and no
+fixture classifier is permitted to inspect it -- constructor identity is the
+discriminant, and this is the free text that follows it. It is deliberately
+its own two-constructor type rather than an optional string: an optional
+string is precisely the carrier the semantic-integrity gate keeps out of the
+`Jaune.lean` import closure, and this is not an error channel. -/
+inductive ErrorDetail : Type
+  | none
+  | text (s : String)
+deriving DecidableEq, Repr, Inhabited
+
+/-- The rendering convention every tag in this executable already follows: a
+bare tag, or a tag opening free diagnostic text at a fixed `" : "`. Every
+renderer in the typed skeleton goes through this one function, so a tag can
+never acquire a second spelling. -/
+def renderTagged (tag : String) : ErrorDetail → String
+  | .none => tag
+  | .text s => s!"{tag} : {s}"
+
+#guard renderTagged "SomeTag" .none = "SomeTag"
+#guard renderTagged "SomeTag" (.text "why") = "SomeTag : why"
+
+/-- Error tag for a configured call whose chain identity contradicts the
+snapshot it was handed.
+
+Separate from `invalidChainConfigTag`: the schedule can be perfectly valid and
+still describe a different chain than the snapshot. Produced by
+`ChainConfig.checkChainId`; deliberately not routed to any fixture identity,
+because a contradictory caller context is not evidence that a candidate block
+is invalid. -/
+def chainIdMismatchTag : String := "ChainIdMismatchError"
+
+/-- Error tag for a timestamp that precedes the first activation of an
+otherwise valid schedule.
+
+Separate from `invalidChainConfigTag` for the reason P0.5 gives: a block from
+an era this build does not implement is outside the declared domain, not a
+malformed configuration, and never an invalid block. Produced by
+`ChainConfig.forkAt`, together with the nonzero mainnet floor. -/
+def unsupportedEraTag : String := "UnsupportedEraError"
+
+/-- Why a configuration, or the pairing of a configuration with a snapshot, is
+not a usable execution context.
+
+This is the outer channel: none of these is a verdict about a candidate
+block. -/
+inductive ChainContextError : Type
+  /-- The activation schedule names no fork at all. -/
+  | emptySchedule
+  /-- Two adjacent activations do not move strictly forward in time. -/
+  | nonIncreasingActivations (prev next : ForkActivation)
+  /-- Two adjacent activations do not move forward through the fork order. -/
+  | nonForwardActivations (prev next : ForkActivation)
+  /-- The configured chain identity is not the snapshot's. -/
+  | chainIdMismatch (configured actual : UInt64)
+deriving DecidableEq, Repr
+
+/-- The one renderer for `ChainContextError`.
+
+The first three arms reproduce today's `ChainConfig.validate` messages exactly;
+the golden guards below pin them against the live producer as well as against
+the literal text. -/
+def ChainContextError.render : ChainContextError → String
+  | .emptySchedule =>
+    s!"{invalidChainConfigTag} : the activation schedule is empty"
+  | .nonIncreasingActivations prev next =>
+    s!"{invalidChainConfigTag} : activation timestamps must strictly \
+       increase, but {next.fork} at {next.timestamp} does not follow \
+       {prev.fork} at {prev.timestamp}"
+  | .nonForwardActivations prev next =>
+    s!"{invalidChainConfigTag} : activations must move forward through the \
+       fork order, but {next.fork} does not follow {prev.fork}"
+  | .chainIdMismatch configured actual =>
+    s!"{chainIdMismatchTag} : the configuration names chain \
+       {configured.toNat}, but the snapshot is chain {actual.toNat}"
+
+/-- Why an input is outside the domain this build implements.
+
+Not a configuration fault and not a block verdict: the configuration may be
+exactly right and the block perfectly valid, and this build still cannot say
+what executing it means. -/
+inductive SupportError : Type
+  /-- A declared fork whose rules are not implemented in this build. -/
+  | unsupportedFork (fork : Fork)
+  /-- A timestamp before the earliest era this configuration supports. -/
+  | unsupportedEra (timestamp floor : Nat)
+deriving DecidableEq, Repr
+
+/-- The one renderer for `SupportError`. The first arm reproduces today's
+`Fork.rules` message exactly. -/
+def SupportError.render : SupportError → String
+  | .unsupportedFork f =>
+    s!"{unsupportedForkTag} : fork {f} is a declared protocol fork whose \
+       execution rules are not implemented in this build"
+  | .unsupportedEra timestamp floor =>
+    s!"{unsupportedEraTag} : timestamp {timestamp} precedes the earliest \
+       era this configuration supports, which begins at {floor}"
+
+-- Golden guards, one representative per constructor. Each pins the exact
+-- rendered bytes, so a later step cannot change an externally observed
+-- message by accident while migrating a producer.
+#guard ChainContextError.render .emptySchedule
+  = "InvalidChainConfigError : the activation schedule is empty"
+#guard ChainContextError.render (.nonIncreasingActivations ⟨.prague, 5⟩ ⟨.osaka, 5⟩)
+  = "InvalidChainConfigError : activation timestamps must strictly increase, \
+     but Osaka at 5 does not follow Prague at 5"
+#guard ChainContextError.render (.nonForwardActivations ⟨.osaka, 5⟩ ⟨.prague, 9⟩)
+  = "InvalidChainConfigError : activations must move forward through the fork \
+     order, but Prague does not follow Osaka"
+#guard ChainContextError.render (.chainIdMismatch 7 1)
+  = "ChainIdMismatchError : the configuration names chain 7, but the snapshot \
+     is chain 1"
+#guard SupportError.render (.unsupportedFork .osaka)
+  = "UnsupportedForkError : fork Osaka is a declared protocol fork whose \
+     execution rules are not implemented in this build"
+#guard SupportError.render (.unsupportedEra 100 200)
+  = "UnsupportedEraError : timestamp 100 precedes the earliest era this \
+     configuration supports, which begins at 200"
+
+
 namespace ChainConfig
 
 /-- Every activation after the first must move strictly forward in both time
@@ -441,17 +589,16 @@ private def validateSteps : List ForkActivation → Except String Unit
     validateSteps (next :: rest)
 
 /-- A schedule is usable when it covers every block unambiguously: it names at
-least one fork, that first fork is active from the genesis timestamp, and every
-later activation moves strictly forward. -/
+least one fork, and every later activation moves strictly forward in time and
+fork order. There is deliberately no requirement that the first activation
+begin at timestamp 0 -- a configuration may support only eras from some later
+floor onward, and a timestamp before that floor is `SupportError.unsupportedEra`
+(from `forkAt` below), never `InvalidChainConfigError`. -/
 def validate (cfg : ChainConfig) : Except String Unit := do
   match cfg.activations with
   | [] =>
     .error s!"{invalidChainConfigTag} : the activation schedule is empty"
-  | first :: _ =>
-    if first.timestamp ≠ 0 then
-      .error
-        s!"{invalidChainConfigTag} : the first activation ({first.fork}) must \
-           be active from timestamp 0, but starts at {first.timestamp}"
+  | _ :: _ =>
     validateSteps cfg.activations
 
 /-- The last activation at or before `timestamp`, without validating the
@@ -461,14 +608,20 @@ def forkAt? (cfg : ChainConfig) (timestamp : Nat) : Option Fork :=
     ForkActivation.fork
 
 /-- The fork active at `timestamp`, rejecting schedules that do not determine
-one. -/
+one and timestamps that precede this configuration's earliest supported era.
+A timestamp before the first activation is `SupportError.unsupportedEra`, not
+an invalid configuration: the schedule is exactly as usable as any other, this
+build simply does not implement anything before its declared floor. -/
 def forkAt (cfg : ChainConfig) (timestamp : Nat) : Except String Fork := do
   cfg.validate
   match cfg.forkAt? timestamp with
   | some f => .ok f
   | none =>
-    .error
-      s!"{invalidChainConfigTag} : no fork is active at timestamp {timestamp}"
+    -- `cfg.validate` above guarantees `cfg.activations` is nonempty, so
+    -- `head?` always finds the floor; the fallback is unreachable in practice
+    -- but keeps this total without threading a nonemptiness proof through.
+    let floor := (cfg.activations.head?.map (·.timestamp)).getD 0
+    Except.mapError SupportError.render (.error (.unsupportedEra timestamp floor))
 
 /-- The rules active at `timestamp`. Fails if the schedule is unusable or if
 the selected fork's rules are not implemented. -/
@@ -501,15 +654,15 @@ def mainnetBpo2Timestamp : Nat := 1767747671
 
 /-- Ethereum mainnet, over the chain of forks this build supports.
 
-The supported transition chain begins at Prague, so Prague is the schedule's
-floor rather than an activation: this build has no pre-Prague rules to run
-before `mainnetPragueTimestamp`, and a schedule may not name rules that do not
-exist. `mainnetPragueTimestamp` records the real activation for provenance and
-is checked against the schedule below. -/
+The supported transition chain begins at Prague, at its real historical
+activation `mainnetPragueTimestamp` -- not at genesis. This build implements no
+pre-Prague era, so a configured mainnet block timestamped before that floor
+must not silently run under Prague rules: `ChainConfig.forkAt` reports it as
+`SupportError.unsupportedEra` rather than resolving it to any fork at all. -/
 def mainnetChainConfig : ChainConfig := {
   chainId := 1
   activations := [
-    ⟨.prague, 0⟩,
+    ⟨.prague, mainnetPragueTimestamp⟩,
     ⟨.osaka, mainnetOsakaTimestamp⟩,
     ⟨.bpo1, mainnetBpo1Timestamp⟩,
     ⟨.bpo2, mainnetBpo2Timestamp⟩
@@ -575,9 +728,16 @@ def ofString? (label : String) : Option ForkTransition := do
 
 Whether it is *usable* is `ChainConfig.validate`'s answer, not this function's:
 a label may name an activation at genesis or a backwards step, and those are
-rejected where every other unusable schedule is. -/
+rejected where every other unusable schedule is. Exposed independent of any
+chain identity: whether a transition names a usable schedule does not depend
+on which chain runs it, so a caller that only wants to check the schedule
+shape (`Main.lean`'s `--network` validation, before any fixture supplies a
+concrete chain ID) needs no placeholder identity to construct one. -/
+def activations (t : ForkTransition) : List ForkActivation :=
+  [⟨t.before, 0⟩, ⟨t.after, t.timestamp⟩]
+
 def chainConfig (chainId : UInt64) (t : ForkTransition) : ChainConfig :=
-  { chainId := chainId, activations := [⟨t.before, 0⟩, ⟨t.after, t.timestamp⟩] }
+  { chainId := chainId, activations := t.activations }
 
 end ForkTransition
 
@@ -738,11 +898,13 @@ private def guardHasTag {α : Type} (tag : String) (e : Except String α) : Bool
 #guard Fork.bpo1.rules = .ok bpo1Rules
 #guard Fork.bpo2.rules = .ok bpo2Rules
 
--- A usable schedule is non-empty, starts at genesis, and moves strictly
--- forward in both time and fork order.
+-- A usable schedule is non-empty and moves strictly forward in both time and
+-- fork order. It need not start at genesis: a schedule may support only eras
+-- from some later floor onward, and that is a usable schedule, not an invalid
+-- one -- `ChainConfig.forkAt` is where a too-early timestamp is refused.
 #guard (ChainConfig.pragueOnly 1).validate.toOption.isSome
 #guard guardHasTag invalidChainConfigTag (ChainConfig.mk 1 []).validate
-#guard guardHasTag invalidChainConfigTag (ChainConfig.mk 1 [⟨.prague, 1⟩]).validate
+#guard (ChainConfig.mk 1 [⟨.prague, 1⟩]).validate.toOption.isSome
 #guard guardHasTag invalidChainConfigTag
   (ChainConfig.mk 1 [⟨.prague, 0⟩, ⟨.osaka, 0⟩]).validate
 #guard guardHasTag invalidChainConfigTag
@@ -769,6 +931,23 @@ private def guardSchedule : ChainConfig :=
 #guard guardSchedule.forkAt 300 = .ok .bpo2
 #guard guardSchedule.forkAt 1000000 = .ok .bpo2
 
+-- A schedule whose first activation is not at genesis is usable, and a
+-- timestamp before its floor is `SupportError.unsupportedEra`, not
+-- `InvalidChainConfigError` -- the exact P0.5 boundary, independent of
+-- mainnet's own timestamps below. One before the floor fails; the floor
+-- itself, and everything after, selects normally.
+private def guardFloorSchedule : ChainConfig :=
+  ChainConfig.mk 1 [⟨.prague, 1000⟩, ⟨.osaka, 2000⟩]
+
+#guard guardFloorSchedule.validate.toOption.isSome
+#guard guardHasTag unsupportedEraTag (guardFloorSchedule.forkAt 999)
+#guard guardFloorSchedule.forkAt 999
+  = .error (SupportError.render (.unsupportedEra 999 1000))
+#guard guardFloorSchedule.forkAt 1000 = .ok .prague
+#guard guardFloorSchedule.forkAt 1999 = .ok .prague
+#guard guardFloorSchedule.forkAt 2000 = .ok .osaka
+#guard ¬ guardHasTag invalidChainConfigTag (guardFloorSchedule.forkAt 999)
+
 -- The whole supported chain is now executable, so every point of the schedule
 -- resolves to rules, and each segment resolves to its own.
 #guard guardSchedule.rulesAt 0 = .ok pragueRules
@@ -794,10 +973,18 @@ private def guardSchedule : ChainConfig :=
 #guard guardHasTag invalidChainConfigTag ((ChainConfig.mk 1 []).rulesAt 0)
 
 -- Mainnet's schedule is usable, and each of its recorded activation timestamps
--- is a boundary: the second before it still runs the old rules.
+-- is a boundary: the second before it still runs the old rules. Genesis, and
+-- everything up to one second before the real Prague activation, is outside
+-- this build's declared domain -- the exact P0.5 fix, since Jaune implements
+-- no pre-Prague era and must not silently answer those blocks as Prague.
 #guard mainnetChainConfig.validate.toOption.isSome
 #guard mainnetChainConfig.chainId = 1
-#guard mainnetChainConfig.forkAt 0 = .ok .prague
+#guard guardHasTag unsupportedEraTag (mainnetChainConfig.forkAt 0)
+#guard guardHasTag unsupportedEraTag
+  (mainnetChainConfig.forkAt (mainnetPragueTimestamp - 1))
+#guard mainnetChainConfig.forkAt (mainnetPragueTimestamp - 1)
+  = .error (SupportError.render (.unsupportedEra (mainnetPragueTimestamp - 1)
+      mainnetPragueTimestamp))
 #guard mainnetChainConfig.forkAt mainnetPragueTimestamp = .ok .prague
 #guard mainnetChainConfig.forkAt (mainnetOsakaTimestamp - 1) = .ok .prague
 #guard mainnetChainConfig.forkAt mainnetOsakaTimestamp = .ok .osaka
@@ -888,145 +1075,6 @@ private def guardOsakaToBpo1 : ForkTransition := ⟨.osaka, .bpo1, 15000⟩
 #guard (NetworkSpec.static .osaka).forks = [.osaka]
 #guard (NetworkSpec.transition guardOsakaToBpo1).forks = [.osaka, .bpo1]
 
------------------- TYPED SEMANTIC REASONS: CONTEXT ------------------
-
--- P0.7 of ~/plans/integrity.md replaces text used as a semantic discriminant
--- with typed reasons. This block lands declarations, renderers, and golden
--- guards only. No producer is migrated here and no rendered message changes:
--- every renderer below reproduces the message its future producer emits
--- today, byte for byte. Steps 9 and 10 move the producers; until then a
--- producer that already builds a typed reason crosses back to the legacy
--- carrier with `Except.mapError`, applied to the renderer named here.
---
--- Placement is frozen by `scripts/report-integrity-design.md` section 6.
--- Context and support reasons live in this module because
--- `ChainConfig.validate`, `ChainConfig.forkAt`, `ChainConfig.rulesAt`, and
--- `Fork.rules` are their first producers, and this module imports only
--- `Jaune/Types.lean`, so nothing downstream can create an import cycle by
--- naming them. The shared diagnostic vocabulary is declared here for the same
--- reason: this is the most upstream module that names an error tag.
-
-/-- Diagnostic-only context text carried beneath a typed reason.
-
-Only a renderer may read it. No semantic branch, no routing decision, and no
-fixture classifier is permitted to inspect it -- constructor identity is the
-discriminant, and this is the free text that follows it. It is deliberately
-its own two-constructor type rather than an optional string: an optional
-string is precisely the carrier the semantic-integrity gate keeps out of the
-`Jaune.lean` import closure, and this is not an error channel. -/
-inductive ErrorDetail : Type
-  | none
-  | text (s : String)
-deriving DecidableEq, Repr, Inhabited
-
-/-- The rendering convention every tag in this executable already follows: a
-bare tag, or a tag opening free diagnostic text at a fixed `" : "`. Every
-renderer in the typed skeleton goes through this one function, so a tag can
-never acquire a second spelling. -/
-def renderTagged (tag : String) : ErrorDetail → String
-  | .none => tag
-  | .text s => s!"{tag} : {s}"
-
-#guard renderTagged "SomeTag" .none = "SomeTag"
-#guard renderTagged "SomeTag" (.text "why") = "SomeTag : why"
-
-/-- Error tag for a configured call whose chain identity contradicts the
-snapshot it was handed.
-
-Separate from `invalidChainConfigTag`: the schedule can be perfectly valid and
-still describe a different chain than the snapshot. Nothing produces it yet --
-Step 2 of the arc adds the check -- and it is deliberately not routed to any
-fixture identity, because a contradictory caller context is not evidence that
-a candidate block is invalid. -/
-def chainIdMismatchTag : String := "ChainIdMismatchError"
-
-/-- Error tag for a timestamp that precedes the first activation of an
-otherwise valid schedule.
-
-Separate from `invalidChainConfigTag` for the reason P0.5 gives: a block from
-an era this build does not implement is outside the declared domain, not a
-malformed configuration, and never an invalid block. Nothing produces it yet;
-Step 2 adds it together with the nonzero mainnet floor. -/
-def unsupportedEraTag : String := "UnsupportedEraError"
-
-/-- Why a configuration, or the pairing of a configuration with a snapshot, is
-not a usable execution context.
-
-This is the outer channel: none of these is a verdict about a candidate
-block. -/
-inductive ChainContextError : Type
-  /-- The activation schedule names no fork at all. -/
-  | emptySchedule
-  /-- Two adjacent activations do not move strictly forward in time. -/
-  | nonIncreasingActivations (prev next : ForkActivation)
-  /-- Two adjacent activations do not move forward through the fork order. -/
-  | nonForwardActivations (prev next : ForkActivation)
-  /-- The configured chain identity is not the snapshot's. -/
-  | chainIdMismatch (configured actual : UInt64)
-deriving DecidableEq, Repr
-
-/-- The one renderer for `ChainContextError`.
-
-The first three arms reproduce today's `ChainConfig.validate` messages exactly;
-the golden guards below pin them against the live producer as well as against
-the literal text. -/
-def ChainContextError.render : ChainContextError → String
-  | .emptySchedule =>
-    s!"{invalidChainConfigTag} : the activation schedule is empty"
-  | .nonIncreasingActivations prev next =>
-    s!"{invalidChainConfigTag} : activation timestamps must strictly \
-       increase, but {next.fork} at {next.timestamp} does not follow \
-       {prev.fork} at {prev.timestamp}"
-  | .nonForwardActivations prev next =>
-    s!"{invalidChainConfigTag} : activations must move forward through the \
-       fork order, but {next.fork} does not follow {prev.fork}"
-  | .chainIdMismatch configured actual =>
-    s!"{chainIdMismatchTag} : the configuration names chain \
-       {configured.toNat}, but the snapshot is chain {actual.toNat}"
-
-/-- Why an input is outside the domain this build implements.
-
-Not a configuration fault and not a block verdict: the configuration may be
-exactly right and the block perfectly valid, and this build still cannot say
-what executing it means. -/
-inductive SupportError : Type
-  /-- A declared fork whose rules are not implemented in this build. -/
-  | unsupportedFork (fork : Fork)
-  /-- A timestamp before the earliest era this configuration supports. -/
-  | unsupportedEra (timestamp floor : Nat)
-deriving DecidableEq, Repr
-
-/-- The one renderer for `SupportError`. The first arm reproduces today's
-`Fork.rules` message exactly. -/
-def SupportError.render : SupportError → String
-  | .unsupportedFork f =>
-    s!"{unsupportedForkTag} : fork {f} is a declared protocol fork whose \
-       execution rules are not implemented in this build"
-  | .unsupportedEra timestamp floor =>
-    s!"{unsupportedEraTag} : timestamp {timestamp} precedes the earliest \
-       era this configuration supports, which begins at {floor}"
-
--- Golden guards, one representative per constructor. Each pins the exact
--- rendered bytes, so a later step cannot change an externally observed
--- message by accident while migrating a producer.
-#guard ChainContextError.render .emptySchedule
-  = "InvalidChainConfigError : the activation schedule is empty"
-#guard ChainContextError.render (.nonIncreasingActivations ⟨.prague, 5⟩ ⟨.osaka, 5⟩)
-  = "InvalidChainConfigError : activation timestamps must strictly increase, \
-     but Osaka at 5 does not follow Prague at 5"
-#guard ChainContextError.render (.nonForwardActivations ⟨.osaka, 5⟩ ⟨.prague, 9⟩)
-  = "InvalidChainConfigError : activations must move forward through the fork \
-     order, but Prague does not follow Osaka"
-#guard ChainContextError.render (.chainIdMismatch 7 1)
-  = "ChainIdMismatchError : the configuration names chain 7, but the snapshot \
-     is chain 1"
-#guard SupportError.render (.unsupportedFork .osaka)
-  = "UnsupportedForkError : fork Osaka is a declared protocol fork whose \
-     execution rules are not implemented in this build"
-#guard SupportError.render (.unsupportedEra 100 200)
-  = "UnsupportedEraError : timestamp 100 precedes the earliest era this \
-     configuration supports, which begins at 200"
-
 -- The three renderer arms that already have a live producer agree with it
 -- byte for byte. This is the property Steps 9 and 10 must preserve when the
 -- producers themselves start returning typed reasons, and it is checked here
@@ -1041,6 +1089,15 @@ def SupportError.render : SupportError → String
 #guard (match (ChainConfig.mk 1 [⟨.osaka, 0⟩, ⟨.prague, 9⟩]).validate with
   | .error e =>
     e == ChainContextError.render (.nonForwardActivations ⟨.osaka, 0⟩ ⟨.prague, 9⟩)
+  | .ok _ => false)
+
+-- `forkAt`'s new unsupported-era arm agrees with `SupportError.render` too,
+-- against the real function rather than a transcription of it.
+#guard (match guardFloorSchedule.forkAt 999 with
+  | .error e => e == SupportError.render (.unsupportedEra 999 1000)
+  | .ok _ => false)
+#guard (match mainnetChainConfig.forkAt 0 with
+  | .error e => e == SupportError.render (.unsupportedEra 0 mainnetPragueTimestamp)
   | .ok _ => false)
 
 end Jaune
