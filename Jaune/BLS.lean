@@ -85,10 +85,14 @@ def Bytes.toExStrBLSP2 (data : Bytes) (subgroupCheck : Bool := false) : Except S
       .error "InvalidParameter : subgroup check failed"
   pure p
 
+-- `takeRightV` is `takeRightD` with its width in the type: the same
+-- left-padding, which restores exactly the leading zeros `trimZero` removed,
+-- but now the pair of coefficient reads is total rather than conventionally
+-- safe.
 def BLSF2.toBytes (x : BLSF2) : Bytes :=
-  let cs := List.takeRightD 2 x.val (0 : BLSF)
-  let c1 := cs[0]!
-  let c0 := cs[1]!
+  let cs := List.takeRightV 2 x.val (0 : BLSF)
+  let c1 := cs[0]
+  let c0 := cs[1]
   c0.val.toBytes.pack 64 ++ c1.val.toBytes.pack 64
 
 def BLSP2.toBytes (p : BLSP2) : Bytes :=
@@ -200,12 +204,12 @@ def BLSP.toBLSP12 : BLSP → BLSP12
 -- Unlike the BN254 twist in EC.lean (which multiplies by w^2 / w^3),
 -- py_ecc's BLS12-381 twist divides the coordinates by w^2 / w^3.
 def blsTwist (p : BLSP2) : BLSP12 :=
-  let xs := List.takeRightD 2 p.x.val (0 : BLSF)
-  let ys := List.takeRightD 2 p.y.val (0 : BLSF)
-  let x1 := xs[0]!
-  let x0 := xs[1]!
-  let y1 := ys[0]!
-  let y0 := ys[1]!
+  let xs := List.takeRightV 2 p.x.val (0 : BLSF)
+  let ys := List.takeRightV 2 p.y.val (0 : BLSF)
+  let x1 := xs[0]
+  let x0 := xs[1]
+  let y1 := ys[0]
+  let y0 := ys[1]
   -- Field isomorphism from Z[p] / u^2 + 1 to Z[p] / u^2 - 2*u + 2:
   -- xcoeffs = [_x.coeffs[0] - _x.coeffs[1], _x.coeffs[1]], embedded
   -- into FQ12 at degrees 0 and 6 (w^6 = u).
@@ -309,11 +313,17 @@ def blsSgn0F (x : BLSF) : Nat := x.val % 2
 
 -- Fp2: sign_0 or (zero_0 and sign_1), coeffs in (c0, c1) order.
 def blsSgn0F2 (x : BLSF2) : Nat :=
-  let cs := List.takeRightD 2 x.val (0 : BLSF)
-  let c1 := cs[0]!
-  let c0 := cs[1]!
+  let cs := List.takeRightV 2 x.val (0 : BLSF)
+  let c1 := cs[0]
+  let c0 := cs[1]
   if c0.val % 2 = 1 then 1
   else if c0.val = 0 then c1.val % 2 else 0
+
+-- Trimming leading zeros is representational: the padded coefficient reads
+-- give the same answer for a trimmed element and its full-width spelling.
+#guard BLSF2.toBytes ⟨trimZero [0, 5]⟩ = BLSF2.toBytes ⟨[0, 5]⟩
+#guard blsSgn0F2 ⟨trimZero [0, 5]⟩ = blsSgn0F2 ⟨[0, 5]⟩
+#guard blsSgn0F2 ⟨[]⟩ = blsSgn0F2 ⟨[0, 0]⟩
 
 -- Horner evaluation of a polynomial given its coefficients low degree first.
 def blsHornerF (coeffs : List BLSF) (x : BLSF) : BLSF :=

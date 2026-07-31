@@ -30,7 +30,7 @@
 # step that discharges a row deletes it (or rewrites it as KEEP) and
 # lowers the budget in the same commit.
 #
-# pending-budget: 230
+# pending-budget: 218
 #
 # At the branch point nothing is discharged yet: Step 1 inventories, it
 # does not repair. There are therefore zero KEEP rows, and the gate's
@@ -91,25 +91,13 @@
 # ---- R2 : Jaune/Machine.lean ----
 
 # ---- R3 : Jaune/BLS.lean ----
-R3 Jaune/BLS.lean let c0 := cs[1]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/BLS.lean let c1 := cs[0]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/BLS.lean let x0 := xs[1]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/BLS.lean let x1 := xs[0]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/BLS.lean let y0 := ys[1]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
-R3 Jaune/BLS.lean let y1 := ys[0]!  ## PENDING(step8,wrapper) PUBLIC optimized fixed-size kernel (not private -- see the note below); owes privatisation or a checked wrapper, plus an in-range bounds theorem
 
 # ---- R3 : Jaune/Basic.lean ----
 R3 Jaune/Basic.lean aux (idx + 1) (array.set! idx item) sz list  ## PENDING(step8,wrapper) size-by-construction array/byte helper; owes a size lemma or proof-indexed access
-R3 Jaune/Basic.lean let high : UInt16 := v[0]!.toUInt16  ## PENDING(step8,wrapper) size-by-construction array/byte helper; owes a size lemma or proof-indexed access
-R3 Jaune/Basic.lean let low : UInt16 := v[1]!.toUInt16  ## PENDING(step8,wrapper) size-by-construction array/byte helper; owes a size lemma or proof-indexed access
 R3 Jaune/Basic.lean then xs.get! m :: ByteArray.sliceD xs (m + 1) n d  ## PENDING(step8,wrapper) size-by-construction array/byte helper; owes a size lemma or proof-indexed access
 R3 Jaune/Basic.lean λ ysn x => ⟨Array.set! ysn.fst ysn.snd x, ysn.snd + 1⟩  ## PENDING(step8,wrapper) size-by-construction array/byte helper; owes a size lemma or proof-indexed access
 
 # ---- R3 : Jaune/EC.lean ----
-R3 Jaune/EC.lean let x0 := xs[0]!  ## PENDING(step8,totalize) twist coefficient read from a possibly short list; owes a fixed-size input or an explicit checked failure
-R3 Jaune/EC.lean let x1 := xs[1]!  ## PENDING(step8,totalize) twist coefficient read from a possibly short list; owes a fixed-size input or an explicit checked failure
-R3 Jaune/EC.lean let y0 := ys[0]!  ## PENDING(step8,totalize) twist coefficient read from a possibly short list; owes a fixed-size input or an explicit checked failure
-R3 Jaune/EC.lean let y1 := ys[1]!  ## PENDING(step8,totalize) twist coefficient read from a possibly short list; owes a fixed-size input or an explicit checked failure
 
 # ---- R3 : Jaune/Execution.lean ----
 

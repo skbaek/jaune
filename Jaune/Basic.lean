@@ -361,7 +361,39 @@ def List.ekat {ξ : Type u} (n : Nat) (xs : List ξ) : List ξ :=
 def List.takeRightD {ξ : Type u} (n : Nat) (xs : List ξ) (x : ξ) : List ξ :=
   (xs.reverse.takeD n x).reverse
 
+theorem List.length_takeRightD {ξ : Type u} (n : Nat) (xs : List ξ) (x : ξ) :
+    (List.takeRightD n xs x).length = n := by
+  simp [List.takeRightD]
+
+/-- `List.takeRightD` carrying its width in the type: exactly `n` entries, the
+last `n` of `xs`, left-padded with `x` when `xs` is shorter.
+
+This is the reader for a fixed-width vector held as a list whose leading zeros
+have been trimmed — a coefficient of a field extension, say. A missing leading
+entry there is a zero, not an absent one, so padding on the left is the
+arithmetically correct completion rather than a defensive default, and the
+width being a type rules out reading past the end of a short list. -/
+def List.takeRightV {ξ : Type u} (n : Nat) (xs : List ξ) (x : ξ) : Vector ξ n :=
+  ⟨(List.takeRightD n xs x).toArray, by simp [List.length_takeRightD]⟩
+
+@[simp] theorem List.takeRightV_toList {ξ : Type u}
+    (n : Nat) (xs : List ξ) (x : ξ) :
+    (List.takeRightV n xs x).toList = List.takeRightD n xs x := rfl
+
 def Bytes.pack (xs : Bytes) (n : Nat) : Bytes := List.takeRightD n xs 0
+
+/-- `Bytes.pack` with its width in the type. -/
+def Bytes.packV (xs : Bytes) (n : Nat) : Vector UInt8 n := List.takeRightV n xs 0
+
+@[simp] theorem Bytes.packV_toList (xs : Bytes) (n : Nat) :
+    (Bytes.packV xs n).toList = Bytes.pack xs n := rfl
+
+theorem Bytes.getElem_packV (xs : Bytes) (n i : Nat) (h : i < n) :
+    (Bytes.packV xs n)[i] = (Bytes.pack xs n).getD i 0 := by
+  have hlen : i < (List.takeRightD n xs 0).length := by
+    rw [List.length_takeRightD]; exact h
+  simp [Bytes.packV, Bytes.pack, List.takeRightV,
+    List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hlen]
 
 def B128.toNat (x : B128) : Nat := (x.1.toNat <<< 64) ||| x.2.toNat
 def B256.toNat (x : B256) : Nat := (x.1.toNat <<< 128) ||| x.2.toNat
@@ -583,10 +615,13 @@ def UInt64.ofBytes (a b c d e f g h : UInt8) : UInt64 :=
 
 
 
+-- `packV` is `pack` with its width in the type, so the two byte reads below
+-- are total: padding a short input on the left with zeros is what `pack`
+-- always did, and it is now the type that says the result has two bytes.
 def Bytes.toUInt16 (xs : Bytes) : UInt16 :=
-  let v := xs.pack 2
-  let high : UInt16 := v[0]!.toUInt16
-  let low : UInt16 := v[1]!.toUInt16
+  let v := xs.packV 2
+  let high : UInt16 := v[0].toUInt16
+  let low : UInt16 := v[1].toUInt16
   (high <<< 8) ||| low
 
 def Bytes.toUInt32 (xs : Bytes) : UInt32 :=
@@ -906,7 +941,7 @@ lemma UInt64.toNat_shiftLeft_lo (a b : UInt64) :
   UInt64.toNat_shiftLeft _ _
 
 lemma toUInt16_toBytes (x : UInt16) : x.toBytes.toUInt16 = x := by
-  simp only [UInt16.toBytes, Bytes.toUInt16]
+  simp only [UInt16.toBytes, Bytes.toUInt16, Bytes.getElem_packV]
   rw [Bytes.pack_eq_self (by rfl)]
   simp
   rw [← UInt16.toNat_inj, UInt16.toNat_or, UInt16.toNat_shiftLeft_lo,

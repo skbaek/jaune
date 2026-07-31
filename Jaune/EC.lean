@@ -613,17 +613,34 @@ def BNP.toBytes (p : BNP) : Bytes :=
 
 
 -- def twist(pt: Optimized_Point3D[FQP]) -> Optimized_Point3D[FQ12]:
+--
+-- An `F_p^2` element is stored with its leading zeros trimmed, so a coordinate
+-- whose degree-one coefficient vanishes arrives as a one-element list and the
+-- zero coordinate as an empty one. `takeRightV` completes such a list on the
+-- left with exactly the zeros the trimming removed — the coefficients this
+-- element mathematically has — and fixes its width at two, so both reads are
+-- total. The former unpadded right-slice did neither: on a trimmed coordinate
+-- it read the surviving low coefficient as though it were the high one, and
+-- had no second entry to read at all.
 def twist (p : BNP2) : BNP12 :=
-  let xs := List.ekat 2 p.x.val
-  let ys := List.ekat 2 p.y.val
-  let x0 := xs[0]!
-  let x1 := xs[1]!
-  let y0 := ys[0]!
-  let y1 := ys[1]!
+  let xs := List.takeRightV 2 p.x.val (0 : BNF)
+  let ys := List.takeRightV 2 p.y.val (0 : BNF)
+  let x0 := xs[0]
+  let x1 := xs[1]
+  let y0 := ys[0]
+  let y1 := ys[1]
   let nx : BNF12 := ⟨[x0, 0, 0, 0, 0, 0, x1 - (x0 * 9)]⟩
   let ny : BNF12 := ⟨[y0, 0, 0, 0, 0, 0, y1 - (y0 * 9)]⟩
   let w : BNF12 := ⟨[1, 0]⟩
   ⟨nx * (w ^ 2), ny * (w ^ 3)⟩
+
+-- Trimming is representational, not semantic: a coordinate written with its
+-- leading zero and the same coordinate with that zero trimmed away twist to
+-- the same point.
+#guard twist ⟨⟨trimZero [0, 5]⟩, ⟨trimZero [0, 7]⟩⟩
+        = twist ⟨⟨[0, 5]⟩, ⟨[0, 7]⟩⟩
+#guard twist ⟨⟨[]⟩, ⟨[]⟩⟩ = twist ⟨⟨[0, 0]⟩, ⟨[0, 0]⟩⟩
+#guard trimZero [(0 : BNF), 5] = [(5 : BNF)]
 
 def pseudoBinaryEncoding : List Int :=
   [
