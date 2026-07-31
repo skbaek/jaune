@@ -10,16 +10,10 @@ private def rlpTags : List String :=
     rlpFieldOverflow256Tag, rlpLeadingZerosTag,
     rlpWithdrawalsNotReadTag, rlpRoundTripTag ]
 
--- The tags are distinct, and none is a prefix of another: `hasErrorType` reads
--- a tag up to a fixed " : ", so one tag must never be readable as another.
+-- The tags are distinct, and none is a prefix of another, so no rendered
+-- decode reason can be read as another by a `" : "`-delimited reader.
 #guard rlpTags.eraseDups.length = 7
 #guard rlpTags.all fun t => (rlpTags.filter fun u => t.isPrefixOf u).length = 1
-
--- The strict tags are not readable as either of the old generic categories.
-#guard rlpTags.all fun t => ¬ hasErrorType t "DecodingError"
-#guard rlpTags.all fun t => ¬ hasErrorType t "EncodingError"
-#guard rlpTags.all fun t => ¬ hasErrorType t "InvalidBlock"
-#guard rlpTags.all fun t => ¬ hasErrorType t "InvalidTransaction"
 
 private def errOf {α : Type} : Except String α → String
   | .error e => e
@@ -28,10 +22,30 @@ private def errOf {α : Type} : Except String α → String
 private def hasTag {α : Type} (tag : String) (e : Except String α) : Bool :=
   hasErrorType (errOf e) tag
 
+/-- The reason of a failing strict decode, for the boundary guards below:
+constructor identity is the discriminant now, so the guards match reasons
+rather than reading rendered text back. -/
+private def failsAs {α : Type} (p : DecodeError → Bool) :
+    Except DecodeError α → Bool
+  | .error e => p e
+  | .ok _ => false
+
+private def isFixedWidth : DecodeError → Bool
+  | .fixedWidth _ => true | _ => false
+private def isOverflow64 : DecodeError → Bool
+  | .fieldOverflow64 _ => true | _ => false
+private def isOverflow256 : DecodeError → Bool
+  | .fieldOverflow256 _ => true | _ => false
+private def isLeadingZeros : DecodeError → Bool
+  | .leadingZeros _ => true | _ => false
+
 -- Fixed-width fields: both the short and the long side are width errors.
 #guard (Bytes.toRlpFixed "root" 32 (List.replicate 32 (0x11 : UInt8))).toOption.isSome
-#guard hasTag rlpFixedWidthTag (Bytes.toRlpFixed "root" 32 (List.replicate 31 (0x11 : UInt8)))
-#guard hasTag rlpFixedWidthTag (Bytes.toRlpFixed "root" 32 (List.replicate 33 (0x11 : UInt8)))
+#guard failsAs isFixedWidth (Bytes.toRlpFixed "root" 32 (List.replicate 31 (0x11 : UInt8)))
+#guard failsAs isFixedWidth (Bytes.toRlpFixed "root" 32 (List.replicate 33 (0x11 : UInt8)))
+-- The renderer template for the fixed-width family, pinned end to end once.
+#guard (Bytes.toRlpFixed "root" 32 (List.replicate 31 (0x11 : UInt8)))
+  = .error (.fixedWidth (.text "root must be exactly 32 bytes, but is 31"))
 
 -- 64-bit scalars: accepted widths convert exactly, nine bytes is an overflow
 -- rather than a truncation, and a leading zero is a distinct reason from an
@@ -39,35 +53,46 @@ private def hasTag {α : Type} (tag : String) (e : Except String α) : Bool :=
 #guard (Bytes.toRlpB64 "index" []).toOption.map UInt64.toNat = some 0
 #guard (Bytes.toRlpB64 "index" (List.replicate 8 (0xFF : UInt8))).toOption.map UInt64.toNat
   = some (2 ^ 64 - 1)
-#guard hasTag rlpFieldOverflow64Tag
+#guard failsAs isOverflow64
   (Bytes.toRlpB64 "index" (0x01 :: List.replicate 8 (0x00 : UInt8)))
-#guard hasTag rlpLeadingZerosTag (Bytes.toRlpB64 "index" [0x00, 0x01])
-#guard ¬ hasTag rlpFieldOverflow64Tag (Bytes.toRlpB64 "index" [0x00, 0x01])
-#guard ¬ hasTag rlpLeadingZerosTag
+#guard failsAs isLeadingZeros (Bytes.toRlpB64 "index" [0x00, 0x01])
+#guard ¬ failsAs isOverflow64 (Bytes.toRlpB64 "index" [0x00, 0x01])
+#guard ¬ failsAs isLeadingZeros
   (Bytes.toRlpB64 "index" (0x01 :: List.replicate 8 (0x00 : UInt8)))
 
--- 256-bit scalars: same reasons, one width up, under the 256-bit overflow tag.
+-- 256-bit scalars: same reasons, one width up, under the 256-bit overflow
+-- constructor.
 #guard (Bytes.toRlpB256 "amount" (List.replicate 32 (0xFF : UInt8))).toOption.map B256.toNat
   = some (2 ^ 256 - 1)
-#guard hasTag rlpFieldOverflow256Tag
+#guard failsAs isOverflow256
   (Bytes.toRlpB256 "amount" (List.replicate 33 (0x01 : UInt8)))
-#guard hasTag rlpLeadingZerosTag (Bytes.toRlpB256 "amount" [0x00, 0x01])
+#guard failsAs isLeadingZeros (Bytes.toRlpB256 "amount" [0x00, 0x01])
 #guard (Bytes.toRlpNat "value" 32 (List.replicate 32 (0xFF : UInt8))).toOption
   = some (2 ^ 256 - 1)
-#guard hasTag rlpFieldOverflow256Tag (Bytes.toRlpNat "value" 32 (List.replicate 33 (0x01 : UInt8)))
+#guard failsAs isOverflow256 (Bytes.toRlpNat "value" 32 (List.replicate 33 (0x01 : UInt8)))
+-- The renderer templates for both scalar families and the canonicality rule.
+#guard (Bytes.toRlpB64 "index" (0x01 :: List.replicate 8 (0x00 : UInt8)))
+  = .error (.fieldOverflow64
+      (.text "index scalar is 9 bytes, exceeding its 8-byte width"))
+#guard (Bytes.toRlpB64 "index" [0x00, 0x01])
+  = .error (.leadingZeros
+      (.text "index scalar 0x0001 is not canonically encoded (leading zero byte)"))
 
 -- Addresses and optional receivers: a width error, never a silent creation.
 #guard (Bytes.toRlpAdr "recipient" (List.replicate 20 (0x11 : UInt8))).toOption.isSome
-#guard hasTag rlpFixedWidthTag (Bytes.toRlpAdr "recipient" (List.replicate 19 (0x11 : UInt8)))
-#guard hasTag rlpFixedWidthTag (Bytes.toRlpAdr "recipient" (List.replicate 21 (0x11 : UInt8)))
-#guard hasTag rlpFixedWidthTag (Bytes.toRlpAdr "recipient" [])
+#guard failsAs isFixedWidth (Bytes.toRlpAdr "recipient" (List.replicate 19 (0x11 : UInt8)))
+#guard failsAs isFixedWidth (Bytes.toRlpAdr "recipient" (List.replicate 21 (0x11 : UInt8)))
+#guard failsAs isFixedWidth (Bytes.toRlpAdr "recipient" [])
 #guard (Bytes.toRlpReceiver "receiver" []).toOption = some none
 #guard (Bytes.toRlpReceiver "receiver" (List.replicate 20 (0x11 : UInt8))).toOption.isSome
-#guard hasTag rlpFixedWidthTag (Bytes.toRlpReceiver "receiver" (List.replicate 21 (0x11 : UInt8)))
+#guard failsAs isFixedWidth (Bytes.toRlpReceiver "receiver" (List.replicate 21 (0x11 : UInt8)))
 
--- A structure failure is its own reason, not a width or overflow one.
-#guard hasErrorType (rlpStructureError "block" "expected a 4-item list") rlpStructureTag
-#guard ¬ hasErrorType (rlpStructureError "block" "expected a 4-item list") rlpFixedWidthTag
+-- A structure failure is its own reason, not a width or overflow one, and its
+-- render is byte-for-byte the retired string helper's.
+#guard DecodeError.structure "block" "expected a 4-item list"
+  = .rlpStructure (.text "block : expected a 4-item list")
+#guard (DecodeError.structure "block" "expected a 4-item list").render
+  = "RlpStructureError : block : expected a 4-item list"
 
 def Inst.toOpString : Inst → String
   | .next n => n.toOpString
@@ -857,7 +882,7 @@ def addLogToBloom (bloom : Bytes) (log : Log) : Bytes :=
 def logsBloom (l : List Log) : Bytes :=
   List.foldl addLogToBloom (List.replicate 256 0x00) l
 
-def BLT.toExStrHeader : BLT → Except String Header
+def BLT.toExHeader : BLT → Except DecodeError Header
   | .list (
       .bytes parentHash ::
       .bytes ommersHash ::
@@ -917,7 +942,7 @@ def BLT.toExStrHeader : BLT → Except String Header
         | [.bytes requestsHash] =>
           (requestsHash.toRlpHash "header requestsHash").map some
         | _ =>
-          .error <| rlpStructureError "header"
+          .error <| DecodeError.structure "header"
             s!"expected 20 or 21 fields, but found {20 + tail.length}"
       .ok {
         parentHash := parentHash
@@ -943,16 +968,16 @@ def BLT.toExStrHeader : BLT → Except String Header
         requestsHash := requestsHash
       }
   | _ =>
-    .error <| rlpStructureError "header"
+    .error <| DecodeError.structure "header"
       "expected a list of 20 or 21 byte-string fields"
 
 /-- Strict header-decoder soundness (P0.3/P0.4). Every header this decoder
 produces satisfies `Header.WireWellFormed`, which is what makes that predicate
 a *lift* of the decoder rather than an independently invented policy: it holds
 of exactly the values the wire can deliver. -/
-theorem BLT.toExStrHeader_wireWellFormed {blt : BLT} {hdr : Header}
-    (h : blt.toExStrHeader = .ok hdr) : hdr.WireWellFormed := by
-  unfold BLT.toExStrHeader at h
+theorem BLT.toExHeader_wireWellFormed {blt : BLT} {hdr : Header}
+    (h : blt.toExHeader = .ok hdr) : hdr.WireWellFormed := by
+  unfold BLT.toExHeader at h
   split at h
   · simp only [Except.bind_eq_ok_iff] at h
     obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, hbl, _, hdf, _, hnb,

@@ -790,6 +790,12 @@ def gasAllowanceExceededTag : String := "GasAllowanceExceededError"
 def initcodeSizeExceededTag : String := "InitcodeSizeExceededError"
 def insufficientAccountFundsTag : String := "InsufficientAccountFundsError"
 def insufficientMaxFeePerGasTag : String := "InsufficientMaxFeePerGasError"
+/-- EIP-4844's per-blob-gas analogue of `insufficientMaxFeePerGasTag`. The
+producer in `checkTransactionBlobData` always carried this exact spelling as a
+literal; Step 10 names it so the typed vocabulary can pin the constructor to
+the tag like every other transaction reason. Its official fixture identity is
+the shared `INSUFFICIENT_MAX_FEE_PER_GAS` one. -/
+def insufficientMaxFeePerBlobGasTag : String := "InsufficientMaxFeePerBlobGasError"
 def transactionGasLimitExceededTag : String :=
   "TransactionGasLimitExceededError"
 def intrinsicGasTooLowTag : String := "IntrinsicGasTooLowError"
@@ -812,7 +818,8 @@ def emptyAuthorizationListTag : String := "EmptyAuthorizationListError"
 def transactionExceptionTags : List String :=
   [ gasPriceProductOverflowTag, gasAllowanceExceededTag,
     initcodeSizeExceededTag, insufficientAccountFundsTag,
-    insufficientMaxFeePerGasTag, transactionGasLimitExceededTag,
+    insufficientMaxFeePerGasTag, insufficientMaxFeePerBlobGasTag,
+    transactionGasLimitExceededTag,
     intrinsicGasTooLowTag, invalidChainIdTag, nonceIsMaxTag, nonceMismatchTooHighTag,
     nonceMismatchTooLowTag,
     priorityGreaterThanMaxFeeTag, senderNotEoaTag,
@@ -821,8 +828,8 @@ def transactionExceptionTags : List String :=
     type3InvalidBlobVersionedHashTag, type3ZeroBlobsTag,
     type4ContractCreationTag, emptyAuthorizationListTag ]
 
-#guard transactionExceptionTags.length = 20
-#guard transactionExceptionTags.eraseDups.length = 20
+#guard transactionExceptionTags.length = 21
+#guard transactionExceptionTags.eraseDups.length = 21
 #guard transactionExceptionTags.all fun t =>
   (transactionExceptionTags.filter fun u => t.isPrefixOf u).length = 1
 
@@ -981,343 +988,6 @@ encoding reconstructed from the decoded block. Kept distinct internally from
 an initial structural decoding failure even though both map to the fixture's
 `RLP_STRUCTURES_ENCODING` identity. -/
 def rlpRoundTripTag : String := "RlpRoundTripError"
-
-/-- The error for an RLP item whose structure is not what the field requires.
-Kept here so structure failures read the same at every call site. -/
-def rlpStructureError (name : String) (detail : String) : String :=
-  s!"{rlpStructureTag} : {name} : {detail}"
-
-/-- A fixed-width field: exactly `n` bytes, no more and no fewer. -/
-def Bytes.toRlpFixed (name : String) (n : Nat) (xs : Bytes) : Except String Bytes :=
-  (xs.toFixed? n).toExcept
-    s!"{rlpFixedWidthTag} : {name} must be exactly {n} bytes, but is {xs.length}"
-
-/-- A fixed-width 32-byte hash or root, as a `B256`. `Bytes.toB256?` is already an
-exact-width decoder, so this adds the precise reason rather than a check. Note
-these fields are *bytes*, not scalars: a root may legitimately begin with a zero
-byte, so the canonical-scalar rule must not be applied to them. -/
-def Bytes.toRlpHash (name : String) (xs : Bytes) : Except String B256 :=
-  xs.toB256?.toExcept
-    s!"{rlpFixedWidthTag} : {name} must be exactly 32 bytes, but is {xs.length}"
-
-/-- A fixed-width 8-byte field, as a `UInt64`. Like `toRlpHash`, this is bytes
-rather than a scalar: the header nonce is eight bytes of zeroes, not empty. -/
-def Bytes.toRlpFixedB64 (name : String) (xs : Bytes) : Except String UInt64 :=
-  xs.toUInt64?.toExcept
-    s!"{rlpFixedWidthTag} : {name} must be exactly 8 bytes, but is {xs.length}"
-
-/-- The canonicality half of scalar checking, shared by every width. The
-overflow tag is a parameter because the width is what the official vocabulary
-distinguishes, while non-canonical encoding is one reason at every width. -/
-private def rlpScalarBytes (overflowTag name : String) (n : Nat) (xs : Bytes) :
-  Except String Bytes := do
-  if xs.length > n then
-    .error
-      s!"{overflowTag} : {name} scalar is {xs.length} bytes, \
-         exceeding its {n}-byte width"
-  if xs.head? = some (0 : UInt8) then
-    .error
-      s!"{rlpLeadingZerosTag} : {name} scalar 0x{Bytes.toHex xs} \
-         is not canonically encoded (leading zero byte)"
-  .ok xs
-
-/-- A canonical unsigned scalar of at most `n` bytes, as a `Nat`. Overflow is
-reported against the 256-bit identity, this being the widest scalar the
-consensus fields have; a field modelled as 64 bits must use `toRlpB64`. -/
-def Bytes.toRlpNat (name : String) (n : Nat) (xs : Bytes) : Except String Nat := do
-  let xs ← rlpScalarBytes rlpFieldOverflow256Tag name n xs
-  .ok xs.toNat
-
-/-- A canonical 64-bit scalar: at most eight bytes, converted without
-truncation. -/
-def Bytes.toRlpB64 (name : String) (xs : Bytes) : Except String UInt64 := do
-  let xs ← rlpScalarBytes rlpFieldOverflow64Tag name 8 xs
-  .ok xs.toUInt64
-
-/-- A canonical 256-bit scalar: at most thirty-two bytes, converted without
-truncation. -/
-def Bytes.toRlpB256 (name : String) (xs : Bytes) : Except String B256 := do
-  let xs ← rlpScalarBytes rlpFieldOverflow256Tag name 32 xs
-  .ok xs.toB256
-
-/-- An address field: exactly twenty bytes. -/
-def Bytes.toRlpAdr (name : String) (xs : Bytes) : Except String Adr :=
-  xs.toAdr?.toExcept
-    s!"{rlpFixedWidthTag} : {name} must be exactly 20 bytes, but is {xs.length}"
-
-/-- An optional contract-creation receiver: empty, or exactly twenty bytes. -/
-def Bytes.toRlpReceiver (name : String) (xs : Bytes) : Except String (Option Adr) :=
-  xs.toReceiver?.toExcept
-    s!"{rlpFixedWidthTag} : {name} must be empty or exactly 20 bytes, \
-       but is {xs.length}"
-
---------------- WIRE-STRUCTURAL PREDICATES ----------------
-
--- P0.4's representation layer, kept deliberately separate from contextual
--- consensus validity (fixed decision 3). Each predicate below is a *lift of
--- the strict decoders above and in `Jaune/Execution.lean` /
--- `Jaune/Transaction.lean*` -- it says exactly what a decoder-produced value
--- satisfies, and nothing about nonces, base fees, gas limits or fork
--- activation. Every one is decidable by finite inspection, so a hand-built
--- record can be certified or refused without an oracle.
-
-/-- Peel one `bind` off an `Except` `do` chain. Declared here because the
-strict field decoders below are the first `do` chains this library inverts;
-`Jaune/Sufficiency.lean`'s instruction walks use the same lemma. -/
-theorem Except.bind_eq_ok {ε α β : Type} {e : Except ε α} {f : α → Except ε β}
-    {b : β} (h : e >>= f = .ok b) : ∃ a, e = .ok a ∧ f a = .ok b := by
-  cases e with
-  | error err => exact absurd h (by simp [bind, Except.bind])
-  | ok a => exact ⟨a, rfl, h⟩
-
-/-- The `Iff` form, so that `simp only` can flatten a whole twenty-field
-decoder chain into nested existentials in one step. -/
-theorem Except.bind_eq_ok_iff {ε α β : Type} {e : Except ε α}
-    {f : α → Except ε β} {b : β} :
-    (e >>= f = .ok b) ↔ ∃ a, e = .ok a ∧ f a = .ok b := by
-  refine ⟨Except.bind_eq_ok, ?_⟩
-  rintro ⟨a, rfl, h⟩
-  simpa [bind, Except.bind] using h
-
-/-- Bridge equations for the legacy renderer adapters (P0.7 item 8). A typed
-core reaches its stringly caller through `Except.mapError <Type>.render`, and
-downstream proofs should invert the adapter with these two lemmas rather than
-unfolding `mapError` at every boundary. -/
-@[simp] theorem Except.mapError_eq_ok_iff {ε δ α : Type} {f : ε → δ}
-    {x : Except ε α} {a : α} : x.mapError f = .ok a ↔ x = .ok a := by
-  cases x <;> simp [Except.mapError]
-
-theorem Except.mapError_eq_error_iff {ε δ α : Type} {f : ε → δ}
-    {x : Except ε α} {d : δ} :
-    x.mapError f = .error d ↔ ∃ e, x = .error e ∧ f e = d := by
-  cases x with
-  | error e => simp [Except.mapError]
-  | ok a => simp [Except.mapError]
-
-/-- Inversion for the `List.mapM` the list-shaped decoders use: every element
-of the decoded list is something the element decoder accepted. This is what
-lifts a per-element soundness theorem to a whole ommer, withdrawal,
-authorisation, or transaction list. -/
-theorem List.mapM_except_eq_ok_mem {α β ε : Type} {f : α → Except ε β} :
-    ∀ {l : List α} {r : List β}, l.mapM f = .ok r → ∀ b ∈ r, ∃ a, f a = .ok b := by
-  intro l
-  induction l with
-  | nil =>
-    intro r h b hb
-    simp only [List.mapM_nil, pure, Except.pure, Except.ok.injEq] at h
-    subst h
-    simp at hb
-  | cons a as ih =>
-    intro r h b hb
-    rw [List.mapM_cons] at h
-    obtain ⟨b0, hb0, h⟩ := Except.bind_eq_ok h
-    obtain ⟨bs, hbs, h⟩ := Except.bind_eq_ok h
-    simp only [pure, Except.pure, Except.ok.injEq] at h
-    subst h
-    rcases List.mem_cons.mp hb with rfl | hb'
-    · exact ⟨a, hb0⟩
-    · exact ih hbs b hb'
-
-/-- The width identity the 256-bit consensus scalars are stated with: a
-thirty-two byte field and a 256-bit bound are the same bound. -/
-theorem pow_256_eq_pow_32 : (2 : Nat) ^ 256 = 256 ^ 32 := by norm_num
-
-/-- The width identity for the 64-bit consensus scalars. -/
-theorem pow_64_eq_pow_8 : (2 : Nat) ^ 64 = 256 ^ 8 := by norm_num
-
-/-- A canonical RLP scalar byte string: no wider than its field, and with no
-leading zero byte. This is the `Prop` face of `Bytes.isCanonicalScalar`, the
-pure shape check the decoders are built from, and it is a real obligation for
-`Tx.r`/`Tx.s`, which are stored as raw bytes. -/
-def Bytes.CanonicalScalar (n : Nat) (xs : Bytes) : Prop :=
-  Bytes.isCanonicalScalar n xs = true
-
-instance (n : Nat) (xs : Bytes) : Decidable (Bytes.CanonicalScalar n xs) := by
-  unfold Bytes.CanonicalScalar; infer_instance
-
-theorem Bytes.canonicalScalar_iff {n : Nat} {xs : Bytes} :
-    Bytes.CanonicalScalar n xs ↔ xs.length ≤ n ∧ xs.head? ≠ some (0 : UInt8) := by
-  unfold Bytes.CanonicalScalar Bytes.isCanonicalScalar
-  simp
-
-private theorem rlpScalarBytes_eq_ok {overflowTag name : String} {n : Nat}
-    {xs ys : Bytes} (h : rlpScalarBytes overflowTag name n xs = .ok ys) :
-    ys = xs ∧ Bytes.CanonicalScalar n xs := by
-  unfold rlpScalarBytes at h
-  simp only [bind, Except.bind] at h
-  split at h
-  · exact absurd h (by simp)
-  · rename_i h1
-    split at h
-    · exact absurd h (by simp)
-    · rename_i h2
-      simp only [Except.ok.injEq] at h
-      refine ⟨h.symm, ?_⟩
-      rw [Bytes.canonicalScalar_iff]
-      exact ⟨by omega, h2⟩
-
-/-- Soundness of the at-most-`n`-byte scalar decoder: the accepted bytes are a
-canonical scalar, and the value they denote is below `256 ^ n`. -/
-theorem Bytes.toRlpNat_eq_ok {name : String} {n : Nat} {xs : Bytes} {v : Nat}
-    (h : xs.toRlpNat name n = .ok v) :
-    Bytes.CanonicalScalar n xs ∧ v < 256 ^ n := by
-  unfold Bytes.toRlpNat at h
-  obtain ⟨zs, hz, hv⟩ := Except.bind_eq_ok h
-  obtain ⟨rfl, hc⟩ := rlpScalarBytes_eq_ok hz
-  refine ⟨hc, ?_⟩
-  simp only [Except.ok.injEq] at hv
-  exact hv ▸ Bytes.toNat_lt_of_length_le (Bytes.canonicalScalar_iff.mp hc).1
-
-/-- The 256-bit scalar decoder accepts only canonical 32-byte-wide scalars. -/
-theorem Bytes.toRlpB256_eq_ok {name : String} {xs : Bytes} {v : B256}
-    (h : xs.toRlpB256 name = .ok v) : Bytes.CanonicalScalar 32 xs := by
-  unfold Bytes.toRlpB256 at h
-  obtain ⟨zs, hz, _⟩ := Except.bind_eq_ok h
-  exact (rlpScalarBytes_eq_ok hz).2
-
-/-- The form the consensus scalars are stated in: a thirty-two byte field
-carries a `U256`. -/
-theorem Bytes.toRlpNat_lt_two_pow_256 {name : String} {xs : Bytes} {v : Nat}
-    (h : xs.toRlpNat name 32 = .ok v) : v < 2 ^ 256 := by
-  rw [pow_256_eq_pow_32]
-  exact (Bytes.toRlpNat_eq_ok h).2
-
-/-- The fixed-width decoder returns exactly `n` bytes. -/
-theorem Bytes.toRlpFixed_eq_ok {name : String} {n : Nat} {xs ys : Bytes}
-    (h : xs.toRlpFixed name n = .ok ys) : ys.length = n := by
-  unfold Bytes.toRlpFixed Bytes.toFixed? at h
-  split at h
-  · rename_i hl
-    simp only [Option.toExcept, Except.ok.injEq] at h
-    exact h ▸ hl
-  · exact absurd h (by simp [Option.toExcept])
-
-/-- Wire well-formedness of a header: precisely the representation facts
-`BLT.toExStrHeader` establishes. The bloom is a fixed 256-byte string; the
-`Nat`-modelled consensus scalars are `U256`; the two blob-gas fields are the
-header's only `U64` scalars. Everything else in `Header` is already carried by
-a width-exact type. -/
-def Header.WireWellFormed (h : Header) : Prop :=
-  h.bloom.length = 256 ∧
-  h.difficulty < 2 ^ 256 ∧
-  h.number < 2 ^ 256 ∧
-  h.gasLimit < 2 ^ 256 ∧
-  h.gasUsed < 2 ^ 256 ∧
-  h.timestamp < 2 ^ 256 ∧
-  h.baseFeePerGas < 2 ^ 256 ∧
-  h.blobGasUsed < 2 ^ 64 ∧
-  h.excessBlobGas < 2 ^ 64
-
-instance (h : Header) : Decidable (Header.WireWellFormed h) := by
-  unfold Header.WireWellFormed; infer_instance
-
-/-- EIP-7702 authorisation tuples arrive inside type-4 transactions, so their
-fields are untrusted in exactly the way a transaction's are. `yParity` is the
-only one `BLT.toExStrAuth` reads as an unbounded scalar. -/
-def Auth.WireWellFormed (a : Auth) : Prop := a.yParity < 2 ^ 256
-
-instance (a : Auth) : Decidable (Auth.WireWellFormed a) := by
-  unfold Auth.WireWellFormed; infer_instance
-
-/-- The per-type half of transaction well-formedness: the fee scalars each
-envelope carries, and the recursive obligation on type-4 authorisations.
-Access-list and blob-hash material is already width-exact by type. -/
-def TxType.WireWellFormed : TxType → Prop
-  | .zero gasPrice _ => gasPrice < 2 ^ 256
-  | .one _ gasPrice _ _ => gasPrice < 2 ^ 256
-  | .two _ maxPriorityFee maxFee _ _ =>
-    maxPriorityFee < 2 ^ 256 ∧ maxFee < 2 ^ 256
-  | .three _ maxPriorityFee maxFee _ _ maxBlobFee _ =>
-    maxPriorityFee < 2 ^ 256 ∧ maxFee < 2 ^ 256 ∧ maxBlobFee < 2 ^ 256
-  | .four _ maxPriorityFee maxFee _ _ auths =>
-    maxPriorityFee < 2 ^ 256 ∧ maxFee < 2 ^ 256 ∧
-      ∀ a ∈ auths, Auth.WireWellFormed a
-
-instance (t : TxType) : Decidable (TxType.WireWellFormed t) := by
-  cases t <;> (unfold TxType.WireWellFormed; infer_instance)
-
-/-- Whether a transaction is a legacy (untyped) one. A typed transaction's
-canonical block encoding is its envelope byte followed by its payload, never
-the legacy list, so this is the discriminator the checked ingress needs. -/
-def TxType.isLegacy : TxType → Bool
-  | .zero _ _ => true
-  | _ => false
-
-/-- Wire well-formedness of a transaction: the `U256` scalars every envelope
-shares, canonical signature scalar bytes, and the per-type obligations.
-`nonce` is already a `UInt64` and `data` is unconstrained on the wire. -/
-def Tx.WireWellFormed (tx : Tx) : Prop :=
-  tx.gas < 2 ^ 256 ∧
-  tx.value < 2 ^ 256 ∧
-  tx.v < 2 ^ 256 ∧
-  Bytes.CanonicalScalar 32 tx.r ∧
-  Bytes.CanonicalScalar 32 tx.s ∧
-  tx.type.WireWellFormed
-
-instance (tx : Tx) : Decidable (Tx.WireWellFormed tx) := by
-  unfold Tx.WireWellFormed; infer_instance
-
-/-- EIP-4895's withdrawal amount is a 64-bit Gwei scalar on the wire even
-though `Withdrawal.amount` stores 256 bits for balance arithmetic, so a
-decoded withdrawal always has its upper 192 bits clear. Design report §7 names
-this as the one place a semantic field is wider than its wire type. -/
-def Withdrawal.WireWellFormed (w : Withdrawal) : Prop :=
-  w.amount.1 = ((0, 0) : B128) ∧ w.amount.2.1 = (0 : UInt64)
-
-instance (w : Withdrawal) : Decidable (Withdrawal.WireWellFormed w) := by
-  unfold Withdrawal.WireWellFormed; infer_instance
-
-/-- Widening a `UInt64` to a `B256` leaves the upper 192 bits clear. This is
-what makes `Withdrawal.WireWellFormed` a genuine lift of
-`BLT.toExStrWithdrawal`, which reads the amount with the 64-bit scalar
-decoder and then widens it. -/
-theorem UInt64.toNat_toB256_high (x : UInt64) :
-    (x.toNat.toB256).1 = ((0, 0) : B128) ∧ (x.toNat.toB256).2.1 = (0 : UInt64) := by
-  have hx : x.toNat < 2 ^ 64 := x.toNat_lt
-  have h128 : x.toNat >>> 128 = 0 := by
-    rw [Nat.shiftRight_eq_div_pow]
-    exact Nat.div_eq_of_lt
-      (Nat.lt_of_lt_of_le hx (Nat.pow_le_pow_right (by norm_num) (by norm_num)))
-  have h64 : x.toNat >>> 64 = 0 := by
-    rw [Nat.shiftRight_eq_div_pow]
-    exact Nat.div_eq_of_lt hx
-  constructor
-  · simp [Nat.toB256, h128, Nat.toB128]
-  · simp [Nat.toB256, Nat.toB128, h64]
-
-/-- A transaction slot inside a block body. `BLT.toExStrBlock` turns a list
-item into a decoded legacy transaction and a byte-string item into opaque
-typed-envelope bytes, so the two sides carry genuinely different obligations:
-the decoded side must be a well-formed legacy transaction, while typed bytes
-stay opaque until the existing decode point inside `applyBody`. Eagerly
-decoding them here would change which error wins (fixed decision 5). -/
-def TxEntry.WireWellFormed : Bytes ⊕ Tx → Prop
-  | .inl _ => True
-  | .inr tx => Tx.WireWellFormed tx ∧ tx.type.isLegacy = true
-
-instance (e : Bytes ⊕ Tx) : Decidable (TxEntry.WireWellFormed e) := by
-  cases e <;> (unfold TxEntry.WireWellFormed; infer_instance)
-
-/-- Structural canonicality of a decoded block: the header, every ommer
-header, every withdrawal, and every transaction slot are wire-well-formed.
-This is the componentwise lift of `BLT.toExStrBlock`; the byte-for-byte
-re-encoding obligation is carried separately, by `CanonicalBlock`. -/
-def Block.RlpCanonical (b : Block) : Prop :=
-  b.header.WireWellFormed ∧
-  (∀ o ∈ b.ommers, Header.WireWellFormed o) ∧
-  (∀ w ∈ b.wds, Withdrawal.WireWellFormed w) ∧
-  (∀ e ∈ b.txs, TxEntry.WireWellFormed e)
-
-instance (b : Block) : Decidable (Block.RlpCanonical b) := by
-  unfold Block.RlpCanonical; infer_instance
-
---------------- STRICT DECODER REGRESSION CHECKS ----------------
-
--- Each reason is reported under its own tag, and each tag is recognized by the
--- `renderTagged` convention the classifier reads -- an exact tag, or a tag
--- opening detail text at " : ". Accepted values are checked too: the point of
--- rejecting a nine-byte index is to keep the eight-byte ones exact.
-
 
 --------------- TYPED SEMANTIC REASONS: CODEC AND VM ---------------
 
@@ -1606,6 +1276,350 @@ def SettledHalt.toEvmError : SettledHalt → EvmError
   = [ rlpStructureTag, rlpFixedWidthTag, rlpFieldOverflow64Tag,
       rlpFieldOverflow256Tag, rlpLeadingZerosTag, rlpWithdrawalsNotReadTag,
       rlpRoundTripTag ]
+
+
+/-- The structure reason for an RLP item that is not what the field requires.
+Kept here so structure failures read the same at every call site; the render
+is byte-for-byte the string the retired stringly helper produced. -/
+def DecodeError.structure (name : String) (detail : String) : DecodeError :=
+  .rlpStructure (.text s!"{name} : {detail}")
+
+/-- A fixed-width field: exactly `n` bytes, no more and no fewer. -/
+def Bytes.toRlpFixed (name : String) (n : Nat) (xs : Bytes) :
+    Except DecodeError Bytes :=
+  (xs.toFixed? n).toExcept
+    (.fixedWidth (.text s!"{name} must be exactly {n} bytes, but is {xs.length}"))
+
+/-- A fixed-width 32-byte hash or root, as a `B256`. `Bytes.toB256?` is already an
+exact-width decoder, so this adds the precise reason rather than a check. Note
+these fields are *bytes*, not scalars: a root may legitimately begin with a zero
+byte, so the canonical-scalar rule must not be applied to them. -/
+def Bytes.toRlpHash (name : String) (xs : Bytes) : Except DecodeError B256 :=
+  xs.toB256?.toExcept
+    (.fixedWidth (.text s!"{name} must be exactly 32 bytes, but is {xs.length}"))
+
+/-- A fixed-width 8-byte field, as a `UInt64`. Like `toRlpHash`, this is bytes
+rather than a scalar: the header nonce is eight bytes of zeroes, not empty. -/
+def Bytes.toRlpFixedB64 (name : String) (xs : Bytes) : Except DecodeError UInt64 :=
+  xs.toUInt64?.toExcept
+    (.fixedWidth (.text s!"{name} must be exactly 8 bytes, but is {xs.length}"))
+
+/-- The canonicality half of scalar checking, shared by every width. The
+overflow *constructor* is a parameter because the width is what the official
+vocabulary distinguishes, while non-canonical encoding is one reason at every
+width. -/
+private def rlpScalarBytes (overflow : ErrorDetail → DecodeError)
+    (name : String) (n : Nat) (xs : Bytes) : Except DecodeError Bytes := do
+  if xs.length > n then
+    .error <| overflow <| .text
+      s!"{name} scalar is {xs.length} bytes, exceeding its {n}-byte width"
+  if xs.head? = some (0 : UInt8) then
+    .error <| .leadingZeros <| .text
+      s!"{name} scalar 0x{Bytes.toHex xs} \
+         is not canonically encoded (leading zero byte)"
+  .ok xs
+
+/-- A canonical unsigned scalar of at most `n` bytes, as a `Nat`. Overflow is
+reported against the 256-bit identity, this being the widest scalar the
+consensus fields have; a field modelled as 64 bits must use `toRlpB64`. -/
+def Bytes.toRlpNat (name : String) (n : Nat) (xs : Bytes) :
+    Except DecodeError Nat := do
+  let xs ← rlpScalarBytes .fieldOverflow256 name n xs
+  .ok xs.toNat
+
+/-- A canonical 64-bit scalar: at most eight bytes, converted without
+truncation. -/
+def Bytes.toRlpB64 (name : String) (xs : Bytes) : Except DecodeError UInt64 := do
+  let xs ← rlpScalarBytes .fieldOverflow64 name 8 xs
+  .ok xs.toUInt64
+
+/-- A canonical 256-bit scalar: at most thirty-two bytes, converted without
+truncation. -/
+def Bytes.toRlpB256 (name : String) (xs : Bytes) : Except DecodeError B256 := do
+  let xs ← rlpScalarBytes .fieldOverflow256 name 32 xs
+  .ok xs.toB256
+
+/-- An address field: exactly twenty bytes. -/
+def Bytes.toRlpAdr (name : String) (xs : Bytes) : Except DecodeError Adr :=
+  xs.toAdr?.toExcept
+    (.fixedWidth (.text s!"{name} must be exactly 20 bytes, but is {xs.length}"))
+
+/-- An optional contract-creation receiver: empty, or exactly twenty bytes. -/
+def Bytes.toRlpReceiver (name : String) (xs : Bytes) :
+    Except DecodeError (Option Adr) :=
+  xs.toReceiver?.toExcept
+    (.fixedWidth (.text s!"{name} must be empty or exactly 20 bytes, \
+       but is {xs.length}"))
+
+--------------- WIRE-STRUCTURAL PREDICATES ----------------
+
+-- P0.4's representation layer, kept deliberately separate from contextual
+-- consensus validity (fixed decision 3). Each predicate below is a *lift of
+-- the strict decoders above and in `Jaune/Execution.lean` /
+-- `Jaune/Transaction.lean*` -- it says exactly what a decoder-produced value
+-- satisfies, and nothing about nonces, base fees, gas limits or fork
+-- activation. Every one is decidable by finite inspection, so a hand-built
+-- record can be certified or refused without an oracle.
+
+/-- Peel one `bind` off an `Except` `do` chain. Declared here because the
+strict field decoders below are the first `do` chains this library inverts;
+`Jaune/Sufficiency.lean`'s instruction walks use the same lemma. -/
+theorem Except.bind_eq_ok {ε α β : Type} {e : Except ε α} {f : α → Except ε β}
+    {b : β} (h : e >>= f = .ok b) : ∃ a, e = .ok a ∧ f a = .ok b := by
+  cases e with
+  | error err => exact absurd h (by simp [bind, Except.bind])
+  | ok a => exact ⟨a, rfl, h⟩
+
+/-- The `Iff` form, so that `simp only` can flatten a whole twenty-field
+decoder chain into nested existentials in one step. -/
+theorem Except.bind_eq_ok_iff {ε α β : Type} {e : Except ε α}
+    {f : α → Except ε β} {b : β} :
+    (e >>= f = .ok b) ↔ ∃ a, e = .ok a ∧ f a = .ok b := by
+  refine ⟨Except.bind_eq_ok, ?_⟩
+  rintro ⟨a, rfl, h⟩
+  simpa [bind, Except.bind] using h
+
+/-- Bridge equations for the legacy renderer adapters (P0.7 item 8). A typed
+core reaches its stringly caller through `Except.mapError <Type>.render`, and
+downstream proofs should invert the adapter with these two lemmas rather than
+unfolding `mapError` at every boundary. -/
+@[simp] theorem Except.mapError_eq_ok_iff {ε δ α : Type} {f : ε → δ}
+    {x : Except ε α} {a : α} : x.mapError f = .ok a ↔ x = .ok a := by
+  cases x <;> simp [Except.mapError]
+
+theorem Except.mapError_eq_error_iff {ε δ α : Type} {f : ε → δ}
+    {x : Except ε α} {d : δ} :
+    x.mapError f = .error d ↔ ∃ e, x = .error e ∧ f e = d := by
+  cases x with
+  | error e => simp [Except.mapError]
+  | ok a => simp [Except.mapError]
+
+/-- Inversion for the `List.mapM` the list-shaped decoders use: every element
+of the decoded list is something the element decoder accepted. This is what
+lifts a per-element soundness theorem to a whole ommer, withdrawal,
+authorisation, or transaction list. -/
+theorem List.mapM_except_eq_ok_mem {α β ε : Type} {f : α → Except ε β} :
+    ∀ {l : List α} {r : List β}, l.mapM f = .ok r → ∀ b ∈ r, ∃ a, f a = .ok b := by
+  intro l
+  induction l with
+  | nil =>
+    intro r h b hb
+    simp only [List.mapM_nil, pure, Except.pure, Except.ok.injEq] at h
+    subst h
+    simp at hb
+  | cons a as ih =>
+    intro r h b hb
+    rw [List.mapM_cons] at h
+    obtain ⟨b0, hb0, h⟩ := Except.bind_eq_ok h
+    obtain ⟨bs, hbs, h⟩ := Except.bind_eq_ok h
+    simp only [pure, Except.pure, Except.ok.injEq] at h
+    subst h
+    rcases List.mem_cons.mp hb with rfl | hb'
+    · exact ⟨a, hb0⟩
+    · exact ih hbs b hb'
+
+/-- The width identity the 256-bit consensus scalars are stated with: a
+thirty-two byte field and a 256-bit bound are the same bound. -/
+theorem pow_256_eq_pow_32 : (2 : Nat) ^ 256 = 256 ^ 32 := by norm_num
+
+/-- The width identity for the 64-bit consensus scalars. -/
+theorem pow_64_eq_pow_8 : (2 : Nat) ^ 64 = 256 ^ 8 := by norm_num
+
+/-- A canonical RLP scalar byte string: no wider than its field, and with no
+leading zero byte. This is the `Prop` face of `Bytes.isCanonicalScalar`, the
+pure shape check the decoders are built from, and it is a real obligation for
+`Tx.r`/`Tx.s`, which are stored as raw bytes. -/
+def Bytes.CanonicalScalar (n : Nat) (xs : Bytes) : Prop :=
+  Bytes.isCanonicalScalar n xs = true
+
+instance (n : Nat) (xs : Bytes) : Decidable (Bytes.CanonicalScalar n xs) := by
+  unfold Bytes.CanonicalScalar; infer_instance
+
+theorem Bytes.canonicalScalar_iff {n : Nat} {xs : Bytes} :
+    Bytes.CanonicalScalar n xs ↔ xs.length ≤ n ∧ xs.head? ≠ some (0 : UInt8) := by
+  unfold Bytes.CanonicalScalar Bytes.isCanonicalScalar
+  simp
+
+private theorem rlpScalarBytes_eq_ok {overflow : ErrorDetail → DecodeError}
+    {name : String} {n : Nat}
+    {xs ys : Bytes} (h : rlpScalarBytes overflow name n xs = .ok ys) :
+    ys = xs ∧ Bytes.CanonicalScalar n xs := by
+  unfold rlpScalarBytes at h
+  simp only [bind, Except.bind] at h
+  split at h
+  · exact absurd h (by simp)
+  · rename_i h1
+    split at h
+    · exact absurd h (by simp)
+    · rename_i h2
+      simp only [Except.ok.injEq] at h
+      refine ⟨h.symm, ?_⟩
+      rw [Bytes.canonicalScalar_iff]
+      exact ⟨by omega, h2⟩
+
+/-- Soundness of the at-most-`n`-byte scalar decoder: the accepted bytes are a
+canonical scalar, and the value they denote is below `256 ^ n`. -/
+theorem Bytes.toRlpNat_eq_ok {name : String} {n : Nat} {xs : Bytes} {v : Nat}
+    (h : xs.toRlpNat name n = .ok v) :
+    Bytes.CanonicalScalar n xs ∧ v < 256 ^ n := by
+  unfold Bytes.toRlpNat at h
+  obtain ⟨zs, hz, hv⟩ := Except.bind_eq_ok h
+  obtain ⟨rfl, hc⟩ := rlpScalarBytes_eq_ok hz
+  refine ⟨hc, ?_⟩
+  simp only [Except.ok.injEq] at hv
+  exact hv ▸ Bytes.toNat_lt_of_length_le (Bytes.canonicalScalar_iff.mp hc).1
+
+/-- The 256-bit scalar decoder accepts only canonical 32-byte-wide scalars. -/
+theorem Bytes.toRlpB256_eq_ok {name : String} {xs : Bytes} {v : B256}
+    (h : xs.toRlpB256 name = .ok v) : Bytes.CanonicalScalar 32 xs := by
+  unfold Bytes.toRlpB256 at h
+  obtain ⟨zs, hz, _⟩ := Except.bind_eq_ok h
+  exact (rlpScalarBytes_eq_ok hz).2
+
+/-- The form the consensus scalars are stated in: a thirty-two byte field
+carries a `U256`. -/
+theorem Bytes.toRlpNat_lt_two_pow_256 {name : String} {xs : Bytes} {v : Nat}
+    (h : xs.toRlpNat name 32 = .ok v) : v < 2 ^ 256 := by
+  rw [pow_256_eq_pow_32]
+  exact (Bytes.toRlpNat_eq_ok h).2
+
+/-- The fixed-width decoder returns exactly `n` bytes. -/
+theorem Bytes.toRlpFixed_eq_ok {name : String} {n : Nat} {xs ys : Bytes}
+    (h : xs.toRlpFixed name n = .ok ys) : ys.length = n := by
+  unfold Bytes.toRlpFixed Bytes.toFixed? at h
+  split at h
+  · rename_i hl
+    simp only [Option.toExcept, Except.ok.injEq] at h
+    exact h ▸ hl
+  · exact absurd h (by simp [Option.toExcept])
+
+/-- Wire well-formedness of a header: precisely the representation facts
+`BLT.toExHeader` establishes. The bloom is a fixed 256-byte string; the
+`Nat`-modelled consensus scalars are `U256`; the two blob-gas fields are the
+header's only `U64` scalars. Everything else in `Header` is already carried by
+a width-exact type. -/
+def Header.WireWellFormed (h : Header) : Prop :=
+  h.bloom.length = 256 ∧
+  h.difficulty < 2 ^ 256 ∧
+  h.number < 2 ^ 256 ∧
+  h.gasLimit < 2 ^ 256 ∧
+  h.gasUsed < 2 ^ 256 ∧
+  h.timestamp < 2 ^ 256 ∧
+  h.baseFeePerGas < 2 ^ 256 ∧
+  h.blobGasUsed < 2 ^ 64 ∧
+  h.excessBlobGas < 2 ^ 64
+
+instance (h : Header) : Decidable (Header.WireWellFormed h) := by
+  unfold Header.WireWellFormed; infer_instance
+
+/-- EIP-7702 authorisation tuples arrive inside type-4 transactions, so their
+fields are untrusted in exactly the way a transaction's are. `yParity` is the
+only one `BLT.toExAuth` reads as an unbounded scalar. -/
+def Auth.WireWellFormed (a : Auth) : Prop := a.yParity < 2 ^ 256
+
+instance (a : Auth) : Decidable (Auth.WireWellFormed a) := by
+  unfold Auth.WireWellFormed; infer_instance
+
+/-- The per-type half of transaction well-formedness: the fee scalars each
+envelope carries, and the recursive obligation on type-4 authorisations.
+Access-list and blob-hash material is already width-exact by type. -/
+def TxType.WireWellFormed : TxType → Prop
+  | .zero gasPrice _ => gasPrice < 2 ^ 256
+  | .one _ gasPrice _ _ => gasPrice < 2 ^ 256
+  | .two _ maxPriorityFee maxFee _ _ =>
+    maxPriorityFee < 2 ^ 256 ∧ maxFee < 2 ^ 256
+  | .three _ maxPriorityFee maxFee _ _ maxBlobFee _ =>
+    maxPriorityFee < 2 ^ 256 ∧ maxFee < 2 ^ 256 ∧ maxBlobFee < 2 ^ 256
+  | .four _ maxPriorityFee maxFee _ _ auths =>
+    maxPriorityFee < 2 ^ 256 ∧ maxFee < 2 ^ 256 ∧
+      ∀ a ∈ auths, Auth.WireWellFormed a
+
+instance (t : TxType) : Decidable (TxType.WireWellFormed t) := by
+  cases t <;> (unfold TxType.WireWellFormed; infer_instance)
+
+/-- Whether a transaction is a legacy (untyped) one. A typed transaction's
+canonical block encoding is its envelope byte followed by its payload, never
+the legacy list, so this is the discriminator the checked ingress needs. -/
+def TxType.isLegacy : TxType → Bool
+  | .zero _ _ => true
+  | _ => false
+
+/-- Wire well-formedness of a transaction: the `U256` scalars every envelope
+shares, canonical signature scalar bytes, and the per-type obligations.
+`nonce` is already a `UInt64` and `data` is unconstrained on the wire. -/
+def Tx.WireWellFormed (tx : Tx) : Prop :=
+  tx.gas < 2 ^ 256 ∧
+  tx.value < 2 ^ 256 ∧
+  tx.v < 2 ^ 256 ∧
+  Bytes.CanonicalScalar 32 tx.r ∧
+  Bytes.CanonicalScalar 32 tx.s ∧
+  tx.type.WireWellFormed
+
+instance (tx : Tx) : Decidable (Tx.WireWellFormed tx) := by
+  unfold Tx.WireWellFormed; infer_instance
+
+/-- EIP-4895's withdrawal amount is a 64-bit Gwei scalar on the wire even
+though `Withdrawal.amount` stores 256 bits for balance arithmetic, so a
+decoded withdrawal always has its upper 192 bits clear. Design report §7 names
+this as the one place a semantic field is wider than its wire type. -/
+def Withdrawal.WireWellFormed (w : Withdrawal) : Prop :=
+  w.amount.1 = ((0, 0) : B128) ∧ w.amount.2.1 = (0 : UInt64)
+
+instance (w : Withdrawal) : Decidable (Withdrawal.WireWellFormed w) := by
+  unfold Withdrawal.WireWellFormed; infer_instance
+
+/-- Widening a `UInt64` to a `B256` leaves the upper 192 bits clear. This is
+what makes `Withdrawal.WireWellFormed` a genuine lift of
+`BLT.toExWithdrawal`, which reads the amount with the 64-bit scalar
+decoder and then widens it. -/
+theorem UInt64.toNat_toB256_high (x : UInt64) :
+    (x.toNat.toB256).1 = ((0, 0) : B128) ∧ (x.toNat.toB256).2.1 = (0 : UInt64) := by
+  have hx : x.toNat < 2 ^ 64 := x.toNat_lt
+  have h128 : x.toNat >>> 128 = 0 := by
+    rw [Nat.shiftRight_eq_div_pow]
+    exact Nat.div_eq_of_lt
+      (Nat.lt_of_lt_of_le hx (Nat.pow_le_pow_right (by norm_num) (by norm_num)))
+  have h64 : x.toNat >>> 64 = 0 := by
+    rw [Nat.shiftRight_eq_div_pow]
+    exact Nat.div_eq_of_lt hx
+  constructor
+  · simp [Nat.toB256, h128, Nat.toB128]
+  · simp [Nat.toB256, Nat.toB128, h64]
+
+/-- A transaction slot inside a block body. `BLT.toExBlock` turns a list
+item into a decoded legacy transaction and a byte-string item into opaque
+typed-envelope bytes, so the two sides carry genuinely different obligations:
+the decoded side must be a well-formed legacy transaction, while typed bytes
+stay opaque until the existing decode point inside `applyBody`. Eagerly
+decoding them here would change which error wins (fixed decision 5). -/
+def TxEntry.WireWellFormed : Bytes ⊕ Tx → Prop
+  | .inl _ => True
+  | .inr tx => Tx.WireWellFormed tx ∧ tx.type.isLegacy = true
+
+instance (e : Bytes ⊕ Tx) : Decidable (TxEntry.WireWellFormed e) := by
+  cases e <;> (unfold TxEntry.WireWellFormed; infer_instance)
+
+/-- Structural canonicality of a decoded block: the header, every ommer
+header, every withdrawal, and every transaction slot are wire-well-formed.
+This is the componentwise lift of `BLT.toExBlock`; the byte-for-byte
+re-encoding obligation is carried separately, by `CanonicalBlock`. -/
+def Block.RlpCanonical (b : Block) : Prop :=
+  b.header.WireWellFormed ∧
+  (∀ o ∈ b.ommers, Header.WireWellFormed o) ∧
+  (∀ w ∈ b.wds, Withdrawal.WireWellFormed w) ∧
+  (∀ e ∈ b.txs, TxEntry.WireWellFormed e)
+
+instance (b : Block) : Decidable (Block.RlpCanonical b) := by
+  unfold Block.RlpCanonical; infer_instance
+
+--------------- STRICT DECODER REGRESSION CHECKS ----------------
+
+-- Each reason is reported under its own tag, and each tag is recognized by the
+-- `renderTagged` convention the classifier reads -- an exact tag, or a tag
+-- opening detail text at " : ". Accepted values are checked too: the point of
+-- rejecting a nine-byte index is to keep the eight-byte ones exact.
+
+
 
 
 @[ext]

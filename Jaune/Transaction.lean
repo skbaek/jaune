@@ -29,6 +29,413 @@ private def errOf {α : Type} : Except String α → String
 private def hasTag {α : Type} (tag : String) (e : Except String α) : Bool :=
   hasErrorType (errOf e) tag
 
+--------- TYPED SEMANTIC REASONS: TRANSACTION, BLOCK, IMPORT ---------
+
+-- Declarations, renderers, and golden guards only; no producer is migrated
+-- here and no rendered message changes. Step 10 moves the producers.
+--
+-- Placement is frozen by `scripts/report-integrity-design.md` section 6:
+-- every transition and import entry point is in this module, so the two
+-- validation vocabularies and the three failure sums belong here. Their tag
+-- constants stay where they are declared, in `Jaune/Machine.lean`, and this
+-- module reads them; a tag and the constructor that renders under it are
+-- pinned to each other by the golden guards below.
+
+/-- Why a transaction is not admissible in the block that contains it.
+
+One constructor per reason in the transaction-rejection vocabulary, which is
+already one producer per reason and one official fixture identity per reason.
+Nonce direction, intrinsic gas, and the 256-bit gas-price product stay
+distinct for exactly the reason the vocabulary keeps them distinct.
+
+Step 10 grew the vocabulary from the twenty tags of the Step-1 census to
+twenty-one: `checkTransactionBlobData`'s EIP-4844 blob-fee rejection always
+rendered under its own `InsufficientMaxFeePerBlobGasError` spelling -- a
+fixture-observed message in the committed golden set -- but carried it as a
+bare literal outside every tag table, so the census could not see it. The
+constructor pins that producer to its tag like every other reason; its
+official fixture identity is the shared `INSUFFICIENT_MAX_FEE_PER_GAS`. -/
+inductive TxValidationError : Type
+  | gasPriceProductOverflow (detail : ErrorDetail)
+  | gasAllowanceExceeded (detail : ErrorDetail)
+  | initcodeSizeExceeded (detail : ErrorDetail)
+  | insufficientAccountFunds (detail : ErrorDetail)
+  | insufficientMaxFeePerGas (detail : ErrorDetail)
+  | insufficientMaxFeePerBlobGas (detail : ErrorDetail)
+  | transactionGasLimitExceeded (detail : ErrorDetail)
+  | intrinsicGasTooLow (detail : ErrorDetail)
+  | invalidChainId (detail : ErrorDetail)
+  | nonceIsMax (detail : ErrorDetail)
+  | nonceMismatchTooHigh (detail : ErrorDetail)
+  | nonceMismatchTooLow (detail : ErrorDetail)
+  | priorityGreaterThanMaxFee (detail : ErrorDetail)
+  | senderNotEoa (detail : ErrorDetail)
+  | type3BlobCountExceeded (detail : ErrorDetail)
+  | type3BlobCountLimitExceeded (detail : ErrorDetail)
+  | type3ContractCreation (detail : ErrorDetail)
+  | type3InvalidBlobVersionedHash (detail : ErrorDetail)
+  | type3ZeroBlobs (detail : ErrorDetail)
+  | type4ContractCreation (detail : ErrorDetail)
+  | emptyAuthorizationList (detail : ErrorDetail)
+deriving DecidableEq, Repr
+
+/-- The tag a transaction-rejection reason renders under. -/
+def TxValidationError.tag : TxValidationError → String
+  | .gasPriceProductOverflow _ => gasPriceProductOverflowTag
+  | .gasAllowanceExceeded _ => gasAllowanceExceededTag
+  | .initcodeSizeExceeded _ => initcodeSizeExceededTag
+  | .insufficientAccountFunds _ => insufficientAccountFundsTag
+  | .insufficientMaxFeePerGas _ => insufficientMaxFeePerGasTag
+  | .insufficientMaxFeePerBlobGas _ => insufficientMaxFeePerBlobGasTag
+  | .transactionGasLimitExceeded _ => transactionGasLimitExceededTag
+  | .intrinsicGasTooLow _ => intrinsicGasTooLowTag
+  | .invalidChainId _ => invalidChainIdTag
+  | .nonceIsMax _ => nonceIsMaxTag
+  | .nonceMismatchTooHigh _ => nonceMismatchTooHighTag
+  | .nonceMismatchTooLow _ => nonceMismatchTooLowTag
+  | .priorityGreaterThanMaxFee _ => priorityGreaterThanMaxFeeTag
+  | .senderNotEoa _ => senderNotEoaTag
+  | .type3BlobCountExceeded _ => type3BlobCountExceededTag
+  | .type3BlobCountLimitExceeded _ => type3BlobCountLimitExceededTag
+  | .type3ContractCreation _ => type3ContractCreationTag
+  | .type3InvalidBlobVersionedHash _ => type3InvalidBlobVersionedHashTag
+  | .type3ZeroBlobs _ => type3ZeroBlobsTag
+  | .type4ContractCreation _ => type4ContractCreationTag
+  | .emptyAuthorizationList _ => emptyAuthorizationListTag
+
+/-- The diagnostic payload of a transaction-rejection reason. -/
+def TxValidationError.detail : TxValidationError → ErrorDetail
+  | .gasPriceProductOverflow d | .gasAllowanceExceeded d
+  | .initcodeSizeExceeded d | .insufficientAccountFunds d
+  | .insufficientMaxFeePerGas d | .insufficientMaxFeePerBlobGas d
+  | .transactionGasLimitExceeded d
+  | .intrinsicGasTooLow d | .invalidChainId d | .nonceIsMax d
+  | .nonceMismatchTooHigh d | .nonceMismatchTooLow d
+  | .priorityGreaterThanMaxFee d | .senderNotEoa d
+  | .type3BlobCountExceeded d | .type3BlobCountLimitExceeded d
+  | .type3ContractCreation d | .type3InvalidBlobVersionedHash d
+  | .type3ZeroBlobs d | .type4ContractCreation d
+  | .emptyAuthorizationList d => d
+
+/-- The one renderer for `TxValidationError`. -/
+def TxValidationError.render (e : TxValidationError) : String :=
+  renderTagged e.tag e.detail
+
+/-- Every transaction-rejection reason, for the completeness guards. -/
+def TxValidationError.all : List TxValidationError :=
+  [ .gasPriceProductOverflow .none, .gasAllowanceExceeded .none,
+    .initcodeSizeExceeded .none, .insufficientAccountFunds .none,
+    .insufficientMaxFeePerGas .none, .insufficientMaxFeePerBlobGas .none,
+    .transactionGasLimitExceeded .none,
+    .intrinsicGasTooLow .none, .invalidChainId .none, .nonceIsMax .none,
+    .nonceMismatchTooHigh .none, .nonceMismatchTooLow .none,
+    .priorityGreaterThanMaxFee .none, .senderNotEoa .none,
+    .type3BlobCountExceeded .none, .type3BlobCountLimitExceeded .none,
+    .type3ContractCreation .none, .type3InvalidBlobVersionedHash .none,
+    .type3ZeroBlobs .none, .type4ContractCreation .none,
+    .emptyAuthorizationList .none ]
+
+/-- Why a header or a post-transition check rejects a block.
+
+One constructor per reason in the block-rejection vocabulary. A bare
+"some consensus rule failed" is exactly what let a block be rejected for the
+wrong reason and still be scored as a pass, which is why each reason is its
+own constructor here as it is its own tag there. -/
+inductive BlockValidationError : Type
+  | gasLimitTooBig (detail : ErrorDetail)
+  | gasLimitAdjustment (detail : ErrorDetail)
+  | gasUsedOverflow (detail : ErrorDetail)
+  | gasUsedMismatch (detail : ErrorDetail)
+  | timestampOlderThanParent (detail : ErrorDetail)
+  | blockNumber (detail : ErrorDetail)
+  | baseFeePerGas (detail : ErrorDetail)
+  | difficultyOverParis (detail : ErrorDetail)
+  | ommersOverParis (detail : ErrorDetail)
+  | extraDataTooBig (detail : ErrorDetail)
+  | unknownParent (detail : ErrorDetail)
+  | unknownParentZero (detail : ErrorDetail)
+  | stateRoot (detail : ErrorDetail)
+  | transactionsRoot (detail : ErrorDetail)
+  | receiptsRoot (detail : ErrorDetail)
+  | logBloom (detail : ErrorDetail)
+  | withdrawalsRoot (detail : ErrorDetail)
+  | headerNonce (detail : ErrorDetail)
+  | excessBlobGas (detail : ErrorDetail)
+  | blobGasUsed (detail : ErrorDetail)
+  | requestsHash (detail : ErrorDetail)
+  | depositEventLayout (detail : ErrorDetail)
+  | systemContractCallFailed (detail : ErrorDetail)
+  | blockRlpSizeExceeded (detail : ErrorDetail)
+deriving DecidableEq, Repr
+
+/-- The tag a block-rejection reason renders under. -/
+def BlockValidationError.tag : BlockValidationError → String
+  | .gasLimitTooBig _ => gasLimitTooBigTag
+  | .gasLimitAdjustment _ => gasLimitAdjustmentTag
+  | .gasUsedOverflow _ => gasUsedOverflowTag
+  | .gasUsedMismatch _ => gasUsedMismatchTag
+  | .timestampOlderThanParent _ => timestampOlderThanParentTag
+  | .blockNumber _ => blockNumberTag
+  | .baseFeePerGas _ => baseFeePerGasTag
+  | .difficultyOverParis _ => difficultyOverParisTag
+  | .ommersOverParis _ => ommersOverParisTag
+  | .extraDataTooBig _ => extraDataTooBigTag
+  | .unknownParent _ => unknownParentTag
+  | .unknownParentZero _ => unknownParentZeroTag
+  | .stateRoot _ => stateRootTag
+  | .transactionsRoot _ => transactionsRootTag
+  | .receiptsRoot _ => receiptsRootTag
+  | .logBloom _ => logBloomTag
+  | .withdrawalsRoot _ => withdrawalsRootTag
+  | .headerNonce _ => headerNonceTag
+  | .excessBlobGas _ => excessBlobGasTag
+  | .blobGasUsed _ => blobGasUsedTag
+  | .requestsHash _ => requestsHashTag
+  | .depositEventLayout _ => depositEventLayoutTag
+  | .systemContractCallFailed _ => systemContractCallFailedTag
+  | .blockRlpSizeExceeded _ => blockRlpSizeExceededTag
+
+/-- The diagnostic payload of a block-rejection reason. -/
+def BlockValidationError.detail : BlockValidationError → ErrorDetail
+  | .gasLimitTooBig d | .gasLimitAdjustment d | .gasUsedOverflow d
+  | .gasUsedMismatch d | .timestampOlderThanParent d | .blockNumber d
+  | .baseFeePerGas d | .difficultyOverParis d | .ommersOverParis d
+  | .extraDataTooBig d | .unknownParent d | .unknownParentZero d
+  | .stateRoot d | .transactionsRoot d | .receiptsRoot d | .logBloom d
+  | .withdrawalsRoot d | .headerNonce d | .excessBlobGas d
+  | .blobGasUsed d | .requestsHash d | .depositEventLayout d
+  | .systemContractCallFailed d | .blockRlpSizeExceeded d => d
+
+/-- The one renderer for `BlockValidationError`. -/
+def BlockValidationError.render (e : BlockValidationError) : String :=
+  renderTagged e.tag e.detail
+
+/-- Every block-rejection reason, for the completeness guards. -/
+def BlockValidationError.all : List BlockValidationError :=
+  [ .gasLimitTooBig .none, .gasLimitAdjustment .none, .gasUsedOverflow .none,
+    .gasUsedMismatch .none, .timestampOlderThanParent .none,
+    .blockNumber .none, .baseFeePerGas .none, .difficultyOverParis .none,
+    .ommersOverParis .none, .extraDataTooBig .none, .unknownParent .none,
+    .unknownParentZero .none, .stateRoot .none, .transactionsRoot .none,
+    .receiptsRoot .none, .logBloom .none, .withdrawalsRoot .none,
+    .headerNonce .none, .excessBlobGas .none, .blobGasUsed .none,
+    .requestsHash .none, .depositEventLayout .none,
+    .systemContractCallFailed .none, .blockRlpSizeExceeded .none ]
+
+/-- Why an import could not be attempted, or could not be trusted.
+
+The outer channel. None of these is a verdict about the candidate block, and
+none may ever be scored as an expected consensus rejection: a contradictory
+caller context, an unimplemented era, a harness fault, or a broken internal
+invariant all mean the question was not answered, not that the answer was
+"invalid". -/
+inductive ImportFailure : Type
+  /-- The configuration, or its pairing with the snapshot, is unusable. -/
+  | context (reason : ChainContextError)
+  /-- The input is outside the domain this build implements. -/
+  | support (reason : SupportError)
+  /-- The surrounding harness could not supply what the import needs. -/
+  | harness (detail : ErrorDetail)
+  /-- A stated invariant of this build did not hold. -/
+  | internal (reason : InternalError)
+  /-- The virtual machine propagated a failure no frame settlement may absorb
+  -- a cryptographic or internal reason on the typed VM carrier. A Step-10
+  extension to the Step-1 skeleton: the VM's error channel is typed `EvmError`,
+  and what escapes settlement is an operational failure of this build, never a
+  candidate verdict, so it belongs on this channel and fails closed. -/
+  | vm (reason : EvmError)
+deriving DecidableEq, Repr
+
+/-- The one renderer for `ImportFailure`. -/
+def ImportFailure.render : ImportFailure → String
+  | .context reason => reason.render
+  | .support reason => reason.render
+  | .harness detail => renderTagged internalErrorTag detail
+  | .internal reason => reason.render
+  | .vm reason => reason.render
+
+/-- Why a candidate block is rejected.
+
+The inner channel: every arm is a consensus verdict about the candidate, and
+every arm carries a reason with an official fixture identity. The `decode`
+arm exists because the audited ordering treats some strict-decode failures as
+block rejection rather than as ingress failure; Step 10 assigns each decode
+reason to this arm or to `RawImportFailure.strictDecode` deliberately, reason
+by reason, and never by inheriting today's nesting. -/
+inductive BlockRejection : Type
+  | transaction (reason : TxValidationError)
+  | block (reason : BlockValidationError)
+  | decode (reason : DecodeError)
+  /-- Sender recovery outside the VM rejected the transaction's signature.
+  A Step-10 extension to the Step-1 skeleton: the four fixture-observed
+  `InvalidSignatureError` diagnostics ride the candidate-rejection channel and
+  classify as `SENDER_NOT_EOA`, so the typed rejection needs an arm for the
+  `CryptoError` carrier `recoverSender` produces. Only its
+  `.invalidSignature` reason maps to a fixture identity; the other
+  cryptographic reasons fail closed. -/
+  | senderRecovery (reason : CryptoError)
+deriving DecidableEq, Repr
+
+/-- The one renderer for `BlockRejection`. -/
+def BlockRejection.render : BlockRejection → String
+  | .transaction reason => reason.render
+  | .block reason => reason.render
+  | .decode reason => reason.render
+  | .senderRecovery reason => reason.render
+
+/-- The result of an import that was actually attempted: an extended chain, or
+a rejected candidate.
+
+Parameterised in the chain representation so that the compatibility wrapper
+and the checked core share one shape. Step 6 introduces the checked snapshot
+and instantiates this at it; until then it is instantiated at `BlockChain`. -/
+abbrev ImportOutcome (chain : Type) : Type := chain ⊕ BlockRejection
+
+/-- Why an import from raw bytes could not produce an outcome at all.
+
+Ingress failure is explicit here rather than nested inside the operational
+channel by accident. -/
+inductive RawImportFailure : Type
+  | strictDecode (reason : DecodeError)
+  | operational (reason : ImportFailure)
+deriving DecidableEq, Repr
+
+/-- The one renderer for `RawImportFailure`. -/
+def RawImportFailure.render : RawImportFailure → String
+  | .strictDecode reason => reason.render
+  | .operational reason => reason.render
+
+/-- Everything the block state transition can fail with, before the import
+layer splits it into a candidate verdict and an operational failure.
+
+This is the working carrier of the transition body -- `validateHeader`, the
+ommers check, `applyBody` with its transaction pipeline, and the
+post-transition checks all construct or propagate one of these -- so it is a
+plain union rather than a channelled sum; `TransitionError.split` below is the
+single place each arm is assigned to the outer or the inner import channel,
+per the Step-1 producer/channel matrix. -/
+inductive TransitionError : Type
+  /-- Strict decode of a typed transaction envelope inside `applyBody` failed.
+  Deliberate channel decision (design report §8): every strict decode reason
+  is a candidate verdict -- the audited fixture ordering scores them as block
+  exceptions -- so this arm splits to `BlockRejection.decode`. -/
+  | decode (reason : DecodeError)
+  /-- A transaction in the body is inadmissible. Splits to
+  `BlockRejection.transaction`. -/
+  | transaction (reason : TxValidationError)
+  /-- A header or post-transition consensus check failed. Splits to
+  `BlockRejection.block`. -/
+  | block (reason : BlockValidationError)
+  /-- Sender recovery rejected a transaction signature outside the VM. Splits
+  to `BlockRejection.senderRecovery`. -/
+  | senderRecovery (reason : CryptoError)
+  /-- The virtual machine propagated a failure that no frame settlement may
+  absorb -- a cryptographic or internal reason on the typed VM carrier. Not a
+  candidate verdict: splits to the outer failure channel. -/
+  | vm (reason : EvmError)
+  /-- A transaction/block-layer invariant of this build did not hold. Never a
+  candidate verdict: splits to the outer failure channel. -/
+  | internal (reason : InternalError)
+deriving DecidableEq, Repr
+
+/-- The one renderer for `TransitionError`: pure delegation, so every rendered
+diagnostic is byte-for-byte its reason's own. -/
+def TransitionError.render : TransitionError → String
+  | .decode reason => reason.render
+  | .transaction reason => reason.render
+  | .block reason => reason.render
+  | .senderRecovery reason => reason.render
+  | .vm reason => reason.render
+  | .internal reason => reason.render
+
+/-- The channel split of the Step-1 producer/channel matrix, in one place:
+which transition failures are verdicts about the candidate block
+(`BlockRejection`, the inner import channel) and which mean the question was
+not answered (`ImportFailure`, the outer channel). Internal and VM-propagated
+failures can never read as an expected consensus rejection (fixed decision
+7); every decode, transaction, block, and sender-recovery reason is the
+candidate's own rejection. -/
+def TransitionError.split : TransitionError → ImportFailure ⊕ BlockRejection
+  | .decode reason => .inr (.decode reason)
+  | .transaction reason => .inr (.transaction reason)
+  | .block reason => .inr (.block reason)
+  | .senderRecovery reason => .inr (.senderRecovery reason)
+  | .vm reason => .inl (.vm reason)
+  | .internal reason => .inl (.internal reason)
+
+/-- Rendering commutes with the channel split: whichever channel a reason is
+assigned to, its diagnostic is unchanged. -/
+theorem TransitionError.render_split (e : TransitionError) :
+    (match e.split with
+      | .inl f => f.render
+      | .inr r => r.render) = e.render := by
+  cases e <;> rfl
+
+#guard TransitionError.render (.internal (.invariant (.text "balance underflow")))
+  = "ERROR : balance underflow"
+#guard TransitionError.render (.vm (.crypto (.pointCompression .none)))
+  = "bCompress failed"
+#guard (TransitionError.split (.internal (.assertion .none))).isLeft
+#guard (TransitionError.split (.vm .revert)).isLeft
+#guard (TransitionError.split (.decode (.roundTrip .none))).isRight
+#guard (TransitionError.split (.senderRecovery (.invalidSignature .none))).isRight
+
+-- Golden guards. Each vocabulary is pinned constructor-by-constructor to the
+-- tag it renders under, so a migrated producer cannot silently change an
+-- externally observed message or route a reason to the wrong identity.
+#guard TxValidationError.all.length = 21
+#guard TxValidationError.all.eraseDups.length = 21
+#guard TxValidationError.all.map TxValidationError.tag = transactionExceptionTags
+#guard (TxValidationError.all.map TxValidationError.tag).eraseDups.length = 21
+#guard TxValidationError.render
+    (.insufficientMaxFeePerBlobGas (.text "insufficient max fee per blob gas"))
+  = "InsufficientMaxFeePerBlobGasError : insufficient max fee per blob gas"
+#guard TxValidationError.render (.nonceMismatchTooHigh .none)
+  = "NonceMismatchTooHighError"
+#guard TxValidationError.render (.intrinsicGasTooLow (.text "needs 21000, has 20999"))
+  = "IntrinsicGasTooLowError : needs 21000, has 20999"
+
+#guard BlockValidationError.all.length = 24
+#guard BlockValidationError.all.eraseDups.length = 24
+#guard BlockValidationError.all.map BlockValidationError.tag = blockExceptionTags
+#guard (BlockValidationError.all.map BlockValidationError.tag).eraseDups.length = 24
+#guard BlockValidationError.render (.stateRoot .none) = "StateRootError"
+#guard BlockValidationError.render (.blockRlpSizeExceeded (.text "1 byte over the limit"))
+  = "BlockRlpSizeExceededError : 1 byte over the limit"
+
+#guard ImportFailure.render (.context .emptySchedule)
+  = "InvalidChainConfigError : the activation schedule is empty"
+#guard ImportFailure.render (.context (.chainIdMismatch 7 1))
+  = "ChainIdMismatchError : the configuration names chain 7, but the snapshot \
+     is chain 1"
+#guard ImportFailure.render (.support (.unsupportedEra 100 200))
+  = "UnsupportedEraError : timestamp 100 precedes the earliest era this \
+     configuration supports, which begins at 200"
+#guard ImportFailure.render (.harness (.text "lastblockhash names no imported snapshot"))
+  = "ERROR : lastblockhash names no imported snapshot"
+#guard ImportFailure.render (.internal (.invariant (.text "receipt not found")))
+  = "ERROR : receipt not found"
+
+#guard BlockRejection.render (.transaction (.senderNotEoa .none)) = "SenderNotEoaError"
+#guard BlockRejection.render (.block (.logBloom .none)) = "LogBloomError"
+#guard BlockRejection.render (.decode (.roundTrip .none)) = "RlpRoundTripError"
+#guard BlockRejection.render (.senderRecovery (.invalidSignature (.text "bad v")))
+  = "InvalidSignatureError : bad v"
+
+#guard RawImportFailure.render (.strictDecode (.rlpStructure .none))
+  = "RlpStructureError"
+#guard RawImportFailure.render (.operational (.support (.unsupportedFork .osaka)))
+  = "UnsupportedForkError : fork Osaka is a declared protocol fork whose \
+     execution rules are not implemented in this build"
+
+-- No block-rejection or transaction-rejection tag is readable as the broad
+-- category it replaces, and the two vocabularies do not overlap. These are the
+-- constructor-level restatements of the distinctness facts the tag lists
+-- already carry, and they are what makes exhaustive matching a faithful
+-- replacement for prefix matching.
+#guard (TxValidationError.all.map TxValidationError.tag).all fun t =>
+  ¬ (BlockValidationError.all.map BlockValidationError.tag).contains t
+
 def processMessageCall.create (msg : Msg) :
   Except String (State × MsgCallOutput) := do
   let benv := msg.benv
@@ -137,38 +544,38 @@ structure BlockOutput : Type where
 
 def checkTransactionGasLimits
     (benv : Benv) (blockOut : BlockOutput) (tx : Tx) :
-    Except String Nat :=
+    Except TxValidationError Nat :=
   let gasAvailable := benv.stat.blockGasLimit - blockOut.blockGasUsed
   let blobGasAvailable := benv.stat.rules.blob.max - blockOut.blobGasUsed
   if tx.gas > gasAvailable then
-    .error
-      s!"{gasAllowanceExceededTag} : transaction gas = {tx.gas} > \
+    .error <| .gasAllowanceExceeded <| .text
+      s!"transaction gas = {tx.gas} > \
          block gas available = {gasAvailable}"
   else
     let txBlobGasUsed := calculateTotalBlobGas tx
     if txBlobGasUsed > blobGasAvailable then
-      .error
-        s!"{type3BlobCountExceededTag} : blob gas used = {txBlobGasUsed} > \
+      .error <| .type3BlobCountExceeded <| .text
+        s!"blob gas used = {txBlobGasUsed} > \
            blob gas available = {blobGasAvailable}"
     else
       .ok txBlobGasUsed
 
 def checkTransactionDynamicGasFee
     (baseFeePerGas gas maxPriorityFee maxFee : Nat) :
-    Except String (Nat × Nat) :=
+    Except TxValidationError (Nat × Nat) :=
   if maxFee < maxPriorityFee then
-    .error
-      s!"{priorityGreaterThanMaxFeeTag} : priority fee = {maxPriorityFee} > \
+    .error <| .priorityGreaterThanMaxFee <| .text
+      s!"priority fee = {maxPriorityFee} > \
          max fee = {maxFee}"
   else if maxFee < baseFeePerGas then
-    .error
-      s!"{insufficientMaxFeePerGasTag} : max fee = {maxFee} < \
+    .error <| .insufficientMaxFeePerGas <| .text
+      s!"max fee = {maxFee} < \
          base fee = {baseFeePerGas}"
   else
     let maxGasFee := gas * maxFee
     if maxGasFee > B256.max.toNat then
-      .error
-        s!"{gasPriceProductOverflowTag} : gas * max fee = {maxGasFee} > \
+      .error <| .gasPriceProductOverflow <| .text
+        s!"gas * max fee = {maxGasFee} > \
            2^256 - 1"
     else
       let priorityFeePerGas := min maxPriorityFee (maxFee - baseFeePerGas)
@@ -176,22 +583,22 @@ def checkTransactionDynamicGasFee
 
 def checkTransactionLegacyGasFee
     (baseFeePerGas gas gasPrice : Nat) :
-    Except String (Nat × Nat) :=
+    Except TxValidationError (Nat × Nat) :=
   if gasPrice < baseFeePerGas then
-    .error
-      s!"{insufficientMaxFeePerGasTag} : gas price = {gasPrice} < \
+    .error <| .insufficientMaxFeePerGas <| .text
+      s!"gas price = {gasPrice} < \
          base fee = {baseFeePerGas}"
   else
     let maxGasFee := gas * gasPrice
     if maxGasFee > B256.max.toNat then
-      .error
-        s!"{gasPriceProductOverflowTag} : gas * gas price = {maxGasFee} > \
+      .error <| .gasPriceProductOverflow <| .text
+        s!"gas * gas price = {maxGasFee} > \
            2^256 - 1"
     else
       .ok ⟨gasPrice, maxGasFee⟩
 
 def checkTransactionGasFee (benv : Benv) (tx : Tx) :
-    Except String (Nat × Nat) :=
+    Except TxValidationError (Nat × Nat) :=
   match tx.type with
   | .zero gasPrice _ =>
     checkTransactionLegacyGasFee benv.stat.baseFeePerGas tx.gas gasPrice
@@ -209,107 +616,116 @@ def checkTransactionGasFee (benv : Benv) (tx : Tx) :
 
 /-- Enforce the fork's per-transaction blob-count limit, when one is active. -/
 def checkTransactionBlobCount (limits : TransactionLimits)
-    (blobHashes : List B256) : Except String Unit :=
+    (blobHashes : List B256) : Except TxValidationError Unit :=
   match limits.maxBlobCount with
   | none => .ok ()
   | some maxBlobCount =>
     if blobHashes.length > maxBlobCount then
-      .error
-        s!"{type3BlobCountLimitExceededTag} : transaction has \
+      .error <| .type3BlobCountLimitExceeded <| .text
+        s!"transaction has \
            {blobHashes.length} blobs > maximum = {maxBlobCount}"
     else
       .ok ()
 
 def checkTransactionBlobData
     (benv : Benv) (tx : Tx) (maxGasFee : Nat) :
-    Except String (Nat × List B256) :=
+    Except TxValidationError (Nat × List B256) :=
   match tx.type with
   | .three _ _ _ _ _ maxBlobFee blobHashes => do
     if blobHashes.isEmpty then
-      .error s!"{type3ZeroBlobsTag} : no blob hashes in type-3 transaction"
+      .error <| .type3ZeroBlobs <| .text "no blob hashes in type-3 transaction"
     checkTransactionBlobCount benv.stat.rules.tx blobHashes
     -- P0.6 item 3: the version byte is read through the total `head?`, never a
     -- partial index into the fixed 32-byte hash encoding.
     if List.any blobHashes (λ bvh => bvh.toBytes.head? ≠ some versionedHashVersionKzg) then
-      .error
-        s!"{type3InvalidBlobVersionedHashTag} : a blob versioned hash has \
+      .error <| .type3InvalidBlobVersionedHash <| .text
+        s!"a blob versioned hash has \
            a version byte other than {versionedHashVersionKzg}"
     else
       let blobGasPrice :=
         calculateBlobGasPrice benv.stat.rules.blob benv.stat.excessBlobGas
       if maxBlobFee < blobGasPrice then
-        .error "InsufficientMaxFeePerBlobGasError : insufficient max fee per blob gas"
+        .error <| .insufficientMaxFeePerBlobGas <|
+          .text "insufficient max fee per blob gas"
       else
         .ok ⟨maxGasFee + calculateTotalBlobGas tx * maxBlobFee, blobHashes⟩
   | _ => .ok ⟨maxGasFee, []⟩
 
-def checkTransactionReceiver (tx : Tx) : Except String Unit :=
+def checkTransactionReceiver (tx : Tx) : Except TxValidationError Unit :=
   if tx.isTypeThree then
     if tx.type.receiver?.isNone then
-      .error
-        s!"{type3ContractCreationTag} : type-3 transactions cannot create contracts"
+      .error <| .type3ContractCreation <|
+        .text "type-3 transactions cannot create contracts"
     else
       .ok ()
   else
     .ok ()
 
-def checkTransactionAuthorizationList (tx : Tx) : Except String Unit :=
+def checkTransactionAuthorizationList (tx : Tx) : Except TxValidationError Unit :=
   match tx.type with
   | .four _ _ _ _ _ [] =>
-    .error s!"{emptyAuthorizationListTag} : empty authorization list"
+    .error <| .emptyAuthorizationList <| .text "empty authorization list"
   | _ => .ok ()
 
-def checkTransactionChainId (benv : Benv) (tx : Tx) : Except String Unit :=
+def checkTransactionChainId (benv : Benv) (tx : Tx) : Except TxValidationError Unit :=
   match tx.type with
   | .zero _ _ =>
     if tx.v < 35 || (tx.v - 35) / 2 = benv.stat.chainId.toNat then .ok ()
-    else .error s!"{invalidChainIdTag} : transaction chain ID = {(tx.v - 35) / 2}"
+    else .error <| .invalidChainId <| .text
+      s!"transaction chain ID = {(tx.v - 35) / 2}"
   | .one chainId _ _ _
   | .two chainId _ _ _ _
   | .three chainId _ _ _ _ _ _
   | .four chainId _ _ _ _ _ =>
     if chainId = benv.stat.chainId then .ok ()
-    else .error s!"{invalidChainIdTag} : transaction chain ID = {chainId}"
+    else .error <| .invalidChainId <| .text s!"transaction chain ID = {chainId}"
 
 def checkTransactionSenderCode (senderAccount : Acct) :
-    Except String Unit :=
+    Except TxValidationError Unit :=
   if ¬ (senderAccount.code.isEmpty ∨ isValidDelegation senderAccount.code) then
-    .error s!"{senderNotEoaTag} : sender has non-delegation code"
+    .error <| .senderNotEoa <| .text "sender has non-delegation code"
   else
     .ok ()
 
 def checkTransactionSenderAccount
     (senderAccount : Acct) (tx : Tx) (maxGasFee : Nat) :
-    Except String Unit :=
+    Except TxValidationError Unit :=
   if senderAccount.nonce > tx.nonce then
-    .error
-      s!"{nonceMismatchTooLowTag} : transaction nonce = {tx.nonce.toNat} < \
+    .error <| .nonceMismatchTooLow <| .text
+      s!"transaction nonce = {tx.nonce.toNat} < \
          sender nonce = {senderAccount.nonce.toNat}"
   else if senderAccount.nonce < tx.nonce then
-    .error
-      s!"{nonceMismatchTooHighTag} : transaction nonce = {tx.nonce.toNat} > \
+    .error <| .nonceMismatchTooHigh <| .text
+      s!"transaction nonce = {tx.nonce.toNat} > \
          sender nonce = {senderAccount.nonce.toNat}"
   else if senderAccount.bal.toNat < maxGasFee + tx.value then
-    .error
-      s!"{insufficientAccountFundsTag} : sender balance = \
+    .error <| .insufficientAccountFunds <| .text
+      s!"sender balance = \
          {senderAccount.bal.toNat} < max gas fee = {maxGasFee} + \
          transaction value = {tx.value}"
   else
     checkTransactionSenderCode senderAccount
 
+/-- The whole transaction admission check. Its carrier is the transition union
+because it joins two typed channels: every rule above is a
+`TxValidationError`, while sender recovery reports on the cryptographic
+channel and is the one reason here that is not a validation rule. -/
 def checkTransaction (benv : Benv) (blockOut : BlockOutput) (tx : Tx) :
-    Except String (Adr × Nat × List B256 × Nat) := do
-  let txBlobGasUsed ← checkTransactionGasLimits benv blockOut tx
-  checkTransactionChainId benv tx
+    Except TransitionError (Adr × Nat × List B256 × Nat) := do
+  let txBlobGasUsed ←
+    Except.mapError .transaction (checkTransactionGasLimits benv blockOut tx)
+  Except.mapError TransitionError.transaction (checkTransactionChainId benv tx)
   let senderAddress ←
-    Except.mapError CryptoError.render (recoverSender benv.stat.chainId tx)
+    Except.mapError .senderRecovery (recoverSender benv.stat.chainId tx)
   let senderAccount := benv.state.get senderAddress
-  let ⟨effectiveGasPrice, maxGasFee⟩ ← checkTransactionGasFee benv tx
+  let ⟨effectiveGasPrice, maxGasFee⟩ ←
+    Except.mapError .transaction (checkTransactionGasFee benv tx)
   let ⟨maxGasFee, blobVersionedHashes⟩ ←
-    checkTransactionBlobData benv tx maxGasFee
-  checkTransactionReceiver tx
-  checkTransactionAuthorizationList tx
-  checkTransactionSenderAccount senderAccount tx maxGasFee
+    Except.mapError .transaction (checkTransactionBlobData benv tx maxGasFee)
+  Except.mapError TransitionError.transaction (checkTransactionReceiver tx)
+  Except.mapError TransitionError.transaction (checkTransactionAuthorizationList tx)
+  Except.mapError TransitionError.transaction
+    (checkTransactionSenderAccount senderAccount tx maxGasFee)
   .ok ⟨
     senderAddress,
     effectiveGasPrice,
@@ -353,34 +769,34 @@ def calculateIntrinsicCost (tx: Tx) : Nat × Nat :=
   ⟩
 
 def checkInitcodeSize (code : CodeLimits) (receiver : Option Adr)
-    (dataLength : Nat) : Except String Unit :=
+    (dataLength : Nat) : Except TxValidationError Unit :=
   if receiver.isNone && dataLength > code.maxInitCodeSize then
-    .error
-      s!"{initcodeSizeExceededTag} : initcode is {dataLength} bytes, \
+    .error <| .initcodeSizeExceeded <| .text
+      s!"initcode is {dataLength} bytes, \
          exceeding the {code.maxInitCodeSize}-byte maximum"
   else
     .ok ()
 
 /-- Enforce the fork's per-transaction gas cap, when one is active. -/
 def checkTransactionGasCap (limits : TransactionLimits) (gas : Nat) :
-    Except String Unit :=
+    Except TxValidationError Unit :=
   match limits.maxGas with
   | none => .ok ()
   | some maxGas =>
     if gas > maxGas then
-      .error
-        s!"{transactionGasLimitExceededTag} : transaction gas = {gas} > \
+      .error <| .transactionGasLimitExceeded <| .text
+        s!"transaction gas = {gas} > \
            maximum = {maxGas}"
     else
       .ok ()
 
 def validateTransaction (rules : ForkRules) (tx : Tx) :
-    Except String (Nat × Nat) := do
+    Except TxValidationError (Nat × Nat) := do
   let ⟨intrinsicGas, callDataFloorGasCost⟩ := calculateIntrinsicCost tx
   if max intrinsicGas callDataFloorGasCost > tx.gas
   then
-    .error
-      s!"{intrinsicGasTooLowTag} : transaction gas = {tx.gas} < \
+    .error <| .intrinsicGasTooLow <| .text
+      s!"transaction gas = {tx.gas} < \
          max intrinsic/calldata floor cost = \
          {max intrinsicGas callDataFloorGasCost}"
   match rules.tx.maxGas with
@@ -390,14 +806,14 @@ def validateTransaction (rules : ForkRules) (tx : Tx) :
     -- the same as EELS, while multiply-invalid legacy fixtures retain their
     -- existing diagnostic identity.
     if tx.nonce = UInt64.max then
-      .error s!"{nonceIsMaxTag} : transaction nonce is 2^64 - 1"
+      .error <| .nonceIsMax <| .text "transaction nonce is 2^64 - 1"
     checkInitcodeSize rules.code tx.type.receiver? tx.data.length
   | some _ =>
     -- Osaka follows EELS: initcode, EIP-7825 gas cap, then nonce.
     checkInitcodeSize rules.code tx.type.receiver? tx.data.length
     checkTransactionGasCap rules.tx tx.gas
     if tx.nonce = UInt64.max then
-      .error s!"{nonceIsMaxTag} : transaction nonce is 2^64 - 1"
+      .error <| .nonceIsMax <| .text "transaction nonce is 2^64 - 1"
   .ok ⟨intrinsicGas, callDataFloorGasCost⟩
 
 def prepareMessage (benv: Benv) (tenv: Tenv) (tx: Tx) :
@@ -532,20 +948,26 @@ private def fixtureTestAccount
     (nonce : UInt64) (bal : B256) (code : ByteArray := .empty) : Acct :=
   { nonce := nonce, bal := bal, stor := .empty, code := code }
 
-#guard hasTag intrinsicGasTooLowTag <|
+-- Constructor-level matcher for the transaction-validation boundary guards.
+private def txvFails {α : Type} (p : TxValidationError → Bool) :
+    Except TxValidationError α → Bool
+  | .error e => p e
+  | .ok _ => false
+
+#guard txvFails (fun | .intrinsicGasTooLow _ => true | _ => false) <|
   validateTransaction pragueRules {fixtureTestTx with gas := txBaseCost - 1}
-#guard hasTag nonceIsMaxTag <|
+#guard txvFails (fun | .nonceIsMax _ => true | _ => false) <|
   validateTransaction pragueRules {fixtureTestTx with nonce := UInt64.max}
-#guard hasTag initcodeSizeExceededTag <|
+#guard txvFails (fun | .initcodeSizeExceeded _ => true | _ => false) <|
   checkInitcodeSize pragueRules.code none (pragueRules.code.maxInitCodeSize + 1)
 
 -- EIP-7825 is inclusive at `2 ^ 24`, and absent at Prague.
 #guard (checkTransactionGasCap osakaRules.tx (2 ^ 24 - 1)).toOption.isSome
 #guard (checkTransactionGasCap osakaRules.tx (2 ^ 24)).toOption.isSome
-#guard hasTag transactionGasLimitExceededTag <|
+#guard txvFails (fun | .transactionGasLimitExceeded _ => true | _ => false) <|
   checkTransactionGasCap osakaRules.tx (2 ^ 24 + 1)
 #guard (checkTransactionGasCap pragueRules.tx (2 ^ 24 + 1)).toOption.isSome
-#guard hasTag transactionGasLimitExceededTag <|
+#guard txvFails (fun | .transactionGasLimitExceeded _ => true | _ => false) <|
   validateTransaction osakaRules {fixtureTestTx with gas := 2 ^ 24 + 1}
 
 -- The initcode bound comes from the rules record, not from a global: a smaller
@@ -555,50 +977,56 @@ private def guardTightCodeLimits : CodeLimits :=
 
 #guard (checkInitcodeSize pragueRules.code none 200).toOption.isSome
 #guard (checkInitcodeSize guardTightCodeLimits none 200).toOption.isSome
-#guard hasTag initcodeSizeExceededTag <|
+#guard txvFails (fun | .initcodeSizeExceeded _ => true | _ => false) <|
   checkInitcodeSize guardTightCodeLimits none 201
 -- A non-creation transaction is unaffected by the limit under either schedule.
 #guard (checkInitcodeSize guardTightCodeLimits (some 0) 100000).toOption.isSome
 
-#guard hasTag priorityGreaterThanMaxFeeTag <|
+#guard txvFails (fun | .priorityGreaterThanMaxFee _ => true | _ => false) <|
   checkTransactionDynamicGasFee 1 1 2 1
-#guard hasTag insufficientMaxFeePerGasTag <|
+#guard txvFails (fun | .insufficientMaxFeePerGas _ => true | _ => false) <|
   checkTransactionDynamicGasFee 2 1 1 1
-#guard hasTag gasPriceProductOverflowTag <|
+#guard txvFails (fun | .gasPriceProductOverflow _ => true | _ => false) <|
   checkTransactionDynamicGasFee 0 2 0 (2 ^ 255)
-#guard hasTag gasPriceProductOverflowTag <|
+#guard txvFails (fun | .gasPriceProductOverflow _ => true | _ => false) <|
   checkTransactionLegacyGasFee 0 2 (2 ^ 255)
 
-#guard hasTag gasAllowanceExceededTag <|
+#guard txvFails (fun | .gasAllowanceExceeded _ => true | _ => false) <|
   checkTransactionGasLimits (fixtureTestBenv txBaseCost) .init
     {fixtureTestTx with gas := txBaseCost + 1}
-#guard hasTag type3BlobCountExceededTag <|
+#guard txvFails (fun | .type3BlobCountExceeded _ => true | _ => false) <|
   checkTransactionGasLimits fixtureTestBenv .init
     { fixtureTestTx with
       type := .three 1 1 10 0 [] 1 (List.replicate 10 0) }
-#guard hasTag type3ZeroBlobsTag <|
+#guard txvFails (fun | .type3ZeroBlobs _ => true | _ => false) <|
   checkTransactionBlobData fixtureTestBenv
     {fixtureTestTx with type := .three 1 1 10 0 [] 1 []} 10
 #guard (checkTransactionBlobCount osakaRules.tx
   (List.replicate 5 (0 : B256))).toOption.isSome
 #guard (checkTransactionBlobCount osakaRules.tx
   (List.replicate 6 (0 : B256))).toOption.isSome
-#guard hasTag type3BlobCountLimitExceededTag <|
+#guard txvFails (fun | .type3BlobCountLimitExceeded _ => true | _ => false) <|
   checkTransactionBlobCount osakaRules.tx (List.replicate 7 (0 : B256))
 #guard (checkTransactionBlobCount pragueRules.tx
   (List.replicate 7 (0 : B256))).toOption.isSome
-#guard hasTag type3InvalidBlobVersionedHashTag <|
+#guard txvFails (fun | .type3InvalidBlobVersionedHash _ => true | _ => false) <|
   checkTransactionBlobData fixtureTestBenv
     {fixtureTestTx with type := .three 1 1 10 0 [] 1 [0]} 10
+-- The blob-fee rejection renders its exact observed golden message.
+#guard txvFails
+    (fun e => e.render ==
+      "InsufficientMaxFeePerBlobGasError : insufficient max fee per blob gas") <|
+  checkTransactionBlobData fixtureTestBenv
+    {fixtureTestTx with type := .three 1 1 10 0 [] 0 [(1 : B256) <<< 248]} 10
 
-#guard hasTag nonceMismatchTooLowTag <|
+#guard txvFails (fun | .nonceMismatchTooLow _ => true | _ => false) <|
   checkTransactionSenderAccount (fixtureTestAccount 2 100) fixtureTestTx 0
-#guard hasTag nonceMismatchTooHighTag <|
+#guard txvFails (fun | .nonceMismatchTooHigh _ => true | _ => false) <|
   checkTransactionSenderAccount (fixtureTestAccount 0 100)
     {fixtureTestTx with nonce := 1} 0
-#guard hasTag insufficientAccountFundsTag <|
+#guard txvFails (fun | .insufficientAccountFunds _ => true | _ => false) <|
   checkTransactionSenderAccount (fixtureTestAccount 0 0) fixtureTestTx 1
-#guard hasTag senderNotEoaTag <|
+#guard txvFails (fun | .senderNotEoa _ => true | _ => false) <|
   checkTransactionSenderAccount
     (fixtureTestAccount 0 100 (ByteArray.mk #[0x01])) fixtureTestTx 0
 
@@ -616,13 +1044,13 @@ def processTransaction
   let bout ← .ok {bout with
     transactionsTrie := bout.transactionsTrie.insert (BLT.bytes index.toBytes).toBytes tx}
   let ⟨intrinsicGas, calldataFloorGasCost⟩ ←
-    validateTransaction benv.stat.rules tx
+    Except.mapError TxValidationError.render (validateTransaction benv.stat.rules tx)
   let ⟨
     sender,
     effectiveGasPrice,
     blobVersionedHashes,
     txBlobGasUsed
-  ⟩ ← checkTransaction benv bout tx
+  ⟩ ← Except.mapError TransitionError.render (checkTransaction benv bout tx)
   let blobGasFee :=
     if tx.isTypeThree
     then calculateDataFee benv.stat.rules.blob benv.stat.excessBlobGas tx
@@ -708,33 +1136,33 @@ def processWithdrawals
 -- fields are: every shape must be checked before any truncating conversion,
 -- and a wrong list shape is a different reason from an oversized scalar.
 
-def BLT.toExStrStorageKey : BLT → Except String B256
+def BLT.toExStorageKey : BLT → Except DecodeError B256
   | .bytes xs => xs.toRlpHash "access list storage key"
   | .list _ =>
-    .error <| rlpStructureError "access list storage key"
+    .error <| DecodeError.structure "access list storage key"
       "expected a byte-string item"
 
-def BLT.toExStrAccessItem : BLT → Except String (Adr × List B256)
+def BLT.toExAccessItem : BLT → Except DecodeError (Adr × List B256)
   | .list [.bytes ar, .list ksr] => do
     let a ← ar.toRlpAdr "access list address"
-    let ks ← List.mapM BLT.toExStrStorageKey ksr
+    let ks ← List.mapM BLT.toExStorageKey ksr
     .ok ⟨a, ks⟩
   | _ =>
-    .error <| rlpStructureError "access list item"
+    .error <| DecodeError.structure "access list item"
       "expected [address, [storage key, ...]]"
 
-def BLT.toExStrAccessList : BLT → Except String AccessList
-  | .list rs => List.mapM BLT.toExStrAccessItem rs
+def BLT.toExAccessList : BLT → Except DecodeError AccessList
+  | .list rs => List.mapM BLT.toExAccessItem rs
   | .bytes _ =>
-    .error <| rlpStructureError "access list" "expected a list item"
+    .error <| DecodeError.structure "access list" "expected a list item"
 
-def BLT.toExStrBlobHash : BLT → Except String B256
+def BLT.toExBlobHash : BLT → Except DecodeError B256
   | .bytes xs => xs.toRlpHash "blob versioned hash"
   | .list _ =>
-    .error <| rlpStructureError "blob versioned hash"
+    .error <| DecodeError.structure "blob versioned hash"
       "expected a byte-string item"
 
-def BLT.toExStrAuth : BLT → Except String Auth
+def BLT.toExAuth : BLT → Except DecodeError Auth
   | .list [
       .bytes chainId,
       .bytes address,
@@ -758,13 +1186,13 @@ def BLT.toExStrAuth : BLT → Except String Auth
         s := s
       }
   | _ =>
-    .error <| rlpStructureError "authorization"
+    .error <| DecodeError.structure "authorization"
       "expected a list of six byte-string fields"
 
 /-- Strict authorisation-decoder soundness. -/
-theorem BLT.toExStrAuth_wireWellFormed {blt : BLT} {a : Auth}
-    (h : blt.toExStrAuth = .ok a) : a.WireWellFormed := by
-  unfold BLT.toExStrAuth at h
+theorem BLT.toExAuth_wireWellFormed {blt : BLT} {a : Auth}
+    (h : blt.toExAuth = .ok a) : a.WireWellFormed := by
+  unfold BLT.toExAuth at h
   split at h
   · repeat obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
     simp only [Except.ok.injEq] at h
@@ -772,9 +1200,17 @@ theorem BLT.toExStrAuth_wireWellFormed {blt : BLT} {a : Auth}
     exact Bytes.toRlpNat_lt_two_pow_256 (by assumption)
   · exact absurd h (by simp)
 
-def Bytes.toExStrTx : Bytes → Except String Tx
+/-- The strict field decoders, lifted to the transaction-decode carrier. Every
+per-field reason stays a `DecodeError`; this wrapper only names the channel. -/
+private def dec {α : Type} : Except DecodeError α → Except TransitionError α :=
+  Except.mapError TransitionError.decode
+
+private theorem dec_eq_ok {α : Type} {x : Except DecodeError α} {a : α}
+    (h : dec x = .ok a) : x = .ok a := Except.mapError_eq_ok_iff.mp h
+
+def Bytes.toExTx : Bytes → Except TransitionError Tx
   | [] =>
-    .error <| rlpStructureError "typed transaction"
+    .error <| .decode <| DecodeError.structure "typed transaction"
       "cannot decode an empty byte string"
   | x :: xs =>
     -- Every scalar is bounded before conversion: `Bytes.toUInt64` truncates modulo
@@ -795,16 +1231,16 @@ def Bytes.toExStrTx : Bytes → Except String Tx
         .bytes r,
         .bytes s
       ]) => do
-      let chainId ← chainId.toRlpB64 "type-1 transaction chainId"
-      let nonce ← nonce.toRlpB64 "type-1 transaction nonce"
-      let gasPrice ← gasPrice.toRlpNat "type-1 transaction gasPrice" 32
-      let gas ← gas.toRlpNat "type-1 transaction gas" 32
-      let receiver ← receiver.toRlpReceiver "type-1 transaction receiver"
-      let value ← value.toRlpNat "type-1 transaction value" 32
-      let accessList ← accessList.toExStrAccessList
-      let yParity ← yParity.toRlpNat "type-1 transaction yParity" 32
-      let _ ← r.toRlpB256 "type-1 transaction r"
-      let _ ← s.toRlpB256 "type-1 transaction s"
+      let chainId ← dec <| chainId.toRlpB64 "type-1 transaction chainId"
+      let nonce ← dec <| nonce.toRlpB64 "type-1 transaction nonce"
+      let gasPrice ← dec <| gasPrice.toRlpNat "type-1 transaction gasPrice" 32
+      let gas ← dec <| gas.toRlpNat "type-1 transaction gas" 32
+      let receiver ← dec <| receiver.toRlpReceiver "type-1 transaction receiver"
+      let value ← dec <| value.toRlpNat "type-1 transaction value" 32
+      let accessList ← dec accessList.toExAccessList
+      let yParity ← dec <| yParity.toRlpNat "type-1 transaction yParity" 32
+      let _ ← dec <| r.toRlpB256 "type-1 transaction r"
+      let _ ← dec <| s.toRlpB256 "type-1 transaction s"
       .ok {
         nonce := nonce,
         gas := gas,
@@ -816,7 +1252,7 @@ def Bytes.toExStrTx : Bytes → Except String Tx
         type := .one chainId gasPrice receiver accessList
       }
     | 0x01, _ =>
-      .error <| rlpStructureError "type-1 transaction"
+      .error <| .decode <| DecodeError.structure "type-1 transaction"
         "expected a list of eleven fields"
     | 0x02, some (.list [
         .bytes chainId,
@@ -832,17 +1268,17 @@ def Bytes.toExStrTx : Bytes → Except String Tx
         .bytes r,
         .bytes s
       ]) => do
-      let chainId ← chainId.toRlpB64 "type-2 transaction chainId"
-      let nonce ← nonce.toRlpB64 "type-2 transaction nonce"
-      let maxPriorityFee ← maxPriorityFee.toRlpNat "type-2 transaction maxPriorityFee" 32
-      let maxFee ← maxFee.toRlpNat "type-2 transaction maxFee" 32
-      let gas ← gas.toRlpNat "type-2 transaction gas" 32
-      let receiver ← receiver.toRlpReceiver "type-2 transaction receiver"
-      let value ← value.toRlpNat "type-2 transaction value" 32
-      let accessList ← accessList.toExStrAccessList
-      let yParity ← yParity.toRlpNat "type-2 transaction yParity" 32
-      let _ ← r.toRlpB256 "type-2 transaction r"
-      let _ ← s.toRlpB256 "type-2 transaction s"
+      let chainId ← dec <| chainId.toRlpB64 "type-2 transaction chainId"
+      let nonce ← dec <| nonce.toRlpB64 "type-2 transaction nonce"
+      let maxPriorityFee ← dec <| maxPriorityFee.toRlpNat "type-2 transaction maxPriorityFee" 32
+      let maxFee ← dec <| maxFee.toRlpNat "type-2 transaction maxFee" 32
+      let gas ← dec <| gas.toRlpNat "type-2 transaction gas" 32
+      let receiver ← dec <| receiver.toRlpReceiver "type-2 transaction receiver"
+      let value ← dec <| value.toRlpNat "type-2 transaction value" 32
+      let accessList ← dec accessList.toExAccessList
+      let yParity ← dec <| yParity.toRlpNat "type-2 transaction yParity" 32
+      let _ ← dec <| r.toRlpB256 "type-2 transaction r"
+      let _ ← dec <| s.toRlpB256 "type-2 transaction s"
       .ok {
         nonce := nonce,
         gas := gas,
@@ -854,7 +1290,7 @@ def Bytes.toExStrTx : Bytes → Except String Tx
         type := .two chainId maxPriorityFee maxFee receiver accessList
       }
     | 0x02, _ =>
-      .error <| rlpStructureError "type-2 transaction"
+      .error <| .decode <| DecodeError.structure "type-2 transaction"
         "expected a list of twelve fields"
     | 0x03, some (.list [
         .bytes chainId,
@@ -872,27 +1308,27 @@ def Bytes.toExStrTx : Bytes → Except String Tx
         .bytes r,
         .bytes s
       ]) => do
-      let chainId ← chainId.toRlpB64 "type-3 transaction chainId"
-      let nonce ← nonce.toRlpB64 "type-3 transaction nonce"
-      let maxPriorityFee ← maxPriorityFee.toRlpNat "type-3 transaction maxPriorityFee" 32
-      let maxFee ← maxFee.toRlpNat "type-3 transaction maxFee" 32
-      let gas ← gas.toRlpNat "type-3 transaction gas" 32
+      let chainId ← dec <| chainId.toRlpB64 "type-3 transaction chainId"
+      let nonce ← dec <| nonce.toRlpB64 "type-3 transaction nonce"
+      let maxPriorityFee ← dec <| maxPriorityFee.toRlpNat "type-3 transaction maxPriorityFee" 32
+      let maxFee ← dec <| maxFee.toRlpNat "type-3 transaction maxFee" 32
+      let gas ← dec <| gas.toRlpNat "type-3 transaction gas" 32
       -- A type-3 receiver is a mandatory address at the RLP level; the
       -- semantic contract-creation rejection downstream remains as defense
       -- in depth for transactions that arrive already decoded.  Empty is the
       -- official type-3 contract-creation failure, while a nonempty value of
       -- any width other than twenty bytes remains an RLP shape failure.
       if receiver.isEmpty then
-        .error
-          s!"{type3ContractCreationTag} : type-3 transaction receiver is empty"
-      let receiver ← receiver.toRlpAdr "type-3 transaction receiver"
-      let value ← value.toRlpNat "type-3 transaction value" 32
-      let accessList ← accessList.toExStrAccessList
-      let maxBlobFee ← maxBlobFee.toRlpNat "type-3 transaction maxBlobFee" 32
-      let blobHashes ← List.mapM BLT.toExStrBlobHash blobHashes
-      let yParity ← yParity.toRlpNat "type-3 transaction yParity" 32
-      let _ ← r.toRlpB256 "type-3 transaction r"
-      let _ ← s.toRlpB256 "type-3 transaction s"
+        .error <| .transaction <| .type3ContractCreation <|
+          .text "type-3 transaction receiver is empty"
+      let receiver ← dec <| receiver.toRlpAdr "type-3 transaction receiver"
+      let value ← dec <| value.toRlpNat "type-3 transaction value" 32
+      let accessList ← dec accessList.toExAccessList
+      let maxBlobFee ← dec <| maxBlobFee.toRlpNat "type-3 transaction maxBlobFee" 32
+      let blobHashes ← dec <| List.mapM BLT.toExBlobHash blobHashes
+      let yParity ← dec <| yParity.toRlpNat "type-3 transaction yParity" 32
+      let _ ← dec <| r.toRlpB256 "type-3 transaction r"
+      let _ ← dec <| s.toRlpB256 "type-3 transaction s"
       .ok {
         nonce := nonce,
         gas := gas,
@@ -906,7 +1342,7 @@ def Bytes.toExStrTx : Bytes → Except String Tx
             maxBlobFee blobHashes
       }
     | 0x03, _ =>
-      .error <| rlpStructureError "type-3 transaction"
+      .error <| .decode <| DecodeError.structure "type-3 transaction"
         "expected a list of fourteen fields"
     | 0x04, some (.list [
         .bytes chainId,
@@ -923,20 +1359,21 @@ def Bytes.toExStrTx : Bytes → Except String Tx
         .bytes r,
         .bytes s
       ]) => do
-      let chainId ← chainId.toRlpB64 "type-4 transaction chainId"
-      let nonce ← nonce.toRlpB64 "type-4 transaction nonce"
-      let maxPriorityFee ← maxPriorityFee.toRlpNat "type-4 transaction maxPriorityFee" 32
-      let maxFee ← maxFee.toRlpNat "type-4 transaction maxFee" 32
-      let gas ← gas.toRlpNat "type-4 transaction gas" 32
+      let chainId ← dec <| chainId.toRlpB64 "type-4 transaction chainId"
+      let nonce ← dec <| nonce.toRlpB64 "type-4 transaction nonce"
+      let maxPriorityFee ← dec <| maxPriorityFee.toRlpNat "type-4 transaction maxPriorityFee" 32
+      let maxFee ← dec <| maxFee.toRlpNat "type-4 transaction maxFee" 32
+      let gas ← dec <| gas.toRlpNat "type-4 transaction gas" 32
       if receiver.isEmpty then
-        .error s!"{type4ContractCreationTag} : type-4 transaction receiver is empty"
-      let receiver ← receiver.toRlpAdr "type-4 transaction receiver"
-      let value ← value.toRlpNat "type-4 transaction value" 32
-      let accessList ← accessList.toExStrAccessList
-      let auths ← List.mapM BLT.toExStrAuth auths
-      let yParity ← yParity.toRlpNat "type-4 transaction yParity" 32
-      let _ ← r.toRlpB256 "type-4 transaction r"
-      let _ ← s.toRlpB256 "type-4 transaction s"
+        .error <| .transaction <| .type4ContractCreation <|
+          .text "type-4 transaction receiver is empty"
+      let receiver ← dec <| receiver.toRlpAdr "type-4 transaction receiver"
+      let value ← dec <| value.toRlpNat "type-4 transaction value" 32
+      let accessList ← dec accessList.toExAccessList
+      let auths ← dec <| List.mapM BLT.toExAuth auths
+      let yParity ← dec <| yParity.toRlpNat "type-4 transaction yParity" 32
+      let _ ← dec <| r.toRlpB256 "type-4 transaction r"
+      let _ ← dec <| s.toRlpB256 "type-4 transaction s"
       .ok {
         nonce := nonce,
         gas := gas,
@@ -948,17 +1385,24 @@ def Bytes.toExStrTx : Bytes → Except String Tx
         type := .four chainId maxPriorityFee maxFee receiver accessList auths
       }
     | 0x04, _ =>
-      .error <| rlpStructureError "type-4 transaction"
+      .error <| .decode <| DecodeError.structure "type-4 transaction"
         "expected a list of thirteen fields"
-    | x, _ => .error s!"ERROR : type-{x} txs do not exist, decoding failed"
+    -- An unknown envelope type has no reviewed fixture identity
+    -- (`TYPE_NOT_SUPPORTED` is outside this build's vocabulary), and its
+    -- message has carried the internal tag since inception -- it was never
+    -- classifiable. It stays a typed internal reason and fails closed; naming
+    -- the identity would be an explicit vocabulary extension, not a default.
+    | x, _ =>
+      .error <| .internal <| .invariant <|
+        .text s!"type-{x} txs do not exist, decoding failed"
 
 /-- Strict typed-transaction-decoder soundness. Every transaction the typed
 envelope decoder produces satisfies `Tx.WireWellFormed`, for each of the four
-implemented envelope types. Together with `BLT.toExStrTx_legacy_wireWellFormed`
+implemented envelope types. Together with `BLT.toExLegacyTx_wireWellFormed`
 below this is what makes the structural predicate a lift of the decoders. -/
-theorem Bytes.toExStrTx_wireWellFormed {xs : Bytes} {tx : Tx}
-    (h : xs.toExStrTx = .ok tx) : tx.WireWellFormed := by
-  unfold Bytes.toExStrTx at h
+theorem Bytes.toExTx_wireWellFormed {xs : Bytes} {tx : Tx}
+    (h : xs.toExTx = .ok tx) : tx.WireWellFormed := by
+  unfold Bytes.toExTx at h
   split at h
   · exact absurd h (by simp)
   · split at h
@@ -968,8 +1412,8 @@ theorem Bytes.toExStrTx_wireWellFormed {xs : Bytes} {tx : Tx}
       subst h
       refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
         first
-          | exact Bytes.toRlpNat_lt_two_pow_256 (by assumption)
-          | exact Bytes.toRlpB256_eq_ok (by assumption)
+          | exact Bytes.toRlpNat_lt_two_pow_256 (dec_eq_ok (by assumption))
+          | exact Bytes.toRlpB256_eq_ok (dec_eq_ok (by assumption))
     · exact absurd h (by simp)
     -- type 2 (EIP-1559)
     · repeat obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
@@ -977,8 +1421,8 @@ theorem Bytes.toExStrTx_wireWellFormed {xs : Bytes} {tx : Tx}
       subst h
       refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
         first
-          | exact Bytes.toRlpNat_lt_two_pow_256 (by assumption)
-          | exact Bytes.toRlpB256_eq_ok (by assumption)
+          | exact Bytes.toRlpNat_lt_two_pow_256 (dec_eq_ok (by assumption))
+          | exact Bytes.toRlpB256_eq_ok (dec_eq_ok (by assumption))
     · exact absurd h (by simp)
     -- type 3 (EIP-4844). The mandatory-receiver guard is a join point, so the
     -- chain has to be split at it before the remaining binds peel.
@@ -992,8 +1436,8 @@ theorem Bytes.toExStrTx_wireWellFormed {xs : Bytes} {tx : Tx}
         subst h
         refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
           first
-            | exact Bytes.toRlpNat_lt_two_pow_256 (by assumption)
-            | exact Bytes.toRlpB256_eq_ok (by assumption)
+            | exact Bytes.toRlpNat_lt_two_pow_256 (dec_eq_ok (by assumption))
+            | exact Bytes.toRlpB256_eq_ok (dec_eq_ok (by assumption))
     · exact absurd h (by simp)
     -- type 4 (EIP-7702)
     · repeat obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
@@ -1007,17 +1451,22 @@ theorem Bytes.toExStrTx_wireWellFormed {xs : Bytes} {tx : Tx}
         refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?auths⟩
         case auths =>
           intro a ha
-          obtain ⟨blt, hblt⟩ := List.mapM_except_eq_ok_mem (by assumption) a ha
-          exact BLT.toExStrAuth_wireWellFormed hblt
+          obtain ⟨blt, hblt⟩ :=
+            List.mapM_except_eq_ok_mem (dec_eq_ok (by assumption)) a ha
+          exact BLT.toExAuth_wireWellFormed hblt
         all_goals
           first
-            | exact Bytes.toRlpNat_lt_two_pow_256 (by assumption)
-            | exact Bytes.toRlpB256_eq_ok (by assumption)
+            | exact Bytes.toRlpNat_lt_two_pow_256 (dec_eq_ok (by assumption))
+            | exact Bytes.toRlpB256_eq_ok (dec_eq_ok (by assumption))
     · exact absurd h (by simp)
     · exact absurd h (by simp)
 
-def decodeTx : Bytes ⊕ Tx → Except String Tx
-  | .inl xs => xs.toExStrTx
+/-- Decode a block-body transaction slot: opaque typed-envelope bytes through
+the strict envelope decoder, an already-decoded legacy slot as itself. The
+`.inr` arm is not a bypass on the checked path: `CanonicalBlock.decodeTx_inr`
+certifies what it returns there. -/
+def decodeTx : Bytes ⊕ Tx → Except TransitionError Tx
+  | .inl xs => xs.toExTx
   | .inr tx => .ok tx
 
 
@@ -1186,7 +1635,9 @@ def applyBody
       lastHash.toBytes
   let benvHistory := benvBeacon.withState stHistory
   let ⟨benvTxs, boutTxs⟩ ←
-    applyTransactions (← txs.mapM decodeTx).putIndex benvHistory .init
+    applyTransactions
+      (← txs.mapM (fun e => Except.mapError TransitionError.render (decodeTx e))).putIndex
+      benvHistory .init
   let ⟨stWds, boutWds⟩ :=
     processWithdrawals benvTxs boutTxs wds
   processGeneralPurposeRequests (benvTxs.withState stWds) boutWds
@@ -1711,7 +2162,7 @@ def stateTransition (ch : BlockChain) (block : Block) :
   Except String BlockChain :=
   stateTransitionWith pragueRules ch block
 
-def BLT.toExStrWithdrawal : BLT → Except String Withdrawal
+def BLT.toExWithdrawal : BLT → Except DecodeError Withdrawal
   | .list [
       .bytes globalIndex,
       .bytes validatorIndex,
@@ -1734,15 +2185,15 @@ def BLT.toExStrWithdrawal : BLT → Except String Withdrawal
       amount := amount.toNat.toB256
     }
   | _ =>
-    .error <| rlpStructureError "withdrawal"
+    .error <| DecodeError.structure "withdrawal"
       "expected a list of four byte-string fields"
 
 /-- Strict withdrawal-decoder soundness: the amount a decoded withdrawal
 carries always fits its 64-bit wire type, even though the field is 256 bits
 wide. -/
-theorem BLT.toExStrWithdrawal_wireWellFormed {blt : BLT} {w : Withdrawal}
-    (h : blt.toExStrWithdrawal = .ok w) : w.WireWellFormed := by
-  unfold BLT.toExStrWithdrawal at h
+theorem BLT.toExWithdrawal_wireWellFormed {blt : BLT} {w : Withdrawal}
+    (h : blt.toExWithdrawal = .ok w) : w.WireWellFormed := by
+  unfold BLT.toExWithdrawal at h
   split at h
   · repeat obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
     simp only [Except.ok.injEq] at h
@@ -1750,8 +2201,12 @@ theorem BLT.toExStrWithdrawal_wireWellFormed {blt : BLT} {w : Withdrawal}
     exact UInt64.toNat_toB256_high _
   · exact absurd h (by simp)
 
-def BLT.toExStrTx : BLT → Except String Tx
-  | .list [
+/-- The strict legacy-transaction decoder over the nine-field list shape. Split
+out of the slot decoder so the block decoder can consume it on the pure decode
+carrier: a legacy list produces only decode reasons, while the byte-string
+route (`Bytes.toExTx`) can also produce typed rejections. -/
+def BLT.toExLegacyTx : List BLT → Except DecodeError Tx
+  | [
       .bytes nonce,
       .bytes gasPrice,
       .bytes gas,
@@ -1783,20 +2238,25 @@ def BLT.toExStrTx : BLT → Except String Tx
       s := s,
       type := .zero gasPrice receiver
     }
-  | .list _ =>
-    .error <| rlpStructureError "legacy transaction"
+  | _ =>
+    .error <| DecodeError.structure "legacy transaction"
       "expected a list of nine byte-string fields"
-  | .bytes xs => xs.toExStrTx
+
+/-- A transaction slot as a standalone value: a legacy list through the strict
+legacy decoder, typed-envelope bytes through the strict envelope decoder. -/
+def BLT.toExTx : BLT → Except TransitionError Tx
+  | .list ls => dec (BLT.toExLegacyTx ls)
+  | .bytes xs => xs.toExTx
 
 /-- Strict legacy-transaction-decoder soundness. A *list*-shaped transaction
 item is the legacy route, so what it yields is both wire-well-formed and of
 legacy type -- which is exactly `TxEntry.WireWellFormed` on the decoded side of
-a block body's transaction slot. The typed route reaches this decoder only
-through a byte string, and never produces a `.zero` transaction. -/
-theorem BLT.toExStrTx_list_wireWellFormed {bs : List BLT} {tx : Tx}
-    (h : (BLT.list bs).toExStrTx = .ok tx) :
+a block body's transaction slot. The typed route never reaches this decoder,
+and never produces a `.zero` transaction. -/
+theorem BLT.toExLegacyTx_wireWellFormed {bs : List BLT} {tx : Tx}
+    (h : BLT.toExLegacyTx bs = .ok tx) :
     Tx.WireWellFormed tx ∧ tx.type.isLegacy = true := by
-  unfold BLT.toExStrTx at h
+  unfold BLT.toExLegacyTx at h
   split at h
   · repeat obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
     simp only [Except.ok.injEq] at h
@@ -1806,22 +2266,21 @@ theorem BLT.toExStrTx_list_wireWellFormed {bs : List BLT} {tx : Tx}
         | exact Bytes.toRlpNat_lt_two_pow_256 (by assumption)
         | exact Bytes.toRlpB256_eq_ok (by assumption)
   · exact absurd h (by simp)
-  · exact absurd (by assumption : BLT.list bs = BLT.bytes _) (by simp)
 
-def BLT.toExStrBlock : BLT → Except String Block
+def BLT.toExBlock : BLT → Except DecodeError Block
   | BLT.list [
       HeaderBLT,
       .list TxBLTs,
       .list OmmerBLTs,
       .list WithdrawalBLTs
     ] => do
-    let header ← HeaderBLT.toExStrHeader
-    let aux : BLT → Except String (Bytes ⊕ Tx)
-      | blt@(.list _) => blt.toExStrTx <&> .inr
+    let header ← HeaderBLT.toExHeader
+    let aux : BLT → Except DecodeError (Bytes ⊕ Tx)
+      | .list ls => BLT.toExLegacyTx ls <&> .inr
       | .bytes xs => .ok <| .inl xs
     let txs ← List.mapM aux TxBLTs
-    let ommers ← List.mapM BLT.toExStrHeader OmmerBLTs
-    let withdrawals ← List.mapM BLT.toExStrWithdrawal WithdrawalBLTs
+    let ommers ← List.mapM BLT.toExHeader OmmerBLTs
+    let withdrawals ← List.mapM BLT.toExWithdrawal WithdrawalBLTs
     .ok {
       header := header,
       txs := txs,
@@ -1829,10 +2288,10 @@ def BLT.toExStrBlock : BLT → Except String Block
       wds := withdrawals
     }
   | .list [_, .list _, .list _] =>
-    .error
-      s!"{rlpWithdrawalsNotReadTag} : post-Shanghai block body omits the withdrawals list"
+    .error <| .withdrawalsNotRead <|
+      .text "post-Shanghai block body omits the withdrawals list"
   | _ =>
-    .error <| rlpStructureError "block"
+    .error <| DecodeError.structure "block"
       "expected [header, transactions, ommers, withdrawals] lists"
 
 /-- Strict block-decoder soundness: a decoded block is structurally canonical
@@ -1840,20 +2299,20 @@ componentwise. Note what this deliberately does *not* say about a byte-string
 transaction slot -- it stays opaque here, and is decoded at the existing point
 inside `applyBody`, so the staged typed-transaction rule (design report §7) is
 preserved and no error precedence moves. -/
-theorem BLT.toExStrBlock_rlpCanonical {blt : BLT} {b : Block}
-    (h : blt.toExStrBlock = .ok b) : b.RlpCanonical := by
-  unfold BLT.toExStrBlock at h
+theorem BLT.toExBlock_rlpCanonical {blt : BLT} {b : Block}
+    (h : blt.toExBlock = .ok b) : b.RlpCanonical := by
+  unfold BLT.toExBlock at h
   split at h
   · repeat obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
     simp only [Except.ok.injEq] at h
     subst h
-    refine ⟨BLT.toExStrHeader_wireWellFormed (by assumption), ?_, ?_, ?_⟩
+    refine ⟨BLT.toExHeader_wireWellFormed (by assumption), ?_, ?_, ?_⟩
     · intro o ho
       obtain ⟨blt', hblt'⟩ := List.mapM_except_eq_ok_mem (by assumption) o ho
-      exact BLT.toExStrHeader_wireWellFormed hblt'
+      exact BLT.toExHeader_wireWellFormed hblt'
     · intro w hw
       obtain ⟨blt', hblt'⟩ := List.mapM_except_eq_ok_mem (by assumption) w hw
-      exact BLT.toExStrWithdrawal_wireWellFormed hblt'
+      exact BLT.toExWithdrawal_wireWellFormed hblt'
     · intro e he
       obtain ⟨blt', hblt'⟩ := List.mapM_except_eq_ok_mem (by assumption) e he
       cases blt' with
@@ -1865,7 +2324,7 @@ theorem BLT.toExStrBlock_rlpCanonical {blt : BLT} {b : Block}
         obtain ⟨tx, htx, he'⟩ := Except.bind_eq_ok hblt'
         simp only [Except.ok.injEq] at he'
         subst he'
-        exact BLT.toExStrTx_list_wireWellFormed htx
+        exact BLT.toExLegacyTx_wireWellFormed htx
   · exact absurd h (by simp)
   · exact absurd h (by simp)
 
@@ -1878,15 +2337,28 @@ block, ignoring everything else in the JSON (the code path that deals
 with nonexistent RLP bytes exists, but is unreachable). its return
 type also omits the RLP bytes, since this is identical to the input.
 -/
-def rlpToBlock (rlp : Bytes) : Except String (Block × B256) := do
+def rlpToBlockE (rlp : Bytes) : Except DecodeError (Block × B256) := do
   let block_blt ← (Bytes.toBLT? rlp).toExcept <|
-    rlpStructureError "block RLP" "cannot decode the outer RLP item"
-  let block ← block_blt.toExStrBlock
+    DecodeError.structure "block RLP" "cannot decode the outer RLP item"
+  let block ← block_blt.toExBlock
   let canonicalRlp := block.toBLT.toBytes
   if rlp ≠ canonicalRlp then
-    .error
-      s!"{rlpRoundTripTag} : decoded block does not re-encode byte-for-byte"
+    .error <| .roundTrip <|
+      .text "decoded block does not re-encode byte-for-byte"
   .ok ⟨block, (Header.toBLT block.header).toBytes.keccak⟩
+
+/-- Legacy renderer adapter over `rlpToBlockE`, byte-identical on every input.
+Retained by name and type because Blanc's protected
+`addBlockToChain_preserves_solvent` quantifies over exactly this equation, and
+the canonical envelope's evidence field is stated with it. -/
+def rlpToBlock (rlp : Bytes) : Except String (Block × B256) :=
+  (rlpToBlockE rlp).mapError DecodeError.render
+
+/-- The adapter adds rendering and nothing else: success is the typed core's
+success. This is the bridge every string-level client inverts through. -/
+theorem rlpToBlock_eq_ok_iff {rlp : Bytes} {p : Block × B256} :
+    rlpToBlock rlp = .ok p ↔ rlpToBlockE rlp = .ok p :=
+  Except.mapError_eq_ok_iff
 
 --------------- THE CANONICAL OUTER-BLOCK ENVELOPE ---------------
 
@@ -1897,7 +2369,8 @@ envelope instead of a separate hash argument. -/
 theorem rlpToBlock_headerHash {raw : Bytes} {block : Block} {hash : B256}
     (h : rlpToBlock raw = .ok ⟨block, hash⟩) :
     hash = (Header.toBLT block.header).toBytes.keccak := by
-  unfold rlpToBlock at h
+  rw [rlpToBlock_eq_ok_iff] at h
+  unfold rlpToBlockE at h
   repeat obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
   dsimp only at h
   split at h
@@ -1911,7 +2384,8 @@ theorem rlpToBlock_headerHash {raw : Bytes} {block : Block} {hash : B256}
 the bytes supplied -- P0.3's first acceptance criterion. -/
 theorem rlpToBlock_canonical {raw : Bytes} {block : Block} {hash : B256}
     (h : rlpToBlock raw = .ok ⟨block, hash⟩) : block.toBLT.toBytes = raw := by
-  unfold rlpToBlock at h
+  rw [rlpToBlock_eq_ok_iff] at h
+  unfold rlpToBlockE at h
   repeat obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
   dsimp only at h
   split at h
@@ -1925,7 +2399,8 @@ theorem rlpToBlock_canonical {raw : Bytes} {block : Block} {hash : B256}
 /-- A successful strict decode is structurally sound. -/
 theorem rlpToBlock_rlpCanonical {raw : Bytes} {block : Block} {hash : B256}
     (h : rlpToBlock raw = .ok ⟨block, hash⟩) : block.RlpCanonical := by
-  unfold rlpToBlock at h
+  rw [rlpToBlock_eq_ok_iff] at h
+  unfold rlpToBlockE at h
   obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
   obtain ⟨b, hb, h⟩ := Except.bind_eq_ok h
   dsimp only at h
@@ -1934,7 +2409,7 @@ theorem rlpToBlock_rlpCanonical {raw : Bytes} {block : Block} {hash : B256}
     exact absurd herr (by simp)
   · simp only [Except.ok.injEq, Prod.mk.injEq] at h
     obtain ⟨rfl, _⟩ := h
-    exact BLT.toExStrBlock_rlpCanonical hb
+    exact BLT.toExBlock_rlpCanonical hb
 
 /-- A canonical outer block: the bytes a peer supplied, the block the strict
 decoder produced from them, and the two pieces of evidence that make the pair
@@ -2051,8 +2526,8 @@ def CheckedHeader.ofHeader? (h : Header) : Option CheckedHeader :=
 
 /-- Certification from the strict decoder, with no second test. -/
 def CheckedHeader.ofDecode {blt : BLT} {h : Header}
-    (hd : blt.toExStrHeader = .ok h) : CheckedHeader :=
-  ⟨h, BLT.toExStrHeader_wireWellFormed hd⟩
+    (hd : blt.toExHeader = .ok h) : CheckedHeader :=
+  ⟨h, BLT.toExHeader_wireWellFormed hd⟩
 
 /-- A withdrawal certified wire-well-formed. -/
 structure CheckedWithdrawal : Type where
@@ -2064,8 +2539,8 @@ def CheckedWithdrawal.ofWithdrawal? (w : Withdrawal) : Option CheckedWithdrawal 
   if hw : w.WireWellFormed then some ⟨w, hw⟩ else none
 
 def CheckedWithdrawal.ofDecode {blt : BLT} {w : Withdrawal}
-    (hd : blt.toExStrWithdrawal = .ok w) : CheckedWithdrawal :=
-  ⟨w, BLT.toExStrWithdrawal_wireWellFormed hd⟩
+    (hd : blt.toExWithdrawal = .ok w) : CheckedWithdrawal :=
+  ⟨w, BLT.toExWithdrawal_wireWellFormed hd⟩
 
 /-- A certified block-body transaction slot.
 
@@ -2087,8 +2562,8 @@ def TxEnvelope.ofTypedBytes (bs : Bytes) : TxEnvelope := ⟨.inl bs, trivial⟩
 
 /-- The decoded legacy slot, from the strict decoder's own equation. -/
 def TxEnvelope.ofLegacyDecode {ls : List BLT} {tx : Tx}
-    (h : (BLT.list ls).toExStrTx = .ok tx) : TxEnvelope :=
-  ⟨.inr tx, BLT.toExStrTx_list_wireWellFormed h⟩
+    (h : BLT.toExLegacyTx ls = .ok tx) : TxEnvelope :=
+  ⟨.inr tx, BLT.toExLegacyTx_wireWellFormed h⟩
 
 /-- The raw compatibility constructor: it carries no evidence, so it validates
 once, here, rather than leaving a slot to be trusted later. -/
@@ -2445,27 +2920,55 @@ private def nineByteScalar : Bytes := 0x01 :: List.replicate 8 0x00
 private def thirtyThreeByteScalar : Bytes := 0x01 :: List.replicate 32 0x00
 private def testRecipient : Bytes := List.replicate 20 0x11
 
+-- Constructor-level guard matchers: the discriminant is now the typed reason,
+-- so these boundary checks match constructors instead of reading rendered
+-- text back through a prefix classifier.
+private def decFails {α : Type} (p : DecodeError → Bool) :
+    Except DecodeError α → Bool
+  | .error e => p e
+  | .ok _ => false
+
+private def txFails {α : Type} (p : TransitionError → Bool) :
+    Except TransitionError α → Bool
+  | .error e => p e
+  | .ok _ => false
+
+private def txDecFails {α : Type} (p : DecodeError → Bool) :
+    Except TransitionError α → Bool :=
+  txFails fun e => match e with | .decode d => p d | _ => false
+
+private def isFixedWidthD : DecodeError → Bool
+  | .fixedWidth _ => true | _ => false
+private def isOverflow64D : DecodeError → Bool
+  | .fieldOverflow64 _ => true | _ => false
+private def isOverflow256D : DecodeError → Bool
+  | .fieldOverflow256 _ => true | _ => false
+private def isStructureD : DecodeError → Bool
+  | .rlpStructure _ => true | _ => false
+private def isWithdrawalsNotReadD : DecodeError → Bool
+  | .withdrawalsNotRead _ => true | _ => false
+
 -- Both withdrawal index positions reject nine bytes at the field boundary;
 -- neither can reach the truncating `Bytes.toUInt64` conversion unchecked.
-#guard hasTag rlpFieldOverflow64Tag <|
-  BLT.toExStrWithdrawal <|
+#guard decFails isOverflow64D <|
+  BLT.toExWithdrawal <|
     withdrawalDecoderVector nineByteScalar [] testRecipient []
-#guard hasTag rlpFieldOverflow64Tag <|
-  BLT.toExStrWithdrawal <|
+#guard decFails isOverflow64D <|
+  BLT.toExWithdrawal <|
     withdrawalDecoderVector [] nineByteScalar testRecipient []
-#guard (BLT.toExStrWithdrawal <|
+#guard (BLT.toExWithdrawal <|
   withdrawalDecoderVector [] [] testRecipient []).toOption.isSome
-#guard hasTag rlpFixedWidthTag <|
-  BLT.toExStrWithdrawal <|
+#guard decFails isFixedWidthD <|
+  BLT.toExWithdrawal <|
     withdrawalDecoderVector [] [] (List.replicate 21 0x11) []
 -- The amount is a 64-bit Gwei scalar (EIP-4895): the exact eight-byte maximum
 -- decodes, and nine bytes are rejected at the field boundary rather than
 -- surfacing later as a state-root mismatch.
-#guard (BLT.toExStrWithdrawal <|
+#guard (BLT.toExWithdrawal <|
   withdrawalDecoderVector [] [] testRecipient (List.replicate 8 0xFF)
   ).toOption.map (fun wd => wd.amount.toNat) = some (2 ^ 64 - 1)
-#guard hasTag rlpFieldOverflow64Tag <|
-  BLT.toExStrWithdrawal <|
+#guard decFails isOverflow64D <|
+  BLT.toExWithdrawal <|
     withdrawalDecoderVector [] [] testRecipient nineByteScalar
 
 -- A canonical legacy transaction preserves its signing/re-encoding bytes.
@@ -2473,40 +2976,40 @@ private def canonicalLegacyVector : BLT :=
   legacyDecoderVector [0x01] [0x02] [0x52, 0x08] testRecipient [] [0x1b] [0x01] [0x02]
 
 #guard
-  (BLT.toExStrTx canonicalLegacyVector).toOption.map (fun tx => tx.toBLT.toBytes)
+  (BLT.toExTx canonicalLegacyVector).toOption.map (fun tx => tx.toBLT.toBytes)
     == some canonicalLegacyVector.toBytes
 
 -- Every legacy scalar is bounded before conversion or sender recovery.
-#guard hasTag rlpFieldOverflow64Tag <|
-  BLT.toExStrTx <|
+#guard txDecFails isOverflow64D <|
+  BLT.toExTx <|
     legacyDecoderVector nineByteScalar [] [] [] [] [] [] []
-#guard hasTag rlpFieldOverflow256Tag <|
-  BLT.toExStrTx <|
+#guard txDecFails isOverflow256D <|
+  BLT.toExTx <|
     legacyDecoderVector [] thirtyThreeByteScalar [] [] [] [] [] []
-#guard hasTag rlpFieldOverflow256Tag <|
-  BLT.toExStrTx <|
+#guard txDecFails isOverflow256D <|
+  BLT.toExTx <|
     legacyDecoderVector [] [] thirtyThreeByteScalar [] [] [] [] []
-#guard hasTag rlpFieldOverflow256Tag <|
-  BLT.toExStrTx <|
+#guard txDecFails isOverflow256D <|
+  BLT.toExTx <|
     legacyDecoderVector [] [] [] [] thirtyThreeByteScalar [] [] []
-#guard hasTag rlpFieldOverflow256Tag <|
-  BLT.toExStrTx <|
+#guard txDecFails isOverflow256D <|
+  BLT.toExTx <|
     legacyDecoderVector [] [] [] [] [] thirtyThreeByteScalar [] []
-#guard hasTag rlpFieldOverflow256Tag <|
-  BLT.toExStrTx <|
+#guard txDecFails isOverflow256D <|
+  BLT.toExTx <|
     legacyDecoderVector [] [] [] [] [] [] thirtyThreeByteScalar []
-#guard hasTag rlpFieldOverflow256Tag <|
-  BLT.toExStrTx <|
+#guard txDecFails isOverflow256D <|
+  BLT.toExTx <|
     legacyDecoderVector [] [] [] [] [] [] [] thirtyThreeByteScalar
-#guard hasTag rlpFixedWidthTag <|
-  BLT.toExStrTx <|
+#guard txDecFails isFixedWidthD <|
+  BLT.toExTx <|
     legacyDecoderVector [] [] [] (List.replicate 21 0x11) [] [] [] []
 
 -- The two block-list failures with dedicated meanings are separated before
 -- header decoding; arbitrary non-list input remains a structure error.
-#guard hasTag rlpWithdrawalsNotReadTag <|
-  BLT.toExStrBlock (.list [.bytes [], .list [], .list []])
-#guard hasTag rlpStructureTag <| BLT.toExStrBlock (.bytes [])
+#guard decFails isWithdrawalsNotReadD <|
+  BLT.toExBlock (.list [.bytes [], .list [], .list []])
+#guard decFails isStructureD <| BLT.toExBlock (.bytes [])
 
 --------- STRICT TYPED-TRANSACTION DECODER REGRESSION CHECKS ----------
 
@@ -2561,7 +3064,7 @@ private def goodAuth : BLT :=
 -- One positive vector per type: it decodes, and it re-encodes to the exact
 -- input bytes, so trie bytes for valid transactions are unchanged.
 private def reencodes (type : UInt8) (v : Bytes) : Bool :=
-  (Bytes.toExStrTx v).toOption.map (fun tx => type :: tx.toBLT.toBytes) == some v
+  (Bytes.toExTx v).toOption.map (fun tx => type :: tx.toBLT.toBytes) == some v
 
 #guard reencodes 0x01 <|
   type1Vector [0x01] [0x01] testRecipient [0x01]
@@ -2584,76 +3087,81 @@ private def shortWidthScalar : Bytes := 0x01 :: List.replicate 30 0x00
   authOf [0x01] testRecipient [0x01] [0x01] [0x02]
 
 -- A type-1/type-2 receiver may be empty, meaning contract creation...
-#guard (Bytes.toExStrTx (type2Vector [0x0a] [] [0x02])).toOption.isSome
+#guard (Bytes.toExTx (type2Vector [0x0a] [] [0x02])).toOption.isSome
 -- ...but an empty type-3 receiver is the semantic contract-creation identity;
 -- nonempty 19/21-byte receivers still fail as malformed RLP fields.
-#guard hasTag type3ContractCreationTag <|
-  Bytes.toExStrTx <| type3Vector [0x01] [] testBlobHash
-#guard hasTag rlpFixedWidthTag <|
-  Bytes.toExStrTx <| type3Vector [0x01] (List.replicate 19 0x11) testBlobHash
-#guard hasTag rlpFixedWidthTag <| Bytes.toExStrTx <|
+#guard txFails (fun e => match e with
+    | .transaction (.type3ContractCreation _) => true | _ => false) <|
+  Bytes.toExTx <| type3Vector [0x01] [] testBlobHash
+#guard txDecFails isFixedWidthD <|
+  Bytes.toExTx <| type3Vector [0x01] (List.replicate 19 0x11) testBlobHash
+#guard txDecFails isFixedWidthD <| Bytes.toExTx <|
   type1Vector [0x01] [0x01] (List.replicate 21 0x11) [0x01] (.list [])
-#guard hasTag rlpFixedWidthTag <|
-  Bytes.toExStrTx <| type4Vector (List.replicate 19 0x11) goodAuth
+#guard txDecFails isFixedWidthD <|
+  Bytes.toExTx <| type4Vector (List.replicate 19 0x11) goodAuth
 
 -- Oversized scalars are overflows at the field boundary, not truncations.
-#guard hasTag rlpFieldOverflow64Tag <| Bytes.toExStrTx <|
+#guard txDecFails isOverflow64D <| Bytes.toExTx <|
   type1Vector [0x01] nineByteScalar testRecipient [0x01] (.list [])
-#guard hasTag rlpFieldOverflow64Tag <| Bytes.toExStrTx <|
+#guard txDecFails isOverflow64D <| Bytes.toExTx <|
   type1Vector nineByteScalar [0x01] testRecipient [0x01] (.list [])
-#guard hasTag rlpFieldOverflow64Tag <|
-  Bytes.toExStrTx <| type3Vector nineByteScalar testRecipient testBlobHash
-#guard hasTag rlpFieldOverflow256Tag <|
-  Bytes.toExStrTx <| type2Vector thirtyThreeByteScalar testRecipient [0x02]
+#guard txDecFails isOverflow64D <|
+  Bytes.toExTx <| type3Vector nineByteScalar testRecipient testBlobHash
+#guard txDecFails isOverflow256D <|
+  Bytes.toExTx <| type2Vector thirtyThreeByteScalar testRecipient [0x02]
 -- The two fields the deleted `reverse.takeD 32` pattern used to truncate.
-#guard hasTag rlpFieldOverflow256Tag <| Bytes.toExStrTx <|
+#guard txDecFails isOverflow256D <| Bytes.toExTx <|
   type1Vector [0x01] [0x01] testRecipient thirtyThreeByteScalar (.list [])
-#guard hasTag rlpFieldOverflow256Tag <|
-  Bytes.toExStrTx <| type2Vector [0x0a] testRecipient thirtyThreeByteScalar
+#guard txDecFails isOverflow256D <|
+  Bytes.toExTx <| type2Vector [0x0a] testRecipient thirtyThreeByteScalar
 
 -- Access lists: exact address and storage-key widths, and both list shapes.
-#guard hasTag rlpFixedWidthTag <| Bytes.toExStrTx <|
+#guard txDecFails isFixedWidthD <| Bytes.toExTx <|
   type1Vector [0x01] [0x01] testRecipient [0x01]
     (accessListOf (List.replicate 21 0x11) testStorageKey)
-#guard hasTag rlpFixedWidthTag <| Bytes.toExStrTx <|
+#guard txDecFails isFixedWidthD <| Bytes.toExTx <|
   type1Vector [0x01] [0x01] testRecipient [0x01]
     (accessListOf testRecipient (List.replicate 33 0x22))
-#guard hasTag rlpFixedWidthTag <| Bytes.toExStrTx <|
+#guard txDecFails isFixedWidthD <| Bytes.toExTx <|
   type1Vector [0x01] [0x01] testRecipient [0x01]
     (accessListOf testRecipient (List.replicate 31 0x22))
-#guard hasTag rlpStructureTag <| Bytes.toExStrTx <|
+#guard txDecFails isStructureD <| Bytes.toExTx <|
   type1Vector [0x01] [0x01] testRecipient [0x01] (.list [.bytes []])
-#guard hasTag rlpStructureTag <| Bytes.toExStrTx <|
+#guard txDecFails isStructureD <| Bytes.toExTx <|
   type1Vector [0x01] [0x01] testRecipient [0x01] (.bytes [])
 
 -- Blob versioned hashes: exactly thirty-two bytes, both sides.
-#guard hasTag rlpFixedWidthTag <| Bytes.toExStrTx <|
+#guard txDecFails isFixedWidthD <| Bytes.toExTx <|
   type3Vector [0x01] testRecipient (0x01 :: List.replicate 32 0x33)
-#guard hasTag rlpFixedWidthTag <|
-  Bytes.toExStrTx <| type3Vector [0x01] testRecipient (List.replicate 31 0x33)
+#guard txDecFails isFixedWidthD <|
+  Bytes.toExTx <| type3Vector [0x01] testRecipient (List.replicate 31 0x33)
 
 -- Authorizations: exact address width, a uint256 chainId, bounded nonce and
 -- r/s, and the six-field list shape.
-#guard hasTag rlpFixedWidthTag <| Bytes.toExStrTx <| type4Vector testRecipient <|
+#guard txDecFails isFixedWidthD <| Bytes.toExTx <| type4Vector testRecipient <|
   authOf [0x01] (List.replicate 21 0x11) [0x01] fullWidthScalar fullWidthScalar
-#guard (Bytes.toExStrTx <| type4Vector testRecipient <|
+#guard (Bytes.toExTx <| type4Vector testRecipient <|
   authOf nineByteScalar testRecipient [0x01] fullWidthScalar fullWidthScalar).toOption.isSome
-#guard hasTag rlpFieldOverflow64Tag <| Bytes.toExStrTx <| type4Vector testRecipient <|
+#guard txDecFails isOverflow64D <| Bytes.toExTx <| type4Vector testRecipient <|
   authOf [0x01] testRecipient nineByteScalar fullWidthScalar fullWidthScalar
-#guard hasTag rlpFieldOverflow256Tag <| Bytes.toExStrTx <| type4Vector testRecipient <|
+#guard txDecFails isOverflow256D <| Bytes.toExTx <| type4Vector testRecipient <|
   authOf [0x01] testRecipient [0x01] thirtyThreeByteScalar fullWidthScalar
-#guard hasTag rlpFieldOverflow256Tag <| Bytes.toExStrTx <| type4Vector testRecipient <|
+#guard txDecFails isOverflow256D <| Bytes.toExTx <| type4Vector testRecipient <|
   authOf [0x01] testRecipient [0x01] fullWidthScalar thirtyThreeByteScalar
-#guard hasTag rlpStructureTag <| Bytes.toExStrTx <|
+#guard txDecFails isStructureD <| Bytes.toExTx <|
   type4Vector testRecipient (.list [.bytes [0x01], .bytes testRecipient])
 
 -- A wrong list shape for a known type byte is a structure error; an unknown
 -- type byte keeps its own failure; empty input is a structure error.
-#guard hasTag rlpStructureTag <| Bytes.toExStrTx (0x01 :: BLT.toBytes (.bytes []))
-#guard hasTag rlpStructureTag <| Bytes.toExStrTx (0x02 :: BLT.toBytes (.list []))
-#guard hasTag rlpStructureTag <| Bytes.toExStrTx []
-#guard ¬ hasTag rlpStructureTag (Bytes.toExStrTx [0x05])
-#guard (Bytes.toExStrTx [0x05]).toOption.isNone
+#guard txDecFails isStructureD <| Bytes.toExTx (0x01 :: BLT.toBytes (.bytes []))
+#guard txDecFails isStructureD <| Bytes.toExTx (0x02 :: BLT.toBytes (.list []))
+#guard txDecFails isStructureD <| Bytes.toExTx []
+#guard ¬ txDecFails isStructureD (Bytes.toExTx [0x05])
+#guard (Bytes.toExTx [0x05]).toOption.isNone
+-- The unknown-type reason is the fail-closed internal one, never a decode or
+-- rejection identity a fixture could score.
+#guard txFails (fun e => match e with | .internal _ => true | _ => false)
+  (Bytes.toExTx [0x05])
 
 /-- Block import from a canonical outer-block envelope, under an explicit rule
 set. This is the checked import core; every public import path below is a
@@ -3214,304 +3722,6 @@ private def guardMismatchConfig : ChainConfig := ChainConfig.mk 7 [⟨.prague, 0
 #guard hasTag rlpStructureTag <|
   addBlockToChainUsing guardOsakaToBpo1Config guardParentChain [0xFF]
 
---------- TYPED SEMANTIC REASONS: TRANSACTION, BLOCK, IMPORT ---------
-
--- Declarations, renderers, and golden guards only; no producer is migrated
--- here and no rendered message changes. Step 10 moves the producers.
---
--- Placement is frozen by `scripts/report-integrity-design.md` section 6:
--- every transition and import entry point is in this module, so the two
--- validation vocabularies and the three failure sums belong here. Their tag
--- constants stay where they are declared, in `Jaune/Machine.lean`, and this
--- module reads them; a tag and the constructor that renders under it are
--- pinned to each other by the golden guards below.
-
-/-- Why a transaction is not admissible in the block that contains it.
-
-One constructor per reason in the transaction-rejection vocabulary, which is
-already one producer per reason and one official fixture identity per reason.
-Nonce direction, intrinsic gas, and the 256-bit gas-price product stay
-distinct for exactly the reason the vocabulary keeps them distinct. -/
-inductive TxValidationError : Type
-  | gasPriceProductOverflow (detail : ErrorDetail)
-  | gasAllowanceExceeded (detail : ErrorDetail)
-  | initcodeSizeExceeded (detail : ErrorDetail)
-  | insufficientAccountFunds (detail : ErrorDetail)
-  | insufficientMaxFeePerGas (detail : ErrorDetail)
-  | transactionGasLimitExceeded (detail : ErrorDetail)
-  | intrinsicGasTooLow (detail : ErrorDetail)
-  | invalidChainId (detail : ErrorDetail)
-  | nonceIsMax (detail : ErrorDetail)
-  | nonceMismatchTooHigh (detail : ErrorDetail)
-  | nonceMismatchTooLow (detail : ErrorDetail)
-  | priorityGreaterThanMaxFee (detail : ErrorDetail)
-  | senderNotEoa (detail : ErrorDetail)
-  | type3BlobCountExceeded (detail : ErrorDetail)
-  | type3BlobCountLimitExceeded (detail : ErrorDetail)
-  | type3ContractCreation (detail : ErrorDetail)
-  | type3InvalidBlobVersionedHash (detail : ErrorDetail)
-  | type3ZeroBlobs (detail : ErrorDetail)
-  | type4ContractCreation (detail : ErrorDetail)
-  | emptyAuthorizationList (detail : ErrorDetail)
-deriving DecidableEq, Repr
-
-/-- The tag a transaction-rejection reason renders under. -/
-def TxValidationError.tag : TxValidationError → String
-  | .gasPriceProductOverflow _ => gasPriceProductOverflowTag
-  | .gasAllowanceExceeded _ => gasAllowanceExceededTag
-  | .initcodeSizeExceeded _ => initcodeSizeExceededTag
-  | .insufficientAccountFunds _ => insufficientAccountFundsTag
-  | .insufficientMaxFeePerGas _ => insufficientMaxFeePerGasTag
-  | .transactionGasLimitExceeded _ => transactionGasLimitExceededTag
-  | .intrinsicGasTooLow _ => intrinsicGasTooLowTag
-  | .invalidChainId _ => invalidChainIdTag
-  | .nonceIsMax _ => nonceIsMaxTag
-  | .nonceMismatchTooHigh _ => nonceMismatchTooHighTag
-  | .nonceMismatchTooLow _ => nonceMismatchTooLowTag
-  | .priorityGreaterThanMaxFee _ => priorityGreaterThanMaxFeeTag
-  | .senderNotEoa _ => senderNotEoaTag
-  | .type3BlobCountExceeded _ => type3BlobCountExceededTag
-  | .type3BlobCountLimitExceeded _ => type3BlobCountLimitExceededTag
-  | .type3ContractCreation _ => type3ContractCreationTag
-  | .type3InvalidBlobVersionedHash _ => type3InvalidBlobVersionedHashTag
-  | .type3ZeroBlobs _ => type3ZeroBlobsTag
-  | .type4ContractCreation _ => type4ContractCreationTag
-  | .emptyAuthorizationList _ => emptyAuthorizationListTag
-
-/-- The diagnostic payload of a transaction-rejection reason. -/
-def TxValidationError.detail : TxValidationError → ErrorDetail
-  | .gasPriceProductOverflow d | .gasAllowanceExceeded d
-  | .initcodeSizeExceeded d | .insufficientAccountFunds d
-  | .insufficientMaxFeePerGas d | .transactionGasLimitExceeded d
-  | .intrinsicGasTooLow d | .invalidChainId d | .nonceIsMax d
-  | .nonceMismatchTooHigh d | .nonceMismatchTooLow d
-  | .priorityGreaterThanMaxFee d | .senderNotEoa d
-  | .type3BlobCountExceeded d | .type3BlobCountLimitExceeded d
-  | .type3ContractCreation d | .type3InvalidBlobVersionedHash d
-  | .type3ZeroBlobs d | .type4ContractCreation d
-  | .emptyAuthorizationList d => d
-
-/-- The one renderer for `TxValidationError`. -/
-def TxValidationError.render (e : TxValidationError) : String :=
-  renderTagged e.tag e.detail
-
-/-- Every transaction-rejection reason, for the completeness guards. -/
-def TxValidationError.all : List TxValidationError :=
-  [ .gasPriceProductOverflow .none, .gasAllowanceExceeded .none,
-    .initcodeSizeExceeded .none, .insufficientAccountFunds .none,
-    .insufficientMaxFeePerGas .none, .transactionGasLimitExceeded .none,
-    .intrinsicGasTooLow .none, .invalidChainId .none, .nonceIsMax .none,
-    .nonceMismatchTooHigh .none, .nonceMismatchTooLow .none,
-    .priorityGreaterThanMaxFee .none, .senderNotEoa .none,
-    .type3BlobCountExceeded .none, .type3BlobCountLimitExceeded .none,
-    .type3ContractCreation .none, .type3InvalidBlobVersionedHash .none,
-    .type3ZeroBlobs .none, .type4ContractCreation .none,
-    .emptyAuthorizationList .none ]
-
-/-- Why a header or a post-transition check rejects a block.
-
-One constructor per reason in the block-rejection vocabulary. A bare
-"some consensus rule failed" is exactly what let a block be rejected for the
-wrong reason and still be scored as a pass, which is why each reason is its
-own constructor here as it is its own tag there. -/
-inductive BlockValidationError : Type
-  | gasLimitTooBig (detail : ErrorDetail)
-  | gasLimitAdjustment (detail : ErrorDetail)
-  | gasUsedOverflow (detail : ErrorDetail)
-  | gasUsedMismatch (detail : ErrorDetail)
-  | timestampOlderThanParent (detail : ErrorDetail)
-  | blockNumber (detail : ErrorDetail)
-  | baseFeePerGas (detail : ErrorDetail)
-  | difficultyOverParis (detail : ErrorDetail)
-  | ommersOverParis (detail : ErrorDetail)
-  | extraDataTooBig (detail : ErrorDetail)
-  | unknownParent (detail : ErrorDetail)
-  | unknownParentZero (detail : ErrorDetail)
-  | stateRoot (detail : ErrorDetail)
-  | transactionsRoot (detail : ErrorDetail)
-  | receiptsRoot (detail : ErrorDetail)
-  | logBloom (detail : ErrorDetail)
-  | withdrawalsRoot (detail : ErrorDetail)
-  | headerNonce (detail : ErrorDetail)
-  | excessBlobGas (detail : ErrorDetail)
-  | blobGasUsed (detail : ErrorDetail)
-  | requestsHash (detail : ErrorDetail)
-  | depositEventLayout (detail : ErrorDetail)
-  | systemContractCallFailed (detail : ErrorDetail)
-  | blockRlpSizeExceeded (detail : ErrorDetail)
-deriving DecidableEq, Repr
-
-/-- The tag a block-rejection reason renders under. -/
-def BlockValidationError.tag : BlockValidationError → String
-  | .gasLimitTooBig _ => gasLimitTooBigTag
-  | .gasLimitAdjustment _ => gasLimitAdjustmentTag
-  | .gasUsedOverflow _ => gasUsedOverflowTag
-  | .gasUsedMismatch _ => gasUsedMismatchTag
-  | .timestampOlderThanParent _ => timestampOlderThanParentTag
-  | .blockNumber _ => blockNumberTag
-  | .baseFeePerGas _ => baseFeePerGasTag
-  | .difficultyOverParis _ => difficultyOverParisTag
-  | .ommersOverParis _ => ommersOverParisTag
-  | .extraDataTooBig _ => extraDataTooBigTag
-  | .unknownParent _ => unknownParentTag
-  | .unknownParentZero _ => unknownParentZeroTag
-  | .stateRoot _ => stateRootTag
-  | .transactionsRoot _ => transactionsRootTag
-  | .receiptsRoot _ => receiptsRootTag
-  | .logBloom _ => logBloomTag
-  | .withdrawalsRoot _ => withdrawalsRootTag
-  | .headerNonce _ => headerNonceTag
-  | .excessBlobGas _ => excessBlobGasTag
-  | .blobGasUsed _ => blobGasUsedTag
-  | .requestsHash _ => requestsHashTag
-  | .depositEventLayout _ => depositEventLayoutTag
-  | .systemContractCallFailed _ => systemContractCallFailedTag
-  | .blockRlpSizeExceeded _ => blockRlpSizeExceededTag
-
-/-- The diagnostic payload of a block-rejection reason. -/
-def BlockValidationError.detail : BlockValidationError → ErrorDetail
-  | .gasLimitTooBig d | .gasLimitAdjustment d | .gasUsedOverflow d
-  | .gasUsedMismatch d | .timestampOlderThanParent d | .blockNumber d
-  | .baseFeePerGas d | .difficultyOverParis d | .ommersOverParis d
-  | .extraDataTooBig d | .unknownParent d | .unknownParentZero d
-  | .stateRoot d | .transactionsRoot d | .receiptsRoot d | .logBloom d
-  | .withdrawalsRoot d | .headerNonce d | .excessBlobGas d
-  | .blobGasUsed d | .requestsHash d | .depositEventLayout d
-  | .systemContractCallFailed d | .blockRlpSizeExceeded d => d
-
-/-- The one renderer for `BlockValidationError`. -/
-def BlockValidationError.render (e : BlockValidationError) : String :=
-  renderTagged e.tag e.detail
-
-/-- Every block-rejection reason, for the completeness guards. -/
-def BlockValidationError.all : List BlockValidationError :=
-  [ .gasLimitTooBig .none, .gasLimitAdjustment .none, .gasUsedOverflow .none,
-    .gasUsedMismatch .none, .timestampOlderThanParent .none,
-    .blockNumber .none, .baseFeePerGas .none, .difficultyOverParis .none,
-    .ommersOverParis .none, .extraDataTooBig .none, .unknownParent .none,
-    .unknownParentZero .none, .stateRoot .none, .transactionsRoot .none,
-    .receiptsRoot .none, .logBloom .none, .withdrawalsRoot .none,
-    .headerNonce .none, .excessBlobGas .none, .blobGasUsed .none,
-    .requestsHash .none, .depositEventLayout .none,
-    .systemContractCallFailed .none, .blockRlpSizeExceeded .none ]
-
-/-- Why an import could not be attempted, or could not be trusted.
-
-The outer channel. None of these is a verdict about the candidate block, and
-none may ever be scored as an expected consensus rejection: a contradictory
-caller context, an unimplemented era, a harness fault, or a broken internal
-invariant all mean the question was not answered, not that the answer was
-"invalid". -/
-inductive ImportFailure : Type
-  /-- The configuration, or its pairing with the snapshot, is unusable. -/
-  | context (reason : ChainContextError)
-  /-- The input is outside the domain this build implements. -/
-  | support (reason : SupportError)
-  /-- The surrounding harness could not supply what the import needs. -/
-  | harness (detail : ErrorDetail)
-  /-- A stated invariant of this build did not hold. -/
-  | internal (reason : InternalError)
-deriving DecidableEq, Repr
-
-/-- The one renderer for `ImportFailure`. -/
-def ImportFailure.render : ImportFailure → String
-  | .context reason => reason.render
-  | .support reason => reason.render
-  | .harness detail => renderTagged internalErrorTag detail
-  | .internal reason => reason.render
-
-/-- Why a candidate block is rejected.
-
-The inner channel: every arm is a consensus verdict about the candidate, and
-every arm carries a reason with an official fixture identity. The `decode`
-arm exists because the audited ordering treats some strict-decode failures as
-block rejection rather than as ingress failure; Step 10 assigns each decode
-reason to this arm or to `RawImportFailure.strictDecode` deliberately, reason
-by reason, and never by inheriting today's nesting. -/
-inductive BlockRejection : Type
-  | transaction (reason : TxValidationError)
-  | block (reason : BlockValidationError)
-  | decode (reason : DecodeError)
-deriving DecidableEq, Repr
-
-/-- The one renderer for `BlockRejection`. -/
-def BlockRejection.render : BlockRejection → String
-  | .transaction reason => reason.render
-  | .block reason => reason.render
-  | .decode reason => reason.render
-
-/-- The result of an import that was actually attempted: an extended chain, or
-a rejected candidate.
-
-Parameterised in the chain representation so that the compatibility wrapper
-and the checked core share one shape. Step 6 introduces the checked snapshot
-and instantiates this at it; until then it is instantiated at `BlockChain`. -/
-abbrev ImportOutcome (chain : Type) : Type := chain ⊕ BlockRejection
-
-/-- Why an import from raw bytes could not produce an outcome at all.
-
-Ingress failure is explicit here rather than nested inside the operational
-channel by accident. -/
-inductive RawImportFailure : Type
-  | strictDecode (reason : DecodeError)
-  | operational (reason : ImportFailure)
-deriving DecidableEq, Repr
-
-/-- The one renderer for `RawImportFailure`. -/
-def RawImportFailure.render : RawImportFailure → String
-  | .strictDecode reason => reason.render
-  | .operational reason => reason.render
-
--- Golden guards. Each vocabulary is pinned constructor-by-constructor to the
--- tag it renders under, so a migrated producer cannot silently change an
--- externally observed message or route a reason to the wrong identity.
-#guard TxValidationError.all.length = 20
-#guard TxValidationError.all.eraseDups.length = 20
-#guard TxValidationError.all.map TxValidationError.tag = transactionExceptionTags
-#guard (TxValidationError.all.map TxValidationError.tag).eraseDups.length = 20
-#guard TxValidationError.render (.nonceMismatchTooHigh .none)
-  = "NonceMismatchTooHighError"
-#guard TxValidationError.render (.intrinsicGasTooLow (.text "needs 21000, has 20999"))
-  = "IntrinsicGasTooLowError : needs 21000, has 20999"
-
-#guard BlockValidationError.all.length = 24
-#guard BlockValidationError.all.eraseDups.length = 24
-#guard BlockValidationError.all.map BlockValidationError.tag = blockExceptionTags
-#guard (BlockValidationError.all.map BlockValidationError.tag).eraseDups.length = 24
-#guard BlockValidationError.render (.stateRoot .none) = "StateRootError"
-#guard BlockValidationError.render (.blockRlpSizeExceeded (.text "1 byte over the limit"))
-  = "BlockRlpSizeExceededError : 1 byte over the limit"
-
-#guard ImportFailure.render (.context .emptySchedule)
-  = "InvalidChainConfigError : the activation schedule is empty"
-#guard ImportFailure.render (.context (.chainIdMismatch 7 1))
-  = "ChainIdMismatchError : the configuration names chain 7, but the snapshot \
-     is chain 1"
-#guard ImportFailure.render (.support (.unsupportedEra 100 200))
-  = "UnsupportedEraError : timestamp 100 precedes the earliest era this \
-     configuration supports, which begins at 200"
-#guard ImportFailure.render (.harness (.text "lastblockhash names no imported snapshot"))
-  = "ERROR : lastblockhash names no imported snapshot"
-#guard ImportFailure.render (.internal (.invariant (.text "receipt not found")))
-  = "ERROR : receipt not found"
-
-#guard BlockRejection.render (.transaction (.senderNotEoa .none)) = "SenderNotEoaError"
-#guard BlockRejection.render (.block (.logBloom .none)) = "LogBloomError"
-#guard BlockRejection.render (.decode (.roundTrip .none)) = "RlpRoundTripError"
-
-#guard RawImportFailure.render (.strictDecode (.rlpStructure .none))
-  = "RlpStructureError"
-#guard RawImportFailure.render (.operational (.support (.unsupportedFork .osaka)))
-  = "UnsupportedForkError : fork Osaka is a declared protocol fork whose \
-     execution rules are not implemented in this build"
-
--- No block-rejection or transaction-rejection tag is readable as the broad
--- category it replaces, and the two vocabularies do not overlap. These are the
--- constructor-level restatements of the distinctness facts the tag lists
--- already carry, and they are what makes exhaustive matching a faithful
--- replacement for prefix matching.
-#guard (TxValidationError.all.map TxValidationError.tag).all fun t =>
-  ¬ (BlockValidationError.all.map BlockValidationError.tag).contains t
 
 --------------- CANONICALITY THROUGH EXECUTION (P0.4, STEP 4) ---------------
 
@@ -4067,14 +4277,14 @@ private def wireGuardWithdrawal (amount : B256) : Withdrawal :=
 -- A decoder-produced legacy transaction is structurally certifiable; the same
 -- record with a noncanonical or overwide signature scalar, or an overwide
 -- value, is not.
-#guard (BLT.toExStrTx canonicalLegacyVector).toOption.map
+#guard (BLT.toExTx canonicalLegacyVector).toOption.map
   (fun tx => decide tx.WireWellFormed) = some true
-#guard (BLT.toExStrTx canonicalLegacyVector).toOption.map
+#guard (BLT.toExTx canonicalLegacyVector).toOption.map
   (fun tx => decide (Tx.WireWellFormed { tx with r := 0x00 :: tx.r })) = some false
-#guard (BLT.toExStrTx canonicalLegacyVector).toOption.map
+#guard (BLT.toExTx canonicalLegacyVector).toOption.map
   (fun tx => decide (Tx.WireWellFormed { tx with s := List.replicate 33 0x01 }))
     = some false
-#guard (BLT.toExStrTx canonicalLegacyVector).toOption.map
+#guard (BLT.toExTx canonicalLegacyVector).toOption.map
   (fun tx => decide (Tx.WireWellFormed { tx with value := 2 ^ 256 })) = some false
 
 -- P0.3's headline negative case. A decoded legacy transaction is a legitimate
@@ -4082,12 +4292,12 @@ private def wireGuardWithdrawal (amount : B256) : Withdrawal :=
 -- transaction's canonical block encoding is its envelope byte followed by its
 -- payload, never the legacy list. This is what forecloses a direct trusted
 -- `.inr Tx` on the checked path.
-#guard (BLT.toExStrTx canonicalLegacyVector).toOption.map
+#guard (BLT.toExTx canonicalLegacyVector).toOption.map
   (fun tx => decide (TxEntry.WireWellFormed (.inr tx))) = some true
-#guard (Bytes.toExStrTx
+#guard (Bytes.toExTx
     (type1Vector [0x01] [0x01] testRecipient [0x01] (.list []))).toOption.map
   (fun tx => decide (TxEntry.WireWellFormed (.inr tx))) = some false
-#guard (Bytes.toExStrTx (type2Vector [0x0a] testRecipient [0x02])).toOption.map
+#guard (Bytes.toExTx (type2Vector [0x0a] testRecipient [0x02])).toOption.map
   (fun tx => decide (TxEntry.WireWellFormed (.inr tx))) = some false
 
 --------------- CHECKED-CONSTRUCTOR AND ENVELOPE CHECKS ---------------
@@ -4109,20 +4319,20 @@ private def wireGuardWithdrawal (amount : B256) : Withdrawal :=
 -- typed envelope; a typed transaction is the exact mirror image. This is the
 -- pair of facts that leaves no direct trusted `.inr Tx` anywhere on the
 -- checked path.
-#guard (BLT.toExStrTx canonicalLegacyVector).toOption.map
+#guard (BLT.toExTx canonicalLegacyVector).toOption.map
   (fun tx => (TxEnvelope.ofEntry? (.inr tx)).isSome) = some true
-#guard (BLT.toExStrTx canonicalLegacyVector).toOption.map
+#guard (BLT.toExTx canonicalLegacyVector).toOption.map
   (fun tx => (Tx.toTypedEnvelope? tx).isSome) = some false
-#guard (Bytes.toExStrTx (type2Vector [0x0a] testRecipient [0x02])).toOption.map
+#guard (Bytes.toExTx (type2Vector [0x0a] testRecipient [0x02])).toOption.map
   (fun tx => (TxEnvelope.ofEntry? (.inr tx)).isSome) = some false
-#guard (Bytes.toExStrTx (type2Vector [0x0a] testRecipient [0x02])).toOption.map
+#guard (Bytes.toExTx (type2Vector [0x0a] testRecipient [0x02])).toOption.map
   (fun tx => (Tx.toTypedEnvelope? tx).isSome) = some true
 
 -- ...and the typed route reproduces the exact envelope bytes it came from, so
 -- commitment bytes are unchanged for a transaction that makes the round trip
 -- through the checked constructor rather than the decoder.
 private def typedEnvelopeBytes? (bs : Bytes) : Option Bytes :=
-  (Bytes.toExStrTx bs).toOption.bind fun tx =>
+  (Bytes.toExTx bs).toOption.bind fun tx =>
     (Tx.toTypedEnvelope? tx).bind fun env =>
       match env.entry with
       | .inl ys => some ys
@@ -4144,10 +4354,10 @@ private def typedEnvelopeBytes? (bs : Bytes) : Option Bytes :=
 -- certified: its canonical encoding is not the legacy list it would be
 -- re-encoded through.
 #guard (CheckedBlock.ofBlock? (guardBlockAt 0)).isSome
-#guard (Bytes.toExStrTx (type2Vector [0x0a] testRecipient [0x02])).toOption.map
+#guard (Bytes.toExTx (type2Vector [0x0a] testRecipient [0x02])).toOption.map
   (fun tx => (CheckedBlock.ofBlock? { guardBlockAt 0 with txs := [.inr tx] }).isSome)
     = some false
-#guard (BLT.toExStrTx canonicalLegacyVector).toOption.map
+#guard (BLT.toExTx canonicalLegacyVector).toOption.map
   (fun tx => (CheckedBlock.ofBlock? { guardBlockAt 0 with txs := [.inr tx] }).isSome)
     = some true
 #guard (CheckedBlock.ofBlock?

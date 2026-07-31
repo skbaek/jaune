@@ -303,7 +303,7 @@ def actualRoutes : List ActualRoute :=
     (initcodeSizeExceededTag, txInitcodeSizeExceeded),
     (insufficientAccountFundsTag, txInsufficientAccountFunds),
     (insufficientMaxFeePerGasTag, txInsufficientMaxFeePerGas),
-    ("InsufficientMaxFeePerBlobGasError", txInsufficientMaxFeePerGas),
+    (insufficientMaxFeePerBlobGasTag, txInsufficientMaxFeePerGas),
     (intrinsicGasTooLowTag, txIntrinsicGasTooLow),
     (transactionGasLimitExceededTag, txGasLimitExceedsMaximum),
     (invalidChainIdTag, txInvalidChainId),
@@ -569,13 +569,13 @@ def routedRlpTags : List String :=
 #guard actualRoutes.all fun r =>
   blockExceptionTags.contains r.fst || routedRlpTags.contains r.fst ||
     transactionExceptionTags.contains r.fst ||
-    r.fst = "InsufficientMaxFeePerBlobGasError" || r.fst = blobGasUsedTag ||
+    r.fst = insufficientMaxFeePerBlobGasTag || r.fst = blobGasUsedTag ||
     r.fst = excessBlobGasTag || r.fst = "InvalidSignatureError"
 #guard routedRlpTags.length = 7
 #guard routedRlpTags.eraseDups.length = 7
 #guard routedRlpTags.all fun t => (actualRoutes.map Prod.fst).contains t
-#guard transactionExceptionTags.length = 20
-#guard transactionExceptionTags.eraseDups.length = 20
+#guard transactionExceptionTags.length = 21
+#guard transactionExceptionTags.eraseDups.length = 21
 #guard transactionExceptionTags.all fun t => (actualRoutes.map Prod.fst).contains t
 
 -- Coverage in the fixture-to-producer direction: every one of the 43

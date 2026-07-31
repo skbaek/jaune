@@ -664,7 +664,7 @@ def ExceptionalHalt.isInvalidParameter : ExceptionalHalt → Bool
   | _ => false
 
 -- def bytes_to_fq(data : Bytes) -> FQ:
-def Bytes.toExStrBLSF (data : Bytes) : Except ExceptionalHalt BLSF := do
+def Bytes.toExBLSF (data : Bytes) : Except ExceptionalHalt BLSF := do
   if data.length ≠ 64 then
     .error (.invalidParameter (.text "input should be 64 bytes long"))
   let x := Bytes.toNat data
@@ -673,12 +673,12 @@ def Bytes.toExStrBLSF (data : Bytes) : Except ExceptionalHalt BLSF := do
   pure (FinField.ofNat x)
 
 -- def bytes_to_g1(data : Bytes) -> Point3D[FQ]:
-def Bytes.toExStrBLSP (data : Bytes) (subgroupCheck : Bool := false) :
+def Bytes.toExBLSP (data : Bytes) (subgroupCheck : Bool := false) :
     Except ExceptionalHalt BLSP := do
   if data.length ≠ 128 then
     .error (.invalidParameter (.text "input should be 128 bytes long"))
-  let x ← Bytes.toExStrBLSF (data.take 64)
-  let y ← Bytes.toExStrBLSF (data.drop 64)
+  let x ← Bytes.toExBLSF (data.take 64)
+  let y ← Bytes.toExBLSF (data.drop 64)
   let p ← (EllipticCurve.mk? x y).toExcept
     (.invalidParameter (.text "point is not on curve"))
   if subgroupCheck then
@@ -686,20 +686,20 @@ def Bytes.toExStrBLSP (data : Bytes) (subgroupCheck : Bool := false) :
       .error (.invalidParameter (.text "subgroup check failed"))
   pure p
 
-def Bytes.toExStrBLSF2 (data : Bytes) : Except ExceptionalHalt BLSF2 := do
+def Bytes.toExBLSF2 (data : Bytes) : Except ExceptionalHalt BLSF2 := do
   if data.length ≠ 128 then
     .error (.invalidParameter (.text "input should be 128 bytes long"))
-  let c0 ← Bytes.toExStrBLSF (data.take 64)
-  let c1 ← Bytes.toExStrBLSF (data.drop 64)
+  let c0 ← Bytes.toExBLSF (data.take 64)
+  let c1 ← Bytes.toExBLSF (data.drop 64)
   pure ⟨trimZero [c1, c0]⟩
 
 -- def bytes_to_g2(data : Bytes) -> Point3D[FQ2]:
-def Bytes.toExStrBLSP2 (data : Bytes) (subgroupCheck : Bool := false) :
+def Bytes.toExBLSP2 (data : Bytes) (subgroupCheck : Bool := false) :
     Except ExceptionalHalt BLSP2 := do
   if data.length ≠ 256 then
     .error (.invalidParameter (.text "input should be 256 bytes long"))
-  let x ← Bytes.toExStrBLSF2 (data.take 128)
-  let y ← Bytes.toExStrBLSF2 (data.drop 128)
+  let x ← Bytes.toExBLSF2 (data.take 128)
+  let y ← Bytes.toExBLSF2 (data.drop 128)
   let p ← (EllipticCurve.mk? x y).toExcept
     (.invalidParameter (.text "point is not on curve"))
   if subgroupCheck then
@@ -707,10 +707,10 @@ def Bytes.toExStrBLSP2 (data : Bytes) (subgroupCheck : Bool := false) :
       .error (.invalidParameter (.text "subgroup check failed"))
   pure p
 
-#guard (Bytes.toExStrBLSP (BLSP.toBytes blsG1Generator)).toOption = some blsG1Generator
+#guard (Bytes.toExBLSP (BLSP.toBytes blsG1Generator)).toOption = some blsG1Generator
 #guard
-  (Bytes.toExStrBLSP (List.replicate 128 (0 : UInt8))).toOption = some (⟨0, 0⟩ : BLSP)
-#guard (Bytes.toExStrBLSP2 (BLSP2.toBytes blsG2Generator)).toOption = some blsG2Generator
+  (Bytes.toExBLSP (List.replicate 128 (0 : UInt8))).toOption = some (⟨0, 0⟩ : BLSP)
+#guard (Bytes.toExBLSP2 (BLSP2.toBytes blsG2Generator)).toOption = some blsG2Generator
 
 def decodeG1MsmPairs (data : Bytes) : Except ExceptionalHalt (List (BLSP × Nat)) :=
   let rec aux (fuel : Nat) (acc : List (BLSP × Nat)) (bs : Bytes) :
@@ -722,7 +722,7 @@ def decodeG1MsmPairs (data : Bytes) : Except ExceptionalHalt (List (BLSP × Nat)
       else if bs.length < 160 then
         .error (.invalidParameter (.text "remaining bytes less than 160"))
       else do
-        let p ← Bytes.toExStrBLSP (bs.take 128) true
+        let p ← Bytes.toExBLSP (bs.take 128) true
         let s := Bytes.toNat ((bs.drop 128).take 32)
         aux fuel' ((p, s) :: acc) (bs.drop 160)
   aux data.length [] data
@@ -737,7 +737,7 @@ def decodeG2MsmPairs (data : Bytes) : Except ExceptionalHalt (List (BLSP2 × Nat
       else if bs.length < 288 then
         .error (.invalidParameter (.text "remaining bytes less than 288"))
       else do
-        let p ← Bytes.toExStrBLSP2 (bs.take 256) true
+        let p ← Bytes.toExBLSP2 (bs.take 256) true
         let s := Bytes.toNat ((bs.drop 256).take 32)
         aux fuel' ((p, s) :: acc) (bs.drop 288)
   aux data.length [] data
@@ -839,7 +839,7 @@ def executeBls12G1Add (evm : Evm) : PrecompResult :=
   if data.length ≠ 256 then .error (.halt (.invalidParameter .none)) 0
   else
     PrecompResult.chargeGas gasBlsG1Add evm fun () =>
-      match Bytes.toExStrBLSP (data.take 128), Bytes.toExStrBLSP (data.drop 128) with
+      match Bytes.toExBLSP (data.take 128), Bytes.toExBLSP (data.drop 128) with
       | .ok p1, .ok p2 => .ok gasBlsG1Add (BLSP.toBytes (p1 + p2))
       | _, _ => .error (.halt (.outOfGas .none)) gasBlsG1Add
 
@@ -864,7 +864,7 @@ def executeBls12G2Add (evm : Evm) : PrecompResult :=
   if data.length ≠ 512 then .error (.halt (.invalidParameter .none)) 0
   else
     PrecompResult.chargeGas gasBlsG2Add evm fun () =>
-      match Bytes.toExStrBLSP2 (data.take 256), Bytes.toExStrBLSP2 (data.drop 256) with
+      match Bytes.toExBLSP2 (data.take 256), Bytes.toExBLSP2 (data.drop 256) with
       | .ok p1, .ok p2 => .ok gasBlsG2Add (BLSP2.toBytes (p1 + p2))
       | _, _ => .error (.halt (.outOfGas .none)) gasBlsG2Add
 
@@ -889,12 +889,12 @@ def executeBls12MapFpToG1 (evm : Evm) : PrecompResult :=
   if data.length ≠ 64 then .error (.halt (.invalidParameter .none)) 0
   else
     PrecompResult.chargeGas gasBlsG1Map evm fun () =>
-      match Bytes.toExStrBLSF data with
+      match Bytes.toExBLSF data with
       | .ok fp => .ok gasBlsG1Map (BLSP.toBytes (blsMapFpToG1 fp))
       | .error _ => .error (.halt (.outOfGas .none)) gasBlsG1Map
 
 -- def bytes_to_g1(data : Bytes) -> Point3D[FQ]:
-def Bytes.toExStrBNP (data : Bytes) : Except ExceptionalHalt BNP := do
+def Bytes.toExBNP (data : Bytes) : Except ExceptionalHalt BNP := do
   if data.length ≠ 64 then
     .error (.invalidParameter (.text "input should be 64 bytes long"))
   let x := data.sliceToNat 0 32
@@ -907,7 +907,7 @@ def Bytes.toExStrBNP (data : Bytes) : Except ExceptionalHalt BNP := do
     (.invalidParameter (.text "point is not on curve"))
 
 -- def bytes_to_g2(data : Bytes) -> Point3D[FQ2]:
-def Bytes.toExStrBNP2 (data : Bytes) : Except ExceptionalHalt BNP2 := do
+def Bytes.toExBNP2 (data : Bytes) : Except ExceptionalHalt BNP2 := do
   if data.length ≠ 128 then
     .error (.invalidParameter (.text "input should be 128 bytes long"))
   let x0 := data.sliceToNat 0 32
@@ -937,7 +937,7 @@ def executeBls12MapFp2ToG2 (evm : Evm) : PrecompResult :=
   if data.length ≠ 128 then .error (.halt (.invalidParameter .none)) 0
   else
     PrecompResult.chargeGas gasBlsG2Map evm fun () =>
-      match Bytes.toExStrBLSF2 data with
+      match Bytes.toExBLSF2 data with
       | .ok fp2 => .ok gasBlsG2Map (BLSP2.toBytes (blsMapFp2ToG2 fp2))
       | .error _ => .error (.halt (.outOfGas .none)) gasBlsG2Map
 
@@ -947,10 +947,10 @@ def executeBls12PairingInner (data : Bytes) (cost : Nat) :
   for i in List.range (data.length / 384) do
     let p : BLSP ←
       catchWithOOGPrecomp cost ExceptionalHalt.isInvalidParameter <|
-        Bytes.toExStrBLSP (data.slice! (i * 384) 128) true
+        Bytes.toExBLSP (data.slice! (i * 384) 128) true
     let q : BLSP2 ←
       catchWithOOGPrecomp cost ExceptionalHalt.isInvalidParameter <|
-        Bytes.toExStrBLSP2 (data.slice! (i * 384 + 128) 256) true
+        Bytes.toExBLSP2 (data.slice! (i * 384 + 128) 256) true
     let pairResult ← match blsPairing q p with
                      | some v => pure v
                      | none => throw ⟨.crypto (.value .none), cost⟩
@@ -980,10 +980,10 @@ def executePairingCheckInner (data : Bytes) (cost : Nat) :
   for i in List.range (data.length / 192) do
     let p : BNP ←
       catchWithOOGPrecomp cost ExceptionalHalt.isInvalidParameter <|
-        Bytes.toExStrBNP (data.slice! (i * 192) 64)
+        Bytes.toExBNP (data.slice! (i * 192) 64)
     let q : BNP2 ←
       catchWithOOGPrecomp cost ExceptionalHalt.isInvalidParameter <|
-        Bytes.toExStrBNP2 (data.slice! (i * 192 + 64) 128)
+        Bytes.toExBNP2 (data.slice! (i * 192 + 64) 128)
     if p * altBn128CurveOrder ≠ ⟨0, 0⟩ then throw ⟨.halt (.outOfGas .none), cost⟩
     if q * altBn128CurveOrder ≠ ⟨0, 0⟩ then throw ⟨.halt (.outOfGas .none), cost⟩
     let pairResult ← match pairing q p with

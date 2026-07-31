@@ -4,7 +4,7 @@
 -- coordinates; the generic curve law is already provided by EC.lean) and
 -- EELS's `bls12_381/__init__.py` (byte-level codecs; gas semantics live in
 -- Execution.lean). Mirrors the BN254 conventions already in EC.lean /
--- Execution.lean (BNF/BNP/Bytes.toExStrBNP) rather than generalizing them.
+-- Execution.lean (BNF/BNP/Bytes.toExBNP) rather than generalizing them.
 
 import Jaune.EC
 import Jaune.BLSConst
