@@ -736,6 +736,35 @@ lemma Adr.lt_asymm {a b : Adr} (h : a < b) : ¬ b < a := by
 lemma Adr.lt_irrefl (x : Adr) : ¬ x < x := by
   intro h; rcases h with h | h <;> simp at h
 
+-- Both map key orders are *lawful for equality*: `compareOfLessAndEq` answers
+-- `.eq` only on the `DecidableEq` branch, so it never conflates two distinct
+-- keys. `Std.TransCmp` is already inferred for both from their `LinearOrder`s;
+-- these two instances supply the missing half, and together they are what lets
+-- a `Std.TreeMap` lookup be read off the map's finite `toList` -- the finite
+-- traversal that `Stor.Canonical` and `State.Canonical` are defined by. Without
+-- them the only route to a decision procedure would quantify over every `B256`
+-- or `Adr`, which is exactly what those predicates must avoid.
+private theorem lawfulEqCmp_of_compareOfLessAndEq {α : Type u}
+    [Ord α] [LT α] [DecidableEq α] [DecidableLT α]
+    [Std.ReflCmp (compare : α → α → Ordering)]
+    (h : ∀ a b : α, (compare a b : Ordering) = compareOfLessAndEq a b) :
+    Std.LawfulEqCmp (compare : α → α → Ordering) := by
+  constructor
+  intro a b hab
+  rw [h a b] at hab
+  unfold compareOfLessAndEq at hab
+  split at hab
+  · exact absurd hab (by simp)
+  · split at hab
+    · assumption
+    · exact absurd hab (by simp)
+
+instance : Std.LawfulEqCmp (compare : B256 → B256 → Ordering) :=
+  lawfulEqCmp_of_compareOfLessAndEq (fun _ _ => rfl)
+
+instance : Std.LawfulEqCmp (compare : Adr → Adr → Ordering) :=
+  lawfulEqCmp_of_compareOfLessAndEq (fun _ _ => rfl)
+
 
 theorem B256.sub_add_cancel {x y : B256} : x - y + y = x := by
   apply B256.toNat_inj

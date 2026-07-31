@@ -2599,6 +2599,419 @@ def liftToExecution (devm : Devm)
     .error ⟨err, devm'⟩
   | .ok devm' => .ok devm'
 
+--------------- CANONICAL STATE AND STORAGE (P0.4) ---------------
+
+-- `State` and `Stor` are raw `Std.TreeMap`s, so nothing in their *types* stops
+-- a map from storing a zero slot or an exact `Acct.nil`. Every mutator below
+-- erases such an entry instead of storing it, but direct map construction
+-- bypasses all of them. `State.root` serialises whatever the map holds, so two
+-- states with identical EVM-level reads can commit to different trie roots --
+-- which is why canonicality is a real commitment-level property and not a
+-- tidiness convention, and why `State.root` may never be changed to hide the
+-- difference.
+--
+-- The predicates are defined by finite `toList` traversal, hence decidable
+-- without quantifying over every key. `Stor.find?`/`getElem?` give the lookup
+-- form semantic proofs actually use, and the `canonical_iff` lemmas below are
+-- the bridge between the two. The premises are the real ones: `State.set`
+-- preserves canonicality only when the account being inserted has canonical
+-- storage, and `State.setStor` only when its storage argument is canonical.
+-- Nothing here is stated more strongly than that.
+--
+-- Note the predicate is `≠ Acct.nil`, never `¬ Acct.Empty`: an account holding
+-- storage is not the representational default even at zero code, nonce, and
+-- balance, so erasing it would lose state.
+
+/-- A storage slot's own optional lookup.
+
+`Stor.get` answers an absent slot with `0`, which is correct for the EVM and
+useless for stating canonicality -- the whole point is to tell "absent" from
+"present and zero" apart. `Stor` is a `def` rather than an `abbrev`, so the
+`GetElem?` notation `s[k]?` does not apply to it; this is that notation. -/
+def Stor.find? (s : Stor) (k : B256) : Option B256 := Std.TreeMap.get? s k
+
+theorem Stor.find?_empty (k : B256) : Stor.empty.find? k = none := rfl
+
+theorem Stor.find?_erase (s : Stor) (k a : B256) :
+    Stor.find? (s.erase k) a = if k = a then none else s.find? a := by
+  rw [Stor.find?, Stor.find?, Std.TreeMap.get?_eq_getElem?,
+      Std.TreeMap.get?_eq_getElem?, Std.TreeMap.getElem?_erase]
+  simp only [Std.compare_eq_iff_eq]
+
+theorem Stor.find?_insert (s : Stor) (k a v : B256) :
+    Stor.find? (s.insert k v) a = if k = a then some v else s.find? a := by
+  rw [Stor.find?, Stor.find?, Std.TreeMap.get?_eq_getElem?,
+      Std.TreeMap.get?_eq_getElem?, Std.TreeMap.getElem?_insert]
+  simp only [Std.compare_eq_iff_eq]
+
+/-- The defining equation of `Stor.set`, as a lookup: writing zero *erases*. -/
+theorem Stor.find?_set (s : Stor) (k a v : B256) :
+    (s.set k v).find? a
+      = if k = a then (if v = 0 then none else some v) else s.find? a := by
+  rw [Stor.set]; split <;> simp_all [Stor.find?_erase, Stor.find?_insert]
+
+theorem Stor.get_eq_getD_find? (s : Stor) (k : B256) :
+    s.get k = (s.find? k).getD 0 := by
+  rw [Stor.get, Stor.find?, Std.TreeMap.get?_eq_getElem?,
+      Std.TreeMap.getD_eq_getD_getElem?]
+
+theorem Stor.get_set_self (s : Stor) (k v : B256) : (s.set k v).get k = v := by
+  rw [Stor.get_eq_getD_find?, Stor.find?_set, if_pos rfl]
+  split <;> simp_all
+
+theorem Stor.get_set_ne (s : Stor) {k a : B256} (h : k ≠ a) (v : B256) :
+    (s.set k v).get a = s.get a := by
+  rw [Stor.get_eq_getD_find?, Stor.get_eq_getD_find?, Stor.find?_set, if_neg h]
+
+/-- A storage map is canonical when it stores no zero-valued slot.
+
+Stated as a finite traversal of the map's `toList`, so it is decidable by
+construction. -/
+def Stor.Canonical (s : Stor) : Prop := ∀ e ∈ s.toList, e.2 ≠ 0
+
+instance {s : Stor} : Decidable (Stor.Canonical s) := List.decidableBAll _ _
+
+theorem Stor.mem_toList_iff {s : Stor} {k v : B256} :
+    (k, v) ∈ s.toList ↔ s.find? k = some v := by
+  rw [Stor.find?, Std.TreeMap.get?_eq_getElem?]
+  exact Std.TreeMap.mem_toList_iff_getElem?_eq_some
+
+/-- The lookup characterisation: the finite traversal and the pointwise
+statement semantic proofs use are the same property. -/
+theorem Stor.canonical_iff {s : Stor} :
+    Stor.Canonical s ↔ ∀ (k v : B256), s.find? k = some v → v ≠ 0 := by
+  constructor
+  · intro h k v hv; exact h (k, v) (Stor.mem_toList_iff.mpr hv)
+  · intro h e he; exact h e.1 e.2 (Stor.mem_toList_iff.mp (by simpa using he))
+
+theorem Stor.canonical_empty : Stor.Canonical .empty := by
+  rw [Stor.canonical_iff]; intro k v hv; cases hv
+
+theorem Stor.Canonical.set {s : Stor} (h : Stor.Canonical s) (k v : B256) :
+    Stor.Canonical (s.set k v) := by
+  rw [Stor.canonical_iff] at h ⊢
+  intro a w hw; rw [Stor.find?_set] at hw
+  split at hw
+  · split at hw
+    · cases hw
+    · cases hw; assumption
+  · exact h a w hw
+
+theorem Stor.Canonical.erase {s : Stor} (h : Stor.Canonical s) (k : B256) :
+    Stor.Canonical (s.erase k) := by
+  rw [Stor.canonical_iff] at h ⊢
+  intro a v hv; rw [Stor.find?_erase] at hv
+  split at hv
+  · cases hv
+  · exact h a v hv
+
+/-- On a canonical map, reading zero and being absent are the same thing.
+
+This is the property the trie commitment depends on, and the reason an
+explicitly stored zero slot is not merely redundant. -/
+theorem Stor.Canonical.get_eq_zero_iff {s : Stor} (h : Stor.Canonical s)
+    (k : B256) : s.get k = 0 ↔ s.find? k = none := by
+  rw [Stor.get_eq_getD_find?]
+  cases hk : s.find? k with
+  | none => simp
+  | some v => simp [Stor.canonical_iff.mp h k v hk]
+
+/-- The canonical smart constructor for storage: fold the pairs through
+`Stor.set`, which drops the zero-valued ones instead of storing them. -/
+def Stor.ofList (l : List (B256 × B256)) : Stor :=
+  l.foldl (fun s e => s.set e.1 e.2) .empty
+
+theorem Stor.canonical_foldl (l : List (B256 × B256)) :
+    ∀ {s : Stor}, Stor.Canonical s →
+      Stor.Canonical (l.foldl (fun s e => s.set e.1 e.2) s) := by
+  induction l with
+  | nil => intro s h; exact h
+  | cons e l ih => intro s h; exact ih (h.set e.1 e.2)
+
+/-- Smart-constructor soundness: the result is canonical whatever it was
+given. -/
+theorem Stor.canonical_ofList (l : List (B256 × B256)) :
+    Stor.Canonical (Stor.ofList l) :=
+  Stor.canonical_foldl l Stor.canonical_empty
+
+theorem Stor.ofList_nil : Stor.ofList [] = .empty := rfl
+
+theorem Stor.ofList_concat (l : List (B256 × B256)) (k v : B256) :
+    Stor.ofList (l ++ [(k, v)]) = (Stor.ofList l).set k v := by
+  rw [Stor.ofList, Stor.ofList, List.foldl_append, List.foldl_cons,
+      List.foldl_nil]
+
+/-- Smart-constructor soundness, read side: the last value written for a key is
+the value read back, so canonicalisation never changes an EVM-level read. -/
+theorem Stor.get_ofList_concat (l : List (B256 × B256)) (k v : B256) :
+    (Stor.ofList (l ++ [(k, v)])).get k = v := by
+  rw [Stor.ofList_concat, Stor.get_set_self]
+
+theorem State.get_eq_getD (w : State) (a : Adr) :
+    w.get a = (w[a]?).getD .nil := by
+  rw [State.get, Std.TreeMap.getD_eq_getD_getElem?]
+
+/-- The defining equation of `State.set`, as a lookup: writing `Acct.nil`
+*erases*. -/
+theorem State.getElem?_set (w : State) (a b : Adr) (ac : Acct) :
+    (w.set a ac)[b]?
+      = if a = b then (if ac = .nil then none else some ac) else w[b]? := by
+  rw [State.set]
+  split <;> simp_all [Std.TreeMap.getElem?_erase, Std.TreeMap.getElem?_insert]
+
+theorem State.getElem?_erase (w : State) (a b : Adr) :
+    (w.erase a)[b]? = if a = b then none else w[b]? := by
+  simp [Std.TreeMap.getElem?_erase]
+
+/-- A world state is canonical when it stores no `Acct.nil` and every account
+it stores has canonical storage.
+
+`≠ Acct.nil`, deliberately, and not `¬ Acct.Empty`: an account with storage is
+not the representational default even at zero code, nonce, and balance. -/
+def State.Canonical (w : State) : Prop :=
+  ∀ e ∈ w.toList, e.2 ≠ Acct.nil ∧ Stor.Canonical e.2.stor
+
+instance {w : State} : Decidable (State.Canonical w) := List.decidableBAll _ _
+
+theorem State.mem_toList_iff {w : State} {a : Adr} {ac : Acct} :
+    (a, ac) ∈ w.toList ↔ w[a]? = some ac :=
+  Std.TreeMap.mem_toList_iff_getElem?_eq_some
+
+/-- The lookup characterisation for world states. -/
+theorem State.canonical_iff {w : State} :
+    State.Canonical w
+      ↔ ∀ (a : Adr) (ac : Acct),
+          w[a]? = some ac → ac ≠ Acct.nil ∧ Stor.Canonical ac.stor := by
+  constructor
+  · intro h a ac hac; exact h (a, ac) (State.mem_toList_iff.mpr hac)
+  · intro h e he; exact h e.1 e.2 (State.mem_toList_iff.mp (by simpa using he))
+
+theorem State.canonical_empty : State.Canonical .empty := by
+  rw [State.canonical_iff]; intro a ac hac; simp at hac
+
+theorem Acct.canonical_nil_stor : Stor.Canonical Acct.nil.stor :=
+  Stor.canonical_empty
+
+/-- `State.set` preserves canonicality **given its real premise**: the account
+being inserted must itself have canonical storage. Without that hypothesis the
+statement is false, and it is not weakened here to make it look primitive. -/
+theorem State.Canonical.set {w : State} (h : State.Canonical w) (a : Adr)
+    {ac : Acct} (hs : Stor.Canonical ac.stor) :
+    State.Canonical (w.set a ac) := by
+  rw [State.canonical_iff] at h ⊢
+  intro b ac' hb; rw [State.getElem?_set] at hb
+  split at hb
+  · split at hb
+    · cases hb
+    · cases hb; exact ⟨by assumption, hs⟩
+  · exact h b ac' hb
+
+theorem State.Canonical.erase {w : State} (h : State.Canonical w) (a : Adr) :
+    State.Canonical (w.erase a) := by
+  rw [State.canonical_iff] at h ⊢
+  intro b ac hb; rw [State.getElem?_erase] at hb
+  split at hb
+  · cases hb
+  · exact h b ac hb
+
+/-- On a canonical state, reading `Acct.nil` and being absent are the same
+thing. This is the account-level counterpart of `Stor.Canonical.get_eq_zero_iff`
+and the regression an explicitly stored `Acct.nil` violates. -/
+theorem State.Canonical.get_eq_nil_iff {w : State} (h : State.Canonical w)
+    (a : Adr) : w.get a = .nil ↔ w[a]? = none := by
+  rw [State.get_eq_getD]
+  cases ha : w[a]? with
+  | none => simp
+  | some ac => simp [(State.canonical_iff.mp h a ac ha).1]
+
+/-- Every account *read* out of a canonical state has canonical storage --
+including an absent one, whose `Acct.nil` carries the empty map. This is what
+lets the derived mutators below discharge `State.Canonical.set`'s premise
+without assuming anything new. -/
+theorem State.Canonical.stor {w : State} (h : State.Canonical w) (a : Adr) :
+    Stor.Canonical (w.get a).stor := by
+  rw [State.get_eq_getD]
+  cases ha : w[a]? with
+  | none => exact Acct.canonical_nil_stor
+  | some ac => exact (State.canonical_iff.mp h a ac ha).2
+
+theorem State.get_set_self (w : State) (a : Adr) (ac : Acct) :
+    (w.set a ac).get a = ac := by
+  rw [State.get_eq_getD, State.getElem?_set, if_pos rfl]
+  split <;> simp_all
+
+theorem State.get_set_ne (w : State) {a b : Adr} (h : a ≠ b) (ac : Acct) :
+    (w.set a ac).get b = w.get b := by
+  rw [State.get_eq_getD, State.get_eq_getD, State.getElem?_set, if_neg h]
+
+--------------- CANONICALITY OF THE PRIMITIVE MUTATORS ---------------
+
+-- One theorem per named state mutator. Each derives its `State.set` premise
+-- from `State.Canonical.stor` rather than assuming it, except `setStor`, whose
+-- storage argument comes from the caller and therefore carries a hypothesis.
+
+theorem State.Canonical.destroyAccount {w : State} (h : State.Canonical w)
+    (a : Adr) : State.Canonical (destroyAccount w a) :=
+  h.erase a
+
+theorem State.Canonical.setCode {w : State} (h : State.Canonical w) (a : Adr)
+    (cd : ByteArray) : State.Canonical (w.setCode a cd) :=
+  h.set a (h.stor a)
+
+theorem State.Canonical.setBal {w : State} (h : State.Canonical w) (a : Adr)
+    (v : B256) : State.Canonical (w.setBal a v) :=
+  h.set a (h.stor a)
+
+theorem State.Canonical.addBal {w : State} (h : State.Canonical w) (a : Adr)
+    (v : B256) : State.Canonical (w.addBal a v) :=
+  h.setBal a _
+
+theorem State.Canonical.subBal {w w' : State} (h : State.Canonical w) {a : Adr}
+    {v : B256} (hw : w.subBal a v = some w') : State.Canonical w' := by
+  rw [State.subBal] at hw
+  split at hw
+  · cases hw
+  · cases hw; exact h.setBal a _
+
+theorem State.Canonical.incrNonce {w : State} (h : State.Canonical w) (a : Adr) :
+    State.Canonical (w.incrNonce a) :=
+  h.set a (h.stor a)
+
+/-- `State.setStor` carries its real premise: the storage map handed in must
+already be canonical. -/
+theorem State.Canonical.setStor {w : State} (h : State.Canonical w) (a : Adr)
+    {s : Stor} (hs : Stor.Canonical s) : State.Canonical (w.setStor a s) :=
+  h.set a hs
+
+theorem State.Canonical.setStorVal {w : State} (h : State.Canonical w) (a : Adr)
+    (k v : B256) : State.Canonical (w.setStorVal a k v) :=
+  h.set a ((h.stor a).set k v)
+
+/-- The canonical smart constructor for world states. Its premise is the honest
+one: the accounts handed in must have canonical storage, which `Stor.ofList`
+supplies for anything the fixture parser builds. -/
+def State.ofList (l : List (Adr × Acct)) : State :=
+  l.foldl (fun w e => w.set e.1 e.2) .empty
+
+theorem State.canonical_foldl (l : List (Adr × Acct))
+    (hl : ∀ e ∈ l, Stor.Canonical e.2.stor) :
+    ∀ {w : State}, State.Canonical w →
+      State.Canonical (l.foldl (fun w e => w.set e.1 e.2) w) := by
+  induction l with
+  | nil => intro w h; exact h
+  | cons e l ih =>
+    intro w h
+    exact ih (fun x hx => hl x (List.mem_cons_of_mem _ hx))
+      (h.set e.1 (hl e List.mem_cons_self))
+
+theorem State.canonical_ofList {l : List (Adr × Acct)}
+    (hl : ∀ e ∈ l, Stor.Canonical e.2.stor) :
+    State.Canonical (State.ofList l) :=
+  State.canonical_foldl l hl State.canonical_empty
+
+theorem State.ofList_nil : State.ofList [] = .empty := rfl
+
+theorem State.ofList_concat (l : List (Adr × Acct)) (a : Adr) (ac : Acct) :
+    State.ofList (l ++ [(a, ac)]) = (State.ofList l).set a ac := by
+  rw [State.ofList, State.ofList, List.foldl_append, List.foldl_cons,
+      List.foldl_nil]
+
+theorem State.get_ofList_concat (l : List (Adr × Acct)) (a : Adr) (ac : Acct) :
+    (State.ofList (l ++ [(a, ac)])).get a = ac := by
+  rw [State.ofList_concat, State.get_set_self]
+
+--------------- CANONICAL TRANSIENT STORAGE ---------------
+
+-- `Tra.set` erases an empty map rather than storing it, exactly as `Stor.set`
+-- erases a zero slot, so transient storage has its own canonicality with the
+-- same shape. It is separate from `Stor.Canonical` because the default it
+-- erases is a different one.
+
+def Tra.Canonical (τ : Tra) : Prop :=
+  ∀ e ∈ τ.toList, e.2 ≠ Stor.empty ∧ Stor.Canonical e.2
+
+instance {τ : Tra} : Decidable (Tra.Canonical τ) := List.decidableBAll _ _
+
+theorem Tra.mem_toList_iff {τ : Tra} {a : Adr} {s : Stor} :
+    (a, s) ∈ τ.toList ↔ τ[a]? = some s :=
+  Std.TreeMap.mem_toList_iff_getElem?_eq_some
+
+theorem Tra.canonical_iff {τ : Tra} :
+    Tra.Canonical τ
+      ↔ ∀ (a : Adr) (s : Stor),
+          τ[a]? = some s → s ≠ Stor.empty ∧ Stor.Canonical s := by
+  constructor
+  · intro h a s hs; exact h (a, s) (Tra.mem_toList_iff.mpr hs)
+  · intro h e he; exact h e.1 e.2 (Tra.mem_toList_iff.mp (by simpa using he))
+
+theorem Tra.canonical_empty : Tra.Canonical .empty := by
+  rw [Tra.canonical_iff]; intro a s hs; simp at hs
+
+theorem Tra.getElem?_set (τ : Tra) (a b : Adr) (s : Stor) :
+    (τ.set a s)[b]?
+      = if a = b then (if s.isEmpty then none else some s) else τ[b]? := by
+  rw [Tra.set]
+  split <;> simp_all [Std.TreeMap.getElem?_erase, Std.TreeMap.getElem?_insert]
+
+theorem Tra.Canonical.set {τ : Tra} (h : Tra.Canonical τ) (a : Adr) {s : Stor}
+    (hs : Stor.Canonical s) : Tra.Canonical (τ.set a s) := by
+  rw [Tra.canonical_iff] at h ⊢
+  intro b s' hb; rw [Tra.getElem?_set] at hb
+  split at hb
+  · split at hb
+    · cases hb
+    · cases hb
+      exact ⟨fun he =>
+        absurd (Std.TreeMap.eq_empty_iff_isEmpty.mp he) (by assumption), hs⟩
+  · exact h b s' hb
+
+/-- Every transient map *read* out of a canonical `Tra` is canonical, the
+absent case included. -/
+theorem Tra.Canonical.getD {τ : Tra} (h : Tra.Canonical τ) (a : Adr) :
+    Stor.Canonical (τ.getD a .empty) := by
+  rw [Std.TreeMap.getD_eq_getD_getElem?]
+  cases ha : τ[a]? with
+  | none => exact Stor.canonical_empty
+  | some s => exact (Tra.canonical_iff.mp h a s ha).2
+
+theorem Tra.Canonical.setStorVal {τ : Tra} (h : Tra.Canonical τ) (a : Adr)
+    (k v : B256) : Tra.Canonical (τ.setStorVal a k v) :=
+  h.set a ((h.getD a).set k v)
+
+--------------- NEGATIVE REGRESSIONS ---------------
+
+-- An absent account and an explicitly stored `Acct.nil` read alike and must
+-- not both count as canonical; the same for an absent and an explicitly stored
+-- zero storage slot. These are the exact cases P0.4 names.
+
+/-- A world state holding an explicit `Acct.nil`, which no mutator can build. -/
+private def nilStoredState : State :=
+  Std.TreeMap.empty.insert (0 : Adr) Acct.nil
+
+/-- A storage map holding an explicit zero slot, likewise unreachable. -/
+private def zeroStoredStor : Stor :=
+  (Std.TreeMap.empty : Stor).insert (0 : B256) 0
+
+-- The reads agree with the empty map ...
+#guard State.get nilStoredState 0 = Acct.nil
+#guard State.get (Std.TreeMap.empty : State) 0 = Acct.nil
+#guard zeroStoredStor.get 0 = 0
+#guard Stor.empty.get 0 = 0
+-- ... and canonicality tells them apart.
+#guard ¬ State.Canonical nilStoredState
+#guard State.Canonical (Std.TreeMap.empty : State)
+#guard ¬ Stor.Canonical zeroStoredStor
+#guard Stor.Canonical Stor.empty
+-- The canonicalising mutator and the smart constructor both refuse to store it.
+#guard Stor.Canonical (Stor.empty.set 0 0)
+#guard Stor.Canonical (Stor.ofList [(0, 0), (1, 7), (2, 0)])
+#guard (Stor.ofList [(0, 0), (1, 7), (2, 0)]).get 1 = 7
+#guard (Stor.ofList [(0, 0), (1, 7), (2, 0)]).get 0 = 0
+#guard State.Canonical (State.ofList [((0 : Adr), Acct.nil)])
+-- An `Acct.nil` handed to the smart constructor is dropped, not stored.
+#guard (State.ofList [((0 : Adr), Acct.nil)]).isEmpty
+#guard ¬ nilStoredState.isEmpty
+
 --------------- TYPED SEMANTIC REASONS: CODEC AND VM ---------------
 
 -- Declarations, renderers, and golden guards only; no producer is migrated
