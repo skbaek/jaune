@@ -347,6 +347,26 @@ today since checkpoint 1 makes no source change to the audit script.
    corrected `toReachUsing`, `Reach.chainId_eq`) is what that successor arc
    will consume. The upstream-candidate inventory (22 + 18 rows) is
    consolidated in §14 below, nothing moved.
+7. **Steps 5 and 6, recorded post-closure (2026-08-01)** — the plan sketch's
+   target-end-state API block (`~/plans/archive/integrity.md`) prescribed
+   `def rlpToCanonicalBlock : Bytes → Except DecodeError CanonicalBlock` and
+   `def BlockChain.check : BlockChain → Except ChainContextError
+   CheckedBlockChain`. Neither shape was built, and the divergence went
+   unrecorded at closure. The delivered checked wire ingress is
+   `CanonicalBlock.ofRlp? : Bytes → Option CanonicalBlock` — namespaced under
+   the structure it constructs, reaching the private constructor only through
+   the evidence-taking `CanonicalBlock.ofDecode` — and `BlockChain.check`
+   returns `Option CheckedBlockChain`. `Option` rather than `Except` in both
+   cases because neither call site adds a diagnostic vocabulary: the ingress's
+   failure side is exactly the one `rlpToBlock` already produces (preserving
+   it would require a second decoder or a second error type, which fixed
+   decision 4 forbids), and `check`'s failure is refutation of the decidable
+   `ValidContext`, already exposed by `check_isSome_iff`/`check_eq_none`.
+   Step 6's own report recorded the delivered signature correctly
+   (`~/plans/reports/integrity-step6.md:18`); §1's diagram above nonetheless
+   carried the sketch's two lines verbatim until corrected. The deviation is
+   confined to this new checked layer — §3.1's pre-existing entry-point
+   inventory is unchanged in name and type, as §1 states.
 
 ## 12. Full commit ledger
 
