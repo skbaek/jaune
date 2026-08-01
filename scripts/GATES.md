@@ -247,10 +247,12 @@ Two different contracts, and confusing them is the most common misreading:
 
 - **`check.sh` tiers are regression gates.** They pass iff every file's
   classification *equals the committed baseline's* — **not** iff every file
-  passes. The legacy corpus has 5 known FAILs; a FAIL turning into a PASS is a
-  gate failure exactly like the reverse. Baselines are
-  `scripts/baseline-<tier>.txt`, reports are `scripts/report-<tier>.txt`
-  (gitignored).
+  passes. The legacy corpus has 5 known FAILs, all diagnosed and none a Jaune
+  defect: two files have no case in the supported fork range, while the other
+  three carry wrong expected exceptions and the frozen oracle agrees with
+  Jaune. A FAIL turning into a PASS is a gate failure exactly like the reverse.
+  Baselines are `scripts/baseline-<tier>.txt`, reports are
+  `scripts/report-<tier>.txt` (gitignored).
 - **`check-mainnet.sh` suites and `check.sh --patch`/`--rlp4` are all-PASS
   targets.** Any non-PASS fails. They have no baseline to rebase.
 - **`check-vectors.sh` is an all-PASS target that also checks coverage.** Every

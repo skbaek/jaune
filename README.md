@@ -14,8 +14,9 @@ and no `native_decide` in the trusted path. Jaune is MIT-licensed.
 
 Jaune was originally written from the Yellow Paper, then rebuilt on a pinned
 2025 execution-specs revision; later forks were implemented and checked
-explicitly. The frozen legacy fixture corpus remains regression evidence, as
-described under Verification status.
+explicitly. The frozen legacy fixture corpus is retained as independently-filled
+regression evidence; its five non-passing files are diagnosed, and none is a
+defect in Jaune, as described under Verification status.
 
 ## Prerequisite
 
@@ -40,11 +41,13 @@ requirements.
 ## Verification status
 
 - **Supported forks:** Prague, Osaka, BPO1, and BPO2, plus the transitions
-  between them. Jaune's frozen legacy corpus remains a regression instrument.
-  The canonical current-mainnet lane is the separately installed
-  `execution-specs` `tests@v20.0.1` release; its strict generated manifests
-  activate Prague as a whole suite (`scripts/check-mainnet.sh --suite prague`,
-  or the deterministic `--suite smoke`).
+  between them. Jaune's primary Prague evidence is the strict all-PASS
+  current-mainnet lane over the separately installed `execution-specs`
+  `tests@v20.0.1` release: 2,573/2,573 Prague fixtures and 5,100/5,100 across
+  the whole manifest, with no expected-failure allowance. Its generated
+  manifests activate Prague as a whole suite
+  (`scripts/check-mainnet.sh --suite prague`, or the deterministic
+  `--suite smoke`).
 - **Static Osaka is supported.** Its complete execution delta is implemented:
   EIP-7823 and EIP-7883 (`MODEXP` bounds/repricing), EIP-7939 (`CLZ`), EIP-7951
   (`P256VERIFY`), EIP-7825 (transaction gas cap), EIP-7594 (six blobs per
@@ -87,11 +90,13 @@ requirements.
   | `--depth` | 67 | all PASS |
   | `--smoke` | 174 | 173 PASS, 1 FAIL |
   | `--bls` | 29 | all PASS (hand-authored target) |
-  | `--full` | 2983 | 2978 PASS, 5 FAIL |
+  | `--full` | 2983 | 2978 PASS, 5 FAIL (diagnosed; none a Jaune defect) |
 
-  `--full` is the entire `BlockchainTests` corpus, dominated by the
-  `GeneralStateTests/` subtree — which passes **2633 of 2634**. The five
-  baselined FAILs are diagnosed: two
+  The frozen `ethereum/tests` corpus is retained as an independently-filled
+  regression instrument. Its `--full` tier is the entire `BlockchainTests`
+  corpus, dominated by the `GeneralStateTests/` subtree — which passes
+  **2633 of 2634**. Its five baselined FAILs are diagnosed, and none is a
+  defect in Jaune: two
   (`stEIP1559/intrinsicCancun.json`, `bcEIP1559/intrinsicOrFailCancun.json`)
   are the corpus's only two fixtures with no case in the supported fork
   range, refused under the fail-closed era policy above rather than reported
