@@ -117,10 +117,14 @@ closure report.
   tip-state-root agreement; `ConfiguredChain` additionally validates a
   `ChainConfig`'s activation schedule and its chain-ID agreement with the
   snapshot, once. Repeated transitions and imports reuse these witnesses
-  instead of recomputing a trie root on every call. `rlpToCanonicalBlock` is
-  the checked wire ingress: a successful decode proves both the strict
-  outer-block decoder image and the exact `block.toBLT.toBytes = raw` round
-  trip, so a hand-built `Block`/`Header`/`Tx` cannot be certified through it.
+  instead of recomputing a trie root on every call.
+  `CanonicalBlock.ofRlp? : Bytes → Option CanonicalBlock` is the checked wire
+  ingress. `CanonicalBlock`'s constructor is private, so the only route to a
+  value is the evidence-taking smart constructor `CanonicalBlock.ofDecode`,
+  which demands the strict decoder's own equation; a successful decode
+  therefore proves both the strict outer-block decoder image and the exact
+  `block.toBLT.toBytes = raw` round trip, so a hand-built
+  `Block`/`Header`/`Tx` cannot be certified through it.
 - **Raw compatibility entry points remain** — `stateTransitionWith/At/Using`,
   `addBlockToChainWith/At/Using`, `stateTransition`, `addBlockToChain`,
   `rlpToBlock`, and friends — for existing callers and proof statements that

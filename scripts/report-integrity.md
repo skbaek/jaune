@@ -25,12 +25,15 @@ checked layer added around them is now the recommended path.
 ```
 Wire bytes (untrusted)
   │
-  │  rlpToCanonicalBlock : Bytes → Except DecodeError CanonicalBlock
+  │  CanonicalBlock.ofRlp? : Bytes → Option CanonicalBlock
+  │    (private ctor; the only route in is the evidence-taking smart
+  │     constructor CanonicalBlock.ofDecode, which demands the strict
+  │     decoder's own equation)
   │    proves: strict-decoder image AND block.toBLT.toBytes = raw
   ▼
 CanonicalBlock { raw, block, decoded, canonical }  (private ctor, checked smart-constructor only)
   │
-  │  BlockChain.check : BlockChain → Except ChainContextError CheckedBlockChain
+  │  BlockChain.check : BlockChain → Option CheckedBlockChain
   │    order: nonempty → canonicality of state → retained-history validity →
   │           canonical-state-root vs tip header comparison
   ▼
@@ -58,12 +61,12 @@ Raw compatibility layer (unchanged names, Blanc's protected-theorem surface):
 
 Validation order at the raw import entry points, frozen since design report
 §3.3 and re-confirmed unchanged this arc: `(…At only)` `f.rules`/`cfg`
-context+schedule before decode → `rlpToBlock`/`rlpToCanonicalBlock` structural
-decode → header-hash evidence → `checkBlockRlpSize` (EIP-7934) → transition →
-`.ok`. `ChainConfig.checkChainId` was inserted at the very front of both
-configured entry points (P0.1), strictly before decode, so a contradictory
-caller context is reported as a context failure rather than a candidate-block
-verdict.
+context+schedule before decode → `rlpToBlock`/`CanonicalBlock.ofRlp?`
+structural decode → header-hash evidence → `checkBlockRlpSize` (EIP-7934) →
+transition → `.ok`. `ChainConfig.checkChainId` was inserted at the very front
+of both configured entry points (P0.1), strictly before decode, so a
+contradictory caller context is reported as a context failure rather than a
+candidate-block verdict.
 
 ## 2. The seven P0 findings and their exact fixes
 
