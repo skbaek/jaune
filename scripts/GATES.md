@@ -29,6 +29,7 @@ Choose the gate by what you changed, cheapest falsifier first:
 | interpreter / gas / state | `scripts/check.sh --depth --no-build --jobs auto` | `scripts/check.sh --smoke --no-build --jobs auto` |
 | fork / block validity | `scripts/check-mainnet.sh --suite transitions --no-build --jobs auto` | `scripts/check-mainnet.sh --suite osaka --no-build --jobs auto` |
 | harness / generators | `python3 -m unittest discover -s scripts/tests` | `python3 scripts/env_doctor.py` |
+| a module's imports, or an added `#guard` / heavy elaboration | `lake build` | `scripts/check-elab.sh` |
 | anything Blanc consumes | `cd ~/blanc && lake build && scripts/check.sh --no-build` | — |
 
 **Use sequential (omit `--jobs`) when the timings themselves matter:** writing a
@@ -87,6 +88,20 @@ only in the verdict line's wall time and its `--jobs` marker.
 Only these three harnesses take `--jobs`. `check-u256.sh`, `check-fake-exp.sh`,
 `check-ec.sh`, and `check-hygiene.sh` do not — the first three are
 single-process oracles and the fourth is sub-second.
+
+`check-elab.sh` does not take it either, for a different and more fundamental
+reason: **its gate *is* the TIME column.** The three harnesses above can run
+contended because a contended run still decides STATUS correctly and only their
+reference times degrade. An elaboration-time gate has nothing left once the
+timings are untrustworthy, so it always runs one file at a time and there is no
+flag to change that. For the same reason it inspects running Lean language
+servers before measuring and refuses when they are holding large environments —
+the swap-exhaustion case recorded in the last rule on this page. It keys on
+resident size rather than on presence, deliberately: `lean-lsp-mcp` is mandated
+tooling, so an idle server (~40 MB, no file open) is the normal steady state and
+must not block the gate, whereas one holding a mathlib environment (~900 MB)
+must. `--force` overrides for investigation and may not be combined with
+`--rebase`.
 
 ### What the job count is worth
 
@@ -176,6 +191,7 @@ executable inputs.
 | `scripts/check.sh --bls` | BLS12-381 + point-evaluation vs hand-authored target baseline | 29 | ~2 min |
 | `scripts/check-ec.sh` | EC differential oracle (pinned, differential, identity cases) | — | compiles a Lean checker first |
 | `scripts/check-vectors.sh` | generated vector conformance + controls + declared-case-count coverage | 51 files, 1,824 cases, 5 controls | ~7.8 min; **~1.5 min at `--jobs auto`** |
+| `scripts/check-elab.sh` | per-module elaboration time vs `scripts/baseline-elab.txt` | 16 modules, ~50 s of elaboration | ~70 s |
 | `cd ~/blanc && lake build && scripts/check.sh --no-build` | downstream elaboration + protected-theorem/axiom audit | ~907 jobs | ~7 s build |
 
 ### Long sequentially — but mostly not long in parallel
@@ -246,6 +262,30 @@ Two different contracts, and confusing them is the most common misreading:
   forces a newly added vector to state its size. The binary independently
   refuses a vector file holding no cases rather than reporting a vacuous `0/0`
   pass.
+
+- **`scripts/check-elab.sh` is a per-module drift gate on elaboration time.** It
+  measures each of our own modules (`Jaune/**/*.lean` plus `Jaune.lean` and
+  `Main.lean`, discovered rather than listed) re-elaborating against built
+  dependencies — the cost of opening the file in a session, and the cost sitting
+  on `lake build`'s critical path. A module fails above **both** 2x its
+  `scripts/baseline-elab.txt` time **and** that time plus 1.0 s; the absolute
+  floor keeps a sub-second module from tripping on scheduler noise. A module
+  that fails to elaborate at all fails the gate, and a source module with no
+  baseline row is a configuration error, which is what forces a new module to
+  state its cost. A module that got much *faster* prints `IMPROVED` rather than
+  passing silently, because a stale over-generous baseline is how this gate
+  would quietly stop gating; refresh with `--rebase`. Stale rows for deleted
+  files are a warning, never a failure. This gate exists because no other one
+  measures this axis: hygiene, integrity, and every conformance tier are silent
+  about elaboration cost, and CI's only ceilings are coarse job timeouts, so a
+  module drifting from 4 s to 60 s would land unnoticed.
+
+  **It is a local gate, not a CI gate.** Its baseline is wall-clock time from
+  one machine, which is machine-dependent in precisely the way `notimeout.md`
+  objected to when it abolished TIMEOUT as a fixture classification — a slower
+  runner would fail modules that are in no way worse. Keep it a pre-push check,
+  or give CI a baseline measured on its own runner. The 2x factor and the 1.0 s
+  floor absorb same-machine variance, not cross-machine variance.
 
 - **`scripts/check-integrity.sh` is a shrink-only budget.** It inventories
   `panic`, raw bang operations, and stringly-typed semantic error carriers over
