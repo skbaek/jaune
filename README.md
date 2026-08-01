@@ -91,10 +91,14 @@ requirements.
 
   `--full` is the entire `BlockchainTests` corpus, dominated by the
   `GeneralStateTests/` subtree — which passes **2633 of 2634**. The five
-  baselined FAILs are four under `InvalidBlocks/` (fixtures encoding invalid
-  blocks) plus one Cancun-variant EIP-1559 case
-  (`GeneralStateTests/stEIP1559/intrinsicCancun.json`); each is the committed
-  expected classification (see the per-tier `scripts/baseline-*.txt`).
+  baselined FAILs are diagnosed: two
+  (`stEIP1559/intrinsicCancun.json`, `bcEIP1559/intrinsicOrFailCancun.json`)
+  are the corpus's only two fixtures with no case in the supported fork
+  range, refused under the fail-closed era policy above rather than reported
+  as a vacuous pass; the other three, under `InvalidBlocks/bcStateTests/`,
+  are fills carrying an upstream implementation's wrong expected exception,
+  and the frozen oracle agrees with Jaune's classification on all three (see
+  the per-tier `scripts/baseline-*.txt`).
 
 ## Semantic integrity
 
