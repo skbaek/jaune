@@ -8,8 +8,9 @@ prove against. It mirrors
 [execution-specs](https://github.com/ethereum/execution-specs) at mainnet head,
 passes 2633/2634 GeneralStateTests, and is MIT-licensed. Its semantics are
 demonstrated sufficient for real verification: a WETH implementation's solvency
-is proven over every reachable chain state, through a verified compiler, with
-no `sorry` and no `native_decide` in the trusted path.
+is proven to be preserved over every state reachable along a valid configured
+chain, including histories that cross scheduled fork activations, through a
+verified compiler, with no `sorry` and no `native_decide` in the trusted path.
 
 Jaune's first version was written directly from the Yellow Paper — the original
 WETH solvency proof ran against that semantics — and was later rebuilt on
