@@ -208,16 +208,10 @@ def blsPairing (q : BLSP2) (p : BLSP) (finalExp : Bool := true) : Option BLSF12 
 #guard (blsTwist blsG2Generator).isOnCurve
 #guard (BLSP.toBLSP12 blsG1Generator).isOnCurve
 
--- Bilinearity sanity checks: e(2*G1gen, G2gen) = e(G1gen, 2*G2gen)
--- = e(G1gen + G1gen, G2gen) = e(G1gen, G2gen)^2 ≠ 1.  Each pairing is
--- bound once; the squared form and the final inequality also rule out
--- a degenerate implementation mapping everything to 1.
-#guard
-  let eg := blsPairing blsG2Generator blsG1Generator
-  let e2g := blsPairing blsG2Generator (blsG1Generator.mulBy 2)
-  let eg2 := blsPairing (blsG2Generator.mulBy 2) blsG1Generator
-  let egg := blsPairing blsG2Generator (blsG1Generator + blsG1Generator)
-  e2g = eg2 ∧ e2g = egg ∧ e2g = eg.map (fun f => f * f) ∧ eg ≠ some 1
+-- The bilinearity sanity check on `blsPairing` lives in `Jaune/BLSGuards.lean`,
+-- outside the `Jaune` library root. It evaluates four full pairings during
+-- elaboration and was 9.6s of this file's 11.8s; off the critical path it still
+-- runs on every build, via `Main.lean`. See that file for the measurements.
 
 -- ---------------------------------------------------------------------------
 -- EIP-2537 map-to-curve precompiles (0x10 map_fp_to_G1, 0x11 map_fp2_to_G2).

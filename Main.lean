@@ -3,6 +3,7 @@ import «Jaune».Sufficiency
 import «Jaune».Transaction
 import «Jaune».FixtureException
 import «Jaune».ChainStore
+import «Jaune».BLSGuards
 
 open Jaune
 

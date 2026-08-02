@@ -4,19 +4,20 @@
 # already-built dependencies, measured sequentially with no language server
 # alive. A file fails the gate above both 2.0x its time here and that time
 # plus 1.0s. Rewrite with: scripts/check-elab.sh --rebase
-OK	1.294	Jaune.lean
-OK	11.758	Jaune/BLS.lean
-OK	0.847	Jaune/BLSConst.lean
-OK	2.974	Jaune/Basic.lean
-OK	2.022	Jaune/ChainStore.lean
-OK	2.282	Jaune/EC.lean
-OK	2.737	Jaune/Execution.lean
-OK	1.507	Jaune/FixtureException.lean
-OK	1.992	Jaune/Fork.lean
-OK	3.805	Jaune/Hash.lean
-OK	3.520	Jaune/Machine.lean
-OK	2.246	Jaune/Precompiles.lean
-OK	5.381	Jaune/Sufficiency.lean
-OK	4.247	Jaune/Transaction.lean
-OK	1.999	Jaune/Types.lean
-OK	1.603	Main.lean
+OK	1.230	Jaune.lean
+OK	1.926	Jaune/BLS.lean
+OK	0.748	Jaune/BLSConst.lean
+OK	10.996	Jaune/BLSGuards.lean
+OK	2.835	Jaune/Basic.lean
+OK	1.899	Jaune/ChainStore.lean
+OK	2.097	Jaune/EC.lean
+OK	2.511	Jaune/Execution.lean
+OK	1.400	Jaune/FixtureException.lean
+OK	1.865	Jaune/Fork.lean
+OK	3.484	Jaune/Hash.lean
+OK	3.239	Jaune/Machine.lean
+OK	2.104	Jaune/Precompiles.lean
+OK	5.196	Jaune/Sufficiency.lean
+OK	3.955	Jaune/Transaction.lean
+OK	1.868	Jaune/Types.lean
+OK	1.490	Main.lean

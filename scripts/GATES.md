@@ -191,7 +191,7 @@ executable inputs.
 | `scripts/check.sh --bls` | BLS12-381 + point-evaluation vs hand-authored target baseline | 29 | ~2 min |
 | `scripts/check-ec.sh` | EC differential oracle (pinned, differential, identity cases) | — | compiles a Lean checker first |
 | `scripts/check-vectors.sh` | generated vector conformance + controls + declared-case-count coverage | 51 files, 1,824 cases, 5 controls | ~7.8 min; **~1.5 min at `--jobs auto`** |
-| `scripts/check-elab.sh` | per-module elaboration time vs `scripts/baseline-elab.txt` | 16 modules, ~50 s of elaboration | ~70 s |
+| `scripts/check-elab.sh` | per-module elaboration time vs `scripts/baseline-elab.txt` | 17 modules, ~49 s of elaboration | ~70 s |
 | `cd ~/blanc && lake build && scripts/check.sh --no-build` | downstream elaboration + protected-theorem/axiom audit | ~907 jobs | ~7 s build |
 
 ### Long sequentially — but mostly not long in parallel
