@@ -459,7 +459,7 @@ def B256.toAdr (x : B256) : Adr := ⟨x.1.2.toUInt32, x.2⟩
 def Adr.toB256 (a : Adr) : B256 := ⟨⟨0, a.1.toUInt64⟩, a.2⟩
 
 lemma toAdr_toB256 (a : Adr) : a.toB256.toAdr = a := by
-  simp [Adr.toB256, B256.toAdr, toUInt32_toUInt64]
+  simp [Adr.toB256, B256.toAdr]
 
 theorem Adr.toB256_inj {x y : Adr} (eq : x.toB256 = y.toB256) : x = y := by
   rw [← toAdr_toB256 x, ← toAdr_toB256 y, eq]
