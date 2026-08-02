@@ -40,6 +40,11 @@ requirements.
 
 ## Verification status
 
+- **What you are trusting** — [`TRUSTED.md`](TRUSTED.md) states the trusted
+  base exactly: the kernel and pins, the axioms, what is deliberately absent
+  and which gate enforces each absence, the known exceptions, and where the
+  line between testing and proof falls. Every figure in it names the command
+  that regenerates it.
 - **Supported forks:** Prague, Osaka, BPO1, and BPO2, plus the transitions
   between them. Jaune's primary Prague evidence is the strict all-PASS
   current-mainnet lane over the separately installed `execution-specs`
