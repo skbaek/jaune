@@ -2,6 +2,9 @@
 
 [![CI](https://github.com/skbaek/jaune/actions/workflows/ci.yml/badge.svg)](https://github.com/skbaek/jaune/actions/workflows/ci.yml)
 
+**[skbaek.github.io/jaune](https://skbaek.github.io/jaune/)** — the guided
+tour: claim, evidence, trust boundaries, roadmap.
+
 **Jaune** is an executable formal specification of the EVM in Lean 4. Its
 strict current-mainnet lane passes **5,100/5,100 supported fixture files and
 34,005/34,005 cases**, Prague through BPO2 including configured transitions,
