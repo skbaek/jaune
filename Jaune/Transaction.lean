@@ -4300,9 +4300,6 @@ theorem stateTransitionUsing_canonical {cfg : ChainConfig} {ch : BlockChain}
 -- once duplicates each continuation twice per level, and the resulting term is
 -- large enough to exhaust `simp`'s step budget -- which is a limit that may
 -- not be raised. Peeling one binder at a time keeps the shared term small.
-private theorem letFun_apply {α : Sort u} {β : α → Sort v} (a : α)
-    (f : (x : α) → β x) : letFun a f = f a := rfl
-
 /-- Header validation establishes both halves of `Block.Links` against the
 chain's tip. -/
 theorem validateHeader_links {rules : ForkRules} {chain : BlockChain}
