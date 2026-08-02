@@ -101,9 +101,11 @@ requirements.
   are the corpus's only two fixtures with no case in the supported fork
   range, refused under the fail-closed era policy above rather than reported
   as a vacuous pass; the other three, under `InvalidBlocks/bcStateTests/`,
-  are fills carrying an upstream implementation's wrong expected exception,
-  and the frozen oracle agrees with Jaune's classification on all three (see
-  the per-tier `scripts/baseline-*.txt`).
+  are multiply-invalid fixtures whose pipe-separated expected-exception
+  alternatives reflect their fill generator's check ordering (evmone tests
+  the fee cap before intrinsic gas) and omit the specification's: the frozen
+  EELS oracle validates intrinsic gas first and reports exactly the identity
+  Jaune reports, on all three (see the per-tier `scripts/baseline-*.txt`).
 
 ## Semantic integrity
 
