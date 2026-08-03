@@ -8,9 +8,10 @@ would find on their own.
 Every figure below is regenerable. Where a number appears, the command that
 produces it appears with it — prefer running the command to trusting the
 number, because the command is current and the number is a snapshot. The
-snapshot was taken on 2026-08-03 against Jaune `main`
-`5d16ebac180ee36776994ef232a7ae65e672d10d` and Blanc `main`
-`b0e36405cb24e7fa05524e864d8cf9a26acad647`.
+snapshot was taken on 2026-08-04 against Jaune
+`4e6a655591ca56583a5fca20782e80a3b9df1777` and Blanc
+`a7db98b918938e7e89b308209d1f864381bddf0c` — the `codex/sweep` tips of the
+Blanc → Jaune upstream sweep, proposed for merge and not yet merged.
 
 This document is the base for both repositories. Blanc's trusted base is this
 one plus three additions — the pinned Jaune revision, the axiom audit, and
@@ -46,7 +47,7 @@ Trusting a Blanc theorem additionally means trusting a specific Jaune:
 
 | | |
 |---|---|
-| Jaune | `739fa42d23c91d3add313437dde5648cf182428b` (`lakefile.lean`, agreeing with `lake-manifest.json`) |
+| Jaune | `4e6a655591ca56583a5fca20782e80a3b9df1777` (`lakefile.lean`, agreeing with `lake-manifest.json` and the Lake-managed checkout) |
 
 Blanc consumes Jaune from Git at that pinned revision, not from a sibling
 checkout, so a fresh clone reproduces the build and bumping Jaune is a reviewed
@@ -106,9 +107,17 @@ grep -rEn '@\[extern|^axiom |^opaque |sorry|partial def|implemented_by|native_de
 ```
 
 Run the same scan unanchored — matching the bare words anywhere, comments
-included — and it returns nine hits, all prose: eight uses of "opaque" in
-comments describing typed-envelope bytes that stay undecoded, and one comment
-about keeping axiom sets exact. No declaration of any of these kinds exists.
+included — and it returns twenty hits, all prose: eleven where `extern` sits
+inside the English word "external" (opcode comments for `EXTCODESIZE` and its
+neighbours, and remarks about externally observed bytes and labels), eight uses
+of "opaque" in comments describing typed-envelope bytes that stay undecoded,
+and one comment about keeping axiom sets exact. No declaration of any of these
+kinds exists.
+
+```
+grep -rEn 'extern|axiom|opaque|sorry|partial def|implemented_by|native_decide|dbg_trace' Jaune/ Main.lean
+```
+
 The stricter scan is worth running yourself; it is the one a skeptical reader
 reaches for, and it is better that this document has already told you what it
 returns.
@@ -202,7 +211,7 @@ surface, not consensus surface — and R4 does reach them, but a reader auditing
 "which code do these rules cover" deserves the boundary stated rather than
 inferred from a comment in a shell script.
 
-**`Main.lean` is in no proof cone.** The fixture harness is 832 lines of `IO`
+**`Main.lean` is in no proof cone.** The fixture harness is 840 lines of `IO`
 that parse JSON, select cases, and compare roots. Every conformance claim this
 project makes passes through code that no theorem covers. R1 and R4 reach it;
 no proof does. It is tested, not proved, and that distinction is the point of
