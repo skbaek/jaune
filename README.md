@@ -31,7 +31,33 @@ You need to have [elan](https://github.com/leanprover/elan) installed.
 
 ## Usage
 
-`lake exe jaune /path/to/test`
+`lake exe jaune /path/to/fixture.json`
+
+Runs one blockchain-test fixture file. Every option is a filter: each one only
+narrows the set of cases that run, and the selection is always narrowed to the
+networks this build supports. The run fails if no case survives, so a green run
+never means "nothing was checked".
+
+Given no `--network`, every supported case in the file runs under the rules its
+own `network` label names. A file holding a mix of networks contributes its
+supported part; one whose cases all predate Prague is reported as out of scope
+rather than passing vacuously.
+
+| option | means |
+|---|---|
+| `--network <label>` | run only cases at this network; not repeatable |
+| `--name <case>` | run only these cases; repeatable |
+| `--notName <case>` | skip these cases; repeatable |
+| `--index <n>` | run only the case at this index |
+
+`lake exe jaune --help` prints the supported network labels. It derives them
+from the build rather than from a written list, so they cannot drift.
+
+The runner takes exactly one file. Fixture *trees* are enumerated by
+`scripts/check.sh --dir`, which records a classification per file against a
+baseline — see [`scripts/GATES.md`](scripts/GATES.md). The alternate modes
+`--vectors <address> <file>`, `--u256 <file>`, and `--fake-exp <file>` run the
+pinned differential oracles and are likewise driven by those gates.
 
 ## External test fixtures
 

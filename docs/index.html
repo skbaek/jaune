@@ -1268,8 +1268,13 @@ footer a:hover{color:var(--ink)}
         <div class="term"><span class="p">$</span> git clone https://github.com/skbaek/jaune
 <span class="p">$</span> cd jaune &amp;&amp; lake build
 <span class="p">$</span> lake exe jaune path/to/fixture.json
+<span class="p">$</span> lake exe jaune path/to/fixture.json --network Osaka
 <span class="p">$</span> scripts/check-mainnet.sh --suite smoke</div>
         <p class="dim" style="font-size:.88rem;margin:14px 0 0">
+          A bare run executes every case in the file whose network this build supports, each under
+          its own rules; <span class="mono">--network</span> narrows that to one and
+          <span class="mono">--help</span> lists the labels. A run fails if no case survives its
+          filters, so green never means nothing was checked.
           Fixture corpora are provisioned separately by checksum-verified bootstrap scripts — see
           <span class="mono">scripts/vectors/SOURCES.md</span> for pinned provenance, disk
           requirements, and the read-only environment doctor. Every gate’s exact command, scale,

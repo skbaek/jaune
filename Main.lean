@@ -456,65 +456,162 @@ def runBlockchainStTest (spec : NetworkSpec) : (Nat × String × Lean.Json) → 
       (postStateRoot = postStateRoot')
       s!"error : end state root does not match\n  expected : {postStateRoot}\n  computed : {postStateRoot'}"
 
-/-- Select the cases whose fixture `network` label is exactly the requested
-one. Selection is by label equality, as before; the label is now a parsed
-value rather than an arbitrary string, so an unknown one cannot reach this
-point, and a transition label matches only its own canonical spelling. -/
-def fixtureCaseSelected (spec : NetworkSpec) (testIdx : Option Nat)
-    (incls excls : List String) : (Nat × String × Lean.Json) → IO Bool
-  | ⟨idx, name, json⟩ => do
-    if let some specIdx := testIdx then
-      if specIdx ≠ idx then return false
-    if ¬ (incls.isEmpty ∨ name ∈ incls) then
-      return false
-    if name ∈ excls then
-      return false
-    let caseNetwork ← json.find "network" >>= Lean.Json.toIoString
-    return caseNetwork = spec.toString
+/-- The network specs this build can actually run.
 
-def runTestFile (spec : NetworkSpec) (testIdx : Option Nat)
-  (incls excls : List String) (idxPath : Nat × String) : IO Unit := do
-  let fileIdx := idxPath.fst
-  let path := idxPath.snd
+Rule 2 of the selection model below. A label is supported when it parses to a
+`NetworkSpec` and, for a transition, names a usable schedule: a transition that
+activates at genesis or runs the fork chain backwards determines no unambiguous
+fork at every block, so no chain can run it. That is the answer `--network` has
+always given such a label; it is applied here to the labels fixtures carry as
+well, so both come from one definition of "supported". -/
+def supportedSpec? (label : String) : Option NetworkSpec := do
+  let spec ← NetworkSpec.ofString? label
+  match spec with
+  | .static _ => return spec
+  | .transition t =>
+    match (ChainConfig.mk 0 t.activations).validate with
+    | .ok _ => return spec
+    | .error _ => none
+
+/-- The `--network` label the user asked for, as a supported spec.
+
+This differs from `supportedSpec?` only in what it does with a rejection: a
+label the user typed is a command-line mistake and is reported as one, naming
+the label and the supported alternatives, rather than quietly selecting
+nothing. The two rejection reasons stay distinct -- an unknown label and a
+schedule that parses but is unusable are different mistakes.
+
+The `0` chain ID is a placeholder: `ChainConfig.validate` never reads
+`chainId`, so it is not a second, independently-chosen chain identity. The
+actual chain ID is read per fixture and threaded by `evaluateFixtureBlock`. -/
+def requireSupportedSpec (label : String) : IO NetworkSpec := do
+  let some spec := NetworkSpec.ofString? label
+    | .throw
+        s!"error : unknown --network label {repr label}; supported labels are \
+           {Fork.all.map Fork.toString} and transitions of the form \
+           <fork>To<fork>AtTime<seconds>"
+  if let .transition t := spec then
+    IO.ofExcept ((ChainConfig.mk 0 t.activations).validate.mapError
+      ChainContextError.render)
+  return spec
+
+/-- Every filter a fixture run can carry, plus the positional arguments seen.
+
+Each filter field is limitative: it can only remove cases from the selection,
+never add one. `paths` is not a filter -- it collects the non-option arguments
+so that options may appear before or after the fixture path, and `main` can
+report "exactly one file" as its own error rather than as an unknown option. It
+is accumulated in reverse, as the parser prepends. -/
+structure FixtureOpts where
+  net : Option NetworkSpec := none
+  testIdx : Option Nat := none
+  incls : List String := []
+  excls : List String := []
+  paths : List String := []
+
+/-- The case's own network spec, if the case survives every filter.
+
+The selection model is three rules, and this function is the first two of them:
+
+1. every user-supplied filter is limitative -- `--network`, `--name`,
+   `--notName` and `--index` can only carve the selection down;
+2. the selection is *always* intersected with what this build supports,
+   `--network` given or not, so a file whose cases predate Prague contributes
+   its supported ones and nothing more;
+3. `runTestFile` requires what remains to be nonempty.
+
+There is deliberately no default fork. The spec returned is the one the case's
+own `network` label names, so each selected case runs under its own rules and
+nothing downstream falls back to a hardcoded one. -/
+def fixtureCaseSpec? (o : FixtureOpts) :
+    (Nat × String × Lean.Json) → IO (Option NetworkSpec)
+  | ⟨idx, name, json⟩ => do
+    if let some specIdx := o.testIdx then
+      if specIdx ≠ idx then return none
+    if ¬ (o.incls.isEmpty ∨ name ∈ o.incls) then
+      return none
+    if name ∈ o.excls then
+      return none
+    let label ← json.find "network" >>= Lean.Json.toIoString
+    let some spec := supportedSpec? label | return none
+    if let some requested := o.net then
+      if spec ≠ requested then return none
+    return some spec
+
+/-- One fixture case's declared `network` label, for reporting. -/
+def fixtureCaseNetwork : (Nat × String × Lean.Json) → IO String
+  | ⟨_, _, json⟩ => json.find "network" >>= Lean.Json.toIoString
+
+def runTestFile (o : FixtureOpts) (path : String) : IO Unit := do
   .println "\n================================================================\n"
-  .println s!"TEST FILE #{fileIdx} : {path}\n"
+  .println s!"TEST FILE : {path}\n"
   let rb ← readJsonFile path >>= Lean.Json.toIoRBNode
   let js := rb.toArray.toList.putIndex
-  let selected ← js.filterM <| fixtureCaseSelected spec testIdx incls excls
-  .println s!"NETWORK : {spec}"
+  let labels ← js.mapM fixtureCaseNetwork
+  let supported := labels.filter (fun l => (supportedSpec? l).isSome)
+  let tagged ← js.mapM fun c => do
+    return (← fixtureCaseSpec? o c).map (fun spec => (spec, c))
+  let selected := tagged.filterMap id
+  .println s!"NETWORKS : {(selected.map (fun p => p.fst.toString)).eraseDups}"
   .println s!"SELECTED CASES : {selected.length}"
   .println s!"SKIPPED CASES : {js.length - selected.length}"
+  -- Rule 3. The three ways to arrive at an empty selection are different
+  -- mistakes and are reported as different ones: a file with no cases at all
+  -- is malformed, a file with no supported case is out of scope for this
+  -- build, and a file whose supported cases were all filtered away is a
+  -- command-line error. Folding them together is what made the old message
+  -- blame a `--network Prague` the user never passed.
+  .guard (¬ js.isEmpty)
+    s!"ERROR : {path} holds no cases; an empty fixture file is a corpus error, \
+       never a vacuous pass"
+  .guard (¬ supported.isEmpty)
+    s!"ERROR : no case in {path} runs at a network this build supports; the \
+       file's labels are {labels.eraseDups}, and the supported labels are \
+       {Fork.all.map Fork.toString} and transitions between them"
   .guard (¬ selected.isEmpty)
-    s!"ERROR : zero cases match the combined network/name/index filters \
-       (network = {spec}) in {path}"
-  let _ ← selected.mapM (runBlockchainStTest spec)
+    s!"ERROR : the filters select no case in {path}; {supported.length} of its \
+       {js.length} cases run at a supported network, with labels \
+       {supported.eraseDups}"
+  let _ ← selected.mapM (fun p => runBlockchainStTest p.fst p.snd)
   .ok ()
 
-def getTestNames (incls excls : List String) :
-  List String → (List String × List String)
-  | option :: arg :: strs =>
-    if option = "--name"
-    then getTestNames (arg :: incls) excls strs
-    else
-      if option = "--notName"
-      then getTestNames incls (arg :: excls) strs
-      else getTestNames incls excls (arg :: strs)
-  | [_] => ⟨incls, excls⟩
-  | [] => ⟨incls, excls⟩
+/-- Parse the fixture-mode options.
 
-def getSkip : List String → Option Nat
-  | s0 :: s1 :: ss =>
-    if s0 = "--skip"
-    then String.toNat? s1
-    else getSkip <| s1 :: ss
-  | _ => none
+Unknown options are refused rather than reinterpreted. Before this existed any
+token the option scanners did not recognise fell through to be treated as a
+path or silently dropped, so a misspelled `--netwrok Prague` ran the default
+fork without a word and a second `--network` was discarded.
 
-def getTestIndex : List String → Option Nat
-  | s0 :: s1 :: ss =>
-    if s0 = "--index"
-    then String.toNat? s1
-    else getTestIndex <| s1 :: ss
-  | _ => none
+`--network` is not repeatable: it is a filter, and a case carries exactly one
+network, so a second one could only ever select nothing. An arity error reports
+that far better than an empty selection would. `--name` and `--notName` do
+repeat -- they accumulate within their own dimension, which stays limitative
+because the dimension as a whole still only removes cases. -/
+def parseFixtureOpts : FixtureOpts → List String → IO FixtureOpts
+  | o, [] => return o
+  | o, "--network" :: label :: rest => do
+    if o.net.isSome then
+      .throw
+        s!"error : --network given more than once; a case has exactly one \
+           network, so a second one can only select nothing"
+    parseFixtureOpts { o with net := some (← requireSupportedSpec label) } rest
+  | o, "--name" :: name :: rest =>
+    parseFixtureOpts { o with incls := name :: o.incls } rest
+  | o, "--notName" :: name :: rest =>
+    parseFixtureOpts { o with excls := name :: o.excls } rest
+  | o, "--index" :: idx :: rest => do
+    let some n := idx.toNat?
+      | .throw s!"error : --index expects a natural number, got {repr idx}"
+    parseFixtureOpts { o with testIdx := some n } rest
+  | o, arg :: rest => do
+    -- Anything left that looks like an option is either misspelled or missing
+    -- its argument; anything else is a positional. Testing the shape here is
+    -- what keeps a typo from being silently reinterpreted as a file path.
+    if arg.startsWith "-" then
+      .throw
+        s!"error : unknown or incomplete option {repr arg}; run with --help \
+           for usage"
+    parseFixtureOpts { o with paths := arg :: o.paths } rest
 
 def getNetwork : List String → Option String
   | "--network" :: network :: _ => some network
@@ -540,37 +637,6 @@ def getFork (opts : List String) : IO Fork :=
       .throw
         s!"error : unknown --network label {repr label}; supported labels are \
            {Fork.all.map Fork.toString}"
-
-/-- Resolve `--network` to the fixture network a suite names: a static fork or
-a supported transition schedule.
-
-A transition's schedule is validated here, before any fixture is read, so a
-label that parses but does not determine an unambiguous fork at every block --
-an activation at genesis, or one that runs the fork chain backwards -- is
-refused up front rather than once per case. This checks schedule shape only,
-through `ForkTransition.activations`, before any fixture is read -- so there is
-no real chain ID to check against yet. `ChainConfig.validate` never reads
-`chainId` at all, so the `0` below is not a second, independently-chosen chain
-identity, only a placeholder the check cannot see; the actual chain ID, read
-per fixture, is threaded separately by `evaluateFixtureBlock`. -/
-def getNetworkSpec (opts : List String) : IO NetworkSpec := do
-  let some label := getNetwork opts | return .static .prague
-  let some spec := NetworkSpec.ofString? label
-    | .throw
-        s!"error : unknown --network label {repr label}; supported labels are \
-           {Fork.all.map Fork.toString} and transitions of the form \
-           <fork>To<fork>AtTime<seconds>"
-  if let .transition t := spec then
-    IO.ofExcept ((ChainConfig.mk 0 t.activations).validate.mapError
-      ChainContextError.render)
-  return spec
-
-def getFiles (path : System.FilePath) : IO (List System.FilePath) := do
-  if (← System.FilePath.isDir path) then
-    let paths ← System.FilePath.walkDir path
-    List.filterM (fun path => path.isDir <&> .not) paths.toList
-  else
-    return [path]
 
 def createMinimalEvm
     (rules : ForkRules) (adr : Adr) (input : Bytes) (gasLimit : Nat) : Evm := {
@@ -809,7 +875,43 @@ def runFakeExpVectorFile (path : String) : IO Bool := do
     IO.println s!"RED — fake-exp: {passes}/{results.length} PASS, target not met"
     return false
 
+/-- The usage text.
+
+The supported labels are rendered from `Fork.all` and from a constructed
+`ForkTransition`, not written out by hand, so this text cannot drift from what
+the build actually supports -- which is exactly how the README's fork list came
+to disagree with the binary. -/
+def usage : String :=
+  s!"usage:
+  jaune <fixture.json> [--network <label>] [--name <case>] \
+[--notName <case>] [--index <n>]
+  jaune --vectors <address> <file.json> [--network <fork>]
+  jaune --u256 <file.json>
+  jaune --fake-exp <file.json>
+  jaune --help
+
+Runs one blockchain-test fixture file.
+
+Every option is a filter: each one only narrows the set of cases that run, and
+the selection is always narrowed to the networks this build supports. The run
+fails if no case survives. Given no --network, every supported case in the file
+runs under the rules its own network label names.
+
+  --network <label>  run only cases at this network; not repeatable
+  --name <case>      run only these cases; repeatable
+  --notName <case>   skip these cases; repeatable
+  --index <n>        run only the case at this index
+
+supported networks:
+  {Fork.all.map Fork.toString}
+  transitions of the form <fork>To<fork>AtTime<seconds>, for example \
+{ForkTransition.toString ⟨.prague, .osaka, 15000⟩}
+"
+
 def main : List String → IO Unit
+  | [] => .throw "error : no arguments; run with --help for usage"
+  | "--help" :: _ => .println usage
+  | "-h" :: _ => .println usage
   | "--u256" :: pathStr :: [] => do
     if !(← runU256VectorFile pathStr) then IO.Process.exit 1
   | "--fake-exp" :: pathStr :: [] => do
@@ -822,19 +924,25 @@ def main : List String → IO Unit
     let f ← getFork opts
     if !(← runVectorFile f addr pathStr) then
       IO.Process.exit 1
-  | path :: opts => do
-    let testIdx : Option Nat := getTestIndex opts
-    let skip : Option Nat := getSkip opts
-    let spec ← getNetworkSpec opts
-    let ⟨incls, excls⟩ := getTestNames [] [] opts
-    let files ← getFiles path
-    let files :=
-      match skip with
-      | none => files
-      | some n => files.drop n
-    let _ ←
-      List.mapM
-        (runTestFile spec testIdx incls excls)
-        (files.map System.FilePath.toString).putIndex
-    pure ()
-  | _ => IO.throw "error : invalid arguments"
+  -- Arity errors for the alternate modes, so that a mode flag given the wrong
+  -- number of arguments is reported as itself rather than falling through to
+  -- fixture mode and being called an unknown option.
+  | "--u256" :: _ => .throw "error : --u256 takes exactly one file path"
+  | "--fake-exp" :: _ => .throw "error : --fake-exp takes exactly one file path"
+  | "--vectors" :: _ =>
+    .throw "error : --vectors takes an address and a file path"
+  -- One fixture file, never a directory. Walking a tree here was a second,
+  -- unaccounted enumeration path: it produced no per-file classification, no
+  -- baseline comparison, no wall-clock guard and no gate lock, so its output
+  -- read like a gate result while being none. `check.sh --dir` is the
+  -- enumerator that has all four. `--skip`, which dropped leading *files*,
+  -- went with it -- it could not mean anything for a single file.
+  | args => do
+    let o ← parseFixtureOpts {} args
+    match o.paths with
+    | [path] => runTestFile o path
+    | [] => .throw "error : no fixture file given; run with --help for usage"
+    | ps =>
+      .throw
+        s!"error : expected exactly one fixture file, got {ps.reverse}; a run \
+           takes one file, and `check.sh --dir` is the enumerator for a tree"
