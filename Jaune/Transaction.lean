@@ -2981,6 +2981,20 @@ Total, because the tip is a field rather than a lookup -- which is what lets
 def CheckedBlockChain.tipHash (cc : CheckedBlockChain) : B256 :=
   cc.tip.header.hash
 
+/-- The snapshot's committed state root, read from the tip header rather than
+rebuilt from the world -- the same trade `tipHash` makes, for the same reason:
+`tipStateRoot` is already the proof that the two agree, so recomputing
+`val.state.root` here would rebuild the whole trie to learn something the
+structure carries. -/
+def CheckedBlockChain.stateRoot (cc : CheckedBlockChain) : B256 :=
+  cc.tip.header.stateRoot
+
+/-- The field read is the trie rebuild. This is `tipStateRoot` under the
+accessor's name, and it is what licenses a consumer to compare against
+`stateRoot` where it would otherwise have called `State.root`. -/
+theorem CheckedBlockChain.stateRoot_eq (cc : CheckedBlockChain) :
+    cc.stateRoot = cc.val.state.root := cc.tipStateRoot.symm
+
 /-- Genesis: the only route from a canonical genesis envelope and a parsed
 prestate to a checked snapshot. It demands what `Main.lean` never checked --
 that the prestate is canonical and that its root is the one the genesis header

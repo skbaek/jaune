@@ -445,9 +445,16 @@ def runBlockchainStTest (spec : NetworkSpec) : (Nat × String × Lean.Json) → 
       s!"error : last block hash does not match\n  expected : {lastBlockHash}\n  computed : {lastBlockHash'}"
 
     let postStateRoot ← getPostStateRoot json
+    -- Read the committed root instead of rebuilding it, exactly as the tip-hash
+    -- check above reads `tipHash`. `CheckedBlockChain.stateRoot_eq` is the proof
+    -- that this is the same comparison as against `chain.val.state.root`, so no
+    -- fixture can classify differently -- and the world-state trie, which this
+    -- runner was reconstructing once per fixture on top of the one
+    -- `stateTransitionE` already built and checked, is not rebuilt at all.
+    let postStateRoot' := chain.stateRoot
     .guard
-      (postStateRoot = chain.val.state.root)
-      s!"error : end state root does not match\n  expected : {postStateRoot}\n  computed : {chain.val.state.root}"
+      (postStateRoot = postStateRoot')
+      s!"error : end state root does not match\n  expected : {postStateRoot}\n  computed : {postStateRoot'}"
 
 /-- Select the cases whose fixture `network` label is exactly the requested
 one. Selection is by label equality, as before; the label is now a parsed
