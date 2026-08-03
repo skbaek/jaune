@@ -1884,6 +1884,11 @@ def Ninst.toString : Ninst → String
 instance : ToString Ninst := ⟨Ninst.toString⟩
 instance : Repr Ninst := ⟨λ i _ => i.toString⟩
 
+lemma Ninst.push_ext {xs ys : Bytes}
+    (le : xs.length ≤ 32) (le' : ys.length ≤ 32) (eq : xs = ys) :
+    Ninst.push xs le = Ninst.push ys le' := by
+  revert le le'; rw [eq]; simp
+
 inductive Inst : Type
   | last : Linst → Inst
   | next : Ninst → Inst
@@ -1911,6 +1916,12 @@ def UInt8.toInstType (b : UInt8) : InstType :=
     | 0x0F => .L
     | _ => .X
   | _ => .R
+
+lemma Linst.toInstType_toUInt8 (l : Linst) : l.toUInt8.toInstType = .L := by
+  cases l <;> rfl
+
+lemma Jinst.toInstType_toUInt8 (j : Jinst) : j.toUInt8.toInstType = .J := by
+  cases j <;> rfl
 
 lemma UInt8.lt_of_highs_lt_highs (x y : UInt8) (lt : x.highs < y.highs) : x < y := by
   rw [UInt8.lt_iff_toNat_lt]

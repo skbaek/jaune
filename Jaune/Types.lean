@@ -144,6 +144,149 @@ lemma lo_toUInt64 (n : Nat) : (n ↾ 64).toUInt64 = n.toUInt64 := by
 lemma Nat.or_lo {k m n : Nat} : (m ||| n) ↾ k = (m ↾ k) ||| (n ↾ k) :=
   Nat.or_mod_two_pow
 
+/-
+Byte-pair decoding for the `Bytes.toUIntN` family and `UIntN.concat`, whose
+definitions are in `Basic.lean`. The lemmas live here rather than beside them
+because their proofs need the `Nat.lo`/`Nat.hi` algebra declared above.
+-/
+
+lemma pair_aux (n m : Nat) :
+    ((n >>> m ↾ m) ↾ (m + m)) <<< m ↾ (m + m) ||| (n ↾ m) ↾ (m + m) =
+      n ↾ (m + m) := by
+  rw [Nat.lo_lo_of_le (by omega)]
+  rw [Nat.lo_lo_of_le (by omega)]
+  apply Eq.trans _ <| high_or_low_eq_self (n ↾ (m + m)) m Nat.lo_lt
+  apply congr_arg₂  _ _ (Nat.lo_lo_of_ge (by omega)).symm
+  rw [@Nat.lo_add_shr n m m, ← Nat.lo_eq _ m, Nat.lo_lo]; rfl
+
+lemma Nat.toUInt16_toUInt8 (n : Nat) : n.toUInt8.toUInt16 = (n ↾ 8).toUInt16 := by
+  have h0 : n.toUInt8.toUInt16 = n.toUInt16 % (2 ^ 8) :=
+      (UInt8.toUInt16_eq_mod_256_iff n.toUInt8 n.toUInt16).mpr
+        (UInt16.toUInt8_ofNat' _).symm
+  have h1: (n.toUInt16 % 2 ^ 8).toNat = n ↾ 8 := by
+    have rw : UInt16.toNat (2 ^ 8) = 2 ^ 8 := rfl
+    rw [UInt16.toNat_mod, rw]; clear rw
+    rw [toNat_toUInt16, ← Nat.lo_eq]
+    apply Nat.lo_lo_of_ge (by omega)
+  have h2 : (n ↾ 8).toUInt16 = n.toUInt16 % (2 ^ 8) := by
+    apply (UInt16.ofNat_eq_iff_mod_eq_toNat _ _).mpr
+    apply Eq.trans (Nat.lo_lo_of_le (by omega)) h1.symm
+  apply Eq.trans h0 h2.symm
+
+lemma List.toUInt16_pair (n : Nat) :
+    Bytes.toUInt16 [(n >>> 8).toUInt8, n.toUInt8] = n.toUInt16 := by
+  have h : (n >>> 8 ↾ 8).toUInt16 <<< 8 ||| (n ↾ 8).toUInt16 = n.toUInt16 := by
+    rw [← UInt16.toNat_inj, toNat_toUInt16, UInt16.toNat_or, toNat_toUInt16]
+    rw [UInt16.toNat_shiftLeft, toNat_toUInt16]; apply pair_aux n 8
+  simp [Bytes.toUInt16, Bytes.getElem_packV, Bytes.pack, takeRightD, List.takeD,
+    List.reverse, List.reverseAux, List.tail, List.headD]
+  rw [Nat.toUInt16_toUInt8, Nat.toUInt16_toUInt8, h]
+
+lemma Nat.toUInt32_toUInt16 (n : Nat) : n.toUInt16.toUInt32 = (n ↾ 16).toUInt32 := by
+  have h0 : n.toUInt16.toUInt32 = n.toUInt32 % (2 ^ 16) :=
+      (UInt16.toUInt32_eq_mod_65536_iff n.toUInt16 n.toUInt32).mpr
+        (UInt32.toUInt16_ofNat' _).symm
+  have h1: (n.toUInt32 % 2 ^ 16).toNat = n ↾ 16 := by
+    have rw : UInt32.toNat (2 ^ 16) = 2 ^ 16 := rfl
+    rw [UInt32.toNat_mod, rw]; clear rw
+    rw [toNat_toUInt32, ← Nat.lo_eq]
+    apply Nat.lo_lo_of_ge (by omega)
+  have h2 : (n ↾ 16).toUInt32 = n.toUInt32 % (2 ^ 16) := by
+    apply (UInt32.ofNat_eq_iff_mod_eq_toNat _ _).mpr
+    apply Eq.trans (Nat.lo_lo_of_le (by omega)) h1.symm
+  apply Eq.trans h0 h2.symm
+
+lemma toUInt32_eq_concat (n : Nat) :
+    n.toUInt32 = UInt16.concat (n >>> 16).toUInt16 n.toUInt16 := by
+  rw [← UInt32.toNat_inj, toNat_toUInt32]
+  simp only [UInt16.concat, Nat.toUInt32_toUInt16]
+  rw [UInt32.toNat_or, UInt32.toNat_shiftLeft_lo, toNat_toUInt32, toNat_toUInt32]
+  rw [Nat.lo_lo_of_le (by omega), Nat.lo_lo_of_le (by omega)]
+  have rw : (UInt32.toNat 16 % 32) = 16 := rfl
+  rw [rw]; clear rw
+  have rw : (n >>> 16 ↾ 16) <<< 16 ↾ 32 = (n ↾ 32) ↿ 16 := by
+    rw [← Nat.lo_add_shr, ← Nat.hi_eq]
+    apply Nat.lo_eq_of_lt
+    apply lt_of_le_of_lt (Nat.hi_le _ _) Nat.lo_lt
+  rw [rw, ← @Nat.lo_lo_of_ge n 32 16 (by omega)]
+  apply (Nat.hi_or_lo _ _).symm
+
+lemma List.toUInt32_pair (n : Nat) (n_lt : n < 2 ^ 16) :
+    Bytes.toUInt32 [(n >>> 8).toUInt8, n.toUInt8] = n.toUInt32 := by
+  simp only [ Bytes.toUInt32, Bytes.pack, takeRightD, List.takeD,
+    List.reverse, List.reverseAux, List.tail, List.headD, List.take, List.drop ]
+  apply Eq.trans _ (toUInt32_eq_concat _).symm
+  apply congr_arg₂ _ _ (congr_arg _ _)
+  · apply congr_arg (λ x : UInt32 => x <<< 16) <| congr_arg _ _
+    rw [Nat.shiftRight_eq_div_pow, Nat.div_eq_zero_of_lt (by omega)]; rfl
+  · apply List.toUInt16_pair
+
+lemma Nat.toUInt64_toUInt32 (n : Nat) : n.toUInt32.toUInt64 = (n ↾ 32).toUInt64 := by
+  have h0 : n.toUInt32.toUInt64 = n.toUInt64 % (2 ^ 32) :=
+      (UInt32.toUInt64_eq_mod_4294967296_iff n.toUInt32 n.toUInt64).mpr
+        (UInt64.toUInt32_ofNat' _).symm
+  have h1: (n.toUInt64 % 2 ^ 32).toNat = n ↾ 32 := by
+    have rw : UInt64.toNat (2 ^ 32) = 2 ^ 32 := rfl
+    rw [UInt64.toNat_mod, rw]; clear rw
+    rw [toNat_toUInt64, ← Nat.lo_eq]
+    apply Nat.lo_lo_of_ge (by omega)
+  have h2 : (n ↾ 32).toUInt64 = n.toUInt64 % (2 ^ 32) := by
+    apply (UInt64.ofNat_eq_iff_mod_eq_toNat _ _).mpr
+    apply Eq.trans (Nat.lo_lo_of_le (by omega)) h1.symm
+  apply Eq.trans h0 h2.symm
+
+lemma toUInt64_eq_concat (n : Nat) :
+    n.toUInt64 = UInt32.concat (n >>> 32).toUInt32 n.toUInt32 := by
+  rw [← UInt64.toNat_inj, toNat_toUInt64]
+  simp only [UInt32.concat, Nat.toUInt64_toUInt32]
+  rw [UInt64.toNat_or, UInt64.toNat_shiftLeft_lo, toNat_toUInt64, toNat_toUInt64]
+  rw [Nat.lo_lo_of_le (by omega), Nat.lo_lo_of_le (by omega)]
+  have rw : (UInt64.toNat 32 % 64) = 32 := rfl
+  rw [rw]; clear rw
+  have rw : (n >>> 32 ↾ 32) <<< 32 ↾ 64 = (n ↾ 64) ↿ 32 := by
+    rw [← Nat.lo_add_shr, ← Nat.hi_eq]
+    apply Nat.lo_eq_of_lt
+    apply lt_of_le_of_lt (Nat.hi_le _ _) Nat.lo_lt
+  rw [rw, ← @Nat.lo_lo_of_ge n 64 32 (by omega)]
+  apply (Nat.hi_or_lo _ _).symm
+
+lemma List.toUInt64_pair (n : Nat) (n_lt : n < 2 ^ 16) :
+    Bytes.toUInt64 [(n >>> 8).toUInt8, n.toUInt8] = n.toUInt64 := by
+  simp only [ Bytes.toUInt64, Bytes.pack, takeRightD, List.takeD,
+    List.reverse, List.reverseAux, List.tail, List.headD, List.take, List.drop ]
+  apply Eq.trans _ (toUInt64_eq_concat _).symm
+  apply congr_arg₂ _ _ (congr_arg _ _)
+  · apply congr_arg (λ x : UInt64 => x <<< 32) <| congr_arg _ _
+    rw [Nat.shiftRight_eq_div_pow, Nat.div_eq_zero_of_lt (by omega)]; rfl
+  · apply List.toUInt32_pair _ n_lt
+
+lemma List.toB256_pair (n : Nat) (n_lt : n < 2 ^ 16):
+    Bytes.toB256 [(n >>> 8).toUInt8, n.toUInt8] = n.toB256 := by
+  have hlow : ∀ a b : UInt8, UInt8.toUInt64 a <<< 8 ||| UInt8.toUInt64 b = Bytes.toUInt64 [a, b] := by
+    intro a b
+    simp only [ Bytes.toUInt64, Bytes.toUInt32, Bytes.toUInt16, Bytes.getElem_packV,
+      Bytes.pack, List.takeRightD, List.takeD,
+      List.reverse, List.reverseAux, List.tail, List.headD, List.take, List.drop,
+      List.getD_cons_zero, List.getD_cons_succ ]
+    simp
+    apply congrArg (fun x : UInt64 => x ||| b.toUInt64)
+    rw [← UInt64.toNat_inj]
+    rw [UInt64.toNat_mod, UInt64.toNat_mod, UInt64.toNat_shiftLeft_lo]
+    have hw : UInt64.toNat (UInt8.toUInt64 a) = UInt8.toNat a := by cases a; rfl
+    have h8 : UInt64.toNat 8 % 64 = 8 := rfl
+    have h32 : UInt64.toNat 4294967296 = 4294967296 := rfl
+    have h16 : UInt64.toNat 65536 = 65536 := rfl
+    rw [hw, h8, h32, h16]
+    simp only [Nat.shiftLeft_eq, Nat.lo]
+    have h := UInt8.toNat_lt a
+    omega
+  show Bytes.toB256 [(n >>> 8).toUInt8, n.toUInt8] = n.toB256
+  rw [Bytes.toB256_pair, hlow, List.toUInt64_pair n n_lt]
+  have h128 : n >>> 128 = 0 := Nat.shiftRight_eq_zero _ _ (by omega)
+  have h64 : n >>> 64 = 0 := Nat.shiftRight_eq_zero _ _ (by omega)
+  simp only [Nat.toB256, Nat.toB128, h128, h64]
+  rfl
+
 lemma toB128_toNat (x : B128) : x.toNat.toB128 = x := by
   simp only [B128.toNat, Nat.toB128]
   apply congr_arg₂
@@ -1399,6 +1542,11 @@ def Jinst.toUInt8 : Jinst → UInt8
   | jump => 0x56     -- 0x56 / 1 / 0 / Unconditional jump.
   | jumpi => 0x57    -- 0x57 / 2 / 0 / Conditional jump.
   | jumpdest => 0x5B -- 0x5b / 0 / 0 / Mark a valid jump destination.
+
+lemma toJinst_toUInt8 {o : Jinst} :
+  UInt8.toJinst o.toUInt8 = some o := by cases o <;> rfl
+lemma toLinst_toUInt8 {o : Linst} :
+  UInt8.toLinst o.toUInt8 = some o := by cases o <;> rfl
 
 instance : Repr Rinst := ⟨λ o _ => o.toString⟩
 instance : Repr Xinst := ⟨λ o _ => o.toString⟩

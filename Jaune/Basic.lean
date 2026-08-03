@@ -421,6 +421,23 @@ instance {ξ : Type u} {ρ : ξ → Prop} {xs : List ξ}
   | nil => apply instDecidableTrue
   | cons x xs ih => simp; apply instDecidableAnd
 
+-- Option helpers, used by the partial list operations below.
+
+lemma of_bind_eq_some {ξ υ} {f : Option ξ} {g : ξ → Option υ} {y} :
+    f >>= g = some y → ∃ x, f = some x ∧ g x = some y := by
+  intro h; cases f with
+  | none => cases h
+  | some x => refine ⟨x, rfl, h⟩
+
+lemma of_pure_eq_some {ξ} {x y : ξ} : pure x = some y → x = y := by intro h; cases h; rfl
+
+lemma of_guard_eq_some {p : Prop} [hd : Decidable p] {ξ} {ox : Option ξ} {x} :
+    (do guard p; ox) = some x → p ∧ ox = some x := by
+  intro h
+  cases em p with
+  | inl hp => simp [hp] at h; constructor <;> assumption
+  | inr hp => simp [guard, if_neg hp] at h
+
 def List.drop? {ξ : Type u} : Nat → List ξ → Option (List ξ)
   | 0, xs => some xs
   | _ + 1, [] => none
@@ -558,6 +575,51 @@ theorem List.append_slice_suffix {ξ : Type y} {xs ys : List ξ} :
     Slice (xs ++ ys) xs.length ys := by
   have h := slice_suffix <| slice_refl <| xs ++ ys
   rw [Nat.zero_add] at h; exact h
+
+lemma List.sliceD_succ {ξ} (xs : List ξ) (m n : Nat) (d : ξ) :
+    xs.sliceD m (n + 1) d = xs.getD m d :: xs.sliceD (m + 1) n d := by
+  cases m <;> cases xs <;> simp [List.sliceD, takeD, List.getD, List.drop]
+
+lemma List.getD_eq_default {ξ} {xs : List ξ} {i : Nat} {d : ξ}
+    (le : xs.length ≤ i) : xs.getD i d = d := by
+  rw [List.getD_eq_getElem?_getD, List.getElem?_eq_none_iff.mpr le]; rfl
+
+lemma List.drop_eq_of_drop?_eq_some {ξ} {xs ys : List ξ} {m : Nat} :
+    xs.drop? m = some ys → xs.drop m = ys := by
+  induction m generalizing xs ys
+  case zero => simp [List.drop?]
+  case succ m ih => cases xs <;> simp [List.drop?]; apply ih
+
+lemma List.takeD_eq_of_take?_eq_some {ξ} {xs ys : List ξ} {m : Nat} {d} :
+    xs.take? m = some ys → xs.takeD m d = ys := by
+  induction m generalizing xs ys
+  case zero => simp [List.take?]
+  case succ m ih =>
+    cases xs <;> simp [List.take?]
+    intro _ eq eq'; cases ys; {cases eq'}
+    cases eq'; simp [ih eq]
+
+lemma List.sliceD_eq_of_slice?_eq_some {ξ} {xs ys : List ξ} {m n : Nat} {d} :
+    xs.slice? m n = some ys → xs.sliceD m n d = ys := by
+  intro eq; simp only [List.slice?] at eq; simp only [List.sliceD]
+  rcases of_bind_eq_some eq with ⟨zs, rw, rw'⟩
+  rw [drop_eq_of_drop?_eq_some rw, takeD_eq_of_take?_eq_some rw']
+
+lemma List.of_get?_succ_eq_some {X} {l : List X} {k : ℕ} {x} :
+    l[k + 1]? = some x → ∃ y, l[k]? = some y := by
+  induction k generalizing l x with
+  | zero =>
+    match l with
+    | [] => simp
+    | [_] => simp
+    | (y :: _ :: _) => intro _; refine' ⟨y, rfl⟩
+  | succ k ih =>
+    match l with
+    | [] => simp
+    | y :: l' =>
+      intro h; simp at h
+      rcases ih h with ⟨y', h'⟩
+      exact ⟨y', h'⟩
 
 
 def B256.mul (x y : B256) : B256 := (x.toNat * y.toNat).toB256
@@ -749,6 +811,12 @@ def Bytes.toUInt64 (xs : Bytes) : UInt64 :=
   let low  : UInt64 := (Bytes.toUInt32 (v.drop 4)).toUInt64
   (high <<< 32) ||| low
 
+def UInt16.concat (x y : UInt16) : UInt32 :=
+  x.toUInt32 <<< 16 ||| y.toUInt32
+
+def UInt32.concat (x y : UInt32) : UInt64 :=
+  x.toUInt64 <<< 32 ||| y.toUInt64
+
 def Bytes.toUInt64? (xs : Bytes) : Option UInt64 :=
   if xs.length = 8 then some (Bytes.toUInt64 xs) else none
 
@@ -828,6 +896,8 @@ lemma Nat.add_sub_mod_eq_sub {k m n : Nat}
     (hm : m < k) (h : n ≤ m) : (k + m - n) % k = m - n := by
   rw [Nat.add_sub_assoc h, Nat.add_mod_left, Nat.mod_eq_of_lt]
   apply lt_of_le_of_lt (Nat.sub_le _ _) hm
+
+lemma two_le_32 : (2 : Nat) ≤ 32 := by omega
 
 
 lemma Nat.mod_two_pow_succ {k m} :
@@ -1527,14 +1597,6 @@ def Except.assert (p : Prop) [inst : Decidable p]
 def Option.toExcept {ξ : Type u} {υ : Type v} (x : ξ) : Option υ → Except ξ υ
   | .none => .error x
   | .some y => .ok y
-
-lemma of_bind_eq_some {ξ υ} {f : Option ξ} {g : ξ → Option υ} {y} :
-    f >>= g = some y → ∃ x, f = some x ∧ g x = some y := by
-  intro h; cases f with
-  | none => cases h
-  | some x => refine ⟨x, rfl, h⟩
-
-lemma of_pure_eq_some {ξ} {x y : ξ} : pure x = some y → x = y := by intro h; cases h; rfl
 
 inductive Except.IsOk {ξ υ} : Except ξ υ → Prop
   | intro {x : υ} : Except.IsOk (Except.ok x)
