@@ -112,6 +112,12 @@ def Nat.toB256 (n : Nat) : B256 :=
 instance {n} : OfNat B128 n := ⟨n.toB128⟩
 instance {n} : OfNat B256 n := ⟨n.toB256⟩
 
+theorem B256.kernel_decidable_comparisons :
+    ((0x06fdde03 : B256) < (0x095ea7b3 : B256)) ∧
+    ((0x095ea7b3 : B256) = (0x095ea7b3 : B256)) ∧
+    ¬ ((0x095ea7b3 : B256) < (0x06fdde03 : B256)) := by
+  decide +kernel
+
 def UInt8.toHexit : UInt8 → Char
   | 0x0 => '0'
   | 0x1 => '1'
