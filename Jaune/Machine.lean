@@ -1912,10 +1912,6 @@ def UInt8.toInstType (b : UInt8) : InstType :=
     | _ => .X
   | _ => .R
 
-lemma Nat.hi_le (a b : Nat) : a ↿ b ≤ a := by
-  rw [hi, shiftLeft_eq, shiftRight_eq_div_pow]
-  apply Nat.div_mul_le_self
-
 lemma UInt8.lt_of_highs_lt_highs (x y : UInt8) (lt : x.highs < y.highs) : x < y := by
   rw [UInt8.lt_iff_toNat_lt]
   have lt' : x.toNat < (x.toNat ↿ 4) + 16 := by

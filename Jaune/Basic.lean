@@ -440,6 +440,126 @@ def List.sliceD {ξ : Type u} (xs : List ξ) (m n : Nat) (x : ξ) : List ξ :=
 def List.slice! {ξ : Type u} [Inhabited ξ] (xs : List ξ) (m n : Nat) : List ξ :=
   takeD n (drop m xs) default
 
+
+-- Lemma API for the partial list operations above.
+
+theorem List.drop?_add {ξ : Type u} (m n : Nat) (xs : List ξ) :
+    drop? (m + n) xs = drop? n xs >>= drop? m := by
+  induction n generalizing xs with
+  | zero => rfl
+  | succ n ih =>
+    cases xs <;> simp only [drop?]
+    · rfl
+    · apply ih
+
+theorem List.get?_eq_drop?_head? {ξ : Type u} {xs : List ξ} {n : Nat} :
+    xs[n]? = drop? n xs >>= List.head? := by
+  induction n generalizing xs with
+  | zero => cases xs <;> simp [drop?]
+  | succ n ih =>
+    cases xs
+    · simp [drop?]
+    · simp [drop?]; apply ih
+
+def List.Slice {ξ : Type u} (xs : List ξ) (m : Nat) (ys : List ξ) : Prop :=
+  ∃ n, xs.slice? m n = some ys
+
+theorem List.slice?_cons {ξ : Type u} (x) (xs : List ξ) (m n : Nat) :
+    slice? (x :: xs) (m + 1) n = slice? xs m n := rfl
+
+theorem List.slice?_eq_cons_iff {ξ : Type u} {xs : List ξ} {m n : Nat} {y} {ys} :
+    slice? xs m (n + 1) = some (y :: ys) ↔
+      (xs[m]? = some y ∧ slice? xs (m + 1) n = some ys) := by
+  induction m generalizing xs with
+  | zero =>
+    match xs with
+    | [] => simp [slice?, drop?, Bind.bind, Option.bind, take?]
+    | x :: xs =>
+      simp only
+        [slice?, drop?, Bind.bind, Option.bind, take?]
+      cases take? n xs <;> simp
+  | succ m ih =>
+    match xs with
+    | [] => simp [slice?, drop?, Bind.bind, Option.bind]
+    | x :: xs =>
+      rw [List.slice?_cons, ih]; rfl
+
+theorem List.slice_cons_iff {ξ : Type u} {xs : List ξ} {m : Nat} {y} {ys} :
+    List.Slice xs m (y :: ys) ↔
+      (xs[m]? = some y ∧ List.Slice xs (m + 1) ys) := by
+  simp only [Slice]
+  constructor <;> intro h
+  · rcases h with ⟨_ | n, h⟩
+    · revert h; unfold slice?
+      cases xs.drop? m with
+      | none => simp
+      | some xs' => simp [take?]
+    · rw [slice?_eq_cons_iff] at h
+      refine' ⟨h.left, _, h.right⟩
+  · rcases h with ⟨h, n, h'⟩
+    refine ⟨_, slice?_eq_cons_iff.mpr ⟨h, h'⟩⟩
+
+theorem List.length_take? {ξ : Type u} {n : Nat} {xs ys : List ξ} :
+    take? n xs = some ys → n = ys.length := by
+  induction n generalizing xs ys with
+  | zero => simp [take?]; intro h; simp [h]
+  | succ n ih =>
+    cases xs <;> simp [take?]
+    intro ys' h h'; rw [ih h, ← h']; rfl
+
+theorem List.length_slice? {ξ : Type u} {xs} {m n : Nat} {ys : List ξ} :
+    slice? xs m n = some ys → n = ys.length := by
+  unfold slice?; cases xs.drop? m <;> simp; apply length_take?
+
+theorem List.get?_eq_of_slice {ξ : Type u} {xs : List ξ} {m : Nat} {y} {ys} :
+    Slice xs m (y :: ys) → xs[m]? = some y := by
+  rw [List.slice_cons_iff]; apply And.left
+
+theorem List.of_take?_eq_append {ξ : Type u} {xs : List ξ}
+    {n : Nat} {ys zs : List ξ} (h : take? n xs = some (ys ++ zs)) :
+    take? ys.length xs = some ys ∧ xs.slice? ys.length zs.length = some zs := by
+  induction ys generalizing n xs with
+  | nil => simp [slice?, drop?] at *; rw [← length_take? h]; refine' ⟨rfl, h⟩
+  | cons y ys ih =>
+    cases n <;> simp [take?] at h
+    cases xs <;> simp [take?] at h
+    rcases h with ⟨h, ⟨_⟩⟩; constructor
+    · rw [List.length_cons]; unfold take?; rw [(ih h).left]; rfl
+    · apply (ih h).right
+
+theorem List.of_slice?_eq_append {ξ : Type u} {xs : List ξ}
+    {m n : Nat} {ys zs} (h : slice? xs m n = some (ys ++ zs)) :
+    slice? xs m ys.length = some ys ∧
+    slice? xs (m + ys.length) zs.length = some zs := by
+  revert h; unfold slice?; rw [Nat.add_comm, drop?_add]
+  cases xs.drop? m <;> simp; rename List ξ => xs'; apply of_take?_eq_append
+
+theorem List.slice_prefix {ξ : Type u} {xs : List ξ}
+    {m : Nat} {ys zs} (h : Slice xs m (ys ++ zs)) : Slice xs m ys := by
+  rcases h with ⟨n, h⟩; refine ⟨_, (of_slice?_eq_append h).left⟩
+
+theorem List.slice_suffix {ξ : Type u} {xs : List ξ} {m : Nat} {ys zs}
+    (h : Slice xs m (ys ++ zs)) : Slice xs (m + ys.length) zs := by
+  rcases h with ⟨n, h⟩; refine ⟨_, (of_slice?_eq_append h).right⟩
+
+theorem List.get?_length_ne_some {ξ : Type y} {xs : List ξ} {y} :
+    xs[xs.length]? ≠ some y := by simp
+
+theorem List.take?_length {ξ : Type u} (xs : List ξ) :
+    take? xs.length xs = some xs := by
+  induction xs with
+  | nil => rfl
+  | cons x xs ih => simp [take?, ih]
+
+theorem List.slice_refl {ξ : Type u} (xs : List ξ) : List.Slice xs 0 xs := by
+  refine' ⟨xs.length, _⟩; simp [slice?, drop?, take?_length]
+
+theorem List.append_slice_suffix {ξ : Type y} {xs ys : List ξ} :
+    Slice (xs ++ ys) xs.length ys := by
+  have h := slice_suffix <| slice_refl <| xs ++ ys
+  rw [Nat.zero_add] at h; exact h
+
+
 def B256.mul (x y : B256) : B256 := (x.toNat * y.toNat).toB256
 instance : HMul B256 B256 B256 := ⟨B256.mul⟩
 
@@ -696,6 +816,18 @@ def Nat.hi (n m : ℕ) : ℕ := n >>> m <<< m
 
 infix:70 " ↾ " => Nat.lo
 infix:70 " ↿ " => Nat.hi
+
+lemma Nat.lo_eq (m n : Nat) : m ↾ n = m % (2 ^ n) := rfl
+lemma Nat.hi_eq (m n : Nat) : m ↿ n = (m >>> n) <<< n := rfl
+
+lemma Nat.hi_le (a b : Nat) : a ↿ b ≤ a := by
+  rw [hi, shiftLeft_eq, shiftRight_eq_div_pow]
+  apply Nat.div_mul_le_self
+
+lemma Nat.add_sub_mod_eq_sub {k m n : Nat}
+    (hm : m < k) (h : n ≤ m) : (k + m - n) % k = m - n := by
+  rw [Nat.add_sub_assoc h, Nat.add_mod_left, Nat.mod_eq_of_lt]
+  apply lt_of_le_of_lt (Nat.sub_le _ _) hm
 
 
 lemma Nat.mod_two_pow_succ {k m} :
@@ -1395,6 +1527,17 @@ def Except.assert (p : Prop) [inst : Decidable p]
 def Option.toExcept {ξ : Type u} {υ : Type v} (x : ξ) : Option υ → Except ξ υ
   | .none => .error x
   | .some y => .ok y
+
+lemma of_bind_eq_some {ξ υ} {f : Option ξ} {g : ξ → Option υ} {y} :
+    f >>= g = some y → ∃ x, f = some x ∧ g x = some y := by
+  intro h; cases f with
+  | none => cases h
+  | some x => refine ⟨x, rfl, h⟩
+
+lemma of_pure_eq_some {ξ} {x y : ξ} : pure x = some y → x = y := by intro h; cases h; rfl
+
+inductive Except.IsOk {ξ υ} : Except ξ υ → Prop
+  | intro {x : υ} : Except.IsOk (Except.ok x)
 
 inductive BLT : Type
   | bytes : Bytes → BLT

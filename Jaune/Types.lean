@@ -19,6 +19,9 @@ def Nat.toAdr (n : Nat) : Adr :=
 
 instance {n} : OfNat Adr n := ⟨n.toAdr⟩
 
+/-- The greatest address. -/
+def Adr.max : Adr := ⟨-1, -1, -1⟩
+
 lemma toNat_toUInt16 {n : ℕ} : UInt16.toNat n.toUInt16 = n ↾ 16 := UInt16.toNat_ofNat
 lemma toNat_toUInt32 {n : ℕ} : UInt32.toNat n.toUInt32 = n ↾ 32 := UInt32.toNat_ofNat
 lemma toNat_toUInt64 {n : ℕ} : UInt64.toNat (n.toUInt64) = n ↾ 64 := UInt64.toNat_ofNat
@@ -168,6 +171,8 @@ lemma B128.sub_eq (x y : B128) :
 
 lemma B256.sub_eq (x y : B256) :
   x - y = ⟨(x.1 - y.1) - (if x.2 < y.2 then 1 else 0), x.2 - y.2⟩ := rfl
+
+lemma B128.zero_eq : (0 : B128) = ⟨0, 0⟩ := rfl
 
 lemma B128.add_eq (x y : B128) :
   x + y = ⟨x.1 + y.1 + if x.2 + y.2 < x.2 then 1 else 0, x.2 + y.2⟩ := rfl
@@ -447,6 +452,13 @@ lemma B256.toNat_add (x y : B256) :
   apply ite_eq_ite_of_iff _ rfl rfl
   simp [B128.toNat_overflow]
 
+/-- No-overflow predicate for `B256` addition. -/
+def B256.Nof (xs ys : B256) : Prop := xs.toNat + ys.toNat < 2 ^ 256
+
+lemma B256.toNat_add_eq_of_nof (x y : B256) (h : B256.Nof x y) :
+    (x + y).toNat = (x.toNat + y.toNat) := by
+  rw [B256.toNat_add, Nat.lo_eq_of_lt h]
+
 theorem B256.add_comm {xs ys : B256} : xs + ys = ys + xs := by
   apply B256.toNat_inj
   rw [B256.toNat_add, B256.toNat_add, Nat.add_comm]
@@ -506,6 +518,10 @@ lemma B128.toNat_sub {a b : B128} :
 lemma B128.toNat_zero : B128.toNat 0 = 0 := rfl
 lemma B128.toNat_one : B128.toNat 1 = 1 := rfl
 
+lemma B256.toNat_zero : (0 : B256).toNat = 0 := rfl
+
+lemma B256.zero_ne_one : (0 : B256) ≠ 1 := by intro h; cases h
+
 lemma B256.toNat_sub (a b : B256) :
     (a - b).toNat = (2 ^ 256 + a.toNat - b.toNat) ↾ 256 := by
   rw [B256.sub_eq]; simp only [B256.toNat]
@@ -518,6 +534,12 @@ lemma B256.toNat_sub (a b : B256) :
   · rw [Nat.add_mod_left]; apply Nat.lo_lo
   · split <;> omega
   · have _ := @B128.toNat_lt b.1; split <;> omega
+
+theorem B256.toNat_sub_eq_of_le (xs ys : B256) (h : ys ≤ xs) :
+    (xs - ys).toNat = xs.toNat - ys.toNat := by
+  rw [toNat_sub, Nat.lo, Nat.add_sub_mod_eq_sub]
+  · apply B256.toNat_lt
+  · apply B256.toNat_le_toNat h
 
 lemma B128.lt_asymm {a b : B128} (h : a < b) : ¬ b < a := by
   intro h'; rcases h with h | h <;> rcases h' with h' | h'
@@ -624,6 +646,15 @@ instance : LinearOrder B256 where
   -- on both sides, so the field closes definitionally while preserving that
   -- instance resolution.
   min_def a b := rfl
+
+lemma B128.sub_self (a : B128) : a - a = 0 := by
+  rw [B128.sub_eq]; simp; rfl
+
+lemma B128.sub_zero (x : B128) : x - 0 = x := by
+  simp [B128.sub_eq, B128.zero_eq]
+
+lemma B256.sub_self (a : B256) : a - a = 0 := by
+  rw [B256.sub_eq]; simp [B128.sub_self]; rfl
 
 def Adr.LE (x y : Adr) : Prop :=
   x.1 < y.1 ∨ (x.1 = y.1 ∧ x.2 ≤ y.2)
