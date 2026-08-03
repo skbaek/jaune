@@ -604,26 +604,6 @@ lemma B256.le_total (m n : B256) : m ≤ n ∨ n ≤ m := by
   · left; apply h
   · right; simp [GT.gt] at h; apply B256.le_of_lt h
 
-instance : DecidableLT B128 :=
-  fun a b => by rw [B128.lt_iff]; infer_instance
-
-instance : DecidableLE B128 :=
-  fun a b => by rw [B128.le_iff]; infer_instance
-
-instance : DecidableEq B128 :=
-  fun a b => by
-    rw [show (a = b) ↔ (a.1 = b.1 ∧ a.2 = b.2) from Prod.ext_iff]; infer_instance
-
-instance : DecidableLT B256 :=
-  fun a b => by rw [B256.lt_iff]; infer_instance
-
-instance : DecidableLE B256 :=
-  fun a b => by rw [B256.le_iff]; infer_instance
-
-instance : DecidableEq B256 :=
-  fun a b => by
-    rw [show (a = b) ↔ (a.1 = b.1 ∧ a.2 = b.2) from Prod.ext_iff]; infer_instance
-
 instance : Ord B128 where
   compare a b := compareOfLessAndEq a b
 
@@ -632,16 +612,17 @@ instance : Ord B256 where
 
 instance : LinearOrder B128 where
   le_total := B128.le_total
-  toDecidableLE := instDecidableLEB128
+  toDecidableLE := by infer_instance
 
 instance : LinearOrder B256 where
   le_total := B256.le_total
-  toDecidableLE := instDecidableLEB256
+  toDecidableLE := by infer_instance
   -- `Min B256` resolves to the pre-existing `B256.min` instance from
   -- `Basic.lean` (used by execution's fee/gas clamping), not this class's
   -- default `min` field. `B256.min a b` is literally `if a ≤ b then a else b`,
-  -- but unfolding it needs default transparency, which the `min_def` auto-param
-  -- tactic does not use — so discharge the field explicitly.
+  -- and the structural `DecidableLE` now unfolds to the same decision procedure
+  -- on both sides, so the field closes definitionally while preserving that
+  -- instance resolution.
   min_def a b := rfl
 
 def Adr.LE (x y : Adr) : Prop :=
@@ -709,15 +690,8 @@ lemma Adr.le_total (m n : Adr) : m ≤ n ∨ n ≤ m := by
       · left; right; refine ⟨h.symm, h'⟩
       · right; right; refine ⟨h, h'⟩
 
-instance : DecidableLT Adr :=
-  fun a b => by rw [Adr.lt_iff]; infer_instance
-
-instance : DecidableLE Adr :=
-  fun a b => by rw [Adr.le_iff]; infer_instance
-
 instance : DecidableEq Adr :=
-  fun a b => by
-    rw [show (a = b) ↔ (a.1 = b.1 ∧ a.2 = b.2) from Prod.ext_iff]; infer_instance
+  inferInstanceAs (DecidableEq (UInt32 × B128))
 
 instance : Ord Adr where
   compare a b := compareOfLessAndEq a b

@@ -640,10 +640,6 @@ def g2KDiscount : List Nat :=
 def initCodeCost (len : Nat) : Nat :=
   gasInitCodeWordCost * (ceilDiv len 32)
 
-instance {a b : Adr} : Decidable (a = b) := by
-  rw [show (a = b) ↔ (a.1 = b.1 ∧ a.2 = b.2) from Prod.ext_iff]
-  apply instDecidableAnd
-
 instance : Hashable Adr := ⟨fun x => x.2.2⟩
 -- The storage-slot hash must depend on the key, not only the address: mix the
 -- address hash with all four 64-bit limbs of the B256 key (finding 3.9). A

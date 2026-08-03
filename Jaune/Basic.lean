@@ -92,14 +92,6 @@ def UInt64.max : UInt64 := 0xFFFFFFFFFFFFFFFF
 def B128.max : B128 := ⟨.max, .max⟩
 def B256.max : B256 := ⟨.max, .max⟩
 
-instance {x y : B128} : Decidable (x = y) := by
-  rw [show (x = y) ↔ (x.1 = y.1 ∧ x.2 = y.2) from Prod.ext_iff]
-  apply instDecidableAnd
-
-instance {x y : B256} : Decidable (x = y) := by
-  rw [show (x = y) ↔ (x.1 = y.1 ∧ x.2 = y.2) from Prod.ext_iff]
-  apply instDecidableAnd
-
 def B128.LT (x y : B128) : Prop :=
   x.1 < y.1 ∨ (x.1 = y.1 ∧ x.2 < y.2)
 instance : @LT B128 := ⟨B128.LT⟩
