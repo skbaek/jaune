@@ -30,7 +30,7 @@ Choose the gate by what you changed, cheapest falsifier first:
 | fork / block validity | `scripts/check-mainnet.sh --suite transitions --no-build --jobs auto` | `scripts/check-mainnet.sh --suite osaka --no-build --jobs auto` |
 | harness / generators | `python3 -m unittest discover -s scripts/tests` | `python3 scripts/env_doctor.py` |
 | a module's imports, or an added `#guard` / heavy elaboration | `lake build` | `scripts/check-elab.sh` |
-| anything Blanc consumes | `cd ~/blanc && lake build && scripts/check.sh --no-build` | — |
+| anything Blanc consumes | `cd ~/blanc && lake build && scripts/check.sh --no-build` | `cd ~/blanc && scripts/check-elab.sh` |
 
 **Use sequential (omit `--jobs`) when the timings themselves matter:** writing a
 baseline with `--rebase` or `--refresh-times`, investigating a performance
@@ -192,6 +192,7 @@ executable inputs.
 | `scripts/check-ec.sh` | EC differential oracle (pinned, differential, identity cases) | — | compiles a Lean checker first |
 | `scripts/check-vectors.sh` | generated vector conformance + controls + declared-case-count coverage | 51 files, 1,824 cases, 5 controls | ~7.8 min; **~1.5 min at `--jobs auto`** |
 | `scripts/check-elab.sh` | per-module elaboration time vs `scripts/baseline-elab.txt` | 17 modules, ~49 s of elaboration | ~70 s |
+| `cd ~/blanc && scripts/check-elab.sh` | per-module Blanc elaboration time vs `~/blanc/scripts/baseline-elab.txt` | 10 modules, ~25.1 s of elaboration | ~25 s |
 | `cd ~/blanc && lake build && scripts/check.sh --no-build` | downstream elaboration + protected-theorem/axiom audit | ~907 jobs | ~7 s build |
 
 ### Long sequentially — but mostly not long in parallel
@@ -363,7 +364,7 @@ motivated it.
 | `check-mainnet.sh --suite osaka`/`prague`/`full`, or any `--jobs > 1` | parallel only | yes |
 | `check-mainnet.sh --suite smoke`/`transitions` (sequential) | — (writes none) | no |
 | `check-vectors.sh` | yes | yes |
-| `check-elab.sh` | yes | yes |
+| `check-elab.sh` (Jaune or Blanc) | yes | yes |
 
 The cheap tiers stay outside the heavy lock deliberately: the check you run
 while iterating must never be hostage to a 20-minute one. `check-hygiene.sh`,
