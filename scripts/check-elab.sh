@@ -32,7 +32,9 @@
 #                 scripts/report-elab.txt.
 #
 # CLI contract: exit 0 iff the gate passed; the last line of output is a single
-# unambiguous verdict. Exit 1 on a violation, 2 on a usage or setup error.
+# unambiguous verdict. Exit 1 on a violation, 2 on a usage or setup error — a
+# refusal to run under contention, including the lock refusal below, is that
+# second kind.
 #
 # WHY THIS GATE IS SEQUENTIAL AND HAS NO --jobs
 #
@@ -94,6 +96,22 @@ set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Captured before the argument loop consumes them; the lock records the whole
+# command line so a refusal can name what is holding it.
+GATE_CMDLINE="$0 $*"
+. "$SCRIPT_DIR/gate-lock.sh"
+
+# One cleanup function, one EXIT trap, installed once: a second `trap ... EXIT`
+# would silently replace this one and leak RCFILE.
+RCFILE=""
+cleanup() {
+  gate_lock_release_all
+  if [ -n "$RCFILE" ]; then rm -f "$RCFILE"; fi
+  return 0
+}
+trap cleanup EXIT
+
 SRC_DIR="Jaune"
 ROOT_MODULES="Jaune.lean Main.lean"
 BASELINE="$SCRIPT_DIR/baseline-elab.txt"
@@ -182,6 +200,27 @@ elif [ -n "$LSP_PIDS" ]; then
   echo "NOTE — elab: $(printf '%s' "$LSP_PIDS" | wc -w | tr -d ' ') idle language server(s) present (largest ${LSP_MAX_MB}MB, total ${LSP_SUM_MB}MB); below the ${LSP_RSS_MAX_MB}MB/${LSP_RSS_TOTAL_MB}MB contention limits, proceeding"
 fi
 
+# --- concurrency guard ------------------------------------------------------
+# Canonicalised first, because the report lock is keyed on this string: two
+# spellings of one path would otherwise take two locks and share a file.
+mkdir -p "$(dirname "$REPORT")"
+REPORT="$(cd "$(dirname "$REPORT")" && pwd)/$(basename "$REPORT")"
+
+# The same argument as the language-server guard above, applied to the other
+# thing that contends on this host: another gate run. This gate's only output
+# is a timing, so a fixture tier dispatching ten workers alongside it does not
+# degrade a reference column — it decides the verdict. So this gate takes the
+# shared heavy-gate lock, and unlike the language-server guard there is no
+# --force for it: a server can be idle and harmless, whereas a heavy gate
+# holding that lock is by construction running. It also locks its report.
+gate_lock_acquire "$SCRIPT_DIR/.gate-heavy.lock" "elab" \
+  "the heavy-gate lock" \
+  "wait for that run to finish; measuring elaboration time beside it would measure the scheduler" \
+  || exit 2
+gate_lock_acquire "$REPORT.lock" "elab" "$REPORT" \
+  "wait for that run to finish, or pass --report <path> to write elsewhere" \
+  || exit 2
+
 # --- build precondition -----------------------------------------------------
 # Every measurement below elaborates one file against its dependencies' oleans.
 # If those are stale the first file to need them pays for rebuilding them and
@@ -209,7 +248,6 @@ fi
 # --- measure ----------------------------------------------------------------
 RESULTS=""
 RCFILE="$(mktemp)"
-trap 'rm -f "$RCFILE"' EXIT
 
 for f in $FILES; do
   TIMEFORMAT='%R'

@@ -1,4 +1,7 @@
 /.lake
 /scripts/report-*.txt
+# Gate locks (scripts/gate-lock.sh): live only for a run's duration, and a
+# stale one is reclaimed by the next run rather than committed.
+*.lock/
 __pycache__/
 *.pyc

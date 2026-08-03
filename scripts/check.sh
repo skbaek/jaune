@@ -163,14 +163,46 @@
 # One default therefore serves both — the throughput-bound case gains a lot and
 # the latency-bound case is indifferent to within 1.4%.
 #
+# One run at a time
+# -----------------
+# A run takes an exclusive lock on its report file, and the Medium/Long tiers
+# and every parallel run also take a shared heavy-gate lock. A second run that
+# would contend is REFUSED immediately, naming the holder; it does not queue and
+# writes nothing. See scripts/gate-lock.sh for the mechanism and the incident.
+#
+# Independently of the lock, a report or baseline that repeats a path is a
+# HARNESS ERROR rather than a classification verdict: the comparison treats path
+# as a primary key, and a doubled report would otherwise be scored as one
+# spurious `MISSING -> <status>` per file.
+#
 # CLI contract: exit 0 if and only if the gate passes; the last line of
-# output is a single unambiguous verdict line.
+# output is a single unambiguous verdict line. A refusal exits 2 — the gate did
+# not fail, it did not run.
 
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
 BIN="$ROOT/.lake/build/bin/jaune"
+
+# Captured before the argument loop consumes them, so a lock records the whole
+# command line and a refusal can name what is holding it.
+GATE_CMDLINE="$0 $*"
+. "$SCRIPT_DIR/gate-lock.sh"
+
+# One cleanup function, one EXIT trap, installed once. A second `trap ... EXIT`
+# silently replaces the first, so every scratch path this script removes has to
+# live here — including CMP_DIR, which had no trap at all and leaked a copy of
+# the baseline into /tmp on every comparison run.
+WORK=""
+CMP_DIR=""
+cleanup() {
+  gate_lock_release_all
+  if [ -n "$WORK" ]; then rm -rf "$WORK"; fi
+  if [ -n "$CMP_DIR" ]; then rm -rf "$CMP_DIR"; fi
+  return 0
+}
+trap cleanup EXIT
 
 usage() {
   echo "usage: scripts/check.sh (--depth | --smoke | --full | --patch | --rlp4 | --bls | --dir <path>) [--report <path>] [--rebase | --refresh-times] [--no-build] [--jobs <n>|auto]" >&2
@@ -349,6 +381,55 @@ if [ "$TOTAL" -eq 0 ]; then
   exit 1
 fi
 
+# Path is a primary key on the selection, and the comparison downstream depends
+# on it: its lookup table is destructive, so a repeated path finds nothing on
+# its second occurrence and is scored `MISSING -> <status>` — a fabricated
+# classification change. --full derives its list from `find | sort` and cannot
+# repeat, but the tier lists are hand-edited, so this is reachable there. Fail
+# before running anything rather than after.
+SEL_DUPS="$(printf '%s\n' "$FILES" | grep -v '^[[:space:]]*$' | sort | uniq -d)"
+if [ -n "$SEL_DUPS" ]; then
+  printf '%s\n' "$SEL_DUPS" | while IFS= read -r D; do
+    echo "DUPLICATE — $TIER: selected more than once: $D" >&2
+  done
+  NSEL_DUPS="$(printf '%s\n' "$SEL_DUPS" | grep -c .)"
+  echo "HARNESS ERROR — $TIER: the selection names $NSEL_DUPS path(s) more than once; no fixture was run"
+  exit 1
+fi
+
+REPORT="${REPORT_PATH:-$SCRIPT_DIR/report-$TIER.txt}"
+BASELINE="$SCRIPT_DIR/baseline-$TIER.txt"
+mkdir -p "$(dirname "$REPORT")"
+# Canonicalised, because the lock below is keyed on this string: two spellings
+# of one path would otherwise take two locks and share a file. Same idiom as
+# the --dir resolution above.
+REPORT="$(cd "$(dirname "$REPORT")" && pwd)/$(basename "$REPORT")"
+
+# Locks before the build, so a refusal costs nothing and two runs cannot even
+# contend over `lake build`. Heavy first, then the report: a consistent order,
+# though rejection rather than queuing already makes deadlock impossible.
+#
+# The heavy lock is held by the catalogue's Medium and Long tiers and by any
+# run that dispatches a worker pool. Two of those on one host contend whatever
+# they write — the 2026-07-31 pair inflated fixture time ~7x — and a contended
+# run's TIME column describes the scheduler rather than the fixture. The
+# sub-second target gates and a sequential --depth or --dir stay outside it, so
+# the cheap check you run while iterating is never hostage to a --full.
+case "$TIER" in
+  smoke|bls|full) HEAVY=1 ;;
+  *)              HEAVY=0 ;;
+esac
+if [ "$JOBS" -gt 1 ]; then HEAVY=1; fi
+if [ "$HEAVY" -eq 1 ]; then
+  gate_lock_acquire "$SCRIPT_DIR/.gate-heavy.lock" "$TIER" \
+    "the heavy-gate lock" \
+    "wait for that run to finish; --patch, --rlp4 and a sequential --depth or --dir do not take this lock" \
+    || exit 2
+fi
+gate_lock_acquire "$REPORT.lock" "$TIER" "$REPORT" \
+  "wait for that run to finish, or pass --report <path> to write elsewhere" \
+  || exit 2
+
 if [ "$BUILD" -eq 1 ]; then
   if ! (cd "$ROOT" && lake build jaune); then
     echo "REGRESSION — $TIER: lake build jaune failed"
@@ -360,9 +441,6 @@ if [ ! -x "$BIN" ]; then
   exit 1
 fi
 
-REPORT="${REPORT_PATH:-$SCRIPT_DIR/report-$TIER.txt}"
-BASELINE="$SCRIPT_DIR/baseline-$TIER.txt"
-mkdir -p "$(dirname "$REPORT")"
 : > "$REPORT"
 
 NPASS=0
@@ -375,7 +453,6 @@ if [ "$JOBS" -gt 1 ]; then
     exit 1
   fi
   WORK="$(mktemp -d)"
-  trap 'rm -rf "$WORK"' EXIT
   LINES="$WORK/lines"
   mkdir -p "$LINES"
 
@@ -496,6 +573,20 @@ $FILES
 EOF
 fi
 
+# The report holds one line per selected file and nothing else. A count that
+# disagrees with the selection means something other than this run wrote to it:
+# on 2026-07-31 two concurrent --full runs each appended their 2,983 lines to
+# one report, and the comparison scored the resulting doubling as 2,983
+# classification changes against an untouched baseline. That is a harness
+# event, and no report or baseline may absorb it — the same rule the wall-clock
+# guard already follows. The lock above prevents this cause; this check refuses
+# the shape whatever the cause.
+NLINES="$(grep -c . "$REPORT" || true)"
+if [ "$NLINES" -ne "$TOTAL" ]; then
+  echo "HARNESS ERROR — $TIER: $REPORT holds $NLINES line(s) for a $TOTAL-file selection; it was not written by this run alone. No classification comparison was performed."
+  exit 1
+fi
+
 SUMMARY="$NPASS PASS, $NFAIL FAIL"
 # Mark parallel verdicts so a report is never mistaken for one whose TIME column
 # carries authority.
@@ -566,6 +657,33 @@ if [ -n "$MALFORMED" ]; then
     HINT="regenerate it with --rebase"
   fi
   echo "REGRESSION — $TIER: $BASELINE is not in STATUS<TAB>TIME<TAB>path form ($HINT)"
+  exit 1
+fi
+
+# Path is a primary key on both inputs, and the comparison below is unsound
+# without it. That comparison deletes each key as it consumes it, so a repeated
+# report path finds nothing on its second occurrence and is scored
+# `MISSING -> <status>`; on the baseline side the table is built with plain
+# assignment, so a repeated path silently collapses to one key and its
+# duplicate is never compared at all. Neither is a classification change.
+# Reject both here, before any comparison — including before --rebase, which
+# otherwise absorbs whatever it is given.
+REPORT_DUPS="$(cut -f3 "$REPORT" | sort | uniq -d)"
+if [ -n "$REPORT_DUPS" ]; then
+  printf '%s\n' "$REPORT_DUPS" | while IFS= read -r D; do
+    echo "DUPLICATE — $TIER: report path appears more than once: $D" >&2
+  done
+  NRD="$(printf '%s\n' "$REPORT_DUPS" | grep -c .)"
+  echo "HARNESS ERROR — $TIER: $REPORT contains $NRD duplicated path(s). No classification comparison was performed."
+  exit 1
+fi
+BASE_DUPS="$(cut -f3 "$CMP_DIR/baseline-raw" | sort | uniq -d)"
+if [ -n "$BASE_DUPS" ]; then
+  printf '%s\n' "$BASE_DUPS" | while IFS= read -r D; do
+    echo "DUPLICATE — $TIER: baseline path appears more than once: $D" >&2
+  done
+  NBD="$(printf '%s\n' "$BASE_DUPS" | grep -c .)"
+  echo "REGRESSION — $TIER: $BASELINE contains $NBD duplicated path(s); the committed baseline is corrupt. See stderr for the list."
   exit 1
 fi
 

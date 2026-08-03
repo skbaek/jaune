@@ -345,6 +345,39 @@ OK — full: 2983 files STATUS-identical to baseline; TIME column refreshed
 OK — depth: baseline rebased with 67 files, 1 classification change(s) absorbed (67 PASS, 0 FAIL)
 ```
 
+## One run at a time
+
+Two gate runs on one host are refused, not queued. Each report-writing harness
+takes an exclusive lock on its report file, and the heavier ones additionally
+take a single shared **heavy-gate lock**; a second run that would contend exits
+2 with a `REFUSED` verdict naming the holder's PID, start time, and full command
+line. It does not wait, does not fall back to another path, and writes nothing.
+The mechanism is `scripts/gate-lock.sh` (`mkdir`, `kill -0`, one `EXIT` trap —
+macOS has no `flock`), which also documents the 2026-07-31 incident that
+motivated it.
+
+| gate | report lock | heavy lock |
+|---|---|---|
+| `check.sh --smoke`, `--bls`, `--full`, or any `--jobs > 1` | yes | yes |
+| `check.sh --depth`, `--patch`, `--rlp4`, `--dir` (sequential) | yes | no |
+| `check-mainnet.sh --suite osaka`/`prague`/`full`, or any `--jobs > 1` | parallel only | yes |
+| `check-mainnet.sh --suite smoke`/`transitions` (sequential) | — (writes none) | no |
+| `check-vectors.sh` | yes | yes |
+| `check-elab.sh` | yes | yes |
+
+The cheap tiers stay outside the heavy lock deliberately: the check you run
+while iterating must never be hostage to a 20-minute one. `check-hygiene.sh`,
+`check-integrity.sh`, `check-u256.sh`, `check-fake-exp.sh` and `check-ec.sh`
+take no lock at all — the first four are sub-second, and `check-ec.sh` is a
+single-process oracle that writes its report in one `tee` rather than appending
+per file.
+
+Escape hatches, where one exists, are named in the refusal: `check.sh` and
+`check-elab.sh` accept `--report <path>`, and a run writing elsewhere locks that
+path instead. There is no flag that skips the heavy lock. A run killed with
+`SIGKILL` leaves its lock behind; the next run finds the recorded PID dead,
+announces a `RECLAIMED` line, and proceeds.
+
 ## Rules
 
 - Never weaken or silently rebase a gate to make it green. A baseline,
@@ -353,6 +386,16 @@ OK — depth: baseline rebased with 67 files, 1 classification change(s) absorbe
 - The wall-clock guard is a hang detector, never a classifier. If it trips, the
   run reports a HARNESS ERROR and records no classification for that file — no
   report or baseline can absorb the event.
+- **A report or baseline that repeats a path is a harness event, never a
+  classification change** — the same rule, applied to the other input the
+  comparison trusts. `check.sh` treats `path` as a primary key on its selection,
+  its report, and its baseline, and rejects a violation on any of the three
+  before comparing anything, `--rebase` included. It also refuses a report whose
+  line count disagrees with the selection. Without those checks a doubled report
+  scores one fabricated `MISSING -> <status>` per file, which is exactly how the
+  2026-07-31 run reported 2,983 regressions against a baseline nobody had
+  touched. `MISSING` itself still means what it always meant: a report path the
+  baseline does not carry is a new fixture.
 - Never run a long fixture tier while Lean LSP servers are alive. Two LSP
   workers holding mathlib environments sit at ~900 MB RSS each and can exhaust
   this host's ~9 GB of swap, inflating wall time several-fold and producing

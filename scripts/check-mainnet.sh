@@ -13,11 +13,38 @@
 # `--start-at N` selects manifest entries at or after position N in both modes.
 # It is a selection over the manifest, applied before any dispatch ordering —
 # never a claim about the order in which the selected entries then run.
+#
+# One run at a time: the osaka/prague/full suites and every parallel run take
+# the shared heavy-gate lock, and a parallel run also locks its report file. A
+# second run that would contend is REFUSED immediately rather than queued, and
+# exits 2 — it did not fail, it did not run. See scripts/gate-lock.sh.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
 BIN="$ROOT/.lake/build/bin/jaune"
+
+# Captured before the argument loop consumes them; the lock records the whole
+# command line so a refusal can name what is holding it.
+GATE_CMDLINE="$0 $*"
+. "$SCRIPT_DIR/gate-lock.sh"
+
+# One cleanup function, one EXIT trap, installed once. This script previously
+# installed four EXIT traps, each silently replacing the last as the selection
+# narrowed; every scratch path now lives here instead, and the variables are
+# initialised so the trap is safe from the first line onwards.
+LIST=""
+SELECTED=""
+WORK=""
+cleanup() {
+  gate_lock_release_all
+  if [ -n "$LIST" ]; then rm -f "$LIST"; fi
+  if [ -n "$SELECTED" ]; then rm -f "$SELECTED"; fi
+  if [ -n "$WORK" ]; then rm -rf "$WORK"; fi
+  return 0
+}
+trap cleanup EXIT
+
 FIXTURES_ROOT="${EEST_MAINNET_ROOT:-$HOME/eest-mainnet-v20.0.1}/fixtures"
 SUITE=""
 SUBDIR=""
@@ -119,13 +146,29 @@ fi
 }
 [ "$GUARD" -gt 0 ] 2>/dev/null || { echo "error: JAUNE_TIMEOUT must be positive" >&2; exit 2; }
 
+# The heavy-gate lock, taken before the build so a refusal costs nothing and two
+# runs cannot contend over `lake build` either. The suites that hold it are the
+# catalogue's Long rows plus any run dispatching a worker pool; smoke and
+# transitions stay outside it, so the cheap suites you run while iterating are
+# never hostage to a long one. See scripts/gate-lock.sh.
+case "$SUITE" in
+  osaka|prague|full) HEAVY=1 ;;
+  *)                 HEAVY=0 ;;
+esac
+if [ "$JOBS" -gt 1 ]; then HEAVY=1; fi
+if [ "$HEAVY" -eq 1 ]; then
+  gate_lock_acquire "$SCRIPT_DIR/.gate-heavy.lock" "$SUITE" \
+    "the heavy-gate lock" \
+    "wait for that run to finish; --suite smoke and --suite transitions do not take this lock when sequential" \
+    || exit 2
+fi
+
 if [ "$BUILD" -eq 1 ]; then
   (cd "$ROOT" && lake build jaune)
 fi
 [ -x "$BIN" ] || { echo "error: jaune binary not found: $BIN" >&2; exit 2; }
 
 LIST="$(mktemp)"
-trap 'rm -f "$LIST"' EXIT
 python3 "$SCRIPT_DIR/gen_mainnet_manifest.py" \
   --fixtures-root "$FIXTURES_ROOT" --check --emit-suite "$SUITE" > "$LIST"
 [ -s "$LIST" ] || { echo "error: zero selected manifest entries for $SUITE" >&2; exit 2; }
@@ -135,7 +178,6 @@ if [ -n "$SUBDIR" ]; then
     echo "error: --dir subtree not found: blockchain_tests/$SUBDIR" >&2; exit 2;
   }
   SELECTED="$(mktemp)"
-  trap 'rm -f "$LIST" "$SELECTED"' EXIT
   grep -E "^${SUBDIR%/}/" "$LIST" > "$SELECTED" || true
   [ -s "$SELECTED" ] || {
     echo "error: zero $SUITE manifest entries under blockchain_tests/$SUBDIR" >&2
@@ -150,8 +192,19 @@ if [ -n "$SUBDIR" ]; then
     exit 2
   }
   mv "$SELECTED" "$LIST"
-  trap 'rm -f "$LIST"' EXIT
+  SELECTED=""
   SUITE="$SUITE:$SUBDIR"
+fi
+
+# The report path is settled once the suite name is — the --dir form appends its
+# subtree to that name — so resolve it here and lock it before anything is
+# dispatched. Only the parallel path writes a report; the sequential path
+# streams progress and writes none, so only it needs the lock.
+REPORT="$SCRIPT_DIR/report-mainnet-$(printf '%s' "$SUITE" | tr '/:' '__').txt"
+if [ "$JOBS" -gt 1 ]; then
+  gate_lock_acquire "$REPORT.lock" "$SUITE" "$REPORT" \
+    "wait for that run to finish" \
+    || exit 2
 fi
 
 TOTAL="$(wc -l < "$LIST" | tr -d ' ')"
@@ -167,7 +220,6 @@ if [ "$JOBS" -gt 1 ]; then
     echo "error: parallel runner not found or not executable: $RUNNER" >&2; exit 2;
   }
   WORK="$(mktemp -d)"
-  trap 'rm -f "$LIST"; rm -rf "$WORK"' EXIT
   LINES="$WORK/lines"
   mkdir -p "$LINES"
 
@@ -217,7 +269,6 @@ if [ "$JOBS" -gt 1 ]; then
     exit 1
   fi
 
-  REPORT="$SCRIPT_DIR/report-mainnet-$(printf '%s' "$SUITE" | tr '/:' '__').txt"
   : > "$REPORT"
   MISSING=0
   while read -r IDX REL _NET; do

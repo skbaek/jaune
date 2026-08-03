@@ -43,14 +43,24 @@
 # produce byte-identical output whatever the job count, so any two reports diff
 # cleanly against each other.
 #
+# One run at a time: this suite takes an exclusive lock on its report and on the
+# shared heavy-gate lock, and a second run that would contend is REFUSED
+# immediately rather than queued. See scripts/gate-lock.sh.
+#
 # CLI contract: exit 0 if and only if the gate passes; the last line of output
-# is a single unambiguous verdict line.
+# is a single unambiguous verdict line. A refusal exits 2 — the gate did not
+# fail, it did not run.
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
 BIN="$ROOT/.lake/build/bin/jaune"
+
+# Captured before the argument loop consumes them; the lock records the whole
+# command line so a refusal can name what is holding it.
+GATE_CMDLINE="$0 $*"
+. "$SCRIPT_DIR/gate-lock.sh"
 
 usage() {
   echo "usage: scripts/check-vectors.sh [--jobs <n>|auto]" >&2
@@ -100,12 +110,33 @@ if [ ! -x "$BIN" ]; then
 fi
 
 REPORT="$SCRIPT_DIR/report-vectors.txt"
+
+# One cleanup function, one EXIT trap, installed once: a second `trap ... EXIT`
+# would silently replace this one and leak the scratch directory. TMPD is the
+# scratch for both modes — the parallel pool's chunks and the case-count
+# cross-check both live there.
+TMPD=""
+cleanup() {
+  gate_lock_release_all
+  if [ -n "$TMPD" ]; then rm -rf "$TMPD"; fi
+  return 0
+}
+trap cleanup EXIT
+
+# This suite is a Medium gate in every mode (~7.8 min sequential, ~1.5 min at
+# --jobs auto), so it always takes the heavy-gate lock as well as its report
+# lock. See scripts/gate-lock.sh.
+gate_lock_acquire "$SCRIPT_DIR/.gate-heavy.lock" "vectors" \
+  "the heavy-gate lock" \
+  "wait for that run to finish" \
+  || exit 2
+gate_lock_acquire "$REPORT.lock" "vectors" "$REPORT" \
+  "wait for that run to finish" \
+  || exit 2
+
 : > "$REPORT"
 
-# One scratch directory and one trap for both modes: the parallel pool's chunks
-# and the case-count cross-check both live here.
 TMPD="$(mktemp -d)"
-trap 'rm -rf "$TMPD"' EXIT
 
 VECTORS_DIR="$SCRIPT_DIR/vectors"
 CONTROL_FILES=(
