@@ -557,6 +557,248 @@ def f1600 (ws : Vector UInt64 25) : Vector UInt64 25 :=
   let s := round1600 (rndc[23]) s
   #v[s.a0, s.a1, s.a2, s.a3, s.a4, s.a5, s.a6, s.a7, s.a8, s.a9, s.a10, s.a11, s.a12, s.a13, s.a14, s.a15, s.a16, s.a17, s.a18, s.a19, s.a20, s.a21, s.a22, s.a23, s.a24]
 
+-- BEGIN GENERATED (scripts/gen-keccak-spec.py) -- do not hand-edit.
+--
+-- `f1600`'s doc comment above claims it is semantically identical to
+-- `f rndc · UInt64.rol` over the reference transcription. `f1600_eq` at the
+-- end of this block is that claim, as a theorem. The three lemmas before it
+-- give each reference pass its closed form on an explicit 25-lane state; ι is
+-- a single `xorLane` on lane 0 and is unfolded inline.
+
+/-- Bridge from the unboxed round state to the 25-lane vector the reference
+definitions operate on. Used by the equivalence theorems and once per
+permutation, never inside a round — the same role `Blake2.Vec.toArray` plays in
+`Jaune/Precompiles.lean`. -/
+def State1600.toVec (s : State1600) : Vector UInt64 25 :=
+  #v[s.a0, s.a1, s.a2, s.a3, s.a4, s.a5, s.a6, s.a7, s.a8, s.a9, s.a10, s.a11, s.a12, s.a13, s.a14, s.a15, s.a16, s.a17, s.a18, s.a19, s.a20, s.a21, s.a22, s.a23, s.a24]
+
+/-- θ in closed form: lane `j` gains the column delta for column `j % 5`. -/
+theorem theta_lit (x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 x16 x17 x18 x19 x20 x21 x22 x23 x24 : UInt64) :
+    θ UInt64.rol #v[x0,
+        x1,
+        x2,
+        x3,
+        x4,
+        x5,
+        x6,
+        x7,
+        x8,
+        x9,
+        x10,
+        x11,
+        x12,
+        x13,
+        x14,
+        x15,
+        x16,
+        x17,
+        x18,
+        x19,
+        x20,
+        x21,
+        x22,
+        x23,
+        x24] =
+    #v[x0 ^^^ ((x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) ^^^ UInt64.rol (x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) 1),
+      x1 ^^^ ((x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) ^^^ UInt64.rol (x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) 1),
+      x2 ^^^ ((x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) ^^^ UInt64.rol (x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) 1),
+      x3 ^^^ ((x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) ^^^ UInt64.rol (x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) 1),
+      x4 ^^^ ((x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) ^^^ UInt64.rol (x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) 1),
+      x5 ^^^ ((x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) ^^^ UInt64.rol (x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) 1),
+      x6 ^^^ ((x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) ^^^ UInt64.rol (x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) 1),
+      x7 ^^^ ((x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) ^^^ UInt64.rol (x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) 1),
+      x8 ^^^ ((x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) ^^^ UInt64.rol (x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) 1),
+      x9 ^^^ ((x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) ^^^ UInt64.rol (x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) 1),
+      x10 ^^^ ((x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) ^^^ UInt64.rol (x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) 1),
+      x11 ^^^ ((x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) ^^^ UInt64.rol (x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) 1),
+      x12 ^^^ ((x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) ^^^ UInt64.rol (x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) 1),
+      x13 ^^^ ((x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) ^^^ UInt64.rol (x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) 1),
+      x14 ^^^ ((x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) ^^^ UInt64.rol (x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) 1),
+      x15 ^^^ ((x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) ^^^ UInt64.rol (x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) 1),
+      x16 ^^^ ((x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) ^^^ UInt64.rol (x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) 1),
+      x17 ^^^ ((x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) ^^^ UInt64.rol (x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) 1),
+      x18 ^^^ ((x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) ^^^ UInt64.rol (x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) 1),
+      x19 ^^^ ((x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) ^^^ UInt64.rol (x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) 1),
+      x20 ^^^ ((x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) ^^^ UInt64.rol (x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) 1),
+      x21 ^^^ ((x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) ^^^ UInt64.rol (x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) 1),
+      x22 ^^^ ((x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) ^^^ UInt64.rol (x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) 1),
+      x23 ^^^ ((x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) ^^^ UInt64.rol (x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) 1),
+      x24 ^^^ ((x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) ^^^ UInt64.rol (x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) 1)] := by
+  simp [θ, θ.outer, θ.inner, xorLane]
+
+/-- ρπ in closed form. The reference walks a single carry `t` through the 24
+`piln` lanes; because the table's entries are distinct, the value written into
+lane `piln[i]` is a rotation of the ORIGINAL lane `piln[i-1]`. -/
+theorem rhopi_lit (x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 x16 x17 x18 x19 x20 x21 x22 x23 x24 : UInt64) :
+    ρπ UInt64.rol #v[x0,
+        x1,
+        x2,
+        x3,
+        x4,
+        x5,
+        x6,
+        x7,
+        x8,
+        x9,
+        x10,
+        x11,
+        x12,
+        x13,
+        x14,
+        x15,
+        x16,
+        x17,
+        x18,
+        x19,
+        x20,
+        x21,
+        x22,
+        x23,
+        x24] =
+    #v[x0,
+      UInt64.rol (x6) 44,
+      UInt64.rol (x12) 43,
+      UInt64.rol (x18) 21,
+      UInt64.rol (x24) 14,
+      UInt64.rol (x3) 28,
+      UInt64.rol (x9) 20,
+      UInt64.rol (x10) 3,
+      UInt64.rol (x16) 45,
+      UInt64.rol (x22) 61,
+      UInt64.rol (x1) 1,
+      UInt64.rol (x7) 6,
+      UInt64.rol (x13) 25,
+      UInt64.rol (x19) 8,
+      UInt64.rol (x20) 18,
+      UInt64.rol (x4) 27,
+      UInt64.rol (x5) 36,
+      UInt64.rol (x11) 10,
+      UInt64.rol (x17) 15,
+      UInt64.rol (x23) 56,
+      UInt64.rol (x2) 62,
+      UInt64.rol (x8) 55,
+      UInt64.rol (x14) 39,
+      UInt64.rol (x15) 41,
+      UInt64.rol (x21) 2] := by
+  simp [ρπ, ρπ.aux, piln, rotc]
+
+/-- χ in closed form, row by row. Each row's five lanes are combined from the
+row's pre-update values, which the reference snapshots into `bc`. -/
+theorem chi_lit (x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 x16 x17 x18 x19 x20 x21 x22 x23 x24 : UInt64) :
+    χ #v[x0,
+      x1,
+      x2,
+      x3,
+      x4,
+      x5,
+      x6,
+      x7,
+      x8,
+      x9,
+      x10,
+      x11,
+      x12,
+      x13,
+      x14,
+      x15,
+      x16,
+      x17,
+      x18,
+      x19,
+      x20,
+      x21,
+      x22,
+      x23,
+      x24] =
+    #v[x0 ^^^ ((~~~ x1) &&& x2),
+      x1 ^^^ ((~~~ x2) &&& x3),
+      x2 ^^^ ((~~~ x3) &&& x4),
+      x3 ^^^ ((~~~ x4) &&& x0),
+      x4 ^^^ ((~~~ x0) &&& x1),
+      x5 ^^^ ((~~~ x6) &&& x7),
+      x6 ^^^ ((~~~ x7) &&& x8),
+      x7 ^^^ ((~~~ x8) &&& x9),
+      x8 ^^^ ((~~~ x9) &&& x5),
+      x9 ^^^ ((~~~ x5) &&& x6),
+      x10 ^^^ ((~~~ x11) &&& x12),
+      x11 ^^^ ((~~~ x12) &&& x13),
+      x12 ^^^ ((~~~ x13) &&& x14),
+      x13 ^^^ ((~~~ x14) &&& x10),
+      x14 ^^^ ((~~~ x10) &&& x11),
+      x15 ^^^ ((~~~ x16) &&& x17),
+      x16 ^^^ ((~~~ x17) &&& x18),
+      x17 ^^^ ((~~~ x18) &&& x19),
+      x18 ^^^ ((~~~ x19) &&& x15),
+      x19 ^^^ ((~~~ x15) &&& x16),
+      x20 ^^^ ((~~~ x21) &&& x22),
+      x21 ^^^ ((~~~ x22) &&& x23),
+      x22 ^^^ ((~~~ x23) &&& x24),
+      x23 ^^^ ((~~~ x24) &&& x20),
+      x24 ^^^ ((~~~ x20) &&& x21)] := by
+  simp [χ, χ.outer, χ.inner, xorLane]
+
+/-- The fused unrolled round equals ι ∘ χ ∘ ρπ ∘ θ over the reference
+transcription. This is the whole content of the equivalence: `round1600`'s
+hand-derived `b` bindings ARE the ρπ carry chain, and its `c`/`d` bindings are
+θ's column parities and deltas. -/
+theorem round_eq (r : Nat) (h : r < 24) (s : State1600) :
+    (round1600 (rndc[r]'h) s).toVec =
+      ι r h rndc (χ (ρπ UInt64.rol (θ UInt64.rol s.toVec))) := by
+  cases s
+  simp [State1600.toVec, round1600, rolc, theta_lit, rhopi_lit, chi_lit,
+    ι, xorLane, UInt64.rol]
+
+/-- Any 25-lane vector is the vector of its own twenty-five lanes. This is what
+lets the closed forms above, stated over explicit lanes, apply to `f1600`'s
+opaque argument. -/
+theorem vec_eta (v : Vector UInt64 25) : v = #v[v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9], v[10], v[11], v[12], v[13], v[14], v[15], v[16], v[17], v[18], v[19], v[20], v[21], v[22], v[23], v[24]] := by
+  apply Vector.ext
+  intro i hi
+  match i, hi with
+  | 0, _ => rfl
+  | 1, _ => rfl
+  | 2, _ => rfl
+  | 3, _ => rfl
+  | 4, _ => rfl
+  | 5, _ => rfl
+  | 6, _ => rfl
+  | 7, _ => rfl
+  | 8, _ => rfl
+  | 9, _ => rfl
+  | 10, _ => rfl
+  | 11, _ => rfl
+  | 12, _ => rfl
+  | 13, _ => rfl
+  | 14, _ => rfl
+  | 15, _ => rfl
+  | 16, _ => rfl
+  | 17, _ => rfl
+  | 18, _ => rfl
+  | 19, _ => rfl
+  | 20, _ => rfl
+  | 21, _ => rfl
+  | 22, _ => rfl
+  | 23, _ => rfl
+  | 24, _ => rfl
+  | _ + 25, h => omega
+
+/-- `f1600` is exactly the twenty-four nested rounds, bridged out once at the
+end; the `let` chain in its body is definitionally this nesting. -/
+theorem f1600_toVec (ws : Vector UInt64 25) :
+    f1600 ws = (round1600 rndc[23] (round1600 rndc[22] (round1600 rndc[21] (round1600 rndc[20] (round1600 rndc[19] (round1600 rndc[18] (round1600 rndc[17] (round1600 rndc[16] (round1600 rndc[15] (round1600 rndc[14] (round1600 rndc[13] (round1600 rndc[12] (round1600 rndc[11] (round1600 rndc[10] (round1600 rndc[9] (round1600 rndc[8] (round1600 rndc[7] (round1600 rndc[6] (round1600 rndc[5] (round1600 rndc[4] (round1600 rndc[3] (round1600 rndc[2] (round1600 rndc[1] (round1600 rndc[0] (⟨ws[0], ws[1], ws[2], ws[3], ws[4], ws[5], ws[6], ws[7], ws[8], ws[9], ws[10], ws[11], ws[12], ws[13], ws[14], ws[15], ws[16], ws[17], ws[18], ws[19], ws[20], ws[21], ws[22], ws[23], ws[24]⟩ : State1600))))))))))))))))))))))))).toVec := rfl
+
+/-- **The retained reference transcription and the production kernel compute
+the same permutation.** `f1600`'s doc comment asserted this; this is the
+proof. It says the optimization preserved the transcribed algorithm — it does
+not say the transcription is FIPS-202, which remains a conformance question
+answered by the differential oracle and the fixture corpora. -/
+theorem f1600_eq (ws : Vector UInt64 25) :
+    f1600 ws = f rndc ws UInt64.rol := by
+  rw [f1600_toVec]
+  simp only [round_eq, f, f.aux, Nat.reduceSub]
+  rw [show State1600.toVec ⟨ws[0], ws[1], ws[2], ws[3], ws[4], ws[5], ws[6], ws[7], ws[8], ws[9], ws[10], ws[11], ws[12], ws[13], ws[14], ws[15], ws[16], ws[17], ws[18], ws[19], ws[20], ws[21], ws[22], ws[23], ws[24]⟩ = ws from (vec_eta ws).symm]
+-- END GENERATED
+
 def Bytes.run : Fin 17 → Bytes → Vector UInt64 25 → B256
   | wc, b0 :: b1 :: b2 :: b3 :: b4 :: b5 :: b6 :: b7 :: bs, ws =>
     let t : UInt64 := UInt64.ofBytes b7 b6 b5 b4 b3 b2 b1 b0
