@@ -31,6 +31,7 @@ Choose the gate by what you changed, cheapest falsifier first:
 | harness / generators | `python3 -m unittest discover -s scripts/tests` | `python3 scripts/env_doctor.py` |
 | a module's imports, or an added `#guard` / heavy elaboration | `lake build` | `scripts/check-elab.sh` |
 | anything Blanc consumes | `cd ~/blanc && lake build && scripts/check.sh --no-build` | `cd ~/blanc && scripts/check-elab.sh` |
+| a Blanc module's imports, or an added Blanc contract | `cd ~/blanc && scripts/check-layering.sh` | `cd ~/blanc && lake build && scripts/check.sh --no-build` |
 
 **Use sequential (omit `--jobs`) when the timings themselves matter:** writing a
 baseline with `--rebase` or `--refresh-times`, investigating a performance
@@ -175,6 +176,7 @@ executable inputs.
 | `scripts/check-integrity.sh` | no panic / raw bang op / stringly semantic carrier in `Jaune.lean`'s import closure (R4 also covers the runner boundary), allowlist in `integrity-allow.txt` | 56 rows, 0 pending | sub-second |
 | `lake build` | integration elaboration | ~1,760 jobs | ~8 s |
 | `scripts/check-u256.sh` | differential word/hash oracle | 21,593 cases | sub-second |
+| `cd ~/blanc && scripts/check-layering.sh` | Blanc's contracts are siblings in the import hierarchy: no cross-contract import, no shared module importing a contract, no unclassified module (rule and rationale in Blanc's `README.md`) | 2 contracts, 14 modules | sub-second |
 | `scripts/check-fake-exp.sh` | fake-exponential differential oracle vs the pinned EELS `taylor_exponential` (blob base fee) | 240 cases | sub-second |
 | `scripts/check.sh --patch` | the ten historical FAIL files, fixed all-PASS target | 10 | sub-second |
 | `scripts/check.sh --rlp4` | four invalid-RLP/header files, subset of `--patch` | 4 | sub-second |
@@ -192,8 +194,8 @@ executable inputs.
 | `scripts/check-ec.sh` | EC differential oracle (pinned, differential, identity cases) | — | compiles a Lean checker first |
 | `scripts/check-vectors.sh` | generated vector conformance + controls + declared-case-count coverage | 51 files, 1,824 cases, 5 controls | ~7.8 min; **~1.5 min at `--jobs auto`** |
 | `scripts/check-elab.sh` | per-module elaboration time vs `scripts/baseline-elab.txt` | 17 modules, ~49 s of elaboration | ~70 s |
-| `cd ~/blanc && scripts/check-elab.sh` | per-module Blanc elaboration time vs `~/blanc/scripts/baseline-elab.txt` | 10 modules, ~25.1 s of elaboration | ~25 s |
-| `cd ~/blanc && lake build && scripts/check.sh --no-build` | downstream elaboration + protected-theorem/axiom audit | ~907 jobs | ~7 s build |
+| `cd ~/blanc && scripts/check-elab.sh` | per-module Blanc elaboration time vs `~/blanc/scripts/baseline-elab.txt` | 14 modules, ~36 s of elaboration | ~35 s |
+| `cd ~/blanc && lake build && scripts/check.sh --no-build` | downstream elaboration + protected-theorem/axiom audit | ~921 jobs, 9 audited theorems | ~7 s build |
 
 ### Long sequentially — but mostly not long in parallel
 
@@ -365,6 +367,7 @@ motivated it.
 | `check-mainnet.sh --suite smoke`/`transitions` (sequential) | — (writes none) | no |
 | `check-vectors.sh` | yes | yes |
 | `check-elab.sh` (Jaune or Blanc) | yes | yes |
+| `cd ~/blanc && scripts/check-layering.sh` | — (writes none) | no |
 
 The cheap tiers stay outside the heavy lock deliberately: the check you run
 while iterating must never be hostage to a 20-minute one. `check-hygiene.sh`,
