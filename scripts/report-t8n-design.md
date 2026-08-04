@@ -9,6 +9,18 @@
 `forks/amsterdam`, `9d6e6f8352a0f76e7e8803722d1a2798fa4f0a96`
 **Comparison, read-only:** `/private/tmp/execution-specs-t8n-mainnet-20260802`,
 `mainnet`, `7b8124a77280edaaad877128937b71a1e3a7ebc5`.
+**Plan:** `~/plans/t8n.md`, Step 1 ("Rebind, reconnoitre, and re-decide").
+**Status:** Step 1 complete, technical verdict GO. The arc is **paused after
+Step 1** by user decision; Steps 2–6 are not started, so no `t8n` frontend
+exists in this repository. This report was written on `codex/t8n` and merged to
+`main` on 2026-08-04 so that it lives with its sibling reports; the branch
+carried nothing else.
+
+**These coordinates are historical.** Every line number, signature pointer, and
+gate figure below was measured at `5d16eba` and `main` has moved since. Treat
+them as a record of what Step 1 found, not as current contracts, and re-measure
+the baseline per `~/plans/t8n.md`, *Baseline gates*, before resuming rather than
+inheriting the numbers recorded here.
 
 The fresh checkouts were fetched separately and made read-only. The pinned
 oracle was neither repointed nor modified.
