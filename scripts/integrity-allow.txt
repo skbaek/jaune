@@ -237,5 +237,7 @@ R4 Jaune/FixtureException.lean def parseExpectation (s : String) : Except String
 R4 Main.lean def Except.toIO {ξ : Type} : Except String ξ → IO ξ  ## KEEP(boundary=CLI) lifts an already-rendered harness error into IO; rendering happened at a typed boundary
 R4 Main.lean def Lean.Json.toString? : Lean.Json → Option String  ## KEEP(parser=JSON) fixture-JSON field accessor; not an error channel
 R4 Main.lean def Option.remove0x (s : String) : Option String :=  ## KEEP(parser=JSON) fixture-JSON hex-prefix syntax; not an error channel
+R4 Main.lean def blockchainTestSibling? (path : String) : Option String :=  ## KEEP(boundary=CLI) rewrites a wrong-tree fixture path to its blockchain_tests sibling for the refusal message; a filesystem path carrying no verdict, read by nothing but the diagnostic
+R4 Main.lean def fixtureCaseFormat? : (Nat × String × Lean.Json) → Option String  ## KEEP(parser=JSON) fixture-JSON field accessor reading EEST's own _info.fixture-format label; not an error channel, and the branch it drives refuses a wrong-format file rather than classifying one
 R4 Main.lean def getNetwork : List String → Option String  ## KEEP(parser=CLI) command-line option accessor; not an error channel
 R4 Main.lean def getTxExMap (j : Lean.Json) : IO (Option String × Bytes) := do  ## KEEP(parser=expectException) carries the fixture's raw expectException label to parseExpectation; not an error channel

@@ -47,6 +47,14 @@ python3 scripts/bootstrap_mainnet.py                 # ~/eest-mainnet-v20.0.1
 python3 scripts/env_doctor.py --mainnet-root ~/eest-mainnet-v20.0.1 --mainnet-deep
 ```
 
+The extracted tree occupies about 7.9 GB and the archive about 404 MB. Allow at
+least 13 GB of free space in the destination filesystem for a fresh install
+(archive plus tree plus transient staging). The download is a single public
+GitHub release asset; exact transfer time depends on your connection. Of the
+extracted trees only `blockchain_tests` (3.6 GB) is the runner's; the rest are
+kept as shipped because the release is verified whole against the publisher's
+manifest, and a pruned tree would no longer match it.
+
 The asset is verified before extraction. Its `fixtures/.meta/index.json` is
 also checked for the publisher's root hash, timestamp, and case count. Generate
 or verify the exact suite/exclusion inventory with

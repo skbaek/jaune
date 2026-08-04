@@ -542,11 +542,65 @@ def fixtureCaseSpec? (o : FixtureOpts) :
 def fixtureCaseNetwork : (Nat × String × Lean.Json) → IO String
   | ⟨_, _, json⟩ => json.find "network" >>= Lean.Json.toIoString
 
+/-- The fixture format a case declares, when it declares one.
+
+EEST fills one test into sibling trees -- `blockchain_tests`,
+`blockchain_tests_engine`, `blockchain_tests_engine_x`, `state_tests` and
+`transaction_tests` -- under a single file name, and every case records the
+tree it came from in `_info.fixture-format`. This runner consumes
+`blockchain_test`; the others describe a different consumer and share almost
+none of the shape it reads.
+
+A case declaring no format is passed through. The field is EEST's, so a
+hand-written or third-party fixture may omit it and still be readable if its
+shape is right. This narrows a bad diagnostic; it does not add a requirement.
+Every case in both installed corpora carries the field. -/
+def fixtureCaseFormat? : (Nat × String × Lean.Json) → Option String
+  | ⟨_, _, json⟩ =>
+    match json.find? "_info" >>= Lean.Json.find? "fixture-format" with
+    | some (.str fmt) => some fmt
+    | _ => none
+
+/-- The `blockchain_tests` sibling of a path inside another EEST fixture tree.
+
+Since the trees agree on every path component but their root, the runnable
+copy of a wrong-tree path is that path with the root swapped, and naming it
+beats describing it. A path carrying no such component -- a file copied out of
+the tree, which is how this mistake is most often made -- has nothing to
+rewrite, and the caller names the tree instead.
+
+The candidates are ordered longest-first so that a `blockchain_tests_engine_x`
+path is not mistaken for a `blockchain_tests_engine` one; the surrounding
+slashes already prevent it, and the order keeps that from resting on them. -/
+def blockchainTestSibling? (path : String) : Option String :=
+  ["blockchain_tests_engine_x", "blockchain_tests_engine", "transaction_tests",
+   "state_tests"].findSome? fun tree =>
+    let rewritten := path.replace s!"/{tree}/" "/blockchain_tests/"
+    if rewritten == path then none else some rewritten
+
 def runTestFile (o : FixtureOpts) (path : String) : IO Unit := do
   .println "\n================================================================\n"
   .println s!"TEST FILE : {path}\n"
   let rb ← readJsonFile path >>= Lean.Json.toIoRBNode
   let js := rb.toArray.toList.putIndex
+  -- Rule 0, and the first thing a new user hits. EEST ships the same test
+  -- under one name in five sibling trees and only `blockchain_tests` is this
+  -- runner's, so a wrong-tree file is the likeliest way to arrive here. It
+  -- used to surface as a missing JSON key -- `network` for a state test,
+  -- `genesisRLP` for an engine one, and the engine case only after a header
+  -- that had already announced selected cases, which reads like a real run
+  -- failing. Neither names the actual mistake, and no filter can repair it:
+  -- `--network` selects among cases, and these cases are not this shape. So
+  -- refuse the file before reading one field that assumes the shape.
+  let declared := (js.filterMap fixtureCaseFormat?).eraseDups
+  let foreign := declared.filter (· ≠ "blockchain_test")
+  .guard foreign.isEmpty
+    s!"ERROR : {path} holds {foreign} cases, and jaune runs blockchain_test \
+       fixtures. EEST fills one test into sibling trees under a single file \
+       name, so the file to run is its blockchain_tests copy{
+         match blockchainTestSibling? path with
+         | some sibling => s!" -- here, {sibling}"
+         | none => ""}"
   let labels ← js.mapM fixtureCaseNetwork
   let supported := labels.filter (fun l => (supportedSpec? l).isSome)
   let tagged ← js.mapM fun c => do
@@ -890,7 +944,11 @@ def usage : String :=
   jaune --fake-exp <file.json>
   jaune --help
 
-Runs one blockchain-test fixture file.
+Runs one blockchain-test fixture file. EEST fills one test into sibling trees
+-- blockchain_tests, blockchain_tests_engine, blockchain_tests_engine_x,
+state_tests and transaction_tests -- under a single file name; only
+blockchain_tests is this runner's. Install the corpus with
+`python3 scripts/bootstrap_mainnet.py`.
 
 Every option is a filter: each one only narrows the set of cases that run, and
 the selection is always narrowed to the networks this build supports. The run

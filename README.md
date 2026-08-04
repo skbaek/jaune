@@ -27,16 +27,38 @@ You need to have [elan](https://github.com/leanprover/elan) installed.
 
 ## Installation
 
-`lake build`
+```sh
+lake exe cache get
+lake build
+```
+
+Jaune depends on mathlib. `lake exe cache get` downloads its prebuilt artifacts;
+without it `lake build` compiles mathlib from source, which takes hours rather
+than the minute the build itself needs. Expect several GB under `.lake/`.
 
 ## Usage
 
 `lake exe jaune /path/to/fixture.json`
 
-Runs one blockchain-test fixture file. Every option is a filter: each one only
-narrows the set of cases that run, and the selection is always narrowed to the
-networks this build supports. The run fails if no case survives, so a green run
-never means "nothing was checked".
+Runs one blockchain-test fixture file. The fixture corpora are not in this
+repository; install the pinned current-mainnet release first, and run fixtures
+from its `blockchain_tests` directory:
+
+```sh
+python3 scripts/bootstrap_mainnet.py     # ~/eest-mainnet-v20.0.1
+FIX=~/eest-mainnet-v20.0.1/fixtures/blockchain_tests
+lake exe jaune $FIX/for_prague/ported_static/vmArithmeticTest/mul/mul.json
+```
+
+EEST fills one test into sibling trees — `blockchain_tests`,
+`blockchain_tests_engine`, `blockchain_tests_engine_x`, `state_tests` and
+`transaction_tests` — under a single file name. Only `blockchain_tests` is this
+runner's; the rest describe a different consumer, and a file from one of them is
+refused by name rather than run.
+
+Every option is a filter: each one only narrows the set of cases that run, and
+the selection is always narrowed to the networks this build supports. The run
+fails if no case survives, so a green run never means "nothing was checked".
 
 Given no `--network`, every supported case in the file runs under the rules its
 own `network` label names. A file holding a mix of networks contributes its

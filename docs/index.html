@@ -1252,7 +1252,7 @@ footer a:hover{color:var(--ink)}
 <section id="build">
   <div class="wrap">
     <p class="eyebrow reveal"><span class="secno">§ 10</span> Reproduce it</p>
-    <h2 class="reveal">Two clones and a build.</h2>
+    <h2 class="reveal">Two clones, a build, and a corpus.</h2>
     <p class="lede reveal" style="margin-top:16px">
       The only prerequisite is <a href="https://github.com/leanprover/elan" target="_blank" rel="noopener"
       style="text-decoration:underline;text-underline-offset:3px">elan</a>, the Lean toolchain manager —
@@ -1266,18 +1266,28 @@ footer a:hover{color:var(--ink)}
           <h3>Jaune</h3><span class="dimmer" style="font-size:.85rem">run the spec against real fixtures</span>
         </div>
         <div class="term"><span class="p">$</span> git clone https://github.com/skbaek/jaune
-<span class="p">$</span> cd jaune &amp;&amp; lake build
-<span class="p">$</span> lake exe jaune path/to/fixture.json
-<span class="p">$</span> lake exe jaune path/to/fixture.json --network Osaka
+<span class="p">$</span> cd jaune &amp;&amp; lake exe cache get &amp;&amp; lake build
+<span class="p">$</span> python3 scripts/bootstrap_mainnet.py
+<span class="p">$</span> FIX=~/eest-mainnet-v20.0.1/fixtures/blockchain_tests
+<span class="p">$</span> lake exe jaune $FIX/for_prague/ported_static/vmArithmeticTest/mul/mul.json
 <span class="p">$</span> scripts/check-mainnet.sh --suite smoke</div>
         <p class="dim" style="font-size:.88rem;margin:14px 0 0">
+          The corpus is not in the repository: the third line fetches the pinned
+          <span class="mono">execution-specs tests@v20.0.1</span> release, verifies its checksum
+          before extraction, and installs it at
+          <span class="mono">~/eest-mainnet-v20.0.1</span> — a 404 MB download and about 7.9 GB on
+          disk, so budget 13 GB free and run it before either of the last two lines. See
+          <span class="mono">scripts/vectors/SOURCES.md</span> for pinned provenance and the
+          read-only environment doctor. The <span class="mono">blockchain_tests</span> directory is
+          the one this runner consumes; EEST fills the same test into
+          <span class="mono">state_tests</span> and two engine trees under the same file name, and
+          those describe a different consumer.
+        </p>
+        <p class="dim" style="font-size:.88rem;margin:10px 0 0">
           A bare run executes every case in the file whose network this build supports, each under
-          its own rules; <span class="mono">--network</span> narrows that to one and
+          its own rules; <span class="mono">--network Prague</span> narrows that to one and
           <span class="mono">--help</span> lists the labels. A run fails if no case survives its
-          filters, so green never means nothing was checked.
-          Fixture corpora are provisioned separately by checksum-verified bootstrap scripts — see
-          <span class="mono">scripts/vectors/SOURCES.md</span> for pinned provenance, disk
-          requirements, and the read-only environment doctor. Every gate’s exact command, scale,
+          filters, so green never means nothing was checked. Every gate’s exact command, scale,
           runtime, and pass criterion is catalogued in <span class="mono">scripts/GATES.md</span>;
           the fixture harnesses take <span class="mono">--jobs auto</span>, which puts the whole
           current-mainnet corpus inside a coffee break.
@@ -1288,14 +1298,22 @@ footer a:hover{color:var(--ink)}
           <h3>Blanc</h3><span class="dimmer" style="font-size:.85rem">check the proofs yourself</span>
         </div>
         <div class="term"><span class="p">$</span> git clone https://github.com/skbaek/blanc
-<span class="p">$</span> cd blanc &amp;&amp; lake build
+<span class="p">$</span> cd blanc &amp;&amp; lake exe cache get &amp;&amp; lake build
 <span class="p">$</span> scripts/check.sh</div>
         <p class="dim" style="font-size:.88rem;margin:14px 0 0">
           <span class="mono">check.sh</span> builds the library and runs the axiom audit over all eight
           audited theorems — the seven solvency results plus the WETH compile
           witness; it exits non-zero if any of them acquires
           <span class="mono">sorryAx</span>, <span class="mono">ofReduceBool</span>, or
-          <span class="mono">ofReduceNat</span>.
+          <span class="mono">ofReduceNat</span>. No fixture corpus is needed: this side is proof,
+          not testing.
+        </p>
+        <p class="dim" style="font-size:.88rem;margin:10px 0 0">
+          Both projects depend on mathlib, so both open with
+          <span class="mono">lake exe cache get</span> — it downloads mathlib's prebuilt artifacts.
+          Skip it and <span class="mono">lake build</span> compiles mathlib from source, which takes
+          hours instead of the minute each project's own build needs, and several GB land under
+          <span class="mono">.lake/</span> either way.
         </p>
       </div>
     </div>

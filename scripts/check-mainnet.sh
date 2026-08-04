@@ -140,8 +140,16 @@ else
   esac
 fi
 
+# The corpus is provisioned separately and is not in the repository, so on a
+# fresh clone this is the first thing that fires. The missing path alone is only
+# actionable to someone who already knows the bootstrap exists, so name the
+# command that creates it and the two ways to point at an existing copy.
 [ -d "$FIXTURES_ROOT/blockchain_tests" ] || {
   echo "error: current-mainnet blockchain fixture root not found: $FIXTURES_ROOT/blockchain_tests" >&2
+  echo "  the corpus is provisioned separately; install it with:" >&2
+  echo "    python3 scripts/bootstrap_mainnet.py" >&2
+  echo "  then re-run. Use --fixtures-root PATH or EEST_MAINNET_ROOT for an existing copy" >&2
+  echo "  elsewhere. Provenance, disk and runtime: scripts/vectors/SOURCES.md" >&2
   exit 2
 }
 [ "$GUARD" -gt 0 ] 2>/dev/null || { echo "error: JAUNE_TIMEOUT must be positive" >&2; exit 2; }
