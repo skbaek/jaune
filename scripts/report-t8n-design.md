@@ -16,11 +16,20 @@ exists in this repository. This report was written on `codex/t8n` and merged to
 `main` on 2026-08-04 so that it lives with its sibling reports; the branch
 carried nothing else.
 
-**These coordinates are historical.** Every line number, signature pointer, and
-gate figure below was measured at `5d16eba` and `main` has moved since. Treat
-them as a record of what Step 1 found, not as current contracts, and re-measure
-the baseline per `~/plans/t8n.md`, *Baseline gates*, before resuming rather than
-inheriting the numbers recorded here.
+**These coordinates are historical.** Every line number and gate figure below
+was measured at `5d16eba`; `main` has moved since. Re-measure the baseline per
+`~/plans/t8n.md`, *Baseline gates*, rather than inheriting the numbers here.
+
+Re-checked against `main` on 2026-08-04: the semantic-core pointers all still
+land exactly — `processTransaction`, `applyTransactions`, `applyBody`,
+`stateTransitionChecks`, `stateTransitionE`, `TransitionError`, `logsBloom`,
+`ErrorDetail` — and `DecodeError` has shifted four lines. **The CLI row is the
+one that rotted:** `bda92bc` ("cli: make every fixture option a filter") deleted
+`getTestIndex` and `getNetworkSpec` outright and moved `getFork` to
+`Main.lean:630`. Everything this report concludes about the seam, the typed-error
+routing, and the upstream `t8n` surface is unaffected — those are anchored to
+Jaune's architecture and to upstream `9d6e6f83`, neither of which moves when
+Jaune's `main` does.
 
 The fresh checkouts were fetched separately and made read-only. The pinned
 oracle was neither repointed nor modified.
