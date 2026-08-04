@@ -272,6 +272,25 @@ stating. Read the statements in
 [`Blanc/Solvent.lean`](https://github.com/skbaek/blanc/blob/main/Blanc/Solvent.lean);
 do not infer them from this document or from a theorem's name.
 
+**`Jaune.KECCAK.f1600_eq` in `Jaune/Hash.lean`** is a second example, and its
+name invites the same overreading. The theorem is
+
+```lean
+theorem f1600_eq (ws : Vector UInt64 25) : f1600 ws = f rndc ws UInt64.rol
+```
+
+with axioms `[propext, Quot.sound]`. It says the monomorphized production
+kernel `f1600` computes **exactly the same permutation** as the polymorphic
+reference transcription (`θ`/`ρπ`/`χ`/`ι`/`f`) retained above it in the same
+file — and that reference is itself a port of Andrey Jivsov's C
+implementation, not a restatement of FIPS 202. `f1600_eq` is evidence that the
+optimization preserved the transcribed algorithm; it is **not** a proof that
+the transcription implements the Keccak-f[1600] standard, and it should not be
+read or cited as "keccak is verified" or "verified keccak". Conformance with
+the standard is addressed the way every hash function in this library is:
+`scripts/check-u256.sh`'s differential oracle and the fixture corpora —
+testing, not proof, exactly as the previous section describes.
+
 ## Regenerating everything above
 
 ```

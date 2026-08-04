@@ -310,7 +310,10 @@ whose out-of-bounds branch was the last explicit abort in the library. -/
 -- reference transcription of the C original. Production hashing goes
 -- through the specialized `f1600` further down; keep this block as the
 -- readable spec the unrolled indices were generated from (the same
--- retention convention as `blake2MixTable`).
+-- retention convention as `blake2MixTable`). This block is now load-bearing
+-- in a second sense: `f1600_eq`, below `f1600`, is a theorem stated against
+-- it, so removing or reshaping this block would break that proof's
+-- statement, not just its stated rationale.
 --
 -- The state is a `Vector ξ 25` rather than an `Array ξ`: keccak-f[1600] has
 -- exactly twenty-five lanes, so the size is part of the specification, and
@@ -505,9 +508,9 @@ private def round1600 (rc : UInt64) (s : State1600) : State1600 :=
   ⟨e0 ^^^ rc, e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e14, e15, e16, e17, e18, e19, e20, e21, e22, e23, e24⟩
 
 /-- keccak-f[1600] monomorphized to `UInt64`: 24 unrolled rounds over 25
-scalar locals. Semantically identical to `f rndc · UInt64.rol` over the
-reference transcription above; round constants are read from `rndc`
-rather than written as literals.
+scalar locals. Proved equal to `f rndc · UInt64.rol` over the reference
+transcription above by `f1600_eq` below; round constants are read from
+`rndc` rather than written as literals.
 
 That read began as a workaround for a Lean-4.23 codegen bug (the duplicated
 constant 0x8000000080008081 was CSE'd into a shared boxed value and the C

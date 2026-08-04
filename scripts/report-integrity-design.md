@@ -301,7 +301,20 @@ Machine-checked as `scripts/integrity-allow.txt`; counts generated, not transcri
 
 **Severity triage.** `Array.set!` = `setIfInBounds`: **total**; the objection is allocation cost and an unexpressed invariant, not partiality. `a[i]!`, `ByteArray.get!`, `Option.get!`: **do panic** (stderr + `default`). `Jaune.List.slice!` (`Basic:410`): total despite the name; zero-pads via `takeD`. **The single genuinely unguarded, reachable, attacker-influenced site is `jumpable` (`Machine:2393`)**: `cd.get! k` where `k` is a popped stack value with no bound relative to `cd.size`. An out-of-range `JUMP` emits a real panic line on stderr and returns `default = 0`; the *verdict* stays correct (0 is not `JUMPDEST`, so `InvalidJumpDestError`), but a partial read is live on a consensus path. `noPushBefore` and `ByteArray.getInst` are guarded by explicit `< size` tests; both `Option.get!` sites are guarded by validity/`isSome` tests immediately above.
 
-**Residual-partiality policy, FROZEN.** (1) A valid checked input reaches **no** panic/default branch. (2) An optimized kernel may retain a low-level operation only behind a formal size/bounds interface **and** an exact allowlist row naming its declaration, its checked/fixed-size wrapper, and its bounds/size theorem — both real declarations. (3) No carve-out for `partial def` or `implemented_by`, ever. (4) The allowlist is a **shrink-only budget**, `# pending-budget: 329` today; a step discharging a row deletes it (or rewrites it `KEEP`) and lowers the budget in the same commit. That is what makes "the list cannot grow without the static gate failing" mechanical. (5) Full reference-algorithm equivalence for keccak is a **separate** target; `~/plans/keccak-proof-proposal.md` records that `f1600` does **not** yield to Blake2's unfolding recipe. Step 8 must not assume otherwise.
+**Residual-partiality policy, FROZEN.** (1) A valid checked input reaches **no** panic/default branch. (2) An optimized kernel may retain a low-level operation only behind a formal size/bounds interface **and** an exact allowlist row naming its declaration, its checked/fixed-size wrapper, and its bounds/size theorem — both real declarations. (3) No carve-out for `partial def` or `implemented_by`, ever. (4) The allowlist is a **shrink-only budget**, `# pending-budget: 329` today; a step discharging a row deletes it (or rewrites it `KEEP`) and lowers the budget in the same commit. That is what makes "the list cannot grow without the static gate failing" mechanical. (5) Full reference-algorithm equivalence for keccak is now **proved**:
+`Jaune.KECCAK.f1600_eq` (`Jaune/Hash.lean`, landed by `~/plans/keccak-proof.md`)
+shows the optimized `f1600` kernel equals the retained polymorphic reference
+transcription `f rndc · UInt64.rol`, with axioms exactly `[propext,
+Quot.sound]`. That is a proof about the transcription of Andrey Jivsov's C
+implementation, not a FIPS-202 conformance proof — conformance remains the
+job of the differential oracle and the fixture corpora, unaffected by this
+theorem. This item's history is worth keeping: the planning-time premise it
+retracts (`~/plans/keccak-proof-proposal.md` recording that `f1600` "does
+**not** yield to Blake2's unfolding recipe") turned out to be an artifact of
+an unrelated Lean-version timeout, not a structural obstacle, once
+`~/plans/archive/integrity.md` moved the reference to a proof-carrying
+`Vector ξ 25`. Nothing about Step 8's allowlist changes: keccak's R2/R3
+sections are empty and `# pending-budget: 0` is untouched.
 
 ## 10. Blanc, the downstream proof client
 

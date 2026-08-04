@@ -131,6 +131,16 @@
 #     `size_blake2Sigma_row`, `size_blake2Sigma_get` and `blake2Sigma_lt`
 #     decide the table facts the kernel's indexed reads rest on. Every KEEP
 #     row below names that wrapper and one of those theorems.
+#
+# UPDATE (2026-08-04, ~/plans/keccak-proof.md): keccak's reference-vs-kernel
+# equivalence, discussed at length above as an open question, is now proved.
+# `Jaune.KECCAK.f1600_eq` shows `f1600` equals `f rndc · UInt64.rol` over the
+# retained reference transcription, axioms `[propext, Quot.sound]`. It is a
+# statement about the transcription of Jivsov's C code, not FIPS-202
+# conformance. This does not add, remove, or reclassify an allowlist row:
+# keccak's R2/R3 sections above are still empty and `# pending-budget: 0` is
+# unchanged. `scripts/report-integrity-design.md` §"Residual-partiality
+# policy" item (5) carries the corrected claim.
 # ---------------------------------------------------------------------------
 
 
