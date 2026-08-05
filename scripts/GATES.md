@@ -1,13 +1,19 @@
 # Verification gates
 
-Authoritative catalogue of the Jaune/Blanc verification gates: what exists, what
+Authoritative catalogue of **Jaune's** verification gates: what exists, what
 each one takes, what it proves, and which to reach for when. This file is the
-single source of truth for gate usage — plans, agent instructions, and reports
-should link here rather than restate it.
+single source of truth for Jaune gate usage — plans, agent instructions, and
+reports should link here rather than restate it.
 
 Audience is anyone driving these gates, human or agent, regardless of tool.
 
 All commands are run from `~/jaune` unless stated otherwise.
+
+**Blanc's gates are catalogued in its own repository, at
+`~/blanc/scripts/GATES.md`.** A gate lives in the repository whose tree it
+checks. Blanc consumes Jaune through an ordinary pinned Lake dependency, so
+Blanc's gates appear here only where a *Jaune* change makes them the right
+falsifier — see [Blanc's gates](#blancs-gates) below.
 
 ## If you are an agent, start here
 
@@ -30,9 +36,7 @@ Choose the gate by what you changed, cheapest falsifier first:
 | fork / block validity | `scripts/check-mainnet.sh --suite transitions --no-build --jobs auto` | `scripts/check-mainnet.sh --suite osaka --no-build --jobs auto` |
 | harness / generators | `python3 -m unittest discover -s scripts/tests` | `python3 scripts/env_doctor.py` |
 | a module's imports, or an added `#guard` / heavy elaboration | `lake build` | `scripts/check-elab.sh` |
-| anything Blanc consumes | `cd ~/blanc && lake build && scripts/check.sh --no-build` | `cd ~/blanc && scripts/check-elab.sh` |
-| a Blanc module's imports, or an added Blanc contract | `cd ~/blanc && scripts/check-layering.sh` | `cd ~/blanc && lake build && scripts/check.sh --no-build` |
-| a Blanc contract's compiled bytes, its fixtures, or either fixture generator | `cd ~/blanc && scripts/check-fmint.sh --no-build` + `scripts/check-weth.sh --no-build` | both `cd ~/blanc && scripts/check-*-coverage.sh` |
+| anything Blanc consumes | `cd ~/blanc && lake build && scripts/check.sh --no-build` | Blanc's full set — see [Blanc's gates](#blancs-gates) |
 
 **Use sequential (omit `--jobs`) when the timings themselves matter:** writing a
 baseline with `--rebase` or `--refresh-times`, investigating a performance
@@ -177,11 +181,6 @@ executable inputs.
 | `scripts/check-integrity.sh` | no panic / raw bang op / stringly semantic carrier in `Jaune.lean`'s import closure (R4 also covers the runner boundary), allowlist in `integrity-allow.txt` | 58 rows, 0 pending | sub-second |
 | `lake build` | integration elaboration | ~1,776 jobs | ~8 s |
 | `scripts/check-u256.sh` | differential word/hash oracle | 21,593 cases | sub-second |
-| `cd ~/blanc && scripts/check-layering.sh` | Blanc's contracts are siblings in the import hierarchy: no cross-contract import, no shared module importing a contract, no unclassified module (rule and rationale in Blanc's `README.md`) | 2 contracts, 15 modules, 13 non-root | sub-second |
-| `cd ~/blanc && scripts/check-fmint.sh --no-build` | fmint fixture conformance, the manifest cross-check, and byte-equality of every fixture's fmint pre-state code against the committed `Blanc.fmintCode` literal | 11 fixtures, 188 assertions, 1257 bytes | sub-second |
-| `cd ~/blanc && scripts/check-weth.sh --no-build` | WETH fixture conformance and the same byte-equality check against `Blanc.wethCode`; there is no WETH manifest, so no cross-check | 11 fixtures, 888 bytes | sub-second |
-| `cd ~/blanc && scripts/check-fmint-coverage.sh` | every fmint selector is exercised by some fixture, against a declared unexercised-selector budget | 12 selectors, budget 0 | sub-second |
-| `cd ~/blanc && scripts/check-weth-coverage.sh` | the same for WETH, plus the `deposit()` fallback on empty calldata | 10 selectors + fallback, budget 0 | sub-second |
 | `scripts/check-fake-exp.sh` | fake-exponential differential oracle vs the pinned EELS `taylor_exponential` (blob base fee) | 240 cases | sub-second |
 | `scripts/check.sh --patch` | the ten historical FAIL files, fixed all-PASS target | 10 | sub-second |
 | `scripts/check.sh --rlp4` | four invalid-RLP/header files, subset of `--patch` | 4 | sub-second |
@@ -199,8 +198,7 @@ executable inputs.
 | `scripts/check-ec.sh` | EC differential oracle (pinned, differential, identity cases) | — | compiles a Lean checker first |
 | `scripts/check-vectors.sh` | generated vector conformance + controls + declared-case-count coverage | 51 files, 1,824 cases, 5 controls | ~7.8 min; **~1.5 min at `--jobs auto`** |
 | `scripts/check-elab.sh` | per-module elaboration time vs `scripts/baseline-elab.txt` | 17 modules, ~49 s of elaboration | ~70 s |
-| `cd ~/blanc && scripts/check-elab.sh` | per-module Blanc elaboration time vs `~/blanc/scripts/baseline-elab.txt` | 15 modules, ~39 s of elaboration | ~40 s |
-| `cd ~/blanc && lake build && scripts/check.sh --no-build` | downstream elaboration + protected-theorem/axiom audit | 922 jobs, 24 audited theorems | ~7 s build |
+| `cd ~/blanc && lake build && scripts/check.sh --no-build` | that a Jaune change has not broken its downstream consumer: Blanc's integration elaboration and its axiom audit. **The cheapest Blanc-side falsifier after a pin bump** — the rest of Blanc's set is catalogued in Blanc's own file | 922 jobs, 24 audited theorems | ~7 s build |
 
 ### Long sequentially — but mostly not long in parallel
 
@@ -235,6 +233,27 @@ it; the arc made both faster without moving either across the line.
 
 The two `--full` gates are the exact-candidate closure pair. **Neither may be
 replaced by its smoke tier.**
+
+### Blanc's gates
+
+Blanc is Jaune's downstream consumer, and its gates are catalogued in **its own
+repository**: `~/blanc/scripts/GATES.md`. That file is authoritative for their
+commands, scale, pass criteria, and lock behavior; do not restate them here.
+
+What belongs in *this* file is the one selection rule that is a Jaune concern:
+
+**After a change Blanc consumes — or any bump of Blanc's pinned Jaune
+revision — the cheapest Blanc-side falsifier is**
+
+```
+cd ~/blanc && lake build && scripts/check.sh --no-build
+```
+
+**and a green result there is not a substitute for Blanc's full set**, which
+that repository's catalogue defines and which the pin bump's own checkpoint
+owes. Blanc pins Jaune by commit, so nothing in Blanc moves until someone moves
+the pin: a red Jaune tree cannot silently break Blanc, and a green Blanc does
+not vouch for Jaune.
 
 ### Environment and provenance
 
@@ -371,9 +390,7 @@ motivated it.
 | `check-mainnet.sh --suite osaka`/`prague`/`full`, or any `--jobs > 1` | parallel only | yes |
 | `check-mainnet.sh --suite smoke`/`transitions` (sequential) | — (writes none) | no |
 | `check-vectors.sh` | yes | yes |
-| `check-elab.sh` (Jaune or Blanc) | yes | yes |
-| `cd ~/blanc && scripts/check-layering.sh` | — (writes none) | no |
-| `cd ~/blanc && scripts/check-fmint.sh`, `check-weth.sh`, and both `check-*-coverage.sh` | — (write none) | no |
+| `check-elab.sh` | yes | yes |
 
 The cheap tiers stay outside the heavy lock deliberately: the check you run
 while iterating must never be hostage to a 20-minute one. `check-hygiene.sh`,
