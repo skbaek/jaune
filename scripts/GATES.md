@@ -44,6 +44,7 @@ Choose the gate by what you changed, cheapest falsifier first:
 | EC / precompiles | `scripts/check-ec.sh`, `scripts/check-legacy.sh --bls --no-build --jobs auto` | `scripts/check-mainnet.sh --suite prague --no-build --jobs auto` |
 | interpreter / gas / state | `scripts/check-legacy.sh --depth --no-build --jobs auto` | `scripts/check-legacy.sh --smoke --no-build --jobs auto` |
 | fork / block validity | `scripts/check-mainnet.sh --suite transitions --no-build --jobs auto` | `scripts/check-mainnet.sh --suite osaka --no-build --jobs auto` |
+| the runner's CLI, its refusals or its case selection (`Main.lean`) | `scripts/check-cli.sh` + `scripts/check-mainnet.sh --suite smoke` | `scripts/check-legacy.sh --smoke --no-build --jobs auto` |
 | harness / generators | `python3 -m unittest discover -s scripts/tests` | `python3 scripts/env_doctor.py` |
 | a module's imports, or an added `#guard` / heavy elaboration | `lake build` | `scripts/check-elab.sh` |
 | anything Blanc consumes | `cd ~/blanc && lake build && scripts/check.sh --no-build` | Blanc's full set — see [Blanc's gates](#blancs-gates) |
@@ -190,6 +191,7 @@ executable inputs.
 | `scripts/check-hygiene.sh` | source/forbidden-token hygiene, allowlist in `hygiene-allow.txt` | — | sub-second |
 | `scripts/check-integrity.sh` | no panic / raw bang op / stringly semantic carrier in `Jaune.lean`'s import closure (R4 also covers the runner boundary), allowlist in `integrity-allow.txt` | 58 rows, 0 pending | sub-second |
 | `lake build` | integration elaboration | ~1,776 jobs | ~8 s |
+| `scripts/check-cli.sh` | the runner's four fixture-file refusals — wrong sibling tree, no cases, no supported network, filters select nothing — and the undeclared-format pass-through, against synthetic fixtures | 11 checks | sub-second |
 | `scripts/check-u256.sh` | differential word/hash oracle | 21,593 cases | sub-second |
 | `scripts/check-fake-exp.sh` | fake-exponential differential oracle vs the pinned EELS `taylor_exponential` (blob base fee) | 240 cases | sub-second |
 | `scripts/check-legacy.sh --patch` | the ten historical FAIL files, fixed all-PASS target | 10 | sub-second |
@@ -338,6 +340,27 @@ Two different contracts, and confusing them is the most common misreading:
   allowlist that carries a row for them at all. Use `--list` to regenerate the
   inventory and `--pending` to read the full pending set.
 
+- **`scripts/check-cli.sh` is an all-hold assertion gate on the runner's
+  refusals.** Each check pins one refusal path — its exit status and a substring
+  of the message a user actually reads — against a synthetic fixture built in a
+  temp dir; any check that does not hold fails the gate. It exists because
+  nothing else covers this surface: the conformance tiers only ever run
+  well-formed corpus files, `scripts/golden-messages.txt` covers block-rejection
+  reasons observed *inside* a run, and `scripts/tests/` covers the Python
+  bootstrap and generator scripts, so all four messages were verified by hand
+  once and could rot silently.
+
+  **It pins the guards, not the run beneath them.** The permissive half of the
+  wrong-tree rule — a case declaring no `_info.fixture-format` is passed through
+  — is checked as an A/B pair of files identical but for the `_info` block, and
+  asserted only as far as *entering* the per-case run. No conformance tier can
+  check that half at all: every case in both installed corpora carries the
+  field, so none of them ever takes the pass-through branch. A hand-written
+  fixture carries no valid genesis state root, so it cannot legitimately
+  complete a run, and the gate deliberately does not assert what happens after
+  that point. It needs the built binary and no corpus, so a bare runner can run
+  it after a build; it never builds one itself.
+
 `--bls` is a middle case: it compares against a committed baseline like a tier,
 but that baseline is a hand-authored *target*, so `--rebase` is refused — edit
 `scripts/baseline-bls.txt` directly, with a written justification for any
@@ -404,10 +427,12 @@ motivated it.
 
 The cheap tiers stay outside the heavy lock deliberately: the check you run
 while iterating must never be hostage to a 20-minute one. `check-hygiene.sh`,
-`check-integrity.sh`, `check-u256.sh`, `check-fake-exp.sh` and `check-ec.sh`
-take no lock at all — the first four are sub-second, and `check-ec.sh` is a
-single-process oracle that writes its report in one `tee` rather than appending
-per file.
+`check-integrity.sh`, `check-cli.sh`, `check-u256.sh`, `check-fake-exp.sh` and
+`check-ec.sh` take no lock at all — the first five are sub-second, and
+`check-ec.sh` is a single-process oracle that writes its report in one `tee`
+rather than appending per file. `check-cli.sh` additionally writes nothing under
+the repository at all: its fixtures live in a `mktemp -d` directory it removes
+on exit, so two concurrent runs cannot even see each other's inputs.
 
 Escape hatches, where one exists, are named in the refusal: `check-legacy.sh` and
 `check-elab.sh` accept `--report <path>`, and a run writing elsewhere locks that
