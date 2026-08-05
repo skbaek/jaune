@@ -62,16 +62,16 @@ jobs:
       - name: Provision EEST fixtures
         run: python3 scripts/bootstrap_eest.py --eest-root "$EEST_ROOT"
 
-      - name: Full conformance tier (check.sh --full)
+      - name: Full conformance tier (check-legacy.sh --full)
         run: |
           JAUNE_FIXTURES="$EELS_ROOT/tests/fixtures/ethereum_tests/BlockchainTests" \
-            scripts/check.sh --full --no-build
+            scripts/check-legacy.sh --full --no-build
       # Run bls even if --full flagged drift, so both reports always exist.
-      - name: BLS / point-evaluation tier (check.sh --bls)
+      - name: BLS / point-evaluation tier (check-legacy.sh --bls)
         if: always()
         run: |
           JAUNE_FIXTURES="$EEST_ROOT/fixtures/blockchain_tests" \
-            scripts/check.sh --bls --no-build
+            scripts/check-legacy.sh --bls --no-build
 
       - name: Upload tier reports
         if: always()

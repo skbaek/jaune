@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Step-1 U256 differential-oracle gate.  The final line follows check.sh's
+# Step-1 U256 differential-oracle gate.  The final line follows check-legacy.sh's
 # verdict convention: exit 0 exactly when every generated vector passes.
 set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

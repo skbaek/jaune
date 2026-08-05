@@ -3,7 +3,7 @@
 # scripts/vectors/fake-exp.json carry expected values computed by the pinned
 # EELS `taylor_exponential` itself (see scripts/gen-fake-exp-vectors.py); the
 # binary evaluates Jaune's total `fakeExp` on every case.  The final line
-# follows check.sh's verdict convention: exit 0 exactly when every vector
+# follows check-legacy.sh's verdict convention: exit 0 exactly when every vector
 # passes.
 set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

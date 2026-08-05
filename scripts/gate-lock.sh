@@ -5,7 +5,7 @@
 #
 # WHY
 #
-# On 2026-07-31 two `scripts/check.sh --full` runs overlapped. Both truncated
+# On 2026-07-31 two `scripts/check-legacy.sh --full` runs overlapped. Both truncated
 # scripts/report-full.txt at start and both then appended their 2,983 per-file
 # lines to it, leaving a 5,966-line report holding every path exactly twice.
 # The comparison's lookup table is destructive, so each path's second
@@ -28,7 +28,7 @@
 #
 # WHY mkdir
 #
-# `flock(1)` does not exist on macOS, which is the same reason check.sh guards
+# `flock(1)` does not exist on macOS, which is the same reason check-legacy.sh guards
 # fixtures with a perl alarm rather than timeout(1). `mkdir` is atomic on every
 # filesystem in play, needs no helper binary, and works identically on the CI
 # runners. Only mkdir, kill -0, ps and trap are used.

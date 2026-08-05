@@ -564,7 +564,7 @@ def _check_eest_metadata(spec: dict, fixtures_root: Path) -> list[Check]:
 
 def _check_eest_bls_tier(spec: dict, fixtures_root: Path) -> list[Check]:
     """Confirm the exact leaf directories consumed by scripts/bls-tests.txt via
-    scripts/check.sh --bls exist. Skipped when the manifest omits the field."""
+    scripts/check-legacy.sh --bls exist. Skipped when the manifest omits the field."""
     subpaths = spec.get("bls_tier_subpaths")
     if not subpaths:
         return []
@@ -1012,7 +1012,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help="EEST install root containing the archive and extracted fixtures/ "
-        "(default: $EEST_ROOT or ~/eest-fixtures; distinct from check.sh's "
+        "(default: $EEST_ROOT or ~/eest-fixtures; distinct from check-legacy.sh's "
         "JAUNE_FIXTURES, which points directly at a tier's leaf fixture dir)",
     )
     parser.add_argument(

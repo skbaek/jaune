@@ -15,7 +15,7 @@ REPORT="${JAUNE_REPORT_DIR:-$SCRIPT_DIR}/report-ec.txt"
 
 TRACE="$ROOT/.lake/build/bin/jaune.trace"
 if [ ! -f "$TRACE" ]; then
-  echo "RED — ec: needs the existing jaune native dependency objects; run 'lake build' or a check.sh gate first"
+  echo "RED — ec: needs the existing jaune native dependency objects; run 'lake build' or a check-legacy.sh gate first"
   exit 1
 fi
 

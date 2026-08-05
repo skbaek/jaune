@@ -13,7 +13,7 @@
 #
 # Verify-on-first-run checklist:
 #   - lean-action restores the mathlib cache (grep the run log for "cache").
-#   - `lake build` produced .lake/build/bin/jaune (check.sh --no-build needs it).
+#   - `lake build` produced .lake/build/bin/jaune (check-legacy.sh --no-build needs it).
 #   - the actions/cache key/path actually HIT on run 2.
 #   - the cached execution-specs+tests checkout (it includes .git) stays under
 #     the 10 GB/repo cache ceiling; if not, narrow the cached path to the
@@ -57,7 +57,7 @@ jobs:
           python-version: "3.11"
 
       # Builds jaune (elaborating every #guard) and leaves the executable at
-      # .lake/build/bin/jaune for check.sh --no-build.
+      # .lake/build/bin/jaune for check-legacy.sh --no-build.
       - uses: leanprover/lean-action@v1
 
       - name: Cache legacy fixture corpus
@@ -72,10 +72,10 @@ jobs:
       - name: Provision legacy fixtures
         run: python3 scripts/bootstrap_legacy.py --execution-specs "$EELS_ROOT"
 
-      # JAUNE_TIMEOUT is left at check.sh's 1800 s default: it is a hang
+      # JAUNE_TIMEOUT is left at check-legacy.sh's 1800 s default: it is a hang
       # detector, not a per-file budget, and the slowest smoke file (~395 s
       # reference) has ample headroom even on a slower hosted runner.
-      - name: Smoke conformance gate (check.sh --smoke)
+      - name: Smoke conformance gate (check-legacy.sh --smoke)
         run: |
           JAUNE_FIXTURES="$EELS_ROOT/tests/fixtures/ethereum_tests/BlockchainTests" \
-            scripts/check.sh --smoke --no-build
+            scripts/check-legacy.sh --smoke --no-build

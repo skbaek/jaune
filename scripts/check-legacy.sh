@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fixture-test harness for Jaune (REFACTOR.md Phase 0, step 0.1).
 #
-# Usage: scripts/check.sh (--depth | --smoke | --full | --patch | --rlp4 | --bls | --dir <path>) [--report <path>] [--rebase | --refresh-times] [--no-build] [--jobs <n>|auto]
+# Usage: scripts/check-legacy.sh (--depth | --smoke | --full | --patch | --rlp4 | --bls | --dir <path>) [--report <path>] [--rebase | --refresh-times] [--no-build] [--jobs <n>|auto]
 #
 #   --depth       run the fuel/call-depth stress set (scripts/depth-tests.txt)
 #   --smoke       run the smoke set (scripts/smoke-tests.txt)
@@ -205,7 +205,7 @@ cleanup() {
 trap cleanup EXIT
 
 usage() {
-  echo "usage: scripts/check.sh (--depth | --smoke | --full | --patch | --rlp4 | --bls | --dir <path>) [--report <path>] [--rebase | --refresh-times] [--no-build] [--jobs <n>|auto]" >&2
+  echo "usage: scripts/check-legacy.sh (--depth | --smoke | --full | --patch | --rlp4 | --bls | --dir <path>) [--report <path>] [--rebase | --refresh-times] [--no-build] [--jobs <n>|auto]" >&2
   exit 2
 }
 

@@ -9,6 +9,16 @@ Audience is anyone driving these gates, human or agent, regardless of tool.
 
 All commands are run from `~/jaune` unless stated otherwise.
 
+**`check-legacy.sh` was named `check.sh` until 2026-08-05.** It was renamed
+because the bare name said nothing about which corpus it runs, and the two
+conformance harnesses read as unrelated when they are siblings:
+`check-legacy.sh` drives the legacy corpus, `check-mainnet.sh` the current one.
+Reports and commits from before that date name it `check.sh`; those are records
+of what was run and were deliberately left alone. Nothing else took the name —
+`check.sh` no longer exists in this repository, so an old command line fails
+loudly rather than silently running something different. (Blanc has its own
+unrelated `scripts/check.sh`, an axiom audit.)
+
 **Blanc's gates are catalogued in its own repository, at
 `~/blanc/scripts/GATES.md`.** A gate lives in the repository whose tree it
 checks. Blanc consumes Jaune through an ordinary pinned Lake dependency, so
@@ -18,7 +28,7 @@ falsifier — see [Blanc's gates](#blancs-gates) below.
 ## If you are an agent, start here
 
 **For routine checks — "did my last edit break anything?" — pass `--jobs auto`.**
-Three harnesses take it — `check.sh`, `check-mainnet.sh`, `check-vectors.sh` —
+Three harnesses take it — `check-legacy.sh`, `check-mainnet.sh`, `check-vectors.sh` —
 and all three run sequentially by default, which costs roughly 2–5x. That default
 is deliberate and correct for the scripts (see [The `--jobs`
 contract](#the---jobs-contract)), but it is the wrong default for development
@@ -29,10 +39,10 @@ Choose the gate by what you changed, cheapest falsifier first:
 | you changed | run this first | then, before pushing |
 |---|---|---|
 | anything at all | `scripts/check-hygiene.sh` + `scripts/check-integrity.sh` + `lake build` | — |
-| U256/word/hash primitives | `scripts/check-u256.sh` | `scripts/check.sh --smoke --no-build --jobs auto` |
+| U256/word/hash primitives | `scripts/check-u256.sh` | `scripts/check-legacy.sh --smoke --no-build --jobs auto` |
 | blob-fee arithmetic (fake exponential) | `scripts/check-fake-exp.sh` | `scripts/check-mainnet.sh --suite transitions --no-build --jobs auto` |
-| EC / precompiles | `scripts/check-ec.sh`, `scripts/check.sh --bls --no-build --jobs auto` | `scripts/check-mainnet.sh --suite prague --no-build --jobs auto` |
-| interpreter / gas / state | `scripts/check.sh --depth --no-build --jobs auto` | `scripts/check.sh --smoke --no-build --jobs auto` |
+| EC / precompiles | `scripts/check-ec.sh`, `scripts/check-legacy.sh --bls --no-build --jobs auto` | `scripts/check-mainnet.sh --suite prague --no-build --jobs auto` |
+| interpreter / gas / state | `scripts/check-legacy.sh --depth --no-build --jobs auto` | `scripts/check-legacy.sh --smoke --no-build --jobs auto` |
 | fork / block validity | `scripts/check-mainnet.sh --suite transitions --no-build --jobs auto` | `scripts/check-mainnet.sh --suite osaka --no-build --jobs auto` |
 | harness / generators | `python3 -m unittest discover -s scripts/tests` | `python3 scripts/env_doctor.py` |
 | a module's imports, or an added `#guard` / heavy elaboration | `lake build` | `scripts/check-elab.sh` |
@@ -54,7 +64,7 @@ for the cheap gates above.
 
 ## The `--jobs` contract
 
-`check.sh`, `check-mainnet.sh`, and `check-vectors.sh` accept `--jobs <n>|auto`;
+`check-legacy.sh`, `check-mainnet.sh`, and `check-vectors.sh` accept `--jobs <n>|auto`;
 `auto` resolves to the machine's logical-core count. **Sequential (`--jobs 1`) is
 the default and its behaviour is untouched** — same guard, same ordering, same
 authoritative timings. Sequential is cleaner in every respect except speed, so it
@@ -129,7 +139,7 @@ It depends on which bound the suite is under, and the corpora differ:
   generalizes: when one file caps this gate, the number only moves by making
   that file faster — and when it does, the committed TIME column must be
   refreshed or dispatch keeps scheduling the old order (see [Writing a
-  `check.sh` baseline](#writing-a-checksh-baseline-two-verbs)).
+  `check-legacy.sh` baseline](#writing-a-check-legacysh-baseline-two-verbs)).
 - **The vector suite was latency-bound until its dominant file was sharded.**
   `blsPairing.json` alone was ~367s of a ~458s sequential total (80%), which set
   the makespan floor no matter how many workers ran: 382s at 10 jobs, a 1.2x
@@ -182,10 +192,10 @@ executable inputs.
 | `lake build` | integration elaboration | ~1,776 jobs | ~8 s |
 | `scripts/check-u256.sh` | differential word/hash oracle | 21,593 cases | sub-second |
 | `scripts/check-fake-exp.sh` | fake-exponential differential oracle vs the pinned EELS `taylor_exponential` (blob base fee) | 240 cases | sub-second |
-| `scripts/check.sh --patch` | the ten historical FAIL files, fixed all-PASS target | 10 | sub-second |
-| `scripts/check.sh --rlp4` | four invalid-RLP/header files, subset of `--patch` | 4 | sub-second |
+| `scripts/check-legacy.sh --patch` | the ten historical FAIL files, fixed all-PASS target | 10 | sub-second |
+| `scripts/check-legacy.sh --rlp4` | four invalid-RLP/header files, subset of `--patch` | 4 | sub-second |
 | `scripts/check-mainnet.sh --suite smoke` | current-mainnet smoke | 16 | sub-second |
-| `scripts/check.sh --depth` | fuel/call-depth stress set | 67 | ~13 s |
+| `scripts/check-legacy.sh --depth` | fuel/call-depth stress set | 67 | ~13 s |
 | `python3 -m unittest discover -s scripts/tests` | harness/generator unit tests | 121 tests | ~13 s |
 | `scripts/check-mainnet.sh --suite transitions` | fork-transition validity | 13 files / 109 cases | ~8–15 s |
 
@@ -193,8 +203,8 @@ executable inputs.
 
 | gate | proves | scale | time |
 |---|---|---|---|
-| `scripts/check.sh --smoke` | broad conformance vs baseline | 174 classifications | ~2 min |
-| `scripts/check.sh --bls` | BLS12-381 + point-evaluation vs hand-authored target baseline | 29 | ~2 min |
+| `scripts/check-legacy.sh --smoke` | broad conformance vs baseline | 174 classifications | ~2 min |
+| `scripts/check-legacy.sh --bls` | BLS12-381 + point-evaluation vs hand-authored target baseline | 29 | ~2 min |
 | `scripts/check-ec.sh` | EC differential oracle (pinned, differential, identity cases) | — | compiles a Lean checker first |
 | `scripts/check-vectors.sh` | generated vector conformance + controls + declared-case-count coverage | 51 files, 1,824 cases, 5 controls | ~7.8 min; **~1.5 min at `--jobs auto`** |
 | `scripts/check-elab.sh` | per-module elaboration time vs `scripts/baseline-elab.txt` | 17 modules, ~49 s of elaboration | ~70 s |
@@ -207,7 +217,7 @@ executable inputs.
 | `scripts/check-mainnet.sh --suite osaka` | strict all-PASS | 2,514 | ~8 min | **~2.3 min** |
 | `scripts/check-mainnet.sh --suite prague` | strict all-PASS | 2,573 | ~12 min | **~3.0 min** |
 | `scripts/check-mainnet.sh --suite full` | strict all-PASS, whole manifest | 5,100 | ~20.8 min | **~5.0 min** |
-| `scripts/check.sh --full` | every legacy fixture vs baseline | 2,983 | **≥ 19 min** | **7.7 min** |
+| `scripts/check-legacy.sh --full` | every legacy fixture vs baseline | 2,983 | **≥ 19 min** | **7.7 min** |
 
 **Read the two legacy `--full` cells differently — they have different
 provenances.** The parallel cell is a measured wall time: 462 s at `--jobs auto`,
@@ -222,7 +232,7 @@ Judge the 1,000-second deferral threshold against the gate as you will actually
 run it. At `--jobs auto` every row above comes in under it — legacy `--full`
 lands near ~460 s, latency-bound by one indivisible fixture that parallelism
 cannot touch — so all four run inline rather than deferred by reflex.
-**A sequential legacy `check.sh --full` remains above the threshold and still
+**A sequential legacy `check-legacy.sh --full` remains above the threshold and still
 requires explicit authorization**: its lower bound alone, 1,145.8 s, exceeds
 1,000 s. A sequential run is still called for only when its per-file timings are
 themselves the evidence.
@@ -272,7 +282,7 @@ generators, never manual transcription.
 
 Two different contracts, and confusing them is the most common misreading:
 
-- **`check.sh` tiers are regression gates.** They pass iff every file's
+- **`check-legacy.sh` tiers are regression gates.** They pass iff every file's
   classification *equals the committed baseline's* — **not** iff every file
   passes. The legacy corpus has 5 known FAILs, all diagnosed and none a Jaune
   defect: two files have no case in the supported fork range, while the other
@@ -280,7 +290,7 @@ Two different contracts, and confusing them is the most common misreading:
   Jaune. A FAIL turning into a PASS is a gate failure exactly like the reverse.
   Baselines are `scripts/baseline-<tier>.txt`, reports are
   `scripts/report-<tier>.txt` (gitignored).
-- **`check-mainnet.sh` suites and `check.sh --patch`/`--rlp4` are all-PASS
+- **`check-mainnet.sh` suites and `check-legacy.sh --patch`/`--rlp4` are all-PASS
   targets.** Any non-PASS fails. They have no baseline to rebase.
 - **`check-vectors.sh` is an all-PASS target that also checks coverage.** Every
   manifest file must pass *and* must run the number of cases the manifest
@@ -336,7 +346,7 @@ non-PASS entry.
 Every gate's last line is a single unambiguous verdict, and every gate exits 0
 if and only if it passed.
 
-## Writing a `check.sh` baseline: two verbs
+## Writing a `check-legacy.sh` baseline: two verbs
 
 A baseline line is `STATUS<TAB>TIME<TAB>path`, and the two columns have
 different status: STATUS is the gate, TIME is reference data. So the two reasons
@@ -385,8 +395,8 @@ motivated it.
 
 | gate | report lock | heavy lock |
 |---|---|---|
-| `check.sh --smoke`, `--bls`, `--full`, or any `--jobs > 1` | yes | yes |
-| `check.sh --depth`, `--patch`, `--rlp4`, `--dir` (sequential) | yes | no |
+| `check-legacy.sh --smoke`, `--bls`, `--full`, or any `--jobs > 1` | yes | yes |
+| `check-legacy.sh --depth`, `--patch`, `--rlp4`, `--dir` (sequential) | yes | no |
 | `check-mainnet.sh --suite osaka`/`prague`/`full`, or any `--jobs > 1` | parallel only | yes |
 | `check-mainnet.sh --suite smoke`/`transitions` (sequential) | — (writes none) | no |
 | `check-vectors.sh` | yes | yes |
@@ -399,7 +409,7 @@ take no lock at all — the first four are sub-second, and `check-ec.sh` is a
 single-process oracle that writes its report in one `tee` rather than appending
 per file.
 
-Escape hatches, where one exists, are named in the refusal: `check.sh` and
+Escape hatches, where one exists, are named in the refusal: `check-legacy.sh` and
 `check-elab.sh` accept `--report <path>`, and a run writing elsewhere locks that
 path instead. There is no flag that skips the heavy lock. A run killed with
 `SIGKILL` leaves its lock behind; the next run finds the recorded PID dead,
@@ -415,7 +425,7 @@ announces a `RECLAIMED` line, and proceeds.
   report or baseline can absorb the event.
 - **A report or baseline that repeats a path is a harness event, never a
   classification change** — the same rule, applied to the other input the
-  comparison trusts. `check.sh` treats `path` as a primary key on its selection,
+  comparison trusts. `check-legacy.sh` treats `path` as a primary key on its selection,
   its report, and its baseline, and rejects a violation on any of the three
   before comparing anything, `--rebase` included. It also refuses a report whose
   line count disagrees with the selection. Without those checks a doubled report

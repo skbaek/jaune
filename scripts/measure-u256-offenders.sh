@@ -3,10 +3,10 @@
 # overwriting an earlier run.  The opt.md arc this served is closed, but the
 # script remains a working instrument for timing these files.
 #
-# Each report line is check.sh's PASS/FAIL classification plus the wall time,
+# Each report line is check-legacy.sh's PASS/FAIL classification plus the wall time,
 # which is the measurement of interest here; every offender runs to completion
 # under the uniform wall-clock guard, so a guard trip is not measurement data
-# but a harness error — check.sh aborts and exits nonzero, and this script
+# but a harness error — check-legacy.sh aborts and exits nonzero, and this script
 # propagates that rather than recording anything.
 
 set -uo pipefail
@@ -52,7 +52,7 @@ run_measurement() {
   echo "--- Measuring $name ---"
   local out rc verdict
   # `local out=$(...)` would mask the exit status, so declare first.
-  out="$("$SCRIPT_DIR/check.sh" "${args[@]}")"
+  out="$("$SCRIPT_DIR/check-legacy.sh" "${args[@]}")"
   rc=$?
   printf '%s\n' "$out"
   verdict="$(printf '%s\n' "$out" | tail -1)"
@@ -68,7 +68,7 @@ run_measurement() {
     echo "RED — measurement did not produce $report" >&2
     return "$rc"
   fi
-  echo "RECORDED — $report (check.sh exit $rc; PASS/FAIL classifications and wall times are retained for review)"
+  echo "RECORDED — $report (check-legacy.sh exit $rc; PASS/FAIL classifications and wall times are retained for review)"
   return 0
 }
 

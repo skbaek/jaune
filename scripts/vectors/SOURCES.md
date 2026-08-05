@@ -13,7 +13,7 @@ output); pass `--execution-specs`, `--eest-root`, or `--venv` to point it at
 non-default locations, or `--manifest` to check against a different manifest
 file entirely. Its `EEST_ROOT` override is a doctor-specific variable naming
 the top-level EEST install directory (containing the archive and its
-extracted `fixtures/` tree); it is distinct from `scripts/check.sh`'s
+extracted `fixtures/` tree); it is distinct from `scripts/check-legacy.sh`'s
 `JAUNE_FIXTURES`, which instead points directly at a tier's leaf fixture
 directory.
 
@@ -124,7 +124,7 @@ directly to `BlockchainTests`, not to the execution-specs root.
 
 ## EEST blockchain fixtures (`--bls` tier)
 
-The `--bls` tier of `scripts/check.sh` runs EEST consensus fixtures that are
+The `--bls` tier of `scripts/check-legacy.sh` runs EEST consensus fixtures that are
 too large to vendor. They come from one pinned execution-spec-tests fixture
 release, unpacked outside the repo at `~/eest-fixtures/fixtures/`:
 

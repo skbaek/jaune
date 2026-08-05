@@ -76,7 +76,7 @@ rather than passing vacuously.
 from the build rather than from a written list, so they cannot drift.
 
 The runner takes exactly one file. Fixture *trees* are enumerated by
-`scripts/check.sh --dir`, which records a classification per file against a
+`scripts/check-legacy.sh --dir`, which records a classification per file against a
 baseline — see [`scripts/GATES.md`](scripts/GATES.md). The alternate modes
 `--vectors <address> <file>`, `--u256 <file>`, and `--fake-exp <file>` run the
 pinned differential oracles and are likewise driven by those gates.
@@ -137,7 +137,7 @@ requirements.
   criteria, runtimes, and which gate to reach for when. Both fixture harnesses
   take `--jobs auto` to run in parallel, which roughly halves the legacy corpus
   and quarters the current-mainnet one.
-- **Conformance tiers** ([`scripts/check.sh`](scripts/check.sh)), each compared
+- **Conformance tiers** ([`scripts/check-legacy.sh`](scripts/check-legacy.sh)), each compared
   against a committed baseline. The gate passes iff **every** file's PASS/FAIL
   matches its baseline — a regression gate, not an all-green one:
 

@@ -22,7 +22,7 @@ esac
 
 TRACE="$ROOT/.lake/build/bin/jaune.trace"
 if [ ! -f "$TRACE" ]; then
-  echo "benchmark needs the existing jaune native dependency objects; run a normal check.sh gate first" >&2
+  echo "benchmark needs the existing jaune native dependency objects; run a normal check-legacy.sh gate first" >&2
   exit 1
 fi
 

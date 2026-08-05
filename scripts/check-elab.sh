@@ -38,7 +38,7 @@
 #
 # WHY THIS GATE IS SEQUENTIAL AND HAS NO --jobs
 #
-# check.sh, check-mainnet.sh, and check-vectors.sh take --jobs because their
+# check-legacy.sh, check-mainnet.sh, and check-vectors.sh take --jobs because their
 # gate is the STATUS column and their TIME column is merely reference data, so a
 # contended run still decides the real question. Here TIME *is* the gate. There
 # is no meaningful parallel mode: concurrent elaborations contend for cores and
@@ -66,7 +66,7 @@
 # THRESHOLD
 #
 # A file fails when its time exceeds both 2x its baseline and its baseline plus
-# 1.0s. The 2x factor mirrors the DRIFT convention already used by check.sh; the
+# 1.0s. The 2x factor mirrors the DRIFT convention already used by check-legacy.sh; the
 # absolute floor keeps a sub-second file from tripping on ordinary scheduler
 # noise, where a half-second blip is a large ratio and no real change. A file
 # that has become much *faster* is reported as IMPROVED rather than passed over
@@ -86,7 +86,7 @@
 #
 # BASELINE FORMAT
 #
-# STATUS<TAB>TIME<TAB>path, sorted by path, matching the check.sh baselines.
+# STATUS<TAB>TIME<TAB>path, sorted by path, matching the check-legacy.sh baselines.
 # STATUS is OK or ERROR. A source file with no baseline row is a configuration
 # error, not an unmeasured file: that is what forces a newly added module to
 # state its cost. A baseline row whose file no longer exists is reported as a

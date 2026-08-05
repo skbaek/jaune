@@ -992,7 +992,7 @@ def main : List String → IO Unit
   -- One fixture file, never a directory. Walking a tree here was a second,
   -- unaccounted enumeration path: it produced no per-file classification, no
   -- baseline comparison, no wall-clock guard and no gate lock, so its output
-  -- read like a gate result while being none. `check.sh --dir` is the
+  -- read like a gate result while being none. `check-legacy.sh --dir` is the
   -- enumerator that has all four. `--skip`, which dropped leading *files*,
   -- went with it -- it could not mean anything for a single file.
   | args => do
@@ -1003,4 +1003,4 @@ def main : List String → IO Unit
     | ps =>
       .throw
         s!"error : expected exactly one fixture file, got {ps.reverse}; a run \
-           takes one file, and `check.sh --dir` is the enumerator for a tree"
+           takes one file, and `check-legacy.sh --dir` is the enumerator for a tree"

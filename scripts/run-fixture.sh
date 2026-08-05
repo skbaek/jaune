@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Internal helper: run exactly one fixture under the wall-clock guard and
 # record its classification. Used only by the parallel dispatch path of
-# check.sh and check-mainnet.sh — both sequential paths keep their own inline
+# check-legacy.sh and check-mainnet.sh — both sequential paths keep their own inline
 # runner so that default-mode behaviour stays byte-identical.
 #
 # usage: run-fixture.sh <bin> <guard> <outdir> <idx> <file> <network> <label>

@@ -61,7 +61,7 @@ python3 -c "import json;print([(p['name'],p['rev'],p.get('inputRev')) for p in j
 ## The axioms
 
 Blanc's audit ([`scripts/AxiomCheck.lean`](https://github.com/skbaek/blanc/blob/main/scripts/AxiomCheck.lean),
-driven by `scripts/check.sh`) is the sharpest statement of the trusted base
+driven by `scripts/check-legacy.sh`) is the sharpest statement of the trusted base
 either repository makes, so it is worth being precise about what it does.
 
 Eight theorems are audited: the seven headline solvency results and the compile
@@ -301,7 +301,7 @@ scripts/check-hygiene.sh
 scripts/check-integrity.sh
 
 cd ~/blanc
-scripts/check.sh --no-build
+scripts/check-legacy.sh --no-build
 ```
 
 If any figure in this document disagrees with those commands, the commands are
