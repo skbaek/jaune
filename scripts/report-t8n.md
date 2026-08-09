@@ -10,9 +10,7 @@
 that checkout's `jaune-wrapper` branch
 **Third tool:** go-ethereum `evm`, `evm version 1.15.6-stable-19d2b4c8`, at
 `~/geth-evm-1.15.6/`
-**Status:** every definition-of-done row is satisfied except **G14**, whose two
-`--full` tiers, `check-vectors.sh` and `check-elab.sh` are held for a quiet
-host at the user's direction.
+**Status:** every definition-of-done row is satisfied.
 
 ## What was built
 
@@ -52,12 +50,16 @@ decoder block moved into that module, and script/documentation additions.
 | G11 | **met** | `fill --evm-bin ~/jaune/.lake/build/bin/jaune tests/frontier/opcodes/test_calldatasize.py --fork Prague` fills 30 of 30 cases, and the three fixture files it writes are **identical, outside `_info`, to the same module filled by the target's own in-process EELS** — 30 of 30 cases equal, field for field |
 | G12 | **met** | `scripts/t8n-acceptance.py` sends the eight blockchain-mode corpus cases to Jaune, the conformance target and go-ethereum's `evm`, and compares field by field with all three versions recorded. Three cases unanimous; five carry registered divergences, and **Jaune agrees with the conformance target in every one**. Output at `scripts/report-t8n-acceptance.txt`, registry at `scripts/t8n/acceptance-divergences.json` |
 | G13 | **met** | `Jaune/T8n.lean` is imported by `Main.lean` only, never from `Jaune.lean`; `git diff --name-only main` over `Jaune.lean` and its twelve closure modules is empty; `check-integrity.sh` reports 58 occurrences and 0 pending, unchanged from `main`; Blanc untouched, its pin unmoved |
-| G14 | **partial** | Every cheap gate is green on the candidate (below). The two `--full` tiers, `check-vectors.sh` and `check-elab.sh` remain; the user directed that they wait for a quiet host, since a second session is using this machine and `check-elab`'s gate *is* its timing |
+| G14 | **met** | The full battery is green on the candidate, both `--full` tiers at `--jobs auto`, on an uncontended host — verdicts below |
 | G15 | **met** | README carries a `t8n` section naming the subcommand, the lane, the handshake and the fail-closed rule; `scripts/GATES.md` carries a cheap-tier row and a selection row for it; this report maps every G-row |
 
 ## Gate verdicts on the candidate
 
-Run at `lake build` = 1,778 jobs, tree clean.
+Run at `lake build` = 1,778 jobs, clean tree, uncontended host, no Lean
+language server alive. The heavy tiers were measured at `1d16791`; the final
+commit differs from it only in `scripts/GATES.md` and
+`scripts/t8n-acceptance.py`, neither of which is an input to any gate, and the
+cheap gates were re-run on the final tip.
 
 ```
 OK — hygiene: all 0 occurrence(s) of {dbg_trace, sorry} under Jaune/ are allowlisted
@@ -65,18 +67,40 @@ OK — integrity: all 58 occurrence(s) ... are allowlisted; 0 pending (budget 0)
 OK — cli: 11 checks; the four fixture-file refusals hold
 OK — u256: 21593/21593 PASS
 OK — fake-exp: 240/240 PASS
+OK — ec: 573/573 cases PASS
 OK — patch: 10/10 PASS
 OK — rlp4: 4/4 PASS
 OK — depth: 67 files match baseline (--jobs 10)
-OK — smoke: 16/16 manifest files PASS
+OK — smoke: 174 files match baseline (173 PASS, 1 FAIL; --jobs 10)
+OK — bls: 29 files match baseline (29 PASS, 0 FAIL; --jobs 10)
+OK — vectors: 51/51 files PASS; controls 5/5 PASS in 87.81s (--jobs 10)
+OK — elab: all 18 file(s) within 2.0x baseline; 53.2 s total vs 50.5 s baseline
+OK — smoke (mainnet): 16/16 manifest files PASS
 OK — transitions: 13/13 manifest files PASS (--jobs 10)
+OK — full (mainnet): 5100/5100 manifest files PASS in 279.39s (--jobs 10)
+OK — full (legacy): 2983 files match baseline (2978 PASS, 5 FAIL; --jobs 10)
 OK — t8n red test: a corrupted stateRoot in block-exception is rejected
 OK — t8n: 9 case(s) byte-identical to goldens generated from execution-specs
      9d6e6f8352a0, deterministic over two runs
 Ran 121 tests ... OK          (python3 -m unittest discover -s scripts/tests)
 ```
 
-`scripts/check-t8n.sh --red-test` measured at 0.53 s.
+Both legacy tiers are baseline-identical, which is the contract: their five
+known FAILs are still FAILs and nothing turned into a PASS. `scripts/check-t8n.sh
+--red-test` measured at 0.53 s.
+
+**`check-elab.sh` needed a second run, and the first one was the gate's own
+trap rather than a regression.** With `--no-build` it reported
+`Jaune.lean: 3.075s vs baseline 1.230s` and went red. That measurement cannot
+have been caused by this change: `Jaune.lean` and its entire import closure are
+byte-identical to `main`, and `Jaune/T8n.lean` is outside that closure. The
+cause is that `--no-build` skips the `lake build` that also warms the page
+cache, so the first file measured — `Jaune.lean`, which sorts first — pays the
+cold read alone. Run as documented, without the flag, the same tree gives
+`Jaune.lean` at 1.290 s and a green verdict, and nothing else in the run moves.
+`scripts/GATES.md` now records the trap and both numbers.
+
+`Jaune/T8n.lean` itself measured 1.658 s against its 1.690 s baseline.
 
 ## The field table as implemented
 
@@ -357,8 +381,6 @@ strictly a successor. Nothing in the frontend as built forecloses it.
 
 ## Remaining risk
 
-- **G14 is unfinished.** The two `--full` tiers, `check-vectors.sh` and
-  `check-elab.sh` are outstanding and must pass before merge.
 - **The third tool is a year old.** `evm 1.15.6` is the newest darwin-arm64
   build go-ethereum publishes, so the `requests` prefix divergence in
   particular may already be fixed upstream. It does not weaken the two

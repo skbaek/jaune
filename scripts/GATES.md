@@ -325,6 +325,15 @@ Two different contracts, and confusing them is the most common misreading:
   about elaboration cost, and CI's only ceilings are coarse job timeouts, so a
   module drifting from 4 s to 60 s would land unnoticed.
 
+  **Do not pass it `--no-build`.** Every other gate treats that flag as a
+  pure saving, and this one does not: the `lake build` it skips is also what
+  pulls the dependency oleans into the page cache, and without it the
+  *first* file measured — `Jaune.lean`, which sorts first — pays the cold
+  read alone. Measured on one unchanged tree, 2026-08-10: `Jaune.lean` at
+  3.075 s with `--no-build` and 1.290 s without, against a 1.230 s baseline.
+  The first is a red gate and a fiction; the second is the number. Nothing
+  else in the run moves, because by the second file the cache is warm.
+
   **It is a local gate, not a CI gate.** Its baseline is wall-clock time from
   one machine, which is machine-dependent in precisely the way `notimeout.md`
   objected to when it abolished TIMEOUT as a fixture classification — a slower

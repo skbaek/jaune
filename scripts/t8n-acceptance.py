@@ -53,8 +53,6 @@ RESULT_SCALARS = [
     "blobGasUsed",
     "requestsHash",
 ]
-RECEIPT_FIELDS = ["transactionHash", "status", "cumulativeGasUsed", "bloom", "logs"]
-
 
 def fail(message: str) -> "NoReturn":  # type: ignore[valid-type]
     print(f"error: {message}", file=sys.stderr)
@@ -141,7 +139,8 @@ def target_tool():
     return binary, head.stdout.strip(), entry["commit"]
 
 
-def run(binary, subcommand, case, work, spec, extra=()):
+def run(binary, subcommand, case, work, spec):
+    """One tool, one case. Blockchain mode only -- see the caller."""
     args = [str(binary)]
     if subcommand:
         args.append(subcommand)
@@ -155,12 +154,8 @@ def run(binary, subcommand, case, work, spec, extra=()):
         f"--state.chainid={spec['chainid']}",
         f"--state.reward={spec['reward']}",
         f"--output.basedir={work}",
-        *extra,
     ]
-    if spec["mode"] == "state-test":
-        args += list(extra) and [] or []
-    completed = subprocess.run(args, capture_output=True, text=True)
-    return completed, work
+    return subprocess.run(args, capture_output=True, text=True)
 
 
 def main() -> int:
@@ -214,7 +209,7 @@ def main() -> int:
             ):
                 work = Path(tmp) / label
                 work.mkdir()
-                completed, _ = run(binary, subcommand, case, work, spec)
+                completed = run(binary, subcommand, case, work, spec)
                 if completed.returncode != 0:
                     detail = (
                         f"{label} exited {completed.returncode}: "
