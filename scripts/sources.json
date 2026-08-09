@@ -73,6 +73,18 @@
     },
     "_comment": "The canonical current-mainnet lane. The GitHub release API resolves this immutable target commit and uploaded asset digest; the archive's .meta/index.json provides the independently checked fixture-tree root hash, generation time, and test count."
   },
+  "conformance_target": {
+    "repo_url": "https://github.com/ethereum/execution-specs.git",
+    "branch": "forks/amsterdam",
+    "commit": "9d6e6f8352a0f76e7e8803722d1a2798fa4f0a96",
+    "default_env_var": "JAUNE_T8N_TARGET",
+    "default_subpath_from_home": "execution-specs-t8n-amsterdam",
+    "venv_subpath": ".venv",
+    "t8n_command": "ethereum-spec-evm",
+    "fill_command": "fill",
+    "fork_lane": ["Prague", "Osaka", "BPO1", "BPO2"],
+    "_comment": "The transition-tool conformance anchor for `jaune t8n`, chosen 2026-08-03 because this checkout's `fill` defaults to the in-process ExecutionSpecsTransitionTool, which calls this same checkout's EELS in process (client_clis/__init__.py sets the default tool; clis/execution_specs.py runs T8N.run). It is a GATE ANCHOR, not a fork-scope commitment: `jaune t8n` serves the Prague-BPO2 lane named above and never selects the Amsterdam/BPO3-5 paths this branch also carries. This checkout is SEPARATE from execution_specs above -- that one is the frozen oracle pin for check-fake-exp.sh and the vector generators, and is never repointed. This one has its own venv (`uv sync --no-default-groups --group test`), which scripts/gen-t8n-goldens.py and scripts/check-t8n.sh drive."
+  },
   "python_oracle": {
     "intended_version": "3.11.9",
     "patch_policy": "exact",
