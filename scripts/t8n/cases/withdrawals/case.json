@@ -1,0 +1,7 @@
+{
+  "description": "Two withdrawals credited after the transactions, exercising the withdrawals trie and withdrawalsRoot.",
+  "fork": "Prague",
+  "chainid": 1,
+  "reward": -1,
+  "mode": "blockchain"
+}

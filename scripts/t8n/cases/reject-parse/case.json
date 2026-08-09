@@ -1,0 +1,7 @@
+{
+  "description": "A type-3 transaction with no receiver, which no fork on this lane can execute, followed by a transaction that still executes. G3's parse-rejection case.",
+  "fork": "Prague",
+  "chainid": 1,
+  "reward": -1,
+  "mode": "blockchain"
+}

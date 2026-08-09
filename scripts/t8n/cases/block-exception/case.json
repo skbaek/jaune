@@ -1,0 +1,7 @@
+{
+  "description": "The withdrawal-request predeploy replaced by an INVALID opcode, so the checked system transaction fails and the block-level reason lands in blockException instead of aborting the run.",
+  "fork": "Prague",
+  "chainid": 1,
+  "reward": -1,
+  "mode": "blockchain"
+}

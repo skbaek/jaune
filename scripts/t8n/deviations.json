@@ -1,0 +1,30 @@
+{
+  "_comment": "The registry of every declared difference between `jaune t8n` and the conformance target on the committed corpus. scripts/check-t8n.sh applies each entry to the GOLDEN side before comparing; nothing is applied to Jaune's output, whose bytes are compared as written. Each entry pins Jaune's exact expected bytes as well as the target's, so an unregistered difference and a changed registered one both fail the gate. scripts/report-t8n.md carries the full justification.",
+  "_messages_comment": "`rejected[].error` and `blockException` carry free text with no normative content. Every transition tool writes its own, and the framework maps the text to a canonical identity through the registered wrapper's exception mapper rather than comparing it (execution_testing/exceptions/exception_mapper.py). Jaune therefore writes its own canonical vocabulary -- the official identity Jaune/FixtureException.lean already assigns to each typed reason -- rather than imitating another tool's wording. Every pair below maps to the same official identity on both sides.",
+  "messages": {
+    "Failed transaction: NonceMismatchError('nonce too high')": "TransactionException.NONCE_MISMATCH_TOO_HIGH",
+    "Failed transaction: TransactionTypeContractCreationError('transaction type `BlobTransaction` not allowed to create contracts')": "TransactionException.TYPE_3_TX_CONTRACT_CREATION",
+    "System contract (00000961ef480eb55e80d19ad83579a64c007002) call failed: 254": "BlockException.SYSTEM_CONTRACT_CALL_FAILED"
+  },
+  "_fields_comment": "Per-case field exemptions. Each names the document, the JSON path, the target's exact value, Jaune's exact value, and why they differ.",
+  "fields": [
+    {
+      "case": "reject-parse",
+      "document": "result.json",
+      "path": [
+        "txRoot"
+      ],
+      "target": "0x97931820127e3dcd674416904de40f1c439048a47f7dd58771a476f6230a06e7",
+      "jaune": "0xdd527ad1d43e599c5166bff38bd8f90c82dc1454d71e53de61c0ab49c7de3a1e",
+      "why": "The case's first transaction is a type-3 blob transaction with no receiver -- a shape every fork on this lane rejects, and one Jaune's `TxType.three` cannot represent at all because its receiver is a mandatory `Adr`. The target builds the object anyway and rejects it one step later, inside `check_transaction`; because `process_transaction` writes into the shared `block_output.transactions_trie` before validating, the unexecutable transaction is still counted by `txRoot` and is still encoded into `body`. Jaune classifies the same shape at decode, with the same official identity (TransactionException.TYPE_3_TX_CONTRACT_CREATION), so `rejected` agrees; it simply has no transaction object to put in the trie or the body. The framework consumes neither field -- specs/blockchain.py excludes `transactions_trie` from the fixture header and recomputes it, and the body is not read back -- and widening the type to represent an invalid shape would weaken Jaune, not the tool."
+    },
+    {
+      "case": "reject-parse",
+      "document": "body.json",
+      "path": [],
+      "target": "0xf899b403f201800164830f4240808080c064e1a00100000000000000000000000000000000000000000000000000000000000001010101b862f860800a830f4240940000000000000000000000000000000000000100018026a089bd7056bd0a48143322d59b279193f091fc13c45ad958965650fadbeef4d79fa06c5a89c93e6fdcc0943fc1bd974ee7f15705d4491a4ee473f65690fb423ec3ed",
+      "jaune": "0xf864b862f860800a830f4240940000000000000000000000000000000000000100018026a089bd7056bd0a48143322d59b279193f091fc13c45ad958965650fadbeef4d79fa06c5a89c93e6fdcc0943fc1bd974ee7f15705d4491a4ee473f65690fb423ec3ed",
+      "why": "The case's first transaction is a type-3 blob transaction with no receiver -- a shape every fork on this lane rejects, and one Jaune's `TxType.three` cannot represent at all because its receiver is a mandatory `Adr`. The target builds the object anyway and rejects it one step later, inside `check_transaction`; because `process_transaction` writes into the shared `block_output.transactions_trie` before validating, the unexecutable transaction is still counted by `txRoot` and is still encoded into `body`. Jaune classifies the same shape at decode, with the same official identity (TransactionException.TYPE_3_TX_CONTRACT_CREATION), so `rejected` agrees; it simply has no transaction object to put in the trie or the body. The framework consumes neither field -- specs/blockchain.py excludes `transactions_trie` from the fixture header and recomputes it, and the body is not read back -- and widening the type to represent an invalid shape would weaken Jaune, not the tool."
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "Three transactions with the middle one rejected: the first and third still execute, and their receipts carry consecutive indices.",
+  "fork": "Prague",
+  "chainid": 1,
+  "reward": -1,
+  "mode": "blockchain"
+}

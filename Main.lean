@@ -4,12 +4,20 @@ import «Jaune».Transaction
 import «Jaune».FixtureException
 import «Jaune».ChainStore
 import «Jaune».BLSGuards
+import «Jaune».T8n
 
 open Jaune
 
 
 
 ----------------- JSON DECODING HELPERS ------------------
+
+-- The bulk of this section -- every `Lean.Json.toIo*` reader, `toAcct`,
+-- `toWorld`, and the two `find` accessors -- now lives in `Jaune/T8n.lean`,
+-- which this module imports. It moved there rather than being copied when the
+-- transition-tool frontend needed to decode the same `alloc` shape: a second
+-- `toWorld` would be a second definition of what a pre-state is. Only the
+-- three declarations below are still fixture-runner-only.
 
 /-- Strip a mandatory `0x` prefix, or fail. This lives in the harness rather
 than `Jaune/Basic.lean` because it is fixture-JSON syntax handling, not
@@ -20,122 +28,13 @@ def Option.remove0x (s : String) : Option String :=
   | '0' :: 'x' :: cs => return String.ofList cs
   | _ => .none
 
-def Lean.Json.toIoList : Lean.Json → IO (List Json)
-  | .arr a => return a.toList
-  | _ => IO.throw "not an array"
-
-def Lean.Json.toIoRBNode :
-  Lean.Json → IO (Std.TreeMap.Raw String Json compare)
-  | .obj r => return r
-  | _ => IO.throw "not an object"
-
 def Lean.Json.toString? : Lean.Json → Option String
   | .str s => some s
   | _ => none
 
-def Lean.Json.toIoString : Lean.Json → IO String
-  | .str s => return s
-  | _ => IO.throw "not a string"
-
-def Lean.Json.toIoBytes (j : Json) : IO Bytes := do
-  let x ← toIoString j >>= .remove0x
-  (Hex.toBytes x).toIO ""
-
-def Lean.Json.toIoAdr (j : Json) : IO Adr := do
-  let x ← toIoString j >>= .remove0x
-  (Hex.toAdr? x).toIO ""
-
-def Lean.Json.toIoB64 (j : Json) : IO UInt64 := do
-  let x ← toIoString j >>= .remove0x
-  (Hex.toUInt64? x).toIO
-
 def Lean.Json.toB256? (j : Json) : Option B256 := do
   let x ← toString? j >>= .remove0x
   Hex.toB256? x
-
-def Lean.Json.toIoB256 (j : Json) : IO B256 := do
-  let x ← toIoString j >>= .remove0x
-  (Hex.toB256? x).toIO ""
-
--- Fixture JSON quantities: any width up to the field's own, and no
--- leading-zero rule, because JSON quantity syntax is not RLP minimal-scalar
--- syntax. These replace a pair that converted through the raw
--- `Bytes.toUInt64` / `Bytes.toB256`, which pad short values and silently
--- *truncate* long ones -- so an over-wide prestate field used to become a
--- plausible in-range one with no error at all. `Bytes.toQuantityB64?` and
--- `Bytes.toQuantityB256?` accept exactly the same short values and reject the
--- over-long input; see the soundness theorems in `Jaune/Types.lean`.
-
-def Lean.Json.toIoQuantityB64 (field : String) (j : Json) : IO UInt64 := do
-  let x ← toIoString j >>= .remove0x
-  let xs ← (Hex.toBytes x).toIO s!"error : {field} is not a hex byte string"
-  (Bytes.toQuantityB64? xs).toIO
-    s!"error : {field} is {xs.length} bytes wide, exceeding the 8-byte maximum"
-
-def Lean.Json.toIoQuantityB256 (field : String) (j : Json) : IO B256 := do
-  let x ← toIoString j >>= .remove0x
-  let xs ← (Hex.toBytes x).toIO s!"error : {field} is not a hex byte string"
-  (Bytes.toQuantityB256? xs).toIO
-    s!"error : {field} is {xs.length} bytes wide, exceeding the 32-byte maximum"
-
-/-- The same decoder for a quantity that arrives as a JSON *key* rather than a
-value. The `0x` prefix stays mandatory, exactly as before. -/
-def Hex.toIoQuantityB256 (field : String) (h : String) : IO B256 := do
-  let x ← IO.remove0x h
-  let xs ← (Hex.toBytes x).toIO s!"error : {field} is not a hex byte string"
-  (Bytes.toQuantityB256? xs).toIO
-    s!"error : {field} is {xs.length} bytes wide, exceeding the 32-byte maximum"
-
-/-- Read a hex *quantity*, which unlike a byte string may have an odd number of
-digits. Used for the small schedule numbers a fixture states about itself. -/
-def Lean.Json.toIoHexNat (j : Json) : IO Nat := do
-  let x ← toIoString j >>= .remove0x
-  if x.isEmpty then .throw "error : empty hex quantity"
-  let nibbles ← (x.toList.mapM Hexit.toB4).toIO s!"error : invalid hex quantity {x}"
-  return nibbles.foldl (fun acc nibble => (acc * 16) + nibble.toNat) 0
-
-def Lean.Json.toAcct : Lean.Json → IO Acct
-  | .obj r => do
-    let aux (xy : String × Lean.Json) : IO (B256 × B256) := do
-      let key ← Hex.toIoQuantityB256 "storage key" xy.fst
-      let value ← Lean.Json.toIoQuantityB256 "storage value" xy.snd
-      return ⟨key, value⟩
-    let bal_json ← (r.get? "balance").toIO ""
-    let nonce_json ← (r.get? "nonce").toIO ""
-    let code_json ← (r.get? "code").toIO ""
-    let stor_json ← (r.get? "storage").toIO "" >>= Lean.Json.toIoRBNode
-    let bal ← Lean.Json.toIoQuantityB256 "balance" bal_json
-    let nonce ← Lean.Json.toIoQuantityB64 "nonce" nonce_json
-    let code ← Lean.Json.toIoBytes code_json
-    let storPairs ← List.mapM aux stor_json.toArray.toList
-    -- Ethereum's state trie has no entries for zero-valued storage slots.  The
-    -- JSON fixtures may spell such a slot explicitly in `pre`, so normalize
-    -- through the canonical smart constructor rather than retaining a
-    -- non-canonical map entry; `Stor.canonical_ofList` is the witness.
-    return ⟨nonce, bal, Stor.ofList storPairs, code.toByteArray⟩
-  | _ => .throw "cannot parse account (not .obj)"
-
--- The prestate is built through `State.ofList`, i.e. through `State.set`, so
--- `State.canonical_ofList` applies: every account comes out of `toAcct`, whose
--- storage is a `Stor.ofList` and hence canonical. An explicit `Acct.nil` or an
--- explicitly zero-valued slot in `pre` is dropped rather than stored, which is
--- what keeps the parsed state's trie root the committed one.
-def Lean.Json.toWorld (j : Lean.Json) : IO State := do
-  let aux (xy : String × Lean.Json) : IO (Adr × Acct) := do
-    let adr ← (Hex.toAdr? <| remove0x xy.fst).toIO ""
-    let acct ← xy.snd.toAcct
-    return ⟨adr, acct⟩
-  let ob ← j.toIoRBNode
-  let entries ← List.mapM aux ob.toArray.toList
-  return State.ofList entries
-
-def Lean.Json.find? : String → Lean.Json → Option Lean.Json
-  | k, .obj r => r.get? k
-  | _, _ => .none
-
-def Lean.Json.find : String → Lean.Json → IO Lean.Json
-  | k, .obj r => (r.get? k).toIO s!"ERROR : FAILED JSON RETRIEVAL WITH KEY : {k}"
-  | k, _ => .throw s!"ERROR : INPUT JSON IS NOT OBJECT, FAILED RETRIEVAL WITH KEY : {k}"
 
 def getTxExMap (j : Lean.Json) : IO (Option String × Bytes) := do
   let rlp ← j.find "rlp" >>= Lean.Json.toIoBytes
@@ -939,10 +838,14 @@ def usage : String :=
   s!"usage:
   jaune <fixture.json> [--network <label>] [--name <case>] \
 [--notName <case>] [--index <n>]
+  jaune t8n [options] --state.fork <label>
   jaune --vectors <address> <file.json> [--network <fork>]
   jaune --u256 <file.json>
   jaune --fake-exp <file.json>
+  jaune --version
   jaune --help
+
+{T8n.usage}
 
 Runs one blockchain-test fixture file. EEST fills one test into sibling trees
 -- blockchain_tests, blockchain_tests_engine, blockchain_tests_engine_x,
@@ -970,6 +873,13 @@ def main : List String → IO Unit
   | [] => .throw "error : no arguments; run with --help for usage"
   | "--help" :: _ => .println usage
   | "-h" :: _ => .println usage
+  -- The banner. A transition-tool framework identifies a binary by running it
+  -- with `-v` and matching the first line against the wrapper registered for
+  -- it, so this line is a wire surface: keep it one line and keep its shape.
+  -- `jaune t8n --info` is the full handshake.
+  | "-v" :: _ => .println s!"jaune version {T8n.version}"
+  | "--version" :: _ => .println s!"jaune version {T8n.version}"
+  | "t8n" :: rest => T8n.run rest
   | "--u256" :: pathStr :: [] => do
     if !(← runU256VectorFile pathStr) then IO.Process.exit 1
   | "--fake-exp" :: pathStr :: [] => do

@@ -1,0 +1,7 @@
+{
+  "description": "A single transaction rejected during execution for a nonce that is too high. Its entry stays in the transactions trie, which is what txRoot pins.",
+  "fork": "Prague",
+  "chainid": 1,
+  "reward": -1,
+  "mode": "blockchain"
+}

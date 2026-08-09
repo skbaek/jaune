@@ -1,0 +1,17 @@
+[
+  {
+    "type": "0x2",
+    "chainId": "0x1",
+    "nonce": "0x0",
+    "maxPriorityFeePerGas": "0x1",
+    "maxFeePerGas": "0x64",
+    "gas": "0xf4240",
+    "to": "0x00000961ef480eb55e80d19ad83579a64c007002",
+    "value": "0x1",
+    "input": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0000000000000001",
+    "accessList": [],
+    "v": "0x1",
+    "r": "0x976025a20c10672d7d804fe549224c9e975bf6e3f0b0823d5c5cdebaf0429ca0",
+    "s": "0x4f19500162a527c830391720e00c821e7e4f4b7a0b33b62711061b15845f1ad2"
+  }
+]
