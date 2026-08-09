@@ -7,15 +7,13 @@ would find on their own.
 
 Every figure below is regenerable. Where a number appears, the command that
 produces it appears with it — prefer running the command to trusting the
-number, because the command is current and the number is a snapshot. The
-snapshot was taken on 2026-08-04 against Jaune
-`4e6a655591ca56583a5fca20782e80a3b9df1777` and Blanc
-`a7db98b918938e7e89b308209d1f864381bddf0c` — the `codex/sweep` tips of the
-Blanc → Jaune upstream sweep, proposed for merge and not yet merged.
+number, because the command is current and the number is only a snapshot.
+Repository identity for any regenerated result is `git rev-parse HEAD` in the
+repository whose gate owns it.
 
 This document is the base for both repositories. Blanc's trusted base is this
 one plus three additions — the pinned Jaune revision, the axiom audit, and
-Blanc's own ungated source — which are stated in
+Blanc's imported-source trust gate — which are stated in
 [Blanc's README](https://github.com/skbaek/blanc/blob/main/README.md#verification-status)
 rather than duplicated here.
 
@@ -61,22 +59,25 @@ python3 -c "import json;print([(p['name'],p['rev'],p.get('inputRev')) for p in j
 ## The axioms
 
 Blanc's audit ([`scripts/AxiomCheck.lean`](https://github.com/skbaek/blanc/blob/main/scripts/AxiomCheck.lean),
-driven by `scripts/check-legacy.sh`) is the sharpest statement of the trusted base
+driven by `scripts/check.sh`) is the sharpest statement of the trusted base
 either repository makes, so it is worth being precise about what it does.
 
-Eight theorems are audited: the seven headline solvency results and the compile
-witness `Blanc.wethCode_compile`. Each row carries its **own pinned expected
-axiom set**, and a theorem's axiom closure must equal that set *exactly*,
-order-insensitively. An unexpected axiom fails the gate — and so does a
-*missing* one, so a proof cannot quietly become vacuous or be replaced by a
-stronger-looking statement without the pin moving in a reviewable diff. A
-secondary pattern net independently rejects `sorryAx`, `ofReduceBool`,
+Every audited row carries its **own pinned expected axiom set**, and a theorem's
+axiom closure must equal that set *exactly*, order-insensitively. An unexpected
+axiom fails the gate, and so does a missing one: dependency-closure changes in
+either direction are reviewable, including the no-axiom trivialization
+direction. That signal does **not** pin the theorem statement and does not by
+itself prevent a weaker or vacuous statement. Blanc separately Lean-checks the
+exact statements of its selected WETH10 flagships with `scripts/check-claims.sh`.
+A secondary pattern net independently rejects `sorryAx`, `ofReduceBool`,
 `ofReduceNat`, and any `_native.` axiom, on the grounds that the last of these
 adds the Lean compiler to the trusted code base.
 
-All eight rows currently pin exactly `[propext, Classical.choice, Quot.sound]`
-— standard classical Lean, present in essentially every Mathlib-using
-development, and no more than that.
+The live audit membership, total, and axiom-set distribution belong to
+[Blanc's README trust section](https://github.com/skbaek/blanc/blob/main/README.md#verification-status)
+and [Blanc's gate catalogue](https://github.com/skbaek/blanc/blob/main/scripts/GATES.md),
+not to a duplicated count here. Most rows use the standard three axioms;
+several compile-shape rows use `propext` only.
 
 ```
 cd ~/blanc && scripts/check.sh --no-build
@@ -103,13 +104,13 @@ each of the following:
 | `dbg_trace` | no tracing on a code path |
 
 ```
-grep -rEn '@\[extern|^axiom |^opaque |sorry|partial def|implemented_by|native_decide|dbg_trace' Jaune/ Main.lean
+rg -n '^\s*@\[extern|^\s*axiom\s|^\s*opaque\s+\S+\s*:|\bsorry\b|^\s*partial\s+def|\bimplemented_by\b|\bnative_decide\b|\bdbg_trace\b' Jaune Main.lean
 ```
 
 Run the same scan unanchored — matching the bare words anywhere, comments
-included — and it returns twenty hits, all prose: eleven where `extern` sits
+included — and it returns twenty-one hits, all prose: eleven where `extern` sits
 inside the English word "external" (opcode comments for `EXTCODESIZE` and its
-neighbours, and remarks about externally observed bytes and labels), eight uses
+neighbours, and remarks about externally observed bytes and labels), nine uses
 of "opaque" in comments describing typed-envelope bytes that stay undecoded,
 and one comment about keeping axiom sets exact. No declaration of any of these
 kinds exists.
@@ -159,21 +160,22 @@ scripts/check-hygiene.sh
 scripts/check-integrity.sh
 ```
 
-Today: hygiene reports 0 occurrences, all allowlisted; integrity reports 56
+Today: hygiene reports 0 occurrences, all allowlisted; integrity reports 58
 occurrences allowlisted, 0 pending, pending budget 0.
 
-**What no gate enforces.** `@[extern]`, `axiom`, `opaque`, and `native_decide`
-are absent from Jaune as a matter of fact, not as a matter of enforcement — no
-Jaune gate forbids them, and a future commit introducing one would not be
-caught by `check-hygiene.sh` or `check-integrity.sh`. Blanc's axiom audit
-catches such a thing only if it enters the eight audited theorems' dependency
-cones. **Also: `check-integrity.sh` is not a CI gate.** The push/pull-request
+**What no Jaune gate enforces.** `@[extern]`, bespoke `axiom`, `opaque`, and
+`native_decide` are absent from Jaune as a matter of fact, not as a matter of
+enforcement — a future Jaune commit introducing one would not be caught by
+`check-hygiene.sh` or `check-integrity.sh`. Blanc now has a separate
+`scripts/check-trust-surface.sh` for these forms in `Blanc.lean`'s transitive
+import closure, and its axiom audit catches dependency-closure changes for the
+named audited results. Neither Blanc gate expands the scope of Jaune's gates.
+**Also: `check-integrity.sh` is not a CI gate.** The push/pull-request
 workflow ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs exactly
 three jobs — the portable-environment unit tests, `check-hygiene.sh`, and
 `lake build` — and the nightly workflow runs the `--full` and `--bls`
 conformance tiers. The integrity gate is in neither; it is run locally and
-before merge. Arc discipline is what has kept it green, which is a process
-guarantee, not a mechanical one.
+before merge, which is a process guarantee rather than a CI guarantee.
 
 ## The known exceptions
 
@@ -194,13 +196,13 @@ configurations can produce them; and `bv_decide` remains banned by project
 policy inside the protected-theorem cone. Both remain sensible guards. Neither
 is presently doing any work on this lemma.
 
-**56 retained allowlist rows, zero pending.** 43 R3 rows for explicitly
-justified optimized or reference operations and 13 R4 rows for legacy renderers
+**58 retained allowlist rows, zero pending.** 43 R3 rows for explicitly
+justified optimized or reference operations and 15 R4 rows for legacy renderers
 and external parser boundaries — and **no R2 rows at all**, so there is no
 `panic` anywhere in the closure. Every retained row is a reviewed `KEEP` naming
 its wrapper, theorem, adapter, or boundary; no `PENDING` row remains and the
 budget is 0. A retained row is a **scoped, mechanically checked exception**, not
-an unclassified defect — but it is an exception, and 56 of them is the honest
+an unclassified defect — but it is an exception, and 58 of them is the honest
 count of places where the strong reading of "no raw bang operations, no
 stringly-typed errors" does not literally hold.
 
@@ -211,7 +213,7 @@ surface, not consensus surface — and R4 does reach them, but a reader auditing
 "which code do these rules cover" deserves the boundary stated rather than
 inferred from a comment in a shell script.
 
-**`Main.lean` is in no proof cone.** The fixture harness is 840 lines of `IO`
+**`Main.lean` is in no proof cone.** The fixture harness is 1,006 lines of `IO`
 that parse JSON, select cases, and compare roots. Every conformance claim this
 project makes passes through code that no theorem covers. R1 and R4 reach it;
 no proof does. It is tested, not proved, and that distinction is the point of
@@ -296,12 +298,14 @@ testing, not proof, exactly as the previous section describes.
 ```
 cd ~/jaune
 cat lean-toolchain
-grep -rEn '@\[extern|^axiom |^opaque |sorry|partial def|implemented_by|native_decide|dbg_trace' Jaune/ Main.lean
+rg -n '^\s*@\[extern|^\s*axiom\s|^\s*opaque\s+\S+\s*:|\bsorry\b|^\s*partial\s+def|\bimplemented_by\b|\bnative_decide\b|\bdbg_trace\b' Jaune Main.lean
 scripts/check-hygiene.sh
 scripts/check-integrity.sh
 
 cd ~/blanc
-scripts/check-legacy.sh --no-build
+scripts/check-trust-surface.sh
+scripts/check.sh --no-build
+scripts/check-claims.sh
 ```
 
 If any figure in this document disagrees with those commands, the commands are
