@@ -1,0 +1,40 @@
+{
+  "_comment": "Registered three-way divergences on the acceptance corpus, for scripts/t8n-acceptance.py. Each entry names the case, the fields, the sides that agree, and why. An unregistered disagreement fails the comparison; these do not, because each has been read and attributed. scripts/report-t8n.md carries the full argument. Note what every entry has in common: Jaune agrees with the conformance target and the third tool is the odd one out, which is what reproducing the target faithfully looks like when the target and another client genuinely differ.",
+  "divergences": [
+    {
+      "case": "reject-execution",
+      "fields": ["txRoot"],
+      "agree": ["jaune", "target"],
+      "differs": "geth",
+      "why": "The conformance target's `process_transaction` writes the transaction into the shared `block_output.transactions_trie` before validating it, so a transaction rejected during execution is still counted by `txRoot`. Jaune reproduces that deliberately. geth counts only the accepted transactions, which is the root the block it would build actually has. This looks like an upstream defect in the target rather than a disagreement about semantics; the framework does not consume `txRoot` (specs/blockchain.py excludes `transactions_trie` from the fixture header and recomputes it), which is presumably why it has gone unnoticed."
+    },
+    {
+      "case": "reject-middle",
+      "fields": ["txRoot", "receiptsRoot"],
+      "agree": ["jaune", "target"],
+      "differs": "geth",
+      "why": "The same defect, plus its receipts half. The target keys each receipt by the transaction's original index, so a rejection in the middle leaves a gap (0 and 2); geth re-indexes the accepted transactions (0 and 1). Both tries are internally consistent; only geth's is the trie of the block that would be built."
+    },
+    {
+      "case": "reject-parse",
+      "fields": ["*"],
+      "agree": ["jaune", "target"],
+      "differs": "geth",
+      "why": "geth refuses the whole input -- `failed unmarshalling txs-file: missing required field 'to' in transaction` -- where Jaune and the target both record the transaction in `rejected` and execute the rest. Rejecting a malformed member of `txs` rather than the whole file is the behaviour the reject-and-continue protocol asks for."
+    },
+    {
+      "case": "requests",
+      "fields": ["requests"],
+      "agree": ["jaune", "target"],
+      "differs": "geth",
+      "why": "EIP-7685 makes a request the concatenation of its one-byte type and its data. Jaune and the target emit `0x01...`; geth 1.15.6 emits the data without the type byte -- while computing the same `requestsHash`, which all three agree on, so geth hashes with the prefix and reports without it."
+    },
+    {
+      "case": "block-exception",
+      "fields": ["hasBlockException"],
+      "agree": ["jaune", "target"],
+      "differs": "geth",
+      "why": "With the withdrawal-request predeploy replaced by an INVALID opcode, Jaune and the target both report a block-level failure of the checked system transaction. geth 1.15.6 reports no block exception at all and produces an ordinary result."
+    }
+  ]
+}

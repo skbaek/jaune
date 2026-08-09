@@ -278,6 +278,7 @@ not vouch for Jaune.
 | `python3 scripts/gen_mainnet_manifest.py --fixtures-root "$HOME/eest-mainnet-v20.0.1/fixtures" --check` | exact current-manifest identity |
 | `python3 scripts/gen-vector-shards.py --check` | the `blsPairing` shards are an exact partition of their source |
 | `python3 scripts/gen-t8n-goldens.py --check` | the committed `t8n` goldens still match the conformance target's current output. Needs that checkout and its venv; `scripts/check-t8n.sh` itself needs neither |
+| `python3 scripts/t8n-acceptance.py --third <evm>` | three-way `t8n` agreement over the corpus: Jaune, the conformance target, and one further transition tool, compared field by field. Not a gate — it needs two external tools — and its registered divergences live in `scripts/t8n/acceptance-divergences.json` |
 
 Python generators run under the frozen oracle venv
 `~/execution-specs/venv/bin/python`. Generated vectors must come from

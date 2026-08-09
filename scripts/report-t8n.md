@@ -8,9 +8,11 @@
 `~/execution-specs-t8n-amsterdam`
 **Wrapper patch:** `~/plans/t8n-eest-jaune-wrapper.patch`, also committed on
 that checkout's `jaune-wrapper` branch
-**Status:** every definition-of-done row is satisfied except **G12**, which
-needs a second transition tool that is not installed on this machine and
-cannot be obtained without downloading a third-party binary.
+**Third tool:** go-ethereum `evm`, `evm version 1.15.6-stable-19d2b4c8`, at
+`~/geth-evm-1.15.6/`
+**Status:** every definition-of-done row is satisfied except **G14**, whose two
+`--full` tiers, `check-vectors.sh` and `check-elab.sh` are held for a quiet
+host at the user's direction.
 
 ## What was built
 
@@ -48,9 +50,9 @@ decoder block moved into that module, and script/documentation additions.
 | G9 | **met** | `scripts/check-t8n.sh` over nine committed cases — plain transfer, contract call with logs, parse rejection, execution rejection, multi-transaction rejection-in-the-middle with a later success, withdrawals, requests, block exception, and both modes. Goldens produced by `scripts/gen-t8n-goldens.py` driving the target, never transcribed; digests recorded in `scripts/t8n/provenance.json` and checked on every run; the generating revision printed in the verdict. `--red-test` corrupts one `stateRoot` in a scratch copy and requires the failure — recorded below |
 | G10 | **met** | `JauneTransitionTool` + `JauneExceptionMapper` in the local checkout's `client_clis/clis/jaune.py`, registered through `client_clis/__init__.py`. The mapper declares all 43 identities Jaune can emit and matches each anchored against its own spelling. `test_jaune.py`, 18 tests, all passing, including six unmapped-reason cases that must surface as `UndefinedException`. The whole diff is one commit against the anchor |
 | G11 | **met** | `fill --evm-bin ~/jaune/.lake/build/bin/jaune tests/frontier/opcodes/test_calldatasize.py --fork Prague` fills 30 of 30 cases, and the three fixture files it writes are **identical, outside `_info`, to the same module filled by the target's own in-process EELS** — 30 of 30 cases equal, field for field |
-| G12 | **OPEN** | Two of three sides are recorded (below). No second transition tool is installed on this machine and none can be installed without downloading a third-party binary, which needs the user's approval |
+| G12 | **met** | `scripts/t8n-acceptance.py` sends the eight blockchain-mode corpus cases to Jaune, the conformance target and go-ethereum's `evm`, and compares field by field with all three versions recorded. Three cases unanimous; five carry registered divergences, and **Jaune agrees with the conformance target in every one**. Output at `scripts/report-t8n-acceptance.txt`, registry at `scripts/t8n/acceptance-divergences.json` |
 | G13 | **met** | `Jaune/T8n.lean` is imported by `Main.lean` only, never from `Jaune.lean`; `git diff --name-only main` over `Jaune.lean` and its twelve closure modules is empty; `check-integrity.sh` reports 58 occurrences and 0 pending, unchanged from `main`; Blanc untouched, its pin unmoved |
-| G14 | **partial** | Every cheap and medium gate is green on the candidate (below). The two `--full` tiers, `check-vectors.sh` and `check-elab.sh` are the remaining ones; they are heavy and a second session is using this host, so they are held for a quiet window rather than measured against a contended one |
+| G14 | **partial** | Every cheap gate is green on the candidate (below). The two `--full` tiers, `check-vectors.sh` and `check-elab.sh` remain; the user directed that they wait for a quiet host, since a second session is using this machine and `check-elab`'s gate *is* its timing |
 | G15 | **met** | README carries a `t8n` section naming the subcommand, the lane, the handshake and the fail-closed rule; `scripts/GATES.md` carries a cheap-tier row and a selection row for it; this report maps every G-row |
 
 ## Gate verdicts on the candidate
@@ -221,34 +223,70 @@ So the target's `rejected` list, on this lane, only ever holds execution
 rejections.
 
 **F5. A transaction rejected during execution stays in the transactions
-trie.** `process_transaction` writes it there before validating, on a block
-output it mutates in place, so the entry survives the exception and
-contributes to `txRoot`. Reproduced deliberately; `txRoot` in the
-`reject-execution` and `reject-middle` goldens is what pins it.
+trie — and go-ethereum disagrees.** `process_transaction` writes it there
+before validating, on a block output it mutates in place, so the entry
+survives the exception and contributes to `txRoot`. When the rejection is in
+the middle of a list, the surviving receipts also keep their original indices,
+so `receiptsRoot` is taken over a trie keyed 0 and 2.
 
-None of F1–F5 is a Jaune defect and none is disclosed anywhere by this goal;
-whether to report them upstream is the user's call.
+Jaune reproduces both deliberately, under the goal's "match the reference"
+invariant, and `txRoot` in the `reject-execution` and `reject-middle` goldens
+is what pins it. The three-way comparison then showed geth doing neither: it
+counts only the accepted transactions and re-indexes their receipts. Geth's is
+the root the block that would be built actually has, so **this looks like an
+upstream defect in the conformance target, not a difference of opinion.** It
+has plausibly gone unnoticed because the framework does not consume `txRoot`
+at all — `specs/blockchain.py` excludes `transactions_trie` from the fixture
+header and recomputes it.
 
-## Three-way agreement (G12, open)
+**F6. The target's `body` output is not the canonical transactions-list
+encoding for legacy transactions.** It writes `rlp.encode([tx.rlp() for tx in
+txs])`, which wraps every member as an RLP byte string. That is right for
+typed transactions, which are opaque byte strings under EIP-2718, and wrong
+for legacy ones, which appear inline. Measured on the corpus: for the type-2
+case all three tools agree, and for the legacy case the target and Jaune emit
+`0xf864b862f860…` where geth emits `0xf862f860…`. Jaune matches the target,
+again by invariant.
 
-Two of the three sides are recorded:
+None of F1–F6 is a Jaune defect and none is disclosed anywhere by this goal;
+whether to report them upstream is the user's call. F5 and F6 are the two
+worth an upstream issue on their own.
+
+## Three-way agreement (G12)
 
 | side | binary | revision |
 |---|---|---|
-| Jaune | `~/jaune/.lake/build/bin/jaune`, `jaune version 0.1.0` | `codex/t8n-frontend`, Lean 4.32.1 |
-| conformance target | `~/execution-specs-t8n-amsterdam/.venv/bin/ethereum-spec-evm` | `execution-specs` `9d6e6f8352a0f76e7e8803722d1a2798fa4f0a96` |
-| third tool | — | **not available** |
+| Jaune | `~/jaune/.lake/build/bin/jaune` | `codex/t8n-frontend`, `jaune version 0.1.0`, Lean 4.32.1 |
+| conformance target | `~/execution-specs-t8n-amsterdam/.venv/bin/ethereum-spec-evm` | `execution-specs` `9d6e6f8352a0f76e7e8803722d1a2798fa4f0a96` (checkout HEAD `827a1cad`, that revision plus the wrapper patch, which the CLI path does not reach) |
+| third tool | `~/geth-evm-1.15.6/geth-alltools-darwin-arm64-1.15.6-19d2b4c8/evm` | `evm version 1.15.6-stable-19d2b4c8`, from `geth-alltools-darwin-arm64-1.15.6-19d2b4c8.tar.gz`, 55,994,330 bytes, MD5 `eab13dc07679afd9b03c25a8ff5b8fe6` as published by the store, SHA-256 `1f90eb6752443ecac1e4853ee01891dd297c81e547b4141c7aba1fadfa14d85a`. This is the newest darwin-arm64 build go-ethereum publishes; the project's current releases carry no macOS binary |
 
-Agreement between the two recorded sides is the content of
-`scripts/check-t8n.sh`: nine cases, `result` / `alloc` / `body` byte-identical
-under the registry above, plus the 30-case fixture identity of the `fill`
-comparison.
+The acceptance corpus is the committed nine-case corpus. Eight of the nine are
+blockchain-mode and therefore three-way comparable; `transfer-state-test` is
+not, because `--state-test` is this target's flag and geth has no equivalent.
 
-No second transition tool is installed: `evm`, `geth`, `evmone`, `besu`,
-`nethtest`, `reth`, `ethrex` and `erigon` are all absent, and so are `go`,
-`node`, `cargo` and a Java runtime, so none can be built or installed from
-what is here. Completing this row needs a downloaded third-party binary, which
-is the user's decision.
+`scripts/t8n-acceptance.py` compares semantic content rather than bytes,
+because the three spell the same values differently on purpose — minimal,
+zero-padded and full-width hex all appear, `alloc` key order differs, a tool
+may omit a zero `nonce`, and geth's receipts carry five fields the other two
+do not. Fifteen `result` fields plus the whole post-state are compared per
+case. Full output: `scripts/report-t8n-acceptance.txt`.
+
+**Result: three cases unanimous, five with registered divergences, and Jaune
+agrees with the conformance target in every one.** Every divergence has geth
+on one side and Jaune-with-the-target on the other, which is what reproducing
+the target faithfully looks like when the target and another client genuinely
+differ. Each is registered in `scripts/t8n/acceptance-divergences.json`:
+
+| case | field(s) | what geth does differently |
+|---|---|---|
+| `reject-execution` | `txRoot` | counts only the accepted transactions |
+| `reject-middle` | `txRoot`, `receiptsRoot` | counts only the accepted transactions, and re-indexes their receipts to 0 and 1 rather than leaving the gap at 1 |
+| `reject-parse` | the whole run | refuses the input file rather than the one malformed member |
+| `requests` | `requests` | omits the EIP-7685 type byte from the request payload, while computing the same `requestsHash` — so it hashes with the prefix and reports without it |
+| `block-exception` | `blockException` | reports none at all when the withdrawal-request predeploy is an INVALID opcode |
+
+The first two are the same upstream defect seen from two sides, and they are
+the most consequential thing this comparison found — see F5 below.
 
 ## The EIP-3155 note
 
@@ -308,15 +346,23 @@ strictly a successor. Nothing in the frontend as built forecloses it.
    reads unless a transaction logs a deposit, and no case does. The other four
    Prague system contracts are present, taken from the target's own
    `pre_allocation_blockchain()`.
-7. **The wrapper patch touches `transition_tool.py`.** Two lines and one
+7. **go-ethereum 1.15.6 as the third tool.** The project publishes no macOS
+   binary for its current releases; 1.15.6 (2025-03-25) is the newest
+   darwin-arm64 build in its store. Downloaded with the user's explicit
+   approval and verified against the store's published MD5.
+8. **The wrapper patch touches `transition_tool.py`.** Two lines and one
    opt-in class variable, without which no external tool can be told to use
    state-test mode (finding F1). Shaped as an upstreamable change; default
    `False`, so nothing else moves.
 
 ## Remaining risk
 
-- **G12 is unfinished.** Agreement is recorded against one further
-  implementation only.
+- **G14 is unfinished.** The two `--full` tiers, `check-vectors.sh` and
+  `check-elab.sh` are outstanding and must pass before merge.
+- **The third tool is a year old.** `evm 1.15.6` is the newest darwin-arm64
+  build go-ethereum publishes, so the `requests` prefix divergence in
+  particular may already be fixed upstream. It does not weaken the two
+  findings that matter, which are about the *target*, not about geth.
 - **The corpus is all Prague.** The lane's other three forks differ from
   Prague in their blob schedule, and no case exercises blob transactions. A
   BPO case is a fair successor.
