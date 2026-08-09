@@ -53,6 +53,54 @@ def fail(message: str) -> "NoReturn":  # type: ignore[valid-type]
     raise SystemExit(2)
 
 
+# The checkout also carries the local Jaune wrapper (see the goal's W-E and
+# ~/plans/t8n-eest-jaune-wrapper.patch). That patch is framework-side only: it
+# adds a client wrapper, its tests, and one opt-in flag on the transition-tool
+# base class, none of which the `ethereum-spec-evm t8n` entry point reaches. So
+# the generator accepts a checkout that is the anchor *plus exactly those
+# files*, and refuses anything else -- a change under `src/ethereum/` would
+# change the goldens and must never pass unnoticed.
+WRAPPER_PATHS = {
+    "packages/testing/src/execution_testing/client_clis/__init__.py",
+    "packages/testing/src/execution_testing/client_clis/clis/jaune.py",
+    "packages/testing/src/execution_testing/client_clis/tests/test_jaune.py",
+    "packages/testing/src/execution_testing/client_clis/transition_tool.py",
+}
+
+
+def git(root: Path, *args: str) -> "subprocess.CompletedProcess[str]":
+    return subprocess.run(
+        ["git", "-C", str(root), *args], capture_output=True, text=True
+    )
+
+
+def verify_revision(root: Path, pinned: str) -> None:
+    """Refuse a checkout that could generate against a different revision."""
+    head = git(root, "rev-parse", "HEAD")
+    if head.returncode != 0:
+        fail(f"{root} is not a git checkout: {head.stderr.strip()}")
+    dirty = git(root, "status", "--porcelain")
+    if dirty.stdout.strip():
+        fail(
+            f"conformance-target checkout {root} has uncommitted changes; "
+            "goldens are generated from a committed revision"
+        )
+    if head.stdout.strip() == pinned:
+        return
+    ancestry = git(root, "merge-base", "--is-ancestor", pinned, "HEAD")
+    changed = git(root, "diff", "--name-only", pinned, "HEAD")
+    unexpected = sorted(set(changed.stdout.split()) - WRAPPER_PATHS)
+    if ancestry.returncode != 0 or unexpected:
+        detail = (
+            f"; it changes {unexpected}" if unexpected else ""
+        )
+        fail(
+            f"conformance-target checkout {root} is at {head.stdout.strip()}, "
+            f"which is not {pinned} nor that revision plus the local Jaune "
+            f"wrapper{detail}; goldens and emission must come from one revision"
+        )
+
+
 def target_paths() -> "tuple[Path, Path, str]":
     """The conformance-target checkout, its interpreter, and its commit."""
     sources = json.loads(SOURCES.read_text())
@@ -72,19 +120,7 @@ def target_paths() -> "tuple[Path, Path, str]":
             f"{entry['default_env_var']} or clone "
             f"{entry['repo_url']} at {entry['commit']}"
         )
-    head = subprocess.run(
-        ["git", "-C", str(root), "rev-parse", "HEAD"],
-        capture_output=True,
-        text=True,
-    )
-    if head.returncode != 0:
-        fail(f"{root} is not a git checkout: {head.stderr.strip()}")
-    if head.stdout.strip() != entry["commit"]:
-        fail(
-            f"conformance-target checkout {root} is at {head.stdout.strip()}, "
-            f"but scripts/sources.json pins {entry['commit']}; goldens and "
-            f"emission must come from one revision"
-        )
+    verify_revision(root, entry["commit"])
     python = root / entry["venv_subpath"] / "bin" / "python"
     t8n = root / entry["venv_subpath"] / "bin" / entry["t8n_command"]
     if not t8n.exists():

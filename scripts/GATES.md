@@ -45,6 +45,7 @@ Choose the gate by what you changed, cheapest falsifier first:
 | interpreter / gas / state | `scripts/check-legacy.sh --depth --no-build --jobs auto` | `scripts/check-legacy.sh --smoke --no-build --jobs auto` |
 | fork / block validity | `scripts/check-mainnet.sh --suite transitions --no-build --jobs auto` | `scripts/check-mainnet.sh --suite osaka --no-build --jobs auto` |
 | the runner's CLI, its refusals or its case selection (`Main.lean`) | `scripts/check-cli.sh` + `scripts/check-mainnet.sh --suite smoke` | `scripts/check-legacy.sh --smoke --no-build --jobs auto` |
+| the `t8n` frontend (`Jaune/T8n.lean`) or its corpus | `scripts/check-t8n.sh --red-test` | `scripts/check-mainnet.sh --suite smoke` |
 | harness / generators | `python3 -m unittest discover -s scripts/tests` | `python3 scripts/env_doctor.py` |
 | a module's imports, or an added `#guard` / heavy elaboration | `lake build` | `scripts/check-elab.sh` |
 | anything Blanc consumes | `cd ~/blanc && lake build && scripts/check.sh --no-build` | Blanc's full set — see [Blanc's gates](#blancs-gates) |
@@ -192,6 +193,7 @@ executable inputs.
 | `scripts/check-integrity.sh` | no panic / raw bang op / stringly semantic carrier in `Jaune.lean`'s import closure (R4 also covers the runner boundary), allowlist in `integrity-allow.txt` | 58 rows, 0 pending | sub-second |
 | `lake build` | integration elaboration | ~1,776 jobs | ~8 s |
 | `scripts/check-cli.sh` | the runner's four fixture-file refusals — wrong sibling tree, no cases, no supported network, filters select nothing — and the undeclared-format pass-through, against synthetic fixtures | 11 checks | sub-second |
+| `scripts/check-t8n.sh` | the `t8n` transition-tool frontend against goldens generated from the pinned conformance target: `result`, `alloc` and `body` byte-identical per case, each case run twice for determinism, every golden's digest checked against `scripts/t8n/provenance.json`. `--red-test` additionally proves it can fail | 9 cases | sub-second |
 | `scripts/check-u256.sh` | differential word/hash oracle | 21,593 cases | sub-second |
 | `scripts/check-fake-exp.sh` | fake-exponential differential oracle vs the pinned EELS `taylor_exponential` (blob base fee) | 240 cases | sub-second |
 | `scripts/check-legacy.sh --patch` | the ten historical FAIL files, fixed all-PASS target | 10 | sub-second |
@@ -275,6 +277,7 @@ not vouch for Jaune.
 | `python3 scripts/env_doctor.py --mainnet-root "$HOME/eest-mainnet-v20.0.1" --mainnet-deep` | validate external fixture identities |
 | `python3 scripts/gen_mainnet_manifest.py --fixtures-root "$HOME/eest-mainnet-v20.0.1/fixtures" --check` | exact current-manifest identity |
 | `python3 scripts/gen-vector-shards.py --check` | the `blsPairing` shards are an exact partition of their source |
+| `python3 scripts/gen-t8n-goldens.py --check` | the committed `t8n` goldens still match the conformance target's current output. Needs that checkout and its venv; `scripts/check-t8n.sh` itself needs neither |
 
 Python generators run under the frozen oracle venv
 `~/execution-specs/venv/bin/python`. Generated vectors must come from
@@ -425,14 +428,20 @@ motivated it.
 | `check-vectors.sh` | yes | yes |
 | `check-elab.sh` | yes | yes |
 
+`check-t8n.sh` takes no lock either, for the same reason `check-cli.sh` does
+not: it writes nothing under the repository. Each case runs in a `mktemp -d`
+directory removed on exit, so two concurrent runs cannot see each other's
+outputs, and the goldens it reads are never written by the gate.
+
 The cheap tiers stay outside the heavy lock deliberately: the check you run
 while iterating must never be hostage to a 20-minute one. `check-hygiene.sh`,
 `check-integrity.sh`, `check-cli.sh`, `check-u256.sh`, `check-fake-exp.sh` and
 `check-ec.sh` take no lock at all — the first five are sub-second, and
 `check-ec.sh` is a single-process oracle that writes its report in one `tee`
-rather than appending per file. `check-cli.sh` additionally writes nothing under
-the repository at all: its fixtures live in a `mktemp -d` directory it removes
-on exit, so two concurrent runs cannot even see each other's inputs.
+rather than appending per file. `check-cli.sh` and `check-t8n.sh` additionally write nothing
+under the repository at all: their scratch files live in a `mktemp -d`
+directory removed on exit, so two concurrent runs cannot even see each other's
+inputs.
 
 Escape hatches, where one exists, are named in the refusal: `check-legacy.sh` and
 `check-elab.sh` accept `--report <path>`, and a run writing elsewhere locks that

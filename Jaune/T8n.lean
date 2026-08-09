@@ -387,10 +387,14 @@ def readWithdrawal (v : Lean.Json) : IO Withdrawal := do
 /-- The `BLOCKHASH` window the target builds: the hashes of the `min(256, n)`
 blocks preceding block `n`, oldest first.
 
-The target represents a gap as a `None` placeholder; `BenvStat.blockHashes` has
+Two shapes, both the target's. An **absent or empty** `blockHashes` yields the
+empty window whatever the block number says -- its `_resolve_block_hashes`
+returns early before it looks at the number, and that is the shape every state
+test arrives in. A **non-empty** one is expanded over the window; the target
+represents a gap in it as a `None` placeholder, and `BenvStat.blockHashes` has
 no placeholder, so a gap is refused here rather than silently read as some
-other block's hash. Every corpus and every `fill` invocation supplies a dense
-window. -/
+other block's hash. Every corpus case and every `fill` invocation that
+supplies the map at all supplies it dense. -/
 def readBlockHashes (j : Lean.Json) (number : Nat) : IO (List B256) := do
   let entries : List (Nat × B256) ←
     match field? j "blockHashes" with
@@ -402,6 +406,7 @@ def readBlockHashes (j : Lean.Json) (number : Nat) : IO (List B256) := do
           s!"error : t8n blockHashes key {repr k} is not a hex quantity"
         let h ← readB256 "blockHashes entry" hv
         pure ⟨n, h⟩
+  if entries.isEmpty then return []
   let window := min 256 number
   let first := number - window
   (List.range window).mapM fun i => do
@@ -770,9 +775,14 @@ BPO2 all are. Block access lists are absent because they are Amsterdam-only.
 -/
 def runBlockchain (benv : Benv) (txs : List (TxParse Tx)) (wds : List Withdrawal) :
     Except TransitionError Outcome := do
-  let lastHash ←
-    benv.stat.blockHashes.getLast?.toExcept
-      (TransitionError.internal (.invariant (.text "block hashes is empty")))
+  -- The parent hash the history-storage system transaction records. The
+  -- target reads `block_hashes[-1]` and raises `IndexError` out of the whole
+  -- tool when the window is empty, which is the shape every state test
+  -- arrives in once the framework has declined to pass `--state-test` to an
+  -- external binary. There is no reference behaviour to match on that input,
+  -- so this records the zero hash and continues; on every input the target
+  -- can process at all, the window is non-empty and this is its last entry.
+  let lastHash := benv.stat.blockHashes.getLast?.getD 0
   let ⟨stHistory, _⟩ ←
     Except.mapError TransitionError.vm <|
       processUncheckedSystemTransaction benv historyStorageAddress lastHash.toBytes
@@ -948,6 +958,7 @@ structure Opts : Type where
   chainId : Nat := 1
   stateTest : Bool := false
   info : Bool := false
+  forks : Bool := false
 
 /-- Accept `--flag=value` as well as `--flag value`. The framework passes the
 separated form to an external binary and the documented form uses `=`; both
@@ -986,6 +997,7 @@ def parseOpts : Opts → List String → IO Opts
   | o, "--state.reward" :: _ :: rest => parseOpts o rest
   | o, "--state-test" :: rest => parseOpts {o with stateTest := true} rest
   | o, "--info" :: rest => parseOpts {o with info := true} rest
+  | o, "--forks" :: rest => parseOpts {o with forks := true} rest
   | _, "--trace" :: _ => unclaimed "--trace" "EIP-3155 tracing"
   | _, "--trace.memory" :: _ => unclaimed "--trace.memory" "EIP-3155 tracing"
   | _, "--trace.nomemory" :: _ => unclaimed "--trace.nomemory" "EIP-3155 tracing"
@@ -1070,6 +1082,13 @@ unrecognised flag, an unrecognised input field, and the RLP `txs` string form
 are all errors with a non-zero exit and no fallback. -/
 def run (args : List String) : IO Unit := do
   let o ← parseOpts {} (normalizeArgs args)
+  -- The fork lane on its own, on one line. This is what a framework wrapper
+  -- asks the binary in order to decide whether to hand it a test, so unlike
+  -- `--info` it must answer from any working directory and must not depend on
+  -- the sources manifest being reachable.
+  if o.forks then
+    IO.println (String.intercalate " " (Fork.all.map Fork.toString))
+    return ()
   if o.info then
     printInfo
     return ()
@@ -1148,6 +1167,7 @@ def usage : String :=
             [--output.basedir <dir>] --state.fork <label>
             [--state.chainid <n>] [--state.reward <n>] [--state-test]
   jaune t8n --info
+  jaune t8n --forks
 
 Executes one state transition outside any block-validation context and emits
 `result` and the post-state `alloc` in the shapes the conformance target
@@ -1160,7 +1180,11 @@ emits. Options may be spelled --flag=value or --flag value.
   --state.reward <n>     accepted and not consumed: every fork on this lane is
                          proof-of-stake, so block rewards are unreachable.
   --info                 print the version, the fork lane and the pins
-                         recorded in scripts/sources.json.
+                         recorded in scripts/sources.json. Needs that file:
+                         pass JAUNE_SOURCES if it is not at scripts/ from the
+                         working directory.
+  --forks                print the supported fork lane and nothing else, on
+                         one line. Answers from anywhere.
 
 Tracing is not claimed: --trace, its variants and --opcode.count are refused
 rather than ignored.

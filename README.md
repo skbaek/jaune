@@ -81,6 +81,47 @@ baseline — see [`scripts/GATES.md`](scripts/GATES.md). The alternate modes
 `--vectors <address> <file>`, `--u256 <file>`, and `--fake-exp <file>` run the
 pinned differential oracles and are likewise driven by those gates.
 
+## The `t8n` transition tool
+
+`lake exe jaune t8n` reads a pre-state (`alloc`), an environment (`env`) and a
+transaction list (`txs`), executes one state transition outside any
+block-validation context, and emits `result` and the post-state `alloc`. This
+is the interface every transition tool in the ecosystem exposes, and it is how
+a test framework, a differential campaign or a third-party cross-check drives
+an implementation without bespoke integration.
+
+```sh
+lake exe jaune t8n \
+  --input.alloc alloc.json --input.env env.json --input.txs txs.json \
+  --output.result result.json --output.alloc out-alloc.json \
+  --state.fork Prague --state.chainid 1
+```
+
+Inputs may be read from a single stdin document instead, by naming `stdin` as
+any `--input.*` value; outputs may be written to `stdout` the same way.
+Options accept `--flag value` and `--flag=value` alike. `--state-test` applies
+exactly one transaction with no system operations.
+
+**The supported lane is Prague, Osaka, BPO1 and BPO2** — the same forks the
+fixture runner supports, and unsupported input fails closed. There is no
+default fork and no fallback: an out-of-lane `--state.fork`, a missing one, an
+unrecognised flag, an unrecognised input field, and the RLP-string form of
+`txs` are each an explicit error with a non-zero exit. Tracing is not claimed,
+so `--trace`, its variants and `--opcode.count` are refused rather than
+ignored.
+
+`lake exe jaune t8n --info` is the handshake: the version, the Lean toolchain,
+the fork lane, the modes, and the corpus and oracle pins, all read from
+[`scripts/sources.json`](scripts/sources.json) rather than restated.
+`lake exe jaune t8n --forks` prints the lane alone, on one line, from any
+working directory; `lake exe jaune -v` prints the banner a framework
+identifies the binary by.
+
+Conformance is gated. `scripts/check-t8n.sh` compares nine cases byte for byte
+against goldens generated from a pinned `execution-specs` revision — see
+[`scripts/t8n/README.md`](scripts/t8n/README.md) for the corpus, the
+generator, and the registry of declared differences.
+
 ## External test fixtures
 
 The fixture suites use pinned data outside this repository. See
