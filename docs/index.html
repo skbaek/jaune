@@ -105,6 +105,7 @@ header.stuck{border-bottom-color:var(--rule)}
 .navlinks .ghbtn{border:1.5px solid var(--rule-2);padding:6px 13px;color:var(--ink);
   display:inline-flex;align-items:center;gap:7px;transition:.2s;font-variant-caps:small-caps;letter-spacing:.06em}
 .navlinks .ghbtn:hover{background:var(--panel)}
+.navlinks .sib .sqo{width:10px;height:10px;border:2px solid var(--ink);background:transparent;display:inline-block;transform:translateY(1px)}
 @media(max-width:860px){.navlinks a:not(.ghbtn){display:none}}
 @media(max-width:400px){.brand i{display:none}}
 
@@ -356,6 +357,9 @@ footer a:hover{color:var(--ink)}
       <a href="#casestudy">Case study</a>
       <a href="#trajectory">Roadmap</a>
       <a href="#build">Build</a>
+      <a class="ghbtn sib" href="https://skbaek.github.io/blanc/" title="Blanc — the sibling project: a minimal contract language proved over this semantics">
+        <span class="sqo"></span>Blanc
+      </a>
       <a class="ghbtn" href="https://github.com/skbaek/jaune" target="_blank" rel="noopener">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
         GitHub
@@ -376,9 +380,10 @@ footer a:hover{color:var(--ink)}
         <p class="lede">
           The Yellow Paper defined Ethereum in mathematics you could only read. Its living
           replacement is a program you can only run. <strong style="color:var(--ink)">Jaune</strong> is both
-          at once: twenty-two thousand lines of Lean&nbsp;4 that state the execution layer precisely
+          at once: twenty-five thousand lines of Lean&nbsp;4 that state the execution layer precisely
           enough to prove theorems about — and compile into an interpreter that passes the
-          mainnet fixture corpus, fork by fork, case by case.
+          mainnet fixture corpus, fork by fork, case by case, and speaks the ecosystem’s standard
+          <span class="mono">t8n</span> transition-tool interface.
         </p>
         <div class="ctarow">
           <a class="btn primary" href="#build">Build it locally</a>
@@ -415,7 +420,8 @@ footer a:hover{color:var(--ink)}
       the fuel that drives it is proven sufficient from the frame’s own gas, with the tight bound, at the
       definition site. Its semantic errors are typed rather than stringly, its checked entry points bind
       an executable snapshot to canonical validated state, and a shrink-only CI budget holds the library
-      at zero panics. The semantics is demonstrated strong enough for real verification — a WETH
+      at zero panics. The interpreter also answers as a standard <span class="mono">t8n</span> transition
+      tool, gated byte-for-byte against the pinned specification’s output. The semantics is demonstrated strong enough for real verification — a WETH
       contract’s solvency is proven to be preserved over every state reachable along a valid configured
       chain, across scheduled fork activations, through a machine-checked compiler, with an axiom audit
       in CI. MIT-licensed.</p>
@@ -673,7 +679,7 @@ footer a:hover{color:var(--ink)}
           <tr><td class="mono">--suite prague</td><td class="num">2,573</td><td class="num">16,573</td><td class="passmark">all pass</td><td class="num">~12 min</td><td class="num">~3.0 min</td></tr>
           <tr><td class="mono">--suite osaka</td><td class="num">2,514</td><td class="num">17,323</td><td class="passmark">all pass</td><td class="num">~8 min</td><td class="num">~2.3 min</td></tr>
           <tr><td class="mono">--suite transitions</td><td class="num">13</td><td class="num">109</td><td class="passmark">all pass</td><td class="num">16 s</td><td class="num">~8 s</td></tr>
-          <tr><td class="mono">--suite full</td><td class="num">5,100</td><td class="num">34,005</td><td class="passmark">all pass</td><td class="num">~19 min</td><td class="num">5.3 min</td></tr>
+          <tr><td class="mono">--suite full</td><td class="num">5,100</td><td class="num">34,005</td><td class="passmark">all pass</td><td class="num">~20.8 min</td><td class="num">~5.0 min</td></tr>
         </tbody>
       </table>
     </div>
@@ -687,18 +693,18 @@ footer a:hover{color:var(--ink)}
 
     <div class="tablewrap reveal" style="margin-top:34px">
       <table>
-        <thead><tr><th>tier</th><th class="num">files</th><th>committed baseline</th><th>what it covers</th></tr></thead>
+        <thead><tr><th>tier — <span class="mono" style="text-transform:none;letter-spacing:0">check-legacy.sh</span></th><th class="num">files</th><th>committed baseline</th><th>what it covers</th></tr></thead>
         <tbody>
           <tr><td class="mono">--depth</td><td class="num">67</td><td class="passmark">all pass</td><td class="dim">recursion &amp; call-depth stress</td></tr>
           <tr><td class="mono">--smoke</td><td class="num">174</td><td>173 pass · 1 expected fail</td><td class="dim">curated cross-section — the routine gate</td></tr>
           <tr><td class="mono">--bls</td><td class="num">29</td><td class="passmark">all pass</td><td class="dim">EIP-2537 BLS12-381 + KZG point evaluation</td></tr>
           <tr><td class="mono">--patch</td><td class="num">10</td><td class="passmark">all pass</td><td class="dim">fixed historical failures — un-rebaseable</td></tr>
           <tr><td class="mono">--rlp4</td><td class="num">4</td><td class="passmark">all pass</td><td class="dim">invalid-RLP / header targets — un-rebaseable</td></tr>
-          <tr><td class="mono">--full</td><td class="num">2,983</td><td>2,978 pass · 5 diagnosed non-passes (none a Jaune defect)</td><td class="dim">the frozen BlockchainTests corpus (8 min at <span class="mono">--jobs auto</span>)</td></tr>
+          <tr><td class="mono">--full</td><td class="num">2,983</td><td>2,978 pass · 5 diagnosed non-passes (none a Jaune defect)</td><td class="dim">the frozen BlockchainTests corpus (~7.7 min at <span class="mono">--jobs auto</span>)</td></tr>
         </tbody>
       </table>
     </div>
-    <p class="cap reveal"><b>Table 2</b> — the frozen legacy lane (<span class="mono">scripts/check.sh</span>).
+    <p class="cap reveal"><b>Table 2</b> — the frozen legacy lane (<span class="mono">scripts/check-legacy.sh</span>).
       Each gate passes iff <em>every</em> file’s PASS/FAIL matches its committed baseline — a regression
       gate, not an all-green banner. None of the five baselined FAILs is a defect in Jaune: two
       fixtures carry no case in the supported fork range, and the other three are multiply-invalid
@@ -717,6 +723,11 @@ footer a:hover{color:var(--ink)}
       <strong>782</strong> for P256VERIFY — run under a strict manifest that fails on a missing
       <em>or</em> unexpected file, <em>and</em> on a file that runs fewer cases than it declares.
       A vector file that quietly lost half its cases would otherwise pass while testing half as much.
+      And since 2026-08 the interpreter also answers as a standard <span class="mono">t8n</span>
+      transition tool: <span class="mono">scripts/check-t8n.sh</span> compares its output byte for byte
+      against goldens from the pinned <span class="mono">execution-specs</span>, each case run twice for
+      determinism — and a three-way acceptance run against go-ethereum found that in every registered
+      divergence, Jaune sides with the specification.
     </p>
 
     <div class="panel reveal" style="margin-top:30px">
@@ -898,12 +909,12 @@ footer a:hover{color:var(--ink)}
     <h2 class="reveal" style="max-width:26ch">What the semantics is sufficient for: WETH solvency across configured forks.</h2>
     <p class="lede reveal" style="margin-top:18px">
       The claim that a semantics “supports verification” is cheap until someone pays it.
-      <strong style="color:var(--ink)">Blanc</strong><span class="dimmer"> (fr. “white”, as in whitepaper)</span>
+      <a href="https://skbaek.github.io/blanc/" style="text-decoration:underline;text-underline-offset:3px"><strong style="color:var(--ink)">Blanc</strong></a><span class="dimmer"> (fr. “white”, as in whitepaper)</span>
       is the payment: a deliberately minimal contract language — four constructors, a compiler into
-      EVM bytecode, a machine-checked compiler-correctness theorem — built to carry one real
-      invariant through Jaune’s semantics at every altitude. The contract is WETH, in 329 lines of
-      Blanc. The invariant is solvency: <em>the contract always holds enough ether to honour every
-      balance.</em>
+      EVM bytecode, a machine-checked compiler-correctness theorem — that carries real invariants
+      through Jaune’s semantics at every altitude. The first contract is WETH, a 244-line Blanc
+      source compiling to 988 bytes. The invariant is solvency: <em>the contract always holds enough
+      ether to honour every balance.</em>
     </p>
 
     <div class="thm reveal" style="margin-top:34px">
@@ -983,12 +994,13 @@ footer a:hover{color:var(--ink)}
         </div>
         <div class="tabpanel" role="tabpanel" id="tp2" aria-labelledby="tb2" hidden>
           <div class="listing">
-            <div class="bar"><span>Blanc/Solvent.lean</span><span class="tag">specification</span></div>
-<pre><span class="c">-- sum of all WETH balances in storage s</span>
-<span class="k">def</span> <span class="d">wbsum</span> (s : <span class="t">Stor</span>) : <span class="t">Nat</span> := sum s.rest
+            <div class="bar"><span>Blanc/Solvent.lean · Blanc/CommonCore.lean</span><span class="tag">specification</span></div>
+<pre><span class="c">-- sum of the address-keyed balances in storage s —</span>
+<span class="c">-- shared upstream since FMINT states conservation over it</span>
+<span class="k">def</span> <span class="d">balSum</span> (s : <span class="t">Stor</span>) : <span class="t">Nat</span> := sum (<span class="t">Stor</span>.rest s)
 
 <span class="k">def</span> <span class="d">Stor.Solvent</span> (s : <span class="t">Stor</span>) (v b : <span class="t">B256</span>) : <span class="t">Prop</span> :=
-  wbsum s + v.toNat ≤ b.toNat
+  balSum s + v.toNat ≤ b.toNat
 
 <span class="k">structure</span> <span class="t">State.Inv</span> (wa : <span class="t">Adr</span>) (w : <span class="t">Jaune.State</span>) : <span class="t">Prop</span> <span class="k">where</span>
   (code    : some (w.getCode wa).toList = <span class="t">Prog</span>.compile weth)
@@ -1025,18 +1037,14 @@ footer a:hover{color:var(--ink)}
         <div class="panel">
           <span class="tick">the audit, in CI, every commit</span>
           <p class="dim" style="font-size:.94rem">
-            Blanc’s CI prints the exact axiom set of all eight audited theorems — the seven solvency results
-            <span class="mono">weth_preserves_solvent</span>,
-            <span class="mono">stateTransition_preserves_solvent</span>,
-            <span class="mono">chain_preserves_solvent</span>,
-            <span class="mono">addBlockToChain_preserves_solvent</span>,
-            <span class="mono">stateTransitionUsing_preserves_solvent</span>,
-            <span class="mono">chainUsing_preserves_solvent</span>, and
-            <span class="mono">addBlockToChainUsing_preserves_solvent</span> — plus the compile witness
-            <span class="mono">wethCode_compile</span>, which pins the exact bytecode those theorems are
-            about — and fails on anything beyond
-            <span class="mono">propext</span>, <span class="mono">Classical.choice</span>,
-            <span class="mono">Quot.sound</span>. No <span class="mono">sorry</span>, no
+            Blanc’s CI audits <strong>315</strong> named theorems — the seven solvency results above
+            among them, from <span class="mono">weth_preserves_solvent</span> to
+            <span class="mono">addBlockToChainUsing_preserves_solvent</span> — each against its own
+            pinned expected axiom set, failing on an extra <em>or missing</em> axiom and on anything
+            beyond <span class="mono">propext</span>, <span class="mono">Classical.choice</span>,
+            <span class="mono">Quot.sound</span>. The compile witness
+            <span class="mono">wethCode_compile</span> pins the exact 988-byte bytecode the WETH
+            theorems are about. No <span class="mono">sorry</span>, no
             <span class="mono">native_decide</span>, nowhere in the trusted path.
           </p>
           <p class="dim" style="font-size:.94rem;margin-bottom:0">
@@ -1046,10 +1054,12 @@ footer a:hover{color:var(--ink)}
           </p>
         </div>
         <p class="note" style="margin-top:16px">
-          Blanc is the case study, not the product. It exists to demonstrate — end to end, with no
-          gaps at the seams — that Jaune’s semantics is strong enough to hang a protocol-level
-          economic invariant on. If you want that altitude for a contract of your own, the
-          machinery is MIT-licensed and 6,400 lines of worked example are waiting.
+          Blanc began here as the case study and has outgrown the role: it now carries three
+          contracts — WETH, an ERC-3156 flash-mint token, and a full 27-selector WETH10 — its
+          315-theorem exact-axiom audit, and a flagship future-redeemability theorem of its own.
+          What remains true is the division of labour: Jaune owns what the machine does, and every
+          Blanc theorem is stated over it. The full Blanc story now lives at
+          <a href="https://skbaek.github.io/blanc/" style="text-decoration:underline;text-underline-offset:3px">skbaek.github.io/blanc</a>.
         </p>
       </div>
     </div>
@@ -1130,7 +1140,7 @@ footer a:hover{color:var(--ink)}
         <p class="dim">A no-toolchain CI job fails the build on any <span class="mono">sorry</span> or stray
           <span class="mono">dbg_trace</span> outside a justified allowlist; a second job holds panics,
           raw bang operations, and stringly-typed semantic carriers to a shrink-only budget over the
-          import closure; Blanc’s job prints exact axiom sets for all eight audited theorems.
+          import closure; Blanc’s job audits 315 theorems against exact pinned axiom sets.
           Generated constants and vectors come from named generators, never hand transcription.</p>
       </div>
     </div>
@@ -1178,19 +1188,21 @@ footer a:hover{color:var(--ink)}
             the removals fixed a real bug in twist-coefficient extraction, not merely a totality gap.</li>
         </ul>
       </div>
-      <div class="stage now reveal">
-        <div class="meta"><span class="pill"><span class="d"></span>next</span></div>
+      <div class="stage done reveal">
+        <div class="meta"><span class="pill"><span class="d"></span>landed · 2026-08</span></div>
         <h3>A machine interface: <span class="mono">t8n</span></h3>
-        <p>Jaune today is a repository you can inspect and a binary you can hand a fixture. The
-          execution-testing ecosystem already has a standard way to invoke an EVM — the transition-tool
-          interface — and Jaune is absent from that list because it consumes filled fixtures rather than
-          exposing the protocol. A read-only spike found the seam already exists: the body executor never
-          sees a header, so <span class="mono">t8n</span> is “build the environment, run the body, emit
-          the roots instead of comparing them,” with no new semantics. The frontend lives outside the
-          proof-facing import closure, so no proof client can come to depend on it. Planned, not built.</p>
+        <p><span class="mono">lake exe jaune t8n</span> speaks the ecosystem’s standard transition-tool
+          interface: <span class="mono">alloc</span>/<span class="mono">env</span>/<span class="mono">txs</span>
+          in, <span class="mono">result</span> and post-state out, with the same fail-closed
+          Prague-through-BPO2 lane as the fixture runner — no default fork, no silent fallback, and
+          unclaimed modes refused rather than ignored. Conformance is gated byte-for-byte against
+          goldens from the pinned <span class="mono">execution-specs</span>, each case run twice for
+          determinism, and a three-way acceptance run against go-ethereum registered only divergences
+          in which Jaune agrees with the specification. The frontend lives outside the proof-facing
+          import closure, exactly as the spike prescribed.</p>
       </div>
-      <div class="stage reveal">
-        <div class="meta"><span class="pill"><span class="d"></span>gated on evidence</span></div>
+      <div class="stage now reveal">
+        <div class="meta"><span class="pill"><span class="d"></span>next · gated on evidence</span></div>
         <h3>The allocation economy</h3>
         <p>Roughly 40% of interpreter loop time is memory management — 47–57% of busy samples are
           allocation and reference counting on the current runtime. Ownership and in-place-update
@@ -1203,10 +1215,15 @@ footer a:hover{color:var(--ink)}
       <div class="stage reveal">
         <div class="meta"><span class="pill"><span class="d"></span>open direction</span></div>
         <h3>More of the protocol under proof, more contracts over it</h3>
-        <p>WETH is the existence proof, not the destination. The open questions are which
-          contract-level invariants justify their proof effort, how much block-level reasoning is
-          reusable across contracts, and where a proof-first language stops being expressive
-          enough. Collaborators with a target property in mind are exactly who this page is for.</p>
+        <p>WETH was the existence proof, not the destination — and the sibling project has since
+          moved the frontier: Blanc’s WETH10 exercises Jaune’s Prague pipeline end to end, from a
+          proved creation transaction through configured-chain reachability, and hangs a
+          future-redeemability flagship on it. The open questions are which invariants justify their
+          proof effort, how much block-level reasoning transfers between contracts, and where a
+          proof-first language stops being expressive enough. Collaborators with a target property
+          in mind are exactly who this page is for — and
+          <a href="https://skbaek.github.io/blanc/" style="text-decoration:underline;text-underline-offset:3px">the Blanc page</a>
+          is the worked answer so far.</p>
       </div>
     </div>
   </div>
@@ -1242,7 +1259,7 @@ footer a:hover{color:var(--ink)}
           counterexample; this is the other half — a machine-checked proof that, for a stated
           invariant and contract, no counterexample exists in any reachable state, under any fork
           schedule.</p>
-        <div class="hook">Blanc/Weth.lean — 329 lines of contract<br>Blanc/Solvent.lean — 6,400 lines of why it holds</div>
+        <div class="hook">Blanc/Weth.lean — 244 lines → 988 proved bytes<br>skbaek.github.io/blanc — the sibling’s own evidence page</div>
       </div>
     </div>
   </div>
@@ -1301,9 +1318,9 @@ footer a:hover{color:var(--ink)}
 <span class="p">$</span> cd blanc &amp;&amp; lake exe cache get &amp;&amp; lake build
 <span class="p">$</span> scripts/check.sh</div>
         <p class="dim" style="font-size:.88rem;margin:14px 0 0">
-          <span class="mono">check.sh</span> builds the library and runs the axiom audit over all eight
-          audited theorems — the seven solvency results plus the WETH compile
-          witness; it exits non-zero if any of them acquires
+          <span class="mono">check.sh</span> builds the library and runs the axiom audit — 315
+          audited theorems, the seven solvency results among them, each checked against its own
+          pinned expected axiom set; it exits non-zero on an extra or missing axiom, on
           <span class="mono">sorryAx</span>, <span class="mono">ofReduceBool</span>, or
           <span class="mono">ofReduceNat</span>. No fixture corpus is needed: this side is proof,
           not testing.
@@ -1330,7 +1347,8 @@ footer a:hover{color:var(--ink)}
         <li id="fn2">Jaune was previously published under the name <span class="mono">ELeVM</span>;
           the repository was renamed in July 2026 and old links redirect.</li>
         <li id="fn3">Figures on this page are drawn from committed reports, baselines, and benchmark
-          instruments in the repositories, current as of the 2026-08-01 semantic-integrity closure.
+          instruments in the repositories, current as of 2026-08-12 (post the 2026-08
+          <span class="mono">t8n</span> landing).
           Wall-clock numbers are same-machine, same-instrument measurements on a 10-core Apple M5;
           fixture counts are exact. The
           current-mainnet lane covers every <span class="mono">blockchain_tests</span> fixture of
@@ -1347,7 +1365,7 @@ footer a:hover{color:var(--ink)}
 <footer>
   <div class="wrap footgrid">
     <div style="max-width:46ch">
-      <div class="brand" style="margin-bottom:10px"><span class="sq"></span><b>Jaune</b><i>&nbsp;— with Blanc, the case study</i></div>
+      <div class="brand" style="margin-bottom:10px"><span class="sq"></span><b>Jaune</b><i>&nbsp;— with Blanc, the sibling project</i></div>
       <p class="dimmer" style="font-size:.85rem;margin:0">
         Both repositories are MIT-licensed. This page states nothing that is not backed by a
         committed report, baseline, theorem, or benchmark instrument in the repositories.
@@ -1355,7 +1373,8 @@ footer a:hover{color:var(--ink)}
     </div>
     <div class="footlinks">
       <a href="https://github.com/skbaek/jaune" target="_blank" rel="noopener">jaune →</a>
-      <a href="https://github.com/skbaek/blanc" target="_blank" rel="noopener">blanc →</a>
+      <a href="https://skbaek.github.io/blanc/">blanc, the sibling →</a>
+      <a href="https://github.com/skbaek/blanc" target="_blank" rel="noopener">blanc source →</a>
       <a href="https://github.com/ethereum/execution-specs" target="_blank" rel="noopener">execution-specs →</a>
       <a href="https://lean-lang.org" target="_blank" rel="noopener">lean 4 →</a>
     </div>
