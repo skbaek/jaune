@@ -3093,3 +3093,212 @@ theorem Except.bimap_id_eq_ok {ε : Type u0} {δ : Type u1} {ξ : Type u2}
     rfl
 
 end Jaune
+
+namespace Jaune.DualGasProbe
+
+/-!
+# Amsterdam dual-gas sufficiency probe
+
+This bounded model tests whether the termination argument in
+`Jaune.Sufficiency` has a replacement for its current `Devm.gasLeft` measure
+under Amsterdam's two gas reservoirs.  It follows `GasMeter` at
+`ethereum/execution-specs` commit
+`6e4808927cb7140f05c43890b48630afcc368d91`:
+
+* state charges draw from `state` first, then spill into `execution`;
+* a state refund repays `spilled` execution gas before refilling `state`;
+* a child receives the parent's whole state reservoir but only a withheld
+  execution grant; and
+* the parent absorbs both reservoirs and spill when the child returns.
+
+The model retains `committedSpill` in the measure even though neither selected
+instruction site commits it.  Amsterdam permits committed spill only in the
+top frame; at the two sites below it is carried unchanged, while spawned child
+frames start with zero.
+
+The tested measure deliberately omits the state reservoir.  State gas cannot
+fund interpreter steps until it spills into execution gas, and a reservoir
+charge can later be refunded.  The outstanding spill is included so that such
+a refund is measure-neutral rather than an apparent increase.
+-/
+
+structure Meter where
+  execution : Nat
+  state : Nat
+  spilled : Nat
+  committedSpill : Nat
+
+/-- Execution gas that can still fund steps, including spill that a rollback
+or state-gas refund can restore to the execution reservoir. -/
+def Meter.measure (m : Meter) : Nat :=
+  m.execution + m.spilled + m.committedSpill
+
+def chargeExecution (amount : Nat) (m : Meter) : Option Meter :=
+  if amount ≤ m.execution then
+    some { m with execution := m.execution - amount }
+  else
+    none
+
+/-- Reservoir-first state charging, including Amsterdam's spill into execution
+gas when the state reservoir is insufficient. -/
+def chargeState (amount : Nat) (m : Meter) : Option Meter :=
+  if amount ≤ m.state then
+    some { m with state := m.state - amount }
+  else
+    let remainder := amount - m.state
+    if remainder ≤ m.execution then
+      some { m with
+        execution := m.execution - remainder
+        state := 0
+        spilled := m.spilled + remainder }
+    else
+      none
+
+/-- LIFO state refund: repay spill into execution gas first, then refill the
+state reservoir. -/
+def refundState (amount : Nat) (m : Meter) : Meter :=
+  if amount ≤ m.spilled then
+    { m with
+      execution := m.execution + amount
+      spilled := m.spilled - amount }
+  else
+    { m with
+      execution := m.execution + m.spilled
+      state := m.state + (amount - m.spilled)
+      spilled := 0 }
+
+structure Spawn where
+  parent : Meter
+  child : Meter
+
+/-- Withhold an execution grant and drain the whole state reservoir into a
+fresh child, matching Amsterdam's call/create child-grant shape. -/
+def spawn (grant : Nat) (m : Meter) : Option Spawn :=
+  if grant ≤ m.execution then
+    some {
+      parent := { m with execution := m.execution - grant, state := 0 }
+      child := {
+        execution := grant
+        state := m.state
+        spilled := 0
+        committedSpill := 0
+      }
+    }
+  else
+    none
+
+/-- Return a child meter to its parent.  The actual Amsterdam implementation
+also requires the child's committed spill to be zero; allowing addition here
+is conservative for the arithmetic result. -/
+def incorporateChild (parent child : Meter) : Meter :=
+  { parent with
+    execution := parent.execution + child.execution
+    state := parent.state + child.state
+    spilled := parent.spilled + child.spilled
+    committedSpill := parent.committedSpill + child.committedSpill }
+
+theorem chargeExecution_measure {amount : Nat} {pre post : Meter}
+    (h : chargeExecution amount pre = some post) :
+    post.measure + amount = pre.measure := by
+  unfold chargeExecution at h
+  split at h
+  · simp only [Option.some.injEq] at h
+    rw [← h]
+    simp only [Meter.measure]
+    omega
+  · contradiction
+
+theorem chargeState_measure {amount : Nat} {pre post : Meter}
+    (h : chargeState amount pre = some post) :
+    post.measure = pre.measure := by
+  unfold chargeState at h
+  split at h
+  · simp only [Option.some.injEq] at h
+    rw [← h]
+    rfl
+  · dsimp only at h
+    split at h
+    · simp only [Option.some.injEq] at h
+      rw [← h]
+      simp only [Meter.measure]
+      omega
+    · contradiction
+
+theorem refundState_measure (amount : Nat) (m : Meter) :
+    (refundState amount m).measure = m.measure := by
+  unfold refundState
+  split <;> simp only [Meter.measure] <;> omega
+
+theorem spawn_measure {grant : Nat} {pre : Meter} {post : Spawn}
+    (h : spawn grant pre = some post) :
+    post.parent.measure + post.child.measure = pre.measure := by
+  unfold spawn at h
+  split at h
+  · simp only [Option.some.injEq] at h
+    rw [← h]
+    simp only [Meter.measure]
+    omega
+  · contradiction
+
+theorem incorporateChild_measure (parent child : Meter) :
+    (incorporateChild parent child).measure = parent.measure + child.measure := by
+  simp only [incorporateChild, Meter.measure]
+  omega
+
+/-- The original single-field measure cannot be reused unchanged: refunding a
+prior spill can increase `execution`, even though the spill-adjusted measure is
+unchanged by `refundState_measure`. -/
+theorem executionGas_alone_can_increase :
+    let before : Meter := {
+      execution := 3
+      state := 0
+      spilled := 7
+      committedSpill := 0
+    }
+    (refundState 7 before).execution > before.execution := by
+  decide
+
+/-- Representative site 1: `Rinst.runCore_gasLt`'s `.sstore` arm in
+`Jaune.Sufficiency`.  Amsterdam SSTORE charges positive execution gas, then
+performs a reservoir charge or a refund.  Even allowing both state operations
+in sequence, each is neutral in the adjusted measure, so the execution charge
+keeps the instruction strictly decreasing. -/
+theorem sstore_site_measure_decreases
+    {executionCost stateCost refund : Nat}
+    {pre afterExecution afterState : Meter}
+    (hCost : 0 < executionCost)
+    (hExecution :
+      chargeExecution executionCost pre = some afterExecution)
+    (hState : chargeState stateCost afterExecution = some afterState) :
+    (refundState refund afterState).measure < pre.measure := by
+  have he := chargeExecution_measure hExecution
+  have hs := chargeState_measure hState
+  have hr := refundState_measure refund afterState
+  omega
+
+/-- Representative site 2: `Xinst.step_call_gasDecreasing` and its
+spawn/settle obligation.  Amsterdam may spill a new-account state charge before
+calculating the child grant, drains the state reservoir into the child, and
+later incorporates the child's remaining gas.  If the child does not increase
+the adjusted measure, any positive total execution charge before the spawn
+still makes the settled parent strictly smaller than the step's input. -/
+theorem call_site_spawn_settle_measure_decreases
+    {entryCost stateCost grantCost childGrant : Nat}
+    {pre afterEntry afterState afterCosts : Meter}
+    {fork : Spawn} {childResult : Meter}
+    (hPositive : 0 < entryCost + grantCost)
+    (hEntry : chargeExecution entryCost pre = some afterEntry)
+    (hState : chargeState stateCost afterEntry = some afterState)
+    (hGrantCost :
+      chargeExecution grantCost afterState = some afterCosts)
+    (hSpawn : spawn childGrant afterCosts = some fork)
+    (hChild : childResult.measure ≤ fork.child.measure) :
+    (incorporateChild fork.parent childResult).measure < pre.measure := by
+  have he := chargeExecution_measure hEntry
+  have hs := chargeState_measure hState
+  have hg := chargeExecution_measure hGrantCost
+  have hsp := spawn_measure hSpawn
+  have hi := incorporateChild_measure fork.parent childResult
+  omega
+
+end Jaune.DualGasProbe
