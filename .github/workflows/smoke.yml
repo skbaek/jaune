@@ -1,24 +1,18 @@
 # ============================================================================
-# DRAFT — NOT ACTIVE. GitHub Actions only runs *.yml / *.yaml under
-# .github/workflows/, so this ".yml.draft" file never executes. It is a
-# review-ready draft of the per-push smoke conformance gate (CI plan P1) — the
-# piece that actually closes Jaune's conformance-in-CI gap.
+# ACTIVE — per-push smoke conformance gate (CI plan P1). Activated 2026-07-25
+# in commit 8f51aec; it has run on every push and pull request to main since.
 #
-# UNVERIFIED: no GitHub Actions run has exercised this. To activate:
-#   git mv smoke.yml.draft smoke.yml     # (or fold the `smoke` job into ci.yml)
-# then push and OBSERVE two runs before trusting it:
-#   1. fixture-cache MISS — bootstrap clones the corpus; confirm the sha/commit
-#      pins in its log, and that --smoke matches baseline-smoke.txt.
-#   2. fixture-cache HIT — bootstrap no-ops; run is fast.
+# What it runs: scripts/check-legacy.sh --smoke --no-build, classifying 174
+# files of the frozen ethereum/tests corpus against scripts/baseline-smoke.txt.
+# Observed wall time on hosted runners: ~5.5-7 min (median ~6 min).
 #
-# Verify-on-first-run checklist:
-#   - lean-action restores the mathlib cache (grep the run log for "cache").
-#   - `lake build` produced .lake/build/bin/jaune (check-legacy.sh --no-build needs it).
-#   - the actions/cache key/path actually HIT on run 2.
-#   - the cached execution-specs+tests checkout (it includes .git) stays under
-#     the 10 GB/repo cache ceiling; if not, narrow the cached path to the
-#     BlockchainTests leaf.
-#   - timeout-minutes sits comfortably above the observed wall time; tighten it.
+# Baseline discipline: drift is reported verbatim and fails the run. Do not
+# rebaseline to go green — a CHANGE line is evidence, not noise.
+#
+# Scope boundary, stated so no badge implies more than it checks: this gate
+# covers the frozen legacy corpus only. The current-mainnet suite
+# (scripts/check-mainnet.sh, 5,100 files / 34,005 cases) is a LOCAL gate and is
+# not run here; see scripts/GATES.md for the full catalogue and its ownership.
 # ============================================================================
 name: smoke
 

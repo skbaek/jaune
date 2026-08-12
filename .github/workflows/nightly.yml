@@ -1,18 +1,22 @@
 # ============================================================================
-# DRAFT — NOT ACTIVE (.yml.draft is ignored by GitHub Actions). Review-ready
-# draft of the nightly heavy-conformance workflow (CI plan P2): the full legacy
-# tier (~56 min reference) and the EEST bls tier, kept OUT of the per-push loop
-# so pushes stay minutes-scale.
+# ACTIVE — nightly heavy-conformance workflow (CI plan P2). Activated
+# 2026-07-25 in commit 590e7b3; it has run daily at 07:00 UTC since.
 #
-# UNVERIFIED. Activate with `git mv nightly.yml.draft nightly.yml`, then trigger
-# via workflow_dispatch and confirm green with artifacts + summary. IMPORTANT:
-# the first --full run on hosted hardware is the first time the 2983-file corpus
-# is classified off the author's machine. If it surfaces baseline drift, report
-# every CHANGE line verbatim and STOP — do not rebaseline to go green.
+# What it runs, kept OUT of the per-push loop so pushes stay minutes-scale:
+#   - scripts/check-legacy.sh --full --no-build — 2,983 classifications of the
+#     frozen ethereum/tests corpus against scripts/baseline-full.txt;
+#   - scripts/check-legacy.sh --bls --no-build — the EEST BLS /
+#     point-evaluation tier.
+# It provisions both corpora first (bootstrap_legacy.py, bootstrap_eest.py,
+# each cached). Observed wall time on hosted runners: ~44-45 min.
 #
-# Verify-on-first-run: both corpora provision + cache; --full wall time vs the
-# 360 min hosted ceiling (if close, shard the file list per the CI plan);
-# reports upload even when a tier flags drift.
+# Baseline discipline: if a tier surfaces drift, every CHANGE line is reported
+# verbatim and the run fails. Do not rebaseline to go green.
+#
+# Scope boundary, stated so no badge implies more than it checks: this covers
+# the frozen legacy corpus and the BLS tier. The current-mainnet suite
+# (scripts/check-mainnet.sh, 5,100 files / 34,005 cases) is a LOCAL gate and is
+# not run here; see scripts/GATES.md for the full catalogue and its ownership.
 # ============================================================================
 name: nightly
 

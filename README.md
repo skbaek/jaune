@@ -4,6 +4,10 @@
 
 **[skbaek.github.io/jaune](https://skbaek.github.io/jaune/)** — the guided
 tour: claim, evidence, trust boundaries, roadmap.
+**[Blanc](https://github.com/skbaek/blanc)**
+([site](https://skbaek.github.io/blanc/)) — the sibling project: a contract
+language that compiles through a verified compiler and proves its contracts
+against these semantics. It is Jaune's end-to-end case study.
 
 **Jaune** is an executable formal specification of the EVM in Lean 4. Its
 strict current-mainnet lane passes **5,100/5,100 supported fixture files and
@@ -28,13 +32,24 @@ You need to have [elan](https://github.com/leanprover/elan) installed.
 ## Installation
 
 ```sh
-lake exe cache get
+lake exe cache get Mathlib/Data/Nat/Basic.lean Mathlib/Data/List/Lemmas.lean \
+  Mathlib/Data/List/TakeDrop.lean Mathlib/Data/List/TakeWhile.lean \
+  Mathlib/Data/UInt.lean Mathlib/Tactic/NormNum.lean \
+  Mathlib/Data/List/Chain.lean
 lake build
 ```
 
-Jaune depends on mathlib. `lake exe cache get` downloads its prebuilt artifacts;
+Jaune depends on mathlib. `lake exe cache get` downloads prebuilt artifacts;
 without it `lake build` compiles mathlib from source, which takes hours rather
-than the minute the build itself needs. Expect several GB under `.lake/`.
+than the minute the build itself needs.
+
+Those seven files are Jaune's entire mathlib import surface — the exact set
+returned by `grep -rh '^import Mathlib' Jaune/ Jaune.lean Main.lean`. Naming
+them fetches only the modules that surface transitively depends on, instead of
+every artifact in mathlib, which is what a bare `lake exe cache get` does.
+Expect a few hundred MB under `.lake/` rather than several GB, and a
+correspondingly shorter first build. A bare `lake exe cache get` still works
+and is the right choice if you intend to import more of mathlib yourself.
 
 ## Usage
 
@@ -257,20 +272,71 @@ closure report.
   semantic carriers in `Jaune.lean`'s import closure — see
   [`scripts/GATES.md`](scripts/GATES.md).
 
-## Portability checks in CI
+## What CI checks, and what it does not
 
-CI preserves the ordinary Lean build and separately runs the standard-library
-unit suite for the source manifest, read-only doctor, legacy/EEST/oracle
-bootstraps, malicious archive handling, and generator path/pin checks. The
-tests create only tiny synthetic Git repositories and fixture archives in their
-temporary workspace; CI never downloads the EEST release or a complete legacy
-fixture corpus. A separate no-toolchain hygiene job
-([`scripts/check-hygiene.sh`](scripts/check-hygiene.sh)) fails the build if any
-`dbg_trace` or `sorry` appears under `Jaune/` outside the justified allowlist
-([`scripts/hygiene-allow.txt`](scripts/hygiene-allow.txt)).
+Three workflows run against this repository. What each one covers is worth
+stating exactly, because the badge above reports only the first of them.
+
+- **`ci.yml` (every push and pull request)** preserves the ordinary Lean build
+  and separately runs the standard-library unit suite for the source manifest,
+  read-only doctor, legacy/EEST/oracle bootstraps, malicious archive handling,
+  and generator path/pin checks. These portability tests create only tiny
+  synthetic Git repositories and fixture archives in their temporary workspace
+  — they never download the EEST release or a complete legacy fixture corpus.
+  A separate no-toolchain hygiene job
+  ([`scripts/check-hygiene.sh`](scripts/check-hygiene.sh)) fails the build if
+  any `dbg_trace` or `sorry` appears under `Jaune/` outside the justified
+  allowlist ([`scripts/hygiene-allow.txt`](scripts/hygiene-allow.txt)).
+  After the build, two gates that need nothing but the binary run in the same
+  job: [`scripts/check-t8n.sh`](scripts/check-t8n.sh), which checks the `t8n`
+  frontend byte-identical to goldens generated from the pinned conformance
+  target and deterministic across two runs, and
+  [`scripts/check-u256.sh`](scripts/check-u256.sh) over the word and hash
+  primitives. Together they cost about a second.
+- **`smoke.yml` (every push and pull request)** classifies 174 files of the
+  frozen legacy corpus against [`scripts/baseline-smoke.txt`](scripts/baseline-smoke.txt).
+- **`nightly.yml` (daily, 07:00 UTC)** provisions both corpora and runs the
+  full legacy tier (2,983 classifications against
+  [`scripts/baseline-full.txt`](scripts/baseline-full.txt)) and the EEST BLS
+  tier.
+
+**The current-mainnet suite is not a CI gate.** The headline result on this
+page — 5,100/5,100 supported fixture files, 34,005/34,005 cases — is produced
+by [`scripts/check-mainnet.sh`](scripts/check-mainnet.sh), which runs locally
+against a corpus this repository does not vendor. So does
+[`scripts/check-integrity.sh`](scripts/check-integrity.sh). A green badge
+attests to the build, the hygiene gate, and the legacy tiers; it does not
+attest to the current-mainnet number. [`scripts/GATES.md`](scripts/GATES.md) is
+the authoritative catalogue of which gate checks what, and where each runs.
 
 The workflows intentionally use maintained major-version action tags
 (`actions/checkout@v6`, `actions/setup-python@v5`, and
 `leanprover/lean-action@v1`) instead of immutable commit SHAs. Review the
 corresponding official action release notes before a tag update, and keep that
 policy consistent within Jaune.
+
+## Contact
+
+Jaune is maintained by one person, [skbaek](https://github.com/skbaek)
+(<seulkeebaek@gmail.com>). There is no team behind it and no service-level
+promise; expect a reply within about a week.
+
+Four things are actively wanted, in descending order of how much they are
+wanted:
+
+1. **A divergence.** If Jaune disagrees with a client, with
+   [execution-specs](https://github.com/ethereum/execution-specs), or with your
+   own implementation on any input, that is the most useful thing you can send.
+   Open an issue with the input, the fork, and the pins. It does not matter
+   whether the divergence turns out to be Jaune's fault — it has already been
+   both ways.
+2. **A claim that outruns its proof**, here or on the site. See
+   [`SECURITY.md`](SECURITY.md).
+3. **A workflow this does not fit.** If you looked at the `t8n` frontend and it
+   could not slot into your differential or testing setup, the specific reason
+   is worth more than a feature request.
+4. **Patches**, which are welcome but not the bottleneck. There is no
+   `CONTRIBUTING.md` yet; open an issue first and the shape of the change can
+   be settled there.
+
+Issues on this repository are read. So is the mail.

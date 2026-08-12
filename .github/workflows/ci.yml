@@ -51,3 +51,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: leanprover/lean-action@v1
+      # Two gates that need only the binary lean-action just built — no corpus,
+      # no venv, no network — so they cost about a second between them and are
+      # the only conformance evidence this per-push badge can honestly carry.
+      # Measured locally 2026-08-13: 0.51 s and 0.35 s respectively.
+      - name: Transition-tool conformance (scripts/check-t8n.sh)
+        run: scripts/check-t8n.sh
+      - name: U256 / word / hash primitives (scripts/check-u256.sh)
+        run: scripts/check-u256.sh
