@@ -117,10 +117,17 @@ the fork lane, the modes, and the corpus and oracle pins, all read from
 working directory; `lake exe jaune -v` prints the banner a framework
 identifies the binary by.
 
-Conformance is gated. `scripts/check-t8n.sh` compares nine cases byte for byte
-against goldens generated from a pinned `execution-specs` revision — see
+Conformance is gated. `scripts/check-t8n.sh` compares nine cases against
+goldens generated from a pinned `execution-specs` revision, with every
+normalization and declared difference explicit — see
 [`scripts/t8n/README.md`](scripts/t8n/README.md) for the corpus, the
 generator, and the registry of declared differences.
+
+**Case study:** [What a full-output reader sees in
+`t8n`](https://skbaek.github.io/jaune/t8n-case-study.html) records a pinned three-way
+comparison with EELS and Geth: two transition-tool emission divergences, why
+the ordinary fixture path did not expose them, their upstream filings, and the
+exact boundaries: no consensus impact, and no known fixture-corpus impact.
 
 ## External test fixtures
 

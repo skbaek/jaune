@@ -10,22 +10,23 @@
 /* ────────────────────────────────────────────────────────────────
    tokens — every colour on the page derives from two variables:
    --paper (the yellow) and --ink (the green). Contrast of --ink on
-   --paper is 8.0 : 1 (WCAG AAA for body text).
+   --paper is 8.0 : 1 (WCAG AAA for body text); the two dimmed inks
+   are held at 5.8 : 1 and 4.6 : 1, so every tier clears WCAG AA.
    ──────────────────────────────────────────────────────────────── */
 :root{
   --paper:#f6e5a8;
   --ink:#1d4a2c;
 
   --sienna:#96491f;                                        /* fixed warm accent: strings, FAIL, stamps */
-  --ink-2:color-mix(in oklab, var(--ink) 76%, var(--paper));
-  --ink-3:color-mix(in oklab, var(--ink) 54%, var(--paper));
+  --ink-2:color-mix(in oklab, var(--ink) 86%, var(--paper));
+  --ink-3:color-mix(in oklab, var(--ink) 76%, var(--paper));
   --rule:color-mix(in oklab, var(--ink) 24%, var(--paper));
   --rule-2:color-mix(in oklab, var(--ink) 52%, var(--paper));
   --panel:color-mix(in srgb, var(--paper) 68%, #fffdf0);
   --shade:color-mix(in srgb, var(--paper) 91%, var(--ink));
   --term:color-mix(in oklab, var(--ink) 84%, #071410);
   --term-ink:color-mix(in oklab, var(--paper) 86%, white);
-  --term-dim:color-mix(in oklab, var(--paper) 44%, var(--term));
+  --term-dim:color-mix(in oklab, var(--paper) 66%, var(--term));
 
   --serif:ui-serif,"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
   --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
@@ -275,7 +276,9 @@ td.mono{font-family:var(--mono);font-size:.8rem}
 .rung:last-child{border-bottom:0}
 .rung .left{padding:18px 20px;border-right:1px solid var(--rule)}
 .rung .right{padding:18px 22px}
-.rung .layer{font-variant-caps:small-caps;letter-spacing:.16em;font-size:.78rem;color:var(--ink-3);margin-bottom:7px}
+/* --ink-2, not --ink-3: these labels also sit on --shade, where the dimmer
+   ink would fall to 4.0 : 1. */
+.rung .layer{font-variant-caps:small-caps;letter-spacing:.16em;font-size:.78rem;color:var(--ink-2);margin-bottom:7px}
 .rung .thmname{font-family:var(--mono);font-size:.76rem;word-break:break-word;line-height:1.5}
 .rung .right p{margin:0;font-size:.92rem;color:var(--ink-2)}
 .rung .right p strong{color:var(--ink);font-weight:600}
@@ -313,7 +316,7 @@ td.mono{font-family:var(--mono);font-size:.8rem}
 /* tabs */
 .tabs{display:flex;gap:0;flex-wrap:wrap;margin-bottom:-1px;position:relative;z-index:1}
 .tab{font-family:var(--mono);font-size:.73rem;padding:7px 13px;border:1px solid var(--rule);
-  border-bottom-color:var(--rule);background:var(--shade);color:var(--ink-3);cursor:pointer;
+  border-bottom-color:var(--rule);background:var(--shade);color:var(--ink-2);cursor:pointer;
   margin-right:-1px;transition:.15s}
 .tab:hover{color:var(--ink-2)}
 .tab[aria-selected="true"]{background:var(--panel);color:var(--ink);border-bottom-color:var(--panel)}
@@ -421,7 +424,8 @@ footer a:hover{color:var(--ink)}
       definition site. Its semantic errors are typed rather than stringly, its checked entry points bind
       an executable snapshot to canonical validated state, and a shrink-only CI budget holds the library
       at zero panics. The interpreter also answers as a standard <span class="mono">t8n</span> transition
-      tool, gated byte-for-byte against the pinned specification’s output. The semantics is demonstrated strong enough for real verification — a WETH
+      tool, gated against its pinned target’s complete output with every normalization and declared
+      deviation explicit. The semantics is demonstrated strong enough for real verification — a WETH
       contract’s solvency is proven to be preserved over every state reachable along a valid configured
       chain, across scheduled fork activations, through a machine-checked compiler, with an axiom audit
       in CI. MIT-licensed.</p>
@@ -724,10 +728,13 @@ footer a:hover{color:var(--ink)}
       <em>or</em> unexpected file, <em>and</em> on a file that runs fewer cases than it declares.
       A vector file that quietly lost half its cases would otherwise pass while testing half as much.
       And since 2026-08 the interpreter also answers as a standard <span class="mono">t8n</span>
-      transition tool: <span class="mono">scripts/check-t8n.sh</span> compares its output byte for byte
-      against goldens from the pinned <span class="mono">execution-specs</span>, each case run twice for
-      determinism — and a three-way acceptance run against go-ethereum found that in every registered
-      divergence, Jaune sides with the specification.
+      transition tool: <span class="mono">scripts/check-t8n.sh</span> compares its complete output
+      against goldens from the pinned <span class="mono">execution-specs</span>, with every normalization
+      and deviation explicit and each case run twice for determinism — and a three-way acceptance run
+      against go-ethereum found that in every registered divergence, Jaune matches its pinned
+      conformance target.
+      <a href="t8n-case-study.html" style="font-weight:600">Read the case study: what a full-output reader sees in
+      <span class="mono">t8n</span>.</a>
     </p>
 
     <div class="panel reveal" style="margin-top:30px">
@@ -1195,11 +1202,14 @@ footer a:hover{color:var(--ink)}
           interface: <span class="mono">alloc</span>/<span class="mono">env</span>/<span class="mono">txs</span>
           in, <span class="mono">result</span> and post-state out, with the same fail-closed
           Prague-through-BPO2 lane as the fixture runner — no default fork, no silent fallback, and
-          unclaimed modes refused rather than ignored. Conformance is gated byte-for-byte against
-          goldens from the pinned <span class="mono">execution-specs</span>, each case run twice for
-          determinism, and a three-way acceptance run against go-ethereum registered only divergences
-          in which Jaune agrees with the specification. The frontend lives outside the proof-facing
-          import closure, exactly as the spike prescribed.</p>
+          unclaimed modes refused rather than ignored. Conformance checks the complete output against
+          goldens from the pinned <span class="mono">execution-specs</span>, with every normalization and
+          deviation explicit and each case run twice for determinism. A three-way acceptance run against
+          go-ethereum registered only divergences in which Jaune matches its pinned conformance target.
+          The frontend lives outside the proof-facing import closure, exactly as the spike prescribed.</p>
+          <div class="ctarow" style="margin-top:18px">
+            <a class="btn" href="t8n-case-study.html">Read the t8n case study</a>
+          </div>
       </div>
       <div class="stage now reveal">
         <div class="meta"><span class="pill"><span class="d"></span>next · gated on evidence</span></div>
