@@ -4,8 +4,44 @@
 # Fails if any forbidden pattern appears under Jaune/ that is not recorded in
 # the committed allowlist scripts/hygiene-allow.txt. Forbidden patterns:
 #
-#   dbg_trace   stray debug tracing left on a code path
-#   sorry       an incomplete proof / axiomatized hole
+#   dbg_trace       stray debug tracing left on a code path
+#   sorry           an incomplete proof / axiomatized hole
+#   axiom           a proposition asserted rather than proved
+#   opaque          a constant with no defining equation
+#   @[extern]       a body supplied outside Lean
+#   @[implemented_by]  ditto, by substitution at compile time
+#   partial def     a definition whose termination is not established
+#   unsafe          a declaration exempted from the kernel's checks
+#   native_decide   a goal closed by running compiled code outside the kernel
+#
+# The first two are hygiene; the rest are the trust surface. TRUSTED.md
+# describes Jaune as having no axiom, sorry, extern or native_decide in the
+# protected path, and until this gate covered them that was a property of the
+# source at a moment rather than a property CI defends. A claim that is only a
+# fact can be lost by one commit; a claim that is a gate cannot be lost
+# quietly. Nothing here is currently present, so the allowlist starts empty for
+# every trust-surface pattern and any first occurrence must be argued for in
+# writing.
+#
+# The trust-surface patterns are anchored to declaration and attribute
+# positions rather than matched as bare words, so prose that merely discusses
+# an opaque scrutinee or an external binary does not trip the gate.
+#
+# Anchoring is not comment-awareness, and this gate deliberately does not try
+# to be a Lean parser. Two prose shapes still trip it, both by design:
+#
+#   * a wrapped comment whose continuation line happens to begin with `axiom`
+#     or `opaque` — reflow the comment (this is how the one occurrence under
+#     Jaune/ was resolved, in Jaune/Hash.lean's `vec_eta` docstring);
+#   * any comment containing `native_decide`, which cannot be anchored because
+#     it is a tactic and legitimately appears mid-line after `by`.
+#
+# That direction is chosen on purpose. A false positive is a loud failure a
+# human clears in seconds by rewording or by adding one justified allowlist
+# entry; a false negative silently admits an axiom into the trusted path. For a
+# gate whose whole job is the trust surface, fail loud. Prefer rewording the
+# prose over adding an entry, so the allowlist stays empty and keeps meaning
+# something.
 #
 # The gate is fail-closed: every currently-committed occurrence must be either
 # removed from the source or listed in the allowlist with a written
@@ -31,7 +67,26 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
 SRC_DIR="Jaune"
 ALLOW="$SCRIPT_DIR/hygiene-allow.txt"
-PATTERN='dbg_trace|\bsorry\b'
+
+# Hygiene proper: unanchored, since these are never legitimate anywhere.
+P_DEBUG='dbg_trace'
+P_SORRY='\bsorry\b'
+
+# Trust surface. Each is anchored to the position the construct actually
+# occupies, so prose about an opaque scrutinee or an external binary is not a
+# hit. `axiom` and `opaque` head a declaration, after any leading modifiers.
+P_DECL='^[[:space:]]*(private[[:space:]]+|protected[[:space:]]+|noncomputable[[:space:]]+|unsafe[[:space:]]+|scoped[[:space:]]+|local[[:space:]]+)*(axiom|opaque)[[:space:]]'
+# `@[extern ...]` / `@[implemented_by ...]` supply a body from outside Lean.
+P_ATTR='@\[[^]]*(extern|implemented_by)\b'
+# `partial def` defines without establishing termination.
+P_PARTIAL='^[[:space:]]*(private[[:space:]]+|protected[[:space:]]+|unsafe[[:space:]]+)*partial[[:space:]]+def\b'
+# `unsafe` heads a declaration exempted from the kernel's checks.
+P_UNSAFE='^[[:space:]]*(private[[:space:]]+|protected[[:space:]]+)*unsafe[[:space:]]'
+# `native_decide` closes a goal by running compiled code outside the kernel.
+P_NATIVE='\bnative_decide\b'
+
+PATTERN="$P_DEBUG|$P_SORRY|$P_DECL|$P_ATTR|$P_PARTIAL|$P_UNSAFE|$P_NATIVE"
+FORBIDDEN='{dbg_trace, sorry, axiom, opaque, @[extern], @[implemented_by], partial def, unsafe, native_decide}'
 
 if [ $# -ne 0 ]; then
   echo "usage: scripts/check-hygiene.sh" >&2
@@ -86,5 +141,5 @@ if [ -n "$VIOLATIONS" ]; then
   exit 1
 fi
 
-echo "OK — hygiene: all $NHITS occurrence(s) of {dbg_trace, sorry} under $SRC_DIR/ are allowlisted; no new ones"
+echo "OK — hygiene: all $NHITS occurrence(s) of $FORBIDDEN under $SRC_DIR/ are allowlisted; no new ones"
 exit 0

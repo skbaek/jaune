@@ -189,7 +189,7 @@ executable inputs.
 
 | gate | proves | scale | time |
 |---|---|---|---|
-| `scripts/check-hygiene.sh` | source/forbidden-token hygiene, allowlist in `hygiene-allow.txt` | — | sub-second |
+| `scripts/check-hygiene.sh` | source hygiene (`dbg_trace`, `sorry`) **and the trust surface** (`axiom`, `opaque`, `@[extern]`, `@[implemented_by]`, `partial def`, `unsafe`, `native_decide`) under `Jaune/`, allowlist in `hygiene-allow.txt` | 9 patterns, 0 occurrences, allowlist empty | sub-second |
 | `scripts/check-integrity.sh` | no panic / raw bang op / stringly semantic carrier in `Jaune.lean`'s import closure (R4 also covers the runner boundary), allowlist in `integrity-allow.txt` | 58 rows, 0 pending | sub-second |
 | `lake build` | integration elaboration | ~1,776 jobs | ~8 s |
 | `scripts/check-cli.sh` | the runner's four fixture-file refusals — wrong sibling tree, no cases, no supported network, filters select nothing — and the undeclared-format pass-through, against synthetic fixtures | 11 checks | sub-second |

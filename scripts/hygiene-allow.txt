@@ -1,9 +1,16 @@
 # Jaune source-hygiene allowlist — consumed by scripts/check-hygiene.sh.
 #
 # Each non-comment line is "<relpath> <normalised source line>" naming a
-# CURRENTLY-COMMITTED occurrence of a forbidden pattern (dbg_trace / sorry)
-# under Jaune/ that is deliberately retained. The gate fails on any occurrence
-# NOT listed here, so a new stray dbg_trace or sorry cannot enter unnoticed.
+# CURRENTLY-COMMITTED occurrence of a forbidden pattern under Jaune/ that is
+# deliberately retained. The gate fails on any occurrence NOT listed here, so
+# neither a stray dbg_trace or sorry nor a new axiom, opaque, @[extern],
+# @[implemented_by], partial def, unsafe or native_decide can enter unnoticed.
+#
+# This file is EMPTY, and that is the point: TRUSTED.md's account of what Jaune
+# does not use is now a gate rather than a fact about a moment. An entry here
+# is a hole in that account, so adding one is a decision to be argued for, not
+# a way to make the gate quiet. If prose trips the gate, reword the prose
+# instead — see the false-positive note in check-hygiene.sh.
 #
 # Keep a justification comment above every entry. When the underlying code is
 # removed, delete its entry (the gate warns about stale entries).

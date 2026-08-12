@@ -163,13 +163,35 @@ scripts/check-integrity.sh
 Today: hygiene reports 0 occurrences, all allowlisted; integrity reports 58
 occurrences allowlisted, 0 pending, pending budget 0.
 
-**What no Jaune gate enforces.** `@[extern]`, bespoke `axiom`, `opaque`, and
-`native_decide` are absent from Jaune as a matter of fact, not as a matter of
-enforcement — a future Jaune commit introducing one would not be caught by
-`check-hygiene.sh` or `check-integrity.sh`. Blanc now has a separate
-`scripts/check-trust-surface.sh` for these forms in `Blanc.lean`'s transitive
-import closure, and its axiom audit catches dependency-closure changes for the
-named audited results. Neither Blanc gate expands the scope of Jaune's gates.
+**The trust surface is now enforced, not merely reported.** `check-hygiene.sh`
+fails on any un-allowlisted `axiom`, `opaque`, `@[extern]`, `@[implemented_by]`,
+`partial def`, `unsafe` or `native_decide` under `Jaune/`, alongside the
+original `dbg_trace` and `sorry`. The allowlist is empty and every one of these
+counts is zero, so the claim this document makes about Jaune's trusted path is
+defended by a gate on every push rather than being a property of the source at
+the moment someone last looked. Adding an allowlist entry is the only way to
+introduce one, and that is a reviewable act with a written justification.
+
+Three residual limits, stated so the gate is not read as more than it is. Its
+scope is `Jaune/`; the root modules `Jaune.lean` and `Main.lean` are outside it
+and are clean today as a matter of fact only. It is a syntactic scan of this
+repository's own text, so it cannot see a construct reached through a
+dependency — that is what the axiom audit is for. And it is not comment-aware,
+so prose can trip it; the fix is to reword the prose, not to allowlist it.
+
+**Why the syntactic scan is not redundant with the axiom audit.** `#print
+axioms` is non-discriminating on exactly this surface: a declaration whose body
+is supplied by `@[extern]` behind an `opaque` reports as depending on no axioms,
+because the kernel never sees a body to collect from. A clean axiom audit is
+therefore compatible with an arbitrarily large hole, and neither check implies
+the other. The claim worth making is the conjunction — the axiom sets are
+exactly as pinned, *and* nothing in the tree steps outside the kernel to get
+there — and it is the conjunction that this repository gates.
+
+Blanc has a separate `scripts/check-trust-surface.sh` for these forms in
+`Blanc.lean`'s transitive import closure, and its axiom audit catches
+dependency-closure changes for the named audited results. Neither Blanc gate
+expands the scope of Jaune's gates.
 **Also: `check-integrity.sh` is not a CI gate.** The push/pull-request
 workflow ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs exactly
 three jobs — the portable-environment unit tests, `check-hygiene.sh`, and
