@@ -276,6 +276,20 @@ None of F1–F6 is a Jaune defect and none is disclosed anywhere by this goal;
 whether to report them upstream is the user's call. F5 and F6 are the two
 worth an upstream issue on their own.
 
+**Disclosure addendum (2026-08-12).** Both were subsequently filed upstream
+on 2026-08-11 — F6 as pull request
+[ethereum/execution-specs#3361](https://github.com/ethereum/execution-specs/pull/3361)
+(the body encoding, with a regression test) and F5 as issue
+[ethereum/execution-specs#3362](https://github.com/ethereum/execution-specs/issues/3362)
+(the indexing behaviour, framed as the tool's design decision, with two
+candidate designs) — together with a public case study,
+<https://skbaek.github.io/jaune/t8n-case-study.html>. Nothing on Jaune's side
+moves: "match the reference" stands, the goldens pin the target's behaviour
+at the anchor, and the `reject-execution`, `reject-middle` and `reject-parse`
+cases are the regression detectors for the day the anchor is re-pinned past
+an upstream fix. The registries carry the filings row by row — see
+`scripts/t8n/deviations.json` and `scripts/t8n/acceptance-divergences.json`.
+
 ## Three-way agreement (G12)
 
 | side | binary | revision |

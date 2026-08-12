@@ -1,19 +1,21 @@
 {
-  "_comment": "Registered three-way divergences on the acceptance corpus, for scripts/t8n-acceptance.py. Each entry names the case, the fields, the sides that agree, and why. An unregistered disagreement fails the comparison; these do not, because each has been read and attributed. scripts/report-t8n.md carries the full argument. Note what every entry has in common: Jaune agrees with the conformance target and the third tool is the odd one out, which is what reproducing the target faithfully looks like when the target and another client genuinely differ.",
+  "_comment": "Registered three-way divergences on the acceptance corpus, for scripts/t8n-acceptance.py. Each entry names the case, the fields, the sides that agree, and why. An unregistered disagreement fails the comparison; these do not, because each has been read and attributed. scripts/report-t8n.md carries the full argument. Note what every entry has in common: Jaune agrees with the conformance target and the third tool is the odd one out, which is what reproducing the target faithfully looks like when the target and another client genuinely differ. A row whose target-side behaviour has been filed upstream carries an `upstream` line naming the filing: those rows are classified target-defect drift, not Jaune failures, and stand until the anchor is re-pinned past a fix. The script ignores the key.",
   "divergences": [
     {
       "case": "reject-execution",
       "fields": ["txRoot"],
       "agree": ["jaune", "target"],
       "differs": "geth",
-      "why": "The conformance target's `process_transaction` writes the transaction into the shared `block_output.transactions_trie` before validating it, so a transaction rejected during execution is still counted by `txRoot`. Jaune reproduces that deliberately. geth counts only the accepted transactions, which is the root the block it would build actually has. This looks like an upstream defect in the target rather than a disagreement about semantics; the framework does not consume `txRoot` (specs/blockchain.py excludes `transactions_trie` from the fixture header and recomputes it), which is presumably why it has gone unnoticed."
+      "why": "The conformance target's `process_transaction` writes the transaction into the shared `block_output.transactions_trie` before validating it, so a transaction rejected during execution is still counted by `txRoot`. Jaune reproduces that deliberately. geth counts only the accepted transactions, which is the root the block it would build actually has. This looks like an upstream defect in the target rather than a disagreement about semantics; the framework does not consume `txRoot` (specs/blockchain.py excludes `transactions_trie` from the fixture header and recomputes it), which is presumably why it has gone unnoticed.",
+      "upstream": "Filed 2026-08-11 as ethereum/execution-specs#3362 (https://github.com/ethereum/execution-specs/issues/3362); geth's accepted-only counting is one of the two designs the issue proposes. Classified target-defect drift."
     },
     {
       "case": "reject-middle",
       "fields": ["txRoot", "receiptsRoot"],
       "agree": ["jaune", "target"],
       "differs": "geth",
-      "why": "The same defect, plus its receipts half. The target keys each receipt by the transaction's original index, so a rejection in the middle leaves a gap (0 and 2); geth re-indexes the accepted transactions (0 and 1). Both tries are internally consistent; only geth's is the trie of the block that would be built."
+      "why": "The same defect, plus its receipts half. The target keys each receipt by the transaction's original index, so a rejection in the middle leaves a gap (0 and 2); geth re-indexes the accepted transactions (0 and 1). Both tries are internally consistent; only geth's is the trie of the block that would be built.",
+      "upstream": "Filed 2026-08-11 as ethereum/execution-specs#3362 (https://github.com/ethereum/execution-specs/issues/3362), which covers both halves -- txRoot and receiptsRoot. Classified target-defect drift."
     },
     {
       "case": "reject-parse",
