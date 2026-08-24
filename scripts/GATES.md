@@ -334,6 +334,12 @@ Two different contracts, and confusing them is the most common misreading:
   The first is a red gate and a fiction; the second is the number. Nothing
   else in the run moves, because by the second file the cache is warm.
 
+  A separate census measured the same cold-first-row inflation in both Jaune
+  and Blanc even when `lake build` had run. Therefore the first module of any
+  sequential pass on a Lean-cold host is re-elaborated alone before its row is
+  believed; the precondition reduces cold reads but does not prove that first
+  measurement warm.
+
   **It is a local gate, not a CI gate.** Its baseline is wall-clock time from
   one machine, which is machine-dependent in precisely the way `notimeout.md`
   objected to when it abolished TIMEOUT as a fixture classification — a slower

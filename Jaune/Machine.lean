@@ -1699,6 +1699,162 @@ def Devm.withRefundCounter (devm : Devm) (refundCounter : Int) : Devm :=
 def Devm.withOutput (devm : Devm) (output : Bytes) : Devm :=
   devm.setMeta {devm.meta with output := output}
 
+theorem Devm.setMach_stack (devm : Devm) (mach : Mach) :
+    (devm.setMach mach).stack = mach.stack := rfl
+
+theorem Devm.setMach_memory (devm : Devm) (mach : Mach) :
+    (devm.setMach mach).memory = mach.memory := rfl
+
+theorem Devm.setMach_logs (devm : Devm) (mach : Mach) :
+    (devm.setMach mach).logs = devm.logs := rfl
+
+theorem Devm.setMach_refundCounter (devm : Devm) (mach : Mach) :
+    (devm.setMach mach).refundCounter = devm.refundCounter := rfl
+
+theorem Devm.setMach_output (devm : Devm) (mach : Mach) :
+    (devm.setMach mach).output = devm.output := rfl
+
+theorem Devm.setMach_accountsToDelete (devm : Devm) (mach : Mach) :
+    (devm.setMach mach).accountsToDelete = devm.accountsToDelete := rfl
+
+theorem Devm.setMach_returnData (devm : Devm) (mach : Mach) :
+    (devm.setMach mach).returnData = devm.returnData := rfl
+
+theorem Devm.setMach_error (devm : Devm) (mach : Mach) :
+    (devm.setMach mach).error = devm.error := rfl
+
+theorem Devm.setMach_accessedAddresses (devm : Devm) (mach : Mach) :
+    (devm.setMach mach).accessedAddresses = devm.accessedAddresses := rfl
+
+theorem Devm.setMach_accessedStorageKeys (devm : Devm) (mach : Mach) :
+    (devm.setMach mach).accessedStorageKeys = devm.accessedStorageKeys := rfl
+
+theorem Devm.setMach_state (devm : Devm) (mach : Mach) :
+    (devm.setMach mach).state = devm.state := rfl
+
+theorem Devm.setMach_createdAccounts (devm : Devm) (mach : Mach) :
+    (devm.setMach mach).createdAccounts = devm.createdAccounts := rfl
+
+theorem Devm.setMach_transientStorage (devm : Devm) (mach : Mach) :
+    (devm.setMach mach).transientStorage = devm.transientStorage := rfl
+
+theorem Devm.setMeta_stack (devm : Devm) (view : Meta) :
+    (devm.setMeta view).stack = devm.stack := rfl
+
+theorem Devm.setMeta_memory (devm : Devm) (view : Meta) :
+    (devm.setMeta view).memory = devm.memory := rfl
+
+theorem Devm.setMeta_logs (devm : Devm) (view : Meta) :
+    (devm.setMeta view).logs = view.logs := rfl
+
+theorem Devm.setMeta_refundCounter (devm : Devm) (view : Meta) :
+    (devm.setMeta view).refundCounter = view.refundCounter := rfl
+
+theorem Devm.setMeta_output (devm : Devm) (view : Meta) :
+    (devm.setMeta view).output = view.output := rfl
+
+theorem Devm.setMeta_accountsToDelete (devm : Devm) (view : Meta) :
+    (devm.setMeta view).accountsToDelete = view.accountsToDelete := rfl
+
+theorem Devm.setMeta_returnData (devm : Devm) (view : Meta) :
+    (devm.setMeta view).returnData = view.returnData := rfl
+
+theorem Devm.setMeta_error (devm : Devm) (view : Meta) :
+    (devm.setMeta view).error = view.error := rfl
+
+theorem Devm.setMeta_accessedAddresses (devm : Devm) (view : Meta) :
+    (devm.setMeta view).accessedAddresses = view.accessedAddresses := rfl
+
+theorem Devm.setMeta_accessedStorageKeys (devm : Devm) (view : Meta) :
+    (devm.setMeta view).accessedStorageKeys = view.accessedStorageKeys := rfl
+
+theorem Devm.setMeta_state (devm : Devm) (view : Meta) :
+    (devm.setMeta view).state = devm.state := rfl
+
+theorem Devm.setMeta_createdAccounts (devm : Devm) (view : Meta) :
+    (devm.setMeta view).createdAccounts = view.createdAccounts := rfl
+
+theorem Devm.setMeta_transientStorage (devm : Devm) (view : Meta) :
+    (devm.setMeta view).transientStorage = devm.transientStorage := rfl
+
+theorem Devm.setWorld_stack (devm : Devm) (world : World) :
+    (devm.setWorld world).stack = devm.stack := rfl
+
+theorem Devm.setWorld_memory (devm : Devm) (world : World) :
+    (devm.setWorld world).memory = devm.memory := rfl
+
+theorem Devm.setWorld_logs (devm : Devm) (world : World) :
+    (devm.setWorld world).logs = devm.logs := rfl
+
+theorem Devm.setWorld_refundCounter (devm : Devm) (world : World) :
+    (devm.setWorld world).refundCounter = devm.refundCounter := rfl
+
+theorem Devm.setWorld_output (devm : Devm) (world : World) :
+    (devm.setWorld world).output = devm.output := rfl
+
+theorem Devm.setWorld_accountsToDelete (devm : Devm) (world : World) :
+    (devm.setWorld world).accountsToDelete = devm.accountsToDelete := rfl
+
+theorem Devm.setWorld_returnData (devm : Devm) (world : World) :
+    (devm.setWorld world).returnData = devm.returnData := rfl
+
+theorem Devm.setWorld_error (devm : Devm) (world : World) :
+    (devm.setWorld world).error = devm.error := rfl
+
+theorem Devm.setWorld_accessedAddresses (devm : Devm) (world : World) :
+    (devm.setWorld world).accessedAddresses = devm.accessedAddresses := rfl
+
+theorem Devm.setWorld_accessedStorageKeys (devm : Devm) (world : World) :
+    (devm.setWorld world).accessedStorageKeys = devm.accessedStorageKeys := rfl
+
+theorem Devm.setWorld_state (devm : Devm) (world : World) :
+    (devm.setWorld world).state = world.state := rfl
+
+theorem Devm.setWorld_createdAccounts (devm : Devm) (world : World) :
+    (devm.setWorld world).createdAccounts = devm.createdAccounts := rfl
+
+theorem Devm.setWorld_transientStorage (devm : Devm) (world : World) :
+    (devm.setWorld world).transientStorage = world.transientStorage := rfl
+
+theorem Devm.withOutput_stack (devm : Devm) (output : Bytes) :
+    (devm.withOutput output).stack = devm.stack := rfl
+
+theorem Devm.withOutput_memory (devm : Devm) (output : Bytes) :
+    (devm.withOutput output).memory = devm.memory := rfl
+
+theorem Devm.withOutput_logs (devm : Devm) (output : Bytes) :
+    (devm.withOutput output).logs = devm.logs := rfl
+
+theorem Devm.withOutput_refundCounter (devm : Devm) (output : Bytes) :
+    (devm.withOutput output).refundCounter = devm.refundCounter := rfl
+
+theorem Devm.withOutput_output (devm : Devm) (output : Bytes) :
+    (devm.withOutput output).output = output := rfl
+
+theorem Devm.withOutput_accountsToDelete (devm : Devm) (output : Bytes) :
+    (devm.withOutput output).accountsToDelete = devm.accountsToDelete := rfl
+
+theorem Devm.withOutput_returnData (devm : Devm) (output : Bytes) :
+    (devm.withOutput output).returnData = devm.returnData := rfl
+
+theorem Devm.withOutput_error (devm : Devm) (output : Bytes) :
+    (devm.withOutput output).error = devm.error := rfl
+
+theorem Devm.withOutput_accessedAddresses (devm : Devm) (output : Bytes) :
+    (devm.withOutput output).accessedAddresses = devm.accessedAddresses := rfl
+
+theorem Devm.withOutput_accessedStorageKeys (devm : Devm) (output : Bytes) :
+    (devm.withOutput output).accessedStorageKeys = devm.accessedStorageKeys := rfl
+
+theorem Devm.withOutput_state (devm : Devm) (output : Bytes) :
+    (devm.withOutput output).state = devm.state := rfl
+
+theorem Devm.withOutput_createdAccounts (devm : Devm) (output : Bytes) :
+    (devm.withOutput output).createdAccounts = devm.createdAccounts := rfl
+
+theorem Devm.withOutput_transientStorage (devm : Devm) (output : Bytes) :
+    (devm.withOutput output).transientStorage = devm.transientStorage := rfl
+
 def Devm.withAccountsToDelete (devm : Devm) (accountsToDelete : AdrSet) : Devm :=
   devm.setMeta {devm.meta with accountsToDelete := accountsToDelete}
 
@@ -2463,6 +2619,15 @@ def Devm.memRead (devm : Devm) (index size : Nat) : Bytes × Devm :=
   let ⟨val, mem⟩ := devm.memory.read index size
   ⟨val, devm.withMemory mem⟩
 
+theorem Devm.memRead_state (devm : Devm) (index size : Nat) :
+    (devm.memRead index size).2.state = devm.state := rfl
+
+theorem Devm.memRead_logs (devm : Devm) (index size : Nat) :
+    (devm.memRead index size).2.logs = devm.logs := rfl
+
+theorem Devm.memRead_error (devm : Devm) (index size : Nat) :
+    (devm.memRead index size).2.error = devm.error := rfl
+
 def Mach.memExtends (mach : Mach) (pairs : List (Nat × Nat)) : Mach :=
   {mach with memory := mach.memory.extends pairs}
 
@@ -2474,6 +2639,9 @@ def Meta.addLog (view : Meta) (log : Log) : Meta :=
 
 def Devm.addLog (devm : Devm) (log : Log) : Devm :=
   liftMachMetaPure (fun mach view => (mach, view.addLog log)) devm
+
+theorem Devm.addLog_error (devm : Devm) (log : Log) :
+    (devm.addLog log).error = devm.error := rfl
 
 def Mach.applyUnary (f : B256 → B256) (cost : Nat) (mach : Mach) :
     Footprint.Outcome Mach Unit :=
