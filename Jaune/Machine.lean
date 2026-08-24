@@ -1855,6 +1855,8 @@ theorem Devm.withOutput_createdAccounts (devm : Devm) (output : Bytes) :
 theorem Devm.withOutput_transientStorage (devm : Devm) (output : Bytes) :
     (devm.withOutput output).transientStorage = devm.transientStorage := rfl
 
+attribute [irreducible] Devm.withOutput
+
 def Devm.withAccountsToDelete (devm : Devm) (accountsToDelete : AdrSet) : Devm :=
   devm.setMeta {devm.meta with accountsToDelete := accountsToDelete}
 
@@ -4624,13 +4626,19 @@ theorem Linst.run_canonical {sevm : Sevm} {devm : Devm}
     refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
     refine Except.CanonicalOn.bind (liftMachExecution_canonical hb) fun d hd => ?_
     rcases hread : d.memRead a.1 b.1 with ⟨out, d'⟩
-    exact (Devm.memRead_eq_canonical hd hread).of_world_eq rfl
+    exact (Devm.memRead_eq_canonical hd hread).of_world_eq (by
+      apply World.ext
+      · exact Devm.withOutput_state d' out
+      · exact Devm.withOutput_transientStorage d' out)
   case ret =>
     refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
     refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
     refine Except.CanonicalOn.bind (liftMachExecution_canonical hb) fun d hd => ?_
     rcases hread : d.memRead a.1 b.1 with ⟨out, d'⟩
-    exact (Devm.memRead_eq_canonical hd hread).of_world_eq rfl
+    exact (Devm.memRead_eq_canonical hd hread).of_world_eq (by
+      apply World.ext
+      · exact Devm.withOutput_state d' out
+      · exact Devm.withOutput_transientStorage d' out)
   case dest =>
     refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
     refine Except.canonicalOn_bind_ok ?_
