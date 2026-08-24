@@ -2019,8 +2019,7 @@ theorem Jinst.runCore_gasLe (pc : Nat) (devm : Devm) (sevm : Sevm) (j : Jinst) :
     (devm.addBal a v).gasLeft = devm.gasLeft := rfl
 
 @[simp] theorem Devm.withOutput_gasLeft (devm : Devm) (output : Bytes) :
-    (devm.withOutput output).gasLeft = devm.gasLeft := by
-  rw [Devm.withOutput, Devm.setMeta_gasLeft]
+    (devm.withOutput output).gasLeft = devm.gasLeft := rfl
 
 /-- The halting instructions. `.rev` is the reason this whole layer exists: it
 is the sole producer of the `"Revert"` tag, the one error `handleError` turns

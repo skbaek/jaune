@@ -1039,12 +1039,7 @@ and an output, and `applyPrecompResult` applies them with `withGasLeft` and
 theorem applyPrecompResult_canonical {evm : Evm} (h : evm.dyna.Canonical)
     (res : PrecompResult) : (applyPrecompResult evm res).Canonical := by
   unfold applyPrecompResult
-  split
-  · exact Devm.Canonical.of_world_eq h rfl
-  · exact Devm.Canonical.of_world_eq h (by
-      apply World.ext
-      · exact (Devm.withOutput_state _ _).trans rfl
-      · exact (Devm.withOutput_transientStorage _ _).trans rfl)
+  split <;> exact Devm.Canonical.of_world_eq h rfl
 
 theorem executePrecomp_canonical {evm : Evm} (h : evm.dyna.Canonical)
     (adr : Adr) : (executePrecomp evm adr).Canonical :=
