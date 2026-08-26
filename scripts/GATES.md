@@ -7,7 +7,9 @@ reports should link here rather than restate it.
 
 Audience is anyone driving these gates, human or agent, regardless of tool.
 
-All commands are run from `~/jaune` unless stated otherwise.
+All commands are run from the root of the Jaune checkout under test — the
+goal's worktree during goal work, `~/jaune` otherwise — unless stated
+otherwise.
 
 **`check-legacy.sh` was named `check.sh` until 2026-08-05.** It was renamed
 because the bare name said nothing about which corpus it runs, and the two
@@ -48,7 +50,7 @@ Choose the gate by what you changed, cheapest falsifier first:
 | the `t8n` frontend (`Jaune/T8n.lean`) or its corpus | `scripts/check-t8n.sh --red-test` | `scripts/check-mainnet.sh --suite smoke` |
 | harness / generators | `python3 -m unittest discover -s scripts/tests` | `python3 scripts/env_doctor.py` |
 | a module's imports, or an added `#guard` / heavy elaboration | `lake build` | `scripts/check-elab.sh` |
-| anything Blanc consumes | `cd ~/blanc && lake build && scripts/check.sh --no-build` | Blanc's full set — see [Blanc's gates](#blancs-gates) |
+| anything Blanc consumes | `lake build && scripts/check.sh --no-build` in the Blanc checkout carrying the candidate pin — its goal worktree during goal work, `~/blanc` otherwise | Blanc's full set — see [Blanc's gates](#blancs-gates) |
 
 **Use sequential (omit `--jobs`) when the timings themselves matter:** writing a
 baseline with `--rebase` or `--refresh-times`, investigating a performance
@@ -212,7 +214,7 @@ executable inputs.
 | `scripts/check-ec.sh` | EC differential oracle (pinned, differential, identity cases) | — | compiles a Lean checker first |
 | `scripts/check-vectors.sh` | generated vector conformance + controls + declared-case-count coverage | 51 files, 1,824 cases, 5 controls | ~7.8 min; **~1.5 min at `--jobs auto`** |
 | `scripts/check-elab.sh` | per-module elaboration time vs `scripts/baseline-elab.txt` | 17 modules, ~49 s of elaboration | ~70 s |
-| `cd ~/blanc && lake build && scripts/check.sh --no-build` | that a Jaune change has not broken its downstream consumer: Blanc's integration elaboration and its axiom audit. **The cheapest Blanc-side falsifier after a pin bump** — the rest of Blanc's set is catalogued in Blanc's own file | count-free here; use Blanc's gate summaries | current Blanc catalogue |
+| `lake build && scripts/check.sh --no-build` in the Blanc checkout carrying the candidate pin | that a Jaune change has not broken its downstream consumer: Blanc's integration elaboration and its axiom audit. **The cheapest Blanc-side falsifier after a pin bump** — the rest of Blanc's set is catalogued in Blanc's own file | count-free here; use Blanc's gate summaries | current Blanc catalogue |
 
 ### Long sequentially — but mostly not long in parallel
 
@@ -260,8 +262,10 @@ What belongs in *this* file is the one selection rule that is a Jaune concern:
 revision — the cheapest Blanc-side falsifier is**
 
 ```
-cd ~/blanc && lake build && scripts/check.sh --no-build
+cd <the Blanc checkout carrying the candidate pin> && lake build && scripts/check.sh --no-build
 ```
+
+run in the Blanc goal worktree during goal work, in `~/blanc` otherwise,
 
 **and a green result there is not a substitute for Blanc's full set**, which
 that repository's catalogue defines and which the pin bump's own checkpoint
