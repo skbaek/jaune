@@ -431,9 +431,16 @@ takes an exclusive lock on its report file, and the heavier ones additionally
 take a single shared **heavy-gate lock**; a second run that would contend exits
 2 with a `REFUSED` verdict naming the holder's PID, start time, and full command
 line. It does not wait, does not fall back to another path, and writes nothing.
-The mechanism is `scripts/gate-lock.sh` (`mkdir`, `kill -0`, one `EXIT` trap —
-macOS has no `flock`), which also documents the 2026-07-31 incident that
-motivated it.
+The heavy-gate lock is host-global — it lives at `~/.codex/locks/gate-heavy.lock`
+and is shared across both this repository and Blanc, and across every checkout
+or worktree of either, because they all contend for the same cores: one host,
+one heavy gate. Before running a timing-authoritative gate, a session must
+already hold the cross-session hard semaphore (`codex-host-semaphore
+hard-acquire`; see `~/elanc/AGENTS.md` and `~/plans/guide/lead.md` for the
+protocol) — the gate lock is the last line of defense, not the coordination
+mechanism. The lock mechanism is `scripts/gate-lock.sh` (`mkdir`, `kill -0`,
+one `EXIT` trap — macOS has no `flock`), which also documents the 2026-07-31
+incident that motivated it.
 
 | gate | report lock | heavy lock |
 |---|---|---|

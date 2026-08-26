@@ -126,7 +126,7 @@ trap cleanup EXIT
 # This suite is a Medium gate in every mode (~7.8 min sequential, ~1.5 min at
 # --jobs auto), so it always takes the heavy-gate lock as well as its report
 # lock. See scripts/gate-lock.sh.
-gate_lock_acquire "$SCRIPT_DIR/.gate-heavy.lock" "vectors" \
+gate_lock_heavy_acquire "vectors" \
   "the heavy-gate lock" \
   "wait for that run to finish" \
   || exit 2

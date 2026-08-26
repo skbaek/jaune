@@ -165,7 +165,7 @@ case "$SUITE" in
 esac
 if [ "$JOBS" -gt 1 ]; then HEAVY=1; fi
 if [ "$HEAVY" -eq 1 ]; then
-  gate_lock_acquire "$SCRIPT_DIR/.gate-heavy.lock" "$SUITE" \
+  gate_lock_heavy_acquire "$SUITE" \
     "the heavy-gate lock" \
     "wait for that run to finish; --suite smoke and --suite transitions do not take this lock when sequential" \
     || exit 2

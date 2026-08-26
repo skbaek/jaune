@@ -207,13 +207,15 @@ mkdir -p "$(dirname "$REPORT")"
 REPORT="$(cd "$(dirname "$REPORT")" && pwd)/$(basename "$REPORT")"
 
 # The same argument as the language-server guard above, applied to the other
-# thing that contends on this host: another gate run. This gate's only output
-# is a timing, so a fixture tier dispatching ten workers alongside it does not
-# degrade a reference column — it decides the verdict. So this gate takes the
-# shared heavy-gate lock, and unlike the language-server guard there is no
-# --force for it: a server can be idle and harmless, whereas a heavy gate
-# holding that lock is by construction running. It also locks its report.
-gate_lock_acquire "$SCRIPT_DIR/.gate-heavy.lock" "elab" \
+# thing that contends on this host: another gate run — from any checkout or
+# worktree of either Blanc or Jaune, since they all schedule onto the same
+# cores. This gate's only output is a timing, so a fixture tier dispatching
+# ten workers alongside it does not degrade a reference column — it decides
+# the verdict. So this gate takes the host-global heavy-gate lock, and unlike
+# the language-server guard there is no --force for it: a server can be idle
+# and harmless, whereas a heavy gate holding that lock is by construction
+# running. It also locks its report.
+gate_lock_heavy_acquire "elab" \
   "the heavy-gate lock" \
   "wait for that run to finish; measuring elaboration time beside it would measure the scheduler" \
   || exit 2

@@ -42,11 +42,24 @@
 # its lock for minutes, so any duration threshold either breaks that or fails
 # to help.
 #
+# THE HEAVY LOCK IS HOST-GLOBAL
+#
+# Per-report locks are keyed on the path they protect, and stay that way. The
+# heavy lock is different: it exists to keep two expensive runs off one HOST,
+# and a key derived from the script's own directory stopped meaning that once
+# sessions began running in git worktrees — every worktree carries its own
+# scripts/, so two checkouts of one repository would silently run beside each
+# other. Blanc and Jaune contend for the same cores, so the same argument
+# crosses the repository boundary. The heavy lock therefore lives at one fixed
+# path under $HOME, shared by both repositories and every checkout or worktree
+# of either: one host, one heavy gate.
+#
 # USE
 #
 #   GATE_CMDLINE="$0 $*"                     # before the argument loop eats them
 #   . "$SCRIPT_DIR/gate-lock.sh"
 #   gate_lock_acquire "$LOCKDIR" "$TIER" "$WHAT" "$HINT" || exit 2
+#   gate_lock_heavy_acquire "$TIER" "$WHAT" "$HINT" || exit 2   # the heavy lock
 #   ...
 #   cleanup() { gate_lock_release_all; rm -rf "$WORK"; }
 #   trap cleanup EXIT
@@ -125,6 +138,19 @@ gate_lock_acquire() {
     rm -f "$gl_dir/owner"
     rmdir "$gl_dir" 2>/dev/null || true
   done
+}
+
+# The single heavy-gate lock for this host. See THE HEAVY LOCK IS HOST-GLOBAL
+# above: keyed under $HOME rather than under scripts/, so every checkout and
+# worktree of Blanc and Jaune contends for the same lock.
+GATE_HEAVY_LOCK="${HOME}/.codex/locks/gate-heavy.lock"
+
+# gate_lock_heavy_acquire <label> <what> [hint]
+#
+# gate_lock_acquire on the host-global heavy lock. Same return contract.
+gate_lock_heavy_acquire() {
+  mkdir -p "${HOME}/.codex/locks"
+  gate_lock_acquire "$GATE_HEAVY_LOCK" "$@"
 }
 
 # Release every lock this process holds. Idempotent, and safe to call from an
