@@ -13,7 +13,7 @@ into 512-bit blocks.
 
 This module is that definition, transcribed from **NIST FIPS 180-4** (*Secure
 Hash Standard*, August 2015) — section numbers are cited at each declaration —
-and `SHA256.FIPS.hash_eq` at the end proves the kernel computes it, for every
+and `Bytes.sha256_eq_fips` at the end proves the kernel computes it, for every
 input.
 
 The transcription is written from the standard, never read back out of the
