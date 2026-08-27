@@ -426,6 +426,29 @@ theorem consumeChunk_eq (H : Vector UInt32 8) (p : Array UInt8) :
   simp only [consumeChunk, FIPS.compress, key]
   rfl
 
+/-! ### Composition
+
+What remains between one block and the whole hash is only the walk over the
+blocks. The kernel's chunks are arrays of exactly the reference's block bytes,
+so `List.foldl_map` lines the two walks up. -/
+
+/-- The kernel's chunk walk is the standard's block walk. -/
+theorem foldl_consumeChunk_eq (H : Vector UInt32 8) (bs : List (List UInt8)) :
+    List.foldl consumeChunk H (bs.map Array.mk)
+      = List.foldl (fun H b => FIPS.compress H (FIPS.toWords b)) H bs := by
+  rw [List.foldl_map]
+  induction bs generalizing H with
+  | nil => simp
+  | cons b bs ih => rw [List.foldl_cons, List.foldl_cons, consumeChunk_eq, ih]
+
+/-- The length field FIPS 180-4 §5.1.1 appends is eight bytes wide. -/
+theorem length_toBytes (x : UInt64) : (UInt64.toBytes x).length = 8 := rfl
+
+/-- The kernel's initial state is the standard's `H{0}`. Like
+`roundConstants_eq` this is `rfl`, and states that two independent
+transcriptions of a FIPS 180-4 table agree. -/
+theorem initChunk_eq : initChunk = FIPS.H0 := rfl
+
 end SHA256
 
 end Jaune
