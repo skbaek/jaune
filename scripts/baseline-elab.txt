@@ -16,6 +16,7 @@ OK	1.400	Jaune/FixtureException.lean
 OK	1.865	Jaune/Fork.lean
 OK	3.484	Jaune/Hash.lean
 OK	3.239	Jaune/Machine.lean
+OK	1.220	Jaune/MulDiv.lean
 OK	2.104	Jaune/Precompiles.lean
 OK	5.196	Jaune/Sufficiency.lean
 OK	1.690	Jaune/T8n.lean
