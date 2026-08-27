@@ -426,6 +426,239 @@ theorem consumeChunk_eq (H : Vector UInt32 8) (p : Array UInt8) :
   simp only [consumeChunk, FIPS.compress, key]
   rfl
 
+/-! ### Padding and parsing
+
+FIPS 180-4 §5.1.1 appends the bit `1`, the zero bits, and the length; §5.2.1
+then parses the result into 512-bit blocks. The kernel does neither as a pass
+of its own: `Bytes.toChunks` walks the message sixty-four bytes at a time and,
+once fewer than sixty-four remain, emits directly the one or two chunks the
+padding calls for — so the padded message is never built. The lemmas here take
+that walk apart and reassemble `pad` and `blocks` from it.
+
+The four cases of the walk are the four of the standard, read through `len % 64`:
+with fifty-five or fewer bytes left the message, the `0x80`, the zeros and the
+length all still fit in one block; with fifty-six to sixty-three they no longer
+do and the padding spills into a second. -/
+
+/-! #### The list and array primitives the chunks are built from -/
+
+/-- Overwriting the entry just past a prefix. -/
+theorem set_append_length {ξ : Type u} (pre : List ξ) (p : ξ) (post : List ξ) (x : ξ) :
+    (pre ++ p :: post).set pre.length x = pre ++ x :: post := by
+  induction pre with
+  | nil => rfl
+  | cons a l ih => simp
+
+/-- `List.splitToArray`'s worker at an exhausted budget returns what it holds. -/
+theorem splitToArray_aux_zero {ξ : Type u} (idx : Nat) (a : Array ξ)
+    (h : idx + 0 = a.size) (xs : List ξ) :
+    List.splitToArray.aux idx a 0 h xs = (a, xs) := by
+  cases xs with
+  | nil => rfl
+  | cons y ys => rfl
+
+/-- One step of `List.splitToArray`'s worker. -/
+theorem splitToArray_aux_succ {ξ : Type u} (idx : Nat) (a : Array ξ) (n : Nat)
+    (h : idx + (n + 1) = a.size) (y : ξ) (ys : List ξ) :
+    List.splitToArray.aux idx a (n + 1) h (y :: ys)
+      = List.splitToArray.aux (idx + 1) (a.set idx y (by omega)) n
+          (by rw [Array.size_set]; omega) ys := rfl
+
+/-- One step of `Array.writeD`. -/
+theorem writeD_cons {ξ : Type u} (a : Array ξ) (n : Nat) (y : ξ) (ys : List ξ)
+    (h : n < a.size) :
+    Array.writeD a n (y :: ys) = Array.writeD (a.set n y h) (n + 1) ys := by
+  rw [Array.writeD, dif_pos h]
+
+/-- `List.splitToArray`'s worker, in closed form, for as long as the list has
+entries left to give. -/
+theorem splitToArray_aux_eq {ξ : Type u} :
+    ∀ (n idx : Nat) (a : Array ξ) (h : idx + n = a.size) (xs pre post : List ξ),
+      a.toList = pre ++ post → pre.length = idx → n ≤ xs.length →
+      List.splitToArray.aux idx a n h xs = (⟨pre ++ xs.take n⟩, xs.drop n) := by
+  intro n
+  induction n with
+  | zero =>
+    intro idx a h xs pre post hap hpre _
+    have hlen : pre.length + post.length = a.size := by
+      rw [← List.length_append, ← hap, Array.length_toList]
+    have hpost : post = [] := by
+      apply List.eq_nil_of_length_eq_zero; omega
+    subst hpost
+    rw [splitToArray_aux_zero]
+    simp [← hap]
+  | succ n ih =>
+    intro idx a h xs pre post hap hpre hle
+    cases xs with
+    | nil => simp at hle
+    | cons y ys =>
+      have hlen : pre.length + post.length = a.size := by
+        rw [← List.length_append, ← hap, Array.length_toList]
+      cases post with
+      | nil => simp at hlen; omega
+      | cons q post' =>
+        rw [splitToArray_aux_succ]
+        rw [ih (idx + 1) (a.set idx y (by omega)) (by rw [Array.size_set]; omega) ys
+              (pre ++ [y]) post'
+              (by rw [Array.toList_set, hap, ← hpre, set_append_length]; simp)
+              (by simp [hpre]) (by simpa using hle)]
+        simp
+
+/-- `List.splitToArray` splits off exactly the first `n` entries when the list
+has that many. -/
+theorem splitToArray_eq {ξ : Type u} (n : Nat) (xs : List ξ) (x : ξ)
+    (hn : n ≤ xs.length) :
+    List.splitToArray n xs x = (⟨xs.take n⟩, xs.drop n) := by
+  have h := splitToArray_aux_eq n 0 (Array.replicate n x) (by simp) xs []
+    (List.replicate n x) (by simp) rfl hn
+  simpa [List.splitToArray] using h
+
+/-- `Array.writeD` overwrites exactly the window it is pointed at. -/
+theorem writeD_eq {ξ : Type u} :
+    ∀ (ys : List ξ) (a : Array ξ) (pre mid : List ξ) (n : Nat),
+      a.toList = pre ++ mid → pre.length = n → mid.length = ys.length →
+      Array.writeD a n ys = ⟨pre ++ ys⟩ := by
+  intro ys
+  induction ys with
+  | nil =>
+    intro a pre mid n ha _ hm
+    have hmid : mid = [] := by
+      apply List.eq_nil_of_length_eq_zero; simpa using hm
+    subst hmid
+    rw [show Array.writeD a n ([] : List ξ) = a from rfl]
+    apply Array.ext'
+    simpa using ha
+  | cons y ys ih =>
+    intro a pre mid n ha hn hm
+    cases mid with
+    | nil => simp at hm
+    | cons q mid' =>
+      have hsz : n < a.size := by
+        rw [← Array.length_toList, ha]; simp [← hn]
+      rw [writeD_cons a n y ys hsz]
+      rw [ih (a.set n y hsz) (pre ++ [y]) mid' (n + 1)
+            (by rw [Array.toList_set, ha, ← hn, set_append_length]; simp)
+            (by simp [hn]) (by simpa using hm)]
+      simp
+
+/-- The single chunk the kernel emits for the empty message. -/
+theorem padChunk_eq (lb : List UInt8) (h8 : lb.length = 8)
+    (h : 0 < (Array.replicate 64 (0x00 : UInt8)).size) :
+    Array.writeD ((Array.replicate 64 (0x00 : UInt8)).set 0 0x80 h) 56 lb
+      = ⟨(0x80 : UInt8) :: (List.replicate 55 (0x00 : UInt8) ++ lb)⟩ := by
+  refine writeD_eq lb _ ((0x80 : UInt8) :: List.replicate 55 (0x00 : UInt8))
+    (List.replicate 8 (0x00 : UInt8)) 56 ?_ (by simp) (by simp [h8])
+  rw [Array.toList_set, Array.toList_replicate,
+    show (64 : Nat) = 63 + 1 from rfl, List.replicate_succ]
+  simp [show (63 : Nat) = 55 + 8 from rfl]
+
+/-! #### Parsing a padded message into blocks -/
+
+/-- No blocks parse out of the empty message. -/
+theorem blocks_nil : FIPS.blocks ([] : List UInt8) = [] := rfl
+
+/-- Parsing splits off a sixty-four byte prefix as one block. -/
+theorem blocks_append_64 (p rest : List UInt8) (hp : p.length = 64) :
+    FIPS.blocks (p ++ rest) = p :: FIPS.blocks rest := by
+  have hlen : (p ++ rest).length / 64 = rest.length / 64 + 1 := by
+    rw [List.length_append, hp]; omega
+  rw [FIPS.blocks, hlen, FIPS.blocksN, List.take_left' hp, List.drop_left' hp,
+    FIPS.blocks]
+
+/-- A padded message of exactly one block parses to exactly that block. -/
+theorem blocks_of_length_64 (l : List UInt8) (h : l.length = 64) :
+    FIPS.blocks l = [l] := by
+  simpa [blocks_nil] using blocks_append_64 l [] h
+
+/-! #### The four branches of the kernel's chunk walk -/
+
+/-- With no bytes left, the kernel emits one all-padding chunk. -/
+theorem toChunks_nil (lb : Bytes) (n : Nat) (xs : Bytes)
+    (h : 0 < (Array.replicate 64 (0x00 : UInt8)).size) :
+    Bytes.toChunks lb n.succ xs 0
+      = [Array.writeD ((Array.replicate 64 (0x00 : UInt8)).set 0 0x80 h) 56 lb] :=
+  Bytes.toChunks.eq_2 lb xs n
+
+/-- With sixty-four or more bytes left, the kernel peels a chunk and recurses. -/
+theorem toChunks_ge_64 (lb : Bytes) (k : Nat) (xs : Bytes) (len : Nat) :
+    Bytes.toChunks lb k.succ xs (len + 64)
+      = (List.splitToArray 64 xs 0).1
+          :: Bytes.toChunks lb k (List.splitToArray 64 xs 0).2 len := rfl
+
+/-- With fifty-six to sixty-three bytes left, the length no longer fits beside
+them, so the kernel emits two chunks. -/
+theorem toChunks_ge_56 (lb : Bytes) (n j : Nat) (xs : Bytes) (hj : j < 8) :
+    Bytes.toChunks lb n.succ xs (j + 56)
+      = [⟨xs ++ (0x80 : UInt8) :: List.replicate (64 - (xs.length + 1)) (0x00 : UInt8)⟩,
+         ⟨List.replicate 56 (0x00 : UInt8) ++ lb⟩] :=
+  Bytes.toChunks.eq_4 lb xs n j (by omega)
+
+/-- With one to fifty-five bytes left, message, padding and length all fit in
+one chunk. -/
+theorem toChunks_lt_56 (lb : Bytes) (n : Nat) (xs : Bytes) (len : Nat)
+    (h1 : 0 < len) (h2 : len < 56) :
+    Bytes.toChunks lb n.succ xs len
+      = [⟨xs ++ (0x80 : UInt8) :: List.replicate (64 - (xs.length + 9)) (0x00 : UInt8)
+            ++ lb⟩] :=
+  Bytes.toChunks.eq_5 lb xs len n (by omega) (by intro len' hl; omega) (by intro m hl; omega)
+
+/-! #### The walk is FIPS 180-4's padding and parsing -/
+
+/-- The kernel's chunk walk produces exactly the blocks FIPS 180-4 parses the
+padded message into.
+
+The fuel `(len / 64).succ` is the kernel's own, and it is exactly enough: each
+step consumes sixty-four bytes, and the last step spends what is left. The
+`Array.mk` on the right is where the two representations meet — the kernel's
+chunks are arrays holding precisely the bytes of the standard's blocks. -/
+theorem toChunks_eq (lenBytes : List UInt8) (h8 : lenBytes.length = 8) :
+    ∀ (len : Nat) (m : List UInt8), m.length = len →
+      Bytes.toChunks lenBytes (len / 64).succ m len
+        = (FIPS.blocks (m ++ ((0x80 : UInt8) ::
+            (List.replicate (FIPS.padZeros len) (0x00 : UInt8) ++ lenBytes)))).map Array.mk := by
+  intro len
+  induction len using Nat.strong_induction_on with
+  | _ len ih =>
+    intro m hm
+    rcases Nat.lt_or_ge len 64 with hlt | hge
+    · rcases Nat.eq_zero_or_pos len with rfl | hpos
+      · have hm0 : m = [] := by simpa using hm
+        subst hm0
+        rw [show (0 : Nat) / 64 = 0 from rfl, toChunks_nil lenBytes 0 [] (by simp),
+          padChunk_eq lenBytes h8, show FIPS.padZeros 0 = 55 from rfl]
+        rw [blocks_of_length_64 _ (by simp [h8])]
+        simp
+      · rcases Nat.lt_or_ge len 56 with h56 | h56
+        · rw [show len / 64 = 0 from by omega,
+            toChunks_lt_56 lenBytes 0 m len hpos h56,
+            show FIPS.padZeros len = 55 - len from by unfold FIPS.padZeros; omega, hm]
+          rw [blocks_of_length_64 _ (by simp [h8, hm]; omega)]
+          simp [show 64 - (len + 9) = 55 - len from by omega]
+        · obtain ⟨j, rfl⟩ : ∃ j, len = j + 56 := ⟨len - 56, by omega⟩
+          have hj : j < 8 := by omega
+          rw [show (j + 56) / 64 = 0 from by omega,
+            toChunks_ge_56 lenBytes 0 j m hj,
+            show FIPS.padZeros (j + 56) = (7 - j) + 56 from by unfold FIPS.padZeros; omega,
+            List.replicate_add, hm]
+          rw [show (m ++ ((0x80 : UInt8) :: (List.replicate (7 - j) (0x00 : UInt8)
+                    ++ List.replicate 56 (0x00 : UInt8) ++ lenBytes)))
+                = (m ++ ((0x80 : UInt8) :: List.replicate (7 - j) (0x00 : UInt8)))
+                    ++ (List.replicate 56 (0x00 : UInt8) ++ lenBytes) from by simp]
+          rw [blocks_append_64 _ _ (by simp [hm]; omega),
+            blocks_of_length_64 _ (by simp [h8])]
+          simp [show 64 - (j + 56 + 1) = 7 - j from by omega]
+    · obtain ⟨len', rfl⟩ : ∃ len', len = len' + 64 := ⟨len - 64, by omega⟩
+      rw [show (len' + 64) / 64 = (len' / 64).succ from by omega,
+        toChunks_ge_64, splitToArray_eq 64 m 0 (by omega)]
+      dsimp only
+      rw [ih len' (by omega) (m.drop 64) (by simp [hm]),
+        show FIPS.padZeros (len' + 64) = FIPS.padZeros len' from by
+          unfold FIPS.padZeros; omega]
+      have h64 : (m.take 64).length = 64 := by rw [List.length_take, hm]; omega
+      conv_rhs => rw [← List.take_append_drop 64 m, List.append_assoc]
+      rw [blocks_append_64 (m.take 64) _ h64]
+      simp
+
 end SHA256
 
 end Jaune
