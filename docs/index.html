@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Jaune — a Yellow Paper you can run</title>
-<meta name="description" content="Jaune is an executable formal specification of the Ethereum Virtual Machine in Lean 4 — a spiritual successor to the Yellow Paper that runs the full mainnet fixture corpus (5,100/5,100 files, Prague through BPO2) and supports machine-checked proof, demonstrated by WETH solvency preservation over every state reachable along a valid configured chain, across scheduled fork activations.">
+<meta name="description" content="Jaune is an executable formal specification of the Ethereum Virtual Machine in Lean 4 — a spiritual successor to the Yellow Paper that runs the full mainnet fixture corpus (5,100/5,100 files, Prague through BPO2) and supports machine-checked proof, demonstrated by four contracts in the sibling Blanc language — most recently a port of Lido's deployed CircuitBreaker, its Registry integrity proved from an official-parameters deployment to every state reachable along a valid configured chain.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='9' fill='%23f6e5a8'/%3E%3Ctext x='32' y='47' font-family='Georgia,serif' font-size='44' text-anchor='middle' fill='%231b4b2b'%3EJ%3C/text%3E%3C/svg%3E">
 <style>
 /* ────────────────────────────────────────────────────────────────
@@ -425,10 +425,12 @@ footer a:hover{color:var(--ink)}
       an executable snapshot to canonical validated state, and a shrink-only CI budget holds the library
       at zero panics. The interpreter also answers as a standard <span class="mono">t8n</span> transition
       tool, gated against its pinned target’s complete output with every normalization and declared
-      deviation explicit. The semantics is demonstrated strong enough for real verification — a WETH
-      contract’s solvency is proven to be preserved over every state reachable along a valid configured
-      chain, across scheduled fork activations, through a machine-checked compiler, with an axiom audit
-      in CI. MIT-licensed.</p>
+      deviation explicit. The semantics is demonstrated strong enough for real verification: the
+      sibling Blanc language has carried four contracts’ invariants through it — a WETH’s solvency
+      across scheduled fork activations, and most recently Registry integrity for a port of Lido’s
+      deployed CircuitBreaker, proved from an official-parameters deployment through the real
+      Prague block pipeline to every reachable state of a valid configured chain — through a
+      machine-checked compiler, with an axiom audit in CI. MIT-licensed.</p>
     </div>
 
     <div class="factbar reveal">
@@ -450,7 +452,7 @@ footer a:hover{color:var(--ink)}
         <li><a href="#conformance"><span class="no">3</span> Tested like a client <span class="dots"></span></a></li>
         <li><a href="#total"><span class="no">4</span> A total interpreter, proven so <span class="dots"></span></a></li>
         <li><a href="#perf"><span class="no">5</span> Fast enough to check <span class="dots"></span></a></li>
-        <li><a href="#casestudy"><span class="no">6</span> Case study: WETH solvency across configured forks <span class="dots"></span></a></li>
+        <li><a href="#casestudy"><span class="no">6</span> Case study: Registry integrity across reachable futures <span class="dots"></span></a></li>
         <li><a href="#method"><span class="no">7</span> How the work is run <span class="dots"></span></a></li>
         <li><a href="#trajectory"><span class="no">8</span> Trajectory <span class="dots"></span></a></li>
         <li><a href="#waysin"><span class="no">9</span> Three ways in <span class="dots"></span></a></li>
@@ -498,9 +500,13 @@ footer a:hover{color:var(--ink)}
         <span class="tick">1.3 — audited trust</span>
         <h3>Trust is checked, not asserted</h3>
         <p class="dim">
-          A no-toolchain CI gate fails the build on any stray <span class="mono">sorry</span>.
-          Nothing in either repository uses <span class="mono">native_decide</span>, which would move
-          trust out of the kernel and into the compiler. And the flagship theorems have their exact
+          A no-toolchain CI gate fails the build on any stray <span class="mono">sorry</span> — and
+          a trust-surface gate holds the whole library to zero un-allowlisted
+          <span class="mono">axiom</span>, <span class="mono">opaque</span>,
+          <span class="mono">@[extern]</span>, <span class="mono">@[implemented_by]</span>,
+          <span class="mono">partial</span>, <span class="mono">unsafe</span>, and
+          <span class="mono">native_decide</span> occurrences: nine patterns, zero hits, an
+          allowlist that is empty rather than merely short. The flagship theorems have their exact
           axiom sets printed and checked by CI — <span class="mono">propext</span>,
           <span class="mono">Classical.choice</span>, <span class="mono">Quot.sound</span>, nothing else.
         </p>
@@ -542,8 +548,9 @@ footer a:hover{color:var(--ink)}
         </div>
         <p class="cap"><b>Fig. 2</b> — sixteen typed error ADTs replaced the strings that used to
           discriminate semantic outcomes. <span class="mono">String</span> survives only at the
-          external parsing, rendering, and fixture-compatibility boundary — 56 allowlisted rows
-          across the whole gate, and the allowlist may only shrink.</p>
+          external parsing, rendering, and fixture-compatibility boundary — 58 exact-match
+          allowlist rows across the whole gate, with the pending-defect budget held at zero and
+          shrink-only.</p>
       </div>
 
       <div class="reveal">
@@ -683,7 +690,7 @@ footer a:hover{color:var(--ink)}
           <tr><td class="mono">--suite prague</td><td class="num">2,573</td><td class="num">16,573</td><td class="passmark">all pass</td><td class="num">~12 min</td><td class="num">~3.0 min</td></tr>
           <tr><td class="mono">--suite osaka</td><td class="num">2,514</td><td class="num">17,323</td><td class="passmark">all pass</td><td class="num">~8 min</td><td class="num">~2.3 min</td></tr>
           <tr><td class="mono">--suite transitions</td><td class="num">13</td><td class="num">109</td><td class="passmark">all pass</td><td class="num">16 s</td><td class="num">~8 s</td></tr>
-          <tr><td class="mono">--suite full</td><td class="num">5,100</td><td class="num">34,005</td><td class="passmark">all pass</td><td class="num">~20.8 min</td><td class="num">~5.0 min</td></tr>
+          <tr><td class="mono">--suite full</td><td class="num">5,100</td><td class="num">34,005</td><td class="passmark">all pass</td><td class="num">~18.9 min</td><td class="num">~5.0 min</td></tr>
         </tbody>
       </table>
     </div>
@@ -867,7 +874,9 @@ footer a:hover{color:var(--ink)}
           The flat round is not trusted, it is <em>proved</em>: two theorems relate it to the retained
           reference round, with axioms exactly <span class="mono">propext</span> and
           <span class="mono">Quot.sound</span>. The old definitions stay in the file — not as dead code,
-          but as the specification the equivalence mentions.
+          but as the specification the equivalence mentions. Keccak’s flat permutation carries the
+          same standing: <span class="mono">f1600_eq</span> proves it equal to its retained
+          reference transcription.
         </p>
       </div>
       <div class="panel">
@@ -912,61 +921,68 @@ footer a:hover{color:var(--ink)}
 <!-- ═══════════════════════ §6 CASE STUDY ═══════════════════════ -->
 <section id="casestudy">
   <div class="wrap">
-    <p class="eyebrow reveal"><span class="secno">§ 6</span> Case study — Blanc &amp; WETH</p>
-    <h2 class="reveal" style="max-width:26ch">What the semantics is sufficient for: WETH solvency across configured forks.</h2>
+    <p class="eyebrow reveal"><span class="secno">§ 6</span> Case study — Blanc &amp; the Lido CircuitBreaker</p>
+    <h2 class="reveal" style="max-width:28ch">What the semantics is sufficient for: a deployed guardian’s registry, coherent at every reachable future.</h2>
     <p class="lede reveal" style="margin-top:18px">
       The claim that a semantics “supports verification” is cheap until someone pays it.
       <a href="https://skbaek.github.io/blanc/" style="text-decoration:underline;text-underline-offset:3px"><strong style="color:var(--ink)">Blanc</strong></a><span class="dimmer"> (fr. “white”, as in whitepaper)</span>
       is the payment: a deliberately minimal contract language — four constructors, a compiler into
       EVM bytecode, a machine-checked compiler-correctness theorem — that carries real invariants
-      through Jaune’s semantics at every altitude. The first contract is WETH, a 244-line Blanc
-      source compiling to 988 bytes. The invariant is solvency: <em>the contract always holds enough
-      ether to honour every balance.</em>
+      through Jaune’s semantics at every altitude. The current frontier is its fourth contract, a
+      port of the CircuitBreaker that Lido deployed in 2026: an emergency brake whose admin grants
+      pauser addresses time-limited authority over registered protocol contracts. The invariant is
+      Registry integrity: <em>the guardian’s book of authorizations stays coherent, whatever any
+      contract it talks to does.</em>
     </p>
 
     <div class="thm reveal" style="margin-top:34px">
       <span class="stamp">machine-checked</span>
-      <div class="head">Theorem (<span class="mono">chainUsing_preserves_solvent</span>, Blanc/Solvent.lean).</div>
-      <p class="stmt">No sequence of valid blocks admitted by a valid configured fork schedule —
-        including histories that cross activations from Prague through BPO2 — can reach a chain state
-        in which WETH is under-collateralised, provided each step satisfies the explicit withdrawal
-        no-overflow bound.</p>
-<pre><span class="k">theorem</span> <span class="d">chainUsing_preserves_solvent</span> (wa : <span class="t">Adr</span>) (cfg : <span class="t">ChainConfig</span>)
-    (ch ch' : <span class="t">BlockChain</span>)
-    (h_reach : <span class="t">BlockChain.ReachUsing</span> cfg ch ch')
-    (h_inv : <span class="t">State.Inv</span> wa ch.state) : <span class="t">State.Inv</span> wa ch'.state</pre>
+      <div class="head">Theorem (<span class="mono">chainUsing_preserves_registryStable</span>, Blanc/LidoCircuitBreakerHistoryChain.lean).</div>
+      <p class="stmt">From any checkpoint whose state has the CircuitBreaker’s exact compiled
+        runtime installed and Registry-coherent storage, every state reachable along a valid
+        configured chain still does — with no premise about the bytecode at any other address, no
+        non-reentrancy condition, and no honesty assumed of the contracts it pauses.</p>
+<pre><span class="k">theorem</span> <span class="d">chainUsing_preserves_registryStable</span> (dp : <span class="t">DeployParams</span>) (ca : <span class="t">Adr</span>)
+    (cfg : <span class="t">ChainConfig</span>) (checkpoint future : <span class="t">BlockChain</span>)
+    (reach : <span class="t">BlockChain.ReachUsing</span> cfg checkpoint future)
+    (stable : <span class="t">RegistryStable</span> dp ca checkpoint.state) :
+    <span class="t">RegistryStable</span> dp ca future.state</pre>
     </div>
-    <p class="cap reveal"><b>Read the quantifiers</b> — <span class="mono">ReachUsing</span> is reachability on a
-      <em>valid configured</em> chain: the base carries configuration, context, and chain-ID validity;
-      each step uses whichever fork the schedule activates at that block’s timestamp and carries the
-      withdrawal no-overflow bound. A history crossing Prague, Osaka, BPO1, and BPO2 is one chain of
-      these steps. The invariant survives the hard forks, and that is a theorem, not a changelog promise.</p>
+    <p class="cap reveal"><b>Read the quantifiers</b> — <span class="mono">ReachUsing</span> is the same
+      configured-chain reachability the WETH solvency family climbed first: whole valid blocks, every
+      transaction anyone sent, arbitrary contracts doing arbitrary things, under the model’s explicit
+      per-step bound on total ether plus withdrawals. <span class="mono">RegistryStable</span> packages
+      exactly two facts — the exact compiled runtime is installed, and the contract’s actual storage
+      admits a coherent Registry witness. What the theorem does not ask for is the point: a pause hands
+      control to an arbitrary callee mid-transaction, and no hypothesis constrains it. The checkpoint
+      is not assumed either: a deployment theorem walks the official constructor input through
+      Jaune’s real creation-message, transaction, and Prague-block pipeline to establish it.</p>
 
     <h3 class="reveal" style="margin:48px 0 6px">Each layer discharges the assumption the one above it would have to make</h3>
     <div class="ladder reveal">
       <div class="rung">
-        <div class="left"><div class="layer">the wire</div><div class="thmname">addBlockToChainUsing_preserves_solvent</div></div>
-        <div class="right"><p><strong>Blocks arriving as raw bytes.</strong> RLP decoding and the block-hash
-          check live inside the theorem, not in its assumptions — solvency survives from
-          <span class="mono">Bytes</span> on the wire to the resulting chain state.</p></div>
+        <div class="left"><div class="layer">the root</div><div class="thmname">canonicalDeploymentStep_establishes_root</div></div>
+        <div class="right"><p><strong>The checkpoint, derived rather than assumed.</strong> From the exact
+          official constructor input, one successful strict singleton type-2 Prague block through
+          Jaune’s configured transition establishes the deployment root — receipt success, the exact
+          installed runtime, an empty coherent Registry.</p></div>
       </div>
       <div class="rung">
-        <div class="left"><div class="layer">the chain</div><div class="thmname">chainUsing_preserves_solvent</div></div>
-        <div class="right"><p><strong>Every reachable state, across activations.</strong> Induction over
-          configured reachability — no block sequence of any length under a valid schedule breaks the
-          invariant when each step's explicit withdrawal bound holds.</p></div>
+        <div class="left"><div class="layer">the chain</div><div class="thmname">chainUsing_preserves_registryStable</div></div>
+        <div class="right"><p><strong>Every reachable state.</strong> Induction over configured
+          reachability — no block sequence of any length under a valid schedule breaks coherence.</p></div>
       </div>
       <div class="rung">
-        <div class="left"><div class="layer">the block</div><div class="thmname">stateTransitionUsing_preserves_solvent</div></div>
-        <div class="right"><p><strong>One whole block, under any scheduled fork’s rules.</strong> Every transaction,
-          plus withdrawals, requests, nonce increments, balance transfers, account destruction — with the
-          no-overflow bound carried explicitly.</p></div>
+        <div class="left"><div class="layer">the block</div><div class="thmname">stateTransition_preserves_registryStable</div></div>
+        <div class="right"><p><strong>One whole block, through Jaune’s real transition.</strong> Every
+          transaction, plus withdrawals, requests, and fee settlement — with the explicit per-step
+          bound carried rather than hidden.</p></div>
       </div>
       <div class="rung">
-        <div class="left"><div class="layer">the call frame</div><div class="thmname">weth_preserves_solvent</div></div>
-        <div class="right"><p><strong>Any successful execution of the contract.</strong> Universally quantified over
-          entry point, calldata, call value, depth, and re-entrant sub-calls — not a case split over the
-          functions someone remembered to audit.</p></div>
+        <div class="left"><div class="layer">the message</div><div class="thmname">processMessageCall_preserves_registryStable</div></div>
+        <div class="right"><p><strong>One message call, at arbitrary depth.</strong> Arbitrary callee
+          bytecode, same-instance re-entry included — coherence crosses the CALL and STATICCALL
+          boundaries with no premise about what runs on the other side.</p></div>
       </div>
       <div class="rung">
         <div class="left"><div class="layer">the compiler</div><div class="thmname">correct</div></div>
@@ -983,59 +999,22 @@ footer a:hover{color:var(--ink)}
 
     <div class="grid2" style="margin-top:34px;align-items:start">
       <div class="reveal">
-        <div class="tabs" role="tablist" aria-label="Blanc code">
-          <button class="tab" role="tab" aria-selected="true" aria-controls="tp1" id="tb1">weth.deposit</button>
-          <button class="tab" role="tab" aria-selected="false" aria-controls="tp2" id="tb2">the invariant</button>
-          <button class="tab" role="tab" aria-selected="false" aria-controls="tp3" id="tb3">the compiler theorem</button>
-        </div>
-        <div class="tabpanel" role="tabpanel" id="tp1" aria-labelledby="tb1">
-          <div class="listing">
-            <div class="bar"><span>Blanc/Weth.lean</span><span class="tag">source</span></div>
-<pre><span class="k">def</span> <span class="d">deposit</span> : <span class="t">Func</span> :=
-  caller ::: sload :::       <span class="c">-- caller_bal</span>
-  callvalue ::: add :::      <span class="c">-- (call_val + caller_bal)</span>
-  caller :::                 <span class="c">-- caller :: (call_val + caller_bal)</span>
-  sstore :::                 <span class="c">-- caller balance now up to date</span>
-  logDeposit</pre>
-          </div>
-        </div>
-        <div class="tabpanel" role="tabpanel" id="tp2" aria-labelledby="tb2" hidden>
-          <div class="listing">
-            <div class="bar"><span>Blanc/Solvent.lean · Blanc/CommonCore.lean</span><span class="tag">specification</span></div>
-<pre><span class="c">-- sum of the address-keyed balances in storage s —</span>
-<span class="c">-- shared upstream since FMINT states conservation over it</span>
-<span class="k">def</span> <span class="d">balSum</span> (s : <span class="t">Stor</span>) : <span class="t">Nat</span> := sum (<span class="t">Stor</span>.rest s)
-
-<span class="k">def</span> <span class="d">Stor.Solvent</span> (s : <span class="t">Stor</span>) (v b : <span class="t">B256</span>) : <span class="t">Prop</span> :=
-  balSum s + v.toNat ≤ b.toNat
-
-<span class="k">structure</span> <span class="t">State.Inv</span> (wa : <span class="t">Adr</span>) (w : <span class="t">Jaune.State</span>) : <span class="t">Prop</span> <span class="k">where</span>
-  (code    : some (w.getCode wa).toList = <span class="t">Prog</span>.compile weth)
-  (nof     : <span class="t">Blanc.SumNof</span> w.bal)
-  (solvent : <span class="t">State.Solvent</span> w wa)</pre>
-          </div>
-        </div>
-        <div class="tabpanel" role="tabpanel" id="tp3" aria-labelledby="tb3" hidden>
-          <div class="listing">
-            <div class="bar"><span>Blanc/CommonCore.lean</span><span class="tag">compiler correctness</span></div>
-<pre><span class="k">theorem</span> <span class="d">correct</span> (sevm : <span class="t">Sevm</span>) (pre : <span class="t">Devm</span>) (p : <span class="t">Prog</span>) (post : <span class="t">Devm</span>)
-    (exc : <span class="t">Exec</span> 0 sevm pre (.ok post))
-    (eq : some sevm.code.toList = p.compile) :
-    <span class="t">Prog</span>.<span class="t">Run</span> sevm pre p post</pre>
-          </div>
-          <p class="dim" style="font-size:.9rem;margin-top:14px">
-            The direction matters: from a real EVM execution of the <em>compiled bytecode</em>, recover a
-            source-level run — so safety proved at the source is a fact about the bytecode the compiler
-            emits, not merely about the source language.
+        <div class="panel">
+          <span class="tick">where it started, and where it went</span>
+          <p class="dim" style="font-size:.94rem">
+            WETH was the first payment on this claim — 244 lines of Blanc compiling to 988 proved
+            bytes, its solvency (<em>the contract always holds enough ether to honour every
+            balance</em>) carried to the same configured-chain altitude, across scheduled fork
+            activations. The frontier then moved through a full 27-selector WETH10,
+            whose future-redeemability flagship runs the Prague pipeline from a proved creation
+            transaction onward, to the CircuitBreaker.
           </p>
-          <p class="dim" style="font-size:.9rem;margin-top:10px;margin-bottom:0">
-            Scope, stated plainly: Blanc’s WETH is a <strong>reimplementation</strong>, not a model of the
-            deployed WETH9 contract; its observable differences in address decoding, storage,
-            collision handling, and payable entry points are catalogued in the
-            <a href="https://github.com/skbaek/blanc/blob/main/WETH_DEVIATIONS.md">deviation registry</a>.
-            The theorem is about the
-            bytecode <em>this</em> source compiles to. Transferring it to the contract at
-            <span class="mono">0xC02a…6Cc2</span> would need a separate argument that nobody here has made.
+          <p class="dim" style="font-size:.94rem;margin-bottom:0">
+            Scope, unchanged since the first port: these are <strong>reimplementations</strong>,
+            never verification of the code at the reference addresses. Each port’s observable
+            differences are catalogued in its own deviation registry, and every theorem is about
+            the bytecode Blanc’s compiler emits — transferring one to a deployed original would
+            need a separate argument that nobody here has made.
           </p>
         </div>
       </div>
@@ -1044,14 +1023,14 @@ footer a:hover{color:var(--ink)}
         <div class="panel">
           <span class="tick">the audit, in CI, every commit</span>
           <p class="dim" style="font-size:.94rem">
-            Blanc’s CI audits <strong>607</strong> named theorems — the seven solvency results above
-            among them, from <span class="mono">weth_preserves_solvent</span> to
-            <span class="mono">addBlockToChainUsing_preserves_solvent</span> — each against its own
+            Blanc’s CI audits <strong>607</strong> named theorems — 198 of them the
+            CircuitBreaker family’s, the history rungs among them — each against its own
             pinned expected axiom set, failing on an extra <em>or missing</em> axiom and on anything
             beyond <span class="mono">propext</span>, <span class="mono">Classical.choice</span>,
-            <span class="mono">Quot.sound</span>. The compile witness
-            <span class="mono">wethCode_compile</span> pins the exact 988-byte bytecode the WETH
-            theorems are about. No <span class="mono">sorry</span>, no
+            <span class="mono">Quot.sound</span>. The history family’s own gate probes all 104 of
+            its public theorems and admits no exception table, and the compile witness
+            <span class="mono">lidoCircuitBreakerCode_compile</span> pins the exact runtime bytes
+            the family is about. No <span class="mono">sorry</span>, no
             <span class="mono">native_decide</span>, nowhere in the trusted path.
           </p>
           <p class="dim" style="font-size:.94rem;margin-bottom:0">
@@ -1061,11 +1040,10 @@ footer a:hover{color:var(--ink)}
           </p>
         </div>
         <p class="note" style="margin-top:16px">
-          Blanc began here as the case study and has outgrown the role: it now carries three
-          contracts — WETH, an ERC-3156 flash-mint token, and a full 27-selector WETH10 — its
-          607-theorem exact-axiom audit, and a flagship future-redeemability theorem of its own.
-          What remains true is the division of labour: Jaune owns what the machine does, and every
-          Blanc theorem is stated over it. The full Blanc story now lives at
+          The division of labour is exact: Jaune owns what the machine does; Blanc owns programs,
+          the compiler, and everything proved about particular contracts. The full portfolio —
+          the WETH, an ERC-3156 flash-mint étude, the 27-selector WETH10, and the Lido
+          CircuitBreaker, each with an evidence page of its own — lives at
           <a href="https://skbaek.github.io/blanc/" style="text-decoration:underline;text-underline-offset:3px">skbaek.github.io/blanc</a>.
         </p>
       </div>
@@ -1147,8 +1125,14 @@ footer a:hover{color:var(--ink)}
         <p class="dim">A no-toolchain CI job fails the build on any <span class="mono">sorry</span> or stray
           <span class="mono">dbg_trace</span> outside a justified allowlist; a second job holds panics,
           raw bang operations, and stringly-typed semantic carriers to a shrink-only budget over the
-          import closure; Blanc’s job audits 607 theorems against exact pinned axiom sets.
-          Generated constants and vectors come from named generators, never hand transcription.</p>
+          import closure; Blanc’s job audits 607 theorems against exact pinned axiom sets. Per push,
+          two conformance gates that need nothing but the binary run beside them —
+          <span class="mono">t8n</span> against its pinned goldens, and the word and hash
+          primitives — in about a second. The gates extend to the tooling itself: an
+          elaboration-budget gate holds per-module compile time against a committed baseline, and a
+          CLI gate pins the runner’s four refusal behaviours, so green never means a filter
+          silently selected nothing. Generated constants and vectors come from named generators,
+          never hand transcription.</p>
       </div>
     </div>
   </div>
@@ -1226,12 +1210,14 @@ footer a:hover{color:var(--ink)}
         <div class="meta"><span class="pill"><span class="d"></span>open direction</span></div>
         <h3>More of the protocol under proof, more contracts over it</h3>
         <p>WETH was the existence proof, not the destination — and the sibling project has since
-          moved the frontier: Blanc’s WETH10 exercises Jaune’s Prague pipeline end to end, from a
-          proved creation transaction through configured-chain reachability, and hangs a
-          future-redeemability flagship on it. The open questions are which invariants justify their
-          proof effort, how much block-level reasoning transfers between contracts, and where a
-          proof-first language stops being expressive enough. Collaborators with a target property
-          in mind are exactly who this page is for — and
+          moved the frontier twice: Blanc’s WETH10 exercises Jaune’s Prague pipeline end to end,
+          from a proved creation transaction through configured-chain reachability with a
+          future-redeemability flagship on top, and its Lido CircuitBreaker port now carries a
+          deployed guardian’s Registry integrity from an official-parameters deployment to every
+          reachable future, over arbitrary hostile callees. The open questions are which invariants
+          justify their proof effort, how much block-level reasoning transfers between contracts,
+          and where a proof-first language stops being expressive enough. Collaborators with a
+          target property in mind are exactly who this page is for — and
           <a href="https://skbaek.github.io/blanc/" style="text-decoration:underline;text-underline-offset:3px">the Blanc page</a>
           is the worked answer so far.</p>
       </div>
@@ -1248,12 +1234,12 @@ footer a:hover{color:var(--ink)}
     <div class="grid3" style="margin-top:34px">
       <div class="aud reveal">
         <h3>Proof engineers &amp; PL researchers</h3>
-        <p>A live, non-toy verification target: ~39,000 lines of Lean 4 spanning an executable
-          semantics, a verified compiler, and a chain-level invariant — with well-posed open
-          problems in representation choice, proof-exposure budgeting, and fork-parameterised
-          reasoning. The sufficiency arc alone is a worked case study in retrofitting totality
-          onto a large fueled interpreter.</p>
-        <div class="hook">start: Jaune/Sufficiency.lean → exec<br>then: Blanc/Solvent.lean → the theorems of §6</div>
+        <p>A live, non-toy verification target: ~277,000 lines of Lean 4 across the sibling pair,
+          spanning an executable semantics, a verified compiler, and contract invariants proved to
+          chain altitude — with well-posed open problems in representation choice, proof-exposure
+          budgeting, and fork-parameterised reasoning. The sufficiency arc alone is a worked case
+          study in retrofitting totality onto a large fueled interpreter.</p>
+        <div class="hook">start: Jaune/Sufficiency.lean → exec<br>then: Blanc/LidoCircuitBreakerHistoryChain.lean → the theorems of §6</div>
       </div>
       <div class="aud reveal">
         <h3>Protocol &amp; client engineers</h3>
@@ -1329,7 +1315,7 @@ footer a:hover{color:var(--ink)}
 <span class="p">$</span> scripts/check.sh</div>
         <p class="dim" style="font-size:.88rem;margin:14px 0 0">
           <span class="mono">check.sh</span> builds the library and runs the axiom audit — 607
-          audited theorems, the seven solvency results among them, each checked against its own
+          audited theorems, the history rungs of §&nbsp;6 among them, each checked against its own
           pinned expected axiom set; it exits non-zero on an extra or missing axiom, on
           <span class="mono">sorryAx</span>, <span class="mono">ofReduceBool</span>, or
           <span class="mono">ofReduceNat</span>. No fixture corpus is needed: this side is proof,
@@ -1357,8 +1343,7 @@ footer a:hover{color:var(--ink)}
         <li id="fn2">Jaune was previously published under the name <span class="mono">ELeVM</span>;
           the repository was renamed in July 2026 and old links redirect.</li>
         <li id="fn3">Figures on this page are drawn from committed reports, baselines, and benchmark
-          instruments in the repositories, current as of 2026-08-12 (post the 2026-08
-          <span class="mono">t8n</span> landing).
+          instruments in the repositories, current as of 2026-08-27.
           Wall-clock numbers are same-machine, same-instrument measurements on a 10-core Apple M5;
           fixture counts are exact. The
           current-mainnet lane covers every <span class="mono">blockchain_tests</span> fixture of
