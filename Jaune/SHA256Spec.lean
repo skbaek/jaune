@@ -349,7 +349,7 @@ theorem rounds_eq (p : Array UInt8) (n : Nat) :
     rw [show List.range' t (n + 1) = t :: List.range' (t + 1) n from rfl, List.foldl_cons]
     set M := FIPS.toWords p.toList with hM
     set W := FIPS.schedule M with hW
-    -- Keep `t`, `M` and `W` opaque from here: `W` is a forty-eight-step fold,
+    -- Freeze `t`, `M` and `W` here: `W` is a forty-eight-step fold,
     -- and any tactic that whnf's it pays for the whole schedule.
     clear_value W M
     have hwj :
