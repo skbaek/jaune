@@ -189,4 +189,216 @@ def hash (m : List UInt8) : B256 :=
 
 end SHA256.FIPS
 
+namespace SHA256
+
+open SHA256.FIPS
+
+/-! ## The kernel computes it
+
+Everything below is the bridge from `Jaune/Hash.lean`'s optimized kernel to the
+transcription above. -/
+
+/-! ### The message schedule
+
+The kernel never materializes the sixty-four-entry schedule: it keeps sixteen
+live words and overwrites `w[t % 16]` with `Wₜ` at round `t`, which is sound
+exactly because the recurrence reaches back no further than sixteen entries.
+The three lemmas here give the reference schedule the two properties that
+bridge needs — that folding only ever appends, and that entry `t` satisfies the
+standard's recurrence. -/
+
+/-- Folding `scheduleStep` appends one entry per index. -/
+theorem size_schedFold (a : Array UInt32) (s n : Nat) :
+    ((List.range' s n).foldl scheduleStep a).size = a.size + n := by
+  induction n generalizing a s with
+  | zero => simp
+  | succ n ih =>
+    rw [show List.range' s (n + 1) = s :: List.range' (s + 1) n from rfl]
+    rw [List.foldl_cons, ih]
+    simp [scheduleStep]
+    omega
+
+/-- Pushing never disturbs an entry already present. -/
+theorem getD_push_lt (a : Array UInt32) (x : UInt32) (i : Nat) (h : i < a.size) :
+    (a.push x).getD i 0 = a.getD i 0 := by
+  simp [Array.getD, h, Nat.lt_succ_of_lt, Array.getElem_push_lt]
+
+/-- Folding `scheduleStep` never disturbs an entry already present. -/
+theorem getD_schedFold (a : Array UInt32) (s n i : Nat) (h : i < a.size) :
+    ((List.range' s n).foldl scheduleStep a).getD i 0 = a.getD i 0 := by
+  induction n generalizing a s with
+  | zero => simp
+  | succ n ih =>
+    rw [show List.range' s (n + 1) = s :: List.range' (s + 1) n from rfl]
+    rw [List.foldl_cons, ih _ _ (by simp [scheduleStep]; omega)]
+    rw [scheduleStep, getD_push_lt _ _ _ h]
+
+/-- The entry a push adds. -/
+theorem getD_push_self (a : Array UInt32) (x : UInt32) :
+    (a.push x).getD a.size 0 = x := by
+  simp [Array.getD]
+
+/-- One more fold step computes the schedule recurrence at the array's own end. -/
+theorem getD_schedFold_self (a : Array UInt32) (n : Nat) (hn : 0 < n) :
+    ((List.range' a.size n).foldl scheduleStep a).getD a.size 0 =
+      sigma1 (a.getD (a.size - 2) 0) + a.getD (a.size - 7) 0 +
+        sigma0 (a.getD (a.size - 15) 0) + a.getD (a.size - 16) 0 := by
+  obtain ⟨m, rfl⟩ : ∃ m, n = m + 1 := ⟨n - 1, by omega⟩
+  rw [show List.range' a.size (m + 1) = a.size :: List.range' (a.size + 1) m from rfl,
+    List.foldl_cons]
+  simp only [scheduleStep]
+  rw [getD_schedFold _ _ _ _ (by simp)]
+  exact getD_push_self _ _
+
+/-- The schedule has the sixty-four entries FIPS 180-4 §6.2.2 gives it. -/
+theorem size_schedule (M : Vector UInt32 16) : (schedule M).size = 64 := by
+  simp [schedule, size_schedFold]
+
+/-- FIPS 180-4 §6.2.2, step 1, first case: `Wₜ = Mₜ` for `0 ≤ t ≤ 15`. -/
+theorem getD_schedule_lt (M : Vector UInt32 16) (t : Nat) (h : t < 16) :
+    (schedule M).getD t 0 = M.toArray.getD t 0 :=
+  getD_schedFold _ _ _ _ (by simpa using h)
+
+/-- FIPS 180-4 §6.2.2, step 1, second case: the schedule recurrence, as an
+equation about the sixty-four-entry schedule rather than about a rolling
+window. -/
+theorem getD_schedule_rec (M : Vector UInt32 16) (t : Nat)
+    (h16 : 16 ≤ t) (h64 : t < 64) :
+    (schedule M).getD t 0 =
+      sigma1 ((schedule M).getD (t - 2) 0) + (schedule M).getD (t - 7) 0 +
+        sigma0 ((schedule M).getD (t - 15) 0) + (schedule M).getD (t - 16) 0 := by
+  have hAsize : ((List.range' 16 (t - 16)).foldl scheduleStep M.toArray).size = t := by
+    rw [size_schedFold]; simp; omega
+  have hsplit : List.range' 16 48
+      = List.range' 16 (t - 16) ++ List.range' t (64 - t) := by
+    conv_lhs => rw [show (48 : Nat) = (t - 16) + (64 - t) by omega]
+    rw [← List.range'_append_1]
+    congr 2
+    omega
+  have hfold : schedule M = (List.range' t (64 - t)).foldl scheduleStep
+      ((List.range' 16 (t - 16)).foldl scheduleStep M.toArray) := by
+    rw [schedule, hsplit, List.foldl_append]
+  have hpres : ∀ i, i < t → (schedule M).getD i 0
+      = ((List.range' 16 (t - 16)).foldl scheduleStep M.toArray).getD i 0 := by
+    intro i hi
+    rw [hfold]
+    exact getD_schedFold _ _ _ _ (by omega)
+  rw [hpres (t - 2) (by omega), hpres (t - 7) (by omega), hpres (t - 15) (by omega),
+    hpres (t - 16) (by omega), hfold]
+  clear hpres hfold hsplit
+  generalize (List.range' 16 (t - 16)).foldl scheduleStep M.toArray = A at hAsize ⊢
+  subst hAsize
+  exact getD_schedFold_self A (64 - A.size) (by omega)
+
+/-! ### The sixty-four rounds
+
+The kernel counts rounds down (`n` remaining, so the round index is
+`t = 64 - n`) and carries its working variables as eight scalars; the reference
+counts up over `List.range 64` and carries a record. `List.range'` peels one
+index per kernel step, which is what lets a single induction on `n` line the
+two up. -/
+
+/-- The kernel's eight scalar working variables, as the reference's record. -/
+def varsVec (v : FIPS.Vars) : Vector UInt32 8 :=
+  #v[v.a, v.b, v.c, v.d, v.e, v.f, v.g, v.h]
+
+/-- The kernel's round-constant table is the standard's `K{256}`.
+
+This is `rfl` and it is still worth stating: the two tables were transcribed
+from FIPS 180-4 §4.2.2 independently, so had either drifted, this would not
+close. -/
+theorem roundConstants_eq : roundConstants = FIPS.K := rfl
+
+/-- The rolling window invariant. At round `t` the kernel's sixteen live words
+hold exactly the last sixteen entries of the reference's sixty-four-entry
+schedule: `W_{t-k}` sits at index `(t - k) % 16`, for every `k` in range. -/
+def WindowOk (M : Vector UInt32 16) (t : Nat) (w : Vector UInt32 16) : Prop :=
+  ∀ k, 1 ≤ k → k ≤ 16 → k ≤ t →
+    w.getD ((t - k) % 16) 0 = (FIPS.schedule M).getD (t - k) 0
+
+/-- Reading back the word a schedule write just placed. -/
+theorem getD_vset_self (w : Vector UInt32 16) (i : Nat) (x : UInt32) (h : i < 16) :
+    (w.set i x h).getD i 0 = x := by
+  simp [Vector.getD, Array.getD, h]
+
+/-- A schedule write leaves the other fifteen words alone. -/
+theorem getD_vset_ne (w : Vector UInt32 16) (i j : Nat) (x : UInt32) (h : i < 16)
+    (hj : j < 16) (hne : j ≠ i) :
+    (w.set i x h).getD j 0 = w.getD j 0 := by
+  have hne' : i ≠ j := Ne.symm hne
+  simp [Vector.getD, Array.getD, hj, hne']
+
+theorem rounds_eq (p : Array UInt8) (n : Nat) :
+    ∀ (hn : n ≤ 64) (w : Vector UInt32 16) (v : FIPS.Vars),
+      WindowOk (FIPS.toWords p.toList) (64 - n) w →
+      rounds p n hn w v.a v.b v.c v.d v.e v.f v.g v.h
+        = varsVec (List.foldl (FIPS.step (FIPS.schedule (FIPS.toWords p.toList)))
+            v (List.range' (64 - n) n)) := by
+  induction n with
+  | zero => intro hn w v _; rfl
+  | succ n ih =>
+    intro hn w v hw
+    have hKg : ∀ (i : Nat) (h : i < 64), (FIPS.K[i]'h) = FIPS.K.getD i 0 := by
+      intro i h; simp [Vector.getD, h]
+    simp only [rounds, roundConstants_eq, hKg]
+    set t := 64 - (n + 1) with ht
+    simp only [← ht]
+    have htlt : t < 64 := by omega
+    have htn : 64 - n = t + 1 := by omega
+    rw [htn] at ih
+    rw [show List.range' t (n + 1) = t :: List.range' (t + 1) n from rfl, List.foldl_cons]
+    set M := FIPS.toWords p.toList with hM
+    set W := FIPS.schedule M with hW
+    -- Keep `t`, `M` and `W` opaque from here: `W` is a forty-eight-step fold,
+    -- and any tactic that whnf's it pays for the whole schedule.
+    clear_value W M
+    have hwj :
+        (if t < 16 then
+            UInt32.ofBytes (p.getD (4 * (t % 16)) 0) (p.getD (4 * (t % 16) + 1) 0)
+              (p.getD (4 * (t % 16) + 2) 0) (p.getD (4 * (t % 16) + 3) 0)
+          else
+            w.getD (t % 16) 0 +
+                  (UInt32.ror (w.getD ((t % 16 + 1) % 16) 0) 7 ^^^
+                      UInt32.ror (w.getD ((t % 16 + 1) % 16) 0) 18 ^^^
+                    w.getD ((t % 16 + 1) % 16) 0 >>> 3) +
+                w.getD ((t % 16 + 9) % 16) 0 +
+              (UInt32.ror (w.getD ((t % 16 + 14) % 16) 0) 17 ^^^
+                  UInt32.ror (w.getD ((t % 16 + 14) % 16) 0) 19 ^^^
+                w.getD ((t % 16 + 14) % 16) 0 >>> 10))
+          = W.getD t 0 := by
+      by_cases hlt : t < 16
+      · rw [if_pos hlt, hW, getD_schedule_lt _ _ hlt, hM]
+        simp [FIPS.toWords, Nat.mod_eq_of_lt hlt, hlt]
+      · rw [if_neg hlt]
+        have h16 : 16 ≤ t := by omega
+        rw [hW, getD_schedule_rec _ _ h16 htlt]
+        rw [show t % 16 = (t - 16) % 16 by omega,
+          show ((t - 16) % 16 + 1) % 16 = (t - 15) % 16 by omega,
+          show ((t - 16) % 16 + 9) % 16 = (t - 7) % 16 by omega,
+          show ((t - 16) % 16 + 14) % 16 = (t - 2) % 16 by omega]
+        rw [hw 16 (by omega) (by omega) (by omega), hw 15 (by omega) (by omega) (by omega),
+          hw 7 (by omega) (by omega) (by omega), hw 2 (by omega) (by omega) (by omega)]
+        -- Both sides now read the same four schedule entries; abstract them so
+        -- the reassociation below cannot descend into the schedule fold.
+        generalize (FIPS.schedule M).getD (t - 2) 0 = w2
+        generalize (FIPS.schedule M).getD (t - 7) 0 = w7
+        generalize (FIPS.schedule M).getD (t - 15) 0 = w15
+        generalize (FIPS.schedule M).getD (t - 16) 0 = w16
+        simp only [FIPS.sigma0, FIPS.sigma1]
+        ac_rfl
+    rw [hwj]
+    refine ih (by omega) _ (FIPS.step W v t) ?_
+    intro k hk1 hk16 hkt
+    rcases Nat.eq_or_lt_of_le hk1 with hk | hk
+    · subst hk
+      simp only [Nat.add_sub_cancel]
+      rw [getD_vset_self, hW]
+    · have hne : (t + 1 - k) % 16 ≠ t % 16 := by omega
+      rw [getD_vset_ne _ _ _ _ _ (by omega) hne]
+      have := hw (k - 1) (by omega) (by omega) (by omega)
+      rw [show t - (k - 1) = t + 1 - k by omega] at this
+      exact this
+
+end SHA256
+
 end Jaune
