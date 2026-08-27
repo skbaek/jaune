@@ -537,7 +537,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
         devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
       let preAccessCost := accessCost callee devm.accessedAddresses
       let devm := addAccessedAddress devm callee
-      let ⟨disablePrecompiles, _, code, delegatedAccessGasCost, devm⟩ :=
+      let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
         accessDelegation devm callee
       let accessCost := preAccessCost + delegatedAccessGasCost
       let createCost :=
@@ -560,8 +560,8 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
               (devm.gasLeft + msgCallStipend)))
       else
         return genericCall.step
-          sevm devm msgCallStipend value sevm.currentTarget callee callee
-          true false inputIndex inputSize outputIndex outputSize
+          sevm devm msgCallStipend value sevm.currentTarget callee
+          newCodeAddress true false inputIndex inputSize outputIndex outputSize
           code disablePrecompiles
   | .callcode =>
     XStep.ofExcept do
@@ -635,7 +635,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
         devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
       let preAccessCost := accessCost target devm.accessedAddresses
       let devm := addAccessedAddress devm target
-      let ⟨disablePrecompiles, _, code, delegatedAccessGasCost, devm⟩ :=
+      let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
         accessDelegation devm target
       let accessCost := preAccessCost + delegatedAccessGasCost
       let ⟨msgCallCost, msgCallStipend⟩ :=
@@ -645,8 +645,9 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
         devm.memExtends
           [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
       return genericCall.step
-        sevm devm msgCallStipend 0 sevm.currentTarget target target true true
-        inputIndex inputSize outputIndex outputSize code disablePrecompiles
+        sevm devm msgCallStipend 0 sevm.currentTarget target newCodeAddress
+        true true inputIndex inputSize outputIndex outputSize code
+        disablePrecompiles
 
 def Ninst.step (evm : Evm) (n : Ninst) : Step :=
   let pc := evm.pc + n.size
