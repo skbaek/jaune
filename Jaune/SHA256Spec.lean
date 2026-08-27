@@ -399,6 +399,33 @@ theorem rounds_eq (p : Array UInt8) (n : Nat) :
       rw [show t - (k - 1) = t + 1 - k by omega] at this
       exact this
 
+/-- `rounds_eq` with the working variables as the eight scalars the kernel
+actually carries, so that it matches `consumeChunk` on the nose. -/
+theorem rounds_eq' (p : Array UInt8) (n : Nat) (hn : n ≤ 64) (w : Vector UInt32 16)
+    (a b c d e f g h : UInt32)
+    (hw : WindowOk (FIPS.toWords p.toList) (64 - n) w) :
+    rounds p n hn w a b c d e f g h
+      = varsVec (List.foldl (FIPS.step (FIPS.schedule (FIPS.toWords p.toList)))
+          ⟨a, b, c, d, e, f, g, h⟩ (List.range' (64 - n) n)) :=
+  rounds_eq p n hn w ⟨a, b, c, d, e, f, g, h⟩ hw
+
+/-- All sixty-four rounds, from the kernel's zeroed window: the invariant is
+vacuous at round 0, so no hypothesis survives. -/
+theorem rounds_eq_full (p : Array UInt8) (a b c d e f g h : UInt32) :
+    rounds p 64 (by omega) (Vector.replicate 16 0) a b c d e f g h
+      = varsVec (List.foldl (FIPS.step (FIPS.schedule (FIPS.toWords p.toList)))
+          ⟨a, b, c, d, e, f, g, h⟩ (List.range 64)) := by
+  rw [List.range_eq_range']
+  exact rounds_eq' p 64 (by omega) _ a b c d e f g h (by intro k hk1 _ hkt; omega)
+
+/-- The kernel's compression of one 64-byte chunk is the standard's, on the
+sixteen words that chunk parses to. -/
+theorem consumeChunk_eq (H : Vector UInt32 8) (p : Array UInt8) :
+    consumeChunk H p = FIPS.compress H (FIPS.toWords p.toList) := by
+  have key := rounds_eq_full p H[0] H[1] H[2] H[3] H[4] H[5] H[6] H[7]
+  simp only [consumeChunk, FIPS.compress, key]
+  rfl
+
 end SHA256
 
 end Jaune
