@@ -4,6 +4,7 @@ import Jaune.Basic
 import Jaune.Types
 import Jaune.Fork
 import Jaune.Hash
+import Jaune.SHA256Spec
 import Jaune.EC
 import Jaune.BLSConst
 import Jaune.BLS
