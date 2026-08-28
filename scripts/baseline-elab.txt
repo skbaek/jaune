@@ -18,6 +18,7 @@ OK	3.484	Jaune/Hash.lean
 OK	3.239	Jaune/Machine.lean
 OK	1.220	Jaune/MulDiv.lean
 OK	2.104	Jaune/Precompiles.lean
+OK	2.894	Jaune/SHA256Spec.lean
 OK	5.196	Jaune/Sufficiency.lean
 OK	1.690	Jaune/T8n.lean
 OK	3.955	Jaune/Transaction.lean
