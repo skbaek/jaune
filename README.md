@@ -159,6 +159,15 @@ requirements.
   and which gate enforces each absence, the known exceptions, and where the
   line between testing and proof falls. Every figure in it names the command
   that regenerates it.
+- **SHA-256 computes the published function, by theorem.**
+  [`Jaune/SHA256Spec.lean`](Jaune/SHA256Spec.lean) transcribes NIST FIPS 180-4
+  section by section, and `Jaune.Bytes.sha256_eq_fips` proves the optimized
+  kernel equal to that transcription for every input, with the standard axioms
+  and no `sorry`. It is the only hash here whose conformance rests on a theorem
+  rather than on differential vectors and fixtures — and the reader still owes
+  the transcription a read, which is the point of citing the standard at every
+  declaration. [`TRUSTED.md`](TRUSTED.md) states exactly what the theorem does
+  and does not claim.
 - **Supported forks:** Prague, Osaka, BPO1, and BPO2, plus the transitions
   between them. Jaune's primary Prague evidence is the strict all-PASS
   current-mainnet lane over the separately installed `execution-specs`

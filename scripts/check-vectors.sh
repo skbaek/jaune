@@ -147,6 +147,18 @@ CONTROL_FILES=(
   modexp_eip2565.json
 )
 
+# Hash precompiles, generated against the pinned EELS oracle by
+# scripts/gen-hash-precompile-vectors.py. They are their own group rather than
+# additions to either group above: the controls are a fixed five-file
+# anti-vacuity set whose denominator is quoted in scripts/GATES.md and is more
+# useful held constant, and the group below it is BLS and point-evaluation, which
+# these are not. Their boundary-length sweeps sit at the 55/56 padding seam, the
+# 63/64/65 block seam and the 31/32/33 gas-word seam; see the generator.
+HASH_FILES=(
+  sha256.json
+  ripemd160.json
+)
+
 # This is a target manifest, not a directory scan: deleting a vector file must
 # make the gate fail rather than silently reducing the tested set.
 PRECOMPILE_FILES=(
@@ -205,7 +217,7 @@ OSAKA_FILES=(
   p256Verify.json
 )
 
-EXPECTED_FILES=("${CONTROL_FILES[@]}" "${PRECOMPILE_FILES[@]}" "${OSAKA_FILES[@]}")
+EXPECTED_FILES=("${CONTROL_FILES[@]}" "${HASH_FILES[@]}" "${PRECOMPILE_FILES[@]}" "${OSAKA_FILES[@]}")
 
 # Files that live in the vector directory but are deliberately not dispatched by
 # this gate.  Listing them keeps the stray-file scan below able to reject a
@@ -243,6 +255,9 @@ AUXILIARY_FILES=(
 # The fork whose rules each file is stated against.  Every file is run with an
 # explicit --network so that a repriced or newly activated precompile is tested
 # under the rules that define it, never under whatever the binary defaults to.
+# sha256.json and ripemd160.json take the Prague default deliberately: both
+# precompiles are Frontier-era and neither has ever been repriced, so Prague is
+# the latest fork whose rules define them unchanged and no separate row is right.
 get_fork() {
   case "$1" in
     modexp_eip7883.json|p256Verify.json) echo "Osaka" ;;
@@ -257,6 +272,8 @@ get_addr() {
     bn256Pairing.json) echo "08" ;;
     blake2F.json) echo "09" ;;
     modexp_eip2565.json) echo "05" ;;
+    sha256.json) echo "02" ;;
+    ripemd160.json) echo "03" ;;
     modexp_eip7883.json) echo "05" ;;
     p256Verify.json) echo "0100" ;;
     pointEvaluation.json) echo "0a" ;;
@@ -324,6 +341,8 @@ get_cases() {
     bn256Pairing.json) echo 14 ;;
     blake2F.json) echo 5 ;;
     modexp_eip2565.json) echo 47 ;;
+    sha256.json) echo 81 ;;
+    ripemd160.json) echo 85 ;;
     modexp_eip7883.json) echo 45 ;;
     p256Verify.json) echo 782 ;;
     pointEvaluation.json) echo 1 ;;
@@ -383,6 +402,15 @@ is_control_file() {
   return 1
 }
 
+is_hash_file() {
+  local file="$1"
+  local hash
+  for hash in "${HASH_FILES[@]}"; do
+    [ "$file" = "$hash" ] && return 0
+  done
+  return 1
+}
+
 is_osaka_file() {
   local file="$1"
   local osaka
@@ -407,12 +435,14 @@ is_expected_file() {
 # The three group banners, named once so that the sequential path and the
 # parallel path's reassembly cannot drift apart.
 HDR_CONTROL='--- Running control files ---'
+HDR_HASH='--- Running hash-precompile files ---'
 HDR_PRECOMPILE='--- Running BLS and point-evaluation files ---'
 HDR_OSAKA='--- Running Osaka files ---'
 
 group_header() {
   case "$1" in
     control) printf '%s\n' "$HDR_CONTROL" ;;
+    hash) printf '%s\n' "$HDR_HASH" ;;
     osaka) printf '%s\n' "$HDR_OSAKA" ;;
     *) printf '%s\n' "$HDR_PRECOMPILE" ;;
   esac
@@ -451,6 +481,8 @@ run_vector_file() {
 
   if is_control_file "$file"; then
     group="control"
+  elif is_hash_file "$file"; then
+    group="hash"
   elif is_osaka_file "$file"; then
     group="osaka"
   else
@@ -490,6 +522,10 @@ if [ "$JOBS" -gt 1 ]; then
   for file in "${CONTROL_FILES[@]}"; do
     plan_idx=$((plan_idx + 1))
     printf '%d\t%s\t%s\n' "$plan_idx" 'control' "$file" >> "$WORK/plan"
+  done
+  for file in "${HASH_FILES[@]}"; do
+    plan_idx=$((plan_idx + 1))
+    printf '%d\t%s\t%s\n' "$plan_idx" 'hash' "$file" >> "$WORK/plan"
   done
   for file in "${PRECOMPILE_FILES[@]}"; do
     plan_idx=$((plan_idx + 1))
@@ -590,6 +626,11 @@ else
 # becoming named constants. Nothing about default-mode behaviour changes.
 printf '%s\n' "$HDR_CONTROL" | tee -a "$REPORT"
 for file in "${CONTROL_FILES[@]}"; do
+  run_vector_file "$file"
+done
+
+printf '%s\n' "$HDR_HASH" | tee -a "$REPORT"
+for file in "${HASH_FILES[@]}"; do
   run_vector_file "$file"
 done
 

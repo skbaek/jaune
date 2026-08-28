@@ -265,8 +265,10 @@ and the fixture evidence is strong, but "mirrors execution-specs at
 
 **The differential oracles** — 21,593 U256/word/hash cases
 (`scripts/check-u256.sh`), 240 fake-exponential cases
-(`scripts/check-fake-exp.sh`), the EC oracle (`scripts/check-ec.sh`), and 1,824
-generated vector cases with 5 controls (`scripts/check-vectors.sh`) — compare
+(`scripts/check-fake-exp.sh`), the EC oracle (`scripts/check-ec.sh`), and 1,990
+generated vector cases with 5 controls (`scripts/check-vectors.sh`, which since
+2026-08-28 includes boundary-length sweeps at precompile addresses `0x02` and
+`0x03`) — compare
 Jaune against a **frozen Python implementation**. It shares no code with the
 Lean, which is what makes the comparison meaningful, but it does share the
 possibility of a common misreading of a specification. Two independent
@@ -311,9 +313,39 @@ implementation, not a restatement of FIPS 202. `f1600_eq` is evidence that the
 optimization preserved the transcribed algorithm; it is **not** a proof that
 the transcription implements the Keccak-f[1600] standard, and it should not be
 read or cited as "keccak is verified" or "verified keccak". Conformance with
-the standard is addressed the way every hash function in this library is:
-`scripts/check-u256.sh`'s differential oracle and the fixture corpora —
-testing, not proof, exactly as the previous section describes.
+the standard is addressed the way every hash function in this library except
+SHA-256 is: `scripts/check-u256.sh`'s differential oracle and the fixture
+corpora — testing, not proof, exactly as the previous section describes.
+
+**`Jaune.Bytes.sha256_eq_fips` in `Jaune/SHA256Spec.lean` is a stronger claim
+than `f1600_eq`, and the whole of the difference is the reference.** The
+theorem is
+
+```lean
+theorem Bytes.sha256_eq_fips (m : Bytes) : Bytes.sha256 m = SHA256.FIPS.hash m
+```
+
+with axioms `[propext, Classical.choice, Quot.sound]`. `SHA256.FIPS.hash` is a
+transcription of **NIST FIPS 180-4** itself — the six logical functions of
+§4.1.2, the constant tables of §4.2.2 and §5.3.3, the padding condition of
+§5.1.1, the block parsing of §5.2.1, and the sixty-four-entry message schedule
+and round assignment of §6.2.2 — written from the published standard and citing
+it declaration by declaration, rather than being a port of someone's C. It
+shares no declaration with the kernel's `SHA256` namespace, and its constant
+tables are independent transcriptions rather than reads of `roundConstants` and
+`initChunk` — which is what `SHA256.roundConstants_eq` and
+`SHA256.initChunk_eq`, both `rfl`, record.
+
+So for SHA-256, and so far for SHA-256 alone, the caveat above does not apply:
+the theorem says the optimized kernel computes the published function on every
+input, and a reader who knows SHA-256 can check its right-hand side against the
+document rather than against other Jaune code. What the theorem cannot do is
+excuse that reader from reading — whether the transcription is faithful to the
+standard is a human judgement, which is why it cites its sections and is kept
+readable rather than convenient. The differential vectors at precompile
+addresses `0x02` and `0x03` are untouched by the theorem and are kept: they
+check a different thing, the precompile's gas and output framing around the
+hash.
 
 ## Regenerating everything above
 
