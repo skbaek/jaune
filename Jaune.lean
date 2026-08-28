@@ -2,6 +2,7 @@
 -- Import modules here that should be built as part of the library.
 import Jaune.Basic
 import Jaune.Types
+import Jaune.MulDiv
 import Jaune.Fork
 import Jaune.Hash
 import Jaune.EC
