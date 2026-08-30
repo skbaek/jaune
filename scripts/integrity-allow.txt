@@ -1,9 +1,11 @@
 # Semantic-integrity allowlist for scripts/check-integrity.sh.
 #
-# Owned by ~/plans/integrity.md. Generated from `scripts/check-integrity.sh
-# --list` at the arc's branch point (Jaune b0dc4ee) and then classified by
-# hand. Every row is an exact, line-number-independent normalised
-# occurrence:
+# Jaune owns this allowlist, and `scripts/GATES.md` owns the gate's current use
+# and pass criteria. The initial inventory and classification history are
+# recorded in `~/plans/integrity.md`. Generated from
+# `scripts/check-integrity.sh --list` at the arc's branch point (Jaune b0dc4ee)
+# and then classified by hand. Every row is an exact,
+# line-number-independent normalised occurrence:
 #
 #   <rule> <relpath> <source line, trimmed, whitespace runs collapsed>
 #
@@ -22,9 +24,9 @@
 #       `match`. Every PENDING row is reported on every run.
 #
 # There is deliberately no R1 row and there never may be: absence of
-# `partial def`, `implemented_by`, and `dbg_trace` is asserted outright,
-# per ~/plans/silence.md having removed the last of each. The gate refuses
-# an allowlist that carries an R1 row at all.
+# `partial def`, `implemented_by`, and `dbg_trace` is asserted outright. The
+# historical `~/plans/silence.md` record documents removal of the last of each.
+# The gate refuses an allowlist that carries an R1 row at all.
 #
 # The budget below is the number of PENDING rows. It may only shrink. A
 # step that discharges a row deletes it (or rewrites it as KEEP) and
