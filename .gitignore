@@ -1,5 +1,9 @@
 /.lake
 /scripts/report-*.txt
+# Host-local performance references. Correctness baselines remain tracked as
+# scripts/baseline-<tier>.txt without timing columns.
+/scripts/baseline-elab.txt
+/scripts/baseline-*-times.txt
 # Gate locks (scripts/gate-lock.sh): live only for a run's duration, and a
 # stale one is reclaimed by the next run rather than committed.
 *.lock/

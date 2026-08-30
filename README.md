@@ -220,6 +220,12 @@ requirements.
   | `--bls` | 29 | all PASS (hand-authored target) |
   | `--full` | 2983 | 2978 PASS, 5 FAIL (diagnosed; none a Jaune defect) |
 
+  These tracked baselines contain only portable `STATUS<TAB>path`
+  expectations. Per-fixture wall times are machine-specific and live in
+  gitignored `scripts/baseline-<tier>-times.txt` files, initialized by each
+  checkout's first complete sequential run. CI keeps comparing the tracked
+  statuses and does not require a shared performance baseline.
+
   The frozen `ethereum/tests` corpus is retained as an independently-filled
   regression instrument. Its `--full` tier is the entire `BlockchainTests`
   corpus, dominated by the `GeneralStateTests/` subtree — which passes

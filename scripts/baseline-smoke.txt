@@ -1,174 +1,174 @@
-PASS	0.10s	GeneralStateTests/Cancun/stEIP1153-transientStorage/17_tstoreGas.json
-PASS	0.10s	GeneralStateTests/Cancun/stEIP1153-transientStorage/19_oogUndoesTransientStore.json
-PASS	0.10s	GeneralStateTests/Cancun/stEIP4844-blobtransactions/blobhashListBounds3.json
-PASS	0.10s	GeneralStateTests/Cancun/stEIP4844-blobtransactions/opcodeBlobhashOutOfRange.json
-PASS	1.44s	GeneralStateTests/Cancun/stEIP5656-MCOPY/MCOPY.json
-PASS	0.48s	GeneralStateTests/Cancun/stEIP5656-MCOPY/MCOPY_memory_hash.json
-PASS	0.60s	GeneralStateTests/Shanghai/stEIP3651-warmcoinbase/coinbaseWarmAccountCallGas.json
-PASS	0.32s	GeneralStateTests/Shanghai/stEIP3651-warmcoinbase/coinbaseWarmAccountCallGasFail.json
-PASS	0.10s	GeneralStateTests/Shanghai/stEIP3855-push0/push0Gas.json
-PASS	0.17s	GeneralStateTests/Shanghai/stEIP3855-push0/push0Gas2.json
-PASS	0.21s	GeneralStateTests/Shanghai/stEIP3860-limitmeterinitcode/create2InitCodeSizeLimit.json
-PASS	0.20s	GeneralStateTests/Shanghai/stEIP3860-limitmeterinitcode/createInitCodeSizeLimit.json
-PASS	0.10s	GeneralStateTests/VMTests/vmArithmeticTest/arith.json
-PASS	0.10s	GeneralStateTests/VMTests/vmArithmeticTest/not.json
-PASS	0.25s	GeneralStateTests/VMTests/vmBitwiseLogicOperation/eq.json
-PASS	0.25s	GeneralStateTests/VMTests/vmBitwiseLogicOperation/iszero.json
-PASS	0.17s	GeneralStateTests/VMTests/vmIOandFlowOperations/pc.json
-PASS	0.17s	GeneralStateTests/VMTests/vmIOandFlowOperations/pop.json
-PASS	0.64s	GeneralStateTests/VMTests/vmLogTest/log0.json
-PASS	0.72s	GeneralStateTests/VMTests/vmLogTest/log2.json
-PASS	0.50s	GeneralStateTests/VMTests/vmPerformance/performanceTester.json
-PASS	0.25s	GeneralStateTests/VMTests/vmTests/calldataload.json
-PASS	0.24s	GeneralStateTests/VMTests/vmTests/suicide.json
-PASS	0.17s	GeneralStateTests/stArgsZeroOneBalance/jumpNonConst.json
-PASS	0.16s	GeneralStateTests/stArgsZeroOneBalance/mloadNonConst.json
-PASS	0.47s	GeneralStateTests/stAttackTest/ContractCreationSpam.json
-PASS	0.11s	GeneralStateTests/stAttackTest/CrashingTransaction.json
-PASS	0.10s	GeneralStateTests/stBadOpcode/eip2315NotRemoved.json
-PASS	0.33s	GeneralStateTests/stBadOpcode/undefinedOpcodeFirstByte.json
-PASS	0.10s	GeneralStateTests/stBugs/randomStatetestDEFAULT-Tue_07_58_41-15153-575192.json
-PASS	0.10s	GeneralStateTests/stBugs/randomStatetestDEFAULT-Tue_07_58_41-15153-575192_london.json
-PASS	0.10s	GeneralStateTests/stCallCodes/callcodeEmptycontract.json
-PASS	0.10s	GeneralStateTests/stCallCodes/callcode_checkPC.json
-PASS	0.10s	GeneralStateTests/stCallCreateCallCodeTest/createInitFail_OOGduringInit.json
-PASS	0.10s	GeneralStateTests/stCallCreateCallCodeTest/createNameRegistratorPerTxs.json
-PASS	0.10s	GeneralStateTests/stCallDelegateCodesCallCodeHomestead/callcallcode_01_OOGE.json
-PASS	0.10s	GeneralStateTests/stCallDelegateCodesCallCodeHomestead/callcodecall_10_OOGE.json
-PASS	0.10s	GeneralStateTests/stCallDelegateCodesHomestead/callcallcode_01_OOGE.json
-PASS	0.10s	GeneralStateTests/stCallDelegateCodesHomestead/callcodecall_10_OOGE.json
-PASS	0.10s	GeneralStateTests/stChainId/chainId.json
-PASS	0.10s	GeneralStateTests/stChainId/chainIdGasCost.json
-PASS	0.10s	GeneralStateTests/stCodeCopyTest/ExtCodeCopyTargetRangeLongerThanCodeTests.json
-PASS	0.10s	GeneralStateTests/stCodeCopyTest/ExtCodeCopyTestsParis.json
-PASS	0.10s	GeneralStateTests/stCodeSizeLimit/codesizeInit.json
-PASS	0.17s	GeneralStateTests/stCodeSizeLimit/codesizeOOGInvalidSize.json
-PASS	0.10s	GeneralStateTests/stCreate2/CREATE2_HighNonce.json
-PASS	0.10s	GeneralStateTests/stCreate2/RevertInCreateInInitCreate2Paris.json
-PASS	0.10s	GeneralStateTests/stCreateTest/CREATE_ContractSSTOREDuringInit.json
-PASS	0.10s	GeneralStateTests/stCreateTest/CreateTransactionRefundEF.json
-PASS	0.10s	GeneralStateTests/stDelegatecallTestHomestead/delegatecallEmptycontract.json
-PASS	0.10s	GeneralStateTests/stDelegatecallTestHomestead/delegatecallInInitcodeToEmptyContract.json
-PASS	0.10s	GeneralStateTests/stEIP150Specific/CreateAndGasInsideCreate.json
-PASS	0.10s	GeneralStateTests/stEIP150Specific/Transaction64Rule_d64e0.json
-PASS	0.10s	GeneralStateTests/stEIP150singleCodeGasPrices/RawBalanceGas.json
-PASS	0.10s	GeneralStateTests/stEIP150singleCodeGasPrices/RawCreateFailGasValueTransfer.json
-PASS	0.10s	GeneralStateTests/stEIP1559/senderBalance.json
-PASS	0.10s	GeneralStateTests/stEIP1559/typeTwoBerlin.json
-PASS	0.10s	GeneralStateTests/stEIP158Specific/EXTCODESIZE_toEpmtyParis.json
-PASS	0.10s	GeneralStateTests/stEIP158Specific/EXTCODESIZE_toNonExistent.json
-PASS	0.20s	GeneralStateTests/stEIP2930/coinbaseT2.json
-PASS	0.24s	GeneralStateTests/stEIP2930/manualCreate.json
-PASS	0.10s	GeneralStateTests/stEIP3607/transactionCollidingWithNonEmptyAccount_calls.json
-PASS	0.10s	GeneralStateTests/stEIP3607/transactionCollidingWithNonEmptyAccount_callsItself.json
-PASS	0.10s	GeneralStateTests/stExample/add11.json
-PASS	0.10s	GeneralStateTests/stExample/yulExample.json
-PASS	0.10s	GeneralStateTests/stExtCodeHash/extCodeHashSelf.json
-PASS	0.10s	GeneralStateTests/stExtCodeHash/extCodeHashSelfInInit.json
-PASS	0.10s	GeneralStateTests/stHomesteadSpecific/createContractViaContractOOGInitCode.json
-PASS	0.10s	GeneralStateTests/stHomesteadSpecific/createContractViaTransactionCost53000.json
-PASS	0.10s	GeneralStateTests/stInitCodeTest/TransactionCreateAutoSuicideContract.json
-PASS	0.10s	GeneralStateTests/stInitCodeTest/TransactionCreateStopInInitcode.json
-PASS	0.10s	GeneralStateTests/stLogTests/log0_emptyMem.json
-PASS	0.10s	GeneralStateTests/stLogTests/log1_emptyMem.json
-PASS	0.10s	GeneralStateTests/stMemExpandingEIP150Calls/CreateAndGasInsideCreateWithMemExpandingCalls.json
-PASS	0.10s	GeneralStateTests/stMemExpandingEIP150Calls/DelegateCallOnEIPWithMemExpandingCalls.json
-PASS	0.17s	GeneralStateTests/stMemoryStressTest/JUMP_Bounds.json
-PASS	0.16s	GeneralStateTests/stMemoryStressTest/MLOAD_Bounds3.json
-PASS	0.10s	GeneralStateTests/stMemoryTest/mload8bitBound.json
-PASS	0.10s	GeneralStateTests/stMemoryTest/mload_dejavu.json
-PASS	0.10s	GeneralStateTests/stNonZeroCallsTest/NonZeroValue_TransactionCALL.json
-PASS	0.10s	GeneralStateTests/stNonZeroCallsTest/NonZeroValue_TransactionCALLwithData.json
-PASS	0.10s	GeneralStateTests/stPreCompiledContracts/identity_to_bigger.json
-PASS	0.10s	GeneralStateTests/stPreCompiledContracts/identity_to_smaller.json
-PASS	0.10s	GeneralStateTests/stPreCompiledContracts2/CallIdentitiy_0.json
-PASS	0.10s	GeneralStateTests/stPreCompiledContracts2/CallIdentitiy_1.json
-PASS	0.17s	GeneralStateTests/stQuadraticComplexityTest/Create1000.json
-PASS	0.17s	GeneralStateTests/stQuadraticComplexityTest/Create1000Byzantium.json
-PASS	0.10s	GeneralStateTests/stRandom/randomStatetest108.json
-PASS	0.10s	GeneralStateTests/stRandom/randomStatetest126.json
-PASS	0.10s	GeneralStateTests/stRandom2/randomStatetest509.json
-PASS	0.10s	GeneralStateTests/stRandom2/randomStatetest647.json
-PASS	0.11s	GeneralStateTests/stRecursiveCreate/recursiveCreate.json
-PASS	0.47s	GeneralStateTests/stRecursiveCreate/recursiveCreateReturnValue.json
-PASS	0.10s	GeneralStateTests/stRefundTest/refundSSTORE.json
-PASS	0.10s	GeneralStateTests/stRefundTest/refund_NoOOG_1.json
-PASS	0.10s	GeneralStateTests/stReturnDataTest/call_ecrec_success_empty_then_returndatasize.json
-PASS	0.10s	GeneralStateTests/stReturnDataTest/returndatasize_initial.json
-PASS	0.10s	GeneralStateTests/stRevertTest/RevertInCreateInInit_Paris.json
-PASS	0.10s	GeneralStateTests/stRevertTest/RevertOnEmptyStack.json
-PASS	0.10s	GeneralStateTests/stSLoadTest/sloadGasCost.json
-PASS	0.10s	GeneralStateTests/stSStoreTest/SstoreCallToSelfSubRefundBelowZero.json
-PASS	0.10s	GeneralStateTests/stSStoreTest/sstoreGas.json
-PASS	0.10s	GeneralStateTests/stSelfBalance/selfBalance.json
-PASS	0.10s	GeneralStateTests/stSelfBalance/selfBalanceEqualsBalance.json
-PASS	0.10s	GeneralStateTests/stShift/sar00.json
-PASS	0.10s	GeneralStateTests/stShift/sar01.json
-PASS	0.10s	GeneralStateTests/stSolidityTest/AmbiguousMethod.json
-PASS	0.11s	GeneralStateTests/stSolidityTest/CallInfiniteLoop.json
-PASS	0.10s	GeneralStateTests/stSpecialTest/OverflowGasMakeMoney.json
-PASS	0.10s	GeneralStateTests/stSpecialTest/StackDepthLimitSEC.json
-PASS	0.10s	GeneralStateTests/stStackTests/stackOverflowSWAP.json
-PASS	0.11s	GeneralStateTests/stStackTests/stacksanitySWAP.json
-PASS	0.10s	GeneralStateTests/stStaticCall/static_CallIdentitiy_1.json
-PASS	0.11s	GeneralStateTests/stStaticCall/static_ZeroValue_CALL_OOGRevert.json
-PASS	1.76s	GeneralStateTests/stStaticFlagEnabled/DelegatecallToPrecompileFromTransaction.json
-PASS	0.10s	GeneralStateTests/stStaticFlagEnabled/StaticcallForPrecompilesIssue683.json
-PASS	0.10s	GeneralStateTests/stSystemOperationsTest/return0.json
-PASS	0.10s	GeneralStateTests/stSystemOperationsTest/return1.json
-PASS	89.55s	GeneralStateTests/stTimeConsuming/static_Call50000_sha256.json
-PASS	0.11s	GeneralStateTests/stTransactionTest/EmptyTransaction3.json
-PASS	0.10s	GeneralStateTests/stTransactionTest/TransactionToItself.json
-PASS	0.10s	GeneralStateTests/stTransitionTest/createNameRegistratorPerTxsAfter.json
-PASS	0.10s	GeneralStateTests/stTransitionTest/createNameRegistratorPerTxsAt.json
-PASS	0.10s	GeneralStateTests/stWalletTest/dayLimitConstructionOOG.json
-PASS	0.11s	GeneralStateTests/stWalletTest/multiOwnedConstructionNotEnoughGas.json
-PASS	0.10s	GeneralStateTests/stZeroCallsRevert/ZeroValue_CALLCODE_OOGRevert.json
-PASS	0.11s	GeneralStateTests/stZeroCallsRevert/ZeroValue_CALL_OOGRevert.json
-PASS	0.10s	GeneralStateTests/stZeroCallsTest/ZeroValue_TransactionCALL.json
-PASS	0.10s	GeneralStateTests/stZeroCallsTest/ZeroValue_TransactionCALLwithData.json
-PASS	0.39s	GeneralStateTests/stZeroKnowledge/ecmul_7827-6598_5617_21000_128.json
-PASS	0.29s	GeneralStateTests/stZeroKnowledge/ecpairing_empty_data_insufficient_gas.json
-PASS	0.38s	GeneralStateTests/stZeroKnowledge2/ecmul_0-0_0_21000_0.json
-PASS	0.29s	GeneralStateTests/stZeroKnowledge2/ecmul_0-3_5616_28000_96_Paris.json
-PASS	0.05s	InvalidBlocks/bc4895-withdrawals/amountIs0.json
-PASS	0.05s	InvalidBlocks/bc4895-withdrawals/amountIs0TouchAccount.json
-PASS	0.38s	InvalidBlocks/bcBlockGasLimitTest/GasUsedHigherThanBlockGasLimitButNotWithRefundsSuicideFirst.json
-PASS	0.04s	InvalidBlocks/bcBlockGasLimitTest/GasUsedHigherThanBlockGasLimitButNotWithRefundsSuicideLast.json
-PASS	0.09s	InvalidBlocks/bcEIP1559/gasLimit20m.json
-PASS	0.09s	InvalidBlocks/bcEIP1559/gasLimit40m.json
-PASS	0.29s	InvalidBlocks/bcEIP3675/timestampPerBlock.json
-PASS	0.04s	InvalidBlocks/bcInvalidHeaderTest/GasLimitIsZero.json
-PASS	0.10s	InvalidBlocks/bcInvalidHeaderTest/wrongGasUsed.json
-PASS	0.52s	InvalidBlocks/bcMultiChainTest/UncleFromSideChain.json
-FAIL	0.03s	InvalidBlocks/bcStateTests/EmptyTransaction.json
-PASS	0.04s	InvalidBlocks/bcStateTests/gasLimitTooHigh.json
-PASS	0.17s	InvalidBlocks/bcUncleHeaderValidity/incorrectUncleTimestamp.json
-PASS	0.16s	InvalidBlocks/bcUncleHeaderValidity/pastUncleTimestamp.json
-PASS	0.16s	InvalidBlocks/bcUncleSpecialTests/uncleBloomNot0.json
-PASS	0.16s	InvalidBlocks/bcUncleSpecialTests/uncleBloomNot0_2.json
-PASS	0.17s	InvalidBlocks/bcUncleTest/UncleIsBrother.json
-PASS	0.11s	InvalidBlocks/bcUncleTest/uncleHeaderAtBlock2.json
-PASS	0.10s	ValidBlocks/bcBlockGasLimitTest/BlockGasLimit2p63m1.json
-PASS	0.10s	ValidBlocks/bcBlockGasLimitTest/SuicideTransaction.json
-PASS	0.16s	ValidBlocks/bcEIP1153-transientStorage/tloadDoesNotPersistAcrossBlocks.json
-PASS	0.15s	ValidBlocks/bcEIP1153-transientStorage/tloadDoesNotPersistCrossTxn.json
-PASS	0.17s	ValidBlocks/bcEIP1559/besuBaseFeeBug.json
-PASS	0.44s	ValidBlocks/bcEIP1559/transType.json
-PASS	0.33s	ValidBlocks/bcEIP3675/tipInsideBlock.json
-PASS	0.27s	ValidBlocks/bcEIP4844-blobtransactions/blockWithAllTransactionTypes.json
-PASS	0.11s	ValidBlocks/bcExample/basefeeExample.json
-PASS	0.11s	ValidBlocks/bcExample/shanghaiExample.json
-PASS	0.33s	ValidBlocks/bcExploitTest/DelegateCallSpam.json
-PASS	0.11s	ValidBlocks/bcExploitTest/StrangeContractCreation.json
-PASS	0.10s	ValidBlocks/bcForkStressTest/AmIOnEIP150.json
-PASS	0.73s	ValidBlocks/bcGasPricerTest/highGasUsage.json
-PASS	0.30s	ValidBlocks/bcGasPricerTest/notxs.json
-PASS	0.10s	ValidBlocks/bcRandomBlockhashTest/randomStatetest253BC.json
-PASS	0.10s	ValidBlocks/bcRandomBlockhashTest/randomStatetest617BC.json
-PASS	0.10s	ValidBlocks/bcStateTests/OverflowGasRequire.json
-PASS	0.10s	ValidBlocks/bcStateTests/suicideCoinbaseState.json
-PASS	0.11s	ValidBlocks/bcValidBlockTest/SimpleTx.json
-PASS	0.10s	ValidBlocks/bcValidBlockTest/diff1024.json
-PASS	0.55s	ValidBlocks/bcWalletTest/wallet2outOf3txs.json
-PASS	0.45s	ValidBlocks/bcWalletTest/wallet2outOf3txs2.json
+PASS	GeneralStateTests/Cancun/stEIP1153-transientStorage/17_tstoreGas.json
+PASS	GeneralStateTests/Cancun/stEIP1153-transientStorage/19_oogUndoesTransientStore.json
+PASS	GeneralStateTests/Cancun/stEIP4844-blobtransactions/blobhashListBounds3.json
+PASS	GeneralStateTests/Cancun/stEIP4844-blobtransactions/opcodeBlobhashOutOfRange.json
+PASS	GeneralStateTests/Cancun/stEIP5656-MCOPY/MCOPY.json
+PASS	GeneralStateTests/Cancun/stEIP5656-MCOPY/MCOPY_memory_hash.json
+PASS	GeneralStateTests/Shanghai/stEIP3651-warmcoinbase/coinbaseWarmAccountCallGas.json
+PASS	GeneralStateTests/Shanghai/stEIP3651-warmcoinbase/coinbaseWarmAccountCallGasFail.json
+PASS	GeneralStateTests/Shanghai/stEIP3855-push0/push0Gas.json
+PASS	GeneralStateTests/Shanghai/stEIP3855-push0/push0Gas2.json
+PASS	GeneralStateTests/Shanghai/stEIP3860-limitmeterinitcode/create2InitCodeSizeLimit.json
+PASS	GeneralStateTests/Shanghai/stEIP3860-limitmeterinitcode/createInitCodeSizeLimit.json
+PASS	GeneralStateTests/VMTests/vmArithmeticTest/arith.json
+PASS	GeneralStateTests/VMTests/vmArithmeticTest/not.json
+PASS	GeneralStateTests/VMTests/vmBitwiseLogicOperation/eq.json
+PASS	GeneralStateTests/VMTests/vmBitwiseLogicOperation/iszero.json
+PASS	GeneralStateTests/VMTests/vmIOandFlowOperations/pc.json
+PASS	GeneralStateTests/VMTests/vmIOandFlowOperations/pop.json
+PASS	GeneralStateTests/VMTests/vmLogTest/log0.json
+PASS	GeneralStateTests/VMTests/vmLogTest/log2.json
+PASS	GeneralStateTests/VMTests/vmPerformance/performanceTester.json
+PASS	GeneralStateTests/VMTests/vmTests/calldataload.json
+PASS	GeneralStateTests/VMTests/vmTests/suicide.json
+PASS	GeneralStateTests/stArgsZeroOneBalance/jumpNonConst.json
+PASS	GeneralStateTests/stArgsZeroOneBalance/mloadNonConst.json
+PASS	GeneralStateTests/stAttackTest/ContractCreationSpam.json
+PASS	GeneralStateTests/stAttackTest/CrashingTransaction.json
+PASS	GeneralStateTests/stBadOpcode/eip2315NotRemoved.json
+PASS	GeneralStateTests/stBadOpcode/undefinedOpcodeFirstByte.json
+PASS	GeneralStateTests/stBugs/randomStatetestDEFAULT-Tue_07_58_41-15153-575192.json
+PASS	GeneralStateTests/stBugs/randomStatetestDEFAULT-Tue_07_58_41-15153-575192_london.json
+PASS	GeneralStateTests/stCallCodes/callcodeEmptycontract.json
+PASS	GeneralStateTests/stCallCodes/callcode_checkPC.json
+PASS	GeneralStateTests/stCallCreateCallCodeTest/createInitFail_OOGduringInit.json
+PASS	GeneralStateTests/stCallCreateCallCodeTest/createNameRegistratorPerTxs.json
+PASS	GeneralStateTests/stCallDelegateCodesCallCodeHomestead/callcallcode_01_OOGE.json
+PASS	GeneralStateTests/stCallDelegateCodesCallCodeHomestead/callcodecall_10_OOGE.json
+PASS	GeneralStateTests/stCallDelegateCodesHomestead/callcallcode_01_OOGE.json
+PASS	GeneralStateTests/stCallDelegateCodesHomestead/callcodecall_10_OOGE.json
+PASS	GeneralStateTests/stChainId/chainId.json
+PASS	GeneralStateTests/stChainId/chainIdGasCost.json
+PASS	GeneralStateTests/stCodeCopyTest/ExtCodeCopyTargetRangeLongerThanCodeTests.json
+PASS	GeneralStateTests/stCodeCopyTest/ExtCodeCopyTestsParis.json
+PASS	GeneralStateTests/stCodeSizeLimit/codesizeInit.json
+PASS	GeneralStateTests/stCodeSizeLimit/codesizeOOGInvalidSize.json
+PASS	GeneralStateTests/stCreate2/CREATE2_HighNonce.json
+PASS	GeneralStateTests/stCreate2/RevertInCreateInInitCreate2Paris.json
+PASS	GeneralStateTests/stCreateTest/CREATE_ContractSSTOREDuringInit.json
+PASS	GeneralStateTests/stCreateTest/CreateTransactionRefundEF.json
+PASS	GeneralStateTests/stDelegatecallTestHomestead/delegatecallEmptycontract.json
+PASS	GeneralStateTests/stDelegatecallTestHomestead/delegatecallInInitcodeToEmptyContract.json
+PASS	GeneralStateTests/stEIP150Specific/CreateAndGasInsideCreate.json
+PASS	GeneralStateTests/stEIP150Specific/Transaction64Rule_d64e0.json
+PASS	GeneralStateTests/stEIP150singleCodeGasPrices/RawBalanceGas.json
+PASS	GeneralStateTests/stEIP150singleCodeGasPrices/RawCreateFailGasValueTransfer.json
+PASS	GeneralStateTests/stEIP1559/senderBalance.json
+PASS	GeneralStateTests/stEIP1559/typeTwoBerlin.json
+PASS	GeneralStateTests/stEIP158Specific/EXTCODESIZE_toEpmtyParis.json
+PASS	GeneralStateTests/stEIP158Specific/EXTCODESIZE_toNonExistent.json
+PASS	GeneralStateTests/stEIP2930/coinbaseT2.json
+PASS	GeneralStateTests/stEIP2930/manualCreate.json
+PASS	GeneralStateTests/stEIP3607/transactionCollidingWithNonEmptyAccount_calls.json
+PASS	GeneralStateTests/stEIP3607/transactionCollidingWithNonEmptyAccount_callsItself.json
+PASS	GeneralStateTests/stExample/add11.json
+PASS	GeneralStateTests/stExample/yulExample.json
+PASS	GeneralStateTests/stExtCodeHash/extCodeHashSelf.json
+PASS	GeneralStateTests/stExtCodeHash/extCodeHashSelfInInit.json
+PASS	GeneralStateTests/stHomesteadSpecific/createContractViaContractOOGInitCode.json
+PASS	GeneralStateTests/stHomesteadSpecific/createContractViaTransactionCost53000.json
+PASS	GeneralStateTests/stInitCodeTest/TransactionCreateAutoSuicideContract.json
+PASS	GeneralStateTests/stInitCodeTest/TransactionCreateStopInInitcode.json
+PASS	GeneralStateTests/stLogTests/log0_emptyMem.json
+PASS	GeneralStateTests/stLogTests/log1_emptyMem.json
+PASS	GeneralStateTests/stMemExpandingEIP150Calls/CreateAndGasInsideCreateWithMemExpandingCalls.json
+PASS	GeneralStateTests/stMemExpandingEIP150Calls/DelegateCallOnEIPWithMemExpandingCalls.json
+PASS	GeneralStateTests/stMemoryStressTest/JUMP_Bounds.json
+PASS	GeneralStateTests/stMemoryStressTest/MLOAD_Bounds3.json
+PASS	GeneralStateTests/stMemoryTest/mload8bitBound.json
+PASS	GeneralStateTests/stMemoryTest/mload_dejavu.json
+PASS	GeneralStateTests/stNonZeroCallsTest/NonZeroValue_TransactionCALL.json
+PASS	GeneralStateTests/stNonZeroCallsTest/NonZeroValue_TransactionCALLwithData.json
+PASS	GeneralStateTests/stPreCompiledContracts/identity_to_bigger.json
+PASS	GeneralStateTests/stPreCompiledContracts/identity_to_smaller.json
+PASS	GeneralStateTests/stPreCompiledContracts2/CallIdentitiy_0.json
+PASS	GeneralStateTests/stPreCompiledContracts2/CallIdentitiy_1.json
+PASS	GeneralStateTests/stQuadraticComplexityTest/Create1000.json
+PASS	GeneralStateTests/stQuadraticComplexityTest/Create1000Byzantium.json
+PASS	GeneralStateTests/stRandom/randomStatetest108.json
+PASS	GeneralStateTests/stRandom/randomStatetest126.json
+PASS	GeneralStateTests/stRandom2/randomStatetest509.json
+PASS	GeneralStateTests/stRandom2/randomStatetest647.json
+PASS	GeneralStateTests/stRecursiveCreate/recursiveCreate.json
+PASS	GeneralStateTests/stRecursiveCreate/recursiveCreateReturnValue.json
+PASS	GeneralStateTests/stRefundTest/refundSSTORE.json
+PASS	GeneralStateTests/stRefundTest/refund_NoOOG_1.json
+PASS	GeneralStateTests/stReturnDataTest/call_ecrec_success_empty_then_returndatasize.json
+PASS	GeneralStateTests/stReturnDataTest/returndatasize_initial.json
+PASS	GeneralStateTests/stRevertTest/RevertInCreateInInit_Paris.json
+PASS	GeneralStateTests/stRevertTest/RevertOnEmptyStack.json
+PASS	GeneralStateTests/stSLoadTest/sloadGasCost.json
+PASS	GeneralStateTests/stSStoreTest/SstoreCallToSelfSubRefundBelowZero.json
+PASS	GeneralStateTests/stSStoreTest/sstoreGas.json
+PASS	GeneralStateTests/stSelfBalance/selfBalance.json
+PASS	GeneralStateTests/stSelfBalance/selfBalanceEqualsBalance.json
+PASS	GeneralStateTests/stShift/sar00.json
+PASS	GeneralStateTests/stShift/sar01.json
+PASS	GeneralStateTests/stSolidityTest/AmbiguousMethod.json
+PASS	GeneralStateTests/stSolidityTest/CallInfiniteLoop.json
+PASS	GeneralStateTests/stSpecialTest/OverflowGasMakeMoney.json
+PASS	GeneralStateTests/stSpecialTest/StackDepthLimitSEC.json
+PASS	GeneralStateTests/stStackTests/stackOverflowSWAP.json
+PASS	GeneralStateTests/stStackTests/stacksanitySWAP.json
+PASS	GeneralStateTests/stStaticCall/static_CallIdentitiy_1.json
+PASS	GeneralStateTests/stStaticCall/static_ZeroValue_CALL_OOGRevert.json
+PASS	GeneralStateTests/stStaticFlagEnabled/DelegatecallToPrecompileFromTransaction.json
+PASS	GeneralStateTests/stStaticFlagEnabled/StaticcallForPrecompilesIssue683.json
+PASS	GeneralStateTests/stSystemOperationsTest/return0.json
+PASS	GeneralStateTests/stSystemOperationsTest/return1.json
+PASS	GeneralStateTests/stTimeConsuming/static_Call50000_sha256.json
+PASS	GeneralStateTests/stTransactionTest/EmptyTransaction3.json
+PASS	GeneralStateTests/stTransactionTest/TransactionToItself.json
+PASS	GeneralStateTests/stTransitionTest/createNameRegistratorPerTxsAfter.json
+PASS	GeneralStateTests/stTransitionTest/createNameRegistratorPerTxsAt.json
+PASS	GeneralStateTests/stWalletTest/dayLimitConstructionOOG.json
+PASS	GeneralStateTests/stWalletTest/multiOwnedConstructionNotEnoughGas.json
+PASS	GeneralStateTests/stZeroCallsRevert/ZeroValue_CALLCODE_OOGRevert.json
+PASS	GeneralStateTests/stZeroCallsRevert/ZeroValue_CALL_OOGRevert.json
+PASS	GeneralStateTests/stZeroCallsTest/ZeroValue_TransactionCALL.json
+PASS	GeneralStateTests/stZeroCallsTest/ZeroValue_TransactionCALLwithData.json
+PASS	GeneralStateTests/stZeroKnowledge/ecmul_7827-6598_5617_21000_128.json
+PASS	GeneralStateTests/stZeroKnowledge/ecpairing_empty_data_insufficient_gas.json
+PASS	GeneralStateTests/stZeroKnowledge2/ecmul_0-0_0_21000_0.json
+PASS	GeneralStateTests/stZeroKnowledge2/ecmul_0-3_5616_28000_96_Paris.json
+PASS	InvalidBlocks/bc4895-withdrawals/amountIs0.json
+PASS	InvalidBlocks/bc4895-withdrawals/amountIs0TouchAccount.json
+PASS	InvalidBlocks/bcBlockGasLimitTest/GasUsedHigherThanBlockGasLimitButNotWithRefundsSuicideFirst.json
+PASS	InvalidBlocks/bcBlockGasLimitTest/GasUsedHigherThanBlockGasLimitButNotWithRefundsSuicideLast.json
+PASS	InvalidBlocks/bcEIP1559/gasLimit20m.json
+PASS	InvalidBlocks/bcEIP1559/gasLimit40m.json
+PASS	InvalidBlocks/bcEIP3675/timestampPerBlock.json
+PASS	InvalidBlocks/bcInvalidHeaderTest/GasLimitIsZero.json
+PASS	InvalidBlocks/bcInvalidHeaderTest/wrongGasUsed.json
+PASS	InvalidBlocks/bcMultiChainTest/UncleFromSideChain.json
+FAIL	InvalidBlocks/bcStateTests/EmptyTransaction.json
+PASS	InvalidBlocks/bcStateTests/gasLimitTooHigh.json
+PASS	InvalidBlocks/bcUncleHeaderValidity/incorrectUncleTimestamp.json
+PASS	InvalidBlocks/bcUncleHeaderValidity/pastUncleTimestamp.json
+PASS	InvalidBlocks/bcUncleSpecialTests/uncleBloomNot0.json
+PASS	InvalidBlocks/bcUncleSpecialTests/uncleBloomNot0_2.json
+PASS	InvalidBlocks/bcUncleTest/UncleIsBrother.json
+PASS	InvalidBlocks/bcUncleTest/uncleHeaderAtBlock2.json
+PASS	ValidBlocks/bcBlockGasLimitTest/BlockGasLimit2p63m1.json
+PASS	ValidBlocks/bcBlockGasLimitTest/SuicideTransaction.json
+PASS	ValidBlocks/bcEIP1153-transientStorage/tloadDoesNotPersistAcrossBlocks.json
+PASS	ValidBlocks/bcEIP1153-transientStorage/tloadDoesNotPersistCrossTxn.json
+PASS	ValidBlocks/bcEIP1559/besuBaseFeeBug.json
+PASS	ValidBlocks/bcEIP1559/transType.json
+PASS	ValidBlocks/bcEIP3675/tipInsideBlock.json
+PASS	ValidBlocks/bcEIP4844-blobtransactions/blockWithAllTransactionTypes.json
+PASS	ValidBlocks/bcExample/basefeeExample.json
+PASS	ValidBlocks/bcExample/shanghaiExample.json
+PASS	ValidBlocks/bcExploitTest/DelegateCallSpam.json
+PASS	ValidBlocks/bcExploitTest/StrangeContractCreation.json
+PASS	ValidBlocks/bcForkStressTest/AmIOnEIP150.json
+PASS	ValidBlocks/bcGasPricerTest/highGasUsage.json
+PASS	ValidBlocks/bcGasPricerTest/notxs.json
+PASS	ValidBlocks/bcRandomBlockhashTest/randomStatetest253BC.json
+PASS	ValidBlocks/bcRandomBlockhashTest/randomStatetest617BC.json
+PASS	ValidBlocks/bcStateTests/OverflowGasRequire.json
+PASS	ValidBlocks/bcStateTests/suicideCoinbaseState.json
+PASS	ValidBlocks/bcValidBlockTest/SimpleTx.json
+PASS	ValidBlocks/bcValidBlockTest/diff1024.json
+PASS	ValidBlocks/bcWalletTest/wallet2outOf3txs.json
+PASS	ValidBlocks/bcWalletTest/wallet2outOf3txs2.json

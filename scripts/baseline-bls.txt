@@ -1,14 +1,14 @@
-# Hand-authored target baseline for `scripts/check.sh --bls` (precomps.md
+# Hand-authored target baseline for `scripts/check-legacy.sh --bls` (precomps.md
 # Step 9). Every file in scripts/bls-tests.txt is expected PASS under the
 # tier defaults: fixture root = the pinned EEST v5.4.0 snapshot at
 # ~/eest-fixtures/fixtures/blockchain_tests (provenance in
 # scripts/vectors/SOURCES.md).
 #
-# Lines are STATUS<TAB>TIME<TAB>path. Only STATUS is gate input. The times are
-# informational reference data recorded 2026-07-21 on the arm64 macOS
-# reference machine (Apple Silicon, 10 cores); the two slowest files are
+# Lines are STATUS<TAB>path. Host-specific wall times live separately in the
+# ignored `scripts/baseline-bls-times.txt`, initialized by this host's first
+# complete sequential run. The two largest inputs are
 #   prague/.../test_valid.json            (514 cases, 46 MB)
-#   cancun/.../test_external_vectors.json (122 Prague KZG cases)
+#   cancun/.../test_external_vectors.json (122 Prague KZG cases),
 # and both run to completion well inside the uniform 1800 s wall-clock guard.
 # That guard is a hang detector, not a classifier: TIMEOUT is no longer a
 # classification at all, so no entry here can carry one — a guard trip is a
@@ -31,32 +31,32 @@
 # Unit-level coverage of the precompile semantics behind the exclusions is
 # green in the vector harness: scripts/check-vectors.sh runs every EIP-2537
 # vector file and all 122 consensus KZG vectors through `jaune --vectors`.
-PASS	6.68s	cancun/eip4844_blobs/test_call_opcode_types.json
-PASS	101.72s	cancun/eip4844_blobs/test_external_vectors.json
-PASS	1.03s	cancun/eip4844_blobs/test_invalid_inputs.json
-PASS	13.46s	cancun/eip4844_blobs/test_point_evaluation_precompile_gas_usage.json
-PASS	3.50s	cancun/eip4844_blobs/test_tx_entry_point.json
-PASS	1.49s	cancun/eip4844_blobs/test_valid_inputs.json
-PASS	26.71s	prague/eip2537_bls_12_381_precompiles/test_call_types.json
-PASS	1.49s	prague/eip2537_bls_12_381_precompiles/test_eip_2537.json
-PASS	1.80s	prague/eip2537_bls_12_381_precompiles/test_gas.json
-PASS	39.79s	prague/eip2537_bls_12_381_precompiles/test_invalid.json
-PASS	0.13s	prague/eip2537_bls_12_381_precompiles/test_invalid_gas_g1msm.json
-PASS	0.14s	prague/eip2537_bls_12_381_precompiles/test_invalid_gas_g2msm.json
-PASS	0.12s	prague/eip2537_bls_12_381_precompiles/test_invalid_gas_pairing.json
-PASS	0.22s	prague/eip2537_bls_12_381_precompiles/test_invalid_length_g1msm.json
-PASS	0.24s	prague/eip2537_bls_12_381_precompiles/test_invalid_length_g2msm.json
-PASS	0.20s	prague/eip2537_bls_12_381_precompiles/test_invalid_length_pairing.json
-PASS	5.49s	prague/eip2537_bls_12_381_precompiles/test_invalid_multi_inf.json
-PASS	0.12s	prague/eip2537_bls_12_381_precompiles/test_invalid_zero_gas_g1msm.json
-PASS	0.11s	prague/eip2537_bls_12_381_precompiles/test_invalid_zero_gas_g2msm.json
-PASS	0.12s	prague/eip2537_bls_12_381_precompiles/test_invalid_zero_gas_pairing.json
-PASS	0.12s	prague/eip2537_bls_12_381_precompiles/test_invalid_zero_length_g1msm.json
-PASS	0.11s	prague/eip2537_bls_12_381_precompiles/test_invalid_zero_length_g2msm.json
-PASS	0.11s	prague/eip2537_bls_12_381_precompiles/test_invalid_zero_length_pairing.json
-PASS	0.71s	prague/eip2537_bls_12_381_precompiles/test_isogeny_kernel_values.json
-PASS	255.70s	prague/eip2537_bls_12_381_precompiles/test_valid.json
-PASS	0.56s	prague/eip2537_bls_12_381_precompiles/test_valid_gas_g1msm.json
-PASS	0.67s	prague/eip2537_bls_12_381_precompiles/test_valid_gas_g2msm.json
-PASS	0.14s	prague/eip2537_bls_12_381_precompiles/test_valid_gas_pairing.json
-PASS	5.92s	prague/eip2537_bls_12_381_precompiles/test_valid_multi_inf.json
+PASS	cancun/eip4844_blobs/test_call_opcode_types.json
+PASS	cancun/eip4844_blobs/test_external_vectors.json
+PASS	cancun/eip4844_blobs/test_invalid_inputs.json
+PASS	cancun/eip4844_blobs/test_point_evaluation_precompile_gas_usage.json
+PASS	cancun/eip4844_blobs/test_tx_entry_point.json
+PASS	cancun/eip4844_blobs/test_valid_inputs.json
+PASS	prague/eip2537_bls_12_381_precompiles/test_call_types.json
+PASS	prague/eip2537_bls_12_381_precompiles/test_eip_2537.json
+PASS	prague/eip2537_bls_12_381_precompiles/test_gas.json
+PASS	prague/eip2537_bls_12_381_precompiles/test_invalid.json
+PASS	prague/eip2537_bls_12_381_precompiles/test_invalid_gas_g1msm.json
+PASS	prague/eip2537_bls_12_381_precompiles/test_invalid_gas_g2msm.json
+PASS	prague/eip2537_bls_12_381_precompiles/test_invalid_gas_pairing.json
+PASS	prague/eip2537_bls_12_381_precompiles/test_invalid_length_g1msm.json
+PASS	prague/eip2537_bls_12_381_precompiles/test_invalid_length_g2msm.json
+PASS	prague/eip2537_bls_12_381_precompiles/test_invalid_length_pairing.json
+PASS	prague/eip2537_bls_12_381_precompiles/test_invalid_multi_inf.json
+PASS	prague/eip2537_bls_12_381_precompiles/test_invalid_zero_gas_g1msm.json
+PASS	prague/eip2537_bls_12_381_precompiles/test_invalid_zero_gas_g2msm.json
+PASS	prague/eip2537_bls_12_381_precompiles/test_invalid_zero_gas_pairing.json
+PASS	prague/eip2537_bls_12_381_precompiles/test_invalid_zero_length_g1msm.json
+PASS	prague/eip2537_bls_12_381_precompiles/test_invalid_zero_length_g2msm.json
+PASS	prague/eip2537_bls_12_381_precompiles/test_invalid_zero_length_pairing.json
+PASS	prague/eip2537_bls_12_381_precompiles/test_isogeny_kernel_values.json
+PASS	prague/eip2537_bls_12_381_precompiles/test_valid.json
+PASS	prague/eip2537_bls_12_381_precompiles/test_valid_gas_g1msm.json
+PASS	prague/eip2537_bls_12_381_precompiles/test_valid_gas_g2msm.json
+PASS	prague/eip2537_bls_12_381_precompiles/test_valid_gas_pairing.json
+PASS	prague/eip2537_bls_12_381_precompiles/test_valid_multi_inf.json

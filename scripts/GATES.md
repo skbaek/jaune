@@ -48,15 +48,15 @@ Choose the gate by what you changed, cheapest falsifier first:
 | fork / block validity | `scripts/check-mainnet.sh --suite transitions --no-build --jobs auto` | `scripts/check-mainnet.sh --suite osaka --no-build --jobs auto` |
 | the runner's CLI, its refusals or its case selection (`Main.lean`) | `scripts/check-cli.sh` + `scripts/check-mainnet.sh --suite smoke` | `scripts/check-legacy.sh --smoke --no-build --jobs auto` |
 | the `t8n` frontend (`Jaune/T8n.lean`) or its corpus | `scripts/check-t8n.sh --red-test` | `scripts/check-mainnet.sh --suite smoke` |
-| harness / generators | `python3 -m unittest discover -s scripts/tests` | `python3 scripts/env_doctor.py` |
+| harness / generators | `python3 scripts/check-legacy-baseline.py self-test` + `python3 -m unittest discover -s scripts/tests` | `python3 scripts/env_doctor.py` |
 | a module's imports, or an added `#guard` / heavy elaboration | `lake build` | `scripts/check-elab.sh` |
 | anything Blanc consumes | `lake build && scripts/check.sh --no-build` in the Blanc checkout carrying the candidate pin — its goal worktree during goal work, `~/blanc` otherwise | Blanc's full set — see [Blanc's gates](#blancs-gates) |
 
-**Use sequential (omit `--jobs`) when the timings themselves matter:** writing a
-baseline with `--rebase` or `--refresh-times`, investigating a performance
-regression, or producing timing evidence for a report. A contended run's TIME
-column reflects scheduling, not the fixture. Parallel mode enforces this — it
-refuses both writing modes outright.
+**Use sequential (omit `--jobs`) when the timings themselves matter:** refreshing
+this host's ignored timing baseline with `--rebase` or `--refresh-times`,
+investigating a performance regression, or producing timing evidence for a
+report. A contended run's TIME column reflects scheduling, not the fixture.
+Parallel mode enforces this — it refuses both writing modes outright.
 
 **Long gates are evidence obligations, not optional.** An action expected to
 exceed 1,000 seconds — judged as you will actually run it, parallel mode
@@ -88,9 +88,10 @@ What parallel mode changes:
   because its sequential path streams each runner's output as it goes — a hang is
   visible there, but a parallel run assembles its output at the end, where a hang
   and slow progress look alike until the guard distinguishes them.
-- **Dispatch becomes longest-first**, seeded from the committed baseline's TIME
-  column. No fixture names are hardcoded; if the slowest fixture changes, the
-  next sequential `--rebase` updates the order automatically.
+- **Dispatch becomes longest-first**, seeded from this checkout's ignored
+  host-local timing baseline when it exists. No fixture names are hardcoded; a
+  fresh clone preserves report order until its first complete sequential run
+  creates the local weights.
   `check-vectors.sh` has no baseline, so it seeds from a small reference-time
   table (`get_weight`) naming only its files that are not near-instant; an
   unnamed file sorts last. A stale weight there costs makespan, never
@@ -141,7 +142,7 @@ It depends on which bound the suite is under, and the corpora differ:
   regardless of workers. Unboxing the BLAKE2b working vector took it to 75.9s
   (see `scripts/report-blake2f.md`), which is why the bound moved. The lesson
   generalizes: when one file caps this gate, the number only moves by making
-  that file faster — and when it does, the committed TIME column must be
+  that file faster — and when it does, the host-local timing baseline must be
   refreshed or dispatch keeps scheduling the old order (see [Writing a
   `check-legacy.sh` baseline](#writing-a-check-legacysh-baseline-two-verbs)).
 - **The vector suite was latency-bound until its dominant file was sharded.**
@@ -202,6 +203,7 @@ executable inputs.
 | `scripts/check-legacy.sh --rlp4` | four invalid-RLP/header files, subset of `--patch` | 4 | sub-second |
 | `scripts/check-mainnet.sh --suite smoke` | current-mainnet smoke | 16 | sub-second |
 | `scripts/check-legacy.sh --depth` | fuel/call-depth stress set | 67 | ~13 s |
+| `python3 scripts/check-legacy-baseline.py self-test` | tracked correctness / ignored timing separation, timing genesis/new-fixture extension, refresh refusal, rebase isolation, drift, duplicate rejection, and host-local dispatch weights | 11 controls | sub-second |
 | `python3 -m unittest discover -s scripts/tests` | harness/generator unit tests | 121 tests | ~13 s |
 | `scripts/check-mainnet.sh --suite transitions` | fork-transition validity | 13 files / 109 cases | ~8–15 s |
 
@@ -213,7 +215,7 @@ executable inputs.
 | `scripts/check-legacy.sh --bls` | BLS12-381 + point-evaluation vs hand-authored target baseline | 29 | ~2 min |
 | `scripts/check-ec.sh` | EC differential oracle (pinned, differential, identity cases) | — | compiles a Lean checker first |
 | `scripts/check-vectors.sh` | generated vector conformance + controls + declared-case-count coverage | 53 files, 1,990 cases, 5 controls | ~7.8 min; **~1.5 min at `--jobs auto`** |
-| `scripts/check-elab.sh` | per-module elaboration time vs `scripts/baseline-elab.txt` | 17 modules, ~49 s of elaboration | ~70 s |
+| `scripts/check-elab.sh` | per-module elaboration time vs the ignored host-local `scripts/baseline-elab.txt` (auto-initialized on first run) | 20 modules, host-dependent | ~70 s on the catalogue host |
 | `lake build && scripts/check.sh --no-build` in the Blanc checkout carrying the candidate pin | that a Jaune change has not broken its downstream consumer: Blanc's integration elaboration and its axiom audit. **The cheapest Blanc-side falsifier after a pin bump** — the rest of Blanc's set is catalogued in Blanc's own file | count-free here; use Blanc's gate summaries | current Blanc catalogue |
 
 ### Long sequentially — but mostly not long in parallel
@@ -228,8 +230,8 @@ executable inputs.
 **Read the two legacy `--full` cells differently — they have different
 provenances.** The parallel cell is a measured wall time: 462 s at `--jobs auto`,
 2026-07-31. The sequential cell is **not** a measured wall time; it is
-1,145.8 s of *summed per-file fixture time* taken from the refreshed TIME
-column, which is a **lower bound** on wall time — a sequential run also pays
+1,145.8 s of *summed per-file fixture time* from the catalogue host's historical
+measurement, which is a **lower bound** on wall time — a sequential run also pays
 2,983 process spawns plus harness overhead on top. Treat it as "at least 19
 min". Before the BLAKE2b unboxing the corresponding figures were ≥ 3,338 s
 summed and ~900 s measured.
@@ -294,13 +296,15 @@ generators, never manual transcription.
 Two different contracts, and confusing them is the most common misreading:
 
 - **`check-legacy.sh` tiers are regression gates.** They pass iff every file's
-  classification *equals the committed baseline's* — **not** iff every file
+  classification *equals the tracked correctness baseline's* — **not** iff every file
   passes. The legacy corpus has 5 known FAILs, all diagnosed and none a Jaune
   defect: two files have no case in the supported fork range, while the other
   three carry wrong expected exceptions and the frozen oracle agrees with
   Jaune. A FAIL turning into a PASS is a gate failure exactly like the reverse.
-  Baselines are `scripts/baseline-<tier>.txt`, reports are
-  `scripts/report-<tier>.txt` (gitignored).
+  Correctness baselines are tracked `STATUS<TAB>path` files at
+  `scripts/baseline-<tier>.txt`. Reports and host-local timing baselines are
+  gitignored as `scripts/report-<tier>.txt` and
+  `scripts/baseline-<tier>-times.txt`.
 - **`check-mainnet.sh` suites and `check-legacy.sh --patch`/`--rlp4` are all-PASS
   targets.** Any non-PASS fails. They have no baseline to rebase.
 - **`check-vectors.sh` is an all-PASS target that also checks coverage.** Every
@@ -321,8 +325,8 @@ Two different contracts, and confusing them is the most common misreading:
   `scripts/baseline-elab.txt` time **and** that time plus 1.0 s; the absolute
   floor keeps a sub-second module from tripping on scheduler noise. A module
   that fails to elaborate at all fails the gate, and a source module with no
-  baseline row is a configuration error, which is what forces a new module to
-  state its cost. A module that got much *faster* prints `IMPROVED` rather than
+  baseline row is initialized by its first green measurement on this host. A
+  module that got much *faster* prints `IMPROVED` rather than
   passing silently, because a stale over-generous baseline is how this gate
   would quietly stop gating; refresh with `--rebase`. Stale rows for deleted
   files are a warning, never a failure. This gate exists because no other one
@@ -345,12 +349,11 @@ Two different contracts, and confusing them is the most common misreading:
   believed; the precondition reduces cold reads but does not prove that first
   measurement warm.
 
-  **It is a local gate, not a CI gate.** Its baseline is wall-clock time from
-  one machine, which is machine-dependent in precisely the way `notimeout.md`
-  objected to when it abolished TIMEOUT as a fixture classification — a slower
-  runner would fail modules that are in no way worse. Keep it a pre-push check,
-  or give CI a baseline measured on its own runner. The 2x factor and the 1.0 s
-  floor absorb same-machine variance, not cross-machine variance.
+  **It is a local gate, not a CI gate.** Its ignored baseline is created in the
+  Jaune checkout by the first uncontended green run. That genesis run performs
+  no timing comparison; later runs compare only with the same host's history.
+  CI continues to build and run correctness gates without consuming a timing
+  baseline. The 2x factor and 1.0 s floor absorb same-machine variance.
 
 - **`scripts/check-integrity.sh` is a shrink-only budget.** It inventories
   `panic`, raw bang operations, and stringly-typed semantic error carriers over
@@ -385,38 +388,39 @@ Two different contracts, and confusing them is the most common misreading:
   that point. It needs the built binary and no corpus, so a bare runner can run
   it after a build; it never builds one itself.
 
-`--bls` is a middle case: it compares against a committed baseline like a tier,
+`--bls` is a middle case: it compares against a tracked baseline like a tier,
 but that baseline is a hand-authored *target*, so `--rebase` is refused — edit
 `scripts/baseline-bls.txt` directly, with a written justification for any
-non-PASS entry.
+non-PASS entry. `--refresh-times` remains safe because it writes only the
+ignored host-local timing file.
 
 Every gate's last line is a single unambiguous verdict, and every gate exits 0
 if and only if it passed.
 
 ## Writing a `check-legacy.sh` baseline: two verbs
 
-A baseline line is `STATUS<TAB>TIME<TAB>path`, and the two columns have
-different status: STATUS is the gate, TIME is reference data. So the two reasons
-to rewrite a baseline get two different flags. Both are sequential-only, and
-both are refused for the `--patch`/`--rlp4` target gates and for the
-hand-maintained `--bls` baseline.
+Portable correctness and host-specific timing use separate files. The tracked
+baseline is `STATUS<TAB>path`; the ignored local timing file is
+`TIME<TAB>path`. A fresh clone's first complete sequential run initializes the
+timing file and makes no timing comparison. Both explicit write modes are
+sequential-only and refused for the `--patch`/`--rlp4` target gates;
+`--bls` refuses only `--rebase`.
 
 | flag | means | on a classification change |
 |---|---|---|
 | `--rebase` | "the classifications legitimately changed; accept them" | absorbs it, after printing a `REBASE — <file>: <old> -> <new>` line for each |
-| `--refresh-times` | "the classifications are identical, the code got faster; refresh the reference times" | **writes nothing**, prints the differing files, exits nonzero |
+| `--refresh-times` | "the classifications are identical, the code got faster; refresh this host's reference times" | **writes nothing**, prints the differing files, exits nonzero |
 
 `--rebase` is rare and consequential — it is the one operation that can make a
 regression disappear, which is why it now prints the delta it absorbs instead of
 a bare `OK`. `--refresh-times` is the safe, mechanical case: it runs the tier,
-compares STATUS through the ordinary comparison, and only then writes a baseline
-that keeps the committed STATUS and path columns and takes TIME from the new
-run. It re-checks that property on the bytes it is about to write, so
-"timing-only" is verified rather than asserted. A refusal from it is a finding —
-report it; do not route around it with `--rebase`.
+compares STATUS through the ordinary comparison, and only then replaces the
+ignored timing file. It never writes the tracked correctness baseline. A
+refusal from it is a finding — report it; do not route around it with
+`--rebase`.
 
 Refreshing TIME is not cosmetic. Parallel dispatch is longest-first, **seeded
-from the committed baseline's TIME column**, so after an optimization that
+from the host-local timing file**, so after an optimization that
 changes which fixture is slowest, a stale TIME column schedules the wrong
 fixture first and gives back part of the speedup. Note also that no DRIFT line
 appears when a fixture gets *faster* — DRIFT fires only above 2× its reference —
@@ -425,8 +429,8 @@ so nothing else prompts the refresh.
 Verdict lines:
 
 ```
-OK — full: 2983 files STATUS-identical to baseline; TIME column refreshed
-OK — depth: baseline rebased with 67 files, 1 classification change(s) absorbed (67 PASS, 0 FAIL)
+OK — full: 2983 files match correctness baseline; host-local times refreshed
+OK — depth: correctness baseline rebased with 67 files, 1 classification change(s) absorbed (67 PASS, 0 FAIL)
 ```
 
 ## One run at a time

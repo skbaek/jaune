@@ -4,8 +4,10 @@
 # Measures how long each of our own modules takes to re-elaborate against
 # already-built dependencies — the cost an interactive session pays to open or
 # touch a file, and the cost that sits on `lake build`'s critical path. Compares
-# every file against the committed reference times in scripts/baseline-elab.txt
-# and fails when one has become materially slower.
+# every file against this checkout's host-local reference times in
+# scripts/baseline-elab.txt and fails when one has become materially slower.
+# The ignored baseline is initialized automatically by the first uncontended
+# green run on a clone; that genesis run performs no timing comparison.
 #
 # This gate exists because nothing else measures this axis. check-hygiene.sh,
 # check-integrity.sh, and the conformance tiers all say nothing about
@@ -18,7 +20,7 @@
 #   scripts/check-elab.sh [--rebase] [--list] [--no-build] [--force]
 #                         [--report <path>]
 #
-#   --rebase      accept the current times as the new committed baseline.
+#   --rebase      accept the current times as this host's new local baseline.
 #                 Refused if any file failed to elaborate — a baseline must
 #                 only ever record a green tree.
 #   --list        measure and print, compare nothing, write no baseline. Use
@@ -75,22 +77,20 @@
 #
 # SCOPE: THIS IS A LOCAL GATE, NOT A CI GATE
 #
-# The committed times are wall-clock measurements from one machine, so they are
-# machine-dependent in exactly the way `notimeout.md` objected to when it
-# abolished TIMEOUT as a fixture classification: a slower or noisier runner
-# would fail files that are in no way worse. Do not wire this into CI against a
-# baseline measured elsewhere. Either keep it a local pre-push check, or give CI
-# its own baseline measured on its own runner and rebased when that runner
-# changes. The 1.0s absolute floor and the 2x factor together absorb ordinary
-# same-machine variance, not cross-machine variance.
+# Wall-clock measurements are machine-dependent in exactly the way
+# `notimeout.md` objected to when it abolished TIMEOUT as a fixture
+# classification. The baseline therefore stays inside this Jaune checkout and
+# is ignored by Git. CI remains a correctness/build gate and does not consume
+# this local performance history. The 1.0s absolute floor and the 2x factor
+# together absorb ordinary same-machine variance.
 #
 # BASELINE FORMAT
 #
-# STATUS<TAB>TIME<TAB>path, sorted by path, matching the check-legacy.sh baselines.
-# STATUS is OK or ERROR. A source file with no baseline row is a configuration
-# error, not an unmeasured file: that is what forces a newly added module to
-# state its cost. A baseline row whose file no longer exists is reported as a
-# warning, never a failure.
+# STATUS<TAB>TIME<TAB>path, sorted by path. STATUS is OK or ERROR. A source
+# file with no row is initialized after a green measurement rather than treated
+# as a regression: no host can compare a module it has never measured. A
+# --force measurement is diagnostic only and never initializes a row. A baseline
+# row whose file no longer exists is reported as a warning.
 
 set -u
 
@@ -105,9 +105,11 @@ GATE_CMDLINE="$0 $*"
 # One cleanup function, one EXIT trap, installed once: a second `trap ... EXIT`
 # would silently replace this one and leak RCFILE.
 RCFILE=""
+BASELINE_TMP=""
 cleanup() {
   gate_lock_release_all
   if [ -n "$RCFILE" ]; then rm -f "$RCFILE"; fi
+  if [ -n "$BASELINE_TMP" ]; then rm -f "$BASELINE_TMP"; fi
   return 0
 }
 trap cleanup EXIT
@@ -134,6 +136,7 @@ REBASE=0
 LIST_ONLY=0
 NO_BUILD=0
 FORCE=0
+BASELINE_GENESIS=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -157,12 +160,26 @@ if [ "$REBASE" -eq 1 ] && [ "$LIST_ONLY" -eq 1 ]; then
   echo "usage error: --rebase and --list are mutually exclusive" >&2
   exit 2
 fi
+if [ "$REBASE" -eq 1 ] && [ "$FORCE" -eq 1 ]; then
+  echo "usage error: --force may not be combined with --rebase; a contended run must never become the local reference" >&2
+  exit 2
+fi
 
 cd "$ROOT" || exit 2
 
 if [ ! -d "$SRC_DIR" ]; then
   echo "REGRESSION — elab: source tree not found: $ROOT/$SRC_DIR"
   exit 2
+fi
+
+if [ ! -f "$BASELINE" ] && [ "$LIST_ONLY" -eq 0 ] && [ "$REBASE" -eq 0 ]; then
+  if [ "$FORCE" -eq 1 ]; then
+    echo "SETUP — elab: no local baseline exists, and --force measurements cannot initialize one"
+    echo "REGRESSION — elab: local baseline genesis requires an uncontended run"
+    exit 2
+  fi
+  BASELINE_GENESIS=1
+  echo "NOTE — elab: no host-local baseline at ${BASELINE#$ROOT/}; this green run will initialize it"
 fi
 
 # --- contention guard -------------------------------------------------------
@@ -187,10 +204,6 @@ if [ "${LSP_MAX_MB:-0}" -gt "$LSP_RSS_MAX_MB" ] || [ "${LSP_SUM_MB:-0}" -gt "$LS
     echo "SETUP — elab: Close the editing session and re-run, or pass --force to measure anyway"
     echo "SETUP — elab: (a --force run may not be rebased)."
     echo "REGRESSION — elab: refusing to measure under language-server contention"
-    exit 2
-  fi
-  if [ "$REBASE" -eq 1 ]; then
-    echo "usage error: --force may not be combined with --rebase; a contended run must never become the committed reference" >&2
     exit 2
   fi
   echo "WARNING — elab: measuring under language-server contention (--force); times are indicative only"
@@ -237,7 +250,7 @@ fi
 
 # --- file discovery ---------------------------------------------------------
 # Discovered, never hardcoded: a new module is measured the moment it exists,
-# and then fails the gate until it has a baseline row.
+# and a green first measurement initializes its host-local row.
 FILES="$( { find "$SRC_DIR" -name '*.lean' -type f | sed 's|^\./||'
             for r in $ROOT_MODULES; do [ -f "$r" ] && echo "$r"; done
           } | sort )"
@@ -270,6 +283,21 @@ NERR="$(printf '%s' "$RESULTS" | awk -F'\t' '$1=="ERROR"' | grep -c .)"
 echo "---"
 echo "elab: $NFILES file(s), $TOTAL s total, report: ${REPORT#$ROOT/}"
 
+write_baseline() {
+  BASELINE_TMP="$(mktemp "$SCRIPT_DIR/.baseline-elab.XXXXXX")"
+  {
+    echo "# Host-local elaboration-time baseline for Jaune — scripts/check-elab.sh"
+    echo "#"
+    echo "# STATUS<TAB>TIME<TAB>path. TIME is seconds to re-elaborate that file against"
+    echo "# already-built dependencies, measured sequentially on this host. Gitignored;"
+    echo "# initialized automatically and refreshed with scripts/check-elab.sh --rebase."
+    echo "# A file fails above both ${DRIFT_FACTOR}x its time here and that time plus ${DRIFT_FLOOR}s."
+    printf '%s\n' "$1"
+  } > "$BASELINE_TMP"
+  mv "$BASELINE_TMP" "$BASELINE"
+  BASELINE_TMP=""
+}
+
 # --- list mode --------------------------------------------------------------
 if [ "$LIST_ONLY" -eq 1 ]; then
   # --list compares no times, but a file that does not elaborate at all is a
@@ -283,6 +311,18 @@ if [ "$LIST_ONLY" -eq 1 ]; then
   exit 0
 fi
 
+# --- local baseline genesis -------------------------------------------------
+if [ "$BASELINE_GENESIS" -eq 1 ]; then
+  if [ "$NERR" -gt 0 ]; then
+    printf '%s' "$RESULTS" | awk -F'\t' '$1=="ERROR" {print "ELAB — does not elaborate: " $3}'
+    echo "REGRESSION — elab: refusing to initialize the local baseline with $NERR file(s) failing to elaborate"
+    exit 1
+  fi
+  write_baseline "$RESULTS"
+  echo "OK — elab: host-local baseline initialized with $NFILES file(s), $TOTAL s total; no timing comparison on genesis"
+  exit 0
+fi
+
 # --- rebase -----------------------------------------------------------------
 if [ "$REBASE" -eq 1 ]; then
   if [ "$NERR" -gt 0 ]; then
@@ -290,23 +330,15 @@ if [ "$REBASE" -eq 1 ]; then
     echo "REGRESSION — elab: refusing to rebase with $NERR file(s) failing to elaborate"
     exit 1
   fi
-  {
-    echo "# Elaboration-time baseline for Jaune — scripts/check-elab.sh"
-    echo "#"
-    echo "# STATUS<TAB>TIME<TAB>path. TIME is seconds to re-elaborate that file against"
-    echo "# already-built dependencies, measured sequentially with no language server"
-    echo "# alive. A file fails the gate above both ${DRIFT_FACTOR}x its time here and that time"
-    echo "# plus ${DRIFT_FLOOR}s. Rewrite with: scripts/check-elab.sh --rebase"
-    printf '%s' "$RESULTS"
-  } > "$BASELINE"
-  echo "OK — elab: baseline rebased with $NFILES file(s), $TOTAL s total"
+  write_baseline "$RESULTS"
+  echo "OK — elab: host-local baseline rebased with $NFILES file(s), $TOTAL s total"
   exit 0
 fi
 
 # --- compare ----------------------------------------------------------------
 if [ ! -f "$BASELINE" ]; then
-  echo "SETUP — elab: no baseline at ${BASELINE#$ROOT/}; create one with scripts/check-elab.sh --rebase"
-  echo "REGRESSION — elab: baseline not found"
+  echo "SETUP — elab: host-local baseline disappeared during the run: ${BASELINE#$ROOT/}"
+  echo "REGRESSION — elab: local baseline not found"
   exit 2
 fi
 
@@ -314,6 +346,8 @@ BASE_ROWS="$(grep -vE '^[[:space:]]*(#|$)' "$BASELINE")"
 
 VIOLATIONS=""
 NOTES=""
+NEW_ROWS=""
+NNEW=0
 
 for f in $FILES; do
   CUR_ROW="$(printf '%s' "$RESULTS" | awk -F'\t' -v p="$f" '$3==p {print; exit}')"
@@ -328,7 +362,14 @@ for f in $FILES; do
 
   BASE_ROW="$(printf '%s' "$BASE_ROWS" | awk -F'\t' -v p="$f" '$3==p {print; exit}')"
   if [ -z "$BASE_ROW" ]; then
-    VIOLATIONS="${VIOLATIONS}ELAB — no baseline row (new module must state its cost): $f
+    if [ "$FORCE" -eq 1 ]; then
+      NOTES="${NOTES}UNREFERENCED — elab: $f: ${CUR_TIME}s (--force measurement not recorded as a local reference)
+"
+      continue
+    fi
+    NEW_ROWS="$NEW_ROWS $f"
+    NNEW=$((NNEW + 1))
+    NOTES="${NOTES}NEW — elab: $f: ${CUR_TIME}s (first measurement; pending a green local admission)
 "
     continue
   fi
@@ -374,5 +415,18 @@ if [ -n "$VIOLATIONS" ]; then
 fi
 
 BASE_TOTAL="$(printf '%s' "$BASE_ROWS" | awk -F'\t' 'NF{s+=$2} END {printf "%.1f", s}')"
+
+if [ "$NNEW" -gt 0 ]; then
+  MERGED_ROWS="$({
+    printf '%s\n' "$BASE_ROWS"
+    for f in $NEW_ROWS; do
+      printf '%s' "$RESULTS" | awk -F'\t' -v p="$f" 'BEGIN {OFS="\t"} $3==p {print $1, $2, $3; exit}'
+    done
+  } | sort -t "$(printf '\t')" -k3,3)"
+  write_baseline "$MERGED_ROWS"
+  BASE_TOTAL="$(printf '%s\n' "$MERGED_ROWS" | awk -F'\t' 'NF{s+=$2} END {printf "%.1f", s}')"
+  echo "NOTE — elab: initialized $NNEW new host-local baseline row(s)"
+fi
+
 echo "OK — elab: all $NFILES file(s) within ${DRIFT_FACTOR}x baseline; $TOTAL s total vs $BASE_TOTAL s baseline"
 exit 0
