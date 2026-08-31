@@ -9,3 +9,9 @@
 *.lock/
 __pycache__/
 *.pyc
+
+# Per-goal Git worktrees. Creme's execution guide requires a dedicated
+# worktree per goal; the convention is that a worktree for the repository at
+# PATH lives in PATH/.worktrees/<goal>, so it needs no assumption about the
+# layout above the repository and no write access outside it.
+/.worktrees/
