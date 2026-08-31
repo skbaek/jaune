@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Semantic-integrity gate for Jaune (CI lint tier).
 #
-# Owned by ~/plans/integrity.md. This is a STATIC gate: it reads source only,
-# runs no Lean toolchain, and is expected to finish well under five seconds.
-# Semantic negative regressions live in the fixture tiers and in Lean #guards,
-# not here.
+# Jaune owns this gate; scripts/GATES.md is its current usage and pass-criterion
+# authority. Its design and closure history are recorded in
+# `~/plans/integrity.md`. This is a STATIC gate: it reads source only, runs no
+# Lean toolchain, and is expected to finish well under five seconds. Semantic
+# negative regressions live in the fixture tiers and in Lean #guards, not here.
 #
 # The inventory is computed over the EXACT LOCAL MODULE IMPORT CLOSURE of
 # Jaune.lean, traversed transitively from `import Jaune.*` lines rather than
@@ -20,9 +21,10 @@
 # Four rules, all fail-closed:
 #
 #   R1  ABSENCE, no allowlist. No `partial def`, `implemented_by`, or
-#       `dbg_trace` anywhere under Jaune/ or in Main.lean. ~/plans/silence.md
-#       removed the last of each from the library and this gate keeps them out.
-#       There is deliberately no carve-out and no allowlist row for these.
+#       `dbg_trace` anywhere under Jaune/ or in Main.lean. The historical
+#       `~/plans/silence.md` record documents removal of the last of each from
+#       the library, and this gate keeps them out. There is deliberately no
+#       carve-out and no allowlist row for these.
 #
 #   R2  No `panic` / `panic!` in the closure, except exact allowlist rows.
 #

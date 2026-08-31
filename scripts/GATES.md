@@ -444,9 +444,9 @@ The heavy-gate lock is host-global — it lives at `~/.codex/locks/gate-heavy.lo
 and is shared across both this repository and Blanc, and across every checkout
 or worktree of either, because they all contend for the same cores: one host,
 one heavy gate. Before running a timing-authoritative gate, a session must
-already hold the cross-session hard semaphore (`codex-host-semaphore
-hard-acquire`; see `~/elanc/AGENTS.md` and `~/plans/guide/lead.md` for the
-protocol) — the gate lock is the last line of defense, not the coordination
+already hold the cross-session hard semaphore through
+`python3 -m creme semaphore`; see `~/creme/docs/guides/execution.md` for the
+protocol. The gate lock is the last line of defense, not the coordination
 mechanism. The lock mechanism is `scripts/gate-lock.sh` (`mkdir`, `kill -0`,
 one `EXIT` trap — macOS has no `flock`), which also documents the 2026-07-31
 incident that motivated it.

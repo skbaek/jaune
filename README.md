@@ -51,6 +51,15 @@ Expect a few hundred MB under `.lake/` rather than several GB, and a
 correspondingly shorter first build. A bare `lake exe cache get` still works
 and is the right choice if you intend to import more of mathlib yourself.
 
+## Optional enhanced agent workflow
+
+Jaune is standalone: the installation above is complete, and Creme is not a
+build dependency. For the optional shared Jaune/Blanc agent workflow, clone the
+public Creme repository alongside Jaune (and Blanc when needed), launch the
+agent client with Creme as its project directory, and follow
+`../creme/docs/guides/execution.md` for host setup and coordination. Jaune's
+repository-specific commands and pass criteria remain in `scripts/GATES.md`.
+
 ## Usage
 
 `lake exe jaune /path/to/fixture.json`
