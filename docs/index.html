@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Jaune — a Yellow Paper you can run</title>
-<meta name="description" content="Jaune is an executable formal specification of the Ethereum Virtual Machine in Lean 4 — a spiritual successor to the Yellow Paper that runs the full mainnet fixture corpus (5,100/5,100 files, Prague through BPO2) and supports machine-checked proof, demonstrated by four contracts in the sibling Blanc language — most recently a port of Lido's deployed CircuitBreaker, its Registry integrity proved from an official-parameters deployment to every state reachable along a valid configured chain.">
+<meta name="description" content="Jaune is an executable formal specification of the Ethereum Virtual Machine in Lean 4 — a spiritual successor to the Yellow Paper that passes every supported file of the pinned mainnet fixture corpus (5,100/5,100, Prague through BPO2) and supports machine-checked proof, demonstrated by four contracts in the sibling Blanc language — most recently a port of Lido's deployed CircuitBreaker, its Registry integrity proved from an official-parameters deployment to every state reachable along a valid configured chain.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='9' fill='%23f6e5a8'/%3E%3Ctext x='32' y='47' font-family='Georgia,serif' font-size='44' text-anchor='middle' fill='%231b4b2b'%3EJ%3C/text%3E%3C/svg%3E">
 <style>
 /* ────────────────────────────────────────────────────────────────
@@ -385,7 +385,7 @@ footer a:hover{color:var(--ink)}
           replacement is a program you can only run. <strong style="color:var(--ink)">Jaune</strong> is both
           at once: twenty-five thousand lines of Lean&nbsp;4 that state the execution layer precisely
           enough to prove theorems about — and compile into an interpreter that passes the
-          mainnet fixture corpus, fork by fork, case by case, and speaks the ecosystem’s standard
+          pinned mainnet fixture corpus, fork by fork, case by case, and speaks the ecosystem’s standard
           <span class="mono">t8n</span> transition-tool interface.
         </p>
         <div class="ctarow">
@@ -417,9 +417,10 @@ footer a:hover{color:var(--ink)}
       Lean&nbsp;4 artifact that is simultaneously a specification, an interpreter, and a proof subject.
       It mirrors <span class="mono">execution-specs</span> at a pinned commit and implements Prague,
       Osaka, BPO1, and BPO2 as first-class rule sets selected from block context, passing
-      5,100 of 5,100 files (34,005 cases) of the current mainnet corpus. All eighteen
+      5,100 of 5,100 supported files (34,005 cases) of the current mainnet corpus. All eighteen
       precompiles — <span class="mono">ecrecover</span> to BLS12-381 to
-      P256VERIFY — are pure Lean, with no FFI and no assumed cryptography. The interpreter is total:
+      P256VERIFY — are pure Lean, with no FFI and nothing axiomatized; SHA-256 moreover carries a
+      machine-checked equivalence to a transcription of its FIPS 180-4 standard. The interpreter is total:
       the fuel that drives it is proven sufficient from the frame’s own gas, with the tight bound, at the
       definition site. Its semantic errors are typed rather than stringly, its checked entry points bind
       an executable snapshot to canonical validated state, and a shrink-only CI budget holds the library
@@ -428,7 +429,7 @@ footer a:hover{color:var(--ink)}
       deviation explicit. The semantics is demonstrated strong enough for real verification: the
       sibling Blanc language has carried four contracts’ invariants through it — a WETH’s solvency
       across scheduled fork activations, and most recently Registry integrity for a port of Lido’s
-      deployed CircuitBreaker, proved from an official-parameters deployment through the real
+      deployed CircuitBreaker, proved from an official-parameters deployment through the full
       Prague block pipeline to every reachable state of a valid configured chain — through a
       machine-checked compiler, with an axiom audit in CI. MIT-licensed.</p>
     </div>
@@ -561,7 +562,7 @@ footer a:hover{color:var(--ink)}
             <span class="mono">panic</span>, raw bang operation, and stringly-typed semantic carrier
             in <span class="mono">Jaune.lean</span>’s import closure — computed transitively from the
             module graph, never hardcoded — and demands an exact allowlist row for each. A new
-            occurrence fails the build. Known defects carry an owning step and count against a declared
+            occurrence fails the gate. Known defects carry an owning step and count against a declared
             budget that may only decrease, so a step cannot discharge one and quietly introduce another.
             The library-wide <span class="mono">panic</span> count is <strong>0</strong>; the pending
             budget is <strong>0</strong>.
@@ -730,7 +731,7 @@ footer a:hover{color:var(--ink)}
       <span class="mono">taylor_exponential</span> cases. The third checks the elliptic-curve layer
       on <strong>573</strong> pinned, differential, and algebraic-identity cases, with no skip and
       no unknown outcome. Alongside them,
-      <strong>51</strong> precompile vector files — <strong>1,824</strong> cases, including
+      <strong>53</strong> precompile vector files — <strong>1,990</strong> cases, including
       <strong>782</strong> for P256VERIFY — run under a strict manifest that fails on a missing
       <em>or</em> unexpected file, <em>and</em> on a file that runs fewer cases than it declares.
       A vector file that quietly lost half its cases would otherwise pass while testing half as much.
@@ -1023,7 +1024,7 @@ footer a:hover{color:var(--ink)}
         <div class="panel">
           <span class="tick">the audit, in CI, every commit</span>
           <p class="dim" style="font-size:.94rem">
-            Blanc’s CI audits <strong>607</strong> named theorems — 198 of them the
+            Blanc’s CI audits <strong>988</strong> named theorems — 288 of them the
             CircuitBreaker family’s, the history rungs among them — each against its own
             pinned expected axiom set, failing on an extra <em>or missing</em> axiom and on anything
             beyond <span class="mono">propext</span>, <span class="mono">Classical.choice</span>,
@@ -1123,9 +1124,9 @@ footer a:hover{color:var(--ink)}
         <span class="tick">hygiene</span>
         <h3>The trusted path is checked mechanically</h3>
         <p class="dim">A no-toolchain CI job fails the build on any <span class="mono">sorry</span> or stray
-          <span class="mono">dbg_trace</span> outside a justified allowlist; a second job holds panics,
-          raw bang operations, and stringly-typed semantic carriers to a shrink-only budget over the
-          import closure; Blanc’s job audits 607 theorems against exact pinned axiom sets. Per push,
+          <span class="mono">dbg_trace</span> outside a justified allowlist; the integrity gate — run
+          locally, like the corpus suites — holds panics, raw bang operations, and stringly-typed
+          semantic carriers to a shrink-only budget over the import closure; Blanc’s job audits 988 theorems against exact pinned axiom sets. Per push,
           two conformance gates that need nothing but the binary run beside them —
           <span class="mono">t8n</span> against its pinned goldens, and the word and hash
           primitives — in about a second. The gates extend to the tooling itself: an
@@ -1314,7 +1315,7 @@ footer a:hover{color:var(--ink)}
 <span class="p">$</span> cd blanc &amp;&amp; lake exe cache get &amp;&amp; lake build
 <span class="p">$</span> scripts/check.sh</div>
         <p class="dim" style="font-size:.88rem;margin:14px 0 0">
-          <span class="mono">check.sh</span> builds the library and runs the axiom audit — 607
+          <span class="mono">check.sh</span> builds the library and runs the axiom audit — 988
           audited theorems, the history rungs of §&nbsp;6 among them, each checked against its own
           pinned expected axiom set; it exits non-zero on an extra or missing axiom, on
           <span class="mono">sorryAx</span>, <span class="mono">ofReduceBool</span>, or
