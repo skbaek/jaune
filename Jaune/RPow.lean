@@ -14,7 +14,8 @@ open Jaune _root_.Nat
 `(z * x + c) / s`.  `rpow s c x n` is the reference-shaped binary loop: its
 accumulator is initialized from the low bit of `n`, then every iteration
 squares the base before conditionally multiplying the accumulator.  That order
-is observable under rounding and is therefore part of the definition.
+is observable under rounding and is therefore part of the definition.  As in
+the reference, a zero base returns before the loop (`0^0` returns the scale).
 
 The arithmetic surface stays at `Nat` altitude.  The final section supplies
 guarded `B256` bridges; no word theorem hides multiplication or addition wrap.
@@ -49,7 +50,7 @@ theorem mulr_scaled_lt_add_scale {s : Nat} (hs : s ≠ 0) (c z x : Nat) :
   simpa [mulr, Nat.mul_add, Nat.mul_comm] using h
 
 /-- The general lower half of the per-step error band. -/
-theorem mulr_scaled_lower {s c : Nat} (hs : s ≠ 0) (hc : c < s) (z x : Nat) :
+theorem mulr_scaled_lower {s c : Nat} (hs : s ≠ 0) (z x : Nat) :
     z * x ≤ s * mulr s c z x + (s - 1 - c) := by
   have h := mulr_scaled_lt_add_scale hs c z x
   rw [Nat.mul_add, Nat.mul_one] at h
@@ -84,8 +85,7 @@ theorem mulr_half_up_upper (s z x : Nat) :
 /-- The half-up step can undershoot by at most `ceilDiv s 2 - 1`. -/
 theorem mulr_half_up_lower {s : Nat} (hs : s ≠ 0) (z x : Nat) :
     z * x ≤ s * mulr s (s / 2) z x + (ceilDiv s 2 - 1) := by
-  have hc : s / 2 < s := by omega
-  have h := mulr_scaled_lower hs hc z x
+  have h := mulr_scaled_lower (c := s / 2) hs z x
   rw [ceilDiv_eq_add_sub_one_div (by decide : (2 : Nat) ≠ 0)]
   omega
 
@@ -144,7 +144,7 @@ theorem mulrChain_scaled_upper (s c z : Nat) (xs : List Nat) :
   have h := mulrChain_telescope s c z xs
   omega
 
-theorem mulrChain_scaled_lower {s c : Nat} (hs : s ≠ 0) (hc : c < s)
+theorem mulrChain_scaled_lower {s c : Nat} (hs : s ≠ 0)
     (z : Nat) (xs : List Nat) :
     z * xs.prod ≤ s ^ xs.length * mulrChain s c z xs +
       (s - 1 - c) * mulrChainOffset s xs := by
@@ -155,7 +155,7 @@ theorem mulrChain_scaled_lower {s c : Nat} (hs : s ≠ 0) (hc : c < s)
       calc
         z * (x * xs.prod) = (z * x) * xs.prod := (Nat.mul_assoc _ _ _).symm
         _ ≤ (s * mulr s c z x + (s - 1 - c)) * xs.prod :=
-          Nat.mul_le_mul_right xs.prod (mulr_scaled_lower hs hc z x)
+          Nat.mul_le_mul_right xs.prod (mulr_scaled_lower hs z x)
         _ = s * (mulr s c z x * xs.prod) + (s - 1 - c) * xs.prod := by
           simp only [Nat.add_mul, Nat.mul_assoc]
         _ ≤ s * (s ^ xs.length * mulrChain s c (mulr s c z x) xs +
@@ -179,8 +179,7 @@ theorem mulrChain_half_up_upper (s z : Nat) (xs : List Nat) :
 theorem mulrChain_half_up_lower {s : Nat} (hs : s ≠ 0) (z : Nat) (xs : List Nat) :
     z * xs.prod ≤ s ^ xs.length * mulrChain s (s / 2) z xs +
       (ceilDiv s 2 - 1) * mulrChainOffset s xs := by
-  have hc : s / 2 < s := by omega
-  have h := mulrChain_scaled_lower hs hc z xs
+  have h := mulrChain_scaled_lower (c := s / 2) hs z xs
   have hcoeff : s - 1 - s / 2 = ceilDiv s 2 - 1 := by
     rw [ceilDiv_eq_add_sub_one_div (by decide : (2 : Nat) ≠ 0)]
     omega
@@ -198,9 +197,11 @@ def rpowLoop (s c z x n : Nat) : Nat :=
 termination_by n
 decreasing_by omega
 
-/-- Scaled exponentiation in the reference's operation order. -/
+/-- Scaled exponentiation in the reference's branch and operation order. -/
 def rpow (s c x n : Nat) : Nat :=
-  if n = 0 then s
+  if x = 0 then
+    if n = 0 then s else 0
+  else if n = 0 then s
   else rpowLoop s c (if n % 2 = 1 then x else s) x (n / 2)
 
 /-- An annotated multiplication expression.  Offsets live on nodes so an
@@ -244,18 +245,18 @@ theorem rpowTreeLoop_eval (s c x initial : Nat) (zt xt : RoundTree) (n : Nat) :
         · apply ih (n / 2) (by omega)
         · apply ih (n / 2) (by omega)
 
-theorem rpowTree_eval_with_initial (s c x initial n : Nat) :
+theorem rpowTree_eval_with_initial (s c x initial n : Nat) (hx : x ≠ 0) :
     (rpowTree c n).eval s x initial = rpow s c x n := by
-  rw [rpowTree, rpow]
+  rw [rpowTree, rpow, if_neg hx]
   split
   · rfl
   · simpa only [RoundTree.eval, apply_ite] using
       rpowTreeLoop_eval s c x initial
         (if n % 2 = 1 then .base else .scale) .base (n / 2)
 
-theorem rpowTree_eval (s c x n : Nat) :
+theorem rpowTree_eval (s c x n : Nat) (hx : x ≠ 0) :
     (rpowTree c n).eval s x 0 = rpow s c x n :=
-  rpowTree_eval_with_initial s c x 0 n
+  rpowTree_eval_with_initial s c x 0 n hx
 
 /-! ### The exact expanded-tree interval -/
 
@@ -350,8 +351,7 @@ theorem RoundTree.scaled_mul_children (s x initial : Nat) (l r : RoundTree) :
 /-- The computed tree is below its ideal leaf product by no more than the
 recursively composed upper certificate. -/
 theorem RoundTree.scaled_le_ideal_add_upper {s x initial : Nat} (t : RoundTree)
-    (hvalid : t.Valid s) :
-    t.scaled s x initial ≤ t.ideal s x initial + t.upperError s x initial := by
+    : t.scaled s x initial ≤ t.ideal s x initial + t.upperError s x initial := by
   induction t with
   | scale => simp [RoundTree.scaled, RoundTree.nodes, RoundTree.eval,
       RoundTree.upperError]
@@ -360,9 +360,8 @@ theorem RoundTree.scaled_le_ideal_add_upper {s x initial : Nat} (t : RoundTree)
   | initial => simp [RoundTree.scaled, RoundTree.nodes, RoundTree.eval,
       RoundTree.upperError]
   | mul c l r ihl ihr =>
-      rcases hvalid with ⟨hc, hl, hr⟩
-      have hleft := ihl hl
-      have hright := ihr hr
+      have hleft := ihl
+      have hright := ihr
       have hproduct := Nat.mul_le_mul hleft hright
       have hlocal := mulr_scaled_le s c (l.eval s x initial) (r.eval s x initial)
       calc
@@ -390,7 +389,7 @@ theorem RoundTree.scaled_le_ideal_add_upper {s x initial : Nat} (t : RoundTree)
 /-- The ideal leaf product is below the computed tree by no more than the
 recursively composed lower certificate. -/
 theorem RoundTree.ideal_le_scaled_add_lower {s x initial : Nat} (t : RoundTree)
-    (hs : s ≠ 0) (hvalid : t.Valid s) :
+    (hs : s ≠ 0) :
     t.ideal s x initial ≤ t.scaled s x initial + t.lowerError s x initial := by
   induction t with
   | scale => simp [RoundTree.scaled, RoundTree.nodes, RoundTree.eval,
@@ -400,11 +399,10 @@ theorem RoundTree.ideal_le_scaled_add_lower {s x initial : Nat} (t : RoundTree)
   | initial => simp [RoundTree.scaled, RoundTree.nodes, RoundTree.eval,
       RoundTree.lowerError]
   | mul c l r ihl ihr =>
-      rcases hvalid with ⟨hc, hl, hr⟩
-      have hleft := ihl hl
-      have hright := ihr hr
+      have hleft := ihl
+      have hright := ihr
       have hproduct := Nat.mul_le_mul hleft hright
-      have hlocal := mulr_scaled_lower hs hc
+      have hlocal := mulr_scaled_lower (c := c) hs
         (l.eval s x initial) (r.eval s x initial)
       have hlocal' :
           l.scaled s x initial * r.scaled s x initial ≤
@@ -628,36 +626,73 @@ theorem rpowTree_ideal (s c x n : Nat) :
   rw [RoundTree.ideal, rpowTree_baseCount, rpowTree_initialCount]
   simp
 
+theorem RoundTree.eval_zero_of_baseCount_pos {s initial : Nat} (t : RoundTree)
+    (hvalid : t.Valid s) (hbase : 0 < t.baseCount) : t.eval s 0 initial = 0 := by
+  induction t with
+  | scale => simp [RoundTree.baseCount] at hbase
+  | base => rfl
+  | initial => simp [RoundTree.baseCount] at hbase
+  | mul c l r ihl ihr =>
+      rcases hvalid with ⟨hc, hl, hr⟩
+      simp only [RoundTree.baseCount] at hbase
+      rcases Nat.eq_zero_or_pos l.baseCount with hzero | hpos
+      · have hrpos : 0 < r.baseCount := by omega
+        rw [RoundTree.eval, ihr hr hrpos, mulr, Nat.mul_zero, Nat.zero_add,
+          Nat.div_eq_of_lt hc]
+      · rw [RoundTree.eval, ihl hl hpos, mulr, Nat.zero_mul, Nat.zero_add,
+          Nat.div_eq_of_lt hc]
+
+theorem rpowTree_eval_of_valid_offset {s c x initial n : Nat} (hc : c < s) :
+    (rpowTree c n).eval s x initial = rpow s c x n := by
+  by_cases hx : x = 0
+  · subst x
+    cases n with
+    | zero => simp [rpowTree, rpow, RoundTree.eval]
+    | succ n =>
+        rw [rpow, if_pos rfl, if_neg (Nat.succ_ne_zero _)]
+        apply (rpowTree c (n + 1)).eval_zero_of_baseCount_pos (rpowTree_valid hc)
+        rw [rpowTree_baseCount]
+        omega
+  · exact rpowTree_eval_with_initial s c x initial n hx
+
 /-- Exact square-and-multiply invariant: the left is the implemented loop,
 scaled once per expanded algebraic node; the right is the true power with the
 parity-initialization scale leaves, and both sides carry every local residue or
 offset contribution explicitly. -/
-theorem rpow_exact_telescope (s c x n : Nat) :
+theorem rpow_exact_telescope {s c : Nat} (hc : c < s) (x n : Nat) :
     s ^ (rpowTree c n).nodes * rpow s c x n +
         (rpowTree c n).exactUnder s x 0 =
       x ^ n * s ^ (rpowTree c n).scaleCount +
         (rpowTree c n).exactOver s x 0 := by
   have h := (rpowTree c n).exact_telescope s x 0
-  rw [RoundTree.scaled, rpowTree_eval, rpowTree_ideal] at h
+  rw [RoundTree.scaled, rpowTree_eval_of_valid_offset hc, rpowTree_ideal] at h
   exact h
 
-theorem rpow_scaled_upper {s c : Nat} (hc : c < s) (x n : Nat) :
+theorem rpow_scaled_upper (s c x n : Nat) :
     s ^ (rpowTree c n).nodes * rpow s c x n ≤
       x ^ n * s ^ (rpowTree c n).scaleCount +
         (rpowTree c n).upperError s x 0 := by
-  have h := RoundTree.scaled_le_ideal_add_upper (s := s) (x := x) (initial := 0)
-    (rpowTree c n) (rpowTree_valid hc)
-  rw [RoundTree.scaled, rpowTree_eval, rpowTree_ideal] at h
-  exact h
+  by_cases hx : x = 0
+  · subst x
+    cases n <;> simp [rpow, rpowTree, RoundTree.nodes, RoundTree.scaleCount,
+      RoundTree.upperError]
+  · have h := RoundTree.scaled_le_ideal_add_upper
+      (s := s) (x := x) (initial := 0) (rpowTree c n)
+    rw [RoundTree.scaled, rpowTree_eval _ _ _ _ hx, rpowTree_ideal] at h
+    exact h
 
-theorem rpow_scaled_lower {s c : Nat} (hs : s ≠ 0) (hc : c < s) (x n : Nat) :
+theorem rpow_scaled_lower {s : Nat} (hs : s ≠ 0) (c x n : Nat) :
     x ^ n * s ^ (rpowTree c n).scaleCount ≤
       s ^ (rpowTree c n).nodes * rpow s c x n +
         (rpowTree c n).lowerError s x 0 := by
-  have h := RoundTree.ideal_le_scaled_add_lower (s := s) (x := x) (initial := 0)
-    (rpowTree c n) hs (rpowTree_valid hc)
-  rw [RoundTree.scaled, rpowTree_eval, rpowTree_ideal] at h
-  exact h
+  by_cases hx : x = 0
+  · subst x
+    cases n <;> simp [rpow, rpowTree, RoundTree.nodes, RoundTree.scaleCount,
+      RoundTree.lowerError]
+  · have h := RoundTree.ideal_le_scaled_add_lower
+      (s := s) (x := x) (initial := 0) (rpowTree c n) hs
+    rw [RoundTree.scaled, rpowTree_eval _ _ _ _ hx, rpowTree_ideal] at h
+    exact h
 
 /-- Number of remaining binary digits. -/
 def binaryDepth (n : Nat) : Nat :=
@@ -679,7 +714,8 @@ def rpowLoopOps (n : Nat) : Nat :=
 termination_by n
 decreasing_by omega
 
-def rpowOps (n : Nat) : Nat := if n = 0 then 0 else rpowLoopOps (n / 2)
+def rpowOps (x n : Nat) : Nat :=
+  if x = 0 then 0 else if n = 0 then 0 else rpowLoopOps (n / 2)
 
 theorem rpowLoopOps_eq_depth_add_weight (n : Nat) :
     rpowLoopOps n = binaryDepth n + binaryWeight n := by
@@ -691,12 +727,82 @@ theorem rpowLoopOps_eq_depth_add_weight (n : Nat) :
       · rw [ih (n / 2) (by omega)]
         omega
 
-theorem rpowOps_eq_depth_add_weight (n : Nat) :
-    rpowOps n = if n = 0 then 0 else binaryDepth (n / 2) + binaryWeight (n / 2) := by
+theorem rpowOps_eq_depth_add_weight (x n : Nat) :
+    rpowOps x n = if x = 0 then 0
+      else if n = 0 then 0 else binaryDepth (n / 2) + binaryWeight (n / 2) := by
   rw [rpowOps]
   split
   · rfl
-  · exact rpowLoopOps_eq_depth_add_weight (n / 2)
+  · split
+    · rfl
+    · exact rpowLoopOps_eq_depth_add_weight (n / 2)
+
+/-- Rounded factors consumed by the accumulator during the binary loop.
+Squarings update the next factor; set bits append that factor to the B2 chain. -/
+def rpowLoopFactors (s c x n : Nat) : List Nat :=
+  if h : n = 0 then []
+  else
+    let xx := mulr s c x x
+    let tail := rpowLoopFactors s c xx (n / 2)
+    if n % 2 = 1 then xx :: tail else tail
+termination_by n
+decreasing_by omega
+
+theorem rpowLoop_eq_mulrChain (s c z x n : Nat) :
+    rpowLoop s c z x n = mulrChain s c z (rpowLoopFactors s c x n) := by
+  induction n using Nat.strong_induction_on generalizing z x with
+  | h n ih =>
+      rw [rpowLoop, rpowLoopFactors]
+      split
+      · rfl
+      · by_cases hbit : n % 2 = 1
+        · simp only [hbit, if_pos, mulrChain]
+          exact ih (n / 2) (by omega)
+            (mulr s c z (mulr s c x x)) (mulr s c x x)
+        · simp only [hbit, if_false]
+          exact ih (n / 2) (by omega) z (mulr s c x x)
+
+theorem rpowLoopFactors_length (s c x n : Nat) :
+    (rpowLoopFactors s c x n).length = binaryWeight n := by
+  induction n using Nat.strong_induction_on generalizing x with
+  | h n ih =>
+      rw [rpowLoopFactors, binaryWeight]
+      split
+      · rfl
+      · by_cases hbit : n % 2 = 1
+        · simp only [hbit, if_pos, List.length_cons]
+          rw [ih (n / 2) (by omega)]
+        · simp only [hbit, if_false]
+          simpa using ih (n / 2) (by omega) (mulr s c x x)
+
+/-- B2's exact additive telescope instantiated on the binary loop's dynamic
+factor chain.  Its scale exponent is exactly the population count. -/
+theorem rpowLoop_factor_telescope (s c z x n : Nat) :
+    s ^ binaryWeight n * rpowLoop s c z x n +
+        mulrChainResidue s c z (rpowLoopFactors s c x n) =
+      z * (rpowLoopFactors s c x n).prod +
+        c * mulrChainOffset s (rpowLoopFactors s c x n) := by
+  rw [rpowLoop_eq_mulrChain, ← rpowLoopFactors_length s c x n]
+  exact mulrChain_telescope s c z (rpowLoopFactors s c x n)
+
+theorem rpowLoop_factor_scaled_upper (s c z x n : Nat) :
+    s ^ binaryWeight n * rpowLoop s c z x n ≤
+      z * (rpowLoopFactors s c x n).prod +
+        c * mulrChainOffset s (rpowLoopFactors s c x n) := by
+  rw [rpowLoop_eq_mulrChain, ← rpowLoopFactors_length s c x n]
+  exact mulrChain_scaled_upper s c z (rpowLoopFactors s c x n)
+
+theorem rpowLoop_factor_scaled_lower {s : Nat} (hs : s ≠ 0)
+    (c z x n : Nat) :
+    z * (rpowLoopFactors s c x n).prod ≤
+      s ^ binaryWeight n * rpowLoop s c z x n +
+        (s - 1 - c) * mulrChainOffset s (rpowLoopFactors s c x n) := by
+  rw [rpowLoop_eq_mulrChain, ← rpowLoopFactors_length s c x n]
+  exact mulrChain_scaled_lower hs z (rpowLoopFactors s c x n)
+
+theorem rpowLoopOps_eq_depth_add_factor_count (s c x n : Nat) :
+    rpowLoopOps n = binaryDepth n + (rpowLoopFactors s c x n).length := by
+  rw [rpowLoopOps_eq_depth_add_weight, rpowLoopFactors_length]
 
 /-! ### Degenerate cases and monotonicity -/
 
@@ -718,7 +824,8 @@ theorem RoundTree.scale_le_eval_of_no_initial {s x initial : Nat} (t : RoundTree
 
 theorem rpow_base_preserved {s x : Nat} (hs : s ≠ 0) (hx : s ≤ x) (c n : Nat) :
     s ≤ rpow s c x n := by
-  rw [← rpowTree_eval]
+  have hx0 : x ≠ 0 := by omega
+  rw [← rpowTree_eval s c x n hx0]
   exact (rpowTree c n).scale_le_eval_of_no_initial hs hx (rpowTree_initialCount c n)
 
 theorem RoundTree.eval_mono_base {s x x' initial : Nat} (h : x ≤ x') (t : RoundTree) :
@@ -733,36 +840,21 @@ theorem RoundTree.eval_mono_base {s x x' initial : Nat} (h : x ≤ x') (t : Roun
 
 theorem rpow_le_rpow_base {x x' : Nat} (h : x ≤ x') (s c n : Nat) :
     rpow s c x n ≤ rpow s c x' n := by
-  rw [← rpowTree_eval, ← rpowTree_eval]
-  exact (rpowTree c n).eval_mono_base h
+  by_cases hx : x = 0
+  · subst x
+    cases n <;> simp [rpow]
+  · have hx' : x' ≠ 0 := by omega
+    rw [← rpowTree_eval s c x n hx, ← rpowTree_eval s c x' n hx']
+    exact (rpowTree c n).eval_mono_base h
 
 theorem rpow_exponent_zero (s c x : Nat) : rpow s c x 0 = s := by
-  rw [rpow, if_pos rfl]
+  simp [rpow]
 
 theorem rpow_zero_zero (s c : Nat) : rpow s c 0 0 = s := rpow_exponent_zero _ _ _
 
-theorem RoundTree.eval_zero_of_baseCount_pos {s initial : Nat} (t : RoundTree)
-    (hvalid : t.Valid s) (hbase : 0 < t.baseCount) : t.eval s 0 initial = 0 := by
-  induction t with
-  | scale => simp [RoundTree.baseCount] at hbase
-  | base => rfl
-  | initial => simp [RoundTree.baseCount] at hbase
-  | mul c l r ihl ihr =>
-      rcases hvalid with ⟨hc, hl, hr⟩
-      simp only [RoundTree.baseCount] at hbase
-      rcases Nat.eq_zero_or_pos l.baseCount with hzero | hpos
-      · have hrpos : 0 < r.baseCount := by omega
-        rw [RoundTree.eval, ihr hr hrpos, mulr, Nat.mul_zero, Nat.zero_add,
-          Nat.div_eq_of_lt hc]
-      · rw [RoundTree.eval, ihl hl hpos, mulr, Nat.zero_mul, Nat.zero_add,
-          Nat.div_eq_of_lt hc]
-
-theorem rpow_zero_succ {s c : Nat} (hc : c < s) (n : Nat) :
+theorem rpow_zero_succ (s c n : Nat) :
     rpow s c 0 (n + 1) = 0 := by
-  rw [← rpowTree_eval]
-  apply (rpowTree c (n + 1)).eval_zero_of_baseCount_pos (rpowTree_valid hc)
-  rw [rpowTree_baseCount]
-  omega
+  simp [rpow]
 
 /-! ## B4 — segment composition and schedule drift -/
 
@@ -783,18 +875,34 @@ def segmentTreeFrom (c : Nat) : RoundTree → List Nat → RoundTree
 def segmentTree (c : Nat) (parts : List Nat) : RoundTree :=
   segmentTreeFrom c .initial parts
 
-theorem segmentTreeFrom_eval (s c x initial : Nat) (t : RoundTree) (parts : List Nat) :
+theorem segmentTreeFrom_eval (s c x initial : Nat) (t : RoundTree) (parts : List Nat)
+    (hx : x ≠ 0) :
     (segmentTreeFrom c t parts).eval s x initial =
       segmentIndexFrom s c x (t.eval s x initial) parts := by
   induction parts generalizing t with
   | nil => rfl
   | cons n ns ih =>
       rw [segmentTreeFrom, segmentIndexFrom, ih, RoundTree.eval,
-        rpowTree_eval_with_initial]
+        rpowTree_eval_with_initial _ _ _ _ _ hx]
 
-theorem segmentTree_eval (s c x chi : Nat) (parts : List Nat) :
+theorem segmentTree_eval (s c x chi : Nat) (parts : List Nat) (hx : x ≠ 0) :
     (segmentTree c parts).eval s x chi = segmentIndex s c x chi parts := by
-  exact segmentTreeFrom_eval s c x chi .initial parts
+  exact segmentTreeFrom_eval s c x chi .initial parts hx
+
+theorem segmentTreeFrom_eval_of_valid_offset {s c : Nat} (hc : c < s)
+    (x initial : Nat) (t : RoundTree) (parts : List Nat) :
+    (segmentTreeFrom c t parts).eval s x initial =
+      segmentIndexFrom s c x (t.eval s x initial) parts := by
+  induction parts generalizing t with
+  | nil => rfl
+  | cons n ns ih =>
+      rw [segmentTreeFrom, segmentIndexFrom, ih, RoundTree.eval,
+        rpowTree_eval_of_valid_offset hc]
+
+theorem segmentTree_eval_of_valid_offset {s c : Nat} (hc : c < s)
+    (x chi : Nat) (parts : List Nat) :
+    (segmentTree c parts).eval s x chi = segmentIndex s c x chi parts := by
+  exact segmentTreeFrom_eval_of_valid_offset hc x chi .initial parts
 
 theorem segmentTreeFrom_baseCount (c : Nat) (t : RoundTree) (parts : List Nat) :
     (segmentTreeFrom c t parts).baseCount = t.baseCount + parts.sum := by
@@ -859,7 +967,7 @@ theorem segmentTree_valid {s c : Nat} (hs : s ≠ 0) (hc : c < s) (parts : List 
   segmentTreeFrom_valid hs hc (by trivial) parts
 
 /-- Lift a path's upper tree band to any common scale-leaf count `k`. -/
-theorem segment_scaled_upper_lifted {s c : Nat} (hs : s ≠ 0) (hc : c < s)
+theorem segment_scaled_upper_lifted {s c : Nat} (hc : c < s)
     (x chi : Nat) (parts : List Nat) {k : Nat}
     (hk : (segmentTree c parts).scaleCount ≤ k) :
     s ^ (parts.sum + k) * segmentIndex s c x chi parts ≤
@@ -867,7 +975,7 @@ theorem segment_scaled_upper_lifted {s c : Nat} (hs : s ≠ 0) (hc : c < s)
         (segmentTree c parts).upperError s x chi *
           s ^ (k - (segmentTree c parts).scaleCount) := by
   have hraw := RoundTree.scaled_le_ideal_add_upper (s := s) (x := x) (initial := chi)
-    (segmentTree c parts) (segmentTree_valid hs hc parts)
+    (segmentTree c parts)
   have hk' : (segmentTree c parts).scaleCount +
       (k - (segmentTree c parts).scaleCount) = k := Nat.add_sub_of_le hk
   have hpow : s ^ k = s ^ (segmentTree c parts).scaleCount *
@@ -876,7 +984,7 @@ theorem segment_scaled_upper_lifted {s c : Nat} (hs : s ≠ 0) (hc : c < s)
       s ^ k = s ^ ((segmentTree c parts).scaleCount +
           (k - (segmentTree c parts).scaleCount)) := by rw [hk']
       _ = _ := pow_add _ _ _
-  rw [RoundTree.scaled, segmentTree_eval, segmentTree_ideal] at hraw
+  rw [RoundTree.scaled, segmentTree_eval_of_valid_offset hc, segmentTree_ideal] at hraw
   calc
     s ^ (parts.sum + k) * segmentIndex s c x chi parts =
         s ^ (k - (segmentTree c parts).scaleCount) *
@@ -895,15 +1003,16 @@ theorem segment_scaled_upper_lifted {s c : Nat} (hs : s ≠ 0) (hc : c < s)
       ac_rfl
 
 /-- Lift a path's lower tree band to any common scale-leaf count `k`. -/
-theorem segment_scaled_lower_lifted {s c : Nat} (hs : s ≠ 0) (hc : c < s)
+theorem segment_scaled_lower_lifted {s c : Nat} (hc : c < s)
     (x chi : Nat) (parts : List Nat) {k : Nat}
     (hk : (segmentTree c parts).scaleCount ≤ k) :
     chi * x ^ parts.sum * s ^ k ≤
       s ^ (parts.sum + k) * segmentIndex s c x chi parts +
         (segmentTree c parts).lowerError s x chi *
           s ^ (k - (segmentTree c parts).scaleCount) := by
+  have hs : s ≠ 0 := by omega
   have hraw := RoundTree.ideal_le_scaled_add_lower (s := s) (x := x) (initial := chi)
-    (segmentTree c parts) hs (segmentTree_valid hs hc parts)
+    (segmentTree c parts) hs
   have hk' : (segmentTree c parts).scaleCount +
       (k - (segmentTree c parts).scaleCount) = k := Nat.add_sub_of_le hk
   have hpow : s ^ k = s ^ (segmentTree c parts).scaleCount *
@@ -912,7 +1021,7 @@ theorem segment_scaled_lower_lifted {s c : Nat} (hs : s ≠ 0) (hc : c < s)
       s ^ k = s ^ ((segmentTree c parts).scaleCount +
           (k - (segmentTree c parts).scaleCount)) := by rw [hk']
       _ = _ := pow_add _ _ _
-  rw [RoundTree.scaled, segmentTree_eval, segmentTree_ideal] at hraw
+  rw [RoundTree.scaled, segmentTree_eval_of_valid_offset hc, segmentTree_ideal] at hraw
   calc
     chi * x ^ parts.sum * s ^ k =
         s ^ (k - (segmentTree c parts).scaleCount) *
@@ -949,7 +1058,7 @@ def segmentDriftForward (s c x chi : Nat) (left right : List Nat) : Nat :=
 
 def natDistance (a b : Nat) : Nat := max (a - b) (b - a)
 
-theorem segmentIndex_sub_le_driftForward {s c : Nat} (hs : s ≠ 0) (hc : c < s)
+theorem segmentIndex_sub_le_driftForward {s c : Nat} (hc : c < s)
     (x chi : Nat) {left right : List Nat} (hsum : left.sum = right.sum) :
     segmentIndex s c x chi left - segmentIndex s c x chi right ≤
       segmentDriftForward s c x chi left right := by
@@ -957,8 +1066,9 @@ theorem segmentIndex_sub_le_driftForward {s c : Nat} (hs : s ≠ 0) (hc : c < s)
   let divisor := s ^ (left.sum + k)
   have hleft : (segmentTree c left).scaleCount ≤ k := Nat.le_max_left _ _
   have hright : (segmentTree c right).scaleCount ≤ k := Nat.le_max_right _ _
-  have hup := segment_scaled_upper_lifted hs hc x chi left hleft
-  have hlo := segment_scaled_lower_lifted hs hc x chi right hright
+  have hs : s ≠ 0 := by omega
+  have hup := segment_scaled_upper_lifted hc x chi left hleft
+  have hlo := segment_scaled_lower_lifted hc x chi right hright
   rw [← hsum] at hlo
   have hcross :
       divisor * segmentIndex s c x chi left ≤
@@ -979,10 +1089,10 @@ theorem segmentIndex_sub_le_driftForward {s c : Nat} (hs : s ≠ 0) (hc : c < s)
   rw [Nat.mul_comm]
   exact hsub
 
-/-- Exact two-sided schedule drift band for partitions of the same elapsed
+/-- Certified two-sided schedule drift band for partitions of the same elapsed
 time.  Both directional certificates are constructed from B1 through the
 expanded B3 tree; `natDistance` is ordinary absolute difference on `Nat`. -/
-theorem segmentIndex_drift_le {s c : Nat} (hs : s ≠ 0) (hc : c < s)
+theorem segmentIndex_drift_le {s c : Nat} (hc : c < s)
     (x chi : Nat) {left right : List Nat} (hsum : left.sum = right.sum) :
     natDistance (segmentIndex s c x chi left) (segmentIndex s c x chi right) ≤
       max (segmentDriftForward s c x chi left right)
@@ -990,14 +1100,11 @@ theorem segmentIndex_drift_le {s c : Nat} (hs : s ≠ 0) (hc : c < s)
   rw [natDistance]
   apply Nat.max_le.mpr
   constructor
-  · exact Nat.le_trans (segmentIndex_sub_le_driftForward hs hc x chi hsum)
+  · exact Nat.le_trans (segmentIndex_sub_le_driftForward hc x chi hsum)
       (Nat.le_max_left _ _)
   · exact Nat.le_trans
-      (segmentIndex_sub_le_driftForward hs hc x chi hsum.symm)
+      (segmentIndex_sub_le_driftForward hc x chi hsum.symm)
       (Nat.le_max_right _ _)
-
-theorem pow_add_ideal (x a b : Nat) : x ^ (a + b) = x ^ a * x ^ b :=
-  pow_add _ _ _
 
 theorem le_floor_compose {s factor : Nat} (hs : s ≠ 0) (hfactor : s ≤ factor)
     (chi : Nat) : chi ≤ mulr s 0 chi factor := by
@@ -1079,7 +1186,9 @@ termination_by n
 decreasing_by omega
 
 def B256.rpow (s c x : B256) (n : Nat) : B256 :=
-  if n = 0 then s
+  if x = 0 then
+    if n = 0 then s else 0
+  else if n = 0 then s
   else B256.rpowLoop s c (if n % 2 = 1 then x else s) x (n / 2)
 
 /-- Every multiplication and subsequent offset addition performed by a word
@@ -1096,7 +1205,8 @@ termination_by n
 decreasing_by omega
 
 def B256.RPowGuards (s c x : B256) (n : Nat) : Prop :=
-  if n = 0 then True
+  if x = 0 then True
+  else if n = 0 then True
   else B256.RPowLoopGuards s c (if n % 2 = 1 then x else s) x (n / 2)
 
 theorem B256.toNat_rpowLoop {s c z x : B256} (hs : s ≠ 0) (n : Nat)
@@ -1127,11 +1237,16 @@ theorem B256.toNat_rpow {s c x : B256} (hs : s ≠ 0) (n : Nat)
     (hguards : B256.RPowGuards s c x n) :
     (B256.rpow s c x n).toNat = Jaune.rpow s.toNat c.toNat x.toNat n := by
   rw [B256.rpow, Jaune.rpow]
-  by_cases hn : n = 0
-  · rw [if_pos hn, if_pos hn]
-  · rw [if_neg hn, if_neg hn]
-    rw [B256.RPowGuards, if_neg hn] at hguards
-    simpa only [apply_ite] using
-      B256.toNat_rpowLoop hs (n / 2) hguards
+  by_cases hx : x = 0
+  · subst x
+    cases n <;> simp only [B256.toNat_zero, if_pos, Nat.succ_ne_zero, if_false]
+  · have hxNat : x.toNat ≠ 0 := B256.toNat_ne_zero hx
+    rw [if_neg hx, if_neg hxNat]
+    by_cases hn : n = 0
+    · rw [if_pos hn, if_pos hn]
+    · rw [if_neg hn, if_neg hn]
+      rw [B256.RPowGuards, if_neg hx, if_neg hn] at hguards
+      simpa only [apply_ite] using
+        B256.toNat_rpowLoop hs (n / 2) hguards
 
 end Jaune
