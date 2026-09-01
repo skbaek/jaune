@@ -45,7 +45,7 @@ Trusting a Blanc theorem additionally means trusting a specific Jaune:
 
 | | |
 |---|---|
-| Jaune | `4e6a655591ca56583a5fca20782e80a3b9df1777` (`lakefile.lean`, agreeing with `lake-manifest.json` and the Lake-managed checkout) |
+| Jaune | `949cf97ee1956828a3ac0eb12a62c438656ba76e` (`lakefile.lean`, agreeing with `lake-manifest.json` and the Lake-managed checkout) |
 
 Blanc consumes Jaune from Git at that pinned revision, not from a sibling
 checkout, so a fresh clone reproduces the build and bumping Jaune is a reviewed
@@ -68,7 +68,7 @@ axiom fails the gate, and so does a missing one: dependency-closure changes in
 either direction are reviewable, including the no-axiom trivialization
 direction. That signal does **not** pin the theorem statement and does not by
 itself prevent a weaker or vacuous statement. Blanc separately Lean-checks the
-exact statements of its selected WETH10 flagships with `scripts/check-claims.sh`.
+exact statements of its protected claim families with `scripts/check-claims.sh`.
 A secondary pattern net independently rejects `sorryAx`, `ofReduceBool`,
 `ofReduceNat`, and any `_native.` axiom, on the grounds that the last of these
 adds the Lean compiler to the trusted code base.
@@ -77,7 +77,7 @@ The live audit membership, total, and axiom-set distribution belong to
 [Blanc's README trust section](https://github.com/skbaek/blanc/blob/main/README.md#verification-status)
 and [Blanc's gate catalogue](https://github.com/skbaek/blanc/blob/main/scripts/GATES.md),
 not to a duplicated count here. Most rows use the standard three axioms;
-several compile-shape rows use `propext` only.
+the rest pin smaller sets, down to none.
 
 ```
 cd ~/blanc && scripts/check.sh --no-build
