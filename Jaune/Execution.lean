@@ -598,7 +598,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
           sevm devm msgCallStipend value sevm.currentTarget
           sevm.currentTarget newCodeAddress true false
           inputIndex inputSize outputIndex outputSize code disablePrecompiles
-  | .delcall =>
+  | .delegatecall =>
     XStep.ofExcept do
       let ⟨gas, devm⟩ ← devm.pop
       let ⟨codeAddress, devm⟩ ← devm.popToAdr
@@ -623,7 +623,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
         sevm devm msgCallStipend sevm.value sevm.caller
         sevm.currentTarget newCodeAddress false false
         inputIndex inputSize outputIndex outputSize code disablePrecompiles
-  | .statcall =>
+  | .staticcall =>
     XStep.ofExcept do
       let ⟨gas, devm⟩ ← devm.pop
       let ⟨target, devm⟩ ← devm.popToAdr
@@ -1700,7 +1700,7 @@ theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
     · exact Except.canonicalOn_ok
         (genericCall.step_canonical hs (by exact hd2)
           _ _ _ _ _ _ _ _ _ _ _ _ _)
-  case delcall =>
+  case delegatecall =>
     refine XStep.ofExcept_canonical ?_
     refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
     refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
@@ -1714,7 +1714,7 @@ theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
     exact Except.canonicalOn_ok
       (genericCall.step_canonical hs (by exact hd2)
         _ _ _ _ _ _ _ _ _ _ _ _ _)
-  case statcall =>
+  case staticcall =>
     refine XStep.ofExcept_canonical ?_
     refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
     refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_

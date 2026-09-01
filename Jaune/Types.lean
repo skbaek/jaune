@@ -1248,7 +1248,7 @@ inductive Rinst : Type
   | shr -- 0x1C / 2 / 1 / logical shift right operation.
   | sar -- 0x1D / 2 / 1 / arithmetic (signed) shift right operation.
   | clz -- 0x1E / 1 / 1 / count leading zero bits (Osaka and later only).
-  | kec -- 0x20 / 2 / 1 / compute Keccak-256 hash.
+  | keccak256 -- 0x20 / 2 / 1 / compute Keccak-256 hash.
   | address -- 0x30 / 0 / 1 / Get the Addr of the currently executing account.
   | balance -- 0x31 / 1 / 1 / Get the balance of the specified account.
   | origin -- 0x32 / 0 / 1 / Get the Addr that initiated the current transaction.
@@ -1262,8 +1262,8 @@ inductive Rinst : Type
   | gasprice -- 0x3a / 0 / 1 / Get the gas price of the current transaction.
   | extcodesize -- 0x3B / 1 / 1 / Get the size of the code of an external account.
   | extcodecopy -- 0x3C / 4 / 0 / Copy the code of an external account to memory.
-  | retdatasize -- 0x3D / 0 / 1 / Get the size of the output data from the previous call.
-  | retdatacopy -- 0x3E / 3 / 0 / Copy output data from the previous call to memory.
+  | returndatasize -- 0x3D / 0 / 1 / Get the size of the output data from the previous call.
+  | returndatacopy -- 0x3E / 3 / 0 / Copy output data from the previous call to memory.
   | extcodehash -- 0x3F / 1 / 1 / Get the code hash of an external account.
   | blockhash -- 0x40 / 1 / 1 / get the hash of the specified block.
   | coinbase -- 0x41 / 0 / 1 / get the Addr of the current block's miner.
@@ -1302,16 +1302,16 @@ inductive Xinst : Type
   | create -- 0xf0 / 3 / 1 / Create a new contract account.
   | call -- 0xf1 / 7 / 1 / Call an existing account, which can be either a contract or a non-contract account.
   | callcode -- 0xf2 / 7 / 1 / Call an existing contract's code using the current contract's Storage and Addr.
-  | delcall -- 0xf4 / 6 / 1 / Call an existing contract's code using the current contract's Storage and the calling contract's Addr and value.
+  | delegatecall -- 0xf4 / 6 / 1 / Call an existing contract's code using the current contract's Storage and the calling contract's Addr and value.
   | create2 -- 0xf5 / 4 / 1 / Create a new contract account at a deterministic Addr using a salt value.
-  | statcall -- 0xfa / 6 / 1 / Perform a read-only call to an existing contract.
+  | staticcall -- 0xfa / 6 / 1 / Perform a read-only call to an existing contract.
 deriving DecidableEq
 
 inductive Linst : Type
   | stop -- 0x00 / 0 / 0 / halts execution.
-  | ret -- 0xf3 / 2 / 0 / Halt execution and return output data.
-  | rev -- 0xfd / 2 / 0 / Halt execution and revert State changes, returning output data.
-  | dest -- 0xff / 1 / 0 / Halt execution and destroy the current contract, transferring remaining Ether to a specified Addr.
+  | return_ -- 0xf3 / 2 / 0 / Halt execution and return output data.
+  | revert -- 0xfd / 2 / 0 / Halt execution and revert State changes, returning output data.
+  | selfdestruct -- 0xff / 1 / 0 / Halt execution and destroy the current contract, transferring remaining Ether to a specified Addr.
 deriving DecidableEq
 
 
@@ -1342,7 +1342,7 @@ def Rinst.toString : Rinst → String
   | shl => "SHL"
   | sar => "SAR"
   | clz => "CLZ"
-  | kec => "KEC"
+  | keccak256 => "KECCAK256"
   | address => "ADDRESS"
   | balance => "BALANCE"
   | origin => "ORIGIN"
@@ -1356,8 +1356,8 @@ def Rinst.toString : Rinst → String
   | gasprice => "GASPRICE"
   | extcodesize => "EXTCODESIZE"
   | extcodecopy => "EXTCODECOPY"
-  | retdatasize => "RETDATASIZE"
-  | retdatacopy => "RETDATACOPY"
+  | returndatasize => "RETURNDATASIZE"
+  | returndatacopy => "RETURNDATACOPY"
   | extcodehash => "EXTCODEHASH"
   | blockhash => "BLOCKHASH"
   | coinbase => "COINBASE"
@@ -1390,15 +1390,15 @@ def Xinst.toString : Xinst → String
   | create => "CREATE"
   | call => "CALL"
   | callcode => "CALLCODE"
-  | delcall => "DELEGATECALL"
+  | delegatecall => "DELEGATECALL"
   | create2 => "CREATE2"
-  | statcall => "STATICCALL"
+  | staticcall => "STATICCALL"
 
 def Linst.toString : Linst → String
   | .stop => "STOP"
-  | .dest => "SELFDESTRUCT"
-  | .rev => "REVERT"
-  | .ret => "RETURN"
+  | .selfdestruct => "SELFDESTRUCT"
+  | .revert => "REVERT"
+  | .return_ => "RETURN"
 
 def UInt8.toRinst : UInt8 → Option Rinst
   | 0x01 => some .add -- 0x01 / 2 / 1 / addition operation.
@@ -1431,7 +1431,7 @@ def UInt8.toRinst : UInt8 → Option Rinst
   -- fork-independent so that instruction positions -- and every downstream
   -- statement about them -- do not depend on which rules are running.
   | 0x1e => some .clz -- 0x1e / 1 / 1 / count leading zero bits.
-  | 0x20 => some .kec -- 0x20 / 2 / 1 / compute Keccak-256 hash.
+  | 0x20 => some .keccak256 -- 0x20 / 2 / 1 / compute Keccak-256 hash.
   | 0x30 => some .address -- 0x30 / 0 / 1 / Get the address of the currently executing account.
   | 0x31 => some .balance -- 0x31 / 1 / 1 / Get the balance of the specified account.
   | 0x32 => some .origin -- 0x32 / 0 / 1 / Get the address that initiated the current transaction.
@@ -1445,8 +1445,8 @@ def UInt8.toRinst : UInt8 → Option Rinst
   | 0x3a => some .gasprice -- 0x3a / 0 / 1 / Get the gas price of the current transaction.
   | 0x3b => some .extcodesize -- 0x3b / 1 / 1 / Get the size of the code of an external account.
   | 0x3c => some .extcodecopy -- 0x3c / 4 / 0 / Copy the code of an external account to memory.
-  | 0x3d => some .retdatasize -- 0x3d / 0 / 1 / Get the size of the output data from the previous call.
-  | 0x3e => some .retdatacopy -- 0x3e / 3 / 0 / Copy output data from the previous call to memory.
+  | 0x3d => some .returndatasize -- 0x3d / 0 / 1 / Get the size of the output data from the previous call.
+  | 0x3e => some .returndatacopy -- 0x3e / 3 / 0 / Copy output data from the previous call to memory.
   | 0x3f => some .extcodehash -- 0x3f / 1 / 1 / Get the code hash of an external account.
   | 0x40 => some .blockhash -- 0x40 / 1 / 1 / get the hash of the specified block.
   | 0x41 => some .coinbase -- 0x41 / 0 / 1 / get the address of the current block's miner.
@@ -1514,9 +1514,9 @@ def UInt8.toXinst : UInt8 → Option Xinst
   | 0xF0 => some .create
   | 0xF1 => some .call
   | 0xF2 => some .callcode
-  | 0xF4 => some .delcall
+  | 0xF4 => some .delegatecall
   | 0xF5 => some .create2
-  | 0xFA => some .statcall
+  | 0xFA => some .staticcall
   | _    => none
 
 def UInt8.toJinst : UInt8 → Option Jinst
@@ -1527,16 +1527,42 @@ def UInt8.toJinst : UInt8 → Option Jinst
 
 def UInt8.toLinst : UInt8 → Option Linst
   | 0x00 => some .stop
-  | 0xF3 => some .ret
-  | 0xFD => some .rev
-  | 0xFF => some .dest
+  | 0xF3 => some .return_
+  | 0xFD => some .revert
+  | 0xFF => some .selfdestruct
   | _ => none
 
 def Linst.toUInt8 : Linst → UInt8
   | .stop => 0x00
-  | .ret => 0xF3
-  | .rev => 0xFD
-  | .dest => 0xFF
+  | .return_ => 0xF3
+  | .revert => 0xFD
+  | .selfdestruct => 0xFF
+
+#guard match (0x20 : UInt8).toRinst with
+  | some .keccak256 => Rinst.keccak256.toString == "KECCAK256"
+  | _ => false
+#guard match (0x3D : UInt8).toRinst with
+  | some .returndatasize => Rinst.returndatasize.toString == "RETURNDATASIZE"
+  | _ => false
+#guard match (0x3E : UInt8).toRinst with
+  | some .returndatacopy => Rinst.returndatacopy.toString == "RETURNDATACOPY"
+  | _ => false
+#guard match (0xF4 : UInt8).toXinst with
+  | some .delegatecall => Xinst.delegatecall.toString == "DELEGATECALL"
+  | _ => false
+#guard match (0xFA : UInt8).toXinst with
+  | some .staticcall => Xinst.staticcall.toString == "STATICCALL"
+  | _ => false
+#guard match (0xF3 : UInt8).toLinst with
+  | some .return_ => Linst.return_.toUInt8 == 0xF3 && Linst.return_.toString == "RETURN"
+  | _ => false
+#guard match (0xFD : UInt8).toLinst with
+  | some .revert => Linst.revert.toUInt8 == 0xFD && Linst.revert.toString == "REVERT"
+  | _ => false
+#guard match (0xFF : UInt8).toLinst with
+  | some .selfdestruct =>
+      Linst.selfdestruct.toUInt8 == 0xFF && Linst.selfdestruct.toString == "SELFDESTRUCT"
+  | _ => false
 
 def Jinst.toUInt8 : Jinst → UInt8
   | jump => 0x56     -- 0x56 / 1 / 0 / Unconditional jump.
