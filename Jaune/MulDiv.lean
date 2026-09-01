@@ -382,4 +382,18 @@ theorem B256.toNat_mul_div_of_nofm {x y z : B256} (h : B256.Nofm x y) (hz : z �
     (x * y / z).toNat = x.toNat * y.toNat / z.toNat := by
   rw [B256.toNat_div hz, B256.toNat_mul_eq_of_nofm h]
 
+/-! ## Cross-denominator comparison -/
+
+/-- Cross-multiplication is a sufficient comparison principle for two floor
+quotients with nonzero denominators. -/
+theorem Nat.div_le_div_of_cross {n₁ n₂ d₁ d₂ : Nat}
+    (hd₁ : d₁ ≠ 0) (hd₂ : d₂ ≠ 0)
+    (hcross : n₁ * d₂ ≤ n₂ * d₁) : n₁ / d₁ ≤ n₂ / d₂ := by
+  apply (Nat.le_div_iff_mul_le (Nat.pos_of_ne_zero hd₂)).2
+  apply Nat.le_of_mul_le_mul_right (c := d₁) _ (Nat.pos_of_ne_zero hd₁)
+  calc
+    (n₁ / d₁ * d₂) * d₁ = (n₁ / d₁ * d₁) * d₂ := by ac_rfl
+    _ ≤ n₁ * d₂ := Nat.mul_le_mul_right d₂ (Nat.div_mul_le_self n₁ d₁)
+    _ ≤ n₂ * d₁ := hcross
+
 end Jaune

@@ -3,6 +3,7 @@
 import Jaune.Basic
 import Jaune.Types
 import Jaune.MulDiv
+import Jaune.RPow
 import Jaune.Fork
 import Jaune.Hash
 import Jaune.SHA256Spec
