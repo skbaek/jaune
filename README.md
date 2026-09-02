@@ -215,9 +215,10 @@ requirements.
     SHA-256 `3586193d…`; installed separately at `~/eest-mainnet-v20.0.1`.
 - **Gate catalogue** — [`scripts/GATES.md`](scripts/GATES.md) is the
   authoritative reference for every verification gate: exact commands, pass
-  criteria, runtimes, and which gate to reach for when. Both fixture harnesses
-  take `--jobs auto` to run in parallel, which roughly halves the legacy corpus
-  and quarters the current-mainnet one.
+  criteria, runtimes, and which gate to reach for when. The legacy, current-
+  mainnet, and vector harnesses take `--jobs auto`; it sizes parallelism from
+  the job's effective memory and CPU limits, while a positive numeric count is
+  an explicit override.
 - **Conformance tiers** ([`scripts/check-legacy.sh`](scripts/check-legacy.sh)), each compared
   against a committed baseline. The gate passes iff **every** file's PASS/FAIL
   matches its baseline — a regression gate, not an all-green one:

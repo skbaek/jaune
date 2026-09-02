@@ -57,19 +57,6 @@ usage() {
   exit 2
 }
 
-# Logical-core count. These suites are throughput-bound — 90% of their fixtures
-# run under 0.15s, so process spawn dominates and every core earns its keep even
-# though an efficiency core is ~5x slower. Measured full-suite walls: 435s at 4
-# jobs, 328s at 8, 299s at 10, 302s at 12. Capping at the performance cores
-# would forfeit a third of that; there is also no way to enforce such a cap,
-# since the scheduler migrates rather than pins.
-all_cores() {
-  N="$(sysctl -n hw.ncpu 2>/dev/null || true)"
-  if [ -z "$N" ]; then N="$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)"; fi
-  if [ -z "$N" ]; then N=4; fi
-  echo "$N"
-}
-
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --suite) shift; [ "$#" -gt 0 ] || usage; SUITE="$1" ;;
@@ -85,7 +72,10 @@ done
 [ -n "$SUITE" ] || usage
 
 if [ "$JOBS" = "auto" ]; then
-  JOBS="$(all_cores)"
+  if ! JOBS="$(python3 "$SCRIPT_DIR/fixture_jobs.py" --explain)"; then
+    echo "error: could not resolve resource-aware automatic job count" >&2
+    exit 2
+  fi
 fi
 case "$JOBS" in
   ''|*[!0-9]*) echo "error: --jobs takes a positive integer or 'auto', not $JOBS" >&2; exit 2 ;;

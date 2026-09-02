@@ -31,7 +31,7 @@
 #                 baseline, and refuse to write anything if it does not
 #   --no-build    skip `lake build jaune`
 #   --jobs <n>    run <n> fixtures concurrently (default 1 = sequential).
-#                 `auto` resolves to the machine's logical-core count. See
+#                 `auto` resolves from effective memory and CPU capacity. See
 #                 "Parallel dispatch" below; sequential remains the default and
 #                 is the only mode whose timings are ever authoritative.
 #
@@ -130,13 +130,12 @@
 # sequential order, not completion order, so a report from either mode diffs
 # cleanly against the same baseline.
 #
-# `auto` resolves to every logical core. An efficiency core runs this workload
-# about 5x slower than a performance core, but that does NOT justify capping the
-# pool at the P-core count: the OS exposes no affinity API and migrates rather
-# than pins, so a cap cannot keep work on the P-cores — it only leaves the
-# E-cores idle. Measured on 4P+6E, aggregate throughput saturates at 4.88x
-# against a 4 + 6/5.05 = 5.19x ceiling, so the E-cores are worth about one
-# extra P-core between them.
+# `auto` is shared with the mainnet and vector harnesses. It takes the smaller
+# of effective logical CPU capacity and a memory pool with 1 GiB reserved plus
+# 2.4 GiB per worker. Linux detection follows finite cgroup-v2 ancestors as
+# well as host MemAvailable; macOS uses reclaimable `vm_stat` pages. Missing
+# trustworthy memory information falls back to one worker. A numeric `--jobs`
+# remains an explicit override and bypasses this sizing policy.
 #
 # What the job count is worth depends on which bound a tier is under:
 #
@@ -205,16 +204,6 @@ usage() {
   exit 2
 }
 
-# Logical-core count. Sizing the pool below this only idles cores the scheduler
-# would otherwise use: E-cores are slow but not worthless, and no cap can steer
-# work away from them anyway (see the header note on affinity).
-all_cores() {
-  N="$(sysctl -n hw.ncpu 2>/dev/null || true)"
-  if [ -z "$N" ]; then N="$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)"; fi
-  if [ -z "$N" ]; then N=4; fi
-  echo "$N"
-}
-
 TIER=""
 DIR_PATH=""
 REBASE=0
@@ -251,7 +240,10 @@ done
 [ -n "$TIER" ] || usage
 
 if [ "$JOBS" = "auto" ]; then
-  JOBS="$(all_cores)"
+  if ! JOBS="$(python3 "$SCRIPT_DIR/fixture_jobs.py" --explain)"; then
+    echo "usage error: could not resolve resource-aware automatic job count" >&2
+    exit 2
+  fi
 fi
 case "$JOBS" in
   ''|*[!0-9]*)

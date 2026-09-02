@@ -69,10 +69,17 @@ for the cheap gates above.
 ## The `--jobs` contract
 
 `check-legacy.sh`, `check-mainnet.sh`, and `check-vectors.sh` accept `--jobs <n>|auto`;
-`auto` resolves to the machine's logical-core count. **Sequential (`--jobs 1`) is
-the default and its behaviour is untouched** — same guard, same ordering, same
-authoritative timings. Sequential is cleaner in every respect except speed, so it
-stays the script-level default; parallel is an explicit per-invocation choice.
+`auto` resolves to the smaller of effective CPU capacity and a memory budget.
+The shared `scripts/fixture_jobs.py` selector reserves 1 GiB outside the worker
+pool and provisions 2.4 GiB per worker. On Linux it takes the tightest remaining
+allowance across host `MemAvailable` and every finite cgroup-v2 ancestor, and
+caps CPU by affinity, cpuset, and finite quota; on macOS it reads reclaimable
+`vm_stat` pages. Missing trustworthy memory information conservatively resolves
+to one worker. A clean 6 or 8 GiB job therefore selects no more than two.
+**Sequential (`--jobs 1`) is the default and its behaviour is untouched** —
+same guard, same ordering, same authoritative timings. A positive numeric value
+is an explicit override and bypasses automatic sizing without changing its
+meaning; invalid and zero values still fail loudly.
 
 What parallel mode changes:
 
@@ -131,7 +138,7 @@ It depends on which bound the suite is under, and the corpora differ:
 - **Legacy `--full` is latency-bound.** Its makespan is set by the single
   longest indivisible fixture, not by the job count. That fixture is now
   `VMTests/vmPerformance/loopMul.json` at 372.5s sequential — 33% of the serial
-  total and 4.5x the second-longest file. Measured 462s at `--jobs auto` (10)
+  total and 4.5x the second-longest file. Measured 462s at `--jobs 10`
   on 2026-07-31. Only making *that* fixture faster moves this number. ("Serial
   total" here and below means the sum of the per-file TIME column, 1,145.8s — a
   lower bound on sequential wall time, not a measured one; see the catalogue
@@ -150,7 +157,7 @@ It depends on which bound the suite is under, and the corpora differ:
   the makespan floor no matter how many workers ran: 382s at 10 jobs, a 1.2x
   saving. It is now run as eight balanced shards holding exactly its 106 cases
   (see `scripts/vectors/SOURCES.md`), which drops the gate to ~90s at
-  `--jobs auto`. Measured makespan for that file's work alone: 367s unsharded,
+  `--jobs 10`. Measured makespan for that file's work alone: 367s unsharded,
   83s at 8 shards, 82s at 24, 78s at 53 — the machine's aggregate-throughput
   ceiling is ~78s, so 8 shards is within 7% of the floor and more shards buy
   almost nothing.
@@ -176,11 +183,11 @@ That is exactly what happened to the previous holder of this position.
 boxed `Array UInt64` working vector with a flat scalar structure made it 75.9s
 and handed the bound to `loopMul`. Sharding was never the remedy for either.
 
-Efficiency cores run this workload ~5x slower than performance cores, but you
-cannot steer work away from them: there is no affinity API, and the scheduler
-migrates rather than pins (at 8 concurrent, every worker inflates a uniform
-~1.64x rather than some bimodally). Capping the pool at the P-core count only
-idles cores, which is why `auto` takes all of them.
+Efficiency cores run this workload ~5x slower than performance cores, but the
+OS scheduler migrates rather than pins (at 8 concurrent, every worker inflates
+a uniform ~1.64x rather than some bimodally). The CPU side of `auto` therefore
+uses all CPUs actually available to the job; the independent memory side is the
+safety cap. Use an explicit numeric count when reproducing a historical timing.
 
 ## Catalogue
 
@@ -214,7 +221,7 @@ executable inputs.
 | `scripts/check-legacy.sh --smoke` | broad conformance vs baseline | 174 classifications | ~2 min |
 | `scripts/check-legacy.sh --bls` | BLS12-381 + point-evaluation vs hand-authored target baseline | 29 | ~2 min |
 | `scripts/check-ec.sh` | EC differential oracle (pinned, differential, identity cases) | — | compiles a Lean checker first |
-| `scripts/check-vectors.sh` | generated vector conformance + controls + declared-case-count coverage | 53 files, 1,990 cases, 5 controls | ~7.8 min; **~1.5 min at `--jobs auto`** |
+| `scripts/check-vectors.sh` | generated vector conformance + controls + declared-case-count coverage | 53 files, 1,990 cases, 5 controls | ~7.8 min; **~1.5 min at `--jobs 10`**; `auto` is resource-dependent |
 | `scripts/check-elab.sh` | per-module elaboration time vs the ignored host-local `scripts/baseline-elab.txt` (auto-initialized on first run) | 20 modules, host-dependent | ~70 s on the catalogue host |
 | `lake build && scripts/check.sh --no-build` in the Blanc checkout carrying the candidate pin | that a Jaune change has not broken its downstream consumer: Blanc's integration elaboration and its axiom audit. **The cheapest Blanc-side falsifier after a pin bump** — the rest of Blanc's set is catalogued in Blanc's own file | count-free here; use Blanc's gate summaries | current Blanc catalogue |
 

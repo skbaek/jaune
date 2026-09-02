@@ -1,0 +1,84 @@
+import argparse
+import importlib.util
+from pathlib import Path
+import tempfile
+import unittest
+
+
+SCRIPT = Path(__file__).parents[1] / "fixture_jobs.py"
+SPEC = importlib.util.spec_from_file_location("fixture_jobs", SCRIPT)
+assert SPEC is not None and SPEC.loader is not None
+MODULE = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(MODULE)
+
+
+class FixtureJobsTests(unittest.TestCase):
+    def test_parse_bytes(self):
+        self.assertEqual(MODULE.parse_bytes("4096"), 4096)
+        self.assertEqual(MODULE.parse_bytes("6G"), 6 * 1024**3)
+        for value in ("0", "-1", "6GiB", "word"):
+            with self.subTest(value=value), self.assertRaises(argparse.ArgumentTypeError):
+                MODULE.parse_bytes(value)
+
+    def test_cpuset_parser(self):
+        self.assertEqual(MODULE.parse_cpuset("0-3,8,10-11"), 7)
+        self.assertEqual(MODULE.parse_cpuset("2,2,3"), 2)
+        for value in ("", "3-1", "x", "1-"):
+            with self.subTest(value=value), self.assertRaises(MODULE.DetectionError):
+                MODULE.parse_cpuset(value)
+
+    def test_memory_reduces_auto_jobs(self):
+        self.assertEqual(MODULE.choose_jobs(16, 8 * MODULE.GIB), 2)
+        self.assertEqual(MODULE.choose_jobs(16, 6 * MODULE.GIB), 2)
+        self.assertEqual(MODULE.choose_jobs(16, 4 * MODULE.GIB), 1)
+
+    def test_cpu_caps_memory_capacity(self):
+        self.assertEqual(MODULE.choose_jobs(2, 32 * MODULE.GIB), 2)
+        self.assertEqual(MODULE.choose_jobs(1, 32 * MODULE.GIB), 1)
+
+    def test_unknown_capacity_falls_back_to_one(self):
+        self.assertEqual(MODULE.choose_jobs(None, None), 1)
+        self.assertEqual(MODULE.choose_jobs(16, None), 1)
+
+    def test_nested_cgroup_uses_tightest_remaining_limit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            outer = root / "outer"
+            child = outer / "child"
+            child.mkdir(parents=True)
+            (outer / "memory.max").write_text(str(8 * MODULE.GIB), encoding="utf-8")
+            (outer / "memory.current").write_text(str(1 * MODULE.GIB), encoding="utf-8")
+            (child / "memory.max").write_text(str(6 * MODULE.GIB), encoding="utf-8")
+            (child / "memory.current").write_text(str(512 * 1024**2), encoding="utf-8")
+            capacity = MODULE.linux_cgroup_memory_capacity(root, "/outer/child")
+            self.assertEqual(capacity.value, 11 * MODULE.GIB // 2)
+            self.assertEqual(MODULE.choose_jobs(16, capacity.value), 1)
+
+    def test_cgroup_inactive_file_cache_is_reclaimable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            child = root / "job"
+            child.mkdir()
+            (child / "memory.max").write_text(str(8 * MODULE.GIB), encoding="utf-8")
+            (child / "memory.current").write_text(str(4 * MODULE.GIB), encoding="utf-8")
+            (child / "memory.stat").write_text(
+                f"anon {MODULE.GIB}\ninactive_file {3 * MODULE.GIB}\n",
+                encoding="utf-8",
+            )
+            capacity = MODULE.linux_cgroup_memory_capacity(root, "/job")
+            self.assertEqual(capacity.value, 7 * MODULE.GIB)
+            self.assertEqual(MODULE.choose_jobs(16, capacity.value), 2)
+
+    def test_cpu_quota_and_cpuset_are_both_considered(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            child = root / "job"
+            child.mkdir()
+            (child / "cpuset.cpus.effective").write_text("0-7", encoding="utf-8")
+            (child / "cpu.max").write_text("250000 100000", encoding="utf-8")
+            capacity = MODULE.linux_cgroup_cpu_capacity(root, "/job")
+            self.assertEqual(capacity.value, 3)
+
+
+if __name__ == "__main__":
+    unittest.main()

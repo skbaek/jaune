@@ -13,7 +13,7 @@
 # Usage: scripts/check-vectors.sh [--jobs <n>|auto]
 #
 #   --jobs <n>  run <n> vector files concurrently (default 1 = sequential).
-#               `auto` resolves to the machine's logical-core count.
+#               `auto` resolves from effective memory and logical CPU capacity.
 #
 # Parallel dispatch (--jobs)
 # --------------------------
@@ -67,17 +67,6 @@ usage() {
   exit 2
 }
 
-# Logical-core count. Sizing the pool below this only idles cores the scheduler
-# would otherwise use: efficiency cores are slow but not worthless, and no cap
-# can steer work away from them anyway — there is no affinity API and the
-# scheduler migrates rather than pins.
-all_cores() {
-  N="$(sysctl -n hw.ncpu 2>/dev/null || true)"
-  if [ -z "$N" ]; then N="$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)"; fi
-  if [ -z "$N" ]; then N=4; fi
-  echo "$N"
-}
-
 JOBS=1
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -88,7 +77,10 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ "$JOBS" = "auto" ]; then
-  JOBS="$(all_cores)"
+  if ! JOBS="$(python3 "$SCRIPT_DIR/fixture_jobs.py" --explain)"; then
+    echo "error: could not resolve resource-aware automatic job count" >&2
+    exit 2
+  fi
 fi
 case "$JOBS" in
   ''|*[!0-9]*)
