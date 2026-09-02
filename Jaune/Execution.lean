@@ -312,14 +312,6 @@ def Frame.ofCall (msg : Msg) : Frame := ⟨msg, msg, false⟩
 def Frame.ofCreate (msg : Msg) : Frame :=
   ⟨msg, processCreateMessage.msg msg, true⟩
 
-/-- Settlement reads the saved state/transient-storage pair and, for CREATE,
-the target and active rules; it never reads either message's calldata.  Drop
-that potentially large payload once `Frame.enter` has produced the child. -/
-def Frame.releaseSettlementCalldata (f : Frame) : Frame :=
-  { f with
-    outer := {f.outer with data := []}
-    inner := {f.inner with data := []} }
-
 /-- Both saved states a call frame can restore from are canonical.
 
 A `Frame` holds two messages and `Frame.settleMsg` can roll back to either:
@@ -330,10 +322,6 @@ state" clause of P0.4 item 5. Statement only -- Step 4 of
 `~/plans/integrity.md` owns the preservation proofs. -/
 def Frame.Canonical (f : Frame) : Prop :=
   Msg.Canonical f.outer ∧ Msg.Canonical f.inner
-
-theorem Frame.releaseSettlementCalldata_canonical {f : Frame} (h : f.Canonical) :
-    f.releaseSettlementCalldata.Canonical := by
-  exact h
 
 instance {f : Frame} : Decidable (Frame.Canonical f) := by
   unfold Frame.Canonical; infer_instance
@@ -380,10 +368,6 @@ def Frame.settleMsg (f : Frame)
 def Frame.settle (f : Frame) (raw : Execution) :
     Except (EvmError × State × AdrSet × Tra) Devm :=
   f.settleMsg (executeCode.handleError raw)
-
-theorem Frame.releaseSettlementCalldata_settle (f : Frame) (raw : Execution) :
-    f.releaseSettlementCalldata.settle raw = f.settle raw := by
-  rfl
 
 def executeCode.enter (msg : Msg) : Evm ⊕ Execution :=
   let evm := initEvm msg
@@ -702,37 +686,6 @@ def Evm.step (evm : Evm) : Step :=
 #guard (ByteArray.mk #[0x36]).mayReadCalldata
 #guard (ByteArray.mk #[0x37]).mayReadCalldata
 
-/-- Release calldata only when the frame's entire bytecode is independent of
-it.  Empty calldata takes the constant-time path used by most system frames. -/
-def Sevm.releaseUnobservableCalldata (sevm : Sevm) : Sevm :=
-  if sevm.data.isEmpty || sevm.code.mayReadCalldata then sevm
-  else {sevm with data := []}
-
-def Evm.releaseUnobservableCalldata (evm : Evm) : Evm :=
-  {evm with sta := evm.sta.releaseUnobservableCalldata}
-
-theorem Sevm.releaseUnobservableCalldata_canonical {sevm : Sevm}
-    (h : sevm.Canonical) : sevm.releaseUnobservableCalldata.Canonical := by
-  unfold Sevm.releaseUnobservableCalldata
-  split <;> exact h
-
-theorem Evm.releaseUnobservableCalldata_canonical {evm : Evm}
-    (h : evm.Canonical) : evm.releaseUnobservableCalldata.Canonical :=
-  ⟨Sevm.releaseUnobservableCalldata_canonical h.1, h.2⟩
-
-private def releaseCalldataGuardSevm (code : ByteArray) : Sevm :=
-  { (default : Sevm) with data := [0xAA], code := code }
-
--- Bytecode independent of calldata releases the retained payload, while a
--- possible reader (including an opcode-shaped PUSH payload) conservatively
--- keeps it.
-#guard ((releaseCalldataGuardSevm (ByteArray.mk #[0x00]))
-    |>.releaseUnobservableCalldata |>.data |>.isEmpty)
-#guard ((releaseCalldataGuardSevm (ByteArray.mk #[0x35]))
-    |>.releaseUnobservableCalldata |>.data) = [0xAA]
-#guard ((releaseCalldataGuardSevm (ByteArray.mk #[0x60, 0x35, 0x00]))
-    |>.releaseUnobservableCalldata |>.data) = [0xAA]
-
 /-- The single recursive interpreter driver, structurally recursive on its fuel
 parameter and therefore obliged to report exhaustion as an outcome.
 
@@ -751,15 +704,12 @@ def execFueled : Evm → Nat → Fueled (EvmError × Devm) Devm
         | .error e => Fueled.ofExcept (.error e)
         | .ok devm => execFueled ⟨pc, evm.sta, devm⟩ fuel
       | .run child =>
-        let frame := frame.releaseSettlementCalldata
-        let parentSta := evm.sta.releaseUnobservableCalldata
-        let child := child.releaseUnobservableCalldata
         match (execFueled child fuel).run with
         | .none => Fueled.exhausted
         | .some raw =>
           match rsm.run (frame.settle raw) with
           | .error e => Fueled.ofExcept (.error e)
-          | .ok devm => execFueled ⟨pc, parentSta, devm⟩ fuel
+          | .ok devm => execFueled ⟨pc, evm.sta, devm⟩ fuel
   termination_by _ fuel => fuel
 
 /-! Focused executable checks for the flattened core.
@@ -1873,23 +1823,19 @@ theorem execFueled_run_canonical :
           rw [← h]
           exact hcan
         · exact ih ⟨pc, evm.sta, d1⟩ ⟨hevm.1, hcan⟩ h
-      · rcases hc : (execFueled child.releaseUnobservableCalldata fuel).run with _ | raw2
+      · rcases hc : (execFueled child fuel).run with _ | raw2
         · rw [hc] at h
           simp only [Fueled.exhausted_run] at h
           nomatch h
         · rw [hc] at h
           dsimp only at h
-          have hsettle := Frame.settle_canonicalSettle
-            (Frame.releaseSettlementCalldata_canonical hst)
-            (ih child.releaseUnobservableCalldata
-              (Evm.releaseUnobservableCalldata_canonical hent) hc)
+          have hsettle := Frame.settle_canonicalSettle hst (ih child hent hc)
           have hcan := Resume.run_canonical (rsm := rsm) hsettle
-          rcases hrun : rsm.run (frame.releaseSettlementCalldata.settle raw2) with ⟨e⟩ | d1 <;>
+          rcases hrun : rsm.run (frame.settle raw2) with ⟨e⟩ | d1 <;>
             rw [hrun] at h hcan <;> dsimp only at h
           · simp only [Fueled.ofExcept_run, Option.some.injEq] at h
             rw [← h]
             exact hcan
-          · exact ih ⟨pc, evm.sta.releaseUnobservableCalldata, d1⟩
-              ⟨Sevm.releaseUnobservableCalldata_canonical hevm.1, hcan⟩ h
+          · exact ih ⟨pc, evm.sta, d1⟩ ⟨hevm.1, hcan⟩ h
 
 end Jaune
