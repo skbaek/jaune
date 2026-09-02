@@ -473,15 +473,21 @@ def genericCreate.step
       createMsg sevm devm createGas endowment newAddress calldata
     return .spawn (Frame.ofCreate childMsg) (.create devm newAddress)
 
-/-- Conservative executable test for bytecode that may observe calldata.
+/-- Allocation-free executable test for bytecode that may observe calldata.
 
-Scanning raw bytes deliberately treats an opcode-shaped PUSH payload as a
-possible instruction.  That can retain data unnecessarily, but absence of all
-three bytes proves that no decoded instruction can read the field. -/
+The byte-sized fold state is either the number of remaining PUSH payload bytes
+or `0xff` once a reader has been found.  Skipping payload bytes matters here:
+contract addresses embedded by `PUSH20` can themselves contain `0x35`--`0x37`,
+but those data bytes are not executable calldata instructions. -/
 private def ByteArray.mayReadCalldata (code : ByteArray) : Bool :=
   code.foldl
-    (fun found byte => found || byte == 0x35 || byte == 0x36 || byte == 0x37)
-    false
+    (fun (remaining : UInt8) byte =>
+      if remaining == 0xff then 0xff
+      else if remaining != 0 then remaining - 1
+      else if byte == 0x35 || byte == 0x36 || byte == 0x37 then 0xff
+      else if 0x60 ≤ byte.toNat ∧ byte.toNat ≤ 0x7f then byte - 0x5f
+      else 0)
+    0 == 0xff
 
 def genericCall.step
     (sevm : Sevm) (devm : Devm) (gas : Nat) (value : B256)
@@ -687,6 +693,13 @@ def Evm.step (evm : Evm) : Step :=
 #guard (ByteArray.mk #[0x35]).mayReadCalldata
 #guard (ByteArray.mk #[0x36]).mayReadCalldata
 #guard (ByteArray.mk #[0x37]).mayReadCalldata
+#guard !(ByteArray.mk #[0x60, 0x35, 0x00]).mayReadCalldata
+#guard (ByteArray.mk #[0x60, 0x35, 0x35]).mayReadCalldata
+#guard !(ByteArray.mk #[0x73, 0x35, 0x00]).mayReadCalldata
+#guard !(ByteArray.mk #[
+  0x73, 0x58, 0x3a, 0xa5, 0x87, 0xd7, 0xd8, 0x52, 0xa5, 0xb8, 0x44,
+  0x8c, 0xc4, 0x16, 0x05, 0x37, 0xd9, 0xbd, 0x12, 0xc8, 0x89, 0x00
+]).mayReadCalldata
 
 /-- The single recursive interpreter driver, structurally recursive on its fuel
 parameter and therefore obliged to report exhaustion as an outcome.
@@ -797,7 +810,12 @@ private def flattenGuardCallData
 -- and an enabled precompile both receive the exact memory slice.
 #guard flattenGuardCallData [0x00] 0 false = some []
 #guard flattenGuardCallData [0x35] 0 false = some [0xAA]
-#guard flattenGuardCallData [0x60, 0x35, 0x00] 0 false = some [0xAA]
+#guard flattenGuardCallData [0x60, 0x35, 0x00] 0 false = some []
+#guard flattenGuardCallData [0x60, 0x35, 0x35] 0 false = some [0xAA]
+#guard flattenGuardCallData [
+  0x73, 0x58, 0x3a, 0xa5, 0x87, 0xd7, 0xd8, 0x52, 0xa5, 0xb8, 0x44,
+  0x8c, 0xc4, 0x16, 0x05, 0x37, 0xd9, 0xbd, 0x12, 0xc8, 0x89, 0x00
+] 0 false = some []
 #guard flattenGuardCallData [] 1 false = some [0xAA]
 #guard flattenGuardCallData [] 1 true = some []
 
