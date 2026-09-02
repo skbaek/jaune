@@ -149,6 +149,15 @@ def normalized_returncode(returncode: int) -> int:
     return min(returncode, 255)
 
 
+def boundary_probe_main(arguments: list[str]) -> int:
+    if len(arguments) != 1 or not arguments[0].isdigit() or int(arguments[0]) <= 0:
+        raise MeasureError("boundary probe expects one positive chunk size in bytes")
+    chunk_size = int(arguments[0])
+    retained: list[bytearray] = []
+    while True:
+        retained.append(bytearray(chunk_size))
+
+
 def child_main(arguments: list[str]) -> int:
     if len(arguments) < 4 or arguments[3] != "--":
         raise MeasureError("invalid internal child invocation")
@@ -372,6 +381,8 @@ def main() -> int:
     try:
         if sys.argv[1:2] == ["__child__"]:
             return child_main(sys.argv[2:])
+        if sys.argv[1:2] == ["__boundary_probe__"]:
+            return boundary_probe_main(sys.argv[2:])
         return controller_main(sys.argv[1:])
     except (MeasureError, OSError, ValueError) as error:
         print(f"MEASUREMENT ERROR — {error}", file=sys.stderr)

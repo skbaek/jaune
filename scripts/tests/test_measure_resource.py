@@ -53,6 +53,11 @@ class MeasureResourceTests(unittest.TestCase):
         self.assertEqual(MODULE.oom_count(snapshot), 1)
         self.assertEqual(MODULE.oom_count(None), 0)
 
+    def test_boundary_probe_validates_chunk_size(self):
+        for arguments in ([], ["0"], ["-1"], ["1", "2"], ["word"]):
+            with self.subTest(arguments=arguments), self.assertRaises(MODULE.MeasureError):
+                MODULE.boundary_probe_main(arguments)
+
 
 if __name__ == "__main__":
     unittest.main()
