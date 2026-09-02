@@ -22,6 +22,15 @@ def recursiveStaticCallCode (target : Adr) (outputSize : Nat) : ByteArray :=
     [0x62, 0x0f, 0x55, 0xc8, 0x5a, 0x03, 0xfa, 0x60, 0x20,
      0x52, 0x5b, 0x00]
 
+/-- Number of `cbb…` frames exercised by `recursiveStaticCallCode` from an
+initial remaining-depth value.  The counter is frame-local and therefore
+equals one in every frame; the exact fixture program keeps spawning until the
+depth-zero STATICCALL refusal. -/
+def recursiveFrameCount (initialDepth : Nat) : Nat := initialDepth + 1
+
+#guard recursiveFrameCount 0 = 1
+#guard recursiveFrameCount 1023 = 1024
+
 def probeMsg (depth outputSize : Nat) : Msg :=
   let target : Adr := 0xcbbf5374fce5edbc8e2a8697c15331677e6ebf0b
   let code := recursiveStaticCallCode target outputSize
@@ -54,8 +63,7 @@ private def parseArgs (args : List String) : IO (Nat × Nat) := do
   | [depth, outputSize] =>
     match depth.toNat?, outputSize.toNat? with
     | some depth, some outputSize =>
-      if depth = 0 then throw (IO.userError "depth must be positive")
-      else if 0xffffff < outputSize then
+      if 0xffffff < outputSize then
         throw (IO.userError "output size must fit PUSH3")
       else pure (depth, outputSize)
     | _, _ => throw (IO.userError "depth and output size must be decimal naturals")
@@ -69,7 +77,7 @@ def main (args : List String) : IO UInt32 := do
     pure 1
   | .ok (logicalSize, materializedSize, success) =>
     IO.println
-      s!"PASS depth={depth} output={outputSize} logical={logicalSize} materialized={materializedSize} success={success.toNat}"
+      s!"PASS depth={depth} frames={recursiveFrameCount depth} output={outputSize} logical={logicalSize} materialized={materializedSize} success={success.toNat}"
     if success = 1 then pure 0 else pure 1
 
 end Jaune.MemoryProbe
