@@ -489,6 +489,14 @@ def genericCreate.step
       createMsg sevm devm createGas endowment newAddress calldata
     return .spawn (Frame.ofCreate childMsg) (.create devm newAddress)
 
+/-- Conservative executable test for bytecode that may observe calldata.
+
+Scanning raw bytes deliberately treats an opcode-shaped PUSH payload as a
+possible instruction.  That can retain data unnecessarily, but absence of all
+three bytes proves that no decoded instruction can read the field. -/
+def ByteArray.mayReadCalldata (code : ByteArray) : Bool :=
+  code.toList.any fun byte => byte == 0x35 || byte == 0x36 || byte == 0x37
+
 def genericCall.step
     (sevm : Sevm) (devm : Devm) (gas : Nat) (value : B256)
     (caller target codeAddress : Adr)
@@ -501,7 +509,13 @@ def genericCall.step
       let devm ← (evm1.withGasLeft (evm1.gasLeft + gas)).push 0
       return .done (.ok devm)
   else
-    let calldata := evm1.memory.data.sliceD inputIndex inputSize 0
+    let calldata :=
+      if inputSize = 0 then []
+      else if code.mayReadCalldata then
+        evm1.memory.data.sliceD inputIndex inputSize 0
+      else if !disablePrecompiles && sevm.benvStat.rules.isPrecomp codeAddress then
+        evm1.memory.data.sliceD inputIndex inputSize 0
+      else []
     let childMsg :=
       callMsg sevm evm1 gas value caller target codeAddress
         shouldTransferValue isStaticcall calldata code disablePrecompiles
@@ -683,14 +697,6 @@ def Evm.step (evm : Evm) : Step :=
   | .some (.jump j) => Step.ofJump (j.run evm)
   | .some (.last l) => .halt (l.run evm.sta evm.dyna)
 
-/-- Conservative executable test for bytecode that may observe calldata.
-
-Scanning raw bytes deliberately treats an opcode-shaped PUSH payload as a
-possible instruction.  That can retain data unnecessarily, but absence of all
-three bytes proves that no decoded instruction can read the field. -/
-def ByteArray.mayReadCalldata (code : ByteArray) : Bool :=
-  code.toList.any fun byte => byte == 0x35 || byte == 0x36 || byte == 0x37
-
 #guard !(ByteArray.mk #[]).mayReadCalldata
 #guard (ByteArray.mk #[0x35]).mayReadCalldata
 #guard (ByteArray.mk #[0x36]).mayReadCalldata
@@ -823,6 +829,24 @@ private def flattenGuardDepthZero : Bool :=
   | _ => false
 
 #guard flattenGuardDepthZero
+
+private def flattenGuardCallData
+    (codeBytes : Bytes) (codeAddress : Adr) (disablePrecompiles : Bool) : Option Bytes :=
+  let msg := flattenGuardMsg [] 100 8
+  let devm := (initDevm msg).withMemory ⟨#[0xAA], 1⟩
+  match
+      genericCall.step (initSevm msg) devm 17 0
+        0 codeAddress codeAddress false false 0 1 0 0
+        (flattenGuardCode codeBytes) disablePrecompiles with
+  | .spawn frame _ => some frame.inner.data
+  | _ => none
+
+-- Non-observing EVM bytecode skips materialization, while a calldata opcode
+-- and an enabled precompile both receive the exact memory slice.
+#guard flattenGuardCallData [0x00] 0 false = some []
+#guard flattenGuardCallData [0x35] 0 false = some [0xAA]
+#guard flattenGuardCallData [] 1 false = some [0xAA]
+#guard flattenGuardCallData [] 1 true = some []
 
 -- A PUSH with zero gas halts through the frozen OutOfGasError channel.
 private def flattenGuardOog : Bool :=
