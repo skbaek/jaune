@@ -4,7 +4,8 @@
 The controller stays in the outer contained job while the payload runs in a
 stricter transient service. A tiny child shim keeps the service alive until the
 controller has read the live cgroup-v2 counters, including after the payload
-crosses the inner resource boundary.
+crosses the inner resource boundary. The kernel's peak and event counters are
+cumulative, so steady-state sampling does not spawn a process or busy-poll.
 """
 
 from __future__ import annotations
@@ -34,8 +35,8 @@ REQUIRED_COUNTERS = (
     "memory.high",
     "memory.oom.group",
 )
-ACTIVE_STATES = {"activating", "active", "deactivating"}
 RESOURCE_EVENT_KEYS = ("max", "oom", "oom_kill")
+SAMPLE_INTERVAL_SECONDS = 0.25
 
 
 class MeasureError(RuntimeError):
@@ -332,8 +333,12 @@ def controller_main(arguments: list[str]) -> int:
                     require_readback(last_snapshot, args.memory_max, args.swap_max)
                 acknowledge_path.write_text("acknowledged\n", encoding="utf-8")
                 break
-            unit_state = show_unit(unit)
-            if unit_state.get("ActiveState") not in ACTIVE_STATES:
+            # systemd-run --wait exits when an unexpectedly terminated child
+            # unit is collected.  The normal child cannot exit here because it
+            # waits for acknowledge_path after writing done_path.  Polling the
+            # local process is therefore sufficient and avoids launching a
+            # systemctl subprocess for every sample of a long-running gate.
+            if process.poll() is not None:
                 if directory.exists():
                     last_snapshot = read_snapshot(directory)
                     samples += 1
@@ -343,7 +348,7 @@ def controller_main(arguments: list[str]) -> int:
                 timed_out = True
                 subprocess.run(("systemctl", "--user", "stop", unit), check=False)
                 break
-            time.sleep(0.01)
+            time.sleep(SAMPLE_INTERVAL_SECONDS)
 
         try:
             systemd_run_rc = process.wait(timeout=60)

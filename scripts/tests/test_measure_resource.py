@@ -72,6 +72,9 @@ class MeasureResourceTests(unittest.TestCase):
             MODULE.classify_verdict(0, 0, True, events, "success"), "FAIL"
         )
 
+    def test_sampling_uses_cumulative_counters_not_a_busy_poll(self):
+        self.assertGreaterEqual(MODULE.SAMPLE_INTERVAL_SECONDS, 0.1)
+
     def test_limit_readback_requires_inner_measurement_settings(self):
         snapshot = {
             "memory_max": "67108864",
