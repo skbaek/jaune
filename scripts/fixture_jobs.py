@@ -124,17 +124,25 @@ def cgroup_ancestors(root: Path, relative_path: str) -> Iterable[Path]:
         current = current.parent
 
 
-def linux_cgroup_memory_capacity(
-    root: Path, relative_path: str
-) -> Capacity:
+def linux_cgroup_memory_capacity(root: Path, relative_path: str) -> Capacity:
     candidates: list[tuple[int, str]] = []
+    controller_seen = False
     for directory in cgroup_ancestors(root, relative_path):
         limit_text = read_text(directory / "memory.max")
+        if limit_text is None:
+            continue
+        controller_seen = True
+        if limit_text == "max":
+            continue
+        if not limit_text.isdigit():
+            raise DetectionError(
+                f"malformed cgroup memory limit at {directory / 'memory.max'}"
+            )
         current_text = read_text(directory / "memory.current")
-        if limit_text is None or limit_text == "max" or not limit_text.isdigit():
-            continue
         if current_text is None or not current_text.isdigit():
-            continue
+            raise DetectionError(
+                f"unreadable cgroup memory usage at {directory / 'memory.current'}"
+            )
         limit, current = int(limit_text), int(current_text)
         inactive_file = 0
         stat_text = read_text(directory / "memory.stat")
@@ -151,8 +159,10 @@ def linux_cgroup_memory_capacity(
                 f"cgroup:{directory}:remaining-after-inactive-file",
             )
         )
+    if not controller_seen:
+        raise DetectionError("no readable cgroup-v2 memory controller")
     if not candidates:
-        return Capacity(None, ())
+        return Capacity(None, ("cgroup-v2:verified-unlimited",))
     value = min(candidate[0] for candidate in candidates)
     sources = tuple(source for candidate, source in candidates if candidate == value)
     return Capacity(value, sources)
@@ -209,6 +219,28 @@ def sysconf_available_memory() -> Capacity:
     return Capacity(pages * page_size, ("sysconf:available-pages",))
 
 
+def parse_macos_vm_stat(text: str) -> Capacity:
+    size_match = re.search(r"page size of (\d+) bytes", text)
+    if size_match is None:
+        return Capacity(None, ())
+    page_size = int(size_match.group(1))
+    # XNU's osfmk/mach/vm_statistics.h documents speculative_count as already
+    # included in free_count.
+    # Purgeable pages are also excluded because vm_stat does not establish that
+    # they are disjoint from the inactive population.  Counting only free and
+    # inactive is intentionally conservative and avoids double counting.
+    available_labels = {"Pages free", "Pages inactive"}
+    pages = 0
+    for raw in text.splitlines():
+        label, separator, value = raw.partition(":")
+        digits = value.strip().rstrip(".")
+        if separator and label in available_labels and digits.isdigit():
+            pages += int(digits)
+    if pages <= 0:
+        return Capacity(None, ())
+    return Capacity(pages * page_size, ("vm_stat:free+inactive",))
+
+
 def macos_available_memory() -> Capacity:
     try:
         completed = subprocess.run(
@@ -218,31 +250,17 @@ def macos_available_memory() -> Capacity:
         return Capacity(None, ())
     if completed.returncode != 0:
         return Capacity(None, ())
-    size_match = re.search(r"page size of (\d+) bytes", completed.stdout)
-    if size_match is None:
-        return Capacity(None, ())
-    page_size = int(size_match.group(1))
-    available_labels = {
-        "Pages free",
-        "Pages inactive",
-        "Pages speculative",
-        "Pages purgeable",
-    }
-    pages = 0
-    for raw in completed.stdout.splitlines():
-        label, separator, value = raw.partition(":")
-        digits = value.strip().rstrip(".")
-        if separator and label in available_labels and digits.isdigit():
-            pages += int(digits)
-    if pages <= 0:
-        return Capacity(None, ())
-    return Capacity(pages * page_size, ("vm_stat:reclaimable-pages",))
+    return parse_macos_vm_stat(completed.stdout)
 
 
 def minimum_capacity(capacities: Iterable[Capacity]) -> Capacity:
+    capacities = list(capacities)
     known = [capacity for capacity in capacities if capacity.value is not None]
     if not known:
-        return Capacity(None, ())
+        return Capacity(
+            None,
+            tuple(source for capacity in capacities for source in capacity.sources),
+        )
     value = min(capacity.value for capacity in known if capacity.value is not None)
     sources = tuple(
         source
@@ -276,8 +294,17 @@ def detect_resources(
         if host_memory.value is None:
             memory_candidates.append(sysconf_available_memory())
         relative = cgroup_v2_relative_path(proc_cgroup)
-        if relative is not None:
-            memory_candidates.append(linux_cgroup_memory_capacity(cgroup_root, relative))
+        if relative is None:
+            memory_candidates = [Capacity(None, ("cgroup-v2:unverified",))]
+        else:
+            try:
+                cgroup_memory = linux_cgroup_memory_capacity(cgroup_root, relative)
+            except DetectionError:
+                # Host availability alone is unsafe when the job's container
+                # boundary cannot be verified.
+                memory_candidates = [Capacity(None, ("cgroup-v2:unverified",))]
+            else:
+                memory_candidates.append(cgroup_memory)
             cpu_candidates.append(linux_cgroup_cpu_capacity(cgroup_root, relative))
     elif system == "Darwin":
         memory_candidates.append(macos_available_memory())

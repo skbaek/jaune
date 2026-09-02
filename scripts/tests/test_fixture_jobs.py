@@ -3,6 +3,7 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 
 SCRIPT = Path(__file__).parents[1] / "fixture_jobs.py"
@@ -68,6 +69,53 @@ class FixtureJobsTests(unittest.TestCase):
             capacity = MODULE.linux_cgroup_memory_capacity(root, "/job")
             self.assertEqual(capacity.value, 7 * MODULE.GIB)
             self.assertEqual(MODULE.choose_jobs(16, capacity.value), 2)
+
+    def test_cgroup_without_memory_controller_is_unverified(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "job").mkdir()
+            with self.assertRaises(MODULE.DetectionError):
+                MODULE.linux_cgroup_memory_capacity(root, "/job")
+
+    def test_finite_cgroup_limit_requires_current_usage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            child = root / "job"
+            child.mkdir()
+            (child / "memory.max").write_text(str(8 * MODULE.GIB), encoding="utf-8")
+            with self.assertRaises(MODULE.DetectionError):
+                MODULE.linux_cgroup_memory_capacity(root, "/job")
+
+    def test_unverified_linux_cgroup_forces_one_worker(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            proc_cgroup = root / "self.cgroup"
+            proc_cgroup.write_text("not-a-unified-membership\n", encoding="utf-8")
+            with (
+                mock.patch.object(MODULE.platform, "system", return_value="Linux"),
+                mock.patch.object(
+                    MODULE,
+                    "linux_mem_available",
+                    return_value=MODULE.Capacity(64 * MODULE.GIB, ("host",)),
+                ),
+            ):
+                resources = MODULE.detect_resources(root, proc_cgroup)
+            self.assertIsNone(resources.memory.value)
+            self.assertEqual(resources.memory.sources, ("cgroup-v2:unverified",))
+            self.assertEqual(
+                MODULE.choose_jobs(resources.cpu.value, resources.memory.value), 1
+            )
+
+    def test_macos_vm_stat_avoids_double_counting(self):
+        capacity = MODULE.parse_macos_vm_stat(
+            "Mach Virtual Memory Statistics: (page size of 4096 bytes)\n"
+            "Pages free:                               10.\n"
+            "Pages inactive:                           20.\n"
+            "Pages speculative:                         7.\n"
+            "Pages purgeable:                           5.\n"
+        )
+        self.assertEqual(capacity.value, 30 * 4096)
+        self.assertEqual(capacity.sources, ("vm_stat:free+inactive",))
 
     def test_cpu_quota_and_cpuset_are_both_considered(self):
         with tempfile.TemporaryDirectory() as directory:

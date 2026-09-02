@@ -73,13 +73,19 @@ for the cheap gates above.
 The shared `scripts/fixture_jobs.py` selector reserves 1 GiB outside the worker
 pool and provisions 2.4 GiB per worker. On Linux it takes the tightest remaining
 allowance across host `MemAvailable` and every finite cgroup-v2 ancestor, and
-caps CPU by affinity, cpuset, and finite quota; on macOS it reads reclaimable
-`vm_stat` pages. Missing trustworthy memory information conservatively resolves
-to one worker. A clean 6 or 8 GiB job therefore selects no more than two.
+caps CPU by affinity, cpuset, and finite quota; on macOS it counts only free and
+inactive `vm_stat` pages. XNU already includes speculative pages in its free
+count, and purgeable pages are not assumed disjoint, so neither is counted a
+second time. An unreadable container boundary or other missing trustworthy
+memory information conservatively resolves to one worker. A clean 6 or 8 GiB
+job therefore selects no more than two.
 **Sequential (`--jobs 1`) is the default and its behaviour is untouched** —
 same guard, same ordering, same authoritative timings. A positive numeric value
 is an explicit override and bypasses automatic sizing without changing its
-meaning; invalid and zero values still fail loudly.
+meaning; invalid and zero values still fail loudly. On a memory-constrained
+host, safer `auto` sizing can trade parallel throughput for headroom. Use a
+numeric override only after separately measuring that worker count under the
+same boundary; this policy does not imply an interpreter-runtime regression.
 
 What parallel mode changes:
 

@@ -53,6 +53,25 @@ class MeasureResourceTests(unittest.TestCase):
         self.assertEqual(MODULE.oom_count(snapshot), 1)
         self.assertEqual(MODULE.oom_count(None), 0)
 
+    def test_every_local_memory_boundary_event_is_fatal(self):
+        for key in MODULE.RESOURCE_EVENT_KEYS:
+            with self.subTest(key=key):
+                events = {event: 0 for event in MODULE.RESOURCE_EVENT_KEYS}
+                events[key] = 1
+                self.assertEqual(
+                    MODULE.classify_verdict(0, 0, False, events, "success"),
+                    "RESOURCE_EVENT",
+                )
+
+    def test_clean_completion_is_the_only_pass(self):
+        events = {event: 0 for event in MODULE.RESOURCE_EVENT_KEYS}
+        self.assertEqual(
+            MODULE.classify_verdict(0, 0, False, events, "success"), "PASS"
+        )
+        self.assertEqual(
+            MODULE.classify_verdict(0, 0, True, events, "success"), "FAIL"
+        )
+
     def test_limit_readback_requires_inner_measurement_settings(self):
         snapshot = {
             "memory_max": "67108864",

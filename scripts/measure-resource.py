@@ -35,6 +35,7 @@ REQUIRED_COUNTERS = (
     "memory.oom.group",
 )
 ACTIVE_STATES = {"activating", "active", "deactivating"}
+RESOURCE_EVENT_KEYS = ("max", "oom", "oom_kill")
 
 
 class MeasureError(RuntimeError):
@@ -215,11 +216,29 @@ def require_readback(snapshot: dict[str, object], memory_max: int, swap_max: int
 
 
 def oom_count(snapshot: dict[str, object] | None) -> int:
+    return local_resource_events(snapshot)["oom_kill"]
+
+
+def local_resource_events(snapshot: dict[str, object] | None) -> dict[str, int]:
     if snapshot is None:
-        return 0
+        return {key: 0 for key in RESOURCE_EVENT_KEYS}
     local = snapshot["memory_events_local"]
     assert isinstance(local, dict)
-    return int(local.get("oom_kill", 0))
+    return {key: int(local.get(key, 0)) for key in RESOURCE_EVENT_KEYS}
+
+
+def classify_verdict(
+    payload_returncode: int | None,
+    systemd_run_returncode: int,
+    timed_out: bool,
+    resource_events: dict[str, int],
+    unit_result: str,
+) -> str:
+    if any(resource_events.values()) or unit_result == "oom-kill":
+        return "RESOURCE_EVENT"
+    if payload_returncode == 0 and systemd_run_returncode == 0 and not timed_out:
+        return "PASS"
+    return "FAIL"
 
 
 def controller_main(arguments: list[str]) -> int:
@@ -336,12 +355,12 @@ def controller_main(arguments: list[str]) -> int:
         if result_path.is_file():
             text = result_path.read_text(encoding="utf-8").strip()
             payload_rc = int(text) if text.isdigit() else None
-        event_oom = oom_count(last_snapshot)
+        resource_events = local_resource_events(last_snapshot)
         result = {
             "schema": 1,
-        "unit": unit,
-        "command": command,
-        "working_directory": str(Path.cwd()),
+            "unit": unit,
+            "command": command,
+            "working_directory": str(Path.cwd()),
             "memory_max": args.memory_max,
             "swap_max": args.swap_max,
             "elapsed_seconds": round(time.monotonic() - started, 6),
@@ -349,15 +368,16 @@ def controller_main(arguments: list[str]) -> int:
             "payload_returncode": payload_rc,
             "systemd_run_returncode": systemd_run_rc,
             "timed_out": timed_out,
-            "oom_kill_count": event_oom,
+            "oom_kill_count": resource_events["oom_kill"],
+            "local_resource_events": resource_events,
             "unit_state": unit_state,
             "terminal_snapshot": last_snapshot,
-            "verdict": (
-                "PASS"
-                if payload_rc == 0 and systemd_run_rc == 0 and not timed_out and event_oom == 0
-                else "RESOURCE_EVENT"
-                if event_oom > 0 or unit_state.get("Result") == "oom-kill"
-                else "FAIL"
+            "verdict": classify_verdict(
+                payload_rc,
+                systemd_run_rc,
+                timed_out,
+                resource_events,
+                unit_state.get("Result", ""),
             ),
         }
         encoded = json.dumps(result, sort_keys=True)
