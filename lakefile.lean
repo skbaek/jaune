@@ -15,3 +15,7 @@ lean_lib «Jaune» where
 @[default_target]
 lean_exe «jaune» where
   root := `Main
+
+/-- Goal-local native probe for call-depth/output-size memory scaling. -/
+lean_exe «jaune-memory-probe» where
+  root := `MemoryProbe
