@@ -2641,6 +2641,34 @@ theorem Evm.step_gasBound (evm : Evm) : evm.step.GasBound evm.dyna.gasLeft := by
   · rename_i l _
     exact Execution.settledGasLe_of_gasLe (Linst.run_gasLe evm.sta evm.dyna l)
 
+/-! The driver keeps its calldata-release machinery private to `Jaune.Execution`.
+These proof-local mirrors are definitionally identical to those private helpers,
+so unfolding `execFueled` exposes terms the sufficiency proofs can name without
+adding anything to Jaune's public API. Keep these definitions in lockstep with
+their implementation counterparts. -/
+
+private def ByteArray.mayReadCalldata (code : ByteArray) : Bool :=
+  code.foldl
+    (fun (remaining : UInt8) byte =>
+      if remaining == 0xff then 0xff
+      else if remaining != 0 then remaining - 1
+      else if byte == 0x35 || byte == 0x36 || byte == 0x37 then 0xff
+      else if 0x60 ≤ byte.toNat ∧ byte.toNat ≤ 0x7f then byte - 0x5f
+      else 0)
+    0 == 0xff
+
+private def Sevm.releaseUnobservableCalldata (sevm : Sevm) : Sevm :=
+  if sevm.data.isEmpty || sevm.code.mayReadCalldata then sevm
+  else {sevm with data := []}
+
+private def Evm.releaseUnobservableCalldata (evm : Evm) : Evm :=
+  {evm with sta := evm.sta.releaseUnobservableCalldata}
+
+private def Frame.releaseSettlementCalldata (f : Frame) : Frame :=
+  { f with
+    outer := {f.outer with data := []}
+    inner := {f.inner with data := []} }
+
 /-! ## The driver
 
 Both theorems go by structural induction on the fuel, and monotonicity has to
@@ -2692,17 +2720,26 @@ theorem execFueled_settledGasLe : ∀ (fuel : Nat) (evm : Evm) {raw : Execution}
           exact (ih _ h).mono (show d1.gasLeft ≤ evm.dyna.gasLeft by omega)
       · rw [he] at h
         dsimp only at h
-        rcases hc : (execFueled child fuel).run with _ | raw'
+        change (match (execFueled child.releaseUnobservableCalldata fuel).run with
+          | none => Fueled.exhausted
+          | some raw' =>
+            match rsm.run (frame.releaseSettlementCalldata.settle raw') with
+            | .error e => Fueled.ofExcept (.error e)
+            | .ok devm =>
+              execFueled ⟨pc, evm.sta.releaseUnobservableCalldata, devm⟩ fuel).run = some raw at h
+        rcases hc : (execFueled child.releaseUnobservableCalldata fuel).run with _ | raw'
         · rw [hc] at h
           simp only [Fueled.exhausted_run] at h
           nomatch h
         · rw [hc] at h
           dsimp only at h
-          have hchild := ih child hc
+          have hchild := ih child.releaseUnobservableCalldata hc
+          change Execution.SettledGasLe child.dyna.gasLeft raw' at hchild
           rw [Frame.enter_run_gasLeft he] at hchild
-          have hres := Resume.run_gasLe (rsm := rsm) (r := frame.settle raw')
+          have hres := Resume.run_gasLe (rsm := rsm)
+            (r := frame.releaseSettlementCalldata.settle raw')
             (m := frame.inner.gas) (fun d hd => Frame.settle_gasLe hchild hd)
-          rcases hrun : rsm.run (frame.settle raw') with ⟨e⟩ | d1
+          rcases hrun : rsm.run (frame.releaseSettlementCalldata.settle raw') with ⟨e⟩ | d1
           · rw [hrun] at h hres
             simp only [Fueled.ofExcept_run, Option.some.injEq] at h
             simp only [Execution.gasLeft_error] at hres
@@ -2740,15 +2777,25 @@ theorem execFueled_run_isSome : ∀ (fuel : Nat) (evm : Evm),
           have hle : d0.gasLeft ≤ frame.inner.gas := Frame.enter_done_gasLe he hd0
           have hlt : d1.gasLeft < fuel := by omega
           exact ih _ hlt
-      · have hgas : child.dyna.gasLeft = frame.inner.gas := Frame.enter_run_gasLeft he
-        have hchildlt : child.dyna.gasLeft < fuel := by omega
-        obtain ⟨raw', hraw'⟩ := ih child hchildlt
+      · change ∃ raw, (match (execFueled child.releaseUnobservableCalldata fuel).run with
+          | none => Fueled.exhausted
+          | some raw' =>
+            match rsm.run (frame.releaseSettlementCalldata.settle raw') with
+            | .error e => Fueled.ofExcept (.error e)
+            | .ok devm =>
+              execFueled ⟨pc, evm.sta.releaseUnobservableCalldata, devm⟩ fuel).run = some raw
+        have hgas : child.releaseUnobservableCalldata.dyna.gasLeft = frame.inner.gas := by
+          change child.dyna.gasLeft = frame.inner.gas
+          exact Frame.enter_run_gasLeft he
+        have hchildlt : child.releaseUnobservableCalldata.dyna.gasLeft < fuel := by omega
+        obtain ⟨raw', hraw'⟩ := ih child.releaseUnobservableCalldata hchildlt
         rw [hraw']
         dsimp only
-        rcases hrun : rsm.run (frame.settle raw') with ⟨e⟩ | d1 <;> dsimp only
+        rcases hrun : rsm.run (frame.releaseSettlementCalldata.settle raw') with ⟨e⟩ | d1 <;>
+          dsimp only
         · exact ⟨.error e, rfl⟩
         · obtain ⟨d0, hd0, hgas2⟩ := Resume.run_ok_gasLeft hrun
-          have hsettled := execFueled_settledGasLe fuel child hraw'
+          have hsettled := execFueled_settledGasLe fuel child.releaseUnobservableCalldata hraw'
           rw [hgas] at hsettled
           have hle : d0.gasLeft ≤ frame.inner.gas := Frame.settle_gasLe hsettled hd0
           have hlt : d1.gasLeft < fuel := by omega
@@ -2832,14 +2879,28 @@ theorem execFueled_run_mono :
           dsimp only at h ⊢
         · exact h
         · exact ih _ hle' h
-      · rcases hc : (execFueled child fuel).run with _ | raw'
+      · change (match (execFueled child.releaseUnobservableCalldata fuel).run with
+          | none => Fueled.exhausted
+          | some raw' =>
+            match rsm.run (frame.releaseSettlementCalldata.settle raw') with
+            | .error e => Fueled.ofExcept (.error e)
+            | .ok devm =>
+              execFueled ⟨pc, evm.sta.releaseUnobservableCalldata, devm⟩ fuel).run = some raw at h
+        change (match (execFueled child.releaseUnobservableCalldata m).run with
+          | none => Fueled.exhausted
+          | some raw' =>
+            match rsm.run (frame.releaseSettlementCalldata.settle raw') with
+            | .error e => Fueled.ofExcept (.error e)
+            | .ok devm =>
+              execFueled ⟨pc, evm.sta.releaseUnobservableCalldata, devm⟩ m).run = some raw
+        rcases hc : (execFueled child.releaseUnobservableCalldata fuel).run with _ | raw'
         · rw [hc] at h
           simp only [Fueled.exhausted_run] at h
           nomatch h
         · rw [hc] at h
           rw [ih _ hle' hc]
           dsimp only at h ⊢
-          rcases hrun : rsm.run (frame.settle raw') with ⟨e⟩ | d1 <;>
+          rcases hrun : rsm.run (frame.releaseSettlementCalldata.settle raw') with ⟨e⟩ | d1 <;>
             rw [hrun] at h <;> dsimp only at h ⊢
           · exact h
           · exact ih _ hle' h
