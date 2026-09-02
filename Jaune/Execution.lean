@@ -312,13 +312,6 @@ def Frame.ofCall (msg : Msg) : Frame := ⟨msg, msg, false⟩
 def Frame.ofCreate (msg : Msg) : Frame :=
   ⟨msg, processCreateMessage.msg msg, true⟩
 
-/-- Settlement reads the saved state/transient-storage pair and, for CREATE,
-the target and active rules; it never reads either message's calldata. -/
-private def Frame.releaseSettlementCalldata (f : Frame) : Frame :=
-  { f with
-    outer := {f.outer with data := []}
-    inner := {f.inner with data := []} }
-
 /-- Both saved states a call frame can restore from are canonical.
 
 A `Frame` holds two messages and `Frame.settleMsg` can roll back to either:
@@ -329,10 +322,6 @@ state" clause of P0.4 item 5. Statement only -- Step 4 of
 `~/plans/integrity.md` owns the preservation proofs. -/
 def Frame.Canonical (f : Frame) : Prop :=
   Msg.Canonical f.outer ∧ Msg.Canonical f.inner
-
-private theorem Frame.releaseSettlementCalldata_canonical {f : Frame}
-    (h : f.Canonical) : f.releaseSettlementCalldata.Canonical := by
-  exact h
 
 instance {f : Frame} : Decidable (Frame.Canonical f) := by
   unfold Frame.Canonical; infer_instance
@@ -379,11 +368,6 @@ def Frame.settleMsg (f : Frame)
 def Frame.settle (f : Frame) (raw : Execution) :
     Except (EvmError × State × AdrSet × Tra) Devm :=
   f.settleMsg (executeCode.handleError raw)
-
-private theorem Frame.releaseSettlementCalldata_settle
-    (f : Frame) (raw : Execution) :
-    f.releaseSettlementCalldata.settle raw = f.settle raw := by
-  rfl
 
 def executeCode.enter (msg : Msg) : Evm ⊕ Execution :=
   let evm := initEvm msg
@@ -489,22 +473,6 @@ def genericCreate.step
       createMsg sevm devm createGas endowment newAddress calldata
     return .spawn (Frame.ofCreate childMsg) (.create devm newAddress)
 
-/-- Allocation-free executable test for bytecode that may observe calldata.
-
-The byte-sized fold state is either the number of remaining PUSH payload bytes
-or `0xff` once a reader has been found.  Skipping payload bytes matters here:
-contract addresses embedded by `PUSH20` can themselves contain `0x35`--`0x37`,
-but those data bytes are not executable calldata instructions. -/
-private def ByteArray.mayReadCalldata (code : ByteArray) : Bool :=
-  code.foldl
-    (fun (remaining : UInt8) byte =>
-      if remaining == 0xff then 0xff
-      else if remaining != 0 then remaining - 1
-      else if byte == 0x35 || byte == 0x36 || byte == 0x37 then 0xff
-      else if 0x60 ≤ byte.toNat ∧ byte.toNat ≤ 0x7f then byte - 0x5f
-      else 0)
-    0 == 0xff
-
 def genericCall.step
     (sevm : Sevm) (devm : Devm) (gas : Nat) (value : B256)
     (caller target codeAddress : Adr)
@@ -522,6 +490,96 @@ def genericCall.step
       callMsg sevm evm1 gas value caller target codeAddress
         shouldTransferValue isStaticcall calldata code disablePrecompiles
     .spawn (Frame.ofCall childMsg) (.call evm1 outputIndex outputSize)
+
+/-! The native driver keeps one exact calldata slice available for structural
+sharing.  The key is only the compact backing array plus the requested range;
+the potentially large padded `Bytes` value is allocated once and then reused
+when a later call asks for the identical slice.  The proof field is erased by
+code generation and makes every cache hit definitionally accountable to the
+ordinary `Array.sliceD` result. -/
+
+private structure CalldataCacheKey where
+  data : Array UInt8
+  inputIndex : Nat
+  inputSize : Nat
+deriving DecidableEq
+
+private structure CalldataCache where
+  key : CalldataCacheKey
+  calldata : Bytes
+  valid : calldata = key.data.sliceD key.inputIndex key.inputSize 0
+
+private def CalldataCache.get
+    (cache : Option CalldataCache) (data : Array UInt8)
+    (inputIndex inputSize : Nat) : Bytes × Option CalldataCache :=
+  let key : CalldataCacheKey := ⟨data, inputIndex, inputSize⟩
+  match cache with
+  | some cached =>
+    if h : cached.key = key then
+      let current : CalldataCache :=
+        { key := key
+          calldata := cached.calldata
+          valid := by simpa [← h] using cached.valid }
+      (current.calldata, some current)
+    else
+      let calldata := data.sliceD inputIndex inputSize 0
+      (calldata, some ⟨key, calldata, rfl⟩)
+  | none =>
+    let calldata := data.sliceD inputIndex inputSize 0
+    (calldata, some ⟨key, calldata, rfl⟩)
+
+private theorem CalldataCache.get_fst
+    (cache : Option CalldataCache) (data : Array UInt8)
+    (inputIndex inputSize : Nat) :
+    (CalldataCache.get cache data inputIndex inputSize).1 =
+      data.sliceD inputIndex inputSize 0 := by
+  unfold CalldataCache.get
+  rcases cache with _ | cached
+  · rfl
+  · dsimp only
+    split
+    · rename_i h
+      simpa [h] using cached.valid
+    · rfl
+
+private def genericCall.stepCached
+    (sevm : Sevm) (devm : Devm) (gas : Nat) (value : B256)
+    (caller target codeAddress : Adr)
+    (shouldTransferValue isStaticcall : Bool)
+    (inputIndex inputSize outputIndex outputSize : Nat)
+    (code : ByteArray) (disablePrecompiles : Bool)
+    (cache : Option CalldataCache) : XStep × Option CalldataCache :=
+  let evm1 := devm.withReturnData []
+  if sevm.depth = 0 then
+    (XStep.ofExcept do
+      let devm ← (evm1.withGasLeft (evm1.gasLeft + gas)).push 0
+      return .done (.ok devm), cache)
+  else
+    let (calldata, cache) :=
+      CalldataCache.get cache evm1.memory.data inputIndex inputSize
+    let childMsg :=
+      callMsg sevm evm1 gas value caller target codeAddress
+        shouldTransferValue isStaticcall calldata code disablePrecompiles
+    (.spawn (Frame.ofCall childMsg) (.call evm1 outputIndex outputSize), cache)
+
+private theorem genericCall.stepCached_fst
+    (sevm : Sevm) (devm : Devm) (gas : Nat) (value : B256)
+    (caller target codeAddress : Adr)
+    (shouldTransferValue isStaticcall : Bool)
+    (inputIndex inputSize outputIndex outputSize : Nat)
+    (code : ByteArray) (disablePrecompiles : Bool)
+    (cache : Option CalldataCache) :
+    (genericCall.stepCached sevm devm gas value caller target codeAddress
+      shouldTransferValue isStaticcall inputIndex inputSize outputIndex
+      outputSize code disablePrecompiles cache).1 =
+    genericCall.step sevm devm gas value caller target codeAddress
+      shouldTransferValue isStaticcall inputIndex inputSize outputIndex
+      outputSize code disablePrecompiles := by
+  unfold genericCall.stepCached genericCall.step
+  dsimp only
+  split
+  · rfl
+  · simp only [CalldataCache.get_fst]
 
 def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
   | .create =>
@@ -681,6 +739,73 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
         true true inputIndex inputSize outputIndex outputSize code
         disablePrecompiles
 
+/-- Cache-threaded native specialization. The first component is proved below
+to be exactly `Xinst.step`; only STATICCALL is specialized because it is the
+measured pathological family, while every other instruction takes the ordinary
+definition verbatim. -/
+private def Xinst.stepCached
+    (sevm : Sevm) (devm : Devm) (cache : Option CalldataCache) :
+    Xinst → XStep × Option CalldataCache
+  | .statcall =>
+    match (do
+      let ⟨gas, devm⟩ ← devm.pop
+      let ⟨target, devm⟩ ← devm.popToAdr
+      let ⟨inputIndex, devm⟩ ← devm.popToNat
+      let ⟨inputSize, devm⟩ ← devm.popToNat
+      let ⟨outputIndex, devm⟩ ← devm.popToNat
+      let ⟨outputSize, devm⟩ ← devm.popToNat
+      let extendCost :=
+        devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
+      let preAccessCost := accessCost target devm.accessedAddresses
+      let devm := addAccessedAddress devm target
+      let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
+        accessDelegation devm target
+      let accessCost := preAccessCost + delegatedAccessGasCost
+      let ⟨msgCallCost, msgCallStipend⟩ :=
+        calculateMsgCallGas 0 gas.toNat devm.gasLeft extendCost accessCost
+      let devm ← chargeGas (msgCallCost + extendCost) devm
+      let devm :=
+        devm.memExtends
+          [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
+      return genericCall.stepCached
+        sevm devm msgCallStipend 0 sevm.currentTarget target newCodeAddress
+        true true inputIndex inputSize outputIndex outputSize code
+        disablePrecompiles cache :
+      Except (EvmError × Devm) (XStep × Option CalldataCache)) with
+    | .error e => (.done (.error e), cache)
+    | .ok result => result
+  | x => (Xinst.step sevm devm x, cache)
+
+private theorem Xinst.stepCached_fst
+    (sevm : Sevm) (devm : Devm) (cache : Option CalldataCache) (x : Xinst) :
+    (Xinst.stepCached sevm devm cache x).1 = Xinst.step sevm devm x := by
+  cases x <;> simp [Xinst.stepCached, Xinst.step]
+  case statcall =>
+    rcases h₁ : devm.pop with e | ⟨gas, d₁⟩
+    · simp only [Bind.bind, Except.bind, XStep.ofExcept]
+    simp only [Bind.bind, Except.bind]
+    rcases h₂ : d₁.popToAdr with e | ⟨target, d₂⟩
+    · simp_all [XStep.ofExcept]
+    rcases h₃ : d₂.popToNat with e | ⟨inputIndex, d₃⟩
+    · simp_all [XStep.ofExcept]
+    rcases h₄ : d₃.popToNat with e | ⟨inputSize, d₄⟩
+    · simp_all [XStep.ofExcept]
+    rcases h₅ : d₄.popToNat with e | ⟨outputIndex, d₅⟩
+    · simp_all [XStep.ofExcept]
+    rcases h₆ : d₅.popToNat with e | ⟨outputSize, d₆⟩
+    · simp_all [XStep.ofExcept]
+    rcases h₇ :
+        chargeGas
+          ((calculateMsgCallGas 0 gas.toNat
+                (accessDelegation (addAccessedAddress d₆ target) target).2.2.2.2.gasLeft
+                (d₆.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
+                (accessCost target d₆.accessedAddresses +
+                  (accessDelegation (addAccessedAddress d₆ target) target).2.2.2.1)).1 +
+            d₆.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
+          (accessDelegation (addAccessedAddress d₆ target) target).2.2.2.2 with e | d₇
+    · simp_all [XStep.ofExcept]
+    simp_all [XStep.ofExcept, genericCall.stepCached_fst]
+
 def Ninst.step (evm : Evm) (n : Ninst) : Step :=
   let pc := evm.pc + n.size
   match n with
@@ -699,49 +824,43 @@ def Evm.step (evm : Evm) : Step :=
   | .some (.jump j) => Step.ofJump (j.run evm)
   | .some (.last l) => .halt (l.run evm.sta evm.dyna)
 
-#guard !(ByteArray.mk #[]).mayReadCalldata
-#guard (ByteArray.mk #[0x35]).mayReadCalldata
-#guard (ByteArray.mk #[0x36]).mayReadCalldata
-#guard (ByteArray.mk #[0x37]).mayReadCalldata
-#guard !(ByteArray.mk #[0x60, 0x35, 0x00]).mayReadCalldata
-#guard (ByteArray.mk #[0x60, 0x35, 0x35]).mayReadCalldata
-#guard !(ByteArray.mk #[0x73, 0x35, 0x00]).mayReadCalldata
-#guard !(ByteArray.mk #[
-  0x73, 0x58, 0x3a, 0xa5, 0x87, 0xd7, 0xd8, 0x52, 0xa5, 0xb8, 0x44,
-  0x8c, 0xc4, 0x16, 0x05, 0x37, 0xd9, 0xbd, 0x12, 0xc8, 0x89, 0x00
-]).mayReadCalldata
+private def Ninst.stepCached
+    (evm : Evm) (cache : Option CalldataCache) (n : Ninst) :
+    Step × Option CalldataCache :=
+  let pc := evm.pc + n.size
+  match n with
+  | .exec x =>
+    let result := Xinst.stepCached evm.sta evm.dyna cache x
+    (XStep.toStep pc result.1, result.2)
+  | _ => (Ninst.step evm n, cache)
 
-/-- Release calldata only when the frame's entire bytecode is independent of
-it. Empty calldata takes the constant-time path used by most system frames. -/
-private def Sevm.releaseUnobservableCalldata (sevm : Sevm) : Sevm :=
-  if sevm.data.isEmpty || sevm.code.mayReadCalldata then sevm
-  else {sevm with data := []}
+private theorem Ninst.stepCached_fst
+    (evm : Evm) (cache : Option CalldataCache) (n : Ninst) :
+    (Ninst.stepCached evm cache n).1 = Ninst.step evm n := by
+  cases n <;>
+    simp [Ninst.stepCached, Ninst.step, Xinst.stepCached_fst]
 
-private def Evm.releaseUnobservableCalldata (evm : Evm) : Evm :=
-  {evm with sta := evm.sta.releaseUnobservableCalldata}
+private def Evm.stepCached
+    (evm : Evm) (cache : Option CalldataCache) :
+    Step × Option CalldataCache :=
+  match evm.getInst with
+  | .none =>
+    (.halt (.error ⟨.halt (.invalidOpcode .none), evm.dyna⟩), cache)
+  | .some (.next n) => Ninst.stepCached evm cache n
+  | .some (.jump j) => (Step.ofJump (j.run evm), cache)
+  | .some (.last l) => (.halt (l.run evm.sta evm.dyna), cache)
 
-private theorem Sevm.releaseUnobservableCalldata_canonical {sevm : Sevm}
-    (h : sevm.Canonical) : sevm.releaseUnobservableCalldata.Canonical := by
-  unfold Sevm.releaseUnobservableCalldata
-  split <;> exact h
-
-private theorem Evm.releaseUnobservableCalldata_canonical {evm : Evm}
-    (h : evm.Canonical) : evm.releaseUnobservableCalldata.Canonical :=
-  ⟨Sevm.releaseUnobservableCalldata_canonical h.1, h.2⟩
-
-private def releaseCalldataGuardSevm (code : ByteArray) : Sevm :=
-  { (default : Sevm) with data := [0xAA], code := code }
-
--- Bytecode independent of calldata releases the retained payload, while a
--- possible reader keeps it. PUSH payload bytes are not executable readers.
-#guard ((releaseCalldataGuardSevm (ByteArray.mk #[0x00]))
-    |>.releaseUnobservableCalldata |>.data |>.isEmpty)
-#guard ((releaseCalldataGuardSevm (ByteArray.mk #[0x35]))
-    |>.releaseUnobservableCalldata |>.data) = [0xAA]
-#guard ((releaseCalldataGuardSevm (ByteArray.mk #[0x60, 0x35, 0x00]))
-    |>.releaseUnobservableCalldata |>.data |>.isEmpty)
-#guard ((releaseCalldataGuardSevm (ByteArray.mk #[0x60, 0x35, 0x35]))
-    |>.releaseUnobservableCalldata |>.data) = [0xAA]
+private theorem Evm.stepCached_fst
+    (evm : Evm) (cache : Option CalldataCache) :
+    (Evm.stepCached evm cache).1 = Evm.step evm := by
+  unfold Evm.stepCached Evm.step
+  cases h : evm.getInst with
+  | none => rfl
+  | some inst =>
+    cases inst with
+    | next n => exact Ninst.stepCached_fst evm cache n
+    | jump j => rfl
+    | last l => rfl
 
 /-- The single recursive interpreter driver, structurally recursive on its fuel
 parameter and therefore obliged to report exhaustion as an outcome.
@@ -761,16 +880,96 @@ def execFueled : Evm → Nat → Fueled (EvmError × Devm) Devm
         | .error e => Fueled.ofExcept (.error e)
         | .ok devm => execFueled ⟨pc, evm.sta, devm⟩ fuel
       | .run child =>
-        let frame := frame.releaseSettlementCalldata
-        let parentSta := evm.sta.releaseUnobservableCalldata
-        let child := child.releaseUnobservableCalldata
         match (execFueled child fuel).run with
         | .none => Fueled.exhausted
         | .some raw =>
           match rsm.run (frame.settle raw) with
           | .error e => Fueled.ofExcept (.error e)
-          | .ok devm => execFueled ⟨pc, parentSta, devm⟩ fuel
+          | .ok devm => execFueled ⟨pc, evm.sta, devm⟩ fuel
   termination_by _ fuel => fuel
+
+/-- Cache-threaded native driver. Its semantic component is proved below to be
+exactly `execFueled`; the extra component only retains a shareable physical
+representative of an exact calldata slice. -/
+private def execFueledCachedCore :
+    Evm → Nat → Option CalldataCache →
+      Fueled (EvmError × Devm) Devm × Option CalldataCache
+  | _, 0, cache => (Fueled.exhausted, cache)
+  | evm, fuel + 1, cache =>
+    let ⟨step, cache⟩ := Evm.stepCached evm cache
+    match step with
+    | .halt ex => (Fueled.ofExcept ex, cache)
+    | .cont pc devm => execFueledCachedCore ⟨pc, evm.sta, devm⟩ fuel cache
+    | .spawn frame rsm pc =>
+      match frame.enter with
+      | .done r =>
+        match rsm.run r with
+        | .error e => (Fueled.ofExcept (.error e), cache)
+        | .ok devm => execFueledCachedCore ⟨pc, evm.sta, devm⟩ fuel cache
+      | .run child =>
+        let ⟨childResult, cache⟩ := execFueledCachedCore child fuel cache
+        match childResult.run with
+        | .none => (Fueled.exhausted, cache)
+        | .some raw =>
+          match rsm.run (frame.settle raw) with
+          | .error e => (Fueled.ofExcept (.error e), cache)
+          | .ok devm => execFueledCachedCore ⟨pc, evm.sta, devm⟩ fuel cache
+  termination_by _ fuel _ => fuel
+
+private theorem execFueledCachedCore_fst :
+    ∀ fuel evm cache,
+      (execFueledCachedCore evm fuel cache).1 = execFueled evm fuel := by
+  intro fuel
+  induction fuel with
+  | zero =>
+    intro evm cache
+    simp [execFueledCachedCore, execFueled]
+  | succ fuel ih =>
+    intro evm cache
+    rcases hstep : Evm.stepCached evm cache with ⟨step, cache'⟩
+    have hs : step = Evm.step evm := by
+      simpa [hstep] using Evm.stepCached_fst evm cache
+    simp only [execFueledCachedCore, hstep, execFueled, ← hs]
+    cases step with
+    | halt ex => rfl
+    | cont pc devm => exact ih ⟨pc, evm.sta, devm⟩ cache'
+    | spawn frame rsm pc =>
+      dsimp only
+      cases hentry : frame.enter with
+      | done r =>
+        dsimp only
+        cases hresume : rsm.run r with
+        | error e => dsimp only
+        | ok devm =>
+          dsimp only
+          exact ih ⟨pc, evm.sta, devm⟩ cache'
+      | run child =>
+        dsimp only
+        rcases hchild : execFueledCachedCore child fuel cache' with
+          ⟨childResult, cache''⟩
+        have hc : childResult = execFueled child fuel := by
+          simpa [hchild] using ih child cache'
+        dsimp only
+        rw [hc]
+        cases hrun : (execFueled child fuel).run with
+        | none => dsimp only
+        | some raw =>
+          dsimp only
+          cases hresume : rsm.run (frame.settle raw) with
+          | error e => dsimp only
+          | ok devm =>
+            dsimp only
+            exact ih ⟨pc, evm.sta, devm⟩ cache''
+
+private def execFueledCached
+    (evm : Evm) (fuel : Nat) : Fueled (EvmError × Devm) Devm :=
+  (execFueledCachedCore evm fuel none).1
+
+@[csimp] private theorem execFueled_eq_cached :
+    execFueled = execFueledCached := by
+  funext evm fuel
+  symm
+  exact execFueledCachedCore_fst fuel evm none
 
 /-! Focused executable checks for the flattened core.
 
@@ -851,8 +1050,8 @@ private def flattenGuardCallData
   | .spawn frame _ => some frame.inner.data
   | _ => none
 
--- `genericCall.step` keeps its original spawned-message construction. The
--- interpreter releases an unobservable payload only after entering the frame.
+-- `genericCall.step` keeps its exact original spawned-message construction;
+-- the native driver only reuses an equal calldata allocation.
 #guard flattenGuardCallData [0x00] 0 false = some [0xAA]
 #guard flattenGuardCallData [0x35] 0 false = some [0xAA]
 #guard flattenGuardCallData [0x60, 0x35, 0x00] 0 false = some [0xAA]
@@ -1889,23 +2088,19 @@ theorem execFueled_run_canonical :
           rw [← h]
           exact hcan
         · exact ih ⟨pc, evm.sta, d1⟩ ⟨hevm.1, hcan⟩ h
-      · rcases hc : (execFueled child.releaseUnobservableCalldata fuel).run with _ | raw2
+      · rcases hc : (execFueled child fuel).run with _ | raw2
         · rw [hc] at h
           simp only [Fueled.exhausted_run] at h
           nomatch h
         · rw [hc] at h
           dsimp only at h
-          have hsettle := Frame.settle_canonicalSettle
-            (Frame.releaseSettlementCalldata_canonical hst)
-            (ih child.releaseUnobservableCalldata
-              (Evm.releaseUnobservableCalldata_canonical hent) hc)
+          have hsettle := Frame.settle_canonicalSettle hst (ih child hent hc)
           have hcan := Resume.run_canonical (rsm := rsm) hsettle
-          rcases hrun : rsm.run (frame.releaseSettlementCalldata.settle raw2) with ⟨e⟩ | d1 <;>
+          rcases hrun : rsm.run (frame.settle raw2) with ⟨e⟩ | d1 <;>
             rw [hrun] at h hcan <;> dsimp only at h
           · simp only [Fueled.ofExcept_run, Option.some.injEq] at h
             rw [← h]
             exact hcan
-          · exact ih ⟨pc, evm.sta.releaseUnobservableCalldata, d1⟩
-              ⟨Sevm.releaseUnobservableCalldata_canonical hevm.1, hcan⟩ h
+          · exact ih ⟨pc, evm.sta, d1⟩ ⟨hevm.1, hcan⟩ h
 
 end Jaune
