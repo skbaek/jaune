@@ -242,6 +242,7 @@ def controller_main(arguments: list[str]) -> int:
         "--quiet",
         f"--unit={unit}",
         "--slice=creme-lean.slice",
+        f"--working-directory={Path.cwd()}",
         "--property=MemoryAccounting=yes",
         "--property=MemoryHigh=infinity",
         f"--property=MemoryMax={args.memory_max}",
@@ -326,8 +327,9 @@ def controller_main(arguments: list[str]) -> int:
         event_oom = oom_count(last_snapshot)
         result = {
             "schema": 1,
-            "unit": unit,
-            "command": command,
+        "unit": unit,
+        "command": command,
+        "working_directory": str(Path.cwd()),
             "memory_max": args.memory_max,
             "swap_max": args.swap_max,
             "elapsed_seconds": round(time.monotonic() - started, 6),
