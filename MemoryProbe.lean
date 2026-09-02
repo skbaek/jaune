@@ -8,16 +8,16 @@ private def byte3 (n : Nat) : Bytes :=
   [(n / 65536).toUInt8, (n / 256).toUInt8, n.toUInt8]
 
 /-- The Prague `d1g0v0` memory-counter program, parameterized only by the
-STATICCALL output-region size. Its counter is frame-local, so recursion ends at
+STATICCALL input-region size. Its counter is frame-local, so recursion ends at
 the EVM call-depth boundary rather than at the storage-counter branch used by
 the companion `d0g0v0` program. -/
-def recursiveStaticCallCode (target : Adr) (outputSize : Nat) : ByteArray :=
+def recursiveStaticCallCode (target : Adr) (inputSize : Nat) : ByteArray :=
   Bytes.toByteArray <|
     [ 0x60, 0x01, 0x60, 0x00, 0x51, 0x01, 0x60, 0x00, 0x52,
       0x61, 0x04, 0x00, 0x60, 0x00, 0x51, 0x10, 0x60, 0x1b,
       0x57, 0x60, 0x01, 0x60, 0x40, 0x52, 0x60, 0x45, 0x56,
       0x5b, 0x60, 0x00, 0x60, 0x00, 0x62 ] ++
-    byte3 outputSize ++
+    byte3 inputSize ++
     [0x60, 0x00, 0x73] ++ target.toBytes ++
     [0x62, 0x0f, 0x55, 0xc8, 0x5a, 0x03, 0xfa, 0x60, 0x20,
      0x52, 0x5b, 0x00]
@@ -31,9 +31,9 @@ def recursiveFrameCount (initialDepth : Nat) : Nat := initialDepth + 1
 #guard recursiveFrameCount 0 = 1
 #guard recursiveFrameCount 1023 = 1024
 
-def probeMsg (depth outputSize : Nat) : Msg :=
+def probeMsg (depth inputSize : Nat) : Msg :=
   let target : Adr := 0xcbbf5374fce5edbc8e2a8697c15331677e6ebf0b
-  let code := recursiveStaticCallCode target outputSize
+  let code := recursiveStaticCallCode target inputSize
   let state := State.setCode .empty target code
   let benv : Benv := {(default : Benv) with state := state}
   {
@@ -48,8 +48,8 @@ def probeMsg (depth outputSize : Nat) : Msg :=
     depth := depth
   }
 
-def run (depth outputSize : Nat) : Except String (Nat × Nat × B256) :=
-  match processMessage (probeMsg depth outputSize) with
+def run (depth inputSize : Nat) : Except String (Nat × Nat × B256) :=
+  match processMessage (probeMsg depth inputSize) with
   | .error _ => .error "frame settlement failed"
   | .ok devm =>
     if devm.error.isSome then
@@ -60,24 +60,24 @@ def run (depth outputSize : Nat) : Except String (Nat × Nat × B256) :=
 
 private def parseArgs (args : List String) : IO (Nat × Nat) := do
   match args with
-  | [depth, outputSize] =>
-    match depth.toNat?, outputSize.toNat? with
-    | some depth, some outputSize =>
-      if 0xffffff < outputSize then
-        throw (IO.userError "output size must fit PUSH3")
-      else pure (depth, outputSize)
-    | _, _ => throw (IO.userError "depth and output size must be decimal naturals")
-  | _ => throw (IO.userError "usage: jaune-memory-probe DEPTH OUTPUT_SIZE")
+  | [depth, inputSize] =>
+    match depth.toNat?, inputSize.toNat? with
+    | some depth, some inputSize =>
+      if 0xffffff < inputSize then
+        throw (IO.userError "input size must fit PUSH3")
+      else pure (depth, inputSize)
+    | _, _ => throw (IO.userError "depth and input size must be decimal naturals")
+  | _ => throw (IO.userError "usage: jaune-memory-probe DEPTH INPUT_SIZE")
 
 def main (args : List String) : IO UInt32 := do
-  let (depth, outputSize) ← parseArgs args
-  match run depth outputSize with
+  let (depth, inputSize) ← parseArgs args
+  match run depth inputSize with
   | .error message =>
-    IO.eprintln s!"FAIL depth={depth} output={outputSize}: {message}"
+    IO.eprintln s!"FAIL depth={depth} input={inputSize}: {message}"
     pure 1
   | .ok (logicalSize, materializedSize, success) =>
     IO.println
-      s!"PASS depth={depth} frames={recursiveFrameCount depth} output={outputSize} logical={logicalSize} materialized={materializedSize} success={success.toNat}"
+      s!"PASS depth={depth} frames={recursiveFrameCount depth} input={inputSize} logical={logicalSize} materialized={materializedSize} success={success.toNat}"
     if success = 1 then pure 0 else pure 1
 
 end Jaune.MemoryProbe
