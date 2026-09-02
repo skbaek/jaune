@@ -2,9 +2,9 @@
 """Run one command in a measured child cgroup below Creme's Lean-only slice.
 
 The controller stays in the outer contained job while the payload runs in a
-stricter transient service. A tiny child shim keeps successful services alive
-until the controller has read the live cgroup-v2 counters; an OOM ends the
-whole child group, whose counters are sampled until the unit becomes inactive.
+stricter transient service. A tiny child shim keeps the service alive until the
+controller has read the live cgroup-v2 counters, including after the payload
+crosses the inner resource boundary.
 """
 
 from __future__ import annotations
@@ -200,7 +200,10 @@ def require_readback(snapshot: dict[str, object], memory_max: int, swap_max: int
         "memory_max": str(memory_max),
         "memory_swap_max": str(swap_max),
         "memory_high": "max",
-        "memory_oom_group": "1",
+        # The approved outer Creme boundary has memory.oom.group=1. Keeping the
+        # inner measurement shim outside the payload's single-process event is
+        # what makes the local counters available before systemd collection.
+        "memory_oom_group": "0",
     }
     mismatches = {
         key: (snapshot[key], value)
@@ -257,7 +260,7 @@ def controller_main(arguments: list[str]) -> int:
         f"--property=MemoryMax={args.memory_max}",
         f"--property=MemorySwapMax={args.swap_max}",
         "--property=OOMScoreAdjust=500",
-        "--property=OOMPolicy=kill",
+        "--property=OOMPolicy=continue",
         sys.executable,
         script,
         "__child__",

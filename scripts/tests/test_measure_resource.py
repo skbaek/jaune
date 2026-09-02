@@ -53,6 +53,18 @@ class MeasureResourceTests(unittest.TestCase):
         self.assertEqual(MODULE.oom_count(snapshot), 1)
         self.assertEqual(MODULE.oom_count(None), 0)
 
+    def test_limit_readback_requires_inner_measurement_settings(self):
+        snapshot = {
+            "memory_max": "67108864",
+            "memory_swap_max": "0",
+            "memory_high": "max",
+            "memory_oom_group": "0",
+        }
+        MODULE.require_readback(snapshot, 67108864, 0)
+        snapshot["memory_oom_group"] = "1"
+        with self.assertRaises(MODULE.MeasureError):
+            MODULE.require_readback(snapshot, 67108864, 0)
+
     def test_boundary_probe_validates_chunk_size(self):
         for arguments in ([], ["0"], ["-1"], ["1", "2"], ["word"]):
             with self.subTest(arguments=arguments), self.assertRaises(MODULE.MeasureError):
