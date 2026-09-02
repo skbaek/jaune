@@ -478,8 +478,10 @@ def genericCreate.step
 Scanning raw bytes deliberately treats an opcode-shaped PUSH payload as a
 possible instruction.  That can retain data unnecessarily, but absence of all
 three bytes proves that no decoded instruction can read the field. -/
-def ByteArray.mayReadCalldata (code : ByteArray) : Bool :=
-  code.toList.any fun byte => byte == 0x35 || byte == 0x36 || byte == 0x37
+private def ByteArray.mayReadCalldata (code : ByteArray) : Bool :=
+  code.foldl
+    (fun found byte => found || byte == 0x35 || byte == 0x36 || byte == 0x37)
+    false
 
 def genericCall.step
     (sevm : Sevm) (devm : Devm) (gas : Nat) (value : B256)
@@ -795,6 +797,7 @@ private def flattenGuardCallData
 -- and an enabled precompile both receive the exact memory slice.
 #guard flattenGuardCallData [0x00] 0 false = some []
 #guard flattenGuardCallData [0x35] 0 false = some [0xAA]
+#guard flattenGuardCallData [0x60, 0x35, 0x00] 0 false = some [0xAA]
 #guard flattenGuardCallData [] 1 false = some [0xAA]
 #guard flattenGuardCallData [] 1 true = some []
 
