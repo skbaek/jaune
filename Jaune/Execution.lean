@@ -312,6 +312,13 @@ def Frame.ofCall (msg : Msg) : Frame := ⟨msg, msg, false⟩
 def Frame.ofCreate (msg : Msg) : Frame :=
   ⟨msg, processCreateMessage.msg msg, true⟩
 
+/-- Settlement reads the saved state/transient-storage pair and, for CREATE,
+the target and active rules; it never reads either message's calldata. -/
+private def Frame.releaseSettlementCalldata (f : Frame) : Frame :=
+  { f with
+    outer := {f.outer with data := []}
+    inner := {f.inner with data := []} }
+
 /-- Both saved states a call frame can restore from are canonical.
 
 A `Frame` holds two messages and `Frame.settleMsg` can roll back to either:
@@ -322,6 +329,10 @@ state" clause of P0.4 item 5. Statement only -- Step 4 of
 `~/plans/integrity.md` owns the preservation proofs. -/
 def Frame.Canonical (f : Frame) : Prop :=
   Msg.Canonical f.outer ∧ Msg.Canonical f.inner
+
+private theorem Frame.releaseSettlementCalldata_canonical {f : Frame}
+    (h : f.Canonical) : f.releaseSettlementCalldata.Canonical := by
+  exact h
 
 instance {f : Frame} : Decidable (Frame.Canonical f) := by
   unfold Frame.Canonical; infer_instance
@@ -368,6 +379,11 @@ def Frame.settleMsg (f : Frame)
 def Frame.settle (f : Frame) (raw : Execution) :
     Except (EvmError × State × AdrSet × Tra) Devm :=
   f.settleMsg (executeCode.handleError raw)
+
+private theorem Frame.releaseSettlementCalldata_settle
+    (f : Frame) (raw : Execution) :
+    f.releaseSettlementCalldata.settle raw = f.settle raw := by
+  rfl
 
 def executeCode.enter (msg : Msg) : Evm ⊕ Execution :=
   let evm := initEvm msg
@@ -501,13 +517,7 @@ def genericCall.step
       let devm ← (evm1.withGasLeft (evm1.gasLeft + gas)).push 0
       return .done (.ok devm)
   else
-    let calldata :=
-      if inputSize = 0 then []
-      else if code.mayReadCalldata then
-        evm1.memory.data.sliceD inputIndex inputSize 0
-      else if !disablePrecompiles && sevm.benvStat.rules.isPrecomp codeAddress then
-        evm1.memory.data.sliceD inputIndex inputSize 0
-      else []
+    let calldata := evm1.memory.data.sliceD inputIndex inputSize 0
     let childMsg :=
       callMsg sevm evm1 gas value caller target codeAddress
         shouldTransferValue isStaticcall calldata code disablePrecompiles
@@ -701,6 +711,38 @@ def Evm.step (evm : Evm) : Step :=
   0x8c, 0xc4, 0x16, 0x05, 0x37, 0xd9, 0xbd, 0x12, 0xc8, 0x89, 0x00
 ]).mayReadCalldata
 
+/-- Release calldata only when the frame's entire bytecode is independent of
+it. Empty calldata takes the constant-time path used by most system frames. -/
+private def Sevm.releaseUnobservableCalldata (sevm : Sevm) : Sevm :=
+  if sevm.data.isEmpty || sevm.code.mayReadCalldata then sevm
+  else {sevm with data := []}
+
+private def Evm.releaseUnobservableCalldata (evm : Evm) : Evm :=
+  {evm with sta := evm.sta.releaseUnobservableCalldata}
+
+private theorem Sevm.releaseUnobservableCalldata_canonical {sevm : Sevm}
+    (h : sevm.Canonical) : sevm.releaseUnobservableCalldata.Canonical := by
+  unfold Sevm.releaseUnobservableCalldata
+  split <;> exact h
+
+private theorem Evm.releaseUnobservableCalldata_canonical {evm : Evm}
+    (h : evm.Canonical) : evm.releaseUnobservableCalldata.Canonical :=
+  ⟨Sevm.releaseUnobservableCalldata_canonical h.1, h.2⟩
+
+private def releaseCalldataGuardSevm (code : ByteArray) : Sevm :=
+  { (default : Sevm) with data := [0xAA], code := code }
+
+-- Bytecode independent of calldata releases the retained payload, while a
+-- possible reader keeps it. PUSH payload bytes are not executable readers.
+#guard ((releaseCalldataGuardSevm (ByteArray.mk #[0x00]))
+    |>.releaseUnobservableCalldata |>.data |>.isEmpty)
+#guard ((releaseCalldataGuardSevm (ByteArray.mk #[0x35]))
+    |>.releaseUnobservableCalldata |>.data) = [0xAA]
+#guard ((releaseCalldataGuardSevm (ByteArray.mk #[0x60, 0x35, 0x00]))
+    |>.releaseUnobservableCalldata |>.data |>.isEmpty)
+#guard ((releaseCalldataGuardSevm (ByteArray.mk #[0x60, 0x35, 0x35]))
+    |>.releaseUnobservableCalldata |>.data) = [0xAA]
+
 /-- The single recursive interpreter driver, structurally recursive on its fuel
 parameter and therefore obliged to report exhaustion as an outcome.
 
@@ -719,12 +761,15 @@ def execFueled : Evm → Nat → Fueled (EvmError × Devm) Devm
         | .error e => Fueled.ofExcept (.error e)
         | .ok devm => execFueled ⟨pc, evm.sta, devm⟩ fuel
       | .run child =>
+        let frame := frame.releaseSettlementCalldata
+        let parentSta := evm.sta.releaseUnobservableCalldata
+        let child := child.releaseUnobservableCalldata
         match (execFueled child fuel).run with
         | .none => Fueled.exhausted
         | .some raw =>
           match rsm.run (frame.settle raw) with
           | .error e => Fueled.ofExcept (.error e)
-          | .ok devm => execFueled ⟨pc, evm.sta, devm⟩ fuel
+          | .ok devm => execFueled ⟨pc, parentSta, devm⟩ fuel
   termination_by _ fuel => fuel
 
 /-! Focused executable checks for the flattened core.
@@ -806,18 +851,18 @@ private def flattenGuardCallData
   | .spawn frame _ => some frame.inner.data
   | _ => none
 
--- Non-observing EVM bytecode skips materialization, while a calldata opcode
--- and an enabled precompile both receive the exact memory slice.
-#guard flattenGuardCallData [0x00] 0 false = some []
+-- `genericCall.step` keeps its original spawned-message construction. The
+-- interpreter releases an unobservable payload only after entering the frame.
+#guard flattenGuardCallData [0x00] 0 false = some [0xAA]
 #guard flattenGuardCallData [0x35] 0 false = some [0xAA]
-#guard flattenGuardCallData [0x60, 0x35, 0x00] 0 false = some []
+#guard flattenGuardCallData [0x60, 0x35, 0x00] 0 false = some [0xAA]
 #guard flattenGuardCallData [0x60, 0x35, 0x35] 0 false = some [0xAA]
 #guard flattenGuardCallData [
   0x73, 0x58, 0x3a, 0xa5, 0x87, 0xd7, 0xd8, 0x52, 0xa5, 0xb8, 0x44,
   0x8c, 0xc4, 0x16, 0x05, 0x37, 0xd9, 0xbd, 0x12, 0xc8, 0x89, 0x00
-] 0 false = some []
+] 0 false = some [0xAA]
 #guard flattenGuardCallData [] 1 false = some [0xAA]
-#guard flattenGuardCallData [] 1 true = some []
+#guard flattenGuardCallData [] 1 true = some [0xAA]
 
 -- A PUSH with zero gas halts through the frozen OutOfGasError channel.
 private def flattenGuardOog : Bool :=
@@ -1844,19 +1889,23 @@ theorem execFueled_run_canonical :
           rw [← h]
           exact hcan
         · exact ih ⟨pc, evm.sta, d1⟩ ⟨hevm.1, hcan⟩ h
-      · rcases hc : (execFueled child fuel).run with _ | raw2
+      · rcases hc : (execFueled child.releaseUnobservableCalldata fuel).run with _ | raw2
         · rw [hc] at h
           simp only [Fueled.exhausted_run] at h
           nomatch h
         · rw [hc] at h
           dsimp only at h
-          have hsettle := Frame.settle_canonicalSettle hst (ih child hent hc)
+          have hsettle := Frame.settle_canonicalSettle
+            (Frame.releaseSettlementCalldata_canonical hst)
+            (ih child.releaseUnobservableCalldata
+              (Evm.releaseUnobservableCalldata_canonical hent) hc)
           have hcan := Resume.run_canonical (rsm := rsm) hsettle
-          rcases hrun : rsm.run (frame.settle raw2) with ⟨e⟩ | d1 <;>
+          rcases hrun : rsm.run (frame.releaseSettlementCalldata.settle raw2) with ⟨e⟩ | d1 <;>
             rw [hrun] at h hcan <;> dsimp only at h
           · simp only [Fueled.ofExcept_run, Option.some.injEq] at h
             rw [← h]
             exact hcan
-          · exact ih ⟨pc, evm.sta, d1⟩ ⟨hevm.1, hcan⟩ h
+          · exact ih ⟨pc, evm.sta.releaseUnobservableCalldata, d1⟩
+              ⟨Sevm.releaseUnobservableCalldata_canonical hevm.1, hcan⟩ h
 
 end Jaune
