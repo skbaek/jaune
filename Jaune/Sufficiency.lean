@@ -2692,17 +2692,19 @@ theorem execFueled_settledGasLe : ∀ (fuel : Nat) (evm : Evm) {raw : Execution}
           exact (ih _ h).mono (show d1.gasLeft ≤ evm.dyna.gasLeft by omega)
       · rw [he] at h
         dsimp only at h
-        rcases hc : (execFueled child fuel).run with _ | raw'
+        rcases hc : (execFueled child.releaseUnobservableCalldata fuel).run with _ | raw'
         · rw [hc] at h
           simp only [Fueled.exhausted_run] at h
           nomatch h
         · rw [hc] at h
           dsimp only at h
-          have hchild := ih child hc
+          have hchild := ih child.releaseUnobservableCalldata hc
+          change Execution.SettledGasLe child.dyna.gasLeft raw' at hchild
           rw [Frame.enter_run_gasLeft he] at hchild
-          have hres := Resume.run_gasLe (rsm := rsm) (r := frame.settle raw')
+          have hres := Resume.run_gasLe (rsm := rsm)
+            (r := frame.releaseSettlementCalldata.settle raw')
             (m := frame.inner.gas) (fun d hd => Frame.settle_gasLe hchild hd)
-          rcases hrun : rsm.run (frame.settle raw') with ⟨e⟩ | d1
+          rcases hrun : rsm.run (frame.releaseSettlementCalldata.settle raw') with ⟨e⟩ | d1
           · rw [hrun] at h hres
             simp only [Fueled.ofExcept_run, Option.some.injEq] at h
             simp only [Execution.gasLeft_error] at hres
@@ -2740,15 +2742,19 @@ theorem execFueled_run_isSome : ∀ (fuel : Nat) (evm : Evm),
           have hle : d0.gasLeft ≤ frame.inner.gas := Frame.enter_done_gasLe he hd0
           have hlt : d1.gasLeft < fuel := by omega
           exact ih _ hlt
-      · have hgas : child.dyna.gasLeft = frame.inner.gas := Frame.enter_run_gasLeft he
-        have hchildlt : child.dyna.gasLeft < fuel := by omega
-        obtain ⟨raw', hraw'⟩ := ih child hchildlt
+      · have hgas : child.releaseUnobservableCalldata.dyna.gasLeft = frame.inner.gas := by
+          change child.dyna.gasLeft = frame.inner.gas
+          exact Frame.enter_run_gasLeft he
+        have hchildlt : child.releaseUnobservableCalldata.dyna.gasLeft < fuel := by omega
+        obtain ⟨raw', hraw'⟩ := ih child.releaseUnobservableCalldata hchildlt
         rw [hraw']
         dsimp only
-        rcases hrun : rsm.run (frame.settle raw') with ⟨e⟩ | d1 <;> dsimp only
+        rcases hrun : rsm.run (frame.releaseSettlementCalldata.settle raw') with
+          ⟨e⟩ | d1 <;> dsimp only
         · exact ⟨.error e, rfl⟩
         · obtain ⟨d0, hd0, hgas2⟩ := Resume.run_ok_gasLeft hrun
-          have hsettled := execFueled_settledGasLe fuel child hraw'
+          have hsettled :=
+            execFueled_settledGasLe fuel child.releaseUnobservableCalldata hraw'
           rw [hgas] at hsettled
           have hle : d0.gasLeft ≤ frame.inner.gas := Frame.settle_gasLe hsettled hd0
           have hlt : d1.gasLeft < fuel := by omega
@@ -2832,14 +2838,14 @@ theorem execFueled_run_mono :
           dsimp only at h ⊢
         · exact h
         · exact ih _ hle' h
-      · rcases hc : (execFueled child fuel).run with _ | raw'
+      · rcases hc : (execFueled child.releaseUnobservableCalldata fuel).run with _ | raw'
         · rw [hc] at h
           simp only [Fueled.exhausted_run] at h
           nomatch h
         · rw [hc] at h
           rw [ih _ hle' hc]
           dsimp only at h ⊢
-          rcases hrun : rsm.run (frame.settle raw') with ⟨e⟩ | d1 <;>
+          rcases hrun : rsm.run (frame.releaseSettlementCalldata.settle raw') with ⟨e⟩ | d1 <;>
             rw [hrun] at h <;> dsimp only at h ⊢
           · exact h
           · exact ih _ hle' h
