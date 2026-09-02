@@ -40,7 +40,7 @@ Choose the gate by what you changed, cheapest falsifier first:
 
 | you changed | run this first | then, before pushing |
 |---|---|---|
-| anything at all | `scripts/check-hygiene.sh` + `scripts/check-integrity.sh` + `lake build` | — |
+| anything at all | `scripts/check-hygiene.sh` + `scripts/check-integrity.sh` + `scripts/check-canonical-opcode-names.sh` + `lake build` | — |
 | U256/word/hash primitives | `scripts/check-u256.sh` | `scripts/check-legacy.sh --smoke --no-build --jobs auto` |
 | blob-fee arithmetic (fake exponential) | `scripts/check-fake-exp.sh` | `scripts/check-mainnet.sh --suite transitions --no-build --jobs auto` |
 | EC / precompiles | `scripts/check-ec.sh`, `scripts/check-legacy.sh --bls --no-build --jobs auto` | `scripts/check-mainnet.sh --suite prague --no-build --jobs auto` |
@@ -120,8 +120,8 @@ both modes emit the same bytes in the same manifest order, so two runs differ
 only in the verdict line's wall time and its `--jobs` marker.
 
 Only these three harnesses take `--jobs`. `check-u256.sh`, `check-fake-exp.sh`,
-`check-ec.sh`, and `check-hygiene.sh` do not — the first three are
-single-process oracles and the fourth is sub-second.
+`check-ec.sh`, `check-hygiene.sh`, and `check-canonical-opcode-names.sh` do not
+— the first three are single-process oracles and the last two are sub-second.
 
 `check-elab.sh` does not take it either, for a different and more fundamental
 reason: **its gate *is* the TIME column.** The three harnesses above can run
@@ -207,6 +207,7 @@ executable inputs.
 |---|---|---|---|
 | `scripts/check-hygiene.sh` | source hygiene (`dbg_trace`, `sorry`) **and the trust surface** (`axiom`, `opaque`, `@[extern]`, `@[implemented_by]`, `partial def`, `unsafe`, `native_decide`) under `Jaune/`, allowlist in `hygiene-allow.txt` | 9 patterns, 0 occurrences, allowlist empty | sub-second |
 | `scripts/check-integrity.sh` | no panic / raw bang op / stringly semantic carrier in `Jaune.lean`'s import closure (R4 also covers the runner boundary), allowlist in `integrity-allow.txt` | 58 rows, 0 pending | sub-second |
+| `scripts/check-canonical-opcode-names.sh` | the eight retired constructor/API spellings and three abbreviated render strings are absent from live Lean source; syntax-qualified SELFDESTRUCT matching leaves ordinary destination locals alone | 8 symbol families, 3 render strings | sub-second |
 | `lake build` | integration elaboration | ~1,776 jobs | ~8 s |
 | `scripts/check-cli.sh` | the runner's four fixture-file refusals — wrong sibling tree, no cases, no supported network, filters select nothing — and the undeclared-format pass-through, against synthetic fixtures | 11 checks | sub-second |
 | `scripts/check-t8n.sh` | the `t8n` transition-tool frontend against goldens generated from the pinned conformance target: `result`, `alloc` and `body` byte-identical per case, each case run twice for determinism, every golden's digest checked against `scripts/t8n/provenance.json`. `--red-test` additionally proves it can fail | 9 cases | sub-second |
@@ -480,10 +481,11 @@ outputs, and the goldens it reads are never written by the gate.
 
 The cheap tiers stay outside the heavy lock deliberately: the check you run
 while iterating must never be hostage to a 20-minute one. `check-hygiene.sh`,
-`check-integrity.sh`, `check-cli.sh`, `check-u256.sh`, `check-fake-exp.sh` and
-`check-ec.sh` take no lock at all — the first five are sub-second, and
-`check-ec.sh` is a single-process oracle that writes its report in one `tee`
-rather than appending per file. `check-cli.sh` and `check-t8n.sh` additionally write nothing
+`check-integrity.sh`, `check-canonical-opcode-names.sh`, `check-cli.sh`,
+`check-u256.sh`, `check-fake-exp.sh` and `check-ec.sh` take no lock at all — the
+first six are sub-second, and `check-ec.sh` is a single-process oracle that
+writes its report in one `tee` rather than appending per file. `check-cli.sh`
+and `check-t8n.sh` additionally write nothing
 under the repository at all: their scratch files live in a `mktemp -d`
 directory removed on exit, so two concurrent runs cannot even see each other's
 inputs.

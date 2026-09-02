@@ -2855,8 +2855,8 @@ def Rinst.runCore
     let code := devm.getCode adr
     let value := code.sliceD code_start_index size (Linst.toUInt8 .stop)
     .ok (devm.memWrite memory_start_index value)
-  | .retdatasize => pushItem devm.returnData.length.toB256 gBase devm
-  | .retdatacopy => do
+  | .returndatasize => pushItem devm.returnData.length.toB256 gBase devm
+  | .returndatacopy => do
     let ⟨memory_start_index, devm⟩ ← devm.popToNat
     let ⟨return_data_start_index, devm⟩ ← devm.popToNat
     let ⟨size, devm⟩ ← devm.popToNat
@@ -2935,7 +2935,7 @@ def Rinst.runCore
       applyUnary (fun x => (B256.leadingZeros x).toB256) gLow devm
     else
       .error ⟨.halt (.invalidOpcode .none), devm⟩
-  | .kec => do
+  | .keccak256 => do
     let ⟨memory_start_index, devm⟩ ← devm.popToNat
     let ⟨size, devm⟩ ← devm.popToNat
     let words := ceilDiv size 32
@@ -3368,7 +3368,7 @@ def Devm.addBal (devm : Devm) (adr : Adr) (val : B256) : Devm :=
 def Linst.run (sevm : Sevm) (devm : Devm) :
     Linst → Except (EvmError × Devm) Devm
   | .stop => .ok devm
-  | .rev => do
+  | .revert => do
     let ⟨memory_start_index, devm⟩ ← devm.popToNat
     let ⟨size, devm⟩ ← devm.popToNat
     let extend_memory_cost := devm.extCost [⟨memory_start_index, size⟩]
@@ -3376,14 +3376,14 @@ def Linst.run (sevm : Sevm) (devm : Devm) :
     let ⟨output, devm⟩ := devm.memRead memory_start_index size
     let devm := devm.withOutput output
     .error ⟨.revert, devm⟩
-  | .ret => do
+  | .return_ => do
     let ⟨index, devm⟩ ← devm.popToNat
     let ⟨size, devm⟩ ← devm.popToNat
     let cost := devm.extCost [⟨index, size⟩]
     let devm ← chargeGas cost devm
     let ⟨output, devm⟩ := devm.memRead index size
     .ok (devm.withOutput output)
-  | .dest => do
+  | .selfdestruct => do
     let donor := sevm.currentTarget
     let ⟨donee, devm⟩ ← devm.popToAdr
     let donorBal ← .ok (devm.getAcct sevm.currentTarget).bal
@@ -4417,7 +4417,7 @@ theorem Rinst.runCore_canonical (pc : Nat) {devm : Devm} (sevm : Sevm)
     intro d2 h2
     rcases hread : d2.memRead start 32 with ⟨val, d3⟩
     exact liftMachExecution_canonical (Devm.memRead_eq_canonical h2 hread)
-  case kec =>
+  case keccak256 =>
     refine Except.CanonicalOn.bind (liftMach_canonicalOn h) ?_
     rintro ⟨start, d1⟩ h1
     refine Except.CanonicalOn.bind (liftMach_canonicalOn h1) ?_
@@ -4492,7 +4492,7 @@ theorem Rinst.runCore_canonical (pc : Nat) {devm : Devm} (sevm : Sevm)
       exact Except.CanonicalOn.bind
         (liftMachExecution_canonical (Devm.Canonical.of_world_eq he rfl))
         fun d hd => Devm.Canonical.of_world_eq hd rfl
-  case retdatacopy =>
+  case returndatacopy =>
     refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
     refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
     refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
@@ -4619,19 +4619,19 @@ theorem Linst.run_canonical {sevm : Sevm} {devm : Devm}
     Execution.Canonical (Linst.run sevm devm l) := by
   cases l <;> simp only [Linst.run]
   case stop => exact h
-  case rev =>
+  case revert =>
     refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
     refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
     refine Except.CanonicalOn.bind (liftMachExecution_canonical hb) fun d hd => ?_
     rcases hread : d.memRead a.1 b.1 with ⟨out, d'⟩
     exact (Devm.memRead_eq_canonical hd hread).of_world_eq rfl
-  case ret =>
+  case return_ =>
     refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
     refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
     refine Except.CanonicalOn.bind (liftMachExecution_canonical hb) fun d hd => ?_
     rcases hread : d.memRead a.1 b.1 with ⟨out, d'⟩
     exact (Devm.memRead_eq_canonical hd hread).of_world_eq rfl
-  case dest =>
+  case selfdestruct =>
     refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
     refine Except.canonicalOn_bind_ok ?_
     refine Except.canonicalOn_bind_ok ?_

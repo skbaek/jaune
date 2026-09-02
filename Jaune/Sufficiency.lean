@@ -879,7 +879,7 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
     split at h
     · exact applyUnary_gasLt (by decide) h
     · simp at h
-  case kec =>
+  case keccak256 =>
     obtain ⟨⟨start, d1⟩, h1, h⟩ := Except.bind_eq_ok h
     obtain ⟨⟨size, d2⟩, h2, h⟩ := Except.bind_eq_ok h
     obtain ⟨d3, h3, h4⟩ := Except.bind_eq_ok h
@@ -907,7 +907,7 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
         d.memWrite memoryStart (sevm.data.sliceD dataStart size 0))
       (by intros; unfold gVerylow; omega)
       (by intros; simp only [Devm.memWrite_gasLeft]) h
-  case retdatacopy =>
+  case returndatacopy =>
     obtain ⟨⟨memoryStart, d1⟩, h1, h⟩ := Except.bind_eq_ok h
     obtain ⟨⟨returnStart, d2⟩, h2, h⟩ := Except.bind_eq_ok h
     obtain ⟨⟨size, d3⟩, h3, h⟩ := Except.bind_eq_ok h
@@ -1323,8 +1323,8 @@ theorem Xinst.step_callcode_gasDecreasing (sevm : Sevm) (devm : Devm) :
     rw [Devm.memExtends_gasLeft]
     exact key
 
-theorem Xinst.step_delcall_gasDecreasing (sevm : Sevm) (devm : Devm) :
-    (Xinst.step sevm devm .delcall).GasDecreasing devm.gasLeft := by
+theorem Xinst.step_delegatecall_gasDecreasing (sevm : Sevm) (devm : Devm) :
+    (Xinst.step sevm devm .delegatecall).GasDecreasing devm.gasLeft := by
   simp only [Xinst.step]
   apply XStep.ofExcept_gasDecreasing
   intro step hstep
@@ -1364,8 +1364,8 @@ theorem Xinst.step_delcall_gasDecreasing (sevm : Sevm) (devm : Devm) :
   rw [Devm.memExtends_gasLeft]
   exact key
 
-theorem Xinst.step_statcall_gasDecreasing (sevm : Sevm) (devm : Devm) :
-    (Xinst.step sevm devm .statcall).GasDecreasing devm.gasLeft := by
+theorem Xinst.step_staticcall_gasDecreasing (sevm : Sevm) (devm : Devm) :
+    (Xinst.step sevm devm .staticcall).GasDecreasing devm.gasLeft := by
   simp only [Xinst.step]
   apply XStep.ofExcept_gasDecreasing
   intro step hstep
@@ -1411,8 +1411,8 @@ theorem Xinst.step_gasDecreasing (sevm : Sevm) (devm : Devm) (x : Xinst) :
   case create2 => exact Xinst.step_create2_gasDecreasing sevm devm
   case call => exact Xinst.step_call_gasDecreasing sevm devm
   case callcode => exact Xinst.step_callcode_gasDecreasing sevm devm
-  case delcall => exact Xinst.step_delcall_gasDecreasing sevm devm
-  case statcall => exact Xinst.step_statcall_gasDecreasing sevm devm
+  case delegatecall => exact Xinst.step_delegatecall_gasDecreasing sevm devm
+  case staticcall => exact Xinst.step_staticcall_gasDecreasing sevm devm
 
 theorem executePrecomp_gasLe (evm : Evm) (adr : Adr) :
     (executePrecomp evm adr).gasLeft ≤ evm.dyna.gasLeft := by
@@ -1841,7 +1841,7 @@ theorem Rinst.runCore_gasLe (pc : Nat) (devm : Devm) (sevm : Sevm) (r : Rinst) :
     refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
     intro d2
     simp
-  case kec =>
+  case keccak256 =>
     refine gasLe_bind_snd (by simp) ?_
     rintro ⟨x, d1⟩
     refine gasLe_bind_snd (by simp) ?_
@@ -1875,7 +1875,7 @@ theorem Rinst.runCore_gasLe (pc : Nat) (devm : Devm) (sevm : Sevm) (r : Rinst) :
     refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
     intro d4
     simp
-  case retdatacopy =>
+  case returndatacopy =>
     refine gasLe_bind_snd (by simp) ?_
     rintro ⟨x, d1⟩
     refine gasLe_bind_snd (by simp) ?_
@@ -2021,14 +2021,14 @@ theorem Jinst.runCore_gasLe (pc : Nat) (devm : Devm) (sevm : Sevm) (j : Jinst) :
 @[simp] theorem Devm.withOutput_gasLeft (devm : Devm) (output : Bytes) :
     (devm.withOutput output).gasLeft = devm.gasLeft := rfl
 
-/-- The halting instructions. `.rev` is the reason this whole layer exists: it
+/-- The halting instructions. `.revert` is the reason this whole layer exists: it
 is the sole producer of the `"Revert"` tag, the one error `handleError` turns
 back into a successful frame result carrying live gas. -/
 theorem Linst.run_gasLe (sevm : Sevm) (devm : Devm) (l : Linst) :
     Execution.gasLeft (Linst.run sevm devm l) ≤ devm.gasLeft := by
   cases l <;> simp only [Linst.run]
   case stop => simp
-  case ret =>
+  case return_ =>
     refine gasLe_bind_snd (by simp) ?_
     rintro ⟨x, d1⟩
     refine gasLe_bind_snd (by simp) ?_
@@ -2036,7 +2036,7 @@ theorem Linst.run_gasLe (sevm : Sevm) (devm : Devm) (l : Linst) :
     refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
     intro d3
     simp
-  case rev =>
+  case revert =>
     refine gasLe_bind_snd (by simp) ?_
     rintro ⟨x, d1⟩
     refine gasLe_bind_snd (by simp) ?_
@@ -2044,7 +2044,7 @@ theorem Linst.run_gasLe (sevm : Sevm) (devm : Devm) (l : Linst) :
     refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
     intro d3
     simp
-  case dest =>
+  case selfdestruct =>
     refine gasLe_bind_snd (by simp) ?_
     rintro ⟨donee, d1⟩
     refine gasLe_bind_const (devm := d1) (by simp) ?_
@@ -2079,7 +2079,7 @@ charge equation the compositional device deliberately discards.
 What the driver actually needs is weaker than a gas bound. `handleError`
 manufactures a live-gas frame result out of exactly one tag, `"Revert"`, and
 every error an `Xinst` can raise is a stack or gas fault — `"Revert"` is
-produced at a single site in the whole interpreter, `Linst.run .rev`. So the
+produced at a single site in the whole interpreter, `Linst.run .revert`. So the
 `Xinst` family discharges the settlement obligation by tag rather than by
 arithmetic, which is a walk with no arithmetic in it at all. -/
 
@@ -2299,7 +2299,7 @@ theorem Xinst.step_noRevert (sevm : Sevm) (devm : Devm) (x : Xinst) :
     split
     · exact xstepNoRevert_bind (Devm.push_noRevert _ _) (fun _ => trivial)
     · exact genericCall.step_noRevert _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-  case delcall =>
+  case delegatecall =>
     refine xstepNoRevert_bind (Devm.pop_noRevert _) ?_
     rintro ⟨gas, d1⟩
     refine xstepNoRevert_bind (Devm.popToAdr_noRevert _) ?_
@@ -2315,7 +2315,7 @@ theorem Xinst.step_noRevert (sevm : Sevm) (devm : Devm) (x : Xinst) :
     refine xstepNoRevert_bind (chargeGas_noRevert _ _) ?_
     intro d7
     exact genericCall.step_noRevert _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-  case statcall =>
+  case staticcall =>
     refine xstepNoRevert_bind (Devm.pop_noRevert _) ?_
     rintro ⟨gas, d1⟩
     refine xstepNoRevert_bind (Devm.popToAdr_noRevert _) ?_

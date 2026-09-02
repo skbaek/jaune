@@ -688,7 +688,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
           sevm devm msgCallStipend value sevm.currentTarget
           sevm.currentTarget newCodeAddress true false
           inputIndex inputSize outputIndex outputSize code disablePrecompiles
-  | .delcall =>
+  | .delegatecall =>
     XStep.ofExcept do
       let ⟨gas, devm⟩ ← devm.pop
       let ⟨codeAddress, devm⟩ ← devm.popToAdr
@@ -713,7 +713,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
         sevm devm msgCallStipend sevm.value sevm.caller
         sevm.currentTarget newCodeAddress false false
         inputIndex inputSize outputIndex outputSize code disablePrecompiles
-  | .statcall =>
+  | .staticcall =>
     XStep.ofExcept do
       let ⟨gas, devm⟩ ← devm.pop
       let ⟨target, devm⟩ ← devm.popToAdr
@@ -746,7 +746,7 @@ definition verbatim. -/
 private def Xinst.stepCached
     (sevm : Sevm) (devm : Devm) (cache : Option CalldataCache) :
     Xinst → XStep × Option CalldataCache
-  | .statcall =>
+  | .staticcall =>
     match (do
       let ⟨gas, devm⟩ ← devm.pop
       let ⟨target, devm⟩ ← devm.popToAdr
@@ -780,7 +780,7 @@ private theorem Xinst.stepCached_fst
     (sevm : Sevm) (devm : Devm) (cache : Option CalldataCache) (x : Xinst) :
     (Xinst.stepCached sevm devm cache x).1 = Xinst.step sevm devm x := by
   cases x <;> simp [Xinst.stepCached, Xinst.step]
-  case statcall =>
+  case staticcall =>
     rcases h₁ : devm.pop with e | ⟨gas, d₁⟩
     · simp only [Bind.bind, Except.bind, XStep.ofExcept]
     simp only [Bind.bind, Except.bind]
@@ -2002,7 +2002,7 @@ theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
     · exact Except.canonicalOn_ok
         (genericCall.step_canonical hs (by exact hd2)
           _ _ _ _ _ _ _ _ _ _ _ _ _)
-  case delcall =>
+  case delegatecall =>
     refine XStep.ofExcept_canonical ?_
     refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
     refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
@@ -2016,7 +2016,7 @@ theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
     exact Except.canonicalOn_ok
       (genericCall.step_canonical hs (by exact hd2)
         _ _ _ _ _ _ _ _ _ _ _ _ _)
-  case statcall =>
+  case staticcall =>
     refine XStep.ofExcept_canonical ?_
     refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
     refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
