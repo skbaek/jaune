@@ -36,6 +36,17 @@ def Lean.Json.toB256? (j : Json) : Option B256 := do
   let x ← toString? j >>= .remove0x
   Hex.toB256? x
 
+/-- A JSON quantity field as a `UInt64`, when present and readable.
+
+`Bytes.toQuantityB64?` rather than `Bytes.toUInt64?`: fixture quantities are
+written minimally, so a small slot number is a one-byte string, and the
+exact-width decoder would reject it. Over-long input is still refused rather
+than truncated. -/
+def Lean.Json.toB64? (j : Json) : Option UInt64 := do
+  let x ← toString? j >>= .remove0x
+  let bytes ← Hex.toBytes x
+  Bytes.toQuantityB64? bytes
+
 def getTxExMap (j : Lean.Json) : IO (Option String × Bytes) := do
   let rlp ← j.find "rlp" >>= Lean.Json.toIoBytes
   match j.find? "expectException" with
@@ -66,6 +77,15 @@ def Lean.Json.toHeader (json : Lean.Json) : IO Header := do
   let excessBlobGas ← (json.find "excessBlobGas" >>= Lean.Json.toIoBytes) <&> Bytes.toNat
   let parentBeaconBlockRoot ← json.find "parentBeaconBlockRoot" >>= Lean.Json.toIoB256
   let requestsHash := (json.find? "requestsHash" >>= Lean.Json.toB256?)
+  -- The two Amsterdam header fields, read exactly as `requestsHash` is: absent
+  -- in a fixture whose fork does not define them, present otherwise. Reading
+  -- them is not running them -- an Amsterdam case is refused before this point
+  -- -- but a header this runner parses must be the header the fixture wrote,
+  -- and silently dropping two fields would make every such header re-encode to
+  -- a different hash.
+  let blockAccessListHash :=
+    (json.find? "blockAccessListHash" >>= Lean.Json.toB256?)
+  let slotNumber := (json.find? "slotNumber" >>= Lean.Json.toB64?)
   .ok {
     parentHash := parentHash
     ommersHash := ommersHash
@@ -88,6 +108,8 @@ def Lean.Json.toHeader (json : Lean.Json) : IO Header := do
     excessBlobGas := excessBlobGas
     parentBeaconBlockRoot := parentBeaconBlockRoot
     requestsHash := requestsHash
+    blockAccessListHash := blockAccessListHash
+    slotNumber := slotNumber
   }
 
 def getPostStateRoot (json : Lean.Json) : IO B256 :=
@@ -279,6 +301,17 @@ def runBlockchainStTest (spec : NetworkSpec) : (Nat × String × Lean.Json) → 
   | ⟨idx, name, json⟩ => do
     .println s!"TEST NAME : {name}"
     .println s!"TEST INDEX : {idx}"
+    -- Every fork this case's network label can select must be one this build
+    -- runs, and that is settled here -- before a header, a prestate, or a
+    -- block is read. A declared fork whose rules are unimplemented is outside
+    -- this build's domain, not evidence about the candidate: routed through
+    -- the import path it would surface as `BLOCK #0 was expected valid but
+    -- failed`, which reads as a verdict on a block this build never examined.
+    -- A transition label is checked at both endpoints for the same reason,
+    -- since its pre-fork blocks would otherwise run and only the post-fork
+    -- ones refuse, halfway through a case.
+    let _ ← IO.ofExcept
+      ((spec.forks.mapM Fork.rules).mapError SupportError.render)
     checkFixtureBlobSchedule spec json
 
     let gbh_json ← json.find "genesisBlockHeader"
@@ -386,9 +419,10 @@ actual chain ID is read per fixture and threaded by `evaluateFixtureBlock`. -/
 def requireSupportedSpec (label : String) : IO NetworkSpec := do
   let some spec := NetworkSpec.ofString? label
     | .throw
-        s!"error : unknown --network label {repr label}; supported labels are \
+        s!"error : unknown --network label {repr label}; declared labels are \
            {Fork.all.map Fork.toString} and transitions of the form \
-           <fork>To<fork>AtTime<seconds>"
+           <fork>To<fork>AtTime<seconds>. Of those, this build runs \
+           {Fork.supported.map Fork.toString}"
   if let .transition t := spec then
     IO.ofExcept ((ChainConfig.mk 0 t.activations).validate.mapError
       ChainContextError.render)
@@ -520,7 +554,7 @@ def runTestFile (o : FixtureOpts) (path : String) : IO Unit := do
   .guard (¬ supported.isEmpty)
     s!"ERROR : no case in {path} runs at a network this build supports; the \
        file's labels are {labels.eraseDups}, and the supported labels are \
-       {Fork.all.map Fork.toString} and transitions between them"
+       {Fork.supported.map Fork.toString} and transitions between them"
   .guard (¬ selected.isEmpty)
     s!"ERROR : the filters select no case in {path}; {supported.length} of its \
        {js.length} cases run at a supported network, with labels \
@@ -588,8 +622,9 @@ def getFork (opts : List String) : IO Fork :=
     | some f => .ok f
     | none =>
       .throw
-        s!"error : unknown --network label {repr label}; supported labels are \
-           {Fork.all.map Fork.toString}"
+        s!"error : unknown --network label {repr label}; declared labels are \
+           {Fork.all.map Fork.toString}, of which this build runs \
+           {Fork.supported.map Fork.toString}"
 
 def createMinimalEvm
     (rules : ForkRules) (adr : Adr) (input : Bytes) (gasLimit : Nat) : Evm := {
@@ -830,10 +865,13 @@ def runFakeExpVectorFile (path : String) : IO Bool := do
 
 /-- The usage text.
 
-The supported labels are rendered from `Fork.all` and from a constructed
-`ForkTransition`, not written out by hand, so this text cannot drift from what
-the build actually supports -- which is exactly how the README's fork list came
-to disagree with the binary. -/
+The label lists are rendered from `Fork.all`, `Fork.supported`, and a
+constructed `ForkTransition`, not written out by hand, so this text cannot
+drift from what the build actually does -- which is exactly how the README's
+fork list came to disagree with the binary. The declared and runnable sets are
+printed separately because they are no longer the same list: a declared fork
+whose rules are unimplemented parses here and is refused later, and a usage
+text that folded the two would claim support this build does not have. -/
 def usage : String :=
   s!"usage:
   jaune <fixture.json> [--network <label>] [--name <case>] \
@@ -863,10 +901,16 @@ runs under the rules its own network label names.
   --notName <case>   skip these cases; repeatable
   --index <n>        run only the case at this index
 
-supported networks:
+declared networks:
   {Fork.all.map Fork.toString}
   transitions of the form <fork>To<fork>AtTime<seconds>, for example \
 {ForkTransition.toString ⟨.prague, .osaka, 15000⟩}
+
+runs at:
+  {Fork.supported.map Fork.toString}
+  A declared network this build does not run -- \
+{Fork.unimplemented.map Fork.toString} -- parses, and every case at it is then \
+refused with UnsupportedForkError rather than answered.
 "
 
 def main : List String → IO Unit

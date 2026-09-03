@@ -1,0 +1,284 @@
+"""Read one pinned EELS revision's fork constants, as values.
+
+This module is executed by ``gen-fork-constants.py`` **inside the conformance
+target's own virtual environment**, because the constants it reports are not
+all literals: Amsterdam derives ``CREATE_ACCESS`` from two other costs,
+``REFUND_STORAGE_CLEAR`` from a state-gas product, and ``MAX_INIT_CODE_SIZE``
+from ``MAX_CODE_SIZE``. Scraping the source text would mean reimplementing
+those expressions in a second place, which is exactly the transcription this
+gate exists to remove. Importing evaluates the definitions upstream actually
+ships.
+
+The caller has already proved that the checkout's ``src/ethereum`` tree is
+byte-identical to the pinned commit, so importing from the working tree reads
+the pinned revision.
+
+Every value is emitted with the dotted upstream path it came from, so the
+mapping between a Jaune ``ForkRules`` field and its upstream definition is part
+of the generated artifact rather than folklore in a script.
+"""
+
+from __future__ import annotations
+
+import ast
+import dataclasses
+import importlib
+import inspect
+import json
+import sys
+
+# Jaune's `Fork.toString` label -> the EELS fork module under ethereum.forks.
+FORKS = {
+    "Prague": "prague",
+    "Osaka": "osaka",
+    "BPO1": "bpo1",
+    "BPO2": "bpo2",
+    "Amsterdam": "amsterdam",
+}
+
+
+class ProbeError(Exception):
+    pass
+
+
+def _mod(fork: str, suffix: str = ""):
+    name = f"ethereum.forks.{fork}" + (f".{suffix}" if suffix else "")
+    return importlib.import_module(name)
+
+
+def _opt_int(obj, name):
+    """A named constant's integer value, or None when the fork has no such name.
+
+    `None` is a real answer here: Prague has no `TX_MAX_GAS_LIMIT` because
+    EIP-7825 does not exist yet, and Jaune records that as `tx.maxGas = none`
+    rather than as an unbounded sentinel.
+    """
+    value = getattr(obj, name, None)
+    return None if value is None else int(value)
+
+
+def _require_int(obj, name, where):
+    value = getattr(obj, name, None)
+    if value is None:
+        raise ProbeError(f"{where} has no {name}")
+    return int(value)
+
+
+def _address_int(value) -> int:
+    return int.from_bytes(bytes(value), "big")
+
+
+def _code_read_surcharge(fork: str) -> tuple[int, str]:
+    """EIP-8038's additive code-reading cost at EXTCODESIZE/EXTCODECOPY.
+
+    Upstream gives this one no name: it is `GasCosts.WARM_ACCESS` added inline
+    at the two opcodes, so there is nothing to look up. It is read here as a
+    presence question about the source instead, which is also the honest shape
+    of the fact -- before EIP-8038 the surcharge is absent, not zero-valued.
+    """
+    environment = _mod(fork, "vm.instructions.environment")
+    source = inspect.getsource(environment)
+    marker = "Code reading cost (EIP-8038)"
+    if marker not in source:
+        return 0, (
+            "absent: vm.instructions.environment charges no EIP-8038 code-reading "
+            "cost, so the surcharge is 0 by absence"
+        )
+    gas = _mod(fork, "vm.gas")
+    return int(gas.GasCosts.WARM_ACCESS), (
+        "vm.gas.GasCosts.WARM_ACCESS, added inline at extcodesize/extcodecopy "
+        f"(source marker {marker!r})"
+    )
+
+
+def _requests(fork: str) -> tuple[list, str]:
+    """The ordered request-producing system contracts, from the fork's own fold.
+
+    Read out of `process_general_purpose_requests` in source order rather than
+    from a list of names, because the order is the rule: the request bytes are
+    concatenated in the order that function calls the contracts, and a
+    reordering would be a consensus change that a set-valued read would miss.
+
+    The receipt-derived deposit request (type 0) is deliberately not here: it
+    is parsed out of the block's logs, not produced by a system call, so it is
+    not one of the ordered contract calls this list models.
+    """
+    fork_module = _mod(fork, "fork")
+    tree = ast.parse(inspect.getsource(fork_module))
+    fn = next(
+        (
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef)
+            and node.name == "process_general_purpose_requests"
+        ),
+        None,
+    )
+    if fn is None:
+        raise ProbeError(f"{fork}.fork has no process_general_purpose_requests")
+
+    # Walk the body in source order, remembering the most recent
+    # `target_address=NAME` and pairing it with the next `*_REQUEST_TYPE` name.
+    pending_address: str | None = None
+    pairs: list[tuple[str, str]] = []
+    for node in _in_source_order(fn):
+        if isinstance(node, ast.keyword) and node.arg == "target_address":
+            if isinstance(node.value, ast.Name):
+                pending_address = node.value.id
+        elif isinstance(node, ast.Name) and node.id.endswith("_REQUEST_TYPE"):
+            if node.id == "DEPOSIT_REQUEST_TYPE":
+                continue
+            if pending_address is None:
+                raise ProbeError(
+                    f"{fork}: {node.id} appears before any target_address"
+                )
+            pairs.append((pending_address, node.id))
+            pending_address = None
+
+    requests_module = _mod(fork, "requests")
+    out = []
+    for address_name, type_name in pairs:
+        address = getattr(fork_module, address_name, None)
+        if address is None:
+            raise ProbeError(f"{fork}.fork has no {address_name}")
+        type_bytes = getattr(requests_module, type_name, None)
+        if type_bytes is None:
+            raise ProbeError(f"{fork}.requests has no {type_name}")
+        out.append(
+            [int.from_bytes(bytes(type_bytes), "big"), f"0x{_address_int(address):040x}"]
+        )
+    return out, (
+        "fork.process_general_purpose_requests, in source-call order: each "
+        "system call's target_address paired with the request type byte its "
+        "output is prefixed with"
+    )
+
+
+def _in_source_order(node):
+    """Every descendant node, ordered by source position.
+
+    `ast.walk` is breadth-first and therefore says nothing about order, and
+    order is the whole content of the request list.
+    """
+    nodes = [n for n in ast.walk(node) if hasattr(n, "lineno")]
+    return sorted(nodes, key=lambda n: (n.lineno, n.col_offset))
+
+
+def extract(label: str, fork: str) -> dict:
+    gas = _mod(fork, "vm.gas")
+    costs = gas.GasCosts
+    fork_module = _mod(fork, "fork")
+    interpreter = _mod(fork, "vm.interpreter")
+    transactions = _mod(fork, "transactions")
+    mapping = _mod(fork, "vm.precompiled_contracts.mapping")
+    instructions = _mod(fork, "vm.instructions")
+    blocks = _mod(fork, "blocks")
+    criteria = _mod(fork).FORK_CRITERIA
+
+    header_fields = {f.name for f in dataclasses.fields(blocks.Header)}
+    surcharge, surcharge_source = _code_read_surcharge(fork)
+    requests, requests_source = _requests(fork)
+
+    def field(path, value, source):
+        return (path, {"value": value, "source": source})
+
+    # `createAccess` is the CREATE/CREATE2 base and the creation transaction's
+    # recipient cost. Upstream spells it `OPCODE_CREATE_BASE` while the two are
+    # the same number, and `CREATE_ACCESS` once EIP-8037 splits the creation
+    # transaction's cost apart from the opcode's. Both names are tried, newest
+    # first, and the name that answered is recorded.
+    if hasattr(costs, "CREATE_ACCESS"):
+        create_access, create_source = int(costs.CREATE_ACCESS), "vm.gas.GasCosts.CREATE_ACCESS"
+    else:
+        create_access = _require_int(costs, "OPCODE_CREATE_BASE", f"{fork}.vm.gas.GasCosts")
+        create_source = "vm.gas.GasCosts.OPCODE_CREATE_BASE"
+
+    if hasattr(costs, "EXECUTION_PER_AUTH_BASE_COST"):
+        per_auth = int(costs.EXECUTION_PER_AUTH_BASE_COST)
+        per_auth_source = "vm.gas.GasCosts.EXECUTION_PER_AUTH_BASE_COST"
+    else:
+        per_auth = _require_int(costs, "AUTH_PER_EMPTY_ACCOUNT", f"{fork}.vm.gas.GasCosts")
+        per_auth_source = "vm.gas.GasCosts.AUTH_PER_EMPTY_ACCOUNT"
+
+    entries = [
+        field("blob.target", _require_int(costs, "BLOB_TARGET_GAS_PER_BLOCK", fork),
+              "vm.gas.GasCosts.BLOB_TARGET_GAS_PER_BLOCK"),
+        field("blob.max", _require_int(fork_module, "MAX_BLOB_GAS_PER_BLOCK", fork),
+              "fork.MAX_BLOB_GAS_PER_BLOCK"),
+        field("blob.baseFeeUpdateFraction",
+              _require_int(costs, "BLOB_BASE_FEE_UPDATE_FRACTION", fork),
+              "vm.gas.GasCosts.BLOB_BASE_FEE_UPDATE_FRACTION"),
+        field("blob.reserveBaseCost", _opt_int(costs, "BLOB_BASE_COST"),
+              "vm.gas.GasCosts.BLOB_BASE_COST (absent before EIP-7918)"),
+        field("code.maxCodeSize", _require_int(interpreter, "MAX_CODE_SIZE", fork),
+              "vm.interpreter.MAX_CODE_SIZE"),
+        field("code.maxInitCodeSize", _require_int(interpreter, "MAX_INIT_CODE_SIZE", fork),
+              "vm.interpreter.MAX_INIT_CODE_SIZE"),
+        field("tx.maxGas", _opt_int(transactions, "TX_MAX_GAS_LIMIT"),
+              "transactions.TX_MAX_GAS_LIMIT (absent before EIP-7825)"),
+        field("tx.maxBlobCount", _opt_int(transactions, "BLOB_COUNT_LIMIT"),
+              "transactions.BLOB_COUNT_LIMIT (absent before EIP-7594)"),
+        field("block.maxRlpSize", _opt_int(fork_module, "MAX_RLP_BLOCK_SIZE"),
+              "fork.MAX_RLP_BLOCK_SIZE (absent before EIP-7934)"),
+        field("op.clz", hasattr(instructions.Ops, "CLZ"),
+              "vm.instructions.Ops.CLZ is defined (EIP-7939)"),
+        field("precompiles",
+              sorted(_address_int(a) for a in mapping.PRE_COMPILED_CONTRACTS),
+              "vm.precompiled_contracts.mapping.PRE_COMPILED_CONTRACTS keys"),
+        field("gas.coldAccountAccess",
+              _require_int(costs, "COLD_ACCOUNT_ACCESS", fork),
+              "vm.gas.GasCosts.COLD_ACCOUNT_ACCESS"),
+        field("gas.callValue", _require_int(costs, "CALL_VALUE", fork),
+              "vm.gas.GasCosts.CALL_VALUE"),
+        field("gas.createAccess", create_access, create_source),
+        field("gas.storageClearRefund",
+              _require_int(costs, "REFUND_STORAGE_CLEAR", fork),
+              "vm.gas.GasCosts.REFUND_STORAGE_CLEAR"),
+        field("gas.txBase", _require_int(costs, "TX_BASE", fork),
+              "vm.gas.GasCosts.TX_BASE"),
+        field("gas.txAccessListAddress",
+              _require_int(costs, "TX_ACCESS_LIST_ADDRESS", fork),
+              "vm.gas.GasCosts.TX_ACCESS_LIST_ADDRESS"),
+        field("gas.txAccessListStorageKey",
+              _require_int(costs, "TX_ACCESS_LIST_STORAGE_KEY", fork),
+              "vm.gas.GasCosts.TX_ACCESS_LIST_STORAGE_KEY"),
+        field("gas.floorTokenCost", _require_int(costs, "TX_DATA_TOKEN_FLOOR", fork),
+              "vm.gas.GasCosts.TX_DATA_TOKEN_FLOOR"),
+        field("gas.perAuthIntrinsic", per_auth, per_auth_source),
+        field("gas.codeReadSurcharge", surcharge, surcharge_source),
+        field("header.blockAccessListHash", "block_access_list_hash" in header_fields,
+              "blocks.Header has a block_access_list_hash field (EIP-7928)"),
+        field("header.slotNumber", "slot_number" in header_fields,
+              "blocks.Header has a slot_number field (EIP-7843)"),
+        field("requests", requests, requests_source),
+    ]
+    seen = [path for path, _ in entries]
+    if len(seen) != len(set(seen)):
+        raise ProbeError(f"{label}: duplicate field path in the extraction table")
+    return {
+        "label": label,
+        "module": f"ethereum.forks.{fork}",
+        "fork_criteria": {
+            "kind": type(criteria).__name__,
+            "timestamp": int(criteria.timestamp)
+            if hasattr(criteria, "timestamp")
+            else None,
+        },
+        "header_field_count": len(dataclasses.fields(blocks.Header)),
+        "constants": dict(entries),
+    }
+
+
+def main() -> int:
+    out = {label: extract(label, fork) for label, fork in FORKS.items()}
+    json.dump(out, sys.stdout, indent=2, sort_keys=True)
+    sys.stdout.write("\n")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except ProbeError as error:
+        print(f"error: {error}", file=sys.stderr)
+        raise SystemExit(2)

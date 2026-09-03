@@ -172,7 +172,9 @@ private def synthHeader (parentHash : B256) (number : Nat) (tag : Bytes) : Heade
     blobGasUsed := 0
     excessBlobGas := 0
     parentBeaconBlockRoot := 0
-    requestsHash := none }
+    requestsHash := none
+    blockAccessListHash := none
+    slotNumber := none }
 
 private def synthBlock (parentHash : B256) (number : Nat) (tag : Bytes) : Block :=
   { header := synthHeader parentHash number tag, txs := [], ommers := [], wds := [] }

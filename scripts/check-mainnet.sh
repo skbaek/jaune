@@ -1,7 +1,19 @@
 #!/usr/bin/env bash
-# Strict all-PASS harness for the generated current-mainnet fixture manifests.
+# Strict all-PASS harness for the generated fixture manifests.
 # Future suite names are recognised explicitly and refused until their protocol
 # step activates them. This is intentionally not a permissive selector.
+#
+# --lane selects the corpus. `mainnet` (the default) is the current-mainnet
+# release and every suite over it runs. `amsterdam` is the Glamsterdam devnet-8
+# prerelease, whose fixtures target a fork `Fork.rules?` answers `none` for:
+# its four suite names are recognised here and every one of them is refused,
+# naming the goal that owns the semantics they would need. A refusal is the
+# point, not a gap -- the alternative is a suite that reports failures about a
+# fork this build has never claimed to run.
+#
+# The two lanes' suite namespaces are disjoint by construction (the devnet
+# lane's derived suites are `amsterdam-` prefixed), so a suite name is never
+# ambiguous and a mistyped --lane cannot silently select the other corpus.
 #
 # --jobs <n>|auto runs <n> fixtures concurrently; sequential (the default) is
 # unchanged. The two modes differ in one deliberate way: sequential stops at the
@@ -45,7 +57,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-FIXTURES_ROOT="${EEST_MAINNET_ROOT:-$HOME/eest-mainnet-v20.0.1}/fixtures"
+LANE="mainnet"
+FIXTURES_ROOT=""
 SUITE=""
 SUBDIR=""
 BUILD=1
@@ -53,12 +66,15 @@ START_AT=1
 JOBS=1
 
 usage() {
-  echo "usage: scripts/check-mainnet.sh (--suite (prague|osaka|transitions|smoke|full) | --dir REL --suite SUITE) [--fixtures-root PATH] [--no-build] [--start-at N] [--jobs <n>|auto]" >&2
+  echo "usage: scripts/check-mainnet.sh [--lane (mainnet|amsterdam)] (--suite SUITE | --dir REL --suite SUITE) [--fixtures-root PATH] [--no-build] [--start-at N] [--jobs <n>|auto]" >&2
+  echo "  --lane mainnet   suites: prague osaka transitions smoke full" >&2
+  echo "  --lane amsterdam suites: amsterdam amsterdam-transitions amsterdam-smoke amsterdam-full (all refused)" >&2
   exit 2
 }
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --lane) shift; [ "$#" -gt 0 ] || usage; LANE="$1" ;;
     --suite) shift; [ "$#" -gt 0 ] || usage; SUITE="$1" ;;
     --dir) shift; [ "$#" -gt 0 ] || usage; SUBDIR="$1" ;;
     --fixtures-root) shift; [ "$#" -gt 0 ] || usage; FIXTURES_ROOT="$1" ;;
@@ -70,6 +86,62 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 [ -n "$SUITE" ] || usage
+
+case "$LANE" in
+  mainnet)
+    LANE_ROOT_DEFAULT="${EEST_MAINNET_ROOT:-$HOME/eest-mainnet-v20.0.1}/fixtures"
+    LANE_BOOTSTRAP="python3 scripts/bootstrap_mainnet.py"
+    LANE_ROOT_ENV="EEST_MAINNET_ROOT"
+    LANE_NAME="current-mainnet" ;;
+  amsterdam)
+    LANE_ROOT_DEFAULT="${EEST_AMSTERDAM_ROOT:-$HOME/eest-glamsterdam-devnet-v8.1.3}/fixtures"
+    LANE_BOOTSTRAP="python3 scripts/bootstrap_mainnet.py --lane amsterdam"
+    LANE_ROOT_ENV="EEST_AMSTERDAM_ROOT"
+    LANE_NAME="glamsterdam-devnet" ;;
+  *) echo "error: unknown lane $LANE; expected mainnet or amsterdam" >&2; exit 2 ;;
+esac
+[ -n "$FIXTURES_ROOT" ] || FIXTURES_ROOT="$LANE_ROOT_DEFAULT"
+
+# The devnet lane's suites are recognised and refused, one message per suite,
+# naming the goal that owns the semantics each would need. The refusal fires
+# before the fixture root is looked at, so it is the same answer on a host that
+# has never installed the corpus as on one that has: whether the archive is
+# present is not what makes this lane unrunnable.
+amsterdam_refusal() { # <suite> <owning goal> <what it would need>
+  echo "error: suite $1 is installed but refused: this build declares Fork.amsterdam and Fork.rules? answers none for it, so no Amsterdam fixture can be run or judged." >&2
+  echo "       Activating it belongs to $2, which implements $3." >&2
+  echo "       The lane is inventoried, not exercised: see scripts/amsterdam/manifests.json for its exact contents." >&2
+  exit 2
+}
+
+AMSTERDAM_BLOCK_GOAL="goal jaune-amsterdam-block-v1"
+AMSTERDAM_CURRENCY_GOAL="goal jaune-amsterdam-currency-v1"
+
+if [ "$LANE" = "amsterdam" ]; then
+  if [ -n "$SUBDIR" ]; then
+    echo "error: --dir is refused on --lane amsterdam: a subtree of a corpus this build cannot run is still a corpus this build cannot run." >&2
+    echo "       Per-subtree landing is $AMSTERDAM_BLOCK_GOAL's instrument, and it becomes available when that goal activates the suite." >&2
+    exit 2
+  fi
+  case "$SUITE" in
+    amsterdam)
+      amsterdam_refusal "$SUITE" "$AMSTERDAM_BLOCK_GOAL" \
+        "the two-dimensional gas meter, the block-level access list, and the four new opcodes" ;;
+    amsterdam-smoke)
+      amsterdam_refusal "$SUITE" "$AMSTERDAM_BLOCK_GOAL" \
+        "the two-dimensional gas meter, the block-level access list, and the four new opcodes" ;;
+    amsterdam-full)
+      amsterdam_refusal "$SUITE" "$AMSTERDAM_BLOCK_GOAL" \
+        "the two-dimensional gas meter, the block-level access list, and the four new opcodes" ;;
+    amsterdam-transitions)
+      amsterdam_refusal "$SUITE" "$AMSTERDAM_CURRENCY_GOAL" \
+        "the BPO2-to-Amsterdam transition lane on top of that metering core" ;;
+    prague|osaka|transitions|smoke|full)
+      echo "error: suite $SUITE is a --lane mainnet suite; the devnet lane's suites are amsterdam, amsterdam-transitions, amsterdam-smoke, amsterdam-full" >&2
+      exit 2 ;;
+    *) echo "error: unknown suite $SUITE for lane amsterdam" >&2; exit 2 ;;
+  esac
+fi
 
 if [ "$JOBS" = "auto" ]; then
   if ! JOBS="$(python3 "$SCRIPT_DIR/fixture_jobs.py" --explain)"; then
@@ -99,6 +171,12 @@ fi
 # step that has yet to happen -- it is the archive's shape.  Reporting an
 # all-PASS verdict over zero selected files would be exactly the permissive
 # oracle this harness exists to prevent.
+lane_mismatch() {
+  echo "error: suite $1 is a --lane amsterdam suite and this run is on --lane $LANE" >&2
+  echo "       Run it as: scripts/check-mainnet.sh --lane amsterdam --suite $1 (which refuses it, by design)" >&2
+  exit 2
+}
+
 bpo_refusal() {
   LABEL="$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"
   echo "error: suite $1 selects no file: the pinned release publishes no fixture whose network is $LABEL." >&2
@@ -114,6 +192,7 @@ if [ -n "$SUBDIR" ]; then
   case "$SUITE" in
     prague|smoke|osaka|transitions) ;;
     bpo1|bpo2) bpo_refusal "$SUITE" ;;
+    amsterdam|amsterdam-*) lane_mismatch "$SUITE" ;;
     full)
       echo "error: suite full has no per-directory form; name the component suite" >&2
       exit 2 ;;
@@ -126,6 +205,7 @@ else
   case "$SUITE" in
     prague|osaka|transitions|smoke|full) ;;
     bpo1|bpo2) bpo_refusal "$SUITE" ;;
+    amsterdam|amsterdam-*) lane_mismatch "$SUITE" ;;
     *) echo "error: unknown suite $SUITE" >&2; exit 2 ;;
   esac
 fi
@@ -135,10 +215,10 @@ fi
 # actionable to someone who already knows the bootstrap exists, so name the
 # command that creates it and the two ways to point at an existing copy.
 [ -d "$FIXTURES_ROOT/blockchain_tests" ] || {
-  echo "error: current-mainnet blockchain fixture root not found: $FIXTURES_ROOT/blockchain_tests" >&2
+  echo "error: $LANE_NAME blockchain fixture root not found: $FIXTURES_ROOT/blockchain_tests" >&2
   echo "  the corpus is provisioned separately; install it with:" >&2
-  echo "    python3 scripts/bootstrap_mainnet.py" >&2
-  echo "  then re-run. Use --fixtures-root PATH or EEST_MAINNET_ROOT for an existing copy" >&2
+  echo "    $LANE_BOOTSTRAP" >&2
+  echo "  then re-run. Use --fixtures-root PATH or $LANE_ROOT_ENV for an existing copy" >&2
   echo "  elsewhere. Provenance, disk and runtime: scripts/vectors/SOURCES.md" >&2
   exit 2
 }
@@ -167,7 +247,7 @@ fi
 [ -x "$BIN" ] || { echo "error: jaune binary not found: $BIN" >&2; exit 2; }
 
 LIST="$(mktemp)"
-python3 "$SCRIPT_DIR/gen_mainnet_manifest.py" \
+python3 "$SCRIPT_DIR/gen_mainnet_manifest.py" --lane "$LANE" \
   --fixtures-root "$FIXTURES_ROOT" --check --emit-suite "$SUITE" > "$LIST"
 [ -s "$LIST" ] || { echo "error: zero selected manifest entries for $SUITE" >&2; exit 2; }
 

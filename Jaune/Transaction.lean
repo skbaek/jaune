@@ -154,6 +154,9 @@ inductive BlockValidationError : Type
   | depositEventLayout (detail : ErrorDetail)
   | systemContractCallFailed (detail : ErrorDetail)
   | blockRlpSizeExceeded (detail : ErrorDetail)
+  /-- A fork-dependent header field is present when the rules do not define
+  it, or absent when they do. -/
+  | headerFieldPresence (detail : ErrorDetail)
 deriving DecidableEq, Repr
 
 /-- The tag a block-rejection reason renders under. -/
@@ -182,6 +185,7 @@ def BlockValidationError.tag : BlockValidationError → String
   | .depositEventLayout _ => depositEventLayoutTag
   | .systemContractCallFailed _ => systemContractCallFailedTag
   | .blockRlpSizeExceeded _ => blockRlpSizeExceededTag
+  | .headerFieldPresence _ => headerFieldPresenceTag
 
 /-- The diagnostic payload of a block-rejection reason. -/
 def BlockValidationError.detail : BlockValidationError → ErrorDetail
@@ -192,7 +196,8 @@ def BlockValidationError.detail : BlockValidationError → ErrorDetail
   | .stateRoot d | .transactionsRoot d | .receiptsRoot d | .logBloom d
   | .withdrawalsRoot d | .headerNonce d | .excessBlobGas d
   | .blobGasUsed d | .requestsHash d | .depositEventLayout d
-  | .systemContractCallFailed d | .blockRlpSizeExceeded d => d
+  | .systemContractCallFailed d | .blockRlpSizeExceeded d
+  | .headerFieldPresence d => d
 
 /-- The one renderer for `BlockValidationError`. -/
 def BlockValidationError.render (e : BlockValidationError) : String :=
@@ -208,7 +213,8 @@ def BlockValidationError.all : List BlockValidationError :=
     .receiptsRoot .none, .logBloom .none, .withdrawalsRoot .none,
     .headerNonce .none, .excessBlobGas .none, .blobGasUsed .none,
     .requestsHash .none, .depositEventLayout .none,
-    .systemContractCallFailed .none, .blockRlpSizeExceeded .none ]
+    .systemContractCallFailed .none, .blockRlpSizeExceeded .none,
+    .headerFieldPresence .none ]
 
 /-- Why an import could not be attempted, or could not be trusted.
 
@@ -393,10 +399,10 @@ theorem TransitionError.render_split (e : TransitionError) :
 #guard TxValidationError.render (.intrinsicGasTooLow (.text "needs 21000, has 20999"))
   = "IntrinsicGasTooLowError : needs 21000, has 20999"
 
-#guard BlockValidationError.all.length = 24
-#guard BlockValidationError.all.eraseDups.length = 24
+#guard BlockValidationError.all.length = 25
+#guard BlockValidationError.all.eraseDups.length = 25
 #guard BlockValidationError.all.map BlockValidationError.tag = blockExceptionTags
-#guard (BlockValidationError.all.map BlockValidationError.tag).eraseDups.length = 24
+#guard (BlockValidationError.all.map BlockValidationError.tag).eraseDups.length = 25
 #guard BlockValidationError.render (.stateRoot .none) = "StateRootError"
 #guard BlockValidationError.render (.blockRlpSizeExceeded (.text "1 byte over the limit"))
   = "BlockRlpSizeExceededError : 1 byte over the limit"
@@ -732,19 +738,30 @@ def checkTransaction (benv : Benv) (blockOut : BlockOutput) (tx : Tx) :
     txBlobGasUsed
   ⟩
 
-def calculateIntrinsicCost (tx: Tx) : Nat × Nat :=
+/-- The transaction's intrinsic cost and its calldata floor.
+
+The five numbers this formula reads that Amsterdam reprices arrive through
+`gas` rather than through the globals that used to hold them: the base cost,
+the two access-list components, the calldata floor token, and the per-
+authorisation intrinsic. `standardCallDataTokenCost` and `initCodeCost` are
+untouched by Amsterdam and stay global.
+
+`createCost` reads `gas.createAccess`, the same field the `CREATE` opcodes
+read: at Prague the creation transaction's recipient cost and the opcode's
+base cost are one number, and EIP-8037 moves both together. -/
+def calculateIntrinsicCost (gas : GasSchedule) (tx: Tx) : Nat × Nat :=
   -- `foldl` (tail-recursive) rather than `(map …).sum`: the latter's
   -- non-tail-recursive `List.map` overflows the stack on large calldata
   -- (e.g. the 1.2 MB inputs in the EIP-2537 stress fixtures).
   let tokensInCalldata : Nat :=
     tx.data.foldl (fun acc x => acc + (if x = 0 then 1 else 4)) 0
   let callDataFloorGasCost : Nat :=
-    tokensInCalldata * floorCalldataCost + txBaseCost
+    tokensInCalldata * gas.floorTokenCost + gas.txBase
   let dataCost : Nat :=
     tokensInCalldata * standardCallDataTokenCost
   let createCost : Nat :=
       match tx.type.receiver? with
-      | none => txCreateCost + initCodeCost (tx.data).length
+      | none => gas.createAccess + initCodeCost (tx.data).length
       | some _ => 0
   let accessListCost : Nat :=
     let accessList :=
@@ -756,14 +773,14 @@ def calculateIntrinsicCost (tx: Tx) : Nat × Nat :=
       | .four _ _ _ _ accessList _ => accessList
     let accessItemCost : (Adr × List B256) → Nat
       | ⟨_, keys⟩ =>
-        txAccessListAddressCost + keys.length * txAccessListStorageKeyCost
+        gas.txAccessListAddress + keys.length * gas.txAccessListStorageKey
     (accessList.map accessItemCost).sum
   let authCost : Nat :=
     match tx.type with
-    | .four _ _ _ _ _ auths => perEmptyAccountCost * auths.length
+    | .four _ _ _ _ _ auths => gas.perAuthIntrinsic * auths.length
     | _ => 0
   ⟨
-    txBaseCost + dataCost + createCost + accessListCost + authCost,
+    gas.txBase + dataCost + createCost + accessListCost + authCost,
     callDataFloorGasCost
   ⟩
 
@@ -791,7 +808,7 @@ def checkTransactionGasCap (limits : TransactionLimits) (gas : Nat) :
 
 def validateTransaction (rules : ForkRules) (tx : Tx) :
     Except TxValidationError (Nat × Nat) := do
-  let ⟨intrinsicGas, callDataFloorGasCost⟩ := calculateIntrinsicCost tx
+  let ⟨intrinsicGas, callDataFloorGasCost⟩ := calculateIntrinsicCost rules.gas tx
   if max intrinsicGas callDataFloorGasCost > tx.gas
   then
     .error <| .intrinsicGasTooLow <| .text
@@ -1597,30 +1614,57 @@ def processCheckedSystemTransaction
       {err.render}"
   | none => .ok ⟨state, systemTxOutput⟩
 
+/-- Call each request-producing system contract in turn, threading the state.
+
+Structural recursion on the contract list rather than a loop, so that the
+invariant proofs are an induction on that list instead of a fixed number of
+nested case splits -- which is what makes adding Amsterdam's two contracts a
+change to data and to nothing else. Each contract's non-empty return data is
+appended prefixed with its own type byte, and the state each call produces is
+what the next call runs against. -/
+def runRequestContracts :
+    List (UInt8 × Adr) → Benv → List Bytes →
+      Except TransitionError (State × List Bytes)
+  | [], benv, acc => .ok ⟨benv.state, acc⟩
+  | ⟨requestType, address⟩ :: rest, benv, acc => do
+    let ⟨state, output⟩ ← processCheckedSystemTransaction benv address []
+    let acc :=
+      if output.returnData.length > 0 then
+        acc ++ [[requestType] ++ output.returnData]
+      else
+        acc
+    runRequestContracts rest (benv.withState state) acc
+
+/-- Run the block's request-producing system contracts and collect their output.
+
+The contracts come from `rules.requests` -- an ordered list of
+`(type byte, address)` pairs -- and this is a fold over it rather than a
+sequence of named calls. The order is the rule: the request bytes are
+concatenated in call order and hashed into `requestsHash`, so calling the same
+contracts in a different order is a different block. Amsterdam appends two more
+entries (EIP-8282's builder deposit and exit), and appending to a list is the
+whole change; nothing here learns their names.
+
+The receipt-derived deposit request stays where it is, ahead of the fold and
+outside the list. It is parsed out of the block's logs rather than produced by
+a system call, so it is not one of these contracts -- which is also why the
+rule data does not carry a type-0 entry.
+
+`pragueRules.requests` reproduces exactly the two calls, in the order, this
+function made before the list existed: `pragueRules_requests` in
+`Jaune/Machine.lean` states that by `rfl`, and a `#guard` below runs it. -/
 def processGeneralPurposeRequests
   (benv : Benv) (bout : BlockOutput) :
   Except TransitionError (State × BlockOutput) := do
   let depositRequests ← parseDepositRequests bout
-  let mut requestsFromExecution : List Bytes := bout.requests
-  if depositRequests.length > 0 then
-    requestsFromExecution :=
-      requestsFromExecution ++ [depositRequestType ++ depositRequests]
-  let ⟨state, withdrawalOutput⟩  ←
-    processCheckedSystemTransaction benv
-      withdrawalRequestPredeployAddress
-      []
-  let benv := {benv with state := state}
-  if withdrawalOutput.returnData.length > 0 then
-    requestsFromExecution :=
-      requestsFromExecution ++ [withdrawalRequestType ++ withdrawalOutput.returnData]
-  let ⟨state, consolidationOutput⟩  ←
-    processCheckedSystemTransaction benv
-      consolidationRequestPredeployAddress
-      []
-  if consolidationOutput.returnData.length > 0 then
-    requestsFromExecution :=
-      requestsFromExecution ++ [consolidationRequestType ++ consolidationOutput.returnData]
-  .ok ⟨state, {bout with requests := requestsFromExecution}⟩
+  let seeded : List Bytes :=
+    if depositRequests.length > 0 then
+      bout.requests ++ [depositRequestType ++ depositRequests]
+    else
+      bout.requests
+  let ⟨state, allRequests⟩ ←
+    runRequestContracts benv.stat.rules.requests benv seeded
+  .ok ⟨state, {bout with requests := allRequests}⟩
 
 def applyTransactions :
     List (Nat × Tx) → Benv → BlockOutput → Except TransitionError (Benv × BlockOutput)
@@ -2109,6 +2153,26 @@ def validateHeader (rules : ForkRules) (chain : BlockChain) (header : Header) :
     .error <| .block <| .ommersOverParis <| .text
       s!"ommers hash = {header.ommersHash} ≠ \
          empty-list hash = {emptyOmmerHash}, which is impossible after Paris"
+  -- A header carries exactly the fork-dependent fields its rules define, in
+  -- both directions. Absent-when-required and present-when-undefined are the
+  -- same rule and the same reason: the wire form of a header is fixed by the
+  -- fork, so a block whose header is a different shape is not a block of this
+  -- fork at all. Keyed on `rules.header`, never on the fork identity, so a
+  -- caller-supplied record decides for itself -- which is what makes the rule
+  -- testable before `amsterdamRules` exists.
+  if header.blockAccessListHash.isSome ≠ rules.header.blockAccessListHash then do
+    .error <| .block <| .headerFieldPresence <| .text
+      s!"blockAccessListHash is \
+         {if header.blockAccessListHash.isSome then "present" else "absent"}, \
+         but these rules \
+         {if rules.header.blockAccessListHash then "require" else "do not define"} \
+         it"
+  if header.slotNumber.isSome ≠ rules.header.slotNumber then do
+    .error <| .block <| .headerFieldPresence <| .text
+      s!"slotNumber is \
+         {if header.slotNumber.isSome then "present" else "absent"}, \
+         but these rules \
+         {if rules.header.slotNumber then "require" else "do not define"} it"
 
 def stateTransitionChecks (bout : BlockOutput) (header : Header)
     (transactionsRoot blockStateRoot receiptRoot : B256)
@@ -3645,6 +3709,8 @@ private def guardTestHeader : Header := {
   excessBlobGas := 0
   parentBeaconBlockRoot := 0
   requestsHash := none
+  blockAccessListHash := none
+  slotNumber := none
 }
 
 private def guardBlockAt (timestamp : Nat) : Block :=
@@ -3710,20 +3776,30 @@ private def guardBlobParent (baseFee blobGasUsed : Nat) : Header :=
     (fun blob => calculateExcessBlobGas blob (guardBlobParent 17 (21 * 131072)))
   = [917504, 917504, 917504]
 
--- Every declared fork now runs; none is refused for want of rules. This chain
--- has no parent block, so each verdict is the fail-closed no-parent invariant
--- on the outer operational channel -- never a support failure.
-#guard Fork.all.all (fun f =>
+-- Every fork this build runs reaches execution; none is refused for want of
+-- rules. This chain has no parent block, so each verdict is the fail-closed
+-- no-parent invariant on the outer operational channel -- never a support
+-- failure.
+#guard Fork.supported.all (fun f =>
   match addBlockToChainAtE f guardEmptyChain (guardBlockAt 0).toBLT.toBytes with
   | .error (.support _) => false
   | _ => true)
-#guard Fork.all.all (fun f =>
+#guard Fork.supported.all (fun f =>
   match f.rules with
   | .error _ => false
   | .ok rules =>
     match stateTransitionE rules guardEmptyChain (guardBlockAt 0) with
     | .error (.internal _) => true
     | _ => false)
+
+-- The complement, at the same entry point and on the same chain: a declared
+-- fork whose rules are unimplemented is refused on the support channel before
+-- any block is examined, so a well-formed Amsterdam block is never answered
+-- with a verdict about its validity.
+#guard Fork.unimplemented.all (fun f =>
+  match addBlockToChainAtE f guardEmptyChain (guardBlockAt 0).toBLT.toBytes with
+  | .error (.support (.unsupportedFork g)) => g == f
+  | _ => false)
 
 -- A one-block chain whose parent is the only input to the child's expected
 -- excess blob gas. Everything the header checks before that rule is satisfied
@@ -3748,6 +3824,204 @@ private def guardChildBlock (timestamp excessBlobGas : Nat) : Block :=
     txs := []
     ommers := []
     wds := [] }
+
+---------------- HEADER FIELD PRESENCE (EIP-7928, EIP-7843) ----------------
+
+-- The two Amsterdam header fields are optional in *shape* and mandatory by
+-- *rule*. What follows pins both halves: the wire shapes the codec accepts and
+-- rejects, that a header without them is byte-identical to what it always was,
+-- and that `validateHeader` enforces presence in both directions -- keyed on
+-- rule data, so a caller-built record decides for itself and the rule is
+-- testable before `amsterdamRules` exists.
+
+private def guardBalHash : B256 := 0x1111111111111111111111111111111111111111111111111111111111111111
+private def guardRequestsHash : B256 := 0x2222222222222222222222222222222222222222222222222222222222222222
+
+/-- A header with all three optional fields, as an Amsterdam block carries it. -/
+private def guardHeader23 : Header :=
+  { guardTestHeader with
+      requestsHash := some guardRequestsHash
+      blockAccessListHash := some guardBalHash
+      slotNumber := some 4096 }
+
+/-- The same header as the supported chain carries it: the requests hash only. -/
+private def guardHeader21 : Header :=
+  { guardTestHeader with requestsHash := some guardRequestsHash }
+
+private def bltFields : BLT → Nat
+  | .list l => l.length
+  | .bytes _ => 0
+
+-- The encoder emits exactly 20, 21 or 23 fields. 22 is not merely rejected on
+-- input -- it is unreachable on output, because the three options nest.
+#guard bltFields (Header.toBLT guardTestHeader) = 20
+#guard bltFields (Header.toBLT guardHeader21) = 21
+#guard bltFields (Header.toBLT guardHeader23) = 23
+
+-- Round trips at both live widths. `Except DecodeError Header` carries no
+-- `BEq`, so the comparison goes through the decoded value.
+private def roundTrips (h : Header) : Bool :=
+  match (Header.toBLT h).toExHeader with
+  | .ok h' => (Header.toBLT h').toBytes == (Header.toBLT h).toBytes
+  | .error _ => false
+
+#guard roundTrips guardHeader21
+#guard roundTrips guardHeader23
+#guard roundTrips guardTestHeader
+-- The round trip preserves the two new fields specifically, not merely the
+-- encoding: a decoder that dropped them would still re-encode to 21 fields.
+#guard (match (Header.toBLT guardHeader23).toExHeader with
+  | .ok h => h.blockAccessListHash == some guardBalHash
+      && h.slotNumber == some 4096
+      && h.requestsHash == some guardRequestsHash
+  | .error _ => false)
+#guard (match (Header.toBLT guardHeader21).toExHeader with
+  | .ok h => h.blockAccessListHash.isNone && h.slotNumber.isNone
+      && h.requestsHash == some guardRequestsHash
+  | .error _ => false)
+
+-- 22 fields is refused, and refused as a *structure* error naming the widths.
+private def guardHeader22BLT : BLT :=
+  match Header.toBLT guardHeader23 with
+  | .list l => .list (l.take 22)
+  | b => b
+
+#guard bltFields guardHeader22BLT = 22
+#guard guardHeader22BLT.toExHeader.toOption.isNone
+#guard (match guardHeader22BLT.toExHeader with
+  | .error e => e.render ==
+      "RlpStructureError : header : expected 20, 21 or 23 fields, but found 22"
+  | .ok _ => false)
+
+-- A 24-field header is refused for the same reason, so the rule is "these
+-- three widths" and not "at most 23".
+#guard (match (Header.toBLT guardHeader23) with
+  | .list l => (BLT.list (l ++ [BLT.bytes []])).toExHeader.toOption.isNone
+  | _ => false)
+
+/-- A header carrying neither Amsterdam field encodes exactly as it did before
+those fields existed.
+
+`rfl` on an arbitrary header, so this is a fact about *every* 20- or 21-field
+header rather than about a sample -- which is what makes "no Prague, Osaka,
+BPO1 or BPO2 block's hash moved" a structural claim and not a test result. The
+right-hand side is the encoder's body as it stood before this change. -/
+example (h : Header) :
+    Header.toBLT { h with blockAccessListHash := none, slotNumber := none }
+      = BLT.list ([
+          BLT.bytes h.parentHash.toBytes,
+          BLT.bytes h.ommersHash.toBytes,
+          BLT.bytes h.coinbase.toBytes,
+          BLT.bytes h.stateRoot.toBytes,
+          BLT.bytes h.txsRoot.toBytes,
+          BLT.bytes h.receiptRoot.toBytes,
+          BLT.bytes h.bloom,
+          BLT.bytes h.difficulty.toBytes,
+          BLT.bytes h.number.toBytes,
+          BLT.bytes h.gasLimit.toBytes,
+          BLT.bytes h.gasUsed.toBytes,
+          BLT.bytes h.timestamp.toBytes,
+          BLT.bytes h.extraData,
+          BLT.bytes h.prevRandao.toBytes,
+          BLT.bytes h.nonce.toBytes,
+          BLT.bytes h.baseFeePerGas.toBytes,
+          BLT.bytes h.withdrawalsRoot.toBytes,
+          BLT.bytes h.blobGasUsed.toBytes,
+          BLT.bytes h.excessBlobGas.toBytes,
+          BLT.bytes h.parentBeaconBlockRoot.toBytes
+        ] ++
+          match h.requestsHash with
+          | none => []
+          | some rh => [BLT.bytes rh.toBytes]) := rfl
+
+/-- Therefore the identity of every such header is unchanged. -/
+example (h : Header) :
+    Header.hash { h with blockAccessListHash := none, slotNumber := none }
+      = (BLT.list ([
+          BLT.bytes h.parentHash.toBytes, BLT.bytes h.ommersHash.toBytes,
+          BLT.bytes h.coinbase.toBytes, BLT.bytes h.stateRoot.toBytes,
+          BLT.bytes h.txsRoot.toBytes, BLT.bytes h.receiptRoot.toBytes,
+          BLT.bytes h.bloom, BLT.bytes h.difficulty.toBytes,
+          BLT.bytes h.number.toBytes, BLT.bytes h.gasLimit.toBytes,
+          BLT.bytes h.gasUsed.toBytes, BLT.bytes h.timestamp.toBytes,
+          BLT.bytes h.extraData, BLT.bytes h.prevRandao.toBytes,
+          BLT.bytes h.nonce.toBytes, BLT.bytes h.baseFeePerGas.toBytes,
+          BLT.bytes h.withdrawalsRoot.toBytes, BLT.bytes h.blobGasUsed.toBytes,
+          BLT.bytes h.excessBlobGas.toBytes,
+          BLT.bytes h.parentBeaconBlockRoot.toBytes
+        ] ++
+          match h.requestsHash with
+          | none => []
+          | some rh => [BLT.bytes rh.toBytes])).toBytes.keccak := rfl
+
+-- The presence rule, both directions, on a real parent chain so that every
+-- other header check has already passed and the presence rule is what decides.
+
+private def guardChildBlockWith (header : Header) : Block :=
+  { header := header, txs := [], ommers := [], wds := [] }
+
+/-- The rules a fork defining both header fields would carry. Built by a
+caller rather than by `Fork.rules?`, because `amsterdamRules` does not exist
+yet: this goal declares the vocabulary, and the fork that uses it is later.
+`ValidRules.check` accepts it, so it is a usable record and not a strawman. -/
+private def guardBothFieldsRules : ForkRules :=
+  { bpo2Rules with
+      header := { blockAccessListHash := true, slotNumber := true } }
+
+#guard (ValidRules.check guardBothFieldsRules).toOption.isSome
+
+-- `baseFeePerGas := 14` is what this parent's gas usage makes expected, so
+-- every other header rule passes and the presence rule is the only one left to
+-- decide. A guard that failed on the base fee would prove nothing about
+-- presence.
+private def guardChild21 : Block :=
+  guardChildBlockWith
+    { (guardChildBlock 1 917504).header with
+        baseFeePerGas := 14
+        requestsHash := some guardRequestsHash }
+
+private def guardChild23 : Block :=
+  guardChildBlockWith
+    { (guardChildBlock 1 917504).header with
+        baseFeePerGas := 14
+        requestsHash := some guardRequestsHash
+        blockAccessListHash := some guardBalHash
+        slotNumber := some 4096 }
+
+private def presenceFails {α : Type} : Except TransitionError α → Bool
+  | .error (.block (.headerFieldPresence _)) => true
+  | _ => false
+
+-- BPO2 defines neither field, so a 23-field header is rejected -- by the
+-- presence rule, not by some earlier check that happens to fire first.
+#guard presenceFails (validateHeader bpo2Rules guardParentChain guardChild23.header)
+-- and its 21-field sibling passes every header check.
+#guard (validateHeader bpo2Rules guardParentChain guardChild21.header).toOption.isSome
+
+-- Under rules that define both fields the answers invert, on the very same
+-- two headers. That is what makes this a rule and not a constant.
+#guard presenceFails
+  (validateHeader guardBothFieldsRules guardParentChain guardChild21.header)
+#guard (validateHeader guardBothFieldsRules guardParentChain
+  guardChild23.header).toOption.isSome
+
+-- The reason names the field and the direction, so a failure is readable
+-- without reading this file.
+#guard (match validateHeader bpo2Rules guardParentChain guardChild23.header with
+  | .error e => e.render.startsWith "HeaderFieldPresenceError : blockAccessListHash is present"
+  | .ok _ => false)
+#guard (match validateHeader guardBothFieldsRules guardParentChain
+    guardChild21.header with
+  | .error e => e.render.startsWith "HeaderFieldPresenceError : blockAccessListHash is absent"
+  | .ok _ => false)
+
+-- One field at a time: each flag is independent of the other.
+#guard presenceFails (validateHeader
+  { bpo2Rules with header := { blockAccessListHash := false, slotNumber := true } }
+  guardParentChain guardChild21.header)
+#guard presenceFails (validateHeader
+  { bpo2Rules with header := { blockAccessListHash := true, slotNumber := false } }
+  guardParentChain guardChild21.header)
 
 -- P0.2, the history half: `RetainedHistoryValid` has teeth, and is decided
 -- rather than assumed. A genesis-rooted chain whose blocks are consecutively
@@ -4208,6 +4482,21 @@ theorem processCheckedSystemTransaction_canonical {benv : Benv}
     · cases hp
       exact processSystemTransaction_canonical h (Except.mapError_eq_ok_iff.mp hq)
 
+/-- Every prefix of the request fold leaves a canonical state.
+
+An induction on the contract list, so the proof does not grow when the list
+does: Amsterdam's two extra contracts are covered by the same argument. -/
+theorem runRequestContracts_canonical :
+    ∀ (rs : List (UInt8 × Adr)) {benv : Benv}, benv.Canonical →
+      ∀ {acc : List Bytes} {p}, runRequestContracts rs benv acc = .ok p →
+        State.Canonical p.1
+  | [], _, h, _, _, hp => by cases hp; exact h.1
+  | _ :: rs, benv, h, acc, p, hp => by
+    unfold runRequestContracts at hp
+    obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
+    exact runRequestContracts_canonical rs
+      (by exact ⟨processCheckedSystemTransaction_canonical h hq, h.2⟩) hp
+
 theorem processGeneralPurposeRequests_canonical {benv : Benv}
     (h : benv.Canonical) {bout : BlockOutput} {p}
     (hp : processGeneralPurposeRequests benv bout = .ok p) :
@@ -4215,19 +4504,9 @@ theorem processGeneralPurposeRequests_canonical {benv : Benv}
   unfold processGeneralPurposeRequests at hp
   obtain ⟨dr, _, hp⟩ := Except.bind_eq_ok hp
   dsimp only at hp
-  split at hp <;>
-    (obtain ⟨q1, hq1, hp⟩ := Except.bind_eq_ok hp
-     obtain ⟨q1s, q1o⟩ := q1
-     dsimp only at hp
-     split at hp <;>
-       (obtain ⟨q2, hq2, hp⟩ := Except.bind_eq_ok hp
-        obtain ⟨q2s, q2o⟩ := q2
-        dsimp only at hp
-        split at hp <;>
-          (cases hp
-           exact processCheckedSystemTransaction_canonical
-             (by exact ⟨processCheckedSystemTransaction_canonical h hq1, h.2⟩)
-             hq2)))
+  obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
+  cases hp
+  exact runRequestContracts_canonical _ h hq
 
 theorem applyTransactions_canonical :
     ∀ (txis : List (Nat × Tx)) {benv : Benv}, benv.Canonical →
