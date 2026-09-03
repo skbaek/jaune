@@ -64,6 +64,72 @@ only generated Prague entries with an explicit `--network Prague`; Osaka, BPO,
 and transition labels remain inventoried and fail closed until their owning
 migration steps activate them.
 
+## Glamsterdam devnet lane (installed, inventoried, refused)
+
+A **second, separate** fixture lane, for a fork this build declares and does
+not implement. Nothing in it runs; installing it claims nothing about running
+it. It exists so that the corpus Amsterdam will eventually be judged against
+is pinned, verified, and inventoried *before* any semantics are written
+against it, and so that the numbers a later goal will implement can be checked
+against the same revision the fixtures were filled from.
+
+The source is
+[`execution-specs` `tests-glamsterdam-devnet@v8.1.3`](https://github.com/ethereum/execution-specs/releases/tag/tests-glamsterdam-devnet%40v8.1.3),
+a **prerelease**, resolved to commit
+`8ca2f4ceefd83100a4d21d0c33747114278a0bc2` — a merge of `forks/amsterdam` into
+`devnets/glamsterdam/8`. Its `fixtures_glamsterdam-devnet.tar.gz` asset is
+944,518,619 bytes with SHA-256
+`f87f59b6e2eede5df3462c1784cd6b168fa6d687e36a77b604aeeaf361aaed64`.
+
+```sh
+python3 scripts/bootstrap_mainnet.py --lane amsterdam   # ~/eest-glamsterdam-devnet-v8.1.3
+python3 scripts/env_doctor.py \
+  --amsterdam-root ~/eest-glamsterdam-devnet-v8.1.3 --amsterdam-deep
+```
+
+The extracted tree is 48,491 files and about 20 GB; allow at least 25 GB of
+free space for a fresh install. Verification is the mainnet lane's, verbatim:
+the same bootstrap, the same member-by-member safe extractor, the same digest
+check before a single byte is written, the same release-index check against
+`fixtures/.meta/index.json` (root hash
+`0x3782178206bded832c8d1622379d6b9dbdaef428d6c0ba5d5a44f78ecc553648`,
+338,970 cases). It is one code path with a `--lane` parameter rather than a
+copy, because a second archive extractor is a second place for a traversal or
+link check to be missing.
+
+**The same commit is the transition-tool anchor.** `sources.json`'s
+`conformance_target` points at `8ca2f4c` too, so the fixtures, the executable
+specification `scripts/gen-fork-constants.py` reads, and the goldens
+`scripts/check-t8n.sh` compares against are one revision by construction rather
+than by coincidence.
+
+`scripts/gen_mainnet_manifest.py --lane amsterdam` writes
+`scripts/amsterdam/manifests.json`; never edit it by hand. The inventory is the
+lane's product:
+
+| suite | files | cases |
+|---|---:|---:|
+| `amsterdam` (static) | 3,140 | 24,840 |
+| `amsterdam-transitions` (`BPO2ToAmsterdamAtTime15k`) | 42 | 127 |
+| `amsterdam-smoke` | 16 | 62 |
+| `amsterdam-full` | 3,182 | 24,967 |
+
+Across 24 labels the corpus holds 12,002 blockchain-test files and 99,151
+cases. The Prague, Osaka and BPO transition labels it also carries are
+inventoried under `covered_without_suite`: they are the current-mainnet lane's
+subject at that lane's own pin, and running them here would test the same rules
+against a second, weaker corpus while reporting it as Amsterdam coverage.
+`BPO2ToBPO3AtTime15k` and `BPO3ToBPO4AtTime15k` are **excluded**, each naming
+the fork this build does not declare — the release publishes them, and Jaune
+has no BPO3 or BPO4 identity.
+
+**Every suite is refused.** `scripts/check-mainnet.sh --lane amsterdam --suite
+<any of the four>` exits 2 with a message naming the goal that owns the
+semantics it would need, and `--dir` is refused likewise. The refusal fires
+before the fixture root is read, so it is the same answer on a host that never
+installed the corpus. See [`../GATES.md`](../GATES.md) for the selection rules
+and `scripts/tests/test_amsterdam_lane.py` for the tests that hold them.
+
 ## Legacy fixture Git bootstrap
 
 [`scripts/bootstrap_legacy.py`](../bootstrap_legacy.py) safely creates the

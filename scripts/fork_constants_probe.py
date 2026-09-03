@@ -46,13 +46,39 @@ def _mod(fork: str, suffix: str = ""):
     return importlib.import_module(name)
 
 
-def _opt_int(obj, name):
-    """A named constant's integer value, or None when the fork has no such name.
+def _find(fork: str, name: str, modules: "tuple[str, ...]"):
+    """Look a module-level constant up across the modules it may live in.
 
-    `None` is a real answer here: Prague has no `TX_MAX_GAS_LIMIT` because
-    EIP-7825 does not exist yet, and Jaune records that as `tx.maxGas = none`
-    rather than as an unbounded sentinel.
+    Upstream moves constants between files without changing them --
+    `BLOB_COUNT_LIMIT` is in `fork` through BPO2 and in `transactions` at
+    Amsterdam, and `MAX_BLOB_GAS_PER_BLOCK` moves from `fork` to `vm.gas` --
+    and the drift monitor classifies exactly that as a refactor, which is to
+    say as nothing. A lookup pinned to one file would report a moved constant
+    as a *changed* one, which is the opposite of what this gate is for.
+
+    Returns `(value, source)` where `source` names the module that answered, so
+    a move is visible in the generated artifact without being a failure. A
+    constant no listed module defines is a real `None`: Prague has no
+    `TX_MAX_GAS_LIMIT` because EIP-7825 does not exist yet, and Jaune records
+    that as `tx.maxGas = none` rather than as an unbounded sentinel.
     """
+    for module in modules:
+        value = getattr(_mod(fork, module), name, None)
+        if value is not None:
+            where = f"{module}.{name}" if module else name
+            return int(value), where
+    searched = ", ".join(f"{m}.{name}" if m else name for m in modules)
+    return None, f"absent: none of {searched} is defined at this fork"
+
+
+def _require(fork: str, name: str, modules: "tuple[str, ...]"):
+    value, source = _find(fork, name, modules)
+    if value is None:
+        raise ProbeError(f"{fork}: {source}")
+    return value, source
+
+
+def _opt_int(obj, name):
     value = getattr(obj, name, None)
     return None if value is None else int(value)
 
@@ -200,11 +226,21 @@ def extract(label: str, fork: str) -> dict:
         per_auth = _require_int(costs, "AUTH_PER_EMPTY_ACCOUNT", f"{fork}.vm.gas.GasCosts")
         per_auth_source = "vm.gas.GasCosts.AUTH_PER_EMPTY_ACCOUNT"
 
+    # Names that live in different modules at different forks are looked up
+    # across every module they are known to inhabit, newest location first.
+    max_blob_gas, max_blob_gas_source = _require(
+        fork, "MAX_BLOB_GAS_PER_BLOCK", ("vm.gas", "fork"))
+    tx_max_gas, tx_max_gas_source = _find(
+        fork, "TX_MAX_GAS_LIMIT", ("transactions", "fork"))
+    blob_count, blob_count_source = _find(
+        fork, "BLOB_COUNT_LIMIT", ("transactions", "fork"))
+    max_rlp, max_rlp_source = _find(
+        fork, "MAX_RLP_BLOCK_SIZE", ("fork", "transactions"))
+
     entries = [
         field("blob.target", _require_int(costs, "BLOB_TARGET_GAS_PER_BLOCK", fork),
               "vm.gas.GasCosts.BLOB_TARGET_GAS_PER_BLOCK"),
-        field("blob.max", _require_int(fork_module, "MAX_BLOB_GAS_PER_BLOCK", fork),
-              "fork.MAX_BLOB_GAS_PER_BLOCK"),
+        field("blob.max", max_blob_gas, max_blob_gas_source),
         field("blob.baseFeeUpdateFraction",
               _require_int(costs, "BLOB_BASE_FEE_UPDATE_FRACTION", fork),
               "vm.gas.GasCosts.BLOB_BASE_FEE_UPDATE_FRACTION"),
@@ -214,12 +250,9 @@ def extract(label: str, fork: str) -> dict:
               "vm.interpreter.MAX_CODE_SIZE"),
         field("code.maxInitCodeSize", _require_int(interpreter, "MAX_INIT_CODE_SIZE", fork),
               "vm.interpreter.MAX_INIT_CODE_SIZE"),
-        field("tx.maxGas", _opt_int(transactions, "TX_MAX_GAS_LIMIT"),
-              "transactions.TX_MAX_GAS_LIMIT (absent before EIP-7825)"),
-        field("tx.maxBlobCount", _opt_int(transactions, "BLOB_COUNT_LIMIT"),
-              "transactions.BLOB_COUNT_LIMIT (absent before EIP-7594)"),
-        field("block.maxRlpSize", _opt_int(fork_module, "MAX_RLP_BLOCK_SIZE"),
-              "fork.MAX_RLP_BLOCK_SIZE (absent before EIP-7934)"),
+        field("tx.maxGas", tx_max_gas, tx_max_gas_source),
+        field("tx.maxBlobCount", blob_count, blob_count_source),
+        field("block.maxRlpSize", max_rlp, max_rlp_source),
         field("op.clz", hasattr(instructions.Ops, "CLZ"),
               "vm.instructions.Ops.CLZ is defined (EIP-7939)"),
         field("precompiles",

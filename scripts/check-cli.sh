@@ -11,6 +11,13 @@
 #   3. no case in it runs at a network this build supports;
 #   4. the command line's filters select none of the cases that do.
 #
+# A fifth refusal joined them when `Fork.amsterdam` was declared: a case whose
+# network label this build *parses* but whose rules it does not implement. It
+# is a different refusal from rule 3 and must stay different -- `Cancun` is a
+# label this build does not know, while `Amsterdam` is one it knows and
+# deliberately cannot run -- so both are asserted here, on files that differ
+# only in that label.
+#
 # Nothing else pinned them. The conformance tiers only ever run well-formed
 # corpus files, `scripts/golden-messages.txt` covers block-rejection reasons
 # observed *inside* a run, and the Python tests under `scripts/tests/` cover the
@@ -157,6 +164,30 @@ cat > "$TMP/loose/unsupported.json" <<'EOF'
 }
 EOF
 
+# The declared-but-unimplemented twin of unsupported.json: identical but for
+# the label. This is the shape every fixture in the installed Glamsterdam
+# devnet corpus has, and the refusal below is the one that corpus meets.
+cat > "$TMP/loose/declared_unimplemented.json" <<'EOF'
+{
+  "tests/amsterdam/eip7843_slotnum/test_slotnum.py::test_slotnum[fork_Amsterdam-blockchain_test]": {
+    "network": "Amsterdam",
+    "_info": { "fixture-format": "blockchain_test" }
+  }
+}
+EOF
+
+# A transition into an unimplemented fork. Its pre-fork blocks would run
+# perfectly well under BPO2, which is exactly why the refusal has to come
+# before the first block rather than partway through the case.
+cat > "$TMP/loose/declared_transition.json" <<'EOF'
+{
+  "tests/amsterdam/eip7843_slotnum/test_slotnum.py::test_slotnum[fork_BPO2ToAmsterdamAtTime15k-blockchain_test]": {
+    "network": "BPO2ToAmsterdamAtTime15k",
+    "_info": { "fixture-format": "blockchain_test" }
+  }
+}
+EOF
+
 cat > "$TMP/loose/declared.json" <<'EOF'
 {
   "tests/frontier/opcodes/test_dup.py::test_dup[fork_Prague-blockchain_test]": {
@@ -205,6 +236,23 @@ expect_refusal "unsupported network" \
   "runs at a network this build supports; the file's labels are [Cancun]" \
   "$TMP/loose/unsupported.json"
 
+# 5b. A label this build parses but cannot run is refused as *unimplemented*,
+#     not as unknown, and refused before any block is read. `SELECTED CASES`
+#     must not appear: reaching the per-case run and only then refusing would
+#     mean the refusal had already been reported as a block verdict.
+expect_refusal "declared but unimplemented network" \
+  "UnsupportedForkError : fork Amsterdam is a declared protocol fork" \
+  "$TMP/loose/declared_unimplemented.json"
+expect_last_lacks "declared but unimplemented network" \
+  "runs at a network this build supports"
+
+# 5c. The same, through a transition label whose other endpoint this build
+#     does run. Checking only the static label would leave the case where the
+#     first blocks are runnable and the later ones are not.
+expect_refusal "transition into an unimplemented network" \
+  "UnsupportedForkError : fork Amsterdam is a declared protocol fork" \
+  "$TMP/loose/declared_transition.json"
+
 # 6. An empty selection the command line caused is a command-line error, and
 #    says how much it filtered away.
 expect_refusal "filters select nothing" \
@@ -235,5 +283,5 @@ if [ "$FAILS" -ne 0 ]; then
   exit 1
 fi
 
-echo "OK — cli: $CHECKS checks; the four fixture-file refusals hold and an undeclared format is still passed through"
+echo "OK — cli: $CHECKS checks; the four fixture-file refusals and the unimplemented-fork refusal hold, and an undeclared format is still passed through"
 exit 0

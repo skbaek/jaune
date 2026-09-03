@@ -107,7 +107,7 @@
           "value": 11684671
         },
         "blob.max": {
-          "source": "fork.MAX_BLOB_GAS_PER_BLOCK",
+          "source": "vm.gas.MAX_BLOB_GAS_PER_BLOCK",
           "value": 2752512
         },
         "blob.reserveBaseCost": {
@@ -119,7 +119,7 @@
           "value": 1835008
         },
         "block.maxRlpSize": {
-          "source": "fork.MAX_RLP_BLOCK_SIZE (absent before EIP-7934)",
+          "source": "fork.MAX_RLP_BLOCK_SIZE",
           "value": 8388608
         },
         "code.maxCodeSize": {
@@ -227,11 +227,11 @@
           ]
         },
         "tx.maxBlobCount": {
-          "source": "transactions.BLOB_COUNT_LIMIT (absent before EIP-7594)",
+          "source": "transactions.BLOB_COUNT_LIMIT",
           "value": 6
         },
         "tx.maxGas": {
-          "source": "transactions.TX_MAX_GAS_LIMIT (absent before EIP-7825)",
+          "source": "transactions.TX_MAX_GAS_LIMIT",
           "value": 16777216
         }
       },
@@ -262,7 +262,7 @@
           "value": 1310720
         },
         "block.maxRlpSize": {
-          "source": "fork.MAX_RLP_BLOCK_SIZE (absent before EIP-7934)",
+          "source": "fork.MAX_RLP_BLOCK_SIZE",
           "value": 8388608
         },
         "code.maxCodeSize": {
@@ -362,11 +362,11 @@
           ]
         },
         "tx.maxBlobCount": {
-          "source": "transactions.BLOB_COUNT_LIMIT (absent before EIP-7594)",
-          "value": null
+          "source": "fork.BLOB_COUNT_LIMIT",
+          "value": 6
         },
         "tx.maxGas": {
-          "source": "transactions.TX_MAX_GAS_LIMIT (absent before EIP-7825)",
+          "source": "transactions.TX_MAX_GAS_LIMIT",
           "value": 16777216
         }
       },
@@ -397,7 +397,7 @@
           "value": 1835008
         },
         "block.maxRlpSize": {
-          "source": "fork.MAX_RLP_BLOCK_SIZE (absent before EIP-7934)",
+          "source": "fork.MAX_RLP_BLOCK_SIZE",
           "value": 8388608
         },
         "code.maxCodeSize": {
@@ -497,11 +497,11 @@
           ]
         },
         "tx.maxBlobCount": {
-          "source": "transactions.BLOB_COUNT_LIMIT (absent before EIP-7594)",
-          "value": null
+          "source": "fork.BLOB_COUNT_LIMIT",
+          "value": 6
         },
         "tx.maxGas": {
-          "source": "transactions.TX_MAX_GAS_LIMIT (absent before EIP-7825)",
+          "source": "transactions.TX_MAX_GAS_LIMIT",
           "value": 16777216
         }
       },
@@ -532,7 +532,7 @@
           "value": 786432
         },
         "block.maxRlpSize": {
-          "source": "fork.MAX_RLP_BLOCK_SIZE (absent before EIP-7934)",
+          "source": "fork.MAX_RLP_BLOCK_SIZE",
           "value": 8388608
         },
         "code.maxCodeSize": {
@@ -632,11 +632,11 @@
           ]
         },
         "tx.maxBlobCount": {
-          "source": "transactions.BLOB_COUNT_LIMIT (absent before EIP-7594)",
-          "value": null
+          "source": "fork.BLOB_COUNT_LIMIT",
+          "value": 6
         },
         "tx.maxGas": {
-          "source": "transactions.TX_MAX_GAS_LIMIT (absent before EIP-7825)",
+          "source": "transactions.TX_MAX_GAS_LIMIT",
           "value": 16777216
         }
       },
@@ -667,7 +667,7 @@
           "value": 786432
         },
         "block.maxRlpSize": {
-          "source": "fork.MAX_RLP_BLOCK_SIZE (absent before EIP-7934)",
+          "source": "absent: none of fork.MAX_RLP_BLOCK_SIZE, transactions.MAX_RLP_BLOCK_SIZE is defined at this fork",
           "value": null
         },
         "code.maxCodeSize": {
@@ -766,11 +766,11 @@
           ]
         },
         "tx.maxBlobCount": {
-          "source": "transactions.BLOB_COUNT_LIMIT (absent before EIP-7594)",
+          "source": "absent: none of transactions.BLOB_COUNT_LIMIT, fork.BLOB_COUNT_LIMIT is defined at this fork",
           "value": null
         },
         "tx.maxGas": {
-          "source": "transactions.TX_MAX_GAS_LIMIT (absent before EIP-7825)",
+          "source": "absent: none of transactions.TX_MAX_GAS_LIMIT, fork.TX_MAX_GAS_LIMIT is defined at this fork",
           "value": null
         }
       },
