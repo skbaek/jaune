@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Jaune — a Yellow Paper you can run</title>
-<meta name="description" content="Jaune is an executable formal specification of the Ethereum Virtual Machine in Lean 4 — a spiritual successor to the Yellow Paper that passes every supported file of the pinned mainnet fixture corpus (5,100/5,100, Prague through BPO2) and supports machine-checked proof, demonstrated by four contracts in the sibling Blanc language — most recently a port of Lido's deployed CircuitBreaker, its Registry integrity proved from an official-parameters deployment to every state reachable along a valid configured chain.">
+<meta name="description" content="Jaune is an executable formal specification of the Ethereum Virtual Machine in Lean 4 — a spiritual successor to the Yellow Paper that passes every supported file of the pinned mainnet fixture corpus (5,100/5,100, Prague through BPO2) and supports machine-checked proof, demonstrated by eight contracts in the sibling Blanc language — among them a port of Lido's deployed CircuitBreaker, its Registry integrity proved from an official-parameters deployment to every state reachable along a valid configured chain, and the eth2 deposit contract, its Merkle root carried through twelve SHA-256 precompile crossings to every admitted future.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='9' fill='%23f6e5a8'/%3E%3Ctext x='32' y='47' font-family='Georgia,serif' font-size='44' text-anchor='middle' fill='%231b4b2b'%3EJ%3C/text%3E%3C/svg%3E">
 <style>
 /* ────────────────────────────────────────────────────────────────
@@ -383,7 +383,7 @@ footer a:hover{color:var(--ink)}
         <p class="lede">
           The Yellow Paper defined Ethereum in mathematics you could only read. Its living
           replacement is a program you can only run. <strong style="color:var(--ink)">Jaune</strong> is both
-          at once: twenty-five thousand lines of Lean&nbsp;4 that state the execution layer precisely
+          at once: twenty-seven thousand lines of Lean&nbsp;4 that state the execution layer precisely
           enough to prove theorems about — and compile into an interpreter that passes the
           pinned mainnet fixture corpus, fork by fork, case by case, and speaks the ecosystem’s standard
           <span class="mono">t8n</span> transition-tool interface.
@@ -427,11 +427,12 @@ footer a:hover{color:var(--ink)}
       at zero panics. The interpreter also answers as a standard <span class="mono">t8n</span> transition
       tool, gated against its pinned target’s complete output with every normalization and declared
       deviation explicit. The semantics is demonstrated strong enough for real verification: the
-      sibling Blanc language has carried four contracts’ invariants through it — a WETH’s solvency
-      across scheduled fork activations, and most recently Registry integrity for a port of Lido’s
-      deployed CircuitBreaker, proved from an official-parameters deployment through the full
-      Prague block pipeline to every reachable state of a valid configured chain — through a
-      machine-checked compiler, with an axiom audit in CI. MIT-licensed.</p>
+      sibling Blanc language has carried eight contracts’ invariants through it — a WETH’s
+      solvency across scheduled fork activations, Registry integrity for a port of Lido’s deployed
+      CircuitBreaker from an official-parameters deployment to every reachable state of a valid
+      configured chain, and the eth2 deposit contract’s Merkle root through twelve SHA-256
+      precompile crossings to every admitted future — through a machine-checked compiler, with an
+      axiom audit in CI. MIT-licensed.</p>
     </div>
 
     <div class="factbar reveal">
@@ -929,8 +930,8 @@ footer a:hover{color:var(--ink)}
       <a href="https://skbaek.github.io/blanc/" style="text-decoration:underline;text-underline-offset:3px"><strong style="color:var(--ink)">Blanc</strong></a><span class="dimmer"> (fr. “white”, as in whitepaper)</span>
       is the payment: a deliberately minimal contract language — four constructors, a compiler into
       EVM bytecode, a machine-checked compiler-correctness theorem — that carries real invariants
-      through Jaune’s semantics at every altitude. The current frontier is its fourth contract, a
-      port of the CircuitBreaker that Lido deployed in 2026: an emergency brake whose admin grants
+      through Jaune’s semantics at every altitude. Its deepest single exercise of the semantics is
+      a port of the CircuitBreaker that Lido deployed in 2026: an emergency brake whose admin grants
       pauser addresses time-limited authority over registered protocol contracts. The invariant is
       Registry integrity: <em>the guardian’s book of authorizations stays coherent, whatever any
       contract it talks to does.</em>
@@ -1008,7 +1009,12 @@ footer a:hover{color:var(--ink)}
             balance</em>) carried to the same configured-chain altitude, across scheduled fork
             activations. The frontier then moved through a full 27-selector WETH10,
             whose future-redeemability flagship runs the Prague pipeline from a proved creation
-            transaction onward, to the CircuitBreaker.
+            transaction onward, to the CircuitBreaker — and on: the eth2 deposit contract, whose
+            proofs cross Jaune’s SHA-256 precompile at twelve source-shaped sites and read the
+            Merkle root off every admitted future of a derived deployment; Lido’s withdrawals
+            gateway and upgradeable proxy, carrying the first delegatecall and two-contract
+            composition theorems; and a pro-rata pricing étude built on Jaune’s new
+            integer-arithmetic layer.
           </p>
           <p class="dim" style="font-size:.94rem;margin-bottom:0">
             Scope, unchanged since the first port: these are <strong>reimplementations</strong>,
@@ -1024,7 +1030,7 @@ footer a:hover{color:var(--ink)}
         <div class="panel">
           <span class="tick">the audit, in CI, every commit</span>
           <p class="dim" style="font-size:.94rem">
-            Blanc’s CI audits <strong>988</strong> named theorems — 288 of them the
+            Blanc’s CI audits <strong>1,070</strong> named theorems — 290 of them the
             CircuitBreaker family’s, the history rungs among them — each against its own
             pinned expected axiom set, failing on an extra <em>or missing</em> axiom and on anything
             beyond <span class="mono">propext</span>, <span class="mono">Classical.choice</span>,
@@ -1043,8 +1049,8 @@ footer a:hover{color:var(--ink)}
         <p class="note" style="margin-top:16px">
           The division of labour is exact: Jaune owns what the machine does; Blanc owns programs,
           the compiler, and everything proved about particular contracts. The full portfolio —
-          the WETH, an ERC-3156 flash-mint étude, the 27-selector WETH10, and the Lido
-          CircuitBreaker, each with an evidence page of its own — lives at
+          six ports, from the WETH to the eth2 deposit contract and Lido’s CircuitBreaker,
+          gateway, and proxy, and two études, each with an evidence page of its own — lives at
           <a href="https://skbaek.github.io/blanc/" style="text-decoration:underline;text-underline-offset:3px">skbaek.github.io/blanc</a>.
         </p>
       </div>
@@ -1126,7 +1132,7 @@ footer a:hover{color:var(--ink)}
         <p class="dim">A no-toolchain CI job fails the build on any <span class="mono">sorry</span> or stray
           <span class="mono">dbg_trace</span> outside a justified allowlist; the integrity gate — run
           locally, like the corpus suites — holds panics, raw bang operations, and stringly-typed
-          semantic carriers to a shrink-only budget over the import closure; Blanc’s job audits 988 theorems against exact pinned axiom sets. Per push,
+          semantic carriers to a shrink-only budget over the import closure; Blanc’s job audits 1,070 theorems against exact pinned axiom sets. Per push,
           two conformance gates that need nothing but the binary run beside them —
           <span class="mono">t8n</span> against its pinned goldens, and the word and hash
           primitives — in about a second. The gates extend to the tooling itself: an
@@ -1196,6 +1202,23 @@ footer a:hover{color:var(--ink)}
             <a class="btn" href="t8n-case-study.html">Read the t8n case study</a>
           </div>
       </div>
+      <div class="stage done reveal">
+        <div class="meta"><span class="pill"><span class="d"></span>landed · 2026-09-02</span></div>
+        <h3>Arithmetic layers, a canonical vocabulary, and a resource-aware harness</h3>
+        <p>Two additive layers for the sibling’s arithmetic études, each a new module and nothing
+          changed beneath it: <span class="mono">MulDiv</span>, the floor and ceiling
+          <span class="mono">a·b/d</span> facts — bounds, monotonicity, round-trip dust, the
+          perturbation lever a donation pulls — with their word-level bridges; and
+          <span class="mono">RPow</span>, the scale-parametric rounded multiply and the
+          reference-shaped square-and-multiply loop with its exact telescoping error band, every
+          statement brute-forced by an independent falsifier before proof and all 127
+          declarations audited to the standard axioms. The instruction vocabulary moved to the
+          canonical EVM mnemonics before any outside consumer, with a gate that refuses the
+          retired spellings. And the fixture harness became resource-aware: unobservable calldata
+          is released rather than retained across frames, <span class="mono">--jobs auto</span>
+          sizes itself from memory as well as cores, and a live resource collector records what a
+          run actually cost.</p>
+      </div>
       <div class="stage now reveal">
         <div class="meta"><span class="pill"><span class="d"></span>next · gated on evidence</span></div>
         <h3>The allocation economy</h3>
@@ -1211,11 +1234,14 @@ footer a:hover{color:var(--ink)}
         <div class="meta"><span class="pill"><span class="d"></span>open direction</span></div>
         <h3>More of the protocol under proof, more contracts over it</h3>
         <p>WETH was the existence proof, not the destination — and the sibling project has since
-          moved the frontier twice: Blanc’s WETH10 exercises Jaune’s Prague pipeline end to end,
-          from a proved creation transaction through configured-chain reachability with a
-          future-redeemability flagship on top, and its Lido CircuitBreaker port now carries a
-          deployed guardian’s Registry integrity from an official-parameters deployment to every
-          reachable future, over arbitrary hostile callees. The open questions are which invariants
+          moved the frontier repeatedly: Blanc’s WETH10 exercises Jaune’s Prague pipeline end to
+          end, from a proved creation transaction through configured-chain reachability with a
+          future-redeemability flagship on top; its Lido CircuitBreaker port carries a deployed
+          guardian’s Registry integrity from an official-parameters deployment to every reachable
+          future, over arbitrary hostile callees; its deposit-contract port crosses the SHA-256
+          precompile — the one hash here that carries a FIPS 180-4 equivalence theorem — twelve
+          times per deposit; and its proxy and gateway ports are the first theorems about
+          delegation and about two verified contracts at once. The open questions are which invariants
           justify their proof effort, how much block-level reasoning transfers between contracts,
           and where a proof-first language stops being expressive enough. Collaborators with a
           target property in mind are exactly who this page is for — and
@@ -1235,7 +1261,7 @@ footer a:hover{color:var(--ink)}
     <div class="grid3" style="margin-top:34px">
       <div class="aud reveal">
         <h3>Proof engineers &amp; PL researchers</h3>
-        <p>A live, non-toy verification target: ~277,000 lines of Lean 4 across the sibling pair,
+        <p>A live, non-toy verification target: ~390,000 lines of Lean 4 across the sibling pair,
           spanning an executable semantics, a verified compiler, and contract invariants proved to
           chain altitude — with well-posed open problems in representation choice, proof-exposure
           budgeting, and fork-parameterised reasoning. The sufficiency arc alone is a worked case
@@ -1315,7 +1341,7 @@ footer a:hover{color:var(--ink)}
 <span class="p">$</span> cd blanc &amp;&amp; lake exe cache get &amp;&amp; lake build
 <span class="p">$</span> scripts/check.sh</div>
         <p class="dim" style="font-size:.88rem;margin:14px 0 0">
-          <span class="mono">check.sh</span> builds the library and runs the axiom audit — 988
+          <span class="mono">check.sh</span> builds the library and runs the axiom audit — 1,070
           audited theorems, the history rungs of §&nbsp;6 among them, each checked against its own
           pinned expected axiom set; it exits non-zero on an extra or missing axiom, on
           <span class="mono">sorryAx</span>, <span class="mono">ofReduceBool</span>, or
@@ -1344,7 +1370,7 @@ footer a:hover{color:var(--ink)}
         <li id="fn2">Jaune was previously published under the name <span class="mono">ELeVM</span>;
           the repository was renamed in July 2026 and old links redirect.</li>
         <li id="fn3">Figures on this page are drawn from committed reports, baselines, and benchmark
-          instruments in the repositories, current as of 2026-08-27.
+          instruments in the repositories, current as of 2026-09-03.
           Wall-clock numbers are same-machine, same-instrument measurements on a 10-core Apple M5;
           fixture counts are exact. The
           current-mainnet lane covers every <span class="mono">blockchain_tests</span> fixture of
