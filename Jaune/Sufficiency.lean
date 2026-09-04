@@ -1553,17 +1553,17 @@ namespace Mach
 
 @[simp] theorem pop_machResultGas (mach : Mach) :
     machResultGas mach.pop = mach.gasLeft := by
-  rcases mach with ⟨stack, memory, gasLeft⟩
+  rcases mach with ⟨stack, memory, gasLeft, stateGas⟩
   cases stack <;> rfl
 
 @[simp] theorem popToNat_machResultGas (mach : Mach) :
     machResultGas mach.popToNat = mach.gasLeft := by
-  rcases mach with ⟨stack, memory, gasLeft⟩
+  rcases mach with ⟨stack, memory, gasLeft, stateGas⟩
   cases stack <;> rfl
 
 @[simp] theorem popToAdr_machResultGas (mach : Mach) :
     machResultGas mach.popToAdr = mach.gasLeft := by
-  rcases mach with ⟨stack, memory, gasLeft⟩
+  rcases mach with ⟨stack, memory, gasLeft, stateGas⟩
   cases stack <;> rfl
 
 @[simp] theorem popN_machResultGas (n : Nat) (mach : Mach) :
@@ -1571,12 +1571,13 @@ namespace Mach
   induction n generalizing mach with
   | zero => rfl
   | succ n ih =>
-    rcases mach with ⟨stack, memory, gasLeft⟩
+    rcases mach with ⟨stack, memory, gasLeft, stateGas⟩
     cases stack with
     | nil => rfl
     | cons x xs =>
-      have ih' := ih ⟨xs, memory, gasLeft⟩
-      rcases hp : Mach.popN ⟨xs, memory, gasLeft⟩ n with ⟨err, m⟩ | ⟨ys, m⟩ <;>
+      have ih' := ih ⟨xs, memory, gasLeft, stateGas⟩
+      rcases hp : Mach.popN ⟨xs, memory, gasLeft, stateGas⟩ n with
+          ⟨err, m⟩ | ⟨ys, m⟩ <;>
         rw [hp] at ih' <;>
         simpa only [Mach.popN, Mach.pop, hp, machResultGas] using ih'
 

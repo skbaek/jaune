@@ -1735,11 +1735,63 @@ instance (b : Block) : Decidable (Block.RlpCanonical b) := by
 
 
 
+/-- EIP-8037's per-frame state-gas meter.
+
+Amsterdam meters a frame in two dimensions. `Mach.gasLeft` keeps its name and
+its meaning -- it is execution gas, and `GAS` still pushes it, exactly as
+upstream pushes `gas_meter.gas_left`. This record is the second dimension, and
+it is nested and defaulted so that every `Mach` literal and every `with`-update
+that does not name it goes on elaborating unchanged.
+
+The four fields are upstream's, one for one:
+
+* `left` is `state_gas_left`, the frame's reservoir. State charges draw from
+  here first.
+* `baseline` is `state_gas_baseline`, the level a rollback refills to. It
+  starts at the frame's grant and only ever moves down, when a commit marks
+  charges non-refillable.
+* `spilled` is `state_gas_spilled`: execution gas that covered a state charge
+  after the reservoir emptied, not yet credited back. EIP-8037 calls this
+  quantity `state_gas_from_gas_left`.
+* `committedSpill` is `state_gas_committed_spill`: spill a commit marked
+  non-refillable. Only a rollback to frame entry credits it back.
+
+Committed *reservoir* draw needs no field of its own: each commit lowers the
+baseline, so it is the grant minus `baseline`. -/
+@[ext]
+structure StateGasMeter : Type where
+  /-- `state_gas_left`: the frame's state-gas reservoir. -/
+  left : Nat
+  /-- `state_gas_baseline`: the reservoir level a rollback refills to. -/
+  baseline : Nat
+  /-- `state_gas_spilled`: execution gas spent covering state charges. -/
+  spilled : Nat
+  /-- `state_gas_committed_spill`: spill marked non-refillable by a commit. -/
+  committedSpill : Nat
+deriving DecidableEq, Repr
+
+/-- The meter a single-dimension fork carries: no reservoir, no spill.
+
+Under `rules.stateGas = none` every frame starts here and stays here, which is
+the invariant `stateGasZero` states and every Prague-facing bridge lemma uses. -/
+def StateGasMeter.zero : StateGasMeter := ⟨0, 0, 0, 0⟩
+
 @[ext]
 structure Mach : Type where
   stack : List B256
   memory : Mem
+  /-- Execution gas. Unchanged in name and in meaning by EIP-8037: `GAS` still
+  pushes it, every existing charge still draws from it, and every Prague-stated
+  fact about it is the fact it was. -/
   gasLeft : Nat
+  /-- EIP-8037's state-gas dimension.
+
+  Defaulted, and that default is load-bearing rather than a convenience: a
+  `Mach` literal or `with`-update that does not name this field goes on
+  elaborating unchanged, which is what keeps the metering shape from rewriting
+  every downstream `Mach` site. Under `rules.stateGas = none` it is `zero` at
+  frame entry and stays `zero`. -/
+  stateGas : StateGasMeter := .zero
 
 @[ext]
 structure Meta : Type where
@@ -1767,6 +1819,8 @@ structure Devm : Type where
 def Devm.stack (devm : Devm) : List B256 := devm.mach.stack
 def Devm.memory (devm : Devm) : Mem := devm.mach.memory
 def Devm.gasLeft (devm : Devm) : Nat := devm.mach.gasLeft
+def Devm.stateGas (devm : Devm) : StateGasMeter := devm.mach.stateGas
+def Devm.stateGasLeft (devm : Devm) : Nat := devm.mach.stateGas.left
 def Devm.logs (devm : Devm) : List Log := devm.meta.logs
 def Devm.refundCounter (devm : Devm) : Int := devm.meta.refundCounter
 def Devm.output (devm : Devm) : Bytes := devm.meta.output
@@ -2140,12 +2194,298 @@ def Mach.chargeGas (cost : Nat) (mach : Mach) : Footprint.Outcome Mach Unit :=
 def chargeGas (cost : Nat) (devm : Devm) : Execution :=
   liftMachExecution (Mach.chargeGas cost) devm
 
+/-- All but one sixty-fourth (EIP-150). Defined here rather than beside the
+call opcodes because `Mach.withholdCreateGas` below is its first reader. -/
+def except64th (n : Nat) : Nat := n - (n / 64)
+
+/-- The termination measure the interpreter's totality argument rests on under
+two reservoirs: execution gas that can still fund a step, plus the spill a
+refund or a rollback can hand back to it.
+
+The *reservoir* is deliberately outside the sum. State gas cannot pay for an
+interpreter step until it spills into `gasLeft`, and a reservoir charge can be
+refunded later, so counting it would make the measure rise for a reason that has
+nothing to do with progress. The outstanding spill is inside the sum for the
+mirror-image reason: without it, `creditStateGasRefund` would look like an
+increase in `gasLeft` (`DualGasProbe.executionGas_alone_can_increase` is the
+standing witness that it can be), when nothing about the frame's ability to
+keep running has improved.
+
+Under `rules.stateGas = none` the meter is `zero`, so this is `gasLeft` and
+every Prague-stated decrease is the decrease it always was. -/
+def Mach.gasMeasure (mach : Mach) : Nat :=
+  mach.gasLeft + mach.stateGas.spilled + mach.stateGas.committedSpill
+
+def Devm.gasMeasure (devm : Devm) : Nat := devm.mach.gasMeasure
+
+@[simp] theorem Devm.gasMeasure_def (devm : Devm) :
+    devm.gasMeasure
+      = devm.gasLeft + devm.mach.stateGas.spilled
+          + devm.mach.stateGas.committedSpill := rfl
+
+/-- On a zero meter the measure is exactly `gasLeft`. This is the bridge every
+Prague-stated termination fact crosses. -/
+@[simp] theorem Mach.gasMeasure_of_stateGas_zero {mach : Mach}
+    (h : mach.stateGas = .zero) : mach.gasMeasure = mach.gasLeft := by
+  simp [Mach.gasMeasure, h, StateGasMeter.zero]
+
+@[simp] theorem Devm.gasMeasure_of_stateGas_zero {devm : Devm}
+    (h : devm.mach.stateGas = .zero) : devm.gasMeasure = devm.gasLeft :=
+  Mach.gasMeasure_of_stateGas_zero h
+
+/-! ### The EIP-8037 meter operations
+
+One definition per upstream `vm/gas.py` function, in upstream's order, each with
+the lemma that says what it does to `Mach.gasMeasure`. The measure is
+`gasLeft + spilled + committedSpill`: execution gas that can still fund
+interpreter steps, plus the spill a refund or rollback can hand back to it. The
+*reservoir* is deliberately outside it -- state gas cannot fund a step until it
+spills, and a reservoir charge can be refunded, so counting it would make the
+measure non-monotone for the wrong reason. `Jaune.DualGasProbe` established this
+choice at the two hardest sites before any of it was written.
+
+Every one of these runs only under `rules.stateGas = some _`. Under `none` the
+meter is `StateGasMeter.zero` and stays there (`stateGasZero` below), so
+`gasMeasure` is `gasLeft` and every Prague-stated termination fact is the fact
+it always was. -/
+
+/-- `charge_state_gas_from_meter`: draw from the reservoir, then spill into
+execution gas, recording the spill. Out of gas only when neither pool can
+cover the charge. -/
+def Mach.chargeStateGas (amount : Nat) (mach : Mach) :
+    Footprint.Outcome Mach Unit :=
+  if amount ≤ mach.stateGas.left then
+    .ok ((), { mach with
+      stateGas := { mach.stateGas with left := mach.stateGas.left - amount } })
+  else if amount - mach.stateGas.left ≤ mach.gasLeft then
+    .ok ((), { mach with
+      gasLeft := mach.gasLeft - (amount - mach.stateGas.left)
+      stateGas := { mach.stateGas with
+        left := 0
+        spilled := mach.stateGas.spilled + (amount - mach.stateGas.left) } })
+  else
+    .error (.halt (.outOfGas .none), mach)
+
+/-- `credit_state_gas_refund`: repay in LIFO order -- the spill that `gasLeft`
+funded first, then the reservoir. This returns gas to exactly the pools the
+charge drew it from, which is what keeps the two dimensions from drifting. -/
+def Mach.creditStateGasRefund (amount : Nat) (mach : Mach) : Mach :=
+  let m := mach.stateGas
+  let fromGasLeft := min amount m.spilled
+  { mach with
+    gasLeft := mach.gasLeft + fromGasLeft
+    stateGas := { m with
+      left := m.left + (amount - fromGasLeft)
+      spilled := m.spilled - fromGasLeft } }
+
+/-- `commit_state_gas`: mark everything spent so far non-refillable. The
+baseline drops to the current reservoir level and the outstanding spill folds
+into `committedSpill`, so a later `restoreStateGas` leaves the state it bought
+paid for. Only the top frame commits, and only after `set_delegation`. -/
+def Mach.commitStateGas (mach : Mach) : Mach :=
+  let m := mach.stateGas
+  { mach with stateGas :=
+      { m with
+        left := m.left
+        baseline := m.left
+        spilled := 0
+        committedSpill := m.committedSpill + m.spilled } }
+
+/-- `restore_state_gas`: roll the frame's state gas back to the baseline on a
+revert or a halt. LIFO again: the spill returns to `gasLeft`, then the
+reservoir resets. Committed spill stays charged.
+
+Upstream also zeroes the refund counter here, because its counter lives on the
+meter; Jaune's lives on `Meta`, so `Devm.restoreStateGas` below does that half.
+Splitting it this way is what keeps `Mach`'s operations pure functions of
+`Mach`, which is what the measure lemmas need. -/
+def Mach.restoreStateGas (mach : Mach) : Mach :=
+  let m := mach.stateGas
+  { mach with
+    gasLeft := mach.gasLeft + m.spilled
+    stateGas := { m with left := m.baseline, spilled := 0 } }
+
+/-- `restore_state_gas_to_entry`: roll back to frame entry, undoing a commit.
+Every spill, committed or not, returns to `gasLeft`, and both reservoir levels
+reset to the frame's grant. Used only when the state rollback also reverts the
+delegations a commit was protecting. -/
+def Mach.restoreStateGasToEntry (grant : Nat) (mach : Mach) : Mach :=
+  let m := mach.stateGas
+  { mach with
+    gasLeft := mach.gasLeft + m.spilled + m.committedSpill
+    stateGas :=
+      { left := grant, baseline := grant, spilled := 0, committedSpill := 0 } }
+
+/-- `forfeit_remaining_gas`: an exceptionally halted frame returns no execution
+gas. Upstream asserts that the spill is already zero here, which holds because
+`restore_state_gas` always precedes it; the Jaune statement of that assertion is
+`forfeitRemainingGas_gasMeasure_of_spilled_zero` below. -/
+def Mach.forfeitRemainingGas (mach : Mach) : Mach :=
+  { mach with gasLeft := 0 }
+
+/-- `withhold_create_gas`: hand a `CREATE*` child all but one sixty-fourth of
+the frame's execution gas, and return what was withheld. -/
+def Mach.withholdCreateGas (mach : Mach) : Nat × Mach :=
+  let child := except64th mach.gasLeft
+  (child, { mach with gasLeft := mach.gasLeft - child })
+
+/-- `drain_state_gas_reservoir`: a child receives the parent's *whole*
+reservoir. There is no all-but-one-64th rule for state gas, and the parent's
+reservoir comes back when the child returns. -/
+def Mach.drainStateGasReservoir (mach : Mach) : Nat × Mach :=
+  (mach.stateGas.left,
+   { mach with stateGas := { mach.stateGas with left := 0 } })
+
+/-- `restore_child_gas`: return a child's untouched grants when the child is
+never entered -- a depth limit or a balance check refused before the spawn. -/
+def Mach.restoreChildGas (gas reservoir : Nat) (mach : Mach) : Mach :=
+  { mach with
+    gasLeft := mach.gasLeft + gas
+    stateGas :=
+      { mach.stateGas with left := mach.stateGas.left + reservoir } }
+
+/-- `repay_state_gas_spill`, new at the pinned revision (`7341820`, #3478).
+
+A refund can land in a different frame than the charge it undoes: the
+refunding frame's spill may be smaller than the refund, so the excess credits
+the reservoir while the `gasLeft` that funded the charge stays reduced. A
+successful merge is where the claim and the credit first share one meter, so
+the reservoir repays `gasLeft` up to the spill still outstanding. Nothing is
+un-created, so no used counter moves -- gas only crosses back between the two
+pools it drifted across. -/
+def Mach.repayStateGasSpill (mach : Mach) : Mach :=
+  let m := mach.stateGas
+  let repayment := min m.left m.spilled
+  { mach with
+    gasLeft := mach.gasLeft + repayment
+    stateGas :=
+      { m with left := m.left - repayment, spilled := m.spilled - repayment } }
+
+/-! ### What each meter operation does to the measure
+
+One lemma per operation of the block above, and together they are the whole
+arithmetic content of the migration: a state-gas operation is measure-*neutral*,
+an execution charge is measure-*decreasing* by exactly what it charges, and a
+spawn conserves the measure across the parent/child pair. Everything the
+termination argument has to know about two reservoirs is here; the sites above
+`Xinst.step` then only have to say which operations they perform.
+
+`Jaune.DualGasProbe` proved these same five shapes on a bounded model before any
+of this existed, and its `executionGas_alone_can_increase` is why the measure
+is not simply `gasLeft`. -/
+
+theorem Mach.chargeGas_gasMeasure {cost : Nat} {mach mach' : Mach} {u : Unit}
+    (h : Mach.chargeGas cost mach = .ok (u, mach')) :
+    mach'.gasMeasure + cost = mach.gasMeasure := by
+  unfold Mach.chargeGas safeSub at h
+  by_cases hle : cost ≤ mach.gasLeft
+  · simp only [if_pos hle, Except.ok.injEq, Prod.mk.injEq] at h
+    rw [← h.2]
+    simp only [Mach.gasMeasure]
+    omega
+  · exact absurd h (by simp [if_neg hle])
+
+/-- A state charge is measure-neutral in both of its branches: a reservoir draw
+moves nothing the measure counts, and a spill moves exactly as much out of
+`gasLeft` as it records in `spilled`. -/
+theorem Mach.chargeStateGas_gasMeasure {amount : Nat} {mach mach' : Mach}
+    {u : Unit} (h : Mach.chargeStateGas amount mach = .ok (u, mach')) :
+    mach'.gasMeasure = mach.gasMeasure := by
+  unfold Mach.chargeStateGas at h
+  split at h
+  · simp only [Except.ok.injEq, Prod.mk.injEq] at h
+    rw [← h.2]
+    rfl
+  · split at h
+    · simp only [Except.ok.injEq, Prod.mk.injEq] at h
+      rw [← h.2]
+      simp only [Mach.gasMeasure]
+      omega
+    · exact absurd h (by simp)
+
+/-- A refund repays `gasLeft` and the reservoir between them, and the part that
+reaches `gasLeft` is exactly the part that leaves `spilled`. -/
+theorem Mach.creditStateGasRefund_gasMeasure (amount : Nat) (mach : Mach) :
+    (mach.creditStateGasRefund amount).gasMeasure = mach.gasMeasure := by
+  simp only [Mach.creditStateGasRefund, Mach.gasMeasure]
+  have : min amount mach.stateGas.spilled ≤ mach.stateGas.spilled := by
+    exact Nat.min_le_right _ _
+  omega
+
+/-- A commit moves spill into committed spill. Both are inside the measure, so
+it moves nothing. -/
+theorem Mach.commitStateGas_gasMeasure (mach : Mach) :
+    mach.commitStateGas.gasMeasure = mach.gasMeasure := by
+  simp only [Mach.commitStateGas, Mach.gasMeasure]
+  omega
+
+/-- A rollback to the baseline hands the outstanding spill back to `gasLeft`.
+Neutral, again because the spill was already counted. -/
+theorem Mach.restoreStateGas_gasMeasure (mach : Mach) :
+    mach.restoreStateGas.gasMeasure = mach.gasMeasure := by
+  simp only [Mach.restoreStateGas, Mach.gasMeasure]
+  omega
+
+/-- A rollback to frame entry hands back committed spill as well. -/
+theorem Mach.restoreStateGasToEntry_gasMeasure (grant : Nat) (mach : Mach) :
+    (mach.restoreStateGasToEntry grant).gasMeasure = mach.gasMeasure := by
+  simp only [Mach.restoreStateGasToEntry, Mach.gasMeasure]
+  omega
+
+/-- Forfeiting never raises the measure. -/
+theorem Mach.forfeitRemainingGas_gasMeasure_le (mach : Mach) :
+    mach.forfeitRemainingGas.gasMeasure ≤ mach.gasMeasure := by
+  simp only [Mach.forfeitRemainingGas, Mach.gasMeasure]
+  omega
+
+/-- Upstream asserts that the spill is already zero when a frame forfeits,
+because `restore_state_gas` always runs first. Under that hypothesis the
+measure after forfeiting is exactly the committed spill -- which is the
+statement a caller needs, and the reason the assertion is worth carrying. -/
+theorem Mach.forfeitRemainingGas_gasMeasure_of_spilled_zero {mach : Mach}
+    (h : mach.stateGas.spilled = 0) :
+    mach.forfeitRemainingGas.gasMeasure = mach.stateGas.committedSpill := by
+  simp only [Mach.forfeitRemainingGas, Mach.gasMeasure, h]
+  omega
+
+/-- Withholding a create child's grant splits the measure exactly: what the
+parent keeps plus what the child receives is what the parent had. -/
+theorem Mach.withholdCreateGas_gasMeasure (mach : Mach) :
+    mach.withholdCreateGas.2.gasMeasure + mach.withholdCreateGas.1
+      = mach.gasMeasure := by
+  simp only [Mach.withholdCreateGas, Mach.gasMeasure, except64th]
+  omega
+
+/-- Draining the reservoir into a child is measure-neutral: the reservoir is
+outside the measure on both sides. This is exactly why the reservoir is
+excluded -- a rule that hands a child *everything* would otherwise look like a
+collapse of the parent's budget. -/
+theorem Mach.drainStateGasReservoir_gasMeasure (mach : Mach) :
+    mach.drainStateGasReservoir.2.gasMeasure = mach.gasMeasure := by
+  simp only [Mach.drainStateGasReservoir, Mach.gasMeasure]
+
+/-- Returning an un-entered child's grants raises the measure by exactly the
+execution gas returned; the reservoir is outside it. -/
+theorem Mach.restoreChildGas_gasMeasure (gas reservoir : Nat) (mach : Mach) :
+    (mach.restoreChildGas gas reservoir).gasMeasure = mach.gasMeasure + gas := by
+  simp only [Mach.restoreChildGas, Mach.gasMeasure]
+  omega
+
+/-- The v8.1.4 repay-on-merge rule moves gas from the reservoir to `gasLeft`
+while cancelling an equal amount of spill. Neutral. -/
+theorem Mach.repayStateGasSpill_gasMeasure (mach : Mach) :
+    mach.repayStateGasSpill.gasMeasure = mach.gasMeasure := by
+  simp only [Mach.repayStateGasSpill, Mach.gasMeasure]
+  have : min mach.stateGas.left mach.stateGas.spilled ≤ mach.stateGas.spilled :=
+    Nat.min_le_right _ _
+  omega
+
 theorem chargeGas_def (cost : Nat) (devm : Devm) :
     chargeGas cost devm = (do
       match safeSub devm.gasLeft cost with
       | none => .error ⟨.halt (.outOfGas .none), devm⟩
       | some gas => .ok (devm.setMach {devm.mach with gasLeft := gas})) := by
-  rcases devm with ⟨⟨stack, memory, gasLeft⟩, view, world⟩
+  rcases devm with ⟨⟨stack, memory, gasLeft, stateGas⟩, view, world⟩
   simp only [chargeGas, Mach.chargeGas, liftMachExecution, liftMach,
     Footprint.toExecution, Footprint.liftOutcome, Devm.setMach, Devm.gasLeft]
   cases safeSub gasLeft cost <;> rfl
@@ -2462,7 +2802,7 @@ theorem Devm.push_def (x : B256) (devm : Devm) : Devm.push x devm = (do
       (devm.stack.length < 1024)
       ⟨.halt (.stackOverflow .none), devm⟩
     .ok (devm.setMach {devm.mach with stack := x :: devm.stack})) := by
-  rcases devm with ⟨⟨stack, memory, gasLeft⟩, view, world⟩
+  rcases devm with ⟨⟨stack, memory, gasLeft, stateGas⟩, view, world⟩
   simp only [Devm.push, Mach.push, liftMachExecution, liftMach, Footprint.toExecution,
     Footprint.liftOutcome, Devm.stack, Devm.setMach, Except.assert, bind, Except.bind]
   split_ifs <;> rfl
@@ -2479,7 +2819,7 @@ theorem Devm.pop_def (devm : Devm) : Devm.pop devm = (do
     match devm.stack with
     | [] => .error ⟨.halt (.stackUnderflow .none), devm⟩
     | x :: xs => .ok ⟨x, devm.setMach {devm.mach with stack := xs}⟩) := by
-  rcases devm with ⟨⟨stack, memory, gasLeft⟩, view, world⟩
+  rcases devm with ⟨⟨stack, memory, gasLeft, stateGas⟩, view, world⟩
   cases stack <;> rfl
 
 def Prod.mapFst {α₁ : Type u₁} {α₂ : Type u₂} {β : Type v} (f : α₁ → α₂) : α₁ × β → α₂ × β :=
@@ -2495,7 +2835,7 @@ def Devm.popToNat (devm : Devm) : Except (EvmError × Devm) (Nat × Devm) :=
 
 theorem Devm.popToNat_def (devm : Devm) :
     devm.popToNat = (devm.pop <&> Prod.mapFst B256.toNat) := by
-  rcases devm with ⟨⟨stack, memory, gasLeft⟩, view, world⟩
+  rcases devm with ⟨⟨stack, memory, gasLeft, stateGas⟩, view, world⟩
   cases stack <;> rfl
 
 def Mach.popToAdr (mach : Mach) : Footprint.Outcome Mach Adr :=
@@ -2508,7 +2848,7 @@ def Devm.popToAdr (devm : Devm) : Except (EvmError × Devm) (Adr × Devm) :=
 
 theorem Devm.popToAdr_def (devm : Devm) :
     devm.popToAdr = (devm.pop <&> Prod.mapFst B256.toAdr) := by
-  rcases devm with ⟨⟨stack, memory, gasLeft⟩, view, world⟩
+  rcases devm with ⟨⟨stack, memory, gasLeft, stateGas⟩, view, world⟩
   cases stack <;> rfl
 
 def Mach.popN (mach : Mach) : Nat → Footprint.Outcome Mach (List B256)
@@ -2535,11 +2875,13 @@ theorem Devm.popN_def (devm : Devm) (n : Nat) : devm.popN n =
   cases n with
   | zero => rfl
   | succ n =>
-    rcases devm with ⟨⟨stack, memory, gasLeft⟩, view, world⟩
+    rcases devm with ⟨⟨stack, memory, gasLeft, stateGas⟩, view, world⟩
     cases stack with
     | nil => rfl
     | cons x xs =>
-      cases h : Mach.popN { stack := xs, memory := memory, gasLeft := gasLeft } n with
+      cases h : Mach.popN
+          { stack := xs, memory := memory, gasLeft := gasLeft,
+            stateGas := stateGas } n with
       | error err =>
         rcases err with ⟨msg, mach'⟩
         cases mach'
@@ -2561,7 +2903,7 @@ def pushItem (x : B256) (c : Nat) (devm : Devm) : Execution :=
 
 theorem pushItem_def (x : B256) (c : Nat) (devm : Devm) :
     pushItem x c devm = (chargeGas c devm >>= Devm.push x) := by
-  rcases devm with ⟨⟨stack, memory, gasLeft⟩, view, world⟩
+  rcases devm with ⟨⟨stack, memory, gasLeft, stateGas⟩, view, world⟩
   simp only [pushItem, Mach.pushItem, Mach.chargeGas, Mach.push, chargeGas, Devm.push,
     liftMachExecution, liftMach, Footprint.toExecution, Footprint.liftOutcome,
     Devm.setMach, bind, Except.bind]
@@ -2814,11 +3156,13 @@ theorem applyUnary_def (f : B256 → B256) (cost : Nat) (devm : Devm) :
     applyUnary f cost devm = (do
       let ⟨x, devm'⟩ ← devm.pop
       pushItem (f x) cost devm') := by
-  rcases devm with ⟨⟨stack, memory, gasLeft⟩, view, world⟩
+  rcases devm with ⟨⟨stack, memory, gasLeft, stateGas⟩, view, world⟩
   cases stack with
   | nil => rfl
   | cons x xs =>
-    cases h : Mach.pushItem (f x) cost { stack := xs, memory := memory, gasLeft := gasLeft } with
+    cases h : Mach.pushItem (f x) cost
+        { stack := xs, memory := memory, gasLeft := gasLeft,
+          stateGas := stateGas } with
     | error err =>
       rcases err with ⟨msg, mach'⟩
       cases mach'
@@ -2837,14 +3181,16 @@ theorem applyBinary_def (f : B256 → B256 → B256) (cost : Nat) (devm : Devm) 
       let ⟨x, devm'⟩ ← devm.pop
       let ⟨y, devm''⟩ ← devm'.pop
       pushItem (f x y) cost devm'') := by
-  rcases devm with ⟨⟨stack, memory, gasLeft⟩, view, world⟩
+  rcases devm with ⟨⟨stack, memory, gasLeft, stateGas⟩, view, world⟩
   cases stack with
   | nil => rfl
   | cons x xs =>
     cases xs with
     | nil => rfl
     | cons y ys =>
-      cases h : Mach.pushItem (f x y) cost { stack := ys, memory := memory, gasLeft := gasLeft } with
+      cases h : Mach.pushItem (f x y) cost
+        { stack := ys, memory := memory, gasLeft := gasLeft,
+          stateGas := stateGas } with
       | error err =>
         rcases err with ⟨msg, mach'⟩
         cases mach'
@@ -3548,7 +3894,6 @@ def Linst.run (sevm : Sevm) (devm : Devm) :
     else
       .ok devm
 
-def except64th (n : Nat) : Nat := n - (n / 64)
 
 def calculateMsgCallGas
   (value gas gas_left memory_cost extra_gas : Nat)
@@ -3588,6 +3933,173 @@ def incorporateChildOnSuccess (parent child : Devm) (returnData : Bytes) : Devm 
     {parent.world with
       state := child.state
       transientStorage := child.transientStorage}
+
+/-! ### Child incorporation under the two-dimensional meter
+
+Upstream's `incorporate_child` is one function with an `if` inside; Jaune's is
+two functions chosen by the caller, and the Amsterdam siblings keep that shape
+so that `Resume.run`'s two branches stay the two branches they are.
+
+The rule the pin states, and what these transcribe: **gas returns to the parent
+regardless of the child's fate**, because a failed child arrives already
+settled -- rolled back to its baseline, its spill refilled, its refunds
+discarded -- so absorbing its meter unconditionally reclaims exactly what it
+gives back. Everything else -- logs, scheduled self-destructs, warmed access
+sets -- survives only on success, dying with the reverted state. A successful
+merge then ends with `repayStateGasSpill`, the rule new at `7341820` (#3478).
+
+Committed spill is not absorbed, because a child never has any: only the top
+frame commits, and it commits after `set_delegation`, which no child runs.
+Upstream states that as an `assert`; here it is a hypothesis the measure lemma
+names rather than an assumption it hides, so a caller that could violate it
+would fail to discharge the corollary rather than silently lose gas. -/
+
+/-- `incorporate_child` on a failed child, under `stateGas = some _`.
+
+The child's execution gas, reservoir and outstanding spill all come back; so do
+its refunds, which the child's own frame settlement has already zeroed. Nothing
+it accumulated survives. -/
+def incorporateChildAmsterdamOnError (parent child : Devm) (returnData : Bytes) :
+    Devm :=
+  let parent := parent.setMach
+    {parent.mach with
+      gasLeft := parent.gasLeft + child.gasLeft
+      stateGas := {parent.mach.stateGas with
+        left := parent.mach.stateGas.left + child.mach.stateGas.left
+        spilled := parent.mach.stateGas.spilled + child.mach.stateGas.spilled}}
+  let parent := parent.setMeta
+    {parent.meta with
+      createdAccounts := child.createdAccounts
+      refundCounter := parent.refundCounter + child.refundCounter
+      returnData := returnData}
+  parent.setWorld
+    {parent.world with
+      state := child.state
+      transientStorage := child.transientStorage}
+
+/-- `incorporate_child` on a successful child, under `stateGas = some _`.
+
+The same unconditional absorption, then the merged meter repays `gasLeft` from
+the reservoir up to the spill still outstanding: a refund can land in a
+different frame than the charge it undoes, and this merge is where the claim
+and the credit first share one meter. -/
+def incorporateChildAmsterdamOnSuccess (parent child : Devm) (returnData : Bytes) :
+    Devm :=
+  let parent := parent.setMach
+    ((({parent.mach with
+        gasLeft := parent.gasLeft + child.gasLeft
+        stateGas := {parent.mach.stateGas with
+          left := parent.mach.stateGas.left + child.mach.stateGas.left
+          spilled :=
+            parent.mach.stateGas.spilled + child.mach.stateGas.spilled}}
+      : Mach)).repayStateGasSpill)
+  let parent := parent.setMeta
+    {parent.meta with
+      createdAccounts := child.createdAccounts
+      logs := parent.logs ++ child.logs
+      refundCounter := parent.refundCounter + child.refundCounter
+      accountsToDelete := parent.accountsToDelete.union child.accountsToDelete
+      returnData := returnData
+      accessedAddresses := parent.accessedAddresses.union child.accessedAddresses
+      accessedStorageKeys := parent.accessedStorageKeys.union child.accessedStorageKeys}
+  parent.setWorld
+    {parent.world with
+      state := child.state
+      transientStorage := child.transientStorage}
+
+/-- Absorbing a failed child conserves the measure, up to the committed spill a
+child cannot have. -/
+theorem incorporateChildAmsterdamOnError_gasMeasure
+    (parent child : Devm) (rd : Bytes) :
+    (incorporateChildAmsterdamOnError parent child rd).gasMeasure
+        + child.mach.stateGas.committedSpill
+      = parent.gasMeasure + child.gasMeasure := by
+  simp only [incorporateChildAmsterdamOnError, Devm.gasMeasure, Mach.gasMeasure,
+    Devm.setMach, Devm.setMeta, Devm.setWorld, Devm.gasLeft]
+  omega
+
+/-- The same for a successful child. The repayment moves gas between two pools
+the measure adds together, so it cancels. -/
+theorem incorporateChildAmsterdamOnSuccess_gasMeasure
+    (parent child : Devm) (rd : Bytes) :
+    (incorporateChildAmsterdamOnSuccess parent child rd).gasMeasure
+        + child.mach.stateGas.committedSpill
+      = parent.gasMeasure + child.gasMeasure := by
+  simp only [incorporateChildAmsterdamOnSuccess, Mach.repayStateGasSpill,
+    Devm.gasMeasure, Mach.gasMeasure, Devm.setMach, Devm.setMeta, Devm.setWorld,
+    Devm.gasLeft]
+  have h :
+      min (parent.mach.stateGas.left + child.mach.stateGas.left)
+          (parent.mach.stateGas.spilled + child.mach.stateGas.spilled)
+        ≤ parent.mach.stateGas.spilled + child.mach.stateGas.spilled :=
+    Nat.min_le_right _ _
+  omega
+
+/-- The corollary the interpreter actually uses: a child that carries no
+committed spill -- which is every child, because only the top frame commits --
+hands its whole measure back. -/
+theorem incorporateChildAmsterdamOnSuccess_gasMeasure_of_child_uncommitted
+    {parent child : Devm} {rd : Bytes}
+    (h : child.mach.stateGas.committedSpill = 0) :
+    (incorporateChildAmsterdamOnSuccess parent child rd).gasMeasure
+      = parent.gasMeasure + child.gasMeasure := by
+  have e := incorporateChildAmsterdamOnSuccess_gasMeasure parent child rd
+  omega
+
+theorem incorporateChildAmsterdamOnError_gasMeasure_of_child_uncommitted
+    {parent child : Devm} {rd : Bytes}
+    (h : child.mach.stateGas.committedSpill = 0) :
+    (incorporateChildAmsterdamOnError parent child rd).gasMeasure
+      = parent.gasMeasure + child.gasMeasure := by
+  have e := incorporateChildAmsterdamOnError_gasMeasure parent child rd
+  omega
+
+/-! ### The zero-meter invariant
+
+Under `rules.stateGas = none` no meter operation above is ever reached, so a
+frame's meter is `zero` at entry and `zero` for ever after. That is what makes
+"the `none` path is today's path" a fact rather than a claim: with the meter
+zero, `gasMeasure` *is* `gasLeft`, and every Prague-stated termination fact is
+the one it always was.
+
+The predicate is stated here, beside the meter; the preservation theorems are
+stated where the switch is read. -/
+
+/-- The frame meters in one dimension: no reservoir, no spill, no commitment. -/
+def Devm.StateGasZero (devm : Devm) : Prop := devm.mach.stateGas = .zero
+
+instance {devm : Devm} : Decidable devm.StateGasZero := by
+  unfold Devm.StateGasZero; infer_instance
+
+@[simp] theorem Devm.stateGasZero_gasMeasure {devm : Devm}
+    (h : devm.StateGasZero) : devm.gasMeasure = devm.gasLeft :=
+  Devm.gasMeasure_of_stateGas_zero h
+
+/-- Every existing `Devm` update reaches `Mach` through `setMach` with a
+`with`-update that does not name `stateGas`, so the invariant is preserved by
+construction rather than by argument. These are the two spellings the
+interpreter actually uses. -/
+@[simp] theorem Devm.stateGasZero_setMach {devm : Devm} {mach : Mach} :
+    (devm.setMach mach).StateGasZero ↔ mach.stateGas = .zero := Iff.rfl
+
+@[simp] theorem Devm.stateGasZero_setMeta {devm : Devm} {view : Meta} :
+    (devm.setMeta view).StateGasZero ↔ devm.StateGasZero := Iff.rfl
+
+@[simp] theorem Devm.stateGasZero_setWorld {devm : Devm} {world : World} :
+    (devm.setWorld world).StateGasZero ↔ devm.StateGasZero := Iff.rfl
+
+theorem Devm.stateGasZero_withGasLeft {devm : Devm} {n : Nat}
+    (h : devm.StateGasZero) : (devm.withGasLeft n).StateGasZero := h
+
+/-- Prague's child incorporation cannot break it either: both siblings rebuild
+`Mach` from the parent's, leaving `stateGas` alone. -/
+theorem incorporateChildOnError_stateGasZero {parent child : Devm} {rd : Bytes}
+    (h : parent.StateGasZero) :
+    (incorporateChildOnError parent child rd).StateGasZero := h
+
+theorem incorporateChildOnSuccess_stateGasZero {parent child : Devm} {rd : Bytes}
+    (h : parent.StateGasZero) :
+    (incorporateChildOnSuccess parent child rd).StateGasZero := h
 
 def computeContractAddress (sender : Adr) (nonce : UInt64) : Adr :=
   let LA : Bytes :=
