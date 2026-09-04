@@ -48,6 +48,21 @@ their blob schedule, which no case here exercises; a BPO case would need blob
 transactions and is a fair successor rather than a gap this corpus pretends to
 cover.
 
+## Amsterdam transaction-metering lane
+
+`jaune t8n --state.fork Amsterdam` resolves the transaction-metering vehicle
+from `Jaune.T8n.laneRules`; it does not make Amsterdam a block-validation fork.
+Consequently `jaune t8n --forks` remains exactly `Prague Osaka BPO1 BPO2`,
+while `jaune t8n --info` reports Amsterdam separately and names the omitted
+EIP-7928/8282/7843/8024/7954 block semantics. The result's `gasUsed` is the
+maximum of execution and state block gas; receipts already carry the
+post-refund `cumulativeGasUsed` produced by the transaction pipeline.
+
+Amsterdam corpus cases and their exact per-case `blockAccessList` /
+`blockAccessListHash` target deviations land as the next W7 slice. Until that
+slice is committed, the nine-case table above remains the complete registered
+corpus and this section claims only the frontend boundary.
+
 Each `alloc.json` carries four of the five Prague system contracts — history
 storage, beacon roots, the withdrawal-request predeploy and the
 consolidation-request predeploy — taken from the target's own

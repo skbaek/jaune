@@ -21,8 +21,11 @@
 # Nothing else pinned them. The conformance tiers only ever run well-formed
 # corpus files, `scripts/golden-messages.txt` covers block-rejection reasons
 # observed *inside* a run, and the Python tests under `scripts/tests/` cover the
-# bootstrap and generator scripts. So all four messages were verified by hand
-# once and could rot silently. This gate is the falsifier: it builds synthetic
+# bootstrap and generator scripts. The Amsterdam transaction-metering lane also
+# needs a small handshake boundary here: `t8n --forks` must remain the runnable
+# block lane, `--info` must disclose Amsterdam and its omissions, and an
+# Amsterdam invocation must pass rule resolution before it reaches its inputs.
+# So all of these surfaces are kept by this falsifier: it builds synthetic
 # fixtures in a temp dir, runs the built binary against each, and asserts both
 # the nonzero exit and a substring of the message.
 #
@@ -307,6 +310,38 @@ if has "code.maxCodeSize" "$RUN_OUT" || has "header.blockAccessListHash" "$RUN_O
   detail "stdout: $RUN_OUT"
 fi
 
+# 9. The t8n metering vehicle is executable without making Amsterdam a block-
+#    validation claim. `--forks` is therefore unchanged, while `--info` names
+#    the separate lane and its exact omissions.
+CHECKS=$((CHECKS + 1))
+run_jaune t8n --forks
+if [ "$RUN_RC" -ne 0 ] || [ "$RUN_OUT" != "Prague Osaka BPO1 BPO2" ]; then
+  fail "t8n --forks: expected the unchanged runnable block lane"
+  detail "rc=$RUN_RC stdout: ${RUN_OUT:-<empty stdout>}"
+fi
+
+CHECKS=$((CHECKS + 1))
+run_jaune t8n --info
+if [ "$RUN_RC" -ne 0 ] \
+  || ! has "t8n metering lane: Amsterdam" "$RUN_OUT"; then
+  fail "t8n --info: expected the Amsterdam transaction-metering lane"
+  detail "rc=$RUN_RC stdout: ${RUN_OUT:-<empty stdout>}"
+fi
+
+CHECKS=$((CHECKS + 1))
+if ! has "omits EIP-7928/8282/7843/8024/7954 block semantics" "$RUN_OUT"; then
+  fail "t8n --info: expected the metering lane's block-semantics omission"
+  detail "stdout: ${RUN_OUT:-<empty stdout>}"
+fi
+
+CHECKS=$((CHECKS + 1))
+run_jaune t8n --state.fork Amsterdam \
+  --input.alloc "$TMP/absent-amsterdam-alloc.json"
+if [ "$RUN_RC" -ne 1 ] || has "UnsupportedForkError" "$RUN_ERR"; then
+  fail "t8n Amsterdam: expected rule resolution before the missing input"
+  detail "rc=$RUN_RC stderr: ${RUN_ERR:-<empty stderr>}"
+fi
+
 # ----------------------------------------------------------------- verdict --
 
 if [ "$FAILS" -ne 0 ]; then
@@ -314,5 +349,5 @@ if [ "$FAILS" -ne 0 ]; then
   exit 1
 fi
 
-echo "OK — cli: $CHECKS checks; the four fixture-file refusals and the unimplemented-fork refusal hold, an undeclared format is still passed through, and the two rule-data printers answer for exactly the forks they should"
+echo "OK — cli: $CHECKS checks; fixture refusals, rule-data printers, and the distinct Amsterdam t8n metering handshake hold"
 exit 0
