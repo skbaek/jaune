@@ -183,6 +183,33 @@ def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
     ("gas.floorTokenCost", jNat r.gas.floorTokenCost),
     ("gas.perAuthIntrinsic", jNat r.gas.perAuthIntrinsic),
     ("gas.codeReadSurcharge", jNat r.gas.codeReadSurcharge),
+    -- EIP-8037's state-gas dimension. One key per field, `null` on a fork
+    -- that meters in one dimension, exactly as `blob.reserveBaseCost` is
+    -- `null` before EIP-7918: a comparison over dotted keys stays key-by-key
+    -- and its diff names the number that moved. `stateGas.present` is the
+    -- switch itself, so a fork acquiring or losing the dimension is one
+    -- unambiguous row rather than ten simultaneous nulls.
+    ("stateGas.present", Lean.Json.bool r.stateGas.isSome),
+    ("stateGas.costPerStateByte",
+      jOptNat (r.stateGas.map StateGasRules.costPerStateByte)),
+    ("stateGas.stateBytesPerNewAccount",
+      jOptNat (r.stateGas.map StateGasRules.stateBytesPerNewAccount)),
+    ("stateGas.stateBytesPerStorageSet",
+      jOptNat (r.stateGas.map StateGasRules.stateBytesPerStorageSet)),
+    ("stateGas.stateBytesPerAuthBase",
+      jOptNat (r.stateGas.map StateGasRules.stateBytesPerAuthBase)),
+    ("stateGas.storageWrite",
+      jOptNat (r.stateGas.map StateGasRules.storageWrite)),
+    ("stateGas.accountWrite",
+      jOptNat (r.stateGas.map StateGasRules.accountWrite)),
+    ("stateGas.txValueCost",
+      jOptNat (r.stateGas.map StateGasRules.txValueCost)),
+    ("stateGas.accessListAddressFloorTokens",
+      jOptNat (r.stateGas.map StateGasRules.accessListAddressFloorTokens)),
+    ("stateGas.accessListStorageKeyFloorTokens",
+      jOptNat (r.stateGas.map StateGasRules.accessListStorageKeyFloorTokens)),
+    ("stateGas.systemMaxSstoresPerCall",
+      jOptNat (r.stateGas.map StateGasRules.systemMaxSstoresPerCall)),
     ("header.blockAccessListHash", Lean.Json.bool r.header.blockAccessListHash),
     ("header.slotNumber", Lean.Json.bool r.header.slotNumber),
     ("requests",
@@ -207,6 +234,53 @@ def runRulesPrinter (label : String) : IO Unit := do
   -- Named rather than dot-notated: this file `open`s `Jaune` but is not in it,
   -- so the definition above lands at the root while `ForkRules` is `Jaune`'s.
   .println (ForkRules.toGateJson rules).pretty
+
+/-- The subset of the flat gate JSON that a metering vehicle actually claims.
+
+`jaune --rules Amsterdam` is refused and stays refused: this build implements no
+Amsterdam *block* rules, so there is no complete record to print and printing a
+partial one under that flag would be the silent half-answer the architecture
+exists to prevent. But the transaction metering shape does exist, and its
+numbers have to be checkable against the pinned upstream revision like every
+other number this build carries.
+
+So this is a deliberately partial view: the ten shared-formula gas numbers and
+the eleven state-gas rows, and nothing else. Every key it omits is a rule the
+block-level goal owns, and `scripts/gen-fork-constants.py` classifies each of
+them by name so the gate can insist that omitted plus printed is the whole
+record. -/
+def ForkRules.toMeteringGateJson (r : ForkRules) : Lean.Json :=
+  let full := ForkRules.toGateJson r
+  let keys := [
+    "gas.coldAccountAccess", "gas.callValue", "gas.createAccess",
+    "gas.storageClearRefund", "gas.txBase", "gas.txAccessListAddress",
+    "gas.txAccessListStorageKey", "gas.floorTokenCost",
+    "gas.perAuthIntrinsic", "gas.codeReadSurcharge",
+    "stateGas.present", "stateGas.costPerStateByte",
+    "stateGas.stateBytesPerNewAccount", "stateGas.stateBytesPerStorageSet",
+    "stateGas.stateBytesPerAuthBase", "stateGas.storageWrite",
+    "stateGas.accountWrite", "stateGas.txValueCost",
+    "stateGas.accessListAddressFloorTokens",
+    "stateGas.accessListStorageKeyFloorTokens",
+    "stateGas.systemMaxSstoresPerCall"]
+  Lean.Json.mkObj (keys.filterMap
+    (fun k => (full.getObjVal? k).toOption.map (fun v => (k, v))))
+
+/-- `jaune --rules-partial <fork>`.
+
+Prints the metering-lane view of a fork that has a metering vehicle. A fork
+this build fully implements has no vehicle and is refused here -- its numbers
+belong under `--rules`, whole -- and so is a fork with neither. -/
+def runRulesPartialPrinter (label : String) : IO Unit := do
+  let some f := Fork.ofString? label
+    | .throw
+        s!"error : unknown --rules-partial label {repr label}; declared labels \
+           are {Fork.all.map Fork.toString}"
+  let some rules := Jaune.T8n.meteringRules? f
+    | .throw
+        s!"error : {f} has no metering vehicle; a fork this build implements \
+           is printed whole by --rules, and no other fork has one"
+  .println (ForkRules.toMeteringGateJson rules).pretty
 
 def getPostStateRoot (json : Lean.Json) : IO B256 :=
   ( do let stateJson ← json.find "postState"
@@ -975,6 +1049,7 @@ def usage : String :=
   jaune t8n [options] --state.fork <label>
   jaune --vectors <address> <file.json> [--network <fork>]
   jaune --rules <fork>
+  jaune --rules-partial <fork>
   jaune --u256 <file.json>
   jaune --fake-exp <file.json>
   jaune --version
@@ -1022,6 +1097,9 @@ def main : List String → IO Unit
   | "--version" :: _ => .println s!"jaune version {T8n.version}"
   | "t8n" :: rest => T8n.run rest
   | "--rules" :: label :: [] => runRulesPrinter label
+  | "--rules-partial" :: label :: [] => runRulesPartialPrinter label
+  | "--rules-partial" :: _ =>
+    .throw "error : --rules-partial takes exactly one fork label"
   | "--rules" :: _ =>
     .throw "error : --rules takes exactly one fork label"
   | "--u256" :: pathStr :: [] => do

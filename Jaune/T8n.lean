@@ -154,6 +154,55 @@ def Lean.Json.find : String → Lean.Json → IO Lean.Json
 namespace Jaune
 namespace T8n
 
+----------------- THE METERING LANE -----------------
+
+/-- The rule set the transition tool meters a fork under when `Fork.rules?` has
+none for it.
+
+This is the **only** table that resolves the Amsterdam metering vehicle, and it
+lives here rather than in `Jaune/Fork.lean` on purpose. `Fork.rules?` answers
+"what are this fork's rules", and for Amsterdam the honest answer is still
+`none`: the block-level rules of EIP-7928, EIP-8282, EIP-7843, EIP-8024 and
+EIP-7954 have no reader in this build, so a block cannot be validated under
+them. What *does* exist is the transaction metering shape, and this lane is
+where it can be exercised against the pinned reference tool.
+
+So the vehicle is reachable from exactly two readers, both of which are
+inventory or differential rather than block validation: `t8n --state.fork
+Amsterdam`, and `jaune --rules-partial Amsterdam`, which the constants gate
+compares against the pinned upstream revision. `t8n --forks` keeps printing
+`Fork.supported`, the runner keeps refusing `--network Amsterdam`, and every
+other entry point is unchanged. The block-level goal composes a real
+`amsterdamRules`, makes `Fork.rules?` answer it, and retires this table. -/
+def meteringRules? : Fork → Option ForkRules
+  | .amsterdam => some amsterdamMeteringRules
+  | _ => none
+
+/-- The lane a fork label runs in: its own rules if this build implements them,
+otherwise the metering vehicle if one exists, and a refusal otherwise. -/
+def laneRules (f : Fork) : Except SupportError ForkRules :=
+  match f.rules? with
+  | some rules => .ok rules
+  | none =>
+    match meteringRules? f with
+    | some rules => .ok rules
+    | none => .error (.unsupportedFork f)
+
+-- No fork this build actually runs has a metering vehicle: a vehicle exists
+-- only where `Fork.rules?` is `none`, so the two tables can never disagree
+-- about a fork and `laneRules` can never shadow a real rule set.
+#guard Fork.supported.all (fun f => (meteringRules? f).isNone)
+#guard Fork.unimplemented = [.amsterdam]
+#guard (meteringRules? .amsterdam) = some amsterdamMeteringRules
+-- On a supported fork the lane is that fork's own rules, unchanged.
+#guard Fork.supported.all (fun f =>
+  match f.rules? with
+  | some r => laneRules f = .ok r
+  | none => false)
+#guard laneRules .prague = .ok pragueRules
+#guard laneRules .bpo2 = .ok bpo2Rules
+#guard laneRules .amsterdam = .ok amsterdamMeteringRules
+
 ----------------- JSON EMISSION ------------------
 
 -- The conformance target writes its outputs with Python's

@@ -697,6 +697,16 @@ always called, in the same order. -/
     pragueRules.header = { blockAccessListHash := false, slotNumber := false } :=
   rfl
 
+/-- Prague meters in one dimension.
+
+This is the bridge every `stateGas = none` branch reduces through. The
+interpreter's Amsterdam branches are `match`es on `rules.stateGas`, so a
+Prague-stated goal that reaches one rewrites to `none` here and then to the
+existing single-dimension code path by `match` reduction -- which is what makes
+"the `none` path is textually today's path" a fact a proof can use rather than
+a claim about the source. -/
+@[simp] theorem pragueRules_stateGas : pragueRules.stateGas = none := rfl
+
 -- The whole supported chain shares Prague's schedule, so the bridge above
 -- serves every fork this build runs, not only Prague. Stated by `rfl` on the
 -- records rather than field by field.

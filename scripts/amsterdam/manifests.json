@@ -7,8 +7,8 @@
       "reason": "in this lane's fork coverage, but this lane raises no suite over it: it is another lane's subject at that lane's pin"
     },
     "Osaka": {
-      "case_count": 17255,
-      "file_count": 2464,
+      "case_count": 17274,
+      "file_count": 2466,
       "reason": "in this lane's fork coverage, but this lane raises no suite over it: it is another lane's subject at that lane's pin"
     },
     "OsakaToBPO1AtTime15k": {
@@ -17,8 +17,8 @@
       "reason": "in this lane's fork coverage, but this lane raises no suite over it: it is another lane's subject at that lane's pin"
     },
     "Prague": {
-      "case_count": 16504,
-      "file_count": 2523,
+      "case_count": 16522,
+      "file_count": 2525,
       "reason": "in this lane's fork coverage, but this lane raises no suite over it: it is another lane's subject at that lane's pin"
     },
     "PragueToOsakaAtTime15k": {
@@ -160,8 +160,8 @@
       "reason": "unsupported transition: BPO3, BPO4 are not in the supported chain"
     },
     "Berlin": {
-      "case_count": 3713,
-      "file_count": 201,
+      "case_count": 3722,
+      "file_count": 202,
       "files": [
         {
           "case_count": 1,
@@ -2665,6 +2665,23 @@
           "case_names_sha256": "3d8381ab7dca01d5743720c135c8b552cd0b23f3632d0caaeef37024b9ef289f",
           "network": "Berlin",
           "path": "for_berlin/frontier/precompiles/precompile_absence/precompile_absence.json"
+        },
+        {
+          "case_count": 9,
+          "case_names": [
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Berlin-precompile_0x0000000000000000000000000000000000000001-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Berlin-precompile_0x0000000000000000000000000000000000000002-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Berlin-precompile_0x0000000000000000000000000000000000000003-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Berlin-precompile_0x0000000000000000000000000000000000000004-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Berlin-precompile_0x0000000000000000000000000000000000000005-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Berlin-precompile_0x0000000000000000000000000000000000000006-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Berlin-precompile_0x0000000000000000000000000000000000000007-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Berlin-precompile_0x0000000000000000000000000000000000000008-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Berlin-precompile_0x0000000000000000000000000000000000000009-blockchain_test]"
+          ],
+          "case_names_sha256": "f35239e4448d1e90ea2c9f5b3a4b475fe784c344afa81b9b342e0395ccd95a07",
+          "network": "Berlin",
+          "path": "for_berlin/frontier/precompiles/precompiles/precompile_as_coinbase.json"
         },
         {
           "case_count": 11,
@@ -5488,8 +5505,8 @@
       "reason": "unsupported historical fork: Berlin is not in the supported chain"
     },
     "Byzantium": {
-      "case_count": 2439,
-      "file_count": 103,
+      "case_count": 2447,
+      "file_count": 104,
       "files": [
         {
           "case_count": 1,
@@ -6961,6 +6978,22 @@
           "case_names_sha256": "32bb9412377044ca1baea9910da3bf5f523eea295a508d2fa97c1b66fda84354",
           "network": "Byzantium",
           "path": "for_byzantium/frontier/precompiles/precompile_absence/precompile_absence.json"
+        },
+        {
+          "case_count": 8,
+          "case_names": [
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Byzantium-precompile_0x0000000000000000000000000000000000000001-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Byzantium-precompile_0x0000000000000000000000000000000000000002-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Byzantium-precompile_0x0000000000000000000000000000000000000003-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Byzantium-precompile_0x0000000000000000000000000000000000000004-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Byzantium-precompile_0x0000000000000000000000000000000000000005-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Byzantium-precompile_0x0000000000000000000000000000000000000006-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Byzantium-precompile_0x0000000000000000000000000000000000000007-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Byzantium-precompile_0x0000000000000000000000000000000000000008-blockchain_test]"
+          ],
+          "case_names_sha256": "47fd3f27bb277b0e2cc270846a86fcb9be126ef2d8c6dc5b1ee51bba282e8ffb",
+          "network": "Byzantium",
+          "path": "for_byzantium/frontier/precompiles/precompiles/precompile_as_coinbase.json"
         },
         {
           "case_count": 46,
@@ -8758,8 +8791,8 @@
       "reason": "unsupported historical fork: Byzantium is not in the supported chain"
     },
     "Cancun": {
-      "case_count": 12809,
-      "file_count": 2345,
+      "case_count": 12819,
+      "file_count": 2346,
       "files": [
         {
           "case_count": 1,
@@ -14612,6 +14645,24 @@
           "case_names_sha256": "e3de74e4b4442d23cfcc8e39448d5b04e0ba8f1396ffb0d9b63b0fd97faadff4",
           "network": "Cancun",
           "path": "for_cancun/frontier/precompiles/precompile_absence/precompile_absence.json"
+        },
+        {
+          "case_count": 10,
+          "case_names": [
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Cancun-precompile_0x0000000000000000000000000000000000000001-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Cancun-precompile_0x0000000000000000000000000000000000000002-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Cancun-precompile_0x0000000000000000000000000000000000000003-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Cancun-precompile_0x0000000000000000000000000000000000000004-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Cancun-precompile_0x0000000000000000000000000000000000000005-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Cancun-precompile_0x0000000000000000000000000000000000000006-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Cancun-precompile_0x0000000000000000000000000000000000000007-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Cancun-precompile_0x0000000000000000000000000000000000000008-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Cancun-precompile_0x0000000000000000000000000000000000000009-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Cancun-precompile_0x000000000000000000000000000000000000000a-blockchain_test]"
+          ],
+          "case_names_sha256": "3a810f8ffd8f8bf88968e43a2f18dacdb2818759c42bc257ab5df7a55937e387",
+          "network": "Cancun",
+          "path": "for_cancun/frontier/precompiles/precompiles/precompile_as_coinbase.json"
         },
         {
           "case_count": 12,
@@ -40519,8 +40570,8 @@
       "reason": "unsupported transition: Cancun is not in the supported chain"
     },
     "ConstantinopleFix": {
-      "case_count": 2578,
-      "file_count": 134,
+      "case_count": 2586,
+      "file_count": 135,
       "files": [
         {
           "case_count": 1,
@@ -42354,6 +42405,22 @@
           "path": "for_constantinoplefix/frontier/precompiles/precompile_absence/precompile_absence.json"
         },
         {
+          "case_count": 8,
+          "case_names": [
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_ConstantinopleFix-precompile_0x0000000000000000000000000000000000000001-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_ConstantinopleFix-precompile_0x0000000000000000000000000000000000000002-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_ConstantinopleFix-precompile_0x0000000000000000000000000000000000000003-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_ConstantinopleFix-precompile_0x0000000000000000000000000000000000000004-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_ConstantinopleFix-precompile_0x0000000000000000000000000000000000000005-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_ConstantinopleFix-precompile_0x0000000000000000000000000000000000000006-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_ConstantinopleFix-precompile_0x0000000000000000000000000000000000000007-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_ConstantinopleFix-precompile_0x0000000000000000000000000000000000000008-blockchain_test]"
+          ],
+          "case_names_sha256": "735e2cc8db5162107ff4e78086e529476d642d9c6fed1c520378e10f12043328",
+          "network": "ConstantinopleFix",
+          "path": "for_constantinoplefix/frontier/precompiles/precompiles/precompile_as_coinbase.json"
+        },
+        {
           "case_count": 46,
           "case_names": [
             "tests/frontier/precompiles/test_ripemd.py::test_precompiles[fork_ConstantinopleFix-blockchain_test_from_state_test-oog_False-full block]",
@@ -44176,8 +44243,8 @@
       "reason": "unsupported historical fork: ConstantinopleFix is not in the supported chain"
     },
     "Frontier": {
-      "case_count": 767,
-      "file_count": 47,
+      "case_count": 771,
+      "file_count": 48,
       "files": [
         {
           "case_count": 1,
@@ -44877,6 +44944,18 @@
           "path": "for_frontier/frontier/precompiles/ecrecover/precompiles.json"
         },
         {
+          "case_count": 4,
+          "case_names": [
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Frontier-precompile_0x0000000000000000000000000000000000000001-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Frontier-precompile_0x0000000000000000000000000000000000000002-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Frontier-precompile_0x0000000000000000000000000000000000000003-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Frontier-precompile_0x0000000000000000000000000000000000000004-blockchain_test]"
+          ],
+          "case_names_sha256": "c4076191726c4d7239c557c0fbeeea5741227dd55346525f3cbf91d738118a0b",
+          "network": "Frontier",
+          "path": "for_frontier/frontier/precompiles/precompiles/precompile_as_coinbase.json"
+        },
+        {
           "case_count": 46,
           "case_names": [
             "tests/frontier/precompiles/test_ripemd.py::test_precompiles[fork_Frontier-blockchain_test_from_state_test-oog_False-full block]",
@@ -45326,8 +45405,8 @@
       "reason": "unsupported historical fork: Frontier is not in the supported chain"
     },
     "Homestead": {
-      "case_count": 783,
-      "file_count": 50,
+      "case_count": 787,
+      "file_count": 51,
       "files": [
         {
           "case_count": 1,
@@ -46045,6 +46124,18 @@
           "path": "for_homestead/frontier/precompiles/ecrecover/precompiles.json"
         },
         {
+          "case_count": 4,
+          "case_names": [
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Homestead-precompile_0x0000000000000000000000000000000000000001-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Homestead-precompile_0x0000000000000000000000000000000000000002-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Homestead-precompile_0x0000000000000000000000000000000000000003-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Homestead-precompile_0x0000000000000000000000000000000000000004-blockchain_test]"
+          ],
+          "case_names_sha256": "b182fa49f07e527e4a9e316a26dc8a4a2dcbfa58f23d88486ee0fc53f061b072",
+          "network": "Homestead",
+          "path": "for_homestead/frontier/precompiles/precompiles/precompile_as_coinbase.json"
+        },
+        {
           "case_count": 46,
           "case_names": [
             "tests/frontier/precompiles/test_ripemd.py::test_precompiles[fork_Homestead-blockchain_test_from_state_test-oog_False-full block]",
@@ -46516,8 +46607,8 @@
       "reason": "unsupported historical fork: Homestead is not in the supported chain"
     },
     "Istanbul": {
-      "case_count": 2733,
-      "file_count": 141,
+      "case_count": 2742,
+      "file_count": 142,
       "files": [
         {
           "case_count": 1,
@@ -48396,6 +48487,23 @@
           "case_names_sha256": "b8b877e23889fc18335516c274a3dad9081086c91165686fb5499a40ab19b29c",
           "network": "Istanbul",
           "path": "for_istanbul/frontier/precompiles/precompile_absence/precompile_absence.json"
+        },
+        {
+          "case_count": 9,
+          "case_names": [
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Istanbul-precompile_0x0000000000000000000000000000000000000001-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Istanbul-precompile_0x0000000000000000000000000000000000000002-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Istanbul-precompile_0x0000000000000000000000000000000000000003-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Istanbul-precompile_0x0000000000000000000000000000000000000004-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Istanbul-precompile_0x0000000000000000000000000000000000000005-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Istanbul-precompile_0x0000000000000000000000000000000000000006-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Istanbul-precompile_0x0000000000000000000000000000000000000007-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Istanbul-precompile_0x0000000000000000000000000000000000000008-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Istanbul-precompile_0x0000000000000000000000000000000000000009-blockchain_test]"
+          ],
+          "case_names_sha256": "8796450ad6b69676b894a5c7ce2b4830be37a32b4358df5f3929f5c5a2104151",
+          "network": "Istanbul",
+          "path": "for_istanbul/frontier/precompiles/precompiles/precompile_as_coinbase.json"
         },
         {
           "case_count": 46,
@@ -50384,8 +50492,8 @@
       "reason": "unsupported historical fork: Istanbul is not in the supported chain"
     },
     "London": {
-      "case_count": 3992,
-      "file_count": 201,
+      "case_count": 4001,
+      "file_count": 202,
       "files": [
         {
           "case_count": 1,
@@ -53161,6 +53269,23 @@
           "case_names_sha256": "07f74704469b6ff963ce03448c1d2d520d6b179a681fb66a6ee70b760cd7cfe7",
           "network": "London",
           "path": "for_london/frontier/precompiles/precompile_absence/precompile_absence.json"
+        },
+        {
+          "case_count": 9,
+          "case_names": [
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_London-precompile_0x0000000000000000000000000000000000000001-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_London-precompile_0x0000000000000000000000000000000000000002-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_London-precompile_0x0000000000000000000000000000000000000003-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_London-precompile_0x0000000000000000000000000000000000000004-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_London-precompile_0x0000000000000000000000000000000000000005-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_London-precompile_0x0000000000000000000000000000000000000006-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_London-precompile_0x0000000000000000000000000000000000000007-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_London-precompile_0x0000000000000000000000000000000000000008-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_London-precompile_0x0000000000000000000000000000000000000009-blockchain_test]"
+          ],
+          "case_names_sha256": "67ad6a1f8819b9ee9784822326e59185ea1cb359cbee6e3340efc5f465d33fea",
+          "network": "London",
+          "path": "for_london/frontier/precompiles/precompiles/precompile_as_coinbase.json"
         },
         {
           "case_count": 11,
@@ -55991,8 +56116,8 @@
       "reason": "unsupported historical fork: London is not in the supported chain"
     },
     "Paris": {
-      "case_count": 4014,
-      "file_count": 205,
+      "case_count": 4023,
+      "file_count": 206,
       "files": [
         {
           "case_count": 1,
@@ -58822,6 +58947,23 @@
           "case_names_sha256": "179d225efeead3f0de66d37c93f78b3143d325161ed28ad0869e59e3b82cc545",
           "network": "Paris",
           "path": "for_paris/frontier/precompiles/precompile_absence/precompile_absence.json"
+        },
+        {
+          "case_count": 9,
+          "case_names": [
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Paris-precompile_0x0000000000000000000000000000000000000001-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Paris-precompile_0x0000000000000000000000000000000000000002-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Paris-precompile_0x0000000000000000000000000000000000000003-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Paris-precompile_0x0000000000000000000000000000000000000004-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Paris-precompile_0x0000000000000000000000000000000000000005-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Paris-precompile_0x0000000000000000000000000000000000000006-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Paris-precompile_0x0000000000000000000000000000000000000007-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Paris-precompile_0x0000000000000000000000000000000000000008-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Paris-precompile_0x0000000000000000000000000000000000000009-blockchain_test]"
+          ],
+          "case_names_sha256": "e6ebb1fc70d203bcb2d6bc6ad7ef221178375cb9b175fe6b734d0d1c6571ec89",
+          "network": "Paris",
+          "path": "for_paris/frontier/precompiles/precompiles/precompile_as_coinbase.json"
         },
         {
           "case_count": 11,
@@ -61707,8 +61849,8 @@
       "reason": "unsupported transition: Paris, Shanghai are not in the supported chain"
     },
     "Shanghai": {
-      "case_count": 4259,
-      "file_count": 239,
+      "case_count": 4268,
+      "file_count": 240,
       "files": [
         {
           "case_count": 1,
@@ -64769,6 +64911,23 @@
           "case_names_sha256": "0f1749f2b6970d4f323f0caaf94e1db076122601a74cd474f6a13f3e5fd8f4b3",
           "network": "Shanghai",
           "path": "for_shanghai/frontier/precompiles/precompile_absence/precompile_absence.json"
+        },
+        {
+          "case_count": 9,
+          "case_names": [
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Shanghai-precompile_0x0000000000000000000000000000000000000001-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Shanghai-precompile_0x0000000000000000000000000000000000000002-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Shanghai-precompile_0x0000000000000000000000000000000000000003-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Shanghai-precompile_0x0000000000000000000000000000000000000004-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Shanghai-precompile_0x0000000000000000000000000000000000000005-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Shanghai-precompile_0x0000000000000000000000000000000000000006-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Shanghai-precompile_0x0000000000000000000000000000000000000007-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Shanghai-precompile_0x0000000000000000000000000000000000000008-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Shanghai-precompile_0x0000000000000000000000000000000000000009-blockchain_test]"
+          ],
+          "case_names_sha256": "e79a4eac6dcc13e4d963aade3a6310a3ad35c5a02f08256d4672210a1dd66184",
+          "network": "Shanghai",
+          "path": "for_shanghai/frontier/precompiles/precompiles/precompile_as_coinbase.json"
         },
         {
           "case_count": 11,
@@ -68048,8 +68207,8 @@
       "reason": "unsupported transition: Shanghai, Cancun are not in the supported chain"
     },
     "SpuriousDragon": {
-      "case_count": 998,
-      "file_count": 66,
+      "case_count": 1002,
+      "file_count": 67,
       "files": [
         {
           "case_count": 1,
@@ -68739,6 +68898,18 @@
           "case_names_sha256": "6419f6f700c537d418de6458b1061fd5522301fca1c8cb10335eabd1cb4ed8af",
           "network": "SpuriousDragon",
           "path": "for_spuriousdragon/frontier/precompiles/ecrecover/precompiles.json"
+        },
+        {
+          "case_count": 4,
+          "case_names": [
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_SpuriousDragon-precompile_0x0000000000000000000000000000000000000001-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_SpuriousDragon-precompile_0x0000000000000000000000000000000000000002-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_SpuriousDragon-precompile_0x0000000000000000000000000000000000000003-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_SpuriousDragon-precompile_0x0000000000000000000000000000000000000004-blockchain_test]"
+          ],
+          "case_names_sha256": "5dc2a1a598f265dfd6d7516dfcc0a3fe1831f204a3be51c312dafd26ec317f2b",
+          "network": "SpuriousDragon",
+          "path": "for_spuriousdragon/frontier/precompiles/precompiles/precompile_as_coinbase.json"
         },
         {
           "case_count": 46,
@@ -69581,8 +69752,8 @@
       "reason": "unsupported historical fork: SpuriousDragon is not in the supported chain"
     },
     "TangerineWhistle": {
-      "case_count": 985,
-      "file_count": 61,
+      "case_count": 989,
+      "file_count": 62,
       "files": [
         {
           "case_count": 1,
@@ -70281,6 +70452,18 @@
           "case_names_sha256": "f0849abcc787b3342abfe9d911cdb557c2ab4bac5f524832d858761b785dd2e2",
           "network": "TangerineWhistle",
           "path": "for_tangerinewhistle/frontier/precompiles/ecrecover/precompiles.json"
+        },
+        {
+          "case_count": 4,
+          "case_names": [
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_TangerineWhistle-precompile_0x0000000000000000000000000000000000000001-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_TangerineWhistle-precompile_0x0000000000000000000000000000000000000002-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_TangerineWhistle-precompile_0x0000000000000000000000000000000000000003-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_TangerineWhistle-precompile_0x0000000000000000000000000000000000000004-blockchain_test]"
+          ],
+          "case_names_sha256": "925d4633fa452cd3d7b2ed226cc2af333ebb53994215e0e3b44b9212cc9a05d9",
+          "network": "TangerineWhistle",
+          "path": "for_tangerinewhistle/frontier/precompiles/precompiles/precompile_as_coinbase.json"
         },
         {
           "case_count": 46,
@@ -71064,8 +71247,8 @@
   "fixture_root": "fixtures",
   "label_inventory": {
     "Amsterdam": {
-      "case_count": 24840,
-      "file_count": 3140,
+      "case_count": 24901,
+      "file_count": 3159,
       "in_lane": true,
       "in_suite": true
     },
@@ -71094,20 +71277,20 @@
       "in_suite": false
     },
     "Berlin": {
-      "case_count": 3713,
-      "file_count": 201,
+      "case_count": 3722,
+      "file_count": 202,
       "in_lane": false,
       "in_suite": false
     },
     "Byzantium": {
-      "case_count": 2439,
-      "file_count": 103,
+      "case_count": 2447,
+      "file_count": 104,
       "in_lane": false,
       "in_suite": false
     },
     "Cancun": {
-      "case_count": 12809,
-      "file_count": 2345,
+      "case_count": 12819,
+      "file_count": 2346,
       "in_lane": false,
       "in_suite": false
     },
@@ -71118,38 +71301,38 @@
       "in_suite": false
     },
     "ConstantinopleFix": {
-      "case_count": 2578,
-      "file_count": 134,
+      "case_count": 2586,
+      "file_count": 135,
       "in_lane": false,
       "in_suite": false
     },
     "Frontier": {
-      "case_count": 767,
-      "file_count": 47,
+      "case_count": 771,
+      "file_count": 48,
       "in_lane": false,
       "in_suite": false
     },
     "Homestead": {
-      "case_count": 783,
-      "file_count": 50,
+      "case_count": 787,
+      "file_count": 51,
       "in_lane": false,
       "in_suite": false
     },
     "Istanbul": {
-      "case_count": 2733,
-      "file_count": 141,
+      "case_count": 2742,
+      "file_count": 142,
       "in_lane": false,
       "in_suite": false
     },
     "London": {
-      "case_count": 3992,
-      "file_count": 201,
+      "case_count": 4001,
+      "file_count": 202,
       "in_lane": false,
       "in_suite": false
     },
     "Osaka": {
-      "case_count": 17255,
-      "file_count": 2464,
+      "case_count": 17274,
+      "file_count": 2466,
       "in_lane": true,
       "in_suite": false
     },
@@ -71160,8 +71343,8 @@
       "in_suite": false
     },
     "Paris": {
-      "case_count": 4014,
-      "file_count": 205,
+      "case_count": 4023,
+      "file_count": 206,
       "in_lane": false,
       "in_suite": false
     },
@@ -71172,8 +71355,8 @@
       "in_suite": false
     },
     "Prague": {
-      "case_count": 16504,
-      "file_count": 2523,
+      "case_count": 16522,
+      "file_count": 2525,
       "in_lane": true,
       "in_suite": false
     },
@@ -71184,8 +71367,8 @@
       "in_suite": false
     },
     "Shanghai": {
-      "case_count": 4259,
-      "file_count": 239,
+      "case_count": 4268,
+      "file_count": 240,
       "in_lane": false,
       "in_suite": false
     },
@@ -71196,14 +71379,14 @@
       "in_suite": false
     },
     "SpuriousDragon": {
-      "case_count": 998,
-      "file_count": 66,
+      "case_count": 1002,
+      "file_count": 67,
       "in_lane": false,
       "in_suite": false
     },
     "TangerineWhistle": {
-      "case_count": 985,
-      "file_count": 61,
+      "case_count": 989,
+      "file_count": 62,
       "in_lane": false,
       "in_suite": false
     }
@@ -71220,19 +71403,19 @@
   "runnable": false,
   "schema_version": 2,
   "source": {
-    "archive_sha256": "f87f59b6e2eede5df3462c1784cd6b168fa6d687e36a77b604aeeaf361aaed64",
+    "archive_sha256": "aed315489163dc67c4e5607d7bbb8902e8329afe939be58193b125f2e81a85d4",
     "metadata_json_expected": {
-      "created_at": "2026-08-31T16:32:04.754180Z",
-      "root_hash": "0x3782178206bded832c8d1622379d6b9dbdaef428d6c0ba5d5a44f78ecc553648",
-      "test_count": 338970
+      "created_at": "2026-09-03T15:24:29.735161Z",
+      "root_hash": "0x417b20736eef8fe20cd98ca22aa0f736a5315c7e58f0cdce72803d03f3db4d9d",
+      "test_count": 340012
     },
-    "release_commit": "8ca2f4ceefd83100a4d21d0c33747114278a0bc2",
-    "release_tag": "tests-glamsterdam-devnet@v8.1.3"
+    "release_commit": "7341820b5b394b1934dfe7bb6f621fcdab7baf7f",
+    "release_tag": "tests-glamsterdam-devnet@v8.1.4"
   },
   "suites": {
     "amsterdam": {
-      "case_count": 24840,
-      "file_count": 3140,
+      "case_count": 24901,
+      "file_count": 3159,
       "files": [
         {
           "case_count": 2,
@@ -74472,6 +74655,15 @@
           "path": "for_amsterdam/amsterdam/eip7928_block_level_access_lists/block_access_lists_opcodes/bal_create2_deploy_then_collision.json"
         },
         {
+          "case_count": 1,
+          "case_names": [
+            "tests/amsterdam/eip7928_block_level_access_lists/test_block_access_lists_opcodes.py::test_bal_create2_selfdestruct_then_recreate_and_write[fork_Amsterdam-blockchain_test]"
+          ],
+          "case_names_sha256": "66e5050c08e203441b907485570a28134c2a3a440baabfaeb9052e5fcb25052f",
+          "network": "Amsterdam",
+          "path": "for_amsterdam/amsterdam/eip7928_block_level_access_lists/block_access_lists_opcodes/bal_create2_selfdestruct_then_recreate_and_write.json"
+        },
+        {
           "case_count": 2,
           "case_names": [
             "tests/amsterdam/eip7928_block_level_access_lists/test_block_access_lists_opcodes.py::test_bal_create2_selfdestruct_then_recreate_same_block[fork_Amsterdam-blockchain_test-no_balance]",
@@ -74551,6 +74743,18 @@
           "case_names_sha256": "dbbb33a06161a6f45552329a6d91b6ccb90cd064e8fae742df2ffed89a074264",
           "network": "Amsterdam",
           "path": "for_amsterdam/amsterdam/eip7928_block_level_access_lists/block_access_lists_opcodes/bal_create_in_static_context.json"
+        },
+        {
+          "case_count": 4,
+          "case_names": [
+            "tests/amsterdam/eip7928_block_level_access_lists/test_block_access_lists_opcodes.py::test_bal_create_nonce_overflow[fork_Amsterdam-create_opcode_CREATE-blockchain_test_from_state_test-nonce_at_max]",
+            "tests/amsterdam/eip7928_block_level_access_lists/test_block_access_lists_opcodes.py::test_bal_create_nonce_overflow[fork_Amsterdam-create_opcode_CREATE-blockchain_test_from_state_test-nonce_below_max]",
+            "tests/amsterdam/eip7928_block_level_access_lists/test_block_access_lists_opcodes.py::test_bal_create_nonce_overflow[fork_Amsterdam-create_opcode_CREATE2-blockchain_test_from_state_test-nonce_at_max]",
+            "tests/amsterdam/eip7928_block_level_access_lists/test_block_access_lists_opcodes.py::test_bal_create_nonce_overflow[fork_Amsterdam-create_opcode_CREATE2-blockchain_test_from_state_test-nonce_below_max]"
+          ],
+          "case_names_sha256": "e7092c52b1e6d19c6a359e60c6911376b2febea34a59433215a2990b42ec4a5d",
+          "network": "Amsterdam",
+          "path": "for_amsterdam/amsterdam/eip7928_block_level_access_lists/block_access_lists_opcodes/bal_create_nonce_overflow.json"
         },
         {
           "case_count": 2,
@@ -77583,15 +77787,6 @@
           "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_create/create2_address_collision.json"
         },
         {
-          "case_count": 1,
-          "case_names": [
-            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_create2_child_spill_not_double_charged[fork_Amsterdam-blockchain_test_from_state_test]"
-          ],
-          "case_names_sha256": "90f5e6e9c294543abb750cdf7d2054034c14e7c894b1d18305b8d8507ee31ac1",
-          "network": "Amsterdam",
-          "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_create/create2_child_spill_not_double_charged.json"
-        },
-        {
           "case_count": 6,
           "case_names": [
             "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_create2_failed_deposit_refunds_storage_state_gas[fork_Amsterdam-blockchain_test_from_state_test-fail_mode_eip3541-slots_0]",
@@ -77632,6 +77827,15 @@
         {
           "case_count": 1,
           "case_names": [
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_create_address_collision[fork_Amsterdam-blockchain_test_from_state_test]"
+          ],
+          "case_names_sha256": "b9823c1a909ea5da44c1a702a621d3b5982baffdcaef4ed0a2656613c24467c5",
+          "network": "Amsterdam",
+          "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_create/create_address_collision.json"
+        },
+        {
+          "case_count": 1,
+          "case_names": [
             "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_create_charges_state_gas[fork_Amsterdam-blockchain_test_from_state_test]"
           ],
           "case_names_sha256": "a06013fce2c5686ded81d150fd4d6686e6c8c4edb84c5fd9bf4328b5cd503b9a",
@@ -77661,6 +77865,18 @@
           "case_names_sha256": "6b4449b7fc3fc8c815b10c63b69cad4a8f9c06ea70d62c4496f2544a8e5da99a",
           "network": "Amsterdam",
           "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_create/create_child_revert_refunds_state_gas.json"
+        },
+        {
+          "case_count": 4,
+          "case_names": [
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_create_child_spill_not_double_charged[fork_Amsterdam-create_opcode_CREATE-blockchain_test_from_state_test-enough_gas_False]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_create_child_spill_not_double_charged[fork_Amsterdam-create_opcode_CREATE-blockchain_test_from_state_test-enough_gas_True]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_create_child_spill_not_double_charged[fork_Amsterdam-create_opcode_CREATE2-blockchain_test_from_state_test-enough_gas_False]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_create_child_spill_not_double_charged[fork_Amsterdam-create_opcode_CREATE2-blockchain_test_from_state_test-enough_gas_True]"
+          ],
+          "case_names_sha256": "11ee94c284358d3d3d6baaeb7eea100be9bc136458718295045bda35cf78f67b",
+          "network": "Amsterdam",
+          "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_create/create_child_spill_not_double_charged.json"
         },
         {
           "case_count": 2,
@@ -77702,13 +77918,16 @@
           "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_create/create_initcode_halt_no_code_deposit_state_gas.json"
         },
         {
-          "case_count": 1,
+          "case_count": 4,
           "case_names": [
-            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_create_insufficient_state_gas[fork_Amsterdam-blockchain_test_from_state_test]"
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_create_insufficient_account_state_gas[fork_Amsterdam-create_opcode_CREATE-blockchain_test_from_state_test-enough_gas_False]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_create_insufficient_account_state_gas[fork_Amsterdam-create_opcode_CREATE-blockchain_test_from_state_test-enough_gas_True]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_create_insufficient_account_state_gas[fork_Amsterdam-create_opcode_CREATE2-blockchain_test_from_state_test-enough_gas_False]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_create_insufficient_account_state_gas[fork_Amsterdam-create_opcode_CREATE2-blockchain_test_from_state_test-enough_gas_True]"
           ],
-          "case_names_sha256": "fade7c9f6d1a8294c7645954a837efa31bd7b359203009efc70a385ba1b926df",
+          "case_names_sha256": "75de666aa3f7696110fb9f2033f2e7b942e06a8b4f52f2dee5051b750f52ad38",
           "network": "Amsterdam",
-          "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_create/create_insufficient_state_gas.json"
+          "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_create/create_insufficient_account_state_gas.json"
         },
         {
           "case_count": 2,
@@ -77732,11 +77951,11 @@
         {
           "case_count": 1,
           "case_names": [
-            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_create_onto_alive_refunds_to_gas_left[fork_Amsterdam-blockchain_test_from_state_test]"
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_create_onto_alive_skips_new_account_charge[fork_Amsterdam-blockchain_test_from_state_test]"
           ],
-          "case_names_sha256": "9ed1ab56ad436b15c7312fdedf9bd89ab7272a292480eca7807edcc302df63f3",
+          "case_names_sha256": "665c8b0d10607c2a7d11c1136d2e4b194e9f64758c5ffbb8dfbc43841b9c0848",
           "network": "Amsterdam",
-          "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_create/create_onto_alive_refunds_to_gas_left.json"
+          "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_create/create_onto_alive_skips_new_account_charge.json"
         },
         {
           "case_count": 1,
@@ -77779,11 +77998,11 @@
         {
           "case_count": 1,
           "case_names": [
-            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_create_tx_collision_no_new_account_charge[fork_Amsterdam-blockchain_test]"
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_create_tx_collision_has_no_net_new_account_charge[fork_Amsterdam-blockchain_test]"
           ],
-          "case_names_sha256": "8d6c2dfc4bd0432e658d3f29f36ecb05b891e15403b2873c8829576a462e167e",
+          "case_names_sha256": "8422fbd5d4447d11e09b595ed7a49abecef315c35d41659700b4549a277f42fe",
           "network": "Amsterdam",
-          "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_create/create_tx_collision_no_new_account_charge.json"
+          "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_create/create_tx_collision_has_no_net_new_account_charge.json"
         },
         {
           "case_count": 1,
@@ -77824,12 +78043,14 @@
           "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_create/create_tx_state_gas.json"
         },
         {
-          "case_count": 2,
+          "case_count": 4,
           "case_names": [
-            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_create_with_reservoir[fork_Amsterdam-blockchain_test_from_state_test-create2]",
-            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_create_with_reservoir[fork_Amsterdam-blockchain_test_from_state_test-create]"
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_create_with_reservoir[fork_Amsterdam-create_opcode_CREATE-blockchain_test_from_state_test-exact_fit]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_create_with_reservoir[fork_Amsterdam-create_opcode_CREATE-blockchain_test_from_state_test-one_short]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_create_with_reservoir[fork_Amsterdam-create_opcode_CREATE2-blockchain_test_from_state_test-exact_fit]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_create_with_reservoir[fork_Amsterdam-create_opcode_CREATE2-blockchain_test_from_state_test-one_short]"
           ],
-          "case_names_sha256": "6e204f6d4d362f509dd35ea8e965584f16cb8b91be5c863ef4d53e9dbe4b66cc",
+          "case_names_sha256": "b24334b0a8a2ad7d54d06ad294c12787252f0a5fb71450a433dbce2488d2b0c6",
           "network": "Amsterdam",
           "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_create/create_with_reservoir.json"
         },
@@ -77899,29 +78120,32 @@
           "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_create/max_initcode_size_gas_metering_via_create.json"
         },
         {
-          "case_count": 1,
+          "case_count": 4,
           "case_names": [
-            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_nested_create_code_deposit_cannot_borrow_parent_gas[fork_Amsterdam-blockchain_test_from_state_test]"
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_nested_create_code_deposit_cannot_borrow_parent_gas[fork_Amsterdam-create_opcode_CREATE-blockchain_test_from_state_test-enough_gas_False]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_nested_create_code_deposit_cannot_borrow_parent_gas[fork_Amsterdam-create_opcode_CREATE-blockchain_test_from_state_test-enough_gas_True]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_nested_create_code_deposit_cannot_borrow_parent_gas[fork_Amsterdam-create_opcode_CREATE2-blockchain_test_from_state_test-enough_gas_False]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_nested_create_code_deposit_cannot_borrow_parent_gas[fork_Amsterdam-create_opcode_CREATE2-blockchain_test_from_state_test-enough_gas_True]"
           ],
-          "case_names_sha256": "3c932042ca5f5415f2c10991f8af747bcbfe4b3e742e5971b84162df7cca8029",
+          "case_names_sha256": "a77ea43ae16b8a9464f411df4f44f2d2fed1b295f50c97281e2ecc66950b5b75",
           "network": "Amsterdam",
           "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_create/nested_create_code_deposit_cannot_borrow_parent_gas.json"
         },
         {
           "case_count": 8,
           "case_names": [
-            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_nested_create_fail_parent_revert_state_gas[fork_Amsterdam-create_opcode_CREATE-blockchain_test-child_halt-parent_reverts]",
-            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_nested_create_fail_parent_revert_state_gas[fork_Amsterdam-create_opcode_CREATE-blockchain_test-child_halt-parent_succeeds]",
-            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_nested_create_fail_parent_revert_state_gas[fork_Amsterdam-create_opcode_CREATE-blockchain_test-child_revert-parent_reverts]",
-            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_nested_create_fail_parent_revert_state_gas[fork_Amsterdam-create_opcode_CREATE-blockchain_test-child_revert-parent_succeeds]",
-            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_nested_create_fail_parent_revert_state_gas[fork_Amsterdam-create_opcode_CREATE2-blockchain_test-child_halt-parent_reverts]",
-            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_nested_create_fail_parent_revert_state_gas[fork_Amsterdam-create_opcode_CREATE2-blockchain_test-child_halt-parent_succeeds]",
-            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_nested_create_fail_parent_revert_state_gas[fork_Amsterdam-create_opcode_CREATE2-blockchain_test-child_revert-parent_reverts]",
-            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_nested_create_fail_parent_revert_state_gas[fork_Amsterdam-create_opcode_CREATE2-blockchain_test-child_revert-parent_succeeds]"
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_nested_create_failure_refunds_state_gas_before_parent_exit[fork_Amsterdam-create_opcode_CREATE-blockchain_test-child_halt-parent_reverts]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_nested_create_failure_refunds_state_gas_before_parent_exit[fork_Amsterdam-create_opcode_CREATE-blockchain_test-child_halt-parent_succeeds]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_nested_create_failure_refunds_state_gas_before_parent_exit[fork_Amsterdam-create_opcode_CREATE-blockchain_test-child_revert-parent_reverts]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_nested_create_failure_refunds_state_gas_before_parent_exit[fork_Amsterdam-create_opcode_CREATE-blockchain_test-child_revert-parent_succeeds]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_nested_create_failure_refunds_state_gas_before_parent_exit[fork_Amsterdam-create_opcode_CREATE2-blockchain_test-child_halt-parent_reverts]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_nested_create_failure_refunds_state_gas_before_parent_exit[fork_Amsterdam-create_opcode_CREATE2-blockchain_test-child_halt-parent_succeeds]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_nested_create_failure_refunds_state_gas_before_parent_exit[fork_Amsterdam-create_opcode_CREATE2-blockchain_test-child_revert-parent_reverts]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_create.py::test_nested_create_failure_refunds_state_gas_before_parent_exit[fork_Amsterdam-create_opcode_CREATE2-blockchain_test-child_revert-parent_succeeds]"
           ],
-          "case_names_sha256": "8c5cf27d8456972b193273e7eaea607c02406d7c5df37e50bfa12d70d659e131",
+          "case_names_sha256": "8429f968c9da53bfdf5ed79814e3f9285fcf2b627ba8f078f41c21046c4dc399",
           "network": "Amsterdam",
-          "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_create/nested_create_fail_parent_revert_state_gas.json"
+          "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_create/nested_create_failure_refunds_state_gas_before_parent_exit.json"
         },
         {
           "case_count": 4,
@@ -78005,6 +78229,143 @@
           "case_names_sha256": "a3c541c13826ff4f2d452d9e94cedd4cfb6ac6660cf6cb28edb4067bf013de89",
           "network": "Amsterdam",
           "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_create/state_gas_spill_header_gas_used.json"
+        },
+        {
+          "case_count": 3,
+          "case_names": [
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_cross_frame_refund.py::test_child_clear_repays_own_spill_first[fork_Amsterdam-blockchain_test_from_state_test-child_ending_invalid]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_cross_frame_refund.py::test_child_clear_repays_own_spill_first[fork_Amsterdam-blockchain_test_from_state_test-child_ending_revert]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_cross_frame_refund.py::test_child_clear_repays_own_spill_first[fork_Amsterdam-blockchain_test_from_state_test-child_ending_stop]"
+          ],
+          "case_names_sha256": "9abebea6591b2ca9c52227b0f91b8c925ebb2900e0e153aa78343395d3e0e409",
+          "network": "Amsterdam",
+          "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_cross_frame_refund/child_clear_repays_own_spill_first.json"
+        },
+        {
+          "case_count": 3,
+          "case_names": [
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_cross_frame_refund.py::test_child_clear_window_cost[fork_Amsterdam-blockchain_test_from_state_test-child_ending_invalid]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_cross_frame_refund.py::test_child_clear_window_cost[fork_Amsterdam-blockchain_test_from_state_test-child_ending_revert]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_cross_frame_refund.py::test_child_clear_window_cost[fork_Amsterdam-blockchain_test_from_state_test-child_ending_stop]"
+          ],
+          "case_names_sha256": "0458368ec2be79fe6f83fd7607b7f04780b183e05d84d1884e051b7a6dcf6d25",
+          "network": "Amsterdam",
+          "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_cross_frame_refund/child_clear_window_cost.json"
+        },
+        {
+          "case_count": 1,
+          "case_names": [
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_cross_frame_refund.py::test_cross_frame_credit_funds_state_at_full_price[fork_Amsterdam-blockchain_test_from_state_test]"
+          ],
+          "case_names_sha256": "55ee53cca122704dc271bf50fdfc374dd8862e9acb6aa26b115329cf5e22e3d7",
+          "network": "Amsterdam",
+          "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_cross_frame_refund/cross_frame_credit_funds_state_at_full_price.json"
+        },
+        {
+          "case_count": 1,
+          "case_names": [
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_cross_frame_refund.py::test_cross_frame_credit_returns_at_settlement[fork_Amsterdam-blockchain_test_from_state_test]"
+          ],
+          "case_names_sha256": "f5af2c6a732a41e7ad82052808ef62885a919780de2df7d1feddbd238a582a14",
+          "network": "Amsterdam",
+          "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_cross_frame_refund/cross_frame_credit_returns_at_settlement.json"
+        },
+        {
+          "case_count": 1,
+          "case_names": [
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_cross_frame_refund.py::test_cross_frame_refund_after_delegation_spill[fork_Amsterdam-blockchain_test_from_state_test]"
+          ],
+          "case_names_sha256": "5bbae09d9900c167a1d2126f677611c0e3c6319787e44b619a3b08979ff53652",
+          "network": "Amsterdam",
+          "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_cross_frame_refund/cross_frame_refund_after_delegation_spill.json"
+        },
+        {
+          "case_count": 3,
+          "case_names": [
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_cross_frame_refund.py::test_cross_frame_refund_repays_spill_at_a_call[fork_Amsterdam-call_opcode_CALL-blockchain_test_from_state_test]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_cross_frame_refund.py::test_cross_frame_refund_repays_spill_at_a_call[fork_Amsterdam-call_opcode_CALLCODE-blockchain_test_from_state_test]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_cross_frame_refund.py::test_cross_frame_refund_repays_spill_at_a_call[fork_Amsterdam-call_opcode_DELEGATECALL-blockchain_test_from_state_test]"
+          ],
+          "case_names_sha256": "5d676bb3bd780f8e4dff558f3b31eda6b1eab62d14889be28a1796a409ed6b02",
+          "network": "Amsterdam",
+          "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_cross_frame_refund/cross_frame_refund_repays_spill_at_a_call.json"
+        },
+        {
+          "case_count": 2,
+          "case_names": [
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_cross_frame_refund.py::test_cross_frame_refund_repays_spill_at_a_create[fork_Amsterdam-create_opcode_CREATE-blockchain_test_from_state_test]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_cross_frame_refund.py::test_cross_frame_refund_repays_spill_at_a_create[fork_Amsterdam-create_opcode_CREATE2-blockchain_test_from_state_test]"
+          ],
+          "case_names_sha256": "8f9ba5dafc90ef127cec2fd14d9107b6b4b5376b75008d89738e6c49dd7c370d",
+          "network": "Amsterdam",
+          "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_cross_frame_refund/cross_frame_refund_repays_spill_at_a_create.json"
+        },
+        {
+          "case_count": 1,
+          "case_names": [
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_cross_frame_refund.py::test_cross_frame_refund_repays_spill_at_merge[fork_Amsterdam-blockchain_test_from_state_test]"
+          ],
+          "case_names_sha256": "76a00831809336d8c5b538f30917e222597b1776ff4015faa29ee498acc25e8d",
+          "network": "Amsterdam",
+          "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_cross_frame_refund/cross_frame_refund_repays_spill_at_merge.json"
+        },
+        {
+          "case_count": 1,
+          "case_names": [
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_cross_frame_refund.py::test_cross_frame_refund_repays_spill_in_inner_frame[fork_Amsterdam-blockchain_test_from_state_test]"
+          ],
+          "case_names_sha256": "8a20b812ef87e18bbb993e55b92f1d0e29648fe159c508902c67a8543301c1c0",
+          "network": "Amsterdam",
+          "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_cross_frame_refund/cross_frame_refund_repays_spill_in_inner_frame.json"
+        },
+        {
+          "case_count": 3,
+          "case_names": [
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_cross_frame_refund.py::test_cross_frame_refund_with_reservoir_grant[fork_Amsterdam-blockchain_test_from_state_test-reservoir_slots_0]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_cross_frame_refund.py::test_cross_frame_refund_with_reservoir_grant[fork_Amsterdam-blockchain_test_from_state_test-reservoir_slots_1]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_cross_frame_refund.py::test_cross_frame_refund_with_reservoir_grant[fork_Amsterdam-blockchain_test_from_state_test-reservoir_slots_2]"
+          ],
+          "case_names_sha256": "aabb8685631f869d5130be4b8a44b276fda7a9b22980652f0b7857d542dee91c",
+          "network": "Amsterdam",
+          "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_cross_frame_refund/cross_frame_refund_with_reservoir_grant.json"
+        },
+        {
+          "case_count": 1,
+          "case_names": [
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_cross_frame_refund.py::test_delegation_spill_window_cost[fork_Amsterdam-blockchain_test_from_state_test]"
+          ],
+          "case_names_sha256": "08538b1a3a4984345f0580b0b7056c956e19ed948e844d837b897b2029dcbdf8",
+          "network": "Amsterdam",
+          "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_cross_frame_refund/delegation_spill_window_cost.json"
+        },
+        {
+          "case_count": 1,
+          "case_names": [
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_cross_frame_refund.py::test_later_set_spills_after_repayment[fork_Amsterdam-blockchain_test_from_state_test]"
+          ],
+          "case_names_sha256": "1a064145cc9eed19c98e4692074bd6bdb557b9581cf9f29b85f5f2fc17ab1a10",
+          "network": "Amsterdam",
+          "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_cross_frame_refund/later_set_spills_after_repayment.json"
+        },
+        {
+          "case_count": 1,
+          "case_names": [
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_cross_frame_refund.py::test_repaid_credit_funds_execution[fork_Amsterdam-blockchain_test_from_state_test]"
+          ],
+          "case_names_sha256": "e916fec459c025ed5625c19e890de6f4c1cce368e22dd1a585947b56c068116a",
+          "network": "Amsterdam",
+          "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_cross_frame_refund/repaid_credit_funds_execution.json"
+        },
+        {
+          "case_count": 3,
+          "case_names": [
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_cross_frame_refund.py::test_reservoir_grant_window_costs[fork_Amsterdam-blockchain_test_from_state_test-reservoir_slots_0]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_cross_frame_refund.py::test_reservoir_grant_window_costs[fork_Amsterdam-blockchain_test_from_state_test-reservoir_slots_1]",
+            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_state_gas_cross_frame_refund.py::test_reservoir_grant_window_costs[fork_Amsterdam-blockchain_test_from_state_test-reservoir_slots_2]"
+          ],
+          "case_names_sha256": "cc6c09261f71c500368c5a8b6ca70032e1d7c01f8df5300a1c237b3ff40c958c",
+          "network": "Amsterdam",
+          "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_cross_frame_refund/reservoir_grant_window_costs.json"
         },
         {
           "case_count": 1,
@@ -91358,6 +91719,32 @@
           "case_names_sha256": "fcfab18fa7c65f6412ad043bd8fdbed2ac5bc90199cfaf3294f13a9ab9c997f0",
           "network": "Amsterdam",
           "path": "for_amsterdam/frontier/precompiles/precompile_absence/precompile_absence.json"
+        },
+        {
+          "case_count": 18,
+          "case_names": [
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Amsterdam-precompile_0x0000000000000000000000000000000000000001-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Amsterdam-precompile_0x0000000000000000000000000000000000000002-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Amsterdam-precompile_0x0000000000000000000000000000000000000003-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Amsterdam-precompile_0x0000000000000000000000000000000000000004-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Amsterdam-precompile_0x0000000000000000000000000000000000000005-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Amsterdam-precompile_0x0000000000000000000000000000000000000006-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Amsterdam-precompile_0x0000000000000000000000000000000000000007-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Amsterdam-precompile_0x0000000000000000000000000000000000000008-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Amsterdam-precompile_0x0000000000000000000000000000000000000009-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Amsterdam-precompile_0x000000000000000000000000000000000000000a-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Amsterdam-precompile_0x000000000000000000000000000000000000000b-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Amsterdam-precompile_0x000000000000000000000000000000000000000c-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Amsterdam-precompile_0x000000000000000000000000000000000000000d-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Amsterdam-precompile_0x000000000000000000000000000000000000000e-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Amsterdam-precompile_0x000000000000000000000000000000000000000f-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Amsterdam-precompile_0x0000000000000000000000000000000000000010-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Amsterdam-precompile_0x0000000000000000000000000000000000000011-blockchain_test]",
+            "tests/frontier/precompiles/test_precompiles.py::test_precompile_as_coinbase[fork_Amsterdam-precompile_0x0000000000000000000000000000000000000100-blockchain_test]"
+          ],
+          "case_names_sha256": "59f10f804ffc3b886288a4854d7bc1747c2d806b3b1391188cb0d736fdb8bd83",
+          "network": "Amsterdam",
+          "path": "for_amsterdam/frontier/precompiles/precompiles/precompile_as_coinbase.json"
         },
         {
           "case_count": 22,
@@ -117786,6 +118173,15 @@
           "path": "for_amsterdam/prague/eip6110_deposits/deposits/deposit.json"
         },
         {
+          "case_count": 1,
+          "case_names": [
+            "tests/prague/eip6110_deposits/test_deposits.py::test_deposit_high_count[fork_Amsterdam-blockchain_test-over_consensus_layer_payload_maximum]"
+          ],
+          "case_names_sha256": "4027c95f06b6d17425ab82f034c29d809dc8a31d9a86e1dc5831710218ea9fc1",
+          "network": "Amsterdam",
+          "path": "for_amsterdam/prague/eip6110_deposits/deposits/deposit_high_count.json"
+        },
+        {
           "case_count": 9,
           "case_names": [
             "tests/prague/eip6110_deposits/test_deposits.py::test_deposit_negative[fork_Amsterdam-blockchain_test-no_deposits_non_empty_requests_list]",
@@ -121198,12 +121594,12 @@
       "network": "Amsterdam"
     },
     "amsterdam-full": {
-      "case_count": 24967,
+      "case_count": 25028,
       "component_suites": [
         "amsterdam",
         "amsterdam-transitions"
       ],
-      "file_count": 3182,
+      "file_count": 3201,
       "networks": [
         "Amsterdam",
         "BPO2ToAmsterdamAtTime15k"
@@ -121211,198 +121607,196 @@
       "selection_rule": "union of every supported static and transition suite"
     },
     "amsterdam-smoke": {
-      "case_count": 62,
+      "case_count": 60,
       "file_count": 16,
       "files": [
         {
           "case_count": 1,
           "case_names": [
-            "tests/ported_static/stLogTests/test_log1_max_topic.py::test_log1_max_topic[fork_Amsterdam-blockchain_test_from_state_test]"
+            "tests/amsterdam/eip7928_block_level_access_lists/test_block_access_lists.py::test_bal_cross_tx_reverted_storage_reads[fork_Amsterdam-blockchain_test]"
           ],
-          "case_names_sha256": "75bfb23a7bbab2b9dc9dbc81bc5df198c4e1761ee7d6544db0be2461b8c793fb",
+          "case_names_sha256": "20cabc2b6d8d10c8fd5e4a4072038c4d3f47680381c7c45e7c0fe08486f8ab72",
           "network": "Amsterdam",
-          "path": "for_amsterdam/ported_static/stLogTests/log1_max_topic/log1_max_topic.json"
+          "path": "for_amsterdam/amsterdam/eip7928_block_level_access_lists/block_access_lists/bal_cross_tx_reverted_storage_reads.json"
         },
         {
-          "case_count": 4,
+          "case_count": 21,
           "case_names": [
-            "tests/cancun/eip4844_blobs/test_blobhash_opcode.py::test_blobhash_scenarios[fork_Amsterdam-blockchain_test-scenario_repeated_valid]",
-            "tests/cancun/eip4844_blobs/test_blobhash_opcode.py::test_blobhash_scenarios[fork_Amsterdam-blockchain_test-scenario_single_valid]",
-            "tests/cancun/eip4844_blobs/test_blobhash_opcode.py::test_blobhash_scenarios[fork_Amsterdam-blockchain_test-scenario_valid_invalid]",
-            "tests/cancun/eip4844_blobs/test_blobhash_opcode.py::test_blobhash_scenarios[fork_Amsterdam-blockchain_test-scenario_varied_valid]"
+            "tests/osaka/eip7823_modexp_upper_bounds/test_modexp_upper_bounds.py::test_modexp_upper_bounds[fork_Amsterdam-blockchain_test_from_state_test-all_exceed_check_ordering]",
+            "tests/osaka/eip7823_modexp_upper_bounds/test_modexp_upper_bounds.py::test_modexp_upper_bounds[fork_Amsterdam-blockchain_test_from_state_test-base_boundary]",
+            "tests/osaka/eip7823_modexp_upper_bounds/test_modexp_upper_bounds.py::test_modexp_upper_bounds[fork_Amsterdam-blockchain_test_from_state_test-base_mod_boundary]",
+            "tests/osaka/eip7823_modexp_upper_bounds/test_modexp_upper_bounds.py::test_modexp_upper_bounds[fork_Amsterdam-blockchain_test_from_state_test-bitwise_pattern_base_exceed]",
+            "tests/osaka/eip7823_modexp_upper_bounds/test_modexp_upper_bounds.py::test_modexp_upper_bounds[fork_Amsterdam-blockchain_test_from_state_test-excess_length_base]",
+            "tests/osaka/eip7823_modexp_upper_bounds/test_modexp_upper_bounds.py::test_modexp_upper_bounds[fork_Amsterdam-blockchain_test_from_state_test-excess_length_exponent]",
+            "tests/osaka/eip7823_modexp_upper_bounds/test_modexp_upper_bounds.py::test_modexp_upper_bounds[fork_Amsterdam-blockchain_test_from_state_test-excess_length_modulus]",
+            "tests/osaka/eip7823_modexp_upper_bounds/test_modexp_upper_bounds.py::test_modexp_upper_bounds[fork_Amsterdam-blockchain_test_from_state_test-expFF_1025_base_0_mod_0]",
+            "tests/osaka/eip7823_modexp_upper_bounds/test_modexp_upper_bounds.py::test_modexp_upper_bounds[fork_Amsterdam-blockchain_test_from_state_test-expFF_1025_base_1024_mod_0]",
+            "tests/osaka/eip7823_modexp_upper_bounds/test_modexp_upper_bounds.py::test_modexp_upper_bounds[fork_Amsterdam-blockchain_test_from_state_test-expFF_1025_base_1025_mod_0]",
+            "tests/osaka/eip7823_modexp_upper_bounds/test_modexp_upper_bounds.py::test_modexp_upper_bounds[fork_Amsterdam-blockchain_test_from_state_test-exp_0_base_0_mod_1025]",
+            "tests/osaka/eip7823_modexp_upper_bounds/test_modexp_upper_bounds.py::test_modexp_upper_bounds[fork_Amsterdam-blockchain_test_from_state_test-exp_0_base_1025_mod_0]",
+            "tests/osaka/eip7823_modexp_upper_bounds/test_modexp_upper_bounds.py::test_modexp_upper_bounds[fork_Amsterdam-blockchain_test_from_state_test-exp_0_base_1025_mod_1]",
+            "tests/osaka/eip7823_modexp_upper_bounds/test_modexp_upper_bounds.py::test_modexp_upper_bounds[fork_Amsterdam-blockchain_test_from_state_test-exp_0_base_1_mod_1025]",
+            "tests/osaka/eip7823_modexp_upper_bounds/test_modexp_upper_bounds.py::test_modexp_upper_bounds[fork_Amsterdam-blockchain_test_from_state_test-exp_1025_base_0_mod_0]",
+            "tests/osaka/eip7823_modexp_upper_bounds/test_modexp_upper_bounds.py::test_modexp_upper_bounds[fork_Amsterdam-blockchain_test_from_state_test-exp_2_pow_64_base_0_mod_0]",
+            "tests/osaka/eip7823_modexp_upper_bounds/test_modexp_upper_bounds.py::test_modexp_upper_bounds[fork_Amsterdam-blockchain_test_from_state_test-exp_boundary]",
+            "tests/osaka/eip7823_modexp_upper_bounds/test_modexp_upper_bounds.py::test_modexp_upper_bounds[fork_Amsterdam-blockchain_test_from_state_test-exp_mod_exceed_base_ok]",
+            "tests/osaka/eip7823_modexp_upper_bounds/test_modexp_upper_bounds.py::test_modexp_upper_bounds[fork_Amsterdam-blockchain_test_from_state_test-mod_boundary]",
+            "tests/osaka/eip7823_modexp_upper_bounds/test_modexp_upper_bounds.py::test_modexp_upper_bounds[fork_Amsterdam-blockchain_test_from_state_test-near_uint64_max_base]",
+            "tests/osaka/eip7823_modexp_upper_bounds/test_modexp_upper_bounds.py::test_modexp_upper_bounds[fork_Amsterdam-blockchain_test_from_state_test-zero_exp_mod_exceed]"
           ],
-          "case_names_sha256": "3c5add43004b4461d80bd6010b6cff3944d624a1e73ee5abf8d44adf816a3efe",
+          "case_names_sha256": "59a1251bde29c38456a67a3d56af10cad9b3cf7746b2f75f63fe46a9d7422048",
           "network": "Amsterdam",
-          "path": "for_amsterdam/cancun/eip4844_blobs/blobhash_opcode/blobhash_scenarios.json"
-        },
-        {
-          "case_count": 1,
-          "case_names": [
-            "tests/ported_static/stSolidityTest/test_create_contract_from_method.py::test_create_contract_from_method[fork_Amsterdam-blockchain_test_from_state_test]"
-          ],
-          "case_names_sha256": "8fbb24022f161d95ab4bff384c007fea26751cde73526fc2f93c12d98983b3cd",
-          "network": "Amsterdam",
-          "path": "for_amsterdam/ported_static/stSolidityTest/create_contract_from_method/create_contract_from_method.json"
-        },
-        {
-          "case_count": 8,
-          "case_names": [
-            "tests/amsterdam/eip7981_increase_access_list_cost/test_eip_mainnet.py::test_access_list_data_cost_edge_cases[fork_Amsterdam-tx_type_1-blockchain_test_from_state_test--all_nonzero_bytes]",
-            "tests/amsterdam/eip7981_increase_access_list_cost/test_eip_mainnet.py::test_access_list_data_cost_edge_cases[fork_Amsterdam-tx_type_1-blockchain_test_from_state_test--all_zero_bytes]",
-            "tests/amsterdam/eip7981_increase_access_list_cost/test_eip_mainnet.py::test_access_list_data_cost_edge_cases[fork_Amsterdam-tx_type_2-blockchain_test_from_state_test--all_nonzero_bytes]",
-            "tests/amsterdam/eip7981_increase_access_list_cost/test_eip_mainnet.py::test_access_list_data_cost_edge_cases[fork_Amsterdam-tx_type_2-blockchain_test_from_state_test--all_zero_bytes]",
-            "tests/amsterdam/eip7981_increase_access_list_cost/test_eip_mainnet.py::test_access_list_data_cost_edge_cases[fork_Amsterdam-tx_type_3-blockchain_test_from_state_test--all_nonzero_bytes]",
-            "tests/amsterdam/eip7981_increase_access_list_cost/test_eip_mainnet.py::test_access_list_data_cost_edge_cases[fork_Amsterdam-tx_type_3-blockchain_test_from_state_test--all_zero_bytes]",
-            "tests/amsterdam/eip7981_increase_access_list_cost/test_eip_mainnet.py::test_access_list_data_cost_edge_cases[fork_Amsterdam-tx_type_4-blockchain_test_from_state_test--all_nonzero_bytes]",
-            "tests/amsterdam/eip7981_increase_access_list_cost/test_eip_mainnet.py::test_access_list_data_cost_edge_cases[fork_Amsterdam-tx_type_4-blockchain_test_from_state_test--all_zero_bytes]"
-          ],
-          "case_names_sha256": "e7399519c37a7ea045aef71deba5000cd5deb2bb5a81cd7695efd3a1c21c529c",
-          "network": "Amsterdam",
-          "path": "for_amsterdam/amsterdam/eip7981_increase_access_list_cost/eip_mainnet/access_list_data_cost_edge_cases.json"
-        },
-        {
-          "case_count": 17,
-          "case_names": [
-            "tests/ported_static/vmArithmeticTest/test_sdiv.py::test_sdiv[fork_Amsterdam-blockchain_test_from_state_test-sdiv_1_0]",
-            "tests/ported_static/vmArithmeticTest/test_sdiv.py::test_sdiv[fork_Amsterdam-blockchain_test_from_state_test-sdiv_1_0_add1]",
-            "tests/ported_static/vmArithmeticTest/test_sdiv.py::test_sdiv[fork_Amsterdam-blockchain_test_from_state_test-sdiv_1_neg1]",
-            "tests/ported_static/vmArithmeticTest/test_sdiv.py::test_sdiv[fork_Amsterdam-blockchain_test_from_state_test-sdiv_2pow255_0]",
-            "tests/ported_static/vmArithmeticTest/test_sdiv.py::test_sdiv[fork_Amsterdam-blockchain_test_from_state_test-sdiv_2pow255_neg1]",
-            "tests/ported_static/vmArithmeticTest/test_sdiv.py::test_sdiv[fork_Amsterdam-blockchain_test_from_state_test-sdiv_2pow255_neg1_2nd]",
-            "tests/ported_static/vmArithmeticTest/test_sdiv.py::test_sdiv[fork_Amsterdam-blockchain_test_from_state_test-sdiv_4_neg2]",
-            "tests/ported_static/vmArithmeticTest/test_sdiv.py::test_sdiv[fork_Amsterdam-blockchain_test_from_state_test-sdiv_5_neg4]",
-            "tests/ported_static/vmArithmeticTest/test_sdiv.py::test_sdiv[fork_Amsterdam-blockchain_test_from_state_test-sdiv_minint_neg1]",
-            "tests/ported_static/vmArithmeticTest/test_sdiv.py::test_sdiv[fork_Amsterdam-blockchain_test_from_state_test-sdiv_neg1_1]",
-            "tests/ported_static/vmArithmeticTest/test_sdiv.py::test_sdiv[fork_Amsterdam-blockchain_test_from_state_test-sdiv_neg1_1_2nd]",
-            "tests/ported_static/vmArithmeticTest/test_sdiv.py::test_sdiv[fork_Amsterdam-blockchain_test_from_state_test-sdiv_neg1_25]",
-            "tests/ported_static/vmArithmeticTest/test_sdiv.py::test_sdiv[fork_Amsterdam-blockchain_test_from_state_test-sdiv_neg1_minint]",
-            "tests/ported_static/vmArithmeticTest/test_sdiv.py::test_sdiv[fork_Amsterdam-blockchain_test_from_state_test-sdiv_neg1_neg1]",
-            "tests/ported_static/vmArithmeticTest/test_sdiv.py::test_sdiv[fork_Amsterdam-blockchain_test_from_state_test-sdiv_neg2_neg4]",
-            "tests/ported_static/vmArithmeticTest/test_sdiv.py::test_sdiv[fork_Amsterdam-blockchain_test_from_state_test-sdiv_neg3_0]",
-            "tests/ported_static/vmArithmeticTest/test_sdiv.py::test_sdiv[fork_Amsterdam-blockchain_test_from_state_test-sdiv_neg9_5]"
-          ],
-          "case_names_sha256": "cb3ad1d1352f61be80c646db86f3d04c1f880efa2bcfb8354ccfb1982fa6e0d7",
-          "network": "Amsterdam",
-          "path": "for_amsterdam/ported_static/vmArithmeticTest/sdiv/sdiv.json"
+          "path": "for_amsterdam/osaka/eip7823_modexp_upper_bounds/modexp_upper_bounds/modexp_upper_bounds.json"
         },
         {
           "case_count": 1,
           "case_names": [
-            "tests/ported_static/stRandom2/test_random_statetest558.py::test_random_statetest558[fork_Amsterdam-blockchain_test_from_state_test]"
+            "tests/ported_static/stTransactionTest/test_suicides_and_internal_call_suicides_bonus_gas_at_call.py::test_suicides_and_internal_call_suicides_bonus_gas_at_call[fork_Amsterdam-blockchain_test_from_state_test]"
           ],
-          "case_names_sha256": "0a38d180255676951cdcd15be88311633d7eebfb441bb6be95b283db2ea06654",
+          "case_names_sha256": "1cd1c64ce4345d10e134dcf2b0dd96070cabb8a4fa81560d9c537b07a731028f",
           "network": "Amsterdam",
-          "path": "for_amsterdam/ported_static/stRandom2/random_statetest558/random_statetest558.json"
+          "path": "for_amsterdam/ported_static/stTransactionTest/suicides_and_internal_call_suicides_bonus_gas_at_call/suicides_and_internal_call_suicides_bonus_gas_at_call.json"
+        },
+        {
+          "case_count": 13,
+          "case_names": [
+            "tests/byzantium/eip197_ec_pairing/test_ecpairing_fuzzed.py::test_invalid_g1_point[fork_Amsterdam-blockchain_test_from_state_test-invalid_g1_point_0-ecpairing]",
+            "tests/byzantium/eip197_ec_pairing/test_ecpairing_fuzzed.py::test_invalid_g1_point[fork_Amsterdam-blockchain_test_from_state_test-invalid_g1_point_1-ecpairing]",
+            "tests/byzantium/eip197_ec_pairing/test_ecpairing_fuzzed.py::test_invalid_g1_point[fork_Amsterdam-blockchain_test_from_state_test-invalid_g1_point_10-ecpairing]",
+            "tests/byzantium/eip197_ec_pairing/test_ecpairing_fuzzed.py::test_invalid_g1_point[fork_Amsterdam-blockchain_test_from_state_test-invalid_g1_point_11-ecpairing]",
+            "tests/byzantium/eip197_ec_pairing/test_ecpairing_fuzzed.py::test_invalid_g1_point[fork_Amsterdam-blockchain_test_from_state_test-invalid_g1_point_12-ecpairing]",
+            "tests/byzantium/eip197_ec_pairing/test_ecpairing_fuzzed.py::test_invalid_g1_point[fork_Amsterdam-blockchain_test_from_state_test-invalid_g1_point_2-ecpairing]",
+            "tests/byzantium/eip197_ec_pairing/test_ecpairing_fuzzed.py::test_invalid_g1_point[fork_Amsterdam-blockchain_test_from_state_test-invalid_g1_point_3-ecpairing]",
+            "tests/byzantium/eip197_ec_pairing/test_ecpairing_fuzzed.py::test_invalid_g1_point[fork_Amsterdam-blockchain_test_from_state_test-invalid_g1_point_4-ecpairing]",
+            "tests/byzantium/eip197_ec_pairing/test_ecpairing_fuzzed.py::test_invalid_g1_point[fork_Amsterdam-blockchain_test_from_state_test-invalid_g1_point_5-ecpairing]",
+            "tests/byzantium/eip197_ec_pairing/test_ecpairing_fuzzed.py::test_invalid_g1_point[fork_Amsterdam-blockchain_test_from_state_test-invalid_g1_point_6-ecpairing]",
+            "tests/byzantium/eip197_ec_pairing/test_ecpairing_fuzzed.py::test_invalid_g1_point[fork_Amsterdam-blockchain_test_from_state_test-invalid_g1_point_7-ecpairing]",
+            "tests/byzantium/eip197_ec_pairing/test_ecpairing_fuzzed.py::test_invalid_g1_point[fork_Amsterdam-blockchain_test_from_state_test-invalid_g1_point_8-ecpairing]",
+            "tests/byzantium/eip197_ec_pairing/test_ecpairing_fuzzed.py::test_invalid_g1_point[fork_Amsterdam-blockchain_test_from_state_test-invalid_g1_point_9-ecpairing]"
+          ],
+          "case_names_sha256": "c3ea21670bd365568778353eb11f9d5383442d6155d2d1232c8ce748a7f53015",
+          "network": "Amsterdam",
+          "path": "for_amsterdam/byzantium/eip197_ec_pairing/ecpairing_fuzzed/invalid_g1_point.json"
         },
         {
           "case_count": 1,
           "case_names": [
-            "tests/ported_static/stRefundTest/test_refund_get_ether_back.py::test_refund_get_ether_back[fork_Amsterdam-blockchain_test_from_state_test]"
+            "tests/shanghai/eip4895_withdrawals/test_withdrawals.py::test_use_value_in_contract[fork_Amsterdam-blockchain_test]"
           ],
-          "case_names_sha256": "d68fbb81d9f424e3062fdc8cf89e9180c03ce621995816c7cfc79f052082b522",
+          "case_names_sha256": "26238f5745174053ff9adb1d9bb9f279d8ee613d13aa66a104673fadd8f974aa",
           "network": "Amsterdam",
-          "path": "for_amsterdam/ported_static/stRefundTest/refund_get_ether_back/refund_get_ether_back.json"
+          "path": "for_amsterdam/shanghai/eip4895_withdrawals/withdrawals/use_value_in_contract.json"
         },
         {
           "case_count": 1,
           "case_names": [
-            "tests/ported_static/stCallCreateCallCodeTest/test_create_name_registrator_per_txs.py::test_create_name_registrator_per_txs[fork_Amsterdam-blockchain_test_from_state_test]"
+            "tests/ported_static/stZeroCallsRevert/test_zero_value_call_to_empty_oog_revert_paris.py::test_zero_value_call_to_empty_oog_revert_paris[fork_Amsterdam-blockchain_test_from_state_test]"
           ],
-          "case_names_sha256": "086727b3d46195df10da2fc51710a77000b8fd1cb91d22ffd04255e4d25cd762",
+          "case_names_sha256": "7fa29b2a0b036a535dd33f7ede925c40d5e71548ebf8d98f7da5e7c2c80f9e55",
           "network": "Amsterdam",
-          "path": "for_amsterdam/ported_static/stCallCreateCallCodeTest/create_name_registrator_per_txs/create_name_registrator_per_txs.json"
-        },
-        {
-          "case_count": 1,
-          "case_names": [
-            "tests/ported_static/stEIP1559/test_sender_balance.py::test_sender_balance[fork_Amsterdam-blockchain_test_from_state_test]"
-          ],
-          "case_names_sha256": "f505001460c8d29a58f74c8b100b74da825516aa52ce2fabda1aa3df5860e116",
-          "network": "Amsterdam",
-          "path": "for_amsterdam/ported_static/stEIP1559/sender_balance/sender_balance.json"
-        },
-        {
-          "case_count": 20,
-          "case_names": [
-            "tests/ported_static/stSStoreTest/test_sstore_xto_xto0.py::test_sstore_xto_xto0[fork_Amsterdam-blockchain_test_from_state_test-d0-g0]",
-            "tests/ported_static/stSStoreTest/test_sstore_xto_xto0.py::test_sstore_xto_xto0[fork_Amsterdam-blockchain_test_from_state_test-d0-g1]",
-            "tests/ported_static/stSStoreTest/test_sstore_xto_xto0.py::test_sstore_xto_xto0[fork_Amsterdam-blockchain_test_from_state_test-d1-g0]",
-            "tests/ported_static/stSStoreTest/test_sstore_xto_xto0.py::test_sstore_xto_xto0[fork_Amsterdam-blockchain_test_from_state_test-d1-g1]",
-            "tests/ported_static/stSStoreTest/test_sstore_xto_xto0.py::test_sstore_xto_xto0[fork_Amsterdam-blockchain_test_from_state_test-d2-g0]",
-            "tests/ported_static/stSStoreTest/test_sstore_xto_xto0.py::test_sstore_xto_xto0[fork_Amsterdam-blockchain_test_from_state_test-d2-g1]",
-            "tests/ported_static/stSStoreTest/test_sstore_xto_xto0.py::test_sstore_xto_xto0[fork_Amsterdam-blockchain_test_from_state_test-d3-g0]",
-            "tests/ported_static/stSStoreTest/test_sstore_xto_xto0.py::test_sstore_xto_xto0[fork_Amsterdam-blockchain_test_from_state_test-d3-g1]",
-            "tests/ported_static/stSStoreTest/test_sstore_xto_xto0.py::test_sstore_xto_xto0[fork_Amsterdam-blockchain_test_from_state_test-d4-g0]",
-            "tests/ported_static/stSStoreTest/test_sstore_xto_xto0.py::test_sstore_xto_xto0[fork_Amsterdam-blockchain_test_from_state_test-d4-g1]",
-            "tests/ported_static/stSStoreTest/test_sstore_xto_xto0.py::test_sstore_xto_xto0[fork_Amsterdam-blockchain_test_from_state_test-d5-g0]",
-            "tests/ported_static/stSStoreTest/test_sstore_xto_xto0.py::test_sstore_xto_xto0[fork_Amsterdam-blockchain_test_from_state_test-d5-g1]",
-            "tests/ported_static/stSStoreTest/test_sstore_xto_xto0.py::test_sstore_xto_xto0[fork_Amsterdam-blockchain_test_from_state_test-d6-g0]",
-            "tests/ported_static/stSStoreTest/test_sstore_xto_xto0.py::test_sstore_xto_xto0[fork_Amsterdam-blockchain_test_from_state_test-d6-g1]",
-            "tests/ported_static/stSStoreTest/test_sstore_xto_xto0.py::test_sstore_xto_xto0[fork_Amsterdam-blockchain_test_from_state_test-d7-g0]",
-            "tests/ported_static/stSStoreTest/test_sstore_xto_xto0.py::test_sstore_xto_xto0[fork_Amsterdam-blockchain_test_from_state_test-d7-g1]",
-            "tests/ported_static/stSStoreTest/test_sstore_xto_xto0.py::test_sstore_xto_xto0[fork_Amsterdam-blockchain_test_from_state_test-d8-g0]",
-            "tests/ported_static/stSStoreTest/test_sstore_xto_xto0.py::test_sstore_xto_xto0[fork_Amsterdam-blockchain_test_from_state_test-d8-g1]",
-            "tests/ported_static/stSStoreTest/test_sstore_xto_xto0.py::test_sstore_xto_xto0[fork_Amsterdam-blockchain_test_from_state_test-d9-g0]",
-            "tests/ported_static/stSStoreTest/test_sstore_xto_xto0.py::test_sstore_xto_xto0[fork_Amsterdam-blockchain_test_from_state_test-d9-g1]"
-          ],
-          "case_names_sha256": "8bce649bf4e518cb5618e156fc186336a7578acb6d4387436ac67809df066154",
-          "network": "Amsterdam",
-          "path": "for_amsterdam/ported_static/stSStoreTest/sstore_xto_xto0/sstore_xto_xto0.json"
+          "path": "for_amsterdam/ported_static/stZeroCallsRevert/zero_value_call_to_empty_oog_revert_paris/zero_value_call_to_empty_oog_revert_paris.json"
         },
         {
           "case_count": 2,
           "case_names": [
-            "tests/ported_static/stStaticCall/test_static_callcallcodecall_010_ooge.py::test_static_callcallcodecall_010_ooge[fork_Amsterdam-blockchain_test_from_state_test-d0]",
-            "tests/ported_static/stStaticCall/test_static_callcallcodecall_010_ooge.py::test_static_callcallcodecall_010_ooge[fork_Amsterdam-blockchain_test_from_state_test-d1]"
+            "tests/ported_static/stArgsZeroOneBalance/test_sdiv_non_const.py::test_sdiv_non_const[fork_Amsterdam-blockchain_test_from_state_test--v0]",
+            "tests/ported_static/stArgsZeroOneBalance/test_sdiv_non_const.py::test_sdiv_non_const[fork_Amsterdam-blockchain_test_from_state_test--v1]"
           ],
-          "case_names_sha256": "e6a0e9cc10ca9450c7b130a2e55f44302b58ce2371cb52650e64f670100e245f",
+          "case_names_sha256": "f2a822b64e2b236d029fb54017e046f03655e16be99c460ca518f4103e07ab41",
           "network": "Amsterdam",
-          "path": "for_amsterdam/ported_static/stStaticCall/static_callcallcodecall_010_ooge/static_callcallcodecall_010_ooge.json"
+          "path": "for_amsterdam/ported_static/stArgsZeroOneBalance/sdiv_non_const/sdiv_non_const.json"
         },
         {
           "case_count": 1,
           "case_names": [
-            "tests/amsterdam/eip8037_state_creation_gas_cost_increase/test_block_2d_gas_accounting.py::test_multi_block_dimension_flip[fork_Amsterdam-blockchain_test]"
+            "tests/ported_static/stStaticCall/test_static_log0_log_memsize_too_high.py::test_static_log0_log_memsize_too_high[fork_Amsterdam-blockchain_test_from_state_test]"
           ],
-          "case_names_sha256": "75046b9c0521f4c5f22681148ab56623b16cc5ab7baef14d0d80fd79112a7e25",
+          "case_names_sha256": "2ea5c82e6ec57451501efa346d0a04efab234d23c848fbdf76381da0c225f32d",
           "network": "Amsterdam",
-          "path": "for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/block_2d_gas_accounting/multi_block_dimension_flip.json"
+          "path": "for_amsterdam/ported_static/stStaticCall/static_log0_log_memsize_too_high/static_log0_log_memsize_too_high.json"
         },
         {
           "case_count": 1,
           "case_names": [
-            "tests/ported_static/stStaticCall/test_static_call_ripemd160_4_gas719.py::test_static_call_ripemd160_4_gas719[fork_Amsterdam-blockchain_test_from_state_test]"
+            "tests/amsterdam/eip7928_block_level_access_lists/test_block_access_lists.py::test_bal_empty_block_no_coinbase[fork_Amsterdam-blockchain_test]"
           ],
-          "case_names_sha256": "b6f9692016bed15e0fbf5ca37b617135f7897d7bbadd815a67a4b3b0f7b85eff",
+          "case_names_sha256": "7fbd389c76bd22dc4d4263de806fe1ed2ed0b42bf72dea3204559bc202a816b2",
           "network": "Amsterdam",
-          "path": "for_amsterdam/ported_static/stStaticCall/static_call_ripemd160_4_gas719/static_call_ripemd160_4_gas719.json"
+          "path": "for_amsterdam/amsterdam/eip7928_block_level_access_lists/block_access_lists/bal_empty_block_no_coinbase.json"
         },
         {
           "case_count": 1,
           "case_names": [
-            "tests/ported_static/stRandom2/test_random_statetest474.py::test_random_statetest474[fork_Amsterdam-blockchain_test_from_state_test]"
+            "tests/ported_static/stStaticCall/test_static_log1_empty_mem.py::test_static_log1_empty_mem[fork_Amsterdam-blockchain_test_from_state_test]"
           ],
-          "case_names_sha256": "8cf449be3f71593c6d0bf7b4f3e02343223b6bfdedb74787df44c22e47246aef",
+          "case_names_sha256": "5abf5956d64b27b08eace6b33dd264407861e9bce8c9d23aef3189e283122734",
           "network": "Amsterdam",
-          "path": "for_amsterdam/ported_static/stRandom2/random_statetest474/random_statetest474.json"
+          "path": "for_amsterdam/ported_static/stStaticCall/static_log1_empty_mem/static_log1_empty_mem.json"
+        },
+        {
+          "case_count": 8,
+          "case_names": [
+            "tests/amsterdam/eip7928_block_level_access_lists/test_block_access_lists.py::test_bal_account_access_target[fork_Amsterdam-blockchain_test-balance]",
+            "tests/amsterdam/eip7928_block_level_access_lists/test_block_access_lists.py::test_bal_account_access_target[fork_Amsterdam-blockchain_test-call]",
+            "tests/amsterdam/eip7928_block_level_access_lists/test_block_access_lists.py::test_bal_account_access_target[fork_Amsterdam-blockchain_test-callcode]",
+            "tests/amsterdam/eip7928_block_level_access_lists/test_block_access_lists.py::test_bal_account_access_target[fork_Amsterdam-blockchain_test-delegatecall]",
+            "tests/amsterdam/eip7928_block_level_access_lists/test_block_access_lists.py::test_bal_account_access_target[fork_Amsterdam-blockchain_test-extcodecopy]",
+            "tests/amsterdam/eip7928_block_level_access_lists/test_block_access_lists.py::test_bal_account_access_target[fork_Amsterdam-blockchain_test-extcodehash]",
+            "tests/amsterdam/eip7928_block_level_access_lists/test_block_access_lists.py::test_bal_account_access_target[fork_Amsterdam-blockchain_test-extcodesize]",
+            "tests/amsterdam/eip7928_block_level_access_lists/test_block_access_lists.py::test_bal_account_access_target[fork_Amsterdam-blockchain_test-staticcall]"
+          ],
+          "case_names_sha256": "ed55abaef4a1d9c5af0a96d408ab3a6d2c67fd28b7e71a60f3c5181ea039a881",
+          "network": "Amsterdam",
+          "path": "for_amsterdam/amsterdam/eip7928_block_level_access_lists/block_access_lists/bal_account_access_target.json"
         },
         {
           "case_count": 1,
           "case_names": [
-            "tests/ported_static/stStaticCall/test_static_callcodecallcodecall_110.py::test_static_callcodecallcodecall_110[fork_Amsterdam-blockchain_test_from_state_test]"
+            "tests/ported_static/stZeroCallsRevert/test_zero_value_delegatecall_to_non_zero_balance_oog_revert.py::test_zero_value_delegatecall_to_non_zero_balance_oog_revert[fork_Amsterdam-blockchain_test_from_state_test]"
           ],
-          "case_names_sha256": "c1fbc546906d448b5857e4ee009cf29d79d7375e254814202d6c9cf486129ba8",
+          "case_names_sha256": "88cdf290ac70fa0cce470d4cd5fe1d341636907df1ff1faaa8a3b76e1d2e853d",
           "network": "Amsterdam",
-          "path": "for_amsterdam/ported_static/stStaticCall/static_callcodecallcodecall_110/static_callcodecallcodecall_110.json"
+          "path": "for_amsterdam/ported_static/stZeroCallsRevert/zero_value_delegatecall_to_non_zero_balance_oog_revert/zero_value_delegatecall_to_non_zero_balance_oog_revert.json"
+        },
+        {
+          "case_count": 3,
+          "case_names": [
+            "tests/amsterdam/eip7976_increase_calldata_floor_cost/test_additional_coverage.py::TestAuthorizationListGasCost::test_authorization_list_intrinsic_gas[fork_Amsterdam-blockchain_test_from_state_test-five_auths]",
+            "tests/amsterdam/eip7976_increase_calldata_floor_cost/test_additional_coverage.py::TestAuthorizationListGasCost::test_authorization_list_intrinsic_gas[fork_Amsterdam-blockchain_test_from_state_test-single_auth]",
+            "tests/amsterdam/eip7976_increase_calldata_floor_cost/test_additional_coverage.py::TestAuthorizationListGasCost::test_authorization_list_intrinsic_gas[fork_Amsterdam-blockchain_test_from_state_test-ten_auths]"
+          ],
+          "case_names_sha256": "ec7e6911cf4b2c3561598ee50adc626f1741f96206a23906fed2d1a34de358f0",
+          "network": "Amsterdam",
+          "path": "for_amsterdam/amsterdam/eip7976_increase_calldata_floor_cost/additional_coverage/authorization_list_intrinsic_gas.json"
         },
         {
           "case_count": 1,
           "case_names": [
-            "tests/amsterdam/eip8038_state_access_gas_cost_increase/test_sstore_refunds.py::test_sstore_restore_nonzero_refunds_write[fork_Amsterdam-blockchain_test_from_state_test]"
+            "tests/ported_static/stRandom/test_random_statetest275.py::test_random_statetest275[fork_Amsterdam-blockchain_test_from_state_test]"
           ],
-          "case_names_sha256": "c832b899b279c12a11fb15132b029d7b0ab4bb0604c5e8618eed86ab79ea54ec",
+          "case_names_sha256": "a4d72e1fee6cbf9eccc8c93e2e8fa4888f51f2abaff98044a97172efc7ace1f8",
           "network": "Amsterdam",
-          "path": "for_amsterdam/amsterdam/eip8038_state_access_gas_cost_increase/sstore_refunds/sstore_restore_nonzero_refunds_write.json"
+          "path": "for_amsterdam/ported_static/stRandom/random_statetest275/random_statetest275.json"
+        },
+        {
+          "case_count": 2,
+          "case_names": [
+            "tests/osaka/eip7825_transaction_gas_limit_cap/test_tx_gas_limit.py::test_maximum_gas_refund[fork_Amsterdam-blockchain_test_from_state_test-exceed_gas_refund_limit_False]",
+            "tests/osaka/eip7825_transaction_gas_limit_cap/test_tx_gas_limit.py::test_maximum_gas_refund[fork_Amsterdam-blockchain_test_from_state_test-exceed_gas_refund_limit_True]"
+          ],
+          "case_names_sha256": "5a55156eeaebcc6fb752f4e895793b1211df8ad865d18052a08df0df1f048685",
+          "network": "Amsterdam",
+          "path": "for_amsterdam/osaka/eip7825_transaction_gas_limit_cap/tx_gas_limit/maximum_gas_refund.json"
+        },
+        {
+          "case_count": 2,
+          "case_names": [
+            "tests/amsterdam/eip7928_block_level_access_lists/test_block_access_lists.py::test_bal_delegated_storage_writes[fork_Amsterdam-blockchain_test-callcode]",
+            "tests/amsterdam/eip7928_block_level_access_lists/test_block_access_lists.py::test_bal_delegated_storage_writes[fork_Amsterdam-blockchain_test-delegatecall]"
+          ],
+          "case_names_sha256": "c813787c313c1cdb2797a19fd8aa2fe31a8059d952f46365b0c98d2141ba914d",
+          "network": "Amsterdam",
+          "path": "for_amsterdam/amsterdam/eip7928_block_level_access_lists/block_access_lists/bal_delegated_storage_writes.json"
         }
       ],
       "network": "Amsterdam",
