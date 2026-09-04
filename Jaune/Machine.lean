@@ -859,6 +859,9 @@ structure TenvStat : Type where
   origin: Adr
   gasPrice: Nat
   gas: Nat
+  /-- Amsterdam's state-gas reservoir beside the execution grant `gas`.
+  Legacy transaction environments keep the default zero. -/
+  stateGasReservoir : Nat := 0
   accessListAddresses: AdrSet
   accessListStorageKeys: KeySet
   blobVersionedHashes: List B256

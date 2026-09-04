@@ -1924,6 +1924,10 @@ structure MsgCallOutput : Type where
   accountsToDelete : AdrSet
   error: Option SettledHalt
   returnData : Bytes
+  /-- State-gas reservoir returned by the top frame. Zero on the legacy path. -/
+  stateGasLeft : Nat := 0
+  /-- Net state gas consumed by the transaction; refunds may make it negative. -/
+  stateGasUsed : Int := 0
 
 def Except.bimap
   {ε : Type u0} {δ : Type u1} {ξ : Type u2} {υ : Type u3}
