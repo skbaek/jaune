@@ -2550,6 +2550,11 @@ def Devm.drainStateGasReservoir (devm : Devm) : Nat × Devm :=
 def Devm.restoreChildGas (gas reservoir : Nat) (devm : Devm) : Devm :=
   devm.setMach (devm.mach.restoreChildGas gas reservoir)
 
+/-- `withhold_create_gas`, at the frame. -/
+def Devm.withholdCreateGas (devm : Devm) : Nat × Devm :=
+  let ⟨child, mach⟩ := devm.mach.withholdCreateGas
+  (child, devm.setMach mach)
+
 theorem chargeGas_def (cost : Nat) (devm : Devm) :
     chargeGas cost devm = (do
       match safeSub devm.gasLeft cost with
@@ -3226,6 +3231,38 @@ def Devm.addLog (devm : Devm) (log : Log) : Devm :=
 
 theorem Devm.addLog_error (devm : Devm) (log : Log) :
     (devm.addLog log).error = devm.error := rfl
+
+/-! ### EIP-7708 transfer logs
+
+`vm/__init__.py` `emit_transfer_log`, `SYSTEM_ADDRESS` and `TRANSFER_TOPIC`
+at the pin. Reached only under `rules.stateGas = some _`: at the frame-entry
+value move and at `SELFDESTRUCT`'s sweep, never for withdrawals, fee refunds or
+coinbase payments, which credit without a transfer. -/
+
+/-- `SYSTEM_ADDRESS`, the address every transfer log is emitted from. -/
+def transferLogAddress : Adr := 0xfffffffffffffffffffffffffffffffffffffffe
+
+/-- `TRANSFER_TOPIC`, `keccak256("Transfer(address,address,uint256)")`. Stated
+as the literal so that no site hashes; `transferTopic_keccak` below pins it to
+the hash. -/
+def transferTopic : B256 :=
+  0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef
+
+/-- The log one non-zero ETH transfer between distinct accounts emits: the two
+addresses left-padded to words as the indexed topics, the amount as the data. -/
+def transferLog (sender recipient : Adr) (amount : B256) : Log :=
+  { address := transferLogAddress
+    topics := [transferTopic, sender.toB256, recipient.toB256]
+    data := amount.toBytes }
+
+/-- `emit_transfer_log`, with both of upstream's guards folded in: a self
+transfer and a zero transfer emit nothing. -/
+def Devm.emitTransferLog (devm : Devm) (sender recipient : Adr) (amount : B256) :
+    Devm :=
+  if sender = recipient ∨ amount = 0 then devm
+  else devm.addLog (transferLog sender recipient amount)
+
+#guard transferTopic = Bytes.keccak "Transfer(address,address,uint256)".toUTF8.toList
 
 def Mach.applyUnary (f : B256 → B256) (cost : Nat) (mach : Mach) :
     Footprint.Outcome Mach Unit :=
@@ -4118,32 +4155,70 @@ def Linst.run (sevm : Sevm) (devm : Devm) :
     let devm ← chargeGas cost devm
     let ⟨output, devm⟩ := devm.memRead index size
     .ok (devm.withOutput output)
-  | .selfdestruct => do
-    let donor := sevm.currentTarget
-    let ⟨donee, devm⟩ ← devm.popToAdr
-    let donorBal ← .ok (devm.getAcct sevm.currentTarget).bal
-    let ⟨devm, gasCost2⟩ ← .ok <|
-      if donee ∉ devm.accessedAddresses
-        then
-          ( ⟨ addAccessedAddress devm donee,
-              gasSelfDestruct + gasColdAccountAccess ⟩ : Devm × Nat )
+  -- `vm/instructions/system.py` `selfdestruct`. The two shapes differ in more
+  -- than numbers, so this is a `match` on the switch: Amsterdam moves the
+  -- static check ahead of the pop, checks the access cost before warming the
+  -- beneficiary, replaces the 25,000 new-account charge by `ACCOUNT_WRITE`
+  -- (execution) plus `NEW_ACCOUNT` (state) when the sweep creates the
+  -- beneficiary, logs the sweep, and schedules the originator without zeroing
+  -- it -- settlement preserves its balance (EIP-8246). Under `none` the body
+  -- below is the body it has always been.
+  | .selfdestruct =>
+    match sevm.benvStat.rules.stateGas with
+    | none => do
+      let donor := sevm.currentTarget
+      let ⟨donee, devm⟩ ← devm.popToAdr
+      let donorBal ← .ok (devm.getAcct sevm.currentTarget).bal
+      let ⟨devm, gasCost2⟩ ← .ok <|
+        if donee ∉ devm.accessedAddresses
+          then
+            ( ⟨ addAccessedAddress devm donee,
+                gasSelfDestruct + gasColdAccountAccess ⟩ : Devm × Nat )
+          else
+            ⟨devm, gasSelfDestruct⟩
+      let gasCost3 ← .ok <|
+        if (devm.getAcct donee).Empty ∧ donorBal ≠ 0 then
+          gasCost2 + gasSelfDestructNewAccount
         else
-          ⟨devm, gasSelfDestruct⟩
-    let gasCost3 ← .ok <|
-      if (devm.getAcct donee).Empty ∧ donorBal ≠ 0 then
-        gasCost2 + gasSelfDestructNewAccount
+          gasCost2
+      let devm ← chargeGas gasCost3 devm
+      assertDynamic sevm devm
+      let devm ←
+        (devm.subBal donor donorBal).toExcept
+          ⟨.internal (.invariant (.text "InsufficientBalanceError")), devm⟩
+      let devm ← .ok <| devm.addBal donee donorBal
+      if donor ∈ devm.createdAccounts then
+        .ok (addAccountToDelete (devm.setBal donor 0) donor)
       else
-        gasCost2
-    let devm ← chargeGas gasCost3 devm
-    assertDynamic sevm devm
-    let devm ←
-      (devm.subBal donor donorBal).toExcept
-        ⟨.internal (.invariant (.text "InsufficientBalanceError")), devm⟩
-    let devm ← .ok <| devm.addBal donee donorBal
-    if donor ∈ devm.createdAccounts then
-      .ok (addAccountToDelete (devm.setBal donor 0) donor)
-    else
-      .ok devm
+        .ok devm
+    | some state => do
+      assertDynamic sevm devm
+      let donor := sevm.currentTarget
+      let ⟨donee, devm⟩ ← devm.popToAdr
+      -- GAS (state-independent), checked before the beneficiary is warmed.
+      let cold := donee ∉ devm.accessedAddresses
+      let gasCost :=
+        gasSelfDestruct +
+          (if cold then sevm.benvStat.rules.gas.coldAccountAccess else 0)
+      .assert (gasCost ≤ devm.gasLeft) ⟨.halt (.outOfGas .none), devm⟩
+      -- STATE ACCESS.
+      let devm := if cold then addAccessedAddress devm donee else devm
+      let donorBal := (devm.getAcct donor).bal
+      -- STATE GAS. A sweep that will create the beneficiary pays the account
+      -- write and the creation. Execution gas before state gas.
+      let creating := (devm.getAcct donee).Empty ∧ donorBal ≠ 0
+      let devm ← chargeGas (gasCost + if creating then state.accountWrite else 0) devm
+      let devm ← chargeStateGas (if creating then state.newAccount else 0) devm
+      -- OPERATION: move the whole balance, log it, schedule the deletion.
+      let devm ←
+        (devm.subBal donor donorBal).toExcept
+          ⟨.internal (.invariant (.text "InsufficientBalanceError")), devm⟩
+      let devm := devm.addBal donee donorBal
+      let devm := devm.emitTransferLog donor donee donorBal
+      if donor ∈ devm.createdAccounts then
+        .ok (addAccountToDelete devm donor)
+      else
+        .ok devm
 
 
 def calculateMsgCallGas
@@ -5235,6 +5310,14 @@ theorem Devm.addLog_canonical {devm : Devm} {log : Log}
     (h : devm.Canonical) : (devm.addLog log).Canonical :=
   liftMachMetaPure_canonical h
 
+theorem Devm.emitTransferLog_canonical {devm : Devm} {sender recipient : Adr}
+    {amount : B256} (h : devm.Canonical) :
+    (devm.emitTransferLog sender recipient amount).Canonical := by
+  unfold Devm.emitTransferLog
+  split
+  · exact h
+  · exact Devm.addLog_canonical h
+
 theorem addAccessedAddress_canonical {devm : Devm} {a : Adr}
     (h : devm.Canonical) : (addAccessedAddress devm a).Canonical :=
   h.of_world_eq rfl
@@ -5370,6 +5453,17 @@ theorem incorporateChildOnError_canonical {parent child : Devm}
 theorem incorporateChildOnSuccess_canonical {parent child : Devm}
     (hc : child.Canonical) (rd : Bytes) :
     (incorporateChildOnSuccess parent child rd).Canonical :=
+  ⟨hc.1, hc.2⟩
+
+/-- The Amsterdam siblings take the child's world wholesale too. -/
+theorem incorporateChildAmsterdamOnError_canonical {parent child : Devm}
+    (hc : child.Canonical) (rd : Bytes) :
+    (incorporateChildAmsterdamOnError parent child rd).Canonical :=
+  ⟨hc.1, hc.2⟩
+
+theorem incorporateChildAmsterdamOnSuccess_canonical {parent child : Devm}
+    (hc : child.Canonical) (rd : Bytes) :
+    (incorporateChildAmsterdamOnSuccess parent child rd).Canonical :=
   ⟨hc.1, hc.2⟩
 
 theorem liftToExecution_canonical {devm : Devm} {r}
@@ -5661,23 +5755,44 @@ theorem Linst.run_canonical {sevm : Sevm} {devm : Devm}
     rcases hread : d.memRead a.1 b.1 with ⟨out, d'⟩
     exact (Devm.memRead_eq_canonical hd hread).of_world_eq rfl
   case selfdestruct =>
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
-    refine Except.canonicalOn_bind_ok ?_
-    refine Except.canonicalOn_bind_ok ?_
-    split <;>
-      (refine Except.canonicalOn_bind_ok ?_
-       refine Except.CanonicalOn.bind
-         (liftMachExecution_canonical (Devm.Canonical.of_world_eq ha rfl))
-         fun d hd => ?_
-       refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
-       refine Except.CanonicalOn.bind (P := Devm.Canonical) ?_ fun d' hd' => ?_
-       · cases hs : d.subBal sevm.currentTarget (a.2.getAcct sevm.currentTarget).bal with
-         | none => exact hd
-         | some d1 => exact Devm.Canonical.subBal hd hs
-       · refine Except.canonicalOn_bind_ok ?_
-         split
-         · exact Devm.Canonical.of_world_eq
-             (Devm.Canonical.setBal (Devm.Canonical.addBal hd' a.1 _) _ 0) rfl
-         · exact Devm.Canonical.addBal hd' a.1 _)
+    split
+    · -- Prague: the body it has always been.
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+      refine Except.canonicalOn_bind_ok ?_
+      refine Except.canonicalOn_bind_ok ?_
+      split <;>
+        (refine Except.canonicalOn_bind_ok ?_
+         refine Except.CanonicalOn.bind
+           (liftMachExecution_canonical (Devm.Canonical.of_world_eq ha rfl))
+           fun d hd => ?_
+         refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
+         refine Except.CanonicalOn.bind (P := Devm.Canonical) ?_ fun d' hd' => ?_
+         · cases hs : d.subBal sevm.currentTarget (a.2.getAcct sevm.currentTarget).bal with
+           | none => exact hd
+           | some d1 => exact Devm.Canonical.subBal hd hs
+         · refine Except.canonicalOn_bind_ok ?_
+           split
+           · exact Devm.Canonical.of_world_eq
+               (Devm.Canonical.setBal (Devm.Canonical.addBal hd' a.1 _) _ 0) rfl
+           · exact Devm.Canonical.addBal hd' a.1 _)
+    · -- Amsterdam: the static check, the pop, the pre-check, the two charges
+      -- (neither touches the world), the sweep, the log, the schedule.
+      refine Except.CanonicalOn.bind (assertDynamic_canonicalOn h) fun _ _ => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+      refine Except.CanonicalOn.bind (Except.canonicalOn_assert ha) fun _ _ => ?_
+      split <;>
+        (refine Except.CanonicalOn.bind
+           (liftMachExecution_canonical (Devm.Canonical.of_world_eq ha rfl))
+           fun d hd => ?_
+         refine Except.CanonicalOn.bind (liftMachExecution_canonical hd)
+           fun d' hd' => ?_
+         refine Except.CanonicalOn.bind (P := Devm.Canonical) ?_ fun d2 hd2 => ?_
+         · cases hs : d'.subBal sevm.currentTarget _ with
+           | none => exact hd'
+           | some d1 => exact Devm.Canonical.subBal hd' hs
+         · split
+           · exact addAccountToDelete_canonical
+               (Devm.emitTransferLog_canonical (Devm.Canonical.addBal hd2 a.1 _))
+           · exact Devm.emitTransferLog_canonical (Devm.Canonical.addBal hd2 a.1 _))
 
 end Jaune

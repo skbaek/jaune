@@ -133,6 +133,21 @@ def accessDelegation (devm : Devm) (adr : Adr) :
     ⟨true, adr, code, accessGasCost, devm⟩
   | none => ⟨false, adr, code, 0, devm⟩
 
+/-- `calculate_delegation_cost` with the schedule's cold access. `accessDelegation`
+above keeps its name and arity -- Blanc names it in 25 files -- and the
+Amsterdam arms read this sibling through `rules.gas`. -/
+def GasSchedule.accessDelegation (gas : GasSchedule) (devm : Devm) (adr : Adr) :
+  Bool × Adr × ByteArray × Nat × Devm :=
+  let state := devm.state
+  let code := state.getCode adr
+  match getDelegatedCodeAddress code with
+  | some adr =>
+    let accessGasCost := gas.accessCost adr devm.accessedAddresses
+    let devm := addAccessedAddress devm adr
+    let code := state.getCode adr
+    ⟨true, adr, code, accessGasCost, devm⟩
+  | none => ⟨false, adr, code, 0, devm⟩
+
 def processCreateMessage.msg (msg : Msg) : Msg :=
   let adr := msg.currentTarget
   let benv := msg.benv.setStor adr .empty
@@ -143,18 +158,39 @@ def processCreateMessage.msg (msg : Msg) : Msg :=
 def processCreateMessage.chargeCodeGas (rules : ForkRules) (devm : Devm) :
     Execution :=
   let contractCode := devm.output
-  let contractCodeGas := contractCode.length * gasCodeDeposit
-  match contractCode with
-  | 0xEF :: _ => .error ⟨.halt (.invalidContractPrefix .none), devm⟩
-  | _ => do
-    let devm ← chargeGas contractCodeGas devm
-    if rules.code.maxCodeSize < contractCode.length
-    then .error ⟨.halt (.outOfGas .none), devm⟩
-    else .ok devm
+  match rules.stateGas with
+  | none =>
+    let contractCodeGas := contractCode.length * gasCodeDeposit
+    match contractCode with
+    | 0xEF :: _ => .error ⟨.halt (.invalidContractPrefix .none), devm⟩
+    | _ => do
+      let devm ← chargeGas contractCodeGas devm
+      if rules.code.maxCodeSize < contractCode.length
+      then .error ⟨.halt (.outOfGas .none), devm⟩
+      else .ok devm
+  -- `vm/interpreter.py` `process_create` at the pin: the prefix and the size
+  -- are checked before anything is charged, and the deposit pays keccak words
+  -- of execution gas plus state bytes of state gas -- nothing per byte.
+  | some state =>
+    match contractCode with
+    | 0xEF :: _ => .error ⟨.halt (.invalidContractPrefix .none), devm⟩
+    | _ =>
+      if rules.code.maxCodeSize < contractCode.length
+      then .error ⟨.halt (.outOfGas .none), devm⟩
+      else do
+        let devm ← chargeGas (gasKeccak256Word * ceilDiv contractCode.length 32) devm
+        chargeStateGas (contractCode.length * state.costPerStateByte) devm
 
 def processCreateMessage.exceptionalHalt
     (devm : Devm) (reason : ExceptionalHalt) (st : State) (tra : Tra) : Devm :=
   let devm := (devm.rollback st tra).withGasLeft 0
+  devm.setMeta {devm.meta with output := [], error := .some (.halt reason)}
+
+/-- `process_create`'s halt settlement under `rules.stateGas = some _`: the
+state gas is refilled to the baseline before the execution gas is forfeited. -/
+def processCreateMessage.exceptionalHaltAmsterdam
+    (devm : Devm) (reason : ExceptionalHalt) (st : State) (tra : Tra) : Devm :=
+  let devm := (devm.rollback st tra).restoreStateGas.forfeitRemainingGas
   devm.setMeta {devm.meta with output := [], error := .some (.halt reason)}
 
 def initSevm (msg : Msg) : Sevm :=
@@ -194,7 +230,38 @@ def initDevm (msg : Msg) : Devm :=
       }
     }
     «meta» := {
-      logs := []
+      -- `process_call`'s value move has already happened at `Frame.enter`;
+      -- under `some _` EIP-7708 logs it, ahead of everything the frame itself
+      -- logs. `Devm.emitTransferLog` carries upstream's two guards (a
+      -- self-transfer and a zero transfer log nothing).
+      logs := match msg.benv.stat.rules.stateGas with
+        | none => []
+        | some _ =>
+          if msg.shouldTransferValue then
+            (Devm.emitTransferLog {
+              mach := {
+                  stack := []
+                  memory := .empty
+                  gasLeft := 0
+                }
+              «meta» := {
+                  logs := []
+                  refundCounter := 0
+                  output := []
+                  accountsToDelete := .emptyWithCapacity
+                  returnData := []
+                  error := .none
+                  accessedAddresses := .emptyWithCapacity
+                  accessedStorageKeys := .emptyWithCapacity
+                  createdAccounts := .emptyWithCapacity
+                }
+              world := {
+                  state := msg.benv.state
+                  transientStorage := msg.tenv.transientStorage
+                }
+              }
+              msg.caller msg.currentTarget msg.value).logs
+          else []
       refundCounter := 0
       output := []
       accountsToDelete := .emptyWithCapacity
@@ -254,6 +321,30 @@ def executeCode.handleError :
     .error ⟨.crypto reason, evm.state, evm.createdAccounts, evm.transientStorage⟩
   | .error ⟨.internal reason, evm⟩ =>
     .error ⟨.internal reason, evm.state, evm.createdAccounts, evm.transientStorage⟩
+
+/-- `process_call`'s settlement under `rules.stateGas = some _`. A halted frame
+refills its state gas to the baseline and forfeits its execution gas; a
+reverted frame refills only. After either, the meter states exactly what the
+frame gives back, so a parent absorbs it unconditionally. -/
+def executeCode.handleErrorAmsterdam :
+    Execution → Except (EvmError × State × AdrSet × Tra) Devm
+  | .ok evm => .ok evm
+  | .error ⟨.halt reason, evm⟩ =>
+    let evm := evm.restoreStateGas.forfeitRemainingGas
+    .ok (evm.setMeta {evm.meta with output := [], error := some (.halt reason)})
+  | .error ⟨.revert, evm⟩ => .ok (evm.restoreStateGas.withError (some .revert))
+  | .error ⟨.crypto reason, evm⟩ =>
+    .error ⟨.crypto reason, evm.state, evm.createdAccounts, evm.transientStorage⟩
+  | .error ⟨.internal reason, evm⟩ =>
+    .error ⟨.internal reason, evm.state, evm.createdAccounts, evm.transientStorage⟩
+
+/-- The settlement a frame's rules select. Under `none` this is
+`executeCode.handleError`, textually. -/
+def executeCode.handleErrorWith (stateGas : Option StateGasRules) (raw : Execution) :
+    Except (EvmError × State × AdrSet × Tra) Devm :=
+  match stateGas with
+  | none => executeCode.handleError raw
+  | some _ => executeCode.handleErrorAmsterdam raw
 
 def Execution.withPc (pc : Nat) (exn : Execution) :
      Except (EvmError × Devm) (Nat × Devm) := do
@@ -373,8 +464,13 @@ def processCreateMessage.settle (msg : Msg)
     | .ok evm => .ok (evm.setCode msg.currentTarget ⟨⟨evm.output⟩⟩)
     | .error ⟨.halt reason, evm⟩ =>
       .ok
-        (processCreateMessage.exceptionalHalt evm reason
-          msg.benv.state msg.tenv.transientStorage)
+        (match msg.benv.stat.rules.stateGas with
+         | none =>
+           processCreateMessage.exceptionalHalt evm reason
+             msg.benv.state msg.tenv.transientStorage
+         | some _ =>
+           processCreateMessage.exceptionalHaltAmsterdam evm reason
+             msg.benv.state msg.tenv.transientStorage)
     | .error ⟨.revert, evm⟩ =>
       .error ⟨.revert, evm.state, evm.createdAccounts, evm.transientStorage⟩
     | .error ⟨.crypto reason, evm⟩ =>
@@ -393,7 +489,7 @@ def Frame.settleMsg (f : Frame)
 
 def Frame.settle (f : Frame) (raw : Execution) :
     Except (EvmError × State × AdrSet × Tra) Devm :=
-  f.settleMsg (executeCode.handleError raw)
+  f.settleMsg (executeCode.handleErrorWith f.inner.benv.stat.rules.stateGas raw)
 
 def executeCode.enter (msg : Msg) : Evm ⊕ Execution :=
   let evm := initEvm msg
@@ -426,6 +522,12 @@ def Frame.enter (f : Frame) : FrameEntry :=
 inductive Resume : Type
   | create (parent : Devm) (newAddress : Adr)
   | call (parent : Devm) (outputIndex outputSize : Nat)
+  /-- The Amsterdam siblings carry the state-gas record the merge reads and
+  whether the spawn charged `NEW_ACCOUNT`, which a failed child refills. -/
+  | createAmsterdam (state : StateGasRules) (parent : Devm) (newAddress : Adr)
+      (newAccountCharged : Bool)
+  | callAmsterdam (state : StateGasRules) (parent : Devm)
+      (outputIndex outputSize : Nat) (newAccountCharged : Bool)
 
 def Resume.run :
     Resume → Except (EvmError × State × AdrSet × Tra) Devm → Execution
@@ -443,6 +545,33 @@ def Resume.run :
       .ok (evm2.memWrite outputIndex actualOutput)
     else
       let evm2 ← (incorporateChildOnSuccess parent child child.output).push 1
+      .ok (evm2.memWrite outputIndex actualOutput)
+  -- `generic_create` / `generic_call` OUTCOME at the pin: the meter is absorbed
+  -- whatever the child's fate, and a charged creation refills when the child
+  -- failed.
+  | .createAmsterdam state parent newAddress newAccountCharged, r => do
+    let child ← liftToExecution parent r
+    if child.error.isSome then
+      let parent := incorporateChildAmsterdamOnError parent child child.output
+      let parent :=
+        if newAccountCharged then parent.creditStateGasRefund state.newAccount
+        else parent
+      parent.push 0
+    else
+      (incorporateChildAmsterdamOnSuccess parent child []).push newAddress.toB256
+  | .callAmsterdam state parent outputIndex outputSize newAccountCharged, r => do
+    let child ← liftToExecution parent r
+    let actualOutput := child.output.take outputSize
+    if child.error.isSome then
+      let parent := incorporateChildAmsterdamOnError parent child child.output
+      let parent :=
+        if newAccountCharged then parent.creditStateGasRefund state.newAccount
+        else parent
+      let evm2 ← parent.push 0
+      .ok (evm2.memWrite outputIndex actualOutput)
+    else
+      let evm2 ←
+        (incorporateChildAmsterdamOnSuccess parent child child.output).push 1
       .ok (evm2.memWrite outputIndex actualOutput)
 
 inductive XStep : Type
@@ -516,6 +645,79 @@ def genericCall.step
       callMsg sevm evm1 gas value caller target codeAddress
         shouldTransferValue isStaticcall calldata code disablePrecompiles
     .spawn (Frame.ofCall childMsg) (.call evm1 outputIndex outputSize)
+
+/-- `generic_call` at the pin, for `rules.stateGas = some state`. The opcode has
+already priced the call, charged both dimensions and withheld both grants; this
+is the lifecycle: the preflight that aborts without spawning -- both grants
+return untouched and a charged creation refills -- or the spawn, whose child
+starts with the reservoir as its state-gas grant. -/
+def genericCallAmsterdam.step
+    (sevm : Sevm) (state : StateGasRules) (devm : Devm)
+    (gas reservoir : Nat) (value : B256)
+    (caller target codeAddress : Adr)
+    (shouldTransferValue isStaticcall : Bool)
+    (inputIndex inputSize outputIndex outputSize : Nat)
+    (code : ByteArray)
+    (disablePrecompiles newAccountCharged insufficientBalance : Bool) : XStep :=
+  let evm1 := devm.withReturnData []
+  if sevm.depth = 0 ∨ insufficientBalance then
+    XStep.ofExcept do
+      let evm1 := evm1.restoreChildGas gas reservoir
+      let evm1 :=
+        if newAccountCharged then evm1.creditStateGasRefund state.newAccount
+        else evm1
+      let devm ← evm1.push 0
+      return .done (.ok devm)
+  else
+    let calldata := evm1.memory.data.sliceD inputIndex inputSize 0
+    let childMsg :=
+      { callMsg sevm evm1 gas value caller target codeAddress
+          shouldTransferValue isStaticcall calldata code disablePrecompiles
+        with stateGasGrant := reservoir }
+    .spawn (Frame.ofCall childMsg)
+      (.callAmsterdam state evm1 outputIndex outputSize newAccountCharged)
+
+/-- `generic_create` at the pin, for `rules.stateGas = some state`. The opcode
+has priced the operation itself; this is the lifecycle: the preflight that
+aborts with nothing charged or withheld, the destination access with its
+creation charge decided by existence alone, the withheld execution grant, the
+collision that consumes it, and the spawn with the whole reservoir. -/
+def genericCreateAmsterdam.step
+    (sevm : Sevm) (state : StateGasRules) (devm : Devm) (endowment : B256)
+    (newAddress : Adr) (memoryIndex memorySize : Nat) : XStep :=
+  XStep.ofExcept do
+    let calldata := devm.memory.data.sliceD memoryIndex memorySize 0
+    let devm := devm.withReturnData []
+    -- PREFLIGHT: nothing has been charged or withheld for the child yet.
+    let sender := devm.state.get sevm.currentTarget
+    if sender.bal < endowment ∨ sender.nonce = UInt64.max ∨ sevm.depth = 0 then
+      let devm ← devm.push 0
+      return .done (.ok devm)
+    -- DESTINATION ACCESS: the creation charge, by existence alone.
+    let devm := addAccessedAddress devm newAddress
+    let newAccountCharged := (devm.getAcct newAddress).Empty
+    let devm ←
+      if newAccountCharged then chargeStateGas state.newAccount devm else .ok devm
+    -- CHILD GRANT: all but one 64th of the execution gas.
+    let ⟨createGas, devm⟩ := devm.withholdCreateGas
+    -- A collision consumes the grant and creates nothing; a collision target
+    -- has code or a nonce, so the creation charge above was never taken.
+    if
+      (let target := devm.state.get newAddress
+       target.nonce ≠ (0 : UInt64) ∨
+       target.code.size ≠ 0 ∨
+       target.stor.size ≠ 0) then
+      let devm := devm.incrNonce sevm.currentTarget
+      let devm ← devm.push 0
+      return .done (.ok devm)
+    -- The whole reservoir rides along, and comes back with the child.
+    let ⟨reservoir, devm⟩ := devm.drainStateGasReservoir
+    let devm := devm.incrNonce sevm.currentTarget
+    let childMsg :=
+      { createMsg sevm devm createGas endowment newAddress calldata
+        with stateGasGrant := reservoir }
+    return .spawn (Frame.ofCreate childMsg)
+      (.createAmsterdam state devm newAddress (decide newAccountCharged))
 
 /-! The native driver keeps one exact calldata slice available for structural
 sharing.  The key is only the compact backing array plus the requested range;
@@ -609,161 +811,370 @@ private theorem genericCall.stepCached_fst
 
 def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
   | .create =>
-    XStep.ofExcept do
-      let ⟨endowment, devm⟩ ← devm.pop
-      let ⟨memoryIndex, devm⟩ ← devm.popToNat
-      let ⟨memorySize, devm⟩ ← devm.popToNat
-      let extendCost := devm.extCost [⟨memoryIndex, memorySize⟩]
-      let initCodeCost := gasInitCodeWordCost * ceilDiv memorySize 32
-      let devm ← chargeGas (gasCreate + extendCost + initCodeCost) devm
-      let devm := devm.memExtends [⟨memoryIndex, memorySize⟩]
-      let newAddress :=
-        computeContractAddress
-          sevm.currentTarget (devm.state.get sevm.currentTarget).nonce
-      return genericCreate.step
-        sevm devm endowment newAddress memoryIndex memorySize
+    match sevm.benvStat.rules.stateGas with
+    | none =>
+      XStep.ofExcept do
+        let ⟨endowment, devm⟩ ← devm.pop
+        let ⟨memoryIndex, devm⟩ ← devm.popToNat
+        let ⟨memorySize, devm⟩ ← devm.popToNat
+        let extendCost := devm.extCost [⟨memoryIndex, memorySize⟩]
+        let initCodeCost := gasInitCodeWordCost * ceilDiv memorySize 32
+        let devm ← chargeGas (gasCreate + extendCost + initCodeCost) devm
+        let devm := devm.memExtends [⟨memoryIndex, memorySize⟩]
+        let newAddress :=
+          computeContractAddress
+            sevm.currentTarget (devm.state.get sevm.currentTarget).nonce
+        return genericCreate.step
+          sevm devm endowment newAddress memoryIndex memorySize
+    | some state =>
+      XStep.ofExcept do
+        -- `create` at the pin: the static check first, `CREATE_ACCESS` from
+        -- the schedule, the initcode limit after the charge.
+        assertDynamic sevm devm
+        let ⟨endowment, devm⟩ ← devm.pop
+        let ⟨memoryIndex, devm⟩ ← devm.popToNat
+        let ⟨memorySize, devm⟩ ← devm.popToNat
+        let extendCost := devm.extCost [⟨memoryIndex, memorySize⟩]
+        let initCodeCost := gasInitCodeWordCost * ceilDiv memorySize 32
+        let devm ←
+          chargeGas (sevm.benvStat.rules.gas.createAccess + extendCost + initCodeCost)
+            devm
+        Except.assert
+          (memorySize ≤ sevm.benvStat.rules.code.maxInitCodeSize)
+          ⟨.halt (.outOfGas .none), devm⟩
+        let devm := devm.memExtends [⟨memoryIndex, memorySize⟩]
+        let newAddress :=
+          computeContractAddress
+            sevm.currentTarget (devm.state.get sevm.currentTarget).nonce
+        return genericCreateAmsterdam.step
+          sevm state devm endowment newAddress memoryIndex memorySize
   | .create2 =>
-    XStep.ofExcept do
-      let ⟨endowment, devm⟩ ← devm.pop
-      let ⟨memoryIndex, devm⟩ ← devm.popToNat
-      let ⟨memorySize, devm⟩ ← devm.popToNat
-      let ⟨salt, devm⟩ ← devm.pop
-      let extendCost := devm.extCost [⟨memoryIndex, memorySize⟩]
-      let initCodeHashCost := gasKeccak256Word * ceilDiv memorySize 32
-      let initCodeCost := gasInitCodeWordCost * ceilDiv memorySize 32
-      let devm ←
-        chargeGas (gasCreate + initCodeHashCost + extendCost + initCodeCost) devm
-      let devm := devm.memExtends [⟨memoryIndex, memorySize⟩]
-      let newAddress :=
-        create2NewAddress
-          sevm.currentTarget salt
-          (devm.memory.data.sliceD memoryIndex memorySize 0)
-      return genericCreate.step
-        sevm devm endowment newAddress memoryIndex memorySize
+    match sevm.benvStat.rules.stateGas with
+    | none =>
+      XStep.ofExcept do
+        let ⟨endowment, devm⟩ ← devm.pop
+        let ⟨memoryIndex, devm⟩ ← devm.popToNat
+        let ⟨memorySize, devm⟩ ← devm.popToNat
+        let ⟨salt, devm⟩ ← devm.pop
+        let extendCost := devm.extCost [⟨memoryIndex, memorySize⟩]
+        let initCodeHashCost := gasKeccak256Word * ceilDiv memorySize 32
+        let initCodeCost := gasInitCodeWordCost * ceilDiv memorySize 32
+        let devm ←
+          chargeGas (gasCreate + initCodeHashCost + extendCost + initCodeCost) devm
+        let devm := devm.memExtends [⟨memoryIndex, memorySize⟩]
+        let newAddress :=
+          create2NewAddress
+            sevm.currentTarget salt
+            (devm.memory.data.sliceD memoryIndex memorySize 0)
+        return genericCreate.step
+          sevm devm endowment newAddress memoryIndex memorySize
+    | some state =>
+      XStep.ofExcept do
+        -- `create2` at the pin: as `create`, plus the initcode hashing words.
+        assertDynamic sevm devm
+        let ⟨endowment, devm⟩ ← devm.pop
+        let ⟨memoryIndex, devm⟩ ← devm.popToNat
+        let ⟨memorySize, devm⟩ ← devm.popToNat
+        let ⟨salt, devm⟩ ← devm.pop
+        let extendCost := devm.extCost [⟨memoryIndex, memorySize⟩]
+        let initCodeHashCost := gasKeccak256Word * ceilDiv memorySize 32
+        let initCodeCost := gasInitCodeWordCost * ceilDiv memorySize 32
+        let devm ←
+          chargeGas
+            (sevm.benvStat.rules.gas.createAccess + initCodeHashCost + extendCost
+              + initCodeCost)
+            devm
+        Except.assert
+          (memorySize ≤ sevm.benvStat.rules.code.maxInitCodeSize)
+          ⟨.halt (.outOfGas .none), devm⟩
+        let devm := devm.memExtends [⟨memoryIndex, memorySize⟩]
+        let newAddress :=
+          create2NewAddress
+            sevm.currentTarget salt
+            (devm.memory.data.sliceD memoryIndex memorySize 0)
+        return genericCreateAmsterdam.step
+          sevm state devm endowment newAddress memoryIndex memorySize
   | .call =>
-    XStep.ofExcept do
-      let ⟨gas, devm⟩ ← devm.pop
-      let ⟨callee, devm⟩ ← devm.popToAdr
-      let ⟨value, devm⟩ ← devm.pop
-      let ⟨inputIndex, devm⟩ ← devm.popToNat
-      let ⟨inputSize, devm⟩ ← devm.popToNat
-      let ⟨outputIndex, devm⟩ ← devm.popToNat
-      let ⟨outputSize, devm⟩ ← devm.popToNat
-      let extendCost :=
-        devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-      let preAccessCost := accessCost callee devm.accessedAddresses
-      let devm := addAccessedAddress devm callee
-      let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
-        accessDelegation devm callee
-      let accessCost := preAccessCost + delegatedAccessGasCost
-      let createCost :=
-        if (¬ (devm.getAcct callee).Empty) ∨ value = 0 then 0 else gNewAccount
-      let transferCost := if value = 0 then 0 else gasCallValue
-      let ⟨msgCallCost, msgCallStipend⟩ :=
-        calculateMsgCallGas value.toNat gas.toNat devm.gasLeft extendCost
-          (accessCost + createCost + transferCost)
-      let devm ← chargeGas (msgCallCost + extendCost) devm
-      Except.assert (!sevm.isStatic ∨ value = 0) ⟨.halt (.writeInStaticContext .none), devm⟩
-      let devm :=
-        devm.memExtends
-          [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-      let senderBal := (devm.getAcct sevm.currentTarget).bal
-      if senderBal < value then
-        let devm ← devm.push 0
-        return .done
-          (.ok
-            ((devm.withReturnData []).withGasLeft
-              (devm.gasLeft + msgCallStipend)))
-      else
-        return genericCall.step
-          sevm devm msgCallStipend value sevm.currentTarget callee
+    match sevm.benvStat.rules.stateGas with
+    | none =>
+      XStep.ofExcept do
+        let ⟨gas, devm⟩ ← devm.pop
+        let ⟨callee, devm⟩ ← devm.popToAdr
+        let ⟨value, devm⟩ ← devm.pop
+        let ⟨inputIndex, devm⟩ ← devm.popToNat
+        let ⟨inputSize, devm⟩ ← devm.popToNat
+        let ⟨outputIndex, devm⟩ ← devm.popToNat
+        let ⟨outputSize, devm⟩ ← devm.popToNat
+        let extendCost :=
+          devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
+        let preAccessCost := accessCost callee devm.accessedAddresses
+        let devm := addAccessedAddress devm callee
+        let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
+          accessDelegation devm callee
+        let accessCost := preAccessCost + delegatedAccessGasCost
+        let createCost :=
+          if (¬ (devm.getAcct callee).Empty) ∨ value = 0 then 0 else gNewAccount
+        let transferCost := if value = 0 then 0 else gasCallValue
+        let ⟨msgCallCost, msgCallStipend⟩ :=
+          calculateMsgCallGas value.toNat gas.toNat devm.gasLeft extendCost
+            (accessCost + createCost + transferCost)
+        let devm ← chargeGas (msgCallCost + extendCost) devm
+        Except.assert (!sevm.isStatic ∨ value = 0) ⟨.halt (.writeInStaticContext .none), devm⟩
+        let devm :=
+          devm.memExtends
+            [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
+        let senderBal := (devm.getAcct sevm.currentTarget).bal
+        if senderBal < value then
+          let devm ← devm.push 0
+          return .done
+            (.ok
+              ((devm.withReturnData []).withGasLeft
+                (devm.gasLeft + msgCallStipend)))
+        else
+          return genericCall.step
+            sevm devm msgCallStipend value sevm.currentTarget callee
+            newCodeAddress true false inputIndex inputSize outputIndex outputSize
+            code disablePrecompiles
+    | some state =>
+      XStep.ofExcept do
+        -- `call` at the pin: the static check before any charge; the
+        -- state-independent price checked before any access; the accesses and
+        -- the delegation's cost; the execution charge; `NEW_ACCOUNT` state gas
+        -- for a value transfer that will create the recipient; the child grant
+        -- computed after every charge, with the whole reservoir.
+        let ⟨gas, devm⟩ ← devm.pop
+        let ⟨callee, devm⟩ ← devm.popToAdr
+        let ⟨value, devm⟩ ← devm.pop
+        let ⟨inputIndex, devm⟩ ← devm.popToNat
+        let ⟨inputSize, devm⟩ ← devm.popToNat
+        let ⟨outputIndex, devm⟩ ← devm.popToNat
+        let ⟨outputSize, devm⟩ ← devm.popToNat
+        Except.assert (!sevm.isStatic ∨ value = 0)
+          ⟨.halt (.writeInStaticContext .none), devm⟩
+        let gasRules := sevm.benvStat.rules.gas
+        let extendCost :=
+          devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
+        let accessGas := gasRules.accessCost callee devm.accessedAddresses
+        let transferCost := if value = 0 then 0 else gasRules.callValue
+        Except.assert (accessGas + transferCost + extendCost ≤ devm.gasLeft)
+          ⟨.halt (.outOfGas .none), devm⟩
+        let devm := addAccessedAddress devm callee
+        let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
+          gasRules.accessDelegation devm callee
+        let extraGas := accessGas + transferCost + delegatedAccessGasCost
+        Except.assert (extraGas + extendCost ≤ devm.gasLeft)
+          ⟨.halt (.outOfGas .none), devm⟩
+        let devm ← chargeGas (extraGas + extendCost) devm
+        let newAccountCharged := value ≠ 0 ∧ (devm.getAcct callee).Empty
+        let devm ←
+          if newAccountCharged then chargeStateGas state.newAccount devm
+          else .ok devm
+        let ⟨msgCallCost, msgCallStipend⟩ :=
+          calculateMsgCallGas value.toNat gas.toNat devm.gasLeft 0 0
+        let devm ← chargeGas msgCallCost devm
+        let ⟨reservoir, devm⟩ := devm.drainStateGasReservoir
+        let devm :=
+          devm.memExtends [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
+        let senderBal := (devm.getAcct sevm.currentTarget).bal
+        return genericCallAmsterdam.step
+          sevm state devm msgCallStipend reservoir value sevm.currentTarget callee
           newCodeAddress true false inputIndex inputSize outputIndex outputSize
-          code disablePrecompiles
+          code disablePrecompiles (decide newAccountCharged) (decide (senderBal < value))
   | .callcode =>
-    XStep.ofExcept do
-      let ⟨gas, devm⟩ ← devm.pop
-      let ⟨codeAddress, devm⟩ ← devm.popToAdr
-      let ⟨value, devm⟩ ← devm.pop
-      let ⟨inputIndex, devm⟩ ← devm.popToNat
-      let ⟨inputSize, devm⟩ ← devm.popToNat
-      let ⟨outputIndex, devm⟩ ← devm.popToNat
-      let ⟨outputSize, devm⟩ ← devm.popToNat
-      let extendCost :=
-        devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-      let preAccessCost := accessCost codeAddress devm.accessedAddresses
-      let devm := addAccessedAddress devm codeAddress
-      let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
-        accessDelegation devm codeAddress
-      let accessCost := preAccessCost + delegatedAccessGasCost
-      let transferCost := if value = 0 then 0 else gasCallValue
-      let ⟨msgCallCost, msgCallStipend⟩ :=
-        calculateMsgCallGas value.toNat gas.toNat devm.gasLeft extendCost
-          (accessCost + transferCost)
-      let devm ← chargeGas (msgCallCost + extendCost) devm
-      let devm :=
-        devm.memExtends
-          [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-      let senderBal := (devm.getAcct sevm.currentTarget).bal
-      if senderBal < value then
-        let devm ← devm.push 0
-        return .done
-          (.ok
-            ((devm.withGasLeft (devm.gasLeft + msgCallStipend)).withReturnData []))
-      else
-        return genericCall.step
-          sevm devm msgCallStipend value sevm.currentTarget
-          sevm.currentTarget newCodeAddress true false
-          inputIndex inputSize outputIndex outputSize code disablePrecompiles
+    match sevm.benvStat.rules.stateGas with
+    | none =>
+      XStep.ofExcept do
+        let ⟨gas, devm⟩ ← devm.pop
+        let ⟨codeAddress, devm⟩ ← devm.popToAdr
+        let ⟨value, devm⟩ ← devm.pop
+        let ⟨inputIndex, devm⟩ ← devm.popToNat
+        let ⟨inputSize, devm⟩ ← devm.popToNat
+        let ⟨outputIndex, devm⟩ ← devm.popToNat
+        let ⟨outputSize, devm⟩ ← devm.popToNat
+        let extendCost :=
+          devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
+        let preAccessCost := accessCost codeAddress devm.accessedAddresses
+        let devm := addAccessedAddress devm codeAddress
+        let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
+          accessDelegation devm codeAddress
+        let accessCost := preAccessCost + delegatedAccessGasCost
+        let transferCost := if value = 0 then 0 else gasCallValue
+        let ⟨msgCallCost, msgCallStipend⟩ :=
+          calculateMsgCallGas value.toNat gas.toNat devm.gasLeft extendCost
+            (accessCost + transferCost)
+        let devm ← chargeGas (msgCallCost + extendCost) devm
+        let devm :=
+          devm.memExtends
+            [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
+        let senderBal := (devm.getAcct sevm.currentTarget).bal
+        if senderBal < value then
+          let devm ← devm.push 0
+          return .done
+            (.ok
+              ((devm.withGasLeft (devm.gasLeft + msgCallStipend)).withReturnData []))
+        else
+          return genericCall.step
+            sevm devm msgCallStipend value sevm.currentTarget
+            sevm.currentTarget newCodeAddress true false
+            inputIndex inputSize outputIndex outputSize code disablePrecompiles
+    | some state =>
+      XStep.ofExcept do
+        -- `callcode` at the pin: the state-independent price checked before
+        -- any access; the accesses and the delegation's cost; the call's cost
+        -- charged with the child grant; the whole reservoir rides along.
+        let ⟨gas, devm⟩ ← devm.pop
+        let ⟨codeAddress, devm⟩ ← devm.popToAdr
+        let ⟨value, devm⟩ ← devm.pop
+        let ⟨inputIndex, devm⟩ ← devm.popToNat
+        let ⟨inputSize, devm⟩ ← devm.popToNat
+        let ⟨outputIndex, devm⟩ ← devm.popToNat
+        let ⟨outputSize, devm⟩ ← devm.popToNat
+        let senderBal := (devm.getAcct sevm.currentTarget).bal
+        let gasRules := sevm.benvStat.rules.gas
+        let extendCost :=
+          devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
+        let accessGas := gasRules.accessCost codeAddress devm.accessedAddresses
+        let transferCost := if value = 0 then 0 else gasRules.callValue
+        Except.assert (accessGas + extendCost + transferCost ≤ devm.gasLeft)
+          ⟨.halt (.outOfGas .none), devm⟩
+        let devm := addAccessedAddress devm codeAddress
+        let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
+          gasRules.accessDelegation devm codeAddress
+        let extraGas := accessGas + transferCost + delegatedAccessGasCost
+        Except.assert (extraGas + extendCost ≤ devm.gasLeft)
+          ⟨.halt (.outOfGas .none), devm⟩
+        let ⟨msgCallCost, msgCallStipend⟩ :=
+          calculateMsgCallGas value.toNat gas.toNat devm.gasLeft extendCost extraGas
+        let devm ← chargeGas (msgCallCost + extendCost) devm
+        let ⟨reservoir, devm⟩ := devm.drainStateGasReservoir
+        let devm :=
+          devm.memExtends [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
+        return genericCallAmsterdam.step
+          sevm state devm msgCallStipend reservoir value sevm.currentTarget sevm.currentTarget
+          newCodeAddress true false inputIndex inputSize outputIndex outputSize
+          code disablePrecompiles false (decide (senderBal < value))
   | .delegatecall =>
-    XStep.ofExcept do
-      let ⟨gas, devm⟩ ← devm.pop
-      let ⟨codeAddress, devm⟩ ← devm.popToAdr
-      let ⟨inputIndex, devm⟩ ← devm.popToNat
-      let ⟨inputSize, devm⟩ ← devm.popToNat
-      let ⟨outputIndex, devm⟩ ← devm.popToNat
-      let ⟨outputSize, devm⟩ ← devm.popToNat
-      let extendCost :=
-        devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-      let preAccessCost := accessCost codeAddress devm.accessedAddresses
-      let devm := addAccessedAddress devm codeAddress
-      let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
-        accessDelegation devm codeAddress
-      let accessCost := preAccessCost + delegatedAccessGasCost
-      let ⟨msgCallCost, msgCallStipend⟩ :=
-        calculateMsgCallGas 0 gas.toNat devm.gasLeft extendCost accessCost
-      let devm ← chargeGas (msgCallCost + extendCost) devm
-      let devm :=
-        devm.memExtends
-          [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-      return genericCall.step
-        sevm devm msgCallStipend sevm.value sevm.caller
-        sevm.currentTarget newCodeAddress false false
-        inputIndex inputSize outputIndex outputSize code disablePrecompiles
+    match sevm.benvStat.rules.stateGas with
+    | none =>
+      XStep.ofExcept do
+        let ⟨gas, devm⟩ ← devm.pop
+        let ⟨codeAddress, devm⟩ ← devm.popToAdr
+        let ⟨inputIndex, devm⟩ ← devm.popToNat
+        let ⟨inputSize, devm⟩ ← devm.popToNat
+        let ⟨outputIndex, devm⟩ ← devm.popToNat
+        let ⟨outputSize, devm⟩ ← devm.popToNat
+        let extendCost :=
+          devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
+        let preAccessCost := accessCost codeAddress devm.accessedAddresses
+        let devm := addAccessedAddress devm codeAddress
+        let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
+          accessDelegation devm codeAddress
+        let accessCost := preAccessCost + delegatedAccessGasCost
+        let ⟨msgCallCost, msgCallStipend⟩ :=
+          calculateMsgCallGas 0 gas.toNat devm.gasLeft extendCost accessCost
+        let devm ← chargeGas (msgCallCost + extendCost) devm
+        let devm :=
+          devm.memExtends
+            [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
+        return genericCall.step
+          sevm devm msgCallStipend sevm.value sevm.caller
+          sevm.currentTarget newCodeAddress false false
+          inputIndex inputSize outputIndex outputSize code disablePrecompiles
+    | some state =>
+      XStep.ofExcept do
+        -- `delegatecall` at the pin: the state-independent price checked before
+        -- any access; the accesses and the delegation's cost; the call's cost
+        -- charged with the child grant; the whole reservoir rides along.
+        let ⟨gas, devm⟩ ← devm.pop
+        let ⟨codeAddress, devm⟩ ← devm.popToAdr
+        let ⟨inputIndex, devm⟩ ← devm.popToNat
+        let ⟨inputSize, devm⟩ ← devm.popToNat
+        let ⟨outputIndex, devm⟩ ← devm.popToNat
+        let ⟨outputSize, devm⟩ ← devm.popToNat
+        let gasRules := sevm.benvStat.rules.gas
+        let extendCost :=
+          devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
+        let accessGas := gasRules.accessCost codeAddress devm.accessedAddresses
+        let transferCost := 0
+        Except.assert (accessGas + extendCost ≤ devm.gasLeft)
+          ⟨.halt (.outOfGas .none), devm⟩
+        let devm := addAccessedAddress devm codeAddress
+        let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
+          gasRules.accessDelegation devm codeAddress
+        let extraGas := accessGas + transferCost + delegatedAccessGasCost
+        Except.assert (extraGas + extendCost ≤ devm.gasLeft)
+          ⟨.halt (.outOfGas .none), devm⟩
+        let ⟨msgCallCost, msgCallStipend⟩ :=
+          calculateMsgCallGas 0 gas.toNat devm.gasLeft extendCost extraGas
+        let devm ← chargeGas (msgCallCost + extendCost) devm
+        let ⟨reservoir, devm⟩ := devm.drainStateGasReservoir
+        let devm :=
+          devm.memExtends [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
+        return genericCallAmsterdam.step
+          sevm state devm msgCallStipend reservoir sevm.value sevm.caller sevm.currentTarget
+          newCodeAddress false false inputIndex inputSize outputIndex outputSize
+          code disablePrecompiles false false
   | .staticcall =>
-    XStep.ofExcept do
-      let ⟨gas, devm⟩ ← devm.pop
-      let ⟨target, devm⟩ ← devm.popToAdr
-      let ⟨inputIndex, devm⟩ ← devm.popToNat
-      let ⟨inputSize, devm⟩ ← devm.popToNat
-      let ⟨outputIndex, devm⟩ ← devm.popToNat
-      let ⟨outputSize, devm⟩ ← devm.popToNat
-      let extendCost :=
-        devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-      let preAccessCost := accessCost target devm.accessedAddresses
-      let devm := addAccessedAddress devm target
-      let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
-        accessDelegation devm target
-      let accessCost := preAccessCost + delegatedAccessGasCost
-      let ⟨msgCallCost, msgCallStipend⟩ :=
-        calculateMsgCallGas 0 gas.toNat devm.gasLeft extendCost accessCost
-      let devm ← chargeGas (msgCallCost + extendCost) devm
-      let devm :=
-        devm.memExtends
-          [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-      return genericCall.step
-        sevm devm msgCallStipend 0 sevm.currentTarget target newCodeAddress
-        true true inputIndex inputSize outputIndex outputSize code
-        disablePrecompiles
+    match sevm.benvStat.rules.stateGas with
+    | none =>
+      XStep.ofExcept do
+        let ⟨gas, devm⟩ ← devm.pop
+        let ⟨target, devm⟩ ← devm.popToAdr
+        let ⟨inputIndex, devm⟩ ← devm.popToNat
+        let ⟨inputSize, devm⟩ ← devm.popToNat
+        let ⟨outputIndex, devm⟩ ← devm.popToNat
+        let ⟨outputSize, devm⟩ ← devm.popToNat
+        let extendCost :=
+          devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
+        let preAccessCost := accessCost target devm.accessedAddresses
+        let devm := addAccessedAddress devm target
+        let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
+          accessDelegation devm target
+        let accessCost := preAccessCost + delegatedAccessGasCost
+        let ⟨msgCallCost, msgCallStipend⟩ :=
+          calculateMsgCallGas 0 gas.toNat devm.gasLeft extendCost accessCost
+        let devm ← chargeGas (msgCallCost + extendCost) devm
+        let devm :=
+          devm.memExtends
+            [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
+        return genericCall.step
+          sevm devm msgCallStipend 0 sevm.currentTarget target newCodeAddress
+          true true inputIndex inputSize outputIndex outputSize code
+          disablePrecompiles
+    | some state =>
+      XStep.ofExcept do
+        -- `staticcall` at the pin: the state-independent price checked before
+        -- any access; the accesses and the delegation's cost; the call's cost
+        -- charged with the child grant; the whole reservoir rides along.
+        let ⟨gas, devm⟩ ← devm.pop
+        let ⟨codeAddress, devm⟩ ← devm.popToAdr -- `to`
+        let ⟨inputIndex, devm⟩ ← devm.popToNat
+        let ⟨inputSize, devm⟩ ← devm.popToNat
+        let ⟨outputIndex, devm⟩ ← devm.popToNat
+        let ⟨outputSize, devm⟩ ← devm.popToNat
+        let gasRules := sevm.benvStat.rules.gas
+        let extendCost :=
+          devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
+        let accessGas := gasRules.accessCost codeAddress devm.accessedAddresses
+        let transferCost := 0
+        Except.assert (accessGas + extendCost ≤ devm.gasLeft)
+          ⟨.halt (.outOfGas .none), devm⟩
+        let devm := addAccessedAddress devm codeAddress
+        let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
+          gasRules.accessDelegation devm codeAddress
+        let extraGas := accessGas + transferCost + delegatedAccessGasCost
+        Except.assert (extraGas + extendCost ≤ devm.gasLeft)
+          ⟨.halt (.outOfGas .none), devm⟩
+        let ⟨msgCallCost, msgCallStipend⟩ :=
+          calculateMsgCallGas 0 gas.toNat devm.gasLeft extendCost extraGas
+        let devm ← chargeGas (msgCallCost + extendCost) devm
+        let ⟨reservoir, devm⟩ := devm.drainStateGasReservoir
+        let devm :=
+          devm.memExtends [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
+        return genericCallAmsterdam.step
+          sevm state devm msgCallStipend reservoir 0 sevm.currentTarget codeAddress
+          newCodeAddress true true inputIndex inputSize outputIndex outputSize
+          code disablePrecompiles false false
 
 /-- Cache-threaded native specialization. The first component is proved below
 to be exactly `Xinst.step`; only STATICCALL is specialized because it is the
@@ -773,6 +1184,9 @@ private def Xinst.stepCached
     (sevm : Sevm) (devm : Devm) (cache : Option CalldataCache) :
     Xinst → XStep × Option CalldataCache
   | .staticcall =>
+    match sevm.benvStat.rules.stateGas with
+    | some _ => (Xinst.step sevm devm .staticcall, cache)
+    | none =>
     match (do
       let ⟨gas, devm⟩ ← devm.pop
       let ⟨target, devm⟩ ← devm.popToAdr
@@ -805,10 +1219,12 @@ private def Xinst.stepCached
 private theorem Xinst.stepCached_fst
     (sevm : Sevm) (devm : Devm) (cache : Option CalldataCache) (x : Xinst) :
     (Xinst.stepCached sevm devm cache x).1 = Xinst.step sevm devm x := by
-  cases x <;> simp [Xinst.stepCached, Xinst.step]
+  cases x <;> simp only [Xinst.stepCached, Xinst.step]
   case staticcall =>
+    split
+    · rfl
     rcases h₁ : devm.pop with e | ⟨gas, d₁⟩
-    · simp only [Bind.bind, Except.bind, XStep.ofExcept]
+    · simp_all [Bind.bind, Except.bind, XStep.ofExcept]
     simp only [Bind.bind, Except.bind]
     rcases h₂ : d₁.popToAdr with e | ⟨target, d₂⟩
     · simp_all [XStep.ofExcept]
@@ -830,7 +1246,7 @@ private theorem Xinst.stepCached_fst
             d₆.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
           (accessDelegation (addAccessedAddress d₆ target) target).2.2.2.2 with e | d₇
     · simp_all [XStep.ofExcept]
-    simp_all [XStep.ofExcept, genericCall.stepCached_fst]
+    simp_all [XStep.ofExcept, pure, Except.pure, genericCall.stepCached_fst]
 
 def Ninst.step (evm : Evm) (n : Ninst) : Step :=
   let pc := evm.pc + n.size
@@ -1633,6 +2049,15 @@ theorem accessDelegation_eq_canonical {devm d' : Devm} {adr : Adr} {b : Bool}
   rw [heq] at hc
   exact hc
 
+theorem GasSchedule.accessDelegation_canonical {gas : GasSchedule} {devm : Devm}
+    (h : devm.Canonical) (adr : Adr) :
+    (gas.accessDelegation devm adr).2.2.2.2.Canonical := by
+  unfold GasSchedule.accessDelegation
+  dsimp only
+  split
+  · exact Devm.Canonical.of_world_eq h rfl
+  · exact h
+
 /-- The create-message initialiser clears the child's storage, marks it
 created, and bumps its nonce -- all through named canonical mutators. -/
 theorem processCreateMessage.msg_canonical {msg : Msg} (h : msg.Canonical) :
@@ -1648,11 +2073,26 @@ theorem processCreateMessage.chargeCodeGas_canonical {rules : ForkRules}
   unfold processCreateMessage.chargeCodeGas
   dsimp only
   split
-  · exact h
-  · refine Except.CanonicalOn.bind (liftMachExecution_canonical h) fun d hd => ?_
-    split
-    · exact hd
-    · exact hd
+  · split
+    · exact h
+    · refine Except.CanonicalOn.bind (liftMachExecution_canonical h) fun d hd => ?_
+      split
+      · exact hd
+      · exact hd
+  · split
+    · exact h
+    · split
+      · exact h
+      · refine Except.CanonicalOn.bind (liftMachExecution_canonical h) fun d hd => ?_
+        exact liftMachExecution_canonical hd
+
+/-- The Amsterdam exceptional halt restores the same saved world; both meter
+updates and the error marker are world-neutral. -/
+theorem processCreateMessage.exceptionalHaltAmsterdam_canonical {devm : Devm}
+    (reason : ExceptionalHalt) {st : State} {tra : Tra}
+    (hst : State.Canonical st) (htra : Tra.Canonical tra) :
+    (processCreateMessage.exceptionalHaltAmsterdam devm reason st tra).Canonical :=
+  Devm.Canonical.of_world_eq (Devm.canonical_rollback (devm := devm) hst htra) rfl
 
 /-- An exceptional create halt restores the saved pair; the failing machine
 contributes nothing to the world. -/
@@ -1666,10 +2106,15 @@ theorem initSevm_canonical {msg : Msg} (h : msg.Canonical) :
     (initSevm msg).Canonical := h.1.2
 
 theorem initDevm_canonical {msg : Msg} (h : msg.Canonical) :
-    (initDevm msg).Canonical := ⟨h.1.1, h.2⟩
+    (initDevm msg).Canonical := by
+  change State.Canonical msg.benv.state ∧ Tra.Canonical msg.tenv.transientStorage
+  exact ⟨h.1.1, h.2⟩
 
 theorem initEvm_canonical {msg : Msg} (h : msg.Canonical) :
-    (initEvm msg).Canonical := ⟨h.1.2, h.1.1, h.2⟩
+    (initEvm msg).Canonical := by
+  change Sevm.Canonical (initSevm msg) ∧
+    State.Canonical msg.benv.state ∧ Tra.Canonical msg.tenv.transientStorage
+  exact ⟨h.1.2, h.1.1, h.2⟩
 
 /-- A successful pre-execution value transfer moves balances through
 `subBal`/`addBal` only. -/
@@ -1722,6 +2167,24 @@ theorem executeCode.handleError_canonicalSettle {raw}
   · exact ⟨hr.1, hr.2⟩
   · exact ⟨hr.1, hr.2⟩
 
+theorem executeCode.handleErrorAmsterdam_canonicalSettle {raw}
+    (hr : Execution.Canonical raw) :
+    (executeCode.handleErrorAmsterdam raw).CanonicalSettle := by
+  unfold executeCode.handleErrorAmsterdam
+  split
+  · exact hr
+  · exact Devm.Canonical.of_world_eq hr rfl
+  · exact Devm.Canonical.of_world_eq hr rfl
+  · exact ⟨hr.1, hr.2⟩
+  · exact ⟨hr.1, hr.2⟩
+
+theorem executeCode.handleErrorWith_canonicalSettle {stateGas raw}
+    (hr : Execution.Canonical raw) :
+    (executeCode.handleErrorWith stateGas raw).CanonicalSettle := by
+  cases stateGas with
+  | none => exact executeCode.handleError_canonicalSettle hr
+  | some state => exact executeCode.handleErrorAmsterdam_canonicalSettle hr
+
 theorem processMessage.settle_canonicalSettle {msg : Msg} (hm : msg.Canonical)
     {r} (hr : Except.CanonicalSettle r) :
     (processMessage.settle msg r).CanonicalSettle := by
@@ -1751,7 +2214,9 @@ theorem processCreateMessage.settle_canonicalSettle {msg : Msg}
           rw [heq] at hc
           exact hc
         exact Devm.Canonical.setCode hok _ _
-    · exact processCreateMessage.exceptionalHalt_canonical _ hm.1.1 hm.2
+    · split
+      · exact processCreateMessage.exceptionalHalt_canonical _ hm.1.1 hm.2
+      · exact processCreateMessage.exceptionalHaltAmsterdam_canonical _ hm.1.1 hm.2
     · next d' heq => exact ⟨(hcanon heq).1, (hcanon heq).2⟩
     · next d' heq => exact ⟨(hcanon heq).1, (hcanon heq).2⟩
     · next d' heq => exact ⟨(hcanon heq).1, (hcanon heq).2⟩
@@ -1772,7 +2237,7 @@ theorem Frame.settleMsg_canonicalSettle {f : Frame} (hf : f.Canonical)
 theorem Frame.settle_canonicalSettle {f : Frame} (hf : f.Canonical)
     {raw} (hraw : Execution.Canonical raw) :
     (f.settle raw).CanonicalSettle :=
-  Frame.settleMsg_canonicalSettle hf (executeCode.handleError_canonicalSettle hraw)
+  Frame.settleMsg_canonicalSettle hf (executeCode.handleErrorWith_canonicalSettle hraw)
 
 theorem Frame.canonical_ofCreate {msg : Msg} (h : msg.Canonical) :
     (Frame.ofCreate msg).Canonical :=
@@ -1831,6 +2296,43 @@ theorem Resume.run_canonical {rsm : Resume} {r} (hr : Except.CanonicalSettle r) 
       exact Devm.Canonical.of_world_eq hd rfl
     · refine Except.CanonicalOn.bind
         (liftMachExecution_canonical (incorporateChildOnSuccess_canonical hc _))
+        fun d hd => ?_
+      exact Devm.Canonical.of_world_eq hd rfl
+  | createAmsterdam state parent newAddress newAccountCharged =>
+    refine Except.CanonicalOn.bind (liftToExecution_canonical hr) fun c hc => ?_
+    split
+    · have hp :
+          (if newAccountCharged then
+              (incorporateChildAmsterdamOnError parent c c.output).creditStateGasRefund
+                state.newAccount
+            else incorporateChildAmsterdamOnError parent c c.output).Canonical := by
+        split
+        · exact Devm.Canonical.of_world_eq
+            (incorporateChildAmsterdamOnError_canonical
+              (parent := parent) (child := c) hc c.output) rfl
+        · exact incorporateChildAmsterdamOnError_canonical
+            (parent := parent) (child := c) hc c.output
+      exact liftMachExecution_canonical hp
+    · exact liftMachExecution_canonical
+        (incorporateChildAmsterdamOnSuccess_canonical hc _)
+  | callAmsterdam state parent outputIndex outputSize newAccountCharged =>
+    refine Except.CanonicalOn.bind (liftToExecution_canonical hr) fun c hc => ?_
+    split
+    · have hp :
+          (if newAccountCharged then
+              (incorporateChildAmsterdamOnError parent c c.output).creditStateGasRefund
+                state.newAccount
+            else incorporateChildAmsterdamOnError parent c c.output).Canonical := by
+        split
+        · exact Devm.Canonical.of_world_eq
+            (incorporateChildAmsterdamOnError_canonical
+              (parent := parent) (child := c) hc c.output) rfl
+        · exact incorporateChildAmsterdamOnError_canonical
+            (parent := parent) (child := c) hc c.output
+      refine Except.CanonicalOn.bind (liftMachExecution_canonical hp) fun d hd => ?_
+      exact Devm.Canonical.of_world_eq hd rfl
+    · refine Except.CanonicalOn.bind
+        (liftMachExecution_canonical (incorporateChildAmsterdamOnSuccess_canonical hc _))
         fun d hd => ?_
       exact Devm.Canonical.of_world_eq hd rfl
 
@@ -1989,94 +2491,279 @@ theorem genericCall.step_canonical {sevm : Sevm} {devm : Devm}
   · exact Frame.canonical_ofCall
       (callMsg_canonical hs (by exact hd) _ _ _ _ _ _ _ _ _ _)
 
+theorem genericCallAmsterdam.step_canonical {sevm : Sevm} {state : StateGasRules}
+    {devm : Devm} (hs : sevm.Canonical) (hd : devm.Canonical)
+    (gas reservoir : Nat) (value : B256) (caller target codeAddress : Adr)
+    (shouldTransferValue isStaticcall : Bool)
+    (inputIndex inputSize outputIndex outputSize : Nat) (code : ByteArray)
+    (disablePrecompiles newAccountCharged insufficientBalance : Bool) :
+    (genericCallAmsterdam.step sevm state devm gas reservoir value caller target
+      codeAddress shouldTransferValue isStaticcall inputIndex inputSize outputIndex
+      outputSize code disablePrecompiles newAccountCharged insufficientBalance).Canonical := by
+  unfold genericCallAmsterdam.step
+  dsimp only
+  split
+  · refine XStep.ofExcept_canonical ?_
+    have hp :
+        (if newAccountCharged = true then
+            (devm.withReturnData []).restoreChildGas gas reservoir |>
+              Devm.creditStateGasRefund state.newAccount
+          else (devm.withReturnData []).restoreChildGas gas reservoir).Canonical := by
+      split
+      · exact Devm.Canonical.of_world_eq hd rfl
+      · exact Devm.Canonical.of_world_eq hd rfl
+    refine Except.CanonicalOn.bind
+      (liftMachExecution_canonical hp) fun d hd1 => ?_
+    exact hd1
+  · apply Frame.canonical_ofCall
+    change (callMsg sevm (devm.withReturnData []) gas value caller target codeAddress
+      shouldTransferValue isStaticcall
+      ((devm.withReturnData []).memory.data.sliceD inputIndex inputSize 0)
+      code disablePrecompiles).Canonical
+    exact callMsg_canonical hs (Devm.Canonical.of_world_eq hd rfl)
+      gas value caller target codeAddress shouldTransferValue isStaticcall
+      ((devm.withReturnData []).memory.data.sliceD inputIndex inputSize 0)
+      code disablePrecompiles
+
+theorem genericCreateAmsterdam.step_canonical {sevm : Sevm} {state : StateGasRules}
+    {devm : Devm} (hs : sevm.Canonical) (hd : devm.Canonical)
+    (endowment : B256) (newAddress : Adr) (memoryIndex memorySize : Nat) :
+    (genericCreateAmsterdam.step sevm state devm endowment newAddress memoryIndex
+      memorySize).Canonical := by
+  unfold genericCreateAmsterdam.step
+  refine XStep.ofExcept_canonical ?_
+  dsimp only
+  split
+  · refine Except.CanonicalOn.bind
+      (liftMachExecution_canonical (Devm.Canonical.of_world_eq hd rfl)) fun d hd1 => ?_
+    exact Except.canonicalOn_ok hd1
+  · split
+    · refine Except.CanonicalOn.bind
+        (liftMachExecution_canonical (Devm.Canonical.of_world_eq hd rfl))
+        fun d hd1 => ?_
+      split
+      · refine Except.CanonicalOn.bind
+          (liftMachExecution_canonical
+            (Devm.Canonical.of_world_eq (Devm.Canonical.incrNonce hd1 _) rfl))
+          fun d2 hd2 => ?_
+        exact Except.canonicalOn_ok hd2
+      · exact Except.canonicalOn_ok <| Frame.canonical_ofCreate <|
+          createMsg_canonical hs
+            (Devm.Canonical.of_world_eq (Devm.Canonical.incrNonce hd1 _) rfl)
+            d.withholdCreateGas.1 endowment newAddress
+            (devm.memory.data.sliceD memoryIndex memorySize 0)
+    · refine Except.CanonicalOn.bind
+        (Except.canonicalOn_ok (Devm.Canonical.of_world_eq hd rfl))
+        fun d hd1 => ?_
+      split
+      · refine Except.CanonicalOn.bind
+          (liftMachExecution_canonical
+            (Devm.Canonical.of_world_eq (Devm.Canonical.incrNonce hd1 _) rfl))
+          fun d2 hd2 => ?_
+        exact Except.canonicalOn_ok hd2
+      · exact Except.canonicalOn_ok <| Frame.canonical_ofCreate <|
+          createMsg_canonical hs
+            (Devm.Canonical.of_world_eq (Devm.Canonical.incrNonce hd1 _) rfl)
+            d.withholdCreateGas.1 endowment newAddress
+            (devm.memory.data.sliceD memoryIndex memorySize 0)
+
 theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
     (hs : sevm.Canonical) (hd : devm.Canonical) (x : Xinst) :
     (Xinst.step sevm devm x).Canonical := by
   cases x <;> simp only [Xinst.step]
   case create =>
-    refine XStep.ofExcept_canonical ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
-    refine Except.CanonicalOn.bind (liftMachExecution_canonical hc) fun d hd1 => ?_
-    exact Except.canonicalOn_ok
-      (genericCreate.step_canonical hs (by exact hd1) _ _ _ _)
+    split
+    · refine XStep.ofExcept_canonical ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
+      refine Except.CanonicalOn.bind (liftMachExecution_canonical hc) fun d hd1 => ?_
+      exact Except.canonicalOn_ok
+        (genericCreate.step_canonical hs (by exact hd1) _ _ _ _)
+    · refine XStep.ofExcept_canonical ?_
+      refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
+      refine Except.CanonicalOn.bind (liftMachExecution_canonical hc) fun d hd1 => ?_
+      refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd1) fun _ _ => ?_
+      apply Except.canonicalOn_ok
+      apply genericCreateAmsterdam.step_canonical
+      · exact hs
+      · exact Devm.Canonical.of_world_eq hd1 rfl
   case create2 =>
-    refine XStep.ofExcept_canonical ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn hc) fun e he => ?_
-    refine Except.CanonicalOn.bind (liftMachExecution_canonical he) fun d hd1 => ?_
-    exact Except.canonicalOn_ok
-      (genericCreate.step_canonical hs (by exact hd1) _ _ _ _)
+    split
+    · refine XStep.ofExcept_canonical ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hc) fun e he => ?_
+      refine Except.CanonicalOn.bind (liftMachExecution_canonical he) fun d hd1 => ?_
+      exact Except.canonicalOn_ok
+        (genericCreate.step_canonical hs (by exact hd1) _ _ _ _)
+    · refine XStep.ofExcept_canonical ?_
+      refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hc) fun e he => ?_
+      refine Except.CanonicalOn.bind (liftMachExecution_canonical he) fun d hd1 => ?_
+      refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd1) fun _ _ => ?_
+      apply Except.canonicalOn_ok
+      apply genericCreateAmsterdam.step_canonical
+      · exact hs
+      · exact Devm.Canonical.of_world_eq hd1 rfl
   case call =>
-    refine XStep.ofExcept_canonical ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn hc) fun d hd1 => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn hd1) fun e he => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn he) fun f hf => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn hf) fun g hg => ?_
-    refine Except.CanonicalOn.bind
-      (liftMachExecution_canonical (accessDelegation_canonical (by exact hg) _))
-      fun d2 hd2 => ?_
-    refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd2) fun _ _ => ?_
     split
-    · refine Except.CanonicalOn.bind
-        (liftMachExecution_canonical (by exact hd2)) fun d3 hd3 => ?_
-      exact hd3
-    · exact Except.canonicalOn_ok
-        (genericCall.step_canonical hs (by exact hd2)
-          _ _ _ _ _ _ _ _ _ _ _ _ _)
+    · refine XStep.ofExcept_canonical ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hc) fun d hd1 => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hd1) fun e he => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn he) fun f hf => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hf) fun g hg => ?_
+      refine Except.CanonicalOn.bind
+        (liftMachExecution_canonical (accessDelegation_canonical (by exact hg) _))
+        fun d2 hd2 => ?_
+      refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd2) fun _ _ => ?_
+      split
+      · refine Except.CanonicalOn.bind
+          (liftMachExecution_canonical (by exact hd2)) fun d3 hd3 => ?_
+        exact hd3
+      · exact Except.canonicalOn_ok
+          (genericCall.step_canonical hs (by exact hd2)
+            _ _ _ _ _ _ _ _ _ _ _ _ _)
+    · refine XStep.ofExcept_canonical ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hc) fun d hd1 => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hd1) fun e he => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn he) fun f hf => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hf) fun g hg => ?_
+      refine Except.CanonicalOn.bind (Except.canonicalOn_assert hg) fun _ _ => ?_
+      refine Except.CanonicalOn.bind (Except.canonicalOn_assert hg) fun _ _ => ?_
+      have haccess := GasSchedule.accessDelegation_canonical
+        (gas := sevm.benvStat.rules.gas) (devm := addAccessedAddress g.2 b.1)
+        (Devm.Canonical.of_world_eq hg rfl) b.1
+      refine Except.CanonicalOn.bind (Except.canonicalOn_assert haccess) fun _ _ => ?_
+      refine Except.CanonicalOn.bind (liftMachExecution_canonical haccess) fun d2 hd2 => ?_
+      split
+      · refine Except.CanonicalOn.bind (liftMachExecution_canonical hd2) fun d3 hd3 => ?_
+        refine Except.CanonicalOn.bind (liftMachExecution_canonical hd3) fun d4 hd4 => ?_
+        apply Except.canonicalOn_ok
+        apply genericCallAmsterdam.step_canonical
+        · exact hs
+        · exact Devm.Canonical.of_world_eq hd4 rfl
+      · refine Except.CanonicalOn.bind (Except.canonicalOn_ok hd2) fun d3 hd3 => ?_
+        refine Except.CanonicalOn.bind (liftMachExecution_canonical hd3) fun d4 hd4 => ?_
+        apply Except.canonicalOn_ok
+        apply genericCallAmsterdam.step_canonical
+        · exact hs
+        · exact Devm.Canonical.of_world_eq hd4 rfl
   case callcode =>
-    refine XStep.ofExcept_canonical ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn hc) fun d hd1 => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn hd1) fun e he => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn he) fun f hf => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn hf) fun g hg => ?_
-    refine Except.CanonicalOn.bind
-      (liftMachExecution_canonical (accessDelegation_canonical (by exact hg) _))
-      fun d2 hd2 => ?_
     split
-    · refine Except.CanonicalOn.bind
-        (liftMachExecution_canonical (by exact hd2)) fun d3 hd3 => ?_
-      exact hd3
-    · exact Except.canonicalOn_ok
+    · refine XStep.ofExcept_canonical ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hc) fun d hd1 => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hd1) fun e he => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn he) fun f hf => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hf) fun g hg => ?_
+      refine Except.CanonicalOn.bind
+        (liftMachExecution_canonical (accessDelegation_canonical (by exact hg) _))
+        fun d2 hd2 => ?_
+      split
+      · refine Except.CanonicalOn.bind
+          (liftMachExecution_canonical (by exact hd2)) fun d3 hd3 => ?_
+        exact hd3
+      · exact Except.canonicalOn_ok
+          (genericCall.step_canonical hs (by exact hd2)
+            _ _ _ _ _ _ _ _ _ _ _ _ _)
+    · refine XStep.ofExcept_canonical ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hc) fun d hd1 => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hd1) fun e he => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn he) fun f hf => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hf) fun g hg => ?_
+      refine Except.CanonicalOn.bind (Except.canonicalOn_assert hg) fun _ _ => ?_
+      have ha := GasSchedule.accessDelegation_canonical
+        (gas := sevm.benvStat.rules.gas) (devm := addAccessedAddress g.2 b.1)
+        (Devm.Canonical.of_world_eq hg rfl) b.1
+      refine Except.CanonicalOn.bind (Except.canonicalOn_assert ha) fun _ _ => ?_
+      refine Except.CanonicalOn.bind (liftMachExecution_canonical ha) fun d2 hd2 => ?_
+      apply Except.canonicalOn_ok
+      apply genericCallAmsterdam.step_canonical
+      · exact hs
+      · exact Devm.Canonical.of_world_eq hd2 rfl
+  case delegatecall =>
+    split
+    · refine XStep.ofExcept_canonical ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hc) fun d hd1 => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hd1) fun e he => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn he) fun f hf => ?_
+      refine Except.CanonicalOn.bind
+        (liftMachExecution_canonical (accessDelegation_canonical (by exact hf) _))
+        fun d2 hd2 => ?_
+      exact Except.canonicalOn_ok
         (genericCall.step_canonical hs (by exact hd2)
           _ _ _ _ _ _ _ _ _ _ _ _ _)
-  case delegatecall =>
-    refine XStep.ofExcept_canonical ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn hc) fun d hd1 => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn hd1) fun e he => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn he) fun f hf => ?_
-    refine Except.CanonicalOn.bind
-      (liftMachExecution_canonical (accessDelegation_canonical (by exact hf) _))
-      fun d2 hd2 => ?_
-    exact Except.canonicalOn_ok
-      (genericCall.step_canonical hs (by exact hd2)
-        _ _ _ _ _ _ _ _ _ _ _ _ _)
+    · refine XStep.ofExcept_canonical ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hc) fun d hd1 => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hd1) fun e he => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn he) fun f hf => ?_
+      refine Except.CanonicalOn.bind (Except.canonicalOn_assert hf) fun _ _ => ?_
+      have ha := GasSchedule.accessDelegation_canonical
+        (gas := sevm.benvStat.rules.gas) (devm := addAccessedAddress f.2 b.1)
+        (Devm.Canonical.of_world_eq hf rfl) b.1
+      refine Except.CanonicalOn.bind (Except.canonicalOn_assert ha) fun _ _ => ?_
+      refine Except.CanonicalOn.bind (liftMachExecution_canonical ha) fun d2 hd2 => ?_
+      apply Except.canonicalOn_ok
+      apply genericCallAmsterdam.step_canonical
+      · exact hs
+      · exact Devm.Canonical.of_world_eq hd2 rfl
   case staticcall =>
-    refine XStep.ofExcept_canonical ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn hc) fun d hd1 => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn hd1) fun e he => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn he) fun f hf => ?_
-    refine Except.CanonicalOn.bind
-      (liftMachExecution_canonical (accessDelegation_canonical (by exact hf) _))
-      fun d2 hd2 => ?_
-    exact Except.canonicalOn_ok
-      (genericCall.step_canonical hs (by exact hd2)
-        _ _ _ _ _ _ _ _ _ _ _ _ _)
+    split
+    · refine XStep.ofExcept_canonical ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hc) fun d hd1 => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hd1) fun e he => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn he) fun f hf => ?_
+      refine Except.CanonicalOn.bind
+        (liftMachExecution_canonical (accessDelegation_canonical (by exact hf) _))
+        fun d2 hd2 => ?_
+      exact Except.canonicalOn_ok
+        (genericCall.step_canonical hs (by exact hd2)
+          _ _ _ _ _ _ _ _ _ _ _ _ _)
+    · refine XStep.ofExcept_canonical ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hc) fun d hd1 => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn hd1) fun e he => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn he) fun f hf => ?_
+      refine Except.CanonicalOn.bind (Except.canonicalOn_assert hf) fun _ _ => ?_
+      have ha := GasSchedule.accessDelegation_canonical
+        (gas := sevm.benvStat.rules.gas) (devm := addAccessedAddress f.2 b.1)
+        (Devm.Canonical.of_world_eq hf rfl) b.1
+      refine Except.CanonicalOn.bind (Except.canonicalOn_assert ha) fun _ _ => ?_
+      refine Except.CanonicalOn.bind (liftMachExecution_canonical ha) fun d2 hd2 => ?_
+      apply Except.canonicalOn_ok
+      apply genericCallAmsterdam.step_canonical
+      · exact hs
+      · exact Devm.Canonical.of_world_eq hd2 rfl
 
 theorem Ninst.step_canonical {evm : Evm} (h : evm.Canonical) (n : Ninst) :
     (Ninst.step evm n).Canonical := by
