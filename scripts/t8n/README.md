@@ -1,6 +1,6 @@
 # The `check-t8n.sh` corpus
 
-Nine cases, each a complete `t8n` invocation, with goldens generated from the
+Thirty-nine cases, each a complete `t8n` invocation, with goldens generated from the
 pinned conformance target. `scripts/check-t8n.sh` runs them; this file says
 what they are and how to change them.
 
@@ -9,13 +9,14 @@ what they are and how to change them.
 ```
 scripts/t8n/
   cases/<name>/case.json          mode, fork, chain id, reward, description
-  cases/<name>/alloc.json         pre-state            (authored)
+  cases/<name>/alloc.json         case-local pre-state (authored)
   cases/<name>/env.json           environment          (authored)
   cases/<name>/txs.src.json       transactions         (authored; may carry secretKey)
   cases/<name>/txs.json           transactions, signed (GENERATED)
   cases/<name>/expected/*.json    result / alloc / body (GENERATED, verbatim)
   provenance.json                 generating revision + every generated digest
   deviations.json                 the registry of declared differences
+  amsterdam-system-alloc.json     shared Amsterdam system state (authored)
 ```
 
 Only the four authored files are edited by hand. Everything else comes from
@@ -25,9 +26,11 @@ with Jaune because someone copied it from Jaune would test nothing, so the
 generator never reads Jaune and the gate refuses a golden whose digest does
 not match `provenance.json`.
 
-`txs.json` is generated too: the target's own `Transaction.sign` signs
-`txs.src.json`, so both tools consume one identical, fully signed list rather
-than each signing its own.
+`txs.json` is generated too: the target's own `Transaction.sign` signs the
+authored transaction source, so both tools consume one identical, fully signed
+list rather than each signing its own. A state-test mirror's local
+`txs.src.json` is an explicit one-file include of its blockchain twin; that
+keeps the two modes byte-identical without hiding how inputs are composed.
 
 ## The cases
 
@@ -58,17 +61,35 @@ EIP-7928/8282/7843/8024/7954 block semantics. The result's `gasUsed` is the
 maximum of execution and state block gas; receipts already carry the
 post-refund `cumulativeGasUsed` produced by the transaction pipeline.
 
-Amsterdam corpus cases and their exact per-case `blockAccessList` /
-`blockAccessListHash` target deviations land as the next W7 slice. Until that
-slice is committed, the nine-case table above remains the complete registered
-corpus and this section claims only the frontend boundary.
+The Appendix-F metering corpus has fifteen scenarios, each in `blockchain` and
+`state-test` mode: transfer, self-transfer, creation, successful and reverting
+new-account CALL, state-reservoir spill/repayment, cross-frame repayment,
+SSTORE's original/current/new lattice, SELFDESTRUCT settlement, external code
+reads, delegation, reservoir allocation above the execution cap, calldata and
+access-list floor gas, the refund cap, and intrinsic rejection above
+`TX_MAX_GAS_LIMIT`. The scenario and its coverage labels are part of each
+`case.json`; unit tests require the exact 15-by-2 matrix.
 
-Each `alloc.json` carries four of the five Prague system contracts — history
-storage, beacon roots, the withdrawal-request predeploy and the
-consolidation-request predeploy — taken from the target's own
-`pre_allocation_blockchain()`. The deposit contract is omitted deliberately:
-it is 6.3 KB of bytecode, nothing reads it unless a transaction logs a deposit,
-and no case here does.
+Every Amsterdam case explicitly names `amsterdam-system-alloc.json` through
+`allocIncludes`; the generator and checker compose that file with the local
+`alloc.json` and reject duplicate accounts or paths outside this corpus. The
+shared file is the target fixture's exact six Amsterdam system predeploys, not
+an implicit runner default.
+
+The pinned target also writes EIP-7928 `blockAccessList` and
+`blockAccessListHash` in every Amsterdam result. Jaune intentionally exposes
+only transaction metering on this lane, so the registered generator records
+both exact target values as target-only deviations for every case. Each pair
+names `jaune-amsterdam-block-v1` and the recording date. The red test removes
+only the hash member from one pair and requires the checker to fail, proving
+that a second unregistered difference cannot hide behind the first.
+
+The original nine Prague cases retain their own complete allocs. Each carries
+four of the five Prague system contracts — history storage, beacon roots, the
+withdrawal-request predeploy and the consolidation-request predeploy — taken
+from the target's own `pre_allocation_blockchain()`. The deposit contract is
+omitted deliberately: it is 6.3 KB of bytecode, nothing reads it unless a
+transaction logs a deposit, and no case here does.
 
 ## Changing a case
 
@@ -101,8 +122,10 @@ both:
   already assigns to each typed reason — rather than imitating another tool's
   wording. Every registered pair maps to the same official identity on both
   sides.
-- **Field exemptions.** Two, both in `reject-parse`, both caused by a
-  transaction shape Jaune's types cannot represent. See the entry's own `why`.
+- **Field exemptions.** Two in `reject-parse`, both caused by a transaction
+  shape Jaune's types cannot represent, plus the generated two-field
+  Amsterdam block-access pair for each of the thirty Appendix-F cases. See
+  each entry's own `why` and owner metadata.
 
 Beyond the registry, the gate applies one **canonicalisation** to `alloc`: both
 sides are sorted, addresses lexically and storage keys numerically. The target

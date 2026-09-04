@@ -141,7 +141,7 @@ the fork lane, the modes, and the corpus and oracle pins, all read from
 working directory; `lake exe jaune -v` prints the banner a framework
 identifies the binary by.
 
-Conformance is gated. `scripts/check-t8n.sh` compares nine cases against
+Conformance is gated. `scripts/check-t8n.sh` compares thirty-nine cases against
 goldens generated from a pinned `execution-specs` revision, with every
 normalization and declared difference explicit — see
 [`scripts/t8n/README.md`](scripts/t8n/README.md) for the corpus, the

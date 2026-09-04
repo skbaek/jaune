@@ -1,0 +1,18 @@
+{
+  "description": "Type-4 transaction with a net-new authority, an existing authority, and a repeated authority; the top-level delegated recipient resolves cold.",
+  "scenario": "am-delegation",
+  "fork": "Amsterdam",
+  "chainid": 1,
+  "reward": -1,
+  "mode": "state-test",
+  "allocIncludes": [
+    "../../amsterdam-system-alloc.json"
+  ],
+  "covers": [
+    "type-4",
+    "new-authority",
+    "existing-authority",
+    "repeated-authority",
+    "cold-delegated-recipient"
+  ]
+}

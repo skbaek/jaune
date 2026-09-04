@@ -78,6 +78,9 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(sys.argv[1])
+sys.path.insert(0, str(ROOT / "scripts"))
+from t8n_inputs import T8nInputError, materialize_alloc
+
 BIN = Path(os.environ["JAUNE_T8N_BIN"])
 ONLY = os.environ["JAUNE_T8N_ONLY"]
 RED = os.environ["JAUNE_T8N_RED"] == "1"
@@ -141,15 +144,22 @@ def apply_deviations(case, name, obj, deviations):
                 f"the target to write {entry['target']!r}, found "
                 f"{pointer[path[-1]]!r}"
             )
-        pointer[path[-1]] = entry["jaune"]
+        if entry.get("jauneAbsent") is True:
+            del pointer[path[-1]]
+        else:
+            pointer[path[-1]] = entry["jaune"]
     return unmapped
 
 
 def run_case(case_dir, work):
     spec = json.loads((case_dir / "case.json").read_text())
+    try:
+        materialize_alloc(case_dir, ROOT / "scripts" / "t8n", work / "input.alloc.json")
+    except T8nInputError as error:
+        return subprocess.CompletedProcess([], 2, "", str(error)), spec
     args = [
         str(BIN), "t8n",
-        f"--input.alloc={case_dir / 'alloc.json'}",
+        f"--input.alloc={work / 'input.alloc.json'}",
         f"--input.env={case_dir / 'env.json'}",
         f"--input.txs={case_dir / 'txs.json'}",
         "--output.result=result.json",
@@ -166,7 +176,7 @@ def run_case(case_dir, work):
     return run, spec
 
 
-def check_case(name, expected_root, failures):
+def check_case(name, expected_root, deviations, failures):
     case_dir = CASES / name
     with tempfile.TemporaryDirectory() as tmp:
         (Path(tmp) / "a").mkdir()
@@ -188,7 +198,6 @@ def check_case(name, expected_root, failures):
                     f"{name}: {output} is not deterministic across two runs"
                 )
                 return
-        deviations = json.loads(DEVIATIONS.read_text())
         for output in OUTPUTS:
             actual = (Path(tmp) / "a" / output).read_text()
             golden_path = expected_root / name / "expected" / output
@@ -241,6 +250,12 @@ def check_provenance(failures):
         failures.append("scripts/t8n/provenance.json is missing")
         return None
     provenance = json.loads(PROVENANCE.read_text())
+    case_names = sorted(p.name for p in CASES.iterdir() if p.is_dir())
+    if sorted(provenance.get("cases", {})) != case_names:
+        failures.append(
+            "provenance case registry differs from the case directories; "
+            "regenerate with scripts/gen-t8n-goldens.py"
+        )
     pinned = json.loads(SOURCES.read_text())["conformance_target"]["commit"]
     if provenance["conformance_target_commit"] != pinned:
         failures.append(
@@ -276,9 +291,10 @@ def select():
 def main():
     names = select()
     failures = []
+    deviations = json.loads(DEVIATIONS.read_text())
     provenance = check_provenance(failures)
     for name in names:
-        check_case(name, CASES, failures)
+        check_case(name, CASES, deviations, failures)
     for failure in failures:
         print(f"T8N — {failure}")
 
@@ -295,7 +311,7 @@ def main():
             corrupted["stateRoot"] = root[:-1] + ("0" if root[-1] != "0" else "1")
             victim.write_text(json.dumps(corrupted, indent=4))
             red_failures = []
-            check_case(names[0], scratch, red_failures)
+            check_case(names[0], scratch, deviations, red_failures)
             if not red_failures:
                 print(
                     "T8N — the red test did not fail: a corrupted stateRoot in "
@@ -306,6 +322,37 @@ def main():
                 print(
                     "OK — t8n red test: a corrupted stateRoot in "
                     f"{names[0]} is rejected"
+                )
+
+        amsterdam_names = [
+            name
+            for name in names
+            if json.loads((CASES / name / "case.json").read_text())["fork"]
+            == "Amsterdam"
+        ]
+        if amsterdam_names:
+            victim = amsterdam_names[0]
+            without_second = json.loads(json.dumps(deviations))
+            without_second["fields"] = [
+                entry
+                for entry in without_second["fields"]
+                if not (
+                    entry.get("case") == victim
+                    and entry.get("path") == ["blockAccessListHash"]
+                )
+            ]
+            second_failures = []
+            check_case(victim, CASES, without_second, second_failures)
+            if not second_failures:
+                print(
+                    "T8N — the red test did not fail: the second Amsterdam "
+                    f"block-access difference in {victim} was not registered"
+                )
+                failures.append("unregistered second Amsterdam difference passed")
+            else:
+                print(
+                    "OK — t8n red test: an unregistered second Amsterdam "
+                    f"difference in {victim} is rejected"
                 )
 
     if failures:

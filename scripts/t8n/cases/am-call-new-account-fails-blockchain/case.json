@@ -1,0 +1,17 @@
+{
+  "description": "The value CALL creates a child account, then the enclosing callee reverts; creation state gas and the nested transfer log are rolled back.",
+  "scenario": "am-call-new-account-fails",
+  "fork": "Amsterdam",
+  "chainid": 1,
+  "reward": -1,
+  "mode": "blockchain",
+  "allocIncludes": [
+    "../../amsterdam-system-alloc.json"
+  ],
+  "covers": [
+    "call-new-account",
+    "reverting-callee",
+    "creation-refill",
+    "log-rollback"
+  ]
+}

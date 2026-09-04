@@ -1,5 +1,185 @@
 {
   "cases": {
+    "am-call-new-account-blockchain": {
+      "expected/alloc.json": "e5f83be554e76e39e50d57824d4c3d5523152e598b7b8ba69cc1e429ce11b527",
+      "expected/body.json": "0619b2184d6048d0d995463b00675fed52d4623b3f4329fd48ba5a47810c1bee",
+      "expected/result.json": "793e5c6e9b1953874f3850379e378fecbfc57ca25e881721ee0ffe324de089f2",
+      "txs.json": "8c6d0fa9a99bced12800e322ee7cf638130bbbd1542535631baf0adc6575c69e"
+    },
+    "am-call-new-account-fails-blockchain": {
+      "expected/alloc.json": "42a8e4bcb0a2a9603cd9e5bf45c305e2f72d678e8c79d34eea34dfa68e59a47c",
+      "expected/body.json": "953cda3a9382a5e62e3cd8cf4f7240c3d363e586c836212289b90f1c2f3f4862",
+      "expected/result.json": "f1564f7e49668a7d8f88efd08494eab8c971ad5a327232fa125f9f362a89f8c4",
+      "txs.json": "a2aaf076f88f99257c1ebace3741d0d5e31de65e099bfbb9518150f2de002090"
+    },
+    "am-call-new-account-fails-state-test": {
+      "expected/alloc.json": "5e855e85292c25dc2a395d00c41484e3d2260e20e05400d2d6adb0eec7787142",
+      "expected/body.json": "953cda3a9382a5e62e3cd8cf4f7240c3d363e586c836212289b90f1c2f3f4862",
+      "expected/result.json": "215310d4fa91c5d321f4d5d2be8c92c7e6e99ffbb88fec5799448f35264d6bfe",
+      "txs.json": "a2aaf076f88f99257c1ebace3741d0d5e31de65e099bfbb9518150f2de002090"
+    },
+    "am-call-new-account-state-test": {
+      "expected/alloc.json": "8d1945861cdad11c0cf1038c790df647bdcf2416cea2034aa80ae9661a9e3583",
+      "expected/body.json": "0619b2184d6048d0d995463b00675fed52d4623b3f4329fd48ba5a47810c1bee",
+      "expected/result.json": "24afa872561ff9de7bd200dd07a6d28931e33c18b06f553848924f4d1468c2fc",
+      "txs.json": "8c6d0fa9a99bced12800e322ee7cf638130bbbd1542535631baf0adc6575c69e"
+    },
+    "am-create-blockchain": {
+      "expected/alloc.json": "f87fa3f17574694b873ee85a1708759c5545a795ca55fd93ceb230476cf02c05",
+      "expected/body.json": "30b671c4a7eafbdde2cce1e49d426c2c143e43012342fe1df5c5bf9ca651fcba",
+      "expected/result.json": "b52a5c2937cae6aaada8d530097bf573a901e6479f2852d24b0eeac2fb19faa1",
+      "txs.json": "0059f9180425951900786a6918318c7b5fcd4a07416e9bcb3afd62edc161edb3"
+    },
+    "am-create-state-test": {
+      "expected/alloc.json": "a651ae113b2db12a9b22b56bfd7445db70fe3b512a6feca77c3dadb5c25ee9a8",
+      "expected/body.json": "30b671c4a7eafbdde2cce1e49d426c2c143e43012342fe1df5c5bf9ca651fcba",
+      "expected/result.json": "a64a3e5231abb947138b8b4da98b7da44d7a064764375b5285567bb84caf4107",
+      "txs.json": "0059f9180425951900786a6918318c7b5fcd4a07416e9bcb3afd62edc161edb3"
+    },
+    "am-cross-frame-refund-blockchain": {
+      "expected/alloc.json": "5d185df0ae3b2a3be8b75561cd829105e9c206034dff009ab698cefe74694ebd",
+      "expected/body.json": "7bd54a619b08f8d5b4df87ead6d561bcd19be060903a73dc6c8715a26fde3c9f",
+      "expected/result.json": "89a9909d8e4cc181dea256420ab10c9fa2c19c84cb7240f449ce23a774bbc06c",
+      "txs.json": "eb855803ab70b042176c276403898ca52bee919bc4a31615473606946b4a63d0"
+    },
+    "am-cross-frame-refund-state-test": {
+      "expected/alloc.json": "6269d508ba297d76eb0a74238b5a65aab521d9da100af5d53b55b899d1bac1ab",
+      "expected/body.json": "7bd54a619b08f8d5b4df87ead6d561bcd19be060903a73dc6c8715a26fde3c9f",
+      "expected/result.json": "e2203ae941e0e8709d4ceaac4166d32a45e9c8175d00bb44b83fe7225238910c",
+      "txs.json": "eb855803ab70b042176c276403898ca52bee919bc4a31615473606946b4a63d0"
+    },
+    "am-delegation-blockchain": {
+      "expected/alloc.json": "4de8fb3b866e9ad67d8acb17b29ff06180f9c137123f2f401c94dfb269a68ad9",
+      "expected/body.json": "ad05ce530cf67c037bdff0a3ce10ea693641b74fac7919dd8e55e77cdfc9a7f9",
+      "expected/result.json": "4cbc5fe708272b22f198164ff8679a1e8a401a9284d450bf3ad78e8213984979",
+      "txs.json": "cfd16d53b73a2c1a90f8e2c9d30e339c43eef4a579812422da35701e57542c03"
+    },
+    "am-delegation-state-test": {
+      "expected/alloc.json": "b5a63fd456970bcb8efd198958c4eb775d5ce55da1f3390331546b1ca7bd68bc",
+      "expected/body.json": "ad05ce530cf67c037bdff0a3ce10ea693641b74fac7919dd8e55e77cdfc9a7f9",
+      "expected/result.json": "4dd2a88dcf3b2505fc74ea0381e10e1d5b2dc087b25e62c0695d3dbf2f38dfc0",
+      "txs.json": "cfd16d53b73a2c1a90f8e2c9d30e339c43eef4a579812422da35701e57542c03"
+    },
+    "am-extcode-blockchain": {
+      "expected/alloc.json": "ca3d8576a88c06c2cf6db85abbef37be4280e71d54c01b20f9ac823678ac960a",
+      "expected/body.json": "e321c004ecf2cefbdecb11deacdde72bba3499b436a738be3ed19de75c12df1f",
+      "expected/result.json": "921760a3eea75d46ce543d802f84a2c634a192e69e21816d4288fa1895fe8d68",
+      "txs.json": "d961ebe21c581050feaf0f738450f811a281b09a34db0b5b11c9e6f31e5797e7"
+    },
+    "am-extcode-state-test": {
+      "expected/alloc.json": "98b81a49339dc0602aeaa2bcf8c86e4586e30e85557587e9c94a1d775f9b71ce",
+      "expected/body.json": "e321c004ecf2cefbdecb11deacdde72bba3499b436a738be3ed19de75c12df1f",
+      "expected/result.json": "80f8dcd4841fc71a636c29d1ca4323577d9e1c828f8cc83094aee5d9cca2ecc7",
+      "txs.json": "d961ebe21c581050feaf0f738450f811a281b09a34db0b5b11c9e6f31e5797e7"
+    },
+    "am-floor-blockchain": {
+      "expected/alloc.json": "f1187a33037646170f76707bd1d2b5bf3fe8205c8b2acd5fb5e0e1aea77b0e8a",
+      "expected/body.json": "c6ec11ed90e7170b9ef2e8d76611c0ca3f058ef9a61a24a46ca55c7e5b259e6a",
+      "expected/result.json": "3e2f5535d9931c522f6ac16090200a54f6185efd53dcc949796c2acddf457ab3",
+      "txs.json": "ece4c6608edfd34e7be7cb49daa26f2b9931390b88e5c0a995c499250b71112c"
+    },
+    "am-floor-state-test": {
+      "expected/alloc.json": "1737d20a503ddea8df86b58f455bee3ca76859738c140450ef541cdfe3c39edc",
+      "expected/body.json": "c6ec11ed90e7170b9ef2e8d76611c0ca3f058ef9a61a24a46ca55c7e5b259e6a",
+      "expected/result.json": "39acaaf24bcc952b7689501e5f0f8ce12648f5af00544aaf75f70548e35aaec1",
+      "txs.json": "ece4c6608edfd34e7be7cb49daa26f2b9931390b88e5c0a995c499250b71112c"
+    },
+    "am-refund-cap-blockchain": {
+      "expected/alloc.json": "691ccab198da9311d35c788bbb15ca3696f59faf839fa848a9373a563df8dcc9",
+      "expected/body.json": "aedd33b14351712e4385c8d94e746b61bbb7b7ebdfe62cccd0c6ae8c8021eabf",
+      "expected/result.json": "174315868dcd400418c8f08373651e2bc0e928a0b59a5119cd9d5d4714f9b8e6",
+      "txs.json": "50ac7706fb6132f240eab09fd60526402838a2bbce9f5d0c89c1de23dd2be4c8"
+    },
+    "am-refund-cap-state-test": {
+      "expected/alloc.json": "5cce4d6c1cf4ae49cae2e5d7fb4cfa24cfb2615eafe9010a41245418698c68ff",
+      "expected/body.json": "aedd33b14351712e4385c8d94e746b61bbb7b7ebdfe62cccd0c6ae8c8021eabf",
+      "expected/result.json": "cea630e4b46f421c88252a15a13af39ab395c71b2969a5be0bb2827039ca401e",
+      "txs.json": "50ac7706fb6132f240eab09fd60526402838a2bbce9f5d0c89c1de23dd2be4c8"
+    },
+    "am-reject-intrinsic-blockchain": {
+      "expected/alloc.json": "5542709ca326a6ff97b0cf750f5a9d40568bf64012a2328c2343349a8fd3ad80",
+      "expected/body.json": "2cfb857d88d03b9bdf97a14c49c1ab0e790e1b090ae85feb45b3d687b0e9ab78",
+      "expected/result.json": "b1e339097b234e50c4fec01857e02bd550889501cdefcb07cf5e2bf163efbc13",
+      "txs.json": "4ed4e16e80d102fee0d831c4768546282dbdf45cc791376dc811ffa2c4434ab0"
+    },
+    "am-reject-intrinsic-state-test": {
+      "expected/alloc.json": "59d5126baeee6621aa80c41533bf4c136e7a923864da11e3b9b85dd1c0d380f7",
+      "expected/body.json": "2cfb857d88d03b9bdf97a14c49c1ab0e790e1b090ae85feb45b3d687b0e9ab78",
+      "expected/result.json": "8dcb600624838bdb587d8898099cb3eb163a31516b07b753dc492832604273b3",
+      "txs.json": "4ed4e16e80d102fee0d831c4768546282dbdf45cc791376dc811ffa2c4434ab0"
+    },
+    "am-reservoir-blockchain": {
+      "expected/alloc.json": "f7e4cf24d9166d2360fc6ff21af6a955e840334f69c8b6909c73439115725d4e",
+      "expected/body.json": "86a8359c6c87bf4368bbd2ae48403600324a18799fd130451b0a4a13ff037a45",
+      "expected/result.json": "bcddfe39911824a90fc92781eaca356b350ee28de7a2b0d3d6c1cc205e473850",
+      "txs.json": "e6f3191b46f7dde3635d384ef5da9a97b9f768708430ec2fb0e309f607ce52e8"
+    },
+    "am-reservoir-state-test": {
+      "expected/alloc.json": "0ea51dc76246247809b6b0a7513a27ba7f8dc4f0165fb70ac8d1381792f1cdf0",
+      "expected/body.json": "86a8359c6c87bf4368bbd2ae48403600324a18799fd130451b0a4a13ff037a45",
+      "expected/result.json": "1e510f1f2ea22830d05a723ad5e26a1bf1ed2a600ed1f872ecc47e28c1fa29c7",
+      "txs.json": "e6f3191b46f7dde3635d384ef5da9a97b9f768708430ec2fb0e309f607ce52e8"
+    },
+    "am-self-transfer-blockchain": {
+      "expected/alloc.json": "13d584c27ed4bc18df9998ea6c2c976e608a4eb3e08006d61bf9305e48054260",
+      "expected/body.json": "50abf58d43a0fa46956bc414567fc7dda71ff83b796476e60ddc40b6b06a23fb",
+      "expected/result.json": "b8b2ee7d2878abe451e659fabc2f6d0da2a927bacd6a0876eaa2ae98c219904f",
+      "txs.json": "345601319de8dae3f8edc8b9b1a4b140fd37265ba15e9923819b893665d12ad2"
+    },
+    "am-self-transfer-state-test": {
+      "expected/alloc.json": "bf5c038757781ddac55e467354501f91f3f9e352ae6882477340cbe7c32a4376",
+      "expected/body.json": "50abf58d43a0fa46956bc414567fc7dda71ff83b796476e60ddc40b6b06a23fb",
+      "expected/result.json": "b8cd8196e8e5847a603c3a3d3a6837ac56d850a6db63d0d2fb04c67f9a2c2930",
+      "txs.json": "345601319de8dae3f8edc8b9b1a4b140fd37265ba15e9923819b893665d12ad2"
+    },
+    "am-selfdestruct-blockchain": {
+      "expected/alloc.json": "3659eb088e13e4960fee2b59592232a6ac49f7a37050d1a8341030aa3ea6f27c",
+      "expected/body.json": "af527a4461cab1f6f2030cbac3956f04a387b71a9bbb1892f47c12d54256c6ea",
+      "expected/result.json": "5a4b8d548100da332d4dfa4566bff7fd4bea997f4fd923aad57f2e9ef14b0b64",
+      "txs.json": "5c5c6190819a43fb4e46f3ef4a9a2a30bb92875378598d76c7b184e8641b2be8"
+    },
+    "am-selfdestruct-state-test": {
+      "expected/alloc.json": "e3115409ecc0c0da751ee48834e249f1bd9cb0ed26afc3f41f4da8645fb3c4a0",
+      "expected/body.json": "af527a4461cab1f6f2030cbac3956f04a387b71a9bbb1892f47c12d54256c6ea",
+      "expected/result.json": "e4b6c9c347afd60de806107229952db05c3ce80c75dfb4e43b7250be9f6ec10d",
+      "txs.json": "5c5c6190819a43fb4e46f3ef4a9a2a30bb92875378598d76c7b184e8641b2be8"
+    },
+    "am-spill-blockchain": {
+      "expected/alloc.json": "0a5cb14dfbfc93df251e5945b26a9a8dc057dc53442d2dc34f22ae80f9cfa3db",
+      "expected/body.json": "ccec89b461f3eceaad3e74eced44743bf06405fb5ee4e8e64522573a9207a884",
+      "expected/result.json": "842cbdc11feae8826d8d106d5b2dafc55bc70a840c56fb5a6139ded5962e2cb0",
+      "txs.json": "6ff08e7c53fa33b8decf59b3f8384f4a4734d2dbac0c782840ce6bf7317039dc"
+    },
+    "am-spill-state-test": {
+      "expected/alloc.json": "1682783089b2aaffe6d6091ae6881ecd4836c0547d95aacab4f1ea43a4702d2a",
+      "expected/body.json": "ccec89b461f3eceaad3e74eced44743bf06405fb5ee4e8e64522573a9207a884",
+      "expected/result.json": "2b7d03536da5e1dad5420157353b290eba896135e1b7231183bf2fc033edf335",
+      "txs.json": "6ff08e7c53fa33b8decf59b3f8384f4a4734d2dbac0c782840ce6bf7317039dc"
+    },
+    "am-sstore-lattice-blockchain": {
+      "expected/alloc.json": "86be68b07d8bfcf05b0dfd175259829aad2708be1e6f45b471eed3a05417c113",
+      "expected/body.json": "72ba8078b2aa20d6d70d0776c1c218cd552af4b8690e4c465abdf2d51de6d86c",
+      "expected/result.json": "d6b775e7113073da964a5ae9268c73620b39ec2b826c38582c5db75acce0b3e5",
+      "txs.json": "b6cf986fce34a13d8c61e72803a9510d35d02343d0d9f31bbc2cffe5e620ea72"
+    },
+    "am-sstore-lattice-state-test": {
+      "expected/alloc.json": "d8e9f5e239dca16afefadaef3afeb044d0171d020d38324e08a39eb2eba59e89",
+      "expected/body.json": "72ba8078b2aa20d6d70d0776c1c218cd552af4b8690e4c465abdf2d51de6d86c",
+      "expected/result.json": "ef23794e0d2404e6899868536de4d80bc026e9b78880e8f26600d9bec6a72794",
+      "txs.json": "b6cf986fce34a13d8c61e72803a9510d35d02343d0d9f31bbc2cffe5e620ea72"
+    },
+    "am-transfer-blockchain": {
+      "expected/alloc.json": "efef6d523faa5f62f6b0f64c822840e2e9c769fe39e26eaf285c52ad617830e7",
+      "expected/body.json": "d09880c8331ef2b379049f5ba00175c4b5a32d008db1e388e564e52a0da8d0e8",
+      "expected/result.json": "c38ade3be4b0fd94f532efc1a7e9f5f37932ce1b039ca55a35f21d7af9706e63",
+      "txs.json": "09ed943006b9f586ba170b59a1c4401101ae909eaea483077ef80da35e68433d"
+    },
+    "am-transfer-state-test": {
+      "expected/alloc.json": "991234c2cc20695b9219d2ac158565e8a5d89db77726beaeb9b4e95a67751096",
+      "expected/body.json": "d09880c8331ef2b379049f5ba00175c4b5a32d008db1e388e564e52a0da8d0e8",
+      "expected/result.json": "0aa9799857215ff3080ff9c13490e092641846017f77ad97c0ce8c4ea62276c0",
+      "txs.json": "09ed943006b9f586ba170b59a1c4401101ae909eaea483077ef80da35e68433d"
+    },
     "block-exception": {
       "expected/alloc.json": "8daadaa05c198068b6c13146765cbcafdaf9526d7fe1255aa8cc83df7e1a8a19",
       "expected/body.json": "b2c18078e9436a2c8530330581d9e3cbb99e5ac99e5186566def91ab47a2a812",

@@ -1,0 +1,16 @@
+{
+  "description": "Calldata plus an access list makes the Amsterdam floor bind: four tokens per byte and 80/128 tokens per address/storage entry at 16 gas each.",
+  "scenario": "am-floor",
+  "fork": "Amsterdam",
+  "chainid": 1,
+  "reward": -1,
+  "mode": "state-test",
+  "allocIncludes": [
+    "../../amsterdam-system-alloc.json"
+  ],
+  "covers": [
+    "calldata-floor",
+    "access-list-address-floor",
+    "access-list-storage-floor"
+  ]
+}

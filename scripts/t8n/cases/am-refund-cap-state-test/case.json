@@ -1,0 +1,15 @@
+{
+  "description": "Clearing eight originally-nonzero storage slots produces refunds above one fifth of pre-refund execution usage, pinning the cap.",
+  "scenario": "am-refund-cap",
+  "fork": "Amsterdam",
+  "chainid": 1,
+  "reward": -1,
+  "mode": "state-test",
+  "allocIncludes": [
+    "../../amsterdam-system-alloc.json"
+  ],
+  "covers": [
+    "storage-clear-refund",
+    "one-fifth-refund-cap"
+  ]
+}

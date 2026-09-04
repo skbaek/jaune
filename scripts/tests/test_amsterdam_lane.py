@@ -41,6 +41,33 @@ AMSTERDAM_SUITES = {
     "amsterdam-transitions": "jaune-amsterdam-currency-v1",
 }
 
+T8N = SCRIPTS / "t8n"
+AMSTERDAM_T8N_SCENARIOS = (
+    "am-transfer",
+    "am-self-transfer",
+    "am-create",
+    "am-call-new-account",
+    "am-call-new-account-fails",
+    "am-spill",
+    "am-cross-frame-refund",
+    "am-sstore-lattice",
+    "am-selfdestruct",
+    "am-extcode",
+    "am-delegation",
+    "am-reservoir",
+    "am-floor",
+    "am-refund-cap",
+    "am-reject-intrinsic",
+)
+AMSTERDAM_SYSTEM_ADDRESSES = {
+    "0x0000bff46984e3725691fa540a8c7589300d8282",
+    "0x000064d678505ad48f8ccb093bc65613800e8282",
+    "0x0000f90827f1c53a10cb7a02335b175320002935",
+    "0x0000bbddc7ce488642fb579f8b00f3a590007251",
+    "0x00000961ef480eb55e80d19ad83579a64c007002",
+    "0x000f3df6d732807ef1319fb7b8bb8522d0beac02",
+}
+
 
 def run_check_mainnet(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
@@ -227,6 +254,88 @@ class LaneManifestFieldTests(unittest.TestCase):
             checks = env_doctor.check_amsterdam(self.sources, Path(tmp) / "absent")
         self.assertTrue(checks)
         self.assertTrue(all(c.name.startswith("glamsterdam-devnet") for c in checks))
+
+
+class AmsterdamT8nCorpusTests(unittest.TestCase):
+    """Appendix-F scenarios, paired modes, and their declared boundary."""
+
+    def case(self, scenario: str, mode: str) -> Path:
+        return T8N / "cases" / f"{scenario}-{mode}"
+
+    def test_appendix_f_has_exactly_fifteen_scenarios_in_both_modes(self):
+        expected = {
+            f"{scenario}-{mode}"
+            for scenario in AMSTERDAM_T8N_SCENARIOS
+            for mode in ("blockchain", "state-test")
+        }
+        actual = {
+            path.name
+            for path in (T8N / "cases").iterdir()
+            if path.is_dir()
+            and json.loads((path / "case.json").read_text()).get("fork")
+            == "Amsterdam"
+        }
+        self.assertEqual(actual, expected)
+
+    def test_each_case_owns_four_inputs_and_declares_shared_system_alloc(self):
+        for scenario in AMSTERDAM_T8N_SCENARIOS:
+            for mode in ("blockchain", "state-test"):
+                with self.subTest(scenario=scenario, mode=mode):
+                    case = self.case(scenario, mode)
+                    spec = json.loads((case / "case.json").read_text())
+                    self.assertEqual(spec["scenario"], scenario)
+                    self.assertEqual(spec["fork"], "Amsterdam")
+                    self.assertEqual(spec["mode"], mode)
+                    self.assertEqual(
+                        spec["allocIncludes"], ["../../amsterdam-system-alloc.json"]
+                    )
+                    self.assertTrue(spec["covers"])
+                    for name in ("case.json", "alloc.json", "env.json", "txs.src.json"):
+                        self.assertTrue((case / name).is_file(), f"{case.name}/{name}")
+
+    def test_each_state_test_uses_the_blockchain_transactions(self):
+        for scenario in AMSTERDAM_T8N_SCENARIOS:
+            with self.subTest(scenario=scenario):
+                blockchain = self.case(scenario, "blockchain")
+                state_test = self.case(scenario, "state-test")
+                source = json.loads((blockchain / "txs.src.json").read_text())
+                mirror = json.loads((state_test / "txs.src.json").read_text())
+                self.assertIsInstance(source, list)
+                self.assertEqual(len(source), 1)
+                self.assertEqual(
+                    mirror, {"include": f"../{scenario}-blockchain/txs.src.json"}
+                )
+
+    def test_shared_system_alloc_is_the_exact_six_predeploys(self):
+        alloc = json.loads((T8N / "amsterdam-system-alloc.json").read_text())
+        self.assertEqual(set(alloc), AMSTERDAM_SYSTEM_ADDRESSES)
+
+    def test_each_case_registers_both_target_only_block_access_fields(self):
+        deviations = json.loads((T8N / "deviations.json").read_text())["fields"]
+        for scenario in AMSTERDAM_T8N_SCENARIOS:
+            for mode in ("blockchain", "state-test"):
+                case = f"{scenario}-{mode}"
+                entries = [entry for entry in deviations if entry.get("case") == case]
+                with self.subTest(case=case):
+                    self.assertEqual(len(entries), 2)
+                    self.assertEqual(
+                        {tuple(entry["path"]) for entry in entries},
+                        {("blockAccessList",), ("blockAccessListHash",)},
+                    )
+                    self.assertTrue(
+                        all(entry.get("jauneAbsent") is True for entry in entries)
+                    )
+                    self.assertTrue(all("target" in entry for entry in entries))
+                    self.assertTrue(all("jaune" not in entry for entry in entries))
+                    self.assertTrue(
+                        all(
+                            entry.get("owner") == "jaune-amsterdam-block-v1"
+                            for entry in entries
+                        )
+                    )
+                    self.assertTrue(
+                        all(entry.get("recorded") == "2026-09-05" for entry in entries)
+                    )
 
 
 if __name__ == "__main__":
