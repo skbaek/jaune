@@ -9,7 +9,7 @@ open Jaune
 
 `Jaune.Execution` defines the interpreter driver structurally recursive on a
 fuel parameter, so it must report exhaustion as a possible outcome. This module
-proves that fuel seeded from the frame's remaining gas is always sufficient, and
+proves that fuel seeded from the frame's gas measure is always sufficient, and
 uses that proof to give the driver and its frame wrappers a total type.
 
 It sits between `Jaune.Execution` (the driver) and `Jaune.Transaction` (its
@@ -17,41 +17,58 @@ first consumer) so that the consumers can be stated against the total API.
 
 ## The measure
 
-The measure is the single field `Devm.gasLeft`. It is deliberately *not*
-Blanc's `Devm.Burn`: that relation is non-strict and bundles thirteen further
-field equalities, neither of which this argument wants. Everything here is
-stated about `gasLeft` alone.
+The measure is `Devm.gasMeasure`: execution gas plus the outstanding and the
+committed spill of EIP-8037's state-gas meter, `gasLeft + spilled +
+committedSpill` (`Jaune/Machine.lean`, beside the meter). Under
+`rules.stateGas = none` the meter is zero and the measure *is* `gasLeft`, so
+every Prague-stated fact below is the fact it always was; under `some _` it is
+what still decreases when a state-gas refund raises `gasLeft`
+(`DualGasProbe.executionGas_alone_can_increase` is the standing witness that
+`gasLeft` alone cannot serve, and the Amsterdam `SSTORE` arm is where that
+witness is met at a real site). It is deliberately *not* Blanc's `Devm.Burn`:
+that relation is non-strict and bundles thirteen further field equalities,
+neither of which this argument wants. Everything here is stated about the
+measure alone, and treats it as one atom: the `simp` sets below say which
+updates leave it alone, `chargeGas_gasMeasure` says how much a charge takes,
+and every site proof ends in one `omega`.
 
 ## The obligations
 
 Sufficiency reduces to four facts about one step of the driver, all measured
 against the frame's gas at the *start* of the step:
 
-* `.cont` — a continuing step leaves strictly less gas;
-* spawn/child — a spawned child starts with strictly less gas than its parent;
+* `.cont` — a continuing step leaves a strictly smaller measure;
+* spawn/child — a spawned child starts with a strictly smaller measure than its
+  parent;
 * spawn/done — a spawn that resolves without running a child resumes the parent
-  with strictly less gas;
-* spawn/settle — a spawn whose child ran, and whose child did not gain gas,
-  resumes the parent with strictly less gas.
+  with a strictly smaller measure;
+* spawn/settle — a spawn whose child ran, and whose child's measure did not
+  grow, resumes the parent with a strictly smaller measure.
 
 The last one is why the driver also needs a monotonicity theorem: the resumed
-parent's gas is `parent.gasLeft + child.gasLeft`, so the child's own budget has
-to be known not to have grown.
+parent's measure is at most `parent.gasMeasure + child.gasMeasure`, so the
+child's own budget has to be known not to have grown.
 -/
 
-/-- The remaining gas carried by a raw frame result, in either branch. The
-error branch retains its `Devm` precisely so that gas can still be read off it,
-and the driver's monotonicity theorem has to cover both branches because
+/- `Devm.gasMeasure_def` unfolds the measure into its three fields. This file
+treats the measure as one atom -- the `simp` sets below say which updates leave
+it alone -- so the unfolding is kept out of the default `simp` set here, where
+it would otherwise triple the size of every arithmetic goal. -/
+attribute [-simp] Devm.gasMeasure_def
+
+/-- The measure carried by a raw frame result, in either branch. The error
+branch retains its `Devm` precisely so that the measure can still be read off
+it, and the driver's monotonicity theorem has to cover both branches because
 `Frame.settle` consumes both. -/
-def Execution.gasLeft : Execution → Nat
-  | .ok devm => devm.gasLeft
-  | .error e => e.2.gasLeft
+def Execution.gasMeasure : Execution → Nat
+  | .ok devm => devm.gasMeasure
+  | .error e => e.2.gasMeasure
 
-@[simp] theorem Execution.gasLeft_ok (devm : Devm) :
-    Execution.gasLeft (.ok devm) = devm.gasLeft := rfl
+@[simp] theorem Execution.gasMeasure_ok (devm : Devm) :
+    Execution.gasMeasure (.ok devm) = devm.gasMeasure := rfl
 
-@[simp] theorem Execution.gasLeft_error (e : EvmError × Devm) :
-    Execution.gasLeft (.error e) = e.2.gasLeft := rfl
+@[simp] theorem Execution.gasMeasure_error (e : EvmError × Devm) :
+    Execution.gasMeasure (.error e) = e.2.gasMeasure := rfl
 
 /-! ## Gas-preserving state updates
 
@@ -218,32 +235,180 @@ end Devm
     (k : B256) :
     (addAccessedStorageKey devm a k).mach.stateGas = devm.mach.stateGas := rfl
 
+/-! ### The same set, for the measure
+
+`Devm.gasMeasure` is `gasLeft + spilled + committedSpill`, so an update that
+leaves both `gasLeft` and `stateGas` alone leaves the measure alone, and the two
+sets above compose into this one. It is stated as its own `simp` set -- rather
+than unfolding the measure at every site -- so that a proof about the measure
+treats it as the single atom `gasLeft` used to be: every `omega` below sees one
+number per `Devm`, not three.
+
+`withGasLeft` is the one plain update that moves the measure, and it moves it
+by exactly the change in `gasLeft`: the meter's two spill fields ride along.
+That pair is named, as `Devm.spill`, because it is also what an exceptional
+halt keeps -- `handleError` zeroes `gasLeft` and leaves the meter alone -- so
+the same name is what the halt obligation below is stated against. -/
+
+namespace Devm
+
+/-- The part of the measure that is not execution gas: the meter's outstanding
+and committed spill. `gasMeasure = gasLeft + spill`, and a halted frame settles
+at exactly `spill`. -/
+def spill (devm : Devm) : Nat :=
+  devm.mach.stateGas.spilled + devm.mach.stateGas.committedSpill
+
+theorem gasMeasure_eq (devm : Devm) : devm.gasMeasure = devm.gasLeft + devm.spill := by
+  simp only [Devm.gasMeasure, Mach.gasMeasure, Devm.gasLeft, Devm.spill]
+  omega
+
+theorem gasLeft_le_gasMeasure (devm : Devm) : devm.gasLeft ≤ devm.gasMeasure := by
+  rw [Devm.gasMeasure_eq]
+  exact Nat.le_add_right _ _
+
+theorem spill_le_gasMeasure (devm : Devm) : devm.spill ≤ devm.gasMeasure := by
+  rw [Devm.gasMeasure_eq]
+  exact Nat.le_add_left _ _
+
+@[simp] theorem setMeta_spill (devm : Devm) (view : Meta) :
+    (devm.setMeta view).spill = devm.spill := rfl
+
+@[simp] theorem setWorld_spill (devm : Devm) (world : World) :
+    (devm.setWorld world).spill = devm.spill := rfl
+
+@[simp] theorem withGasLeft_spill (devm : Devm) (n : Nat) :
+    (devm.withGasLeft n).spill = devm.spill := rfl
+
+@[simp] theorem withReturnData_spill (devm : Devm) (returnData : Bytes) :
+    (devm.withReturnData returnData).spill = devm.spill := rfl
+
+@[simp] theorem rollback_spill (devm : Devm) (wor : State) (tra : Tra) :
+    (devm.rollback wor tra).spill = devm.spill := rfl
+
+@[simp] theorem setMach_gasMeasure (devm : Devm) (mach : Mach) :
+    (devm.setMach mach).gasMeasure = mach.gasMeasure := rfl
+
+@[simp] theorem setMeta_gasMeasure (devm : Devm) (view : Meta) :
+    (devm.setMeta view).gasMeasure = devm.gasMeasure := rfl
+
+@[simp] theorem setWorld_gasMeasure (devm : Devm) (world : World) :
+    (devm.setWorld world).gasMeasure = devm.gasMeasure := rfl
+
+theorem withGasLeft_gasMeasure (devm : Devm) (n : Nat) :
+    (devm.withGasLeft n).gasMeasure = n + devm.spill := by
+  simp only [Devm.withGasLeft, Devm.setMach, Devm.gasMeasure, Mach.gasMeasure,
+    Devm.spill]
+  omega
+
+@[simp] theorem withStack_gasMeasure (devm : Devm) (stack : List B256) :
+    (devm.withStack stack).gasMeasure = devm.gasMeasure := rfl
+
+@[simp] theorem withMemory_gasMeasure (devm : Devm) (memory : Mem) :
+    (devm.withMemory memory).gasMeasure = devm.gasMeasure := rfl
+
+@[simp] theorem withLogs_gasMeasure (devm : Devm) (logs : List Log) :
+    (devm.withLogs logs).gasMeasure = devm.gasMeasure := rfl
+
+@[simp] theorem withRefundCounter_gasMeasure (devm : Devm) (rc : Int) :
+    (devm.withRefundCounter rc).gasMeasure = devm.gasMeasure := rfl
+
+@[simp] theorem withReturnData_gasMeasure (devm : Devm) (returnData : Bytes) :
+    (devm.withReturnData returnData).gasMeasure = devm.gasMeasure := rfl
+
+@[simp] theorem withError_gasMeasure (devm : Devm) (error : Option SettledHalt) :
+    (devm.withError error).gasMeasure = devm.gasMeasure := rfl
+
+@[simp] theorem withCreatedAccounts_gasMeasure (devm : Devm) (as : AdrSet) :
+    (devm.withCreatedAccounts as).gasMeasure = devm.gasMeasure := rfl
+
+@[simp] theorem withState_gasMeasure (devm : Devm) (state : State) :
+    (devm.withState state).gasMeasure = devm.gasMeasure := rfl
+
+@[simp] theorem memWrite_gasMeasure (devm : Devm) (idx : Nat) (val : Bytes) :
+    (devm.memWrite idx val).gasMeasure = devm.gasMeasure := rfl
+
+@[simp] theorem memExtends_gasMeasure (devm : Devm) (pairs : List (Nat × Nat)) :
+    (devm.memExtends pairs).gasMeasure = devm.gasMeasure := rfl
+
+@[simp] theorem memRead_gasMeasure (devm : Devm) (index size : Nat) :
+    (devm.memRead index size).2.gasMeasure = devm.gasMeasure := rfl
+
+@[simp] theorem addLog_gasMeasure (devm : Devm) (log : Log) :
+    (devm.addLog log).gasMeasure = devm.gasMeasure := rfl
+
+@[simp] theorem setStorVal_gasMeasure (devm : Devm) (adr : Adr) (key val : B256) :
+    (devm.setStorVal adr key val).gasMeasure = devm.gasMeasure := rfl
+
+@[simp] theorem setTransVal_gasMeasure (devm : Devm) (adr : Adr) (key val : B256) :
+    (devm.setTransVal adr key val).gasMeasure = devm.gasMeasure := rfl
+
+@[simp] theorem incrNonce_gasMeasure (devm : Devm) (adr : Adr) :
+    (devm.incrNonce adr).gasMeasure = devm.gasMeasure := rfl
+
+@[simp] theorem setCode_gasMeasure (devm : Devm) (adr : Adr) (code : ByteArray) :
+    (devm.setCode adr code).gasMeasure = devm.gasMeasure := rfl
+
+@[simp] theorem rollback_gasMeasure (devm : Devm) (wor : State) (tra : Tra) :
+    (devm.rollback wor tra).gasMeasure = devm.gasMeasure := rfl
+
+end Devm
+
+@[simp] theorem addAccessedAddress_gasMeasure (devm : Devm) (a : Adr) :
+    (addAccessedAddress devm a).gasMeasure = devm.gasMeasure := rfl
+
+@[simp] theorem addAccessedStorageKey_gasMeasure (devm : Devm) (a : Adr) (k : B256) :
+    (addAccessedStorageKey devm a k).gasMeasure = devm.gasMeasure := rfl
+
+/-! ### Child incorporation, on the measure
+
+Prague's incorporation adds the child's execution gas to the parent's and leaves
+the parent's meter alone, so the parent's measure grows by exactly
+`child.gasLeft` -- which is at most `child.gasMeasure`. The driver only ever
+needs the bound, and stating the bound is what lets the Amsterdam siblings
+(`incorporateChildAmsterdam*_gasMeasure`, which conserve the pair's measure up
+to a committed spill a child cannot carry) satisfy the same obligation. -/
+
+theorem incorporateChildOnError_gasMeasure (parent child : Devm) (rd : Bytes) :
+    (incorporateChildOnError parent child rd).gasMeasure =
+      parent.gasMeasure + child.gasLeft := by
+  simp only [incorporateChildOnError, Devm.setMach, Devm.setMeta, Devm.setWorld,
+    Devm.gasMeasure, Mach.gasMeasure, Devm.gasLeft]
+  omega
+
+theorem incorporateChildOnSuccess_gasMeasure (parent child : Devm) (rd : Bytes) :
+    (incorporateChildOnSuccess parent child rd).gasMeasure =
+      parent.gasMeasure + child.gasLeft := by
+  simp only [incorporateChildOnSuccess, Devm.setMach, Devm.setMeta, Devm.setWorld,
+    Devm.gasMeasure, Mach.gasMeasure, Devm.gasLeft]
+  omega
+
 /-! ## The charging primitive
 
-`chargeGas` is the only place an instruction body loses gas, and it loses
-exactly the cost it was asked for. Every strict-decrease proof in the corpus
-bottoms out in `chargeGas_gasLeft`, so it is stated as an exact equation rather
-than an inequality: the arithmetic of the call/create families needs to add the
-charge back. -/
+`chargeGas` is the only place an instruction body loses execution gas, and it
+loses exactly the cost it was asked for; the meter is untouched, so the measure
+drops by exactly that cost too. Every strict-decrease proof in the corpus
+bottoms out in `chargeGas_gasMeasure`, so it is stated as an exact equation
+rather than an inequality: the arithmetic of the call/create families needs to
+add the charge back. -/
 
-theorem chargeGas_gasLeft {c : Nat} {devm devm' : Devm}
-    (h : chargeGas c devm = .ok devm') : devm'.gasLeft + c = devm.gasLeft := by
+theorem chargeGas_gasMeasure {c : Nat} {devm devm' : Devm}
+    (h : chargeGas c devm = .ok devm') : devm'.gasMeasure + c = devm.gasMeasure := by
   rw [chargeGas_def] at h
   by_cases hle : c ≤ devm.gasLeft
   · simp only [safeSub, if_pos hle, Except.ok.injEq] at h
     subst h
-    simp only [Devm.setMach_gasLeft]
+    simp only [Devm.setMach, Mach.gasMeasure, Devm.gasMeasure, Devm.gasLeft] at hle ⊢
     omega
   · exact absurd h (by simp [safeSub, if_neg hle])
 
 /-! ## Stack primitives
 
-Pushing and popping never touch `gasLeft`. These are the inversion forms the
-instruction walks need: the hypothesis is the `.ok` equation that survives a
-`split`, and the conclusion feeds `omega`. -/
+Pushing and popping never touch `gasLeft` or the meter. These are the inversion
+forms the instruction walks need: the hypothesis is the `.ok` equation that
+survives a `split`, and the conclusion feeds `omega`. -/
 
-theorem Devm.push_gasLeft {x : B256} {devm devm' : Devm}
-    (h : Devm.push x devm = .ok devm') : devm'.gasLeft = devm.gasLeft := by
+theorem Devm.push_gasMeasure {x : B256} {devm devm' : Devm}
+    (h : Devm.push x devm = .ok devm') : devm'.gasMeasure = devm.gasMeasure := by
   rw [Devm.push_def] at h
   unfold Except.assert at h
   split at h
@@ -251,16 +416,16 @@ theorem Devm.push_gasLeft {x : B256} {devm devm' : Devm}
     subst h; rfl
   · exact absurd h (by simp [bind, Except.bind])
 
-theorem Devm.pop_gasLeft {devm : Devm} {x : B256} {devm' : Devm}
-    (h : devm.pop = .ok (x, devm')) : devm'.gasLeft = devm.gasLeft := by
+theorem Devm.pop_gasMeasure {devm : Devm} {x : B256} {devm' : Devm}
+    (h : devm.pop = .ok (x, devm')) : devm'.gasMeasure = devm.gasMeasure := by
   rw [Devm.pop_def] at h
   split at h
   · exact absurd h (by simp)
   · simp only [Except.ok.injEq, Prod.mk.injEq] at h
     rw [← h.2]; rfl
 
-theorem Devm.popToNat_gasLeft {devm : Devm} {n : Nat} {devm' : Devm}
-    (h : devm.popToNat = .ok (n, devm')) : devm'.gasLeft = devm.gasLeft := by
+theorem Devm.popToNat_gasMeasure {devm : Devm} {n : Nat} {devm' : Devm}
+    (h : devm.popToNat = .ok (n, devm')) : devm'.gasMeasure = devm.gasMeasure := by
   rcases devm with ⟨⟨stack, memory, gasLeft⟩, view, world⟩
   cases stack with
   | nil =>
@@ -272,8 +437,8 @@ theorem Devm.popToNat_gasLeft {devm : Devm} {n : Nat} {devm' : Devm}
     rw [← h.2]
     rfl
 
-theorem Devm.popToAdr_gasLeft {devm : Devm} {a : Adr} {devm' : Devm}
-    (h : devm.popToAdr = .ok (a, devm')) : devm'.gasLeft = devm.gasLeft := by
+theorem Devm.popToAdr_gasMeasure {devm : Devm} {a : Adr} {devm' : Devm}
+    (h : devm.popToAdr = .ok (a, devm')) : devm'.gasMeasure = devm.gasMeasure := by
   rcases devm with ⟨⟨stack, memory, gasLeft⟩, view, world⟩
   cases stack with
   | nil =>
@@ -285,8 +450,8 @@ theorem Devm.popToAdr_gasLeft {devm : Devm} {a : Adr} {devm' : Devm}
     rw [← h.2]
     rfl
 
-theorem Devm.popN_gasLeft {devm : Devm} {n : Nat} {xs : List B256} {devm' : Devm}
-    (h : devm.popN n = .ok (xs, devm')) : devm'.gasLeft = devm.gasLeft := by
+theorem Devm.popN_gasMeasure {devm : Devm} {n : Nat} {xs : List B256} {devm' : Devm}
+    (h : devm.popN n = .ok (xs, devm')) : devm'.gasMeasure = devm.gasMeasure := by
   induction n generalizing devm xs devm' with
   | zero =>
     rw [Devm.popN_def] at h
@@ -304,19 +469,21 @@ theorem Devm.popN_gasLeft {devm : Devm} {n : Nat} {xs : List B256} {devm' : Devm
       | ok q =>
         rw [hq] at h
         simp only [Except.ok.injEq, Prod.mk.injEq] at h
-        rw [← h.2, ih (by rw [hq]), Devm.pop_gasLeft (x := p.1) (by rw [hp])]
+        rw [← h.2, ih (by rw [hq]), Devm.pop_gasMeasure (x := p.1) (by rw [hp])]
 
 /-! ## Lifting a footprint-restricted core
 
 `liftMachExecution` and its `Meta`/`World` variants only ever reattach the
-core's own `Mach` to the original `Devm`, so a gas fact proved once about the
-core transfers verbatim. These inversion lemmas are what let the `apply*`
+core's own `Mach` to the original `Devm`, so a fact proved once about the core's
+`Mach` transfers verbatim. These inversion lemmas are what let the `apply*`
 family — and, in the corpus, `Rinst.balanceCore` — be handled at the `Mach`
-level, where there is no `Devm` scaffolding in the way. -/
+level, where there is no `Devm` scaffolding in the way. They return the whole
+`Mach` rather than one field of it, so that both the measure and, where a site
+needs it, the meter can be read off the same witness. -/
 
 theorem liftMachExecution_ok {core : Mach → Footprint.Outcome Mach Unit}
     {devm devm' : Devm} (h : liftMachExecution core devm = .ok devm') :
-    ∃ u mach', core devm.mach = .ok (u, mach') ∧ devm'.gasLeft = mach'.gasLeft := by
+    ∃ u mach', core devm.mach = .ok (u, mach') ∧ devm'.mach = mach' := by
   unfold liftMachExecution liftMach Footprint.toExecution Footprint.liftOutcome at h
   rcases hc : core devm.mach with ⟨err, view⟩ | ⟨u, mach'⟩ <;> simp only [hc] at h
   · exact absurd h (by simp)
@@ -329,7 +496,7 @@ theorem liftMachMetaExecution_ok
     {core : Mach → Meta → Footprint.Outcome (Mach × Meta) Unit}
     {devm devm' : Devm} (h : liftMachMetaExecution core devm = .ok devm') :
     ∃ u view', core devm.mach devm.meta = .ok (u, view') ∧
-      devm'.gasLeft = view'.1.gasLeft := by
+      devm'.mach = view'.1 := by
   unfold liftMachMetaExecution liftMachMeta Footprint.toExecution
     Footprint.liftOutcome at h
   rcases hc : core devm.mach devm.meta with ⟨err, view⟩ | ⟨u, view'⟩ <;>
@@ -338,80 +505,72 @@ theorem liftMachMetaExecution_ok
   · refine ⟨u, view', rfl, ?_⟩
     simp only [Except.ok.injEq] at h
     rw [← h]
-    rfl
 
 theorem liftMachMetaWorldExecution_ok
     {core : World → Mach → Meta → Footprint.Outcome (Mach × Meta) Unit}
     {devm devm' : Devm} (h : liftMachMetaWorldExecution core devm = .ok devm') :
     ∃ u view', core devm.world devm.mach devm.meta = .ok (u, view') ∧
-      devm'.gasLeft = view'.1.gasLeft :=
+      devm'.mach = view'.1 :=
   liftMachMetaExecution_ok h
 
 /-! ## The `Mach`-level charging and stack layer
 
 The `apply*` family is defined by `liftMachExecution` over a `Mach`-only core
-with no intervening `_def` lemma for the ternary case, so its gas accounting is
-proved here rather than at `Devm` level. -/
+with no intervening `_def` lemma for the ternary case, so its accounting is
+proved here rather than at `Devm` level. The charge itself is
+`Mach.chargeGas_gasMeasure`, stated beside the meter in `Jaune/Machine.lean`
+with the rest of the meter operations' measure lemmas. -/
 
 namespace Mach
 
-theorem chargeGas_gasLeft {c : Nat} {mach mach' : Mach} {u : Unit}
-    (h : Mach.chargeGas c mach = .ok (u, mach')) :
-    mach'.gasLeft + c = mach.gasLeft := by
-  unfold Mach.chargeGas safeSub at h
-  by_cases hle : c ≤ mach.gasLeft
-  · simp only [if_pos hle, Except.ok.injEq, Prod.mk.injEq] at h
-    rw [← h.2]
-    dsimp only
-    omega
-  · exact absurd h (by simp [if_neg hle])
-
-theorem pop_gasLeft {mach mach' : Mach} {x : B256}
-    (h : mach.pop = .ok (x, mach')) : mach'.gasLeft = mach.gasLeft := by
+theorem pop_gasMeasure {mach mach' : Mach} {x : B256}
+    (h : mach.pop = .ok (x, mach')) : mach'.gasMeasure = mach.gasMeasure := by
   unfold Mach.pop at h
   split at h
   · exact absurd h (by simp)
   · simp only [Except.ok.injEq, Prod.mk.injEq] at h
     rw [← h.2]
+    rfl
 
-theorem push_gasLeft {x : B256} {mach mach' : Mach} {u : Unit}
-    (h : Mach.push x mach = .ok (u, mach')) : mach'.gasLeft = mach.gasLeft := by
+theorem push_gasMeasure {x : B256} {mach mach' : Mach} {u : Unit}
+    (h : Mach.push x mach = .ok (u, mach')) : mach'.gasMeasure = mach.gasMeasure := by
   unfold Mach.push at h
   split at h
   · simp only [Except.ok.injEq, Prod.mk.injEq] at h
     rw [← h.2]
+    rfl
   · exact absurd h (by simp)
 
-theorem pushItem_gasLeft {x : B256} {c : Nat} {mach mach' : Mach} {u : Unit}
+theorem pushItem_gasMeasure {x : B256} {c : Nat} {mach mach' : Mach} {u : Unit}
     (h : Mach.pushItem x c mach = .ok (u, mach')) :
-    mach'.gasLeft + c = mach.gasLeft := by
+    mach'.gasMeasure + c = mach.gasMeasure := by
   unfold Mach.pushItem at h
   rcases hc : Mach.chargeGas c mach with ⟨err, m⟩ | ⟨uc, m1⟩ <;> simp only [hc] at h
   · exact absurd h (by simp)
-  · rw [push_gasLeft h, ← chargeGas_gasLeft hc]
+  · rw [push_gasMeasure h, ← Mach.chargeGas_gasMeasure hc]
 
-theorem applyUnary_gasLeft {f : B256 → B256} {c : Nat} {mach mach' : Mach}
+theorem applyUnary_gasMeasure {f : B256 → B256} {c : Nat} {mach mach' : Mach}
     {u : Unit} (h : Mach.applyUnary f c mach = .ok (u, mach')) :
-    mach'.gasLeft + c = mach.gasLeft := by
+    mach'.gasMeasure + c = mach.gasMeasure := by
   unfold Mach.applyUnary at h
   rcases hp : mach.pop with ⟨err, m⟩ | ⟨x, m1⟩ <;> simp only [hp] at h
   · exact absurd h (by simp)
-  · rw [pushItem_gasLeft h, pop_gasLeft hp]
+  · rw [pushItem_gasMeasure h, pop_gasMeasure hp]
 
-theorem applyBinary_gasLeft {f : B256 → B256 → B256} {c : Nat} {mach mach' : Mach}
+theorem applyBinary_gasMeasure {f : B256 → B256 → B256} {c : Nat} {mach mach' : Mach}
     {u : Unit} (h : Mach.applyBinary f c mach = .ok (u, mach')) :
-    mach'.gasLeft + c = mach.gasLeft := by
+    mach'.gasMeasure + c = mach.gasMeasure := by
   unfold Mach.applyBinary at h
   rcases hp : mach.pop with ⟨err, m⟩ | ⟨x, m1⟩ <;> simp only [hp] at h
   · exact absurd h (by simp)
   · rcases hq : m1.pop with ⟨err, m⟩ | ⟨y, m2⟩ <;> simp only [hq] at h
     · exact absurd h (by simp)
-    · rw [pushItem_gasLeft h, pop_gasLeft hq, pop_gasLeft hp]
+    · rw [pushItem_gasMeasure h, pop_gasMeasure hq, pop_gasMeasure hp]
 
-theorem applyTernary_gasLeft {f : B256 → B256 → B256 → B256} {c : Nat}
+theorem applyTernary_gasMeasure {f : B256 → B256 → B256 → B256} {c : Nat}
     {mach mach' : Mach} {u : Unit}
     (h : Mach.applyTernary f c mach = .ok (u, mach')) :
-    mach'.gasLeft + c = mach.gasLeft := by
+    mach'.gasMeasure + c = mach.gasMeasure := by
   unfold Mach.applyTernary at h
   rcases hp : mach.pop with ⟨err, m⟩ | ⟨x, m1⟩ <;> simp only [hp] at h
   · exact absurd h (by simp)
@@ -419,7 +578,7 @@ theorem applyTernary_gasLeft {f : B256 → B256 → B256 → B256} {c : Nat}
     · exact absurd h (by simp)
     · rcases hr : m2.pop with ⟨err, m⟩ | ⟨z, m3⟩ <;> simp only [hr] at h
       · exact absurd h (by simp)
-      · rw [pushItem_gasLeft h, pop_gasLeft hr, pop_gasLeft hq, pop_gasLeft hp]
+      · rw [pushItem_gasMeasure h, pop_gasMeasure hr, pop_gasMeasure hq, pop_gasMeasure hp]
 
 end Mach
 
@@ -430,30 +589,30 @@ These four cover every `Rinst` constructor whose body is a bare
 the rest. Each is stated as an exact equation in the charge, so a caller that
 needs strictness supplies `0 < c` and finishes with `omega`. -/
 
-theorem pushItem_gasLeft {x : B256} {c : Nat} {devm devm' : Devm}
-    (h : pushItem x c devm = .ok devm') : devm'.gasLeft + c = devm.gasLeft := by
-  obtain ⟨_, mach', hcore, hgas⟩ := liftMachExecution_ok h
-  rw [hgas, Mach.pushItem_gasLeft hcore]
-  rfl
+theorem pushItem_gasMeasure {x : B256} {c : Nat} {devm devm' : Devm}
+    (h : pushItem x c devm = .ok devm') : devm'.gasMeasure + c = devm.gasMeasure := by
+  obtain ⟨_, mach', hcore, hmach⟩ := liftMachExecution_ok h
+  show devm'.mach.gasMeasure + c = devm.mach.gasMeasure
+  rw [hmach, Mach.pushItem_gasMeasure hcore]
 
-theorem applyUnary_gasLeft {f : B256 → B256} {c : Nat} {devm devm' : Devm}
-    (h : applyUnary f c devm = .ok devm') : devm'.gasLeft + c = devm.gasLeft := by
-  obtain ⟨_, mach', hcore, hgas⟩ := liftMachExecution_ok h
-  rw [hgas, Mach.applyUnary_gasLeft hcore]
-  rfl
+theorem applyUnary_gasMeasure {f : B256 → B256} {c : Nat} {devm devm' : Devm}
+    (h : applyUnary f c devm = .ok devm') : devm'.gasMeasure + c = devm.gasMeasure := by
+  obtain ⟨_, mach', hcore, hmach⟩ := liftMachExecution_ok h
+  show devm'.mach.gasMeasure + c = devm.mach.gasMeasure
+  rw [hmach, Mach.applyUnary_gasMeasure hcore]
 
-theorem applyBinary_gasLeft {f : B256 → B256 → B256} {c : Nat} {devm devm' : Devm}
-    (h : applyBinary f c devm = .ok devm') : devm'.gasLeft + c = devm.gasLeft := by
-  obtain ⟨_, mach', hcore, hgas⟩ := liftMachExecution_ok h
-  rw [hgas, Mach.applyBinary_gasLeft hcore]
-  rfl
+theorem applyBinary_gasMeasure {f : B256 → B256 → B256} {c : Nat} {devm devm' : Devm}
+    (h : applyBinary f c devm = .ok devm') : devm'.gasMeasure + c = devm.gasMeasure := by
+  obtain ⟨_, mach', hcore, hmach⟩ := liftMachExecution_ok h
+  show devm'.mach.gasMeasure + c = devm.mach.gasMeasure
+  rw [hmach, Mach.applyBinary_gasMeasure hcore]
 
-theorem applyTernary_gasLeft {f : B256 → B256 → B256 → B256} {c : Nat}
+theorem applyTernary_gasMeasure {f : B256 → B256 → B256 → B256} {c : Nat}
     {devm devm' : Devm} (h : applyTernary f c devm = .ok devm') :
-    devm'.gasLeft + c = devm.gasLeft := by
-  obtain ⟨_, mach', hcore, hgas⟩ := liftMachExecution_ok h
-  rw [hgas, Mach.applyTernary_gasLeft hcore]
-  rfl
+    devm'.gasMeasure + c = devm.gasMeasure := by
+  obtain ⟨_, mach', hcore, hmach⟩ := liftMachExecution_ok h
+  show devm'.mach.gasMeasure + c = devm.mach.gasMeasure
+  rw [hmach, Mach.applyTernary_gasMeasure hcore]
 
 /-! ## Walking an instruction body
 
@@ -474,23 +633,26 @@ theorem Except.assert_eq_ok {p : Prop} [Decidable p] {ε : Type} {e : ε} {u : U
 /-! ## Resume accounting
 
 A `Resume` succeeds only by incorporating a child that itself succeeded, and it
-always hands the parent back exactly `parent.gasLeft + child.gasLeft`. Isolating
-that here is what collapses the three spawn-shaped obligations of the driver
-into the single arithmetic fact `frame.inner.gas + rsm.parentGas < gasLeft`:
-the child's own budget is `frame.inner.gas` and never grows, and the parent's
-retained gas is `rsm.parentGas`. -/
+hands the parent back at most `parent.gasMeasure + child.gasMeasure` -- Prague's
+incorporation adds exactly the child's `gasLeft`, and Amsterdam's conserves the
+pair's measure up to the committed spill a child cannot carry. Isolating that
+here is what collapses the three spawn-shaped obligations of the driver into
+the single arithmetic fact `frame.inner.gas + rsm.parentGas < gasMeasure`: the
+child's own budget is `frame.inner.gas` (a fresh frame carries no spill, so its
+measure is its grant) and never grows, and the parent's retained measure is
+`rsm.parentGas`. -/
 
-/-- The gas a `Resume` retains for the parent, before the child's leftover is
-added back. -/
+/-- The measure a `Resume` retains for the parent, before the child's leftover
+is added back. -/
 def Resume.parentGas : Resume → Nat
-  | .create parent _ => parent.gasLeft
-  | .call parent _ _ => parent.gasLeft
+  | .create parent _ => parent.gasMeasure
+  | .call parent _ _ => parent.gasMeasure
 
-theorem Resume.run_ok_gasLeft {rsm : Resume}
+theorem Resume.run_ok_gasMeasure {rsm : Resume}
     {r : Except (EvmError × State × AdrSet × Tra) Devm} {devm' : Devm}
     (h : rsm.run r = .ok devm') :
     ∃ child : Devm, r = .ok child ∧
-      devm'.gasLeft = rsm.parentGas + child.gasLeft := by
+      devm'.gasMeasure ≤ rsm.parentGas + child.gasMeasure := by
   cases rsm with
   | create parent newAddress =>
     cases r with
@@ -498,28 +660,38 @@ theorem Resume.run_ok_gasLeft {rsm : Resume}
     | ok child =>
       refine ⟨child, rfl, ?_⟩
       simp only [Resume.run, liftToExecution, bind, Except.bind] at h
+      have hc := Devm.gasLeft_le_gasMeasure child
       split at h
-      · rw [Devm.push_gasLeft h]; rfl
-      · rw [Devm.push_gasLeft h]; rfl
+      · rw [Devm.push_gasMeasure h, incorporateChildOnError_gasMeasure]
+        simp only [Resume.parentGas]
+        omega
+      · rw [Devm.push_gasMeasure h, incorporateChildOnSuccess_gasMeasure]
+        simp only [Resume.parentGas]
+        omega
   | call parent outputIndex outputSize =>
     cases r with
     | error e => exact absurd h (by simp [Resume.run, liftToExecution, bind, Except.bind])
     | ok child =>
       refine ⟨child, rfl, ?_⟩
       simp only [Resume.run, liftToExecution, bind, Except.bind] at h
+      have hc := Devm.gasLeft_le_gasMeasure child
       split at h
       · rcases hp : (incorporateChildOnError parent child child.output).push 0 with
           ⟨e⟩ | ⟨d⟩ <;> simp only [hp] at h
         · exact absurd h (by simp)
         · simp only [Except.ok.injEq] at h
-          rw [← h, Devm.memWrite_gasLeft, Devm.push_gasLeft hp]
-          rfl
+          rw [← h, Devm.memWrite_gasMeasure, Devm.push_gasMeasure hp,
+            incorporateChildOnError_gasMeasure]
+          simp only [Resume.parentGas]
+          omega
       · rcases hp : (incorporateChildOnSuccess parent child child.output).push 1 with
           ⟨e⟩ | ⟨d⟩ <;> simp only [hp] at h
         · exact absurd h (by simp)
         · simp only [Except.ok.injEq] at h
-          rw [← h, Devm.memWrite_gasLeft, Devm.push_gasLeft hp]
-          rfl
+          rw [← h, Devm.memWrite_gasMeasure, Devm.push_gasMeasure hp,
+            incorporateChildOnSuccess_gasMeasure]
+          simp only [Resume.parentGas]
+          omega
 
 /-! ## Call-family accounting
 
@@ -581,11 +753,17 @@ with the charge inside an `if`, 4 constructors), `Jinst.jumpdest` (the smallest
 charge in the machine, `gJumpdest = 1`), and `Xinst.step .call` — the hard case,
 covering a spawn and both of its refund branches. -/
 
-@[simp] theorem accessDelegation_gasLeft (devm : Devm) (adr : Adr) :
-    (accessDelegation devm adr).2.2.2.2.gasLeft = devm.gasLeft := by
+@[simp] theorem accessDelegation_gasMeasure (devm : Devm) (adr : Adr) :
+    (accessDelegation devm adr).2.2.2.2.gasMeasure = devm.gasMeasure := by
   unfold accessDelegation
   dsimp only
-  split <;> simp only [addAccessedAddress_gasLeft]
+  split <;> simp only [addAccessedAddress_gasMeasure]
+
+@[simp] theorem accessDelegation_stateGas (devm : Devm) (adr : Adr) :
+    (accessDelegation devm adr).2.2.2.2.mach.stateGas = devm.mach.stateGas := by
+  unfold accessDelegation
+  dsimp only
+  split <;> simp only [addAccessedAddress_stateGas]
 
 /-- The step-level obligation for a call-type instruction, measured against the
 frame's gas at the start of the step.
@@ -596,9 +774,9 @@ resume-after-child) it asserts the single arithmetic fact
 `frame.inner.gas + rsm.parentGas < n`. The other three follow from it
 generically, because `Frame.enter` hands the child exactly `frame.inner.gas`,
 neither the child nor `Frame.settle` can increase that, and `Resume.run`
-returns `rsm.parentGas + child.gasLeft` (`Resume.run_ok_gasLeft`). -/
+returns `rsm.parentGas + child.gasMeasure` (`Resume.run_ok_gasMeasure`). -/
 def XStep.GasDecreasing (sevm : Sevm) (n : Nat) : XStep → Prop
-  | .done ex => ∀ devm', ex = .ok devm' → devm'.gasLeft < n
+  | .done ex => ∀ devm', ex = .ok devm' → devm'.gasMeasure < n
   | .spawn frame rsm =>
       frame.inner.gas + rsm.parentGas < n ∧
         frame.inner.benv.stat.rules = sevm.benvStat.rules
@@ -621,7 +799,7 @@ theorem genericCall.step_gasDecreasing
     (caller target codeAddress : Adr) (shouldTransferValue isStaticcall : Bool)
     (inputIndex inputSize outputIndex outputSize : Nat)
     (code : ByteArray) (disablePrecompiles : Bool) {n : Nat}
-    (hn : devm.gasLeft + gas < n) :
+    (hn : devm.gasMeasure + gas < n) :
     (genericCall.step sevm devm gas value caller target codeAddress
       shouldTransferValue isStaticcall inputIndex inputSize outputIndex
       outputSize code disablePrecompiles).GasDecreasing sevm n := by
@@ -634,15 +812,17 @@ theorem genericCall.step_gasDecreasing
     rw [← hstep]
     intro devm' hd
     simp only [Except.ok.injEq] at hd
-    rw [← hd, Devm.push_gasLeft p1, Devm.withGasLeft_gasLeft,
-      Devm.withReturnData_gasLeft]
-    exact hn
+    rw [← hd, Devm.push_gasMeasure p1]
+    simp only [Devm.withGasLeft_gasMeasure, Devm.withReturnData_gasLeft,
+      Devm.withReturnData_spill]
+    have hm := Devm.gasMeasure_eq devm
+    omega
   · -- The spawn owes two things now: the arithmetic, and that the child runs
     -- under the spawning frame's rules -- which holds by construction, since
     -- `callMsg` copies `sevm.benvStat` verbatim.
     refine ⟨?_, rfl⟩
     show (Frame.ofCall _).inner.gas + Resume.parentGas _ < n
-    simp only [Frame.ofCall, callMsg, Resume.parentGas, Devm.withReturnData_gasLeft]
+    simp only [Frame.ofCall, callMsg, Resume.parentGas, Devm.withReturnData_gasMeasure]
     omega
 
 /-- The shared tail of every call-type instruction. Once the parent has been
@@ -653,20 +833,20 @@ itself consume exactly this. -/
 theorem call_charge_stipend_lt
     {value gas gasLeft memoryCost extraGas cs : Nat} {devm d d' : Devm}
     (hstip : (if value = 0 then 0 else cs) < extraGas + memoryCost)
-    (hd : d.gasLeft = devm.gasLeft)
+    (hd : d.gasMeasure = devm.gasMeasure)
     (hcharge : chargeGas
         ((calculateMsgCallGas value gas gasLeft memoryCost extraGas cs).1 + memoryCost)
         d = .ok d') :
-    d'.gasLeft + (calculateMsgCallGas value gas gasLeft memoryCost extraGas cs).2
-      < devm.gasLeft := by
-  have e := chargeGas_gasLeft hcharge
+    d'.gasMeasure + (calculateMsgCallGas value gas gasLeft memoryCost extraGas cs).2
+      < devm.gasMeasure := by
+  have e := chargeGas_gasMeasure hcharge
   have s := calculateMsgCallGas_stipend_lt (value := value) (gas := gas)
     (gasLeft := gasLeft) (memoryCost := memoryCost) (extraGas := extraGas)
     (cs := cs) hstip
   omega
 
 theorem Xinst.step_call_gasDecreasing (sevm : Sevm) (devm : Devm) :
-    (Xinst.step sevm devm .call).GasDecreasing sevm devm.gasLeft := by
+    (Xinst.step sevm devm .call).GasDecreasing sevm devm.gasMeasure := by
   simp only [Xinst.step]
   apply XStep.ofExcept_gasDecreasing
   intro step hstep
@@ -678,18 +858,18 @@ theorem Xinst.step_call_gasDecreasing (sevm : Sevm) (devm : Devm) :
   obtain ⟨⟨outputIndex, d6⟩, p6, hstep⟩ := Except.bind_eq_ok hstep
   obtain ⟨⟨outputSize, d7⟩, p7, hstep⟩ := Except.bind_eq_ok hstep
   dsimp only at hstep
-  have e1 := Devm.pop_gasLeft p1
-  have e2 := Devm.popToAdr_gasLeft p2
-  have e3 := Devm.pop_gasLeft p3
-  have e4 := Devm.popToNat_gasLeft p4
-  have e5 := Devm.popToNat_gasLeft p5
-  have e6 := Devm.popToNat_gasLeft p6
-  have e7 := Devm.popToNat_gasLeft p7
+  have e1 := Devm.pop_gasMeasure p1
+  have e2 := Devm.popToAdr_gasMeasure p2
+  have e3 := Devm.pop_gasMeasure p3
+  have e4 := Devm.popToNat_gasMeasure p4
+  have e5 := Devm.popToNat_gasMeasure p5
+  have e6 := Devm.popToNat_gasMeasure p6
+  have e7 := Devm.popToNat_gasMeasure p7
   dsimp only at e2 e3 e4 e5 e6 e7
   -- The delegation lookup can warm one more address but never touches gas.
-  have eA : (accessDelegation (addAccessedAddress d7 callee) callee).2.2.2.2.gasLeft
-      = devm.gasLeft := by
-    rw [accessDelegation_gasLeft, addAccessedAddress_gasLeft]; omega
+  have eA : (accessDelegation (addAccessedAddress d7 callee) callee).2.2.2.2.gasMeasure
+      = devm.gasMeasure := by
+    rw [accessDelegation_gasMeasure, addAccessedAddress_gasMeasure]; omega
   -- `extra_gas` strictly covers the stipend: a warm access alone costs 100, and
   -- a value-bearing call pays `gasCallValue` against a `gCallStipend` stipend.
   have hstip :
@@ -719,53 +899,55 @@ theorem Xinst.step_call_gasDecreasing (sevm : Sevm) (devm : Devm) :
     rw [← hstep]
     intro devm' hd
     simp only [Except.ok.injEq] at hd
-    rw [← hd, Devm.withGasLeft_gasLeft, Devm.push_gasLeft ppush,
-      Devm.memExtends_gasLeft]
+    rw [← hd]
+    simp only [Devm.withGasLeft_gasMeasure, Devm.withReturnData_spill]
+    rw [Nat.add_right_comm, ← Devm.gasMeasure_eq, Devm.push_gasMeasure ppush,
+      Devm.memExtends_gasMeasure]
     exact key
   · -- The spawn: the child's whole budget is the stipend.
     simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
     rw [← hstep]
     apply genericCall.step_gasDecreasing
-    rw [Devm.memExtends_gasLeft]
+    rw [Devm.memExtends_gasMeasure]
     exact key
 
 theorem Rinst.runCore_mstore_gasLt {pc : Nat} {devm : Devm} {sevm : Sevm}
     {devm' : Devm} (h : Rinst.runCore pc devm sevm .mstore = .ok devm') :
-    devm'.gasLeft < devm.gasLeft := by
+    devm'.gasMeasure < devm.gasMeasure := by
   simp only [Rinst.runCore] at h
   obtain ⟨⟨start_index, d1⟩, h1, h⟩ := Except.bind_eq_ok h
   obtain ⟨⟨value, d2⟩, h2, h⟩ := Except.bind_eq_ok h
   obtain ⟨d3, h3, h⟩ := Except.bind_eq_ok h
   dsimp only at h h1 h2 h3
   simp only [Except.ok.injEq] at h
-  have e1 := Devm.popToNat_gasLeft h1
-  have e2 := Devm.pop_gasLeft h2
-  have e3 := chargeGas_gasLeft h3
-  rw [← h, Devm.memWrite_gasLeft]
+  have e1 := Devm.popToNat_gasMeasure h1
+  have e2 := Devm.pop_gasMeasure h2
+  have e3 := chargeGas_gasMeasure h3
+  rw [← h, Devm.memWrite_gasMeasure]
   unfold gVerylow at e3
   omega
 
 theorem Rinst.runCore_extcodesize_gasLt {pc : Nat} {devm : Devm} {sevm : Sevm}
     {devm' : Devm} (hv : sevm.benvStat.rules.Valid)
     (h : Rinst.runCore pc devm sevm .extcodesize = .ok devm') :
-    devm'.gasLeft < devm.gasLeft := by
+    devm'.gasMeasure < devm.gasMeasure := by
   simp only [Rinst.runCore] at h
   obtain ⟨⟨adr, d1⟩, h1, h⟩ := Except.bind_eq_ok h
   dsimp only at h h1
-  have e1 := Devm.popToAdr_gasLeft h1
+  have e1 := Devm.popToAdr_gasMeasure h1
   -- The charge sits inside the warm/cold `if`, and the elaborator pushed the
   -- continuation into both arms; both charge a positive constant, and the cold
   -- arm's `addAccessedAddress` preserves gas.
   split at h
   · obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
-    have e2 := chargeGas_gasLeft h2
-    have e3 := Devm.push_gasLeft h3
+    have e2 := chargeGas_gasMeasure h2
+    have e3 := Devm.push_gasMeasure h3
     unfold gasWarmAccess at e2
     omega
   · obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
-    have e2 := chargeGas_gasLeft h2
-    rw [addAccessedAddress_gasLeft] at e2
-    have e3 := Devm.push_gasLeft h3
+    have e2 := chargeGas_gasMeasure h2
+    rw [addAccessedAddress_gasMeasure] at e2
+    have e3 := Devm.push_gasMeasure h3
     -- The cold half is now whatever the fork's schedule says, so positivity
     -- comes from `Valid` rather than from a literal.
     have hc := hv.gas.warmAccess_le
@@ -775,11 +957,11 @@ theorem Rinst.runCore_extcodesize_gasLt {pc : Nat} {devm : Devm} {sevm : Sevm}
 theorem Jinst.runCore_jumpdest_gasLt {pc : Nat} {devm : Devm} {sevm : Sevm}
     {pc' : Nat} {devm' : Devm}
     (h : Jinst.runCore pc devm sevm .jumpdest = .ok (pc', devm')) :
-    devm'.gasLeft < devm.gasLeft := by
+    devm'.gasMeasure < devm.gasMeasure := by
   simp only [Jinst.runCore] at h
   obtain ⟨d1, h1, h⟩ := Except.bind_eq_ok h
   simp only [Except.ok.injEq, Prod.mk.injEq] at h
-  have e1 := chargeGas_gasLeft h1
+  have e1 := chargeGas_gasMeasure h1
   unfold gJumpdest at e1
   rw [← h.2]
   omega
@@ -788,28 +970,28 @@ theorem Jinst.runCore_jumpdest_gasLt {pc : Nat} {devm : Devm} {sevm : Sevm}
 
 theorem pushItem_gasLt {x : B256} {c : Nat} {devm devm' : Devm}
     (hc : 0 < c) (h : pushItem x c devm = .ok devm') :
-    devm'.gasLeft < devm.gasLeft := by
-  have e := pushItem_gasLeft h
+    devm'.gasMeasure < devm.gasMeasure := by
+  have e := pushItem_gasMeasure h
   omega
 
 theorem applyUnary_gasLt {f : B256 → B256} {c : Nat} {devm devm' : Devm}
     (hc : 0 < c) (h : applyUnary f c devm = .ok devm') :
-    devm'.gasLeft < devm.gasLeft := by
-  have e := applyUnary_gasLeft h
+    devm'.gasMeasure < devm.gasMeasure := by
+  have e := applyUnary_gasMeasure h
   omega
 
 theorem applyBinary_gasLt {f : B256 → B256 → B256} {c : Nat}
     {devm devm' : Devm} (hc : 0 < c)
     (h : applyBinary f c devm = .ok devm') :
-    devm'.gasLeft < devm.gasLeft := by
-  have e := applyBinary_gasLeft h
+    devm'.gasMeasure < devm.gasMeasure := by
+  have e := applyBinary_gasMeasure h
   omega
 
 theorem applyTernary_gasLt {f : B256 → B256 → B256 → B256} {c : Nat}
     {devm devm' : Devm} (hc : 0 < c)
     (h : applyTernary f c devm = .ok devm') :
-    devm'.gasLeft < devm.gasLeft := by
-  have e := applyTernary_gasLeft h
+    devm'.gasMeasure < devm.gasMeasure := by
+  have e := applyTernary_gasMeasure h
   omega
 
 theorem popChargePush_gasLt (pre : Devm)
@@ -819,12 +1001,12 @@ theorem popChargePush_gasLt (pre : Devm)
       let ⟨x, d⟩ ← pre.pop
       let d' ← chargeGas (cost x d) d
       d'.push (value x d')) = .ok post) :
-    post.gasLeft < pre.gasLeft := by
+    post.gasMeasure < pre.gasMeasure := by
   obtain ⟨⟨x, d⟩, hp, h⟩ := Except.bind_eq_ok h
   obtain ⟨d', hc, hpush⟩ := Except.bind_eq_ok h
-  have ep := Devm.pop_gasLeft hp
-  have ec := chargeGas_gasLeft hc
-  have eq := Devm.push_gasLeft hpush
+  have ep := Devm.pop_gasMeasure hp
+  have ec := chargeGas_gasMeasure hc
+  have eq := Devm.push_gasMeasure hpush
   have hcpos := hpos x d
   omega
 
@@ -837,14 +1019,14 @@ theorem pop2ChargePush_gasLt (pre : Devm)
       let ⟨y, d⟩ ← d.pop
       let d' ← chargeGas (cost x y d) d
       d'.push (value x y d')) = .ok post) :
-    post.gasLeft < pre.gasLeft := by
+    post.gasMeasure < pre.gasMeasure := by
   obtain ⟨⟨x, d1⟩, h1, h⟩ := Except.bind_eq_ok h
   obtain ⟨⟨y, d2⟩, h2, h⟩ := Except.bind_eq_ok h
   obtain ⟨d3, h3, h4⟩ := Except.bind_eq_ok h
-  have e1 := Devm.pop_gasLeft h1
-  have e2 := Devm.pop_gasLeft h2
-  have e3 := chargeGas_gasLeft h3
-  have e4 := Devm.push_gasLeft h4
+  have e1 := Devm.pop_gasMeasure h1
+  have e2 := Devm.pop_gasMeasure h2
+  have e3 := chargeGas_gasMeasure h3
+  have e4 := Devm.push_gasMeasure h4
   have hp := hpos x y d2
   omega
 
@@ -852,23 +1034,23 @@ theorem popNat3ChargePure_gasLt (pre : Devm)
     (cost : Nat → Nat → Nat → Devm → Nat)
     (next : Nat → Nat → Nat → Devm → Devm)
     (hpos : ∀ x y z d, 0 < cost x y z d) {post : Devm}
-    (hnext : ∀ x y z d, (next x y z d).gasLeft = d.gasLeft)
+    (hnext : ∀ x y z d, (next x y z d).gasMeasure = d.gasMeasure)
     (h : (do
       let ⟨x, d⟩ ← pre.popToNat
       let ⟨y, d⟩ ← d.popToNat
       let ⟨z, d⟩ ← d.popToNat
       let d' ← chargeGas (cost x y z d) d
       .ok (next x y z d')) = .ok post) :
-    post.gasLeft < pre.gasLeft := by
+    post.gasMeasure < pre.gasMeasure := by
   obtain ⟨⟨x, d1⟩, h1, h⟩ := Except.bind_eq_ok h
   obtain ⟨⟨y, d2⟩, h2, h⟩ := Except.bind_eq_ok h
   obtain ⟨⟨z, d3⟩, h3, h⟩ := Except.bind_eq_ok h
   obtain ⟨d4, h4, h5⟩ := Except.bind_eq_ok h
   simp only [Except.ok.injEq] at h5
-  have e1 := Devm.popToNat_gasLeft h1
-  have e2 := Devm.popToNat_gasLeft h2
-  have e3 := Devm.popToNat_gasLeft h3
-  have e4 := chargeGas_gasLeft h4
+  have e1 := Devm.popToNat_gasMeasure h1
+  have e2 := Devm.popToNat_gasMeasure h2
+  have e3 := Devm.popToNat_gasMeasure h3
+  have e4 := chargeGas_gasMeasure h4
   have ep := hpos x y z d3
   rw [← h5, hnext]
   omega
@@ -877,20 +1059,20 @@ theorem popNatPopChargePure_gasLt (pre : Devm)
     (cost : Nat → B256 → Devm → Nat)
     (next : Nat → B256 → Devm → Devm)
     (hpos : ∀ x y d, 0 < cost x y d) {post : Devm}
-    (hnext : ∀ x y d, (next x y d).gasLeft = d.gasLeft)
+    (hnext : ∀ x y d, (next x y d).gasMeasure = d.gasMeasure)
     (h : (do
       let ⟨x, d⟩ ← pre.popToNat
       let ⟨y, d⟩ ← d.pop
       let d' ← chargeGas (cost x y d) d
       .ok (next x y d')) = .ok post) :
-    post.gasLeft < pre.gasLeft := by
+    post.gasMeasure < pre.gasMeasure := by
   obtain ⟨⟨x, d1⟩, h1, h⟩ := Except.bind_eq_ok h
   obtain ⟨⟨y, d2⟩, h2, h⟩ := Except.bind_eq_ok h
   obtain ⟨d3, h3, h4⟩ := Except.bind_eq_ok h
   simp only [Except.ok.injEq] at h4
-  have e1 := Devm.popToNat_gasLeft h1
-  have e2 := Devm.pop_gasLeft h2
-  have e3 := chargeGas_gasLeft h3
+  have e1 := Devm.popToNat_gasMeasure h1
+  have e2 := Devm.pop_gasMeasure h2
+  have e3 := chargeGas_gasMeasure h3
   have ep := hpos x y d2
   rw [← h4, hnext]
   omega
@@ -898,7 +1080,7 @@ theorem popNatPopChargePure_gasLt (pre : Devm)
 theorem Rinst.balance_runCore_gasLt {pc : Nat} {devm devm' : Devm}
     {sevm : Sevm} (hvalid : sevm.benvStat.rules.Valid)
     (h : Rinst.runCore pc devm sevm .balance = .ok devm') :
-    devm'.gasLeft < devm.gasLeft := by
+    devm'.gasMeasure < devm.gasMeasure := by
   simp only [Rinst.runCore] at h
   obtain ⟨u, view', hcore, hout⟩ := liftMachMetaWorldExecution_ok h
   unfold Rinst.balanceCore at hcore
@@ -919,13 +1101,13 @@ theorem Rinst.balance_runCore_gasLt {pc : Nat} {devm devm' : Devm}
         | ok p =>
           rcases p with ⟨u3, mach3⟩
           simp only [hpush, Except.ok.injEq, Prod.mk.injEq] at hcore
-          have ep := Mach.pop_gasLeft hp
-          have ec := Mach.chargeGas_gasLeft hc
-          have eq := Mach.push_gasLeft hpush
-          have hv : view'.1.gasLeft = mach3.gasLeft :=
-            congrArg Mach.gasLeft (congrArg Prod.fst hcore.2).symm
+          have ep := Mach.pop_gasMeasure hp
+          have ec := Mach.chargeGas_gasMeasure hc
+          have eq := Mach.push_gasMeasure hpush
+          have hv : view'.1.gasMeasure = mach3.gasMeasure :=
+            congrArg Mach.gasMeasure (congrArg Prod.fst hcore.2).symm
+          show devm'.mach.gasMeasure < devm.mach.gasMeasure
           rw [hout, hv]
-          change mach3.gasLeft < devm.mach.gasLeft
           unfold gasWarmAccess at ec
           omega
     · simp only [hw, if_false] at hcore
@@ -940,13 +1122,13 @@ theorem Rinst.balance_runCore_gasLt {pc : Nat} {devm devm' : Devm}
         | ok p =>
           rcases p with ⟨u3, mach3⟩
           simp only [hpush, Except.ok.injEq, Prod.mk.injEq] at hcore
-          have ep := Mach.pop_gasLeft hp
-          have ec := Mach.chargeGas_gasLeft hc
-          have eq := Mach.push_gasLeft hpush
-          have hv : view'.1.gasLeft = mach3.gasLeft :=
-            congrArg Mach.gasLeft (congrArg Prod.fst hcore.2).symm
+          have ep := Mach.pop_gasMeasure hp
+          have ec := Mach.chargeGas_gasMeasure hc
+          have eq := Mach.push_gasMeasure hpush
+          have hv : view'.1.gasMeasure = mach3.gasMeasure :=
+            congrArg Mach.gasMeasure (congrArg Prod.fst hcore.2).symm
+          show devm'.mach.gasMeasure < devm.mach.gasMeasure
           rw [hout, hv]
-          change mach3.gasLeft < devm.mach.gasLeft
           have hcold := hvalid.gas.warmAccess_le
           unfold gasWarmAccess at hcold
           omega
@@ -960,20 +1142,20 @@ theorem popAdrAccessChargePush_gasLt (pre : Devm) {gas : GasSchedule}
         if adr ∈ d.accessedAddresses then chargeGas gasWarmAccess d
         else chargeGas gas.coldAccountAccess (addAccessedAddress d adr)
       d'.push (value adr d')) = .ok post) :
-    post.gasLeft < pre.gasLeft := by
+    post.gasMeasure < pre.gasMeasure := by
   obtain ⟨⟨adr, d1⟩, h1, h⟩ := Except.bind_eq_ok h
-  have e1 := Devm.popToAdr_gasLeft h1
+  have e1 := Devm.popToAdr_gasMeasure h1
   dsimp only at h e1
   split at h
   · obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
-    have e2 := chargeGas_gasLeft h2
-    have e3 := Devm.push_gasLeft h3
+    have e2 := chargeGas_gasMeasure h2
+    have e3 := Devm.push_gasMeasure h3
     unfold gasWarmAccess at e2
     omega
   · obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
-    have e2 := chargeGas_gasLeft h2
-    rw [addAccessedAddress_gasLeft] at e2
-    have e3 := Devm.push_gasLeft h3
+    have e2 := chargeGas_gasMeasure h2
+    rw [addAccessedAddress_gasMeasure] at e2
+    have e3 := Devm.push_gasMeasure h3
     have hc := hv.warmAccess_le
     unfold gasWarmAccess at hc
     omega
@@ -981,7 +1163,7 @@ theorem popAdrAccessChargePush_gasLt (pre : Devm) {gas : GasSchedule}
 theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
     (r : Rinst) {devm' : Devm} (hv : sevm.benvStat.rules.Valid)
     (h : Rinst.runCore pc devm sevm r = .ok devm') :
-    devm'.gasLeft < devm.gasLeft := by
+    devm'.gasMeasure < devm.gasMeasure := by
   cases r <;> simp only [Rinst.runCore] at h
   all_goals first
     | exact applyBinary_gasLt (by decide) h
@@ -1002,12 +1184,12 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
     obtain ⟨⟨start, d1⟩, h1, h⟩ := Except.bind_eq_ok h
     obtain ⟨⟨size, d2⟩, h2, h⟩ := Except.bind_eq_ok h
     obtain ⟨d3, h3, h4⟩ := Except.bind_eq_ok h
-    have e1 := Devm.popToNat_gasLeft h1
-    have e2 := Devm.popToNat_gasLeft h2
-    have e3 := chargeGas_gasLeft h3
-    have e4 := Devm.push_gasLeft h4
+    have e1 := Devm.popToNat_gasMeasure h1
+    have e2 := Devm.popToNat_gasMeasure h2
+    have e3 := chargeGas_gasMeasure h3
+    have e4 := Devm.push_gasMeasure h4
     dsimp only at e1 e2 e3 e4
-    rw [Devm.memRead_gasLeft] at e4
+    rw [Devm.memRead_gasMeasure] at e4
     unfold gKeccak256 at e3
     omega
   case balance =>
@@ -1025,21 +1207,21 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
       (fun memoryStart dataStart size d =>
         d.memWrite memoryStart (sevm.data.sliceD dataStart size 0))
       (by intros; unfold gVerylow; omega)
-      (by intros; simp only [Devm.memWrite_gasLeft]) h
+      (by intros; simp only [Devm.memWrite_gasMeasure]) h
   case returndatacopy =>
     obtain ⟨⟨memoryStart, d1⟩, h1, h⟩ := Except.bind_eq_ok h
     obtain ⟨⟨returnStart, d2⟩, h2, h⟩ := Except.bind_eq_ok h
     obtain ⟨⟨size, d3⟩, h3, h⟩ := Except.bind_eq_ok h
     obtain ⟨d4, h4, h⟩ := Except.bind_eq_ok h
-    have e1 := Devm.popToNat_gasLeft h1
-    have e2 := Devm.popToNat_gasLeft h2
-    have e3 := Devm.popToNat_gasLeft h3
-    have e4 := chargeGas_gasLeft h4
+    have e1 := Devm.popToNat_gasMeasure h1
+    have e2 := Devm.popToNat_gasMeasure h2
+    have e3 := Devm.popToNat_gasMeasure h3
+    have e4 := chargeGas_gasMeasure h4
     dsimp only at h e1 e2 e3 e4
     split at h
     · nomatch h
     · simp only [Except.ok.injEq] at h
-      rw [← h, Devm.memWrite_gasLeft]
+      rw [← h, Devm.memWrite_gasMeasure]
       unfold gVerylow at e4
       omega
   case extcodecopy =>
@@ -1047,23 +1229,23 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
     obtain ⟨⟨memoryStart, d2⟩, h2, h⟩ := Except.bind_eq_ok h
     obtain ⟨⟨codeStart, d3⟩, h3, h⟩ := Except.bind_eq_ok h
     obtain ⟨⟨size, d4⟩, h4, h⟩ := Except.bind_eq_ok h
-    have e1 := Devm.popToAdr_gasLeft h1
-    have e2 := Devm.popToNat_gasLeft h2
-    have e3 := Devm.popToNat_gasLeft h3
-    have e4 := Devm.popToNat_gasLeft h4
+    have e1 := Devm.popToAdr_gasMeasure h1
+    have e2 := Devm.popToNat_gasMeasure h2
+    have e3 := Devm.popToNat_gasMeasure h3
+    have e4 := Devm.popToNat_gasMeasure h4
     dsimp only at h e1 e2 e3 e4
     split at h
     · obtain ⟨d5, h5, h6⟩ := Except.bind_eq_ok h
       simp only [Except.ok.injEq] at h6
-      have e5 := chargeGas_gasLeft h5
-      rw [← h6, Devm.memWrite_gasLeft]
+      have e5 := chargeGas_gasMeasure h5
+      rw [← h6, Devm.memWrite_gasMeasure]
       unfold gasWarmAccess at e5
       omega
     · obtain ⟨d5, h5, h6⟩ := Except.bind_eq_ok h
       simp only [Except.ok.injEq] at h6
-      have e5 := chargeGas_gasLeft h5
-      rw [addAccessedAddress_gasLeft] at e5
-      rw [← h6, Devm.memWrite_gasLeft]
+      have e5 := chargeGas_gasMeasure h5
+      rw [addAccessedAddress_gasMeasure] at e5
+      rw [← h6, Devm.memWrite_gasMeasure]
       have hc := hv.gas.warmAccess_le
       unfold gasWarmAccess at hc
       omega
@@ -1099,21 +1281,21 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
       simp only [hp, Except.map, Except.bind] at h
       nomatch h
     | ok p =>
-      have e1 := Devm.pop_gasLeft hp
+      have e1 := Devm.pop_gasMeasure hp
       change Except.bind (Except.map Prod.snd devm.pop) (chargeGas gBase) =
         .ok devm' at h
       simp only [hp, Except.map, Except.bind] at h
-      have e2 := chargeGas_gasLeft h
+      have e2 := chargeGas_gasMeasure h
       unfold gBase at e2
       omega
   case mload =>
     obtain ⟨⟨start, d1⟩, h1, h⟩ := Except.bind_eq_ok h
     obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
-    have e1 := Devm.popToNat_gasLeft h1
-    have e2 := chargeGas_gasLeft h2
-    have e3 := Devm.push_gasLeft h3
+    have e1 := Devm.popToNat_gasMeasure h1
+    have e2 := chargeGas_gasMeasure h2
+    have e3 := Devm.push_gasMeasure h3
     dsimp only at e1 e2 e3
-    rw [Devm.memRead_gasLeft] at e3
+    rw [Devm.memRead_gasMeasure] at e3
     unfold gVerylow at e2
     omega
   case mstore =>
@@ -1124,7 +1306,7 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
       (fun start _ d => gVerylow + d.extCost [(start, 1)])
       (fun start value d => d.memWrite start [value.2.2.toUInt8])
       (by intros; unfold gVerylow; omega)
-      (by intros; simp only [Devm.memWrite_gasLeft]) h
+      (by intros; simp only [Devm.memWrite_gasMeasure]) h
   case mcopy =>
     exact popNat3ChargePure_gasLt devm
       (fun destinationStart sourceStart size d =>
@@ -1134,7 +1316,7 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
         (d.memRead sourceStart size).2.memWrite destinationStart
           (d.memRead sourceStart size).1)
       (by intros; unfold gVerylow; omega)
-      (by intros; simp only [Devm.memWrite_gasLeft, Devm.memRead_gasLeft]) h
+      (by intros; simp only [Devm.memWrite_gasMeasure, Devm.memRead_gasMeasure]) h
   case sstore =>
     obtain ⟨⟨key, d1⟩, h1, h⟩ := Except.bind_eq_ok h
     obtain ⟨⟨value, d2⟩, h2, h⟩ := Except.bind_eq_ok h
@@ -1146,14 +1328,14 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
     obtain ⟨d4, hCharge, h⟩ := Except.bind_eq_ok h
     obtain ⟨_, _hDynamic, hFinal⟩ := Except.bind_eq_ok h
     simp only [Except.ok.injEq] at hPair hCost hRefund hFinal
-    have e1 := Devm.pop_gasLeft h1
-    have e2 := Devm.pop_gasLeft h2
-    have e3 := chargeGas_gasLeft hCharge
-    have hPairGas : gasPair.1.gasLeft = d2.gasLeft := by
+    have e1 := Devm.pop_gasMeasure h1
+    have e2 := Devm.pop_gasMeasure h2
+    have e3 := chargeGas_gasMeasure hCharge
+    have hPairGas : gasPair.1.gasMeasure = d2.gasMeasure := by
       rw [← hPair]
-      split <;> simp only [addAccessedStorageKey_gasLeft]
-    have hRefundGas : d3.gasLeft = d2.gasLeft := by
-      rw [← hRefund, Devm.withRefundCounter_gasLeft, hPairGas]
+      split <;> simp only [addAccessedStorageKey_gasMeasure]
+    have hRefundGas : d3.gasMeasure = d2.gasMeasure := by
+      rw [← hRefund, Devm.withRefundCounter_gasMeasure, hPairGas]
     have hCostPos : 0 < cost := by
       rw [← hCost]
       split
@@ -1165,27 +1347,27 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
       · unfold gasWarmAccess
         omega
     dsimp only at e1 e2 hFinal
-    rw [← hFinal, Devm.setStorVal_gasLeft]
+    rw [← hFinal, Devm.setStorVal_gasMeasure]
     omega
   case sload =>
     obtain ⟨⟨key, d1⟩, h1, h⟩ := Except.bind_eq_ok h
-    have e1 := Devm.pop_gasLeft h1
+    have e1 := Devm.pop_gasMeasure h1
     dsimp only at h e1
     split at h
     · obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
-      have e2 := chargeGas_gasLeft h2
-      have e3 := Devm.push_gasLeft h3
+      have e2 := chargeGas_gasMeasure h2
+      have e3 := Devm.push_gasMeasure h3
       unfold gasWarmAccess at e2
       omega
     · obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
-      have e2 := chargeGas_gasLeft h2
-      rw [addAccessedStorageKey_gasLeft] at e2
-      have e3 := Devm.push_gasLeft h3
+      have e2 := chargeGas_gasMeasure h2
+      rw [addAccessedStorageKey_gasMeasure] at e2
+      have e3 := Devm.push_gasMeasure h3
       unfold gasColdSload at e2
       omega
   case tload =>
     obtain ⟨⟨key, d1⟩, h1, h2⟩ := Except.bind_eq_ok h
-    have e1 := Devm.pop_gasLeft h1
+    have e1 := Devm.pop_gasMeasure h1
     have e2 := pushItem_gasLt (by unfold gasWarmAccess; omega) h2
     dsimp only at e1 e2
     omega
@@ -1195,34 +1377,34 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
     obtain ⟨d3, h3, h⟩ := Except.bind_eq_ok h
     obtain ⟨_, _hassert, h4⟩ := Except.bind_eq_ok h
     simp only [Except.ok.injEq] at h4
-    have e1 := Devm.pop_gasLeft h1
-    have e2 := Devm.pop_gasLeft h2
-    have e3 := chargeGas_gasLeft h3
+    have e1 := Devm.pop_gasMeasure h1
+    have e2 := Devm.pop_gasMeasure h2
+    have e3 := chargeGas_gasMeasure h3
     dsimp only at e1 e2 e3
-    rw [← h4, Devm.setTransVal_gasLeft]
+    rw [← h4, Devm.setTransVal_gasMeasure]
     unfold gasWarmAccess at e3
     omega
   case gas =>
     obtain ⟨d1, h1, h2⟩ := Except.bind_eq_ok h
-    have e1 := chargeGas_gasLeft h1
-    have e2 := Devm.push_gasLeft h2
+    have e1 := chargeGas_gasMeasure h1
+    have e2 := Devm.push_gasMeasure h2
     unfold gBase at e1
     omega
   case dup i =>
     obtain ⟨d1, h1, h⟩ := Except.bind_eq_ok h
-    have e1 := chargeGas_gasLeft h1
+    have e1 := chargeGas_gasMeasure h1
     split at h
     · nomatch h
-    · have e2 := Devm.push_gasLeft h
+    · have e2 := Devm.push_gasMeasure h
       unfold gVerylow at e1
       omega
   case swap i =>
     obtain ⟨d1, h1, h⟩ := Except.bind_eq_ok h
-    have e1 := chargeGas_gasLeft h1
+    have e1 := chargeGas_gasMeasure h1
     split at h
     · nomatch h
     · simp only [Except.ok.injEq] at h
-      rw [← h, Devm.withStack_gasLeft]
+      rw [← h, Devm.withStack_gasMeasure]
       unfold gVerylow at e1
       omega
   case log topicCount =>
@@ -1232,12 +1414,12 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
     obtain ⟨d4, h4, h⟩ := Except.bind_eq_ok h
     obtain ⟨_, _hassert, h5⟩ := Except.bind_eq_ok h
     simp only [Except.ok.injEq] at h5
-    have e1 := Devm.popToNat_gasLeft h1
-    have e2 := Devm.popToNat_gasLeft h2
-    have e3 := Devm.popN_gasLeft h3
-    have e4 := chargeGas_gasLeft h4
+    have e1 := Devm.popToNat_gasMeasure h1
+    have e2 := Devm.popToNat_gasMeasure h2
+    have e3 := Devm.popN_gasMeasure h3
+    have e4 := chargeGas_gasMeasure h4
     dsimp only at e1 e2 e3 e4 h5
-    rw [← h5, Devm.addLog_gasLeft, Devm.memRead_gasLeft]
+    rw [← h5, Devm.addLog_gasMeasure, Devm.memRead_gasMeasure]
     unfold gLog at e4
     omega
   case codecopy =>
@@ -1248,12 +1430,12 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
         d.memWrite memoryStart
           (sevm.code.sliceD codeStart size (Linst.toUInt8 .stop)))
       (by intros; unfold gVerylow; omega)
-      (by intros; simp only [Devm.memWrite_gasLeft]) h
+      (by intros; simp only [Devm.memWrite_gasMeasure]) h
 
 theorem Jinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
     (j : Jinst) {pc' : Nat} {devm' : Devm}
     (h : Jinst.runCore pc devm sevm j = .ok (pc', devm')) :
-    devm'.gasLeft < devm.gasLeft := by
+    devm'.gasMeasure < devm.gasMeasure := by
   cases j
   case jumpdest =>
     exact Jinst.runCore_jumpdest_gasLt h
@@ -1263,8 +1445,8 @@ theorem Jinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
     obtain ⟨d2, h2, h⟩ := Except.bind_eq_ok h
     obtain ⟨_, _hassert, h3⟩ := Except.bind_eq_ok h
     simp only [Except.ok.injEq, Prod.mk.injEq] at h3
-    have e1 := Devm.pop_gasLeft h1
-    have e2 := chargeGas_gasLeft h2
+    have e1 := Devm.pop_gasMeasure h1
+    have e2 := chargeGas_gasMeasure h2
     dsimp only at e1 e2
     rw [← h3.2]
     unfold gMid at e2
@@ -1274,9 +1456,9 @@ theorem Jinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
     obtain ⟨⟨destination, d1⟩, h1, h⟩ := Except.bind_eq_ok h
     obtain ⟨⟨condition, d2⟩, h2, h⟩ := Except.bind_eq_ok h
     obtain ⟨d3, h3, h⟩ := Except.bind_eq_ok h
-    have e1 := Devm.pop_gasLeft h1
-    have e2 := Devm.pop_gasLeft h2
-    have e3 := chargeGas_gasLeft h3
+    have e1 := Devm.pop_gasMeasure h1
+    have e2 := Devm.pop_gasMeasure h2
+    have e3 := chargeGas_gasMeasure h3
     dsimp only at h e1 e2 e3
     split at h
     · obtain ⟨nextPc, _hpc, h4⟩ := Except.bind_eq_ok h
@@ -1301,7 +1483,7 @@ theorem except64th_le (n : Nat) : except64th n ≤ n := by
 theorem genericCreate.step_gasDecreasing
     (sevm : Sevm) (devm : Devm) (endowment : B256)
     (newAddress : Adr) (memoryIndex memorySize : Nat) {n : Nat}
-    (hn : devm.gasLeft < n) :
+    (hn : devm.gasMeasure < n) :
     XStep.GasDecreasing sevm n
       (genericCreate.step sevm devm endowment newAddress memoryIndex memorySize) := by
   unfold genericCreate.step
@@ -1316,9 +1498,12 @@ theorem genericCreate.step_gasDecreasing
     rw [← hstep]
     intro devm' hd
     simp only [Except.ok.injEq] at hd
-    rw [← hd, Devm.push_gasLeft hpush, Devm.withGasLeft_gasLeft,
-      Devm.withReturnData_gasLeft, Devm.withGasLeft_gasLeft]
+    rw [← hd, Devm.push_gasMeasure hpush]
+    simp only [Devm.withGasLeft_gasMeasure, Devm.withGasLeft_gasLeft,
+      Devm.withReturnData_gasLeft, Devm.withReturnData_spill,
+      Devm.withGasLeft_spill]
     have hle := except64th_le devm.gasLeft
+    have hm := Devm.gasMeasure_eq devm
     omega
   · split at hstep
     · obtain ⟨d1, hpush, hstep⟩ := Except.bind_eq_ok hstep
@@ -1326,23 +1511,25 @@ theorem genericCreate.step_gasDecreasing
       rw [← hstep]
       intro devm' hd
       simp only [Except.ok.injEq] at hd
-      rw [← hd, Devm.push_gasLeft hpush, addAccessedAddress_gasLeft,
-        Devm.incrNonce_gasLeft, Devm.withReturnData_gasLeft,
-        Devm.withGasLeft_gasLeft]
+      rw [← hd, Devm.push_gasMeasure hpush, addAccessedAddress_gasMeasure,
+        Devm.incrNonce_gasMeasure, Devm.withReturnData_gasMeasure,
+        Devm.withGasLeft_gasMeasure]
+      have hm := Devm.gasMeasure_eq devm
       omega
     · simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
       rw [← hstep]
       refine ⟨?_, rfl⟩
       show (Frame.ofCreate _).inner.gas + Resume.parentGas _ < n
       simp only [Frame.ofCreate, processCreateMessage.msg_gas, createMsg,
-        Resume.parentGas, addAccessedAddress_gasLeft,
-        Devm.incrNonce_gasLeft, Devm.withReturnData_gasLeft,
-        Devm.withGasLeft_gasLeft]
+        Resume.parentGas, addAccessedAddress_gasMeasure,
+        Devm.incrNonce_gasMeasure, Devm.withReturnData_gasMeasure,
+        Devm.withGasLeft_gasMeasure]
       have hle := except64th_le devm.gasLeft
+      have hm := Devm.gasMeasure_eq devm
       omega
 
 theorem Xinst.step_create_gasDecreasing (sevm : Sevm) (devm : Devm) :
-    (Xinst.step sevm devm .create).GasDecreasing sevm devm.gasLeft := by
+    (Xinst.step sevm devm .create).GasDecreasing sevm devm.gasMeasure := by
   simp only [Xinst.step]
   apply XStep.ofExcept_gasDecreasing
   intro step hstep
@@ -1353,17 +1540,17 @@ theorem Xinst.step_create_gasDecreasing (sevm : Sevm) (devm : Devm) :
   simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
   rw [← hstep]
   apply genericCreate.step_gasDecreasing
-  have e1 := Devm.pop_gasLeft h1
-  have e2 := Devm.popToNat_gasLeft h2
-  have e3 := Devm.popToNat_gasLeft h3
-  have e4 := chargeGas_gasLeft h4
+  have e1 := Devm.pop_gasMeasure h1
+  have e2 := Devm.popToNat_gasMeasure h2
+  have e3 := Devm.popToNat_gasMeasure h3
+  have e4 := chargeGas_gasMeasure h4
   dsimp only at e1 e2 e3 e4
-  rw [Devm.memExtends_gasLeft]
+  rw [Devm.memExtends_gasMeasure]
   unfold gasCreate at e4
   omega
 
 theorem Xinst.step_create2_gasDecreasing (sevm : Sevm) (devm : Devm) :
-    (Xinst.step sevm devm .create2).GasDecreasing sevm devm.gasLeft := by
+    (Xinst.step sevm devm .create2).GasDecreasing sevm devm.gasMeasure := by
   simp only [Xinst.step]
   apply XStep.ofExcept_gasDecreasing
   intro step hstep
@@ -1375,18 +1562,18 @@ theorem Xinst.step_create2_gasDecreasing (sevm : Sevm) (devm : Devm) :
   simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
   rw [← hstep]
   apply genericCreate.step_gasDecreasing
-  have e1 := Devm.pop_gasLeft h1
-  have e2 := Devm.popToNat_gasLeft h2
-  have e3 := Devm.popToNat_gasLeft h3
-  have e4 := Devm.pop_gasLeft h4
-  have e5 := chargeGas_gasLeft h5
+  have e1 := Devm.pop_gasMeasure h1
+  have e2 := Devm.popToNat_gasMeasure h2
+  have e3 := Devm.popToNat_gasMeasure h3
+  have e4 := Devm.pop_gasMeasure h4
+  have e5 := chargeGas_gasMeasure h5
   dsimp only at e1 e2 e3 e4 e5
-  rw [Devm.memExtends_gasLeft]
+  rw [Devm.memExtends_gasMeasure]
   unfold gasCreate at e5
   omega
 
 theorem Xinst.step_callcode_gasDecreasing (sevm : Sevm) (devm : Devm) :
-    (Xinst.step sevm devm .callcode).GasDecreasing sevm devm.gasLeft := by
+    (Xinst.step sevm devm .callcode).GasDecreasing sevm devm.gasMeasure := by
   simp only [Xinst.step]
   apply XStep.ofExcept_gasDecreasing
   intro step hstep
@@ -1398,18 +1585,18 @@ theorem Xinst.step_callcode_gasDecreasing (sevm : Sevm) (devm : Devm) :
   obtain ⟨⟨outputIndex, d6⟩, p6, hstep⟩ := Except.bind_eq_ok hstep
   obtain ⟨⟨outputSize, d7⟩, p7, hstep⟩ := Except.bind_eq_ok hstep
   dsimp only at hstep
-  have e1 := Devm.pop_gasLeft p1
-  have e2 := Devm.popToAdr_gasLeft p2
-  have e3 := Devm.pop_gasLeft p3
-  have e4 := Devm.popToNat_gasLeft p4
-  have e5 := Devm.popToNat_gasLeft p5
-  have e6 := Devm.popToNat_gasLeft p6
-  have e7 := Devm.popToNat_gasLeft p7
+  have e1 := Devm.pop_gasMeasure p1
+  have e2 := Devm.popToAdr_gasMeasure p2
+  have e3 := Devm.pop_gasMeasure p3
+  have e4 := Devm.popToNat_gasMeasure p4
+  have e5 := Devm.popToNat_gasMeasure p5
+  have e6 := Devm.popToNat_gasMeasure p6
+  have e7 := Devm.popToNat_gasMeasure p7
   dsimp only at e2 e3 e4 e5 e6 e7
   have eA :
-      (accessDelegation (addAccessedAddress d7 codeAddress) codeAddress).2.2.2.2.gasLeft
-        = devm.gasLeft := by
-    rw [accessDelegation_gasLeft, addAccessedAddress_gasLeft]
+      (accessDelegation (addAccessedAddress d7 codeAddress) codeAddress).2.2.2.2.gasMeasure
+        = devm.gasMeasure := by
+    rw [accessDelegation_gasMeasure, addAccessedAddress_gasMeasure]
     omega
   have hstip :
       (if value.toNat = 0 then 0 else gCallStipend) <
@@ -1435,17 +1622,19 @@ theorem Xinst.step_callcode_gasDecreasing (sevm : Sevm) (devm : Devm) :
     rw [← hstep]
     intro devm' hd
     simp only [Except.ok.injEq] at hd
-    rw [← hd, Devm.withReturnData_gasLeft, Devm.withGasLeft_gasLeft,
-      Devm.push_gasLeft ppush, Devm.memExtends_gasLeft]
+    rw [← hd]
+    simp only [Devm.withGasLeft_gasMeasure, Devm.withReturnData_gasMeasure]
+    rw [Nat.add_right_comm, ← Devm.gasMeasure_eq, Devm.push_gasMeasure ppush,
+      Devm.memExtends_gasMeasure]
     exact key
   · simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
     rw [← hstep]
     apply genericCall.step_gasDecreasing
-    rw [Devm.memExtends_gasLeft]
+    rw [Devm.memExtends_gasMeasure]
     exact key
 
 theorem Xinst.step_delegatecall_gasDecreasing (sevm : Sevm) (devm : Devm) :
-    (Xinst.step sevm devm .delegatecall).GasDecreasing sevm devm.gasLeft := by
+    (Xinst.step sevm devm .delegatecall).GasDecreasing sevm devm.gasMeasure := by
   simp only [Xinst.step]
   apply XStep.ofExcept_gasDecreasing
   intro step hstep
@@ -1456,17 +1645,17 @@ theorem Xinst.step_delegatecall_gasDecreasing (sevm : Sevm) (devm : Devm) :
   obtain ⟨⟨outputIndex, d5⟩, p5, hstep⟩ := Except.bind_eq_ok hstep
   obtain ⟨⟨outputSize, d6⟩, p6, hstep⟩ := Except.bind_eq_ok hstep
   dsimp only at hstep
-  have e1 := Devm.pop_gasLeft p1
-  have e2 := Devm.popToAdr_gasLeft p2
-  have e3 := Devm.popToNat_gasLeft p3
-  have e4 := Devm.popToNat_gasLeft p4
-  have e5 := Devm.popToNat_gasLeft p5
-  have e6 := Devm.popToNat_gasLeft p6
+  have e1 := Devm.pop_gasMeasure p1
+  have e2 := Devm.popToAdr_gasMeasure p2
+  have e3 := Devm.popToNat_gasMeasure p3
+  have e4 := Devm.popToNat_gasMeasure p4
+  have e5 := Devm.popToNat_gasMeasure p5
+  have e6 := Devm.popToNat_gasMeasure p6
   dsimp only at e2 e3 e4 e5 e6
   have eA :
-      (accessDelegation (addAccessedAddress d6 codeAddress) codeAddress).2.2.2.2.gasLeft
-        = devm.gasLeft := by
-    rw [accessDelegation_gasLeft, addAccessedAddress_gasLeft]
+      (accessDelegation (addAccessedAddress d6 codeAddress) codeAddress).2.2.2.2.gasMeasure
+        = devm.gasMeasure := by
+    rw [accessDelegation_gasMeasure, addAccessedAddress_gasMeasure]
     omega
   have hstip :
       (if (0 : Nat) = 0 then 0 else gCallStipend) <
@@ -1482,11 +1671,11 @@ theorem Xinst.step_delegatecall_gasDecreasing (sevm : Sevm) (devm : Devm) :
   simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
   rw [← hstep]
   apply genericCall.step_gasDecreasing
-  rw [Devm.memExtends_gasLeft]
+  rw [Devm.memExtends_gasMeasure]
   exact key
 
 theorem Xinst.step_staticcall_gasDecreasing (sevm : Sevm) (devm : Devm) :
-    (Xinst.step sevm devm .staticcall).GasDecreasing sevm devm.gasLeft := by
+    (Xinst.step sevm devm .staticcall).GasDecreasing sevm devm.gasMeasure := by
   simp only [Xinst.step]
   apply XStep.ofExcept_gasDecreasing
   intro step hstep
@@ -1497,17 +1686,17 @@ theorem Xinst.step_staticcall_gasDecreasing (sevm : Sevm) (devm : Devm) :
   obtain ⟨⟨outputIndex, d5⟩, p5, hstep⟩ := Except.bind_eq_ok hstep
   obtain ⟨⟨outputSize, d6⟩, p6, hstep⟩ := Except.bind_eq_ok hstep
   dsimp only at hstep
-  have e1 := Devm.pop_gasLeft p1
-  have e2 := Devm.popToAdr_gasLeft p2
-  have e3 := Devm.popToNat_gasLeft p3
-  have e4 := Devm.popToNat_gasLeft p4
-  have e5 := Devm.popToNat_gasLeft p5
-  have e6 := Devm.popToNat_gasLeft p6
+  have e1 := Devm.pop_gasMeasure p1
+  have e2 := Devm.popToAdr_gasMeasure p2
+  have e3 := Devm.popToNat_gasMeasure p3
+  have e4 := Devm.popToNat_gasMeasure p4
+  have e5 := Devm.popToNat_gasMeasure p5
+  have e6 := Devm.popToNat_gasMeasure p6
   dsimp only at e2 e3 e4 e5 e6
   have eA :
-      (accessDelegation (addAccessedAddress d6 target) target).2.2.2.2.gasLeft
-        = devm.gasLeft := by
-    rw [accessDelegation_gasLeft, addAccessedAddress_gasLeft]
+      (accessDelegation (addAccessedAddress d6 target) target).2.2.2.2.gasMeasure
+        = devm.gasMeasure := by
+    rw [accessDelegation_gasMeasure, addAccessedAddress_gasMeasure]
     omega
   have hstip :
       (if (0 : Nat) = 0 then 0 else gCallStipend) <
@@ -1522,11 +1711,11 @@ theorem Xinst.step_staticcall_gasDecreasing (sevm : Sevm) (devm : Devm) :
   simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
   rw [← hstep]
   apply genericCall.step_gasDecreasing
-  rw [Devm.memExtends_gasLeft]
+  rw [Devm.memExtends_gasMeasure]
   exact key
 
 theorem Xinst.step_gasDecreasing (sevm : Sevm) (devm : Devm) (x : Xinst) :
-    (Xinst.step sevm devm x).GasDecreasing sevm devm.gasLeft := by
+    (Xinst.step sevm devm x).GasDecreasing sevm devm.gasMeasure := by
   cases x
   case create => exact Xinst.step_create_gasDecreasing sevm devm
   case create2 => exact Xinst.step_create2_gasDecreasing sevm devm
@@ -1536,50 +1725,55 @@ theorem Xinst.step_gasDecreasing (sevm : Sevm) (devm : Devm) (x : Xinst) :
   case staticcall => exact Xinst.step_staticcall_gasDecreasing sevm devm
 
 theorem executePrecomp_gasLe (evm : Evm) (adr : Adr) :
-    (executePrecomp evm adr).gasLeft ≤ evm.dyna.gasLeft := by
+    (executePrecomp evm adr).gasMeasure ≤ evm.dyna.gasMeasure := by
   unfold executePrecomp applyPrecompResult
   cases precompileRun evm adr with
   | error msg cost =>
-    simp only [Execution.gasLeft_error, Devm.withGasLeft_gasLeft]
+    simp only [Execution.gasMeasure_error, Devm.withGasLeft_gasMeasure]
+    have hm := Devm.gasMeasure_eq evm.dyna
     omega
   | ok cost output =>
-    simp only [Execution.gasLeft_ok]
-    simp only [Devm.withOutput, Devm.setMeta_gasLeft,
-      Devm.withGasLeft_gasLeft]
+    simp only [Execution.gasMeasure_ok]
+    simp only [Devm.withOutput, Devm.setMeta_gasMeasure,
+      Devm.withGasLeft_gasMeasure]
+    have hm := Devm.gasMeasure_eq evm.dyna
     omega
 
 theorem executeCode.handleError_ok_gasLe {raw : Execution} {devm : Devm}
     (h : executeCode.handleError raw = .ok devm) :
-    devm.gasLeft ≤ raw.gasLeft := by
+    devm.gasMeasure ≤ raw.gasMeasure := by
   cases raw with
   | ok d =>
     simp only [executeCode.handleError, Except.ok.injEq] at h
     rw [← h]
-    simp only [Execution.gasLeft_ok]
+    simp only [Execution.gasMeasure_ok]
     omega
   | error e =>
     obtain ⟨err, d0⟩ := e
     cases err with
     | halt reason =>
       simp only [executeCode.handleError, Except.ok.injEq] at h
-      rw [← h, Devm.setMeta_gasLeft, Devm.withGasLeft_gasLeft]
+      rw [← h, Devm.setMeta_gasMeasure, Devm.withGasLeft_gasMeasure]
+      simp only [Execution.gasMeasure_error]
+      have hm := Devm.gasMeasure_eq d0
       omega
     | revert =>
       simp only [executeCode.handleError, Except.ok.injEq] at h
-      rw [← h, Devm.withError_gasLeft]
-      simp only [Execution.gasLeft_error]
+      rw [← h, Devm.withError_gasMeasure]
+      simp only [Execution.gasMeasure_error]
       omega
     | crypto reason => exact absurd h (by simp [executeCode.handleError])
     | internal reason => exact absurd h (by simp [executeCode.handleError])
 
 @[simp] theorem chargeGas_result_gasLe (cost : Nat) (devm : Devm) :
-    (chargeGas cost devm).gasLeft ≤ devm.gasLeft := by
+    (chargeGas cost devm).gasMeasure ≤ devm.gasMeasure := by
   rw [chargeGas_def]
   by_cases hc : cost ≤ devm.gasLeft
-  · simp only [safeSub, hc, if_pos, Execution.gasLeft_ok,
-      Devm.setMach_gasLeft]
+  · simp only [safeSub, hc, if_pos, Execution.gasMeasure_ok,
+      Devm.setMach_gasMeasure]
+    simp only [Mach.gasMeasure, Devm.gasMeasure, Devm.gasLeft]
     omega
-  · simp [safeSub, hc, Execution.gasLeft]
+  · simp [safeSub, hc, Execution.gasMeasure]
 
 /-! ## Gas non-increase
 
@@ -1601,16 +1795,16 @@ which is what keeps this second corpus to a fraction of the size of the first.
 /-- The gas reported by a `Devm`-threading step, in whichever branch it takes.
 `proj` reads the `Devm` out of a successful payload. -/
 def resultGas {α : Type} (proj : α → Devm) : Except (EvmError × Devm) α → Nat
-  | .error p => p.2.gasLeft
-  | .ok a => (proj a).gasLeft
+  | .error p => p.2.gasMeasure
+  | .ok a => (proj a).gasMeasure
 
 @[simp] theorem resultGas_error {α : Type} (proj : α → Devm) (p : EvmError × Devm) :
-    resultGas proj (.error p) = p.2.gasLeft := rfl
+    resultGas proj (.error p) = p.2.gasMeasure := rfl
 
 @[simp] theorem resultGas_ok {α : Type} (proj : α → Devm) (a : α) :
-    resultGas proj (.ok a) = (proj a).gasLeft := rfl
+    resultGas proj (.ok a) = (proj a).gasMeasure := rfl
 
-@[simp] theorem resultGas_id (ex : Execution) : resultGas id ex = ex.gasLeft := by
+@[simp] theorem resultGas_id (ex : Execution) : resultGas id ex = ex.gasMeasure := by
   cases ex <;> rfl
 
 /-- Peel one `bind` whose payload is a `_ × Devm` pair. The tail obligation is
@@ -1619,16 +1813,16 @@ down. -/
 theorem gasLe_bind_snd {α : Type} {n : Nat}
     {e : Except (EvmError × Devm) (α × Devm)} {f : α × Devm → Execution}
     (he : resultGas Prod.snd e ≤ n)
-    (hf : ∀ a : α × Devm, Execution.gasLeft (f a) ≤ a.2.gasLeft) :
-    Execution.gasLeft (e >>= f) ≤ n := by
+    (hf : ∀ a : α × Devm, Execution.gasMeasure (f a) ≤ a.2.gasMeasure) :
+    Execution.gasMeasure (e >>= f) ≤ n := by
   cases e with
   | error p => exact he
   | ok a => exact Nat.le_trans (hf a) he
 
 /-- Peel one `bind` whose payload is a bare `Devm`. -/
 theorem gasLe_bind_id {n : Nat} {e : Execution} {f : Devm → Execution}
-    (he : e.gasLeft ≤ n) (hf : ∀ d : Devm, Execution.gasLeft (f d) ≤ d.gasLeft) :
-    Execution.gasLeft (e >>= f) ≤ n := by
+    (he : e.gasMeasure ≤ n) (hf : ∀ d : Devm, Execution.gasMeasure (f d) ≤ d.gasMeasure) :
+    Execution.gasMeasure (e >>= f) ≤ n := by
   cases e with
   | error p => exact he
   | ok d => exact Nat.le_trans (hf d) he
@@ -1638,15 +1832,15 @@ guard, or an `.ok` of a pure value. The current `Devm` simply survives it. -/
 theorem gasLe_bind_const {α : Type} {n : Nat} {devm : Devm}
     {e : Except (EvmError × Devm) α} {f : α → Execution}
     (he : resultGas (fun _ => devm) e ≤ n)
-    (hf : ∀ a : α, Execution.gasLeft (f a) ≤ devm.gasLeft) :
-    Execution.gasLeft (e >>= f) ≤ n := by
+    (hf : ∀ a : α, Execution.gasMeasure (f a) ≤ devm.gasMeasure) :
+    Execution.gasMeasure (e >>= f) ≤ n := by
   cases e with
   | error p => exact he
   | ok a => exact Nat.le_trans (hf a) he
 
 @[simp] theorem resultGas_assert {p : Prop} [Decidable p] {devm : Devm}
     (msg : EvmError) :
-    resultGas (fun _ => devm) (Except.assert p ⟨msg, devm⟩) = devm.gasLeft := by
+    resultGas (fun _ => devm) (Except.assert p ⟨msg, devm⟩) = devm.gasMeasure := by
   unfold Except.assert
   split <;> rfl
 
@@ -1655,8 +1849,8 @@ theorem gasLe_bind_const {α : Type} {n : Nat} {devm : Devm}
 /-- The `Mach`-level analogue of `resultGas`, for the primitives defined by a
 footprint lift. -/
 def machResultGas {α : Type} : Footprint.Outcome Mach α → Nat
-  | .error p => p.2.gasLeft
-  | .ok p => p.2.gasLeft
+  | .error p => p.2.gasMeasure
+  | .ok p => p.2.gasMeasure
 
 theorem liftMach_resultGas {α : Type} (core : Mach → Footprint.Outcome Mach α)
     (devm : Devm) :
@@ -1666,29 +1860,29 @@ theorem liftMach_resultGas {α : Type} (core : Mach → Footprint.Outcome Mach �
 
 theorem liftMachExecution_resultGas (core : Mach → Footprint.Outcome Mach Unit)
     (devm : Devm) :
-    (liftMachExecution core devm).gasLeft = machResultGas (core devm.mach) := by
+    (liftMachExecution core devm).gasMeasure = machResultGas (core devm.mach) := by
   unfold liftMachExecution Footprint.toExecution liftMach Footprint.liftOutcome
   cases core devm.mach <;> rfl
 
 namespace Mach
 
 @[simp] theorem pop_machResultGas (mach : Mach) :
-    machResultGas mach.pop = mach.gasLeft := by
+    machResultGas mach.pop = mach.gasMeasure := by
   rcases mach with ⟨stack, memory, gasLeft, stateGas⟩
   cases stack <;> rfl
 
 @[simp] theorem popToNat_machResultGas (mach : Mach) :
-    machResultGas mach.popToNat = mach.gasLeft := by
+    machResultGas mach.popToNat = mach.gasMeasure := by
   rcases mach with ⟨stack, memory, gasLeft, stateGas⟩
   cases stack <;> rfl
 
 @[simp] theorem popToAdr_machResultGas (mach : Mach) :
-    machResultGas mach.popToAdr = mach.gasLeft := by
+    machResultGas mach.popToAdr = mach.gasMeasure := by
   rcases mach with ⟨stack, memory, gasLeft, stateGas⟩
   cases stack <;> rfl
 
 @[simp] theorem popN_machResultGas (n : Nat) (mach : Mach) :
-    machResultGas (mach.popN n) = mach.gasLeft := by
+    machResultGas (mach.popN n) = mach.gasMeasure := by
   induction n generalizing mach with
   | zero => rfl
   | succ n ih =>
@@ -1700,24 +1894,25 @@ namespace Mach
       rcases hp : Mach.popN ⟨xs, memory, gasLeft, stateGas⟩ n with
           ⟨err, m⟩ | ⟨ys, m⟩ <;>
         rw [hp] at ih' <;>
-        simpa only [Mach.popN, Mach.pop, hp, machResultGas] using ih'
+        simpa only [Mach.popN, Mach.pop, hp, machResultGas, Mach.gasMeasure]
+          using ih'
 
 @[simp] theorem push_machResultGas (x : B256) (mach : Mach) :
-    machResultGas (Mach.push x mach) = mach.gasLeft := by
+    machResultGas (Mach.push x mach) = mach.gasMeasure := by
   unfold Mach.push
   split <;> rfl
 
 @[simp] theorem chargeGas_machResultGas (c : Nat) (mach : Mach) :
-    machResultGas (Mach.chargeGas c mach) ≤ mach.gasLeft := by
+    machResultGas (Mach.chargeGas c mach) ≤ mach.gasMeasure := by
   unfold Mach.chargeGas safeSub
   by_cases hc : c ≤ mach.gasLeft
-  · simp only [if_pos hc, machResultGas]
+  · simp only [if_pos hc, machResultGas, Mach.gasMeasure]
     omega
-  · simp only [if_neg hc, machResultGas]
+  · simp only [if_neg hc, machResultGas, Mach.gasMeasure]
     omega
 
 @[simp] theorem pushItem_machResultGas (x : B256) (c : Nat) (mach : Mach) :
-    machResultGas (Mach.pushItem x c mach) ≤ mach.gasLeft := by
+    machResultGas (Mach.pushItem x c mach) ≤ mach.gasMeasure := by
   unfold Mach.pushItem
   have hc := Mach.chargeGas_machResultGas c mach
   rcases hg : Mach.chargeGas c mach with ⟨err, m⟩ | ⟨u, m⟩ <;> rw [hg] at hc <;>
@@ -1726,7 +1921,7 @@ namespace Mach
   · exact Nat.le_trans (Nat.le_of_eq (push_machResultGas x m)) hc
 
 @[simp] theorem applyUnary_machResultGas (f : B256 → B256) (c : Nat) (mach : Mach) :
-    machResultGas (Mach.applyUnary f c mach) ≤ mach.gasLeft := by
+    machResultGas (Mach.applyUnary f c mach) ≤ mach.gasMeasure := by
   unfold Mach.applyUnary
   have hp := Mach.pop_machResultGas mach
   rcases hg : mach.pop with ⟨err, m⟩ | ⟨x, m⟩ <;> rw [hg] at hp <;>
@@ -1736,7 +1931,7 @@ namespace Mach
 
 @[simp] theorem applyBinary_machResultGas (f : B256 → B256 → B256) (c : Nat)
     (mach : Mach) :
-    machResultGas (Mach.applyBinary f c mach) ≤ mach.gasLeft := by
+    machResultGas (Mach.applyBinary f c mach) ≤ mach.gasMeasure := by
   unfold Mach.applyBinary
   have hp := Mach.pop_machResultGas mach
   rcases hg : mach.pop with ⟨err, m⟩ | ⟨x, m1⟩ <;> rw [hg] at hp <;>
@@ -1750,7 +1945,7 @@ namespace Mach
 
 @[simp] theorem applyTernary_machResultGas (f : B256 → B256 → B256 → B256) (c : Nat)
     (mach : Mach) :
-    machResultGas (Mach.applyTernary f c mach) ≤ mach.gasLeft := by
+    machResultGas (Mach.applyTernary f c mach) ≤ mach.gasMeasure := by
   unfold Mach.applyTernary
   have hp := Mach.pop_machResultGas mach
   rcases hg : mach.pop with ⟨err, m⟩ | ⟨x, m1⟩ <;> rw [hg] at hp <;>
@@ -1771,53 +1966,53 @@ end Mach
 /-! ### The `Devm` layer of the non-increase corpus -/
 
 @[simp] theorem Devm.pop_resultGas (devm : Devm) :
-    resultGas Prod.snd devm.pop = devm.gasLeft := by
+    resultGas Prod.snd devm.pop = devm.gasMeasure := by
   rw [Devm.pop, liftMach_resultGas, Mach.pop_machResultGas]
   rfl
 
 @[simp] theorem Devm.popToNat_resultGas (devm : Devm) :
-    resultGas Prod.snd devm.popToNat = devm.gasLeft := by
+    resultGas Prod.snd devm.popToNat = devm.gasMeasure := by
   rw [Devm.popToNat, liftMach_resultGas, Mach.popToNat_machResultGas]
   rfl
 
 @[simp] theorem Devm.popToAdr_resultGas (devm : Devm) :
-    resultGas Prod.snd devm.popToAdr = devm.gasLeft := by
+    resultGas Prod.snd devm.popToAdr = devm.gasMeasure := by
   rw [Devm.popToAdr, liftMach_resultGas, Mach.popToAdr_machResultGas]
   rfl
 
 @[simp] theorem Devm.popN_resultGas (devm : Devm) (n : Nat) :
-    resultGas Prod.snd (devm.popN n) = devm.gasLeft := by
+    resultGas Prod.snd (devm.popN n) = devm.gasMeasure := by
   rw [Devm.popN, liftMach_resultGas, Mach.popN_machResultGas]
   rfl
 
 @[simp] theorem Devm.push_gasLe (x : B256) (devm : Devm) :
-    (devm.push x).gasLeft = devm.gasLeft := by
+    (devm.push x).gasMeasure = devm.gasMeasure := by
   rw [Devm.push, liftMachExecution_resultGas, Mach.push_machResultGas]
   rfl
 
 @[simp] theorem pushItem_gasLe (x : B256) (c : Nat) (devm : Devm) :
-    (pushItem x c devm).gasLeft ≤ devm.gasLeft := by
+    (pushItem x c devm).gasMeasure ≤ devm.gasMeasure := by
   rw [pushItem, liftMachExecution_resultGas]
   exact Mach.pushItem_machResultGas x c devm.mach
 
 @[simp] theorem applyUnary_gasLe (f : B256 → B256) (c : Nat) (devm : Devm) :
-    (applyUnary f c devm).gasLeft ≤ devm.gasLeft := by
+    (applyUnary f c devm).gasMeasure ≤ devm.gasMeasure := by
   rw [applyUnary, liftMachExecution_resultGas]
   exact Mach.applyUnary_machResultGas f c devm.mach
 
 @[simp] theorem applyBinary_gasLe (f : B256 → B256 → B256) (c : Nat) (devm : Devm) :
-    (applyBinary f c devm).gasLeft ≤ devm.gasLeft := by
+    (applyBinary f c devm).gasMeasure ≤ devm.gasMeasure := by
   rw [applyBinary, liftMachExecution_resultGas]
   exact Mach.applyBinary_machResultGas f c devm.mach
 
 @[simp] theorem applyTernary_gasLe (f : B256 → B256 → B256 → B256) (c : Nat)
     (devm : Devm) :
-    (applyTernary f c devm).gasLeft ≤ devm.gasLeft := by
+    (applyTernary f c devm).gasMeasure ≤ devm.gasMeasure := by
   rw [applyTernary, liftMachExecution_resultGas]
   exact Mach.applyTernary_machResultGas f c devm.mach
 
 @[simp] theorem Devm.pop_map_snd_gasLe (devm : Devm) :
-    Execution.gasLeft (devm.pop <&> Prod.snd) = devm.gasLeft := by
+    Execution.gasMeasure (devm.pop <&> Prod.snd) = devm.gasMeasure := by
   have h := Devm.pop_resultGas devm
   rcases hp : devm.pop with ⟨err, d⟩ | ⟨x, d⟩ <;> rw [hp] at h <;>
     simp only [resultGas_error, resultGas_ok] at h
@@ -1829,8 +2024,8 @@ its `Devm` somewhere other than the second component. -/
 theorem gasLe_bind {α : Type} {n : Nat} {proj : α → Devm}
     {e : Except (EvmError × Devm) α} {f : α → Execution}
     (he : resultGas proj e ≤ n)
-    (hf : ∀ a : α, Execution.gasLeft (f a) ≤ (proj a).gasLeft) :
-    Execution.gasLeft (e >>= f) ≤ n := by
+    (hf : ∀ a : α, Execution.gasMeasure (f a) ≤ (proj a).gasMeasure) :
+    Execution.gasMeasure (e >>= f) ≤ n := by
   cases e with
   | error p => exact he
   | ok a => exact Nat.le_trans (hf a) he
@@ -1840,24 +2035,24 @@ theorem gasLe_bind {α : Type} {n : Nat} {proj : α → Devm}
 theorem gasLe_bind_gen {α β : Type} {n : Nat} {proj : α → Devm} {proj' : β → Devm}
     {e : Except (EvmError × Devm) α} {f : α → Except (EvmError × Devm) β}
     (he : resultGas proj e ≤ n)
-    (hf : ∀ a : α, resultGas proj' (f a) ≤ (proj a).gasLeft) :
+    (hf : ∀ a : α, resultGas proj' (f a) ≤ (proj a).gasMeasure) :
     resultGas proj' (e >>= f) ≤ n := by
   cases e with
   | error p => exact he
   | ok a => exact Nat.le_trans (hf a) he
 
 @[simp] theorem assertDynamic_resultGas (sevm : Sevm) (devm : Devm) :
-    resultGas (fun _ => devm) (assertDynamic sevm devm) = devm.gasLeft :=
+    resultGas (fun _ => devm) (assertDynamic sevm devm) = devm.gasMeasure :=
   resultGas_assert _
 
 /-- The `Mach × Meta` analogue of `machResultGas`, for `Rinst.balanceCore`. -/
 def machMetaResultGas {α : Type} : Footprint.Outcome (Mach × Meta) α → Nat
-  | .error p => p.2.1.gasLeft
-  | .ok p => p.2.1.gasLeft
+  | .error p => p.2.1.gasMeasure
+  | .ok p => p.2.1.gasMeasure
 
 theorem liftMachMetaExecution_resultGas
     (core : Mach → Meta → Footprint.Outcome (Mach × Meta) Unit) (devm : Devm) :
-    (liftMachMetaExecution core devm).gasLeft =
+    (liftMachMetaExecution core devm).gasMeasure =
       machMetaResultGas (core devm.mach devm.meta) := by
   rcases h : core devm.mach devm.meta with ⟨err, view⟩ | ⟨u, view⟩ <;>
     simp only [liftMachMetaExecution, Footprint.toExecution, liftMachMeta,
@@ -1865,11 +2060,11 @@ theorem liftMachMetaExecution_resultGas
 
 theorem Rinst.balanceCore_machMetaResultGas (gas : GasSchedule) (world : World)
     (mach : Mach) (view : Meta) :
-    machMetaResultGas (Rinst.balanceCore gas world mach view) ≤ mach.gasLeft := by
+    machMetaResultGas (Rinst.balanceCore gas world mach view) ≤ mach.gasMeasure := by
   have hp := Mach.pop_machResultGas mach
-  have hc : ∀ (c : Nat) (m : Mach), machResultGas (Mach.chargeGas c m) ≤ m.gasLeft :=
+  have hc : ∀ (c : Nat) (m : Mach), machResultGas (Mach.chargeGas c m) ≤ m.gasMeasure :=
     Mach.chargeGas_machResultGas
-  have hs : ∀ (x : B256) (m : Mach), machResultGas (Mach.push x m) = m.gasLeft :=
+  have hs : ∀ (x : B256) (m : Mach), machResultGas (Mach.push x m) = m.gasMeasure :=
     Mach.push_machResultGas
   unfold Rinst.balanceCore
   split
@@ -1911,7 +2106,7 @@ theorem Rinst.balanceCore_machMetaResultGas (gas : GasSchedule) (world : World)
 branch. The successful branch is already covered strictly by
 `Rinst.runCore_gasLt`; this is the error branch the `"Revert"` path needs. -/
 theorem Rinst.runCore_gasLe (pc : Nat) (devm : Devm) (sevm : Sevm) (r : Rinst) :
-    (Rinst.runCore pc devm sevm r).gasLeft ≤ devm.gasLeft := by
+    (Rinst.runCore pc devm sevm r).gasMeasure ≤ devm.gasMeasure := by
   cases r <;> simp only [Rinst.runCore]
   all_goals first
     | exact pushItem_gasLe _ _ _
@@ -2018,7 +2213,7 @@ theorem Rinst.runCore_gasLe (pc : Nat) (devm : Devm) (sevm : Sevm) (r : Rinst) :
         (fun d => Nat.le_of_eq (Devm.push_gasLe _ d))
     · exact gasLe_bind_id
         (Nat.le_trans (chargeGas_result_gasLe _ _)
-          (Nat.le_of_eq (addAccessedAddress_gasLeft _ _)))
+          (Nat.le_of_eq (addAccessedAddress_gasMeasure _ _)))
         (fun d => Nat.le_of_eq (Devm.push_gasLe _ d))
   case sload =>
     refine gasLe_bind_snd (by simp) ?_
@@ -2028,7 +2223,7 @@ theorem Rinst.runCore_gasLe (pc : Nat) (devm : Devm) (sevm : Sevm) (r : Rinst) :
         (fun d => Nat.le_of_eq (Devm.push_gasLe _ d))
     · exact gasLe_bind_id
         (Nat.le_trans (chargeGas_result_gasLe _ _)
-          (Nat.le_of_eq (addAccessedStorageKey_gasLeft _ _ _)))
+          (Nat.le_of_eq (addAccessedStorageKey_gasMeasure _ _ _)))
         (fun d => Nat.le_of_eq (Devm.push_gasLe _ d))
   case extcodecopy =>
     refine gasLe_bind_snd (by simp) ?_
@@ -2043,7 +2238,7 @@ theorem Rinst.runCore_gasLe (pc : Nat) (devm : Devm) (sevm : Sevm) (r : Rinst) :
     · exact gasLe_bind_id (chargeGas_result_gasLe _ _) (fun d => by simp)
     · exact gasLe_bind_id
         (Nat.le_trans (chargeGas_result_gasLe _ _)
-          (Nat.le_of_eq (addAccessedAddress_gasLeft _ _)))
+          (Nat.le_of_eq (addAccessedAddress_gasMeasure _ _)))
         (fun d => by simp)
   case swap n =>
     refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
@@ -2099,7 +2294,7 @@ theorem Rinst.runCore_gasLe (pc : Nat) (devm : Devm) (sevm : Sevm) (r : Rinst) :
       simp
 
 theorem Jinst.runCore_gasLe (pc : Nat) (devm : Devm) (sevm : Sevm) (j : Jinst) :
-    resultGas Prod.snd (Jinst.runCore pc devm sevm j) ≤ devm.gasLeft := by
+    resultGas Prod.snd (Jinst.runCore pc devm sevm j) ≤ devm.gasMeasure := by
   cases j <;> simp only [Jinst.runCore]
   case jumpdest =>
     exact gasLe_bind_gen (proj := id) (by simp) (fun d => by simp)
@@ -2124,31 +2319,31 @@ theorem Jinst.runCore_gasLe (pc : Nat) (devm : Devm) (sevm : Sevm) (j : Jinst) :
       intro _
       exact gasLe_bind_gen (proj := fun _ : Nat => d3) (by simp) (fun _ => by simp)
 
-@[simp] theorem Devm.subBal_gasLeft {devm devm' : Devm} {a : Adr} {v : B256}
-    (h : devm.subBal a v = some devm') : devm'.gasLeft = devm.gasLeft := by
+@[simp] theorem Devm.subBal_gasMeasure {devm devm' : Devm} {a : Adr} {v : B256}
+    (h : devm.subBal a v = some devm') : devm'.gasMeasure = devm.gasMeasure := by
   unfold Devm.subBal at h
   rcases hs : devm.state.subBal a v with _ | state <;> rw [hs] at h <;>
     simp only [bind, Option.bind, Option.some.injEq] at h
   · nomatch h
-  · rw [← h, Devm.withState_gasLeft]
+  · rw [← h, Devm.withState_gasMeasure]
 
-@[simp] theorem Devm.setBal_gasLeft (devm : Devm) (a : Adr) (v : B256) :
-    (devm.setBal a v).gasLeft = devm.gasLeft := rfl
+@[simp] theorem Devm.setBal_gasMeasure (devm : Devm) (a : Adr) (v : B256) :
+    (devm.setBal a v).gasMeasure = devm.gasMeasure := rfl
 
-@[simp] theorem addAccountToDelete_gasLeft (devm : Devm) (a : Adr) :
-    (addAccountToDelete devm a).gasLeft = devm.gasLeft := rfl
+@[simp] theorem addAccountToDelete_gasMeasure (devm : Devm) (a : Adr) :
+    (addAccountToDelete devm a).gasMeasure = devm.gasMeasure := rfl
 
-@[simp] theorem Devm.addBal_gasLeft (devm : Devm) (a : Adr) (v : B256) :
-    (devm.addBal a v).gasLeft = devm.gasLeft := rfl
+@[simp] theorem Devm.addBal_gasMeasure (devm : Devm) (a : Adr) (v : B256) :
+    (devm.addBal a v).gasMeasure = devm.gasMeasure := rfl
 
-@[simp] theorem Devm.withOutput_gasLeft (devm : Devm) (output : Bytes) :
-    (devm.withOutput output).gasLeft = devm.gasLeft := rfl
+@[simp] theorem Devm.withOutput_gasMeasure (devm : Devm) (output : Bytes) :
+    (devm.withOutput output).gasMeasure = devm.gasMeasure := rfl
 
 /-- The halting instructions. `.revert` is the reason this whole layer exists: it
 is the sole producer of the `"Revert"` tag, the one error `handleError` turns
 back into a successful frame result carrying live gas. -/
 theorem Linst.run_gasLe (sevm : Sevm) (devm : Devm) (l : Linst) :
-    Execution.gasLeft (Linst.run sevm devm l) ≤ devm.gasLeft := by
+    Execution.gasMeasure (Linst.run sevm devm l) ≤ devm.gasMeasure := by
   cases l <;> simp only [Linst.run]
   case stop => simp
   case return_ =>
@@ -2185,7 +2380,7 @@ theorem Linst.run_gasLe (sevm : Sevm) (devm : Devm) (l : Linst) :
       refine gasLe_bind_id ?_ ?_
       · rcases hb : d3.subBal sevm.currentTarget donorBal with _ | d4
         · simp [Option.toExcept]
-        · simp [Option.toExcept, Devm.subBal_gasLeft hb]
+        · simp [Option.toExcept, Devm.subBal_gasMeasure hb]
       · intro d4
         refine gasLe_bind_id (by simp) ?_
         intro d5
@@ -2199,261 +2394,305 @@ so the `Devm` in `(evm1.withGasLeft (evm1.gasLeft + gas)).push 0` carries more
 gas than the intermediate it came from; the bound is recoverable only from the
 charge equation the compositional device deliberately discards.
 
-What the driver actually needs is weaker than a gas bound. `handleError`
-manufactures a live-gas frame result out of exactly one tag, `"Revert"`, and
-every error an `Xinst` can raise is a stack or gas fault — `"Revert"` is
-produced at a single site in the whole interpreter, `Linst.run .revert`. So the
-`Xinst` family discharges the settlement obligation by tag rather than by
-arithmetic, which is a walk with no arithmetic in it at all. -/
+What the driver actually needs is weaker than a measure bound, and it has two
+halves. `handleError` manufactures a live-gas frame result out of exactly one
+tag, `"Revert"`, and every error an `Xinst` can raise is a stack or gas fault —
+`"Revert"` is produced at a single site in the whole interpreter,
+`Linst.run .revert`. That is the first half, and it is a walk with no
+arithmetic in it at all. The second half is what an exceptional halt *keeps*:
+`handleError` zeroes `gasLeft` and leaves the meter alone, so the settled
+measure is the halted frame's `spill`, and the driver needs that spill bounded
+by the measure the step began with. Along a Prague arm no operation touches the
+meter, so the walk carries one more fact -- every branch still holds the meter
+the step began with -- and the bound follows because a meter's spill never
+exceeds the measure it is part of. The two halves travel together in one walk,
+which is the walk the tag obligation alone used to be. -/
 
-/-- No branch of this outcome reports the `"Revert"` tag. -/
-def NoRevertOut {α : Type} : Except (EvmError × Devm) α → Prop
-  | .error p => p.1 ≠ .revert
-  | .ok _ => True
+/-- Every error branch of this outcome is a halt that is not a `"Revert"` and
+still carries the meter `s`; a successful branch carries `s` too, which is what
+lets the fact travel across a bind. -/
+def HaltOut {α : Type} (proj : α → Devm) (s : StateGasMeter) :
+    Except (EvmError × Devm) α → Prop
+  | .error p => p.1 ≠ .revert ∧ p.2.mach.stateGas = s
+  | .ok a => (proj a).mach.stateGas = s
 
 /-- The `Mach`-level analogue, for the footprint-lifted primitives. -/
-def MachNoRevert {α : Type} : Footprint.Outcome Mach α → Prop
-  | .error q => q.1 ≠ .revert
-  | .ok _ => True
+def MachHaltOut {α : Type} (s : StateGasMeter) : Footprint.Outcome Mach α → Prop
+  | .error q => q.1 ≠ .revert ∧ q.2.stateGas = s
+  | .ok p => p.2.stateGas = s
 
-theorem liftMach_noRevert {α : Type} {core : Mach → Footprint.Outcome Mach α}
-    {devm : Devm} (h : MachNoRevert (core devm.mach)) :
-    NoRevertOut (liftMach core devm) := by
+theorem liftMach_haltOut {α : Type} {core : Mach → Footprint.Outcome Mach α}
+    {devm : Devm} {s : StateGasMeter} (h : MachHaltOut s (core devm.mach)) :
+    HaltOut Prod.snd s (liftMach core devm) := by
   unfold liftMach Footprint.liftOutcome
   rcases hc : core devm.mach with ⟨err, m⟩ | ⟨v, m⟩ <;> rw [hc] at h
   · exact h
-  · trivial
+  · exact h
 
-theorem liftMachExecution_noRevert {core : Mach → Footprint.Outcome Mach Unit}
-    {devm : Devm} (h : MachNoRevert (core devm.mach)) :
-    NoRevertOut (liftMachExecution core devm) := by
+theorem liftMachExecution_haltOut {core : Mach → Footprint.Outcome Mach Unit}
+    {devm : Devm} {s : StateGasMeter} (h : MachHaltOut s (core devm.mach)) :
+    HaltOut id s (liftMachExecution core devm) := by
   unfold liftMachExecution Footprint.toExecution liftMach Footprint.liftOutcome
   rcases hc : core devm.mach with ⟨err, m⟩ | ⟨v, m⟩ <;> rw [hc] at h
   · exact h
-  · trivial
+  · exact h
 
-theorem Mach.pop_noRevert (mach : Mach) : MachNoRevert mach.pop := by
+theorem Mach.pop_haltOut {mach : Mach} {s : StateGasMeter}
+    (hs : mach.stateGas = s) : MachHaltOut s mach.pop := by
   unfold Mach.pop
   split
-  · show EvmError.halt (.stackUnderflow .none) ≠ .revert
-    decide
-  · trivial
+  · exact And.intro (by simp) hs
+  · exact hs
 
-theorem Mach.popToNat_noRevert (mach : Mach) : MachNoRevert mach.popToNat := by
-  have h := Mach.pop_noRevert mach
+theorem Mach.popToNat_haltOut {mach : Mach} {s : StateGasMeter}
+    (hs : mach.stateGas = s) : MachHaltOut s mach.popToNat := by
+  have h := Mach.pop_haltOut hs
   unfold Mach.popToNat
   rcases hp : mach.pop with ⟨e⟩ | ⟨x, m⟩ <;> rw [hp] at h
   · exact h
-  · trivial
+  · exact h
 
-theorem Mach.popToAdr_noRevert (mach : Mach) : MachNoRevert mach.popToAdr := by
-  have h := Mach.pop_noRevert mach
+theorem Mach.popToAdr_haltOut {mach : Mach} {s : StateGasMeter}
+    (hs : mach.stateGas = s) : MachHaltOut s mach.popToAdr := by
+  have h := Mach.pop_haltOut hs
   unfold Mach.popToAdr
   rcases hp : mach.pop with ⟨e⟩ | ⟨x, m⟩ <;> rw [hp] at h
   · exact h
-  · trivial
-
-theorem Mach.push_noRevert (x : B256) (mach : Mach) :
-    MachNoRevert (Mach.push x mach) := by
-  unfold Mach.push
-  split
-  · trivial
-  · show EvmError.halt (.stackOverflow .none) ≠ .revert
-    decide
-
-theorem Mach.chargeGas_noRevert (c : Nat) (mach : Mach) :
-    MachNoRevert (Mach.chargeGas c mach) := by
-  unfold Mach.chargeGas
-  split
-  · show EvmError.halt (.outOfGas .none) ≠ .revert
-    decide
-  · trivial
-
-theorem Devm.pop_noRevert (devm : Devm) : NoRevertOut devm.pop :=
-  liftMach_noRevert (Mach.pop_noRevert devm.mach)
-
-theorem Devm.popToNat_noRevert (devm : Devm) : NoRevertOut devm.popToNat :=
-  liftMach_noRevert (Mach.popToNat_noRevert devm.mach)
-
-theorem Devm.popToAdr_noRevert (devm : Devm) : NoRevertOut devm.popToAdr :=
-  liftMach_noRevert (Mach.popToAdr_noRevert devm.mach)
-
-theorem Devm.push_noRevert (x : B256) (devm : Devm) : NoRevertOut (devm.push x) :=
-  liftMachExecution_noRevert (Mach.push_noRevert x devm.mach)
-
-theorem chargeGas_noRevert (c : Nat) (devm : Devm) : NoRevertOut (chargeGas c devm) :=
-  liftMachExecution_noRevert (Mach.chargeGas_noRevert c devm.mach)
-
-theorem assert_noRevert {p : Prop} [Decidable p] {msg : EvmError} {devm : Devm}
-    (h : msg ≠ .revert) :
-    NoRevertOut (Except.assert p (⟨msg, devm⟩ : EvmError × Devm)) := by
-  unfold Except.assert
-  split
-  · trivial
   · exact h
 
-theorem assertDynamic_noRevert (sevm : Sevm) (devm : Devm) :
-    NoRevertOut (assertDynamic sevm devm) := by
-  unfold assertDynamic
-  exact assert_noRevert (by decide)
+theorem Mach.push_haltOut {x : B256} {mach : Mach} {s : StateGasMeter}
+    (hs : mach.stateGas = s) : MachHaltOut s (Mach.push x mach) := by
+  unfold Mach.push
+  split
+  · exact hs
+  · exact And.intro (by simp) hs
 
-/-- The `XStep` form of the tag obligation. A spawn carries no outcome of its
+theorem Mach.chargeGas_haltOut {c : Nat} {mach : Mach} {s : StateGasMeter}
+    (hs : mach.stateGas = s) : MachHaltOut s (Mach.chargeGas c mach) := by
+  unfold Mach.chargeGas
+  split
+  · exact And.intro (by simp) hs
+  · exact hs
+
+theorem Devm.pop_haltOut {devm : Devm} {s : StateGasMeter}
+    (hs : devm.mach.stateGas = s) : HaltOut Prod.snd s devm.pop :=
+  liftMach_haltOut (Mach.pop_haltOut hs)
+
+theorem Devm.popToNat_haltOut {devm : Devm} {s : StateGasMeter}
+    (hs : devm.mach.stateGas = s) : HaltOut Prod.snd s devm.popToNat :=
+  liftMach_haltOut (Mach.popToNat_haltOut hs)
+
+theorem Devm.popToAdr_haltOut {devm : Devm} {s : StateGasMeter}
+    (hs : devm.mach.stateGas = s) : HaltOut Prod.snd s devm.popToAdr :=
+  liftMach_haltOut (Mach.popToAdr_haltOut hs)
+
+theorem Devm.push_haltOut {x : B256} {devm : Devm} {s : StateGasMeter}
+    (hs : devm.mach.stateGas = s) : HaltOut id s (devm.push x) :=
+  liftMachExecution_haltOut (Mach.push_haltOut hs)
+
+theorem chargeGas_haltOut {c : Nat} {devm : Devm} {s : StateGasMeter}
+    (hs : devm.mach.stateGas = s) : HaltOut id s (chargeGas c devm) :=
+  liftMachExecution_haltOut (Mach.chargeGas_haltOut hs)
+
+theorem assert_haltOut {p : Prop} [Decidable p] {msg : EvmError} {devm : Devm}
+    {s : StateGasMeter} (h : msg ≠ .revert) (hs : devm.mach.stateGas = s) :
+    HaltOut (fun _ => devm) s (Except.assert p (⟨msg, devm⟩ : EvmError × Devm)) := by
+  unfold Except.assert
+  split
+  · exact hs
+  · exact And.intro h hs
+
+theorem assertDynamic_haltOut (sevm : Sevm) {devm : Devm} {s : StateGasMeter}
+    (hs : devm.mach.stateGas = s) :
+    HaltOut (fun _ => devm) s (assertDynamic sevm devm) := by
+  unfold assertDynamic
+  exact assert_haltOut (by decide) hs
+
+/-- What the `Xinst` route owes on its halt branch, against the measure `n`
+the step began with: no `"Revert"` tag, and a spill `n` still covers, because
+the spill is what an exceptional halt keeps. A spawn carries no outcome of its
 own, so it owes nothing. -/
-def XStep.NoRevert : XStep → Prop
-  | .done ex => NoRevertOut ex
+def XStep.Halt (n : Nat) : XStep → Prop
+  | .done ex => ∀ p, ex = .error p → p.1 ≠ .revert ∧ p.2.spill ≤ n
   | .spawn _ _ => True
 
-/-- The obligation on an `XStep`-valued body, before `XStep.ofExcept` collapses
-its error branch into a `.done`. -/
-def xstepNoRevert : Except (EvmError × Devm) XStep → Prop
-  | .error p => p.1 ≠ .revert
-  | .ok step => step.NoRevert
+theorem XStep.done_ok_halt (d : Devm) (n : Nat) : (XStep.done (.ok d)).Halt n := by
+  intro p hp
+  exact absurd hp (by simp)
 
-theorem XStep.ofExcept_noRevert {x : Except (EvmError × Devm) XStep}
-    (h : xstepNoRevert x) : (XStep.ofExcept x).NoRevert := by
+/-- The obligation on an `XStep`-valued body, before `XStep.ofExcept` collapses
+its error branch into a `.done`: an error is a non-`Revert` halt still carrying
+the meter `s`, and a step owes `Halt n`. -/
+def xstepHalt (s : StateGasMeter) (n : Nat) : Except (EvmError × Devm) XStep → Prop
+  | .error p => p.1 ≠ .revert ∧ p.2.mach.stateGas = s
+  | .ok step => step.Halt n
+
+/-- Collapsing the error branch: a halt still holding the meter `s` spills at
+most what `s` spills, which is the one arithmetic fact in this corpus. -/
+theorem XStep.ofExcept_halt {s : StateGasMeter} {n : Nat}
+    {x : Except (EvmError × Devm) XStep}
+    (hsn : s.spilled + s.committedSpill ≤ n) (h : xstepHalt s n x) :
+    (XStep.ofExcept x).Halt n := by
   cases x with
-  | error p => exact h
+  | error p =>
+    have h' : p.1 ≠ .revert ∧ p.2.mach.stateGas = s := h
+    intro q hq
+    cases hq
+    refine ⟨h'.1, ?_⟩
+    unfold Devm.spill
+    rw [h'.2]
+    exact hsn
   | ok step => exact h
 
-theorem xstepNoRevert_bind {α : Type} {e : Except (EvmError × Devm) α}
-    {f : α → Except (EvmError × Devm) XStep}
-    (he : NoRevertOut e) (hf : ∀ a, xstepNoRevert (f a)) :
-    xstepNoRevert (e >>= f) := by
+theorem xstepHalt_bind {α : Type} {proj : α → Devm} {s : StateGasMeter} {n : Nat}
+    {e : Except (EvmError × Devm) α} {f : α → Except (EvmError × Devm) XStep}
+    (he : HaltOut proj s e)
+    (hf : ∀ a, (proj a).mach.stateGas = s → xstepHalt s n (f a)) :
+    xstepHalt s n (e >>= f) := by
   cases e with
   | error p => exact he
-  | ok a => exact hf a
+  | ok a => exact hf a he
 
-theorem genericCall.step_noRevert
+theorem genericCall.step_halt
     (sevm : Sevm) (devm : Devm) (gas : Nat) (value : B256)
     (caller target codeAddress : Adr) (shouldTransferValue isStaticcall : Bool)
     (inputIndex inputSize outputIndex outputSize : Nat)
-    (code : ByteArray) (disablePrecompiles : Bool) :
+    (code : ByteArray) (disablePrecompiles : Bool) {s : StateGasMeter} {n : Nat}
+    (hs : devm.mach.stateGas = s) (hsn : s.spilled + s.committedSpill ≤ n) :
     (genericCall.step sevm devm gas value caller target codeAddress
       shouldTransferValue isStaticcall inputIndex inputSize outputIndex
-      outputSize code disablePrecompiles).NoRevert := by
+      outputSize code disablePrecompiles).Halt n := by
   unfold genericCall.step
   split
-  · exact XStep.ofExcept_noRevert
-      (xstepNoRevert_bind (Devm.push_noRevert _ _) (fun _ => trivial))
+  · exact XStep.ofExcept_halt hsn
+      (xstepHalt_bind (Devm.push_haltOut (by simpa using hs))
+        (fun _ _ => XStep.done_ok_halt _ _))
   · trivial
 
-theorem genericCreate.step_noRevert
+theorem genericCreate.step_halt
     (sevm : Sevm) (devm : Devm) (endowment : B256) (newAddress : Adr)
-    (memoryIndex memorySize : Nat) :
+    (memoryIndex memorySize : Nat) {s : StateGasMeter} {n : Nat}
+    (hs : devm.mach.stateGas = s) (hsn : s.spilled + s.committedSpill ≤ n) :
     (genericCreate.step sevm devm endowment newAddress memoryIndex
-      memorySize).NoRevert := by
+      memorySize).Halt n := by
   unfold genericCreate.step
-  apply XStep.ofExcept_noRevert
-  refine xstepNoRevert_bind (assert_noRevert (by decide)) ?_
-  intro _
-  refine xstepNoRevert_bind (assertDynamic_noRevert _ _) ?_
-  intro _
+  apply XStep.ofExcept_halt hsn
+  refine xstepHalt_bind (assert_haltOut (by decide) hs) ?_
+  intro _ _
+  refine xstepHalt_bind (assertDynamic_haltOut _ (by simpa using hs)) ?_
+  intro _ _
   dsimp only
   split
-  · exact xstepNoRevert_bind (Devm.push_noRevert _ _) (fun _ => trivial)
+  · exact xstepHalt_bind (Devm.push_haltOut (by simpa using hs))
+      (fun _ _ => XStep.done_ok_halt _ _)
   · split
-    · exact xstepNoRevert_bind (Devm.push_noRevert _ _) (fun _ => trivial)
+    · exact xstepHalt_bind (Devm.push_haltOut (by simpa using hs))
+        (fun _ _ => XStep.done_ok_halt _ _)
     · trivial
 
-theorem Xinst.step_noRevert (sevm : Sevm) (devm : Devm) (x : Xinst) :
-    (Xinst.step sevm devm x).NoRevert := by
-  cases x <;> simp only [Xinst.step] <;> apply XStep.ofExcept_noRevert
+theorem Xinst.step_halt (sevm : Sevm) (devm : Devm) (x : Xinst)
+    {s : StateGasMeter} {n : Nat}
+    (hs : devm.mach.stateGas = s) (hsn : s.spilled + s.committedSpill ≤ n) :
+    (Xinst.step sevm devm x).Halt n := by
+  cases x <;> simp only [Xinst.step] <;> apply XStep.ofExcept_halt hsn
   case create =>
-    refine xstepNoRevert_bind (Devm.pop_noRevert _) ?_
-    rintro ⟨endowment, d1⟩
-    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
-    rintro ⟨memoryIndex, d2⟩
-    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
-    rintro ⟨memorySize, d3⟩
-    refine xstepNoRevert_bind (chargeGas_noRevert _ _) ?_
-    intro d4
-    exact genericCreate.step_noRevert _ _ _ _ _ _
+    refine xstepHalt_bind (Devm.pop_haltOut hs) ?_
+    rintro ⟨endowment, d1⟩ h1
+    refine xstepHalt_bind (Devm.popToNat_haltOut h1) ?_
+    rintro ⟨memoryIndex, d2⟩ h2
+    refine xstepHalt_bind (Devm.popToNat_haltOut h2) ?_
+    rintro ⟨memorySize, d3⟩ h3
+    refine xstepHalt_bind (chargeGas_haltOut h3) ?_
+    intro d4 h4
+    exact genericCreate.step_halt _ _ _ _ _ _ (by simpa using h4) hsn
   case create2 =>
-    refine xstepNoRevert_bind (Devm.pop_noRevert _) ?_
-    rintro ⟨endowment, d1⟩
-    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
-    rintro ⟨memoryIndex, d2⟩
-    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
-    rintro ⟨memorySize, d3⟩
-    refine xstepNoRevert_bind (Devm.pop_noRevert _) ?_
-    rintro ⟨salt, d4⟩
-    refine xstepNoRevert_bind (chargeGas_noRevert _ _) ?_
-    intro d5
-    exact genericCreate.step_noRevert _ _ _ _ _ _
+    refine xstepHalt_bind (Devm.pop_haltOut hs) ?_
+    rintro ⟨endowment, d1⟩ h1
+    refine xstepHalt_bind (Devm.popToNat_haltOut h1) ?_
+    rintro ⟨memoryIndex, d2⟩ h2
+    refine xstepHalt_bind (Devm.popToNat_haltOut h2) ?_
+    rintro ⟨memorySize, d3⟩ h3
+    refine xstepHalt_bind (Devm.pop_haltOut h3) ?_
+    rintro ⟨salt, d4⟩ h4
+    refine xstepHalt_bind (chargeGas_haltOut h4) ?_
+    intro d5 h5
+    exact genericCreate.step_halt _ _ _ _ _ _ (by simpa using h5) hsn
   case call =>
-    refine xstepNoRevert_bind (Devm.pop_noRevert _) ?_
-    rintro ⟨gas, d1⟩
-    refine xstepNoRevert_bind (Devm.popToAdr_noRevert _) ?_
-    rintro ⟨callee, d2⟩
-    refine xstepNoRevert_bind (Devm.pop_noRevert _) ?_
-    rintro ⟨value, d3⟩
-    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
-    rintro ⟨inputIndex, d4⟩
-    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
-    rintro ⟨inputSize, d5⟩
-    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
-    rintro ⟨outputIndex, d6⟩
-    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
-    rintro ⟨outputSize, d7⟩
-    refine xstepNoRevert_bind (chargeGas_noRevert _ _) ?_
-    intro d8
-    refine xstepNoRevert_bind (assert_noRevert (by decide)) ?_
-    intro _
+    refine xstepHalt_bind (Devm.pop_haltOut hs) ?_
+    rintro ⟨gas, d1⟩ h1
+    refine xstepHalt_bind (Devm.popToAdr_haltOut h1) ?_
+    rintro ⟨callee, d2⟩ h2
+    refine xstepHalt_bind (Devm.pop_haltOut h2) ?_
+    rintro ⟨value, d3⟩ h3
+    refine xstepHalt_bind (Devm.popToNat_haltOut h3) ?_
+    rintro ⟨inputIndex, d4⟩ h4
+    refine xstepHalt_bind (Devm.popToNat_haltOut h4) ?_
+    rintro ⟨inputSize, d5⟩ h5
+    refine xstepHalt_bind (Devm.popToNat_haltOut h5) ?_
+    rintro ⟨outputIndex, d6⟩ h6
+    refine xstepHalt_bind (Devm.popToNat_haltOut h6) ?_
+    rintro ⟨outputSize, d7⟩ h7
+    refine xstepHalt_bind (chargeGas_haltOut (by simpa using h7)) ?_
+    intro d8 h8
+    refine xstepHalt_bind (assert_haltOut (by decide) h8) ?_
+    intro _ _
     split
-    · exact xstepNoRevert_bind (Devm.push_noRevert _ _) (fun _ => trivial)
-    · exact genericCall.step_noRevert _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+    · exact xstepHalt_bind (Devm.push_haltOut (by simpa using h8))
+        (fun _ _ => XStep.done_ok_halt _ _)
+    · exact genericCall.step_halt _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ (by simpa using h8) hsn
   case callcode =>
-    refine xstepNoRevert_bind (Devm.pop_noRevert _) ?_
-    rintro ⟨gas, d1⟩
-    refine xstepNoRevert_bind (Devm.popToAdr_noRevert _) ?_
-    rintro ⟨codeAddress, d2⟩
-    refine xstepNoRevert_bind (Devm.pop_noRevert _) ?_
-    rintro ⟨value, d3⟩
-    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
-    rintro ⟨inputIndex, d4⟩
-    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
-    rintro ⟨inputSize, d5⟩
-    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
-    rintro ⟨outputIndex, d6⟩
-    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
-    rintro ⟨outputSize, d7⟩
-    refine xstepNoRevert_bind (chargeGas_noRevert _ _) ?_
-    intro d8
+    refine xstepHalt_bind (Devm.pop_haltOut hs) ?_
+    rintro ⟨gas, d1⟩ h1
+    refine xstepHalt_bind (Devm.popToAdr_haltOut h1) ?_
+    rintro ⟨codeAddress, d2⟩ h2
+    refine xstepHalt_bind (Devm.pop_haltOut h2) ?_
+    rintro ⟨value, d3⟩ h3
+    refine xstepHalt_bind (Devm.popToNat_haltOut h3) ?_
+    rintro ⟨inputIndex, d4⟩ h4
+    refine xstepHalt_bind (Devm.popToNat_haltOut h4) ?_
+    rintro ⟨inputSize, d5⟩ h5
+    refine xstepHalt_bind (Devm.popToNat_haltOut h5) ?_
+    rintro ⟨outputIndex, d6⟩ h6
+    refine xstepHalt_bind (Devm.popToNat_haltOut h6) ?_
+    rintro ⟨outputSize, d7⟩ h7
+    refine xstepHalt_bind (chargeGas_haltOut (by simpa using h7)) ?_
+    intro d8 h8
     split
-    · exact xstepNoRevert_bind (Devm.push_noRevert _ _) (fun _ => trivial)
-    · exact genericCall.step_noRevert _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+    · exact xstepHalt_bind (Devm.push_haltOut (by simpa using h8))
+        (fun _ _ => XStep.done_ok_halt _ _)
+    · exact genericCall.step_halt _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ (by simpa using h8) hsn
   case delegatecall =>
-    refine xstepNoRevert_bind (Devm.pop_noRevert _) ?_
-    rintro ⟨gas, d1⟩
-    refine xstepNoRevert_bind (Devm.popToAdr_noRevert _) ?_
-    rintro ⟨codeAddress, d2⟩
-    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
-    rintro ⟨inputIndex, d3⟩
-    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
-    rintro ⟨inputSize, d4⟩
-    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
-    rintro ⟨outputIndex, d5⟩
-    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
-    rintro ⟨outputSize, d6⟩
-    refine xstepNoRevert_bind (chargeGas_noRevert _ _) ?_
-    intro d7
-    exact genericCall.step_noRevert _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+    refine xstepHalt_bind (Devm.pop_haltOut hs) ?_
+    rintro ⟨gas, d1⟩ h1
+    refine xstepHalt_bind (Devm.popToAdr_haltOut h1) ?_
+    rintro ⟨codeAddress, d2⟩ h2
+    refine xstepHalt_bind (Devm.popToNat_haltOut h2) ?_
+    rintro ⟨inputIndex, d3⟩ h3
+    refine xstepHalt_bind (Devm.popToNat_haltOut h3) ?_
+    rintro ⟨inputSize, d4⟩ h4
+    refine xstepHalt_bind (Devm.popToNat_haltOut h4) ?_
+    rintro ⟨outputIndex, d5⟩ h5
+    refine xstepHalt_bind (Devm.popToNat_haltOut h5) ?_
+    rintro ⟨outputSize, d6⟩ h6
+    refine xstepHalt_bind (chargeGas_haltOut (by simpa using h6)) ?_
+    intro d7 h7
+    exact genericCall.step_halt _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ (by simpa using h7) hsn
   case staticcall =>
-    refine xstepNoRevert_bind (Devm.pop_noRevert _) ?_
-    rintro ⟨gas, d1⟩
-    refine xstepNoRevert_bind (Devm.popToAdr_noRevert _) ?_
-    rintro ⟨target, d2⟩
-    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
-    rintro ⟨inputIndex, d3⟩
-    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
-    rintro ⟨inputSize, d4⟩
-    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
-    rintro ⟨outputIndex, d5⟩
-    refine xstepNoRevert_bind (Devm.popToNat_noRevert _) ?_
-    rintro ⟨outputSize, d6⟩
-    refine xstepNoRevert_bind (chargeGas_noRevert _ _) ?_
-    intro d7
-    exact genericCall.step_noRevert _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+    refine xstepHalt_bind (Devm.pop_haltOut hs) ?_
+    rintro ⟨gas, d1⟩ h1
+    refine xstepHalt_bind (Devm.popToAdr_haltOut h1) ?_
+    rintro ⟨target, d2⟩ h2
+    refine xstepHalt_bind (Devm.popToNat_haltOut h2) ?_
+    rintro ⟨inputIndex, d3⟩ h3
+    refine xstepHalt_bind (Devm.popToNat_haltOut h3) ?_
+    rintro ⟨inputSize, d4⟩ h4
+    refine xstepHalt_bind (Devm.popToNat_haltOut h4) ?_
+    rintro ⟨outputIndex, d5⟩ h5
+    refine xstepHalt_bind (Devm.popToNat_haltOut h5) ?_
+    rintro ⟨outputSize, d6⟩ h6
+    refine xstepHalt_bind (chargeGas_haltOut (by simpa using h6)) ?_
+    intro d7 h7
+    exact genericCall.step_halt _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ (by simpa using h7) hsn
 
 /-! ## Settling a finished frame
 
@@ -2467,7 +2706,7 @@ ignorant of which route a given instruction family took. -/
 most `n` gas. An exceptional halt is rewritten to zero gas, and every remaining
 tag stays an `.error`, which `Resume.run` cannot turn into a resumed parent. -/
 def Execution.SettledGasLe (n : Nat) (ex : Execution) : Prop :=
-  ∀ d : Devm, executeCode.handleError ex = .ok d → d.gasLeft ≤ n
+  ∀ d : Devm, executeCode.handleError ex = .ok d → d.gasMeasure ≤ n
 
 theorem Execution.SettledGasLe.mono {m n : Nat} {ex : Execution} (h : m ≤ n)
     (hs : ex.SettledGasLe m) : ex.SettledGasLe n :=
@@ -2475,13 +2714,15 @@ theorem Execution.SettledGasLe.mono {m n : Nat} {ex : Execution} (h : m ≤ n)
 
 /-- The route the `Rinst`/`Jinst`/`Linst` corpus takes. -/
 theorem Execution.settledGasLe_of_gasLe {n : Nat} {ex : Execution}
-    (h : ex.gasLeft ≤ n) : ex.SettledGasLe n :=
+    (h : ex.gasMeasure ≤ n) : ex.SettledGasLe n :=
   fun _ hd => Nat.le_trans (executeCode.handleError_ok_gasLe hd) h
 
-/-- The route the `Xinst` family takes: bound the successful branch, and rule
-out the one tag that would let an error carry live gas through. -/
-theorem Execution.settledGasLe_of_noRevert {n : Nat} {ex : Execution}
-    (hok : ∀ d, ex = .ok d → d.gasLeft ≤ n) (hnr : NoRevertOut ex) :
+/-- The route the `Xinst` family takes: bound the successful branch, rule out
+the one tag that would let an error carry live gas through, and bound the spill
+an exceptional halt keeps. -/
+theorem Execution.settledGasLe_of_halt {n : Nat} {ex : Execution}
+    (hok : ∀ d, ex = .ok d → d.gasMeasure ≤ n)
+    (hhalt : ∀ p, ex = .error p → p.1 ≠ .revert ∧ p.2.spill ≤ n) :
     ex.SettledGasLe n := by
   intro d hd
   cases ex with
@@ -2491,17 +2732,19 @@ theorem Execution.settledGasLe_of_noRevert {n : Nat} {ex : Execution}
     exact hok d0 rfl
   | error p =>
     obtain ⟨err, evm⟩ := p
+    obtain ⟨hnr, hsp⟩ := hhalt _ rfl
+    dsimp only at hnr hsp
     cases err with
     | halt reason =>
       simp only [executeCode.handleError, Except.ok.injEq] at hd
-      rw [← hd, Devm.setMeta_gasLeft, Devm.withGasLeft_gasLeft]
+      rw [← hd, Devm.setMeta_gasMeasure, Devm.withGasLeft_gasMeasure]
       omega
     | revert => exact absurd rfl hnr
     | crypto reason => exact absurd hd (by simp [executeCode.handleError])
     | internal reason => exact absurd hd (by simp [executeCode.handleError])
 
 theorem processCreateMessage.chargeCodeGas_gasLe (rules : ForkRules) (devm : Devm) :
-    (processCreateMessage.chargeCodeGas rules devm).gasLeft ≤ devm.gasLeft := by
+    (processCreateMessage.chargeCodeGas rules devm).gasMeasure ≤ devm.gasMeasure := by
   unfold processCreateMessage.chargeCodeGas
   dsimp only
   split
@@ -2513,7 +2756,7 @@ theorem processCreateMessage.chargeCodeGas_gasLe (rules : ForkRules) (devm : Dev
 theorem processMessage.settle_ok_gasLe {msg : Msg}
     {r : Except (EvmError × State × AdrSet × Tra) Devm} {d : Devm}
     (h : processMessage.settle msg r = .ok d) :
-    ∃ d0, r = .ok d0 ∧ d.gasLeft ≤ d0.gasLeft := by
+    ∃ d0, r = .ok d0 ∧ d.gasMeasure ≤ d0.gasMeasure := by
   cases r with
   | error e =>
     exact absurd h (by simp [processMessage.settle, bind, Except.bind])
@@ -2522,14 +2765,14 @@ theorem processMessage.settle_ok_gasLe {msg : Msg}
     simp only [processMessage.settle, bind, Except.bind] at h
     split at h
     · simp only [Except.ok.injEq] at h
-      rw [← h, Devm.rollback_gasLeft]
+      rw [← h, Devm.rollback_gasMeasure]
     · simp only [Except.ok.injEq] at h
       rw [← h]
 
 theorem processCreateMessage.settle_ok_gasLe {msg : Msg}
     {r : Except (EvmError × State × AdrSet × Tra) Devm} {d : Devm}
     (h : processCreateMessage.settle msg r = .ok d) :
-    ∃ d0, r = .ok d0 ∧ d.gasLeft ≤ d0.gasLeft := by
+    ∃ d0, r = .ok d0 ∧ d.gasMeasure ≤ d0.gasMeasure := by
   cases r with
   | error e =>
     exact absurd h (by simp [processCreateMessage.settle, bind, Except.bind])
@@ -2540,28 +2783,30 @@ theorem processCreateMessage.settle_ok_gasLe {msg : Msg}
     · have hc := processCreateMessage.chargeCodeGas_gasLe msg.benv.stat.rules d0
       rcases hcc : processCreateMessage.chargeCodeGas msg.benv.stat.rules d0 with
           ⟨err, d1⟩ | d1 <;> rw [hcc] at hc h <;>
-        simp only [Execution.gasLeft_error, Execution.gasLeft_ok] at hc
+        simp only [Execution.gasMeasure_error, Execution.gasMeasure_ok] at hc
       · cases err with
         | halt reason =>
           dsimp only at h
           simp only [Except.ok.injEq] at h
           rw [← h]
           unfold processCreateMessage.exceptionalHalt
-          rw [Devm.setMeta_gasLeft, Devm.withGasLeft_gasLeft]
+          rw [Devm.setMeta_gasMeasure, Devm.withGasLeft_gasMeasure,
+            Devm.rollback_spill]
+          have hm := Devm.gasMeasure_eq d1
           omega
         | revert => nomatch h
         | crypto reason => nomatch h
         | internal reason => nomatch h
       · dsimp only at h
         simp only [Except.ok.injEq] at h
-        rw [← h, Devm.setCode_gasLeft]
+        rw [← h, Devm.setCode_gasMeasure]
         exact hc
     · simp only [Except.ok.injEq] at h
-      rw [← h, Devm.rollback_gasLeft]
+      rw [← h, Devm.rollback_gasMeasure]
 
 theorem Frame.settleMsg_ok_gasLe {f : Frame}
     {r : Except (EvmError × State × AdrSet × Tra) Devm} {d : Devm}
-    (h : f.settleMsg r = .ok d) : ∃ d0, r = .ok d0 ∧ d.gasLeft ≤ d0.gasLeft := by
+    (h : f.settleMsg r = .ok d) : ∃ d0, r = .ok d0 ∧ d.gasMeasure ≤ d0.gasMeasure := by
   unfold Frame.settleMsg at h
   dsimp only at h
   split at h
@@ -2571,7 +2816,7 @@ theorem Frame.settleMsg_ok_gasLe {f : Frame}
   · exact processMessage.settle_ok_gasLe h
 
 theorem Frame.settle_gasLe {f : Frame} {raw : Execution} {n : Nat} {d : Devm}
-    (hraw : raw.SettledGasLe n) (h : f.settle raw = .ok d) : d.gasLeft ≤ n := by
+    (hraw : raw.SettledGasLe n) (h : f.settle raw = .ok d) : d.gasMeasure ≤ n := by
   unfold Frame.settle at h
   obtain ⟨d0, h0, hle⟩ := Frame.settleMsg_ok_gasLe h
   exact Nat.le_trans hle (hraw d0 h0)
@@ -2585,23 +2830,23 @@ precompile outcome, which the settlement bound already covers. -/
 @[simp] theorem Msg.withBenv_gas (msg : Msg) (benv : Benv) :
     (msg.withBenv benv).gas = msg.gas := rfl
 
-@[simp] theorem initEvm_gasLeft (msg : Msg) :
-    (initEvm msg).dyna.gasLeft = msg.gas := rfl
+@[simp] theorem initEvm_gasMeasure (msg : Msg) :
+    (initEvm msg).dyna.gasMeasure = msg.gas := rfl
 
-theorem executeCode.enter_inl_gasLeft {msg : Msg} {evm : Evm}
-    (h : executeCode.enter msg = .inl evm) : evm.dyna.gasLeft = msg.gas := by
+theorem executeCode.enter_inl_gasMeasure {msg : Msg} {evm : Evm}
+    (h : executeCode.enter msg = .inl evm) : evm.dyna.gasMeasure = msg.gas := by
   unfold executeCode.enter at h
   dsimp only at h
   split at h
   · simp only [Sum.inl.injEq] at h
-    rw [← h, initEvm_gasLeft]
+    rw [← h, initEvm_gasMeasure]
   · split at h
     · nomatch h
     · simp only [Sum.inl.injEq] at h
-      rw [← h, initEvm_gasLeft]
+      rw [← h, initEvm_gasMeasure]
 
 theorem executeCode.enter_inr_gasLe {msg : Msg} {raw : Execution}
-    (h : executeCode.enter msg = .inr raw) : raw.gasLeft ≤ msg.gas := by
+    (h : executeCode.enter msg = .inr raw) : raw.gasMeasure ≤ msg.gas := by
   unfold executeCode.enter at h
   dsimp only at h
   split at h
@@ -2778,20 +3023,20 @@ theorem genericCreate.step_spawn_stat {sevm : Sevm} {devm : Devm}
     · simp only [Pure.pure, Except.pure, Except.ok.injEq, XStep.spawn.injEq] at hx
       rw [← hx.1, Frame.ofCreate_inner_stat, createMsg_stat]
 
-theorem Frame.enter_run_gasLeft {f : Frame} {child : Evm}
-    (h : f.enter = .run child) : child.dyna.gasLeft = f.inner.gas := by
+theorem Frame.enter_run_gasMeasure {f : Frame} {child : Evm}
+    (h : f.enter = .run child) : child.dyna.gasMeasure = f.inner.gas := by
   unfold Frame.enter at h
   split at h
   · nomatch h
   · split at h
     · rename_i evm henter
       simp only [FrameEntry.run.injEq] at h
-      rw [← h, executeCode.enter_inl_gasLeft henter, Msg.withBenv_gas]
+      rw [← h, executeCode.enter_inl_gasMeasure henter, Msg.withBenv_gas]
     · nomatch h
 
 theorem Frame.enter_done_gasLe {f : Frame}
     {r : Except (EvmError × State × AdrSet × Tra) Devm} {d : Devm}
-    (h : f.enter = .done r) (hd : r = .ok d) : d.gasLeft ≤ f.inner.gas := by
+    (h : f.enter = .done r) (hd : r = .ok d) : d.gasMeasure ≤ f.inner.gas := by
   unfold Frame.enter at h
   split at h
   · simp only [FrameEntry.done.injEq] at h
@@ -2810,50 +3055,44 @@ theorem Frame.enter_done_gasLe {f : Frame}
 
 /-! ## Resuming a parent
 
-`Resume.run_ok_gasLeft` already pins the successful result at
-`rsm.parentGas + child.gasLeft`. The bound below covers the error branch as
+`Resume.run_ok_gasMeasure` already bounds the successful result by
+`rsm.parentGas + child.gasMeasure`. The bound below covers the error branch as
 well, which the driver needs because a resume that overflows the parent's stack
 still produces a raw result the *grandparent* has to settle. -/
 
-@[simp] theorem incorporateChildOnError_gasLeft (parent child : Devm) (rd : Bytes) :
-    (incorporateChildOnError parent child rd).gasLeft =
-      parent.gasLeft + child.gasLeft := rfl
-
-@[simp] theorem incorporateChildOnSuccess_gasLeft (parent child : Devm) (rd : Bytes) :
-    (incorporateChildOnSuccess parent child rd).gasLeft =
-      parent.gasLeft + child.gasLeft := rfl
-
 theorem Resume.run_gasLe {rsm : Resume}
     {r : Except (EvmError × State × AdrSet × Tra) Devm} {m : Nat}
-    (hr : ∀ d, r = .ok d → d.gasLeft ≤ m) :
-    Execution.gasLeft (rsm.run r) ≤ rsm.parentGas + m := by
+    (hr : ∀ d, r = .ok d → d.gasMeasure ≤ m) :
+    Execution.gasMeasure (rsm.run r) ≤ rsm.parentGas + m := by
   cases rsm with
   | create parent newAddress =>
     cases r with
     | error e =>
       simp only [Resume.run, liftToExecution, bind, Except.bind,
-        Execution.gasLeft_error, Resume.parentGas, Devm.setWorld_gasLeft,
-        Devm.withCreatedAccounts_gasLeft]
+        Execution.gasMeasure_error, Resume.parentGas, Devm.setWorld_gasMeasure,
+        Devm.withCreatedAccounts_gasMeasure]
       omega
     | ok child =>
       have hc := hr child rfl
+      have hcl := Devm.gasLeft_le_gasMeasure child
       simp only [Resume.run, liftToExecution, bind, Except.bind, Resume.parentGas]
-      split <;> simp only [Devm.push_gasLe, incorporateChildOnError_gasLeft,
-        incorporateChildOnSuccess_gasLeft] <;> omega
+      split <;> simp only [Devm.push_gasLe, incorporateChildOnError_gasMeasure,
+        incorporateChildOnSuccess_gasMeasure] <;> omega
   | call parent outputIndex outputSize =>
     cases r with
     | error e =>
       simp only [Resume.run, liftToExecution, bind, Except.bind,
-        Execution.gasLeft_error, Resume.parentGas, Devm.setWorld_gasLeft,
-        Devm.withCreatedAccounts_gasLeft]
+        Execution.gasMeasure_error, Resume.parentGas, Devm.setWorld_gasMeasure,
+        Devm.withCreatedAccounts_gasMeasure]
       omega
     | ok child =>
       have hc := hr child rfl
+      have hcl := Devm.gasLeft_le_gasMeasure child
       simp only [Resume.run, liftToExecution, bind, Except.bind, Resume.parentGas]
       split <;>
         refine gasLe_bind_id ?_ (fun d => by simp) <;>
-        simp only [Devm.push_gasLe, incorporateChildOnError_gasLeft,
-          incorporateChildOnSuccess_gasLeft] <;> omega
+        simp only [Devm.push_gasLe, incorporateChildOnError_gasMeasure,
+          incorporateChildOnSuccess_gasMeasure] <;> omega
 
 /-! ## The step-level obligation
 
@@ -2864,13 +3103,13 @@ induction has a single hypothesis to consume. -/
 start of the step. -/
 def Step.GasBound (sevm : Sevm) (n : Nat) : Step → Prop
   | .halt ex => ex.SettledGasLe n
-  | .cont _ devm => devm.gasLeft < n
+  | .cont _ devm => devm.gasMeasure < n
   | .spawn frame rsm _ =>
       frame.inner.gas + rsm.parentGas < n ∧
         frame.inner.benv.stat.rules = sevm.benvStat.rules
 
 theorem Step.ofExecution_gasBound {sevm : Sevm} {pc n : Nat} {ex : Execution}
-    (hok : ∀ d, ex = .ok d → d.gasLeft < n) (hset : ex.SettledGasLe n) :
+    (hok : ∀ d, ex = .ok d → d.gasMeasure < n) (hset : ex.SettledGasLe n) :
     (Step.ofExecution pc ex).GasBound sevm n := by
   cases ex with
   | error e => exact hset
@@ -2878,35 +3117,35 @@ theorem Step.ofExecution_gasBound {sevm : Sevm} {pc n : Nat} {ex : Execution}
 
 theorem Step.ofJump_gasBound {sevm : Sevm} {n : Nat}
     {x : Except (EvmError × Devm) (Nat × Devm)}
-    (hok : ∀ p, x = .ok p → p.2.gasLeft < n) (hle : resultGas Prod.snd x ≤ n) :
+    (hok : ∀ p, x = .ok p → p.2.gasMeasure < n) (hle : resultGas Prod.snd x ≤ n) :
     (Step.ofJump x).GasBound sevm n := by
   cases x with
   | error e => exact Execution.settledGasLe_of_gasLe hle
   | ok p => exact hok p rfl
 
 theorem XStep.toStep_gasBound {sevm : Sevm} {pc n : Nat} {step : XStep}
-    (hdec : step.GasDecreasing sevm n) (hnr : step.NoRevert) :
+    (hdec : step.GasDecreasing sevm n) (hh : step.Halt n) :
     (XStep.toStep pc step).GasBound sevm n := by
   cases step with
   | done ex =>
     refine Step.ofExecution_gasBound hdec ?_
-    exact Execution.settledGasLe_of_noRevert
-      (fun d hd => Nat.le_of_lt (hdec d hd)) hnr
+    exact Execution.settledGasLe_of_halt
+      (fun d hd => Nat.le_of_lt (hdec d hd)) hh
   | spawn frame rsm => exact hdec
 
 theorem Ninst.step_push_gasLt {xs : Bytes} {evm : Evm} {devm : Devm}
     (h : (chargeGas (if xs = [] then gBase else gVerylow) evm.dyna >>=
-      Devm.push xs.toB256) = .ok devm) : devm.gasLeft < evm.dyna.gasLeft := by
+      Devm.push xs.toB256) = .ok devm) : devm.gasMeasure < evm.dyna.gasMeasure := by
   obtain ⟨d1, h1, h2⟩ := Except.bind_eq_ok h
-  have e1 := chargeGas_gasLeft h1
-  have e2 := Devm.push_gasLeft h2
+  have e1 := chargeGas_gasMeasure h1
+  have e2 := Devm.push_gasMeasure h2
   have hpos : 0 < (if xs = [] then gBase else gVerylow) := by
     split <;> decide
   omega
 
 theorem Ninst.step_gasBound (evm : Evm) (n : Ninst)
     (hv : evm.sta.benvStat.rules.Valid) :
-    (Ninst.step evm n).GasBound evm.sta evm.dyna.gasLeft := by
+    (Ninst.step evm n).GasBound evm.sta evm.dyna.gasMeasure := by
   cases n with
   | push xs b =>
     refine Step.ofExecution_gasBound (fun d hd => Ninst.step_push_gasLt hd) ?_
@@ -2920,10 +3159,10 @@ theorem Ninst.step_gasBound (evm : Evm) (n : Ninst)
       (Rinst.runCore_gasLe evm.pc evm.dyna evm.sta r)
   | exec x =>
     exact XStep.toStep_gasBound (Xinst.step_gasDecreasing evm.sta evm.dyna x)
-      (Xinst.step_noRevert evm.sta evm.dyna x)
+      (Xinst.step_halt evm.sta evm.dyna x rfl (Devm.spill_le_gasMeasure _))
 
 theorem Evm.step_gasBound (evm : Evm) (hv : evm.sta.benvStat.rules.Valid) :
-    evm.step.GasBound evm.sta evm.dyna.gasLeft := by
+    evm.step.GasBound evm.sta evm.dyna.gasMeasure := by
   unfold Evm.step
   split
   · exact Execution.settledGasLe_of_gasLe (Nat.le_of_eq rfl)
@@ -2946,7 +3185,7 @@ raw gas, because that is the only thing a parent can extract from a child's
 result and it is what both routes of the halting corpus establish. -/
 theorem execFueled_settledGasLe : ∀ (fuel : Nat) (evm : Evm) {raw : Execution},
     (execFueled evm fuel).run = some raw → evm.sta.benvStat.rules.Valid →
-      raw.SettledGasLe evm.dyna.gasLeft := by
+      raw.SettledGasLe evm.dyna.gasMeasure := by
   intro fuel
   induction fuel with
   | zero =>
@@ -2980,14 +3219,14 @@ theorem execFueled_settledGasLe : ∀ (fuel : Nat) (evm : Evm) {raw : Execution}
         rcases hrun : rsm.run r with ⟨e⟩ | d1
         · rw [hrun] at h hres
           simp only [Fueled.ofExcept_run, Option.some.injEq] at h
-          simp only [Execution.gasLeft_error] at hres
+          simp only [Execution.gasMeasure_error] at hres
           rw [← h]
           refine Execution.settledGasLe_of_gasLe ?_
-          simp only [Execution.gasLeft_error]
+          simp only [Execution.gasMeasure_error]
           omega
         · rw [hrun] at h hres
-          simp only [Execution.gasLeft_ok] at hres
-          exact (ih _ h hv).mono (show d1.gasLeft ≤ evm.dyna.gasLeft by omega)
+          simp only [Execution.gasMeasure_ok] at hres
+          exact (ih _ h hv).mono (show d1.gasMeasure ≤ evm.dyna.gasMeasure by omega)
       · rw [he] at h
         dsimp only at h
         rcases hc : (execFueled child fuel).run with _ | raw'
@@ -2998,26 +3237,26 @@ theorem execFueled_settledGasLe : ∀ (fuel : Nat) (evm : Evm) {raw : Execution}
           dsimp only at h
           have hchild :=
             ih child hc (by rw [Frame.enter_run_rules he, hrules]; exact hv)
-          rw [Frame.enter_run_gasLeft he] at hchild
+          rw [Frame.enter_run_gasMeasure he] at hchild
           have hres := Resume.run_gasLe (rsm := rsm) (r := frame.settle raw')
             (m := frame.inner.gas) (fun d hd => Frame.settle_gasLe hchild hd)
           rcases hrun : rsm.run (frame.settle raw') with ⟨e⟩ | d1
           · rw [hrun] at h hres
             simp only [Fueled.ofExcept_run, Option.some.injEq] at h
-            simp only [Execution.gasLeft_error] at hres
+            simp only [Execution.gasMeasure_error] at hres
             rw [← h]
             refine Execution.settledGasLe_of_gasLe ?_
-            simp only [Execution.gasLeft_error]
+            simp only [Execution.gasMeasure_error]
             omega
           · rw [hrun] at h hres
-            simp only [Execution.gasLeft_ok] at hres
-            exact (ih _ h hv).mono (show d1.gasLeft ≤ evm.dyna.gasLeft by omega)
+            simp only [Execution.gasMeasure_ok] at hres
+            exact (ih _ h hv).mono (show d1.gasMeasure ≤ evm.dyna.gasMeasure by omega)
 
-/-- **Sufficiency.** Fuel strictly greater than the frame's remaining gas always
+/-- **Sufficiency.** Fuel strictly greater than the frame's measure always
 carries the driver to a result. The base case is vacuous: the hypothesis forces
 `fuel > 0`. -/
 theorem execFueled_run_isSome : ∀ (fuel : Nat) (evm : Evm),
-    evm.dyna.gasLeft < fuel → evm.sta.benvStat.rules.Valid →
+    evm.dyna.gasMeasure < fuel → evm.sta.benvStat.rules.Valid →
       ∃ raw : Execution, (execFueled evm fuel).run = some raw := by
   intro fuel
   induction fuel with
@@ -3031,34 +3270,34 @@ theorem execFueled_run_isSome : ∀ (fuel : Nat) (evm : Evm),
     rcases hs : evm.step with ⟨ex⟩ | ⟨pc, devm⟩ | ⟨frame, rsm, pc⟩ <;>
       rw [hs] at hstep <;> simp only [Step.GasBound] at hstep <;> dsimp only
     · exact ⟨ex, rfl⟩
-    · have hlt : devm.gasLeft < fuel := by omega
+    · have hlt : devm.gasMeasure < fuel := by omega
       exact ih _ hlt hv
     · obtain ⟨hstep, hrules⟩ := hstep
       rcases he : frame.enter with r | child <;> dsimp only
       · rcases hrun : rsm.run r with ⟨e⟩ | d1 <;> dsimp only
         · exact ⟨.error e, rfl⟩
-        · obtain ⟨d0, hd0, hgas⟩ := Resume.run_ok_gasLeft hrun
-          have hle : d0.gasLeft ≤ frame.inner.gas := Frame.enter_done_gasLe he hd0
-          have hlt : d1.gasLeft < fuel := by omega
+        · obtain ⟨d0, hd0, hgas⟩ := Resume.run_ok_gasMeasure hrun
+          have hle : d0.gasMeasure ≤ frame.inner.gas := Frame.enter_done_gasLe he hd0
+          have hlt : d1.gasMeasure < fuel := by omega
           exact ih _ hlt hv
-      · have hgas : child.dyna.gasLeft = frame.inner.gas := Frame.enter_run_gasLeft he
+      · have hgas : child.dyna.gasMeasure = frame.inner.gas := Frame.enter_run_gasMeasure he
         have hcv : child.sta.benvStat.rules.Valid := by
           rw [Frame.enter_run_rules he, hrules]; exact hv
-        have hchildlt : child.dyna.gasLeft < fuel := by omega
+        have hchildlt : child.dyna.gasMeasure < fuel := by omega
         obtain ⟨raw', hraw'⟩ := ih child hchildlt hcv
         rw [hraw']
         dsimp only
         rcases hrun : rsm.run (frame.settle raw') with ⟨e⟩ | d1 <;> dsimp only
         · exact ⟨.error e, rfl⟩
-        · obtain ⟨d0, hd0, hgas2⟩ := Resume.run_ok_gasLeft hrun
+        · obtain ⟨d0, hd0, hgas2⟩ := Resume.run_ok_gasMeasure hrun
           have hsettled := execFueled_settledGasLe fuel child hraw' hcv
           rw [hgas] at hsettled
-          have hle : d0.gasLeft ≤ frame.inner.gas := Frame.settle_gasLe hsettled hd0
-          have hlt : d1.gasLeft < fuel := by omega
+          have hle : d0.gasMeasure ≤ frame.inner.gas := Frame.settle_gasLe hsettled hd0
+          have hlt : d1.gasMeasure < fuel := by omega
           exact ih _ hlt hv
 
 theorem execFueled_ne_exhausted (evm : Evm) (fuel : Nat)
-    (h : evm.dyna.gasLeft < fuel) (hv : evm.sta.benvStat.rules.Valid) :
+    (h : evm.dyna.gasMeasure < fuel) (hv : evm.sta.benvStat.rules.Valid) :
     execFueled evm fuel ≠ Fueled.exhausted := by
   obtain ⟨raw, hraw⟩ := execFueled_run_isSome fuel evm h hv
   intro hcon
@@ -3067,12 +3306,12 @@ theorem execFueled_ne_exhausted (evm : Evm) (fuel : Nat)
   nomatch hraw
 
 /-- The form the total `exec` consumes. The additive constant is **1**: seeding
-the driver with `gasLeft + 1` is always enough, so the total wrapper can
+the driver with `gasMeasure + 1` is always enough, so the total wrapper can
 discharge the `Option` with this witness. -/
 theorem execFueled_succ_ne_exhausted (evm : Evm)
     (hv : evm.sta.benvStat.rules.Valid) :
-    execFueled evm (evm.dyna.gasLeft + 1) ≠ Fueled.exhausted :=
-  execFueled_ne_exhausted evm (evm.dyna.gasLeft + 1) (Nat.lt_succ_self _) hv
+    execFueled evm (evm.dyna.gasMeasure + 1) ≠ Fueled.exhausted :=
+  execFueled_ne_exhausted evm (evm.dyna.gasMeasure + 1) (Nat.lt_succ_self _) hv
 
 /-! ## The total interpreter
 
@@ -3080,21 +3319,23 @@ Everything below is fuel-free. `execFueled` survives as the structurally
 recursive definition downstream proofs reason over, but no consumer has to
 thread a fuel parameter or handle an exhaustion outcome any more. -/
 
-/-- The fuel budget seeded from a frame's remaining gas. The additive constant
-is the one `execFueled_succ_ne_exhausted` proves sufficient: **1**. -/
+/-- The fuel budget seeded from a frame's gas measure. The additive constant is
+the one `execFueled_succ_ne_exhausted` proves sufficient: **1**. Under
+`rules.stateGas = none` the measure is `gasLeft`, so the seed is the seed it
+always was; under `some _` it also counts the spill a refund can hand back. -/
 def sufficientFuel (gas : Nat) : Nat := gas + 1
 
 theorem execFueled_run_sufficientFuel_isSome (evm : Evm)
     (hv : evm.sta.benvStat.rules.Valid) :
-    ((execFueled evm (sufficientFuel evm.dyna.gasLeft)).run).isSome := by
+    ((execFueled evm (sufficientFuel evm.dyna.gasMeasure)).run).isSome := by
   obtain ⟨raw, hraw⟩ :=
-    execFueled_run_isSome (sufficientFuel evm.dyna.gasLeft) evm
+    execFueled_run_isSome (sufficientFuel evm.dyna.gasMeasure) evm
       (Nat.lt_succ_self _) hv
   rw [hraw]
   rfl
 
 /-- **The total interpreter.** Fuel is an implementation detail: the driver is
-seeded from the frame's own remaining gas, and the seeded budget is enough for
+seeded from the frame's own gas measure, and the seeded budget is enough for
 any rule set the semantics can use.
 
 The exhaustion branch is not discharged at the definition site any more, and
@@ -3107,7 +3348,7 @@ the pattern this executable already uses for the unreachable, and
 `exec_of_valid` below is the proof that under a usable rule set it is never
 taken. Every named fork carries the witness, so no entry point can reach it. -/
 def exec (evm : Evm) : Except (EvmError × Devm) Devm :=
-  match (execFueled evm (sufficientFuel evm.dyna.gasLeft)).run with
+  match (execFueled evm (sufficientFuel evm.dyna.gasMeasure)).run with
   | some r => r
   | none => .error ⟨.internal (.invariant .none), evm.dyna⟩
 
@@ -3116,9 +3357,9 @@ returns exactly the total result, so no downstream proof has to reason about
 the invariant branch. -/
 theorem execFueled_run_sufficientFuel (evm : Evm)
     (hv : evm.sta.benvStat.rules.Valid) :
-    (execFueled evm (sufficientFuel evm.dyna.gasLeft)).run = some (exec evm) := by
+    (execFueled evm (sufficientFuel evm.dyna.gasMeasure)).run = some (exec evm) := by
   obtain ⟨raw, hraw⟩ :=
-    execFueled_run_isSome (sufficientFuel evm.dyna.gasLeft) evm
+    execFueled_run_isSome (sufficientFuel evm.dyna.gasMeasure) evm
       (Nat.lt_succ_self _) hv
   rw [hraw]
   unfold exec
@@ -3127,7 +3368,7 @@ theorem execFueled_run_sufficientFuel (evm : Evm)
 /-- The invariant branch is unreachable under a usable rule set: `exec` is the
 driver's own answer, not a fallback. -/
 theorem exec_of_valid (evm : Evm) (hv : evm.sta.benvStat.rules.Valid) :
-    ∃ raw, (execFueled evm (sufficientFuel evm.dyna.gasLeft)).run = some raw
+    ∃ raw, (execFueled evm (sufficientFuel evm.dyna.gasMeasure)).run = some raw
       ∧ exec evm = raw :=
   ⟨exec evm, execFueled_run_sufficientFuel evm hv, rfl⟩
 
@@ -3177,7 +3418,7 @@ theorem execFueled_run_mono :
           · exact ih _ hle' h
 
 /-- The downstream bridge at an arbitrary sufficient budget. -/
-theorem execFueled_run_of_lt {evm : Evm} {fuel : Nat} (h : evm.dyna.gasLeft < fuel)
+theorem execFueled_run_of_lt {evm : Evm} {fuel : Nat} (h : evm.dyna.gasMeasure < fuel)
     (hv : evm.sta.benvStat.rules.Valid) :
     (execFueled evm fuel).run = some (exec evm) :=
   execFueled_run_mono _ evm h (execFueled_run_sufficientFuel evm hv)
@@ -3185,7 +3426,7 @@ theorem execFueled_run_of_lt {evm : Evm} {fuel : Nat} (h : evm.dyna.gasLeft < fu
 /-- Reading a fueled result off as the total one: the shape a proof stated over
 `execFueled` uses to transfer to `exec`. -/
 theorem exec_eq_of_run {evm : Evm} {fuel : Nat} {raw : Execution}
-    (hlt : evm.dyna.gasLeft < fuel) (hv : evm.sta.benvStat.rules.Valid)
+    (hlt : evm.dyna.gasMeasure < fuel) (hv : evm.sta.benvStat.rules.Valid)
     (h : (execFueled evm fuel).run = some raw) :
     exec evm = raw := by
   rw [execFueled_run_of_lt hlt hv] at h
@@ -3241,7 +3482,7 @@ private def totalGuardSummary
     (r : Except (EvmError × State × AdrSet × Tra) Devm) :
     Option (Option SettledHalt × List B256 × Bytes × Nat) :=
   match r with
-  | .ok devm => some ⟨devm.error, devm.stack, devm.output, devm.gasLeft⟩
+  | .ok devm => some ⟨devm.error, devm.stack, devm.output, devm.gasMeasure⟩
   | .error _ => none
 
 -- Arithmetic loop: the state that exhausted `execFueled` at fuel 20 now runs to a
@@ -3252,7 +3493,7 @@ private def totalGuardArithmeticLoop : Bool :=
   | .error ⟨err, _⟩, .ok devm =>
     err == .halt (.outOfGas .none) &&
       devm.error == some (.halt (.outOfGas .none)) &&
-      devm.gasLeft == 0
+      devm.gasMeasure == 0
   | _, _ => false
 
 #guard totalGuardArithmeticLoop
@@ -3298,7 +3539,7 @@ private def totalGuardCreateCollisionMsg : Msg :=
 private def totalGuardCreateCollision : Bool :=
   match processMessage totalGuardCreateCollisionMsg with
   | .ok devm =>
-    devm.error == none && devm.stack.head? == some 0 && devm.gasLeft == 1062
+    devm.error == none && devm.stack.head? == some 0 && devm.gasMeasure == 1062
   | .error _ => false
 
 #guard totalGuardCreateCollision
@@ -3318,7 +3559,7 @@ private def totalGuardPrecompileDispatch : Bool :=
   match
       processMessage (totalGuardPrecompileMsg false),
       processMessage (totalGuardPrecompileMsg true) with
-  | .ok viaPrecomp, .ok viaCode => viaPrecomp.gasLeft == 7000 && viaCode.gasLeft == 10000
+  | .ok viaPrecomp, .ok viaCode => viaPrecomp.gasMeasure == 7000 && viaCode.gasMeasure == 10000
   | _, _ => false
 
 #guard totalGuardPrecompileDispatch
@@ -3327,7 +3568,7 @@ private def totalGuardPrecompileDispatch : Bool :=
 -- depth 8 gets 0 at depth 0, with the call never reaching the driver.
 private def totalGuardDepthZero : Bool :=
   match processMessage {totalGuardNestedCallMsg with depth := 0} with
-  | .ok devm => devm.stack.head? == some 0 && devm.gasLeft == 97379
+  | .ok devm => devm.stack.head? == some 0 && devm.gasMeasure == 97379
   | .error _ => false
 
 #guard totalGuardDepthZero
@@ -3353,7 +3594,7 @@ private def totalGuardRevert : Bool :=
     devm.error == some .revert &&
       devm.output.length == 32 &&
       devm.output.getLast? == some 0x2A &&
-      devm.gasLeft == 982
+      devm.gasMeasure == 982
   | .error _ => false
 
 #guard totalGuardRevert
@@ -3381,7 +3622,7 @@ statement therefore keeps the signature it had. -/
 theorem exec_canonical {evm : Evm} (h : evm.Canonical) :
     Execution.Canonical (exec evm) := by
   unfold exec
-  cases hr : (execFueled evm (sufficientFuel evm.dyna.gasLeft)).run with
+  cases hr : (execFueled evm (sufficientFuel evm.dyna.gasMeasure)).run with
   | none => exact h.2
   | some raw => exact execFueled_run_canonical _ evm h hr
 
