@@ -46,6 +46,7 @@ Choose the gate by what you changed, cheapest falsifier first:
 | EC / precompiles | `scripts/check-ec.sh`, `scripts/check-legacy.sh --bls --no-build --jobs auto` | `scripts/check-mainnet.sh --suite prague --no-build --jobs auto` |
 | interpreter / gas / state | `scripts/check-legacy.sh --depth --no-build --jobs auto` | `scripts/check-legacy.sh --smoke --no-build --jobs auto` |
 | fork / block validity | `scripts/check-mainnet.sh --suite transitions --no-build --jobs auto` | `scripts/check-mainnet.sh --suite osaka --no-build --jobs auto` |
+| a number a fork carries as rule data (`Jaune/Fork.lean`) | `scripts/check-fork-constants.sh` | `scripts/check-mainnet.sh --suite full --no-build --jobs auto` |
 | the runner's CLI, its refusals or its case selection (`Main.lean`) | `scripts/check-cli.sh` + `scripts/check-mainnet.sh --suite smoke` | `scripts/check-legacy.sh --smoke --no-build --jobs auto` |
 | the `t8n` frontend (`Jaune/T8n.lean`) or its corpus | `scripts/check-t8n.sh --red-test` | `scripts/check-mainnet.sh --suite smoke` |
 | harness / generators | `python3 scripts/check-legacy-baseline.py self-test` + `python3 -m unittest discover -s scripts/tests` | `python3 scripts/env_doctor.py` |
@@ -209,7 +210,8 @@ executable inputs.
 | `scripts/check-integrity.sh` | no panic / raw bang op / stringly semantic carrier in `Jaune.lean`'s import closure (R4 also covers the runner boundary), allowlist in `integrity-allow.txt` | 58 rows, 0 pending | sub-second |
 | `scripts/check-canonical-opcode-names.sh` | the eight retired constructor/API spellings and three abbreviated render strings are absent from live Lean source; syntax-qualified SELFDESTRUCT matching leaves ordinary destination locals alone | 8 symbol families, 3 render strings | sub-second |
 | `lake build` | integration elaboration | ~1,776 jobs | ~8 s |
-| `scripts/check-cli.sh` | the runner's four fixture-file refusals — wrong sibling tree, no cases, no supported network, filters select nothing — and the undeclared-format pass-through, against synthetic fixtures | 11 checks | sub-second |
+| `scripts/check-cli.sh` | the runner's four fixture-file refusals — wrong sibling tree, no cases, no supported network, filters select nothing — and the undeclared-format pass-through, against synthetic fixtures, and the refusal of a fork this build declares but does not implement — in both its static and its transition form, and asserted to be a *different* refusal from the unknown-label one | 14 checks | sub-second |
+| `scripts/check-fork-constants.sh` | that every constant each declared fork carries as rule data equals the pinned `execution-specs` revision's, by comparing `scripts/amsterdam/constants.json` (written by `scripts/gen-fork-constants.py` from that revision) against `lake exe jaune --rules <fork>`. Also that the extraction was taken at the commit `sources.json` currently pins, that a declared-but-unimplemented fork is refused by `--rules`, and — the row that keeps the gate from shrinking — that the printer's field set is exactly the set the extraction's coverage table classifies, so a new `ForkRules` field must be classified before this can pass | 24 constants x 4 runnable forks, 1 refused | sub-second |
 | `scripts/check-t8n.sh` | the `t8n` transition-tool frontend against goldens generated from the pinned conformance target: `result`, `alloc` and `body` byte-identical per case, each case run twice for determinism, every golden's digest checked against `scripts/t8n/provenance.json`. `--red-test` additionally proves it can fail | 9 cases | sub-second |
 | `scripts/check-u256.sh` | differential word/hash oracle | 21,593 cases | sub-second |
 | `scripts/check-fake-exp.sh` | fake-exponential differential oracle vs the pinned EELS `taylor_exponential` (blob base fee) | 240 cases | sub-second |
@@ -218,7 +220,7 @@ executable inputs.
 | `scripts/check-mainnet.sh --suite smoke` | current-mainnet smoke | 16 | sub-second |
 | `scripts/check-legacy.sh --depth` | fuel/call-depth stress set | 67 | ~13 s |
 | `python3 scripts/check-legacy-baseline.py self-test` | tracked correctness / ignored timing separation, timing genesis/new-fixture extension, refresh refusal, rebase isolation, drift, duplicate rejection, and host-local dispatch weights | 11 controls | sub-second |
-| `python3 -m unittest discover -s scripts/tests` | harness/generator unit tests | 121 tests | ~13 s |
+| `python3 -m unittest discover -s scripts/tests` | harness/generator unit tests | 163 tests | ~14 s |
 | `scripts/check-mainnet.sh --suite transitions` | fork-transition validity | 13 files / 109 cases | ~8–15 s |
 
 ### Medium — before a commit or push candidate
@@ -266,6 +268,31 @@ it; the arc made both faster without moving either across the line.
 The two `--full` gates are the exact-candidate closure pair. **Neither may be
 replaced by its smoke tier.**
 
+### The Glamsterdam devnet lane
+
+`check-mainnet.sh` takes `--lane (mainnet|amsterdam)`. `mainnet` is the default
+and is every historical invocation of this script, unchanged.
+
+**`--lane amsterdam` has no runnable suite, by design.** Its corpus targets
+Amsterdam, whose rules `Fork.rules?` answers `none` for, so its four suite
+names — `amsterdam`, `amsterdam-transitions`, `amsterdam-smoke`,
+`amsterdam-full` — are recognised and every one of them is refused, naming the
+goal that owns the semantics it would need. `--dir` is refused for the same
+reason: a subtree of a corpus this build cannot run is still a corpus this
+build cannot run. The refusal fires before the fixture root is looked at, so
+it is the same answer whether or not the archive is installed.
+
+The lane is therefore an **inventory**, not a tier. What it is for is
+`scripts/amsterdam/manifests.json`: the exact contents of the pinned
+prerelease, per label, with every exclusion carrying the fork that excluded it.
+`scripts/tests/test_amsterdam_lane.py` holds its refusals and its parser.
+
+The two lanes' suite namespaces are disjoint, so a mistyped `--lane` names the
+other lane's suite rather than selecting the wrong corpus. Neither lane reads
+the other's manifest, install root, or environment variable, and **the
+current-mainnet manifest is byte-identical to what it was before the lane
+existed**.
+
 ### Blanc's gates
 
 Blanc is Jaune's downstream consumer, and its gates are catalogued in **its own
@@ -296,6 +323,10 @@ not vouch for Jaune.
 | `python3 scripts/env_doctor.py` | validate the configured legacy/EELS/oracle environment |
 | `python3 scripts/env_doctor.py --mainnet-root "$HOME/eest-mainnet-v20.0.1" --mainnet-deep` | validate external fixture identities |
 | `python3 scripts/gen_mainnet_manifest.py --fixtures-root "$HOME/eest-mainnet-v20.0.1/fixtures" --check` | exact current-manifest identity |
+| `python3 scripts/bootstrap_mainnet.py --lane amsterdam` | install the Glamsterdam devnet-8 prerelease corpus (~0.94 GB compressed, ~20 GB extracted, 48,491 files) |
+| `python3 scripts/env_doctor.py --amsterdam-root "$HOME/eest-glamsterdam-devnet-v8.1.3" --amsterdam-deep` | validate that lane's archive digest, layout, release index, and every extracted file against the archive |
+| `python3 scripts/gen_mainnet_manifest.py --lane amsterdam --fixtures-root "$HOME/eest-glamsterdam-devnet-v8.1.3/fixtures" --check` | exact devnet-lane manifest identity |
+| `python3 scripts/gen-fork-constants.py --check` | the committed fork-constant extraction still matches the pinned `execution-specs` revision. Needs that checkout and its venv; `scripts/check-fork-constants.sh` itself needs neither |
 | `python3 scripts/gen-vector-shards.py --check` | the `blsPairing` shards are an exact partition of their source |
 | `python3 scripts/gen-hash-precompile-vectors.py --check` | the committed `sha256.json`/`ripemd160.json` still match the pinned EELS oracle, and that oracle still matches the published FIPS 180-4 / RIPEMD-160 known answers |
 | `python3 scripts/gen-t8n-goldens.py --check` | the committed `t8n` goldens still match the conformance target's current output. Needs that checkout and its venv; `scripts/check-t8n.sh` itself needs neither |
@@ -473,6 +504,11 @@ incident that motivated it.
 | `check-mainnet.sh --suite smoke`/`transitions` (sequential) | — (writes none) | no |
 | `check-vectors.sh` | yes | yes |
 | `check-elab.sh` | yes | yes |
+
+`check-fork-constants.sh` takes no lock and needs no corpus: it reads the
+built binary and one committed JSON file, and writes nothing. A
+`--lane amsterdam` run takes no lock either, because it refuses before it
+reaches the point where a lock would be taken.
 
 `check-t8n.sh` takes no lock either, for the same reason `check-cli.sh` does
 not: it writes nothing under the repository. Each case runs in a `mktemp -d`

@@ -1179,6 +1179,34 @@ def addLogToBloom (bloom : Bytes) (log : Log) : Bytes :=
 def logsBloom (l : List Log) : Bytes :=
   List.foldl addLogToBloom (List.replicate 256 0x00) l
 
+/-- Decode a header's optional trailing fields.
+
+Its own function, and not inlined into `BLT.toExHeader`, for two reasons: the
+accepted shapes are a statement worth reading on their own, and the header
+decoder's soundness proof then sees one `←` here rather than a case split whose
+arms all establish the same thing. None of these three fields contributes to
+`Header.WireWellFormed` -- each is width-exact by its own type -- so the proof
+genuinely does not need to look inside.
+
+Exactly three tails are accepted, mirroring `Header.toBLT`'s nesting: none, the
+requests hash alone, and all three. **22 fields is rejected.** A header
+carrying a block-access-list hash but no slot number is not a header of any
+fork, and accepting it would mean guessing which field the sender omitted. -/
+private def decodeHeaderOptionals :
+    List BLT → Except DecodeError (Option B256 × Option B256 × Option UInt64)
+  | [] => .ok ⟨none, none, none⟩
+  | [.bytes requestsHash] => do
+    let requestsHash ← requestsHash.toRlpHash "header requestsHash"
+    .ok ⟨some requestsHash, none, none⟩
+  | [.bytes requestsHash, .bytes balHash, .bytes slotNumber] => do
+    let requestsHash ← requestsHash.toRlpHash "header requestsHash"
+    let balHash ← balHash.toRlpHash "header blockAccessListHash"
+    let slotNumber ← slotNumber.toRlpB64 "header slotNumber"
+    .ok ⟨some requestsHash, some balHash, some slotNumber⟩
+  | tail =>
+    .error <| DecodeError.structure "header"
+      s!"expected 20, 21 or 23 fields, but found {20 + tail.length}"
+
 def BLT.toExHeader : BLT → Except DecodeError Header
   | .list (
       .bytes parentHash ::
@@ -1231,16 +1259,9 @@ def BLT.toExHeader : BLT → Except DecodeError Header
       let excessBlobGas := (← excessBlobGas.toRlpB64 "header excessBlobGas").toNat
       let previousBeaconBlockRoot ←
         parentBeaconBlockRoot.toRlpHash "header parentBeaconBlockRoot"
-      -- The requests hash is optional in shape, but exactly 32 bytes when
-      -- present: an absent field and a malformed one are different failures.
-      let requestsHash : Option B256 ←
-        match tail with
-        | [] => .ok none
-        | [.bytes requestsHash] =>
-          (requestsHash.toRlpHash "header requestsHash").map some
-        | _ =>
-          .error <| DecodeError.structure "header"
-            s!"expected 20 or 21 fields, but found {20 + tail.length}"
+      -- Shape-optional, but exactly typed when present: an absent field and a
+      -- malformed one are different failures.
+      let optionals ← decodeHeaderOptionals tail
       .ok {
         parentHash := parentHash
         ommersHash := ommersHash
@@ -1262,11 +1283,13 @@ def BLT.toExHeader : BLT → Except DecodeError Header
         blobGasUsed := blobGasUsed
         excessBlobGas := excessBlobGas
         parentBeaconBlockRoot := previousBeaconBlockRoot
-        requestsHash := requestsHash
+        requestsHash := optionals.1
+        blockAccessListHash := optionals.2.1
+        slotNumber := optionals.2.2
       }
   | _ =>
     .error <| DecodeError.structure "header"
-      "expected a list of 20 or 21 byte-string fields"
+      "expected a list of 20, 21 or 23 byte-string fields"
 
 /-- Strict header-decoder soundness (P0.3/P0.4). Every header this decoder
 produces satisfies `Header.WireWellFormed`, which is what makes that predicate
@@ -1289,15 +1312,12 @@ theorem BLT.toExHeader_wireWellFormed {blt : BLT} {hdr : Header}
     have h7 := Bytes.toRlpNat_lt_two_pow_256 hbf
     have h8 : bgu.toNat < 2 ^ 64 := bgu.toNat_lt
     have h9 : ebg.toNat < 2 ^ 64 := ebg.toNat_lt
-    split at hm
-    · simp only [Except.bind_eq_ok_iff, Except.ok.injEq] at hm
-      obtain ⟨_, _, rfl⟩ := hm
-      exact ⟨hb, h2, h3, h4, h5, h6, h7, h8, h9⟩
-    · simp only [Except.bind_eq_ok_iff, Except.ok.injEq] at hm
-      obtain ⟨_, _, rfl⟩ := hm
-      exact ⟨hb, h2, h3, h4, h5, h6, h7, h8, h9⟩
-    · simp only [Except.bind_eq_ok_iff] at hm
-      exact absurd hm (by simp)
+    -- The optional tail is decoded by `decodeHeaderOptionals`, and none of the
+    -- three fields it produces appears in `WireWellFormed`, so one bind step
+    -- discharges every accepted shape at once.
+    simp only [Except.ok.injEq] at hm
+    obtain ⟨_, _, rfl⟩ := hm
+    exact ⟨hb, h2, h3, h4, h5, h6, h7, h8, h9⟩
   · exact absurd h (by simp)
 
 /-- The child's excess blob gas.
@@ -1525,7 +1545,8 @@ def setDelegationStep
       else
         let refundCounter :=
           if AccountExists msg.benv.state authority then
-            refundCounter + (perEmptyAccountCost - perAuthBaseCost).toB256
+            refundCounter +
+              (msg.benv.stat.rules.gas.perAuthIntrinsic - perAuthBaseCost).toB256
           else
             refundCounter
         let codeToSet : ByteArray :=

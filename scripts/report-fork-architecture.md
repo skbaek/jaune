@@ -37,8 +37,9 @@ failing lookup; `none` reports `UnsupportedForkError` rather than answering with
 another fork's rules, because running Osaka blocks under Prague semantics would
 turn a missing implementation into a silent consensus fault.
 
-All four forks now resolve. `prague` and `osaka` carry complete static
-execution rules; `bpo1` and `bpo2` are `osakaRules` with one field replaced:
+**Four of the five declared forks resolve.** `prague` and `osaka` carry
+complete static execution rules; `bpo1` and `bpo2` are `osakaRules` with one
+field replaced:
 
 ```
 bpo1Rules = { osakaRules with fork := .bpo1, blob := bpo1BlobSchedule }
@@ -50,11 +51,34 @@ of the code rather than a claim about it: a guard undoes the update and
 requires the whole record to equal `osakaRules`, so no BPO fork can acquire a
 rule of its own, and a later Osaka correction reaches both automatically.
 
-Since every declared fork resolves, `Fork.rules`'s `UnsupportedForkError`
-branch is now unreachable in this build. It is retained deliberately: it is the
-only correct answer for the next declared-but-unimplemented fork, and the
-guards that used to exercise it now assert that the whole supported chain
-resolves instead.
+`amsterdam` is the fifth, and it resolves to `none` on purpose. Declaring an
+identity without its rules is what the `Option` in `Fork.rules?` was for, and
+this is the first time it is used: the label parses, has an index, and appears
+in transition labels, while every attempt to run it is `UnsupportedForkError`.
+So the `UnsupportedForkError` branch is reachable again rather than merely
+retained.
+
+That makes two different lists, and conflating them is the mistake the code is
+arranged to prevent:
+
+```
+Fork.all           = [prague, osaka, bpo1, bpo2, amsterdam]   -- declared
+Fork.supported     = Fork.all.filter (·.rules?.isSome)        -- runnable
+Fork.unimplemented = Fork.all.filter (·.rules?.isNone)
+```
+
+Both derived lists come from `Fork.rules?` rather than being written out, so
+they cannot drift from what actually resolves. The distinction is carried
+through every user-facing surface: a diagnostic about an *unrecognised* label
+names the declared list, one about a label this build cannot *run* names the
+runnable list, and `t8n --forks` — the handshake a framework reads to decide
+what to send this binary — advertises only the runnable one.
+
+A fixture case at an unimplemented fork is refused at the top of the per-case
+run, before a header, a prestate or a block is read, and for both endpoints of
+a transition label. Routed through the import path instead it would surface as
+"block 0 was expected valid but failed", which reads as a verdict about a block
+this build never examined.
 
 ## What `ForkRules` carries
 
@@ -62,6 +86,8 @@ resolves instead.
 ForkRules := { fork : Fork, blob : BlobSchedule, code : CodeLimits,
                tx : TransactionLimits, block : BlockLimits,
                modexp : ModexpRules, op : OpcodeRules,
+               gas : GasSchedule, header : HeaderRules,
+               requests : List (UInt8 × Adr),
                precompiles : List Adr }
 ```
 
@@ -92,12 +118,65 @@ ForkRules := { fork : Fork, blob : BlobSchedule, code : CodeLimits,
   carried as the set itself. `ForkRules.isPrecomp` is the membership predicate.
   Step 4 also made EIP-2929's pre-warmed access list in `prepareMessage` read
   this field, which was the last surviving literal copy of the Prague set.
+- `gas : GasSchedule` (added for Amsterdam) — the ten numbers a supported fork
+  moves *inside a formula both forks share*: `coldAccountAccess`, `callValue`,
+  `createAccess`, `storageClearRefund`, `txBase`, `txAccessListAddress`,
+  `txAccessListStorageKey`, `floorTokenCost`, `perAuthIntrinsic`, and
+  `codeReadSurcharge`. The scope is deliberately narrow, and the narrowness is
+  the design: a number belongs here when a later fork reprices it *and* both
+  forks compute with it the same way, so one field serves both without a
+  branch. Numbers no supported fork moves stay global, and so do numbers only
+  one fork's formula mentions — `gasStorageSet`, `gasStorageUpdate`,
+  `gNewAccount`, `gasCodeDeposit`, the 12,500 authorisation refund — because
+  moving them would state a fork difference that does not exist.
+  `codeReadSurcharge` is additive with identity `0`, which is what makes the
+  Prague formula literally unchanged rather than merely equal to what it was.
+  Every field's Prague value is `rfl`-equal to the global that has always held
+  it (`pragueRules_gas_*` in `Jaune/Machine.lean`, exported `@[simp]`), so no
+  Prague-stated proof and no Prague fixture can observe that the number now
+  arrives through a record.
+- `header : HeaderRules` (added for Amsterdam) — `blockAccessListHash` and
+  `slotNumber`, one `Bool` per EIP (7928 and 7843). Two flags rather than one
+  because nothing in the protocol makes the two fields arrive together.
+  `validateHeader` requires each field to be present exactly when its flag is
+  set, in both directions: a header carrying a field the rules do not define is
+  as invalid as one missing a field they do.
+- `requests : List (UInt8 × Adr)` (added for Amsterdam) — the
+  request-producing system contracts, as `(type byte, address)` pairs, in call
+  order. The order is the rule, not an implementation detail: the request bytes
+  are concatenated in that order and hashed into `requestsHash`.
+  `processGeneralPurposeRequests` folds over this list, so EIP-8282's two extra
+  contracts are an appended pair and nothing else. The receipt-derived deposit
+  request (type 0) is deliberately absent — it is parsed out of the block's
+  logs rather than produced by a system call.
 - `fork` — provenance for reports and error messages, not a dispatch key.
 
 Every static Prague/Osaka execution category identified by the pinned EELS diff
-is now rule data. Categories still not present are future schedule/activation
-facts: BPO1/BPO2 blob parameters and named mainnet timestamps belong to Step 6,
-not to the static Osaka rule record.
+is rule data. So are the three categories Amsterdam needs from this record's
+shape. What is deliberately *not* here is Amsterdam's own semantics: there is
+no `amsterdamRules`, because the two-dimensional gas meter, the block-level
+access list and the four new opcodes are not implemented, and a record naming
+values for rules that no code reads would be a claim this build cannot support.
+
+**Every number in this record is machine-checked**, not transcribed:
+`scripts/gen-fork-constants.py` extracts each declared fork's constants from
+the pinned `execution-specs` revision — by importing the fork module, since
+several are computed rather than literal — and
+`scripts/check-fork-constants.sh` compares them against
+`lake exe jaune --rules <fork>`. Its coverage table classifies *every* field,
+so a field added later cannot become silently unchecked; the six `MODEXP`
+parameters are classified as checked elsewhere, because upstream gives them no
+names to read and they are covered as behaviour by the vector suite and the
+repricing subtrees.
+
+Three interpreter-step numbers — `coldAccountAccess`, `callValue` and
+`createAccess` — exist in the record and are checked by that gate, but the
+opcode interpreter still reads them from the globals. Moving those readers
+requires a structural premise on `GasSchedule`, because `Jaune/Sufficiency.lean`
+states its gas-decreasing theorems over an arbitrary `Sevm` and a zero-valued
+schedule would break termination. That premise belongs with the goal that
+migrates the termination measure to Amsterdam's two reservoirs, which restates
+those theorems anyway.
 
 ## Osaka's state
 

@@ -201,6 +201,22 @@ requirements.
   The pinned release publishes no fixture whose network is a bare `BPO1` or
   `BPO2`, so `--suite bpo1` and `--suite bpo2` select nothing and are refused
   rather than reported as vacuously green.
+- **`Amsterdam` is a declared label whose rules are not implemented.** It
+  parses, it has a position in the fork chain, and transition labels naming it
+  are read — and every attempt to *run* it is refused with
+  `UnsupportedForkError`, never answered with another fork's rules. So the
+  label appears in `jaune --help`'s declared list and not in what that text
+  calls "runs at"; `jaune t8n --forks`, which is the handshake a framework
+  reads to decide what to send, advertises only the four forks above.
+  What exists today is the *vocabulary* Amsterdam needs — the gas numbers it
+  reprices, the two header fields it adds, and its request-producing contracts,
+  all carried as fork rule data and machine-checked against the pinned
+  `execution-specs` revision by `scripts/check-fork-constants.sh`. **No
+  Amsterdam semantics are implemented and no Amsterdam fixture passes.** The
+  devnet-8 corpus is installable as its own lane
+  (`python3 scripts/bootstrap_mainnet.py --lane amsterdam`) and inventoried in
+  `scripts/amsterdam/manifests.json`, and every suite over it is refused,
+  naming the goal that owns the semantics it would need.
 - **Reference:** mirrors [execution-specs](https://github.com/ethereum/execution-specs)
   `mainnet` at commit
   [`4198…7694`](https://github.com/ethereum/execution-specs/tree/4198b9c5996713b268aed602739d5aa40e277694)

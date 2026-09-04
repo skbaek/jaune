@@ -462,7 +462,8 @@ def decodeEnv (rules : ForkRules) (stateTest : Bool) (j : Lean.Json) : IO T8nEnv
           timestamp := 0, extraData := [], prevRandao := 0, nonce := 0,
           baseFeePerGas := parentBaseFee, withdrawalsRoot := 0,
           blobGasUsed := parentBlobGasUsed, excessBlobGas := parentExcessBlobGas,
-          parentBeaconBlockRoot := 0, requestsHash := none }
+          parentBeaconBlockRoot := 0, requestsHash := none,
+          blockAccessListHash := none, slotNumber := none }
       pure (calculateExcessBlobGas rules.blob parentHeader)
   -- A state test performs no system operations, so the parent beacon block
   -- root is never read; the target sets it to `None` in that mode.
@@ -1055,7 +1056,9 @@ def printInfo : IO Unit := do
            recorded there, so set JAUNE_SOURCES to that file's path"
   IO.println s!"jaune version {version}"
   IO.println s!"lean toolchain: {Lean.versionString}"
-  IO.println s!"t8n fork lane: {String.intercalate " " (Fork.all.map Fork.toString)}"
+  IO.println
+    s!"t8n fork lane: \
+       {String.intercalate " " (Fork.supported.map Fork.toString)}"
   IO.println s!"t8n modes: blockchain (default), state-test (--state-test)"
   IO.println s!"t8n tracing: not claimed"
   IO.println s!"sources manifest: {path}"
@@ -1087,7 +1090,11 @@ def run (args : List String) : IO Unit := do
   -- `--info` it must answer from any working directory and must not depend on
   -- the sources manifest being reachable.
   if o.forks then
-    IO.println (String.intercalate " " (Fork.all.map Fork.toString))
+    -- The runnable lane, not the declared one. This line is a wrapper's whole
+    -- basis for deciding what to send, so advertising a fork the very next
+    -- step would refuse would make the refusal a wasted round trip and the
+    -- handshake a false claim.
+    IO.println (String.intercalate " " (Fork.supported.map Fork.toString))
     return ()
   if o.info then
     printInfo
@@ -1095,11 +1102,11 @@ def run (args : List String) : IO Unit := do
   if o.forkLabel.isEmpty then
     IO.throw
       s!"error : t8n requires --state.fork; there is no default fork, and the \
-         supported labels are {Fork.all.map Fork.toString}"
+         supported labels are {Fork.supported.map Fork.toString}"
   let some f := Fork.ofString? o.forkLabel
     | IO.throw
         s!"error : t8n does not support the fork {repr o.forkLabel}; this \
-           build's lane is {Fork.all.map Fork.toString} and there is no \
+           build's lane is {Fork.supported.map Fork.toString} and there is no \
            fallback"
   let rules ← IO.ofExcept (f.rules.mapError SupportError.render)
   let usesStdin :=
@@ -1173,7 +1180,7 @@ Executes one state transition outside any block-validation context and emits
 `result` and the post-state `alloc` in the shapes the conformance target
 emits. Options may be spelled --flag=value or --flag value.
 
-  --state.fork <label>   required; one of {Fork.all.map Fork.toString}. There
+  --state.fork <label>   required; one of {Fork.supported.map Fork.toString}. There
                          is no default and no fallback.
   --state-test           apply exactly one transaction with no system
                          operations, no withdrawals and no requests.

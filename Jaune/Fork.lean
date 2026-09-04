@@ -35,6 +35,7 @@ inductive Fork : Type
   | osaka
   | bpo1
   | bpo2
+  | amsterdam
 deriving DecidableEq, Repr, Inhabited
 
 namespace Fork
@@ -46,6 +47,7 @@ def toString : Fork → String
   | .osaka => "Osaka"
   | .bpo1 => "BPO1"
   | .bpo2 => "BPO2"
+  | .amsterdam => "Amsterdam"
 
 instance : ToString Fork := ⟨Fork.toString⟩
 
@@ -56,10 +58,18 @@ def ofString? : String → Option Fork
   | "Osaka" => some .osaka
   | "BPO1" => some .bpo1
   | "BPO2" => some .bpo2
+  | "Amsterdam" => some .amsterdam
   | _ => none
 
-/-- Every supported fork, in activation order. -/
-def all : List Fork := [.prague, .osaka, .bpo1, .bpo2]
+/-- Every *declared* fork, in activation order.
+
+Declared is not implemented: `Fork.amsterdam` is here because its label,
+its position in the chain, and the transitions naming it are facts this build
+knows, while `Fork.rules?` answers `none` for it. The list of forks whose rules
+this build can actually run is `Fork.supported` below, and the two must not be
+confused at a user-facing message: a label this build parses and refuses is a
+different answer from one it does not recognise at all. -/
+def all : List Fork := [.prague, .osaka, .bpo1, .bpo2, .amsterdam]
 
 /-- Position in the supported transition chain.
 
@@ -71,6 +81,7 @@ def index : Fork → Nat
   | .osaka => 1
   | .bpo1 => 2
   | .bpo2 => 3
+  | .amsterdam => 4
 
 end Fork
 
@@ -153,6 +164,72 @@ structure OpcodeRules : Type where
   clz : Bool
 deriving DecidableEq, Repr
 
+/-- The gas numbers a supported fork moves inside a formula both forks share.
+
+This is exactly the scope decision D2 of the Amsterdam programme fixes, and it
+is deliberately narrow. A number belongs here when Amsterdam reprices it *and*
+Prague and Amsterdam compute with it in the same formula, so that one record
+field can serve both without a branch. Numbers Amsterdam leaves alone stay
+global; numbers only one fork's formula mentions -- `gasStorageSet`,
+`gasStorageUpdate`, `gNewAccount`, `gasCodeDeposit`, the 12,500 authorisation
+refund -- stay global too, because moving them here would state a fork
+difference that does not exist.
+
+Every field's Prague value is `rfl`-equal to the global constant that has
+always held it (`pragueRules_gas_*` below), so no Prague-stated proof and no
+Prague fixture can observe that the number now arrives through a record. The
+Amsterdam values in the comments are the pinned upstream commit's and are
+checked mechanically by `scripts/check-fork-constants.sh`; they are recorded
+here as documentation, not as a rule this build implements. -/
+structure GasSchedule : Type where
+  /-- EIP-2929's cold account access. Prague 2600; Amsterdam 3000. -/
+  coldAccountAccess : Nat
+  /-- The surcharge a value-bearing call pays. Prague 9000; Amsterdam 11300. -/
+  callValue : Nat
+  /-- The `CREATE`/`CREATE2` base cost, which is also the creation
+  transaction's recipient cost. Prague 32000; Amsterdam 12000, where
+  EIP-8037 moves most of the creation cost into state gas. -/
+  createAccess : Nat
+  /-- The refund for clearing a storage slot. Prague 4800; Amsterdam 11616. -/
+  storageClearRefund : Nat
+  /-- The intrinsic cost every transaction pays. Prague 21000; Amsterdam
+  12000, with EIP-2780 charging the difference per resource instead. -/
+  txBase : Nat
+  /-- Per access-list address. Prague 2400; Amsterdam 2900. -/
+  txAccessListAddress : Nat
+  /-- Per access-list storage key. Prague 1900; Amsterdam 2000. -/
+  txAccessListStorageKey : Nat
+  /-- The per-token calldata floor (EIP-7623). Prague 10; Amsterdam 16. -/
+  floorTokenCost : Nat
+  /-- The intrinsic cost of one EIP-7702 authorisation tuple. Prague 25000;
+  Amsterdam 7816. -/
+  perAuthIntrinsic : Nat
+  /-- EIP-8038's additive code-reading surcharge at `EXTCODESIZE` and
+  `EXTCODECOPY`. Prague 0; Amsterdam 100.
+
+  Stated as an additive term whose identity is 0 rather than as an optional
+  cost, because that is what makes the Prague formula literally unchanged: the
+  surcharge is added at both forks and contributes nothing at Prague. Upstream
+  gives this number no name of its own -- it is `WARM_ACCESS` added inline at
+  the two opcodes -- so the constants gate reads it as a source-presence fact
+  and records the derivation. -/
+  codeReadSurcharge : Nat
+deriving DecidableEq, Repr
+
+/-- Which fork-dependent header fields a block must carry.
+
+Two booleans rather than one, because the two EIPs are separate: EIP-7928
+introduces `blockAccessListHash` and EIP-7843 `slotNumber`, and nothing in the
+protocol makes them arrive together. Presence is required exactly when the
+flag is set, in both directions -- a header carrying a field the rules do not
+name is as invalid as one missing a field they do. -/
+structure HeaderRules : Type where
+  /-- EIP-7928: the header commits to the block-level access list. -/
+  blockAccessListHash : Bool
+  /-- EIP-7843: the header carries the consensus slot number. -/
+  slotNumber : Bool
+deriving DecidableEq, Repr
+
 /-- Everything the interpreter needs to know about *which* rules it is running.
 
 Execution reads this record and nothing else about the fork. The `fork` field
@@ -173,6 +250,19 @@ structure ForkRules : Type where
   modexp : ModexpRules
   /-- Which fork-gated opcodes are defined. -/
   op : OpcodeRules
+  /-- The gas numbers a supported fork moves inside a shared formula. -/
+  gas : GasSchedule
+  /-- Which fork-dependent header fields a block must carry. -/
+  header : HeaderRules
+  /-- The request-producing system contracts, as `(type byte, address)` pairs,
+  in the order `processGeneralPurposeRequests` must call them.
+
+  The order is the rule, not an implementation detail: the request bytes are
+  concatenated in call order and hashed into `requestsHash`, so a reordering
+  would be a consensus change. The receipt-derived deposit request (type 0) is
+  deliberately absent -- it is parsed out of the block's logs rather than
+  produced by a system call, so it is not one of these. -/
+  requests : List (UInt8 × Adr)
   /-- The addresses at which a precompiled contract is active. -/
   precompiles : List Adr
 deriving DecidableEq
@@ -263,6 +353,42 @@ def pragueModexpRules : ModexpRules := {
 /-- Prague's opcode set: 0x1E is still an unassigned byte. -/
 def pragueOpcodeRules : OpcodeRules := { clz := false }
 
+/-- Prague's shared-formula gas numbers.
+
+Each value is the global constant that has always held it, and
+`Jaune/Machine.lean` states that equality as an `rfl` lemma next to those
+globals -- it cannot be stated here, because this module is upstream of them.
+The literals are written out rather than imported for exactly that reason, and
+the lemmas are what stop the two copies from drifting. -/
+def pragueGasSchedule : GasSchedule := {
+  coldAccountAccess := 2600
+  callValue := 9000
+  createAccess := 32000
+  storageClearRefund := 4800
+  txBase := 21000
+  txAccessListAddress := 2400
+  txAccessListStorageKey := 1900
+  floorTokenCost := 10
+  perAuthIntrinsic := 25000
+  -- Additive with identity 0: EIP-8038 is not active, so the code-reading
+  -- surcharge contributes nothing and the Prague formula is unchanged.
+  codeReadSurcharge := 0
+}
+
+/-- Prague's header carries neither Amsterdam field. -/
+def pragueHeaderRules : HeaderRules :=
+  { blockAccessListHash := false, slotNumber := false }
+
+/-- Prague's request-producing system contracts, in call order: the EIP-7002
+withdrawal contract, then the EIP-7251 consolidation contract.
+
+`Jaune/Machine.lean` states that these are the same two addresses, in the same
+order, that its `processGeneralPurposeRequests` fold has always called. -/
+def pragueRequests : List (UInt8 × Adr) := [
+  (1, 0x00000961Ef480Eb55e80D19ad83579A64c007002), -- EIP-7002 withdrawals
+  (2, 0x0000BBdDc7CE488642fb579F8B00f3a590007251)  -- EIP-7251 consolidations
+]
+
 /-- The precompiles active at Prague: 0x01 through 0x11, contiguous.
 
 Written out rather than computed from a range so that the set stays readable
@@ -297,6 +423,9 @@ def pragueRules : ForkRules := {
   block := pragueBlockLimits
   modexp := pragueModexpRules
   op := pragueOpcodeRules
+  gas := pragueGasSchedule
+  header := pragueHeaderRules
+  requests := pragueRequests
   precompiles := praguePrecompiles
 }
 
@@ -367,6 +496,13 @@ def osakaRules : ForkRules := {
   block := osakaBlockLimits
   modexp := osakaModexpRules
   op := osakaOpcodeRules
+  -- Osaka moves none of the three new categories: EIP-7939 is an opcode, and
+  -- the repricings, the header fields, and the two extra request contracts are
+  -- all Amsterdam's. Naming Prague's records rather than repeating them is
+  -- what makes that a fact of the source instead of a claim about it.
+  gas := pragueGasSchedule
+  header := pragueHeaderRules
+  requests := pragueRequests
   precompiles := osakaPrecompiles
 }
 
@@ -446,10 +582,10 @@ theorem bpo2Rules_valid : bpo2Rules.Valid := by decide
 /-- Error tag for a fork whose identity is known but whose rules this build
 does not implement.
 
-Every fork this build declares now resolves, so nothing reaches this branch
-today. It is retained because it is the only correct answer for the next
-declared-but-unimplemented fork: falling back to another fork's rules would
-turn a missing implementation into a silent consensus fault. -/
+`Fork.amsterdam` is declared and unresolved, so this branch is reachable: it
+is the answer every entry point gives for an Amsterdam input. Falling back to
+another fork's rules would turn a missing implementation into a silent
+consensus fault, so there is deliberately no fallback to fall back to. -/
 def unsupportedForkTag : String := "UnsupportedForkError"
 
 /-- The single place where a fork identity becomes rule data.
@@ -463,6 +599,21 @@ def Fork.rules? : Fork → Option ForkRules
   | .osaka => some osakaRules
   | .bpo1 => some bpo1Rules
   | .bpo2 => some bpo2Rules
+  | .amsterdam => none
+
+/-- The declared forks this build can actually run.
+
+Derived from `Fork.rules?` rather than written out, so it cannot drift from
+what resolves. This is the list a message means when it says "supported":
+`Fork.all` is what this build *parses*, and these are the labels it will also
+execute. -/
+def Fork.supported : List Fork := Fork.all.filter (fun f => f.rules?.isSome)
+
+/-- The declared forks whose rules this build does not implement.
+
+The complement of `Fork.supported` within `Fork.all`, for the diagnostics that
+have to name exactly which labels parse and are then refused. -/
+def Fork.unimplemented : List Fork := Fork.all.filter (fun f => f.rules?.isNone)
 
 /-- Every rule set a fork identity resolves to is structurally usable.
 
@@ -1125,11 +1276,23 @@ private def isEraL : RulesLookupError → Bool
 #guard Fork.ofString? "Osaka" = some .osaka
 #guard Fork.ofString? "BPO1" = some .bpo1
 #guard Fork.ofString? "BPO2" = some .bpo2
+#guard Fork.ofString? "Amsterdam" = some .amsterdam
 #guard (Fork.ofString? "Cancun").isNone
 #guard (Fork.ofString? "prague").isNone
+#guard (Fork.ofString? "amsterdam").isNone
 #guard (Fork.ofString? "").isNone
-#guard Fork.all.length = 4
-#guard Fork.all.map Fork.index = [0, 1, 2, 3]
+#guard Fork.all.length = 5
+#guard Fork.all.map Fork.index = [0, 1, 2, 3, 4]
+
+-- The declared set and the runnable set are different lists, and both are
+-- derived from `Fork.rules?` rather than restated. Amsterdam is the whole
+-- difference: it is declared, it parses, it has a position in the chain, and
+-- it does not resolve.
+#guard Fork.supported = [.prague, .osaka, .bpo1, .bpo2]
+#guard Fork.unimplemented = [.amsterdam]
+#guard Fork.supported.length + Fork.unimplemented.length = Fork.all.length
+#guard Fork.amsterdam.index = 4
+#guard Fork.amsterdam.rules? = none
 
 -- The central rule values are the Prague constants this build has always used.
 #guard pragueRules.fork = .prague
@@ -1147,6 +1310,31 @@ private def isEraL : RulesLookupError → Bool
 #guard pragueRules.modexp.gasDivisor = 3
 #guard pragueRules.modexp.minGas = 200
 #guard pragueRules.op.clz = false
+
+-- The ten shared-formula gas numbers, pinned as literals here and tied to the
+-- global constants they came from by the `rfl` lemmas in `Jaune/Machine.lean`.
+-- Both halves are needed: these say what the numbers are, those say that
+-- nothing observing the old globals can tell the difference.
+#guard pragueRules.gas.coldAccountAccess = 2600
+#guard pragueRules.gas.callValue = 9000
+#guard pragueRules.gas.createAccess = 32000
+#guard pragueRules.gas.storageClearRefund = 4800
+#guard pragueRules.gas.txBase = 21000
+#guard pragueRules.gas.txAccessListAddress = 2400
+#guard pragueRules.gas.txAccessListStorageKey = 1900
+#guard pragueRules.gas.floorTokenCost = 10
+#guard pragueRules.gas.perAuthIntrinsic = 25000
+#guard pragueRules.gas.codeReadSurcharge = 0
+
+-- Prague's header carries neither Amsterdam field, and its request list is the
+-- two contracts today's fold calls, in today's order.
+#guard pragueRules.header.blockAccessListHash = false
+#guard pragueRules.header.slotNumber = false
+#guard pragueRules.requests.length = 2
+#guard pragueRules.requests.map Prod.fst = [1, 2]
+#guard pragueRules.requests =
+  [(1, (0x00000961Ef480Eb55e80D19ad83579A64c007002 : Adr)),
+   (2, (0x0000BBdDc7CE488642fb579F8B00f3a590007251 : Adr))]
 
 -- Prague's precompile activation set is exactly 0x01 through 0x11, which is
 -- what the former `1 ≤ a.toNat ∧ a.toNat ≤ 17` range said.
@@ -1177,6 +1365,13 @@ private def isEraL : RulesLookupError → Bool
 #guard osakaRules.modexp.minGas = 500
 #guard osakaRules.op.clz = true
 
+-- Osaka moves none of the three new categories. Stated about the whole record
+-- rather than field by field, so a future edit that gives Osaka a gas, header,
+-- or request rule of its own fails here.
+#guard osakaRules.gas = pragueRules.gas
+#guard osakaRules.header = pragueRules.header
+#guard osakaRules.requests = pragueRules.requests
+
 -- P256VERIFY is appended, so Prague's seventeen keep their addresses and the
 -- eighteenth is reachable only under Osaka rules. Nothing in between becomes a
 -- precompile by widening a range.
@@ -1192,11 +1387,32 @@ private def isEraL : RulesLookupError → Bool
 -- A BPO fork is Osaka with three different blob numbers. These two guards say
 -- exactly that, and they say it about the whole record: undoing the identity
 -- and the blob schedule must give Osaka back, so no BPO fork can acquire a
--- transaction limit, opcode, precompile, or gas rule of its own.
+-- transaction limit, opcode, precompile, gas, header, or request rule of its
+-- own. Because they compare whole records, they extend to the three
+-- categories added for Amsterdam without being restated for them -- which is
+-- the point of writing a BPO record as an update of Osaka's.
 #guard { bpo1Rules with fork := .osaka, blob := osakaBlobSchedule } = osakaRules
 #guard { bpo2Rules with fork := .osaka, blob := osakaBlobSchedule } = osakaRules
 #guard bpo1Rules.fork = .bpo1
 #guard bpo2Rules.fork = .bpo2
+
+-- The same fact stated field by field for the three new categories, so that a
+-- failure names the category rather than "the records differ".
+#guard bpo1Rules.gas = pragueGasSchedule
+#guard bpo2Rules.gas = pragueGasSchedule
+#guard bpo1Rules.header = pragueHeaderRules
+#guard bpo2Rules.header = pragueHeaderRules
+#guard bpo1Rules.requests = pragueRequests
+#guard bpo2Rules.requests = pragueRequests
+
+-- Every fork this build runs shares one gas schedule, one header rule, and one
+-- request list: the whole supported chain is Prague's in these three
+-- categories. Amsterdam is what makes them vary, and it does not resolve here.
+#guard Fork.supported.all (fun f =>
+  match f.rules? with
+  | some r => r.gas == pragueGasSchedule && r.header == pragueHeaderRules
+      && r.requests == pragueRequests
+  | none => false)
 
 -- The three moving numbers, as blob counts times `GAS_PER_BLOB`, and the
 -- reserve base cost EIP-7918 introduced at Osaka and no BPO fork changes.
@@ -1221,14 +1437,31 @@ private def isEraL : RulesLookupError → Bool
     bpo2BlobSchedule].map BlobSchedule.baseFeeUpdateFraction
   = [5007716, 5007716, 8346193, 11684671]
 
--- Every declared fork resolves in this build, so `Fork.rules` is total here and
--- the unsupported-fork branch is unreachable rather than merely untaken.
-#guard Fork.all.all (fun f => f.rules?.isSome)
-#guard Fork.all.all (fun f => (f.rules?.map ForkRules.fork) = some f)
+-- Every fork this build runs resolves to rules that name it back, and the one
+-- it does not run is refused with its own identity rather than with another
+-- fork's rules. The unsupported-fork branch is reachable again, which is the
+-- point: `Fork.amsterdam` is a declared identity whose semantics belong to a
+-- later goal, and until then every entry point must say so.
+#guard Fork.supported.all (fun f => f.rules?.isSome)
+#guard Fork.supported.all (fun f => (f.rules?.map ForkRules.fork) = some f)
+#guard Fork.unimplemented.all (fun f => f.rules?.isNone)
 #guard Fork.prague.rules = .ok pragueRules
 #guard Fork.osaka.rules = .ok osakaRules
 #guard Fork.bpo1.rules = .ok bpo1Rules
 #guard Fork.bpo2.rules = .ok bpo2Rules
+#guard Fork.amsterdam.rules = .error (.unsupportedFork .amsterdam)
+#guard Fork.amsterdam.validRules?.isNone
+#guard Fork.supported.all (fun f => f.validRules?.isSome)
+-- The refusal a user actually reads, from the live producer, on the exact
+-- label the devnet corpus carries.
+#guard (match Fork.amsterdam.rules with
+  | .error e => e.render ==
+      "UnsupportedForkError : fork Amsterdam is a declared protocol fork whose \
+       execution rules are not implemented in this build"
+  | .ok _ => false)
+#guard SupportError.render (.unsupportedFork .amsterdam)
+  = "UnsupportedForkError : fork Amsterdam is a declared protocol fork whose \
+     execution rules are not implemented in this build"
 
 -- A usable schedule is non-empty and moves strictly forward in both time and
 -- fork order. It need not start at genesis: a schedule may support only eras
@@ -1327,7 +1560,15 @@ private def guardFloorSchedule : ChainConfig :=
 #guard mainnetChainConfig.forkAt (mainnetBpo2Timestamp - 1) = .ok .bpo1
 #guard mainnetChainConfig.forkAt mainnetBpo2Timestamp = .ok .bpo2
 #guard mainnetChainConfig.rulesAt mainnetBpo2Timestamp = .ok bpo2Rules
-#guard mainnetChainConfig.activations.map ForkActivation.fork = Fork.all
+-- D13 of the Amsterdam programme: the mainnet schedule keeps its four
+-- activations until upstream `FORK_CRITERIA` carries a real Amsterdam
+-- timestamp. Declaring the identity must not add an activation, so this is
+-- stated against the supported list and against Amsterdam's absence directly,
+-- never against `Fork.all`.
+#guard mainnetChainConfig.activations.map ForkActivation.fork = Fork.supported
+#guard mainnetChainConfig.activations.length = 4
+#guard ¬ (mainnetChainConfig.activations.map ForkActivation.fork).contains
+  .amsterdam
 
 -- The mainnet activations are strictly ordered in the same direction as the
 -- fork chain, which is the fact `validate` enforces and the reason the four
@@ -1346,6 +1587,8 @@ private def guardFloorSchedule : ChainConfig :=
   = some ⟨.bpo1, .bpo2, 15000⟩
 #guard ForkTransition.ofString? "PragueToOsakaAtTime15000"
   = some ⟨.prague, .osaka, 15000⟩
+#guard ForkTransition.ofString? "BPO2ToAmsterdamAtTime15k"
+  = some ⟨.bpo2, .amsterdam, 15000⟩
 #guard (ForkTransition.ofString? "CancunToPragueAtTime15k").isNone
 #guard (ForkTransition.ofString? "BPO2ToBPO3AtTime15k").isNone
 #guard (ForkTransition.ofString? "ShanghaiToCancunAtTime15k").isNone
@@ -1382,6 +1625,26 @@ private def guardOsakaToBpo1 : ForkTransition := ⟨.osaka, .bpo1, 15000⟩
 #guard (guardOsakaToBpo1.chainConfig 1).rulesAt 15000 = .ok bpo1Rules
 #guard (guardOsakaToBpo1.chainConfig 1).rulesAt 15001 = .ok bpo1Rules
 #guard (guardOsakaToBpo1.chainConfig 7).chainId = 7
+
+-- The devnet corpus's transition label. Its schedule is usable -- both
+-- endpoints are declared and the pair moves forward -- and the refusal lands
+-- exactly at the activation timestamp, as a support failure naming Amsterdam.
+-- Everything before it still runs BPO2's rules, which is what makes a
+-- transition fixture's pre-fork blocks meaningful rather than skipped.
+private def guardBpo2ToAmsterdam : ForkTransition := ⟨.bpo2, .amsterdam, 15000⟩
+
+#guard NetworkSpec.ofString? "BPO2ToAmsterdamAtTime15k"
+  = some (.transition guardBpo2ToAmsterdam)
+#guard (NetworkSpec.transition guardBpo2ToAmsterdam).forks = [.bpo2, .amsterdam]
+#guard (guardBpo2ToAmsterdam.chainConfig 1).validate.toOption.isSome
+#guard (guardBpo2ToAmsterdam.chainConfig 1).rulesAt 0 = .ok bpo2Rules
+#guard (guardBpo2ToAmsterdam.chainConfig 1).rulesAt 14999 = .ok bpo2Rules
+#guard (guardBpo2ToAmsterdam.chainConfig 1).forkAt 15000 = .ok .amsterdam
+#guard (guardBpo2ToAmsterdam.chainConfig 1).rulesAt 15000
+  = .error (.support (.unsupportedFork .amsterdam))
+-- The refusal is a support failure, never a context failure: the schedule is
+-- not at fault and the block is not being called invalid.
+#guard ¬ lookupFails isContextL ((guardBpo2ToAmsterdam.chainConfig 1).rulesAt 15000)
 
 -- A parseable label may still name an unusable schedule; it is refused where
 -- every other unusable schedule is, rather than at the parser.

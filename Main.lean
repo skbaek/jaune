@@ -36,6 +36,17 @@ def Lean.Json.toB256? (j : Json) : Option B256 := do
   let x ← toString? j >>= .remove0x
   Hex.toB256? x
 
+/-- A JSON quantity field as a `UInt64`, when present and readable.
+
+`Bytes.toQuantityB64?` rather than `Bytes.toUInt64?`: fixture quantities are
+written minimally, so a small slot number is a one-byte string, and the
+exact-width decoder would reject it. Over-long input is still refused rather
+than truncated. -/
+def Lean.Json.toB64? (j : Json) : Option UInt64 := do
+  let x ← toString? j >>= .remove0x
+  let bytes ← Hex.toBytes x
+  Bytes.toQuantityB64? bytes
+
 def getTxExMap (j : Lean.Json) : IO (Option String × Bytes) := do
   let rlp ← j.find "rlp" >>= Lean.Json.toIoBytes
   match j.find? "expectException" with
@@ -66,6 +77,15 @@ def Lean.Json.toHeader (json : Lean.Json) : IO Header := do
   let excessBlobGas ← (json.find "excessBlobGas" >>= Lean.Json.toIoBytes) <&> Bytes.toNat
   let parentBeaconBlockRoot ← json.find "parentBeaconBlockRoot" >>= Lean.Json.toIoB256
   let requestsHash := (json.find? "requestsHash" >>= Lean.Json.toB256?)
+  -- The two Amsterdam header fields, read exactly as `requestsHash` is: absent
+  -- in a fixture whose fork does not define them, present otherwise. Reading
+  -- them is not running them -- an Amsterdam case is refused before this point
+  -- -- but a header this runner parses must be the header the fixture wrote,
+  -- and silently dropping two fields would make every such header re-encode to
+  -- a different hash.
+  let blockAccessListHash :=
+    (json.find? "blockAccessListHash" >>= Lean.Json.toB256?)
+  let slotNumber := (json.find? "slotNumber" >>= Lean.Json.toB64?)
   .ok {
     parentHash := parentHash
     ommersHash := ommersHash
@@ -88,7 +108,105 @@ def Lean.Json.toHeader (json : Lean.Json) : IO Header := do
     excessBlobGas := excessBlobGas
     parentBeaconBlockRoot := parentBeaconBlockRoot
     requestsHash := requestsHash
+    blockAccessListHash := blockAccessListHash
+    slotNumber := slotNumber
   }
+
+/-! ## The rule-data printer
+
+`jaune --rules <fork>` prints one `ForkRules` record as JSON, so that
+`scripts/check-fork-constants.sh` can compare what this build carries against
+what `scripts/gen-fork-constants.py` extracted from the pinned
+`execution-specs` revision. Neither side reads the other: the extractor reads
+upstream and this reads the record, and the gate is the only place they meet.
+
+The layout is **flat, keyed by dotted field path** rather than nested. A
+comparison over dotted keys is exact key-by-key, its diff names the field that
+moved rather than "the records differ", and the key *set* is itself checkable
+-- which is what lets the gate refuse a `ForkRules` field that no one has
+classified. -/
+
+/-- A 20-byte address as `0x` and forty lowercase hex digits.
+
+Written here rather than reused from `Adr.toHex`, which pads and cases for
+human display: this string is compared byte-for-byte against a generator's
+output, so its shape is part of the gate and is pinned by a `#guard`. -/
+def Adr.toGateHex (a : Adr) : String :=
+  let digits := "0123456789abcdef".toList
+  let rec go (fuel n : Nat) (acc : List Char) : List Char :=
+    match fuel with
+    | 0 => acc
+    | fuel + 1 => go fuel (n / 16) (digits[n % 16]! :: acc)
+  "0x" ++ String.ofList (go 40 a.toNat [])
+
+#guard Adr.toGateHex (0x00000961Ef480Eb55e80D19ad83579A64c007002 : Adr)
+  = "0x00000961ef480eb55e80d19ad83579a64c007002"
+#guard Adr.toGateHex (0 : Adr)
+  = "0x0000000000000000000000000000000000000000"
+#guard Adr.toGateHex (0x01 : Adr)
+  = "0x0000000000000000000000000000000000000001"
+
+private def jNat (n : Nat) : Lean.Json := Lean.toJson n
+
+private def jOptNat : Option Nat → Lean.Json
+  | none => .null
+  | some n => jNat n
+
+/-- One rule record as the flat JSON the constants gate compares. -/
+def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
+  Lean.Json.mkObj [
+    ("blob.target", jNat r.blob.target),
+    ("blob.max", jNat r.blob.max),
+    ("blob.baseFeeUpdateFraction", jNat r.blob.baseFeeUpdateFraction),
+    ("blob.reserveBaseCost", jOptNat r.blob.reserveBaseCost),
+    ("code.maxCodeSize", jNat r.code.maxCodeSize),
+    ("code.maxInitCodeSize", jNat r.code.maxInitCodeSize),
+    ("tx.maxGas", jOptNat r.tx.maxGas),
+    ("tx.maxBlobCount", jOptNat r.tx.maxBlobCount),
+    ("block.maxRlpSize", jOptNat r.block.maxRlpSize),
+    ("modexp.maxLength", jOptNat r.modexp.maxLength),
+    ("modexp.flatComplexity", jOptNat r.modexp.flatComplexity),
+    ("modexp.complexityCoeff", jNat r.modexp.complexityCoeff),
+    ("modexp.iterationCoeff", jNat r.modexp.iterationCoeff),
+    ("modexp.gasDivisor", jNat r.modexp.gasDivisor),
+    ("modexp.minGas", jNat r.modexp.minGas),
+    ("op.clz", Lean.Json.bool r.op.clz),
+    ("precompiles",
+      Lean.Json.arr ((r.precompiles.map (fun a => jNat a.toNat)).toArray)),
+    ("gas.coldAccountAccess", jNat r.gas.coldAccountAccess),
+    ("gas.callValue", jNat r.gas.callValue),
+    ("gas.createAccess", jNat r.gas.createAccess),
+    ("gas.storageClearRefund", jNat r.gas.storageClearRefund),
+    ("gas.txBase", jNat r.gas.txBase),
+    ("gas.txAccessListAddress", jNat r.gas.txAccessListAddress),
+    ("gas.txAccessListStorageKey", jNat r.gas.txAccessListStorageKey),
+    ("gas.floorTokenCost", jNat r.gas.floorTokenCost),
+    ("gas.perAuthIntrinsic", jNat r.gas.perAuthIntrinsic),
+    ("gas.codeReadSurcharge", jNat r.gas.codeReadSurcharge),
+    ("header.blockAccessListHash", Lean.Json.bool r.header.blockAccessListHash),
+    ("header.slotNumber", Lean.Json.bool r.header.slotNumber),
+    ("requests",
+      Lean.Json.arr ((r.requests.map (fun p =>
+        Lean.Json.arr #[jNat p.fst.toNat,
+          Lean.Json.str (Adr.toGateHex p.snd)])).toArray))
+  ]
+
+/-- `jaune --rules <fork>`.
+
+A fork whose rules this build does not implement is refused here exactly as it
+is everywhere else: there is nothing to print, and printing another fork's
+record would be the silent fallback the whole architecture exists to prevent.
+So `--rules Amsterdam` fails with `UnsupportedForkError`, which is also what
+makes the gate's fork list and `Fork.supported` the same list by construction. -/
+def runRulesPrinter (label : String) : IO Unit := do
+  let some f := Fork.ofString? label
+    | .throw
+        s!"error : unknown --rules label {repr label}; declared labels are \
+           {Fork.all.map Fork.toString}"
+  let rules ← IO.ofExcept (f.rules.mapError SupportError.render)
+  -- Named rather than dot-notated: this file `open`s `Jaune` but is not in it,
+  -- so the definition above lands at the root while `ForkRules` is `Jaune`'s.
+  .println (ForkRules.toGateJson rules).pretty
 
 def getPostStateRoot (json : Lean.Json) : IO B256 :=
   ( do let stateJson ← json.find "postState"
@@ -279,6 +397,17 @@ def runBlockchainStTest (spec : NetworkSpec) : (Nat × String × Lean.Json) → 
   | ⟨idx, name, json⟩ => do
     .println s!"TEST NAME : {name}"
     .println s!"TEST INDEX : {idx}"
+    -- Every fork this case's network label can select must be one this build
+    -- runs, and that is settled here -- before a header, a prestate, or a
+    -- block is read. A declared fork whose rules are unimplemented is outside
+    -- this build's domain, not evidence about the candidate: routed through
+    -- the import path it would surface as `BLOCK #0 was expected valid but
+    -- failed`, which reads as a verdict on a block this build never examined.
+    -- A transition label is checked at both endpoints for the same reason,
+    -- since its pre-fork blocks would otherwise run and only the post-fork
+    -- ones refuse, halfway through a case.
+    let _ ← IO.ofExcept
+      ((spec.forks.mapM Fork.rules).mapError SupportError.render)
     checkFixtureBlobSchedule spec json
 
     let gbh_json ← json.find "genesisBlockHeader"
@@ -386,9 +515,10 @@ actual chain ID is read per fixture and threaded by `evaluateFixtureBlock`. -/
 def requireSupportedSpec (label : String) : IO NetworkSpec := do
   let some spec := NetworkSpec.ofString? label
     | .throw
-        s!"error : unknown --network label {repr label}; supported labels are \
+        s!"error : unknown --network label {repr label}; declared labels are \
            {Fork.all.map Fork.toString} and transitions of the form \
-           <fork>To<fork>AtTime<seconds>"
+           <fork>To<fork>AtTime<seconds>. Of those, this build runs \
+           {Fork.supported.map Fork.toString}"
   if let .transition t := spec then
     IO.ofExcept ((ChainConfig.mk 0 t.activations).validate.mapError
       ChainContextError.render)
@@ -520,7 +650,7 @@ def runTestFile (o : FixtureOpts) (path : String) : IO Unit := do
   .guard (¬ supported.isEmpty)
     s!"ERROR : no case in {path} runs at a network this build supports; the \
        file's labels are {labels.eraseDups}, and the supported labels are \
-       {Fork.all.map Fork.toString} and transitions between them"
+       {Fork.supported.map Fork.toString} and transitions between them"
   .guard (¬ selected.isEmpty)
     s!"ERROR : the filters select no case in {path}; {supported.length} of its \
        {js.length} cases run at a supported network, with labels \
@@ -588,8 +718,9 @@ def getFork (opts : List String) : IO Fork :=
     | some f => .ok f
     | none =>
       .throw
-        s!"error : unknown --network label {repr label}; supported labels are \
-           {Fork.all.map Fork.toString}"
+        s!"error : unknown --network label {repr label}; declared labels are \
+           {Fork.all.map Fork.toString}, of which this build runs \
+           {Fork.supported.map Fork.toString}"
 
 def createMinimalEvm
     (rules : ForkRules) (adr : Adr) (input : Bytes) (gasLimit : Nat) : Evm := {
@@ -830,16 +961,20 @@ def runFakeExpVectorFile (path : String) : IO Bool := do
 
 /-- The usage text.
 
-The supported labels are rendered from `Fork.all` and from a constructed
-`ForkTransition`, not written out by hand, so this text cannot drift from what
-the build actually supports -- which is exactly how the README's fork list came
-to disagree with the binary. -/
+The label lists are rendered from `Fork.all`, `Fork.supported`, and a
+constructed `ForkTransition`, not written out by hand, so this text cannot
+drift from what the build actually does -- which is exactly how the README's
+fork list came to disagree with the binary. The declared and runnable sets are
+printed separately because they are no longer the same list: a declared fork
+whose rules are unimplemented parses here and is refused later, and a usage
+text that folded the two would claim support this build does not have. -/
 def usage : String :=
   s!"usage:
   jaune <fixture.json> [--network <label>] [--name <case>] \
 [--notName <case>] [--index <n>]
   jaune t8n [options] --state.fork <label>
   jaune --vectors <address> <file.json> [--network <fork>]
+  jaune --rules <fork>
   jaune --u256 <file.json>
   jaune --fake-exp <file.json>
   jaune --version
@@ -863,10 +998,16 @@ runs under the rules its own network label names.
   --notName <case>   skip these cases; repeatable
   --index <n>        run only the case at this index
 
-supported networks:
+declared networks:
   {Fork.all.map Fork.toString}
   transitions of the form <fork>To<fork>AtTime<seconds>, for example \
 {ForkTransition.toString ⟨.prague, .osaka, 15000⟩}
+
+runs at:
+  {Fork.supported.map Fork.toString}
+  A declared network this build does not run -- \
+{Fork.unimplemented.map Fork.toString} -- parses, and every case at it is then \
+refused with UnsupportedForkError rather than answered.
 "
 
 def main : List String → IO Unit
@@ -880,6 +1021,9 @@ def main : List String → IO Unit
   | "-v" :: _ => .println s!"jaune version {T8n.version}"
   | "--version" :: _ => .println s!"jaune version {T8n.version}"
   | "t8n" :: rest => T8n.run rest
+  | "--rules" :: label :: [] => runRulesPrinter label
+  | "--rules" :: _ =>
+    .throw "error : --rules takes exactly one fork label"
   | "--u256" :: pathStr :: [] => do
     if !(← runU256VectorFile pathStr) then IO.Process.exit 1
   | "--fake-exp" :: pathStr :: [] => do

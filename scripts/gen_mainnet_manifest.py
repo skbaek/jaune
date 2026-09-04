@@ -1,17 +1,29 @@
 #!/usr/bin/env python3
-"""Generate and verify exact current-mainnet blockchain-fixture manifests.
+"""Generate and verify exact blockchain-fixture manifests, per lane.
 
 The generator has no network behaviour.  It consumes a fixture tree already
-verified against ``sources.json`` by ``env_doctor.py --mainnet-deep`` and emits
+verified against ``sources.json`` by ``env_doctor.py --<lane>-deep`` and emits
 the complete static-fork, transition, and exclusion inventories.  A fixed
-lexicographic first-32 Prague-file rule derives the smoke suite; no path is
+lexicographic rule over a pinned seed derives the smoke suite; no path is
 hand-selected.
 
-A transition label is supported when both of its endpoints are forks this build
-implements, which is the same rule ``ForkTransition.ofString?`` applies in Lean.
-Nothing here is a hand-kept list of supported transitions: the archive's labels
-are parsed, and a label naming a fork outside the supported chain is excluded
-with that fork as its reason.
+``--lane`` selects which release the manifest describes:
+
+- ``mainnet`` (the default) inventories the current-mainnet release over the
+  forks whose rules this build implements: Prague, Osaka, BPO1, BPO2;
+- ``amsterdam`` inventories the Glamsterdam devnet-8 prerelease over those plus
+  the *declared* fork ``Amsterdam``.
+
+A label is *in a lane* when every fork it names is one that lane covers, which
+for a transition is the same rule ``ForkTransition.ofString?`` applies in Lean.
+Nothing here is a hand-kept list: the archive's labels are parsed, and a label
+naming a fork outside the lane is excluded with that fork as its reason.
+
+**Being in a lane is not being runnable.** The Amsterdam lane deliberately
+covers a fork ``Fork.rules?`` answers ``none`` for, because the inventory's job
+is to say exactly what the corpus holds -- including what it holds that this
+build cannot yet execute.  Which suites may actually run is decided by
+``check-mainnet.sh``, which refuses this lane's suites outright.
 """
 from __future__ import annotations
 
@@ -20,6 +32,7 @@ import hashlib
 import json
 import sys
 from collections import Counter, defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 
 import env_doctor
@@ -29,6 +42,7 @@ ROOT = Path(__file__).resolve().parent
 DEFAULT_SOURCES = ROOT / "sources.json"
 DEFAULT_OUTPUT = ROOT / "mainnet" / "manifests.json"
 SUPPORTED_STATIC = ("Prague", "Osaka", "BPO1", "BPO2")
+AMSTERDAM_STATIC = SUPPORTED_STATIC + ("Amsterdam",)
 SMOKE_FILE_COUNT = 16
 GAS_PER_BLOB = 2 ** 17
 BLOB_SCHEDULE_FIELDS = ("target", "max", "baseFeeUpdateFraction")
@@ -36,6 +50,67 @@ BLOB_SCHEDULE_FIELDS = ("target", "max", "baseFeeUpdateFraction")
 
 class InventoryError(Exception):
     pass
+
+
+@dataclass(frozen=True)
+class LaneSpec:
+    """One release this generator can inventory.
+
+    `statics` is the set of static labels the lane covers, and therefore also
+    the endpoints a transition label may name.  `smoke_network` is the static
+    label the small reproducible sample is drawn from.  `sources_key` names the
+    manifest section holding the release identity that seeds that sample.
+    """
+
+    name: str
+    sources_key: str
+    statics: tuple[str, ...]
+    suite_statics: tuple[str, ...]
+    smoke_network: str
+    suite_prefix: str
+    report_label: str
+    output: Path
+
+    def suite(self, kind: str) -> str:
+        """The name of one of this lane's derived suites.
+
+        Static suites keep their label's own lowercase spelling; the three
+        derived suites are lane-prefixed so that the two lanes' suite
+        namespaces are disjoint and a mistyped `--suite` can never select the
+        other lane's corpus.
+        """
+        return f"{self.suite_prefix}{kind}"
+
+
+LANES = {
+    "mainnet": LaneSpec(
+        name="mainnet",
+        sources_key="current_mainnet",
+        statics=SUPPORTED_STATIC,
+        suite_statics=SUPPORTED_STATIC,
+        smoke_network="Prague",
+        suite_prefix="",
+        report_label="current-mainnet",
+        output=ROOT / "mainnet" / "manifests.json",
+    ),
+    # The devnet lane *covers* every fork a devnet label can name -- otherwise
+    # `BPO2ToAmsterdamAtTime15k` would be excluded for naming BPO2 -- but it
+    # raises a suite only over Amsterdam itself. The Prague-BPO2 fixtures this
+    # prerelease also carries are the mainnet lane's subject at the mainnet
+    # lane's own pin, and running them here would test the same rules against a
+    # second, weaker corpus while reporting it as Amsterdam coverage.
+    "amsterdam": LaneSpec(
+        name="amsterdam",
+        sources_key="glamsterdam_devnet",
+        statics=AMSTERDAM_STATIC,
+        suite_statics=("Amsterdam",),
+        smoke_network="Amsterdam",
+        suite_prefix="amsterdam-",
+        report_label="glamsterdam-devnet",
+        output=ROOT / "amsterdam" / "manifests.json",
+    ),
+}
+DEFAULT_LANE = LANES["mainnet"]
 
 
 def parse_transition(label: str) -> tuple[str, str, int] | None:
@@ -60,26 +135,26 @@ def parse_transition(label: str) -> tuple[str, str, int] | None:
     return endpoints[0], endpoints[1], int(digits) * scale
 
 
-def label_forks(label: str) -> tuple[str, ...] | None:
-    """The forks a label can select, or ``None`` if this build cannot run it."""
-    if label in SUPPORTED_STATIC:
+def label_forks(label: str, statics: tuple[str, ...] = SUPPORTED_STATIC) -> tuple[str, ...] | None:
+    """The forks a label can select, or ``None`` if it is outside this lane."""
+    if label in statics:
         return (label,)
     transition = parse_transition(label)
     if transition is None:
         return None
     before, after, _ = transition
-    if before not in SUPPORTED_STATIC or after not in SUPPORTED_STATIC:
+    if before not in statics or after not in statics:
         return None
     return (before, after)
 
 
-def exclusion_reason(label: str) -> str:
-    """Why a label is not run, named precisely enough to be reviewable."""
+def exclusion_reason(label: str, statics: tuple[str, ...] = SUPPORTED_STATIC) -> str:
+    """Why a label is not in this lane, named precisely enough to be reviewable."""
     transition = parse_transition(label)
     if transition is None:
         return f"unsupported historical fork: {label} is not in the supported chain"
     before, after, _ = transition
-    outside = [f for f in (before, after) if f not in SUPPORTED_STATIC]
+    outside = [f for f in (before, after) if f not in statics]
     verb = "is" if len(outside) == 1 else "are"
     return f"unsupported transition: {', '.join(outside)} {verb} not in the supported chain"
 
@@ -128,7 +203,7 @@ def declared_blob_schedule(path: Path, name: str, case: dict, forks: tuple[str, 
     return schedules
 
 
-def read_cases(path: Path) -> tuple[str, list[str], dict]:
+def read_cases(path: Path, statics: tuple[str, ...] = SUPPORTED_STATIC) -> tuple[str, list[str], dict]:
     try:
         value = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError) as error:
@@ -149,7 +224,7 @@ def read_cases(path: Path) -> tuple[str, list[str], dict]:
             network = label
         elif network != label:
             raise InventoryError(f"mixed network labels in one fixture file: {path}")
-        forks = label_forks(label)
+        forks = label_forks(label, statics)
         if forks is not None:
             for fork, values in declared_blob_schedule(path, name, case, forks).items():
                 if schedules.setdefault(fork, values) != values:
@@ -161,11 +236,13 @@ def read_cases(path: Path) -> tuple[str, list[str], dict]:
     return network, sorted(names), schedules
 
 
-def inventory(fixtures_root: Path, sources: dict) -> dict:
+def inventory(fixtures_root: Path, sources: dict, lane: LaneSpec = DEFAULT_LANE) -> dict:
+    statics = lane.statics
+    release = sources[lane.sources_key]
     blockchain = fixtures_root / "blockchain_tests"
     if not blockchain.is_dir():
         raise InventoryError(f"missing blockchain_tests root: {blockchain}")
-    expected_top = set(sources["current_mainnet"]["expected_top_level_dirs"])
+    expected_top = set(release["expected_top_level_dirs"])
     actual_top = {
         path.name for path in fixtures_root.iterdir() if path.is_dir() and path.name != ".meta"
     }
@@ -181,7 +258,7 @@ def inventory(fixtures_root: Path, sources: dict) -> dict:
     blob_schedules: dict[str, dict[str, int]] = {}
     for path in sorted(blockchain.rglob("*.json")):
         relative = path.relative_to(blockchain).as_posix()
-        label, names, schedules = read_cases(path)
+        label, names, schedules = read_cases(path, statics)
         grouped[label].append(
             {
                 "path": relative,
@@ -208,15 +285,15 @@ def inventory(fixtures_root: Path, sources: dict) -> dict:
             "file_count": len(grouped.get(label, [])),
             "case_count": label_cases[label],
         }
-        for label in SUPPORTED_STATIC
+        for label in lane.suite_statics
     }
-    prague_files = suites["prague"]["files"]
+    smoke_source = suites[lane.smoke_network.lower()]["files"]
     smoke_files = sorted(
-        prague_files,
-        key=lambda entry: smoke_rank(sources["current_mainnet"]["release_commit"], entry),
+        smoke_source,
+        key=lambda entry: smoke_rank(release["release_commit"], entry),
     )[:SMOKE_FILE_COUNT]
-    suites["smoke"] = {
-        "network": "Prague",
+    suites[lane.suite("smoke")] = {
+        "network": lane.smoke_network,
         "selection_rule": f"lowest {SMOKE_FILE_COUNT} SHA-256 ranks of release_commit:path",
         "files": smoke_files,
         "file_count": len(smoke_files),
@@ -226,14 +303,23 @@ def inventory(fixtures_root: Path, sources: dict) -> dict:
     transition_labels = sorted(
         label for label in grouped if parse_transition(label) is not None
     )
+    # A transition belongs to this lane's suite when it is in the lane *and*
+    # at least one endpoint is a fork this lane raises a suite over. Without
+    # the second condition the devnet lane's transitions suite would carry the
+    # three Prague-BPO2 transitions the mainnet lane already owns, at a second
+    # pin, and report them as Amsterdam coverage. For the mainnet lane the two
+    # conditions coincide, because it raises a suite over every fork it covers.
     supported_transitions = [
-        label for label in transition_labels if label_forks(label) is not None
+        label
+        for label in transition_labels
+        if (forks := label_forks(label, statics)) is not None
+        and any(fork in lane.suite_statics for fork in forks)
     ]
     transition_files = sorted(
         (entry for label in supported_transitions for entry in grouped[label]),
         key=lambda entry: entry["path"],
     )
-    suites["transitions"] = {
+    suites[lane.suite("transitions")] = {
         "networks": supported_transitions,
         "selection_rule": "every fixture whose transition label names two supported forks",
         "files": transition_files,
@@ -245,10 +331,10 @@ def inventory(fixtures_root: Path, sources: dict) -> dict:
     # that selects it, and duplicating it here would make the two copies
     # something that could disagree.
     components = [
-        label.lower() for label in SUPPORTED_STATIC if grouped.get(label)
-    ] + ["transitions"]
-    suites["full"] = {
-        "networks": [label for label in SUPPORTED_STATIC if grouped.get(label)]
+        label.lower() for label in lane.suite_statics if grouped.get(label)
+    ] + [lane.suite("transitions")]
+    suites[lane.suite("full")] = {
+        "networks": [label for label in lane.suite_statics if grouped.get(label)]
         + supported_transitions,
         "selection_rule": "union of every supported static and transition suite",
         "component_suites": components,
@@ -258,21 +344,52 @@ def inventory(fixtures_root: Path, sources: dict) -> dict:
 
     excluded = {
         label: {
-            "reason": exclusion_reason(label),
+            "reason": exclusion_reason(label, statics),
             "file_count": len(entries),
             "case_count": label_cases[label],
             "files": entries,
         }
         for label, entries in sorted(grouped.items())
-        if label_forks(label) is None
+        if label_forks(label, statics) is None
     }
-    return {
+
+    # A label may be inside the lane and still raise no suite of its own -- the
+    # devnet corpus carries the whole Prague-BPO2 history alongside Amsterdam,
+    # and that history is the mainnet lane's subject at the mainnet lane's pin.
+    # Such a label is neither run here nor excluded, so it is stated outright
+    # rather than left to be inferred from the difference of two other lists.
+    suite_networks = {
+        network
+        for suite in suites.values()
+        for network in ([suite["network"]] if "network" in suite else suite.get("networks", []))
+    }
+    covered_without_suite = {
+        label: {
+            "reason": "in this lane's fork coverage, but this lane raises no "
+            "suite over it: it is another lane's subject at that lane's pin",
+            "file_count": len(entries),
+            "case_count": label_cases[label],
+        }
+        for label, entries in sorted(grouped.items())
+        if label_forks(label, statics) is not None and label not in suite_networks
+    }
+    label_inventory = {
+        label: {
+            "file_count": len(entries),
+            "case_count": label_cases[label],
+            "in_lane": label_forks(label, statics) is not None,
+            "in_suite": label in suite_networks,
+        }
+        for label, entries in sorted(grouped.items())
+    }
+
+    result = {
         "schema_version": 2,
         "source": {
-            "release_tag": sources["current_mainnet"]["release_tag"],
-            "release_commit": sources["current_mainnet"]["release_commit"],
-            "archive_sha256": sources["current_mainnet"]["archive_sha256"],
-            "metadata_json_expected": sources["current_mainnet"]["metadata_json_expected"],
+            "release_tag": release["release_tag"],
+            "release_commit": release["release_commit"],
+            "archive_sha256": release["archive_sha256"],
+            "metadata_json_expected": release["metadata_json_expected"],
         },
         "fixture_root": "fixtures",
         "blockchain_root": "blockchain_tests",
@@ -292,7 +409,7 @@ def inventory(fixtures_root: Path, sources: dict) -> dict:
         },
         "transition_inventory": {
             label: {
-                "supported": label_forks(label) is not None,
+                "supported": label_forks(label, statics) is not None,
                 "activation": parse_transition(label)[2],
                 "file_count": len(grouped[label]),
                 "case_count": label_cases[label],
@@ -305,6 +422,20 @@ def inventory(fixtures_root: Path, sources: dict) -> dict:
             expected_top - {"blockchain_tests"}
         ),
     }
+    if lane.name != DEFAULT_LANE.name:
+        # Lane-local sections. The current-mainnet manifest is a tracked
+        # artifact with a fixed shape and a gate that compares it exactly, so a
+        # second lane adds keys to its own manifest and never to that one.
+        result["lane"] = lane.name
+        result["covered_without_suite"] = covered_without_suite
+        result["label_inventory"] = label_inventory
+        result["runnable"] = False
+        result["refusal_reason"] = (
+            "this lane's fixtures target Amsterdam, whose execution rules "
+            "Fork.rules? answers none for; every suite here is refused until "
+            "the goal that owns those semantics activates it"
+        )
+    return result
 
 
 def load_sources(path: Path) -> dict:
@@ -320,30 +451,50 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--fixtures-root", type=Path, required=True)
     parser.add_argument("--sources", type=Path, default=DEFAULT_SOURCES)
-    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument(
+        "--lane",
+        choices=sorted(LANES),
+        default=DEFAULT_LANE.name,
+        help="which release to inventory (default: %(default)s). The lane fixes "
+        "the sources.json section, the fork coverage, the suite names, and the "
+        "default output path.",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="manifest path (default: the lane's own, scripts/<lane>/manifests.json)",
+    )
     parser.add_argument("--check", action="store_true", help="fail unless output is exact")
     parser.add_argument(
         "--emit-suite",
         help="after optional --check, print manifest file paths and network labels as TSV",
     )
     args = parser.parse_args(argv)
+    lane = LANES[args.lane]
+    output = args.output if args.output is not None else lane.output
     try:
         sources = load_sources(args.sources)
-        actual = inventory(args.fixtures_root, sources)
+        actual = inventory(args.fixtures_root, sources, lane)
     except (env_doctor.ManifestError, InventoryError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
     if args.check:
         try:
-            expected = json.loads(args.output.read_text())
+            expected = json.loads(output.read_text())
         except (OSError, json.JSONDecodeError) as error:
-            print(f"error: cannot read generated manifest {args.output}: {error}", file=sys.stderr)
+            print(f"error: cannot read generated manifest {output}: {error}", file=sys.stderr)
             return 2
         if expected != actual:
-            print("RED — current-mainnet manifest is stale or fixture input differs", file=sys.stderr)
+            print(
+                f"RED — {lane.report_label} manifest is stale or fixture input differs",
+                file=sys.stderr,
+            )
             return 1
         if args.emit_suite is None:
-            print("OK — current-mainnet manifest exactly matches the pinned fixture tree")
+            print(
+                f"OK — {lane.report_label} manifest exactly matches the pinned fixture tree"
+            )
             return 0
     if args.emit_suite is not None:
         suite = actual["suites"].get(args.emit_suite)
@@ -370,8 +521,8 @@ def main(argv: list[str]) -> int:
         for entry in files:
             print(f"{entry['path']}\t{entry['network']}")
         return 0
-    write_json(args.output, actual)
-    print(f"Wrote {args.output}")
+    write_json(output, actual)
+    print(f"Wrote {output}")
     return 0
 
 

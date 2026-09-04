@@ -1,12 +1,24 @@
 #!/usr/bin/env python3
-"""Safely bootstrap Jaune's current-mainnet fixture release.
+"""Safely bootstrap one of Jaune's external fixture-release lanes.
 
-The command consumes the current_mainnet fields of scripts/sources.json, obtains the
+The command consumes one lane's fields of scripts/sources.json, obtains the
 pinned execution-spec-tests archive (reusing an already-verified copy or
 downloading it once), verifies its SHA-256 *before* extraction, extracts it
 through a safe member-by-member validator, checks the expected layout and
 release provenance, and places the fixture tree atomically at the install
 root.
+
+Two lanes exist and `--lane` selects between them:
+
+- `mainnet` (the default, and every historical invocation of this script) reads
+  `current_mainnet` and installs the current-mainnet release;
+- `amsterdam` reads `glamsterdam_devnet` and installs the Glamsterdam devnet-8
+  prerelease.
+
+They differ only in manifest key, environment variable, and install root. The
+extraction, checksum, safety, and provenance logic below is shared verbatim,
+because a second copy of an archive extractor is a second place for a traversal
+or link check to be missing.
 
 Safety invariants (mirroring scripts/bootstrap_legacy.py):
 
@@ -47,6 +59,30 @@ DEFAULT_MANIFEST = Path(__file__).resolve().parent / "sources.json"
 _STREAM_CHUNK = 1024 * 1024
 
 
+@dataclass(frozen=True)
+class Lane:
+    """One fixture release this script can install.
+
+    `key` names the manifest section, `env_var` the root override, and `label`
+    is what diagnostics call the lane. Nothing else about a lane is special:
+    the fields under `key` have the same shape and the same meaning in both.
+    """
+
+    name: str
+    key: str
+    env_var: str
+    label: str
+
+
+LANES = {
+    "mainnet": Lane("mainnet", "current_mainnet", "EEST_MAINNET_ROOT", "current-mainnet"),
+    "amsterdam": Lane(
+        "amsterdam", "glamsterdam_devnet", "EEST_AMSTERDAM_ROOT", "glamsterdam-devnet"
+    ),
+}
+DEFAULT_LANE = LANES["mainnet"]
+
+
 class CurrentMainnetBootstrapError(Exception):
     """A safe refusal or failed bootstrap action."""
 
@@ -84,16 +120,16 @@ def _safe_filename(value: object, field: str) -> str:
     return value
 
 
-def validate_current_mainnet_manifest(manifest: dict) -> None:
-    """Validate the current-mainnet lock fields that influence extraction."""
+def validate_current_mainnet_manifest(manifest: dict, lane: Lane = DEFAULT_LANE) -> None:
+    """Validate one lane's lock fields that influence extraction."""
     if manifest.get("schema_version") != 1:
         raise CurrentMainnetBootstrapError(
             f"unsupported manifest schema_version {manifest.get('schema_version')!r}; "
             "expected 1"
         )
-    if not isinstance(manifest.get("current_mainnet"), dict):
-        raise CurrentMainnetBootstrapError("manifest is missing current_mainnet")
-    spec = manifest["current_mainnet"]
+    if not isinstance(manifest.get(lane.key), dict):
+        raise CurrentMainnetBootstrapError(f"manifest is missing {lane.key}")
+    spec = manifest[lane.key]
 
     sha = spec.get("archive_sha256")
     if (
@@ -102,39 +138,41 @@ def validate_current_mainnet_manifest(manifest: dict) -> None:
         or any(char not in "0123456789abcdefABCDEF" for char in sha)
     ):
         raise CurrentMainnetBootstrapError(
-            "manifest field current_mainnet.archive_sha256 must be an exact 64-character "
+            f"manifest field {lane.key}.archive_sha256 must be an exact 64-character "
             "hexadecimal digest"
         )
 
     url = spec.get("archive_url")
     if not isinstance(url, str) or not url.strip():
         raise CurrentMainnetBootstrapError(
-            "manifest field current_mainnet.archive_url must be a nonempty string"
+            f"manifest field {lane.key}.archive_url must be a nonempty string"
         )
 
-    _safe_filename(spec.get("archive_filename"), "current_mainnet.archive_filename")
-    _safe_relative_path(spec.get("fixtures_subpath"), "current_mainnet.fixtures_subpath")
+    _safe_filename(spec.get("archive_filename"), f"{lane.key}.archive_filename")
+    _safe_relative_path(spec.get("fixtures_subpath"), f"{lane.key}.fixtures_subpath")
 
-    if spec.get("default_env_var") != "EEST_MAINNET_ROOT":
+    if spec.get("default_env_var") != lane.env_var:
         raise CurrentMainnetBootstrapError(
-            "manifest field current_mainnet.default_env_var must preserve the "
-            "EEST_MAINNET_ROOT convention"
+            f"manifest field {lane.key}.default_env_var must preserve the "
+            f"{lane.env_var} convention"
         )
     _safe_relative_path(
-        spec.get("default_subpath_from_home"), "current_mainnet.default_subpath_from_home"
+        spec.get("default_subpath_from_home"), f"{lane.key}.default_subpath_from_home"
     )
 
     top = spec.get("expected_top_level_dirs")
     if not isinstance(top, list) or not top:
         raise CurrentMainnetBootstrapError(
-            "manifest field current_mainnet.expected_top_level_dirs must be a nonempty list"
+            f"manifest field {lane.key}.expected_top_level_dirs must be a nonempty list"
         )
     for entry in top:
-        _safe_relative_path(entry, "current_mainnet.expected_top_level_dirs[]")
+        _safe_relative_path(entry, f"{lane.key}.expected_top_level_dirs[]")
 
 
-def current_mainnet_root_from_args(explicit: Path | None, manifest: dict) -> Path:
-    spec = manifest["current_mainnet"]
+def current_mainnet_root_from_args(
+    explicit: Path | None, manifest: dict, lane: Lane = DEFAULT_LANE
+) -> Path:
+    spec = manifest[lane.key]
     if explicit is not None:
         selected = explicit.expanduser()
     elif os.environ.get(spec["default_env_var"]):
@@ -145,12 +183,12 @@ def current_mainnet_root_from_args(explicit: Path | None, manifest: dict) -> Pat
 
 
 def archive_cache_from_args(
-    explicit: Path | None, mainnet_root: Path, manifest: dict
+    explicit: Path | None, mainnet_root: Path, manifest: dict, lane: Lane = DEFAULT_LANE
 ) -> Path:
     if explicit is not None:
         selected = explicit.expanduser()
     else:
-        selected = mainnet_root / manifest["current_mainnet"]["archive_filename"]
+        selected = mainnet_root / manifest[lane.key]["archive_filename"]
     return Path(os.path.abspath(os.fspath(selected)))
 
 
@@ -164,9 +202,11 @@ def _verify_archive_hash(archive_path: Path, expected_sha: str) -> str | None:
     return None
 
 
-def _verify_fixtures_tree(manifest: dict, fixtures_root: Path) -> list[str]:
+def _verify_fixtures_tree(
+    manifest: dict, fixtures_root: Path, lane: Lane = DEFAULT_LANE
+) -> list[str]:
     """Fast structural + provenance verification of an extracted tree."""
-    spec = manifest["current_mainnet"]
+    spec = manifest[lane.key]
     if not fixtures_root.is_dir():
         return [f"extracted fixtures not found: {fixtures_root}"]
 
@@ -177,16 +217,16 @@ def _verify_fixtures_tree(manifest: dict, fixtures_root: Path) -> list[str]:
     if missing:
         problems.append(f"missing expected subdirectories: {', '.join(missing)}")
 
-    for check in env_doctor.check_current_mainnet_metadata(spec, fixtures_root):
+    for check in env_doctor.check_release_index_metadata(spec, fixtures_root, lane.label):
         if check.status != env_doctor.STATUS_OK:
             problems.append(f"{check.name}: {check.detail}")
     return problems
 
 
 def inspect_installation(
-    manifest: dict, mainnet_root: Path, archive_cache: Path
+    manifest: dict, mainnet_root: Path, archive_cache: Path, lane: Lane = DEFAULT_LANE
 ) -> InstallationState:
-    spec = manifest["current_mainnet"]
+    spec = manifest[lane.key]
     fixtures_root = mainnet_root / spec["fixtures_subpath"]
 
     archive_present = archive_cache.is_file()
@@ -209,7 +249,7 @@ def inspect_installation(
     archive_problem = _verify_archive_hash(archive_cache, spec["archive_sha256"])
     if archive_problem is not None:
         problems.append(archive_problem)
-    problems.extend(_verify_fixtures_tree(manifest, fixtures_root))
+    problems.extend(_verify_fixtures_tree(manifest, fixtures_root, lane))
 
     exists = archive_present or fixtures_present
     return InstallationState(exists, not problems, tuple(problems))
@@ -241,10 +281,12 @@ def _download_archive(url: str, part_path: Path, expected_sha: str) -> None:
         )
 
 
-def _obtain_archive(manifest: dict, url: str, archive_cache: Path) -> str:
+def _obtain_archive(
+    manifest: dict, url: str, archive_cache: Path, lane: Lane = DEFAULT_LANE
+) -> str:
     """Ensure a checksum-verified archive exists at archive_cache. Returns a
     one-line description of what happened."""
-    expected_sha = manifest["current_mainnet"]["archive_sha256"]
+    expected_sha = manifest[lane.key]["archive_sha256"]
 
     if archive_cache.is_file():
         problem = _verify_archive_hash(archive_cache, expected_sha)
@@ -285,10 +327,12 @@ def _obtain_archive(manifest: dict, url: str, archive_cache: Path) -> str:
     return f"downloaded and verified archive: {archive_cache}"
 
 
-def _extract_archive(manifest: dict, archive_path: Path, staging_dir: Path) -> int:
+def _extract_archive(
+    manifest: dict, archive_path: Path, staging_dir: Path, lane: Lane = DEFAULT_LANE
+) -> int:
     """Extract the archive's fixtures/ subtree into staging_dir (which becomes
     the fixtures tree), rejecting any unsafe member. Returns the file count."""
-    prefix = manifest["current_mainnet"]["fixtures_subpath"].rstrip("/") + "/"
+    prefix = manifest[lane.key]["fixtures_subpath"].rstrip("/") + "/"
     prefix_dir = prefix.rstrip("/")
     file_count = 0
 
@@ -356,8 +400,10 @@ def _remove_quietly(path: Path) -> None:
         )
 
 
-def install_fresh(manifest: dict, mainnet_root: Path, archive_cache: Path) -> None:
-    spec = manifest["current_mainnet"]
+def install_fresh(
+    manifest: dict, mainnet_root: Path, archive_cache: Path, lane: Lane = DEFAULT_LANE
+) -> None:
+    spec = manifest[lane.key]
     fixtures_root = mainnet_root / spec["fixtures_subpath"]
     if _path_exists(fixtures_root):
         raise CurrentMainnetBootstrapError(
@@ -371,7 +417,7 @@ def install_fresh(manifest: dict, mainnet_root: Path, archive_cache: Path) -> No
             f"cannot create install root {mainnet_root}: {error}"
         ) from error
 
-    print(_obtain_archive(manifest, spec["archive_url"], archive_cache))
+    print(_obtain_archive(manifest, spec["archive_url"], archive_cache, lane))
 
     try:
         staging = Path(
@@ -385,9 +431,9 @@ def install_fresh(manifest: dict, mainnet_root: Path, archive_cache: Path) -> No
     keep_staging = True
     try:
         print("Extracting verified archive into a temporary staging directory...")
-        count = _extract_archive(manifest, archive_cache, staging)
+        count = _extract_archive(manifest, archive_cache, staging, lane)
 
-        problems = _verify_fixtures_tree(manifest, staging)
+        problems = _verify_fixtures_tree(manifest, staging, lane)
         if problems:
             raise CurrentMainnetBootstrapError(
                 "extracted tree failed layout/provenance verification:\n  - "
@@ -413,11 +459,15 @@ def install_fresh(manifest: dict, mainnet_root: Path, archive_cache: Path) -> No
 
 
 def print_dry_run(
-    manifest: dict, mainnet_root: Path, archive_cache: Path, state: InstallationState
+    manifest: dict,
+    mainnet_root: Path,
+    archive_cache: Path,
+    state: InstallationState,
+    lane: Lane = DEFAULT_LANE,
 ) -> None:
-    spec = manifest["current_mainnet"]
+    spec = manifest[lane.key]
     fixtures_root = mainnet_root / spec["fixtures_subpath"]
-    print(f"DRY RUN — planning current-mainnet install at: {mainnet_root}")
+    print(f"DRY RUN — planning {lane.label} install at: {mainnet_root}")
     if not _path_exists(mainnet_root):
         print(f"Would create install root: {mainnet_root}")
 
@@ -450,11 +500,21 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"path to the external-source manifest (default: {DEFAULT_MANIFEST})",
     )
     parser.add_argument(
+        "--lane",
+        choices=sorted(LANES),
+        default=DEFAULT_LANE.name,
+        help="which fixture release to install (default: %(default)s). Every lane "
+        "reads its own sources.json section and its own install root; no lane "
+        "reads or writes another's.",
+    )
+    parser.add_argument(
         "--mainnet-root",
+        "--root",
+        dest="mainnet_root",
         type=Path,
         default=None,
-        help="current-mainnet install root containing the archive and extracted fixtures/ "
-        "(default: $EEST_MAINNET_ROOT or ~/eest-mainnet-v20.0.1)",
+        help="lane install root containing the archive and extracted fixtures/ "
+        "(default: the lane's $<default_env_var>, else ~/<default_subpath_from_home>)",
     )
     parser.add_argument(
         "--archive-cache",
@@ -473,17 +533,20 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str]) -> int:
     args = build_parser().parse_args(argv)
+    lane = LANES[args.lane]
     try:
         manifest = env_doctor.load_manifest(args.manifest)
-        validate_current_mainnet_manifest(manifest)
+        validate_current_mainnet_manifest(manifest, lane)
     except (env_doctor.ManifestError, CurrentMainnetBootstrapError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
 
-    mainnet_root = current_mainnet_root_from_args(args.mainnet_root, manifest)
-    archive_cache = archive_cache_from_args(args.archive_cache, mainnet_root, manifest)
+    mainnet_root = current_mainnet_root_from_args(args.mainnet_root, manifest, lane)
+    archive_cache = archive_cache_from_args(
+        args.archive_cache, mainnet_root, manifest, lane
+    )
 
-    state = inspect_installation(manifest, mainnet_root, archive_cache)
+    state = inspect_installation(manifest, mainnet_root, archive_cache, lane)
 
     if state.correct:
         print(
@@ -494,7 +557,7 @@ def main(argv: list[str]) -> int:
         print("No network or filesystem changes were made.")
         return 0
 
-    fixtures_root = mainnet_root / manifest["current_mainnet"]["fixtures_subpath"]
+    fixtures_root = mainnet_root / manifest[lane.key]["fixtures_subpath"]
     if fixtures_root.exists():
         print(
             "error: refusing existing fixture tree because it is not a complete, "
@@ -512,11 +575,11 @@ def main(argv: list[str]) -> int:
         return 1
 
     if args.dry_run:
-        print_dry_run(manifest, mainnet_root, archive_cache, state)
+        print_dry_run(manifest, mainnet_root, archive_cache, state, lane)
         return 0
 
     try:
-        install_fresh(manifest, mainnet_root, archive_cache)
+        install_fresh(manifest, mainnet_root, archive_cache, lane)
     except CurrentMainnetBootstrapError as error:
         print(f"error: bootstrap failed safely: {error}", file=sys.stderr)
         print(
@@ -526,7 +589,7 @@ def main(argv: list[str]) -> int:
         )
         return 1
 
-    print(f"OK — installed verified current-mainnet fixtures at {mainnet_root}")
+    print(f"OK — installed verified {lane.label} fixtures at {mainnet_root}")
     return 0
 
 

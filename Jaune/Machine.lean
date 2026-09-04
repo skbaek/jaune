@@ -110,7 +110,33 @@ structure Header : Type where
   excessBlobGas : Nat
   parentBeaconBlockRoot : B256
   requestsHash : Option B256
+  /-- EIP-7928: the commitment to the block-level access list.
 
+  Optional in the same sense `requestsHash` is: the field exists on the wire
+  only at forks that define it, and `ForkRules.header.blockAccessListHash` is
+  what says which those are. `none` is "this fork has no such field", never
+  "the field is zero". -/
+  blockAccessListHash : Option B256
+  /-- EIP-7843: the consensus slot number this block was produced for, which
+  `SLOTNUM` pushes. Optional on the same terms. -/
+  slotNumber : Option UInt64
+
+/-- The canonical RLP encoding of a header.
+
+The three optional fields are emitted in nested order -- `requestsHash`, then
+`blockAccessListHash`, then `slotNumber` -- which is the order upstream's
+header dataclass declares them and the order the fixtures carry them. Nesting
+rather than concatenating three independent options is deliberate: it makes
+the encodable shapes exactly **20, 21 and 23** fields, so the 22-field
+encoding that would result from an incoherent record cannot be produced at
+all. `BLT.toExHeader` accepts exactly those three shapes and rejects 22, and
+`validateHeader` is what rejects a record whose field presence disagrees with
+the rules it is being validated under.
+
+A header with the two new fields absent encodes exactly as it did before they
+existed -- the inner `match` on an absent `blockAccessListHash` reduces to the
+empty tail the old code wrote literally -- which is why `Header.hash` is
+unchanged on every 21-field header by `rfl`. -/
 def Header.toBLT (header : Header) : BLT :=
   BLT.list <| [
     BLT.bytes header.parentHash.toBytes,
@@ -136,7 +162,18 @@ def Header.toBLT (header : Header) : BLT :=
   ] ++
     match header.requestsHash with
     | none => []
-    | some rh => [BLT.bytes rh.toBytes]
+    | some rh =>
+      BLT.bytes rh.toBytes ::
+        match header.blockAccessListHash with
+        | none => []
+        | some balHash =>
+          BLT.bytes balHash.toBytes ::
+            match header.slotNumber with
+            | none => []
+            -- A canonical scalar, like `number` and `gasLimit` above and
+            -- unlike `nonce`: upstream's `slot_number` is a `U64` quantity, so
+            -- it is encoded minimally and `toRlpB64` decodes it that way.
+            | some slot => [BLT.bytes slot.toNat.toBytes]
 
 /-- A header's identity: the keccak of its canonical RLP encoding.
 
@@ -592,6 +629,80 @@ theorem gasPerBlob_pos : 0 < gasPerBlob := by decide
 def perEmptyAccountCost := 25000
 def perAuthBaseCost := 12500
 def txBaseCost : Nat := 21000
+
+/-! ### The rule-data bridge
+
+`ForkRules.gas`, `ForkRules.header` and `ForkRules.requests` (`Jaune/Fork.lean`)
+carry the numbers a supported fork moves inside a formula both forks share. The
+globals above stay defined and keep their meaning -- they are *Prague's values*,
+and the interpreter now reads them through `rules.gas` so that a later fork can
+supply different ones.
+
+These lemmas are the proof that the two spellings are the same number, and they
+are `rfl` because the record literal in `Jaune/Fork.lean` is definitionally the
+constant here. Two things rest on that:
+
+* **Behaviour preservation.** Every Prague-stated fact about the old globals
+  survives, because nothing was renamed and nothing moved -- only the path by
+  which the interpreter reaches the value.
+* **Downstream proofs keep reducing.** They are `@[simp]`, so a client stating a
+  goal in terms of `pragueRules.gas.callValue` (or reaching one through the
+  interpreter) rewrites to `gasCallValue` and meets the arithmetic it already
+  knows. Blanc is stated over Prague throughout, so this is what keeps its
+  1,929 `gasLeft` mentions reducing across the pin bump.
+
+They are also the only place the two copies of each literal can drift apart:
+`Jaune/Fork.lean` is upstream of this module and cannot name these constants,
+so the record spells them out, and `rfl` here is what makes that duplication
+safe rather than a second source of truth. -/
+
+@[simp] theorem pragueRules_gas_coldAccountAccess :
+    pragueRules.gas.coldAccountAccess = gasColdAccountAccess := rfl
+@[simp] theorem pragueRules_gas_callValue :
+    pragueRules.gas.callValue = gasCallValue := rfl
+@[simp] theorem pragueRules_gas_createAccess :
+    pragueRules.gas.createAccess = gasCreate := rfl
+@[simp] theorem pragueRules_gas_storageClearRefund :
+    pragueRules.gas.storageClearRefund = rSClear := rfl
+@[simp] theorem pragueRules_gas_txBase :
+    pragueRules.gas.txBase = txBaseCost := rfl
+@[simp] theorem pragueRules_gas_txAccessListAddress :
+    pragueRules.gas.txAccessListAddress = txAccessListAddressCost := rfl
+@[simp] theorem pragueRules_gas_txAccessListStorageKey :
+    pragueRules.gas.txAccessListStorageKey = txAccessListStorageKeyCost := rfl
+@[simp] theorem pragueRules_gas_floorTokenCost :
+    pragueRules.gas.floorTokenCost = floorCalldataCost := rfl
+@[simp] theorem pragueRules_gas_perAuthIntrinsic :
+    pragueRules.gas.perAuthIntrinsic = perEmptyAccountCost := rfl
+/-- The tenth field is additive with identity `0`, so the Prague formula is
+literally unchanged rather than merely equal to what it was. -/
+@[simp] theorem pragueRules_gas_codeReadSurcharge :
+    pragueRules.gas.codeReadSurcharge = 0 := rfl
+
+/-- `createAccess` is one number at Prague for both of its two readers: the
+`CREATE`/`CREATE2` opcode base and the creation transaction's recipient cost.
+Stated so that the single field is justified rather than assumed -- EIP-8037
+moves both together, and if upstream ever separated them this would fail. -/
+@[simp] theorem txCreateCost_eq_gasCreate : txCreateCost = gasCreate := rfl
+
+/-- The request contracts the rule data names are the ones this module has
+always called, in the same order. -/
+@[simp] theorem pragueRules_requests :
+    pragueRules.requests =
+      [(1, withdrawalRequestPredeployAddress),
+       (2, consolidationRequestPredeployAddress)] := rfl
+
+/-- Prague carries neither Amsterdam header field. -/
+@[simp] theorem pragueRules_header :
+    pragueRules.header = { blockAccessListHash := false, slotNumber := false } :=
+  rfl
+
+-- The whole supported chain shares Prague's schedule, so the bridge above
+-- serves every fork this build runs, not only Prague. Stated by `rfl` on the
+-- records rather than field by field.
+theorem osakaRules_gas : osakaRules.gas = pragueRules.gas := rfl
+theorem bpo1Rules_gas : bpo1Rules.gas = pragueRules.gas := rfl
+theorem bpo2Rules_gas : bpo2Rules.gas = pragueRules.gas := rfl
 def g1MsmLengthPerPair : Nat := 160
 def g2MsmLengthPerPair : Nat := 288
 def g1MaxDiscount : Nat := 519
@@ -914,6 +1025,14 @@ def depositEventLayoutTag : String := "DepositEventLayoutError"
 def systemContractCallFailedTag : String := "SystemContractCallFailedError"
 def blockRlpSizeExceededTag : String := "BlockRlpSizeExceededError"
 
+/-- A fork-dependent header field is present when the rules do not define it,
+or absent when they do.
+
+One tag for both directions and both fields (EIP-7928's block-access-list hash
+and EIP-7843's slot number), because it is one rule: a header carries exactly
+the fields its fork defines. Which field and which direction is the detail. -/
+def headerFieldPresenceTag : String := "HeaderFieldPresenceError"
+
 /-- Every block-rejection tag. The single source of truth for the distinctness
 checks and the whole-list constructor/tag pin. -/
 def blockExceptionTags : List String :=
@@ -924,13 +1043,13 @@ def blockExceptionTags : List String :=
     stateRootTag, transactionsRootTag, receiptsRootTag, logBloomTag,
     withdrawalsRootTag, headerNonceTag, excessBlobGasTag, blobGasUsedTag,
     requestsHashTag, depositEventLayoutTag, systemContractCallFailedTag,
-    blockRlpSizeExceededTag ]
+    blockRlpSizeExceededTag, headerFieldPresenceTag ]
 
 -- The tags are distinct, and none is a prefix of another, so no rendered
 -- reason can be read as another by any " : "-delimited reader -- and none is
 -- the broad category the vocabulary replaced.
-#guard blockExceptionTags.length = 24
-#guard blockExceptionTags.eraseDups.length = 24
+#guard blockExceptionTags.length = 25
+#guard blockExceptionTags.eraseDups.length = 25
 #guard blockExceptionTags.all fun t =>
   (blockExceptionTags.filter fun u => t.isPrefixOf u).length = 1
 #guard blockExceptionTags.all fun t => t ≠ "InvalidBlock"
@@ -2741,17 +2860,25 @@ def Evm.contract (evm : Evm) : Adr := evm.sta.currentTarget
 def assertDynamic (sevm : Sevm) (devm : Devm) : Except (EvmError × Devm) Unit :=
   Except.assert (!sevm.isStatic) ⟨.halt (.writeInStaticContext .none), devm⟩
 
-def sstoreNewRefundCounter (new_value : B256)
+/-- The refund a single `SSTORE` adds to or removes from the counter.
+
+The clear refund arrives through `gas.storageClearRefund` rather than through
+the `rSClear` global, because Amsterdam reprices it inside this same formula.
+Every other number here -- `gasStorageSet`, `gasStorageUpdate`, `gasColdSload`,
+`gasWarmAccess` -- is a legacy-only value the supported chain shares, and stays
+a global for that reason. `pragueRules_gas_storageClearRefund` below is the
+`rfl` proof that no Prague caller can tell the difference. -/
+def sstoreNewRefundCounter (gas : GasSchedule) (new_value : B256)
     (original_value : B256) (current_value : B256) (rc : Int) : Int :=
   if current_value ≠ new_value then
     let rc' :=
       if original_value ≠ 0 ∧ current_value ≠ 0 ∧ new_value = 0 then
-        rc + rSClear
+        rc + gas.storageClearRefund
       else
         rc
     let rc'' :=
       if original_value ≠ 0 ∧ current_value = 0 then
-        rc' - rSClear
+        rc' - gas.storageClearRefund
       else
         rc'
     if original_value = new_value then
@@ -3007,6 +3134,7 @@ def Rinst.runCore
         gasCost2 + gasWarmAccess
     let devm ← .ok <| devm.withRefundCounter <|
       sstoreNewRefundCounter
+        sevm.benvStat.rules.gas
         new_value
         original_value
         current_value

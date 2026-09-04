@@ -324,6 +324,13 @@ def ofBlockValidationError : BlockValidationError → Option FixtureException
   | .depositEventLayout _ => some blockInvalidDepositEventLayout
   | .systemContractCallFailed _ => some blockSystemContractCallFailed
   | .blockRlpSizeExceeded _ => some blockRlpBlockLimitExceeded
+  -- No official identity: the current-mainnet corpus has no fixture that can
+  -- reach this rule, because every fork it covers defines the same header
+  -- fields. The devnet corpus does -- `invalid_post_fork_block_without_slot_number`
+  -- and `invalid_pre_fork_block_with_slot_number` -- and assigning the
+  -- identity those fixtures expect belongs with the goal that activates that
+  -- lane. Failing closed until then is the same choice `.headerNonce` makes.
+  | .headerFieldPresence _ => none
 
 /-- The official identity of a sender-recovery rejection. Only a malformed
 signature has one; the other cryptographic reasons fail closed. -/
@@ -500,15 +507,24 @@ def fixtureInventory : List String :=
 ----------------- CONSTRUCTOR-CLASSIFICATION CHECKS ------------------
 
 -- Totality of the deliberate assignment: every decode and transaction reason
--- has an identity; exactly one block reason (the header nonce) is knowingly
--- unmapped; and of the cryptographic reasons only the malformed signature
--- classifies.
+-- has an identity; exactly two block reasons -- the header nonce, and the
+-- fork-dependent header-field presence rule -- are knowingly unmapped; and of
+-- the cryptographic reasons only the malformed signature classifies.
+--
+-- The presence rule is unmapped because no fixture in the installed corpora
+-- can reach it: every fork the current-mainnet lane covers defines the same
+-- header fields. The devnet lane's `invalid_pre_fork_block_with_slot_number`
+-- and `invalid_post_fork_block_without_slot_number` do reach it, and giving it
+-- the identity those fixtures expect belongs with the goal that activates that
+-- lane. Until then it fails closed, which is what an unmapped reason means.
 #guard DecodeError.all.all (fun e => (ofDecodeError e).isSome)
 #guard TxValidationError.all.all (fun e => (ofTxValidationError e).isSome)
 #guard (BlockValidationError.all.filter
-  (fun e => (ofBlockValidationError e).isNone)).length = 1
+  (fun e => (ofBlockValidationError e).isNone)).length = 2
 #guard (ofBlockValidationError (.headerNonce .none)).isNone
 #guard (ofBlockValidationError (.headerNonce (.text "detail"))).isNone
+#guard (ofBlockValidationError (.headerFieldPresence .none)).isNone
+#guard (ofBlockValidationError (.headerFieldPresence (.text "detail"))).isNone
 #guard (ofCryptoError (.invalidSignature .none)) == some txSenderNotEoa
 #guard (ofCryptoError (.pointCompression .none)).isNone
 #guard (ofCryptoError (.value .none)).isNone

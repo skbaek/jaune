@@ -73,17 +73,46 @@
     },
     "_comment": "The canonical current-mainnet lane. The GitHub release API resolves this immutable target commit and uploaded asset digest; the archive's .meta/index.json provides the independently checked fixture-tree root hash, generation time, and test count."
   },
+  "glamsterdam_devnet": {
+    "release_tag": "tests-glamsterdam-devnet@v8.1.3",
+    "release_commit": "8ca2f4ceefd83100a4d21d0c33747114278a0bc2",
+    "release_url": "https://github.com/ethereum/execution-specs/releases/tag/tests-glamsterdam-devnet%40v8.1.3",
+    "archive_url": "https://github.com/ethereum/execution-specs/releases/download/tests-glamsterdam-devnet%40v8.1.3/fixtures_glamsterdam-devnet.tar.gz",
+    "archive_filename": "fixtures_glamsterdam-devnet.tar.gz",
+    "archive_sha256": "f87f59b6e2eede5df3462c1784cd6b168fa6d687e36a77b604aeeaf361aaed64",
+    "archive_size_bytes": 944518619,
+    "default_env_var": "EEST_AMSTERDAM_ROOT",
+    "default_subpath_from_home": "eest-glamsterdam-devnet-v8.1.3",
+    "fixtures_subpath": "fixtures",
+    "expected_top_level_dirs": [
+      "blockchain_tests",
+      "blockchain_tests_engine",
+      "blockchain_tests_engine_x",
+      "blockchain_tests_sync",
+      "state_tests",
+      "transaction_tests"
+    ],
+    "metadata_json_file_subpath": ".meta/index.json",
+    "metadata_json_expected": {
+      "root_hash": "0x3782178206bded832c8d1622379d6b9dbdaef428d6c0ba5d5a44f78ecc553648",
+      "created_at": "2026-08-31T16:32:04.754180Z",
+      "test_count": 338970
+    },
+    "_comment": "The Glamsterdam devnet-8 lane. A PRERELEASE fixture corpus targeting a fork whose rules this build does not implement: every suite over it is refused until the goal that owns the semantics activates it, and `Fork.amsterdam.rules?` is `none`. The release commit is a merge of `forks/amsterdam` into `devnets/glamsterdam/8`, so the fixtures and the executable reference agree by construction, and `conformance_target` below is pinned to the same commit. Layout, top-level directories, and the `.meta/index.json` identity fields above were recorded from the checksum-verified archive on 2026-09-03, not assumed from the mainnet lane.",
+    "_comment_lane": "This lane is separate from current_mainnet in every respect that could couple them: its own install root, env var, archive, manifest (scripts/amsterdam/manifests.json), suites, and exclusions. The mainnet lane's pin, manifest, suites, and baselines are not read or written by anything on this side."
+  },
   "conformance_target": {
     "repo_url": "https://github.com/ethereum/execution-specs.git",
-    "branch": "forks/amsterdam",
-    "commit": "9d6e6f8352a0f76e7e8803722d1a2798fa4f0a96",
+    "branch": "devnets/glamsterdam/8",
+    "commit": "8ca2f4ceefd83100a4d21d0c33747114278a0bc2",
     "default_env_var": "JAUNE_T8N_TARGET",
     "default_subpath_from_home": "execution-specs-t8n-amsterdam",
     "venv_subpath": ".venv",
     "t8n_command": "ethereum-spec-evm",
     "fill_command": "fill",
     "fork_lane": ["Prague", "Osaka", "BPO1", "BPO2"],
-    "_comment": "The transition-tool conformance anchor for `jaune t8n`, chosen 2026-08-03 because this checkout's `fill` defaults to the in-process ExecutionSpecsTransitionTool, which calls this same checkout's EELS in process (client_clis/__init__.py sets the default tool; clis/execution_specs.py runs T8N.run). It is a GATE ANCHOR, not a fork-scope commitment: `jaune t8n` serves the Prague-BPO2 lane named above and never selects the Amsterdam/BPO3-5 paths this branch also carries. This checkout is SEPARATE from execution_specs above -- that one is the frozen oracle pin for check-fake-exp.sh and the vector generators, and is never repointed. This one has its own venv (`uv sync --no-default-groups --group test`), which scripts/gen-t8n-goldens.py and scripts/check-t8n.sh drive."
+    "_comment": "The transition-tool conformance anchor for `jaune t8n`, chosen 2026-08-03 because this checkout's `fill` defaults to the in-process ExecutionSpecsTransitionTool, which calls this same checkout's EELS in process (client_clis/__init__.py sets the default tool; clis/execution_specs.py runs T8N.run). It is a GATE ANCHOR, not a fork-scope commitment: `jaune t8n` serves the Prague-BPO2 lane named above and never selects the Amsterdam/BPO3-5 paths this branch also carries. This checkout is SEPARATE from execution_specs above -- that one is the frozen oracle pin for check-fake-exp.sh and the vector generators, and is never repointed. This one has its own venv (`uv sync --no-default-groups --group test`), which scripts/gen-t8n-goldens.py and scripts/check-t8n.sh drive.",
+    "_comment_repin": "Moved 2026-09-03 from 9d6e6f8 (forks/amsterdam, 2026-08-10) to 8ca2f4c, the commit the tests-glamsterdam-devnet@v8.1.3 release was built from, so that the anchor and glamsterdam_devnet above name ONE revision. The old pin predates the EIP-8038 constant revision and was therefore stale on exactly the numbers scripts/check-fork-constants.sh reads. The nine Prague-lane goldens were regenerated at the new pin and required to be byte-identical; the wrapper commit was carried across as ed46609 (branch jaune-wrapper-8ca2f4c), whose diff against 8ca2f4c is exactly the four framework-side wrapper paths gen-t8n-goldens.py allows. The pre-move wrapper commit remains reachable as branch jaune-wrapper at 827a1ca."
   },
   "python_oracle": {
     "intended_version": "3.11.9",

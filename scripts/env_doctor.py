@@ -593,8 +593,15 @@ def _check_eest_bls_tier(spec: dict, fixtures_root: Path) -> list[Check]:
     ]
 
 
-def check_current_mainnet_metadata(spec: dict, fixtures_root: Path) -> list[Check]:
-    """Verify the release index fields emitted by the current fixture publisher."""
+def check_release_index_metadata(
+    spec: dict, fixtures_root: Path, label: str = "current-mainnet"
+) -> list[Check]:
+    """Verify the release index fields emitted by the current fixture publisher.
+
+    `label` names the lane in the check's own name, so a doctor run covering
+    two lanes reports two distinguishable rows rather than the same row twice.
+    """
+    name = f"{label}: fixture metadata"
     subpath = spec.get("metadata_json_file_subpath")
     expected = spec.get("metadata_json_expected")
     if not subpath or not isinstance(expected, dict):
@@ -602,30 +609,34 @@ def check_current_mainnet_metadata(spec: dict, fixtures_root: Path) -> list[Chec
     try:
         relative = safe_member_relpath(subpath)
     except UnsafeArchiveMember as error:
-        return [Check("current-mainnet: fixture metadata", STATUS_FAIL, str(error))]
+        return [Check(name, STATUS_FAIL, str(error))]
     path = fixtures_root / Path(*relative.parts)
     if not path.is_file():
-        return [Check("current-mainnet: fixture metadata", STATUS_MISSING, f"not found: {path}")]
+        return [Check(name, STATUS_MISSING, f"not found: {path}")]
     try:
         actual = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError) as error:
-        return [Check("current-mainnet: fixture metadata", STATUS_FAIL, f"could not parse {path}: {error}")]
+        return [Check(name, STATUS_FAIL, f"could not parse {path}: {error}")]
     if not isinstance(actual, dict):
-        return [Check("current-mainnet: fixture metadata", STATUS_FAIL, "release index is not a JSON object")]
+        return [Check(name, STATUS_FAIL, "release index is not a JSON object")]
     mismatches = [
         f"{key}: expected {want!r}, got {actual.get(key)!r}"
         for key, want in expected.items()
         if actual.get(key) != want
     ]
     if mismatches:
-        return [Check("current-mainnet: fixture metadata", STATUS_FAIL, "; ".join(mismatches))]
+        return [Check(name, STATUS_FAIL, "; ".join(mismatches))]
     return [
         Check(
-            "current-mainnet: fixture metadata",
+            name,
             STATUS_OK,
             ", ".join(f"{key}={value}" for key, value in expected.items()),
         )
     ]
+
+
+# The pre-rename spelling, kept for any caller that still asks for it by name.
+check_current_mainnet_metadata = check_release_index_metadata
 
 
 def deep_compare_eest(manifest: dict, eest_root: Path) -> list[Check]:
@@ -786,21 +797,57 @@ def _renamed_checks(checks: list[Check], old: str, new: str) -> list[Check]:
     return [Check(check.name.replace(old, new), check.status, check.detail) for check in checks]
 
 
+def check_release_lane(manifest: dict, root: Path, key: str, label: str) -> list[Check]:
+    """Check one separately installed fixture-release lane.
+
+    Both lanes carry the same fields under their own manifest key, so this is
+    the mainnet check with the key and the reported label supplied rather than
+    assumed. Nothing here knows which fork a lane's fixtures target: a lane is
+    installed and verified the same way whether or not this build can run what
+    it holds, and which suites are runnable is the manifest generator's
+    question, not the doctor's.
+    """
+    spec = manifest[key]
+    checks = check_eest({"eest": spec}, root)
+    checks = _renamed_checks(checks, "eest", label)
+    fixtures_root = root / spec["fixtures_subpath"]
+    if fixtures_root.is_dir():
+        checks.extend(check_release_index_metadata(spec, fixtures_root, label))
+    return checks
+
+
+def deep_compare_release_lane(
+    manifest: dict, root: Path, key: str, label: str
+) -> list[Check]:
+    """Deep-check one lane's tree against its pinned release asset."""
+    checks = deep_compare_eest({"eest": manifest[key]}, root)
+    return _renamed_checks(checks, "eest", label)
+
+
 def check_current_mainnet(manifest: dict, mainnet_root: Path) -> list[Check]:
     """Check the separately installed canonical current-mainnet fixture lane."""
-    spec = manifest["current_mainnet"]
-    checks = check_eest({"eest": spec}, mainnet_root)
-    checks = _renamed_checks(checks, "eest", "current-mainnet")
-    fixtures_root = mainnet_root / spec["fixtures_subpath"]
-    if fixtures_root.is_dir():
-        checks.extend(check_current_mainnet_metadata(spec, fixtures_root))
-    return checks
+    return check_release_lane(manifest, mainnet_root, "current_mainnet", "current-mainnet")
 
 
 def deep_compare_current_mainnet(manifest: dict, mainnet_root: Path) -> list[Check]:
     """Deep-check the current-mainnet tree against its pinned release asset."""
-    checks = deep_compare_eest({"eest": manifest["current_mainnet"]}, mainnet_root)
-    return _renamed_checks(checks, "eest", "current-mainnet")
+    return deep_compare_release_lane(
+        manifest, mainnet_root, "current_mainnet", "current-mainnet"
+    )
+
+
+def check_amsterdam(manifest: dict, amsterdam_root: Path) -> list[Check]:
+    """Check the separately installed Glamsterdam devnet fixture lane."""
+    return check_release_lane(
+        manifest, amsterdam_root, "glamsterdam_devnet", "glamsterdam-devnet"
+    )
+
+
+def deep_compare_amsterdam(manifest: dict, amsterdam_root: Path) -> list[Check]:
+    """Deep-check the Glamsterdam devnet tree against its pinned release asset."""
+    return deep_compare_release_lane(
+        manifest, amsterdam_root, "glamsterdam_devnet", "glamsterdam-devnet"
+    )
 
 
 def check_python_oracle(
@@ -1023,6 +1070,16 @@ def build_parser() -> argparse.ArgumentParser:
         "fixtures/ (default: $EEST_MAINNET_ROOT or ~/eest-mainnet-v20.0.1)",
     )
     parser.add_argument(
+        "--amsterdam-root",
+        type=Path,
+        default=None,
+        help="Glamsterdam devnet install root containing the release archive and "
+        "extracted fixtures/ (default: $EEST_AMSTERDAM_ROOT or "
+        "~/eest-glamsterdam-devnet-v8.1.3). This lane holds fixtures for a fork "
+        "whose rules this build does not implement; installing it claims nothing "
+        "about running it.",
+    )
+    parser.add_argument(
         "--venv",
         type=Path,
         default=None,
@@ -1046,6 +1103,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="additionally deep-verify the current-mainnet fixture tree against "
         "its release archive. Ignored with --legacy-only.",
+    )
+    parser.add_argument(
+        "--amsterdam-deep",
+        action="store_true",
+        help="additionally deep-verify the Glamsterdam devnet fixture tree "
+        "against its release archive. Ignored with --legacy-only.",
     )
     parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     return parser
@@ -1087,6 +1150,32 @@ def main(argv: list[str]) -> int:
     else:
         mainnet_root = None
 
+    if args.amsterdam_root is not None and "glamsterdam_devnet" not in manifest:
+        print(
+            "error: --amsterdam-root requires a glamsterdam_devnet manifest section",
+            file=sys.stderr,
+        )
+        return 2
+    if args.amsterdam_root is not None:
+        amsterdam_root = args.amsterdam_root.expanduser()
+    elif os.environ.get("EEST_AMSTERDAM_ROOT"):
+        amsterdam_root = Path(os.environ["EEST_AMSTERDAM_ROOT"]).expanduser()
+    elif "glamsterdam_devnet" in manifest:
+        amsterdam_root = Path.home() / manifest["glamsterdam_devnet"]["default_subpath_from_home"]
+    else:
+        amsterdam_root = None
+
+    # The devnet lane is optional in a way the mainnet lane is not: it is a
+    # prerelease corpus no in-tree gate runs today, so an installation that is
+    # simply absent is not a failure. It is checked when it is asked for
+    # explicitly, and when it is actually installed.
+    check_amsterdam_lane = amsterdam_root is not None and (
+        args.amsterdam_root is not None
+        or args.amsterdam_deep
+        or bool(os.environ.get("EEST_AMSTERDAM_ROOT"))
+        or amsterdam_root.is_dir()
+    )
+
     venv_path = args.venv or (execution_specs_root / "venv")
 
     checks: list[Check] = []
@@ -1101,6 +1190,10 @@ def main(argv: list[str]) -> int:
             checks.extend(check_current_mainnet(manifest, mainnet_root))
         if args.mainnet_deep and mainnet_root is not None:
             checks.extend(deep_compare_current_mainnet(manifest, mainnet_root))
+        if check_amsterdam_lane:
+            checks.extend(check_amsterdam(manifest, amsterdam_root))
+        if args.amsterdam_deep and amsterdam_root is not None:
+            checks.extend(deep_compare_amsterdam(manifest, amsterdam_root))
         checks.extend(check_python_oracle(manifest, venv_path, args.manifest))
 
     ok = all(check.status == STATUS_OK for check in checks)
