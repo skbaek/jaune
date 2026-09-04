@@ -169,14 +169,40 @@ parameters are classified as checked elsewhere, because upstream gives them no
 names to read and they are covered as behaviour by the vector suite and the
 repricing subtrees.
 
-Three interpreter-step numbers — `coldAccountAccess`, `callValue` and
-`createAccess` — exist in the record and are checked by that gate, but the
-opcode interpreter still reads them from the globals. Moving those readers
-requires a structural premise on `GasSchedule`, because `Jaune/Sufficiency.lean`
-states its gas-decreasing theorems over an arbitrary `Sevm` and a zero-valued
-schedule would break termination. That premise belongs with the goal that
-migrates the termination measure to Amsterdam's two reservoirs, which restates
-those theorems anyway.
+The three interpreter-step numbers that were left on the globals —
+`coldAccountAccess`, `callValue` and `createAccess` — are read through
+`rules.gas` at the account-access sites now, and the premise that made the
+deferral necessary exists: **`GasSchedule.Valid`**.
+
+It is deliberately small, and it was discovered rather than designed. The
+gas-decreasing theorems are stated over an arbitrary `Sevm`, so a zero-valued
+schedule would break termination; instantiating the family at exactly that
+schedule and reading the failures gives three inequalities and no more —
+`100 ≤ coldAccountAccess`, `0 < createAccess`, `2300 ≤ callValue`, which are
+`gasWarmAccess`, positivity, and `gCallStipend`. Each is refused under its own
+`RuleDefect`, so a rule set the semantics cannot use says which number is the
+problem. `ForkRules.Valid` carries it, every named fork's record carries the
+witness, and `ValidRules.check` is still the one way a caller-supplied record
+obtains one.
+
+Two consequences are worth stating because they are what kept the change from
+spreading:
+
+* `accessCost` keeps its name and its arity. The schedule-carrying form is a
+  sibling, `GasSchedule.accessCost`, and `pragueRules_gas_accessCost` is the
+  `rfl` proof that the two are the same function at Prague. A downstream proof
+  that names `accessCost` is untouched.
+* `exec` keeps its signature and stays total. Sufficiency now needs a
+  hypothesis and a `def` cannot demand one, so the exhaustion branch became a
+  typed internal invariant error — the pattern this executable already uses for
+  the unreachable — with `exec_of_valid` proving a usable rule set never
+  reaches it. Because that branch returns the frame's own `Devm`, the
+  *canonicality* family needs no premise at all and every one of its signatures
+  is unchanged.
+
+`accessCost`'s cold half is the one number a metering vehicle can move without
+any other part of the record moving with it, which is why the account-access
+sites were the right place to land this first.
 
 ## Osaka's state
 

@@ -208,12 +208,23 @@ requirements.
   label appears in `jaune --help`'s declared list and not in what that text
   calls "runs at"; `jaune t8n --forks`, which is the handshake a framework
   reads to decide what to send, advertises only the four forks above.
-  What exists today is the *vocabulary* Amsterdam needs — the gas numbers it
-  reprices, the two header fields it adds, and its request-producing contracts,
-  all carried as fork rule data and machine-checked against the pinned
-  `execution-specs` revision by `scripts/check-fork-constants.sh`. **No
-  Amsterdam semantics are implemented and no Amsterdam fixture passes.** The
-  devnet-8 corpus is installable as its own lane
+  What exists today is the *vocabulary* Amsterdam needs and part of the
+  metering shape that reads it. The vocabulary is the gas numbers it reprices,
+  EIP-8037's state-gas dimension, the two header fields it adds and its
+  request-producing contracts, all carried as fork rule data and machine-checked
+  against the pinned `execution-specs` revision by
+  `scripts/check-fork-constants.sh`. The shape is the two-reservoir gas meter on
+  the machine, its charge, spill, refill, commit and merge operations with their
+  termination lemmas, and the account-access sites that read their repriced
+  numbers from the rules — all of it behind one `Option` switch that is `none`
+  on every fork this build runs, so nothing a Prague, Osaka, BPO1 or BPO2
+  fixture observes has changed.
+
+  **No Amsterdam fixture passes, and none is meant to yet.** The transaction
+  pipeline, the call and create families, transfer logs and self-destruct
+  settlement are not implemented; `Fork.amsterdam.rules?` is still `none`; the
+  runner still refuses `--network Amsterdam`; `jaune t8n --forks` still
+  advertises four forks. The devnet-8 corpus is installable as its own lane
   (`python3 scripts/bootstrap_mainnet.py --lane amsterdam`) and inventoried in
   `scripts/amsterdam/manifests.json`, and every suite over it is refused,
   naming the goal that owns the semantics it would need.
