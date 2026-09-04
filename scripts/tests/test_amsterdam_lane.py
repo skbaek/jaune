@@ -212,7 +212,7 @@ class LaneManifestFieldTests(unittest.TestCase):
 
     def test_the_release_identity_is_pinned_to_the_devnet_commit(self):
         devnet = self.sources["glamsterdam_devnet"]
-        self.assertEqual(devnet["release_tag"], "tests-glamsterdam-devnet@v8.1.3")
+        self.assertEqual(devnet["release_tag"], "tests-glamsterdam-devnet@v8.1.4")
         # The fixture release and the transition-tool anchor must name one
         # revision: that is what makes the extracted constants and the fixtures
         # agree by construction rather than by coincidence.

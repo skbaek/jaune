@@ -324,8 +324,8 @@ not vouch for Jaune.
 | `python3 scripts/env_doctor.py --mainnet-root "$HOME/eest-mainnet-v20.0.1" --mainnet-deep` | validate external fixture identities |
 | `python3 scripts/gen_mainnet_manifest.py --fixtures-root "$HOME/eest-mainnet-v20.0.1/fixtures" --check` | exact current-manifest identity |
 | `python3 scripts/bootstrap_mainnet.py --lane amsterdam` | install the Glamsterdam devnet-8 prerelease corpus (~0.94 GB compressed, ~20 GB extracted, 48,491 files) |
-| `python3 scripts/env_doctor.py --amsterdam-root "$HOME/eest-glamsterdam-devnet-v8.1.3" --amsterdam-deep` | validate that lane's archive digest, layout, release index, and every extracted file against the archive |
-| `python3 scripts/gen_mainnet_manifest.py --lane amsterdam --fixtures-root "$HOME/eest-glamsterdam-devnet-v8.1.3/fixtures" --check` | exact devnet-lane manifest identity |
+| `python3 scripts/env_doctor.py --amsterdam-root "$HOME/eest-glamsterdam-devnet-v8.1.4" --amsterdam-deep` | validate that lane's archive digest, layout, release index, and every extracted file against the archive |
+| `python3 scripts/gen_mainnet_manifest.py --lane amsterdam --fixtures-root "$HOME/eest-glamsterdam-devnet-v8.1.4/fixtures" --check` | exact devnet-lane manifest identity |
 | `python3 scripts/gen-fork-constants.py --check` | the committed fork-constant extraction still matches the pinned `execution-specs` revision. Needs that checkout and its venv; `scripts/check-fork-constants.sh` itself needs neither |
 | `python3 scripts/gen-vector-shards.py --check` | the `blsPairing` shards are an exact partition of their source |
 | `python3 scripts/gen-hash-precompile-vectors.py --check` | the committed `sha256.json`/`ripemd160.json` still match the pinned EELS oracle, and that oracle still matches the published FIPS 180-4 / RIPEMD-160 known answers |

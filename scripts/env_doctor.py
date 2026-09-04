@@ -1075,7 +1075,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Glamsterdam devnet install root containing the release archive and "
         "extracted fixtures/ (default: $EEST_AMSTERDAM_ROOT or "
-        "~/eest-glamsterdam-devnet-v8.1.3). This lane holds fixtures for a fork "
+        "~/eest-glamsterdam-devnet-v8.1.4). This lane holds fixtures for a fork "
         "whose rules this build does not implement; installing it claims nothing "
         "about running it.",
     )

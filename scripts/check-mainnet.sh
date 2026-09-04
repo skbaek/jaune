@@ -94,7 +94,7 @@ case "$LANE" in
     LANE_ROOT_ENV="EEST_MAINNET_ROOT"
     LANE_NAME="current-mainnet" ;;
   amsterdam)
-    LANE_ROOT_DEFAULT="${EEST_AMSTERDAM_ROOT:-$HOME/eest-glamsterdam-devnet-v8.1.3}/fixtures"
+    LANE_ROOT_DEFAULT="${EEST_AMSTERDAM_ROOT:-$HOME/eest-glamsterdam-devnet-v8.1.4}/fixtures"
     LANE_BOOTSTRAP="python3 scripts/bootstrap_mainnet.py --lane amsterdam"
     LANE_ROOT_ENV="EEST_AMSTERDAM_ROOT"
     LANE_NAME="glamsterdam-devnet" ;;
