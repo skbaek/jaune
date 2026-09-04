@@ -276,6 +276,37 @@ for variant in declared undeclared; do
   fi
 done
 
+# 8. The rule-data printers. `--rules` answers for a fork this build runs and
+#    refuses one it does not, which is what makes the constants gate's fork
+#    list and `Fork.supported` the same list. `--rules-partial` is the mirror
+#    image: it answers only for a fork carrying a metering vehicle, so a
+#    partial record can never be mistaken for a complete one.
+CHECKS=$((CHECKS + 1))
+run_jaune --rules Prague
+if [ "$RUN_RC" -ne 0 ] || ! has '"gas.txBase": 21000' "$RUN_OUT"; then
+  fail "--rules Prague: expected the Prague record on stdout"
+  detail "rc=$RUN_RC stdout: ${RUN_OUT:-<empty stdout>}"
+fi
+expect_refusal "--rules on an unimplemented fork" \
+  "UnsupportedForkError : fork Amsterdam is a declared protocol fork" \
+  --rules Amsterdam
+expect_refusal "--rules-partial on an implemented fork" \
+  "has no metering vehicle" \
+  --rules-partial Prague
+CHECKS=$((CHECKS + 1))
+run_jaune --rules-partial Amsterdam
+if [ "$RUN_RC" -ne 0 ] \
+  || ! has '"stateGas.costPerStateByte": 1530' "$RUN_OUT" \
+  || ! has '"gas.txBase": 12000' "$RUN_OUT"; then
+  fail "--rules-partial Amsterdam: expected the metering vehicle's rows"
+  detail "rc=$RUN_RC stdout: ${RUN_OUT:-<empty stdout>}"
+fi
+CHECKS=$((CHECKS + 1))
+if has "code.maxCodeSize" "$RUN_OUT" || has "header.blockAccessListHash" "$RUN_OUT"; then
+  fail "--rules-partial Amsterdam: printed a field the vehicle does not claim"
+  detail "stdout: $RUN_OUT"
+fi
+
 # ----------------------------------------------------------------- verdict --
 
 if [ "$FAILS" -ne 0 ]; then
@@ -283,5 +314,5 @@ if [ "$FAILS" -ne 0 ]; then
   exit 1
 fi
 
-echo "OK — cli: $CHECKS checks; the four fixture-file refusals and the unimplemented-fork refusal hold, and an undeclared format is still passed through"
+echo "OK — cli: $CHECKS checks; the four fixture-file refusals and the unimplemented-fork refusal hold, an undeclared format is still passed through, and the two rule-data printers answer for exactly the forks they should"
 exit 0

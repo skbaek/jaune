@@ -181,6 +181,17 @@ def initDevm (msg : Msg) : Devm :=
       stack := []
       memory := .empty
       gasLeft := msg.gas
+      -- `create_evm` / the `GasMeter` a child frame is built with: the
+      -- reservoir starts at the grant and so does the baseline a rollback
+      -- refills to. With a zero grant this is `StateGasMeter.zero`, which is
+      -- what every `none`-path frame gets and what `initDevm_stateGasZero`
+      -- states.
+      stateGas := {
+        left := msg.stateGasGrant
+        baseline := msg.stateGasGrant
+        spilled := 0
+        committedSpill := 0
+      }
     }
     «meta» := {
       logs := []
@@ -198,6 +209,21 @@ def initDevm (msg : Msg) : Devm :=
       transientStorage := msg.tenv.transientStorage
     }
   }
+
+/-- A frame with no state-gas grant starts with a zero meter.
+
+This is where `Devm.StateGasZero` enters the interpreter: under
+`rules.stateGas = none` no site sets `Msg.stateGasGrant`, so every frame --
+top-level and child alike -- begins here, and the measure begins as `gasLeft`. -/
+theorem initDevm_stateGasZero {msg : Msg} (h : msg.stateGasGrant = 0) :
+    (initDevm msg).StateGasZero := by
+  simp [initDevm, Devm.StateGasZero, StateGasMeter.zero, h]
+
+@[simp] theorem initDevm_gasLeft (msg : Msg) : (initDevm msg).gasLeft = msg.gas :=
+  rfl
+
+@[simp] theorem initDevm_stateGasLeft (msg : Msg) :
+    (initDevm msg).stateGasLeft = msg.stateGasGrant := rfl
 
 def initEvm (msg : Msg) : Evm :=
   {

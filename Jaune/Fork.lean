@@ -378,19 +378,59 @@ def BlobSchedule.Valid (b : BlobSchedule) : Prop :=
 instance {b : BlobSchedule} : Decidable b.Valid := by
   unfold BlobSchedule.Valid; infer_instance
 
+/-- The gas schedule's numbers are large enough for the interpreter's
+termination argument to go through.
+
+Not consensus validity, and not "these are the right prices": these are the
+three facts the *totality* proof consumes, and they were discovered rather than
+guessed -- the `Jaune.Sufficiency` family was instantiated at a zero-valued
+schedule and these are the obligations that failed.
+
+- `100 ≤ coldAccountAccess` is what makes an account access cost at least the
+  warm access, which every `gasLt` obligation at a cold `EXTCODESIZE`,
+  `BALANCE`, `EXTCODEHASH` or `CALL` needs in order to charge *something*
+  strictly positive. The literal is `gasWarmAccess`, spelled out because this
+  module is upstream of the globals; `pragueRules_gas_warmAccess_le` in
+  `Jaune/Machine.lean` is the `rfl` bridge.
+- `0 < createAccess` is the same fact for an empty-initcode `CREATE`, whose
+  only other charge can be zero.
+- `2300 ≤ callValue` is what makes a value-bearing `CALL` charge at least the
+  stipend it hands the child, so that the parent's measure still falls across
+  the spawn. The literal is `gCallStipend`.
+
+Prague's schedule satisfies all three at 2,600 / 32,000 / 9,000, and
+Amsterdam's at 3,000 / 12,000 / 11,300; the numbers move, the inequalities do
+not. -/
+def GasSchedule.Valid (g : GasSchedule) : Prop :=
+  100 ≤ g.coldAccountAccess ∧ 0 < g.createAccess ∧ 2300 ≤ g.callValue
+
+instance {g : GasSchedule} : Decidable g.Valid := by
+  unfold GasSchedule.Valid; infer_instance
+
 /-- The rule set's parameters are usable by the semantics that reads them.
 
-Beyond the blob schedule this adds `MODEXP`'s `GQUADDIVISOR`, the one other
-fork-carried number the semantics divides by. Every other divisor in the
-interpreter -- `elasticityMultiplier`, `gasLimitAdjustmentFactor`,
-`baseFeeMaxChangeDenominator` -- is a global constant rather than rule data, so
-its positivity is a closed fact proved next to it in `Jaune/Machine.lean` and
-not a hypothesis anything must carry. -/
+Three groups, one per thing the semantics needs of a number it did not choose:
+the blob schedule's divisors and its target/ceiling ordering, `MODEXP`'s
+`GQUADDIVISOR`, and -- since Amsterdam reprices the numbers the interpreter's
+own termination argument leans on -- the gas schedule's three inequalities.
+Every other divisor in the interpreter -- `elasticityMultiplier`,
+`gasLimitAdjustmentFactor`, `baseFeeMaxChangeDenominator` -- is a global
+constant rather than rule data, so its positivity is a closed fact proved next
+to it in `Jaune/Machine.lean` and not a hypothesis anything must carry. -/
 def ForkRules.Valid (r : ForkRules) : Prop :=
-  r.blob.Valid ∧ 0 < r.modexp.gasDivisor
+  r.blob.Valid ∧ 0 < r.modexp.gasDivisor ∧ r.gas.Valid
 
 instance {r : ForkRules} : Decidable r.Valid := by
   unfold ForkRules.Valid; infer_instance
+
+/-- The three projections, named so that a Sufficiency obligation can say which
+part of validity it consumes rather than indexing into a conjunction. -/
+theorem ForkRules.Valid.blob {r : ForkRules} (h : r.Valid) : r.blob.Valid := h.1
+
+theorem ForkRules.Valid.modexpGasDivisor_pos {r : ForkRules} (h : r.Valid) :
+    0 < r.modexp.gasDivisor := h.2.1
+
+theorem ForkRules.Valid.gas {r : ForkRules} (h : r.Valid) : r.gas.Valid := h.2.2
 
 /-- Prague's blob schedule (EIP-4844 as amended for Prague). -/
 def pragueBlobSchedule : BlobSchedule := {
@@ -716,6 +756,24 @@ theorem osakaRules_valid : osakaRules.Valid := by decide
 theorem bpo1Rules_valid : bpo1Rules.Valid := by decide
 theorem bpo2Rules_valid : bpo2Rules.Valid := by decide
 
+/-- The metering vehicle carries the witness too, which is what lets the
+Sufficiency family be instantiated at Amsterdam's numbers rather than only at
+Prague's. Amsterdam moves all three of `GasSchedule.Valid`'s numbers --
+`createAccess` *downwards*, from 32,000 to 12,000 -- and the inequalities still
+hold, which is the fact this `decide` records. -/
+theorem amsterdamMeteringRules_valid : amsterdamMeteringRules.Valid := by decide
+
+theorem amsterdamGasSchedule_valid : amsterdamGasSchedule.Valid := by decide
+theorem pragueGasSchedule_valid : pragueGasSchedule.Valid := by decide
+
+-- The three obligations, and what a schedule that failed one would be refused
+-- for. Stated as guards so that the discovery recorded in `GasSchedule.Valid`'s
+-- docstring is checked rather than remembered.
+#guard ¬ ({ pragueGasSchedule with coldAccountAccess := 99 } : GasSchedule).Valid
+#guard ¬ ({ pragueGasSchedule with createAccess := 0 } : GasSchedule).Valid
+#guard ¬ ({ pragueGasSchedule with callValue := 2299 } : GasSchedule).Valid
+#guard ({ pragueGasSchedule with callValue := 2300 } : GasSchedule).Valid
+
 -- The three premises, spelled out once per named schedule, so a future
 -- reparameterisation that zeroes a divisor or inverts the target/ceiling pair
 -- fails here rather than inside `fakeExp`.
@@ -902,6 +960,15 @@ inductive RuleDefect : Type
   | blobTargetAboveMax (target max : Nat)
   /-- `MODEXP`'s `GQUADDIVISOR` is zero. -/
   | zeroModexpGasDivisor
+  /-- An account access would cost less than a warm one, so a cold access at
+  `BALANCE`, `EXTCODE*` or a `CALL` need charge nothing. -/
+  | accountAccessBelowWarm (coldAccountAccess : Nat)
+  /-- `CREATE` would cost nothing, so an empty-initcode creation need charge
+  nothing. -/
+  | zeroCreateAccess
+  /-- A value-bearing call would hand its child more stipend than it charges
+  its parent. -/
+  | callValueBelowStipend (callValue : Nat)
 deriving DecidableEq, Repr
 
 /-- Why a configuration, or the pairing of a configuration with a snapshot, is
@@ -949,6 +1016,12 @@ def ChainContextError.render : ChainContextError → String
       | .blobTargetAboveMax target max =>
         s!"the blob gas target {target} exceeds the ceiling {max}"
       | .zeroModexpGasDivisor => "the MODEXP gas divisor is zero"
+      | .accountAccessBelowWarm cold =>
+        s!"a cold account access costs {cold}, below the warm access cost 100"
+      | .zeroCreateAccess => "the CREATE base cost is zero"
+      | .callValueBelowStipend callValue =>
+        s!"a value-bearing call costs {callValue}, below the 2300 stipend it \
+           hands the child"
 
 /-- Why an input is outside the domain this build implements.
 
@@ -1045,6 +1118,12 @@ def ForkRules.defect? (r : ForkRules) : Option RuleDefect :=
     some (.blobTargetAboveMax r.blob.target r.blob.max)
   else if r.modexp.gasDivisor = 0 then
     some .zeroModexpGasDivisor
+  else if r.gas.coldAccountAccess < 100 then
+    some (.accountAccessBelowWarm r.gas.coldAccountAccess)
+  else if r.gas.createAccess = 0 then
+    some .zeroCreateAccess
+  else if r.gas.callValue < 2300 then
+    some (.callValueBelowStipend r.gas.callValue)
   else
     none
 
@@ -1052,16 +1131,24 @@ def ForkRules.defect? (r : ForkRules) : Option RuleDefect :=
 so the check below neither over- nor under-reports. -/
 theorem ForkRules.defect?_eq_none_iff {r : ForkRules} :
     r.defect? = none ↔ r.Valid := by
-  rw [ForkRules.defect?, ForkRules.Valid, BlobSchedule.Valid]
-  split
-  · simp_all
-  · split
-    · simp_all
-    · split
-      · simp_all
-      · split
-        · simp_all
-        · simp_all; omega
+  rw [ForkRules.defect?, ForkRules.Valid, BlobSchedule.Valid, GasSchedule.Valid]
+  repeat' split
+  all_goals simp_all
+  all_goals omega
+
+-- Each gas-schedule obligation is refused under its own name, so a failure
+-- says which number the semantics cannot use rather than "the record is
+-- invalid". The vehicle passes all of them.
+#guard ForkRules.defect? { pragueRules with
+    gas := { pragueGasSchedule with coldAccountAccess := 99 } }
+  = some (.accountAccessBelowWarm 99)
+#guard ForkRules.defect? { pragueRules with
+    gas := { pragueGasSchedule with createAccess := 0 } }
+  = some .zeroCreateAccess
+#guard ForkRules.defect? { pragueRules with
+    gas := { pragueGasSchedule with callValue := 2299 } }
+  = some (.callValueBelowStipend 2299)
+#guard ForkRules.defect? amsterdamMeteringRules = none
 
 /-- A rule set together with the proof that its parameters are usable.
 

@@ -707,6 +707,26 @@ existing single-dimension code path by `match` reduction -- which is what makes
 a claim about the source. -/
 @[simp] theorem pragueRules_stateGas : pragueRules.stateGas = none := rfl
 
+/-- The two literals `GasSchedule.Valid` spells out are the globals it means.
+
+`Jaune/Fork.lean` is upstream of this module and cannot name `gasWarmAccess` or
+`gCallStipend`, so the predicate writes `100` and `2300`. This is the `rfl`
+proof that those are not third copies of the numbers but the same two, which is
+what lets a Sufficiency obligation stated in terms of the globals be discharged
+from a `Valid` hypothesis. -/
+theorem gasSchedule_valid_iff (g : GasSchedule) :
+    g.Valid ↔ gasWarmAccess ≤ g.coldAccountAccess ∧ 0 < g.createAccess
+      ∧ gCallStipend ≤ g.callValue := Iff.rfl
+
+theorem GasSchedule.Valid.warmAccess_le {g : GasSchedule} (h : g.Valid) :
+    gasWarmAccess ≤ g.coldAccountAccess := h.1
+
+theorem GasSchedule.Valid.createAccess_pos {g : GasSchedule} (h : g.Valid) :
+    0 < g.createAccess := h.2.1
+
+theorem GasSchedule.Valid.stipend_le_callValue {g : GasSchedule} (h : g.Valid) :
+    gCallStipend ≤ g.callValue := h.2.2
+
 -- The whole supported chain shares Prague's schedule, so the bridge above
 -- serves every fork this build runs, not only Prague. Stated by `rfl` on the
 -- records rather than field by field.
@@ -869,6 +889,14 @@ structure Msg : Type where
   accessedAddresses: AdrSet
   accessedStorageKeys: KeySet
   disablePrecompiles : Bool
+  /-- EIP-8037's state-gas grant: the reservoir the frame starts with, beside
+  the execution grant `gas`.
+
+  Defaulted to `0` for the same reason `Mach.stateGas` is defaulted to `zero`:
+  a message built by a `none`-path caller does not name it, so every existing
+  construction keeps elaborating and every `none`-path frame starts with an
+  empty reservoir -- which `initDevm` then seeds as `StateGasMeter.zero`. -/
+  stateGasGrant : Nat := 0
 
 def Msg.withBenv (msg : Msg) (benv : Benv) : Msg :=
   {msg with benv := benv}
@@ -2480,6 +2508,48 @@ theorem Mach.repayStateGasSpill_gasMeasure (mach : Mach) :
     Nat.min_le_right _ _
   omega
 
+/-! ### The same operations, at the frame
+
+`Devm` wrappers over the `Mach` operations above, in the shape the interpreter
+calls them. Two of them are more than a lift: `restoreStateGas` also discards
+the frame's refunds, because upstream's refund counter lives on the meter and
+Jaune's lives on `Meta`. -/
+/-- `charge_state_gas`, at the frame. Reservoir first, then spill into
+execution gas. Reached only under `rules.stateGas = some _`. -/
+def chargeStateGas (amount : Nat) (devm : Devm) : Execution :=
+  liftMachExecution (Mach.chargeStateGas amount) devm
+
+/-- `credit_state_gas_refund`, at the frame. Total, because a refund cannot
+fail. -/
+def Devm.creditStateGasRefund (amount : Nat) (devm : Devm) : Devm :=
+  devm.setMach (devm.mach.creditStateGasRefund amount)
+
+/-- `commit_state_gas`, at the frame. -/
+def Devm.commitStateGas (devm : Devm) : Devm :=
+  devm.setMach devm.mach.commitStateGas
+
+/-- `restore_state_gas`, at the frame. Upstream's counter lives on the meter and
+Jaune's on `Meta`, so the refund discard is here rather than in `Mach`. -/
+def Devm.restoreStateGas (devm : Devm) : Devm :=
+  (devm.setMach devm.mach.restoreStateGas).withRefundCounter 0
+
+/-- `restore_state_gas_to_entry`, at the frame. -/
+def Devm.restoreStateGasToEntry (grant : Nat) (devm : Devm) : Devm :=
+  devm.setMach (devm.mach.restoreStateGasToEntry grant)
+
+/-- `forfeit_remaining_gas`, at the frame. -/
+def Devm.forfeitRemainingGas (devm : Devm) : Devm :=
+  devm.setMach devm.mach.forfeitRemainingGas
+
+/-- `drain_state_gas_reservoir`, at the frame. -/
+def Devm.drainStateGasReservoir (devm : Devm) : Nat × Devm :=
+  let ⟨reservoir, mach⟩ := devm.mach.drainStateGasReservoir
+  (reservoir, devm.setMach mach)
+
+/-- `restore_child_gas`, at the frame. -/
+def Devm.restoreChildGas (gas reservoir : Nat) (devm : Devm) : Devm :=
+  devm.setMach (devm.mach.restoreChildGas gas reservoir)
+
 theorem chargeGas_def (cost : Nat) (devm : Devm) :
     chargeGas cost devm = (do
       match safeSub devm.gasLeft cost with
@@ -2914,6 +2984,49 @@ theorem pushItem_def (x : B256) (c : Nat) (devm : Devm) :
 def accessCost (x : Adr) (a : AdrSet) : Nat :=
   if x ∈ a then gasWarmAccess else gasColdAccountAccess
 
+/-- The warm/cold account-access cost under a *fork's own* schedule.
+
+A sibling rather than a third parameter on `accessCost`. EIP-8038 reprices the
+cold half (2,600 to 3,000) and leaves the warm half alone, so the interpreter
+has to read the number from `rules.gas` -- but `accessCost` is named 121 times
+downstream, and widening its arity would move every one of those statements for
+a reason that has nothing to do with what they say. Instead the schedule-carrying
+form is the one the interpreter calls, `accessCost` stays exactly what it was,
+and the `rfl` lemma below says they are the same function at Prague. -/
+def GasSchedule.accessCost (gas : GasSchedule) (x : Adr) (a : AdrSet) : Nat :=
+  if x ∈ a then gasWarmAccess else gas.coldAccountAccess
+
+@[simp] theorem pragueGasSchedule_accessCost (x : Adr) (a : AdrSet) :
+    pragueGasSchedule.accessCost x a = accessCost x a := rfl
+
+@[simp] theorem pragueRules_gas_accessCost (x : Adr) (a : AdrSet) :
+    pragueRules.gas.accessCost x a = accessCost x a := rfl
+
+/-- The warm cost is the floor at every schedule, because only the cold half
+moves. The Sufficiency family needs this, and needs it to hold of an arbitrary
+schedule rather than of Prague's. -/
+theorem GasSchedule.gasWarmAccess_le_accessCost (gas : GasSchedule)
+    (x : Adr) (a : AdrSet) (h : gasWarmAccess ≤ gas.coldAccountAccess) :
+    gasWarmAccess ≤ gas.accessCost x a := by
+  unfold GasSchedule.accessCost
+  split
+  · exact Nat.le_refl _
+  · exact h
+
+/-- The account-access cost is positive under any usable schedule -- the shape
+`access_cost_pos` had at Prague, now stated of the schedule the interpreter
+actually reads. -/
+theorem GasSchedule.Valid.accessCost_pos {g : GasSchedule} (h : g.Valid)
+    (x : Adr) (a : AdrSet) : 0 < g.accessCost x a := by
+  unfold GasSchedule.accessCost
+  have hw := h.warmAccess_le
+  unfold gasWarmAccess at *
+  split <;> omega
+
+theorem GasSchedule.Valid.warmAccess_le_accessCost {g : GasSchedule}
+    (h : g.Valid) (x : Adr) (a : AdrSet) : gasWarmAccess ≤ g.accessCost x a :=
+  g.gasWarmAccess_le_accessCost x a h.warmAccess_le
+
 def Meta.addAccessedAddress (view : Meta) (a : Adr) : Meta :=
   {view with accessedAddresses := view.accessedAddresses.insert a}
 
@@ -3245,6 +3358,72 @@ def sstoreNewRefundCounter (gas : GasSchedule) (new_value : B256)
     else
       rc''
   else rc
+
+/-- `sstore`'s refund contribution under the Amsterdam metering shape.
+
+A sibling of `sstoreNewRefundCounter` rather than a widening of it, because the
+two forks disagree about what a restored slot refunds. Prague refunds the
+difference between what a set or an update cost and what the access cost --
+`gasStorageSet - gasWarmAccess`, or `gasStorageUpdate - gasColdSload -
+gasWarmAccess`. Amsterdam has decomposed the write, so a restored slot simply
+refunds the `STORAGE_WRITE` the first change to it paid. The clear refund is
+`gas.storageClearRefund` in both, which is why that one number is a
+`GasSchedule` field and these are not.
+
+Transcribed from `vm/instructions/storage.py`'s refund block, in its order. -/
+def sstoreAmsterdamRefundCounter (gas : GasSchedule) (state : StateGasRules)
+    (new_value original_value current_value : B256) (rc : Int) : Int :=
+  if current_value ≠ new_value then
+    let rc' :=
+      if original_value ≠ 0 ∧ current_value ≠ 0 ∧ new_value = 0 then
+        rc + gas.storageClearRefund
+      else
+        rc
+    let rc'' :=
+      if original_value ≠ 0 ∧ current_value = 0 then
+        rc' - gas.storageClearRefund
+      else
+        rc'
+    if original_value = new_value then
+      rc'' + state.storageWrite
+    else
+      rc''
+  else rc
+
+/-- The execution gas one `SSTORE` charges under the Amsterdam shape: the
+access, cold or warm, plus `STORAGE_WRITE` on the slot's first change this
+transaction. EIP-8038 re-derives the old `gasStorageSet` / `gasStorageUpdate`
+lattice as exactly these two terms, with the state creation moved out into the
+state dimension. -/
+def sstoreAmsterdamGasCost (state : StateGasRules)
+    (new_value original_value current_value : B256) (cold : Bool) : Nat :=
+  (if cold then gasColdSload else gasWarmAccess) +
+    (if original_value = current_value ∧ current_value ≠ new_value then
+      state.storageWrite
+    else
+      0)
+
+/-- The *state* gas one `SSTORE` charges: `STORAGE_SET` on a first-time set of a
+zero slot, and nothing otherwise. The credit-back when such a slot is cleared
+again in the same transaction is a refund rather than a negative charge, so it
+goes through `creditStateGasRefund` at the site. -/
+def sstoreAmsterdamStateGas (state : StateGasRules)
+    (new_value original_value current_value : B256) : Nat :=
+  if original_value = current_value ∧ current_value ≠ new_value
+      ∧ original_value = 0 then
+    state.storageSet
+  else
+    0
+
+/-- Whether this `SSTORE` returns the slot to a zero original, which refills the
+`STORAGE_SET` an earlier set in the same transaction charged. -/
+def sstoreAmsterdamStateRefund (state : StateGasRules)
+    (new_value original_value current_value : B256) : Nat :=
+  if current_value ≠ new_value ∧ original_value = new_value
+      ∧ original_value = 0 then
+    state.storageSet
+  else
+    0
 
 /-- The read-only-World core of `BALANCE`.  Its mutable result contains only
     `Mach` and `Meta`: it pops the address operand, charges the warm/cold
@@ -4075,6 +4254,7 @@ instance {devm : Devm} : Decidable devm.StateGasZero := by
     (h : devm.StateGasZero) : devm.gasMeasure = devm.gasLeft :=
   Devm.gasMeasure_of_stateGas_zero h
 
+
 /-- Every existing `Devm` update reaches `Mach` through `setMach` with a
 `with`-update that does not name `stateGas`, so the invariant is preserved by
 construction rather than by argument. These are the two spellings the
@@ -4679,6 +4859,118 @@ private def zeroStoredStor : Stor :=
 -- An `Acct.nil` handed to the smart constructor is dropped, not stored.
 #guard (State.ofList [((0 : Adr), Acct.nil)]).isEmpty
 #guard ¬ nilStoredState.isEmpty
+
+/-! ### Site table: the account-access sites, at both metering shapes
+
+G3 of `jaune-amsterdam-metering-v1`. For each site the interpreter reads a
+repriced number at, one guard reproducing today's Prague number and one
+reproducing the pinned target's Amsterdam number, both through the same
+expression the arm evaluates. A repricing that reached only one of the two
+shapes fails here.
+
+`gasWarmAccess` is a global on both sides on purpose: no fork moves it, so the
+warm rows say "still 100" rather than restating a rule that did not change. -/
+
+private def guardAdr : Adr := 0x1000
+private def guardCold : AdrSet := .emptyWithCapacity
+private def guardWarm : AdrSet := guardCold.insert guardAdr
+
+private def pragueGas : GasSchedule := pragueRules.gas
+private def amsterdamGas : GasSchedule := amsterdamMeteringRules.gas
+
+-- `accessCost`, the shape `BALANCE`, `EXTCODE*` and the whole CALL family read.
+#guard pragueGas.accessCost guardAdr guardCold = 2600
+#guard amsterdamGas.accessCost guardAdr guardCold = 3000
+#guard pragueGas.accessCost guardAdr guardWarm = 100
+#guard amsterdamGas.accessCost guardAdr guardWarm = 100
+-- and the sibling is the old function at Prague, definitionally.
+#guard pragueGas.accessCost guardAdr guardCold = accessCost guardAdr guardCold
+#guard pragueGas.accessCost guardAdr guardWarm = accessCost guardAdr guardWarm
+
+-- `EXTCODESIZE` / `EXTCODECOPY`: the access half plus EIP-8038's code-reading
+-- surcharge, which is `0` at Prague and 100 at Amsterdam.
+#guard pragueGas.coldAccountAccess + pragueGas.codeReadSurcharge = 2600
+#guard amsterdamGas.coldAccountAccess + amsterdamGas.codeReadSurcharge = 3100
+#guard gasWarmAccess + pragueGas.codeReadSurcharge = 100
+#guard gasWarmAccess + amsterdamGas.codeReadSurcharge = 200
+
+-- `EXTCODEHASH` takes the repriced access and no surcharge.
+#guard pragueGas.coldAccountAccess = 2600
+#guard amsterdamGas.coldAccountAccess = 3000
+
+-- The value-bearing call surcharge and the `CREATE`/`CREATE2` base, the other
+-- two numbers goal A left on the globals for this goal to route.
+#guard pragueGas.callValue = 9000
+#guard amsterdamGas.callValue = 11300
+#guard pragueGas.createAccess = 32000
+#guard amsterdamGas.createAccess = 12000
+#guard pragueGas.callValue = gasCallValue
+#guard pragueGas.createAccess = gasCreate
+
+-- The stipend a value-bearing call hands its child is covered by the surcharge
+-- at both shapes. This is the inequality the Sufficiency family needs, checked
+-- as data here so a repricing that broke it fails before any proof does.
+#guard gCallStipend < pragueGas.callValue
+#guard gCallStipend < amsterdamGas.callValue
+
+/-! ### Site table: `SSTORE` over the (original, current, new) lattice
+
+The arm's two shapes charge different *terms*, not just different numbers, so
+the rows below name the terms. Prague's are the globals it has always used;
+Amsterdam's come from the two records and are computed by the sibling
+definitions the arm calls, so a guard here is a guard on the code path.
+
+`amsterdamState` is the vehicle's state-gas record; a vehicle without one would
+not be a metering vehicle, and the `Option` match is discharged by `rfl`. -/
+
+private def amsterdamState : StateGasRules := amsterdamStateGasRules
+
+-- Prague: the whole cost of a first-time set of a zero slot, cold, is the
+-- cold-load charge plus `gasStorageSet`; an update to a non-zero slot is the
+-- cold-load charge plus the difference; a change to an already-warm slot that
+-- is not the first this transaction costs the warm access alone.
+#guard gasColdSload + gasStorageSet = 22100
+#guard gasColdSload + (gasStorageUpdate - gasColdSload) = 5000
+#guard gasWarmAccess = 100
+
+-- Amsterdam: access plus `STORAGE_WRITE` on the slot's first change, and
+-- nothing but the access otherwise. EIP-8038 re-derives the lattice above as
+-- exactly these two terms.
+#guard sstoreAmsterdamGasCost amsterdamState 1 0 0 true = 2100 + 10000
+#guard sstoreAmsterdamGasCost amsterdamState 1 0 0 false = 100 + 10000
+#guard sstoreAmsterdamGasCost amsterdamState 2 1 1 true = 2100 + 10000
+#guard sstoreAmsterdamGasCost amsterdamState 2 1 1 false = 100 + 10000
+-- current ≠ original: the write was already paid for this transaction.
+#guard sstoreAmsterdamGasCost amsterdamState 3 1 2 true = 2100
+#guard sstoreAmsterdamGasCost amsterdamState 3 1 2 false = 100
+-- new = current: no change at all, so no write either.
+#guard sstoreAmsterdamGasCost amsterdamState 1 1 1 true = 2100
+#guard sstoreAmsterdamGasCost amsterdamState 1 1 1 false = 100
+
+-- The state dimension: a first-time set of a *zero* slot creates state and
+-- pays `STORAGE_SET`; nothing else does.
+#guard sstoreAmsterdamStateGas amsterdamState 1 0 0 = 97920
+#guard sstoreAmsterdamStateGas amsterdamState 2 1 1 = 0
+#guard sstoreAmsterdamStateGas amsterdamState 3 1 2 = 0
+#guard sstoreAmsterdamStateGas amsterdamState 0 0 0 = 0
+-- and the same slot cleared again in the same transaction refills it.
+#guard sstoreAmsterdamStateRefund amsterdamState 0 0 1 = 97920
+#guard sstoreAmsterdamStateRefund amsterdamState 0 1 1 = 0
+#guard sstoreAmsterdamStateRefund amsterdamState 1 0 0 = 0
+
+-- Refunds. The clear refund is the one number both shapes take from
+-- `GasSchedule`, at each fork's own value; the restore refund is
+-- `gasStorageSet - gasWarmAccess` at Prague and `STORAGE_WRITE` at Amsterdam.
+#guard sstoreNewRefundCounter pragueGas 0 1 1 0 = 4800
+#guard sstoreAmsterdamRefundCounter amsterdamGas amsterdamState 0 1 1 0 = 11616
+#guard sstoreNewRefundCounter pragueGas 1 1 0 0
+  = -4800 + (5000 - 2100 - 100)
+#guard sstoreAmsterdamRefundCounter amsterdamGas amsterdamState 1 1 0 0
+  = -11616 + 10000
+#guard sstoreNewRefundCounter pragueGas 0 0 1 0 = 20000 - 100
+#guard sstoreAmsterdamRefundCounter amsterdamGas amsterdamState 0 0 1 0 = 10000
+#guard sstoreNewRefundCounter pragueGas 1 1 1 0 = 0
+#guard sstoreAmsterdamRefundCounter amsterdamGas amsterdamState 1 1 1 0 = 0
 
 --------------- CANONICALITY THROUGH EXECUTION (P0.4, STEP 4) ---------------
 
