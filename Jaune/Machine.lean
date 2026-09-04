@@ -3428,16 +3428,22 @@ def sstoreAmsterdamStateRefund (state : StateGasRules)
 /-- The read-only-World core of `BALANCE`.  Its mutable result contains only
     `Mach` and `Meta`: it pops the address operand, charges the warm/cold
     account-access cost, records a cold access, and pushes the balance read
-    from `World`. -/
-def Rinst.balanceCore (world : World) (mach : Mach) (view : Meta) :
-    Footprint.Outcome (Mach × Meta) Unit :=
+    from `World`.
+
+    The cold half arrives through `gas.coldAccountAccess` rather than through
+    the global, because EIP-8038 reprices it (2,600 to 3,000) inside this same
+    formula. The warm half is a global still: no fork moves it. A `GasSchedule`
+    parameter rather than a `Sevm` one, because that is all this core reads and
+    it has no other reason to see the frame. -/
+def Rinst.balanceCore (gas : GasSchedule) (world : World) (mach : Mach)
+    (view : Meta) : Footprint.Outcome (Mach × Meta) Unit :=
   match mach.pop with
   | .error (err, mach') => .error (err, (mach', view))
   | .ok (x, mach') =>
     let a := x.toAdr
     let warm := a ∈ view.accessedAddresses
     let view' := if warm then view else view.addAccessedAddress a
-    let cost := if warm then gasWarmAccess else gasColdAccountAccess
+    let cost := if warm then gasWarmAccess else gas.coldAccountAccess
     match Mach.chargeGas cost mach' with
     | .error (err, mach'') => .error (err, (mach'', view'))
     | .ok (_, mach'') =>
@@ -3459,7 +3465,8 @@ def Rinst.runCore
     let fee :=
       calculateBlobGasPrice sevm.benvStat.rules.blob sevm.benvStat.excessBlobGas
     pushItem fee.toB256 gBase devm
-  | .balance => liftMachMetaWorldExecution Rinst.balanceCore devm
+  | .balance =>
+    liftMachMetaWorldExecution (Rinst.balanceCore sevm.benvStat.rules.gas) devm
   | .origin => pushItem sevm.tenvStat.origin.toB256 gBase devm
   | .caller => pushItem sevm.caller.toB256 gBase devm
   | .callvalue => pushItem sevm.value gBase devm
@@ -3491,12 +3498,19 @@ def Rinst.runCore
     let value := sevm.code.sliceD code_start_index size (Linst.toUInt8 .stop)
     .ok (devm.memWrite memory_start_index value)
   | .gasprice => pushItem sevm.tenvStat.gasPrice.toB256 gBase devm
+  -- EIP-8038 adds a code-reading surcharge to `EXTCODESIZE` and `EXTCODECOPY`,
+  -- and reprices the cold half of the access. Both arrive through `rules.gas`;
+  -- the surcharge is *additive with identity zero*, so the Prague formula here
+  -- is literally the formula it was rather than merely equal to it.
   | .extcodesize => do
     let ⟨adr, devm⟩ ← devm.popToAdr
+    let gas := sevm.benvStat.rules.gas
     let devm ←
       if adr ∈ devm.accessedAddresses
-      then chargeGas gasWarmAccess devm
-      else chargeGas gasColdAccountAccess (addAccessedAddress devm adr)
+      then chargeGas (gasWarmAccess + gas.codeReadSurcharge) devm
+      else
+        chargeGas (gas.coldAccountAccess + gas.codeReadSurcharge)
+          (addAccessedAddress devm adr)
     let codesize := (devm.getCode adr).size.toB256
     devm.push codesize
   | .extcodecopy => do
@@ -3507,12 +3521,18 @@ def Rinst.runCore
     let words := ceilDiv size 32
     let copy_gas_cost := gasCopy * words
     let extend_memory_cost := devm.extCost [⟨memory_start_index, size⟩]
+    let gas := sevm.benvStat.rules.gas
     let devm ←
       if adr ∈ devm.accessedAddresses
-      then chargeGas (gasWarmAccess + copy_gas_cost + extend_memory_cost) devm
+      then
+        chargeGas
+          (gasWarmAccess + gas.codeReadSurcharge + copy_gas_cost
+            + extend_memory_cost)
+          devm
       else
         chargeGas
-          (gasColdAccountAccess + copy_gas_cost + extend_memory_cost)
+          (gas.coldAccountAccess + gas.codeReadSurcharge + copy_gas_cost
+            + extend_memory_cost)
           (addAccessedAddress devm adr)
     let code := devm.getCode adr
     let value := code.sliceD code_start_index size (Linst.toUInt8 .stop)
@@ -3531,13 +3551,17 @@ def Rinst.runCore
     let value :=
       devm.returnData.sliceD return_data_start_index size 0
     .ok (devm.memWrite memory_start_index value)
+  -- `EXTCODEHASH` takes the repriced cold access and *no* surcharge: upstream
+  -- adds the code-reading cost at `EXTCODESIZE` and `EXTCODECOPY` only, which
+  -- is a fact about those two arms rather than about reading code.
   | .extcodehash => do
     let ⟨adr, devm⟩ ← devm.popToAdr
     let devm ←
       if adr ∈ devm.accessedAddresses then
         chargeGas gasWarmAccess devm
       else
-        chargeGas gasColdAccountAccess (addAccessedAddress devm adr)
+        chargeGas sevm.benvStat.rules.gas.coldAccountAccess
+          (addAccessedAddress devm adr)
     let account := devm.getAcct adr
     let codehash : B256 :=
       if account.Empty then 0
