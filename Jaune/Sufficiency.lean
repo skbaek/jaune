@@ -50,12 +50,6 @@ parent's measure is at most `parent.gasMeasure + child.gasMeasure`, so the
 child's own budget has to be known not to have grown.
 -/
 
-/- `Devm.gasMeasure_def` unfolds the measure into its three fields. This file
-treats the measure as one atom -- the `simp` sets below say which updates leave
-it alone -- so the unfolding is kept out of the default `simp` set here, where
-it would otherwise triple the size of every arithmetic goal. -/
-attribute [-simp] Devm.gasMeasure_def
-
 /-- The measure carried by a raw frame result, in either branch. The error
 branch retains its `Devm` precisely so that the measure can still be read off
 it, and the driver's monotonicity theorem has to cover both branches because
@@ -613,6 +607,52 @@ theorem applyTernary_gasMeasure {f : B256 → B256 → B256 → B256} {c : Nat}
   obtain ⟨_, mach', hcore, hmach⟩ := liftMachExecution_ok h
   show devm'.mach.gasMeasure + c = devm.mach.gasMeasure
   rw [hmach, Mach.applyTernary_gasMeasure hcore]
+
+/-! ## The meter operations, at the frame
+
+The Amsterdam `SSTORE` arm is the first site that touches the meter: it credits
+a refund and charges state gas beside its execution charge. Both are
+measure-neutral (`Jaune/Machine.lean` proves it on `Mach`); these are the
+`Devm`-level forms the walks consume, in the same shapes as the primitives
+above. -/
+
+theorem chargeGas_gasMeasure_lt {c : Nat} {devm devm' : Devm} (hc : 0 < c)
+    (h : chargeGas c devm = .ok devm') : devm'.gasMeasure < devm.gasMeasure := by
+  have e := chargeGas_gasMeasure h
+  omega
+
+theorem chargeStateGas_gasMeasure {amount : Nat} {devm devm' : Devm}
+    (h : chargeStateGas amount devm = .ok devm') :
+    devm'.gasMeasure = devm.gasMeasure := by
+  obtain ⟨_, mach', hcore, hmach⟩ := liftMachExecution_ok h
+  show devm'.mach.gasMeasure = devm.mach.gasMeasure
+  rw [hmach, Mach.chargeStateGas_gasMeasure hcore]
+
+@[simp] theorem Devm.creditStateGasRefund_gasMeasure (amount : Nat) (devm : Devm) :
+    (devm.creditStateGasRefund amount).gasMeasure = devm.gasMeasure :=
+  Mach.creditStateGasRefund_gasMeasure amount devm.mach
+
+/-- The `SSTORE` arms warm the slot only when it is cold, and the walks meet
+that as an `if` around one `Devm`; either way the measure is untouched. -/
+@[simp] theorem Devm.ite_addAccessedStorageKey_gasMeasure {c : Prop} [Decidable c]
+    (devm : Devm) (a : Adr) (k : B256) :
+    (if c then addAccessedStorageKey devm a k else devm).gasMeasure
+      = devm.gasMeasure := by
+  split <;> simp
+
+@[simp] theorem Devm.ite_addAccessedStorageKey_gasMeasure' {c : Prop} [Decidable c]
+    (devm : Devm) (a : Adr) (k : B256) :
+    (if c then devm else addAccessedStorageKey devm a k).gasMeasure
+      = devm.gasMeasure := by
+  split <;> simp
+
+/-- Amsterdam's `SSTORE` execution charge is at least the warm access, so the
+arm still decreases the measure whatever the slot's history. -/
+theorem sstoreAmsterdamGasCost_pos (state : StateGasRules)
+    (new_value original_value current_value : B256) (cold : Bool) :
+    0 < sstoreAmsterdamGasCost state new_value original_value current_value cold := by
+  unfold sstoreAmsterdamGasCost gasColdSload gasWarmAccess
+  split <;> split <;> omega
 
 /-! ## Walking an instruction body
 
@@ -1318,37 +1358,58 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
       (by intros; unfold gVerylow; omega)
       (by intros; simp only [Devm.memWrite_gasMeasure, Devm.memRead_gasMeasure]) h
   case sstore =>
-    obtain ⟨⟨key, d1⟩, h1, h⟩ := Except.bind_eq_ok h
-    obtain ⟨⟨value, d2⟩, h2, h⟩ := Except.bind_eq_ok h
-    obtain ⟨_, hStipend, h⟩ := Except.bind_eq_ok h
-    have _hStipend := Except.assert_eq_ok hStipend
-    obtain ⟨gasPair, hPair, h⟩ := Except.bind_eq_ok h
-    obtain ⟨cost, hCost, h⟩ := Except.bind_eq_ok h
-    obtain ⟨d3, hRefund, h⟩ := Except.bind_eq_ok h
-    obtain ⟨d4, hCharge, h⟩ := Except.bind_eq_ok h
-    obtain ⟨_, _hDynamic, hFinal⟩ := Except.bind_eq_ok h
-    simp only [Except.ok.injEq] at hPair hCost hRefund hFinal
-    have e1 := Devm.pop_gasMeasure h1
-    have e2 := Devm.pop_gasMeasure h2
-    have e3 := chargeGas_gasMeasure hCharge
-    have hPairGas : gasPair.1.gasMeasure = d2.gasMeasure := by
-      rw [← hPair]
-      split <;> simp only [addAccessedStorageKey_gasMeasure]
-    have hRefundGas : d3.gasMeasure = d2.gasMeasure := by
-      rw [← hRefund, Devm.withRefundCounter_gasMeasure, hPairGas]
-    have hCostPos : 0 < cost := by
-      rw [← hCost]
-      split
-      · split
-        · unfold gasStorageSet
+    split at h
+    · -- Prague: the body it has always been.
+      obtain ⟨⟨key, d1⟩, h1, h⟩ := Except.bind_eq_ok h
+      obtain ⟨⟨value, d2⟩, h2, h⟩ := Except.bind_eq_ok h
+      obtain ⟨_, hStipend, h⟩ := Except.bind_eq_ok h
+      have _hStipend := Except.assert_eq_ok hStipend
+      obtain ⟨gasPair, hPair, h⟩ := Except.bind_eq_ok h
+      obtain ⟨cost, hCost, h⟩ := Except.bind_eq_ok h
+      obtain ⟨d3, hRefund, h⟩ := Except.bind_eq_ok h
+      obtain ⟨d4, hCharge, h⟩ := Except.bind_eq_ok h
+      obtain ⟨_, _hDynamic, hFinal⟩ := Except.bind_eq_ok h
+      simp only [Except.ok.injEq] at hPair hCost hRefund hFinal
+      have e1 := Devm.pop_gasMeasure h1
+      have e2 := Devm.pop_gasMeasure h2
+      have e3 := chargeGas_gasMeasure hCharge
+      have hPairGas : gasPair.1.gasMeasure = d2.gasMeasure := by
+        rw [← hPair]
+        split <;> simp only [addAccessedStorageKey_gasMeasure]
+      have hRefundGas : d3.gasMeasure = d2.gasMeasure := by
+        rw [← hRefund, Devm.withRefundCounter_gasMeasure, hPairGas]
+      have hCostPos : 0 < cost := by
+        rw [← hCost]
+        split
+        · split
+          · unfold gasStorageSet
+            omega
+          · unfold gasStorageUpdate gasColdSload
+            omega
+        · unfold gasWarmAccess
           omega
-        · unfold gasStorageUpdate gasColdSload
-          omega
-      · unfold gasWarmAccess
-        omega
-    dsimp only at e1 e2 hFinal
-    rw [← hFinal, Devm.setStorVal_gasMeasure]
-    omega
+      dsimp only at e1 e2 hFinal
+      rw [← hFinal, Devm.setStorVal_gasMeasure]
+      omega
+    · -- Amsterdam: `vm/instructions/storage.py` `sstore`. The credit and the
+      -- state charge are measure-neutral; the execution charge is at least a
+      -- warm access, and that is the whole decrease.
+      obtain ⟨_, _hStatic, h⟩ := Except.bind_eq_ok h
+      obtain ⟨⟨key, d1⟩, h1, h⟩ := Except.bind_eq_ok h
+      obtain ⟨⟨value, d2⟩, h2, h⟩ := Except.bind_eq_ok h
+      obtain ⟨_, _hGas, h⟩ := Except.bind_eq_ok h
+      obtain ⟨d3, hCharge, h⟩ := Except.bind_eq_ok h
+      obtain ⟨d4, hState, hFinal⟩ := Except.bind_eq_ok h
+      simp only [Except.ok.injEq] at hFinal
+      have e1 := Devm.pop_gasMeasure h1
+      have e2 := Devm.pop_gasMeasure h2
+      have e3 := chargeGas_gasMeasure_lt (sstoreAmsterdamGasCost_pos _ _ _ _ _) hCharge
+      have e4 := chargeStateGas_gasMeasure hState
+      simp only [Devm.creditStateGasRefund_gasMeasure, Devm.withRefundCounter_gasMeasure,
+        Devm.ite_addAccessedStorageKey_gasMeasure] at e3
+      dsimp only at e1 e2 hFinal
+      rw [← hFinal, Devm.setStorVal_gasMeasure]
+      omega
   case sload =>
     obtain ⟨⟨key, d1⟩, h1, h⟩ := Except.bind_eq_ok h
     have e1 := Devm.pop_gasMeasure h1
@@ -1864,6 +1925,21 @@ theorem liftMachExecution_resultGas (core : Mach → Footprint.Outcome Mach Unit
   unfold liftMachExecution Footprint.toExecution liftMach Footprint.liftOutcome
   cases core devm.mach <;> rfl
 
+/-- A state charge never raises the measure in either branch: a reservoir draw
+moves nothing the measure counts, a spill moves exactly as much out of
+`gasLeft` as it records, and the out-of-gas branch returns the frame it was
+given. -/
+@[simp] theorem Mach.chargeStateGas_machResultGas (amount : Nat) (mach : Mach) :
+    machResultGas (Mach.chargeStateGas amount mach) ≤ mach.gasMeasure := by
+  unfold Mach.chargeStateGas
+  split_ifs <;> simp only [machResultGas, Mach.gasMeasure] <;> omega
+
+@[simp] theorem chargeStateGas_result_gasLe (amount : Nat) (devm : Devm) :
+    (chargeStateGas amount devm).gasMeasure ≤ devm.gasMeasure := by
+  rw [chargeStateGas, liftMachExecution_resultGas]
+  exact Mach.chargeStateGas_machResultGas amount devm.mach
+
+
 namespace Mach
 
 @[simp] theorem pop_machResultGas (mach : Mach) :
@@ -2273,24 +2349,40 @@ theorem Rinst.runCore_gasLe (pc : Nat) (devm : Devm) (sevm : Sevm) (r : Rinst) :
     intro _
     simp
   case sstore =>
-    refine gasLe_bind_snd (by simp) ?_
-    rintro ⟨key, d1⟩
-    refine gasLe_bind_snd (by simp) ?_
-    rintro ⟨val, d2⟩
-    refine gasLe_bind_const (devm := d2) (by simp) ?_
-    intro _
-    refine gasLe_bind (proj := Prod.fst) ?_ ?_
-    · simp only [resultGas_ok]
-      split <;> simp
-    · rintro ⟨d3, cost2⟩
-      refine gasLe_bind_const (devm := d3) (by simp) ?_
+    split
+    · -- Prague.
+      refine gasLe_bind_snd (by simp) ?_
+      rintro ⟨key, d1⟩
+      refine gasLe_bind_snd (by simp) ?_
+      rintro ⟨val, d2⟩
+      refine gasLe_bind_const (devm := d2) (by simp) ?_
       intro _
-      refine gasLe_bind_id (by simp) ?_
+      refine gasLe_bind (proj := Prod.fst) ?_ ?_
+      · simp only [resultGas_ok]
+        split <;> simp
+      · rintro ⟨d3, cost2⟩
+        refine gasLe_bind_const (devm := d3) (by simp) ?_
+        intro _
+        refine gasLe_bind_id (by simp) ?_
+        intro d4
+        refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
+        intro d5
+        refine gasLe_bind_const (devm := d5) (by simp) ?_
+        intro _
+        simp
+    · -- Amsterdam.
+      refine gasLe_bind_const (devm := devm) (by simp) ?_
+      intro _
+      refine gasLe_bind_snd (by simp) ?_
+      rintro ⟨key, d1⟩
+      refine gasLe_bind_snd (by simp) ?_
+      rintro ⟨val, d2⟩
+      refine gasLe_bind_const (devm := d2) (by simp) ?_
+      intro _
+      refine gasLe_bind_id (Nat.le_trans (chargeGas_result_gasLe _ _) (by simp)) ?_
+      intro d3
+      refine gasLe_bind_id (chargeStateGas_result_gasLe _ _) ?_
       intro d4
-      refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
-      intro d5
-      refine gasLe_bind_const (devm := d5) (by simp) ?_
-      intro _
       simp
 
 theorem Jinst.runCore_gasLe (pc : Nat) (devm : Devm) (sevm : Sevm) (j : Jinst) :

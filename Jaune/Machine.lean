@@ -2246,7 +2246,7 @@ def Mach.gasMeasure (mach : Mach) : Nat :=
 
 def Devm.gasMeasure (devm : Devm) : Nat := devm.mach.gasMeasure
 
-@[simp] theorem Devm.gasMeasure_def (devm : Devm) :
+theorem Devm.gasMeasure_def (devm : Devm) :
     devm.gasMeasure
       = devm.gasLeft + devm.mach.stateGas.spilled
           + devm.mach.stateGas.committedSpill := rfl
@@ -3668,39 +3668,87 @@ def Rinst.runCore
     let ⟨key, devm⟩ ← devm.pop
     pushItem (devm.getTransVal sevm.currentTarget key) gasWarmAccess devm
   | .pc => pushItem pc.toB256 gBase devm
-  | .sstore => do
-    let ⟨key, devm⟩ ← devm.pop
-    let ⟨new_value, devm⟩ ← devm.pop
-    .assert
-      (gCallStipend < devm.gasLeft)
-      ⟨.halt (.outOfGas .none), devm⟩
-    let ct := sevm.currentTarget
-    let original_value := getOrigStorVal sevm ct key
-    let current_value := devm.getStorVal ct key
-    let ⟨devm, gasCost2⟩ ← .ok <|
-      if ⟨ct, key⟩ ∉ devm.accessedStorageKeys then
-        ( ⟨ addAccessedStorageKey devm ct key,
-            gasColdSload ⟩ : Devm × Nat )
-      else
-        ⟨devm, 0⟩
-    let gasCost3 ← .ok <|
-      if original_value = current_value ∧ current_value ≠ new_value then
-        if original_value = 0 then
-          gasCost2 + gasStorageSet
+  -- `vm/instructions/storage.py` `sstore`. The two shapes differ in more than
+  -- numbers, so this is a `match` on the switch rather than a schedule read:
+  -- Amsterdam moves the static check ahead of the pops, replaces the EIP-2200
+  -- stipend sentry with an explicit `check_gas`, re-derives the charge as
+  -- access plus `STORAGE_WRITE`, and moves the state creation into the second
+  -- dimension. Under `none` the body below is the body it has always been.
+  | .sstore =>
+    match sevm.benvStat.rules.stateGas with
+    | none => do
+      let ⟨key, devm⟩ ← devm.pop
+      let ⟨new_value, devm⟩ ← devm.pop
+      .assert
+        (gCallStipend < devm.gasLeft)
+        ⟨.halt (.outOfGas .none), devm⟩
+      let ct := sevm.currentTarget
+      let original_value := getOrigStorVal sevm ct key
+      let current_value := devm.getStorVal ct key
+      let ⟨devm, gasCost2⟩ ← .ok <|
+        if ⟨ct, key⟩ ∉ devm.accessedStorageKeys then
+          ( ⟨ addAccessedStorageKey devm ct key,
+              gasColdSload ⟩ : Devm × Nat )
         else
-          gasCost2 + (gasStorageUpdate - gasColdSload)
-      else
-        gasCost2 + gasWarmAccess
-    let devm ← .ok <| devm.withRefundCounter <|
-      sstoreNewRefundCounter
-        sevm.benvStat.rules.gas
-        new_value
-        original_value
-        current_value
-        devm.refundCounter
-    let devm ← chargeGas gasCost3 devm
-    assertDynamic sevm devm
-    .ok (devm.setStorVal sevm.currentTarget key new_value)
+          ⟨devm, 0⟩
+      let gasCost3 ← .ok <|
+        if original_value = current_value ∧ current_value ≠ new_value then
+          if original_value = 0 then
+            gasCost2 + gasStorageSet
+          else
+            gasCost2 + (gasStorageUpdate - gasColdSload)
+        else
+          gasCost2 + gasWarmAccess
+      let devm ← .ok <| devm.withRefundCounter <|
+        sstoreNewRefundCounter
+          sevm.benvStat.rules.gas
+          new_value
+          original_value
+          current_value
+          devm.refundCounter
+      let devm ← chargeGas gasCost3 devm
+      assertDynamic sevm devm
+      .ok (devm.setStorVal sevm.currentTarget key new_value)
+    | some state => do
+      -- The static check now precedes everything, including the pops.
+      assertDynamic sevm devm
+      let ⟨key, devm⟩ ← devm.pop
+      let ⟨new_value, devm⟩ ← devm.pop
+      let ct := sevm.currentTarget
+      -- GAS (state-independent). Price what is computable without touching
+      -- state and check it is affordable first: the access cost can now exceed
+      -- the stipend, so the EIP-2200 sentry alone no longer suffices.
+      let cold := ⟨ct, key⟩ ∉ devm.accessedStorageKeys
+      let accessGas := if cold then gasColdSload else gasWarmAccess
+      .assert
+        (max accessGas (gCallStipend + 1) ≤ devm.gasLeft)
+        ⟨.halt (.outOfGas .none), devm⟩
+      -- STATE ACCESS. Only now is the slot read, and only now is it warmed.
+      let devm := if cold then addAccessedStorageKey devm ct key else devm
+      let original_value := getOrigStorVal sevm ct key
+      let current_value := devm.getStorVal ct key
+      let devm := devm.withRefundCounter <|
+        sstoreAmsterdamRefundCounter
+          sevm.benvStat.rules.gas state
+          new_value original_value current_value devm.refundCounter
+      -- STATE GAS. A set-then-cleared slot refills the `STORAGE_SET` its first
+      -- set charged, and the credit precedes both charges as upstream's does.
+      let devm :=
+        devm.creditStateGasRefund
+          (sstoreAmsterdamStateRefund state new_value original_value
+            current_value)
+      -- Execution gas before state gas, so that an execution-gas out-of-gas
+      -- does not consume state gas that would inflate the parent's reservoir.
+      let devm ←
+        chargeGas
+          (sstoreAmsterdamGasCost state new_value original_value current_value
+            cold)
+          devm
+      let devm ←
+        chargeStateGas
+          (sstoreAmsterdamStateGas state new_value original_value current_value)
+          devm
+      .ok (devm.setStorVal ct key new_value)
   | .tstore => do
     let ⟨key, devm⟩ ← devm.pop
     let ⟨new_value, devm⟩ ← devm.pop
@@ -5503,18 +5551,33 @@ theorem Rinst.runCore_canonical (pc : Nat) {devm : Devm} (sevm : Sevm)
         (liftMachExecution_canonical (Devm.Canonical.of_world_eq ha rfl))
         fun d hd => liftMachExecution_canonical hd
   case sstore =>
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
-    refine Except.CanonicalOn.bind (Except.canonicalOn_assert hb) fun _ _ => ?_
-    split <;>
-      (refine Except.canonicalOn_bind_ok ?_
-       refine Except.canonicalOn_bind_ok ?_
-       refine Except.canonicalOn_bind_ok ?_
-       refine Except.CanonicalOn.bind
-         (liftMachExecution_canonical (Devm.Canonical.of_world_eq hb rfl))
-         fun d hd => ?_
-       refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
-       exact Devm.Canonical.setStorVal hd _ _ _)
+    split
+    · -- Prague: the body it has always been.
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+      refine Except.CanonicalOn.bind (Except.canonicalOn_assert hb) fun _ _ => ?_
+      split <;>
+        (refine Except.canonicalOn_bind_ok ?_
+         refine Except.canonicalOn_bind_ok ?_
+         refine Except.canonicalOn_bind_ok ?_
+         refine Except.CanonicalOn.bind
+           (liftMachExecution_canonical (Devm.Canonical.of_world_eq hb rfl))
+           fun d hd => ?_
+         refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
+         exact Devm.Canonical.setStorVal hd _ _ _)
+    · -- Amsterdam: the static check first, the pops, the pre-check, then the
+      -- two charges, neither of which touches the world.
+      refine Except.CanonicalOn.bind (assertDynamic_canonicalOn h) fun _ _ => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+      refine Except.CanonicalOn.bind (Except.canonicalOn_assert hb) fun _ _ => ?_
+      split <;>
+        (refine Except.CanonicalOn.bind
+           (liftMachExecution_canonical (Devm.Canonical.of_world_eq hb rfl))
+           fun d hd => ?_
+         refine Except.CanonicalOn.bind (liftMachExecution_canonical hd)
+           fun d' hd' => ?_
+         exact Devm.Canonical.setStorVal hd' _ _ _)
   case tload =>
     refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
     exact liftMachExecution_canonical ha
