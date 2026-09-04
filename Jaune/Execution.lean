@@ -1505,6 +1505,132 @@ private def flattenGuardCallData
 #guard flattenGuardCallData [] 1 false = some [0xAA]
 #guard flattenGuardCallData [] 1 true = some [0xAA]
 
+/-! ### Amsterdam metering site table: CALL, CREATE and SELFDESTRUCT
+
+These guards execute the instruction sites themselves against the Prague rule
+shape and the Amsterdam metering vehicle. CREATE recovers its opcode charge by
+adding the retained parent gas to the child grant; CALL uses a zero requested
+grant, so the parent's debit is exactly the access/value site charge. The
+state component similarly adds the parent and child reservoirs. -/
+
+private def meteringGuardGas : Nat := 1_000_000
+private def meteringGuardStateGas : Nat := 1_000_000
+private def meteringGuardCaller : Adr := 0x1000
+private def meteringGuardCallee : Adr := 0x2000
+
+private def meteringGuardMsg (rules : ForkRules) (stateGasGrant : Nat) : Msg :=
+  let state := State.setBal .empty meteringGuardCaller 100
+  {
+    (default : Msg) with
+    benv := {
+      (default : Benv) with
+      state := state
+      stat := {(default : BenvStat) with rules := rules, origState := state}
+    }
+    caller := meteringGuardCaller
+    target := some meteringGuardCaller
+    currentTarget := meteringGuardCaller
+    gas := meteringGuardGas
+    depth := 8
+    stateGasGrant := stateGasGrant
+  }
+
+private def meteringGuardDevm
+    (rules : ForkRules) (stateGasGrant : Nat) (stack : List B256) : Devm :=
+  (initDevm (meteringGuardMsg rules stateGasGrant)).withStack stack
+
+private def meteringGuardResumeParent : Resume → Devm
+  | .create parent _ => parent
+  | .call parent _ _ => parent
+  | .createAmsterdam _ parent _ _ => parent
+  | .callAmsterdam _ parent _ _ _ => parent
+
+private def meteringGuardCreateCharges
+    (rules : ForkRules) (stateGasGrant : Nat) (x : Xinst)
+    (stack : List B256) : Option (Nat × Nat) :=
+  let msg := meteringGuardMsg rules stateGasGrant
+  match Xinst.step (initSevm msg) (meteringGuardDevm rules stateGasGrant stack) x with
+  | .spawn frame resume =>
+    let parent := meteringGuardResumeParent resume
+    some
+      (meteringGuardGas - (parent.gasLeft + frame.inner.gas),
+       stateGasGrant - (parent.stateGasLeft + frame.inner.stateGasGrant))
+  | _ => none
+
+private def meteringGuardCallCharges
+    (rules : ForkRules) (stateGasGrant : Nat) (x : Xinst)
+    (stack : List B256) : Option (Nat × Nat) :=
+  let msg := meteringGuardMsg rules stateGasGrant
+  match Xinst.step (initSevm msg) (meteringGuardDevm rules stateGasGrant stack) x with
+  | .spawn frame resume =>
+    let parent := meteringGuardResumeParent resume
+    some
+      (meteringGuardGas - parent.gasLeft,
+       stateGasGrant - (parent.stateGasLeft + frame.inner.stateGasGrant))
+  | _ => none
+
+private def meteringGuardSelfdestructCharges
+    (rules : ForkRules) (stateGasGrant : Nat) : Option (Nat × Nat × Nat) :=
+  let msg := meteringGuardMsg rules stateGasGrant
+  let devm := meteringGuardDevm rules stateGasGrant [meteringGuardCallee.toB256]
+  match Linst.run (initSevm msg) devm .selfdestruct with
+  | .ok d =>
+    some
+      (meteringGuardGas - d.gasLeft,
+       stateGasGrant - d.stateGasLeft,
+       d.logs.length)
+  | .error _ => none
+
+-- CREATE and CREATE2 share the same zero-initcode base at both shapes.
+#guard meteringGuardCreateCharges pragueRules 0 .create [0, 0, 0]
+  = some (32000, 0)
+#guard meteringGuardCreateCharges amsterdamMeteringRules meteringGuardStateGas
+    .create [0, 0, 0]
+  = some (12000, 183600)
+#guard meteringGuardCreateCharges pragueRules 0 .create2 [0, 0, 0, 0]
+  = some (32000, 0)
+#guard meteringGuardCreateCharges amsterdamMeteringRules meteringGuardStateGas
+    .create2 [0, 0, 0, 0]
+  = some (12000, 183600)
+
+-- A cold value-bearing CALL creates its empty recipient at both shapes. Prague
+-- pays the legacy 25,000 execution surcharge; Amsterdam pays NEW_ACCOUNT in
+-- the state dimension instead. CALLCODE never creates an account.
+#guard meteringGuardCallCharges pragueRules 0 .call
+    [0, meteringGuardCallee.toB256, 1, 0, 0, 0, 0]
+  = some (36600, 0)
+#guard meteringGuardCallCharges amsterdamMeteringRules meteringGuardStateGas .call
+    [0, meteringGuardCallee.toB256, 1, 0, 0, 0, 0]
+  = some (14300, 183600)
+#guard meteringGuardCallCharges pragueRules 0 .callcode
+    [0, meteringGuardCallee.toB256, 1, 0, 0, 0, 0]
+  = some (11600, 0)
+#guard meteringGuardCallCharges amsterdamMeteringRules meteringGuardStateGas
+    .callcode [0, meteringGuardCallee.toB256, 1, 0, 0, 0, 0]
+  = some (14300, 0)
+
+-- The no-value call variants pay only the cold account access at this input.
+#guard meteringGuardCallCharges pragueRules 0 .delegatecall
+    [0, meteringGuardCallee.toB256, 0, 0, 0, 0]
+  = some (2600, 0)
+#guard meteringGuardCallCharges amsterdamMeteringRules meteringGuardStateGas
+    .delegatecall [0, meteringGuardCallee.toB256, 0, 0, 0, 0]
+  = some (3000, 0)
+#guard meteringGuardCallCharges pragueRules 0 .staticcall
+    [0, meteringGuardCallee.toB256, 0, 0, 0, 0]
+  = some (2600, 0)
+#guard meteringGuardCallCharges amsterdamMeteringRules meteringGuardStateGas
+    .staticcall [0, meteringGuardCallee.toB256, 0, 0, 0, 0]
+  = some (3000, 0)
+
+-- A cold sweep to a new beneficiary: Amsterdam replaces the legacy 25,000
+-- execution surcharge with ACCOUNT_WRITE plus NEW_ACCOUNT state gas, and emits
+-- the EIP-7708 transfer log.
+#guard meteringGuardSelfdestructCharges pragueRules 0 = some (32600, 0, 0)
+#guard meteringGuardSelfdestructCharges amsterdamMeteringRules
+    meteringGuardStateGas
+  = some (17000, 183600, 1)
+
 -- A PUSH with zero gas halts through the frozen OutOfGasError channel.
 private def flattenGuardOog : Bool :=
   let msg := flattenGuardMsg [0x60, 0x01, 0x00] 0 8
