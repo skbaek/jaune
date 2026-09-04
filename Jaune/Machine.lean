@@ -4400,6 +4400,626 @@ def Devm.StateGasZero (devm : Devm) : Prop := devm.mach.stateGas = .zero
 instance {devm : Devm} : Decidable devm.StateGasZero := by
   unfold Devm.StateGasZero; infer_instance
 
+/-- State-gas preservation for machine-result carriers.  The failing machine
+is just as observable as the successful payload, so both channels carry the
+zero-meter obligation. -/
+def Except.StateGasZeroOn {ρ α : Type} (P : α → Prop) :
+    Except (ρ × Devm) α → Prop
+  | .ok a => P a
+  | .error e => e.2.StateGasZero
+
+/-- The zero-meter invariant on an execution result, on both channels. -/
+abbrev Execution.StateGasZero (x : Execution) : Prop :=
+  x.StateGasZeroOn Devm.StateGasZero
+
+theorem Except.StateGasZeroOn.bind {ρ α β : Type} {P : α → Prop} {Q : β → Prop}
+    {x : Except (ρ × Devm) α} {f : α → Except (ρ × Devm) β}
+    (hx : x.StateGasZeroOn P)
+    (hf : ∀ a, P a → (f a).StateGasZeroOn Q) :
+    (x >>= f).StateGasZeroOn Q := by
+  cases x with
+  | error e => exact hx
+  | ok a => exact hf a hx
+
+theorem Except.StateGasZeroOn.map {ρ α β : Type} {P : α → Prop} {Q : β → Prop}
+    {x : Except (ρ × Devm) α} {f : α → β}
+    (hx : x.StateGasZeroOn P) (hf : ∀ a, P a → Q (f a)) :
+    (x <&> f).StateGasZeroOn Q := by
+  cases x with
+  | error e => exact hx
+  | ok a => exact hf a hx
+
+theorem Except.stateGasZeroOn_ok {ρ α : Type} {P : α → Prop} {a : α}
+    (h : P a) :
+    (Except.ok a : Except (ρ × Devm) α).StateGasZeroOn P := h
+
+theorem Except.stateGasZeroOn_error {ρ α : Type} {P : α → Prop}
+    {e : ρ × Devm} (h : e.2.StateGasZero) :
+    (Except.error e : Except (ρ × Devm) α).StateGasZeroOn P := h
+
+theorem Except.stateGasZeroOn_assert {p : Prop} [Decidable p] {ρ : Type}
+    {e : ρ × Devm} (h : e.2.StateGasZero) :
+    (Except.assert p e).StateGasZeroOn (fun _ => True) := by
+  unfold Except.assert
+  split
+  · trivial
+  · exact h
+
+/-- A footprint result preserves the state-gas record of its input machine on
+both channels. -/
+def Footprint.StateGasEq {α : Type} (before : Mach) :
+    Footprint.Outcome Mach α → Prop
+  | .error (_, mach) => mach.stateGas = before.stateGas
+  | .ok (_, mach) => mach.stateGas = before.stateGas
+
+def Footprint.MachMetaStateGasEq {α : Type} (before : Mach) :
+    Footprint.Outcome (Mach × Meta) α → Prop
+  | .error (_, view) => view.1.stateGas = before.stateGas
+  | .ok (_, view) => view.1.stateGas = before.stateGas
+
+/-- A Mach-only footprint preserves the zero meter whenever its core leaves
+the `stateGas` field unchanged on both result channels. -/
+theorem liftMach_stateGasZeroOn {α : Type}
+    {core : Mach → Footprint.Outcome Mach α} {devm : Devm}
+    (h : devm.StateGasZero)
+    (hc : Footprint.StateGasEq devm.mach (core devm.mach)) :
+    (liftMach core devm).StateGasZeroOn (fun a => a.2.StateGasZero) := by
+  unfold liftMach Footprint.liftOutcome
+  split <;> simp_all [Footprint.StateGasEq, Except.StateGasZeroOn,
+    Devm.StateGasZero, Devm.setMach]
+
+theorem Footprint.toExecution_stateGasZero {x : Except _ (Unit × Devm)}
+    (hx : x.StateGasZeroOn (fun a => a.2.StateGasZero)) :
+    (Footprint.toExecution x).StateGasZero := by
+  cases x with
+  | error e => exact hx
+  | ok a => exact hx
+
+theorem liftMachExecution_stateGasZero
+    {core : Mach → Footprint.Outcome Mach Unit} {devm : Devm}
+    (h : devm.StateGasZero)
+    (hc : Footprint.StateGasEq devm.mach (core devm.mach)) :
+    (liftMachExecution core devm).StateGasZero := by
+  cases hcore : core devm.mach with
+  | error e =>
+    rw [hcore] at hc
+    simpa [liftMachExecution, Footprint.toExecution, liftMach,
+      Footprint.liftOutcome, hcore, Execution.StateGasZero,
+      Footprint.StateGasEq, Except.StateGasZeroOn, Devm.StateGasZero,
+      Devm.setMach] using hc.trans h
+  | ok a =>
+    rw [hcore] at hc
+    simpa [liftMachExecution, Footprint.toExecution, liftMach,
+      Footprint.liftOutcome, hcore, Execution.StateGasZero,
+      Footprint.StateGasEq, Except.StateGasZeroOn, Devm.StateGasZero,
+      Devm.setMach] using hc.trans h
+
+theorem liftMachMetaExecution_stateGasZero
+    {core : Mach → Meta → Footprint.Outcome (Mach × Meta) Unit} {devm : Devm}
+    (h : devm.StateGasZero)
+    (hc : Footprint.MachMetaStateGasEq devm.mach (core devm.mach devm.meta)) :
+    (liftMachMetaExecution core devm).StateGasZero := by
+  cases hcore : core devm.mach devm.meta with
+  | error e =>
+    rw [hcore] at hc
+    simpa [liftMachMetaExecution, Footprint.toExecution, liftMachMeta,
+      Footprint.liftOutcome, hcore, Execution.StateGasZero,
+      Footprint.MachMetaStateGasEq, Except.StateGasZeroOn,
+      Devm.StateGasZero] using hc.trans h
+  | ok a =>
+    rw [hcore] at hc
+    simpa [liftMachMetaExecution, Footprint.toExecution, liftMachMeta,
+      Footprint.liftOutcome, hcore, Execution.StateGasZero,
+      Footprint.MachMetaStateGasEq, Except.StateGasZeroOn,
+      Devm.StateGasZero] using hc.trans h
+theorem Mach.chargeGas_stateGas_eq (cost : Nat) (mach : Mach) :
+    Footprint.StateGasEq mach (mach.chargeGas cost) := by
+  cases hs : safeSub mach.gasLeft cost <;>
+    simp [Mach.chargeGas, hs, Footprint.StateGasEq]
+
+theorem Mach.push_stateGas_eq (x : B256) (mach : Mach) :
+    Footprint.StateGasEq mach (mach.push x) := by
+  by_cases hs : mach.stack.length < 1024 <;>
+    simp [Mach.push, hs, Footprint.StateGasEq]
+
+theorem Mach.pop_stateGas_eq (mach : Mach) :
+    Footprint.StateGasEq mach mach.pop := by
+  cases hs : mach.stack <;> simp [Mach.pop, hs, Footprint.StateGasEq]
+
+theorem Mach.popToNat_stateGas_eq (mach : Mach) :
+    Footprint.StateGasEq mach mach.popToNat := by
+  unfold Mach.popToNat
+  cases hp : mach.pop <;>
+    have hm := Mach.pop_stateGas_eq mach <;> rw [hp] at hm <;> exact hm
+
+theorem Mach.popToAdr_stateGas_eq (mach : Mach) :
+    Footprint.StateGasEq mach mach.popToAdr := by
+  unfold Mach.popToAdr
+  cases hp : mach.pop <;>
+    have hm := Mach.pop_stateGas_eq mach <;> rw [hp] at hm <;> exact hm
+
+theorem Mach.popN_stateGas_eq (mach : Mach) (n : Nat) :
+    Footprint.StateGasEq mach (mach.popN n) := by
+  induction n generalizing mach with
+  | zero => rfl
+  | succ n ih =>
+    unfold Mach.popN
+    cases hp : mach.pop with
+    | error e =>
+      have hm := Mach.pop_stateGas_eq mach
+      rw [hp] at hm
+      exact hm
+    | ok a =>
+      have hm := Mach.pop_stateGas_eq mach
+      rw [hp] at hm
+      cases hn : a.2.popN n with
+      | error e =>
+        have hn' := ih a.2
+        rw [hn] at hn'
+        simpa [hp, hn, Footprint.StateGasEq] using hn'.trans hm
+      | ok b =>
+        have hn' := ih a.2
+        rw [hn] at hn'
+        simpa [hp, hn, Footprint.StateGasEq] using hn'.trans hm
+
+theorem Mach.pushItem_stateGas_eq (x : B256) (cost : Nat) (mach : Mach) :
+    Footprint.StateGasEq mach (mach.pushItem x cost) := by
+  unfold Mach.pushItem
+  cases hc : mach.chargeGas cost with
+  | error e =>
+    have hm := Mach.chargeGas_stateGas_eq cost mach
+    rw [hc] at hm
+    exact hm
+  | ok a =>
+    have hm := Mach.chargeGas_stateGas_eq cost mach
+    rw [hc] at hm
+    have hp := Mach.push_stateGas_eq x a.2
+    cases hpush : a.2.push x <;> rw [hpush] at hp
+    · simpa [hc, hpush, Footprint.StateGasEq] using hp.trans hm
+    · simpa [hc, hpush, Footprint.StateGasEq] using hp.trans hm
+
+theorem Mach.applyUnary_stateGas_eq (f : B256 → B256) (cost : Nat) (mach : Mach) :
+    Footprint.StateGasEq mach (mach.applyUnary f cost) := by
+  unfold Mach.applyUnary
+  cases hp : mach.pop with
+  | error e =>
+    have hm := Mach.pop_stateGas_eq mach
+    rw [hp] at hm
+    exact hm
+  | ok a =>
+    have hm := Mach.pop_stateGas_eq mach
+    rw [hp] at hm
+    have ho := Mach.pushItem_stateGas_eq (f a.1) cost a.2
+    cases hpush : a.2.pushItem (f a.1) cost <;> rw [hpush] at ho
+    · simpa [hp, hpush, Footprint.StateGasEq] using ho.trans hm
+    · simpa [hp, hpush, Footprint.StateGasEq] using ho.trans hm
+
+theorem Mach.applyBinary_stateGas_eq (f : B256 → B256 → B256) (cost : Nat)
+    (mach : Mach) :
+    Footprint.StateGasEq mach (mach.applyBinary f cost) := by
+  unfold Mach.applyBinary
+  cases hp : mach.pop with
+  | error e =>
+    have hm := Mach.pop_stateGas_eq mach
+    rw [hp] at hm
+    exact hm
+  | ok a =>
+    have hm := Mach.pop_stateGas_eq mach
+    rw [hp] at hm
+    cases hp2 : a.2.pop with
+    | error e =>
+      have hm2 := Mach.pop_stateGas_eq a.2
+      rw [hp2] at hm2
+      simpa [hp, hp2, Footprint.StateGasEq] using hm2.trans hm
+    | ok b =>
+      have hm2 := Mach.pop_stateGas_eq a.2
+      rw [hp2] at hm2
+      have ho := Mach.pushItem_stateGas_eq (f a.1 b.1) cost b.2
+      cases hpush : b.2.pushItem (f a.1 b.1) cost <;> rw [hpush] at ho
+      · simpa [hp, hp2, hpush, Footprint.StateGasEq] using
+          ho.trans (hm2.trans hm)
+      · simpa [hp, hp2, hpush, Footprint.StateGasEq] using
+          ho.trans (hm2.trans hm)
+
+theorem Mach.applyTernary_stateGas_eq (f : B256 → B256 → B256 → B256)
+    (cost : Nat) (mach : Mach) :
+    Footprint.StateGasEq mach (mach.applyTernary f cost) := by
+  unfold Mach.applyTernary
+  cases hp : mach.pop with
+  | error e =>
+    have hm := Mach.pop_stateGas_eq mach
+    rw [hp] at hm
+    exact hm
+  | ok a =>
+    have hm := Mach.pop_stateGas_eq mach
+    rw [hp] at hm
+    cases hp2 : a.2.pop with
+    | error e =>
+      have hm2 := Mach.pop_stateGas_eq a.2
+      rw [hp2] at hm2
+      simpa [hp, hp2, Footprint.StateGasEq] using hm2.trans hm
+    | ok b =>
+      have hm2 := Mach.pop_stateGas_eq a.2
+      rw [hp2] at hm2
+      cases hp3 : b.2.pop with
+      | error e =>
+        have hm3 := Mach.pop_stateGas_eq b.2
+        rw [hp3] at hm3
+        simpa [hp, hp2, hp3, Footprint.StateGasEq] using
+          hm3.trans (hm2.trans hm)
+      | ok c =>
+        have hm3 := Mach.pop_stateGas_eq b.2
+        rw [hp3] at hm3
+        have ho := Mach.pushItem_stateGas_eq (f a.1 b.1 c.1) cost c.2
+        cases hpush : c.2.pushItem (f a.1 b.1 c.1) cost <;> rw [hpush] at ho
+        · simpa [hp, hp2, hp3, hpush, Footprint.StateGasEq] using
+            ho.trans (hm3.trans (hm2.trans hm))
+        · simpa [hp, hp2, hp3, hpush, Footprint.StateGasEq] using
+            ho.trans (hm3.trans (hm2.trans hm))
+
+theorem chargeGas_stateGasZero (cost : Nat) {devm : Devm}
+    (h : devm.StateGasZero) : (chargeGas cost devm).StateGasZero :=
+  liftMachExecution_stateGasZero h (Mach.chargeGas_stateGas_eq cost devm.mach)
+
+theorem Devm.push_stateGasZero (x : B256) {devm : Devm}
+    (h : devm.StateGasZero) : (devm.push x).StateGasZero :=
+  liftMachExecution_stateGasZero h (Mach.push_stateGas_eq x devm.mach)
+
+theorem pushItem_stateGasZero (x : B256) (cost : Nat) {devm : Devm}
+    (h : devm.StateGasZero) : (pushItem x cost devm).StateGasZero :=
+  liftMachExecution_stateGasZero h
+    (Mach.pushItem_stateGas_eq x cost devm.mach)
+
+theorem Devm.pop_stateGasZero {devm : Devm} (h : devm.StateGasZero) :
+    devm.pop.StateGasZeroOn (fun a => a.2.StateGasZero) :=
+  liftMach_stateGasZeroOn h (Mach.pop_stateGas_eq devm.mach)
+
+theorem Devm.popToNat_stateGasZero {devm : Devm} (h : devm.StateGasZero) :
+    devm.popToNat.StateGasZeroOn (fun a => a.2.StateGasZero) :=
+  liftMach_stateGasZeroOn h (Mach.popToNat_stateGas_eq devm.mach)
+
+theorem Devm.popToAdr_stateGasZero {devm : Devm} (h : devm.StateGasZero) :
+    devm.popToAdr.StateGasZeroOn (fun a => a.2.StateGasZero) :=
+  liftMach_stateGasZeroOn h (Mach.popToAdr_stateGas_eq devm.mach)
+
+theorem Devm.popN_stateGasZero {devm : Devm} (h : devm.StateGasZero) (n : Nat) :
+    (devm.popN n).StateGasZeroOn (fun a => a.2.StateGasZero) :=
+  liftMach_stateGasZeroOn h (Mach.popN_stateGas_eq devm.mach n)
+
+theorem applyUnary_stateGasZero (f : B256 → B256) (cost : Nat) {devm : Devm}
+    (h : devm.StateGasZero) : (applyUnary f cost devm).StateGasZero :=
+  liftMachExecution_stateGasZero h
+    (Mach.applyUnary_stateGas_eq f cost devm.mach)
+
+theorem applyBinary_stateGasZero (f : B256 → B256 → B256) (cost : Nat)
+    {devm : Devm} (h : devm.StateGasZero) :
+    (applyBinary f cost devm).StateGasZero :=
+  liftMachExecution_stateGasZero h
+    (Mach.applyBinary_stateGas_eq f cost devm.mach)
+
+theorem applyTernary_stateGasZero (f : B256 → B256 → B256 → B256) (cost : Nat)
+    {devm : Devm} (h : devm.StateGasZero) :
+    (applyTernary f cost devm).StateGasZero :=
+  liftMachExecution_stateGasZero h
+    (Mach.applyTernary_stateGas_eq f cost devm.mach)
+
+theorem Devm.memRead_stateGasZero {devm : Devm} (index size : Nat)
+    (h : devm.StateGasZero) :
+    (devm.memRead index size).2.StateGasZero := h
+
+theorem Devm.subBal_stateGasZero {devm devm' : Devm}
+    (h : devm.StateGasZero) {adr : Adr} {value : B256}
+    (hs : devm.subBal adr value = some devm') : devm'.StateGasZero := by
+  unfold Devm.subBal at hs
+  cases hw : devm.state.subBal adr value with
+  | none => rw [hw] at hs; contradiction
+  | some world =>
+    rw [hw] at hs
+    simp only [bind, Option.bind, Option.some.injEq] at hs
+    rw [← hs]
+    exact h
+
+theorem Devm.addBal_stateGasZero {devm : Devm} (h : devm.StateGasZero)
+    (adr : Adr) (value : B256) : (devm.addBal adr value).StateGasZero := h
+
+theorem Devm.setBal_stateGasZero {devm : Devm} (h : devm.StateGasZero)
+    (adr : Adr) (value : B256) : (devm.setBal adr value).StateGasZero := h
+
+theorem Devm.withRefundCounter_stateGasZero {devm : Devm}
+    (h : devm.StateGasZero) (refund : Int) :
+    (devm.withRefundCounter refund).StateGasZero := h
+
+theorem addAccountToDelete_stateGasZero {devm : Devm} (h : devm.StateGasZero)
+    (adr : Adr) : (addAccountToDelete devm adr).StateGasZero := h
+
+theorem Rinst.balanceCore_stateGas_eq (gas : GasSchedule) (world : World)
+    (mach : Mach) (view : Meta) :
+    Footprint.MachMetaStateGasEq mach (Rinst.balanceCore gas world mach view) := by
+  unfold Rinst.balanceCore
+  cases hp : mach.pop with
+  | error e =>
+    have hm := Mach.pop_stateGas_eq mach
+    rw [hp] at hm
+    simpa [hp, Footprint.StateGasEq, Footprint.MachMetaStateGasEq] using hm
+  | ok a =>
+    have hm := Mach.pop_stateGas_eq mach
+    rw [hp] at hm
+    cases hc : a.2.chargeGas (if a.1.toAdr ∈ view.accessedAddresses
+        then gasWarmAccess else gas.coldAccountAccess) with
+    | error e =>
+      have hc' := Mach.chargeGas_stateGas_eq
+        (if a.1.toAdr ∈ view.accessedAddresses
+          then gasWarmAccess else gas.coldAccountAccess) a.2
+      rw [hc] at hc'
+      simpa [hp, hc, Footprint.MachMetaStateGasEq] using hc'.trans hm
+    | ok b =>
+      have hc' := Mach.chargeGas_stateGas_eq
+        (if a.1.toAdr ∈ view.accessedAddresses
+          then gasWarmAccess else gas.coldAccountAccess) a.2
+      rw [hc] at hc'
+      have hpush := Mach.push_stateGas_eq (world.state.get a.1.toAdr).bal b.2
+      cases hq : b.2.push (world.state.get a.1.toAdr).bal <;> rw [hq] at hpush
+      · simpa [hp, hc, hq, Footprint.MachMetaStateGasEq] using
+          hpush.trans (hc'.trans hm)
+      · simpa [hp, hc, hq, Footprint.MachMetaStateGasEq] using
+          hpush.trans (hc'.trans hm)
+
+theorem Rinst.balance_stateGasZero (gas : GasSchedule) {devm : Devm}
+    (h : devm.StateGasZero) :
+    (liftMachMetaWorldExecution (Rinst.balanceCore gas) devm).StateGasZero :=
+  liftMachMetaExecution_stateGasZero h
+    (Rinst.balanceCore_stateGas_eq gas devm.world devm.mach devm.meta)
+
+/-- Every register instruction preserves a zero meter when the state-gas
+switch is absent.  The switch hypothesis rules out only the `SSTORE`
+Amsterdam sibling; all other register operations are meter-blind. -/
+theorem Rinst.run_stateGasZero {evm : Evm} (h : evm.dyna.StateGasZero)
+    (hrules : evm.sta.benvStat.rules.stateGas = none) (r : Rinst) :
+    (r.run evm).StateGasZero := by
+  unfold Rinst.run
+  cases r <;> simp only [Rinst.runCore]
+  all_goals try exact applyUnary_stateGasZero _ _ h
+  all_goals try exact applyBinary_stateGasZero _ _ h
+  all_goals try exact applyTernary_stateGasZero _ _ h
+  all_goals try exact pushItem_stateGasZero _ _ h
+  all_goals try exact Rinst.balance_stateGasZero _ h
+  case mload =>
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) ?_
+    rintro ⟨start, d1⟩ h1
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h1) ?_
+    intro d2 h2
+    exact Devm.push_stateGasZero _ (Devm.memRead_stateGasZero start 32 h2)
+  case keccak256 =>
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) ?_
+    rintro ⟨start, d1⟩ h1
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h1) ?_
+    rintro ⟨size, d2⟩ h2
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h2) ?_
+    intro d3 h3
+    exact Devm.push_stateGasZero _ (Devm.memRead_stateGasZero start size h3)
+  case mcopy =>
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) ?_
+    rintro ⟨dest, d1⟩ h1
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h1) ?_
+    rintro ⟨src, d2⟩ h2
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h2) ?_
+    rintro ⟨len, d3⟩ h3
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h3) ?_
+    intro d4 h4
+    exact Except.stateGasZeroOn_ok (Devm.memRead_stateGasZero src len h4)
+  case log =>
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) ?_
+    rintro ⟨start, d1⟩ h1
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h1) ?_
+    rintro ⟨size, d2⟩ h2
+    refine Except.StateGasZeroOn.bind (Devm.popN_stateGasZero h2 _) ?_
+    rintro ⟨topics, d3⟩ h3
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h3) ?_
+    intro d4 h4
+    refine Except.StateGasZeroOn.bind (Except.stateGasZeroOn_assert h4) ?_
+    intro _ _
+    exact Except.stateGasZeroOn_ok (Devm.memRead_stateGasZero start size h4)
+  case exp =>
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero ha) fun b hb => ?_
+    exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ hb)
+      fun d hd => Devm.push_stateGasZero _ hd
+  case clz =>
+    split
+    · exact applyUnary_stateGasZero _ _ h
+    · exact Except.stateGasZeroOn_error h
+  case calldataload =>
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
+    exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ ha)
+      fun d hd => Devm.push_stateGasZero _ hd
+  case calldatacopy =>
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) fun a ha => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero ha) fun b hb => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hb) fun c hc => ?_
+    exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ hc)
+      fun _ hd => Except.stateGasZeroOn_ok hd
+  case codecopy =>
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) fun a ha => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero ha) fun b hb => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hb) fun c hc => ?_
+    exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ hc)
+      fun _ hd => Except.stateGasZeroOn_ok hd
+  case extcodesize =>
+    refine Except.StateGasZeroOn.bind (Devm.popToAdr_stateGasZero h) fun a ha => ?_
+    split <;>
+      exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ ha)
+        fun _ hd => Devm.push_stateGasZero _ hd
+  case extcodecopy =>
+    refine Except.StateGasZeroOn.bind (Devm.popToAdr_stateGasZero h) fun a ha => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero ha) fun b hb => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hb) fun c hc => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hc) fun e he => ?_
+    split <;>
+      exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ he)
+        fun _ hd => Except.stateGasZeroOn_ok hd
+  case returndatacopy =>
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) fun a ha => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero ha) fun b hb => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hb) fun c hc => ?_
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ hc) fun d hd => ?_
+    split
+    · exact Except.StateGasZeroOn.bind
+        (Except.stateGasZeroOn_error (P := fun _ => True) hd)
+        fun _ _ => Except.stateGasZeroOn_ok hd
+    · exact Except.stateGasZeroOn_ok hd
+  case extcodehash =>
+    refine Except.StateGasZeroOn.bind (Devm.popToAdr_stateGasZero h) fun a ha => ?_
+    split <;>
+      exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ ha)
+        fun _ hd => Devm.push_stateGasZero _ hd
+  case blockhash =>
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
+    exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ ha)
+      fun _ hd => Devm.push_stateGasZero _ hd
+  case blobhash =>
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
+    exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ ha)
+      fun _ hd => Devm.push_stateGasZero _ hd
+  case pop =>
+    exact Except.StateGasZeroOn.bind
+      (Except.StateGasZeroOn.map (Devm.pop_stateGasZero h) fun _ ha => ha)
+      fun _ hd => chargeGas_stateGasZero _ hd
+  case mstore =>
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) fun a ha => ?_
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero ha) fun b hb => ?_
+    exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ hb)
+      fun _ hd => Except.stateGasZeroOn_ok hd
+  case mstore8 =>
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) fun a ha => ?_
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero ha) fun b hb => ?_
+    exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ hb)
+      fun _ hd => Except.stateGasZeroOn_ok hd
+  case sload =>
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
+    split <;>
+      exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ ha)
+        fun _ hd => Devm.push_stateGasZero _ hd
+  case sstore =>
+    rw [hrules]
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero ha) fun b hb => ?_
+    refine Except.StateGasZeroOn.bind (Except.stateGasZeroOn_assert hb) fun _ _ => ?_
+    refine Except.StateGasZeroOn.bind
+      (P := fun p : Devm × Nat => p.1.StateGasZero) ?_ fun p hp => ?_
+    · exact Except.stateGasZeroOn_ok (by split <;> exact hb)
+    refine Except.StateGasZeroOn.bind
+      (P := fun _ => True) (Except.stateGasZeroOn_ok trivial) fun _ _ => ?_
+    refine Except.StateGasZeroOn.bind
+      (Except.stateGasZeroOn_ok (Devm.withRefundCounter_stateGasZero hp _))
+      fun d hd => ?_
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ hd) fun d' hd' => ?_
+    refine Except.StateGasZeroOn.bind (Except.stateGasZeroOn_assert hd') fun _ _ => ?_
+    exact Except.stateGasZeroOn_ok hd'
+  case tload =>
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
+    exact pushItem_stateGasZero _ _ ha
+  case tstore =>
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero ha) fun b hb => ?_
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ hb) fun d hd => ?_
+    refine Except.StateGasZeroOn.bind (Except.stateGasZeroOn_assert hd) fun _ _ => ?_
+    exact Except.stateGasZeroOn_ok hd
+  case gas =>
+    exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h)
+      fun _ hd => Devm.push_stateGasZero _ hd
+  case dup =>
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h) fun d hd => ?_
+    split
+    · exact Except.stateGasZeroOn_error hd
+    · exact Devm.push_stateGasZero _ hd
+  case swap =>
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h) fun d hd => ?_
+    split
+    · exact Except.stateGasZeroOn_error hd
+    · exact Except.stateGasZeroOn_ok hd
+
+theorem Jinst.run_stateGasZero {evm : Evm} (h : evm.dyna.StateGasZero)
+    (j : Jinst) :
+    (j.run evm).StateGasZeroOn (fun a => a.2.StateGasZero) := by
+  unfold Jinst.run
+  cases j <;> simp only [Jinst.runCore]
+  case jumpdest =>
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h) ?_
+    intro d hd
+    exact Except.stateGasZeroOn_ok hd
+  case jump =>
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) ?_
+    rintro ⟨dest, d⟩ hd
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ hd) ?_
+    intro d2 hd2
+    refine Except.StateGasZeroOn.bind (Except.stateGasZeroOn_assert hd2) ?_
+    intro _ _
+    exact Except.stateGasZeroOn_ok hd2
+  case jumpi =>
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) ?_
+    rintro ⟨dest, d⟩ hd
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero hd) ?_
+    rintro ⟨cond, d2⟩ hd2
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ hd2) ?_
+    intro d3 hd3
+    split
+    · exact Except.stateGasZeroOn_ok hd3
+    · refine Except.StateGasZeroOn.bind (Except.stateGasZeroOn_assert hd3) ?_
+      intro _ _
+      exact Except.stateGasZeroOn_ok hd3
+
+theorem Linst.run_stateGasZero {sevm : Sevm} {devm : Devm}
+    (h : devm.StateGasZero) (hrules : sevm.benvStat.rules.stateGas = none)
+    (l : Linst) : Execution.StateGasZero (l.run sevm devm) := by
+  cases l <;> simp only [Linst.run]
+  case stop => exact h
+  case revert =>
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) ?_
+    rintro ⟨start, d1⟩ h1
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h1) ?_
+    rintro ⟨size, d2⟩ h2
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h2) ?_
+    intro d3 h3
+    exact Except.stateGasZeroOn_error (Devm.memRead_stateGasZero _ _ h3)
+  case return_ =>
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) ?_
+    rintro ⟨start, d1⟩ h1
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h1) ?_
+    rintro ⟨size, d2⟩ h2
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h2) ?_
+    intro d3 h3
+    exact Except.stateGasZeroOn_ok (Devm.memRead_stateGasZero _ _ h3)
+  case selfdestruct =>
+    rw [hrules]
+    refine Except.StateGasZeroOn.bind (Devm.popToAdr_stateGasZero h) ?_
+    rintro ⟨donee, d1⟩ h1
+    refine Except.StateGasZeroOn.bind
+      (P := fun _ => True) (Except.stateGasZeroOn_ok trivial) ?_
+    intro donorBal _
+    refine Except.StateGasZeroOn.bind
+      (P := fun p : Devm × Nat => p.1.StateGasZero) ?_ ?_
+    · exact Except.stateGasZeroOn_ok (by split <;> exact h1)
+    rintro ⟨d2, cost⟩ h2
+    refine Except.StateGasZeroOn.bind
+      (P := fun _ => True) (Except.stateGasZeroOn_ok trivial) ?_
+    intro cost3 _
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h2) ?_
+    intro d3 h5
+    refine Except.StateGasZeroOn.bind (Except.stateGasZeroOn_assert h5) ?_
+    intro _ _
+    refine Except.StateGasZeroOn.bind (P := Devm.StateGasZero) ?_ ?_
+    · cases hs : d3.subBal sevm.currentTarget donorBal with
+      | none => exact Except.stateGasZeroOn_error h5
+      | some d4 => exact Except.stateGasZeroOn_ok (Devm.subBal_stateGasZero h5 hs)
+    · intro d4 h6
+      refine Except.StateGasZeroOn.bind
+        (Except.stateGasZeroOn_ok (Devm.addBal_stateGasZero h6 _ _)) ?_
+      intro d5 h7
+      split
+      · exact Except.stateGasZeroOn_ok
+          (addAccountToDelete_stateGasZero (Devm.setBal_stateGasZero h7 _ _) _)
+      · exact Except.stateGasZeroOn_ok h7
+
 @[simp] theorem Devm.stateGasZero_gasMeasure {devm : Devm}
     (h : devm.StateGasZero) : devm.gasMeasure = devm.gasLeft :=
   Devm.gasMeasure_of_stateGas_zero h

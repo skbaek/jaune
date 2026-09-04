@@ -2967,4 +2967,506 @@ theorem execFueled_run_canonical :
             exact hcan
           · exact ih ⟨pc, evm.sta, d1⟩ ⟨hevm.1, hcan⟩ h
 
+/-! ### The zero-meter invariant through execution
+
+The machine layer proves that every legacy instruction preserves
+`Devm.StateGasZero`.  These result predicates add the frame and interpreter
+structure needed to say the same thing about spawning, settlement, and the
+fueled driver.  Amsterdam-only resume constructors are deliberately excluded:
+under `rules.stateGas = none` they are unreachable. -/
+
+def Except.SettlementStateGasZero :
+    Except (EvmError × State × AdrSet × Tra) Devm → Prop
+  | .error _ => True
+  | .ok devm => devm.StateGasZero
+
+theorem Except.SettlementStateGasZero.bind {x} {f : Devm → _}
+    (hx : SettlementStateGasZero x)
+    (hf : ∀ devm, devm.StateGasZero → SettlementStateGasZero (f devm)) :
+    SettlementStateGasZero (x >>= f) := by
+  cases x with
+  | error e => exact hx
+  | ok devm => exact hf devm hx
+
+def Frame.StateGasZero (frame : Frame) : Prop :=
+  frame.outer.benv.stat.rules.stateGas = none ∧
+    frame.inner.benv.stat.rules.stateGas = none ∧
+    frame.inner.stateGasGrant = 0
+
+def Resume.StateGasZero : Resume → Prop
+  | .create parent _ => parent.StateGasZero
+  | .call parent _ _ => parent.StateGasZero
+  | .createAmsterdam .. => False
+  | .callAmsterdam .. => False
+
+def XStep.StateGasZero : XStep → Prop
+  | .done ex => ex.StateGasZero
+  | .spawn frame rsm => frame.StateGasZero ∧ rsm.StateGasZero
+
+def Step.StateGasZero : Step → Prop
+  | .halt ex => ex.StateGasZero
+  | .cont _ devm => devm.StateGasZero
+  | .spawn frame rsm _ => frame.StateGasZero ∧ rsm.StateGasZero
+
+def Evm.StateGasZero (evm : Evm) : Prop :=
+  evm.sta.benvStat.rules.stateGas = none ∧ evm.dyna.StateGasZero
+
+def FrameEntry.StateGasZero : FrameEntry → Prop
+  | .done r => Except.SettlementStateGasZero r
+  | .run evm => evm.StateGasZero
+
+theorem XStep.ofExcept_stateGasZero {x : Except (EvmError × Devm) XStep}
+    (h : x.StateGasZeroOn XStep.StateGasZero) :
+    (XStep.ofExcept x).StateGasZero := by
+  cases x with
+  | error e => exact h
+  | ok step => exact h
+
+theorem Step.ofExecution_stateGasZero (pc : Nat) {x : Execution}
+    (h : x.StateGasZero) : (Step.ofExecution pc x).StateGasZero := by
+  cases x with
+  | error e => exact h
+  | ok devm => exact h
+
+theorem Step.ofJump_stateGasZero {x : Except (EvmError × Devm) (Nat × Devm)}
+    (h : x.StateGasZeroOn (fun a => a.2.StateGasZero)) :
+    (Step.ofJump x).StateGasZero := by
+  cases x with
+  | error e => exact h
+  | ok a => exact h
+
+theorem XStep.toStep_stateGasZero (pc : Nat) {x : XStep}
+    (h : x.StateGasZero) : (x.toStep pc).StateGasZero := by
+  cases x with
+  | done ex => exact Step.ofExecution_stateGasZero pc h
+  | spawn frame rsm => exact h
+
+theorem Frame.ofCall_stateGasZero {msg : Msg}
+    (hrules : msg.benv.stat.rules.stateGas = none)
+    (hgrant : msg.stateGasGrant = 0) :
+    (Frame.ofCall msg).StateGasZero := ⟨hrules, hrules, hgrant⟩
+
+theorem Frame.ofCreate_stateGasZero {msg : Msg}
+    (hrules : msg.benv.stat.rules.stateGas = none)
+    (hgrant : msg.stateGasGrant = 0) :
+    (Frame.ofCreate msg).StateGasZero := ⟨hrules, hrules, hgrant⟩
+
+theorem initEvm_stateGasZero {msg : Msg}
+    (hrules : msg.benv.stat.rules.stateGas = none)
+    (hgrant : msg.stateGasGrant = 0) :
+    (initEvm msg).StateGasZero :=
+  ⟨hrules, initDevm_stateGasZero hgrant⟩
+
+theorem executePrecomp_stateGasZero {evm : Evm}
+    (h : evm.dyna.StateGasZero) (adr : Adr) :
+    (executePrecomp evm adr).StateGasZero := by
+  unfold executePrecomp applyPrecompResult
+  split <;> exact h
+
+theorem executeCode.enter_stateGasZero {msg : Msg}
+    (hrules : msg.benv.stat.rules.stateGas = none)
+    (hgrant : msg.stateGasGrant = 0) :
+    Sum.elim Evm.StateGasZero Execution.StateGasZero
+      (executeCode.enter msg) := by
+  unfold executeCode.enter
+  split
+  · exact initEvm_stateGasZero hrules hgrant
+  · split
+    · exact executePrecomp_stateGasZero (initDevm_stateGasZero hgrant) _
+    · exact initEvm_stateGasZero hrules hgrant
+
+theorem Msg.benvAfterTransfer_ok_stateGas {msg : Msg} {benv : Benv}
+    (h : msg.benvAfterTransfer = .ok benv) :
+    benv.stat.rules.stateGas = msg.benv.stat.rules.stateGas := by
+  unfold Msg.benvAfterTransfer at h
+  split at h
+  · cases hs : msg.benv.subBal msg.caller msg.value with
+    | none => rw [hs] at h; contradiction
+    | some b1 =>
+        rw [hs] at h
+        simp only [Option.toExcept, bind, Except.bind, Except.ok.injEq] at h
+        rw [← h]
+        unfold Benv.subBal at hs
+        cases hw : msg.benv.state.subBal msg.caller msg.value with
+        | none => rw [hw] at hs; contradiction
+        | some world =>
+            rw [hw] at hs
+            simp only [bind, Option.bind, Option.some.injEq] at hs
+            rw [← hs]
+            rfl
+  · cases h
+    rfl
+
+theorem executeCode.handleError_stateGasZero {raw : Execution}
+    (h : raw.StateGasZero) :
+    Except.SettlementStateGasZero (executeCode.handleError raw) := by
+  cases raw with
+  | ok devm => exact h
+  | error e =>
+    rcases e with ⟨reason, devm⟩
+    cases reason with
+    | halt reason => exact h
+    | revert => exact h
+    | crypto reason => trivial
+    | internal reason => trivial
+
+theorem executeCode.handleErrorWith_stateGasZero {raw : Execution}
+    (h : raw.StateGasZero) :
+    Except.SettlementStateGasZero
+      (executeCode.handleErrorWith none raw) :=
+  executeCode.handleError_stateGasZero h
+
+theorem processMessage.settle_stateGasZero {msg : Msg}
+    {r : Except (EvmError × State × AdrSet × Tra) Devm}
+    (h : Except.SettlementStateGasZero r) :
+    Except.SettlementStateGasZero (processMessage.settle msg r) := by
+  cases r with
+  | error e => exact h
+  | ok devm =>
+    simp only [processMessage.settle, bind, Except.bind]
+    split <;> exact h
+
+theorem processCreateMessage.chargeCodeGas_stateGasZero
+    {rules : ForkRules} {devm : Devm}
+    (hrules : rules.stateGas = none) (h : devm.StateGasZero) :
+    (processCreateMessage.chargeCodeGas rules devm).StateGasZero := by
+  simp only [processCreateMessage.chargeCodeGas, hrules]
+  split
+  · exact h
+  · refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h) ?_
+    intro d hd
+    split <;> exact hd
+
+theorem processCreateMessage.exceptionalHalt_stateGasZero {devm : Devm}
+    (h : devm.StateGasZero) (reason : ExceptionalHalt) (st : State) (tra : Tra) :
+    (processCreateMessage.exceptionalHalt devm reason st tra).StateGasZero := h
+
+theorem processCreateMessage.settle_stateGasZero {msg : Msg}
+    (hrules : msg.benv.stat.rules.stateGas = none)
+    {r : Except (EvmError × State × AdrSet × Tra) Devm}
+    (h : Except.SettlementStateGasZero r) :
+    Except.SettlementStateGasZero (processCreateMessage.settle msg r) := by
+  refine Except.SettlementStateGasZero.bind h fun devm hd => ?_
+  split
+  · have hzero : ∀ {e : EvmError} {d' : Devm},
+        processCreateMessage.chargeCodeGas msg.benv.stat.rules devm =
+          .error (e, d') → d'.StateGasZero := by
+      intro e d' heq
+      have hc := processCreateMessage.chargeCodeGas_stateGasZero hrules hd
+      rw [heq] at hc
+      exact hc
+    split
+    · next d' heq =>
+        have hc := processCreateMessage.chargeCodeGas_stateGasZero hrules hd
+        rw [heq] at hc
+        exact hc
+    · split
+      · exact processCreateMessage.exceptionalHalt_stateGasZero
+          (hzero (by assumption)) _ _ _
+      · simp_all
+    · trivial
+    · trivial
+    · trivial
+  · exact hd
+
+theorem Frame.settleMsg_stateGasZero {frame : Frame}
+    (hf : frame.StateGasZero)
+    {r : Except (EvmError × State × AdrSet × Tra) Devm}
+    (h : Except.SettlementStateGasZero r) :
+    Except.SettlementStateGasZero (frame.settleMsg r) := by
+  unfold Frame.settleMsg
+  split
+  · exact processCreateMessage.settle_stateGasZero hf.1
+      (processMessage.settle_stateGasZero h)
+  · exact processMessage.settle_stateGasZero h
+
+theorem Frame.settle_stateGasZero {frame : Frame}
+    (hf : frame.StateGasZero) {raw : Execution} (h : raw.StateGasZero) :
+    Except.SettlementStateGasZero (frame.settle raw) := by
+  unfold Frame.settle
+  rw [hf.2.1]
+  exact Frame.settleMsg_stateGasZero hf
+    (executeCode.handleErrorWith_stateGasZero h)
+
+theorem Frame.enter_stateGasZero {frame : Frame} (hf : frame.StateGasZero) :
+    frame.enter.StateGasZero := by
+  unfold Frame.enter
+  cases he : frame.inner.benvAfterTransfer with
+  | error e =>
+      exact Frame.settleMsg_stateGasZero hf trivial
+  | ok benv =>
+      dsimp only
+      have hstat := Msg.benvAfterTransfer_ok_stateGas he
+      have hrules : benv.stat.rules.stateGas = none := hstat.trans hf.2.1
+      have hent := executeCode.enter_stateGasZero
+        (msg := frame.inner.withBenv benv) hrules hf.2.2
+      cases hx : executeCode.enter (frame.inner.withBenv benv) with
+      | inl evm => rw [hx] at hent; exact hent
+      | inr raw =>
+          rw [hx] at hent
+          exact Frame.settle_stateGasZero hf hent
+
+theorem genericCall.step_stateGasZero {sevm : Sevm} {devm : Devm}
+    (hrules : sevm.benvStat.rules.stateGas = none)
+    (h : devm.StateGasZero)
+    (gas : Nat) (value : B256) (caller target codeAddress : Adr)
+    (shouldTransferValue isStaticcall : Bool)
+    (inputIndex inputSize outputIndex outputSize : Nat)
+    (code : ByteArray) (disablePrecompiles : Bool) :
+    (genericCall.step sevm devm gas value caller target codeAddress
+      shouldTransferValue isStaticcall inputIndex inputSize outputIndex
+      outputSize code disablePrecompiles).StateGasZero := by
+  unfold genericCall.step
+  dsimp only
+  split
+  · refine XStep.ofExcept_stateGasZero ?_
+    refine Except.StateGasZeroOn.bind
+      (Devm.push_stateGasZero _ (Devm.stateGasZero_withGasLeft h)) ?_
+    intro d hd
+    exact Except.stateGasZeroOn_ok hd
+  · exact ⟨Frame.ofCall_stateGasZero hrules rfl, h⟩
+
+theorem genericCreate.step_stateGasZero {sevm : Sevm} {devm : Devm}
+    (hrules : sevm.benvStat.rules.stateGas = none)
+    (h : devm.StateGasZero) (endowment : B256) (newAddress : Adr)
+    (memoryIndex memorySize : Nat) :
+    (genericCreate.step sevm devm endowment newAddress memoryIndex memorySize).StateGasZero := by
+  unfold genericCreate.step
+  refine XStep.ofExcept_stateGasZero ?_
+  refine Except.StateGasZeroOn.bind (Except.stateGasZeroOn_assert h) ?_
+  intro _ _
+  refine Except.StateGasZeroOn.bind
+    (Except.stateGasZeroOn_assert (Devm.stateGasZero_withGasLeft h)) ?_
+  intro _ _
+  dsimp only
+  split
+  · refine Except.StateGasZeroOn.bind
+      (Devm.push_stateGasZero _ (Devm.stateGasZero_withGasLeft h)) ?_
+    intro d hd
+    exact Except.stateGasZeroOn_ok hd
+  · split
+    · refine Except.StateGasZeroOn.bind
+        (Devm.push_stateGasZero _ (Devm.stateGasZero_withGasLeft h)) ?_
+      intro d hd
+      exact Except.stateGasZeroOn_ok hd
+    · exact Except.stateGasZeroOn_ok
+        ⟨Frame.ofCreate_stateGasZero hrules rfl,
+          Devm.stateGasZero_withGasLeft h⟩
+
+theorem accessDelegation_stateGasZero {devm : Devm}
+    (h : devm.StateGasZero) (adr : Adr) :
+    (accessDelegation devm adr).2.2.2.2.StateGasZero := by
+  unfold accessDelegation
+  dsimp only
+  split <;> exact h
+
+theorem Xinst.step_stateGasZero {sevm : Sevm} {devm : Devm}
+    (hrules : sevm.benvStat.rules.stateGas = none)
+    (h : devm.StateGasZero) (x : Xinst) :
+    (Xinst.step sevm devm x).StateGasZero := by
+  cases x <;> simp only [Xinst.step, hrules]
+  case create =>
+    refine XStep.ofExcept_stateGasZero ?_
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero ha) fun b hb => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hb) fun c hc => ?_
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ hc) fun d hd => ?_
+    exact Except.stateGasZeroOn_ok
+      (genericCreate.step_stateGasZero hrules (by exact hd) _ _ _ _)
+  case create2 =>
+    refine XStep.ofExcept_stateGasZero ?_
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero ha) fun b hb => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hb) fun c hc => ?_
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero hc) fun e he => ?_
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ he) fun d hd => ?_
+    exact Except.stateGasZeroOn_ok
+      (genericCreate.step_stateGasZero hrules (by exact hd) _ _ _ _)
+  case call =>
+    refine XStep.ofExcept_stateGasZero ?_
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToAdr_stateGasZero ha) fun b hb => ?_
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero hb) fun c hc => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hc) fun d hd => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hd) fun e he => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero he) fun f hf => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hf) fun g hg => ?_
+    have haccess := accessDelegation_stateGasZero (devm := addAccessedAddress g.2 b.1) hg b.1
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ haccess) fun d2 hd2 => ?_
+    refine Except.StateGasZeroOn.bind (Except.stateGasZeroOn_assert hd2) fun _ _ => ?_
+    split
+    · refine Except.StateGasZeroOn.bind (Devm.push_stateGasZero _ hd2) fun d3 hd3 => ?_
+      exact Except.stateGasZeroOn_ok hd3
+    · exact Except.stateGasZeroOn_ok
+        (genericCall.step_stateGasZero hrules (by exact hd2)
+          _ _ _ _ _ _ _ _ _ _ _ _ _)
+  case callcode =>
+    refine XStep.ofExcept_stateGasZero ?_
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToAdr_stateGasZero ha) fun b hb => ?_
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero hb) fun c hc => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hc) fun d hd => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hd) fun e he => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero he) fun f hf => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hf) fun g hg => ?_
+    have haccess := accessDelegation_stateGasZero (devm := addAccessedAddress g.2 b.1) hg b.1
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ haccess) fun d2 hd2 => ?_
+    split
+    · refine Except.StateGasZeroOn.bind (Devm.push_stateGasZero _ hd2) fun d3 hd3 => ?_
+      exact Except.stateGasZeroOn_ok hd3
+    · exact Except.stateGasZeroOn_ok
+        (genericCall.step_stateGasZero hrules (by exact hd2)
+          _ _ _ _ _ _ _ _ _ _ _ _ _)
+  case delegatecall =>
+    refine XStep.ofExcept_stateGasZero ?_
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToAdr_stateGasZero ha) fun b hb => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hb) fun c hc => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hc) fun d hd => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hd) fun e he => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero he) fun f hf => ?_
+    have haccess := accessDelegation_stateGasZero (devm := addAccessedAddress f.2 b.1) hf b.1
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ haccess) fun d2 hd2 => ?_
+    exact Except.stateGasZeroOn_ok
+      (genericCall.step_stateGasZero hrules (by exact hd2)
+        _ _ _ _ _ _ _ _ _ _ _ _ _)
+  case staticcall =>
+    refine XStep.ofExcept_stateGasZero ?_
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToAdr_stateGasZero ha) fun b hb => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hb) fun c hc => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hc) fun d hd => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hd) fun e he => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero he) fun f hf => ?_
+    have haccess := accessDelegation_stateGasZero (devm := addAccessedAddress f.2 b.1) hf b.1
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ haccess) fun d2 hd2 => ?_
+    exact Except.stateGasZeroOn_ok
+      (genericCall.step_stateGasZero hrules (by exact hd2)
+        _ _ _ _ _ _ _ _ _ _ _ _ _)
+
+theorem Ninst.step_stateGasZero {evm : Evm} (h : evm.StateGasZero)
+    (n : Ninst) : (Ninst.step evm n).StateGasZero := by
+  cases n with
+  | push xs prf =>
+      refine Step.ofExecution_stateGasZero _ ?_
+      refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h.2) ?_
+      intro d hd
+      exact Devm.push_stateGasZero _ hd
+  | reg r =>
+      exact Step.ofExecution_stateGasZero _
+        (Rinst.run_stateGasZero h.2 h.1 r)
+  | exec x =>
+      exact XStep.toStep_stateGasZero _
+        (Xinst.step_stateGasZero h.1 h.2 x)
+
+theorem Evm.step_stateGasZero {evm : Evm} (h : evm.StateGasZero) :
+    evm.step.StateGasZero := by
+  unfold Evm.step
+  split
+  · exact h.2
+  · exact Ninst.step_stateGasZero h _
+  · exact Step.ofJump_stateGasZero (Jinst.run_stateGasZero h.2 _)
+  · exact Linst.run_stateGasZero h.2 h.1 _
+
+theorem Resume.run_stateGasZero {rsm : Resume} (hr : rsm.StateGasZero)
+    {r : Except (EvmError × State × AdrSet × Tra) Devm} :
+    (rsm.run r).StateGasZero := by
+  cases rsm with
+  | create parent newAddress =>
+      simp only [Resume.StateGasZero] at hr
+      unfold Resume.run liftToExecution
+      cases r with
+      | error e =>
+          rcases e with ⟨err, state, createdAccounts, tra⟩
+          exact hr
+      | ok child =>
+          simp only [bind, Except.bind]
+          split
+          · exact Devm.push_stateGasZero _
+              (incorporateChildOnError_stateGasZero hr)
+          · exact Devm.push_stateGasZero _
+              (incorporateChildOnSuccess_stateGasZero hr)
+  | call parent outputIndex outputSize =>
+      simp only [Resume.StateGasZero] at hr
+      unfold Resume.run liftToExecution
+      cases r with
+      | error e =>
+          rcases e with ⟨err, state, createdAccounts, tra⟩
+          exact hr
+      | ok child =>
+          simp only [bind, Except.bind]
+          split
+          · refine Except.StateGasZeroOn.bind
+              (Devm.push_stateGasZero _
+                (incorporateChildOnError_stateGasZero hr)) ?_
+            intro d hd
+            exact Except.stateGasZeroOn_ok hd
+          · refine Except.StateGasZeroOn.bind
+              (Devm.push_stateGasZero _
+                (incorporateChildOnSuccess_stateGasZero hr)) ?_
+            intro d hd
+            exact Except.stateGasZeroOn_ok hd
+  | createAmsterdam state parent newAddress charged =>
+      change False at hr
+      exact False.elim hr
+  | callAmsterdam state parent outputIndex outputSize charged =>
+      change False at hr
+      exact False.elim hr
+
+/-- A legacy execution started with the disabled state-gas meter returns with
+that meter still zero, on both success and exceptional-halt channels. -/
+theorem execFueled_run_stateGasZero :
+    ∀ (fuel : Nat) (evm : Evm), evm.StateGasZero →
+      ∀ {raw : Execution}, (execFueled evm fuel).run = some raw →
+        raw.StateGasZero := by
+  intro fuel
+  induction fuel with
+  | zero =>
+      intro evm _ raw hrun
+      rw [execFueled] at hrun
+      simp only [Fueled.exhausted_run] at hrun
+      nomatch hrun
+  | succ fuel ih =>
+      intro evm hevm raw hrun
+      have hstep := Evm.step_stateGasZero hevm
+      rw [execFueled] at hrun
+      rcases hs : evm.step with ⟨ex⟩ | ⟨pc, devm⟩ | ⟨frame, rsm, pc⟩ <;>
+        rw [hs] at hrun hstep <;> dsimp only at hrun
+      · simp only [Fueled.ofExcept_run, Option.some.injEq] at hrun
+        rw [← hrun]
+        exact hstep
+      · exact ih ⟨pc, evm.sta, devm⟩ ⟨hevm.1, hstep⟩ hrun
+      · have henter := Frame.enter_stateGasZero hstep.1
+        rcases he : frame.enter with r | child <;>
+          rw [he] at hrun henter <;> dsimp only at hrun
+        · have hresume := Resume.run_stateGasZero hstep.2 (r := r)
+          rcases hr : rsm.run r with ⟨e⟩ | d <;>
+            rw [hr] at hrun hresume <;> dsimp only at hrun
+          · simp only [Fueled.ofExcept_run, Option.some.injEq] at hrun
+            rw [← hrun]
+            exact hresume
+          · exact ih ⟨pc, evm.sta, d⟩ ⟨hevm.1, hresume⟩ hrun
+        · rcases hc : (execFueled child fuel).run with _ | raw2
+          · rw [hc] at hrun
+            simp only [Fueled.exhausted_run] at hrun
+            nomatch hrun
+          · rw [hc] at hrun
+            dsimp only at hrun
+            have hsettle := Frame.settle_stateGasZero hstep.1
+              (ih child henter hc)
+            have hresume := Resume.run_stateGasZero hstep.2
+              (r := frame.settle raw2)
+            rcases hr : rsm.run (frame.settle raw2) with ⟨e⟩ | d <;>
+              rw [hr] at hrun hresume <;> dsimp only at hrun
+            · simp only [Fueled.ofExcept_run, Option.some.injEq] at hrun
+              rw [← hrun]
+              exact hresume
+            · exact ih ⟨pc, evm.sta, d⟩ ⟨hevm.1, hresume⟩ hrun
+
+theorem execFueled_run_gasMeasure_eq_gasLeft {fuel : Nat} {evm : Evm}
+    (h : evm.StateGasZero) {devm : Devm}
+    (hrun : (execFueled evm fuel).run = some (.ok devm)) :
+    devm.gasMeasure = devm.gasLeft :=
+  Devm.stateGasZero_gasMeasure (execFueled_run_stateGasZero fuel evm h hrun)
+
 end Jaune
