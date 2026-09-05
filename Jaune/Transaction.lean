@@ -798,6 +798,16 @@ structure BlockOutput : Type where
   blobGasUsed : Nat
   requests : List Bytes
 
+/-- The legacy block-accounting relation promised by fixed decision 8: sender
+and execution gas advance together, and the independent state-gas dimension
+stays empty. -/
+def BlockOutput.LegacyGasAccounting (bout : BlockOutput) : Prop :=
+  bout.cumulativeGasUsed = bout.blockGasUsed ∧ bout.blockStateGasUsed = 0
+
+instance {bout : BlockOutput} : Decidable bout.LegacyGasAccounting := by
+  unfold BlockOutput.LegacyGasAccounting
+  infer_instance
+
 -- The following helpers keep the checks in the same order, with the same
 -- returned payloads and error strings, as the monolithic transaction checker.
 -- Splitting the executable stages makes successful runs easier to invert in
@@ -1251,6 +1261,27 @@ theorem settleTransactionGas_none_invariants {rules : ForkRules}
       settlement.stateGasUsed = 0 := by
   simp [settleTransactionGas, h]
 
+/-- The actual block-counter update performed after transaction settlement. -/
+def BlockOutput.withGasSettlement (bout : BlockOutput)
+    (settlement : TransactionGasSettlement) (txBlobGasUsed : Nat) : BlockOutput :=
+  {bout with
+    blockGasUsed := bout.blockGasUsed + settlement.executionGasUsed
+    blockStateGasUsed := bout.blockStateGasUsed + settlement.stateGasUsed
+    cumulativeGasUsed := bout.cumulativeGasUsed + settlement.gasUsed
+    blobGasUsed := bout.blobGasUsed + txBlobGasUsed}
+
+/-- A settlement whose execution and sender counters agree and whose state
+counter is zero preserves the legacy `BlockOutput` relation. -/
+theorem BlockOutput.LegacyGasAccounting.withGasSettlement
+    {bout : BlockOutput} (hb : bout.LegacyGasAccounting)
+    {settlement : TransactionGasSettlement}
+    (hs : settlement.executionGasUsed = settlement.gasUsed ∧
+      settlement.stateGasUsed = 0) (txBlobGasUsed : Nat) :
+    (bout.withGasSettlement settlement txBlobGasUsed).LegacyGasAccounting := by
+  unfold BlockOutput.LegacyGasAccounting at hb ⊢
+  simp only [BlockOutput.withGasSettlement]
+  omega
+
 def prepareMessage (benv: Benv) (tenv: Tenv) (tx: Tx) :
   Except TransitionError Msg := do
   let ⟨currentTarget, msgData, code, codeAddress⟩ :
@@ -1343,6 +1374,10 @@ def BlockOutput.init : BlockOutput :=
     blobGasUsed := 0
     requests := []
   }
+
+theorem BlockOutput.init_legacyGasAccounting :
+    BlockOutput.init.LegacyGasAccounting := by
+  simp [BlockOutput.init, BlockOutput.LegacyGasAccounting]
 
 ---------------- TRANSACTION-REJECTION REGRESSION CHECKS ----------------
 
@@ -1707,11 +1742,7 @@ def processTransaction
   let state := state.addBal benv.stat.coinbase transactionFee.toB256
   let state := settleSelfdestructs benv.stat.rules
     txOutput.accountsToDelete.toList state
-  let bout ← .ok {bout with
-    blockGasUsed := bout.blockGasUsed + settlement.executionGasUsed,
-    blockStateGasUsed := bout.blockStateGasUsed + settlement.stateGasUsed,
-    cumulativeGasUsed := bout.cumulativeGasUsed + settlement.gasUsed,
-    blobGasUsed := bout.blobGasUsed + txBlobGasUsed}
+  let bout ← .ok (bout.withGasSettlement settlement txBlobGasUsed)
   let receipt :=
     makeReceipt tx txOutput.error bout.cumulativeGasUsed txOutput.logs
   let receiptKey : Bytes := BLT.toBytes <| .bytes index.toBytes
@@ -1721,9 +1752,46 @@ def processTransaction
     blockLogs := bout.blockLogs ++ txOutput.logs}
   .ok ⟨state, bout⟩
 
+/-- Under a legacy schedule, the real transaction producer preserves the
+legacy block-counter relation through its settlement and receipt updates. -/
+theorem processTransaction_legacyGasAccounting {benv : Benv}
+    (hnone : benv.stat.rules.stateGas = none) {bout : BlockOutput}
+    (hb : bout.LegacyGasAccounting) {tx : Tx} {index : Nat} {p}
+    (hp : processTransaction benv bout tx index = .ok p) :
+    p.2.LegacyGasAccounting := by
+  unfold processTransaction at hp
+  obtain ⟨b1, hb1, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨validationSender, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨ig, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨ck, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨st1, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨msg, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨q, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨rc, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨b2, hb2, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨b3, hb3, hp⟩ := Except.bind_eq_ok hp
+  simp only [Except.ok.injEq] at hb1 hb2 hb3
+  have hb1' : b1.LegacyGasAccounting := by
+    rw [← hb1]
+    exact hb
+  have hb2' : b2.LegacyGasAccounting := by
+    rw [← hb2]
+    exact BlockOutput.LegacyGasAccounting.withGasSettlement hb1'
+      (settleTransactionGas_none_invariants hnone _ _ _ _ _ _) _
+  have hb3' : b3.LegacyGasAccounting := by
+    rw [← hb3]
+    exact hb2'
+  cases hp
+  exact hb3'
+
 def BlockOutput.withWithdrawalsTrie
     (bo : BlockOutput) (tr : Std.TreeMap Bytes Withdrawal compare) : BlockOutput :=
   {bo with withdrawalsTrie := tr}
+
+theorem BlockOutput.LegacyGasAccounting.withWithdrawalsTrie
+    {bout : BlockOutput} (hb : bout.LegacyGasAccounting)
+    (tr : Std.TreeMap Bytes Withdrawal compare) :
+    (bout.withWithdrawalsTrie tr).LegacyGasAccounting := hb
 
 def processWithdrawalsTrie (tr : Std.TreeMap Bytes Withdrawal compare)
     (wds : List Withdrawal) : Std.TreeMap Bytes Withdrawal compare :=
@@ -1743,6 +1811,13 @@ def processWithdrawals
   let trie := processWithdrawalsTrie bout.withdrawalsTrie wds
   let state := processWithdrawalsState benv.state wds
   ⟨state, bout.withWithdrawalsTrie trie⟩
+
+theorem processWithdrawals_legacyGasAccounting {benv : Benv}
+    {bout : BlockOutput} (hb : bout.LegacyGasAccounting)
+    (wds : List Withdrawal) :
+    (processWithdrawals benv bout wds).2.LegacyGasAccounting := by
+  unfold processWithdrawals
+  exact hb.withWithdrawalsTrie _
 
 -- Access lists, blob hashes, and authorization tuples arrive inside typed
 -- transactions, so their fields are untrusted in exactly the way withdrawal
@@ -2279,12 +2354,47 @@ def processGeneralPurposeRequests
     runRequestContracts benv.stat.rules.requests benv seeded
   .ok ⟨state, {bout with requests := allRequests}⟩
 
+theorem processGeneralPurposeRequests_legacyGasAccounting {benv : Benv}
+    {bout : BlockOutput} (hb : bout.LegacyGasAccounting) {p}
+    (hp : processGeneralPurposeRequests benv bout = .ok p) :
+    p.2.LegacyGasAccounting := by
+  unfold processGeneralPurposeRequests at hp
+  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
+  cases hp
+  exact hb
+
 def applyTransactions :
     List (Nat × Tx) → Benv → BlockOutput → Except TransitionError (Benv × BlockOutput)
   | [], benv, bout => .ok (benv, bout)
   | ⟨i, tx⟩ :: txis, benv , bout => do
     let ⟨st, bout'⟩ ← processTransaction benv bout tx i
     applyTransactions txis (benv.withState st) bout'
+
+/-- The actual transaction-list fold preserves the legacy block counters at
+every successful iteration. -/
+theorem applyTransactions_legacyGasAccounting :
+    ∀ (txis : List (Nat × Tx)) {benv : Benv},
+      benv.stat.rules.stateGas = none →
+      ∀ {bout : BlockOutput} {p}, bout.LegacyGasAccounting →
+        applyTransactions txis benv bout = .ok p → p.2.LegacyGasAccounting
+  | [], _, _, _, _, hb, hp => by cases hp; exact hb
+  | txi :: txis, benv, hnone, bout, p, hb, hp => by
+    unfold applyTransactions at hp
+    obtain ⟨⟨st, bout'⟩, hq, hp⟩ := Except.bind_eq_ok hp
+    exact applyTransactions_legacyGasAccounting txis
+      (benv := benv.withState st) hnone
+      (processTransaction_legacyGasAccounting hnone hb hq) hp
+
+/-- Starting from the producer's real initializer discharges the initial
+legacy relation required by the iteration theorem. -/
+theorem applyTransactions_init_legacyGasAccounting
+    (txis : List (Nat × Tx)) {benv : Benv}
+    (hnone : benv.stat.rules.stateGas = none) {p}
+    (hp : applyTransactions txis benv .init = .ok p) :
+    p.2.LegacyGasAccounting :=
+  applyTransactions_legacyGasAccounting txis hnone
+    BlockOutput.init_legacyGasAccounting hp
 
 def applyBody
   (benv : Benv) (txs : List (Bytes ⊕ Tx)) (wds : List Withdrawal) :
@@ -2309,6 +2419,32 @@ def applyBody
   let ⟨stWds, boutWds⟩ :=
     processWithdrawals benvTxs boutTxs wds
   processGeneralPurposeRequests (benvTxs.withState stWds) boutWds
+
+/-- A successful legacy block body starts from `BlockOutput.init`, preserves
+the relation through every transaction, and keeps it through withdrawals and
+the request pass. -/
+theorem applyBody_legacyGasAccounting {benv : Benv}
+    (hnone : benv.stat.rules.stateGas = none)
+    {txs : List (Bytes ⊕ Tx)} {wds : List Withdrawal} {p}
+    (hp : applyBody benv txs wds = .ok p) : p.2.LegacyGasAccounting := by
+  unfold applyBody at hp
+  obtain ⟨q1, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨q2, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨txsD, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
+  have hqLegacy : q.2.LegacyGasAccounting :=
+    applyTransactions_init_legacyGasAccounting txsD.putIndex
+      (benv := (benv.withState q1.1).withState q2.1) hnone hq
+  obtain ⟨benvTxs, boutTxs⟩ := q
+  dsimp only at hp hqLegacy
+  rcases hw : processWithdrawals benvTxs boutTxs wds with ⟨stWds, boutWds⟩
+  simp only [hw] at hp
+  have hwLegacy := processWithdrawals_legacyGasAccounting
+    (benv := benvTxs) hqLegacy wds
+  simp only [hw] at hwLegacy
+  exact processGeneralPurposeRequests_legacyGasAccounting
+    hwLegacy hp
 
 def getLast256BlockHashes (chain : BlockChain) : List B256 :=
   match chain.blocks.reverse.take 255 with
