@@ -171,6 +171,8 @@ def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
     ("modexp.gasDivisor", jNat r.modexp.gasDivisor),
     ("modexp.minGas", jNat r.modexp.minGas),
     ("op.clz", Lean.Json.bool r.op.clz),
+    ("op.slotnum", Lean.Json.bool r.op.slotnum),
+    ("op.stackAccess", Lean.Json.bool r.op.stackAccess),
     ("precompiles",
       Lean.Json.arr ((r.precompiles.map (fun a => jNat a.toNat)).toArray)),
     ("gas.coldAccountAccess", jNat r.gas.coldAccountAccess),
@@ -212,6 +214,10 @@ def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
       jOptNat (r.stateGas.map StateGasRules.systemMaxSstoresPerCall)),
     ("header.blockAccessListHash", Lean.Json.bool r.header.blockAccessListHash),
     ("header.slotNumber", Lean.Json.bool r.header.slotNumber),
+    -- EIP-7928's block-level access-list rules, under the same `present` +
+    -- per-field `null` convention as `stateGas`.
+    ("bal.present", Lean.Json.bool r.bal.isSome),
+    ("bal.itemCost", jOptNat (r.bal.map BalRules.itemCost)),
     ("requests",
       Lean.Json.arr ((r.requests.map (fun p =>
         Lean.Json.arr #[jNat p.fst.toNat,
@@ -223,8 +229,10 @@ def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
 A fork whose rules this build does not implement is refused here exactly as it
 is everywhere else: there is nothing to print, and printing another fork's
 record would be the silent fallback the whole architecture exists to prevent.
-So `--rules Amsterdam` fails with `UnsupportedForkError`, which is also what
-makes the gate's fork list and `Fork.supported` the same list by construction. -/
+Every declared fork resolves since goal C composed `amsterdamRules`, so today
+the refusal is unreachable through a declared label; it stays for the next
+declared-but-unimplemented fork. The gate's fork list and `Fork.supported` are
+the same list by construction. -/
 def runRulesPrinter (label : String) : IO Unit := do
   let some f := Fork.ofString? label
     | .throw
@@ -235,52 +243,9 @@ def runRulesPrinter (label : String) : IO Unit := do
   -- so the definition above lands at the root while `ForkRules` is `Jaune`'s.
   .println (ForkRules.toGateJson rules).pretty
 
-/-- The subset of the flat gate JSON that a metering vehicle actually claims.
-
-`jaune --rules Amsterdam` is refused and stays refused: this build implements no
-Amsterdam *block* rules, so there is no complete record to print and printing a
-partial one under that flag would be the silent half-answer the architecture
-exists to prevent. But the transaction metering shape does exist, and its
-numbers have to be checkable against the pinned upstream revision like every
-other number this build carries.
-
-So this is a deliberately partial view: the ten shared-formula gas numbers and
-the eleven state-gas rows, and nothing else. Every key it omits is a rule the
-block-level goal owns, and `scripts/gen-fork-constants.py` classifies each of
-them by name so the gate can insist that omitted plus printed is the whole
-record. -/
-def ForkRules.toMeteringGateJson (r : ForkRules) : Lean.Json :=
-  let full := ForkRules.toGateJson r
-  let keys := [
-    "gas.coldAccountAccess", "gas.callValue", "gas.createAccess",
-    "gas.storageClearRefund", "gas.txBase", "gas.txAccessListAddress",
-    "gas.txAccessListStorageKey", "gas.floorTokenCost",
-    "gas.perAuthIntrinsic", "gas.codeReadSurcharge",
-    "stateGas.present", "stateGas.costPerStateByte",
-    "stateGas.stateBytesPerNewAccount", "stateGas.stateBytesPerStorageSet",
-    "stateGas.stateBytesPerAuthBase", "stateGas.storageWrite",
-    "stateGas.accountWrite", "stateGas.txValueCost",
-    "stateGas.accessListAddressFloorTokens",
-    "stateGas.accessListStorageKeyFloorTokens",
-    "stateGas.systemMaxSstoresPerCall"]
-  Lean.Json.mkObj (keys.filterMap
-    (fun k => (full.getObjVal? k).toOption.map (fun v => (k, v))))
-
-/-- `jaune --rules-partial <fork>`.
-
-Prints the metering-lane view of a fork that has a metering vehicle. A fork
-this build fully implements has no vehicle and is refused here -- its numbers
-belong under `--rules`, whole -- and so is a fork with neither. -/
-def runRulesPartialPrinter (label : String) : IO Unit := do
-  let some f := Fork.ofString? label
-    | .throw
-        s!"error : unknown --rules-partial label {repr label}; declared labels \
-           are {Fork.all.map Fork.toString}"
-  let some rules := Jaune.T8n.meteringRules? f
-    | .throw
-        s!"error : {f} has no metering vehicle; a fork this build implements \
-           is printed whole by --rules, and no other fork has one"
-  .println (ForkRules.toMeteringGateJson rules).pretty
+-- Goal B's `--rules-partial` printer and `ForkRules.toMeteringGateJson`, the
+-- metering vehicle's partial view, are retired with the vehicle: every
+-- declared fork is printed whole by `--rules`.
 
 def getPostStateRoot (json : Lean.Json) : IO B256 :=
   ( do let stateJson ← json.find "postState"
@@ -1049,7 +1014,6 @@ def usage : String :=
   jaune t8n [options] --state.fork <label>
   jaune --vectors <address> <file.json> [--network <fork>]
   jaune --rules <fork>
-  jaune --rules-partial <fork>
   jaune --u256 <file.json>
   jaune --fake-exp <file.json>
   jaune --version
@@ -1080,9 +1044,9 @@ declared networks:
 
 runs at:
   {Fork.supported.map Fork.toString}
-  A declared network this build does not run -- \
-{Fork.unimplemented.map Fork.toString} -- parses, and every case at it is then \
-refused with UnsupportedForkError rather than answered.
+  Declared networks this build does not run: {Fork.unimplemented.map Fork.toString}. \
+Such a label parses, and every case at it is then refused with \
+UnsupportedForkError rather than answered.
 "
 
 def main : List String → IO Unit
@@ -1097,9 +1061,6 @@ def main : List String → IO Unit
   | "--version" :: _ => .println s!"jaune version {T8n.version}"
   | "t8n" :: rest => T8n.run rest
   | "--rules" :: label :: [] => runRulesPrinter label
-  | "--rules-partial" :: label :: [] => runRulesPartialPrinter label
-  | "--rules-partial" :: _ =>
-    .throw "error : --rules-partial takes exactly one fork label"
   | "--rules" :: _ =>
     .throw "error : --rules takes exactly one fork label"
   | "--u256" :: pathStr :: [] => do

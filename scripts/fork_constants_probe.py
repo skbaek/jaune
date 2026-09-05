@@ -129,6 +129,40 @@ def _code_read_surcharge(fork: str) -> tuple[int, str]:
     )
 
 
+# EIP-663's stack-access trio. Upstream ships the three opcodes as one
+# feature and Jaune carries them as one boolean, so "some of them" is not a
+# value this row can take: a fork defining only part of the trio would mean the
+# feature had been split upstream and a single flag no longer modelled it.
+STACK_ACCESS_OPS = ("DUPN", "SWAPN", "EXCHANGE")
+
+
+def _stack_access(fork: str, ops) -> "tuple[bool, str]":
+    """Whether the fork defines all of EIP-663's stack-access opcodes.
+
+    A source-presence fact in the same style as `op.clz`, but over three names
+    instead of one, so the derivation is recorded rather than left implicit. A
+    partial definition raises instead of rounding to a bool: that is a drift in
+    the formula this row abbreviates, and silently answering `False` (or
+    `True`) would hide exactly the upstream change the gate exists to surface.
+    """
+    defined = [name for name in STACK_ACCESS_OPS if hasattr(ops, name)]
+    derivation = (
+        "vm.instructions.Ops defines all of "
+        + ", ".join(STACK_ACCESS_OPS)
+        + " (EIP-663)"
+    )
+    if not defined:
+        return False, f"{derivation}: none of the three is defined at this fork"
+    if len(defined) != len(STACK_ACCESS_OPS):
+        missing = [name for name in STACK_ACCESS_OPS if name not in defined]
+        raise ProbeError(
+            f"{fork}: vm.instructions.Ops defines {defined} but not {missing}; "
+            "EIP-663's stack-access opcodes are one boolean in Jaune, so a "
+            "partial definition is a drift in the derivation, not a False"
+        )
+    return True, f"{derivation}: all three are defined"
+
+
 def _requests(fork: str) -> tuple[list, str]:
     """The ordered request-producing system contracts, from the fork's own fold.
 
@@ -292,6 +326,44 @@ def _state_gas(fork: str) -> "list[tuple[str, dict]]":
     ]
 
 
+def _bal(fork: str) -> "list[tuple[str, dict]]":
+    """EIP-7928's block-level access-list rules, or nulls for a fork without one.
+
+    The same Option convention as `_state_gas`, for the same reason: both rows
+    are emitted for every fork, so the extraction's key set does not depend on
+    the fork and the gate's key-set check stays a single comparison. A fork
+    with no block access list carries `bal.present` false and every other row
+    `null`, which is exactly what `ForkRules.bal = none` prints.
+
+    Presence is asked of the cost rather than of a class, because upstream
+    gives EIP-7928 no type of its own: the per-item charge is one more member
+    of `GasCosts`, absent before the EIP and present after it.
+    """
+    gas = _mod(fork, "vm.gas")
+    costs = getattr(gas, "GasCosts", None)
+    present = costs is not None and hasattr(costs, "BLOCK_ACCESS_LIST_ITEM")
+
+    def row(path, value, source):
+        return (path, {"value": value, "source": source})
+
+    if not present:
+        absent = (
+            "vm.gas.GasCosts has no BLOCK_ACCESS_LIST_ITEM: the fork charges "
+            "for no block access list (EIP-7928 not active)"
+        )
+        return [
+            row("bal.present", False, absent),
+            row("bal.itemCost", None, absent),
+        ]
+    return [
+        row("bal.present", True,
+            "vm.gas.GasCosts.BLOCK_ACCESS_LIST_ITEM is defined (EIP-7928)"),
+        row("bal.itemCost",
+            _require_int(costs, "BLOCK_ACCESS_LIST_ITEM", f"{fork}.vm.gas.GasCosts"),
+            "vm.gas.GasCosts.BLOCK_ACCESS_LIST_ITEM"),
+    ]
+
+
 def extract(label: str, fork: str) -> dict:
     gas = _mod(fork, "vm.gas")
     costs = gas.GasCosts
@@ -306,6 +378,7 @@ def extract(label: str, fork: str) -> dict:
     header_fields = {f.name for f in dataclasses.fields(blocks.Header)}
     surcharge, surcharge_source = _code_read_surcharge(fork)
     requests, requests_source = _requests(fork)
+    stack_access, stack_access_source = _stack_access(fork, instructions.Ops)
 
     def field(path, value, source):
         return (path, {"value": value, "source": source})
@@ -357,6 +430,9 @@ def extract(label: str, fork: str) -> dict:
         field("block.maxRlpSize", max_rlp, max_rlp_source),
         field("op.clz", hasattr(instructions.Ops, "CLZ"),
               "vm.instructions.Ops.CLZ is defined (EIP-7939)"),
+        field("op.slotnum", hasattr(instructions.Ops, "SLOTNUM"),
+              "vm.instructions.Ops.SLOTNUM is defined (EIP-7843)"),
+        field("op.stackAccess", stack_access, stack_access_source),
         field("precompiles",
               sorted(_address_int(a) for a in mapping.PRE_COMPILED_CONTRACTS),
               "vm.precompiled_contracts.mapping.PRE_COMPILED_CONTRACTS keys"),
@@ -386,7 +462,7 @@ def extract(label: str, fork: str) -> dict:
         field("header.slotNumber", "slot_number" in header_fields,
               "blocks.Header has a slot_number field (EIP-7843)"),
         field("requests", requests, requests_source),
-    ] + _state_gas(fork)
+    ] + _state_gas(fork) + _bal(fork)
     seen = [path for path, _ in entries]
     if len(seen) != len(set(seen)):
         raise ProbeError(f"{label}: duplicate field path in the extraction table")

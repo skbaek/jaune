@@ -1732,12 +1732,12 @@ private def meteringGuardSelfdestructCharges
 -- CREATE and CREATE2 share the same zero-initcode base at both shapes.
 #guard meteringGuardCreateCharges pragueRules 0 .create [0, 0, 0]
   = some (32000, 0)
-#guard meteringGuardCreateCharges amsterdamMeteringRules meteringGuardStateGas
+#guard meteringGuardCreateCharges amsterdamRules meteringGuardStateGas
     .create [0, 0, 0]
   = some (12000, 183600)
 #guard meteringGuardCreateCharges pragueRules 0 .create2 [0, 0, 0, 0]
   = some (32000, 0)
-#guard meteringGuardCreateCharges amsterdamMeteringRules meteringGuardStateGas
+#guard meteringGuardCreateCharges amsterdamRules meteringGuardStateGas
     .create2 [0, 0, 0, 0]
   = some (12000, 183600)
 #guard meteringGuardCreateCharges meteringGuardLegacyRules 0 .create [0, 0, 0]
@@ -1751,13 +1751,13 @@ private def meteringGuardSelfdestructCharges
 #guard meteringGuardCallCharges pragueRules 0 .call
     [0, meteringGuardCallee.toB256, 1, 0, 0, 0, 0]
   = some (36600, 0)
-#guard meteringGuardCallCharges amsterdamMeteringRules meteringGuardStateGas .call
+#guard meteringGuardCallCharges amsterdamRules meteringGuardStateGas .call
     [0, meteringGuardCallee.toB256, 1, 0, 0, 0, 0]
   = some (14300, 183600)
 #guard meteringGuardCallCharges pragueRules 0 .callcode
     [0, meteringGuardCallee.toB256, 1, 0, 0, 0, 0]
   = some (11600, 0)
-#guard meteringGuardCallCharges amsterdamMeteringRules meteringGuardStateGas
+#guard meteringGuardCallCharges amsterdamRules meteringGuardStateGas
     .callcode [0, meteringGuardCallee.toB256, 1, 0, 0, 0, 0]
   = some (14300, 0)
 
@@ -1775,13 +1775,13 @@ private def meteringGuardSelfdestructCharges
 #guard meteringGuardCallCharges pragueRules 0 .delegatecall
     [0, meteringGuardCallee.toB256, 0, 0, 0, 0]
   = some (2600, 0)
-#guard meteringGuardCallCharges amsterdamMeteringRules meteringGuardStateGas
+#guard meteringGuardCallCharges amsterdamRules meteringGuardStateGas
     .delegatecall [0, meteringGuardCallee.toB256, 0, 0, 0, 0]
   = some (3000, 0)
 #guard meteringGuardCallCharges pragueRules 0 .staticcall
     [0, meteringGuardCallee.toB256, 0, 0, 0, 0]
   = some (2600, 0)
-#guard meteringGuardCallCharges amsterdamMeteringRules meteringGuardStateGas
+#guard meteringGuardCallCharges amsterdamRules meteringGuardStateGas
     .staticcall [0, meteringGuardCallee.toB256, 0, 0, 0, 0]
   = some (3000, 0)
 #guard meteringGuardDelegatedCallCharges meteringGuardLegacyRules .delegatecall
@@ -1800,7 +1800,7 @@ private def meteringGuardSelfdestructCharges
 #guard meteringGuardSelfdestructCharges pragueRules 0 = some (32600, 0, 0)
 #guard meteringGuardSelfdestructCharges meteringGuardLegacyRules 0
   = some (32700, 0, 0)
-#guard meteringGuardSelfdestructCharges amsterdamMeteringRules
+#guard meteringGuardSelfdestructCharges amsterdamRules
     meteringGuardStateGas
   = some (17000, 183600, 1)
 

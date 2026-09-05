@@ -154,61 +154,38 @@ def Lean.Json.find : String → Lean.Json → IO Lean.Json
 namespace Jaune
 namespace T8n
 
------------------ THE METERING LANE -----------------
+----------------- THE FORK LANE -----------------
 
-/-- The rule set the transition tool meters a fork under when `Fork.rules?` has
-none for it.
+/-- The forks `jaune t8n --forks` advertises to a transition-tool framework.
 
-This is the **only** table that resolves the Amsterdam metering vehicle, and it
-lives here rather than in `Jaune/Fork.lean` on purpose. `Fork.rules?` answers
-"what are this fork's rules", and for Amsterdam the honest answer is still
-`none`: the block-level rules of EIP-7928, EIP-8282, EIP-7843, EIP-8024 and
-EIP-7954 have no reader in this build, so a block cannot be validated under
-them. What *does* exist is the transaction metering shape, and this lane is
-where it can be exercised against the pinned reference tool.
+This is the block-validation handshake goal A fixed at the four forks whose
+static and transition corpora this build runs end to end, spelled out rather
+than derived from `Fork.supported` on purpose. Since goal C composed
+`amsterdamRules`, `Fork.supported` names Amsterdam too and `--state.fork
+Amsterdam` resolves through `Fork.rules?` exactly like every other label; but
+advertising a fork on this line is the one consequence of that resolution the
+block-level goal *surfaces rather than takes* (its fixed decision 7: a
+user-consulted step), and extending the lane is the `--forks`/`--info`
+handshake work of goal `jaune-amsterdam-currency-v1`. Until that decision
+lands, the line stays byte-identical to what it has printed since goal A.
 
-So the vehicle is reachable from exactly two readers, both of which are
-inventory or differential rather than block validation: `t8n --state.fork
-Amsterdam`, and `jaune --rules-partial Amsterdam`, which the constants gate
-compares against the pinned upstream revision. `t8n --forks` keeps printing
-`Fork.supported`, the runner keeps refusing `--network Amsterdam`, and every
-other entry point is unchanged. The block-level goal composes a real
-`amsterdamRules`, makes `Fork.rules?` answer it, and retires this table. -/
-def meteringRules? : Fork → Option ForkRules
-  | .amsterdam => some amsterdamMeteringRules
-  | _ => none
+Goal B's transaction-metering resolver (`meteringRules?`, `meteringForks`,
+`laneRules`) is retired: there is one resolver, `Fork.rules`, for every label. -/
+def advertisedForkLane : List Fork := [.prague, .osaka, .bpo1, .bpo2]
 
-/-- Fork labels accepted only by the transaction-metering differential.
-Kept separate from `Fork.supported`, which remains the block-validation lane
-reported by `t8n --forks`. -/
-def meteringForks : List Fork :=
-  Fork.all.filter fun f => (meteringRules? f).isSome
-
-/-- The lane a fork label runs in: its own rules if this build implements them,
-otherwise the metering vehicle if one exists, and a refusal otherwise. -/
-def laneRules (f : Fork) : Except SupportError ForkRules :=
-  match f.rules? with
-  | some rules => .ok rules
-  | none =>
-    match meteringRules? f with
-    | some rules => .ok rules
-    | none => .error (.unsupportedFork f)
-
--- No fork this build actually runs has a metering vehicle: a vehicle exists
--- only where `Fork.rules?` is `none`, so the two tables can never disagree
--- about a fork and `laneRules` can never shadow a real rule set.
-#guard Fork.supported.all (fun f => (meteringRules? f).isNone)
-#guard Fork.unimplemented = [.amsterdam]
-#guard meteringForks = [.amsterdam]
-#guard (meteringRules? .amsterdam) = some amsterdamMeteringRules
--- On a supported fork the lane is that fork's own rules, unchanged.
-#guard Fork.supported.all (fun f =>
-  match f.rules? with
-  | some r => laneRules f = .ok r
-  | none => false)
-#guard laneRules .prague = .ok pragueRules
-#guard laneRules .bpo2 = .ok bpo2Rules
-#guard laneRules .amsterdam = .ok amsterdamMeteringRules
+-- The advertised lane is a prefix of the runnable one: nothing advertised is
+-- refused, and the only runnable fork not yet advertised is Amsterdam. (Goal
+-- B's guards here asserted `Fork.unimplemented = [.amsterdam]`, `meteringForks
+-- = [.amsterdam]` and `meteringRules? .amsterdam = some amsterdamMeteringRules`;
+-- each is rewritten to the statement that replaced it.)
+#guard advertisedForkLane.all (fun f => f.rules?.isSome)
+#guard Fork.supported.take advertisedForkLane.length = advertisedForkLane
+#guard Fork.supported.filter (fun f => !advertisedForkLane.contains f) = [.amsterdam]
+#guard Fork.unimplemented = []
+#guard Fork.amsterdam.rules = .ok amsterdamRules
+#guard Fork.all.all (fun f => f.rules.toOption.isSome)
+#guard Fork.prague.rules = .ok pragueRules
+#guard Fork.bpo2.rules = .ok bpo2Rules
 
 ----------------- JSON EMISSION ------------------
 
@@ -1125,11 +1102,12 @@ def printInfo : IO Unit := do
   IO.println s!"lean toolchain: {Lean.versionString}"
   IO.println
     s!"t8n fork lane: \
-       {String.intercalate " " (Fork.supported.map Fork.toString)}"
+       {String.intercalate " " (advertisedForkLane.map Fork.toString)}"
   IO.println
-    s!"t8n metering lane: \
-       {String.intercalate " " (meteringForks.map Fork.toString)} \
-       (transaction metering only; omits EIP-7928/8282/7843/8024/7954 block semantics)"
+    s!"t8n resolves: \
+       {String.intercalate " " (Fork.supported.map Fork.toString)} \
+       (every declared fork, through Fork.rules?; Amsterdam is not yet \
+       advertised on --forks, pending goal jaune-amsterdam-currency-v1)"
   IO.println s!"t8n modes: blockchain (default), state-test (--state-test)"
   IO.println s!"t8n tracing: not claimed"
   IO.println s!"sources manifest: {path}"
@@ -1161,11 +1139,10 @@ def run (args : List String) : IO Unit := do
   -- `--info` it must answer from any working directory and must not depend on
   -- the sources manifest being reachable.
   if o.forks then
-    -- The runnable lane, not the declared one. This line is a wrapper's whole
-    -- basis for deciding what to send, so advertising a fork the very next
-    -- step would refuse would make the refusal a wasted round trip and the
-    -- handshake a false claim.
-    IO.println (String.intercalate " " (Fork.supported.map Fork.toString))
+    -- The advertised lane. This line is a wrapper's whole basis for deciding
+    -- what to send, so it names only forks the very next step would run --
+    -- and, per `advertisedForkLane`, not yet every fork it would run.
+    IO.println (String.intercalate " " (advertisedForkLane.map Fork.toString))
     return ()
   if o.info then
     printInfo
@@ -1173,15 +1150,13 @@ def run (args : List String) : IO Unit := do
   if o.forkLabel.isEmpty then
     IO.throw
       s!"error : t8n requires --state.fork; there is no default fork, and the \
-         runnable labels are {Fork.supported.map Fork.toString}; the \
-         transaction-metering labels are {meteringForks.map Fork.toString}"
+         runnable labels are {Fork.supported.map Fork.toString}"
   let some f := Fork.ofString? o.forkLabel
     | IO.throw
         s!"error : t8n does not support the fork {repr o.forkLabel}; this \
-           build's runnable lane is {Fork.supported.map Fork.toString}, its \
-           transaction-metering lane is {meteringForks.map Fork.toString}, \
-           and there is no fallback"
-  let rules ← IO.ofExcept ((laneRules f).mapError SupportError.render)
+           build's runnable lane is {Fork.supported.map Fork.toString}, and \
+           there is no fallback"
+  let rules ← IO.ofExcept (f.rules.mapError SupportError.render)
   let usesStdin :=
     o.inputAlloc = "stdin" ∨ o.inputEnv = "stdin" ∨ o.inputTxs = "stdin"
   let stdinDoc ←
@@ -1254,20 +1229,20 @@ Executes one state transition outside any block-validation context and emits
 emits. Options may be spelled --flag=value or --flag value.
 
   --state.fork <label>   required; one of the runnable labels
-                         {Fork.supported.map Fork.toString}, or the transaction-
-                         metering labels {meteringForks.map Fork.toString}.
-                         There is no default and no fallback.
+                         {Fork.supported.map Fork.toString}. There is no
+                         default and no fallback.
   --state-test           apply exactly one transaction with no system
                          operations, no withdrawals and no requests.
   --state.reward <n>     accepted and not consumed: every fork on this lane is
                          proof-of-stake, so block rewards are unreachable.
-  --info                 print the version, runnable and transaction-metering
-                         lanes (including the latter's omissions), and the pins
-                         recorded in scripts/sources.json. Needs that file:
-                         pass JAUNE_SOURCES if it is not at scripts/ from the
+  --info                 print the version, the advertised fork lane, every
+                         fork this build resolves, and the pins recorded in
+                         scripts/sources.json. Needs that file: pass
+                         JAUNE_SOURCES if it is not at scripts/ from the
                          working directory.
-  --forks                print the supported fork lane and nothing else, on
-                         one line. Answers from anywhere.
+  --forks                print the advertised fork lane and nothing else, on
+                         one line ({advertisedForkLane.map Fork.toString}).
+                         Answers from anywhere.
 
 Tracing is not claimed: --trace, its variants and --opcode.count are refused
 rather than ignored.

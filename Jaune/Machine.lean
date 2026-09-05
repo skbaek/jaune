@@ -5694,7 +5694,7 @@ private def guardCold : AdrSet := .emptyWithCapacity
 private def guardWarm : AdrSet := guardCold.insert guardAdr
 
 private def pragueGas : GasSchedule := pragueRules.gas
-private def amsterdamGas : GasSchedule := amsterdamMeteringRules.gas
+private def amsterdamGas : GasSchedule := amsterdamRules.gas
 
 -- `accessCost`, the shape `BALANCE`, `EXTCODE*` and the whole CALL family read.
 #guard pragueGas.accessCost guardAdr guardCold = 2600

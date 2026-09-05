@@ -1427,7 +1427,7 @@ private def fixtureAmsterdamBenv (blockGasLimit : Nat := 30000000)
   let base := fixtureTestBenv blockGasLimit
   { base with
     state := state
-    stat := {base.stat with rules := amsterdamMeteringRules, origState := origState}
+    stat := {base.stat with rules := amsterdamRules, origState := origState}
   }
 
 private def fixtureAmsterdamMsg (state origState : State)
@@ -1512,34 +1512,34 @@ private def plainAmsterdamTransfer : Tx :=
 private def fixtureTestAuth : Auth :=
   {chainId := 0, address := 0, nonce := 0, yParity := 0, r := 0, s := 0}
 
-#guard calculateIntrinsicCost amsterdamMeteringRules plainAmsterdamTransfer 1
+#guard calculateIntrinsicCost amsterdamRules plainAmsterdamTransfer 1
   = ⟨21000, 21000⟩
-#guard calculateIntrinsicCost amsterdamMeteringRules
+#guard calculateIntrinsicCost amsterdamRules
     {plainAmsterdamTransfer with type := .zero 10 (some 1)} 1
   = ⟨12000, 12000⟩
-#guard calculateIntrinsicCost amsterdamMeteringRules
+#guard calculateIntrinsicCost amsterdamRules
     {fixtureTestTx with gas := 30000000, type := .zero 10 none} 1
   = ⟨24000, 24000⟩
-#guard calculateIntrinsicCost amsterdamMeteringRules
+#guard calculateIntrinsicCost amsterdamRules
     {fixtureTestTx with gas := 30000000, type := .one 1 10 (some 2) [(3, [4])]} 1
   = ⟨23228, 18328⟩
-#guard (calculateIntrinsicCost amsterdamMeteringRules
+#guard (calculateIntrinsicCost amsterdamRules
     {fixtureTestTx with gas := 30000000, type := .four 1 1 10 2 [] [fixtureTestAuth]} 1).1
   = 12000 + 3000 + 7816
 
 private def amsterdamTxMaxGas : Nat :=
-  amsterdamMeteringRules.tx.maxGas.getD 0
+  amsterdamRules.tx.maxGas.getD 0
 
-#guard (validateTransaction amsterdamMeteringRules
+#guard (validateTransaction amsterdamRules
     {plainAmsterdamTransfer with gas := amsterdamTxMaxGas + 1} 1).toOption.isSome
-#guard allocateEvmGas amsterdamMeteringRules (amsterdamTxMaxGas + 100) 21000
+#guard allocateEvmGas amsterdamRules (amsterdamTxMaxGas + 100) 21000
   = ⟨amsterdamTxMaxGas - 21000, 100⟩
 
 #guard settleTransactionGas pragueRules 1000 0 100 777 100 999
   = ⟨800, 200, 800, 0⟩
-#guard settleTransactionGas amsterdamMeteringRules 1000 600 100 200 100 50
+#guard settleTransactionGas amsterdamRules 1000 600 100 200 100 50
   = ⟨600, 400, 650, 50⟩
-#guard settleTransactionGas amsterdamMeteringRules 1000 0 100 200 1000 (-50)
+#guard settleTransactionGas amsterdamRules 1000 0 100 200 1000 (-50)
   = ⟨560, 440, 700, 0⟩
 
 #guard delegationChargeGuard false =
@@ -4543,14 +4543,18 @@ private def guardBlobParent (baseFee blobGasUsed : Nat) : Header :=
     | .error (.internal _) => true
     | _ => false)
 
--- The complement, at the same entry point and on the same chain: a declared
--- fork whose rules are unimplemented is refused on the support channel before
--- any block is examined, so a well-formed Amsterdam block is never answered
--- with a verdict about its validity.
-#guard Fork.unimplemented.all (fun f =>
-  match addBlockToChainAtE f guardEmptyChain (guardBlockAt 0).toBLT.toBytes with
-  | .error (.support (.unsupportedFork g)) => g == f
-  | _ => false)
+-- The complement, at the same entry point and on the same chain, is now
+-- vacuous: no declared fork is unimplemented since goal C composed
+-- `amsterdamRules`. Goal A's guard here asserted that Amsterdam was refused on
+-- the support channel before any block was examined; it is rewritten to say
+-- that Amsterdam reaches execution like every other fork (the no-parent
+-- invariant, never a support failure), and that the support channel is
+-- unreachable through any declared label.
+#guard Fork.unimplemented = []
+#guard (match addBlockToChainAtE .amsterdam guardEmptyChain
+    (guardBlockAt 0).toBLT.toBytes with
+  | .error (.support _) => false
+  | _ => true)
 
 -- A one-block chain whose parent is the only input to the child's expected
 -- excess blob gas. Everything the header checks before that rule is satisfied
@@ -4711,13 +4715,15 @@ example (h : Header) :
 private def guardChildBlockWith (header : Header) : Block :=
   { header := header, txs := [], ommers := [], wds := [] }
 
-/-- The rules a fork defining both header fields would carry. Built by a
-caller rather than by `Fork.rules?`, because `amsterdamRules` does not exist
-yet: this goal declares the vocabulary, and the fork that uses it is later.
-`ValidRules.check` accepts it, so it is a usable record and not a strawman. -/
-private def guardBothFieldsRules : ForkRules :=
-  { bpo2Rules with
-      header := { blockAccessListHash := true, slotNumber := true } }
+/-- The rules of the fork defining both header fields: since goal C that fork
+exists, and `Fork.rules?` names it. (Goal A built this record by hand from
+`bpo2Rules` because `amsterdamRules` did not exist yet; a bare header-flag
+update of BPO2 is now refused by `ForkRules.Valid`, which ties the
+`blockAccessListHash` flag to the presence of `bal` rules.) `ValidRules.check`
+accepts it, so it is a usable record and not a strawman. -/
+private def guardBothFieldsRules : ForkRules := amsterdamRules
+
+#guard Fork.amsterdam.rules? = some guardBothFieldsRules
 
 #guard (ValidRules.check guardBothFieldsRules).toOption.isSome
 
@@ -6060,11 +6066,11 @@ private def orderingGuardTstore
 
 -- Amsterdam follows `storage.py.tstore`: the static error precedes stack
 -- access and charging. The `none` lane retains the pre-Amsterdam order.
-#guard orderingGuardTstore amsterdamMeteringRules 0 [] =
+#guard orderingGuardTstore amsterdamRules 0 [] =
   ("WriteInStaticContext", 0, [], false, false)
-#guard orderingGuardTstore amsterdamMeteringRules 99 [1, 2] =
+#guard orderingGuardTstore amsterdamRules 99 [1, 2] =
   ("WriteInStaticContext", 99, [1, 2], false, false)
-#guard orderingGuardTstore amsterdamMeteringRules 100 [1, 2] =
+#guard orderingGuardTstore amsterdamRules 100 [1, 2] =
   ("WriteInStaticContext", 100, [1, 2], false, false)
 #guard orderingGuardTstore pragueRules 0 [] =
   ("StackUnderflowError", 0, [], false, false)
@@ -6073,7 +6079,7 @@ private def orderingGuardTstore
 
 private def orderingGuardDelegatedMessage (gas : Nat) : Msg :=
   let code := (eoaDelegationMarker ++ (0x3000 : Adr).toBytes).toByteArray
-  (orderingGuardMessage amsterdamMeteringRules gas).setCode 0x2000 code
+  (orderingGuardMessage amsterdamRules gas).setCode 0x2000 code
 
 private def orderingGuardCall
     (gas : Nat) (x : Xinst) (stack : List B256) :=
