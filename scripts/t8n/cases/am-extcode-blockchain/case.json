@@ -1,5 +1,5 @@
 {
-  "description": "EXTCODESIZE and EXTCODECOPY each read the same external code cold and warm, pinning the Amsterdam code-read surcharge.",
+  "description": "EXTCODESIZE reads address 0x700 cold then warm; EXTCODECOPY independently reads address 0x701 cold then warm, pinning both Amsterdam code-read surcharge branches.",
   "scenario": "am-extcode",
   "fork": "Amsterdam",
   "chainid": 1,

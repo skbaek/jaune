@@ -1,5 +1,5 @@
 {
-  "description": "The value CALL creates a child account, then the enclosing callee reverts; creation state gas and the nested transfer log are rolled back.",
+  "description": "A value CALL to the absent point-evaluation precompile fails on empty input and refills its new-account charge; a later value CALL succeeds before the enclosing callee reverts, preserving the original rollback and log coverage.",
   "scenario": "am-call-new-account-fails",
   "fork": "Amsterdam",
   "chainid": 1,
@@ -10,8 +10,8 @@
   ],
   "covers": [
     "call-new-account",
-    "reverting-callee",
-    "creation-refill",
+    "failed-child-creation-refill",
+    "enclosing-revert",
     "log-rollback"
   ]
 }
