@@ -2139,18 +2139,20 @@ theorem Xinst.step_callcode_gasDecreasing (sevm : Sevm) (devm : Devm)
     have e7 := Devm.popToNat_gasMeasure p7
     dsimp only at e1 e2 e3 e4 e5 e6 e7 hstep
     have eA :
-        (sevm.benvStat.rules.gas.accessDelegation
-          (addAccessedAddress d7 codeAddress) codeAddress).2.2.2.2.gasMeasure =
+        (completeDelegationAccess (addAccessedAddress d7 codeAddress)
+          (sevm.benvStat.rules.gas.delegationCost
+            (addAccessedAddress d7 codeAddress) codeAddress).1
+          (sevm.benvStat.rules.gas.delegationCost
+            (addAccessedAddress d7 codeAddress) codeAddress).2.1).2.gasMeasure =
           devm.gasMeasure := by
-      rw [GasSchedule.accessDelegation_gasMeasure,
-        addAccessedAddress_gasMeasure]
+      rw [completeDelegationAccess_gasMeasure, addAccessedAddress_gasMeasure]
       omega
     have hstip :
         (if value.toNat = 0 then 0 else gCallStipend) <
           ((sevm.benvStat.rules.gas.accessCost codeAddress d7.accessedAddresses +
               (if value = 0 then 0 else sevm.benvStat.rules.gas.callValue) +
-              (sevm.benvStat.rules.gas.accessDelegation
-                (addAccessedAddress d7 codeAddress) codeAddress).2.2.2.1) +
+              (sevm.benvStat.rules.gas.delegationCost
+                (addAccessedAddress d7 codeAddress) codeAddress).2.2) +
             d7.extCost [(inputIndex, inputSize), (outputIndex, outputSize)]) := by
       have hac := GasSchedule.access_cost_pos hv.gas codeAddress d7.accessedAddresses
       have hcall := GasSchedule.Valid.stipend_le_callValue hv.gas
@@ -2242,18 +2244,20 @@ theorem Xinst.step_delegatecall_gasDecreasing (sevm : Sevm) (devm : Devm)
     have e6 := Devm.popToNat_gasMeasure p6
     dsimp only at e1 e2 e3 e4 e5 e6 hstep
     have eA :
-        (sevm.benvStat.rules.gas.accessDelegation
-          (addAccessedAddress d6 codeAddress) codeAddress).2.2.2.2.gasMeasure =
+        (completeDelegationAccess (addAccessedAddress d6 codeAddress)
+          (sevm.benvStat.rules.gas.delegationCost
+            (addAccessedAddress d6 codeAddress) codeAddress).1
+          (sevm.benvStat.rules.gas.delegationCost
+            (addAccessedAddress d6 codeAddress) codeAddress).2.1).2.gasMeasure =
           devm.gasMeasure := by
-      rw [GasSchedule.accessDelegation_gasMeasure,
-        addAccessedAddress_gasMeasure]
+      rw [completeDelegationAccess_gasMeasure, addAccessedAddress_gasMeasure]
       omega
     have hstip :
         (if (0 : Nat) = 0 then 0 else gCallStipend) <
           (sevm.benvStat.rules.gas.accessCost codeAddress d6.accessedAddresses +
               0 +
-              (sevm.benvStat.rules.gas.accessDelegation
-                (addAccessedAddress d6 codeAddress) codeAddress).2.2.2.1) +
+              (sevm.benvStat.rules.gas.delegationCost
+                (addAccessedAddress d6 codeAddress) codeAddress).2.2) +
             d6.extCost [(inputIndex, inputSize), (outputIndex, outputSize)] := by
       simp only [if_pos]
       have hac := GasSchedule.access_cost_pos hv.gas codeAddress d6.accessedAddresses
@@ -2337,18 +2341,20 @@ theorem Xinst.step_staticcall_gasDecreasing (sevm : Sevm) (devm : Devm)
     have e6 := Devm.popToNat_gasMeasure p6
     dsimp only at e1 e2 e3 e4 e5 e6 hstep
     have eA :
-        (sevm.benvStat.rules.gas.accessDelegation
-          (addAccessedAddress d6 codeAddress) codeAddress).2.2.2.2.gasMeasure =
+        (completeDelegationAccess (addAccessedAddress d6 codeAddress)
+          (sevm.benvStat.rules.gas.delegationCost
+            (addAccessedAddress d6 codeAddress) codeAddress).1
+          (sevm.benvStat.rules.gas.delegationCost
+            (addAccessedAddress d6 codeAddress) codeAddress).2.1).2.gasMeasure =
           devm.gasMeasure := by
-      rw [GasSchedule.accessDelegation_gasMeasure,
-        addAccessedAddress_gasMeasure]
+      rw [completeDelegationAccess_gasMeasure, addAccessedAddress_gasMeasure]
       omega
     have hstip :
         (if (0 : Nat) = 0 then 0 else gCallStipend) <
           (sevm.benvStat.rules.gas.accessCost codeAddress d6.accessedAddresses +
               0 +
-              (sevm.benvStat.rules.gas.accessDelegation
-                (addAccessedAddress d6 codeAddress) codeAddress).2.2.2.1) +
+              (sevm.benvStat.rules.gas.delegationCost
+                (addAccessedAddress d6 codeAddress) codeAddress).2.2) +
             d6.extCost [(inputIndex, inputSize), (outputIndex, outputSize)] := by
       simp only [if_pos]
       have hac := GasSchedule.access_cost_pos hv.gas codeAddress d6.accessedAddresses

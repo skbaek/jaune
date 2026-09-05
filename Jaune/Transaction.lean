@@ -5201,14 +5201,11 @@ private theorem resolveTopLevelCallAmsterdam_canonical {msg : Msg}
     (resolveTopLevelCallAmsterdam msg devm).CanonicalOn
       (fun r => r.1.Canonical ∧ r.2.Canonical) := by
   unfold resolveTopLevelCallAmsterdam
-  rcases heq : msg.benv.stat.rules.gas.accessDelegation devm
-      msg.currentTarget with ⟨delegated, codeAddress, code, accessCost, accessed⟩
-  have haccess := GasSchedule.accessDelegation_canonical
-    (gas := msg.benv.stat.rules.gas) hd msg.currentTarget
-  rw [heq] at haccess
-  dsimp only at haccess
-  refine Except.CanonicalOn.bind (chargeGas_canonical haccess)
-    fun finished hfinished => ?_
+  rcases msg.benv.stat.rules.gas.delegationCost devm msg.currentTarget
+    with ⟨delegated, codeAddress, accessCost⟩
+  refine Except.CanonicalOn.bind (chargeGas_canonical hd)
+    fun charged hcharged => ?_
+  have hfinished := completeDelegationAccess_canonical hcharged delegated codeAddress
   exact ⟨preparedTopLevelMsg_canonical hm hfinished, hfinished⟩
 
 private theorem dispatchTopLevelAmsterdam_canonical {state : StateGasRules}
