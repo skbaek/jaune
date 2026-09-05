@@ -46,6 +46,9 @@ inductive FixtureException where
   | blockInvalidLogBloom
   | blockInvalidDepositEventLayout
   | blockSystemContractCallFailed
+  /-- A mandatory system contract with no code at the block that must call it
+  (goal D, DP-2): the pinned reference's `InvalidBlock` before the call. -/
+  | blockSystemContractEmpty
   | blockInvalidReceiptsRoot
   | blockInvalidRequests
   | blockInvalidStateRoot
@@ -104,6 +107,7 @@ def all : List FixtureException :=
     blockInvalidLogBloom,
     blockInvalidDepositEventLayout,
     blockSystemContractCallFailed,
+    blockSystemContractEmpty,
     blockInvalidReceiptsRoot,
     blockInvalidRequests,
     blockInvalidStateRoot,
@@ -157,6 +161,7 @@ def toString : FixtureException → String
   | blockInvalidLogBloom => "BlockException.INVALID_LOG_BLOOM"
   | blockInvalidDepositEventLayout => "BlockException.INVALID_DEPOSIT_EVENT_LAYOUT"
   | blockSystemContractCallFailed => "BlockException.SYSTEM_CONTRACT_CALL_FAILED"
+  | blockSystemContractEmpty => "BlockException.SYSTEM_CONTRACT_EMPTY"
   | blockInvalidReceiptsRoot => "BlockException.INVALID_RECEIPTS_ROOT"
   | blockInvalidRequests => "BlockException.INVALID_REQUESTS"
   | blockInvalidStateRoot => "BlockException.INVALID_STATE_ROOT"
@@ -338,6 +343,9 @@ def ofBlockValidationError : BlockValidationError → Option FixtureException
   | .requestsHash _ => some blockInvalidRequests
   | .depositEventLayout _ => some blockInvalidDepositEventLayout
   | .systemContractCallFailed _ => some blockSystemContractCallFailed
+  -- Goal D (DP-2): the empty-contract rejection was a fail-closed internal
+  -- invariant with no identity; the transition corpus names one.
+  | .systemContractEmpty _ => some blockSystemContractEmpty
   | .blockRlpSizeExceeded _ => some blockRlpBlockLimitExceeded
   -- EIP-7928 (goal C). Consensus observes one thing, the header's hash against
   -- the computed list; the fixture runner refines that reason into the two
@@ -394,10 +402,10 @@ open FixtureException
 -- The vocabulary is the reviewed current-mainnet identity set reached by the
 -- supported static Prague and Osaka lanes, plus the four the Glamsterdam
 -- devnet lane's `eip7928_*` subtree names (goal C).
-#guard all.length = 47
+#guard all.length = 48
 
 -- `toString` is injective, so no two identities collapse to one token.
-#guard (all.map toString).eraseDups.length = 47
+#guard (all.map toString).eraseDups.length = 48
 
 -- `toString`/`ofString?` round trip on all 47, in both directions.
 #guard all.all (fun e => ofString? e.toString == some e)
@@ -515,9 +523,13 @@ def fixtureInventory : List String :=
          "BlockException.INVALID_BAL_HASH|BlockException.INVALID_BLOCK_HASH",                               -- devnet 1
          "BlockException.INCORRECT_BLOCK_FORMAT",                                                           -- devnet 2
          "BlockException.GAS_USED_OVERFLOW|TransactionException.GAS_ALLOWANCE_EXCEEDED" ]                   -- devnet 9
+    -- The devnet lane's `for_bpo2toamsterdamattime15k/` transition corpus
+    -- (goal D): the empty-request-contract identity of EIP-8282's
+    -- `test_contract_deployment.py` `deploy_after_fork` cases.
+    ++ [ "BlockException.SYSTEM_CONTRACT_EMPTY" ]                                                          -- devnet transitions 4
 
-#guard fixtureInventory.length = 51
-#guard fixtureInventory.eraseDups.length = 51
+#guard fixtureInventory.length = 52
+#guard fixtureInventory.eraseDups.length = 52
 #guard fixtureInventory.all (fun s => (parseExpectation s).toOption.isSome)
 
 -- Both coverage directions: every identity is reachable from the corpus, and
@@ -526,7 +538,7 @@ def fixtureInventory : List String :=
 -- fails loudly if a constructor is added that the fixtures never name.
 #guard
   (fixtureInventory.flatMap
-    (fun s => ((parseExpectation s).toOption.getD []))).eraseDups.length = 45
+    (fun s => ((parseExpectation s).toOption.getD []))).eraseDups.length = 46
 
 -- Malformed expectation strings are rejected, not repaired.
 #guard parseRejects ""                                                     -- no alternatives

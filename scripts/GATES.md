@@ -299,15 +299,20 @@ with the old statement named in the harness):
 Runtime, measured 2026-09-06 on the WSL2 host at `--jobs 6` under the memory
 scope: `amsterdam-transitions` 1.45 s of fixture time (~18 s wall with the
 manifest `--check`), `amsterdam-full` 269.76 s (286 s wall) — inside the
-1,000-second rule. At goal D's checkpoint `5691eb2` the transition suite
-reports **36/42 files PASS**: six files whose verdict Jaune agrees with (block
-invalid) but whose declared identity differs — four 22-field-header cases
-that `BLT.toExHeader` rejects as `RLP_STRUCTURES_ENCODING` where the corpus
-declares `INCORRECT_BLOCK_FORMAT`/`INVALID_BAL_HASH`/`INVALID_BLOCK_HASH`, and
-two files expecting `BlockException.SYSTEM_CONTRACT_EMPTY`, an identity outside
-this build's vocabulary. Both are recorded as findings routed to the owner
-(goal D's decision packets DP-1, DP-2); no identity was aliased and no
-exclusion added to reach green.
+1,000-second rule. At goal D's candidate the transition suite reports
+**38/42 files PASS**: the four `invalid_{pre,post}_fork_block_*` fixtures of
+`eip7843_slotnum` and `eip7928_block_level_access_lists` carry a 22-field RLP
+header that `BLT.toExHeader` rejects as `RLP_STRUCTURES_ENCODING` (programme
+D4: 21 or 23 fields, never 22) where the corpus declares
+`INCORRECT_BLOCK_FORMAT`/`INVALID_BAL_HASH`/`INVALID_BLOCK_HASH` — three
+identities for one wire defect. Jaune agrees on the verdict (block invalid)
+and keeps its honest identity; the four are recorded as identity findings
+with agreed verdicts (goal D's DP-1, owner ruling: record, do not alias), so
+the pass rule for this suite is read as **all-PASS modulo those four recorded
+files** until upstream declares alternations. (The two `eip8282_…/
+contract_deployment` files that expected `BlockException.SYSTEM_CONTRACT_EMPTY`
+pass since goal D gave that reason its own typed arm and identity — DP-2.) No
+exclusion was added to reach green.
 
 The Amsterdam identities the corpus expects (`BlockException.INVALID_BLOCK_ACCESS_LIST`,
 `INVALID_BAL_HASH`, `INCORRECT_BLOCK_FORMAT`, `BLOCK_ACCESS_LIST_GAS_LIMIT_EXCEEDED`,

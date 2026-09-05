@@ -159,6 +159,11 @@ inductive BlockValidationError : Type
   | requestsHash (detail : ErrorDetail)
   | depositEventLayout (detail : ErrorDetail)
   | systemContractCallFailed (detail : ErrorDetail)
+  /-- A mandatory request-producing system contract holds no code when the
+  block must call it. The pinned `process_checked_system_transaction` raises
+  `InvalidBlock` before attempting the call; the corpus names it
+  `BlockException.SYSTEM_CONTRACT_EMPTY`. (Goal D, DP-2.) -/
+  | systemContractEmpty (detail : ErrorDetail)
   | blockRlpSizeExceeded (detail : ErrorDetail)
   /-- A fork-dependent header field is present when the rules do not define
   it, or absent when they do. -/
@@ -213,6 +218,7 @@ def BlockValidationError.tag : BlockValidationError → String
   | .requestsHash _ => requestsHashTag
   | .depositEventLayout _ => depositEventLayoutTag
   | .systemContractCallFailed _ => systemContractCallFailedTag
+  | .systemContractEmpty _ => systemContractEmptyTag
   | .blockRlpSizeExceeded _ => blockRlpSizeExceededTag
   | .headerFieldPresence _ => headerFieldPresenceTag
   | .blockAccessListHash _ _ => blockAccessListHashTag
@@ -229,7 +235,7 @@ def BlockValidationError.detail : BlockValidationError → ErrorDetail
   | .stateRoot d | .transactionsRoot d | .receiptsRoot d | .logBloom d
   | .withdrawalsRoot d | .headerNonce d | .excessBlobGas d
   | .blobGasUsed d | .requestsHash d | .depositEventLayout d
-  | .systemContractCallFailed d | .blockRlpSizeExceeded d
+  | .systemContractCallFailed d | .systemContractEmpty d | .blockRlpSizeExceeded d
   | .headerFieldPresence d
   | .blockAccessListContent d | .blockAccessListFormat d
   | .blockAccessListGasLimit d => d
@@ -249,7 +255,8 @@ def BlockValidationError.all : List BlockValidationError :=
     .receiptsRoot .none, .logBloom .none, .withdrawalsRoot .none,
     .headerNonce .none, .excessBlobGas .none, .blobGasUsed .none,
     .requestsHash .none, .depositEventLayout .none,
-    .systemContractCallFailed .none, .blockRlpSizeExceeded .none,
+    .systemContractCallFailed .none, .systemContractEmpty .none,
+    .blockRlpSizeExceeded .none,
     .headerFieldPresence .none, .blockAccessListHash emptyOmmerHash .none,
     .blockAccessListContent .none, .blockAccessListFormat .none,
     .blockAccessListGasLimit .none ]
@@ -437,10 +444,10 @@ theorem TransitionError.render_split (e : TransitionError) :
 #guard TxValidationError.render (.intrinsicGasTooLow (.text "needs 21000, has 20999"))
   = "IntrinsicGasTooLowError : needs 21000, has 20999"
 
-#guard BlockValidationError.all.length = 29
-#guard BlockValidationError.all.eraseDups.length = 29
+#guard BlockValidationError.all.length = 30
+#guard BlockValidationError.all.eraseDups.length = 30
 #guard BlockValidationError.all.map BlockValidationError.tag = blockExceptionTags
-#guard (BlockValidationError.all.map BlockValidationError.tag).eraseDups.length = 29
+#guard (BlockValidationError.all.map BlockValidationError.tag).eraseDups.length = 30
 #guard BlockValidationError.render (.stateRoot .none) = "StateRootError"
 #guard BlockValidationError.render (.blockRlpSizeExceeded (.text "1 byte over the limit"))
   = "BlockRlpSizeExceededError : 1 byte over the limit"
@@ -2576,15 +2583,20 @@ def processCheckedSystemTransaction
   (benv : Benv) (target : Adr) (data : Bytes) :
   Except TransitionError (State × MsgCallOutput) := do
   let systemContractCode : ByteArray := benv.state.getCode target
-  -- A mis-provisioned chain: the mandatory system contract holds no code. Its
-  -- official Osaka identity (SYSTEM_CONTRACT_EMPTY) is outside this build's
-  -- reviewed vocabulary, and the retired string carried the broad
-  -- "InvalidBlock" category, which was never classifiable -- so the reason is
-  -- typed internal and fails closed. Unobserved in every corpus; the spelling
-  -- change is recorded by the Step-10 report.
+  -- A mis-provisioned chain: the mandatory system contract holds no code. The
+  -- pinned `process_checked_system_transaction` raises `InvalidBlock` here,
+  -- before attempting the call, and the corpus names the reason
+  -- `BlockException.SYSTEM_CONTRACT_EMPTY`; it is a block rejection with its
+  -- own typed reason and its own fixture identity. (Until goal D this arm was
+  -- a fail-closed *internal* invariant, with the note that the identity was
+  -- "outside this build's reviewed vocabulary" and "unobserved in every
+  -- corpus"; the Glamsterdam devnet transition corpus observes it in the four
+  -- `deploy_after_fork` cases of `eip8282_…/test_contract_deployment.py`, so
+  -- the reason is rewritten to the block channel -- goal D, packet DP-2,
+  -- owner-approved.)
   if systemContractCode.isEmpty then
-    .error <| .internal <| .invariant <|
-      .text s!"system contract address {target.toHex} holds no code"
+    .error <| .block <| .systemContractEmpty <| .text
+      s!"system contract address {target.toHex} holds no code"
   let ⟨state, systemTxOutput⟩ ←
     Except.mapError TransitionError.vm
       (processSystemTransaction benv target systemContractCode data)

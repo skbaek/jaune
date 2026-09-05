@@ -1068,6 +1068,12 @@ def depositEventLayoutTag : String := "DepositEventLayoutError"
 
 /-- A mandatory protocol system-contract call reverted, threw, or ran out of gas. -/
 def systemContractCallFailedTag : String := "SystemContractCallFailedError"
+/-- A mandatory protocol system contract holds no code at the block that must
+call it (EIP-7002/7251/8282 request contracts): the pinned
+`process_checked_system_transaction` raises `InvalidBlock` before the call, and
+the fixture identity is `BlockException.SYSTEM_CONTRACT_EMPTY`. Goal D (DP-2,
+owner-approved): until then this reason was a fail-closed internal invariant. -/
+def systemContractEmptyTag : String := "SystemContractEmptyError"
 def blockRlpSizeExceededTag : String := "BlockRlpSizeExceededError"
 
 /-- A fork-dependent header field is present when the rules do not define it,
@@ -1096,6 +1102,7 @@ def blockExceptionTags : List String :=
     stateRootTag, transactionsRootTag, receiptsRootTag, logBloomTag,
     withdrawalsRootTag, headerNonceTag, excessBlobGasTag, blobGasUsedTag,
     requestsHashTag, depositEventLayoutTag, systemContractCallFailedTag,
+    systemContractEmptyTag,
     blockRlpSizeExceededTag, headerFieldPresenceTag, blockAccessListHashTag,
     blockAccessListContentTag, blockAccessListFormatTag,
     blockAccessListGasLimitTag ]
@@ -1103,8 +1110,8 @@ def blockExceptionTags : List String :=
 -- The tags are distinct, and none is a prefix of another, so no rendered
 -- reason can be read as another by any " : "-delimited reader -- and none is
 -- the broad category the vocabulary replaced.
-#guard blockExceptionTags.length = 29
-#guard blockExceptionTags.eraseDups.length = 29
+#guard blockExceptionTags.length = 30
+#guard blockExceptionTags.eraseDups.length = 30
 #guard blockExceptionTags.all fun t =>
   (blockExceptionTags.filter fun u => t.isPrefixOf u).length = 1
 #guard blockExceptionTags.all fun t => t ≠ "InvalidBlock"
