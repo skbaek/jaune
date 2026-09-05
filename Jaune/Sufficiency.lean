@@ -777,7 +777,11 @@ theorem Resume.run_ok_gasMeasure {rsm : Resume}
       refine ⟨child, rfl, ?_⟩
       simp only [Resume.run, liftToExecution, bind, Except.bind] at h
       split at h
-      · rcases hp :
+      · have hsettled : child.AmsterdamFailedChildSettled := by
+          by_contra hn
+          simp [Except.assert, hn] at h
+        simp only [Except.assert, if_pos hsettled] at h
+        rcases hp :
           (if newAccountCharged then
               (incorporateChildAmsterdamOnError parent child child.output).creditStateGasRefund
                 state.newAccount
@@ -786,13 +790,18 @@ theorem Resume.run_ok_gasMeasure {rsm : Resume}
         · exact absurd h (by simp)
         · simp only [Except.ok.injEq] at h
           rw [← h, Devm.push_gasMeasure hp]
-          simp only [Resume.parentGas, Devm.creditStateGasRefund_gasMeasure]
-          have he := incorporateChildAmsterdamOnError_gasMeasure
-            parent child child.output
+          simp only [Resume.parentGas]
+          have he := incorporateChildAmsterdamOnError_gasMeasure_of_child_settled
+            (parent := parent) (child := child) (rd := child.output) hsettled
           split <;> simp_all only [Devm.creditStateGasRefund_gasMeasure] <;> omega
-      · rw [Devm.push_gasMeasure h]
+      · have huncommitted : child.AmsterdamChildUncommitted := by
+          by_contra hn
+          simp [Except.assert, hn] at h
+        simp only [Except.assert, if_pos huncommitted] at h
+        rw [Devm.push_gasMeasure h]
         simp only [Resume.parentGas]
-        have he := incorporateChildAmsterdamOnSuccess_gasMeasure parent child []
+        have he := incorporateChildAmsterdamOnSuccess_gasMeasure_of_child_uncommitted
+          (parent := parent) (child := child) (rd := []) huncommitted
         omega
   | callAmsterdam state parent outputIndex outputSize newAccountCharged =>
     cases r with
@@ -801,7 +810,11 @@ theorem Resume.run_ok_gasMeasure {rsm : Resume}
       refine ⟨child, rfl, ?_⟩
       simp only [Resume.run, liftToExecution, bind, Except.bind] at h
       split at h
-      · rcases hp :
+      · have hsettled : child.AmsterdamFailedChildSettled := by
+          by_contra hn
+          simp [Except.assert, hn] at h
+        simp only [Except.assert, if_pos hsettled] at h
+        rcases hp :
           (if newAccountCharged then
               (incorporateChildAmsterdamOnError parent child child.output).creditStateGasRefund
                 state.newAccount
@@ -810,19 +823,23 @@ theorem Resume.run_ok_gasMeasure {rsm : Resume}
         · exact absurd h (by simp)
         · simp only [Except.ok.injEq] at h
           rw [← h, Devm.memWrite_gasMeasure, Devm.push_gasMeasure hp]
-          simp only [Resume.parentGas, Devm.creditStateGasRefund_gasMeasure]
-          have he := incorporateChildAmsterdamOnError_gasMeasure
-            parent child child.output
+          simp only [Resume.parentGas]
+          have he := incorporateChildAmsterdamOnError_gasMeasure_of_child_settled
+            (parent := parent) (child := child) (rd := child.output) hsettled
           split <;> simp_all only [Devm.creditStateGasRefund_gasMeasure] <;> omega
-      · rcases hp :
+      · have huncommitted : child.AmsterdamChildUncommitted := by
+          by_contra hn
+          simp [Except.assert, hn] at h
+        simp only [Except.assert, if_pos huncommitted] at h
+        rcases hp :
           (incorporateChildAmsterdamOnSuccess parent child child.output).push 1 with
           ⟨e⟩ | ⟨d⟩ <;> simp only [hp] at h
         · exact absurd h (by simp)
         · simp only [Except.ok.injEq] at h
           rw [← h, Devm.memWrite_gasMeasure, Devm.push_gasMeasure hp]
           simp only [Resume.parentGas]
-          have he := incorporateChildAmsterdamOnSuccess_gasMeasure
-            parent child child.output
+          have he := incorporateChildAmsterdamOnSuccess_gasMeasure_of_child_uncommitted
+            (parent := parent) (child := child) (rd := child.output) huncommitted
           omega
 
 /-! ## Call-family accounting
@@ -4192,14 +4209,22 @@ theorem Resume.run_gasLe {rsm : Resume}
       have hc := hr child rfl
       simp only [Resume.run, liftToExecution, bind, Except.bind, Resume.parentGas]
       split
-      · simp only [Devm.push_gasLe, apply_ite,
-          Devm.creditStateGasRefund_gasMeasure, ite_self]
-        have he := incorporateChildAmsterdamOnError_gasMeasure
-          parent child child.output
-        omega
-      · simp only [Devm.push_gasLe]
-        have he := incorporateChildAmsterdamOnSuccess_gasMeasure parent child []
-        omega
+      · by_cases hsettled : child.AmsterdamFailedChildSettled
+        · simp only [Except.assert, if_pos hsettled, Devm.push_gasLe, apply_ite,
+            Devm.creditStateGasRefund_gasMeasure, ite_self]
+          have he := incorporateChildAmsterdamOnError_gasMeasure_of_child_settled
+            (parent := parent) (child := child) (rd := child.output) hsettled
+          omega
+        · simp only [Except.assert, if_neg hsettled, Execution.gasMeasure_error]
+          omega
+      · by_cases huncommitted : child.AmsterdamChildUncommitted
+        · simp only [Except.assert, if_pos huncommitted, Devm.push_gasLe]
+          have he :=
+            incorporateChildAmsterdamOnSuccess_gasMeasure_of_child_uncommitted
+              (parent := parent) (child := child) (rd := []) huncommitted
+          omega
+        · simp only [Except.assert, if_neg huncommitted, Execution.gasMeasure_error]
+          omega
   | callAmsterdam state parent outputIndex outputSize newAccountCharged =>
     cases r with
     | error e =>
@@ -4211,17 +4236,26 @@ theorem Resume.run_gasLe {rsm : Resume}
       have hc := hr child rfl
       simp only [Resume.run, liftToExecution, bind, Except.bind, Resume.parentGas]
       split
-      · refine gasLe_bind_id ?_ (fun d => by simp)
-        simp only [Devm.push_gasLe, apply_ite,
-          Devm.creditStateGasRefund_gasMeasure, ite_self]
-        have he := incorporateChildAmsterdamOnError_gasMeasure
-          parent child child.output
-        omega
-      · refine gasLe_bind_id ?_ (fun d => by simp)
-        simp only [Devm.push_gasLe]
-        have he := incorporateChildAmsterdamOnSuccess_gasMeasure
-          parent child child.output
-        omega
+      · by_cases hsettled : child.AmsterdamFailedChildSettled
+        · simp only [Except.assert, if_pos hsettled]
+          refine gasLe_bind_id ?_ (fun d => by simp)
+          simp only [Devm.push_gasLe, apply_ite,
+            Devm.creditStateGasRefund_gasMeasure, ite_self]
+          have he := incorporateChildAmsterdamOnError_gasMeasure_of_child_settled
+            (parent := parent) (child := child) (rd := child.output) hsettled
+          omega
+        · simp only [Except.assert, if_neg hsettled, Execution.gasMeasure_error]
+          omega
+      · by_cases huncommitted : child.AmsterdamChildUncommitted
+        · simp only [Except.assert, if_pos huncommitted]
+          refine gasLe_bind_id ?_ (fun d => by simp)
+          simp only [Devm.push_gasLe]
+          have he :=
+            incorporateChildAmsterdamOnSuccess_gasMeasure_of_child_uncommitted
+              (parent := parent) (child := child) (rd := child.output) huncommitted
+          omega
+        · simp only [Except.assert, if_neg huncommitted, Execution.gasMeasure_error]
+          omega
 
 /-! ## The step-level obligation
 

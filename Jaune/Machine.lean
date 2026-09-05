@@ -4279,9 +4279,31 @@ merge then ends with `repayStateGasSpill`, the rule new at `7341820` (#3478).
 
 Committed spill is not absorbed, because a child never has any: only the top
 frame commits, and it commits after `set_delegation`, which no child runs.
-Upstream states that as an `assert`; here it is a hypothesis the measure lemma
-names rather than an assumption it hides, so a caller that could violate it
-would fail to discharge the corollary rather than silently lose gas. -/
+Upstream states that as an `assert`; `Resume.run` enforces the same invariant at
+both actual Amsterdam incorporation sites, so a malformed child becomes a
+typed internal invariant error instead of silently losing gas. -/
+
+/-- The invariant every successfully settled Amsterdam child must satisfy
+before its meter can be incorporated into its parent. -/
+def Devm.AmsterdamChildUncommitted (child : Devm) : Prop :=
+  child.mach.stateGas.committedSpill = 0
+
+instance {child : Devm} : Decidable child.AmsterdamChildUncommitted := by
+  unfold Devm.AmsterdamChildUncommitted
+  infer_instance
+
+/-- The additional settlement facts required before incorporating a failed
+Amsterdam child: rollback has restored the reservoir baseline, cleared the
+outstanding spill, and discarded the child's refund counter. -/
+def Devm.AmsterdamFailedChildSettled (child : Devm) : Prop :=
+  child.AmsterdamChildUncommitted ∧
+    child.mach.stateGas.spilled = 0 ∧
+    child.refundCounter = 0 ∧
+    child.stateGasLeft = child.mach.stateGas.baseline
+
+instance {child : Devm} : Decidable child.AmsterdamFailedChildSettled := by
+  unfold Devm.AmsterdamFailedChildSettled
+  infer_instance
 
 /-- `incorporate_child` on a failed child, under `stateGas = some _`.
 
@@ -4364,24 +4386,33 @@ theorem incorporateChildAmsterdamOnSuccess_gasMeasure
     Nat.min_le_right _ _
   omega
 
-/-- The corollary the interpreter actually uses: a child that carries no
-committed spill -- which is every child, because only the top frame commits --
-hands its whole measure back. -/
+/-- A child that carries no committed spill hands its whole measure back. -/
 theorem incorporateChildAmsterdamOnSuccess_gasMeasure_of_child_uncommitted
     {parent child : Devm} {rd : Bytes}
-    (h : child.mach.stateGas.committedSpill = 0) :
+    (h : child.AmsterdamChildUncommitted) :
     (incorporateChildAmsterdamOnSuccess parent child rd).gasMeasure
       = parent.gasMeasure + child.gasMeasure := by
   have e := incorporateChildAmsterdamOnSuccess_gasMeasure parent child rd
+  unfold Devm.AmsterdamChildUncommitted at h
   omega
 
 theorem incorporateChildAmsterdamOnError_gasMeasure_of_child_uncommitted
     {parent child : Devm} {rd : Bytes}
-    (h : child.mach.stateGas.committedSpill = 0) :
+    (h : child.AmsterdamChildUncommitted) :
     (incorporateChildAmsterdamOnError parent child rd).gasMeasure
       = parent.gasMeasure + child.gasMeasure := by
   have e := incorporateChildAmsterdamOnError_gasMeasure parent child rd
+  unfold Devm.AmsterdamChildUncommitted at h
   omega
+
+/-- The exact conservation equation available at the failed-child
+incorporation site after its executable settlement check succeeds. -/
+theorem incorporateChildAmsterdamOnError_gasMeasure_of_child_settled
+    {parent child : Devm} {rd : Bytes}
+    (h : child.AmsterdamFailedChildSettled) :
+    (incorporateChildAmsterdamOnError parent child rd).gasMeasure
+      = parent.gasMeasure + child.gasMeasure :=
+  incorporateChildAmsterdamOnError_gasMeasure_of_child_uncommitted h.1
 
 /-! ### The zero-meter invariant
 

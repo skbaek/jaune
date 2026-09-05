@@ -552,17 +552,24 @@ def Resume.run :
   | .createAmsterdam state parent newAddress newAccountCharged, r => do
     let child ← liftToExecution parent r
     if child.error.isSome then
+      Except.assert child.AmsterdamFailedChildSettled
+        ⟨.internal (.invariant (.text "failed Amsterdam child is not settled")), child⟩
       let parent := incorporateChildAmsterdamOnError parent child child.output
       let parent :=
         if newAccountCharged then parent.creditStateGasRefund state.newAccount
         else parent
       parent.push 0
     else
+      Except.assert child.AmsterdamChildUncommitted
+        ⟨.internal (.invariant (.text "Amsterdam child has committed state-gas spill")),
+          child⟩
       (incorporateChildAmsterdamOnSuccess parent child []).push newAddress.toB256
   | .callAmsterdam state parent outputIndex outputSize newAccountCharged, r => do
     let child ← liftToExecution parent r
     let actualOutput := child.output.take outputSize
     if child.error.isSome then
+      Except.assert child.AmsterdamFailedChildSettled
+        ⟨.internal (.invariant (.text "failed Amsterdam child is not settled")), child⟩
       let parent := incorporateChildAmsterdamOnError parent child child.output
       let parent :=
         if newAccountCharged then parent.creditStateGasRefund state.newAccount
@@ -570,9 +577,71 @@ def Resume.run :
       let evm2 ← parent.push 0
       .ok (evm2.memWrite outputIndex actualOutput)
     else
+      Except.assert child.AmsterdamChildUncommitted
+        ⟨.internal (.invariant (.text "Amsterdam child has committed state-gas spill")),
+          child⟩
       let evm2 ←
         (incorporateChildAmsterdamOnSuccess parent child child.output).push 1
       .ok (evm2.memWrite outputIndex actualOutput)
+
+private def resumeGuardCommittedChild : Devm :=
+  (default : Devm).setMach
+    { (default : Devm).mach with
+      stateGas := {StateGasMeter.zero with committedSpill := 1} }
+
+private def resumeGuardUnsettledFailure : Devm :=
+  ((default : Devm).setMach
+    { (default : Devm).mach with
+      stateGas := {StateGasMeter.zero with spilled := 1} }).withError (some .revert)
+
+private def resumeGuardFailedCommittedSpill : Devm :=
+  ((default : Devm).setMach
+    { (default : Devm).mach with
+      stateGas := {StateGasMeter.zero with committedSpill := 1} }).withError (some .revert)
+
+private def resumeGuardFailedRefund : Devm :=
+  ((default : Devm).withRefundCounter 1).withError (some .revert)
+
+private def resumeGuardFailedReservoir : Devm :=
+  ((default : Devm).setMach
+    { (default : Devm).mach with
+      stateGas := {StateGasMeter.zero with baseline := 1} }).withError (some .revert)
+
+private def resumeGuardSettledFailure : Devm :=
+  (default : Devm).withError (some .revert)
+
+private def resumeGuardIsInvariantError : Execution → Bool
+  | .error ⟨.internal (.invariant _), _⟩ => true
+  | _ => false
+
+private def resumeGuardStack : Execution → Option (List B256)
+  | .ok devm => some devm.stack
+  | .error _ => none
+
+-- Both actual Amsterdam resume constructors reject a child whose committed
+-- spill would otherwise disappear, and a failed child whose rollback facts do
+-- not hold. Clean success and settled failure still reach incorporation.
+#guard resumeGuardIsInvariantError <|
+  Resume.run (.createAmsterdam amsterdamStateGasRules default 0 false)
+    (.ok resumeGuardCommittedChild)
+#guard resumeGuardIsInvariantError <|
+  Resume.run (.callAmsterdam amsterdamStateGasRules default 0 0 false)
+    (.ok resumeGuardUnsettledFailure)
+#guard resumeGuardIsInvariantError <|
+  Resume.run (.createAmsterdam amsterdamStateGasRules default 0 false)
+    (.ok resumeGuardFailedCommittedSpill)
+#guard resumeGuardIsInvariantError <|
+  Resume.run (.callAmsterdam amsterdamStateGasRules default 0 0 false)
+    (.ok resumeGuardFailedRefund)
+#guard resumeGuardIsInvariantError <|
+  Resume.run (.createAmsterdam amsterdamStateGasRules default 0 false)
+    (.ok resumeGuardFailedReservoir)
+#guard resumeGuardStack
+    (Resume.run (.createAmsterdam amsterdamStateGasRules default 0 false) (.ok default))
+      = some [0]
+#guard resumeGuardStack
+    (Resume.run (.callAmsterdam amsterdamStateGasRules default 0 0 false)
+      (.ok resumeGuardSettledFailure)) = some [0]
 
 inductive XStep : Type
   | done (ex : Execution)
@@ -2519,8 +2588,10 @@ theorem Resume.run_canonical {rsm : Resume} {r} (hr : Except.CanonicalSettle r) 
               (parent := parent) (child := c) hc c.output) rfl
         · exact incorporateChildAmsterdamOnError_canonical
             (parent := parent) (child := c) hc c.output
+      refine Except.CanonicalOn.bind (Except.canonicalOn_assert hc) fun _ _ => ?_
       exact liftMachExecution_canonical hp
-    · exact liftMachExecution_canonical
+    · refine Except.CanonicalOn.bind (Except.canonicalOn_assert hc) fun _ _ => ?_
+      exact liftMachExecution_canonical
         (incorporateChildAmsterdamOnSuccess_canonical hc _)
   | callAmsterdam state parent outputIndex outputSize newAccountCharged =>
     refine Except.CanonicalOn.bind (liftToExecution_canonical hr) fun c hc => ?_
@@ -2536,9 +2607,11 @@ theorem Resume.run_canonical {rsm : Resume} {r} (hr : Except.CanonicalSettle r) 
               (parent := parent) (child := c) hc c.output) rfl
         · exact incorporateChildAmsterdamOnError_canonical
             (parent := parent) (child := c) hc c.output
+      refine Except.CanonicalOn.bind (Except.canonicalOn_assert hc) fun _ _ => ?_
       refine Except.CanonicalOn.bind (liftMachExecution_canonical hp) fun d hd => ?_
       exact Devm.Canonical.of_world_eq hd rfl
-    · refine Except.CanonicalOn.bind
+    · refine Except.CanonicalOn.bind (Except.canonicalOn_assert hc) fun _ _ => ?_
+      refine Except.CanonicalOn.bind
         (liftMachExecution_canonical (incorporateChildAmsterdamOnSuccess_canonical hc _))
         fun d hd => ?_
       exact Devm.Canonical.of_world_eq hd rfl
