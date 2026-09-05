@@ -4176,7 +4176,7 @@ def Linst.run (sevm : Sevm) (devm : Devm) :
         if donee ∉ devm.accessedAddresses
           then
             ( ⟨ addAccessedAddress devm donee,
-                gasSelfDestruct + gasColdAccountAccess ⟩ : Devm × Nat )
+                gasSelfDestruct + sevm.benvStat.rules.gas.coldAccountAccess ⟩ : Devm × Nat )
           else
             ⟨devm, gasSelfDestruct⟩
       let gasCost3 ← .ok <|
