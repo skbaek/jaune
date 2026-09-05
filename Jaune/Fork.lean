@@ -2296,13 +2296,14 @@ private def guardBpo2ToAmsterdam : ForkTransition := ⟨.bpo2, .amsterdam, 15000
 #guard amsterdamRules.requests.length = 4
 
 -- D13 (goal D, G5): mainnet's schedule keeps exactly its four activations and
--- names no Amsterdam one while the pinned `FORK_CRITERIA` is `Unscheduled`.
+-- names no Amsterdam one while the pinned `FORK_CRITERIA` is `Unscheduled` --
+-- the shape is guarded with the schedule above (`activations.length = 4`, the
+-- fork list, `¬ contains .amsterdam`). What goal D adds is the gate:
 -- `scripts/check-fork-constants.sh` compares that criterion against this
--- schedule, so the day the number exists the red gate names the missing
--- `mainnetAmsterdamTimestamp`; nothing here pre-empts it.
-#guard mainnetChainConfig.activations.length = 4
-#guard mainnetChainConfig.activations.map (·.fork) = [.prague, .osaka, .bpo1, .bpo2]
-#guard mainnetChainConfig.activations.all (fun a => a.fork != .amsterdam)
+-- schedule through the `mainnetActivation` row of `--rules`, so the day the
+-- number exists the red gate names the missing `mainnetAmsterdamTimestamp`;
+-- nothing here pre-empts it. Until then BPO2 is the last era, however far
+-- ahead the block timestamp lies.
 #guard mainnetChainConfig.forkAt? mainnetBpo2Timestamp = some .bpo2
 #guard mainnetChainConfig.forkAt? (mainnetBpo2Timestamp + 10 ^ 9) = some .bpo2
 
