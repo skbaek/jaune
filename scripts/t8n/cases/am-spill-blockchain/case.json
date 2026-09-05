@@ -1,5 +1,5 @@
 {
-  "description": "A zero-reservoir transaction spills a STORAGE_WRITE charge into gasLeft, then clearing the slot repays that spill in LIFO order.",
+  "description": "A zero-reservoir transaction spills a STORAGE_SET state-gas charge into gasLeft, then clearing the slot repays that spill in LIFO order; STORAGE_WRITE remains the separate execution-gas charge.",
   "scenario": "am-spill",
   "fork": "Amsterdam",
   "chainid": 1,
