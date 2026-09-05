@@ -1513,6 +1513,10 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
     split at h
     · exact applyUnary_gasLt (by decide) h
     · simp at h
+  case slotnum =>
+    split at h
+    · exact pushItem_gasLt (by decide) h
+    · simp at h
   case keccak256 =>
     obtain ⟨⟨start, d1⟩, h1, h⟩ := Except.bind_eq_ok h
     obtain ⟨⟨size, d2⟩, h2, h⟩ := Except.bind_eq_ok h
@@ -2821,6 +2825,10 @@ theorem Rinst.runCore_gasLe (pc : Nat) (devm : Devm) (sevm : Sevm) (r : Rinst) :
   case clz =>
     split
     · exact applyUnary_gasLe _ _ _
+    · simp
+  case slotnum =>
+    split
+    · exact pushItem_gasLe _ _ _
     · simp
   case pop =>
     exact gasLe_bind_id (Nat.le_of_eq (Devm.pop_map_snd_gasLe devm))
@@ -4398,6 +4406,76 @@ theorem Ninst.step_gasBound (evm : Evm) (n : Ninst)
     exact XStep.toStep_gasBound (Xinst.step_gasDecreasing evm.sta evm.dyna x hv)
       (Xinst.step_halt evm.sta evm.dyna x rfl
         (Devm.spill_le_gasMeasure _) (Nat.le_refl _))
+  -- EIP-8024: `VERY_LOW` is charged before anything else can succeed, so a
+  -- successful step strictly lowers the measure; every outcome keeps it
+  -- bounded by the entry measure.
+  | dupn imm =>
+    refine Step.ofExecution_gasBound (fun d hd => ?_) ?_
+    · split at hd
+      · obtain ⟨d1, h1, hd⟩ := Except.bind_eq_ok hd
+        have e1 := chargeGas_gasMeasure h1
+        split at hd
+        · nomatch hd
+        · split at hd
+          · nomatch hd
+          · have e2 := Devm.push_gasMeasure hd
+            unfold gVerylow at e1
+            omega
+      · nomatch hd
+    · refine Execution.settledGasLe_of_gasLe ?_
+      split
+      · refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
+        intro d1
+        split
+        · simp
+        · split
+          · simp
+          · exact Nat.le_of_eq (Devm.push_gasLe _ _)
+      · simp
+  | swapn imm =>
+    refine Step.ofExecution_gasBound (fun d hd => ?_) ?_
+    · split at hd
+      · obtain ⟨d1, h1, hd⟩ := Except.bind_eq_ok hd
+        have e1 := chargeGas_gasMeasure h1
+        split at hd
+        · nomatch hd
+        · split at hd
+          · nomatch hd
+          · simp only [Except.ok.injEq] at hd
+            rw [← hd, Devm.withStack_gasMeasure]
+            unfold gVerylow at e1
+            omega
+      · nomatch hd
+    · refine Execution.settledGasLe_of_gasLe ?_
+      split
+      · refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
+        intro d1
+        split
+        · simp
+        · split <;> simp
+      · simp
+  | exchange imm =>
+    refine Step.ofExecution_gasBound (fun d hd => ?_) ?_
+    · split at hd
+      · obtain ⟨d1, h1, hd⟩ := Except.bind_eq_ok hd
+        have e1 := chargeGas_gasMeasure h1
+        split at hd
+        · nomatch hd
+        · split at hd
+          · nomatch hd
+          · simp only [Except.ok.injEq] at hd
+            rw [← hd, Devm.withStack_gasMeasure]
+            unfold gVerylow at e1
+            omega
+      · nomatch hd
+    · refine Execution.settledGasLe_of_gasLe ?_
+      split
+      · refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
+        intro d1
+        split
+        · simp
+        · split <;> simp
+      · simp
 
 theorem Evm.step_gasBound (evm : Evm) (hv : evm.sta.benvStat.rules.Valid) :
     evm.step.GasBound evm.sta evm.dyna.gasMeasure := by

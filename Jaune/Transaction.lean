@@ -1583,6 +1583,17 @@ private def guardTightCodeLimits : CodeLimits :=
 #guard (checkInitcodeSize guardTightCodeLimits none 200).toOption.isSome
 #guard txvFails (fun | .initcodeSizeExceeded _ => true | _ => false) <|
   checkInitcodeSize guardTightCodeLimits none 201
+
+-- EIP-7954 (goal C, G5): the creation-transaction data check reads Amsterdam's
+-- raised limit through `rules.code` -- inclusive at 0x20000 -- while BPO2's
+-- 0xC000 limit is unchanged.
+#guard (checkInitcodeSize amsterdamRules.code none 0x20000).toOption.isSome
+#guard txvFails (fun | .initcodeSizeExceeded _ => true | _ => false) <|
+  checkInitcodeSize amsterdamRules.code none (0x20000 + 1)
+#guard (checkInitcodeSize bpo2Rules.code none 0xC000).toOption.isSome
+#guard txvFails (fun | .initcodeSizeExceeded _ => true | _ => false) <|
+  checkInitcodeSize bpo2Rules.code none (0xC000 + 1)
+#guard (checkInitcodeSize amsterdamRules.code (some 0x1234) (0x20000 + 1)).toOption.isSome
 -- A non-creation transaction is unaffected by the limit under either schedule.
 #guard (checkInitcodeSize guardTightCodeLimits (some 0) 100000).toOption.isSome
 
@@ -2975,7 +2986,9 @@ def initBenvStat (rules : ForkRules) (chain : BlockChain) (header : Header) :
     time := header.timestamp.toB256,
     prevRandao := header.prevRandao,
     excessBlobGas := header.excessBlobGas,
-    parentBeaconBlockRoot := header.parentBeaconBlockRoot
+    parentBeaconBlockRoot := header.parentBeaconBlockRoot,
+    -- EIP-7843: absent before Amsterdam, where nothing reads it.
+    slotNumber := header.slotNumber.getD 0
   }
 
 def initBenv (rules : ForkRules) (chain : BlockChain) (header : Header) : Benv :=

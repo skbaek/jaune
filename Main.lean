@@ -247,6 +247,95 @@ def runRulesPrinter (label : String) : IO Unit := do
 -- metering vehicle's partial view, are retired with the vehicle: every
 -- declared fork is printed whole by `--rules`.
 
+/-- `jaune --jumpdest-control <seed> <blobs> <size>`: the programme's D8
+random-blob control for the jump-destination analysis (goal C, G4).
+
+For each of `blobs` pseudo-random byte arrays of `size` bytes (a 64-bit LCG
+seeded from `seed + i`, so the run is reproducible), compares three
+computations of the valid jump-destination set: the pinned Amsterdam forward
+walk `pinnedJumpDestsFrom` (with EIP-8024's `DUPN`/`SWAPN`/`EXCHANGE` cases),
+the pre-Amsterdam forward walk `legacyJumpDestsFrom`, and the interpreter's own
+backward scan `jumpable`. The first two are proved equal on every input
+(`pinnedJumpDestsFrom_eq_legacy`); this control is the falsifier for that
+theorem's *statement* and for `jumpable` agreeing with it, run on blobs large
+enough to exercise EIP-7954's 64 KiB code ceiling. It also reports the slowest
+blob's `jumpable` scan time, which is programme R3's measurement. -/
+def runJumpdestControl (seedStr blobsStr sizeStr : String) : IO Bool := do
+  let some seed := seedStr.toNat?
+    | .throw s!"error : --jumpdest-control seed is not a number: {repr seedStr}"
+  let some blobs := blobsStr.toNat?
+    | .throw s!"error : --jumpdest-control blob count is not a number: {repr blobsStr}"
+  let some size := sizeStr.toNat?
+    | .throw s!"error : --jumpdest-control size is not a number: {repr sizeStr}"
+  if blobs = 0 ∨ size = 0 then
+    IO.println
+      s!"RED — jumpdest-control: 0 blobs or 0 bytes compares nothing; an empty \
+         control is never a vacuous pass"
+    return false
+  let mut ok := true
+  let mut slowestMs : Nat := 0
+  let mut slowestBlob : Nat := 0
+  let mut slowestWalkMs : Nat := 0
+  let mut destinations : Nat := 0
+  let mut stackAccessBytes : Nat := 0
+  for i in List.range blobs do
+    let tGen ← IO.monoMsNow
+    -- Knuth's MMIX LCG on `UInt64`; the top byte of each state is the next
+    -- code byte, so every opcode value is equally likely and the three
+    -- EIP-8024 bytes appear about `3 * size / 256` times per blob.
+    let mut x : UInt64 := (seed + i).toUInt64 * 6364136223846793005 + 1442695040888963407
+    let mut arr : Array UInt8 := Array.mkEmpty size
+    for _ in List.range size do
+      x := x * 6364136223846793005 + 1442695040888963407
+      arr := arr.push (x >>> 56).toUInt8
+    let cd : ByteArray := ⟨arr⟩
+    stackAccessBytes := stackAccessBytes +
+      (arr.toList.filter (fun b => b = 0xE6 ∨ b = 0xE7 ∨ b = 0xE8)).length
+    -- Each phase's result is printed before the next timestamp is taken, so
+    -- the compiler cannot float the pure computation past the clock read.
+    IO.println s!"blob {i}: {cd.size} bytes generated, {stackAccessBytes} stack-access byte(s) so far"
+    (← IO.getStdout).flush
+    let tWalk ← IO.monoMsNow
+    let pinned := pinnedJumpDestsFrom cd 0
+    IO.println s!"blob {i}: pinned walk: {pinned.length} destination(s)"
+    (← IO.getStdout).flush
+    let tPinned ← IO.monoMsNow
+    let legacy := legacyJumpDestsFrom cd 0
+    IO.println s!"blob {i}: legacy walk: {legacy.length} destination(s)"
+    (← IO.getStdout).flush
+    let t0 ← IO.monoMsNow
+    let scanned := (List.range size).filter (jumpable cd)
+    IO.println s!"blob {i}: jumpable scan: {scanned.length} destination(s)"
+    (← IO.getStdout).flush
+    let t1 ← IO.monoMsNow
+    IO.println
+      s!"blob {i}: generate {tWalk - tGen} ms, pinned walk {tPinned - tWalk} ms, \
+         legacy walk {t0 - tPinned} ms, jumpable scan {t1 - t0} ms"
+    if t0 - tWalk > slowestWalkMs then
+      slowestWalkMs := t0 - tWalk
+    if t1 - t0 > slowestMs then
+      slowestMs := t1 - t0
+      slowestBlob := i
+    destinations := destinations + pinned.length
+    if pinned ≠ legacy then
+      IO.println s!"RED — jumpdest-control: blob {i}: pinned walk ≠ legacy walk"
+      ok := false
+    if pinned ≠ scanned then
+      IO.println s!"RED — jumpdest-control: blob {i}: pinned walk ≠ jumpable scan"
+      ok := false
+  if ok then
+    IO.println
+      s!"OK — jumpdest-control: {blobs} blob(s) × {size} bytes (seed {seed}): \
+         pinned walk = legacy walk = jumpable on every blob; {destinations} \
+         destination(s), {stackAccessBytes} DUPN/SWAPN/EXCHANGE byte(s); slowest \
+         jumpable scan {slowestMs} ms (blob {slowestBlob}); slowest forward walks \
+         {slowestWalkMs} ms"
+  else
+    IO.println
+      s!"RED — jumpdest-control: {blobs} blob(s) × {size} bytes (seed {seed}): \
+         a walk disagreed; see the lines above"
+  return ok
+
 def getPostStateRoot (json : Lean.Json) : IO B256 :=
   ( do let stateJson ← json.find "postState"
        let state ← stateJson.toWorld
@@ -1016,6 +1105,7 @@ def usage : String :=
   jaune --rules <fork>
   jaune --u256 <file.json>
   jaune --fake-exp <file.json>
+  jaune --jumpdest-control <seed> <blobs> <size>
   jaune --version
   jaune --help
 
@@ -1065,6 +1155,10 @@ def main : List String → IO Unit
     .throw "error : --rules takes exactly one fork label"
   | "--u256" :: pathStr :: [] => do
     if !(← runU256VectorFile pathStr) then IO.Process.exit 1
+  | "--jumpdest-control" :: seed :: blobs :: size :: [] => do
+    if !(← runJumpdestControl seed blobs size) then IO.Process.exit 1
+  | "--jumpdest-control" :: _ =>
+    .throw "error : --jumpdest-control takes exactly <seed> <blobs> <size>"
   | "--fake-exp" :: pathStr :: [] => do
     if !(← runFakeExpVectorFile pathStr) then IO.Process.exit 1
   | "--vectors" :: addrStr :: pathStr :: opts => do

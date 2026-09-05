@@ -848,6 +848,10 @@ structure BenvStat : Type where
   prevRandao : B256
   excessBlobGas : Nat
   parentBeaconBlockRoot : B256
+  /-- EIP-7843: the consensus slot number the header carries, which `SLOTNUM`
+  pushes. Defaulted so that every existing `BenvStat` literal keeps
+  elaborating; under rules without `op.slotnum` nothing reads it. -/
+  slotNumber : UInt64 := 0
 
 -- class Benvironment
 structure Benv : Type where
@@ -2568,21 +2572,62 @@ theorem chargeGas_def (cost : Nat) (devm : Devm) :
     Footprint.toExecution, Footprint.liftOutcome, Devm.setMach, Devm.gasLeft]
   cases safeSub gasLeft cost <;> rfl
 
+/-- EIP-8024's `decode_single` (`vm/stack.py`): the immediate byte of `DUPN`
+and `SWAPN`. Accepted immediates are `0x00–0x5A` and `0x80–0xFF`, decoding to
+`(x + 145) % 256`, which is `17 ≤ n ≤ 235`; the forbidden range `0x5B–0x7F` --
+`JUMPDEST` and every `PUSH1`–`PUSH32` byte -- is `none`, which the interpreter
+answers with an invalid-instruction halt (the pinned `InvalidParameter`). The
+forbidden range is what keeps the jump-destination analysis unchanged: see
+`pinnedJumpDests_eq_legacy` below. -/
+def decodeSingle (x : UInt8) : Option Nat :=
+  if x ≤ 0x5A ∨ 0x80 ≤ x then some ((x.toNat + 145) % 256) else none
+
+/-- EIP-8024's `decode_pair`: the immediate byte of `EXCHANGE`. Accepted
+immediates are `0x00–0x51` and `0x80–0xFF`; `k = x ^ 143`, `(q, r) = divmod k
+16`, and the pair is `(q + 1, r + 1)` when `q < r` and `(r + 1, 29 - q)`
+otherwise, giving `1 ≤ n ≤ 14` and `n < m ≤ 30 - n`. -/
+def decodePair (x : UInt8) : Option (Nat × Nat) :=
+  if x ≤ 0x51 ∨ 0x80 ≤ x then
+    let k := x.toNat ^^^ 143
+    let q := k / 16
+    let r := k % 16
+    some (if q < r then (q + 1, r + 1) else (r + 1, 29 - q))
+  else none
+
+/-- The byte at `i`, or `0` past the end of code: the pinned `buffer_read`'s
+zero fill, which is how an immediate is read when the opcode is the last
+byte. -/
+def ByteArray.byteD (code : ByteArray) (i : Nat) : UInt8 :=
+  if h : i < code.size then code[i] else 0
+
 inductive Ninst : Type
   | reg : Rinst → Ninst
   | exec : Xinst → Ninst
   | push : ∀ bs : Bytes, bs.length ≤ 32 → Ninst
+  /-- EIP-8024 `DUPN` (0xE6) with its one immediate byte, undecoded: decoding
+  happens at execution, where a forbidden immediate is an exceptional halt. -/
+  | dupn : UInt8 → Ninst
+  /-- EIP-8024 `SWAPN` (0xE7) with its immediate byte. -/
+  | swapn : UInt8 → Ninst
+  /-- EIP-8024 `EXCHANGE` (0xE8) with its immediate byte. -/
+  | exchange : UInt8 → Ninst
 
 def Ninst.toOpString : Ninst → String
   | reg o => Rinst.toString o
   | exec o => Xinst.toString o
   | push bs _ => "PUSH" ++ bs.length.repr
+  | dupn _ => "DUPN"
+  | swapn _ => "SWAPN"
+  | exchange _ => "EXCHANGE"
 
 def Ninst.toString : Ninst → String
   | reg o => Rinst.toString o
   | exec o => Xinst.toString o
   | push [] _ => "PUSH0"
   | push bs _ => "PUSH" ++ bs.length.repr ++ " " ++ Bytes.toHex bs
+  | dupn i => "DUPN " ++ Bytes.toHex [i]
+  | swapn i => "SWAPN " ++ Bytes.toHex [i]
+  | exchange i => "EXCHANGE " ++ Bytes.toHex [i]
 
 instance : ToString Ninst := ⟨Ninst.toString⟩
 instance : Repr Ninst := ⟨λ i _ => i.toString⟩
@@ -2667,7 +2712,16 @@ def ByteArray.getInst (code : ByteArray) (pc : Nat) : Option Inst :=
   then
     let b : UInt8 := code[pc]
     match h : b.toInstType with
-    | .R => b.toRinst <&> (.next ∘ .reg)
+    | .R =>
+      -- EIP-8024's three stack-access instructions carry one immediate byte
+      -- and are sized here, fork-independently, exactly as `push` is (D8):
+      -- whether they are *defined* is `rules.op.stackAccess`, checked where
+      -- they run. The immediate is read zero-filled past the end of code.
+      match b with
+      | 0xE6 => some (.next (.dupn (code.byteD (pc + 1))))
+      | 0xE7 => some (.next (.swapn (code.byteD (pc + 1))))
+      | 0xE8 => some (.next (.exchange (code.byteD (pc + 1))))
+      | _ => b.toRinst <&> (.next ∘ .reg)
     | .X => b.toXinst <&> (.next ∘ .exec)
     | .J => b.toJinst <&> .jump
     | .L => b.toLinst <&> .last
@@ -2682,6 +2736,45 @@ def ByteArray.getInst (code : ByteArray) (pc : Nat) : Option Inst :=
 
 def Evm.getInst (evm : Evm) : Option Inst :=
   ByteArray.getInst evm.sta.code evm.pc
+
+-- The EIP-8024 decode tables at every boundary the jump-destination argument
+-- depends on (goal C, Appendix D), against the pinned `decode_single` and
+-- `decode_pair`.
+#guard decodeSingle 0x00 = some 145
+#guard decodeSingle 0x5A = some 235
+#guard decodeSingle 0x80 = some 17
+#guard decodeSingle 0xFF = some 144
+#guard decodeSingle 0x5B = none
+#guard decodeSingle 0x5F = none
+#guard decodeSingle 0x60 = none
+#guard decodeSingle 0x7F = none
+#guard decodePair 0x00 = some (9, 16)
+#guard decodePair 0x51 = some (14, 15)
+#guard decodePair 0x80 = some (1, 16)
+#guard decodePair 0xFF = some (1, 22)
+#guard decodePair 0x52 = none
+#guard decodePair 0x5B = none
+#guard decodePair 0x7F = none
+-- Every accepted single decodes into `17 ≤ n ≤ 235`; every accepted pair into
+-- `1 ≤ n ≤ 14` and `n < m ≤ 30 - n`; the forbidden ranges are exactly
+-- `0x5B–0x7F` and `0x52–0x7F`, and both contain `JUMPDEST` and `PUSH1`–`PUSH32`.
+#guard (List.range 256).all fun x =>
+  match decodeSingle x.toUInt8 with
+  | none => 0x5B ≤ x ∧ x ≤ 0x7F
+  | some n => (x < 0x5B ∨ 0x80 ≤ x) ∧ 17 ≤ n ∧ n ≤ 235
+#guard (List.range 256).all fun x =>
+  match decodePair x.toUInt8 with
+  | none => 0x52 ≤ x ∧ x ≤ 0x7F
+  | some (n, m) => (x < 0x52 ∨ 0x80 ≤ x) ∧ 1 ≤ n ∧ n ≤ 14 ∧ n < m ∧ m ≤ 30 - n
+#guard (decodeSingle 0x5B).isNone ∧ (decodePair 0x5B).isNone -- JUMPDEST
+#guard (List.range' 0x60 32).all fun x =>
+  (decodeSingle x.toUInt8).isNone ∧ (decodePair x.toUInt8).isNone -- PUSH1–PUSH32
+-- Sizing and the zero-filled immediate, fork-independently.
+#guard ByteArray.getInst ⟨#[0xE6, 0x80]⟩ 0 matches some (.next (.dupn 0x80))
+#guard ByteArray.getInst ⟨#[0xE7, 0x00]⟩ 0 matches some (.next (.swapn 0x00))
+#guard ByteArray.getInst ⟨#[0xE8, 0xFF]⟩ 0 matches some (.next (.exchange 0xFF))
+#guard ByteArray.getInst ⟨#[0xE6]⟩ 0 matches some (.next (.dupn 0x00))
+#guard ByteArray.getInst ⟨#[0x4B]⟩ 0 matches some (.next (.reg .slotnum))
 
 /-- EELS `taylor_exponential`'s accumulator loop as a *well-founded* recursion
 (P0.6 item 1): `fakeExpAux num den i numAcc` is the sum of the series continued
@@ -3364,6 +3457,18 @@ def List.swap {ξ} : List ξ → Nat → Option (List ξ)
     let ys := xs.set k x
     .some (y :: ys)
 
+/-- Exchange the items at indices `n` and `m` (both counted from the top),
+or `none` when either is beyond the stack: EIP-8024 `EXCHANGE`'s
+`max(n, m) + 1 > len(stack)` underflow, stated as two indexed reads. -/
+def List.exchange {ξ} (l : List ξ) (n m : Nat) : Option (List ξ) := do
+  let x ← l[n]?
+  let y ← l[m]?
+  .some ((l.set n y).set m x)
+
+#guard List.exchange [1, 2, 3, 4] 1 3 = some [1, 4, 3, 2]
+#guard List.exchange [1, 2, 3, 4] 0 4 = none
+#guard List.exchange ([] : List Nat) 0 0 = none
+
 def Evm.contract (evm : Evm) : Adr := evm.sta.currentTarget
 
 def assertDynamic (sevm : Sevm) (devm : Devm) : Except (EvmError × Devm) Unit :=
@@ -3689,6 +3794,15 @@ def Rinst.runCore
     match List.swap devm.stack n with
     | none => .error ⟨.halt (.stackUnderflow .none), devm⟩
     | some stack => .ok (devm.withStack stack)
+  -- `vm/instructions/block.py` `slot_number`: `charge_gas(OPCODE_SLOTNUM)`,
+  -- where `OPCODE_SLOTNUM = BASE`, then push `U256(block_env.slot_number)`.
+  -- The availability check comes first, exactly as for `CLZ`: under rules
+  -- without EIP-7843 the byte is an undefined instruction.
+  | .slotnum =>
+    if sevm.benvStat.rules.op.slotnum then
+      pushItem sevm.benvStat.slotNumber.toNat.toB256 gBase devm
+    else
+      .error ⟨.halt (.invalidOpcode .none), devm⟩
   | .dup n => do
     let devm ← chargeGas gVerylow devm
     match devm.stack[n]? with
@@ -4051,6 +4165,34 @@ private def guardClzErr (e : Execution) : String :=
 #guard guardClzErr (guardClz pragueRules 100 []) = "InvalidOpcode"
 #guard guardClzErr (guardClz pragueRules 0 [0]) = "InvalidOpcode"
 
+-- EIP-7843 `SLOTNUM` (goal C, G3): under Amsterdam it charges `BASE` (2) and
+-- pushes the block environment's slot number zero-extended to 256 bits; under
+-- BPO2 the byte 0x4B is unassigned, so it is an invalid instruction whatever
+-- the stack and gas hold.
+private def guardSlotnum (rules : ForkRules) (slot : UInt64) (gasLeft : Nat)
+    (stack : List B256) : Execution :=
+  Rinst.runCore 0 (((default : Devm).withGasLeft gasLeft).withStack stack)
+    { guardSevmWith rules with
+      benvStat := { (default : BenvStat) with rules := rules, slotNumber := slot } }
+    .slotnum
+
+#guard gBase = 2
+#guard (guardSlotnum amsterdamRules 12345 100 []).toOption.map Devm.stack
+  = some [Nat.toB256 12345]
+#guard (guardSlotnum amsterdamRules 12345 100 []).toOption.map Devm.gasLeft
+  = some (100 - gBase)
+#guard (guardSlotnum amsterdamRules (2 ^ 64 - 1) 100 [7]).toOption.map Devm.stack
+  = some [Nat.toB256 (2 ^ 64 - 1), Nat.toB256 7]
+#guard (guardSlotnum amsterdamRules 0 2 []).toOption.map Devm.gasLeft = some 0
+#guard guardClzErr (guardSlotnum amsterdamRules 12345 1 []) = "OutOfGasError"
+#guard guardClzErr (guardSlotnum bpo2Rules 12345 100 []) = "InvalidOpcode"
+#guard guardClzErr (guardSlotnum bpo2Rules 12345 0 []) = "InvalidOpcode"
+#guard guardClzErr (guardSlotnum pragueRules 0 100 [1]) = "InvalidOpcode"
+-- `UInt8.toRinst` decodes 0x4B at every fork and round-trips its mnemonic.
+#guard (0x4B : UInt8).toRinst matches some .slotnum
+#guard ((0x4B : UInt8).toRinst.map Rinst.toString) = some "SLOTNUM"
+#guard (0x4B : UInt8).toInstType matches .R
+
 -- Under Osaka the same two degenerate inputs reach the real failures instead.
 #guard guardClzErr (guardClz osakaRules 100 []) = "StackUnderflowError"
 #guard guardClzErr (guardClz osakaRules (gLow - 1) [0]) = "OutOfGasError"
@@ -4086,6 +4228,140 @@ def jumpable (cd : ByteArray) (k : Nat) : Bool :=
 #guard jumpable ⟨#[0x5B]⟩ 1 = false
 #guard jumpable ⟨#[0x5B]⟩ (2 ^ 64) = false
 #guard jumpable ⟨#[]⟩ 0 = false
+
+--------------- EIP-8024 AND THE JUMP-DESTINATION SET ---------------
+
+-- The pinned `get_valid_jump_destinations` (`vm/runtime.py` at Amsterdam) is
+-- *not* the pre-Amsterdam walk: at a `DUPN`, `SWAPN` or `EXCHANGE` byte it
+-- skips the following immediate unless that immediate lies in the opcode's
+-- forbidden range, in which case the byte stays at an instruction boundary.
+-- So "the jump-destination set is unchanged" is a theorem to discharge, not an
+-- observation, and here it is: both walks are written out as forward passes
+-- listing every destination at or after `pc`, and `pinnedJumpDestsFrom_eq_legacy`
+-- proves them equal on every byte array. The argument is exactly that both
+-- forbidden ranges (`0x5B–0x7F` and `0x52–0x7F`) contain `JUMPDEST` (0x5B) and
+-- every `PUSH1`–`PUSH32` byte (`0x60–0x7F`): an *accepted* immediate is
+-- therefore never a destination and never a push, so the legacy walk, which
+-- steps onto it, adds nothing and steps off again, landing where the pinned
+-- walk landed in one step; a *forbidden* immediate is deliberately not
+-- skipped, so both walks step onto it alike.
+--
+-- `jumpable`/`noPushBefore` -- the backward scan the interpreter runs -- keep
+-- their definitions. The programme's random-blob control (`scripts/check-jumpdest.sh`)
+-- compares `jumpable` against `pinnedJumpDestsFrom` on 64 KiB blobs, as the
+-- falsifier for this theorem's *statement*; the theorem is what makes the
+-- unchanged definitions correct on adversarial code, not just sampled code.
+
+/-- The pinned Amsterdam `get_valid_jump_destinations`, from `pc`: `JUMPDEST`
+is a destination; `PUSH1`–`PUSH32` skip their data; `DUPN`/`SWAPN` skip their
+immediate unless it is in `0x5B–0x7F`, `EXCHANGE` unless it is in `0x52–0x7F`;
+every other byte -- `PUSH0` and undefined opcodes included -- advances one.
+An immediate past the end of code reads as `0`, which is accepted, so the
+last-byte case skips past the end exactly as the pinned `pc + 1 < len(code)`
+guard does. -/
+def pinnedJumpDestsFrom (cd : ByteArray) (pc : Nat) : List Nat :=
+  if h : pc < cd.size then
+    let b := cd[pc]
+    if b = 0x5B then pc :: pinnedJumpDestsFrom cd (pc + 1)
+    else if 0x60 ≤ b ∧ b ≤ 0x7F then pinnedJumpDestsFrom cd (pc + (b.toNat - 0x5F) + 1)
+    else if b = 0xE6 ∨ b = 0xE7 then
+      if 0x5B ≤ cd.byteD (pc + 1) ∧ cd.byteD (pc + 1) ≤ 0x7F then
+        pinnedJumpDestsFrom cd (pc + 1)
+      else pinnedJumpDestsFrom cd (pc + 2)
+    else if b = 0xE8 then
+      if 0x52 ≤ cd.byteD (pc + 1) ∧ cd.byteD (pc + 1) ≤ 0x7F then
+        pinnedJumpDestsFrom cd (pc + 1)
+      else pinnedJumpDestsFrom cd (pc + 2)
+    else pinnedJumpDestsFrom cd (pc + 1)
+  else []
+termination_by cd.size - pc
+decreasing_by all_goals omega
+
+/-- The pre-Amsterdam walk: the same pass with no immediate-carrying opcode
+other than the pushes, which is the walk `noPushBefore` characterises. -/
+def legacyJumpDestsFrom (cd : ByteArray) (pc : Nat) : List Nat :=
+  if h : pc < cd.size then
+    let b := cd[pc]
+    if b = 0x5B then pc :: legacyJumpDestsFrom cd (pc + 1)
+    else if 0x60 ≤ b ∧ b ≤ 0x7F then legacyJumpDestsFrom cd (pc + (b.toNat - 0x5F) + 1)
+    else legacyJumpDestsFrom cd (pc + 1)
+  else []
+termination_by cd.size - pc
+decreasing_by all_goals omega
+
+/-- The legacy walk steps off a byte that is neither `JUMPDEST` nor a
+`PUSH1`–`PUSH32` without adding a destination. -/
+theorem legacyJumpDestsFrom_skip (cd : ByteArray) (pc : Nat)
+    (hj : cd.byteD pc ≠ 0x5B) (hp : ¬ (0x60 ≤ cd.byteD pc ∧ cd.byteD pc ≤ 0x7F)) :
+    legacyJumpDestsFrom cd pc = legacyJumpDestsFrom cd (pc + 1) := by
+  rw [legacyJumpDestsFrom]
+  split
+  · rename_i h
+    have hb : cd[pc] = cd.byteD pc := by simp [ByteArray.byteD, h]
+    simp only [hb]
+    rw [if_neg hj, if_neg hp]
+  · rename_i h
+    rw [legacyJumpDestsFrom]
+    rw [dif_neg (by omega)]
+
+/-- Appendix D of goal C: the pinned Amsterdam walk and the pre-Amsterdam walk
+compute the same destinations on every byte array. -/
+theorem pinnedJumpDestsFrom_eq_legacy (cd : ByteArray) (pc : Nat) :
+    pinnedJumpDestsFrom cd pc = legacyJumpDestsFrom cd pc := by
+  rw [pinnedJumpDestsFrom, legacyJumpDestsFrom]
+  split
+  · rename_i h
+    -- An immediate outside a forbidden range `[lo, 0x7F]` with `lo ≤ 0x5B` is
+    -- neither `JUMPDEST` nor a `PUSH1`–`PUSH32` byte, so the legacy walk steps
+    -- off it without adding a destination.
+    have key : ∀ lo : UInt8, lo ≤ 0x5B →
+        ¬ (lo ≤ cd.byteD (pc + 1) ∧ cd.byteD (pc + 1) ≤ 0x7F) →
+        legacyJumpDestsFrom cd (pc + 1) = legacyJumpDestsFrom cd (pc + 2) := by
+      intro lo hlo hnot
+      apply legacyJumpDestsFrom_skip
+      · intro heq
+        apply hnot
+        rw [heq]
+        exact ⟨hlo, by decide⟩
+      · intro ⟨h1, h2⟩
+        apply hnot
+        exact ⟨UInt8.le_trans hlo (UInt8.le_trans (by decide) h1), h2⟩
+    dsimp only
+    split_ifs <;> first
+      | exact congrArg _ (pinnedJumpDestsFrom_eq_legacy cd (pc + 1))
+      | exact pinnedJumpDestsFrom_eq_legacy cd (pc + 1)
+      | exact pinnedJumpDestsFrom_eq_legacy cd _
+      | (rw [pinnedJumpDestsFrom_eq_legacy cd (pc + 2)]
+         exact (key 0x5B (by decide) (by assumption)).symm)
+      | (rw [pinnedJumpDestsFrom_eq_legacy cd (pc + 2)]
+         exact (key 0x52 (by decide) (by assumption)).symm)
+  · rfl
+termination_by cd.size - pc
+decreasing_by all_goals omega
+
+-- The guard points of Appendix D, on both walks and on `jumpable`.
+-- `[0xE6, 0x5B]` / `[0xE8, 0x5B]`: a forbidden immediate is not skipped, so
+-- `1` is a destination; `[0xE6, 0x80, 0x5B]` / `[0xE8, 0x00, 0x5B]`: an
+-- accepted immediate is skipped, `2` is a destination and `1` is not.
+#guard pinnedJumpDestsFrom ⟨#[0xE6, 0x5B]⟩ 0 = [1]
+#guard pinnedJumpDestsFrom ⟨#[0xE8, 0x5B]⟩ 0 = [1]
+#guard pinnedJumpDestsFrom ⟨#[0xE6, 0x80, 0x5B]⟩ 0 = [2]
+#guard pinnedJumpDestsFrom ⟨#[0xE8, 0x00, 0x5B]⟩ 0 = [2]
+-- 0x7F is forbidden, so it is not skipped -- and it is PUSH32, which eats the
+-- JUMPDEST behind it: the set is empty on both walks and for `jumpable`.
+#guard pinnedJumpDestsFrom ⟨#[0xE7, 0x7F, 0x5B]⟩ 0 = []
+#guard (List.range 3).filter (jumpable ⟨#[0xE7, 0x7F, 0x5B]⟩) = []
+#guard pinnedJumpDestsFrom ⟨#[0xE7, 0x5B, 0x5B]⟩ 0 = [1, 2]
+#guard pinnedJumpDestsFrom ⟨#[0x60, 0x5B, 0x5B]⟩ 0 = [2]
+#guard pinnedJumpDestsFrom ⟨#[0xE6]⟩ 0 = []
+#guard jumpable ⟨#[0xE6, 0x5B]⟩ 1 = true
+#guard jumpable ⟨#[0xE8, 0x5B]⟩ 1 = true
+#guard jumpable ⟨#[0xE6, 0x80, 0x5B]⟩ 2 = true
+#guard jumpable ⟨#[0xE6, 0x80, 0x5B]⟩ 1 = false
+#guard jumpable ⟨#[0xE8, 0x00, 0x5B]⟩ 2 = true
+#guard jumpable ⟨#[0xE8, 0x00, 0x5B]⟩ 1 = false
+#guard (List.range 3).filter (jumpable ⟨#[0xE7, 0x5B, 0x5B]⟩) = [1, 2]
+#guard (List.range 3).filter (jumpable ⟨#[0x60, 0x5B, 0x5B]⟩) = [2]
 
 def Jinst.runCore (pc : Nat) (devm : Devm) (sevm : Sevm) :
     Jinst → Except (EvmError × Devm) (Nat × Devm)
@@ -4874,6 +5150,10 @@ theorem Rinst.run_stateGasZero {evm : Evm} (h : evm.dyna.StateGasZero)
   case clz =>
     split
     · exact applyUnary_stateGasZero _ _ h
+    · exact Except.stateGasZeroOn_error h
+  case slotnum =>
+    split
+    · exact pushItem_stateGasZero _ _ h
     · exact Except.stateGasZeroOn_error h
   case calldataload =>
     refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
@@ -6237,6 +6517,10 @@ theorem Rinst.runCore_canonical (pc : Nat) {devm : Devm} (sevm : Sevm)
     exact Except.CanonicalOn.bind (liftMachExecution_canonical hb)
       fun d hd => liftMachExecution_canonical hd
   case clz =>
+    split
+    · exact liftMachExecution_canonical h
+    · exact h
+  case slotnum =>
     split
     · exact liftMachExecution_canonical h
     · exact h
