@@ -152,16 +152,43 @@ ForkRules := { fork : Fork, blob : BlobSchedule, code : CodeLimits,
 - `fork` — provenance for reports and error messages, not a dispatch key.
 
 Every static Prague/Osaka execution category identified by the pinned EELS diff
-is rule data. So are the categories Amsterdam needs from this record's shape.
-There is deliberately no complete `amsterdamRules`: the block-level access
-list, builder requests, new opcodes, and code-limit changes are not implemented,
-so `Fork.amsterdam.rules?` must continue to refuse block execution. The
-transaction-metering semantics do exist behind one narrower vehicle assembled
-from `bpo2Rules`, `amsterdamGasSchedule`, and `amsterdamStateGasRules`.
-`Jaune.T8n.meteringRules?` is the only resolver for that vehicle; it lets the
-transition tool exercise Amsterdam intrinsic pricing, the two-dimensional
-meter, instruction sites, settlement, receipts, and block-gas accounting
-without advertising or accepting Amsterdam as a runnable fixture fork.
+is rule data. So is everything Amsterdam adds, and `amsterdamRules` is now the
+fifth complete record: `bpo2Rules` with `amsterdamGasSchedule` and
+`amsterdamStateGasRules` (the metering goal's), `amsterdamCodeLimits`
+(EIP-7954: `0x10000` / `0x20000`), `amsterdamOpcodeRules` (`clz`, `slotnum`,
+`stackAccess`), `amsterdamHeaderRules` (both EIP-7928/7843 header fields
+required), `amsterdamRequests` (Prague's two system calls followed by
+EIP-8282's builder deposit and exit contracts, in call order) and `bal := some
+{ itemCost := 2000 }` — the one record for the block-level access list
+(`BalRules`), whose presence is what switches on read recording, the builder,
+the item rule and the header's hash check. `Fork.rules? .amsterdam = some
+amsterdamRules`; `Fork.supported` is five forks and `Fork.unimplemented` is
+empty; the transition tool's fork-local metering resolver is retired and it
+reads `Fork.rules` like everything else. `ForkRules.Valid` gained two
+conjuncts for the new record — `bal`, when present, has a non-zero
+`itemCost`, and `bal.isSome` equals the header rule's `blockAccessListHash`
+flag — each refused under its own `RuleDefect`, so a record that carries a
+list without the header field, or the field without the list, is not a rule
+set the semantics accept.
+
+The block-level access list itself is the one Amsterdam category that is not
+a number. Its read set is recorded in `Devm.meta` (`accountReads`,
+`storageReads`) by two recorders that are the identity when `rules.bal` is
+`none`, defined so that every `mach`/`world` projection is `rfl` — which is
+why the gas and state proofs written before the list existed still hold
+unchanged. The recording sites are the pinned `state_tracker`'s
+`get_account*` calls, one by one; reads survive reverts because every child
+merge unions them and a halted top-level preparation keeps them. The builder
+beside `BlockOutput` incorporates each transaction as a diff against the
+block's cumulative state at index `i + 1`, the two pre-execution system calls
+at 0 and the post-execution operations at `n + 1`, then sorts, encodes in the
+dataclass field order and hashes; the item rule fires inside the body and the
+header comparison is the last of the pinned `execute_block` checks. Consensus
+observes only that hash. The corpus's three identities for a bad list are
+answered by the fixture runner from the fixture's published copy of the list
+— header-inconsistent → `INVALID_BAL_HASH`, canonicalised-equal-to-computed →
+`INCORRECT_BLOCK_FORMAT`, otherwise `INVALID_BLOCK_ACCESS_LIST` — from the
+typed rejection and the decoded header, never from a rendered message.
 
 **Every number in this record is machine-checked**, not transcribed:
 `scripts/gen-fork-constants.py` extracts each declared fork's constants from
@@ -176,8 +203,13 @@ repricing subtrees.
 
 The three interpreter-step numbers that were left on the globals —
 `coldAccountAccess`, `callValue` and `createAccess` — are read through
-`rules.gas` at the account-access sites now, and the premise that made the
-deferral necessary exists: **`GasSchedule.Valid`**.
+`rules.gas` at the account-access sites, and the premise that made the
+deferral necessary exists: **`GasSchedule.Valid`**. The three Amsterdam
+instructions are gated the same way — `SLOTNUM` by `rules.op.slotnum`,
+`DUPN`/`SWAPN`/`EXCHANGE` by `rules.op.stackAccess` — decoded at every fork
+(EIP-8024's two-byte forms are sized by `getInst` fork-independently) and
+refused as `InvalidOpcode` where the rule is off, with the jumpdest set proved
+unchanged by `pinnedJumpDestsFrom_eq_legacy` rather than sampled.
 
 It is deliberately small, and it was discovered rather than designed. The
 gas-decreasing theorems are stated over an arbitrary `Sevm`, so a zero-valued

@@ -1930,13 +1930,21 @@ private def amsterdamCapacityOutput : BlockOutput :=
   checkTransactionSenderAccount
     (fixtureTestAccount 0 100 (ByteArray.mk #[0x01])) fixtureTestTx 0
 
-private def recoverValidationSender (rules : ForkRules) (chainId : UInt64)
-    (tx : Tx) : Except TransitionError Adr :=
-  match rules.stateGas with
+/-- The sender the Amsterdam intrinsic-cost formula needs before
+`checkTransaction` runs. The pinned `process_transaction` compares the
+transaction's own chain identifier with the block's (`WrongChainIdError`)
+*before* `check_transaction` recovers the sender, so a legacy transaction
+signed for another chain is refused for its chain identifier, not for its
+signature; the check is repeated here ahead of recovery for that reason (the
+`none` lane keeps its own order inside `checkTransaction`). -/
+private def recoverValidationSender (benv : Benv) (tx : Tx) :
+    Except TransitionError Adr :=
+  match benv.stat.rules.stateGas with
   | none => .ok 0
-  | some _ =>
+  | some _ => do
+    Except.mapError TransitionError.transaction (checkTransactionChainId benv tx)
     Except.mapError (fun e => TransitionError.senderRecovery e)
-      (recoverSender chainId tx)
+      (recoverSender benv.stat.chainId tx)
 
 /-- Amsterdam SELFDESTRUCT settlement clears account data but preserves the
 beneficiary-independent balance retained by EIP-6780. -/
@@ -1965,8 +1973,7 @@ def processTransaction
   let benv := benv.beginTransaction
   let bout ← .ok {bout with
     transactionsTrie := bout.transactionsTrie.insert (BLT.bytes index.toBytes).toBytes tx}
-  let validationSender : Adr ←
-    recoverValidationSender benv.stat.rules benv.stat.chainId tx
+  let validationSender : Adr ← recoverValidationSender benv tx
   let ⟨intrinsicGas, calldataFloorGasCost⟩ ←
     Except.mapError TransitionError.transaction
       (validateTransaction benv.stat.rules tx validationSender)

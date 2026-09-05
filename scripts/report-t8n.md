@@ -126,7 +126,9 @@ cold read alone. Run as documented, without the flag, the same tree gives
 
 `currentDifficulty` is absent because the lane is proof-of-stake and the
 target's `exclude_none` drops it; `blockAccessList` / `blockAccessListHash`
-are absent because they are Amsterdam-only; `sha3Uncles`, `traces` and
+are present exactly at Amsterdam (the list's RLP and its keccak, after
+`requests`; the empty list's `0xc0` in state-test mode, where the target builds
+none) and absent on the earlier forks; `sha3Uncles`, `traces` and
 `opcodeCount` are absent for the same reason.
 
 Two number spellings, and confusing them is the easiest way to produce output

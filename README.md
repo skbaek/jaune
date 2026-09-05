@@ -201,40 +201,27 @@ requirements.
   The pinned release publishes no fixture whose network is a bare `BPO1` or
   `BPO2`, so `--suite bpo1` and `--suite bpo2` select nothing and are refused
   rather than reported as vacuously green.
-- **`Amsterdam` is a declared label whose rules are not implemented.** It
-  parses, it has a position in the fork chain, and transition labels naming it
-  are read — and every attempt to *run* it is refused with
-  `UnsupportedForkError`, never answered with another fork's rules. So the
-  label appears in `jaune --help`'s declared list and not in what that text
-  calls "runs at"; `jaune t8n --forks`, which is the handshake a framework
-  reads to decide what to send, advertises only the four forks above.
-  What exists today is the *vocabulary* Amsterdam needs and the transaction-
-  metering shape that reads it. The vocabulary is the gas numbers it reprices,
-  EIP-8037's state-gas dimension, the two header fields it adds and its
-  request-producing contracts, all carried as fork rule data and machine-checked
-  against the pinned `execution-specs` revision by
-  `scripts/check-fork-constants.sh`. The shape is the two-reservoir gas meter on
-  the machine, its charge, spill, refill, commit and merge operations with their
-  termination lemmas, and the account-access sites that read their repriced
-  numbers from the rules — all of it behind one `Option` switch that is `none`
-  on every fork this build runs, so nothing a Prague, Osaka, BPO1 or BPO2
-  fixture observes has changed. The Amsterdam-only branch also covers
-  resource-based intrinsic pricing, CALL/CREATE and SSTORE metering, spill and
-  refill across child frames, transfer logs, balance-preserving SELFDESTRUCT,
-  and two-dimensional transaction settlement, receipts, and block-gas
-  accounting. A committed 39-case transition-tool corpus exercises those
-  transaction semantics through `jaune t8n --state.fork Amsterdam` against the
-  pinned executable reference.
-
-  **No Amsterdam fixture passes, and none is meant to yet.** The transaction
-  pipeline is deliberately reachable only through that t8n-local metering
-  vehicle; Amsterdam's block-level access list, builder requests, new opcodes,
-  and code limits are not implemented. `Fork.amsterdam.rules?` is still
-  `none`; the fixture runner still refuses `--network Amsterdam`; `jaune t8n
-  --forks` still advertises four forks. The devnet-8 corpus is installable as
-  its own lane (`python3 scripts/bootstrap_mainnet.py --lane amsterdam`) and
-  inventoried in `scripts/amsterdam/manifests.json`, and every suite over it is
-  refused, naming the goal that owns the missing block semantics.
+- **`Amsterdam` runs, against the Glamsterdam devnet-8 prerelease corpus.**
+  `Fork.amsterdam.rules?` resolves to `amsterdamRules`, the fifth complete rule
+  record: the repriced gas numbers and EIP-8037's state-gas dimension (the
+  metering goal), EIP-7954's code limits, EIP-7843 `SLOTNUM`, EIP-8024
+  `DUPN`/`SWAPN`/`EXCHANGE` (with the jumpdest set proved unchanged),
+  EIP-8282's two further request contracts, and EIP-7928's block-level access
+  list — read set, builder, canonical encoding, item rule and header hash check
+  — every number machine-checked against the pinned `execution-specs` revision
+  by `scripts/check-fork-constants.sh`. Nothing a Prague, Osaka, BPO1 or BPO2
+  fixture observes has changed: every Amsterdam behaviour sits behind rule data
+  that is off on those forks, and their lanes are re-run on every candidate.
+  The devnet corpus is its own lane (`python3 scripts/bootstrap_mainnet.py
+  --lane amsterdam`, `scripts/check-mainnet.sh --lane amsterdam --suite
+  amsterdam`), inventoried in `scripts/amsterdam/manifests.json`; its static
+  `Amsterdam` suite and smoke tier run, while its transition suite
+  (`BPO2ToAmsterdamAtTime15k`) is refused until `jaune-amsterdam-currency-v1`
+  activates the schedule. A committed 39-case transition-tool corpus exercises
+  the transaction semantics and the block-level access list through `jaune
+  t8n --state.fork Amsterdam` against the pinned executable reference; `jaune
+  t8n --forks` still advertises the four forks whose transition handshake is
+  settled, and `--info` says that Amsterdam resolves.
 - **Reference:** mirrors [execution-specs](https://github.com/ethereum/execution-specs)
   `mainnet` at commit
   [`4198…7694`](https://github.com/ethereum/execution-specs/tree/4198b9c5996713b268aed602739d5aa40e277694)

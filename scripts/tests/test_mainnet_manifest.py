@@ -181,6 +181,23 @@ class ManifestTests(unittest.TestCase):
                 self.assertEqual(len(rows), expected, suite)
                 self.assertTrue(all(len(row) == 2 and row[1] for row in rows), suite)
 
+    def test_the_default_lane_states_no_runnability(self):
+        """The devnet lane annotates every suite with `runnable` and defers the
+        two that select `BPO2ToAmsterdamAtTime15k` by name. The current-mainnet
+        manifest is a tracked artifact its gate compares byte for byte, so none
+        of that may reach it through the shared code path: this lane defers
+        nothing, and every suite it raises is one this build runs."""
+        self.assertEqual(generator.LANES["mainnet"].deferred_labels, ())
+        with tempfile.TemporaryDirectory() as tmp:
+            fixtures, manifest = self.make_root(Path(tmp))
+            actual = generator.inventory(fixtures, generator.load_sources(manifest))
+        for key in ("runnable", "refusal_reason", "lane", "label_inventory"):
+            self.assertNotIn(key, actual, key)
+        for name, suite in actual["suites"].items():
+            with self.subTest(suite=name):
+                self.assertNotIn("runnable", suite)
+                self.assertNotIn("refusal_reason", suite)
+
     def test_emit_rejects_an_empty_suite(self):
         with tempfile.TemporaryDirectory() as tmp:
             fixtures, manifest = self.make_root(Path(tmp))
