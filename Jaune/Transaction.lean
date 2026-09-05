@@ -554,9 +554,10 @@ private def preparedTopLevelMsg (msg : Msg) (devm : Devm) : Msg :=
 
 private def resolveTopLevelCallAmsterdam (msg : Msg) (devm : Devm) :
     Except (EvmError × Devm) (Msg × Devm) := do
-  let ⟨delegated, codeAddress, code, accessCost, devm⟩ :=
-    msg.benv.stat.rules.gas.accessDelegation devm msg.currentTarget
+  let ⟨delegated, codeAddress, accessCost⟩ :=
+    msg.benv.stat.rules.gas.delegationCost devm msg.currentTarget
   let devm ← chargeGas accessCost devm
+  let ⟨code, devm⟩ := completeDelegationAccess devm delegated codeAddress
   let msg := preparedTopLevelMsg msg devm
   .ok ⟨{
     msg with
@@ -6026,5 +6027,97 @@ private def typedEnvelopeBytes? (bs : Bytes) : Option Bytes :=
 #guard (CanonicalBlock.ofRlp? (guardBlockAt 0).toBLT.toBytes).map
   CanonicalBlock.headerHash
     = some (Header.toBLT (guardBlockAt 0).header).toBytes.keccak
+
+--------------- AMSTERDAM FAILURE-ORDER REGRESSIONS ---------------
+
+-- These guards pin failure precedence and warming at the metering switch.
+-- They deliberately exercise `Rinst.runCore`, all four `Xinst.step` CALL
+-- variants, and the private top-level dispatch boundary rather than a pricing
+-- helper in isolation.
+private def orderingGuardMessage (rules : ForkRules) (gas : Nat) : Msg :=
+  let state := State.setBal .empty (0x1000 : Adr) 100
+  { (default : Msg) with
+    benv := { (default : Benv) with
+      state := state
+      stat := { (default : BenvStat) with rules := rules, origState := state } }
+    caller := 0x1000
+    target := some 0x1000
+    currentTarget := 0x1000
+    gas := gas
+    depth := 8 }
+
+private def orderingGuardSummary (r : Execution) :
+    String × Nat × List Nat × Bool × Bool :=
+  let (status, d) := match r with
+    | .ok d => ("ok", d)
+    | .error (e, d) => (e.render, d)
+  (status, d.gasLeft, d.stack.map B256.toNat,
+    d.accessedAddresses.contains (0x2000 : Adr),
+    d.accessedAddresses.contains (0x3000 : Adr))
+
+private def orderingGuardTstore
+    (rules : ForkRules) (gas : Nat) (stack : List B256) :=
+  let msg := { orderingGuardMessage rules gas with isStatic := true }
+  orderingGuardSummary
+    (Rinst.runCore 0 ((initDevm msg).withStack stack) (initSevm msg) .tstore)
+
+-- Amsterdam follows `storage.py.tstore`: the static error precedes stack
+-- access and charging. The `none` lane retains the pre-Amsterdam order.
+#guard orderingGuardTstore amsterdamMeteringRules 0 [] =
+  ("WriteInStaticContext", 0, [], false, false)
+#guard orderingGuardTstore amsterdamMeteringRules 99 [1, 2] =
+  ("WriteInStaticContext", 99, [1, 2], false, false)
+#guard orderingGuardTstore amsterdamMeteringRules 100 [1, 2] =
+  ("WriteInStaticContext", 100, [1, 2], false, false)
+#guard orderingGuardTstore pragueRules 0 [] =
+  ("StackUnderflowError", 0, [], false, false)
+#guard orderingGuardTstore pragueRules 99 [1, 2] =
+  ("OutOfGasError", 99, [], false, false)
+
+private def orderingGuardDelegatedMessage (gas : Nat) : Msg :=
+  let code := (eoaDelegationMarker ++ (0x3000 : Adr).toBytes).toByteArray
+  (orderingGuardMessage amsterdamMeteringRules gas).setCode 0x2000 code
+
+private def orderingGuardCall
+    (gas : Nat) (x : Xinst) (stack : List B256) :=
+  let msg := orderingGuardDelegatedMessage gas
+  let d := (initDevm msg).withStack stack
+  match Xinst.step (initSevm msg) d x with
+  | .done r => orderingGuardSummary r
+  | .spawn _ _ => ("spawn", 0, [], false, false)
+
+-- The first check may warm the direct code address. The second includes the
+-- delegated access price and must fail before the delegated address is warmed.
+#guard orderingGuardCall 2999 .staticcall [0, 0x2000, 0, 0, 0, 0] =
+  ("OutOfGasError", 2999, [], false, false)
+#guard orderingGuardCall 3000 .call [0, 0x2000, 0, 0, 0, 0, 0] =
+  ("OutOfGasError", 3000, [], true, false)
+#guard orderingGuardCall 3000 .callcode [0, 0x2000, 0, 0, 0, 0, 0] =
+  ("OutOfGasError", 3000, [], true, false)
+#guard orderingGuardCall 3000 .delegatecall [0, 0x2000, 0, 0, 0, 0] =
+  ("OutOfGasError", 3000, [], true, false)
+#guard orderingGuardCall 3000 .staticcall [0, 0x2000, 0, 0, 0, 0] =
+  ("OutOfGasError", 3000, [], true, false)
+#guard (orderingGuardCall 6000 .staticcall [0, 0x2000, 0, 0, 0, 0]).1 =
+  "spawn"
+
+private def orderingGuardTopLevel (gas : Nat) : String × Nat × Bool × Bool :=
+  let msg := { orderingGuardDelegatedMessage gas with
+    target := some 0x2000
+    currentTarget := 0x2000 }
+  let devm := addAccessedAddress (initDevm msg) 0x2000
+  match resolveTopLevelCallAmsterdam msg devm with
+  | .error (e, d) =>
+    (e.render, d.gasLeft,
+      d.accessedAddresses.contains (0x2000 : Adr),
+      d.accessedAddresses.contains (0x3000 : Adr))
+  | .ok (_, d) =>
+    ("ok", d.gasLeft,
+      d.accessedAddresses.contains (0x2000 : Adr),
+      d.accessedAddresses.contains (0x3000 : Adr))
+
+-- Top-level dispatch has the same boundary: a cold delegated access priced at
+-- 3,000 with only 2,999 gas leaves the already-warm recipient as the sole one.
+#guard orderingGuardTopLevel 2999 = ("OutOfGasError", 2999, true, false)
 
 end Jaune

@@ -3789,12 +3789,22 @@ def Rinst.runCore
           (sstoreAmsterdamStateGas state new_value original_value current_value)
           devm
       .ok (devm.setStorVal ct key new_value)
-  | .tstore => do
-    let ⟨key, devm⟩ ← devm.pop
-    let ⟨new_value, devm⟩ ← devm.pop
-    let devm ← chargeGas gasWarmAccess devm
-    assertDynamic sevm devm
-    .ok (devm.setTransVal sevm.currentTarget key new_value)
+  | .tstore =>
+    match sevm.benvStat.rules.stateGas with
+    | none => do
+      let ⟨key, devm⟩ ← devm.pop
+      let ⟨new_value, devm⟩ ← devm.pop
+      let devm ← chargeGas gasWarmAccess devm
+      assertDynamic sevm devm
+      .ok (devm.setTransVal sevm.currentTarget key new_value)
+    | some _ => do
+      -- `storage.py.tstore` at the pin: static execution is rejected before
+      -- stack access or charging, so failure preserves both stack and gas.
+      assertDynamic sevm devm
+      let ⟨key, devm⟩ ← devm.pop
+      let ⟨new_value, devm⟩ ← devm.pop
+      let devm ← chargeGas gasWarmAccess devm
+      .ok (devm.setTransVal sevm.currentTarget key new_value)
   | .mcopy => do
     let ⟨destination, devm⟩ ← devm.popToNat
     let ⟨source, devm⟩ ← devm.popToNat
@@ -4956,6 +4966,7 @@ theorem Rinst.run_stateGasZero {evm : Evm} (h : evm.dyna.StateGasZero)
     refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
     exact pushItem_stateGasZero _ _ ha
   case tstore =>
+    rw [hrules]
     refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
     refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero ha) fun b hb => ?_
     refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ hb) fun d hd => ?_
@@ -6336,11 +6347,17 @@ theorem Rinst.runCore_canonical (pc : Nat) {devm : Devm} (sevm : Sevm)
     refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
     exact liftMachExecution_canonical ha
   case tstore =>
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
-    refine Except.CanonicalOn.bind (liftMachExecution_canonical hb) fun d hd => ?_
-    refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
-    exact Devm.Canonical.setTransVal hd _ _ _
+    split
+    · refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+      refine Except.CanonicalOn.bind (liftMachExecution_canonical hb) fun d hd => ?_
+      refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
+      exact Devm.Canonical.setTransVal hd _ _ _
+    · refine Except.CanonicalOn.bind (assertDynamic_canonicalOn h) fun _ _ => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+      refine Except.CanonicalOn.bind (liftMachExecution_canonical hb) fun d hd => ?_
+      exact Devm.Canonical.setTransVal hd _ _ _
   case gas =>
     exact Except.CanonicalOn.bind (liftMachExecution_canonical h)
       fun d hd => liftMachExecution_canonical hd
