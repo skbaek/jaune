@@ -1,0 +1,16 @@
+{
+  "description": "Plain value transfer to an already-live account: 21,000 intrinsic gas, one transfer log, and matching result/receipt gas.",
+  "scenario": "am-transfer",
+  "fork": "Amsterdam",
+  "chainid": 1,
+  "reward": -1,
+  "mode": "blockchain",
+  "allocIncludes": [
+    "../../amsterdam-system-alloc.json"
+  ],
+  "covers": [
+    "intrinsic-transfer",
+    "transfer-log",
+    "receipt-cumulative-gas"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "description": "Transaction gas exceeds 16,777,216; the excess is the state reservoir while execution remains capped and block capacity is checked per dimension.",
+  "scenario": "am-reservoir",
+  "fork": "Amsterdam",
+  "chainid": 1,
+  "reward": -1,
+  "mode": "blockchain",
+  "allocIncludes": [
+    "../../amsterdam-system-alloc.json"
+  ],
+  "covers": [
+    "gas-above-2^24",
+    "state-reservoir",
+    "dual-block-capacity"
+  ]
+}

@@ -440,74 +440,326 @@ theorem TransitionError.render_split (e : TransitionError) :
 #guard (TxValidationError.all.map TxValidationError.tag).all fun t =>
   ¬ (BlockValidationError.all.map BlockValidationError.tag).contains t
 
+/-! ### Amsterdam top-level preparation
+
+The dual-gas fork prices state-dependent transaction dispatch in the top
+frame, before bytecode starts.  The preparation machine therefore carries the
+real top-frame meters and world.  A successful delegation phase commits its
+state gas; a later preparation failure restores the transaction-entry
+reservoir and world. -/
+
+private abbrev AmsterdamDelegationResult := Devm × AdrSet × AdrSet
+
+private def chargeNewAuthorityAmsterdam (state : StateGasRules)
+    (authority : Adr) (devm : Devm) : Execution :=
+  if devm.state.get authority = .nil then
+    chargeStateGas state.newAccount devm
+  else .ok devm
+
+private def chargePaidAccountWriteAmsterdam (state : StateGasRules)
+    (authority : Adr) (devm : Devm) (paidWrites : AdrSet) :
+    Except (EvmError × Devm) (Devm × AdrSet) :=
+  if paidWrites.contains authority then
+    .ok ⟨devm, paidWrites⟩
+  else do
+    let devm ← chargeGas state.accountWrite devm
+    .ok ⟨devm, paidWrites.insert authority⟩
+
+private def chargeAuthBaseAmsterdam (state : StateGasRules) (msg : Msg)
+    (authority target : Adr) (devm : Devm) (delegationSetFor : AdrSet) :
+    Except (EvmError × Devm) (Devm × AdrSet × ByteArray) :=
+  if target = 0 then
+    .ok ⟨devm, delegationSetFor, .empty⟩
+  else do
+    let delegatedBeforeTx :=
+      isValidDelegation (msg.benv.stat.origState.getCode authority)
+    let devm ←
+      if ¬ delegatedBeforeTx && ¬ delegationSetFor.contains authority then
+        chargeStateGas state.authBase devm
+      else .ok devm
+    .ok ⟨devm, delegationSetFor.insert authority,
+      (eoaDelegationMarker ++ target.toBytes).toByteArray⟩
+
+private def applyValidatedDelegationAmsterdam (state : StateGasRules)
+    (msg : Msg) (authority target : Adr) (devm : Devm)
+    (paidWrites delegationSetFor : AdrSet) :
+    Except (EvmError × Devm) AmsterdamDelegationResult := do
+  let devm ← chargeNewAuthorityAmsterdam state authority devm
+  let (⟨devm, paidWrites⟩ : Devm × AdrSet) ←
+    chargePaidAccountWriteAmsterdam state authority devm paidWrites
+  let (⟨devm, delegationSetFor, codeToSet⟩ :
+      Devm × AdrSet × ByteArray) ←
+    chargeAuthBaseAmsterdam state msg authority target devm delegationSetFor
+  let devm := (devm.setCode authority codeToSet).incrNonce authority
+  .ok ⟨devm, paidWrites, delegationSetFor⟩
+
+private def setDelegationAmsterdamStep (state : StateGasRules) (msg : Msg)
+    (auth : Auth) (devm : Devm) (paidWrites delegationSetFor : AdrSet) :
+    Except (EvmError × Devm) AmsterdamDelegationResult := do
+  if auth.chainId != msg.benv.stat.chainId.toB256 && auth.chainId != 0 then
+    .ok ⟨devm, paidWrites, delegationSetFor⟩
+  else if auth.nonce = UInt64.max then
+    .ok ⟨devm, paidWrites, delegationSetFor⟩
+  else
+    match recoverAuthority auth with
+    | .error (.invalidSignature _) =>
+      .ok ⟨devm, paidWrites, delegationSetFor⟩
+    | .error err => .error ⟨.crypto err, devm⟩
+    | .ok authority =>
+      -- Recovery warms the authority even when a later validity check skips
+      -- the tuple.
+      let devm := addAccessedAddress devm authority
+      let authorityAccount := devm.state.get authority
+      if ¬ (authorityAccount.code.isEmpty ∨
+          isValidDelegation authorityAccount.code) then
+        .ok ⟨devm, paidWrites, delegationSetFor⟩
+      else if authorityAccount.nonce != auth.nonce then
+        .ok ⟨devm, paidWrites, delegationSetFor⟩
+      else
+        applyValidatedDelegationAmsterdam state msg authority auth.address
+          devm paidWrites delegationSetFor
+
+private def setDelegationAmsterdamLoop (state : StateGasRules) (msg : Msg) :
+    List Auth → Devm → AdrSet → AdrSet →
+      Except (EvmError × Devm) AmsterdamDelegationResult
+  | [], devm, paidWrites, delegationSetFor =>
+    .ok ⟨devm, paidWrites, delegationSetFor⟩
+  | auth :: auths, devm, paidWrites, delegationSetFor => do
+    let ⟨devm, paidWrites, delegationSetFor⟩ ←
+      setDelegationAmsterdamStep state msg auth devm paidWrites delegationSetFor
+    setDelegationAmsterdamLoop state msg auths devm paidWrites delegationSetFor
+
+private def setDelegationAmsterdam (state : StateGasRules) (msg : Msg)
+    (devm : Devm) : Execution := do
+  let paidWrites := {msg.caller}
+  let paidWrites :=
+    if msg.target.isNone || msg.value != 0 then
+      paidWrites.insert msg.currentTarget
+    else paidWrites
+  let ⟨devm, _, _⟩ ← setDelegationAmsterdamLoop state msg
+    msg.tenv.stat.auths devm paidWrites .emptyWithCapacity
+  .ok devm
+
+private def preparedTopLevelMsg (msg : Msg) (devm : Devm) : Msg :=
+  { msg with
+    benv := {
+      msg.benv with
+      state := devm.state
+      createdAccounts := devm.createdAccounts
+    }
+    tenv := {msg.tenv with transientStorage := devm.transientStorage}
+    accessedAddresses := devm.accessedAddresses
+    accessedStorageKeys := devm.accessedStorageKeys
+  }
+
+private def resolveTopLevelCallAmsterdam (msg : Msg) (devm : Devm) :
+    Except (EvmError × Devm) (Msg × Devm) := do
+  let ⟨delegated, codeAddress, accessCost⟩ :=
+    msg.benv.stat.rules.gas.delegationCost devm msg.currentTarget
+  let devm ← chargeGas accessCost devm
+  let ⟨code, devm⟩ := completeDelegationAccess devm delegated codeAddress
+  let msg := preparedTopLevelMsg msg devm
+  .ok ⟨{
+    msg with
+    codeAddress := some codeAddress
+    code := code
+    disablePrecompiles := delegated
+  }, devm⟩
+
+private def dispatchTopLevelAmsterdam (state : StateGasRules) (msg : Msg)
+    (devm : Devm) : Except (EvmError × Devm) (Msg × Devm) := do
+  if msg.target.isNone then
+    let isCollision :=
+      accountHasCodeOrNonce devm.state msg.currentTarget ||
+        accountHasStorage devm.state msg.currentTarget
+    if isCollision then
+      .error ⟨.halt (.addressCollision .none), devm⟩
+    else do
+      let devm ←
+        if msg.benv.stat.origState.get msg.currentTarget = .nil then
+          chargeStateGas state.newAccount devm
+        else .ok devm
+      .ok ⟨preparedTopLevelMsg msg devm, devm⟩
+  else do
+    let devm ←
+      if msg.value != 0 && ¬ AccountExists devm.state msg.currentTarget then
+        chargeStateGas state.newAccount devm
+      else .ok devm
+    resolveTopLevelCallAmsterdam msg devm
+
+private def finishTopLevelAmsterdam (state : StateGasRules) (msg : Msg)
+    (devm : Devm) : Except (EvmError × Devm) (Msg × Devm) :=
+  let devm :=
+    if msg.tenv.stat.auths.isEmpty then devm else devm.commitStateGas
+  dispatchTopLevelAmsterdam state msg devm
+
+private def prepareTopLevelAmsterdam (state : StateGasRules) (msg : Msg) :
+    Except (EvmError × Devm) (Msg × Devm) := do
+  let devm := initDevm msg
+  let devm ←
+    if msg.tenv.stat.auths.isEmpty then .ok devm
+    else setDelegationAmsterdam state msg devm
+  finishTopLevelAmsterdam state msg devm
+
+/-- Enter the existing total interpreter with the machine prepared above.
+Only the ordinary `Frame.enter` initialization is replaced: transfer,
+precompile dispatch, execution, and frame settlement remain shared. -/
+private def runPreparedTopFrame (frame : Frame) (prepared : Devm) :
+    Except (EvmError × State × AdrSet × Tra) Devm :=
+  match frame.inner.benvAfterTransfer with
+  | .error e => frame.settleMsg (.error e)
+  | .ok benv =>
+    let inner := frame.inner.withBenv benv
+    let dyna :=
+      (prepared.withState benv.state).withCreatedAccounts benv.createdAccounts
+    let evm : Evm := {pc := 0, sta := initSevm inner, dyna := dyna}
+    let raw :=
+      match inner.codeAddress with
+      | none => exec evm
+      | some adr =>
+        if !inner.disablePrecompiles && inner.benv.stat.rules.isPrecomp adr then
+          executePrecomp evm adr
+        else exec evm
+    frame.settle raw
+
+private def msgCallOutputAmsterdam (msg : Msg) (evm : Devm) :
+    Except EvmError (State × MsgCallOutput) := do
+  let refundCounter ←
+    if evm.error.isNone then
+      (Int.toNat? evm.refundCounter).toExcept
+        (EvmError.internal (.invariant (.text "refund counter is negative")))
+    else .ok 0
+  let logs := if evm.error.isNone then evm.logs else []
+  let accountsToDelete :=
+    if evm.error.isNone then evm.accountsToDelete else .emptyWithCapacity
+  let stateGasUsed :=
+    Int.ofNat msg.stateGasGrant - Int.ofNat evm.stateGasLeft +
+      Int.ofNat evm.mach.stateGas.spilled +
+      Int.ofNat evm.mach.stateGas.committedSpill
+  .ok ⟨evm.state, {
+    gasLeft := evm.gasLeft
+    refundCounter := refundCounter
+    logs := logs
+    accountsToDelete := accountsToDelete
+    error := evm.error
+    returnData := evm.output
+    stateGasLeft := evm.stateGasLeft
+    stateGasUsed := stateGasUsed
+  }⟩
+
+private def settleTopLevelPreparationFailure (msg : Msg) (error : EvmError)
+    (devm : Devm) : Except EvmError (State × MsgCallOutput) :=
+  match error with
+  | .halt reason =>
+    let devm :=
+      (devm.rollback msg.benv.state msg.tenv.transientStorage)
+        |>.restoreStateGasToEntry msg.stateGasGrant
+        |>.forfeitRemainingGas
+    .ok ⟨msg.benv.state, {
+      gasLeft := devm.gasLeft
+      refundCounter := 0
+      logs := []
+      accountsToDelete := .emptyWithCapacity
+      error := some (.halt reason)
+      returnData := []
+      stateGasLeft := devm.stateGasLeft
+      stateGasUsed := 0
+    }⟩
+  | .revert => .error .revert
+  | .crypto reason => .error (.crypto reason)
+  | .internal reason => .error (.internal reason)
+
+private def processTopLevelAmsterdam (state : StateGasRules) (msg : Msg)
+    (frameOf : Msg → Frame) : Except EvmError (State × MsgCallOutput) :=
+  match prepareTopLevelAmsterdam state msg with
+  | .error ⟨error, devm⟩ =>
+    settleTopLevelPreparationFailure msg error devm
+  | .ok ⟨msg, devm⟩ => do
+    let evm ← Except.bimap Prod.fst id
+      (runPreparedTopFrame (frameOf msg) devm)
+    msgCallOutputAmsterdam msg evm
+
 def processMessageCall.create (msg : Msg) :
   Except EvmError (State × MsgCallOutput) := do
-  let benv := msg.benv
-  let isCollision : Bool :=
-    accountHasCodeOrNonce benv.state msg.currentTarget || accountHasStorage benv.state msg.currentTarget
-  if isCollision then
-    return ⟨benv.state, ⟨0, 0, [], .emptyWithCapacity, .some (.halt (.addressCollision .none)), []⟩⟩
-  else
-    let evm ← Except.bimap Prod.fst id (processCreateMessage msg)
-    let logs := if evm.error.isNone then evm.logs else []
-    let accountsToDelete := if evm.error.isNone then evm.accountsToDelete else .emptyWithCapacity
-    let refundCounter ←
+  match msg.benv.stat.rules.stateGas with
+  | none =>
+    let benv := msg.benv
+    let isCollision : Bool :=
+      accountHasCodeOrNonce benv.state msg.currentTarget ||
+        accountHasStorage benv.state msg.currentTarget
+    if isCollision then
+      return ⟨benv.state,
+        ⟨0, 0, [], .emptyWithCapacity,
+          .some (.halt (.addressCollision .none)), [], 0, 0⟩⟩
+    else
+      let evm ← Except.bimap Prod.fst id (processCreateMessage msg)
+      let logs := if evm.error.isNone then evm.logs else []
+      let accountsToDelete :=
+        if evm.error.isNone then evm.accountsToDelete else .emptyWithCapacity
+      let refundCounter ←
+        if evm.error.isNone then
+         (Int.toNat? evm.refundCounter).toExcept
+           (EvmError.internal (.invariant (.text "refund counter is negative")))
+        else
+          .ok 0
+      .ok ⟨
+        evm.state,
+        {
+          gasLeft := evm.gasLeft,
+          refundCounter := refundCounter
+          logs := logs,
+          accountsToDelete := accountsToDelete,
+          error := evm.error,
+          returnData := evm.output
+        }
+      ⟩
+  | some state =>
+    processTopLevelAmsterdam state msg Frame.ofCreate
+
+def processMessageCall.call (msg : Msg) :
+  Except EvmError (State × MsgCallOutput) := do
+  match msg.benv.stat.rules.stateGas with
+  | none =>
+    let (⟨msgDelegation, refundDelegation⟩ : Msg × Nat) ←
+      if msg.tenv.stat.auths.isEmpty then
+        .ok (⟨msg, 0⟩ : Msg × Nat)
+      else do
+        let ⟨msgDelegation, setDelegationValue⟩ ← setDelegation msg
+        .ok ⟨msgDelegation, setDelegationValue.toNat⟩
+    let msgPc :=
+      match getDelegatedCodeAddress msgDelegation.code with
+      | none => msgDelegation
+      | some dca =>
+        {
+          msgDelegation with
+          disablePrecompiles := true,
+          accessedAddresses := msgDelegation.accessedAddresses.insert dca,
+          code := msgDelegation.benv.state.getCode dca,
+          codeAddress := some dca
+        }
+    let evm ← Except.bimap Prod.fst id (processMessage msgPc)
+    let refundProcessMessage ←
       if evm.error.isNone then
-       (Int.toNat? evm.refundCounter).toExcept
-         (EvmError.internal (.invariant (.text "refund counter is negative")))
+        (Int.toNat? evm.refundCounter).toExcept
+          (EvmError.internal (.invariant (.text "refund counter is negative")))
       else
         .ok 0
+    let logs := if evm.error.isNone then evm.logs else []
+    let accountsToDelete :=
+      if evm.error.isNone then evm.accountsToDelete else .emptyWithCapacity
     .ok ⟨
       evm.state,
       {
         gasLeft := evm.gasLeft,
-        refundCounter := refundCounter
+        refundCounter := refundDelegation + refundProcessMessage
         logs := logs,
         accountsToDelete := accountsToDelete,
         error := evm.error,
         returnData := evm.output
       }
     ⟩
-
-def processMessageCall.call (msg : Msg) :
-  Except EvmError (State × MsgCallOutput) := do
-  let (⟨msgDelegation, refundDelegation⟩ : Msg × Nat) ←
-    if msg.tenv.stat.auths.isEmpty then
-      .ok (⟨msg, 0⟩ : Msg × Nat)
-    else do
-      let ⟨msgDelegation, setDelegationValue⟩ ← setDelegation msg
-      .ok ⟨msgDelegation, setDelegationValue.toNat⟩
-  let msgPc :=
-    match getDelegatedCodeAddress msgDelegation.code with
-    | none => msgDelegation
-    | some dca =>
-      {
-        msgDelegation with
-        disablePrecompiles := true,
-        accessedAddresses := msgDelegation.accessedAddresses.insert dca,
-        code := msgDelegation.benv.state.getCode dca,
-        codeAddress := some dca
-      }
-  let evm ← Except.bimap Prod.fst id (processMessage msgPc)
-  let refundProcessMessage ←
-    if evm.error.isNone then
-      (Int.toNat? evm.refundCounter).toExcept
-        (EvmError.internal (.invariant (.text "refund counter is negative")))
-    else
-      .ok 0
-  let logs := if evm.error.isNone then evm.logs else []
-  let accountsToDelete := if evm.error.isNone then evm.accountsToDelete else .emptyWithCapacity
-  .ok ⟨
-    evm.state,
-    {
-      gasLeft := evm.gasLeft,
-      refundCounter := refundDelegation + refundProcessMessage
-      logs := logs,
-      accountsToDelete := accountsToDelete,
-      error := evm.error,
-      returnData := evm.output
-    }
-  ⟩
+  | some state =>
+    processTopLevelAmsterdam state msg Frame.ofCall
 
 def processMessageCall (msg : Msg) :
     Except EvmError (State × MsgCallOutput) := do
@@ -534,6 +786,11 @@ structure Receipt : Type where
 
 structure BlockOutput : Type where
   blockGasUsed : Nat
+  /-- State-gas usage is an independent block-capacity dimension under
+  Amsterdam. The default keeps every legacy construction source-compatible. -/
+  blockStateGasUsed : Nat := 0
+  /-- Sender-facing gas after refunds, accumulated for receipt encoding. -/
+  cumulativeGasUsed : Nat := 0
   transactionsTrie : Std.TreeMap Bytes Tx compare
   receiptsTrie : Std.TreeMap Bytes (Fin 5 × Receipt) compare
   receiptKeys : List Bytes
@@ -541,6 +798,16 @@ structure BlockOutput : Type where
   withdrawalsTrie : Std.TreeMap Bytes Withdrawal compare
   blobGasUsed : Nat
   requests : List Bytes
+
+/-- The legacy block-accounting relation promised by fixed decision 8: sender
+and execution gas advance together, and the independent state-gas dimension
+stays empty. -/
+def BlockOutput.LegacyGasAccounting (bout : BlockOutput) : Prop :=
+  bout.cumulativeGasUsed = bout.blockGasUsed ∧ bout.blockStateGasUsed = 0
+
+instance {bout : BlockOutput} : Decidable bout.LegacyGasAccounting := by
+  unfold BlockOutput.LegacyGasAccounting
+  infer_instance
 
 -- The following helpers keep the checks in the same order, with the same
 -- returned payloads and error strings, as the monolithic transaction checker.
@@ -550,20 +817,39 @@ structure BlockOutput : Type where
 def checkTransactionGasLimits
     (benv : Benv) (blockOut : BlockOutput) (tx : Tx) :
     Except TxValidationError Nat :=
-  let gasAvailable := benv.stat.blockGasLimit - blockOut.blockGasUsed
+  let executionGasAvailable := benv.stat.blockGasLimit - blockOut.blockGasUsed
   let blobGasAvailable := benv.stat.rules.blob.max - blockOut.blobGasUsed
-  if tx.gas > gasAvailable then
+  let executionGasRequired :=
+    match benv.stat.rules.stateGas with
+    | none => tx.gas
+    | some _ => min (benv.stat.rules.tx.maxGas.getD tx.gas) tx.gas
+  if executionGasRequired > executionGasAvailable then
     .error <| .gasAllowanceExceeded <| .text
-      s!"transaction gas = {tx.gas} > \
-         block gas available = {gasAvailable}"
+      s!"transaction execution gas = {executionGasRequired} > \
+         block execution gas available = {executionGasAvailable}"
   else
-    let txBlobGasUsed := calculateTotalBlobGas tx
-    if txBlobGasUsed > blobGasAvailable then
-      .error <| .type3BlobCountExceeded <| .text
-        s!"blob gas used = {txBlobGasUsed} > \
-           blob gas available = {blobGasAvailable}"
-    else
-      .ok txBlobGasUsed
+    match benv.stat.rules.stateGas with
+    | some _ =>
+      let stateGasAvailable :=
+        benv.stat.blockGasLimit - blockOut.blockStateGasUsed
+      if tx.gas > stateGasAvailable then
+        .error <| .gasAllowanceExceeded <| .text
+          s!"transaction state gas = {tx.gas} > \
+             block state gas available = {stateGasAvailable}"
+      else
+        let txBlobGasUsed := calculateTotalBlobGas tx
+        if txBlobGasUsed > blobGasAvailable then
+          .error <| .type3BlobCountExceeded <| .text
+            s!"blob gas used = {txBlobGasUsed} > \
+               blob gas available = {blobGasAvailable}"
+        else .ok txBlobGasUsed
+    | none =>
+      let txBlobGasUsed := calculateTotalBlobGas tx
+      if txBlobGasUsed > blobGasAvailable then
+        .error <| .type3BlobCountExceeded <| .text
+          s!"blob gas used = {txBlobGasUsed} > \
+             blob gas available = {blobGasAvailable}"
+      else .ok txBlobGasUsed
 
 def checkTransactionDynamicGasFee
     (baseFeePerGas gas maxPriorityFee maxFee : Nat) :
@@ -749,38 +1035,70 @@ untouched by Amsterdam and stay global.
 `createCost` reads `gas.createAccess`, the same field the `CREATE` opcodes
 read: at Prague the creation transaction's recipient cost and the opcode's
 base cost are one number, and EIP-8037 moves both together. -/
-def calculateIntrinsicCost (gas : GasSchedule) (tx: Tx) : Nat × Nat :=
+def calculateIntrinsicCost (rules : ForkRules) (tx : Tx) (sender : Adr) : Nat × Nat :=
   -- `foldl` (tail-recursive) rather than `(map …).sum`: the latter's
   -- non-tail-recursive `List.map` overflows the stack on large calldata
   -- (e.g. the 1.2 MB inputs in the EIP-2537 stress fixtures).
   let tokensInCalldata : Nat :=
     tx.data.foldl (fun acc x => acc + (if x = 0 then 1 else 4)) 0
-  let callDataFloorGasCost : Nat :=
-    tokensInCalldata * gas.floorTokenCost + gas.txBase
+  let floorTokensInCalldata : Nat :=
+    match rules.stateGas with
+    | none => tokensInCalldata
+    | some _ => tx.data.length * standardCallDataTokenCost
   let dataCost : Nat :=
     tokensInCalldata * standardCallDataTokenCost
-  let createCost : Nat :=
+  let recipientCost : Nat :=
       match tx.type.receiver? with
-      | none => gas.createAccess + initCodeCost (tx.data).length
-      | some _ => 0
+      | none => rules.gas.createAccess
+      | some recipient =>
+        match rules.stateGas with
+        | none => 0
+        | some state =>
+          if recipient = sender then 0
+          else rules.gas.coldAccountAccess + if tx.value = 0 then 0 else state.txValueCost
+  let initCost : Nat :=
+    if tx.type.receiver?.isNone then initCodeCost tx.data.length else 0
+  let accessList :=
+    match tx.type with
+    | .zero _ _ => []
+    | .one _ _ _ accessList => accessList
+    | .two _ _ _ _ accessList => accessList
+    | .three _ _ _ _ accessList _ _ => accessList
+    | .four _ _ _ _ accessList _ => accessList
   let accessListCost : Nat :=
     let accessList :=
-      match tx.type with
-      | .zero _ _ => []
-      | .one _ _ _ accessList => accessList
-      | .two _ _ _ _ accessList => accessList
-      | .three _ _ _ _ accessList _ _ => accessList
-      | .four _ _ _ _ accessList _ => accessList
+      accessList
     let accessItemCost : (Adr × List B256) → Nat
       | ⟨_, keys⟩ =>
-        gas.txAccessListAddress + keys.length * gas.txAccessListStorageKey
-    (accessList.map accessItemCost).sum
+        rules.gas.txAccessListAddress + keys.length * rules.gas.txAccessListStorageKey
+    let executionCost := (accessList.map accessItemCost).sum
+    match rules.stateGas with
+    | none => executionCost
+    | some state =>
+      let floorTokens := accessList.foldl (fun acc item =>
+        acc + state.accessListAddressFloorTokens
+          + item.2.length * state.accessListStorageKeyFloorTokens) 0
+      executionCost + floorTokens * rules.gas.floorTokenCost
+  let accessListFloorTokens : Nat :=
+    match rules.stateGas with
+    | none => 0
+    | some state => accessList.foldl (fun acc item =>
+        acc + state.accessListAddressFloorTokens
+          + item.2.length * state.accessListStorageKeyFloorTokens) 0
   let authCost : Nat :=
     match tx.type with
-    | .four _ _ _ _ _ auths => gas.perAuthIntrinsic * auths.length
+    | .four _ _ _ _ _ auths => rules.gas.perAuthIntrinsic * auths.length
     | _ => 0
+  let baseExecutionGas := rules.gas.txBase + recipientCost
+  let floorBaseGas :=
+    match rules.stateGas with
+    | none => rules.gas.txBase
+    | some _ => baseExecutionGas
+  let callDataFloorGasCost :=
+    (floorTokensInCalldata + accessListFloorTokens) * rules.gas.floorTokenCost
+      + floorBaseGas
   ⟨
-    gas.txBase + dataCost + createCost + accessListCost + authCost,
+    baseExecutionGas + initCost + dataCost + accessListCost + authCost,
     callDataFloorGasCost
   ⟩
 
@@ -806,31 +1124,164 @@ def checkTransactionGasCap (limits : TransactionLimits) (gas : Nat) :
     else
       .ok ()
 
-def validateTransaction (rules : ForkRules) (tx : Tx) :
+private def checkTransactionPriorityFeeRelation (tx : Tx) :
+    Except TxValidationError Unit :=
+  let check (priorityFee maxFee : Nat) :=
+    if maxFee < priorityFee then
+      .error <| .priorityGreaterThanMaxFee <| .text
+        s!"priority fee = {priorityFee} > max fee = {maxFee}"
+    else .ok ()
+  match tx.type with
+  | .two _ priorityFee maxFee _ _
+  | .three _ priorityFee maxFee _ _ _ _
+  | .four _ priorityFee maxFee _ _ _ => check priorityFee maxFee
+  | _ => .ok ()
+
+private def checkTransactionBlobShape (rules : ForkRules) (tx : Tx) :
+    Except TxValidationError Unit := do
+  match tx.type with
+  | .three _ _ _ _ _ _ blobHashes =>
+    if blobHashes.isEmpty then
+      .error <| .type3ZeroBlobs <| .text "no blob hashes in type-3 transaction"
+    checkTransactionBlobCount rules.tx blobHashes
+    if List.any blobHashes
+        (fun hash => hash.toBytes.head? ≠ some versionedHashVersionKzg) then
+      .error <| .type3InvalidBlobVersionedHash <| .text
+        s!"a blob versioned hash has a version byte other than \
+           {versionedHashVersionKzg}"
+  | _ => .ok ()
+
+def validateTransaction (rules : ForkRules) (tx : Tx) (sender : Adr) :
     Except TxValidationError (Nat × Nat) := do
-  let ⟨intrinsicGas, callDataFloorGasCost⟩ := calculateIntrinsicCost rules.gas tx
-  if max intrinsicGas callDataFloorGasCost > tx.gas
-  then
-    .error <| .intrinsicGasTooLow <| .text
-      s!"transaction gas = {tx.gas} < \
-         max intrinsic/calldata floor cost = \
-         {max intrinsicGas callDataFloorGasCost}"
-  match rules.tx.maxGas with
+  match rules.stateGas with
   | none =>
-    -- Keep Prague's established error precedence byte-for-byte: before Osaka
-    -- this build checked the nonce before initcode size. The validity set is
-    -- the same as EELS, while multiply-invalid legacy fixtures retain their
-    -- existing diagnostic identity.
-    if tx.nonce = UInt64.max then
-      .error <| .nonceIsMax <| .text "transaction nonce is 2^64 - 1"
-    checkInitcodeSize rules.code tx.type.receiver? tx.data.length
+    let ⟨intrinsicGas, callDataFloorGasCost⟩ :=
+      calculateIntrinsicCost rules tx sender
+    if max intrinsicGas callDataFloorGasCost > tx.gas then
+      .error <| .intrinsicGasTooLow <| .text
+        s!"transaction gas = {tx.gas} < \
+           max intrinsic/calldata floor cost = \
+           {max intrinsicGas callDataFloorGasCost}"
+    match rules.tx.maxGas with
+    | none =>
+      -- Keep Prague's established error precedence byte-for-byte.
+      if tx.nonce = UInt64.max then
+        .error <| .nonceIsMax <| .text "transaction nonce is 2^64 - 1"
+      checkInitcodeSize rules.code tx.type.receiver? tx.data.length
+    | some _ =>
+      -- Osaka keeps its EIP-7825 whole-transaction cap.
+      checkInitcodeSize rules.code tx.type.receiver? tx.data.length
+      checkTransactionGasCap rules.tx tx.gas
+      if tx.nonce = UInt64.max then
+        .error <| .nonceIsMax <| .text "transaction nonce is 2^64 - 1"
+    .ok ⟨intrinsicGas, callDataFloorGasCost⟩
   | some _ =>
-    -- Osaka follows EELS: initcode, EIP-7825 gas cap, then nonce.
-    checkInitcodeSize rules.code tx.type.receiver? tx.data.length
-    checkTransactionGasCap rules.tx tx.gas
+    -- Amsterdam follows the pinned source order. The structural checks moved
+    -- here so their reason precedes intrinsic affordability on multiply-
+    -- invalid inputs; the whole-transaction EIP-7825 cap is not applied.
     if tx.nonce = UInt64.max then
       .error <| .nonceIsMax <| .text "transaction nonce is 2^64 - 1"
-  .ok ⟨intrinsicGas, callDataFloorGasCost⟩
+    checkInitcodeSize rules.code tx.type.receiver? tx.data.length
+    checkTransactionPriorityFeeRelation tx
+    checkTransactionBlobShape rules tx
+    checkTransactionReceiver tx
+    checkTransactionAuthorizationList tx
+    let ⟨intrinsicGas, callDataFloorGasCost⟩ :=
+      calculateIntrinsicCost rules tx sender
+    if intrinsicGas > tx.gas then
+      .error <| .intrinsicGasTooLow <| .text
+        s!"transaction gas = {tx.gas} < intrinsic execution gas = \
+           {intrinsicGas}"
+    if callDataFloorGasCost > tx.gas then
+      .error <| .intrinsicGasTooLow <| .text
+        s!"transaction gas = {tx.gas} < intrinsic calldata floor = \
+           {callDataFloorGasCost}"
+    match rules.tx.maxGas with
+    | none => pure ()
+    | some maxGas =>
+      if intrinsicGas > maxGas then
+        .error <| .intrinsicGasTooLow <| .text
+          s!"intrinsic execution gas = {intrinsicGas} > maximum = {maxGas}"
+      if callDataFloorGasCost > maxGas then
+        .error <| .intrinsicGasTooLow <| .text
+          s!"intrinsic calldata floor = {callDataFloorGasCost} > maximum = {maxGas}"
+    .ok ⟨intrinsicGas, callDataFloorGasCost⟩
+
+/-- The pinned Amsterdam split of post-intrinsic gas into the top frame's
+execution grant and its state-gas reservoir. -/
+structure EvmGasAllocation : Type where
+  executionGas : Nat
+  stateGasReservoir : Nat
+deriving DecidableEq, Repr
+
+def allocateEvmGas (rules : ForkRules) (txGas intrinsicGas : Nat) :
+    EvmGasAllocation :=
+  let evmGas := txGas - intrinsicGas
+  match rules.stateGas with
+  | none => ⟨evmGas, 0⟩
+  | some _ =>
+    let executionBudget := rules.tx.maxGas.getD txGas - intrinsicGas
+    let executionGas := min executionBudget evmGas
+    ⟨executionGas, evmGas - executionGas⟩
+
+/-- Gas figures produced once, then consumed by sender refund, block
+accounting, and receipt construction. -/
+structure TransactionGasSettlement : Type where
+  gasUsed : Nat
+  gasLeft : Nat
+  executionGasUsed : Nat
+  stateGasUsed : Nat
+deriving DecidableEq, Repr
+
+def settleTransactionGas (rules : ForkRules) (txGas calldataFloor gasLeft
+    stateGasLeft refundCounter : Nat) (netStateGasUsed : Int) :
+    TransactionGasSettlement :=
+  match rules.stateGas with
+  | none =>
+    let gasUsedBeforeRefund := txGas - gasLeft
+    let gasRefund := min (gasUsedBeforeRefund / 5) refundCounter
+    let gasUsed := max (gasUsedBeforeRefund - gasRefund) calldataFloor
+    ⟨gasUsed, txGas - gasUsed, gasUsed, 0⟩
+  | some _ =>
+    let gasUsedBeforeRefund := txGas - gasLeft - stateGasLeft
+    let gasRefund := min (gasUsedBeforeRefund / 5) refundCounter
+    let gasUsed := max (gasUsedBeforeRefund - gasRefund) calldataFloor
+    let stateGasUsed := Int.toNat netStateGasUsed
+    let executionGasUsed :=
+      max (gasUsedBeforeRefund - stateGasUsed) calldataFloor
+    ⟨gasUsed, txGas - gasUsed, executionGasUsed, stateGasUsed⟩
+
+/-- On every legacy fork the block execution counter and sender-facing
+counter advance together, while the state dimension remains zero. -/
+theorem settleTransactionGas_none_invariants {rules : ForkRules}
+    (h : rules.stateGas = none) (txGas calldataFloor gasLeft stateGasLeft
+      refundCounter : Nat) (netStateGasUsed : Int) :
+    let settlement := settleTransactionGas rules txGas calldataFloor gasLeft
+      stateGasLeft refundCounter netStateGasUsed
+    settlement.executionGasUsed = settlement.gasUsed ∧
+      settlement.stateGasUsed = 0 := by
+  simp [settleTransactionGas, h]
+
+/-- The actual block-counter update performed after transaction settlement. -/
+def BlockOutput.withGasSettlement (bout : BlockOutput)
+    (settlement : TransactionGasSettlement) (txBlobGasUsed : Nat) : BlockOutput :=
+  {bout with
+    blockGasUsed := bout.blockGasUsed + settlement.executionGasUsed
+    blockStateGasUsed := bout.blockStateGasUsed + settlement.stateGasUsed
+    cumulativeGasUsed := bout.cumulativeGasUsed + settlement.gasUsed
+    blobGasUsed := bout.blobGasUsed + txBlobGasUsed}
+
+/-- A settlement whose execution and sender counters agree and whose state
+counter is zero preserves the legacy `BlockOutput` relation. -/
+theorem BlockOutput.LegacyGasAccounting.withGasSettlement
+    {bout : BlockOutput} (hb : bout.LegacyGasAccounting)
+    {settlement : TransactionGasSettlement}
+    (hs : settlement.executionGasUsed = settlement.gasUsed ∧
+      settlement.stateGasUsed = 0) (txBlobGasUsed : Nat) :
+    (bout.withGasSettlement settlement txBlobGasUsed).LegacyGasAccounting := by
+  unfold BlockOutput.LegacyGasAccounting at hb ⊢
+  simp only [BlockOutput.withGasSettlement]
+  omega
 
 def prepareMessage (benv: Benv) (tenv: Tenv) (tx: Tx) :
   Except TransitionError Msg := do
@@ -874,6 +1325,7 @@ def prepareMessage (benv: Benv) (tenv: Tenv) (tx: Tx) :
     accessedAddresses := accessedAddresses,
     accessedStorageKeys := tenv.stat.accessListStorageKeys,
     disablePrecompiles := false
+    stateGasGrant := tenv.stat.stateGasReservoir
   }
 
 def calculateDataFee (blob : BlobSchedule) (excess_blob_gas: Nat) (tx: Tx) :
@@ -913,6 +1365,8 @@ def makeReceipt
 def BlockOutput.init : BlockOutput :=
   {
     blockGasUsed := 0
+    blockStateGasUsed := 0
+    cumulativeGasUsed := 0
     transactionsTrie := .empty
     receiptsTrie := .empty
     receiptKeys := []
@@ -921,6 +1375,10 @@ def BlockOutput.init : BlockOutput :=
     blobGasUsed := 0
     requests := []
   }
+
+theorem BlockOutput.init_legacyGasAccounting :
+    BlockOutput.init.LegacyGasAccounting := by
+  simp [BlockOutput.init, BlockOutput.LegacyGasAccounting]
 
 ---------------- TRANSACTION-REJECTION REGRESSION CHECKS ----------------
 
@@ -964,6 +1422,136 @@ private def fixtureTestAccount
     (nonce : UInt64) (bal : B256) (code : ByteArray := .empty) : Acct :=
   { nonce := nonce, bal := bal, stor := .empty, code := code }
 
+private def fixtureAmsterdamBenv (blockGasLimit : Nat := 30000000)
+    (state : State := .empty) (origState : State := .empty) : Benv :=
+  let base := fixtureTestBenv blockGasLimit
+  { base with
+    state := state
+    stat := {base.stat with rules := amsterdamMeteringRules, origState := origState}
+  }
+
+private def fixtureAmsterdamMsg (state origState : State)
+    (target : Option Adr) (currentTarget : Adr) (value gas grant : Nat)
+    (accessed : AdrSet := .emptyWithCapacity) : Msg :=
+  { (default : Msg) with
+    benv := fixtureAmsterdamBenv (state := state) (origState := origState)
+    tenv := { (default : Tenv) with stat := {
+      (default : TenvStat) with
+      origin := 1
+      gas := gas
+      stateGasReservoir := grant
+    }}
+    caller := 1
+    target := target
+    currentTarget := currentTarget
+    gas := gas
+    value := value.toB256
+    codeAddress := target
+    code := state.getCode currentTarget
+    depth := 1024
+    shouldTransferValue := true
+    accessedAddresses := accessed
+    stateGasGrant := grant
+  }
+
+private def delegationChargeGuard (doRepeat : Bool) :
+    Option (Nat × Nat × Nat × Nat) :=
+  let msg := fixtureAmsterdamMsg .empty .empty (some 2) 2 0 20000 300000
+  let initial := initDevm msg
+  match applyValidatedDelegationAmsterdam amsterdamStateGasRules msg 5 6
+      initial .emptyWithCapacity .emptyWithCapacity with
+  | .error _ => none
+  | .ok ⟨once, paid, setFor⟩ =>
+    if doRepeat then
+      match applyValidatedDelegationAmsterdam amsterdamStateGasRules msg 5 7
+          once paid setFor with
+      | .error _ => none
+      | .ok ⟨twice, _, _⟩ =>
+        some ⟨once.gasLeft, once.stateGasLeft,
+          twice.gasLeft, twice.stateGasLeft⟩
+    else some ⟨once.gasLeft, once.stateGasLeft, 0, 0⟩
+
+private def prepareCreateGuard (collision : Bool) :
+    Option (Nat × Nat × Option SettledHalt) :=
+  let address : Adr := 9
+  let account := fixtureTestAccount 1 0
+  let state := if collision then State.set .empty address account else .empty
+  let msg := fixtureAmsterdamMsg state state none address 0 20000 200000
+  match prepareTopLevelAmsterdam amsterdamStateGasRules msg with
+  | .ok ⟨_, devm⟩ => some ⟨devm.gasLeft, devm.stateGasLeft, none⟩
+  | .error ⟨error, devm⟩ =>
+    match settleTopLevelPreparationFailure msg error devm with
+    | .ok ⟨_, output⟩ =>
+      some ⟨output.gasLeft, output.stateGasLeft, output.error⟩
+    | .error _ => none
+
+private def delegatedDispatchGuard (warm : Bool) :
+    Option (Nat × Nat × Option Adr) :=
+  let target : Adr := 10
+  let delegate : Adr := 11
+  let delegation :=
+    (eoaDelegationMarker ++ delegate.toBytes).toByteArray
+  let state :=
+    (State.set .empty target (fixtureTestAccount 0 0 delegation)).set
+      delegate (fixtureTestAccount 0 0 (.mk (.mk [0x00])))
+  let accessed : AdrSet :=
+    if warm then ({target, delegate} : AdrSet) else {target}
+  let msg := fixtureAmsterdamMsg state state (some target) target 0
+    10000 0 accessed
+  match prepareTopLevelAmsterdam amsterdamStateGasRules msg with
+  | .error _ => none
+  | .ok ⟨prepared, devm⟩ =>
+    some ⟨devm.gasLeft, devm.stateGasLeft, prepared.codeAddress⟩
+
+/-! The W5 value tables.  These evaluate the production definitions and pin
+the split that downstream t8n vectors observe. -/
+
+private def plainAmsterdamTransfer : Tx :=
+  {fixtureTestTx with gas := 30000000, value := 1, type := .zero 10 (some 2)}
+
+private def fixtureTestAuth : Auth :=
+  {chainId := 0, address := 0, nonce := 0, yParity := 0, r := 0, s := 0}
+
+#guard calculateIntrinsicCost amsterdamMeteringRules plainAmsterdamTransfer 1
+  = ⟨21000, 21000⟩
+#guard calculateIntrinsicCost amsterdamMeteringRules
+    {plainAmsterdamTransfer with type := .zero 10 (some 1)} 1
+  = ⟨12000, 12000⟩
+#guard calculateIntrinsicCost amsterdamMeteringRules
+    {fixtureTestTx with gas := 30000000, type := .zero 10 none} 1
+  = ⟨24000, 24000⟩
+#guard calculateIntrinsicCost amsterdamMeteringRules
+    {fixtureTestTx with gas := 30000000, type := .one 1 10 (some 2) [(3, [4])]} 1
+  = ⟨23228, 18328⟩
+#guard (calculateIntrinsicCost amsterdamMeteringRules
+    {fixtureTestTx with gas := 30000000, type := .four 1 1 10 2 [] [fixtureTestAuth]} 1).1
+  = 12000 + 3000 + 7816
+
+private def amsterdamTxMaxGas : Nat :=
+  amsterdamMeteringRules.tx.maxGas.getD 0
+
+#guard (validateTransaction amsterdamMeteringRules
+    {plainAmsterdamTransfer with gas := amsterdamTxMaxGas + 1} 1).toOption.isSome
+#guard allocateEvmGas amsterdamMeteringRules (amsterdamTxMaxGas + 100) 21000
+  = ⟨amsterdamTxMaxGas - 21000, 100⟩
+
+#guard settleTransactionGas pragueRules 1000 0 100 777 100 999
+  = ⟨800, 200, 800, 0⟩
+#guard settleTransactionGas amsterdamMeteringRules 1000 600 100 200 100 50
+  = ⟨600, 400, 650, 50⟩
+#guard settleTransactionGas amsterdamMeteringRules 1000 0 100 200 1000 (-50)
+  = ⟨560, 440, 700, 0⟩
+
+#guard delegationChargeGuard false =
+  some ⟨11000, 81210, 0, 0⟩
+-- The second write to one authority pays neither ACCOUNT_WRITE nor AUTH_BASE.
+#guard delegationChargeGuard true =
+  some ⟨11000, 81210, 11000, 81210⟩
+#guard prepareCreateGuard false = some ⟨20000, 16400, none⟩
+#guard prepareCreateGuard true =
+  some ⟨0, 200000, some (.halt (.addressCollision .none))⟩
+#guard delegatedDispatchGuard false = some ⟨7000, 0, some 11⟩
+#guard delegatedDispatchGuard true = some ⟨9900, 0, some 11⟩
 -- Constructor-level matcher for the transaction-validation boundary guards.
 private def txvFails {α : Type} (p : TxValidationError → Bool) :
     Except TxValidationError α → Bool
@@ -971,9 +1559,9 @@ private def txvFails {α : Type} (p : TxValidationError → Bool) :
   | .ok _ => false
 
 #guard txvFails (fun | .intrinsicGasTooLow _ => true | _ => false) <|
-  validateTransaction pragueRules {fixtureTestTx with gas := txBaseCost - 1}
+  validateTransaction pragueRules {fixtureTestTx with gas := txBaseCost - 1} 0
 #guard txvFails (fun | .nonceIsMax _ => true | _ => false) <|
-  validateTransaction pragueRules {fixtureTestTx with nonce := UInt64.max}
+  validateTransaction pragueRules {fixtureTestTx with nonce := UInt64.max} 0
 #guard txvFails (fun | .initcodeSizeExceeded _ => true | _ => false) <|
   checkInitcodeSize pragueRules.code none (pragueRules.code.maxInitCodeSize + 1)
 
@@ -984,7 +1572,7 @@ private def txvFails {α : Type} (p : TxValidationError → Bool) :
   checkTransactionGasCap osakaRules.tx (2 ^ 24 + 1)
 #guard (checkTransactionGasCap pragueRules.tx (2 ^ 24 + 1)).toOption.isSome
 #guard txvFails (fun | .transactionGasLimitExceeded _ => true | _ => false) <|
-  validateTransaction osakaRules {fixtureTestTx with gas := 2 ^ 24 + 1}
+  validateTransaction osakaRules {fixtureTestTx with gas := 2 ^ 24 + 1} 0
 
 -- The initcode bound comes from the rules record, not from a global: a smaller
 -- limit rejects an initcode the Prague limit accepts, at the same boundary.
@@ -1010,6 +1598,25 @@ private def guardTightCodeLimits : CodeLimits :=
 #guard txvFails (fun | .gasAllowanceExceeded _ => true | _ => false) <|
   checkTransactionGasLimits (fixtureTestBenv txBaseCost) .init
     {fixtureTestTx with gas := txBaseCost + 1}
+
+private def amsterdamCapacityTx : Tx :=
+  {plainAmsterdamTransfer with gas := amsterdamTxMaxGas + 50}
+
+private def amsterdamCapacityBenv : Benv :=
+  fixtureAmsterdamBenv (amsterdamTxMaxGas + 100)
+
+private def amsterdamCapacityOutput : BlockOutput :=
+  {BlockOutput.init with blockGasUsed := 100, blockStateGasUsed := 50}
+
+#guard (checkTransactionGasLimits amsterdamCapacityBenv
+    amsterdamCapacityOutput amsterdamCapacityTx).toOption.isSome
+#guard txvFails (fun | .gasAllowanceExceeded _ => true | _ => false) <|
+  checkTransactionGasLimits amsterdamCapacityBenv
+    {amsterdamCapacityOutput with blockGasUsed := 101} amsterdamCapacityTx
+#guard txvFails (fun | .gasAllowanceExceeded _ => true | _ => false) <|
+  checkTransactionGasLimits amsterdamCapacityBenv
+    {amsterdamCapacityOutput with blockStateGasUsed := 51} amsterdamCapacityTx
+
 #guard txvFails (fun | .type3BlobCountExceeded _ => true | _ => false) <|
   checkTransactionGasLimits fixtureTestBenv .init
     { fixtureTestTx with
@@ -1046,6 +1653,28 @@ private def guardTightCodeLimits : CodeLimits :=
   checkTransactionSenderAccount
     (fixtureTestAccount 0 100 (ByteArray.mk #[0x01])) fixtureTestTx 0
 
+private def recoverValidationSender (rules : ForkRules) (chainId : UInt64)
+    (tx : Tx) : Except TransitionError Adr :=
+  match rules.stateGas with
+  | none => .ok 0
+  | some _ =>
+    Except.mapError (fun e => TransitionError.senderRecovery e)
+      (recoverSender chainId tx)
+
+/-- Amsterdam SELFDESTRUCT settlement clears account data but preserves the
+beneficiary-independent balance retained by EIP-6780. -/
+def clearAccountPreservingBalance (state : State) (address : Adr) : State :=
+  let account := state.get address
+  state.set address {account with nonce := 0, code := .empty, stor := .empty}
+
+/-- Select the fork's SELFDESTRUCT settlement semantics once, outside the
+transaction proof's monadic spine. -/
+def settleSelfdestructs (rules : ForkRules) (addresses : List Adr)
+    (state : State) : State :=
+  match rules.stateGas with
+  | none => addresses.foldl destroyAccount state
+  | some _ => addresses.foldl clearAccountPreservingBalance state
+
 
 def processTransaction
   (benv: Benv) (bout : BlockOutput)
@@ -1059,8 +1688,11 @@ def processTransaction
   let benv := benv.beginTransaction
   let bout ← .ok {bout with
     transactionsTrie := bout.transactionsTrie.insert (BLT.bytes index.toBytes).toBytes tx}
+  let validationSender : Adr ←
+    recoverValidationSender benv.stat.rules benv.stat.chainId tx
   let ⟨intrinsicGas, calldataFloorGasCost⟩ ←
-    Except.mapError TransitionError.transaction (validateTransaction benv.stat.rules tx)
+    Except.mapError TransitionError.transaction
+      (validateTransaction benv.stat.rules tx validationSender)
   let ⟨
     sender,
     effectiveGasPrice,
@@ -1072,7 +1704,7 @@ def processTransaction
     then calculateDataFee benv.stat.rules.blob benv.stat.excessBlobGas tx
     else 0
   let effectiveGasFee := tx.gas * effectiveGasPrice
-  let gas := tx.gas - intrinsicGas
+  let allocation := allocateEvmGas benv.stat.rules tx.gas intrinsicGas
   let state : State := benv.state.incrNonce sender
   let state ← (state.subBal sender (effectiveGasFee + blobGasFee).toB256).toExcept
     (TransitionError.internal (.invariant (.text "balance underflow")))
@@ -1085,7 +1717,8 @@ def processTransaction
     stat := {
       origin := sender
       gasPrice := effectiveGasPrice
-      gas := gas
+      gas := allocation.executionGas
+      stateGasReservoir := allocation.stateGasReservoir
       accessListAddresses := preaccessedAddresses
       accessListStorageKeys := preaccessedStorageKeys
       blobVersionedHashes := blobVersionedHashes
@@ -1096,28 +1729,23 @@ def processTransaction
   }
   let msg ← prepareMessage {benv with state := state} tenv tx
   let ⟨state, txOutput⟩ ← Except.mapError TransitionError.vm (processMessageCall msg)
-  let txGasUsedBeforeRefund := tx.gas - txOutput.gasLeft
   let refundCounter : Nat ←
     (Int.toNat? txOutput.refundCounter).toExcept
       (TransitionError.internal (.invariant (.text "refund counter is negative")))
-  let txGasRefund : Nat :=
-    min (txGasUsedBeforeRefund / 5) refundCounter
-  let txGasUsedAfterRefund : Nat :=
-    max (txGasUsedBeforeRefund - txGasRefund) calldataFloorGasCost
-  let txGasLeft :=
-    tx.gas - txGasUsedAfterRefund
+  let settlement :=
+    settleTransactionGas benv.stat.rules tx.gas calldataFloorGasCost
+      txOutput.gasLeft txOutput.stateGasLeft refundCounter txOutput.stateGasUsed
   let gasRefundAmount : Nat :=
-    txGasLeft * effectiveGasPrice
+    settlement.gasLeft * effectiveGasPrice
   let priorityFeePerGas := effectiveGasPrice - benv.stat.baseFeePerGas
-  let transactionFee := txGasUsedAfterRefund * priorityFeePerGas
+  let transactionFee := settlement.gasUsed * priorityFeePerGas
   let state := state.addBal sender gasRefundAmount.toB256
   let state := state.addBal benv.stat.coinbase transactionFee.toB256
-  let state := txOutput.accountsToDelete.toList.foldl destroyAccount state
-  let bout ← .ok {bout with
-    blockGasUsed := bout.blockGasUsed + txGasUsedAfterRefund,
-    blobGasUsed := bout.blobGasUsed + txBlobGasUsed}
+  let state := settleSelfdestructs benv.stat.rules
+    txOutput.accountsToDelete.toList state
+  let bout ← .ok (bout.withGasSettlement settlement txBlobGasUsed)
   let receipt :=
-    makeReceipt tx txOutput.error bout.blockGasUsed txOutput.logs
+    makeReceipt tx txOutput.error bout.cumulativeGasUsed txOutput.logs
   let receiptKey : Bytes := BLT.toBytes <| .bytes index.toBytes
   let bout ← .ok {bout with
     receiptKeys := bout.receiptKeys ++ [receiptKey]
@@ -1125,9 +1753,46 @@ def processTransaction
     blockLogs := bout.blockLogs ++ txOutput.logs}
   .ok ⟨state, bout⟩
 
+/-- Under a legacy schedule, the real transaction producer preserves the
+legacy block-counter relation through its settlement and receipt updates. -/
+theorem processTransaction_legacyGasAccounting {benv : Benv}
+    (hnone : benv.stat.rules.stateGas = none) {bout : BlockOutput}
+    (hb : bout.LegacyGasAccounting) {tx : Tx} {index : Nat} {p}
+    (hp : processTransaction benv bout tx index = .ok p) :
+    p.2.LegacyGasAccounting := by
+  unfold processTransaction at hp
+  obtain ⟨b1, hb1, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨validationSender, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨ig, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨ck, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨st1, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨msg, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨q, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨rc, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨b2, hb2, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨b3, hb3, hp⟩ := Except.bind_eq_ok hp
+  simp only [Except.ok.injEq] at hb1 hb2 hb3
+  have hb1' : b1.LegacyGasAccounting := by
+    rw [← hb1]
+    exact hb
+  have hb2' : b2.LegacyGasAccounting := by
+    rw [← hb2]
+    exact BlockOutput.LegacyGasAccounting.withGasSettlement hb1'
+      (settleTransactionGas_none_invariants hnone _ _ _ _ _ _) _
+  have hb3' : b3.LegacyGasAccounting := by
+    rw [← hb3]
+    exact hb2'
+  cases hp
+  exact hb3'
+
 def BlockOutput.withWithdrawalsTrie
     (bo : BlockOutput) (tr : Std.TreeMap Bytes Withdrawal compare) : BlockOutput :=
   {bo with withdrawalsTrie := tr}
+
+theorem BlockOutput.LegacyGasAccounting.withWithdrawalsTrie
+    {bout : BlockOutput} (hb : bout.LegacyGasAccounting)
+    (tr : Std.TreeMap Bytes Withdrawal compare) :
+    (bout.withWithdrawalsTrie tr).LegacyGasAccounting := hb
 
 def processWithdrawalsTrie (tr : Std.TreeMap Bytes Withdrawal compare)
     (wds : List Withdrawal) : Std.TreeMap Bytes Withdrawal compare :=
@@ -1147,6 +1812,13 @@ def processWithdrawals
   let trie := processWithdrawalsTrie bout.withdrawalsTrie wds
   let state := processWithdrawalsState benv.state wds
   ⟨state, bout.withWithdrawalsTrie trie⟩
+
+theorem processWithdrawals_legacyGasAccounting {benv : Benv}
+    {bout : BlockOutput} (hb : bout.LegacyGasAccounting)
+    (wds : List Withdrawal) :
+    (processWithdrawals benv bout wds).2.LegacyGasAccounting := by
+  unfold processWithdrawals
+  exact hb.withWithdrawalsTrie _
 
 -- Access lists, blob hashes, and authorization tuples arrive inside typed
 -- transactions, so their fields are untrusted in exactly the way withdrawal
@@ -1494,6 +2166,10 @@ def processSystemTransactionTenv (benv : Benv) : Tenv :=
       origin := systemAddress,
       gasPrice := benv.stat.baseFeePerGas,
       gas := systemTransactionGas,
+      stateGasReservoir :=
+        match benv.stat.rules.stateGas with
+        | none => 0
+        | some state => state.systemReservoir
       accessListAddresses := .emptyWithCapacity
       accessListStorageKeys := .emptyWithCapacity
       blobVersionedHashes := [],
@@ -1519,10 +2195,23 @@ def processSystemTransactionMsg (benv : Benv) (tenv : Tenv)
     codeAddress := target,
     shouldTransferValue := false,
     isStatic := false,
-    accessedAddresses := .emptyWithCapacity,
+    accessedAddresses :=
+      match benv.stat.rules.stateGas with
+      | none => .emptyWithCapacity
+      | some _ =>
+        (.emptyWithCapacity : AdrSet).insertMany
+          (benv.stat.rules.precompiles ++ [systemAddress, target]),
     accessedStorageKeys := .emptyWithCapacity,
     disablePrecompiles := false
+    stateGasGrant := tenv.stat.stateGasReservoir
   }
+
+#guard (processSystemTransactionTenv
+    fixtureAmsterdamBenv).stat.stateGasReservoir
+  = amsterdamStateGasRules.systemReservoir
+#guard (processSystemTransactionMsg fixtureAmsterdamBenv
+    (processSystemTransactionTenv fixtureAmsterdamBenv) 1 [] .empty).stateGasGrant
+  = amsterdamStateGasRules.systemReservoir
 
 -- The single boundary shared by all four system transactions (beacon roots,
 -- history storage, withdrawal requests, consolidation requests), so each takes
@@ -1666,12 +2355,47 @@ def processGeneralPurposeRequests
     runRequestContracts benv.stat.rules.requests benv seeded
   .ok ⟨state, {bout with requests := allRequests}⟩
 
+theorem processGeneralPurposeRequests_legacyGasAccounting {benv : Benv}
+    {bout : BlockOutput} (hb : bout.LegacyGasAccounting) {p}
+    (hp : processGeneralPurposeRequests benv bout = .ok p) :
+    p.2.LegacyGasAccounting := by
+  unfold processGeneralPurposeRequests at hp
+  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
+  cases hp
+  exact hb
+
 def applyTransactions :
     List (Nat × Tx) → Benv → BlockOutput → Except TransitionError (Benv × BlockOutput)
   | [], benv, bout => .ok (benv, bout)
   | ⟨i, tx⟩ :: txis, benv , bout => do
     let ⟨st, bout'⟩ ← processTransaction benv bout tx i
     applyTransactions txis (benv.withState st) bout'
+
+/-- The actual transaction-list fold preserves the legacy block counters at
+every successful iteration. -/
+theorem applyTransactions_legacyGasAccounting :
+    ∀ (txis : List (Nat × Tx)) {benv : Benv},
+      benv.stat.rules.stateGas = none →
+      ∀ {bout : BlockOutput} {p}, bout.LegacyGasAccounting →
+        applyTransactions txis benv bout = .ok p → p.2.LegacyGasAccounting
+  | [], _, _, _, _, hb, hp => by cases hp; exact hb
+  | txi :: txis, benv, hnone, bout, p, hb, hp => by
+    unfold applyTransactions at hp
+    obtain ⟨⟨st, bout'⟩, hq, hp⟩ := Except.bind_eq_ok hp
+    exact applyTransactions_legacyGasAccounting txis
+      (benv := benv.withState st) hnone
+      (processTransaction_legacyGasAccounting hnone hb hq) hp
+
+/-- Starting from the producer's real initializer discharges the initial
+legacy relation required by the iteration theorem. -/
+theorem applyTransactions_init_legacyGasAccounting
+    (txis : List (Nat × Tx)) {benv : Benv}
+    (hnone : benv.stat.rules.stateGas = none) {p}
+    (hp : applyTransactions txis benv .init = .ok p) :
+    p.2.LegacyGasAccounting :=
+  applyTransactions_legacyGasAccounting txis hnone
+    BlockOutput.init_legacyGasAccounting hp
 
 def applyBody
   (benv : Benv) (txs : List (Bytes ⊕ Tx)) (wds : List Withdrawal) :
@@ -1696,6 +2420,32 @@ def applyBody
   let ⟨stWds, boutWds⟩ :=
     processWithdrawals benvTxs boutTxs wds
   processGeneralPurposeRequests (benvTxs.withState stWds) boutWds
+
+/-- A successful legacy block body starts from `BlockOutput.init`, preserves
+the relation through every transaction, and keeps it through withdrawals and
+the request pass. -/
+theorem applyBody_legacyGasAccounting {benv : Benv}
+    (hnone : benv.stat.rules.stateGas = none)
+    {txs : List (Bytes ⊕ Tx)} {wds : List Withdrawal} {p}
+    (hp : applyBody benv txs wds = .ok p) : p.2.LegacyGasAccounting := by
+  unfold applyBody at hp
+  obtain ⟨q1, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨q2, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨txsD, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
+  have hqLegacy : q.2.LegacyGasAccounting :=
+    applyTransactions_init_legacyGasAccounting txsD.putIndex
+      (benv := (benv.withState q1.1).withState q2.1) hnone hq
+  obtain ⟨benvTxs, boutTxs⟩ := q
+  dsimp only at hp hqLegacy
+  rcases hw : processWithdrawals benvTxs boutTxs wds with ⟨stWds, boutWds⟩
+  simp only [hw] at hp
+  have hwLegacy := processWithdrawals_legacyGasAccounting
+    (benv := benvTxs) hqLegacy wds
+  simp only [hw] at hwLegacy
+  exact processGeneralPurposeRequests_legacyGasAccounting
+    hwLegacy hp
 
 def getLast256BlockHashes (chain : BlockChain) : List B256 :=
   match chain.blocks.reverse.take 255 with
@@ -2178,9 +2928,10 @@ def stateTransitionChecks (bout : BlockOutput) (header : Header)
     (transactionsRoot blockStateRoot receiptRoot : B256)
     (blockLogsBloom : Bytes) (withdrawalsRoot requestsHash : B256) :
     Except BlockValidationError Unit := do
-  if bout.blockGasUsed ≠ header.gasUsed then
+  let totalBlockGasUsed := max bout.blockGasUsed bout.blockStateGasUsed
+  if totalBlockGasUsed ≠ header.gasUsed then
     .error <| .gasUsedMismatch <| .text
-      s!"computed block gas used = {bout.blockGasUsed} ≠ \
+      s!"computed block gas used = {totalBlockGasUsed} ≠ \
          header block gas used = {header.gasUsed}"
   if transactionsRoot ≠ header.txsRoot then
     .error <| .transactionsRoot <| .text
@@ -4349,20 +5100,241 @@ private def guardMismatchConfig : ChainConfig := ChainConfig.mk 7 [⟨.prague, 0
 -- successful block transition. Every lemma states the success channel; the
 -- error channel at this layer carries no state.
 
+private theorem chargeNewAuthorityAmsterdam_canonical {state : StateGasRules}
+    {authority : Adr} {devm : Devm} (h : devm.Canonical) :
+    (chargeNewAuthorityAmsterdam state authority devm).Canonical := by
+  unfold chargeNewAuthorityAmsterdam
+  split
+  · exact liftMachExecution_canonical h
+  · exact h
+
+private theorem chargePaidAccountWriteAmsterdam_canonical
+    {state : StateGasRules} {authority : Adr} {devm : Devm}
+    {paidWrites : AdrSet} (h : devm.Canonical) :
+    (chargePaidAccountWriteAmsterdam state authority devm paidWrites).CanonicalOn
+      (fun r => r.1.Canonical) := by
+  unfold chargePaidAccountWriteAmsterdam
+  split
+  · exact h
+  · exact Except.CanonicalOn.bind (chargeGas_canonical h) (fun _ hd => hd)
+
+private theorem chargeAuthBaseAmsterdam_canonical {state : StateGasRules}
+    {msg : Msg} {authority target : Adr} {devm : Devm}
+    {delegationSetFor : AdrSet} (h : devm.Canonical) :
+    (chargeAuthBaseAmsterdam state msg authority target devm
+      delegationSetFor).CanonicalOn (fun r => r.1.Canonical) := by
+  unfold chargeAuthBaseAmsterdam
+  split
+  · exact h
+  · dsimp only
+    split
+    · exact Except.CanonicalOn.bind (liftMachExecution_canonical h)
+        (fun _ hd => hd)
+    · exact h
+
+private theorem applyValidatedDelegationAmsterdam_canonical
+    {state : StateGasRules} {msg : Msg} {authority target : Adr}
+    {devm : Devm} {paidWrites delegationSetFor : AdrSet}
+    (h : devm.Canonical) :
+    (applyValidatedDelegationAmsterdam state msg authority target devm
+      paidWrites delegationSetFor).CanonicalOn (fun r => r.1.Canonical) := by
+  unfold applyValidatedDelegationAmsterdam
+  refine Except.CanonicalOn.bind (chargeNewAuthorityAmsterdam_canonical h)
+    fun devm hdevm => ?_
+  refine Except.CanonicalOn.bind
+    (chargePaidAccountWriteAmsterdam_canonical hdevm) fun r hr => ?_
+  obtain ⟨devm, paidWrites⟩ := r
+  refine Except.CanonicalOn.bind
+    (chargeAuthBaseAmsterdam_canonical hr) fun r hr => ?_
+  obtain ⟨devm, delegationSetFor, codeToSet⟩ := r
+  exact Devm.Canonical.incrNonce (Devm.Canonical.setCode hr authority codeToSet)
+    authority
+
+private theorem setDelegationAmsterdamStep_canonical
+    {state : StateGasRules} {msg : Msg} {auth : Auth} {devm : Devm}
+    {paidWrites delegationSetFor : AdrSet} (h : devm.Canonical) :
+    (setDelegationAmsterdamStep state msg auth devm paidWrites
+      delegationSetFor).CanonicalOn (fun r => r.1.Canonical) := by
+  unfold setDelegationAmsterdamStep
+  split
+  · exact h
+  · split
+    · exact h
+    · cases hr : recoverAuthority auth with
+      | error error =>
+        cases error <;> simp only <;> exact h
+      | ok authority =>
+        dsimp only
+        have ha := addAccessedAddress_canonical (a := authority) h
+        split
+        · exact ha
+        · split
+          · exact ha
+          · exact applyValidatedDelegationAmsterdam_canonical ha
+
+private theorem setDelegationAmsterdamLoop_canonical
+    {state : StateGasRules} {msg : Msg} {auths : List Auth} {devm : Devm}
+    {paidWrites delegationSetFor : AdrSet} (h : devm.Canonical) :
+    (setDelegationAmsterdamLoop state msg auths devm paidWrites
+      delegationSetFor).CanonicalOn (fun r => r.1.Canonical) := by
+  induction auths generalizing devm paidWrites delegationSetFor with
+  | nil => exact h
+  | cons auth auths ih =>
+    unfold setDelegationAmsterdamLoop
+    exact Except.CanonicalOn.bind (setDelegationAmsterdamStep_canonical h)
+      (fun r hr => ih hr)
+
+private theorem setDelegationAmsterdam_canonical {state : StateGasRules}
+    {msg : Msg} {devm : Devm} (h : devm.Canonical) :
+    (setDelegationAmsterdam state msg devm).Canonical := by
+  unfold setDelegationAmsterdam
+  exact Except.CanonicalOn.bind (setDelegationAmsterdamLoop_canonical h)
+    (fun _ hr => hr)
+
+private theorem preparedTopLevelMsg_canonical {msg : Msg} {devm : Devm}
+    (hm : msg.Canonical) (hd : devm.Canonical) :
+    (preparedTopLevelMsg msg devm).Canonical := by
+  exact ⟨⟨hd.1, hm.1.2⟩, hd.2⟩
+
+private theorem resolveTopLevelCallAmsterdam_canonical {msg : Msg}
+    {devm : Devm} (hm : msg.Canonical) (hd : devm.Canonical) :
+    (resolveTopLevelCallAmsterdam msg devm).CanonicalOn
+      (fun r => r.1.Canonical ∧ r.2.Canonical) := by
+  unfold resolveTopLevelCallAmsterdam
+  rcases msg.benv.stat.rules.gas.delegationCost devm msg.currentTarget
+    with ⟨delegated, codeAddress, accessCost⟩
+  refine Except.CanonicalOn.bind (chargeGas_canonical hd)
+    fun charged hcharged => ?_
+  have hfinished := completeDelegationAccess_canonical hcharged delegated codeAddress
+  exact ⟨preparedTopLevelMsg_canonical hm hfinished, hfinished⟩
+
+private theorem dispatchTopLevelAmsterdam_canonical {state : StateGasRules}
+    {msg : Msg} {devm : Devm} (hm : msg.Canonical) (hd : devm.Canonical) :
+    (dispatchTopLevelAmsterdam state msg devm).CanonicalOn
+      (fun r => r.1.Canonical ∧ r.2.Canonical) := by
+  unfold dispatchTopLevelAmsterdam
+  split
+  · dsimp only
+    split
+    · exact hd
+    · split
+      · exact Except.CanonicalOn.bind (liftMachExecution_canonical hd)
+          (fun charged hcharged =>
+            ⟨preparedTopLevelMsg_canonical hm hcharged, hcharged⟩)
+      · exact ⟨preparedTopLevelMsg_canonical hm hd, hd⟩
+  · dsimp only
+    split
+    · exact Except.CanonicalOn.bind (liftMachExecution_canonical hd)
+        (fun _ hcharged => resolveTopLevelCallAmsterdam_canonical hm hcharged)
+    · exact resolveTopLevelCallAmsterdam_canonical hm hd
+
+private theorem finishTopLevelAmsterdam_canonical {state : StateGasRules}
+    {msg : Msg} {devm : Devm} (hm : msg.Canonical) (hd : devm.Canonical) :
+    (finishTopLevelAmsterdam state msg devm).CanonicalOn
+      (fun r => r.1.Canonical ∧ r.2.Canonical) := by
+  unfold finishTopLevelAmsterdam
+  split
+  · exact dispatchTopLevelAmsterdam_canonical hm hd
+  · exact dispatchTopLevelAmsterdam_canonical hm
+      (Devm.Canonical.of_world_eq hd rfl)
+
+private theorem prepareTopLevelAmsterdam_canonical {state : StateGasRules}
+    {msg : Msg} (hm : msg.Canonical) :
+    (prepareTopLevelAmsterdam state msg).CanonicalOn
+      (fun r => r.1.Canonical ∧ r.2.Canonical) := by
+  unfold prepareTopLevelAmsterdam
+  have hi := initDevm_canonical hm
+  dsimp only
+  split
+  · exact finishTopLevelAmsterdam_canonical hm hi
+  · exact Except.CanonicalOn.bind (setDelegationAmsterdam_canonical hi)
+      (fun _ hd => finishTopLevelAmsterdam_canonical hm hd)
+
+private theorem runPreparedTopFrame_canonicalSettle {frame : Frame}
+    {prepared : Devm} (hf : frame.Canonical) (hp : prepared.Canonical) :
+    (runPreparedTopFrame frame prepared).CanonicalSettle := by
+  unfold runPreparedTopFrame
+  rcases hbt : frame.inner.benvAfterTransfer with e | benv
+  · exact Frame.settleMsg_canonicalSettle hf
+      (Msg.benvAfterTransfer_error_canonical hf.2 hbt)
+  · have hb := Msg.benvAfterTransfer_ok_canonical hf.2 hbt
+    have hi := Msg.Canonical.withBenv hf.2 hb
+    have hd :
+        ((prepared.withState benv.state).withCreatedAccounts
+          benv.createdAccounts).Canonical :=
+      Devm.Canonical.of_world_eq (hp.withState hb.1) rfl
+    let evm : Evm := {
+      pc := 0
+      sta := initSevm (frame.inner.withBenv benv)
+      dyna := (prepared.withState benv.state).withCreatedAccounts
+        benv.createdAccounts
+    }
+    have hevm : evm.Canonical := ⟨initSevm_canonical hi, hd⟩
+    dsimp only
+    split
+    · exact Frame.settle_canonicalSettle hf (exec_canonical hevm)
+    · split
+      · exact Frame.settle_canonicalSettle hf
+          (executePrecomp_canonical hevm.2 _)
+      · exact Frame.settle_canonicalSettle hf (exec_canonical hevm)
+
+private theorem processTopLevelAmsterdam_canonical {state : StateGasRules}
+    {msg : Msg} (hm : msg.Canonical) (frameOf : Msg → Frame)
+    (hframe : ∀ {prepared : Msg}, prepared.Canonical →
+      (frameOf prepared).Canonical) {p}
+    (hp : processTopLevelAmsterdam state msg frameOf = .ok p) :
+    State.Canonical p.1 := by
+  unfold processTopLevelAmsterdam at hp
+  have hprepare := prepareTopLevelAmsterdam_canonical (state := state) hm
+  cases hprep : prepareTopLevelAmsterdam state msg with
+  | error failure =>
+    rw [hprep] at hp hprepare
+    obtain ⟨error, devm⟩ := failure
+    cases error with
+    | halt reason =>
+      simp only [settleTopLevelPreparationFailure] at hp
+      cases hp
+      exact hm.1.1
+    | revert =>
+      simp only [settleTopLevelPreparationFailure] at hp
+      cases hp
+    | crypto reason =>
+      simp only [settleTopLevelPreparationFailure] at hp
+      cases hp
+    | internal reason =>
+      simp only [settleTopLevelPreparationFailure] at hp
+      cases hp
+  | ok prepared =>
+    rw [hprep] at hp hprepare
+    obtain ⟨preparedMsg, preparedDevm⟩ := prepared
+    obtain ⟨evm, hevm, hp⟩ := Except.bind_eq_ok hp
+    have hrun := runPreparedTopFrame_canonicalSettle
+      (hframe hprepare.1) hprepare.2
+    rw [Except.bimap_id_eq_ok hevm] at hrun
+    unfold msgCallOutputAmsterdam at hp
+    split at hp <;>
+      (obtain ⟨refundCounter, _, hp⟩ := Except.bind_eq_ok hp
+       cases hp
+       exact hrun.1)
+
 theorem processMessageCall.create_canonical {msg : Msg} (h : msg.Canonical)
     {p} (hp : processMessageCall.create msg = .ok p) :
     State.Canonical p.1 := by
   unfold processMessageCall.create at hp
   dsimp only at hp
   split at hp
-  · cases hp
-    exact h.1.1
-  · obtain ⟨evm, hevm, hp⟩ := Except.bind_eq_ok hp
-    have hcan := processCreateMessage_ok_canonical h (Except.bimap_id_eq_ok hevm)
-    split at hp <;>
-      (obtain ⟨rc, _, hp⟩ := Except.bind_eq_ok hp
-       cases hp
-       exact hcan.1)
+  · split at hp <;>
+      first
+      | (cases hp; exact h.1.1)
+      | (obtain ⟨evm, hevm, hp⟩ := Except.bind_eq_ok hp
+         have hcan := processCreateMessage_ok_canonical h
+           (Except.bimap_id_eq_ok hevm)
+         split at hp <;>
+           (obtain ⟨rc, _, hp⟩ := Except.bind_eq_ok hp
+            cases hp
+            exact hcan.1))
+  · exact processTopLevelAmsterdam_canonical h Frame.ofCreate
+      (fun hm => Frame.canonical_ofCreate hm) hp
 
 theorem processMessageCall.call_canonical {msg : Msg} (h : msg.Canonical)
     {p} (hp : processMessageCall.call msg = .ok p) :
@@ -4370,33 +5342,37 @@ theorem processMessageCall.call_canonical {msg : Msg} (h : msg.Canonical)
   unfold processMessageCall.call at hp
   dsimp only at hp
   split at hp
-  · -- no authorizations: the join point receives the message unchanged
-    obtain ⟨x0, hx0, hp⟩ := Except.bind_eq_ok hp
-    cases hx0
-    dsimp only at hp
-    split at hp <;>
-      (obtain ⟨evm, hevm, hp⟩ := Except.bind_eq_ok hp
-       have hcan := processMessage_ok_canonical (by exact h)
-         (Except.bimap_id_eq_ok hevm)
-       split at hp <;>
-         (obtain ⟨rc, _, hp⟩ := Except.bind_eq_ok hp
-          cases hp
-          exact hcan.1))
-  · -- delegation processed first
-    obtain ⟨w, hw, hp⟩ := Except.bind_eq_ok hp
-    have hwc := setDelegation_canonical h hw
-    obtain ⟨wm, wv⟩ := w
-    obtain ⟨x0, hx0, hp⟩ := Except.bind_eq_ok hp
-    cases hx0
-    dsimp only at hp
-    split at hp <;>
-      (obtain ⟨evm, hevm, hp⟩ := Except.bind_eq_ok hp
-       have hcan := processMessage_ok_canonical (by exact hwc)
-         (Except.bimap_id_eq_ok hevm)
-       split at hp <;>
-         (obtain ⟨rc, _, hp⟩ := Except.bind_eq_ok hp
-          cases hp
-          exact hcan.1))
+  · split at hp <;>
+      first
+      | (-- no authorizations: the join point receives the message unchanged
+         obtain ⟨x0, hx0, hp⟩ := Except.bind_eq_ok hp
+         cases hx0
+         dsimp only at hp
+         split at hp <;>
+           (obtain ⟨evm, hevm, hp⟩ := Except.bind_eq_ok hp
+            have hcan := processMessage_ok_canonical (by exact h)
+              (Except.bimap_id_eq_ok hevm)
+            split at hp <;>
+              (obtain ⟨rc, _, hp⟩ := Except.bind_eq_ok hp
+               cases hp
+               exact hcan.1)))
+      | (-- delegation processed first
+         obtain ⟨w, hw, hp⟩ := Except.bind_eq_ok hp
+         have hwc := setDelegation_canonical h hw
+         obtain ⟨wm, wv⟩ := w
+         obtain ⟨x0, hx0, hp⟩ := Except.bind_eq_ok hp
+         cases hx0
+         dsimp only at hp
+         split at hp <;>
+           (obtain ⟨evm, hevm, hp⟩ := Except.bind_eq_ok hp
+            have hcan := processMessage_ok_canonical (by exact hwc)
+              (Except.bimap_id_eq_ok hevm)
+            split at hp <;>
+              (obtain ⟨rc, _, hp⟩ := Except.bind_eq_ok hp
+               cases hp
+               exact hcan.1)))
+  · exact processTopLevelAmsterdam_canonical h Frame.ofCall
+      (fun hm => Frame.canonical_ofCall hm) hp
 
 /-- A successful message call leaves a canonical state, for both the create
 and the call route. -/
@@ -4414,15 +5390,33 @@ theorem prepareMessage_canonical {benv : Benv} {tenv : Tenv} {tx : Tx}
   cases hm
   exact ⟨hb, ht⟩
 
+theorem State.Canonical.clearAccountPreservingBalance {state : State}
+    (h : state.Canonical) (address : Adr) :
+    (clearAccountPreservingBalance state address).Canonical := by
+  unfold Jaune.clearAccountPreservingBalance
+  exact State.Canonical.set h address Stor.canonical_empty
+
+theorem State.Canonical.settleSelfdestructs {state : State}
+    (h : state.Canonical) (rules : ForkRules) (addresses : List Adr) :
+    (settleSelfdestructs rules addresses state).Canonical := by
+  unfold Jaune.settleSelfdestructs
+  split
+  · exact State.Canonical.foldl_destroyAccount h
+  · induction addresses generalizing state with
+    | nil => exact h
+    | cons address addresses ih =>
+      exact ih (State.Canonical.clearAccountPreservingBalance h address)
+
 /-- A successful transaction leaves a canonical state: the fee movements go
 through `incrNonce`/`subBal`/`addBal`, the call itself through
-`processMessageCall`, and settlement folds `destroyAccount`. -/
+`processMessageCall`, and settlement follows the fork's SELFDESTRUCT rule. -/
 theorem processTransaction_canonical {benv : Benv} (h : benv.Canonical)
     {bout : BlockOutput} {tx : Tx} {index : Nat} {p}
     (hp : processTransaction benv bout tx index = .ok p) :
     State.Canonical p.1 := by
   unfold processTransaction at hp
   obtain ⟨b1, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨validationSender, _, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨ig, _, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨ck, _, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨st1, hst1, hp⟩ := Except.bind_eq_ok hp
@@ -4440,8 +5434,8 @@ theorem processTransaction_canonical {benv : Benv} (h : benv.Canonical)
     prepareMessage_canonical (by exact ⟨hst1c, h.1⟩)
       (by exact Tra.canonical_empty) hmsg
   have hqc := processMessageCall_canonical hmsgc (Except.mapError_eq_ok_iff.mp hq)
-  exact State.Canonical.foldl_destroyAccount
-    (State.Canonical.addBal (State.Canonical.addBal hqc _ _) _ _)
+  exact State.Canonical.settleSelfdestructs
+    (State.Canonical.addBal (State.Canonical.addBal hqc _ _) _ _) _ _
 
 theorem processWithdrawalsState_canonical {st : State} (h : st.Canonical)
     (wds : List Withdrawal) : (processWithdrawalsState st wds).Canonical := by
@@ -4656,7 +5650,7 @@ theorem stateTransitionChecks_stateRoot {bout : BlockOutput} {header : Header}
     blockStateRoot = header.stateRoot := by
   unfold stateTransitionChecks at h
   dsimp only at h
-  by_cases h1 : bout.blockGasUsed ≠ header.gasUsed
+  by_cases h1 : max bout.blockGasUsed bout.blockStateGasUsed ≠ header.gasUsed
   · rw [if_pos h1] at h
     obtain ⟨_, hb, _⟩ := Except.bind_eq_ok h
     exact absurd hb (by simp)
@@ -5030,5 +6024,97 @@ private def typedEnvelopeBytes? (bs : Bytes) : Option Bytes :=
 #guard (CanonicalBlock.ofRlp? (guardBlockAt 0).toBLT.toBytes).map
   CanonicalBlock.headerHash
     = some (Header.toBLT (guardBlockAt 0).header).toBytes.keccak
+
+--------------- AMSTERDAM FAILURE-ORDER REGRESSIONS ---------------
+
+-- These guards pin failure precedence and warming at the metering switch.
+-- They deliberately exercise `Rinst.runCore`, all four `Xinst.step` CALL
+-- variants, and the private top-level dispatch boundary rather than a pricing
+-- helper in isolation.
+private def orderingGuardMessage (rules : ForkRules) (gas : Nat) : Msg :=
+  let state := State.setBal .empty (0x1000 : Adr) 100
+  { (default : Msg) with
+    benv := { (default : Benv) with
+      state := state
+      stat := { (default : BenvStat) with rules := rules, origState := state } }
+    caller := 0x1000
+    target := some 0x1000
+    currentTarget := 0x1000
+    gas := gas
+    depth := 8 }
+
+private def orderingGuardSummary (r : Execution) :
+    String × Nat × List Nat × Bool × Bool :=
+  let (status, d) := match r with
+    | .ok d => ("ok", d)
+    | .error (e, d) => (e.render, d)
+  (status, d.gasLeft, d.stack.map B256.toNat,
+    d.accessedAddresses.contains (0x2000 : Adr),
+    d.accessedAddresses.contains (0x3000 : Adr))
+
+private def orderingGuardTstore
+    (rules : ForkRules) (gas : Nat) (stack : List B256) :=
+  let msg := { orderingGuardMessage rules gas with isStatic := true }
+  orderingGuardSummary
+    (Rinst.runCore 0 ((initDevm msg).withStack stack) (initSevm msg) .tstore)
+
+-- Amsterdam follows `storage.py.tstore`: the static error precedes stack
+-- access and charging. The `none` lane retains the pre-Amsterdam order.
+#guard orderingGuardTstore amsterdamMeteringRules 0 [] =
+  ("WriteInStaticContext", 0, [], false, false)
+#guard orderingGuardTstore amsterdamMeteringRules 99 [1, 2] =
+  ("WriteInStaticContext", 99, [1, 2], false, false)
+#guard orderingGuardTstore amsterdamMeteringRules 100 [1, 2] =
+  ("WriteInStaticContext", 100, [1, 2], false, false)
+#guard orderingGuardTstore pragueRules 0 [] =
+  ("StackUnderflowError", 0, [], false, false)
+#guard orderingGuardTstore pragueRules 99 [1, 2] =
+  ("OutOfGasError", 99, [], false, false)
+
+private def orderingGuardDelegatedMessage (gas : Nat) : Msg :=
+  let code := (eoaDelegationMarker ++ (0x3000 : Adr).toBytes).toByteArray
+  (orderingGuardMessage amsterdamMeteringRules gas).setCode 0x2000 code
+
+private def orderingGuardCall
+    (gas : Nat) (x : Xinst) (stack : List B256) :=
+  let msg := orderingGuardDelegatedMessage gas
+  let d := (initDevm msg).withStack stack
+  match Xinst.step (initSevm msg) d x with
+  | .done r => orderingGuardSummary r
+  | .spawn _ _ => ("spawn", 0, [], false, false)
+
+-- The first check may warm the direct code address. The second includes the
+-- delegated access price and must fail before the delegated address is warmed.
+#guard orderingGuardCall 2999 .staticcall [0, 0x2000, 0, 0, 0, 0] =
+  ("OutOfGasError", 2999, [], false, false)
+#guard orderingGuardCall 3000 .call [0, 0x2000, 0, 0, 0, 0, 0] =
+  ("OutOfGasError", 3000, [], true, false)
+#guard orderingGuardCall 3000 .callcode [0, 0x2000, 0, 0, 0, 0, 0] =
+  ("OutOfGasError", 3000, [], true, false)
+#guard orderingGuardCall 3000 .delegatecall [0, 0x2000, 0, 0, 0, 0] =
+  ("OutOfGasError", 3000, [], true, false)
+#guard orderingGuardCall 3000 .staticcall [0, 0x2000, 0, 0, 0, 0] =
+  ("OutOfGasError", 3000, [], true, false)
+#guard (orderingGuardCall 6000 .staticcall [0, 0x2000, 0, 0, 0, 0]).1 =
+  "spawn"
+
+private def orderingGuardTopLevel (gas : Nat) : String × Nat × Bool × Bool :=
+  let msg := { orderingGuardDelegatedMessage gas with
+    target := some 0x2000
+    currentTarget := 0x2000 }
+  let devm := addAccessedAddress (initDevm msg) 0x2000
+  match resolveTopLevelCallAmsterdam msg devm with
+  | .error (e, d) =>
+    (e.render, d.gasLeft,
+      d.accessedAddresses.contains (0x2000 : Adr),
+      d.accessedAddresses.contains (0x3000 : Adr))
+  | .ok (_, d) =>
+    ("ok", d.gasLeft,
+      d.accessedAddresses.contains (0x2000 : Adr),
+      d.accessedAddresses.contains (0x3000 : Adr))
+
+-- Top-level dispatch has the same boundary: a cold delegated access priced at
+-- 3,000 with only 2,999 gas leaves the already-warm recipient as the sole one.
+#guard orderingGuardTopLevel 2999 = ("OutOfGasError", 2999, true, false)
 
 end Jaune

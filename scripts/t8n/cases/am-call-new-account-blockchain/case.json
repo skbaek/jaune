@@ -1,0 +1,17 @@
+{
+  "description": "Value CALL from a funded contract to a non-alive account, draining the state reservoir into the child and emitting the nested transfer log.",
+  "scenario": "am-call-new-account",
+  "fork": "Amsterdam",
+  "chainid": 1,
+  "reward": -1,
+  "mode": "blockchain",
+  "allocIncludes": [
+    "../../amsterdam-system-alloc.json"
+  ],
+  "covers": [
+    "call-value",
+    "call-new-account",
+    "child-state-reservoir",
+    "nested-transfer-log"
+  ]
+}

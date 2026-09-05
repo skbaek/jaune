@@ -1,0 +1,17 @@
+{
+  "description": "One creation transaction creates two funded children: one self-destructs to a new beneficiary and one to itself, covering settlement and balance preservation.",
+  "scenario": "am-selfdestruct",
+  "fork": "Amsterdam",
+  "chainid": 1,
+  "reward": -1,
+  "mode": "blockchain",
+  "allocIncludes": [
+    "../../amsterdam-system-alloc.json"
+  ],
+  "covers": [
+    "created-selfdestruct",
+    "new-beneficiary",
+    "account-write",
+    "self-beneficiary"
+  ]
+}

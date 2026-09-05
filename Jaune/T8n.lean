@@ -154,6 +154,62 @@ def Lean.Json.find : String → Lean.Json → IO Lean.Json
 namespace Jaune
 namespace T8n
 
+----------------- THE METERING LANE -----------------
+
+/-- The rule set the transition tool meters a fork under when `Fork.rules?` has
+none for it.
+
+This is the **only** table that resolves the Amsterdam metering vehicle, and it
+lives here rather than in `Jaune/Fork.lean` on purpose. `Fork.rules?` answers
+"what are this fork's rules", and for Amsterdam the honest answer is still
+`none`: the block-level rules of EIP-7928, EIP-8282, EIP-7843, EIP-8024 and
+EIP-7954 have no reader in this build, so a block cannot be validated under
+them. What *does* exist is the transaction metering shape, and this lane is
+where it can be exercised against the pinned reference tool.
+
+So the vehicle is reachable from exactly two readers, both of which are
+inventory or differential rather than block validation: `t8n --state.fork
+Amsterdam`, and `jaune --rules-partial Amsterdam`, which the constants gate
+compares against the pinned upstream revision. `t8n --forks` keeps printing
+`Fork.supported`, the runner keeps refusing `--network Amsterdam`, and every
+other entry point is unchanged. The block-level goal composes a real
+`amsterdamRules`, makes `Fork.rules?` answer it, and retires this table. -/
+def meteringRules? : Fork → Option ForkRules
+  | .amsterdam => some amsterdamMeteringRules
+  | _ => none
+
+/-- Fork labels accepted only by the transaction-metering differential.
+Kept separate from `Fork.supported`, which remains the block-validation lane
+reported by `t8n --forks`. -/
+def meteringForks : List Fork :=
+  Fork.all.filter fun f => (meteringRules? f).isSome
+
+/-- The lane a fork label runs in: its own rules if this build implements them,
+otherwise the metering vehicle if one exists, and a refusal otherwise. -/
+def laneRules (f : Fork) : Except SupportError ForkRules :=
+  match f.rules? with
+  | some rules => .ok rules
+  | none =>
+    match meteringRules? f with
+    | some rules => .ok rules
+    | none => .error (.unsupportedFork f)
+
+-- No fork this build actually runs has a metering vehicle: a vehicle exists
+-- only where `Fork.rules?` is `none`, so the two tables can never disagree
+-- about a fork and `laneRules` can never shadow a real rule set.
+#guard Fork.supported.all (fun f => (meteringRules? f).isNone)
+#guard Fork.unimplemented = [.amsterdam]
+#guard meteringForks = [.amsterdam]
+#guard (meteringRules? .amsterdam) = some amsterdamMeteringRules
+-- On a supported fork the lane is that fork's own rules, unchanged.
+#guard Fork.supported.all (fun f =>
+  match f.rules? with
+  | some r => laneRules f = .ok r
+  | none => false)
+#guard laneRules .prague = .ok pragueRules
+#guard laneRules .bpo2 = .ok bpo2Rules
+#guard laneRules .amsterdam = .ok amsterdamMeteringRules
+
 ----------------- JSON EMISSION ------------------
 
 -- The conformance target writes its outputs with Python's
@@ -771,8 +827,10 @@ def runStateTest (benv : Benv) (txs : List (TxParse Tx)) :
 /-- Blockchain mode: the target's `_run_blockchain_test`, step for step.
 
 Block rewards are absent because they are unreachable on this lane: the
-target pays them only when the fork is not proof-of-stake, and Prague through
-BPO2 all are. Block access lists are absent because they are Amsterdam-only.
+target pays them only when the fork is not proof-of-stake, and every runnable
+or metering fork here is proof-of-stake. Block access-list construction remains
+outside the Amsterdam metering vehicle; the corpus deviation registry records
+the target's exact `blockAccessList` / `blockAccessListHash` pair per case.
 -/
 def runBlockchain (benv : Benv) (txs : List (TxParse Tx)) (wds : List Withdrawal) :
     Except TransitionError Outcome := do
@@ -883,6 +941,15 @@ def rejectionJson (r : Rejection) : JOut :=
     ⟨"error", .str (rejectionText r.reason)⟩
   ]
 
+private def resultGasUsed (bout : BlockOutput) : Nat :=
+  max bout.blockGasUsed bout.blockStateGasUsed
+
+-- Legacy block outputs keep `blockStateGasUsed = 0`; Amsterdam may make either
+-- dimension the header/result maximum.
+#guard resultGasUsed {BlockOutput.init with blockGasUsed := 100} = 100
+#guard resultGasUsed
+  {BlockOutput.init with blockGasUsed := 50, blockStateGasUsed := 100} = 100
+
 /-- The `result` document.
 
 Key order is the target's pydantic declaration order, which is what its
@@ -900,7 +967,7 @@ def resultJson (env : T8nEnv) (o : Outcome) : JOut :=
     ⟨"logsBloom", .str (hexBytes (logsBloom o.bout.blockLogs))⟩,
     ⟨"receipts", .arr (o.bout.receiptKeys.filterMap (receiptJson o.bout))⟩,
     ⟨"rejected", .arr (o.rejected.map rejectionJson)⟩,
-    ⟨"gasUsed", .str (hexQuantity o.bout.blockGasUsed)⟩,
+    ⟨"gasUsed", .str (hexQuantity (resultGasUsed o.bout))⟩,
     ⟨"currentBaseFee", .str (hexQuantity env.baseFeePerGas)⟩,
     ⟨"withdrawalsRoot", .str (hexB256 (getWithdrawalsRoot o.bout))⟩,
     ⟨"currentExcessBlobGas", .str (hexQuantity env.excessBlobGas)⟩,
@@ -1059,6 +1126,10 @@ def printInfo : IO Unit := do
   IO.println
     s!"t8n fork lane: \
        {String.intercalate " " (Fork.supported.map Fork.toString)}"
+  IO.println
+    s!"t8n metering lane: \
+       {String.intercalate " " (meteringForks.map Fork.toString)} \
+       (transaction metering only; omits EIP-7928/8282/7843/8024/7954 block semantics)"
   IO.println s!"t8n modes: blockchain (default), state-test (--state-test)"
   IO.println s!"t8n tracing: not claimed"
   IO.println s!"sources manifest: {path}"
@@ -1102,13 +1173,15 @@ def run (args : List String) : IO Unit := do
   if o.forkLabel.isEmpty then
     IO.throw
       s!"error : t8n requires --state.fork; there is no default fork, and the \
-         supported labels are {Fork.supported.map Fork.toString}"
+         runnable labels are {Fork.supported.map Fork.toString}; the \
+         transaction-metering labels are {meteringForks.map Fork.toString}"
   let some f := Fork.ofString? o.forkLabel
     | IO.throw
         s!"error : t8n does not support the fork {repr o.forkLabel}; this \
-           build's lane is {Fork.supported.map Fork.toString} and there is no \
-           fallback"
-  let rules ← IO.ofExcept (f.rules.mapError SupportError.render)
+           build's runnable lane is {Fork.supported.map Fork.toString}, its \
+           transaction-metering lane is {meteringForks.map Fork.toString}, \
+           and there is no fallback"
+  let rules ← IO.ofExcept ((laneRules f).mapError SupportError.render)
   let usesStdin :=
     o.inputAlloc = "stdin" ∨ o.inputEnv = "stdin" ∨ o.inputTxs = "stdin"
   let stdinDoc ←
@@ -1180,13 +1253,16 @@ Executes one state transition outside any block-validation context and emits
 `result` and the post-state `alloc` in the shapes the conformance target
 emits. Options may be spelled --flag=value or --flag value.
 
-  --state.fork <label>   required; one of {Fork.supported.map Fork.toString}. There
-                         is no default and no fallback.
+  --state.fork <label>   required; one of the runnable labels
+                         {Fork.supported.map Fork.toString}, or the transaction-
+                         metering labels {meteringForks.map Fork.toString}.
+                         There is no default and no fallback.
   --state-test           apply exactly one transaction with no system
                          operations, no withdrawals and no requests.
   --state.reward <n>     accepted and not consumed: every fork on this lane is
                          proof-of-stake, so block rewards are unreachable.
-  --info                 print the version, the fork lane and the pins
+  --info                 print the version, runnable and transaction-metering
+                         lanes (including the latter's omissions), and the pins
                          recorded in scripts/sources.json. Needs that file:
                          pass JAUNE_SOURCES if it is not at scripts/ from the
                          working directory.

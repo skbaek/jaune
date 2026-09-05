@@ -697,6 +697,36 @@ always called, in the same order. -/
     pragueRules.header = { blockAccessListHash := false, slotNumber := false } :=
   rfl
 
+/-- Prague meters in one dimension.
+
+This is the bridge every `stateGas = none` branch reduces through. The
+interpreter's Amsterdam branches are `match`es on `rules.stateGas`, so a
+Prague-stated goal that reaches one rewrites to `none` here and then to the
+existing single-dimension code path by `match` reduction -- which is what makes
+"the `none` path is textually today's path" a fact a proof can use rather than
+a claim about the source. -/
+@[simp] theorem pragueRules_stateGas : pragueRules.stateGas = none := rfl
+
+/-- The two literals `GasSchedule.Valid` spells out are the globals it means.
+
+`Jaune/Fork.lean` is upstream of this module and cannot name `gasWarmAccess` or
+`gCallStipend`, so the predicate writes `100` and `2300`. This is the `rfl`
+proof that those are not third copies of the numbers but the same two, which is
+what lets a Sufficiency obligation stated in terms of the globals be discharged
+from a `Valid` hypothesis. -/
+theorem gasSchedule_valid_iff (g : GasSchedule) :
+    g.Valid ↔ gasWarmAccess ≤ g.coldAccountAccess ∧ 0 < g.createAccess
+      ∧ gCallStipend ≤ g.callValue := Iff.rfl
+
+theorem GasSchedule.Valid.warmAccess_le {g : GasSchedule} (h : g.Valid) :
+    gasWarmAccess ≤ g.coldAccountAccess := h.1
+
+theorem GasSchedule.Valid.createAccess_pos {g : GasSchedule} (h : g.Valid) :
+    0 < g.createAccess := h.2.1
+
+theorem GasSchedule.Valid.stipend_le_callValue {g : GasSchedule} (h : g.Valid) :
+    gCallStipend ≤ g.callValue := h.2.2
+
 -- The whole supported chain shares Prague's schedule, so the bridge above
 -- serves every fork this build runs, not only Prague. Stated by `rfl` on the
 -- records rather than field by field.
@@ -829,6 +859,9 @@ structure TenvStat : Type where
   origin: Adr
   gasPrice: Nat
   gas: Nat
+  /-- Amsterdam's state-gas reservoir beside the execution grant `gas`.
+  Legacy transaction environments keep the default zero. -/
+  stateGasReservoir : Nat := 0
   accessListAddresses: AdrSet
   accessListStorageKeys: KeySet
   blobVersionedHashes: List B256
@@ -859,6 +892,14 @@ structure Msg : Type where
   accessedAddresses: AdrSet
   accessedStorageKeys: KeySet
   disablePrecompiles : Bool
+  /-- EIP-8037's state-gas grant: the reservoir the frame starts with, beside
+  the execution grant `gas`.
+
+  Defaulted to `0` for the same reason `Mach.stateGas` is defaulted to `zero`:
+  a message built by a `none`-path caller does not name it, so every existing
+  construction keeps elaborating and every `none`-path frame starts with an
+  empty reservoir -- which `initDevm` then seeds as `StateGasMeter.zero`. -/
+  stateGasGrant : Nat := 0
 
 def Msg.withBenv (msg : Msg) (benv : Benv) : Msg :=
   {msg with benv := benv}
@@ -1725,11 +1766,63 @@ instance (b : Block) : Decidable (Block.RlpCanonical b) := by
 
 
 
+/-- EIP-8037's per-frame state-gas meter.
+
+Amsterdam meters a frame in two dimensions. `Mach.gasLeft` keeps its name and
+its meaning -- it is execution gas, and `GAS` still pushes it, exactly as
+upstream pushes `gas_meter.gas_left`. This record is the second dimension, and
+it is nested and defaulted so that every `Mach` literal and every `with`-update
+that does not name it goes on elaborating unchanged.
+
+The four fields are upstream's, one for one:
+
+* `left` is `state_gas_left`, the frame's reservoir. State charges draw from
+  here first.
+* `baseline` is `state_gas_baseline`, the level a rollback refills to. It
+  starts at the frame's grant and only ever moves down, when a commit marks
+  charges non-refillable.
+* `spilled` is `state_gas_spilled`: execution gas that covered a state charge
+  after the reservoir emptied, not yet credited back. EIP-8037 calls this
+  quantity `state_gas_from_gas_left`.
+* `committedSpill` is `state_gas_committed_spill`: spill a commit marked
+  non-refillable. Only a rollback to frame entry credits it back.
+
+Committed *reservoir* draw needs no field of its own: each commit lowers the
+baseline, so it is the grant minus `baseline`. -/
+@[ext]
+structure StateGasMeter : Type where
+  /-- `state_gas_left`: the frame's state-gas reservoir. -/
+  left : Nat
+  /-- `state_gas_baseline`: the reservoir level a rollback refills to. -/
+  baseline : Nat
+  /-- `state_gas_spilled`: execution gas spent covering state charges. -/
+  spilled : Nat
+  /-- `state_gas_committed_spill`: spill marked non-refillable by a commit. -/
+  committedSpill : Nat
+deriving DecidableEq, Repr
+
+/-- The meter a single-dimension fork carries: no reservoir, no spill.
+
+Under `rules.stateGas = none` every frame starts here and stays here, which is
+the invariant `stateGasZero` states and every Prague-facing bridge lemma uses. -/
+def StateGasMeter.zero : StateGasMeter := ⟨0, 0, 0, 0⟩
+
 @[ext]
 structure Mach : Type where
   stack : List B256
   memory : Mem
+  /-- Execution gas. Unchanged in name and in meaning by EIP-8037: `GAS` still
+  pushes it, every existing charge still draws from it, and every Prague-stated
+  fact about it is the fact it was. -/
   gasLeft : Nat
+  /-- EIP-8037's state-gas dimension.
+
+  Defaulted, and that default is load-bearing rather than a convenience: a
+  `Mach` literal or `with`-update that does not name this field goes on
+  elaborating unchanged, which is what keeps the metering shape from rewriting
+  every downstream `Mach` site. Under `rules.stateGas = none` it is `zero` at
+  frame entry and stays `zero`. -/
+  stateGas : StateGasMeter := .zero
 
 @[ext]
 structure Meta : Type where
@@ -1757,6 +1850,8 @@ structure Devm : Type where
 def Devm.stack (devm : Devm) : List B256 := devm.mach.stack
 def Devm.memory (devm : Devm) : Mem := devm.mach.memory
 def Devm.gasLeft (devm : Devm) : Nat := devm.mach.gasLeft
+def Devm.stateGas (devm : Devm) : StateGasMeter := devm.mach.stateGas
+def Devm.stateGasLeft (devm : Devm) : Nat := devm.mach.stateGas.left
 def Devm.logs (devm : Devm) : List Log := devm.meta.logs
 def Devm.refundCounter (devm : Devm) : Int := devm.meta.refundCounter
 def Devm.output (devm : Devm) : Bytes := devm.meta.output
@@ -2130,12 +2225,345 @@ def Mach.chargeGas (cost : Nat) (mach : Mach) : Footprint.Outcome Mach Unit :=
 def chargeGas (cost : Nat) (devm : Devm) : Execution :=
   liftMachExecution (Mach.chargeGas cost) devm
 
+/-- All but one sixty-fourth (EIP-150). Defined here rather than beside the
+call opcodes because `Mach.withholdCreateGas` below is its first reader. -/
+def except64th (n : Nat) : Nat := n - (n / 64)
+
+/-- The termination measure the interpreter's totality argument rests on under
+two reservoirs: execution gas that can still fund a step, plus the spill a
+refund or a rollback can hand back to it.
+
+The *reservoir* is deliberately outside the sum. State gas cannot pay for an
+interpreter step until it spills into `gasLeft`, and a reservoir charge can be
+refunded later, so counting it would make the measure rise for a reason that has
+nothing to do with progress. The outstanding spill is inside the sum for the
+mirror-image reason: without it, `creditStateGasRefund` would look like an
+increase in `gasLeft` (`DualGasProbe.executionGas_alone_can_increase` is the
+standing witness that it can be), when nothing about the frame's ability to
+keep running has improved.
+
+Under `rules.stateGas = none` the meter is `zero`, so this is `gasLeft` and
+every Prague-stated decrease is the decrease it always was. -/
+def Mach.gasMeasure (mach : Mach) : Nat :=
+  mach.gasLeft + mach.stateGas.spilled + mach.stateGas.committedSpill
+
+def Devm.gasMeasure (devm : Devm) : Nat := devm.mach.gasMeasure
+
+theorem Devm.gasMeasure_def (devm : Devm) :
+    devm.gasMeasure
+      = devm.gasLeft + devm.mach.stateGas.spilled
+          + devm.mach.stateGas.committedSpill := rfl
+
+/-- On a zero meter the measure is exactly `gasLeft`. This is the bridge every
+Prague-stated termination fact crosses. -/
+@[simp] theorem Mach.gasMeasure_of_stateGas_zero {mach : Mach}
+    (h : mach.stateGas = .zero) : mach.gasMeasure = mach.gasLeft := by
+  simp [Mach.gasMeasure, h, StateGasMeter.zero]
+
+@[simp] theorem Devm.gasMeasure_of_stateGas_zero {devm : Devm}
+    (h : devm.mach.stateGas = .zero) : devm.gasMeasure = devm.gasLeft :=
+  Mach.gasMeasure_of_stateGas_zero h
+
+/-! ### The EIP-8037 meter operations
+
+One definition per upstream `vm/gas.py` function, in upstream's order, each with
+the lemma that says what it does to `Mach.gasMeasure`. The measure is
+`gasLeft + spilled + committedSpill`: execution gas that can still fund
+interpreter steps, plus the spill a refund or rollback can hand back to it. The
+*reservoir* is deliberately outside it -- state gas cannot fund a step until it
+spills, and a reservoir charge can be refunded, so counting it would make the
+measure non-monotone for the wrong reason. `Jaune.DualGasProbe` established this
+choice at the two hardest sites before any of it was written.
+
+Every one of these runs only under `rules.stateGas = some _`. Under `none` the
+meter is `StateGasMeter.zero` and stays there (`stateGasZero` below), so
+`gasMeasure` is `gasLeft` and every Prague-stated termination fact is the fact
+it always was. -/
+
+/-- `charge_state_gas_from_meter`: draw from the reservoir, then spill into
+execution gas, recording the spill. Out of gas only when neither pool can
+cover the charge. -/
+def Mach.chargeStateGas (amount : Nat) (mach : Mach) :
+    Footprint.Outcome Mach Unit :=
+  if amount ≤ mach.stateGas.left then
+    .ok ((), { mach with
+      stateGas := { mach.stateGas with left := mach.stateGas.left - amount } })
+  else if amount - mach.stateGas.left ≤ mach.gasLeft then
+    .ok ((), { mach with
+      gasLeft := mach.gasLeft - (amount - mach.stateGas.left)
+      stateGas := { mach.stateGas with
+        left := 0
+        spilled := mach.stateGas.spilled + (amount - mach.stateGas.left) } })
+  else
+    .error (.halt (.outOfGas .none), mach)
+
+/-- `credit_state_gas_refund`: repay in LIFO order -- the spill that `gasLeft`
+funded first, then the reservoir. This returns gas to exactly the pools the
+charge drew it from, which is what keeps the two dimensions from drifting. -/
+def Mach.creditStateGasRefund (amount : Nat) (mach : Mach) : Mach :=
+  let m := mach.stateGas
+  let fromGasLeft := min amount m.spilled
+  { mach with
+    gasLeft := mach.gasLeft + fromGasLeft
+    stateGas := { m with
+      left := m.left + (amount - fromGasLeft)
+      spilled := m.spilled - fromGasLeft } }
+
+/-- `commit_state_gas`: mark everything spent so far non-refillable. The
+baseline drops to the current reservoir level and the outstanding spill folds
+into `committedSpill`, so a later `restoreStateGas` leaves the state it bought
+paid for. Only the top frame commits, and only after `set_delegation`. -/
+def Mach.commitStateGas (mach : Mach) : Mach :=
+  let m := mach.stateGas
+  { mach with stateGas :=
+      { m with
+        left := m.left
+        baseline := m.left
+        spilled := 0
+        committedSpill := m.committedSpill + m.spilled } }
+
+/-- `restore_state_gas`: roll the frame's state gas back to the baseline on a
+revert or a halt. LIFO again: the spill returns to `gasLeft`, then the
+reservoir resets. Committed spill stays charged.
+
+Upstream also zeroes the refund counter here, because its counter lives on the
+meter; Jaune's lives on `Meta`, so `Devm.restoreStateGas` below does that half.
+Splitting it this way is what keeps `Mach`'s operations pure functions of
+`Mach`, which is what the measure lemmas need. -/
+def Mach.restoreStateGas (mach : Mach) : Mach :=
+  let m := mach.stateGas
+  { mach with
+    gasLeft := mach.gasLeft + m.spilled
+    stateGas := { m with left := m.baseline, spilled := 0 } }
+
+/-- `restore_state_gas_to_entry`: roll back to frame entry, undoing a commit.
+Every spill, committed or not, returns to `gasLeft`, and both reservoir levels
+reset to the frame's grant. Used only when the state rollback also reverts the
+delegations a commit was protecting. -/
+def Mach.restoreStateGasToEntry (grant : Nat) (mach : Mach) : Mach :=
+  let m := mach.stateGas
+  { mach with
+    gasLeft := mach.gasLeft + m.spilled + m.committedSpill
+    stateGas :=
+      { left := grant, baseline := grant, spilled := 0, committedSpill := 0 } }
+
+/-- `forfeit_remaining_gas`: an exceptionally halted frame returns no execution
+gas. Upstream asserts that the spill is already zero here, which holds because
+`restore_state_gas` always precedes it; the Jaune statement of that assertion is
+`forfeitRemainingGas_gasMeasure_of_spilled_zero` below. -/
+def Mach.forfeitRemainingGas (mach : Mach) : Mach :=
+  { mach with gasLeft := 0 }
+
+/-- `withhold_create_gas`: hand a `CREATE*` child all but one sixty-fourth of
+the frame's execution gas, and return what was withheld. -/
+def Mach.withholdCreateGas (mach : Mach) : Nat × Mach :=
+  let child := except64th mach.gasLeft
+  (child, { mach with gasLeft := mach.gasLeft - child })
+
+/-- `drain_state_gas_reservoir`: a child receives the parent's *whole*
+reservoir. There is no all-but-one-64th rule for state gas, and the parent's
+reservoir comes back when the child returns. -/
+def Mach.drainStateGasReservoir (mach : Mach) : Nat × Mach :=
+  (mach.stateGas.left,
+   { mach with stateGas := { mach.stateGas with left := 0 } })
+
+/-- `restore_child_gas`: return a child's untouched grants when the child is
+never entered -- a depth limit or a balance check refused before the spawn. -/
+def Mach.restoreChildGas (gas reservoir : Nat) (mach : Mach) : Mach :=
+  { mach with
+    gasLeft := mach.gasLeft + gas
+    stateGas :=
+      { mach.stateGas with left := mach.stateGas.left + reservoir } }
+
+/-- `repay_state_gas_spill`, new at the pinned revision (`7341820`, #3478).
+
+A refund can land in a different frame than the charge it undoes: the
+refunding frame's spill may be smaller than the refund, so the excess credits
+the reservoir while the `gasLeft` that funded the charge stays reduced. A
+successful merge is where the claim and the credit first share one meter, so
+the reservoir repays `gasLeft` up to the spill still outstanding. Nothing is
+un-created, so no used counter moves -- gas only crosses back between the two
+pools it drifted across. -/
+def Mach.repayStateGasSpill (mach : Mach) : Mach :=
+  let m := mach.stateGas
+  let repayment := min m.left m.spilled
+  { mach with
+    gasLeft := mach.gasLeft + repayment
+    stateGas :=
+      { m with left := m.left - repayment, spilled := m.spilled - repayment } }
+
+/-! ### What each meter operation does to the measure
+
+One lemma per operation of the block above, and together they are the whole
+arithmetic content of the migration: a state-gas operation is measure-*neutral*,
+an execution charge is measure-*decreasing* by exactly what it charges, and a
+spawn conserves the measure across the parent/child pair. Everything the
+termination argument has to know about two reservoirs is here; the sites above
+`Xinst.step` then only have to say which operations they perform.
+
+`Jaune.DualGasProbe` proved these same five shapes on a bounded model before any
+of this existed, and its `executionGas_alone_can_increase` is why the measure
+is not simply `gasLeft`. -/
+
+theorem Mach.chargeGas_gasMeasure {cost : Nat} {mach mach' : Mach} {u : Unit}
+    (h : Mach.chargeGas cost mach = .ok (u, mach')) :
+    mach'.gasMeasure + cost = mach.gasMeasure := by
+  unfold Mach.chargeGas safeSub at h
+  by_cases hle : cost ≤ mach.gasLeft
+  · simp only [if_pos hle, Except.ok.injEq, Prod.mk.injEq] at h
+    rw [← h.2]
+    simp only [Mach.gasMeasure]
+    omega
+  · exact absurd h (by simp [if_neg hle])
+
+/-- A state charge is measure-neutral in both of its branches: a reservoir draw
+moves nothing the measure counts, and a spill moves exactly as much out of
+`gasLeft` as it records in `spilled`. -/
+theorem Mach.chargeStateGas_gasMeasure {amount : Nat} {mach mach' : Mach}
+    {u : Unit} (h : Mach.chargeStateGas amount mach = .ok (u, mach')) :
+    mach'.gasMeasure = mach.gasMeasure := by
+  unfold Mach.chargeStateGas at h
+  split at h
+  · simp only [Except.ok.injEq, Prod.mk.injEq] at h
+    rw [← h.2]
+    rfl
+  · split at h
+    · simp only [Except.ok.injEq, Prod.mk.injEq] at h
+      rw [← h.2]
+      simp only [Mach.gasMeasure]
+      omega
+    · exact absurd h (by simp)
+
+/-- A refund repays `gasLeft` and the reservoir between them, and the part that
+reaches `gasLeft` is exactly the part that leaves `spilled`. -/
+theorem Mach.creditStateGasRefund_gasMeasure (amount : Nat) (mach : Mach) :
+    (mach.creditStateGasRefund amount).gasMeasure = mach.gasMeasure := by
+  simp only [Mach.creditStateGasRefund, Mach.gasMeasure]
+  have : min amount mach.stateGas.spilled ≤ mach.stateGas.spilled := by
+    exact Nat.min_le_right _ _
+  omega
+
+/-- A commit moves spill into committed spill. Both are inside the measure, so
+it moves nothing. -/
+theorem Mach.commitStateGas_gasMeasure (mach : Mach) :
+    mach.commitStateGas.gasMeasure = mach.gasMeasure := by
+  simp only [Mach.commitStateGas, Mach.gasMeasure]
+  omega
+
+/-- A rollback to the baseline hands the outstanding spill back to `gasLeft`.
+Neutral, again because the spill was already counted. -/
+theorem Mach.restoreStateGas_gasMeasure (mach : Mach) :
+    mach.restoreStateGas.gasMeasure = mach.gasMeasure := by
+  simp only [Mach.restoreStateGas, Mach.gasMeasure]
+  omega
+
+/-- A rollback to frame entry hands back committed spill as well. -/
+theorem Mach.restoreStateGasToEntry_gasMeasure (grant : Nat) (mach : Mach) :
+    (mach.restoreStateGasToEntry grant).gasMeasure = mach.gasMeasure := by
+  simp only [Mach.restoreStateGasToEntry, Mach.gasMeasure]
+  omega
+
+/-- Forfeiting never raises the measure. -/
+theorem Mach.forfeitRemainingGas_gasMeasure_le (mach : Mach) :
+    mach.forfeitRemainingGas.gasMeasure ≤ mach.gasMeasure := by
+  simp only [Mach.forfeitRemainingGas, Mach.gasMeasure]
+  omega
+
+/-- Upstream asserts that the spill is already zero when a frame forfeits,
+because `restore_state_gas` always runs first. Under that hypothesis the
+measure after forfeiting is exactly the committed spill -- which is the
+statement a caller needs, and the reason the assertion is worth carrying. -/
+theorem Mach.forfeitRemainingGas_gasMeasure_of_spilled_zero {mach : Mach}
+    (h : mach.stateGas.spilled = 0) :
+    mach.forfeitRemainingGas.gasMeasure = mach.stateGas.committedSpill := by
+  simp only [Mach.forfeitRemainingGas, Mach.gasMeasure, h]
+  omega
+
+/-- Withholding a create child's grant splits the measure exactly: what the
+parent keeps plus what the child receives is what the parent had. -/
+theorem Mach.withholdCreateGas_gasMeasure (mach : Mach) :
+    mach.withholdCreateGas.2.gasMeasure + mach.withholdCreateGas.1
+      = mach.gasMeasure := by
+  simp only [Mach.withholdCreateGas, Mach.gasMeasure, except64th]
+  omega
+
+/-- Draining the reservoir into a child is measure-neutral: the reservoir is
+outside the measure on both sides. This is exactly why the reservoir is
+excluded -- a rule that hands a child *everything* would otherwise look like a
+collapse of the parent's budget. -/
+theorem Mach.drainStateGasReservoir_gasMeasure (mach : Mach) :
+    mach.drainStateGasReservoir.2.gasMeasure = mach.gasMeasure := by
+  simp only [Mach.drainStateGasReservoir, Mach.gasMeasure]
+
+/-- Returning an un-entered child's grants raises the measure by exactly the
+execution gas returned; the reservoir is outside it. -/
+theorem Mach.restoreChildGas_gasMeasure (gas reservoir : Nat) (mach : Mach) :
+    (mach.restoreChildGas gas reservoir).gasMeasure = mach.gasMeasure + gas := by
+  simp only [Mach.restoreChildGas, Mach.gasMeasure]
+  omega
+
+/-- The v8.1.4 repay-on-merge rule moves gas from the reservoir to `gasLeft`
+while cancelling an equal amount of spill. Neutral. -/
+theorem Mach.repayStateGasSpill_gasMeasure (mach : Mach) :
+    mach.repayStateGasSpill.gasMeasure = mach.gasMeasure := by
+  simp only [Mach.repayStateGasSpill, Mach.gasMeasure]
+  have : min mach.stateGas.left mach.stateGas.spilled ≤ mach.stateGas.spilled :=
+    Nat.min_le_right _ _
+  omega
+
+/-! ### The same operations, at the frame
+
+`Devm` wrappers over the `Mach` operations above, in the shape the interpreter
+calls them. Two of them are more than a lift: `restoreStateGas` also discards
+the frame's refunds, because upstream's refund counter lives on the meter and
+Jaune's lives on `Meta`. -/
+/-- `charge_state_gas`, at the frame. Reservoir first, then spill into
+execution gas. Reached only under `rules.stateGas = some _`. -/
+def chargeStateGas (amount : Nat) (devm : Devm) : Execution :=
+  liftMachExecution (Mach.chargeStateGas amount) devm
+
+/-- `credit_state_gas_refund`, at the frame. Total, because a refund cannot
+fail. -/
+def Devm.creditStateGasRefund (amount : Nat) (devm : Devm) : Devm :=
+  devm.setMach (devm.mach.creditStateGasRefund amount)
+
+/-- `commit_state_gas`, at the frame. -/
+def Devm.commitStateGas (devm : Devm) : Devm :=
+  devm.setMach devm.mach.commitStateGas
+
+/-- `restore_state_gas`, at the frame. Upstream's counter lives on the meter and
+Jaune's on `Meta`, so the refund discard is here rather than in `Mach`. -/
+def Devm.restoreStateGas (devm : Devm) : Devm :=
+  (devm.setMach devm.mach.restoreStateGas).withRefundCounter 0
+
+/-- `restore_state_gas_to_entry`, at the frame. -/
+def Devm.restoreStateGasToEntry (grant : Nat) (devm : Devm) : Devm :=
+  devm.setMach (devm.mach.restoreStateGasToEntry grant)
+
+/-- `forfeit_remaining_gas`, at the frame. -/
+def Devm.forfeitRemainingGas (devm : Devm) : Devm :=
+  devm.setMach devm.mach.forfeitRemainingGas
+
+/-- `drain_state_gas_reservoir`, at the frame. -/
+def Devm.drainStateGasReservoir (devm : Devm) : Nat × Devm :=
+  let ⟨reservoir, mach⟩ := devm.mach.drainStateGasReservoir
+  (reservoir, devm.setMach mach)
+
+/-- `restore_child_gas`, at the frame. -/
+def Devm.restoreChildGas (gas reservoir : Nat) (devm : Devm) : Devm :=
+  devm.setMach (devm.mach.restoreChildGas gas reservoir)
+
+/-- `withhold_create_gas`, at the frame. -/
+def Devm.withholdCreateGas (devm : Devm) : Nat × Devm :=
+  let ⟨child, mach⟩ := devm.mach.withholdCreateGas
+  (child, devm.setMach mach)
+
 theorem chargeGas_def (cost : Nat) (devm : Devm) :
     chargeGas cost devm = (do
       match safeSub devm.gasLeft cost with
       | none => .error ⟨.halt (.outOfGas .none), devm⟩
       | some gas => .ok (devm.setMach {devm.mach with gasLeft := gas})) := by
-  rcases devm with ⟨⟨stack, memory, gasLeft⟩, view, world⟩
+  rcases devm with ⟨⟨stack, memory, gasLeft, stateGas⟩, view, world⟩
   simp only [chargeGas, Mach.chargeGas, liftMachExecution, liftMach,
     Footprint.toExecution, Footprint.liftOutcome, Devm.setMach, Devm.gasLeft]
   cases safeSub gasLeft cost <;> rfl
@@ -2452,7 +2880,7 @@ theorem Devm.push_def (x : B256) (devm : Devm) : Devm.push x devm = (do
       (devm.stack.length < 1024)
       ⟨.halt (.stackOverflow .none), devm⟩
     .ok (devm.setMach {devm.mach with stack := x :: devm.stack})) := by
-  rcases devm with ⟨⟨stack, memory, gasLeft⟩, view, world⟩
+  rcases devm with ⟨⟨stack, memory, gasLeft, stateGas⟩, view, world⟩
   simp only [Devm.push, Mach.push, liftMachExecution, liftMach, Footprint.toExecution,
     Footprint.liftOutcome, Devm.stack, Devm.setMach, Except.assert, bind, Except.bind]
   split_ifs <;> rfl
@@ -2469,7 +2897,7 @@ theorem Devm.pop_def (devm : Devm) : Devm.pop devm = (do
     match devm.stack with
     | [] => .error ⟨.halt (.stackUnderflow .none), devm⟩
     | x :: xs => .ok ⟨x, devm.setMach {devm.mach with stack := xs}⟩) := by
-  rcases devm with ⟨⟨stack, memory, gasLeft⟩, view, world⟩
+  rcases devm with ⟨⟨stack, memory, gasLeft, stateGas⟩, view, world⟩
   cases stack <;> rfl
 
 def Prod.mapFst {α₁ : Type u₁} {α₂ : Type u₂} {β : Type v} (f : α₁ → α₂) : α₁ × β → α₂ × β :=
@@ -2485,7 +2913,7 @@ def Devm.popToNat (devm : Devm) : Except (EvmError × Devm) (Nat × Devm) :=
 
 theorem Devm.popToNat_def (devm : Devm) :
     devm.popToNat = (devm.pop <&> Prod.mapFst B256.toNat) := by
-  rcases devm with ⟨⟨stack, memory, gasLeft⟩, view, world⟩
+  rcases devm with ⟨⟨stack, memory, gasLeft, stateGas⟩, view, world⟩
   cases stack <;> rfl
 
 def Mach.popToAdr (mach : Mach) : Footprint.Outcome Mach Adr :=
@@ -2498,7 +2926,7 @@ def Devm.popToAdr (devm : Devm) : Except (EvmError × Devm) (Adr × Devm) :=
 
 theorem Devm.popToAdr_def (devm : Devm) :
     devm.popToAdr = (devm.pop <&> Prod.mapFst B256.toAdr) := by
-  rcases devm with ⟨⟨stack, memory, gasLeft⟩, view, world⟩
+  rcases devm with ⟨⟨stack, memory, gasLeft, stateGas⟩, view, world⟩
   cases stack <;> rfl
 
 def Mach.popN (mach : Mach) : Nat → Footprint.Outcome Mach (List B256)
@@ -2525,11 +2953,13 @@ theorem Devm.popN_def (devm : Devm) (n : Nat) : devm.popN n =
   cases n with
   | zero => rfl
   | succ n =>
-    rcases devm with ⟨⟨stack, memory, gasLeft⟩, view, world⟩
+    rcases devm with ⟨⟨stack, memory, gasLeft, stateGas⟩, view, world⟩
     cases stack with
     | nil => rfl
     | cons x xs =>
-      cases h : Mach.popN { stack := xs, memory := memory, gasLeft := gasLeft } n with
+      cases h : Mach.popN
+          { stack := xs, memory := memory, gasLeft := gasLeft,
+            stateGas := stateGas } n with
       | error err =>
         rcases err with ⟨msg, mach'⟩
         cases mach'
@@ -2551,7 +2981,7 @@ def pushItem (x : B256) (c : Nat) (devm : Devm) : Execution :=
 
 theorem pushItem_def (x : B256) (c : Nat) (devm : Devm) :
     pushItem x c devm = (chargeGas c devm >>= Devm.push x) := by
-  rcases devm with ⟨⟨stack, memory, gasLeft⟩, view, world⟩
+  rcases devm with ⟨⟨stack, memory, gasLeft, stateGas⟩, view, world⟩
   simp only [pushItem, Mach.pushItem, Mach.chargeGas, Mach.push, chargeGas, Devm.push,
     liftMachExecution, liftMach, Footprint.toExecution, Footprint.liftOutcome,
     Devm.setMach, bind, Except.bind]
@@ -2561,6 +2991,49 @@ theorem pushItem_def (x : B256) (c : Nat) (devm : Devm) :
 
 def accessCost (x : Adr) (a : AdrSet) : Nat :=
   if x ∈ a then gasWarmAccess else gasColdAccountAccess
+
+/-- The warm/cold account-access cost under a *fork's own* schedule.
+
+A sibling rather than a third parameter on `accessCost`. EIP-8038 reprices the
+cold half (2,600 to 3,000) and leaves the warm half alone, so the interpreter
+has to read the number from `rules.gas` -- but `accessCost` is named 121 times
+downstream, and widening its arity would move every one of those statements for
+a reason that has nothing to do with what they say. Instead the schedule-carrying
+form is the one the interpreter calls, `accessCost` stays exactly what it was,
+and the `rfl` lemma below says they are the same function at Prague. -/
+def GasSchedule.accessCost (gas : GasSchedule) (x : Adr) (a : AdrSet) : Nat :=
+  if x ∈ a then gasWarmAccess else gas.coldAccountAccess
+
+@[simp] theorem pragueGasSchedule_accessCost (x : Adr) (a : AdrSet) :
+    pragueGasSchedule.accessCost x a = accessCost x a := rfl
+
+@[simp] theorem pragueRules_gas_accessCost (x : Adr) (a : AdrSet) :
+    pragueRules.gas.accessCost x a = accessCost x a := rfl
+
+/-- The warm cost is the floor at every schedule, because only the cold half
+moves. The Sufficiency family needs this, and needs it to hold of an arbitrary
+schedule rather than of Prague's. -/
+theorem GasSchedule.gasWarmAccess_le_accessCost (gas : GasSchedule)
+    (x : Adr) (a : AdrSet) (h : gasWarmAccess ≤ gas.coldAccountAccess) :
+    gasWarmAccess ≤ gas.accessCost x a := by
+  unfold GasSchedule.accessCost
+  split
+  · exact Nat.le_refl _
+  · exact h
+
+/-- The account-access cost is positive under any usable schedule -- the shape
+`access_cost_pos` had at Prague, now stated of the schedule the interpreter
+actually reads. -/
+theorem GasSchedule.Valid.accessCost_pos {g : GasSchedule} (h : g.Valid)
+    (x : Adr) (a : AdrSet) : 0 < g.accessCost x a := by
+  unfold GasSchedule.accessCost
+  have hw := h.warmAccess_le
+  unfold gasWarmAccess at *
+  split <;> omega
+
+theorem GasSchedule.Valid.warmAccess_le_accessCost {g : GasSchedule}
+    (h : g.Valid) (x : Adr) (a : AdrSet) : gasWarmAccess ≤ g.accessCost x a :=
+  g.gasWarmAccess_le_accessCost x a h.warmAccess_le
 
 def Meta.addAccessedAddress (view : Meta) (a : Adr) : Meta :=
   {view with accessedAddresses := view.accessedAddresses.insert a}
@@ -2762,6 +3235,38 @@ def Devm.addLog (devm : Devm) (log : Log) : Devm :=
 theorem Devm.addLog_error (devm : Devm) (log : Log) :
     (devm.addLog log).error = devm.error := rfl
 
+/-! ### EIP-7708 transfer logs
+
+`vm/__init__.py` `emit_transfer_log`, `SYSTEM_ADDRESS` and `TRANSFER_TOPIC`
+at the pin. Reached only under `rules.stateGas = some _`: at the frame-entry
+value move and at `SELFDESTRUCT`'s sweep, never for withdrawals, fee refunds or
+coinbase payments, which credit without a transfer. -/
+
+/-- `SYSTEM_ADDRESS`, the address every transfer log is emitted from. -/
+def transferLogAddress : Adr := 0xfffffffffffffffffffffffffffffffffffffffe
+
+/-- `TRANSFER_TOPIC`, `keccak256("Transfer(address,address,uint256)")`. Stated
+as the literal so that no site hashes; `transferTopic_keccak` below pins it to
+the hash. -/
+def transferTopic : B256 :=
+  0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef
+
+/-- The log one non-zero ETH transfer between distinct accounts emits: the two
+addresses left-padded to words as the indexed topics, the amount as the data. -/
+def transferLog (sender recipient : Adr) (amount : B256) : Log :=
+  { address := transferLogAddress
+    topics := [transferTopic, sender.toB256, recipient.toB256]
+    data := amount.toBytes }
+
+/-- `emit_transfer_log`, with both of upstream's guards folded in: a self
+transfer and a zero transfer emit nothing. -/
+def Devm.emitTransferLog (devm : Devm) (sender recipient : Adr) (amount : B256) :
+    Devm :=
+  if sender = recipient ∨ amount = 0 then devm
+  else devm.addLog (transferLog sender recipient amount)
+
+#guard transferTopic = Bytes.keccak "Transfer(address,address,uint256)".toUTF8.toList
+
 def Mach.applyUnary (f : B256 → B256) (cost : Nat) (mach : Mach) :
     Footprint.Outcome Mach Unit :=
   match mach.pop with
@@ -2804,11 +3309,13 @@ theorem applyUnary_def (f : B256 → B256) (cost : Nat) (devm : Devm) :
     applyUnary f cost devm = (do
       let ⟨x, devm'⟩ ← devm.pop
       pushItem (f x) cost devm') := by
-  rcases devm with ⟨⟨stack, memory, gasLeft⟩, view, world⟩
+  rcases devm with ⟨⟨stack, memory, gasLeft, stateGas⟩, view, world⟩
   cases stack with
   | nil => rfl
   | cons x xs =>
-    cases h : Mach.pushItem (f x) cost { stack := xs, memory := memory, gasLeft := gasLeft } with
+    cases h : Mach.pushItem (f x) cost
+        { stack := xs, memory := memory, gasLeft := gasLeft,
+          stateGas := stateGas } with
     | error err =>
       rcases err with ⟨msg, mach'⟩
       cases mach'
@@ -2827,14 +3334,16 @@ theorem applyBinary_def (f : B256 → B256 → B256) (cost : Nat) (devm : Devm) 
       let ⟨x, devm'⟩ ← devm.pop
       let ⟨y, devm''⟩ ← devm'.pop
       pushItem (f x y) cost devm'') := by
-  rcases devm with ⟨⟨stack, memory, gasLeft⟩, view, world⟩
+  rcases devm with ⟨⟨stack, memory, gasLeft, stateGas⟩, view, world⟩
   cases stack with
   | nil => rfl
   | cons x xs =>
     cases xs with
     | nil => rfl
     | cons y ys =>
-      cases h : Mach.pushItem (f x y) cost { stack := ys, memory := memory, gasLeft := gasLeft } with
+      cases h : Mach.pushItem (f x y) cost
+        { stack := ys, memory := memory, gasLeft := gasLeft,
+          stateGas := stateGas } with
       | error err =>
         rcases err with ⟨msg, mach'⟩
         cases mach'
@@ -2890,19 +3399,91 @@ def sstoreNewRefundCounter (gas : GasSchedule) (new_value : B256)
       rc''
   else rc
 
+/-- `sstore`'s refund contribution under the Amsterdam metering shape.
+
+A sibling of `sstoreNewRefundCounter` rather than a widening of it, because the
+two forks disagree about what a restored slot refunds. Prague refunds the
+difference between what a set or an update cost and what the access cost --
+`gasStorageSet - gasWarmAccess`, or `gasStorageUpdate - gasColdSload -
+gasWarmAccess`. Amsterdam has decomposed the write, so a restored slot simply
+refunds the `STORAGE_WRITE` the first change to it paid. The clear refund is
+`gas.storageClearRefund` in both, which is why that one number is a
+`GasSchedule` field and these are not.
+
+Transcribed from `vm/instructions/storage.py`'s refund block, in its order. -/
+def sstoreAmsterdamRefundCounter (gas : GasSchedule) (state : StateGasRules)
+    (new_value original_value current_value : B256) (rc : Int) : Int :=
+  if current_value ≠ new_value then
+    let rc' :=
+      if original_value ≠ 0 ∧ current_value ≠ 0 ∧ new_value = 0 then
+        rc + gas.storageClearRefund
+      else
+        rc
+    let rc'' :=
+      if original_value ≠ 0 ∧ current_value = 0 then
+        rc' - gas.storageClearRefund
+      else
+        rc'
+    if original_value = new_value then
+      rc'' + state.storageWrite
+    else
+      rc''
+  else rc
+
+/-- The execution gas one `SSTORE` charges under the Amsterdam shape: the
+access, cold or warm, plus `STORAGE_WRITE` on the slot's first change this
+transaction. EIP-8038 re-derives the old `gasStorageSet` / `gasStorageUpdate`
+lattice as exactly these two terms, with the state creation moved out into the
+state dimension. -/
+def sstoreAmsterdamGasCost (state : StateGasRules)
+    (new_value original_value current_value : B256) (cold : Bool) : Nat :=
+  (if cold then gasColdSload else gasWarmAccess) +
+    (if original_value = current_value ∧ current_value ≠ new_value then
+      state.storageWrite
+    else
+      0)
+
+/-- The *state* gas one `SSTORE` charges: `STORAGE_SET` on a first-time set of a
+zero slot, and nothing otherwise. The credit-back when such a slot is cleared
+again in the same transaction is a refund rather than a negative charge, so it
+goes through `creditStateGasRefund` at the site. -/
+def sstoreAmsterdamStateGas (state : StateGasRules)
+    (new_value original_value current_value : B256) : Nat :=
+  if original_value = current_value ∧ current_value ≠ new_value
+      ∧ original_value = 0 then
+    state.storageSet
+  else
+    0
+
+/-- Whether this `SSTORE` returns the slot to a zero original, which refills the
+`STORAGE_SET` an earlier set in the same transaction charged. -/
+def sstoreAmsterdamStateRefund (state : StateGasRules)
+    (new_value original_value current_value : B256) : Nat :=
+  if current_value ≠ new_value ∧ original_value = new_value
+      ∧ original_value = 0 then
+    state.storageSet
+  else
+    0
+
 /-- The read-only-World core of `BALANCE`.  Its mutable result contains only
     `Mach` and `Meta`: it pops the address operand, charges the warm/cold
     account-access cost, records a cold access, and pushes the balance read
-    from `World`. -/
-def Rinst.balanceCore (world : World) (mach : Mach) (view : Meta) :
-    Footprint.Outcome (Mach × Meta) Unit :=
+    from `World`.
+
+    The cold half arrives through `gas.coldAccountAccess` rather than through
+    the global, because EIP-8038 reprices it (2,600 to 3,000) inside this same
+    formula. The warm half is a global still: no fork moves it. A `GasSchedule`
+    parameter rather than a `Sevm` one, because that is all this core reads and
+    it has no other reason to see the frame. -/
+def Rinst.balanceCore (gas : GasSchedule) (world : World) (mach : Mach)
+    (view : Meta) : Footprint.Outcome (Mach × Meta) Unit :=
   match mach.pop with
   | .error (err, mach') => .error (err, (mach', view))
   | .ok (x, mach') =>
     let a := x.toAdr
     let warm := a ∈ view.accessedAddresses
     let view' := if warm then view else view.addAccessedAddress a
-    let cost := if warm then gasWarmAccess else gasColdAccountAccess
+    let cost := if warm then gasWarmAccess else gas.coldAccountAccess
     match Mach.chargeGas cost mach' with
     | .error (err, mach'') => .error (err, (mach'', view'))
     | .ok (_, mach'') =>
@@ -2924,7 +3505,8 @@ def Rinst.runCore
     let fee :=
       calculateBlobGasPrice sevm.benvStat.rules.blob sevm.benvStat.excessBlobGas
     pushItem fee.toB256 gBase devm
-  | .balance => liftMachMetaWorldExecution Rinst.balanceCore devm
+  | .balance =>
+    liftMachMetaWorldExecution (Rinst.balanceCore sevm.benvStat.rules.gas) devm
   | .origin => pushItem sevm.tenvStat.origin.toB256 gBase devm
   | .caller => pushItem sevm.caller.toB256 gBase devm
   | .callvalue => pushItem sevm.value gBase devm
@@ -2956,12 +3538,19 @@ def Rinst.runCore
     let value := sevm.code.sliceD code_start_index size (Linst.toUInt8 .stop)
     .ok (devm.memWrite memory_start_index value)
   | .gasprice => pushItem sevm.tenvStat.gasPrice.toB256 gBase devm
+  -- EIP-8038 adds a code-reading surcharge to `EXTCODESIZE` and `EXTCODECOPY`,
+  -- and reprices the cold half of the access. Both arrive through `rules.gas`;
+  -- the surcharge is *additive with identity zero*, so the Prague formula here
+  -- is literally the formula it was rather than merely equal to it.
   | .extcodesize => do
     let ⟨adr, devm⟩ ← devm.popToAdr
+    let gas := sevm.benvStat.rules.gas
     let devm ←
       if adr ∈ devm.accessedAddresses
-      then chargeGas gasWarmAccess devm
-      else chargeGas gasColdAccountAccess (addAccessedAddress devm adr)
+      then chargeGas (gasWarmAccess + gas.codeReadSurcharge) devm
+      else
+        chargeGas (gas.coldAccountAccess + gas.codeReadSurcharge)
+          (addAccessedAddress devm adr)
     let codesize := (devm.getCode adr).size.toB256
     devm.push codesize
   | .extcodecopy => do
@@ -2972,12 +3561,18 @@ def Rinst.runCore
     let words := ceilDiv size 32
     let copy_gas_cost := gasCopy * words
     let extend_memory_cost := devm.extCost [⟨memory_start_index, size⟩]
+    let gas := sevm.benvStat.rules.gas
     let devm ←
       if adr ∈ devm.accessedAddresses
-      then chargeGas (gasWarmAccess + copy_gas_cost + extend_memory_cost) devm
+      then
+        chargeGas
+          (gasWarmAccess + gas.codeReadSurcharge + copy_gas_cost
+            + extend_memory_cost)
+          devm
       else
         chargeGas
-          (gasColdAccountAccess + copy_gas_cost + extend_memory_cost)
+          (gas.coldAccountAccess + gas.codeReadSurcharge + copy_gas_cost
+            + extend_memory_cost)
           (addAccessedAddress devm adr)
     let code := devm.getCode adr
     let value := code.sliceD code_start_index size (Linst.toUInt8 .stop)
@@ -2996,13 +3591,17 @@ def Rinst.runCore
     let value :=
       devm.returnData.sliceD return_data_start_index size 0
     .ok (devm.memWrite memory_start_index value)
+  -- `EXTCODEHASH` takes the repriced cold access and *no* surcharge: upstream
+  -- adds the code-reading cost at `EXTCODESIZE` and `EXTCODECOPY` only, which
+  -- is a fact about those two arms rather than about reading code.
   | .extcodehash => do
     let ⟨adr, devm⟩ ← devm.popToAdr
     let devm ←
       if adr ∈ devm.accessedAddresses then
         chargeGas gasWarmAccess devm
       else
-        chargeGas gasColdAccountAccess (addAccessedAddress devm adr)
+        chargeGas sevm.benvStat.rules.gas.coldAccountAccess
+          (addAccessedAddress devm adr)
     let account := devm.getAcct adr
     let codehash : B256 :=
       if account.Empty then 0
@@ -3109,45 +3708,103 @@ def Rinst.runCore
     let ⟨key, devm⟩ ← devm.pop
     pushItem (devm.getTransVal sevm.currentTarget key) gasWarmAccess devm
   | .pc => pushItem pc.toB256 gBase devm
-  | .sstore => do
-    let ⟨key, devm⟩ ← devm.pop
-    let ⟨new_value, devm⟩ ← devm.pop
-    .assert
-      (gCallStipend < devm.gasLeft)
-      ⟨.halt (.outOfGas .none), devm⟩
-    let ct := sevm.currentTarget
-    let original_value := getOrigStorVal sevm ct key
-    let current_value := devm.getStorVal ct key
-    let ⟨devm, gasCost2⟩ ← .ok <|
-      if ⟨ct, key⟩ ∉ devm.accessedStorageKeys then
-        ( ⟨ addAccessedStorageKey devm ct key,
-            gasColdSload ⟩ : Devm × Nat )
-      else
-        ⟨devm, 0⟩
-    let gasCost3 ← .ok <|
-      if original_value = current_value ∧ current_value ≠ new_value then
-        if original_value = 0 then
-          gasCost2 + gasStorageSet
+  -- `vm/instructions/storage.py` `sstore`. The two shapes differ in more than
+  -- numbers, so this is a `match` on the switch rather than a schedule read:
+  -- Amsterdam moves the static check ahead of the pops, replaces the EIP-2200
+  -- stipend sentry with an explicit `check_gas`, re-derives the charge as
+  -- access plus `STORAGE_WRITE`, and moves the state creation into the second
+  -- dimension. Under `none` the body below is the body it has always been.
+  | .sstore =>
+    match sevm.benvStat.rules.stateGas with
+    | none => do
+      let ⟨key, devm⟩ ← devm.pop
+      let ⟨new_value, devm⟩ ← devm.pop
+      .assert
+        (gCallStipend < devm.gasLeft)
+        ⟨.halt (.outOfGas .none), devm⟩
+      let ct := sevm.currentTarget
+      let original_value := getOrigStorVal sevm ct key
+      let current_value := devm.getStorVal ct key
+      let ⟨devm, gasCost2⟩ ← .ok <|
+        if ⟨ct, key⟩ ∉ devm.accessedStorageKeys then
+          ( ⟨ addAccessedStorageKey devm ct key,
+              gasColdSload ⟩ : Devm × Nat )
         else
-          gasCost2 + (gasStorageUpdate - gasColdSload)
-      else
-        gasCost2 + gasWarmAccess
-    let devm ← .ok <| devm.withRefundCounter <|
-      sstoreNewRefundCounter
-        sevm.benvStat.rules.gas
-        new_value
-        original_value
-        current_value
-        devm.refundCounter
-    let devm ← chargeGas gasCost3 devm
-    assertDynamic sevm devm
-    .ok (devm.setStorVal sevm.currentTarget key new_value)
-  | .tstore => do
-    let ⟨key, devm⟩ ← devm.pop
-    let ⟨new_value, devm⟩ ← devm.pop
-    let devm ← chargeGas gasWarmAccess devm
-    assertDynamic sevm devm
-    .ok (devm.setTransVal sevm.currentTarget key new_value)
+          ⟨devm, 0⟩
+      let gasCost3 ← .ok <|
+        if original_value = current_value ∧ current_value ≠ new_value then
+          if original_value = 0 then
+            gasCost2 + gasStorageSet
+          else
+            gasCost2 + (gasStorageUpdate - gasColdSload)
+        else
+          gasCost2 + gasWarmAccess
+      let devm ← .ok <| devm.withRefundCounter <|
+        sstoreNewRefundCounter
+          sevm.benvStat.rules.gas
+          new_value
+          original_value
+          current_value
+          devm.refundCounter
+      let devm ← chargeGas gasCost3 devm
+      assertDynamic sevm devm
+      .ok (devm.setStorVal sevm.currentTarget key new_value)
+    | some state => do
+      -- The static check now precedes everything, including the pops.
+      assertDynamic sevm devm
+      let ⟨key, devm⟩ ← devm.pop
+      let ⟨new_value, devm⟩ ← devm.pop
+      let ct := sevm.currentTarget
+      -- GAS (state-independent). Price what is computable without touching
+      -- state and check it is affordable first: the access cost can now exceed
+      -- the stipend, so the EIP-2200 sentry alone no longer suffices.
+      let cold := ⟨ct, key⟩ ∉ devm.accessedStorageKeys
+      let accessGas := if cold then gasColdSload else gasWarmAccess
+      .assert
+        (max accessGas (gCallStipend + 1) ≤ devm.gasLeft)
+        ⟨.halt (.outOfGas .none), devm⟩
+      -- STATE ACCESS. Only now is the slot read, and only now is it warmed.
+      let devm := if cold then addAccessedStorageKey devm ct key else devm
+      let original_value := getOrigStorVal sevm ct key
+      let current_value := devm.getStorVal ct key
+      let devm := devm.withRefundCounter <|
+        sstoreAmsterdamRefundCounter
+          sevm.benvStat.rules.gas state
+          new_value original_value current_value devm.refundCounter
+      -- STATE GAS. A set-then-cleared slot refills the `STORAGE_SET` its first
+      -- set charged, and the credit precedes both charges as upstream's does.
+      let devm :=
+        devm.creditStateGasRefund
+          (sstoreAmsterdamStateRefund state new_value original_value
+            current_value)
+      -- Execution gas before state gas, so that an execution-gas out-of-gas
+      -- does not consume state gas that would inflate the parent's reservoir.
+      let devm ←
+        chargeGas
+          (sstoreAmsterdamGasCost state new_value original_value current_value
+            cold)
+          devm
+      let devm ←
+        chargeStateGas
+          (sstoreAmsterdamStateGas state new_value original_value current_value)
+          devm
+      .ok (devm.setStorVal ct key new_value)
+  | .tstore =>
+    match sevm.benvStat.rules.stateGas with
+    | none => do
+      let ⟨key, devm⟩ ← devm.pop
+      let ⟨new_value, devm⟩ ← devm.pop
+      let devm ← chargeGas gasWarmAccess devm
+      assertDynamic sevm devm
+      .ok (devm.setTransVal sevm.currentTarget key new_value)
+    | some _ => do
+      -- `storage.py.tstore` at the pin: static execution is rejected before
+      -- stack access or charging, so failure preserves both stack and gas.
+      assertDynamic sevm devm
+      let ⟨key, devm⟩ ← devm.pop
+      let ⟨new_value, devm⟩ ← devm.pop
+      let devm ← chargeGas gasWarmAccess devm
+      .ok (devm.setTransVal sevm.currentTarget key new_value)
   | .mcopy => do
     let ⟨destination, devm⟩ ← devm.popToNat
     let ⟨source, devm⟩ ← devm.popToNat
@@ -3511,34 +4168,71 @@ def Linst.run (sevm : Sevm) (devm : Devm) :
     let devm ← chargeGas cost devm
     let ⟨output, devm⟩ := devm.memRead index size
     .ok (devm.withOutput output)
-  | .selfdestruct => do
-    let donor := sevm.currentTarget
-    let ⟨donee, devm⟩ ← devm.popToAdr
-    let donorBal ← .ok (devm.getAcct sevm.currentTarget).bal
-    let ⟨devm, gasCost2⟩ ← .ok <|
-      if donee ∉ devm.accessedAddresses
-        then
-          ( ⟨ addAccessedAddress devm donee,
-              gasSelfDestruct + gasColdAccountAccess ⟩ : Devm × Nat )
+  -- `vm/instructions/system.py` `selfdestruct`. The two shapes differ in more
+  -- than numbers, so this is a `match` on the switch: Amsterdam moves the
+  -- static check ahead of the pop, checks the access cost before warming the
+  -- beneficiary, replaces the 25,000 new-account charge by `ACCOUNT_WRITE`
+  -- (execution) plus `NEW_ACCOUNT` (state) when the sweep creates the
+  -- beneficiary, logs the sweep, and schedules the originator without zeroing
+  -- it -- settlement preserves its balance (EIP-8246). Under `none` the body
+  -- below is the body it has always been.
+  | .selfdestruct =>
+    match sevm.benvStat.rules.stateGas with
+    | none => do
+      let donor := sevm.currentTarget
+      let ⟨donee, devm⟩ ← devm.popToAdr
+      let donorBal ← .ok (devm.getAcct sevm.currentTarget).bal
+      let ⟨devm, gasCost2⟩ ← .ok <|
+        if donee ∉ devm.accessedAddresses
+          then
+            ( ⟨ addAccessedAddress devm donee,
+                gasSelfDestruct + sevm.benvStat.rules.gas.coldAccountAccess ⟩ : Devm × Nat )
+          else
+            ⟨devm, gasSelfDestruct⟩
+      let gasCost3 ← .ok <|
+        if (devm.getAcct donee).Empty ∧ donorBal ≠ 0 then
+          gasCost2 + gasSelfDestructNewAccount
         else
-          ⟨devm, gasSelfDestruct⟩
-    let gasCost3 ← .ok <|
-      if (devm.getAcct donee).Empty ∧ donorBal ≠ 0 then
-        gasCost2 + gasSelfDestructNewAccount
+          gasCost2
+      let devm ← chargeGas gasCost3 devm
+      assertDynamic sevm devm
+      let devm ←
+        (devm.subBal donor donorBal).toExcept
+          ⟨.internal (.invariant (.text "InsufficientBalanceError")), devm⟩
+      let devm ← .ok <| devm.addBal donee donorBal
+      if donor ∈ devm.createdAccounts then
+        .ok (addAccountToDelete (devm.setBal donor 0) donor)
       else
-        gasCost2
-    let devm ← chargeGas gasCost3 devm
-    assertDynamic sevm devm
-    let devm ←
-      (devm.subBal donor donorBal).toExcept
-        ⟨.internal (.invariant (.text "InsufficientBalanceError")), devm⟩
-    let devm ← .ok <| devm.addBal donee donorBal
-    if donor ∈ devm.createdAccounts then
-      .ok (addAccountToDelete (devm.setBal donor 0) donor)
-    else
-      .ok devm
+        .ok devm
+    | some state => do
+      assertDynamic sevm devm
+      let donor := sevm.currentTarget
+      let ⟨donee, devm⟩ ← devm.popToAdr
+      -- GAS (state-independent), checked before the beneficiary is warmed.
+      let cold := donee ∉ devm.accessedAddresses
+      let gasCost :=
+        gasSelfDestruct +
+          (if cold then sevm.benvStat.rules.gas.coldAccountAccess else 0)
+      .assert (gasCost ≤ devm.gasLeft) ⟨.halt (.outOfGas .none), devm⟩
+      -- STATE ACCESS.
+      let devm := if cold then addAccessedAddress devm donee else devm
+      let donorBal := (devm.getAcct donor).bal
+      -- STATE GAS. A sweep that will create the beneficiary pays the account
+      -- write and the creation. Execution gas before state gas.
+      let creating := (devm.getAcct donee).Empty ∧ donorBal ≠ 0
+      let devm ← chargeGas (gasCost + if creating then state.accountWrite else 0) devm
+      let devm ← chargeStateGas (if creating then state.newAccount else 0) devm
+      -- OPERATION: move the whole balance, log it, schedule the deletion.
+      let devm ←
+        (devm.subBal donor donorBal).toExcept
+          ⟨.internal (.invariant (.text "InsufficientBalanceError")), devm⟩
+      let devm := devm.addBal donee donorBal
+      let devm := devm.emitTransferLog donor donee donorBal
+      if donor ∈ devm.createdAccounts then
+        .ok (addAccountToDelete devm donor)
+      else
+        .ok devm
 
-def except64th (n : Nat) : Nat := n - (n / 64)
 
 def calculateMsgCallGas
   (value gas gas_left memory_cost extra_gas : Nat)
@@ -3578,6 +4272,832 @@ def incorporateChildOnSuccess (parent child : Devm) (returnData : Bytes) : Devm 
     {parent.world with
       state := child.state
       transientStorage := child.transientStorage}
+
+/-! ### Child incorporation under the two-dimensional meter
+
+Upstream's `incorporate_child` is one function with an `if` inside; Jaune's is
+two functions chosen by the caller, and the Amsterdam siblings keep that shape
+so that `Resume.run`'s two branches stay the two branches they are.
+
+The rule the pin states, and what these transcribe: **gas returns to the parent
+regardless of the child's fate**, because a failed child arrives already
+settled -- rolled back to its baseline, its spill refilled, its refunds
+discarded -- so absorbing its meter unconditionally reclaims exactly what it
+gives back. Everything else -- logs, scheduled self-destructs, warmed access
+sets -- survives only on success, dying with the reverted state. A successful
+merge then ends with `repayStateGasSpill`, the rule new at `7341820` (#3478).
+
+Committed spill is not absorbed, because a child never has any: only the top
+frame commits, and it commits after `set_delegation`, which no child runs.
+Upstream states that as an `assert`; `Resume.run` enforces the same invariant at
+both actual Amsterdam incorporation sites, so a malformed child becomes a
+typed internal invariant error instead of silently losing gas. -/
+
+/-- The invariant every successfully settled Amsterdam child must satisfy
+before its meter can be incorporated into its parent. -/
+def Devm.AmsterdamChildUncommitted (child : Devm) : Prop :=
+  child.mach.stateGas.committedSpill = 0
+
+instance {child : Devm} : Decidable child.AmsterdamChildUncommitted := by
+  unfold Devm.AmsterdamChildUncommitted
+  infer_instance
+
+/-- The additional settlement facts required before incorporating a failed
+Amsterdam child: rollback has restored the reservoir baseline, cleared the
+outstanding spill, and discarded the child's refund counter. -/
+def Devm.AmsterdamFailedChildSettled (child : Devm) : Prop :=
+  child.AmsterdamChildUncommitted ∧
+    child.mach.stateGas.spilled = 0 ∧
+    child.refundCounter = 0 ∧
+    child.stateGasLeft = child.mach.stateGas.baseline
+
+instance {child : Devm} : Decidable child.AmsterdamFailedChildSettled := by
+  unfold Devm.AmsterdamFailedChildSettled
+  infer_instance
+
+/-- `incorporate_child` on a failed child, under `stateGas = some _`.
+
+The child's execution gas, reservoir and outstanding spill all come back; so do
+its refunds, which the child's own frame settlement has already zeroed. Nothing
+it accumulated survives. -/
+def incorporateChildAmsterdamOnError (parent child : Devm) (returnData : Bytes) :
+    Devm :=
+  let parent := parent.setMach
+    {parent.mach with
+      gasLeft := parent.gasLeft + child.gasLeft
+      stateGas := {parent.mach.stateGas with
+        left := parent.mach.stateGas.left + child.mach.stateGas.left
+        spilled := parent.mach.stateGas.spilled + child.mach.stateGas.spilled}}
+  let parent := parent.setMeta
+    {parent.meta with
+      createdAccounts := child.createdAccounts
+      refundCounter := parent.refundCounter + child.refundCounter
+      returnData := returnData}
+  parent.setWorld
+    {parent.world with
+      state := child.state
+      transientStorage := child.transientStorage}
+
+/-- `incorporate_child` on a successful child, under `stateGas = some _`.
+
+The same unconditional absorption, then the merged meter repays `gasLeft` from
+the reservoir up to the spill still outstanding: a refund can land in a
+different frame than the charge it undoes, and this merge is where the claim
+and the credit first share one meter. -/
+def incorporateChildAmsterdamOnSuccess (parent child : Devm) (returnData : Bytes) :
+    Devm :=
+  let parent := parent.setMach
+    ((({parent.mach with
+        gasLeft := parent.gasLeft + child.gasLeft
+        stateGas := {parent.mach.stateGas with
+          left := parent.mach.stateGas.left + child.mach.stateGas.left
+          spilled :=
+            parent.mach.stateGas.spilled + child.mach.stateGas.spilled}}
+      : Mach)).repayStateGasSpill)
+  let parent := parent.setMeta
+    {parent.meta with
+      createdAccounts := child.createdAccounts
+      logs := parent.logs ++ child.logs
+      refundCounter := parent.refundCounter + child.refundCounter
+      accountsToDelete := parent.accountsToDelete.union child.accountsToDelete
+      returnData := returnData
+      accessedAddresses := parent.accessedAddresses.union child.accessedAddresses
+      accessedStorageKeys := parent.accessedStorageKeys.union child.accessedStorageKeys}
+  parent.setWorld
+    {parent.world with
+      state := child.state
+      transientStorage := child.transientStorage}
+
+/-- Absorbing a failed child conserves the measure, up to the committed spill a
+child cannot have. -/
+theorem incorporateChildAmsterdamOnError_gasMeasure
+    (parent child : Devm) (rd : Bytes) :
+    (incorporateChildAmsterdamOnError parent child rd).gasMeasure
+        + child.mach.stateGas.committedSpill
+      = parent.gasMeasure + child.gasMeasure := by
+  simp only [incorporateChildAmsterdamOnError, Devm.gasMeasure, Mach.gasMeasure,
+    Devm.setMach, Devm.setMeta, Devm.setWorld, Devm.gasLeft]
+  omega
+
+/-- The same for a successful child. The repayment moves gas between two pools
+the measure adds together, so it cancels. -/
+theorem incorporateChildAmsterdamOnSuccess_gasMeasure
+    (parent child : Devm) (rd : Bytes) :
+    (incorporateChildAmsterdamOnSuccess parent child rd).gasMeasure
+        + child.mach.stateGas.committedSpill
+      = parent.gasMeasure + child.gasMeasure := by
+  simp only [incorporateChildAmsterdamOnSuccess, Mach.repayStateGasSpill,
+    Devm.gasMeasure, Mach.gasMeasure, Devm.setMach, Devm.setMeta, Devm.setWorld,
+    Devm.gasLeft]
+  have h :
+      min (parent.mach.stateGas.left + child.mach.stateGas.left)
+          (parent.mach.stateGas.spilled + child.mach.stateGas.spilled)
+        ≤ parent.mach.stateGas.spilled + child.mach.stateGas.spilled :=
+    Nat.min_le_right _ _
+  omega
+
+/-- A child that carries no committed spill hands its whole measure back. -/
+theorem incorporateChildAmsterdamOnSuccess_gasMeasure_of_child_uncommitted
+    {parent child : Devm} {rd : Bytes}
+    (h : child.AmsterdamChildUncommitted) :
+    (incorporateChildAmsterdamOnSuccess parent child rd).gasMeasure
+      = parent.gasMeasure + child.gasMeasure := by
+  have e := incorporateChildAmsterdamOnSuccess_gasMeasure parent child rd
+  unfold Devm.AmsterdamChildUncommitted at h
+  omega
+
+theorem incorporateChildAmsterdamOnError_gasMeasure_of_child_uncommitted
+    {parent child : Devm} {rd : Bytes}
+    (h : child.AmsterdamChildUncommitted) :
+    (incorporateChildAmsterdamOnError parent child rd).gasMeasure
+      = parent.gasMeasure + child.gasMeasure := by
+  have e := incorporateChildAmsterdamOnError_gasMeasure parent child rd
+  unfold Devm.AmsterdamChildUncommitted at h
+  omega
+
+/-- The exact conservation equation available at the failed-child
+incorporation site after its executable settlement check succeeds. -/
+theorem incorporateChildAmsterdamOnError_gasMeasure_of_child_settled
+    {parent child : Devm} {rd : Bytes}
+    (h : child.AmsterdamFailedChildSettled) :
+    (incorporateChildAmsterdamOnError parent child rd).gasMeasure
+      = parent.gasMeasure + child.gasMeasure :=
+  incorporateChildAmsterdamOnError_gasMeasure_of_child_uncommitted h.1
+
+/-! ### The zero-meter invariant
+
+Under `rules.stateGas = none` no meter operation above is ever reached, so a
+frame's meter is `zero` at entry and `zero` for ever after. That is what makes
+"the `none` path is today's path" a fact rather than a claim: with the meter
+zero, `gasMeasure` *is* `gasLeft`, and every Prague-stated termination fact is
+the one it always was.
+
+The predicate is stated here, beside the meter; the preservation theorems are
+stated where the switch is read. -/
+
+/-- The frame meters in one dimension: no reservoir, no spill, no commitment. -/
+def Devm.StateGasZero (devm : Devm) : Prop := devm.mach.stateGas = .zero
+
+instance {devm : Devm} : Decidable devm.StateGasZero := by
+  unfold Devm.StateGasZero; infer_instance
+
+/-- State-gas preservation for machine-result carriers.  The failing machine
+is just as observable as the successful payload, so both channels carry the
+zero-meter obligation. -/
+def Except.StateGasZeroOn {ρ α : Type} (P : α → Prop) :
+    Except (ρ × Devm) α → Prop
+  | .ok a => P a
+  | .error e => e.2.StateGasZero
+
+/-- The zero-meter invariant on an execution result, on both channels. -/
+abbrev Execution.StateGasZero (x : Execution) : Prop :=
+  x.StateGasZeroOn Devm.StateGasZero
+
+theorem Except.StateGasZeroOn.bind {ρ α β : Type} {P : α → Prop} {Q : β → Prop}
+    {x : Except (ρ × Devm) α} {f : α → Except (ρ × Devm) β}
+    (hx : x.StateGasZeroOn P)
+    (hf : ∀ a, P a → (f a).StateGasZeroOn Q) :
+    (x >>= f).StateGasZeroOn Q := by
+  cases x with
+  | error e => exact hx
+  | ok a => exact hf a hx
+
+theorem Except.StateGasZeroOn.map {ρ α β : Type} {P : α → Prop} {Q : β → Prop}
+    {x : Except (ρ × Devm) α} {f : α → β}
+    (hx : x.StateGasZeroOn P) (hf : ∀ a, P a → Q (f a)) :
+    (x <&> f).StateGasZeroOn Q := by
+  cases x with
+  | error e => exact hx
+  | ok a => exact hf a hx
+
+theorem Except.stateGasZeroOn_ok {ρ α : Type} {P : α → Prop} {a : α}
+    (h : P a) :
+    (Except.ok a : Except (ρ × Devm) α).StateGasZeroOn P := h
+
+theorem Except.stateGasZeroOn_error {ρ α : Type} {P : α → Prop}
+    {e : ρ × Devm} (h : e.2.StateGasZero) :
+    (Except.error e : Except (ρ × Devm) α).StateGasZeroOn P := h
+
+theorem Except.stateGasZeroOn_assert {p : Prop} [Decidable p] {ρ : Type}
+    {e : ρ × Devm} (h : e.2.StateGasZero) :
+    (Except.assert p e).StateGasZeroOn (fun _ => True) := by
+  unfold Except.assert
+  split
+  · trivial
+  · exact h
+
+/-- A footprint result preserves the state-gas record of its input machine on
+both channels. -/
+def Footprint.StateGasEq {α : Type} (before : Mach) :
+    Footprint.Outcome Mach α → Prop
+  | .error (_, mach) => mach.stateGas = before.stateGas
+  | .ok (_, mach) => mach.stateGas = before.stateGas
+
+def Footprint.MachMetaStateGasEq {α : Type} (before : Mach) :
+    Footprint.Outcome (Mach × Meta) α → Prop
+  | .error (_, view) => view.1.stateGas = before.stateGas
+  | .ok (_, view) => view.1.stateGas = before.stateGas
+
+/-- A Mach-only footprint preserves the zero meter whenever its core leaves
+the `stateGas` field unchanged on both result channels. -/
+theorem liftMach_stateGasZeroOn {α : Type}
+    {core : Mach → Footprint.Outcome Mach α} {devm : Devm}
+    (h : devm.StateGasZero)
+    (hc : Footprint.StateGasEq devm.mach (core devm.mach)) :
+    (liftMach core devm).StateGasZeroOn (fun a => a.2.StateGasZero) := by
+  unfold liftMach Footprint.liftOutcome
+  split <;> simp_all [Footprint.StateGasEq, Except.StateGasZeroOn,
+    Devm.StateGasZero, Devm.setMach]
+
+theorem Footprint.toExecution_stateGasZero {x : Except _ (Unit × Devm)}
+    (hx : x.StateGasZeroOn (fun a => a.2.StateGasZero)) :
+    (Footprint.toExecution x).StateGasZero := by
+  cases x with
+  | error e => exact hx
+  | ok a => exact hx
+
+theorem liftMachExecution_stateGasZero
+    {core : Mach → Footprint.Outcome Mach Unit} {devm : Devm}
+    (h : devm.StateGasZero)
+    (hc : Footprint.StateGasEq devm.mach (core devm.mach)) :
+    (liftMachExecution core devm).StateGasZero := by
+  cases hcore : core devm.mach with
+  | error e =>
+    rw [hcore] at hc
+    simpa [liftMachExecution, Footprint.toExecution, liftMach,
+      Footprint.liftOutcome, hcore, Execution.StateGasZero,
+      Footprint.StateGasEq, Except.StateGasZeroOn, Devm.StateGasZero,
+      Devm.setMach] using hc.trans h
+  | ok a =>
+    rw [hcore] at hc
+    simpa [liftMachExecution, Footprint.toExecution, liftMach,
+      Footprint.liftOutcome, hcore, Execution.StateGasZero,
+      Footprint.StateGasEq, Except.StateGasZeroOn, Devm.StateGasZero,
+      Devm.setMach] using hc.trans h
+
+theorem liftMachMetaExecution_stateGasZero
+    {core : Mach → Meta → Footprint.Outcome (Mach × Meta) Unit} {devm : Devm}
+    (h : devm.StateGasZero)
+    (hc : Footprint.MachMetaStateGasEq devm.mach (core devm.mach devm.meta)) :
+    (liftMachMetaExecution core devm).StateGasZero := by
+  cases hcore : core devm.mach devm.meta with
+  | error e =>
+    rw [hcore] at hc
+    simpa [liftMachMetaExecution, Footprint.toExecution, liftMachMeta,
+      Footprint.liftOutcome, hcore, Execution.StateGasZero,
+      Footprint.MachMetaStateGasEq, Except.StateGasZeroOn,
+      Devm.StateGasZero] using hc.trans h
+  | ok a =>
+    rw [hcore] at hc
+    simpa [liftMachMetaExecution, Footprint.toExecution, liftMachMeta,
+      Footprint.liftOutcome, hcore, Execution.StateGasZero,
+      Footprint.MachMetaStateGasEq, Except.StateGasZeroOn,
+      Devm.StateGasZero] using hc.trans h
+theorem Mach.chargeGas_stateGas_eq (cost : Nat) (mach : Mach) :
+    Footprint.StateGasEq mach (mach.chargeGas cost) := by
+  cases hs : safeSub mach.gasLeft cost <;>
+    simp [Mach.chargeGas, hs, Footprint.StateGasEq]
+
+theorem Mach.push_stateGas_eq (x : B256) (mach : Mach) :
+    Footprint.StateGasEq mach (mach.push x) := by
+  by_cases hs : mach.stack.length < 1024 <;>
+    simp [Mach.push, hs, Footprint.StateGasEq]
+
+theorem Mach.pop_stateGas_eq (mach : Mach) :
+    Footprint.StateGasEq mach mach.pop := by
+  cases hs : mach.stack <;> simp [Mach.pop, hs, Footprint.StateGasEq]
+
+theorem Mach.popToNat_stateGas_eq (mach : Mach) :
+    Footprint.StateGasEq mach mach.popToNat := by
+  unfold Mach.popToNat
+  cases hp : mach.pop <;>
+    have hm := Mach.pop_stateGas_eq mach <;> rw [hp] at hm <;> exact hm
+
+theorem Mach.popToAdr_stateGas_eq (mach : Mach) :
+    Footprint.StateGasEq mach mach.popToAdr := by
+  unfold Mach.popToAdr
+  cases hp : mach.pop <;>
+    have hm := Mach.pop_stateGas_eq mach <;> rw [hp] at hm <;> exact hm
+
+theorem Mach.popN_stateGas_eq (mach : Mach) (n : Nat) :
+    Footprint.StateGasEq mach (mach.popN n) := by
+  induction n generalizing mach with
+  | zero => rfl
+  | succ n ih =>
+    unfold Mach.popN
+    cases hp : mach.pop with
+    | error e =>
+      have hm := Mach.pop_stateGas_eq mach
+      rw [hp] at hm
+      exact hm
+    | ok a =>
+      have hm := Mach.pop_stateGas_eq mach
+      rw [hp] at hm
+      cases hn : a.2.popN n with
+      | error e =>
+        have hn' := ih a.2
+        rw [hn] at hn'
+        simpa [hp, hn, Footprint.StateGasEq] using hn'.trans hm
+      | ok b =>
+        have hn' := ih a.2
+        rw [hn] at hn'
+        simpa [hp, hn, Footprint.StateGasEq] using hn'.trans hm
+
+theorem Mach.pushItem_stateGas_eq (x : B256) (cost : Nat) (mach : Mach) :
+    Footprint.StateGasEq mach (mach.pushItem x cost) := by
+  unfold Mach.pushItem
+  cases hc : mach.chargeGas cost with
+  | error e =>
+    have hm := Mach.chargeGas_stateGas_eq cost mach
+    rw [hc] at hm
+    exact hm
+  | ok a =>
+    have hm := Mach.chargeGas_stateGas_eq cost mach
+    rw [hc] at hm
+    have hp := Mach.push_stateGas_eq x a.2
+    cases hpush : a.2.push x <;> rw [hpush] at hp
+    · simpa [hc, hpush, Footprint.StateGasEq] using hp.trans hm
+    · simpa [hc, hpush, Footprint.StateGasEq] using hp.trans hm
+
+theorem Mach.applyUnary_stateGas_eq (f : B256 → B256) (cost : Nat) (mach : Mach) :
+    Footprint.StateGasEq mach (mach.applyUnary f cost) := by
+  unfold Mach.applyUnary
+  cases hp : mach.pop with
+  | error e =>
+    have hm := Mach.pop_stateGas_eq mach
+    rw [hp] at hm
+    exact hm
+  | ok a =>
+    have hm := Mach.pop_stateGas_eq mach
+    rw [hp] at hm
+    have ho := Mach.pushItem_stateGas_eq (f a.1) cost a.2
+    cases hpush : a.2.pushItem (f a.1) cost <;> rw [hpush] at ho
+    · simpa [hp, hpush, Footprint.StateGasEq] using ho.trans hm
+    · simpa [hp, hpush, Footprint.StateGasEq] using ho.trans hm
+
+theorem Mach.applyBinary_stateGas_eq (f : B256 → B256 → B256) (cost : Nat)
+    (mach : Mach) :
+    Footprint.StateGasEq mach (mach.applyBinary f cost) := by
+  unfold Mach.applyBinary
+  cases hp : mach.pop with
+  | error e =>
+    have hm := Mach.pop_stateGas_eq mach
+    rw [hp] at hm
+    exact hm
+  | ok a =>
+    have hm := Mach.pop_stateGas_eq mach
+    rw [hp] at hm
+    cases hp2 : a.2.pop with
+    | error e =>
+      have hm2 := Mach.pop_stateGas_eq a.2
+      rw [hp2] at hm2
+      simpa [hp, hp2, Footprint.StateGasEq] using hm2.trans hm
+    | ok b =>
+      have hm2 := Mach.pop_stateGas_eq a.2
+      rw [hp2] at hm2
+      have ho := Mach.pushItem_stateGas_eq (f a.1 b.1) cost b.2
+      cases hpush : b.2.pushItem (f a.1 b.1) cost <;> rw [hpush] at ho
+      · simpa [hp, hp2, hpush, Footprint.StateGasEq] using
+          ho.trans (hm2.trans hm)
+      · simpa [hp, hp2, hpush, Footprint.StateGasEq] using
+          ho.trans (hm2.trans hm)
+
+theorem Mach.applyTernary_stateGas_eq (f : B256 → B256 → B256 → B256)
+    (cost : Nat) (mach : Mach) :
+    Footprint.StateGasEq mach (mach.applyTernary f cost) := by
+  unfold Mach.applyTernary
+  cases hp : mach.pop with
+  | error e =>
+    have hm := Mach.pop_stateGas_eq mach
+    rw [hp] at hm
+    exact hm
+  | ok a =>
+    have hm := Mach.pop_stateGas_eq mach
+    rw [hp] at hm
+    cases hp2 : a.2.pop with
+    | error e =>
+      have hm2 := Mach.pop_stateGas_eq a.2
+      rw [hp2] at hm2
+      simpa [hp, hp2, Footprint.StateGasEq] using hm2.trans hm
+    | ok b =>
+      have hm2 := Mach.pop_stateGas_eq a.2
+      rw [hp2] at hm2
+      cases hp3 : b.2.pop with
+      | error e =>
+        have hm3 := Mach.pop_stateGas_eq b.2
+        rw [hp3] at hm3
+        simpa [hp, hp2, hp3, Footprint.StateGasEq] using
+          hm3.trans (hm2.trans hm)
+      | ok c =>
+        have hm3 := Mach.pop_stateGas_eq b.2
+        rw [hp3] at hm3
+        have ho := Mach.pushItem_stateGas_eq (f a.1 b.1 c.1) cost c.2
+        cases hpush : c.2.pushItem (f a.1 b.1 c.1) cost <;> rw [hpush] at ho
+        · simpa [hp, hp2, hp3, hpush, Footprint.StateGasEq] using
+            ho.trans (hm3.trans (hm2.trans hm))
+        · simpa [hp, hp2, hp3, hpush, Footprint.StateGasEq] using
+            ho.trans (hm3.trans (hm2.trans hm))
+
+theorem chargeGas_stateGasZero (cost : Nat) {devm : Devm}
+    (h : devm.StateGasZero) : (chargeGas cost devm).StateGasZero :=
+  liftMachExecution_stateGasZero h (Mach.chargeGas_stateGas_eq cost devm.mach)
+
+theorem Devm.push_stateGasZero (x : B256) {devm : Devm}
+    (h : devm.StateGasZero) : (devm.push x).StateGasZero :=
+  liftMachExecution_stateGasZero h (Mach.push_stateGas_eq x devm.mach)
+
+theorem pushItem_stateGasZero (x : B256) (cost : Nat) {devm : Devm}
+    (h : devm.StateGasZero) : (pushItem x cost devm).StateGasZero :=
+  liftMachExecution_stateGasZero h
+    (Mach.pushItem_stateGas_eq x cost devm.mach)
+
+theorem Devm.pop_stateGasZero {devm : Devm} (h : devm.StateGasZero) :
+    devm.pop.StateGasZeroOn (fun a => a.2.StateGasZero) :=
+  liftMach_stateGasZeroOn h (Mach.pop_stateGas_eq devm.mach)
+
+theorem Devm.popToNat_stateGasZero {devm : Devm} (h : devm.StateGasZero) :
+    devm.popToNat.StateGasZeroOn (fun a => a.2.StateGasZero) :=
+  liftMach_stateGasZeroOn h (Mach.popToNat_stateGas_eq devm.mach)
+
+theorem Devm.popToAdr_stateGasZero {devm : Devm} (h : devm.StateGasZero) :
+    devm.popToAdr.StateGasZeroOn (fun a => a.2.StateGasZero) :=
+  liftMach_stateGasZeroOn h (Mach.popToAdr_stateGas_eq devm.mach)
+
+theorem Devm.popN_stateGasZero {devm : Devm} (h : devm.StateGasZero) (n : Nat) :
+    (devm.popN n).StateGasZeroOn (fun a => a.2.StateGasZero) :=
+  liftMach_stateGasZeroOn h (Mach.popN_stateGas_eq devm.mach n)
+
+theorem applyUnary_stateGasZero (f : B256 → B256) (cost : Nat) {devm : Devm}
+    (h : devm.StateGasZero) : (applyUnary f cost devm).StateGasZero :=
+  liftMachExecution_stateGasZero h
+    (Mach.applyUnary_stateGas_eq f cost devm.mach)
+
+theorem applyBinary_stateGasZero (f : B256 → B256 → B256) (cost : Nat)
+    {devm : Devm} (h : devm.StateGasZero) :
+    (applyBinary f cost devm).StateGasZero :=
+  liftMachExecution_stateGasZero h
+    (Mach.applyBinary_stateGas_eq f cost devm.mach)
+
+theorem applyTernary_stateGasZero (f : B256 → B256 → B256 → B256) (cost : Nat)
+    {devm : Devm} (h : devm.StateGasZero) :
+    (applyTernary f cost devm).StateGasZero :=
+  liftMachExecution_stateGasZero h
+    (Mach.applyTernary_stateGas_eq f cost devm.mach)
+
+theorem Devm.memRead_stateGasZero {devm : Devm} (index size : Nat)
+    (h : devm.StateGasZero) :
+    (devm.memRead index size).2.StateGasZero := h
+
+theorem Devm.subBal_stateGasZero {devm devm' : Devm}
+    (h : devm.StateGasZero) {adr : Adr} {value : B256}
+    (hs : devm.subBal adr value = some devm') : devm'.StateGasZero := by
+  unfold Devm.subBal at hs
+  cases hw : devm.state.subBal adr value with
+  | none => rw [hw] at hs; contradiction
+  | some world =>
+    rw [hw] at hs
+    simp only [bind, Option.bind, Option.some.injEq] at hs
+    rw [← hs]
+    exact h
+
+theorem Devm.addBal_stateGasZero {devm : Devm} (h : devm.StateGasZero)
+    (adr : Adr) (value : B256) : (devm.addBal adr value).StateGasZero := h
+
+theorem Devm.setBal_stateGasZero {devm : Devm} (h : devm.StateGasZero)
+    (adr : Adr) (value : B256) : (devm.setBal adr value).StateGasZero := h
+
+theorem Devm.withRefundCounter_stateGasZero {devm : Devm}
+    (h : devm.StateGasZero) (refund : Int) :
+    (devm.withRefundCounter refund).StateGasZero := h
+
+theorem addAccountToDelete_stateGasZero {devm : Devm} (h : devm.StateGasZero)
+    (adr : Adr) : (addAccountToDelete devm adr).StateGasZero := h
+
+theorem Rinst.balanceCore_stateGas_eq (gas : GasSchedule) (world : World)
+    (mach : Mach) (view : Meta) :
+    Footprint.MachMetaStateGasEq mach (Rinst.balanceCore gas world mach view) := by
+  unfold Rinst.balanceCore
+  cases hp : mach.pop with
+  | error e =>
+    have hm := Mach.pop_stateGas_eq mach
+    rw [hp] at hm
+    simpa [hp, Footprint.StateGasEq, Footprint.MachMetaStateGasEq] using hm
+  | ok a =>
+    have hm := Mach.pop_stateGas_eq mach
+    rw [hp] at hm
+    cases hc : a.2.chargeGas (if a.1.toAdr ∈ view.accessedAddresses
+        then gasWarmAccess else gas.coldAccountAccess) with
+    | error e =>
+      have hc' := Mach.chargeGas_stateGas_eq
+        (if a.1.toAdr ∈ view.accessedAddresses
+          then gasWarmAccess else gas.coldAccountAccess) a.2
+      rw [hc] at hc'
+      simpa [hp, hc, Footprint.MachMetaStateGasEq] using hc'.trans hm
+    | ok b =>
+      have hc' := Mach.chargeGas_stateGas_eq
+        (if a.1.toAdr ∈ view.accessedAddresses
+          then gasWarmAccess else gas.coldAccountAccess) a.2
+      rw [hc] at hc'
+      have hpush := Mach.push_stateGas_eq (world.state.get a.1.toAdr).bal b.2
+      cases hq : b.2.push (world.state.get a.1.toAdr).bal <;> rw [hq] at hpush
+      · simpa [hp, hc, hq, Footprint.MachMetaStateGasEq] using
+          hpush.trans (hc'.trans hm)
+      · simpa [hp, hc, hq, Footprint.MachMetaStateGasEq] using
+          hpush.trans (hc'.trans hm)
+
+theorem Rinst.balance_stateGasZero (gas : GasSchedule) {devm : Devm}
+    (h : devm.StateGasZero) :
+    (liftMachMetaWorldExecution (Rinst.balanceCore gas) devm).StateGasZero :=
+  liftMachMetaExecution_stateGasZero h
+    (Rinst.balanceCore_stateGas_eq gas devm.world devm.mach devm.meta)
+
+/-- Every register instruction preserves a zero meter when the state-gas
+switch is absent.  The switch hypothesis rules out only the `SSTORE`
+Amsterdam sibling; all other register operations are meter-blind. -/
+theorem Rinst.run_stateGasZero {evm : Evm} (h : evm.dyna.StateGasZero)
+    (hrules : evm.sta.benvStat.rules.stateGas = none) (r : Rinst) :
+    (r.run evm).StateGasZero := by
+  unfold Rinst.run
+  cases r <;> simp only [Rinst.runCore]
+  case iszero | not => exact applyUnary_stateGasZero _ _ h
+  case add | mul | sub | div | sdiv | mod | smod | signextend | lt | gt | slt |
+      sgt | eq | and | or | xor | byte | shl | shr | sar =>
+    exact applyBinary_stateGasZero _ _ h
+  case addmod | mulmod => exact applyTernary_stateGasZero _ _ h
+  case address | basefee | blobbasefee | origin | caller | callvalue |
+      calldatasize | codesize | gasprice | returndatasize | selfbalance |
+      chainid | number | timestamp | gaslimit | prevrandao | coinbase | msize |
+      pc =>
+    exact pushItem_stateGasZero _ _ h
+  case balance => exact Rinst.balance_stateGasZero _ h
+  case mload =>
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) ?_
+    rintro ⟨start, d1⟩ h1
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h1) ?_
+    intro d2 h2
+    exact Devm.push_stateGasZero _ (Devm.memRead_stateGasZero start 32 h2)
+  case keccak256 =>
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) ?_
+    rintro ⟨start, d1⟩ h1
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h1) ?_
+    rintro ⟨size, d2⟩ h2
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h2) ?_
+    intro d3 h3
+    exact Devm.push_stateGasZero _ (Devm.memRead_stateGasZero start size h3)
+  case mcopy =>
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) ?_
+    rintro ⟨dest, d1⟩ h1
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h1) ?_
+    rintro ⟨src, d2⟩ h2
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h2) ?_
+    rintro ⟨len, d3⟩ h3
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h3) ?_
+    intro d4 h4
+    exact Except.stateGasZeroOn_ok (Devm.memRead_stateGasZero src len h4)
+  case log =>
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) ?_
+    rintro ⟨start, d1⟩ h1
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h1) ?_
+    rintro ⟨size, d2⟩ h2
+    refine Except.StateGasZeroOn.bind (Devm.popN_stateGasZero h2 _) ?_
+    rintro ⟨topics, d3⟩ h3
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h3) ?_
+    intro d4 h4
+    refine Except.StateGasZeroOn.bind (Except.stateGasZeroOn_assert h4) ?_
+    intro _ _
+    exact Except.stateGasZeroOn_ok (Devm.memRead_stateGasZero start size h4)
+  case exp =>
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero ha) fun b hb => ?_
+    exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ hb)
+      fun d hd => Devm.push_stateGasZero _ hd
+  case clz =>
+    split
+    · exact applyUnary_stateGasZero _ _ h
+    · exact Except.stateGasZeroOn_error h
+  case calldataload =>
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
+    exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ ha)
+      fun d hd => Devm.push_stateGasZero _ hd
+  case calldatacopy =>
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) fun a ha => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero ha) fun b hb => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hb) fun c hc => ?_
+    exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ hc)
+      fun _ hd => Except.stateGasZeroOn_ok hd
+  case codecopy =>
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) fun a ha => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero ha) fun b hb => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hb) fun c hc => ?_
+    exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ hc)
+      fun _ hd => Except.stateGasZeroOn_ok hd
+  case extcodesize =>
+    refine Except.StateGasZeroOn.bind (Devm.popToAdr_stateGasZero h) fun a ha => ?_
+    split <;>
+      exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ ha)
+        fun _ hd => Devm.push_stateGasZero _ hd
+  case extcodecopy =>
+    refine Except.StateGasZeroOn.bind (Devm.popToAdr_stateGasZero h) fun a ha => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero ha) fun b hb => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hb) fun c hc => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hc) fun e he => ?_
+    split <;>
+      exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ he)
+        fun _ hd => Except.stateGasZeroOn_ok hd
+  case returndatacopy =>
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) fun a ha => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero ha) fun b hb => ?_
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hb) fun c hc => ?_
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ hc) fun d hd => ?_
+    split
+    · exact Except.StateGasZeroOn.bind
+        (Except.stateGasZeroOn_error (P := fun _ => True) hd)
+        fun _ _ => Except.stateGasZeroOn_ok hd
+    · exact Except.stateGasZeroOn_ok hd
+  case extcodehash =>
+    refine Except.StateGasZeroOn.bind (Devm.popToAdr_stateGasZero h) fun a ha => ?_
+    split <;>
+      exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ ha)
+        fun _ hd => Devm.push_stateGasZero _ hd
+  case blockhash =>
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
+    exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ ha)
+      fun _ hd => Devm.push_stateGasZero _ hd
+  case blobhash =>
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
+    exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ ha)
+      fun _ hd => Devm.push_stateGasZero _ hd
+  case pop =>
+    exact Except.StateGasZeroOn.bind
+      (Except.StateGasZeroOn.map (Devm.pop_stateGasZero h) fun _ ha => ha)
+      fun _ hd => chargeGas_stateGasZero _ hd
+  case mstore =>
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) fun a ha => ?_
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero ha) fun b hb => ?_
+    exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ hb)
+      fun _ hd => Except.stateGasZeroOn_ok hd
+  case mstore8 =>
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) fun a ha => ?_
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero ha) fun b hb => ?_
+    exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ hb)
+      fun _ hd => Except.stateGasZeroOn_ok hd
+  case sload =>
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
+    split <;>
+      exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ ha)
+        fun _ hd => Devm.push_stateGasZero _ hd
+  case sstore =>
+    rw [hrules]
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero ha) fun b hb => ?_
+    refine Except.StateGasZeroOn.bind (Except.stateGasZeroOn_assert hb) fun _ _ => ?_
+    refine Except.StateGasZeroOn.bind
+      (P := fun p : Devm × Nat => p.1.StateGasZero) ?_ fun p hp => ?_
+    · exact Except.stateGasZeroOn_ok (by split <;> exact hb)
+    refine Except.StateGasZeroOn.bind
+      (P := fun _ => True) (Except.stateGasZeroOn_ok trivial) fun _ _ => ?_
+    refine Except.StateGasZeroOn.bind
+      (Except.stateGasZeroOn_ok (Devm.withRefundCounter_stateGasZero hp _))
+      fun d hd => ?_
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ hd) fun d' hd' => ?_
+    refine Except.StateGasZeroOn.bind (Except.stateGasZeroOn_assert hd') fun _ _ => ?_
+    exact Except.stateGasZeroOn_ok hd'
+  case tload =>
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
+    exact pushItem_stateGasZero _ _ ha
+  case tstore =>
+    rw [hrules]
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero ha) fun b hb => ?_
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ hb) fun d hd => ?_
+    refine Except.StateGasZeroOn.bind (Except.stateGasZeroOn_assert hd) fun _ _ => ?_
+    exact Except.stateGasZeroOn_ok hd
+  case gas =>
+    exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h)
+      fun _ hd => Devm.push_stateGasZero _ hd
+  case dup =>
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h) fun d hd => ?_
+    split
+    · exact Except.stateGasZeroOn_error hd
+    · exact Devm.push_stateGasZero _ hd
+  case swap =>
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h) fun d hd => ?_
+    split
+    · exact Except.stateGasZeroOn_error hd
+    · exact Except.stateGasZeroOn_ok hd
+
+theorem Jinst.run_stateGasZero {evm : Evm} (h : evm.dyna.StateGasZero)
+    (j : Jinst) :
+    (j.run evm).StateGasZeroOn (fun a => a.2.StateGasZero) := by
+  unfold Jinst.run
+  cases j <;> simp only [Jinst.runCore]
+  case jumpdest =>
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h) ?_
+    intro d hd
+    exact Except.stateGasZeroOn_ok hd
+  case jump =>
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) ?_
+    rintro ⟨dest, d⟩ hd
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ hd) ?_
+    intro d2 hd2
+    refine Except.StateGasZeroOn.bind (Except.stateGasZeroOn_assert hd2) ?_
+    intro _ _
+    exact Except.stateGasZeroOn_ok hd2
+  case jumpi =>
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) ?_
+    rintro ⟨dest, d⟩ hd
+    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero hd) ?_
+    rintro ⟨cond, d2⟩ hd2
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ hd2) ?_
+    intro d3 hd3
+    split
+    · exact Except.stateGasZeroOn_ok hd3
+    · refine Except.StateGasZeroOn.bind (Except.stateGasZeroOn_assert hd3) ?_
+      intro _ _
+      exact Except.stateGasZeroOn_ok hd3
+
+theorem Linst.run_stateGasZero {sevm : Sevm} {devm : Devm}
+    (h : devm.StateGasZero) (hrules : sevm.benvStat.rules.stateGas = none)
+    (l : Linst) : Execution.StateGasZero (l.run sevm devm) := by
+  cases l <;> simp only [Linst.run]
+  case stop => exact h
+  case revert =>
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) ?_
+    rintro ⟨start, d1⟩ h1
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h1) ?_
+    rintro ⟨size, d2⟩ h2
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h2) ?_
+    intro d3 h3
+    exact Except.stateGasZeroOn_error (Devm.memRead_stateGasZero _ _ h3)
+  case return_ =>
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) ?_
+    rintro ⟨start, d1⟩ h1
+    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h1) ?_
+    rintro ⟨size, d2⟩ h2
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h2) ?_
+    intro d3 h3
+    exact Except.stateGasZeroOn_ok (Devm.memRead_stateGasZero _ _ h3)
+  case selfdestruct =>
+    rw [hrules]
+    refine Except.StateGasZeroOn.bind (Devm.popToAdr_stateGasZero h) ?_
+    rintro ⟨donee, d1⟩ h1
+    refine Except.StateGasZeroOn.bind
+      (P := fun _ => True) (Except.stateGasZeroOn_ok trivial) ?_
+    intro donorBal _
+    refine Except.StateGasZeroOn.bind
+      (P := fun p : Devm × Nat => p.1.StateGasZero) ?_ ?_
+    · exact Except.stateGasZeroOn_ok (by split <;> exact h1)
+    rintro ⟨d2, cost⟩ h2
+    refine Except.StateGasZeroOn.bind
+      (P := fun _ => True) (Except.stateGasZeroOn_ok trivial) ?_
+    intro cost3 _
+    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h2) ?_
+    intro d3 h5
+    refine Except.StateGasZeroOn.bind (Except.stateGasZeroOn_assert h5) ?_
+    intro _ _
+    refine Except.StateGasZeroOn.bind (P := Devm.StateGasZero) ?_ ?_
+    · cases hs : d3.subBal sevm.currentTarget donorBal with
+      | none => exact Except.stateGasZeroOn_error h5
+      | some d4 => exact Except.stateGasZeroOn_ok (Devm.subBal_stateGasZero h5 hs)
+    · intro d4 h6
+      refine Except.StateGasZeroOn.bind
+        (Except.stateGasZeroOn_ok (Devm.addBal_stateGasZero h6 _ _)) ?_
+      intro d5 h7
+      split
+      · exact Except.stateGasZeroOn_ok
+          (addAccountToDelete_stateGasZero (Devm.setBal_stateGasZero h7 _ _) _)
+      · exact Except.stateGasZeroOn_ok h7
+
+@[simp] theorem Devm.stateGasZero_gasMeasure {devm : Devm}
+    (h : devm.StateGasZero) : devm.gasMeasure = devm.gasLeft :=
+  Devm.gasMeasure_of_stateGas_zero h
+
+
+/-- Every existing `Devm` update reaches `Mach` through `setMach` with a
+`with`-update that does not name `stateGas`, so the invariant is preserved by
+construction rather than by argument. These are the two spellings the
+interpreter actually uses. -/
+@[simp] theorem Devm.stateGasZero_setMach {devm : Devm} {mach : Mach} :
+    (devm.setMach mach).StateGasZero ↔ mach.stateGas = .zero := Iff.rfl
+
+@[simp] theorem Devm.stateGasZero_setMeta {devm : Devm} {view : Meta} :
+    (devm.setMeta view).StateGasZero ↔ devm.StateGasZero := Iff.rfl
+
+@[simp] theorem Devm.stateGasZero_setWorld {devm : Devm} {world : World} :
+    (devm.setWorld world).StateGasZero ↔ devm.StateGasZero := Iff.rfl
+
+theorem Devm.stateGasZero_withGasLeft {devm : Devm} {n : Nat}
+    (h : devm.StateGasZero) : (devm.withGasLeft n).StateGasZero := h
+
+/-- Prague's child incorporation cannot break it either: both siblings rebuild
+`Mach` from the parent's, leaving `stateGas` alone. -/
+theorem incorporateChildOnError_stateGasZero {parent child : Devm} {rd : Bytes}
+    (h : parent.StateGasZero) :
+    (incorporateChildOnError parent child rd).StateGasZero := h
+
+theorem incorporateChildOnSuccess_stateGasZero {parent child : Devm} {rd : Bytes}
+    (h : parent.StateGasZero) :
+    (incorporateChildOnSuccess parent child rd).StateGasZero := h
 
 def computeContractAddress (sender : Adr) (nonce : UInt64) : Adr :=
   let LA : Bytes :=
@@ -4158,6 +5678,118 @@ private def zeroStoredStor : Stor :=
 #guard (State.ofList [((0 : Adr), Acct.nil)]).isEmpty
 #guard ¬ nilStoredState.isEmpty
 
+/-! ### Site table: the account-access sites, at both metering shapes
+
+G3 of `jaune-amsterdam-metering-v1`. For each site the interpreter reads a
+repriced number at, one guard reproducing today's Prague number and one
+reproducing the pinned target's Amsterdam number, both through the same
+expression the arm evaluates. A repricing that reached only one of the two
+shapes fails here.
+
+`gasWarmAccess` is a global on both sides on purpose: no fork moves it, so the
+warm rows say "still 100" rather than restating a rule that did not change. -/
+
+private def guardAdr : Adr := 0x1000
+private def guardCold : AdrSet := .emptyWithCapacity
+private def guardWarm : AdrSet := guardCold.insert guardAdr
+
+private def pragueGas : GasSchedule := pragueRules.gas
+private def amsterdamGas : GasSchedule := amsterdamMeteringRules.gas
+
+-- `accessCost`, the shape `BALANCE`, `EXTCODE*` and the whole CALL family read.
+#guard pragueGas.accessCost guardAdr guardCold = 2600
+#guard amsterdamGas.accessCost guardAdr guardCold = 3000
+#guard pragueGas.accessCost guardAdr guardWarm = 100
+#guard amsterdamGas.accessCost guardAdr guardWarm = 100
+-- and the sibling is the old function at Prague, definitionally.
+#guard pragueGas.accessCost guardAdr guardCold = accessCost guardAdr guardCold
+#guard pragueGas.accessCost guardAdr guardWarm = accessCost guardAdr guardWarm
+
+-- `EXTCODESIZE` / `EXTCODECOPY`: the access half plus EIP-8038's code-reading
+-- surcharge, which is `0` at Prague and 100 at Amsterdam.
+#guard pragueGas.coldAccountAccess + pragueGas.codeReadSurcharge = 2600
+#guard amsterdamGas.coldAccountAccess + amsterdamGas.codeReadSurcharge = 3100
+#guard gasWarmAccess + pragueGas.codeReadSurcharge = 100
+#guard gasWarmAccess + amsterdamGas.codeReadSurcharge = 200
+
+-- `EXTCODEHASH` takes the repriced access and no surcharge.
+#guard pragueGas.coldAccountAccess = 2600
+#guard amsterdamGas.coldAccountAccess = 3000
+
+-- The value-bearing call surcharge and the `CREATE`/`CREATE2` base, the other
+-- two numbers goal A left on the globals for this goal to route.
+#guard pragueGas.callValue = 9000
+#guard amsterdamGas.callValue = 11300
+#guard pragueGas.createAccess = 32000
+#guard amsterdamGas.createAccess = 12000
+#guard pragueGas.callValue = gasCallValue
+#guard pragueGas.createAccess = gasCreate
+
+-- The stipend a value-bearing call hands its child is covered by the surcharge
+-- at both shapes. This is the inequality the Sufficiency family needs, checked
+-- as data here so a repricing that broke it fails before any proof does.
+#guard gCallStipend < pragueGas.callValue
+#guard gCallStipend < amsterdamGas.callValue
+
+/-! ### Site table: `SSTORE` over the (original, current, new) lattice
+
+The arm's two shapes charge different *terms*, not just different numbers, so
+the rows below name the terms. Prague's are the globals it has always used;
+Amsterdam's come from the two records and are computed by the sibling
+definitions the arm calls, so a guard here is a guard on the code path.
+
+`amsterdamState` is the vehicle's state-gas record; a vehicle without one would
+not be a metering vehicle, and the `Option` match is discharged by `rfl`. -/
+
+private def amsterdamState : StateGasRules := amsterdamStateGasRules
+
+-- Prague: the whole cost of a first-time set of a zero slot, cold, is the
+-- cold-load charge plus `gasStorageSet`; an update to a non-zero slot is the
+-- cold-load charge plus the difference; a change to an already-warm slot that
+-- is not the first this transaction costs the warm access alone.
+#guard gasColdSload + gasStorageSet = 22100
+#guard gasColdSload + (gasStorageUpdate - gasColdSload) = 5000
+#guard gasWarmAccess = 100
+
+-- Amsterdam: access plus `STORAGE_WRITE` on the slot's first change, and
+-- nothing but the access otherwise. EIP-8038 re-derives the lattice above as
+-- exactly these two terms.
+#guard sstoreAmsterdamGasCost amsterdamState 1 0 0 true = 2100 + 10000
+#guard sstoreAmsterdamGasCost amsterdamState 1 0 0 false = 100 + 10000
+#guard sstoreAmsterdamGasCost amsterdamState 2 1 1 true = 2100 + 10000
+#guard sstoreAmsterdamGasCost amsterdamState 2 1 1 false = 100 + 10000
+-- current ≠ original: the write was already paid for this transaction.
+#guard sstoreAmsterdamGasCost amsterdamState 3 1 2 true = 2100
+#guard sstoreAmsterdamGasCost amsterdamState 3 1 2 false = 100
+-- new = current: no change at all, so no write either.
+#guard sstoreAmsterdamGasCost amsterdamState 1 1 1 true = 2100
+#guard sstoreAmsterdamGasCost amsterdamState 1 1 1 false = 100
+
+-- The state dimension: a first-time set of a *zero* slot creates state and
+-- pays `STORAGE_SET`; nothing else does.
+#guard sstoreAmsterdamStateGas amsterdamState 1 0 0 = 97920
+#guard sstoreAmsterdamStateGas amsterdamState 2 1 1 = 0
+#guard sstoreAmsterdamStateGas amsterdamState 3 1 2 = 0
+#guard sstoreAmsterdamStateGas amsterdamState 0 0 0 = 0
+-- and the same slot cleared again in the same transaction refills it.
+#guard sstoreAmsterdamStateRefund amsterdamState 0 0 1 = 97920
+#guard sstoreAmsterdamStateRefund amsterdamState 0 1 1 = 0
+#guard sstoreAmsterdamStateRefund amsterdamState 1 0 0 = 0
+
+-- Refunds. The clear refund is the one number both shapes take from
+-- `GasSchedule`, at each fork's own value; the restore refund is
+-- `gasStorageSet - gasWarmAccess` at Prague and `STORAGE_WRITE` at Amsterdam.
+#guard sstoreNewRefundCounter pragueGas 0 1 1 0 = 4800
+#guard sstoreAmsterdamRefundCounter amsterdamGas amsterdamState 0 1 1 0 = 11616
+#guard sstoreNewRefundCounter pragueGas 1 1 0 0
+  = -4800 + (5000 - 2100 - 100)
+#guard sstoreAmsterdamRefundCounter amsterdamGas amsterdamState 1 1 0 0
+  = -11616 + 10000
+#guard sstoreNewRefundCounter pragueGas 0 0 1 0 = 20000 - 100
+#guard sstoreAmsterdamRefundCounter amsterdamGas amsterdamState 0 0 1 0 = 10000
+#guard sstoreNewRefundCounter pragueGas 1 1 1 0 = 0
+#guard sstoreAmsterdamRefundCounter amsterdamGas amsterdamState 1 1 1 0 = 0
+
 --------------- CANONICALITY THROUGH EXECUTION (P0.4, STEP 4) ---------------
 
 -- The state-helper half of the preservation corpus: result-carrier predicates
@@ -4349,6 +5981,14 @@ theorem Devm.addLog_canonical {devm : Devm} {log : Log}
     (h : devm.Canonical) : (devm.addLog log).Canonical :=
   liftMachMetaPure_canonical h
 
+theorem Devm.emitTransferLog_canonical {devm : Devm} {sender recipient : Adr}
+    {amount : B256} (h : devm.Canonical) :
+    (devm.emitTransferLog sender recipient amount).Canonical := by
+  unfold Devm.emitTransferLog
+  split
+  · exact h
+  · exact Devm.addLog_canonical h
+
 theorem addAccessedAddress_canonical {devm : Devm} {a : Adr}
     (h : devm.Canonical) : (addAccessedAddress devm a).Canonical :=
   h.of_world_eq rfl
@@ -4484,6 +6124,17 @@ theorem incorporateChildOnError_canonical {parent child : Devm}
 theorem incorporateChildOnSuccess_canonical {parent child : Devm}
     (hc : child.Canonical) (rd : Bytes) :
     (incorporateChildOnSuccess parent child rd).Canonical :=
+  ⟨hc.1, hc.2⟩
+
+/-- The Amsterdam siblings take the child's world wholesale too. -/
+theorem incorporateChildAmsterdamOnError_canonical {parent child : Devm}
+    (hc : child.Canonical) (rd : Bytes) :
+    (incorporateChildAmsterdamOnError parent child rd).Canonical :=
+  ⟨hc.1, hc.2⟩
+
+theorem incorporateChildAmsterdamOnSuccess_canonical {parent child : Devm}
+    (hc : child.Canonical) (rd : Bytes) :
+    (incorporateChildAmsterdamOnSuccess parent child rd).Canonical :=
   ⟨hc.1, hc.2⟩
 
 theorem liftToExecution_canonical {devm : Devm} {r}
@@ -4665,27 +6316,48 @@ theorem Rinst.runCore_canonical (pc : Nat) {devm : Devm} (sevm : Sevm)
         (liftMachExecution_canonical (Devm.Canonical.of_world_eq ha rfl))
         fun d hd => liftMachExecution_canonical hd
   case sstore =>
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
-    refine Except.CanonicalOn.bind (Except.canonicalOn_assert hb) fun _ _ => ?_
-    split <;>
-      (refine Except.canonicalOn_bind_ok ?_
-       refine Except.canonicalOn_bind_ok ?_
-       refine Except.canonicalOn_bind_ok ?_
-       refine Except.CanonicalOn.bind
-         (liftMachExecution_canonical (Devm.Canonical.of_world_eq hb rfl))
-         fun d hd => ?_
-       refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
-       exact Devm.Canonical.setStorVal hd _ _ _)
+    split
+    · -- Prague: the body it has always been.
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+      refine Except.CanonicalOn.bind (Except.canonicalOn_assert hb) fun _ _ => ?_
+      split <;>
+        (refine Except.canonicalOn_bind_ok ?_
+         refine Except.canonicalOn_bind_ok ?_
+         refine Except.canonicalOn_bind_ok ?_
+         refine Except.CanonicalOn.bind
+           (liftMachExecution_canonical (Devm.Canonical.of_world_eq hb rfl))
+           fun d hd => ?_
+         refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
+         exact Devm.Canonical.setStorVal hd _ _ _)
+    · -- Amsterdam: the static check first, the pops, the pre-check, then the
+      -- two charges, neither of which touches the world.
+      refine Except.CanonicalOn.bind (assertDynamic_canonicalOn h) fun _ _ => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+      refine Except.CanonicalOn.bind (Except.canonicalOn_assert hb) fun _ _ => ?_
+      split <;>
+        (refine Except.CanonicalOn.bind
+           (liftMachExecution_canonical (Devm.Canonical.of_world_eq hb rfl))
+           fun d hd => ?_
+         refine Except.CanonicalOn.bind (liftMachExecution_canonical hd)
+           fun d' hd' => ?_
+         exact Devm.Canonical.setStorVal hd' _ _ _)
   case tload =>
     refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
     exact liftMachExecution_canonical ha
   case tstore =>
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
-    refine Except.CanonicalOn.bind (liftMachExecution_canonical hb) fun d hd => ?_
-    refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
-    exact Devm.Canonical.setTransVal hd _ _ _
+    split
+    · refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+      refine Except.CanonicalOn.bind (liftMachExecution_canonical hb) fun d hd => ?_
+      refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
+      exact Devm.Canonical.setTransVal hd _ _ _
+    · refine Except.CanonicalOn.bind (assertDynamic_canonicalOn h) fun _ _ => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+      refine Except.CanonicalOn.bind (liftMachExecution_canonical hb) fun d hd => ?_
+      exact Devm.Canonical.setTransVal hd _ _ _
   case gas =>
     exact Except.CanonicalOn.bind (liftMachExecution_canonical h)
       fun d hd => liftMachExecution_canonical hd
@@ -4760,23 +6432,44 @@ theorem Linst.run_canonical {sevm : Sevm} {devm : Devm}
     rcases hread : d.memRead a.1 b.1 with ⟨out, d'⟩
     exact (Devm.memRead_eq_canonical hd hread).of_world_eq rfl
   case selfdestruct =>
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
-    refine Except.canonicalOn_bind_ok ?_
-    refine Except.canonicalOn_bind_ok ?_
-    split <;>
-      (refine Except.canonicalOn_bind_ok ?_
-       refine Except.CanonicalOn.bind
-         (liftMachExecution_canonical (Devm.Canonical.of_world_eq ha rfl))
-         fun d hd => ?_
-       refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
-       refine Except.CanonicalOn.bind (P := Devm.Canonical) ?_ fun d' hd' => ?_
-       · cases hs : d.subBal sevm.currentTarget (a.2.getAcct sevm.currentTarget).bal with
-         | none => exact hd
-         | some d1 => exact Devm.Canonical.subBal hd hs
-       · refine Except.canonicalOn_bind_ok ?_
-         split
-         · exact Devm.Canonical.of_world_eq
-             (Devm.Canonical.setBal (Devm.Canonical.addBal hd' a.1 _) _ 0) rfl
-         · exact Devm.Canonical.addBal hd' a.1 _)
+    split
+    · -- Prague: the body it has always been.
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+      refine Except.canonicalOn_bind_ok ?_
+      refine Except.canonicalOn_bind_ok ?_
+      split <;>
+        (refine Except.canonicalOn_bind_ok ?_
+         refine Except.CanonicalOn.bind
+           (liftMachExecution_canonical (Devm.Canonical.of_world_eq ha rfl))
+           fun d hd => ?_
+         refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
+         refine Except.CanonicalOn.bind (P := Devm.Canonical) ?_ fun d' hd' => ?_
+         · cases hs : d.subBal sevm.currentTarget (a.2.getAcct sevm.currentTarget).bal with
+           | none => exact hd
+           | some d1 => exact Devm.Canonical.subBal hd hs
+         · refine Except.canonicalOn_bind_ok ?_
+           split
+           · exact Devm.Canonical.of_world_eq
+               (Devm.Canonical.setBal (Devm.Canonical.addBal hd' a.1 _) _ 0) rfl
+           · exact Devm.Canonical.addBal hd' a.1 _)
+    · -- Amsterdam: the static check, the pop, the pre-check, the two charges
+      -- (neither touches the world), the sweep, the log, the schedule.
+      refine Except.CanonicalOn.bind (assertDynamic_canonicalOn h) fun _ _ => ?_
+      refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+      refine Except.CanonicalOn.bind (Except.canonicalOn_assert ha) fun _ _ => ?_
+      split <;>
+        (refine Except.CanonicalOn.bind
+           (liftMachExecution_canonical (Devm.Canonical.of_world_eq ha rfl))
+           fun d hd => ?_
+         refine Except.CanonicalOn.bind (liftMachExecution_canonical hd)
+           fun d' hd' => ?_
+         refine Except.CanonicalOn.bind (P := Devm.Canonical) ?_ fun d2 hd2 => ?_
+         · cases hs : d'.subBal sevm.currentTarget _ with
+           | none => exact hd'
+           | some d1 => exact Devm.Canonical.subBal hd' hs
+         · split
+           · exact addAccountToDelete_canonical
+               (Devm.emitTransferLog_canonical (Devm.Canonical.addBal hd2 a.1 _))
+           · exact Devm.emitTransferLog_canonical (Devm.Canonical.addBal hd2 a.1 _))
 
 end Jaune

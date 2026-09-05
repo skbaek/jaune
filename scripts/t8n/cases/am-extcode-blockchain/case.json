@@ -1,0 +1,16 @@
+{
+  "description": "EXTCODESIZE reads address 0x700 cold then warm; EXTCODECOPY independently reads address 0x701 cold then warm, pinning both Amsterdam code-read surcharge branches.",
+  "scenario": "am-extcode",
+  "fork": "Amsterdam",
+  "chainid": 1,
+  "reward": -1,
+  "mode": "blockchain",
+  "allocIncludes": [
+    "../../amsterdam-system-alloc.json"
+  ],
+  "covers": [
+    "extcodesize-cold-warm",
+    "extcodecopy-cold-warm",
+    "code-read-surcharge"
+  ]
+}

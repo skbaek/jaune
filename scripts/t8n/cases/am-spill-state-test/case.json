@@ -1,0 +1,16 @@
+{
+  "description": "A zero-reservoir transaction spills a STORAGE_SET state-gas charge into gasLeft, then clearing the slot repays that spill in LIFO order; STORAGE_WRITE remains the separate execution-gas charge.",
+  "scenario": "am-spill",
+  "fork": "Amsterdam",
+  "chainid": 1,
+  "reward": -1,
+  "mode": "state-test",
+  "allocIncludes": [
+    "../../amsterdam-system-alloc.json"
+  ],
+  "covers": [
+    "state-gas-spill",
+    "storage-credit",
+    "lifo-repay"
+  ]
+}

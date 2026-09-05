@@ -83,6 +83,18 @@ def _opt_int(obj, name):
     return None if value is None else int(value)
 
 
+def _require_attr(obj, name, where):
+    """Read an attribute that must exist, without converting it to an int.
+
+    Needed where the value is a structured type rather than a number --
+    upstream's `StateGasPerByte` rate, whose own field carries the number.
+    """
+    value = getattr(obj, name, None)
+    if value is None:
+        raise ProbeError(f"{where} has no {name}")
+    return value
+
+
 def _require_int(obj, name, where):
     value = getattr(obj, name, None)
     if value is None:
@@ -190,6 +202,96 @@ def _in_source_order(node):
     return sorted(nodes, key=lambda n: (n.lineno, n.col_offset))
 
 
+
+def _state_gas(fork: str) -> "list[tuple[str, dict]]":
+    """Extract EIP-8037's state-gas dimension, or nulls for a fork without one.
+
+    A fork that meters in one dimension has no `StateGasCosts` class at all, so
+    every row is `null` and `stateGas.present` is `False` -- which is exactly
+    what `ForkRules.stateGas = none` prints. The rows are emitted for every
+    fork rather than only for the forks that have them, so the extraction's key
+    set does not depend on the fork and the gate's key-set check stays a single
+    comparison.
+
+    The ten numbers live in three upstream places, and each row records which
+    one answered: the state-byte counts on `StateGasCosts`, the two repriced
+    execution charges and the transaction value cost on `GasCosts`, EIP-7981's
+    two floor token counts as module constants of `transactions`, and the
+    system-transaction reservoir as a module constant of `fork`. The three
+    derived costs -- STORAGE_SET, NEW_ACCOUNT, AUTH_BASE -- are deliberately
+    *not* extracted: they are products of rows already here, and Jaune computes
+    them the same way, so extracting them would check an arithmetic identity
+    twice instead of checking its inputs once.
+    """
+    gas = _mod(fork, "vm.gas")
+    present = hasattr(gas, "StateGasCosts")
+
+    def row(path, value, source):
+        return (path, {"value": value, "source": source})
+
+    if not present:
+        absent = "the fork has no vm.gas.StateGasCosts: it meters in one dimension"
+        paths = [
+            "costPerStateByte", "stateBytesPerNewAccount",
+            "stateBytesPerStorageSet", "stateBytesPerAuthBase", "storageWrite",
+            "accountWrite", "txValueCost", "accessListAddressFloorTokens",
+            "accessListStorageKeyFloorTokens", "systemMaxSstoresPerCall",
+        ]
+        return [row("stateGas.present", False,
+                    "vm.gas.StateGasCosts is absent (EIP-8037 not active)")] + [
+            row(f"stateGas.{name}", None, absent) for name in paths
+        ]
+
+    costs = gas.StateGasCosts
+    gas_costs = gas.GasCosts
+    transactions = _mod(fork, "transactions")
+    fork_module = _mod(fork, "fork")
+    return [
+        row("stateGas.present", True,
+            "vm.gas.StateGasCosts is defined (EIP-8037)"),
+        # `COST_PER_STATE_BYTE` is a `StateGasPerByte`, deliberately not a
+        # `Uint`: upstream models it as a *rate*, so that adding it to a gas
+        # amount is a type error and only multiplying it by a byte count is
+        # allowed. Its single `rate` field is the number, so that is the
+        # attribute this reads, and the source string says so.
+        row("stateGas.costPerStateByte",
+            _require_int(
+                _require_attr(costs, "COST_PER_STATE_BYTE",
+                              f"{fork}.vm.gas.StateGasCosts"),
+                "rate", f"{fork}.vm.gas.StateGasCosts.COST_PER_STATE_BYTE"),
+            "vm.gas.StateGasCosts.COST_PER_STATE_BYTE.rate"),
+        row("stateGas.stateBytesPerNewAccount",
+            _require_int(costs, "STATE_BYTES_PER_NEW_ACCOUNT", f"{fork}.vm.gas.StateGasCosts"),
+            "vm.gas.StateGasCosts.STATE_BYTES_PER_NEW_ACCOUNT"),
+        row("stateGas.stateBytesPerStorageSet",
+            _require_int(costs, "STATE_BYTES_PER_STORAGE_SET", f"{fork}.vm.gas.StateGasCosts"),
+            "vm.gas.StateGasCosts.STATE_BYTES_PER_STORAGE_SET"),
+        row("stateGas.stateBytesPerAuthBase",
+            _require_int(costs, "STATE_BYTES_PER_AUTH_BASE", f"{fork}.vm.gas.StateGasCosts"),
+            "vm.gas.StateGasCosts.STATE_BYTES_PER_AUTH_BASE"),
+        row("stateGas.storageWrite",
+            _require_int(gas_costs, "STORAGE_WRITE", f"{fork}.vm.gas.GasCosts"),
+            "vm.gas.GasCosts.STORAGE_WRITE"),
+        row("stateGas.accountWrite",
+            _require_int(gas_costs, "ACCOUNT_WRITE", f"{fork}.vm.gas.GasCosts"),
+            "vm.gas.GasCosts.ACCOUNT_WRITE"),
+        row("stateGas.txValueCost",
+            _require_int(gas_costs, "TX_VALUE_COST", f"{fork}.vm.gas.GasCosts"),
+            "vm.gas.GasCosts.TX_VALUE_COST"),
+        row("stateGas.accessListAddressFloorTokens",
+            _require_int(transactions, "ACCESS_LIST_ADDRESS_FLOOR_TOKENS",
+                         f"{fork}.transactions"),
+            "transactions.ACCESS_LIST_ADDRESS_FLOOR_TOKENS"),
+        row("stateGas.accessListStorageKeyFloorTokens",
+            _require_int(transactions, "ACCESS_LIST_STORAGE_KEY_FLOOR_TOKENS",
+                         f"{fork}.transactions"),
+            "transactions.ACCESS_LIST_STORAGE_KEY_FLOOR_TOKENS"),
+        row("stateGas.systemMaxSstoresPerCall",
+            _require_int(fork_module, "SYSTEM_MAX_SSTORES_PER_CALL", f"{fork}.fork"),
+            "fork.SYSTEM_MAX_SSTORES_PER_CALL"),
+    ]
+
+
 def extract(label: str, fork: str) -> dict:
     gas = _mod(fork, "vm.gas")
     costs = gas.GasCosts
@@ -284,7 +386,7 @@ def extract(label: str, fork: str) -> dict:
         field("header.slotNumber", "slot_number" in header_fields,
               "blocks.Header has a slot_number field (EIP-7843)"),
         field("requests", requests, requests_source),
-    ]
+    ] + _state_gas(fork)
     seen = [path for path, _ in entries]
     if len(seen) != len(set(seen)):
         raise ProbeError(f"{label}: duplicate field path in the extraction table")

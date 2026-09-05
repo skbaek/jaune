@@ -1,0 +1,16 @@
+{
+  "description": "A parent sets its slot and a DELEGATECALL child clears it in the parent context, exercising repay-on-merge across frames.",
+  "scenario": "am-cross-frame-refund",
+  "fork": "Amsterdam",
+  "chainid": 1,
+  "reward": -1,
+  "mode": "state-test",
+  "allocIncludes": [
+    "../../amsterdam-system-alloc.json"
+  ],
+  "covers": [
+    "cross-frame-refund",
+    "delegatecall",
+    "repay-on-merge"
+  ]
+}

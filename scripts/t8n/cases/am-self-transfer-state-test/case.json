@@ -1,0 +1,15 @@
+{
+  "description": "Sender-to-self value transfer: the Amsterdam 12,000 intrinsic path and no transfer log.",
+  "scenario": "am-self-transfer",
+  "fork": "Amsterdam",
+  "chainid": 1,
+  "reward": -1,
+  "mode": "state-test",
+  "allocIncludes": [
+    "../../amsterdam-system-alloc.json"
+  ],
+  "covers": [
+    "intrinsic-self-transfer",
+    "no-self-transfer-log"
+  ]
+}

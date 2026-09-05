@@ -21,8 +21,11 @@
 # Nothing else pinned them. The conformance tiers only ever run well-formed
 # corpus files, `scripts/golden-messages.txt` covers block-rejection reasons
 # observed *inside* a run, and the Python tests under `scripts/tests/` cover the
-# bootstrap and generator scripts. So all four messages were verified by hand
-# once and could rot silently. This gate is the falsifier: it builds synthetic
+# bootstrap and generator scripts. The Amsterdam transaction-metering lane also
+# needs a small handshake boundary here: `t8n --forks` must remain the runnable
+# block lane, `--info` must disclose Amsterdam and its omissions, and an
+# Amsterdam invocation must pass rule resolution before it reaches its inputs.
+# So all of these surfaces are kept by this falsifier: it builds synthetic
 # fixtures in a temp dir, runs the built binary against each, and asserts both
 # the nonzero exit and a substring of the message.
 #
@@ -276,6 +279,69 @@ for variant in declared undeclared; do
   fi
 done
 
+# 8. The rule-data printers. `--rules` answers for a fork this build runs and
+#    refuses one it does not, which is what makes the constants gate's fork
+#    list and `Fork.supported` the same list. `--rules-partial` is the mirror
+#    image: it answers only for a fork carrying a metering vehicle, so a
+#    partial record can never be mistaken for a complete one.
+CHECKS=$((CHECKS + 1))
+run_jaune --rules Prague
+if [ "$RUN_RC" -ne 0 ] || ! has '"gas.txBase": 21000' "$RUN_OUT"; then
+  fail "--rules Prague: expected the Prague record on stdout"
+  detail "rc=$RUN_RC stdout: ${RUN_OUT:-<empty stdout>}"
+fi
+expect_refusal "--rules on an unimplemented fork" \
+  "UnsupportedForkError : fork Amsterdam is a declared protocol fork" \
+  --rules Amsterdam
+expect_refusal "--rules-partial on an implemented fork" \
+  "has no metering vehicle" \
+  --rules-partial Prague
+CHECKS=$((CHECKS + 1))
+run_jaune --rules-partial Amsterdam
+if [ "$RUN_RC" -ne 0 ] \
+  || ! has '"stateGas.costPerStateByte": 1530' "$RUN_OUT" \
+  || ! has '"gas.txBase": 12000' "$RUN_OUT"; then
+  fail "--rules-partial Amsterdam: expected the metering vehicle's rows"
+  detail "rc=$RUN_RC stdout: ${RUN_OUT:-<empty stdout>}"
+fi
+CHECKS=$((CHECKS + 1))
+if has "code.maxCodeSize" "$RUN_OUT" || has "header.blockAccessListHash" "$RUN_OUT"; then
+  fail "--rules-partial Amsterdam: printed a field the vehicle does not claim"
+  detail "stdout: $RUN_OUT"
+fi
+
+# 9. The t8n metering vehicle is executable without making Amsterdam a block-
+#    validation claim. `--forks` is therefore unchanged, while `--info` names
+#    the separate lane and its exact omissions.
+CHECKS=$((CHECKS + 1))
+run_jaune t8n --forks
+if [ "$RUN_RC" -ne 0 ] || [ "$RUN_OUT" != "Prague Osaka BPO1 BPO2" ]; then
+  fail "t8n --forks: expected the unchanged runnable block lane"
+  detail "rc=$RUN_RC stdout: ${RUN_OUT:-<empty stdout>}"
+fi
+
+CHECKS=$((CHECKS + 1))
+run_jaune t8n --info
+if [ "$RUN_RC" -ne 0 ] \
+  || ! has "t8n metering lane: Amsterdam" "$RUN_OUT"; then
+  fail "t8n --info: expected the Amsterdam transaction-metering lane"
+  detail "rc=$RUN_RC stdout: ${RUN_OUT:-<empty stdout>}"
+fi
+
+CHECKS=$((CHECKS + 1))
+if ! has "omits EIP-7928/8282/7843/8024/7954 block semantics" "$RUN_OUT"; then
+  fail "t8n --info: expected the metering lane's block-semantics omission"
+  detail "stdout: ${RUN_OUT:-<empty stdout>}"
+fi
+
+CHECKS=$((CHECKS + 1))
+run_jaune t8n --state.fork Amsterdam \
+  --input.alloc "$TMP/absent-amsterdam-alloc.json"
+if [ "$RUN_RC" -ne 1 ] || has "UnsupportedForkError" "$RUN_ERR"; then
+  fail "t8n Amsterdam: expected rule resolution before the missing input"
+  detail "rc=$RUN_RC stderr: ${RUN_ERR:-<empty stderr>}"
+fi
+
 # ----------------------------------------------------------------- verdict --
 
 if [ "$FAILS" -ne 0 ]; then
@@ -283,5 +349,5 @@ if [ "$FAILS" -ne 0 ]; then
   exit 1
 fi
 
-echo "OK — cli: $CHECKS checks; the four fixture-file refusals and the unimplemented-fork refusal hold, and an undeclared format is still passed through"
+echo "OK — cli: $CHECKS checks; fixture refusals, rule-data printers, and the distinct Amsterdam t8n metering handshake hold"
 exit 0

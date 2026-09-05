@@ -1,0 +1,17 @@
+{
+  "description": "Creation transaction into an empty address, covering CREATE_ACCESS, initcode, NEW_ACCOUNT, and code-deposit state gas.",
+  "scenario": "am-create",
+  "fork": "Amsterdam",
+  "chainid": 1,
+  "reward": -1,
+  "mode": "state-test",
+  "allocIncludes": [
+    "../../amsterdam-system-alloc.json"
+  ],
+  "covers": [
+    "create-access",
+    "new-account",
+    "initcode",
+    "code-deposit"
+  ]
+}

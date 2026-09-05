@@ -216,6 +216,71 @@ structure GasSchedule : Type where
   codeReadSurcharge : Nat
 deriving DecidableEq, Repr
 
+/-- EIP-8037's state-gas dimension, and the numbers only the Amsterdam metering
+shape reads.
+
+`ForkRules.stateGas` carries this record under an `Option`, and that `Option` is
+the whole metering switch: `none` selects today's single-dimension formulas
+unchanged, `some r` selects the Amsterdam shape. EIP-2780, 7778, 8037 and 8038
+are co-designed and not separately deployable -- 2780's decomposition assumes
+8037's state gas for creation, and 8038's `STORAGE_WRITE` assumes `STORAGE_SET`
+moved to state gas -- so one switch is the honest shape for all four.
+
+The division of labour against `GasSchedule` is exact: a number Amsterdam moves
+inside a formula *both* forks compute lives there, because one field can serve
+both without a branch. A number that exists only under the Amsterdam shape
+lives here, because Prague has nowhere to put it. Nothing Amsterdam-only
+becomes a global.
+
+The three derived state costs are definitions over these fields rather than
+second literals, so `NEW_ACCOUNT`, `STORAGE_SET` and `AUTH_BASE` cannot drift
+from the byte counts they are products of. The Amsterdam values in the comments
+are the pinned upstream commit's and are checked mechanically by
+`scripts/check-fork-constants.sh`. -/
+structure StateGasRules : Type where
+  /-- `COST_PER_STATE_BYTE`: gas per byte of new state. Amsterdam 1530. -/
+  costPerStateByte : Nat
+  /-- `STATE_BYTES_PER_NEW_ACCOUNT`. Amsterdam 120, so `NEW_ACCOUNT` is
+  183,600. -/
+  stateBytesPerNewAccount : Nat
+  /-- `STATE_BYTES_PER_STORAGE_SET`. Amsterdam 64, so `STORAGE_SET` is
+  97,920. -/
+  stateBytesPerStorageSet : Nat
+  /-- `STATE_BYTES_PER_AUTH_BASE`. Amsterdam 23, so `AUTH_BASE` is 35,190. -/
+  stateBytesPerAuthBase : Nat
+  /-- `STORAGE_WRITE` (EIP-8038), the execution-gas charge a slot's first
+  change pays. Amsterdam 10000. -/
+  storageWrite : Nat
+  /-- `ACCOUNT_WRITE` (EIP-8038). Amsterdam 9000. -/
+  accountWrite : Nat
+  /-- `TX_VALUE_COST` (EIP-2780), the intrinsic charge a value-bearing
+  non-self-transfer pays. Amsterdam 6000. -/
+  txValueCost : Nat
+  /-- `ACCESS_LIST_ADDRESS_FLOOR_TOKENS` (EIP-7981). Amsterdam 80. -/
+  accessListAddressFloorTokens : Nat
+  /-- `ACCESS_LIST_STORAGE_KEY_FLOOR_TOKENS` (EIP-7981). Amsterdam 128. -/
+  accessListStorageKeyFloorTokens : Nat
+  /-- `SYSTEM_MAX_SSTORES_PER_CALL`, the reservoir a system transaction is
+  granted, in `STORAGE_SET` units. Amsterdam 16. -/
+  systemMaxSstoresPerCall : Nat
+deriving DecidableEq, Repr
+
+/-- `STORAGE_SET`: the state gas a first-time set of a zero slot pays. -/
+def StateGasRules.storageSet (r : StateGasRules) : Nat :=
+  r.stateBytesPerStorageSet * r.costPerStateByte
+
+/-- `NEW_ACCOUNT`: the state gas creating an account pays. -/
+def StateGasRules.newAccount (r : StateGasRules) : Nat :=
+  r.stateBytesPerNewAccount * r.costPerStateByte
+
+/-- `AUTH_BASE`: the state gas one net-new EIP-7702 delegation pays. -/
+def StateGasRules.authBase (r : StateGasRules) : Nat :=
+  r.stateBytesPerAuthBase * r.costPerStateByte
+
+/-- The state gas a system transaction's reservoir is granted. -/
+def StateGasRules.systemReservoir (r : StateGasRules) : Nat :=
+  r.systemMaxSstoresPerCall * r.storageSet
+
 /-- Which fork-dependent header fields a block must carry.
 
 Two booleans rather than one, because the two EIPs are separate: EIP-7928
@@ -252,6 +317,15 @@ structure ForkRules : Type where
   op : OpcodeRules
   /-- The gas numbers a supported fork moves inside a shared formula. -/
   gas : GasSchedule
+  /-- EIP-8037's state-gas dimension, or `none` for a fork that meters in one
+  dimension.
+
+  This `Option` is the metering switch. Under `none` the interpreter runs the
+  formulas it has always run, textually; under `some r` it runs Amsterdam's
+  two-reservoir shape with `r`'s numbers. Prague, Osaka, BPO1 and BPO2 all
+  carry `none`, so nothing the supported chain does can observe that the field
+  exists. -/
+  stateGas : Option StateGasRules
   /-- Which fork-dependent header fields a block must carry. -/
   header : HeaderRules
   /-- The request-producing system contracts, as `(type byte, address)` pairs,
@@ -304,19 +378,59 @@ def BlobSchedule.Valid (b : BlobSchedule) : Prop :=
 instance {b : BlobSchedule} : Decidable b.Valid := by
   unfold BlobSchedule.Valid; infer_instance
 
+/-- The gas schedule's numbers are large enough for the interpreter's
+termination argument to go through.
+
+Not consensus validity, and not "these are the right prices": these are the
+three facts the *totality* proof consumes, and they were discovered rather than
+guessed -- the `Jaune.Sufficiency` family was instantiated at a zero-valued
+schedule and these are the obligations that failed.
+
+- `100 ≤ coldAccountAccess` is what makes an account access cost at least the
+  warm access, which every `gasLt` obligation at a cold `EXTCODESIZE`,
+  `BALANCE`, `EXTCODEHASH` or `CALL` needs in order to charge *something*
+  strictly positive. The literal is `gasWarmAccess`, spelled out because this
+  module is upstream of the globals; `pragueRules_gas_warmAccess_le` in
+  `Jaune/Machine.lean` is the `rfl` bridge.
+- `0 < createAccess` is the same fact for an empty-initcode `CREATE`, whose
+  only other charge can be zero.
+- `2300 ≤ callValue` is what makes a value-bearing `CALL` charge at least the
+  stipend it hands the child, so that the parent's measure still falls across
+  the spawn. The literal is `gCallStipend`.
+
+Prague's schedule satisfies all three at 2,600 / 32,000 / 9,000, and
+Amsterdam's at 3,000 / 12,000 / 11,300; the numbers move, the inequalities do
+not. -/
+def GasSchedule.Valid (g : GasSchedule) : Prop :=
+  100 ≤ g.coldAccountAccess ∧ 0 < g.createAccess ∧ 2300 ≤ g.callValue
+
+instance {g : GasSchedule} : Decidable g.Valid := by
+  unfold GasSchedule.Valid; infer_instance
+
 /-- The rule set's parameters are usable by the semantics that reads them.
 
-Beyond the blob schedule this adds `MODEXP`'s `GQUADDIVISOR`, the one other
-fork-carried number the semantics divides by. Every other divisor in the
-interpreter -- `elasticityMultiplier`, `gasLimitAdjustmentFactor`,
-`baseFeeMaxChangeDenominator` -- is a global constant rather than rule data, so
-its positivity is a closed fact proved next to it in `Jaune/Machine.lean` and
-not a hypothesis anything must carry. -/
+Three groups, one per thing the semantics needs of a number it did not choose:
+the blob schedule's divisors and its target/ceiling ordering, `MODEXP`'s
+`GQUADDIVISOR`, and -- since Amsterdam reprices the numbers the interpreter's
+own termination argument leans on -- the gas schedule's three inequalities.
+Every other divisor in the interpreter -- `elasticityMultiplier`,
+`gasLimitAdjustmentFactor`, `baseFeeMaxChangeDenominator` -- is a global
+constant rather than rule data, so its positivity is a closed fact proved next
+to it in `Jaune/Machine.lean` and not a hypothesis anything must carry. -/
 def ForkRules.Valid (r : ForkRules) : Prop :=
-  r.blob.Valid ∧ 0 < r.modexp.gasDivisor
+  r.blob.Valid ∧ 0 < r.modexp.gasDivisor ∧ r.gas.Valid
 
 instance {r : ForkRules} : Decidable r.Valid := by
   unfold ForkRules.Valid; infer_instance
+
+/-- The three projections, named so that a Sufficiency obligation can say which
+part of validity it consumes rather than indexing into a conjunction. -/
+theorem ForkRules.Valid.blob {r : ForkRules} (h : r.Valid) : r.blob.Valid := h.1
+
+theorem ForkRules.Valid.modexpGasDivisor_pos {r : ForkRules} (h : r.Valid) :
+    0 < r.modexp.gasDivisor := h.2.1
+
+theorem ForkRules.Valid.gas {r : ForkRules} (h : r.Valid) : r.gas.Valid := h.2.2
 
 /-- Prague's blob schedule (EIP-4844 as amended for Prague). -/
 def pragueBlobSchedule : BlobSchedule := {
@@ -424,6 +538,8 @@ def pragueRules : ForkRules := {
   modexp := pragueModexpRules
   op := pragueOpcodeRules
   gas := pragueGasSchedule
+  -- Prague meters in one dimension, so there is no state-gas record to carry.
+  stateGas := none
   header := pragueHeaderRules
   requests := pragueRequests
   precompiles := praguePrecompiles
@@ -501,6 +617,7 @@ def osakaRules : ForkRules := {
   -- all Amsterdam's. Naming Prague's records rather than repeating them is
   -- what makes that a fact of the source instead of a claim about it.
   gas := pragueGasSchedule
+  stateGas := none
   header := pragueHeaderRules
   requests := pragueRequests
   precompiles := osakaPrecompiles
@@ -543,6 +660,88 @@ def bpo1Rules : ForkRules :=
 def bpo2Rules : ForkRules :=
   { osakaRules with fork := .bpo2, blob := bpo2BlobSchedule }
 
+/-- Amsterdam's shared-formula gas numbers (EIP-8038, 2780, 7976, 7981).
+
+Every value is the pinned `execution-specs` revision's, and
+`scripts/check-fork-constants.sh` is what says so: it compares this record's
+fields against the extraction the generator takes from that revision. The
+derivations upstream states, recorded here so a future repricing is checked
+against the same identity rather than a copied number:
+
+* `callValue` = `ACCOUNT_WRITE` + `CALL_STIPEND` = 9000 + 2300;
+* `createAccess` = `ACCOUNT_WRITE` + `COLD_ACCOUNT_ACCESS` = 9000 + 3000;
+* `storageClearRefund` = (`STORAGE_WRITE` + `COLD_STORAGE_ACCESS`) * 4800 / 5000
+  = (10000 + 2100) * 4800 / 5000;
+* `txAccessListAddress` = `COLD_ACCOUNT_ACCESS` - `WARM_ACCESS` = 3000 - 100;
+* `txAccessListStorageKey` = `COLD_STORAGE_ACCESS` - `WARM_ACCESS` = 2100 - 100;
+* `perAuthIntrinsic` = 101 * 16 + 3000 + 3000 + 2 * 100.
+
+`codeReadSurcharge` has no name of its own upstream: EIP-8038 adds `WARM_ACCESS`
+inline at `EXTCODESIZE` and `EXTCODECOPY`, so the extraction reads it as a
+source-presence fact and records that derivation. -/
+def amsterdamGasSchedule : GasSchedule := {
+  coldAccountAccess := 3000
+  callValue := 11300
+  createAccess := 12000
+  storageClearRefund := 11616
+  txBase := 12000
+  txAccessListAddress := 2900
+  txAccessListStorageKey := 2000
+  floorTokenCost := 16
+  perAuthIntrinsic := 7816
+  codeReadSurcharge := 100
+}
+
+/-- Amsterdam's state-gas dimension (EIP-8037), and the four numbers only its
+metering shape reads (EIP-2780's transaction value cost, EIP-7981's two floor
+token counts, and the system-transaction reservoir).
+
+`STORAGE_SET`, `NEW_ACCOUNT` and `AUTH_BASE` are not fields: they are the
+`StateGasRules` products 64 * 1530 = 97,920, 120 * 1530 = 183,600 and
+23 * 1530 = 35,190, guarded as such below. -/
+def amsterdamStateGasRules : StateGasRules := {
+  costPerStateByte := 1530
+  stateBytesPerNewAccount := 120
+  stateBytesPerStorageSet := 64
+  stateBytesPerAuthBase := 23
+  storageWrite := 10000
+  accountWrite := 9000
+  txValueCost := 6000
+  accessListAddressFloorTokens := 80
+  accessListStorageKeyFloorTokens := 128
+  systemMaxSstoresPerCall := 16
+}
+
+/-- The rules an Amsterdam *transaction* is metered by, without the block-level
+rules a later goal adds.
+
+This is a **vehicle**, not `Fork.amsterdam`'s rule set. `Fork.amsterdam.rules?`
+is still `none` and `Fork.supported` is still four forks, because the
+block-level rules EIP-7928, EIP-8282, EIP-7843, EIP-8024 and EIP-7954 carry
+have no reader in this build yet: a record that resolved would promise a
+semantics that does not exist. What does exist is the metering shape, and it
+needs a `ForkRules` to be exercised against.
+
+So the vehicle is BPO2's record with exactly the three fields this goal
+implements moved -- the identity, the shared-formula numbers, and the state-gas
+switch. Everything else is deliberately BPO2's: the header flags stay `false`,
+the request list stays Prague's two contracts, and the code limits and opcode
+set stay BPO2's, because each of those belongs to the block-level goal and
+would be a false claim here.
+
+It is reachable from exactly two places: the `#guard` tables below, which is
+where the metering numbers are pinned, and `jaune t8n --state.fork Amsterdam`,
+which resolves it through a table local to the transition-tool frontend rather
+than through `Fork.rules?`. `t8n --forks` keeps printing `Fork.supported`.
+
+The block-level goal composes a real `amsterdamRules` from
+`amsterdamGasSchedule` and `amsterdamStateGasRules` and retires this. -/
+def amsterdamMeteringRules : ForkRules :=
+  { bpo2Rules with
+    fork := .amsterdam
+    gas := amsterdamGasSchedule
+    stateGas := some amsterdamStateGasRules }
+
 -- Every named rule set carries the structural witness, so no in-tree execution
 -- path ever needs to check it. `decide` is the whole proof: the predicates are
 -- decidable and the parameters are literals.
@@ -556,6 +755,24 @@ theorem pragueRules_valid : pragueRules.Valid := by decide
 theorem osakaRules_valid : osakaRules.Valid := by decide
 theorem bpo1Rules_valid : bpo1Rules.Valid := by decide
 theorem bpo2Rules_valid : bpo2Rules.Valid := by decide
+
+/-- The metering vehicle carries the witness too, which is what lets the
+Sufficiency family be instantiated at Amsterdam's numbers rather than only at
+Prague's. Amsterdam moves all three of `GasSchedule.Valid`'s numbers --
+`createAccess` *downwards*, from 32,000 to 12,000 -- and the inequalities still
+hold, which is the fact this `decide` records. -/
+theorem amsterdamMeteringRules_valid : amsterdamMeteringRules.Valid := by decide
+
+theorem amsterdamGasSchedule_valid : amsterdamGasSchedule.Valid := by decide
+theorem pragueGasSchedule_valid : pragueGasSchedule.Valid := by decide
+
+-- The three obligations, and what a schedule that failed one would be refused
+-- for. Stated as guards so that the discovery recorded in `GasSchedule.Valid`'s
+-- docstring is checked rather than remembered.
+#guard ¬ ({ pragueGasSchedule with coldAccountAccess := 99 } : GasSchedule).Valid
+#guard ¬ ({ pragueGasSchedule with createAccess := 0 } : GasSchedule).Valid
+#guard ¬ ({ pragueGasSchedule with callValue := 2299 } : GasSchedule).Valid
+#guard ({ pragueGasSchedule with callValue := 2300 } : GasSchedule).Valid
 
 -- The three premises, spelled out once per named schedule, so a future
 -- reparameterisation that zeroes a divisor or inverts the target/ceiling pair
@@ -743,6 +960,15 @@ inductive RuleDefect : Type
   | blobTargetAboveMax (target max : Nat)
   /-- `MODEXP`'s `GQUADDIVISOR` is zero. -/
   | zeroModexpGasDivisor
+  /-- An account access would cost less than a warm one, so a cold access at
+  `BALANCE`, `EXTCODE*` or a `CALL` need charge nothing. -/
+  | accountAccessBelowWarm (coldAccountAccess : Nat)
+  /-- `CREATE` would cost nothing, so an empty-initcode creation need charge
+  nothing. -/
+  | zeroCreateAccess
+  /-- A value-bearing call would hand its child more stipend than it charges
+  its parent. -/
+  | callValueBelowStipend (callValue : Nat)
 deriving DecidableEq, Repr
 
 /-- Why a configuration, or the pairing of a configuration with a snapshot, is
@@ -790,6 +1016,12 @@ def ChainContextError.render : ChainContextError → String
       | .blobTargetAboveMax target max =>
         s!"the blob gas target {target} exceeds the ceiling {max}"
       | .zeroModexpGasDivisor => "the MODEXP gas divisor is zero"
+      | .accountAccessBelowWarm cold =>
+        s!"a cold account access costs {cold}, below the warm access cost 100"
+      | .zeroCreateAccess => "the CREATE base cost is zero"
+      | .callValueBelowStipend callValue =>
+        s!"a value-bearing call costs {callValue}, below the 2300 stipend it \
+           hands the child"
 
 /-- Why an input is outside the domain this build implements.
 
@@ -886,6 +1118,12 @@ def ForkRules.defect? (r : ForkRules) : Option RuleDefect :=
     some (.blobTargetAboveMax r.blob.target r.blob.max)
   else if r.modexp.gasDivisor = 0 then
     some .zeroModexpGasDivisor
+  else if r.gas.coldAccountAccess < 100 then
+    some (.accountAccessBelowWarm r.gas.coldAccountAccess)
+  else if r.gas.createAccess = 0 then
+    some .zeroCreateAccess
+  else if r.gas.callValue < 2300 then
+    some (.callValueBelowStipend r.gas.callValue)
   else
     none
 
@@ -893,16 +1131,24 @@ def ForkRules.defect? (r : ForkRules) : Option RuleDefect :=
 so the check below neither over- nor under-reports. -/
 theorem ForkRules.defect?_eq_none_iff {r : ForkRules} :
     r.defect? = none ↔ r.Valid := by
-  rw [ForkRules.defect?, ForkRules.Valid, BlobSchedule.Valid]
-  split
-  · simp_all
-  · split
-    · simp_all
-    · split
-      · simp_all
-      · split
-        · simp_all
-        · simp_all; omega
+  rw [ForkRules.defect?, ForkRules.Valid, BlobSchedule.Valid, GasSchedule.Valid]
+  repeat' split
+  all_goals simp_all
+  all_goals omega
+
+-- Each gas-schedule obligation is refused under its own name, so a failure
+-- says which number the semantics cannot use rather than "the record is
+-- invalid". The vehicle passes all of them.
+#guard ForkRules.defect? { pragueRules with
+    gas := { pragueGasSchedule with coldAccountAccess := 99 } }
+  = some (.accountAccessBelowWarm 99)
+#guard ForkRules.defect? { pragueRules with
+    gas := { pragueGasSchedule with createAccess := 0 } }
+  = some .zeroCreateAccess
+#guard ForkRules.defect? { pragueRules with
+    gas := { pragueGasSchedule with callValue := 2299 } }
+  = some (.callValueBelowStipend 2299)
+#guard ForkRules.defect? amsterdamMeteringRules = none
 
 /-- A rule set together with the proof that its parameters are usable.
 
@@ -1326,6 +1572,11 @@ private def isEraL : RulesLookupError → Bool
 #guard pragueRules.gas.perAuthIntrinsic = 25000
 #guard pragueRules.gas.codeReadSurcharge = 0
 
+-- The metering switch is off for every fork this build runs. Stated on Prague
+-- here and on the whole supported chain below; the `rfl` lemma in
+-- `Jaune/Machine.lean` is what lets a Prague-stated proof unfold it away.
+#guard pragueRules.stateGas = none
+
 -- Prague's header carries neither Amsterdam field, and its request list is the
 -- two contracts today's fold calls, in today's order.
 #guard pragueRules.header.blockAccessListHash = false
@@ -1400,6 +1651,8 @@ private def isEraL : RulesLookupError → Bool
 -- failure names the category rather than "the records differ".
 #guard bpo1Rules.gas = pragueGasSchedule
 #guard bpo2Rules.gas = pragueGasSchedule
+#guard bpo1Rules.stateGas = none
+#guard bpo2Rules.stateGas = none
 #guard bpo1Rules.header = pragueHeaderRules
 #guard bpo2Rules.header = pragueHeaderRules
 #guard bpo1Rules.requests = pragueRequests
@@ -1411,7 +1664,7 @@ private def isEraL : RulesLookupError → Bool
 #guard Fork.supported.all (fun f =>
   match f.rules? with
   | some r => r.gas == pragueGasSchedule && r.header == pragueHeaderRules
-      && r.requests == pragueRequests
+      && r.requests == pragueRequests && r.stateGas == none
   | none => false)
 
 -- The three moving numbers, as blob counts times `GAS_PER_BLOB`, and the
@@ -1436,6 +1689,98 @@ private def isEraL : RulesLookupError → Bool
 #guard [pragueBlobSchedule, osakaBlobSchedule, bpo1BlobSchedule,
     bpo2BlobSchedule].map BlobSchedule.baseFeeUpdateFraction
   = [5007716, 5007716, 8346193, 11684671]
+
+-- Amsterdam's numbers, pinned as literals against the metering vehicle. This
+-- is the only place in the build where they are written down; the constants
+-- gate compares each of them against the pinned upstream revision, and the
+-- `#guard`s here are what a mutation of one has to get past first.
+#guard amsterdamMeteringRules.gas.coldAccountAccess = 3000
+#guard amsterdamMeteringRules.gas.callValue = 11300
+#guard amsterdamMeteringRules.gas.createAccess = 12000
+#guard amsterdamMeteringRules.gas.storageClearRefund = 11616
+#guard amsterdamMeteringRules.gas.txBase = 12000
+#guard amsterdamMeteringRules.gas.txAccessListAddress = 2900
+#guard amsterdamMeteringRules.gas.txAccessListStorageKey = 2000
+#guard amsterdamMeteringRules.gas.floorTokenCost = 16
+#guard amsterdamMeteringRules.gas.perAuthIntrinsic = 7816
+#guard amsterdamMeteringRules.gas.codeReadSurcharge = 100
+
+-- The four derivations upstream states as sums and differences, checked as
+-- arithmetic rather than restated as literals: if a repricing moves one side,
+-- the identity is what fails.
+#guard amsterdamGasSchedule.callValue = 9000 + 2300
+#guard amsterdamGasSchedule.createAccess
+  = 9000 + amsterdamGasSchedule.coldAccountAccess
+#guard amsterdamGasSchedule.storageClearRefund = (10000 + 2100) * 4800 / 5000
+#guard amsterdamGasSchedule.txAccessListAddress
+  = amsterdamGasSchedule.coldAccountAccess - 100
+#guard amsterdamGasSchedule.txAccessListStorageKey = 2100 - 100
+#guard amsterdamGasSchedule.perAuthIntrinsic
+  = 101 * amsterdamGasSchedule.floorTokenCost + 3000 + 3000 + 2 * 100
+
+-- The state-gas dimension: the ten fields, and the three costs derived from
+-- them. The products are guarded rather than the products' values being
+-- fields, so that a change to `costPerStateByte` moves all three at once.
+#guard amsterdamStateGasRules.costPerStateByte = 1530
+#guard amsterdamStateGasRules.stateBytesPerNewAccount = 120
+#guard amsterdamStateGasRules.stateBytesPerStorageSet = 64
+#guard amsterdamStateGasRules.stateBytesPerAuthBase = 23
+#guard amsterdamStateGasRules.storageWrite = 10000
+#guard amsterdamStateGasRules.accountWrite = 9000
+#guard amsterdamStateGasRules.txValueCost = 6000
+#guard amsterdamStateGasRules.accessListAddressFloorTokens = 80
+#guard amsterdamStateGasRules.accessListStorageKeyFloorTokens = 128
+#guard amsterdamStateGasRules.systemMaxSstoresPerCall = 16
+#guard amsterdamStateGasRules.storageSet = 97920
+#guard amsterdamStateGasRules.newAccount = 183600
+#guard amsterdamStateGasRules.authBase = 35190
+#guard amsterdamStateGasRules.systemReservoir = 16 * 97920
+
+-- The two identities `CALL_VALUE` and `CREATE_ACCESS` are built from, stated
+-- across the two records so that the split between `GasSchedule` and
+-- `StateGasRules` is checked rather than assumed.
+#guard amsterdamGasSchedule.callValue
+  = amsterdamStateGasRules.accountWrite + 2300
+#guard amsterdamGasSchedule.createAccess
+  = amsterdamStateGasRules.accountWrite + amsterdamGasSchedule.coldAccountAccess
+#guard amsterdamGasSchedule.storageClearRefund
+  = (amsterdamStateGasRules.storageWrite + 2100) * 4800 / 5000
+
+-- A plain Amsterdam value transfer still costs 21,000 intrinsic gas, as three
+-- numbers rather than one: EIP-2780 decomposes the old base, it does not
+-- reprice the common case.
+#guard amsterdamGasSchedule.txBase + amsterdamGasSchedule.coldAccountAccess
+  + amsterdamStateGasRules.txValueCost = 21000
+
+-- The vehicle is BPO2's record with exactly three fields moved. Stated as a
+-- record update in both directions, so it cannot silently acquire a
+-- block-level rule that belongs to a later goal: undoing the identity, the gas
+-- schedule and the switch must give BPO2 back.
+#guard { amsterdamMeteringRules with
+  fork := .bpo2, gas := pragueGasSchedule, stateGas := none } = bpo2Rules
+#guard amsterdamMeteringRules.fork = .amsterdam
+#guard amsterdamMeteringRules.stateGas = some amsterdamStateGasRules
+#guard amsterdamMeteringRules.blob = bpo2BlobSchedule
+#guard amsterdamMeteringRules.code = pragueCodeLimits
+#guard amsterdamMeteringRules.op = osakaOpcodeRules
+#guard amsterdamMeteringRules.tx = osakaTransactionLimits
+#guard amsterdamMeteringRules.precompiles = osakaPrecompiles
+
+-- What the vehicle deliberately does NOT claim. Each of these is a rule the
+-- block-level goal `jaune-amsterdam-block-v1` owns, and each is BPO2's here.
+-- A guard rather than a comment, so that adding one of them to this record
+-- without moving the goal boundary fails.
+#guard amsterdamMeteringRules.header.blockAccessListHash = false
+#guard amsterdamMeteringRules.header.slotNumber = false
+#guard amsterdamMeteringRules.requests = pragueRequests
+#guard amsterdamMeteringRules.code.maxCodeSize = 24576
+#guard amsterdamMeteringRules.op.clz = true
+
+-- And the vehicle is not reachable through fork identity: this is what keeps
+-- it a metering vehicle rather than a declaration that Amsterdam is supported.
+#guard Fork.amsterdam.rules? = none
+#guard Fork.amsterdam.rules?.isNone
+#guard ¬ Fork.supported.contains .amsterdam
 
 -- Every fork this build runs resolves to rules that name it back, and the one
 -- it does not run is refused with its own identity rather than with another

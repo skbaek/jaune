@@ -74,17 +74,17 @@ against it, and so that the numbers a later goal will implement can be checked
 against the same revision the fixtures were filled from.
 
 The source is
-[`execution-specs` `tests-glamsterdam-devnet@v8.1.3`](https://github.com/ethereum/execution-specs/releases/tag/tests-glamsterdam-devnet%40v8.1.3),
+[`execution-specs` `tests-glamsterdam-devnet@v8.1.4`](https://github.com/ethereum/execution-specs/releases/tag/tests-glamsterdam-devnet%40v8.1.4),
 a **prerelease**, resolved to commit
-`8ca2f4ceefd83100a4d21d0c33747114278a0bc2` — a merge of `forks/amsterdam` into
+`7341820b5b394b1934dfe7bb6f621fcdab7baf7f` — a merge of `forks/amsterdam` into
 `devnets/glamsterdam/8`. Its `fixtures_glamsterdam-devnet.tar.gz` asset is
-944,518,619 bytes with SHA-256
-`f87f59b6e2eede5df3462c1784cd6b168fa6d687e36a77b604aeeaf361aaed64`.
+946,283,655 bytes with SHA-256
+`aed315489163dc67c4e5607d7bbb8902e8329afe939be58193b125f2e81a85d4`.
 
 ```sh
-python3 scripts/bootstrap_mainnet.py --lane amsterdam   # ~/eest-glamsterdam-devnet-v8.1.3
+python3 scripts/bootstrap_mainnet.py --lane amsterdam   # ~/eest-glamsterdam-devnet-v8.1.4
 python3 scripts/env_doctor.py \
-  --amsterdam-root ~/eest-glamsterdam-devnet-v8.1.3 --amsterdam-deep
+  --amsterdam-root ~/eest-glamsterdam-devnet-v8.1.4 --amsterdam-deep
 ```
 
 The extracted tree is 48,491 files and about 20 GB; allow at least 25 GB of
@@ -92,13 +92,13 @@ free space for a fresh install. Verification is the mainnet lane's, verbatim:
 the same bootstrap, the same member-by-member safe extractor, the same digest
 check before a single byte is written, the same release-index check against
 `fixtures/.meta/index.json` (root hash
-`0x3782178206bded832c8d1622379d6b9dbdaef428d6c0ba5d5a44f78ecc553648`,
-338,970 cases). It is one code path with a `--lane` parameter rather than a
+`0x417b20736eef8fe20cd98ca22aa0f736a5315c7e58f0cdce72803d03f3db4d9d`,
+340,012 cases). It is one code path with a `--lane` parameter rather than a
 copy, because a second archive extractor is a second place for a traversal or
 link check to be missing.
 
 **The same commit is the transition-tool anchor.** `sources.json`'s
-`conformance_target` points at `8ca2f4c` too, so the fixtures, the executable
+`conformance_target` points at `7341820` too, so the fixtures, the executable
 specification `scripts/gen-fork-constants.py` reads, and the goldens
 `scripts/check-t8n.sh` compares against are one revision by construction rather
 than by coincidence.

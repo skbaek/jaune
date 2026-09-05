@@ -91,6 +91,20 @@ COVERAGE = {
     "header.blockAccessListHash": "checked",
     "header.slotNumber": "checked",
     "requests": "checked",
+    # EIP-8037's state-gas dimension. Every fork carries these rows; a fork
+    # that meters in one dimension carries them as `null` with
+    # `stateGas.present` false, exactly as `ForkRules.stateGas = none` prints.
+    "stateGas.present": "checked",
+    "stateGas.costPerStateByte": "checked",
+    "stateGas.stateBytesPerNewAccount": "checked",
+    "stateGas.stateBytesPerStorageSet": "checked",
+    "stateGas.stateBytesPerAuthBase": "checked",
+    "stateGas.storageWrite": "checked",
+    "stateGas.accountWrite": "checked",
+    "stateGas.txValueCost": "checked",
+    "stateGas.accessListAddressFloorTokens": "checked",
+    "stateGas.accessListStorageKeyFloorTokens": "checked",
+    "stateGas.systemMaxSstoresPerCall": "checked",
     # The six MODEXP parameters are inline literals inside `complexity`,
     # `iterations` and `gas_cost` in the pinned modules -- upstream gives them
     # no names to read. Reading them would mean re-deriving each one from
@@ -105,6 +119,47 @@ COVERAGE = {
     "modexp.gasDivisor": "elsewhere",
     "modexp.minGas": "elsewhere",
 }
+
+# The fields `jaune --rules-partial <fork>` emits: exactly what a metering
+# vehicle claims. A fork whose rules this build does not implement is compared
+# against upstream on these and only these, and every other field of the record
+# has to be classified as somebody's -- see `fork_coverage` below.
+METERING_FIELDS = {
+    "gas.coldAccountAccess",
+    "gas.callValue",
+    "gas.createAccess",
+    "gas.storageClearRefund",
+    "gas.txBase",
+    "gas.txAccessListAddress",
+    "gas.txAccessListStorageKey",
+    "gas.floorTokenCost",
+    "gas.perAuthIntrinsic",
+    "gas.codeReadSurcharge",
+    "stateGas.present",
+    "stateGas.costPerStateByte",
+    "stateGas.stateBytesPerNewAccount",
+    "stateGas.stateBytesPerStorageSet",
+    "stateGas.stateBytesPerAuthBase",
+    "stateGas.storageWrite",
+    "stateGas.accountWrite",
+    "stateGas.txValueCost",
+    "stateGas.accessListAddressFloorTokens",
+    "stateGas.accessListStorageKeyFloorTokens",
+    "stateGas.systemMaxSstoresPerCall",
+}
+
+# Which fork label has a metering vehicle, and which goal owns the rest of its
+# record. A declared fork with no vehicle is simply refused and classified
+# nowhere; a fork with one owes a classification for every field.
+METERING_FORKS = {"Amsterdam"}
+DEFERRED_OWNER = "jaune-amsterdam-block-v1"
+DEFERRED_REASON = (
+    "not claimed by the metering vehicle: this build implements Amsterdam's "
+    "transaction metering shape (EIP-2780/7708/7778/7976/7981/8037/8038/8246) "
+    "and none of its block-level rules. The field is the block-level goal's, "
+    "which composes a complete amsterdamRules and retires the vehicle; until "
+    "then `jaune --rules Amsterdam` is refused and this row is not compared."
+)
 
 ELSEWHERE_REASON = (
     "no named upstream constant: the value is an inline literal inside "
@@ -189,6 +244,23 @@ def target() -> "tuple[Path, Path, str]":
     return root, python, entry["commit"]
 
 
+def _fork_status(path: str, status: str) -> dict:
+    """Classify one field for a fork this build meters but does not implement.
+
+    Three outcomes and no fourth: compared against upstream because the
+    metering vehicle claims it, covered by behaviour elsewhere (the MODEXP
+    parameters, as for every other fork), or deferred to the goal that owns it.
+    The gate requires this table's key set to be the whole record's, so a
+    `ForkRules` field added later cannot become quietly uncompared here either
+    -- it has to be given an owner first.
+    """
+    if status != "checked":
+        return {"status": status, "reason": ELSEWHERE_REASON}
+    if path in METERING_FIELDS:
+        return {"status": "checked"}
+    return {"status": "deferred", "owner": DEFERRED_OWNER, "reason": DEFERRED_REASON}
+
+
 def build() -> dict:
     root, python, commit = target()
     run = subprocess.run(
@@ -233,6 +305,13 @@ def build() -> dict:
                 else {"status": status, "reason": ELSEWHERE_REASON}
             )
             for path, status in sorted(COVERAGE.items())
+        },
+        "fork_coverage": {
+            label: {
+                path: _fork_status(path, status)
+                for path, status in sorted(COVERAGE.items())
+            }
+            for label in sorted(METERING_FORKS & set(forks))
         },
         "forks": forks,
     }

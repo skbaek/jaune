@@ -1,0 +1,15 @@
+{
+  "description": "An access list whose 128-token storage entries push intrinsic execution gas above TX_MAX_GAS_LIMIT is recorded in rejected.",
+  "scenario": "am-reject-intrinsic",
+  "fork": "Amsterdam",
+  "chainid": 1,
+  "reward": -1,
+  "mode": "blockchain",
+  "allocIncludes": [
+    "../../amsterdam-system-alloc.json"
+  ],
+  "covers": [
+    "intrinsic-above-tx-max",
+    "rejected-transaction"
+  ]
+}
