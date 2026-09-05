@@ -128595,8 +128595,7 @@
         "Amsterdam",
         "BPO2ToAmsterdamAtTime15k"
       ],
-      "refusal_reason": "selects BPO2ToAmsterdamAtTime15k: this build resolves rules for both endpoints, but no gate in it covers the BPO2-to-Amsterdam activation boundary, which goal jaune-amsterdam-currency-v1 owns",
-      "runnable": false,
+      "runnable": true,
       "selection_rule": "union of every supported static and transition suite"
     },
     "amsterdam-smoke": {
@@ -129325,8 +129324,7 @@
       "networks": [
         "BPO2ToAmsterdamAtTime15k"
       ],
-      "refusal_reason": "selects BPO2ToAmsterdamAtTime15k: this build resolves rules for both endpoints, but no gate in it covers the BPO2-to-Amsterdam activation boundary, which goal jaune-amsterdam-currency-v1 owns",
-      "runnable": false,
+      "runnable": true,
       "selection_rule": "every fixture whose transition label names two supported forks"
     }
   },

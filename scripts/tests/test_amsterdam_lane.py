@@ -1,22 +1,25 @@
 """Synthetic tests for the Glamsterdam devnet lane.
 
-The lane is now *half runnable*, and that split is what these tests hold in
-place. This build implements Amsterdam, so the two suites over the static
-`Amsterdam` corpus run; the two that select `BPO2ToAmsterdamAtTime15k` stay
-refused, because nothing here gates that activation boundary. Four properties
-matter and are checked below.
+The lane is now *fully runnable*, and that is what these tests hold in place.
+This build implements Amsterdam and gates the BPO2-to-Amsterdam activation
+boundary, so all four suites run: the two over the static `Amsterdam` corpus
+(since goal C) and the two that select `BPO2ToAmsterdamAtTime15k` (since goal
+`jaune-amsterdam-currency-v1`, which rewrote goal C's refusals into
+admissions). Four properties matter and are checked below.
 
-* **The runnable suites are admitted, and actually dispatch.** A suite that was
+* **Every suite is admitted, and actually dispatches.** A suite that was
   "activated" by deleting its refusal but still selected nothing, or that
   reported an all-PASS over a subtree it only partly ran, would be the same
   permissive oracle the refusals existed to prevent. The end-to-end class runs
   the real harness over a miniature synthetic corpus with a stub binary, so the
   dispatch, the selection, and the verdict are exercised without the installed
-  20 GB archive and without Lean.
-* **The deferred suites are refused, by name, with the owning goal named** --
-  and with the *true* reason. The old message said `Fork.rules?` answers `none`
-  for Amsterdam, which this build makes false; a refusal that states a false
-  fact is worse than no refusal, so its absence is asserted directly.
+  archive and without Lean. `--start-at` reports only what it verified.
+* **No retired refusal survives, in a message or in the source.** Goal A's
+  refusal said `Fork.rules?` answers `none` for Amsterdam; goal C's said no gate
+  covers the activation boundary. Both are false in this build, and a refusal
+  that states a false fact is worse than no refusal, so the absence of both
+  statements is asserted directly, and the transition suites pointed at an
+  absent root reach the corpus check like the static ones.
 * **`--dir` refuses rather than under-reports.** A subtree that does not exist,
   holds no fixture, or whose on-disk file count disagrees with the manifest's
   count for the selected suite is an error, never a smaller pass.
@@ -44,18 +47,22 @@ import env_doctor
 
 CHECK_MAINNET = SCRIPTS / "check-mainnet.sh"
 
-# The lane's four suite names, split by what this build may claim about them.
-AMSTERDAM_RUNNABLE_SUITES = ("amsterdam", "amsterdam-smoke")
-AMSTERDAM_REFUSED_SUITES = {
-    "amsterdam-transitions": "jaune-amsterdam-currency-v1",
-    "amsterdam-full": "jaune-amsterdam-currency-v1",
-}
-AMSTERDAM_SUITES = tuple(AMSTERDAM_RUNNABLE_SUITES) + tuple(AMSTERDAM_REFUSED_SUITES)
+# The lane's four suite names. Every one is runnable in this build; the two
+# transition-carrying ones were refused until goal jaune-amsterdam-currency-v1.
+AMSTERDAM_STATIC_SUITES = ("amsterdam", "amsterdam-smoke")
+AMSTERDAM_TRANSITION_SUITES = ("amsterdam-transitions", "amsterdam-full")
+AMSTERDAM_RUNNABLE_SUITES = AMSTERDAM_STATIC_SUITES + AMSTERDAM_TRANSITION_SUITES
+AMSTERDAM_SUITES = AMSTERDAM_RUNNABLE_SUITES
 
-# The claim the previous refusals rested on, which this build makes false. It
-# must not survive anywhere in the harness: a stale refusal reads as a current
-# fact about the build.
-RETIRED_CLAIM = "Fork.rules? answers none"
+# The claims the previous refusals rested on, each made false by a later
+# build. None may survive anywhere in the harness: a stale refusal reads as a
+# current fact about the build. The first is goal A's (falsified by goal C),
+# the second goal C's (falsified by goal jaune-amsterdam-currency-v1).
+RETIRED_CLAIMS = (
+    "Fork.rules? answers none",
+    "no gate in this build covers the BPO2-to-Amsterdam activation boundary",
+    "is installed but refused",
+)
 
 # One consistent blob schedule for the synthetic corpus. The generator requires
 # every in-lane case to declare one for each fork its label can select, and
@@ -104,44 +111,45 @@ def run_check_mainnet(*args: str) -> subprocess.CompletedProcess:
 class LaneRefusalTests(unittest.TestCase):
     """The four suites, and both directions of lane confusion."""
 
-    def test_the_deferred_suites_are_refused_naming_the_currency_goal(self):
-        for suite, goal in AMSTERDAM_REFUSED_SUITES.items():
+    def test_the_transition_suites_are_admitted_naming_no_goal(self):
+        """Goal C refused `amsterdam-transitions` and `amsterdam-full` by name,
+        naming `jaune-amsterdam-currency-v1` as the goal that would gate the
+        activation boundary. That goal rewrote the refusal into this admission:
+        the two suites are answered exactly like the static ones -- pointed at
+        an absent root they reach the corpus check -- and no message names a
+        goal that "owns" them any more."""
+        for suite in AMSTERDAM_TRANSITION_SUITES:
             with self.subTest(suite=suite):
-                run = run_check_mainnet("--lane", "amsterdam", "--suite", suite, "--no-build")
+                with tempfile.TemporaryDirectory() as tmp:
+                    run = run_check_mainnet(
+                        "--lane", "amsterdam", "--suite", suite, "--no-build",
+                        "--fixtures-root", str(Path(tmp) / "absent"),
+                    )
                 self.assertEqual(run.returncode, 2, run.stderr)
-                self.assertIn("is installed but refused", run.stderr)
-                self.assertIn("BPO2ToAmsterdamAtTime15k", run.stderr)
-                self.assertIn(goal, run.stderr)
+                self.assertNotIn("is installed but refused", run.stderr)
+                self.assertNotIn("jaune-amsterdam-currency-v1", run.stderr)
+                self.assertIn("glamsterdam-devnet blockchain fixture root not found", run.stderr)
 
-    def test_no_refusal_repeats_the_claim_this_build_falsified(self):
-        """`Fork.amsterdam.rules?` resolves now, so nothing may still say it does
-        not -- neither in a message printed at runtime nor in the source that
-        prints them, where a stale sentence would be read as current fact."""
-        for suite in AMSTERDAM_REFUSED_SUITES:
+    def test_no_refusal_repeats_a_claim_a_later_build_falsified(self):
+        """`Fork.amsterdam.rules?` resolves and the activation boundary is
+        gated, so nothing may still say otherwise -- neither in a message
+        printed at runtime nor in the source that prints them, where a stale
+        sentence would be read as current fact."""
+        for suite in AMSTERDAM_SUITES:
             with self.subTest(suite=suite):
-                run = run_check_mainnet("--lane", "amsterdam", "--suite", suite, "--no-build")
-                self.assertNotIn(RETIRED_CLAIM, run.stderr)
-        self.assertNotIn(RETIRED_CLAIM, CHECK_MAINNET.read_text())
-        self.assertNotIn(RETIRED_CLAIM, (SCRIPTS / "gen_mainnet_manifest.py").read_text())
-
-    def test_refusal_precedes_any_look_at_the_corpus(self):
-        """The answer must not depend on whether the archive is installed.
-
-        A refusal that only fired once the fixtures were present would read as
-        "not installed" on a fresh clone and as "refused" here, which are
-        different claims. Pointing the lane at a directory that does not exist
-        must still produce the refusal.
-        """
-        with tempfile.TemporaryDirectory() as tmp:
-            run = run_check_mainnet(
-                "--lane", "amsterdam", "--suite", "amsterdam-transitions", "--no-build",
-                "--fixtures-root", str(Path(tmp) / "absent"),
-            )
-        self.assertEqual(run.returncode, 2, run.stderr)
-        self.assertIn("is installed but refused", run.stderr)
+                with tempfile.TemporaryDirectory() as tmp:
+                    run = run_check_mainnet(
+                        "--lane", "amsterdam", "--suite", suite, "--no-build",
+                        "--fixtures-root", str(Path(tmp) / "absent"),
+                    )
+                for claim in RETIRED_CLAIMS:
+                    self.assertNotIn(claim, run.stderr)
+        for claim in RETIRED_CLAIMS:
+            self.assertNotIn(claim, CHECK_MAINNET.read_text())
+            self.assertNotIn(claim, (SCRIPTS / "gen_mainnet_manifest.py").read_text())
 
     def test_the_runnable_suites_are_admitted_and_reach_the_corpus(self):
-        """The mirror image: a suite this build may run must NOT be refused by
+        """Every suite this build may run -- all four -- must NOT be refused by
         name. Pointed at an absent root it gets as far as the corpus check and
         stops there -- which is the bootstrap message, not a refusal, and is
         reached before any lock is taken or any fixture is dispatched."""
@@ -161,7 +169,10 @@ class LaneRefusalTests(unittest.TestCase):
         self.assertEqual(run.returncode, 2, run.stderr)
         for suite in AMSTERDAM_SUITES:
             self.assertIn(suite, run.stderr)
-        self.assertIn("amsterdam-transitions, amsterdam-full refused", run.stderr)
+        # Goal C's usage line ended "amsterdam-transitions, amsterdam-full
+        # refused"; the four suites are now listed as peers and no suite on
+        # this lane is described as refused.
+        self.assertNotIn("refused", run.stderr.split("--lane amsterdam")[1].splitlines()[0])
 
     def test_mainnet_suite_on_the_devnet_lane_names_the_devnet_suites(self):
         run = run_check_mainnet("--lane", "amsterdam", "--suite", "prague", "--no-build")
@@ -361,19 +372,24 @@ class SyntheticLaneRunTests(unittest.TestCase):
 
     # -- the manifest the lane raises over this corpus --------------------
 
-    def test_the_static_suites_are_runnable_and_the_transition_ones_are_not(self):
+    def test_every_suite_is_runnable_and_no_refusal_reason_remains(self):
+        """Goal C's manifest carried `runnable: false` and a `refusal_reason`
+        naming `jaune-amsterdam-currency-v1` on the two transition suites; that
+        goal rewrote the statement: every suite is runnable and the reason is
+        gone from the whole document."""
         suites = self.manifest["suites"]
+        self.assertEqual(sorted(suites), sorted(AMSTERDAM_SUITES))
         for name in AMSTERDAM_RUNNABLE_SUITES:
             with self.subTest(suite=name):
                 self.assertTrue(suites[name]["runnable"])
                 self.assertNotIn("refusal_reason", suites[name])
-        for name, goal in AMSTERDAM_REFUSED_SUITES.items():
-            with self.subTest(suite=name):
-                self.assertFalse(suites[name]["runnable"])
-                self.assertIn("BPO2ToAmsterdamAtTime15k", suites[name]["refusal_reason"])
-                self.assertIn(goal, suites[name]["refusal_reason"])
         self.assertTrue(self.manifest["runnable"])
-        self.assertNotIn("refusal_reason", self.manifest)
+        self.assertNotIn("refusal_reason", json.dumps(self.manifest))
+        self.assertEqual(
+            [e["path"] for e in suites["amsterdam-transitions"]["files"]],
+            ["for_bpo2toamsterdamattime15k/t.json"],
+        )
+        self.assertEqual(suites["amsterdam-full"]["file_count"], 4)
 
     def test_the_static_suite_holds_every_amsterdam_case_and_nothing_else(self):
         amsterdam = self.manifest["suites"]["amsterdam"]
@@ -407,11 +423,44 @@ class SyntheticLaneRunTests(unittest.TestCase):
         self.assertIn("OK — amsterdam-smoke: 3/3 manifest files PASS", run.stdout)
 
     def test_start_at_reports_only_what_it_verified(self):
+        """Goal C's independent review, F2: the sequential path seeded its PASS
+        count with the skipped entries and printed `3/3 manifest files PASS`
+        after dispatching one -- and this test pinned that string. It now
+        asserts the honest one, in the parallel path's wording."""
         run = self.run_lane("--suite", "amsterdam-smoke", "--start-at", "3")
         self.assertEqual(run.returncode, 0, run.stderr)
-        self.assertIn("3/3", run.stdout)
+        self.assertIn(
+            "OK — amsterdam-smoke: 1/1 selected manifest files PASS", run.stdout
+        )
+        self.assertIn("(entries 3-3; 2 skipped by --start-at and NOT verified)", run.stdout)
+        self.assertNotIn("3/3 manifest files PASS", run.stdout)
         self.assertIn("[3/3] PASS", run.stderr)
         self.assertNotIn("[1/3] PASS", run.stderr)
+
+    def test_the_transition_suite_dispatches_its_fixture(self):
+        """The rewritten admission is exercised end to end: the transition
+        suite selects the one `BPO2ToAmsterdamAtTime15k` fixture and dispatches
+        it under that label (the harness's allowed-network list admits it), and
+        the union dispatches every file of both components."""
+        run = self.run_lane("--suite", "amsterdam-transitions")
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertIn("OK — amsterdam-transitions: 1/1 manifest files PASS", run.stdout)
+        self.assertIn("[1/1] PASS for_bpo2toamsterdamattime15k/t.json", run.stderr)
+        run = self.run_lane("--suite", "amsterdam-full")
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertIn("OK — amsterdam-full: 4/4 manifest files PASS", run.stdout)
+
+    def test_dir_lands_a_transition_subtree_under_the_count_rule(self):
+        """Open question 2 of the goal: the count rule fits the transition
+        tree as it is -- a subtree of `for_bpo2toamsterdamattime15k/` holds
+        only that label's files, so on-disk count equals the suite's count."""
+        run = self.run_lane(
+            "--suite", "amsterdam-transitions", "--dir", "for_bpo2toamsterdamattime15k"
+        )
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertIn(
+            "OK — amsterdam-transitions:for_bpo2toamsterdamattime15k: 1/1", run.stdout
+        )
 
     def test_dir_selects_exactly_one_subtree(self):
         run = self.run_lane(

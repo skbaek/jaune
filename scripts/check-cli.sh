@@ -186,7 +186,8 @@ EOF
 
 # A transition into Amsterdam. Both endpoints resolve since goal C, so the
 # label passes rule resolution; the harness-level `amsterdam-transitions`
-# suite stays refused by `check-mainnet.sh` until goal jaune-amsterdam-currency-v1.
+# suite runs under `check-mainnet.sh` since goal jaune-amsterdam-currency-v1
+# gated the activation boundary (goal C's harness refused it until then).
 cat > "$TMP/loose/declared_transition.json" <<'EOF'
 {
   "tests/amsterdam/eip7843_slotnum/test_slotnum.py::test_slotnum[fork_BPO2ToAmsterdamAtTime15k-blockchain_test]": {

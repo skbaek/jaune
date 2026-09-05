@@ -89,8 +89,12 @@ python3 scripts/env_doctor.py \
   --amsterdam-root ~/eest-glamsterdam-devnet-v8.1.4 --amsterdam-deep
 ```
 
-The extracted tree is 48,491 files and about 20 GB; allow at least 25 GB of
-free space for a fresh install. Verification is the mainnet lane's, verbatim:
+The extracted tree is **48,734 files** (the archive's member count, which
+`env_doctor.py --amsterdam-deep` verifies file by file; the 48,491 this
+paragraph carried until goal `jaune-amsterdam-currency-v1` was stale). Its
+size on disk is a host observation, not a fact of the release: 14 GB on this
+host's ext4 (`du -sh`, 2026-09-06; the archive itself is a further 903 MB), so
+allow at least 20 GB of free space for a fresh install. Verification is the mainnet lane's, verbatim:
 the same bootstrap, the same member-by-member safe extractor, the same digest
 check before a single byte is written, the same release-index check against
 `fixtures/.meta/index.json` (root hash
@@ -111,10 +115,15 @@ lane's product:
 
 | suite | files | cases |
 |---|---:|---:|
-| `amsterdam` (static) | 3,140 | 24,840 |
+| `amsterdam` (static) | 3,159 | 24,901 |
 | `amsterdam-transitions` (`BPO2ToAmsterdamAtTime15k`) | 42 | 127 |
-| `amsterdam-smoke` | 16 | 62 |
-| `amsterdam-full` | 3,182 | 24,967 |
+| `amsterdam-smoke` | 16 | 60 |
+| `amsterdam-full` | 3,201 | 25,028 |
+
+(Counts are `manifests.json`'s at `tests-glamsterdam-devnet@v8.1.4`, re-read
+from the manifest regenerated at that pin on 2026-09-06; the earlier rows here
+were v8.1.3's — 3,140 / 24,840, 16 / 62 and 3,182 / 24,967 — and were stale
+from the 2026-09-04 re-pin until goal `jaune-amsterdam-currency-v1`.)
 
 Across 24 labels the corpus holds 12,002 blockchain-test files and 99,151
 cases. The Prague, Osaka and BPO transition labels it also carries are
@@ -125,12 +134,17 @@ against a second, weaker corpus while reporting it as Amsterdam coverage.
 the fork this build does not declare — the release publishes them, and Jaune
 has no BPO3 or BPO4 identity.
 
-**Every suite is refused.** `scripts/check-mainnet.sh --lane amsterdam --suite
-<any of the four>` exits 2 with a message naming the goal that owns the
-semantics it would need, and `--dir` is refused likewise. The refusal fires
-before the fixture root is read, so it is the same answer on a host that never
-installed the corpus. See [`../GATES.md`](../GATES.md) for the selection rules
-and `scripts/tests/test_amsterdam_lane.py` for the tests that hold them.
+**Every suite runs.** This paragraph said "every suite is refused" when the
+lane was created (goal A, 2026-09-03): each `--suite` exited 2 naming the goal
+that owned the semantics it would need. Goal C (2026-09-06) activated the two
+static suites, `amsterdam` and `amsterdam-smoke`, and goal
+`jaune-amsterdam-currency-v1` activated `amsterdam-transitions` and the union
+`amsterdam-full` by gating the `BPO2ToAmsterdamAtTime15k` activation boundary.
+What still refuses is a mistyped or empty `--dir` subtree, a subtree whose
+on-disk file count disagrees with the manifest's, and the other lane's suite
+names — each answered by name before any fixture runs. See
+[`../GATES.md`](../GATES.md) for the selection rules and
+`scripts/tests/test_amsterdam_lane.py` for the tests that hold them.
 
 ## Legacy fixture Git bootstrap
 
@@ -327,7 +341,9 @@ fall back to the manifest-default `<execution-specs>/venv/bin/python`, and
 otherwise skip with a message naming that venv and `scripts/bootstrap_oracle.py`
 instead of failing. `OK (skipped=2)` therefore means the oracle venv was not
 discoverable, not that the generators are unverified — create the venv as
-above and rerun for the full 80.
+above and rerun for the full suite (191 test functions under `scripts/tests/`
+at goal `jaune-amsterdam-currency-v1`; "the full 80" here was the 2026-08
+count).
 
 The remaining generator tests stay on whichever interpreter runs the suite on
 purpose: they assert checkout-validation refusals, which happen before the

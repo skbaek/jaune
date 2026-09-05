@@ -208,8 +208,14 @@ deferral necessary exists: **`GasSchedule.Valid`**. The three Amsterdam
 instructions are gated the same way — `SLOTNUM` by `rules.op.slotnum`,
 `DUPN`/`SWAPN`/`EXCHANGE` by `rules.op.stackAccess` — decoded at every fork
 (EIP-8024's two-byte forms are sized by `getInst` fork-independently) and
-refused as `InvalidOpcode` where the rule is off, with the jumpdest set proved
-unchanged by `pinnedJumpDestsFrom_eq_legacy` rather than sampled.
+refused as `InvalidOpcode` where the rule is off. The jumpdest claim has two
+halves and they have different standing: `pinnedJumpDestsFrom_eq_legacy`
+**proves** that the pinned Amsterdam destination walk and the pre-Amsterdam
+walk agree on every byte array (so the three immediates change no
+destination); the bridge from those walks to Jaune's own `jumpable`/
+`noPushBefore` scan is **sampled** by `scripts/check-jumpdest.sh`, not proved
+(goal C's independent review, P2; re-implementing `jumpable` on the walk is
+reserved to the owner).
 
 It is deliberately small, and it was discovered rather than designed. The
 gas-decreasing theorems are stated over an arbitrary `Sevm`, so a zero-valued

@@ -6,12 +6,16 @@
 # --lane selects the corpus. `mainnet` (the default) is the current-mainnet
 # release and every suite over it runs. `amsterdam` is the Glamsterdam devnet-8
 # prerelease. This build implements Amsterdam -- `Fork.amsterdam.rules?`
-# resolves -- so that lane's two suites over the static `Amsterdam` corpus,
-# `amsterdam` and `amsterdam-smoke`, run here exactly as the mainnet lane's
-# suites run over theirs. The two that select `BPO2ToAmsterdamAtTime15k` --
-# `amsterdam-transitions` and its union `amsterdam-full` -- stay refused and
-# name the goal that owns the activation boundary. A refusal is the point, not
-# a gap: the alternative is an all-PASS verdict over a boundary no gate covers.
+# resolves -- and gates the BPO2-to-Amsterdam activation boundary
+# (`BPO2ToAmsterdamAtTime15k` is a `ChainConfig` whose rules are chosen per
+# block by timestamp; `Jaune/Fork.lean` guards the switch at exactly the
+# labelled second), so all four of that lane's suites run here exactly as the
+# mainnet lane's suites run over theirs: `amsterdam` and `amsterdam-smoke` over
+# the static `Amsterdam` corpus, `amsterdam-transitions` over the
+# `BPO2ToAmsterdamAtTime15k` fixtures, and their union `amsterdam-full`. (Goal
+# C refused the last two, naming goal `jaune-amsterdam-currency-v1` as the one
+# that would cover the boundary; that goal rewrote the refusal into this
+# admission -- see the suite check below.)
 #
 # The two lanes' suite namespaces are disjoint by construction (the devnet
 # lane's derived suites are `amsterdam-` prefixed), so a suite name is never
@@ -74,7 +78,7 @@ JOBS=1
 usage() {
   echo "usage: scripts/check-mainnet.sh [--lane (mainnet|amsterdam)] (--suite SUITE | --dir REL --suite SUITE) [--fixtures-root PATH] [--no-build] [--start-at N] [--jobs <n>|auto]" >&2
   echo "  --lane mainnet   suites: prague osaka transitions smoke full" >&2
-  echo "  --lane amsterdam suites: amsterdam amsterdam-smoke; amsterdam-transitions, amsterdam-full refused" >&2
+  echo "  --lane amsterdam suites: amsterdam amsterdam-smoke amsterdam-transitions amsterdam-full" >&2
   exit 2
 }
 
@@ -108,37 +112,26 @@ case "$LANE" in
 esac
 [ -n "$FIXTURES_ROOT" ] || FIXTURES_ROOT="$LANE_ROOT_DEFAULT"
 
-# The devnet lane's two suites over the *static* Amsterdam corpus run: this
-# build implements those rules, `Fork.amsterdam.rules?` resolves, and the
-# fixture runner admits the `Amsterdam` network label, so those fixtures can be
-# run and judged. The two suites that select `BPO2ToAmsterdamAtTime15k` are
-# still refused, and the refusal is not the old one restated: it is no longer
-# true that this build resolves no Amsterdam rules. What it does not have is any
-# gate over the BPO2-to-Amsterdam *activation boundary* -- the schedule, its
-# blob parameters and the header continuity across it -- which is the currency
-# goal's subject. Running the transition fixtures here would produce a verdict
-# no evidence in this build supports. The refusal fires before the fixture root
-# is looked at, so it is the same answer on a host that has never installed the
-# corpus as on one that has: whether the archive is present is not what defers
-# these two suites.
-amsterdam_refusal() { # <suite> <what it selects>
-  echo "error: suite $1 is installed but refused: it selects $2, and no gate in this build covers the BPO2-to-Amsterdam activation boundary." >&2
-  echo "       Amsterdam's own rules do resolve here: the static corpus runs as --suite amsterdam and --suite amsterdam-smoke." >&2
-  echo "       Activating the transition lane belongs to $AMSTERDAM_CURRENCY_GOAL, which implements it." >&2
-  echo "       The lane's exact contents, per label and per suite: scripts/amsterdam/manifests.json." >&2
-  exit 2
-}
-
-AMSTERDAM_CURRENCY_GOAL="goal jaune-amsterdam-currency-v1"
-
+# All four devnet-lane suites run. The two over the *static* Amsterdam corpus
+# have run since goal C: this build implements those rules and the fixture
+# runner admits the `Amsterdam` label. The two that select
+# `BPO2ToAmsterdamAtTime15k` -- `amsterdam-transitions` and the union
+# `amsterdam-full` -- were refused by goal C with the statement "no gate in
+# this build covers the BPO2-to-Amsterdam activation boundary", naming goal
+# `jaune-amsterdam-currency-v1`. That goal made the statement false and
+# rewrote it here rather than deleting it: the boundary is now gated. The
+# transition label is a `ChainConfig` whose rules are chosen per block by the
+# block's own timestamp (`ForkTransition.chainConfig`, `ChainConfig.rulesAt`),
+# `Jaune/Fork.lean` guards that `rulesAt 14999` is BPO2's record and `rulesAt
+# 15000` is Amsterdam's, with the header-field presence, the block-level access
+# list and the request contracts switching with the record, and the runner
+# admits the transition label below. So the transition fixtures can be run and
+# judged, and `--suite amsterdam-transitions` is the gate over the boundary.
+# What still refuses here is a suite name that is not this lane's, and the
+# mainnet lane's names, each answered by name.
 if [ "$LANE" = "amsterdam" ]; then
   case "$SUITE" in
-    amsterdam|amsterdam-smoke) ;;
-    amsterdam-transitions)
-      amsterdam_refusal "$SUITE" "the BPO2ToAmsterdamAtTime15k fixtures" ;;
-    amsterdam-full)
-      amsterdam_refusal "$SUITE" \
-        "the BPO2ToAmsterdamAtTime15k fixtures (it is the union of amsterdam and amsterdam-transitions)" ;;
+    amsterdam|amsterdam-smoke|amsterdam-transitions|amsterdam-full) ;;
     prague|osaka|transitions|smoke|full)
       echo "error: suite $SUITE is a --lane mainnet suite; the devnet lane's suites are amsterdam, amsterdam-transitions, amsterdam-smoke, amsterdam-full" >&2
       exit 2 ;;
@@ -269,8 +262,8 @@ fi
 # transitions stay outside it, so the cheap suites you run while iterating are
 # never hostage to a long one. See scripts/gate-lock.sh.
 case "$SUITE" in
-  osaka|prague|full|amsterdam) HEAVY=1 ;;
-  *)                           HEAVY=0 ;;
+  osaka|prague|full|amsterdam|amsterdam-full) HEAVY=1 ;;
+  *)                                          HEAVY=0 ;;
 esac
 if [ "$JOBS" -gt 1 ]; then HEAVY=1; fi
 if [ "$HEAVY" -eq 1 ]; then
@@ -287,15 +280,18 @@ fi
 
 # The network labels this lane may hand the binary. A label this list does not
 # name must never reach the runner: the runner would refuse it, but the manifest
-# is what is meant to be exact. `Amsterdam` is admitted on the devnet lane only
-# -- on the mainnet lane it would mean the wrong corpus had been selected -- and
-# the devnet lane admits no transition label at all, because the two suites that
-# carry one are refused above.
+# is what is meant to be exact. `Amsterdam` and `BPO2ToAmsterdamAtTime15k` are
+# admitted on the devnet lane only -- on the mainnet lane either would mean the
+# wrong corpus had been selected. (Goal C's lane admitted no transition label,
+# because the two suites that carry one were refused; goal
+# `jaune-amsterdam-currency-v1` admits the one label the corpus publishes and
+# no other: `BPO2ToBPO3AtTime15k` and `BPO3ToBPO4AtTime15k` stay manifest
+# exclusions naming the fork this build does not declare.)
 case "$LANE" in
   mainnet)
     ALLOWED_NETWORKS="Prague Osaka BPO1 BPO2 PragueToOsakaAtTime15k OsakaToBPO1AtTime15k BPO1ToBPO2AtTime15k" ;;
   amsterdam)
-    ALLOWED_NETWORKS="Amsterdam" ;;
+    ALLOWED_NETWORKS="Amsterdam BPO2ToAmsterdamAtTime15k" ;;
 esac
 
 LIST="$(mktemp)"
@@ -348,7 +344,13 @@ TOTAL="$(wc -l < "$LIST" | tr -d ' ')"
 [ "$START_AT" -le "$TOTAL" ] || {
   echo "error: --start-at $START_AT exceeds $SUITE manifest size $TOTAL" >&2; exit 2;
 }
-PASS=$((START_AT - 1))
+# Two counters. POS is the manifest position, for the progress line; PASS
+# counts only files this run actually verified. The sequential exit line once
+# seeded PASS with START_AT-1 and so reported every skipped entry as passing
+# (goal C's independent review, F2); it now reports what it verified, in the
+# parallel path's wording, with the skip named.
+POS=$((START_AT - 1))
+PASS=0
 START_ALL="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
 
 if [ "$JOBS" -gt 1 ]; then
@@ -472,9 +474,14 @@ while IFS=$'\t' read -r REL NETWORK; do
     echo "RED — $SUITE: non-PASS fixture $REL (network $NETWORK, exit $RC)" >&2
     exit 1
   fi
+  POS=$((POS + 1))
   PASS=$((PASS + 1))
-  printf '[%d/%d] PASS %s\n' "$PASS" "$TOTAL" "$REL" >&2
+  printf '[%d/%d] PASS %s\n' "$POS" "$TOTAL" "$REL" >&2
 done < <(tail -n +"$START_AT" "$LIST")
 END_ALL="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
 ELAPSED="$(perl -e 'printf "%.2f", $ARGV[1] - $ARGV[0]' "$START_ALL" "$END_ALL")"
-echo "OK — $SUITE: $PASS/$TOTAL manifest files PASS in ${ELAPSED}s"
+if [ "$START_AT" -gt 1 ]; then
+  echo "OK — $SUITE: $PASS/$PASS selected manifest files PASS in ${ELAPSED}s (entries $START_AT-$TOTAL; $((START_AT - 1)) skipped by --start-at and NOT verified)"
+else
+  echo "OK — $SUITE: $PASS/$TOTAL manifest files PASS in ${ELAPSED}s"
+fi

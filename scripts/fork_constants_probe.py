@@ -466,6 +466,17 @@ def extract(label: str, fork: str) -> dict:
     seen = [path for path, _ in entries]
     if len(seen) != len(set(seen)):
         raise ProbeError(f"{label}: duplicate field path in the extraction table")
+    # D13: the mainnet activation the pinned specification declares for this
+    # fork, as a compared row rather than a printed one. `ByTimestamp` carries
+    # the timestamp; `Unscheduled` (and any criterion without one) is `None`,
+    # which the build's printer answers with `null` while `mainnetChainConfig`
+    # names no activation for the fork. The same fact is also kept under
+    # `fork_criteria` below for the `--table` report.
+    entries.append(field(
+        "mainnetActivation",
+        int(criteria.timestamp) if hasattr(criteria, "timestamp") else None,
+        f"FORK_CRITERIA ({type(criteria).__name__})",
+    ))
     return {
         "label": label,
         "module": f"ethereum.forks.{fork}",
