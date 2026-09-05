@@ -64,14 +64,16 @@ only generated Prague entries with an explicit `--network Prague`; Osaka, BPO,
 and transition labels remain inventoried and fail closed until their owning
 migration steps activate them.
 
-## Glamsterdam devnet lane (installed, inventoried, refused)
+## Glamsterdam devnet lane (installed, inventoried, run)
 
-A **second, separate** fixture lane, for a fork this build declares and does
-not implement. Nothing in it runs; installing it claims nothing about running
-it. It exists so that the corpus Amsterdam will eventually be judged against
-is pinned, verified, and inventoried *before* any semantics are written
-against it, and so that the numbers a later goal will implement can be checked
-against the same revision the fixtures were filled from.
+A **second, separate** fixture lane, for Amsterdam. It was installed, pinned,
+verified and inventoried before any Amsterdam semantics were written against
+it, so that the corpus the implementation would be judged against — and the
+`execution-specs` revision its numbers are checked against — was fixed first.
+Its static `Amsterdam` suites now run (`scripts/check-mainnet.sh --lane
+amsterdam --suite amsterdam`, `--suite amsterdam-smoke`, `--dir <subtree>`);
+its transition suite (`BPO2ToAmsterdamAtTime15k`) stays refused until the
+schedule is activated by `jaune-amsterdam-currency-v1`.
 
 The source is
 [`execution-specs` `tests-glamsterdam-devnet@v8.1.4`](https://github.com/ethereum/execution-specs/releases/tag/tests-glamsterdam-devnet%40v8.1.4),

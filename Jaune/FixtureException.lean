@@ -57,6 +57,13 @@ inductive FixtureException where
   | blockRlpWithdrawalsNotRead
   | blockUnknownParent
   | blockUnknownParentZero
+  -- EIP-7928 (goal C, fixed decision 9): three identities of their own, and
+  -- the malformed-list identity the corpus uses for a published list that is
+  -- not in the canonical form.
+  | blockInvalidBlockAccessList
+  | blockInvalidBalHash
+  | blockAccessListGasLimitExceeded
+  | blockIncorrectBlockFormat
   -- TransactionException.*
   | txGasLimitPriceProductOverflow
   | txGasAllowanceExceeded
@@ -108,6 +115,10 @@ def all : List FixtureException :=
     blockRlpWithdrawalsNotRead,
     blockUnknownParent,
     blockUnknownParentZero,
+    blockInvalidBlockAccessList,
+    blockInvalidBalHash,
+    blockAccessListGasLimitExceeded,
+    blockIncorrectBlockFormat,
     txGasLimitPriceProductOverflow,
     txGasAllowanceExceeded,
     txInitcodeSizeExceeded,
@@ -157,6 +168,10 @@ def toString : FixtureException → String
   | blockRlpWithdrawalsNotRead => "BlockException.RLP_WITHDRAWALS_NOT_READ"
   | blockUnknownParent => "BlockException.UNKNOWN_PARENT"
   | blockUnknownParentZero => "BlockException.UNKNOWN_PARENT_ZERO"
+  | blockInvalidBlockAccessList => "BlockException.INVALID_BLOCK_ACCESS_LIST"
+  | blockInvalidBalHash => "BlockException.INVALID_BAL_HASH"
+  | blockAccessListGasLimitExceeded => "BlockException.BLOCK_ACCESS_LIST_GAS_LIMIT_EXCEEDED"
+  | blockIncorrectBlockFormat => "BlockException.INCORRECT_BLOCK_FORMAT"
   | txGasLimitPriceProductOverflow =>
     "TransactionException.GASLIMIT_PRICE_PRODUCT_OVERFLOW"
   | txGasAllowanceExceeded => "TransactionException.GAS_ALLOWANCE_EXCEEDED"
@@ -324,6 +339,17 @@ def ofBlockValidationError : BlockValidationError → Option FixtureException
   | .depositEventLayout _ => some blockInvalidDepositEventLayout
   | .systemContractCallFailed _ => some blockSystemContractCallFailed
   | .blockRlpSizeExceeded _ => some blockRlpBlockLimitExceeded
+  -- EIP-7928 (goal C). Consensus observes one thing, the header's hash against
+  -- the computed list; the fixture runner refines that reason into the two
+  -- content identities from the list the fixture publishes as its
+  -- verification aid (`Main.lean`): a published list not in canonical form is
+  -- `INCORRECT_BLOCK_FORMAT`, a canonical one the header's hash commits to
+  -- but Jaune did not compute is `INVALID_BLOCK_ACCESS_LIST`, and a header
+  -- hash inconsistent with the published list is `INVALID_BAL_HASH`.
+  | .blockAccessListHash _ _ => some blockInvalidBalHash
+  | .blockAccessListContent _ => some blockInvalidBlockAccessList
+  | .blockAccessListFormat _ => some blockIncorrectBlockFormat
+  | .blockAccessListGasLimit _ => some blockAccessListGasLimitExceeded
   -- No official identity: the current-mainnet corpus has no fixture that can
   -- reach this rule, because every fork it covers defines the same header
   -- fields. The devnet corpus does -- `invalid_post_fork_block_without_slot_number`
@@ -366,13 +392,14 @@ end FixtureException
 open FixtureException
 
 -- The vocabulary is the reviewed current-mainnet identity set reached by the
--- supported static Prague and Osaka lanes.
-#guard all.length = 43
+-- supported static Prague and Osaka lanes, plus the four the Glamsterdam
+-- devnet lane's `eip7928_*` subtree names (goal C).
+#guard all.length = 47
 
 -- `toString` is injective, so no two identities collapse to one token.
-#guard (all.map toString).eraseDups.length = 43
+#guard (all.map toString).eraseDups.length = 47
 
--- `toString`/`ofString?` round trip on all 43, in both directions.
+-- `toString`/`ofString?` round trip on all 47, in both directions.
 #guard all.all (fun e => ofString? e.toString == some e)
 #guard all.all (fun e => (ofString? e.toString).all (fun e' => e'.toString == e.toString))
 
@@ -478,9 +505,19 @@ def fixtureInventory : List String :=
     "TransactionException.TYPE_3_TX_ZERO_BLOBS" ]                                                           -- 1
     ++ [ "TransactionException.TYPE_4_EMPTY_AUTHORIZATION_LIST",                                           -- current mainnet 1
          "TransactionException.TYPE_4_TX_CONTRACT_CREATION" ]                                               -- current mainnet 1
+    -- The Glamsterdam devnet lane's `for_amsterdam/amsterdam/eip*` subtrees at
+    -- `tests-glamsterdam-devnet@v8.1.4` (goal C, Appendix C): the three EIP-7928
+    -- identities, the two alternations, the malformed-list identity, and the
+    -- gas-used alternation the block-accounting subtree carries.
+    ++ [ "BlockException.INVALID_BLOCK_ACCESS_LIST",                                                        -- devnet 61
+         "BlockException.BLOCK_ACCESS_LIST_GAS_LIMIT_EXCEEDED",                                             -- devnet 4
+         "BlockException.INVALID_BLOCK_ACCESS_LIST|BlockException.INVALID_GAS_USED",                        -- devnet 1
+         "BlockException.INVALID_BAL_HASH|BlockException.INVALID_BLOCK_HASH",                               -- devnet 1
+         "BlockException.INCORRECT_BLOCK_FORMAT",                                                           -- devnet 2
+         "BlockException.GAS_USED_OVERFLOW|TransactionException.GAS_ALLOWANCE_EXCEEDED" ]                   -- devnet 9
 
-#guard fixtureInventory.length = 45
-#guard fixtureInventory.eraseDups.length = 45
+#guard fixtureInventory.length = 51
+#guard fixtureInventory.eraseDups.length = 51
 #guard fixtureInventory.all (fun s => (parseExpectation s).toOption.isSome)
 
 -- Both coverage directions: every identity is reachable from the corpus, and
@@ -489,7 +526,7 @@ def fixtureInventory : List String :=
 -- fails loudly if a constructor is added that the fixtures never name.
 #guard
   (fixtureInventory.flatMap
-    (fun s => ((parseExpectation s).toOption.getD []))).eraseDups.length = 41
+    (fun s => ((parseExpectation s).toOption.getD []))).eraseDups.length = 45
 
 -- Malformed expectation strings are rejected, not repaired.
 #guard parseRejects ""                                                     -- no alternatives
@@ -508,8 +545,9 @@ def fixtureInventory : List String :=
 
 -- Totality of the deliberate assignment: every decode and transaction reason
 -- has an identity; exactly two block reasons -- the header nonce, and the
--- fork-dependent header-field presence rule -- are knowingly unmapped; and of
--- the cryptographic reasons only the malformed signature classifies.
+-- fork-dependent header-field presence rule -- are knowingly unmapped; the
+-- four EIP-7928 reasons each have their own; and of the cryptographic reasons
+-- only the malformed signature classifies.
 --
 -- The presence rule is unmapped because no fixture in the installed corpora
 -- can reach it: every fork the current-mainnet lane covers defines the same
@@ -585,6 +623,37 @@ def fixtureInventory : List String :=
 -- An unmapped reason never matches, no matter how broad the expected set.
 #guard ¬ matchesSet all (.block (.headerNonce .none))
 #guard ¬ matchesSet all (.senderRecovery (.pointCompression .none))
+
+-- EIP-7928 (goal C): the four reasons land on four different identities, the
+-- corpus's alternations parse to the sets they name, and a hash mismatch is
+-- never scored as a content or format mismatch or vice versa -- which is what
+-- fixed decision 9's refusal to alias buys.
+#guard ofBlockValidationError (.blockAccessListHash emptyOmmerHash .none) == some blockInvalidBalHash
+#guard ofBlockValidationError (.blockAccessListContent .none)
+  == some blockInvalidBlockAccessList
+#guard ofBlockValidationError (.blockAccessListFormat .none) == some blockIncorrectBlockFormat
+#guard ofBlockValidationError (.blockAccessListGasLimit .none)
+  == some blockAccessListGasLimitExceeded
+#guard [blockInvalidBalHash, blockInvalidBlockAccessList, blockIncorrectBlockFormat,
+  blockAccessListGasLimitExceeded].eraseDups.length = 4
+#guard parsesTo "BlockException.INVALID_BLOCK_ACCESS_LIST|BlockException.INVALID_GAS_USED"
+  [blockInvalidBlockAccessList, blockInvalidGasUsed]
+#guard parsesTo "BlockException.INVALID_BAL_HASH|BlockException.INVALID_BLOCK_HASH"
+  [blockInvalidBalHash, blockInvalidWithdrawalsRoot]
+#guard (parseExpectation "BlockException.INVALID_BLOCK_ACCESS_LIST").toOption.all
+  (fun expected => ¬ matchesSet expected (.block (.blockAccessListHash emptyOmmerHash .none)))
+#guard (parseExpectation "BlockException.INVALID_BLOCK_ACCESS_LIST").toOption.all
+  (fun expected => matchesSet expected (.block (.blockAccessListContent .none)))
+#guard (parseExpectation "BlockException.INVALID_BAL_HASH|BlockException.INVALID_BLOCK_HASH").toOption.all
+  (fun expected => matchesSet expected (.block (.blockAccessListHash emptyOmmerHash .none)))
+#guard (parseExpectation "BlockException.INVALID_BAL_HASH|BlockException.INVALID_BLOCK_HASH").toOption.all
+  (fun expected => ¬ matchesSet expected (.block (.blockAccessListContent .none)))
+#guard (parseExpectation "BlockException.INVALID_BLOCK_ACCESS_LIST|BlockException.INVALID_GAS_USED").toOption.all
+  (fun expected => ¬ matchesSet expected (.block (.blockAccessListHash emptyOmmerHash .none)))
+#guard (parseExpectation "BlockException.BLOCK_ACCESS_LIST_GAS_LIMIT_EXCEEDED").toOption.all
+  (fun expected => matchesSet expected (.block (.blockAccessListGasLimit .none)))
+#guard (parseExpectation "BlockException.INCORRECT_BLOCK_FORMAT").toOption.all
+  (fun expected => matchesSet expected (.block (.blockAccessListFormat .none)))
 -- An empty expected set matches nothing; `parseExpectation` cannot produce one.
 #guard ¬ matchesSet [] (.block (.gasLimitTooBig .none))
 

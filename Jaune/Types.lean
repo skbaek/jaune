@@ -1276,6 +1276,7 @@ inductive Rinst : Type
   | basefee -- 0x48 / 0 / 1 / get the current block's base fee.
   | blobhash -- 0x49 / 1 / 1 /
   | blobbasefee -- 0x4A / 0 / 1 / get the current block's blob base fee.
+  | slotnum -- 0x4B / 0 / 1 / get the current block's consensus slot number (Amsterdam and later only).
   | pop -- 0x50 / 1 / 0 / Remove an item from the Stack.
   | mload -- 0x51 / 1 / 1 / Load a Word from memory.
   | mstore -- 0x52 / 2 / 0 / Store a Word in memory.
@@ -1370,6 +1371,7 @@ def Rinst.toString : Rinst → String
   | basefee => "BASEFEE"
   | blobhash => "BLOBHASH"
   | blobbasefee => "BLOBBASEFEE"
+  | slotnum => "SLOTNUM"
   | pop => "POP"
   | mload => "MLOAD"
   | mstore => "MSTORE"
@@ -1459,6 +1461,9 @@ def UInt8.toRinst : UInt8 → Option Rinst
   | 0x48 => some .basefee -- 0x48 / 0 / 1 /
   | 0x49 => some .blobhash -- 0x49 / 1 / 1 /
   | 0x4A => some .blobbasefee -- 0x4A / 0 / 1 /
+  -- 0x4B decodes at every fork, like 0x1E; whether it is a defined instruction
+  -- is `ForkRules.op.slotnum`, checked by `Rinst.runCore` (EIP-7843).
+  | 0x4B => some .slotnum -- 0x4B / 0 / 1 / get the current block's slot number.
   | 0x50 => some .pop -- 0x50 / 1 / 0 / Remove an item from the stack.
   | 0x51 => some .mload -- 0x51 / 1 / 1 / Load a word from memory.
   | 0x52 => some .mstore -- 0x52 / 2 / 0 / Store a word in memory.

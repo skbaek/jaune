@@ -154,61 +154,38 @@ def Lean.Json.find : String → Lean.Json → IO Lean.Json
 namespace Jaune
 namespace T8n
 
------------------ THE METERING LANE -----------------
+----------------- THE FORK LANE -----------------
 
-/-- The rule set the transition tool meters a fork under when `Fork.rules?` has
-none for it.
+/-- The forks `jaune t8n --forks` advertises to a transition-tool framework.
 
-This is the **only** table that resolves the Amsterdam metering vehicle, and it
-lives here rather than in `Jaune/Fork.lean` on purpose. `Fork.rules?` answers
-"what are this fork's rules", and for Amsterdam the honest answer is still
-`none`: the block-level rules of EIP-7928, EIP-8282, EIP-7843, EIP-8024 and
-EIP-7954 have no reader in this build, so a block cannot be validated under
-them. What *does* exist is the transaction metering shape, and this lane is
-where it can be exercised against the pinned reference tool.
+This is the block-validation handshake goal A fixed at the four forks whose
+static and transition corpora this build runs end to end, spelled out rather
+than derived from `Fork.supported` on purpose. Since goal C composed
+`amsterdamRules`, `Fork.supported` names Amsterdam too and `--state.fork
+Amsterdam` resolves through `Fork.rules?` exactly like every other label; but
+advertising a fork on this line is the one consequence of that resolution the
+block-level goal *surfaces rather than takes* (its fixed decision 7: a
+user-consulted step), and extending the lane is the `--forks`/`--info`
+handshake work of goal `jaune-amsterdam-currency-v1`. Until that decision
+lands, the line stays byte-identical to what it has printed since goal A.
 
-So the vehicle is reachable from exactly two readers, both of which are
-inventory or differential rather than block validation: `t8n --state.fork
-Amsterdam`, and `jaune --rules-partial Amsterdam`, which the constants gate
-compares against the pinned upstream revision. `t8n --forks` keeps printing
-`Fork.supported`, the runner keeps refusing `--network Amsterdam`, and every
-other entry point is unchanged. The block-level goal composes a real
-`amsterdamRules`, makes `Fork.rules?` answer it, and retires this table. -/
-def meteringRules? : Fork → Option ForkRules
-  | .amsterdam => some amsterdamMeteringRules
-  | _ => none
+Goal B's transaction-metering resolver (`meteringRules?`, `meteringForks`,
+`laneRules`) is retired: there is one resolver, `Fork.rules`, for every label. -/
+def advertisedForkLane : List Fork := [.prague, .osaka, .bpo1, .bpo2]
 
-/-- Fork labels accepted only by the transaction-metering differential.
-Kept separate from `Fork.supported`, which remains the block-validation lane
-reported by `t8n --forks`. -/
-def meteringForks : List Fork :=
-  Fork.all.filter fun f => (meteringRules? f).isSome
-
-/-- The lane a fork label runs in: its own rules if this build implements them,
-otherwise the metering vehicle if one exists, and a refusal otherwise. -/
-def laneRules (f : Fork) : Except SupportError ForkRules :=
-  match f.rules? with
-  | some rules => .ok rules
-  | none =>
-    match meteringRules? f with
-    | some rules => .ok rules
-    | none => .error (.unsupportedFork f)
-
--- No fork this build actually runs has a metering vehicle: a vehicle exists
--- only where `Fork.rules?` is `none`, so the two tables can never disagree
--- about a fork and `laneRules` can never shadow a real rule set.
-#guard Fork.supported.all (fun f => (meteringRules? f).isNone)
-#guard Fork.unimplemented = [.amsterdam]
-#guard meteringForks = [.amsterdam]
-#guard (meteringRules? .amsterdam) = some amsterdamMeteringRules
--- On a supported fork the lane is that fork's own rules, unchanged.
-#guard Fork.supported.all (fun f =>
-  match f.rules? with
-  | some r => laneRules f = .ok r
-  | none => false)
-#guard laneRules .prague = .ok pragueRules
-#guard laneRules .bpo2 = .ok bpo2Rules
-#guard laneRules .amsterdam = .ok amsterdamMeteringRules
+-- The advertised lane is a prefix of the runnable one: nothing advertised is
+-- refused, and the only runnable fork not yet advertised is Amsterdam. (Goal
+-- B's guards here asserted `Fork.unimplemented = [.amsterdam]`, `meteringForks
+-- = [.amsterdam]` and `meteringRules? .amsterdam = some amsterdamMeteringRules`;
+-- each is rewritten to the statement that replaced it.)
+#guard advertisedForkLane.all (fun f => f.rules?.isSome)
+#guard Fork.supported.take advertisedForkLane.length = advertisedForkLane
+#guard Fork.supported.filter (fun f => !advertisedForkLane.contains f) = [.amsterdam]
+#guard Fork.unimplemented = []
+#guard Fork.amsterdam.rules = .ok amsterdamRules
+#guard Fork.all.all (fun f => f.rules.toOption.isSome)
+#guard Fork.prague.rules = .ok pragueRules
+#guard Fork.bpo2.rules = .ok bpo2Rules
 
 ----------------- JSON EMISSION ------------------
 
@@ -394,10 +371,9 @@ def natReq (j : Lean.Json) (k : String) : IO Nat := do
 ----------------- INPUT: THE ENVIRONMENT ------------------
 
 /-- Everything `env` contributes to a `BenvStat`, after the target's two
-derivations have been applied. Fields the Prague-BPO2 lane does not consume --
-`currentDifficulty`, `slotNumber`, `extraData`, the block-access-list pair --
-are accepted and dropped, exactly as the target accepts and does not consume
-them. -/
+derivations have been applied. Fields no lane consumes -- `currentDifficulty`,
+`extraData`, the block-access-list pair -- are accepted and dropped, exactly
+as the target accepts and does not consume them. -/
 structure T8nEnv : Type where
   coinbase : Adr
   gasLimit : Nat
@@ -409,6 +385,11 @@ structure T8nEnv : Type where
   parentBeaconBlockRoot : B256
   blockHashes : List B256
   withdrawals : List Withdrawal
+  /-- EIP-7843 (goal C): `env.slotNumber`, what `SLOTNUM` pushes. The target's
+  default block environment sets `slot_number = U64(0)`, and its driver passes
+  an absent field through as `None`, on which no consuming instruction can
+  run at all; this lane reads an absent field as zero. -/
+  slotNumber : UInt64
 
 def envKnownFields : List String :=
   [ "currentCoinbase", "currentGasLimit", "currentNumber", "currentTimestamp",
@@ -536,12 +517,14 @@ def decodeEnv (rules : ForkRules) (stateTest : Bool) (j : Lean.Json) : IO T8nEnv
     | some v => do
       let items ← v.toIoList
       items.mapM readWithdrawal
+  let slotNumber ← natOr j "slotNumber" 0
   return {
     coinbase := coinbase, gasLimit := gasLimit, number := number,
     timestamp := timestamp, prevRandao := prevRandao.toB256,
     baseFeePerGas := baseFeePerGas, excessBlobGas := excessBlobGas,
     parentBeaconBlockRoot := parentBeaconBlockRoot,
-    blockHashes := blockHashes, withdrawals := withdrawals
+    blockHashes := blockHashes, withdrawals := withdrawals,
+    slotNumber := slotNumber.toUInt64
   }
 
 ----------------- INPUT: TRANSACTIONS ------------------
@@ -828,12 +811,20 @@ def runStateTest (benv : Benv) (txs : List (TxParse Tx)) :
 
 Block rewards are absent because they are unreachable on this lane: the
 target pays them only when the fork is not proof-of-stake, and every runnable
-or metering fork here is proof-of-stake. Block access-list construction remains
-outside the Amsterdam metering vehicle; the corpus deviation registry records
-the target's exact `blockAccessList` / `blockAccessListHash` pair per case.
--/
+or metering fork here is proof-of-stake.
+
+EIP-7928 (goal C): the two pre-execution system calls are incorporated into
+the block-level access list at index 0, each transaction at its index plus one
+inside `processTransaction`, and the post-execution operations -- withdrawals,
+then each request call -- at `len(txs) + 1`, the tool's count of the
+transactions it was handed, rejected ones included (the driver sets the index
+once, before withdrawals; Appendix E item 2 of the goal). The list is built
+after the requests and the item rule is applied to it; a violation is the
+`blockException` of a result that still carries the list, as the target
+assigns `block_output.block_access_list` before validating it. -/
 def runBlockchain (benv : Benv) (txs : List (TxParse Tx)) (wds : List Withdrawal) :
     Except TransitionError Outcome := do
+  let rules := benv.stat.rules
   -- The parent hash the history-storage system transaction records. The
   -- target reads `block_hashes[-1]` and raises `IndexError` out of the whole
   -- tool when the window is empty, which is the shape every state test
@@ -842,20 +833,36 @@ def runBlockchain (benv : Benv) (txs : List (TxParse Tx)) (wds : List Withdrawal
   -- so this records the zero hash and continues; on every input the target
   -- can process at all, the window is non-empty and this is its last entry.
   let lastHash := benv.stat.blockHashes.getLast?.getD 0
-  let ⟨stHistory, _⟩ ←
+  let ⟨stHistory, outHistory⟩ ←
     Except.mapError TransitionError.vm <|
       processUncheckedSystemTransaction benv historyStorageAddress lastHash.toBytes
+  let bal := ({} : BalBuilder).incorporateSystem rules 0 benv.state stHistory
+    (historyStorageAddress :: outHistory.accountReads.toList) outHistory.storageReads.toList
   let benv := benv.withState stHistory
-  let ⟨stBeacon, _⟩ ←
+  let ⟨stBeacon, outBeacon⟩ ←
     Except.mapError TransitionError.vm <|
       processUncheckedSystemTransaction benv beaconRootsAddress
         benv.stat.parentBeaconBlockRoot.toBytes
+  let bal := bal.incorporateSystem rules 0 benv.state stBeacon
+    (beaconRootsAddress :: outBeacon.accountReads.toList) outBeacon.storageReads.toList
   let benv := benv.withState stBeacon
-  let ⟨benv, bout, rej⟩ ← foldTxs txs.putIndex benv .init []
+  let ⟨benv, bout, rej⟩ ← foldTxs txs.putIndex benv {BlockOutput.init with bal := bal} []
+  let postIndex := txs.length + 1
   let ⟨stWds, bout⟩ := processWithdrawals benv bout wds
+  let balWds := bout.bal.incorporateSystem rules postIndex benv.state stWds
+    (wds.map Withdrawal.recipient) []
+  let bout := {bout with bal := balWds}
   let benv := benv.withState stWds
-  match processGeneralPurposeRequests benv bout with
-  | .ok ⟨st, bout'⟩ => .ok ⟨st, bout', rej, none⟩
+  match processGeneralPurposeRequestsAt postIndex benv bout with
+  | .ok ⟨st, bout'⟩ =>
+    let list := match rules.bal with
+      | none => []
+      | some _ => bout'.bal.build
+    let bout' := {bout' with blockAccessList := list}
+    match checkBlockAccessListGasLimit rules benv.stat.blockGasLimit list with
+    | .ok () => .ok ⟨st, bout', rej, none⟩
+    | .error (.block reason) => .ok ⟨st, bout', rej, some reason⟩
+    | .error err => .error err
   | .error (.block reason) =>
     -- The target raises `InvalidBlock` out of the step and builds its result
     -- from whatever the block environment and block output already hold.
@@ -955,9 +962,12 @@ private def resultGasUsed (bout : BlockOutput) : Nat :=
 Key order is the target's pydantic declaration order, which is what its
 `model_dump` emits -- note that `requestsHash` precedes `requests`. Absent
 keys are the ones its `exclude_none=True` drops: `currentDifficulty` is
-`None` on a proof-of-stake lane, the block-access-list pair is Amsterdam-only,
-and traces are not claimed by this tool at all. -/
-def resultJson (env : T8nEnv) (o : Outcome) : JOut :=
+`None` on a proof-of-stake lane, the block-access-list pair (EIP-7928, goal
+C) is present exactly when the rules carry a block-level access list -- the
+list's RLP and its keccak, the empty list's `0xc0` in state-test mode, where
+the target never builds one -- and traces are not claimed by this tool at
+all. The key spellings are the ones goal B's first golden recorded. -/
+def resultJson (rules : ForkRules) (env : T8nEnv) (o : Outcome) : JOut :=
   let logsHash := (BLT.list (o.bout.blockLogs.map Log.toBLT)).toBytes.keccak
   let base : List (String × JOut) := [
     ⟨"stateRoot", .str (hexB256 o.state.root)⟩,
@@ -975,6 +985,11 @@ def resultJson (env : T8nEnv) (o : Outcome) : JOut :=
     ⟨"requestsHash", .str (hexB256 (computeRequestsHash o.bout.requests))⟩,
     ⟨"requests", .arr (o.bout.requests.map fun r => .str (hexBytes r))⟩
   ]
+  let base := match rules.bal with
+    | none => base
+    | some _ => base ++ [
+      ⟨"blockAccessList", .str (hexBytes o.bout.blockAccessList.encode)⟩,
+      ⟨"blockAccessListHash", .str (hexB256 o.bout.blockAccessList.hash)⟩ ]
   match o.blockException with
   | none => .obj base
   | some e => .obj (base ++ [⟨"blockException", .str (blockExceptionText e)⟩])
@@ -1125,11 +1140,12 @@ def printInfo : IO Unit := do
   IO.println s!"lean toolchain: {Lean.versionString}"
   IO.println
     s!"t8n fork lane: \
-       {String.intercalate " " (Fork.supported.map Fork.toString)}"
+       {String.intercalate " " (advertisedForkLane.map Fork.toString)}"
   IO.println
-    s!"t8n metering lane: \
-       {String.intercalate " " (meteringForks.map Fork.toString)} \
-       (transaction metering only; omits EIP-7928/8282/7843/8024/7954 block semantics)"
+    s!"t8n resolves: \
+       {String.intercalate " " (Fork.supported.map Fork.toString)} \
+       (every declared fork, through Fork.rules?; Amsterdam is not yet \
+       advertised on --forks, pending goal jaune-amsterdam-currency-v1)"
   IO.println s!"t8n modes: blockchain (default), state-test (--state-test)"
   IO.println s!"t8n tracing: not claimed"
   IO.println s!"sources manifest: {path}"
@@ -1161,11 +1177,10 @@ def run (args : List String) : IO Unit := do
   -- `--info` it must answer from any working directory and must not depend on
   -- the sources manifest being reachable.
   if o.forks then
-    -- The runnable lane, not the declared one. This line is a wrapper's whole
-    -- basis for deciding what to send, so advertising a fork the very next
-    -- step would refuse would make the refusal a wasted round trip and the
-    -- handshake a false claim.
-    IO.println (String.intercalate " " (Fork.supported.map Fork.toString))
+    -- The advertised lane. This line is a wrapper's whole basis for deciding
+    -- what to send, so it names only forks the very next step would run --
+    -- and, per `advertisedForkLane`, not yet every fork it would run.
+    IO.println (String.intercalate " " (advertisedForkLane.map Fork.toString))
     return ()
   if o.info then
     printInfo
@@ -1173,15 +1188,13 @@ def run (args : List String) : IO Unit := do
   if o.forkLabel.isEmpty then
     IO.throw
       s!"error : t8n requires --state.fork; there is no default fork, and the \
-         runnable labels are {Fork.supported.map Fork.toString}; the \
-         transaction-metering labels are {meteringForks.map Fork.toString}"
+         runnable labels are {Fork.supported.map Fork.toString}"
   let some f := Fork.ofString? o.forkLabel
     | IO.throw
         s!"error : t8n does not support the fork {repr o.forkLabel}; this \
-           build's runnable lane is {Fork.supported.map Fork.toString}, its \
-           transaction-metering lane is {meteringForks.map Fork.toString}, \
-           and there is no fallback"
-  let rules ← IO.ofExcept ((laneRules f).mapError SupportError.render)
+           build's runnable lane is {Fork.supported.map Fork.toString}, and \
+           there is no fallback"
+  let rules ← IO.ofExcept (f.rules.mapError SupportError.render)
   let usesStdin :=
     o.inputAlloc = "stdin" ∨ o.inputEnv = "stdin" ∨ o.inputTxs = "stdin"
   let stdinDoc ←
@@ -1212,14 +1225,15 @@ def run (args : List String) : IO Unit := do
       time := env.timestamp.toB256,
       prevRandao := env.prevRandao,
       excessBlobGas := env.excessBlobGas,
-      parentBeaconBlockRoot := env.parentBeaconBlockRoot
+      parentBeaconBlockRoot := env.parentBeaconBlockRoot,
+      slotNumber := env.slotNumber
     }
   }
   let outcome ←
     IO.ofExcept <|
       (if o.stateTest then runStateTest benv txs
         else runBlockchain benv txs env.withdrawals).mapError TransitionError.render
-  let resultText := (resultJson env outcome).toString
+  let resultText := (resultJson rules env outcome).toString
   let allocText := (allocJson outcome.state).toString
   let bodyText := quoted (bodyHex txs)
   let basedir : System.FilePath := o.outputBasedir
@@ -1233,7 +1247,7 @@ def run (args : List String) : IO Unit := do
   else
     IO.FS.writeFile (basedir.join o.outputAlloc) allocText
   if o.outputResult = "stdout" then
-    stdoutFields := stdoutFields ++ [⟨"result", resultJson env outcome⟩]
+    stdoutFields := stdoutFields ++ [⟨"result", resultJson rules env outcome⟩]
   else
     IO.FS.writeFile (basedir.join o.outputResult) resultText
   if ¬ stdoutFields.isEmpty then
@@ -1254,20 +1268,20 @@ Executes one state transition outside any block-validation context and emits
 emits. Options may be spelled --flag=value or --flag value.
 
   --state.fork <label>   required; one of the runnable labels
-                         {Fork.supported.map Fork.toString}, or the transaction-
-                         metering labels {meteringForks.map Fork.toString}.
-                         There is no default and no fallback.
+                         {Fork.supported.map Fork.toString}. There is no
+                         default and no fallback.
   --state-test           apply exactly one transaction with no system
                          operations, no withdrawals and no requests.
   --state.reward <n>     accepted and not consumed: every fork on this lane is
                          proof-of-stake, so block rewards are unreachable.
-  --info                 print the version, runnable and transaction-metering
-                         lanes (including the latter's omissions), and the pins
-                         recorded in scripts/sources.json. Needs that file:
-                         pass JAUNE_SOURCES if it is not at scripts/ from the
+  --info                 print the version, the advertised fork lane, every
+                         fork this build resolves, and the pins recorded in
+                         scripts/sources.json. Needs that file: pass
+                         JAUNE_SOURCES if it is not at scripts/ from the
                          working directory.
-  --forks                print the supported fork lane and nothing else, on
-                         one line. Answers from anywhere.
+  --forks                print the advertised fork lane and nothing else, on
+                         one line ({advertisedForkLane.map Fork.toString}).
+                         Answers from anywhere.
 
 Tracing is not claimed: --trace, its variants and --opcode.count are refused
 rather than ignored.

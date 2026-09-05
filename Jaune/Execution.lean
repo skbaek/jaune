@@ -374,6 +374,11 @@ def Ninst.size : Ninst → Nat
   | reg _ => 1
   | exec _ => 1
   | push xs _ => xs.length + 1
+  -- EIP-8024: one immediate byte, so `pc += 2` -- for an accepted immediate.
+  -- A forbidden one halts before the counter moves, so its size is never read.
+  | dupn _ => 2
+  | swapn _ => 2
+  | exchange _ => 2
 
 -- the message passed to the sub-call performed by a call-type instruction.
 -- factored out as a named definition to prevent context blowup in proofs.
@@ -777,12 +782,16 @@ def genericCreateAmsterdam.step
     let calldata := devm.memory.data.sliceD memoryIndex memorySize 0
     let devm := devm.withReturnData []
     -- PREFLIGHT: nothing has been charged or withheld for the child yet.
+    -- `get_account(sender_address)` is a read (EIP-7928).
+    let devm := devm.balReadAccount sevm.benvStat.rules sevm.currentTarget
     let sender := devm.state.get sevm.currentTarget
     if sender.bal < endowment ∨ sender.nonce = UInt64.max ∨ sevm.depth = 0 then
       let devm ← devm.push 0
       return .done (.ok devm)
-    -- DESTINATION ACCESS: the creation charge, by existence alone.
+    -- DESTINATION ACCESS: the creation charge, by existence alone;
+    -- `is_account_alive(contract_address)` reads the destination (EIP-7928).
     let devm := addAccessedAddress devm newAddress
+    let devm := devm.balReadAccount sevm.benvStat.rules newAddress
     let newAccountCharged := (devm.getAcct newAddress).Empty
     let devm ←
       if newAccountCharged then chargeStateGas state.newAccount devm else .ok devm
@@ -1054,9 +1063,13 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
         let devm := addAccessedAddress devm callee
         let ⟨disablePrecompiles, newCodeAddress, delegatedAccessGasCost⟩ :=
           gasRules.delegationCost devm callee
+        -- `calculate_delegation_cost`: `get_account(to)` is a read (EIP-7928).
+        let devm := devm.balReadAccount sevm.benvStat.rules callee
         let extraGas := accessGas + transferCost + delegatedAccessGasCost
         Except.assert (extraGas + extendCost ≤ devm.gasLeft)
           ⟨.halt (.outOfGas .none), devm⟩
+        -- `get_account(code_address)` before the charge is a read (EIP-7928).
+        let devm := devm.balReadAccount sevm.benvStat.rules newCodeAddress
         let ⟨code, devm⟩ :=
           completeDelegationAccess devm disablePrecompiles newCodeAddress
         let devm ← chargeGas (extraGas + extendCost) devm
@@ -1136,9 +1149,13 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
         let devm := addAccessedAddress devm codeAddress
         let ⟨disablePrecompiles, newCodeAddress, delegatedAccessGasCost⟩ :=
           gasRules.delegationCost devm codeAddress
+        -- `calculate_delegation_cost`: `get_account(to)` is a read (EIP-7928).
+        let devm := devm.balReadAccount sevm.benvStat.rules codeAddress
         let extraGas := accessGas + transferCost + delegatedAccessGasCost
         Except.assert (extraGas + extendCost ≤ devm.gasLeft)
           ⟨.halt (.outOfGas .none), devm⟩
+        -- `get_account(code_address)` before the charge is a read (EIP-7928).
+        let devm := devm.balReadAccount sevm.benvStat.rules newCodeAddress
         let ⟨code, devm⟩ :=
           completeDelegationAccess devm disablePrecompiles newCodeAddress
         let ⟨msgCallCost, msgCallStipend⟩ :=
@@ -1200,9 +1217,13 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
         let devm := addAccessedAddress devm codeAddress
         let ⟨disablePrecompiles, newCodeAddress, delegatedAccessGasCost⟩ :=
           gasRules.delegationCost devm codeAddress
+        -- `calculate_delegation_cost`: `get_account(to)` is a read (EIP-7928).
+        let devm := devm.balReadAccount sevm.benvStat.rules codeAddress
         let extraGas := accessGas + transferCost + delegatedAccessGasCost
         Except.assert (extraGas + extendCost ≤ devm.gasLeft)
           ⟨.halt (.outOfGas .none), devm⟩
+        -- `get_account(code_address)` before the charge is a read (EIP-7928).
+        let devm := devm.balReadAccount sevm.benvStat.rules newCodeAddress
         let ⟨code, devm⟩ :=
           completeDelegationAccess devm disablePrecompiles newCodeAddress
         let ⟨msgCallCost, msgCallStipend⟩ :=
@@ -1264,9 +1285,13 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
         let devm := addAccessedAddress devm codeAddress
         let ⟨disablePrecompiles, newCodeAddress, delegatedAccessGasCost⟩ :=
           gasRules.delegationCost devm codeAddress
+        -- `calculate_delegation_cost`: `get_account(to)` is a read (EIP-7928).
+        let devm := devm.balReadAccount sevm.benvStat.rules codeAddress
         let extraGas := accessGas + transferCost + delegatedAccessGasCost
         Except.assert (extraGas + extendCost ≤ devm.gasLeft)
           ⟨.halt (.outOfGas .none), devm⟩
+        -- `get_account(code_address)` before the charge is a read (EIP-7928).
+        let devm := devm.balReadAccount sevm.benvStat.rules newCodeAddress
         let ⟨code, devm⟩ :=
           completeDelegationAccess devm disablePrecompiles newCodeAddress
         let ⟨msgCallCost, msgCallStipend⟩ :=
@@ -1366,6 +1391,51 @@ def Ninst.step (evm : Evm) (n : Ninst) : Step :=
       devm.push xs.toB256
   | .reg r => Step.ofExecution pc (r.run evm)
   | .exec x => XStep.toStep pc (Xinst.step evm.sta evm.dyna x)
+  -- EIP-8024 (`vm/instructions/stack.py` `dupn`/`swapn`/`exchange`): the
+  -- availability check first, as for every fork-gated opcode; then
+  -- `charge_gas(VERY_LOW)` *before* the immediate is decoded, so an
+  -- out-of-gas frame reports that and not the immediate; then the decode,
+  -- where a forbidden immediate is the pinned `InvalidParameter`, an
+  -- exceptional halt reported as an invalid instruction; then the stack.
+  -- `DUPN n` duplicates position `n` (`stack[-n]`, index `n - 1` from the
+  -- top), `SWAPN n` swaps the top with position `n + 1` (index `n`), and
+  -- `EXCHANGE n m` swaps positions `n + 1` and `m + 1` (indices `n`, `m`).
+  | .dupn imm =>
+    Step.ofExecution pc <| do
+      if evm.sta.benvStat.rules.op.stackAccess then
+        let devm ← chargeGas gVerylow evm.dyna
+        match decodeSingle imm with
+        | none => .error ⟨.halt (.invalidOpcode .none), devm⟩
+        | some n =>
+          match devm.stack[n - 1]? with
+          | none => .error ⟨.halt (.stackUnderflow .none), devm⟩
+          | some word => devm.push word
+      else
+        .error ⟨.halt (.invalidOpcode .none), evm.dyna⟩
+  | .swapn imm =>
+    Step.ofExecution pc <| do
+      if evm.sta.benvStat.rules.op.stackAccess then
+        let devm ← chargeGas gVerylow evm.dyna
+        match decodeSingle imm with
+        | none => .error ⟨.halt (.invalidOpcode .none), devm⟩
+        | some n =>
+          match List.swap devm.stack (n - 1) with
+          | none => .error ⟨.halt (.stackUnderflow .none), devm⟩
+          | some stack => .ok (devm.withStack stack)
+      else
+        .error ⟨.halt (.invalidOpcode .none), evm.dyna⟩
+  | .exchange imm =>
+    Step.ofExecution pc <| do
+      if evm.sta.benvStat.rules.op.stackAccess then
+        let devm ← chargeGas gVerylow evm.dyna
+        match decodePair imm with
+        | none => .error ⟨.halt (.invalidOpcode .none), devm⟩
+        | some (n, m) =>
+          match List.exchange devm.stack n m with
+          | none => .error ⟨.halt (.stackUnderflow .none), devm⟩
+          | some stack => .ok (devm.withStack stack)
+      else
+        .error ⟨.halt (.invalidOpcode .none), evm.dyna⟩
 
 def Evm.step (evm : Evm) : Step :=
   match evm.getInst with
@@ -1373,6 +1443,86 @@ def Evm.step (evm : Evm) : Step :=
   | .some (.next n) => Ninst.step evm n
   | .some (.jump j) => Step.ofJump (j.run evm)
   | .some (.last l) => .halt (l.run evm.sta evm.dyna)
+
+-- EIP-8024 `DUPN`/`SWAPN`/`EXCHANGE` (goal C, G4), stepped from real code
+-- through `getInst`, so that the immediate's sizing, the zero fill past the
+-- end of code, the activation check, the `VERY_LOW` charge, the decode, and
+-- the stack effect are all observed together. The summary is
+-- `(status, gasLeft, stack as Nats, pc)`; `"ok"` is a continued frame.
+private def stackAccessGuardEvm (rules : ForkRules) (code : ByteArray)
+    (gasLeft : Nat) (stack : List B256) : Evm :=
+  { pc := 0,
+    sta := { (default : Sevm) with
+      code := code,
+      benvStat := { (default : BenvStat) with rules := rules } },
+    dyna := ((default : Devm).withGasLeft gasLeft).withStack stack }
+
+private def stackAccessGuard (rules : ForkRules) (code : List UInt8)
+    (gasLeft : Nat) (stack : List Nat) : String × Nat × List Nat × Nat :=
+  match Evm.step (stackAccessGuardEvm rules ⟨code.toArray⟩ gasLeft
+      (stack.map Nat.toB256)) with
+  | .cont pc d => ("ok", d.gasLeft, d.stack.map B256.toNat, pc)
+  | .halt (.error ⟨e, d⟩) => (e.render, d.gasLeft, d.stack.map B256.toNat, 0)
+  | .halt (.ok d) => ("halt-ok", d.gasLeft, d.stack.map B256.toNat, 0)
+  | .spawn _ _ _ => ("spawn", 0, [], 0)
+
+private def guardStackOf (n : Nat) : List Nat := List.range n
+
+-- Sizing: an accepted immediate advances the counter by two (`pc += 2`).
+-- `DUPN 0x80` decodes to 17 and duplicates position 17 (index 16).
+#guard stackAccessGuard amsterdamRules [0xE6, 0x80] 100 (guardStackOf 17)
+  = ("ok", 100 - gVerylow, 16 :: guardStackOf 17, 2)
+#guard gVerylow = 3
+-- One item short is a stack underflow -- after the charge, as in the pinned
+-- `dupn`, whose `charge_gas` precedes the length test.
+#guard stackAccessGuard amsterdamRules [0xE6, 0x80] 100 (guardStackOf 16)
+  = ("StackUnderflowError", 100 - gVerylow, guardStackOf 16, 0)
+-- `DUPN 0x00` decodes to 145: 145 items suffice, 144 do not.
+#guard (stackAccessGuard amsterdamRules [0xE6, 0x00] 100 (guardStackOf 145)).1 = "ok"
+#guard (stackAccessGuard amsterdamRules [0xE6, 0x00] 100 (guardStackOf 144)).1
+  = "StackUnderflowError"
+-- `DUPN` as the final byte of code: the immediate is zero-filled to 0x00,
+-- decoding to 145 -- a stack underflow unless 145 items are present.
+#guard (stackAccessGuard amsterdamRules [0xE6] 100 (guardStackOf 144)).1
+  = "StackUnderflowError"
+#guard (stackAccessGuard amsterdamRules [0xE6] 100 (guardStackOf 145)).1 = "ok"
+#guard (stackAccessGuard amsterdamRules [0xE6] 100 (guardStackOf 145)).2.2.2 = 2
+-- A forbidden immediate is an invalid instruction -- after the charge, since
+-- the pinned `charge_gas` precedes the decode -- whatever the stack holds.
+#guard stackAccessGuard amsterdamRules [0xE6, 0x5B] 100 (guardStackOf 200)
+  = ("InvalidOpcode", 100 - gVerylow, guardStackOf 200, 0)
+#guard (stackAccessGuard amsterdamRules [0xE6, 0x7F] 100 (guardStackOf 200)).1 = "InvalidOpcode"
+#guard (stackAccessGuard amsterdamRules [0xE7, 0x5B] 100 (guardStackOf 200)).1 = "InvalidOpcode"
+#guard (stackAccessGuard amsterdamRules [0xE8, 0x52] 100 (guardStackOf 200)).1 = "InvalidOpcode"
+#guard (stackAccessGuard amsterdamRules [0xE8, 0x7F] 100 (guardStackOf 200)).1 = "InvalidOpcode"
+-- Out of gas precedes the decode: with 2 gas even a forbidden immediate
+-- reports the gas failure, not the immediate.
+#guard (stackAccessGuard amsterdamRules [0xE6, 0x5B] 2 (guardStackOf 200)).1 = "OutOfGasError"
+-- `SWAPN 0x80` decodes to 17: swaps the top with position 18 (index 17); 18
+-- items suffice, 17 do not.
+#guard stackAccessGuard amsterdamRules [0xE7, 0x80] 100 (guardStackOf 18)
+  = ("ok", 100 - gVerylow, ((guardStackOf 18).set 0 17).set 17 0, 2)
+#guard (stackAccessGuard amsterdamRules [0xE7, 0x80] 100 (guardStackOf 17)).1
+  = "StackUnderflowError"
+-- `EXCHANGE 0x00` decodes to `(9, 16)`: swaps positions 10 and 17 (indices 9
+-- and 16); 17 items suffice, 16 do not.
+#guard stackAccessGuard amsterdamRules [0xE8, 0x00] 100 (guardStackOf 17)
+  = ("ok", 100 - gVerylow, ((guardStackOf 17).set 9 16).set 16 9, 2)
+#guard (stackAccessGuard amsterdamRules [0xE8, 0x00] 100 (guardStackOf 16)).1
+  = "StackUnderflowError"
+-- `EXCHANGE 0xFF` decodes to `(1, 22)`: indices 1 and 22, 23 items needed.
+#guard stackAccessGuard amsterdamRules [0xE8, 0xFF] 100 (guardStackOf 23)
+  = ("ok", 100 - gVerylow, ((guardStackOf 23).set 1 22).set 22 1, 2)
+-- Under BPO2 the three bytes are unassigned: an invalid instruction whatever
+-- the stack and gas hold, and no gas is charged.
+#guard stackAccessGuard bpo2Rules [0xE6, 0x80] 100 (guardStackOf 17)
+  = ("InvalidOpcode", 100, guardStackOf 17, 0)
+#guard (stackAccessGuard bpo2Rules [0xE7, 0x80] 100 (guardStackOf 18)).1 = "InvalidOpcode"
+#guard (stackAccessGuard bpo2Rules [0xE8, 0x00] 0 []).1 = "InvalidOpcode"
+#guard (stackAccessGuard pragueRules [0xE6, 0x80] 100 (guardStackOf 17)).1 = "InvalidOpcode"
+-- And `SLOTNUM` from code, for the same fixture: `BASE`, the push, `pc += 1`.
+#guard stackAccessGuard amsterdamRules [0x4B] 100 [] = ("ok", 100 - gBase, [0], 1)
+#guard (stackAccessGuard bpo2Rules [0x4B] 100 []).1 = "InvalidOpcode"
 
 private def Ninst.stepCached
     (evm : Evm) (cache : Option CalldataCache) (n : Ninst) :
@@ -1688,6 +1838,40 @@ private def meteringGuardCreateCharges
        stateGasGrant - (parent.stateGasLeft + frame.inner.stateGasGrant))
   | _ => none
 
+-- EIP-7954 (goal C, G5): the deposited-code check and both `CREATE`-family
+-- memory-size checks read Amsterdam's raised limits through `rules.code`.
+-- The deposit check is inclusive at 0x10000 bytes and halts with `OutOfGas`
+-- one byte above; under BPO2 the same boundary sits at 0x6000.
+private def codeLimitGuardDeposit (rules : ForkRules) (stateGasGrant : Nat)
+    (size : Nat) : Option Bool :=
+  match processCreateMessage.chargeCodeGas rules
+      (((meteringGuardDevm rules stateGasGrant []).withGasLeft 20_000_000).withOutput
+        (List.replicate size (0x00 : UInt8))) with
+  | .ok _ => some true
+  | .error ⟨.halt (.outOfGas _), _⟩ => some false
+  | .error _ => none
+
+#guard codeLimitGuardDeposit amsterdamRules 200_000_000 0x10000 = some true
+#guard codeLimitGuardDeposit amsterdamRules 200_000_000 (0x10000 + 1) = some false
+#guard codeLimitGuardDeposit bpo2Rules 0 0x6000 = some true
+#guard codeLimitGuardDeposit bpo2Rules 0 (0x6000 + 1) = some false
+#guard codeLimitGuardDeposit pragueRules 0 (0x6000 + 1) = some false
+-- `CREATE` and `CREATE2` refuse an initcode above `maxInitCodeSize` before
+-- spawning a child: 0x20000 bytes spawn under Amsterdam, 0x20000 + 1 halt;
+-- 0xC000 + 1 already halts under BPO2. The stack is `[value, offset, size]`
+-- (`[value, offset, size, salt]` for `CREATE2`), top first.
+#guard (meteringGuardCreateCharges amsterdamRules meteringGuardStateGas .create
+  [0, 0, 0x20000]).isSome
+#guard (meteringGuardCreateCharges amsterdamRules meteringGuardStateGas .create
+  [0, 0, 0x20000 + 1]).isNone
+#guard (meteringGuardCreateCharges amsterdamRules meteringGuardStateGas .create2
+  [0, 0, 0x20000, 0]).isSome
+#guard (meteringGuardCreateCharges amsterdamRules meteringGuardStateGas .create2
+  [0, 0, 0x20000 + 1, 0]).isNone
+#guard (meteringGuardCreateCharges bpo2Rules 0 .create [0, 0, 0xC000]).isSome
+#guard (meteringGuardCreateCharges bpo2Rules 0 .create [0, 0, 0xC000 + 1]).isNone
+#guard (meteringGuardCreateCharges bpo2Rules 0 .create2 [0, 0, 0xC000 + 1, 0]).isNone
+
 private def meteringGuardCallCharges
     (rules : ForkRules) (stateGasGrant : Nat) (x : Xinst)
     (stack : List B256) : Option (Nat × Nat) :=
@@ -1732,12 +1916,12 @@ private def meteringGuardSelfdestructCharges
 -- CREATE and CREATE2 share the same zero-initcode base at both shapes.
 #guard meteringGuardCreateCharges pragueRules 0 .create [0, 0, 0]
   = some (32000, 0)
-#guard meteringGuardCreateCharges amsterdamMeteringRules meteringGuardStateGas
+#guard meteringGuardCreateCharges amsterdamRules meteringGuardStateGas
     .create [0, 0, 0]
   = some (12000, 183600)
 #guard meteringGuardCreateCharges pragueRules 0 .create2 [0, 0, 0, 0]
   = some (32000, 0)
-#guard meteringGuardCreateCharges amsterdamMeteringRules meteringGuardStateGas
+#guard meteringGuardCreateCharges amsterdamRules meteringGuardStateGas
     .create2 [0, 0, 0, 0]
   = some (12000, 183600)
 #guard meteringGuardCreateCharges meteringGuardLegacyRules 0 .create [0, 0, 0]
@@ -1751,13 +1935,13 @@ private def meteringGuardSelfdestructCharges
 #guard meteringGuardCallCharges pragueRules 0 .call
     [0, meteringGuardCallee.toB256, 1, 0, 0, 0, 0]
   = some (36600, 0)
-#guard meteringGuardCallCharges amsterdamMeteringRules meteringGuardStateGas .call
+#guard meteringGuardCallCharges amsterdamRules meteringGuardStateGas .call
     [0, meteringGuardCallee.toB256, 1, 0, 0, 0, 0]
   = some (14300, 183600)
 #guard meteringGuardCallCharges pragueRules 0 .callcode
     [0, meteringGuardCallee.toB256, 1, 0, 0, 0, 0]
   = some (11600, 0)
-#guard meteringGuardCallCharges amsterdamMeteringRules meteringGuardStateGas
+#guard meteringGuardCallCharges amsterdamRules meteringGuardStateGas
     .callcode [0, meteringGuardCallee.toB256, 1, 0, 0, 0, 0]
   = some (14300, 0)
 
@@ -1775,13 +1959,13 @@ private def meteringGuardSelfdestructCharges
 #guard meteringGuardCallCharges pragueRules 0 .delegatecall
     [0, meteringGuardCallee.toB256, 0, 0, 0, 0]
   = some (2600, 0)
-#guard meteringGuardCallCharges amsterdamMeteringRules meteringGuardStateGas
+#guard meteringGuardCallCharges amsterdamRules meteringGuardStateGas
     .delegatecall [0, meteringGuardCallee.toB256, 0, 0, 0, 0]
   = some (3000, 0)
 #guard meteringGuardCallCharges pragueRules 0 .staticcall
     [0, meteringGuardCallee.toB256, 0, 0, 0, 0]
   = some (2600, 0)
-#guard meteringGuardCallCharges amsterdamMeteringRules meteringGuardStateGas
+#guard meteringGuardCallCharges amsterdamRules meteringGuardStateGas
     .staticcall [0, meteringGuardCallee.toB256, 0, 0, 0, 0]
   = some (3000, 0)
 #guard meteringGuardDelegatedCallCharges meteringGuardLegacyRules .delegatecall
@@ -1800,7 +1984,7 @@ private def meteringGuardSelfdestructCharges
 #guard meteringGuardSelfdestructCharges pragueRules 0 = some (32600, 0, 0)
 #guard meteringGuardSelfdestructCharges meteringGuardLegacyRules 0
   = some (32700, 0, 0)
-#guard meteringGuardSelfdestructCharges amsterdamMeteringRules
+#guard meteringGuardSelfdestructCharges amsterdamRules
     meteringGuardStateGas
   = some (17000, 183600, 1)
 
@@ -2101,6 +2285,11 @@ structure MsgCallOutput : Type where
   stateGasLeft : Nat := 0
   /-- Net state gas consumed by the transaction; refunds may make it negative. -/
   stateGasUsed : Int := 0
+  /-- EIP-7928: the accounts the top frame and its children read (goal C).
+  Empty on the legacy path and under `rules.bal = none`. -/
+  accountReads : AdrSet := .emptyWithCapacity
+  /-- EIP-7928: the storage slots read. -/
+  storageReads : KeySet := .emptyWithCapacity
 
 def Except.bimap
   {ε : Type u0} {δ : Type u1} {ξ : Type u2} {υ : Type u3}
@@ -2966,7 +3155,11 @@ theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
       have hbase : (addAccessedAddress g.2 b.1).Canonical :=
         Devm.Canonical.of_world_eq hg rfl
       refine Except.CanonicalOn.bind (Except.canonicalOn_assert hbase) fun _ _ => ?_
-      have haccess := completeDelegationAccess_canonical hbase
+      have haccess := completeDelegationAccess_canonical
+        (show (Devm.balReadAccount sevm.benvStat.rules
+            (sevm.benvStat.rules.gas.delegationCost (addAccessedAddress g.2 b.1) b.1).2.1
+            (Devm.balReadAccount sevm.benvStat.rules b.1 (addAccessedAddress g.2 b.1))).Canonical
+          from hbase)
         (sevm.benvStat.rules.gas.delegationCost
           (addAccessedAddress g.2 b.1) b.1).1
         (sevm.benvStat.rules.gas.delegationCost
@@ -3020,7 +3213,11 @@ theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
       have hbase : (addAccessedAddress g.2 b.1).Canonical :=
         Devm.Canonical.of_world_eq hg rfl
       refine Except.CanonicalOn.bind (Except.canonicalOn_assert hbase) fun _ _ => ?_
-      have haccess := completeDelegationAccess_canonical hbase
+      have haccess := completeDelegationAccess_canonical
+        (show (Devm.balReadAccount sevm.benvStat.rules
+            (sevm.benvStat.rules.gas.delegationCost (addAccessedAddress g.2 b.1) b.1).2.1
+            (Devm.balReadAccount sevm.benvStat.rules b.1 (addAccessedAddress g.2 b.1))).Canonical
+          from hbase)
         (sevm.benvStat.rules.gas.delegationCost
           (addAccessedAddress g.2 b.1) b.1).1
         (sevm.benvStat.rules.gas.delegationCost
@@ -3059,7 +3256,11 @@ theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
       have hbase : (addAccessedAddress f.2 b.1).Canonical :=
         Devm.Canonical.of_world_eq hf rfl
       refine Except.CanonicalOn.bind (Except.canonicalOn_assert hbase) fun _ _ => ?_
-      have haccess := completeDelegationAccess_canonical hbase
+      have haccess := completeDelegationAccess_canonical
+        (show (Devm.balReadAccount sevm.benvStat.rules
+            (sevm.benvStat.rules.gas.delegationCost (addAccessedAddress f.2 b.1) b.1).2.1
+            (Devm.balReadAccount sevm.benvStat.rules b.1 (addAccessedAddress f.2 b.1))).Canonical
+          from hbase)
         (sevm.benvStat.rules.gas.delegationCost
           (addAccessedAddress f.2 b.1) b.1).1
         (sevm.benvStat.rules.gas.delegationCost
@@ -3098,7 +3299,11 @@ theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
       have hbase : (addAccessedAddress f.2 b.1).Canonical :=
         Devm.Canonical.of_world_eq hf rfl
       refine Except.CanonicalOn.bind (Except.canonicalOn_assert hbase) fun _ _ => ?_
-      have haccess := completeDelegationAccess_canonical hbase
+      have haccess := completeDelegationAccess_canonical
+        (show (Devm.balReadAccount sevm.benvStat.rules
+            (sevm.benvStat.rules.gas.delegationCost (addAccessedAddress f.2 b.1) b.1).2.1
+            (Devm.balReadAccount sevm.benvStat.rules b.1 (addAccessedAddress f.2 b.1))).Canonical
+          from hbase)
         (sevm.benvStat.rules.gas.delegationCost
           (addAccessedAddress f.2 b.1) b.1).1
         (sevm.benvStat.rules.gas.delegationCost
@@ -3118,6 +3323,36 @@ theorem Ninst.step_canonical {evm : Evm} (h : evm.Canonical) (n : Ninst) :
       fun d hd => liftMachExecution_canonical hd
   | reg r => exact Step.ofExecution_canonical _ (Rinst.run_canonical h.2 r)
   | exec x => exact XStep.toStep_canonical _ (Xinst.step_canonical h.1 h.2 x)
+  | dupn imm =>
+    refine Step.ofExecution_canonical _ ?_
+    split
+    · refine Except.CanonicalOn.bind (liftMachExecution_canonical h.2) fun d hd => ?_
+      split
+      · exact hd
+      · split
+        · exact hd
+        · exact liftMachExecution_canonical hd
+    · exact h.2
+  | swapn imm =>
+    refine Step.ofExecution_canonical _ ?_
+    split
+    · refine Except.CanonicalOn.bind (liftMachExecution_canonical h.2) fun d hd => ?_
+      split
+      · exact hd
+      · split
+        · exact hd
+        · exact Devm.Canonical.of_world_eq hd rfl
+    · exact h.2
+  | exchange imm =>
+    refine Step.ofExecution_canonical _ ?_
+    split
+    · refine Except.CanonicalOn.bind (liftMachExecution_canonical h.2) fun d hd => ?_
+      split
+      · exact hd
+      · split
+        · exact hd
+        · exact Devm.Canonical.of_world_eq hd rfl
+    · exact h.2
 
 /-- One interpreter step preserves the invariant: whatever the step decides --
 halt, continue, or spawn -- every state it hands on is canonical. -/
@@ -3590,6 +3825,36 @@ theorem Ninst.step_stateGasZero {evm : Evm} (h : evm.StateGasZero)
   | exec x =>
       exact XStep.toStep_stateGasZero _
         (Xinst.step_stateGasZero h.1 h.2 x)
+  | dupn imm =>
+      refine Step.ofExecution_stateGasZero _ ?_
+      split
+      · refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h.2) fun d hd => ?_
+        split
+        · exact Except.stateGasZeroOn_error hd
+        · split
+          · exact Except.stateGasZeroOn_error hd
+          · exact Devm.push_stateGasZero _ hd
+      · exact Except.stateGasZeroOn_error h.2
+  | swapn imm =>
+      refine Step.ofExecution_stateGasZero _ ?_
+      split
+      · refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h.2) fun d hd => ?_
+        split
+        · exact Except.stateGasZeroOn_error hd
+        · split
+          · exact Except.stateGasZeroOn_error hd
+          · exact Except.stateGasZeroOn_ok hd
+      · exact Except.stateGasZeroOn_error h.2
+  | exchange imm =>
+      refine Step.ofExecution_stateGasZero _ ?_
+      split
+      · refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h.2) fun d hd => ?_
+        split
+        · exact Except.stateGasZeroOn_error hd
+        · split
+          · exact Except.stateGasZeroOn_error hd
+          · exact Except.stateGasZeroOn_ok hd
+      · exact Except.stateGasZeroOn_error h.2
 
 theorem Evm.step_stateGasZero {evm : Evm} (h : evm.StateGasZero) :
     evm.step.StateGasZero := by

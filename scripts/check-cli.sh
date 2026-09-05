@@ -11,23 +11,28 @@
 #   3. no case in it runs at a network this build supports;
 #   4. the command line's filters select none of the cases that do.
 #
-# A fifth refusal joined them when `Fork.amsterdam` was declared: a case whose
-# network label this build *parses* but whose rules it does not implement. It
-# is a different refusal from rule 3 and must stay different -- `Cancun` is a
-# label this build does not know, while `Amsterdam` is one it knows and
-# deliberately cannot run -- so both are asserted here, on files that differ
-# only in that label.
+# A fifth refusal joined them when `Fork.amsterdam` was declared -- a case whose
+# network label this build *parses* but whose rules it does not implement --
+# and left again when goal C composed `amsterdamRules`: every declared label
+# now resolves. The two files that pinned that refusal (an Amsterdam static
+# case and a BPO2-to-Amsterdam transition, each differing from unsupported.json
+# only in the label) are kept and asserted the other way round: they pass rule
+# resolution, are never refused as unsupported, and fail only on the synthetic
+# fixture's absent block data. `Cancun` (rule 3) is still a label this build
+# does not know, so the distinction between "unknown" and "declared" survives
+# as the difference between rule 3 and these two admissions.
 #
 # Nothing else pinned them. The conformance tiers only ever run well-formed
 # corpus files, `scripts/golden-messages.txt` covers block-rejection reasons
 # observed *inside* a run, and the Python tests under `scripts/tests/` cover the
-# bootstrap and generator scripts. The Amsterdam transaction-metering lane also
-# needs a small handshake boundary here: `t8n --forks` must remain the runnable
-# block lane, `--info` must disclose Amsterdam and its omissions, and an
-# Amsterdam invocation must pass rule resolution before it reaches its inputs.
-# So all of these surfaces are kept by this falsifier: it builds synthetic
-# fixtures in a temp dir, runs the built binary against each, and asserts both
-# the nonzero exit and a substring of the message.
+# bootstrap and generator scripts. The t8n handshake also needs a small
+# boundary here: `t8n --forks` must stay the advertised four-fork lane until
+# the owner decides otherwise (the block-level goal's fixed decision 7),
+# `--info` must disclose that Amsterdam resolves and is not yet advertised, and
+# an Amsterdam invocation must pass rule resolution before it reaches its
+# inputs. So all of these surfaces are kept by this falsifier: it builds
+# synthetic fixtures in a temp dir, runs the built binary against each, and
+# asserts both the exit status and a substring of the message.
 #
 # Rule 1 is permissive by design — a case declaring no `fixture-format` at all
 # is passed through, since the field is EEST's and a hand-written fixture may
@@ -167,9 +172,9 @@ cat > "$TMP/loose/unsupported.json" <<'EOF'
 }
 EOF
 
-# The declared-but-unimplemented twin of unsupported.json: identical but for
-# the label. This is the shape every fixture in the installed Glamsterdam
-# devnet corpus has, and the refusal below is the one that corpus meets.
+# The declared twin of unsupported.json: identical but for the label. This is
+# the shape every fixture in the installed Glamsterdam devnet corpus has; it
+# was refused as unimplemented until goal C, and is admitted below.
 cat > "$TMP/loose/declared_unimplemented.json" <<'EOF'
 {
   "tests/amsterdam/eip7843_slotnum/test_slotnum.py::test_slotnum[fork_Amsterdam-blockchain_test]": {
@@ -179,9 +184,9 @@ cat > "$TMP/loose/declared_unimplemented.json" <<'EOF'
 }
 EOF
 
-# A transition into an unimplemented fork. Its pre-fork blocks would run
-# perfectly well under BPO2, which is exactly why the refusal has to come
-# before the first block rather than partway through the case.
+# A transition into Amsterdam. Both endpoints resolve since goal C, so the
+# label passes rule resolution; the harness-level `amsterdam-transitions`
+# suite stays refused by `check-mainnet.sh` until goal jaune-amsterdam-currency-v1.
 cat > "$TMP/loose/declared_transition.json" <<'EOF'
 {
   "tests/amsterdam/eip7843_slotnum/test_slotnum.py::test_slotnum[fork_BPO2ToAmsterdamAtTime15k-blockchain_test]": {
@@ -239,21 +244,35 @@ expect_refusal "unsupported network" \
   "runs at a network this build supports; the file's labels are [Cancun]" \
   "$TMP/loose/unsupported.json"
 
-# 5b. A label this build parses but cannot run is refused as *unimplemented*,
-#     not as unknown, and refused before any block is read. `SELECTED CASES`
-#     must not appear: reaching the per-case run and only then refusing would
-#     mean the refusal had already been reported as a block verdict.
-expect_refusal "declared but unimplemented network" \
-  "UnsupportedForkError : fork Amsterdam is a declared protocol fork" \
+# 5b. Amsterdam is a label this build parses *and* runs (goal C). The case is
+#     admitted past both fork guards -- neither "unsupported" (rule 3) nor
+#     "unimplemented" (the retired fifth refusal) -- and fails only on the
+#     synthetic fixture's absent block data, exactly like undeclared.json.
+#     (Goal A asserted the UnsupportedForkError refusal here; rewritten.)
+expect_admitted_past_fork_guards() { # <label> <argv...>
+  label="$1"; shift
+  CHECKS=$((CHECKS + 1))
+  run_jaune "$@"
+  if [ "$RUN_RC" -eq 0 ]; then
+    fail "$label: a synthetic fixture with no block data cannot pass"
+    return
+  fi
+  if has "UnsupportedForkError" "$RUN_ERR"; then
+    fail "$label: refused as an unimplemented fork, but Amsterdam resolves"
+    detail "got: ${RUN_ERR:-<empty stderr>}"
+  fi
+  if has "runs at a network this build supports" "$RUN_ERR"; then
+    fail "$label: refused as an unknown network, but Amsterdam is declared and runs"
+    detail "got: ${RUN_ERR:-<empty stderr>}"
+  fi
+}
+expect_admitted_past_fork_guards "declared and implemented network (Amsterdam)" \
   "$TMP/loose/declared_unimplemented.json"
-expect_last_lacks "declared but unimplemented network" \
-  "runs at a network this build supports"
 
-# 5c. The same, through a transition label whose other endpoint this build
-#     does run. Checking only the static label would leave the case where the
-#     first blocks are runnable and the later ones are not.
-expect_refusal "transition into an unimplemented network" \
-  "UnsupportedForkError : fork Amsterdam is a declared protocol fork" \
+# 5c. The same, through a transition label into Amsterdam whose other endpoint
+#     this build also runs: the label passes rule resolution for both
+#     endpoints. (Goal A asserted the UnsupportedForkError refusal here.)
+expect_admitted_past_fork_guards "transition into Amsterdam" \
   "$TMP/loose/declared_transition.json"
 
 # 6. An empty selection the command line caused is a command-line error, and
@@ -279,58 +298,66 @@ for variant in declared undeclared; do
   fi
 done
 
-# 8. The rule-data printers. `--rules` answers for a fork this build runs and
-#    refuses one it does not, which is what makes the constants gate's fork
-#    list and `Fork.supported` the same list. `--rules-partial` is the mirror
-#    image: it answers only for a fork carrying a metering vehicle, so a
-#    partial record can never be mistaken for a complete one.
+# 8. The rule-data printer. `--rules` answers for every fork this build runs,
+#    which since goal C is every declared fork, and that is what makes the
+#    constants gate's fork list and `Fork.supported` the same list. Goal B's
+#    `--rules-partial` (the metering vehicle's partial view) is retired with
+#    the vehicle: the flag is unknown, and Amsterdam is printed whole.
+#    (Goal A asserted `--rules Amsterdam` was refused with UnsupportedForkError,
+#    and goal B asserted `--rules-partial Amsterdam` printed the vehicle's rows
+#    and none of the block-level fields; both are rewritten here.)
 CHECKS=$((CHECKS + 1))
 run_jaune --rules Prague
 if [ "$RUN_RC" -ne 0 ] || ! has '"gas.txBase": 21000' "$RUN_OUT"; then
   fail "--rules Prague: expected the Prague record on stdout"
   detail "rc=$RUN_RC stdout: ${RUN_OUT:-<empty stdout>}"
 fi
-expect_refusal "--rules on an unimplemented fork" \
-  "UnsupportedForkError : fork Amsterdam is a declared protocol fork" \
-  --rules Amsterdam
-expect_refusal "--rules-partial on an implemented fork" \
-  "has no metering vehicle" \
-  --rules-partial Prague
 CHECKS=$((CHECKS + 1))
-run_jaune --rules-partial Amsterdam
+run_jaune --rules Amsterdam
 if [ "$RUN_RC" -ne 0 ] \
+  || ! has '"gas.txBase": 12000' "$RUN_OUT" \
   || ! has '"stateGas.costPerStateByte": 1530' "$RUN_OUT" \
-  || ! has '"gas.txBase": 12000' "$RUN_OUT"; then
-  fail "--rules-partial Amsterdam: expected the metering vehicle's rows"
+  || ! has '"code.maxCodeSize": 65536' "$RUN_OUT" \
+  || ! has '"header.blockAccessListHash": true' "$RUN_OUT" \
+  || ! has '"bal.itemCost": 2000' "$RUN_OUT" \
+  || ! has '"op.slotnum": true' "$RUN_OUT" \
+  || ! has '"op.stackAccess": true' "$RUN_OUT"; then
+  fail "--rules Amsterdam: expected the whole Amsterdam record on stdout"
   detail "rc=$RUN_RC stdout: ${RUN_OUT:-<empty stdout>}"
 fi
 CHECKS=$((CHECKS + 1))
-if has "code.maxCodeSize" "$RUN_OUT" || has "header.blockAccessListHash" "$RUN_OUT"; then
-  fail "--rules-partial Amsterdam: printed a field the vehicle does not claim"
-  detail "stdout: $RUN_OUT"
+run_jaune --rules-partial Amsterdam
+if [ "$RUN_RC" -eq 0 ] || has '"gas.txBase"' "$RUN_OUT"; then
+  fail "--rules-partial: the retired metering-vehicle printer still answers"
+  detail "rc=$RUN_RC stdout: ${RUN_OUT:-<empty stdout>}"
 fi
 
-# 9. The t8n metering vehicle is executable without making Amsterdam a block-
-#    validation claim. `--forks` is therefore unchanged, while `--info` names
-#    the separate lane and its exact omissions.
+# 9. The t8n handshake. Amsterdam resolves through `Fork.rules?` like every
+#    other label, but advertising it on `--forks` is a user-consulted step the
+#    block-level goal surfaces rather than takes (its fixed decision 7), so
+#    `--forks` stays the four-fork lane and `--info` says so in words.
+#    (Goal B asserted here that `--info` named a separate "metering lane" that
+#    "omits EIP-7928/8282/7843/8024/7954 block semantics"; rewritten.)
 CHECKS=$((CHECKS + 1))
 run_jaune t8n --forks
 if [ "$RUN_RC" -ne 0 ] || [ "$RUN_OUT" != "Prague Osaka BPO1 BPO2" ]; then
-  fail "t8n --forks: expected the unchanged runnable block lane"
+  fail "t8n --forks: expected the unchanged advertised block lane"
   detail "rc=$RUN_RC stdout: ${RUN_OUT:-<empty stdout>}"
 fi
 
 CHECKS=$((CHECKS + 1))
 run_jaune t8n --info
 if [ "$RUN_RC" -ne 0 ] \
-  || ! has "t8n metering lane: Amsterdam" "$RUN_OUT"; then
-  fail "t8n --info: expected the Amsterdam transaction-metering lane"
+  || ! has "t8n fork lane: Prague Osaka BPO1 BPO2" "$RUN_OUT" \
+  || ! has "t8n resolves: Prague Osaka BPO1 BPO2 Amsterdam" "$RUN_OUT"; then
+  fail "t8n --info: expected the advertised lane and the resolved fork list"
   detail "rc=$RUN_RC stdout: ${RUN_OUT:-<empty stdout>}"
 fi
 
 CHECKS=$((CHECKS + 1))
-if ! has "omits EIP-7928/8282/7843/8024/7954 block semantics" "$RUN_OUT"; then
-  fail "t8n --info: expected the metering lane's block-semantics omission"
+if ! has "not yet advertised on --forks, pending goal jaune-amsterdam-currency-v1" "$RUN_OUT" \
+  || has "omits EIP-7928/8282/7843/8024/7954 block semantics" "$RUN_OUT"; then
+  fail "t8n --info: expected the not-yet-advertised note and no block-semantics omission"
   detail "stdout: ${RUN_OUT:-<empty stdout>}"
 fi
 
@@ -349,5 +376,5 @@ if [ "$FAILS" -ne 0 ]; then
   exit 1
 fi
 
-echo "OK — cli: $CHECKS checks; fixture refusals, rule-data printers, and the distinct Amsterdam t8n metering handshake hold"
+echo "OK — cli: $CHECKS checks; fixture refusals, the Amsterdam admissions, the rule-data printer, and the t8n handshake hold"
 exit 0

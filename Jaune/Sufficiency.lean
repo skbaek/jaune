@@ -1164,13 +1164,18 @@ theorem Xinst.step_call_gasDecreasing (sevm : Sevm) (devm : Devm)
     have e7 := Devm.popToNat_gasMeasure p7
     dsimp only at e1 e2 e3 e4 e5 e6 e7
     have eA :
-        (completeDelegationAccess (addAccessedAddress d7 callee)
+        (completeDelegationAccess
+          (Devm.balReadAccount sevm.benvStat.rules
+            (sevm.benvStat.rules.gas.delegationCost
+              (addAccessedAddress d7 callee) callee).2.1
+            (Devm.balReadAccount sevm.benvStat.rules callee (addAccessedAddress d7 callee)))
           (sevm.benvStat.rules.gas.delegationCost
             (addAccessedAddress d7 callee) callee).1
           (sevm.benvStat.rules.gas.delegationCost
             (addAccessedAddress d7 callee) callee).2.1).2.gasMeasure =
           devm.gasMeasure := by
-      rw [completeDelegationAccess_gasMeasure, addAccessedAddress_gasMeasure]
+      rw [completeDelegationAccess_gasMeasure]
+      simp only [Devm.balReadAccount_gasMeasure, addAccessedAddress_gasMeasure]
       omega
     have hstip :
         (if value.toNat = 0 then 0 else gCallStipend) <
@@ -1201,7 +1206,11 @@ theorem Xinst.step_call_gasDecreasing (sevm : Sevm) (devm : Devm)
               d7.extCost [(inputIndex, inputSize), (outputIndex, outputSize)]) =
           devm.gasMeasure := by
       calc
-        _ = (completeDelegationAccess (addAccessedAddress d7 callee)
+        _ = (completeDelegationAccess
+              (Devm.balReadAccount sevm.benvStat.rules
+                (sevm.benvStat.rules.gas.delegationCost
+                  (addAccessedAddress d7 callee) callee).2.1
+                (Devm.balReadAccount sevm.benvStat.rules callee (addAccessedAddress d7 callee)))
               (sevm.benvStat.rules.gas.delegationCost
                 (addAccessedAddress d7 callee) callee).1
               (sevm.benvStat.rules.gas.delegationCost
@@ -1275,12 +1284,14 @@ theorem Rinst.runCore_extcodesize_gasLt {pc : Nat} {devm : Devm} {sevm : Sevm}
   · obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
     have e2 := chargeGas_gasMeasure h2
     have e3 := Devm.push_gasMeasure h3
+    simp only [Devm.balReadAccount_gasMeasure] at e3
     unfold gasWarmAccess at e2
     omega
   · obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
     have e2 := chargeGas_gasMeasure h2
     rw [addAccessedAddress_gasMeasure] at e2
     have e3 := Devm.push_gasMeasure h3
+    simp only [Devm.balReadAccount_gasMeasure] at e3
     -- The cold half is now whatever the fork's schedule says, so positivity
     -- comes from `Valid` rather than from a literal.
     have hc := hv.gas.warmAccess_le
@@ -1513,6 +1524,10 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
     split at h
     · exact applyUnary_gasLt (by decide) h
     · simp at h
+  case slotnum =>
+    split at h
+    · exact pushItem_gasLt (by decide) h
+    · simp at h
   case keccak256 =>
     obtain ⟨⟨start, d1⟩, h1, h⟩ := Except.bind_eq_ok h
     obtain ⟨⟨size, d2⟩, h2, h⟩ := Except.bind_eq_ok h
@@ -1571,14 +1586,14 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
     · obtain ⟨d5, h5, h6⟩ := Except.bind_eq_ok h
       simp only [Except.ok.injEq] at h6
       have e5 := chargeGas_gasMeasure h5
-      rw [← h6, Devm.memWrite_gasMeasure]
+      rw [← h6, Devm.memWrite_gasMeasure, Devm.balReadAccount_gasMeasure]
       unfold gasWarmAccess at e5
       omega
     · obtain ⟨d5, h5, h6⟩ := Except.bind_eq_ok h
       simp only [Except.ok.injEq] at h6
       have e5 := chargeGas_gasMeasure h5
       rw [addAccessedAddress_gasMeasure] at e5
-      rw [← h6, Devm.memWrite_gasMeasure]
+      rw [← h6, Devm.memWrite_gasMeasure, Devm.balReadAccount_gasMeasure]
       have hc := hv.gas.warmAccess_le
       unfold gasWarmAccess at hc
       omega
@@ -1586,11 +1601,33 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
     apply Rinst.runCore_extcodesize_gasLt (pc := pc) (sevm := sevm) hv
     simpa only [Rinst.runCore] using h
   case extcodehash =>
-    exact popAdrAccessChargePush_gasLt devm hv.gas
-      (fun adr d =>
-        let account := d.getAcct adr
-        if account.Empty then 0
-        else ByteArray.keccak 0 account.code.size account.code) h
+    -- As `extcodesize`: the EIP-7928 read recorder sits between the charge
+    -- and the push and is measure-neutral.
+    obtain ⟨⟨adr, d1⟩, h1, h⟩ := Except.bind_eq_ok h
+    dsimp only at h h1
+    have e1 := Devm.popToAdr_gasMeasure h1
+    split at h
+    · obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
+      have e2 := chargeGas_gasMeasure h2
+      have e3 := Devm.push_gasMeasure h3
+      simp only [Devm.balReadAccount_gasMeasure] at e3
+      unfold gasWarmAccess at e2
+      omega
+    · obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
+      have e2 := chargeGas_gasMeasure h2
+      rw [addAccessedAddress_gasMeasure] at e2
+      have e3 := Devm.push_gasMeasure h3
+      simp only [Devm.balReadAccount_gasMeasure] at e3
+      have hc := hv.gas.warmAccess_le
+      unfold gasWarmAccess at hc
+      omega
+  case selfbalance =>
+    obtain ⟨d1, h1, h⟩ := Except.bind_eq_ok h
+    have e1 := chargeGas_gasMeasure h1
+    have e2 := Devm.push_gasMeasure h
+    simp only [Devm.balReadAccount_gasMeasure] at e2
+    unfold gLow at e1
+    omega
   case blockhash =>
     exact popChargePush_gasLt devm
       (fun _ _ => gBlockhash)
@@ -1668,7 +1705,7 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
       have e3 := chargeGas_gasMeasure hCharge
       have hPairGas : gasPair.1.gasMeasure = d2.gasMeasure := by
         rw [← hPair]
-        split <;> simp only [addAccessedStorageKey_gasMeasure]
+        split <;> simp only [addAccessedStorageKey_gasMeasure, Devm.balReadStorage_gasMeasure]
       have hRefundGas : d3.gasMeasure = d2.gasMeasure := by
         rw [← hRefund, Devm.withRefundCounter_gasMeasure, hPairGas]
       have hCostPos : 0 < cost := by
@@ -1682,7 +1719,7 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
         · unfold gasWarmAccess
           omega
       dsimp only at e1 e2 hFinal
-      rw [← hFinal, Devm.setStorVal_gasMeasure]
+      rw [← hFinal, Devm.setStorVal_gasMeasure, Devm.balReadAccount_gasMeasure]
       omega
     · -- Amsterdam: `vm/instructions/storage.py` `sstore`. The credit and the
       -- state charge are measure-neutral; the execution charge is at least a
@@ -1699,9 +1736,9 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
       have e3 := chargeGas_gasMeasure_lt (sstoreAmsterdamGasCost_pos _ _ _ _ _) hCharge
       have e4 := chargeStateGas_gasMeasure hState
       simp only [Devm.creditStateGasRefund_gasMeasure, Devm.withRefundCounter_gasMeasure,
-        Devm.ite_addAccessedStorageKey_gasMeasure] at e3
+        Devm.balReadStorage_gasMeasure, Devm.ite_addAccessedStorageKey_gasMeasure] at e3
       dsimp only at e1 e2 hFinal
-      rw [← hFinal, Devm.setStorVal_gasMeasure]
+      rw [← hFinal, Devm.setStorVal_gasMeasure, Devm.balReadAccount_gasMeasure]
       omega
   case sload =>
     obtain ⟨⟨key, d1⟩, h1, h⟩ := Except.bind_eq_ok h
@@ -1711,12 +1748,14 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
     · obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
       have e2 := chargeGas_gasMeasure h2
       have e3 := Devm.push_gasMeasure h3
+      simp only [Devm.balReadStorage_gasMeasure] at e3
       unfold gasWarmAccess at e2
       omega
     · obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
       have e2 := chargeGas_gasMeasure h2
       rw [addAccessedStorageKey_gasMeasure] at e2
       have e3 := Devm.push_gasMeasure h3
+      simp only [Devm.balReadStorage_gasMeasure] at e3
       unfold gasColdSload at e2
       omega
   case tload =>
@@ -1911,10 +1950,12 @@ theorem genericCreateAmsterdam.step_gasDecreasing
     rw [← hstep]
     intro devm' hd
     simp only [Except.ok.injEq] at hd
-    rw [← hd, Devm.push_gasMeasure hpush, Devm.withReturnData_gasMeasure]
-    exact hn
+    rw [← hd, Devm.push_gasMeasure hpush]
+    simpa only [Devm.balReadAccount_gasMeasure, Devm.withReturnData_gasMeasure] using hn
   · have eaccess :
-        (addAccessedAddress (devm.withReturnData []) newAddress).gasMeasure =
+        (Devm.balReadAccount sevm.benvStat.rules newAddress
+          (addAccessedAddress (Devm.balReadAccount sevm.benvStat.rules sevm.currentTarget
+            (devm.withReturnData [])) newAddress)).gasMeasure =
           devm.gasMeasure := by simp
     split at hstep
     · obtain ⟨d1, hstate, hstep⟩ := Except.bind_eq_ok hstep
@@ -1935,12 +1976,13 @@ theorem genericCreateAmsterdam.step_gasDecreasing
         show (Frame.ofCreate _).inner.gas + Resume.parentGas _ < n
         simp only [Frame.ofCreate, processCreateMessage.msg_gas, createMsg,
           Resume.parentGas, Devm.incrNonce_gasMeasure,
-          Devm.drainStateGasReservoir_gasMeasure,
-          Devm.withholdCreateGas_gasMeasure]
+          Devm.drainStateGasReservoir_gasMeasure]
         omega
     · simp only [bind, Except.bind] at hstep
       have hwith := Devm.withholdCreateGas_gasMeasure
-        (addAccessedAddress (devm.withReturnData []) newAddress)
+        (Devm.balReadAccount sevm.benvStat.rules newAddress
+          (addAccessedAddress (Devm.balReadAccount sevm.benvStat.rules sevm.currentTarget
+            (devm.withReturnData [])) newAddress))
       split at hstep
       · obtain ⟨d1, hpush, hstep⟩ := Except.bind_eq_ok hstep
         simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
@@ -1956,8 +1998,7 @@ theorem genericCreateAmsterdam.step_gasDecreasing
         show (Frame.ofCreate _).inner.gas + Resume.parentGas _ < n
         simp only [Frame.ofCreate, processCreateMessage.msg_gas, createMsg,
           Resume.parentGas, Devm.incrNonce_gasMeasure,
-          Devm.drainStateGasReservoir_gasMeasure,
-          Devm.withholdCreateGas_gasMeasure]
+          Devm.drainStateGasReservoir_gasMeasure]
         omega
 theorem Xinst.step_create_gasDecreasing (sevm : Sevm) (devm : Devm)
     (hv : sevm.benvStat.rules.Valid) :
@@ -2139,13 +2180,18 @@ theorem Xinst.step_callcode_gasDecreasing (sevm : Sevm) (devm : Devm)
     have e7 := Devm.popToNat_gasMeasure p7
     dsimp only at e1 e2 e3 e4 e5 e6 e7 hstep
     have eA :
-        (completeDelegationAccess (addAccessedAddress d7 codeAddress)
+        (completeDelegationAccess
+          (Devm.balReadAccount sevm.benvStat.rules
+            (sevm.benvStat.rules.gas.delegationCost
+              (addAccessedAddress d7 codeAddress) codeAddress).2.1
+            (Devm.balReadAccount sevm.benvStat.rules codeAddress (addAccessedAddress d7 codeAddress)))
           (sevm.benvStat.rules.gas.delegationCost
             (addAccessedAddress d7 codeAddress) codeAddress).1
           (sevm.benvStat.rules.gas.delegationCost
             (addAccessedAddress d7 codeAddress) codeAddress).2.1).2.gasMeasure =
           devm.gasMeasure := by
-      rw [completeDelegationAccess_gasMeasure, addAccessedAddress_gasMeasure]
+      rw [completeDelegationAccess_gasMeasure]
+      simp only [Devm.balReadAccount_gasMeasure, addAccessedAddress_gasMeasure]
       omega
     have hstip :
         (if value.toNat = 0 then 0 else gCallStipend) <
@@ -2244,13 +2290,18 @@ theorem Xinst.step_delegatecall_gasDecreasing (sevm : Sevm) (devm : Devm)
     have e6 := Devm.popToNat_gasMeasure p6
     dsimp only at e1 e2 e3 e4 e5 e6 hstep
     have eA :
-        (completeDelegationAccess (addAccessedAddress d6 codeAddress)
+        (completeDelegationAccess
+          (Devm.balReadAccount sevm.benvStat.rules
+            (sevm.benvStat.rules.gas.delegationCost
+              (addAccessedAddress d6 codeAddress) codeAddress).2.1
+            (Devm.balReadAccount sevm.benvStat.rules codeAddress (addAccessedAddress d6 codeAddress)))
           (sevm.benvStat.rules.gas.delegationCost
             (addAccessedAddress d6 codeAddress) codeAddress).1
           (sevm.benvStat.rules.gas.delegationCost
             (addAccessedAddress d6 codeAddress) codeAddress).2.1).2.gasMeasure =
           devm.gasMeasure := by
-      rw [completeDelegationAccess_gasMeasure, addAccessedAddress_gasMeasure]
+      rw [completeDelegationAccess_gasMeasure]
+      simp only [Devm.balReadAccount_gasMeasure, addAccessedAddress_gasMeasure]
       omega
     have hstip :
         (if (0 : Nat) = 0 then 0 else gCallStipend) <
@@ -2341,13 +2392,18 @@ theorem Xinst.step_staticcall_gasDecreasing (sevm : Sevm) (devm : Devm)
     have e6 := Devm.popToNat_gasMeasure p6
     dsimp only at e1 e2 e3 e4 e5 e6 hstep
     have eA :
-        (completeDelegationAccess (addAccessedAddress d6 codeAddress)
+        (completeDelegationAccess
+          (Devm.balReadAccount sevm.benvStat.rules
+            (sevm.benvStat.rules.gas.delegationCost
+              (addAccessedAddress d6 codeAddress) codeAddress).2.1
+            (Devm.balReadAccount sevm.benvStat.rules codeAddress (addAccessedAddress d6 codeAddress)))
           (sevm.benvStat.rules.gas.delegationCost
             (addAccessedAddress d6 codeAddress) codeAddress).1
           (sevm.benvStat.rules.gas.delegationCost
             (addAccessedAddress d6 codeAddress) codeAddress).2.1).2.gasMeasure =
           devm.gasMeasure := by
-      rw [completeDelegationAccess_gasMeasure, addAccessedAddress_gasMeasure]
+      rw [completeDelegationAccess_gasMeasure]
+      simp only [Devm.balReadAccount_gasMeasure, addAccessedAddress_gasMeasure]
       omega
     have hstip :
         (if (0 : Nat) = 0 then 0 else gCallStipend) <
@@ -2759,9 +2815,9 @@ theorem liftMachMetaExecution_resultGas
     simp only [liftMachMetaExecution, Footprint.toExecution, liftMachMeta,
       Footprint.liftOutcome, h, machMetaResultGas] <;> rfl
 
-theorem Rinst.balanceCore_machMetaResultGas (gas : GasSchedule) (world : World)
+theorem Rinst.balanceCore_machMetaResultGas (rules : ForkRules) (world : World)
     (mach : Mach) (view : Meta) :
-    machMetaResultGas (Rinst.balanceCore gas world mach view) ≤ mach.gasMeasure := by
+    machMetaResultGas (Rinst.balanceCore rules world mach view) ≤ mach.gasMeasure := by
   have hp := Mach.pop_machResultGas mach
   have hc : ∀ (c : Nat) (m : Mach), machResultGas (Mach.chargeGas c m) ≤ m.gasMeasure :=
     Mach.chargeGas_machResultGas
@@ -2779,14 +2835,14 @@ theorem Rinst.balanceCore_machMetaResultGas (gas : GasSchedule) (world : World)
     split
     · rename_i err m2 heq2
       have := hc (if x.toAdr ∈ view.accessedAddresses then gasWarmAccess
-        else gas.coldAccountAccess) m1
+        else rules.gas.coldAccountAccess) m1
       rw [heq2] at this
       simp only [machResultGas] at this
       simp only [machMetaResultGas]
       omega
     · rename_i u m2 heq2
       have h2 := hc (if x.toAdr ∈ view.accessedAddresses then gasWarmAccess
-        else gas.coldAccountAccess) m1
+        else rules.gas.coldAccountAccess) m1
       rw [heq2] at h2
       simp only [machResultGas] at h2
       split
@@ -2822,6 +2878,10 @@ theorem Rinst.runCore_gasLe (pc : Nat) (devm : Devm) (sevm : Sevm) (r : Rinst) :
     split
     · exact applyUnary_gasLe _ _ _
     · simp
+  case slotnum =>
+    split
+    · exact pushItem_gasLe _ _ _
+    · simp
   case pop =>
     exact gasLe_bind_id (Nat.le_of_eq (Devm.pop_map_snd_gasLe devm))
       (fun d => chargeGas_result_gasLe _ d)
@@ -2829,27 +2889,27 @@ theorem Rinst.runCore_gasLe (pc : Nat) (devm : Devm) (sevm : Sevm) (r : Rinst) :
     refine gasLe_bind_snd (by simp) ?_
     rintro ⟨x, d1⟩
     exact gasLe_bind_id (chargeGas_result_gasLe _ _)
-      (fun d => Nat.le_of_eq (Devm.push_gasLe _ d))
+      (fun d => by simp)
   case calldataload =>
     refine gasLe_bind_snd (by simp) ?_
     rintro ⟨x, d1⟩
     exact gasLe_bind_id (chargeGas_result_gasLe _ _)
-      (fun d => Nat.le_of_eq (Devm.push_gasLe _ d))
+      (fun d => by simp)
   case blockhash =>
     refine gasLe_bind_snd (by simp) ?_
     rintro ⟨x, d1⟩
     exact gasLe_bind_id (chargeGas_result_gasLe _ _)
-      (fun d => Nat.le_of_eq (Devm.push_gasLe _ d))
+      (fun d => by simp)
   case gas =>
     exact gasLe_bind_id (chargeGas_result_gasLe _ _)
-      (fun d => Nat.le_of_eq (Devm.push_gasLe _ d))
+      (fun d => by simp)
   case exp =>
     refine gasLe_bind_snd (by simp) ?_
     rintro ⟨x, d1⟩
     refine gasLe_bind_snd (by simp) ?_
     rintro ⟨y, d2⟩
     exact gasLe_bind_id (chargeGas_result_gasLe _ _)
-      (fun d => Nat.le_of_eq (Devm.push_gasLe _ d))
+      (fun d => by simp)
   case tload =>
     refine gasLe_bind_snd (by simp) ?_
     rintro ⟨x, d1⟩
@@ -2906,26 +2966,28 @@ theorem Rinst.runCore_gasLe (pc : Nat) (devm : Devm) (sevm : Sevm) (r : Rinst) :
     split
     · exact gasLe_bind_const (devm := d4) (by simp) (fun _ => by simp)
     · simp
+  case selfbalance =>
+    exact gasLe_bind_id (chargeGas_result_gasLe _ _) (fun d => by simp)
   case extcodesize | extcodehash =>
     refine gasLe_bind_snd (by simp) ?_
     rintro ⟨adr, d1⟩
     split
     · exact gasLe_bind_id (chargeGas_result_gasLe _ _)
-        (fun d => Nat.le_of_eq (Devm.push_gasLe _ d))
+        (fun d => by simp)
     · exact gasLe_bind_id
         (Nat.le_trans (chargeGas_result_gasLe _ _)
           (Nat.le_of_eq (addAccessedAddress_gasMeasure _ _)))
-        (fun d => Nat.le_of_eq (Devm.push_gasLe _ d))
+        (fun d => by simp)
   case sload =>
     refine gasLe_bind_snd (by simp) ?_
     rintro ⟨key, d1⟩
     split
     · exact gasLe_bind_id (chargeGas_result_gasLe _ _)
-        (fun d => Nat.le_of_eq (Devm.push_gasLe _ d))
+        (fun d => by simp)
     · exact gasLe_bind_id
         (Nat.le_trans (chargeGas_result_gasLe _ _)
           (Nat.le_of_eq (addAccessedStorageKey_gasMeasure _ _ _)))
-        (fun d => Nat.le_of_eq (Devm.push_gasLe _ d))
+        (fun d => by simp)
   case extcodecopy =>
     refine gasLe_bind_snd (by simp) ?_
     rintro ⟨adr, d1⟩
@@ -3129,16 +3191,23 @@ theorem Linst.run_gasLe (sevm : Sevm) (devm : Devm) (l : Linst) :
       have hd2 : d2.gasMeasure = d1.gasMeasure := by
         simp only [d2]
         split <;> simp
+      -- The two EIP-7928 read recorders between the warming and the charges.
+      let dR := (d2.balReadAccount sevm.benvStat.rules donee).balReadAccount
+        sevm.benvStat.rules sevm.currentTarget
+      have hdR : dR.gasMeasure = d1.gasMeasure := by
+        simp only [dR, Devm.balReadAccount_gasMeasure, hd2]
       refine gasLe_bind_id ?_ ?_
-      · exact Nat.le_trans (chargeGas_result_gasLe _ d2) (Nat.le_of_eq hd2)
+      · exact Nat.le_trans (chargeGas_result_gasLe _ dR) (Nat.le_of_eq hdR)
       · intro d3
         refine gasLe_bind_id (chargeStateGas_result_gasLe _ d3) ?_
         intro d4
         refine gasLe_bind_id ?_ ?_
-        · rcases hb : d4.subBal sevm.currentTarget (d2.getAcct sevm.currentTarget).bal with
-            _ | d5
-          · simp [Option.toExcept]
-          · simp [Option.toExcept, Devm.subBal_gasMeasure hb]
+        · -- The balance is read through the recorders; split the match itself.
+          simp only [Option.toExcept]
+          split
+          · simp
+          · rename_i d5 hb
+            simp [Devm.subBal_gasMeasure hb]
         · intro d5
           simp only [apply_ite, Execution.gasMeasure_ok, addAccountToDelete_gasMeasure,
             Devm.emitTransferLog_gasMeasure, Devm.addBal_gasMeasure, ite_self, Nat.le_refl]
@@ -3510,12 +3579,14 @@ theorem genericCreateAmsterdam.step_halt
   dsimp only
   split
   · refine HaltLe.bind (Devm.push_haltLe 0 ?_) ?_
-    · simpa only [Devm.withReturnData_gasMeasure] using hn
+    · simpa only [Devm.balReadAccount_gasMeasure, Devm.withReturnData_gasMeasure] using hn
     · intro d hd
       exact XStep.done_ok_halt d n
   · have haccess :
-        (addAccessedAddress (devm.withReturnData []) newAddress).gasMeasure ≤ n := by
-      simpa only [addAccessedAddress_gasMeasure,
+        (Devm.balReadAccount sevm.benvStat.rules newAddress
+          (addAccessedAddress (Devm.balReadAccount sevm.benvStat.rules sevm.currentTarget
+            (devm.withReturnData [])) newAddress)).gasMeasure ≤ n := by
+      simpa only [Devm.balReadAccount_gasMeasure, addAccessedAddress_gasMeasure,
         Devm.withReturnData_gasMeasure] using hn
     split
     · refine HaltLe.bind (chargeStateGas_haltLe state.newAccount haccess) ?_
@@ -3530,7 +3601,9 @@ theorem genericCreateAmsterdam.step_halt
       · trivial
     · simp only [bind, Except.bind]
       have hwith := Devm.withholdCreateGas_gasMeasure
-        (addAccessedAddress (devm.withReturnData []) newAddress)
+        (Devm.balReadAccount sevm.benvStat.rules newAddress
+          (addAccessedAddress (Devm.balReadAccount sevm.benvStat.rules sevm.currentTarget
+            (devm.withReturnData [])) newAddress))
       split
       · refine HaltLe.bind (Devm.push_haltLe 0 ?_) ?_
         · simp only [Devm.incrNonce_gasMeasure]
@@ -3714,15 +3787,20 @@ theorem Xinst.step_halt (sevm : Sevm) (devm : Devm) (x : Xinst)
       refine HaltLe.bind (assert_haltLe _ (by decide) hstatic) ?_
       intro _ hpre
       refine HaltLe.bind (assert_haltLe _ (by decide) ?_) ?_
-      · simpa only [addAccessedAddress_gasMeasure] using hpre
+      · simpa only [Devm.balReadAccount_gasMeasure, addAccessedAddress_gasMeasure] using hpre
       · intro _ hfull
         have haccess :
-            (completeDelegationAccess (addAccessedAddress d7 callee)
+            (completeDelegationAccess
+              (Devm.balReadAccount sevm.benvStat.rules
+                (sevm.benvStat.rules.gas.delegationCost
+                  (addAccessedAddress d7 callee) callee).2.1
+                (Devm.balReadAccount sevm.benvStat.rules callee (addAccessedAddress d7 callee)))
               (sevm.benvStat.rules.gas.delegationCost
                 (addAccessedAddress d7 callee) callee).1
               (sevm.benvStat.rules.gas.delegationCost
                 (addAccessedAddress d7 callee) callee).2.1).2.gasMeasure ≤ n := by
-          simpa only [completeDelegationAccess_gasMeasure] using hfull
+          simpa only [completeDelegationAccess_gasMeasure, Devm.balReadAccount_gasMeasure]
+            using hfull
         refine HaltLe.bind (chargeGas_haltLe _ haccess) ?_
         intro d8 h8
         split
@@ -3759,15 +3837,20 @@ theorem Xinst.step_halt (sevm : Sevm) (devm : Devm) (x : Xinst)
       refine HaltLe.bind (assert_haltLe _ (by decide) h7) ?_
       intro _ hpre
       refine HaltLe.bind (assert_haltLe _ (by decide) ?_) ?_
-      · simpa only [addAccessedAddress_gasMeasure] using hpre
+      · simpa only [Devm.balReadAccount_gasMeasure, addAccessedAddress_gasMeasure] using hpre
       · intro _ hfull
         have haccess :
-            (completeDelegationAccess (addAccessedAddress d7 codeAddress)
+            (completeDelegationAccess
+              (Devm.balReadAccount sevm.benvStat.rules
+                (sevm.benvStat.rules.gas.delegationCost
+                  (addAccessedAddress d7 codeAddress) codeAddress).2.1
+                (Devm.balReadAccount sevm.benvStat.rules codeAddress (addAccessedAddress d7 codeAddress)))
               (sevm.benvStat.rules.gas.delegationCost
                 (addAccessedAddress d7 codeAddress) codeAddress).1
               (sevm.benvStat.rules.gas.delegationCost
                 (addAccessedAddress d7 codeAddress) codeAddress).2.1).2.gasMeasure ≤ n := by
-          simpa only [completeDelegationAccess_gasMeasure] using hfull
+          simpa only [completeDelegationAccess_gasMeasure, Devm.balReadAccount_gasMeasure]
+            using hfull
         refine HaltLe.bind (chargeGas_haltLe _ haccess) ?_
         intro d8 h8
         apply genericCallAmsterdam.step_halt
@@ -3790,15 +3873,20 @@ theorem Xinst.step_halt (sevm : Sevm) (devm : Devm) (x : Xinst)
       refine HaltLe.bind (assert_haltLe _ (by decide) h6) ?_
       intro _ hpre
       refine HaltLe.bind (assert_haltLe _ (by decide) ?_) ?_
-      · simpa only [addAccessedAddress_gasMeasure] using hpre
+      · simpa only [Devm.balReadAccount_gasMeasure, addAccessedAddress_gasMeasure] using hpre
       · intro _ hfull
         have haccess :
-            (completeDelegationAccess (addAccessedAddress d6 codeAddress)
+            (completeDelegationAccess
+              (Devm.balReadAccount sevm.benvStat.rules
+                (sevm.benvStat.rules.gas.delegationCost
+                  (addAccessedAddress d6 codeAddress) codeAddress).2.1
+                (Devm.balReadAccount sevm.benvStat.rules codeAddress (addAccessedAddress d6 codeAddress)))
               (sevm.benvStat.rules.gas.delegationCost
                 (addAccessedAddress d6 codeAddress) codeAddress).1
               (sevm.benvStat.rules.gas.delegationCost
                 (addAccessedAddress d6 codeAddress) codeAddress).2.1).2.gasMeasure ≤ n := by
-          simpa only [completeDelegationAccess_gasMeasure] using hfull
+          simpa only [completeDelegationAccess_gasMeasure, Devm.balReadAccount_gasMeasure]
+            using hfull
         refine HaltLe.bind (chargeGas_haltLe _ haccess) ?_
         intro d7 h7
         apply genericCallAmsterdam.step_halt
@@ -3821,15 +3909,20 @@ theorem Xinst.step_halt (sevm : Sevm) (devm : Devm) (x : Xinst)
       refine HaltLe.bind (assert_haltLe _ (by decide) h6) ?_
       intro _ hpre
       refine HaltLe.bind (assert_haltLe _ (by decide) ?_) ?_
-      · simpa only [addAccessedAddress_gasMeasure] using hpre
+      · simpa only [Devm.balReadAccount_gasMeasure, addAccessedAddress_gasMeasure] using hpre
       · intro _ hfull
         have haccess :
-            (completeDelegationAccess (addAccessedAddress d6 codeAddress)
+            (completeDelegationAccess
+              (Devm.balReadAccount sevm.benvStat.rules
+                (sevm.benvStat.rules.gas.delegationCost
+                  (addAccessedAddress d6 codeAddress) codeAddress).2.1
+                (Devm.balReadAccount sevm.benvStat.rules codeAddress (addAccessedAddress d6 codeAddress)))
               (sevm.benvStat.rules.gas.delegationCost
                 (addAccessedAddress d6 codeAddress) codeAddress).1
               (sevm.benvStat.rules.gas.delegationCost
                 (addAccessedAddress d6 codeAddress) codeAddress).2.1).2.gasMeasure ≤ n := by
-          simpa only [completeDelegationAccess_gasMeasure] using hfull
+          simpa only [completeDelegationAccess_gasMeasure, Devm.balReadAccount_gasMeasure]
+            using hfull
         refine HaltLe.bind (chargeGas_haltLe _ haccess) ?_
         intro d7 h7
         apply genericCallAmsterdam.step_halt
@@ -4398,6 +4491,76 @@ theorem Ninst.step_gasBound (evm : Evm) (n : Ninst)
     exact XStep.toStep_gasBound (Xinst.step_gasDecreasing evm.sta evm.dyna x hv)
       (Xinst.step_halt evm.sta evm.dyna x rfl
         (Devm.spill_le_gasMeasure _) (Nat.le_refl _))
+  -- EIP-8024: `VERY_LOW` is charged before anything else can succeed, so a
+  -- successful step strictly lowers the measure; every outcome keeps it
+  -- bounded by the entry measure.
+  | dupn imm =>
+    refine Step.ofExecution_gasBound (fun d hd => ?_) ?_
+    · split at hd
+      · obtain ⟨d1, h1, hd⟩ := Except.bind_eq_ok hd
+        have e1 := chargeGas_gasMeasure h1
+        split at hd
+        · nomatch hd
+        · split at hd
+          · nomatch hd
+          · have e2 := Devm.push_gasMeasure hd
+            unfold gVerylow at e1
+            omega
+      · nomatch hd
+    · refine Execution.settledGasLe_of_gasLe ?_
+      split
+      · refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
+        intro d1
+        split
+        · simp
+        · split
+          · simp
+          · exact Nat.le_of_eq (Devm.push_gasLe _ _)
+      · simp
+  | swapn imm =>
+    refine Step.ofExecution_gasBound (fun d hd => ?_) ?_
+    · split at hd
+      · obtain ⟨d1, h1, hd⟩ := Except.bind_eq_ok hd
+        have e1 := chargeGas_gasMeasure h1
+        split at hd
+        · nomatch hd
+        · split at hd
+          · nomatch hd
+          · simp only [Except.ok.injEq] at hd
+            rw [← hd, Devm.withStack_gasMeasure]
+            unfold gVerylow at e1
+            omega
+      · nomatch hd
+    · refine Execution.settledGasLe_of_gasLe ?_
+      split
+      · refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
+        intro d1
+        split
+        · simp
+        · split <;> simp
+      · simp
+  | exchange imm =>
+    refine Step.ofExecution_gasBound (fun d hd => ?_) ?_
+    · split at hd
+      · obtain ⟨d1, h1, hd⟩ := Except.bind_eq_ok hd
+        have e1 := chargeGas_gasMeasure h1
+        split at hd
+        · nomatch hd
+        · split at hd
+          · nomatch hd
+          · simp only [Except.ok.injEq] at hd
+            rw [← hd, Devm.withStack_gasMeasure]
+            unfold gVerylow at e1
+            omega
+      · nomatch hd
+    · refine Execution.settledGasLe_of_gasLe ?_
+      split
+      · refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
+        intro d1
+        split
+        · simp
+        · split <;> simp
+      · simp
 
 theorem Evm.step_gasBound (evm : Evm) (hv : evm.sta.benvStat.rules.Valid) :
     evm.step.GasBound evm.sta evm.dyna.gasMeasure := by

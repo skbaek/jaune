@@ -1,24 +1,34 @@
 """Synthetic tests for the Glamsterdam devnet lane.
 
-The lane exists to be *installed and refused*, which makes its refusals the
-thing worth testing: nothing else exercises them, because no conformance tier
-runs this corpus and none ever will until the goal that owns Amsterdam's
-semantics activates it. Two properties matter and are checked here.
+The lane is now *half runnable*, and that split is what these tests hold in
+place. This build implements Amsterdam, so the two suites over the static
+`Amsterdam` corpus run; the two that select `BPO2ToAmsterdamAtTime15k` stay
+refused, because nothing here gates that activation boundary. Four properties
+matter and are checked below.
 
-* **Every suite is refused, by name, with the owning goal named.** A lane whose
-  suites quietly selected zero files, or ran and reported an all-PASS verdict
-  over a corpus this build cannot judge, would be exactly the permissive
-  oracle the harness exists to prevent.
+* **The runnable suites are admitted, and actually dispatch.** A suite that was
+  "activated" by deleting its refusal but still selected nothing, or that
+  reported an all-PASS over a subtree it only partly ran, would be the same
+  permissive oracle the refusals existed to prevent. The end-to-end class runs
+  the real harness over a miniature synthetic corpus with a stub binary, so the
+  dispatch, the selection, and the verdict are exercised without the installed
+  20 GB archive and without Lean.
+* **The deferred suites are refused, by name, with the owning goal named** --
+  and with the *true* reason. The old message said `Fork.rules?` answers `none`
+  for Amsterdam, which this build makes false; a refusal that states a false
+  fact is worse than no refusal, so its absence is asserted directly.
+* **`--dir` refuses rather than under-reports.** A subtree that does not exist,
+  holds no fixture, or whose on-disk file count disagrees with the manifest's
+  count for the selected suite is an error, never a smaller pass.
 * **The two lanes cannot be confused.** Their suite namespaces are disjoint,
   each names the other's suites when one is asked for on the wrong lane, and
   neither reads the other's manifest or install root.
-
-The manifest half is tested against a synthetic corpus rather than the
-installed 20 GB one, so these run in a temp dir with no fixtures present.
 """
 from __future__ import annotations
 
+import contextlib
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -34,11 +44,27 @@ import env_doctor
 
 CHECK_MAINNET = SCRIPTS / "check-mainnet.sh"
 
-AMSTERDAM_SUITES = {
-    "amsterdam": "jaune-amsterdam-block-v1",
-    "amsterdam-smoke": "jaune-amsterdam-block-v1",
-    "amsterdam-full": "jaune-amsterdam-block-v1",
+# The lane's four suite names, split by what this build may claim about them.
+AMSTERDAM_RUNNABLE_SUITES = ("amsterdam", "amsterdam-smoke")
+AMSTERDAM_REFUSED_SUITES = {
     "amsterdam-transitions": "jaune-amsterdam-currency-v1",
+    "amsterdam-full": "jaune-amsterdam-currency-v1",
+}
+AMSTERDAM_SUITES = tuple(AMSTERDAM_RUNNABLE_SUITES) + tuple(AMSTERDAM_REFUSED_SUITES)
+
+# The claim the previous refusals rested on, which this build makes false. It
+# must not survive anywhere in the harness: a stale refusal reads as a current
+# fact about the build.
+RETIRED_CLAIM = "Fork.rules? answers none"
+
+# One consistent blob schedule for the synthetic corpus. The generator requires
+# every in-lane case to declare one for each fork its label can select, and
+# refuses a corpus whose files disagree; these values are the pinned release's
+# own, read from `for_amsterdam/amsterdam/eip7843_slotnum`.
+SYNTHETIC_BLOB_SCHEDULE = {
+    "Prague": {"target": "0x06", "max": "0x09", "baseFeeUpdateFraction": "0x4c6964"},
+    "BPO2": {"target": "0x0e", "max": "0x15", "baseFeeUpdateFraction": "0xb24b3f"},
+    "Amsterdam": {"target": "0x0e", "max": "0x15", "baseFeeUpdateFraction": "0xb24b3f"},
 }
 
 T8N = SCRIPTS / "t8n"
@@ -76,16 +102,27 @@ def run_check_mainnet(*args: str) -> subprocess.CompletedProcess:
 
 
 class LaneRefusalTests(unittest.TestCase):
-    """The four suites, `--dir`, and both directions of lane confusion."""
+    """The four suites, and both directions of lane confusion."""
 
-    def test_every_amsterdam_suite_is_refused_naming_its_goal(self):
-        for suite, goal in AMSTERDAM_SUITES.items():
+    def test_the_deferred_suites_are_refused_naming_the_currency_goal(self):
+        for suite, goal in AMSTERDAM_REFUSED_SUITES.items():
             with self.subTest(suite=suite):
                 run = run_check_mainnet("--lane", "amsterdam", "--suite", suite, "--no-build")
                 self.assertEqual(run.returncode, 2, run.stderr)
                 self.assertIn("is installed but refused", run.stderr)
-                self.assertIn("Fork.rules? answers none", run.stderr)
+                self.assertIn("BPO2ToAmsterdamAtTime15k", run.stderr)
                 self.assertIn(goal, run.stderr)
+
+    def test_no_refusal_repeats_the_claim_this_build_falsified(self):
+        """`Fork.amsterdam.rules?` resolves now, so nothing may still say it does
+        not -- neither in a message printed at runtime nor in the source that
+        prints them, where a stale sentence would be read as current fact."""
+        for suite in AMSTERDAM_REFUSED_SUITES:
+            with self.subTest(suite=suite):
+                run = run_check_mainnet("--lane", "amsterdam", "--suite", suite, "--no-build")
+                self.assertNotIn(RETIRED_CLAIM, run.stderr)
+        self.assertNotIn(RETIRED_CLAIM, CHECK_MAINNET.read_text())
+        self.assertNotIn(RETIRED_CLAIM, (SCRIPTS / "gen_mainnet_manifest.py").read_text())
 
     def test_refusal_precedes_any_look_at_the_corpus(self):
         """The answer must not depend on whether the archive is installed.
@@ -97,20 +134,34 @@ class LaneRefusalTests(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmp:
             run = run_check_mainnet(
-                "--lane", "amsterdam", "--suite", "amsterdam", "--no-build",
+                "--lane", "amsterdam", "--suite", "amsterdam-transitions", "--no-build",
                 "--fixtures-root", str(Path(tmp) / "absent"),
             )
         self.assertEqual(run.returncode, 2, run.stderr)
         self.assertIn("is installed but refused", run.stderr)
 
-    def test_dir_is_refused_on_the_devnet_lane(self):
-        run = run_check_mainnet(
-            "--lane", "amsterdam", "--suite", "amsterdam",
-            "--dir", "amsterdam/eip7843_slotnum", "--no-build",
-        )
+    def test_the_runnable_suites_are_admitted_and_reach_the_corpus(self):
+        """The mirror image: a suite this build may run must NOT be refused by
+        name. Pointed at an absent root it gets as far as the corpus check and
+        stops there -- which is the bootstrap message, not a refusal, and is
+        reached before any lock is taken or any fixture is dispatched."""
+        for suite in AMSTERDAM_RUNNABLE_SUITES:
+            with self.subTest(suite=suite):
+                with tempfile.TemporaryDirectory() as tmp:
+                    run = run_check_mainnet(
+                        "--lane", "amsterdam", "--suite", suite, "--no-build",
+                        "--fixtures-root", str(Path(tmp) / "absent"),
+                    )
+                self.assertEqual(run.returncode, 2, run.stderr)
+                self.assertNotIn("is installed but refused", run.stderr)
+                self.assertIn("glamsterdam-devnet blockchain fixture root not found", run.stderr)
+
+    def test_usage_states_which_devnet_suites_run(self):
+        run = run_check_mainnet()
         self.assertEqual(run.returncode, 2, run.stderr)
-        self.assertIn("--dir is refused on --lane amsterdam", run.stderr)
-        self.assertIn("jaune-amsterdam-block-v1", run.stderr)
+        for suite in AMSTERDAM_SUITES:
+            self.assertIn(suite, run.stderr)
+        self.assertIn("amsterdam-transitions, amsterdam-full refused", run.stderr)
 
     def test_mainnet_suite_on_the_devnet_lane_names_the_devnet_suites(self):
         run = run_check_mainnet("--lane", "amsterdam", "--suite", "prague", "--no-build")
@@ -197,6 +248,282 @@ class LaneParserTests(unittest.TestCase):
         self.assertEqual(
             generator.LANES["amsterdam"].output.parent.name, "amsterdam"
         )
+
+
+class SyntheticLaneRunTests(unittest.TestCase):
+    """The activated lane, end to end, over a corpus small enough to own.
+
+    The installed devnet archive is ~20 GB and running any real subtree needs
+    the built binary and minutes of wall time, so neither belongs in the cheap
+    tier. What does belong there is the harness's own logic: that a runnable
+    suite selects the right entries and dispatches them, that `--dir` picks out
+    exactly one subtree, and that every way of selecting fewer files than the
+    subtree holds is refused instead of reported as a smaller pass.
+
+    So this class builds a miniature corpus (four fixtures, one of them a
+    transition, in three subtrees plus an empty one), generates the lane's
+    manifest over it with the real generator, and runs the real
+    `check-mainnet.sh` against a stub `jaune` that passes everything. A stub
+    that always passes is the right oracle here precisely because the thing
+    under test is selection: if the harness ran the wrong files, or none, the
+    verdict's counts would still say so.
+
+    `--suite amsterdam-smoke` is the suite used to dispatch, because it takes no
+    lock; `--suite amsterdam` takes the host-global heavy-gate lock, which a
+    unit test must never contend for.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = Path(tempfile.mkdtemp(prefix="amsterdam-lane-"))
+        cls.addClassCleanup(shutil.rmtree, cls.tmp, ignore_errors=True)
+        cls.checkout = cls.tmp / "checkout"
+        cls.fixtures = cls.tmp / "fixtures"
+        cls.build_checkout(cls.checkout)
+        cls.build_corpus(cls.fixtures)
+        generated = subprocess.run(
+            [sys.executable, str(cls.checkout / "scripts" / "gen_mainnet_manifest.py"),
+             "--lane", "amsterdam", "--fixtures-root", str(cls.fixtures)],
+            capture_output=True, text=True,
+        )
+        assert generated.returncode == 0, generated.stderr
+        cls.manifest = json.loads(
+            (cls.checkout / "scripts" / "amsterdam" / "manifests.json").read_text()
+        )
+
+    @classmethod
+    def build_checkout(cls, checkout: Path) -> None:
+        """A throwaway copy of the harness, with a stub binary in place of Lean.
+
+        Only the top-level files of `scripts/` are copied: the harness, the
+        generator, the lock, and `sources.json`, which is the real one -- the
+        release identity that seeds the smoke ranking has to be the pinned one
+        for this to be a test of the shipped selection rule.
+        """
+        scripts = checkout / "scripts"
+        scripts.mkdir(parents=True)
+        for path in SCRIPTS.iterdir():
+            if path.is_file():
+                shutil.copy2(path, scripts / path.name)
+        (scripts / "amsterdam").mkdir()
+        stub = checkout / ".lake" / "build" / "bin"
+        stub.mkdir(parents=True)
+        binary = stub / "jaune"
+        binary.write_text("#!/bin/sh\nexit 0\n")
+        binary.chmod(0o755)
+
+    @classmethod
+    def build_corpus(cls, fixtures: Path) -> None:
+        release = json.loads((SCRIPTS / "sources.json").read_text())["glamsterdam_devnet"]
+        for name in release["expected_top_level_dirs"]:
+            (fixtures / name).mkdir(parents=True)
+        # The publisher's own release index, carrying the identity `sources.json`
+        # pins. The generator refuses a tree whose index is not the pinned one,
+        # so a synthetic corpus that omitted it would be testing a code path the
+        # real lane never takes.
+        index = fixtures / release["metadata_json_file_subpath"]
+        index.parent.mkdir(parents=True, exist_ok=True)
+        index.write_text(json.dumps(release["metadata_json_expected"]))
+        cls.write_fixture(fixtures, "for_amsterdam/amsterdam/eip7843_slotnum/a.json", "Amsterdam")
+        cls.write_fixture(fixtures, "for_amsterdam/amsterdam/eip7843_slotnum/b.json", "Amsterdam")
+        # A subtree that mixes labels: the devnet archive re-fills earlier forks'
+        # suites under `for_amsterdam` too, so a directory holding both is the
+        # shape the count rule exists for.
+        cls.write_fixture(fixtures, "for_amsterdam/amsterdam/eip9999_mixed/c.json", "Amsterdam")
+        cls.write_fixture(fixtures, "for_amsterdam/amsterdam/eip9999_mixed/d.json", "Prague")
+        cls.write_fixture(
+            fixtures, "for_bpo2toamsterdamattime15k/t.json", "BPO2ToAmsterdamAtTime15k"
+        )
+        (fixtures / "blockchain_tests/for_amsterdam/amsterdam/eip0000_empty").mkdir()
+
+    @classmethod
+    def write_fixture(cls, fixtures: Path, relative: str, network: str) -> None:
+        path = fixtures / "blockchain_tests" / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({
+            f"{network}-{relative}": {
+                "network": network,
+                "config": {
+                    "network": network,
+                    "chainid": "0x01",
+                    "blobSchedule": SYNTHETIC_BLOB_SCHEDULE,
+                },
+            }
+        }))
+
+    def run_lane(self, *args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [str(self.checkout / "scripts" / "check-mainnet.sh"),
+             "--lane", "amsterdam", "--no-build",
+             "--fixtures-root", str(self.fixtures), *args],
+            capture_output=True, text=True, cwd=str(self.checkout),
+        )
+
+    # -- the manifest the lane raises over this corpus --------------------
+
+    def test_the_static_suites_are_runnable_and_the_transition_ones_are_not(self):
+        suites = self.manifest["suites"]
+        for name in AMSTERDAM_RUNNABLE_SUITES:
+            with self.subTest(suite=name):
+                self.assertTrue(suites[name]["runnable"])
+                self.assertNotIn("refusal_reason", suites[name])
+        for name, goal in AMSTERDAM_REFUSED_SUITES.items():
+            with self.subTest(suite=name):
+                self.assertFalse(suites[name]["runnable"])
+                self.assertIn("BPO2ToAmsterdamAtTime15k", suites[name]["refusal_reason"])
+                self.assertIn(goal, suites[name]["refusal_reason"])
+        self.assertTrue(self.manifest["runnable"])
+        self.assertNotIn("refusal_reason", self.manifest)
+
+    def test_the_static_suite_holds_every_amsterdam_case_and_nothing_else(self):
+        amsterdam = self.manifest["suites"]["amsterdam"]
+        self.assertEqual(
+            [entry["path"] for entry in amsterdam["files"]],
+            [
+                "for_amsterdam/amsterdam/eip7843_slotnum/a.json",
+                "for_amsterdam/amsterdam/eip7843_slotnum/b.json",
+                "for_amsterdam/amsterdam/eip9999_mixed/c.json",
+            ],
+        )
+        self.assertEqual(amsterdam["file_count"], 3)
+
+    def test_nothing_under_for_amsterdam_is_excluded(self):
+        """G7's manifest condition: the exclusion list may not reach into the
+        corpus this lane runs. An exclusion there would be a file silently not
+        run under a suite reported all-PASS."""
+        excluded = [
+            entry["path"]
+            for label in self.manifest["excluded"].values()
+            for entry in label["files"]
+            if entry["path"].startswith("for_amsterdam/")
+        ]
+        self.assertEqual(excluded, [])
+
+    # -- dispatch ---------------------------------------------------------
+
+    def test_a_runnable_suite_dispatches_every_selected_file(self):
+        run = self.run_lane("--suite", "amsterdam-smoke")
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertIn("OK — amsterdam-smoke: 3/3 manifest files PASS", run.stdout)
+
+    def test_start_at_reports_only_what_it_verified(self):
+        run = self.run_lane("--suite", "amsterdam-smoke", "--start-at", "3")
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertIn("3/3", run.stdout)
+        self.assertIn("[3/3] PASS", run.stderr)
+        self.assertNotIn("[1/3] PASS", run.stderr)
+
+    def test_dir_selects_exactly_one_subtree(self):
+        run = self.run_lane(
+            "--suite", "amsterdam-smoke", "--dir", "for_amsterdam/amsterdam/eip7843_slotnum"
+        )
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertIn(
+            "OK — amsterdam-smoke:for_amsterdam/amsterdam/eip7843_slotnum: 2/2", run.stdout
+        )
+
+    # -- and every way of selecting fewer files than the subtree holds -----
+
+    def test_dir_refuses_a_subtree_whose_counts_disagree(self):
+        """The count rule: on-disk `.json` count must equal the manifest's count
+        for the selected suite. The mixed subtree holds two files and the suite
+        selects one of them, so running it would report an all-PASS over "the
+        subtree" while half of it never ran."""
+        run = self.run_lane(
+            "--suite", "amsterdam-smoke", "--dir", "for_amsterdam/amsterdam/eip9999_mixed"
+        )
+        self.assertEqual(run.returncode, 2, run.stdout + run.stderr)
+        self.assertIn("holds 2 fixture files but the amsterdam-smoke manifest lists 1", run.stderr)
+        self.assertNotIn("PASS", run.stdout)
+
+    def test_dir_refuses_an_empty_subtree(self):
+        run = self.run_lane(
+            "--suite", "amsterdam-smoke", "--dir", "for_amsterdam/amsterdam/eip0000_empty"
+        )
+        self.assertEqual(run.returncode, 2, run.stdout + run.stderr)
+        self.assertIn("holds no fixture file", run.stderr)
+        self.assertNotIn("PASS", run.stdout)
+
+    def test_dir_refuses_a_subtree_that_is_not_there(self):
+        run = self.run_lane(
+            "--suite", "amsterdam-smoke", "--dir", "for_amsterdam/amsterdam/eip0000_nonexistent"
+        )
+        self.assertEqual(run.returncode, 2, run.stdout + run.stderr)
+        self.assertIn("--dir subtree not found", run.stderr)
+
+    def test_dir_names_the_full_path_when_the_for_amsterdam_prefix_is_missing(self):
+        """The lane's own subtrees sit two levels down. `--dir` is one rule on
+        both lanes -- a path under `blockchain_tests` -- so the short spelling is
+        an error, and an error that can name the path meant costs nothing."""
+        run = self.run_lane("--suite", "amsterdam-smoke", "--dir", "amsterdam/eip7843_slotnum")
+        self.assertEqual(run.returncode, 2, run.stdout + run.stderr)
+        self.assertIn("--dir subtree not found", run.stderr)
+        self.assertIn("--dir for_amsterdam/amsterdam/eip7843_slotnum", run.stderr)
+
+    def test_dir_refuses_an_escaping_path(self):
+        run = self.run_lane("--suite", "amsterdam-smoke", "--dir", "../for_amsterdam")
+        self.assertEqual(run.returncode, 2, run.stdout + run.stderr)
+        self.assertIn("must be a relative path inside blockchain_tests", run.stderr)
+
+    # -- the manifest catches a changed corpus, it does not absorb it -----
+
+    def run_generator(self, *args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(self.checkout / "scripts" / "gen_mainnet_manifest.py"),
+             "--lane", "amsterdam", "--fixtures-root", str(self.fixtures), *args],
+            capture_output=True, text=True,
+        )
+
+    @contextlib.contextmanager
+    def mutated(self, relative: str, edit):
+        """One file of the corpus, changed for the duration of one test."""
+        path = self.fixtures / relative
+        original = path.read_bytes()
+        path.write_text(edit(json.loads(original)))
+        try:
+            yield
+        finally:
+            path.write_bytes(original)
+
+    def test_the_unmutated_corpus_checks_clean(self):
+        """The baseline the two controls below are read against."""
+        run = self.run_generator("--check")
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertIn("exactly matches the pinned fixture tree", run.stdout)
+
+    def test_a_changed_fixture_turns_check_red(self):
+        """Programme §10's named risk: a fixture-format change must be caught,
+        not absorbed. A key added to a fixture leaves its network label and its
+        case names untouched -- the manifest's content digest is what sees it."""
+        def add_a_header_field(fixture: dict) -> str:
+            case = next(iter(fixture.values()))
+            case["extraHeaderField"] = "0x00"
+            return json.dumps(fixture)
+
+        with self.mutated(
+            "blockchain_tests/for_amsterdam/amsterdam/eip7843_slotnum/a.json",
+            add_a_header_field,
+        ):
+            run = self.run_generator("--check")
+        self.assertEqual(run.returncode, 1, run.stdout + run.stderr)
+        self.assertIn("stale or fixture input differs", run.stderr)
+
+    def test_a_changed_release_index_is_refused(self):
+        """The other half of the same risk: the tree's own identity. A manifest
+        generated over a tree whose index says it is a different release would
+        be an exact claim about the wrong thing, so this fails closed at
+        generation rather than being recorded and compared."""
+        with self.mutated(
+            ".meta/index.json",
+            lambda index: json.dumps(dict(index, test_count=index["test_count"] + 1)),
+        ):
+            checked = self.run_generator("--check")
+            regenerated = self.run_generator()
+        self.assertEqual(checked.returncode, 2, checked.stdout + checked.stderr)
+        self.assertIn("release index does not match the pin", checked.stderr)
+        self.assertIn("test_count", checked.stderr)
+        # And it may not be regenerated into agreement either.
+        self.assertEqual(regenerated.returncode, 2, regenerated.stdout)
 
 
 class LaneManifestFieldTests(unittest.TestCase):
@@ -310,31 +637,28 @@ class AmsterdamT8nCorpusTests(unittest.TestCase):
         alloc = json.loads((T8N / "amsterdam-system-alloc.json").read_text())
         self.assertEqual(set(alloc), AMSTERDAM_SYSTEM_ADDRESSES)
 
-    def test_each_case_registers_both_target_only_block_access_fields(self):
+    def test_each_case_pins_both_block_access_fields_with_no_deviation(self):
+        """Jaune emits the EIP-7928 pair itself, so the goldens pin it exactly.
+
+        Until goal C's W4 it was absent from Jaune's result and registered as
+        a target-only deviation for every case; now the registry carries no
+        Amsterdam entry and both fields are compared byte for byte. Rewritten
+        rather than deleted (fixed decision 8): the guard that recorded the
+        omission is the same guard that now records its removal.
+        """
         deviations = json.loads((T8N / "deviations.json").read_text())["fields"]
         for scenario in AMSTERDAM_T8N_SCENARIOS:
             for mode in ("blockchain", "state-test"):
                 case = f"{scenario}-{mode}"
-                entries = [entry for entry in deviations if entry.get("case") == case]
+                result = json.loads(
+                    (self.case(scenario, mode) / "expected" / "result.json").read_text()
+                )
                 with self.subTest(case=case):
-                    self.assertEqual(len(entries), 2)
+                    self.assertIn("blockAccessList", result)
+                    self.assertIn("blockAccessListHash", result)
                     self.assertEqual(
-                        {tuple(entry["path"]) for entry in entries},
-                        {("blockAccessList",), ("blockAccessListHash",)},
-                    )
-                    self.assertTrue(
-                        all(entry.get("jauneAbsent") is True for entry in entries)
-                    )
-                    self.assertTrue(all("target" in entry for entry in entries))
-                    self.assertTrue(all("jaune" not in entry for entry in entries))
-                    self.assertTrue(
-                        all(
-                            entry.get("owner") == "jaune-amsterdam-block-v1"
-                            for entry in entries
-                        )
-                    )
-                    self.assertTrue(
-                        all(entry.get("recorded") == "2026-09-05" for entry in entries)
+                        [entry for entry in deviations if entry.get("case") == case],
+                        [],
                     )
 
 

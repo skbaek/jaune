@@ -29,26 +29,15 @@
 #
 # A fork this build declares but does not implement is expected to be refused
 # by `--rules`; that is checked too, so the gate's fork list and
-# `Fork.supported` cannot drift apart.
-#
-# A refused fork may nonetheless carry a *metering vehicle*: a partial record
-# whose numbers this build does implement, printed by `--rules-partial` and
-# resolved only through the transition tool's own lane table. For such a fork
-# three further things are checked, and together they are what keeps a partial
-# claim honest:
-#
-#   4. the per-fork coverage table classifies *every* field of the record --
-#      compared, covered elsewhere, or deferred with the owning goal named;
-#   5. the metering printer's key set is exactly the compared set, so the lane
-#      cannot quietly shrink or quietly widen; and
-#   6. every compared field matches the pinned revision, exactly as for a fork
-#      this build runs.
+# `Fork.supported` cannot drift apart. Every fork the extraction names resolves
+# today, so that branch is unreachable through a declared label; it stays for
+# the next declared-but-unimplemented fork, which is precisely when it bites.
 #
 # Usage: scripts/check-fork-constants.sh [--table]
 #
 #   --table  additionally print the extracted Amsterdam column in full, for a
-#            report. The rows outside the metering vehicle are inventory, not a
-#            check; the rows inside it are checked by rule 6 above.
+#            report. Every row of it is checked by rule 1; printing it is a
+#            convenience for the report, not a further check.
 #
 # CLI contract: exit 0 iff every check holds; the last line is a single
 # unambiguous verdict. Exit 1 on a violation, 2 on a usage or setup error.
@@ -96,13 +85,6 @@ for FORK in $FORKS; do
   else
     printf 'refused\n' > "$TMP/$FORK.refused"
   fi
-  # A refused fork may still carry a metering vehicle -- a partial record whose
-  # numbers this build does implement. Ask for it unconditionally; the Python
-  # pass decides whether one was expected.
-  if "$BIN" --rules-partial "$FORK" > "$TMP/$FORK.partial.json" \
-      2> "$TMP/$FORK.partial.err"; then
-    : > "$TMP/$FORK.partial.ok"
-  fi
 done
 
 python3 - "$EXTRACTION" "$SOURCES" "$TMP" "$TABLE" <<'PYEOF'
@@ -125,9 +107,7 @@ if taken != pinned:
 
 coverage = extraction["coverage"]
 checked = {k for k, v in coverage.items() if v["status"] == "checked"}
-fork_coverage = extraction.get("fork_coverage", {})
 compared = 0
-metered = []
 runnable = []
 
 
@@ -165,60 +145,8 @@ for fork, entry in sorted(extraction["forks"].items()):
                 f"{err.strip()[:200]}"
             )
 
-        # A refused fork may still be metered. When it is, every field of the
-        # record has to be classified for it -- compared against upstream
-        # because the vehicle claims it, covered by behaviour elsewhere, or
-        # deferred with the goal that owns it named -- and the partial
-        # printer's key set has to be exactly the compared set. That is what
-        # stops the metering lane from quietly shrinking, and what makes the
-        # deferral a recorded fact rather than an omission.
-        per_fork = fork_coverage.get(fork)
-        has_partial = (tmp / f"{fork}.partial.ok").exists()
-        if per_fork is None:
-            if has_partial:
-                problems.append(
-                    f"{fork}: --rules-partial prints a metering record, but "
-                    "the extraction classifies no fields for this fork; "
-                    "classify them in scripts/gen-fork-constants.py"
-                )
-            continue
-        if not has_partial:
-            partial_err = (tmp / f"{fork}.partial.err").read_text()
-            problems.append(
-                f"{fork}: the extraction classifies fields for a metering "
-                f"vehicle, but --rules-partial refused: {partial_err.strip()[:200]}"
-            )
-            continue
-        if set(per_fork) != set(coverage):
-            missing = sorted(set(coverage) - set(per_fork))
-            extra = sorted(set(per_fork) - set(coverage))
-            problems.append(
-                f"{fork}: the per-fork coverage table is not the whole record "
-                f"— unclassified {missing}, classified-but-absent {extra}"
-            )
-        for field, entry_status in sorted(per_fork.items()):
-            if entry_status["status"] == "deferred" and not entry_status.get("owner"):
-                problems.append(
-                    f"{fork}.{field}: deferred with no owning goal named"
-                )
-        metering_checked = {
-            k for k, v in per_fork.items() if v["status"] == "checked"
-        }
-        try:
-            partial = json.loads((tmp / f"{fork}.partial.json").read_text())
-        except json.JSONDecodeError as error:
-            problems.append(f"{fork}: --rules-partial did not print JSON: {error}")
-            continue
-        if set(partial) != metering_checked:
-            missing = sorted(metering_checked - set(partial))
-            extra = sorted(set(partial) - metering_checked)
-            problems.append(
-                f"{fork}: the metering printer's fields and the per-fork "
-                f"coverage table disagree — not printed {missing}, printed but "
-                f"not checked {extra}"
-            )
-        metered.append(fork)
-        compared += compare_fields(fork, entry, partial, sorted(metering_checked))
+        # Nothing of a refused fork is compared: there is no record to
+        # compare. The refusal itself is the whole check.
         continue
     runnable.append(fork)
     try:
@@ -260,24 +188,11 @@ if problems:
     )
     raise SystemExit(1)
 
-metering_note = ""
-if metered:
-    deferred = sum(
-        1
-        for f in metered
-        for v in fork_coverage[f].values()
-        if v["status"] == "deferred"
-    )
-    metering_note = (
-        f"; {len(metered)} metering vehicle(s) ({', '.join(metered)}) compared "
-        f"on their claimed fields, {deferred} field(s) deferred to a named goal"
-    )
-
+declared_refused = len(extraction["forks"]) - len(runnable)
 print(
-    f"OK — fork-constants: {compared} constant(s) across {len(runnable)} fork(s) "
-    f"({', '.join(runnable)}) match execution-specs {taken[:12]}; "
-    f"{len(extraction['forks']) - len(runnable)} declared fork(s) refused"
-    f"{metering_note}"
+    f"OK — fork-constants: {compared} comparison(s) across {len(runnable)} "
+    f"runnable fork(s) ({', '.join(runnable)}) match execution-specs "
+    f"{taken[:12]}; {declared_refused} declared fork(s) refused"
 )
 PYEOF
 exit $?

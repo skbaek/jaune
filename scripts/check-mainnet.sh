@@ -5,15 +5,21 @@
 #
 # --lane selects the corpus. `mainnet` (the default) is the current-mainnet
 # release and every suite over it runs. `amsterdam` is the Glamsterdam devnet-8
-# prerelease, whose fixtures target a fork `Fork.rules?` answers `none` for:
-# its four suite names are recognised here and every one of them is refused,
-# naming the goal that owns the semantics they would need. A refusal is the
-# point, not a gap -- the alternative is a suite that reports failures about a
-# fork this build has never claimed to run.
+# prerelease. This build implements Amsterdam -- `Fork.amsterdam.rules?`
+# resolves -- so that lane's two suites over the static `Amsterdam` corpus,
+# `amsterdam` and `amsterdam-smoke`, run here exactly as the mainnet lane's
+# suites run over theirs. The two that select `BPO2ToAmsterdamAtTime15k` --
+# `amsterdam-transitions` and its union `amsterdam-full` -- stay refused and
+# name the goal that owns the activation boundary. A refusal is the point, not
+# a gap: the alternative is an all-PASS verdict over a boundary no gate covers.
 #
 # The two lanes' suite namespaces are disjoint by construction (the devnet
 # lane's derived suites are `amsterdam-` prefixed), so a suite name is never
-# ambiguous and a mistyped --lane cannot silently select the other corpus.
+# ambiguous and a mistyped --lane cannot silently select the other corpus. That
+# disjointness is also why one report-file convention serves both lanes: a
+# report is named for its suite, scripts/report-mainnet-<suite>.txt, and no two
+# suites across the two lanes share a name, so no lane prefix is needed and the
+# mainnet lane's report paths are exactly what they always were.
 #
 # --jobs <n>|auto runs <n> fixtures concurrently; sequential (the default) is
 # unchanged. The two modes differ in one deliberate way: sequential stops at the
@@ -68,7 +74,7 @@ JOBS=1
 usage() {
   echo "usage: scripts/check-mainnet.sh [--lane (mainnet|amsterdam)] (--suite SUITE | --dir REL --suite SUITE) [--fixtures-root PATH] [--no-build] [--start-at N] [--jobs <n>|auto]" >&2
   echo "  --lane mainnet   suites: prague osaka transitions smoke full" >&2
-  echo "  --lane amsterdam suites: amsterdam amsterdam-transitions amsterdam-smoke amsterdam-full (all refused)" >&2
+  echo "  --lane amsterdam suites: amsterdam amsterdam-smoke; amsterdam-transitions, amsterdam-full refused" >&2
   exit 2
 }
 
@@ -102,45 +108,50 @@ case "$LANE" in
 esac
 [ -n "$FIXTURES_ROOT" ] || FIXTURES_ROOT="$LANE_ROOT_DEFAULT"
 
-# The devnet lane's suites are recognised and refused, one message per suite,
-# naming the goal that owns the semantics each would need. The refusal fires
-# before the fixture root is looked at, so it is the same answer on a host that
-# has never installed the corpus as on one that has: whether the archive is
-# present is not what makes this lane unrunnable.
-amsterdam_refusal() { # <suite> <owning goal> <what it would need>
-  echo "error: suite $1 is installed but refused: this build declares Fork.amsterdam and Fork.rules? answers none for it, so no Amsterdam fixture can be run or judged." >&2
-  echo "       Activating it belongs to $2, which implements $3." >&2
-  echo "       The lane is inventoried, not exercised: see scripts/amsterdam/manifests.json for its exact contents." >&2
+# The devnet lane's two suites over the *static* Amsterdam corpus run: this
+# build implements those rules, `Fork.amsterdam.rules?` resolves, and the
+# fixture runner admits the `Amsterdam` network label, so those fixtures can be
+# run and judged. The two suites that select `BPO2ToAmsterdamAtTime15k` are
+# still refused, and the refusal is not the old one restated: it is no longer
+# true that this build resolves no Amsterdam rules. What it does not have is any
+# gate over the BPO2-to-Amsterdam *activation boundary* -- the schedule, its
+# blob parameters and the header continuity across it -- which is the currency
+# goal's subject. Running the transition fixtures here would produce a verdict
+# no evidence in this build supports. The refusal fires before the fixture root
+# is looked at, so it is the same answer on a host that has never installed the
+# corpus as on one that has: whether the archive is present is not what defers
+# these two suites.
+amsterdam_refusal() { # <suite> <what it selects>
+  echo "error: suite $1 is installed but refused: it selects $2, and no gate in this build covers the BPO2-to-Amsterdam activation boundary." >&2
+  echo "       Amsterdam's own rules do resolve here: the static corpus runs as --suite amsterdam and --suite amsterdam-smoke." >&2
+  echo "       Activating the transition lane belongs to $AMSTERDAM_CURRENCY_GOAL, which implements it." >&2
+  echo "       The lane's exact contents, per label and per suite: scripts/amsterdam/manifests.json." >&2
   exit 2
 }
 
-AMSTERDAM_BLOCK_GOAL="goal jaune-amsterdam-block-v1"
 AMSTERDAM_CURRENCY_GOAL="goal jaune-amsterdam-currency-v1"
 
 if [ "$LANE" = "amsterdam" ]; then
-  if [ -n "$SUBDIR" ]; then
-    echo "error: --dir is refused on --lane amsterdam: a subtree of a corpus this build cannot run is still a corpus this build cannot run." >&2
-    echo "       Per-subtree landing is $AMSTERDAM_BLOCK_GOAL's instrument, and it becomes available when that goal activates the suite." >&2
-    exit 2
-  fi
   case "$SUITE" in
-    amsterdam)
-      amsterdam_refusal "$SUITE" "$AMSTERDAM_BLOCK_GOAL" \
-        "the two-dimensional gas meter, the block-level access list, and the four new opcodes" ;;
-    amsterdam-smoke)
-      amsterdam_refusal "$SUITE" "$AMSTERDAM_BLOCK_GOAL" \
-        "the two-dimensional gas meter, the block-level access list, and the four new opcodes" ;;
-    amsterdam-full)
-      amsterdam_refusal "$SUITE" "$AMSTERDAM_BLOCK_GOAL" \
-        "the two-dimensional gas meter, the block-level access list, and the four new opcodes" ;;
+    amsterdam|amsterdam-smoke) ;;
     amsterdam-transitions)
-      amsterdam_refusal "$SUITE" "$AMSTERDAM_CURRENCY_GOAL" \
-        "the BPO2-to-Amsterdam transition lane on top of that metering core" ;;
+      amsterdam_refusal "$SUITE" "the BPO2ToAmsterdamAtTime15k fixtures" ;;
+    amsterdam-full)
+      amsterdam_refusal "$SUITE" \
+        "the BPO2ToAmsterdamAtTime15k fixtures (it is the union of amsterdam and amsterdam-transitions)" ;;
     prague|osaka|transitions|smoke|full)
       echo "error: suite $SUITE is a --lane mainnet suite; the devnet lane's suites are amsterdam, amsterdam-transitions, amsterdam-smoke, amsterdam-full" >&2
       exit 2 ;;
     *) echo "error: unknown suite $SUITE for lane amsterdam" >&2; exit 2 ;;
   esac
+  # The same path-shape check the mainnet lane applies, in the same position
+  # relative to its own suite check, so that a doubly-invalid invocation is
+  # answered by the same one of the two on either lane.
+  if [ -n "$SUBDIR" ]; then
+    case "$SUBDIR" in
+      /*|*..*) echo "error: --dir must be a relative path inside blockchain_tests" >&2; exit 2 ;;
+    esac
+  fi
 fi
 
 if [ "$JOBS" = "auto" ]; then
@@ -173,7 +184,7 @@ fi
 # oracle this harness exists to prevent.
 lane_mismatch() {
   echo "error: suite $1 is a --lane amsterdam suite and this run is on --lane $LANE" >&2
-  echo "       Run it as: scripts/check-mainnet.sh --lane amsterdam --suite $1 (which refuses it, by design)" >&2
+  echo "       Run it as: scripts/check-mainnet.sh --lane amsterdam --suite $1" >&2
   exit 2
 }
 
@@ -188,26 +199,28 @@ bpo_refusal() {
 # targeted instrument for landing one semantic change at a time: the entries
 # still come from the generated manifest, every one of them still has to PASS,
 # and an empty or unlisted selection is an error.
-if [ -n "$SUBDIR" ]; then
-  case "$SUITE" in
-    prague|smoke|osaka|transitions) ;;
-    bpo1|bpo2) bpo_refusal "$SUITE" ;;
-    amsterdam|amsterdam-*) lane_mismatch "$SUITE" ;;
-    full)
-      echo "error: suite full has no per-directory form; name the component suite" >&2
-      exit 2 ;;
-    *) echo "error: unknown suite $SUITE" >&2; exit 2 ;;
-  esac
-  case "$SUBDIR" in
-    /*|*..*) echo "error: --dir must be a relative path inside blockchain_tests" >&2; exit 2 ;;
-  esac
-else
-  case "$SUITE" in
-    prague|osaka|transitions|smoke|full) ;;
-    bpo1|bpo2) bpo_refusal "$SUITE" ;;
-    amsterdam|amsterdam-*) lane_mismatch "$SUITE" ;;
-    *) echo "error: unknown suite $SUITE" >&2; exit 2 ;;
-  esac
+if [ "$LANE" = "mainnet" ]; then
+  if [ -n "$SUBDIR" ]; then
+    case "$SUITE" in
+      prague|smoke|osaka|transitions) ;;
+      bpo1|bpo2) bpo_refusal "$SUITE" ;;
+      amsterdam|amsterdam-*) lane_mismatch "$SUITE" ;;
+      full)
+        echo "error: suite full has no per-directory form; name the component suite" >&2
+        exit 2 ;;
+      *) echo "error: unknown suite $SUITE" >&2; exit 2 ;;
+    esac
+    case "$SUBDIR" in
+      /*|*..*) echo "error: --dir must be a relative path inside blockchain_tests" >&2; exit 2 ;;
+    esac
+  else
+    case "$SUITE" in
+      prague|osaka|transitions|smoke|full) ;;
+      bpo1|bpo2) bpo_refusal "$SUITE" ;;
+      amsterdam|amsterdam-*) lane_mismatch "$SUITE" ;;
+      *) echo "error: unknown suite $SUITE" >&2; exit 2 ;;
+    esac
+  fi
 fi
 
 # The corpus is provisioned separately and is not in the repository, so on a
@@ -224,14 +237,40 @@ fi
 }
 [ "$GUARD" -gt 0 ] 2>/dev/null || { echo "error: JAUNE_TIMEOUT must be positive" >&2; exit 2; }
 
+# `--dir` names a subtree of `blockchain_tests` on either lane -- the devnet
+# lane's Amsterdam subtrees are `for_amsterdam/amsterdam/eip*`, spelled in full,
+# because the argument is one rule and not a per-lane one. Whether that subtree
+# exists and holds fixtures at all is settled here, before the heavy lock, the
+# build and the manifest read: a mistyped path is a typo, and a typo should cost
+# nothing and hold nothing. What it must never cost is a wrong verdict, which is
+# why the two answers below are refusals and not empty selections.
+SUBDIR_ROOT=""
+ON_DISK=0
+if [ -n "$SUBDIR" ]; then
+  SUBDIR_ROOT="$FIXTURES_ROOT/blockchain_tests/${SUBDIR%/}"
+  [ -d "$SUBDIR_ROOT" ] || {
+    echo "error: --dir subtree not found: blockchain_tests/$SUBDIR" >&2
+    if [ "$LANE" = "amsterdam" ] && [ -d "$FIXTURES_ROOT/blockchain_tests/for_amsterdam/${SUBDIR%/}" ]; then
+      echo "       This lane's Amsterdam subtrees live under for_amsterdam/; did you mean --dir for_amsterdam/${SUBDIR%/}?" >&2
+    fi
+    exit 2
+  }
+  ON_DISK="$(find "$SUBDIR_ROOT" -name '*.json' | wc -l | tr -d ' ')"
+  [ "$ON_DISK" -gt 0 ] || {
+    echo "error: --dir subtree holds no fixture file: blockchain_tests/$SUBDIR" >&2
+    echo "       An all-PASS verdict over zero files is the permissive oracle this harness exists to prevent." >&2
+    exit 2
+  }
+fi
+
 # The heavy-gate lock, taken before the build so a refusal costs nothing and two
 # runs cannot contend over `lake build` either. The suites that hold it are the
 # catalogue's Long rows plus any run dispatching a worker pool; smoke and
 # transitions stay outside it, so the cheap suites you run while iterating are
 # never hostage to a long one. See scripts/gate-lock.sh.
 case "$SUITE" in
-  osaka|prague|full) HEAVY=1 ;;
-  *)                 HEAVY=0 ;;
+  osaka|prague|full|amsterdam) HEAVY=1 ;;
+  *)                           HEAVY=0 ;;
 esac
 if [ "$JOBS" -gt 1 ]; then HEAVY=1; fi
 if [ "$HEAVY" -eq 1 ]; then
@@ -246,27 +285,47 @@ if [ "$BUILD" -eq 1 ]; then
 fi
 [ -x "$BIN" ] || { echo "error: jaune binary not found: $BIN" >&2; exit 2; }
 
+# The network labels this lane may hand the binary. A label this list does not
+# name must never reach the runner: the runner would refuse it, but the manifest
+# is what is meant to be exact. `Amsterdam` is admitted on the devnet lane only
+# -- on the mainnet lane it would mean the wrong corpus had been selected -- and
+# the devnet lane admits no transition label at all, because the two suites that
+# carry one are refused above.
+case "$LANE" in
+  mainnet)
+    ALLOWED_NETWORKS="Prague Osaka BPO1 BPO2 PragueToOsakaAtTime15k OsakaToBPO1AtTime15k BPO1ToBPO2AtTime15k" ;;
+  amsterdam)
+    ALLOWED_NETWORKS="Amsterdam" ;;
+esac
+
 LIST="$(mktemp)"
 python3 "$SCRIPT_DIR/gen_mainnet_manifest.py" --lane "$LANE" \
   --fixtures-root "$FIXTURES_ROOT" --check --emit-suite "$SUITE" > "$LIST"
 [ -s "$LIST" ] || { echo "error: zero selected manifest entries for $SUITE" >&2; exit 2; }
 
 if [ -n "$SUBDIR" ]; then
-  [ -d "$FIXTURES_ROOT/blockchain_tests/$SUBDIR" ] || {
-    echo "error: --dir subtree not found: blockchain_tests/$SUBDIR" >&2; exit 2;
-  }
   SELECTED="$(mktemp)"
   grep -E "^${SUBDIR%/}/" "$LIST" > "$SELECTED" || true
   [ -s "$SELECTED" ] || {
     echo "error: zero $SUITE manifest entries under blockchain_tests/$SUBDIR" >&2
     exit 2
   }
-  # An unlisted .json inside the subtree means the subtree mixes fork labels or
-  # the manifest is stale; either way it must not be skipped silently.
-  ON_DISK="$(find "$FIXTURES_ROOT/blockchain_tests/${SUBDIR%/}" -name '*.json' | wc -l | tr -d ' ')"
+  # THE COUNT RULE, stated: the number of .json files on disk under the subtree
+  # must EQUAL the number of entries the selected suite has under it. Equality,
+  # not containment. An unlisted .json inside the subtree means one of two
+  # things -- the subtree mixes network labels and this suite selects only some
+  # of them, or the manifest is stale -- and neither may be skipped silently.
+  #
+  # A mixed subtree is therefore refused rather than run over the subset the
+  # suite happens to name: `--dir` is the instrument for landing one whole
+  # subtree at a time, so an "all-PASS over blockchain_tests/X" that quietly
+  # meant "over 40 of X's 174 files" would be a claim about files that never
+  # ran. The way to land a genuinely mixed subtree is to name its unmixed
+  # children, one `--dir` each -- never to relax this comparison.
   IN_MANIFEST="$(wc -l < "$SELECTED" | tr -d ' ')"
   [ "$ON_DISK" -eq "$IN_MANIFEST" ] || {
     echo "error: blockchain_tests/$SUBDIR holds $ON_DISK fixture files but the $SUITE manifest lists $IN_MANIFEST" >&2
+    echo "       --dir runs a whole subtree or none of it: name an unmixed child subtree, or regenerate the manifest if it is stale." >&2
     exit 2
   }
   mv "$SELECTED" "$LIST"
@@ -306,15 +365,14 @@ if [ "$JOBS" -gt 1 ]; then
   # problem; a pool cannot, and a malformed entry or missing file is a harness
   # error that must never be reachable as a fixture classification.
   tail -n +"$START_AT" "$LIST" \
-    | awk -F'\t' -v root="$FIXTURES_ROOT/blockchain_tests" -v start="$START_AT" '
+    | awk -F'\t' -v root="$FIXTURES_ROOT/blockchain_tests" -v start="$START_AT" \
+          -v nets=" $ALLOWED_NETWORKS " '
         {
           if (NF != 2 || $1 == "" || $2 == "") {
             printf "error: malformed generated manifest entry at line %d\n", FNR > "/dev/stderr"; bad = 1; exit 1
           }
           n = $2
-          if (n != "Prague" && n != "Osaka" && n != "BPO1" && n != "BPO2" &&
-              n != "PragueToOsakaAtTime15k" && n != "OsakaToBPO1AtTime15k" &&
-              n != "BPO1ToBPO2AtTime15k") {
+          if (index(nets, " " n " ") == 0) {
             printf "error: unknown manifest network %s\n", n > "/dev/stderr"; bad = 1; exit 1
           }
           printf "%d %s %s\n", FNR + start - 1, $1, n
@@ -388,12 +446,9 @@ while IFS=$'\t' read -r REL NETWORK; do
   [ -n "$REL" ] && [ -n "$NETWORK" ] || {
     echo "error: malformed generated manifest entry" >&2; exit 2;
   }
-  # The static forks and the transition labels whose endpoints are both
-  # supported.  A label this list does not name must never reach the binary:
-  # the binary would refuse it, but the manifest is what is meant to be exact.
-  case "$NETWORK" in
-    Prague|Osaka|BPO1|BPO2) ;;
-    PragueToOsakaAtTime15k|OsakaToBPO1AtTime15k|BPO1ToBPO2AtTime15k) ;;
+  # This lane's admitted labels, resolved once above.
+  case " $ALLOWED_NETWORKS " in
+    *" $NETWORK "*) ;;
     *) echo "error: unknown manifest network $NETWORK" >&2; exit 2;;
   esac
   FILE="$FIXTURES_ROOT/blockchain_tests/$REL"

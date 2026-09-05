@@ -19,11 +19,22 @@ for a transition is the same rule ``ForkTransition.ofString?`` applies in Lean.
 Nothing here is a hand-kept list: the archive's labels are parsed, and a label
 naming a fork outside the lane is excluded with that fork as its reason.
 
-**Being in a lane is not being runnable.** The Amsterdam lane deliberately
-covers a fork ``Fork.rules?`` answers ``none`` for, because the inventory's job
-is to say exactly what the corpus holds -- including what it holds that this
-build cannot yet execute.  Which suites may actually run is decided by
-``check-mainnet.sh``, which refuses this lane's suites outright.
+**Being in a lane is not being runnable, and runnability is per suite.**  The
+inventory's job is to say exactly what the corpus holds, including what it holds
+that this build cannot yet execute, so every derived suite states whether it is
+runnable and a suite that is not states why in a ``refusal_reason`` naming the
+goal that owns it.  On the Amsterdam lane the two suites over the static
+``Amsterdam`` corpus are runnable -- this build implements those rules -- and
+the two that select ``BPO2ToAmsterdamAtTime15k`` are not, because no gate here
+covers that activation boundary.  ``check-mainnet.sh`` enforces the same
+division; this manifest is where it is stated per suite, with counts.
+
+``--check`` is an identity gate, not a summary comparison.  It fails on a
+release index that is not the pinned one, and -- on any lane but the default --
+on a single changed byte in a single fixture, because every file entry carries
+the SHA-256 of its exact contents alongside its case names.  A fixture whose
+block header gained a field keeps its label and its case names; the digest is
+what makes that a red rather than something the inventory absorbs.
 """
 from __future__ import annotations
 
@@ -70,6 +81,12 @@ class LaneSpec:
     suite_prefix: str
     report_label: str
     output: Path
+    # Labels this lane covers and inventories but whose suites are deferred to
+    # another goal, and the one reason that names it.  A suite is runnable when
+    # it selects none of them; a suite that selects one carries that reason.
+    # Empty on the default lane, whose manifest has no such section at all.
+    deferred_labels: tuple[str, ...] = ()
+    deferral_reason: str = ""
 
     def suite(self, kind: str) -> str:
         """The name of one of this lane's derived suites.
@@ -108,6 +125,16 @@ LANES = {
         suite_prefix="amsterdam-",
         report_label="glamsterdam-devnet",
         output=ROOT / "amsterdam" / "manifests.json",
+        # Amsterdam's own rules resolve in this build, so the static suites run.
+        # The transition label is a different claim: both its endpoints are
+        # forks this build runs, but nothing here gates the activation boundary
+        # between them, so the suites carrying it are deferred rather than run.
+        deferred_labels=("BPO2ToAmsterdamAtTime15k",),
+        deferral_reason=(
+            "selects BPO2ToAmsterdamAtTime15k: this build resolves rules for "
+            "both endpoints, but no gate in it covers the BPO2-to-Amsterdam "
+            "activation boundary, which goal jaune-amsterdam-currency-v1 owns"
+        ),
     ),
 }
 DEFAULT_LANE = LANES["mainnet"]
@@ -203,10 +230,26 @@ def declared_blob_schedule(path: Path, name: str, case: dict, forks: tuple[str, 
     return schedules
 
 
-def read_cases(path: Path, statics: tuple[str, ...] = SUPPORTED_STATIC) -> tuple[str, list[str], dict]:
+def read_cases(
+    path: Path, statics: tuple[str, ...] = SUPPORTED_STATIC
+) -> tuple[str, list[str], dict, str]:
+    """The label, case names, declared blob schedules, and content digest.
+
+    The digest is over the file's exact bytes, so it pins the fixture as it was
+    generated from -- not only the case names it declares. A fixture whose block
+    header grew a field, or whose expected result changed, still carries the same
+    network label and the same case names, and a manifest that recorded only
+    those would absorb the change instead of catching it. The bytes are read
+    once and both the parse and the digest come from that read.
+    """
     try:
-        value = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError) as error:
+        raw = path.read_bytes()
+    except OSError as error:
+        raise InventoryError(f"unreadable JSON fixture {path}: {error}") from error
+    digest = hashlib.sha256(raw).hexdigest()
+    try:
+        value = json.loads(raw)
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
         raise InventoryError(f"unreadable JSON fixture {path}: {error}") from error
     if not isinstance(value, dict) or not value:
         raise InventoryError(f"unknown JSON form in {path}: expected nonempty object")
@@ -233,12 +276,37 @@ def read_cases(path: Path, statics: tuple[str, ...] = SUPPORTED_STATIC) -> tuple
                     )
         names.append(name)
     assert network is not None
-    return network, sorted(names), schedules
+    return network, sorted(names), schedules, digest
+
+
+def verify_release_index(fixtures_root: Path, release: dict, label: str) -> None:
+    """Fail closed unless the extracted tree's own release index is the pinned one.
+
+    The publisher writes `.meta/index.json` with the fixture tree's root hash,
+    its generation time and its test count, and `sources.json` pins those three.
+    Comparing them is `env_doctor`'s check and it is called here rather than
+    reimplemented, so the two oracles cannot drift apart: an inventory is a claim
+    about a specific tree, and a manifest generated over a tree whose own index
+    says it is a different one would make that claim about nothing. A lane that
+    pins no index (a synthetic root in a test) configures no subpath and is not
+    checked -- the doctor's own contract, unchanged.
+    """
+    failed = [
+        check
+        for check in env_doctor.check_release_index_metadata(release, fixtures_root, label)
+        if check.status != env_doctor.STATUS_OK
+    ]
+    if failed:
+        raise InventoryError(
+            "release index does not match the pin: "
+            + "; ".join(f"{check.name}: {check.detail}" for check in failed)
+        )
 
 
 def inventory(fixtures_root: Path, sources: dict, lane: LaneSpec = DEFAULT_LANE) -> dict:
     statics = lane.statics
     release = sources[lane.sources_key]
+    verify_release_index(fixtures_root, release, lane.report_label)
     blockchain = fixtures_root / "blockchain_tests"
     if not blockchain.is_dir():
         raise InventoryError(f"missing blockchain_tests root: {blockchain}")
@@ -256,18 +324,23 @@ def inventory(fixtures_root: Path, sources: dict, lane: LaneSpec = DEFAULT_LANE)
     label_cases: Counter[str] = Counter()
     all_files: set[str] = set()
     blob_schedules: dict[str, dict[str, int]] = {}
+    # The current-mainnet manifest is a tracked artifact its gate compares byte
+    # for byte, so the per-file content digest -- like every other lane-local
+    # record -- is written only by a lane that is not that one.
+    with_content_digest = lane.name != DEFAULT_LANE.name
     for path in sorted(blockchain.rglob("*.json")):
         relative = path.relative_to(blockchain).as_posix()
-        label, names, schedules = read_cases(path, statics)
-        grouped[label].append(
-            {
-                "path": relative,
-                "network": label,
-                "case_count": len(names),
-                "case_names": names,
-                "case_names_sha256": file_digest(names),
-            }
-        )
+        label, names, schedules, content = read_cases(path, statics)
+        entry = {
+            "path": relative,
+            "network": label,
+            "case_count": len(names),
+            "case_names": names,
+            "case_names_sha256": file_digest(names),
+        }
+        if with_content_digest:
+            entry["content_sha256"] = content
+        grouped[label].append(entry)
         for fork, values in schedules.items():
             if blob_schedules.setdefault(fork, values) != values:
                 raise InventoryError(
@@ -429,12 +502,22 @@ def inventory(fixtures_root: Path, sources: dict, lane: LaneSpec = DEFAULT_LANE)
         result["lane"] = lane.name
         result["covered_without_suite"] = covered_without_suite
         result["label_inventory"] = label_inventory
-        result["runnable"] = False
-        result["refusal_reason"] = (
-            "this lane's fixtures target Amsterdam, whose execution rules "
-            "Fork.rules? answers none for; every suite here is refused until "
-            "the goal that owns those semantics activates it"
-        )
+        # Runnability is a property of a suite, not of a lane: this lane holds
+        # runnable suites and deferred ones at the same pin, and folding that
+        # into one whole-lane flag is what made the previous manifest state
+        # something false about the static corpus. The lane-level flag now says
+        # only that some suite here runs; which ones, and why the others do not,
+        # is stated on the suites themselves.
+        deferred = set(lane.deferred_labels)
+        for suite in suites.values():
+            networks = (
+                [suite["network"]] if "network" in suite else suite.get("networks", [])
+            )
+            blocked = sorted(set(networks) & deferred)
+            suite["runnable"] = not blocked
+            if blocked:
+                suite["refusal_reason"] = lane.deferral_reason
+        result["runnable"] = any(suite["runnable"] for suite in suites.values())
     return result
 
 

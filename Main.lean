@@ -55,6 +55,91 @@ def getTxExMap (j : Lean.Json) : IO (Option String × Bytes) := do
     let exs ← exj.toIoString
     pure ⟨.some exs, rlp⟩
 
+/-- The block-level access list a Glamsterdam fixture publishes beside an
+Amsterdam block (`rlp_decoded.blockAccessList`, or `blockAccessList` on a
+hand-authored block), read in its published order with no sorting and no
+deduplication: the refinement in `refineBlockAccessListRejection` needs the
+list exactly as delivered. The JSON prints its keys in an order that is not
+the RLP field order, so the structure is rebuilt field by field. -/
+def Lean.Json.toIoBlockAccessList (j : Lean.Json) : IO BlockAccessList := do
+  let accounts ← j.toIoList
+  accounts.mapM fun acc => do
+    let indexOf (c : Lean.Json) : IO Nat :=
+      (c.find "blockAccessIndex" >>= Lean.Json.toIoQuantityB64 "blockAccessIndex")
+        <&> UInt64.toNat
+    let address ← acc.find "address" >>= Lean.Json.toIoAdr
+    let storageChanges ← (acc.find "storageChanges" >>= Lean.Json.toIoList) >>=
+      List.mapM fun sc => do
+        let slot ← sc.find "slot" >>= Lean.Json.toIoQuantityB256 "slot"
+        let changes ← (sc.find "slotChanges" >>= Lean.Json.toIoList) >>= List.mapM fun c => do
+          let i ← indexOf c
+          let v ← c.find "postValue" >>= Lean.Json.toIoQuantityB256 "postValue"
+          pure (i, v)
+        pure (slot, changes)
+    let storageReads ← (acc.find "storageReads" >>= Lean.Json.toIoList) >>=
+      List.mapM (Lean.Json.toIoQuantityB256 "storageReads")
+    let balanceChanges ← (acc.find "balanceChanges" >>= Lean.Json.toIoList) >>=
+      List.mapM fun c => do
+        let i ← indexOf c
+        let v ← c.find "postBalance" >>= Lean.Json.toIoQuantityB256 "postBalance"
+        pure (i, v)
+    let nonceChanges ← (acc.find "nonceChanges" >>= Lean.Json.toIoList) >>=
+      List.mapM fun c => do
+        let i ← indexOf c
+        let n ← c.find "postNonce" >>= Lean.Json.toIoQuantityB64 "postNonce"
+        pure (i, n)
+    let codeChanges ← (acc.find "codeChanges" >>= Lean.Json.toIoList) >>=
+      List.mapM fun c => do
+        let i ← indexOf c
+        let code ← c.find "newCode" >>= Lean.Json.toIoBytes
+        pure (i, code.toByteArray)
+    pure { address, storageChanges, storageReads, balanceChanges, nonceChanges, codeChanges }
+
+/-- Refine a consensus `blockAccessListHash` rejection with the list the fixture
+publishes (goal C, fixed decision 9).
+
+Consensus sees one thing: the hash of the list it built differs from the
+header's `blockAccessListHash`, because an Amsterdam block carries only the
+hash. The corpus names three reasons, and the fixture's published list -- a
+verification aid, not part of the block -- is what tells them apart, so the
+runner, which alone has it, does the telling:
+
+- the header's hash is **not** the published list's hash: the header commits to
+  something else, and the consensus identity `INVALID_BAL_HASH` stands;
+- it is, and the published list's canonical re-arrangement
+  (`BlockAccessList.canonicalise`) hashes to the computed list: the content is
+  right and only the form is wrong -- `INCORRECT_BLOCK_FORMAT`;
+- it is, and the content differs -- `INVALID_BLOCK_ACCESS_LIST`.
+
+A block without a published list keeps its consensus identity. Classification
+reads the typed rejection and the decoded header, never a rendered message. -/
+def refineBlockAccessListRejection (blockJson : Lean.Json) (blockRlp : Bytes) :
+    BlockRejection → IO BlockRejection
+  | .block (.blockAccessListHash computed detail) => do
+    let published? := blockJson.find? "blockAccessList" <|>
+      (blockJson.find? "rlp_decoded" >>= Lean.Json.find? "blockAccessList")
+    match published? with
+    | none => pure (.block (.blockAccessListHash computed detail))
+    | some listJson =>
+      let published ← listJson.toIoBlockAccessList
+      let header ← match rlpToBlockE blockRlp with
+        | .ok ⟨block, _⟩ => pure block.header
+        | .error reason =>
+          .throw s!"error : block RLP undecodable while refining a block access \
+            list rejection: {reason.render}"
+      let publishedHash := published.hash
+      if header.blockAccessListHash ≠ some publishedHash then
+        pure (.block (.blockAccessListHash computed detail))
+      else if published.canonicalise.hash = computed then
+        pure (.block (.blockAccessListFormat (.text
+          s!"published block access list ({published.length} entries) has the computed \
+             content {computed} in a non-canonical arrangement, hash {publishedHash}")))
+      else
+        pure (.block (.blockAccessListContent (.text
+          s!"published block access list hash = {publishedHash} (header-consistent) ≠ \
+             computed block access list hash = {computed}")))
+  | rejection => pure rejection
+
 def Lean.Json.toHeader (json : Lean.Json) : IO Header := do
   let parentHash ← json.find "parentHash" >>= Lean.Json.toIoB256
   let ommersHash ← json.find "uncleHash" >>= Lean.Json.toIoB256
@@ -171,6 +256,8 @@ def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
     ("modexp.gasDivisor", jNat r.modexp.gasDivisor),
     ("modexp.minGas", jNat r.modexp.minGas),
     ("op.clz", Lean.Json.bool r.op.clz),
+    ("op.slotnum", Lean.Json.bool r.op.slotnum),
+    ("op.stackAccess", Lean.Json.bool r.op.stackAccess),
     ("precompiles",
       Lean.Json.arr ((r.precompiles.map (fun a => jNat a.toNat)).toArray)),
     ("gas.coldAccountAccess", jNat r.gas.coldAccountAccess),
@@ -212,6 +299,10 @@ def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
       jOptNat (r.stateGas.map StateGasRules.systemMaxSstoresPerCall)),
     ("header.blockAccessListHash", Lean.Json.bool r.header.blockAccessListHash),
     ("header.slotNumber", Lean.Json.bool r.header.slotNumber),
+    -- EIP-7928's block-level access-list rules, under the same `present` +
+    -- per-field `null` convention as `stateGas`.
+    ("bal.present", Lean.Json.bool r.bal.isSome),
+    ("bal.itemCost", jOptNat (r.bal.map BalRules.itemCost)),
     ("requests",
       Lean.Json.arr ((r.requests.map (fun p =>
         Lean.Json.arr #[jNat p.fst.toNat,
@@ -223,8 +314,10 @@ def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
 A fork whose rules this build does not implement is refused here exactly as it
 is everywhere else: there is nothing to print, and printing another fork's
 record would be the silent fallback the whole architecture exists to prevent.
-So `--rules Amsterdam` fails with `UnsupportedForkError`, which is also what
-makes the gate's fork list and `Fork.supported` the same list by construction. -/
+Every declared fork resolves since goal C composed `amsterdamRules`, so today
+the refusal is unreachable through a declared label; it stays for the next
+declared-but-unimplemented fork. The gate's fork list and `Fork.supported` are
+the same list by construction. -/
 def runRulesPrinter (label : String) : IO Unit := do
   let some f := Fork.ofString? label
     | .throw
@@ -235,52 +328,98 @@ def runRulesPrinter (label : String) : IO Unit := do
   -- so the definition above lands at the root while `ForkRules` is `Jaune`'s.
   .println (ForkRules.toGateJson rules).pretty
 
-/-- The subset of the flat gate JSON that a metering vehicle actually claims.
+-- Goal B's `--rules-partial` printer and `ForkRules.toMeteringGateJson`, the
+-- metering vehicle's partial view, are retired with the vehicle: every
+-- declared fork is printed whole by `--rules`.
 
-`jaune --rules Amsterdam` is refused and stays refused: this build implements no
-Amsterdam *block* rules, so there is no complete record to print and printing a
-partial one under that flag would be the silent half-answer the architecture
-exists to prevent. But the transaction metering shape does exist, and its
-numbers have to be checkable against the pinned upstream revision like every
-other number this build carries.
+/-- `jaune --jumpdest-control <seed> <blobs> <size>`: the programme's D8
+random-blob control for the jump-destination analysis (goal C, G4).
 
-So this is a deliberately partial view: the ten shared-formula gas numbers and
-the eleven state-gas rows, and nothing else. Every key it omits is a rule the
-block-level goal owns, and `scripts/gen-fork-constants.py` classifies each of
-them by name so the gate can insist that omitted plus printed is the whole
-record. -/
-def ForkRules.toMeteringGateJson (r : ForkRules) : Lean.Json :=
-  let full := ForkRules.toGateJson r
-  let keys := [
-    "gas.coldAccountAccess", "gas.callValue", "gas.createAccess",
-    "gas.storageClearRefund", "gas.txBase", "gas.txAccessListAddress",
-    "gas.txAccessListStorageKey", "gas.floorTokenCost",
-    "gas.perAuthIntrinsic", "gas.codeReadSurcharge",
-    "stateGas.present", "stateGas.costPerStateByte",
-    "stateGas.stateBytesPerNewAccount", "stateGas.stateBytesPerStorageSet",
-    "stateGas.stateBytesPerAuthBase", "stateGas.storageWrite",
-    "stateGas.accountWrite", "stateGas.txValueCost",
-    "stateGas.accessListAddressFloorTokens",
-    "stateGas.accessListStorageKeyFloorTokens",
-    "stateGas.systemMaxSstoresPerCall"]
-  Lean.Json.mkObj (keys.filterMap
-    (fun k => (full.getObjVal? k).toOption.map (fun v => (k, v))))
-
-/-- `jaune --rules-partial <fork>`.
-
-Prints the metering-lane view of a fork that has a metering vehicle. A fork
-this build fully implements has no vehicle and is refused here -- its numbers
-belong under `--rules`, whole -- and so is a fork with neither. -/
-def runRulesPartialPrinter (label : String) : IO Unit := do
-  let some f := Fork.ofString? label
-    | .throw
-        s!"error : unknown --rules-partial label {repr label}; declared labels \
-           are {Fork.all.map Fork.toString}"
-  let some rules := Jaune.T8n.meteringRules? f
-    | .throw
-        s!"error : {f} has no metering vehicle; a fork this build implements \
-           is printed whole by --rules, and no other fork has one"
-  .println (ForkRules.toMeteringGateJson rules).pretty
+For each of `blobs` pseudo-random byte arrays of `size` bytes (a 64-bit LCG
+seeded from `seed + i`, so the run is reproducible), compares three
+computations of the valid jump-destination set: the pinned Amsterdam forward
+walk `pinnedJumpDestsFrom` (with EIP-8024's `DUPN`/`SWAPN`/`EXCHANGE` cases),
+the pre-Amsterdam forward walk `legacyJumpDestsFrom`, and the interpreter's own
+backward scan `jumpable`. The first two are proved equal on every input
+(`pinnedJumpDestsFrom_eq_legacy`); this control is the falsifier for that
+theorem's *statement* and for `jumpable` agreeing with it, run on blobs large
+enough to exercise EIP-7954's 64 KiB code ceiling. It also reports the slowest
+blob's `jumpable` scan time, which is programme R3's measurement. -/
+def runJumpdestControl (seedStr blobsStr sizeStr : String) : IO Bool := do
+  let some seed := seedStr.toNat?
+    | .throw s!"error : --jumpdest-control seed is not a number: {repr seedStr}"
+  let some blobs := blobsStr.toNat?
+    | .throw s!"error : --jumpdest-control blob count is not a number: {repr blobsStr}"
+  let some size := sizeStr.toNat?
+    | .throw s!"error : --jumpdest-control size is not a number: {repr sizeStr}"
+  if blobs = 0 ∨ size = 0 then
+    IO.println
+      s!"RED — jumpdest-control: 0 blobs or 0 bytes compares nothing; an empty \
+         control is never a vacuous pass"
+    return false
+  let mut ok := true
+  let mut slowestMs : Nat := 0
+  let mut slowestBlob : Nat := 0
+  let mut slowestWalkMs : Nat := 0
+  let mut destinations : Nat := 0
+  let mut stackAccessBytes : Nat := 0
+  for i in List.range blobs do
+    let tGen ← IO.monoMsNow
+    -- Knuth's MMIX LCG on `UInt64`; the top byte of each state is the next
+    -- code byte, so every opcode value is equally likely and the three
+    -- EIP-8024 bytes appear about `3 * size / 256` times per blob.
+    let mut x : UInt64 := (seed + i).toUInt64 * 6364136223846793005 + 1442695040888963407
+    let mut arr : Array UInt8 := Array.mkEmpty size
+    for _ in List.range size do
+      x := x * 6364136223846793005 + 1442695040888963407
+      arr := arr.push (x >>> 56).toUInt8
+    let cd : ByteArray := ⟨arr⟩
+    stackAccessBytes := stackAccessBytes +
+      (arr.toList.filter (fun b => b = 0xE6 ∨ b = 0xE7 ∨ b = 0xE8)).length
+    -- Each phase's result is printed before the next timestamp is taken, so
+    -- the compiler cannot float the pure computation past the clock read.
+    IO.println s!"blob {i}: {cd.size} bytes generated, {stackAccessBytes} stack-access byte(s) so far"
+    (← IO.getStdout).flush
+    let tWalk ← IO.monoMsNow
+    let pinned := pinnedJumpDestsFrom cd 0
+    IO.println s!"blob {i}: pinned walk: {pinned.length} destination(s)"
+    (← IO.getStdout).flush
+    let tPinned ← IO.monoMsNow
+    let legacy := legacyJumpDestsFrom cd 0
+    IO.println s!"blob {i}: legacy walk: {legacy.length} destination(s)"
+    (← IO.getStdout).flush
+    let t0 ← IO.monoMsNow
+    let scanned := (List.range size).filter (jumpable cd)
+    IO.println s!"blob {i}: jumpable scan: {scanned.length} destination(s)"
+    (← IO.getStdout).flush
+    let t1 ← IO.monoMsNow
+    IO.println
+      s!"blob {i}: generate {tWalk - tGen} ms, pinned walk {tPinned - tWalk} ms, \
+         legacy walk {t0 - tPinned} ms, jumpable scan {t1 - t0} ms"
+    if t0 - tWalk > slowestWalkMs then
+      slowestWalkMs := t0 - tWalk
+    if t1 - t0 > slowestMs then
+      slowestMs := t1 - t0
+      slowestBlob := i
+    destinations := destinations + pinned.length
+    if pinned ≠ legacy then
+      IO.println s!"RED — jumpdest-control: blob {i}: pinned walk ≠ legacy walk"
+      ok := false
+    if pinned ≠ scanned then
+      IO.println s!"RED — jumpdest-control: blob {i}: pinned walk ≠ jumpable scan"
+      ok := false
+  if ok then
+    IO.println
+      s!"OK — jumpdest-control: {blobs} blob(s) × {size} bytes (seed {seed}): \
+         pinned walk = legacy walk = jumpable on every blob; {destinations} \
+         destination(s), {stackAccessBytes} DUPN/SWAPN/EXCHANGE byte(s); slowest \
+         jumpable scan {slowestMs} ms (blob {slowestBlob}); slowest forward walks \
+         {slowestWalkMs} ms"
+  else
+    IO.println
+      s!"RED — jumpdest-control: {blobs} blob(s) × {size} bytes (seed {seed}): \
+         a walk disagreed; see the lines above"
+  return ok
 
 def getPostStateRoot (json : Lean.Json) : IO B256 :=
   ( do let stateJson ← json.find "postState"
@@ -416,7 +555,10 @@ def processBlockJsons (spec : NetworkSpec) (chainId : UInt64) (store : ChainStor
       | some expected =>
         requireExpectedFailure idx chainname expected failure.render none
         processBlockJsons spec chainId store rest
-    | .ok (.inr rejection) =>
+    | .ok (.inr consensusRejection) =>
+      -- An Amsterdam access-list hash rejection is refined with the fixture's
+      -- published list before scoring; every other rejection passes through.
+      let rejection ← refineBlockAccessListRejection blockJson blockRlp consensusRejection
       match expected? with
       | none =>
         .throw s!"BLOCK #{idx} ({chainname}) was expected valid but failed\n\
@@ -1049,9 +1191,9 @@ def usage : String :=
   jaune t8n [options] --state.fork <label>
   jaune --vectors <address> <file.json> [--network <fork>]
   jaune --rules <fork>
-  jaune --rules-partial <fork>
   jaune --u256 <file.json>
   jaune --fake-exp <file.json>
+  jaune --jumpdest-control <seed> <blobs> <size>
   jaune --version
   jaune --help
 
@@ -1080,9 +1222,9 @@ declared networks:
 
 runs at:
   {Fork.supported.map Fork.toString}
-  A declared network this build does not run -- \
-{Fork.unimplemented.map Fork.toString} -- parses, and every case at it is then \
-refused with UnsupportedForkError rather than answered.
+  Declared networks this build does not run: {Fork.unimplemented.map Fork.toString}. \
+Such a label parses, and every case at it is then refused with \
+UnsupportedForkError rather than answered.
 "
 
 def main : List String → IO Unit
@@ -1097,13 +1239,14 @@ def main : List String → IO Unit
   | "--version" :: _ => .println s!"jaune version {T8n.version}"
   | "t8n" :: rest => T8n.run rest
   | "--rules" :: label :: [] => runRulesPrinter label
-  | "--rules-partial" :: label :: [] => runRulesPartialPrinter label
-  | "--rules-partial" :: _ =>
-    .throw "error : --rules-partial takes exactly one fork label"
   | "--rules" :: _ =>
     .throw "error : --rules takes exactly one fork label"
   | "--u256" :: pathStr :: [] => do
     if !(← runU256VectorFile pathStr) then IO.Process.exit 1
+  | "--jumpdest-control" :: seed :: blobs :: size :: [] => do
+    if !(← runJumpdestControl seed blobs size) then IO.Process.exit 1
+  | "--jumpdest-control" :: _ =>
+    .throw "error : --jumpdest-control takes exactly <seed> <blobs> <size>"
   | "--fake-exp" :: pathStr :: [] => do
     if !(← runFakeExpVectorFile pathStr) then IO.Process.exit 1
   | "--vectors" :: addrStr :: pathStr :: opts => do
