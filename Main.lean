@@ -237,9 +237,22 @@ private def jOptNat : Option Nat → Lean.Json
   | none => .null
   | some n => jNat n
 
-/-- One rule record as the flat JSON the constants gate compares. -/
+/-- One rule record as the flat JSON the constants gate compares.
+
+One row is not a field of the record: `mainnetActivation` is the timestamp at
+which `mainnetChainConfig` activates this record's fork on mainnet, or `null`
+when the schedule names no such activation. It is printed here because the
+pinned specification carries the same fact per fork as `FORK_CRITERIA`, and
+D13 of the Amsterdam programme says the constants gate compares the two: the
+day the pin's criterion for a fork becomes `ByTimestamp`, this row disagrees
+with `null` and the gate names the missing `mainnet<Fork>Timestamp`. Reading
+the schedule rather than a constant keeps the printer honest about what the
+build actually activates. -/
 def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
   Lean.Json.mkObj [
+    ("mainnetActivation",
+      jOptNat ((mainnetChainConfig.activations.find? (·.fork == r.fork)).map
+        (·.timestamp))),
     ("blob.target", jNat r.blob.target),
     ("blob.max", jNat r.blob.max),
     ("blob.baseFeeUpdateFraction", jNat r.blob.baseFeeUpdateFraction),

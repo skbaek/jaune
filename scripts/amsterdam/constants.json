@@ -65,6 +65,9 @@
     "header.slotNumber": {
       "status": "checked"
     },
+    "mainnetActivation": {
+      "status": "checked"
+    },
     "modexp.complexityCoeff": {
       "reason": "no named upstream constant: the value is an inline literal inside vm/precompiled_contracts/modexp.py's complexity/iterations/gas_cost. Checked as behaviour by scripts/check-vectors.sh and by the eip7823_modexp_upper_bounds and eip7883_modexp_gas_increase subtrees of scripts/check-mainnet.sh --suite osaka.",
       "status": "elsewhere"
@@ -230,6 +233,10 @@
         "header.slotNumber": {
           "source": "blocks.Header has a slot_number field (EIP-7843)",
           "value": true
+        },
+        "mainnetActivation": {
+          "source": "FORK_CRITERIA (Unscheduled)",
+          "value": null
         },
         "op.clz": {
           "source": "vm.instructions.Ops.CLZ is defined (EIP-7939)",
@@ -434,6 +441,10 @@
           "source": "blocks.Header has a slot_number field (EIP-7843)",
           "value": false
         },
+        "mainnetActivation": {
+          "source": "FORK_CRITERIA (ByTimestamp)",
+          "value": 1765290071
+        },
         "op.clz": {
           "source": "vm.instructions.Ops.CLZ is defined (EIP-7939)",
           "value": true
@@ -628,6 +639,10 @@
         "header.slotNumber": {
           "source": "blocks.Header has a slot_number field (EIP-7843)",
           "value": false
+        },
+        "mainnetActivation": {
+          "source": "FORK_CRITERIA (ByTimestamp)",
+          "value": 1767747671
         },
         "op.clz": {
           "source": "vm.instructions.Ops.CLZ is defined (EIP-7939)",
@@ -824,6 +839,10 @@
           "source": "blocks.Header has a slot_number field (EIP-7843)",
           "value": false
         },
+        "mainnetActivation": {
+          "source": "FORK_CRITERIA (ByTimestamp)",
+          "value": 1764798551
+        },
         "op.clz": {
           "source": "vm.instructions.Ops.CLZ is defined (EIP-7939)",
           "value": true
@@ -1018,6 +1037,10 @@
         "header.slotNumber": {
           "source": "blocks.Header has a slot_number field (EIP-7843)",
           "value": false
+        },
+        "mainnetActivation": {
+          "source": "FORK_CRITERIA (ByTimestamp)",
+          "value": 1746612311
         },
         "op.clz": {
           "source": "vm.instructions.Ops.CLZ is defined (EIP-7939)",

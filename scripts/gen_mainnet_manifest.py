@@ -23,11 +23,14 @@ naming a fork outside the lane is excluded with that fork as its reason.
 inventory's job is to say exactly what the corpus holds, including what it holds
 that this build cannot yet execute, so every derived suite states whether it is
 runnable and a suite that is not states why in a ``refusal_reason`` naming the
-goal that owns it.  On the Amsterdam lane the two suites over the static
-``Amsterdam`` corpus are runnable -- this build implements those rules -- and
-the two that select ``BPO2ToAmsterdamAtTime15k`` are not, because no gate here
-covers that activation boundary.  ``check-mainnet.sh`` enforces the same
-division; this manifest is where it is stated per suite, with counts.
+goal that owns it.  On the Amsterdam lane all four suites are runnable: this
+build implements Amsterdam's rules, and the BPO2-to-Amsterdam activation
+boundary that ``BPO2ToAmsterdamAtTime15k`` names is a per-block schedule
+gated by ``Jaune/Fork.lean`` and run as ``--suite amsterdam-transitions``.
+(Until goal ``jaune-amsterdam-currency-v1`` the two transition-carrying suites
+stated a ``refusal_reason`` here; the field remains the way a future lane says
+what it cannot yet run.)  ``check-mainnet.sh`` enforces the same division;
+this manifest is where it is stated per suite, with counts.
 
 ``--check`` is an identity gate, not a summary comparison.  It fails on a
 release index that is not the pinned one, and -- on any lane but the default --
@@ -125,16 +128,18 @@ LANES = {
         suite_prefix="amsterdam-",
         report_label="glamsterdam-devnet",
         output=ROOT / "amsterdam" / "manifests.json",
-        # Amsterdam's own rules resolve in this build, so the static suites run.
-        # The transition label is a different claim: both its endpoints are
-        # forks this build runs, but nothing here gates the activation boundary
-        # between them, so the suites carrying it are deferred rather than run.
-        deferred_labels=("BPO2ToAmsterdamAtTime15k",),
-        deferral_reason=(
-            "selects BPO2ToAmsterdamAtTime15k: this build resolves rules for "
-            "both endpoints, but no gate in it covers the BPO2-to-Amsterdam "
-            "activation boundary, which goal jaune-amsterdam-currency-v1 owns"
-        ),
+        # Amsterdam's own rules resolve in this build, so the static suites run,
+        # and the activation boundary is gated too: `BPO2ToAmsterdamAtTime15k`
+        # is a schedule whose rules are chosen per block by timestamp, guarded
+        # in `Jaune/Fork.lean` and run as `--suite amsterdam-transitions`. So
+        # no label this lane covers is deferred. (Goal C deferred the
+        # transition label with the reason "no gate in it covers the
+        # BPO2-to-Amsterdam activation boundary, which goal
+        # jaune-amsterdam-currency-v1 owns"; that goal made the reason false
+        # and rewrote it here. The mechanism stays for the next lane whose
+        # semantics land in steps.)
+        deferred_labels=(),
+        deferral_reason="",
     ),
 }
 DEFAULT_LANE = LANES["mainnet"]

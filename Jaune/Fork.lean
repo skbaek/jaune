@@ -813,8 +813,12 @@ Written as an update of `bpo2Rules` so that every field Amsterdam does *not*
 move -- the blob schedule, the transaction and block limits, `MODEXP`, the
 precompile set -- is BPO2's by construction, and the record-update guards below
 state, field by field and as a whole, exactly which fields moved. Nothing here
-is inherited by accident: a `ForkRules` field added later must be named in
-those guards before the build is green again.
+is inherited by accident: the anonymous-constructor `example` beside those
+guards names all thirteen fields positionally, so a `ForkRules` field added
+later fails the build until it is classified as moved or inherited. (The
+`with`-update guards alone cannot see such a field -- goal C's independent
+review, finding F1 -- because an inherited `bpo2Rules.newField` sits on both
+sides of both of them.)
 
 This retires goal B's transaction-metering vehicle (`amsterdamMeteringRules`)
 and the transition-tool-local resolver that reached it. `Fork.amsterdam.rules?`
@@ -1770,6 +1774,28 @@ private def isEraL : RulesLookupError → Bool
 #guard bpo1Rules.fork = .bpo1
 #guard bpo2Rules.fork = .bpo2
 
+-- F1 (goal D): each earlier fork's record spelled with the anonymous
+-- constructor over all thirteen fields, so a field added to `ForkRules` later
+-- cannot be inherited by any fork without being named here. The `with`-update
+-- guards above compare records that would both carry the new field, so they
+-- cannot see it; these can.
+example : pragueRules =
+    ⟨.prague, pragueBlobSchedule, pragueCodeLimits, pragueTransactionLimits,
+     pragueBlockLimits, pragueModexpRules, pragueOpcodeRules, pragueGasSchedule,
+     none, pragueHeaderRules, pragueRequests, none, praguePrecompiles⟩ := rfl
+example : osakaRules =
+    ⟨.osaka, osakaBlobSchedule, pragueCodeLimits, osakaTransactionLimits,
+     osakaBlockLimits, osakaModexpRules, osakaOpcodeRules, pragueGasSchedule,
+     none, pragueHeaderRules, pragueRequests, none, osakaPrecompiles⟩ := rfl
+example : bpo1Rules =
+    ⟨.bpo1, bpo1BlobSchedule, pragueCodeLimits, osakaTransactionLimits,
+     osakaBlockLimits, osakaModexpRules, osakaOpcodeRules, pragueGasSchedule,
+     none, pragueHeaderRules, pragueRequests, none, osakaPrecompiles⟩ := rfl
+example : bpo2Rules =
+    ⟨.bpo2, bpo2BlobSchedule, pragueCodeLimits, osakaTransactionLimits,
+     osakaBlockLimits, osakaModexpRules, osakaOpcodeRules, pragueGasSchedule,
+     none, pragueHeaderRules, pragueRequests, none, osakaPrecompiles⟩ := rfl
+
 -- The same fact stated field by field for the three new categories, so that a
 -- failure names the category rather than "the records differ".
 #guard bpo1Rules.gas = pragueGasSchedule
@@ -1886,10 +1912,12 @@ private def isEraL : RulesLookupError → Bool
 
 -- The composed record is BPO2's with exactly eight fields moved, stated as a
 -- record update in both directions so that it cannot silently acquire or lose
--- a rule: undoing all eight must give BPO2 back, and every `ForkRules` field
--- is named on one side or the other. A field added to `ForkRules` later
--- fails the `with`-update guards until it is classified here as moved or
--- inherited -- which is the G1 "no silent inheritance" rule made executable.
+-- a rule: undoing all eight must give BPO2 back. The forward guard is the one
+-- that bites on a ninth field silently differing from BPO2; the backward one
+-- is the definition restated and reduces to `rfl`. Neither sees a field added
+-- to `ForkRules` later and inherited from BPO2 (goal C's review, F1) -- that
+-- is what the anonymous-constructor `example` after the per-field guards is
+-- for: it is the G1 "no silent inheritance" rule made executable.
 #guard { amsterdamRules with
   fork := .bpo2, code := pragueCodeLimits, op := osakaOpcodeRules,
   gas := pragueGasSchedule, stateGas := none, header := pragueHeaderRules,
@@ -1914,6 +1942,17 @@ private def isEraL : RulesLookupError → Bool
 #guard amsterdamRules.block = osakaBlockLimits
 #guard amsterdamRules.modexp = osakaModexpRules
 #guard amsterdamRules.precompiles = osakaPrecompiles
+-- F1 (goal D, inherited from goal C's independent review): the whole record,
+-- spelled with the anonymous constructor over all thirteen `ForkRules` fields
+-- in declaration order. Unlike a `with`-update, this cannot inherit a field
+-- silently: adding a fourteenth field makes this `example` fail to elaborate
+-- until the field is placed here as moved or inherited. Its siblings for
+-- Prague, Osaka, BPO1 and BPO2 sit beside their own record guards above.
+example : amsterdamRules =
+    ⟨.amsterdam, bpo2BlobSchedule, amsterdamCodeLimits, osakaTransactionLimits,
+     osakaBlockLimits, osakaModexpRules, amsterdamOpcodeRules,
+     amsterdamGasSchedule, some amsterdamStateGasRules, amsterdamHeaderRules,
+     amsterdamRequests, some amsterdamBalRules, osakaPrecompiles⟩ := rfl
 
 -- The block-level values themselves (EIP-7954, 7843, 8024, 7928, 8282), each
 -- of which goal B's vehicle guarded as *absent* (`header.blockAccessListHash =
@@ -2217,5 +2256,55 @@ private def guardBpo2ToAmsterdam : ForkTransition := ⟨.bpo2, .amsterdam, 15000
   | .error e => e ==
       .support (.unsupportedEra 0 mainnetPragueTimestamp)
   | .ok _ => false)
+
+----------------- THE BPO2-TO-AMSTERDAM ACTIVATION BOUNDARY (goal D) -----------------
+
+-- The rules at 0, 14999, 15000 and 15001 are guarded with the label's parse
+-- above (`guardBpo2ToAmsterdam`). These are the remaining points Appendix B of
+-- `jaune-amsterdam-currency-goal.md` requires, each falsifiable without a
+-- fixture; the fixture corpus (`--suite amsterdam-transitions`) is what shows
+-- every rule keyed on these records switches with them. A transition label is
+-- a schedule that starts at genesis, unlike `mainnetChainConfig`, so block 0
+-- already resolves to the `before` fork rather than an unsupported era.
+#guard ForkTransition.ofString? "BPO2ToAmsterdamAtTime15k" = some guardBpo2ToAmsterdam
+#guard (guardBpo2ToAmsterdam.chainConfig 1).validate = .ok ()
+#guard (guardBpo2ToAmsterdam.chainConfig 1).forkAt 0 = .ok .bpo2
+#guard (guardBpo2ToAmsterdam.chainConfig 1).forkAt 14999 = .ok .bpo2
+-- The schedule is chain-neutral: the same answers on another chain identity.
+#guard (guardBpo2ToAmsterdam.chainConfig 12345).rulesAt 14999 = .ok bpo2Rules
+#guard (guardBpo2ToAmsterdam.chainConfig 12345).rulesAt 15000 = .ok amsterdamRules
+
+-- What switches at that second. Header-field presence: `validateHeader` keys
+-- on these two flags, so a pre-activation block carrying either field and an
+-- activation block missing either are both rejected with `headerFieldPresence`.
+#guard bpo2Rules.header.blockAccessListHash = false
+#guard bpo2Rules.header.slotNumber = false
+#guard amsterdamRules.header.blockAccessListHash = true
+#guard amsterdamRules.header.slotNumber = true
+-- The block-level access list: `bal = none` builds nothing (goal C's bridge
+-- lemma), so the last BPO2 block has an empty list and index zero, and the
+-- first Amsterdam block is the first to build and commit one.
+#guard bpo2Rules.bal = none
+#guard amsterdamRules.bal = some amsterdamBalRules
+-- Excess blob gas is carried across the boundary from the parent header under
+-- the block's own rules' blob schedule (`calculateExcessBlobGas rules.blob
+-- parent`); at this boundary that schedule does not move.
+#guard amsterdamRules.blob = bpo2Rules.blob
+-- The two EIP-8282 request contracts are called only from the first Amsterdam
+-- block on: BPO2's list is Prague's two.
+#guard bpo2Rules.requests.length = 2
+#guard amsterdamRules.requests.length = 4
+
+-- D13 (goal D, G5): mainnet's schedule keeps exactly its four activations and
+-- names no Amsterdam one while the pinned `FORK_CRITERIA` is `Unscheduled` --
+-- the shape is guarded with the schedule above (`activations.length = 4`, the
+-- fork list, `¬ contains .amsterdam`). What goal D adds is the gate:
+-- `scripts/check-fork-constants.sh` compares that criterion against this
+-- schedule through the `mainnetActivation` row of `--rules`, so the day the
+-- number exists the red gate names the missing `mainnetAmsterdamTimestamp`;
+-- nothing here pre-empts it. Until then BPO2 is the last era, however far
+-- ahead the block timestamp lies.
+#guard mainnetChainConfig.forkAt? mainnetBpo2Timestamp = some .bpo2
+#guard mainnetChainConfig.forkAt? (mainnetBpo2Timestamp + 10 ^ 9) = some .bpo2
 
 end Jaune

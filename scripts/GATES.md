@@ -210,10 +210,10 @@ executable inputs.
 | `scripts/check-integrity.sh` | no panic / raw bang op / stringly semantic carrier in `Jaune.lean`'s import closure (R4 also covers the runner boundary), allowlist in `integrity-allow.txt` | 58 rows, 0 pending | sub-second |
 | `scripts/check-canonical-opcode-names.sh` | the eight retired constructor/API spellings and three abbreviated render strings are absent from live Lean source; syntax-qualified SELFDESTRUCT matching leaves ordinary destination locals alone | 8 symbol families, 3 render strings | sub-second |
 | `lake build` | integration elaboration | ~1,776 jobs | ~8 s |
-| `scripts/check-cli.sh` | the runner's four fixture-file refusals — wrong sibling tree, no cases, no supported network, filters select nothing — and the undeclared-format pass-through, against synthetic fixtures, and the admission of `Amsterdam` — the fifth supported fork — past the fork guards in both its static and its transition form (the guards that once refused it, rewritten to their new true statement rather than deleted), still distinct from the unknown-label refusal. Also the rule-data printer: `--rules` answers the whole record for every one of the five supported forks, `Amsterdam` included, and the retired `--rules-partial` is refused. The t8n handshake checks keep `--forks` on the four-fork block-validation lane pending the currency goal's handshake and require `--info` to say that Amsterdam resolves and is not yet advertised | 20 checks | sub-second |
-| `scripts/check-fork-constants.sh` | that every constant each declared fork carries as rule data equals the pinned `execution-specs` revision's, by comparing `scripts/amsterdam/constants.json` (written by `scripts/gen-fork-constants.py` from that revision) against `lake exe jaune --rules <fork>`. Also that the extraction was taken at the commit `sources.json` currently pins, and — the row that keeps the gate from shrinking — that the printer's field set is exactly the set the extraction's coverage table classifies, so a new `ForkRules` field must be classified before this can pass. The Amsterdam column is compared in full: `bal.itemCost` from `vm.gas.GasCosts.BLOCK_ACCESS_LIST_ITEM`, `op.slotnum`/`op.stackAccess` as source-presence facts on `vm.instructions.Ops`, the code limits from `vm.interpreter`, the four request `(type, address)` pairs in `process_general_purpose_requests` call order; no field of any fork is classified as owned by a later goal. Negative control (goal C's report): one Amsterdam literal mutated in a disposable worktree turns this gate red at the named field (`Amsterdam.bal.itemCost: this build has 2001, 7341820b5b39 has 2000`) and the gas-limit boundary fixture red | 39 constants x 5 runnable forks (195 comparisons) | sub-second |
+| `scripts/check-cli.sh` | the runner's four fixture-file refusals — wrong sibling tree, no cases, no supported network, filters select nothing — and the undeclared-format pass-through, against synthetic fixtures, and the admission of `Amsterdam` — the fifth supported fork — past the fork guards in both its static and its transition form (the guards that once refused it, rewritten to their new true statement rather than deleted), still distinct from the unknown-label refusal. Also the rule-data printer: `--rules` answers the whole record for every one of the five supported forks, `Amsterdam` included, and the retired `--rules-partial` is refused. The t8n handshake checks require `--forks` to print the five-fork runnable lane (`Fork.supported`, Amsterdam included) and to equal `sources.json`'s `conformance_target.fork_lane`, and `--info` to state the lane, its basis and the resolved set with no "pending goal" clause (goal `jaune-amsterdam-currency-v1` rewrote goal C's four-fork assertions) | 21 checks | sub-second |
+| `scripts/check-fork-constants.sh` | that every constant each declared fork carries as rule data equals the pinned `execution-specs` revision's, by comparing `scripts/amsterdam/constants.json` (written by `scripts/gen-fork-constants.py` from that revision) against `lake exe jaune --rules <fork>`. Also that the extraction was taken at the commit `sources.json` currently pins, and — the row that keeps the gate from shrinking — that the printer's field set is exactly the set the extraction's coverage table classifies, so a new `ForkRules` field must be classified before this can pass. The Amsterdam column is compared in full: `bal.itemCost` from `vm.gas.GasCosts.BLOCK_ACCESS_LIST_ITEM`, `op.slotnum`/`op.stackAccess` as source-presence facts on `vm.instructions.Ops`, the code limits from `vm.interpreter`, the four request `(type, address)` pairs in `process_general_purpose_requests` call order; no field of any fork is classified as owned by a later goal. One row is schedule data rather than rule data (programme D13, goal `jaune-amsterdam-currency-v1`): `mainnetActivation`, the pinned `FORK_CRITERIA` timestamp against `mainnetChainConfig`'s activation for the fork — `null` on both sides for Amsterdam while upstream keeps it `Unscheduled`, so the day the pin says `ByTimestamp` this gate turns red at `Amsterdam.mainnetActivation` and names the `mainnetAmsterdamTimestamp` to write (before that goal the criterion was only printed, under `--table`). Negative controls: one Amsterdam literal mutated in a disposable worktree turns this gate red at the named field (`Amsterdam.bal.itemCost: this build has 2001, 7341820b5b39 has 2000`, goal C) and the gas-limit boundary fixture red; the D13 row's three-part control is in goal D's `w5-d13.md` | 40 rows x 5 runnable forks (200 comparisons) | sub-second |
 | `scripts/check-t8n.sh` | the `t8n` transition-tool frontend against goldens generated from the pinned conformance target: `result`, `alloc` and `body` byte-identical per case, each case run twice for determinism, every golden's digest checked against `scripts/t8n/provenance.json`. The Amsterdam half is the exact Appendix-F 15-by-2 scenario/mode matrix, compared byte-for-byte including the EIP-7928 `blockAccessList`/`blockAccessListHash` pair the tool now emits (the former target-only deviation entries are gone; the registry keeps two field deviations and four message-normalization rows, the `INTRINSIC_GAS_TOO_LOW` row carrying its owner and date). `--red-test` additionally corrupts one golden, injects an unregistered difference, and moves a registered deviation's target side, proving all three controls bite | 39 cases | seconds |
-| `scripts/check-jumpdest.sh` | the control for the jumpdest theorem `pinnedJumpDestsFrom_eq_legacy`: on nine 64 KiB pseudo-random blobs (fixed seeds, EIP-7954's raised ceiling) the pinned Amsterdam `get_valid_jump_destinations` walk, the legacy walk and the `jumpable` scan agree, with per-phase timings forced before each clock read (`jaune --jumpdest-control <seed> 1 65536`). A falsifier for the theorem's statement, run as well as the proof, never instead of it | 9 blobs × 65,536 bytes | ~7 s |
+| `scripts/check-jumpdest.sh` | the sampled half of the jumpdest claim. **Proved** (goal C, `Jaune/Machine.lean`): `pinnedJumpDestsFrom_eq_legacy` — the pinned Amsterdam `get_valid_jump_destinations` walk and the pre-Amsterdam walk compute the same set on every byte array, so EIP-8024's three immediates change no destination. **Sampled, not proved**: the bridge from either walk to Jaune's own `jumpable`/`noPushBefore` scan (`jumpable cd k ↔ k ∈ legacyJumpDestsFrom cd 0`), which this gate checks on nine 64 KiB pseudo-random blobs (fixed seeds, EIP-7954's raised ceiling), with per-phase timings forced before each clock read (`jaune --jumpdest-control <seed> 1 65536`). The seed list omits seven measured seeds on which `jumpable` does not finish inside 45 s at 64 KiB (a cost artifact — goal C's review ran them at 8 and 16 KiB and found agreement); re-implementing `jumpable` on the walk is packet P2, reserved to the owner. A falsifier for the sampled half, run as well as the theorem, never instead of it | 9 blobs × 65,536 bytes | ~7 s |
 | `scripts/check-u256.sh` | differential word/hash oracle | 21,593 cases | sub-second |
 | `scripts/check-fake-exp.sh` | fake-exponential differential oracle vs the pinned EELS `taylor_exponential` (blob base fee) | 240 cases | sub-second |
 | `scripts/check-legacy.sh --patch` | the ten historical FAIL files, fixed all-PASS target | 10 | sub-second |
@@ -283,23 +283,45 @@ the pinned devnet-8 prerelease (`tests-glamsterdam-devnet@v8.1.4`, filled at
 by `scripts/gen_mainnet_manifest.py --lane amsterdam` — which also verifies the
 release index against `sources.json` and records every file's `content_sha256`,
 so a changed index count or a changed fixture byte turns `--check` red instead
-of being absorbed. Two suites run, two are refused:
+of being absorbed. All four suites run (goal C activated the two static ones;
+goal `jaune-amsterdam-currency-v1` activated the two that carry the
+`BPO2ToAmsterdamAtTime15k` label, rewriting goal C's refusal into the admission
+with the old statement named in the harness):
 
 | suite | selects | scale (files / cases) | pass rule |
 |---|---|---:|---|
 | `--suite amsterdam` | every `for_amsterdam` case with the static `Amsterdam` label | 3,159 / 24,901 | all-PASS, zero exclusions inside `for_amsterdam`; takes the heavy lock as `full` does |
 | `--suite amsterdam-smoke` | the 16 lowest SHA-256 ranks of `release_commit:path` over that suite | 16 / 60 | all-PASS; no lock |
-| `--dir for_amsterdam/amsterdam/<subtree> --suite amsterdam` | one subtree; refused when it names no file, and when its on-disk `.json` count differs from the manifest's count for it, so a mixed or mistyped subtree is never run over a subset or reported over zero files | the fourteen `eip*` subtrees are 730 / 3,900 together | all-PASS; the lock follows the suite name |
-| `--suite amsterdam-transitions` | the `BPO2ToAmsterdamAtTime15k` fixtures | 42 / 127 | **refused**, naming `jaune-amsterdam-currency-v1`, which activates the schedule |
-| `--suite amsterdam-full` | the union | 3,201 / 25,028 | **refused** for the same reason |
+| `--dir <subtree> --suite <suite>` | one subtree under `blockchain_tests` (`for_amsterdam/amsterdam/eip*` for the static suite, `for_bpo2toamsterdamattime15k/<fork>/<eip>/<module>` for the transition suite); refused when it names no file, and when its on-disk `.json` count differs from the manifest's count for it, so a mixed or mistyped subtree is never run over a subset or reported over zero files | the fourteen static `eip*` subtrees are 730 / 3,900 together; the thirteen transition subtrees are 42 / 127 | all-PASS; the lock follows the suite name |
+| `--suite amsterdam-transitions` | every `BPO2ToAmsterdamAtTime15k` fixture — the activation boundary, run as a `ChainConfig` whose rules are chosen per block by timestamp | 42 / 127, across 13 subtrees (12 `amsterdam/eip*` modules and one re-filled Berlin precompile-warming file that alone holds 50 of the 127 cases) | all-PASS on verdict **and** identity, like every `check-mainnet.sh` suite; zero exclusions inside `for_bpo2toamsterdamattime15k`; no lock when sequential (as `transitions` on the mainnet lane) |
+| `--suite amsterdam-full` | the union | 3,201 / 25,028 | all-PASS; takes the heavy lock |
+
+Runtime, measured 2026-09-06 on the WSL2 host at `--jobs 6` under the memory
+scope: `amsterdam-transitions` 1.45 s of fixture time (~18 s wall with the
+manifest `--check`), `amsterdam-full` 269.76 s (286 s wall) — inside the
+1,000-second rule. At goal D's candidate the transition suite reports
+**38/42 files PASS**: the four `invalid_{pre,post}_fork_block_*` fixtures of
+`eip7843_slotnum` and `eip7928_block_level_access_lists` carry a 22-field RLP
+header that `BLT.toExHeader` rejects as `RLP_STRUCTURES_ENCODING` (programme
+D4: 21 or 23 fields, never 22) where the corpus declares
+`INCORRECT_BLOCK_FORMAT`/`INVALID_BAL_HASH`/`INVALID_BLOCK_HASH` — three
+identities for one wire defect. Jaune agrees on the verdict (block invalid)
+and keeps its honest identity; the four are recorded as identity findings
+with agreed verdicts (goal D's DP-1, owner ruling: record, do not alias), so
+the pass rule for this suite is read as **all-PASS modulo those four recorded
+files** until upstream declares alternations. (The two `eip8282_…/
+contract_deployment` files that expected `BlockException.SYSTEM_CONTRACT_EMPTY`
+pass since goal D gave that reason its own typed arm and identity — DP-2.) No
+exclusion was added to reach green.
 
 The Amsterdam identities the corpus expects (`BlockException.INVALID_BLOCK_ACCESS_LIST`,
 `INVALID_BAL_HASH`, `INCORRECT_BLOCK_FORMAT`, `BLOCK_ACCESS_LIST_GAS_LIMIT_EXCEEDED`,
 and their alternations) are typed constructors in `Jaune/FixtureException.lean`,
 never aliases of an older identity; a wrong list is answered for the reason the
 fixture names. `scripts/tests/test_amsterdam_lane.py` holds the lane's parser,
-suite derivation, `--dir` rules, the two surviving refusals and the two
-manifest-drift controls.
+suite derivation, `--dir` rules, the absence of every retired refusal and the two
+manifest-drift controls; the transition suite's admission and dispatch, and
+the `--dir` count rule on the transition tree, are pinned there too.
 
 The two lanes' suite namespaces are disjoint, so a mistyped `--lane` names the
 other lane's suite rather than selecting the wrong corpus. Neither lane reads
@@ -337,7 +359,7 @@ not vouch for Jaune.
 | `python3 scripts/env_doctor.py` | validate the configured legacy/EELS/oracle environment |
 | `python3 scripts/env_doctor.py --mainnet-root "$HOME/eest-mainnet-v20.0.1" --mainnet-deep` | validate external fixture identities |
 | `python3 scripts/gen_mainnet_manifest.py --fixtures-root "$HOME/eest-mainnet-v20.0.1/fixtures" --check` | exact current-manifest identity |
-| `python3 scripts/bootstrap_mainnet.py --lane amsterdam` | install the Glamsterdam devnet-8 prerelease corpus (~0.94 GB compressed, ~20 GB extracted, 48,491 files) |
+| `python3 scripts/bootstrap_mainnet.py --lane amsterdam` | install the Glamsterdam devnet-8 prerelease corpus (946,283,655-byte archive, 48,734 files; extracted size is filesystem-dependent — 14 GB on this host's ext4) |
 | `python3 scripts/env_doctor.py --amsterdam-root "$HOME/eest-glamsterdam-devnet-v8.1.4" --amsterdam-deep` | validate that lane's archive digest, layout, release index, and every extracted file against the archive |
 | `python3 scripts/gen_mainnet_manifest.py --lane amsterdam --fixtures-root "$HOME/eest-glamsterdam-devnet-v8.1.4/fixtures" --check` | exact devnet-lane manifest identity |
 | `python3 scripts/gen-fork-constants.py --check` | the committed fork-constant extraction still matches the pinned `execution-specs` revision. Needs that checkout and its venv; `scripts/check-fork-constants.sh` itself needs neither |
@@ -524,8 +546,9 @@ built binary and one committed JSON file, and writes nothing. A
 `--lane amsterdam` run takes the heavy lock exactly as the mainnet lane does,
 derived from the suite name: `--suite amsterdam` takes it, with or without a
 `--dir` subtree (as `--suite prague --dir X` does on the mainnet lane);
-`--suite amsterdam-smoke` does not; the two refused suites exit before the
-point where a lock would be taken.
+`--suite amsterdam-smoke` does not; `--suite amsterdam-full` takes it as the
+union of a heavy suite; `--suite amsterdam-transitions` does not when
+sequential, exactly as the mainnet lane's `transitions`.
 
 `check-t8n.sh` takes no lock either, for the same reason `check-cli.sh` does
 not: it writes nothing under the repository. Each case runs in a `mktemp -d`

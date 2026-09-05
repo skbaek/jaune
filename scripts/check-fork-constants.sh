@@ -27,6 +27,17 @@
 #      table classifies — so a `ForkRules` field added later cannot slip
 #      through unchecked, it has to be classified first.
 #
+# One row of check 1 is not rule data but schedule data: `mainnetActivation`,
+# the pinned `FORK_CRITERIA` timestamp against `mainnetChainConfig`'s
+# activation for the fork (D13 of the Amsterdam programme; goal
+# jaune-amsterdam-currency-v1). Today Amsterdam is `Unscheduled` upstream and
+# absent from the mainnet schedule, so the row agrees on `null`. The day the
+# pin says `ByTimestamp`, this gate turns red at `Amsterdam.mainnetActivation`
+# and names the constant to write; an activation the build carries that the
+# pin does not, or at a different second, is red the same way. Before this
+# goal the criterion was only *printed*, under `--table`, and compared to
+# nothing.
+#
 # A fork this build declares but does not implement is expected to be refused
 # by `--rules`; that is checked too, so the gate's fork list and
 # `Fork.supported` cannot drift apart. Every fork the extraction names resolves
@@ -126,10 +137,32 @@ def compare_fields(fork, entry, printed, fields):
         if field == "precompiles":
             got = sorted(got)
         if got != want:
-            problems.append(
-                f"{fork}.{field}: this build has {got!r}, {taken[:12]} has "
-                f"{want!r} (from {source})"
-            )
+            if field == "mainnetActivation" and got is None:
+                # D13: the pin schedules the fork and this build does not.
+                problems.append(
+                    f"{fork}.mainnetActivation: {taken[:12]} schedules {fork} "
+                    f"on mainnet at timestamp {want} ({source}), but "
+                    f"mainnetChainConfig carries no {fork} activation. Write "
+                    f"`mainnet{fork}Timestamp : Nat := {want}` in Jaune/Fork.lean "
+                    f"and append ⟨.{fork.lower()}, mainnet{fork}Timestamp⟩ to "
+                    "mainnetChainConfig.activations."
+                )
+            elif field == "mainnetActivation" and want is None:
+                problems.append(
+                    f"{fork}.mainnetActivation: this build activates {fork} on "
+                    f"mainnet at timestamp {got}, but {taken[:12]}'s FORK_CRITERIA "
+                    f"for it is unscheduled ({source})."
+                )
+            elif field == "mainnetActivation":
+                problems.append(
+                    f"{fork}.mainnetActivation: this build activates {fork} on "
+                    f"mainnet at {got}, {taken[:12]} at {want} ({source})."
+                )
+            else:
+                problems.append(
+                    f"{fork}.{field}: this build has {got!r}, {taken[:12]} has "
+                    f"{want!r} (from {source})"
+                )
         n += 1
     return n
 

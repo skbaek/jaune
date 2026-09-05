@@ -373,7 +373,12 @@ strictly a successor. Nothing in the frontend as built forecloses it.
 3. **`--forks` as a separate probe.** `--info` reads `scripts/sources.json`
    and fails closed without it, which is right for a handshake and wrong for
    the question a framework wrapper asks from a temporary directory. Two
-   flags, each fully answerable in its own context.
+   flags, each fully answerable in its own context. Since goal
+   `jaune-amsterdam-currency-v1` the lane `--forks` prints is `Fork.supported`
+   -- five forks, Amsterdam included -- rather than a hand-kept prefix of it,
+   and `--info` states the lane's basis; the EEST wrapper
+   (`client_clis/clis/jaune.py`) reads `--forks` and nothing else to decide
+   what to send.
 4. **`--state.reward` accepted and not consumed.** The target pays block
    rewards only when the fork is not proof-of-stake, and every fork on this
    lane is, so the value cannot change the transition. `fill` always passes

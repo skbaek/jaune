@@ -93,6 +93,12 @@ COVERAGE = {
     "header.blockAccessListHash": "checked",
     "header.slotNumber": "checked",
     "requests": "checked",
+    # D13: the mainnet activation timestamp, from the pinned `FORK_CRITERIA`.
+    # Not a `ForkRules` field -- the printer reads it from
+    # `mainnetChainConfig` -- but a row of the same comparison, so that the
+    # gate turns red the moment the pin schedules a fork this build's mainnet
+    # schedule does not name (goal jaune-amsterdam-currency-v1, G5).
+    "mainnetActivation": "checked",
     # EIP-8037's state-gas dimension. Every fork carries these rows; a fork
     # that meters in one dimension carries them as `null` with
     # `stateGas.present` false, exactly as `ForkRules.stateGas = none` prints.
