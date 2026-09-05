@@ -38,7 +38,10 @@
 # Usage: scripts/check-t8n.sh [--red-test] [--case <name>]
 #
 #   --red-test  additionally prove the gate can fail: corrupt one byte of one
-#               expectation in a scratch copy and require a red verdict.
+#               expectation in a scratch copy and require a red verdict, then
+#               prove the registry bites -- dropping a registered deviation
+#               must surface the difference it declares, and moving the target
+#               bytes it pins must fail rather than be applied.
 #   --case      run one case only.
 #
 # CLI contract: exit 0 iff every selected case passes; the last line is a
@@ -114,6 +117,15 @@ def canonical(name, obj):
     return json.dumps(out, indent=4)
 
 
+def message_identity(row):
+    """The canonical identity a `messages` row maps its free text to.
+
+    A row is either that identity on its own or an object carrying it under
+    `jaune` beside the owner and date of the goal that ruled on the row.
+    """
+    return row["jaune"] if isinstance(row, dict) else row
+
+
 def apply_deviations(case, name, obj, deviations):
     """Patch the *golden* into what Jaune is expected to have written."""
     messages = deviations["messages"]
@@ -122,13 +134,13 @@ def apply_deviations(case, name, obj, deviations):
         for rejection in obj.get("rejected", []):
             text = rejection.get("error")
             if text in messages:
-                rejection["error"] = messages[text]
+                rejection["error"] = message_identity(messages[text])
             else:
                 unmapped.append(text)
         exception = obj.get("blockException")
         if exception is not None:
             if exception in messages:
-                obj["blockException"] = messages[exception]
+                obj["blockException"] = message_identity(messages[exception])
             else:
                 unmapped.append(exception)
     for entry in deviations["fields"]:
@@ -324,35 +336,57 @@ def main():
                     f"{names[0]} is rejected"
                 )
 
-        amsterdam_names = [
-            name
-            for name in names
-            if json.loads((CASES / name / "case.json").read_text())["fork"]
-            == "Amsterdam"
+        # The registry must also be doing real work: a difference that is not
+        # registered must fail, and a registered entry whose target side moved
+        # must fail too. Both are proved on a surviving registered deviation.
+        registered = [
+            entry for entry in deviations["fields"] if entry.get("case") in names
         ]
-        if amsterdam_names:
-            victim = amsterdam_names[0]
-            without_second = json.loads(json.dumps(deviations))
-            without_second["fields"] = [
-                entry
-                for entry in without_second["fields"]
-                if not (
-                    entry.get("case") == victim
-                    and entry.get("path") == ["blockAccessListHash"]
-                )
+        if registered:
+            entry = registered[0]
+            victim = entry["case"]
+            label = (
+                f"{victim}/{entry['document']}/"
+                f"{'.'.join(entry['path']) or '(document)'}"
+            )
+
+            dropped = json.loads(json.dumps(deviations))
+            dropped["fields"] = [
+                other for other in dropped["fields"] if other != entry
             ]
-            second_failures = []
-            check_case(victim, CASES, without_second, second_failures)
-            if not second_failures:
+            dropped_failures = []
+            check_case(victim, CASES, dropped, dropped_failures)
+            if not dropped_failures:
                 print(
-                    "T8N — the red test did not fail: the second Amsterdam "
-                    f"block-access difference in {victim} was not registered"
+                    "T8N — the red test did not fail: the difference at "
+                    f"{label} was accepted with no registered deviation"
                 )
-                failures.append("unregistered second Amsterdam difference passed")
+                failures.append("unregistered difference passed")
             else:
                 print(
-                    "OK — t8n red test: an unregistered second Amsterdam "
-                    f"difference in {victim} is rejected"
+                    "OK — t8n red test: the unregistered difference at "
+                    f"{label} is rejected"
+                )
+
+            moved = json.loads(json.dumps(deviations))
+            for other in moved["fields"]:
+                if other == entry:
+                    target = other["target"]
+                    other["target"] = target[:-1] + (
+                        "0" if target[-1] != "0" else "1"
+                    )
+            moved_failures = []
+            check_case(victim, CASES, moved, moved_failures)
+            if not moved_failures:
+                print(
+                    "T8N — the red test did not fail: the registered deviation "
+                    f"at {label} was applied to a target value it does not pin"
+                )
+                failures.append("registered deviation mismatch passed")
+            else:
+                print(
+                    "OK — t8n red test: a registered deviation whose target "
+                    f"side moved is rejected at {label}"
                 )
 
     if failures:

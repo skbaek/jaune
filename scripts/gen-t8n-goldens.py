@@ -45,7 +45,6 @@ SCRIPTS = Path(__file__).resolve().parent
 ROOT = SCRIPTS.parent
 CASES_DIR = SCRIPTS / "t8n" / "cases"
 PROVENANCE = SCRIPTS / "t8n" / "provenance.json"
-DEVIATIONS = SCRIPTS / "t8n" / "deviations.json"
 SOURCES = SCRIPTS / "sources.json"
 
 GOLDEN_FILES = ("result.json", "alloc.json", "body.json")
@@ -209,66 +208,6 @@ def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-AMSTERDAM_BLOCK_OWNER = "jaune-amsterdam-block-v1"
-AMSTERDAM_BLOCK_RECORDED = "2026-09-05"
-
-
-def amsterdam_block_deviations(name: str, result: dict) -> list[dict]:
-    """Register both target-only Amsterdam block-access result fields."""
-    entries = []
-    for field in ("blockAccessList", "blockAccessListHash"):
-        if field not in result:
-            fail(f"{name}: target result has no {field}")
-        entries.append(
-            {
-                "case": name,
-                "document": "result.json",
-                "path": [field],
-                "target": result[field],
-                "jauneAbsent": True,
-                "owner": AMSTERDAM_BLOCK_OWNER,
-                "recorded": AMSTERDAM_BLOCK_RECORDED,
-                "why": (
-                    "The pinned Amsterdam target emits EIP-7928 block-level "
-                    "access-list data. Jaune's Amsterdam lane is intentionally "
-                    "transaction-metering only and omits block semantics; "
-                    "t8n --info names that boundary."
-                ),
-            }
-        )
-    return entries
-
-
-def update_amsterdam_deviations(
-    selected: list[str], generated: list[dict], check: bool, drift: list[str]
-) -> None:
-    registry = json.loads(DEVIATIONS.read_text())
-    existing = [
-        entry
-        for entry in registry["fields"]
-        if entry.get("owner") == AMSTERDAM_BLOCK_OWNER
-        and entry.get("case") in selected
-    ]
-    generated = sorted(generated, key=lambda entry: (entry["case"], entry["path"]))
-    existing = sorted(existing, key=lambda entry: (entry["case"], entry["path"]))
-    if check:
-        if existing != generated:
-            drift.append("deviations.json Amsterdam block-access pairs")
-        return
-    registry["fields"] = [
-        entry
-        for entry in registry["fields"]
-        if not (
-            entry.get("owner") == AMSTERDAM_BLOCK_OWNER
-            and entry.get("case") in selected
-        )
-    ] + generated
-    registry["fields"].sort(
-        key=lambda entry: (entry.get("case", ""), entry.get("document", ""), entry.get("path", []))
-    )
-    DEVIATIONS.write_text(json.dumps(registry, indent=2) + "\n")
-
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--case", help="regenerate only this case")
@@ -293,7 +232,6 @@ def main() -> int:
             provenance["cases"] = previous.get("cases", {})
 
     drift = []
-    generated_deviations = []
     with tempfile.TemporaryDirectory() as tmp:
         for name in names:
             case = CASES_DIR / name
@@ -301,13 +239,6 @@ def main() -> int:
             work.mkdir()
             sign_txs(python, case, work)
             run_target(t8n, case, work)
-            spec = json.loads((case / "case.json").read_text())
-            if spec["fork"] == "Amsterdam":
-                generated_deviations.extend(
-                    amsterdam_block_deviations(
-                        name, json.loads((work / "result.json").read_text())
-                    )
-                )
             expected = case / "expected"
             expected.mkdir(exist_ok=True)
             produced = {"txs.json": work / "txs.json"}
@@ -327,8 +258,6 @@ def main() -> int:
                 entry[relative] = digest(path)
             provenance["cases"][name] = entry
             print(f"  {name}: {len(produced)} file(s)")
-
-    update_amsterdam_deviations(names, generated_deviations, options.check, drift)
 
     if options.check:
         if drift:

@@ -19,12 +19,12 @@ scripts/t8n/
   amsterdam-system-alloc.json     shared Amsterdam system state (authored)
 ```
 
-Only the four authored files are edited by hand. Everything else comes from
-`scripts/gen-t8n-goldens.py`, which drives the conformance target's
-`ethereum-spec-evm t8n` and copies its output unchanged. A golden that agreed
-with Jaune because someone copied it from Jaune would test nothing, so the
-generator never reads Jaune and the gate refuses a golden whose digest does
-not match `provenance.json`.
+Only the four authored files and `deviations.json` are edited by hand.
+Everything else comes from `scripts/gen-t8n-goldens.py`, which drives the
+conformance target's `ethereum-spec-evm t8n` and copies its output unchanged.
+A golden that agreed with Jaune because someone copied it from Jaune would
+test nothing, so the generator never reads Jaune and the gate refuses a golden
+whose digest does not match `provenance.json`.
 
 `txs.json` is generated too: the target's own `Transaction.sign` signs the
 authored transaction source, so both tools consume one identical, fully signed
@@ -51,15 +51,14 @@ their blob schedule, which no case here exercises; a BPO case would need blob
 transactions and is a fair successor rather than a gap this corpus pretends to
 cover.
 
-## Amsterdam transaction-metering lane
+## Amsterdam lane
 
-`jaune t8n --state.fork Amsterdam` resolves the transaction-metering vehicle
-from `Jaune.T8n.laneRules`; it does not make Amsterdam a block-validation fork.
-Consequently `jaune t8n --forks` remains exactly `Prague Osaka BPO1 BPO2`,
-while `jaune t8n --info` reports Amsterdam separately and names the omitted
-EIP-7928/8282/7843/8024/7954 block semantics. The result's `gasUsed` is the
-maximum of execution and state block gas; receipts already carry the
-post-refund `cumulativeGasUsed` produced by the transaction pipeline.
+`jaune t8n --state.fork Amsterdam` resolves Amsterdam through `Fork.rules?`
+like every other fork. `jaune t8n --forks` still advertises exactly
+`Prague Osaka BPO1 BPO2` and `jaune t8n --info` reports the wider set the tool
+resolves. The result's `gasUsed` is the maximum of execution and state block
+gas; receipts already carry the post-refund `cumulativeGasUsed` produced by
+the transaction pipeline.
 
 The Appendix-F metering corpus has fifteen scenarios, each in `blockchain` and
 `state-test` mode: transfer, self-transfer, creation, successful and reverting
@@ -77,12 +76,13 @@ shared file is the target fixture's exact six Amsterdam system predeploys, not
 an implicit runner default.
 
 The pinned target also writes EIP-7928 `blockAccessList` and
-`blockAccessListHash` in every Amsterdam result. Jaune intentionally exposes
-only transaction metering on this lane, so the registered generator records
-both exact target values as target-only deviations for every case. Each pair
-names `jaune-amsterdam-block-v1` and the recording date. The red test removes
-only the hash member from one pair and requires the checker to fail, proving
-that a second unregistered difference cannot hide behind the first.
+`blockAccessListHash` in every Amsterdam result, and Jaune now writes both
+itself. They are compared byte for byte like every other result key: the
+registry carries no Amsterdam entry, and the generator no longer writes one.
+Two of the thirty cases -- `am-reject-intrinsic-blockchain` and its
+`-state-test` mirror -- have their single transaction rejected, so the target's
+own list shows that a rejected transaction contributes nothing to it; the
+agreement is what the gate checks.
 
 The original nine Prague cases retain their own complete allocs. Each carries
 four of the five Prague system contracts — history storage, beacon roots, the
@@ -121,11 +121,12 @@ both:
   canonical vocabulary — the official identity `Jaune/FixtureException.lean`
   already assigns to each typed reason — rather than imitating another tool's
   wording. Every registered pair maps to the same official identity on both
-  sides.
-- **Field exemptions.** Two in `reject-parse`, both caused by a transaction
-  shape Jaune's types cannot represent, plus the generated two-field
-  Amsterdam block-access pair for each of the thirty Appendix-F cases. See
-  each entry's own `why` and owner metadata.
+  sides. A row is that identity on its own, or an object carrying it under
+  `jaune` beside the `owner` and `recorded` metadata of the goal that ruled on
+  the row.
+- **Field exemptions.** Two, both in `reject-parse` and both caused by a
+  transaction shape Jaune's types cannot represent. See each entry's own `why`
+  and `upstream` metadata.
 
 Beyond the registry, the gate applies one **canonicalisation** to `alloc`: both
 sides are sorted, addresses lexically and storage keys numerically. The target
