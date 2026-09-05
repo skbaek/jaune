@@ -4778,11 +4778,17 @@ theorem Rinst.run_stateGasZero {evm : Evm} (h : evm.dyna.StateGasZero)
     (r.run evm).StateGasZero := by
   unfold Rinst.run
   cases r <;> simp only [Rinst.runCore]
-  all_goals try exact applyUnary_stateGasZero _ _ h
-  all_goals try exact applyBinary_stateGasZero _ _ h
-  all_goals try exact applyTernary_stateGasZero _ _ h
-  all_goals try exact pushItem_stateGasZero _ _ h
-  all_goals try exact Rinst.balance_stateGasZero _ h
+  case iszero | not => exact applyUnary_stateGasZero _ _ h
+  case add | mul | sub | div | sdiv | mod | smod | signextend | lt | gt | slt |
+      sgt | eq | and | or | xor | byte | shl | shr | sar =>
+    exact applyBinary_stateGasZero _ _ h
+  case addmod | mulmod => exact applyTernary_stateGasZero _ _ h
+  case address | basefee | blobbasefee | origin | caller | callvalue |
+      calldatasize | codesize | gasprice | returndatasize | selfbalance |
+      chainid | number | timestamp | gaslimit | prevrandao | coinbase | msize |
+      pc =>
+    exact pushItem_stateGasZero _ _ h
+  case balance => exact Rinst.balance_stateGasZero _ h
   case mload =>
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) ?_
     rintro ⟨start, d1⟩ h1
