@@ -208,7 +208,7 @@ requirements.
   label appears in `jaune --help`'s declared list and not in what that text
   calls "runs at"; `jaune t8n --forks`, which is the handshake a framework
   reads to decide what to send, advertises only the four forks above.
-  What exists today is the *vocabulary* Amsterdam needs and part of the
+  What exists today is the *vocabulary* Amsterdam needs and the transaction-
   metering shape that reads it. The vocabulary is the gas numbers it reprices,
   EIP-8037's state-gas dimension, the two header fields it adds and its
   request-producing contracts, all carried as fork rule data and machine-checked
@@ -218,16 +218,23 @@ requirements.
   termination lemmas, and the account-access sites that read their repriced
   numbers from the rules — all of it behind one `Option` switch that is `none`
   on every fork this build runs, so nothing a Prague, Osaka, BPO1 or BPO2
-  fixture observes has changed.
+  fixture observes has changed. The Amsterdam-only branch also covers
+  resource-based intrinsic pricing, CALL/CREATE and SSTORE metering, spill and
+  refill across child frames, transfer logs, balance-preserving SELFDESTRUCT,
+  and two-dimensional transaction settlement, receipts, and block-gas
+  accounting. A committed 39-case transition-tool corpus exercises those
+  transaction semantics through `jaune t8n --state.fork Amsterdam` against the
+  pinned executable reference.
 
   **No Amsterdam fixture passes, and none is meant to yet.** The transaction
-  pipeline, the call and create families, transfer logs and self-destruct
-  settlement are not implemented; `Fork.amsterdam.rules?` is still `none`; the
-  runner still refuses `--network Amsterdam`; `jaune t8n --forks` still
-  advertises four forks. The devnet-8 corpus is installable as its own lane
-  (`python3 scripts/bootstrap_mainnet.py --lane amsterdam`) and inventoried in
-  `scripts/amsterdam/manifests.json`, and every suite over it is refused,
-  naming the goal that owns the semantics it would need.
+  pipeline is deliberately reachable only through that t8n-local metering
+  vehicle; Amsterdam's block-level access list, builder requests, new opcodes,
+  and code limits are not implemented. `Fork.amsterdam.rules?` is still
+  `none`; the fixture runner still refuses `--network Amsterdam`; `jaune t8n
+  --forks` still advertises four forks. The devnet-8 corpus is installable as
+  its own lane (`python3 scripts/bootstrap_mainnet.py --lane amsterdam`) and
+  inventoried in `scripts/amsterdam/manifests.json`, and every suite over it is
+  refused, naming the goal that owns the missing block semantics.
 - **Reference:** mirrors [execution-specs](https://github.com/ethereum/execution-specs)
   `mainnet` at commit
   [`4198…7694`](https://github.com/ethereum/execution-specs/tree/4198b9c5996713b268aed602739d5aa40e277694)

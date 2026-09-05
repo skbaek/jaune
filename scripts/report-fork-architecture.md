@@ -152,11 +152,16 @@ ForkRules := { fork : Fork, blob : BlobSchedule, code : CodeLimits,
 - `fork` — provenance for reports and error messages, not a dispatch key.
 
 Every static Prague/Osaka execution category identified by the pinned EELS diff
-is rule data. So are the three categories Amsterdam needs from this record's
-shape. What is deliberately *not* here is Amsterdam's own semantics: there is
-no `amsterdamRules`, because the two-dimensional gas meter, the block-level
-access list and the four new opcodes are not implemented, and a record naming
-values for rules that no code reads would be a claim this build cannot support.
+is rule data. So are the categories Amsterdam needs from this record's shape.
+There is deliberately no complete `amsterdamRules`: the block-level access
+list, builder requests, new opcodes, and code-limit changes are not implemented,
+so `Fork.amsterdam.rules?` must continue to refuse block execution. The
+transaction-metering semantics do exist behind one narrower vehicle assembled
+from `bpo2Rules`, `amsterdamGasSchedule`, and `amsterdamStateGasRules`.
+`Jaune.T8n.meteringRules?` is the only resolver for that vehicle; it lets the
+transition tool exercise Amsterdam intrinsic pricing, the two-dimensional
+meter, instruction sites, settlement, receipts, and block-gas accounting
+without advertising or accepting Amsterdam as a runnable fixture fork.
 
 **Every number in this record is machine-checked**, not transcribed:
 `scripts/gen-fork-constants.py` extracts each declared fork's constants from
