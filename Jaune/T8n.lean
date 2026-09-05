@@ -158,29 +158,37 @@ namespace T8n
 
 /-- The forks `jaune t8n --forks` advertises to a transition-tool framework.
 
-This is the block-validation handshake goal A fixed at the four forks whose
-static and transition corpora this build runs end to end, spelled out rather
-than derived from `Fork.supported` on purpose. Since goal C composed
-`amsterdamRules`, `Fork.supported` names Amsterdam too and `--state.fork
-Amsterdam` resolves through `Fork.rules?` exactly like every other label; but
-advertising a fork on this line is the one consequence of that resolution the
-block-level goal *surfaces rather than takes* (its fixed decision 7: a
-user-consulted step), and extending the lane is the `--forks`/`--info`
-handshake work of goal `jaune-amsterdam-currency-v1`. Until that decision
-lands, the line stays byte-identical to what it has printed since goal A.
+This is the block-validation handshake. Goal A fixed it at the four forks
+whose static and transition corpora the build then ran end to end, spelled out
+as a hand-kept list; goal C composed `amsterdamRules` and left the list alone
+on purpose (its fixed decision 7: advertising a fork is a user-consulted step,
+not a side effect of `rules?` resolving). Goal `jaune-amsterdam-currency-v1`
+took that step and made the line the build's own: the advertised lane *is* the
+runnable lane, `Fork.supported`, and a guard says so, rather than a guard that
+enumerates the gap. A fork therefore cannot be advertised here and refused by
+`--state.fork`, nor run by `--state.fork` and hidden here. The basis for
+advertising each fork is the evidence a framework then relies on: the fixture
+corpora of `scripts/check-mainnet.sh` (the mainnet lane for Prague–BPO2, the
+Glamsterdam devnet lane's static and transition suites for Amsterdam) and the
+39-case transition-tool differential of `scripts/check-t8n.sh`.
+`scripts/sources.json`'s `conformance_target.fork_lane` is the same list, and
+`scripts/check-cli.sh` pins that the two agree.
 
 Goal B's transaction-metering resolver (`meteringRules?`, `meteringForks`,
 `laneRules`) is retired: there is one resolver, `Fork.rules`, for every label. -/
-def advertisedForkLane : List Fork := [.prague, .osaka, .bpo1, .bpo2]
+def advertisedForkLane : List Fork := Fork.supported
 
--- The advertised lane is a prefix of the runnable one: nothing advertised is
--- refused, and the only runnable fork not yet advertised is Amsterdam. (Goal
--- B's guards here asserted `Fork.unimplemented = [.amsterdam]`, `meteringForks
--- = [.amsterdam]` and `meteringRules? .amsterdam = some amsterdamMeteringRules`;
--- each is rewritten to the statement that replaced it.)
+-- The advertised lane is the runnable lane, stated both ways so that a fork
+-- added to `Fork.all` without rules is neither advertised nor silently omitted
+-- from a hand-kept list. (Goal C's guards here said the lane was a *prefix* of
+-- the runnable one with `[.amsterdam]` the only runnable fork not advertised;
+-- goal B's said `Fork.unimplemented = [.amsterdam]` and named the metering
+-- vehicle; each is rewritten to the statement that replaced it.)
+#guard advertisedForkLane = Fork.supported
+#guard advertisedForkLane = [.prague, .osaka, .bpo1, .bpo2, .amsterdam]
 #guard advertisedForkLane.all (fun f => f.rules?.isSome)
-#guard Fork.supported.take advertisedForkLane.length = advertisedForkLane
-#guard Fork.supported.filter (fun f => !advertisedForkLane.contains f) = [.amsterdam]
+#guard Fork.supported.filter (fun f => !advertisedForkLane.contains f) = []
+#guard Fork.all.filter (fun f => !advertisedForkLane.contains f) = Fork.unimplemented
 #guard Fork.unimplemented = []
 #guard Fork.amsterdam.rules = .ok amsterdamRules
 #guard Fork.all.all (fun f => f.rules.toOption.isSome)
@@ -1142,10 +1150,17 @@ def printInfo : IO Unit := do
     s!"t8n fork lane: \
        {String.intercalate " " (advertisedForkLane.map Fork.toString)}"
   IO.println
+    s!"t8n lane basis: the advertised lane is every fork this build runs \
+       (Fork.supported), each carried by its fixture corpus under \
+       scripts/check-mainnet.sh (the current-mainnet lane for Prague, Osaka, \
+       BPO1 and BPO2; the Glamsterdam devnet lane, static and transition \
+       suites, for Amsterdam) and by the transition-tool differential of \
+       scripts/check-t8n.sh against the conformance target below"
+  IO.println
     s!"t8n resolves: \
        {String.intercalate " " (Fork.supported.map Fork.toString)} \
-       (every declared fork, through Fork.rules?; Amsterdam is not yet \
-       advertised on --forks, pending goal jaune-amsterdam-currency-v1)"
+       (every declared fork, through Fork.rules?; the same list as the lane, \
+       by construction)"
   IO.println s!"t8n modes: blockchain (default), state-test (--state-test)"
   IO.println s!"t8n tracing: not claimed"
   IO.println s!"sources manifest: {path}"
@@ -1178,8 +1193,8 @@ def run (args : List String) : IO Unit := do
   -- the sources manifest being reachable.
   if o.forks then
     -- The advertised lane. This line is a wrapper's whole basis for deciding
-    -- what to send, so it names only forks the very next step would run --
-    -- and, per `advertisedForkLane`, not yet every fork it would run.
+    -- what to send, so it names exactly the forks the very next step would
+    -- run: `advertisedForkLane` is `Fork.supported`.
     IO.println (String.intercalate " " (advertisedForkLane.map Fork.toString))
     return ()
   if o.info then
@@ -1274,8 +1289,8 @@ emits. Options may be spelled --flag=value or --flag value.
                          operations, no withdrawals and no requests.
   --state.reward <n>     accepted and not consumed: every fork on this lane is
                          proof-of-stake, so block rewards are unreachable.
-  --info                 print the version, the advertised fork lane, every
-                         fork this build resolves, and the pins recorded in
+  --info                 print the version, the advertised fork lane and its
+                         basis, every fork this build resolves, and the pins recorded in
                          scripts/sources.json. Needs that file: pass
                          JAUNE_SOURCES if it is not at scripts/ from the
                          working directory.

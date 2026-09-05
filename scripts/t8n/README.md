@@ -54,9 +54,15 @@ cover.
 ## Amsterdam lane
 
 `jaune t8n --state.fork Amsterdam` resolves Amsterdam through `Fork.rules?`
-like every other fork. `jaune t8n --forks` still advertises exactly
-`Prague Osaka BPO1 BPO2` and `jaune t8n --info` reports the wider set the tool
-resolves. The result's `gasUsed` is the maximum of execution and state block
+like every other fork, and since goal `jaune-amsterdam-currency-v1`
+`jaune t8n --forks` advertises it: the lane printed there is `Fork.supported`
+itself -- `Prague Osaka BPO1 BPO2 Amsterdam` -- so the advertised lane and the
+runnable lane cannot differ, `scripts/sources.json`'s
+`conformance_target.fork_lane` is the same list (pinned by
+`scripts/check-cli.sh`), and `jaune t8n --info` states the lane, its basis
+(the fixture corpora of `check-mainnet.sh` and the differential of
+`check-t8n.sh`), and the resolved set. (Goal C kept `--forks` at four forks
+and had `--info` call Amsterdam "not yet advertised, pending" this goal.) The result's `gasUsed` is the maximum of execution and state block
 gas; receipts already carry the post-refund `cumulativeGasUsed` produced by
 the transaction pipeline.
 

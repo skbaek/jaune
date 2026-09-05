@@ -26,11 +26,12 @@
 # corpus files, `scripts/golden-messages.txt` covers block-rejection reasons
 # observed *inside* a run, and the Python tests under `scripts/tests/` cover the
 # bootstrap and generator scripts. The t8n handshake also needs a small
-# boundary here: `t8n --forks` must stay the advertised four-fork lane until
-# the owner decides otherwise (the block-level goal's fixed decision 7),
-# `--info` must disclose that Amsterdam resolves and is not yet advertised, and
-# an Amsterdam invocation must pass rule resolution before it reaches its
-# inputs. So all of these surfaces are kept by this falsifier: it builds
+# boundary here: `t8n --forks` must name exactly the runnable lane -- the five
+# supported forks, Amsterdam included since goal jaune-amsterdam-currency-v1
+# took the owner-consulted step goal C surfaced -- and agree with
+# `sources.json`'s `conformance_target.fork_lane`; `--info` must state the lane
+# and its basis and no longer call Amsterdam pending; and an Amsterdam
+# invocation must pass rule resolution before it reaches its inputs. So all of these surfaces are kept by this falsifier: it builds
 # synthetic fixtures in a temp dir, runs the built binary against each, and
 # asserts both the exit status and a substring of the message.
 #
@@ -333,32 +334,47 @@ if [ "$RUN_RC" -eq 0 ] || has '"gas.txBase"' "$RUN_OUT"; then
   detail "rc=$RUN_RC stdout: ${RUN_OUT:-<empty stdout>}"
 fi
 
-# 9. The t8n handshake. Amsterdam resolves through `Fork.rules?` like every
-#    other label, but advertising it on `--forks` is a user-consulted step the
-#    block-level goal surfaces rather than takes (its fixed decision 7), so
-#    `--forks` stays the four-fork lane and `--info` says so in words.
-#    (Goal B asserted here that `--info` named a separate "metering lane" that
-#    "omits EIP-7928/8282/7843/8024/7954 block semantics"; rewritten.)
+# 9. The t8n handshake. The advertised lane is the runnable lane: `--forks`
+#    names the five supported forks, Amsterdam included, and is byte-equal to
+#    `sources.json`'s `conformance_target.fork_lane`, so a fork cannot be
+#    advertised in one place and not the other; `--info` states the lane, its
+#    basis, and the resolved list, and no longer says Amsterdam is pending.
+#    (Goal C asserted here that `--forks` stayed the four-fork lane and that
+#    `--info` said Amsterdam was "not yet advertised on --forks, pending goal
+#    jaune-amsterdam-currency-v1"; goal B, before it, that `--info` named a
+#    separate "metering lane" omitting block semantics. Each is rewritten to
+#    the statement that replaced it.)
 CHECKS=$((CHECKS + 1))
 run_jaune t8n --forks
-if [ "$RUN_RC" -ne 0 ] || [ "$RUN_OUT" != "Prague Osaka BPO1 BPO2" ]; then
-  fail "t8n --forks: expected the unchanged advertised block lane"
+LANE_FROM_SOURCES="$(python3 -c '
+import json, sys
+print(" ".join(json.load(open(sys.argv[1]))["conformance_target"]["fork_lane"]))' "$ROOT/scripts/sources.json")"
+if [ "$RUN_RC" -ne 0 ] || [ "$RUN_OUT" != "Prague Osaka BPO1 BPO2 Amsterdam" ]; then
+  fail "t8n --forks: expected the five-fork lane, Amsterdam included"
   detail "rc=$RUN_RC stdout: ${RUN_OUT:-<empty stdout>}"
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ "$RUN_OUT" != "$LANE_FROM_SOURCES" ]; then
+  fail "t8n --forks: the advertised lane and sources.json conformance_target.fork_lane disagree"
+  detail "binary: ${RUN_OUT:-<empty>}; sources.json: $LANE_FROM_SOURCES"
 fi
 
 CHECKS=$((CHECKS + 1))
 run_jaune t8n --info
 if [ "$RUN_RC" -ne 0 ] \
-  || ! has "t8n fork lane: Prague Osaka BPO1 BPO2" "$RUN_OUT" \
+  || ! has "t8n fork lane: Prague Osaka BPO1 BPO2 Amsterdam" "$RUN_OUT" \
+  || ! has "t8n lane basis: the advertised lane is every fork this build runs" "$RUN_OUT" \
   || ! has "t8n resolves: Prague Osaka BPO1 BPO2 Amsterdam" "$RUN_OUT"; then
-  fail "t8n --info: expected the advertised lane and the resolved fork list"
+  fail "t8n --info: expected the five-fork lane, its basis, and the resolved fork list"
   detail "rc=$RUN_RC stdout: ${RUN_OUT:-<empty stdout>}"
 fi
 
 CHECKS=$((CHECKS + 1))
-if ! has "not yet advertised on --forks, pending goal jaune-amsterdam-currency-v1" "$RUN_OUT" \
+if has "not yet advertised" "$RUN_OUT" \
+  || has "pending goal jaune-amsterdam-currency-v1" "$RUN_OUT" \
   || has "omits EIP-7928/8282/7843/8024/7954 block semantics" "$RUN_OUT"; then
-  fail "t8n --info: expected the not-yet-advertised note and no block-semantics omission"
+  fail "t8n --info: a retired lane statement (pending-goal note or block-semantics omission) is still printed"
   detail "stdout: ${RUN_OUT:-<empty stdout>}"
 fi
 
