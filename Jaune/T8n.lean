@@ -371,10 +371,9 @@ def natReq (j : Lean.Json) (k : String) : IO Nat := do
 ----------------- INPUT: THE ENVIRONMENT ------------------
 
 /-- Everything `env` contributes to a `BenvStat`, after the target's two
-derivations have been applied. Fields the Prague-BPO2 lane does not consume --
-`currentDifficulty`, `slotNumber`, `extraData`, the block-access-list pair --
-are accepted and dropped, exactly as the target accepts and does not consume
-them. -/
+derivations have been applied. Fields no lane consumes -- `currentDifficulty`,
+`extraData`, the block-access-list pair -- are accepted and dropped, exactly
+as the target accepts and does not consume them. -/
 structure T8nEnv : Type where
   coinbase : Adr
   gasLimit : Nat
@@ -386,6 +385,11 @@ structure T8nEnv : Type where
   parentBeaconBlockRoot : B256
   blockHashes : List B256
   withdrawals : List Withdrawal
+  /-- EIP-7843 (goal C): `env.slotNumber`, what `SLOTNUM` pushes. The target's
+  default block environment sets `slot_number = U64(0)`, and its driver passes
+  an absent field through as `None`, on which no consuming instruction can
+  run at all; this lane reads an absent field as zero. -/
+  slotNumber : UInt64
 
 def envKnownFields : List String :=
   [ "currentCoinbase", "currentGasLimit", "currentNumber", "currentTimestamp",
@@ -513,12 +517,14 @@ def decodeEnv (rules : ForkRules) (stateTest : Bool) (j : Lean.Json) : IO T8nEnv
     | some v => do
       let items ← v.toIoList
       items.mapM readWithdrawal
+  let slotNumber ← natOr j "slotNumber" 0
   return {
     coinbase := coinbase, gasLimit := gasLimit, number := number,
     timestamp := timestamp, prevRandao := prevRandao.toB256,
     baseFeePerGas := baseFeePerGas, excessBlobGas := excessBlobGas,
     parentBeaconBlockRoot := parentBeaconBlockRoot,
-    blockHashes := blockHashes, withdrawals := withdrawals
+    blockHashes := blockHashes, withdrawals := withdrawals,
+    slotNumber := slotNumber.toUInt64
   }
 
 ----------------- INPUT: TRANSACTIONS ------------------
@@ -805,12 +811,20 @@ def runStateTest (benv : Benv) (txs : List (TxParse Tx)) :
 
 Block rewards are absent because they are unreachable on this lane: the
 target pays them only when the fork is not proof-of-stake, and every runnable
-or metering fork here is proof-of-stake. Block access-list construction remains
-outside the Amsterdam metering vehicle; the corpus deviation registry records
-the target's exact `blockAccessList` / `blockAccessListHash` pair per case.
--/
+or metering fork here is proof-of-stake.
+
+EIP-7928 (goal C): the two pre-execution system calls are incorporated into
+the block-level access list at index 0, each transaction at its index plus one
+inside `processTransaction`, and the post-execution operations -- withdrawals,
+then each request call -- at `len(txs) + 1`, the tool's count of the
+transactions it was handed, rejected ones included (the driver sets the index
+once, before withdrawals; Appendix E item 2 of the goal). The list is built
+after the requests and the item rule is applied to it; a violation is the
+`blockException` of a result that still carries the list, as the target
+assigns `block_output.block_access_list` before validating it. -/
 def runBlockchain (benv : Benv) (txs : List (TxParse Tx)) (wds : List Withdrawal) :
     Except TransitionError Outcome := do
+  let rules := benv.stat.rules
   -- The parent hash the history-storage system transaction records. The
   -- target reads `block_hashes[-1]` and raises `IndexError` out of the whole
   -- tool when the window is empty, which is the shape every state test
@@ -819,20 +833,36 @@ def runBlockchain (benv : Benv) (txs : List (TxParse Tx)) (wds : List Withdrawal
   -- so this records the zero hash and continues; on every input the target
   -- can process at all, the window is non-empty and this is its last entry.
   let lastHash := benv.stat.blockHashes.getLast?.getD 0
-  let ⟨stHistory, _⟩ ←
+  let ⟨stHistory, outHistory⟩ ←
     Except.mapError TransitionError.vm <|
       processUncheckedSystemTransaction benv historyStorageAddress lastHash.toBytes
+  let bal := ({} : BalBuilder).incorporateSystem rules 0 benv.state stHistory
+    (historyStorageAddress :: outHistory.accountReads.toList) outHistory.storageReads.toList
   let benv := benv.withState stHistory
-  let ⟨stBeacon, _⟩ ←
+  let ⟨stBeacon, outBeacon⟩ ←
     Except.mapError TransitionError.vm <|
       processUncheckedSystemTransaction benv beaconRootsAddress
         benv.stat.parentBeaconBlockRoot.toBytes
+  let bal := bal.incorporateSystem rules 0 benv.state stBeacon
+    (beaconRootsAddress :: outBeacon.accountReads.toList) outBeacon.storageReads.toList
   let benv := benv.withState stBeacon
-  let ⟨benv, bout, rej⟩ ← foldTxs txs.putIndex benv .init []
+  let ⟨benv, bout, rej⟩ ← foldTxs txs.putIndex benv {BlockOutput.init with bal := bal} []
+  let postIndex := txs.length + 1
   let ⟨stWds, bout⟩ := processWithdrawals benv bout wds
+  let balWds := bout.bal.incorporateSystem rules postIndex benv.state stWds
+    (wds.map Withdrawal.recipient) []
+  let bout := {bout with bal := balWds}
   let benv := benv.withState stWds
-  match processGeneralPurposeRequests benv bout with
-  | .ok ⟨st, bout'⟩ => .ok ⟨st, bout', rej, none⟩
+  match processGeneralPurposeRequestsAt postIndex benv bout with
+  | .ok ⟨st, bout'⟩ =>
+    let list := match rules.bal with
+      | none => []
+      | some _ => bout'.bal.build
+    let bout' := {bout' with blockAccessList := list}
+    match checkBlockAccessListGasLimit rules benv.stat.blockGasLimit list with
+    | .ok () => .ok ⟨st, bout', rej, none⟩
+    | .error (.block reason) => .ok ⟨st, bout', rej, some reason⟩
+    | .error err => .error err
   | .error (.block reason) =>
     -- The target raises `InvalidBlock` out of the step and builds its result
     -- from whatever the block environment and block output already hold.
@@ -932,9 +962,12 @@ private def resultGasUsed (bout : BlockOutput) : Nat :=
 Key order is the target's pydantic declaration order, which is what its
 `model_dump` emits -- note that `requestsHash` precedes `requests`. Absent
 keys are the ones its `exclude_none=True` drops: `currentDifficulty` is
-`None` on a proof-of-stake lane, the block-access-list pair is Amsterdam-only,
-and traces are not claimed by this tool at all. -/
-def resultJson (env : T8nEnv) (o : Outcome) : JOut :=
+`None` on a proof-of-stake lane, the block-access-list pair (EIP-7928, goal
+C) is present exactly when the rules carry a block-level access list -- the
+list's RLP and its keccak, the empty list's `0xc0` in state-test mode, where
+the target never builds one -- and traces are not claimed by this tool at
+all. The key spellings are the ones goal B's first golden recorded. -/
+def resultJson (rules : ForkRules) (env : T8nEnv) (o : Outcome) : JOut :=
   let logsHash := (BLT.list (o.bout.blockLogs.map Log.toBLT)).toBytes.keccak
   let base : List (String × JOut) := [
     ⟨"stateRoot", .str (hexB256 o.state.root)⟩,
@@ -952,6 +985,11 @@ def resultJson (env : T8nEnv) (o : Outcome) : JOut :=
     ⟨"requestsHash", .str (hexB256 (computeRequestsHash o.bout.requests))⟩,
     ⟨"requests", .arr (o.bout.requests.map fun r => .str (hexBytes r))⟩
   ]
+  let base := match rules.bal with
+    | none => base
+    | some _ => base ++ [
+      ⟨"blockAccessList", .str (hexBytes o.bout.blockAccessList.encode)⟩,
+      ⟨"blockAccessListHash", .str (hexB256 o.bout.blockAccessList.hash)⟩ ]
   match o.blockException with
   | none => .obj base
   | some e => .obj (base ++ [⟨"blockException", .str (blockExceptionText e)⟩])
@@ -1187,14 +1225,15 @@ def run (args : List String) : IO Unit := do
       time := env.timestamp.toB256,
       prevRandao := env.prevRandao,
       excessBlobGas := env.excessBlobGas,
-      parentBeaconBlockRoot := env.parentBeaconBlockRoot
+      parentBeaconBlockRoot := env.parentBeaconBlockRoot,
+      slotNumber := env.slotNumber
     }
   }
   let outcome ←
     IO.ofExcept <|
       (if o.stateTest then runStateTest benv txs
         else runBlockchain benv txs env.withdrawals).mapError TransitionError.render
-  let resultText := (resultJson env outcome).toString
+  let resultText := (resultJson rules env outcome).toString
   let allocText := (allocJson outcome.state).toString
   let bodyText := quoted (bodyHex txs)
   let basedir : System.FilePath := o.outputBasedir
@@ -1208,7 +1247,7 @@ def run (args : List String) : IO Unit := do
   else
     IO.FS.writeFile (basedir.join o.outputAlloc) allocText
   if o.outputResult = "stdout" then
-    stdoutFields := stdoutFields ++ [⟨"result", resultJson env outcome⟩]
+    stdoutFields := stdoutFields ++ [⟨"result", resultJson rules env outcome⟩]
   else
     IO.FS.writeFile (basedir.join o.outputResult) resultText
   if ¬ stdoutFields.isEmpty then

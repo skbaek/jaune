@@ -123,6 +123,12 @@ def TxValidationError.all : List TxValidationError :=
     .type3ZeroBlobs .none, .type4ContractCreation .none,
     .emptyAuthorizationList .none ]
 
+/-- `B256` carries no `Repr` of its own; the block-rejection type below derives
+one, and its `blockAccessListHash` reason now carries a hash as data. Rendered
+through the hex `ToString`, which is how every hash prints elsewhere. -/
+instance : Repr B256 where
+  reprPrec h _ := .text (toString h)
+
 /-- Why a header or a post-transition check rejects a block.
 
 One constructor per reason in the block-rejection vocabulary. A bare
@@ -157,6 +163,29 @@ inductive BlockValidationError : Type
   /-- A fork-dependent header field is present when the rules do not define
   it, or absent when they do. -/
   | headerFieldPresence (detail : ErrorDetail)
+  /-- EIP-7928: the computed block-level access list's hash differs from the
+  header's `blockAccessListHash`. The one reason consensus can observe: the
+  block carries only the hash. `computed` is the hash of the list this
+  candidate built, carried as data so that the fixture runner's refinement
+  below never reads a rendered message. -/
+  | blockAccessListHash (computed : B256) (detail : ErrorDetail)
+  /-- EIP-7928: the block-level access list a fixture publishes as its
+  verification aid is not the computed one in content. Never produced by the
+  block pipeline -- only the fixture runner, which alone has the published
+  list, refines a `blockAccessListHash` rejection into this one when the
+  header's hash is consistent with that list, so that the corpus's two
+  identities `INVALID_BLOCK_ACCESS_LIST` and `INVALID_BAL_HASH` are answered
+  for the reason each names. -/
+  | blockAccessListContent (detail : ErrorDetail)
+  /-- EIP-7928: the published list has exactly the computed content in a
+  non-canonical arrangement -- accounts out of order or an entry duplicated
+  -- which a client comparing the delivered list rejects as malformed.
+  Runner-refined, like `blockAccessListContent`: the header's hash is
+  consistent with the published list and `BlockAccessList.canonicalise` of
+  it hashes to the computed hash. -/
+  | blockAccessListFormat (detail : ErrorDetail)
+  /-- EIP-7928: the list holds more items than `gasLimit / itemCost`. -/
+  | blockAccessListGasLimit (detail : ErrorDetail)
 deriving DecidableEq, Repr
 
 /-- The tag a block-rejection reason renders under. -/
@@ -186,6 +215,10 @@ def BlockValidationError.tag : BlockValidationError → String
   | .systemContractCallFailed _ => systemContractCallFailedTag
   | .blockRlpSizeExceeded _ => blockRlpSizeExceededTag
   | .headerFieldPresence _ => headerFieldPresenceTag
+  | .blockAccessListHash _ _ => blockAccessListHashTag
+  | .blockAccessListContent _ => blockAccessListContentTag
+  | .blockAccessListFormat _ => blockAccessListFormatTag
+  | .blockAccessListGasLimit _ => blockAccessListGasLimitTag
 
 /-- The diagnostic payload of a block-rejection reason. -/
 def BlockValidationError.detail : BlockValidationError → ErrorDetail
@@ -197,7 +230,10 @@ def BlockValidationError.detail : BlockValidationError → ErrorDetail
   | .withdrawalsRoot d | .headerNonce d | .excessBlobGas d
   | .blobGasUsed d | .requestsHash d | .depositEventLayout d
   | .systemContractCallFailed d | .blockRlpSizeExceeded d
-  | .headerFieldPresence d => d
+  | .headerFieldPresence d
+  | .blockAccessListContent d | .blockAccessListFormat d
+  | .blockAccessListGasLimit d => d
+  | .blockAccessListHash _ d => d
 
 /-- The one renderer for `BlockValidationError`. -/
 def BlockValidationError.render (e : BlockValidationError) : String :=
@@ -214,7 +250,9 @@ def BlockValidationError.all : List BlockValidationError :=
     .headerNonce .none, .excessBlobGas .none, .blobGasUsed .none,
     .requestsHash .none, .depositEventLayout .none,
     .systemContractCallFailed .none, .blockRlpSizeExceeded .none,
-    .headerFieldPresence .none ]
+    .headerFieldPresence .none, .blockAccessListHash emptyOmmerHash .none,
+    .blockAccessListContent .none, .blockAccessListFormat .none,
+    .blockAccessListGasLimit .none ]
 
 /-- Why an import could not be attempted, or could not be trusted.
 
@@ -399,10 +437,10 @@ theorem TransitionError.render_split (e : TransitionError) :
 #guard TxValidationError.render (.intrinsicGasTooLow (.text "needs 21000, has 20999"))
   = "IntrinsicGasTooLowError : needs 21000, has 20999"
 
-#guard BlockValidationError.all.length = 25
-#guard BlockValidationError.all.eraseDups.length = 25
+#guard BlockValidationError.all.length = 29
+#guard BlockValidationError.all.eraseDups.length = 29
 #guard BlockValidationError.all.map BlockValidationError.tag = blockExceptionTags
-#guard (BlockValidationError.all.map BlockValidationError.tag).eraseDups.length = 25
+#guard (BlockValidationError.all.map BlockValidationError.tag).eraseDups.length = 29
 #guard BlockValidationError.render (.stateRoot .none) = "StateRootError"
 #guard BlockValidationError.render (.blockRlpSizeExceeded (.text "1 byte over the limit"))
   = "BlockRlpSizeExceededError : 1 byte over the limit"
@@ -507,8 +545,9 @@ private def setDelegationAmsterdamStep (state : StateGasRules) (msg : Msg)
     | .error err => .error ⟨.crypto err, devm⟩
     | .ok authority =>
       -- Recovery warms the authority even when a later validity check skips
-      -- the tuple.
+      -- the tuple, and `get_account(authority)` reads it (EIP-7928).
       let devm := addAccessedAddress devm authority
+      let devm := devm.balReadAccount msg.benv.stat.rules authority
       let authorityAccount := devm.state.get authority
       if ¬ (authorityAccount.code.isEmpty ∨
           isValidDelegation authorityAccount.code) then
@@ -558,6 +597,8 @@ private def resolveTopLevelCallAmsterdam (msg : Msg) (devm : Devm) :
     msg.benv.stat.rules.gas.delegationCost devm msg.currentTarget
   let devm ← chargeGas accessCost devm
   let ⟨code, devm⟩ := completeDelegationAccess devm delegated codeAddress
+  -- `create_evm`: `get_account(code_address)` is a read (EIP-7928).
+  let devm := devm.balReadAccount msg.benv.stat.rules codeAddress
   let msg := preparedTopLevelMsg msg devm
   .ok ⟨{
     msg with
@@ -568,6 +609,11 @@ private def resolveTopLevelCallAmsterdam (msg : Msg) (devm : Devm) :
 
 private def dispatchTopLevelAmsterdam (state : StateGasRules) (msg : Msg)
     (devm : Devm) : Except (EvmError × Devm) (Msg × Devm) := do
+  -- `create_evm` reads the current target on both branches --
+  -- `account_deployable`/`get_pre_state_account` for a creation,
+  -- `resolve_delegated_code_address`'s `get_account(recipient)` for a call
+  -- (EIP-7928).
+  let devm := devm.balReadAccount msg.benv.stat.rules msg.currentTarget
   if msg.target.isNone then
     let isCollision :=
       accountHasCodeOrNonce devm.state msg.currentTarget ||
@@ -637,6 +683,8 @@ private def msgCallOutputAmsterdam (msg : Msg) (evm : Devm) :
       Int.ofNat evm.mach.stateGas.spilled +
       Int.ofNat evm.mach.stateGas.committedSpill
   .ok ⟨evm.state, {
+    accountReads := evm.meta.accountReads
+    storageReads := evm.meta.storageReads
     gasLeft := evm.gasLeft
     refundCounter := refundCounter
     logs := logs
@@ -655,7 +703,13 @@ private def settleTopLevelPreparationFailure (msg : Msg) (error : EvmError)
       (devm.rollback msg.benv.state msg.tenv.transientStorage)
         |>.restoreStateGasToEntry msg.stateGasGrant
         |>.forfeitRemainingGas
+    -- The reads the preparation recorded before it halted -- the authorities
+    -- of every processed tuple, the recipient once dispatch loaded it -- stay
+    -- in the block-level access list: `incorporate_tx_into_block` runs for a
+    -- halted transaction too, and a read survives the rollback (EIP-7928).
     .ok ⟨msg.benv.state, {
+      accountReads := devm.meta.accountReads
+      storageReads := devm.meta.storageReads
       gasLeft := devm.gasLeft
       refundCounter := 0
       logs := []
@@ -689,8 +743,9 @@ def processMessageCall.create (msg : Msg) :
         accountHasStorage benv.state msg.currentTarget
     if isCollision then
       return ⟨benv.state,
-        ⟨0, 0, [], .emptyWithCapacity,
-          .some (.halt (.addressCollision .none)), [], 0, 0⟩⟩
+        { gasLeft := 0, refundCounter := 0, logs := [],
+          accountsToDelete := .emptyWithCapacity,
+          error := .some (.halt (.addressCollision .none)), returnData := [] }⟩
     else
       let evm ← Except.bimap Prod.fst id (processCreateMessage msg)
       let logs := if evm.error.isNone then evm.logs else []
@@ -784,6 +839,211 @@ structure Receipt : Type where
   bloom : Bytes
   logs : List Log
 
+/-! ### EIP-7928: the block-level access list (goal C, fixed decisions 2–4)
+
+A block-scoped builder beside `BlockOutput`, fed once per incorporation --
+each pre-execution system call at index 0, the `i`-th transaction at `i + 1`,
+the withdrawals batch and each request-producing system call at `n + 1` --
+with the *diff* of the incorporated state against the block's cumulative state
+(net-zero filtered by construction: a write of the value already there is not
+a change) and with the read sets the interpreter recorded (`Meta.accountReads`,
+`Meta.storageReads`), which survive reverts. `build` then produces the pinned
+canonical form -- accounts by address, slots by number, changes by index, a
+slot among the changes excluded from the reads, an account with nothing but
+reads still present -- and `hash` is `keccak256(rlp(list))` in the pinned
+dataclass field order `address, storageChanges, storageReads, balanceChanges,
+nonceChanges, codeChanges`. Nothing under `rules.bal = none` touches any of
+this: `BlockOutput.bal` stays `{}` and `blockAccessList` stays `[]`. -/
+
+/-- One account's accumulated changes and reads (`AccountData` at the pin).
+Slots live in ordered maps so that `build` needs no sort of its own; the change
+lists are appended in block-access-index order and sorted again at build. -/
+structure BalAccount : Type where
+  storageChanges : Std.TreeMap B256 (List (Nat × B256)) compare := .empty
+  storageReads : Std.TreeMap B256 Unit compare := .empty
+  balanceChanges : List (Nat × B256) := []
+  nonceChanges : List (Nat × UInt64) := []
+  codeChanges : List (Nat × ByteArray) := []
+
+/-- `BlockAccessListBuilder` at the pin: address ↦ its data. The block access
+index is not stored here; every incorporation names its own. -/
+structure BalBuilder : Type where
+  accounts : Std.TreeMap Adr BalAccount compare := .empty
+
+namespace BalAccount
+
+/-- Replace the entry at `idx` or append: only the final value per index is
+kept (`add_storage_write`, `add_balance_change`, `add_code_change`). -/
+private def upsert {α : Type} (l : List (Nat × α)) (idx : Nat) (v : α) : List (Nat × α) :=
+  if l.any (·.1 = idx) then l.map (fun c => if c.1 = idx then (idx, v) else c)
+  else l ++ [(idx, v)]
+
+def addStorageWrite (acc : BalAccount) (slot : B256) (idx : Nat) (v : B256) : BalAccount :=
+  {acc with storageChanges :=
+    acc.storageChanges.insert slot (upsert (acc.storageChanges.getD slot []) idx v)}
+
+def addStorageRead (acc : BalAccount) (slot : B256) : BalAccount :=
+  {acc with storageReads := acc.storageReads.insert slot ()}
+
+def addBalanceChange (acc : BalAccount) (idx : Nat) (v : B256) : BalAccount :=
+  {acc with balanceChanges := upsert acc.balanceChanges idx v}
+
+/-- `add_nonce_change` keeps the highest nonce per index. -/
+def addNonceChange (acc : BalAccount) (idx : Nat) (n : UInt64) : BalAccount :=
+  {acc with nonceChanges :=
+    match acc.nonceChanges.find? (·.1 = idx) with
+    | some ⟨_, old⟩ => if old < n then upsert acc.nonceChanges idx n else acc.nonceChanges
+    | none => acc.nonceChanges ++ [(idx, n)]}
+
+def addCodeChange (acc : BalAccount) (idx : Nat) (code : ByteArray) : BalAccount :=
+  {acc with codeChanges := upsert acc.codeChanges idx code}
+
+end BalAccount
+
+namespace BalBuilder
+
+/-- `ensure_account`/`add_touched_account`: an entry with nothing in it. -/
+def ensure (b : BalBuilder) (a : Adr) : BalBuilder :=
+  if b.accounts.contains a then b else {accounts := b.accounts.insert a {}}
+
+def modify (b : BalBuilder) (a : Adr) (f : BalAccount → BalAccount) : BalBuilder :=
+  {accounts := b.accounts.insert a (f (b.accounts.getD a {}))}
+
+/-- `update_builder_from_tx`: the incorporated state's writes as a diff against
+the block's cumulative state (`pre`), recorded at `idx`; then the merge of the
+read sets. An address whose account differs in balance, nonce or code, or
+whose storage differs at a slot, records that change with the post value; a
+value written back to its original is no change, and -- because `SLOAD` and
+`SSTORE` recorded the slot -- surfaces as a read. -/
+def incorporate (b : BalBuilder) (idx : Nat) (pre post : State)
+    (accountReads : List Adr) (storageReads : List (Adr × B256)) : BalBuilder :=
+  let addrs : List Adr := (pre.keys ++ post.keys).eraseDups
+  let b := addrs.foldl (init := b) fun b a =>
+    let acPre := pre.get a
+    let acPost := post.get a
+    let b := if acPre.bal ≠ acPost.bal then b.modify a (·.addBalanceChange idx acPost.bal) else b
+    let b := if acPre.nonce ≠ acPost.nonce then b.modify a (·.addNonceChange idx acPost.nonce) else b
+    let b :=
+      if acPre.code.data ≠ acPost.code.data then b.modify a (·.addCodeChange idx acPost.code)
+      else b
+    let slots : List B256 := (acPre.stor.keys ++ acPost.stor.keys).eraseDups
+    slots.foldl (init := b) fun b k =>
+      if acPre.stor.get k ≠ acPost.stor.get k then
+        b.modify a (·.addStorageWrite k idx (acPost.stor.get k))
+      else b
+  let b := storageReads.foldl (init := b) fun b ⟨a, k⟩ => b.modify a (·.addStorageRead k)
+  accountReads.foldl (init := b) fun b a => b.ensure a
+
+end BalBuilder
+
+/-- `AccountChanges` at the pin, in its dataclass field order. -/
+structure BalAccountChanges : Type where
+  address : Adr
+  storageChanges : List (B256 × List (Nat × B256))
+  storageReads : List B256
+  balanceChanges : List (Nat × B256)
+  nonceChanges : List (Nat × UInt64)
+  codeChanges : List (Nat × ByteArray)
+
+/-- The built list: `BlockAccessList` at the pin. -/
+abbrev BlockAccessList : Type := List BalAccountChanges
+
+private def sortByIndex {α : Type} (l : List (Nat × α)) : List (Nat × α) :=
+  l.mergeSort (fun x y => x.1 ≤ y.1)
+
+/-- `_build_from_builder`: accounts by address, slots by number, changes by
+index, and a slot that appears among the changes excluded from the reads. -/
+def BalBuilder.build (b : BalBuilder) : BlockAccessList :=
+  b.accounts.toList.map fun ⟨a, acc⟩ =>
+    { address := a
+      storageChanges := acc.storageChanges.toList.map fun ⟨slot, cs⟩ => (slot, sortByIndex cs)
+      storageReads := (acc.storageReads.toList.map Prod.fst).filter
+        (fun k => ¬ acc.storageChanges.contains k)
+      balanceChanges := sortByIndex acc.balanceChanges
+      nonceChanges := sortByIndex acc.nonceChanges
+      codeChanges := sortByIndex acc.codeChanges }
+
+/-- RLP of an unsigned integer: minimal big-endian bytes, `0` as the empty
+string -- how the pinned `rlp.encode` writes `U256`, `U64` and `Uint`. -/
+private def natBLT (n : Nat) : BLT := .bytes n.toBytes
+
+def BalAccountChanges.toBLT (c : BalAccountChanges) : BLT :=
+  .list [
+    .bytes c.address.toBytes,
+    .list (c.storageChanges.map fun ⟨slot, cs⟩ =>
+      .list [natBLT slot.toNat,
+             .list (cs.map fun ⟨i, v⟩ => .list [natBLT i, natBLT v.toNat])]),
+    .list (c.storageReads.map fun k => natBLT k.toNat),
+    .list (c.balanceChanges.map fun ⟨i, v⟩ => .list [natBLT i, natBLT v.toNat]),
+    .list (c.nonceChanges.map fun ⟨i, n⟩ => .list [natBLT i, natBLT n.toNat]),
+    .list (c.codeChanges.map fun ⟨i, code⟩ => .list [natBLT i, .bytes code.toList]) ]
+
+def BlockAccessList.toBLT (l : BlockAccessList) : BLT := .list (l.map BalAccountChanges.toBLT)
+
+/-- `rlp.encode(block_access_list)`. -/
+def BlockAccessList.encode (l : BlockAccessList) : Bytes := l.toBLT.toBytes
+
+/-- `hash_block_access_list`. -/
+def BlockAccessList.hash (l : BlockAccessList) : B256 := l.encode.keccak
+
+/-- `validate_block_access_list_gas_limit`'s count: every address, plus every
+unique storage slot across its changes and reads (the reads already exclude
+the changed slots at build time). -/
+def BlockAccessList.itemCount (l : BlockAccessList) : Nat :=
+  l.foldl (fun n c => n + 1 + c.storageChanges.length + c.storageReads.length) 0
+
+-- The empty list hashes to `keccak(rlp [])`, which is `emptyOmmerHash`.
+#guard BlockAccessList.hash [] = emptyOmmerHash
+#guard BlockAccessList.encode [] = [0xC0]
+#guard BlockAccessList.itemCount [] = 0
+
+/-- A delivered list's canonical re-arrangement: accounts in address order,
+adjacent exact duplicates collapsed, every entry's own content untouched. The
+fixture runner compares its hash with the computed list's to tell a published
+list that is right in content but wrong in form (the corpus's
+`INCORRECT_BLOCK_FORMAT`: accounts reversed, an account duplicated) from one
+whose content is wrong (`INVALID_BLOCK_ACCESS_LIST`). Consensus never calls
+it: the block carries only the hash, and a built list is already canonical. -/
+def BlockAccessList.canonicalise (l : BlockAccessList) : BlockAccessList :=
+  dedupAdjacent (l.mergeSort fun a b => (compare a.address b.address).isLE)
+where
+  dedupAdjacent : BlockAccessList → BlockAccessList
+    | a :: b :: rest =>
+      if a.toBLT.toBytes = b.toBLT.toBytes then dedupAdjacent (b :: rest)
+      else a :: dedupAdjacent (b :: rest)
+    | l => l
+
+-- `canonicalise` on the shapes the corpus's two format cases take: a reversed
+-- pair is re-sorted, an exact duplicate collapses, and a canonical list is a
+-- fixed point -- while two entries at one address with different content are
+-- both kept, so a content defect can never pass as a format defect.
+private def guardBalHi : BalAccountChanges :=
+  { address := beaconRootsAddress, storageChanges := [], storageReads := [],
+    balanceChanges := [], nonceChanges := [(1, 1)], codeChanges := [] }
+private def guardBalLo : BalAccountChanges :=
+  { address := historyStorageAddress, storageChanges := [], storageReads := [0x200b],
+    balanceChanges := [], nonceChanges := [], codeChanges := [] }
+private def guardBalLo' : BalAccountChanges := { guardBalLo with storageReads := [0x200c] }
+#guard compare historyStorageAddress beaconRootsAddress = .lt
+#guard BlockAccessList.encode (BlockAccessList.canonicalise [guardBalHi, guardBalLo]) =
+  BlockAccessList.encode [guardBalLo, guardBalHi]
+#guard BlockAccessList.encode (BlockAccessList.canonicalise [guardBalLo, guardBalHi, guardBalHi]) =
+  BlockAccessList.encode [guardBalLo, guardBalHi]
+#guard BlockAccessList.encode (BlockAccessList.canonicalise [guardBalLo, guardBalHi]) =
+  BlockAccessList.encode [guardBalLo, guardBalHi]
+#guard BlockAccessList.encode (BlockAccessList.canonicalise [guardBalLo, guardBalLo', guardBalHi]) =
+  BlockAccessList.encode [guardBalLo, guardBalLo', guardBalHi]
+#guard BlockAccessList.encode (BlockAccessList.canonicalise []) = [0xC0]
+
+-- The `none` state-gas lanes -- `Xinst`'s legacy call and create paths and the
+-- legacy top-level dispatch -- record no access-list reads. That is sound only
+-- while every supported fork with a block-level access list also meters state
+-- gas, so those lanes are never taken under `bal` rules; this pins it.
+#guard Fork.supported.all fun f =>
+  match f.rules? with
+  | some r => !r.bal.isSome || r.stateGas.isSome
+  | none => true
+
 structure BlockOutput : Type where
   blockGasUsed : Nat
   /-- State-gas usage is an independent block-capacity dimension under
@@ -798,6 +1058,12 @@ structure BlockOutput : Type where
   withdrawalsTrie : Std.TreeMap Bytes Withdrawal compare
   blobGasUsed : Nat
   requests : List Bytes
+  /-- EIP-7928: the block-level access-list builder, fed at every incorporation
+  under `rules.bal = some _`; untouched otherwise. Defaulted so that every
+  `BlockOutput` literal keeps elaborating. -/
+  bal : BalBuilder := {}
+  /-- EIP-7928: the built list, set once by `applyBody` after the requests. -/
+  blockAccessList : BlockAccessList := []
 
 /-- The legacy block-accounting relation promised by fixed decision 8: sender
 and execution gas advance together, and the independent state-gas dimension
@@ -1762,7 +2028,17 @@ def processTransaction
     receiptKeys := bout.receiptKeys ++ [receiptKey]
     receiptsTrie := bout.receiptsTrie.insert receiptKey receipt
     blockLogs := bout.blockLogs ++ txOutput.logs}
-  .ok ⟨state, bout⟩
+  -- EIP-7928: `incorporate_tx_into_block` at `index + 1`, after the
+  -- self-destruct settlement: the transaction's writes as a diff against the
+  -- block's cumulative state, plus its reads and the transaction-level ones --
+  -- the sender (`check_transaction`, `update_sender_state`, the refund) and
+  -- the coinbase (`disburse_gas_fees` credits it even a zero fee).
+  let bal := match benv.stat.rules.bal with
+    | none => bout.bal
+    | some _ => bout.bal.incorporate (index + 1) benv.state state
+        (sender :: benv.stat.coinbase :: txOutput.accountReads.toList)
+        txOutput.storageReads.toList
+  .ok ⟨state, {bout with bal := bal}⟩
 
 /-- Under a legacy schedule, the real transaction producer preserves the
 legacy block-counter relation through its settlement and receipt updates. -/
@@ -2322,18 +2598,24 @@ nested case splits -- which is what makes adding Amsterdam's two contracts a
 change to data and to nothing else. Each contract's non-empty return data is
 appended prefixed with its own type byte, and the state each call produces is
 what the next call runs against. -/
-def runRequestContracts :
-    List (UInt8 × Adr) → Benv → List Bytes →
-      Except TransitionError (State × List Bytes)
-  | [], benv, acc => .ok ⟨benv.state, acc⟩
-  | ⟨requestType, address⟩ :: rest, benv, acc => do
+def runRequestContracts (idx : Nat) :
+    List (UInt8 × Adr) → Benv → List Bytes → BalBuilder →
+      Except TransitionError (State × List Bytes × BalBuilder)
+  | [], benv, acc, bal => .ok ⟨benv.state, acc, bal⟩
+  | ⟨requestType, address⟩ :: rest, benv, acc, bal => do
     let ⟨state, output⟩ ← processCheckedSystemTransaction benv address []
     let acc :=
       if output.returnData.length > 0 then
         acc ++ [[requestType] ++ output.returnData]
       else
         acc
-    runRequestContracts rest (benv.withState state) acc
+    -- EIP-7928: each checked call incorporates its own writes and reads at
+    -- the post-execution index; `create_evm` read the contract's account.
+    let bal := match benv.stat.rules.bal with
+      | none => bal
+      | some _ => bal.incorporate idx benv.state state
+          (address :: output.accountReads.toList) output.storageReads.toList
+    runRequestContracts idx rest (benv.withState state) acc bal
 
 /-- Run the block's request-producing system contracts and collect their output.
 
@@ -2353,7 +2635,7 @@ rule data does not carry a type-0 entry.
 `pragueRules.requests` reproduces exactly the two calls, in the order, this
 function made before the list existed: `pragueRules_requests` in
 `Jaune/Machine.lean` states that by `rfl`, and a `#guard` below runs it. -/
-def processGeneralPurposeRequests
+def processGeneralPurposeRequestsAt (balIndex : Nat)
   (benv : Benv) (bout : BlockOutput) :
   Except TransitionError (State × BlockOutput) := do
   let depositRequests ← parseDepositRequests bout
@@ -2362,15 +2644,24 @@ def processGeneralPurposeRequests
       bout.requests ++ [depositRequestType ++ depositRequests]
     else
       bout.requests
-  let ⟨state, allRequests⟩ ←
-    runRequestContracts benv.stat.rules.requests benv seeded
-  .ok ⟨state, {bout with requests := allRequests}⟩
+  let ⟨state, allRequests, bal⟩ ←
+    runRequestContracts balIndex benv.stat.rules.requests benv seeded bout.bal
+  .ok ⟨state, {bout with requests := allRequests, bal := bal}⟩
+
+/-- The block pipeline's request pass. EIP-7928: post-execution operations use
+index `n + 1`, `n` the number of transactions -- one receipt key each, since a
+block whose transaction is rejected is itself rejected. The transition tool,
+whose driver counts the transactions it was handed, calls
+`processGeneralPurposeRequestsAt` with its own count. -/
+def processGeneralPurposeRequests (benv : Benv) (bout : BlockOutput) :
+    Except TransitionError (State × BlockOutput) :=
+  processGeneralPurposeRequestsAt (bout.receiptKeys.length + 1) benv bout
 
 theorem processGeneralPurposeRequests_legacyGasAccounting {benv : Benv}
     {bout : BlockOutput} (hb : bout.LegacyGasAccounting) {p}
     (hp : processGeneralPurposeRequests benv bout = .ok p) :
     p.2.LegacyGasAccounting := by
-  unfold processGeneralPurposeRequests at hp
+  unfold processGeneralPurposeRequests processGeneralPurposeRequestsAt at hp
   obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
   cases hp
@@ -2408,29 +2699,69 @@ theorem applyTransactions_init_legacyGasAccounting
   applyTransactions_legacyGasAccounting txis hnone
     BlockOutput.init_legacyGasAccounting hp
 
+/-- EIP-7928: incorporate one pre-execution or post-execution system operation
+-- a system call's writes and reads plus the contract account `create_evm`
+read, or the withdrawals batch's credits plus each recipient `create_ether`
+read -- at `idx`, under rules that carry a block-level access list. -/
+def BalBuilder.incorporateSystem (bal : BalBuilder) (rules : ForkRules) (idx : Nat)
+    (pre post : State) (accountReads : List Adr) (storageReads : List (Adr × B256)) :
+    BalBuilder :=
+  match rules.bal with
+  | none => bal
+  | some _ => bal.incorporate idx pre post accountReads storageReads
+
+/-- `validate_block_access_list_gas_limit`, inside `apply_body` before any
+header comparison: `items > gasLimit // itemCost` is a block rejection. -/
+def checkBlockAccessListGasLimit (rules : ForkRules) (blockGasLimit : Nat)
+    (list : BlockAccessList) : Except TransitionError Unit :=
+  match rules.bal with
+  | none => .ok ()
+  | some r =>
+    if list.itemCount > blockGasLimit / r.itemCost then
+      .error <| .block <| .blockAccessListGasLimit <| .text
+        s!"block access list holds {list.itemCount} items, exceeding \
+           gasLimit / itemCost = {blockGasLimit / r.itemCost}"
+    else .ok ()
+
 def applyBody
   (benv : Benv) (txs : List (Bytes ⊕ Tx)) (wds : List Withdrawal) :
   Except TransitionError (State × BlockOutput) := do
-  let ⟨stBeacon, _⟩ ←
+  let ⟨stBeacon, outBeacon⟩ ←
     Except.mapError TransitionError.vm <|
       processUncheckedSystemTransaction benv
         beaconRootsAddress
         benv.stat.parentBeaconBlockRoot.toBytes
+  -- EIP-7928: the two pre-execution system calls incorporate at index 0.
+  let bal := BalBuilder.incorporateSystem {} benv.stat.rules 0 benv.state stBeacon
+    (beaconRootsAddress :: outBeacon.accountReads.toList) outBeacon.storageReads.toList
   let benvBeacon : Benv := benv.withState stBeacon
   let lastHash ←
      benvBeacon.stat.blockHashes.getLast?.toExcept
        (TransitionError.internal (.invariant (.text "block hashes is empty")))
-  let ⟨stHistory, _⟩ ←
+  let ⟨stHistory, outHistory⟩ ←
     Except.mapError TransitionError.vm <|
       processUncheckedSystemTransaction benvBeacon
         historyStorageAddress
         lastHash.toBytes
+  let bal := bal.incorporateSystem benv.stat.rules 0 benvBeacon.state stHistory
+    (historyStorageAddress :: outHistory.accountReads.toList) outHistory.storageReads.toList
   let benvHistory := benvBeacon.withState stHistory
   let ⟨benvTxs, boutTxs⟩ ←
-    applyTransactions (← txs.mapM decodeTx).putIndex benvHistory .init
+    applyTransactions (← txs.mapM decodeTx).putIndex benvHistory {BlockOutput.init with bal := bal}
   let ⟨stWds, boutWds⟩ :=
     processWithdrawals benvTxs boutTxs wds
-  processGeneralPurposeRequests (benvTxs.withState stWds) boutWds
+  -- EIP-7928: the withdrawals batch is one incorporation at `n + 1`; every
+  -- recipient is read by `create_ether` whatever the amount.
+  let balWds := boutWds.bal.incorporateSystem benv.stat.rules
+    (boutTxs.receiptKeys.length + 1) benvTxs.state stWds (wds.map Withdrawal.recipient) []
+  let boutWds := {boutWds with bal := balWds}
+  let ⟨stReq, boutReq⟩ ← processGeneralPurposeRequests (benvTxs.withState stWds) boutWds
+  -- `build_block_access_list`, then the item rule -- before any header check.
+  let list := match benv.stat.rules.bal with
+    | none => []
+    | some _ => boutReq.bal.build
+  checkBlockAccessListGasLimit benv.stat.rules benv.stat.blockGasLimit list
+  .ok ⟨stReq, {boutReq with blockAccessList := list}⟩
 
 /-- A successful legacy block body starts from `BlockOutput.init`, preserves
 the relation through every transaction, and keeps it through withdrawals and
@@ -2445,9 +2776,12 @@ theorem applyBody_legacyGasAccounting {benv : Benv}
   obtain ⟨q2, _, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨txsD, _, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
+  -- The initial output is `.init` with the two system calls' access-list
+  -- incorporation; the relation reads none of that.
   have hqLegacy : q.2.LegacyGasAccounting :=
-    applyTransactions_init_legacyGasAccounting txsD.putIndex
-      (benv := (benv.withState q1.1).withState q2.1) hnone hq
+    applyTransactions_legacyGasAccounting txsD.putIndex
+      (benv := (benv.withState q1.1).withState q2.1) hnone
+      (by simp [BlockOutput.LegacyGasAccounting, BlockOutput.init]) hq
   obtain ⟨benvTxs, boutTxs⟩ := q
   dsimp only at hp hqLegacy
   rcases hw : processWithdrawals benvTxs boutTxs wds with ⟨stWds, boutWds⟩
@@ -2455,8 +2789,16 @@ theorem applyBody_legacyGasAccounting {benv : Benv}
   have hwLegacy := processWithdrawals_legacyGasAccounting
     (benv := benvTxs) hqLegacy wds
   simp only [hw] at hwLegacy
-  exact processGeneralPurposeRequests_legacyGasAccounting
-    hwLegacy hp
+  -- The withdrawals' access-list incorporation, the request pass, the item
+  -- rule and the built list touch no gas counter.
+  obtain ⟨q', hq', hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
+  cases hp
+  let balWds := boutWds.bal.incorporateSystem benv.stat.rules
+    (boutTxs.receiptKeys.length + 1) benvTxs.state stWds (wds.map Withdrawal.recipient) []
+  have hreq := processGeneralPurposeRequests_legacyGasAccounting
+    (bout := {boutWds with bal := balWds}) hwLegacy hq'
+  exact hreq
 
 def getLast256BlockHashes (chain : BlockChain) : List B256 :=
   match chain.blocks.reverse.take 255 with
@@ -2972,6 +3314,21 @@ def stateTransitionChecks (bout : BlockOutput) (header : Header)
       s!"computed requests hash = {requestsHash} ≠ \
          header requests hash = {header.requestsHash}"
 
+/-- EIP-7928: the header's `blockAccessListHash` against the computed list, the
+last of the pinned `execute_block` comparisons -- after `requestsHash` -- and
+only under rules that carry a block-level access list. -/
+def blockAccessListCheck (rules : ForkRules) (bout : BlockOutput) (header : Header) :
+    Except BlockValidationError Unit :=
+  match rules.bal with
+  | none => .ok ()
+  | some _ =>
+    let hash := bout.blockAccessList.hash
+    if some hash ≠ header.blockAccessListHash then
+      .error <| .blockAccessListHash hash <| .text
+        s!"computed block access list hash = {hash} ≠ \
+           header block access list hash = {header.blockAccessListHash}"
+    else .ok ()
+
 def initBenvStat (rules : ForkRules) (chain : BlockChain) (header : Header) :
     BenvStat :=
   {
@@ -3125,6 +3482,7 @@ def stateTransitionE (rules : ForkRules) (ch : BlockChain) (block : Block) :
     stateTransitionChecks bout block.header
       transactionsRoot blockStateRoot receiptRoot
       blockLogsBloom withdrawalsRoot requestsHash
+  Except.mapError TransitionError.block <| blockAccessListCheck rules bout block.header
   .ok ⟨appendBlock ch.blocks block, st, ch.chainId⟩
 
 /-- Legacy renderer adapter over `stateTransitionE`, byte-identical on every
@@ -5025,6 +5383,7 @@ theorem stateTransitionWith_preserves_chainId
   obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
   obtain ⟨⟨st, bout⟩, _, h⟩ := Except.bind_eq_ok h
   obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
   simp only [Except.ok.injEq] at h
   rw [← h]
 
@@ -5499,27 +5858,27 @@ theorem processCheckedSystemTransaction_canonical {benv : Benv}
 
 An induction on the contract list, so the proof does not grow when the list
 does: Amsterdam's two extra contracts are covered by the same argument. -/
-theorem runRequestContracts_canonical :
+theorem runRequestContracts_canonical (idx : Nat) :
     ∀ (rs : List (UInt8 × Adr)) {benv : Benv}, benv.Canonical →
-      ∀ {acc : List Bytes} {p}, runRequestContracts rs benv acc = .ok p →
-        State.Canonical p.1
-  | [], _, h, _, _, hp => by cases hp; exact h.1
-  | _ :: rs, benv, h, acc, p, hp => by
+      ∀ {acc : List Bytes} {bal : BalBuilder} {p},
+        runRequestContracts idx rs benv acc bal = .ok p → State.Canonical p.1
+  | [], _, h, _, _, _, hp => by cases hp; exact h.1
+  | _ :: rs, benv, h, acc, bal, p, hp => by
     unfold runRequestContracts at hp
     obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
-    exact runRequestContracts_canonical rs
+    exact runRequestContracts_canonical idx rs
       (by exact ⟨processCheckedSystemTransaction_canonical h hq, h.2⟩) hp
 
 theorem processGeneralPurposeRequests_canonical {benv : Benv}
     (h : benv.Canonical) {bout : BlockOutput} {p}
     (hp : processGeneralPurposeRequests benv bout = .ok p) :
     State.Canonical p.1 := by
-  unfold processGeneralPurposeRequests at hp
+  unfold processGeneralPurposeRequests processGeneralPurposeRequestsAt at hp
   obtain ⟨dr, _, hp⟩ := Except.bind_eq_ok hp
   dsimp only at hp
   obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
   cases hp
-  exact runRequestContracts_canonical _ h hq
+  exact runRequestContracts_canonical _ _ h hq
 
 theorem applyTransactions_canonical :
     ∀ (txis : List (Nat × Tx)) {benv : Benv}, benv.Canonical →
@@ -5551,8 +5910,18 @@ theorem applyBody_canonical {benv : Benv} (h : benv.Canonical)
       (Except.mapError_eq_ok_iff.mp hq2)
   have hb3 : q3.1.Canonical :=
     applyTransactions_canonical _ (by exact ⟨hb2, h.2⟩) hq3
-  exact processGeneralPurposeRequests_canonical
-    (by exact ⟨processWithdrawalsState_canonical hb3.1 _, hb3.2⟩) hp
+  obtain ⟨benvTxs, boutTxs⟩ := q3
+  dsimp only at hp hb3
+  -- The withdrawals pass is a pair literal; the access-list incorporation,
+  -- the item rule and the built list carry no state.
+  simp only [processWithdrawals] at hp
+  obtain ⟨q4, hq4, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
+  cases hp
+  have hc := processGeneralPurposeRequests_canonical
+    (benv := benvTxs.withState (processWithdrawalsState benvTxs.state wds))
+    ⟨processWithdrawalsState_canonical hb3.1 _, hb3.2⟩ hq4
+  exact hc
 
 /-- **Raw successful block transition preserves canonicality.** The output
 chain's execution state is the body's final state, and its original state is
@@ -5566,6 +5935,7 @@ theorem stateTransitionWith_canonical {rules : ForkRules} {ch : BlockChain}
   obtain ⟨u2, _, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨u3, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨u4, _, hp⟩ := Except.bind_eq_ok hp
   cases hp
   exact applyBody_canonical (by exact ⟨h, h⟩) hq
 
@@ -5699,8 +6069,10 @@ theorem stateTransitionWith_eq_ok {rules : ForkRules} {ch ch' : BlockChain}
   obtain ⟨u2, _, h⟩ := Except.bind_eq_ok h
   obtain ⟨q, _, h⟩ := Except.bind_eq_ok h
   obtain ⟨u3, hchk, h⟩ := Except.bind_eq_ok h
+  obtain ⟨u4, _, h⟩ := Except.bind_eq_ok h
   cases u1
   cases u3
+  cases u4
   cases h
   exact ⟨hvh, rfl,
     stateTransitionChecks_stateRoot (Except.mapError_eq_ok_iff.mp hchk)⟩
@@ -6135,5 +6507,83 @@ private def orderingGuardTopLevel (gas : Nat) : String × Nat × Bool × Bool :=
 -- Top-level dispatch has the same boundary: a cold delegated access priced at
 -- 3,000 with only 2,999 gas leaves the already-warm recipient as the sole one.
 #guard orderingGuardTopLevel 2999 = ("OutOfGasError", 2999, true, false)
+
+--------------- EIP-7928 BLOCK-LEVEL ACCESS LIST REGRESSIONS (G6) ---------------
+
+-- The builder against the pinned `update_builder_from_tx` on synthetic states,
+-- and the frame merge against the pinned snapshot's shared read sets. The
+-- pipeline's index assignment -- 0 for the two pre-execution system calls,
+-- `i + 1` for the `i`-th transaction, `n + 1` for withdrawals and each request
+-- call -- is what `applyBody` and `processTransaction` pass; the builder below
+-- is shown to file each incorporation under the index it is given, and the
+-- Glamsterdam corpus's multi-transaction blocks are the end-to-end evidence.
+
+private def balGuardA : Adr := 0x1000
+private def balGuardB : Adr := 0x2000
+private def balGuardPre : State :=
+  ((State.setBal .empty balGuardA 100).setStorVal balGuardA 1 7).setStorVal balGuardA 2 9
+
+/-- The built list without its code changes, which carry no `DecidableEq`. -/
+private def balGuardView (b : BalBuilder) :
+    List (Adr × List (B256 × List (Nat × B256)) × List B256 × List (Nat × B256) ×
+      List (Nat × UInt64)) :=
+  b.build.map fun c =>
+    (c.address, c.storageChanges, c.storageReads, c.balanceChanges, c.nonceChanges)
+
+-- A slot written back to its original value is no change and -- because
+-- `SSTORE` recorded it -- surfaces as a read.
+#guard balGuardView (({} : BalBuilder).incorporate 1 balGuardPre balGuardPre
+    [balGuardA] [(balGuardA, 1)]) ==
+  [(balGuardA, [], [1], [], [])]
+
+-- A slot both read and written appears only among the changes.
+#guard balGuardView (({} : BalBuilder).incorporate 1 balGuardPre
+    (balGuardPre.setStorVal balGuardA 1 8) [balGuardA] [(balGuardA, 1)]) ==
+  [(balGuardA, [(1, [(1, 8)])], [], [], [])]
+
+-- Three transactions, then withdrawals, each incorporated under its own index
+-- against the block's cumulative state, after a system call at index 0.
+#guard
+  let st0 := balGuardPre
+  let stSys := st0.setStorVal balGuardB 3 4
+  let st1 := stSys.setBal balGuardA 90
+  let st2 := st1.setBal balGuardA 80
+  let st3 := st2.setBal balGuardA 70
+  let st4 := st3.setBal balGuardA 170
+  let b := ({} : BalBuilder).incorporate 0 st0 stSys [balGuardB] []
+  let b := b.incorporate 1 stSys st1 [balGuardA] []
+  let b := b.incorporate 2 st1 st2 [balGuardA] []
+  let b := b.incorporate 3 st2 st3 [balGuardA] []
+  let b := b.incorporate 4 st3 st4 [balGuardA] []
+  balGuardView b ==
+    [(balGuardA, [], [], [(1, 90), (2, 80), (3, 70), (4, 170)], []),
+     (balGuardB, [(3, [(0, 4)])], [], [], [])]
+
+-- A created-then-self-destructed account leaves no state behind, so its
+-- storage writes are no diff, and the slots `SSTORE` recorded are reads
+-- (the pinned `destroyStorage` conversion).
+#guard balGuardView (({} : BalBuilder).incorporate 1 balGuardPre balGuardPre
+    [balGuardB] [(balGuardB, 5)]) ==
+  [(balGuardB, [], [5], [], [])]
+
+-- A failed child's reads survive the merge into its parent.
+#guard
+  let parent := initDevm (orderingGuardMessage amsterdamRules 100000)
+  let child := (parent.balReadAccount amsterdamRules balGuardB)
+    |>.balReadStorage amsterdamRules balGuardB 5
+  let merged := incorporateChildAmsterdamOnError parent child []
+  merged.meta.accountReads.contains balGuardB ∧
+    merged.meta.storageReads.contains (balGuardB, 5) ∧
+    ¬ parent.meta.accountReads.contains balGuardB
+
+-- The item rule: `items > gasLimit / itemCost` rejects; at the limit it admits.
+private def balGuardList (n : Nat) : BlockAccessList :=
+  [{ address := balGuardA, storageChanges := [], storageReads := (List.range n).map (·.toB256),
+     balanceChanges := [], nonceChanges := [], codeChanges := [] }]
+#guard (balGuardList 2).itemCount = 3
+#guard checkBlockAccessListGasLimit amsterdamRules 6000 (balGuardList 2) matches .ok _
+#guard checkBlockAccessListGasLimit amsterdamRules 6000 (balGuardList 3)
+  matches .error (.block (.blockAccessListGasLimit _))
+#guard checkBlockAccessListGasLimit bpo2Rules 6000 (balGuardList 3) matches .ok _
 
 end Jaune

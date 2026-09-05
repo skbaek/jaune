@@ -782,12 +782,16 @@ def genericCreateAmsterdam.step
     let calldata := devm.memory.data.sliceD memoryIndex memorySize 0
     let devm := devm.withReturnData []
     -- PREFLIGHT: nothing has been charged or withheld for the child yet.
+    -- `get_account(sender_address)` is a read (EIP-7928).
+    let devm := devm.balReadAccount sevm.benvStat.rules sevm.currentTarget
     let sender := devm.state.get sevm.currentTarget
     if sender.bal < endowment ∨ sender.nonce = UInt64.max ∨ sevm.depth = 0 then
       let devm ← devm.push 0
       return .done (.ok devm)
-    -- DESTINATION ACCESS: the creation charge, by existence alone.
+    -- DESTINATION ACCESS: the creation charge, by existence alone;
+    -- `is_account_alive(contract_address)` reads the destination (EIP-7928).
     let devm := addAccessedAddress devm newAddress
+    let devm := devm.balReadAccount sevm.benvStat.rules newAddress
     let newAccountCharged := (devm.getAcct newAddress).Empty
     let devm ←
       if newAccountCharged then chargeStateGas state.newAccount devm else .ok devm
@@ -1059,9 +1063,13 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
         let devm := addAccessedAddress devm callee
         let ⟨disablePrecompiles, newCodeAddress, delegatedAccessGasCost⟩ :=
           gasRules.delegationCost devm callee
+        -- `calculate_delegation_cost`: `get_account(to)` is a read (EIP-7928).
+        let devm := devm.balReadAccount sevm.benvStat.rules callee
         let extraGas := accessGas + transferCost + delegatedAccessGasCost
         Except.assert (extraGas + extendCost ≤ devm.gasLeft)
           ⟨.halt (.outOfGas .none), devm⟩
+        -- `get_account(code_address)` before the charge is a read (EIP-7928).
+        let devm := devm.balReadAccount sevm.benvStat.rules newCodeAddress
         let ⟨code, devm⟩ :=
           completeDelegationAccess devm disablePrecompiles newCodeAddress
         let devm ← chargeGas (extraGas + extendCost) devm
@@ -1141,9 +1149,13 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
         let devm := addAccessedAddress devm codeAddress
         let ⟨disablePrecompiles, newCodeAddress, delegatedAccessGasCost⟩ :=
           gasRules.delegationCost devm codeAddress
+        -- `calculate_delegation_cost`: `get_account(to)` is a read (EIP-7928).
+        let devm := devm.balReadAccount sevm.benvStat.rules codeAddress
         let extraGas := accessGas + transferCost + delegatedAccessGasCost
         Except.assert (extraGas + extendCost ≤ devm.gasLeft)
           ⟨.halt (.outOfGas .none), devm⟩
+        -- `get_account(code_address)` before the charge is a read (EIP-7928).
+        let devm := devm.balReadAccount sevm.benvStat.rules newCodeAddress
         let ⟨code, devm⟩ :=
           completeDelegationAccess devm disablePrecompiles newCodeAddress
         let ⟨msgCallCost, msgCallStipend⟩ :=
@@ -1205,9 +1217,13 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
         let devm := addAccessedAddress devm codeAddress
         let ⟨disablePrecompiles, newCodeAddress, delegatedAccessGasCost⟩ :=
           gasRules.delegationCost devm codeAddress
+        -- `calculate_delegation_cost`: `get_account(to)` is a read (EIP-7928).
+        let devm := devm.balReadAccount sevm.benvStat.rules codeAddress
         let extraGas := accessGas + transferCost + delegatedAccessGasCost
         Except.assert (extraGas + extendCost ≤ devm.gasLeft)
           ⟨.halt (.outOfGas .none), devm⟩
+        -- `get_account(code_address)` before the charge is a read (EIP-7928).
+        let devm := devm.balReadAccount sevm.benvStat.rules newCodeAddress
         let ⟨code, devm⟩ :=
           completeDelegationAccess devm disablePrecompiles newCodeAddress
         let ⟨msgCallCost, msgCallStipend⟩ :=
@@ -1269,9 +1285,13 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
         let devm := addAccessedAddress devm codeAddress
         let ⟨disablePrecompiles, newCodeAddress, delegatedAccessGasCost⟩ :=
           gasRules.delegationCost devm codeAddress
+        -- `calculate_delegation_cost`: `get_account(to)` is a read (EIP-7928).
+        let devm := devm.balReadAccount sevm.benvStat.rules codeAddress
         let extraGas := accessGas + transferCost + delegatedAccessGasCost
         Except.assert (extraGas + extendCost ≤ devm.gasLeft)
           ⟨.halt (.outOfGas .none), devm⟩
+        -- `get_account(code_address)` before the charge is a read (EIP-7928).
+        let devm := devm.balReadAccount sevm.benvStat.rules newCodeAddress
         let ⟨code, devm⟩ :=
           completeDelegationAccess devm disablePrecompiles newCodeAddress
         let ⟨msgCallCost, msgCallStipend⟩ :=
@@ -2265,6 +2285,11 @@ structure MsgCallOutput : Type where
   stateGasLeft : Nat := 0
   /-- Net state gas consumed by the transaction; refunds may make it negative. -/
   stateGasUsed : Int := 0
+  /-- EIP-7928: the accounts the top frame and its children read (goal C).
+  Empty on the legacy path and under `rules.bal = none`. -/
+  accountReads : AdrSet := .emptyWithCapacity
+  /-- EIP-7928: the storage slots read. -/
+  storageReads : KeySet := .emptyWithCapacity
 
 def Except.bimap
   {ε : Type u0} {δ : Type u1} {ξ : Type u2} {υ : Type u3}
@@ -3130,7 +3155,11 @@ theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
       have hbase : (addAccessedAddress g.2 b.1).Canonical :=
         Devm.Canonical.of_world_eq hg rfl
       refine Except.CanonicalOn.bind (Except.canonicalOn_assert hbase) fun _ _ => ?_
-      have haccess := completeDelegationAccess_canonical hbase
+      have haccess := completeDelegationAccess_canonical
+        (show (Devm.balReadAccount sevm.benvStat.rules
+            (sevm.benvStat.rules.gas.delegationCost (addAccessedAddress g.2 b.1) b.1).2.1
+            (Devm.balReadAccount sevm.benvStat.rules b.1 (addAccessedAddress g.2 b.1))).Canonical
+          from hbase)
         (sevm.benvStat.rules.gas.delegationCost
           (addAccessedAddress g.2 b.1) b.1).1
         (sevm.benvStat.rules.gas.delegationCost
@@ -3184,7 +3213,11 @@ theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
       have hbase : (addAccessedAddress g.2 b.1).Canonical :=
         Devm.Canonical.of_world_eq hg rfl
       refine Except.CanonicalOn.bind (Except.canonicalOn_assert hbase) fun _ _ => ?_
-      have haccess := completeDelegationAccess_canonical hbase
+      have haccess := completeDelegationAccess_canonical
+        (show (Devm.balReadAccount sevm.benvStat.rules
+            (sevm.benvStat.rules.gas.delegationCost (addAccessedAddress g.2 b.1) b.1).2.1
+            (Devm.balReadAccount sevm.benvStat.rules b.1 (addAccessedAddress g.2 b.1))).Canonical
+          from hbase)
         (sevm.benvStat.rules.gas.delegationCost
           (addAccessedAddress g.2 b.1) b.1).1
         (sevm.benvStat.rules.gas.delegationCost
@@ -3223,7 +3256,11 @@ theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
       have hbase : (addAccessedAddress f.2 b.1).Canonical :=
         Devm.Canonical.of_world_eq hf rfl
       refine Except.CanonicalOn.bind (Except.canonicalOn_assert hbase) fun _ _ => ?_
-      have haccess := completeDelegationAccess_canonical hbase
+      have haccess := completeDelegationAccess_canonical
+        (show (Devm.balReadAccount sevm.benvStat.rules
+            (sevm.benvStat.rules.gas.delegationCost (addAccessedAddress f.2 b.1) b.1).2.1
+            (Devm.balReadAccount sevm.benvStat.rules b.1 (addAccessedAddress f.2 b.1))).Canonical
+          from hbase)
         (sevm.benvStat.rules.gas.delegationCost
           (addAccessedAddress f.2 b.1) b.1).1
         (sevm.benvStat.rules.gas.delegationCost
@@ -3262,7 +3299,11 @@ theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
       have hbase : (addAccessedAddress f.2 b.1).Canonical :=
         Devm.Canonical.of_world_eq hf rfl
       refine Except.CanonicalOn.bind (Except.canonicalOn_assert hbase) fun _ _ => ?_
-      have haccess := completeDelegationAccess_canonical hbase
+      have haccess := completeDelegationAccess_canonical
+        (show (Devm.balReadAccount sevm.benvStat.rules
+            (sevm.benvStat.rules.gas.delegationCost (addAccessedAddress f.2 b.1) b.1).2.1
+            (Devm.balReadAccount sevm.benvStat.rules b.1 (addAccessedAddress f.2 b.1))).Canonical
+          from hbase)
         (sevm.benvStat.rules.gas.delegationCost
           (addAccessedAddress f.2 b.1) b.1).1
         (sevm.benvStat.rules.gas.delegationCost

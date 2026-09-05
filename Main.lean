@@ -55,6 +55,91 @@ def getTxExMap (j : Lean.Json) : IO (Option String × Bytes) := do
     let exs ← exj.toIoString
     pure ⟨.some exs, rlp⟩
 
+/-- The block-level access list a Glamsterdam fixture publishes beside an
+Amsterdam block (`rlp_decoded.blockAccessList`, or `blockAccessList` on a
+hand-authored block), read in its published order with no sorting and no
+deduplication: the refinement in `refineBlockAccessListRejection` needs the
+list exactly as delivered. The JSON prints its keys in an order that is not
+the RLP field order, so the structure is rebuilt field by field. -/
+def Lean.Json.toIoBlockAccessList (j : Lean.Json) : IO BlockAccessList := do
+  let accounts ← j.toIoList
+  accounts.mapM fun acc => do
+    let indexOf (c : Lean.Json) : IO Nat :=
+      (c.find "blockAccessIndex" >>= Lean.Json.toIoQuantityB64 "blockAccessIndex")
+        <&> UInt64.toNat
+    let address ← acc.find "address" >>= Lean.Json.toIoAdr
+    let storageChanges ← (acc.find "storageChanges" >>= Lean.Json.toIoList) >>=
+      List.mapM fun sc => do
+        let slot ← sc.find "slot" >>= Lean.Json.toIoQuantityB256 "slot"
+        let changes ← (sc.find "slotChanges" >>= Lean.Json.toIoList) >>= List.mapM fun c => do
+          let i ← indexOf c
+          let v ← c.find "postValue" >>= Lean.Json.toIoQuantityB256 "postValue"
+          pure (i, v)
+        pure (slot, changes)
+    let storageReads ← (acc.find "storageReads" >>= Lean.Json.toIoList) >>=
+      List.mapM (Lean.Json.toIoQuantityB256 "storageReads")
+    let balanceChanges ← (acc.find "balanceChanges" >>= Lean.Json.toIoList) >>=
+      List.mapM fun c => do
+        let i ← indexOf c
+        let v ← c.find "postBalance" >>= Lean.Json.toIoQuantityB256 "postBalance"
+        pure (i, v)
+    let nonceChanges ← (acc.find "nonceChanges" >>= Lean.Json.toIoList) >>=
+      List.mapM fun c => do
+        let i ← indexOf c
+        let n ← c.find "postNonce" >>= Lean.Json.toIoQuantityB64 "postNonce"
+        pure (i, n)
+    let codeChanges ← (acc.find "codeChanges" >>= Lean.Json.toIoList) >>=
+      List.mapM fun c => do
+        let i ← indexOf c
+        let code ← c.find "newCode" >>= Lean.Json.toIoBytes
+        pure (i, code.toByteArray)
+    pure { address, storageChanges, storageReads, balanceChanges, nonceChanges, codeChanges }
+
+/-- Refine a consensus `blockAccessListHash` rejection with the list the fixture
+publishes (goal C, fixed decision 9).
+
+Consensus sees one thing: the hash of the list it built differs from the
+header's `blockAccessListHash`, because an Amsterdam block carries only the
+hash. The corpus names three reasons, and the fixture's published list -- a
+verification aid, not part of the block -- is what tells them apart, so the
+runner, which alone has it, does the telling:
+
+- the header's hash is **not** the published list's hash: the header commits to
+  something else, and the consensus identity `INVALID_BAL_HASH` stands;
+- it is, and the published list's canonical re-arrangement
+  (`BlockAccessList.canonicalise`) hashes to the computed list: the content is
+  right and only the form is wrong -- `INCORRECT_BLOCK_FORMAT`;
+- it is, and the content differs -- `INVALID_BLOCK_ACCESS_LIST`.
+
+A block without a published list keeps its consensus identity. Classification
+reads the typed rejection and the decoded header, never a rendered message. -/
+def refineBlockAccessListRejection (blockJson : Lean.Json) (blockRlp : Bytes) :
+    BlockRejection → IO BlockRejection
+  | .block (.blockAccessListHash computed detail) => do
+    let published? := blockJson.find? "blockAccessList" <|>
+      (blockJson.find? "rlp_decoded" >>= Lean.Json.find? "blockAccessList")
+    match published? with
+    | none => pure (.block (.blockAccessListHash computed detail))
+    | some listJson =>
+      let published ← listJson.toIoBlockAccessList
+      let header ← match rlpToBlockE blockRlp with
+        | .ok ⟨block, _⟩ => pure block.header
+        | .error reason =>
+          .throw s!"error : block RLP undecodable while refining a block access \
+            list rejection: {reason.render}"
+      let publishedHash := published.hash
+      if header.blockAccessListHash ≠ some publishedHash then
+        pure (.block (.blockAccessListHash computed detail))
+      else if published.canonicalise.hash = computed then
+        pure (.block (.blockAccessListFormat (.text
+          s!"published block access list ({published.length} entries) has the computed \
+             content {computed} in a non-canonical arrangement, hash {publishedHash}")))
+      else
+        pure (.block (.blockAccessListContent (.text
+          s!"published block access list hash = {publishedHash} (header-consistent) ≠ \
+             computed block access list hash = {computed}")))
+  | rejection => pure rejection
+
 def Lean.Json.toHeader (json : Lean.Json) : IO Header := do
   let parentHash ← json.find "parentHash" >>= Lean.Json.toIoB256
   let ommersHash ← json.find "uncleHash" >>= Lean.Json.toIoB256
@@ -470,7 +555,10 @@ def processBlockJsons (spec : NetworkSpec) (chainId : UInt64) (store : ChainStor
       | some expected =>
         requireExpectedFailure idx chainname expected failure.render none
         processBlockJsons spec chainId store rest
-    | .ok (.inr rejection) =>
+    | .ok (.inr consensusRejection) =>
+      -- An Amsterdam access-list hash rejection is refined with the fixture's
+      -- published list before scoring; every other rejection passes through.
+      let rejection ← refineBlockAccessListRejection blockJson blockRlp consensusRejection
       match expected? with
       | none =>
         .throw s!"BLOCK #{idx} ({chainname}) was expected valid but failed\n\

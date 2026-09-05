@@ -1077,6 +1077,14 @@ One tag for both directions and both fields (EIP-7928's block-access-list hash
 and EIP-7843's slot number), because it is one rule: a header carries exactly
 the fields its fork defines. Which field and which direction is the detail. -/
 def headerFieldPresenceTag : String := "HeaderFieldPresenceError"
+-- EIP-7928 (goal C, fixed decision 9): four reasons of their own -- the
+-- header's hash against the computed list (the one consensus observes), the
+-- published list's content and form (refined by the fixture runner from the
+-- list a fixture publishes), and the item rule.
+def blockAccessListHashTag : String := "InvalidBlockAccessListHashError"
+def blockAccessListContentTag : String := "InvalidBlockAccessListError"
+def blockAccessListFormatTag : String := "MalformedBlockAccessListError"
+def blockAccessListGasLimitTag : String := "BlockAccessListGasLimitExceededError"
 
 /-- Every block-rejection tag. The single source of truth for the distinctness
 checks and the whole-list constructor/tag pin. -/
@@ -1088,13 +1096,15 @@ def blockExceptionTags : List String :=
     stateRootTag, transactionsRootTag, receiptsRootTag, logBloomTag,
     withdrawalsRootTag, headerNonceTag, excessBlobGasTag, blobGasUsedTag,
     requestsHashTag, depositEventLayoutTag, systemContractCallFailedTag,
-    blockRlpSizeExceededTag, headerFieldPresenceTag ]
+    blockRlpSizeExceededTag, headerFieldPresenceTag, blockAccessListHashTag,
+    blockAccessListContentTag, blockAccessListFormatTag,
+    blockAccessListGasLimitTag ]
 
 -- The tags are distinct, and none is a prefix of another, so no rendered
 -- reason can be read as another by any " : "-delimited reader -- and none is
 -- the broad category the vocabulary replaced.
-#guard blockExceptionTags.length = 25
-#guard blockExceptionTags.eraseDups.length = 25
+#guard blockExceptionTags.length = 29
+#guard blockExceptionTags.eraseDups.length = 29
 #guard blockExceptionTags.all fun t =>
   (blockExceptionTags.filter fun u => t.isPrefixOf u).length = 1
 #guard blockExceptionTags.all fun t => t ≠ "InvalidBlock"
@@ -1839,6 +1849,18 @@ structure Meta : Type where
   accessedAddresses : AdrSet
   accessedStorageKeys : KeySet
   createdAccounts : AdrSet
+  /-- EIP-7928 (goal C): the accounts this frame and its incorporated children
+  read through a state accessor -- the pinned `state_tracker`'s
+  `account_reads`, transcribed primitive by primitive (goal C, Appendix B).
+  Recorded only under `rules.bal = some _`: `Devm.balReadAccount` is the
+  identity otherwise, so no frame under Prague–BPO2 rules ever allocates it.
+  Defaulted so that every `Meta` literal keeps elaborating. The set survives a
+  child's halt or revert -- a failed child's `Devm` keeps its `Meta` -- and is
+  merged into the parent at every incorporation, which is the pinned "shared
+  by reference, never rolled back" rule. -/
+  accountReads : AdrSet := .emptyWithCapacity
+  /-- EIP-7928: the storage slots read (`get_storage`), under the same rules. -/
+  storageReads : KeySet := .emptyWithCapacity
 
 @[ext]
 structure World : Type where
@@ -3140,6 +3162,134 @@ def Meta.addAccessedStorageKey (view : Meta) (a : Adr) (k : B256) : Meta :=
 def addAccessedStorageKey (devm : Devm) (a : Adr) (k : B256) : Devm :=
   liftMachMetaPure (fun mach view => (mach, view.addAccessedStorageKey a k)) devm
 
+/-- EIP-7928: record an account read (`state_tracker.get_account_optional`
+and every accessor built on it). -/
+def Meta.readAccount (view : Meta) (a : Adr) : Meta :=
+  {view with accountReads := view.accountReads.insert a}
+
+/-- EIP-7928: record a storage read (`state_tracker.get_storage`). -/
+def Meta.readStorage (view : Meta) (a : Adr) (k : B256) : Meta :=
+  {view with storageReads := view.storageReads.insert ⟨a, k⟩}
+
+/-- Record an account read for the block-level access list, under rules that
+carry one; the identity under `rules.bal = none`, so that nothing a Prague–BPO2
+frame does can observe the read set (goal C, fixed decision 2). Placed at the
+interpreter sites where the pinned code calls a state accessor -- after the
+charge that precedes the access, so an out-of-gas frame records nothing the
+pinned frame would not. -/
+def Devm.balReadAccount (rules : ForkRules) (a : Adr) (devm : Devm) : Devm :=
+  -- The switch sits inside `setMeta` so that `mach` and `world` are preserved
+  -- *definitionally* in both branches: every existing proof that reads through
+  -- a meta-only update by `rfl` keeps doing so.
+  devm.setMeta (if rules.bal.isSome then devm.meta.readAccount a else devm.meta)
+
+/-- The storage-read twin of `Devm.balReadAccount`. -/
+def Devm.balReadStorage (rules : ForkRules) (a : Adr) (k : B256) (devm : Devm) :
+    Devm :=
+  devm.setMeta (if rules.bal.isSome then devm.meta.readStorage a k else devm.meta)
+
+-- The recorders touch `meta` and nothing else; every measure, machine field
+-- and world projection sees through them, and under `bal = none` they vanish.
+@[simp] theorem Devm.balReadAccount_mach (rules : ForkRules) (a : Adr) (devm : Devm) :
+    (devm.balReadAccount rules a).mach = devm.mach := by
+  rfl
+@[simp] theorem Devm.balReadAccount_world (rules : ForkRules) (a : Adr) (devm : Devm) :
+    (devm.balReadAccount rules a).world = devm.world := by
+  rfl
+@[simp] theorem Devm.balReadAccount_gasLeft (rules : ForkRules) (a : Adr) (devm : Devm) :
+    (devm.balReadAccount rules a).gasLeft = devm.gasLeft := by
+  rfl
+@[simp] theorem Devm.balReadAccount_gasMeasure (rules : ForkRules) (a : Adr) (devm : Devm) :
+    (devm.balReadAccount rules a).gasMeasure = devm.gasMeasure := by
+  rfl
+@[simp] theorem Devm.balReadAccount_stack (rules : ForkRules) (a : Adr) (devm : Devm) :
+    (devm.balReadAccount rules a).stack = devm.stack := by
+  rfl
+@[simp] theorem Devm.balReadAccount_state (rules : ForkRules) (a : Adr) (devm : Devm) :
+    (devm.balReadAccount rules a).state = devm.state := by
+  rfl
+@[simp] theorem Devm.balReadAccount_stateGas (rules : ForkRules) (a : Adr) (devm : Devm) :
+    (devm.balReadAccount rules a).stateGas = devm.stateGas := by
+  rfl
+@[simp] theorem Devm.balReadAccount_stateGasLeft (rules : ForkRules) (a : Adr) (devm : Devm) :
+    (devm.balReadAccount rules a).stateGasLeft = devm.stateGasLeft := by
+  rfl
+@[simp] theorem Devm.balReadAccount_accessedAddresses (rules : ForkRules) (a : Adr)
+    (devm : Devm) :
+    (devm.balReadAccount rules a).accessedAddresses = devm.accessedAddresses := by
+  unfold Devm.balReadAccount Meta.readAccount; split <;> rfl
+@[simp] theorem Devm.balReadAccount_accessedStorageKeys (rules : ForkRules) (a : Adr)
+    (devm : Devm) :
+    (devm.balReadAccount rules a).accessedStorageKeys = devm.accessedStorageKeys := by
+  unfold Devm.balReadAccount Meta.readAccount; split <;> rfl
+@[simp] theorem Devm.balReadAccount_createdAccounts (rules : ForkRules) (a : Adr)
+    (devm : Devm) :
+    (devm.balReadAccount rules a).createdAccounts = devm.createdAccounts := by
+  unfold Devm.balReadAccount Meta.readAccount; split <;> rfl
+@[simp] theorem Devm.balReadAccount_refundCounter (rules : ForkRules) (a : Adr)
+    (devm : Devm) :
+    (devm.balReadAccount rules a).refundCounter = devm.refundCounter := by
+  unfold Devm.balReadAccount Meta.readAccount; split <;> rfl
+@[simp] theorem Devm.balReadAccount_logs (rules : ForkRules) (a : Adr) (devm : Devm) :
+    (devm.balReadAccount rules a).logs = devm.logs := by
+  unfold Devm.balReadAccount Meta.readAccount; split <;> rfl
+@[simp] theorem Devm.balReadAccount_transientStorage (rules : ForkRules) (a : Adr)
+    (devm : Devm) :
+    (devm.balReadAccount rules a).transientStorage = devm.transientStorage := by
+  rfl
+theorem Devm.balReadAccount_none {rules : ForkRules} (h : rules.bal = none) (a : Adr)
+    (devm : Devm) : devm.balReadAccount rules a = devm := by
+  unfold Devm.balReadAccount; simp [h, Devm.setMeta]
+
+@[simp] theorem Devm.balReadStorage_mach (rules : ForkRules) (a : Adr) (k : B256)
+    (devm : Devm) : (devm.balReadStorage rules a k).mach = devm.mach := by
+  rfl
+@[simp] theorem Devm.balReadStorage_world (rules : ForkRules) (a : Adr) (k : B256)
+    (devm : Devm) : (devm.balReadStorage rules a k).world = devm.world := by
+  rfl
+@[simp] theorem Devm.balReadStorage_gasLeft (rules : ForkRules) (a : Adr) (k : B256)
+    (devm : Devm) : (devm.balReadStorage rules a k).gasLeft = devm.gasLeft := by
+  rfl
+@[simp] theorem Devm.balReadStorage_gasMeasure (rules : ForkRules) (a : Adr) (k : B256)
+    (devm : Devm) : (devm.balReadStorage rules a k).gasMeasure = devm.gasMeasure := by
+  rfl
+@[simp] theorem Devm.balReadStorage_stack (rules : ForkRules) (a : Adr) (k : B256)
+    (devm : Devm) : (devm.balReadStorage rules a k).stack = devm.stack := by
+  rfl
+@[simp] theorem Devm.balReadStorage_state (rules : ForkRules) (a : Adr) (k : B256)
+    (devm : Devm) : (devm.balReadStorage rules a k).state = devm.state := by
+  rfl
+@[simp] theorem Devm.balReadStorage_stateGas (rules : ForkRules) (a : Adr) (k : B256)
+    (devm : Devm) : (devm.balReadStorage rules a k).stateGas = devm.stateGas := by
+  rfl
+@[simp] theorem Devm.balReadStorage_stateGasLeft (rules : ForkRules) (a : Adr) (k : B256)
+    (devm : Devm) : (devm.balReadStorage rules a k).stateGasLeft = devm.stateGasLeft := by
+  rfl
+@[simp] theorem Devm.balReadStorage_accessedAddresses (rules : ForkRules) (a : Adr)
+    (k : B256) (devm : Devm) :
+    (devm.balReadStorage rules a k).accessedAddresses = devm.accessedAddresses := by
+  unfold Devm.balReadStorage Meta.readStorage; split <;> rfl
+@[simp] theorem Devm.balReadStorage_accessedStorageKeys (rules : ForkRules) (a : Adr)
+    (k : B256) (devm : Devm) :
+    (devm.balReadStorage rules a k).accessedStorageKeys = devm.accessedStorageKeys := by
+  unfold Devm.balReadStorage Meta.readStorage; split <;> rfl
+@[simp] theorem Devm.balReadStorage_createdAccounts (rules : ForkRules) (a : Adr)
+    (k : B256) (devm : Devm) :
+    (devm.balReadStorage rules a k).createdAccounts = devm.createdAccounts := by
+  unfold Devm.balReadStorage Meta.readStorage; split <;> rfl
+@[simp] theorem Devm.balReadStorage_refundCounter (rules : ForkRules) (a : Adr)
+    (k : B256) (devm : Devm) :
+    (devm.balReadStorage rules a k).refundCounter = devm.refundCounter := by
+  unfold Devm.balReadStorage Meta.readStorage; split <;> rfl
+@[simp] theorem Devm.balReadStorage_transientStorage (rules : ForkRules) (a : Adr)
+    (k : B256) (devm : Devm) :
+    (devm.balReadStorage rules a k).transientStorage = devm.transientStorage := by
+  rfl
+theorem Devm.balReadStorage_none {rules : ForkRules} (h : rules.bal = none) (a : Adr)
+    (k : B256) (devm : Devm) : devm.balReadStorage rules a k = devm := by
+  unfold Devm.balReadStorage; simp [h, Devm.setMeta]
+
+
 def addAccountToDelete (devm : Devm) (a : Adr) : Devm :=
   devm.withAccountsToDelete (devm.accountsToDelete.insert a)
 
@@ -3580,7 +3730,21 @@ def sstoreAmsterdamStateRefund (state : StateGasRules)
     formula. The warm half is a global still: no fork moves it. A `GasSchedule`
     parameter rather than a `Sevm` one, because that is all this core reads and
     it has no other reason to see the frame. -/
-def Rinst.balanceCore (gas : GasSchedule) (world : World) (mach : Mach)
+-- The read recorders are meta-only, so every state projection sees through them.
+@[simp] theorem Devm.balReadAccount_getAcct (rules : ForkRules) (a x : Adr) (devm : Devm) :
+    (devm.balReadAccount rules a).getAcct x = devm.getAcct x := rfl
+@[simp] theorem Devm.balReadAccount_getBal (rules : ForkRules) (a x : Adr) (devm : Devm) :
+    (devm.balReadAccount rules a).getBal x = devm.getBal x := rfl
+@[simp] theorem Devm.balReadAccount_getCode (rules : ForkRules) (a x : Adr) (devm : Devm) :
+    (devm.balReadAccount rules a).getCode x = devm.getCode x := rfl
+@[simp] theorem Devm.balReadAccount_getStorVal (rules : ForkRules) (a x : Adr) (k : B256)
+    (devm : Devm) : (devm.balReadAccount rules a).getStorVal x k = devm.getStorVal x k := rfl
+@[simp] theorem Devm.balReadStorage_getAcct (rules : ForkRules) (a x : Adr) (k : B256)
+    (devm : Devm) : (devm.balReadStorage rules a k).getAcct x = devm.getAcct x := rfl
+@[simp] theorem Devm.balReadStorage_getStorVal (rules : ForkRules) (a x : Adr) (k k' : B256)
+    (devm : Devm) : (devm.balReadStorage rules a k).getStorVal x k' = devm.getStorVal x k' := rfl
+
+def Rinst.balanceCore (rules : ForkRules) (world : World) (mach : Mach)
     (view : Meta) : Footprint.Outcome (Mach × Meta) Unit :=
   match mach.pop with
   | .error (err, mach') => .error (err, (mach', view))
@@ -3588,13 +3752,16 @@ def Rinst.balanceCore (gas : GasSchedule) (world : World) (mach : Mach)
     let a := x.toAdr
     let warm := a ∈ view.accessedAddresses
     let view' := if warm then view else view.addAccessedAddress a
-    let cost := if warm then gasWarmAccess else gas.coldAccountAccess
+    let cost := if warm then gasWarmAccess else rules.gas.coldAccountAccess
     match Mach.chargeGas cost mach' with
     | .error (err, mach'') => .error (err, (mach'', view'))
     | .ok (_, mach'') =>
+      -- `environment.py` `balance`: `charge_gas` then `get_account(address)`;
+      -- the read is recorded after the charge and before the push (EIP-7928).
+      let view'' := if rules.bal.isSome then view'.readAccount a else view'
       match Mach.push (world.state.get a).bal mach'' with
-      | .error (err, mach''') => .error (err, (mach''', view'))
-      | .ok (_, mach''') => .ok ((), (mach''', view'))
+      | .error (err, mach''') => .error (err, (mach''', view''))
+      | .ok (_, mach''') => .ok ((), (mach''', view''))
 
 def Rinst.runCore
   (pc : Nat)
@@ -3611,7 +3778,7 @@ def Rinst.runCore
       calculateBlobGasPrice sevm.benvStat.rules.blob sevm.benvStat.excessBlobGas
     pushItem fee.toB256 gBase devm
   | .balance =>
-    liftMachMetaWorldExecution (Rinst.balanceCore sevm.benvStat.rules.gas) devm
+    liftMachMetaWorldExecution (Rinst.balanceCore sevm.benvStat.rules) devm
   | .origin => pushItem sevm.tenvStat.origin.toB256 gBase devm
   | .caller => pushItem sevm.caller.toB256 gBase devm
   | .callvalue => pushItem sevm.value gBase devm
@@ -3656,6 +3823,8 @@ def Rinst.runCore
       else
         chargeGas (gas.coldAccountAccess + gas.codeReadSurcharge)
           (addAccessedAddress devm adr)
+    -- `get_account(address)` after the charge (EIP-7928).
+    let devm := devm.balReadAccount sevm.benvStat.rules adr
     let codesize := (devm.getCode adr).size.toB256
     devm.push codesize
   | .extcodecopy => do
@@ -3679,6 +3848,8 @@ def Rinst.runCore
           (gas.coldAccountAccess + gas.codeReadSurcharge + copy_gas_cost
             + extend_memory_cost)
           (addAccessedAddress devm adr)
+    -- `get_account(address)` after the charge (EIP-7928).
+    let devm := devm.balReadAccount sevm.benvStat.rules adr
     let code := devm.getCode adr
     let value := code.sliceD code_start_index size (Linst.toUInt8 .stop)
     .ok (devm.memWrite memory_start_index value)
@@ -3707,12 +3878,19 @@ def Rinst.runCore
       else
         chargeGas sevm.benvStat.rules.gas.coldAccountAccess
           (addAccessedAddress devm adr)
+    -- `get_account(address)` after the charge (EIP-7928).
+    let devm := devm.balReadAccount sevm.benvStat.rules adr
     let account := devm.getAcct adr
     let codehash : B256 :=
       if account.Empty then 0
       else ByteArray.keccak 0 account.code.size account.code
     devm.push codehash
-  | .selfbalance => pushItem (devm.getBal sevm.currentTarget) gLow devm
+  -- `environment.py` `self_balance`: `charge_gas(LOW)`, then `get_account`
+  -- on the current target -- recorded for EIP-7928 -- then the push.
+  | .selfbalance => do
+    let devm ← chargeGas gLow devm
+    (devm.balReadAccount sevm.benvStat.rules sevm.currentTarget).push
+      (devm.getBal sevm.currentTarget)
   | .chainid => pushItem sevm.benvStat.chainId.toB256 gBase devm
   | .number => pushItem sevm.benvStat.number.toB256 gBase devm
   | .timestamp => pushItem sevm.benvStat.time gBase devm
@@ -3817,6 +3995,8 @@ def Rinst.runCore
       else
         chargeGas gasColdSload
           (addAccessedStorageKey devm ct key)
+    -- `get_storage` after the charge (EIP-7928).
+    let devm := devm.balReadStorage sevm.benvStat.rules ct key
     devm.push (devm.getStorVal ct key)
   | .tload => do
     let ⟨key, devm⟩ ← devm.pop
@@ -3838,6 +4018,9 @@ def Rinst.runCore
         ⟨.halt (.outOfGas .none), devm⟩
       let ct := sevm.currentTarget
       let original_value := getOrigStorVal sevm ct key
+      -- `get_storage_original` records nothing; `get_storage` records the
+      -- slot (EIP-7928).
+      let devm := devm.balReadStorage sevm.benvStat.rules ct key
       let current_value := devm.getStorVal ct key
       let ⟨devm, gasCost2⟩ ← .ok <|
         if ⟨ct, key⟩ ∉ devm.accessedStorageKeys then
@@ -3862,7 +4045,9 @@ def Rinst.runCore
           devm.refundCounter
       let devm ← chargeGas gasCost3 devm
       assertDynamic sevm devm
-      .ok (devm.setStorVal sevm.currentTarget key new_value)
+      -- `set_storage` asserts `get_account_optional(address)`: an account read.
+      .ok ((devm.balReadAccount sevm.benvStat.rules ct).setStorVal
+        sevm.currentTarget key new_value)
     | some state => do
       -- The static check now precedes everything, including the pops.
       assertDynamic sevm devm
@@ -3880,6 +4065,9 @@ def Rinst.runCore
       -- STATE ACCESS. Only now is the slot read, and only now is it warmed.
       let devm := if cold then addAccessedStorageKey devm ct key else devm
       let original_value := getOrigStorVal sevm ct key
+      -- `get_storage_original` records nothing; `get_storage` records the
+      -- slot (EIP-7928).
+      let devm := devm.balReadStorage sevm.benvStat.rules ct key
       let current_value := devm.getStorVal ct key
       let devm := devm.withRefundCounter <|
         sstoreAmsterdamRefundCounter
@@ -3902,7 +4090,8 @@ def Rinst.runCore
         chargeStateGas
           (sstoreAmsterdamStateGas state new_value original_value current_value)
           devm
-      .ok (devm.setStorVal ct key new_value)
+      -- `set_storage` asserts `get_account_optional(address)`: an account read.
+      .ok ((devm.balReadAccount sevm.benvStat.rules ct).setStorVal ct key new_value)
   | .tstore =>
     match sevm.benvStat.rules.stateGas with
     | none => do
@@ -4457,6 +4646,10 @@ def Linst.run (sevm : Sevm) (devm : Devm) :
     | none => do
       let donor := sevm.currentTarget
       let ⟨donee, devm⟩ ← devm.popToAdr
+      -- `is_account_alive(beneficiary)` and `get_account(originator)`
+      -- (EIP-7928; the identity under this lane's `bal = none`).
+      let devm := (devm.balReadAccount sevm.benvStat.rules donee).balReadAccount
+        sevm.benvStat.rules donor
       let donorBal ← .ok (devm.getAcct sevm.currentTarget).bal
       let ⟨devm, gasCost2⟩ ← .ok <|
         if donee ∉ devm.accessedAddresses
@@ -4490,8 +4683,12 @@ def Linst.run (sevm : Sevm) (devm : Devm) :
         gasSelfDestruct +
           (if cold then sevm.benvStat.rules.gas.coldAccountAccess else 0)
       .assert (gasCost ≤ devm.gasLeft) ⟨.halt (.outOfGas .none), devm⟩
-      -- STATE ACCESS.
+      -- STATE ACCESS: the beneficiary is warmed, then `is_account_alive` reads
+      -- it and `get_account` reads the originator (EIP-7928), before the
+      -- charges below.
       let devm := if cold then addAccessedAddress devm donee else devm
+      let devm := (devm.balReadAccount sevm.benvStat.rules donee).balReadAccount
+        sevm.benvStat.rules donor
       let donorBal := (devm.getAcct donor).bal
       -- STATE GAS. A sweep that will create the beneficiary pays the account
       -- write and the creation. Execution gas before state gas.
@@ -4526,7 +4723,11 @@ def incorporateChildOnError (parent child : Devm) (returnData : Bytes) : Devm :=
   let parent := parent.setMeta
     {parent.meta with
       createdAccounts := child.createdAccounts
-      returnData := returnData}
+      returnData := returnData
+      -- EIP-7928: a failed child's reads survive (the pinned snapshot shares
+      -- the read sets by reference and rolls back only the writes).
+      accountReads := parent.meta.accountReads.union child.meta.accountReads
+      storageReads := parent.meta.storageReads.union child.meta.storageReads}
   parent.setWorld
     {parent.world with
       state := child.state
@@ -4543,7 +4744,9 @@ def incorporateChildOnSuccess (parent child : Devm) (returnData : Bytes) : Devm 
       accountsToDelete := parent.accountsToDelete.union child.accountsToDelete
       returnData := returnData
       accessedAddresses := parent.accessedAddresses.union child.accessedAddresses
-      accessedStorageKeys := parent.accessedStorageKeys.union child.accessedStorageKeys}
+      accessedStorageKeys := parent.accessedStorageKeys.union child.accessedStorageKeys
+      accountReads := parent.meta.accountReads.union child.meta.accountReads
+      storageReads := parent.meta.storageReads.union child.meta.storageReads}
   parent.setWorld
     {parent.world with
       state := child.state
@@ -4608,7 +4811,11 @@ def incorporateChildAmsterdamOnError (parent child : Devm) (returnData : Bytes) 
     {parent.meta with
       createdAccounts := child.createdAccounts
       refundCounter := parent.refundCounter + child.refundCounter
-      returnData := returnData}
+      returnData := returnData
+      -- EIP-7928: a failed child's reads survive (the pinned snapshot shares
+      -- the read sets by reference and rolls back only the writes).
+      accountReads := parent.meta.accountReads.union child.meta.accountReads
+      storageReads := parent.meta.storageReads.union child.meta.storageReads}
   parent.setWorld
     {parent.world with
       state := child.state
@@ -4638,7 +4845,9 @@ def incorporateChildAmsterdamOnSuccess (parent child : Devm) (returnData : Bytes
       accountsToDelete := parent.accountsToDelete.union child.accountsToDelete
       returnData := returnData
       accessedAddresses := parent.accessedAddresses.union child.accessedAddresses
-      accessedStorageKeys := parent.accessedStorageKeys.union child.accessedStorageKeys}
+      accessedStorageKeys := parent.accessedStorageKeys.union child.accessedStorageKeys
+      accountReads := parent.meta.accountReads.union child.meta.accountReads
+      storageReads := parent.meta.storageReads.union child.meta.storageReads}
   parent.setWorld
     {parent.world with
       state := child.state
@@ -5049,9 +5258,9 @@ theorem Devm.withRefundCounter_stateGasZero {devm : Devm}
 theorem addAccountToDelete_stateGasZero {devm : Devm} (h : devm.StateGasZero)
     (adr : Adr) : (addAccountToDelete devm adr).StateGasZero := h
 
-theorem Rinst.balanceCore_stateGas_eq (gas : GasSchedule) (world : World)
+theorem Rinst.balanceCore_stateGas_eq (rules : ForkRules) (world : World)
     (mach : Mach) (view : Meta) :
-    Footprint.MachMetaStateGasEq mach (Rinst.balanceCore gas world mach view) := by
+    Footprint.MachMetaStateGasEq mach (Rinst.balanceCore rules world mach view) := by
   unfold Rinst.balanceCore
   cases hp : mach.pop with
   | error e =>
@@ -5062,17 +5271,17 @@ theorem Rinst.balanceCore_stateGas_eq (gas : GasSchedule) (world : World)
     have hm := Mach.pop_stateGas_eq mach
     rw [hp] at hm
     cases hc : a.2.chargeGas (if a.1.toAdr ∈ view.accessedAddresses
-        then gasWarmAccess else gas.coldAccountAccess) with
+        then gasWarmAccess else rules.gas.coldAccountAccess) with
     | error e =>
       have hc' := Mach.chargeGas_stateGas_eq
         (if a.1.toAdr ∈ view.accessedAddresses
-          then gasWarmAccess else gas.coldAccountAccess) a.2
+          then gasWarmAccess else rules.gas.coldAccountAccess) a.2
       rw [hc] at hc'
       simpa [hp, hc, Footprint.MachMetaStateGasEq] using hc'.trans hm
     | ok b =>
       have hc' := Mach.chargeGas_stateGas_eq
         (if a.1.toAdr ∈ view.accessedAddresses
-          then gasWarmAccess else gas.coldAccountAccess) a.2
+          then gasWarmAccess else rules.gas.coldAccountAccess) a.2
       rw [hc] at hc'
       have hpush := Mach.push_stateGas_eq (world.state.get a.1.toAdr).bal b.2
       cases hq : b.2.push (world.state.get a.1.toAdr).bal <;> rw [hq] at hpush
@@ -5081,11 +5290,11 @@ theorem Rinst.balanceCore_stateGas_eq (gas : GasSchedule) (world : World)
       · simpa [hp, hc, hq, Footprint.MachMetaStateGasEq] using
           hpush.trans (hc'.trans hm)
 
-theorem Rinst.balance_stateGasZero (gas : GasSchedule) {devm : Devm}
+theorem Rinst.balance_stateGasZero (rules : ForkRules) {devm : Devm}
     (h : devm.StateGasZero) :
-    (liftMachMetaWorldExecution (Rinst.balanceCore gas) devm).StateGasZero :=
+    (liftMachMetaWorldExecution (Rinst.balanceCore rules) devm).StateGasZero :=
   liftMachMetaExecution_stateGasZero h
-    (Rinst.balanceCore_stateGas_eq gas devm.world devm.mach devm.meta)
+    (Rinst.balanceCore_stateGas_eq rules devm.world devm.mach devm.meta)
 
 /-- Every register instruction preserves a zero meter when the state-gas
 switch is absent.  The switch hypothesis rules out only the `SSTORE`
@@ -5101,10 +5310,13 @@ theorem Rinst.run_stateGasZero {evm : Evm} (h : evm.dyna.StateGasZero)
     exact applyBinary_stateGasZero _ _ h
   case addmod | mulmod => exact applyTernary_stateGasZero _ _ h
   case address | basefee | blobbasefee | origin | caller | callvalue |
-      calldatasize | codesize | gasprice | returndatasize | selfbalance |
+      calldatasize | codesize | gasprice | returndatasize |
       chainid | number | timestamp | gaslimit | prevrandao | coinbase | msize |
       pc =>
     exact pushItem_stateGasZero _ _ h
+  case selfbalance =>
+    exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h)
+      fun d hd => Devm.push_stateGasZero _ hd
   case balance => exact Rinst.balance_stateGasZero _ h
   case mload =>
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) ?_
@@ -6524,6 +6736,9 @@ theorem Rinst.runCore_canonical (pc : Nat) {devm : Devm} (sevm : Sevm)
     split
     · exact liftMachExecution_canonical h
     · exact h
+  case selfbalance =>
+    exact Except.CanonicalOn.bind (liftMachExecution_canonical h)
+      fun d hd => liftMachExecution_canonical hd
   case calldataload =>
     refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
     exact Except.CanonicalOn.bind (liftMachExecution_canonical ha)
@@ -6727,6 +6942,8 @@ theorem Linst.run_canonical {sevm : Sevm} {devm : Devm}
            (liftMachExecution_canonical (Devm.Canonical.of_world_eq ha rfl))
            fun d hd => ?_
          refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
+         -- The EIP-7928 read recorders are meta-only: read the balance through them.
+         simp only [Devm.balReadAccount_getAcct]
          refine Except.CanonicalOn.bind (P := Devm.Canonical) ?_ fun d' hd' => ?_
          · cases hs : d.subBal sevm.currentTarget (a.2.getAcct sevm.currentTarget).bal with
            | none => exact hd
