@@ -457,10 +457,19 @@ class SyntheticLaneRunTests(unittest.TestCase):
         # must stay lock-free. The union's two components are dispatched here
         # and just below through the two suites that take no lock when
         # sequential, so all four of its files are still dispatched; the
-        # union's own *selection* is pinned by
+        # union's own *selection* stays pinned by
         # `test_every_suite_is_runnable_and_no_refusal_reason_remains` above
-        # (`suites["amsterdam-full"]["file_count"] == 4`). Nothing this row
-        # asserted is lost. (Goal `jaune-forks-by-construction-v1`, W6.)
+        # (`suites["amsterdam-full"]["file_count"] == 4`).
+        #
+        # What IS lost, stated plainly rather than glossed: after this change
+        # `amsterdam-full` is dispatched nowhere -- not here, not in any other
+        # test, and not in the goal's catalogue selection -- so this module's
+        # first stated property, "every suite is admitted, and actually
+        # dispatches", no longer holds of that one suite. Its selection is
+        # pinned and each of its two components is dispatched, which is why the
+        # trade was taken; restoring the union's own dispatch needs a lock-free
+        # way to run it, which is `check-mainnet.sh`'s to provide.
+        # (Goal `jaune-forks-by-construction-v1`, W6; independent review F-4.)
         run = self.run_lane("--suite", "amsterdam-smoke")
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         self.assertIn("OK — amsterdam-smoke: 3/3 manifest files PASS", run.stdout)

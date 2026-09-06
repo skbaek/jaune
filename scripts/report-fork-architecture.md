@@ -16,7 +16,7 @@ unchanged.
 
 | concept | type | role |
 |---|---|---|
-| identity | `Fork` (`prague`, `osaka`, `bpo1`, `bpo2`) | a name; carries no semantics |
+| identity | `Fork` (`prague`, `osaka`, `bpo1`, `bpo2`, `amsterdam`) | a name; carries no semantics |
 | rules | `ForkRules` | the data execution actually reads |
 | schedule | `ChainConfig` | which rules a given chain uses at a given block |
 
