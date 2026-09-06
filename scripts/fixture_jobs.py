@@ -7,6 +7,12 @@ memory that is actually available to the current job.  On Linux that is the
 minimum of host ``MemAvailable`` and every finite cgroup-v2 ancestor's remaining
 allowance; CPU affinity, cpusets, and finite CPU quotas are capped similarly.
 
+An **absent** boundary file and an **unreadable** one are not the same thing
+and are not treated the same way.  Absent means this host does not publish that
+boundary and the search continues; unreadable means the boundary exists and
+could not be read, which makes every remaining answer untrustworthy and
+resolves the whole selection to one worker.
+
 The constants are deliberately workload-level budgets rather than a claim that
 every fixture consumes this much: one GiB stays outside the worker pool and
 each worker is provisioned 2.4 GiB.  Thus a clean 6 or 8 GiB job resolves to at
@@ -93,10 +99,32 @@ def parse_cpuset(specification: str) -> int:
 
 
 def read_text(path: Path) -> str | None:
+    """Read one resource-boundary file, distinguishing ABSENT from UNREADABLE.
+
+    An **absent** file is information: this kernel, container runtime or host
+    simply does not publish that boundary, and the caller may look elsewhere.
+    It returns ``None``.
+
+    An **unreadable** file is the opposite of information: the boundary exists
+    and we were refused it, or the read failed.  Treating that as "no such
+    boundary" is what let a job with an unreadable leaf ``memory.max`` inherit
+    a permissive ancestor's answer and resolve to one worker per CPU, against
+    the documented promise that an unreadable container boundary resolves to
+    one worker.  So it raises ``DetectionError``, which every caller resolves
+    conservatively.
+    """
     try:
         return path.read_text(encoding="utf-8").strip()
-    except (FileNotFoundError, PermissionError, OSError):
+    except FileNotFoundError:
         return None
+    except NotADirectoryError:
+        # A path component is not a directory: the boundary does not exist
+        # here at all, which is the absent case rather than a refused read.
+        return None
+    except OSError as error:
+        raise DetectionError(
+            f"unreadable resource boundary file {path}: {error}"
+        ) from error
 
 
 def cgroup_v2_relative_path(proc_cgroup: Path = Path("/proc/self/cgroup")) -> str | None:
@@ -289,23 +317,25 @@ def detect_resources(
     memory_candidates: list[Capacity] = []
     system = platform.system()
     if system == "Linux":
-        host_memory = linux_mem_available()
-        memory_candidates.append(host_memory)
-        if host_memory.value is None:
-            memory_candidates.append(sysconf_available_memory())
-        relative = cgroup_v2_relative_path(proc_cgroup)
-        if relative is None:
-            memory_candidates = [Capacity(None, ("cgroup-v2:unverified",))]
-        else:
-            try:
-                cgroup_memory = linux_cgroup_memory_capacity(cgroup_root, relative)
-            except DetectionError:
-                # Host availability alone is unsafe when the job's container
-                # boundary cannot be verified.
-                memory_candidates = [Capacity(None, ("cgroup-v2:unverified",))]
-            else:
-                memory_candidates.append(cgroup_memory)
+        try:
+            host_memory = linux_mem_available()
+            memory_candidates.append(host_memory)
+            if host_memory.value is None:
+                memory_candidates.append(sysconf_available_memory())
+            relative = cgroup_v2_relative_path(proc_cgroup)
+            if relative is None:
+                raise DetectionError("no cgroup-v2 membership for this job")
+            memory_candidates.append(
+                linux_cgroup_memory_capacity(cgroup_root, relative)
+            )
             cpu_candidates.append(linux_cgroup_cpu_capacity(cgroup_root, relative))
+        except DetectionError:
+            # Host availability alone is unsafe when the job's own container
+            # boundary cannot be verified — whether because the membership is
+            # absent, a boundary file is unreadable, or a counter is malformed.
+            # Dropping every memory candidate is what makes `choose_jobs`
+            # answer with the documented conservative one worker.
+            memory_candidates = [Capacity(None, ("cgroup-v2:unverified",))]
     elif system == "Darwin":
         memory_candidates.append(macos_available_memory())
     else:

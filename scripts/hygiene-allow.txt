@@ -6,11 +6,37 @@
 # neither a stray dbg_trace or sorry nor a new axiom, opaque, @[extern],
 # @[implemented_by], partial def, unsafe or native_decide can enter unnoticed.
 #
-# This file is EMPTY, and that is the point: TRUSTED.md's account of what Jaune
-# does not use is now a gate rather than a fact about a moment. An entry here
-# is a hole in that account, so adding one is a decision to be argued for, not
-# a way to make the gate quiet. If prose trips the gate, reword the prose
-# instead — see the false-positive note in check-hygiene.sh.
+# This file carries EXACTLY ONE entry, and that is the point: TRUSTED.md's
+# account of what Jaune does not use is a gate rather than a fact about a
+# moment. An entry here is a hole in that account, so adding one is a decision
+# to be argued for, not a way to make the gate quiet. If prose trips the gate,
+# reword the prose instead — see the false-positive note in check-hygiene.sh.
 #
 # Keep a justification comment above every entry. When the underlying code is
 # removed, delete its entry (the gate warns about stale entries).
+
+# `@[csimp] execFueled_eq_cached` — the one compiled-code substitution in Jaune.
+#
+# WHAT IT CARRIES. The proposition is `execFueled = execFueledCached`, a fully
+# proved theorem, not an assertion. Its proof is `execFueledCachedCore_fst`,
+# which chains up from `CalldataCache.get_fst` through `genericCall.stepCached_fst`,
+# `Xinst.stepCached_fst`, `Ninst.stepCached_fst` and `Evm.stepCached_fst`. The
+# cache structure itself carries a proof field
+# `valid : calldata = key.data.sliceD key.inputIndex key.inputSize 0`, erased by
+# code generation, so a cache hit is definitionally accountable to the ordinary
+# slice and no cached run can observe a value the uncached run would not.
+#
+# WHY IT IS ALLOWED RATHER THAN REMOVED. It is the landed fix for the
+# depth-1024 one-megabyte calldata retention defect (goal
+# `jaune-linux-16gb-memory-v1`): `genericCall.step` evaluated a fresh
+# million-byte `Bytes` slice per frame and `execFueled` kept every ancestor's
+# copy live, ~32 MB of list cells per live call. Sharing the evaluated slice is
+# what makes the former offender run in 0.32 s at 57 MB.
+#
+# WHY IT IS LISTED RATHER THAN SILENT. `@[csimp]` is the attribute that makes
+# the compiled binary run a different function from the elaborated definition,
+# and every fixture gate measures the compiled binary. `check-hygiene.sh` is
+# the trust surface's gate, so this fact belongs on it. Listing it also means a
+# SECOND `@[csimp]` anywhere under the scanned source fails the gate and has to
+# be argued for here.
+Jaune/Execution.lean @[csimp] private theorem execFueled_eq_cached :

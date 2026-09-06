@@ -1305,18 +1305,190 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
           newCodeAddress true true inputIndex inputSize outputIndex outputSize
           code disablePrecompiles false false
 
+/-- The cache-threaded counterpart of `XStep.ofExcept`: an `Except` whose value
+already carries the threaded cache, with the untouched cache restored on the
+error path. Naming it lets each cached call arm's proof be a rewrite rather
+than a hand-driven case analysis over the whole gas computation. -/
+private def XStep.ofExceptCached
+    (cache : Option CalldataCache)
+    (ec : Except (EvmError × Devm) (XStep × Option CalldataCache)) :
+    XStep × Option CalldataCache :=
+  match ec with
+  | .error e => (.done (.error e), cache)
+  | .ok result => result
+
+private theorem XStep.ofExceptCached_fst
+    (cache : Option CalldataCache)
+    {ec : Except (EvmError × Devm) (XStep × Option CalldataCache)}
+    {eu : Except (EvmError × Devm) XStep}
+    (h : Except.map Prod.fst ec = eu) :
+    (XStep.ofExceptCached cache ec).1 = XStep.ofExcept eu := by
+  subst h; cases ec <;> rfl
+
+/-- `Except.map` commutes with `bind` and with `<$>`, which is what lets a
+cached arm and its ordinary arm be compared leaf by leaf instead of branch by
+branch: the two `do` blocks are the same chain and differ only in what they
+return. Every branch of the gas computation is therefore proved once, in
+`genericCall.stepCached_fst`, rather than re-cased per opcode. -/
+private theorem Except.map_bind' {ε α β γ : Type} (m : Except ε α)
+    (k : α → Except ε β) (f : β → γ) :
+    Except.map f (m >>= k) = m >>= fun a => Except.map f (k a) := by
+  cases m <;> rfl
+
+private theorem Except.map_map' {ε α β γ : Type} (m : Except ε α)
+    (g : α → β) (f : β → γ) :
+    Except.map f (g <$> m) = (fun a => f (g a)) <$> m := by
+  cases m <;> rfl
+
+private theorem Except.map_pure' {ε α β : Type} (f : α → β) (a : α) :
+    Except.map f (pure a : Except ε α) = pure (f a) := rfl
+
+private theorem Except.map_ok' {ε α β : Type} (f : α → β) (a : α) :
+    Except.map f (Except.ok a : Except ε α) = Except.ok (f a) := rfl
+
+private theorem Except.map_error' {ε α β : Type} (f : α → β) (e : ε) :
+    Except.map f (Except.error e : Except ε α) = Except.error e := rfl
+
 /-- Cache-threaded native specialization. The first component is proved below
-to be exactly `Xinst.step`; only STATICCALL is specialized because it is the
-measured pathological family, while every other instruction takes the ordinary
-definition verbatim. -/
+to be exactly `Xinst.step`; all four call opcodes are specialized because all
+four reach `genericCall.step`, which is where the per-frame calldata slice is
+evaluated, while every other instruction takes the ordinary definition verbatim.
+
+STATICCALL alone was specialized when the retention defect was first fixed,
+because it is the family the pathological fixture uses. The isolated
+CALL-family analogue was then measured on this instrument and on the pinned
+corpus file `call1_mb1024_calldepth`: the same ~32 MB per live frame, bounded
+only by the fixture's gas limit rather than by anything in the code path. The
+specialization is therefore lifted to CALL, CALLCODE and DELEGATECALL, whose
+legacy arms are reproduced here verbatim from `Xinst.step` with
+`genericCall.stepCached` in place of `genericCall.step` and the cache threaded
+through the early returns. The Amsterdam (`stateGas = some _`) arms are not
+specialized: they reach `genericCallAmsterdam.step`, a separate definition. -/
 private def Xinst.stepCached
     (sevm : Sevm) (devm : Devm) (cache : Option CalldataCache) :
     Xinst → XStep × Option CalldataCache
+  | .call =>
+    match sevm.benvStat.rules.stateGas with
+    | some _ => (Xinst.step sevm devm .call, cache)
+    | none =>
+    XStep.ofExceptCached cache (do
+      let ⟨gas, devm⟩ ← devm.pop
+      let ⟨callee, devm⟩ ← devm.popToAdr
+      let ⟨value, devm⟩ ← devm.pop
+      let ⟨inputIndex, devm⟩ ← devm.popToNat
+      let ⟨inputSize, devm⟩ ← devm.popToNat
+      let ⟨outputIndex, devm⟩ ← devm.popToNat
+      let ⟨outputSize, devm⟩ ← devm.popToNat
+      let extendCost :=
+        devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
+      let gasRules := sevm.benvStat.rules.gas
+      let preAccessCost := gasRules.accessCost callee devm.accessedAddresses
+      let devm := addAccessedAddress devm callee
+      let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
+        gasRules.accessDelegation devm callee
+      let accessCost := preAccessCost + delegatedAccessGasCost
+      let createCost :=
+        if (¬ (devm.getAcct callee).Empty) ∨ value = 0 then 0 else gNewAccount
+      let transferCost := if value = 0 then 0 else gasRules.callValue
+      let ⟨msgCallCost, msgCallStipend⟩ :=
+        calculateMsgCallGas value.toNat gas.toNat devm.gasLeft extendCost
+          (accessCost + createCost + transferCost)
+      let devm ← chargeGas (msgCallCost + extendCost) devm
+      Except.assert (!sevm.isStatic ∨ value = 0) ⟨.halt (.writeInStaticContext .none), devm⟩
+      let devm :=
+        devm.memExtends
+          [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
+      let senderBal := (devm.getAcct sevm.currentTarget).bal
+      if senderBal < value then
+        let devm ← devm.push 0
+        return (.done
+          (.ok
+            ((devm.withReturnData []).withGasLeft
+              (devm.gasLeft + msgCallStipend))), cache)
+      else
+        return genericCall.stepCached
+          sevm devm msgCallStipend value sevm.currentTarget callee
+          newCodeAddress true false inputIndex inputSize outputIndex outputSize
+          code disablePrecompiles cache :
+      Except (EvmError × Devm) (XStep × Option CalldataCache))
+  | .callcode =>
+    match sevm.benvStat.rules.stateGas with
+    | some _ => (Xinst.step sevm devm .callcode, cache)
+    | none =>
+    XStep.ofExceptCached cache (do
+      let ⟨gas, devm⟩ ← devm.pop
+      let ⟨codeAddress, devm⟩ ← devm.popToAdr
+      let ⟨value, devm⟩ ← devm.pop
+      let ⟨inputIndex, devm⟩ ← devm.popToNat
+      let ⟨inputSize, devm⟩ ← devm.popToNat
+      let ⟨outputIndex, devm⟩ ← devm.popToNat
+      let ⟨outputSize, devm⟩ ← devm.popToNat
+      let extendCost :=
+        devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
+      let gasRules := sevm.benvStat.rules.gas
+      let preAccessCost := gasRules.accessCost codeAddress devm.accessedAddresses
+      let devm := addAccessedAddress devm codeAddress
+      let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
+        gasRules.accessDelegation devm codeAddress
+      let accessCost := preAccessCost + delegatedAccessGasCost
+      let transferCost := if value = 0 then 0 else gasRules.callValue
+      let ⟨msgCallCost, msgCallStipend⟩ :=
+        calculateMsgCallGas value.toNat gas.toNat devm.gasLeft extendCost
+          (accessCost + transferCost)
+      let devm ← chargeGas (msgCallCost + extendCost) devm
+      let devm :=
+        devm.memExtends
+          [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
+      let senderBal := (devm.getAcct sevm.currentTarget).bal
+      if senderBal < value then
+        let devm ← devm.push 0
+        return (.done
+          (.ok
+            ((devm.withGasLeft (devm.gasLeft + msgCallStipend)).withReturnData [])),
+          cache)
+      else
+        return genericCall.stepCached
+          sevm devm msgCallStipend value sevm.currentTarget
+          sevm.currentTarget newCodeAddress true false
+          inputIndex inputSize outputIndex outputSize code disablePrecompiles
+          cache :
+      Except (EvmError × Devm) (XStep × Option CalldataCache))
+  | .delegatecall =>
+    match sevm.benvStat.rules.stateGas with
+    | some _ => (Xinst.step sevm devm .delegatecall, cache)
+    | none =>
+    XStep.ofExceptCached cache (do
+      let ⟨gas, devm⟩ ← devm.pop
+      let ⟨codeAddress, devm⟩ ← devm.popToAdr
+      let ⟨inputIndex, devm⟩ ← devm.popToNat
+      let ⟨inputSize, devm⟩ ← devm.popToNat
+      let ⟨outputIndex, devm⟩ ← devm.popToNat
+      let ⟨outputSize, devm⟩ ← devm.popToNat
+      let extendCost :=
+        devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
+      let gasRules := sevm.benvStat.rules.gas
+      let preAccessCost := gasRules.accessCost codeAddress devm.accessedAddresses
+      let devm := addAccessedAddress devm codeAddress
+      let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
+        gasRules.accessDelegation devm codeAddress
+      let accessCost := preAccessCost + delegatedAccessGasCost
+      let ⟨msgCallCost, msgCallStipend⟩ :=
+        calculateMsgCallGas 0 gas.toNat devm.gasLeft extendCost accessCost
+      let devm ← chargeGas (msgCallCost + extendCost) devm
+      let devm :=
+        devm.memExtends
+          [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
+      return genericCall.stepCached
+        sevm devm msgCallStipend sevm.value sevm.caller
+        sevm.currentTarget newCodeAddress false false
+        inputIndex inputSize outputIndex outputSize code disablePrecompiles
+        cache :
+      Except (EvmError × Devm) (XStep × Option CalldataCache))
   | .staticcall =>
     match sevm.benvStat.rules.stateGas with
     | some _ => (Xinst.step sevm devm .staticcall, cache)
     | none =>
-    match (do
+    XStep.ofExceptCached cache (do
       let ⟨gas, devm⟩ ← devm.pop
       let ⟨target, devm⟩ ← devm.popToAdr
       let ⟨inputIndex, devm⟩ ← devm.popToNat
@@ -1341,45 +1513,41 @@ private def Xinst.stepCached
         sevm devm msgCallStipend 0 sevm.currentTarget target newCodeAddress
         true true inputIndex inputSize outputIndex outputSize code
         disablePrecompiles cache :
-      Except (EvmError × Devm) (XStep × Option CalldataCache)) with
-    | .error e => (.done (.error e), cache)
-    | .ok result => result
+      Except (EvmError × Devm) (XStep × Option CalldataCache))
   | x => (Xinst.step sevm devm x, cache)
 
 private theorem Xinst.stepCached_fst
     (sevm : Sevm) (devm : Devm) (cache : Option CalldataCache) (x : Xinst) :
     (Xinst.stepCached sevm devm cache x).1 = Xinst.step sevm devm x := by
   cases x <;> simp only [Xinst.stepCached, Xinst.step]
-  case staticcall =>
-    split
+  case call =>
+    rcases hs : sevm.benvStat.rules.stateGas with _ | state
+    · refine XStep.ofExceptCached_fst cache ?_
+      simp only [Except.map_bind', Except.map_map', Except.map_pure',
+        Except.map_ok', Except.map_error', apply_ite (Except.map Prod.fst),
+        genericCall.stepCached_fst]
     · rfl
-    rcases h₁ : devm.pop with e | ⟨gas, d₁⟩
-    · simp_all [Bind.bind, Except.bind, XStep.ofExcept]
-    simp only [Bind.bind, Except.bind]
-    rcases h₂ : d₁.popToAdr with e | ⟨target, d₂⟩
-    · simp_all [XStep.ofExcept]
-    rcases h₃ : d₂.popToNat with e | ⟨inputIndex, d₃⟩
-    · simp_all [XStep.ofExcept]
-    rcases h₄ : d₃.popToNat with e | ⟨inputSize, d₄⟩
-    · simp_all [XStep.ofExcept]
-    rcases h₅ : d₄.popToNat with e | ⟨outputIndex, d₅⟩
-    · simp_all [XStep.ofExcept]
-    rcases h₆ : d₅.popToNat with e | ⟨outputSize, d₆⟩
-    · simp_all [XStep.ofExcept]
-    rcases h₇ :
-        chargeGas
-          ((calculateMsgCallGas 0 gas.toNat
-                (sevm.benvStat.rules.gas.accessDelegation
-                  (addAccessedAddress d₆ target) target).2.2.2.2.gasLeft
-                (d₆.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
-                (sevm.benvStat.rules.gas.accessCost target d₆.accessedAddresses +
-                  (sevm.benvStat.rules.gas.accessDelegation
-                    (addAccessedAddress d₆ target) target).2.2.2.1)).1 +
-            d₆.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
-          (sevm.benvStat.rules.gas.accessDelegation
-            (addAccessedAddress d₆ target) target).2.2.2.2 with e | d₇
-    · simp_all [XStep.ofExcept]
-    simp_all [XStep.ofExcept, pure, Except.pure, genericCall.stepCached_fst]
+  case callcode =>
+    rcases hs : sevm.benvStat.rules.stateGas with _ | state
+    · refine XStep.ofExceptCached_fst cache ?_
+      simp only [Except.map_bind', Except.map_map', Except.map_pure',
+        Except.map_ok', Except.map_error', apply_ite (Except.map Prod.fst),
+        genericCall.stepCached_fst]
+    · rfl
+  case delegatecall =>
+    rcases hs : sevm.benvStat.rules.stateGas with _ | state
+    · refine XStep.ofExceptCached_fst cache ?_
+      simp only [Except.map_bind', Except.map_map', Except.map_pure',
+        Except.map_ok', Except.map_error', apply_ite (Except.map Prod.fst),
+        genericCall.stepCached_fst]
+    · rfl
+  case staticcall =>
+    rcases hs : sevm.benvStat.rules.stateGas with _ | state
+    · refine XStep.ofExceptCached_fst cache ?_
+      simp only [Except.map_bind', Except.map_map', Except.map_pure',
+        Except.map_ok', Except.map_error', apply_ite (Except.map Prod.fst),
+        genericCall.stepCached_fst]
+    · rfl
 
 def Ninst.step (evm : Evm) (n : Ninst) : Step :=
   let pc := evm.pc + n.size

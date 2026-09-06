@@ -21,7 +21,8 @@
 # Four rules, all fail-closed:
 #
 #   R1  ABSENCE, no allowlist. No `partial def`, `implemented_by`, or
-#       `dbg_trace` anywhere under Jaune/ or in Main.lean. The historical
+#       `dbg_trace` anywhere under Jaune/, in Main.lean, or in MemoryProbe.lean.
+#       The historical
 #       `~/plans/silence.md` record documents removal of the last of each from
 #       the library, and this gate keeps them out. There is deliberately no
 #       carve-out and no allowlist row for these.
@@ -35,7 +36,8 @@
 #       branch, except exact allowlist rows. Since Step 10 completed the
 #       typed-error migration, R4's scope is the closure PLUS the runner
 #       boundary (Jaune/ChainStore.lean, Jaune/FixtureException.lean,
-#       Main.lean), every remaining row is a reviewed KEEP -- a named legacy
+#       Main.lean) and the bounded memory probe (MemoryProbe.lean), every
+#       remaining row is a reviewed KEEP -- a named legacy
 #       renderer adapter or an external parser/JSON boundary -- and the gate
 #       refuses an R4 PENDING row outright: a new stringly semantic carrier
 #       can no longer be deferred, only reviewed in or rejected.
@@ -134,9 +136,15 @@ closure_files = sorted(path_of(m) for m in closure)
 # The post-Step-10 scope of R4: the closure plus the runner boundary, where
 # the fixture parser and the CLI renderer live. Strings there are legitimate
 # only at exact-listed parser/renderer lines.
+# MemoryProbe.lean is the second tracked Lean executable in this repository:
+# a bounded native probe built by the ordinary `lake build` and asserted by
+# scripts/check-memory-probe.sh. It was outside every static gate until the
+# memory-closure repair; an anti-regression instrument that no gate reads is
+# one that rots. It carries a typed ProbeError rather than an `Except String`,
+# so it enters this scope with no allowlist row.
 r4_files = sorted(set(closure_files)
                   | {"Jaune/ChainStore.lean", "Jaune/FixtureException.lean",
-                     "Main.lean"})
+                     "Main.lean", "MemoryProbe.lean"})
 
 # R1 is scoped to the whole library plus Main.lean, not just the closure:
 # silence.md removed these from every Jaune source file and this gate keeps
@@ -144,7 +152,7 @@ r4_files = sorted(set(closure_files)
 # and are deliberately not in scope.
 r1_files = sorted(
     ["Jaune/" + f for f in os.listdir("Jaune") if f.endswith(".lean")]
-    + ["Jaune.lean", "Main.lean"]
+    + ["Jaune.lean", "Main.lean", "MemoryProbe.lean"]
 )
 
 RULES = [
@@ -277,5 +285,5 @@ if [ "$PENDING" -gt "$PENDING_MAX" ]; then
 fi
 
 NHITS="$(printf '%s\n' "$HITS" | grep -c .)"
-echo "OK — integrity: all $NHITS occurrence(s) in the audited scope (Jaune.lean closure + runner boundary for R4) are allowlisted; $PENDING pending (budget $PENDING_MAX); no new ones"
+echo "OK — integrity: all $NHITS occurrence(s) in the audited scope (Jaune.lean closure + runner boundary and MemoryProbe.lean for R4) are allowlisted; $PENDING pending (budget $PENDING_MAX); no new ones"
 exit 0

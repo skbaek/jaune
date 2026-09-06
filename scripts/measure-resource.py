@@ -1,19 +1,62 @@
 #!/usr/bin/env python3
-"""Run one command in a measured child cgroup below Creme's Lean-only slice.
+"""Run one command inside an admitted containment scope and record what it cost.
 
-The controller stays in the outer contained job while the payload runs in a
-stricter transient service. A tiny child shim keeps the service alive until the
-controller has read the live cgroup-v2 counters, including after the payload
-crosses the inner resource boundary. The kernel's peak and event counters are
-cumulative, so steady-state sampling does not spawn a process or busy-poll.
+Two containment shapes are admitted, and the record always says which was used.
+
+``nested-slice`` — the original shape. The controller stays in the outer
+contained job below Creme's dedicated Lean-only slice while the payload runs in
+a stricter transient service beside it. A tiny child shim keeps the service
+alive until the controller has read the live cgroup-v2 counters, including after
+the payload crosses the inner resource boundary.
+
+``in-scope`` — the same discipline on a host that has no such system slice (a
+user-session systemd with no root, for instance). The caller places the whole
+measurement inside one transient cgroup of its own,
+
+    systemd-run --user --scope -p MemoryMax=<budget> -p MemorySwapMax=<swap> -- \
+        measure-resource.py --memory-max <budget> --swap-max <swap> -- <payload>
+
+and the payload runs as a direct child inside it. `OOMPolicy=continue` is
+required, not optional: systemd's default for a scope is to tear the whole
+scope down when the kernel kills one member, which would destroy the
+instrument exactly on the run whose containment is the evidence. What made the original shape
+trustworthy was never the *name* of the slice: it was that the measured cgroup
+is a finite transient boundary whose limits are read back live from the kernel
+rather than assumed, and that it is never the session, user or root cgroup.
+Both shapes are held to exactly that, and ``in-scope`` additionally refuses any
+leaf that is not a transient ``.scope``/``.service``, refuses a user manager
+service, and requires the leaf's own ``memory.max``/``memory.swap.max`` to equal
+the requested budget exactly. Its measured peak *includes this controller*,
+which is recorded and is conservative in the safe direction.
+
+The kernel's peak and event counters are cumulative, so steady-state sampling
+does not spawn a process or busy-poll.
+
+Records are ``"schema": 2``. Schema 2 is additive over schema 1 and carries what
+a resource-acceptance clause actually has to show:
+
+  * ``identity`` — the sha256 of the executable under measurement and of the
+    fixture manifest in force, so a record names the artefact it measured
+    instead of resting on a working directory and a file name;
+  * ``survival`` — boot identity, login-session identity, and the OOM counters
+    of every cgroup ancestor *outside* the measured leaf, sampled before and
+    after the run, with explicit ``changed``/``increased`` verdicts. A source
+    that is unavailable on this host says so in its own field rather than
+    disappearing from the record.
+
+Schema 1 records are historical. Nothing here rewrites, re-hashes or
+reinterprets one, and a schema-1 record is not a schema-2 record with fields
+missing: it is a record from an instrument that could not carry them.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -22,7 +65,14 @@ import time
 import uuid
 
 
+SCHEMA_VERSION = 2
 DEDICATED_SLICE_FRAGMENT = "/creme.slice/creme-lean.slice/"
+CGROUP_ROOT = Path("/sys/fs/cgroup")
+# A user manager's own service is a session boundary, not a measurement scope:
+# containing a payload "in" it would contain the whole login session with it.
+USER_MANAGER = re.compile(r"^user@\d+\.service$")
+TRANSIENT_LEAF_SUFFIXES = (".scope", ".service")
+HASH_CHUNK_BYTES = 1024 * 1024
 REQUIRED_COUNTERS = (
     "memory.current",
     "memory.peak",
@@ -80,17 +130,242 @@ def own_cgroup_path() -> str:
     raise MeasureError("cgroup-v2 membership is unavailable")
 
 
-def require_dedicated_child(path: str) -> None:
-    if DEDICATED_SLICE_FRAGMENT not in path:
-        raise MeasureError(f"scope is outside the dedicated Lean-only slice: {path}")
+def in_dedicated_slice(path: str) -> bool:
+    return DEDICATED_SLICE_FRAGMENT in path
+
+
+def require_admitted_containment(path: str) -> None:
+    """Refuse any cgroup that is not an admitted containment scope.
+
+    Admitted means one of two things, and nothing else: a child of Creme's
+    dedicated Lean-only slice, or a transient ``.scope``/``.service`` leaf that
+    is not a user manager's own service and not the root. The session, user and
+    root cgroups are refused here; the finite-limit readback in
+    `validate_requested_limits` and `require_readback` refuses everything else
+    that has no real boundary.
+    """
+    if in_dedicated_slice(path):
+        return
+    relative = path.strip("/")
+    if not relative:
+        raise MeasureError("scope is the cgroup root, which contains the whole host")
+    leaf = relative.rsplit("/", 1)[-1]
+    if not leaf.endswith(TRANSIENT_LEAF_SUFFIXES):
+        raise MeasureError(
+            f"scope is not a transient .scope/.service containment leaf: {path}"
+        )
+    if USER_MANAGER.match(leaf):
+        raise MeasureError(
+            f"scope is a user manager service, which is the login session: {path}"
+        )
 
 
 def cgroup_dir(path: str) -> Path:
-    require_dedicated_child(path)
-    directory = Path("/sys/fs/cgroup") / path.lstrip("/")
+    require_admitted_containment(path)
+    directory = CGROUP_ROOT / path.lstrip("/")
     if not directory.is_dir():
         raise MeasureError(f"cgroup directory is unavailable: {directory}")
     return directory
+
+
+def require_survivable_containment(unit: str) -> None:
+    """Refuse a containment scope that dies when its payload is contained.
+
+    systemd's default `OOMPolicy` for a scope is `stop`: when the kernel kills
+    one member for crossing the boundary, systemd terminates the whole scope —
+    including this controller, before it has read the counters. A red control
+    would then destroy its own instrument and leave nothing behind but a
+    SIGTERM. The nested-slice shape already sets `OOMPolicy=continue` on the
+    payload unit; in-scope containment needs the caller to set it on the scope:
+
+        systemd-run --user --scope -p MemoryMax=... -p MemorySwapMax=... \
+            -p OOMPolicy=continue -- ...
+
+    This is a hard refusal rather than a warning, because the failure it
+    prevents is silent: a green measurement never triggers it, so it would only
+    ever be discovered on the run that mattered.
+    """
+    try:
+        properties = show_unit(unit)
+    except MeasureError as error:
+        raise MeasureError(
+            f"cannot inspect the containment scope {unit}: {error}"
+        ) from error
+    policy = properties.get("OOMPolicy", "")
+    if policy != "continue":
+        raise MeasureError(
+            f"containment scope {unit} has OOMPolicy={policy or 'unknown'}; "
+            "in-scope containment requires OOMPolicy=continue so a contained "
+            "payload kill does not take this controller down with it"
+        )
+
+
+def read_optional(path: Path) -> str | None:
+    try:
+        return path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+
+
+def unavailable(reason: str) -> dict[str, object]:
+    return {"available": False, "reason": reason}
+
+
+def file_identity(path: Path | None, role: str) -> dict[str, object]:
+    """sha256 one artefact under measurement, or say plainly why there is none."""
+    if path is None:
+        return unavailable(f"no {role} was declared for this run")
+    try:
+        digest = hashlib.sha256()
+        size = 0
+        with path.open("rb") as handle:
+            while chunk := handle.read(HASH_CHUNK_BYTES):
+                digest.update(chunk)
+                size += len(chunk)
+    except OSError as error:
+        return unavailable(f"{role} {path} is unreadable: {error}")
+    return {
+        "available": True,
+        "path": str(path.resolve()),
+        "sha256": digest.hexdigest(),
+        "size_bytes": size,
+    }
+
+
+def boot_identity() -> dict[str, object]:
+    """Boot and machine identity: a reboot between two samples is visible here."""
+    boot_id = read_optional(Path("/proc/sys/kernel/random/boot_id"))
+    machine_id = read_optional(Path("/etc/machine-id"))
+    if boot_id is None:
+        return unavailable("/proc/sys/kernel/random/boot_id is unreadable")
+    return {
+        "available": True,
+        "boot_id": boot_id,
+        "machine_id": machine_id if machine_id is not None else None,
+    }
+
+
+def session_identity() -> dict[str, object]:
+    """Login-session identity, so "the desktop survived" is a checkable claim.
+
+    `loginctl list-sessions` is the authority when logind is present; the audit
+    session id and `XDG_SESSION_ID` are recorded alongside it because a process
+    started outside any session (a system unit, a container init) has none, and
+    that absence is itself worth recording rather than hiding.
+    """
+    audit = read_optional(Path("/proc/self/sessionid"))
+    if audit == "4294967295":
+        audit = None
+    xdg = os.environ.get("XDG_SESSION_ID")
+    sessions: list[str] | None = None
+    reason = None
+    if shutil.which("loginctl") is None:
+        reason = "loginctl is not installed"
+    else:
+        completed = subprocess.run(
+            ("loginctl", "list-sessions", "--no-legend", "--no-pager"),
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        if completed.returncode != 0:
+            reason = f"loginctl list-sessions failed: {completed.stderr.strip()}"
+        else:
+            sessions = sorted(
+                " ".join(line.split())
+                for line in completed.stdout.splitlines()
+                if line.strip()
+            )
+    if sessions is None and audit is None and xdg is None:
+        return unavailable(reason or "no login session source on this host")
+    identity: dict[str, object] = {
+        "available": True,
+        "audit_session_id": audit,
+        "xdg_session_id": xdg,
+    }
+    if sessions is None:
+        identity["sessions"] = None
+        identity["sessions_unavailable_reason"] = reason
+    else:
+        identity["sessions"] = sessions
+        identity["sessions_sha256"] = hashlib.sha256(
+            "\n".join(sessions).encode("utf-8")
+        ).hexdigest()
+    return identity
+
+
+def outer_oom_counters(measured_relative_path: str) -> dict[str, object]:
+    """OOM counters for every cgroup ancestor OUTSIDE the measured leaf.
+
+    Generic by construction rather than naming one host's `user@1001.service`:
+    the ancestors of the measured leaf are exactly the scopes whose counters
+    must not move while a contained payload is killed inside it.
+
+    Each ancestor carries both of the kernel's counter files, and the
+    distinction is the whole point of the clause. `memory.events` is
+    **hierarchical**: a kill inside the measured leaf increments it at every
+    ancestor, so a contained, expected, correctly-reported kill would read as
+    "the desktop's scope OOMed" if it were the only number recorded.
+    `memory.events.local` counts only that cgroup's own members. The
+    increase verdict is taken from the local counters; the hierarchical ones
+    are kept beside them so the contained kill stays visible instead of being
+    filtered away.
+    """
+    relative = measured_relative_path.strip("/")
+    ancestors: list[str] = []
+    parts = relative.split("/") if relative else []
+    for index in range(len(parts) - 1, -1, -1):
+        ancestors.append("/" + "/".join(parts[:index]) if index else "/")
+    counters: dict[str, object] = {}
+    for ancestor in ancestors:
+        directory = CGROUP_ROOT / ancestor.lstrip("/")
+        entry: dict[str, object] = {}
+        for field, name in (("local", "memory.events.local"), ("hierarchical", "memory.events")):
+            text = read_optional(directory / name)
+            if text is None:
+                entry[field] = unavailable(f"{name} is unreadable")
+                continue
+            try:
+                entry[field] = parse_flat_counters(text)
+            except MeasureError as error:
+                entry[field] = unavailable(str(error))
+        counters[ancestor] = entry
+    return counters
+
+
+def survival_snapshot(measured_relative_path: str) -> dict[str, object]:
+    return {
+        "boot": boot_identity(),
+        "session": session_identity(),
+        "outer_oom": outer_oom_counters(measured_relative_path),
+    }
+
+
+def outer_oom_increased(
+    pre: dict[str, object], post: dict[str, object]
+) -> bool | None:
+    """True if an ancestor's OWN OOM counters moved; None if undecidable.
+
+    "Own" is `memory.events.local`: a payload killed inside the measured leaf
+    is contained by definition, and reporting that as an outer OOM would make
+    every correctly-contained red control look like a host incident.
+    """
+    decided = False
+    for scope, before in pre.items():
+        after = post.get(scope)
+        if not isinstance(before, dict) or not isinstance(after, dict):
+            continue
+        before_local = before.get("local")
+        after_local = after.get("local")
+        if not isinstance(before_local, dict) or not isinstance(after_local, dict):
+            continue
+        if before_local.get("available") is False or after_local.get("available") is False:
+            continue
+        decided = True
+        for key in ("oom", "oom_kill", "oom_group_kill"):
+            if int(after_local.get(key, 0)) > int(before_local.get(key, 0)):
+                return True
+    return False if decided else None
 
 
 def read_value(path: Path) -> str:
@@ -128,6 +403,7 @@ def show_unit(unit: str) -> dict[str, str]:
         "ExecMainCode",
         "ExecMainStatus",
         "ControlGroup",
+        "OOMPolicy",
     )
     command = ["systemctl", "--user", "show", unit]
     for prop in properties:
@@ -179,8 +455,16 @@ def child_main(arguments: list[str]) -> int:
     return returncode
 
 
-def validate_requested_limits(memory_max: int, swap_max: int) -> None:
-    outer = cgroup_dir(own_cgroup_path())
+def validate_requested_limits(own_path: str, memory_max: int, swap_max: int) -> None:
+    """The containing scope must be a finite boundary that covers the request.
+
+    In `nested-slice` mode the payload runs in a stricter transient service
+    beside this controller, so the request must fit inside the boundary this
+    controller is under. In `in-scope` mode the containing scope *is* the
+    measured boundary, so the request must equal it exactly — a request smaller
+    than the enclosing limit would be a budget nobody enforces.
+    """
+    outer = cgroup_dir(own_path)
     outer_max = read_value(outer / "memory.max")
     outer_swap = read_value(outer / "memory.swap.max")
     if outer_max == "max" or not outer_max.isdigit():
@@ -195,6 +479,13 @@ def validate_requested_limits(memory_max: int, swap_max: int) -> None:
         raise MeasureError(
             f"requested swap limit {swap_max} exceeds outer boundary {outer_swap}"
         )
+    if not in_dedicated_slice(own_path):
+        if memory_max != int(outer_max) or swap_max != int(outer_swap):
+            raise MeasureError(
+                "in-scope containment measures the enclosing scope itself, so the "
+                f"request ({memory_max}/{swap_max}) must equal its boundary "
+                f"({outer_max}/{outer_swap})"
+            )
 
 
 def require_readback(snapshot: dict[str, object], memory_max: int, swap_max: int) -> None:
@@ -230,36 +521,34 @@ def local_resource_events(snapshot: dict[str, object] | None) -> dict[str, int]:
 
 def classify_verdict(
     payload_returncode: int | None,
-    systemd_run_returncode: int,
+    systemd_run_returncode: int | None,
     timed_out: bool,
     resource_events: dict[str, int],
     unit_result: str,
 ) -> str:
+    """`systemd_run_returncode` is `None` in in-scope mode: there is no launcher
+    process between the controller and the payload, so there is no third exit
+    status to require. Every other condition is unchanged."""
     if any(resource_events.values()) or unit_result == "oom-kill":
         return "RESOURCE_EVENT"
-    if payload_returncode == 0 and systemd_run_returncode == 0 and not timed_out:
+    launcher_ok = systemd_run_returncode in (0, None)
+    if payload_returncode == 0 and launcher_ok and not timed_out:
         return "PASS"
     return "FAIL"
 
 
-def controller_main(arguments: list[str]) -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--memory-max", required=True, type=parse_bytes)
-    parser.add_argument("--swap-max", required=True, type=parse_swap_bytes)
-    parser.add_argument("--json-out", type=Path)
-    parser.add_argument("--timeout-seconds", type=float, default=7200.0)
-    parser.add_argument("command", nargs=argparse.REMAINDER)
-    args = parser.parse_args(arguments)
-    command = args.command[1:] if args.command[:1] == ["--"] else args.command
-    if not command:
-        parser.error("a command is required after --")
-    if args.timeout_seconds <= 0:
-        parser.error("--timeout-seconds must be positive")
-    if shutil.which("systemd-run") is None or shutil.which("systemctl") is None:
-        raise MeasureError("systemd-run and systemctl are required")
+def resolve_payload_binary(command: list[str]) -> Path | None:
+    resolved = shutil.which(command[0])
+    if resolved is None:
+        return None
+    path = Path(resolved)
+    return path if path.is_file() else None
 
-    validate_requested_limits(args.memory_max, args.swap_max)
-    started = time.monotonic()
+
+def run_nested_slice(
+    args: argparse.Namespace, command: list[str], started: float
+) -> dict[str, object]:
+    """The original shape: a stricter transient service beside this controller."""
     unit = f"jaune-resource-{os.getpid()}-{uuid.uuid4().hex[:10]}.service"
     scratch = Path(tempfile.mkdtemp(prefix="jaune-resource-", dir="/tmp"))
     done_path = scratch / "done"
@@ -297,9 +586,9 @@ def controller_main(arguments: list[str]) -> int:
     samples = 0
     timed_out = False
     unit_state: dict[str, str] = {}
+    control_group = ""
     try:
         process = subprocess.Popen(launch)
-        control_group = ""
         for _ in range(1000):
             try:
                 unit_state = show_unit(unit)
@@ -354,45 +643,30 @@ def controller_main(arguments: list[str]) -> int:
             systemd_run_rc = process.wait(timeout=60)
         except subprocess.TimeoutExpired as error:
             subprocess.run(("systemctl", "--user", "stop", unit), check=False)
-            raise MeasureError("transient unit did not finish after terminal sampling") from error
+            raise MeasureError(
+                "transient unit did not finish after terminal sampling"
+            ) from error
         unit_state = show_unit(unit)
         payload_rc = None
         if result_path.is_file():
             text = result_path.read_text(encoding="utf-8").strip()
             payload_rc = int(text) if text.isdigit() else None
-        resource_events = local_resource_events(last_snapshot)
-        result = {
-            "schema": 1,
+        return {
+            "containment": {
+                "mode": "nested-slice",
+                "measured_cgroup": control_group,
+                "controller_inside_measured_cgroup": False,
+                "peak_reset_before_payload": False,
+            },
             "unit": unit,
-            "command": command,
-            "working_directory": str(Path.cwd()),
-            "memory_max": args.memory_max,
-            "swap_max": args.swap_max,
-            "elapsed_seconds": round(time.monotonic() - started, 6),
             "samples": samples,
+            "timed_out": timed_out,
             "payload_returncode": payload_rc,
             "systemd_run_returncode": systemd_run_rc,
-            "timed_out": timed_out,
-            "oom_kill_count": resource_events["oom_kill"],
-            "local_resource_events": resource_events,
             "unit_state": unit_state,
             "terminal_snapshot": last_snapshot,
-            "verdict": classify_verdict(
-                payload_rc,
-                systemd_run_rc,
-                timed_out,
-                resource_events,
-                unit_state.get("Result", ""),
-            ),
+            "measured_relative_path": control_group,
         }
-        encoded = json.dumps(result, sort_keys=True)
-        print(f"RESOURCE {encoded}")
-        if args.json_out is not None:
-            args.json_out.parent.mkdir(parents=True, exist_ok=True)
-            args.json_out.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        if result["verdict"] == "PASS":
-            return 0
-        return payload_rc if isinstance(payload_rc, int) and payload_rc != 0 else 1
     finally:
         if not acknowledge_path.exists() and done_path.exists():
             acknowledge_path.write_text("cleanup\n", encoding="utf-8")
@@ -403,6 +677,208 @@ def controller_main(arguments: list[str]) -> int:
             capture_output=True,
         )
         shutil.rmtree(scratch, ignore_errors=True)
+
+
+def run_in_scope(
+    args: argparse.Namespace, command: list[str], own_path: str, started: float
+) -> dict[str, object]:
+    """Measure the transient scope this controller is already contained by.
+
+    The payload is an ordinary child process, so the kernel's OOM killer acts
+    on it inside the same boundary that would have contained a nested unit, and
+    the leaf's cumulative `memory.peak`, `memory.swap.peak` and
+    `memory.events.local` are read live exactly as before. The controller's own
+    footprint is inside the measurement; that is recorded, and it can only make
+    the reported peak larger than the payload's own.
+    """
+    directory = cgroup_dir(own_path)
+    unit = own_path.strip("/").rsplit("/", 1)[-1]
+    require_survivable_containment(unit)
+    entry_snapshot = read_snapshot(directory)
+    require_readback(entry_snapshot, args.memory_max, args.swap_max)
+    entry_peak = int(entry_snapshot["memory_peak"])  # type: ignore[arg-type]
+    # Linux 6.2 and later reset a cgroup's cumulative `memory.peak` on any
+    # write. Where that works the reported peak is the payload's own rather
+    # than the whole scope's history; where it does not, the record says so and
+    # the peak is read as it stands, which can only overstate the payload.
+    try:
+        (directory / "memory.peak").write_text("0", encoding="utf-8")
+    except OSError:
+        peak_after_reset = entry_peak
+    else:
+        peak_after_reset = int(read_value(directory / "memory.peak"))
+    peak_reset = peak_after_reset < entry_peak
+
+    samples = 0
+    timed_out = False
+    last_snapshot: dict[str, object] | None = None
+
+    def prefer_payload_as_oom_victim() -> None:
+        # The nested-slice shape gives the payload unit `OOMScoreAdjust=500` so
+        # that the boundary kills the payload rather than anything else in the
+        # scope. In-scope mode shares its cgroup with this controller, so it
+        # raises the same knob on the child directly. Raising is unprivileged;
+        # lowering is not, which is why the controller cannot instead protect
+        # itself. Without this a red control can kill its own instrument and
+        # leave no record of the event it was built to record.
+        try:
+            Path("/proc/self/oom_score_adj").write_text("500", encoding="utf-8")
+        except OSError:
+            pass
+
+    process = subprocess.Popen(command, preexec_fn=prefer_payload_as_oom_victim)
+    try:
+        while True:
+            last_snapshot = read_snapshot(directory)
+            samples += 1
+            require_readback(last_snapshot, args.memory_max, args.swap_max)
+            if process.poll() is not None:
+                break
+            if time.monotonic() - started > args.timeout_seconds:
+                timed_out = True
+                process.kill()
+                break
+            time.sleep(SAMPLE_INTERVAL_SECONDS)
+        process.wait(timeout=60)
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=60)
+    last_snapshot = read_snapshot(directory)
+    samples += 1
+    require_readback(last_snapshot, args.memory_max, args.swap_max)
+
+    try:
+        unit_state = show_unit(unit)
+    except MeasureError:
+        unit_state = {}
+    return {
+        "containment": {
+            "mode": "in-scope",
+            "measured_cgroup": own_path,
+            "controller_inside_measured_cgroup": True,
+            "peak_reset_before_payload": peak_reset,
+            "peak_bytes_at_controller_entry": entry_peak,
+            "peak_bytes_after_reset": peak_after_reset,
+        },
+        "unit": unit,
+        "samples": samples,
+        "timed_out": timed_out,
+        "payload_returncode": normalized_returncode(process.returncode),
+        "systemd_run_returncode": None,
+        "unit_state": unit_state,
+        "terminal_snapshot": last_snapshot,
+        "measured_relative_path": own_path,
+    }
+
+
+def controller_main(arguments: list[str]) -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--memory-max", required=True, type=parse_bytes)
+    parser.add_argument("--swap-max", required=True, type=parse_swap_bytes)
+    parser.add_argument("--json-out", type=Path)
+    parser.add_argument("--timeout-seconds", type=float, default=7200.0)
+    parser.add_argument(
+        "--executable",
+        type=Path,
+        action="append",
+        help="the built executable under measurement; hashed into the record. "
+        "Repeatable. Omitting it is recorded as an explicit unavailable marker, "
+        "not as a missing field.",
+    )
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        action="append",
+        help="the fixture manifest in force; hashed into the record. Repeatable.",
+    )
+    parser.add_argument("command", nargs=argparse.REMAINDER)
+    args = parser.parse_args(arguments)
+    command = args.command[1:] if args.command[:1] == ["--"] else args.command
+    if not command:
+        parser.error("a command is required after --")
+    if args.timeout_seconds <= 0:
+        parser.error("--timeout-seconds must be positive")
+    if shutil.which("systemd-run") is None or shutil.which("systemctl") is None:
+        raise MeasureError("systemd-run and systemctl are required")
+
+    own_path = own_cgroup_path()
+    require_admitted_containment(own_path)
+    validate_requested_limits(own_path, args.memory_max, args.swap_max)
+    nested = in_dedicated_slice(own_path)
+
+    identity: dict[str, object] = {
+        "executables": [
+            file_identity(path, "executable")
+            for path in (args.executable or [None])
+        ],
+        "fixture_manifests": [
+            file_identity(path, "fixture manifest")
+            for path in (args.manifest or [None])
+        ],
+        "payload_command_binary": file_identity(
+            resolve_payload_binary(command), "payload command binary"
+        ),
+    }
+
+    started = time.monotonic()
+    pre_survival = survival_snapshot(own_path)
+    if nested:
+        outcome = run_nested_slice(args, command, started)
+    else:
+        outcome = run_in_scope(args, command, own_path, started)
+    post_survival = survival_snapshot(str(outcome["measured_relative_path"]))
+
+    resource_events = local_resource_events(outcome["terminal_snapshot"])
+    unit_state = outcome["unit_state"]
+    assert isinstance(unit_state, dict)
+    pre_outer = pre_survival["outer_oom"]
+    post_outer = post_survival["outer_oom"]
+    assert isinstance(pre_outer, dict) and isinstance(post_outer, dict)
+    result = {
+        "schema": SCHEMA_VERSION,
+        "containment": outcome["containment"],
+        "unit": outcome["unit"],
+        "command": command,
+        "working_directory": str(Path.cwd()),
+        "memory_max": args.memory_max,
+        "swap_max": args.swap_max,
+        "elapsed_seconds": round(time.monotonic() - started, 6),
+        "samples": outcome["samples"],
+        "payload_returncode": outcome["payload_returncode"],
+        "systemd_run_returncode": outcome["systemd_run_returncode"],
+        "timed_out": outcome["timed_out"],
+        "oom_kill_count": resource_events["oom_kill"],
+        "local_resource_events": resource_events,
+        "unit_state": unit_state,
+        "terminal_snapshot": outcome["terminal_snapshot"],
+        "identity": identity,
+        "survival": {
+            "pre": pre_survival,
+            "post": post_survival,
+            "boot_changed": pre_survival["boot"] != post_survival["boot"],
+            "session_changed": pre_survival["session"] != post_survival["session"],
+            "outer_oom_increased": outer_oom_increased(pre_outer, post_outer),
+        },
+        "verdict": classify_verdict(
+            outcome["payload_returncode"],
+            outcome["systemd_run_returncode"],
+            outcome["timed_out"],
+            resource_events,
+            unit_state.get("Result", ""),
+        ),
+    }
+    encoded = json.dumps(result, sort_keys=True)
+    print(f"RESOURCE {encoded}")
+    if args.json_out is not None:
+        args.json_out.parent.mkdir(parents=True, exist_ok=True)
+        args.json_out.write_text(
+            json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+    if result["verdict"] == "PASS":
+        return 0
+    payload_rc = outcome["payload_returncode"]
+    return payload_rc if isinstance(payload_rc, int) and payload_rc != 0 else 1
 
 
 def main() -> int:
