@@ -646,7 +646,12 @@ private def finishTopLevelAmsterdam (state : StateGasRules) (msg : Msg)
     if msg.tenv.stat.auths.isEmpty then devm else devm.commitStateGas
   dispatchTopLevelAmsterdam state msg devm
 
-private def prepareTopLevelAmsterdam (state : StateGasRules) (msg : Msg) :
+/-- Build the machine a top-level Amsterdam message call starts from: the
+initial `Devm`, then the authorization tuples of an EIP-7702 transaction, then
+the state-gas commit and the creation/call dispatch that `create_evm` performs.
+Amsterdam-only: the pre-Amsterdam lane (`rules.stateGas = none`) never reaches
+it, and `processTopLevelAmsterdam` is its only caller outside the guards. -/
+def prepareTopLevelAmsterdam (state : StateGasRules) (msg : Msg) :
     Except (EvmError × Devm) (Msg × Devm) := do
   let devm := initDevm msg
   let devm ←
@@ -702,7 +707,12 @@ private def msgCallOutputAmsterdam (msg : Msg) (evm : Devm) :
     stateGasUsed := stateGasUsed
   }⟩
 
-private def settleTopLevelPreparationFailure (msg : Msg) (error : EvmError)
+/-- Settle a top-level Amsterdam message call whose preparation failed before
+the interpreter was entered: a halt rolls the state back, forfeits the remaining
+gas and reports the pre-call state with the reads preparation had already
+recorded, while every other error propagates unchanged. Amsterdam-only, and
+reached only from `processTopLevelAmsterdam`'s error branch. -/
+def settleTopLevelPreparationFailure (msg : Msg) (error : EvmError)
     (devm : Devm) : Except EvmError (State × MsgCallOutput) :=
   match error with
   | .halt reason =>
@@ -730,7 +740,12 @@ private def settleTopLevelPreparationFailure (msg : Msg) (error : EvmError)
   | .crypto reason => .error (.crypto reason)
   | .internal reason => .error (.internal reason)
 
-private def processTopLevelAmsterdam (state : StateGasRules) (msg : Msg)
+/-- Run one top-level Amsterdam message call: prepare the machine, settle a
+preparation failure, or enter the shared interpreter on the prepared frame and
+render its output. `frameOf` selects the creation or the call frame, which is
+what makes this the one Amsterdam body behind both `processMessageCall.create`
+and `processMessageCall.call`. Amsterdam-only. -/
+def processTopLevelAmsterdam (state : StateGasRules) (msg : Msg)
     (frameOf : Msg → Frame) : Except EvmError (State × MsgCallOutput) :=
   match prepareTopLevelAmsterdam state msg with
   | .error ⟨error, devm⟩ =>
