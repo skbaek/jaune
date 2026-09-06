@@ -3513,7 +3513,7 @@ def stateTransitionE (f : Fork) (ch : BlockChain) (block : Block) :
 input, and the entry point for static fixture suites, which state their fork
 rather than deriving it.
 
-Named `stateTransitionAt` and taking a `ForkRules` until goal
+Named `stateTransitionWith` and taking a `ForkRules` until goal
 `jaune-forks-by-construction-v1`. Once a machine carries a `Fork`, the
 rules-taking adapter and this one had the same domain, so the duplicate layer
 was retired into this name rather than kept as a synonym; there is no longer a
@@ -4660,7 +4660,7 @@ Same rendered diagnostics; the decode-failure channel moved from the outer
 `.error` to the inner `.inr` deliberately (see the core's docstring and the
 Step-10 report).
 
-Named `addBlockToChainAt` and taking a `ForkRules` until goal
+Named `addBlockToChainWith` and taking a `ForkRules` until goal
 `jaune-forks-by-construction-v1`; with a machine carrying a `Fork` the
 rules-taking adapter and the fork-taking one had the same domain, and the
 duplicate layer was retired into this name. The `.support` channel this
@@ -4821,9 +4821,11 @@ example (chain : BlockChain) (blockRlp : Bytes) :
     addBlockToChainAt .prague chain blockRlp = addBlockToChain chain blockRlp :=
   rfl
 
--- A block whose fork this build cannot run is refused, and refused *before*
--- anything is decoded or executed, so an unimplemented fork can never be
--- mistaken for a rule this build actually applied.
+-- A block whose fork a build cannot run would be refused *before* anything is
+-- decoded or executed, so an unimplemented fork could never be mistaken for a
+-- rule the build actually applied. No fork is in that state here: `Fork.ruleSet`
+-- is total, and the guards below record that the support channel is
+-- unreachable through any declared label.
 
 private def guardEmptyChain : BlockChain :=
   { blocks := [], state := .empty, chainId := 1 }
@@ -4933,9 +4935,10 @@ private def guardBlobParent (baseFee blobGasUsed : Nat) : Header :=
     | .error (.internal _) => true
     | _ => false)
 
--- The complement, at the same entry point and on the same chain, is now
--- vacuous: no declared fork is unimplemented since goal C composed
--- `amsterdamRules`. Goal A's guard here asserted that Amsterdam was refused on
+-- The complement, at the same entry point and on the same chain, is vacuous
+-- by construction: `Fork.ruleSet` is total, so `Fork.unimplemented_eq_nil` is a
+-- theorem and this guard records today's list rather than establishing it.
+-- Goal A's guard here asserted that Amsterdam was refused on
 -- the support channel before any block was examined; it is rewritten to say
 -- that Amsterdam reaches execution like every other fork (the no-parent
 -- invariant, never a support failure), and that the support channel is
