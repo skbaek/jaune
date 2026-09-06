@@ -1812,12 +1812,19 @@ The other half -- that the sites name those functions rather than the globals
 beside them -- is a source condition after this change rather than an evaluation
 one, and `scripts/check-rule-data-reads.sh` is **the whole of the replacement's
 site coverage**. It is shown to bite twice, each in a disposable tree: on
-`Xinst.step`'s legacy CALL arm reading `gasCallValue`, and on `Linst.run`'s
-legacy SELFDESTRUCT arm (`Jaune/Machine.lean`) reading `gasColdAccountAccess` --
-each leaves the tree green with every `#guard` below still passing, and turns
-only that gate red. Its three names cover exactly the CREATE and SELFDESTRUCT
-reads the two vacuous rows miss. Goal `jaune-forks-by-construction-v1`,
-D-F6 (iii). -/
+`Xinst.step`'s legacy CALL arm reading the global that shadows `callValue`, and
+on `Linst.run`'s legacy SELFDESTRUCT arm (`Jaune/Machine.lean`) reading the one
+that shadows `coldAccountAccess` -- each leaves the tree green with every
+`#guard` below still passing, and turns only that gate red. Its three names
+cover exactly the CREATE and SELFDESTRUCT reads the two vacuous rows miss.
+
+The two globals are named here by the field they shadow rather than spelled,
+because that gate's inventory is a plain identifier grep with **no comment
+exemption**: prose that spells one is an occurrence like any other and has to be
+classified in `scripts/rule-data-allow.txt`. That is deliberate -- a gate that
+skipped comments would let a reader be told the wrong thing about which name the
+interpreter uses -- and this paragraph is the first thing to have tripped it.
+Goal `jaune-forks-by-construction-v1`, D-F6 (iii). -/
 private def meteringGuardLegacySchedule : GasSchedule :=
   {pragueGasSchedule with
     coldAccountAccess := 2700
