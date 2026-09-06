@@ -16,7 +16,7 @@ unchanged.
 
 | concept | type | role |
 |---|---|---|
-| identity | `Fork` (`prague`, `osaka`, `bpo1`, `bpo2`) | a name; carries no semantics |
+| identity | `Fork` (`prague`, `osaka`, `bpo1`, `bpo2`, `amsterdam`) | a name; carries no semantics |
 | rules | `ForkRules` | the data execution actually reads |
 | schedule | `ChainConfig` | which rules a given chain uses at a given block |
 
@@ -27,17 +27,36 @@ checked for monotonicity — it is not a licence to compare forks in execution.
 ## The single place fork ordering becomes rule data
 
 ```
-Fork.rules? : Fork → Option ForkRules
+Fork.ruleSet : Fork → ForkRules
 ```
 
-This is the one function that turns an identity into semantics. Adding a fork
-means adding a case here plus the rule data it names — never a second
-interpreter, never a comparison at a use site. `Fork.rules` wraps it as a
-failing lookup; `none` reports `UnsupportedForkError` rather than answering with
-another fork's rules, because running Osaka blocks under Prague semantics would
-turn a missing implementation into a silent consensus fault.
+This is the one function that turns an identity into semantics, and it is
+**total**. Adding a fork means adding a case here plus the rule data it names —
+never a second interpreter, never a comparison at a use site.
 
-**Four of the five declared forks resolve.** `prague` and `osaka` carry
+Totality is the load-bearing property, not a convenience. Because it holds,
+
+```
+Fork.ruleSet_valid : ∀ f : Fork, (Fork.ruleSet f).Valid
+```
+
+is proved once, by `cases f <;> decide`, and because `BenvStat` carries a
+`Fork` (below) it discharges `ForkRules.Valid` for every machine that can
+exist. No statement about a machine carries a validity premise.
+
+`Fork.rules? : Fork → Option ForkRules` and
+`Fork.rules : Fork → Except SupportError ForkRules` keep their names, their
+types and their callers, and are defined through `Fork.ruleSet` as `some` and
+`.ok`. Their `none` and `.error` branches therefore have no inhabitant. They
+are **retained vocabulary, not live paths**: `scripts/check-fork-constants.sh`
+and `scripts/check-cli.sh` assert the `UnsupportedForkError` refusal text, the
+CLI's declared-versus-runnable distinction is user-facing, and a fork identity
+declared ahead of its rules would need a partial lookup back. Answering such a
+lookup with another fork's rules would turn a missing implementation into a
+silent consensus fault, which is why the refusal is retained rather than
+deleted.
+
+**All five declared forks resolve.** `prague` and `osaka` carry
 complete static execution rules; `bpo1` and `bpo2` are `osakaRules` with one
 field replaced:
 
@@ -51,14 +70,11 @@ of the code rather than a claim about it: a guard undoes the update and
 requires the whole record to equal `osakaRules`, so no BPO fork can acquire a
 rule of its own, and a later Osaka correction reaches both automatically.
 
-`amsterdam` is the fifth, and it resolves to `none` on purpose. Declaring an
-identity without its rules is what the `Option` in `Fork.rules?` was for, and
-this is the first time it is used: the label parses, has an index, and appears
-in transition labels, while every attempt to run it is `UnsupportedForkError`.
-So the `UnsupportedForkError` branch is reachable again rather than merely
-retained.
+`amsterdam` is the fifth and, since goal `jaune-amsterdam-currency-v1`, carries
+a complete record of its own. The label parses, has an index, appears in
+transition labels, and runs.
 
-That makes two different lists, and conflating them is the mistake the code is
+There are still two lists, and conflating them is the mistake the code is
 arranged to prevent:
 
 ```
@@ -68,15 +84,27 @@ Fork.unimplemented = Fork.all.filter (·.rules?.isNone)
 ```
 
 Both derived lists come from `Fork.rules?` rather than being written out, so
-they cannot drift from what actually resolves. The distinction is carried
-through every user-facing surface: a diagnostic about an *unrecognised* label
-names the declared list, one about a label this build cannot *run* names the
-runnable list, and `t8n --forks` — the handshake a framework reads to decide
-what to send this binary — advertises only the runnable one.
+they cannot drift from what actually resolves — and since `Fork.ruleSet` is
+total they are provably the trivial ones:
 
-A fixture case at an unimplemented fork is refused at the top of the per-case
-run, before a header, a prestate or a block is read, and for both endpoints of
-a transition label. Routed through the import path instead it would surface as
+```
+Fork.supported_eq_all    : Fork.supported = Fork.all
+Fork.unimplemented_eq_nil : Fork.unimplemented = []
+```
+
+These are **theorems, not `#guard`s**, deliberately: a guard would pass again
+the day a fork were declared without rules, which is exactly the state a total
+`Fork.ruleSet` makes impossible. The guards that record today's lists remain
+beside them.
+
+The distinction between the two names is kept because they answer different
+questions — what this build *parses* against what it will also *execute* — and
+because a user-facing message must keep distinguishing a label this build does
+not recognise from one it recognises and could refuse. The refusal path is
+unreachable; the vocabulary that expresses it is retained, and the fixture
+runner's refusal at the top of the per-case run (before a header, a prestate or
+a block is read, and for both endpoints of a transition label) is retained with
+it. Routed through the import path instead, such a refusal would surface as
 "block 0 was expected valid but failed", which reads as a verdict about a block
 this build never examined.
 
@@ -161,10 +189,10 @@ required), `amsterdamRequests` (Prague's two system calls followed by
 EIP-8282's builder deposit and exit contracts, in call order) and `bal := some
 { itemCost := 2000 }` — the one record for the block-level access list
 (`BalRules`), whose presence is what switches on read recording, the builder,
-the item rule and the header's hash check. `Fork.rules? .amsterdam = some
+the item rule and the header's hash check. `Fork.ruleSet .amsterdam =
 amsterdamRules`; `Fork.supported` is five forks and `Fork.unimplemented` is
-empty; the transition tool's fork-local metering resolver is retired and it
-reads `Fork.rules` like everything else. `ForkRules.Valid` gained two
+empty, both as theorems; the transition tool's fork-local metering resolver is
+retired and it reads `Fork.rules` like everything else. `ForkRules.Valid` gained two
 conjuncts for the new record — `bal`, when present, has a non-zero
 `itemCost`, and `bal.isSome` equals the header rule's `blockAccessListHash`
 flag — each refused under its own `RuleDefect`, so a record that carries a
@@ -204,7 +232,11 @@ repricing subtrees.
 The three interpreter-step numbers that were left on the globals —
 `coldAccountAccess`, `callValue` and `createAccess` — are read through
 `rules.gas` at the account-access sites, and the premise that made the
-deferral necessary exists: **`GasSchedule.Valid`**. The three Amsterdam
+deferral necessary exists: **`GasSchedule.Valid`**. It survives as a *schedule*
+premise on the schedule-level lemmas (`GasSchedule.access_cost_pos`,
+`GasSchedule.gasWarmAccess_le_access_cost`, `popAdrAccessChargePush_gasLt`),
+which quantify over a schedule rather than over a machine; what disappeared is
+the machine-level premise, because every machine's schedule is its fork's. The three Amsterdam
 instructions are gated the same way — `SLOTNUM` by `rules.op.slotnum`,
 `DUPN`/`SWAPN`/`EXCHANGE` by `rules.op.stackAccess` — decoded at every fork
 (EIP-8024's two-byte forms are sized by `getInst` fork-independently) and
@@ -224,9 +256,12 @@ schedule and reading the failures gives three inequalities and no more —
 `100 ≤ coldAccountAccess`, `0 < createAccess`, `2300 ≤ callValue`, which are
 `gasWarmAccess`, positivity, and `gCallStipend`. Each is refused under its own
 `RuleDefect`, so a rule set the semantics cannot use says which number is the
-problem. `ForkRules.Valid` carries it, every named fork's record carries the
-witness, and `ValidRules.check` is still the one way a caller-supplied record
-obtains one.
+problem. `ForkRules.Valid` carries it, and `Fork.ruleSet_valid` proves it once for all
+five fork records — which, since `BenvStat` carries a `Fork`, is every rule set
+a machine can hold. `ValidRules.check` and `ForkRules.defect?` are retained as
+the vocabulary a future parameter study needs: they are the way a *caller*
+supplied record would obtain a witness, and no such record can reach a machine
+today.
 
 Two consequences are worth stating because they are what kept the change from
 spreading:
@@ -235,11 +270,14 @@ spreading:
   sibling, `GasSchedule.accessCost`, and `pragueRules_gas_accessCost` is the
   `rfl` proof that the two are the same function at Prague. A downstream proof
   that names `accessCost` is untouched.
-* `exec` keeps its signature and stays total. Sufficiency now needs a
-  hypothesis and a `def` cannot demand one, so the exhaustion branch became a
-  typed internal invariant error — the pattern this executable already uses for
-  the unreachable — with `exec_of_valid` proving a usable rule set never
-  reaches it. Because that branch returns the frame's own `Devm`, the
+* `exec` keeps its signature and stays total. Sufficiency needs
+  `ForkRules.Valid` and a `def` cannot demand a hypothesis, so the exhaustion
+  branch became a typed internal invariant error — the pattern this executable
+  already uses for the unreachable — with `exec_ok` proving it is never
+  reached. `exec_ok` is unconditional: `BenvStat` carries a `Fork`, so the
+  witness is a fact about the machine rather than a premise. (It was named
+  `exec_of_valid` while that premise existed; nothing outside this repository
+  named it.) Because that branch returns the frame's own `Devm`, the
   *canonicality* family needs no premise at all and every one of its signatures
   is unchanged.
 
@@ -291,8 +329,15 @@ separate, and Osaka's is stated through the EIP's blob-count product.
 
 ## How rules reach the interpreter
 
-`rules : ForkRules` is a **field of `BenvStat`**. Every environment that
-execution already threads reaches a `BenvStat`:
+`fork : Fork` is a **field of `BenvStat`**, and
+
+```
+BenvStat.rules (s : BenvStat) : ForkRules := Fork.ruleSet s.fork
+```
+
+is a definition carrying the former field's name and type. Every environment
+that execution already threads reaches a `BenvStat`, and every *read* below is
+textually what it always was:
 
 | environment | path to the rules |
 |---|---|
@@ -301,6 +346,18 @@ execution already threads reaches a `BenvStat`:
 | `Msg` | `.benv.stat.rules` |
 | `Sevm` | `.benvStat.rules` |
 | `Evm` | `.sta.benvStat.rules` |
+
+What moved is *construction*: there is no `rules` field to set, so the only
+rule sets a machine can carry are the five `Fork.ruleSet` records. A record
+that satisfies `ForkRules.Valid` but realises no fork is not rejected — it is
+inexpressible. That is what makes `BenvStat.rules_valid`, `Sevm.rules_valid`
+and `Evm.rules_valid` one-line corollaries of `Fork.ruleSet_valid`, and what
+removed the validity premise from all 25 machine-level Sufficiency statements.
+
+The fork index is a *selection and provenance* key, exactly as
+`ForkRules.fork` already was; `BenvStat.rules_fork` says the two agree.
+Execution still branches on rule **data** and never on `Fork` identity — an
+`if fork = …` in execution would be a defect, not an optimisation.
 
 This is what keeps one interpreter. No opcode evaluator, precompile dispatcher,
 transaction pipeline, or block transition was duplicated or given a fork
@@ -328,43 +385,59 @@ Rule consumers, and where each reads its rule:
 
 ## Public entry points
 
-Four layers, each named by how it obtains rules. This naming is now fixed.
+**Three** layers, each named by how it obtains rules. There were four until
+goal `jaune-forks-by-construction-v1`: with `BenvStat` carrying a `Fork`, a
+rules-taking `…With` layer and a fork-taking `…At` layer have the same domain,
+so `…With` was retired *into* `…At` rather than kept as a synonym. There is no
+longer an entry point that can be handed a rule record no fork realises. This
+naming is now fixed.
 
 | suffix | selects rules by | intended caller |
 |---|---|---|
-| `…With rules` | given explicitly | the core implementation |
-| `…At fork` | a named `Fork` | static fixture suites |
+| `…At fork` | a named `Fork` | static fixture suites, and the core |
 | `…Using cfg` | a `ChainConfig` and the block timestamp | a configured chain |
 | *(none)* | Prague | existing callers and downstream proofs |
 
 ```
-stateTransitionWith  : ForkRules   → BlockChain → Block → Except String BlockChain
+stateTransitionE     : Fork        → BlockChain → Block → Except TransitionError BlockChain
 stateTransitionAt    : Fork        → BlockChain → Block → Except String BlockChain
 stateTransitionUsing : ChainConfig → BlockChain → Block → Except String BlockChain
 stateTransition      :               BlockChain → Block → Except String BlockChain
 
-addBlockToChainWith  : ForkRules   → BlockChain → B8L → Except String (BlockChain ⊕ String)
+addBlockToChainAtE   : Fork        → BlockChain → B8L → Except ImportFailure (ImportOutcome BlockChain)
 addBlockToChainAt    : Fork        → BlockChain → B8L → Except String (BlockChain ⊕ String)
 addBlockToChainUsing : ChainConfig → BlockChain → B8L → Except String (BlockChain ⊕ String)
 addBlockToChain      :               BlockChain → B8L → Except String (BlockChain ⊕ String)
 ```
 
-`addBlockToChainCore` sits under the `addBlockToChain*` family and takes an
-already-decoded block plus the authoritative original RLP length. Thus `…Using`
-can read the block timestamp without decoding twice, while EIP-7934 never
-measures a shorter re-encoding. The public entry-point signatures are unchanged.
+`stateTransitionE` is the typed canonical core and `addBlockToChainCanonicalE`
+sits under the `addBlockToChain*` family, taking an already-decoded block plus
+the authoritative original RLP length. Thus `…Using` can read the block
+timestamp without decoding twice, while EIP-7934 never measures a shorter
+re-encoding. `…Using` now selects through `ChainConfig.forkAt` rather than
+`ChainConfig.rulesAt`; both remain, and `rulesAt` is `forkAt` composed with
+`Fork.rules`.
+
+The `…At`, `…Using` and Prague entry points are unchanged in name and type.
+The retired `…With` layer is the one public resignature this change makes, and
+it was reserved to the owner and ruled (2026-09-06): the `Fork` form.
 
 ### The Prague wrappers are the core, not a copy
 
 `stateTransition` and `addBlockToChain` keep their original names, types, and
-behaviour. Four `example`s in `Execution.lean` prove this by `rfl`:
+behaviour. Four `example`s in `Jaune/Transaction.lean` prove this by `rfl`:
 
 ```
-stateTransition ch block          = stateTransitionWith pragueRules ch block
-stateTransitionAt .prague ch block = stateTransition ch block
-addBlockToChain chain rlp          = addBlockToChainWith pragueRules chain rlp
+stateTransition ch block            = stateTransitionAt .prague ch block
+stateTransitionAt .prague ch block  = stateTransition ch block
+addBlockToChain chain rlp           = addBlockToChainAt .prague chain rlp
 addBlockToChainAt .prague chain rlp = addBlockToChain chain rlp
 ```
+
+Two of the four are now the same equation read in both directions, because the
+rules-explicit layer they used to compare against *is* the fork-explicit one.
+They are kept in both directions rather than halved: the pair says that neither
+name is the definition of the other in a way a later edit could quietly invert.
 
 `rfl` rather than sample-data equality is the point: it holds for every input,
 so no wrapper can diverge from the core somewhere untested. Prague is permanent
@@ -391,9 +464,13 @@ at one fork, so a transition label there is an error rather than an ambiguity.
   both the static and the transition grammar; the fixture runner aborts.
 - Declared but unimplemented fork → `UnsupportedForkError`, raised while
   resolving rules, before anything is decoded or executed. On the block-import
-  API this is the harness `.error` channel, never a `.inr` block-rejection
-  verdict: a fork this build has not implemented says nothing about whether the
-  block is valid. No fork this build declares is in that state today.
+  API this would be the harness `.error` channel, never a `.inr`
+  block-rejection verdict: a fork this build has not implemented says nothing
+  about whether the block is valid. **No fork can be in that state**:
+  `Fork.ruleSet` is total, so this refusal is unreachable vocabulary, retained
+  because two gates assert its text, because the declared-versus-runnable
+  distinction it expresses is user-facing, and because reintroducing a partial
+  lookup is what a fork declared ahead of its rules would require.
 - A fixture that declares its own blob schedule is checked against the rules
   the run will apply, for every fork the label can select. The archive, not
   this repository, is the authority for the numbers a BPO fork consists of.
@@ -415,10 +492,17 @@ rather than being copied per fork, as the plan's design decision 6 requires.
 Adding BPO1 and BPO2 required no Blanc repair at all, which is the clearest
 evidence that they are data: nothing downstream reads a blob schedule.
 
-Blanc's solvency results are now stated over an arbitrary `ForkRules`
-(`stateTransitionWith_inv_solvent`, `addBlockToChainWith_inv_solvent`), with
-the named-fork and configured-chain entry points as instances and the two
-protected Prague theorems as the `pragueRules` instance of the same proof.
+Blanc's solvency results (`stateTransitionWith_preserves_solvent`,
+`addBlockToChainWith_preserves_solvent`, over the generic parents
+`stateTransitionWith_preserves_inv` and `addBlockToChainWith_preserves_inv`)
+were stated over an arbitrary `ForkRules`, with the named-fork and
+configured-chain entry points as instances and the two protected Prague
+theorems as the `pragueRules` instance of the same proof. Retiring the `…With`
+layer re-binds them over `Fork`, so what was an arbitrary rule record becomes
+one of five — a real narrowing of their non-vacuous domain, and the intended
+content of "non-fork rule sets become inexpressible". Blanc's repair belongs to
+its pin bump, and the narrowing is a matter for the owner rather than for this
+note, which records it and stops there.
 `BlockChain.ReachUsing` is reachability along a configured chain, so a sequence
 crossing Prague, Osaka, BPO1, and BPO2 is one induction rather than one
 relation per fork. The four protected statements are textually unchanged and
