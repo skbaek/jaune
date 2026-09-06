@@ -1,0 +1,45 @@
+# Rule-data read allowlist — consumed by scripts/check-rule-data-reads.sh.
+#
+# The gate inventories every live mention, under `Jaune/` and in `Main.lean`,
+# of a gas constant that a supported fork reprices and that therefore lives in
+# `ForkRules.gas` as rule data: `gasColdAccountAccess`, `gasCallValue` and
+# `gasCreate` (programme D2). Each is shadowed by a `GasSchedule` field the
+# interpreter must read instead -- `coldAccountAccess`, `callValue`,
+# `createAccess` -- and each still exists as a global because Prague's value is
+# the legacy one and several Prague-specific statements are about it.
+#
+# Every occurrence must match an exact, line-number-independent row below:
+#
+#   <relpath> <source line, trimmed, whitespace runs collapsed>
+#
+# A new occurrence anywhere -- in an instruction site, a charging helper, or a
+# new lemma -- fails the gate until it is classified here. That is the point:
+# once `BenvStat` carries a `Fork`, every reachable machine's legacy-lane
+# schedule is `pragueGasSchedule`, whose three numbers equal these globals by
+# `rfl`, so a site that read the global instead of the selected record would
+# compute the same number on every machine and no evaluation guard could see
+# the difference. This inventory is what sees it.
+#
+# Goal `jaune-forks-by-construction-v1`, decision D-F6 (iii). It replaces the
+# structural half of the retired `meteringGuardLegacyRules` machine guards; the
+# arithmetic half survives as the schedule-level rows beside
+# `meteringGuardLegacySchedule` in `Jaune/Execution.lean`.
+#
+# --- the three definitions ---
+Jaune/Machine.lean def gasColdAccountAccess : Nat := 2600
+Jaune/Machine.lean def gasCallValue : Nat := 9000
+Jaune/Machine.lean def gasCreate : Nat := 32000
+# --- Prague bridges: the record's value IS the global at Prague, by rfl ---
+Jaune/Machine.lean pragueRules.gas.coldAccountAccess = gasColdAccountAccess := rfl
+Jaune/Machine.lean pragueRules.gas.callValue = gasCallValue := rfl
+Jaune/Machine.lean pragueRules.gas.createAccess = gasCreate := rfl
+Jaune/Machine.lean @[simp] theorem txCreateCost_eq_gasCreate : txCreateCost = gasCreate := rfl
+Jaune/Machine.lean #guard pragueGas.callValue = gasCallValue
+Jaune/Machine.lean #guard pragueGas.createAccess = gasCreate
+# --- the retained schedule-free `accessCost`, which is Prague's function ---
+Jaune/Machine.lean if x ∈ a then gasWarmAccess else gasColdAccountAccess
+Jaune/Sufficiency.lean unfold accessCost gasWarmAccess gasColdAccountAccess
+# --- prose ---
+Jaune/Machine.lean interpreter) rewrites to `gasCallValue` and meets the arithmetic it already
+Jaune/Sufficiency.lean `gasCallValue = 9000` against a `gCallStipend = 2300` stipend.
+Jaune/Sufficiency.lean -- a value-bearing call pays `gasCallValue` against a `gCallStipend` stipend.
