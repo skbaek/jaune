@@ -4133,11 +4133,15 @@ theorem executeCode.enter_inr_gasLe {msg : Msg} {raw : Execution}
 
 /-! ### Every frame the interpreter enters runs under the same rules
 
-The gas-decreasing obligations now rest on `rules.Valid` -- Amsterdam reprices
-the numbers they lean on, so the numbers are no longer literals a `decide` can
-settle. The driver recurses into *child* frames, so it needs the premise to
-travel with them, and this is the invariant that makes it travel: a spawned
-frame's rules are the spawning frame's rules.
+The gas-decreasing obligations rest on `rules.Valid` -- Amsterdam reprices the
+numbers they lean on, so the numbers are no longer literals a `decide` can
+settle. Since goal `jaune-forks-by-construction-v1` the witness is a fact about
+the machine (`Sevm.rules_valid`, from `Fork.ruleSet_valid`) rather than a
+premise, so nothing has to *travel* into a child frame: the child is a machine
+and carries its own. The invariant below is kept because it is what makes the
+recursion's rule-identity claim true rather than assumed, and because the
+spawn obligation still states it: a spawned frame's rules are the spawning
+frame's rules.
 
 That is a fact about the message-building path rather than about gas. A child's
 `Benv` is the parent's `benvStat` with only its `state` moved -- `callMsg` and
@@ -4609,8 +4613,9 @@ theorem execFueled_settledGasLe : ∀ (fuel : Nat) (evm : Evm) {raw : Execution}
       exact (ih _ h).mono (Nat.le_of_lt hstep)
     · rw [hs] at h hstep
       simp only [Step.GasBound] at hstep
-      -- The spawn obligation now also says the child runs under these rules,
-      -- which is what carries the validity premise into the recursion.
+      -- The spawn obligation also says the child runs under these rules. The
+      -- recursion no longer needs that half -- the child's validity comes from
+      -- its own fork -- so it is discarded here rather than threaded.
       obtain ⟨hstep, -⟩ := hstep
       dsimp only at h
       rcases he : frame.enter with r | child

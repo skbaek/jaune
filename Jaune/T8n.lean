@@ -179,8 +179,12 @@ Goal B's transaction-metering resolver (`meteringRules?`, `meteringForks`,
 def advertisedForkLane : List Fork := Fork.supported
 
 -- The advertised lane is the runnable lane, stated both ways so that a fork
--- added to `Fork.all` without rules is neither advertised nor silently omitted
--- from a hand-kept list. (Goal C's guards here said the lane was a *prefix* of
+-- added to `Fork.all` without rules would be neither advertised nor silently
+-- omitted from a hand-kept list. Since goal `jaune-forks-by-construction-v1`
+-- no fork can be in that state -- `Fork.ruleSet` is total, and
+-- `Fork.supported_eq_all` and `Fork.unimplemented_eq_nil` are theorems -- so
+-- these guards record today's lists rather than establishing them, and the
+-- advertised lane is `Fork.all`. (Goal C's guards here said the lane was a *prefix* of
 -- the runnable one with `[.amsterdam]` the only runnable fork not advertised;
 -- goal B's said `Fork.unimplemented = [.amsterdam]` and named the metering
 -- vehicle; each is rewritten to the statement that replaced it.)

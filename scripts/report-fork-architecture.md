@@ -256,9 +256,12 @@ schedule and reading the failures gives three inequalities and no more —
 `100 ≤ coldAccountAccess`, `0 < createAccess`, `2300 ≤ callValue`, which are
 `gasWarmAccess`, positivity, and `gCallStipend`. Each is refused under its own
 `RuleDefect`, so a rule set the semantics cannot use says which number is the
-problem. `ForkRules.Valid` carries it, every named fork's record carries the
-witness, and `ValidRules.check` is still the one way a caller-supplied record
-obtains one.
+problem. `ForkRules.Valid` carries it, and `Fork.ruleSet_valid` proves it once for all
+five fork records — which, since `BenvStat` carries a `Fork`, is every rule set
+a machine can hold. `ValidRules.check` and `ForkRules.defect?` are retained as
+the vocabulary a future parameter study needs: they are the way a *caller*
+supplied record would obtain a witness, and no such record can reach a machine
+today.
 
 Two consequences are worth stating because they are what kept the change from
 spreading:
