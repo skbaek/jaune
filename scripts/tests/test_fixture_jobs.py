@@ -1,5 +1,6 @@
 import argparse
 import importlib.util
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -105,6 +106,91 @@ class FixtureJobsTests(unittest.TestCase):
             self.assertEqual(
                 MODULE.choose_jobs(resources.cpu.value, resources.memory.value), 1
             )
+
+    def test_absent_boundary_file_is_not_an_unreadable_one(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.assertIsNone(MODULE.read_text(root / "memory.max"))
+            unreadable = root / "memory.max"
+            unreadable.write_text("max\n", encoding="utf-8")
+            os.chmod(unreadable, 0o000)
+            try:
+                with self.assertRaises(MODULE.DetectionError):
+                    MODULE.read_text(unreadable)
+            finally:
+                os.chmod(unreadable, 0o600)
+
+    def _unreadable_leaf_tree(self, root: Path) -> Path:
+        """An outer cgroup that says `max` over a leaf whose limit is refused."""
+        outer = root / "outer"
+        leaf = outer / "leaf"
+        leaf.mkdir(parents=True)
+        (outer / "memory.max").write_text("max\n", encoding="utf-8")
+        (outer / "memory.current").write_text(str(MODULE.GIB), encoding="utf-8")
+        leaf_max = leaf / "memory.max"
+        leaf_max.write_text(str(6 * MODULE.GIB), encoding="utf-8")
+        (leaf / "memory.current").write_text(str(MODULE.GIB), encoding="utf-8")
+        os.chmod(leaf_max, 0o000)
+        return leaf_max
+
+    def _resolve_on_simulated_host(self, root: Path, proc_cgroup: Path) -> int:
+        """64 GiB of host memory, 16 CPUs, cgroup answers taken from `root`."""
+        with (
+            mock.patch.object(MODULE.platform, "system", return_value="Linux"),
+            mock.patch.object(
+                MODULE,
+                "linux_mem_available",
+                return_value=MODULE.Capacity(64 * MODULE.GIB, ("host",)),
+            ),
+            mock.patch.object(MODULE.os, "cpu_count", return_value=16),
+            mock.patch.object(
+                MODULE.os, "sched_getaffinity", return_value=set(range(16))
+            ),
+        ):
+            resources = MODULE.detect_resources(root, proc_cgroup)
+        return MODULE.choose_jobs(resources.cpu.value, resources.memory.value)
+
+    def test_unreadable_leaf_boundary_resolves_to_one_worker(self):
+        # The documented promise is "an unreadable container boundary ...
+        # conservatively resolves to one worker".  Before this fix the leaf's
+        # refused `memory.max` was skipped, the permissive ancestor answered
+        # `max`, and a 64 GiB / 16 CPU host resolved to 16 workers.  The second
+        # half of this test restores only the pre-fix `read_text` and shows
+        # exactly that, so the control cannot silently stop biting.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            proc_cgroup = root / "self.cgroup"
+            proc_cgroup.write_text("0::/outer/leaf\n", encoding="utf-8")
+            leaf_max = self._unreadable_leaf_tree(root)
+            try:
+                self.assertEqual(self._resolve_on_simulated_host(root, proc_cgroup), 1)
+
+                def prefix_read_text(path):
+                    try:
+                        return path.read_text(encoding="utf-8").strip()
+                    except (FileNotFoundError, PermissionError, OSError):
+                        return None
+
+                with mock.patch.object(MODULE, "read_text", prefix_read_text):
+                    self.assertEqual(
+                        self._resolve_on_simulated_host(root, proc_cgroup), 16
+                    )
+            finally:
+                os.chmod(leaf_max, 0o600)
+
+    def test_absent_leaf_boundary_still_reads_the_ancestor(self):
+        # The conservative path must not swallow the ordinary case: a leaf that
+        # publishes no memory controller at all is absent, not refused, and the
+        # tightest readable ancestor still answers.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            proc_cgroup = root / "self.cgroup"
+            proc_cgroup.write_text("0::/outer/leaf\n", encoding="utf-8")
+            outer = root / "outer"
+            (outer / "leaf").mkdir(parents=True)
+            (outer / "memory.max").write_text(str(8 * MODULE.GIB), encoding="utf-8")
+            (outer / "memory.current").write_text(str(MODULE.GIB), encoding="utf-8")
+            self.assertEqual(self._resolve_on_simulated_host(root, proc_cgroup), 2)
 
     def test_macos_vm_stat_avoids_double_counting(self):
         capacity = MODULE.parse_macos_vm_stat(

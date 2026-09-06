@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # Source-hygiene gate for Jaune (CI lint tier).
 #
-# Fails if any forbidden pattern appears under Jaune/ that is not recorded in
-# the committed allowlist scripts/hygiene-allow.txt. Forbidden patterns:
+# Fails if any forbidden pattern appears in the scanned source that is not
+# recorded in the committed allowlist scripts/hygiene-allow.txt. The scanned
+# source is every `*.lean` under Jaune/ plus the root-level MemoryProbe.lean,
+# which is a tracked Lean executable built by the ordinary `lake build` and is
+# therefore part of the surface this gate defends; it was outside the scan
+# until the memory-closure repair brought it in. Forbidden patterns:
 #
 #   dbg_trace       stray debug tracing left on a code path
 #   sorry           an incomplete proof / axiomatized hole
@@ -10,6 +14,14 @@
 #   opaque          a constant with no defining equation
 #   @[extern]       a body supplied outside Lean
 #   @[implemented_by]  ditto, by substitution at compile time
+#   @[csimp]        a compiled-code substitution: the kernel keeps seeing the
+#                   original definition while every compiled artifact runs the
+#                   replacement, so this is the attribute that makes the binary
+#                   differ from what was elaborated. It demands a kernel-checked
+#                   equality proof, so it is not a hole in the trust surface —
+#                   it is a fact about the trust surface that must be visible
+#                   rather than silent, and every fixture gate measures the
+#                   compiled binary
 #   partial def     a definition whose termination is not established
 #   unsafe          a declaration exempted from the kernel's checks
 #   native_decide   a goal closed by running compiled code outside the kernel
@@ -19,9 +31,10 @@
 # protected path, and until this gate covered them that was a property of the
 # source at a moment rather than a property CI defends. A claim that is only a
 # fact can be lost by one commit; a claim that is a gate cannot be lost
-# quietly. Nothing here is currently present, so the allowlist starts empty for
-# every trust-surface pattern and any first occurrence must be argued for in
-# writing.
+# quietly. Every trust-surface pattern but one has no occurrence at all, and
+# any first occurrence must be argued for in writing. The one exception is the
+# single proved `@[csimp]` substitution, which carries a written allowlist row
+# naming the equality it proves.
 #
 # The trust-surface patterns are anchored to declaration and attribute
 # positions rather than matched as bare words, so prose that merely discusses
@@ -66,6 +79,12 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
 SRC_DIR="Jaune"
+# Tracked Lean sources outside SRC_DIR that are nonetheless part of the scanned
+# surface. MemoryProbe.lean is the bounded memory regression's executable: it is
+# built by `lake build` and asserted by scripts/check-memory-probe.sh, so it is
+# scanned here rather than left as the one Lean file nothing looks at.
+EXTRA_SRC="MemoryProbe.lean"
+SCAN_LABEL="$SRC_DIR/ + $EXTRA_SRC"
 ALLOW="$SCRIPT_DIR/hygiene-allow.txt"
 
 # Hygiene proper: unanchored, since these are never legitimate anywhere.
@@ -84,9 +103,13 @@ P_PARTIAL='^[[:space:]]*(private[[:space:]]+|protected[[:space:]]+|unsafe[[:spac
 P_UNSAFE='^[[:space:]]*(private[[:space:]]+|protected[[:space:]]+)*unsafe[[:space:]]'
 # `native_decide` closes a goal by running compiled code outside the kernel.
 P_NATIVE='\bnative_decide\b'
+# `@[csimp]` substitutes a different function into compiled code. Anchored to
+# the attribute position for the same reason as @[extern]: prose about csimp
+# lemmas must not trip the gate, an actual attribute must.
+P_CSIMP='@\[[^]]*csimp\b'
 
-PATTERN="$P_DEBUG|$P_SORRY|$P_DECL|$P_ATTR|$P_PARTIAL|$P_UNSAFE|$P_NATIVE"
-FORBIDDEN='{dbg_trace, sorry, axiom, opaque, @[extern], @[implemented_by], partial def, unsafe, native_decide}'
+PATTERN="$P_DEBUG|$P_SORRY|$P_DECL|$P_ATTR|$P_PARTIAL|$P_UNSAFE|$P_NATIVE|$P_CSIMP"
+FORBIDDEN='{dbg_trace, sorry, axiom, opaque, @[extern], @[implemented_by], @[csimp], partial def, unsafe, native_decide}'
 
 if [ $# -ne 0 ]; then
   echo "usage: scripts/check-hygiene.sh" >&2
@@ -96,11 +119,17 @@ if [ ! -d "$ROOT/$SRC_DIR" ]; then
   echo "REGRESSION — hygiene: source tree not found: $ROOT/$SRC_DIR"
   exit 2
 fi
+for extra in $EXTRA_SRC; do
+  if [ ! -f "$ROOT/$extra" ]; then
+    echo "REGRESSION — hygiene: scanned source not found: $ROOT/$extra"
+    exit 2
+  fi
+done
 
 normalise() { sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s/[[:space:]]+/ /g'; }
 
 # Current occurrences, normalised to "<relpath> <collapsed source line>".
-HITS="$(cd "$ROOT" && grep -rEn "$PATTERN" "$SRC_DIR" --include='*.lean' 2>/dev/null \
+HITS="$(cd "$ROOT" && grep -rEn "$PATTERN" "$SRC_DIR" --include='*.lean' $EXTRA_SRC 2>/dev/null \
   | awk '{
       path = $0; sub(/:[0-9]+:.*$/, "", path)
       line = $0; sub(/^[^:]+:[0-9]+:/, "", line)
@@ -137,9 +166,9 @@ if [ -n "$VIOLATIONS" ]; then
     [ -n "$v" ] && echo "HYGIENE — un-allowlisted occurrence: $v"
   done
   NVIO="$(printf '%s\n' "$VIOLATIONS" | grep -c .)"
-  echo "REGRESSION — hygiene: $NVIO forbidden occurrence(s) under $SRC_DIR/ not in $(basename "$ALLOW"); remove them or add a justified allowlist entry"
+  echo "REGRESSION — hygiene: $NVIO forbidden occurrence(s) in $SCAN_LABEL not in $(basename "$ALLOW"); remove them or add a justified allowlist entry"
   exit 1
 fi
 
-echo "OK — hygiene: all $NHITS occurrence(s) of $FORBIDDEN under $SRC_DIR/ are allowlisted; no new ones"
+echo "OK — hygiene: all $NHITS occurrence(s) of $FORBIDDEN in $SCAN_LABEL are allowlisted; no new ones"
 exit 0

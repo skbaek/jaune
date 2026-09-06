@@ -16,6 +16,12 @@ lean_lib «Jaune» where
 lean_exe «jaune» where
   root := `Main
 
-/-- Goal-local native probe for call-depth/output-size memory scaling. -/
+/--
+Bounded native probe for call-depth/calldata-size memory scaling, driven by
+`scripts/check-memory-probe.sh`. It is a default target so the ordinary
+`lake build` elaborates it: an anti-regression instrument that no automated
+path builds is an instrument that rots.
+-/
+@[default_target]
 lean_exe «jaune-memory-probe» where
   root := `MemoryProbe

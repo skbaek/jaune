@@ -134,8 +134,11 @@
 # of effective logical CPU capacity and a memory pool with 1 GiB reserved plus
 # 2.4 GiB per worker. Linux detection follows finite cgroup-v2 ancestors as
 # well as host MemAvailable; macOS uses reclaimable `vm_stat` pages. Missing
-# trustworthy memory information falls back to one worker. A numeric `--jobs`
-# remains an explicit override and bypasses this sizing policy.
+# trustworthy memory information falls back to one worker, and an UNREADABLE
+# boundary file counts as missing rather than as absent: a leaf whose own
+# `memory.max` is refused resolves to one worker even when a permissive
+# ancestor is readable. A numeric `--jobs` remains an explicit override and
+# bypasses this sizing policy.
 #
 # What the job count is worth depends on which bound a tier is under:
 #
