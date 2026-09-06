@@ -1795,15 +1795,29 @@ the globals by `rfl`, so on every reachable machine "reads the record" and
 can distinguish are therefore exactly the ones no fork carries.
 
 What survives here is the half that needs no machine: the same three numbers,
-priced through the same schedule-carrying functions the sites call
-(`GasSchedule.accessCost`, `GasSchedule.accessDelegation`,
-`GasSchedule.delegationCost`, `.callValue`, `.createAccess`), each row paired
-with the Prague value it differs from, so a schedule-carrying function that
-stopped reading its argument fails here. The other half -- that the sites name
-those functions rather than the globals beside them -- is a source condition
-after this change rather than an evaluation one, and
-`scripts/check-rule-data-reads.sh` is the control for it. Goal
-`jaune-forks-by-construction-v1`, D-F6 (iii). -/
+each row paired with the Prague value it differs from. **Two of the four rows
+below bite and two do not**, and this docstring said otherwise until the
+independent review (F-2) measured it. The 14,500 and 5,400 rows run
+`GasSchedule.accessCost`, `GasSchedule.accessDelegation` and
+`GasSchedule.delegationCost`, so a helper that stopped reading its schedule
+argument fails there. The 31,000 row restates this record's own `createAccess`
+literal, and the 32,700 row is arithmetic over two globals and a literal field;
+neither can fail for anything an instruction site does, so the CREATE and
+SELFDESTRUCT quantities have **no function-level control** here.
+`.createAccess` and `.callValue` are field projections, not functions, and
+listing them beside three real `GasSchedule` functions is what made the earlier
+wording read as stronger than it was.
+
+The other half -- that the sites name those functions rather than the globals
+beside them -- is a source condition after this change rather than an evaluation
+one, and `scripts/check-rule-data-reads.sh` is **the whole of the replacement's
+site coverage**. It is shown to bite twice, each in a disposable tree: on
+`Xinst.step`'s legacy CALL arm reading `gasCallValue`, and on `Linst.run`'s
+legacy SELFDESTRUCT arm (`Jaune/Machine.lean`) reading `gasColdAccountAccess` --
+each leaves the tree green with every `#guard` below still passing, and turns
+only that gate red. Its three names cover exactly the CREATE and SELFDESTRUCT
+reads the two vacuous rows miss. Goal `jaune-forks-by-construction-v1`,
+D-F6 (iii). -/
 private def meteringGuardLegacySchedule : GasSchedule :=
   {pragueGasSchedule with
     coldAccountAccess := 2700
