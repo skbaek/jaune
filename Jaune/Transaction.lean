@@ -1676,7 +1676,7 @@ private def fixtureTestBenv (blockGasLimit : Nat := 10000000) : Benv :=
     state := .empty
     createdAccounts := .emptyWithCapacity
     stat := {
-      rules := pragueRules
+      fork := .prague
       chainId := 1
       origState := .empty
       blockGasLimit := blockGasLimit
@@ -1700,7 +1700,7 @@ private def fixtureAmsterdamBenv (blockGasLimit : Nat := 30000000)
   let base := fixtureTestBenv blockGasLimit
   { base with
     state := state
-    stat := {base.stat with rules := amsterdamRules, origState := origState}
+    stat := {base.stat with fork := .amsterdam, origState := origState}
   }
 
 private def fixtureAmsterdamMsg (state origState : State)
@@ -3118,7 +3118,7 @@ parent, reporting *which* rule failed.
 Relocated from `Jaune/Execution.lean` by Step 10, with `calculateBaseFeePerGas`
 and `validateHeader` below: their reasons are `BlockValidationError`
 constructors, whose frozen home is this module (design report §6), and their
-only consumer is `stateTransitionWith`'s core here -- the same
+only consumer is `stateTransitionAt`'s core here -- the same
 producer-follows-type relocation Step 9 recorded for the BLS decoders.
 
 The absolute bound is tested first, and that order is the point: a limit just
@@ -3348,10 +3348,10 @@ def blockAccessListCheck (rules : ForkRules) (bout : BlockOutput) (header : Head
            header block access list hash = {header.blockAccessListHash}"
     else .ok ()
 
-def initBenvStat (rules : ForkRules) (chain : BlockChain) (header : Header) :
+def initBenvStat (fork : Fork) (chain : BlockChain) (header : Header) :
     BenvStat :=
   {
-    rules := rules,
+    fork := fork,
     chainId := chain.chainId,
     origState := chain.state,
     blockGasLimit := header.gasLimit,
@@ -3367,11 +3367,11 @@ def initBenvStat (rules : ForkRules) (chain : BlockChain) (header : Header) :
     slotNumber := header.slotNumber.getD 0
   }
 
-def initBenv (rules : ForkRules) (chain : BlockChain) (header : Header) : Benv :=
+def initBenv (fork : Fork) (chain : BlockChain) (header : Header) : Benv :=
   {
     state := chain.state,
     createdAccounts := .emptyWithCapacity,
-    stat := initBenvStat rules chain header
+    stat := initBenvStat fork chain header
   }
 
 def getTransactionsRoot (bout : BlockOutput) : B256 :=
@@ -3481,15 +3481,20 @@ theorem BlockChain.retainedHistoryValid_appendBlock {chain chain' : BlockChain}
         List.length_cons, List.length_nil]
       omega
 
-/-- The block state transition under an explicit rule set: the typed canonical
-core. Every other state-transition entry point below only decides *which*
-rules to hand it, and the retained stringly names are renderer adapters over
-this one function. -/
-def stateTransitionE (rules : ForkRules) (ch : BlockChain) (block : Block) :
+/-- The block state transition at an explicitly named fork: the typed
+canonical core. Every other state-transition entry point below only decides
+*which* fork to hand it, and the retained stringly names are renderer adapters
+over this one function.
+
+It takes a `Fork` rather than a `ForkRules` because the machine it builds
+carries a fork (`BenvStat.fork`): there is no rule record to hand it that is
+not some fork's, so the parameter says exactly what the caller can choose. -/
+def stateTransitionE (f : Fork) (ch : BlockChain) (block : Block) :
   Except TransitionError BlockChain := do
+  let rules := f.ruleSet
   validateHeader rules ch block.header
   Except.mapError TransitionError.block (stateTransitionOmmersCheck block.ommers)
-  let benv : Benv := initBenv rules ch block.header
+  let benv : Benv := initBenv f ch block.header
   let ⟨st, bout⟩ ← applyBody benv block.txs block.wds
   let blockStateRoot : B256 := st.root
   let transactionsRoot : B256 := getTransactionsRoot bout
@@ -3505,27 +3510,27 @@ def stateTransitionE (rules : ForkRules) (ch : BlockChain) (block : Block) :
   .ok ⟨appendBlock ch.blocks block, st, ch.chainId⟩
 
 /-- Legacy renderer adapter over `stateTransitionE`, byte-identical on every
-input. Retained by name and type: Blanc's protected theorems and this
-module's `rfl` identities are stated over it (design report §3.1). -/
-def stateTransitionWith (rules : ForkRules) (ch : BlockChain) (block : Block) :
+input, and the entry point for static fixture suites, which state their fork
+rather than deriving it.
+
+Named `stateTransitionAt` and taking a `ForkRules` until goal
+`jaune-forks-by-construction-v1`. Once a machine carries a `Fork`, the
+rules-taking adapter and this one had the same domain, so the duplicate layer
+was retired into this name rather than kept as a synonym; there is no longer a
+rules-taking entry point that could be handed a record no fork realises. The
+`UnsupportedForkError` route this function used to take for an unimplemented
+fork is gone with it -- `Fork.ruleSet` is total -- and the vocabulary is
+retained where `Fork.rules` still renders it. -/
+def stateTransitionAt (f : Fork) (ch : BlockChain) (block : Block) :
   Except String BlockChain :=
-  (stateTransitionE rules ch block).mapError TransitionError.render
+  (stateTransitionE f ch block).mapError TransitionError.render
 
 /-- The adapter adds rendering and nothing else. -/
-theorem stateTransitionWith_eq_ok_iff {rules : ForkRules} {ch ch' : BlockChain}
+theorem stateTransitionAt_eq_ok_iff {f : Fork} {ch ch' : BlockChain}
     {block : Block} :
-    stateTransitionWith rules ch block = .ok ch'
-      ↔ stateTransitionE rules ch block = .ok ch' :=
+    stateTransitionAt f ch block = .ok ch'
+      ↔ stateTransitionE f ch block = .ok ch' :=
   Except.mapError_eq_ok_iff
-
-/-- The block state transition at an explicitly named fork.
-
-This is the entry point for static fixture suites, which state their fork
-rather than deriving it. A fork whose rules this build does not implement
-fails here with `UnsupportedForkError`; it never falls back to Prague. -/
-def stateTransitionAt (f : Fork) (ch : BlockChain) (block : Block) :
-    Except String BlockChain := do
-  stateTransitionWith (← Except.mapError SupportError.render f.rules) ch block
 
 /-- Whether a configuration's declared chain identity agrees with a snapshot's.
 
@@ -3553,8 +3558,8 @@ anything else -- P0.1's fix -- then proceeds exactly as before. -/
 def stateTransitionUsing (cfg : ChainConfig) (ch : BlockChain) (block : Block) :
     Except String BlockChain := do
   Except.mapError ChainContextError.render (cfg.checkChainId ch)
-  stateTransitionWith
-    (← Except.mapError RulesLookupError.render (cfg.rulesAt block.header.timestamp))
+  stateTransitionAt
+    (← Except.mapError RulesLookupError.render (cfg.forkAt block.header.timestamp))
     ch block
 
 /-- The Prague state transition.
@@ -3564,7 +3569,7 @@ supported protocol, not scaffolding, and downstream proofs state their results
 about this name. -/
 def stateTransition (ch : BlockChain) (block : Block) :
   Except String BlockChain :=
-  stateTransitionWith pragueRules ch block
+  stateTransitionAt .prague ch block
 
 def BLT.toExWithdrawal : BLT → Except DecodeError Withdrawal
   | .list [
@@ -4049,14 +4054,14 @@ Definitionally the typed core applied to the envelope's block, so every result
 about `stateTransitionE` transfers to it by `rfl` and no proof has to be
 restated. What it adds is at the type level: a caller of this entry point
 cannot supply a block that no strict decode ever produced. -/
-def stateTransitionCanonical (rules : ForkRules) (ch : BlockChain)
+def stateTransitionCanonical (f : Fork) (ch : BlockChain)
     (cb : CanonicalBlock) :
     Except TransitionError BlockChain :=
-  stateTransitionE rules ch cb.block
+  stateTransitionE f ch cb.block
 
-theorem stateTransitionCanonical_eq (rules : ForkRules) (ch : BlockChain)
+theorem stateTransitionCanonical_eq (f : Fork) (ch : BlockChain)
     (cb : CanonicalBlock) :
-    stateTransitionCanonical rules ch cb = stateTransitionE rules ch cb.block :=
+    stateTransitionCanonical f ch cb = stateTransitionE f ch cb.block :=
   rfl
 
 --------------- THE CHECKED CHAIN SNAPSHOT ---------------
@@ -4596,15 +4601,15 @@ is *removed* rather than preserved as a no-op.
 
 Check precedence is unchanged. Strict decode and the byte-for-byte round trip
 are harness prerequisites, discharged before an envelope can exist at all;
-among consensus checks EIP-7934 is first, before `stateTransitionWith` reaches
+among consensus checks EIP-7934 is first, before `stateTransitionAt` reaches
 header validation, exactly as EELS. The two failure channels are unchanged:
 `.error` is a harness-level failure, `.inr` is a block this chain rejects. -/
-def addBlockToChainCanonicalE (rules : ForkRules) (chain : BlockChain)
+def addBlockToChainCanonicalE (f : Fork) (chain : BlockChain)
     (cb : CanonicalBlock) : Except ImportFailure (ImportOutcome BlockChain) :=
-  match checkBlockRlpSize rules.block cb.rawSize with
+  match checkBlockRlpSize f.ruleSet.block cb.rawSize with
   | .error err => .ok (.inr (.block err))
   | .ok () =>
-    match stateTransitionE rules chain cb.block with
+    match stateTransitionE f chain cb.block with
     | .error e =>
       match e.split with
       | .inl failure => .error failure
@@ -4623,10 +4628,10 @@ def ImportOutcome.renderLegacy :
   | .ok (.inr rejection) => .ok (.inr rejection.render)
 
 /-- Legacy renderer adapter over the canonical-envelope import core. -/
-def addBlockToChainCanonical (rules : ForkRules) (chain : BlockChain)
+def addBlockToChainCanonical (f : Fork) (chain : BlockChain)
     (cb : CanonicalBlock) :
     Except String (BlockChain ⊕ String) :=
-  ImportOutcome.renderLegacy (addBlockToChainCanonicalE rules chain cb)
+  ImportOutcome.renderLegacy (addBlockToChainCanonicalE f chain cb)
 
 /-- Block import from raw bytes under an explicit rule set: the typed core of
 the raw compatibility wrapper. It carries no evidence, so it validates on
@@ -4641,32 +4646,26 @@ outer channel was the accidental nesting design report §8 names, and is
 deliberately not preserved. `RawImportFailure.strictDecode` therefore retains
 no producer on this path; it remains the declared ingress channel for a
 future decoder whose failures are *not* candidate verdicts. -/
-def addBlockToChainWithE (rules : ForkRules) (chain : BlockChain)
+def addBlockToChainAtE (f : Fork) (chain : BlockChain)
     (blockRlp : Bytes) : Except ImportFailure (ImportOutcome BlockChain) :=
   match h : rlpToBlockE blockRlp with
   | .error reason => .ok (.inr (.decode reason))
   | .ok ⟨_, _⟩ =>
-    addBlockToChainCanonicalE rules chain
+    addBlockToChainCanonicalE f chain
       (CanonicalBlock.ofDecode (rlpToBlock_eq_ok_iff.mpr h))
 
-/-- Legacy renderer adapter over `addBlockToChainWithE`. Retained by name and
-type: Blanc's protected `addBlockToChain_preserves_solvent` is its Prague
-instance. Same rendered diagnostics; the decode-failure channel moved from
-the outer `.error` to the inner `.inr` deliberately (see the core's docstring
-and the Step-10 report). -/
-def addBlockToChainWith (rules : ForkRules) (chain : BlockChain)
-    (blockRlp : Bytes) : Except String (BlockChain ⊕ String) :=
-  ImportOutcome.renderLegacy (addBlockToChainWithE rules chain blockRlp)
+/-- Legacy renderer adapter over `addBlockToChainAtE`. Retained by type:
+Blanc's protected `addBlockToChain_preserves_solvent` is its Prague instance.
+Same rendered diagnostics; the decode-failure channel moved from the outer
+`.error` to the inner `.inr` deliberately (see the core's docstring and the
+Step-10 report).
 
-/-- Typed block import at an explicitly named fork. An unimplemented fork
-fails on the outer channel: it is a limitation of this build, not a verdict
-that the block is invalid, and can never be recorded as one. -/
-def addBlockToChainAtE (f : Fork) (chain : BlockChain) (blockRlp : Bytes) :
-    Except ImportFailure (ImportOutcome BlockChain) := do
-  addBlockToChainWithE (← Except.mapError ImportFailure.support f.rules)
-    chain blockRlp
-
-/-- Legacy renderer adapter over `addBlockToChainAtE`. -/
+Named `addBlockToChainAt` and taking a `ForkRules` until goal
+`jaune-forks-by-construction-v1`; with a machine carrying a `Fork` the
+rules-taking adapter and the fork-taking one had the same domain, and the
+duplicate layer was retired into this name. The `.support` channel this
+function used to route an unimplemented fork through is gone with it:
+`Fork.ruleSet` is total. -/
 def addBlockToChainAt (f : Fork) (chain : BlockChain) (blockRlp : Bytes) :
     Except String (BlockChain ⊕ String) :=
   ImportOutcome.renderLegacy (addBlockToChainAtE f chain blockRlp)
@@ -4688,10 +4687,10 @@ def addBlockToChainUsingE (cfg : ChainConfig) (chain : BlockChain)
   match h : rlpToBlockE blockRlp with
   | .error reason => .ok (.inr (.decode reason))
   | .ok ⟨block, _⟩ =>
-    let rules ←
+    let fork ←
       Except.mapError ImportFailure.ofLookup
-        (cfg.rulesAt block.header.timestamp)
-    addBlockToChainCanonicalE rules chain
+        (cfg.forkAt block.header.timestamp)
+    addBlockToChainCanonicalE fork chain
       (CanonicalBlock.ofDecode (rlpToBlock_eq_ok_iff.mpr h))
 
 /-- Legacy renderer adapter over `addBlockToChainUsingE`. -/
@@ -4705,12 +4704,12 @@ Retained with its original name, type, and behaviour; downstream proofs state
 their results about this name. -/
 def addBlockToChain (chain : BlockChain) (blockRlp : Bytes) :
   Except String (BlockChain ⊕ String) :=
-  addBlockToChainWith pragueRules chain blockRlp
+  addBlockToChainAt .prague chain blockRlp
 
 --------------- IMPORT BRIDGE AND INVERSION LEMMAS ---------------
 
 -- Stated entirely over `rlpToBlock`, `checkBlockRlpSize` and
--- `stateTransitionWith`. A downstream proof client -- Blanc, in practice --
+-- `stateTransitionAt`. A downstream proof client -- Blanc, in practice --
 -- can invert an import with these and never unfold `CanonicalBlock`,
 -- `addBlockToChainCanonical`, or the raw wrapper's dependent match.
 
@@ -4719,13 +4718,13 @@ with exactly the decoder's own diagnostic. Before Step 10 the same diagnostic
 rode the outer harness channel -- the accidental nesting design report §8
 records -- so the channel here is a deliberate move, and the rendered message
 is unchanged. -/
-theorem addBlockToChainWith_decode_error {rules : ForkRules} {chain : BlockChain}
+theorem addBlockToChainAt_decode_error {f : Fork} {chain : BlockChain}
     {blockRlp : Bytes} {err : String} (h : rlpToBlock blockRlp = .error err) :
-    addBlockToChainWith rules chain blockRlp = .ok (.inr err) := by
+    addBlockToChainAt f chain blockRlp = .ok (.inr err) := by
   unfold rlpToBlock at h
   rw [Except.mapError_eq_error_iff] at h
   obtain ⟨reason, hre, rfl⟩ := h
-  unfold addBlockToChainWith addBlockToChainWithE
+  unfold addBlockToChainAt addBlockToChainAtE
   split
   · rename_i e he
     rw [hre] at he
@@ -4738,13 +4737,13 @@ theorem addBlockToChainWith_decode_error {rules : ForkRules} {chain : BlockChain
 /-- A raw import whose bytes strictly decode is the checked core on the
 envelope that decode produces. This is the bridge: the wrapper adds
 validation, and nothing else. -/
-theorem addBlockToChainWith_eq_canonical {rules : ForkRules} {chain : BlockChain}
+theorem addBlockToChainAt_eq_canonical {f : Fork} {chain : BlockChain}
     {blockRlp : Bytes} {block : Block} {hash : B256}
     (h : rlpToBlock blockRlp = .ok ⟨block, hash⟩) :
-    addBlockToChainWith rules chain blockRlp
-      = addBlockToChainCanonical rules chain (CanonicalBlock.ofDecode h) := by
+    addBlockToChainAt f chain blockRlp
+      = addBlockToChainCanonical f chain (CanonicalBlock.ofDecode h) := by
   have hE := rlpToBlock_eq_ok_iff.mp h
-  unfold addBlockToChainWith addBlockToChainWithE
+  unfold addBlockToChainAt addBlockToChainAtE
   split
   · rename_i e he
     rw [hE] at he
@@ -4756,11 +4755,11 @@ theorem addBlockToChainWith_eq_canonical {rules : ForkRules} {chain : BlockChain
     rfl
 
 /-- Inversion of the typed canonical-envelope import core. -/
-theorem addBlockToChainCanonicalE_eq_ok_inl {rules : ForkRules}
+theorem addBlockToChainCanonicalE_eq_ok_inl {f : Fork}
     {chain chain' : BlockChain} {cb : CanonicalBlock}
-    (h : addBlockToChainCanonicalE rules chain cb = .ok (.inl chain')) :
-    checkBlockRlpSize rules.block cb.rawSize = .ok () ∧
-      stateTransitionE rules chain cb.block = .ok chain' := by
+    (h : addBlockToChainCanonicalE f chain cb = .ok (.inl chain')) :
+    checkBlockRlpSize f.ruleSet.block cb.rawSize = .ok () ∧
+      stateTransitionE f chain cb.block = .ok chain' := by
   unfold addBlockToChainCanonicalE at h
   split at h
   · simp at h
@@ -4775,16 +4774,17 @@ theorem addBlockToChainCanonicalE_eq_ok_inl {rules : ForkRules}
 against the *supplied* byte length, then the transition -- in that order.
 Stated over the legacy names, so a downstream stringly client (Blanc) can
 invert an import without unfolding the typed core. -/
-theorem addBlockToChainWith_eq_ok_inl {rules : ForkRules}
+theorem addBlockToChainAt_eq_ok_inl {f : Fork}
     {chain chain' : BlockChain} {blockRlp : Bytes}
-    (h : addBlockToChainWith rules chain blockRlp = .ok (.inl chain')) :
+    (h : addBlockToChainAt f chain blockRlp = .ok (.inl chain')) :
     ∃ block hash,
       rlpToBlock blockRlp = .ok ⟨block, hash⟩ ∧
-      checkBlockRlpSize rules.block blockRlp.length = .ok () ∧
-      stateTransitionWith rules chain block = .ok chain' := by
-  unfold addBlockToChainWith at h
-  cases hE : addBlockToChainWithE rules chain blockRlp with
-  | error f => rw [hE] at h; exact absurd h (by simp [ImportOutcome.renderLegacy])
+      checkBlockRlpSize f.ruleSet.block blockRlp.length = .ok () ∧
+      stateTransitionAt f chain block = .ok chain' := by
+  unfold addBlockToChainAt at h
+  cases hE : addBlockToChainAtE f chain blockRlp with
+  | error failure =>
+    rw [hE] at h; exact absurd h (by simp [ImportOutcome.renderLegacy])
   | ok outcome =>
     rw [hE] at h
     cases outcome with
@@ -4792,13 +4792,13 @@ theorem addBlockToChainWith_eq_ok_inl {rules : ForkRules}
     | inl ch =>
       simp only [ImportOutcome.renderLegacy, Except.ok.injEq, Sum.inl.injEq] at h
       subst h
-      unfold addBlockToChainWithE at hE
+      unfold addBlockToChainAtE at hE
       split at hE
       · exact absurd hE (by simp)
       · rename_i block hash hd
         obtain ⟨hsize, hst⟩ := addBlockToChainCanonicalE_eq_ok_inl hE
         exact ⟨block, hash, rlpToBlock_eq_ok_iff.mpr hd, hsize,
-          stateTransitionWith_eq_ok_iff.mpr hst⟩
+          stateTransitionAt_eq_ok_iff.mpr hst⟩
 
 ---------------- FORK ARCHITECTURE CHECKS ----------------
 
@@ -4808,14 +4808,14 @@ theorem addBlockToChainWith_eq_ok_inl {rules : ForkRules}
 -- somewhere else, and downstream proofs state their results about these names.
 
 example (ch : BlockChain) (block : Block) :
-    stateTransition ch block = stateTransitionWith pragueRules ch block := rfl
+    stateTransition ch block = stateTransitionAt .prague ch block := rfl
 
 example (ch : BlockChain) (block : Block) :
     stateTransitionAt .prague ch block = stateTransition ch block := rfl
 
 example (chain : BlockChain) (blockRlp : Bytes) :
     addBlockToChain chain blockRlp
-      = addBlockToChainWith pragueRules chain blockRlp := rfl
+      = addBlockToChainAt .prague chain blockRlp := rfl
 
 example (chain : BlockChain) (blockRlp : Bytes) :
     addBlockToChainAt .prague chain blockRlp = addBlockToChain chain blockRlp :=
@@ -4928,8 +4928,8 @@ private def guardBlobParent (baseFee blobGasUsed : Nat) : Header :=
 #guard Fork.supported.all (fun f =>
   match f.rules with
   | .error _ => false
-  | .ok rules =>
-    match stateTransitionE rules guardEmptyChain (guardBlockAt 0) with
+  | .ok _ =>
+    match stateTransitionE f guardEmptyChain (guardBlockAt 0) with
     | .error (.internal _) => true
     | _ => false)
 
@@ -5267,15 +5267,13 @@ private def errorText? {α : Type} : Except String α → Option String
 typed transition core: what the fork-selection boundary guards compare. -/
 private def transitionAtE (f : Fork) (ch : BlockChain) (block : Block) :
     Except TransitionError BlockChain :=
-  match f.rules with
-  | .error _ => .error (.internal (.assertion .none))
-  | .ok rules => stateTransitionE rules ch block
+  stateTransitionE f ch block
 
 private def transitionUsingE (cfg : ChainConfig) (ch : BlockChain)
     (block : Block) : Except TransitionError BlockChain :=
-  match cfg.rulesAt block.header.timestamp with
+  match cfg.forkAt block.header.timestamp with
   | .error _ => .error (.internal (.assertion .none))
-  | .ok rules => stateTransitionE rules ch block
+  | .ok f => stateTransitionE f ch block
 
 -- The explicit API applies the fork it is given, and only that fork accepts
 -- its own expected value.
@@ -5389,14 +5387,14 @@ theorem stateTransitionUsing_success_chainId_eq
   simp [stateTransitionUsing, ChainConfig.checkChainId, hne, Except.mapError,
     Bind.bind, Except.bind] at h
 
-/-- Every successful `stateTransitionWith` copies the input snapshot's chain
+/-- Every successful `stateTransitionAt` copies the input snapshot's chain
 identity into its output unconditionally -- the shared fact both configured
 entry points' preservation theorems reduce to. -/
-theorem stateTransitionWith_preserves_chainId
-    {rules : ForkRules} {ch : BlockChain} {block : Block} {ch' : BlockChain}
-    (h : stateTransitionWith rules ch block = .ok ch') :
+theorem stateTransitionAt_preserves_chainId
+    {f : Fork} {ch : BlockChain} {block : Block} {ch' : BlockChain}
+    (h : stateTransitionAt f ch block = .ok ch') :
     ch'.chainId = ch.chainId := by
-  rw [stateTransitionWith_eq_ok_iff] at h
+  rw [stateTransitionAt_eq_ok_iff] at h
   unfold stateTransitionE at h
   obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
   obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
@@ -5413,7 +5411,7 @@ theorem stateTransitionUsing_preserves_chainId
   unfold stateTransitionUsing at h
   obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
   obtain ⟨rules, _, h⟩ := Except.bind_eq_ok h
-  exact stateTransitionWith_preserves_chainId h
+  exact stateTransitionAt_preserves_chainId h
 
 /-- A same-ID configured transition is exactly the rule-selected core: the
 identity check Step 2 adds is a no-op whenever the caller's IDs already agree,
@@ -5423,8 +5421,8 @@ theorem stateTransitionUsing_eq_of_chainId_eq
     (heq : cfg.chainId = ch.chainId) :
     stateTransitionUsing cfg ch block
       = (Except.mapError RulesLookupError.render
-          (cfg.rulesAt block.header.timestamp)).bind
-          (fun rules => stateTransitionWith rules ch block) := by
+          (cfg.forkAt block.header.timestamp)).bind
+          (fun f => stateTransitionAt f ch block) := by
   unfold stateTransitionUsing ChainConfig.checkChainId
   simp [heq, Except.mapError, Bind.bind, Except.bind]
 
@@ -5466,8 +5464,8 @@ theorem addBlockToChainUsing_preserves_chainId
       · simp at hE
       · obtain ⟨rules, _, hE⟩ := Except.bind_eq_ok hE
         obtain ⟨_, hst⟩ := addBlockToChainCanonicalE_eq_ok_inl hE
-        exact stateTransitionWith_preserves_chainId
-          (stateTransitionWith_eq_ok_iff.mpr hst)
+        exact stateTransitionAt_preserves_chainId
+          (stateTransitionAt_eq_ok_iff.mpr hst)
 
 -- P0.1 negative guards: config ID 7 against a chain ID 1 snapshot, matching
 -- the acceptance evidence's own example. The mismatch is a context failure on
@@ -5945,10 +5943,10 @@ theorem applyBody_canonical {benv : Benv} (h : benv.Canonical)
 /-- **Raw successful block transition preserves canonicality.** The output
 chain's execution state is the body's final state, and its original state is
 the input chain's. -/
-theorem stateTransitionWith_canonical {rules : ForkRules} {ch : BlockChain}
+theorem stateTransitionAt_canonical {f : Fork} {ch : BlockChain}
     (h : ch.Canonical) {block : Block} {ch'}
-    (hp : stateTransitionWith rules ch block = .ok ch') : ch'.Canonical := by
-  rw [stateTransitionWith_eq_ok_iff] at hp
+    (hp : stateTransitionAt f ch block = .ok ch') : ch'.Canonical := by
+  rw [stateTransitionAt_eq_ok_iff] at hp
   unfold stateTransitionE at hp
   obtain ⟨u1, _, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨u2, _, hp⟩ := Except.bind_eq_ok hp
@@ -5958,17 +5956,10 @@ theorem stateTransitionWith_canonical {rules : ForkRules} {ch : BlockChain}
   cases hp
   exact applyBody_canonical (by exact ⟨h, h⟩) hq
 
-theorem stateTransitionAt_canonical {f : Fork} {ch : BlockChain}
-    (h : ch.Canonical) {block : Block} {ch'}
-    (hp : stateTransitionAt f ch block = .ok ch') : ch'.Canonical := by
-  unfold stateTransitionAt at hp
-  obtain ⟨r, _, hp⟩ := Except.bind_eq_ok hp
-  exact stateTransitionWith_canonical h hp
-
 theorem stateTransition_canonical {ch : BlockChain} (h : ch.Canonical)
     {block : Block} {ch'} (hp : stateTransition ch block = .ok ch') :
     ch'.Canonical :=
-  stateTransitionWith_canonical h hp
+  stateTransitionAt_canonical (f := .prague) h hp
 
 /-- Configured successful transition preserves canonicality. -/
 theorem stateTransitionUsing_canonical {cfg : ChainConfig} {ch : BlockChain}
@@ -5977,7 +5968,7 @@ theorem stateTransitionUsing_canonical {cfg : ChainConfig} {ch : BlockChain}
   unfold stateTransitionUsing at hp
   obtain ⟨u1, _, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨r, _, hp⟩ := Except.bind_eq_ok hp
-  exact stateTransitionWith_canonical h hp
+  exact stateTransitionAt_canonical (f := r) h hp
 
 --------------- THE CHECKED TRANSITION (P0.2, STEP 6) ---------------
 
@@ -6077,12 +6068,12 @@ theorem stateTransitionChecks_stateRoot {bout : BlockOutput} {header : Header}
 /-- Inversion of a successful raw transition: header validation passed, the
 result's blocks are the parent's with this block appended, and its state is
 the one the child header commits to. -/
-theorem stateTransitionWith_eq_ok {rules : ForkRules} {ch ch' : BlockChain}
-    {block : Block} (h : stateTransitionWith rules ch block = .ok ch') :
-    validateHeader rules ch block.header = .ok () ∧
+theorem stateTransitionAt_eq_ok {f : Fork} {ch ch' : BlockChain}
+    {block : Block} (h : stateTransitionAt f ch block = .ok ch') :
+    validateHeader f.ruleSet ch block.header = .ok () ∧
       ch'.blocks = appendBlock ch.blocks block ∧
       ch'.state.root = block.header.stateRoot := by
-  rw [stateTransitionWith_eq_ok_iff] at h
+  rw [stateTransitionAt_eq_ok_iff] at h
   unfold stateTransitionE at h
   obtain ⟨u1, hvh, h⟩ := Except.bind_eq_ok h
   obtain ⟨u2, _, h⟩ := Except.bind_eq_ok h
@@ -6101,14 +6092,14 @@ snapshot, assembled from what the transition already established: `Step 4`'s
 canonicality preservation, header validation's parent link, the checked
 envelope's wire well-formedness, and the block checks' own state-root
 comparison. No root is recomputed. -/
-theorem BlockChain.validContext_of_transition {rules : ForkRules}
+theorem BlockChain.validContext_of_transition {f : Fork}
     {cc : CheckedBlockChain} {cb : CanonicalBlock} {ch' : BlockChain}
-    (h : stateTransitionWith rules cc.val cb.block = .ok ch') :
+    (h : stateTransitionAt f cc.val cb.block = .ok ch') :
     ch'.blocks.getLast? = some cb.block ∧ ch'.RetainedHistoryValid ∧
       ch'.state.Canonical ∧ ch'.state.root = cb.block.header.stateRoot := by
-  obtain ⟨hvh, hblocks, hroot⟩ := stateTransitionWith_eq_ok h
+  obtain ⟨hvh, hblocks, hroot⟩ := stateTransitionAt_eq_ok h
   obtain ⟨hph, hnum⟩ := validateHeader_links cc.tip_is_last hvh
-  refine ⟨?_, ?_, stateTransitionWith_canonical cc.canonicalState h, hroot⟩
+  refine ⟨?_, ?_, stateTransitionAt_canonical (f := f) cc.canonicalState h, hroot⟩
   · rw [hblocks]; exact appendBlock_getLast? _ _
   · exact BlockChain.retainedHistoryValid_appendBlock cc.retainedHistory
       cc.tip_is_last ⟨hnum, hph⟩ cb.rlpCanonical.1 hblocks
@@ -6119,15 +6110,15 @@ theorem BlockChain.validContext_of_transition {rules : ForkRules}
 canonical envelope, and it is definitionally the typed core on their values,
 so every result about `stateTransitionE` transfers by `rfl`. Its output
 witness is `CheckedBlockChain.ofTransition` below. -/
-def stateTransitionChecked (rules : ForkRules) (cc : CheckedBlockChain)
+def stateTransitionChecked (f : Fork) (cc : CheckedBlockChain)
     (cb : CanonicalBlock) :
     Except TransitionError BlockChain :=
-  stateTransitionE rules cc.val cb.block
+  stateTransitionE f cc.val cb.block
 
-theorem stateTransitionChecked_eq (rules : ForkRules) (cc : CheckedBlockChain)
+theorem stateTransitionChecked_eq (f : Fork) (cc : CheckedBlockChain)
     (cb : CanonicalBlock) :
-    stateTransitionChecked rules cc cb
-      = stateTransitionE rules cc.val cb.block := rfl
+    stateTransitionChecked f cc cb
+      = stateTransitionE f cc.val cb.block := rfl
 
 /-- The checked output of a successful checked transition.
 
@@ -6135,38 +6126,38 @@ This is the P0.2 fast path: the returned snapshot's four facts are proofs, not
 computations, so a repeated client pays exactly one state-root computation --
 the one `stateTransitionChecks` already performed on the child -- and never a
 second one on the parent. -/
-def CheckedBlockChain.ofTransition {rules : ForkRules} {cc : CheckedBlockChain}
+def CheckedBlockChain.ofTransition {f : Fork} {cc : CheckedBlockChain}
     {cb : CanonicalBlock} {ch' : BlockChain}
-    (h : stateTransitionChecked rules cc cb = .ok ch') : CheckedBlockChain :=
+    (h : stateTransitionChecked f cc cb = .ok ch') : CheckedBlockChain :=
   CheckedBlockChain.ofEvidence ch' cb.block
     (BlockChain.validContext_of_transition
-      (stateTransitionWith_eq_ok_iff.mpr h)).1
+      (stateTransitionAt_eq_ok_iff.mpr h)).1
     (BlockChain.validContext_of_transition
-      (stateTransitionWith_eq_ok_iff.mpr h)).2.1
+      (stateTransitionAt_eq_ok_iff.mpr h)).2.1
     (BlockChain.validContext_of_transition
-      (stateTransitionWith_eq_ok_iff.mpr h)).2.2.1
+      (stateTransitionAt_eq_ok_iff.mpr h)).2.2.1
     (BlockChain.validContext_of_transition
-      (stateTransitionWith_eq_ok_iff.mpr h)).2.2.2
+      (stateTransitionAt_eq_ok_iff.mpr h)).2.2.2
 
-theorem CheckedBlockChain.ofTransition_val {rules : ForkRules}
+theorem CheckedBlockChain.ofTransition_val {f : Fork}
     {cc : CheckedBlockChain} {cb : CanonicalBlock} {ch' : BlockChain}
-    (h : stateTransitionChecked rules cc cb = .ok ch') :
+    (h : stateTransitionChecked f cc cb = .ok ch') :
     (CheckedBlockChain.ofTransition h).val = ch' := rfl
 
-theorem CheckedBlockChain.ofTransition_tip {rules : ForkRules}
+theorem CheckedBlockChain.ofTransition_tip {f : Fork}
     {cc : CheckedBlockChain} {cb : CanonicalBlock} {ch' : BlockChain}
-    (h : stateTransitionChecked rules cc cb = .ok ch') :
+    (h : stateTransitionChecked f cc cb = .ok ch') :
     (CheckedBlockChain.ofTransition h).tip = cb.block := rfl
 
 /-- Inversion of the legacy canonical-envelope import adapter, stated over the
 legacy transition name for stringly clients. -/
-theorem addBlockToChainCanonical_eq_ok_inl {rules : ForkRules}
+theorem addBlockToChainCanonical_eq_ok_inl {f : Fork}
     {chain chain' : BlockChain} {cb : CanonicalBlock}
-    (h : addBlockToChainCanonical rules chain cb = .ok (.inl chain')) :
-    checkBlockRlpSize rules.block cb.rawSize = .ok () ∧
-      stateTransitionWith rules chain cb.block = .ok chain' := by
+    (h : addBlockToChainCanonical f chain cb = .ok (.inl chain')) :
+    checkBlockRlpSize f.ruleSet.block cb.rawSize = .ok () ∧
+      stateTransitionAt f chain cb.block = .ok chain' := by
   unfold addBlockToChainCanonical at h
-  cases hE : addBlockToChainCanonicalE rules chain cb with
+  cases hE : addBlockToChainCanonicalE f chain cb with
   | error f => rw [hE] at h; exact absurd h (by simp [ImportOutcome.renderLegacy])
   | ok outcome =>
     rw [hE] at h
@@ -6176,34 +6167,34 @@ theorem addBlockToChainCanonical_eq_ok_inl {rules : ForkRules}
       simp only [ImportOutcome.renderLegacy, Except.ok.injEq, Sum.inl.injEq] at h
       subst h
       obtain ⟨hsize, hst⟩ := addBlockToChainCanonicalE_eq_ok_inl hE
-      exact ⟨hsize, stateTransitionWith_eq_ok_iff.mpr hst⟩
+      exact ⟨hsize, stateTransitionAt_eq_ok_iff.mpr hst⟩
 
 /-- The checked import core: a checked snapshot in, and on the accepting
 channel a snapshot whose witness is `CheckedBlockChain.ofImport`. The
 validation order is the frozen one, unchanged -- this is the typed canonical
 core with a checked input type, and it is the two-level shape P0.7 prescribes:
 `Except ImportFailure (CheckedBlockChain-producing outcome ⊕ BlockRejection)`. -/
-def addBlockToChainChecked (rules : ForkRules) (cc : CheckedBlockChain)
+def addBlockToChainChecked (f : Fork) (cc : CheckedBlockChain)
     (cb : CanonicalBlock) :
     Except ImportFailure (ImportOutcome BlockChain) :=
-  addBlockToChainCanonicalE rules cc.val cb
+  addBlockToChainCanonicalE f cc.val cb
 
 /-- The checked output of a successful checked import. -/
-def CheckedBlockChain.ofImport {rules : ForkRules} {cc : CheckedBlockChain}
+def CheckedBlockChain.ofImport {f : Fork} {cc : CheckedBlockChain}
     {cb : CanonicalBlock} {ch' : BlockChain}
-    (h : addBlockToChainChecked rules cc cb = .ok (.inl ch')) : CheckedBlockChain :=
+    (h : addBlockToChainChecked f cc cb = .ok (.inl ch')) : CheckedBlockChain :=
   CheckedBlockChain.ofTransition
-    (rules := rules) (cc := cc) (cb := cb)
+    (f := f) (cc := cc) (cb := cb)
     (addBlockToChainCanonicalE_eq_ok_inl h).2
 
-theorem CheckedBlockChain.ofImport_val {rules : ForkRules} {cc : CheckedBlockChain}
+theorem CheckedBlockChain.ofImport_val {f : Fork} {cc : CheckedBlockChain}
     {cb : CanonicalBlock} {ch' : BlockChain}
-    (h : addBlockToChainChecked rules cc cb = .ok (.inl ch')) :
+    (h : addBlockToChainChecked f cc cb = .ok (.inl ch')) :
     (CheckedBlockChain.ofImport h).val = ch' := rfl
 
-theorem CheckedBlockChain.ofImport_tip {rules : ForkRules} {cc : CheckedBlockChain}
+theorem CheckedBlockChain.ofImport_tip {f : Fork} {cc : CheckedBlockChain}
     {cb : CanonicalBlock} {ch' : BlockChain}
-    (h : addBlockToChainChecked rules cc cb = .ok (.inl ch')) :
+    (h : addBlockToChainChecked f cc cb = .ok (.inl ch')) :
     (CheckedBlockChain.ofImport h).tip = cb.block := rfl
 
 --------------- CONFIGURED CHECKED ENTRY POINTS ---------------
@@ -6214,8 +6205,8 @@ repeated, and the snapshot is not rechecked at all; what remains is the rule
 lookup, which is the only part that depends on the candidate's timestamp. -/
 def stateTransitionConfigured (pc : ConfiguredChain) (cb : CanonicalBlock) :
     Except RulesLookupError (Except TransitionError BlockChain) := do
-  let rules ← pc.config.rulesAt cb.block.header.timestamp
-  .ok (stateTransitionE rules pc.chain.val cb.block)
+  let f ← pc.config.forkAt cb.block.header.timestamp
+  .ok (stateTransitionE f pc.chain.val cb.block)
 
 /-- The configured checked path agrees with the raw configured entry point on
 every input, through the renderer: what it drops is exactly the check its
@@ -6228,8 +6219,8 @@ theorem stateTransitionConfigured_eq (pc : ConfiguredChain) (cb : CanonicalBlock
   unfold stateTransitionConfigured stateTransitionUsing
   rw [pc.checkChainId_eq_ok]
   simp only [bind, Except.bind, Except.mapError]
-  cases hr : pc.config.rulesAt cb.block.header.timestamp <;>
-    simp [Except.mapError, stateTransitionWith]
+  cases hr : pc.config.forkAt cb.block.header.timestamp <;>
+    simp [Except.mapError, stateTransitionAt]
 
 /-- The checked output of a successful configured checked transition. -/
 def CheckedBlockChain.ofConfiguredTransition {pc : ConfiguredChain}
@@ -6238,25 +6229,25 @@ def CheckedBlockChain.ofConfiguredTransition {pc : ConfiguredChain}
     CheckedBlockChain :=
   CheckedBlockChain.ofEvidence ch' cb.block
     (by
-      obtain ⟨rules, _, hst⟩ := Except.bind_eq_ok h
+      obtain ⟨f, _, hst⟩ := Except.bind_eq_ok h
       simp only [Except.ok.injEq] at hst
       exact (BlockChain.validContext_of_transition (cc := pc.chain)
-        (stateTransitionWith_eq_ok_iff.mpr (hst ▸ hr))).1)
+        (stateTransitionAt_eq_ok_iff.mpr (hst ▸ hr))).1)
     (by
-      obtain ⟨rules, _, hst⟩ := Except.bind_eq_ok h
+      obtain ⟨f, _, hst⟩ := Except.bind_eq_ok h
       simp only [Except.ok.injEq] at hst
       exact (BlockChain.validContext_of_transition (cc := pc.chain)
-        (stateTransitionWith_eq_ok_iff.mpr (hst ▸ hr))).2.1)
+        (stateTransitionAt_eq_ok_iff.mpr (hst ▸ hr))).2.1)
     (by
-      obtain ⟨rules, _, hst⟩ := Except.bind_eq_ok h
+      obtain ⟨f, _, hst⟩ := Except.bind_eq_ok h
       simp only [Except.ok.injEq] at hst
       exact (BlockChain.validContext_of_transition (cc := pc.chain)
-        (stateTransitionWith_eq_ok_iff.mpr (hst ▸ hr))).2.2.1)
+        (stateTransitionAt_eq_ok_iff.mpr (hst ▸ hr))).2.2.1)
     (by
-      obtain ⟨rules, _, hst⟩ := Except.bind_eq_ok h
+      obtain ⟨f, _, hst⟩ := Except.bind_eq_ok h
       simp only [Except.ok.injEq] at hst
       exact (BlockChain.validContext_of_transition (cc := pc.chain)
-        (stateTransitionWith_eq_ok_iff.mpr (hst ▸ hr))).2.2.2)
+        (stateTransitionAt_eq_ok_iff.mpr (hst ▸ hr))).2.2.2)
 
 --------------- CHECKED/RAW BRIDGES (FOR STEP 11) ---------------
 
@@ -6264,25 +6255,25 @@ def CheckedBlockChain.ofConfiguredTransition {pc : ConfiguredChain}
 -- theorems are written about and the checked ones, without unfolding either
 -- structure.
 
-theorem stateTransitionChecked_eq_raw (rules : ForkRules) (cc : CheckedBlockChain)
+theorem stateTransitionChecked_eq_raw (f : Fork) (cc : CheckedBlockChain)
     (cb : CanonicalBlock) :
-    stateTransitionChecked rules cc cb
-      = stateTransitionCanonical rules cc.val cb := rfl
+    stateTransitionChecked f cc cb
+      = stateTransitionCanonical f cc.val cb := rfl
 
-theorem addBlockToChainChecked_eq_raw (rules : ForkRules) (cc : CheckedBlockChain)
+theorem addBlockToChainChecked_eq_raw (f : Fork) (cc : CheckedBlockChain)
     (cb : CanonicalBlock) :
-    addBlockToChainChecked rules cc cb
-      = addBlockToChainCanonicalE rules cc.val cb := rfl
+    addBlockToChainChecked f cc cb
+      = addBlockToChainCanonicalE f cc.val cb := rfl
 
 /-- A raw typed import of bytes into a checked snapshot's value is the checked
 import of the envelope those bytes decode to. -/
-theorem addBlockToChainWithE_eq_checked {rules : ForkRules} {cc : CheckedBlockChain}
+theorem addBlockToChainAtE_eq_checked {f : Fork} {cc : CheckedBlockChain}
     {blockRlp : Bytes} {block : Block} {hash : B256}
     (h : rlpToBlock blockRlp = .ok ⟨block, hash⟩) :
-    addBlockToChainWithE rules cc.val blockRlp
-      = addBlockToChainChecked rules cc (CanonicalBlock.ofDecode h) := by
+    addBlockToChainAtE f cc.val blockRlp
+      = addBlockToChainChecked f cc (CanonicalBlock.ofDecode h) := by
   have hE := rlpToBlock_eq_ok_iff.mp h
-  unfold addBlockToChainWithE addBlockToChainChecked
+  unfold addBlockToChainAtE addBlockToChainChecked
   split
   · rename_i e he
     rw [hE] at he
@@ -6441,12 +6432,12 @@ private def typedEnvelopeBytes? (bs : Bytes) : Option Bytes :=
 -- They deliberately exercise `Rinst.runCore`, all four `Xinst.step` CALL
 -- variants, and the private top-level dispatch boundary rather than a pricing
 -- helper in isolation.
-private def orderingGuardMessage (rules : ForkRules) (gas : Nat) : Msg :=
+private def orderingGuardMessage (fork : Fork) (gas : Nat) : Msg :=
   let state := State.setBal .empty (0x1000 : Adr) 100
   { (default : Msg) with
     benv := { (default : Benv) with
       state := state
-      stat := { (default : BenvStat) with rules := rules, origState := state } }
+      stat := { (default : BenvStat) with fork := fork, origState := state } }
     caller := 0x1000
     target := some 0x1000
     currentTarget := 0x1000
@@ -6463,27 +6454,27 @@ private def orderingGuardSummary (r : Execution) :
     d.accessedAddresses.contains (0x3000 : Adr))
 
 private def orderingGuardTstore
-    (rules : ForkRules) (gas : Nat) (stack : List B256) :=
-  let msg := { orderingGuardMessage rules gas with isStatic := true }
+    (fork : Fork) (gas : Nat) (stack : List B256) :=
+  let msg := { orderingGuardMessage fork gas with isStatic := true }
   orderingGuardSummary
     (Rinst.runCore 0 ((initDevm msg).withStack stack) (initSevm msg) .tstore)
 
 -- Amsterdam follows `storage.py.tstore`: the static error precedes stack
 -- access and charging. The `none` lane retains the pre-Amsterdam order.
-#guard orderingGuardTstore amsterdamRules 0 [] =
+#guard orderingGuardTstore .amsterdam 0 [] =
   ("WriteInStaticContext", 0, [], false, false)
-#guard orderingGuardTstore amsterdamRules 99 [1, 2] =
+#guard orderingGuardTstore .amsterdam 99 [1, 2] =
   ("WriteInStaticContext", 99, [1, 2], false, false)
-#guard orderingGuardTstore amsterdamRules 100 [1, 2] =
+#guard orderingGuardTstore .amsterdam 100 [1, 2] =
   ("WriteInStaticContext", 100, [1, 2], false, false)
-#guard orderingGuardTstore pragueRules 0 [] =
+#guard orderingGuardTstore .prague 0 [] =
   ("StackUnderflowError", 0, [], false, false)
-#guard orderingGuardTstore pragueRules 99 [1, 2] =
+#guard orderingGuardTstore .prague 99 [1, 2] =
   ("OutOfGasError", 99, [], false, false)
 
 private def orderingGuardDelegatedMessage (gas : Nat) : Msg :=
   let code := (eoaDelegationMarker ++ (0x3000 : Adr).toBytes).toByteArray
-  (orderingGuardMessage amsterdamRules gas).setCode 0x2000 code
+  (orderingGuardMessage .amsterdam gas).setCode 0x2000 code
 
 private def orderingGuardCall
     (gas : Nat) (x : Xinst) (stack : List B256) :=
@@ -6587,7 +6578,7 @@ private def balGuardView (b : BalBuilder) :
 
 -- A failed child's reads survive the merge into its parent.
 #guard
-  let parent := initDevm (orderingGuardMessage amsterdamRules 100000)
+  let parent := initDevm (orderingGuardMessage .amsterdam 100000)
   let child := (parent.balReadAccount amsterdamRules balGuardB)
     |>.balReadStorage amsterdamRules balGuardB 5
   let merged := incorporateChildAmsterdamOnError parent child []

@@ -467,18 +467,18 @@ each block's own timestamp decides which rules it runs under -- which is the
 whole content of a transition fixture -- and the schedule's usability and
 chain identity are checked first, in the order `addBlockToChainUsing` checks
 them. -/
-def fixtureImportRules (spec : NetworkSpec) (chainId : UInt64)
-    (parent : CheckedBlockChain) (header : Header) : Except ImportFailure ForkRules := do
+def fixtureImportFork (spec : NetworkSpec) (chainId : UInt64)
+    (parent : CheckedBlockChain) (header : Header) : Except ImportFailure Fork := do
   match spec with
-  | .static f => Except.mapError ImportFailure.support f.rules
+  | .static f => .ok f
   | .transition t =>
     -- Exactly what `addBlockToChainUsingE` checks, in its order: the schedule
     -- is usable, it names this chain, and only then does the candidate's own
-    -- timestamp select the rules.
+    -- timestamp select the fork.
     let cfg := t.chainConfig chainId
     Except.mapError ImportFailure.context cfg.validate
     Except.mapError ImportFailure.context (cfg.checkChainId parent.val)
-    Except.mapError ImportFailure.ofLookup (cfg.rulesAt header.timestamp)
+    Except.mapError ImportFailure.ofLookup (cfg.forkAt header.timestamp)
 
 /-- Strictly decode a fixture block once, select its parent snapshot by the
 decoded `parentHash`, and import it into that snapshot through the checked
@@ -502,10 +502,10 @@ def evaluateFixtureBlock (spec : NetworkSpec) (chainId : UInt64) (store : ChainS
     match store.findParent block.header.parentHash with
     | .error reason => .ok (.inr (.block reason))
     | .ok parent =>
-      match fixtureImportRules spec chainId parent block.header with
+      match fixtureImportFork spec chainId parent block.header with
       | .error failure => .error failure
-      | .ok rules =>
-        match him : addBlockToChainChecked rules parent
+      | .ok f =>
+        match him : addBlockToChainChecked f parent
             (CanonicalBlock.ofDecode (rlpToBlock_eq_ok_iff.mpr hd)) with
         | .error failure => .error failure
         | .ok (.inr rejection) => .ok (.inr rejection)
@@ -952,7 +952,7 @@ def getFork (opts : List String) : IO Fork :=
            {Fork.supported.map Fork.toString}"
 
 def createMinimalEvm
-    (rules : ForkRules) (adr : Adr) (input : Bytes) (gasLimit : Nat) : Evm := {
+    (fork : Fork) (adr : Adr) (input : Bytes) (gasLimit : Nat) : Evm := {
   pc := 0
   sta := {
     caller := default
@@ -967,7 +967,7 @@ def createMinimalEvm
     shouldTransferValue := false
     isStatic := false
     disablePrecompiles := false
-    benvStat := { (default : BenvStat) with rules := rules }
+    benvStat := { (default : BenvStat) with fork := fork }
     tenvStat := default
   }
   dyna := {
@@ -994,7 +994,7 @@ def createMinimalEvm
   }
 }
 
-def processVector (rules : ForkRules) (adr : Adr) : (Nat × Lean.Json) → IO Bool
+def processVector (fork : Fork) (adr : Adr) : (Nat × Lean.Json) → IO Bool
   | ⟨idx, json⟩ => do
     let name ← (json.find? "Name" >>= Lean.Json.toString?).toIO s!"missing Name at index {idx}"
     let inputStr ← (json.find? "Input" >>= Lean.Json.toString?).toIO s!"missing Input for {name}"
@@ -1009,7 +1009,7 @@ def processVector (rules : ForkRules) (adr : Adr) : (Nat × Lean.Json) → IO Bo
         let gs := toString g
         (String.toNat? gs).toIO s!"invalid Gas for {name}"
       else pure 0
-    let evm := createMinimalEvm rules adr input 0xffffffffffff
+    let evm := createMinimalEvm fork adr input 0xffffffffffff
     let res := precompileRun evm adr
     match expected? with
     | some expected =>
@@ -1047,7 +1047,7 @@ def runVectorFile (f : Fork) (addr : Adr) (path : String) : IO Bool := do
     return false
   let rb ← readJsonFile path >>= Lean.Json.toIoList
   let js := rb.putIndex
-  let results ← js.mapM (processVector rules addr)
+  let results ← js.mapM (processVector f addr)
   let mut passes := 0
   for pass in results do
     if pass then passes := passes + 1

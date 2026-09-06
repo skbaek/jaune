@@ -831,12 +831,23 @@ structure Log : Type where
   (data : Bytes)
 
 structure BenvStat : Type where
-  /-- The rules this block runs under.
-  Carrying them here, rather than as an extra argument, is what keeps a single
+  /-- The fork this block runs under, and through it the rules.
+
+  The machine carries the *fork*, and `BenvStat.rules` below derives the rule
+  record from it with `Fork.ruleSet`. That is what makes `ForkRules.Valid` a
+  fact about every machine rather than a premise every statement has to carry:
+  the only rule sets a machine can hold are the five fork records, each proved
+  usable once by `Fork.ruleSet_valid`. A rule record that describes no fork is
+  not rejected, it is inexpressible.
+
+  Carrying it here, rather than as an extra argument, is what keeps a single
   interpreter: every function that already sees a `BenvStat` -- directly, or
   through `Benv`, `Msg`, or `Sevm` -- can read the active rules without a
-  signature change, and nothing anywhere needs to know which fork it is. -/
-  rules : ForkRules
+  signature change. Execution still branches on rule *data* and never on this
+  field: it is a selection and provenance key, exactly as `ForkRules.fork`
+  already is, and `Jaune`'s hygiene condition is that no `if fork = ...`
+  appears in execution. -/
+  fork : Fork
   chainId : UInt64
   origState : State
   blockGasLimit : Nat
@@ -852,6 +863,26 @@ structure BenvStat : Type where
   pushes. Defaulted so that every existing `BenvStat` literal keeps
   elaborating; under rules without `op.slotnum` nothing reads it. -/
   slotNumber : UInt64 := 0
+
+/-- The rules this block runs under.
+
+Kept under its former name and type -- `BenvStat → ForkRules` -- so that every
+*read* of the active rules, in this repository and downstream, is textually
+unchanged. What moved is construction: there is no `rules` field to set, so the
+only rule sets a machine can carry are the five `Fork.ruleSet` records. -/
+def BenvStat.rules (s : BenvStat) : ForkRules := Fork.ruleSet s.fork
+
+/-- The machine's fork index and the record it reads agree. -/
+@[simp] theorem BenvStat.rules_fork (s : BenvStat) : s.rules.fork = s.fork :=
+  Fork.ruleSet_fork s.fork
+
+/-- **Every machine's rules are usable, with no premise.**
+
+The corollary of `Fork.ruleSet_valid` that the Sufficiency results live off:
+because `BenvStat` carries a `Fork`, `ForkRules.Valid` is discharged from the
+machine itself rather than assumed at each statement. -/
+theorem BenvStat.rules_valid (s : BenvStat) : s.rules.Valid :=
+  Fork.ruleSet_valid s.fork
 
 -- class Benvironment
 structure Benv : Type where
@@ -1927,6 +1958,17 @@ structure Evm : Type where
   pc : Nat
   sta : Sevm
   dyna : Devm
+
+/-- Every static machine's rules are usable, with no premise.
+
+The form the Sufficiency results take their witness in: where a statement about
+a `Sevm` used to bind `(hv : sevm.benvStat.rules.Valid)`, it now applies this. -/
+theorem Sevm.rules_valid (sevm : Sevm) : sevm.benvStat.rules.Valid :=
+  BenvStat.rules_valid sevm.benvStat
+
+/-- Every machine's rules are usable, with no premise. See `Sevm.rules_valid`. -/
+theorem Evm.rules_valid (evm : Evm) : evm.sta.benvStat.rules.Valid :=
+  BenvStat.rules_valid evm.sta.benvStat
 
 def Devm.withStack (devm : Devm) (stack : List B256) : Devm :=
   devm.setMach {devm.mach with stack := stack}
@@ -4157,7 +4199,7 @@ def Rinst.run (evm : Evm) := Rinst.runCore evm.pc evm.dyna evm.sta
 
 instance : Inhabited BenvStat := ⟨
   {
-    rules := pragueRules
+    fork := .prague
     chainId := 0
     origState := .empty
     blockGasLimit := 0
@@ -4326,14 +4368,14 @@ instance : Inhabited Evm := ⟨
 #guard (List.range 256).all
   (fun n => B256.leadingZeros (Nat.toB256 (2 ^ (n + 1) - 1)) = 255 - n)
 
-private def guardSevmWith (rules : ForkRules) : Sevm :=
+private def guardSevmAt (fork : Fork) : Sevm :=
   { (default : Sevm) with
-    benvStat := { (default : BenvStat) with rules := rules } }
+    benvStat := { (default : BenvStat) with fork := fork } }
 
-private def guardClz (rules : ForkRules) (gasLeft : Nat) (stack : List B256) :
+private def guardClz (fork : Fork) (gasLeft : Nat) (stack : List B256) :
     Execution :=
   Rinst.runCore 0 (((default : Devm).withGasLeft gasLeft).withStack stack)
-    (guardSevmWith rules) .clz
+    (guardSevmAt fork) .clz
 
 private def guardClzErr (e : Execution) : String :=
   match e with
@@ -4341,58 +4383,58 @@ private def guardClzErr (e : Execution) : String :=
   | .ok _ => "unexpected success"
 
 -- Under Osaka the opcode pops one word, charges `LOW`, and pushes the count.
-#guard (guardClz osakaRules 100 [0]).toOption.map Devm.stack
+#guard (guardClz .osaka 100 [0]).toOption.map Devm.stack
   = some [Nat.toB256 256]
-#guard (guardClz osakaRules 100 [1]).toOption.map Devm.stack
+#guard (guardClz .osaka 100 [1]).toOption.map Devm.stack
   = some [Nat.toB256 255]
-#guard (guardClz osakaRules 100 [B256.max]).toOption.map Devm.stack
+#guard (guardClz .osaka 100 [B256.max]).toOption.map Devm.stack
   = some [Nat.toB256 0]
-#guard (guardClz osakaRules 100 [0]).toOption.map Devm.gasLeft = some (100 - gLow)
+#guard (guardClz .osaka 100 [0]).toOption.map Devm.gasLeft = some (100 - gLow)
 #guard gLow = 5
 
 -- The rest of the stack is untouched and only the top word is consumed.
-#guard (guardClz osakaRules 100 [0, 7]).toOption.map Devm.stack
+#guard (guardClz .osaka 100 [0, 7]).toOption.map Devm.stack
   = some [Nat.toB256 256, Nat.toB256 7]
 
 -- Under Prague 0x1E is an unassigned byte, so it is an invalid instruction
 -- whatever the stack and gas hold -- not a stack or gas failure, and not a
 -- silent success.
-#guard guardClzErr (guardClz pragueRules 100 [0]) = "InvalidOpcode"
-#guard guardClzErr (guardClz pragueRules 100 []) = "InvalidOpcode"
-#guard guardClzErr (guardClz pragueRules 0 [0]) = "InvalidOpcode"
+#guard guardClzErr (guardClz .prague 100 [0]) = "InvalidOpcode"
+#guard guardClzErr (guardClz .prague 100 []) = "InvalidOpcode"
+#guard guardClzErr (guardClz .prague 0 [0]) = "InvalidOpcode"
 
 -- EIP-7843 `SLOTNUM` (goal C, G3): under Amsterdam it charges `BASE` (2) and
 -- pushes the block environment's slot number zero-extended to 256 bits; under
 -- BPO2 the byte 0x4B is unassigned, so it is an invalid instruction whatever
 -- the stack and gas hold.
-private def guardSlotnum (rules : ForkRules) (slot : UInt64) (gasLeft : Nat)
+private def guardSlotnum (fork : Fork) (slot : UInt64) (gasLeft : Nat)
     (stack : List B256) : Execution :=
   Rinst.runCore 0 (((default : Devm).withGasLeft gasLeft).withStack stack)
-    { guardSevmWith rules with
-      benvStat := { (default : BenvStat) with rules := rules, slotNumber := slot } }
+    { guardSevmAt fork with
+      benvStat := { (default : BenvStat) with fork := fork, slotNumber := slot } }
     .slotnum
 
 #guard gBase = 2
-#guard (guardSlotnum amsterdamRules 12345 100 []).toOption.map Devm.stack
+#guard (guardSlotnum .amsterdam 12345 100 []).toOption.map Devm.stack
   = some [Nat.toB256 12345]
-#guard (guardSlotnum amsterdamRules 12345 100 []).toOption.map Devm.gasLeft
+#guard (guardSlotnum .amsterdam 12345 100 []).toOption.map Devm.gasLeft
   = some (100 - gBase)
-#guard (guardSlotnum amsterdamRules (2 ^ 64 - 1) 100 [7]).toOption.map Devm.stack
+#guard (guardSlotnum .amsterdam (2 ^ 64 - 1) 100 [7]).toOption.map Devm.stack
   = some [Nat.toB256 (2 ^ 64 - 1), Nat.toB256 7]
-#guard (guardSlotnum amsterdamRules 0 2 []).toOption.map Devm.gasLeft = some 0
-#guard guardClzErr (guardSlotnum amsterdamRules 12345 1 []) = "OutOfGasError"
-#guard guardClzErr (guardSlotnum bpo2Rules 12345 100 []) = "InvalidOpcode"
-#guard guardClzErr (guardSlotnum bpo2Rules 12345 0 []) = "InvalidOpcode"
-#guard guardClzErr (guardSlotnum pragueRules 0 100 [1]) = "InvalidOpcode"
+#guard (guardSlotnum .amsterdam 0 2 []).toOption.map Devm.gasLeft = some 0
+#guard guardClzErr (guardSlotnum .amsterdam 12345 1 []) = "OutOfGasError"
+#guard guardClzErr (guardSlotnum .bpo2 12345 100 []) = "InvalidOpcode"
+#guard guardClzErr (guardSlotnum .bpo2 12345 0 []) = "InvalidOpcode"
+#guard guardClzErr (guardSlotnum .prague 0 100 [1]) = "InvalidOpcode"
 -- `UInt8.toRinst` decodes 0x4B at every fork and round-trips its mnemonic.
 #guard (0x4B : UInt8).toRinst matches some .slotnum
 #guard ((0x4B : UInt8).toRinst.map Rinst.toString) = some "SLOTNUM"
 #guard (0x4B : UInt8).toInstType matches .R
 
 -- Under Osaka the same two degenerate inputs reach the real failures instead.
-#guard guardClzErr (guardClz osakaRules 100 []) = "StackUnderflowError"
-#guard guardClzErr (guardClz osakaRules (gLow - 1) [0]) = "OutOfGasError"
-#guard (guardClz osakaRules gLow [0]).toOption.map Devm.gasLeft = some 0
+#guard guardClzErr (guardClz .osaka 100 []) = "StackUnderflowError"
+#guard guardClzErr (guardClz .osaka (gLow - 1) [0]) = "OutOfGasError"
+#guard (guardClz .osaka gLow [0]).toOption.map Devm.gasLeft = some 0
 
 instance : Inhabited Execution := ⟨.ok default⟩
 
