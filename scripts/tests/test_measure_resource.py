@@ -110,6 +110,22 @@ class MeasureResourceTests(unittest.TestCase):
                     "/app.slice/run-p1-i1.scope", 1024**3, 0
                 )
 
+    def test_a_scope_that_dies_with_its_payload_is_refused(self):
+        # systemd's default scope OOMPolicy is `stop`, which would terminate
+        # this controller together with a contained payload kill and leave the
+        # red side of a control with no record at all.
+        with mock.patch.object(
+            MODULE, "show_unit", return_value={"OOMPolicy": "continue"}
+        ):
+            MODULE.require_survivable_containment("run-p1-i1.scope")
+        for policy in ({"OOMPolicy": "stop"}, {"OOMPolicy": "kill"}, {}):
+            with (
+                self.subTest(policy=policy),
+                mock.patch.object(MODULE, "show_unit", return_value=policy),
+                self.assertRaises(MODULE.MeasureError),
+            ):
+                MODULE.require_survivable_containment("run-p1-i1.scope")
+
     def test_schema_is_two(self):
         self.assertEqual(MODULE.SCHEMA_VERSION, 2)
 
@@ -169,7 +185,12 @@ class MeasureResourceTests(unittest.TestCase):
             (leaf / "memory.events").write_text("oom_kill 9\n", encoding="utf-8")
             for ancestor in (root, root / "user.slice",
                              root / "user.slice" / "user@1001.service"):
+                # A kill inside the leaf shows up in every ancestor's
+                # hierarchical counter and in none of their local ones.
                 (ancestor / "memory.events").write_text(
+                    "low 0\nhigh 0\nmax 0\noom 9\noom_kill 9\n", encoding="utf-8"
+                )
+                (ancestor / "memory.events.local").write_text(
                     "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\n", encoding="utf-8"
                 )
             with mock.patch.object(MODULE, "CGROUP_ROOT", root):
@@ -184,17 +205,28 @@ class MeasureResourceTests(unittest.TestCase):
             self.assertNotIn(
                 "/user.slice/user@1001.service/run-p1.scope", counters
             )
-            self.assertEqual(counters["/user.slice/user@1001.service"]["oom_kill"], 0)
+            entry = counters["/user.slice/user@1001.service"]
+            self.assertEqual(entry["local"]["oom_kill"], 0)
+            self.assertEqual(entry["hierarchical"]["oom_kill"], 9)
 
-    def test_an_outer_oom_kill_is_visible_rather_than_silently_absent(self):
+    def test_a_contained_kill_is_not_an_outer_oom(self):
+        # The distinction this clause turns on: `memory.events` is
+        # hierarchical, so a correctly-contained red control increments it at
+        # every ancestor. Only the ancestors' OWN counters decide the verdict.
         clean = {"oom": 0, "oom_kill": 0, "oom_group_kill": 0}
         killed = {"oom": 1, "oom_kill": 1, "oom_group_kill": 0}
         self.assertIs(
-            MODULE.outer_oom_increased({"/user.slice": clean}, {"/user.slice": clean}),
+            MODULE.outer_oom_increased(
+                {"/user.slice": {"local": clean, "hierarchical": clean}},
+                {"/user.slice": {"local": clean, "hierarchical": killed}},
+            ),
             False,
         )
         self.assertIs(
-            MODULE.outer_oom_increased({"/user.slice": clean}, {"/user.slice": killed}),
+            MODULE.outer_oom_increased(
+                {"/user.slice": {"local": clean, "hierarchical": clean}},
+                {"/user.slice": {"local": killed, "hierarchical": killed}},
+            ),
             True,
         )
         # Undecidable is neither True nor False: an unreadable counter must not
@@ -202,7 +234,8 @@ class MeasureResourceTests(unittest.TestCase):
         unavailable = {"available": False, "reason": "unreadable"}
         self.assertIsNone(
             MODULE.outer_oom_increased(
-                {"/": unavailable}, {"/": unavailable}
+                {"/": {"local": unavailable, "hierarchical": unavailable}},
+                {"/": {"local": unavailable, "hierarchical": unavailable}},
             )
         )
 

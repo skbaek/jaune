@@ -16,7 +16,10 @@ measurement inside one transient cgroup of its own,
     systemd-run --user --scope -p MemoryMax=<budget> -p MemorySwapMax=<swap> -- \
         measure-resource.py --memory-max <budget> --swap-max <swap> -- <payload>
 
-and the payload runs as a direct child inside it. What made the original shape
+and the payload runs as a direct child inside it. `OOMPolicy=continue` is
+required, not optional: systemd's default for a scope is to tear the whole
+scope down when the kernel kills one member, which would destroy the
+instrument exactly on the run whose containment is the evidence. What made the original shape
 trustworthy was never the *name* of the slice: it was that the measured cgroup
 is a finite transient boundary whose limits are read back live from the kernel
 rather than assumed, and that it is never the session, user or root cgroup.
@@ -165,6 +168,38 @@ def cgroup_dir(path: str) -> Path:
     return directory
 
 
+def require_survivable_containment(unit: str) -> None:
+    """Refuse a containment scope that dies when its payload is contained.
+
+    systemd's default `OOMPolicy` for a scope is `stop`: when the kernel kills
+    one member for crossing the boundary, systemd terminates the whole scope —
+    including this controller, before it has read the counters. A red control
+    would then destroy its own instrument and leave nothing behind but a
+    SIGTERM. The nested-slice shape already sets `OOMPolicy=continue` on the
+    payload unit; in-scope containment needs the caller to set it on the scope:
+
+        systemd-run --user --scope -p MemoryMax=... -p MemorySwapMax=... \
+            -p OOMPolicy=continue -- ...
+
+    This is a hard refusal rather than a warning, because the failure it
+    prevents is silent: a green measurement never triggers it, so it would only
+    ever be discovered on the run that mattered.
+    """
+    try:
+        properties = show_unit(unit)
+    except MeasureError as error:
+        raise MeasureError(
+            f"cannot inspect the containment scope {unit}: {error}"
+        ) from error
+    policy = properties.get("OOMPolicy", "")
+    if policy != "continue":
+        raise MeasureError(
+            f"containment scope {unit} has OOMPolicy={policy or 'unknown'}; "
+            "in-scope containment requires OOMPolicy=continue so a contained "
+            "payload kill does not take this controller down with it"
+        )
+
+
 def read_optional(path: Path) -> str | None:
     try:
         return path.read_text(encoding="utf-8").strip()
@@ -260,11 +295,21 @@ def session_identity() -> dict[str, object]:
 
 
 def outer_oom_counters(measured_relative_path: str) -> dict[str, object]:
-    """`memory.events` for every cgroup ancestor OUTSIDE the measured leaf.
+    """OOM counters for every cgroup ancestor OUTSIDE the measured leaf.
 
     Generic by construction rather than naming one host's `user@1001.service`:
     the ancestors of the measured leaf are exactly the scopes whose counters
     must not move while a contained payload is killed inside it.
+
+    Each ancestor carries both of the kernel's counter files, and the
+    distinction is the whole point of the clause. `memory.events` is
+    **hierarchical**: a kill inside the measured leaf increments it at every
+    ancestor, so a contained, expected, correctly-reported kill would read as
+    "the desktop's scope OOMed" if it were the only number recorded.
+    `memory.events.local` counts only that cgroup's own members. The
+    increase verdict is taken from the local counters; the hierarchical ones
+    are kept beside them so the contained kill stays visible instead of being
+    filtered away.
     """
     relative = measured_relative_path.strip("/")
     ancestors: list[str] = []
@@ -274,14 +319,17 @@ def outer_oom_counters(measured_relative_path: str) -> dict[str, object]:
     counters: dict[str, object] = {}
     for ancestor in ancestors:
         directory = CGROUP_ROOT / ancestor.lstrip("/")
-        text = read_optional(directory / "memory.events")
-        if text is None:
-            counters[ancestor] = unavailable("memory.events is unreadable")
-            continue
-        try:
-            counters[ancestor] = parse_flat_counters(text)
-        except MeasureError as error:
-            counters[ancestor] = unavailable(str(error))
+        entry: dict[str, object] = {}
+        for field, name in (("local", "memory.events.local"), ("hierarchical", "memory.events")):
+            text = read_optional(directory / name)
+            if text is None:
+                entry[field] = unavailable(f"{name} is unreadable")
+                continue
+            try:
+                entry[field] = parse_flat_counters(text)
+            except MeasureError as error:
+                entry[field] = unavailable(str(error))
+        counters[ancestor] = entry
     return counters
 
 
@@ -296,17 +344,26 @@ def survival_snapshot(measured_relative_path: str) -> dict[str, object]:
 def outer_oom_increased(
     pre: dict[str, object], post: dict[str, object]
 ) -> bool | None:
-    """True if any ancestor's OOM counters moved; None if it cannot be decided."""
+    """True if an ancestor's OWN OOM counters moved; None if undecidable.
+
+    "Own" is `memory.events.local`: a payload killed inside the measured leaf
+    is contained by definition, and reporting that as an outer OOM would make
+    every correctly-contained red control look like a host incident.
+    """
     decided = False
     for scope, before in pre.items():
         after = post.get(scope)
         if not isinstance(before, dict) or not isinstance(after, dict):
             continue
-        if before.get("available") is False or after.get("available") is False:
+        before_local = before.get("local")
+        after_local = after.get("local")
+        if not isinstance(before_local, dict) or not isinstance(after_local, dict):
+            continue
+        if before_local.get("available") is False or after_local.get("available") is False:
             continue
         decided = True
         for key in ("oom", "oom_kill", "oom_group_kill"):
-            if int(after.get(key, 0)) > int(before.get(key, 0)):
+            if int(after_local.get(key, 0)) > int(before_local.get(key, 0)):
                 return True
     return False if decided else None
 
@@ -346,6 +403,7 @@ def show_unit(unit: str) -> dict[str, str]:
         "ExecMainCode",
         "ExecMainStatus",
         "ControlGroup",
+        "OOMPolicy",
     )
     command = ["systemctl", "--user", "show", unit]
     for prop in properties:
@@ -634,6 +692,8 @@ def run_in_scope(
     the reported peak larger than the payload's own.
     """
     directory = cgroup_dir(own_path)
+    unit = own_path.strip("/").rsplit("/", 1)[-1]
+    require_survivable_containment(unit)
     entry_snapshot = read_snapshot(directory)
     require_readback(entry_snapshot, args.memory_max, args.swap_max)
     entry_peak = int(entry_snapshot["memory_peak"])  # type: ignore[arg-type]
@@ -649,11 +709,24 @@ def run_in_scope(
         peak_after_reset = int(read_value(directory / "memory.peak"))
     peak_reset = peak_after_reset < entry_peak
 
-    unit = own_path.strip("/").rsplit("/", 1)[-1]
     samples = 0
     timed_out = False
     last_snapshot: dict[str, object] | None = None
-    process = subprocess.Popen(command)
+
+    def prefer_payload_as_oom_victim() -> None:
+        # The nested-slice shape gives the payload unit `OOMScoreAdjust=500` so
+        # that the boundary kills the payload rather than anything else in the
+        # scope. In-scope mode shares its cgroup with this controller, so it
+        # raises the same knob on the child directly. Raising is unprivileged;
+        # lowering is not, which is why the controller cannot instead protect
+        # itself. Without this a red control can kill its own instrument and
+        # leave no record of the event it was built to record.
+        try:
+            Path("/proc/self/oom_score_adj").write_text("500", encoding="utf-8")
+        except OSError:
+            pass
+
+    process = subprocess.Popen(command, preexec_fn=prefer_payload_as_oom_victim)
     try:
         while True:
             last_snapshot = read_snapshot(directory)
