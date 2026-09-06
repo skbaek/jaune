@@ -1449,17 +1449,17 @@ def Evm.step (evm : Evm) : Step :=
 -- end of code, the activation check, the `VERY_LOW` charge, the decode, and
 -- the stack effect are all observed together. The summary is
 -- `(status, gasLeft, stack as Nats, pc)`; `"ok"` is a continued frame.
-private def stackAccessGuardEvm (rules : ForkRules) (code : ByteArray)
+private def stackAccessGuardEvm (fork : Fork) (code : ByteArray)
     (gasLeft : Nat) (stack : List B256) : Evm :=
   { pc := 0,
     sta := { (default : Sevm) with
       code := code,
-      benvStat := { (default : BenvStat) with rules := rules } },
+      benvStat := { (default : BenvStat) with fork := fork } },
     dyna := ((default : Devm).withGasLeft gasLeft).withStack stack }
 
-private def stackAccessGuard (rules : ForkRules) (code : List UInt8)
+private def stackAccessGuard (fork : Fork) (code : List UInt8)
     (gasLeft : Nat) (stack : List Nat) : String × Nat × List Nat × Nat :=
-  match Evm.step (stackAccessGuardEvm rules ⟨code.toArray⟩ gasLeft
+  match Evm.step (stackAccessGuardEvm fork ⟨code.toArray⟩ gasLeft
       (stack.map Nat.toB256)) with
   | .cont pc d => ("ok", d.gasLeft, d.stack.map B256.toNat, pc)
   | .halt (.error ⟨e, d⟩) => (e.render, d.gasLeft, d.stack.map B256.toNat, 0)
@@ -1470,59 +1470,59 @@ private def guardStackOf (n : Nat) : List Nat := List.range n
 
 -- Sizing: an accepted immediate advances the counter by two (`pc += 2`).
 -- `DUPN 0x80` decodes to 17 and duplicates position 17 (index 16).
-#guard stackAccessGuard amsterdamRules [0xE6, 0x80] 100 (guardStackOf 17)
+#guard stackAccessGuard .amsterdam [0xE6, 0x80] 100 (guardStackOf 17)
   = ("ok", 100 - gVerylow, 16 :: guardStackOf 17, 2)
 #guard gVerylow = 3
 -- One item short is a stack underflow -- after the charge, as in the pinned
 -- `dupn`, whose `charge_gas` precedes the length test.
-#guard stackAccessGuard amsterdamRules [0xE6, 0x80] 100 (guardStackOf 16)
+#guard stackAccessGuard .amsterdam [0xE6, 0x80] 100 (guardStackOf 16)
   = ("StackUnderflowError", 100 - gVerylow, guardStackOf 16, 0)
 -- `DUPN 0x00` decodes to 145: 145 items suffice, 144 do not.
-#guard (stackAccessGuard amsterdamRules [0xE6, 0x00] 100 (guardStackOf 145)).1 = "ok"
-#guard (stackAccessGuard amsterdamRules [0xE6, 0x00] 100 (guardStackOf 144)).1
+#guard (stackAccessGuard .amsterdam [0xE6, 0x00] 100 (guardStackOf 145)).1 = "ok"
+#guard (stackAccessGuard .amsterdam [0xE6, 0x00] 100 (guardStackOf 144)).1
   = "StackUnderflowError"
 -- `DUPN` as the final byte of code: the immediate is zero-filled to 0x00,
 -- decoding to 145 -- a stack underflow unless 145 items are present.
-#guard (stackAccessGuard amsterdamRules [0xE6] 100 (guardStackOf 144)).1
+#guard (stackAccessGuard .amsterdam [0xE6] 100 (guardStackOf 144)).1
   = "StackUnderflowError"
-#guard (stackAccessGuard amsterdamRules [0xE6] 100 (guardStackOf 145)).1 = "ok"
-#guard (stackAccessGuard amsterdamRules [0xE6] 100 (guardStackOf 145)).2.2.2 = 2
+#guard (stackAccessGuard .amsterdam [0xE6] 100 (guardStackOf 145)).1 = "ok"
+#guard (stackAccessGuard .amsterdam [0xE6] 100 (guardStackOf 145)).2.2.2 = 2
 -- A forbidden immediate is an invalid instruction -- after the charge, since
 -- the pinned `charge_gas` precedes the decode -- whatever the stack holds.
-#guard stackAccessGuard amsterdamRules [0xE6, 0x5B] 100 (guardStackOf 200)
+#guard stackAccessGuard .amsterdam [0xE6, 0x5B] 100 (guardStackOf 200)
   = ("InvalidOpcode", 100 - gVerylow, guardStackOf 200, 0)
-#guard (stackAccessGuard amsterdamRules [0xE6, 0x7F] 100 (guardStackOf 200)).1 = "InvalidOpcode"
-#guard (stackAccessGuard amsterdamRules [0xE7, 0x5B] 100 (guardStackOf 200)).1 = "InvalidOpcode"
-#guard (stackAccessGuard amsterdamRules [0xE8, 0x52] 100 (guardStackOf 200)).1 = "InvalidOpcode"
-#guard (stackAccessGuard amsterdamRules [0xE8, 0x7F] 100 (guardStackOf 200)).1 = "InvalidOpcode"
+#guard (stackAccessGuard .amsterdam [0xE6, 0x7F] 100 (guardStackOf 200)).1 = "InvalidOpcode"
+#guard (stackAccessGuard .amsterdam [0xE7, 0x5B] 100 (guardStackOf 200)).1 = "InvalidOpcode"
+#guard (stackAccessGuard .amsterdam [0xE8, 0x52] 100 (guardStackOf 200)).1 = "InvalidOpcode"
+#guard (stackAccessGuard .amsterdam [0xE8, 0x7F] 100 (guardStackOf 200)).1 = "InvalidOpcode"
 -- Out of gas precedes the decode: with 2 gas even a forbidden immediate
 -- reports the gas failure, not the immediate.
-#guard (stackAccessGuard amsterdamRules [0xE6, 0x5B] 2 (guardStackOf 200)).1 = "OutOfGasError"
+#guard (stackAccessGuard .amsterdam [0xE6, 0x5B] 2 (guardStackOf 200)).1 = "OutOfGasError"
 -- `SWAPN 0x80` decodes to 17: swaps the top with position 18 (index 17); 18
 -- items suffice, 17 do not.
-#guard stackAccessGuard amsterdamRules [0xE7, 0x80] 100 (guardStackOf 18)
+#guard stackAccessGuard .amsterdam [0xE7, 0x80] 100 (guardStackOf 18)
   = ("ok", 100 - gVerylow, ((guardStackOf 18).set 0 17).set 17 0, 2)
-#guard (stackAccessGuard amsterdamRules [0xE7, 0x80] 100 (guardStackOf 17)).1
+#guard (stackAccessGuard .amsterdam [0xE7, 0x80] 100 (guardStackOf 17)).1
   = "StackUnderflowError"
 -- `EXCHANGE 0x00` decodes to `(9, 16)`: swaps positions 10 and 17 (indices 9
 -- and 16); 17 items suffice, 16 do not.
-#guard stackAccessGuard amsterdamRules [0xE8, 0x00] 100 (guardStackOf 17)
+#guard stackAccessGuard .amsterdam [0xE8, 0x00] 100 (guardStackOf 17)
   = ("ok", 100 - gVerylow, ((guardStackOf 17).set 9 16).set 16 9, 2)
-#guard (stackAccessGuard amsterdamRules [0xE8, 0x00] 100 (guardStackOf 16)).1
+#guard (stackAccessGuard .amsterdam [0xE8, 0x00] 100 (guardStackOf 16)).1
   = "StackUnderflowError"
 -- `EXCHANGE 0xFF` decodes to `(1, 22)`: indices 1 and 22, 23 items needed.
-#guard stackAccessGuard amsterdamRules [0xE8, 0xFF] 100 (guardStackOf 23)
+#guard stackAccessGuard .amsterdam [0xE8, 0xFF] 100 (guardStackOf 23)
   = ("ok", 100 - gVerylow, ((guardStackOf 23).set 1 22).set 22 1, 2)
 -- Under BPO2 the three bytes are unassigned: an invalid instruction whatever
 -- the stack and gas hold, and no gas is charged.
-#guard stackAccessGuard bpo2Rules [0xE6, 0x80] 100 (guardStackOf 17)
+#guard stackAccessGuard .bpo2 [0xE6, 0x80] 100 (guardStackOf 17)
   = ("InvalidOpcode", 100, guardStackOf 17, 0)
-#guard (stackAccessGuard bpo2Rules [0xE7, 0x80] 100 (guardStackOf 18)).1 = "InvalidOpcode"
-#guard (stackAccessGuard bpo2Rules [0xE8, 0x00] 0 []).1 = "InvalidOpcode"
-#guard (stackAccessGuard pragueRules [0xE6, 0x80] 100 (guardStackOf 17)).1 = "InvalidOpcode"
+#guard (stackAccessGuard .bpo2 [0xE7, 0x80] 100 (guardStackOf 18)).1 = "InvalidOpcode"
+#guard (stackAccessGuard .bpo2 [0xE8, 0x00] 0 []).1 = "InvalidOpcode"
+#guard (stackAccessGuard .prague [0xE6, 0x80] 100 (guardStackOf 17)).1 = "InvalidOpcode"
 -- And `SLOTNUM` from code, for the same fixture: `BASE`, the push, `pc += 1`.
-#guard stackAccessGuard amsterdamRules [0x4B] 100 [] = ("ok", 100 - gBase, [0], 1)
-#guard (stackAccessGuard bpo2Rules [0x4B] 100 []).1 = "InvalidOpcode"
+#guard stackAccessGuard .amsterdam [0x4B] 100 [] = ("ok", 100 - gBase, [0], 1)
+#guard (stackAccessGuard .bpo2 [0x4B] 100 []).1 = "InvalidOpcode"
 
 private def Ninst.stepCached
     (evm : Evm) (cache : Option CalldataCache) (n : Ninst) :
@@ -1778,27 +1778,76 @@ private def meteringGuardCallee : Adr := 0x2000
 private def meteringGuardDelegate : Adr := 0x3000
 
 /-- A valid legacy-shaped schedule whose three inherited instruction-site
-numbers deliberately differ from Prague's.  These values make the site guards
-below sensitive to the selected `rules.gas` record even when `stateGas = none`.
--/
-private def meteringGuardLegacyRules : ForkRules :=
-  {pragueRules with gas :=
-    {pragueRules.gas with
-      coldAccountAccess := 2700
-      callValue := 9100
-      createAccess := 31000}}
+numbers deliberately differ from Prague's. These values make the charge guards
+below sensitive to the schedule they are handed, even in the `stateGas = none`
+lane where every fork carries `pragueGasSchedule`.
 
-#guard meteringGuardLegacyRules.stateGas = none
-#guard decide meteringGuardLegacyRules.Valid
+**Why this is a `GasSchedule` and no longer a `ForkRules`.** It used to be a
+whole rule record, and the guards below drove `Xinst.step`/`Linst.run` on a
+machine carrying it, which is how a *third* legacy-shaped record proved that
+the instruction sites read the *selected* `rules.gas` rather than the globals
+or a hard-wired Prague/Amsterdam pair. A machine now carries a `Fork`, so no
+such record can reach a machine, and no machine-driven evaluation can make the
+distinction any more: of the five fork records the four with `stateGas = none`
+all carry `pragueGasSchedule`, and `pragueGasSchedule`'s three numbers equal
+the globals by `rfl`, so on every reachable machine "reads the record" and
+"reads the global" compute the same number. The three schedules the legacy lane
+can distinguish are therefore exactly the ones no fork carries.
 
-private def meteringGuardMsg (rules : ForkRules) (stateGasGrant : Nat) : Msg :=
+What survives here is the half that needs no machine: the same three numbers,
+each row paired with the Prague value it differs from. **Two of the four rows
+below bite and two do not**, and this docstring said otherwise until the
+independent review (F-2) measured it. The 14,500 and 5,400 rows run
+`GasSchedule.accessCost`, `GasSchedule.accessDelegation` and
+`GasSchedule.delegationCost`, so a helper that stopped reading its schedule
+argument fails there. The 31,000 row restates this record's own `createAccess`
+literal, and the 32,700 row is arithmetic over two globals and a literal field;
+neither can fail for anything an instruction site does, so the CREATE and
+SELFDESTRUCT quantities have **no function-level control** here.
+`.createAccess` and `.callValue` are field projections, not functions, and
+listing them beside three real `GasSchedule` functions is what made the earlier
+wording read as stronger than it was.
+
+The other half -- that the sites name those functions rather than the globals
+beside them -- is a source condition after this change rather than an evaluation
+one, and `scripts/check-rule-data-reads.sh` is **the whole of the replacement's
+site coverage**. It is shown to bite twice, each in a disposable tree: on
+`Xinst.step`'s legacy CALL arm reading the global that shadows `callValue`, and
+on `Linst.run`'s legacy SELFDESTRUCT arm (`Jaune/Machine.lean`) reading the one
+that shadows `coldAccountAccess` -- each leaves the tree green with every
+`#guard` below still passing, and turns only that gate red. Its three names
+cover exactly the CREATE and SELFDESTRUCT reads the two vacuous rows miss.
+
+The two globals are named here by the field they shadow rather than spelled,
+because that gate's inventory is a plain identifier grep with **no comment
+exemption**: prose that spells one is an occurrence like any other and has to be
+classified in `scripts/rule-data-allow.txt`. That is deliberate -- a gate that
+skipped comments would let a reader be told the wrong thing about which name the
+interpreter uses -- and this paragraph is the first thing to have tripped it.
+Goal `jaune-forks-by-construction-v1`, D-F6 (iii). -/
+private def meteringGuardLegacySchedule : GasSchedule :=
+  {pragueGasSchedule with
+    coldAccountAccess := 2700
+    callValue := 9100
+    createAccess := 31000}
+
+#guard decide meteringGuardLegacySchedule.Valid
+-- The schedule differs from Prague's in exactly the three numbers the guards
+-- below price, so each of those rows is a live comparison rather than a
+-- restatement of Prague.
+#guard meteringGuardLegacySchedule.coldAccountAccess
+  ≠ pragueGasSchedule.coldAccountAccess
+#guard meteringGuardLegacySchedule.callValue ≠ pragueGasSchedule.callValue
+#guard meteringGuardLegacySchedule.createAccess ≠ pragueGasSchedule.createAccess
+
+private def meteringGuardMsg (fork : Fork) (stateGasGrant : Nat) : Msg :=
   let state := State.setBal .empty meteringGuardCaller 100
   {
     (default : Msg) with
     benv := {
       (default : Benv) with
       state := state
-      stat := {(default : BenvStat) with rules := rules, origState := state}
+      stat := {(default : BenvStat) with fork := fork, origState := state}
     }
     caller := meteringGuardCaller
     target := some meteringGuardCaller
@@ -1809,16 +1858,16 @@ private def meteringGuardMsg (rules : ForkRules) (stateGasGrant : Nat) : Msg :=
   }
 
 private def meteringGuardDevm
-    (rules : ForkRules) (stateGasGrant : Nat) (stack : List B256) : Devm :=
-  (initDevm (meteringGuardMsg rules stateGasGrant)).withStack stack
+    (fork : Fork) (stateGasGrant : Nat) (stack : List B256) : Devm :=
+  (initDevm (meteringGuardMsg fork stateGasGrant)).withStack stack
 
-private def meteringGuardDelegatedMsg (rules : ForkRules) : Msg :=
+private def meteringGuardDelegatedMsg (fork : Fork) : Msg :=
   let code := (eoaDelegationMarker ++ meteringGuardDelegate.toBytes).toByteArray
-  (meteringGuardMsg rules 0).setCode meteringGuardCallee code
+  (meteringGuardMsg fork 0).setCode meteringGuardCallee code
 
 private def meteringGuardDelegatedDevm
-    (rules : ForkRules) (stack : List B256) : Devm :=
-  (initDevm (meteringGuardDelegatedMsg rules)).withStack stack
+    (fork : Fork) (stack : List B256) : Devm :=
+  (initDevm (meteringGuardDelegatedMsg fork)).withStack stack
 
 private def meteringGuardResumeParent : Resume → Devm
   | .create parent _ => parent
@@ -1827,10 +1876,10 @@ private def meteringGuardResumeParent : Resume → Devm
   | .callAmsterdam _ parent _ _ _ => parent
 
 private def meteringGuardCreateCharges
-    (rules : ForkRules) (stateGasGrant : Nat) (x : Xinst)
+    (fork : Fork) (stateGasGrant : Nat) (x : Xinst)
     (stack : List B256) : Option (Nat × Nat) :=
-  let msg := meteringGuardMsg rules stateGasGrant
-  match Xinst.step (initSevm msg) (meteringGuardDevm rules stateGasGrant stack) x with
+  let msg := meteringGuardMsg fork stateGasGrant
+  match Xinst.step (initSevm msg) (meteringGuardDevm fork stateGasGrant stack) x with
   | .spawn frame resume =>
     let parent := meteringGuardResumeParent resume
     some
@@ -1842,41 +1891,41 @@ private def meteringGuardCreateCharges
 -- memory-size checks read Amsterdam's raised limits through `rules.code`.
 -- The deposit check is inclusive at 0x10000 bytes and halts with `OutOfGas`
 -- one byte above; under BPO2 the same boundary sits at 0x6000.
-private def codeLimitGuardDeposit (rules : ForkRules) (stateGasGrant : Nat)
+private def codeLimitGuardDeposit (fork : Fork) (stateGasGrant : Nat)
     (size : Nat) : Option Bool :=
-  match processCreateMessage.chargeCodeGas rules
-      (((meteringGuardDevm rules stateGasGrant []).withGasLeft 20_000_000).withOutput
+  match processCreateMessage.chargeCodeGas (Fork.ruleSet fork)
+      (((meteringGuardDevm fork stateGasGrant []).withGasLeft 20_000_000).withOutput
         (List.replicate size (0x00 : UInt8))) with
   | .ok _ => some true
   | .error ⟨.halt (.outOfGas _), _⟩ => some false
   | .error _ => none
 
-#guard codeLimitGuardDeposit amsterdamRules 200_000_000 0x10000 = some true
-#guard codeLimitGuardDeposit amsterdamRules 200_000_000 (0x10000 + 1) = some false
-#guard codeLimitGuardDeposit bpo2Rules 0 0x6000 = some true
-#guard codeLimitGuardDeposit bpo2Rules 0 (0x6000 + 1) = some false
-#guard codeLimitGuardDeposit pragueRules 0 (0x6000 + 1) = some false
+#guard codeLimitGuardDeposit .amsterdam 200_000_000 0x10000 = some true
+#guard codeLimitGuardDeposit .amsterdam 200_000_000 (0x10000 + 1) = some false
+#guard codeLimitGuardDeposit .bpo2 0 0x6000 = some true
+#guard codeLimitGuardDeposit .bpo2 0 (0x6000 + 1) = some false
+#guard codeLimitGuardDeposit .prague 0 (0x6000 + 1) = some false
 -- `CREATE` and `CREATE2` refuse an initcode above `maxInitCodeSize` before
 -- spawning a child: 0x20000 bytes spawn under Amsterdam, 0x20000 + 1 halt;
 -- 0xC000 + 1 already halts under BPO2. The stack is `[value, offset, size]`
 -- (`[value, offset, size, salt]` for `CREATE2`), top first.
-#guard (meteringGuardCreateCharges amsterdamRules meteringGuardStateGas .create
+#guard (meteringGuardCreateCharges .amsterdam meteringGuardStateGas .create
   [0, 0, 0x20000]).isSome
-#guard (meteringGuardCreateCharges amsterdamRules meteringGuardStateGas .create
+#guard (meteringGuardCreateCharges .amsterdam meteringGuardStateGas .create
   [0, 0, 0x20000 + 1]).isNone
-#guard (meteringGuardCreateCharges amsterdamRules meteringGuardStateGas .create2
+#guard (meteringGuardCreateCharges .amsterdam meteringGuardStateGas .create2
   [0, 0, 0x20000, 0]).isSome
-#guard (meteringGuardCreateCharges amsterdamRules meteringGuardStateGas .create2
+#guard (meteringGuardCreateCharges .amsterdam meteringGuardStateGas .create2
   [0, 0, 0x20000 + 1, 0]).isNone
-#guard (meteringGuardCreateCharges bpo2Rules 0 .create [0, 0, 0xC000]).isSome
-#guard (meteringGuardCreateCharges bpo2Rules 0 .create [0, 0, 0xC000 + 1]).isNone
-#guard (meteringGuardCreateCharges bpo2Rules 0 .create2 [0, 0, 0xC000 + 1, 0]).isNone
+#guard (meteringGuardCreateCharges .bpo2 0 .create [0, 0, 0xC000]).isSome
+#guard (meteringGuardCreateCharges .bpo2 0 .create [0, 0, 0xC000 + 1]).isNone
+#guard (meteringGuardCreateCharges .bpo2 0 .create2 [0, 0, 0xC000 + 1, 0]).isNone
 
 private def meteringGuardCallCharges
-    (rules : ForkRules) (stateGasGrant : Nat) (x : Xinst)
+    (fork : Fork) (stateGasGrant : Nat) (x : Xinst)
     (stack : List B256) : Option (Nat × Nat) :=
-  let msg := meteringGuardMsg rules stateGasGrant
-  match Xinst.step (initSevm msg) (meteringGuardDevm rules stateGasGrant stack) x with
+  let msg := meteringGuardMsg fork stateGasGrant
+  match Xinst.step (initSevm msg) (meteringGuardDevm fork stateGasGrant stack) x with
   | .spawn frame resume =>
     let parent := meteringGuardResumeParent resume
     some
@@ -1885,26 +1934,26 @@ private def meteringGuardCallCharges
   | _ => none
 
 private def meteringGuardDelegatedCallCharges
-    (rules : ForkRules) (x : Xinst) (stack : List B256) : Option Nat :=
-  let msg := meteringGuardDelegatedMsg rules
-  match Xinst.step (initSevm msg) (meteringGuardDelegatedDevm rules stack) x with
+    (fork : Fork) (x : Xinst) (stack : List B256) : Option Nat :=
+  let msg := meteringGuardDelegatedMsg fork
+  match Xinst.step (initSevm msg) (meteringGuardDelegatedDevm fork stack) x with
   | .spawn _ resume =>
     some (meteringGuardGas - (meteringGuardResumeParent resume).gasLeft)
   | _ => none
 
 private def meteringGuardCachedStaticcallCharge
-    (rules : ForkRules) (stack : List B256) : Option Nat :=
-  let msg := meteringGuardDelegatedMsg rules
+    (fork : Fork) (stack : List B256) : Option Nat :=
+  let msg := meteringGuardDelegatedMsg fork
   match (Xinst.stepCached (initSevm msg)
-      (meteringGuardDelegatedDevm rules stack) none .staticcall).1 with
+      (meteringGuardDelegatedDevm fork stack) none .staticcall).1 with
   | .spawn _ resume =>
     some (meteringGuardGas - (meteringGuardResumeParent resume).gasLeft)
   | _ => none
 
 private def meteringGuardSelfdestructCharges
-    (rules : ForkRules) (stateGasGrant : Nat) : Option (Nat × Nat × Nat) :=
-  let msg := meteringGuardMsg rules stateGasGrant
-  let devm := meteringGuardDevm rules stateGasGrant [meteringGuardCallee.toB256]
+    (fork : Fork) (stateGasGrant : Nat) : Option (Nat × Nat × Nat) :=
+  let msg := meteringGuardMsg fork stateGasGrant
+  let devm := meteringGuardDevm fork stateGasGrant [meteringGuardCallee.toB256]
   match Linst.run (initSevm msg) devm .selfdestruct with
   | .ok d =>
     some
@@ -1914,77 +1963,98 @@ private def meteringGuardSelfdestructCharges
   | .error _ => none
 
 -- CREATE and CREATE2 share the same zero-initcode base at both shapes.
-#guard meteringGuardCreateCharges pragueRules 0 .create [0, 0, 0]
+#guard meteringGuardCreateCharges .prague 0 .create [0, 0, 0]
   = some (32000, 0)
-#guard meteringGuardCreateCharges amsterdamRules meteringGuardStateGas
+#guard meteringGuardCreateCharges .amsterdam meteringGuardStateGas
     .create [0, 0, 0]
   = some (12000, 183600)
-#guard meteringGuardCreateCharges pragueRules 0 .create2 [0, 0, 0, 0]
+#guard meteringGuardCreateCharges .prague 0 .create2 [0, 0, 0, 0]
   = some (32000, 0)
-#guard meteringGuardCreateCharges amsterdamRules meteringGuardStateGas
+#guard meteringGuardCreateCharges .amsterdam meteringGuardStateGas
     .create2 [0, 0, 0, 0]
   = some (12000, 183600)
-#guard meteringGuardCreateCharges meteringGuardLegacyRules 0 .create [0, 0, 0]
-  = some (31000, 0)
-#guard meteringGuardCreateCharges meteringGuardLegacyRules 0 .create2 [0, 0, 0, 0]
-  = some (31000, 0)
 
 -- A cold value-bearing CALL creates its empty recipient at both shapes. Prague
 -- pays the legacy 25,000 execution surcharge; Amsterdam pays NEW_ACCOUNT in
 -- the state dimension instead. CALLCODE never creates an account.
-#guard meteringGuardCallCharges pragueRules 0 .call
+#guard meteringGuardCallCharges .prague 0 .call
     [0, meteringGuardCallee.toB256, 1, 0, 0, 0, 0]
   = some (36600, 0)
-#guard meteringGuardCallCharges amsterdamRules meteringGuardStateGas .call
+#guard meteringGuardCallCharges .amsterdam meteringGuardStateGas .call
     [0, meteringGuardCallee.toB256, 1, 0, 0, 0, 0]
   = some (14300, 183600)
-#guard meteringGuardCallCharges pragueRules 0 .callcode
+#guard meteringGuardCallCharges .prague 0 .callcode
     [0, meteringGuardCallee.toB256, 1, 0, 0, 0, 0]
   = some (11600, 0)
-#guard meteringGuardCallCharges amsterdamRules meteringGuardStateGas
+#guard meteringGuardCallCharges .amsterdam meteringGuardStateGas
     .callcode [0, meteringGuardCallee.toB256, 1, 0, 0, 0, 0]
   = some (14300, 0)
 
 -- A delegation designator makes both the opcode target and delegated code
 -- address cold.  Every CALL-family legacy arm must charge both through the
 -- selected schedule; the value-bearing arms also read its `callValue`.
-#guard meteringGuardDelegatedCallCharges meteringGuardLegacyRules .call
-    [0, meteringGuardCallee.toB256, 1, 0, 0, 0, 0]
-  = some 14500
-#guard meteringGuardDelegatedCallCharges meteringGuardLegacyRules .callcode
-    [0, meteringGuardCallee.toB256, 1, 0, 0, 0, 0]
-  = some 14500
+--
+-- The rows below price exactly the quantities the retired legacy-record rows
+-- priced -- 31,000 for the CREATE base, 14,500 for a delegated value-bearing
+-- call, 5,400 for a delegated no-value call, 32,700 for a cold sweep to a new
+-- beneficiary -- but through the schedule-carrying functions themselves rather
+-- than through a machine, because a machine now carries a `Fork` and cannot
+-- carry these numbers. `meteringGuardLegacySchedule` says why. Each row is
+-- paired with the Prague value it differs from, so a function that stopped
+-- reading its schedule argument turns both halves of the pair equal and fails
+-- here.
+private def meteringGuardDelegationDevm : Devm :=
+  meteringGuardDelegatedDevm .prague []
+
+/-- The access-and-value charge a legacy CALL-family site computes for a
+delegated target, priced by an explicit schedule: the target's own cold access,
+then the delegated address's, then the value surcharge -- in the order and with
+the warming the arms perform. -/
+private def meteringGuardDelegatedCharge (gas : GasSchedule) (value : B256) : Nat :=
+  let devm := meteringGuardDelegationDevm
+  let pre := gas.accessCost meteringGuardCallee devm.accessedAddresses
+  let devm := addAccessedAddress devm meteringGuardCallee
+  let delegated := (gas.accessDelegation devm meteringGuardCallee).2.2.2.1
+  pre + delegated + (if value = 0 then 0 else gas.callValue)
+
+#guard meteringGuardLegacySchedule.createAccess = 31000
+#guard pragueGasSchedule.createAccess = 32000
+#guard meteringGuardDelegatedCharge meteringGuardLegacySchedule 1 = 14500
+#guard meteringGuardDelegatedCharge pragueGasSchedule 1 = 14200
+#guard meteringGuardDelegatedCharge meteringGuardLegacySchedule 0 = 5400
+#guard meteringGuardDelegatedCharge pragueGasSchedule 0 = 5200
+-- The cached CALL path resolves the same delegation through `delegationCost`,
+-- which prices the delegated address without warming it.
+#guard (meteringGuardLegacySchedule.delegationCost
+    meteringGuardDelegationDevm meteringGuardCallee).2.2 = 2700
+#guard (pragueGasSchedule.delegationCost
+    meteringGuardDelegationDevm meteringGuardCallee).2.2 = 2600
+-- A cold sweep to a new beneficiary: `SELFDESTRUCT`'s base, the schedule's cold
+-- account access, and the legacy new-account surcharge.
+#guard gasSelfDestruct + meteringGuardLegacySchedule.coldAccountAccess
+    + gasSelfDestructNewAccount = 32700
+#guard gasSelfDestruct + pragueGasSchedule.coldAccountAccess
+    + gasSelfDestructNewAccount = 32600
 
 -- The no-value call variants pay only the cold account access at this input.
-#guard meteringGuardCallCharges pragueRules 0 .delegatecall
+#guard meteringGuardCallCharges .prague 0 .delegatecall
     [0, meteringGuardCallee.toB256, 0, 0, 0, 0]
   = some (2600, 0)
-#guard meteringGuardCallCharges amsterdamRules meteringGuardStateGas
+#guard meteringGuardCallCharges .amsterdam meteringGuardStateGas
     .delegatecall [0, meteringGuardCallee.toB256, 0, 0, 0, 0]
   = some (3000, 0)
-#guard meteringGuardCallCharges pragueRules 0 .staticcall
+#guard meteringGuardCallCharges .prague 0 .staticcall
     [0, meteringGuardCallee.toB256, 0, 0, 0, 0]
   = some (2600, 0)
-#guard meteringGuardCallCharges amsterdamRules meteringGuardStateGas
+#guard meteringGuardCallCharges .amsterdam meteringGuardStateGas
     .staticcall [0, meteringGuardCallee.toB256, 0, 0, 0, 0]
   = some (3000, 0)
-#guard meteringGuardDelegatedCallCharges meteringGuardLegacyRules .delegatecall
-    [0, meteringGuardCallee.toB256, 0, 0, 0, 0]
-  = some 5400
-#guard meteringGuardDelegatedCallCharges meteringGuardLegacyRules .staticcall
-    [0, meteringGuardCallee.toB256, 0, 0, 0, 0]
-  = some 5400
-#guard meteringGuardCachedStaticcallCharge meteringGuardLegacyRules
-    [0, meteringGuardCallee.toB256, 0, 0, 0, 0]
-  = some 5400
 
 -- A cold sweep to a new beneficiary: Amsterdam replaces the legacy 25,000
 -- execution surcharge with ACCOUNT_WRITE plus NEW_ACCOUNT state gas, and emits
 -- the EIP-7708 transfer log.
-#guard meteringGuardSelfdestructCharges pragueRules 0 = some (32600, 0, 0)
-#guard meteringGuardSelfdestructCharges meteringGuardLegacyRules 0
-  = some (32700, 0, 0)
-#guard meteringGuardSelfdestructCharges amsterdamRules
+#guard meteringGuardSelfdestructCharges .prague 0 = some (32600, 0, 0)
+#guard meteringGuardSelfdestructCharges .amsterdam
     meteringGuardStateGas
   = some (17000, 183600, 1)
 

@@ -324,13 +324,15 @@ def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
 
 /-- `jaune --rules <fork>`.
 
-A fork whose rules this build does not implement is refused here exactly as it
-is everywhere else: there is nothing to print, and printing another fork's
-record would be the silent fallback the whole architecture exists to prevent.
-Every declared fork resolves since goal C composed `amsterdamRules`, so today
-the refusal is unreachable through a declared label; it stays for the next
-declared-but-unimplemented fork. The gate's fork list and `Fork.supported` are
-the same list by construction. -/
+A fork whose rules this build does not implement would be refused here exactly
+as it is everywhere else: there is nothing to print, and printing another
+fork's record would be the silent fallback the whole architecture exists to
+prevent. **No fork can be in that state**: `Fork.ruleSet` is total, so the
+refusal is unreachable by construction rather than by inspection
+(`Fork.supported_eq_all`). It stays because reintroducing a partial lookup is
+what a fork identity declared ahead of its rules would require, and because
+`scripts/check-fork-constants.sh` asserts its text. The gate's fork list and
+`Fork.supported` are the same list by construction. -/
 def runRulesPrinter (label : String) : IO Unit := do
   let some f := Fork.ofString? label
     | .throw
@@ -467,18 +469,18 @@ each block's own timestamp decides which rules it runs under -- which is the
 whole content of a transition fixture -- and the schedule's usability and
 chain identity are checked first, in the order `addBlockToChainUsing` checks
 them. -/
-def fixtureImportRules (spec : NetworkSpec) (chainId : UInt64)
-    (parent : CheckedBlockChain) (header : Header) : Except ImportFailure ForkRules := do
+def fixtureImportFork (spec : NetworkSpec) (chainId : UInt64)
+    (parent : CheckedBlockChain) (header : Header) : Except ImportFailure Fork := do
   match spec with
-  | .static f => Except.mapError ImportFailure.support f.rules
+  | .static f => .ok f
   | .transition t =>
     -- Exactly what `addBlockToChainUsingE` checks, in its order: the schedule
     -- is usable, it names this chain, and only then does the candidate's own
-    -- timestamp select the rules.
+    -- timestamp select the fork.
     let cfg := t.chainConfig chainId
     Except.mapError ImportFailure.context cfg.validate
     Except.mapError ImportFailure.context (cfg.checkChainId parent.val)
-    Except.mapError ImportFailure.ofLookup (cfg.rulesAt header.timestamp)
+    Except.mapError ImportFailure.ofLookup (cfg.forkAt header.timestamp)
 
 /-- Strictly decode a fixture block once, select its parent snapshot by the
 decoded `parentHash`, and import it into that snapshot through the checked
@@ -502,10 +504,10 @@ def evaluateFixtureBlock (spec : NetworkSpec) (chainId : UInt64) (store : ChainS
     match store.findParent block.header.parentHash with
     | .error reason => .ok (.inr (.block reason))
     | .ok parent =>
-      match fixtureImportRules spec chainId parent block.header with
+      match fixtureImportFork spec chainId parent block.header with
       | .error failure => .error failure
-      | .ok rules =>
-        match him : addBlockToChainChecked rules parent
+      | .ok f =>
+        match him : addBlockToChainChecked f parent
             (CanonicalBlock.ofDecode (rlpToBlock_eq_ok_iff.mpr hd)) with
         | .error failure => .error failure
         | .ok (.inr rejection) => .ok (.inr rejection)
@@ -628,8 +630,9 @@ def runBlockchainStTest (spec : NetworkSpec) : (Nat × String × Lean.Json) → 
     .println s!"TEST INDEX : {idx}"
     -- Every fork this case's network label can select must be one this build
     -- runs, and that is settled here -- before a header, a prestate, or a
-    -- block is read. A declared fork whose rules are unimplemented is outside
-    -- this build's domain, not evidence about the candidate: routed through
+    -- block is read. A declared fork whose rules a build did not implement
+    -- would be outside its domain, not evidence about the candidate (no fork
+    -- is in that state here: `Fork.ruleSet` is total): routed through
     -- the import path it would surface as `BLOCK #0 was expected valid but
     -- failed`, which reads as a verdict on a block this build never examined.
     -- A transition label is checked at both endpoints for the same reason,
@@ -952,7 +955,7 @@ def getFork (opts : List String) : IO Fork :=
            {Fork.supported.map Fork.toString}"
 
 def createMinimalEvm
-    (rules : ForkRules) (adr : Adr) (input : Bytes) (gasLimit : Nat) : Evm := {
+    (fork : Fork) (adr : Adr) (input : Bytes) (gasLimit : Nat) : Evm := {
   pc := 0
   sta := {
     caller := default
@@ -967,7 +970,7 @@ def createMinimalEvm
     shouldTransferValue := false
     isStatic := false
     disablePrecompiles := false
-    benvStat := { (default : BenvStat) with rules := rules }
+    benvStat := { (default : BenvStat) with fork := fork }
     tenvStat := default
   }
   dyna := {
@@ -994,7 +997,7 @@ def createMinimalEvm
   }
 }
 
-def processVector (rules : ForkRules) (adr : Adr) : (Nat × Lean.Json) → IO Bool
+def processVector (fork : Fork) (adr : Adr) : (Nat × Lean.Json) → IO Bool
   | ⟨idx, json⟩ => do
     let name ← (json.find? "Name" >>= Lean.Json.toString?).toIO s!"missing Name at index {idx}"
     let inputStr ← (json.find? "Input" >>= Lean.Json.toString?).toIO s!"missing Input for {name}"
@@ -1009,7 +1012,7 @@ def processVector (rules : ForkRules) (adr : Adr) : (Nat × Lean.Json) → IO Bo
         let gs := toString g
         (String.toNat? gs).toIO s!"invalid Gas for {name}"
       else pure 0
-    let evm := createMinimalEvm rules adr input 0xffffffffffff
+    let evm := createMinimalEvm fork adr input 0xffffffffffff
     let res := precompileRun evm adr
     match expected? with
     | some expected =>
@@ -1047,7 +1050,7 @@ def runVectorFile (f : Fork) (addr : Adr) (path : String) : IO Bool := do
     return false
   let rb ← readJsonFile path >>= Lean.Json.toIoList
   let js := rb.putIndex
-  let results ← js.mapM (processVector rules addr)
+  let results ← js.mapM (processVector f addr)
   let mut passes := 0
   for pass in results do
     if pass then passes := passes + 1
@@ -1194,9 +1197,12 @@ The label lists are rendered from `Fork.all`, `Fork.supported`, and a
 constructed `ForkTransition`, not written out by hand, so this text cannot
 drift from what the build actually does -- which is exactly how the README's
 fork list came to disagree with the binary. The declared and runnable sets are
-printed separately because they are no longer the same list: a declared fork
-whose rules are unimplemented parses here and is refused later, and a usage
-text that folded the two would claim support this build does not have. -/
+printed separately because they answer different questions -- what this build
+parses against what it will also run. They are the same list today, and
+provably so (`Fork.supported_eq_all`); folding them would still be wrong,
+because a build that declared a fork ahead of its rules would then claim
+support it does not have, and the reader could not tell the two questions
+apart. -/
 def usage : String :=
   s!"usage:
   jaune <fixture.json> [--network <label>] [--name <case>] \

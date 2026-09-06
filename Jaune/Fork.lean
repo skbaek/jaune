@@ -63,12 +63,13 @@ def ofString? : String → Option Fork
 
 /-- Every *declared* fork, in activation order.
 
-Declared is not implemented: `Fork.amsterdam` is here because its label,
-its position in the chain, and the transitions naming it are facts this build
-knows, while `Fork.rules?` answers `none` for it. The list of forks whose rules
-this build can actually run is `Fork.supported` below, and the two must not be
-confused at a user-facing message: a label this build parses and refuses is a
-different answer from one it does not recognise at all. -/
+Every entry here is also runnable: `Fork.ruleSet` is total, so
+`Fork.supported = Fork.all` is a theorem (`Fork.supported_eq_all`) rather than
+an observation. The two names are kept apart because they answer different
+questions -- what this build *parses* against what it will also *execute* --
+and because a user-facing message must keep distinguishing a label this build
+does not recognise from one it recognises and could refuse. No fork is in the
+refused state, and none can be while `Fork.ruleSet` is total. -/
 def all : List Fork := [.prague, .osaka, .bpo1, .bpo2, .amsterdam]
 
 /-- Position in the supported transition chain.
@@ -892,54 +893,106 @@ theorem pragueGasSchedule_valid : pragueGasSchedule.Valid := by decide
 /-- Error tag for a fork whose identity is known but whose rules this build
 does not implement.
 
-`Fork.amsterdam` is declared and unresolved, so this branch is reachable: it
-is the answer every entry point gives for an Amsterdam input. Falling back to
-another fork's rules would turn a missing implementation into a silent
-consensus fault, so there is deliberately no fallback to fall back to. -/
+**Unreachable vocabulary, deliberately retained.** Every declared fork now
+resolves through `Fork.ruleSet`, so no lookup produces this tag; the guard at
+the end of this file records that. It is kept because
+`scripts/check-fork-constants.sh` and `scripts/check-cli.sh` assert this exact
+refusal text, because the CLI's declared-versus-runnable distinction is
+user-facing vocabulary, and because a fork identity declared ahead of its rules
+would need it back. Falling back to another fork's rules would turn a missing
+implementation into a silent consensus fault, so there is deliberately no
+fallback to fall back to. -/
 def unsupportedForkTag : String := "UnsupportedForkError"
 
 /-- The single place where a fork identity becomes rule data.
 
-`none` means the fork is declared but not yet executable. It must never be
-answered with another fork's rules: running Osaka blocks under Prague semantics
-because Osaka is unfinished would turn a missing implementation into a silent
-consensus fault. -/
-def Fork.rules? : Fork → Option ForkRules
-  | .prague => some pragueRules
-  | .osaka => some osakaRules
-  | .bpo1 => some bpo1Rules
-  | .bpo2 => some bpo2Rules
-  | .amsterdam => some amsterdamRules
+This is a **total** function, and that totality is the point: a `Fork` is not
+an identity that may or may not resolve, it *is* the selection of one of five
+rule records. Everything else that answers "which rules?" -- `Fork.rules?`,
+`Fork.rules`, `BenvStat.rules`, `ChainConfig.rulesAt` -- is defined through it,
+so `Fork.ruleSet_valid` below discharges `ForkRules.Valid` once for every rule
+set any machine can carry.
+
+The name is `ruleSet` rather than `rules` because `Fork.rules` is the public
+`Except`-returning entry point (below) and keeps its name and type. -/
+def Fork.ruleSet : Fork → ForkRules
+  | .prague => pragueRules
+  | .osaka => osakaRules
+  | .bpo1 => bpo1Rules
+  | .bpo2 => bpo2Rules
+  | .amsterdam => amsterdamRules
+
+/-- **Rule validity, proved once, for every fork.**
+
+This is the theorem the rest of the tree lives off. Because `BenvStat` carries
+a `Fork` and derives its rules through `Fork.ruleSet`, every machine's rule set
+is one of these five records, so no statement about a machine needs a
+`ForkRules.Valid` premise: `BenvStat.rules_valid`, `Sevm.rules_valid` and
+`Evm.rules_valid` in `Jaune/Machine.lean` are one-line corollaries.
+
+`cases f <;> decide` rather than a bare `decide`: the per-constructor form is
+what the five `*_valid` theorems above already use, and it keeps a failure
+pointing at the fork whose record broke rather than at an opaque `∀`. -/
+theorem Fork.ruleSet_valid (f : Fork) : f.ruleSet.Valid := by
+  cases f <;> decide
+
+/-- The rules a fork selects name that fork back.
+
+`ForkRules.fork` is provenance -- the identity a record was built for -- and
+this says the two agree, so a machine indexed by a `Fork` and the record it
+reads never disagree about which fork is running. -/
+theorem Fork.ruleSet_fork (f : Fork) : f.ruleSet.fork = f := by
+  cases f <;> rfl
+
+/-- Rule lookup as an `Option`, kept for its callers and its vocabulary.
+
+`some` for every fork: the `none` branch has no inhabitant, because
+`Fork.ruleSet` is total. It is retained rather than deleted because the
+declared-versus-runnable distinction it expresses is a real user-facing one and
+a fork identity declared ahead of its rules would need it back; what changed is
+that no fork is in that state, and none can be while `Fork.ruleSet` is total. -/
+def Fork.rules? (f : Fork) : Option ForkRules := some f.ruleSet
 
 /-- The declared forks this build can actually run.
 
 Derived from `Fork.rules?` rather than written out, so it cannot drift from
 what resolves. This is the list a message means when it says "supported":
 `Fork.all` is what this build *parses*, and these are the labels it will also
-execute. -/
+execute. Since every fork resolves, `Fork.supported_eq_all` proves the two are
+the same list -- a theorem rather than a `#guard`, because a guard would pass
+again the day a fork were declared without rules, which is exactly the state
+`Fork.ruleSet`'s totality makes impossible. -/
 def Fork.supported : List Fork := Fork.all.filter (fun f => f.rules?.isSome)
 
 /-- The declared forks whose rules this build does not implement.
 
 The complement of `Fork.supported` within `Fork.all`, for the diagnostics that
-have to name exactly which labels parse and are then refused. -/
+have to name exactly which labels parse and are then refused. It is empty, and
+`Fork.unimplemented_eq_nil` proves it. -/
 def Fork.unimplemented : List Fork := Fork.all.filter (fun f => f.rules?.isNone)
+
+/-- Every declared fork is runnable: parsing and executing admit the same
+labels. A theorem, not a guard -- see `Fork.supported`. -/
+theorem Fork.supported_eq_all : Fork.supported = Fork.all := by
+  simp [Fork.supported, Fork.all, Fork.rules?]
+
+/-- No declared fork is unimplemented. A theorem, not a guard. -/
+theorem Fork.unimplemented_eq_nil : Fork.unimplemented = [] := by
+  simp [Fork.unimplemented, Fork.all, Fork.rules?]
 
 /-- Every rule set a fork identity resolves to is structurally usable.
 
 This is what makes `ForkRules.Valid` free at the fork-selected entry points:
 `stateTransitionAt`, `addBlockToChainAt`, and everything reached through
 `ChainConfig.rulesAt` obtain their rules from here, so they carry the witness
-without checking for it. Only a caller supplying a rule record of its own has
-anything to prove. -/
+without checking for it. Since `Fork.ruleSet` is total this is a corollary of
+`Fork.ruleSet_valid`; it is kept under its own name for the callers that hold
+an `Option` rather than a `Fork`. -/
 theorem Fork.rules?_valid {f : Fork} {r : ForkRules} (h : f.rules? = some r) :
     r.Valid := by
-  cases f <;> rw [Fork.rules?] at h <;> cases h
-  · exact pragueRules_valid
-  · exact osakaRules_valid
-  · exact bpo1Rules_valid
-  · exact bpo2Rules_valid
-  · exact amsterdamRules_valid
+  rw [Fork.rules?] at h
+  cases h
+  exact Fork.ruleSet_valid f
 
 /-- A fork's rules become active at this timestamp. -/
 structure ForkActivation : Type where
@@ -1183,21 +1236,19 @@ def SupportError.render : SupportError → String
   = "InvalidForkRulesError : the rules do not carry block-level access-list \
      rules, but the header commits to one"
 
-/-- `Fork.rules?` as a failing lookup, with the typed reason every
-explicit-fork entry point reports for an unimplemented fork. Declared here,
-after the support vocabulary, because Step 10 made the reason a constructor:
-the rendered message is byte-for-byte the one this function always emitted. -/
-def Fork.rules (f : Fork) : Except SupportError ForkRules :=
-  match f.rules? with
-  | some rules => .ok rules
-  | none => .error (.unsupportedFork f)
+/-- Rule lookup in the `Except` shape the explicit-fork entry points use.
+
+It always succeeds -- `Fork.ruleSet` is total -- so the `.error` arm is
+unreachable vocabulary, retained for the reasons `unsupportedForkTag` records.
+The name, the type and the rendered message are unchanged: the shape is what
+ten call sites and the CLI's refusal surface are written against. -/
+def Fork.rules (f : Fork) : Except SupportError ForkRules := .ok f.ruleSet
 
 theorem Fork.rules_valid {f : Fork} {r : ForkRules} (h : f.rules = .ok r) :
     r.Valid := by
   rw [Fork.rules] at h
-  cases hr : f.rules? with
-  | none => rw [hr] at h; cases h
-  | some r' => rw [hr] at h; cases h; exact Fork.rules?_valid hr
+  cases h
+  exact Fork.ruleSet_valid f
 
 /-- Why a configured fork or rules lookup failed: the schedule itself is not a
 usable context, or the input is outside the supported domain. The two channels
@@ -1655,11 +1706,15 @@ private def isEraL : RulesLookupError → Bool
 #guard Fork.all.map Fork.index = [0, 1, 2, 3, 4]
 
 -- The declared set and the runnable set are both derived from `Fork.rules?`
--- rather than restated, and since goal C composed `amsterdamRules` they are
--- the same list: every declared fork resolves. (Goal A's guards here asserted
--- `Fork.supported = [.prague, .osaka, .bpo1, .bpo2]`, `Fork.unimplemented =
--- [.amsterdam]` and `Fork.amsterdam.rules? = none`; each is rewritten to the
--- statement that replaced it rather than deleted.)
+-- rather than restated, and they are the same list: every declared fork
+-- resolves. These guards record the two lists *as they read today*; the fact
+-- that they must agree is `Fork.supported_eq_all` and
+-- `Fork.unimplemented_eq_nil`, proved above, because a guard would pass again
+-- the day a fork were declared without rules and a theorem cannot.
+-- (Goal A's guards here asserted `Fork.supported = [.prague, .osaka, .bpo1,
+-- .bpo2]`, `Fork.unimplemented = [.amsterdam]` and
+-- `Fork.amsterdam.rules? = none`; each is rewritten to the statement that
+-- replaced it rather than deleted.)
 #guard Fork.supported = [.prague, .osaka, .bpo1, .bpo2, .amsterdam]
 #guard Fork.supported.length = 5
 #guard Fork.unimplemented = []
@@ -1998,9 +2053,13 @@ example : amsterdamRules =
 #guard Fork.supported.contains .amsterdam
 
 -- Every fork this build declares resolves to rules that name it back. The
--- unsupported-fork branch is unreachable through `Fork.rules?` again -- as it
--- was before `Fork.amsterdam` was declared -- and stays in the vocabulary for
--- the next declared-but-unimplemented fork. (Goal A guarded here that
+-- unsupported-fork branch is unreachable through `Fork.rules?` -- now by
+-- construction rather than by inspection, since `Fork.ruleSet` is total -- and
+-- stays in the vocabulary for the reasons `unsupportedForkTag` records: the
+-- CLI's declared-versus-runnable distinction, two gates that assert the exact
+-- refusal text, and a future fork identity declared ahead of its rules, which
+-- would have to reintroduce a partial lookup to get there. (Goal A guarded
+-- here that
 -- `Fork.amsterdam.rules = .error (.unsupportedFork .amsterdam)` and that the
 -- refusal rendered the `UnsupportedForkError` golden; both are rewritten to
 -- the admission that replaced them.)

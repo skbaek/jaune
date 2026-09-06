@@ -1065,9 +1065,9 @@ theorem call_charge_stipend_lt
   omega
 
 theorem Xinst.step_call_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
-    (hv : sevm.benvStat.rules.Valid)
     (hstate : sevm.benvStat.rules.stateGas = none) :
     (Xinst.step sevm devm .call).GasDecreasing sevm devm.gasMeasure := by
+  have hv := Sevm.rules_valid sevm
   simp only [Xinst.step, hstate]
   apply XStep.ofExcept_gasDecreasing
   intro step hstep
@@ -1134,13 +1134,13 @@ theorem Xinst.step_call_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
     rw [Devm.memExtends_gasMeasure]
     exact key
 
-theorem Xinst.step_call_gasDecreasing (sevm : Sevm) (devm : Devm)
-    (hv : sevm.benvStat.rules.Valid) :
+theorem Xinst.step_call_gasDecreasing (sevm : Sevm) (devm : Devm) :
     (Xinst.step sevm devm .call).GasDecreasing sevm devm.gasMeasure := by
+  have hv := Sevm.rules_valid sevm
   simp only [Xinst.step]
   split
   · simpa only [Xinst.step, *] using
-      Xinst.step_call_gasDecreasing_legacy sevm devm hv (by assumption)
+      Xinst.step_call_gasDecreasing_legacy sevm devm (by assumption)
   · rename_i state hstate
     apply XStep.ofExcept_gasDecreasing
     intro step hstep
@@ -1270,9 +1270,10 @@ theorem Rinst.runCore_mstore_gasLt {pc : Nat} {devm : Devm} {sevm : Sevm}
   omega
 
 theorem Rinst.runCore_extcodesize_gasLt {pc : Nat} {devm : Devm} {sevm : Sevm}
-    {devm' : Devm} (hv : sevm.benvStat.rules.Valid)
+    {devm' : Devm}
     (h : Rinst.runCore pc devm sevm .extcodesize = .ok devm') :
     devm'.gasMeasure < devm.gasMeasure := by
+  have hv := Sevm.rules_valid sevm
   simp only [Rinst.runCore] at h
   obtain ⟨⟨adr, d1⟩, h1, h⟩ := Except.bind_eq_ok h
   dsimp only at h h1
@@ -1422,9 +1423,10 @@ theorem popNatPopChargePure_gasLt (pre : Devm)
   omega
 
 theorem Rinst.balance_runCore_gasLt {pc : Nat} {devm devm' : Devm}
-    {sevm : Sevm} (hvalid : sevm.benvStat.rules.Valid)
+    {sevm : Sevm}
     (h : Rinst.runCore pc devm sevm .balance = .ok devm') :
     devm'.gasMeasure < devm.gasMeasure := by
+  have hvalid := Sevm.rules_valid sevm
   simp only [Rinst.runCore] at h
   obtain ⟨u, view', hcore, hout⟩ := liftMachMetaWorldExecution_ok h
   unfold Rinst.balanceCore at hcore
@@ -1505,9 +1507,10 @@ theorem popAdrAccessChargePush_gasLt (pre : Devm) {gas : GasSchedule}
     omega
 
 theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
-    (r : Rinst) {devm' : Devm} (hv : sevm.benvStat.rules.Valid)
+    (r : Rinst) {devm' : Devm}
     (h : Rinst.runCore pc devm sevm r = .ok devm') :
     devm'.gasMeasure < devm.gasMeasure := by
+  have hv := Sevm.rules_valid sevm
   cases r <;> simp only [Rinst.runCore] at h
   all_goals first
     | exact applyBinary_gasLt (by decide) h
@@ -1541,7 +1544,7 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
     unfold gKeccak256 at e3
     omega
   case balance =>
-    apply Rinst.balance_runCore_gasLt (pc := pc) (sevm := sevm) hv
+    apply Rinst.balance_runCore_gasLt (pc := pc) (sevm := sevm)
     simpa only [Rinst.runCore] using h
   case calldataload =>
     exact popChargePush_gasLt devm
@@ -1598,7 +1601,7 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
       unfold gasWarmAccess at hc
       omega
   case extcodesize =>
-    apply Rinst.runCore_extcodesize_gasLt (pc := pc) (sevm := sevm) hv
+    apply Rinst.runCore_extcodesize_gasLt (pc := pc) (sevm := sevm)
     simpa only [Rinst.runCore] using h
   case extcodehash =>
     -- As `extcodesize`: the EIP-7928 read recorder sits between the charge
@@ -2000,9 +2003,9 @@ theorem genericCreateAmsterdam.step_gasDecreasing
           Resume.parentGas, Devm.incrNonce_gasMeasure,
           Devm.drainStateGasReservoir_gasMeasure]
         omega
-theorem Xinst.step_create_gasDecreasing (sevm : Sevm) (devm : Devm)
-    (hv : sevm.benvStat.rules.Valid) :
+theorem Xinst.step_create_gasDecreasing (sevm : Sevm) (devm : Devm) :
     (Xinst.step sevm devm .create).GasDecreasing sevm devm.gasMeasure := by
+  have hv := Sevm.rules_valid sevm
   simp only [Xinst.step]
   split
   · apply XStep.ofExcept_gasDecreasing
@@ -2042,9 +2045,9 @@ theorem Xinst.step_create_gasDecreasing (sevm : Sevm) (devm : Devm)
     rw [Devm.memExtends_gasMeasure]
     omega
 
-theorem Xinst.step_create2_gasDecreasing (sevm : Sevm) (devm : Devm)
-    (hv : sevm.benvStat.rules.Valid) :
+theorem Xinst.step_create2_gasDecreasing (sevm : Sevm) (devm : Devm) :
     (Xinst.step sevm devm .create2).GasDecreasing sevm devm.gasMeasure := by
+  have hv := Sevm.rules_valid sevm
   simp only [Xinst.step]
   split
   · apply XStep.ofExcept_gasDecreasing
@@ -2089,9 +2092,9 @@ theorem Xinst.step_create2_gasDecreasing (sevm : Sevm) (devm : Devm)
     omega
 
 theorem Xinst.step_callcode_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
-    (hv : sevm.benvStat.rules.Valid)
     (hstate : sevm.benvStat.rules.stateGas = none) :
     (Xinst.step sevm devm .callcode).GasDecreasing sevm devm.gasMeasure := by
+  have hv := Sevm.rules_valid sevm
   simp only [Xinst.step, hstate]
   apply XStep.ofExcept_gasDecreasing
   intro step hstep
@@ -2151,13 +2154,13 @@ theorem Xinst.step_callcode_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
     rw [Devm.memExtends_gasMeasure]
     exact key
 
-theorem Xinst.step_callcode_gasDecreasing (sevm : Sevm) (devm : Devm)
-    (hv : sevm.benvStat.rules.Valid) :
+theorem Xinst.step_callcode_gasDecreasing (sevm : Sevm) (devm : Devm) :
     (Xinst.step sevm devm .callcode).GasDecreasing sevm devm.gasMeasure := by
+  have hv := Sevm.rules_valid sevm
   simp only [Xinst.step]
   split
   · simpa only [Xinst.step, *] using
-      Xinst.step_callcode_gasDecreasing_legacy sevm devm hv (by assumption)
+      Xinst.step_callcode_gasDecreasing_legacy sevm devm (by assumption)
   · rename_i state hstate
     apply XStep.ofExcept_gasDecreasing
     intro step hstep
@@ -2220,9 +2223,9 @@ theorem Xinst.step_callcode_gasDecreasing (sevm : Sevm) (devm : Devm)
     exact key
 
 theorem Xinst.step_delegatecall_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
-    (hv : sevm.benvStat.rules.Valid)
     (hstate : sevm.benvStat.rules.stateGas = none) :
     (Xinst.step sevm devm .delegatecall).GasDecreasing sevm devm.gasMeasure := by
+  have hv := Sevm.rules_valid sevm
   simp only [Xinst.step, hstate]
   apply XStep.ofExcept_gasDecreasing
   intro step hstep
@@ -2263,13 +2266,13 @@ theorem Xinst.step_delegatecall_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
   rw [Devm.memExtends_gasMeasure]
   exact key
 
-theorem Xinst.step_delegatecall_gasDecreasing (sevm : Sevm) (devm : Devm)
-    (hv : sevm.benvStat.rules.Valid) :
+theorem Xinst.step_delegatecall_gasDecreasing (sevm : Sevm) (devm : Devm) :
     (Xinst.step sevm devm .delegatecall).GasDecreasing sevm devm.gasMeasure := by
+  have hv := Sevm.rules_valid sevm
   simp only [Xinst.step]
   split
   · simpa only [Xinst.step, *] using
-      Xinst.step_delegatecall_gasDecreasing_legacy sevm devm hv (by assumption)
+      Xinst.step_delegatecall_gasDecreasing_legacy sevm devm (by assumption)
   · rename_i state hstate
     apply XStep.ofExcept_gasDecreasing
     intro step hstep
@@ -2322,9 +2325,9 @@ theorem Xinst.step_delegatecall_gasDecreasing (sevm : Sevm) (devm : Devm)
     exact key
 
 theorem Xinst.step_staticcall_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
-    (hv : sevm.benvStat.rules.Valid)
     (hstate : sevm.benvStat.rules.stateGas = none) :
     (Xinst.step sevm devm .staticcall).GasDecreasing sevm devm.gasMeasure := by
+  have hv := Sevm.rules_valid sevm
   simp only [Xinst.step, hstate]
   apply XStep.ofExcept_gasDecreasing
   intro step hstep
@@ -2365,13 +2368,13 @@ theorem Xinst.step_staticcall_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
   rw [Devm.memExtends_gasMeasure]
   exact key
 
-theorem Xinst.step_staticcall_gasDecreasing (sevm : Sevm) (devm : Devm)
-    (hv : sevm.benvStat.rules.Valid) :
+theorem Xinst.step_staticcall_gasDecreasing (sevm : Sevm) (devm : Devm) :
     (Xinst.step sevm devm .staticcall).GasDecreasing sevm devm.gasMeasure := by
+  have hv := Sevm.rules_valid sevm
   simp only [Xinst.step]
   split
   · simpa only [Xinst.step, *] using
-      Xinst.step_staticcall_gasDecreasing_legacy sevm devm hv (by assumption)
+      Xinst.step_staticcall_gasDecreasing_legacy sevm devm (by assumption)
   · rename_i state hstate
     apply XStep.ofExcept_gasDecreasing
     intro step hstep
@@ -2423,16 +2426,15 @@ theorem Xinst.step_staticcall_gasDecreasing (sevm : Sevm) (devm : Devm)
       Devm.drainStateGasReservoir_gasMeasure]
     exact key
 
-theorem Xinst.step_gasDecreasing (sevm : Sevm) (devm : Devm) (x : Xinst)
-    (hv : sevm.benvStat.rules.Valid) :
+theorem Xinst.step_gasDecreasing (sevm : Sevm) (devm : Devm) (x : Xinst) :
     (Xinst.step sevm devm x).GasDecreasing sevm devm.gasMeasure := by
   cases x
-  case create => exact Xinst.step_create_gasDecreasing sevm devm hv
-  case create2 => exact Xinst.step_create2_gasDecreasing sevm devm hv
-  case call => exact Xinst.step_call_gasDecreasing sevm devm hv
-  case callcode => exact Xinst.step_callcode_gasDecreasing sevm devm hv
-  case delegatecall => exact Xinst.step_delegatecall_gasDecreasing sevm devm hv
-  case staticcall => exact Xinst.step_staticcall_gasDecreasing sevm devm hv
+  case create => exact Xinst.step_create_gasDecreasing sevm devm
+  case create2 => exact Xinst.step_create2_gasDecreasing sevm devm
+  case call => exact Xinst.step_call_gasDecreasing sevm devm
+  case callcode => exact Xinst.step_callcode_gasDecreasing sevm devm
+  case delegatecall => exact Xinst.step_delegatecall_gasDecreasing sevm devm
+  case staticcall => exact Xinst.step_staticcall_gasDecreasing sevm devm
 
 theorem executePrecomp_gasLe (evm : Evm) (adr : Adr) :
     (executePrecomp evm adr).gasMeasure ≤ evm.dyna.gasMeasure := by
@@ -4131,11 +4133,15 @@ theorem executeCode.enter_inr_gasLe {msg : Msg} {raw : Execution}
 
 /-! ### Every frame the interpreter enters runs under the same rules
 
-The gas-decreasing obligations now rest on `rules.Valid` -- Amsterdam reprices
-the numbers they lean on, so the numbers are no longer literals a `decide` can
-settle. The driver recurses into *child* frames, so it needs the premise to
-travel with them, and this is the invariant that makes it travel: a spawned
-frame's rules are the spawning frame's rules.
+The gas-decreasing obligations rest on `rules.Valid` -- Amsterdam reprices the
+numbers they lean on, so the numbers are no longer literals a `decide` can
+settle. Since goal `jaune-forks-by-construction-v1` the witness is a fact about
+the machine (`Sevm.rules_valid`, from `Fork.ruleSet_valid`) rather than a
+premise, so nothing has to *travel* into a child frame: the child is a machine
+and carries its own. The invariant below is kept because it is what makes the
+recursion's rule-identity claim true rather than assumed, and because the
+spawn obligation still states it: a spawned frame's rules are the spawning
+frame's rules.
 
 That is a fact about the message-building path rather than about gas. A child's
 `Benv` is the parent's `benvStat` with only its `state` moved -- `callMsg` and
@@ -4473,8 +4479,7 @@ theorem Ninst.step_push_gasLt {xs : Bytes} {evm : Evm} {devm : Devm}
     split <;> decide
   omega
 
-theorem Ninst.step_gasBound (evm : Evm) (n : Ninst)
-    (hv : evm.sta.benvStat.rules.Valid) :
+theorem Ninst.step_gasBound (evm : Evm) (n : Ninst) :
     (Ninst.step evm n).GasBound evm.sta evm.dyna.gasMeasure := by
   cases n with
   | push xs b =>
@@ -4484,11 +4489,11 @@ theorem Ninst.step_gasBound (evm : Evm) (n : Ninst)
       (fun d => Nat.le_of_eq (Devm.push_gasLe _ d))
   | reg r =>
     refine Step.ofExecution_gasBound
-      (fun d hd => Rinst.runCore_gasLt evm.pc evm.dyna evm.sta r hv hd) ?_
+      (fun d hd => Rinst.runCore_gasLt evm.pc evm.dyna evm.sta r hd) ?_
     exact Execution.settledGasLe_of_gasLe
       (Rinst.runCore_gasLe evm.pc evm.dyna evm.sta r)
   | exec x =>
-    exact XStep.toStep_gasBound (Xinst.step_gasDecreasing evm.sta evm.dyna x hv)
+    exact XStep.toStep_gasBound (Xinst.step_gasDecreasing evm.sta evm.dyna x)
       (Xinst.step_halt evm.sta evm.dyna x rfl
         (Devm.spill_le_gasMeasure _) (Nat.le_refl _))
   -- EIP-8024: `VERY_LOW` is charged before anything else can succeed, so a
@@ -4562,12 +4567,12 @@ theorem Ninst.step_gasBound (evm : Evm) (n : Ninst)
         · split <;> simp
       · simp
 
-theorem Evm.step_gasBound (evm : Evm) (hv : evm.sta.benvStat.rules.Valid) :
+theorem Evm.step_gasBound (evm : Evm) :
     evm.step.GasBound evm.sta evm.dyna.gasMeasure := by
   unfold Evm.step
   split
   · exact Execution.settledGasLe_of_gasLe (Nat.le_of_eq rfl)
-  · exact Ninst.step_gasBound evm _ hv
+  · exact Ninst.step_gasBound evm _
   · rename_i j _
     exact Step.ofJump_gasBound
       (fun p hp => Jinst.runCore_gasLt evm.pc evm.dyna evm.sta j hp)
@@ -4585,18 +4590,18 @@ not hand its parent back more gas than it was given. -/
 raw gas, because that is the only thing a parent can extract from a child's
 result and it is what both routes of the halting corpus establish. -/
 theorem execFueled_settledGasLe : ∀ (fuel : Nat) (evm : Evm) {raw : Execution},
-    (execFueled evm fuel).run = some raw → evm.sta.benvStat.rules.Valid →
+    (execFueled evm fuel).run = some raw →
       raw.SettledGasLe evm.dyna.gasMeasure := by
   intro fuel
   induction fuel with
   | zero =>
-    intro evm raw h _hv
+    intro evm raw h
     rw [execFueled] at h
     simp only [Fueled.exhausted_run] at h
     nomatch h
   | succ fuel ih =>
-    intro evm raw h hv
-    have hstep := Evm.step_gasBound evm hv
+    intro evm raw h
+    have hstep := Evm.step_gasBound evm
     rw [execFueled] at h
     rcases hs : evm.step with ⟨ex⟩ | ⟨pc, devm⟩ | ⟨frame, rsm, pc⟩
     · rw [hs] at h hstep
@@ -4605,12 +4610,13 @@ theorem execFueled_settledGasLe : ∀ (fuel : Nat) (evm : Evm) {raw : Execution}
       exact hstep
     · rw [hs] at h hstep
       simp only [Step.GasBound] at hstep
-      exact (ih _ h hv).mono (Nat.le_of_lt hstep)
+      exact (ih _ h).mono (Nat.le_of_lt hstep)
     · rw [hs] at h hstep
       simp only [Step.GasBound] at hstep
-      -- The spawn obligation now also says the child runs under these rules,
-      -- which is what carries the validity premise into the recursion.
-      obtain ⟨hstep, hrules⟩ := hstep
+      -- The spawn obligation also says the child runs under these rules. The
+      -- recursion no longer needs that half -- the child's validity comes from
+      -- its own fork -- so it is discarded here rather than threaded.
+      obtain ⟨hstep, -⟩ := hstep
       dsimp only at h
       rcases he : frame.enter with r | child
       · rw [he] at h
@@ -4627,7 +4633,7 @@ theorem execFueled_settledGasLe : ∀ (fuel : Nat) (evm : Evm) {raw : Execution}
           omega
         · rw [hrun] at h hres
           simp only [Execution.gasMeasure_ok] at hres
-          exact (ih _ h hv).mono (show d1.gasMeasure ≤ evm.dyna.gasMeasure by omega)
+          exact (ih _ h).mono (show d1.gasMeasure ≤ evm.dyna.gasMeasure by omega)
       · rw [he] at h
         dsimp only at h
         rcases hc : (execFueled child fuel).run with _ | raw'
@@ -4636,8 +4642,7 @@ theorem execFueled_settledGasLe : ∀ (fuel : Nat) (evm : Evm) {raw : Execution}
           nomatch h
         · rw [hc] at h
           dsimp only at h
-          have hchild :=
-            ih child hc (by rw [Frame.enter_run_rules he, hrules]; exact hv)
+          have hchild := ih child hc
           rw [Frame.enter_run_gasMeasure he] at hchild
           have hres := Resume.run_gasLe (rsm := rsm) (r := frame.settle raw')
             (m := frame.inner.gas) (fun d hd => Frame.settle_gasLe hchild hd)
@@ -4651,56 +4656,54 @@ theorem execFueled_settledGasLe : ∀ (fuel : Nat) (evm : Evm) {raw : Execution}
             omega
           · rw [hrun] at h hres
             simp only [Execution.gasMeasure_ok] at hres
-            exact (ih _ h hv).mono (show d1.gasMeasure ≤ evm.dyna.gasMeasure by omega)
+            exact (ih _ h).mono (show d1.gasMeasure ≤ evm.dyna.gasMeasure by omega)
 
 /-- **Sufficiency.** Fuel strictly greater than the frame's measure always
 carries the driver to a result. The base case is vacuous: the hypothesis forces
 `fuel > 0`. -/
 theorem execFueled_run_isSome : ∀ (fuel : Nat) (evm : Evm),
-    evm.dyna.gasMeasure < fuel → evm.sta.benvStat.rules.Valid →
+    evm.dyna.gasMeasure < fuel →
       ∃ raw : Execution, (execFueled evm fuel).run = some raw := by
   intro fuel
   induction fuel with
   | zero =>
-    intro evm h _hv
+    intro evm h
     omega
   | succ fuel ih =>
-    intro evm h hv
-    have hstep := Evm.step_gasBound evm hv
+    intro evm h
+    have hstep := Evm.step_gasBound evm
     rw [execFueled]
     rcases hs : evm.step with ⟨ex⟩ | ⟨pc, devm⟩ | ⟨frame, rsm, pc⟩ <;>
       rw [hs] at hstep <;> simp only [Step.GasBound] at hstep <;> dsimp only
     · exact ⟨ex, rfl⟩
     · have hlt : devm.gasMeasure < fuel := by omega
-      exact ih _ hlt hv
-    · obtain ⟨hstep, hrules⟩ := hstep
+      exact ih _ hlt
+    · obtain ⟨hstep, -⟩ := hstep
       rcases he : frame.enter with r | child <;> dsimp only
       · rcases hrun : rsm.run r with ⟨e⟩ | d1 <;> dsimp only
         · exact ⟨.error e, rfl⟩
         · obtain ⟨d0, hd0, hgas⟩ := Resume.run_ok_gasMeasure hrun
           have hle : d0.gasMeasure ≤ frame.inner.gas := Frame.enter_done_gasLe he hd0
           have hlt : d1.gasMeasure < fuel := by omega
-          exact ih _ hlt hv
+          exact ih _ hlt
       · have hgas : child.dyna.gasMeasure = frame.inner.gas := Frame.enter_run_gasMeasure he
-        have hcv : child.sta.benvStat.rules.Valid := by
-          rw [Frame.enter_run_rules he, hrules]; exact hv
         have hchildlt : child.dyna.gasMeasure < fuel := by omega
-        obtain ⟨raw', hraw'⟩ := ih child hchildlt hcv
+        obtain ⟨raw', hraw'⟩ := ih child hchildlt
         rw [hraw']
         dsimp only
         rcases hrun : rsm.run (frame.settle raw') with ⟨e⟩ | d1 <;> dsimp only
         · exact ⟨.error e, rfl⟩
         · obtain ⟨d0, hd0, hgas2⟩ := Resume.run_ok_gasMeasure hrun
-          have hsettled := execFueled_settledGasLe fuel child hraw' hcv
+          have hsettled := execFueled_settledGasLe fuel child hraw'
           rw [hgas] at hsettled
           have hle : d0.gasMeasure ≤ frame.inner.gas := Frame.settle_gasLe hsettled hd0
           have hlt : d1.gasMeasure < fuel := by omega
-          exact ih _ hlt hv
+          exact ih _ hlt
 
 theorem execFueled_ne_exhausted (evm : Evm) (fuel : Nat)
-    (h : evm.dyna.gasMeasure < fuel) (hv : evm.sta.benvStat.rules.Valid) :
+    (h : evm.dyna.gasMeasure < fuel) :
     execFueled evm fuel ≠ Fueled.exhausted := by
-  obtain ⟨raw, hraw⟩ := execFueled_run_isSome fuel evm h hv
+  obtain ⟨raw, hraw⟩ := execFueled_run_isSome fuel evm h
   intro hcon
   rw [hcon] at hraw
   simp only [Fueled.exhausted_run] at hraw
@@ -4709,10 +4712,9 @@ theorem execFueled_ne_exhausted (evm : Evm) (fuel : Nat)
 /-- The form the total `exec` consumes. The additive constant is **1**: seeding
 the driver with `gasMeasure + 1` is always enough, so the total wrapper can
 discharge the `Option` with this witness. -/
-theorem execFueled_succ_ne_exhausted (evm : Evm)
-    (hv : evm.sta.benvStat.rules.Valid) :
+theorem execFueled_succ_ne_exhausted (evm : Evm) :
     execFueled evm (evm.dyna.gasMeasure + 1) ≠ Fueled.exhausted :=
-  execFueled_ne_exhausted evm (evm.dyna.gasMeasure + 1) (Nat.lt_succ_self _) hv
+  execFueled_ne_exhausted evm (evm.dyna.gasMeasure + 1) (Nat.lt_succ_self _)
 
 /-! ## The total interpreter
 
@@ -4726,12 +4728,11 @@ the one `execFueled_succ_ne_exhausted` proves sufficient: **1**. Under
 always was; under `some _` it also counts the spill a refund can hand back. -/
 def sufficientFuel (gas : Nat) : Nat := gas + 1
 
-theorem execFueled_run_sufficientFuel_isSome (evm : Evm)
-    (hv : evm.sta.benvStat.rules.Valid) :
+theorem execFueled_run_sufficientFuel_isSome (evm : Evm) :
     ((execFueled evm (sufficientFuel evm.dyna.gasMeasure)).run).isSome := by
   obtain ⟨raw, hraw⟩ :=
     execFueled_run_isSome (sufficientFuel evm.dyna.gasMeasure) evm
-      (Nat.lt_succ_self _) hv
+      (Nat.lt_succ_self _)
   rw [hraw]
   rfl
 
@@ -4745,33 +4746,39 @@ sufficiency proof now rests on `rules.Valid` -- Amsterdam reprices the numbers
 it leans on, so they are no longer literals a `decide` can settle -- and a
 `def` cannot demand a hypothesis without moving its signature, which fixed
 decision 7 forbids. So the branch becomes a *typed internal invariant error*,
-the pattern this executable already uses for the unreachable, and
-`exec_of_valid` below is the proof that under a usable rule set it is never
-taken. Every named fork carries the witness, so no entry point can reach it. -/
+the pattern this executable already uses for the unreachable, and `exec_ok`
+below is the proof that it is never taken. Every machine carries a fork, and
+every fork's rules are usable (`Fork.ruleSet_valid`), so the witness the
+sufficiency proof needs is a fact about the machine rather than a premise: no
+machine, and therefore no entry point, can reach the branch. -/
 def exec (evm : Evm) : Except (EvmError × Devm) Devm :=
   match (execFueled evm (sufficientFuel evm.dyna.gasMeasure)).run with
   | some r => r
   | none => .error ⟨.internal (.invariant .none), evm.dyna⟩
 
-/-- **Bridge equation.** Under a usable rule set the driver at the seeded budget
-returns exactly the total result, so no downstream proof has to reason about
-the invariant branch. -/
-theorem execFueled_run_sufficientFuel (evm : Evm)
-    (hv : evm.sta.benvStat.rules.Valid) :
+/-- **Bridge equation.** The driver at the seeded budget returns exactly the
+total result, so no downstream proof has to reason about the invariant branch.
+Unconditional: the rule set a machine carries is its fork's, and every fork's
+is usable. -/
+theorem execFueled_run_sufficientFuel (evm : Evm) :
     (execFueled evm (sufficientFuel evm.dyna.gasMeasure)).run = some (exec evm) := by
   obtain ⟨raw, hraw⟩ :=
     execFueled_run_isSome (sufficientFuel evm.dyna.gasMeasure) evm
-      (Nat.lt_succ_self _) hv
+      (Nat.lt_succ_self _)
   rw [hraw]
   unfold exec
   rw [hraw]
 
-/-- The invariant branch is unreachable under a usable rule set: `exec` is the
-driver's own answer, not a fallback. -/
-theorem exec_of_valid (evm : Evm) (hv : evm.sta.benvStat.rules.Valid) :
+/-- The invariant branch is unreachable: `exec` is the driver's own answer, not
+a fallback.
+
+Named `exec_of_valid` until goal `jaune-forks-by-construction-v1`, when the
+`ForkRules.Valid` premise the old name referred to came off every statement
+about a machine. Nothing outside this repository named it. -/
+theorem exec_ok (evm : Evm) :
     ∃ raw, (execFueled evm (sufficientFuel evm.dyna.gasMeasure)).run = some raw
       ∧ exec evm = raw :=
-  ⟨exec evm, execFueled_run_sufficientFuel evm hv, rfl⟩
+  ⟨exec evm, execFueled_run_sufficientFuel evm, rfl⟩
 
 /-- More fuel never changes a result the driver already reached. This is what
 makes the seeded budget an implementation detail rather than a semantic choice:
@@ -4819,18 +4826,17 @@ theorem execFueled_run_mono :
           · exact ih _ hle' h
 
 /-- The downstream bridge at an arbitrary sufficient budget. -/
-theorem execFueled_run_of_lt {evm : Evm} {fuel : Nat} (h : evm.dyna.gasMeasure < fuel)
-    (hv : evm.sta.benvStat.rules.Valid) :
+theorem execFueled_run_of_lt {evm : Evm} {fuel : Nat} (h : evm.dyna.gasMeasure < fuel) :
     (execFueled evm fuel).run = some (exec evm) :=
-  execFueled_run_mono _ evm h (execFueled_run_sufficientFuel evm hv)
+  execFueled_run_mono _ evm h (execFueled_run_sufficientFuel evm)
 
 /-- Reading a fueled result off as the total one: the shape a proof stated over
 `execFueled` uses to transfer to `exec`. -/
 theorem exec_eq_of_run {evm : Evm} {fuel : Nat} {raw : Execution}
-    (hlt : evm.dyna.gasMeasure < fuel) (hv : evm.sta.benvStat.rules.Valid)
+    (hlt : evm.dyna.gasMeasure < fuel)
     (h : (execFueled evm fuel).run = some raw) :
     exec evm = raw := by
-  rw [execFueled_run_of_lt hlt hv] at h
+  rw [execFueled_run_of_lt hlt] at h
   exact Option.some.inj h
 
 /-! ## The total frame wrappers
