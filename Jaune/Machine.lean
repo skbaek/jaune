@@ -1762,7 +1762,13 @@ def Withdrawal.WireWellFormed (w : Withdrawal) : Prop :=
   w.amount.1 = ((0, 0) : B128) ∧ w.amount.2.1 = (0 : UInt64)
 
 instance (w : Withdrawal) : Decidable (Withdrawal.WireWellFormed w) := by
-  unfold Withdrawal.WireWellFormed; infer_instance
+  unfold Withdrawal.WireWellFormed
+  apply decidable_of_iff (w.amount.1.1 = 0 ∧ w.amount.1.2 = 0 ∧ w.amount.2.1 = 0)
+  · constructor
+    · rintro ⟨ha, hb, hc⟩
+      exact ⟨by exact Prod.ext ha hb, hc⟩
+    · rintro ⟨h, hc⟩
+      exact ⟨Prod.mk.inj h |>.1, Prod.mk.inj h |>.2, hc⟩
 
 /-- Widening a `UInt64` to a `B256` leaves the upper 192 bits clear. This is
 what makes `Withdrawal.WireWellFormed` a genuine lift of
@@ -1780,6 +1786,7 @@ theorem UInt64.toNat_toB256_high (x : UInt64) :
     exact Nat.div_eq_of_lt hx
   constructor
   · simp [Nat.toB256, h128, Nat.toB128]
+    rfl
   · simp [Nat.toB256, Nat.toB128, h64]
 
 /-- A transaction slot inside a block body. `BLT.toExBlock` turns a list
@@ -3047,7 +3054,7 @@ theorem Devm.push_def (x : B256) (devm : Devm) : Devm.push x devm = (do
   rcases devm with ⟨⟨stack, memory, gasLeft, stateGas⟩, view, world⟩
   simp only [Devm.push, Mach.push, liftMachExecution, liftMach, Footprint.toExecution,
     Footprint.liftOutcome, Devm.stack, Devm.setMach, Except.assert, bind, Except.bind]
-  split_ifs <;> rfl
+  by_cases h : stack.length < 1024 <;> simp [h]
 
 def Mach.pop (mach : Mach) : Footprint.Outcome Mach B256 :=
   match mach.stack with
@@ -5731,14 +5738,16 @@ theorem Stor.find?_empty (k : B256) : Stor.empty.find? k = none := rfl
 
 theorem Stor.find?_erase (s : Stor) (k a : B256) :
     Stor.find? (s.erase k) a = if k = a then none else s.find? a := by
-  rw [Stor.find?, Stor.find?, Std.TreeMap.get?_eq_getElem?,
-      Std.TreeMap.get?_eq_getElem?, Std.TreeMap.getElem?_erase]
+  change (Std.TreeMap.erase (show Std.TreeMap B256 B256 compare from s) k)[a]? =
+    if k = a then none else (show Std.TreeMap B256 B256 compare from s)[a]?
+  rw [Std.TreeMap.getElem?_erase]
   simp only [Std.compare_eq_iff_eq]
 
 theorem Stor.find?_insert (s : Stor) (k a v : B256) :
     Stor.find? (s.insert k v) a = if k = a then some v else s.find? a := by
-  rw [Stor.find?, Stor.find?, Std.TreeMap.get?_eq_getElem?,
-      Std.TreeMap.get?_eq_getElem?, Std.TreeMap.getElem?_insert]
+  change (Std.TreeMap.insert (show Std.TreeMap B256 B256 compare from s) k v)[a]? =
+    if k = a then some v else (show Std.TreeMap B256 B256 compare from s)[a]?
+  rw [Std.TreeMap.getElem?_insert]
   simp only [Std.compare_eq_iff_eq]
 
 /-- The defining equation of `Stor.set`, as a lookup: writing zero *erases*. -/
@@ -5749,8 +5758,7 @@ theorem Stor.find?_set (s : Stor) (k a v : B256) :
 
 theorem Stor.get_eq_getD_find? (s : Stor) (k : B256) :
     s.get k = (s.find? k).getD 0 := by
-  rw [Stor.get, Stor.find?, Std.TreeMap.get?_eq_getElem?,
-      Std.TreeMap.getD_eq_getD_getElem?]
+  exact Std.TreeMap.getD_eq_getD_getElem?
 
 theorem Stor.get_set_self (s : Stor) (k v : B256) : (s.set k v).get k = v := by
   rw [Stor.get_eq_getD_find?, Stor.find?_set, if_pos rfl]
@@ -5770,7 +5778,6 @@ instance {s : Stor} : Decidable (Stor.Canonical s) := List.decidableBAll _ _
 
 theorem Stor.mem_toList_iff {s : Stor} {k v : B256} :
     (k, v) ∈ s.toList ↔ s.find? k = some v := by
-  rw [Stor.find?, Std.TreeMap.get?_eq_getElem?]
   exact Std.TreeMap.mem_toList_iff_getElem?_eq_some
 
 /-- The lookup characterisation: the finite traversal and the pointwise
@@ -5796,11 +5803,11 @@ theorem Stor.Canonical.set {s : Stor} (h : Stor.Canonical s) (k v : B256) :
 
 theorem Stor.Canonical.erase {s : Stor} (h : Stor.Canonical s) (k : B256) :
     Stor.Canonical (s.erase k) := by
-  rw [Stor.canonical_iff] at h ⊢
+  apply (Stor.canonical_iff).mpr
   intro a v hv; rw [Stor.find?_erase] at hv
   split at hv
   · cases hv
-  · exact h a v hv
+  · exact (Stor.canonical_iff.mp h) a v hv
 
 /-- On a canonical map, reading zero and being absent are the same thing.
 
