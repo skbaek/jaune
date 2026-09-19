@@ -63,8 +63,9 @@ lemma B128.or_eq (x y : B128) :
   x ||| y = ⟨x.1 ||| y.1, x.2 ||| y.2⟩ := rfl
 
 lemma toB128_or (a b : Nat) : (a ||| b).toB128 = a.toB128 ||| b.toB128 := by
-  simp only [Nat.toB128]
-  rw [B128.or_eq, toUInt64_or, Nat.shiftRight_or_distrib, toUInt64_or]
+  change (((a ||| b) >>> 64).toUInt64, (a ||| b).toUInt64) =
+    (((a >>> 64).toUInt64 ||| (b >>> 64).toUInt64), a.toUInt64 ||| b.toUInt64)
+  rw [Nat.shiftRight_or_distrib, toUInt64_or, toUInt64_or]
 
 lemma Nat.shiftLeft_lt_of_lt {a b n : Nat} (h : a < 2 ^ n) :
     (a <<< b) < (2 ^ (n + b)) := by
@@ -328,8 +329,9 @@ lemma B128.zero_add (n : B128) : 0 + n = n := by
   simp only [
     show ((0 : B128).1) = 0 from rfl, _root_.zero_add,
     show ((0 : B128).2) = 0 from rfl,
-    UInt64.not_lt_zero, ↓reduceIte, add_zero, Prod.mk.eta
+    UInt64.not_lt_zero, ↓reduceIte, add_zero
   ]
+  rfl
 
 lemma toB256_toNat (x : B256) : x.toNat.toB256 = x := by
   simp only [B256.toNat, Nat.toB256]
@@ -615,6 +617,7 @@ def Adr.toB256 (a : Adr) : B256 := ⟨⟨0, a.1.toUInt64⟩, a.2⟩
 
 lemma toAdr_toB256 (a : Adr) : a.toB256.toAdr = a := by
   simp [Adr.toB256, B256.toAdr]
+  rfl
 
 theorem Adr.toB256_inj {x y : Adr} (eq : x.toB256 = y.toB256) : x = y := by
   rw [← toAdr_toB256 x, ← toAdr_toB256 y, eq]
@@ -794,7 +797,9 @@ lemma B128.sub_self (a : B128) : a - a = 0 := by
   rw [B128.sub_eq]; simp; rfl
 
 lemma B128.sub_zero (x : B128) : x - 0 = x := by
-  simp [B128.sub_eq, B128.zero_eq]
+  rw [B128.sub_eq, B128.zero_eq]
+  simp
+  rfl
 
 lemma B256.sub_self (a : B256) : a - a = 0 := by
   rw [B256.sub_eq]; simp [B128.sub_self]; rfl

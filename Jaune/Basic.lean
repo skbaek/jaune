@@ -1212,7 +1212,11 @@ lemma Bytes.toB256_zero_cons (xs : Bytes) : Bytes.toB256 (0 :: xs) = Bytes.toB25
 lemma Bytes.toB256_pair (b0 b1 : UInt8) :
     Bytes.toB256 [b0, b1] = ⟨⟨0, 0⟩, ⟨0, (b0.toUInt64 <<< 8) ||| b1.toUInt64⟩⟩ := by
   simp only [Bytes.toB256, Bytes.toB256.go]
-  refine Prod.ext (Prod.ext ?_ ?_) (Prod.ext ?_ ?_) <;> bv_decide
+  refine Prod.ext (Prod.ext ?_ ?_) (Prod.ext ?_ ?_) <;> simp
+  rw [← UInt64.toNat_inj, UInt64.toNat_shiftRight]
+  change b0.toNat >>> 56 = 0
+  exact Nat.shiftRight_eq_zero _ _
+    (Nat.lt_of_lt_of_le (UInt8.toNat_lt b0) (by norm_num))
 
 private lemma Nat.lo_lo_of_le_codec {x m n : Nat} (h : n ≤ m) :
     (x ↾ m) ↾ n = x ↾ n := by
