@@ -134,7 +134,14 @@ class FixtureJobsTests(unittest.TestCase):
         return leaf_max
 
     def _resolve_on_simulated_host(self, root: Path, proc_cgroup: Path) -> int:
-        """64 GiB of host memory, 16 CPUs, cgroup answers taken from `root`."""
+        """64 GiB of host memory, 16 CPUs, cgroup answers taken from `root`.
+
+        The simulated host is Linux, so `os.sched_getaffinity` has to answer
+        even when the host running the test does not publish it (macOS does
+        not).  `create=True` installs it for the duration of the patch and
+        removes it again afterwards; without it the patch raises
+        `AttributeError` on such a host before the case under test ever runs.
+        """
         with (
             mock.patch.object(MODULE.platform, "system", return_value="Linux"),
             mock.patch.object(
@@ -144,7 +151,10 @@ class FixtureJobsTests(unittest.TestCase):
             ),
             mock.patch.object(MODULE.os, "cpu_count", return_value=16),
             mock.patch.object(
-                MODULE.os, "sched_getaffinity", return_value=set(range(16))
+                MODULE.os,
+                "sched_getaffinity",
+                return_value=set(range(16)),
+                create=True,
             ),
         ):
             resources = MODULE.detect_resources(root, proc_cgroup)
