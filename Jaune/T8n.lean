@@ -881,6 +881,169 @@ def runBlockchain (benv : Benv) (txs : List (TxParse Tx)) (wds : List Withdrawal
     .ok ⟨benv.state, bout, rej, some reason⟩
   | .error err => .error err
 
+-- Focused EIP-7928 carry tests for the two block frontends. The request
+-- addresses are the first two pinned Amsterdam request contracts; their test
+-- bytecode calls one helper, so the two real request calls write and restore
+-- the same `(address, slot)` at their common post-execution index.
+private def balPipelineWithdrawalRequestsAddress : Adr :=
+  0x00000961Ef480Eb55e80D19ad83579A64c007002
+private def balPipelineConsolidationRequestsAddress : Adr :=
+  0x0000BBdDc7CE488642fb579F8B00f3a590007251
+private def balPipelineBuilderDepositRequestsAddress : Adr :=
+  0x0000BFF46984E3725691FA540A8C7589300D8282
+private def balPipelineBuilderExitRequestsAddress : Adr :=
+  0x000064D678505AD48F8CCB093BC65613800E8282
+private def balPipelineHelper : Adr := 0x1000
+private def balPipelineBeneficiary : Adr := 0x2000
+
+#guard amsterdamRequests.take 2 =
+  [(1, balPipelineWithdrawalRequestsAddress), (2, balPipelineConsolidationRequestsAddress)]
+
+private def balPipelineBytes (before : Bytes) (address : Adr) (after : Bytes) : ByteArray :=
+  .mk (.mk (before ++ address.toBytes ++ after))
+
+-- `SLOAD 0; ISZERO` chooses `SSTORE 0 1` first and `SSTORE 0 0` second.
+private def balPipelineToggleCode : ByteArray :=
+  .mk (.mk [0x60, 0x00, 0x54, 0x15, 0x60, 0x0d, 0x57,
+    0x60, 0x00, 0x60, 0x00, 0x55, 0x00, 0x5b,
+    0x60, 0x01, 0x60, 0x00, 0x55, 0x00])
+
+private def balPipelineStopCode : ByteArray := .mk (.mk [0x00])
+
+-- A request contract invokes the shared helper with empty input and output.
+private def balPipelineCallCode (address : Adr) : ByteArray :=
+  balPipelineBytes [0x60, 0x00, 0x60, 0x00, 0x60, 0x00, 0x60, 0x00, 0x60, 0x00, 0x73]
+    address [0x61, 0xff, 0xff, 0xf1, 0x00]
+
+-- The stack before CALL is out-size, out-offset, in-size, in-offset, value,
+-- destination, gas. Jaune's binary evaluator applies `DIV` to top then next,
+-- so `PUSH1 2; SELFBALANCE; DIV` supplies its half-value form.
+private def balPipelineForwardCode (address : Adr) (half : Bool) : ByteArray :=
+  .mk (.mk ([0x60, 0x00, 0x60, 0x00, 0x60, 0x00, 0x60, 0x00] ++
+    (if half then [0x60, 0x02, 0x47, 0x04] else [0x47]) ++ [0x73] ++ address.toBytes ++
+      [0x61, 0xff, 0xff, 0xf1, 0x00]))
+
+private def balPipelineBenv (state : State) : Benv :=
+  { state := state
+    createdAccounts := .emptyWithCapacity
+    stat := {
+      fork := .amsterdam
+      chainId := 1
+      origState := state
+      blockGasLimit := 30000000
+      blockHashes := [0]
+      coinbase := 0
+      number := 1
+      baseFeePerGas := 1
+      time := 0
+      prevRandao := 0
+      excessBlobGas := 0
+      parentBeaconBlockRoot := 0
+      slotNumber := 0 } }
+
+private def balPipelineToggleState : State :=
+  let state := State.setCode .empty balPipelineHelper balPipelineToggleCode
+  let state := State.setCode state balPipelineWithdrawalRequestsAddress
+    (balPipelineCallCode balPipelineHelper)
+  let state := State.setCode state balPipelineConsolidationRequestsAddress
+    (balPipelineCallCode balPipelineHelper)
+  let state := State.setCode state balPipelineBuilderDepositRequestsAddress balPipelineStopCode
+  State.setCode state balPipelineBuilderExitRequestsAddress balPipelineStopCode
+
+private def balPipelineOneCallState : State :=
+  let state := State.setCode .empty balPipelineHelper balPipelineToggleCode
+  let state := State.setCode state balPipelineWithdrawalRequestsAddress
+    (balPipelineCallCode balPipelineHelper)
+  let state := State.setCode state balPipelineConsolidationRequestsAddress balPipelineStopCode
+  let state := State.setCode state balPipelineBuilderDepositRequestsAddress balPipelineStopCode
+  State.setCode state balPipelineBuilderExitRequestsAddress balPipelineStopCode
+
+private def balPipelineForwardState (half : Bool) : State :=
+  let state := State.setCode .empty balPipelineWithdrawalRequestsAddress
+    (balPipelineForwardCode balPipelineBeneficiary half)
+  let state := State.setCode state balPipelineConsolidationRequestsAddress balPipelineStopCode
+  let state := State.setCode state balPipelineBuilderDepositRequestsAddress balPipelineStopCode
+  State.setCode state balPipelineBuilderExitRequestsAddress balPipelineStopCode
+
+private def balPipelineHelperNoNet (list : BlockAccessList) : Bool :=
+  match list.find? (fun c => c.address == balPipelineHelper) with
+  | some c => c.storageChanges.isEmpty && c.storageReads == [0]
+  | none => false
+
+private def balPipelineHelperOneWrite (list : BlockAccessList) : Bool :=
+  match list.find? (fun c => c.address == balPipelineHelper) with
+  | some c => c.storageChanges == [(0, [(1, 1)])] && c.storageReads.isEmpty
+  | none => false
+
+private def balPipelineBalances (list : BlockAccessList) (address : Adr)
+    (want : List (Nat × B256)) : Bool :=
+  match list.find? (fun c => c.address == address) with
+  | some c => c.balanceChanges == want
+  | none => false
+
+private def balPipelineRequestNetApplyBody : Bool :=
+  match applyBody (balPipelineBenv balPipelineToggleState) [] [] with
+  | .ok ⟨state, bout⟩ =>
+    (state.get balPipelineHelper).stor.get 0 == 0 && balPipelineHelperNoNet bout.blockAccessList
+  | .error _ => false
+
+private def balPipelineRequestOneWriteApplyBody : Bool :=
+  match applyBody (balPipelineBenv balPipelineOneCallState) [] [] with
+  | .ok ⟨state, bout⟩ =>
+    (state.get balPipelineHelper).stor.get 0 == 1 && balPipelineHelperOneWrite bout.blockAccessList
+  | .error _ => false
+
+private def balPipelineRequestNetT8n : Bool :=
+  match runBlockchain (balPipelineBenv balPipelineToggleState) [] [] with
+  | .ok out => out.blockException.isNone &&
+    (out.state.get balPipelineHelper).stor.get 0 == 0 && balPipelineHelperNoNet out.bout.blockAccessList
+  | .error _ => false
+
+private def balPipelineRequestOneWriteT8n : Bool :=
+  match runBlockchain (balPipelineBenv balPipelineOneCallState) [] [] with
+  | .ok out => out.blockException.isNone &&
+    (out.state.get balPipelineHelper).stor.get 0 == 1 && balPipelineHelperOneWrite out.bout.blockAccessList
+  | .error _ => false
+
+private def balPipelineForwardApplyBody (half : Bool) : Bool :=
+  let amount : B256 := 2 * (10 ^ 9).toB256
+  let retained := if half then amount / 2 else 0
+  let forwarded := if half then amount / 2 else amount
+  let wds : List Withdrawal :=
+    [{ globalIndex := 0, validatorIndex := 0, recipient := balPipelineWithdrawalRequestsAddress, amount := 2 }]
+  match applyBody (balPipelineBenv (balPipelineForwardState half)) [] wds with
+  | .ok ⟨state, bout⟩ =>
+    (state.get balPipelineWithdrawalRequestsAddress).bal == retained &&
+      (state.get balPipelineBeneficiary).bal == forwarded &&
+      balPipelineBalances bout.blockAccessList balPipelineWithdrawalRequestsAddress
+        (if half then [(1, retained)] else []) &&
+      balPipelineBalances bout.blockAccessList balPipelineBeneficiary [(1, forwarded)]
+  | .error _ => false
+
+private def balPipelineForwardT8n (half : Bool) : Bool :=
+  let amount : B256 := 2 * (10 ^ 9).toB256
+  let retained := if half then amount / 2 else 0
+  let forwarded := if half then amount / 2 else amount
+  let wds : List Withdrawal :=
+    [{ globalIndex := 0, validatorIndex := 0, recipient := balPipelineWithdrawalRequestsAddress, amount := 2 }]
+  match runBlockchain (balPipelineBenv (balPipelineForwardState half)) [] wds with
+  | .ok out => out.blockException.isNone &&
+    (out.state.get balPipelineWithdrawalRequestsAddress).bal == retained &&
+      (out.state.get balPipelineBeneficiary).bal == forwarded &&
+      balPipelineBalances out.bout.blockAccessList balPipelineWithdrawalRequestsAddress
+        (if half then [(1, retained)] else []) &&
+      balPipelineBalances out.bout.blockAccessList balPipelineBeneficiary [(1, forwarded)]
+  | .error _ => false
+
+#guard balPipelineRequestNetApplyBody
+#guard balPipelineRequestOneWriteApplyBody
+#guard balPipelineRequestNetT8n
+#guard balPipelineRequestOneWriteT8n
+#guard balPipelineForwardApplyBody false
+#guard balPipelineForwardApplyBody true
+#guard balPipelineForwardT8n false
+#guard balPipelineForwardT8n true
+
 ----------------- REJECTION AND BLOCK-EXCEPTION TEXT ------------------
 
 -- `rejected[].error` and `blockException` carry free text with no normative

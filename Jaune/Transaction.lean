@@ -1891,8 +1891,8 @@ private def amsterdamTxMaxGas : Nat :=
 #guard prepareCreateGuard true =
   some ⟨0, 200000, some (.halt (.addressCollision .none))⟩
 
--- The top-level legacy and Amsterdam routes accept storage-only targets. The
--- existing nonce guard above remains the collision control for both lanes.
+-- The top-level legacy and Amsterdam routes accept storage-only targets; the
+-- code and nonce guards below retain the collision control in both lanes.
 private def legacyStorageOnlyCreateGuard : Bool :=
   let address : Adr := 12
   let state := State.setStorVal .empty address 1 1
@@ -6680,6 +6680,18 @@ private def balGuardView (b : BalBuilder) :
   let b := ({} : BalBuilder).incorporate 0 st0 st1 [balGuardA] [(balGuardA, 1)]
   let b := b.incorporate 0 st1 st2 [balGuardA] [(balGuardA, 1)]
   balGuardView b == [(balGuardA, [], [1], [], [])]
+
+-- Removing a later same-index slot change preserves that slot's earlier index
+-- entry, and its read remains excluded because it is still a change overall.
+#guard
+  let st0 := balGuardPre
+  let st1 := st0.setStorVal balGuardA 1 8
+  let st2 := st1.setStorVal balGuardA 1 9
+  let st3 := st2.setStorVal balGuardA 1 8
+  let b := ({} : BalBuilder).incorporate 1 st0 st1 [balGuardA] [(balGuardA, 1)]
+  let b := b.incorporate 2 st1 st2 [balGuardA] [(balGuardA, 1)]
+  let b := b.incorporate 2 st2 st3 [balGuardA] [(balGuardA, 1)]
+  balGuardView b == [(balGuardA, [(1, [(1, 8)])], [], [], [])]
 
 -- Full forwarding cancels only its own balance entry, while half forwarding
 -- retains its final balance and the preceding balance and slot entries.
