@@ -713,7 +713,8 @@ def genericCreate.step
     if
       (let target := devm.state.get newAddress
        target.nonce ≠ (0 : UInt64) ∨
-       target.code.size ≠ 0) then
+       target.code.size ≠ 0 ∨
+       target.stor.size ≠ 0) then
       let devm ← devm.push 0
       return .done (.ok devm)
     let childMsg :=
@@ -801,7 +802,8 @@ def genericCreateAmsterdam.step
     if
       (let target := devm.state.get newAddress
        target.nonce ≠ (0 : UInt64) ∨
-       target.code.size ≠ 0) then
+       target.code.size ≠ 0 ∨
+       target.stor.size ≠ 0) then
       let devm := devm.incrNonce sevm.currentTarget
       let devm ← devm.push 0
       return .done (.ok devm)
@@ -1898,16 +1900,15 @@ private def flattenGuardCreateAmsterdamCollision (code : Bool) : Bool :=
 #guard flattenGuardCreateAmsterdamCollision true
 #guard flattenGuardCreateAmsterdamCollision false
 
--- Storage alone no longer blocks either shared CREATE helper. CREATE2 reaches
--- these same helpers through `Xinst.step`, so its unchanged routing inherits
--- these checks while code/nonce collision remains covered above.
+-- Fixture-compatible collision behavior: storage alone blocks both shared
+-- CREATE helpers. CREATE2 reaches these same helpers through `Xinst.step`.
 private def flattenGuardCreateStorageOnly : Bool :=
   let target : Adr := 0x41
   let state := State.setStorVal .empty target 1 1
   let msg : Msg :=
     {(flattenGuardMsg [] 100000 8) with benv := {(default : Benv) with state := state}}
   match genericCreate.step (initSevm msg) (initDevm msg) 0 target 0 0 with
-  | .spawn _ _ => true
+  | .done (.ok devm) => devm.stack.head? == some 0
   | _ => false
 
 private def flattenGuardCreateAmsterdamStorageOnly : Bool :=
@@ -1920,7 +1921,7 @@ private def flattenGuardCreateAmsterdamStorageOnly : Bool :=
       stateGasGrant := 200000}
   match genericCreateAmsterdam.step (initSevm msg) amsterdamStateGasRules (initDevm msg)
       0 target 0 0 with
-  | .spawn _ _ => true
+  | .done (.ok devm) => devm.stack.head? == some 0
   | _ => false
 
 #guard flattenGuardCreateStorageOnly

@@ -623,7 +623,8 @@ private def dispatchTopLevelAmsterdam (state : StateGasRules) (msg : Msg)
   let devm := devm.balReadAccount msg.benv.stat.rules msg.currentTarget
   if msg.target.isNone then
     let isCollision :=
-      accountHasCodeOrNonce devm.state msg.currentTarget
+      accountHasCodeOrNonce devm.state msg.currentTarget ||
+        accountHasStorage devm.state msg.currentTarget
     if isCollision then
       .error ⟨.halt (.addressCollision .none), devm⟩
     else do
@@ -760,7 +761,8 @@ def processMessageCall.create (msg : Msg) :
   | none =>
     let benv := msg.benv
     let isCollision : Bool :=
-      accountHasCodeOrNonce benv.state msg.currentTarget
+      accountHasCodeOrNonce benv.state msg.currentTarget ||
+        accountHasStorage benv.state msg.currentTarget
     if isCollision then
       return ⟨benv.state,
         { gasLeft := 0, refundCounter := 0, logs := [],
@@ -1891,8 +1893,8 @@ private def amsterdamTxMaxGas : Nat :=
 #guard prepareCreateGuard true =
   some ⟨0, 200000, some (.halt (.addressCollision .none))⟩
 
--- The top-level legacy and Amsterdam routes accept storage-only targets; the
--- code and nonce guards below retain the collision control in both lanes.
+-- Fixture-compatible top-level creation rejects a target with storage alone;
+-- code and nonce remain independent collision controls in both lanes.
 private def legacyStorageOnlyCreateGuard : Bool :=
   let address : Adr := 12
   let state := State.setStorVal .empty address 1 1
@@ -1901,14 +1903,17 @@ private def legacyStorageOnlyCreateGuard : Bool :=
       benv := {(default : Benv) with state := state}
       target := none, currentTarget := address, gas := 20000, depth := 1024}
   match processMessageCall.create msg with
-  | .ok ⟨_, output⟩ => output.error.isNone
+  | .ok ⟨_, output⟩ =>
+    output.gasLeft == 0 && output.error == some (.halt (.addressCollision .none))
   | .error _ => false
 
 private def amsterdamStorageOnlyCreateGuard : Bool :=
   let address : Adr := 13
   let state := State.setStorVal .empty address 1 1
   let msg := fixtureAmsterdamMsg state state none address 0 20000 200000
-  (prepareTopLevelAmsterdam amsterdamStateGasRules msg).isOk
+  match prepareTopLevelAmsterdam amsterdamStateGasRules msg with
+  | .error ⟨.halt (.addressCollision .none), _⟩ => true
+  | _ => false
 
 private def legacyCreateCollisionGuard (code : Bool) : Bool :=
   let address : Adr := 14
