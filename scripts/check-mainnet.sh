@@ -99,7 +99,7 @@ done
 
 case "$LANE" in
   mainnet)
-    LANE_ROOT_DEFAULT="${EEST_MAINNET_ROOT:-$HOME/eest-mainnet-v20.0.1}/fixtures"
+    LANE_ROOT_DEFAULT="${EEST_MAINNET_ROOT:-$HOME/eest-mainnet-v20.0.2}/fixtures"
     LANE_BOOTSTRAP="python3 scripts/bootstrap_mainnet.py"
     LANE_ROOT_ENV="EEST_MAINNET_ROOT"
     LANE_NAME="current-mainnet" ;;

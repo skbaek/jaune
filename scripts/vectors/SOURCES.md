@@ -36,22 +36,24 @@ network, disk, and runtime requirements above are available.
 ## Canonical current-mainnet lane
 
 The current conformance source is
-[`execution-specs` `tests@v20.0.1`](https://github.com/ethereum/execution-specs/releases/tag/tests%40v20.0.1),
-resolved to commit `87aba1a38a476b31f819a2390eb481527e6dc683`. Its official
+[`execution-specs` `tests@v20.0.2`](https://github.com/ethereum/execution-specs/releases/tag/tests%40v20.0.2),
+resolved to commit `abbe05777ab83fb94ce18c425daaa7ab79e779c1`. Its official
 `fixtures.tar.gz` asset has SHA-256
-`3586193db06d4d5745d5e90b3c3008c2255a4e19ccd8f11a3ce887aec8c0b17c`.
+`1280540950a4c3470a421416b6f35458a9b635827265c29e5aef1ae839ae1788`.
 Install it separately from frozen EEST material:
 
 ```sh
-python3 scripts/bootstrap_mainnet.py                 # ~/eest-mainnet-v20.0.1
-python3 scripts/env_doctor.py --mainnet-root ~/eest-mainnet-v20.0.1 --mainnet-deep
+python3 scripts/bootstrap_mainnet.py                 # ~/eest-mainnet-v20.0.2
+python3 scripts/env_doctor.py --mainnet-root ~/eest-mainnet-v20.0.2 --mainnet-deep
 ```
 
-The extracted tree occupies about 7.9 GB and the archive about 404 MB. Allow at
-least 13 GB of free space in the destination filesystem for a fresh install
-(archive plus tree plus transient staging). The download is a single public
+The extracted files total 9,091,923,053 logical bytes (about 9.1 GB), and
+the archive is 540,487,005 bytes. Actual disk allocation depends on the
+filesystem. Retain the existing guidance of at least 13 GB free for a fresh
+install, covering the archive, extraction staging and filesystem overhead.
+Keep the previous installation separate during a reference update. The download is a single public
 GitHub release asset; exact transfer time depends on your connection. Of the
-extracted trees only `blockchain_tests` (3.6 GB) is the runner's; the rest are
+extracted trees only `blockchain_tests` (4,007,807,537 logical bytes) is the runner's; the rest are
 kept as shipped because the release is verified whole against the publisher's
 manifest, and a pruned tree would no longer match it.
 
@@ -60,9 +62,10 @@ also checked for the publisher's root hash, timestamp, and case count. Generate
 or verify the exact suite/exclusion inventory with
 `scripts/gen_mainnet_manifest.py`; never edit `scripts/mainnet/manifests.json`
 by hand. `scripts/check-mainnet.sh --suite smoke` and `--suite prague` execute
-only generated Prague entries with an explicit `--network Prague`; Osaka, BPO,
-and transition labels remain inventoried and fail closed until their owning
-migration steps activate them.
+only generated Prague entries with an explicit `--network Prague`. The Osaka
+and supported transition suites also run; `--suite full` selects their complete
+union. Bare BPO1/BPO2 suites are refused because this release contains no static
+fixtures for them; their scheduled transitions remain covered.
 
 ## Glamsterdam devnet lane (installed, inventoried, run)
 
@@ -72,8 +75,10 @@ it, so that the corpus the implementation would be judged against — and the
 `execution-specs` revision its numbers are checked against — was fixed first.
 Its static `Amsterdam` suites now run (`scripts/check-mainnet.sh --lane
 amsterdam --suite amsterdam`, `--suite amsterdam-smoke`, `--dir <subtree>`);
-its transition suite (`BPO2ToAmsterdamAtTime15k`) stays refused until the
-schedule is activated by `jaune-amsterdam-currency-v1`.
+its transition suite (`BPO2ToAmsterdamAtTime15k`) also runs following
+`jaune-amsterdam-currency-v1`. The owning gate catalogue records its four
+remaining exception-identity findings; running the suite is not a claim that
+those findings are resolved.
 
 The source is
 [`execution-specs` `tests-glamsterdam-devnet@v8.1.4`](https://github.com/ethereum/execution-specs/releases/tag/tests-glamsterdam-devnet%40v8.1.4),

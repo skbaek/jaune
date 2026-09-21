@@ -11,7 +11,7 @@
 #
 # Scope boundary, stated so no badge implies more than it checks: this gate
 # covers the frozen legacy corpus only. The current-mainnet suite
-# (scripts/check-mainnet.sh, 5,100 files / 34,005 cases) is a LOCAL gate and is
+# (scripts/check-mainnet.sh, 5,006 files / 34,205 cases) is a LOCAL gate and is
 # not run here; see scripts/GATES.md for the full catalogue and its ownership.
 # ============================================================================
 name: smoke

@@ -10,10 +10,10 @@ language that compiles through a verified compiler and proves its contracts
 against these semantics. It is Jaune's end-to-end case study.
 
 **Jaune** is an executable formal specification of the EVM in Lean 4. Its
-strict current-mainnet lane passes **5,100/5,100 supported fixture files and
-34,005/34,005 cases**, Prague through BPO2 including configured transitions,
+strict current-mainnet lane passes **5,006/5,006 supported fixture files and
+34,205/34,205 cases**, Prague through BPO2 including configured transitions,
 against [execution-specs](https://github.com/ethereum/execution-specs)
-`tests@v20.0.1`. Its semantics are demonstrated sufficient for real
+`tests@v20.0.2`. Its semantics are demonstrated sufficient for real
 verification: a WETH implementation's solvency is proven to be preserved over
 every state reachable along a valid configured chain, including histories that
 cross scheduled fork activations, through a verified compiler, with no `sorry`
@@ -69,8 +69,8 @@ repository; install the pinned current-mainnet release first, and run fixtures
 from its `blockchain_tests` directory:
 
 ```sh
-python3 scripts/bootstrap_mainnet.py     # ~/eest-mainnet-v20.0.1
-FIX=~/eest-mainnet-v20.0.1/fixtures/blockchain_tests
+python3 scripts/bootstrap_mainnet.py     # ~/eest-mainnet-v20.0.2
+FIX=~/eest-mainnet-v20.0.2/fixtures/blockchain_tests
 lake exe jaune $FIX/for_prague/ported_static/vmArithmeticTest/mul/mul.json
 ```
 
@@ -180,7 +180,7 @@ requirements.
 - **Supported forks:** Prague, Osaka, BPO1, and BPO2, plus the transitions
   between them. Jaune's primary Prague evidence is the strict all-PASS
   current-mainnet lane over the separately installed `execution-specs`
-  `tests@v20.0.1` release: 2,573/2,573 Prague fixtures and 5,100/5,100 across
+  `tests@v20.0.2` release: 2,526/2,526 Prague fixtures and 5,006/5,006 across
   the whole manifest, with no expected-failure allowance. Its generated
   manifests activate Prague as a whole suite
   (`scripts/check-mainnet.sh --suite prague`, or the deterministic
@@ -190,7 +190,7 @@ requirements.
   (`P256VERIFY`), EIP-7825 (transaction gas cap), EIP-7594 (six blobs per
   transaction), EIP-7918 (blob reserve price), and EIP-7934 (original block-RLP
   size). `scripts/check-mainnet.sh --suite osaka` is a strict all-PASS gate;
-  the pinned manifest is 2,514/2,514 files (17,323 cases).
+  the pinned manifest is 2,467/2,467 files (17,423 cases).
 - **BPO1 and BPO2 are supported as rule data** (EIP-7892): each is Osaka with a
   different blob target, ceiling, and base-fee update fraction, and nothing
   else. A chain selects them from its own activation schedule, so a fixture
@@ -232,8 +232,8 @@ requirements.
   [`scripts/vectors/SOURCES.md`](scripts/vectors/SOURCES.md):
   - *legacy* — `ethereum/tests` @ `3129f16` (plus its `LegacyTests` @ `2339b9a`);
   - *EEST* — release `v5.4.0` (SHA-256 `92cf1b47…`).
-  - *current mainnet* — `execution-specs` `tests@v20.0.1` @ `87aba1a`, asset
-    SHA-256 `3586193d…`; installed separately at `~/eest-mainnet-v20.0.1`.
+  - *current mainnet* — `execution-specs` `tests@v20.0.2` @ `abbe057`, asset
+    SHA-256 `12805409…`; installed separately at `~/eest-mainnet-v20.0.2`.
 - **Gate catalogue** — [`scripts/GATES.md`](scripts/GATES.md) is the
   authoritative reference for every verification gate: exact commands, pass
   criteria, runtimes, and which gate to reach for when. The legacy, current-
@@ -347,7 +347,7 @@ stating exactly, because the badge above reports only the first of them.
   tier.
 
 **The current-mainnet suite is not a CI gate.** The headline result on this
-page — 5,100/5,100 supported fixture files, 34,005/34,005 cases — is produced
+page — 5,006/5,006 supported fixture files, 34,205/34,205 cases — is produced
 by [`scripts/check-mainnet.sh`](scripts/check-mainnet.sh), which runs locally
 against a corpus this repository does not vendor. So does
 [`scripts/check-integrity.sh`](scripts/check-integrity.sh). A green badge

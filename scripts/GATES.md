@@ -247,11 +247,16 @@ executable inputs.
 
 | gate | proves | scale | sequential | `--jobs auto` |
 |---|---|---|---|---|
-| `scripts/check-mainnet.sh --suite osaka` | strict all-PASS | 2,514 | ~8 min | **~2.3 min** |
-| `scripts/check-mainnet.sh --suite prague` | strict all-PASS | 2,573 | ~12 min | **~3.0 min** |
-| `scripts/check-mainnet.sh --suite full` | strict all-PASS, whole manifest | 5,100 | ~20.8 min | **~5.0 min** |
+| `scripts/check-mainnet.sh --suite osaka` | strict all-PASS | 2,467 | ~8 min | **~2.3 min** |
+| `scripts/check-mainnet.sh --suite prague` | strict all-PASS | 2,526 | ~12 min | **~3.0 min** |
+| `scripts/check-mainnet.sh --suite full` | strict all-PASS, whole manifest | 5,006 | ~20.8 min | **~5.0 min** |
 | `scripts/check-mainnet.sh --lane amsterdam --suite amsterdam` | strict all-PASS over the static Amsterdam corpus, zero exclusions inside `for_amsterdam` | 3,159 | not measured | **~4.5 min** (267 s at `--jobs 6`, 2026-09-06) |
 | `scripts/check-legacy.sh --full` | every legacy fixture vs baseline | 2,983 | **≥ 19 min** | **7.7 min** |
+
+The current-mainnet scales above describe `tests@v20.0.2`; their runtime
+figures are retained historical measurements from `tests@v20.0.1`, not new
+measurements of the updated corpus. Admission still uses the expected runtime
+of the actual command and host.
 
 **Read the two legacy `--full` cells differently — they have different
 provenances.** The parallel cell is a measured wall time: 462 s at `--jobs auto`,
@@ -363,8 +368,8 @@ not vouch for Jaune.
 | command | purpose |
 |---|---|
 | `python3 scripts/env_doctor.py` | validate the configured legacy/EELS/oracle environment |
-| `python3 scripts/env_doctor.py --mainnet-root "$HOME/eest-mainnet-v20.0.1" --mainnet-deep` | validate external fixture identities |
-| `python3 scripts/gen_mainnet_manifest.py --fixtures-root "$HOME/eest-mainnet-v20.0.1/fixtures" --check` | exact current-manifest identity |
+| `python3 scripts/env_doctor.py --mainnet-root "$HOME/eest-mainnet-v20.0.2" --mainnet-deep` | validate external fixture identities |
+| `python3 scripts/gen_mainnet_manifest.py --fixtures-root "$HOME/eest-mainnet-v20.0.2/fixtures" --check` | exact current-manifest identity |
 | `python3 scripts/bootstrap_mainnet.py --lane amsterdam` | install the Glamsterdam devnet-8 prerelease corpus (946,283,655-byte archive, 48,734 files; extracted size is filesystem-dependent — 14 GB on this host's ext4) |
 | `python3 scripts/env_doctor.py --amsterdam-root "$HOME/eest-glamsterdam-devnet-v8.1.4" --amsterdam-deep` | validate that lane's archive digest, layout, release index, and every extracted file against the archive |
 | `python3 scripts/gen_mainnet_manifest.py --lane amsterdam --fixtures-root "$HOME/eest-glamsterdam-devnet-v8.1.4/fixtures" --check` | exact devnet-lane manifest identity |

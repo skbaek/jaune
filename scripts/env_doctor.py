@@ -1067,7 +1067,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help="current-mainnet install root containing fixtures.tar.gz and extracted "
-        "fixtures/ (default: $EEST_MAINNET_ROOT or ~/eest-mainnet-v20.0.1)",
+        "fixtures/ (default: $EEST_MAINNET_ROOT or ~/eest-mainnet-v20.0.2)",
     )
     parser.add_argument(
         "--amsterdam-root",

@@ -255,13 +255,18 @@ than trusting a path. That is good provenance. What the corpora establish is
 agreement with the reference implementation **on the cases its authors thought
 to write**. They establish nothing about unreached paths.
 
-**The reference itself is pinned, and does not cover everything Jaune claims.**
-`execution_specs.commit` is `4198b9c5996713b268aed602739d5aa40e277694`, which
-ends at Prague — it contains no Osaka. Jaune's Osaka and BPO support was built
-from EIP text and validated against the `tests@v20.0.1` fixture release, not
-transliterated from the pinned Python. That is a reasonable thing to have done
-and the fixture evidence is strong, but "mirrors execution-specs at
-`4198…7694`" is precise for Prague and structurally cannot be true for Osaka.
+**The reference pins have distinct scopes.** The frozen Python oracle
+`execution_specs.commit`, `4198b9c5996713b268aed602739d5aa40e277694`, ends at
+Prague and remains the input to its registered vector generators. It is not
+an identity claim for Jaune's whole current semantics. Osaka and BPO support
+was originally built from EIP text and validated against `tests@v20.0.1`;
+the current-mainnet fixture lane now uses `tests@v20.0.2`. The separate
+transition-tool/Amsterdam anchor remains `7341820b5b394b1934dfe7bb6f621fcdab7baf7f`.
+Jaune retains fixture-compatible rejection of storage-only creation collisions
+as an intentional difference from that transition-tool snapshot; the current
+upstream fixtures exclude this ambiguous account shape. Agreement on generated arithmetic vectors
+or fixtures does not establish equivalence to every part of any one Python
+revision, nor final Amsterdam support.
 
 **The differential oracles** — 21,593 U256/word/hash cases
 (`scripts/check-u256.sh`), 240 fake-exponential cases
