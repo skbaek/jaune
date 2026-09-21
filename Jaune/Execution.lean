@@ -713,8 +713,7 @@ def genericCreate.step
     if
       (let target := devm.state.get newAddress
        target.nonce ≠ (0 : UInt64) ∨
-       target.code.size ≠ 0 ∨
-       target.stor.size ≠ 0) then
+       target.code.size ≠ 0) then
       let devm ← devm.push 0
       return .done (.ok devm)
     let childMsg :=
@@ -802,8 +801,7 @@ def genericCreateAmsterdam.step
     if
       (let target := devm.state.get newAddress
        target.nonce ≠ (0 : UInt64) ∨
-       target.code.size ≠ 0 ∨
-       target.stor.size ≠ 0) then
+       target.code.size ≠ 0) then
       let devm := devm.incrNonce sevm.currentTarget
       let devm ← devm.push 0
       return .done (.ok devm)
@@ -1862,10 +1860,12 @@ private def flattenGuardArithmeticLoop : Bool :=
 
 #guard flattenGuardArithmeticLoop
 
--- CREATE collision: a nonempty target code short-circuits with stack word 0.
-private def flattenGuardCreateCollision : Bool :=
+-- CREATE collision: code and nonce each short-circuit with stack word 0.
+private def flattenGuardCreateCollision (code : Bool) : Bool :=
   let target : Adr := 0x40
-  let state := State.setCode .empty target (flattenGuardCode [0x00])
+  let state :=
+    if code then State.setCode .empty target (flattenGuardCode [0x00])
+    else State.set .empty target {nonce := 1, bal := 0, stor := .empty, code := .empty}
   let msg : Msg :=
     {
       (flattenGuardMsg [] 100000 8) with
@@ -1877,7 +1877,54 @@ private def flattenGuardCreateCollision : Bool :=
   | .done (.ok devm) => devm.stack.head? == some 0
   | _ => false
 
-#guard flattenGuardCreateCollision
+#guard flattenGuardCreateCollision true
+#guard flattenGuardCreateCollision false
+
+private def flattenGuardCreateAmsterdamCollision (code : Bool) : Bool :=
+  let target : Adr := 0x43
+  let state :=
+    if code then State.setCode .empty target (flattenGuardCode [0x00])
+    else State.set .empty target {nonce := 1, bal := 0, stor := .empty, code := .empty}
+  let base : Benv := default
+  let msg : Msg :=
+    {(flattenGuardMsg [] 100000 8) with
+      benv := {base with state := state, stat := {base.stat with fork := .amsterdam}}
+      stateGasGrant := 200000}
+  match genericCreateAmsterdam.step (initSevm msg) amsterdamStateGasRules (initDevm msg)
+      0 target 0 0 with
+  | .done (.ok devm) => devm.stack.head? == some 0
+  | _ => false
+
+#guard flattenGuardCreateAmsterdamCollision true
+#guard flattenGuardCreateAmsterdamCollision false
+
+-- Storage alone no longer blocks either shared CREATE helper. CREATE2 reaches
+-- these same helpers through `Xinst.step`, so its unchanged routing inherits
+-- these checks while code/nonce collision remains covered above.
+private def flattenGuardCreateStorageOnly : Bool :=
+  let target : Adr := 0x41
+  let state := State.setStorVal .empty target 1 1
+  let msg : Msg :=
+    {(flattenGuardMsg [] 100000 8) with benv := {(default : Benv) with state := state}}
+  match genericCreate.step (initSevm msg) (initDevm msg) 0 target 0 0 with
+  | .spawn _ _ => true
+  | _ => false
+
+private def flattenGuardCreateAmsterdamStorageOnly : Bool :=
+  let target : Adr := 0x42
+  let state := State.setStorVal .empty target 1 1
+  let base : Benv := default
+  let msg : Msg :=
+    {(flattenGuardMsg [] 100000 8) with
+      benv := {base with state := state, stat := {base.stat with fork := .amsterdam}}
+      stateGasGrant := 200000}
+  match genericCreateAmsterdam.step (initSevm msg) amsterdamStateGasRules (initDevm msg)
+      0 target 0 0 with
+  | .spawn _ _ => true
+  | _ => false
+
+#guard flattenGuardCreateStorageOnly
+#guard flattenGuardCreateAmsterdamStorageOnly
 
 -- Precompile dispatch is taken normally and bypassed when explicitly disabled.
 private def flattenGuardPrecompileDispatch : Bool :=

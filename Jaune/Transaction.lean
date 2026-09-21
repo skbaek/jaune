@@ -623,8 +623,7 @@ private def dispatchTopLevelAmsterdam (state : StateGasRules) (msg : Msg)
   let devm := devm.balReadAccount msg.benv.stat.rules msg.currentTarget
   if msg.target.isNone then
     let isCollision :=
-      accountHasCodeOrNonce devm.state msg.currentTarget ||
-        accountHasStorage devm.state msg.currentTarget
+      accountHasCodeOrNonce devm.state msg.currentTarget
     if isCollision then
       .error ⟨.halt (.addressCollision .none), devm⟩
     else do
@@ -761,8 +760,7 @@ def processMessageCall.create (msg : Msg) :
   | none =>
     let benv := msg.benv
     let isCollision : Bool :=
-      accountHasCodeOrNonce benv.state msg.currentTarget ||
-        accountHasStorage benv.state msg.currentTarget
+      accountHasCodeOrNonce benv.state msg.currentTarget
     if isCollision then
       return ⟨benv.state,
         { gasLeft := 0, refundCounter := 0, logs := [],
@@ -887,10 +885,19 @@ structure BalAccount : Type where
   nonceChanges : List (Nat × UInt64) := []
   codeChanges : List (Nat × ByteArray) := []
 
-/-- `BlockAccessListBuilder` at the pin: address ↦ its data. The block access
-index is not stored here; every incorporation names its own. -/
+private structure BalIndexStartAccount : Type where
+  balance : B256
+  nonce : UInt64
+  code : ByteArray
+
+/-- `BlockAccessListBuilder` at the pin: address ↦ its data. Per-index start
+values are captured only for fields that change, so calls sharing an index net
+against the first value at that index without retaining whole state snapshots. -/
 structure BalBuilder : Type where
   accounts : Std.TreeMap Adr BalAccount compare := .empty
+  indexStartAccounts : Std.TreeMap Nat (Std.TreeMap Adr BalIndexStartAccount compare) compare := .empty
+  indexStartStorage :
+    Std.TreeMap Nat (Std.TreeMap Adr (Std.TreeMap B256 B256 compare) compare) compare := .empty
 
 namespace BalAccount
 
@@ -907,8 +914,17 @@ def addStorageWrite (acc : BalAccount) (slot : B256) (idx : Nat) (v : B256) : Ba
 def addStorageRead (acc : BalAccount) (slot : B256) : BalAccount :=
   {acc with storageReads := acc.storageReads.insert slot ()}
 
+def removeStorageWrite (acc : BalAccount) (slot : B256) (idx : Nat) : BalAccount :=
+  let changes := (acc.storageChanges.getD slot []).filter (fun c => c.1 != idx)
+  {acc with storageChanges :=
+    if changes.isEmpty then acc.storageChanges.erase slot
+    else acc.storageChanges.insert slot changes}
+
 def addBalanceChange (acc : BalAccount) (idx : Nat) (v : B256) : BalAccount :=
   {acc with balanceChanges := upsert acc.balanceChanges idx v}
+
+def removeBalanceChange (acc : BalAccount) (idx : Nat) : BalAccount :=
+  {acc with balanceChanges := acc.balanceChanges.filter (fun c => c.1 != idx)}
 
 /-- `add_nonce_change` keeps the highest nonce per index. -/
 def addNonceChange (acc : BalAccount) (idx : Nat) (n : UInt64) : BalAccount :=
@@ -917,8 +933,14 @@ def addNonceChange (acc : BalAccount) (idx : Nat) (n : UInt64) : BalAccount :=
     | some ⟨_, old⟩ => if old < n then upsert acc.nonceChanges idx n else acc.nonceChanges
     | none => acc.nonceChanges ++ [(idx, n)]}
 
+def removeNonceChange (acc : BalAccount) (idx : Nat) : BalAccount :=
+  {acc with nonceChanges := acc.nonceChanges.filter (fun c => c.1 != idx)}
+
 def addCodeChange (acc : BalAccount) (idx : Nat) (code : ByteArray) : BalAccount :=
   {acc with codeChanges := upsert acc.codeChanges idx code}
+
+def removeCodeChange (acc : BalAccount) (idx : Nat) : BalAccount :=
+  {acc with codeChanges := acc.codeChanges.filter (fun c => c.1 != idx)}
 
 end BalAccount
 
@@ -926,33 +948,63 @@ namespace BalBuilder
 
 /-- `ensure_account`/`add_touched_account`: an entry with nothing in it. -/
 def ensure (b : BalBuilder) (a : Adr) : BalBuilder :=
-  if b.accounts.contains a then b else {accounts := b.accounts.insert a {}}
+  if b.accounts.contains a then b else {b with accounts := b.accounts.insert a {}}
 
 def modify (b : BalBuilder) (a : Adr) (f : BalAccount → BalAccount) : BalBuilder :=
-  {accounts := b.accounts.insert a (f (b.accounts.getD a {}))}
+  {b with accounts := b.accounts.insert a (f (b.accounts.getD a {}))}
 
-/-- `update_builder_from_tx`: the incorporated state's writes as a diff against
-the block's cumulative state (`pre`), recorded at `idx`; then the merge of the
-read sets. An address whose account differs in balance, nonce or code, or
-whose storage differs at a slot, records that change with the post value; a
-value written back to its original is no change, and -- because `SLOAD` and
-`SSTORE` recorded the slot -- surfaces as a read. -/
+private def startAccount (b : BalBuilder) (idx : Nat) (address : Adr) (account : Acct) :
+    BalBuilder × BalIndexStartAccount :=
+  let atIndex := b.indexStartAccounts.getD idx .empty
+  match atIndex.get? address with
+  | some start => (b, start)
+  | none =>
+    let start : BalIndexStartAccount :=
+      {balance := account.bal, nonce := account.nonce, code := account.code}
+    ({b with indexStartAccounts := b.indexStartAccounts.insert idx (atIndex.insert address start)}, start)
+
+private def startStorage (b : BalBuilder) (idx : Nat) (address : Adr) (slot value : B256) :
+    BalBuilder × B256 :=
+  let atIndex := b.indexStartStorage.getD idx .empty
+  let atAddress := atIndex.getD address .empty
+  match atAddress.get? slot with
+  | some start => (b, start)
+  | none =>
+    let atAddress := atAddress.insert slot value
+    let atIndex := atIndex.insert address atAddress
+    ({b with indexStartStorage := b.indexStartStorage.insert idx atIndex}, value)
+
+/-- `update_builder_from_tx`: the incorporated state's writes against values
+captured at the start of `idx`, then the merge of the read sets. An address or
+slot restored by a later operation sharing `idx` removes only that index's
+change, leaving changes from other indices and the recorded reads intact. -/
 def incorporate (b : BalBuilder) (idx : Nat) (pre post : State)
     (accountReads : List Adr) (storageReads : List (Adr × B256)) : BalBuilder :=
   let addrs : List Adr := (pre.keys ++ post.keys).eraseDups
   let b := addrs.foldl (init := b) fun b a =>
     let acPre := pre.get a
     let acPost := post.get a
-    let b := if acPre.bal ≠ acPost.bal then b.modify a (·.addBalanceChange idx acPost.bal) else b
-    let b := if acPre.nonce ≠ acPost.nonce then b.modify a (·.addNonceChange idx acPost.nonce) else b
+    let accountChanged :=
+      acPre.bal ≠ acPost.bal || acPre.nonce ≠ acPost.nonce || acPre.code.data ≠ acPost.code.data
+    let ⟨b, acStart⟩ :=
+      if accountChanged then b.startAccount idx a acPre
+      else (b, {balance := acPre.bal, nonce := acPre.nonce, code := acPre.code})
     let b :=
-      if acPre.code.data ≠ acPost.code.data then b.modify a (·.addCodeChange idx acPost.code)
-      else b
+      if acStart.balance ≠ acPost.bal then b.modify a (·.addBalanceChange idx acPost.bal)
+      else if accountChanged then b.modify a (·.removeBalanceChange idx) else b
+    let b :=
+      if acStart.nonce ≠ acPost.nonce then b.modify a (·.addNonceChange idx acPost.nonce)
+      else if accountChanged then b.modify a (·.removeNonceChange idx) else b
+    let b :=
+      if acStart.code.data ≠ acPost.code.data then b.modify a (·.addCodeChange idx acPost.code)
+      else if accountChanged then b.modify a (·.removeCodeChange idx) else b
     let slots : List B256 := (acPre.stor.keys ++ acPost.stor.keys).eraseDups
     slots.foldl (init := b) fun b k =>
-      if acPre.stor.get k ≠ acPost.stor.get k then
-        b.modify a (·.addStorageWrite k idx (acPost.stor.get k))
-      else b
+      let changed := acPre.stor.get k ≠ acPost.stor.get k
+      let ⟨b, startValue⟩ :=
+        if changed then b.startStorage idx a k (acPre.stor.get k) else (b, acPre.stor.get k)
+      if startValue ≠ acPost.stor.get k then b.modify a (·.addStorageWrite k idx (acPost.stor.get k))
+      else if changed then b.modify a (·.removeStorageWrite k idx) else b
   let b := storageReads.foldl (init := b) fun b ⟨a, k⟩ => b.modify a (·.addStorageRead k)
   accountReads.foldl (init := b) fun b a => b.ensure a
 
@@ -1838,6 +1890,56 @@ private def amsterdamTxMaxGas : Nat :=
 #guard prepareCreateGuard false = some ⟨20000, 16400, none⟩
 #guard prepareCreateGuard true =
   some ⟨0, 200000, some (.halt (.addressCollision .none))⟩
+
+-- The top-level legacy and Amsterdam routes accept storage-only targets. The
+-- existing nonce guard above remains the collision control for both lanes.
+private def legacyStorageOnlyCreateGuard : Bool :=
+  let address : Adr := 12
+  let state := State.setStorVal .empty address 1 1
+  let msg : Msg :=
+    {(default : Msg) with
+      benv := {(default : Benv) with state := state}
+      target := none, currentTarget := address, gas := 20000, depth := 1024}
+  match processMessageCall.create msg with
+  | .ok ⟨_, output⟩ => output.error.isNone
+  | .error _ => false
+
+private def amsterdamStorageOnlyCreateGuard : Bool :=
+  let address : Adr := 13
+  let state := State.setStorVal .empty address 1 1
+  let msg := fixtureAmsterdamMsg state state none address 0 20000 200000
+  (prepareTopLevelAmsterdam amsterdamStateGasRules msg).isOk
+
+private def legacyCreateCollisionGuard (code : Bool) : Bool :=
+  let address : Adr := 14
+  let state :=
+    if code then State.setCode .empty address (.mk (.mk [0x00]))
+    else State.set .empty address (fixtureTestAccount 1 0)
+  let msg : Msg :=
+    {(default : Msg) with
+      benv := {(default : Benv) with state := state}
+      target := none, currentTarget := address, gas := 20000, depth := 1024}
+  match processMessageCall.create msg with
+  | .ok ⟨_, output⟩ =>
+    output.gasLeft == 0 && output.error == some (.halt (.addressCollision .none))
+  | .error _ => false
+
+private def amsterdamCreateCollisionGuard (code : Bool) : Bool :=
+  let address : Adr := 15
+  let state :=
+    if code then State.setCode .empty address (.mk (.mk [0x00]))
+    else State.set .empty address (fixtureTestAccount 1 0)
+  let msg := fixtureAmsterdamMsg state state none address 0 20000 200000
+  match prepareTopLevelAmsterdam amsterdamStateGasRules msg with
+  | .error ⟨.halt (.addressCollision .none), _⟩ => true
+  | _ => false
+
+#guard legacyStorageOnlyCreateGuard
+#guard amsterdamStorageOnlyCreateGuard
+#guard legacyCreateCollisionGuard true
+#guard legacyCreateCollisionGuard false
+#guard amsterdamCreateCollisionGuard true
+#guard amsterdamCreateCollisionGuard false
 #guard delegatedDispatchGuard false = some ⟨7000, 0, some 11⟩
 #guard delegatedDispatchGuard true = some ⟨9900, 0, some 11⟩
 -- Constructor-level matcher for the transaction-validation boundary guards.
@@ -6568,6 +6670,50 @@ private def balGuardView (b : BalBuilder) :
 #guard balGuardView (({} : BalBuilder).incorporate 1 balGuardPre
     (balGuardPre.setStorVal balGuardA 1 8) [balGuardA] [(balGuardA, 1)]) ==
   [(balGuardA, [(1, [(1, 8)])], [], [], [])]
+
+-- Two calls at one index net against the index start, not against each other:
+-- the restored slot remains a read and the account entry remains present.
+#guard
+  let st0 := balGuardPre
+  let st1 := st0.setStorVal balGuardA 1 8
+  let st2 := st1.setStorVal balGuardA 1 7
+  let b := ({} : BalBuilder).incorporate 0 st0 st1 [balGuardA] [(balGuardA, 1)]
+  let b := b.incorporate 0 st1 st2 [balGuardA] [(balGuardA, 1)]
+  balGuardView b == [(balGuardA, [], [1], [], [])]
+
+-- Full forwarding cancels only its own balance entry, while half forwarding
+-- retains its final balance and the preceding balance and slot entries.
+#guard
+  let st0 := balGuardPre
+  let stPrior := ((st0.setBal balGuardB 9).setStorVal balGuardA 1 8).setBal balGuardA 110
+  let stCredited := stPrior.setBal balGuardA 160
+  let stForwarded := stCredited.setBal balGuardA 110
+  let stHalf := stCredited.setBal balGuardA 135
+  let full := ({} : BalBuilder).incorporate 1 st0 stPrior [balGuardA, balGuardB] [(balGuardA, 1)]
+  let full := full.incorporate 2 stPrior stCredited [balGuardA] []
+  let full := full.incorporate 2 stCredited stForwarded [balGuardA] []
+  let half := ({} : BalBuilder).incorporate 1 st0 stPrior [balGuardA, balGuardB] [(balGuardA, 1)]
+  let half := half.incorporate 2 stPrior stCredited [balGuardA] []
+  let half := half.incorporate 2 stCredited stHalf [balGuardA] []
+  balGuardView full ==
+      [(balGuardA, [(1, [(1, 8)])], [], [(1, 110)], []), (balGuardB, [], [], [(1, 9)], [])] ∧
+    balGuardView half ==
+      [(balGuardA, [(1, [(1, 8)])], [], [(1, 110), (2, 135)], []),
+       (balGuardB, [], [], [(1, 9)], [])]
+
+-- Nonce and code use the same index-start rule. Restoring both leaves the
+-- touched account present without either stale change.
+#guard
+  let st0 := balGuardPre
+  let changed : Acct := {nonce := 1, bal := 0, stor := .empty, code := .mk (.mk [0x00])}
+  let st1 := st0.set balGuardB changed
+  let st2 := st1.set balGuardB .nil
+  let b := ({} : BalBuilder).incorporate 0 st0 st1 [balGuardB] []
+  let b := b.incorporate 0 st1 st2 [balGuardB] []
+  match b.build with
+  | [c] => c.address == balGuardB && c.storageChanges.isEmpty && c.storageReads.isEmpty &&
+      c.balanceChanges.isEmpty && c.nonceChanges.isEmpty && c.codeChanges.isEmpty
+  | _ => false
 
 -- Three transactions, then withdrawals, each incorporated under its own index
 -- against the block's cumulative state, after a system call at index 0.
