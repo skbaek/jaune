@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Jaune — a Yellow Paper you can run</title>
-<meta name="description" content="Jaune is an executable formal specification of the Ethereum Virtual Machine in Lean 4 — a spiritual successor to the Yellow Paper that passes every supported file of the pinned mainnet fixture corpus (5,100/5,100, Prague through BPO2) and supports machine-checked proof, demonstrated by eight contracts in the sibling Blanc language — among them a port of Lido's deployed CircuitBreaker, its Registry integrity proved from an official-parameters deployment to every state reachable along a valid configured chain, and the eth2 deposit contract, its Merkle root carried through twelve SHA-256 precompile crossings to every admitted future.">
+<meta name="description" content="Jaune is an executable formal specification of the Ethereum Virtual Machine in Lean 4 — a spiritual successor to the Yellow Paper that passes every supported file of the pinned mainnet fixture corpus (5,006/5,006, Prague through BPO2) and supports machine-checked proof, demonstrated by eight contracts in the sibling Blanc language — among them a port of Lido's deployed CircuitBreaker, its Registry integrity proved from an official-parameters deployment to every state reachable along a valid configured chain, and the eth2 deposit contract, its Merkle root carried through twelve SHA-256 precompile crossings to every admitted future.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='9' fill='%23f6e5a8'/%3E%3Ctext x='32' y='47' font-family='Georgia,serif' font-size='44' text-anchor='middle' fill='%231b4b2b'%3EJ%3C/text%3E%3C/svg%3E">
 <style>
 /* ────────────────────────────────────────────────────────────────
@@ -400,9 +400,9 @@ footer a:hover{color:var(--ink)}
 <span class="ok">OK — full: 5100/5100 manifest files PASS in 1130.13s</span>
 <span class="p">$</span> scripts/check-mainnet.sh --suite transitions
 <span class="ok">OK — transitions: 13/13 manifest files PASS in 15.62s</span></div>
-        <p class="cap"><b>Fig. 1</b> — the current-mainnet gates, verbatim. 5,100 fixture files,
+        <p class="cap"><b>Fig. 1</b> — historical mainnet gate output for <span class="mono">tests@v20.0.1</span>, verbatim. 5,100 fixture files,
           34,005 cases, spanning Prague, Osaka, BPO1, BPO2, and the transitions between them —
-          with zero expected failures on this lane.<sup class="fn"><a href="#fn3">3</a></sup></p>
+          with zero expected failures on that run. The current release and counts are in Table 1.<sup class="fn"><a href="#fn3">3</a></sup></p>
         <div class="pills">
           <span class="pill"><span class="d"></span>0 sorry — CI-enforced</span>
           <span class="pill"><span class="d"></span>0 native_decide</span>
@@ -417,7 +417,7 @@ footer a:hover{color:var(--ink)}
       Lean&nbsp;4 artifact that is simultaneously a specification, an interpreter, and a proof subject.
       It mirrors <span class="mono">execution-specs</span> at a pinned commit and implements Prague,
       Osaka, BPO1, and BPO2 as first-class rule sets selected from block context, passing
-      5,100 of 5,100 supported files (34,005 cases) of the current mainnet corpus. All eighteen
+      5,006 of 5,006 supported files (34,205 cases) of the current mainnet corpus. All eighteen
       precompiles — <span class="mono">ecrecover</span> to BLS12-381 to
       P256VERIFY — are pure Lean, with no FFI and nothing axiomatized; SHA-256 moreover carries a
       machine-checked equivalence to a transcription of its FIPS 180-4 standard. The interpreter is total:
@@ -436,8 +436,8 @@ footer a:hover{color:var(--ink)}
     </div>
 
     <div class="factbar reveal">
-      <div class="fact"><span class="n">34,005<span class="dimmer" style="font-size:1.05rem">/34,005</span></span>
-        <span class="l">cases passing on the current-mainnet corpus — 5,100 files, zero expected failures</span></div>
+      <div class="fact"><span class="n">34,205<span class="dimmer" style="font-size:1.05rem">/34,205</span></span>
+        <span class="l">cases passing on the current-mainnet corpus — 5,006 files, zero expected failures</span></div>
       <div class="fact"><span class="n">Prague → BPO2</span>
         <span class="l">four forks and their transitions, one interpreter — rules are data, never dispatch</span></div>
       <div class="fact"><span class="n">18</span>
@@ -642,7 +642,7 @@ footer a:hover{color:var(--ink)}
           <p class="dim" style="font-size:.93rem">
             Every executable EIP in the Prague→Osaka delta of
             <span class="mono">execution-specs</span> is implemented and exercised by a strict
-            all-PASS gate — 2,514 of 2,514 files, 17,323 cases:
+            all-PASS gate — 2,467 of 2,467 files, 17,423 cases:
           </p>
           <div class="chips">
             <span class="chip"><b>7823</b> MODEXP bounds</span>
@@ -677,7 +677,7 @@ footer a:hover{color:var(--ink)}
     <h2 class="reveal" style="max-width:22ch">Tested like a client.</h2>
     <p class="lede reveal" style="margin-top:18px">
       Two fixture lanes. The canonical lane is the <span class="mono">execution-specs</span>
-      <span class="mono">tests@v20.0.1</span> release under strict generated manifests: activating a
+      <span class="mono">tests@v20.0.2</span> release under strict generated manifests: activating a
       fork means its whole suite, exclusions are machine-generated with per-fork reasons, and
       unknown labels fail loudly. The frozen <span class="mono">ethereum/tests</span> lane is retained
       as an independently-filled regression instrument with committed per-file baselines. Its five
@@ -688,21 +688,21 @@ footer a:hover{color:var(--ink)}
       <table>
         <thead><tr><th>suite</th><th class="num">files</th><th class="num">cases</th><th>result</th><th class="num">wall</th><th class="num">--jobs auto</th></tr></thead>
         <tbody>
-          <tr><td class="mono">--suite smoke</td><td class="num">16</td><td class="num">28</td><td class="passmark">all pass</td><td class="num">0.5 s</td><td class="num">0.5 s</td></tr>
-          <tr><td class="mono">--suite prague</td><td class="num">2,573</td><td class="num">16,573</td><td class="passmark">all pass</td><td class="num">~12 min</td><td class="num">~3.0 min</td></tr>
-          <tr><td class="mono">--suite osaka</td><td class="num">2,514</td><td class="num">17,323</td><td class="passmark">all pass</td><td class="num">~8 min</td><td class="num">~2.3 min</td></tr>
+          <tr><td class="mono">--suite smoke</td><td class="num">16</td><td class="num">155</td><td class="passmark">all pass</td><td class="num">0.5 s</td><td class="num">0.5 s</td></tr>
+          <tr><td class="mono">--suite prague</td><td class="num">2,526</td><td class="num">16,673</td><td class="passmark">all pass</td><td class="num">~12 min</td><td class="num">~3.0 min</td></tr>
+          <tr><td class="mono">--suite osaka</td><td class="num">2,467</td><td class="num">17,423</td><td class="passmark">all pass</td><td class="num">~8 min</td><td class="num">~2.3 min</td></tr>
           <tr><td class="mono">--suite transitions</td><td class="num">13</td><td class="num">109</td><td class="passmark">all pass</td><td class="num">16 s</td><td class="num">~8 s</td></tr>
-          <tr><td class="mono">--suite full</td><td class="num">5,100</td><td class="num">34,005</td><td class="passmark">all pass</td><td class="num">~18.9 min</td><td class="num">~5.0 min</td></tr>
+          <tr><td class="mono">--suite full</td><td class="num">5,006</td><td class="num">34,205</td><td class="passmark">all pass</td><td class="num">~18.9 min</td><td class="num">~5.0 min</td></tr>
         </tbody>
       </table>
     </div>
     <p class="cap reveal"><b>Table 1</b> — the current-mainnet lane
       (<span class="mono">scripts/check-mainnet.sh</span>), <span class="mono">blockchain_tests</span>
-      from <span class="mono">tests@v20.0.1</span>, verified by SHA-256 at bootstrap. This lane has no
+      from <span class="mono">tests@v20.0.2</span>, verified by SHA-256 at bootstrap. This lane has no
       expected-failure baseline: every manifested case at a supported fork passes.<sup class="fn"><a href="#fn3">3</a></sup>
-      Both harnesses take <span class="mono">--jobs auto</span>; the sequential column stays the
-      authoritative one, because a contended run’s per-file timings measure the scheduler rather
-      than the fixture.</p>
+      The timing columns retain historical <span class="mono">tests@v20.0.1</span> measurements;
+      they are not new measurements of the updated corpus. Both harnesses take
+      <span class="mono">--jobs auto</span>. Uncontended per-file timings require sequential runs.</p>
 
     <div class="tablewrap reveal" style="margin-top:34px">
       <table>
@@ -995,7 +995,7 @@ footer a:hover{color:var(--ink)}
       <div class="rung base">
         <div class="left"><div class="layer">the ground</div><div class="thmname">exec · stateTransitionUsing · Jaune</div></div>
         <div class="right"><p><strong>Jaune’s executable semantics.</strong> The definitions every rung above is
-          stated over — the same ones compiled into the binary behind the 34,005 passing cases of §3.</p></div>
+          stated over — the same ones compiled into the binary behind the 34,205 passing cases of §3.</p></div>
       </div>
     </div>
 
@@ -1156,7 +1156,7 @@ footer a:hover{color:var(--ink)}
         <div class="meta"><span class="pill"><span class="d"></span>landed · 2026</span></div>
         <h3>The multi-fork architecture</h3>
         <p>Fork-parameterised rules, the complete Osaka execution delta, BPO1/BPO2 as schedule data,
-          configured transitions, and the strict-manifest current-mainnet lane — 5,100/5,100 files.
+          configured transitions, and the strict-manifest current-mainnet lane — 5,006/5,006 files.
           The generic transition proof landed in the fork arc; configured reachability and raw-import
           corollaries are now restored and protected by Blanc’s exact-axiom audit.</p>
       </div>
@@ -1308,14 +1308,14 @@ footer a:hover{color:var(--ink)}
         <div class="term"><span class="p">$</span> git clone https://github.com/skbaek/jaune
 <span class="p">$</span> cd jaune &amp;&amp; lake exe cache get &amp;&amp; lake build
 <span class="p">$</span> python3 scripts/bootstrap_mainnet.py
-<span class="p">$</span> FIX=~/eest-mainnet-v20.0.1/fixtures/blockchain_tests
+<span class="p">$</span> FIX=~/eest-mainnet-v20.0.2/fixtures/blockchain_tests
 <span class="p">$</span> lake exe jaune $FIX/for_prague/ported_static/vmArithmeticTest/mul/mul.json
 <span class="p">$</span> scripts/check-mainnet.sh --suite smoke</div>
         <p class="dim" style="font-size:.88rem;margin:14px 0 0">
           The corpus is not in the repository: the third line fetches the pinned
-          <span class="mono">execution-specs tests@v20.0.1</span> release, verifies its checksum
+          <span class="mono">execution-specs tests@v20.0.2</span> release, verifies its checksum
           before extraction, and installs it at
-          <span class="mono">~/eest-mainnet-v20.0.1</span> — a 404 MB download and about 7.9 GB on
+          <span class="mono">~/eest-mainnet-v20.0.2</span> — a 540 MB download and about 9.1 GB of extracted files on
           disk, so budget 13 GB free and run it before either of the last two lines. See
           <span class="mono">scripts/vectors/SOURCES.md</span> for pinned provenance and the
           read-only environment doctor. The <span class="mono">blockchain_tests</span> directory is
@@ -1374,7 +1374,7 @@ footer a:hover{color:var(--ink)}
           Wall-clock numbers are same-machine, same-instrument measurements on a 10-core Apple M5;
           fixture counts are exact. The
           current-mainnet lane covers every <span class="mono">blockchain_tests</span> fixture of
-          <span class="mono">tests@v20.0.1</span> whose fork Jaune supports; exclusions for
+          <span class="mono">tests@v20.0.2</span> whose fork Jaune supports; exclusions for
           unsupported historical forks are machine-generated with per-fork reasons, and unknown
           labels fail the manifest check.</li>
       </ol>
