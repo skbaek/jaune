@@ -4073,7 +4073,8 @@ def Rinst.runCore
         (gCallStipend < devm.gasLeft)
         ⟨.halt (.outOfGas .none), devm⟩
       let ct := sevm.currentTarget
-      let original_value := getOrigStorVal sevm ct key
+      let original_value :=
+        if ct ∈ devm.createdAccounts then 0 else getOrigStorVal sevm ct key
       -- `get_storage_original` records nothing; `get_storage` records the
       -- slot (EIP-7928).
       let devm := devm.balReadStorage sevm.benvStat.rules ct key
@@ -4120,7 +4121,8 @@ def Rinst.runCore
         ⟨.halt (.outOfGas .none), devm⟩
       -- STATE ACCESS. Only now is the slot read, and only now is it warmed.
       let devm := if cold then addAccessedStorageKey devm ct key else devm
-      let original_value := getOrigStorVal sevm ct key
+      let original_value :=
+        if ct ∈ devm.createdAccounts then 0 else getOrigStorVal sevm ct key
       -- `get_storage_original` records nothing; `get_storage` records the
       -- slot (EIP-7928).
       let devm := devm.balReadStorage sevm.benvStat.rules ct key
@@ -4378,6 +4380,50 @@ instance : Inhabited Evm := ⟨
 private def guardSevmAt (fork : Fork) : Sevm :=
   { (default : Sevm) with
     benvStat := { (default : BenvStat) with fork := fork } }
+
+/-! The creation path clears inherited storage and marks the account as created.
+`SSTORE` must consequently see zero as its transaction-original value, even
+though `origState` still contains the pre-creation storage. -/
+private def createdAccountSstoreGuard (fork : Fork) : Option (B256 × Int × Nat) :=
+  let address : Adr := 0x5150
+  let key : B256 := 0
+  let origState := State.setStorVal .empty address key 1
+  let createdState := State.set .empty address { Acct.nil with nonce := 1 }
+  let sevm : Sevm :=
+    { guardSevmAt fork with
+      currentTarget := address
+      benvStat := { (guardSevmAt fork).benvStat with origState := origState } }
+  let devm :=
+    (((default : Devm).withGasLeft 200000).withStack [key, 1]).withCreatedAccounts
+      (({} : AdrSet).insert address)
+  let devm := devm.withState createdState
+  let devm :=
+    if fork = .amsterdam then
+      devm.setMach { devm.mach with stateGas := ⟨100000, 100000, 0, 0⟩ }
+    else devm
+  match Rinst.runCore 0 devm sevm .sstore with
+  | .ok devm => some ⟨devm.getStorVal address key, devm.refundCounter, devm.stateGasLeft⟩
+  | .error _ => none
+
+/-! A noncreated account continues to compare `SSTORE` against its transaction
+original storage value. -/
+private def noncreatedAccountSstoreGuard : Option (B256 × Int) :=
+  let address : Adr := 0x5151
+  let key : B256 := 0
+  let state := State.setStorVal .empty address key 1
+  let sevm : Sevm :=
+    { guardSevmAt .prague with
+      currentTarget := address
+      benvStat := { (guardSevmAt .prague).benvStat with origState := state } }
+  let devm := ((default : Devm).withGasLeft 200000).withStack [key, 0]
+  let devm := devm.withState state
+  match Rinst.runCore 0 devm sevm .sstore with
+  | .ok devm => some ⟨devm.getStorVal address key, devm.refundCounter⟩
+  | .error _ => none
+
+#guard createdAccountSstoreGuard .prague = some ⟨1, 0, 0⟩
+#guard createdAccountSstoreGuard .amsterdam = some ⟨1, 0, 2080⟩
+#guard noncreatedAccountSstoreGuard = some ⟨0, 4800⟩
 
 private def guardClz (fork : Fork) (gasLeft : Nat) (stack : List B256) :
     Execution :=

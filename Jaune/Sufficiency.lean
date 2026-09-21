@@ -1713,14 +1713,22 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
         rw [← hRefund, Devm.withRefundCounter_gasMeasure, hPairGas]
       have hCostPos : 0 < cost := by
         rw [← hCost]
-        split
-        · split
+        by_cases hc : sevm.currentTarget ∈ d2.createdAccounts
+        · simp only [hc, ↓reduceIte]
+          split
           · unfold gasStorageSet
             omega
-          · unfold gasStorageUpdate gasColdSload
+          · unfold gasWarmAccess
             omega
-        · unfold gasWarmAccess
-          omega
+        · simp only [hc, ↓reduceIte]
+          split
+          · split
+            · unfold gasStorageSet
+              omega
+            · unfold gasStorageUpdate gasColdSload
+              omega
+          · unfold gasWarmAccess
+            omega
       dsimp only at e1 e2 hFinal
       rw [← hFinal, Devm.setStorVal_gasMeasure, Devm.balReadAccount_gasMeasure]
       omega
