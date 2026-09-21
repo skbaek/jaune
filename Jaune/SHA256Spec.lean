@@ -302,6 +302,17 @@ two up. -/
 def varsVec (v : FIPS.Vars) : Vector UInt32 8 :=
   #v[v.a, v.b, v.c, v.d, v.e, v.f, v.g, v.h]
 
+private def addRoundVector (H h' : Vector UInt32 8) : Vector UInt32 8 :=
+  #v[H[0] + h'[0], H[1] + h'[1], H[2] + h'[2], H[3] + h'[3],
+    H[4] + h'[4], H[5] + h'[5], H[6] + h'[6], H[7] + h'[7]]
+
+private def addRoundVars (H : Vector UInt32 8) (v : FIPS.Vars) : Vector UInt32 8 :=
+  #v[H[0] + v.a, H[1] + v.b, H[2] + v.c, H[3] + v.d,
+    H[4] + v.e, H[5] + v.f, H[6] + v.g, H[7] + v.h]
+
+private theorem addRoundVector_varsVec (H : Vector UInt32 8) (v : FIPS.Vars) :
+    addRoundVector H (varsVec v) = addRoundVars H v := rfl
+
 /-- The kernel's round-constant table is the standard's `K{256}`.
 
 This is `rfl` and it is still worth stating: the two tables were transcribed
@@ -409,22 +420,56 @@ theorem rounds_eq' (p : Array UInt8) (n : Nat) (hn : n ≤ 64) (w : Vector UInt3
           ⟨a, b, c, d, e, f, g, h⟩ (List.range' (64 - n) n)) :=
   rounds_eq p n hn w ⟨a, b, c, d, e, f, g, h⟩ hw
 
+/-- All sixty-four rounds, from the kernel's zeroed window, for any proof of
+the fixed bound. -/
+private theorem rounds_eq_full_of_le (p : Array UInt8) (hn : 64 ≤ 64)
+    (a b c d e f g h : UInt32) :
+    rounds p 64 hn (Vector.replicate 16 0) a b c d e f g h
+      = varsVec (List.foldl (FIPS.step (FIPS.schedule (FIPS.toWords p.toList)))
+          ⟨a, b, c, d, e, f, g, h⟩ (List.range 64)) := by
+  rw [List.range_eq_range']
+  exact rounds_eq' p 64 hn _ a b c d e f g h (by intro k hk1 _ hkt; omega)
+
 /-- All sixty-four rounds, from the kernel's zeroed window: the invariant is
 vacuous at round 0, so no hypothesis survives. -/
 theorem rounds_eq_full (p : Array UInt8) (a b c d e f g h : UInt32) :
     rounds p 64 (by omega) (Vector.replicate 16 0) a b c d e f g h
       = varsVec (List.foldl (FIPS.step (FIPS.schedule (FIPS.toWords p.toList)))
-          ⟨a, b, c, d, e, f, g, h⟩ (List.range 64)) := by
-  rw [List.range_eq_range']
-  exact rounds_eq' p 64 (by omega) _ a b c d e f g h (by intro k hk1 _ hkt; omega)
+          ⟨a, b, c, d, e, f, g, h⟩ (List.range 64)) :=
+  rounds_eq_full_of_le p (by omega) a b c d e f g h
+
+private theorem compress_eq_addRoundVars (H : Vector UInt32 8) (M : Vector UInt32 16) :
+    FIPS.compress H M = addRoundVars H
+      (List.foldl (FIPS.step (FIPS.schedule M))
+        { a := H[0], b := H[1], c := H[2], d := H[3],
+          e := H[4], f := H[5], g := H[6], h := H[7] } (List.range 64)) := rfl
+
+/-- Keep the eight additions behind `addRoundVector` while relating the round
+result to `compress`.  Rewriting through `consumeChunk`'s `let` exposes the
+concrete sixty-four-round fold once per projection, which is needlessly costly
+for kernel reduction. -/
+private theorem roundResult_eq_compress (H : Vector UInt32 8) (p : Array UInt8)
+    (hn : 64 ≤ 64) :
+    (let h' := rounds p 64 hn (Vector.replicate 16 0)
+      H[0] H[1] H[2] H[3] H[4] H[5] H[6] H[7]
+    #v[H[0] + h'[0], H[1] + h'[1], H[2] + h'[2], H[3] + h'[3],
+      H[4] + h'[4], H[5] + h'[5], H[6] + h'[6], H[7] + h'[7]]) =
+      FIPS.compress H (FIPS.toWords p.toList) := by
+  change addRoundVector H (rounds p 64 hn (Vector.replicate 16 0)
+    H[0] H[1] H[2] H[3] H[4] H[5] H[6] H[7]) =
+      FIPS.compress H (FIPS.toWords p.toList)
+  rw [compress_eq_addRoundVars]
+  exact Eq.trans
+    (congrArg (addRoundVector H)
+      (rounds_eq_full_of_le p hn H[0] H[1] H[2] H[3] H[4] H[5] H[6] H[7]))
+    (addRoundVector_varsVec H _)
 
 /-- The kernel's compression of one 64-byte chunk is the standard's, on the
 sixteen words that chunk parses to. -/
 theorem consumeChunk_eq (H : Vector UInt32 8) (p : Array UInt8) :
     consumeChunk H p = FIPS.compress H (FIPS.toWords p.toList) := by
-  have key := rounds_eq_full p H[0] H[1] H[2] H[3] H[4] H[5] H[6] H[7]
-  simp only [consumeChunk, FIPS.compress, key]
-  rfl
+  unfold consumeChunk
+  exact roundResult_eq_compress H p _
 
 /-! ### Padding and parsing
 
