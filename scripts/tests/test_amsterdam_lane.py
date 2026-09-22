@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -362,12 +363,19 @@ class SyntheticLaneRunTests(unittest.TestCase):
             }
         }))
 
-    def run_lane(self, *args: str) -> subprocess.CompletedProcess:
+    def run_lane(self, *args: str, home: Path | None = None) -> subprocess.CompletedProcess:
+        """`home`, when given, is the harness's `$HOME` -- the one input from
+        which `gate-lock.sh` derives the host-global heavy-gate lock path. A
+        test that dispatches a heavy suite passes a private one, so it contends
+        only with itself and never with the real host lock."""
+        env = None
+        if home is not None:
+            env = dict(os.environ, HOME=str(home))
         return subprocess.run(
             [str(self.checkout / "scripts" / "check-mainnet.sh"),
              "--lane", "amsterdam", "--no-build",
              "--fixtures-root", str(self.fixtures), *args],
-            capture_output=True, text=True, cwd=str(self.checkout),
+            capture_output=True, text=True, cwd=str(self.checkout), env=env,
         )
 
     # -- the manifest the lane raises over this corpus --------------------
@@ -446,33 +454,45 @@ class SyntheticLaneRunTests(unittest.TestCase):
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         self.assertIn("OK — amsterdam-transitions: 1/1 manifest files PASS", run.stdout)
         self.assertIn("[1/1] PASS for_bpo2toamsterdamattime15k/t.json", run.stderr)
-        # The second dispatch used to be `--suite amsterdam-full`, the union.
-        # `check-mainnet.sh` derives the heavy-gate lock from the suite *name*
-        # (`osaka|prague|full|amsterdam|amsterdam-full`), and that lock is
-        # host-global and refused rather than queued, so this row -- a "light",
-        # no-corpus unit row -- failed with
-        # `REFUSED — amsterdam-full: the heavy-gate lock is locked by PID ...`
-        # whenever any other checkout on the host was running a heavy gate.
-        # That is a fact about the host, not about the lane, and a unit suite
-        # must stay lock-free. The union's two components are dispatched here
-        # and just below through the two suites that take no lock when
-        # sequential, so all four of its files are still dispatched; the
-        # union's own *selection* stays pinned by
-        # `test_every_suite_is_runnable_and_no_refusal_reason_remains` above
-        # (`suites["amsterdam-full"]["file_count"] == 4`).
-        #
-        # What IS lost, stated plainly rather than glossed: after this change
-        # `amsterdam-full` is dispatched nowhere -- not here, not in any other
-        # test, and not in the goal's catalogue selection -- so this module's
-        # first stated property, "every suite is admitted, and actually
-        # dispatches", no longer holds of that one suite. Its selection is
-        # pinned and each of its two components is dispatched, which is why the
-        # trade was taken; restoring the union's own dispatch needs a lock-free
-        # way to run it, which is `check-mainnet.sh`'s to provide.
-        # (Goal `jaune-forks-by-construction-v1`, W6; independent review F-4.)
         run = self.run_lane("--suite", "amsterdam-smoke")
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         self.assertIn("OK — amsterdam-smoke: 3/3 manifest files PASS", run.stdout)
+
+    def test_the_union_dispatches_every_file_under_a_private_heavy_lock(self):
+        """`amsterdam-full` takes the heavy-gate lock by name, so it runs here
+        with `$HOME` pointed at a private directory: the union is dispatched
+        end to end while a live holder of the *other* lock path -- standing in
+        for a heavy gate elsewhere on the host -- is refused as production
+        would refuse it."""
+        private_home = self.tmp / "home-private"
+        busy_home = self.tmp / "home-busy"
+        private_home.mkdir(exist_ok=True)
+        held = busy_home / ".codex" / "locks" / "gate-heavy.lock"
+        held.mkdir(parents=True, exist_ok=True)
+        (held / "owner").write_text(f"{os.getpid()}\n2026-01-01 00:00:00\nunit-test holder\n")
+
+        run = self.run_lane("--suite", "amsterdam-full", home=private_home)
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertIn("OK — amsterdam-full: 4/4 manifest files PASS", run.stdout)
+        for rel in (
+            "for_amsterdam/amsterdam/eip7843_slotnum/a.json",
+            "for_amsterdam/amsterdam/eip7843_slotnum/b.json",
+            "for_amsterdam/amsterdam/eip9999_mixed/c.json",
+            "for_bpo2toamsterdamattime15k/t.json",
+        ):
+            self.assertIn(f"PASS {rel}", run.stderr)
+        self.assertFalse((private_home / ".codex" / "locks" / "gate-heavy.lock").exists())
+
+        # The control: the union still takes the heavy lock, and a live holder
+        # of it refuses the run before anything is dispatched.
+        refused = self.run_lane("--suite", "amsterdam-full", home=busy_home)
+        self.assertEqual(refused.returncode, 2, refused.stdout + refused.stderr)
+        self.assertIn(
+            f"REFUSED — amsterdam-full: the heavy-gate lock is locked by PID {os.getpid()}",
+            refused.stdout,
+        )
+        self.assertNotIn("PASS", refused.stdout + refused.stderr)
+        self.assertTrue((held / "owner").exists())
 
     def test_dir_lands_a_transition_subtree_under_the_count_rule(self):
         """Open question 2 of the goal: the count rule fits the transition
