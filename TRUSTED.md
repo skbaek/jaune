@@ -11,9 +11,12 @@ number, because the command is current and the number is only a snapshot.
 Repository identity for any regenerated result is `git rev-parse HEAD` in the
 repository whose gate owns it.
 
-This document is the base for both repositories. Blanc's trusted base is this
-one plus three additions — the pinned Jaune revision, the axiom audit, and
-Blanc's imported-source trust gate — which are stated in
+This document is the base for both repositories. Each repository audits what
+it owns. Jaune audits its own trust surface and the axiom closure of its
+canonical execution proof layer (see [The axioms](#the-axioms)). Blanc's
+trusted base is this one plus three additions — the pinned Jaune revision,
+Blanc's axiom and claim audits over its own results, and Blanc's
+imported-source trust gate — which are stated in
 [Blanc's README](https://github.com/skbaek/blanc/blob/main/README.md#verification-status)
 rather than duplicated here.
 
@@ -38,18 +41,17 @@ Trusting a Jaune theorem means trusting:
 
 | | |
 |---|---|
-| the Lean 4 kernel | `leanprover/lean4:v4.32.1` (`lean-toolchain`) |
-| Mathlib | `v4.32.1`, revision `520045ab14e26149ee970e2e617ca04b09bde5d6` |
+| the Lean 4 kernel | the toolchain named in `lean-toolchain` (`leanprover/lean4:v4.34.0` when this was written) |
+| Mathlib | the tag required in `lakefile.lean` and the revision `lake-manifest.json` resolves (`v4.34.0`, `5ed2965256430c3649e86755f9576b54eca72435` when this was written) |
 
-Trusting a Blanc theorem additionally means trusting a specific Jaune:
+The files are the record; the commands below read them.
 
-| | |
-|---|---|
-| Jaune | `949cf97ee1956828a3ac0eb12a62c438656ba76e` (`lakefile.lean`, agreeing with `lake-manifest.json` and the Lake-managed checkout) |
-
-Blanc consumes Jaune from Git at that pinned revision, not from a sibling
-checkout, so a fresh clone reproduces the build and bumping Jaune is a reviewed
-one-line change.
+Trusting a Blanc theorem additionally means trusting the specific Jaune commit
+Blanc pins in its `lakefile.lean`, agreeing with its `lake-manifest.json` and
+recorded in Blanc's README. Blanc consumes Jaune from Git at that revision,
+not from a sibling checkout, so a fresh clone reproduces the build and bumping
+Jaune is a reviewed one-line change. That pin moves independently of this
+repository, so it is not copied here.
 
 ```
 cat lean-toolchain
@@ -58,28 +60,68 @@ python3 -c "import json;print([(p['name'],p['rev'],p.get('inputRev')) for p in j
 
 ## The axioms
 
-Blanc's audit ([`scripts/AxiomCheck.lean`](https://github.com/skbaek/blanc/blob/main/scripts/AxiomCheck.lean),
-driven by `scripts/check.sh`) is the sharpest statement of the trusted base
-either repository makes, so it is worth being precise about what it does.
+Axiom auditing follows ownership. Each repository checks the axiom closure of
+the results it owns, and neither audit covers the other repository's results.
 
-Every audited row carries its **own pinned expected axiom set**, and a theorem's
-axiom closure must equal that set *exactly*, order-insensitively. An unexpected
-axiom fails the gate, and so does a missing one: dependency-closure changes in
-either direction are reviewable, including the no-axiom trivialization
-direction. That signal does **not** pin the theorem statement and does not by
-itself prevent a weaker or vacuous statement. Blanc separately Lean-checks the
-exact statements of its protected claim families with `scripts/check-claims.sh`.
-A secondary pattern net independently rejects `sorryAx`, `ofReduceBool`,
-`ofReduceNat`, and any `_native.` axiom, on the grounds that the last of these
-adds the Lean compiler to the trusted code base.
+**Jaune audits its canonical execution proof layer.**
+[`scripts/ExecutionAxioms.lean`](scripts/ExecutionAxioms.lean) holds 53
+`#expect_axioms` rows. They cover `Jaune.Exec` and its constructors, adequacy
+(`exec_iff_exec_eq`), derivation and chronology operations, settlement
+lemmas, frame spawn lemmas, the symbolic PUSH and arithmetic rules, and the
+observations of the two execution examples. Every row pins exactly
+`Classical.choice`, `Quot.sound`, `propext`. A declaration whose closure
+differs **in either direction** fails elaboration at its row. Because the
+`Assurance` library that holds the rows is a default build target, it also
+fails the ordinary `lake build`. The closure is computed by a from-scratch walk
+over every reachable constant's type and value and every inductive's
+constructors (`Jaune.AxiomAudit.auditFullAxioms` in
+[`scripts/AxiomAudit.lean`](scripts/AxiomAudit.lean)). It never calls
+`Lean.collectAxioms` or `#print axioms`, which on current Lean can under-report
+axioms reached through an imported inductive (lean4#15226).
+[`scripts/assurance-manifest.json`](scripts/assurance-manifest.json) records
+every row's provenance. That includes the fifteen obligations Blanc pinned
+under their former `Blanc.*` names before these declarations moved into Jaune.
+`python3 scripts/check-assurance-manifest.py` runs in CI. It fails when a row
+and the manifest disagree, when either loses an entry, or when a public rule of
+a symbolic-rule module has no row. Adding, removing or re-pinning a row is a
+reviewed decision, never a routine edit; see
+[`scripts/GATES.md`](scripts/GATES.md#destination-axiom-audit).
 
-The live audit membership, total, and axiom-set distribution belong to
+This audit's scope is that proof layer, not the whole library. A Jaune
+theorem outside it — `Bytes.sha256_eq_fips`, for example — has no pinned row
+here. Its axioms are stated in this document from `#print axioms`, which
+lean4#15226 makes advisory. The walker is a `partial def` metaprogram under
+`scripts/`, outside the hygiene and integrity scopes, like the other
+`scripts/*.lean` tools.
+
+**Blanc audits its own results, downstream.** Blanc's audit
+([`scripts/AxiomCheck.lean`](https://github.com/skbaek/blanc/blob/main/scripts/AxiomCheck.lean),
+driven by `scripts/check.sh`) checks Blanc's theorems, and with them whatever
+Jaune closure those theorems reach at the Jaune revision Blanc pins. It does not
+audit Jaune's library as a whole, and it is not a substitute for Jaune's own
+audit. Blanc keeps its downstream claim and axiom checks.
+
+Every audited Blanc row carries its **own pinned expected axiom set**, and a
+theorem's axiom closure must equal that set *exactly*, order-insensitively. An
+unexpected axiom fails the gate, and so does a missing one: dependency-closure
+changes in either direction are reviewable, including the no-axiom
+trivialization direction. Neither repository's axiom signal pins a theorem
+statement, and it does not by itself prevent a weaker or vacuous statement.
+Blanc separately Lean-checks the exact statements of its protected claim
+families with `scripts/check-claims.sh`. A secondary pattern net independently
+rejects `sorryAx`, `ofReduceBool`, `ofReduceNat`, and any `_native.` axiom, on
+the grounds that the last of these adds the Lean compiler to the trusted code
+base.
+
+Blanc's live audit membership, total, and axiom-set distribution belong to
 [Blanc's README trust section](https://github.com/skbaek/blanc/blob/main/README.md#verification-status)
 and [Blanc's gate catalogue](https://github.com/skbaek/blanc/blob/main/scripts/GATES.md),
 not to a duplicated count here. Most rows use the standard three axioms;
 the rest pin smaller sets, down to none.
 
 ```
+cd ~/jaune && python3 scripts/check-assurance-manifest.py   # rows and manifest agree
+# the rows themselves are checked by the ordinary build (library `Assurance`)
 cd ~/blanc && scripts/check.sh --no-build
 ```
 
@@ -108,12 +150,12 @@ rg -n '^\s*@\[extern|^\s*axiom\s|^\s*opaque\s+\S+\s*:|\bsorry\b|^\s*partial\s+de
 ```
 
 Run the same scan unanchored — matching the bare words anywhere, comments
-included — and it returns twenty-one hits, all prose: eleven where `extern` sits
-inside the English word "external" (opcode comments for `EXTCODESIZE` and its
-neighbours, and remarks about externally observed bytes and labels), nine uses
-of "opaque" in comments describing typed-envelope bytes that stay undecoded,
-and one comment about keeping axiom sets exact. No declaration of any of these
-kinds exists.
+included — and it returns twenty-four hits, all prose: thirteen where `extern`
+sits inside the English word "external" (opcode comments for `EXTCODESIZE` and
+its neighbours, and remarks about externally observed bytes and labels), ten
+uses of "opaque" in comments (mostly typed-envelope bytes that stay
+undecoded), and one comment about keeping axiom sets exact. No declaration of
+any of these kinds exists.
 
 ```
 grep -rEn 'extern|axiom|opaque|sorry|partial def|implemented_by|native_decide|dbg_trace' Jaune/ Main.lean
@@ -129,11 +171,10 @@ defended, and a reader is entitled to know where the guarantee is a gate and
 where it is a fact.
 
 [`scripts/check-hygiene.sh`](scripts/check-hygiene.sh) — forbids `dbg_trace`
-and `sorry` under `Jaune/`, fail-closed against the committed allowlist
-[`scripts/hygiene-allow.txt`](scripts/hygiene-allow.txt). **That allowlist
-contains only comments.** It has no entries because there is nothing to exempt.
-Matching is line-number independent, so the gate survives edits above an
-occurrence but forces re-review if the matched text changes. It needs no Lean
+and `sorry` under `Jaune/` and `Examples/`, fail-closed against the committed
+allowlist [`scripts/hygiene-allow.txt`](scripts/hygiene-allow.txt). Matching
+is line-number independent, so the gate survives edits above an occurrence
+but forces re-review if the matched text changes. It needs no Lean
 toolchain and **runs in CI on every push and pull request**.
 
 [`scripts/check-integrity.sh`](scripts/check-integrity.sh) — four fail-closed
@@ -142,8 +183,9 @@ traversed from `import Jaune.*` lines rather than hardcoded, so the gate can
 never be satisfied by moving code out of reach:
 
 - **R1** — no `partial def`, `implemented_by`, or `dbg_trace` under `Jaune/` or
-  in `Main.lean`. Absence with **no allowlist at all**: there is deliberately
-  no carve-out and no row to add.
+  `Examples/`, in their roots, in `Main.lean`, or in `MemoryProbe.lean`.
+  Absence with **no allowlist at all**: there is deliberately no carve-out and
+  no row to add.
 - **R2** — no `panic`/`panic!` in the closure, except exact allowlist rows.
 - **R3** — no raw bang operation (`get!`, `set!`, `xs[i]!`, …) in the closure,
   except exact allowlist rows.
@@ -160,44 +202,54 @@ scripts/check-hygiene.sh
 scripts/check-integrity.sh
 ```
 
-Today: hygiene reports 0 occurrences, all allowlisted; integrity reports 58
-occurrences allowlisted, 0 pending, pending budget 0.
+Today: hygiene reports 1 occurrence, allowlisted (the `@[csimp]` row below);
+integrity reports 58 occurrences allowlisted, 0 pending, pending budget 0.
 
 **The trust surface is now enforced, not merely reported.** `check-hygiene.sh`
 fails on any un-allowlisted `axiom`, `opaque`, `@[extern]`, `@[implemented_by]`,
-`partial def`, `unsafe` or `native_decide` under `Jaune/`, alongside the
-original `dbg_trace` and `sorry`. The allowlist is empty and every one of these
-counts is zero, so the claim this document makes about Jaune's trusted path is
+`@[csimp]`, `partial def`, `unsafe` or `native_decide` under `Jaune/` and
+`Examples/`, in `Jaune.lean`, `Examples.lean` and `MemoryProbe.lean`, and in
+the external-consumer smoke source, alongside the original `dbg_trace` and
+`sorry`. Every one of these counts is zero except one: the allowlist carries
+exactly one row, the proved `@[csimp]` substitution `execFueled_eq_cached`
+in `Jaune/Execution.lean`. It is a kernel-checked equality
+`execFueled = execFueledCached`, and it makes the compiled binary run the
+calldata-sharing implementation. The row's written justification is in the
+allowlist. So the claim this document makes about Jaune's trusted path is
 defended by a gate on every push rather than being a property of the source at
 the moment someone last looked. Adding an allowlist entry is the only way to
-introduce one, and that is a reviewable act with a written justification.
+introduce another, and that is a reviewable act with a written justification.
 
-Three residual limits, stated so the gate is not read as more than it is. Its
-scope is `Jaune/`; the root modules `Jaune.lean` and `Main.lean` are outside it
-and are clean today as a matter of fact only. It is a syntactic scan of this
-repository's own text, so it cannot see a construct reached through a
-dependency — that is what the axiom audit is for. And it is not comment-aware,
+Three residual limits, stated so the gate is not read as more than it is.
+`Main.lean` is outside its scope and is clean today as a matter of fact only.
+It is a syntactic scan of this repository's own text, so it cannot see a
+construct reached through a dependency — that is what the axiom audit is for. And it is not comment-aware,
 so prose can trip it; the fix is to reword the prose, not to allowlist it.
 
 **Why the syntactic scan is not redundant with the axiom audit.** `#print
 axioms` is non-discriminating on exactly this surface: a declaration whose body
 is supplied by `@[extern]` behind an `opaque` reports as depending on no axioms,
-because the kernel never sees a body to collect from. A clean axiom audit is
+because the kernel never sees a body to collect from. (On current Lean it can
+also under-report axioms reached through an imported inductive, lean4#15226,
+which is why Jaune's audit uses its own walker.) A clean axiom audit is
 therefore compatible with an arbitrarily large hole, and neither check implies
-the other. The claim worth making is the conjunction — the axiom sets are
-exactly as pinned, *and* nothing in the tree steps outside the kernel to get
-there — and it is the conjunction that this repository gates.
+the other. The claim worth making is the conjunction — the audited axiom sets
+are exactly as pinned, *and* nothing in the tree steps outside the kernel to
+get there — and it is the conjunction that this repository gates.
 
 Blanc has a separate `scripts/check-trust-surface.sh` for these forms in
 `Blanc.lean`'s transitive import closure, and its axiom audit catches
 dependency-closure changes for the named audited results. Neither Blanc gate
 expands the scope of Jaune's gates.
-**Also: `check-integrity.sh` is not a CI gate.** The push/pull-request
-workflow ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs exactly
-three jobs — the portable-environment unit tests, `check-hygiene.sh`, and
-`lake build` — and the nightly workflow runs the `--full` and `--bls`
-conformance tiers. The integrity gate is in neither; it is run locally and
-before merge, which is a process guarantee rather than a CI guarantee.
+
+**CI coverage.** The push/pull-request workflow
+([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs four jobs: the
+portable-environment unit tests; a static job running `check-hygiene.sh`,
+`check-integrity.sh`, `check-consumer-boundary.py` and
+`check-assurance-manifest.py`; `lake build`, which includes the axiom rows,
+followed by `check-t8n.sh` and `check-u256.sh`; and the exact-revision Git
+consumer smoke test. The nightly workflow runs the `--full` and `--bls`
+conformance tiers.
 
 ## The known exceptions
 
@@ -212,7 +264,9 @@ $ echo 'import Jaune.Basic
 ```
 
 So this `bv_decide` produced a kernel-checked proof and no per-declaration
-`_native.bv_decide.ax_*` axiom. It adds nothing to the trusted base. Blanc's
+`_native.bv_decide.ax_*` axiom. (That reading comes from `#print axioms`, which
+lean4#15226 makes advisory; `Bytes.toB256_pair` has no row in Jaune's
+from-scratch audit.) It adds nothing to the trusted base. Blanc's
 gate nonetheless rejects `_native.` axioms by name, because other `bv_decide`
 configurations can produce them; and `bv_decide` remains banned by project
 policy inside the protected-theorem cone. Both remain sensible guards. Neither
@@ -235,7 +289,7 @@ surface, not consensus surface — and R4 does reach them, but a reader auditing
 "which code do these rules cover" deserves the boundary stated rather than
 inferred from a comment in a shell script.
 
-**`Main.lean` is in no proof cone.** The fixture harness is 1,006 lines of `IO`
+**`Main.lean` is in no proof cone.** The fixture harness is 1,300 lines of `IO`
 that parse JSON, select cases, and compare roots. Every conformance claim this
 project makes passes through code that no theorem covers. R1 and R4 reach it;
 no proof does. It is tested, not proved, and that distinction is the point of
@@ -357,9 +411,12 @@ hash.
 ```
 cd ~/jaune
 cat lean-toolchain
+python3 -c "import json;print([(p['name'],p['rev'],p.get('inputRev')) for p in json.load(open('lake-manifest.json'))['packages']])"
 rg -n '^\s*@\[extern|^\s*axiom\s|^\s*opaque\s+\S+\s*:|\bsorry\b|^\s*partial\s+def|\bimplemented_by\b|\bnative_decide\b|\bdbg_trace\b' Jaune Main.lean
 scripts/check-hygiene.sh
 scripts/check-integrity.sh
+python3 scripts/check-assurance-manifest.py
+lake build        # elaborates the axiom rows; on a coordinated host use its build launcher
 
 cd ~/blanc
 scripts/check-trust-surface.sh
