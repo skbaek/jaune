@@ -53,11 +53,10 @@ and is the right choice if you intend to import more of mathlib yourself.
 
 ## Proving execution properties
 
-Start with the [execution examples](Examples/README.md): symbolic instruction
-rules, a complete composed raw-frame proof, and a separate checked transaction
-entry. The same guide shows installation through an exact Git dependency.
-The examples build with their containing revision and are outside Jaune's
-production import closure.
+[`API.md`](API.md) is the guide for proof authors: supported imports and
+declarations by task, and what compatibility this revision does and does not
+promise. [`Examples/README.md`](Examples/README.md) walks through the checked
+examples and installation through an exact Git dependency.
 
 ## Optional enhanced agent workflow
 
