@@ -868,20 +868,9 @@ theorem pragueGasSchedule_valid : pragueGasSchedule.Valid := by decide
 #guard ¬ ({ pragueGasSchedule with callValue := 2299 } : GasSchedule).Valid
 #guard ({ pragueGasSchedule with callValue := 2300 } : GasSchedule).Valid
 
--- The three premises, spelled out once per named schedule, so a future
--- reparameterisation that zeroes a divisor or inverts the target/ceiling pair
--- fails here rather than inside `fakeExp`.
-#guard 0 < pragueBlobSchedule.baseFeeUpdateFraction
-#guard 0 < osakaBlobSchedule.baseFeeUpdateFraction
-#guard 0 < bpo1BlobSchedule.baseFeeUpdateFraction
-#guard 0 < bpo2BlobSchedule.baseFeeUpdateFraction
-#guard pragueBlobSchedule.target ≤ pragueBlobSchedule.max
-#guard osakaBlobSchedule.target ≤ osakaBlobSchedule.max
-#guard bpo1BlobSchedule.target ≤ bpo1BlobSchedule.max
-#guard bpo2BlobSchedule.target ≤ bpo2BlobSchedule.max
-#guard 0 < pragueModexpRules.gasDivisor
-#guard 0 < osakaModexpRules.gasDivisor
--- A zero divisor and an inverted schedule are both refused.
+-- The premises themselves hold for every named schedule by the `*_valid`
+-- theorems above; what no theorem states is that `Valid` refuses a schedule
+-- that breaks one. A zero divisor and an inverted schedule are both refused.
 #guard ¬ ({ pragueBlobSchedule with baseFeeUpdateFraction := 0 } : BlobSchedule).Valid
 #guard ¬ ({ pragueBlobSchedule with max := 0 } : BlobSchedule).Valid
 #guard ¬ ({ pragueBlobSchedule with
@@ -1707,17 +1696,17 @@ private def isEraL : RulesLookupError → Bool
 
 -- The declared set and the runnable set are both derived from `Fork.rules?`
 -- rather than restated, and they are the same list: every declared fork
--- resolves. These guards record the two lists *as they read today*; the fact
--- that they must agree is `Fork.supported_eq_all` and
+-- resolves. These guards record the runnable list *as it reads today*; the fact
+-- that the lists must agree is `Fork.supported_eq_all` and
 -- `Fork.unimplemented_eq_nil`, proved above, because a guard would pass again
--- the day a fork were declared without rules and a theorem cannot.
+-- the day a fork were declared without rules and a theorem cannot. (Its
+-- length and the empty unimplemented list are those theorems, so they are not
+-- re-guarded here.)
 -- (Goal A's guards here asserted `Fork.supported = [.prague, .osaka, .bpo1,
 -- .bpo2]`, `Fork.unimplemented = [.amsterdam]` and
 -- `Fork.amsterdam.rules? = none`; each is rewritten to the statement that
 -- replaced it rather than deleted.)
 #guard Fork.supported = [.prague, .osaka, .bpo1, .bpo2, .amsterdam]
-#guard Fork.supported.length = 5
-#guard Fork.unimplemented = []
 #guard Fork.supported.length + Fork.unimplemented.length = Fork.all.length
 #guard Fork.amsterdam.index = 4
 #guard Fork.amsterdam.rules? = some amsterdamRules
@@ -2062,10 +2051,10 @@ example : amsterdamRules =
 -- here that
 -- `Fork.amsterdam.rules = .error (.unsupportedFork .amsterdam)` and that the
 -- refusal rendered the `UnsupportedForkError` golden; both are rewritten to
--- the admission that replaced them.)
-#guard Fork.supported.all (fun f => f.rules?.isSome)
-#guard Fork.supported.all (fun f => (f.rules?.map ForkRules.fork) = some f)
-#guard Fork.unimplemented.all (fun f => f.rules?.isNone)
+-- the admission that replaced them.) That `rules?` resolves and names the fork
+-- back is `Fork.rules?`'s definition with `Fork.ruleSet_fork`, and that nothing
+-- is unimplemented is `Fork.unimplemented_eq_nil`; the rows below pin `rules`
+-- and `validRules?`.
 #guard Fork.prague.rules = .ok pragueRules
 #guard Fork.osaka.rules = .ok osakaRules
 #guard Fork.bpo1.rules = .ok bpo1Rules

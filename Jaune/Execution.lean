@@ -2010,16 +2010,16 @@ the globals by `rfl`, so on every reachable machine "reads the record" and
 "reads the global" compute the same number. The three schedules the legacy lane
 can distinguish are therefore exactly the ones no fork carries.
 
-What survives here is the half that needs no machine: the same three numbers,
-each row paired with the Prague value it differs from. **Two of the four rows
-below bite and two do not**, and this docstring said otherwise until the
-independent review (F-2) measured it. The 14,500 and 5,400 rows run
+What survives here is the half that needs no machine, each row paired with
+the Prague value it differs from. The 14,500 and 5,400 rows run
 `GasSchedule.accessCost`, `GasSchedule.accessDelegation` and
 `GasSchedule.delegationCost`, so a helper that stopped reading its schedule
-argument fails there. The 31,000 row restates this record's own `createAccess`
-literal, and the 32,700 row is arithmetic over two globals and a literal field;
-neither can fail for anything an instruction site does, so the CREATE and
-SELFDESTRUCT quantities have **no function-level control** here.
+argument fails there. The independent review (F-2) found that the former
+31,000 row only restated this record's own `createAccess` literal and the
+former 32,700 row was arithmetic over two globals and a literal field; neither
+could fail for anything an instruction site does, so both were removed
+(evidence-economy trim, 2026-09-23) and the CREATE and SELFDESTRUCT quantities
+have **no function-level control** here.
 `.createAccess` and `.callValue` are field projections, not functions, and
 listing them beside three real `GasSchedule` functions is what made the earlier
 wording read as stronger than it was.
@@ -2032,7 +2032,7 @@ site coverage**. It is shown to bite twice, each in a disposable tree: on
 on `Linst.run`'s legacy SELFDESTRUCT arm (`Jaune/Machine.lean`) reading the one
 that shadows `coldAccountAccess` -- each leaves the tree green with every
 `#guard` below still passing, and turns only that gate red. Its three names
-cover exactly the CREATE and SELFDESTRUCT reads the two vacuous rows miss.
+cover exactly the CREATE and SELFDESTRUCT reads no row here controls.
 
 The two globals are named here by the field they shadow rather than spelled,
 because that gate's inventory is a plain identifier grep with **no comment
@@ -2210,15 +2210,16 @@ private def meteringGuardSelfdestructCharges
 -- address cold.  Every CALL-family legacy arm must charge both through the
 -- selected schedule; the value-bearing arms also read its `callValue`.
 --
--- The rows below price exactly the quantities the retired legacy-record rows
--- priced -- 31,000 for the CREATE base, 14,500 for a delegated value-bearing
--- call, 5,400 for a delegated no-value call, 32,700 for a cold sweep to a new
--- beneficiary -- but through the schedule-carrying functions themselves rather
--- than through a machine, because a machine now carries a `Fork` and cannot
--- carry these numbers. `meteringGuardLegacySchedule` says why. Each row is
--- paired with the Prague value it differs from, so a function that stopped
--- reading its schedule argument turns both halves of the pair equal and fails
--- here.
+-- The rows below price two of the quantities the retired legacy-record rows
+-- priced -- 14,500 for a delegated value-bearing call and 5,400 for a
+-- delegated no-value call -- but through the schedule-carrying functions
+-- themselves rather than through a machine, because a machine now carries a
+-- `Fork` and cannot carry these numbers. (The CREATE-base and cold-sweep rows,
+-- 31,000 and 32,700, restated a definition's literal and arithmetic over
+-- definitions, so they were removed; `meteringGuardLegacySchedule` says why.)
+-- Each row is paired with the Prague value it differs from, so a function that
+-- stopped reading its schedule argument turns both halves of the pair equal and
+-- fails here.
 private def meteringGuardDelegationDevm : Devm :=
   meteringGuardDelegatedDevm .prague []
 
@@ -2233,8 +2234,6 @@ private def meteringGuardDelegatedCharge (gas : GasSchedule) (value : B256) : Na
   let delegated := (gas.accessDelegation devm meteringGuardCallee).2.2.2.1
   pre + delegated + (if value = 0 then 0 else gas.callValue)
 
-#guard meteringGuardLegacySchedule.createAccess = 31000
-#guard pragueGasSchedule.createAccess = 32000
 #guard meteringGuardDelegatedCharge meteringGuardLegacySchedule 1 = 14500
 #guard meteringGuardDelegatedCharge pragueGasSchedule 1 = 14200
 #guard meteringGuardDelegatedCharge meteringGuardLegacySchedule 0 = 5400
@@ -2245,12 +2244,6 @@ private def meteringGuardDelegatedCharge (gas : GasSchedule) (value : B256) : Na
     meteringGuardDelegationDevm meteringGuardCallee).2.2 = 2700
 #guard (pragueGasSchedule.delegationCost
     meteringGuardDelegationDevm meteringGuardCallee).2.2 = 2600
--- A cold sweep to a new beneficiary: `SELFDESTRUCT`'s base, the schedule's cold
--- account access, and the legacy new-account surcharge.
-#guard gasSelfDestruct + meteringGuardLegacySchedule.coldAccountAccess
-    + gasSelfDestructNewAccount = 32700
-#guard gasSelfDestruct + pragueGasSchedule.coldAccountAccess
-    + gasSelfDestructNewAccount = 32600
 
 -- The no-value call variants pay only the cold account access at this input.
 #guard meteringGuardCallCharges .prague 0 .delegatecall
