@@ -19,6 +19,7 @@ import Jaune.Exec
 import Jaune.ExecDeriv
 import Jaune.ExecSettlement
 import Jaune.ExecChronology
+import Jaune.SymbolicPush
 import Jaune.MessageExecution
 import Jaune.Transaction
 

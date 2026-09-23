@@ -12,6 +12,10 @@ require mathlib from git
 @[default_target]
 lean_lib «Jaune» where
 
+/-- Consumer examples compile in the ambient package, outside the library import closure. -/
+@[default_target]
+lean_lib «Examples» where
+
 @[default_target]
 lean_exe «jaune» where
   root := `Main
