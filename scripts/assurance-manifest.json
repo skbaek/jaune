@@ -24,7 +24,7 @@
         "print_axioms": "scripts/AxiomCheck.lean:173"
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
-      "downstream_check": "Blanc scripts/check.sh row for Blanc.Frame.raw_commits_of_settlementCommits retained; it follows Blanc's adoption of the Jaune name",
+      "downstream_check": "Blanc's duplicate row for Blanc.Frame.raw_commits_of_settlementCommits is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
     },
     {
@@ -44,7 +44,7 @@
         "print_axioms": "scripts/AxiomCheck.lean:174"
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
-      "downstream_check": "Blanc scripts/check.sh row for Blanc.Exec.descendantFrames_runOk_of_settlementCommits retained; it follows Blanc's adoption of the Jaune name",
+      "downstream_check": "Blanc's duplicate row for Blanc.Exec.descendantFrames_runOk_of_settlementCommits is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
     },
     {
@@ -64,7 +64,7 @@
         "print_axioms": "scripts/AxiomCheck.lean:175"
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
-      "downstream_check": "Blanc scripts/check.sh row for Blanc.Exec.descendantFrames_runOk_of_not_settlementCommits retained; it follows Blanc's adoption of the Jaune name",
+      "downstream_check": "Blanc's duplicate row for Blanc.Exec.descendantFrames_runOk_of_not_settlementCommits is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
     },
     {
@@ -84,7 +84,7 @@
         "print_axioms": "scripts/AxiomCheck.lean:176"
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
-      "downstream_check": "Blanc scripts/check.sh row for Blanc.Exec.descendantFrames_runOk_create_codeDepositRollback retained; it follows Blanc's adoption of the Jaune name",
+      "downstream_check": "Blanc's duplicate row for Blanc.Exec.descendantFrames_runOk_create_codeDepositRollback is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
     },
     {
@@ -104,7 +104,7 @@
         "print_axioms": "scripts/AxiomCheck.lean:177"
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
-      "downstream_check": "Blanc scripts/check.sh row for Blanc.Exec.committedFrames_eq_nil_of_not_commits retained; it follows Blanc's adoption of the Jaune name",
+      "downstream_check": "Blanc's duplicate row for Blanc.Exec.committedFrames_eq_nil_of_not_commits is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
     },
     {
@@ -124,7 +124,7 @@
         "print_axioms": "scripts/AxiomCheck.lean:178"
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
-      "downstream_check": "Blanc scripts/check.sh row for Blanc.ProcessMessage.settlementCommits_of_some_ok_clean retained; it follows Blanc's adoption of the Jaune name",
+      "downstream_check": "Blanc's duplicate row for Blanc.ProcessMessage.settlementCommits_of_some_ok_clean is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
     },
     {
@@ -144,7 +144,7 @@
         "print_axioms": "scripts/AxiomCheck.lean:179"
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
-      "downstream_check": "Blanc scripts/check.sh row for Blanc.Frame.settlementCommits_ofCall_of_raw_commits retained; it follows Blanc's adoption of the Jaune name",
+      "downstream_check": "Blanc's duplicate row for Blanc.Frame.settlementCommits_ofCall_of_raw_commits is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
     },
     {
@@ -164,7 +164,7 @@
         "print_axioms": "scripts/AxiomCheck.lean:190"
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
-      "downstream_check": "Blanc scripts/check.sh row for Blanc.Exec.retainedNodes_runOk_of_settlementCommits retained; it follows Blanc's adoption of the Jaune name",
+      "downstream_check": "Blanc's duplicate row for Blanc.Exec.retainedNodes_runOk_of_settlementCommits is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
     },
     {
@@ -184,7 +184,7 @@
         "print_axioms": "scripts/AxiomCheck.lean:191"
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
-      "downstream_check": "Blanc scripts/check.sh row for Blanc.Exec.retainedNodes_runOk_of_not_settlementCommits retained; it follows Blanc's adoption of the Jaune name",
+      "downstream_check": "Blanc's duplicate row for Blanc.Exec.retainedNodes_runOk_of_not_settlementCommits is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
     },
     {
@@ -204,7 +204,7 @@
         "print_axioms": "scripts/AxiomCheck.lean:669"
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
-      "downstream_check": "Blanc scripts/check.sh row for Blanc.benvAfterTransfer_stat retained; it follows Blanc's adoption of the Jaune name",
+      "downstream_check": "Blanc's duplicate row for Blanc.benvAfterTransfer_stat is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
     },
     {
@@ -224,7 +224,7 @@
         "print_axioms": "scripts/AxiomCheck.lean:1122"
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
-      "downstream_check": "Blanc scripts/check.sh row for Blanc.Frame.enter_run_benvStat retained; it follows Blanc's adoption of the Jaune name",
+      "downstream_check": "Blanc's duplicate row for Blanc.Frame.enter_run_benvStat is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
     },
     {
@@ -244,7 +244,7 @@
         "print_axioms": "scripts/AxiomCheck.lean:1123"
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
-      "downstream_check": "Blanc scripts/check.sh row for Blanc.RunFrame.benvStat_eq retained; it follows Blanc's adoption of the Jaune name",
+      "downstream_check": "Blanc's duplicate row for Blanc.RunFrame.benvStat_eq is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
     },
     {
@@ -264,7 +264,7 @@
         "print_axioms": "scripts/AxiomCheck.lean:1124"
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
-      "downstream_check": "Blanc scripts/check.sh row for Blanc.genericCall.step_spawn_benvStat retained; it follows Blanc's adoption of the Jaune name",
+      "downstream_check": "Blanc's duplicate row for Blanc.genericCall.step_spawn_benvStat is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
     },
     {
@@ -284,7 +284,7 @@
         "print_axioms": "scripts/AxiomCheck.lean:1125"
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
-      "downstream_check": "Blanc scripts/check.sh row for Blanc.genericCreate.step_spawn_benvStat retained; it follows Blanc's adoption of the Jaune name",
+      "downstream_check": "Blanc's duplicate row for Blanc.genericCreate.step_spawn_benvStat is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
     },
     {
@@ -304,7 +304,7 @@
         "print_axioms": "scripts/AxiomCheck.lean:1126"
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
-      "downstream_check": "Blanc scripts/check.sh row for Blanc.Xinst.step_spawn_benvStat retained; it follows Blanc's adoption of the Jaune name",
+      "downstream_check": "Blanc's duplicate row for Blanc.Xinst.step_spawn_benvStat is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
     },
     {
