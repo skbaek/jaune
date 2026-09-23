@@ -43,6 +43,8 @@ jobs:
         run: scripts/check-hygiene.sh
       - name: Semantic integrity
         run: scripts/check-integrity.sh
+      - name: Library and example connectivity
+        run: python3 scripts/check-consumer-boundary.py
 
   build:
     runs-on: ubuntu-24.04

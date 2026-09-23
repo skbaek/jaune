@@ -646,3 +646,11 @@ source trees and their root modules. Integrity scans examples (including files
 not imported by `Examples.lean`) under R1–R4; R1 also recursively scans Jaune,
 so a nested module cannot escape the absence rule. Existing allowlists and
 budgets apply unchanged. Missing example tree/root is a setup failure.
+
+`python3 scripts/check-consumer-boundary.py` is a static CI check that the seven
+canonical execution modules are reachable from `Jaune.lean`, every source under
+`Examples/` is reachable from `Examples.lean`, and both libraries retain default
+Lake registration. It rejects Blanc/Creme imports in either source tree and
+example imports in the production closure. It scans actual source imports after
+removing nested comments; unsupported import syntax fails explicitly. It does
+not establish theorem types, axiom sets, or successful external installation.
