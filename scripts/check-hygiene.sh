@@ -3,7 +3,7 @@
 #
 # Fails if any forbidden pattern appears in the scanned source that is not
 # recorded in the committed allowlist scripts/hygiene-allow.txt. The scanned
-# source is every `*.lean` under Jaune/ plus the root-level MemoryProbe.lean,
+# source is every `*.lean` under Jaune/ and Examples/, plus their roots and MemoryProbe.lean,
 # which is a tracked Lean executable built by the ordinary `lake build` and is
 # therefore part of the surface this gate defends; it was outside the scan
 # until the memory-closure repair brought it in. Forbidden patterns:
@@ -78,13 +78,13 @@ set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
-SRC_DIR="Jaune"
+SRC_DIRS="Jaune Examples"
 # Tracked Lean sources outside SRC_DIR that are nonetheless part of the scanned
 # surface. MemoryProbe.lean is the bounded memory regression's executable: it is
 # built by `lake build` and asserted by scripts/check-memory-probe.sh, so it is
 # scanned here rather than left as the one Lean file nothing looks at.
-EXTRA_SRC="MemoryProbe.lean"
-SCAN_LABEL="$SRC_DIR/ + $EXTRA_SRC"
+EXTRA_SRC="Jaune.lean Examples.lean MemoryProbe.lean"
+SCAN_LABEL="$SRC_DIRS trees + $EXTRA_SRC"
 ALLOW="$SCRIPT_DIR/hygiene-allow.txt"
 
 # Hygiene proper: unanchored, since these are never legitimate anywhere.
@@ -115,10 +115,12 @@ if [ $# -ne 0 ]; then
   echo "usage: scripts/check-hygiene.sh" >&2
   exit 2
 fi
-if [ ! -d "$ROOT/$SRC_DIR" ]; then
-  echo "REGRESSION — hygiene: source tree not found: $ROOT/$SRC_DIR"
-  exit 2
-fi
+for src in $SRC_DIRS; do
+  if [ ! -d "$ROOT/$src" ]; then
+    echo "REGRESSION — hygiene: source tree not found: $ROOT/$src"
+    exit 2
+  fi
+done
 for extra in $EXTRA_SRC; do
   if [ ! -f "$ROOT/$extra" ]; then
     echo "REGRESSION — hygiene: scanned source not found: $ROOT/$extra"
@@ -129,7 +131,7 @@ done
 normalise() { sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s/[[:space:]]+/ /g'; }
 
 # Current occurrences, normalised to "<relpath> <collapsed source line>".
-HITS="$(cd "$ROOT" && grep -rEn "$PATTERN" "$SRC_DIR" --include='*.lean' $EXTRA_SRC 2>/dev/null \
+HITS="$(cd "$ROOT" && grep -rEn "$PATTERN" $SRC_DIRS --include='*.lean' $EXTRA_SRC 2>/dev/null \
   | awk '{
       path = $0; sub(/:[0-9]+:.*$/, "", path)
       line = $0; sub(/^[^:]+:[0-9]+:/, "", line)

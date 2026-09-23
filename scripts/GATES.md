@@ -636,3 +636,13 @@ announces a `RECLAIMED` line, and proceeds.
   this host's ~9 GB of swap, inflating wall time several-fold and producing
   pure-artifact DRIFT lines. Classifications stay trustworthy under contention;
   timings do not.
+
+### Ambient execution examples
+
+`Examples` is a default Lake library in the same package and revision as Jaune;
+the ordinary owned default build elaborates `Examples.Execution`. It is outside
+Jaune's production import closure. Hygiene scans every Lean file under both
+source trees and their root modules. Integrity scans examples (including files
+not imported by `Examples.lean`) under R1–R4; R1 also recursively scans Jaune,
+so a nested module cannot escape the absence rule. Existing allowlists and
+budgets apply unchanged. Missing example tree/root is a setup failure.

@@ -38,11 +38,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-      # No Lean toolchain needed — a fail-closed grep gate against a committed
-      # allowlist (scripts/hygiene-allow.txt) so no new dbg_trace / sorry can
-      # enter Jaune/ unnoticed.
-      - name: Source-hygiene gate (no stray dbg_trace / sorry under Jaune/)
+      # Static checks cover library source and ambient consumer examples.
+      - name: Source hygiene
         run: scripts/check-hygiene.sh
+      - name: Semantic integrity
+        run: scripts/check-integrity.sh
 
   build:
     runs-on: ubuntu-24.04

@@ -21,16 +21,17 @@
 # Four rules, all fail-closed:
 #
 #   R1  ABSENCE, no allowlist. No `partial def`, `implemented_by`, or
-#       `dbg_trace` anywhere under Jaune/, in Main.lean, or in MemoryProbe.lean.
+#       `dbg_trace` anywhere recursively under Jaune/ or Examples/, in their
+#       roots, Main.lean, or MemoryProbe.lean.
 #       The historical
 #       `~/plans/silence.md` record documents removal of the last of each from
 #       the library, and this gate keeps them out. There is deliberately no
 #       carve-out and no allowlist row for these.
 #
-#   R2  No `panic` / `panic!` in the closure, except exact allowlist rows.
+#   R2  No `panic` / `panic!` in the closure or examples, except exact allowlist rows.
 #
 #   R3  No raw bang operation (`get!`, `set!`, `modify!`, `xs[i]!`, ...) in the
-#       closure, except exact allowlist rows.
+#       closure or examples, except exact allowlist rows.
 #
 #   R4  No stringly-typed semantic error carrier or string-driven semantic
 #       branch, except exact allowlist rows. Since Step 10 completed the
@@ -110,6 +111,7 @@ fi
 
 INVENTORY="$(cd "$ROOT" && python3 - <<'PY'
 import os, re, sys
+from pathlib import Path
 
 # ---- the exact local module import closure of Jaune.lean -------------------
 def path_of(mod):
@@ -133,8 +135,16 @@ while stack:
 
 closure_files = sorted(path_of(m) for m in closure)
 
+# Examples are consumer code, never production imports. Scan even orphaned
+# examples so removing an import cannot hide a forbidden construct.
+if not Path("Examples").is_dir() or not Path("Examples.lean").is_file():
+    print("SETUP missing Examples source tree or root", file=sys.stderr)
+    sys.exit(2)
+example_files = ["Examples.lean"] + sorted(str(p) for p in Path("Examples").rglob("*.lean"))
+protected_files = sorted(set(closure_files) | set(example_files))
+
 # The post-Step-10 scope of R4: the closure plus the runner boundary, where
-# the fixture parser and the CLI renderer live. Strings there are legitimate
+# examples, the fixture parser and the CLI renderer live. Strings there are legitimate
 # only at exact-listed parser/renderer lines.
 # MemoryProbe.lean is the second tracked Lean executable in this repository:
 # a bounded native probe built by the ordinary `lake build` and asserted by
@@ -142,7 +152,7 @@ closure_files = sorted(path_of(m) for m in closure)
 # memory-closure repair; an anti-regression instrument that no gate reads is
 # one that rots. It carries a typed ProbeError rather than an `Except String`,
 # so it enters this scope with no allowlist row.
-r4_files = sorted(set(closure_files)
+r4_files = sorted(set(protected_files)
                   | {"Jaune/ChainStore.lean", "Jaune/FixtureException.lean",
                      "Main.lean", "MemoryProbe.lean"})
 
@@ -151,16 +161,17 @@ r4_files = sorted(set(closure_files)
 # them out of all of them. scripts/*.lean are Lean metaprograms over `Expr`
 # and are deliberately not in scope.
 r1_files = sorted(
-    ["Jaune/" + f for f in os.listdir("Jaune") if f.endswith(".lean")]
+    [str(p) for p in Path("Jaune").rglob("*.lean")]
+    + example_files
     + ["Jaune.lean", "Main.lean", "MemoryProbe.lean"]
 )
 
 RULES = [
     # rule, scope, compiled pattern
     ("R1", r1_files, re.compile(r'partial\s+def|implemented_by|dbg_trace')),
-    ("R2", closure_files,
+    ("R2", protected_files,
      re.compile(r'(?<![A-Za-z0-9_])panic!?(?![A-Za-z0-9_])')),
-    ("R3", closure_files,
+    ("R3", protected_files,
      re.compile(r'(?<![A-Za-z0-9_])'
                 r'(get!|set!|modify!|getLast!|head!|back!|swap!|uget!|getElem!)'
                 r'(?![A-Za-z0-9_])'
@@ -285,5 +296,5 @@ if [ "$PENDING" -gt "$PENDING_MAX" ]; then
 fi
 
 NHITS="$(printf '%s\n' "$HITS" | grep -c .)"
-echo "OK — integrity: all $NHITS occurrence(s) in the audited scope (Jaune.lean closure + runner boundary and MemoryProbe.lean for R4) are allowlisted; $PENDING pending (budget $PENDING_MAX); no new ones"
+echo "OK — integrity: all $NHITS occurrence(s) in the audited scope (Jaune.lean closure + Examples; runner boundary and MemoryProbe.lean for R4) are allowlisted; $PENDING pending (budget $PENDING_MAX); no new ones"
 exit 0
