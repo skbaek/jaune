@@ -240,7 +240,7 @@ with the same executable inputs.
 | gate | proves | scale | time |
 |---|---|---|---|
 | `scripts/check-legacy.sh --smoke` | broad conformance vs baseline | 174 classifications | 79.9 s at `--jobs auto` (3 jobs, 2026-09-21 catalogue) |
-| `scripts/check-legacy.sh --bls` | BLS12-381 + point-evaluation vs hand-authored target baseline. **Unique protection:** it is CI's only BLS12-381/point-evaluation conformance (the nightly job); the mainnet suites carry the same EIP-2537/EIP-4844 modules from a newer release but run only locally | 29 | 76.0 s at `--jobs auto` (3 jobs, 2026-09-21 catalogue); ~172 s summed sequential |
+| `scripts/check-legacy.sh --bls` | BLS12-381 + point-evaluation vs hand-authored target baseline. **Unique protection:** it is CI's only BLS12-381/point-evaluation conformance (the nightly job); the mainnet suites carry the same EIP-2537/EIP-4844 modules from a newer release but run only locally | 29 | 76.0 s at `--jobs auto` (3 jobs, 2026-09-21 catalogue); 171.9 s summed per-file, sequential, 2026-08-25 host-local report (pre-4.34) |
 | `scripts/check-ec.sh` | EC differential oracle (pinned, differential, identity cases) | — | 11.6 s including compiling its Lean checker (2026-09-21 catalogue) |
 | `scripts/check-vectors.sh` | generated vector conformance + controls + declared-case-count coverage | 53 files, 1,990 cases, 5 controls | ~7.8 min; **~1.5 min at `--jobs 10`**; 197.8 s at `--jobs auto` (2026-09-21 catalogue); `auto` is resource-dependent |
 | `scripts/check-elab.sh` | per-module elaboration time vs the ignored host-local `scripts/baseline-elab.txt` (auto-initialized on first run) | 20 modules, host-dependent | ~70 s on the catalogue host |
@@ -254,7 +254,7 @@ with the same executable inputs.
 | `scripts/check-mainnet.sh --suite prague` | strict all-PASS | 2,526 | ~12 min | **341.7 s** (2026-09-21 catalogue) |
 | `scripts/check-mainnet.sh --suite full` | strict all-PASS, whole manifest; **supersedes `osaka`, `prague`, `transitions` and `smoke` in a closure bundle** | 5,006 | ~20.8 min | **618.9 s** (2026-09-21 catalogue) |
 | `scripts/check-mainnet.sh --lane amsterdam --suite amsterdam` | strict all-PASS over the static Amsterdam corpus, zero exclusions inside `for_amsterdam` | 3,159 | not measured; run it parallel | **454.5 s** (2026-09-21 catalogue; 267 s at `--jobs 6`, 2026-09-06) |
-| `scripts/check-mainnet.sh --lane amsterdam --suite amsterdam-full` | the union of `amsterdam` and `amsterdam-transitions`; **supersedes both, and `amsterdam-smoke`, in a closure bundle** | 3,201 | not measured; run it parallel | **463.6 s** (2026-09-21 catalogue) |
+| `scripts/check-mainnet.sh --lane amsterdam --suite amsterdam-full` | the union of `amsterdam` and `amsterdam-transitions`; pass rule as `amsterdam-transitions`: all-PASS modulo DP-1's four recorded files; **supersedes both, and `amsterdam-smoke`, in a closure bundle** | 3,201 | not measured; run it parallel | **463.6 s** (2026-09-21 catalogue, a run RED on exactly DP-1's four files) |
 | `scripts/check-legacy.sh --full` | every legacy fixture vs baseline; **supersedes `--smoke`, `--depth`, `--patch` and `--rlp4` in a closure bundle** | 2,983 | **≥ 19 min** | **501.3 s** at 4 jobs (2026-09-21 catalogue) |
 
 The current-mainnet scales above describe `tests@v20.0.2`; their runtime
@@ -299,8 +299,10 @@ file of its components under a pass rule at least as strict: `full` and
 every `--smoke` and `--depth` baseline line is identical in
 `baseline-full.txt`, and every `--patch`/`--rlp4` file is `PASS` there. Running
 both bought ~1,155 s of repeated files and no protection in the 2026-09-21
-catalogue. The subsets stay available, and remain the right tools, for
-iterating.
+catalogue. The legacy premise (baseline lines identical, patch/rlp4 files
+`PASS`) was verified by inspection at `69fb6b6` and must be re-verified on any
+`--rebase` of `baseline-full.txt`. The subsets stay available, and remain the
+right tools, for iterating.
 
 ### The Glamsterdam devnet lane
 
@@ -324,7 +326,7 @@ with the old statement named in the harness):
 | `--suite amsterdam-smoke` | the 16 lowest SHA-256 ranks of `release_commit:path` over that suite | 16 / 60 | all-PASS; no lock |
 | `--dir <subtree> --suite <suite>` | one subtree under `blockchain_tests` (`for_amsterdam/amsterdam/eip*` for the static suite, `for_bpo2toamsterdamattime15k/<fork>/<eip>/<module>` for the transition suite); refused when it names no file, and when its on-disk `.json` count differs from the manifest's count for it, so a mixed or mistyped subtree is never run over a subset or reported over zero files | the fourteen static `eip*` subtrees are 730 / 3,900 together; the thirteen transition subtrees are 42 / 127 | all-PASS; the lock follows the suite name |
 | `--suite amsterdam-transitions` | every `BPO2ToAmsterdamAtTime15k` fixture — the activation boundary, run as a `ChainConfig` whose rules are chosen per block by timestamp | 42 / 127, across 13 subtrees (12 `amsterdam/eip*` modules and one re-filled Berlin precompile-warming file that alone holds 50 of the 127 cases) | all-PASS on verdict **and** identity, like every `check-mainnet.sh` suite; zero exclusions inside `for_bpo2toamsterdamattime15k`; no lock when sequential (as `transitions` on the mainnet lane) |
-| `--suite amsterdam-full` | the union | 3,201 / 25,028 | all-PASS; takes the heavy lock |
+| `--suite amsterdam-full` | the union | 3,201 / 25,028 | all-PASS modulo the four recorded DP-1 files below, as `amsterdam-transitions`; takes the heavy lock |
 
 Runtime, measured 2026-09-06 on the WSL2 host at `--jobs 6` under the memory
 scope: `amsterdam-transitions` 1.45 s of fixture time (~18 s wall with the
