@@ -654,3 +654,16 @@ Lake registration. It rejects Blanc/Creme imports in either source tree and
 example imports in the production closure. It scans actual source imports after
 removing nested comments; unsupported import syntax fails explicitly. It does
 not establish theorem types, axiom sets, or successful external installation.
+
+The `external-consumer` CI job prepares a disposable package with
+`python3 scripts/external-consumer.py prepare DIRECTORY --url URL --revision SHA`,
+builds `Consumer`, then runs the copied verifier with `verify DIRECTORY`.
+Preparation requires a fresh directory and a full commit ID. Verification checks
+the exact Git URL/revision, installed HEAD, clean tracked source, matching
+toolchain, Git-only dependency types, absence of Blanc/Creme packages and the
+consumer olean. It does not compile; local builds use the normal host launcher.
+CI deletes its sparse bootstrap checkout before building, so source must come
+from the dependency. GitHub build-cache restoration is disabled; Mathlib cache
+download is enabled. A local bare-mirror rehearsal is useful development evidence
+but is not the CI HTTPS-install verdict. Hygiene and integrity also scan the
+external smoke source before it is copied.

@@ -141,6 +141,14 @@ if not Path("Examples").is_dir() or not Path("Examples.lean").is_file():
     print("SETUP missing Examples source tree or root", file=sys.stderr)
     sys.exit(2)
 example_files = ["Examples.lean"] + sorted(str(p) for p in Path("Examples").rglob("*.lean"))
+# The external smoke source is copied into a disposable Git consumer in CI.
+# It receives the same source checks before copying, without becoming a
+# production import or a permanently separate package.
+consumer_file = "scripts/consumer/Consumer.lean"
+if not Path(consumer_file).is_file():
+    print("SETUP missing external consumer source", file=sys.stderr)
+    sys.exit(2)
+example_files.append(consumer_file)
 protected_files = sorted(set(closure_files) | set(example_files))
 
 # The post-Step-10 scope of R4: the closure plus the runner boundary, where

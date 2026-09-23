@@ -58,3 +58,33 @@ deviations described in [the corpus guide](../scripts/t8n/README.md). CI already
 runs this case as part of `scripts/check-t8n.sh`; this example adds no duplicate
 conformance harness and changes no golden. It is finite transaction evidence,
 separate from the universally quantified direct-frame proof above.
+
+## Installing as a Git dependency
+
+The external smoke source in [scripts/consumer/Consumer.lean](../scripts/consumer/Consumer.lean)
+constructs a complete out-of-gas derivation and proves its interpreter result.
+It imports only `Jaune.SymbolicPush`; it uses neither this example library nor
+a Blanc package. A disposable package can be prepared for a published commit:
+
+```sh
+python3 scripts/external-consumer.py prepare /tmp/jaune-consumer \
+  --url https://github.com/skbaek/jaune.git --revision "$(git rev-parse HEAD)"
+cd /tmp/jaune-consumer
+lake update
+lake exe cache get
+lake build
+python3 verify-consumer.py verify .
+```
+
+Use a fresh destination path. On a coordinated development host, use its admitted
+build launcher. The generated package carries this checkout's toolchain and a
+Git dependency on the requested commit. Verification checks the manifest URL and
+revision, the installed clean checkout, matching toolchains, Git-only dependency
+types and the compiled consumer artifact. It rejects a sibling path dependency.
+
+CI prepares the package from a sparse bootstrap checkout, removes that checkout,
+then builds and verifies the Git-installed consumer. It disables GitHub artifact
+cache restoration and downloads Mathlib's published cache; that is an explicit
+cache condition, not a claim that all dependencies compile from source. Local
+file-URL mirrors are accepted only for unpublished-candidate rehearsals and do
+not establish HTTPS availability or newcomer download cost.

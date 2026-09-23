@@ -61,3 +61,34 @@ jobs:
         run: scripts/check-t8n.sh
       - name: U256 / word / hash primitives (scripts/check-u256.sh)
         run: scripts/check-u256.sh
+
+  external-consumer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      # Only bootstrap files are checked out; Jaune source must arrive through
+      # the disposable package's exact Git dependency.
+      - uses: actions/checkout@v6
+        with:
+          path: source-metadata
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /lean-toolchain
+            /scripts/external-consumer.py
+            /scripts/consumer/Consumer.lean
+      - name: Prepare exact-revision Git consumer
+        run: |
+          python3 source-metadata/scripts/external-consumer.py prepare external-consumer \
+            --url "https://github.com/${GITHUB_REPOSITORY}.git" --revision "$GITHUB_SHA"
+          rm -rf source-metadata
+      - uses: leanprover/lean-action@v1
+        with:
+          lake-package-directory: external-consumer
+          auto-config: false
+          build: true
+          test: false
+          lint: false
+          use-github-cache: false
+          use-mathlib-cache: true
+      - name: Verify installed Git identity and built consumer
+        run: python3 external-consumer/verify-consumer.py verify external-consumer

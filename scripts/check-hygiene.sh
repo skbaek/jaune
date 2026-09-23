@@ -83,7 +83,7 @@ SRC_DIRS="Jaune Examples"
 # surface. MemoryProbe.lean is the bounded memory regression's executable: it is
 # built by `lake build` and asserted by scripts/check-memory-probe.sh, so it is
 # scanned here rather than left as the one Lean file nothing looks at.
-EXTRA_SRC="Jaune.lean Examples.lean MemoryProbe.lean"
+EXTRA_SRC="Jaune.lean Examples.lean MemoryProbe.lean scripts/consumer/Consumer.lean"
 SCAN_LABEL="$SRC_DIRS trees + $EXTRA_SRC"
 ALLOW="$SCRIPT_DIR/hygiene-allow.txt"
 

@@ -51,6 +51,14 @@ Expect a few hundred MB under `.lake/` rather than several GB, and a
 correspondingly shorter first build. A bare `lake exe cache get` still works
 and is the right choice if you intend to import more of mathlib yourself.
 
+## Proving execution properties
+
+Start with the [execution examples](Examples/README.md): symbolic instruction
+rules, a complete composed raw-frame proof, and a separate checked transaction
+entry. The same guide shows installation through an exact Git dependency.
+The examples build with their containing revision and are outside Jaune's
+production import closure.
+
 ## Optional enhanced agent workflow
 
 Jaune is standalone: the installation above is complete, and Creme is not a
