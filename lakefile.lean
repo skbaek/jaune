@@ -29,3 +29,14 @@ path builds is an instrument that rots.
 @[default_target]
 lean_exe «jaune-memory-probe» where
   root := `MemoryProbe
+
+/--
+Exact axiom expectations for the canonical execution surface
+(`scripts/ExecutionAxioms.lean`), checked by the from-scratch walker in
+`scripts/AxiomAudit.lean`. A default target, so an ordinary build enforces them.
+`AxiomAudit` imports only `Lean`, for downstream reuse.
+-/
+@[default_target]
+lean_lib «Assurance» where
+  srcDir := "scripts"
+  roots := #[`AxiomAudit, `ExecutionAxioms]

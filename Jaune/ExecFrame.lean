@@ -2,13 +2,14 @@ import Jaune.Execution
 
 /-!
 Generic frame and step relations used by complete execution derivations.
-The historical `Blanc` namespace preserves existing consumer interfaces;
-this module depends only on Jaune and its ordinary Lean dependencies.
+This module depends only on Jaune and its ordinary Lean dependencies.
 Compiler stack-prefix relations remain owned by Blanc.
 -/
 
-namespace Blanc
+namespace Jaune
 
+-- `ByteArray.getInst` and other extensions of root types live in `Jaune`;
+-- opening it lets generalized field notation (`code.getInst`) find them.
 open Jaune
 
 def Jinst.Run (evm : Evm) :
@@ -752,4 +753,4 @@ lemma Evm.step_spawn_inv {pc : Nat} {sevm : Sevm} {devm : Devm}
   · cases hs
 
 
-end Blanc
+end Jaune

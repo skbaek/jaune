@@ -7,8 +7,10 @@ Children precede resumed parents; rollback filters the retained chronology.
 Same-frame prefixes retain the existing descendant-to-root edge orientation.
 -/
 
-namespace Blanc
+namespace Jaune
 
+-- `ByteArray.getInst` and other extensions of root types live in `Jaune`;
+-- opening it lets generalized field notation (`code.getInst`) find them.
 open Jaune
 
 /-- Every reached driver node, in execution order.  This is deliberately not
@@ -206,4 +208,4 @@ theorem Exec.Deriv.ParentPrefix.trans
   | refl => exact right
   | step head rest ih => exact .step head (ih right)
 
-end Blanc
+end Jaune

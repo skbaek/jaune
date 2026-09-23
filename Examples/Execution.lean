@@ -12,21 +12,21 @@ open Jaune
 abbrev code (a b : UInt8) : ByteArray := ⟨#[0x60, a, 0x60, b, 0x00]⟩
 
 theorem first (a b : UInt8) :
-    Blanc.Ninst.At (code a b) 0 (.push [a] (by simp)) := by
-  simp [Blanc.Ninst.At, code, ByteArray.getInst,
+    Jaune.Ninst.At (code a b) 0 (.push [a] (by simp)) := by
+  simp [Jaune.Ninst.At, code, ByteArray.getInst,
     ← ByteArray.size_data, ByteArray.getElem_eq_getElem_data,
     UInt8.toInstType, UInt8.highs, UInt8.lows, ByteArray.sliceD, UInt8.toLinst]
   rfl
 
 theorem second (a b : UInt8) :
-    Blanc.Ninst.At (code a b) 2 (.push [b] (by simp)) := by
-  simp [Blanc.Ninst.At, code, ByteArray.getInst,
+    Jaune.Ninst.At (code a b) 2 (.push [b] (by simp)) := by
+  simp [Jaune.Ninst.At, code, ByteArray.getInst,
     ← ByteArray.size_data, ByteArray.getElem_eq_getElem_data,
     UInt8.toInstType, UInt8.highs, UInt8.lows, ByteArray.sliceD, UInt8.toLinst]
   rfl
 
-theorem last (a b : UInt8) : Blanc.Linst.At (code a b) 4 .stop := by
-  simp [Blanc.Linst.At, code, ByteArray.getInst,
+theorem last (a b : UInt8) : Jaune.Linst.At (code a b) 4 .stop := by
+  simp [Jaune.Linst.At, code, ByteArray.getInst,
     ← ByteArray.size_data, ByteArray.getElem_eq_getElem_data,
     UInt8.toInstType, UInt8.highs, UInt8.lows, UInt8.toLinst]
   rfl
@@ -39,7 +39,7 @@ def finalState (base : Devm) (a b : UInt8) : Devm :=
 
 /-- A data-valued derivation, built from the same constructors used by adequacy. -/
 def execution (env : Sevm) (base : Devm) (a b : UInt8) :
-    Blanc.Exec 0 { env with code := code a b } (initial base)
+    Jaune.Exec 0 { env with code := code a b } (initial base)
       (.ok (finalState base a b)) := by
   apply SymbolicPush.prepend [a] (by simp) (first a b)
   · simp [SymbolicPush.cost, initial, Devm.gasLeft, Devm.setMach, gVerylow]
@@ -48,7 +48,7 @@ def execution (env : Sevm) (base : Devm) (a b : UInt8) :
   · simp [SymbolicPush.cost, SymbolicPush.post, initial, Devm.gasLeft,
       Devm.setMach, gVerylow]
   · simp [SymbolicPush.post, initial, Devm.stack, Devm.setMach]
-  exact .halt (Blanc.Evm.step_last (devm := finalState base a b) (l := .stop) (last a b))
+  exact .halt (Jaune.Evm.step_last (devm := finalState base a b) (l := .stop) (last a b))
 
 theorem final_stack (base : Devm) (a b : UInt8) :
     (finalState base a b).stack = [Bytes.toB256 [b], Bytes.toB256 [a]] := rfl
@@ -66,6 +66,6 @@ theorem final_meta (base : Devm) (a b : UInt8) :
 theorem interpreter (env : Sevm) (base : Devm) (a b : UInt8) :
     exec ⟨0, { env with code := code a b }, initial base⟩ =
       .ok (finalState base a b) :=
-  (Blanc.exec_iff_exec_eq _ _ _ _).mp ⟨execution env base a b⟩
+  (Jaune.exec_iff_exec_eq _ _ _ _).mp ⟨execution env base a b⟩
 
 end Examples.Execution

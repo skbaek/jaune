@@ -5,11 +5,12 @@ import Jaune.Sufficiency
 The canonical complete execution derivation and its adequacy theorem.
 The first natural-number index is the initial program counter. The six
 constructors preserve child execution, settlement and parent resumption.
-The historical `Blanc.Exec` name is retained for downstream compatibility.
 -/
 
-namespace Blanc
+namespace Jaune
 
+-- `ByteArray.getInst` and other extensions of root types live in `Jaune`;
+-- opening it lets generalized field notation (`code.getInst`) find them.
 open Jaune
 
 /- Exec pc sevm devm ex is provable iff
@@ -454,4 +455,4 @@ lemma of_processCreateMessage (msg : Msg)
   of_runFrame eq
 
 
-end Blanc
+end Jaune

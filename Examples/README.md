@@ -21,9 +21,9 @@ These are direct-frame statements, not transaction validation or settlement
 claims. The bytecode example uses PUSH1; it does not establish support for every
 instruction or fork-specific opcode.
 
-`Jaune.Exec` owns the canonical execution type and adequacy theorem. Historical
-qualified names such as `Blanc.Exec` and `Blanc.exec_iff_exec_eq` remain for
-compatibility; importing a Blanc package is unnecessary. `Jaune.ExecDeriv`,
+The `Jaune.Exec` module owns the canonical execution type `Jaune.Exec` and its
+adequacy theorem `Jaune.exec_iff_exec_eq`; importing a Blanc package is
+unnecessary. `Jaune.ExecDeriv`,
 `Jaune.ExecSettlement` and `Jaune.ExecChronology` expose derivation, settlement and
 occurrence support respectively. Compiler and contract-specific APIs remain in
 Blanc.

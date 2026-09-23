@@ -8,8 +8,10 @@ Contract-neutral adapters between `exec (initEvm msg)` and top-level
 exceptional-halt outcomes.
 -/
 
-namespace Blanc
+namespace Jaune
 
+-- `ByteArray.getInst` and other extensions of root types live in `Jaune`;
+-- opening it lets generalized field notation (`code.getInst`) find them.
 open Jaune
 
 namespace MessageExecution
@@ -353,4 +355,4 @@ end MessageExecution
 @[simp] theorem Msg.initSevm_currentTarget (msg : Msg) :
     (initSevm msg).currentTarget = msg.currentTarget := rfl
 
-end Blanc
+end Jaune

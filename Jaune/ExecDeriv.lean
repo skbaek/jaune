@@ -6,8 +6,10 @@ Both child and resumed-parent recursive premises remain explicit. The strict
 order points from a proper subderivation to its enclosing derivation.
 -/
 
-namespace Blanc
+namespace Jaune
 
+-- `ByteArray.getInst` and other extensions of root types live in `Jaune`;
+-- opening it lets generalized field notation (`code.getInst`) find them.
 open Jaune
 
 abbrev Exec.Pred : Type :=
@@ -178,4 +180,4 @@ theorem Exec.Deriv.strongRec (π : Exec.Deriv.Pred) : □p (carryover π) → �
   apply ih' _ h_gt
 
 
-end Blanc
+end Jaune

@@ -5,8 +5,10 @@ Raw outcome commitment, complete frame settlement and retained child frames.
 CREATE code-deposit failure remains distinct from raw child success.
 -/
 
-namespace Blanc
+namespace Jaune
 
+-- `ByteArray.getInst` and other extensions of root types live in `Jaune`;
+-- opening it lets generalized field notation (`code.getInst`) find them.
 open Jaune
 
 /-- Whether an execution outcome commits its frame state. -/
@@ -127,7 +129,7 @@ private theorem processCreateMessage_clean_input
 execution itself was clean. -/
 theorem Frame.raw_commits_of_settlementCommits
     {frame : Frame} {raw : Execution}
-    (h : Blanc.Frame.settlementCommits frame raw = true) :
+    (h : Frame.settlementCommits frame raw = true) :
     Execution.commits raw = true := by
   unfold Frame.settlementCommits at h
   cases hsettled : frame.settle raw with
@@ -193,9 +195,9 @@ def Exec.descendantFrames {pc : Nat} {sevm : Sevm} {pre : Devm}
   | .runErr _ _ _ _ => []
   | .runOk (f := frame) (raw := raw) _ _ child _ next =>
       let childFrames :=
-        if h : Blanc.Frame.settlementCommits frame raw = true then
+        if h : Frame.settlementCommits frame raw = true then
           let hraw : Execution.commits raw = true :=
-            Blanc.Frame.raw_commits_of_settlementCommits h
+            Frame.raw_commits_of_settlementCommits h
           Exec.Frame.ofRun child hraw :: Exec.descendantFrames child
         else []
       childFrames ++ Exec.descendantFrames next
@@ -230,7 +232,7 @@ no retained frame, even if its raw execution itself committed. -/
     (child : Exec cevm.pc cevm.sta cevm.dyna raw)
     (hr : rsm.run (f.settle raw) = .ok devm')
     (next : Exec pc' sevm devm' out)
-    (hnot : Blanc.Frame.settlementCommits f raw ≠ true) :
+    (hnot : Frame.settlementCommits f raw ≠ true) :
     Exec.descendantFrames (Exec.runOk hstep henter child hr next) =
       Exec.descendantFrames next := by
   simp only [Exec.descendantFrames, dif_neg hnot, List.nil_append]
@@ -263,7 +265,7 @@ theorem Exec.descendantFrames_runOk_create_codeDepositRollback
   have hframeSettle : f.settle raw = .ok settled := by
     unfold Frame.settle Frame.settleMsg
     simpa only [hcreate, ↓reduceIte] using hsettled
-  unfold Blanc.Frame.settlementCommits at hcommit
+  unfold Frame.settlementCommits at hcommit
   rw [hframeSettle] at hcommit
   cases hoption : settled.error with
   | none => simp [hoption] at herror
@@ -498,4 +500,4 @@ theorem ProcessCreateMessage.ok_state_eq_inner_of_no_error
         rw [show inner.error = none from herror]
         rfl
 
-end Blanc
+end Jaune

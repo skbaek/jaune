@@ -25,7 +25,7 @@ theorem step_success (evm : Evm) (bytes : Bytes) (width : bytes.length ≤ 32)
       .cont (evm.pc + bytes.length + 1) (post bytes evm.dyna) := by
   dsimp [cost] at gas
   dsimp [Devm.stack] at room
-  rw [Blanc.Ninst.step_push]
+  rw [Ninst.step_push]
   simp [chargeGas_def, safeSub, gas, Devm.push_def, Except.assert,
     Devm.stack, Devm.setMach, room, post, cost, bind, Except.bind, Step.ofExecution]
 
@@ -35,7 +35,7 @@ theorem step_outOfGas (evm : Evm) (bytes : Bytes) (width : bytes.length ≤ 32)
     Ninst.step evm (.push bytes width) =
       .halt (.error ⟨.halt (.outOfGas .none), evm.dyna⟩) := by
   dsimp [cost] at gas
-  rw [Blanc.Ninst.step_push]
+  rw [Ninst.step_push]
   simp [chargeGas_def, safeSub, Nat.not_le_of_lt gas,
     bind, Except.bind, Step.ofExecution]
 
@@ -47,7 +47,7 @@ theorem step_stackOverflow (evm : Evm) (bytes : Bytes) (width : bytes.length ≤
       .halt (.error ⟨.halt (.stackOverflow .none), afterCharge bytes evm.dyna⟩) := by
   dsimp [cost] at gas
   dsimp [Devm.stack] at full
-  rw [Blanc.Ninst.step_push]
+  rw [Ninst.step_push]
   simp [chargeGas_def, safeSub, gas, Devm.push_def, Except.assert,
     Devm.stack, Devm.setMach, afterCharge, cost, bind, Except.bind,
     Step.ofExecution, Nat.not_lt_of_ge full]
@@ -55,11 +55,11 @@ theorem step_stackOverflow (evm : Evm) (bytes : Bytes) (width : bytes.length ≤
 /-- Prepend a decoded PUSH to a complete continuation, preserving its outcome. -/
 def prepend {pc : Nat} {sevm : Sevm} {pre : Devm} {out : Execution}
     (bytes : Bytes) (width : bytes.length ≤ 32)
-    (decoded : Blanc.Ninst.At sevm.code pc (.push bytes width))
+    (decoded : Ninst.At sevm.code pc (.push bytes width))
     (gas : cost bytes ≤ pre.gasLeft) (room : pre.stack.length < 1024)
-    (next : Blanc.Exec (pc + bytes.length + 1) sevm (post bytes pre) out) :
-    Blanc.Exec pc sevm pre out :=
-  .cont ((Blanc.Evm.step_next decoded).trans
+    (next : Exec (pc + bytes.length + 1) sevm (post bytes pre) out) :
+    Exec pc sevm pre out :=
+  .cont ((Evm.step_next decoded).trans
     (step_success ⟨pc, sevm, pre⟩ bytes width gas room)) next
 
 end Jaune.SymbolicPush
