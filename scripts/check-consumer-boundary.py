@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 EXECUTION_MODULES = {
     "Jaune.ExecFrame", "Jaune.Exec", "Jaune.ExecDeriv",
     "Jaune.ExecSettlement", "Jaune.ExecChronology",
-    "Jaune.MessageExecution", "Jaune.SymbolicPush",
+    "Jaune.MessageExecution", "Jaune.SymbolicPush", "Jaune.SymbolicArith",
 }
 
 

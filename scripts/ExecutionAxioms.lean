@@ -1,17 +1,24 @@
 import AxiomAudit
 import Jaune.ExecChronology
 import Jaune.MessageExecution
+import Jaune.SymbolicArith
 import Examples.Execution
+import Examples.Arithmetic
 
 /-!
 # Destination axiom audit for the canonical execution surface
 
-Thirty-eight approved rows (user decision `jaune-destination-axiom-pins-20260924`),
-each with the exact expected set `Classical.choice, Quot.sound, propext`. The
-first fifteen restate obligations Blanc already pinned under the declarations'
-former `Blanc.*` names; the rest bind the canonical `Exec` type and its
-constructors, adequacy, derivation operations, symbolic PUSH rules and the
-ambient example. Expectations are reviewed data: nothing here learns a set from
+Fifty-three rows, each with the exact expected set
+`Classical.choice, Quot.sound, propext`. The first thirty-eight are the approved
+rows of user decision `jaune-destination-axiom-pins-20260924`: fifteen restate
+obligations Blanc already pinned under the declarations' former `Blanc.*` names;
+the rest bind the canonical `Exec` type and its constructors, adequacy,
+derivation operations, symbolic PUSH rules and the PUSH example. The last
+fifteen, added with the declarations they audit (unit
+`jaune-c6-surface-20260924`), bind the symbolic arithmetic rules and the
+composed arithmetic example. `scripts/assurance-manifest.json` records each
+row's provenance, and `scripts/check-assurance-manifest.py` keeps the two in
+step. Expectations are reviewed data: nothing here learns a set from
 the candidate. The walk is `Jaune.AxiomAudit.auditFullAxioms`, never
 `Lean.collectAxioms`. The default `Assurance` target builds this file, so an
 ordinary build fails on any mismatch.
@@ -55,3 +62,18 @@ ordinary build fails on any mismatch.
 #expect_axioms Examples.Execution.final_gas [Classical.choice, Quot.sound, propext]
 #expect_axioms Examples.Execution.final_world [Classical.choice, Quot.sound, propext]
 #expect_axioms Examples.Execution.final_meta [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.SymbolicArith.step_eq [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.SymbolicArith.step_success [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.SymbolicArith.step_outOfGas [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.SymbolicArith.step_stackUnderflow [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.SymbolicArith.prepend [Classical.choice, Quot.sound, propext]
+#expect_axioms Examples.Arithmetic.execution [Classical.choice, Quot.sound, propext]
+#expect_axioms Examples.Arithmetic.next [Classical.choice, Quot.sound, propext]
+#expect_axioms Examples.Arithmetic.result [Classical.choice, Quot.sound, propext]
+#expect_axioms Examples.Arithmetic.interpreter [Classical.choice, Quot.sound, propext]
+#expect_axioms Examples.Arithmetic.final_stack [Classical.choice, Quot.sound, propext]
+#expect_axioms Examples.Arithmetic.final_sum [Classical.choice, Quot.sound, propext]
+#expect_axioms Examples.Arithmetic.final_gas [Classical.choice, Quot.sound, propext]
+#expect_axioms Examples.Arithmetic.final_world [Classical.choice, Quot.sound, propext]
+#expect_axioms Examples.Arithmetic.final_meta [Classical.choice, Quot.sound, propext]
+#expect_axioms Examples.Arithmetic.concrete [Classical.choice, Quot.sound, propext]

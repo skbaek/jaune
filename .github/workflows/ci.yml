@@ -45,6 +45,8 @@ jobs:
         run: scripts/check-integrity.sh
       - name: Library and example connectivity
         run: python3 scripts/check-consumer-boundary.py
+      - name: Destination axiom rows and assurance manifest
+        run: python3 scripts/check-assurance-manifest.py
 
   build:
     runs-on: ubuntu-24.04

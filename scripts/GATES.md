@@ -41,6 +41,7 @@ Choose the gate by what you changed, cheapest falsifier first:
 | you changed | run this first | then, before pushing |
 |---|---|---|
 | anything at all | `scripts/check-hygiene.sh` + `scripts/check-integrity.sh` + `scripts/check-canonical-opcode-names.sh` + `scripts/check-rule-data-reads.sh` + `lake build` | — |
+| the canonical execution surface, its `#expect_axioms` rows or `Examples/` | `python3 scripts/check-consumer-boundary.py` + `python3 scripts/check-assurance-manifest.py` | `lake build` |
 | U256/word/hash primitives | `scripts/check-u256.sh` | `scripts/check-legacy.sh --smoke --no-build --jobs auto` |
 | blob-fee arithmetic (fake exponential) | `scripts/check-fake-exp.sh` | `scripts/check-mainnet.sh --suite transitions --no-build --jobs auto` |
 | EC / precompiles | `scripts/check-ec.sh`, `scripts/check-legacy.sh --bls --no-build --jobs auto` | `scripts/check-mainnet.sh --suite prague --no-build --jobs auto` |
@@ -216,6 +217,7 @@ with the same executable inputs.
 | `scripts/check-hygiene.sh` | source hygiene (`dbg_trace`, `sorry`) **and the trust surface** (`axiom`, `opaque`, `@[extern]`, `@[implemented_by]`, `@[csimp]`, `partial def`, `unsafe`, `native_decide`) under `Jaune/` **plus `MemoryProbe.lean`**, allowlist in `hygiene-allow.txt`. `@[csimp]` is on this list because it is the attribute that makes the compiled binary run a different function from the elaborated definition, and every fixture gate measures the compiled binary | 10 patterns, 1 occurrence, 1 allowlist row (`Jaune.execFueled_eq_cached`, justified in `hygiene-allow.txt`) | sub-second |
 | `scripts/check-integrity.sh` | no panic / raw bang op / stringly semantic carrier in `Jaune.lean`'s import closure (R4 also covers the runner boundary and `MemoryProbe.lean`; R1's absence rule covers `MemoryProbe.lean` too), allowlist in `integrity-allow.txt` | 58 rows, 0 pending | sub-second |
 | `scripts/check-canonical-opcode-names.sh` | the eight retired constructor/API spellings and three abbreviated render strings are absent from live Lean source; syntax-qualified SELFDESTRUCT matching leaves ordinary destination locals alone | 8 symbol families, 3 render strings | sub-second |
+| `python3 scripts/check-assurance-manifest.py` | that the [destination axiom audit](#destination-axiom-audit)'s `#expect_axioms` rows and `scripts/assurance-manifest.json` name the same declarations with the same expected sets, in both directions and without repeats, and that every public theorem/lemma and `Exec`-valued def of `Jaune/SymbolicPush.lean` and `Jaune/SymbolicArith.lean` has a row. Source-only: whether each set is the declaration's actual closure is the build's verdict | 53 rows / 53 entries, 9 covered rules | sub-second |
 | `scripts/check-rule-data-reads.sh` | that no interpreter site reads a repriced gas number from the global that shadows it instead of from the selected `rules.gas`. Inventories every live mention of `gasColdAccountAccess`, `gasCallValue` and `gasCreate` under `Jaune/` and in `Main.lean` against the shrink-only `scripts/rule-data-allow.txt`; a new occurrence anywhere fails until it is classified. It is structural rather than an evaluation guard on purpose (goal `jaune-forks-by-construction-v1`, D-F6): once `BenvStat` carries a `Fork`, every machine that can reach the `stateGas = none` lane runs `pragueGasSchedule`, whose three repriced numbers equal these globals by `rfl`, so a site reading the global would compute the same number on every reachable machine and no `#guard` could see it. **This gate is the whole of the replacement's site coverage.** The schedule-level rows beside `meteringGuardLegacySchedule` in `Jaune/Execution.lean` record two of the four quantities the retired `meteringGuardLegacyRules` rows priced (14,500 / 5,400), through `GasSchedule.accessCost`, `GasSchedule.accessDelegation` and `GasSchedule.delegationCost`. The CREATE (31,000) and SELFDESTRUCT (32,700) rows restated a literal and arithmetic over definitions, could not fail for anything an instruction site does, and were removed on 2026-09-23 (evidence-economy trim); those two quantities have no function-level control. Negative controls, both run in a disposable tree: replacing `gasRules.callValue` by `gasCallValue` in `Xinst.step`'s legacy CALL arm, and `sevm.benvStat.rules.gas.coldAccountAccess` by `gasColdAccountAccess` in `Linst.run`'s legacy SELFDESTRUCT arm (`Jaune/Machine.lean`), each leave the tree green with every `#guard` still passing and turn **this** gate red naming the new occurrence; reverting only the edit restores green | 3 shadowed globals, 15 occurrences / 14 allowlist rows | sub-second |
 | `lake build` | integration elaboration. Its default targets are `Jaune`, `Examples`, `Assurance`, `jaune` and `jaune-memory-probe`, so the bounded memory probe is elaborated by the ordinary build rather than only on request, and the ordinary build fails on any [destination axiom audit](#destination-axiom-audit) mismatch | 1,815 jobs (2026-09-24) | ~8 s |
 | `scripts/check-cli.sh` | the runner's four fixture-file refusals — wrong sibling tree, no cases, no supported network, filters select nothing — and the undeclared-format pass-through, against synthetic fixtures, and the admission of `Amsterdam` — the fifth supported fork — past the fork guards in both its static and its transition form (the guards that once refused it, rewritten to their new true statement rather than deleted), still distinct from the unknown-label refusal. Also the rule-data printer: `--rules` answers the whole record for every one of the five supported forks, `Amsterdam` included, and the retired `--rules-partial` is refused. The t8n handshake checks require `--forks` to print the five-fork runnable lane (`Fork.supported`, Amsterdam included) and to equal `sources.json`'s `conformance_target.fork_lane`, and `--info` to state the lane, its basis and the resolved set with no "pending goal" clause (goal `jaune-amsterdam-currency-v1` rewrote goal C's four-fork assertions) | 21 checks | sub-second |
@@ -230,7 +232,7 @@ with the same executable inputs.
 | `scripts/check-mainnet.sh --suite smoke` | current-mainnet smoke | 16 | sub-second |
 | `scripts/check-legacy.sh --depth` | fuel/call-depth stress set | 67 | ~13 s |
 | `python3 scripts/check-legacy-baseline.py self-test` | tracked correctness / ignored timing separation, timing genesis/new-fixture extension, refresh refusal, rebase isolation, drift, duplicate rejection, and host-local dispatch weights | 11 controls | sub-second |
-| `python3 -m unittest discover -s scripts/tests` | harness/generator unit tests. **This suite must stay lock-free**: it is a light row that runs while anything else on the host may hold the host-global heavy-gate lock, so no test here may shell out to a suite that takes it (`osaka`, `prague`, `full`, `amsterdam`, `amsterdam-full`) against the real `$HOME`; the one heavy-suite dispatch, the synthetic `amsterdam-full` union, runs with `$HOME` pointed at a private directory, so the lock path `gate-lock.sh` derives from it is the test's own | 214 tests | 16.2 s (213 tests, 2026-09-21 catalogue) |
+| `python3 -m unittest discover -s scripts/tests` | harness/generator unit tests. **This suite must stay lock-free**: it is a light row that runs while anything else on the host may hold the host-global heavy-gate lock, so no test here may shell out to a suite that takes it (`osaka`, `prague`, `full`, `amsterdam`, `amsterdam-full`) against the real `$HOME`; the one heavy-suite dispatch, the synthetic `amsterdam-full` union, runs with `$HOME` pointed at a private directory, so the lock path `gate-lock.sh` derives from it is the test's own | 218 tests | 16.2 s (213 tests, 2026-09-21 catalogue) |
 | `scripts/check-mainnet.sh --lane amsterdam --suite amsterdam-smoke` | Glamsterdam devnet smoke (16 lowest SHA-256 ranks of the static suite) | 16 files / 60 cases | 14.7 s wall, ~4 s of it fixtures (2026-09-21 catalogue) |
 | `scripts/check-mainnet.sh --lane amsterdam --dir for_amsterdam/amsterdam/<subtree> --suite amsterdam` | one `eip*` subtree of the devnet corpus, all-PASS, count-checked against the manifest | 2–241 files | 0.2 s – 110 s (`eip8037_*` is the slow one) |
 | `scripts/check-mainnet.sh --suite transitions` | fork-transition validity | 13 files / 109 cases | 18.0 s (2026-09-21 catalogue) |
@@ -640,15 +642,29 @@ announces a `RECLAIMED` line, and proceeds.
 ### Destination axiom audit
 
 The default `Assurance` library (`srcDir := "scripts"`) elaborates
-`scripts/ExecutionAxioms.lean`: 38 `#expect_axioms` rows over the canonical
+`scripts/ExecutionAxioms.lean`: 53 `#expect_axioms` rows over the canonical
 execution surface (`Jaune.Exec` and its constructors, adequacy, derivation,
-settlement and chronology, frame spawn lemmas, `Jaune.SymbolicPush` and the
-`Examples.Execution` observations), each pinned to exactly `Classical.choice`,
-`Quot.sound`, `propext`. A row fails elaboration, and with it `lake build`, when
+settlement and chronology, frame spawn lemmas, `Jaune.SymbolicPush`,
+`Jaune.SymbolicArith`, and the `Examples.Execution` and `Examples.Arithmetic`
+observations), each pinned to exactly `Classical.choice`, `Quot.sound`,
+`propext`. A row fails elaboration, and with it `lake build`, when
 the declaration's axiom closure differs from its set in either direction; the
 message names the row as `AXIOM mismatch for <name>: expected [...], actual [...]`.
-Rows and sets are a user-reserved decision (`jaune-destination-axiom-pins-20260924`):
-adding, removing or re-pinning one is never a routine edit.
+Rows and sets are a user-reserved decision (`jaune-destination-axiom-pins-20260924`
+approved the first 38): adding, removing or re-pinning one is never a routine
+edit. The other 15 were added at the standard set together with the
+declarations they audit (unit `jaune-c6-surface-20260924`), under that
+unit's explicit authorization.
+
+`scripts/assurance-manifest.json` gives every row its provenance: declaration,
+expected set, origin (`carried` for the fifteen obligations Blanc pinned under
+their former `Blanc.*` names, `destination` otherwise), the original check (the
+Blanc `scripts/check.sh` row and `scripts/AxiomCheck.lean` line at a named
+commit), the property enforced, the destination check, and the downstream check
+retained. `python3 scripts/check-assurance-manifest.py` (CI, hygiene job) fails
+when a row is deleted, an entry is deleted, a set differs, or a public rule of a
+coverage module has no row; `scripts/tests/test_assurance_manifest.py` holds
+those three omissions as controls.
 
 The closure is computed by `Jaune.AxiomAudit.auditFullAxioms` in
 `scripts/AxiomAudit.lean`, a from-scratch walk over each reachable constant's
@@ -664,14 +680,17 @@ fails its row, and restoring the bytes restores green.
 ### Ambient execution examples
 
 `Examples` is a default Lake library in the same package and revision as Jaune;
-the ordinary owned default build elaborates `Examples.Execution`. It is outside
+the ordinary owned default build elaborates `Examples.Execution` and
+`Examples.Arithmetic`. The latter's `#guard_msgs` negative checks (a gas premise
+one short, and the `ADD` rule applied to `DIV`) fail that build if either
+negative case starts elaborating. It is outside
 Jaune's production import closure. Hygiene scans every Lean file under both
 source trees and their root modules. Integrity scans examples (including files
 not imported by `Examples.lean`) under R1–R4; R1 also recursively scans Jaune,
 so a nested module cannot escape the absence rule. Existing allowlists and
 budgets apply unchanged. Missing example tree/root is a setup failure.
 
-`python3 scripts/check-consumer-boundary.py` is a static CI check that the seven
+`python3 scripts/check-consumer-boundary.py` is a static CI check that the eight
 canonical execution modules are reachable from `Jaune.lean`, every source under
 `Examples/` is reachable from `Examples.lean`, and both libraries retain default
 Lake registration. It rejects Blanc/Creme imports in either source tree and

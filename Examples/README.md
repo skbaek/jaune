@@ -28,6 +28,28 @@ unnecessary. `Jaune.ExecDeriv`,
 occurrence support respectively. Compiler and contract-specific APIs remain in
 Blanc.
 
+## Arithmetic and composition by inversion
+
+[Arithmetic.lean](Arithmetic.lean) imports `Jaune.SymbolicPush` and
+`Jaune.SymbolicArith` and runs `PUSH1 a; PUSH1 b; ADD; STOP` from gas `g` and an
+incoming stack `s`, both variables. The premises are `9 ≤ g` and
+`s.length < 1023`; `concrete` discharges them at `g = 9`, `s = []`. It is a
+completed raw frame ending at `STOP`, not a settled message. The final stack is
+`(b + a) :: s` with value `a.toNat + b.toNat` (`ADD` wraps modulo `2 ^ 256`,
+which two bytes never reach), and `final_gas` is `g - 9`.
+
+`result` is the composition step: it takes an arbitrary `Jaune.Exec` derivation
+from the start state and inverts it one continuing step at a time (`next`), then
+settles the `STOP` with `Exec.halt_inv`, so every derivation has the stated
+outcome. `interpreter` reads the total `Jaune.exec` result through adequacy.
+
+`Jaune.SymbolicArith` covers `ADD`, `SUB` and `MUL` (the `Op` family) with a
+success rule, an out-of-gas rule and a stack-underflow rule, plus `prepend` for
+composing a decoded instruction with a continuation. Other binary opcodes are
+not family members. Two `#guard_msgs` checks at the end of the example keep the
+build red if a gas premise one short, or the `ADD` rule applied to `DIV`, ever
+elaborates.
+
 ## Transaction entry
 
 The separate [transfer-blockchain fixture](../scripts/t8n/cases/transfer-blockchain)

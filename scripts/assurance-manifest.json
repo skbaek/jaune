@@ -1,0 +1,843 @@
+{
+  "schema": "jaune-assurance-manifest/1",
+  "axiom_file": "scripts/ExecutionAxioms.lean",
+  "coverage_modules": [
+    "Jaune/SymbolicPush.lean",
+    "Jaune/SymbolicArith.lean"
+  ],
+  "coverage_rule": "every non-private theorem or lemma, and every def whose header mentions Exec, in a coverage module has an #expect_axioms row; data definitions carry no proof of their own and are reached through the rows that use them",
+  "entries": [
+    {
+      "declaration": "Jaune.Frame.raw_commits_of_settlementCommits",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "carried",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": {
+        "repository": "blanc",
+        "commit": "3cc0ad7ab73adb9b6537d8bf8330d3e2ed1f6ddc",
+        "declaration": "Blanc.Frame.raw_commits_of_settlementCommits",
+        "audit_row": "scripts/check.sh:435 `Blanc.Frame.raw_commits_of_settlementCommits|$STANDARD`",
+        "print_axioms": "scripts/AxiomCheck.lean:173"
+      },
+      "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
+      "downstream_check": "Blanc scripts/check.sh row for Blanc.Frame.raw_commits_of_settlementCommits retained; it follows Blanc's adoption of the Jaune name",
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.Exec.descendantFrames_runOk_of_settlementCommits",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "carried",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": {
+        "repository": "blanc",
+        "commit": "3cc0ad7ab73adb9b6537d8bf8330d3e2ed1f6ddc",
+        "declaration": "Blanc.Exec.descendantFrames_runOk_of_settlementCommits",
+        "audit_row": "scripts/check.sh:436 `Blanc.Exec.descendantFrames_runOk_of_settlementCommits|$STANDARD`",
+        "print_axioms": "scripts/AxiomCheck.lean:174"
+      },
+      "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
+      "downstream_check": "Blanc scripts/check.sh row for Blanc.Exec.descendantFrames_runOk_of_settlementCommits retained; it follows Blanc's adoption of the Jaune name",
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.Exec.descendantFrames_runOk_of_not_settlementCommits",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "carried",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": {
+        "repository": "blanc",
+        "commit": "3cc0ad7ab73adb9b6537d8bf8330d3e2ed1f6ddc",
+        "declaration": "Blanc.Exec.descendantFrames_runOk_of_not_settlementCommits",
+        "audit_row": "scripts/check.sh:437 `Blanc.Exec.descendantFrames_runOk_of_not_settlementCommits|$STANDARD`",
+        "print_axioms": "scripts/AxiomCheck.lean:175"
+      },
+      "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
+      "downstream_check": "Blanc scripts/check.sh row for Blanc.Exec.descendantFrames_runOk_of_not_settlementCommits retained; it follows Blanc's adoption of the Jaune name",
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.Exec.descendantFrames_runOk_create_codeDepositRollback",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "carried",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": {
+        "repository": "blanc",
+        "commit": "3cc0ad7ab73adb9b6537d8bf8330d3e2ed1f6ddc",
+        "declaration": "Blanc.Exec.descendantFrames_runOk_create_codeDepositRollback",
+        "audit_row": "scripts/check.sh:438 `Blanc.Exec.descendantFrames_runOk_create_codeDepositRollback|$STANDARD`",
+        "print_axioms": "scripts/AxiomCheck.lean:176"
+      },
+      "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
+      "downstream_check": "Blanc scripts/check.sh row for Blanc.Exec.descendantFrames_runOk_create_codeDepositRollback retained; it follows Blanc's adoption of the Jaune name",
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.Exec.committedFrames_eq_nil_of_not_commits",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "carried",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": {
+        "repository": "blanc",
+        "commit": "3cc0ad7ab73adb9b6537d8bf8330d3e2ed1f6ddc",
+        "declaration": "Blanc.Exec.committedFrames_eq_nil_of_not_commits",
+        "audit_row": "scripts/check.sh:439 `Blanc.Exec.committedFrames_eq_nil_of_not_commits|$STANDARD`",
+        "print_axioms": "scripts/AxiomCheck.lean:177"
+      },
+      "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
+      "downstream_check": "Blanc scripts/check.sh row for Blanc.Exec.committedFrames_eq_nil_of_not_commits retained; it follows Blanc's adoption of the Jaune name",
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.ProcessMessage.settlementCommits_of_some_ok_clean",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "carried",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": {
+        "repository": "blanc",
+        "commit": "3cc0ad7ab73adb9b6537d8bf8330d3e2ed1f6ddc",
+        "declaration": "Blanc.ProcessMessage.settlementCommits_of_some_ok_clean",
+        "audit_row": "scripts/check.sh:440 `Blanc.ProcessMessage.settlementCommits_of_some_ok_clean|$STANDARD`",
+        "print_axioms": "scripts/AxiomCheck.lean:178"
+      },
+      "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
+      "downstream_check": "Blanc scripts/check.sh row for Blanc.ProcessMessage.settlementCommits_of_some_ok_clean retained; it follows Blanc's adoption of the Jaune name",
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.Frame.settlementCommits_ofCall_of_raw_commits",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "carried",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": {
+        "repository": "blanc",
+        "commit": "3cc0ad7ab73adb9b6537d8bf8330d3e2ed1f6ddc",
+        "declaration": "Blanc.Frame.settlementCommits_ofCall_of_raw_commits",
+        "audit_row": "scripts/check.sh:441 `Blanc.Frame.settlementCommits_ofCall_of_raw_commits|$STANDARD`",
+        "print_axioms": "scripts/AxiomCheck.lean:179"
+      },
+      "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
+      "downstream_check": "Blanc scripts/check.sh row for Blanc.Frame.settlementCommits_ofCall_of_raw_commits retained; it follows Blanc's adoption of the Jaune name",
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.Exec.retainedNodes_runOk_of_settlementCommits",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "carried",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": {
+        "repository": "blanc",
+        "commit": "3cc0ad7ab73adb9b6537d8bf8330d3e2ed1f6ddc",
+        "declaration": "Blanc.Exec.retainedNodes_runOk_of_settlementCommits",
+        "audit_row": "scripts/check.sh:452 `Blanc.Exec.retainedNodes_runOk_of_settlementCommits|$STANDARD`",
+        "print_axioms": "scripts/AxiomCheck.lean:190"
+      },
+      "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
+      "downstream_check": "Blanc scripts/check.sh row for Blanc.Exec.retainedNodes_runOk_of_settlementCommits retained; it follows Blanc's adoption of the Jaune name",
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.Exec.retainedNodes_runOk_of_not_settlementCommits",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "carried",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": {
+        "repository": "blanc",
+        "commit": "3cc0ad7ab73adb9b6537d8bf8330d3e2ed1f6ddc",
+        "declaration": "Blanc.Exec.retainedNodes_runOk_of_not_settlementCommits",
+        "audit_row": "scripts/check.sh:453 `Blanc.Exec.retainedNodes_runOk_of_not_settlementCommits|$STANDARD`",
+        "print_axioms": "scripts/AxiomCheck.lean:191"
+      },
+      "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
+      "downstream_check": "Blanc scripts/check.sh row for Blanc.Exec.retainedNodes_runOk_of_not_settlementCommits retained; it follows Blanc's adoption of the Jaune name",
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.benvAfterTransfer_stat",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "carried",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": {
+        "repository": "blanc",
+        "commit": "3cc0ad7ab73adb9b6537d8bf8330d3e2ed1f6ddc",
+        "declaration": "Blanc.benvAfterTransfer_stat",
+        "audit_row": "scripts/check.sh:931 `Blanc.benvAfterTransfer_stat|$STANDARD`",
+        "print_axioms": "scripts/AxiomCheck.lean:669"
+      },
+      "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
+      "downstream_check": "Blanc scripts/check.sh row for Blanc.benvAfterTransfer_stat retained; it follows Blanc's adoption of the Jaune name",
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.Frame.enter_run_benvStat",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "carried",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": {
+        "repository": "blanc",
+        "commit": "3cc0ad7ab73adb9b6537d8bf8330d3e2ed1f6ddc",
+        "declaration": "Blanc.Frame.enter_run_benvStat",
+        "audit_row": "scripts/check.sh:1384 `Blanc.Frame.enter_run_benvStat|$STANDARD`",
+        "print_axioms": "scripts/AxiomCheck.lean:1122"
+      },
+      "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
+      "downstream_check": "Blanc scripts/check.sh row for Blanc.Frame.enter_run_benvStat retained; it follows Blanc's adoption of the Jaune name",
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.RunFrame.benvStat_eq",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "carried",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": {
+        "repository": "blanc",
+        "commit": "3cc0ad7ab73adb9b6537d8bf8330d3e2ed1f6ddc",
+        "declaration": "Blanc.RunFrame.benvStat_eq",
+        "audit_row": "scripts/check.sh:1385 `Blanc.RunFrame.benvStat_eq|$STANDARD`",
+        "print_axioms": "scripts/AxiomCheck.lean:1123"
+      },
+      "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
+      "downstream_check": "Blanc scripts/check.sh row for Blanc.RunFrame.benvStat_eq retained; it follows Blanc's adoption of the Jaune name",
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.genericCall.step_spawn_benvStat",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "carried",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": {
+        "repository": "blanc",
+        "commit": "3cc0ad7ab73adb9b6537d8bf8330d3e2ed1f6ddc",
+        "declaration": "Blanc.genericCall.step_spawn_benvStat",
+        "audit_row": "scripts/check.sh:1386 `Blanc.genericCall.step_spawn_benvStat|$STANDARD`",
+        "print_axioms": "scripts/AxiomCheck.lean:1124"
+      },
+      "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
+      "downstream_check": "Blanc scripts/check.sh row for Blanc.genericCall.step_spawn_benvStat retained; it follows Blanc's adoption of the Jaune name",
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.genericCreate.step_spawn_benvStat",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "carried",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": {
+        "repository": "blanc",
+        "commit": "3cc0ad7ab73adb9b6537d8bf8330d3e2ed1f6ddc",
+        "declaration": "Blanc.genericCreate.step_spawn_benvStat",
+        "audit_row": "scripts/check.sh:1387 `Blanc.genericCreate.step_spawn_benvStat|$STANDARD`",
+        "print_axioms": "scripts/AxiomCheck.lean:1125"
+      },
+      "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
+      "downstream_check": "Blanc scripts/check.sh row for Blanc.genericCreate.step_spawn_benvStat retained; it follows Blanc's adoption of the Jaune name",
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.Xinst.step_spawn_benvStat",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "carried",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": {
+        "repository": "blanc",
+        "commit": "3cc0ad7ab73adb9b6537d8bf8330d3e2ed1f6ddc",
+        "declaration": "Blanc.Xinst.step_spawn_benvStat",
+        "audit_row": "scripts/check.sh:1388 `Blanc.Xinst.step_spawn_benvStat|$STANDARD`",
+        "print_axioms": "scripts/AxiomCheck.lean:1126"
+      },
+      "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
+      "downstream_check": "Blanc scripts/check.sh row for Blanc.Xinst.step_spawn_benvStat retained; it follows Blanc's adoption of the Jaune name",
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.Exec",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.Exec.halt",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.Exec.cont",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.Exec.doneErr",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.Exec.doneOk",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.Exec.runErr",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.Exec.runOk",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.exec_iff_exec_eq",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.Exec.strong_rec",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.Exec.Deriv.strongRec",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.Exec.Deriv.ParentStep.unique",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.Exec.rawNodes",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.Exec.retainedNodes",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.SymbolicPush.step_success",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.SymbolicPush.step_outOfGas",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.SymbolicPush.step_stackOverflow",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.SymbolicPush.prepend",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Examples.Execution.execution",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Examples.Execution.interpreter",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Examples.Execution.final_stack",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Examples.Execution.final_gas",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Examples.Execution.final_world",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Examples.Execution.final_meta",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-destination-axiom-pins-20260924",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.SymbolicArith.step_eq",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-c6-surface-20260924 (declaration created in this unit)",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.SymbolicArith.step_success",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-c6-surface-20260924 (declaration created in this unit)",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.SymbolicArith.step_outOfGas",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-c6-surface-20260924 (declaration created in this unit)",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.SymbolicArith.step_stackUnderflow",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-c6-surface-20260924 (declaration created in this unit)",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Jaune.SymbolicArith.prepend",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-c6-surface-20260924 (declaration created in this unit)",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Examples.Arithmetic.execution",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-c6-surface-20260924 (declaration created in this unit)",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Examples.Arithmetic.next",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-c6-surface-20260924 (declaration created in this unit)",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Examples.Arithmetic.result",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-c6-surface-20260924 (declaration created in this unit)",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Examples.Arithmetic.interpreter",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-c6-surface-20260924 (declaration created in this unit)",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Examples.Arithmetic.final_stack",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-c6-surface-20260924 (declaration created in this unit)",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Examples.Arithmetic.final_sum",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-c6-surface-20260924 (declaration created in this unit)",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Examples.Arithmetic.final_gas",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-c6-surface-20260924 (declaration created in this unit)",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Examples.Arithmetic.final_world",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-c6-surface-20260924 (declaration created in this unit)",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Examples.Arithmetic.final_meta",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-c6-surface-20260924 (declaration created in this unit)",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    },
+    {
+      "declaration": "Examples.Arithmetic.concrete",
+      "expected_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "origin": "destination",
+      "decision": "jaune-c6-surface-20260924 (declaration created in this unit)",
+      "original_check": null,
+      "property": "axiom closure equals the standard set exactly",
+      "downstream_check": null,
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+    }
+  ]
+}
