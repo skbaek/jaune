@@ -19,7 +19,7 @@ fifteen, added with the declarations they audit (unit
 composed arithmetic example. `scripts/assurance-manifest.json` records each
 row's provenance, and `scripts/check-assurance-manifest.py` keeps the two in
 step. Expectations are reviewed data: nothing here learns a set from
-the candidate. The walk is `Jaune.AxiomAudit.auditFullAxioms`, never
+the candidate. The walk is `Jaune.AxiomAudit.walk`, never
 `Lean.collectAxioms`. The default `Assurance` target builds this file, so an
 ordinary build fails on any mismatch.
 -/

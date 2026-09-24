@@ -74,7 +74,7 @@ differs **in either direction** fails elaboration at its row. Because the
 `Assurance` library that holds the rows is a default build target, it also
 fails the ordinary `lake build`. The closure is computed by a from-scratch walk
 over every reachable constant's type and value and every inductive's
-constructors (`Jaune.AxiomAudit.auditFullAxioms` in
+constructors (`Jaune.AxiomAudit.walk` in
 [`scripts/AxiomAudit.lean`](scripts/AxiomAudit.lean)). It never calls
 `Lean.collectAxioms` or `#print axioms`, which on current Lean can under-report
 axioms reached through an imported inductive (lean4#15226).
@@ -90,9 +90,9 @@ reviewed decision, never a routine edit; see
 This audit's scope is that proof layer, not the whole library. A Jaune
 theorem outside it — `Bytes.sha256_eq_fips`, for example — has no pinned row
 here. Its axioms are stated in this document from `#print axioms`, which
-lean4#15226 makes advisory. The walker is a `partial def` metaprogram under
-`scripts/`, outside the hygiene and integrity scopes, like the other
-`scripts/*.lean` tools.
+lean4#15226 makes advisory. The walker is a metaprogram under `scripts/`,
+outside the hygiene and integrity scopes, like the other `scripts/*.lean`
+tools.
 
 **Blanc audits its own results, downstream.** Blanc's audit
 ([`scripts/AxiomCheck.lean`](https://github.com/skbaek/blanc/blob/main/scripts/AxiomCheck.lean),

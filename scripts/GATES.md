@@ -666,16 +666,22 @@ when a row is deleted, an entry is deleted, a set differs, or a public rule of a
 coverage module has no row; `scripts/tests/test_assurance_manifest.py` holds
 those three omissions as controls.
 
-The closure is computed by `Jaune.AxiomAudit.auditFullAxioms` in
+The closure is computed by `Jaune.AxiomAudit.walk` in
 `scripts/AxiomAudit.lean`, a from-scratch walk over each reachable constant's
-type and value and each inductive's constructors. It never calls
-`Lean.collectAxioms` or `#print axioms` (lean4#15226). That module imports only
-`Lean` and is a root of `Assurance` so a downstream package can import it;
-`Jaune.lean` imports neither file. Like the other `scripts/*.lean`
-metaprograms, both are outside the hygiene and integrity scopes. Controls
-(2026-09-24, disposable tree): injecting a non-standard axiom into one audited
+type and value and each inductive's constructors, with a fresh visited set per
+audited name and no cached per-constant result. It never calls
+`Lean.collectAxioms` or `#print axioms` (lean4#15226). It is the single walker:
+`#expect_axioms` and the `#full_axioms` report command (one
+`FULL-AXIOMS '<name>': [...]` line per name, each name in its own task) both
+use it, and both fail elaboration when the walk reaches a constant the
+environment does not contain. That module imports only `Lean` and is a root of
+`Assurance` so a downstream package can import it; `Jaune.lean` imports
+neither file. Like the other `scripts/*.lean` metaprograms, both are outside
+the hygiene and integrity scopes. Controls (2026-09-24, disposable tree,
+against this walker): injecting a non-standard axiom into one audited
 declaration fails the owned build at exactly that row, a wrong expected set
-fails its row, and restoring the bytes restores green.
+fails its row, a row whose declaration references a constant absent from the
+environment fails at that row, and restoring the bytes restores green.
 
 ### Ambient execution examples
 
