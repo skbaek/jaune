@@ -25,7 +25,7 @@
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
       "downstream_check": "Blanc's duplicate row for Blanc.Frame.raw_commits_of_settlementCommits is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.Exec.descendantFrames_runOk_of_settlementCommits",
@@ -45,7 +45,7 @@
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
       "downstream_check": "Blanc's duplicate row for Blanc.Exec.descendantFrames_runOk_of_settlementCommits is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.Exec.descendantFrames_runOk_of_not_settlementCommits",
@@ -65,7 +65,7 @@
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
       "downstream_check": "Blanc's duplicate row for Blanc.Exec.descendantFrames_runOk_of_not_settlementCommits is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.Exec.descendantFrames_runOk_create_codeDepositRollback",
@@ -85,7 +85,7 @@
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
       "downstream_check": "Blanc's duplicate row for Blanc.Exec.descendantFrames_runOk_create_codeDepositRollback is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.Exec.committedFrames_eq_nil_of_not_commits",
@@ -105,7 +105,7 @@
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
       "downstream_check": "Blanc's duplicate row for Blanc.Exec.committedFrames_eq_nil_of_not_commits is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.ProcessMessage.settlementCommits_of_some_ok_clean",
@@ -125,7 +125,7 @@
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
       "downstream_check": "Blanc's duplicate row for Blanc.ProcessMessage.settlementCommits_of_some_ok_clean is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.Frame.settlementCommits_ofCall_of_raw_commits",
@@ -145,7 +145,7 @@
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
       "downstream_check": "Blanc's duplicate row for Blanc.Frame.settlementCommits_ofCall_of_raw_commits is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.Exec.retainedNodes_runOk_of_settlementCommits",
@@ -165,7 +165,7 @@
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
       "downstream_check": "Blanc's duplicate row for Blanc.Exec.retainedNodes_runOk_of_settlementCommits is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.Exec.retainedNodes_runOk_of_not_settlementCommits",
@@ -185,7 +185,7 @@
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
       "downstream_check": "Blanc's duplicate row for Blanc.Exec.retainedNodes_runOk_of_not_settlementCommits is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.benvAfterTransfer_stat",
@@ -205,7 +205,7 @@
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
       "downstream_check": "Blanc's duplicate row for Blanc.benvAfterTransfer_stat is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.Frame.enter_run_benvStat",
@@ -225,7 +225,7 @@
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
       "downstream_check": "Blanc's duplicate row for Blanc.Frame.enter_run_benvStat is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.RunFrame.benvStat_eq",
@@ -245,7 +245,7 @@
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
       "downstream_check": "Blanc's duplicate row for Blanc.RunFrame.benvStat_eq is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.genericCall.step_spawn_benvStat",
@@ -265,7 +265,7 @@
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
       "downstream_check": "Blanc's duplicate row for Blanc.genericCall.step_spawn_benvStat is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.genericCreate.step_spawn_benvStat",
@@ -285,7 +285,7 @@
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
       "downstream_check": "Blanc's duplicate row for Blanc.genericCreate.step_spawn_benvStat is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.Xinst.step_spawn_benvStat",
@@ -305,7 +305,7 @@
       },
       "property": "axiom closure equals the standard set exactly (no sorryAx, no native-evaluation axiom, no missing axiom)",
       "downstream_check": "Blanc's duplicate row for Blanc.Xinst.step_spawn_benvStat is deleted when Blanc adopts this Jaune revision (user decision jaune-destination-axiom-pins-20260924, condition 3); this row is the obligation's single audit thereafter",
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.Exec",
@@ -319,7 +319,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.Exec.halt",
@@ -333,7 +333,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.Exec.cont",
@@ -347,7 +347,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.Exec.doneErr",
@@ -361,7 +361,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.Exec.doneOk",
@@ -375,7 +375,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.Exec.runErr",
@@ -389,7 +389,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.Exec.runOk",
@@ -403,7 +403,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.exec_iff_exec_eq",
@@ -417,7 +417,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.Exec.strong_rec",
@@ -431,7 +431,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.Exec.Deriv.strongRec",
@@ -445,7 +445,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.Exec.Deriv.ParentStep.unique",
@@ -459,7 +459,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.Exec.rawNodes",
@@ -473,7 +473,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.Exec.retainedNodes",
@@ -487,7 +487,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.SymbolicPush.step_success",
@@ -501,7 +501,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.SymbolicPush.step_outOfGas",
@@ -515,7 +515,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.SymbolicPush.step_stackOverflow",
@@ -529,7 +529,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.SymbolicPush.prepend",
@@ -543,7 +543,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Examples.Execution.execution",
@@ -557,7 +557,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Examples.Execution.interpreter",
@@ -571,7 +571,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Examples.Execution.final_stack",
@@ -585,7 +585,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Examples.Execution.final_gas",
@@ -599,7 +599,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Examples.Execution.final_world",
@@ -613,7 +613,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Examples.Execution.final_meta",
@@ -627,7 +627,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.SymbolicArith.step_eq",
@@ -641,7 +641,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.SymbolicArith.step_success",
@@ -655,7 +655,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.SymbolicArith.step_outOfGas",
@@ -669,7 +669,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.SymbolicArith.step_stackUnderflow",
@@ -683,7 +683,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Jaune.SymbolicArith.prepend",
@@ -697,7 +697,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Examples.Arithmetic.execution",
@@ -711,7 +711,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Examples.Arithmetic.next",
@@ -725,7 +725,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Examples.Arithmetic.result",
@@ -739,7 +739,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Examples.Arithmetic.interpreter",
@@ -753,7 +753,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Examples.Arithmetic.final_stack",
@@ -767,7 +767,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Examples.Arithmetic.final_sum",
@@ -781,7 +781,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Examples.Arithmetic.final_gas",
@@ -795,7 +795,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Examples.Arithmetic.final_world",
@@ -809,7 +809,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Examples.Arithmetic.final_meta",
@@ -823,7 +823,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
       "declaration": "Examples.Arithmetic.concrete",
@@ -837,7 +837,7 @@
       "original_check": null,
       "property": "axiom closure equals the standard set exactly",
       "downstream_check": null,
-      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.auditFullAxioms), built by the default Assurance target"
+      "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     }
   ]
 }
