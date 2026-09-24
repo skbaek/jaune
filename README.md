@@ -32,10 +32,9 @@ You need to have [elan](https://github.com/leanprover/elan) installed.
 ## Installation
 
 ```sh
-lake exe cache get Mathlib/Data/Nat/Basic.lean Mathlib/Data/List/Lemmas.lean \
-  Mathlib/Data/List/TakeDrop.lean Mathlib/Data/List/TakeWhile.lean \
-  Mathlib/Data/UInt.lean Mathlib/Tactic/NormNum.lean \
-  Mathlib/Data/List/Chain.lean
+lake exe cache get Mathlib.Data.Nat.Basic Mathlib.Data.List.Lemmas \
+  Mathlib.Data.List.TakeDrop Mathlib.Data.List.TakeWhile \
+  Mathlib.Data.UInt Mathlib.Tactic.NormNum Mathlib.Data.List.Chain
 lake build
 ```
 
@@ -43,13 +42,23 @@ Jaune depends on mathlib. `lake exe cache get` downloads prebuilt artifacts;
 without it `lake build` compiles mathlib from source, which takes hours rather
 than the minute the build itself needs.
 
-Those seven files are Jaune's entire mathlib import surface — the exact set
-returned by `grep -rh '^import Mathlib' Jaune/ Jaune.lean Main.lean`. Naming
-them fetches only the modules that surface transitively depends on, instead of
-every artifact in mathlib, which is what a bare `lake exe cache get` does.
-Expect a few hundred MB under `.lake/` rather than several GB, and a
-correspondingly shorter first build. A bare `lake exe cache get` still works
-and is the right choice if you intend to import more of mathlib yourself.
+Those seven modules are Jaune's entire mathlib import surface, the exact set
+returned by `grep -rh '^import Mathlib' Jaune/ Jaune.lean Main.lean`; nothing
+else in the default build imports mathlib. `cache get` takes them as module
+names: at this mathlib pin the file-path form (`Mathlib/Data/Nat/Basic.lean`)
+is refused as a non-existing path. Naming them fetches only the modules that
+surface transitively depends on, instead of every artifact in mathlib, which is
+what a bare `lake exe cache get` does. Measured from an empty mathlib cache on
+2026-09-24: 872 files, about 70 MB downloaded, unpacking to about 590 MiB
+under `.lake/packages/mathlib/.lake`, on top of about 680 MiB of dependency
+Git clones. A bare `lake exe cache get` still works and is the right choice if
+you intend to import more of mathlib yourself.
+
+A package that requires Jaune usually resolves it with `lake update`. That
+command runs mathlib's post-update hook, which runs a bare `lake exe cache get`
+and so fetches the full mathlib cache. To fetch only the seven modules above,
+run `lake update` with `MATHLIB_NO_CACHE_ON_UPDATE=1`, which the hook honours,
+and then the command above.
 
 ## Proving execution properties
 
@@ -133,8 +142,8 @@ any `--input.*` value; outputs may be written to `stdout` the same way.
 Options accept `--flag value` and `--flag=value` alike. `--state-test` applies
 exactly one transaction with no system operations.
 
-**The supported lane is Prague, Osaka, BPO1 and BPO2** — the same forks the
-fixture runner supports, and unsupported input fails closed. There is no
+**The supported lane is Prague, Osaka, BPO1, BPO2 and Amsterdam** — the same
+forks the fixture runner supports, and unsupported input fails closed. There is no
 default fork and no fallback: an out-of-lane `--state.fork`, a missing one, an
 unrecognised flag, an unrecognised input field, and the RLP-string form of
 `txs` are each an explicit error with a non-zero exit. Tracing is not claimed,
@@ -185,7 +194,8 @@ requirements.
   declaration. [`TRUSTED.md`](TRUSTED.md) states exactly what the theorem does
   and does not claim.
 - **Supported forks:** Prague, Osaka, BPO1, and BPO2, plus the transitions
-  between them. Jaune's primary Prague evidence is the strict all-PASS
+  between them; Amsterdam also runs, against a devnet prerelease corpus (see
+  below). Jaune's primary Prague evidence is the strict all-PASS
   current-mainnet lane over the separately installed `execution-specs`
   `tests@v20.0.2` release: 2,526/2,526 Prague fixtures and 5,006/5,006 across
   the whole manifest, with no expected-failure allowance. Its generated
@@ -221,14 +231,16 @@ requirements.
   that is off on those forks, and their lanes are re-run on every candidate.
   The devnet corpus is its own lane (`python3 scripts/bootstrap_mainnet.py
   --lane amsterdam`, `scripts/check-mainnet.sh --lane amsterdam --suite
-  amsterdam`), inventoried in `scripts/amsterdam/manifests.json`; its static
-  `Amsterdam` suite and smoke tier run, while its transition suite
-  (`BPO2ToAmsterdamAtTime15k`) is refused until `jaune-amsterdam-currency-v1`
-  activates the schedule. A committed 39-case transition-tool corpus exercises
-  the transaction semantics and the block-level access list through `jaune
-  t8n --state.fork Amsterdam` against the pinned executable reference; `jaune
-  t8n --forks` still advertises the four forks whose transition handshake is
-  settled, and `--info` says that Amsterdam resolves.
+  amsterdam`), inventoried in `scripts/amsterdam/manifests.json`. All four of
+  its suites run: the static `Amsterdam` suite and its smoke tier, and the
+  `BPO2ToAmsterdamAtTime15k` transition suite together with the union of both.
+  The transition suite passes all 42 files except four recorded identity
+  findings, where Jaune agrees that the block is invalid but names a different
+  exception than the fixture (see [`scripts/GATES.md`](scripts/GATES.md#the-glamsterdam-devnet-lane)).
+  A committed 39-case transition-tool corpus exercises the transaction
+  semantics and the block-level access list through `jaune t8n --state.fork
+  Amsterdam` against the pinned executable reference, and `jaune t8n --forks`
+  advertises all five forks, Amsterdam included.
 - **Reference:** mirrors [execution-specs](https://github.com/ethereum/execution-specs)
   `mainnet` at commit
   [`4198…7694`](https://github.com/ethereum/execution-specs/tree/4198b9c5996713b268aed602739d5aa40e277694)
@@ -330,22 +342,37 @@ closure report.
 Three workflows run against this repository. What each one covers is worth
 stating exactly, because the badge above reports only the first of them.
 
-- **`ci.yml` (every push and pull request)** preserves the ordinary Lean build
-  and separately runs the standard-library unit suite for the source manifest,
-  read-only doctor, legacy/EEST/oracle bootstraps, malicious archive handling,
-  and generator path/pin checks. These portability tests create only tiny
-  synthetic Git repositories and fixture archives in their temporary workspace
-  — they never download the EEST release or a complete legacy fixture corpus.
-  A separate no-toolchain hygiene job
-  ([`scripts/check-hygiene.sh`](scripts/check-hygiene.sh)) fails the build if
-  any `dbg_trace` or `sorry` appears under `Jaune/` outside the justified
-  allowlist ([`scripts/hygiene-allow.txt`](scripts/hygiene-allow.txt)).
-  After the build, two gates that need nothing but the binary run in the same
-  job: [`scripts/check-t8n.sh`](scripts/check-t8n.sh), which checks the `t8n`
-  frontend byte-identical to goldens generated from the pinned conformance
-  target and deterministic across two runs, and
-  [`scripts/check-u256.sh`](scripts/check-u256.sh) over the word and hash
-  primitives. Together they cost about a second.
+- **`ci.yml` (every push and pull request)** runs four jobs.
+  - *portability* runs the standard-library unit suite for the source
+    manifest, read-only doctor, legacy/EEST/oracle bootstraps, malicious
+    archive handling, and generator path/pin checks. These tests create only
+    tiny synthetic Git repositories and fixture archives in their temporary
+    workspace; they never download the EEST release or a complete legacy
+    fixture corpus.
+  - *hygiene* needs no toolchain. It runs
+    [`scripts/check-hygiene.sh`](scripts/check-hygiene.sh) (source hygiene and
+    the trust surface, against
+    [`scripts/hygiene-allow.txt`](scripts/hygiene-allow.txt)),
+    [`scripts/check-integrity.sh`](scripts/check-integrity.sh) (no panic, raw
+    bang operation or stringly semantic carrier outside
+    [`scripts/integrity-allow.txt`](scripts/integrity-allow.txt)),
+    [`scripts/check-consumer-boundary.py`](scripts/check-consumer-boundary.py)
+    (the execution modules and examples stay reachable and independent of
+    Blanc and Creme), and
+    [`scripts/check-assurance-manifest.py`](scripts/check-assurance-manifest.py)
+    (the destination axiom rows and their manifest agree).
+  - *build* runs the ordinary Lean build of every default target, so the
+    examples and the destination axiom audit elaborate on every push. After
+    the build, two gates that need nothing but the binary run in the same job:
+    [`scripts/check-t8n.sh`](scripts/check-t8n.sh), which checks the `t8n`
+    frontend byte-identical to goldens generated from the pinned conformance
+    target and deterministic across two runs, and
+    [`scripts/check-u256.sh`](scripts/check-u256.sh) over the word and hash
+    primitives. Together they cost about a second.
+  - *external-consumer* installs Jaune into a disposable package through an
+    exact Git dependency on the pushed commit, builds that package, and
+    verifies the installed identity with
+    [`scripts/external-consumer.py`](scripts/external-consumer.py).
 - **`smoke.yml` (every push and pull request)** classifies 174 files of the
   frozen legacy corpus against [`scripts/baseline-smoke.txt`](scripts/baseline-smoke.txt).
 - **`nightly.yml` (daily, 07:00 UTC)** provisions both corpora and runs the
@@ -356,10 +383,9 @@ stating exactly, because the badge above reports only the first of them.
 **The current-mainnet suite is not a CI gate.** The headline result on this
 page — 5,006/5,006 supported fixture files, 34,205/34,205 cases — is produced
 by [`scripts/check-mainnet.sh`](scripts/check-mainnet.sh), which runs locally
-against a corpus this repository does not vendor. So does
-[`scripts/check-integrity.sh`](scripts/check-integrity.sh). A green badge
-attests to the build, the hygiene gate, and the legacy tiers; it does not
-attest to the current-mainnet number. [`scripts/GATES.md`](scripts/GATES.md) is
+against a corpus this repository does not vendor. A green badge attests to
+the four `ci.yml` jobs above; it does not attest to the current-mainnet
+number. [`scripts/GATES.md`](scripts/GATES.md) is
 the authoritative catalogue of which gate checks what, and where each runs.
 
 The workflows intentionally use maintained major-version action tags
