@@ -245,7 +245,7 @@ with the same executable inputs.
 | `scripts/check-legacy.sh --bls` | BLS12-381 + point-evaluation vs hand-authored target baseline. **Unique protection:** it is CI's only BLS12-381/point-evaluation conformance (the nightly job); the mainnet suites carry the same EIP-2537/EIP-4844 modules from a newer release but run only locally | 29 | 76.0 s at `--jobs auto` (3 jobs, 2026-09-21 catalogue); 171.9 s summed per-file, sequential, 2026-08-25 host-local report (pre-4.34) |
 | `scripts/check-ec.sh` | EC differential oracle (pinned, differential, identity cases) | — | 11.6 s including compiling its Lean checker (2026-09-21 catalogue) |
 | `scripts/check-vectors.sh` | generated vector conformance + controls + declared-case-count coverage | 53 files, 1,990 cases, 5 controls | ~7.8 min; **~1.5 min at `--jobs 10`**; 197.8 s at `--jobs auto` (2026-09-21 catalogue); `auto` is resource-dependent |
-| `scripts/check-elab.sh` | per-module elaboration time vs the ignored host-local `scripts/baseline-elab.txt` (auto-initialized on first run) | 20 modules, host-dependent | ~70 s on the catalogue host |
+| `scripts/check-elab.sh` | per-module elaboration time vs the ignored host-local `scripts/baseline-elab.txt` (auto-initialized on first run) | 35 modules, host-dependent | 87.8 s on the catalogue host (2026-09-24) |
 | `lake build && scripts/check.sh --no-build` in the Blanc checkout carrying the candidate pin | that a Jaune change has not broken its downstream consumer: Blanc's integration elaboration and its axiom audit. **The cheapest Blanc-side falsifier after a pin bump** — the rest of Blanc's set is catalogued in Blanc's own file | count-free here; use Blanc's gate summaries | current Blanc catalogue |
 
 ### Long sequentially — but mostly not long in parallel
@@ -433,10 +433,16 @@ Two different contracts, and confusing them is the most common misreading:
   pass.
 
 - **`scripts/check-elab.sh` is a per-module drift gate on elaboration time.** It
-  measures each of our own modules (`Jaune/**/*.lean` plus `Jaune.lean` and
-  `Main.lean`, discovered rather than listed) re-elaborating against built
-  dependencies — the cost of opening the file in a session, and the cost sitting
-  on `lake build`'s critical path. A module fails above **both** 2x its
+  measures each of our own modules re-elaborating against built dependencies:
+  every Lean file the default `lake build` elaborates, namely
+  `Jaune/**/*.lean` and `Examples/**/*.lean`, the root modules `Jaune.lean`,
+  `Examples.lean`, `Main.lean` and `MemoryProbe.lean`, and the modules of the
+  default `Assurance` library (`scripts/AxiomAudit.lean`,
+  `scripts/ExecutionAxioms.lean`), whose `srcDir` and `roots` the gate reads
+  from `lakefile.lean` (a configuration it cannot read is a setup failure).
+  Trees are discovered rather than listed. The time measured is the cost of
+  opening the file in a session, and the cost sitting on `lake build`'s
+  critical path. A module fails above **both** 2x its
   `scripts/baseline-elab.txt` time **and** that time plus 1.0 s; the absolute
   floor keeps a sub-second module from tripping on scheduler noise. A module
   that fails to elaborate at all fails the gate, and a source module with no

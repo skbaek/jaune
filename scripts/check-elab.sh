@@ -3,7 +3,11 @@
 #
 # Measures how long each of our own modules takes to re-elaborate against
 # already-built dependencies — the cost an interactive session pays to open or
-# touch a file, and the cost that sits on `lake build`'s critical path. Compares
+# touch a file, and the cost that sits on `lake build`'s critical path. "Our own
+# modules" are every Lean file of this package that the default `lake build`
+# elaborates: the Jaune/ and Examples/ trees, the root modules of the default
+# libraries and executables, and the scripts/ modules of the default Assurance
+# library (read from lakefile.lean, so a new root is measured too). Compares
 # every file against this checkout's host-local reference times in
 # scripts/baseline-elab.txt and fails when one has become materially slower.
 # The ignored baseline is initialized automatically by the first uncontended
@@ -114,8 +118,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-SRC_DIR="Jaune"
-ROOT_MODULES="Jaune.lean Main.lean"
+# Trees scanned recursively, and the root modules of the default targets
+# (Jaune, Examples, jaune, jaune-memory-probe). The Assurance library's modules
+# live under its own srcDir and are discovered from lakefile.lean below.
+SRC_DIRS="Jaune Examples"
+ROOT_MODULES="Jaune.lean Examples.lean Main.lean MemoryProbe.lean"
 BASELINE="$SCRIPT_DIR/baseline-elab.txt"
 REPORT="$SCRIPT_DIR/report-elab.txt"
 
@@ -167,10 +174,37 @@ fi
 
 cd "$ROOT" || exit 2
 
-if [ ! -d "$SRC_DIR" ]; then
-  echo "REGRESSION — elab: source tree not found: $ROOT/$SRC_DIR"
+for d in $SRC_DIRS; do
+  if [ ! -d "$d" ]; then
+    echo "REGRESSION — elab: source tree not found: $ROOT/$d"
+    exit 2
+  fi
+done
+
+# The default Assurance library (srcDir "scripts") is built by `lake build`,
+# so its modules are ours to measure. Read its srcDir and roots from the Lake
+# configuration rather than listing them here; a library that cannot be read
+# is a setup failure, never an empty selection.
+ASSURANCE_BLOCK="$(awk '/^lean_lib «Assurance»/ {f=1; next}
+  f && /^(@\[|lean_lib |lean_exe |require |package )/ {f=0}
+  f' lakefile.lean)"
+ASSURANCE_SRC="$(printf '%s\n' "$ASSURANCE_BLOCK" | sed -n 's/^[[:space:]]*srcDir := "\([^"]*\)".*/\1/p')"
+ASSURANCE_ROOTS="$(printf '%s\n' "$ASSURANCE_BLOCK" | sed -n 's/^[[:space:]]*roots := #\[\(.*\)\].*/\1/p' | tr -d '`,')"
+if [ -z "$ASSURANCE_SRC" ] || [ -z "$ASSURANCE_ROOTS" ]; then
+  echo "SETUP — elab: could not read the Assurance library's srcDir and roots from lakefile.lean"
+  echo "REGRESSION — elab: Assurance modules not discovered"
   exit 2
 fi
+ASSURANCE_MODULES=""
+for r in $ASSURANCE_ROOTS; do
+  f="$ASSURANCE_SRC/$(printf '%s' "$r" | tr '.' '/').lean"
+  if [ ! -f "$f" ]; then
+    echo "SETUP — elab: Assurance root $r has no source file at $f"
+    echo "REGRESSION — elab: Assurance modules not discovered"
+    exit 2
+  fi
+  ASSURANCE_MODULES="$ASSURANCE_MODULES $f"
+done
 
 if [ ! -f "$BASELINE" ] && [ "$LIST_ONLY" -eq 0 ] && [ "$REBASE" -eq 0 ]; then
   if [ "$FORCE" -eq 1 ]; then
@@ -251,12 +285,13 @@ fi
 # --- file discovery ---------------------------------------------------------
 # Discovered, never hardcoded: a new module is measured the moment it exists,
 # and a green first measurement initializes its host-local row.
-FILES="$( { find "$SRC_DIR" -name '*.lean' -type f | sed 's|^\./||'
+FILES="$( { for d in $SRC_DIRS; do find "$d" -name '*.lean' -type f | sed 's|^\./||'; done
             for r in $ROOT_MODULES; do [ -f "$r" ] && echo "$r"; done
-          } | sort )"
+            for f in $ASSURANCE_MODULES; do echo "$f"; done
+          } | sort -u )"
 
 if [ -z "$FILES" ]; then
-  echo "REGRESSION — elab: no source files selected under $SRC_DIR"
+  echo "REGRESSION — elab: no source files selected under $SRC_DIRS"
   exit 2
 fi
 
