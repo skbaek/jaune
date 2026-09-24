@@ -83,6 +83,16 @@ jobs:
           python3 source-metadata/scripts/external-consumer.py prepare external-consumer \
             --url "https://github.com/${GITHUB_REPOSITORY}.git" --revision "$GITHUB_SHA"
           rm -rf source-metadata
+      # A fresh package has no lake-manifest.json, and lean-action refuses to
+      # configure without one; resolving it here is what `lake build` does
+      # implicitly when a developer builds the package locally.
+      - name: Resolve the exact Git dependency
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+            | sh -s -- -y --default-toolchain none
+          export PATH="$HOME/.elan/bin:$PATH"
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          cd external-consumer && lake update
       - uses: leanprover/lean-action@v1
         with:
           lake-package-directory: external-consumer
