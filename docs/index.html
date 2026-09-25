@@ -4,7 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Jaune — a Yellow Paper you can run</title>
-<meta name="description" content="Jaune is an executable formal specification of the Ethereum Virtual Machine in Lean 4 — a spiritual successor to the Yellow Paper that passes every supported file of the pinned mainnet fixture corpus (5,006/5,006, Prague through BPO2) and supports machine-checked proof, demonstrated by eight contracts in the sibling Blanc language — among them a port of Lido's deployed CircuitBreaker, its Registry integrity proved from an official-parameters deployment to every state reachable along a valid configured chain, and the eth2 deposit contract, its Merkle root carried through twelve SHA-256 precompile crossings to every admitted future.">
+<meta name="description" content="Jaune is an executable formal specification of the Ethereum Virtual Machine in Lean 4 — a spiritual successor to the Yellow Paper that passes every supported file of the pinned mainnet fixture corpus (5,006/5,006, Prague through BPO2), runs Amsterdam against its devnet corpus, and supports machine-checked proof, demonstrated by contracts in the sibling Blanc language — among them a port of Lido's deployed CircuitBreaker, its Registry integrity proved from an official-parameters deployment to every state reachable along a valid configured chain, and the eth2 deposit contract, its Merkle root carried through twelve SHA-256 precompile crossings to every admitted future.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Jaune — a Yellow Paper you can run">
+<meta property="og:description" content="An executable formal specification of the EVM in Lean 4: one artifact that is a specification, an interpreter that passes the pinned mainnet fixture corpus, and a proof subject.">
+<meta property="og:url" content="https://skbaek.github.io/jaune/">
+<meta property="og:site_name" content="Jaune">
+<meta property="og:locale" content="en_US">
+<link rel="canonical" href="https://skbaek.github.io/jaune/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Jaune — a Yellow Paper you can run">
+<meta name="twitter:description" content="An executable formal specification of the EVM in Lean 4, tested like a client and proved like a theorem.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='9' fill='%23f6e5a8'/%3E%3Ctext x='32' y='47' font-family='Georgia,serif' font-size='44' text-anchor='middle' fill='%231b4b2b'%3EJ%3C/text%3E%3C/svg%3E">
 <style>
 /* ────────────────────────────────────────────────────────────────
@@ -173,7 +183,6 @@ header.stuck{border-bottom-color:var(--rule)}
    ──────────────────────────────────────────────────────────────── */
 section{padding:88px 0 0}
 section:last-of-type{padding-bottom:40px}
-.rule-sep{height:0;border-top:1px solid var(--rule);margin-top:88px}
 
 .panel{background:var(--panel);border:1px solid var(--rule);padding:24px 24px 20px;
   box-shadow:0 1px 0 color-mix(in srgb, var(--ink) 8%, transparent)}
@@ -208,7 +217,6 @@ section:last-of-type{padding-bottom:40px}
   font-family:var(--serif);font-size:.78rem;flex:none}
 .listing pre{margin:0;padding:16px 18px;overflow-x:auto;font-family:var(--mono);
   font-size:.78rem;line-height:1.72;color:var(--ink);-webkit-overflow-scrolling:touch}
-.listing.tight pre{font-size:.74rem}
 pre .c{color:var(--ink-3);font-style:italic}
 pre .k{font-weight:700}
 pre .d{font-weight:600;text-decoration:underline dotted 1px;text-underline-offset:3px}
@@ -313,21 +321,6 @@ td.mono{font-family:var(--mono);font-size:.8rem}
 .nogo li:last-child{border-bottom:0}
 .nogo .why{display:block;font-family:var(--mono);font-size:.73rem;color:var(--ink-3);margin-top:3px}
 
-/* tabs */
-.tabs{display:flex;gap:0;flex-wrap:wrap;margin-bottom:-1px;position:relative;z-index:1}
-.tab{font-family:var(--mono);font-size:.73rem;padding:7px 13px;border:1px solid var(--rule);
-  border-bottom-color:var(--rule);background:var(--shade);color:var(--ink-2);cursor:pointer;
-  margin-right:-1px;transition:.15s}
-.tab:hover{color:var(--ink-2)}
-.tab[aria-selected="true"]{background:var(--panel);color:var(--ink);border-bottom-color:var(--panel)}
-.tabpanel[hidden]{display:none}
-
-/* kv list */
-.kv{display:flex;gap:10px;font-size:.88rem;padding:8px 0;border-bottom:1px solid var(--rule)}
-.kv:last-child{border-bottom:0}
-.kv dt{color:var(--ink-3);flex:0 0 132px;font-variant-caps:small-caps;letter-spacing:.1em;font-size:.84rem;padding-top:1px}
-.kv dd{margin:0;color:var(--ink-2)}
-
 /* footnotes & footer */
 .fnotes{margin-top:96px;padding-top:8px}
 .fnotes .rulehead{width:220px;border-top:1px solid var(--rule-2);margin-bottom:16px}
@@ -345,7 +338,6 @@ footer a:hover{color:var(--ink)}
   html{scroll-behavior:auto}
 }
 </style>
-<script>document.documentElement.classList.add('js');</script>
 </head>
 <body>
 
@@ -383,7 +375,7 @@ footer a:hover{color:var(--ink)}
         <p class="lede">
           The Yellow Paper defined Ethereum in mathematics you could only read. Its living
           replacement is a program you can only run. <strong style="color:var(--ink)">Jaune</strong> is both
-          at once: twenty-seven thousand lines of Lean&nbsp;4 that state the execution layer precisely
+          at once: forty thousand lines of Lean&nbsp;4 that state the execution layer precisely
           enough to prove theorems about — and compile into an interpreter that passes the
           pinned mainnet fixture corpus, fork by fork, case by case, and speaks the ecosystem’s standard
           <span class="mono">t8n</span> transition-tool interface.
@@ -412,12 +404,13 @@ footer a:hover{color:var(--ink)}
       </div>
     </div>
 
-    <div class="abstract reveal" id="abstract">
+    <div class="abstract" id="abstract">
       <p><span class="lead">Abstract.</span>&nbsp; Jaune restates the Ethereum execution layer as a single
       Lean&nbsp;4 artifact that is simultaneously a specification, an interpreter, and a proof subject.
       It mirrors <span class="mono">execution-specs</span> at a pinned commit and implements Prague,
       Osaka, BPO1, and BPO2 as first-class rule sets selected from block context, passing
-      5,006 of 5,006 supported files (34,205 cases) of the current mainnet corpus. All eighteen
+      5,006 of 5,006 supported files (34,205 cases) of the current mainnet corpus; Amsterdam is a
+      fifth rule set, tracked at a pinned Glamsterdam devnet snapshot with its own fixture lane. All eighteen
       precompiles — <span class="mono">ecrecover</span> to BLS12-381 to
       P256VERIFY — are pure Lean, with no FFI and nothing axiomatized; SHA-256 moreover carries a
       machine-checked equivalence to a transcription of its FIPS 180-4 standard. The interpreter is total:
@@ -426,8 +419,10 @@ footer a:hover{color:var(--ink)}
       an executable snapshot to canonical validated state, and a shrink-only CI budget holds the library
       at zero panics. The interpreter also answers as a standard <span class="mono">t8n</span> transition
       tool, gated against its pinned target’s complete output with every normalization and declared
-      deviation explicit. The semantics is demonstrated strong enough for real verification: the
-      sibling Blanc language has carried eight contracts’ invariants through it — a WETH’s
+      deviation explicit. Its canonical execution-derivation type, adequacy theorem, and symbolic
+      instruction rules ship in the library itself, with checked examples, a task-organized API guide,
+      and exact axiom pins that the ordinary build enforces. The semantics is demonstrated strong enough for real verification: the
+      sibling Blanc language has carried contract invariants through it — a WETH’s
       solvency across scheduled fork activations, Registry integrity for a port of Lido’s deployed
       CircuitBreaker from an official-parameters deployment to every reachable state of a valid
       configured chain, and the eth2 deposit contract’s Merkle root through twelve SHA-256
@@ -435,18 +430,18 @@ footer a:hover{color:var(--ink)}
       axiom audit in CI. MIT-licensed.</p>
     </div>
 
-    <div class="factbar reveal">
+    <div class="factbar">
       <div class="fact"><span class="n">34,205<span class="dimmer" style="font-size:1.05rem">/34,205</span></span>
         <span class="l">cases passing on the current-mainnet corpus — 5,006 files, zero expected failures</span></div>
-      <div class="fact"><span class="n">Prague → BPO2</span>
-        <span class="l">four forks and their transitions, one interpreter — rules are data, never dispatch</span></div>
+      <div class="fact"><span class="n">Prague → Amsterdam</span>
+        <span class="l">five forks and their transitions, one interpreter — rules are data, never dispatch; Amsterdam at a devnet pin</span></div>
       <div class="fact"><span class="n">18</span>
         <span class="l">precompiles in pure Lean, ecrecover to P256VERIFY — no FFI, no C, no “assume the curve”</span></div>
       <div class="fact"><span class="n">gas + 1</span>
         <span class="l">the proven-sufficient fuel bound — the interpreter is total, and the proof is in the artifact</span></div>
     </div>
 
-    <nav class="toc reveal" id="toc" aria-label="Contents">
+    <nav class="toc" id="toc" aria-label="Contents">
       <h2>Contents</h2>
       <ol>
         <li><a href="#gap"><span class="no">1</span> One artifact instead of two <span class="dots"></span></a></li>
@@ -467,9 +462,9 @@ footer a:hover{color:var(--ink)}
 <!-- ═══════════════════════ §1 THE GAP ═══════════════════════ -->
 <section id="gap">
   <div class="wrap">
-    <p class="eyebrow reveal"><span class="secno">§ 1</span> The gap this closes</p>
-    <h2 class="reveal" style="max-width:24ch">One artifact instead of two.</h2>
-    <p class="lede reveal" style="margin-top:18px">
+    <p class="eyebrow"><span class="secno">§ 1</span> The gap this closes</p>
+    <h2 style="max-width:24ch">One artifact instead of two.</h2>
+    <p class="lede" style="margin-top:18px">
       Formal models of the EVM are usually written <em>for the prover</em> — small, idealised, and
       quietly different from anything that runs. The distance between the model and the
       implementation is where the bugs live, and nothing in the proofs covers it. Jaune removes
@@ -477,7 +472,7 @@ footer a:hover{color:var(--ink)}
     </p>
 
     <div class="grid3" style="margin-top:40px">
-      <div class="panel reveal">
+      <div class="panel">
         <span class="tick">1.1 — one definition per rule</span>
         <h3>The spec is the executable</h3>
         <p class="dim">
@@ -485,10 +480,13 @@ footer a:hover{color:var(--ink)}
           <span class="mono">stateTransitionUsing</span>, <span class="mono">addBlockToChainUsing</span> —
           are the definitions Lean compiles into the binary that runs the fixture corpus.
           There is no reference model to drift out of sync, because each rule of the protocol
-          is written down exactly once.
+          is written down exactly once. The one place the binary runs something else is declared:
+          a calldata-sharing <span class="mono">execFueledCached</span> replaces
+          <span class="mono">execFueled</span> in compiled code, through an
+          <span class="mono">@[csimp]</span> theorem proving the two equal.
         </p>
       </div>
-      <div class="panel reveal">
+      <div class="panel">
         <span class="tick">1.2 — no escape hatches</span>
         <h3>All the way down to the curves</h3>
         <p class="dim">
@@ -498,7 +496,7 @@ footer a:hover{color:var(--ink)}
           either repository — no linked C, no “assume this crypto is correct” frontier under the theorems.
         </p>
       </div>
-      <div class="panel reveal">
+      <div class="panel">
         <span class="tick">1.3 — audited trust</span>
         <h3>Trust is checked, not asserted</h3>
         <p class="dim">
@@ -506,17 +504,20 @@ footer a:hover{color:var(--ink)}
           a trust-surface gate holds the whole library to zero un-allowlisted
           <span class="mono">axiom</span>, <span class="mono">opaque</span>,
           <span class="mono">@[extern]</span>, <span class="mono">@[implemented_by]</span>,
-          <span class="mono">partial</span>, <span class="mono">unsafe</span>, and
-          <span class="mono">native_decide</span> occurrences: nine patterns, zero hits, an
-          allowlist that is empty rather than merely short. The flagship theorems have their exact
-          axiom sets printed and checked by CI — <span class="mono">propext</span>,
-          <span class="mono">Classical.choice</span>, <span class="mono">Quot.sound</span>, nothing else.
+          <span class="mono">@[csimp]</span>, <span class="mono">partial</span>,
+          <span class="mono">unsafe</span>, and <span class="mono">native_decide</span> occurrences:
+          ten patterns, one hit, one allowlist row — the proved <span class="mono">@[csimp]</span>
+          equation of §1.1, justified in writing. The canonical proof surface has its exact axiom
+          sets pinned — 53 rows, each <span class="mono">propext</span>,
+          <span class="mono">Classical.choice</span>, <span class="mono">Quot.sound</span> and nothing
+          else — computed by a from-scratch walker rather than <span class="mono">#print axioms</span>,
+          and the ordinary build fails on any mismatch.
         </p>
       </div>
     </div>
 
-    <h3 class="reveal" style="margin:48px 0 6px">A specification substrate has to be sound before it is fast</h3>
-    <p class="dim reveal measure" style="font-size:.95rem;margin-bottom:22px">
+    <h3 style="margin:48px 0 6px">A specification substrate has to be sound before it is fast</h3>
+    <p class="dim measure" style="font-size:.95rem;margin-bottom:22px">
       An internal review found seven ways this artifact could still have been a good interpreter and
       a bad specification: a chain that paired a tip with an unrelated state, a hand-built transaction
       indistinguishable from a wire-decoded one, an unimplemented era silently answered with another
@@ -525,7 +526,7 @@ footer a:hover{color:var(--ink)}
     </p>
 
     <div class="grid2" style="align-items:start">
-      <div class="reveal">
+      <div>
         <div class="listing">
           <div class="bar"><span>Jaune/Machine.lean · Jaune/Transaction.lean</span><span class="tag">typed, not stringly</span></div>
 <pre><span class="c">-- The VM's whole error carrier. An internal defect cannot be</span>
@@ -555,7 +556,7 @@ footer a:hover{color:var(--ink)}
           shrink-only.</p>
       </div>
 
-      <div class="reveal">
+      <div>
         <div class="panel">
           <span class="tick">the gate, not the promise</span>
           <p class="dim" style="font-size:.94rem">
@@ -584,7 +585,7 @@ footer a:hover{color:var(--ink)}
       </div>
     </div>
 
-    <p class="note reveal" style="margin-top:26px">
+    <p class="note" style="margin-top:26px">
       Lineage, stated plainly: the Yellow Paper has not kept pace with the protocol, and Ethereum’s
       canonical specification today is <span class="mono">execution-specs</span> — executable Python,
       current, but not a thing you can state a theorem in. Jaune mirrors it at a pinned commit,
@@ -597,46 +598,58 @@ footer a:hover{color:var(--ink)}
 <!-- ═══════════════════════ §2 FORKS ═══════════════════════ -->
 <section id="forks">
   <div class="wrap">
-    <p class="eyebrow reveal"><span class="secno">§ 2</span> Coverage</p>
-    <h2 class="reveal" style="max-width:24ch">The protocol, present tense.</h2>
-    <p class="lede reveal" style="margin-top:18px">
+    <p class="eyebrow"><span class="secno">§ 2</span> Coverage</p>
+    <h2 style="max-width:24ch">The protocol, present tense.</h2>
+    <p class="lede" style="margin-top:18px">
       A specification earns the name only while it describes the protocol that actually exists.
-      Jaune is fork-parameterised: Prague, Osaka, BPO1, and BPO2 are values of one
+      Jaune is fork-parameterised: Prague, Osaka, BPO1, BPO2, and Amsterdam are values of one
       <span class="mono">ForkRules</span> record, and a single interpreter reads the record and
       nothing else. A chain’s configuration schedules activations; each block’s timestamp selects
-      its rules.
+      its rules. Every machine carries its fork, so rule validity is proved once, for all five,
+      rather than assumed at each use.
     </p>
 
     <div class="grid2" style="margin-top:38px;align-items:start">
-      <div class="reveal">
+      <div>
         <div class="listing">
           <div class="bar"><span>Jaune/Fork.lean</span><span class="tag">a fork is a value</span></div>
 <pre><span class="k">inductive</span> <span class="t">Fork</span> : <span class="t">Type</span>
-  | prague | osaka | bpo1 | bpo2
+  | prague
+  | osaka
+  | bpo1
+  | bpo2
+  | amsterdam
 
-<span class="c">-- BPO1 is Osaka with three numbers changed — enforced by</span>
+<span class="c">-- BPO1 is Osaka with its blob schedule replaced — enforced by</span>
 <span class="c">-- construction, so no BPO fork can silently acquire an</span>
 <span class="c">-- execution rule of its own.</span>
 <span class="k">def</span> <span class="d">bpo1Rules</span> : <span class="t">ForkRules</span> :=
   { osakaRules <span class="k">with</span> fork := .bpo1, blob := bpo1BlobSchedule }
 
-<span class="c">-- The single place a fork identity becomes rule data.</span>
-<span class="c">-- An unimplemented fork is an error — never a fallback to</span>
-<span class="c">-- another fork's rules, which would turn a missing</span>
-<span class="c">-- implementation into a silent consensus fault.</span>
-<span class="k">def</span> <span class="d">Fork.rules?</span> : <span class="t">Fork</span> → <span class="t">Option</span> <span class="t">ForkRules</span>
-  | .prague => <span class="k">some</span> pragueRules
-  | .osaka  => <span class="k">some</span> osakaRules
-  | .bpo1   => <span class="k">some</span> bpo1Rules
-  | .bpo2   => <span class="k">some</span> bpo2Rules</pre>
+<span class="c">-- The single place a fork identity becomes rule data. Total:</span>
+<span class="c">-- a Fork is the selection of one of five rule records, never</span>
+<span class="c">-- an identity that may fail to resolve or fall back to</span>
+<span class="c">-- another fork's rules.</span>
+<span class="k">def</span> <span class="d">Fork.ruleSet</span> : <span class="t">Fork</span> → <span class="t">ForkRules</span>
+  | .prague => pragueRules
+  | .osaka => osakaRules
+  | .bpo1 => bpo1Rules
+  | .bpo2 => bpo2Rules
+  | .amsterdam => amsterdamRules
+
+<span class="k">theorem</span> <span class="d">Fork.ruleSet_valid</span> (f : <span class="t">Fork</span>) : f.ruleSet.<span class="t">Valid</span>
+<span class="k">theorem</span> <span class="d">Fork.supported_eq_all</span> : <span class="t">Fork</span>.supported = <span class="t">Fork</span>.all</pre>
         </div>
         <p class="cap"><b>Fig. 3</b> — forks as data. <span class="mono">ForkRules</span> centralises the
-          blob schedule, code and transaction limits, MODEXP pricing, fork-gated opcodes, and the
-          precompile activation set; <span class="mono">ChainConfig</span> maps timestamps to forks and
-          rejects ambiguous schedules.</p>
+          blob schedule, code, transaction and block limits, MODEXP pricing, fork-gated opcodes, the
+          shared-formula gas schedule, Amsterdam’s optional state-gas dimension, the fork-dependent
+          header fields, the request-producing system contracts, the optional block-level access
+          list, and the precompile activation set; <span class="mono">ChainConfig</span> maps timestamps to forks and rejects ambiguous
+          schedules. <span class="mono">scripts/check-fork-constants.sh</span> compares every number
+          in every record against the pinned <span class="mono">execution-specs</span> revision.</p>
       </div>
 
-      <div class="reveal">
+      <div>
         <div class="panel">
           <span class="tick">the Osaka execution delta, complete</span>
           <p class="dim" style="font-size:.93rem">
@@ -657,11 +670,43 @@ footer a:hover{color:var(--ink)}
           </div>
         </div>
         <div class="panel" style="margin-top:16px">
+          <span class="tick">Amsterdam, at a pinned devnet snapshot</span>
+          <p class="dim" style="font-size:.93rem">
+            Amsterdam has no mainnet activation at the pinned upstream revision, so Jaune tracks it at the
+            <span class="mono">tests-glamsterdam-devnet@v8.1.4</span> release and the
+            <span class="mono">execution-specs</span> commit it was filled from,
+            <span class="mono">7341820</span>. <span class="mono">amsterdamRules</span> is a complete
+            record, written as an update of BPO2’s so every field it does not move is inherited by
+            construction:
+          </p>
+          <div class="chips">
+            <span class="chip"><b>8037</b> state-gas dimension</span>
+            <span class="chip"><b>8038</b> access repricing</span>
+            <span class="chip"><b>2780</b> tx value cost</span>
+            <span class="chip"><b>7981</b> access-list floor</span>
+            <span class="chip"><b>7954</b> 64 KiB code limit</span>
+            <span class="chip"><b>7843</b> SLOTNUM</span>
+            <span class="chip"><b>8024</b> DUPN/SWAPN/EXCHANGE</span>
+            <span class="chip"><b>7928</b> block-level access list</span>
+            <span class="chip"><b>8282</b> builder requests</span>
+          </div>
+          <p class="dim" style="font-size:.93rem;margin:12px 0 0">
+            The two-reservoir metering is proved total like the rest: the fuel bound is restated over
+            a gas measure that counts spilled state gas and equals <span class="mono">gasLeft</span> on
+            every earlier fork. The EIP-8024 immediates are proved to leave the jump-destination set
+            unchanged. What this is not: final Amsterdam. The devnet pin moves when upstream does, and
+            nothing a Prague-through-BPO2 fixture observes changed to admit it.
+          </p>
+        </div>
+        <div class="panel" style="margin-top:16px">
           <span class="tick">transitions are the real test</span>
           <p class="dim" style="font-size:.93rem;margin-bottom:0">
             Fixtures like <span class="mono">OsakaToBPO1AtTime15k</span> run through the configured
-            block-import API: each block’s timestamp chooses its rules mid-stream. The transitions
-            suite — Prague→Osaka, Osaka→BPO1, BPO1→BPO2 — is a strict all-PASS gate.
+            block-import API: each block’s timestamp chooses its rules mid-stream. The mainnet
+            transitions suite — Prague→Osaka, Osaka→BPO1, BPO1→BPO2 — is a strict all-PASS gate. The
+            devnet’s <span class="mono">BPO2ToAmsterdamAtTime15k</span> suite passes 38 of its 42 files;
+            on the other four Jaune agrees the block is invalid but names a different exception than
+            the fixture, and those are recorded as identity findings rather than aliased away.
             Selectors that would match zero fixtures are refused, not reported as vacuously green.
           </p>
         </div>
@@ -673,18 +718,20 @@ footer a:hover{color:var(--ink)}
 <!-- ═══════════════════════ §3 CONFORMANCE ═══════════════════════ -->
 <section id="conformance">
   <div class="wrap">
-    <p class="eyebrow reveal"><span class="secno">§ 3</span> Conformance</p>
-    <h2 class="reveal" style="max-width:22ch">Tested like a client.</h2>
-    <p class="lede reveal" style="margin-top:18px">
-      Two fixture lanes. The canonical lane is the <span class="mono">execution-specs</span>
+    <p class="eyebrow"><span class="secno">§ 3</span> Conformance</p>
+    <h2 style="max-width:22ch">Tested like a client.</h2>
+    <p class="lede" style="margin-top:18px">
+      Three fixture lanes. The canonical lane is the <span class="mono">execution-specs</span>
       <span class="mono">tests@v20.0.2</span> release under strict generated manifests: activating a
       fork means its whole suite, exclusions are machine-generated with per-fork reasons, and
-      unknown labels fail loudly. The frozen <span class="mono">ethereum/tests</span> lane is retained
+      unknown labels fail loudly. A separate devnet lane runs Amsterdam against its pinned
+      prerelease corpus under the same rules, sharing nothing with the mainnet lane’s pin,
+      manifest, or install. The frozen <span class="mono">ethereum/tests</span> lane is retained
       as an independently-filled regression instrument with committed per-file baselines. Its five
       non-passing files are diagnosed, and none is a defect in Jaune.
     </p>
 
-    <div class="tablewrap reveal" style="margin-top:30px">
+    <div class="tablewrap" style="margin-top:30px">
       <table>
         <thead><tr><th>suite</th><th class="num">files</th><th class="num">cases</th><th>result</th><th class="num">wall</th><th class="num">--jobs auto</th></tr></thead>
         <tbody>
@@ -696,7 +743,7 @@ footer a:hover{color:var(--ink)}
         </tbody>
       </table>
     </div>
-    <p class="cap reveal"><b>Table 1</b> — the current-mainnet lane
+    <p class="cap"><b>Table 1</b> — the current-mainnet lane
       (<span class="mono">scripts/check-mainnet.sh</span>), <span class="mono">blockchain_tests</span>
       from <span class="mono">tests@v20.0.2</span>, verified by SHA-256 at bootstrap. This lane has no
       expected-failure baseline: every manifested case at a supported fork passes.<sup class="fn"><a href="#fn3">3</a></sup>
@@ -704,7 +751,28 @@ footer a:hover{color:var(--ink)}
       they are not new measurements of the updated corpus. Both harnesses take
       <span class="mono">--jobs auto</span>. Uncontended per-file timings require sequential runs.</p>
 
-    <div class="tablewrap reveal" style="margin-top:34px">
+    <div class="tablewrap" style="margin-top:34px">
+      <table>
+        <thead><tr><th>suite — <span class="mono" style="text-transform:none;letter-spacing:0">--lane amsterdam</span></th><th class="num">files</th><th class="num">cases</th><th>result</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">--suite amsterdam-smoke</td><td class="num">16</td><td class="num">60</td><td class="passmark">all pass</td></tr>
+          <tr><td class="mono">--suite amsterdam</td><td class="num">3,159</td><td class="num">24,901</td><td class="passmark">all pass</td></tr>
+          <tr><td class="mono">--suite amsterdam-transitions</td><td class="num">42</td><td class="num">127</td><td>38 pass · 4 recorded identity findings</td></tr>
+          <tr><td class="mono">--suite amsterdam-full</td><td class="num">3,201</td><td class="num">25,028</td><td>all pass but the same 4</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="cap"><b>Table 2</b> — the Glamsterdam devnet lane
+      (<span class="mono">scripts/check-mainnet.sh --lane amsterdam</span>), over
+      <span class="mono">tests-glamsterdam-devnet@v8.1.4</span>, with zero exclusions inside the
+      Amsterdam trees. The four findings are the invalid pre- and post-fork blocks of the SLOTNUM
+      and block-level-access-list transition modules: their headers carry 22 RLP fields, which
+      Jaune rejects as a structural encoding error where the fixtures name a block-format,
+      access-list-hash, or block-hash exception — same verdict, a different name for it. The union
+      ran in 463.6&nbsp;s at <span class="mono">--jobs auto</span> on 2026-09-21, red on exactly
+      those four files.</p>
+
+    <div class="tablewrap" style="margin-top:34px">
       <table>
         <thead><tr><th>tier — <span class="mono" style="text-transform:none;letter-spacing:0">check-legacy.sh</span></th><th class="num">files</th><th>committed baseline</th><th>what it covers</th></tr></thead>
         <tbody>
@@ -717,7 +785,7 @@ footer a:hover{color:var(--ink)}
         </tbody>
       </table>
     </div>
-    <p class="cap reveal"><b>Table 2</b> — the frozen legacy lane (<span class="mono">scripts/check-legacy.sh</span>).
+    <p class="cap"><b>Table 3</b> — the frozen legacy lane (<span class="mono">scripts/check-legacy.sh</span>).
       Each gate passes iff <em>every</em> file’s PASS/FAIL matches its committed baseline — a regression
       gate, not an all-green banner. None of the five baselined FAILs is a defect in Jaune: two
       fixtures carry no case in the supported fork range, and the other three are multiply-invalid
@@ -725,7 +793,7 @@ footer a:hover{color:var(--ink)}
       the identity Jaune reports — the same one the frozen oracle reports. Within this corpus the
       <span class="mono">GeneralStateTests/</span> subtree passes <strong>2,633 of 2,634</strong>.</p>
 
-    <p class="note reveal" style="margin-top:26px">
+    <p class="note" style="margin-top:26px">
       Beneath the fixture lanes sit three oracles. Two are differential against a frozen
       <span class="mono">execution-specs</span> Python interpreter — <strong>21,593</strong>
       word-arithmetic and hash cases, and <strong>240</strong> blob-fee
@@ -738,23 +806,25 @@ footer a:hover{color:var(--ink)}
       A vector file that quietly lost half its cases would otherwise pass while testing half as much.
       And since 2026-08 the interpreter also answers as a standard <span class="mono">t8n</span>
       transition tool: <span class="mono">scripts/check-t8n.sh</span> compares its complete output
-      against goldens from the pinned <span class="mono">execution-specs</span>, with every normalization
-      and deviation explicit and each case run twice for determinism — and a three-way acceptance run
-      against go-ethereum found that in every registered divergence, Jaune matches its pinned
+      on 39 cases — 30 of them Amsterdam’s, block-level access list included — against goldens from
+      the pinned <span class="mono">execution-specs</span>, with every normalization and deviation
+      explicit and each case run twice for determinism. A three-way acceptance run against
+      go-ethereum in 2026-08 found that in every registered divergence, Jaune matches its pinned
       conformance target.
       <a href="t8n-case-study.html" style="font-weight:600">Read the case study: what a full-output reader sees in
       <span class="mono">t8n</span>.</a>
     </p>
 
-    <div class="panel reveal" style="margin-top:30px">
+    <div class="panel" style="margin-top:30px">
       <span class="tick">what is <em>not</em> claimed</span>
       <p class="dim" style="margin-bottom:0;font-size:.94rem">
         Jaune is not proved equivalent to the Yellow Paper or to
         <span class="mono">execution-specs</span>. That correspondence is established the way every
         client establishes it — by differential testing against pinned corpora — and published as
         per-file classifications rather than asserted as a theorem. The formal guarantee is relative
-        to Jaune’s semantics; the empirical guarantee is the corpus. Confusing the two is how
-        verification gets oversold, and this project declines to.
+        to Jaune’s semantics; the empirical guarantee is the corpus. Amsterdam’s evidence is a
+        devnet corpus, so its support is a snapshot of a moving target, not final Amsterdam.
+        Confusing any of these is how verification gets oversold, and this project declines to.
       </p>
     </div>
   </div>
@@ -763,21 +833,23 @@ footer a:hover{color:var(--ink)}
 <!-- ═══════════════════════ §4 TOTALITY ═══════════════════════ -->
 <section id="total">
   <div class="wrap">
-    <p class="eyebrow reveal"><span class="secno">§ 4</span> Totality</p>
-    <h2 class="reveal" style="max-width:24ch">A total interpreter, proven so.</h2>
-    <p class="lede reveal" style="margin-top:18px">
+    <p class="eyebrow"><span class="secno">§ 4</span> Totality</p>
+    <h2 style="max-width:24ch">A total interpreter, proven so.</h2>
+    <p class="lede" style="margin-top:18px">
       Executable semantics in a proof assistant usually carry a fuel parameter, and “out of fuel”
       leaks into every downstream statement as a side condition. Jaune closed that door: the EVM’s
       own gas bounds its recursion, and the bound is a theorem, not a convention.
     </p>
 
     <div class="grid2" style="margin-top:38px;align-items:start">
-      <div class="reveal">
+      <div>
         <div class="listing">
           <div class="bar"><span>Jaune/Sufficiency.lean</span><span class="tag">fuel, discharged</span></div>
-<pre><span class="c">-- Fuel strictly above remaining gas can never exhaust.</span>
+<pre><span class="c">-- Fuel strictly above the gas measure can never exhaust.</span>
+<span class="c">-- The measure is gasLeft plus any spilled Amsterdam state</span>
+<span class="c">-- gas; on every earlier fork it is exactly gasLeft.</span>
 <span class="k">theorem</span> <span class="d">execFueled_ne_exhausted</span> (evm : <span class="t">Evm</span>) (fuel : <span class="t">Nat</span>)
-    (h : evm.dyna.gasLeft &lt; fuel) :
+    (h : evm.dyna.gasMeasure &lt; fuel) :
     execFueled evm fuel ≠ <span class="t">Fueled</span>.exhausted
 
 <span class="c">-- The additive constant is 1 — the tight bound.</span>
@@ -787,25 +859,27 @@ footer a:hover{color:var(--ink)}
 <span class="c">-- discharged by proof at the definition site.</span>
 <span class="k">def</span> <span class="d">exec</span> (evm : <span class="t">Evm</span>) : <span class="t">Except</span> (<span class="t">EvmError</span> × <span class="t">Devm</span>) <span class="t">Devm</span></pre>
         </div>
-        <p class="cap"><b>Fig. 4</b> — the sufficiency result, closed 2026-07. A gas-decrease corpus
-          over all 82 instruction constructors feeds a settlement-and-monotonicity argument;
-          <span class="mono">exec</span> and the frame-level API
+        <p class="cap"><b>Fig. 4</b> — the sufficiency result, closed 2026-07 and restated in 2026-09
+          over the two-reservoir gas measure Amsterdam’s metering needs. A gas-decrease corpus over
+          every instruction constructor (82 when the arc closed; Amsterdam’s four new opcodes joined
+          it) feeds a settlement-and-monotonicity argument; <span class="mono">exec</span> and the frame-level API
           (<span class="mono">runFrame</span>, <span class="mono">executeCode</span>,
           <span class="mono">processMessage</span>) are total, and the
           <span class="mono">"RecursionLimit"</span> observable is deleted from the semantics.</p>
       </div>
 
-      <div class="reveal">
+      <div>
         <div class="panel">
           <span class="tick">why a verifier should care</span>
           <p class="dim" style="font-size:.94rem">
             Adequacy between the relational semantics proofs use and the interpreter that runs
             becomes a clean equivalence — no fuel threshold, no
-            <span class="mono">∃ fuel, ∀ fuel′ &gt; fuel, …</span> plumbing in any statement:
+            <span class="mono">∃ fuel, ∀ fuel′ &gt; fuel, …</span> plumbing in any statement. The
+            relational type and this equivalence now live in Jaune itself
+            (<span class="mono">Jaune/Exec.lean</span>), so a proof author needs no second package:
           </p>
-          <pre style="margin:0;padding:12px 14px;background:var(--shade);border:1px solid var(--rule);overflow-x:auto;font-family:var(--mono);font-size:.74rem;line-height:1.7"><span class="k">lemma</span> <span class="d">exec_iff_exec_eq</span> :
-  <span class="t">Nonempty</span> (<span class="t">Exec</span> pc sevm devm exn) ↔
-    exec ⟨pc, sevm, devm⟩ = exn</pre>
+          <pre style="margin:0;padding:12px 14px;background:var(--shade);border:1px solid var(--rule);overflow-x:auto;font-family:var(--mono);font-size:.74rem;line-height:1.7"><span class="k">lemma</span> <span class="d">exec_iff_exec_eq</span> (pc : <span class="t">Nat</span>) (sevm : <span class="t">Sevm</span>) (devm : <span class="t">Devm</span>) (exn : <span class="t">Execution</span>) :
+    <span class="t">Nonempty</span> (<span class="t">Exec</span> pc sevm devm exn) ↔ exec ⟨pc, sevm, devm⟩ = exn</pre>
           <p class="dim" style="font-size:.94rem;margin:14px 0 0">
             And the seeding is provably an implementation detail:
             <span class="mono">execFueled_run_mono</span> shows more fuel never changes a reached
@@ -827,9 +901,9 @@ footer a:hover{color:var(--ink)}
 <!-- ═══════════════════════ §5 PERFORMANCE ═══════════════════════ -->
 <section id="perf">
   <div class="wrap">
-    <p class="eyebrow reveal"><span class="secno">§ 5</span> Performance</p>
-    <h2 class="reveal" style="max-width:24ch">Fast enough to check.</h2>
-    <p class="lede reveal" style="margin-top:18px">
+    <p class="eyebrow"><span class="secno">§ 5</span> Performance</p>
+    <h2 style="max-width:24ch">Fast enough to check.</h2>
+    <p class="lede" style="margin-top:18px">
       A specification nobody can afford to run is a specification nobody checks. Two measured
       optimization arcs — elliptic curves, then keccak — took the four-family benchmark aggregate
       from 105.81&nbsp;s to 11.5&nbsp;s on identical instruments and hardware, a 9.2× speedup, without
@@ -837,7 +911,7 @@ footer a:hover{color:var(--ink)}
       single slowest fixture in the entire corpus from 12½ minutes to 77 seconds.
     </p>
 
-    <div class="panel reveal" style="margin-top:30px">
+    <div class="panel" style="margin-top:30px">
       <span class="tick">four-family fixture aggregate · summed per-file seconds · lower is better</span>
       <div class="bars" id="bars">
         <div class="bar base"><div class="lbl">Pre-optimization<small>baseline</small></div>
@@ -849,17 +923,18 @@ footer a:hover{color:var(--ink)}
         <div class="bar"><div class="lbl">After the keccak arc<small>monomorphized permutation</small></div>
           <div class="track"><div class="fill" data-w="11.1" style="width:11.1%"></div></div>
           <div class="val">11.73 s</div></div>
-        <div class="bar"><div class="lbl">Today<small>Lean v4.32.1 · total interpreter</small></div>
+        <div class="bar"><div class="lbl">After the totality arc<small>Lean v4.32.1 · 2026-07</small></div>
           <div class="track"><div class="fill" data-w="10.9" style="width:10.9%"></div></div>
           <div class="val">11.48 s</div></div>
       </div>
     </div>
-    <p class="cap reveal"><b>Fig. 5</b> — same instrument, same machine, five-run medians. The toolchain
+    <p class="cap"><b>Fig. 5</b> — same instrument, same machine, five-run medians. The v4.32.1 toolchain
       migration, the totality arc, and the semantic-integrity arc each re-measured and landed at
       parity or better — the BLS tier 20.6% <em>faster</em> after migration, the checked-entry-point
-      path 2.3% faster than the code it replaced.</p>
+      path 2.3% faster than the code it replaced. The last bar is the most recent committed run of
+      this instrument; it predates the Lean 4.34 migration and Amsterdam’s metering.</p>
 
-    <div class="grid2 reveal" style="margin-top:30px;align-items:start">
+    <div class="grid2" style="margin-top:30px;align-items:start">
       <div class="panel">
         <span class="tick">the same technique, one file away</span>
         <h3>BLAKE2b: 9.72× on the corpus’s worst case</h3>
@@ -900,7 +975,7 @@ footer a:hover{color:var(--ink)}
       </div>
     </div>
 
-    <div class="tablewrap reveal" style="margin-top:30px">
+    <div class="tablewrap" style="margin-top:30px">
       <table>
         <thead><tr><th>microbenchmark</th><th class="num">before</th><th class="num">after</th><th class="num">factor</th></tr></thead>
         <tbody>
@@ -912,7 +987,7 @@ footer a:hover{color:var(--ink)}
         </tbody>
       </table>
     </div>
-    <p class="cap reveal"><b>Table 3</b> — committed benchmark instruments, five-run medians.
+    <p class="cap"><b>Table 4</b> — committed benchmark instruments, five-run medians.
       All of it pure Lean before and after: the speedups came from representation and algorithm,
       never from calling out to C. The last row is reported at its honest magnitude: twelve rounds
       behind a fixed per-call cost is setup-dominated, so it dilutes a ~10× round loop to 1.62× and
@@ -923,9 +998,9 @@ footer a:hover{color:var(--ink)}
 <!-- ═══════════════════════ §6 CASE STUDY ═══════════════════════ -->
 <section id="casestudy">
   <div class="wrap">
-    <p class="eyebrow reveal"><span class="secno">§ 6</span> Case study — Blanc &amp; the Lido CircuitBreaker</p>
-    <h2 class="reveal" style="max-width:28ch">What the semantics is sufficient for: a deployed guardian’s registry, coherent at every reachable future.</h2>
-    <p class="lede reveal" style="margin-top:18px">
+    <p class="eyebrow"><span class="secno">§ 6</span> Case study — Blanc &amp; the Lido CircuitBreaker</p>
+    <h2 style="max-width:28ch">What the semantics is sufficient for: a deployed guardian’s registry, coherent at every reachable future.</h2>
+    <p class="lede" style="margin-top:18px">
       The claim that a semantics “supports verification” is cheap until someone pays it.
       <a href="https://skbaek.github.io/blanc/" style="text-decoration:underline;text-underline-offset:3px"><strong style="color:var(--ink)">Blanc</strong></a><span class="dimmer"> (fr. “white”, as in whitepaper)</span>
       is the payment: a deliberately minimal contract language — four constructors, a compiler into
@@ -937,31 +1012,36 @@ footer a:hover{color:var(--ink)}
       contract it talks to does.</em>
     </p>
 
-    <div class="thm reveal" style="margin-top:34px">
+    <div class="thm" style="margin-top:34px">
       <span class="stamp">machine-checked</span>
       <div class="head">Theorem (<span class="mono">chainUsing_preserves_registryStable</span>, Blanc/LidoCircuitBreakerHistoryChain.lean).</div>
       <p class="stmt">From any checkpoint whose state has the CircuitBreaker’s exact compiled
         runtime installed and Registry-coherent storage, every state reachable along a valid
-        configured chain still does — with no premise about the bytecode at any other address, no
-        non-reentrancy condition, and no honesty assumed of the contracts it pauses.</p>
+        configured chain whose schedule selects only covered forks still does — with no premise
+        about the bytecode at any other address, no non-reentrancy condition, and no honesty
+        assumed of the contracts it pauses.</p>
 <pre><span class="k">theorem</span> <span class="d">chainUsing_preserves_registryStable</span> (dp : <span class="t">DeployParams</span>) (ca : <span class="t">Adr</span>)
     (cfg : <span class="t">ChainConfig</span>) (checkpoint future : <span class="t">BlockChain</span>)
     (reach : <span class="t">BlockChain.ReachUsing</span> cfg checkpoint future)
-    (stable : <span class="t">RegistryStable</span> dp ca checkpoint.state) :
+    (stable : <span class="t">RegistryStable</span> dp ca checkpoint.state)
+    (hcov : ∀ t f, cfg.forkAt t = .ok f → <span class="t">CoveredFork</span> f) :
     <span class="t">RegistryStable</span> dp ca future.state</pre>
     </div>
-    <p class="cap reveal"><b>Read the quantifiers</b> — <span class="mono">ReachUsing</span> is the same
+    <p class="cap"><b>Read the quantifiers</b> — <span class="mono">ReachUsing</span> is the same
       configured-chain reachability the WETH solvency family climbed first: whole valid blocks, every
       transaction anyone sent, arbitrary contracts doing arbitrary things, under the model’s explicit
       per-step bound on total ether plus withdrawals. <span class="mono">RegistryStable</span> packages
       exactly two facts — the exact compiled runtime is installed, and the contract’s actual storage
-      admits a coherent Registry witness. What the theorem does not ask for is the point: a pause hands
+      admits a coherent Registry witness. <span class="mono">CoveredFork</span> is exactly Prague, Osaka,
+      BPO1, and BPO2: Blanc now builds on a Jaune that implements Amsterdam, and states its results
+      for the four forks its proofs cover rather than for Amsterdam blocks it has not yet reasoned
+      about. What the theorem does not ask for is the point: a pause hands
       control to an arbitrary callee mid-transaction, and no hypothesis constrains it. The checkpoint
       is not assumed either: a deployment theorem walks the official constructor input through
       Jaune’s real creation-message, transaction, and Prague-block pipeline to establish it.</p>
 
-    <h3 class="reveal" style="margin:48px 0 6px">Each layer discharges the assumption the one above it would have to make</h3>
-    <div class="ladder reveal">
+    <h3 style="margin:48px 0 6px">Each layer discharges the assumption the one above it would have to make</h3>
+    <div class="ladder">
       <div class="rung">
         <div class="left"><div class="layer">the root</div><div class="thmname">canonicalDeploymentStep_establishes_root</div></div>
         <div class="right"><p><strong>The checkpoint, derived rather than assumed.</strong> From the exact
@@ -995,12 +1075,13 @@ footer a:hover{color:var(--ink)}
       <div class="rung base">
         <div class="left"><div class="layer">the ground</div><div class="thmname">exec · stateTransitionUsing · Jaune</div></div>
         <div class="right"><p><strong>Jaune’s executable semantics.</strong> The definitions every rung above is
-          stated over — the same ones compiled into the binary behind the 34,205 passing cases of §3.</p></div>
+          stated over — the same ones the fixture runner of §3 compiles. Blanc pins Jaune at
+          <span class="mono">c326e3f</span>, whose Lean sources are the ones this page describes.</p></div>
       </div>
     </div>
 
     <div class="grid2" style="margin-top:34px;align-items:start">
-      <div class="reveal">
+      <div>
         <div class="panel">
           <span class="tick">where it started, and where it went</span>
           <p class="dim" style="font-size:.94rem">
@@ -1026,7 +1107,7 @@ footer a:hover{color:var(--ink)}
         </div>
       </div>
 
-      <div class="reveal">
+      <div>
         <div class="panel">
           <span class="tick">the audit, in CI, every commit</span>
           <p class="dim" style="font-size:.94rem">
@@ -1034,7 +1115,8 @@ footer a:hover{color:var(--ink)}
             CircuitBreaker family’s, the history rungs among them — each against its own
             pinned expected axiom set, failing on an extra <em>or missing</em> axiom and on anything
             beyond <span class="mono">propext</span>, <span class="mono">Classical.choice</span>,
-            <span class="mono">Quot.sound</span>. The history family’s own gate probes all 104 of
+            <span class="mono">Quot.sound</span>, each closure computed by Jaune’s from-scratch axiom
+            walker. The history family’s own gate probes all 104 of
             its public theorems and admits no exception table, and the compile witness
             <span class="mono">lidoCircuitBreakerCode_compile</span> pins the exact runtime bytes
             the family is about. No <span class="mono">sorry</span>, no
@@ -1043,14 +1125,15 @@ footer a:hover{color:var(--ink)}
           <p class="dim" style="font-size:.94rem;margin-bottom:0">
             Blanc pins Jaune by immutable commit in its lakefile, so the pair builds reproducibly
             from two clones — and “which semantics was this proved against” always has a
-            one-line answer.
+            one-line answer. Since 2026-09-24 Blanc builds on Jaune’s canonical execution layer
+            instead of its own copy of it, and its build runs Jaune’s own axiom pins as well.
           </p>
         </div>
         <p class="note" style="margin-top:16px">
           The division of labour is exact: Jaune owns what the machine does; Blanc owns programs,
           the compiler, and everything proved about particular contracts. The full portfolio —
-          six ports, from the WETH to the eth2 deposit contract and Lido’s CircuitBreaker,
-          gateway, and proxy, and two études, each with an evidence page of its own — lives at
+          ports from the WETH to the eth2 deposit contract and Lido’s CircuitBreaker, gateway,
+          and proxy, plus arithmetic études, each with an evidence page of its own — lives at
           <a href="https://skbaek.github.io/blanc/" style="text-decoration:underline;text-underline-offset:3px">skbaek.github.io/blanc</a>.
         </p>
       </div>
@@ -1061,16 +1144,16 @@ footer a:hover{color:var(--ink)}
 <!-- ═══════════════════════ §7 METHOD ═══════════════════════ -->
 <section id="method">
   <div class="wrap">
-    <p class="eyebrow reveal"><span class="secno">§ 7</span> Method</p>
-    <h2 class="reveal" style="max-width:26ch">Pre-registered gates, and the discipline to lose.</h2>
-    <p class="lede reveal" style="margin-top:18px">
+    <p class="eyebrow"><span class="secno">§ 7</span> Method</p>
+    <h2 style="max-width:26ch">Pre-registered gates, and the discipline to lose.</h2>
+    <p class="lede" style="margin-top:18px">
       Every number on this page comes from a committed report, baseline, or benchmark instrument.
       Optimization arcs declare their measurement method and GO/NO-GO threshold <em>before</em> the
       experiment, and a failed gate cancels the work no matter how much was already invested.
       Below is the part most projects never publish: the ledger of ideas that lost.
     </p>
 
-    <div class="panel reveal" style="margin-top:30px">
+    <div class="panel" style="margin-top:30px">
       <span class="tick">closed on measurement — no code shipped</span>
       <ul class="nogo">
         <li>
@@ -1096,7 +1179,7 @@ footer a:hover{color:var(--ink)}
       </ul>
     </div>
 
-    <p class="note reveal" style="margin-top:22px">
+    <p class="note" style="margin-top:22px">
       The gates cut the other way too, and the same rule applies: the BLAKE2b arc predeclared
       <em>GO at ≥2.0×, HALT below</em> — with the recorded response to a low number being “report and
       stop,” not “reach for a faster form until the number looks better.” It measured 9.72× and shipped.
@@ -1107,7 +1190,7 @@ footer a:hover{color:var(--ink)}
     </p>
 
     <div class="grid3" style="margin-top:20px">
-      <div class="panel reveal">
+      <div class="panel">
         <span class="tick">baselines</span>
         <h3>Regression gates, not green theatre</h3>
         <p class="dim">Committed baselines record the expected PASS/FAIL of every file; a gate passes only
@@ -1118,7 +1201,7 @@ footer a:hover{color:var(--ink)}
           can no longer be spelled the same way as “accept a changed classification.” The safe verb
           re-derives the classifications from the bytes it is about to write and refuses if any moved.</p>
       </div>
-      <div class="panel reveal">
+      <div class="panel">
         <span class="tick">provenance</span>
         <h3>Every external input is pinned</h3>
         <p class="dim">Fixture corpora never enter the repository: bootstrap scripts provision them against
@@ -1126,20 +1209,23 @@ footer a:hover{color:var(--ink)}
           frozen Python interpreter for the differential oracle — and a read-only environment doctor
           reports drift without touching anything.</p>
       </div>
-      <div class="panel reveal">
+      <div class="panel">
         <span class="tick">hygiene</span>
         <h3>The trusted path is checked mechanically</h3>
         <p class="dim">A no-toolchain CI job fails the build on any <span class="mono">sorry</span> or stray
           <span class="mono">dbg_trace</span> outside a justified allowlist; the integrity gate — run
           locally, like the corpus suites — holds panics, raw bang operations, and stringly-typed
-          semantic carriers to a shrink-only budget over the import closure; Blanc’s job audits 1,331 theorems against exact pinned axiom sets. Per push,
-          two conformance gates that need nothing but the binary run beside them —
-          <span class="mono">t8n</span> against its pinned goldens, and the word and hash
-          primitives — in about a second. The gates extend to the tooling itself: an
-          elaboration-budget gate holds per-module compile time against a committed baseline, and a
-          CLI gate pins the runner’s four refusal behaviours, so green never means a filter
-          silently selected nothing. Generated constants and vectors come from named generators,
-          never hand transcription.</p>
+          semantic carriers to a shrink-only budget over the import closure; the ordinary build
+          fails on any drift in the 53 pinned axiom sets; Blanc’s job audits 1,331 theorems against
+          exact pinned axiom sets. Per push, two conformance gates that need nothing but the binary
+          run beside them — <span class="mono">t8n</span> against its pinned goldens, and the word
+          and hash primitives — in about a second, and a separate job installs Jaune into a fresh
+          package through an exact Git dependency and verifies what it installed. The gates extend
+          to the tooling itself: an elaboration-budget gate holds the compile time of every Lean
+          file the default build elaborates against a host-local baseline, a memory probe bounds a
+          1,024-deep call path carrying a megabyte of calldata, and a CLI gate pins the runner’s
+          refusal behaviours, so green never means a filter silently selected nothing. Generated
+          constants and vectors come from named generators, never hand transcription.</p>
       </div>
     </div>
   </div>
@@ -1148,11 +1234,11 @@ footer a:hover{color:var(--ink)}
 <!-- ═══════════════════════ §8 TRAJECTORY ═══════════════════════ -->
 <section id="trajectory">
   <div class="wrap">
-    <p class="eyebrow reveal"><span class="secno">§ 8</span> Trajectory</p>
-    <h2 class="reveal" style="max-width:24ch">Recently landed, currently open.</h2>
+    <p class="eyebrow"><span class="secno">§ 8</span> Trajectory</p>
+    <h2 style="max-width:24ch">Recently landed, currently open.</h2>
 
     <div class="road">
-      <div class="stage done reveal">
+      <div class="stage done">
         <div class="meta"><span class="pill"><span class="d"></span>landed · 2026</span></div>
         <h3>The multi-fork architecture</h3>
         <p>Fork-parameterised rules, the complete Osaka execution delta, BPO1/BPO2 as schedule data,
@@ -1160,7 +1246,7 @@ footer a:hover{color:var(--ink)}
           The generic transition proof landed in the fork arc; configured reachability and raw-import
           corollaries are now restored and protected by Blanc’s exact-axiom audit.</p>
       </div>
-      <div class="stage done reveal">
+      <div class="stage done">
         <div class="meta"><span class="pill"><span class="d"></span>landed · 2026-07</span></div>
         <h3>Toolchain migration &amp; the totality arc</h3>
         <p>Lean and mathlib to v4.32.1 with every classification unchanged; then the sufficiency
@@ -1169,7 +1255,7 @@ footer a:hover{color:var(--ink)}
           Then the BLAKE2b unboxing, which moved the corpus’s latency bound off a precompile for the
           first time.</p>
       </div>
-      <div class="stage done reveal">
+      <div class="stage done">
         <div class="meta"><span class="pill"><span class="d"></span>landed · 2026-08-01</span></div>
         <h3>Semantic-integrity hardening</h3>
         <p>Seven priority findings from a full internal review, each now a checked invariant rather
@@ -1186,13 +1272,13 @@ footer a:hover{color:var(--ink)}
             the removals fixed a real bug in twist-coefficient extraction, not merely a totality gap.</li>
         </ul>
       </div>
-      <div class="stage done reveal">
+      <div class="stage done">
         <div class="meta"><span class="pill"><span class="d"></span>landed · 2026-08</span></div>
         <h3>A machine interface: <span class="mono">t8n</span></h3>
         <p><span class="mono">lake exe jaune t8n</span> speaks the ecosystem’s standard transition-tool
           interface: <span class="mono">alloc</span>/<span class="mono">env</span>/<span class="mono">txs</span>
           in, <span class="mono">result</span> and post-state out, with the same fail-closed
-          Prague-through-BPO2 lane as the fixture runner — no default fork, no silent fallback, and
+          fork lane as the fixture runner (Prague through BPO2 then, Amsterdam added since) — no default fork, no silent fallback, and
           unclaimed modes refused rather than ignored. Conformance checks the complete output against
           goldens from the pinned <span class="mono">execution-specs</span>, with every normalization and
           deviation explicit and each case run twice for determinism. A three-way acceptance run against
@@ -1202,7 +1288,7 @@ footer a:hover{color:var(--ink)}
             <a class="btn" href="t8n-case-study.html">Read the t8n case study</a>
           </div>
       </div>
-      <div class="stage done reveal">
+      <div class="stage done">
         <div class="meta"><span class="pill"><span class="d"></span>landed · 2026-09-02</span></div>
         <h3>Arithmetic layers, a canonical vocabulary, and a resource-aware harness</h3>
         <p>Two additive layers for the sibling’s arithmetic études, each a new module and nothing
@@ -1219,32 +1305,86 @@ footer a:hover{color:var(--ink)}
           sizes itself from memory as well as cores, and a live resource collector records what a
           run actually cost.</p>
       </div>
-      <div class="stage now reveal">
-        <div class="meta"><span class="pill"><span class="d"></span>next · gated on evidence</span></div>
-        <h3>The allocation economy</h3>
-        <p>Roughly 40% of interpreter loop time is memory management — 47–57% of busy samples are
-          allocation and reference counting on the current runtime. Ownership and in-place-update
-          discipline comes first (zero proof exposure); representation changes to
-          <span class="mono">B256</span> and the stack sit behind their own measured decision gates,
-          because they touch types Blanc proves over directly. Jumpdest validity — a static property
-          currently re-derived at every jump — rides along with whichever session next opens the
-          interpreter.</p>
+      <div class="stage done">
+        <div class="meta"><span class="pill"><span class="d"></span>landed · 2026-09-06</span></div>
+        <h3>Amsterdam, a fifth fork</h3>
+        <p>Four merged steps took Amsterdam from a declared name to a runnable rule set at the
+          Glamsterdam devnet-8 pin. First the identity, the rule data and a separate fixture lane,
+          with every fork constant compared against the pinned <span class="mono">execution-specs</span>
+          by a gate. Then EIP-8037’s metering: a frame with two gas reservoirs, and the totality proof
+          restated over a gas measure that covers both. Then the block level — the block-level access
+          list, the new request contracts, <span class="mono">SLOTNUM</span> and
+          <span class="mono">DUPN</span>/<span class="mono">SWAPN</span>/<span class="mono">EXCHANGE</span>,
+          the raised code limits — and finally the BPO2-to-Amsterdam transition suites and a
+          <span class="mono">t8n</span> handshake that advertises exactly the lane the binary runs. The
+          static suite passes whole; the transition suite’s four identity findings are recorded, not
+          aliased.</p>
       </div>
-      <div class="stage reveal">
+      <div class="stage done">
+        <div class="meta"><span class="pill"><span class="d"></span>landed · 2026-09-06</span></div>
+        <h3>Rules by construction, and a bounded memory closure</h3>
+        <p>Every machine now carries its <span class="mono">Fork</span>, and its rules are a total
+          function of it, so rule validity is one theorem over five records instead of a premise on
+          every statement; a static gate refuses any interpreter site that reads a repriced number
+          from a global instead of the selected rules. Separately, a call chain 1,024 frames deep
+          no longer keeps one copy of a megabyte of calldata per frame: before Amsterdam, the four call
+          opcodes share one evaluated slice through the proved <span class="mono">@[csimp]</span> equation of
+          §1.1, and a memory-probe gate holds the peak under a fixed budget.</p>
+      </div>
+      <div class="stage done">
+        <div class="meta"><span class="pill"><span class="d"></span>landed · 2026-09-21</span></div>
+        <h3>Lean 4.34, and the v20.0.2 mainnet release</h3>
+        <p>Lean and mathlib moved to v4.34.0, with the gate catalogue re-run on the migrated tree; the current-mainnet lane moved to
+          the <span class="mono">tests@v20.0.2</span> release, whose manifest is Table 1; and a round
+          of fixes landed for contract-creation collisions, original storage of freshly created
+          accounts, and the block-level access list’s index accounting.</p>
+      </div>
+      <div class="stage done">
+        <div class="meta"><span class="pill"><span class="d"></span>landed · 2026-09-24</span></div>
+        <h3>Jaune as a library you can prove against</h3>
+        <p>The canonical execution-derivation layer — the relational <span class="mono">Exec</span> type,
+          its adequacy with the interpreter, derivation, settlement and chronology — moved from Blanc
+          into Jaune under Jaune’s own names, and Blanc now imports it instead of keeping a copy.
+          Around it: symbolic <span class="mono">PUSH</span> and <span class="mono">ADD</span>/<span class="mono">SUB</span>/<span class="mono">MUL</span>
+          rules, two checked examples that run symbolic bytecode to completion,
+          a task-organized guide (<span class="mono">API.md</span>) that says which modules are
+          supported, incidental, or experimental, and 53 exact axiom pins with a provenance manifest,
+          computed by one from-scratch walker that Blanc’s audit reuses. CI installs Jaune into a
+          fresh package from an exact Git commit and verifies what it installed.</p>
+      </div>
+      <div class="stage now">
+        <div class="meta"><span class="pill"><span class="d"></span>open · as the repository records it</span></div>
+        <h3>What is stated as not yet done</h3>
+        <ul>
+          <li>Amsterdam tracks a devnet; its pin, rules and lane move when upstream does, and its
+            mainnet activation is written only once the pinned upstream revision schedules one — the
+            constants gate turns red that day.</li>
+          <li>The four transition-suite identity findings stay recorded until upstream declares
+            alternative exceptions for those fixtures.</li>
+          <li>The message-settlement theorems for revert and exceptional halt are proved for Prague
+            through BPO2; no Amsterdam form is proved yet.</li>
+          <li>Jump destinations: the Amsterdam walk is proved equal to the earlier one, but the bridge
+            from either walk to the interpreter’s own scan is sampled on 64 KiB blobs, not proved.</li>
+          <li>There is no running-prefix interface: an <span class="mono">Exec</span> derivation always
+            runs to an outcome.</li>
+        </ul>
+      </div>
+      <div class="stage">
         <div class="meta"><span class="pill"><span class="d"></span>open direction</span></div>
-        <h3>More of the protocol under proof, more contracts over it</h3>
+        <h3>More contracts over the semantics</h3>
         <p>WETH was the existence proof, not the destination — and the sibling project has since
-          moved the frontier repeatedly: Blanc’s WETH10 exercises Jaune’s Prague pipeline end to
+          moved the frontier repeatedly: Blanc’s WETH10 exercises Jaune’s pipeline end to
           end, from a proved creation transaction through configured-chain reachability with a
           future-redeemability flagship on top; its Lido CircuitBreaker port carries a deployed
           guardian’s Registry integrity from an official-parameters deployment to every reachable
           future, over arbitrary hostile callees; its deposit-contract port crosses the SHA-256
           precompile — the one hash here that carries a FIPS 180-4 equivalence theorem — twelve
           times per deposit; and its proxy and gateway ports are the first theorems about
-          delegation and about two verified contracts at once. The open questions are which invariants
-          justify their proof effort, how much block-level reasoning transfers between contracts,
-          and where a proof-first language stops being expressive enough. Collaborators with a
-          target property in mind are exactly who this page is for — and
+          delegation and about two verified contracts at once. Blanc’s results cover Prague
+          through BPO2; Amsterdam coverage there is future work, as Blanc states. The open
+          questions are which invariants justify their proof effort, how much block-level reasoning
+          transfers between contracts, and where a proof-first language stops being expressive
+          enough. Collaborators with a target property in mind are exactly who this page is for — and
           <a href="https://skbaek.github.io/blanc/" style="text-decoration:underline;text-underline-offset:3px">the Blanc page</a>
           is the worked answer so far.</p>
       </div>
@@ -1255,33 +1395,33 @@ footer a:hover{color:var(--ink)}
 <!-- ═══════════════════════ §9 AUDIENCE ═══════════════════════ -->
 <section id="waysin">
   <div class="wrap">
-    <p class="eyebrow reveal"><span class="secno">§ 9</span> Who this is for</p>
-    <h2 class="reveal">Three ways in.</h2>
+    <p class="eyebrow"><span class="secno">§ 9</span> Who this is for</p>
+    <h2>Three ways in.</h2>
 
     <div class="grid3" style="margin-top:34px">
-      <div class="aud reveal">
+      <div class="aud">
         <h3>Proof engineers &amp; PL researchers</h3>
-        <p>A live, non-toy verification target: ~390,000 lines of Lean 4 across the sibling pair,
+        <p>A live, non-toy verification target: ~530,000 lines of Lean 4 across the sibling pair,
           spanning an executable semantics, a verified compiler, and contract invariants proved to
           chain altitude — with well-posed open problems in representation choice, proof-exposure
           budgeting, and fork-parameterised reasoning. The sufficiency arc alone is a worked case
           study in retrofitting totality onto a large fueled interpreter.</p>
-        <div class="hook">start: Jaune/Sufficiency.lean → exec<br>then: Blanc/LidoCircuitBreakerHistoryChain.lean → the theorems of §6</div>
+        <div class="hook">start: API.md → Examples/Arithmetic.lean<br>then: Jaune/Sufficiency.lean → exec<br>and: Blanc/LidoCircuitBreakerHistoryChain.lean → the theorems of §6</div>
       </div>
-      <div class="aud reveal">
+      <div class="aud">
         <h3>Protocol &amp; client engineers</h3>
-        <p>An independent implementation of the Prague-through-BPO2 rules that reads as a
-          specification and runs the real corpus — a differential oracle, a precise reference for
+        <p>An independent implementation of the Prague-through-BPO2 rules, and of Amsterdam at its
+          devnet pin, that reads as a specification and runs the real corpus — a differential oracle, a precise reference for
           when a fixture disagrees with your client, and a place where each rule is stated once,
           without the surrounding engineering.</p>
         <div class="hook">Jaune/Fork.lean is the protocol as data<br>scripts/check-mainnet.sh --suite smoke in 0.5 s</div>
       </div>
-      <div class="aud reveal">
+      <div class="aud">
         <h3>Security researchers &amp; DeFi builders</h3>
         <p>Invariants that hold at chain level, not per function. A fuzzer searches for the
           counterexample; this is the other half — a machine-checked proof that, for a stated
-          invariant and contract, no counterexample exists in any reachable state, under any fork
-          schedule.</p>
+          invariant and contract, no counterexample exists in any reachable state, under any schedule
+          of the forks the proof covers.</p>
         <div class="hook">Blanc/Weth.lean — 244 lines → 988 proved bytes<br>skbaek.github.io/blanc — the sibling’s own evidence page</div>
       </div>
     </div>
@@ -1291,9 +1431,9 @@ footer a:hover{color:var(--ink)}
 <!-- ═══════════════════════ §10 BUILD ═══════════════════════ -->
 <section id="build">
   <div class="wrap">
-    <p class="eyebrow reveal"><span class="secno">§ 10</span> Reproduce it</p>
-    <h2 class="reveal">Two clones, a build, and a corpus.</h2>
-    <p class="lede reveal" style="margin-top:16px">
+    <p class="eyebrow"><span class="secno">§ 10</span> Reproduce it</p>
+    <h2>Two clones, a build, and a corpus.</h2>
+    <p class="lede" style="margin-top:16px">
       The only prerequisite is <a href="https://github.com/leanprover/elan" target="_blank" rel="noopener"
       style="text-decoration:underline;text-underline-offset:3px">elan</a>, the Lean toolchain manager —
       exact Lean and mathlib versions are pinned in the repositories, and Blanc pins Jaune by
@@ -1301,7 +1441,7 @@ footer a:hover{color:var(--ink)}
     </p>
 
     <div class="grid2" style="margin-top:30px;align-items:start">
-      <div class="panel reveal">
+      <div class="panel">
         <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:14px">
           <h3>Jaune</h3><span class="dimmer" style="font-size:.85rem">run the spec against real fixtures</span>
         </div>
@@ -1333,7 +1473,7 @@ footer a:hover{color:var(--ink)}
           current-mainnet corpus inside a coffee break.
         </p>
       </div>
-      <div class="panel reveal">
+      <div class="panel">
         <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:14px">
           <h3>Blanc</h3><span class="dimmer" style="font-size:.85rem">check the proofs yourself</span>
         </div>
@@ -1352,25 +1492,46 @@ footer a:hover{color:var(--ink)}
           Both projects depend on mathlib, so both open with
           <span class="mono">lake exe cache get</span> — it downloads mathlib's prebuilt artifacts.
           Skip it and <span class="mono">lake build</span> compiles mathlib from source, which takes
-          hours instead of the minute each project's own build needs, and several GB land under
-          <span class="mono">.lake/</span> either way.
+          hours, and several GB land under <span class="mono">.lake/</span> either way. Jaune imports
+          only seven mathlib modules; its README names them, and fetching just those was measured
+          at about 70 MB on 2026-09-24.
         </p>
       </div>
     </div>
 
+    <div class="panel" style="margin-top:18px">
+      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:14px">
+        <h3>Your own proofs</h3><span class="dimmer" style="font-size:.85rem">depend on Jaune from Lake</span>
+      </div>
+      <div class="term">require jaune from git "https://github.com/skbaek/jaune.git" @ "&lt;full commit id&gt;"</div>
+      <p class="dim" style="font-size:.88rem;margin:14px 0 0">
+        Pin a full commit: there are no release tags and no compatibility promise across revisions.
+        <span class="mono">API.md</span> sorts the library by proof task and says which modules are
+        supported, which are incidental, and which (the Amsterdam lane) are experimental;
+        <span class="mono">Examples/</span> holds the checked examples it cites, which compile with
+        every build of the same revision; and <span class="mono">scripts/external-consumer.py</span>
+        prepares and verifies a disposable package installed this way, as CI does for every push to
+        <span class="mono">main</span> and every pull request.
+      </p>
+    </div>
+
     <!-- ═══ footnotes ═══ -->
-    <div class="fnotes reveal" id="notes">
+    <div class="fnotes" id="notes">
       <div class="rulehead"></div>
       <ol>
         <li id="fn1">Successor in spirit, not in office. Jaune is an independent project with no
           affiliation to the Ethereum Foundation. Ethereum’s canonical specification is
           <span class="mono">execution-specs</span>, which Jaune mirrors at pinned commit
-          <span class="mono">4198b9c5</span> (mainnet branch, 2025-09-19) and tests against.
+          <span class="mono">4198b9c5</span> (mainnet branch, 2025-09-19) and tests against. Amsterdam,
+          which that commit predates, follows <span class="mono">execution-specs</span>
+          <span class="mono">7341820</span>, the commit the Glamsterdam devnet-8 fixtures were
+          filled from, and every Amsterdam constant is checked against it.
           <a href="#ref1">↩</a></li>
         <li id="fn2">Jaune was previously published under the name <span class="mono">ELeVM</span>;
           the repository was renamed in July 2026 and old links redirect.</li>
         <li id="fn3">Figures on this page are drawn from committed reports, baselines, and benchmark
-          instruments in the repositories, current as of 2026-09-03.
+          instruments in the repositories, current as of 2026-09-25; a figure that carries its own
+          date is the most recent committed measurement of it.
           Wall-clock numbers are same-machine, same-instrument measurements on a 10-core Apple M5;
           fixture counts are exact. The
           current-mainnet lane covers every <span class="mono">blockchain_tests</span> fixture of
@@ -1440,23 +1601,6 @@ footer a:hover{color:var(--ink)}
   window.addEventListener('scroll', checkBars, {passive:true});
   window.addEventListener('load', checkBars);
   checkBars();
-
-  // tabs
-  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
-  tabs.forEach(function(t){
-    t.addEventListener('click', function(){
-      tabs.forEach(function(o){
-        o.setAttribute('aria-selected', String(o === t));
-        document.getElementById(o.getAttribute('aria-controls')).hidden = (o !== t);
-      });
-    });
-    t.addEventListener('keydown', function(e){
-      var i = tabs.indexOf(t), n = null;
-      if (e.key === 'ArrowRight') n = tabs[(i+1)%tabs.length];
-      if (e.key === 'ArrowLeft')  n = tabs[(i-1+tabs.length)%tabs.length];
-      if (n){ e.preventDefault(); n.click(); n.focus(); }
-    });
-  });
 
   // copy buttons on terminal blocks
   document.querySelectorAll('.term').forEach(function(block){
