@@ -12,6 +12,7 @@
 <meta property="og:site_name" content="Jaune">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-08-12">
+<meta property="article:modified_time" content="2026-09-25">
 <link rel="canonical" href="https://skbaek.github.io/jaune/t8n-case-study.html">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="What a full-output reader sees in t8n">
@@ -261,7 +262,7 @@ footer{border-top:3px double var(--rule-2);padding:34px 0 46px;color:var(--ink-3
             A <span class="mono">t8n</span> tool takes a pre-state, a block environment, and signed
             transactions, then emits the post-state and the artifacts needed to assemble a block.
             Jaune implements that interface over the same Lean definitions used by its fixture runner
-            and proof stack. Its nine-case gate compares <span class="mono">result</span>,
+            and proof stack. Its gate — nine cases when this study was written, thirty-nine now — compares <span class="mono">result</span>,
             <span class="mono">alloc</span>, and <span class="mono">body</span> against goldens generated
             by a pinned EELS checkout, with every normalization and deviation explicit.
           </p>
@@ -472,7 +473,7 @@ footer{border-top:3px double var(--rule-2);padding:34px 0 46px;color:var(--ink-3
           </div>
           <div class="panel">
             <strong>Not a Jaune mismatch</strong>
-            <p class="dim">Jaune reproduces its frozen target by design. The cases remain regression detectors for a future target re-pin.</p>
+            <p class="dim">Jaune reproduces its frozen target by design. The target has since been re-pinned twice, to <span class="mono">8ca2f4c</span> and <span class="mono">7341820</span> (3 and 4 September 2026); this case’s goldens were regenerated at each and came out byte-identical, so the pinned target still emits both behaviors.</p>
           </div>
         </div>
 
@@ -489,7 +490,8 @@ footer{border-top:3px double var(--rule-2);padding:34px 0 46px;color:var(--ink-3
           </a>
         </div>
         <p class="caption">
-          Both filings were open when this page was prepared on 12 August 2026. This page does not treat
+          Both filings were open when this page was prepared on 12 August 2026, and both were still open
+          on 25 September 2026. This page does not treat
           an open filing as maintainer confirmation or claim that either change has landed.
         </p>
       </div>
@@ -503,35 +505,53 @@ footer{border-top:3px double var(--rule-2);padding:34px 0 46px;color:var(--ink-3
         </div>
         <div class="prose">
           <p>
-            Jaune’s ordinary gate needs only a built Jaune binary: it reruns all nine cases twice,
-            checks determinism, verifies every golden digest, and compares <span class="mono">result</span>,
+            The exhibit is reproduced at the commits it was found on. Jaune
+            <span class="mono">df58966</span> carries the case, its goldens from EELS
+            <span class="mono">9d6e6f83</span>, and the three-way script. Its ordinary gate needs only a
+            built Jaune binary: it reruns every case twice (nine at that commit), checks determinism,
+            verifies every golden digest, and compares <span class="mono">result</span>,
             <span class="mono">alloc</span>, and <span class="mono">body</span> with all normalizations
-            and deviations explicit. The three-way script additionally needs the pinned EELS checkout
-            and a Geth <span class="mono">evm</span> binary. It makes the root divergence observable but,
-            deliberately, does not compare <span class="mono">body</span>.
+            and deviations explicit. The three-way script additionally needs an EELS checkout at the
+            same pin and a Geth <span class="mono">evm</span> binary. It makes the root divergence
+            observable but, deliberately, does not compare <span class="mono">body</span>.
           </p>
         </div>
 
-        <div class="term" aria-label="Reproduction commands"><pre><span class="prompt">$</span> lake build
+        <div class="term" aria-label="Reproduction commands"><pre><span class="prompt">$</span> git clone https://github.com/skbaek/jaune.git
+<span class="prompt">$</span> cd jaune
+<span class="prompt">$</span> git checkout --detach df58966f01786adfdc8f6315d53580468225e9eb
+<span class="prompt">$</span> lake exe cache get &amp;&amp; lake build
 <span class="prompt">$</span> scripts/check-t8n.sh --case reject-middle --red-test
 
-<span class="prompt">$</span> JAUNE_T8N_TARGET=/path/to/execution-specs-t8n-amsterdam \
+<span class="prompt">$</span> git clone https://github.com/ethereum/execution-specs.git ~/execution-specs-t8n-amsterdam
+<span class="prompt">$</span> git -C ~/execution-specs-t8n-amsterdam checkout --detach 9d6e6f8352a0f76e7e8803722d1a2798fa4f0a96
+<span class="prompt">$</span> (cd ~/execution-specs-t8n-amsterdam &amp;&amp; uv sync --no-default-groups --group test)
+<span class="prompt">$</span> JAUNE_T8N_TARGET=~/execution-specs-t8n-amsterdam \
     python3 scripts/t8n-acceptance.py \
       --third /path/to/geth/evm \
       --third-name geth \
       --third-version 'evm version 1.15.6-stable-19d2b4c8'</pre></div>
 
         <p class="caption">
-          The focused regression at PR #3361’s exact head reproduces the body correction separately:
-          rejection at input 1, an inline legacy transaction, a typed byte envelope, and the exact
-          accepted-only 204-byte body.
+          Current Jaune still carries the case and its goldens unchanged, but its corpus has grown to
+          thirty-nine cases, thirty of them Amsterdam’s, while the three-way divergence registry was
+          recorded against the nine-case corpus; the three-way run is therefore reproduced at
+          <span class="mono">df58966</span> rather than at the tip. The body correction
+          reproduces separately in the focused regression of PR #3361, pinned below to the head the
+          pull request carried on 25 September 2026: rejection at input 1, an inline legacy
+          transaction, a typed byte envelope, and exactly the accepted-only body — 204 bytes on this
+          input. The pull request’s branch was rewritten on 22 August 2026, and the test moved under
+          <span class="mono">packages/testing</span>; the head this page first cited,
+          <span class="mono">0b79966</span>, is no longer in the branch’s history, so fetching the
+          pull request no longer brings it into a fresh clone.
         </p>
         <div class="term" aria-label="Body regression commands"><pre><span class="prompt">$</span> git clone https://github.com/ethereum/execution-specs.git
 <span class="prompt">$</span> cd execution-specs
 <span class="prompt">$</span> git fetch origin pull/3361/head
-<span class="prompt">$</span> git checkout --detach 0b79966b037eb17f1a02f2f13e73de06bedf2342
+<span class="prompt">$</span> git checkout --detach 6d963d31e539fd82284ea52a10d3b331d6186b7a
 <span class="prompt">$</span> uv sync --frozen --no-default-groups --group test
-<span class="prompt">$</span> uv run --no-sync pytest -q tests/evm_tools/test_t8n_body.py</pre></div>
+<span class="prompt">$</span> uv run --no-sync pytest -q \
+    packages/testing/src/execution_testing/evm_tools/tests/test_t8n_body.py</pre></div>
 
         <ul class="sources">
           <li><a href="https://github.com/skbaek/jaune/blob/df58966f01786adfdc8f6315d53580468225e9eb/scripts/report-t8n.md">Completion report and three-way ledger</a></li>
@@ -544,7 +564,7 @@ footer{border-top:3px double var(--rule-2);padding:34px 0 46px;color:var(--ink-3
           <li><a href="https://github.com/ethereum/execution-specs/blob/5b2b22c75f69bda02615204396b70a91e00529e0/packages/testing/src/execution_testing/client_clis/cli_types.py#L750-L771">Fixture output loader does not consume body</a></li>
           <li><a href="https://github.com/ethereum/execution-specs/blob/5b2b22c75f69bda02615204396b70a91e00529e0/src/ethereum/forks/amsterdam/fork.py#L1010-L1091">EELS transaction-processing path</a></li>
           <li><a href="https://github.com/ethereum/execution-specs/blob/5b2b22c75f69bda02615204396b70a91e00529e0/src/ethereum_spec_tools/evm_tools/t8n/__init__.py#L324-L391">EELS t8n reject-and-continue path</a></li>
-          <li><a href="https://github.com/ethereum/execution-specs/blob/0b79966b037eb17f1a02f2f13e73de06bedf2342/tests/evm_tools/test_t8n_body.py#L19-L53">PR #3361 body regression</a></li>
+          <li><a href="https://github.com/ethereum/execution-specs/blob/6d963d31e539fd82284ea52a10d3b331d6186b7a/packages/testing/src/execution_testing/evm_tools/tests/test_t8n_body.py#L19-L53">PR #3361 body regression, at its 25 September 2026 head</a></li>
         </ul>
 
         <div class="note">
