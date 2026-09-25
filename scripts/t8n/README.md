@@ -46,10 +46,12 @@ keeps the two modes byte-identical without hiding how inputs are composed.
 | `requests` | a real EIP-7002 withdrawal request, so `requests` is non-empty and `requestsHash` is not the empty digest |
 | `block-exception` | a failing checked system transaction landing in `blockException` instead of aborting the run |
 
-Every case runs at Prague. The lane's other three forks differ from Prague in
-their blob schedule, which no case here exercises; a BPO case would need blob
-transactions and is a fair successor rather than a gap this corpus pretends to
-cover.
+These nine cases run at Prague. Two of the lane's other four forks, BPO1 and
+BPO2, differ from Prague only in their blob schedule, which no case here
+exercises; a BPO case would need blob transactions and is a fair successor
+rather than a gap this corpus pretends to cover. Osaka has no case of its own
+either. The fifth fork, Amsterdam, is covered separately by the thirty `am-*`
+cases below.
 
 ## Amsterdam lane
 

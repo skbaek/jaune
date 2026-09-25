@@ -55,13 +55,13 @@ def fail(message: str) -> "NoReturn":  # type: ignore[valid-type]
     raise SystemExit(2)
 
 
-# The checkout also carries the local Jaune wrapper (see the goal's W-E and
-# ~/plans/t8n-eest-jaune-wrapper.patch). That patch is framework-side only: it
-# adds a client wrapper, its tests, and one opt-in flag on the transition-tool
-# base class, none of which the `ethereum-spec-evm t8n` entry point reaches. So
-# the generator accepts a checkout that is the anchor *plus exactly those
-# files*, and refuses anything else -- a change under `src/ethereum/` would
-# change the goldens and must never pass unnoticed.
+# The checkout also carries the local Jaune wrapper: a small framework-side
+# patch, applied on top of the pinned commit, that adds a client wrapper, its
+# tests, and one opt-in flag on the transition-tool base class -- none of
+# which the `ethereum-spec-evm t8n` entry point reaches. So the generator
+# accepts a checkout that is the anchor *plus exactly those files*, and
+# refuses anything else -- a change under `src/ethereum/` would change the
+# goldens and must never pass unnoticed.
 WRAPPER_PATHS = {
     "packages/testing/src/execution_testing/client_clis/__init__.py",
     "packages/testing/src/execution_testing/client_clis/clis/jaune.py",

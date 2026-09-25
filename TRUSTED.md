@@ -26,9 +26,8 @@ A Jaune or Blanc theorem is checked by the Lean 4 kernel at the pinned
 toolchain version, on top of Mathlib at a pinned revision, and depends on the
 three standard classical axioms — `propext`, `Classical.choice`, `Quot.sound` —
 and nothing else. Nothing in the Jaune library is `@[extern]`, `opaque`,
-`partial`, `native_decide`-backed, or `sorry`-ed, and there is no `panic` in
-its import closure; the one `bv_decide` in the library is kernel-checked and
-contributes no axiom. What the theorems do *not* cover is
+`partial`, `native_decide`-backed, `bv_decide`-backed, or `sorry`-ed, and there
+is no `panic` in its import closure. What the theorems do *not* cover is
 the fixture harness (`Main.lean`, which no theorem mentions), the two harness
 modules outside the library's import closure, and the question of whether the
 theorems state the properties you actually care about. Conformance with the
@@ -253,24 +252,24 @@ conformance tiers.
 
 ## The known exceptions
 
-**One `bv_decide`, and it costs nothing.** `Jaune/Basic.lean` closes the codec
-equation lemma `Bytes.toB256_pair` with `bv_decide`; it is the only occurrence
-in the library. Measured 2026-08-03:
-
-```
-$ echo 'import Jaune.Basic
-#print axioms Jaune.Bytes.toB256_pair' > /tmp/probe.lean && lake env lean /tmp/probe.lean
-'Jaune.Bytes.toB256_pair' depends on axioms: [propext, Classical.choice, Quot.sound]
-```
-
-So this `bv_decide` produced a kernel-checked proof and no per-declaration
-`_native.bv_decide.ax_*` axiom. (That reading comes from `#print axioms`, which
-lean4#15226 makes advisory; `Bytes.toB256_pair` has no row in Jaune's
-from-scratch audit.) It adds nothing to the trusted base. Blanc's
-gate nonetheless rejects `_native.` axioms by name, because other `bv_decide`
-configurations can produce them; and `bv_decide` remains banned by project
-policy inside the protected-theorem cone. Both remain sensible guards. Neither
-is presently doing any work on this lemma.
+**No `bv_decide` in the library.** `Jaune/Basic.lean`'s codec equation lemma
+`Bytes.toB256_pair` closed with `bv_decide` until the Lean 4.34 migration
+(`10ed5a4`, 2026-09-20) rewrote its proof to plain `simp`; no declaration
+anywhere in the library uses `bv_decide` now, so there is nothing here for an
+axiom reading to qualify. `Bytes.toB256_pair` was never covered by Jaune's
+from-scratch audit either way — it sits outside the canonical execution
+surface `scripts/ExecutionAxioms.lean` pins. `bv_decide` remains banned by
+project policy inside the protected-theorem cone regardless, because some
+configurations can produce a per-declaration `_native.bv_decide.ax_*` axiom
+that a naive `#print axioms` or `Lean.collectAxioms` reading can miss when it
+is reached through an imported inductive (lean4#15226) — which is exactly why
+Jaune's own axiom evidence is never `#print axioms`, `collectAxioms`, or
+`lean_verify`, but the from-scratch walk `Jaune.AxiomAudit.walk` runs for
+every `#expect_axioms` pin, enforced by the default build (see [Destination
+axiom audit](scripts/GATES.md#destination-axiom-audit)). Blanc, which does use
+`bv_decide`, guards it
+with a dedicated check (`scripts/check.sh`) that rejects `_native.` axioms by
+name.
 
 **58 retained allowlist rows, zero pending.** 43 R3 rows for explicitly
 justified optimized or reference operations and 15 R4 rows for legacy renderers
