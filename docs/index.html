@@ -483,7 +483,8 @@ footer a:hover{color:var(--ink)}
           is written down exactly once. The one place the binary runs something else is declared:
           a calldata-sharing <span class="mono">execFueledCached</span> replaces
           <span class="mono">execFueled</span> in compiled code, through an
-          <span class="mono">@[csimp]</span> theorem proving the two equal.
+          <span class="mono">@[csimp]</span> theorem proving the two equal; the sharing applies on
+          the pre-Amsterdam forks.
         </p>
       </div>
       <div class="panel">
@@ -683,6 +684,7 @@ footer a:hover{color:var(--ink)}
             <span class="chip"><b>8037</b> state-gas dimension</span>
             <span class="chip"><b>8038</b> access repricing</span>
             <span class="chip"><b>2780</b> tx value cost</span>
+            <span class="chip"><b>7976</b> calldata floor</span>
             <span class="chip"><b>7981</b> access-list floor</span>
             <span class="chip"><b>7954</b> 64 KiB code limit</span>
             <span class="chip"><b>7843</b> SLOTNUM</span>
@@ -736,19 +738,21 @@ footer a:hover{color:var(--ink)}
         <thead><tr><th>suite</th><th class="num">files</th><th class="num">cases</th><th>result</th><th class="num">wall</th><th class="num">--jobs auto</th></tr></thead>
         <tbody>
           <tr><td class="mono">--suite smoke</td><td class="num">16</td><td class="num">155</td><td class="passmark">all pass</td><td class="num">0.5 s</td><td class="num">0.5 s</td></tr>
-          <tr><td class="mono">--suite prague</td><td class="num">2,526</td><td class="num">16,673</td><td class="passmark">all pass</td><td class="num">~12 min</td><td class="num">~3.0 min</td></tr>
-          <tr><td class="mono">--suite osaka</td><td class="num">2,467</td><td class="num">17,423</td><td class="passmark">all pass</td><td class="num">~8 min</td><td class="num">~2.3 min</td></tr>
-          <tr><td class="mono">--suite transitions</td><td class="num">13</td><td class="num">109</td><td class="passmark">all pass</td><td class="num">16 s</td><td class="num">~8 s</td></tr>
-          <tr><td class="mono">--suite full</td><td class="num">5,006</td><td class="num">34,205</td><td class="passmark">all pass</td><td class="num">~18.9 min</td><td class="num">~5.0 min</td></tr>
+          <tr><td class="mono">--suite prague</td><td class="num">2,526</td><td class="num">16,673</td><td class="passmark">all pass</td><td class="num">~12 min</td><td class="num">341.7 s</td></tr>
+          <tr><td class="mono">--suite osaka</td><td class="num">2,467</td><td class="num">17,423</td><td class="passmark">all pass</td><td class="num">~8 min</td><td class="num">231.0 s</td></tr>
+          <tr><td class="mono">--suite transitions</td><td class="num">13</td><td class="num">109</td><td class="passmark">all pass</td><td class="num">16 s</td><td class="num">18.0 s</td></tr>
+          <tr><td class="mono">--suite full</td><td class="num">5,006</td><td class="num">34,205</td><td class="passmark">all pass</td><td class="num">~18.9 min</td><td class="num">618.9 s</td></tr>
         </tbody>
       </table>
     </div>
     <p class="cap"><b>Table 1</b> — the current-mainnet lane
       (<span class="mono">scripts/check-mainnet.sh</span>), <span class="mono">blockchain_tests</span>
       from <span class="mono">tests@v20.0.2</span>, verified by SHA-256 at bootstrap. This lane has no
-      expected-failure baseline: every manifested case at a supported fork passes.<sup class="fn"><a href="#fn3">3</a></sup>
-      The timing columns retain historical <span class="mono">tests@v20.0.1</span> measurements;
-      they are not new measurements of the updated corpus. Both harnesses take
+      expected-failure baseline: every manifested case at a supported fork passed in the full-lane
+      run of 2026-09-21.<sup class="fn"><a href="#fn3">3</a></sup>
+      The timing columns were measured on the <span class="mono">tests@v20.0.1</span> corpus,
+      not the updated one: the <span class="mono">--jobs auto</span> column on 2026-09-21, after the
+      Lean 4.34 migration; the sequential column earlier. Both harnesses take
       <span class="mono">--jobs auto</span>. Uncontended per-file timings require sequential runs.</p>
 
     <div class="tablewrap" style="margin-top:34px">
@@ -928,7 +932,7 @@ footer a:hover{color:var(--ink)}
           <div class="val">11.48 s</div></div>
       </div>
     </div>
-    <p class="cap"><b>Fig. 5</b> — same instrument, same machine, five-run medians. The v4.32.1 toolchain
+    <p class="cap"><b>Fig. 5</b> — same four fixture families, same machine, summed per-file seconds, each bar from its arc’s committed report; the last is the best of three runs. The v4.32.1 toolchain
       migration, the totality arc, and the semantic-integrity arc each re-measured and landed at
       parity or better — the BLS tier 20.6% <em>faster</em> after migration, the checked-entry-point
       path 2.3% faster than the code it replaced. The last bar is the most recent committed run of
@@ -1095,8 +1099,8 @@ footer a:hover{color:var(--ink)}
             proofs cross Jaune’s SHA-256 precompile at twelve source-shaped sites and read the
             Merkle root off every admitted future of a derived deployment; Lido’s withdrawals
             gateway and upgradeable proxy, carrying the first delegatecall and two-contract
-            composition theorems; and a pro-rata pricing étude built on Jaune’s new
-            integer-arithmetic layer.
+            composition theorems; a pro-rata pricing étude built on Jaune’s new
+            integer-arithmetic layer — and on since, as the Blanc page records.
           </p>
           <p class="dim" style="font-size:.94rem;margin-bottom:0">
             Scope, unchanged since the first port: these are <strong>reimplementations</strong>,
@@ -1224,7 +1228,7 @@ footer a:hover{color:var(--ink)}
           package through an exact Git dependency and verifies what it installed. The gates extend
           to the tooling itself: an elaboration-budget gate holds the compile time of every Lean
           file the default build elaborates against a host-local baseline, a memory probe bounds a
-          1,024-deep call path carrying a megabyte of calldata, and a CLI gate pins the runner’s
+          1,024-deep Prague call path carrying a megabyte of calldata, and a CLI gate pins the runner’s
           refusal behaviours, so green never means a filter silently selected nothing. Generated
           constants and vectors come from named generators, never hand transcription.</p>
       </div>
@@ -1328,8 +1332,8 @@ footer a:hover{color:var(--ink)}
           function of it, so rule validity is one theorem over five records instead of a premise on
           every statement; a static gate refuses any interpreter site that reads a repriced number
           from a global instead of the selected rules. Separately, a call chain 1,024 frames deep
-          no longer keeps one copy of a megabyte of calldata per frame: before Amsterdam, the four call
-          opcodes share one evaluated slice through the proved <span class="mono">@[csimp]</span> equation of
+          no longer keeps one copy of a megabyte of calldata per frame: on the pre-Amsterdam forks, the
+          four call opcodes share one evaluated slice through the proved <span class="mono">@[csimp]</span> equation of
           §1.1, and a memory-probe gate holds the peak under a fixed budget.</p>
       </div>
       <div class="stage done">
@@ -1470,8 +1474,8 @@ footer a:hover{color:var(--ink)}
           <span class="mono">--help</span> lists the labels. A run fails if no case survives its
           filters, so green never means nothing was checked. Every gate’s exact command, scale,
           runtime, and pass criterion is catalogued in <span class="mono">scripts/GATES.md</span>;
-          the fixture harnesses take <span class="mono">--jobs auto</span>, which puts the whole
-          current-mainnet corpus inside a coffee break.
+          the fixture harnesses take <span class="mono">--jobs auto</span>, which ran the whole
+          current-mainnet corpus in about ten minutes on the catalogue host.
         </p>
       </div>
       <div class="panel">
@@ -1506,7 +1510,7 @@ footer a:hover{color:var(--ink)}
       </div>
       <div class="term">require jaune from git "https://github.com/skbaek/jaune.git" @ "&lt;full commit id&gt;"</div>
       <p class="dim" style="font-size:.88rem;margin:14px 0 0">
-        Pin a full commit: there are no release tags and no compatibility promise across revisions.
+        Pin a full commit: there are no version tags and no compatibility promise across revisions.
         <span class="mono">API.md</span> sorts the library by proof task and says which modules are
         supported, which are incidental, and which (the Amsterdam lane) are experimental;
         <span class="mono">Examples/</span> holds the checked examples it cites, which compile with
