@@ -1,6 +1,6 @@
 # Flatten the interpreter recursion and thin Blanc shadows — closure report
 
-**Plan:** `~/plans/flatten.md` (Steps 1–4).
+**Plan:** the flatten plan (Steps 1–4).
 **Closure date:** 2026-07-28 (Asia/Seoul).
 **Candidate branches:** `elevm` `codex/flatten` at
 `fed6c71fe95361d4bcf328bc64f7e132cc453775` (documentation tip; semantic core

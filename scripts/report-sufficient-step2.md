@@ -1,6 +1,6 @@
 # Step 2 — the strict-decrease corpus and the sufficiency theorem
 
-**Plan:** `~/plans/sufficient.md`, Step 2
+**Plan:** the sufficiency plan, Step 2
 **Repository:** `~/elevm`, branch `codex/sufficient`
 **Step-1 base:** `5c5fe7a`
 **Step-2 tip:** `17556bf` (not pushed; Step 3 produces the pin target)

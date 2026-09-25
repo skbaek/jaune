@@ -1,6 +1,6 @@
 # Integrity arc — Step 1 design report
 
-Re-audit and freeze of the semantic-integrity architecture. Plan: `~/plans/integrity.md`. Executed 2026-07-31 (Asia/Seoul).
+Re-audit and freeze of the semantic-integrity architecture. Plan: the integrity plan. Executed 2026-07-31 (Asia/Seoul).
 
 This report is the frozen design contract for Steps 2–12. Where it contradicts the plan's planning-time snapshot, **this report wins**; every divergence is in §11. Two Step-1 deliverables landed as committed machine-checkable artifacts and are normative in their own right: `scripts/check-integrity.sh` and `scripts/integrity-allow.txt`.
 
@@ -11,7 +11,7 @@ This report is the frozen design contract for Steps 2–12. Where it contradicts
 | Jaune | `codex/integrity` | `b0dc4eee6d82e0309321b2350071b20c0e3984a3` | clean |
 | Blanc | `codex/integrity` | `5aff61505d02a942fa525ff1bd593f4708f9778d` | clean |
 
-Both are the documentation-only commits on the restructure arc's semantic candidates (`ad7f47ec…` / `ecad8192…`), which remain ancestors. Both on `leanprover/lean4:v4.32.1`. Blanc pins Jaune `ad7f47ec4bd1fa3cd1c4a315174b7361f7960518` in `lakefile.lean`, `lake-manifest.json`, and the Lake checkout — all three agreeing, an ordinary clone, not a symlink. `silence.md`, `blake2f.md`, `restructure.md` all closed green and merged; the sequencing stop condition does not fire.
+Both are the documentation-only commits on the restructure arc's semantic candidates (`ad7f47ec…` / `ecad8192…`), which remain ancestors. Both on `leanprover/lean4:v4.32.1`. Blanc pins Jaune `ad7f47ec4bd1fa3cd1c4a315174b7361f7960518` in `lakefile.lean`, `lake-manifest.json`, and the Lake checkout — all three agreeing, an ordinary clone, not a symlink. The silence, blake2f, and restructure plans all closed green and merged; the sequencing stop condition does not fire.
 
 Baseline gates, each run alone before any edit, all matching the restructure closure scale for scale: `env_doctor` PASS; `env_doctor --mainnet-deep` PASS; `gen_mainnet_manifest --check` PASS; `gen-vector-shards --check` PASS (106/106); `check-hygiene.sh` PASS (0); Python **121 tests** OK; Jaune `lake build` **1,768 jobs**; `check-u256.sh` 21,593/21,593; `--patch` 10/10; `--rlp4` 4/4; `--depth` 67/67 vs baseline; mainnet `smoke` 16/16; `transitions` 13/13 files, 109 cases; Blanc `lake build` **913 jobs**; Blanc `check.sh --no-build` 4/4 exact axiom sets. Sole build diagnostic in either repo is the inherited `Jaune/Types.lean:462` unused-simp warning.
 
@@ -233,7 +233,7 @@ Explicit `tip` + `tip_is_last` resolves the nonempty-tip dependency: **no partia
 | `BlockValidationError` | **`Transaction.lean`** | ditto `blockExceptionTags` (`Machine:913`) |
 | `ImportFailure`, `BlockRejection`, `ImportOutcome`, `RawImportFailure` | **`Transaction.lean`** | entry points all there |
 
-**Why precompile reasons cannot live in `Precompiles.lean`.** Import order is `Machine ← Precompiles ← Execution`. `PrecompResult` (`Precompiles:7`) carries its failure as a `String`, and that failure must inhabit the VM carrier declared **upstream** at `Machine:1174`. A typed precompile reason declared in `Precompiles.lean` could not be a constructor of the Machine-level halt type without a cycle. Resolution: the *reason type* is a constructor family of the Machine-level halt error; `Precompiles.lean` keeps only precompile-specific helpers and renderer arms. **The plan's Step-1 prompt says "precompile errors in `Precompiles.lean`" — that is the one placement instruction this report overrides.** It is a placement correction, not the cycle the plan lists as a stop condition: the dependency graph is exactly what `restructure.md` produced. No layer needs a type from a module that imports it. **No cycle exists.**
+**Why precompile reasons cannot live in `Precompiles.lean`.** Import order is `Machine ← Precompiles ← Execution`. `PrecompResult` (`Precompiles:7`) carries its failure as a `String`, and that failure must inhabit the VM carrier declared **upstream** at `Machine:1174`. A typed precompile reason declared in `Precompiles.lean` could not be a constructor of the Machine-level halt type without a cycle. Resolution: the *reason type* is a constructor family of the Machine-level halt error; `Precompiles.lean` keeps only precompile-specific helpers and renderer arms. **The plan's Step-1 prompt says "precompile errors in `Precompiles.lean`" — that is the one placement instruction this report overrides.** It is a placement correction, not the cycle the plan lists as a stop condition: the dependency graph is exactly what the restructure plan produced. No layer needs a type from a module that imports it. **No cycle exists.**
 
 ## 7. Structural predicates and the staged typed-tx rule
 
@@ -276,7 +276,7 @@ Every semantic string branch reads through this, `isExceptionalHalt` (`:757`), o
 
 Machine-checked as `scripts/integrity-allow.txt`; counts generated, not transcribed.
 
-**Absence checks all hold.** `partial def`, `implemented_by`, `dbg_trace`: **zero** in `Jaune/*.lean`, `Jaune.lean`, `Main.lean`. `silence.md` held. The only two `partial def`s in the repo are `exprSize` and `zetaAll` in `scripts/flatten-pilot.lean`, a Lean metaprogram over `Expr` — neither library code nor in any closure, correctly out of scope. R1 asserts this **outright, no allowlist**; the gate refuses an allowlist carrying an R1 row.
+**Absence checks all hold.** `partial def`, `implemented_by`, `dbg_trace`: **zero** in `Jaune/*.lean`, `Jaune.lean`, `Main.lean`. The silence plan held. The only two `partial def`s in the repo are `exprSize` and `zetaAll` in `scripts/flatten-pilot.lean`, a Lean metaprogram over `Expr` — neither library code nor in any closure, correctly out of scope. R1 asserts this **outright, no allowlist**; the gate refuses an allowlist carrying an R1 row.
 
 **Panics — exactly two, both in the closure:** `Machine:1424` `fakeExpAux` `panic! "error : fuel exhausted in fake exponentiation"` (Step 7); `Hash:259` `KECCAK.Array.modify!` `panic "Array.modify! out of bounds"` (Step 8). Nothing outside the closure panics.
 
@@ -297,22 +297,22 @@ Machine-checked as `scripts/integrity-allow.txt`; counts generated, not transcri
 | `Basic:1254` | `Array.copyD`, `Array.set!` | 4 |
 | `Basic:1458` | `List.splitToArray.aux`, `Array.set!` | 4 |
 
-**Two refuted plan premises.** **(a) Nothing is `private`.** No bang-op site sits inside a `private` declaration. `Precompiles.lean` and `BLS.lean` have **zero** `private` declarations; `Hash.lean`'s only two (`rolc`, `round1600`) contain none. The keccak/SHA-256/RIPEMD-160/Blake2 kernels are public `Jaune.KECCAK.*`, `Jaune.SHA256.*`, `Jaune.Blake2.*`, reachable by any importer — internal by convention only. P0.6 item 4 permits "a **private** optimized array kernel behind a checked wrapper", so **Step 8 must privatise these or give them fixed-size inputs.** A wrapper over an exported raw kernel is not compliant — that is exactly the "public helper accepting an arbitrary short array" the plan requires rejected or totalized. **(b) `Blake2.g` retains four `Array.set!`.** `Blake2.Vec` is a sixteen-field scalar structure and `Blake2.roundVec_toArray` / `Blake2.roundsVec_toArray` exist with axiom set exactly `[propext, Quot.sound]`, as promised. But `Blake2.g` still has four `Array.set!`. They are **off the execution path** and retained because the equivalence theorems mention them — not dead code, as the plan says. The plan's stronger claim that `blake2f.md` "replaces `Blake2.g`'s four `Array.set!` calls" is **false as stated**. Not a hazard, not a stop condition: `Array.set!` is `Array.setIfInBounds`, hence **total**. Step 8 must not reopen the kernel.
+**Two refuted plan premises.** **(a) Nothing is `private`.** No bang-op site sits inside a `private` declaration. `Precompiles.lean` and `BLS.lean` have **zero** `private` declarations; `Hash.lean`'s only two (`rolc`, `round1600`) contain none. The keccak/SHA-256/RIPEMD-160/Blake2 kernels are public `Jaune.KECCAK.*`, `Jaune.SHA256.*`, `Jaune.Blake2.*`, reachable by any importer — internal by convention only. P0.6 item 4 permits "a **private** optimized array kernel behind a checked wrapper", so **Step 8 must privatise these or give them fixed-size inputs.** A wrapper over an exported raw kernel is not compliant — that is exactly the "public helper accepting an arbitrary short array" the plan requires rejected or totalized. **(b) `Blake2.g` retains four `Array.set!`.** `Blake2.Vec` is a sixteen-field scalar structure and `Blake2.roundVec_toArray` / `Blake2.roundsVec_toArray` exist with axiom set exactly `[propext, Quot.sound]`, as promised. But `Blake2.g` still has four `Array.set!`. They are **off the execution path** and retained because the equivalence theorems mention them — not dead code, as the plan says. The plan's stronger claim that the blake2f plan "replaces `Blake2.g`'s four `Array.set!` calls" is **false as stated**. Not a hazard, not a stop condition: `Array.set!` is `Array.setIfInBounds`, hence **total**. Step 8 must not reopen the kernel.
 
 **Severity triage.** `Array.set!` = `setIfInBounds`: **total**; the objection is allocation cost and an unexpressed invariant, not partiality. `a[i]!`, `ByteArray.get!`, `Option.get!`: **do panic** (stderr + `default`). `Jaune.List.slice!` (`Basic:410`): total despite the name; zero-pads via `takeD`. **The single genuinely unguarded, reachable, attacker-influenced site is `jumpable` (`Machine:2393`)**: `cd.get! k` where `k` is a popped stack value with no bound relative to `cd.size`. An out-of-range `JUMP` emits a real panic line on stderr and returns `default = 0`; the *verdict* stays correct (0 is not `JUMPDEST`, so `InvalidJumpDestError`), but a partial read is live on a consensus path. `noPushBefore` and `ByteArray.getInst` are guarded by explicit `< size` tests; both `Option.get!` sites are guarded by validity/`isSome` tests immediately above.
 
 **Residual-partiality policy, FROZEN.** (1) A valid checked input reaches **no** panic/default branch. (2) An optimized kernel may retain a low-level operation only behind a formal size/bounds interface **and** an exact allowlist row naming its declaration, its checked/fixed-size wrapper, and its bounds/size theorem — both real declarations. (3) No carve-out for `partial def` or `implemented_by`, ever. (4) The allowlist is a **shrink-only budget**, `# pending-budget: 329` today; a step discharging a row deletes it (or rewrites it `KEEP`) and lowers the budget in the same commit. That is what makes "the list cannot grow without the static gate failing" mechanical. (5) Full reference-algorithm equivalence for keccak is now **proved**:
-`Jaune.KECCAK.f1600_eq` (`Jaune/Hash.lean`, landed by `~/plans/keccak-proof.md`)
+`Jaune.KECCAK.f1600_eq` (`Jaune/Hash.lean`, landed by the keccak-proof plan)
 shows the optimized `f1600` kernel equals the retained polymorphic reference
 transcription `f rndc · UInt64.rol`, with axioms exactly `[propext,
 Quot.sound]`. That is a proof about the transcription of Andrey Jivsov's C
 implementation, not a FIPS-202 conformance proof — conformance remains the
 job of the differential oracle and the fixture corpora, unaffected by this
 theorem. This item's history is worth keeping: the planning-time premise it
-retracts (`~/plans/keccak-proof-proposal.md` recording that `f1600` "does
+retracts (the keccak-proof proposal recording that `f1600` "does
 **not** yield to Blake2's unfolding recipe") turned out to be an artifact of
 an unrelated Lean-version timeout, not a structural obstacle, once
-`~/plans/archive/integrity.md` moved the reference to a proof-carrying
+the archived integrity plan moved the reference to a proof-carrying
 `Vector ξ 25`. Nothing about Step 8's allowlist changes: keccak's R2/R3
 sections are empty and `# pending-budget: 0` is untouched.
 
@@ -335,4 +335,4 @@ Each overrides the plan text; none is a stop condition.
 
 ## 12. Scope check
 
-No semantic change. No opcode behaviour, gas constant, gas charge timing, fork activation fact, trie commitment, cryptographic algorithm, error text, or validation order altered. No baseline, exclusion list, manifest, timeout, or protected theorem weakened or rebased. No `sorry`, `admit`, new axiom, or `ofReduce*`. No history rewrite, force-push, local-path Blanc dependency, or protected-branch merge. `~/plans/todo.md` was neither read as instruction, staged, committed, nor modified.
+No semantic change. No opcode behaviour, gas constant, gas charge timing, fork activation fact, trie commitment, cryptographic algorithm, error text, or validation order altered. No baseline, exclusion list, manifest, timeout, or protected theorem weakened or rebased. No `sorry`, `admit`, new axiom, or `ofReduce*`. No history rewrite, force-push, local-path Blanc dependency, or protected-branch merge. The planning to-do list was neither read as instruction, staged, committed, nor modified.

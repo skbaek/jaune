@@ -12,7 +12,7 @@
 -- identities, unmapped actual reasons, and broad categories such as a bare
 -- `InvalidBlock` are failures, never successes.
 --
--- Since Step 10 of ~/plans/integrity.md, the actual side is classified by
+-- Since Step 10 of the integrity plan, the actual side is classified by
 -- **constructor**: `FixtureException.ofBlockRejection` maps each typed
 -- rejection reason directly to its official identity (or to `none`, failing
 -- closed). The only string this module still parses is the fixture's own

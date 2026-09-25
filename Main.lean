@@ -447,7 +447,7 @@ def Except.toIO {ξ : Type} : Except String ξ → IO ξ
   | .error err => .throw err
 
 
-/-- Golden-message capture for `~/plans/integrity.md` P0.7.
+/-- Golden-message capture for the integrity plan's P0.7.
 
 When `JAUNE_MSG_LOG` names a file, every fixture-observed rendered rejection
 message — the raw diagnostic text an expected-invalid block actually failed

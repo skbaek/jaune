@@ -1,12 +1,12 @@
 # `t8n` frontend — completion report
 
 **Date:** 2026-08-10
-**Goal:** `~/plans/t8n-goal.md`
+**Goal:** the t8n goal (a planning record kept outside this repository)
 **Jaune branch:** `codex/t8n-frontend`, from `main` `4ec33de`
 **Conformance target:** `execution-specs` `forks/amsterdam`
 `9d6e6f8352a0f76e7e8803722d1a2798fa4f0a96`, at
 `~/execution-specs-t8n-amsterdam`
-**Wrapper patch:** `~/plans/t8n-eest-jaune-wrapper.patch`, also committed on
+**Wrapper patch:** kept with the planning records, also committed on
 that checkout's `jaune-wrapper` branch
 **Third tool:** go-ethereum `evm`, `evm version 1.15.6-stable-19d2b4c8`, at
 `~/geth-evm-1.15.6/`
@@ -37,7 +37,7 @@ decoder block moved into that module, and script/documentation additions.
 
 | ID | Verdict | Evidence |
 |---|---|---|
-| G1 | **met** | `~/execution-specs-t8n-amsterdam`, `git rev-parse HEAD` = `9d6e6f8352a0f76e7e8803722d1a2798fa4f0a96`, outside `/private/tmp`; own venv at `.venv` (Python 3.11.9, `uv sync --no-default-groups --group test`); `conformance_target` entry in `scripts/sources.json` (commit `3d0bcce`); `~/execution-specs` untouched, still `4198b9c5996713b268aed602739d5aa40e277694`, never repointed |
+| G1 | **met** | `~/execution-specs-t8n-amsterdam`, `git rev-parse HEAD` = `9d6e6f8352a0f76e7e8803722d1a2798fa4f0a96`, outside the temporary directory; own venv at `.venv` (Python 3.11.9, `uv sync --no-default-groups --group test`); `conformance_target` entry in `scripts/sources.json` (commit `3d0bcce`); `~/execution-specs` untouched, still `4198b9c5996713b268aed602739d5aa40e277694`, never repointed |
 | G2 | **met** | Every `env` / `txs` / `alloc` field of the design report's Prague–BPO2 table is accepted (`envKnownFields`, `txKnownFields`), and an unrecognised one is refused by name. `currentExcessBlobGas` is derived from the parent fields through `calculateExcessBlobGas` when absent, and `currentBaseFee` through `calculateBaseFeePerGas`. The RLP-string `txs` form is refused with the target's own reason. Measured exits: out-of-lane `--state.fork Cancun` → 1; missing `--state.fork` → 1; RLP `txs` → 1; unknown flag → 1; unknown `env` field → 1; a good run → 0. No fallback to Prague anywhere |
 | G3 | **met** | The split is typed: `TxParse Tx = Except TxParseError Tx`, and `RejectReason` is `parse` or `execution`, rendered once at the emission boundary. Corpus case `reject-parse`: transaction 0 never becomes a `Tx`, is reported in `rejected` at index `0x0`, and transaction 1 still executes and produces a receipt |
 | G4 | **met** | `--state-test` applies `txs[0]` only, through `runStateTest`, with no system operations, no withdrawals and no requests. Rollback is not threading the new state. Corpus case `transfer-state-test` is byte-identical to the target's `--state-test` output |

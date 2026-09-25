@@ -1,5 +1,5 @@
-# Hand-authored target baseline for `scripts/check-legacy.sh --bls` (precomps.md
-# Step 9). Every file in scripts/bls-tests.txt is expected PASS under the
+# Hand-authored target baseline for `scripts/check-legacy.sh --bls` (precompile
+# plan Step 9). Every file in scripts/bls-tests.txt is expected PASS under the
 # tier defaults: fixture root = the pinned EEST v5.4.0 snapshot at
 # ~/eest-fixtures/fixtures/blockchain_tests (provenance in
 # scripts/vectors/SOURCES.md).

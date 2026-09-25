@@ -1,11 +1,11 @@
 # Rename closure report — ELeVM → Jaune, 2026-07-29
 
-Plan: `~/plans/rename.md`. Focus: identity only. No semantics, no proof, no
+Plan: the rename plan. Focus: identity only. No semantics, no proof, no
 classification, and no baseline changed in this arc.
 
 ## Verdict
 
-**Green.** Every gate is classification-exact against the `sufficient.md`
+**Green.** Every gate is classification-exact against the sufficiency plan's
 closure baselines. The grep audit is empty on every functional surface in
 jaune, Blanc, elanc, the active plans, agent memory, and the site. Two
 user-owned FULL gates remain outstanding, and both merges are the user's.
@@ -23,10 +23,10 @@ After the arc, occurrences outside the allowlist are **zero** in all of:
 | `~/jaune` | `scripts/report-*.md`, `scripts/handoff-sufficient-step2.md`, the oracle preimage | clean |
 | `~/blanc` | `scripts/report-*.md` | clean |
 | `~/elanc` | `docs/portability-plan.md`, `docs/portability-acceptance-2026-07-24.md` | clean |
-| `~/plans` | `archive/`, `rename.md`, one quoted conversation title | clean |
-| agent memory | `jaune-rename.md`, `rename-state.md` | clean |
-| `~/pitch/jaune-blanc-site` | — | clean |
-| `~/pitch/pitch.md` | entire file (historical) | untouched, 16 mentions |
+| planning records | the archive, the rename plan, one quoted conversation title | clean |
+| agent memory | two rename memory entries | clean |
+| the site's working copy | — | clean |
+| a private pitch draft | entire file (historical) | untouched, 16 mentions |
 
 ## Commit ledger
 
@@ -36,7 +36,7 @@ After the arc, occurrences outside the allowlist are **zero** in all of:
 | jaune | `codex/rename` | `b4ce153` | runners, CI, docs, README — **Blanc's pin target** |
 | blanc | `codex/rename` | `08f999e` | require/manifest/checkout, 4 imports, README, canary |
 | elanc | `codex/rename` | `1464bff` | agent config, setup guide, doctor + tests, versions.json |
-| plans | `codex/rename` | `b819242` | active plans; `archive/` untouched |
+| planning records | `codex/rename` | `b819242` | active plans; the archive untouched |
 
 Agent memory and the site are not version-controlled and were edited in place.
 
@@ -126,9 +126,9 @@ symlink. The stale `.lake/packages/elevm` tree was removed.
 5. **Surfaces the plan did not enumerate.** Blanc's
    `.github/workflows/canary.yml` is functional — it `ls-remote`s the
    repository URL and seds the lakefile pin — and `ELEVM_DEV` became
-   `JAUNE_DEV`. Four active plans beyond `integrity.md` and `todo.md`
-   (`big-step-planning.md`, `small-step-planning.md`, `jumpdest-proposal.md`,
-   `lean-eval-proposal.md`) name runnable commands and were updated.
+   `JAUNE_DEV`. Four active plans beyond the integrity plan and the to-do list
+   (the big-step and small-step planning notes, the jumpdest proposal, and
+   the Lean-evaluation proposal) name runnable commands and were updated.
 
 6. **Two elanc docs left as history**, per that repository's own rule at
    `docs/portability-plan.md:117` — *"Do not rewrite historical evidence merely
@@ -173,7 +173,7 @@ Minor: `~/jaune/.gitignore` covers `/.lake` and `/scripts/report-*.txt` but not
 ## Handoff
 
 Both tips are pushed and clean and are presented for user merge; **nothing was
-merged**. After merge, `~/plans/rename.md` moves to `~/plans/archive/` and
-`integrity.md` Step 1 may begin — its re-audit re-derives every declaration,
+merged**. After merge, the rename plan moves to the planning archive and
+the integrity plan's Step 1 may begin — its re-audit re-derives every declaration,
 path, and module name under the new names, so it absorbs this rename at no
 marginal cost.

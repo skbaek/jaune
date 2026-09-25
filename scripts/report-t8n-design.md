@@ -5,11 +5,11 @@
 `5d16ebac180ee36776994ef232a7ae65e672d10d`
 **Pinned oracle (unchanged):** `~/execution-specs`,
 `4198b9c5996713b268aed602739d5aa40e277694`
-**Current upstream, read-only:** `/private/tmp/execution-specs-t8n-20260802`,
+**Current upstream, read-only:** a temporary `execution-specs` checkout,
 `forks/amsterdam`, `9d6e6f8352a0f76e7e8803722d1a2798fa4f0a96`
-**Comparison, read-only:** `/private/tmp/execution-specs-t8n-mainnet-20260802`,
+**Comparison, read-only:** a second temporary `execution-specs` checkout,
 `mainnet`, `7b8124a77280edaaad877128937b71a1e3a7ebc5`.
-**Plan:** `~/plans/t8n.md`, Step 1 ("Rebind, reconnoitre, and re-decide").
+**Plan:** the t8n plan, Step 1 ("Rebind, reconnoitre, and re-decide").
 **Status:** Step 1 complete, technical verdict GO. The arc is **paused after
 Step 1** by user decision; Steps 2–6 are not started, so no `t8n` frontend
 exists in this repository. This report was written on `codex/t8n` and merged to
@@ -18,7 +18,7 @@ carried nothing else.
 
 **These coordinates are historical.** Every line number and gate figure below
 was measured at `5d16eba`; `main` has moved since. Re-measure the baseline per
-`~/plans/t8n.md`, *Baseline gates*, rather than inheriting the numbers here.
+the t8n plan's *Baseline gates*, rather than inheriting the numbers here.
 
 Re-checked against `main` on 2026-08-04: the semantic-core pointers all still
 land exactly — `processTransaction`, `applyTransactions`, `applyBody`,

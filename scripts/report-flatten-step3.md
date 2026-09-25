@@ -1,6 +1,6 @@
 # Flatten the interpreter recursion — Step 3 report
 
-**Plan:** `~/plans/flatten.md`, Step 3 ("Rebuild Blanc's shadow layer as thin
+**Plan:** the flatten plan, Step 3 ("Rebuild Blanc's shadow layer as thin
 wrappers").
 **Dates:** started 2026-07-28, completed 2026-07-28 (Asia/Seoul).
 **Repository/branch:** `blanc`, `codex/flatten`.

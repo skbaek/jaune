@@ -3,7 +3,7 @@
 #
 # Jaune owns this gate; scripts/GATES.md is its current usage and pass-criterion
 # authority. Its design and closure history are recorded in
-# `~/plans/integrity.md`. This is a STATIC gate: it reads source only, runs no
+# the integrity plan, kept outside this repository. This is a STATIC gate: it reads source only, runs no
 # Lean toolchain, and is expected to finish well under five seconds. Semantic
 # negative regressions live in the fixture tiers and in Lean #guards, not here.
 #
@@ -24,7 +24,7 @@
 #       `dbg_trace` anywhere recursively under Jaune/ or Examples/, in their
 #       roots, Main.lean, or MemoryProbe.lean.
 #       The historical
-#       `~/plans/silence.md` record documents removal of the last of each from
+#       silence-arc record documents removal of the last of each from
 #       the library, and this gate keeps them out. There is deliberately no
 #       carve-out and no allowlist row for these.
 #
@@ -165,7 +165,7 @@ r4_files = sorted(set(protected_files)
                      "Main.lean", "MemoryProbe.lean"})
 
 # R1 is scoped to the whole library plus Main.lean, not just the closure:
-# silence.md removed these from every Jaune source file and this gate keeps
+# the silence arc removed these from every Jaune source file and this gate keeps
 # them out of all of them. scripts/*.lean are Lean metaprograms over `Expr`
 # and are deliberately not in scope.
 r1_files = sorted(

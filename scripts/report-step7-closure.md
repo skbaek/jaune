@@ -1,6 +1,6 @@
 # Step 7 closure report — candidate verification and merge handoff
 
-Date: 2026-07-27 (Asia/Seoul). Plan: `~/plans/migration.md`, Step 7.
+Date: 2026-07-27 (Asia/Seoul). Plan: the migration plan, Step 7.
 
 ## Candidate identity and status
 

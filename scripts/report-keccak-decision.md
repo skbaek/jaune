@@ -1,7 +1,7 @@
 # Step 3: keccak arc re-profile and byte-layer GO/NO-GO
 
-Date: 2026-07-25 (Asia/Seoul). Plan: `~/plans/keccak-bytelayer.md`
-(bundling `~/plans/keccak-proposal.md` + narrow `~/plans/bytelayer-proposal.md`).
+Date: 2026-07-25 (Asia/Seoul). Plan: the keccak-bytelayer plan
+(bundling the keccak proposal + a narrow byte-layer proposal).
 Machine, fixtures, and instruments identical across all rows; profiles are
 macOS `sample` main-thread call trees; family times are `check.sh --dir`
 summed per-file report times.

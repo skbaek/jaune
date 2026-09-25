@@ -460,7 +460,7 @@ A `Frame` holds two messages and `Frame.settleMsg` can roll back to either:
 whose code-deposit charge fails restores the *outer* one. The invariant
 therefore has to name both, which is exactly the "every saved parent/rollback
 state" clause of P0.4 item 5. Statement only -- Step 4 of
-`~/plans/integrity.md` owns the preservation proofs. -/
+the integrity plan (kept outside this repository) owns the preservation proofs. -/
 def Frame.Canonical (f : Frame) : Prop :=
   Msg.Canonical f.outer ∧ Msg.Canonical f.inner
 

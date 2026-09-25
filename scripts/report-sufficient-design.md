@@ -1,6 +1,6 @@
 # Sufficiency arc — Step 1 design report
 
-**Plan:** `~/plans/sufficient.md`, Step 1 (design, module split, gas-decrease
+**Plan:** the sufficiency plan, Step 1 (design, module split, gas-decrease
 infrastructure, pilot).
 **Date:** 2026-07-28 (Asia/Seoul).
 **Branch:** `codex/sufficient` in `~/elevm`, from `main` at

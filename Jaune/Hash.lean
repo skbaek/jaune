@@ -526,7 +526,7 @@ defined over. `Vector` is a single-field wrapper around `Array` with an erased
 size proof, so the runtime representation is exactly the `Array UInt64` this
 took before: the type records the size, it does not change it. (The boxed-array
 boundary this crosses per permutation is a recorded performance observation,
-`~/plans/lean-eval-proposal.md`, and is deliberately not addressed here.) -/
+in the Lean-evaluation proposal, and is deliberately not addressed here.) -/
 def f1600 (ws : Vector UInt64 25) : Vector UInt64 25 :=
   let s : State1600 :=
     ⟨ws[0], ws[1], ws[2], ws[3], ws[4],

@@ -165,7 +165,7 @@ reaped before the long suites per the swap rule.
    Blanc`) so downstream projects do not inherit hundreds of root-level names
    (`exec`, `trie`, `fork`, `Bytes`, `State`...). Mechanical but wide; touches
    every file and Blanc's imports of Jaune names. Recommend doing it as its own
-   short arc before or right after integrity.md (whose re-audit would then see
+   short arc before or right after the integrity plan (whose re-audit would then see
    final names).
 5. **Deferred file splits** (the interleaving makes each a careful
    dependency-ordered move, not a sed):
@@ -195,6 +195,6 @@ reaped before the long suites per the swap rule.
 
 User-owned: the two `--full` gates on the exact candidates, then merge
 approval for jaune `codex/style` → main, blanc `codex/style` → main (blanc
-merges after jaune so the pin resolves), and `~/plans/integrity.md` re-read —
-its identifier references were updated to the new names (plans commit
-`4c0f6c3`).
+merges after jaune so the pin resolves), and the integrity plan re-read —
+its identifier references were updated to the new names (planning-record
+commit `4c0f6c3`).

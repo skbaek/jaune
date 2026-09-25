@@ -82,7 +82,7 @@
 # SCOPE: THIS IS A LOCAL GATE, NOT A CI GATE
 #
 # Wall-clock measurements are machine-dependent in exactly the way
-# `notimeout.md` objected to when it abolished TIMEOUT as a fixture
+# the no-timeout plan objected to when it abolished TIMEOUT as a fixture
 # classification. The baseline therefore stays inside this Jaune checkout and
 # is ignored by Git. CI remains a correctness/build gate and does not consume
 # this local performance history. The 1.0s absolute floor and the 2x factor

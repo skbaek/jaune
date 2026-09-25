@@ -1,6 +1,6 @@
 # Step 3 — retype the interpreter and delete the RecursionLimit observable
 
-**Plan:** `~/plans/sufficient.md`, Step 3
+**Plan:** the sufficiency plan, Step 3
 **Repository:** `~/elevm`, branch `codex/sufficient`
 **Step-2 tip:** `911a114`
 **Step-3 tips:** `25a0521` (rename) · `0a94e41` (retype, **pushed — Blanc's pin
@@ -180,7 +180,7 @@ Three runs on the final binary; all selected fixtures passed.
    ~75 MB of free pages, from fifteen idle Lean LSP workers accumulated across
    sessions. Killing the workers freed ~2.9 GB and throughput recovered to
    ~7 files/s. The final Prague wall time (727.29 s against a 714.88 s
-   baseline) is unaffected. This is the hazard `~/plans/sufficient.md` warns
+   baseline) is unaffected. This is the hazard the sufficiency plan warns
    about under *Execution environment assumption*; the mitigation is to reap
    LSP workers before, not during, a long tier.
 2. **The readiness audit's `createGas` refund list is inaccurate** for the

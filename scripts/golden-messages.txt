@@ -1,5 +1,5 @@
 # Fixture-observed rendered rejection messages — the golden set for the
-# typed-error migration (~/plans/integrity.md P0.7, Steps 9-10).
+# typed-error migration (the integrity plan's P0.7, Steps 9-10).
 #
 # Captured via the JAUNE_MSG_LOG hook in Main.lean (logObservedMessage): every
 # raw diagnostic an expected-invalid block actually failed with, across one

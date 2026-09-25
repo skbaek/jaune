@@ -1,6 +1,6 @@
 # The sufficiency arc — closure report
 
-**Plan:** `~/plans/sufficient.md` (all five steps)
+**Plan:** the sufficiency plan (all five steps)
 **Repositories and candidates proposed for merge:**
 
 - `~/elevm`, branch `codex/sufficient`, tip `c8fb8a3` (semantic tip `0a94e41`;
@@ -228,4 +228,4 @@ verdicts are green:
   policy question of whether to track the docs tip is left to the user, and
   the pin as it stands is correct and immutable)
 
-After the merge, move `~/plans/sufficient.md` to `~/plans/archive/`.
+After the merge, move the sufficiency plan to the planning archive.

@@ -1,6 +1,6 @@
 # Step 5 report — complete static Osaka execution
 
-Date: 2026-07-27 (Asia/Seoul). Plan: `~/plans/migration.md`, Step 5.
+Date: 2026-07-27 (Asia/Seoul). Plan: the migration plan, Step 5.
 
 ## Authoritative inputs
 

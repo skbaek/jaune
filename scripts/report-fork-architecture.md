@@ -1,7 +1,7 @@
 # Architecture note — the multi-fork API
 
 Date: 2026-07-26 (Asia/Seoul), amended 2026-07-27 for Steps 4, 5, and 6.
-Plan: `~/plans/migration.md`, Step 2.
+Plan: the migration plan, Step 2.
 
 This note fixes the public fork API. Per the plan, a material redesign of
 anything named here is a human-attention stop condition from this point on.

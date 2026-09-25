@@ -236,7 +236,7 @@ diagnostic pin checkpoint retains Blanc main
   note that line 126 still held a `String`/`String.Slice` comparison was already
   stale at the branch point: the file instead documents and uses `Adr.toNat`
   for comparison. This arc made no change to it.
-- No new defect was found that requires an `integrity.md` repair.
+- No new defect was found that requires an integrity-plan repair.
 
 The arc is green and complete. The only human decision remaining is protected
 branch integration: merge Jaune first, then Blanc so Blanc's pinned Jaune

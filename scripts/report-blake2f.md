@@ -1,9 +1,9 @@
 # blake2f arc closure report — unbox the BLAKE2b working vector
 
-- **Plan:** `~/plans/blake2f.md` (two steps, executed in auto mode 2026-07-31)
-- **Step reports:** `~/plans/reports/blake2f-step-1.md`,
-  `~/plans/reports/blake2f-step-2.md`
-- **Arc ledger:** `~/plans/state/blake2f.json`
+- **Plan:** the blake2f plan, a planning record kept outside this repository (two steps, executed in auto mode 2026-07-31)
+- **Step reports:** the blake2f step-1 and step-2 reports,
+  kept with the planning records
+- **Arc ledger:** kept with the planning records
 - **Toolchain:** `leanprover/lean4:v4.32.1`
 - **Focus:** Jaune only. Blanc was not edited, not repinned, and not gated on.
 
@@ -118,7 +118,7 @@ depth, and raising the limit is prohibited.
 ## Measurements, and the decision gate applied
 
 Both instruments, sequential, on an idle host with no Lean LSP worker alive.
-`planning.md` §5 requires comparable before/after measurements from the same
+the planning guide's §5 requires comparable before/after measurements from the same
 committed instrument on the same machine; both satisfy that.
 
 ### Instrument 1 — fixture level (authoritative)
@@ -255,13 +255,13 @@ WALL = 462 s
 | sequential `--full` | ≥ 3,337.9 s | **≥ 1,145.8 s** | sum of the per-file TIME column — a *lower bound* on wall time, not a measurement |
 | parallel `--full` at `--jobs auto` | ~900 s | **462 s** | measured wall time |
 
-**No deferral status changed.** The sequential run was above `planning.md` §6's
+**No deferral status changed.** The sequential run was above the planning guide's §6
 1,000-second threshold before this arc and is still above it — its lower bound
 alone, 1,145.8 s, exceeds 1,000 s — so it still requires explicit authorization.
 The parallel run was already under the threshold (~900 s) and still is. The arc
 made both faster without moving either across the line, exactly as the plan's
 *Verified starting point* predicted ("Sequential `--full` falls from ~31 min to
-~21 min and therefore still sits above `planning.md` §6's 1,000-second
+~21 min and therefore still sits above the planning guide's §6 1,000-second
 threshold").
 
 No sequential wall time was measured for this arc, and deliberately so: that
@@ -337,11 +337,11 @@ flat round, and `executeBlake2F`'s name, type, error strings
 (`"InvalidParameter"`, `"bCompress failed"`), gas charge, and output bytes are
 unchanged in any case. Repinning Blanc would have added a cross-repository
 integration risk to an arc that has no cross-repository content, and would have
-pre-empted `restructure.md` Step 3, which owns the pin bump. Blanc's pin still
+pre-empted the restructure plan's Step 3, which owns the pin bump. Blanc's pin still
 resolves to the same immutable commit,
 `c9808a575bb97491f64b178630e5616c7cee5350`.
 
-## Defects noticed and deliberately left for `integrity.md`
+## Defects noticed and deliberately left for the integrity plan
 
 Per the plan, defects found in passing are recorded, not fixed.
 
@@ -378,16 +378,16 @@ warranted recording.
 | Legacy baseline refreshed through `--refresh-times`, verdict line quoted, refresh committed alone as timing-only | done |
 | Fixture speedup measured on both instruments, sequential, idle host, LSP down; decision gate applied in writing | done |
 | `scripts/report-blake2f.md` committed | this file |
-| `restructure.md` and `integrity.md` refreshed, plan edits committed in `~/plans` | done |
+| The restructure and integrity plans refreshed, plan edits committed with the planning records | done |
 | Exact merge candidate named; **user approval obtained before any merge into `main`** | **named below; approval pending** |
-| After the approved merge, `~/plans/blake2f.md` moves to `~/plans/archive/` | pending the merge |
+| After the approved merge, the blake2f plan moves to the planning archive | pending the merge |
 
 ## Merge handoff
 
 **Proposed for integration into Jaune `main`: the tip of `codex/blake2f`.** It is
 pushed, its tree is clean, and every gate above is green on it. The exact
-40-character hash is recorded in `~/plans/state/blake2f.json` and in
-`~/plans/reports/blake2f-step-2.md`. Blanc needs no companion merge and no
+40-character hash is recorded in the arc ledger and in the step-2
+report, both kept with the planning records. Blanc needs no companion merge and no
 repin.
 
 **No merge has been performed or attempted, and the arc's launch was not treated

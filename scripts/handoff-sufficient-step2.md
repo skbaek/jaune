@@ -13,8 +13,8 @@
 
 ## Request and governing plan
 
-- User request: perform **Step 2** from `/Users/agent/plans/sufficient.md`.
-- ELeVM repository: `/Users/agent/elevm`
+- User request: perform **Step 2** from the sufficiency plan (a planning record kept outside this repository).
+- ELeVM repository: `~/elevm`
 - Branch: `codex/sufficient`
 - Do not push during Step 2.
 - Do not change instruction definitions, execution semantics, or charge timing.
@@ -28,9 +28,9 @@
 - Completed Rinst checkpoint commit:
   `3ac154f sufficiency: prove strict decrease for Rinst`
 - The current working tree contains a **clean, uncommitted** continuation in:
-  `/Users/agent/elevm/Elevm/Sufficiency.lean`
+  `~/elevm/Elevm/Sufficiency.lean`
 - A byte-for-byte editable mirror is kept at:
-  `/Users/agent/elanc/.work-sufficient/Sufficiency.lean`
+  `~/elanc/.work-sufficient/Sufficiency.lean`
 - Current Lean file length: 1475 lines.
 - Full-file LSP diagnostics were clean when this note was written.
 - No `sorry`, `admit`, new axiom, `ofReduceBool`, or raised resource limit was
@@ -179,8 +179,8 @@ The ELeVM repository is outside the current writable root. Continue editing
 the mirror with `apply_patch`, then copy it to the repository:
 
 ```sh
-cp /Users/agent/elanc/.work-sufficient/Sufficiency.lean \
-  /Users/agent/elevm/Elevm/Sufficiency.lean
+cp ~/elanc/.work-sufficient/Sufficiency.lean \
+  ~/elevm/Elevm/Sufficiency.lean
 ```
 
 The `cp` escalation prefix was approved. After each copy, inspect the edited

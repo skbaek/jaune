@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fixture-test harness for Jaune (REFACTOR.md Phase 0, step 0.1).
+# Fixture-test harness for Jaune (refactor plan Phase 0, step 0.1).
 #
 # Usage: scripts/check-legacy.sh (--depth | --smoke | --full | --patch | --rlp4 | --bls | --dir <path>) [--report <path>] [--rebase | --refresh-times] [--no-build] [--jobs <n>|auto]
 #
@@ -13,7 +13,7 @@
 #   --bls         run the EEST consensus set for the BLS12-381 and
 #                 point-evaluation precompiles (scripts/bls-tests.txt) against
 #                 the committed hand-authored target baseline
-#                 scripts/baseline-bls.txt (precomps.md Step 9); the fixture
+#                 scripts/baseline-bls.txt (precompile plan Step 9); the fixture
 #                 root differs — see Environment
 #   --dir <path>  run one .json fixture, or every .json fixture under a
 #                 directory (the path must be inside the fixture root); ad hoc

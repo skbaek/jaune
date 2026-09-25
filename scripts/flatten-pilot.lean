@@ -1,5 +1,5 @@
 /-
-  Step-1 pilot for `~/plans/flatten.md` ("Flatten the interpreter recursion").
+  Step-1 pilot for the flatten plan ("Flatten the interpreter recursion").
 
   This file is DELIBERATELY OUTSIDE the `Jaune` library root: `lakefile.lean`
   declares `lean_lib «Jaune»` with the default glob (root module only), so a

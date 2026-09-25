@@ -1,7 +1,7 @@
 # Toolchain migration re-baseline: Lean/mathlib v4.23.0 → v4.32.1
 
-Date: 2026-07-25 (Asia/Seoul). Plan: `~/plans/migration.md` step 1. Sequencing
-constraint: `~/plans/toolchain-migration-notes.md` (allocator/refcount arc must
+Date: 2026-07-25 (Asia/Seoul). Plan: the migration plan, step 1. Sequencing
+constraint: the toolchain-migration notes (allocator/refcount arc must
 not start until the profiles are re-taken on the new runtime).
 
 **This report is evidence only. No allocator/refcount work is authorized by it,
@@ -97,7 +97,7 @@ the up-front layout check. The named recovery branch
 `codex/migration` by `f3679ea03858645edd0269c61ffb60fb834d41be` without
 conflicts. On that merge candidate:
 
-- `/Users/agent/execution-specs/venv/bin/python -m unittest discover -s scripts/tests`:
+- `~/execution-specs/venv/bin/python -m unittest discover -s scripts/tests`:
   **80/80 PASS** in 14.366 s (14.44 s wall);
 - `scripts/check-hygiene.sh`: **PASS**, all 2 allowlisted occurrences and no new
   `dbg_trace`/`sorry` under `Elevm/` (0.03 s wall).
@@ -119,7 +119,7 @@ message naming that venv and `scripts/bootstrap_oracle.py` when neither is
 available. The gate catalogue and `scripts/vectors/SOURCES.md` now state the
 expected interpreter. Measured on `codex/migration` at `839f442`:
 
-- `/Users/agent/execution-specs/venv/bin/python -m unittest discover -s scripts/tests`:
+- `~/execution-specs/venv/bin/python -m unittest discover -s scripts/tests`:
   **80/80 PASS** in 14.379 s (14.47 s wall);
 - `python3 -m unittest discover -s scripts/tests`: **80/80 PASS** in 10.628 s
   (10.72 s wall) — previously 2 errors;

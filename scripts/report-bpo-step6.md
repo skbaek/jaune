@@ -1,6 +1,6 @@
 # Step 6 report — BPO schedules and supported fork transitions
 
-Date: 2026-07-27 (Asia/Seoul). Plan: `~/plans/migration.md`, Step 6.
+Date: 2026-07-27 (Asia/Seoul). Plan: the migration plan, Step 6.
 
 ## Authoritative inputs
 

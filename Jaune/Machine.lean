@@ -6084,7 +6084,7 @@ theorem Tra.Canonical.setStorVal {τ : Tra} (h : Tra.Canonical τ) (a : Adr)
 
 --------------- THE EXECUTION-STATE INVARIANT VOCABULARY ---------------
 
--- Statements only. This is the vocabulary Step 4 of `~/plans/integrity.md`
+-- Statements only. This is the vocabulary Step 4 of the integrity plan
 -- proves the preservation corpus in; nothing here asserts that any interpreter
 -- step preserves anything, and no such theorem is stated ahead of its proof.
 --

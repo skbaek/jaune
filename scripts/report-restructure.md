@@ -1,7 +1,7 @@
 # Restructure arc — closure report
 
 Module split and root-namespace wrap for Jaune and Blanc. Plan:
-`~/plans/restructure.md`. Executed 2026-07-31 (Asia/Seoul).
+the restructure plan. Executed 2026-07-31 (Asia/Seoul).
 
 **Verdict: the arc is complete and green, with Step 4's `Solvent.lean` split
 deferred at its predeclared feasibility stop.** Both `--full` closure gates
@@ -29,7 +29,7 @@ Arc-wide diff against the pre-arc `main` tips (Jaune `5ffdd9ba`, Blanc
 
 ### Jaune — the `Execution.lean` three-way split
 
-`Jaune/Execution.lean` was 4,696 lines at the `blake2f.md` closure. It is now
+`Jaune/Execution.lean` was 4,696 lines at the blake2f plan's closure. It is now
 three dependency-ordered modules:
 
 | Module | Lines (post-split) | Lines (now, post-wrap) | Contents |
@@ -361,7 +361,7 @@ protected branch was merged.
 
 Blanc declarations that state reusable facts about Jaune or core types with no
 Blanc semantic concept in them. **Nothing was moved.** This is the worklist a
-post-integrity arc will own; `integrity.md` will extend it. "Hits" counts
+post-integrity arc will own; the integrity plan will extend it. "Hits" counts
 source-token occurrences including the declaration; "uses" excludes it.
 
 | Candidate | Kind | Hits / uses | Protected cone |
@@ -441,7 +441,7 @@ license to change the harness:
    report or baseline can absorb the event"* — and a duplicated report is the
    same category of harness event.
 
-Both are specified in `~/plans/concurrency-guard-proposal.md`, written
+Both are specified in the concurrency-guard proposal, written
 2026-07-31, which also records the 2026-07-31 artifact as a ready-made
 regression fixture. The re-run reported in §6 ran every gate strictly
 sequentially and produced a clean 2,983-line report.
@@ -472,7 +472,7 @@ Both changed granularity, not scope or semantics.
 
 `GATES.md` records the harness unit suite as 110 tests; it is **121**. Noticed
 and left alone — correcting the catalogue is not this arc's business, and it is
-listed below for `integrity.md`.
+listed below for the integrity plan.
 
 ### Documentation corrected
 
@@ -496,11 +496,11 @@ was true when written.
 
 ## 10. Defects noticed and deliberately not fixed
 
-Handed to `~/plans/integrity.md`:
+Handed to the integrity plan:
 
 1. **The two harness defects in §9** — no report-file locking, and a
    duplicated report absorbed as a classification verdict. Owner:
-   `~/plans/concurrency-guard-proposal.md`.
+   the concurrency-guard proposal.
 2. **The inherited `Jaune/Types.lean:462` unused-simp warning** — the sole
    diagnostic in both builds, present before this arc and untouched.
 3. **`GATES.md` records 110 Python unit tests; the suite has 121.**
@@ -511,8 +511,8 @@ Handed to `~/plans/integrity.md`:
 6. **The `Solvent.lean` generic/WETH boundary** (§1) — the largest deferred
    item, requiring a semantic generalization of `Msg.InvSolvent` and
    `Benv.InvSolvent`.
-7. **`~/plans` carries two uncommitted proposal files** —
-   `t8n-proposal.md` and `restore-chain-using-proposal.md` — preserved and
+7. **The planning records carry two uncommitted proposal files** —
+   the t8n proposal and the restore-chain-using proposal — preserved and
    excluded by every step of this arc, as by the steps before it. They are the
    user's to commit or discard.
 
@@ -547,7 +547,7 @@ content is identical to it. Neither touches a `.lean` source file, a baseline,
 a manifest, or a pin. Per the plan's Step-5 checkpoint 3, **Blanc's pin stays
 at the semantic Jaune commit `ad7f47ec…`**: a documentation-only Jaune commit
 does not require a bump. The exact final tips are recorded in the arc ledger
-`~/plans/state/restructure.json`.
+kept with the planning records.
 
 There is no deliberate uncommitted source state in either repository.
 
@@ -556,6 +556,6 @@ integration into their respective `main` branches. **Blanc must merge after
 Jaune** so that its pin resolves to a commit reachable on Jaune `main`. No
 merge, rebase, or squash was performed.
 
-`~/plans/integrity.md` has been refreshed to the post-restructure layout,
-names, and tips, and is ready for its Step 1. `~/plans/restructure.md` moves to
-`~/plans/archive/` only after the user-approved merge.
+The integrity plan has been refreshed to the post-restructure layout,
+names, and tips, and is ready for its Step 1. The restructure plan moves to
+the planning archive only after the user-approved merge.

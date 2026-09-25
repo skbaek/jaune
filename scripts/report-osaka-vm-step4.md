@@ -1,6 +1,6 @@
 # Step 4 report — the Osaka VM delta
 
-Date: 2026-07-27 (Asia/Seoul). Plan: `~/plans/migration.md`, Step 4.
+Date: 2026-07-27 (Asia/Seoul). Plan: the migration plan, Step 4.
 
 ## Executable reference
 

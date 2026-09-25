@@ -1,6 +1,6 @@
 # Flatten the interpreter recursion — Step 2 report
 
-**Plan:** `~/plans/flatten.md`, Step 2 ("Flatten ELeVM behind the unchanged
+**Plan:** the flatten plan, Step 2 ("Flatten ELeVM behind the unchanged
 boundary").
 **Date:** 2026-07-28 (Asia/Seoul).
 **Repository/branch:** `elevm`, `codex/flatten`.

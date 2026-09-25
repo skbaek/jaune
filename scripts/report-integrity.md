@@ -1,9 +1,9 @@
 # Integrity arc — closure report
 
-Plan: `~/plans/integrity.md`. Step 12 (closure, reports, and merge handoff),
+Plan: the integrity plan. Step 12 (closure, reports, and merge handoff),
 executed 2026-08-01 (Asia/Seoul) by the auto-mode relay (Claude Code / Sonnet 5
 / high). Synthesizes `scripts/report-integrity-design.md` (Step 1) and
-`~/plans/reports/integrity-step3.md` through `integrity-step11.md`.
+the integrity step-3 through step-11 reports, kept with the planning records.
 
 **Exact candidates, verified clean and pushed at report time:**
 
@@ -341,14 +341,14 @@ today since checkpoint 1 makes no source change to the audit script.
    `692224c`, not itself a P0 defect — was re-introduced in corrected form
    (targeting `ChainConfig.pragueOnly ch.chainId`, taking `ValidContext` as a
    hypothesis rather than re-deriving it, which would rebuild the P0.1 defect
-   one level up); `~/plans/restore-chain-using-proposal.md`'s two
+   one level up); the restore-chain-using proposal's two
    style-arc-deleted solvency theorems were **not** restored, per that step's
    explicit boundary — the shape Step 11 lands (evidence-carrying `refl`,
    corrected `toReachUsing`, `Reach.chainId_eq`) is what that successor arc
    will consume. The upstream-candidate inventory (22 + 18 rows) is
    consolidated in §14 below, nothing moved.
 7. **Steps 5 and 6, recorded post-closure (2026-08-01)** — the plan sketch's
-   target-end-state API block (`~/plans/archive/integrity.md`) prescribed
+   target-end-state API block (the archived integrity plan) prescribed
    `def rlpToCanonicalBlock : Bytes → Except DecodeError CanonicalBlock` and
    `def BlockChain.check : BlockChain → Except ChainContextError
    CheckedBlockChain`. Neither shape was built, and the divergence went
@@ -363,7 +363,7 @@ today since checkpoint 1 makes no source change to the audit script.
    decision 4 forbids), and `check`'s failure is refutation of the decidable
    `ValidContext`, already exposed by `check_isSome_iff`/`check_eq_none`.
    Step 6's own report recorded the delivered signature correctly
-   (`~/plans/reports/integrity-step6.md:18`); §1's diagram above nonetheless
+   (the integrity step-6 report, line 18); §1's diagram above nonetheless
    carried the sketch's two lines verbatim until corrected. The deviation is
    confined to this new checked layer — §3.1's pre-existing entry-point
    inventory is unchanged in name and type, as §1 states.
@@ -409,7 +409,7 @@ All jaune/blanc commits, chronological, all pushed unless flagged:
 | 11 cp3 | blanc | `98376a27` | transition/import repair, 5-row audit, tip |
 | 12 cp1 | both | (none) | verification-only; no source changes |
 
-`~/plans` ledger commits: `cae3ae8`, `75759c3`, `9720a00`, `1500f5a` (Step 11)
+Planning-record ledger commits: `cae3ae8`, `75759c3`, `9720a00`, `1500f5a` (Step 11)
 and `40d10f6` (Step 12 checkpoint 1) — none pushed, consistent with this
 repo's existing convention.
 
@@ -418,17 +418,17 @@ Blanc greens: `8284543`↦`4b2171d8`; `5aff6150`↦`ad7f47ec`.
 
 ## 13. Deferred, non-P0 work
 
-- **`Blanc/Common.lean`/`Solvent.lean` split** (`restructure.md` Steps 3–4):
+- **`Blanc/Common.lean`/`Solvent.lean` split** (the restructure plan's Steps 3–4):
   the tactic re-rooting closed; the module split itself was explicitly
   deferrable in that plan and is not part of this arc's scope.
-- **16 zero-reference `@[simp]` lemmas** noted during `restructure.md` Step 3,
+- **16 zero-reference `@[simp]` lemmas** noted during the restructure plan's Step 3,
   carried forward, not touched here.
 - **`stateTransitionConfigured`'s residual double-validate**: it still calls
   `cfg.rulesAt`, which re-runs `cfg.validate` internally (a five-element list
   walk, no root recomputation) — noted at Step 6, not addressed; a cheap
   target for a future step alongside the error-carrier work that already
   touched this function.
-- **`~/plans/restore-chain-using-proposal.md`**: the two style-arc-deleted
+- **The restore-chain-using proposal**: the two style-arc-deleted
   solvency theorems remain unrestored; Step 11 explicitly prepared the ground
   (`ReachUsing.refl`'s evidence, corrected `toReachUsing`, `Reach.chainId_eq`)
   for that successor arc to consume.
@@ -444,7 +444,7 @@ Blanc greens: `8284543`↦`4b2171d8`; `5aff6150`↦`ad7f47ec`.
 
 ## 14. Consolidated upstream-candidate worklist
 
-Every Blanc declaration noticed, across `restructure.md` (Step 3) and this
+Every Blanc declaration noticed, across the restructure plan (Step 3) and this
 arc (Step 11), that states a fact about a Jaune-shaped type with no Blanc
 concept in it, and so is a genuine candidate to relocate to Jaune in a future
 sweep. **Nothing has been moved** — relocating a declaration changes Jaune's
@@ -452,7 +452,7 @@ public API and is out of scope for both arcs. All are currently declared in
 Blanc (`Blanc.` qualified); "Kind" `definition` entries additionally change
 Jaune's API surface if moved and need more deliberation than a lemma.
 
-**From `restructure.md` (`scripts/report-restructure-step-3.md`), 22 rows:**
+**From the restructure plan (`scripts/report-restructure-step-3.md`), 22 rows:**
 
 | Candidate | Kind | Hits/uses | Cone |
 | --- | --- | ---: | :---: |
@@ -483,7 +483,7 @@ The marked `B128`/`B256` block still carries the unacted-on banner
 `-- B(2^n) lemmas (transfer to Jaune later) --` at `Blanc/Basic.lean:247`;
 carried forward, not silently dropped or prefixed away.
 
-**From this arc's Step 11 (`~/plans/reports/integrity-step11.md`), 18 further
+**From this arc's Step 11 (the integrity step-11 report), 18 further
 rows — all lemmas (no new definitions), all in the protected-theorem cone,
 surfaced while repairing Blanc against the typed carrier:**
 

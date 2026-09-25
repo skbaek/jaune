@@ -1,6 +1,6 @@
 # Flatten the interpreter recursion — Step 1 design note
 
-**Plan:** `~/plans/flatten.md`, Step 1 ("Fix the design and measure the pilot").
+**Plan:** the flatten plan, Step 1 ("Fix the design and measure the pilot").
 **Date:** 2026-07-28 (Asia/Seoul).
 **Branches:** `elevm` `codex/flatten` (from `be33a2cfd6c9eefbe69a13bb6389164893c9a1e0`),
 `blanc` `codex/flatten` (from `36c4ec37b656bafe457bcf99653bc4a1053071fa`).
@@ -457,7 +457,7 @@ call appears in the body.
 
 **Why not fewer or more.** Zero recursive functions is impossible (the language
 has no other fixed point available here without well-founded recursion on gas,
-which `depythonization-notes.md` §5 rules out). Two would arise from factoring
+which the depythonization notes' §5 rule out). Two would arise from factoring
 the duplicated three-line "resume then continue" tail into a helper that itself
 calls `exec`; the duplication is three lines twice and is cheaper than a
 mutual block, for ELeVM and for Blanc. A frame-stack (defunctionalized-stack)

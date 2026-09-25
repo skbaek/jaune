@@ -37,10 +37,10 @@ The execution-specs virtual environment reports exactly `py_ecc 8.0.0`. The
 four inspected source files are:
 
 ```text
-/Users/bsk/execution-specs/venv/lib/python3.11/site-packages/py_ecc/optimized_bls12_381/optimized_curve.py
-/Users/bsk/execution-specs/venv/lib/python3.11/site-packages/py_ecc/optimized_bls12_381/optimized_pairing.py
-/Users/bsk/execution-specs/venv/lib/python3.11/site-packages/py_ecc/optimized_bn128/optimized_curve.py
-/Users/bsk/execution-specs/venv/lib/python3.11/site-packages/py_ecc/optimized_bn128/optimized_pairing.py
+~/execution-specs/venv/lib/python3.11/site-packages/py_ecc/optimized_bls12_381/optimized_curve.py
+~/execution-specs/venv/lib/python3.11/site-packages/py_ecc/optimized_bls12_381/optimized_pairing.py
+~/execution-specs/venv/lib/python3.11/site-packages/py_ecc/optimized_bn128/optimized_curve.py
+~/execution-specs/venv/lib/python3.11/site-packages/py_ecc/optimized_bn128/optimized_pairing.py
 ```
 
 These optimized modules use homogeneous projective points `(x, y, z)` with

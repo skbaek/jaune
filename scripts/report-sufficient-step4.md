@@ -1,6 +1,6 @@
 # Step 4 — repair Blanc and delete the fuel-threshold machinery
 
-**Plan:** `~/plans/sufficient.md`, Step 4
+**Plan:** the sufficiency plan, Step 4
 **Repository:** `~/blanc`, branch `codex/sufficient` (new, from `main` = `39ed4a3`)
 **ELeVM pin:** `0a94e419ac21ba42d04b8961107df50a0f1df2cd` (the Step-3 retype
 commit), agreeing in `lakefile.lean`, `lake-manifest.json`, and the real

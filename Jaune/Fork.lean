@@ -1005,7 +1005,7 @@ def invalidChainConfigTag : String := "InvalidChainConfigError"
 
 ------------------ TYPED SEMANTIC REASONS: CONTEXT ------------------
 
--- P0.7 of ~/plans/integrity.md replaces text used as a semantic discriminant
+-- P0.7 of the integrity plan replaces text used as a semantic discriminant
 -- with typed reasons. Declared here, ahead of `ChainConfig`, precisely so its
 -- own producers can build them directly: Step 2 of the integrity arc (P0.1,
 -- P0.5) wires `ChainConfig.validate` and `ChainConfig.forkAt` below to
@@ -2309,7 +2309,7 @@ private def guardBpo2ToAmsterdam : ForkTransition := ⟨.bpo2, .amsterdam, 15000
 
 -- The rules at 0, 14999, 15000 and 15001 are guarded with the label's parse
 -- above (`guardBpo2ToAmsterdam`). These are the remaining points Appendix B of
--- `jaune-amsterdam-currency-goal.md` requires, each falsifiable without a
+-- the `jaune-amsterdam-currency-v1` goal requires, each falsifiable without a
 -- fixture; the fixture corpus (`--suite amsterdam-transitions`) is what shows
 -- every rule keyed on these records switches with them. A transition label is
 -- a schedule that starts at genesis, unlike `mainnetChainConfig`, so block 0
