@@ -3509,32 +3509,7 @@ def ceil32 (n : Nat) : Nat :=
   | 0 => n
   | m@(_ + 1) => n + 32 - m
 
-theorem le_ceil32 (n : Nat) : n ≤ ceil32 n := by
-  unfold ceil32; split <;> omega
-
-/-- Write `xs` into memory at offset `n`, growing the logical size to the next
-word boundary when the window passes it.
-
-Stated for the kernel: growth is one zero-padding append (`Array.padTo`) and
-the write one splice (`Array.spliceD`), so a kernel evaluation of a memory
-image costs a list append per write rather than one array rebuild per byte.
-The compiled interpreter runs the in-place `Mem.writeFast` instead, by the
-proved equality `Mem.write_eq_writeFast`. -/
 def Mem.write (μ : Mem) (n : ℕ) : Bytes → Mem
-  | [] => μ
-  | xs@(_ :: _) =>
-    if n + xs.length ≤ μ.size
-    then
-      if n + xs.length ≤ μ.data.size
-      then ⟨Array.spliceD μ.data n xs, μ.size⟩
-      else ⟨Array.spliceD (Array.padTo μ.data (n + xs.length) 0x00) n xs, μ.size⟩
-    else
-      let newSize := ceil32 (n + xs.length)
-      ⟨Array.spliceD (Array.padTo μ.data newSize 0x00) n xs, newSize⟩
-
-/-- `Mem.write` in place: `Array.copyD` onto a blank array for the growth and
-`Array.writeD` for the write. This is what the compiled interpreter runs. -/
-def Mem.writeFast (μ : Mem) (n : ℕ) : Bytes → Mem
   | [] => μ
   | xs@(_ :: _) =>
     if n + xs.length ≤ μ.size
@@ -3550,78 +3525,6 @@ def Mem.writeFast (μ : Mem) (n : ℕ) : Bytes → Mem
       let newSize := ceil32 (n + xs.length)
       let blank : Array UInt8 := Array.replicate newSize 0x00
       ⟨Array.writeD (Array.copyD μ.data blank) n xs, newSize⟩
-
-/-- The compiled interpreter's memory write is the kernel's. The compiled-code
-substitution attribute on this equality makes compiled code call
-`Mem.writeFast` wherever it calls `Mem.write`; the equality is proved, and its
-row in `scripts/hygiene-allow.txt` says why it is allowed. -/
-@[csimp] theorem Mem.write_eq_writeFast : @Mem.write = @Mem.writeFast := by
-  funext μ n xs
-  cases xs with
-  | nil => rfl
-  | cons x xs =>
-    simp only [Mem.write, Mem.writeFast, Array.copyD_replicate_eq_padTo]
-    split
-    · split
-      · rename_i h
-        rw [Array.writeD_eq_spliceD _ _ _ h]
-      · rw [Array.writeD_eq_spliceD _ _ _ (by rw [Array.size_padTo])]
-    · rw [Array.writeD_eq_spliceD _ _ _ (by rw [Array.size_padTo]; exact le_ceil32 _)]
-
-/-- The size after a non-empty write: unchanged when the window fits, rounded
-up to the word boundary past it otherwise. -/
-theorem Mem.size_write_cons {μ : Mem} {n : Nat} {x : UInt8} {xs : Bytes} :
-    (μ.write n (x :: xs)).size =
-      if n + (x :: xs).length ≤ μ.size then μ.size
-      else ceil32 (n + (x :: xs).length) := by
-  simp only [Mem.write]
-  split_ifs <;> rfl
-
-/-- A write inside the logical size leaves it alone. -/
-theorem Mem.size_write_of_le {μ : Mem} {n : Nat} {bs : Bytes}
-    (h : n + bs.length ≤ μ.size) : (μ.write n bs).size = μ.size := by
-  rcases bs with _ | ⟨x, xs⟩
-  · rfl
-  · rw [Mem.size_write_cons]
-    simp only [List.length_cons] at h ⊢
-    simp [h]
-
-/-- A write keeps the backing array inside the logical size. -/
-theorem Mem.data_size_write_le {μ : Mem} (h : μ.data.size ≤ μ.size) (n : Nat)
-    (xs : Bytes) : (μ.write n xs).data.size ≤ (μ.write n xs).size := by
-  rcases xs with _ | ⟨x, xs⟩
-  · exact h
-  · simp only [Mem.write]
-    split_ifs with h1 h2
-    · rw [Array.size_spliceD h2]; exact h
-    · rw [Array.size_spliceD (by rw [Array.size_padTo]), Array.size_padTo]; exact h1
-    · rw [Array.size_spliceD (by rw [Array.size_padTo]; exact le_ceil32 _),
-        Array.size_padTo]
-
-/-- Read-over-write for memory: inside the window a byte is the payload's,
-outside it the byte memory held before (zero past the backing array). -/
-theorem Mem.getD_write {μ : Mem} (h : μ.data.size ≤ μ.size) (n : Nat)
-    (xs : Bytes) (i : Nat) :
-    (μ.write n xs).data.getD i 0 =
-      if n ≤ i ∧ i < n + xs.length then xs.getD (i - n) 0 else μ.data.getD i 0 := by
-  rcases xs with _ | ⟨x, xs⟩
-  · simp only [List.length_nil, Nat.add_zero, show ¬(n ≤ i ∧ i < n) by omega,
-      ↓reduceIte]
-    rfl
-  · have hz : ∀ j, μ.data.size ≤ j → μ.data.getD j 0 = 0 := fun j hj => by
-      rw [Array.getD_eq_getD_getElem?, Array.getElem?_eq_none (by omega)]; rfl
-    simp only [Mem.write]
-    by_cases h1 : n + (x :: xs).length ≤ μ.size
-    · by_cases h2 : n + (x :: xs).length ≤ μ.data.size
-      · simp only [h1, h2, ↓reduceIte]
-        exact Array.getD_spliceD h2 0 i
-      · simp only [h1, h2, ↓reduceIte]
-        rw [Array.getD_spliceD (by rw [Array.size_padTo]), Array.getD_padTo]
-        split_ifs <;> first | rfl | exact (hz i (by omega)).symm
-    · simp only [h1, ↓reduceIte]
-      have hc := le_ceil32 (n + (x :: xs).length)
-      rw [Array.getD_spliceD (by rw [Array.size_padTo]; exact hc), Array.getD_padTo]
-      split_ifs <;> first | rfl | exact (hz i (by omega)).symm
 
 def Mem.extend (μ : Mem) (index size : Nat) : Mem :=
   ⟨μ.data, memExtSize μ.size index size⟩

@@ -6,7 +6,7 @@
 # neither a stray dbg_trace or sorry nor a new axiom, opaque, @[extern],
 # @[implemented_by], partial def, unsafe or native_decide can enter unnoticed.
 #
-# This file carries EXACTLY TWO entries, and that is the point: TRUSTED.md's
+# This file carries EXACTLY ONE entry, and that is the point: TRUSTED.md's
 # account of what Jaune does not use is a gate rather than a fact about a
 # moment. An entry here is a hole in that account, so adding one is a decision
 # to be argued for, not a way to make the gate quiet. If prose trips the gate,
@@ -40,25 +40,3 @@
 # SECOND `@[csimp]` anywhere under the scanned source fails the gate and has to
 # be argued for here.
 Jaune/Execution.lean @[csimp] private theorem execFueled_eq_cached :
-
-# `@[csimp] Mem.write_eq_writeFast` -- the second compiled-code substitution.
-#
-# WHAT IT CARRIES. The proposition is `@Mem.write = @Mem.writeFast`, a fully
-# proved theorem (`Jaune/Machine.lean`), from `Array.copyD_replicate_eq_padTo`
-# and `Array.writeD_eq_spliceD` (`Jaune/Basic.lean`). `Mem.writeFast` is the
-# body `Mem.write` had before goal `jaune-wishlist-v2` (item V3), byte for byte.
-#
-# WHY IT IS ALLOWED RATHER THAN REMOVED. `Mem.write` is now stated for the
-# kernel: growth is one zero-padding append and the write one list splice, so
-# kernel evaluation of a memory image (Blanc's `decide +kernel` walks) no
-# longer rebuilds the backing array once per byte through `Array.copyD`'s fold
-# and `Array.writeD`'s `set` chain. Those two are the right code for the
-# compiled interpreter, which every fixture gate measures; the substitution
-# keeps the binary on them. Approved by the user as conditional on a measured
-# no-regression of the compiled interpreter (decision
-# jaune-wishlist-approval-20260928); the before/after smoke timings are in the
-# goal report.
-#
-# WHY IT IS LISTED RATHER THAN SILENT. As for the first row: the compiled
-# binary runs a different function from the elaborated definition.
-Jaune/Machine.lean @[csimp] theorem Mem.write_eq_writeFast : @Mem.write = @Mem.writeFast := by

@@ -201,7 +201,7 @@ scripts/check-hygiene.sh
 scripts/check-integrity.sh
 ```
 
-Today: hygiene reports 2 occurrences, allowlisted (the two `@[csimp]` rows below);
+Today: hygiene reports 1 occurrence, allowlisted (the `@[csimp]` row below);
 integrity reports 58 occurrences allowlisted, 0 pending, pending budget 0.
 
 **The trust surface is now enforced, not merely reported.** `check-hygiene.sh`
@@ -210,14 +210,11 @@ fails on any un-allowlisted `axiom`, `opaque`, `@[extern]`, `@[implemented_by]`,
 `Examples/`, in `Jaune.lean`, `Examples.lean` and `MemoryProbe.lean`, and in
 the external-consumer smoke source, alongside the original `dbg_trace` and
 `sorry`. Every one of these counts is zero except one: the allowlist carries
-exactly two rows, both proved `@[csimp]` substitutions. The first is
-`execFueled_eq_cached` in `Jaune/Execution.lean`, a kernel-checked equality
-`execFueled = execFueledCached` that makes the compiled binary run the
-calldata-sharing implementation. The second is `Mem.write_eq_writeFast` in
-`Jaune/Machine.lean`, a kernel-checked equality `Mem.write = Mem.writeFast`
-that lets `Mem.write` be stated for the kernel (one append and one splice)
-while the compiled binary keeps the in-place array write. Each row's written
-justification is in the allowlist. So the claim this document makes about Jaune's trusted path is
+exactly one row, the proved `@[csimp]` substitution `execFueled_eq_cached`
+in `Jaune/Execution.lean`. It is a kernel-checked equality
+`execFueled = execFueledCached`, and it makes the compiled binary run the
+calldata-sharing implementation. The row's written justification is in the
+allowlist. So the claim this document makes about Jaune's trusted path is
 defended by a gate on every push rather than being a property of the source at
 the moment someone last looked. Adding an allowlist entry is the only way to
 introduce another, and that is a reviewable act with a written justification.
