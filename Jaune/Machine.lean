@@ -3365,14 +3365,35 @@ lemma Std.TreeMap.eq_empty_iff_isEmpty {α : Type u} {β : Type v}
     t = Std.TreeMap.empty ↔ t.isEmpty = true := by
   refine' ⟨_, eq_empty_of_isEmpty⟩; intro h; cases h; rfl
 
-instance {stor : Stor} : Decidable (stor = .empty) := by
-  simp only [Stor.empty]
-  rw [show (stor = Std.TreeMap.empty) ↔ (stor.isEmpty = true) from
-        Std.TreeMap.eq_empty_iff_isEmpty]
-  infer_instance
+/- Both instances below decide through a `Bool` test with `decidable_of_iff`, so
+the kernel can reduce them: an instance built by `rw` is a `propext` cast, which
+leaves every `State.set` (an `SSTORE`, a value transfer) stuck under kernel
+evaluation. -/
+instance {stor : Stor} : Decidable (stor = .empty) :=
+  decidable_of_iff (stor.isEmpty = true) Std.TreeMap.eq_empty_iff_isEmpty.symm
 
-instance {ac : Acct} : Decidable (ac = .nil) := by
-  rw [Acct.ext_iff, Acct.nil]; apply instDecidableAnd
+theorem Acct.eq_nil_iff (ac : Acct) :
+    (ac.nonce == 0 && ac.bal == 0 && ac.stor.isEmpty && ac.code.size == 0) = true ↔
+      ac = .nil := by
+  rcases ac with ⟨n, b, s, ⟨c⟩⟩
+  simp only [Acct.nil, Bool.and_eq_true, beq_iff_eq, Acct.mk.injEq]
+  constructor
+  · rintro ⟨⟨⟨hn, hb⟩, hs⟩, hc⟩
+    refine ⟨hn, hb, Std.TreeMap.eq_empty_of_isEmpty hs, ?_⟩
+    simp only [ByteArray.size] at hc
+    rw [Array.size_eq_zero_iff.mp hc]
+  · rintro ⟨hn, hb, hs, hc⟩
+    subst hs
+    refine ⟨⟨⟨hn, hb⟩, rfl⟩, ?_⟩
+    rw [hc]; rfl
+
+instance {ac : Acct} : Decidable (ac = .nil) :=
+  decidable_of_iff _ (Acct.eq_nil_iff ac)
+
+-- Kernel reduction of both instances (a `rw`-built instance fails this).
+example : decide ({ Acct.nil with bal := 1 } = .nil) = false ∧
+    decide (Acct.nil = .nil) = true ∧ decide (Stor.empty = .empty) = true := by
+  decide
 
 def State.get (w : State) (a : Adr) : Acct :=
   w.getD a .nil
