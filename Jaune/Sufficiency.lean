@@ -4020,6 +4020,69 @@ theorem processCreateMessage.chargeCodeGas_gasLe (rules : ForkRules) (devm : Dev
         intro d
         exact chargeStateGas_result_gasLe _ d
 
+/-- A successful `liftMachExecution` changes only the machine. -/
+theorem liftMachExecution_ok_eq_setMach {core : Mach → Footprint.Outcome Mach Unit}
+    {devm devm' : Devm} (h : liftMachExecution core devm = .ok devm') :
+    devm' = devm.setMach devm'.mach := by
+  unfold liftMachExecution liftMach Footprint.toExecution Footprint.liftOutcome at h
+  rcases hc : core devm.mach with ⟨err, view⟩ | ⟨u, mach'⟩ <;> simp only [hc] at h
+  · exact absurd h (by simp)
+  · simp only [Except.ok.injEq] at h
+    rw [← h]
+    rfl
+
+/-- CREATE code-deposit charging changes only the machine: every successful
+result is the input with a new `Mach`. -/
+theorem processCreateMessage.chargeCodeGas_ok_eq_setMach {rules : ForkRules}
+    {pre post : Devm} (h : processCreateMessage.chargeCodeGas rules pre = .ok post) :
+    post = pre.setMach post.mach := by
+  unfold processCreateMessage.chargeCodeGas at h
+  dsimp only at h
+  split at h
+  · split at h
+    · cases h
+    · obtain ⟨d, hd, hrest⟩ := Except.bind_eq_ok h
+      split at hrest
+      · cases hrest
+      · cases hrest
+        exact liftMachExecution_ok_eq_setMach hd
+  · split at h
+    · cases h
+    · split at h
+      · cases h
+      · obtain ⟨d, hd, hrest⟩ := Except.bind_eq_ok h
+        rw [liftMachExecution_ok_eq_setMach hrest, liftMachExecution_ok_eq_setMach hd]
+        rfl
+
+/-- The legacy CREATE code-deposit charge, closed form: under
+`rules.stateGas = none`, code that does not start with `0xEF`, fits
+`maxCodeSize` and is paid for is charged `gasCodeDeposit` per byte of
+execution gas and nothing else. -/
+theorem processCreateMessage.chargeCodeGas_legacy_eq_ok {rules : ForkRules} {d : Devm}
+    (hstateGas : rules.stateGas = none) (hprefix : d.output.head? ≠ some 0xEF)
+    (hgas : d.output.length * gasCodeDeposit ≤ d.gasLeft)
+    (hmax : d.output.length ≤ rules.code.maxCodeSize) :
+    processCreateMessage.chargeCodeGas rules d =
+      .ok (d.setMach ⟨d.stack, d.memory, d.gasLeft - d.output.length * gasCodeDeposit,
+        d.stateGas⟩) := by
+  have hcharge : chargeGas (d.output.length * gasCodeDeposit) d =
+      .ok (d.setMach ⟨d.stack, d.memory, d.gasLeft - d.output.length * gasCodeDeposit,
+        d.stateGas⟩) := by
+    rw [chargeGas_def]
+    have hs : safeSub d.gasLeft (d.output.length * gasCodeDeposit) =
+        some (d.gasLeft - d.output.length * gasCodeDeposit) := by
+      simp [safeSub, hgas]
+    rw [hs]
+    rfl
+  unfold processCreateMessage.chargeCodeGas
+  rw [hstateGas]
+  dsimp only
+  split
+  · rename_i tail hout
+    exact absurd (by rw [hout]; rfl) hprefix
+  · rw [hcharge]
+    simp [bind, Except.bind, show ¬ rules.code.maxCodeSize < d.output.length by omega]
+
 theorem processMessage.settle_ok_gasLe {msg : Msg}
     {r : Except (EvmError × State × AdrSet × Tra) Devm} {d : Devm}
     (h : processMessage.settle msg r = .ok d) :
