@@ -2034,6 +2034,10 @@ theorem Devm.setMach_createdAccounts (devm : Devm) (mach : Mach) :
 theorem Devm.setMach_transientStorage (devm : Devm) (mach : Mach) :
     (devm.setMach mach).transientStorage = devm.transientStorage := rfl
 
+/-- Overwriting an overwritten machine keeps only the last write. -/
+theorem Devm.setMach_setMach {devm : Devm} {m m' : Mach} :
+    (devm.setMach m).setMach m' = devm.setMach m' := rfl
+
 theorem Devm.setMeta_stack (devm : Devm) (view : Meta) :
     (devm.setMeta view).stack = devm.stack := rfl
 
@@ -3437,6 +3441,16 @@ def Devm.getBal (devm : Devm) (a : Adr) : B256 := (devm.getAcct a).bal
 def Devm.getCode (devm : Devm) (a : Adr) : ByteArray := (devm.getAcct a).code
 def Devm.getStorVal (devm : Devm) (adr : Adr) (key : B256) : B256 :=
   (devm.getAcct adr).stor.get key
+def Devm.getStor (devm : Devm) (adr : Adr) : Stor :=
+  (devm.getAcct adr).stor
+
+/-- Storage is a world field, so a machine write cannot move it. -/
+theorem Devm.getStorVal_setMach {devm : Devm} {m : Mach} {a : Adr} {k : B256} :
+    (devm.setMach m).getStorVal a k = devm.getStorVal a k := rfl
+
+/-- Account code is a world field, so a machine write cannot move it. -/
+theorem Devm.getCode_setMach {devm : Devm} {m : Mach} {a : Adr} :
+    (devm.setMach m).getCode a = devm.getCode a := rfl
 
 def Stor.set (s : Stor) (k v : B256) : Stor :=
   if v = 0 then s.erase k else s.insert k v

@@ -4245,4 +4245,116 @@ theorem execFueled_run_gasMeasure_eq_gasLeft {fuel : Nat} {evm : Evm}
     devm.gasMeasure = devm.gasLeft :=
   Devm.stateGasZero_gasMeasure (execFueled_run_stateGasZero fuel evm h hrun)
 
+--------------- ACCOUNT ACCESSORS OVER STATE WRITERS ---------------
+
+-- Each writer sets one account through `State.set`, so a reader of another
+-- field, or of another account, is unchanged. Names and binders follow the
+-- copies Blanc carried before these moved here.
+
+theorem Devm.getCode_state (d : Devm) (a : Adr) :
+    d.getCode a = d.state.getCode a := rfl
+
+theorem State.setBal_get_self {st : Jaune.State} {adr : Adr} {v : B256} :
+    (st.setBal adr v).get adr = (st.get adr).withBal v := State.get_set_self _ _ _
+
+theorem State.setBal_get_ne {st : Jaune.State} {adr a : Adr} {v : B256} (h : adr ≠ a) :
+    (st.setBal adr v).get a = st.get a := State.get_set_ne _ h _
+
+theorem State.setBal_get_stor {st : Jaune.State} {b a : Adr} {v : B256} :
+    ((st.setBal b v).get a).stor = (st.get a).stor := by
+  by_cases h : b = a
+  · subst h; rw [State.setBal_get_self]; rfl
+  · rw [State.setBal_get_ne h]
+
+theorem State.setBal_get_code {st : Jaune.State} {b a : Adr} {v : B256} :
+    ((st.setBal b v).get a).code = (st.get a).code := by
+  by_cases h : b = a
+  · subst h; rw [State.setBal_get_self]; rfl
+  · rw [State.setBal_get_ne h]
+
+theorem State.of_subBal {st st' : Jaune.State} {ct : Adr} {wad : B256}
+    (h : st.subBal ct wad = some st') :
+    wad ≤ st.bal ct ∧ st' = st.setBal ct (st.bal ct - wad) := by
+  unfold State.subBal at h
+  split_ifs at h with h_lt
+  cases h
+  exact ⟨B256.not_lt.mp h_lt, rfl⟩
+
+theorem State.incrNonce_get_bal {st : Jaune.State} {adr a : Adr} :
+    ((st.incrNonce adr).get a).bal = (st.get a).bal := by
+  simp only [State.incrNonce]
+  by_cases h : adr = a
+  · subst h; rw [State.get_set_self]
+  · rw [State.get_set_ne _ h]
+
+theorem State.incrNonce_get_stor {st : Jaune.State} {adr a : Adr} :
+    ((st.incrNonce adr).get a).stor = (st.get a).stor := by
+  simp only [State.incrNonce]
+  by_cases h : adr = a
+  · subst h; rw [State.get_set_self]
+  · rw [State.get_set_ne _ h]
+
+theorem State.incrNonce_get_code {st : Jaune.State} {adr a : Adr} :
+    ((st.incrNonce adr).get a).code = (st.get a).code := by
+  simp only [State.incrNonce]
+  by_cases h : adr = a
+  · subst h; rw [State.get_set_self]
+  · rw [State.get_set_ne _ h]
+
+theorem State.setBal_getCode (st : State) (adr a : Adr) (val : B256) :
+    (st.setBal adr val).getCode a = st.getCode a :=
+  State.setBal_get_code
+
+theorem State.addBal_getCode (st : State) (adr a : Adr) (val : B256) :
+    (st.addBal adr val).getCode a = st.getCode a :=
+  State.setBal_getCode st adr a (st.bal adr + val)
+
+theorem State.subBal_getCode {st st' : State} {adr a : Adr} {val : B256}
+    (h : st.subBal adr val = some st') : st'.getCode a = st.getCode a := by
+  rw [(State.of_subBal h).2]
+  exact State.setBal_getCode st adr a (st.bal adr - val)
+
+theorem Benv.addBal_getCode (benv : Benv) (adr a : Adr) (val : B256) :
+    (benv.addBal adr val).state.getCode a = benv.state.getCode a :=
+  State.addBal_getCode benv.state adr a val
+
+theorem Devm.incrNonce_getCode {devm : Devm} {adr a : Adr} :
+    (devm.incrNonce adr).getCode a = devm.getCode a :=
+  State.incrNonce_get_code
+
+theorem Benv.incrNonce_getCode {benv : Benv} {adr a : Adr} :
+    (benv.incrNonce adr).state.getCode a = benv.state.getCode a :=
+  State.incrNonce_get_code
+
+/-- The storage at `ca` is blind to a credit. -/
+theorem getStor_addBal (w : Jaune.State) (ca a : Adr) (val : B256) :
+    (w.addBal a val).getStor ca = w.getStor ca :=
+  State.setBal_get_stor
+
+/-- Persistent storage writes preserve every account's code. -/
+theorem Devm.setStorVal_getCode (devm : Devm) (owner : Adr)
+    (key value : B256) (address : Adr) :
+    (devm.setStorVal owner key value).getCode address =
+      devm.getCode address := by
+  show ((devm.state.setStorVal owner key value).get address).code =
+    (devm.state.get address).code
+  unfold State.setStorVal
+  by_cases h : owner = address
+  · subst h
+    rw [State.get_set_self]
+  · rw [State.get_set_ne _ h]
+
+/-- Installing account code preserves every account's persistent storage. -/
+theorem Devm.setCode_getStor (devm : Devm) (address : Adr)
+    (code : ByteArray) :
+    Devm.getStor (devm.setCode address code) = Devm.getStor devm := by
+  funext target
+  change ((devm.state.setCode address code).get target).stor =
+    (devm.state.get target).stor
+  unfold State.setCode
+  by_cases h : address = target
+  · subst h
+    rw [State.get_set_self]
+  · rw [State.get_set_ne _ h]
+
 end Jaune
