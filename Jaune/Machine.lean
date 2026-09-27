@@ -4504,6 +4504,20 @@ def jumpable (cd : ByteArray) (k : Nat) : Bool :=
 -- `jumpable_eq_jumpdestOk` proves the two equal on every byte array, so a proof
 -- may rewrite with it and evaluate the forward scan instead.
 
+/-- One step of `ByteArray.toList`'s index loop, read through the checked
+index. The loop's own read is core's panicking one, reached here by `whnf`. -/
+private lemma ByteArray.toList_loop_step (bs : ByteArray) (i : Nat) (r : List UInt8)
+    (h : i < bs.size) :
+    _root_.ByteArray.toList.loop bs i r = _root_.ByteArray.toList.loop bs (i + 1) (bs[i] :: r) := by
+  conv => lhs; unfold _root_.ByteArray.toList.loop
+  rw [if_pos h]
+  congr 2
+  conv => lhs; whnf
+  generalize Nat.decLt _ _ = d
+  cases d with
+  | isFalse h' => exact absurd h h'
+  | isTrue _ => rfl
+
 private lemma ByteArray.toList_eq_toList_data' {xs : ByteArray} :
     xs.toList = xs.data.toList := by
   have gen :
@@ -4517,13 +4531,12 @@ private lemma ByteArray.toList_eq_toList_data' {xs : ByteArray} :
         rw [if_neg _, List.reverse_reverse, List.append_nil]
         simp [ByteArray.size]
       | cons y ys ih =>
-        unfold _root_.ByteArray.toList.loop
-        have rw : ByteArray.get! ⟨⟨xs ++ y :: ys⟩⟩ xs.length = y := by
-          simp [ByteArray.get!]
+        rw [ByteArray.toList_loop_step _ _ _ (by simp [ByteArray.size])]
+        have rw : (⟨⟨xs ++ y :: ys⟩⟩ : ByteArray)[xs.length]'(by simp [ByteArray.size]) = y := by
+          simp [ByteArray.getElem_eq_getElem_data]
         have rw' : xs.length + 1 = (xs ++ [y]).length := by simp
         have rw'' : y :: xs.reverse = (xs ++ [y]).reverse := by simp
-        rw [if_pos _, rw, List.append_cons, rw', rw'', ih]
-        simp [ByteArray.size]
+        rw [rw, List.append_cons, rw', rw'', ih]
   rcases xs with ⟨⟨xs⟩⟩; apply gen [] xs
 
 private lemma ByteArray.getElem_of_getElem?_eq_some' {xs : ByteArray} {n : Nat}
