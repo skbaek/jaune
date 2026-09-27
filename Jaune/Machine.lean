@@ -2038,6 +2038,9 @@ theorem Devm.setMach_transientStorage (devm : Devm) (mach : Mach) :
 theorem Devm.setMach_setMach {devm : Devm} {m m' : Mach} :
     (devm.setMach m).setMach m' = devm.setMach m' := rfl
 
+theorem Devm.withOutput_gasLeft (devm : Devm) (out : Bytes) :
+    (devm.withOutput out).gasLeft = devm.gasLeft := rfl
+
 theorem Devm.setMeta_stack (devm : Devm) (view : Meta) :
     (devm.setMeta view).stack = devm.stack := rfl
 
@@ -3546,6 +3549,9 @@ def Devm.memWrite (devm : Devm) (idx : Nat) (val : Bytes) : Devm :=
 def Devm.memRead (devm : Devm) (index size : Nat) : Bytes × Devm :=
   let ⟨val, mem⟩ := devm.memory.read index size
   ⟨val, devm.withMemory mem⟩
+
+theorem Devm.memRead_snd_gasLeft (devm : Devm) (index size : Nat) :
+    (devm.memRead index size).2.gasLeft = devm.gasLeft := rfl
 
 theorem Devm.memRead_state (devm : Devm) (index size : Nat) :
     (devm.memRead index size).2.state = devm.state := rfl

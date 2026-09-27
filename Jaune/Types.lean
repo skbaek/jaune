@@ -804,6 +804,20 @@ lemma B128.sub_zero (x : B128) : x - 0 = x := by
 lemma B256.sub_self (a : B256) : a - a = 0 := by
   rw [B256.sub_eq]; simp [B128.sub_self]; rfl
 
+lemma B256.sub_zero (x : B256) : x - 0 = x := by
+  apply B256.toNat_inj
+  rw [B256.toNat_sub_eq_of_le _ _ (by rw [B256.le_iff_toNat_le_toNat, B256.toNat_zero]; omega),
+    B256.toNat_zero, Nat.sub_zero]
+
+lemma B256.add_zero (x : B256) : x + 0 = x := by
+  apply B256.toNat_inj
+  rw [B256.toNat_add, B256.toNat_zero, Nat.add_zero]
+  exact Nat.lo_eq_of_lt (B256.toNat_lt x)
+
+lemma B256.zero_le (x : B256) : (0 : B256) ≤ x := by
+  rw [B256.le_iff_toNat_le_toNat, B256.toNat_zero]
+  omega
+
 def Adr.LE (x y : Adr) : Prop :=
   x.1 < y.1 ∨ (x.1 = y.1 ∧ x.2 ≤ y.2)
 instance : @LE Adr := ⟨Adr.LE⟩

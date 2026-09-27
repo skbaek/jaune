@@ -739,6 +739,38 @@ def List.compare {ξ : Type u} [Ord ξ] : List ξ → List ξ → Ordering
     | o => o
 instance {ξ : Type u} [Ord ξ] : Ord (List ξ) := ⟨List.compare⟩
 
+/-- Jaune's list comparator is core's lexicographic one. -/
+theorem List.jauneCompare_eq_compareLex {ξ : Type u} [Ord ξ] (xs ys : _root_.List ξ) :
+    Jaune.List.compare xs ys = _root_.List.compareLex (Ord.compare : ξ → ξ → Ordering) xs ys := by
+  induction xs generalizing ys with
+  | nil => cases ys <;> rfl
+  | cons x xs ih =>
+      cases ys with
+      | nil => rfl
+      | cons y ys =>
+          cases h : (Ord.compare x y : Ordering) <;>
+            simp [Jaune.List.compare, _root_.List.compareLex, h, ih]
+
+instance {ξ : Type u} [Ord ξ] [Std.TransCmp (Ord.compare : ξ → ξ → Ordering)] :
+    Std.TransCmp (Ord.compare : _root_.List ξ → _root_.List ξ → Ordering) := by
+  rw [show (Ord.compare : _root_.List ξ → _root_.List ξ → Ordering) =
+      _root_.List.compareLex (Ord.compare : ξ → ξ → Ordering) by
+    funext xs ys
+    exact List.jauneCompare_eq_compareLex xs ys]
+  infer_instance
+
+instance {ξ : Type u} [Ord ξ] [Std.LawfulEqCmp (Ord.compare : ξ → ξ → Ordering)] :
+    Std.LawfulEqCmp (Ord.compare : _root_.List ξ → _root_.List ξ → Ordering) := by
+  rw [show (Ord.compare : _root_.List ξ → _root_.List ξ → Ordering) =
+      _root_.List.compareLex (Ord.compare : ξ → ξ → Ordering) by
+    funext xs ys
+    exact List.jauneCompare_eq_compareLex xs ys]
+  infer_instance
+
+-- The byte-list comparator Jaune's tries use resolves both.
+example : Std.TransCmp (compare : Bytes → Bytes → Ordering) := inferInstance
+example : Std.LawfulEqCmp (compare : Bytes → Bytes → Ordering) := inferInstance
+
 def UInt8.compareLows (x y : UInt8) : Ordering :=
   Ord.compare x.lows y.lows
 
@@ -1785,5 +1817,6 @@ def Nat.toHex (n : Nat) : String :=
 def List.maxD {ξ} [Max ξ] : List ξ → ξ → ξ
   | [], y => y
   | x :: xs, y => maxD xs (max x y)
+
 
 end Jaune

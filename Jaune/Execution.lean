@@ -148,6 +148,11 @@ def GasSchedule.accessDelegation (gas : GasSchedule) (devm : Devm) (adr : Adr) :
     ⟨true, adr, code, accessGasCost, devm⟩
   | none => ⟨false, adr, code, 0, devm⟩
 
+/-- Under the Prague schedule the schedule-reading delegation access is the
+original one. -/
+theorem accessDelegation_eq (devm : Devm) (adr : Adr) :
+    pragueGasSchedule.accessDelegation devm adr = accessDelegation devm adr := rfl
+
 /-- `eoa_delegation.py.calculate_delegation_cost` at the Amsterdam pin.
 This reads the direct account's designation and prices the delegated address,
 but deliberately neither warms that address nor reads its code. Amsterdam
