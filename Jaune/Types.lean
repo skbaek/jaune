@@ -1297,6 +1297,7 @@ inductive Rinst : Type
   | dup : Fin 16 → Rinst
   | swap : Fin 16 → Rinst
   | log : Fin 5 → Rinst
+deriving DecidableEq
 
 inductive Jinst : Type
   | jump -- 0x56 / 1 / 0 / Unconditional jump.

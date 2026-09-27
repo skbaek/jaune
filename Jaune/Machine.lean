@@ -2689,6 +2689,7 @@ inductive Ninst : Type
   | swapn : UInt8 → Ninst
   /-- EIP-8024 `EXCHANGE` (0xE8) with its immediate byte. -/
   | exchange : UInt8 → Ninst
+deriving DecidableEq
 
 def Ninst.toOpString : Ninst → String
   | reg o => Rinst.toString o
@@ -2722,6 +2723,7 @@ inductive Inst : Type
 
 inductive InstType
   | R | X | J | L | P
+deriving DecidableEq
 
 def UInt8.toInstType (b : UInt8) : InstType :=
   match b.highs with
