@@ -95,6 +95,83 @@ def Devm.Burn : Devm → Devm → Prop :=
     gasLeft := (· ≥ · )
   }
 
+/-! ### Fieldwise laws of `Devm.Rel`
+
+Names and statements are the ones Blanc carried; Jaune now owns them, so a new
+`Devm.Rels` field is repaired here, once. -/
+
+/-- Functional compatibility form of reflexivity, avoiding the deprecated root alias. -/
+abbrev ReflexiveRel {α : Sort _} (r : α → α → Prop) : Prop := ∀ x, r x x
+
+/-- Functional compatibility form of transitivity, avoiding the deprecated root alias. -/
+abbrev TransitiveRel {α : Sort _} (r : α → α → Prop) : Prop :=
+  ∀ ⦃x y z⦄, r x y → r y z → r x z
+
+def Devm.Rels.Refl (r : Devm.Rels) : Prop :=
+  ReflexiveRel r.stack ∧ ReflexiveRel r.memory ∧ ReflexiveRel r.gasLeft ∧
+  ReflexiveRel r.logs ∧ ReflexiveRel r.refundCounter ∧ ReflexiveRel r.output ∧
+  ReflexiveRel r.accountsToDelete ∧ ReflexiveRel r.returnData ∧ ReflexiveRel r.error ∧
+  ReflexiveRel r.accessedAddresses ∧ ReflexiveRel r.accessedStorageKeys ∧
+  ReflexiveRel r.state ∧ ReflexiveRel r.createdAccounts ∧
+  ReflexiveRel r.transientStorage ∧ ReflexiveRel r.stateGas ∧
+  ReflexiveRel r.accountReads ∧ ReflexiveRel r.storageReads
+
+def Devm.Rels.Trans (r : Devm.Rels) : Prop :=
+  TransitiveRel r.stack ∧ TransitiveRel r.memory ∧ TransitiveRel r.gasLeft ∧
+  TransitiveRel r.logs ∧ TransitiveRel r.refundCounter ∧ TransitiveRel r.output ∧
+  TransitiveRel r.accountsToDelete ∧ TransitiveRel r.returnData ∧ TransitiveRel r.error ∧
+  TransitiveRel r.accessedAddresses ∧ TransitiveRel r.accessedStorageKeys ∧
+  TransitiveRel r.state ∧ TransitiveRel r.createdAccounts ∧
+  TransitiveRel r.transientStorage ∧ TransitiveRel r.stateGas ∧
+  TransitiveRel r.accountReads ∧ TransitiveRel r.storageReads
+
+theorem Devm.rel_refl {r : Devm.Rels} (hr : Devm.Rels.Refl r) :
+    ReflexiveRel (Devm.Rel r) := by
+  intro d
+  obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h16, h17⟩ := hr
+  exact ⟨h1 _, h2 _, h3 _, h4 _, h5 _, h6 _, h7 _, h8 _, h9 _, h10 _, h11 _, h12 _,
+    h13 _, h14 _, h15 _, h16 _, h17 _⟩
+
+theorem Devm.rel_trans {r : Devm.Rels} (hr : Devm.Rels.Trans r) :
+    TransitiveRel (Devm.Rel r) := by
+  intro a b c hab hbc
+  obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h16, h17⟩ := hr
+  exact ⟨h1 hab.stack hbc.stack, h2 hab.memory hbc.memory, h3 hab.gasLeft hbc.gasLeft,
+    h4 hab.logs hbc.logs, h5 hab.refundCounter hbc.refundCounter,
+    h6 hab.output hbc.output, h7 hab.accountsToDelete hbc.accountsToDelete,
+    h8 hab.returnData hbc.returnData, h9 hab.error hbc.error,
+    h10 hab.accessedAddresses hbc.accessedAddresses,
+    h11 hab.accessedStorageKeys hbc.accessedStorageKeys, h12 hab.state hbc.state,
+    h13 hab.createdAccounts hbc.createdAccounts,
+    h14 hab.transientStorage hbc.transientStorage, h15 hab.stateGas hbc.stateGas,
+    h16 hab.accountReads hbc.accountReads, h17 hab.storageReads hbc.storageReads⟩
+
+/-- A relation that is equality off the machine fields relates `d` only to
+`d` with a new `Mach`. Consumers read the equation instead of unpacking the
+seventeen fields positionally. -/
+theorem Devm.Rel.eq_setMach {stack : List B256 → List B256 → Prop}
+    {memory : Mem → Mem → Prop} {gasLeft : Nat → Nat → Prop}
+    {stateGas : StateGasMeter → StateGasMeter → Prop} {d d' : Devm}
+    (h : Devm.Rel {Devm.Rels.eq with
+      stack := stack, memory := memory, gasLeft := gasLeft, stateGas := stateGas} d d') :
+    d' = d.setMach d'.mach := by
+  obtain ⟨_, _, _, hlogs, hrefund, houtput, hdel, hret, herr, haddr, hkeys, hstate,
+    hcreated, htra, _, hreads, hsreads⟩ := h
+  rcases d with ⟨mach, ⟨logs, refund, output, toDelete, returnData, err, addr, keys, created,
+    reads, sreads⟩, ⟨state, tra⟩⟩
+  rcases d' with ⟨mach', ⟨logs', refund', output', toDelete', returnData', err', addr', keys',
+    created', reads', sreads'⟩, ⟨state', tra'⟩⟩
+  simp only [Devm.Rels.eq] at *
+  cases hlogs; cases hrefund; cases houtput; cases hdel; cases hret; cases herr
+  cases haddr; cases hkeys; cases hstate; cases hcreated; cases htra; cases hreads
+  cases hsreads
+  rfl
+
+/-- `Devm.Burn` changes only the machine. -/
+theorem Devm.Burn.eq_setMach {d d' : Devm} (h : Devm.Burn d d') :
+    d' = d.setMach d'.mach :=
+  Devm.Rel.eq_setMach h
+
 
 def Linst.At (code : ByteArray) (pc : Nat) (l : Linst) : Prop := code.getInst pc = some (.last l)
 def Ninst.At (code : ByteArray) (pc : Nat) (n : Ninst) : Prop := code.getInst pc = some (.next n)
