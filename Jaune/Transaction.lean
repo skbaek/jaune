@@ -2230,97 +2230,6 @@ theorem processTransaction_legacyGasAccounting {benv : Benv}
   cases hp
   exact hb3'
 
-/-- `processTransaction` from its stages: each fallible step's result, in
-order, determines the transaction's result. Both lanes; the conclusion is the
-body after its last fallible step. Stating the stages rather than unfolding the
-body keeps a consumer's success proof independent of the body's layout. -/
-theorem processTransaction_eq_ok_of_stages
-    {benv : Benv} {bout : BlockOutput} {tx : Tx} {index : Nat}
-    {validationSender sender : Adr} {intrinsicGas calldataFloorGasCost : Nat}
-    {effectiveGasPrice txBlobGasUsed refundCounter : Nat}
-    {blobVersionedHashes : List B256} {debitState messageState : State}
-    {msg : Msg} {messageOut : MsgCallOutput}
-    (hsender : recoverValidationSender benv.beginTransaction tx = .ok validationSender)
-    (hvalid : validateTransaction benv.stat.rules tx validationSender =
-      .ok (intrinsicGas, calldataFloorGasCost))
-    (hcheck : checkTransaction benv.beginTransaction
-      {bout with
-        transactionsTrie :=
-          bout.transactionsTrie.insert (BLT.bytes index.toBytes).toBytes tx} tx =
-      .ok (sender, effectiveGasPrice, blobVersionedHashes, txBlobGasUsed))
-    (hdebit : (benv.state.incrNonce sender).subBal sender
-      (tx.gas * effectiveGasPrice +
-        (if tx.isTypeThree
-         then calculateDataFee benv.stat.rules.blob benv.stat.excessBlobGas tx
-         else 0)).toB256 = some debitState)
-    (hprepare : prepareMessage {benv.beginTransaction with state := debitState}
-      { transientStorage := .empty
-        stat := {
-          origin := sender
-          gasPrice := effectiveGasPrice
-          gas := (allocateEvmGas benv.stat.rules tx.gas intrinsicGas).executionGas
-          stateGasReservoir :=
-            (allocateEvmGas benv.stat.rules tx.gas intrinsicGas).stateGasReservoir
-          accessListAddresses := .ofList (benv.stat.coinbase :: tx.accessList.map Prod.fst)
-          accessListStorageKeys :=
-            .ofList (tx.accessList.map <| λ ⟨adr, keys⟩ => keys.map (⟨adr, ·⟩)).flatten
-          blobVersionedHashes := blobVersionedHashes
-          auths := tx.auths
-          indexInBlock := index
-          txHash := getTxHash tx } } tx = .ok msg)
-    (hmessage : processMessageCall msg = .ok (messageState, messageOut))
-    (hrefund : Int.toNat? messageOut.refundCounter = some refundCounter) :
-    processTransaction benv bout tx index =
-      let settlement :=
-        settleTransactionGas benv.stat.rules tx.gas calldataFloorGasCost
-          messageOut.gasLeft messageOut.stateGasLeft refundCounter messageOut.stateGasUsed
-      let state := messageState.addBal sender (settlement.gasLeft * effectiveGasPrice).toB256
-      let state := state.addBal benv.stat.coinbase
-        (settlement.gasUsed * (effectiveGasPrice - benv.stat.baseFeePerGas)).toB256
-      let state := settleSelfdestructs benv.stat.rules messageOut.accountsToDelete.toList state
-      let bout1 := {bout with
-        transactionsTrie :=
-          bout.transactionsTrie.insert (BLT.bytes index.toBytes).toBytes tx}
-      let bout2 := bout1.withGasSettlement settlement txBlobGasUsed
-      let receiptKey : Bytes := BLT.toBytes <| .bytes index.toBytes
-      let bout3 := {bout2 with
-        receiptKeys := bout2.receiptKeys ++ [receiptKey]
-        receiptsTrie := bout2.receiptsTrie.insert receiptKey
-          (makeReceipt tx messageOut.error bout2.cumulativeGasUsed messageOut.logs)
-        blockLogs := bout2.blockLogs ++ messageOut.logs}
-      let bal := match benv.stat.rules.bal with
-        | none => bout3.bal
-        | some _ => bout3.bal.incorporate (index + 1) benv.state state
-            (sender :: benv.stat.coinbase :: messageOut.accountReads.toList)
-            messageOut.storageReads.toList
-      .ok ⟨state, {bout3 with bal := bal}⟩ := by
-  -- The body reads everything through `benv.beginTransaction`, which changes
-  -- only `stat.origState`; restate the stages in that form.
-  have hvalid' : validateTransaction benv.beginTransaction.stat.rules tx validationSender =
-      .ok (intrinsicGas, calldataFloorGasCost) := hvalid
-  have hdebit' : (benv.beginTransaction.state.incrNonce sender).subBal sender
-      (tx.gas * effectiveGasPrice +
-        (if tx.isTypeThree
-         then calculateDataFee benv.beginTransaction.stat.rules.blob
-           benv.beginTransaction.stat.excessBlobGas tx
-         else 0)).toB256 = some debitState := hdebit
-  unfold processTransaction
-  simp only [bind, Except.bind]
-  rw [hsender]
-  simp only [Except.mapError]
-  rw [hvalid']
-  simp only
-  rw [hcheck]
-  simp only
-  rw [hdebit']
-  simp only [Option.toExcept]
-  split
-  next e h => exact absurd (hprepare.symm.trans h) (by simp)
-  next m h =>
-    obtain rfl : msg = m := by simpa using hprepare.symm.trans h
-    simp only [hmessage, hrefund]
-    rfl
-
 def BlockOutput.withWithdrawalsTrie
     (bo : BlockOutput) (tr : Std.TreeMap Bytes Withdrawal compare) : BlockOutput :=
   {bo with withdrawalsTrie := tr}
@@ -2964,13 +2873,6 @@ def BalBuilder.incorporateSystem (bal : BalBuilder) (rules : ForkRules) (idx : N
   | none => bal
   | some _ => bal.incorporate idx pre post accountReads storageReads
 
-@[simp] theorem BalBuilder.incorporateSystem_of_bal_none {rules : ForkRules}
-    (h : rules.bal = none) (bal : BalBuilder) (idx : Nat) (pre post : State)
-    (accountReads : List Adr) (storageReads : List (Adr × B256)) :
-    bal.incorporateSystem rules idx pre post accountReads storageReads = bal := by
-  unfold BalBuilder.incorporateSystem
-  rw [h]
-
 /-- `validate_block_access_list_gas_limit`, inside `apply_body` before any
 header comparison: `items > gasLimit // itemCost` is a block rejection. -/
 def checkBlockAccessListGasLimit (rules : ForkRules) (blockGasLimit : Nat)
@@ -3060,78 +2962,6 @@ theorem applyBody_legacyGasAccounting {benv : Benv}
   have hreq := processGeneralPurposeRequests_legacyGasAccounting
     (bout := {boutWds with bal := balWds}) hwLegacy hq'
   exact hreq
-
-/-- `applyBody` from its stages: the two pre-execution system calls, the
-transactions, the withdrawals and requests, and the access-list item rule.
-Both lanes; `applyBody_eq_ok_of_stages_of_bal_none` is the legacy form. -/
-theorem applyBody_eq_ok_of_stages {benv : Benv} {txs : List (Bytes ⊕ Tx)}
-    {wds : List Withdrawal} {stBeacon stHistory stReq : State}
-    {outBeacon outHistory : MsgCallOutput} {lastHash : B256} {decoded : List Tx}
-    {benvTxs : Benv} {boutTxs boutReq : BlockOutput}
-    (hbeacon : processUncheckedSystemTransaction benv beaconRootsAddress
-      benv.stat.parentBeaconBlockRoot.toBytes = .ok (stBeacon, outBeacon))
-    (hlast : benv.stat.blockHashes.getLast? = some lastHash)
-    (hhistory : processUncheckedSystemTransaction (benv.withState stBeacon)
-      historyStorageAddress lastHash.toBytes = .ok (stHistory, outHistory))
-    (hdecode : txs.mapM decodeTx = .ok decoded)
-    (htxs : applyTransactions decoded.putIndex ((benv.withState stBeacon).withState stHistory)
-      {BlockOutput.init with
-        bal := (BalBuilder.incorporateSystem {} benv.stat.rules 0 benv.state stBeacon
-            (beaconRootsAddress :: outBeacon.accountReads.toList)
-            outBeacon.storageReads.toList).incorporateSystem benv.stat.rules 0 stBeacon
-          stHistory (historyStorageAddress :: outHistory.accountReads.toList)
-          outHistory.storageReads.toList} = .ok (benvTxs, boutTxs))
-    (hreq : processGeneralPurposeRequests
-      (benvTxs.withState (processWithdrawals benvTxs boutTxs wds).1)
-      {(processWithdrawals benvTxs boutTxs wds).2 with
-        bal := (processWithdrawals benvTxs boutTxs wds).2.bal.incorporateSystem
-          benv.stat.rules (boutTxs.receiptKeys.length + 1) benvTxs.state
-          (processWithdrawals benvTxs boutTxs wds).1 (wds.map Withdrawal.recipient) []} =
-      .ok (stReq, boutReq))
-    (hlimit : checkBlockAccessListGasLimit benv.stat.rules benv.stat.blockGasLimit
-      (match benv.stat.rules.bal with
-        | none => []
-        | some _ => boutReq.bal.build) = .ok ()) :
-    applyBody benv txs wds =
-      .ok (stReq, {boutReq with
-        blockAccessList := match benv.stat.rules.bal with
-          | none => []
-          | some _ => boutReq.bal.build}) := by
-  unfold applyBody
-  simp only [bind, Except.bind, Except.mapError, hbeacon]
-  simp only [Benv.withState] at hlast hhistory htxs hreq ⊢
-  rw [hlast]
-  simp only [Option.toExcept, hhistory, hdecode]
-  rw [htxs]
-  simp only
-  rw [hreq]
-  simp only
-  rw [hlimit]
-
-/-- `applyBody_eq_ok_of_stages` without a block-level access list: the
-incorporations are identities and the item rule passes. -/
-theorem applyBody_eq_ok_of_stages_of_bal_none {benv : Benv} {txs : List (Bytes ⊕ Tx)}
-    {wds : List Withdrawal} {stBeacon stHistory stReq : State}
-    {outBeacon outHistory : MsgCallOutput} {lastHash : B256} {decoded : List Tx}
-    {benvTxs : Benv} {boutTxs boutReq : BlockOutput}
-    (hbal : benv.stat.rules.bal = none)
-    (hbeacon : processUncheckedSystemTransaction benv beaconRootsAddress
-      benv.stat.parentBeaconBlockRoot.toBytes = .ok (stBeacon, outBeacon))
-    (hlast : benv.stat.blockHashes.getLast? = some lastHash)
-    (hhistory : processUncheckedSystemTransaction (benv.withState stBeacon)
-      historyStorageAddress lastHash.toBytes = .ok (stHistory, outHistory))
-    (hdecode : txs.mapM decodeTx = .ok decoded)
-    (htxs : applyTransactions decoded.putIndex ((benv.withState stBeacon).withState stHistory)
-      BlockOutput.init = .ok (benvTxs, boutTxs))
-    (hreq : processGeneralPurposeRequests
-      (benvTxs.withState (processWithdrawals benvTxs boutTxs wds).1)
-      (processWithdrawals benvTxs boutTxs wds).2 = .ok (stReq, boutReq)) :
-    applyBody benv txs wds = .ok (stReq, {boutReq with blockAccessList := []}) := by
-  have h := applyBody_eq_ok_of_stages (wds := wds) hbeacon hlast hhistory hdecode
-    (by simp only [BalBuilder.incorporateSystem_of_bal_none hbal]; exact htxs)
-    (by simp only [BalBuilder.incorporateSystem_of_bal_none hbal]; exact hreq)
-    (by simp [checkBlockAccessListGasLimit, hbal])
-  simpa [hbal] using h
 
 def getLast256BlockHashes (chain : BlockChain) : List B256 :=
   match chain.blocks.reverse.take 255 with
