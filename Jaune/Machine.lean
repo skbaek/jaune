@@ -3377,8 +3377,12 @@ lemma Std.TreeMap.eq_empty_iff_isEmpty {α : Type u} {β : Type v}
 /- Both instances below decide through a `Bool` test with `decidable_of_iff`, so
 the kernel can reduce them: an instance built by `rw` is a `propext` cast, which
 leaves every `State.set` (an `SSTORE`, a value transfer) stuck under kernel
-evaluation. -/
-instance {stor : Stor} : Decidable (stor = .empty) :=
+evaluation. Both are also `@[irreducible]`, which only the elaborator reads:
+without it, `whnf` inside a failing defeq check between concrete states runs
+`State.set` through the Bool test instead of stopping at the instance, as the
+old `rw`-built one did, and downstream proofs time out. The kernel ignores the
+attribute, so kernel evaluation (`decide +kernel`) is unaffected. -/
+@[irreducible] instance {stor : Stor} : Decidable (stor = .empty) :=
   decidable_of_iff (stor.isEmpty = true) Std.TreeMap.eq_empty_iff_isEmpty.symm
 
 theorem Acct.eq_nil_iff (ac : Acct) :
@@ -3396,13 +3400,13 @@ theorem Acct.eq_nil_iff (ac : Acct) :
     refine ⟨⟨⟨hn, hb⟩, rfl⟩, ?_⟩
     rw [hc]; rfl
 
-instance {ac : Acct} : Decidable (ac = .nil) :=
+@[irreducible] instance {ac : Acct} : Decidable (ac = .nil) :=
   decidable_of_iff _ (Acct.eq_nil_iff ac)
 
 -- Kernel reduction of both instances (a `rw`-built instance fails this).
 example : decide ({ Acct.nil with bal := 1 } = .nil) = false ∧
     decide (Acct.nil = .nil) = true ∧ decide (Stor.empty = .empty) = true := by
-  decide
+  decide +kernel
 
 def State.get (w : State) (a : Adr) : Acct :=
   w.getD a .nil
