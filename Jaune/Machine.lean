@@ -6964,14 +6964,6 @@ theorem Except.CanonicalOn.bind {ρ α β : Type} {P : α → Prop} {Q : β → 
   | error e => exact hx
   | ok a => exact hf a hx
 
-theorem Except.CanonicalOn.map {ρ α β : Type} {P : α → Prop} {Q : β → Prop}
-    {x : Except (ρ × Devm) α} {f : α → β}
-    (hx : x.CanonicalOn P) (hf : ∀ a, P a → Q (f a)) :
-    (x <&> f).CanonicalOn Q := by
-  cases x with
-  | error e => exact hx
-  | ok a => exact hf a hx
-
 theorem Except.CanonicalOn.imp {ρ α : Type} {P Q : α → Prop}
     {x : Except (ρ × Devm) α}
     (hx : x.CanonicalOn P) (hf : ∀ a, P a → Q a) : x.CanonicalOn Q := by
@@ -7031,12 +7023,6 @@ theorem liftMachMetaExecution_canonical
     {core : Mach → Meta → Footprint.Outcome (Mach × Meta) Unit} {devm : Devm}
     (h : devm.Canonical) : (liftMachMetaExecution core devm).Canonical :=
   Footprint.toExecution_canonical (liftMachMeta_canonicalOn h)
-
-theorem liftMachMetaWorldExecution_canonical
-    {core : World → Mach → Meta → Footprint.Outcome (Mach × Meta) Unit}
-    {devm : Devm} (h : devm.Canonical) :
-    (liftMachMetaWorldExecution core devm).Canonical :=
-  liftMachMetaExecution_canonical h
 
 theorem liftMachPure_canonical {core : Mach → Mach} {devm : Devm}
     (h : devm.Canonical) : (liftMachPure core devm).Canonical :=
@@ -7277,10 +7263,6 @@ theorem liftToExecution_canonical {devm : Devm} {r}
 theorem Except.canonicalOn_ok {ρ α : Type} {P : α → Prop} {a : α} (h : P a) :
     (Except.ok a : Except (ρ × Devm) α).CanonicalOn P := h
 
-theorem Except.canonicalOn_error {ρ α : Type} {P : α → Prop} {e : ρ × Devm}
-    (h : e.2.Canonical) :
-    (Except.error e : Except (ρ × Devm) α).CanonicalOn P := h
-
 /-- `.ok a >>= f` is `f a` by iota, so sequencing after a pure binding needs
 no case split. Stated so the descent tactic can skip the abstraction. -/
 theorem Except.canonicalOn_bind_ok {ρ α β : Type} {P : β → Prop} {a : α}
@@ -7298,158 +7280,373 @@ theorem Except.CanonicalSettle.bind {ρ : Type}
   | error e => exact hx
   | ok d => exact hf d hx
 
-/-- The eq-conditioned form of `Devm.memRead_canonical`, matching the
-hypothesis a `split` on the destructuring `let` leaves behind. -/
-theorem Devm.memRead_eq_canonical {devm d' : Devm} {i s : Nat} {val : Bytes}
-    (h : devm.Canonical) (heq : devm.memRead i s = (val, d')) :
-    d'.Canonical := by
-  have hm := Devm.memRead_canonical (index := i) (size := s) h
-  rw [heq] at hm
-  exact hm
+/-! ### The world frame
 
-/-- Canonicality through every register-instruction arm. Only `SSTORE` and
-`TSTORE` change the world, each through its named mutator; every other arm is
-world-preserving by construction. The four arms that destructure `memRead`
-with an irrefutable `let` are walked by hand, because that match does not
-reduce over an opaque scrutinee. -/
-theorem Rinst.runCore_canonical (pc : Nat) {devm : Devm} (sevm : Sevm)
-    (h : devm.Canonical) (r : Rinst) :
-    (Rinst.runCore pc devm sevm r).Canonical := by
+Every instruction that writes neither storage, transient storage, nor (through
+`SELFDESTRUCT`) balances keeps three components of the machine it starts from:
+the world -- state and transient storage -- and the two deletion-relevant sets,
+`accountsToDelete` and `createdAccounts`. This is the one arm-by-arm walk of
+those instructions (`Rinst.runCore_worldFrame`, `Jinst.runCore_worldFrame`,
+`Linst.run_worldFrame`); canonicality of the same arms is a corollary of it
+(`Execution.WorldFrame.canonical`), because canonicality reads only the world.
+Both channels are covered: an error keeps the frame of the machine it
+carries, which execution goes on using. -/
+
+/-- `d'` keeps `d`'s world and its two deletion-relevant sets. Every other
+component -- stack, memory, both gas pools, logs, refunds, output, return data,
+access sets and the EIP-7928 read sets -- is left free. -/
+structure Devm.WorldFrame (d d' : Devm) : Prop where
+  world : d.world = d'.world
+  accountsToDelete : d.accountsToDelete = d'.accountsToDelete
+  createdAccounts : d.createdAccounts = d'.createdAccounts
+
+theorem Devm.WorldFrame.refl (d : Devm) : d.WorldFrame d := ⟨rfl, rfl, rfl⟩
+
+theorem Devm.WorldFrame.trans {d₁ d₂ d₃ : Devm} (h₁ : d₁.WorldFrame d₂)
+    (h₂ : d₂.WorldFrame d₃) : d₁.WorldFrame d₃ :=
+  ⟨h₁.1.trans h₂.1, h₁.2.trans h₂.2, h₁.3.trans h₂.3⟩
+
+/-- Extend a frame by a step that leaves the three components alone; each
+premise is `rfl` for a `Mach`- or `Meta`-only update. -/
+theorem Devm.WorldFrame.keep {pre d d' : Devm} (h : pre.WorldFrame d)
+    (hw : d.world = d'.world) (ha : d.accountsToDelete = d'.accountsToDelete)
+    (hc : d.createdAccounts = d'.createdAccounts) : pre.WorldFrame d' :=
+  h.trans ⟨hw, ha, hc⟩
+
+theorem Devm.WorldFrame.state {d d' : Devm} (h : d.WorldFrame d') :
+    d.state = d'.state :=
+  congrArg World.state h.world
+
+theorem Devm.WorldFrame.transientStorage {d d' : Devm} (h : d.WorldFrame d') :
+    d.transientStorage = d'.transientStorage :=
+  congrArg World.transientStorage h.world
+
+theorem Devm.Canonical.of_worldFrame {d d' : Devm} (h : d.Canonical)
+    (hf : d.WorldFrame d') : d'.Canonical :=
+  h.of_world_eq hf.world.symm
+
+/-- The world frame of a machine-level result, on both channels: the error
+channel's machine keeps `pre`'s frame outright, an ok payload meets the
+caller's predicate (for a machine payload, `pre.WorldFrame`). -/
+def Except.WorldFrameOn {ρ α : Type} (pre : Devm) (P : α → Prop) :
+    Except (ρ × Devm) α → Prop
+  | .ok a => P a
+  | .error e => pre.WorldFrame e.2
+
+/-- A whole-machine execution result keeps `pre`'s frame on both channels. -/
+abbrev Execution.WorldFrame (pre : Devm) (x : Execution) : Prop :=
+  x.WorldFrameOn pre pre.WorldFrame
+
+theorem Except.WorldFrameOn.bind {ρ α β : Type} {pre : Devm} {P : α → Prop}
+    {Q : β → Prop} {x : Except (ρ × Devm) α} {f : α → Except (ρ × Devm) β}
+    (hx : x.WorldFrameOn pre P) (hf : ∀ a, P a → (f a).WorldFrameOn pre Q) :
+    (x >>= f).WorldFrameOn pre Q := by
+  cases x with
+  | error e => exact hx
+  | ok a => exact hf a hx
+
+theorem Except.WorldFrameOn.map {ρ α β : Type} {pre : Devm} {P : α → Prop}
+    {Q : β → Prop} {x : Except (ρ × Devm) α} {f : α → β}
+    (hx : x.WorldFrameOn pre P) (hf : ∀ a, P a → Q (f a)) :
+    (x <&> f).WorldFrameOn pre Q := by
+  cases x with
+  | error e => exact hx
+  | ok a => exact hf a hx
+
+theorem Except.WorldFrameOn.imp {ρ α : Type} {pre : Devm} {P Q : α → Prop}
+    {x : Except (ρ × Devm) α} (hx : x.WorldFrameOn pre P)
+    (hf : ∀ a, P a → Q a) : x.WorldFrameOn pre Q := by
+  cases x with
+  | error e => exact hx
+  | ok a => exact hf a hx
+
+theorem Except.worldFrameOn_error {ρ α : Type} {pre : Devm} {P : α → Prop}
+    {e : ρ × Devm} (h : pre.WorldFrame e.2) :
+    (Except.error e : Except (ρ × Devm) α).WorldFrameOn pre P := h
+
+theorem Except.worldFrameOn_assert {p : Prop} [Decidable p] {ρ : Type}
+    {pre : Devm} {e : ρ × Devm} (h : pre.WorldFrame e.2) :
+    (Except.assert p e).WorldFrameOn pre (fun _ => True) := by
+  unfold Except.assert
+  split
+  · trivial
+  · exact h
+
+/-- Canonicality from the frame: the error channel's machine and every
+payload the predicate covers share `pre`'s world. -/
+theorem Except.WorldFrameOn.canonicalOn {ρ α : Type} {pre : Devm}
+    {P Q : α → Prop} {x : Except (ρ × Devm) α} (hpre : pre.Canonical)
+    (hx : x.WorldFrameOn pre P) (hf : ∀ a, P a → Q a) : x.CanonicalOn Q := by
+  cases x with
+  | error e => exact hpre.of_worldFrame hx
+  | ok a => exact hf a hx
+
+theorem Execution.WorldFrame.canonical {pre : Devm} {x : Execution}
+    (hpre : pre.Canonical) (hx : x.WorldFrame pre) : x.Canonical :=
+  Except.WorldFrameOn.canonicalOn hpre hx fun _ hd => hpre.of_worldFrame hd
+
+-- The lifted footprint combinators and the named `Meta` recorders.
+
+theorem liftMach_worldFrameOn {α : Type} {core : Mach → Footprint.Outcome Mach α}
+    {pre devm : Devm} (h : pre.WorldFrame devm) :
+    (liftMach core devm).WorldFrameOn pre (fun a => pre.WorldFrame a.2) := by
+  unfold liftMach Footprint.liftOutcome
+  split <;> exact h.keep rfl rfl rfl
+
+theorem Footprint.toExecution_worldFrame {pre : Devm}
+    {x : Except (EvmError × Devm) (Unit × Devm)}
+    (hx : x.WorldFrameOn pre (fun a => pre.WorldFrame a.2)) :
+    (Footprint.toExecution x).WorldFrame pre := by
+  cases x with
+  | error e => exact hx
+  | ok a => exact hx
+
+theorem liftMachExecution_worldFrame {core : Mach → Footprint.Outcome Mach Unit}
+    {pre devm : Devm} (h : pre.WorldFrame devm) :
+    (liftMachExecution core devm).WorldFrame pre :=
+  Footprint.toExecution_worldFrame (liftMach_worldFrameOn h)
+
+theorem Devm.balReadAccount_worldFrame {pre devm : Devm} {rules : ForkRules}
+    {a : Adr} (h : pre.WorldFrame devm) :
+    pre.WorldFrame (devm.balReadAccount rules a) := by
+  unfold Devm.balReadAccount
+  split <;> exact h.keep rfl rfl rfl
+
+theorem Devm.balReadStorage_worldFrame {pre devm : Devm} {rules : ForkRules}
+    {a : Adr} {k : B256} (h : pre.WorldFrame devm) :
+    pre.WorldFrame (devm.balReadStorage rules a k) := by
+  unfold Devm.balReadStorage
+  split <;> exact h.keep rfl rfl rfl
+
+/-- The eq-conditioned `memRead` step, matching the hypothesis a destructuring
+`let` leaves behind. -/
+theorem Devm.memRead_eq_worldFrame {pre devm d' : Devm} {i s : Nat}
+    {val : Bytes} (h : pre.WorldFrame devm) (heq : devm.memRead i s = (val, d')) :
+    pre.WorldFrame d' := by
+  unfold Devm.memRead at heq
+  rcases hm : devm.memory.read i s with ⟨v, mem⟩
+  rw [hm] at heq
+  cases heq
+  exact h.keep rfl rfl rfl
+
+/-- `BALANCE`'s core warms one address and records one read: neither touches
+the deletion-relevant sets. -/
+theorem Rinst.balanceCore_worldFrame {rules : ForkRules} {pre devm : Devm}
+    (h : pre.WorldFrame devm) :
+    (liftMachMetaWorldExecution (Rinst.balanceCore rules) devm).WorldFrame pre := by
+  simp only [liftMachMetaWorldExecution, liftMachMetaExecution, liftMachMeta,
+    Footprint.liftOutcome, Rinst.balanceCore]
+  have hv : ∀ v : Meta, v.accountsToDelete = devm.meta.accountsToDelete →
+      v.createdAccounts = devm.meta.createdAccounts →
+      ∀ m, pre.WorldFrame { mach := m, «meta» := v, world := devm.world } :=
+    fun _ ha hc _ => h.keep rfl ha.symm hc.symm
+  rcases hp : devm.mach.pop with ⟨err, m⟩ | ⟨⟨x, m⟩⟩
+  · exact hv _ rfl rfl m
+  have h1 : (if x.toAdr ∈ devm.meta.accessedAddresses then devm.meta
+      else devm.meta.addAccessedAddress x.toAdr).accountsToDelete =
+        devm.meta.accountsToDelete ∧
+      (if x.toAdr ∈ devm.meta.accessedAddresses then devm.meta
+      else devm.meta.addAccessedAddress x.toAdr).createdAccounts =
+        devm.meta.createdAccounts := by split <;> exact ⟨rfl, rfl⟩
+  simp only
+  rcases Mach.chargeGas (if x.toAdr ∈ devm.meta.accessedAddresses then gasWarmAccess
+      else rules.gas.coldAccountAccess) m with ⟨err, m'⟩ | ⟨_, m'⟩
+  · exact hv _ h1.1 h1.2 m'
+  simp only
+  rcases Mach.push (devm.world.state.get x.toAdr).bal m' with ⟨err, m''⟩ | ⟨_, m''⟩ <;>
+    exact hv _ (by split <;> exact h1.1) (by split <;> exact h1.2) m''
+
+/-- The world frame through every register-instruction arm but the two
+writers. -/
+theorem Rinst.runCore_worldFrame (pc : Nat) (sevm : Sevm) (devm : Devm)
+    (r : Rinst) (hs : r ≠ .sstore) (ht : r ≠ .tstore) :
+    (Rinst.runCore pc devm sevm r).WorldFrame devm := by
+  have h := Devm.WorldFrame.refl devm
   cases r <;> simp only [Rinst.runCore]
+  case sstore => exact absurd rfl hs
+  case tstore => exact absurd rfl ht
+  case balance => exact Rinst.balanceCore_worldFrame h
   case mload =>
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) ?_
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) ?_
     rintro ⟨start, d1⟩ h1
-    refine Except.CanonicalOn.bind (liftMachExecution_canonical h1) ?_
+    refine Except.WorldFrameOn.bind (liftMachExecution_worldFrame h1) ?_
     intro d2 h2
     rcases hread : d2.memRead start 32 with ⟨val, d3⟩
-    exact liftMachExecution_canonical (Devm.memRead_eq_canonical h2 hread)
+    exact liftMachExecution_worldFrame (Devm.memRead_eq_worldFrame h2 hread)
   case keccak256 =>
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) ?_
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) ?_
     rintro ⟨start, d1⟩ h1
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h1) ?_
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h1) ?_
     rintro ⟨size, d2⟩ h2
-    refine Except.CanonicalOn.bind (liftMachExecution_canonical h2) ?_
+    refine Except.WorldFrameOn.bind (liftMachExecution_worldFrame h2) ?_
     intro d3 h3
     rcases hread : d3.memRead start size with ⟨arg, d4⟩
-    exact liftMachExecution_canonical (Devm.memRead_eq_canonical h3 hread)
+    exact liftMachExecution_worldFrame (Devm.memRead_eq_worldFrame h3 hread)
   case mcopy =>
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) ?_
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) ?_
     rintro ⟨dest, d1⟩ h1
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h1) ?_
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h1) ?_
     rintro ⟨src, d2⟩ h2
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h2) ?_
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h2) ?_
     rintro ⟨len, d3⟩ h3
-    refine Except.CanonicalOn.bind (liftMachExecution_canonical h3) ?_
+    refine Except.WorldFrameOn.bind (liftMachExecution_worldFrame h3) ?_
     intro d4 h4
     rcases hread : d4.memRead src len with ⟨val, d5⟩
-    exact (Devm.memRead_eq_canonical h4 hread).of_world_eq rfl
+    exact (Devm.memRead_eq_worldFrame h4 hread).keep rfl rfl rfl
   case log =>
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) ?_
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) ?_
     rintro ⟨start, d1⟩ h1
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h1) ?_
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h1) ?_
     rintro ⟨size, d2⟩ h2
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h2) ?_
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h2) ?_
     rintro ⟨topics, d3⟩ h3
-    refine Except.CanonicalOn.bind (liftMachExecution_canonical h3) ?_
+    refine Except.WorldFrameOn.bind (liftMachExecution_worldFrame h3) ?_
     intro d4 h4
-    refine Except.CanonicalOn.bind (Except.canonicalOn_assert h4) ?_
+    refine Except.WorldFrameOn.bind (Except.worldFrameOn_assert h4) ?_
     intro u _
     rcases hread : d4.memRead start size with ⟨data, d5⟩
-    exact (Devm.memRead_eq_canonical h4 hread).of_world_eq rfl
-  all_goals try exact liftMachExecution_canonical h
-  all_goals try exact liftMachMetaWorldExecution_canonical h
+    exact (Devm.memRead_eq_worldFrame h4 hread).keep rfl rfl rfl
+  all_goals try exact liftMachExecution_worldFrame h
   case exp =>
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
-    exact Except.CanonicalOn.bind (liftMachExecution_canonical hb)
-      fun d hd => liftMachExecution_canonical hd
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) fun a ha => ?_
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn ha) fun b hb => ?_
+    exact Except.WorldFrameOn.bind (liftMachExecution_worldFrame hb)
+      fun d hd => liftMachExecution_worldFrame hd
   case clz =>
     split
-    · exact liftMachExecution_canonical h
+    · exact liftMachExecution_worldFrame h
     · exact h
   case slotnum =>
     split
-    · exact liftMachExecution_canonical h
+    · exact liftMachExecution_worldFrame h
     · exact h
   case selfbalance =>
-    exact Except.CanonicalOn.bind (liftMachExecution_canonical h)
-      fun d hd => liftMachExecution_canonical hd
+    exact Except.WorldFrameOn.bind (liftMachExecution_worldFrame h)
+      fun d hd => liftMachExecution_worldFrame (Devm.balReadAccount_worldFrame hd)
   case calldataload =>
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
-    exact Except.CanonicalOn.bind (liftMachExecution_canonical ha)
-      fun d hd => liftMachExecution_canonical hd
-  case calldatacopy =>
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
-    exact Except.CanonicalOn.bind (liftMachExecution_canonical hc)
-      fun d hd => Devm.Canonical.of_world_eq hd rfl
-  case codecopy =>
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
-    exact Except.CanonicalOn.bind (liftMachExecution_canonical hc)
-      fun d hd => Devm.Canonical.of_world_eq hd rfl
-  case extcodesize =>
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) fun a ha => ?_
+    exact Except.WorldFrameOn.bind (liftMachExecution_worldFrame ha)
+      fun d hd => liftMachExecution_worldFrame hd
+  case calldatacopy | codecopy =>
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) fun a ha => ?_
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn ha) fun b hb => ?_
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn hb) fun c hc => ?_
+    exact Except.WorldFrameOn.bind (liftMachExecution_worldFrame hc)
+      fun d hd => hd.keep rfl rfl rfl
+  case extcodesize | extcodehash =>
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) fun a ha => ?_
     split <;>
-      exact Except.CanonicalOn.bind
-        (liftMachExecution_canonical (Devm.Canonical.of_world_eq ha rfl))
-        fun d hd => liftMachExecution_canonical hd
+      exact Except.WorldFrameOn.bind
+        (liftMachExecution_worldFrame (ha.keep rfl rfl rfl))
+        fun d hd => liftMachExecution_worldFrame (Devm.balReadAccount_worldFrame hd)
   case extcodecopy =>
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn hc) fun e he => ?_
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) fun a ha => ?_
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn ha) fun b hb => ?_
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn hb) fun c hc => ?_
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn hc) fun e he => ?_
     split <;>
-      exact Except.CanonicalOn.bind
-        (liftMachExecution_canonical (Devm.Canonical.of_world_eq he rfl))
-        fun d hd => Devm.Canonical.of_world_eq hd rfl
+      exact Except.WorldFrameOn.bind
+        (liftMachExecution_worldFrame (he.keep rfl rfl rfl))
+        fun d hd => (Devm.balReadAccount_worldFrame hd).keep rfl rfl rfl
   case returndatacopy =>
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
-    refine Except.CanonicalOn.bind (liftMachExecution_canonical hc) fun d hd => ?_
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) fun a ha => ?_
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn ha) fun b hb => ?_
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn hb) fun c hc => ?_
+    refine Except.WorldFrameOn.bind (liftMachExecution_worldFrame hc) fun d hd => ?_
     split
-    · exact Except.CanonicalOn.bind
-        (Except.canonicalOn_error (P := fun _ => True) hd)
-        fun _ _ => Devm.Canonical.of_world_eq hd rfl
-    · exact Devm.Canonical.of_world_eq hd rfl
-  case extcodehash =>
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
-    split <;>
-      exact Except.CanonicalOn.bind
-        (liftMachExecution_canonical (Devm.Canonical.of_world_eq ha rfl))
-        fun d hd => liftMachExecution_canonical hd
-  case blockhash =>
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
-    exact Except.CanonicalOn.bind (liftMachExecution_canonical ha)
-      fun d hd => liftMachExecution_canonical hd
-  case blobhash =>
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
-    exact Except.CanonicalOn.bind (liftMachExecution_canonical ha)
-      fun d hd => liftMachExecution_canonical hd
+    · exact Except.WorldFrameOn.bind
+        (Except.worldFrameOn_error (P := fun _ => True) hd)
+        fun _ _ => hd.keep rfl rfl rfl
+    · exact hd.keep rfl rfl rfl
+  case blockhash | blobhash =>
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) fun a ha => ?_
+    exact Except.WorldFrameOn.bind (liftMachExecution_worldFrame ha)
+      fun d hd => liftMachExecution_worldFrame hd
   case pop =>
-    exact Except.CanonicalOn.bind
-      (Except.CanonicalOn.map (liftMach_canonicalOn h) fun _ ha => ha)
-      fun d hd => liftMachExecution_canonical hd
-  case mstore =>
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
-    exact Except.CanonicalOn.bind (liftMachExecution_canonical hb)
-      fun d hd => Devm.Canonical.of_world_eq hd rfl
-  case mstore8 =>
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
-    exact Except.CanonicalOn.bind (liftMachExecution_canonical hb)
-      fun d hd => Devm.Canonical.of_world_eq hd rfl
+    exact Except.WorldFrameOn.bind
+      (Except.WorldFrameOn.map (liftMach_worldFrameOn h) fun _ ha => ha)
+      fun d hd => liftMachExecution_worldFrame hd
+  case mstore | mstore8 =>
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) fun a ha => ?_
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn ha) fun b hb => ?_
+    exact Except.WorldFrameOn.bind (liftMachExecution_worldFrame hb)
+      fun d hd => hd.keep rfl rfl rfl
   case sload =>
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) fun a ha => ?_
     split <;>
-      exact Except.CanonicalOn.bind
-        (liftMachExecution_canonical (Devm.Canonical.of_world_eq ha rfl))
-        fun d hd => liftMachExecution_canonical hd
-  case sstore =>
+      exact Except.WorldFrameOn.bind
+        (liftMachExecution_worldFrame (ha.keep rfl rfl rfl))
+        fun d hd => liftMachExecution_worldFrame (Devm.balReadStorage_worldFrame hd)
+  case tload =>
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) fun a ha => ?_
+    exact liftMachExecution_worldFrame ha
+  case gas =>
+    exact Except.WorldFrameOn.bind (liftMachExecution_worldFrame h)
+      fun d hd => liftMachExecution_worldFrame hd
+  case dup =>
+    refine Except.WorldFrameOn.bind (liftMachExecution_worldFrame h) fun d hd => ?_
+    split
+    · exact hd
+    · exact liftMachExecution_worldFrame hd
+  case swap =>
+    refine Except.WorldFrameOn.bind (liftMachExecution_worldFrame h) fun d hd => ?_
+    split
+    · exact hd
+    · exact hd.keep rfl rfl rfl
+
+theorem Rinst.run_worldFrame (evm : Evm) (r : Rinst) (hs : r ≠ .sstore)
+    (ht : r ≠ .tstore) : (Rinst.run evm r).WorldFrame evm.dyna :=
+  Rinst.runCore_worldFrame evm.pc evm.sta evm.dyna r hs ht
+
+/-- Jump instructions keep the frame; the payload carries the new program
+counter beside the machine. -/
+theorem Jinst.runCore_worldFrame (pc : Nat) (sevm : Sevm) (devm : Devm)
+    (j : Jinst) :
+    (Jinst.runCore pc devm sevm j).WorldFrameOn devm
+      (fun a => devm.WorldFrame a.2) := by
+  have h := Devm.WorldFrame.refl devm
+  cases j <;> simp only [Jinst.runCore]
+  case jumpdest =>
+    exact Except.WorldFrameOn.bind (liftMachExecution_worldFrame h) fun d hd => hd
+  case jump =>
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) fun a ha => ?_
+    refine Except.WorldFrameOn.bind (liftMachExecution_worldFrame ha) fun d hd => ?_
+    exact Except.WorldFrameOn.bind (Except.worldFrameOn_assert hd) fun _ _ => hd
+  case jumpi =>
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) fun a ha => ?_
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn ha) fun b hb => ?_
+    refine Except.WorldFrameOn.bind (liftMachExecution_worldFrame hb) fun d hd => ?_
+    split
+    · exact hd
+    · exact Except.WorldFrameOn.bind (Except.worldFrameOn_assert hd) fun _ _ => hd
+
+theorem Jinst.run_worldFrame (evm : Evm) (j : Jinst) :
+    (Jinst.run evm j).WorldFrameOn evm.dyna (fun a => evm.dyna.WorldFrame a.2) :=
+  Jinst.runCore_worldFrame evm.pc evm.sta evm.dyna j
+
+/-- The halting instructions other than `SELFDESTRUCT` keep the frame. -/
+theorem Linst.run_worldFrame (sevm : Sevm) (devm : Devm) (l : Linst)
+    (hl : l ≠ .selfdestruct) : Execution.WorldFrame devm (Linst.run sevm devm l) := by
+  have h := Devm.WorldFrame.refl devm
+  cases l <;> simp only [Linst.run]
+  case selfdestruct => exact absurd rfl hl
+  case stop => exact h
+  case revert | return_ =>
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) fun a ha => ?_
+    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn ha) fun b hb => ?_
+    refine Except.WorldFrameOn.bind (liftMachExecution_worldFrame hb) fun d hd => ?_
+    rcases hread : d.memRead a.1 b.1 with ⟨out, d'⟩
+    exact (Devm.memRead_eq_worldFrame hd hread).keep rfl rfl rfl
+
+/-- Canonicality through every register-instruction arm. Only `SSTORE` and
+`TSTORE` change the world, each through its named mutator, and are walked
+here; every other arm keeps the world frame (`Rinst.runCore_worldFrame`). -/
+theorem Rinst.runCore_canonical (pc : Nat) {devm : Devm} (sevm : Sevm)
+    (h : devm.Canonical) (r : Rinst) :
+    (Rinst.runCore pc devm sevm r).Canonical := by
+  by_cases hs : r = .sstore
+  · subst hs
+    simp only [Rinst.runCore]
     split
     · -- Prague: the body it has always been.
       refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
@@ -7477,10 +7674,9 @@ theorem Rinst.runCore_canonical (pc : Nat) {devm : Devm} (sevm : Sevm)
          refine Except.CanonicalOn.bind (liftMachExecution_canonical hd)
            fun d' hd' => ?_
          exact Devm.Canonical.setStorVal hd' _ _ _)
-  case tload =>
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
-    exact liftMachExecution_canonical ha
-  case tstore =>
+  by_cases ht : r = .tstore
+  · subst ht
+    simp only [Rinst.runCore]
     split
     · refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
       refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
@@ -7492,19 +7688,7 @@ theorem Rinst.runCore_canonical (pc : Nat) {devm : Devm} (sevm : Sevm)
       refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
       refine Except.CanonicalOn.bind (liftMachExecution_canonical hb) fun d hd => ?_
       exact Devm.Canonical.setTransVal hd _ _ _
-  case gas =>
-    exact Except.CanonicalOn.bind (liftMachExecution_canonical h)
-      fun d hd => liftMachExecution_canonical hd
-  case dup =>
-    refine Except.CanonicalOn.bind (liftMachExecution_canonical h) fun d hd => ?_
-    split
-    · exact hd
-    · exact liftMachExecution_canonical hd
-  case swap =>
-    refine Except.CanonicalOn.bind (liftMachExecution_canonical h) fun d hd => ?_
-    split
-    · exact hd
-    · exact Devm.Canonical.of_world_eq hd rfl
+  exact (Rinst.runCore_worldFrame pc sevm devm r hs ht).canonical h
 
 theorem Rinst.run_canonical {evm : Evm} (h : evm.dyna.Canonical) (r : Rinst) :
     (Rinst.run evm r).Canonical :=
@@ -7522,25 +7706,9 @@ theorem State.Canonical.foldl_destroyAccount {l : List Adr} {w : State}
 program counter beside the machine. -/
 theorem Jinst.runCore_canonicalOn (pc : Nat) {devm : Devm} (sevm : Sevm)
     (h : devm.Canonical) (j : Jinst) :
-    (Jinst.runCore pc devm sevm j).CanonicalOn (fun a => a.2.Canonical) := by
-  cases j <;> simp only [Jinst.runCore]
-  case jumpdest =>
-    refine Except.CanonicalOn.bind (liftMachExecution_canonical h)
-      fun d hd => ?_
-    exact hd
-  case jump =>
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
-    refine Except.CanonicalOn.bind (liftMachExecution_canonical ha) fun d hd => ?_
-    refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
-    exact hd
-  case jumpi =>
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
-    refine Except.CanonicalOn.bind (liftMachExecution_canonical hb) fun d hd => ?_
-    split
-    · exact Except.canonicalOn_bind_ok hd
-    · refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
-      exact Except.canonicalOn_bind_ok hd
+    (Jinst.runCore pc devm sevm j).CanonicalOn (fun a => a.2.Canonical) :=
+  (Jinst.runCore_worldFrame pc sevm devm j).canonicalOn h
+    fun _ ha => h.of_worldFrame ha
 
 theorem Jinst.run_canonicalOn {evm : Evm} (h : evm.dyna.Canonical) (j : Jinst) :
     (Jinst.run evm j).CanonicalOn (fun a => a.2.Canonical) :=
@@ -7551,21 +7719,9 @@ world-changing arm, and it factors through `subBal`/`addBal`/`setBal`. -/
 theorem Linst.run_canonical {sevm : Sevm} {devm : Devm}
     (h : devm.Canonical) (l : Linst) :
     Execution.Canonical (Linst.run sevm devm l) := by
-  cases l <;> simp only [Linst.run]
-  case stop => exact h
-  case revert =>
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
-    refine Except.CanonicalOn.bind (liftMachExecution_canonical hb) fun d hd => ?_
-    rcases hread : d.memRead a.1 b.1 with ⟨out, d'⟩
-    exact (Devm.memRead_eq_canonical hd hread).of_world_eq rfl
-  case return_ =>
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
-    refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
-    refine Except.CanonicalOn.bind (liftMachExecution_canonical hb) fun d hd => ?_
-    rcases hread : d.memRead a.1 b.1 with ⟨out, d'⟩
-    exact (Devm.memRead_eq_canonical hd hread).of_world_eq rfl
-  case selfdestruct =>
+  by_cases hl : l = .selfdestruct
+  · subst hl
+    simp only [Linst.run]
     split
     · -- Prague: the body it has always been.
       refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
@@ -7607,5 +7763,6 @@ theorem Linst.run_canonical {sevm : Sevm} {devm : Devm}
            · exact addAccountToDelete_canonical
                (Devm.emitTransferLog_canonical (Devm.Canonical.addBal hd2 a.1 _))
            · exact Devm.emitTransferLog_canonical (Devm.Canonical.addBal hd2 a.1 _))
+  exact (Linst.run_worldFrame sevm devm l hl).canonical h
 
 end Jaune
