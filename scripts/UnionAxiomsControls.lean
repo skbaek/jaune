@@ -1,6 +1,7 @@
 import AxiomAudit
 import UnionAxiomsFixture.Good
 import UnionAxiomsFixture.Bad
+import UnionAxiomsFixture.ViaDep
 
 /-!
 # Controls for `#union_axioms_of_modules`
@@ -53,6 +54,17 @@ error: #union_axioms_of_modules: UnionAxiomsFixture.Bad reaches axioms outside #
 -/
 #guard_msgs in
 #union_axioms_of_modules UnionAxiomsFixture.Bad
+
+-- Axioms outside the population are found across its boundary: `depAx` only
+-- through the constructor of an inductive the population mentions, `depAx2`
+-- only through a private theorem.
+/--
+error: #union_axioms_of_modules: UnionAxiomsFixture.ViaDep reaches axioms outside #[Classical.choice, Quot.sound, propext]: #[depAx, depAx2]
+  depAx <- root useDep: useDep -> DepInd -> DepInd.mk -> depAx
+  depAx2 <- root _private.UnionAxiomsFixture.ViaDep.0.hiddenDep: _private.UnionAxiomsFixture.ViaDep.0.hiddenDep -> depAx2
+-/
+#guard_msgs in
+#union_axioms_of_modules UnionAxiomsFixture.ViaDep
 
 -- An empty population fails closed: no such module, and a name that is only a
 -- textual (not component-wise) prefix of a module.

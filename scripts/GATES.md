@@ -439,7 +439,7 @@ Two different contracts, and confusing them is the most common misreading:
   `Examples.lean`, `Main.lean` and `MemoryProbe.lean`, and the modules of the
   default `Assurance` library (`scripts/AxiomAudit.lean`,
   `scripts/ExecutionAxioms.lean`, `scripts/UnionAxiomsControls.lean` and the
-  fixtures `scripts/UnionAxiomsFixture/{Good,Bad}.lean`), whose `srcDir` and `roots` the gate reads
+  fixtures `scripts/UnionAxiomsFixture/{Good,Bad,Dep,ViaDep}.lean`), whose `srcDir` and `roots` the gate reads
   from `lakefile.lean` (a configuration it cannot read is a setup failure).
   Trees are discovered rather than listed. The time measured is the cost of
   opening the file in a session, and the cost sitting on `lake build`'s
@@ -694,8 +694,8 @@ walk per root). All three commands fail elaboration when the walk reaches a
 constant the environment does not contain. That module imports only `Lean` and
 is a root of `Assurance` so a downstream package can import it; `Jaune.lean`
 imports neither file. Like the other `scripts/*.lean` metaprograms, the walker,
-`ExecutionAxioms.lean`, `UnionAxiomsControls.lean` and the two fixture modules
-`scripts/UnionAxiomsFixture/{Good,Bad}.lean` are outside the hygiene and
+`ExecutionAxioms.lean`, `UnionAxiomsControls.lean` and the four fixture modules
+`scripts/UnionAxiomsFixture/{Good,Bad,Dep,ViaDep}.lean` are outside the hygiene and
 integrity scopes. Controls of the per-name entry points (2026-09-24, disposable
 tree, against this walker): injecting a non-standard axiom into one audited
 declaration fails the owned build at exactly that row, a wrong expected set
@@ -709,7 +709,10 @@ population passes with the exact union and root set; an explicit allowed list is
 honoured and `[]` allows nothing; a population reaching a non-allowed axiom
 fails naming the axiom, both root theorems and the chain; an empty population
 fails closed, as does a name that is only a textual prefix of a module; and an
-absent constant reached from a root fails and is located.
+absent constant reached from a root fails and is located; axioms declared
+outside the population are found across its boundary, through the constructor of
+an inductive the population mentions and through a private theorem (a private
+name is a root).
 
 ### Ambient execution examples
 
