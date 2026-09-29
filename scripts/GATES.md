@@ -438,7 +438,8 @@ Two different contracts, and confusing them is the most common misreading:
   `Jaune/**/*.lean` and `Examples/**/*.lean`, the root modules `Jaune.lean`,
   `Examples.lean`, `Main.lean` and `MemoryProbe.lean`, and the modules of the
   default `Assurance` library (`scripts/AxiomAudit.lean`,
-  `scripts/ExecutionAxioms.lean`), whose `srcDir` and `roots` the gate reads
+  `scripts/ExecutionAxioms.lean`, `scripts/UnionAxiomsControls.lean` and the
+  fixtures `scripts/UnionAxiomsFixture/{Good,Bad}.lean`), whose `srcDir` and `roots` the gate reads
   from `lakefile.lean` (a configuration it cannot read is a setup failure).
   Trees are discovered rather than listed. The time measured is the cost of
   opening the file in a session, and the cost sitting on `lake build`'s
@@ -672,22 +673,43 @@ when a row is deleted, an entry is deleted, a set differs, or a public rule of a
 coverage module has no row; `scripts/tests/test_assurance_manifest.py` holds
 those three omissions as controls.
 
-The closure is computed by `Jaune.AxiomAudit.walk` in
+The closure is computed by `Jaune.AxiomAudit.walkMany` in
 `scripts/AxiomAudit.lean`, a from-scratch walk over each reachable constant's
-type and value and each inductive's constructors, with a fresh visited set per
-audited name and no cached per-constant result. It never calls
-`Lean.collectAxioms` or `#print axioms` (lean4#15226). It is the single walker:
-`#expect_axioms` and the `#full_axioms` report command (one
-`FULL-AXIOMS '<name>': [...]` line per name, each name in its own task) both
-use it, and both fail elaboration when the walk reaches a constant the
-environment does not contain. That module imports only `Lean` and is a root of
-`Assurance` so a downstream package can import it; `Jaune.lean` imports
-neither file. Like the other `scripts/*.lean` metaprograms, both are outside
-the hygiene and integrity scopes. Controls (2026-09-24, disposable tree,
-against this walker): injecting a non-standard axiom into one audited
+type and value and each inductive's constructors, with one visited set per walk
+and no cached per-constant result. It never calls `Lean.collectAxioms` or
+`#print axioms` (lean4#15226). It is the single walker, with two entry points.
+Per name: `walk` (a single root) serves `#expect_axioms` and the `#full_axioms`
+report command (one `FULL-AXIOMS '<name>': [...]` line per name, each name in
+its own task), each name with a fresh visited set. Union: `#union_axioms_of_modules
+P [allowed,...]` roots one walk, with one shared visited set, at every kernel
+constant (all kinds, private names and auxiliaries) recorded in the `constNames`
+of every imported module named `P` or `P.…`, and logs one
+`UNION-AXIOMS 'P': [...] roots=<n> modules=<m> visited=<v>` line. It fails
+elaboration when no module matches (an empty population is never green), when
+the walk reaches an absent constant, and when the union contains an axiom outside
+the allowed list (default `propext, Classical.choice, Quot.sound`; `[]` allows
+none); an axiom failure names, per offending axiom, up to 20 roots that reach it
+with the chain from the root to the axiom (a linear reverse-graph search, not a
+walk per root). All three commands fail elaboration when the walk reaches a
+constant the environment does not contain. That module imports only `Lean` and
+is a root of `Assurance` so a downstream package can import it; `Jaune.lean`
+imports neither file. Like the other `scripts/*.lean` metaprograms, the walker,
+`ExecutionAxioms.lean`, `UnionAxiomsControls.lean` and the two fixture modules
+`scripts/UnionAxiomsFixture/{Good,Bad}.lean` are outside the hygiene and
+integrity scopes. Controls of the per-name entry points (2026-09-24, disposable
+tree, against this walker): injecting a non-standard axiom into one audited
 declaration fails the owned build at exactly that row, a wrong expected set
 fails its row, a row whose declaration references a constant absent from the
 environment fails at that row, and restoring the bytes restores green.
+
+The union entry point's controls are committed in the default `Assurance`
+library (`scripts/UnionAxiomsControls.lean`, every `#guard_msgs` exact, so the
+ordinary build fails at the control if a behaviour changes): a compliant
+population passes with the exact union and root set; an explicit allowed list is
+honoured and `[]` allows nothing; a population reaching a non-allowed axiom
+fails naming the axiom, both root theorems and the chain; an empty population
+fails closed, as does a name that is only a textual prefix of a module; and an
+absent constant reached from a root fails and is located.
 
 ### Ambient execution examples
 
