@@ -2833,6 +2833,13 @@ private theorem frame_settle_output_length_le {frame : Frame} {raw : Execution}
     rw [hpost]
     exact handled_output_length_le _ _ hh
 
+private theorem frame_settleMsg_error (frame : Frame)
+    (failure : EvmError × State × AdrSet × Tra) :
+    frame.settleMsg (.error failure) = .error failure := by
+  simp only [Frame.settleMsg, processMessage.settle,
+    processCreateMessage.settle, bind, Except.bind]
+  split <;> rfl
+
 private theorem push_returnData (pre : Devm) (word : B256) :
     match pre.push word with
     | .error failure => failure.2.returnData = pre.returnData
@@ -3059,6 +3066,33 @@ theorem call_spawn_code_reply_bound
   rw [hrsm]
   exact call_resume_returnData_lt_two_pow_160 (parent.withReturnData [])
     outputIndex outputSize (frame.settle raw) rfl hsettled
+
+/-- A failed value transfer never enters code or a precompile. Its actual
+CALL resume inherits the empty return-data buffer installed at spawn, even
+when the parent's stack push itself fails. -/
+theorem call_spawn_transfer_error_reply_bound
+    {sevm : Sevm} {parent : Devm} (grant : Nat) (value : B256)
+    (inputIndex inputSize outputIndex outputSize : Nat)
+    {caller target codeAddress : Adr} {shouldTransferValue isStaticcall : Bool}
+    {code : ByteArray} {disablePrecompiles : Bool}
+    {frame : Frame} {resume : Resume}
+    {failure : EvmError × State × AdrSet × Tra}
+    (hspawn : genericCall.step sevm parent grant value caller target codeAddress
+      shouldTransferValue isStaticcall inputIndex inputSize outputIndex outputSize
+      code disablePrecompiles = .spawn frame resume)
+    (htransfer : frame.inner.benvAfterTransfer = .error failure) :
+    frame.enter = .done (.error failure) ∧
+      match resume.run (.error failure) with
+      | .ok post => post.returnData.length < 2 ^ 160
+      | .error e => e.2.returnData.length < 2 ^ 160 := by
+  have hsettle := frame_settleMsg_error frame failure
+  have hentry : frame.enter = .done (.error failure) := by
+    simp only [Frame.enter, htransfer, hsettle]
+  obtain ⟨_, hrsm⟩ := genericCall.step_spawn_call hspawn
+  refine ⟨hentry, ?_⟩
+  rw [hrsm]
+  exact call_resume_returnData_lt_two_pow_160 (parent.withReturnData [])
+    outputIndex outputSize (.error failure) rfl (by intro child hc; cases hc)
 
 /-- A successful native MODEXP reply has at most the modulus-header width.
 This uses the selected precompile execution, including its gas and length
@@ -3812,5 +3846,77 @@ theorem call_spawn_native_enter_error
   · rw [hrsm]
     exact call_resume_returnData_lt_two_pow_160 (parent.withReturnData [])
       outputIndex outputSize (frame.settle (.error failure)) rfl hsettled
+
+/-- Every actual value-bearing or zero-value word-sized CALL spawn has a
+bounded parent return-data result. This combines failed value transfer,
+ordinary code execution, and successful or rejected native precompiles,
+including errors and both resume outcomes. The code branch quantifies over
+its actual recursive execution instead of assuming an output premise. -/
+theorem call_spawn_enter_reply_bound
+    {sevm : Sevm} {before charged : Devm}
+    (baseCost : Nat) (gas value : B256)
+    (extraGas inputIndex inputSize outputIndex outputSize : Nat)
+    {caller target codeAddress : Adr} {shouldTransferValue isStaticcall : Bool}
+    {code : ByteArray} {disablePrecompiles : Bool}
+    {frame : Frame} {resume : Resume}
+    (hcharge : chargeGas
+      (baseCost + before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
+      before = .ok charged)
+    (hspawn : genericCall.step sevm
+      (charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)])
+      (calculateMsgCallGas value.toNat gas.toNat before.gasLeft
+        (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
+        extraGas gCallStipend).2 value caller target codeAddress
+      shouldTransferValue isStaticcall inputIndex inputSize outputIndex outputSize
+      code disablePrecompiles = .spawn frame resume)
+    (hpotential : before.gasMeasure + calculateMemoryGasCost before.memory.size <
+      2 ^ 256)
+    (hstate : sevm.benvStat.rules.stateGas = none) :
+    match frame.enter with
+    | .run child =>
+        ∀ raw : Execution, Exec child.pc child.sta child.dyna raw →
+          match resume.run (frame.settle raw) with
+          | .ok post => post.returnData.length < 2 ^ 160
+          | .error failure => failure.2.returnData.length < 2 ^ 160
+    | .done settled =>
+        match resume.run settled with
+        | .ok post => post.returnData.length < 2 ^ 160
+        | .error failure => failure.2.returnData.length < 2 ^ 160 := by
+  cases ht : frame.inner.benvAfterTransfer with
+  | error transferFailure =>
+      have hf := call_spawn_transfer_error_reply_bound
+        (calculateMsgCallGas value.toNat gas.toNat before.gasLeft
+          (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
+          extraGas gCallStipend).2 value inputIndex inputSize outputIndex outputSize
+        hspawn ht
+      rw [hf.1]
+      exact hf.2
+  | ok benv =>
+      cases hd : executeCode.enter (frame.inner.withBenv benv) with
+      | inl child =>
+          have he : frame.enter = .run child := by
+            simp only [Frame.enter, ht, hd]
+          rw [he]
+          intro raw hexec
+          exact (call_spawn_code_reply_bound gas value before.gasLeft
+            (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
+            extraGas inputIndex inputSize outputIndex outputSize
+            hspawn he hexec hstate).2.2
+      | inr result =>
+          cases result with
+          | ok post =>
+              have hf := call_spawn_native_enter_success baseCost gas value extraGas
+                inputIndex inputSize outputIndex outputSize hcharge hspawn
+                hpotential ht hd
+              rw [hf.1]
+              exact hf.2.2
+          | error failure =>
+              have hf := call_spawn_native_enter_error
+                (calculateMsgCallGas value.toNat gas.toNat before.gasLeft
+                  (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
+                  extraGas gCallStipend).2 value inputIndex inputSize outputIndex
+                outputSize hspawn ht hd
+              rw [hf.1]
+              exact hf.2
 
 end Jaune
