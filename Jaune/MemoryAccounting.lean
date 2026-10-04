@@ -2657,6 +2657,33 @@ private theorem output_length_lt_two_pow_160 {n grant : Nat}
   have hconstant : 2 ^ 256 ≤ calculateMemoryGasCost (2 ^ 160) := by decide
   omega
 
+/-- A charged CALL input window is bounded by the parent's paid memory
+potential. This is the source of the identity precompile's reply bound. -/
+theorem charged_call_input_length_lt_two_pow_160
+    {before charged : Devm} (baseCost inputIndex inputSize outputIndex outputSize : Nat)
+    (hcharge : chargeGas
+      (baseCost + before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
+      before = .ok charged)
+    (hpotential : before.gasMeasure + calculateMemoryGasCost before.memory.size <
+      2 ^ 256) :
+    inputSize < 2 ^ 160 := by
+  let pairs := [(inputIndex, inputSize), (outputIndex, outputSize)]
+  have hacc := charged_memExtends_accounting pairs baseCost hcharge
+  have hmem : inputSize ≤ (charged.memExtends pairs).memory.size := by
+    by_cases hz : inputSize = 0
+    · omega
+    · have ha := memExtSize_access_le charged.memory.size inputIndex inputSize hz
+      have hg := memExtSize_ge
+        (memExtSize charged.memory.size inputIndex inputSize) outputIndex outputSize
+      change inputSize ≤
+        memExtSize (memExtSize charged.memory.size inputIndex inputSize)
+          outputIndex outputSize
+      omega
+  have hmono := calculateMemoryGasCost_mono hmem
+  have hcost : calculateMemoryGasCost inputSize ≤
+      before.gasMeasure + calculateMemoryGasCost before.memory.size := by omega
+  exact output_length_lt_two_pow_160 hcost hpotential
+
 private theorem entered_code_output_cost {frame : Frame} {child : Evm} {raw : Execution}
     (henter : frame.enter = .run child)
     (hexec : Exec child.pc child.sta child.dyna raw)
@@ -2941,21 +2968,6 @@ theorem executeModexp_ok_output_length_le {evm : Evm} {cost : Nat} {output : Byt
           exact Nat.le_refl _
     · cases h
 
-/-- The actual MODEXP precompile execution preserves the header-derived reply
-bound on its successful EVM result. -/
-theorem executePrecomp_modexp_ok_output_length_le {evm : Evm} {post : Devm}
-    (h : executePrecomp evm 5 = .ok post) :
-    post.output.length ≤ Bytes.sliceToNat evm.sta.data 64 32 := by
-  change applyPrecompResult evm (executeModexp evm) = .ok post at h
-  unfold applyPrecompResult at h
-  rcases hx : executeModexp evm with ⟨reason, charged⟩ | ⟨charged, bytes⟩
-  · simp only [hx] at h
-    cases h
-  · simp only [hx, Except.ok.injEq] at h
-    subst post
-    rw [Devm.withOutput_output]
-    exact executeModexp_ok_output_length_le hx
-
 /-- A successful MODEXP executes the selected fork's price and passes the
 actual gas guard, including when its output is empty. -/
 theorem executeModexp_ok_selected_cost {evm : Evm} {cost : Nat} {output : Bytes}
@@ -3006,6 +3018,108 @@ theorem executePrecomp_modexp_ok_selected_cost {evm : Evm} {post : Devm}
     rw [Devm.withOutput_output]
     exact ⟨charged, rfl, executeModexp_ok_selected_cost hx⟩
 
+private theorem ceilDiv8_ge_pow157_of_ge_pow160 {n : Nat}
+    (hn : 2 ^ 160 ≤ n) : 2 ^ 157 ≤ ceilDiv n 8 := by
+  have hceil : n ≤ 8 * ceilDiv n 8 := by
+    simp only [ceilDiv]
+    split <;> omega
+  have hp : (2 : Nat) ^ 160 = 8 * 2 ^ 157 := by decide
+  omega
+
+/-- The Prague MODEXP schedule alone rejects a modulus header this large
+within any 256-bit gas grant. -/
+theorem pragueModexpGasCost_large_modulus
+    {baseLength modulusLength expLength expHead : Nat}
+    (hmod : 2 ^ 160 ≤ modulusLength) :
+    2 ^ 256 ≤ modexpGasCost pragueModexpRules
+      baseLength modulusLength expLength expHead := by
+  let words := ceilDiv (max baseLength modulusLength) 8
+  have hw : 2 ^ 157 ≤ words :=
+    ceilDiv8_ge_pow157_of_ge_pow160
+      (Nat.le_trans hmod (Nat.le_max_right baseLength modulusLength))
+  have hsq : (2 ^ 157) ^ 2 ≤ words ^ 2 := Nat.pow_le_pow_left hw 2
+  have hiter : 1 ≤ modexpIterations pragueModexpRules expLength expHead := by
+    unfold modexpIterations
+    exact Nat.le_max_right _ _
+  have hmul : words ^ 2 ≤ words ^ 2 *
+      modexpIterations pragueModexpRules expLength expHead := by
+    simpa only [mul_one] using Nat.mul_le_mul_left (words ^ 2) hiter
+  have hbig : 3 * 2 ^ 256 ≤ (2 ^ 157) ^ 2 := by decide
+  have hcost : 2 ^ 256 ≤
+      (words ^ 2 * modexpIterations pragueModexpRules expLength expHead) / 3 := by
+    omega
+  simp only [modexpGasCost, modexpComplexity, pragueModexpRules, Nat.one_mul]
+  exact Nat.le_trans hcost (Nat.le_max_right _ _)
+
+private theorem executeModexp_ok_lengthsInBounds {evm : Evm} {cost : Nat}
+    {output : Bytes} (h : executeModexp evm = .ok cost output) :
+    modexpLengthsInBounds evm.sta.benvStat.rules.modexp
+      (Bytes.sliceToNat evm.sta.data 0 32)
+      (Bytes.sliceToNat evm.sta.data 32 32)
+      (Bytes.sliceToNat evm.sta.data 64 32) = true := by
+  unfold executeModexp at h
+  dsimp only at h
+  split at h
+  · cases h
+  · rename_i hguard
+    exact not_not.mp hguard
+
+private theorem osaka_modexp_modulus_le (baseLength expLength modulusLength : Nat)
+    (h : modexpLengthsInBounds osakaModexpRules
+      baseLength expLength modulusLength = true) :
+    modulusLength ≤ 1024 := by
+  simp only [modexpLengthsInBounds, osakaModexpRules] at h
+  simp only [Bool.and_eq_true_eq_eq_true_and_eq_true, decide_eq_true_eq] at h
+  exact h.2
+
+private theorem initialized_modexp_rules (evm : Evm) :
+    evm.sta.benvStat.rules.modexp = pragueModexpRules ∨
+      evm.sta.benvStat.rules.modexp = osakaModexpRules := by
+  change (Fork.ruleSet evm.sta.benvStat.fork).modexp = pragueModexpRules ∨
+    (Fork.ruleSet evm.sta.benvStat.fork).modexp = osakaModexpRules
+  cases evm.sta.benvStat.fork <;>
+    first | exact Or.inl rfl | exact Or.inr rfl
+
+/-- Under a word-sized gas grant, a successful initialized MODEXP reply has
+the strict size needed by CALL return-data accounting on every selected fork. -/
+theorem executeModexp_ok_output_length_lt_two_pow_160
+    {evm : Evm} {cost : Nat} {output : Bytes}
+    (h : executeModexp evm = .ok cost output)
+    (hgas : evm.dyna.gasLeft < 2 ^ 256) :
+    output.length < 2 ^ 160 := by
+  have hlen := executeModexp_ok_output_length_le h
+  have hprice := executeModexp_ok_selected_cost h
+  rcases initialized_modexp_rules evm with hprague | hosaka
+  · rw [hprague] at hprice
+    by_contra hnot
+    have hmod : 2 ^ 160 ≤ Bytes.sliceToNat evm.sta.data 64 32 := by omega
+    have hlarge := pragueModexpGasCost_large_modulus
+      (baseLength := Bytes.sliceToNat evm.sta.data 0 32)
+      (modulusLength := Bytes.sliceToNat evm.sta.data 64 32)
+      (expLength := Bytes.sliceToNat evm.sta.data 32 32)
+      (expHead := Bytes.sliceToNat evm.sta.data
+        (96 + Bytes.sliceToNat evm.sta.data 0 32)
+        (min 32 (Bytes.sliceToNat evm.sta.data 32 32))) hmod
+    omega
+  · have hbound := osaka_modexp_modulus_le
+      (Bytes.sliceToNat evm.sta.data 0 32)
+      (Bytes.sliceToNat evm.sta.data 32 32)
+      (Bytes.sliceToNat evm.sta.data 64 32) (by
+        rw [← hosaka]
+        exact executeModexp_ok_lengthsInBounds h)
+    have hsmall : 1024 < (2 : Nat) ^ 160 := by decide
+    omega
+
+/-- The selected MODEXP precompile inherits the strict reply bound from the
+actual guarded and charged native execution. -/
+theorem executePrecomp_modexp_ok_output_length_lt_two_pow_160
+    {evm : Evm} {post : Devm}
+    (h : executePrecomp evm 5 = .ok post)
+    (hgas : evm.dyna.gasLeft < 2 ^ 256) :
+    post.output.length < 2 ^ 160 := by
+  obtain ⟨cost, hmodexp, _, _⟩ := executePrecomp_modexp_ok_selected_cost h
+  exact executeModexp_ok_output_length_lt_two_pow_160 hmodexp hgas
+
 /-- An initialized identity reply is exactly the paid input. -/
 theorem executeId_ok_output_and_cost {evm : Evm} {cost : Nat} {output : Bytes}
     (h : executeId evm = .ok cost output) :
@@ -3032,5 +3146,368 @@ theorem executePrecomp_id_ok_output {evm : Evm} {post : Devm}
     subst post
     rw [Devm.withOutput_output]
     exact (executeId_ok_output_and_cost hx).1
+
+/-- The real zero-value CALL grant is a word-bounded MODEXP gas reservoir;
+its selected native reply therefore meets the full return-data bound. -/
+theorem zero_call_spawn_modexp_reply_bound
+    {sevm : Sevm} {before charged : Devm} (gas : B256)
+    (extraGas cs inputIndex inputSize outputIndex outputSize : Nat)
+    {caller target codeAddress : Adr} {shouldTransferValue isStaticcall : Bool}
+    {code : ByteArray} {disablePrecompiles : Bool}
+    {frame : Frame} {resume : Resume} {benv : Benv} {post : Devm}
+    (hspawn : genericCall.step sevm
+      (charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)])
+      (calculateMsgCallGas 0 gas.toNat before.gasLeft
+        (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
+        extraGas cs).2 0 caller target codeAddress shouldTransferValue isStaticcall
+      inputIndex inputSize outputIndex outputSize code disablePrecompiles =
+        .spawn frame resume)
+    (hmodexp : executePrecomp (initEvm (frame.inner.withBenv benv)) 5 = .ok post) :
+    post.output.length < 2 ^ 160 := by
+  have hf := (genericCall.step_spawn_call hspawn).1
+  have hgrant := calculateMsgCallGas_zero_word_child_lt gas before.gasLeft
+    (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)]) extraGas cs
+  have hgas : (initEvm (frame.inner.withBenv benv)).dyna.gasLeft < 2 ^ 256 := by
+    change frame.inner.gas < 2 ^ 256
+    rw [hf]
+    exact hgrant
+  exact executePrecomp_modexp_ok_output_length_lt_two_pow_160 hmodexp hgas
+
+/-- An identity reply from the real spawned zero-value CALL frame is bounded
+by the caller's paid input memory, even if the precompile returns all input. -/
+theorem zero_call_spawn_id_reply_bound
+    {sevm : Sevm} {before charged : Devm}
+    (baseCost gas inputIndex inputSize outputIndex outputSize : Nat)
+    {caller target codeAddress : Adr} {shouldTransferValue isStaticcall : Bool}
+    {code : ByteArray} {disablePrecompiles : Bool}
+    {frame : Frame} {resume : Resume} {benv : Benv} {post : Devm}
+    (hcharge : chargeGas
+      (baseCost + before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
+      before = .ok charged)
+    (hspawn : genericCall.step sevm
+      (charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)])
+      gas 0 caller target codeAddress shouldTransferValue isStaticcall
+      inputIndex inputSize outputIndex outputSize code disablePrecompiles =
+        .spawn frame resume)
+    (hpotential : before.gasMeasure + calculateMemoryGasCost before.memory.size <
+      2 ^ 256)
+    (hidentity : executePrecomp (initEvm (frame.inner.withBenv benv)) 4 = .ok post) :
+    post.output.length < 2 ^ 160 := by
+  have hout := executePrecomp_id_ok_output hidentity
+  rw [hout]
+  change frame.inner.data.length < 2 ^ 160
+  rw [genericCall.step_spawn_data_length hspawn]
+  exact charged_call_input_length_lt_two_pow_160
+    baseCost inputIndex inputSize outputIndex outputSize hcharge hpotential
+
+private theorem bnp_serialized_length (p : BNP) : (BNP.toBytes p).length = 64 := by
+  simp only [BNP.toBytes, List.length_append, Bytes.pack, List.length_takeRightD]
+
+private theorem blsp_serialized_length (p : BLSP) : (BLSP.toBytes p).length = 128 := by
+  simp only [BLSP.toBytes, List.length_append, Bytes.pack, List.length_takeRightD]
+
+private theorem blsf2_serialized_length (x : BLSF2) : x.toBytes.length = 128 := by
+  simp only [BLSF2.toBytes, List.length_append, Bytes.pack, List.length_takeRightD]
+
+private theorem blsp2_serialized_length (p : BLSP2) : (BLSP2.toBytes p).length = 256 := by
+  simp only [BLSP2.toBytes, List.length_append, blsf2_serialized_length]
+
+private theorem executeEcadd_ok_output_length {evm : Evm} {cost : Nat}
+    {output : Bytes} (h : executeEcadd evm = .ok cost output) :
+    output.length = 64 := by
+  unfold executeEcadd PrecompResult.chargeGas at h
+  dsimp only at h
+  repeat split at h
+  all_goals repeat split at h
+  all_goals repeat split at h
+  all_goals try cases h
+  all_goals exact bnp_serialized_length _
+
+private theorem executeEcmul_ok_output_length {evm : Evm} {cost : Nat}
+    {output : Bytes} (h : executeEcmul evm = .ok cost output) :
+    output.length = 64 := by
+  unfold executeEcmul PrecompResult.chargeGas at h
+  dsimp only at h
+  repeat split at h
+  all_goals repeat split at h
+  all_goals try cases h
+  all_goals exact bnp_serialized_length _
+
+private theorem executeBls12G1Add_ok_output_length {evm : Evm} {cost : Nat}
+    {output : Bytes} (h : executeBls12G1Add evm = .ok cost output) :
+    output.length = 128 := by
+  unfold executeBls12G1Add PrecompResult.chargeGas at h
+  dsimp only at h
+  repeat split at h
+  all_goals repeat split at h
+  all_goals try cases h
+  all_goals exact blsp_serialized_length _
+
+private theorem executeBls12G1Msm_ok_output_length {evm : Evm} {cost : Nat}
+    {output : Bytes} (h : executeBls12G1Msm evm = .ok cost output) :
+    output.length = 128 := by
+  unfold executeBls12G1Msm PrecompResult.chargeGas at h
+  dsimp only at h
+  repeat split at h
+  all_goals repeat split at h
+  all_goals try cases h
+  all_goals exact blsp_serialized_length _
+
+private theorem executeBls12G2Add_ok_output_length {evm : Evm} {cost : Nat}
+    {output : Bytes} (h : executeBls12G2Add evm = .ok cost output) :
+    output.length = 256 := by
+  unfold executeBls12G2Add PrecompResult.chargeGas at h
+  dsimp only at h
+  repeat split at h
+  all_goals repeat split at h
+  all_goals try cases h
+  all_goals exact blsp2_serialized_length _
+
+private theorem executeBls12G2Msm_ok_output_length {evm : Evm} {cost : Nat}
+    {output : Bytes} (h : executeBls12G2Msm evm = .ok cost output) :
+    output.length = 256 := by
+  unfold executeBls12G2Msm PrecompResult.chargeGas at h
+  dsimp only at h
+  repeat split at h
+  all_goals repeat split at h
+  all_goals try cases h
+  all_goals exact blsp2_serialized_length _
+
+private theorem executeBls12MapFpToG1_ok_output_length {evm : Evm} {cost : Nat}
+    {output : Bytes} (h : executeBls12MapFpToG1 evm = .ok cost output) :
+    output.length = 128 := by
+  unfold executeBls12MapFpToG1 PrecompResult.chargeGas at h
+  dsimp only at h
+  repeat split at h
+  all_goals repeat split at h
+  all_goals try cases h
+  all_goals exact blsp_serialized_length _
+
+private theorem executeBls12MapFp2ToG2_ok_output_length {evm : Evm} {cost : Nat}
+    {output : Bytes} (h : executeBls12MapFp2ToG2 evm = .ok cost output) :
+    output.length = 256 := by
+  unfold executeBls12MapFp2ToG2 PrecompResult.chargeGas at h
+  dsimp only at h
+  repeat split at h
+  all_goals repeat split at h
+  all_goals try cases h
+  all_goals exact blsp2_serialized_length _
+
+private theorem executeSha256_ok_output_length {evm : Evm} {cost : Nat}
+    {output : Bytes} (h : executeSha256 evm = .ok cost output) :
+    output.length = 32 := by
+  unfold executeSha256 PrecompResult.chargeGas at h
+  dsimp only at h
+  split at h
+  · cases h
+    exact B256.length_toBytes _
+  · cases h
+
+private theorem executeRipemd160_ok_output_length {evm : Evm} {cost : Nat}
+    {output : Bytes} (h : executeRipemd160 evm = .ok cost output) :
+    output.length = 32 := by
+  unfold executeRipemd160 PrecompResult.chargeGas at h
+  dsimp only at h
+  split at h
+  · cases h
+    exact B256.length_toBytes _
+  · cases h
+
+private theorem executeP256Verify_ok_output_length_le {evm : Evm} {cost : Nat}
+    {output : Bytes} (h : executeP256Verify evm = .ok cost output) :
+    output.length ≤ 32 := by
+  unfold executeP256Verify PrecompResult.chargeGas at h
+  dsimp only at h
+  repeat split at h
+  all_goals repeat split at h
+  all_goals try cases h
+  all_goals simp only [List.length_nil, B256.length_toBytes]
+  all_goals omega
+
+private theorem executeEcrecover_ok_output_length_le {evm : Evm} {cost : Nat}
+    {output : Bytes} (h : executeEcrecover evm = .ok cost output) :
+    output.length ≤ 32 := by
+  unfold executeEcrecover PrecompResult.chargeGas at h
+  dsimp only at h
+  repeat split at h
+  all_goals repeat split at h
+  all_goals repeat split at h
+  all_goals try cases h
+  all_goals simp only [List.length_nil, B256.length_toBytes]
+  all_goals omega
+
+private theorem executePointEval_ok_output_length {evm : Evm} {cost : Nat}
+    {output : Bytes} (h : executePointEval evm = .ok cost output) :
+    output.length = 64 := by
+  unfold executePointEval PrecompResult.chargeGas at h
+  dsimp only at h
+  repeat split at h
+  all_goals repeat split at h
+  all_goals repeat split at h
+  all_goals try cases h
+  all_goals simp only [List.length_append, B256.length_toBytes]
+
+private theorem executePairingCheckInner_ok_output_length {data : Bytes}
+    {charged reported : Nat} {output : Bytes}
+    (h : executePairingCheckInner data charged = .ok (reported, output)) :
+    output.length = 32 := by
+  unfold executePairingCheckInner at h
+  dsimp only at h
+  repeat split at h
+  all_goals try cases h
+  simp only [bind, Except.bind, pure, Except.pure] at h
+  split at h
+  · cases h
+  · split at h
+    all_goals cases h
+    all_goals simp only [B256.length_toBytes]
+
+private theorem executeBls12PairingInner_ok_output_length {data : Bytes}
+    {charged reported : Nat} {output : Bytes}
+    (h : executeBls12PairingInner data charged = .ok (reported, output)) :
+    output.length = 32 := by
+  unfold executeBls12PairingInner at h
+  dsimp only at h
+  simp only [bind, Except.bind, pure, Except.pure] at h
+  split at h
+  · cases h
+  · split at h
+    all_goals cases h
+    all_goals simp only [B256.length_toBytes]
+
+private theorem executePairingCheck_ok_output_length {evm : Evm}
+    {cost : Nat} {output : Bytes}
+    (h : executePairingCheck evm = .ok cost output) : output.length = 32 := by
+  unfold executePairingCheck PrecompResult.chargeGas at h
+  dsimp only at h
+  repeat split at h
+  all_goals try cases h
+  all_goals exact executePairingCheckInner_ok_output_length ‹_›
+
+private theorem executeBls12Pairing_ok_output_length {evm : Evm}
+    {cost : Nat} {output : Bytes}
+    (h : executeBls12Pairing evm = .ok cost output) : output.length = 32 := by
+  unfold executeBls12Pairing PrecompResult.chargeGas at h
+  dsimp only at h
+  repeat split at h
+  all_goals repeat split at h
+  all_goals try cases h
+  all_goals exact executeBls12PairingInner_ok_output_length ‹_›
+
+private theorem eight_byte_chunks_length (xs : List UInt64) :
+    (List.flatten (xs.map fun n => (Jaune.UInt64.toBytes n).reverse.takeD 8 (0x00 : UInt8))).length =
+      xs.length * 8 := by
+  induction xs with
+  | nil => rfl
+  | cons x xs ih =>
+    simp only [List.map_cons, List.flatten_cons, List.length_append,
+      List.takeD_length, ih, List.length_cons]
+    omega
+
+private theorem bCompress_ok_output_length {rounds : Nat} {h m : List UInt64}
+    {t0 t1 : UInt64} {f : Bool} {output : Bytes}
+    (hok : bCompress rounds h m t0 t1 f = some output) : output.length = 64 := by
+  unfold bCompress at hok
+  split at hok
+  · split at hok
+    · simp only [Option.some.injEq] at hok
+      subst output
+      simp only [eight_byte_chunks_length, Vector.length_toList]
+    · cases hok
+  · cases hok
+
+private theorem executeBlake2F_ok_output_length {evm : Evm}
+    {cost : Nat} {output : Bytes}
+    (h : executeBlake2F evm = .ok cost output) : output.length = 64 := by
+  unfold executeBlake2F PrecompResult.chargeGas at h
+  dsimp only at h
+  repeat split at h
+  all_goals repeat split at h
+  all_goals repeat split at h
+  all_goals try cases h
+  all_goals exact bCompress_ok_output_length ‹_›
+
+/-- Every successful initialized native precompile has a fixed-width reply
+unless it is identity or MODEXP; those two use their paid input and gas. -/
+theorem precompileRun_ok_output_length_lt_two_pow_160
+    {evm : Evm} {adr : Adr} {cost : Nat} {output : Bytes}
+    (h : precompileRun evm adr = .ok cost output)
+    (hdata : evm.sta.data.length < 2 ^ 160)
+    (hgas : evm.dyna.gasLeft < 2 ^ 256) :
+    output.length < 2 ^ 160 := by
+  unfold precompileRun at h
+  split at h
+  all_goals first
+    | have := executeEcrecover_ok_output_length_le h; omega
+    | have := executeSha256_ok_output_length h; omega
+    | have := executeRipemd160_ok_output_length h; omega
+    | have hout := (executeId_ok_output_and_cost h).1; rw [hout]; exact hdata
+    | exact executeModexp_ok_output_length_lt_two_pow_160 h hgas
+    | have := executeEcadd_ok_output_length h; omega
+    | have := executeEcmul_ok_output_length h; omega
+    | have := executePairingCheck_ok_output_length h; omega
+    | have := executeBlake2F_ok_output_length h; omega
+    | have := executePointEval_ok_output_length h; omega
+    | have := executeBls12G1Add_ok_output_length h; omega
+    | have := executeBls12G1Msm_ok_output_length h; omega
+    | have := executeBls12G2Add_ok_output_length h; omega
+    | have := executeBls12G2Msm_ok_output_length h; omega
+    | have := executeBls12Pairing_ok_output_length h; omega
+    | have := executeBls12MapFpToG1_ok_output_length h; omega
+    | have := executeBls12MapFp2ToG2_ok_output_length h; omega
+    | have := executeP256Verify_ok_output_length_le h; omega
+    | cases h
+
+/-- An actual selected native success obeys the full return-data width once
+the initialized input and gas reservoir have their physical bounds. -/
+theorem executePrecomp_ok_output_length_lt_two_pow_160
+    {evm : Evm} {adr : Adr} {post : Devm}
+    (h : executePrecomp evm adr = .ok post)
+    (hdata : evm.sta.data.length < 2 ^ 160)
+    (hgas : evm.dyna.gasLeft < 2 ^ 256) :
+    post.output.length < 2 ^ 160 := by
+  unfold executePrecomp applyPrecompResult at h
+  rcases hrun : precompileRun evm adr with ⟨reason, charged⟩ | ⟨charged, bytes⟩
+  · simp only [hrun] at h
+    cases h
+  · simp only [hrun, Except.ok.injEq] at h
+    subst post
+    rw [Devm.withOutput_output]
+    exact precompileRun_ok_output_length_lt_two_pow_160 hrun hdata hgas
+
+/-- The real zero-value CALL spawn supplies both physical premises needed by
+every selected native precompile, including identity and MODEXP. -/
+theorem zero_call_spawn_native_reply_bound
+    {sevm : Sevm} {before charged : Devm}
+    (baseCost : Nat) (gas : B256)
+    (extraGas cs inputIndex inputSize outputIndex outputSize : Nat)
+    {caller target codeAddress : Adr} {shouldTransferValue isStaticcall : Bool}
+    {code : ByteArray} {disablePrecompiles : Bool}
+    {frame : Frame} {resume : Resume} {benv : Benv} {adr : Adr} {post : Devm}
+    (hcharge : chargeGas
+      (baseCost + before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
+      before = .ok charged)
+    (hspawn : genericCall.step sevm
+      (charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)])
+      (calculateMsgCallGas 0 gas.toNat before.gasLeft
+        (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
+        extraGas cs).2 0 caller target codeAddress shouldTransferValue isStaticcall
+      inputIndex inputSize outputIndex outputSize code disablePrecompiles =
+        .spawn frame resume)
+    (hpotential : before.gasMeasure + calculateMemoryGasCost before.memory.size <
+      2 ^ 256)
+    (hnative : executePrecomp (initEvm (frame.inner.withBenv benv)) adr = .ok post) :
+    post.output.length < 2 ^ 160 := by
+  have hdata : (initEvm (frame.inner.withBenv benv)).sta.data.length < 2 ^ 160 := by
+    change frame.inner.data.length < 2 ^ 160
+    rw [genericCall.step_spawn_data_length hspawn]
+    exact charged_call_input_length_lt_two_pow_160
+      baseCost inputIndex inputSize outputIndex outputSize hcharge hpotential
+  have hgas : (initEvm (frame.inner.withBenv benv)).dyna.gasLeft < 2 ^ 256 := by
+    change frame.inner.gas < 2 ^ 256
+    rw [(genericCall.step_spawn_call hspawn).1]
+    exact calculateMsgCallGas_zero_word_child_lt gas before.gasLeft
+      (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)]) extraGas cs
+  exact executePrecomp_ok_output_length_lt_two_pow_160 hnative hdata hgas
 
 end Jaune
