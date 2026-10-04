@@ -1926,4 +1926,959 @@ theorem Evm.step_memory_accounting_output (evm : Evm)
           simp only [Evm.step, hi]
           exact Linst.run_memory_accounting_output evm.sta evm.dyna l hstate
 
+
+private theorem call_run_size_output (parent : Devm) (outputIndex outputSize : Nat)
+    (r : Except (EvmError × State × AdrSet × Tra) Devm)
+    (hwindow : outputSize ≠ 0 → outputIndex + outputSize ≤ parent.memory.size) :
+    match (Resume.call parent outputIndex outputSize).run r with
+    | .error failure =>
+        failure.2.memory.size = parent.memory.size ∧ failure.2.output = parent.output
+    | .ok post => post.memory.size = parent.memory.size ∧ post.output = parent.output := by
+  cases r with
+  | error failure => exact ⟨rfl, rfl⟩
+  | ok child =>
+      have ho := call_run_memory_output parent outputIndex outputSize (.ok child)
+      rcases hr : (Resume.call parent outputIndex outputSize).run (.ok child) with failure | post
+      · rw [hr] at ho
+        exact ⟨congrArg Mem.size ho.1, ho.2⟩
+      · rw [hr] at ho
+        refine ⟨?_, ho⟩
+        rw [Resume.call_run_ok_memory hr]
+        apply Mem.write_size_of_prepaid
+        intro hcopy
+        have hsize : outputSize ≠ 0 := by
+          intro hz
+          rw [hz, List.take_zero] at hcopy
+          exact hcopy rfl
+        have hlength : (child.output.take outputSize).length ≤ outputSize := by
+          rw [List.length_take]
+          exact Nat.min_le_left _ _
+        exact Nat.le_trans (Nat.add_le_add_left hlength outputIndex) (hwindow hsize)
+
+private theorem create_run_memory_output (parent : Devm) (newAddress : Adr)
+    (r : Except (EvmError × State × AdrSet × Tra) Devm) :
+    match (Resume.create parent newAddress).run r with
+    | .error failure => failure.2.memory = parent.memory ∧ failure.2.output = parent.output
+    | .ok post => post.memory = parent.memory ∧ post.output = parent.output := by
+  cases r with
+  | error failure => exact ⟨rfl, rfl⟩
+  | ok child =>
+      by_cases he : child.error.isSome = true
+      · simp only [Resume.run, liftToExecution, bind, Except.bind, he, ite_true]
+        let incorporated := incorporateChildOnError parent child child.output
+        rcases hp : incorporated.push 0 with failure | pushed
+        · have hf := push_memory_output incorporated 0
+          rw [hp] at hf
+          exact hf
+        · have hf := push_memory_output incorporated 0
+          rw [hp] at hf
+          exact hf
+      · simp only [Resume.run, liftToExecution, bind, Except.bind, he]
+        let incorporated := incorporateChildOnSuccess parent child []
+        rcases hp : incorporated.push newAddress.toB256 with failure | pushed
+        · have hf := push_memory_output incorporated newAddress.toB256
+          rw [hp] at hf
+          exact hf
+        · have hf := push_memory_output incorporated newAddress.toB256
+          rw [hp] at hf
+          exact hf
+
+private theorem call_run_memory_allowance (parent : Devm) (outputIndex outputSize grant : Nat)
+    (r : Except (EvmError × State × AdrSet × Tra) Devm)
+    (hwindow : outputSize ≠ 0 → outputIndex + outputSize ≤ parent.memory.size)
+    (hchild : ∀ child, r = .ok child → child.gasMeasure ≤ grant) :
+    allowanceResult parent grant ((Resume.call parent outputIndex outputSize).run r) := by
+  have hf := call_run_size_output parent outputIndex outputSize r hwindow
+  have hg := Resume.run_gasLe (rsm := .call parent outputIndex outputSize) hchild
+  rcases hr : (Resume.call parent outputIndex outputSize).run r with failure | post
+  · rw [hr] at hf hg
+    change failure.2.gasMeasure ≤ parent.gasMeasure + grant at hg
+    change allowancePreserved parent grant failure.2
+    refine ⟨?_, hf.2⟩
+    rw [hf.1]
+    omega
+  · rw [hr] at hf hg
+    change post.gasMeasure ≤ parent.gasMeasure + grant at hg
+    change allowancePreserved parent grant post
+    refine ⟨?_, hf.2⟩
+    rw [hf.1]
+    omega
+
+private theorem create_run_memory_allowance (parent : Devm) (newAddress : Adr) (grant : Nat)
+    (r : Except (EvmError × State × AdrSet × Tra) Devm)
+    (hchild : ∀ child, r = .ok child → child.gasMeasure ≤ grant) :
+    allowanceResult parent grant ((Resume.create parent newAddress).run r) := by
+  have hf := create_run_memory_output parent newAddress r
+  have hg := Resume.run_gasLe (rsm := .create parent newAddress) hchild
+  rcases hr : (Resume.create parent newAddress).run r with failure | post
+  · rw [hr] at hf hg
+    change failure.2.gasMeasure ≤ parent.gasMeasure + grant at hg
+    change allowancePreserved parent grant failure.2
+    refine ⟨?_, hf.2⟩
+    rw [hf.1]
+    omega
+  · rw [hr] at hf hg
+    change post.gasMeasure ≤ parent.gasMeasure + grant at hg
+    change allowancePreserved parent grant post
+    refine ⟨?_, hf.2⟩
+    rw [hf.1]
+    omega
+
+
+private def spawnAccounting (pre : Devm) (allowance : Nat) : XStep → Prop
+  | .done _ => True
+  | .spawn frame resume =>
+      ∀ r : Except (EvmError × State × AdrSet × Tra) Devm,
+        (∀ child, r = .ok child → child.gasMeasure ≤ frame.inner.gas) →
+        allowanceResult pre allowance (resume.run r)
+
+private def spawnResult (pre : Devm) (allowance : Nat)
+    (raw : Except (EvmError × Devm) XStep) : Prop :=
+  match raw with
+  | .error _ => True
+  | .ok step => spawnAccounting pre allowance step
+
+private theorem allowanceResult_rebase {pre middle : Devm} {inner outer : Nat}
+    {raw : Execution}
+    (hp : middle.gasMeasure + calculateMemoryGasCost middle.memory.size + inner ≤
+      pre.gasMeasure + calculateMemoryGasCost pre.memory.size + outer)
+    (ho : middle.output = pre.output) (h : allowanceResult middle inner raw) :
+    allowanceResult pre outer raw := by
+  cases raw with
+  | error failure => exact allowance_rebase hp ho h
+  | ok post => exact allowance_rebase hp ho h
+
+private theorem spawnAccounting_rebase {pre middle : Devm} {inner outer : Nat}
+    {step : XStep}
+    (hp : middle.gasMeasure + calculateMemoryGasCost middle.memory.size + inner ≤
+      pre.gasMeasure + calculateMemoryGasCost pre.memory.size + outer)
+    (ho : middle.output = pre.output) (h : spawnAccounting middle inner step) :
+    spawnAccounting pre outer step := by
+  cases step with
+  | done raw => trivial
+  | spawn frame resume =>
+      intro r hchild
+      exact allowanceResult_rebase hp ho (h r hchild)
+
+private theorem spawnResult_rebase {pre middle : Devm} {inner outer : Nat}
+    {raw : Except (EvmError × Devm) XStep}
+    (hp : middle.gasMeasure + calculateMemoryGasCost middle.memory.size + inner ≤
+      pre.gasMeasure + calculateMemoryGasCost pre.memory.size + outer)
+    (ho : middle.output = pre.output) (h : spawnResult middle inner raw) :
+    spawnResult pre outer raw := by
+  cases raw with
+  | error failure => trivial
+  | ok step => exact spawnAccounting_rebase hp ho h
+
+private theorem spawnResult_bind {α : Type} {pre : Devm} {allowance : Nat}
+    {first : Except (EvmError × Devm) α} {next : α → Except (EvmError × Devm) XStep}
+    {project : α → Devm}
+    (hf : nonspawnResult pre project first)
+    (hn : ∀ value, spawnResult (project value) allowance (next value)) :
+    spawnResult pre allowance (first >>= next) := by
+  cases first with
+  | error failure => trivial
+  | ok value =>
+      apply spawnResult_rebase (ho := hf.2) (h := hn value)
+      have hp := hf.1
+      omega
+
+private theorem spawnAccounting_ofExcept {pre : Devm} {allowance : Nat}
+    {raw : Except (EvmError × Devm) XStep} (h : spawnResult pre allowance raw) :
+    spawnAccounting pre allowance (XStep.ofExcept raw) := by
+  cases raw with
+  | error failure => trivial
+  | ok step => exact h
+
+private theorem spawnResult_charged_memory (pairs : List (Nat × Nat)) (baseCost : Nat)
+    (pre : Devm) (action : Devm → Except (EvmError × Devm) XStep)
+    (hbody : ∀ charged, spawnResult (charged.memExtends pairs) baseCost (action charged)) :
+    spawnResult pre 0 (chargeGas (baseCost + pre.extCost pairs) pre >>= action) := by
+  rcases hc : chargeGas (baseCost + pre.extCost pairs) pre with failure | charged
+  · trivial
+  · have hf := charge_memory_output (baseCost + pre.extCost pairs) pre
+    rw [hc] at hf
+    refine spawnResult_rebase (pre := pre) (middle := charged.memExtends pairs)
+      (inner := baseCost) (outer := 0) ?_ hf.2 (hbody charged)
+    have ha := charged_memExtends_accounting pairs baseCost hc
+    omega
+
+private theorem spawnResult_charged_call (pairs : List (Nat × Nat)) (cost refund : Nat)
+    (pre : Devm) (hrefund : refund ≤ cost)
+    (action : Devm → Except (EvmError × Devm) XStep)
+    (hbody : ∀ charged, spawnResult (charged.memExtends pairs) refund (action charged)) :
+    spawnResult pre 0 (chargeGas (cost + pre.extCost pairs) pre >>= action) := by
+  refine spawnResult_charged_memory pairs cost pre action ?_
+  intro charged
+  exact spawnResult_rebase (pre := charged.memExtends pairs)
+    (middle := charged.memExtends pairs) (inner := refund) (outer := cost)
+    (Nat.add_le_add_left hrefund _) rfl (hbody charged)
+
+private theorem spawnResult_done_push (word : B256) (pre : Devm) (allowance : Nat)
+    (reference : Devm) :
+    spawnResult reference allowance (do
+      let post ← pre.push word
+      pure (.done (.ok post))) := by
+  cases pre.push word <;> trivial
+
+private theorem genericCall_spawn_allowance
+    (sevm : Sevm) (pre : Devm) (gas : Nat) (value : B256)
+    (caller target codeAddress : Adr) (transfer staticCall : Bool)
+    (inputIndex inputSize outputIndex outputSize : Nat)
+    (code : ByteArray) (disable : Bool)
+    (hwindow : outputSize ≠ 0 → outputIndex + outputSize ≤ pre.memory.size) :
+    spawnAccounting pre gas (genericCall.step sevm pre gas value caller target codeAddress
+      transfer staticCall inputIndex inputSize outputIndex outputSize code disable) := by
+  unfold genericCall.step
+  split
+  · apply spawnAccounting_ofExcept
+    exact spawnResult_done_push 0
+      ((pre.withReturnData []).withGasLeft ((pre.withReturnData []).gasLeft + gas)) gas pre
+  · intro r hchild
+    exact call_run_memory_allowance (pre.withReturnData []) outputIndex outputSize gas
+      r hwindow hchild
+
+private theorem genericCreate_spawn_accounting
+    (sevm : Sevm) (pre : Devm) (endowment : B256)
+    (newAddress : Adr) (memoryIndex memorySize : Nat) :
+    spawnAccounting pre 0
+      (genericCreate.step sevm pre endowment newAddress memoryIndex memorySize) := by
+  unfold genericCreate.step
+  apply spawnAccounting_ofExcept
+  refine spawnResult_bind
+    (nonspawn_assert (memorySize ≤ sevm.benvStat.rules.code.maxInitCodeSize)
+      (.halt (.outOfGas .none)) pre) ?_
+  intro _
+  let grant := except64th pre.gasLeft
+  let withheld := pre.withGasLeft (pre.gasLeft - grant)
+  have hg : grant ≤ pre.gasLeft := except64th_le pre.gasLeft
+  have hhold : nonspawnPreserved pre withheld := by
+    refine ⟨?_, rfl⟩
+    dsimp only [withheld]
+    rw [Devm.withGasLeft_gasMeasure]
+    change (pre.gasLeft - grant + pre.spill) +
+      calculateMemoryGasCost pre.memory.size ≤
+      pre.gasMeasure + calculateMemoryGasCost pre.memory.size
+    have hm := Devm.gasMeasure_eq pre
+    omega
+  refine spawnResult_bind
+    (nonspawn_assert_at ((!sevm.isStatic) = true)
+      (.halt (.writeInStaticContext .none)) withheld pre hhold) ?_
+  intro _
+  let current := withheld.withReturnData []
+  by_cases hfail : (current.state.get sevm.currentTarget).bal < endowment ∨
+      (current.state.get sevm.currentTarget).nonce = UInt64.max ∨ sevm.depth = 0
+  · dsimp only [current, withheld, grant] at hfail
+    simp only [ite_eq_left hfail]
+    exact spawnResult_done_push 0 (current.withGasLeft (current.gasLeft + grant)) 0 pre
+  · dsimp only [current, withheld, grant] at hfail
+    simp only [ite_eq_right hfail]
+    let accessed := addAccessedAddress (current.incrNonce sevm.currentTarget) newAddress
+    by_cases hcollision : (accessed.state.get newAddress).nonce ≠ (0 : UInt64) ∨
+        (accessed.state.get newAddress).code.size ≠ 0 ∨
+        (accessed.state.get newAddress).stor.size ≠ 0
+    · dsimp only [accessed, current, withheld, grant] at hcollision
+      simp only [ite_eq_left hcollision]
+      exact spawnResult_done_push 0 accessed 0 pre
+    · dsimp only [accessed, current, withheld, grant] at hcollision
+      simp only [ite_eq_right hcollision]
+      intro r hchild
+      have hr := create_run_memory_allowance accessed newAddress grant r hchild
+      apply allowanceResult_rebase (pre := pre) (middle := accessed)
+        (inner := grant) (outer := 0) ?_ rfl hr
+      dsimp only [accessed, current, withheld]
+      simp only [addAccessedAddress_gasMeasure, Devm.incrNonce_gasMeasure,
+        Devm.withReturnData_gasMeasure, Devm.withGasLeft_gasMeasure]
+      change (pre.gasLeft - grant + pre.spill) +
+        calculateMemoryGasCost pre.memory.size + grant ≤
+        pre.gasMeasure + calculateMemoryGasCost pre.memory.size + 0
+      have hm := Devm.gasMeasure_eq pre
+      omega
+
+
+private theorem call_output_window (charged : Devm)
+    (inputIndex inputSize outputIndex outputSize : Nat) :
+    outputSize ≠ 0 →
+      outputIndex + outputSize ≤
+        (charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)]).memory.size := by
+  intro hsize
+  change outputIndex + outputSize ≤
+    memExtSize (memExtSize charged.memory.size inputIndex inputSize) outputIndex outputSize
+  exact memExtSize_access_le _ outputIndex outputSize hsize
+
+private theorem executable_spawn_accounting (sevm : Sevm) (pre : Devm) (x : Xinst)
+    (hstate : sevm.benvStat.rules.stateGas = none) :
+    spawnAccounting pre 0 (Xinst.step sevm pre x) := by
+  cases x <;> simp only [Xinst.step, hstate]
+  case create =>
+    apply spawnAccounting_ofExcept
+    refine spawnResult_bind (nonspawn_pop pre) ?_
+    intro endowment
+    refine spawnResult_bind (nonspawn_popToNat endowment.2) ?_
+    intro memoryIndex
+    refine spawnResult_bind (nonspawn_popToNat memoryIndex.2) ?_
+    intro memorySize
+    rw [Nat.add_right_comm sevm.benvStat.rules.gas.createAccess
+      (memorySize.2.extCost [(memoryIndex.1, memorySize.1)])
+      (gasInitCodeWordCost * ceilDiv memorySize.1 32)]
+    refine spawnResult_charged_memory [(memoryIndex.1, memorySize.1)]
+      (sevm.benvStat.rules.gas.createAccess + gasInitCodeWordCost * ceilDiv memorySize.1 32)
+      memorySize.2 _ ?_
+    intro charged
+    refine spawnAccounting_rebase (pre := charged.memExtends [(memoryIndex.1, memorySize.1)])
+      (inner := 0) ?_ rfl
+      (genericCreate_spawn_accounting sevm _ endowment.1 _ memoryIndex.1 memorySize.1)
+    omega
+  case create2 =>
+    apply spawnAccounting_ofExcept
+    refine spawnResult_bind (nonspawn_pop pre) ?_
+    intro endowment
+    refine spawnResult_bind (nonspawn_popToNat endowment.2) ?_
+    intro memoryIndex
+    refine spawnResult_bind (nonspawn_popToNat memoryIndex.2) ?_
+    intro memorySize
+    refine spawnResult_bind (nonspawn_pop memorySize.2) ?_
+    intro salt
+    rw [Nat.add_right_comm
+      (sevm.benvStat.rules.gas.createAccess + gasKeccak256Word * ceilDiv memorySize.1 32)
+      (salt.2.extCost [(memoryIndex.1, memorySize.1)])
+      (gasInitCodeWordCost * ceilDiv memorySize.1 32)]
+    refine spawnResult_charged_memory [(memoryIndex.1, memorySize.1)]
+      (sevm.benvStat.rules.gas.createAccess + gasKeccak256Word * ceilDiv memorySize.1 32 +
+        gasInitCodeWordCost * ceilDiv memorySize.1 32)
+      salt.2 _ ?_
+    intro charged
+    refine spawnAccounting_rebase (pre := charged.memExtends [(memoryIndex.1, memorySize.1)])
+      (inner := 0) ?_ rfl
+      (genericCreate_spawn_accounting sevm _ endowment.1 _ memoryIndex.1 memorySize.1)
+    omega
+  case delegatecall =>
+    apply spawnAccounting_ofExcept
+    refine spawnResult_bind (nonspawn_pop pre) ?_
+    intro gas
+    refine spawnResult_bind (nonspawn_popToAdr gas.2) ?_
+    intro codeAddress
+    refine spawnResult_bind (nonspawn_popToNat codeAddress.2) ?_
+    intro inputIndex
+    refine spawnResult_bind (nonspawn_popToNat inputIndex.2) ?_
+    intro inputSize
+    refine spawnResult_bind (nonspawn_popToNat inputSize.2) ?_
+    intro outputIndex
+    refine spawnResult_bind (nonspawn_popToNat outputIndex.2) ?_
+    intro outputSize
+    let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
+    let lookup := sevm.benvStat.rules.gas.accessDelegation
+      (addAccessedAddress outputSize.2 codeAddress.1) codeAddress.1
+    let parent := lookup.2.2.2.2
+    have hp : nonspawnPreserved outputSize.2 parent :=
+      nonspawnPreserved_trans (nonspawn_addAccessedAddress outputSize.2 codeAddress.1)
+        (nonspawn_delegation sevm.benvStat.rules.gas _ codeAddress.1)
+    refine spawnResult_rebase (pre := outputSize.2) (middle := parent)
+      (inner := 0) (outer := 0) hp.1 hp.2 ?_
+    have hm : parent.memory = outputSize.2.memory :=
+      (delegation_memory_output sevm.benvStat.rules.gas
+        (addAccessedAddress outputSize.2 codeAddress.1) codeAddress.1).1
+    have hext : outputSize.2.extCost pairs = parent.extCost pairs := by
+      simp only [Devm.extCost, hm]
+    change spawnResult parent 0 (chargeGas
+      ((calculateMsgCallGas 0 gas.1.toNat parent.gasLeft (outputSize.2.extCost pairs)
+        (sevm.benvStat.rules.gas.accessCost codeAddress.1 outputSize.2.accessedAddresses +
+          lookup.2.2.2.1)).1 + outputSize.2.extCost pairs) parent >>= _)
+    rw [hext]
+    let costs := calculateMsgCallGas 0 gas.1.toNat parent.gasLeft (parent.extCost pairs)
+      (sevm.benvStat.rules.gas.accessCost codeAddress.1 outputSize.2.accessedAddresses +
+        lookup.2.2.2.1)
+    refine spawnResult_charged_call pairs costs.1 costs.2 parent ?_ _ ?_
+    · exact calculateMsgCallGas_refund_le_base 0 gas.1.toNat parent.gasLeft
+        (parent.extCost pairs)
+        (sevm.benvStat.rules.gas.accessCost codeAddress.1 outputSize.2.accessedAddresses +
+          lookup.2.2.2.1) gCallStipend (Nat.zero_le _)
+    · intro charged
+      exact genericCall_spawn_allowance sevm (charged.memExtends pairs) costs.2
+        sevm.value sevm.caller sevm.currentTarget lookup.2.1
+        false false inputIndex.1 inputSize.1 outputIndex.1 outputSize.1
+        lookup.2.2.1 lookup.1 (call_output_window charged inputIndex.1 inputSize.1 outputIndex.1 outputSize.1)
+
+  case staticcall =>
+    apply spawnAccounting_ofExcept
+    refine spawnResult_bind (nonspawn_pop pre) ?_
+    intro gas
+    refine spawnResult_bind (nonspawn_popToAdr gas.2) ?_
+    intro target
+    refine spawnResult_bind (nonspawn_popToNat target.2) ?_
+    intro inputIndex
+    refine spawnResult_bind (nonspawn_popToNat inputIndex.2) ?_
+    intro inputSize
+    refine spawnResult_bind (nonspawn_popToNat inputSize.2) ?_
+    intro outputIndex
+    refine spawnResult_bind (nonspawn_popToNat outputIndex.2) ?_
+    intro outputSize
+    let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
+    let lookup := sevm.benvStat.rules.gas.accessDelegation
+      (addAccessedAddress outputSize.2 target.1) target.1
+    let parent := lookup.2.2.2.2
+    have hp : nonspawnPreserved outputSize.2 parent :=
+      nonspawnPreserved_trans (nonspawn_addAccessedAddress outputSize.2 target.1)
+        (nonspawn_delegation sevm.benvStat.rules.gas _ target.1)
+    refine spawnResult_rebase (pre := outputSize.2) (middle := parent)
+      (inner := 0) (outer := 0) hp.1 hp.2 ?_
+    have hm : parent.memory = outputSize.2.memory :=
+      (delegation_memory_output sevm.benvStat.rules.gas
+        (addAccessedAddress outputSize.2 target.1) target.1).1
+    have hext : outputSize.2.extCost pairs = parent.extCost pairs := by
+      simp only [Devm.extCost, hm]
+    change spawnResult parent 0 (chargeGas
+      ((calculateMsgCallGas 0 gas.1.toNat parent.gasLeft (outputSize.2.extCost pairs)
+        (sevm.benvStat.rules.gas.accessCost target.1 outputSize.2.accessedAddresses +
+          lookup.2.2.2.1)).1 + outputSize.2.extCost pairs) parent >>= _)
+    rw [hext]
+    let costs := calculateMsgCallGas 0 gas.1.toNat parent.gasLeft (parent.extCost pairs)
+      (sevm.benvStat.rules.gas.accessCost target.1 outputSize.2.accessedAddresses +
+        lookup.2.2.2.1)
+    refine spawnResult_charged_call pairs costs.1 costs.2 parent ?_ _ ?_
+    · exact calculateMsgCallGas_refund_le_base 0 gas.1.toNat parent.gasLeft
+        (parent.extCost pairs)
+        (sevm.benvStat.rules.gas.accessCost target.1 outputSize.2.accessedAddresses +
+          lookup.2.2.2.1) gCallStipend (Nat.zero_le _)
+    · intro charged
+      exact genericCall_spawn_allowance sevm (charged.memExtends pairs) costs.2
+        0 sevm.currentTarget target.1 lookup.2.1
+        true true inputIndex.1 inputSize.1 outputIndex.1 outputSize.1
+        lookup.2.2.1 lookup.1 (call_output_window charged inputIndex.1 inputSize.1 outputIndex.1 outputSize.1)
+  case call =>
+    apply spawnAccounting_ofExcept
+    refine spawnResult_bind (nonspawn_pop pre) ?_
+    intro gas
+    refine spawnResult_bind (nonspawn_popToAdr gas.2) ?_
+    intro callee
+    refine spawnResult_bind (nonspawn_pop callee.2) ?_
+    intro value
+    refine spawnResult_bind (nonspawn_popToNat value.2) ?_
+    intro inputIndex
+    refine spawnResult_bind (nonspawn_popToNat inputIndex.2) ?_
+    intro inputSize
+    refine spawnResult_bind (nonspawn_popToNat inputSize.2) ?_
+    intro outputIndex
+    refine spawnResult_bind (nonspawn_popToNat outputIndex.2) ?_
+    intro outputSize
+    let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
+    let lookup := sevm.benvStat.rules.gas.accessDelegation
+      (addAccessedAddress outputSize.2 callee.1) callee.1
+    let parent := lookup.2.2.2.2
+    have hp : nonspawnPreserved outputSize.2 parent :=
+      nonspawnPreserved_trans (nonspawn_addAccessedAddress outputSize.2 callee.1)
+        (nonspawn_delegation sevm.benvStat.rules.gas _ callee.1)
+    refine spawnResult_rebase (pre := outputSize.2) (middle := parent)
+      (inner := 0) (outer := 0) hp.1 hp.2 ?_
+    have hm : parent.memory = outputSize.2.memory :=
+      (delegation_memory_output sevm.benvStat.rules.gas
+        (addAccessedAddress outputSize.2 callee.1) callee.1).1
+    have hext : outputSize.2.extCost pairs = parent.extCost pairs := by
+      simp only [Devm.extCost, hm]
+    let accessCost := sevm.benvStat.rules.gas.accessCost callee.1
+      outputSize.2.accessedAddresses + lookup.2.2.2.1
+    let createCost : Nat := if ¬(parent.getAcct callee.1).Empty ∨ value.1 = 0 then 0 else gNewAccount
+    change spawnResult parent 0 (chargeGas
+      ((calculateMsgCallGas value.1.toNat gas.1.toNat parent.gasLeft
+        (outputSize.2.extCost pairs)
+        (accessCost + createCost + if value.1 = 0 then 0 else sevm.benvStat.rules.gas.callValue)).1 +
+          outputSize.2.extCost pairs) parent >>= _)
+    rw [hext]
+    let costs := calculateMsgCallGas value.1.toNat gas.1.toNat parent.gasLeft
+      (parent.extCost pairs)
+      (accessCost + createCost + if value.1 = 0 then 0 else sevm.benvStat.rules.gas.callValue)
+    refine spawnResult_charged_call pairs costs.1 costs.2 parent ?_ _ ?_
+    · exact value_call_refund_le_base sevm value.1 gas.1.toNat parent.gasLeft
+        (parent.extCost pairs) accessCost createCost
+    · intro charged
+      refine spawnResult_bind
+        (nonspawn_assert_at ((!sevm.isStatic) = true ∨ value.1 = 0)
+          (.halt (.writeInStaticContext .none)) charged (charged.memExtends pairs)
+          (nonspawn_before_paid pairs charged)) ?_
+      intro _
+      let paid := charged.memExtends pairs
+      by_cases hb : (paid.getAcct sevm.currentTarget).bal < value.1
+      · dsimp only [paid, pairs] at hb
+        simp only [ite_eq_left hb]
+        cases hp : paid.push 0 <;> trivial
+      · dsimp only [paid, pairs] at hb
+        simp only [ite_eq_right hb]
+        exact genericCall_spawn_allowance sevm paid costs.2 value.1
+          sevm.currentTarget callee.1 lookup.2.1 true false
+          inputIndex.1 inputSize.1 outputIndex.1 outputSize.1 lookup.2.2.1 lookup.1
+          (call_output_window charged inputIndex.1 inputSize.1 outputIndex.1 outputSize.1)
+
+  case callcode =>
+    apply spawnAccounting_ofExcept
+    refine spawnResult_bind (nonspawn_pop pre) ?_
+    intro gas
+    refine spawnResult_bind (nonspawn_popToAdr gas.2) ?_
+    intro codeAddress
+    refine spawnResult_bind (nonspawn_pop codeAddress.2) ?_
+    intro value
+    refine spawnResult_bind (nonspawn_popToNat value.2) ?_
+    intro inputIndex
+    refine spawnResult_bind (nonspawn_popToNat inputIndex.2) ?_
+    intro inputSize
+    refine spawnResult_bind (nonspawn_popToNat inputSize.2) ?_
+    intro outputIndex
+    refine spawnResult_bind (nonspawn_popToNat outputIndex.2) ?_
+    intro outputSize
+    let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
+    let lookup := sevm.benvStat.rules.gas.accessDelegation
+      (addAccessedAddress outputSize.2 codeAddress.1) codeAddress.1
+    let parent := lookup.2.2.2.2
+    have hp : nonspawnPreserved outputSize.2 parent :=
+      nonspawnPreserved_trans (nonspawn_addAccessedAddress outputSize.2 codeAddress.1)
+        (nonspawn_delegation sevm.benvStat.rules.gas _ codeAddress.1)
+    refine spawnResult_rebase (pre := outputSize.2) (middle := parent)
+      (inner := 0) (outer := 0) hp.1 hp.2 ?_
+    have hm : parent.memory = outputSize.2.memory :=
+      (delegation_memory_output sevm.benvStat.rules.gas
+        (addAccessedAddress outputSize.2 codeAddress.1) codeAddress.1).1
+    have hext : outputSize.2.extCost pairs = parent.extCost pairs := by
+      simp only [Devm.extCost, hm]
+    let accessCost := sevm.benvStat.rules.gas.accessCost codeAddress.1
+      outputSize.2.accessedAddresses + lookup.2.2.2.1
+    let createCost : Nat := 0
+    change spawnResult parent 0 (chargeGas
+      ((calculateMsgCallGas value.1.toNat gas.1.toNat parent.gasLeft
+        (outputSize.2.extCost pairs)
+        (accessCost + createCost + if value.1 = 0 then 0 else sevm.benvStat.rules.gas.callValue)).1 +
+          outputSize.2.extCost pairs) parent >>= _)
+    rw [hext]
+    let costs := calculateMsgCallGas value.1.toNat gas.1.toNat parent.gasLeft
+      (parent.extCost pairs)
+      (accessCost + createCost + if value.1 = 0 then 0 else sevm.benvStat.rules.gas.callValue)
+    refine spawnResult_charged_call pairs costs.1 costs.2 parent ?_ _ ?_
+    · exact value_call_refund_le_base sevm value.1 gas.1.toNat parent.gasLeft
+        (parent.extCost pairs) accessCost createCost
+    · intro charged
+      let paid := charged.memExtends pairs
+      by_cases hb : (paid.getAcct sevm.currentTarget).bal < value.1
+      · dsimp only [paid, pairs] at hb
+        simp only [ite_eq_left hb]
+        cases hp : paid.push 0 <;> trivial
+      · dsimp only [paid, pairs] at hb
+        simp only [ite_eq_right hb]
+        exact genericCall_spawn_allowance sevm paid costs.2 value.1
+          sevm.currentTarget sevm.currentTarget lookup.2.1 true false
+          inputIndex.1 inputSize.1 outputIndex.1 outputSize.1 lookup.2.2.1 lookup.1
+          (call_output_window charged inputIndex.1 inputSize.1 outputIndex.1 outputSize.1)
+
+private theorem step_spawn_resume_accounting
+    (evm : Evm) (hstate : evm.sta.benvStat.rules.stateGas = none)
+    {frame : Frame} {resume : Resume} {pc' : Nat}
+    (hspawn : Evm.step evm = .spawn frame resume pc')
+    (r : Except (EvmError × State × AdrSet × Tra) Devm)
+    (hchild : ∀ child, r = .ok child → child.gasMeasure ≤ frame.inner.gas) :
+    nonspawnResult evm.dyna id (resume.run r) := by
+  cases hi : evm.getInst with
+  | none =>
+      simp only [Evm.step, hi] at hspawn
+      cases hspawn
+  | some instruction =>
+      cases instruction with
+      | next n =>
+          simp only [Evm.step, hi] at hspawn
+          obtain ⟨x, _, hs⟩ := Ninst.step_spawn_inv hspawn
+          have ha := executable_spawn_accounting evm.sta evm.dyna x hstate
+          rw [hs] at ha
+          have hr := ha r hchild
+          cases hraw : resume.run r with
+          | error failure =>
+              rw [hraw] at hr
+              exact ⟨by simpa only [Nat.add_zero] using hr.1, hr.2⟩
+          | ok post =>
+              rw [hraw] at hr
+              exact ⟨by simpa only [Nat.add_zero, id] using hr.1, hr.2⟩
+      | jump j =>
+          simp only [Evm.step, hi] at hspawn
+          cases Step.ofJump_ne_spawn hspawn
+      | last l =>
+          simp only [Evm.step, hi] at hspawn
+          cases hspawn
+
+
+private theorem raw_accounting_trans {pre middle : Devm} {raw : Execution}
+    (hp : nonspawnPreserved pre middle) (hr : rawTerminalAccounted middle raw) :
+    rawTerminalAccounted pre raw := by
+  cases raw with
+  | error failure =>
+      refine ⟨Nat.le_trans hr.1 hp.1, ?_⟩
+      cases hr.2 with
+      | inl ho => exact Or.inl (ho.trans hp.2)
+      | inr hc => exact Or.inr (Nat.le_trans hc hp.1)
+  | ok post =>
+      refine ⟨Nat.le_trans hr.1 hp.1, ?_⟩
+      cases hr.2 with
+      | inl ho => exact Or.inl (ho.trans hp.2)
+      | inr hc => exact Or.inr (Nat.le_trans hc hp.1)
+
+private theorem raw_accounting_gas_le {pre : Devm} {raw : Execution}
+    (hr : rawTerminalAccounted pre raw) :
+    raw.gasMeasure ≤ pre.gasMeasure + calculateMemoryGasCost pre.memory.size := by
+  cases raw with
+  | error failure =>
+      change failure.2.gasMeasure ≤ _
+      have hp := hr.1
+      omega
+  | ok post =>
+      change post.gasMeasure ≤ _
+      have hp := hr.1
+      omega
+
+private theorem spawned_child_stateGas_none (evm : Evm)
+    (hstate : evm.sta.benvStat.rules.stateGas = none)
+    {frame : Frame} {resume : Resume} {pc' : Nat} {child : Evm}
+    (hspawn : Evm.step evm = .spawn frame resume pc')
+    (henter : frame.enter = .run child) :
+    child.sta.benvStat.rules.stateGas = none := by
+  have hs := Evm.step_gasBound evm
+  rw [hspawn] at hs
+  rw [Frame.enter_run_benvStat henter, hs.2]
+  exact hstate
+
+private theorem entered_child_potential {frame : Frame} {child : Evm}
+    (henter : frame.enter = .run child) :
+    child.dyna.gasMeasure + calculateMemoryGasCost child.dyna.memory.size = frame.inner.gas := by
+  obtain ⟨benv, _, hinit⟩ := Frame.enter_run_inv henter
+  have hm : child.dyna.memory.size = 0 := by
+    rw [hinit]
+    rfl
+  have hz : calculateMemoryGasCost 0 = 0 := rfl
+  rw [hm, hz, Nat.add_zero]
+  exact Frame.enter_run_gasMeasure henter
+
+private theorem exec_memory_accounting :
+    ∀ (pc : Nat) (sevm : Sevm) (pre : Devm) (raw : Execution),
+      Exec pc sevm pre raw →
+      sevm.benvStat.rules.stateGas = none →
+      rawTerminalAccounted pre raw := by
+  apply Exec.rec
+  · intro pc sevm pre raw hstep hstate
+    have hs := Evm.step_memory_accounting_output ⟨pc, sevm, pre⟩ hstate
+    rw [hstep] at hs
+    exact hs
+  · intro pc sevm pre pc' middle raw hstep _ ih hstate
+    have hs := Evm.step_memory_accounting_output ⟨pc, sevm, pre⟩ hstate
+    rw [hstep] at hs
+    exact raw_accounting_trans hs (ih hstate)
+  · intro pc sevm pre frame resume pc' r failure hstep henter hresume hstate
+    have hs := step_spawn_resume_accounting ⟨pc, sevm, pre⟩ hstate hstep r
+      (fun child hchild => Frame.enter_done_gasLe henter hchild)
+    rw [hresume] at hs
+    exact ⟨hs.1, Or.inl hs.2⟩
+  · intro pc sevm pre frame resume pc' r middle raw hstep henter hresume _ ih hstate
+    have hs := step_spawn_resume_accounting ⟨pc, sevm, pre⟩ hstate hstep r
+      (fun child hchild => Frame.enter_done_gasLe henter hchild)
+    rw [hresume] at hs
+    exact raw_accounting_trans hs (ih hstate)
+  · intro pc sevm pre frame resume pc' child childRaw failure
+      hstep henter _ hresume ihChild hstate
+    have hc := ihChild (spawned_child_stateGas_none ⟨pc, sevm, pre⟩ hstate hstep henter)
+    have hgas := raw_accounting_gas_le hc
+    rw [entered_child_potential henter] at hgas
+    have hsettled := Execution.settledGasLe_of_gasLe hgas
+    have hs := step_spawn_resume_accounting ⟨pc, sevm, pre⟩ hstate hstep (frame.settle childRaw)
+      (fun settled hsettle => Frame.settle_gasLe hsettled hsettle)
+    rw [hresume] at hs
+    exact ⟨hs.1, Or.inl hs.2⟩
+  · intro pc sevm pre frame resume pc' child childRaw middle raw
+      hstep henter _ hresume _ ihChild ihParent hstate
+    have hc := ihChild (spawned_child_stateGas_none ⟨pc, sevm, pre⟩ hstate hstep henter)
+    have hgas := raw_accounting_gas_le hc
+    rw [entered_child_potential henter] at hgas
+    have hsettled := Execution.settledGasLe_of_gasLe hgas
+    have hs := step_spawn_resume_accounting ⟨pc, sevm, pre⟩ hstate hstep (frame.settle childRaw)
+      (fun settled hsettle => Frame.settle_gasLe hsettled hsettle)
+    rw [hresume] at hs
+    exact raw_accounting_trans hs (ihParent hstate)
+
+/-- Complete actual execution preserves the memory/gas potential, and its full
+raw output is inherited or paid by that initial potential on both channels. -/
+theorem Exec.memory_accounting_output
+    {pc : Nat} {sevm : Sevm} {pre : Devm} {raw : Execution}
+    (h : Exec pc sevm pre raw) (hstate : sevm.benvStat.rules.stateGas = none) :
+    let initial := pre.gasMeasure + calculateMemoryGasCost pre.memory.size
+    let accounted := fun post : Devm =>
+      post.gasMeasure + calculateMemoryGasCost post.memory.size ≤ initial ∧
+        (post.output = pre.output ∨ calculateMemoryGasCost post.output.length ≤ initial)
+    match raw with
+    | .ok post => accounted post
+    | .error failure => accounted failure.2 := by
+  cases raw with
+  | error failure => exact exec_memory_accounting pc sevm pre (.error failure) h hstate
+  | ok post => exact exec_memory_accounting pc sevm pre (.ok post) h hstate
+
+
+private theorem output_length_lt_two_pow_160 {n grant : Nat}
+    (hcost : calculateMemoryGasCost n ≤ grant) (hgrant : grant < 2 ^ 256) :
+    n < 2 ^ 160 := by
+  by_contra hn
+  have hn' : 2 ^ 160 ≤ n := Nat.le_of_not_gt hn
+  have hmono := calculateMemoryGasCost_mono hn'
+  have hconstant : 2 ^ 256 ≤ calculateMemoryGasCost (2 ^ 160) := by decide
+  omega
+
+private theorem entered_code_output_cost {frame : Frame} {child : Evm} {raw : Execution}
+    (henter : frame.enter = .run child)
+    (hexec : Exec child.pc child.sta child.dyna raw)
+    (hstate : child.sta.benvStat.rules.stateGas = none) :
+    match raw with
+    | .ok post => calculateMemoryGasCost post.output.length ≤ frame.inner.gas
+    | .error failure => calculateMemoryGasCost failure.2.output.length ≤ frame.inner.gas := by
+  obtain ⟨benv, _, hinit⟩ := Frame.enter_run_inv henter
+  have hout : child.dyna.output = [] := by
+    rw [hinit]
+    rfl
+  have hinitial := entered_child_potential henter
+  cases raw with
+  | error failure =>
+      have hc := hexec.memory_accounting_output hstate
+      dsimp only at hc ⊢
+      rcases hc.2 with inherited | paid
+      · rw [inherited, hout]
+        exact Nat.zero_le _
+      · rw [hinitial] at paid
+        exact paid
+  | ok post =>
+      have hc := hexec.memory_accounting_output hstate
+      dsimp only at hc ⊢
+      rcases hc.2 with inherited | paid
+      · rw [inherited, hout]
+        exact Nat.zero_le _
+      · rw [hinitial] at paid
+        exact paid
+
+
+private def rawOutputLength (raw : Execution) : Nat :=
+  match raw with
+  | .ok post => post.output.length
+  | .error failure => failure.2.output.length
+
+private theorem handled_output_length_le (stateGas : Option StateGasRules)
+    (raw : Execution) {post : Devm}
+    (h : executeCode.handleErrorWith stateGas raw = .ok post) :
+    post.output.length ≤ rawOutputLength raw := by
+  cases stateGas <;> cases raw with
+  | ok pre =>
+      simp only [executeCode.handleErrorWith, executeCode.handleError,
+        executeCode.handleErrorAmsterdam, Except.ok.injEq] at h
+      subst post
+      exact Nat.le_refl _
+  | error failure =>
+      rcases failure with ⟨err, pre⟩
+      cases err with
+      | halt reason =>
+          simp only [executeCode.handleErrorWith, executeCode.handleError,
+            executeCode.handleErrorAmsterdam, Except.ok.injEq] at h
+          subst post
+          exact Nat.zero_le _
+      | revert =>
+          simp only [executeCode.handleErrorWith, executeCode.handleError,
+            executeCode.handleErrorAmsterdam, Except.ok.injEq] at h
+          subst post
+          exact Nat.le_refl _
+      | crypto reason | internal reason =>
+          simp only [executeCode.handleErrorWith, executeCode.handleError,
+            executeCode.handleErrorAmsterdam] at h
+          cases h
+
+private theorem message_settle_output {msg : Msg}
+    {r : Except (EvmError × State × AdrSet × Tra) Devm} {post : Devm}
+    (h : processMessage.settle msg r = .ok post) :
+    ∃ pre, r = .ok pre ∧ post.output = pre.output := by
+  unfold processMessage.settle at h
+  obtain ⟨pre, hr, hrest⟩ := Except.bind_eq_ok h
+  refine ⟨pre, hr, ?_⟩
+  split at hrest <;> cases hrest <;> rfl
+
+private theorem create_settle_output_length_le {msg : Msg}
+    {r : Except (EvmError × State × AdrSet × Tra) Devm} {post : Devm}
+    (h : processCreateMessage.settle msg r = .ok post) :
+    ∃ pre, r = .ok pre ∧ post.output.length ≤ pre.output.length := by
+  unfold processCreateMessage.settle at h
+  obtain ⟨pre, hr, hrest⟩ := Except.bind_eq_ok h
+  refine ⟨pre, hr, ?_⟩
+  split at hrest
+  · rcases hc : processCreateMessage.chargeCodeGas msg.benv.stat.rules pre with failure | paid
+    · rcases failure with ⟨err, failed⟩
+      cases err with
+      | halt reason =>
+          simp only [hc] at hrest
+          cases hs : msg.benv.stat.rules.stateGas <;>
+            simp only [hs, Except.ok.injEq] at hrest
+          all_goals
+            subst post
+            exact Nat.zero_le _
+      | revert | crypto reason | internal reason =>
+          simp only [hc] at hrest
+          cases hrest
+    · simp only [hc, Except.ok.injEq] at hrest
+      subst post
+      rw [processCreateMessage.chargeCodeGas_ok_eq_setMach hc]
+      exact Nat.le_refl _
+  · cases hrest
+    exact Nat.le_refl _
+
+private theorem frame_settle_output_length_le {frame : Frame} {raw : Execution}
+    {post : Devm} (h : frame.settle raw = .ok post) :
+    post.output.length ≤ rawOutputLength raw := by
+  unfold Frame.settle Frame.settleMsg at h
+  split at h
+  · obtain ⟨middle, hm, hpost⟩ := create_settle_output_length_le h
+    obtain ⟨handled, hh, hmiddle⟩ := message_settle_output hm
+    rw [hmiddle] at hpost
+    exact Nat.le_trans hpost (handled_output_length_le _ _ hh)
+  · obtain ⟨handled, hh, hpost⟩ := message_settle_output h
+    rw [hpost]
+    exact handled_output_length_le _ _ hh
+
+private theorem push_returnData (pre : Devm) (word : B256) :
+    match pre.push word with
+    | .error failure => failure.2.returnData = pre.returnData
+    | .ok post => post.returnData = pre.returnData := by
+  rw [Devm.push_def]
+  by_cases hs : pre.stack.length < 1024
+  · simp only [Except.assert, hs, ite_true, bind, Except.bind]
+    rfl
+  · simp only [Except.assert, hs, ite_false, bind, Except.bind]
+
+private theorem call_run_returnData (parent : Devm) (outputIndex outputSize : Nat)
+    (r : Except (EvmError × State × AdrSet × Tra) Devm) :
+    let expected := match r with
+      | .error _ => parent.returnData
+      | .ok child => child.output
+    match (Resume.call parent outputIndex outputSize).run r with
+    | .error failure => failure.2.returnData = expected
+    | .ok post => post.returnData = expected := by
+  cases r with
+  | error failure =>
+      rcases failure with ⟨err, state, created, tra⟩
+      rfl
+  | ok child =>
+      by_cases he : child.error.isSome = true
+      · simp only [Resume.run, liftToExecution, bind, Except.bind, he, ite_true]
+        let incorporated := incorporateChildOnError parent child child.output
+        rcases hp : incorporated.push 0 with failure | pushed
+        · have hf := push_returnData incorporated 0
+          rw [hp] at hf
+          exact hf
+        · have hf := push_returnData incorporated 0
+          rw [hp] at hf
+          exact hf
+      · simp only [Resume.run, liftToExecution, bind, Except.bind, he]
+        let incorporated := incorporateChildOnSuccess parent child child.output
+        rcases hp : incorporated.push 1 with failure | pushed
+        · have hf := push_returnData incorporated 1
+          rw [hp] at hf
+          exact hf
+        · have hf := push_returnData incorporated 1
+          rw [hp] at hf
+          exact hf
+
+
+/-- The same initialized code child of an actual zero-value CALL has a paid
+full output and a natural reply length below (2^160). Settlement and both raw
+resume outcomes retain that full return-data bound, including push failure. -/
+theorem zero_call_spawn_code_reply_bound
+    {sevm : Sevm} {before charged : Devm} (gas : B256)
+    (extraGas cs inputIndex inputSize outputIndex outputSize : Nat)
+    {caller target codeAddress : Adr} {shouldTransferValue isStaticcall : Bool}
+    {code : ByteArray} {disablePrecompiles : Bool}
+    {frame : Frame} {resume : Resume} {childEvm : Evm} {raw : Execution}
+    (hcharge : chargeGas
+      ((calculateMsgCallGas 0 gas.toNat before.gasLeft
+        (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
+        extraGas cs).1 +
+        before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
+      before = .ok charged)
+    (hspawn : genericCall.step sevm
+      (charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)])
+      (calculateMsgCallGas 0 gas.toNat before.gasLeft
+        (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
+        extraGas cs).2 0 caller target codeAddress shouldTransferValue isStaticcall
+      inputIndex inputSize outputIndex outputSize code disablePrecompiles =
+        .spawn frame resume)
+    (henter : frame.enter = .run childEvm)
+    (hexec : Exec childEvm.pc childEvm.sta childEvm.dyna raw)
+    (hstate : sevm.benvStat.rules.stateGas = none) :
+    let grant := (calculateMsgCallGas 0 gas.toNat before.gasLeft
+      (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
+      extraGas cs).2
+    let fullLength := (fun result : Execution => match result with
+      | .ok post => post.output.length
+      | .error failure => failure.2.output.length) raw
+    calculateMemoryGasCost fullLength ≤ grant ∧ fullLength < 2 ^ 160 ∧
+      (∀ settled, frame.settle raw = .ok settled → settled.output.length < 2 ^ 160) ∧
+      let accounted := fun post : Devm =>
+        post.returnData.length < 2 ^ 160 ∧
+        post.gasMeasure + extraGas + calculateMemoryGasCost post.memory.size ≤
+          before.gasMeasure + calculateMemoryGasCost before.memory.size ∧
+        post.output = before.output
+      match resume.run (frame.settle raw) with
+      | .ok post => accounted post
+      | .error failure => accounted failure.2 := by
+  let pairs := [(inputIndex, inputSize), (outputIndex, outputSize)]
+  let costs := calculateMsgCallGas 0 gas.toNat before.gasLeft (before.extCost pairs) extraGas cs
+  let parent := (charged.memExtends pairs).withReturnData []
+  obtain ⟨hf, hrsm⟩ := genericCall.step_spawn_call hspawn
+  change frame.inner.gas = costs.2 at hf
+  change resume = .call parent outputIndex outputSize at hrsm
+  have hstat := genericCall.step_spawn_stat hspawn
+  have hchildState : childEvm.sta.benvStat.rules.stateGas = none := by
+    rw [Frame.enter_run_benvStat henter, hstat]
+    exact hstate
+  have hcost : calculateMemoryGasCost (rawOutputLength raw) ≤ frame.inner.gas := by
+    cases raw <;> exact entered_code_output_cost henter hexec hchildState
+  rw [hf] at hcost
+  have hgrant : costs.2 < 2 ^ 256 :=
+    calculateMsgCallGas_zero_word_child_lt gas before.gasLeft (before.extCost pairs) extraGas cs
+  have hlength := output_length_lt_two_pow_160 hcost hgrant
+  have hsettled : ∀ settled, frame.settle raw = .ok settled →
+      settled.output.length < 2 ^ 160 := by
+    intro settled hs
+    exact Nat.lt_of_le_of_lt (frame_settle_output_length_le hs) hlength
+  have hreturnData :
+      match resume.run (frame.settle raw) with
+      | .ok post => post.returnData.length < 2 ^ 160
+      | .error failure => failure.2.returnData.length < 2 ^ 160 := by
+    have hfields := call_run_returnData parent outputIndex outputSize (frame.settle raw)
+    rw [← hrsm] at hfields
+    cases hs : frame.settle raw with
+    | error failure =>
+        rw [hs] at hfields
+        rcases hr : resume.run (.error failure) with failure | post
+        · rw [hr] at hfields
+          dsimp only at hfields ⊢
+          rw [hfields]
+          change (0 : Nat) < 2 ^ 160
+          decide
+        · rw [hr] at hfields
+          dsimp only at hfields ⊢
+          rw [hfields]
+          change (0 : Nat) < 2 ^ 160
+          decide
+    | ok settled =>
+        have hl := hsettled settled hs
+        rw [hs] at hfields
+        rcases hr : resume.run (.ok settled) with failure | post
+        · rw [hr] at hfields
+          dsimp only at hfields ⊢
+          rw [hfields]
+          exact hl
+        · rw [hr] at hfields
+          dsimp only at hfields ⊢
+          rw [hfields]
+          exact hl
+  have haccount := zero_call_spawn_resume_raw_accounting gas extraGas cs inputIndex inputSize
+    outputIndex outputSize hcharge hspawn henter hexec
+  refine ⟨hcost, hlength, hsettled, ?_⟩
+  rcases hr : resume.run (frame.settle raw) with failure | post
+  · rw [hr] at hreturnData haccount
+    exact ⟨hreturnData, haccount⟩
+  · rw [hr] at hreturnData haccount
+    exact ⟨hreturnData, haccount⟩
+
 end Jaune
