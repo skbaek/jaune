@@ -567,4 +567,482 @@ theorem zero_call_spawn_resume_raw_accounting
         outputSize hcharge hspawn henter hexec hresume
     exact ⟨haccount, ho.trans hparentOutput⟩
 
+private def nonspawnPreserved (pre post : Devm) : Prop :=
+  post.gasMeasure + calculateMemoryGasCost post.memory.size ≤
+    pre.gasMeasure + calculateMemoryGasCost pre.memory.size ∧
+  post.output = pre.output
+
+private def resultMemoryFields {α : Type} (pre : Devm) (project : α → Devm)
+    (raw : Except (EvmError × Devm) α) : Prop :=
+  match raw with
+  | .error failure => failure.2.memory = pre.memory ∧ failure.2.output = pre.output
+  | .ok value => (project value).memory = pre.memory ∧ (project value).output = pre.output
+
+private def nonspawnResult {α : Type} (pre : Devm) (project : α → Devm)
+    (raw : Except (EvmError × Devm) α) : Prop :=
+  match raw with
+  | .ok value => nonspawnPreserved pre (project value)
+  | .error failure => nonspawnPreserved pre failure.2
+
+private theorem resultMemoryFields_trans {α : Type} {pre middle : Devm}
+    {project : α → Devm} {raw : Except (EvmError × Devm) α}
+    (hm : middle.memory = pre.memory ∧ middle.output = pre.output)
+    (hr : resultMemoryFields middle project raw) : resultMemoryFields pre project raw := by
+  cases raw with
+  | error failure => exact ⟨hr.1.trans hm.1, hr.2.trans hm.2⟩
+  | ok value => exact ⟨hr.1.trans hm.1, hr.2.trans hm.2⟩
+
+private theorem resultMemoryFields_bind {α β : Type} {pre : Devm}
+    {first : Except (EvmError × Devm) α} {next : α → Except (EvmError × Devm) β}
+    {projectFirst : α → Devm} {projectNext : β → Devm}
+    (hf : resultMemoryFields pre projectFirst first)
+    (hn : ∀ value, resultMemoryFields (projectFirst value) projectNext (next value)) :
+    resultMemoryFields pre projectNext (first >>= next) := by
+  cases first with
+  | error failure => exact hf
+  | ok value => exact resultMemoryFields_trans hf (hn value)
+
+private theorem nonspawnResult_of_fields {α : Type} {pre : Devm}
+    {project : α → Devm} {raw : Except (EvmError × Devm) α}
+    (hgas : resultGas project raw ≤ pre.gasMeasure)
+    (hfields : resultMemoryFields pre project raw) : nonspawnResult pre project raw := by
+  cases raw with
+  | error failure =>
+      change failure.2.gasMeasure ≤ pre.gasMeasure at hgas
+      change failure.2.memory = pre.memory ∧ failure.2.output = pre.output at hfields
+      change nonspawnPreserved pre failure.2
+      refine ⟨?_, hfields.2⟩
+      rw [hfields.1]
+      exact Nat.add_le_add_right hgas _
+  | ok value =>
+      change (project value).gasMeasure ≤ pre.gasMeasure at hgas
+      change (project value).memory = pre.memory ∧ (project value).output = pre.output at hfields
+      change nonspawnPreserved pre (project value)
+      refine ⟨?_, hfields.2⟩
+      rw [hfields.1]
+      exact Nat.add_le_add_right hgas _
+
+private theorem resultMemoryFields_charge (cost : Nat) (pre : Devm) :
+    resultMemoryFields pre id (chargeGas cost pre) := by
+  have h := charge_memory_output cost pre
+  cases hc : chargeGas cost pre <;> rw [hc] at h <;> exact h
+
+private theorem resultMemoryFields_pop (pre : Devm) :
+    resultMemoryFields pre Prod.snd pre.pop := by
+  have h := pop_memory_output pre
+  cases hp : pre.pop <;> rw [hp] at h <;> exact h
+
+private theorem jump_memory_accounting (pc : Nat) (pre : Devm) (sevm : Sevm) (j : Jinst) :
+    nonspawnResult pre Prod.snd (Jinst.runCore pc pre sevm j) := by
+  refine nonspawnResult_of_fields (Jinst.runCore_gasLe pc pre sevm j) ?_
+  cases j with
+  | jumpdest =>
+      simp only [Jinst.runCore]
+      refine resultMemoryFields_bind (resultMemoryFields_charge gJumpdest pre) ?_
+      intro charged
+      exact ⟨rfl, rfl⟩
+  | jump =>
+      simp only [Jinst.runCore]
+      refine resultMemoryFields_bind (resultMemoryFields_pop pre) ?_
+      intro popped
+      refine resultMemoryFields_bind (resultMemoryFields_charge gMid popped.2) ?_
+      intro charged
+      simp only [Except.assert, bind, Except.bind]
+      by_cases hj : jumpable sevm.code popped.1.toNat = true
+      · simp only [ite_eq_left hj]
+        exact ⟨rfl, rfl⟩
+      · simp only [ite_eq_right hj]
+        exact ⟨rfl, rfl⟩
+  | jumpi =>
+      simp only [Jinst.runCore]
+      refine resultMemoryFields_bind (resultMemoryFields_pop pre) ?_
+      intro popped
+      refine resultMemoryFields_bind (resultMemoryFields_pop popped.2) ?_
+      intro poppedAgain
+      refine resultMemoryFields_bind (resultMemoryFields_charge gHigh poppedAgain.2) ?_
+      intro charged
+      split
+      · exact ⟨rfl, rfl⟩
+      · simp only [Except.assert, bind, Except.bind]
+        by_cases hj : jumpable sevm.code popped.1.toNat = true
+        · simp only [ite_eq_left hj]
+          exact ⟨rfl, rfl⟩
+        · simp only [ite_eq_right hj]
+          exact ⟨rfl, rfl⟩
+
+private theorem resultMemoryFields_push (pre : Devm) (word : B256) :
+    resultMemoryFields pre id (pre.push word) := by
+  have h := push_memory_output pre word
+  cases hp : pre.push word <;> rw [hp] at h <;> exact h
+
+private theorem resultMemoryFields_pushItem (word : B256) (cost : Nat) (pre : Devm) :
+    resultMemoryFields pre id (pushItem word cost pre) := by
+  rw [pushItem_def]
+  refine resultMemoryFields_bind (resultMemoryFields_charge cost pre) ?_
+  intro charged
+  exact resultMemoryFields_push charged word
+
+private theorem resultMemoryFields_unary (f : B256 → B256) (cost : Nat) (pre : Devm) :
+    resultMemoryFields pre id (applyUnary f cost pre) := by
+  rw [applyUnary_def]
+  refine resultMemoryFields_bind (resultMemoryFields_pop pre) ?_
+  intro popped
+  exact resultMemoryFields_pushItem (f popped.1) cost popped.2
+
+private theorem resultMemoryFields_binary (f : B256 → B256 → B256)
+    (cost : Nat) (pre : Devm) : resultMemoryFields pre id (applyBinary f cost pre) := by
+  rw [applyBinary_def]
+  refine resultMemoryFields_bind (resultMemoryFields_pop pre) ?_
+  intro popped
+  refine resultMemoryFields_bind (resultMemoryFields_pop popped.2) ?_
+  intro poppedAgain
+  exact resultMemoryFields_pushItem (f popped.1 poppedAgain.1) cost poppedAgain.2
+
+private theorem nonspawn_pushItem (word : B256) (cost : Nat) (pre : Devm) :
+    nonspawnResult pre id (pushItem word cost pre) := by
+  refine nonspawnResult_of_fields ?_ (resultMemoryFields_pushItem word cost pre)
+  simpa only [resultGas_id] using pushItem_gasLe word cost pre
+
+private theorem nonspawn_unary (f : B256 → B256) (cost : Nat) (pre : Devm) :
+    nonspawnResult pre id (applyUnary f cost pre) := by
+  refine nonspawnResult_of_fields ?_ (resultMemoryFields_unary f cost pre)
+  simpa only [resultGas_id] using applyUnary_gasLe f cost pre
+
+private theorem nonspawn_binary (f : B256 → B256 → B256) (cost : Nat) (pre : Devm) :
+    nonspawnResult pre id (applyBinary f cost pre) := by
+  refine nonspawnResult_of_fields ?_ (resultMemoryFields_binary f cost pre)
+  simpa only [resultGas_id] using applyBinary_gasLe f cost pre
+
+private theorem nonspawnPreserved_trans {pre middle post : Devm}
+    (hm : nonspawnPreserved pre middle) (hp : nonspawnPreserved middle post) :
+    nonspawnPreserved pre post :=
+  ⟨hp.1.trans hm.1, hp.2.trans hm.2⟩
+
+private theorem nonspawnResult_trans {α : Type} {pre middle : Devm}
+    {project : α → Devm} {raw : Except (EvmError × Devm) α}
+    (hm : nonspawnPreserved pre middle) (hr : nonspawnResult middle project raw) :
+    nonspawnResult pre project raw := by
+  cases raw with
+  | error failure => exact nonspawnPreserved_trans hm hr
+  | ok value => exact nonspawnPreserved_trans hm hr
+
+private theorem nonspawnResult_bind {α β : Type} {pre : Devm}
+    {first : Except (EvmError × Devm) α} {next : α → Except (EvmError × Devm) β}
+    {projectFirst : α → Devm} {projectNext : β → Devm}
+    (hf : nonspawnResult pre projectFirst first)
+    (hn : ∀ value, nonspawnResult (projectFirst value) projectNext (next value)) :
+    nonspawnResult pre projectNext (first >>= next) := by
+  cases first with
+  | error failure => exact hf
+  | ok value => exact nonspawnResult_trans hf (hn value)
+
+private theorem nonspawn_pop (pre : Devm) : nonspawnResult pre Prod.snd pre.pop := by
+  exact nonspawnResult_of_fields (Nat.le_of_eq (Devm.pop_resultGas pre))
+    (resultMemoryFields_pop pre)
+
+private theorem nonspawn_charge (cost : Nat) (pre : Devm) :
+    nonspawnResult pre id (chargeGas cost pre) := by
+  refine nonspawnResult_of_fields ?_ (resultMemoryFields_charge cost pre)
+  simpa only [resultGas_id] using chargeGas_result_gasLe cost pre
+
+private theorem nonspawn_push (word : B256) (pre : Devm) :
+    nonspawnResult pre id (pre.push word) := by
+  refine nonspawnResult_of_fields ?_ (resultMemoryFields_push pre word)
+  simpa only [resultGas_id] using Nat.le_of_eq (Devm.push_gasLe word pre)
+
+private theorem nonspawn_balReadAccount (rules : ForkRules) (adr : Adr) (pre : Devm) :
+    nonspawnPreserved pre (pre.balReadAccount rules adr) := by
+  refine ⟨Nat.le_refl _, ?_⟩
+  unfold Devm.balReadAccount
+  split <;> rfl
+
+private theorem nonspawn_popToNat (pre : Devm) :
+    nonspawnResult pre Prod.snd pre.popToNat := by
+  have h := nonspawn_pop pre
+  cases hp : pre.pop <;> rw [hp] at h
+  all_goals simpa only [Devm.popToNat_def, Functor.mapRev, Functor.map, Except.map,
+    Prod.mapFst, Prod.map, nonspawnResult, id_eq, hp] using h
+
+private theorem nonspawn_popToAdr (pre : Devm) :
+    nonspawnResult pre Prod.snd pre.popToAdr := by
+  have h := nonspawn_pop pre
+  cases hp : pre.pop <;> rw [hp] at h
+  all_goals simpa only [Devm.popToAdr_def, Functor.mapRev, Functor.map, Except.map,
+    Prod.mapFst, Prod.map, nonspawnResult, id_eq, hp] using h
+
+private theorem nonspawn_balReadStorage (rules : ForkRules) (adr : Adr) (key : B256)
+    (pre : Devm) : nonspawnPreserved pre (pre.balReadStorage rules adr key) := by
+  refine ⟨Nat.le_refl _, ?_⟩
+  unfold Devm.balReadStorage
+  split <;> rfl
+
+private theorem nonspawn_addAccessedAddress (pre : Devm) (adr : Adr) :
+    nonspawnPreserved pre (addAccessedAddress pre adr) :=
+  ⟨Nat.le_refl _, rfl⟩
+
+private theorem nonspawn_addAccessedStorageKey (pre : Devm) (adr : Adr) (key : B256) :
+    nonspawnPreserved pre (addAccessedStorageKey pre adr key) :=
+  ⟨Nat.le_refl _, rfl⟩
+
+private theorem nonspawn_assertDynamic (sevm : Sevm) (pre : Devm) :
+    nonspawnResult pre (fun _ : Unit => pre) (assertDynamic sevm pre) := by
+  unfold assertDynamic
+  by_cases hs : (!sevm.isStatic) = true
+  · simp only [Except.assert, ite_eq_left hs]
+    exact ⟨Nat.le_refl _, rfl⟩
+  · simp only [Except.assert, ite_eq_right hs]
+    exact ⟨Nat.le_refl _, rfl⟩
+
+private theorem nonspawn_charged_memory (pairs : List (Nat × Nat)) (baseCost : Nat)
+    (pre : Devm) (action : Devm → Execution)
+    (hbody : ∀ charged, nonspawnResult (charged.memExtends pairs) id (action charged)) :
+    nonspawnResult pre id (chargeGas (baseCost + pre.extCost pairs) pre >>= action) := by
+  rcases hc : chargeGas (baseCost + pre.extCost pairs) pre with failure | charged
+  · have h := nonspawn_charge (baseCost + pre.extCost pairs) pre
+    rw [hc] at h
+    exact h
+  · have hf := charge_memory_output (baseCost + pre.extCost pairs) pre
+    rw [hc] at hf
+    have hp : nonspawnPreserved pre (charged.memExtends pairs) := by
+      refine ⟨?_, hf.2⟩
+      have ha := charged_memExtends_accounting pairs baseCost hc
+      omega
+    exact nonspawnResult_trans hp (hbody charged)
+
+private theorem ceil32_eq_ceilDiv32 (n : Nat) : ceil32 n = 32 * ceilDiv n 32 := by
+  by_cases hz : n % 32 = 0
+  · simp only [ceil32, ceilDiv, hz, ite_true, Nat.add_zero]
+    omega
+  · simp only [ceilDiv, ite_eq_right hz]
+    unfold ceil32
+    split
+    · contradiction
+    · omega
+
+private theorem memory_write_size_le_ext (memory : Mem) (index : Nat) (bytes : Bytes) :
+    (memory.write index bytes).size ≤ memExtSize memory.size index bytes.length := by
+  cases bytes with
+  | nil => exact Nat.le_refl _
+  | cons byte bytes =>
+      simp only [Mem.write]
+      split
+      · split <;> exact memExtSize_ge memory.size index (byte :: bytes).length
+      · change ceil32 (index + (byte :: bytes).length) ≤
+          memExtSize memory.size index (byte :: bytes).length
+        have hn : (byte :: bytes).length ≠ 0 := by
+          simp only [List.length_cons]
+          omega
+        rw [ceil32_eq_ceilDiv32]
+        simp only [memExtSize, ite_eq_right hn]
+        exact Nat.mul_le_mul_left 32 (Nat.le_max_right _ _)
+
+private theorem nonspawn_write (pre : Devm) (index : Nat) (bytes : Bytes) :
+    nonspawnPreserved (pre.memExtends [(index, bytes.length)]) (pre.memWrite index bytes) := by
+  refine ⟨?_, rfl⟩
+  have hw := memory_write_size_le_ext pre.memory index bytes
+  have hc := calculateMemoryGasCost_mono hw
+  change pre.gasMeasure + calculateMemoryGasCost (pre.memory.write index bytes).size ≤
+    pre.gasMeasure + calculateMemoryGasCost (memExtSize pre.memory.size index bytes.length)
+  exact Nat.add_le_add_left hc _
+
+private theorem nonspawn_read (pre : Devm) (index size : Nat) :
+    nonspawnPreserved (pre.memExtends [(index, size)]) (pre.memRead index size).2 :=
+  ⟨Nat.le_refl _, rfl⟩
+
+private theorem list_slice_length (bytes : List UInt8) (index size : Nat)
+    (defaultByte : UInt8) : (List.sliceD bytes index size defaultByte).length = size := by
+  induction size generalizing index with
+  | zero => rfl
+  | succ size ih => rw [List.sliceD_succ, List.length_cons, ih]
+
+private theorem regular_memory_accounting (pc : Nat) (pre : Devm) (sevm : Sevm) (r : Rinst)
+    (hstate : sevm.benvStat.rules.stateGas = none) :
+    nonspawnResult pre id (Rinst.runCore pc pre sevm r) := by
+  cases r <;> simp only [Rinst.runCore]
+  all_goals first
+    | exact nonspawn_pushItem _ _ _
+    | exact nonspawn_unary _ _ _
+    | exact nonspawn_binary _ _ _
+    | skip
+  case exp =>
+    refine nonspawnResult_bind (nonspawn_pop pre) ?_
+    intro popped
+    refine nonspawnResult_bind (nonspawn_pop popped.2) ?_
+    intro poppedAgain
+    rw [← pushItem_def]
+    exact nonspawn_pushItem _ _ _
+  case calldataload =>
+    refine nonspawnResult_bind (nonspawn_pop pre) ?_
+    intro popped
+    rw [← pushItem_def]
+    exact nonspawn_pushItem _ _ _
+  case blobhash =>
+    refine nonspawnResult_bind (nonspawn_pop pre) ?_
+    intro popped
+    rw [← pushItem_def]
+    exact nonspawn_pushItem _ _ _
+  case blockhash =>
+    refine nonspawnResult_bind (nonspawn_pop pre) ?_
+    intro popped
+    rw [← pushItem_def]
+    exact nonspawn_pushItem _ _ _
+  case tload =>
+    refine nonspawnResult_bind (nonspawn_pop pre) ?_
+    intro popped
+    exact nonspawn_pushItem _ _ _
+  case gas =>
+    refine nonspawnResult_bind (nonspawn_charge gBase pre) ?_
+    intro charged
+    exact nonspawn_push _ _
+  case clz =>
+    split
+    · exact nonspawn_unary _ _ _
+    · exact ⟨Nat.le_refl _, rfl⟩
+  case slotnum =>
+    split
+    · exact nonspawn_pushItem _ _ _
+    · exact ⟨Nat.le_refl _, rfl⟩
+  case selfbalance =>
+    refine nonspawnResult_bind (nonspawn_charge gLow pre) ?_
+    intro charged
+    exact nonspawnResult_trans (nonspawn_balReadAccount sevm.benvStat.rules
+      sevm.currentTarget charged) (nonspawn_push _ _)
+  case dup n =>
+    refine nonspawnResult_bind (nonspawn_charge gVerylow pre) ?_
+    intro charged
+    rcases hword : charged.stack[n]? with _ | word
+    · exact ⟨Nat.le_refl _, rfl⟩
+    · exact nonspawn_push word charged
+  case swap n =>
+    refine nonspawnResult_bind (nonspawn_charge gVerylow pre) ?_
+    intro charged
+    rcases hstack : List.swap charged.stack n with _ | stack
+    · exact ⟨Nat.le_refl _, rfl⟩
+    · exact ⟨Nat.le_refl _, rfl⟩
+  case pop =>
+    have hf : nonspawnResult pre id (pre.pop <&> Prod.snd) := by
+      have h := nonspawn_pop pre
+      cases hp : pre.pop <;> rw [hp] at h
+      all_goals simpa only [Functor.mapRev, Functor.map, Except.map,
+        nonspawnResult, id_eq] using h
+    refine nonspawnResult_bind hf ?_
+    intro popped
+    exact nonspawn_charge gBase popped
+  case extcodesize =>
+    refine nonspawnResult_bind (nonspawn_popToAdr pre) ?_
+    intro popped
+    split
+    · refine nonspawnResult_bind (nonspawn_charge _ popped.2) ?_
+      intro charged
+      exact nonspawnResult_trans (nonspawn_balReadAccount sevm.benvStat.rules
+        popped.1 charged) (nonspawn_push _ _)
+    · refine nonspawnResult_trans (nonspawn_addAccessedAddress popped.2 popped.1) ?_
+      refine nonspawnResult_bind (nonspawn_charge _ _) ?_
+      intro charged
+      exact nonspawnResult_trans (nonspawn_balReadAccount sevm.benvStat.rules
+        popped.1 charged) (nonspawn_push _ _)
+  case extcodehash =>
+    refine nonspawnResult_bind (nonspawn_popToAdr pre) ?_
+    intro popped
+    split
+    · refine nonspawnResult_bind (nonspawn_charge _ popped.2) ?_
+      intro charged
+      exact nonspawnResult_trans (nonspawn_balReadAccount sevm.benvStat.rules
+        popped.1 charged) (nonspawn_push _ _)
+    · refine nonspawnResult_trans (nonspawn_addAccessedAddress popped.2 popped.1) ?_
+      refine nonspawnResult_bind (nonspawn_charge _ _) ?_
+      intro charged
+      exact nonspawnResult_trans (nonspawn_balReadAccount sevm.benvStat.rules
+        popped.1 charged) (nonspawn_push _ _)
+  case sload =>
+    refine nonspawnResult_bind (nonspawn_pop pre) ?_
+    intro popped
+    split
+    · refine nonspawnResult_bind (nonspawn_charge gasWarmAccess popped.2) ?_
+      intro charged
+      exact nonspawnResult_trans (nonspawn_balReadStorage sevm.benvStat.rules
+        sevm.currentTarget popped.1 charged) (nonspawn_push _ _)
+    · refine nonspawnResult_trans (nonspawn_addAccessedStorageKey popped.2
+        sevm.currentTarget popped.1) ?_
+      refine nonspawnResult_bind (nonspawn_charge gasColdSload _) ?_
+      intro charged
+      exact nonspawnResult_trans (nonspawn_balReadStorage sevm.benvStat.rules
+        sevm.currentTarget popped.1 charged) (nonspawn_push _ _)
+  case tstore =>
+    simp only [hstate]
+    refine nonspawnResult_bind (nonspawn_pop pre) ?_
+    intro popped
+    refine nonspawnResult_bind (nonspawn_pop popped.2) ?_
+    intro poppedAgain
+    refine nonspawnResult_bind (nonspawn_charge gasWarmAccess poppedAgain.2) ?_
+    intro charged
+    refine nonspawnResult_bind (nonspawn_assertDynamic sevm charged) ?_
+    intro _
+    exact ⟨Nat.le_refl _, rfl⟩
+  case mload =>
+    refine nonspawnResult_bind (nonspawn_popToNat pre) ?_
+    intro popped
+    refine nonspawn_charged_memory [(popped.1, 32)] gVerylow popped.2 _ ?_
+    intro charged
+    exact nonspawnResult_trans (nonspawn_read charged popped.1 32) (nonspawn_push _ _)
+  case keccak256 =>
+    refine nonspawnResult_bind (nonspawn_popToNat pre) ?_
+    intro popped
+    refine nonspawnResult_bind (nonspawn_popToNat popped.2) ?_
+    intro poppedAgain
+    refine nonspawn_charged_memory [(popped.1, poppedAgain.1)]
+      (gKeccak256 + gasKeccak256Word * ceilDiv poppedAgain.1 32) poppedAgain.2 _ ?_
+    intro charged
+    exact nonspawnResult_trans (nonspawn_read charged popped.1 poppedAgain.1)
+      (nonspawn_push _ _)
+  case mstore =>
+    refine nonspawnResult_bind (nonspawn_popToNat pre) ?_
+    intro popped
+    refine nonspawnResult_bind (nonspawn_pop popped.2) ?_
+    intro poppedAgain
+    refine nonspawn_charged_memory [(popped.1, 32)] gVerylow poppedAgain.2 _ ?_
+    intro charged
+    change nonspawnPreserved (charged.memExtends [(popped.1, 32)])
+      (charged.memWrite popped.1 poppedAgain.1.toBytes)
+    simpa only [B256.length_toBytes] using nonspawn_write charged popped.1 poppedAgain.1.toBytes
+  case mstore8 =>
+    refine nonspawnResult_bind (nonspawn_popToNat pre) ?_
+    intro popped
+    refine nonspawnResult_bind (nonspawn_pop popped.2) ?_
+    intro poppedAgain
+    refine nonspawn_charged_memory [(popped.1, 1)] gVerylow poppedAgain.2 _ ?_
+    intro charged
+    change nonspawnPreserved (charged.memExtends [(popped.1, 1)])
+      (charged.memWrite popped.1 [poppedAgain.1.2.2.toUInt8])
+    simpa only [List.length_cons, List.length_nil] using
+      nonspawn_write charged popped.1 [poppedAgain.1.2.2.toUInt8]
+  case calldatacopy =>
+    refine nonspawnResult_bind (nonspawn_popToNat pre) ?_
+    intro popped
+    refine nonspawnResult_bind (nonspawn_popToNat popped.2) ?_
+    intro dataIndex
+    refine nonspawnResult_bind (nonspawn_popToNat dataIndex.2) ?_
+    intro size
+    refine nonspawn_charged_memory [(popped.1, size.1)]
+      (gVerylow + gasCopy * ceilDiv size.1 32) size.2 _ ?_
+    intro charged
+    change nonspawnPreserved (charged.memExtends [(popped.1, size.1)])
+      (charged.memWrite popped.1 (List.sliceD sevm.data dataIndex.1 size.1 0))
+    simpa only [list_slice_length] using
+      nonspawn_write charged popped.1 (List.sliceD sevm.data dataIndex.1 size.1 0)
+  case codecopy =>
+    refine nonspawnResult_bind (nonspawn_popToNat pre) ?_
+    intro popped
+    refine nonspawnResult_bind (nonspawn_popToNat popped.2) ?_
+    intro codeIndex
+    refine nonspawnResult_bind (nonspawn_popToNat codeIndex.2) ?_
+    intro size
+    refine nonspawn_charged_memory [(popped.1, size.1)]
+      (gVerylow + gasCopy * ceilDiv size.1 32) size.2 _ ?_
+    intro charged
+    change nonspawnPreserved (charged.memExtends [(popped.1, size.1)])
+      (charged.memWrite popped.1 (ByteArray.sliceD sevm.code codeIndex.1 size.1 (Linst.toUInt8 .stop)))
+    simpa only [ByteArray.length_sliceD] using nonspawn_write charged popped.1
+      (ByteArray.sliceD sevm.code codeIndex.1 size.1 (Linst.toUInt8 .stop))
+
 end Jaune
