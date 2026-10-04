@@ -3761,6 +3761,58 @@ theorem zero_call_spawn_native_enter_success
 /-- The same initialized native-success path also covers value-bearing CALL:
 its bounded requested gas plus the real fixed stipend still cannot pay for a
 MODEXP result of length 2^160. The charged input controls identity replies. -/
+private theorem call_spawn_native_enter_success_input_or_potential
+    {sevm : Sevm} {before charged : Devm}
+    (baseCost : Nat) (gas value : B256)
+    (extraGas inputIndex inputSize outputIndex outputSize : Nat)
+    {caller target codeAddress : Adr} {shouldTransferValue isStaticcall : Bool}
+    {code : ByteArray} {disablePrecompiles : Bool}
+    {frame : Frame} {resume : Resume} {benv : Benv} {post : Devm}
+    (hcharge : chargeGas
+      (baseCost + before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
+      before = .ok charged)
+    (hspawn : genericCall.step sevm
+      (charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)])
+      (calculateMsgCallGas value.toNat gas.toNat before.gasLeft
+        (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
+        extraGas gCallStipend).2 value caller target codeAddress
+      shouldTransferValue isStaticcall inputIndex inputSize outputIndex outputSize
+      code disablePrecompiles = .spawn frame resume)
+    (hsource : before.gasMeasure + calculateMemoryGasCost before.memory.size <
+      2 ^ 256 ∨ inputSize < 2 ^ 160)
+    (htransfer : frame.inner.benvAfterTransfer = .ok benv)
+    (hdispatch : executeCode.enter (frame.inner.withBenv benv) = .inr (.ok post)) :
+    frame.enter = .done (frame.settle (.ok post)) ∧
+      post.output.length < 2 ^ 160 ∧
+      match resume.run (frame.settle (.ok post)) with
+      | .ok resumed => resumed.returnData.length < 2 ^ 160
+      | .error failure => failure.2.returnData.length < 2 ^ 160 := by
+  have hdata : (frame.inner.withBenv benv).data.length < 2 ^ 160 := by
+    change frame.inner.data.length < 2 ^ 160
+    rw [genericCall.step_spawn_data_length hspawn]
+    rcases hsource with hpotential | hinput
+    · exact charged_call_input_length_lt_two_pow_160
+        baseCost inputIndex inputSize outputIndex outputSize hcharge hpotential
+    · exact hinput
+  have hgas : (frame.inner.withBenv benv).gas < 2 ^ 256 + gCallStipend := by
+    change frame.inner.gas < 2 ^ 256 + gCallStipend
+    rw [(genericCall.step_spawn_call hspawn).1]
+    exact calculateMsgCallGas_word_child_lt_with_stipend value gas before.gasLeft
+      (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)]) extraGas
+  have hraw := executeCode_enter_native_ok_output_length_lt_two_pow_160
+    hdispatch hdata hgas
+  have hsettled : ∀ settled, frame.settle (.ok post) = .ok settled →
+      settled.output.length < 2 ^ 160 := by
+    intro settled hs
+    exact Nat.lt_of_le_of_lt (frame_settle_output_length_le hs) hraw
+  obtain ⟨_, hrsm⟩ := genericCall.step_spawn_call hspawn
+  refine ⟨?_, hraw, ?_⟩
+  · simp only [Frame.enter, htransfer, hdispatch]
+  · rw [hrsm]
+    exact call_resume_returnData_lt_two_pow_160
+      ((charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)]).withReturnData [])
+      outputIndex outputSize (frame.settle (.ok post)) rfl hsettled
+
 theorem call_spawn_native_enter_success
     {sevm : Sevm} {before charged : Devm}
     (baseCost : Nat) (gas value : B256)
@@ -3787,29 +3839,9 @@ theorem call_spawn_native_enter_success
       match resume.run (frame.settle (.ok post)) with
       | .ok resumed => resumed.returnData.length < 2 ^ 160
       | .error failure => failure.2.returnData.length < 2 ^ 160 := by
-  have hdata : (frame.inner.withBenv benv).data.length < 2 ^ 160 := by
-    change frame.inner.data.length < 2 ^ 160
-    rw [genericCall.step_spawn_data_length hspawn]
-    exact charged_call_input_length_lt_two_pow_160
-      baseCost inputIndex inputSize outputIndex outputSize hcharge hpotential
-  have hgas : (frame.inner.withBenv benv).gas < 2 ^ 256 + gCallStipend := by
-    change frame.inner.gas < 2 ^ 256 + gCallStipend
-    rw [(genericCall.step_spawn_call hspawn).1]
-    exact calculateMsgCallGas_word_child_lt_with_stipend value gas before.gasLeft
-      (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)]) extraGas
-  have hraw := executeCode_enter_native_ok_output_length_lt_two_pow_160
-    hdispatch hdata hgas
-  have hsettled : ∀ settled, frame.settle (.ok post) = .ok settled →
-      settled.output.length < 2 ^ 160 := by
-    intro settled hs
-    exact Nat.lt_of_le_of_lt (frame_settle_output_length_le hs) hraw
-  obtain ⟨_, hrsm⟩ := genericCall.step_spawn_call hspawn
-  refine ⟨?_, hraw, ?_⟩
-  · simp only [Frame.enter, htransfer, hdispatch]
-  · rw [hrsm]
-    exact call_resume_returnData_lt_two_pow_160
-      ((charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)]).withReturnData [])
-      outputIndex outputSize (frame.settle (.ok post)) rfl hsettled
+  exact call_spawn_native_enter_success_input_or_potential baseCost gas value extraGas
+    inputIndex inputSize outputIndex outputSize hcharge hspawn
+    (Or.inl hpotential) htransfer hdispatch
 
 /-- A rejected native precompile starts with empty output. Even when its
 settlement fails or the parent's stack push fails, CALL return data stays
@@ -3852,7 +3884,7 @@ bounded parent return-data result. This combines failed value transfer,
 ordinary code execution, and successful or rejected native precompiles,
 including errors and both resume outcomes. The code branch quantifies over
 its actual recursive execution instead of assuming an output premise. -/
-theorem call_spawn_enter_reply_bound
+private theorem call_spawn_enter_reply_bound_input_or_potential
     {sevm : Sevm} {before charged : Devm}
     (baseCost : Nat) (gas value : B256)
     (extraGas inputIndex inputSize outputIndex outputSize : Nat)
@@ -3869,8 +3901,8 @@ theorem call_spawn_enter_reply_bound
         extraGas gCallStipend).2 value caller target codeAddress
       shouldTransferValue isStaticcall inputIndex inputSize outputIndex outputSize
       code disablePrecompiles = .spawn frame resume)
-    (hpotential : before.gasMeasure + calculateMemoryGasCost before.memory.size <
-      2 ^ 256)
+    (hsource : before.gasMeasure + calculateMemoryGasCost before.memory.size <
+      2 ^ 256 ∨ inputSize < 2 ^ 160)
     (hstate : sevm.benvStat.rules.stateGas = none) :
     match frame.enter with
     | .run child =>
@@ -3905,9 +3937,9 @@ theorem call_spawn_enter_reply_bound
       | inr result =>
           cases result with
           | ok post =>
-              have hf := call_spawn_native_enter_success baseCost gas value extraGas
+              have hf := call_spawn_native_enter_success_input_or_potential baseCost gas value extraGas
                 inputIndex inputSize outputIndex outputSize hcharge hspawn
-                hpotential ht hd
+                hsource ht hd
               rw [hf.1]
               exact hf.2.2
           | error failure =>
@@ -3918,6 +3950,39 @@ theorem call_spawn_enter_reply_bound
                 outputSize hspawn ht hd
               rw [hf.1]
               exact hf.2
+
+theorem call_spawn_enter_reply_bound
+    {sevm : Sevm} {before charged : Devm}
+    (baseCost : Nat) (gas value : B256)
+    (extraGas inputIndex inputSize outputIndex outputSize : Nat)
+    {caller target codeAddress : Adr} {shouldTransferValue isStaticcall : Bool}
+    {code : ByteArray} {disablePrecompiles : Bool}
+    {frame : Frame} {resume : Resume}
+    (hcharge : chargeGas
+      (baseCost + before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
+      before = .ok charged)
+    (hspawn : genericCall.step sevm
+      (charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)])
+      (calculateMsgCallGas value.toNat gas.toNat before.gasLeft
+        (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
+        extraGas gCallStipend).2 value caller target codeAddress
+      shouldTransferValue isStaticcall inputIndex inputSize outputIndex outputSize
+      code disablePrecompiles = .spawn frame resume)
+    (hpotential : before.gasMeasure + calculateMemoryGasCost before.memory.size <
+      2 ^ 256)
+    (hstate : sevm.benvStat.rules.stateGas = none) :
+    match frame.enter with
+    | .run child =>
+        ∀ raw : Execution, Exec child.pc child.sta child.dyna raw →
+          match resume.run (frame.settle raw) with
+          | .ok post => post.returnData.length < 2 ^ 160
+          | .error failure => failure.2.returnData.length < 2 ^ 160
+    | .done settled =>
+        match resume.run settled with
+        | .ok post => post.returnData.length < 2 ^ 160
+        | .error failure => failure.2.returnData.length < 2 ^ 160 := by
+  exact call_spawn_enter_reply_bound_input_or_potential baseCost gas value extraGas
+    inputIndex inputSize outputIndex outputSize hcharge hspawn (Or.inl hpotential) hstate
 
 private def callStepReplyBound (step : XStep) : Prop :=
   ∀ (xl : Xlot) (post : Devm), xl.Filled → XStep.Run step xl (.ok post) →
@@ -3947,7 +4012,8 @@ private theorem charged_genericCall_reply_bound
     (hcharge : chargeGas
       (baseCost + before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
       before = .ok charged)
-    (hpotential : before.gasMeasure + calculateMemoryGasCost before.memory.size < 2 ^ 256)
+    (hsource : before.gasMeasure + calculateMemoryGasCost before.memory.size < 2 ^ 256 ∨
+      inputSize < 2 ^ 160)
     (hstate : sevm.benvStat.rules.stateGas = none) :
     callStepReplyBound (genericCall.step sevm
       (charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)])
@@ -3987,8 +4053,8 @@ private theorem charged_genericCall_reply_bound
           (Jaune.Array.sliceD (paid.withReturnData []).memory.data inputIndex inputSize 0)
           code disablePrecompiles)) (.call (paid.withReturnData []) outputIndex outputSize) := by
       simp only [genericCall.step, ite_eq_right depth]
-    have bounded := call_spawn_enter_reply_bound baseCost gas value extraGas
-      inputIndex inputSize outputIndex outputSize hcharge spawn hpotential hstate
+    have bounded := call_spawn_enter_reply_bound_input_or_potential baseCost gas value extraGas
+      inputIndex inputSize outputIndex outputSize hcharge spawn hsource hstate
     rw [spawn] at hrun
     obtain ⟨settled, frameRun, resumed⟩ := hrun
     cases enter : (Frame.ofCall (callMsg sevm (paid.withReturnData []) grant value caller
@@ -4084,7 +4150,75 @@ private theorem xinst_call_reply_bound (sevm : Sevm) (pre : Devm)
         · dsimp only [paid, pairs] at balance
           simp only [ite_eq_right balance, Pure.pure, Except.pure, XStep.ofExcept]
           exact charged_genericCall_reply_bound costs.1 gas.1 value.1 extraGas
-            inputIndex.1 inputSize.1 outputIndex.1 outputSize.1 charge parentPotential hstate
+            inputIndex.1 inputSize.1 outputIndex.1 outputSize.1 charge (Or.inl parentPotential) hstate
+      · simp only [Except.assert, ite_eq_right static, XStep.ofExcept]
+        intro xl post hfilled hrun
+        cases hrun.2
+
+/-- Fixed actual CALL operands provide the identity precompile's input bound
+without any bound on the enclosing caller's initial gas or memory potential. -/
+private theorem xinst_call_reply_bound_of_input_size
+    (sevm : Sevm) (pre : Devm) (gas callee value inputIndex inputSize outputIndex outputSize : B256)
+    (S : List B256)
+    (hstack : pre.stack = gas :: callee :: value :: inputIndex :: inputSize :: outputIndex :: outputSize :: S)
+    (hstate : sevm.benvStat.rules.stateGas = none)
+    (hinput : inputSize.toNat < 2 ^ 160) :
+    callStepReplyBound (Xinst.step sevm pre .call) := by
+  rcases pre with ⟨⟨stack, memory, gasLeft, stateGas⟩, view, world⟩
+  change stack = _ at hstack
+  subst stack
+  let base : Devm := ⟨⟨S, memory, gasLeft, stateGas⟩, view, world⟩
+  simp only [Xinst.step, hstate, Devm.popToAdr_def, Devm.popToNat_def,
+    Devm.pop_def, Devm.stack, Devm.setMach, bind, Except.bind, Functor.mapRev, Functor.map, Except.map,
+    Prod.mapFst, Prod.map, id_eq]
+  let pairs := [(inputIndex.toNat, inputSize.toNat), (outputIndex.toNat, outputSize.toNat)]
+  let lookup := sevm.benvStat.rules.gas.accessDelegation
+    (addAccessedAddress base callee.toAdr) callee.toAdr
+  let parent := lookup.2.2.2.2
+  have memory : parent.memory = base.memory :=
+    (delegation_memory_output sevm.benvStat.rules.gas
+      (addAccessedAddress base callee.toAdr) callee.toAdr).1
+  have extension : base.extCost pairs = parent.extCost pairs := by
+    simp only [Devm.extCost, memory]
+  let accessCost := sevm.benvStat.rules.gas.accessCost callee.toAdr
+    base.accessedAddresses + lookup.2.2.2.1
+  let createCost : Nat := if ¬(parent.getAcct callee.toAdr).Empty ∨ value = 0 then 0 else gNewAccount
+  let extraGas := accessCost + createCost + if value = 0 then 0 else sevm.benvStat.rules.gas.callValue
+  change callStepReplyBound (XStep.ofExcept (chargeGas
+    ((calculateMsgCallGas value.toNat gas.toNat parent.gasLeft
+      (base.extCost pairs) extraGas).1 + base.extCost pairs) parent >>= _))
+  rw [extension]
+  let costs := calculateMsgCallGas value.toNat gas.toNat parent.gasLeft
+    (parent.extCost pairs) extraGas
+  cases charge : chargeGas (costs.1 + parent.extCost pairs) parent with
+  | error failure =>
+      simp only [bind, Except.bind, XStep.ofExcept]
+      intro xl post hfilled hrun
+      cases hrun.2
+  | ok charged =>
+      simp only [bind, Except.bind]
+      by_cases static : (!sevm.isStatic) = true ∨ value = 0
+      · simp only [Except.assert, ite_eq_left static]
+        let paid := charged.memExtends pairs
+        by_cases balance : (paid.getAcct sevm.currentTarget).bal < value
+        · dsimp only [paid, pairs] at balance
+          simp only [ite_eq_left balance]
+          intro xl post hfilled hrun
+          change XStep.Run (XStep.ofExcept (paid.push 0 >>= _)) xl (.ok post) at hrun
+          cases pushed : paid.push 0 with
+          | error failure =>
+              simp only [pushed, bind, Except.bind, XStep.ofExcept, XStep.Run] at hrun
+              cases hrun.2
+          | ok next =>
+              simp only [pushed, bind, Except.bind, Pure.pure, Except.pure,
+                XStep.ofExcept, XStep.Run] at hrun
+              cases hrun.2
+              change (0 : Nat) < 2 ^ 160
+              decide
+        · dsimp only [paid, pairs] at balance
+          simp only [ite_eq_right balance, Pure.pure, Except.pure, XStep.ofExcept]
+          exact charged_genericCall_reply_bound costs.1 gas value extraGas
+            inputIndex.toNat inputSize.toNat outputIndex.toNat outputSize.toNat charge (Or.inr hinput) hstate
       · simp only [Except.assert, ite_eq_right static, XStep.ofExcept]
         intro xl post hfilled hrun
         cases hrun.2
@@ -4111,5 +4245,35 @@ theorem call_returnData_length_lt_two_pow_160
     post.returnData.length < 2 ^ 160 := by
   obtain ⟨xl, filled, pc, step⟩ := hrun
   exact call_step_returnData_length_lt_two_pow_160 filled step hstate hpotential
+
+/-- A real CALL with bounded actual input installs full returndata below
+`2^160`, independently of its caller's initial gas and memory potential.
+The stack fixes the seven actual operands; the filled slot supplies the
+recursive child execution. No reply cap or output-copy-window bound is assumed. -/
+theorem call_step_returnData_length_lt_two_pow_160_of_input_size
+    {pc : Nat} {sevm : Sevm} {pre post : Devm} {xl : Xlot}
+    {gas callee value inputIndex inputSize outputIndex outputSize : B256} {S : List B256}
+    (hfilled : xl.Filled)
+    (hrun : Ninst.StepRun pc sevm pre (.exec .call) xl (.ok post))
+    (hstack : pre.stack = gas :: callee :: value :: inputIndex :: inputSize :: outputIndex :: outputSize :: S)
+    (hstate : sevm.benvStat.rules.stateGas = none)
+    (hinput : inputSize.toNat < 2 ^ 160) :
+    post.returnData.length < 2 ^ 160 := by
+  rw [Ninst.StepRun, Ninst.step_exec, XStep.run_toStep] at hrun
+  exact xinst_call_reply_bound_of_input_size sevm pre gas callee value
+    inputIndex inputSize outputIndex outputSize S hstack hstate hinput xl post hfilled hrun
+
+/-- The run interface of the same operand-derived full-reply bound. -/
+theorem call_returnData_length_lt_two_pow_160_of_input_size
+    {sevm : Sevm} {pre post : Devm}
+    {gas callee value inputIndex inputSize outputIndex outputSize : B256} {S : List B256}
+    (hrun : Ninst.Run sevm pre (.exec .call) post)
+    (hstack : pre.stack = gas :: callee :: value :: inputIndex :: inputSize :: outputIndex :: outputSize :: S)
+    (hstate : sevm.benvStat.rules.stateGas = none)
+    (hinput : inputSize.toNat < 2 ^ 160) :
+    post.returnData.length < 2 ^ 160 := by
+  obtain ⟨xl, filled, pc, step⟩ := hrun
+  exact call_step_returnData_length_lt_two_pow_160_of_input_size
+    filled step hstack hstate hinput
 
 end Jaune
