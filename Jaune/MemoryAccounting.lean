@@ -2679,6 +2679,19 @@ private theorem output_length_lt_two_pow_160 {n grant : Nat}
   have hconstant : 2 ^ 256 ≤ calculateMemoryGasCost (2 ^ 160) := by decide
   omega
 
+/-- The fixed CALL stipend is too small to fund an output of length `2^160`,
+even when added to the largest word-sized requested gas grant. -/
+private theorem output_length_lt_two_pow_160_with_stipend {n grant : Nat}
+    (hcost : calculateMemoryGasCost n ≤ grant)
+    (hgrant : grant < 2 ^ 256 + gCallStipend) :
+    n < 2 ^ 160 := by
+  by_contra hn
+  have hn' : 2 ^ 160 ≤ n := Nat.le_of_not_gt hn
+  have hmono := calculateMemoryGasCost_mono hn'
+  have hconstant : 2 ^ 256 + gCallStipend ≤
+      calculateMemoryGasCost (2 ^ 160) := by decide
+  omega
+
 /-- A charged CALL input window is bounded by the parent's paid memory
 potential. This is the source of the identity precompile's reply bound. -/
 theorem charged_call_input_length_lt_two_pow_160
@@ -2997,6 +3010,55 @@ theorem zero_call_spawn_code_reply_bound
     exact ⟨hreturnData, haccount⟩
   · rw [hr] at hreturnData haccount
     exact ⟨hreturnData, haccount⟩
+
+/-- An entered code child of a word-sized CALL has a bounded full output on
+both raw channels, including the value-bearing stipend case. Settlement can
+only shorten that output, and either parent resume channel receives bounded
+return data. The recursive execution's memory potential supplies the bound;
+the caller's output window is not used as a substitute for the full reply. -/
+theorem call_spawn_code_reply_bound
+    {sevm : Sevm} {parent : Devm} (gas value : B256)
+    (gasLeft memoryCost extraGas inputIndex inputSize outputIndex outputSize : Nat)
+    {caller target codeAddress : Adr} {shouldTransferValue isStaticcall : Bool}
+    {code : ByteArray} {disablePrecompiles : Bool}
+    {frame : Frame} {resume : Resume} {childEvm : Evm} {raw : Execution}
+    (hspawn : genericCall.step sevm parent
+      (calculateMsgCallGas value.toNat gas.toNat gasLeft memoryCost extraGas
+        gCallStipend).2 value caller target codeAddress shouldTransferValue
+      isStaticcall inputIndex inputSize outputIndex outputSize code
+      disablePrecompiles = .spawn frame resume)
+    (henter : frame.enter = .run childEvm)
+    (hexec : Exec childEvm.pc childEvm.sta childEvm.dyna raw)
+    (hstate : sevm.benvStat.rules.stateGas = none) :
+    (fun result : Execution => match result with
+      | .ok post => post.output.length
+      | .error failure => failure.2.output.length) raw < 2 ^ 160 ∧
+      (∀ settled, frame.settle raw = .ok settled → settled.output.length < 2 ^ 160) ∧
+      match resume.run (frame.settle raw) with
+      | .ok post => post.returnData.length < 2 ^ 160
+      | .error failure => failure.2.returnData.length < 2 ^ 160 := by
+  have hstat := genericCall.step_spawn_stat hspawn
+  have hchildState : childEvm.sta.benvStat.rules.stateGas = none := by
+    rw [Frame.enter_run_benvStat henter, hstat]
+    exact hstate
+  have hcost : calculateMemoryGasCost (rawOutputLength raw) ≤ frame.inner.gas := by
+    cases raw <;> exact entered_code_output_cost henter hexec hchildState
+  have hframe := (genericCall.step_spawn_call hspawn).1
+  have hgrant := calculateMsgCallGas_word_child_lt_with_stipend value gas gasLeft
+    memoryCost extraGas
+  have hlength : rawOutputLength raw < 2 ^ 160 := by
+    apply output_length_lt_two_pow_160_with_stipend hcost
+    rw [hframe]
+    exact hgrant
+  have hsettled : ∀ settled, frame.settle raw = .ok settled →
+      settled.output.length < 2 ^ 160 := by
+    intro settled hs
+    exact Nat.lt_of_le_of_lt (frame_settle_output_length_le hs) hlength
+  obtain ⟨_, hrsm⟩ := genericCall.step_spawn_call hspawn
+  refine ⟨hlength, hsettled, ?_⟩
+  rw [hrsm]
+  exact call_resume_returnData_lt_two_pow_160 (parent.withReturnData [])
+    outputIndex outputSize (frame.settle raw) rfl hsettled
 
 /-- A successful native MODEXP reply has at most the modulus-header width.
 This uses the selected precompile execution, including its gas and length
