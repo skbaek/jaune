@@ -170,6 +170,28 @@ theorem genericCall.step_spawn_call {sevm : Sevm} {parent : Devm} {gas : Nat}
     rw [← h.1]
     exact ⟨rfl, h.2.symm⟩
 
+/-- The spawned CALL frame receives exactly the caller's selected input
+window, including the zero-filled tail of a short memory read. -/
+theorem genericCall.step_spawn_data {sevm : Sevm} {parent : Devm} {gas : Nat}
+    {value : B256} {caller target codeAddress : Adr}
+    {shouldTransferValue isStaticcall : Bool}
+    {inputIndex inputSize outputIndex outputSize : Nat}
+    {code : ByteArray} {disablePrecompiles : Bool} {frame : Frame} {resume : Resume}
+    (h : genericCall.step sevm parent gas value caller target codeAddress
+      shouldTransferValue isStaticcall inputIndex inputSize outputIndex outputSize
+      code disablePrecompiles = .spawn frame resume) :
+    frame.inner.data =
+      Jaune.Array.sliceD (parent.withReturnData []).memory.data inputIndex inputSize 0 := by
+  unfold genericCall.step at h
+  split at h
+  · have hx := XStep.ofExcept_spawn h
+    obtain ⟨_, _, hx⟩ := Except.bind_eq_ok hx
+    simp only [Pure.pure, Except.pure, Except.ok.injEq] at hx
+    nomatch hx
+  · simp only [XStep.spawn.injEq] at h
+    rw [← h.1]
+    rfl
+
 /-- One genuine zero-value CALL spawn/run/settle/resume accounting clause.
 The successful charge prepays the same input/output windows that the actual
 spawn retains. The same child derivation supplies its settlement gas bound;
@@ -271,6 +293,20 @@ private theorem memory_slice_length (xs : Array UInt8) (index size : Nat)
       rw [ih, List.length_cons]
       omega
   simpa only [Array.sliceD, List.length_nil, Nat.zero_add] using aux [] size
+
+/-- The real spawned CALL input has the requested length, even when reading
+beyond the caller's materialized memory. -/
+theorem genericCall.step_spawn_data_length {sevm : Sevm} {parent : Devm} {gas : Nat}
+    {value : B256} {caller target codeAddress : Adr}
+    {shouldTransferValue isStaticcall : Bool}
+    {inputIndex inputSize outputIndex outputSize : Nat}
+    {code : ByteArray} {disablePrecompiles : Bool} {frame : Frame} {resume : Resume}
+    (h : genericCall.step sevm parent gas value caller target codeAddress
+      shouldTransferValue isStaticcall inputIndex inputSize outputIndex outputSize
+      code disablePrecompiles = .spawn frame resume) :
+    frame.inner.data.length = inputSize := by
+  rw [genericCall.step_spawn_data h]
+  exact memory_slice_length _ _ _ _
 
 private theorem pop_memory_output (pre : Devm) :
     match pre.pop with
@@ -2880,5 +2916,121 @@ theorem zero_call_spawn_code_reply_bound
     exact ⟨hreturnData, haccount⟩
   · rw [hr] at hreturnData haccount
     exact ⟨hreturnData, haccount⟩
+
+/-- A successful native MODEXP reply has at most the modulus-header width.
+This uses the selected precompile execution, including its gas and length
+guards; it does not assume a caller-supplied output budget. -/
+theorem executeModexp_ok_output_length_le {evm : Evm} {cost : Nat} {output : Bytes}
+    (h : executeModexp evm = .ok cost output) :
+    output.length ≤ Bytes.sliceToNat evm.sta.data 64 32 := by
+  unfold executeModexp at h
+  dsimp only at h
+  split at h
+  · cases h
+  · unfold PrecompResult.chargeGas at h
+    split at h
+    · split at h
+      · cases h
+        exact Nat.zero_le _
+      · split at h
+        · cases h
+          simp only [List.length_replicate]
+          exact Nat.le_refl _
+        · cases h
+          simp only [Bytes.pack, List.length_takeRightD]
+          exact Nat.le_refl _
+    · cases h
+
+/-- The actual MODEXP precompile execution preserves the header-derived reply
+bound on its successful EVM result. -/
+theorem executePrecomp_modexp_ok_output_length_le {evm : Evm} {post : Devm}
+    (h : executePrecomp evm 5 = .ok post) :
+    post.output.length ≤ Bytes.sliceToNat evm.sta.data 64 32 := by
+  change applyPrecompResult evm (executeModexp evm) = .ok post at h
+  unfold applyPrecompResult at h
+  rcases hx : executeModexp evm with ⟨reason, charged⟩ | ⟨charged, bytes⟩
+  · simp only [hx] at h
+    cases h
+  · simp only [hx, Except.ok.injEq] at h
+    subst post
+    rw [Devm.withOutput_output]
+    exact executeModexp_ok_output_length_le hx
+
+/-- A successful MODEXP executes the selected fork's price and passes the
+actual gas guard, including when its output is empty. -/
+theorem executeModexp_ok_selected_cost {evm : Evm} {cost : Nat} {output : Bytes}
+    (h : executeModexp evm = .ok cost output) :
+    cost = modexpGasCost evm.sta.benvStat.rules.modexp
+      (Bytes.sliceToNat evm.sta.data 0 32)
+      (Bytes.sliceToNat evm.sta.data 64 32)
+      (Bytes.sliceToNat evm.sta.data 32 32)
+      (Bytes.sliceToNat evm.sta.data
+        (96 + Bytes.sliceToNat evm.sta.data 0 32)
+        (min 32 (Bytes.sliceToNat evm.sta.data 32 32))) ∧
+      cost ≤ evm.dyna.gasLeft := by
+  unfold executeModexp at h
+  dsimp only at h
+  split at h
+  · cases h
+  · unfold PrecompResult.chargeGas at h
+    split at h
+    · split at h
+      · cases h
+        exact ⟨rfl, ‹_›⟩
+      · split at h
+        · cases h
+          exact ⟨rfl, ‹_›⟩
+        · cases h
+          exact ⟨rfl, ‹_›⟩
+    · cases h
+
+/-- Expose the priced MODEXP branch through the actual precompile selector. -/
+theorem executePrecomp_modexp_ok_selected_cost {evm : Evm} {post : Devm}
+    (h : executePrecomp evm 5 = .ok post) :
+    ∃ cost, executeModexp evm = .ok cost post.output ∧
+      cost = modexpGasCost evm.sta.benvStat.rules.modexp
+        (Bytes.sliceToNat evm.sta.data 0 32)
+        (Bytes.sliceToNat evm.sta.data 64 32)
+        (Bytes.sliceToNat evm.sta.data 32 32)
+        (Bytes.sliceToNat evm.sta.data
+          (96 + Bytes.sliceToNat evm.sta.data 0 32)
+          (min 32 (Bytes.sliceToNat evm.sta.data 32 32))) ∧
+      cost ≤ evm.dyna.gasLeft := by
+  change applyPrecompResult evm (executeModexp evm) = .ok post at h
+  unfold applyPrecompResult at h
+  rcases hx : executeModexp evm with ⟨reason, charged⟩ | ⟨charged, bytes⟩
+  · simp only [hx] at h
+    cases h
+  · simp only [hx, Except.ok.injEq] at h
+    subst post
+    rw [Devm.withOutput_output]
+    exact ⟨charged, rfl, executeModexp_ok_selected_cost hx⟩
+
+/-- An initialized identity reply is exactly the paid input. -/
+theorem executeId_ok_output_and_cost {evm : Evm} {cost : Nat} {output : Bytes}
+    (h : executeId evm = .ok cost output) :
+    output = evm.sta.data ∧
+      cost = 15 + 3 * ceilDiv evm.sta.data.length 32 ∧
+      cost ≤ evm.dyna.gasLeft := by
+  unfold executeId PrecompResult.chargeGas at h
+  dsimp only at h
+  split at h
+  · cases h
+    exact ⟨rfl, rfl, ‹_›⟩
+  · cases h
+
+/-- The selected identity precompile returns the initialized input bytes. -/
+theorem executePrecomp_id_ok_output {evm : Evm} {post : Devm}
+    (h : executePrecomp evm 4 = .ok post) :
+    post.output = evm.sta.data := by
+  change applyPrecompResult evm (executeId evm) = .ok post at h
+  unfold applyPrecompResult at h
+  rcases hx : executeId evm with ⟨reason, charged⟩ | ⟨charged, bytes⟩
+  · simp only [hx] at h
+    cases h
+  · simp only [hx, Except.ok.injEq] at h
+    subst post
+    rw [Devm.withOutput_output]
+    exact (executeId_ok_output_and_cost hx).1
 
 end Jaune
