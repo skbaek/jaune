@@ -20,6 +20,28 @@ theorem calculateMsgCallGas_zero_word_child_lt (gas : B256)
     (calculateMsgCallGas_zero_child_le gas.toNat gasLeft memoryCost extraGas cs)
     (B256.toNat_lt gas)
 
+/-- The CALL stipend adds at most its fixed amount to a word-sized requested
+grant, including the underfunded branch of the gas calculator. -/
+theorem calculateMsgCallGas_word_child_lt_with_stipend (value gas : B256)
+    (gasLeft memoryCost extraGas : Nat) :
+    (calculateMsgCallGas value.toNat gas.toNat gasLeft memoryCost extraGas
+      gCallStipend).2 < 2 ^ 256 + gCallStipend := by
+  have hg := B256.toNat_lt gas
+  unfold calculateMsgCallGas
+  by_cases hv : value.toNat = 0
+  · simp only [hv, ite_true, Nat.add_zero]
+    split
+    · omega
+    · have hm := Nat.min_le_left gas.toNat
+        (except64th (gasLeft - memoryCost - extraGas))
+      omega
+  · simp only [hv, ite_false]
+    split
+    · omega
+    · have hm := Nat.min_le_left gas.toNat
+        (except64th (gasLeft - memoryCost - extraGas))
+      omega
+
 private theorem ceilDiv32_le {a b : Nat} (h : a ≤ b) :
     ceilDiv a 32 ≤ ceilDiv b 32 := by
   simp only [ceilDiv]
@@ -2841,6 +2863,38 @@ private theorem call_run_returnData (parent : Devm) (outputIndex outputSize : Na
           rw [hp] at hf
           exact hf
 
+private theorem call_resume_returnData_lt_two_pow_160
+    (parent : Devm) (outputIndex outputSize : Nat)
+    (r : Except (EvmError × State × AdrSet × Tra) Devm)
+    (hparent : parent.returnData = [])
+    (houtput : ∀ child, r = .ok child → child.output.length < 2 ^ 160) :
+    match (Resume.call parent outputIndex outputSize).run r with
+    | .ok post => post.returnData.length < 2 ^ 160
+    | .error failure => failure.2.returnData.length < 2 ^ 160 := by
+  have hf := call_run_returnData parent outputIndex outputSize r
+  cases r with
+  | error err =>
+    rcases hr : (Resume.call parent outputIndex outputSize).run (.error err) with failure | post
+    · rw [hr] at hf
+      dsimp only at hf ⊢
+      rw [hf, hparent]
+      decide
+    · rw [hr] at hf
+      dsimp only at hf ⊢
+      rw [hf, hparent]
+      decide
+  | ok child =>
+    have hl := houtput child rfl
+    rcases hr : (Resume.call parent outputIndex outputSize).run (.ok child) with failure | post
+    · rw [hr] at hf
+      dsimp only at hf ⊢
+      rw [hf]
+      exact hl
+    · rw [hr] at hf
+      dsimp only at hf ⊢
+      rw [hf]
+      exact hl
+
 
 /-- The same initialized code child of an actual zero-value CALL has a paid
 full output and a natural reply length below (2^160). Settlement and both raw
@@ -3031,7 +3085,7 @@ within any 256-bit gas grant. -/
 theorem pragueModexpGasCost_large_modulus
     {baseLength modulusLength expLength expHead : Nat}
     (hmod : 2 ^ 160 ≤ modulusLength) :
-    2 ^ 256 ≤ modexpGasCost pragueModexpRules
+    2 ^ 256 + gCallStipend ≤ modexpGasCost pragueModexpRules
       baseLength modulusLength expLength expHead := by
   let words := ceilDiv (max baseLength modulusLength) 8
   have hw : 2 ^ 157 ≤ words :=
@@ -3044,8 +3098,8 @@ theorem pragueModexpGasCost_large_modulus
   have hmul : words ^ 2 ≤ words ^ 2 *
       modexpIterations pragueModexpRules expLength expHead := by
     simpa only [mul_one] using Nat.mul_le_mul_left (words ^ 2) hiter
-  have hbig : 3 * 2 ^ 256 ≤ (2 ^ 157) ^ 2 := by decide
-  have hcost : 2 ^ 256 ≤
+  have hbig : 3 * (2 ^ 256 + gCallStipend) ≤ (2 ^ 157) ^ 2 := by decide
+  have hcost : 2 ^ 256 + gCallStipend ≤
       (words ^ 2 * modexpIterations pragueModexpRules expLength expHead) / 3 := by
     omega
   simp only [modexpGasCost, modexpComplexity, pragueModexpRules, Nat.one_mul]
@@ -3085,7 +3139,7 @@ the strict size needed by CALL return-data accounting on every selected fork. -/
 theorem executeModexp_ok_output_length_lt_two_pow_160
     {evm : Evm} {cost : Nat} {output : Bytes}
     (h : executeModexp evm = .ok cost output)
-    (hgas : evm.dyna.gasLeft < 2 ^ 256) :
+    (hgas : evm.dyna.gasLeft < 2 ^ 256 + gCallStipend) :
     output.length < 2 ^ 160 := by
   have hlen := executeModexp_ok_output_length_le h
   have hprice := executeModexp_ok_selected_cost h
@@ -3115,7 +3169,7 @@ actual guarded and charged native execution. -/
 theorem executePrecomp_modexp_ok_output_length_lt_two_pow_160
     {evm : Evm} {post : Devm}
     (h : executePrecomp evm 5 = .ok post)
-    (hgas : evm.dyna.gasLeft < 2 ^ 256) :
+    (hgas : evm.dyna.gasLeft < 2 ^ 256 + gCallStipend) :
     post.output.length < 2 ^ 160 := by
   obtain ⟨cost, hmodexp, _, _⟩ := executePrecomp_modexp_ok_selected_cost h
   exact executeModexp_ok_output_length_lt_two_pow_160 hmodexp hgas
@@ -3171,7 +3225,7 @@ theorem zero_call_spawn_modexp_reply_bound
     change frame.inner.gas < 2 ^ 256
     rw [hf]
     exact hgrant
-  exact executePrecomp_modexp_ok_output_length_lt_two_pow_160 hmodexp hgas
+  exact executePrecomp_modexp_ok_output_length_lt_two_pow_160 hmodexp (by omega)
 
 /-- An identity reply from the real spawned zero-value CALL frame is bounded
 by the caller's paid input memory, even if the precompile returns all input. -/
@@ -3433,7 +3487,7 @@ theorem precompileRun_ok_output_length_lt_two_pow_160
     {evm : Evm} {adr : Adr} {cost : Nat} {output : Bytes}
     (h : precompileRun evm adr = .ok cost output)
     (hdata : evm.sta.data.length < 2 ^ 160)
-    (hgas : evm.dyna.gasLeft < 2 ^ 256) :
+    (hgas : evm.dyna.gasLeft < 2 ^ 256 + gCallStipend) :
     output.length < 2 ^ 160 := by
   unfold precompileRun at h
   split at h
@@ -3464,7 +3518,7 @@ theorem executePrecomp_ok_output_length_lt_two_pow_160
     {evm : Evm} {adr : Adr} {post : Devm}
     (h : executePrecomp evm adr = .ok post)
     (hdata : evm.sta.data.length < 2 ^ 160)
-    (hgas : evm.dyna.gasLeft < 2 ^ 256) :
+    (hgas : evm.dyna.gasLeft < 2 ^ 256 + gCallStipend) :
     post.output.length < 2 ^ 160 := by
   unfold executePrecomp applyPrecompResult at h
   rcases hrun : precompileRun evm adr with ⟨reason, charged⟩ | ⟨charged, bytes⟩
@@ -3508,6 +3562,193 @@ theorem zero_call_spawn_native_reply_bound
     rw [(genericCall.step_spawn_call hspawn).1]
     exact calculateMsgCallGas_zero_word_child_lt gas before.gasLeft
       (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)]) extraGas cs
-  exact executePrecomp_ok_output_length_lt_two_pow_160 hnative hdata hgas
+  exact executePrecomp_ok_output_length_lt_two_pow_160 hnative hdata (by omega)
+
+/-- The executable frame entry dispatch itself preserves the native output
+bound on a successful precompile branch. -/
+theorem executeCode_enter_native_ok_output_length_lt_two_pow_160
+    {msg : Msg} {post : Devm}
+    (henter : executeCode.enter msg = .inr (.ok post))
+    (hdata : msg.data.length < 2 ^ 160)
+    (hgas : msg.gas < 2 ^ 256 + gCallStipend) :
+    post.output.length < 2 ^ 160 := by
+  unfold executeCode.enter at henter
+  cases hcode : msg.codeAddress with
+  | none =>
+    simp only [hcode] at henter
+    cases henter
+  | some adr =>
+    simp only [hcode] at henter
+    split at henter
+    · simp only [Sum.inr.injEq] at henter
+      apply executePrecomp_ok_output_length_lt_two_pow_160 henter
+      · exact hdata
+      · exact hgas
+    · cases henter
+
+/-- A native error carries the empty initialized output through the real
+dispatch, regardless of the selected precompile's rejection reason. -/
+theorem executeCode_enter_native_error_output_nil
+    {msg : Msg} {failure : EvmError × Devm}
+    (henter : executeCode.enter msg = .inr (.error failure)) :
+    failure.2.output = [] := by
+  unfold executeCode.enter at henter
+  cases hcode : msg.codeAddress with
+  | none =>
+    simp only [hcode] at henter
+    cases henter
+  | some adr =>
+    simp only [hcode] at henter
+    split at henter
+    · simp only [Sum.inr.injEq] at henter
+      unfold executePrecomp applyPrecompResult at henter
+      rcases hrun : precompileRun (initEvm msg) adr with ⟨reason, charged⟩ | ⟨charged, bytes⟩
+      · simp only [hrun, Except.error.injEq] at henter
+        cases henter
+        rfl
+      · simp only [hrun] at henter
+        cases henter
+    · cases henter
+
+/-- A successful native branch of the actual zero-value CALL frame enters as
+a settled result, and its full raw reply satisfies the natural size bound. -/
+theorem zero_call_spawn_native_enter_success
+    {sevm : Sevm} {before charged : Devm}
+    (baseCost : Nat) (gas : B256)
+    (extraGas cs inputIndex inputSize outputIndex outputSize : Nat)
+    {caller target codeAddress : Adr} {shouldTransferValue isStaticcall : Bool}
+    {code : ByteArray} {disablePrecompiles : Bool}
+    {frame : Frame} {resume : Resume} {benv : Benv} {post : Devm}
+    (hcharge : chargeGas
+      (baseCost + before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
+      before = .ok charged)
+    (hspawn : genericCall.step sevm
+      (charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)])
+      (calculateMsgCallGas 0 gas.toNat before.gasLeft
+        (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
+        extraGas cs).2 0 caller target codeAddress shouldTransferValue isStaticcall
+      inputIndex inputSize outputIndex outputSize code disablePrecompiles =
+        .spawn frame resume)
+    (hpotential : before.gasMeasure + calculateMemoryGasCost before.memory.size <
+      2 ^ 256)
+    (htransfer : frame.inner.benvAfterTransfer = .ok benv)
+    (hdispatch : executeCode.enter (frame.inner.withBenv benv) = .inr (.ok post)) :
+    frame.enter = .done (frame.settle (.ok post)) ∧
+      post.output.length < 2 ^ 160 ∧
+      match resume.run (frame.settle (.ok post)) with
+      | .ok resumed => resumed.returnData.length < 2 ^ 160
+      | .error failure => failure.2.returnData.length < 2 ^ 160 := by
+  have hdata : (frame.inner.withBenv benv).data.length < 2 ^ 160 := by
+    change frame.inner.data.length < 2 ^ 160
+    rw [genericCall.step_spawn_data_length hspawn]
+    exact charged_call_input_length_lt_two_pow_160
+      baseCost inputIndex inputSize outputIndex outputSize hcharge hpotential
+  have hgas : (frame.inner.withBenv benv).gas < 2 ^ 256 := by
+    change frame.inner.gas < 2 ^ 256
+    rw [(genericCall.step_spawn_call hspawn).1]
+    exact calculateMsgCallGas_zero_word_child_lt gas before.gasLeft
+      (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)]) extraGas cs
+  have hraw := executeCode_enter_native_ok_output_length_lt_two_pow_160
+    hdispatch hdata (by omega)
+  have hsettled : ∀ settled, frame.settle (.ok post) = .ok settled →
+      settled.output.length < 2 ^ 160 := by
+    intro settled hs
+    exact Nat.lt_of_le_of_lt (frame_settle_output_length_le hs) hraw
+  obtain ⟨_, hrsm⟩ := genericCall.step_spawn_call hspawn
+  refine ⟨?_, hraw, ?_⟩
+  · simp only [Frame.enter, htransfer, hdispatch]
+  · rw [hrsm]
+    exact call_resume_returnData_lt_two_pow_160
+      ((charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)]).withReturnData [])
+      outputIndex outputSize (frame.settle (.ok post)) rfl hsettled
+
+/-- The same initialized native-success path also covers value-bearing CALL:
+its bounded requested gas plus the real fixed stipend still cannot pay for a
+MODEXP result of length 2^160. The charged input controls identity replies. -/
+theorem call_spawn_native_enter_success
+    {sevm : Sevm} {before charged : Devm}
+    (baseCost : Nat) (gas value : B256)
+    (extraGas inputIndex inputSize outputIndex outputSize : Nat)
+    {caller target codeAddress : Adr} {shouldTransferValue isStaticcall : Bool}
+    {code : ByteArray} {disablePrecompiles : Bool}
+    {frame : Frame} {resume : Resume} {benv : Benv} {post : Devm}
+    (hcharge : chargeGas
+      (baseCost + before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
+      before = .ok charged)
+    (hspawn : genericCall.step sevm
+      (charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)])
+      (calculateMsgCallGas value.toNat gas.toNat before.gasLeft
+        (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
+        extraGas gCallStipend).2 value caller target codeAddress
+      shouldTransferValue isStaticcall inputIndex inputSize outputIndex outputSize
+      code disablePrecompiles = .spawn frame resume)
+    (hpotential : before.gasMeasure + calculateMemoryGasCost before.memory.size <
+      2 ^ 256)
+    (htransfer : frame.inner.benvAfterTransfer = .ok benv)
+    (hdispatch : executeCode.enter (frame.inner.withBenv benv) = .inr (.ok post)) :
+    frame.enter = .done (frame.settle (.ok post)) ∧
+      post.output.length < 2 ^ 160 ∧
+      match resume.run (frame.settle (.ok post)) with
+      | .ok resumed => resumed.returnData.length < 2 ^ 160
+      | .error failure => failure.2.returnData.length < 2 ^ 160 := by
+  have hdata : (frame.inner.withBenv benv).data.length < 2 ^ 160 := by
+    change frame.inner.data.length < 2 ^ 160
+    rw [genericCall.step_spawn_data_length hspawn]
+    exact charged_call_input_length_lt_two_pow_160
+      baseCost inputIndex inputSize outputIndex outputSize hcharge hpotential
+  have hgas : (frame.inner.withBenv benv).gas < 2 ^ 256 + gCallStipend := by
+    change frame.inner.gas < 2 ^ 256 + gCallStipend
+    rw [(genericCall.step_spawn_call hspawn).1]
+    exact calculateMsgCallGas_word_child_lt_with_stipend value gas before.gasLeft
+      (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)]) extraGas
+  have hraw := executeCode_enter_native_ok_output_length_lt_two_pow_160
+    hdispatch hdata hgas
+  have hsettled : ∀ settled, frame.settle (.ok post) = .ok settled →
+      settled.output.length < 2 ^ 160 := by
+    intro settled hs
+    exact Nat.lt_of_le_of_lt (frame_settle_output_length_le hs) hraw
+  obtain ⟨_, hrsm⟩ := genericCall.step_spawn_call hspawn
+  refine ⟨?_, hraw, ?_⟩
+  · simp only [Frame.enter, htransfer, hdispatch]
+  · rw [hrsm]
+    exact call_resume_returnData_lt_two_pow_160
+      ((charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)]).withReturnData [])
+      outputIndex outputSize (frame.settle (.ok post)) rfl hsettled
+
+/-- A rejected native precompile starts with empty output. Even when its
+settlement fails or the parent's stack push fails, CALL return data stays
+strictly below the natural width. This clause also covers nonzero-value CALL. -/
+theorem call_spawn_native_enter_error
+    {sevm : Sevm} {parent : Devm} (grant : Nat) (value : B256)
+    (inputIndex inputSize outputIndex outputSize : Nat)
+    {caller target codeAddress : Adr} {shouldTransferValue isStaticcall : Bool}
+    {code : ByteArray} {disablePrecompiles : Bool}
+    {frame : Frame} {resume : Resume} {benv : Benv}
+    {failure : EvmError × Devm}
+    (hspawn : genericCall.step sevm parent grant value caller target codeAddress
+      shouldTransferValue isStaticcall inputIndex inputSize outputIndex outputSize
+      code disablePrecompiles = .spawn frame resume)
+    (htransfer : frame.inner.benvAfterTransfer = .ok benv)
+    (hdispatch : executeCode.enter (frame.inner.withBenv benv) =
+      .inr (.error failure)) :
+    frame.enter = .done (frame.settle (.error failure)) ∧
+      match resume.run (frame.settle (.error failure)) with
+      | .ok resumed => resumed.returnData.length < 2 ^ 160
+      | .error e => e.2.returnData.length < 2 ^ 160 := by
+  have hraw := executeCode_enter_native_error_output_nil hdispatch
+  have hsettled : ∀ settled, frame.settle (.error failure) = .ok settled →
+      settled.output.length < 2 ^ 160 := by
+    intro settled hs
+    have hle := frame_settle_output_length_le hs
+    change settled.output.length ≤ failure.2.output.length at hle
+    rw [hraw] at hle
+    simp only [List.length_nil] at hle
+    omega
+  obtain ⟨_, hrsm⟩ := genericCall.step_spawn_call hspawn
+  constructor
+  · simp only [Frame.enter, htransfer, hdispatch]
+  · rw [hrsm]
+    exact call_resume_returnData_lt_two_pow_160 (parent.withReturnData [])
+      outputIndex outputSize (frame.settle (.error failure)) rfl hsettled
 
 end Jaune
