@@ -452,4 +452,119 @@ theorem Linst.run_memory_accounting_output (sevm : Sevm) (pre : Devm) (l : Linst
         rw [hfields.1]
         exact Nat.add_le_add_right hgas _
 
+private theorem push_memory_output (pre : Devm) (word : B256) :
+    match pre.push word with
+    | .error failure => failure.2.memory = pre.memory ∧ failure.2.output = pre.output
+    | .ok post => post.memory = pre.memory ∧ post.output = pre.output := by
+  rw [Devm.push_def]
+  by_cases hs : pre.stack.length < 1024
+  · simp only [Except.assert, hs, ite_true, bind, Except.bind]
+    exact ⟨rfl, rfl⟩
+  · simp only [Except.assert, hs, ite_false, bind, Except.bind]
+    exact ⟨True.intro, True.intro⟩
+
+private theorem call_run_memory_output (parent : Devm) (outputIndex outputSize : Nat)
+    (r : Except (EvmError × State × AdrSet × Tra) Devm) :
+    match (Resume.call parent outputIndex outputSize).run r with
+    | .error failure => failure.2.memory = parent.memory ∧ failure.2.output = parent.output
+    | .ok post => post.output = parent.output := by
+  cases r with
+  | error failure =>
+      rcases failure with ⟨err, state, created, tra⟩
+      exact ⟨rfl, rfl⟩
+  | ok child =>
+      by_cases he : child.error.isSome = true
+      · simp only [Resume.run, liftToExecution, bind, Except.bind, he, ite_true]
+        let incorporated := incorporateChildOnError parent child child.output
+        rcases hp : incorporated.push 0 with failure | pushed
+        · have hf := push_memory_output incorporated 0
+          rw [hp] at hf
+          dsimp only
+          exact ⟨hf.1, hf.2⟩
+        · have hf := push_memory_output incorporated 0
+          rw [hp] at hf
+          dsimp only
+          exact hf.2
+      · simp only [Resume.run, liftToExecution, bind, Except.bind, he]
+        let incorporated := incorporateChildOnSuccess parent child child.output
+        rcases hp : incorporated.push 1 with failure | pushed
+        · have hf := push_memory_output incorporated 1
+          rw [hp] at hf
+          dsimp only
+          exact ⟨hf.1, hf.2⟩
+        · have hf := push_memory_output incorporated 1
+          rw [hp] at hf
+          dsimp only
+          exact hf.2
+
+/-- The same actual zero-value CALL charge/spawn/child derivation accounts for
+both raw resume outcomes, with enclosing output inherited from the caller. -/
+theorem zero_call_spawn_resume_raw_accounting
+    {sevm : Sevm} {before charged : Devm} (gas : B256)
+    (extraGas cs inputIndex inputSize outputIndex outputSize : Nat)
+    {caller target codeAddress : Adr} {shouldTransferValue isStaticcall : Bool}
+    {code : ByteArray} {disablePrecompiles : Bool}
+    {frame : Frame} {resume : Resume} {childEvm : Evm} {raw : Execution}
+    (hcharge : chargeGas
+      ((calculateMsgCallGas 0 gas.toNat before.gasLeft
+        (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
+        extraGas cs).1 +
+        before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
+      before = .ok charged)
+    (hspawn : genericCall.step sevm
+      (charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)])
+      (calculateMsgCallGas 0 gas.toNat before.gasLeft
+        (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
+        extraGas cs).2 0 caller target codeAddress shouldTransferValue isStaticcall
+      inputIndex inputSize outputIndex outputSize code disablePrecompiles =
+        .spawn frame resume)
+    (henter : frame.enter = .run childEvm)
+    (hexec : Exec childEvm.pc childEvm.sta childEvm.dyna raw) :
+    let accounted := fun post : Devm =>
+      post.gasMeasure + extraGas + calculateMemoryGasCost post.memory.size ≤
+          before.gasMeasure + calculateMemoryGasCost before.memory.size ∧
+        post.output = before.output
+    match resume.run (frame.settle raw) with
+    | .ok post => accounted post
+    | .error failure => accounted failure.2 := by
+  let pairs := [(inputIndex, inputSize), (outputIndex, outputSize)]
+  let costs := calculateMsgCallGas 0 gas.toNat before.gasLeft (before.extCost pairs) extraGas cs
+  let parent := (charged.memExtends pairs).withReturnData []
+  obtain ⟨hf, hrsm⟩ := genericCall.step_spawn_call hspawn
+  change frame.inner.gas = costs.2 at hf
+  change resume = .call parent outputIndex outputSize at hrsm
+  have hfields := charge_memory_output (costs.1 + before.extCost pairs) before
+  rw [hcharge] at hfields
+  have hparentOutput : parent.output = before.output := hfields.2
+  have ho := call_run_memory_output parent outputIndex outputSize (frame.settle raw)
+  rw [← hrsm] at ho
+  rcases hresume : resume.run (frame.settle raw) with failure | post
+  · rw [hresume] at ho
+    dsimp only at ho ⊢
+    refine ⟨?_, ho.2.trans hparentOutput⟩
+    have hs := hexec.settledGasLe
+    rw [Frame.enter_run_gasMeasure henter, hf] at hs
+    have hg := Resume.run_gasLe (rsm := resume) (r := frame.settle raw)
+      (m := costs.2) (fun d hd => Frame.settle_gasLe hs hd)
+    rw [hresume, hrsm] at hg
+    change failure.2.gasMeasure ≤ parent.gasMeasure + costs.2 at hg
+    have hc : costs.1 = costs.2 + extraGas :=
+      calculateMsgCallGas_zero_value_cost _ _ _ _ _
+    have hcharge' : chargeGas ((costs.2 + extraGas) + before.extCost pairs) before =
+        .ok charged := by
+      rw [← hc]
+      exact hcharge
+    have haccount := charged_memExtends_accounting pairs (costs.2 + extraGas) hcharge'
+    change parent.gasMeasure + (costs.2 + extraGas) +
+      calculateMemoryGasCost parent.memory.size =
+        before.gasMeasure + calculateMemoryGasCost before.memory.size at haccount
+    rw [ho.1]
+    omega
+  · rw [hresume] at ho
+    dsimp only at ho ⊢
+    obtain ⟨child, hsettle, hchild, hmem, hsize, haccount⟩ :=
+      zero_call_spawn_resume_accounting gas extraGas cs inputIndex inputSize outputIndex
+        outputSize hcharge hspawn henter hexec hresume
+    exact ⟨haccount, ho.trans hparentOutput⟩
+
 end Jaune
