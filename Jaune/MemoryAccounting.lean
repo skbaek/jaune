@@ -259,4 +259,197 @@ theorem zero_call_spawn_resume_accounting
   rw [hmemsize]
   omega
 
+private theorem memory_slice_length (xs : Array UInt8) (index size : Nat)
+    (defaultByte : UInt8) : (Array.sliceD xs index size defaultByte).length = size := by
+  have aux (acc : List UInt8) (n : Nat) :
+      (Array.sliceD.aux xs acc index n defaultByte).length = acc.length + n := by
+    induction n generalizing acc with
+    | zero => rfl
+    | succ n ih =>
+      change (Array.sliceD.aux xs (xs.getD (index + n) defaultByte :: acc)
+        index n defaultByte).length = _
+      rw [ih, List.length_cons]
+      omega
+  simpa only [Array.sliceD, List.length_nil, Nat.zero_add] using aux [] size
+
+private theorem pop_memory_output (pre : Devm) :
+    match pre.pop with
+    | .error failure => failure.2.memory = pre.memory ∧ failure.2.output = pre.output
+    | .ok result => result.2.memory = pre.memory ∧ result.2.output = pre.output := by
+  rw [Devm.pop_def]
+  cases pre.stack <;> exact ⟨rfl, rfl⟩
+
+private theorem charge_memory_output (cost : Nat) (pre : Devm) :
+    match chargeGas cost pre with
+    | .error failure => failure.2.memory = pre.memory ∧ failure.2.output = pre.output
+    | .ok post => post.memory = pre.memory ∧ post.output = pre.output := by
+  rw [chargeGas_def]
+  cases safeSub pre.gasLeft cost <;> exact ⟨rfl, rfl⟩
+
+private theorem charged_read_accounting {pre charged : Devm} (index size : Nat)
+    (hcharge : chargeGas (pre.extCost [(index, size)]) pre = .ok charged) :
+    let post := (charged.memRead index size).2.withOutput (charged.memRead index size).1
+    post.gasMeasure + calculateMemoryGasCost post.memory.size =
+        pre.gasMeasure + calculateMemoryGasCost pre.memory.size ∧
+      calculateMemoryGasCost post.output.length ≤
+        pre.gasMeasure + calculateMemoryGasCost pre.memory.size := by
+  have hc := charged_memExtends_accounting [(index, size)] 0
+    (by simpa only [Nat.zero_add] using hcharge)
+  let post := (charged.memRead index size).2.withOutput (charged.memRead index size).1
+  have heq : post.gasMeasure + calculateMemoryGasCost post.memory.size =
+      pre.gasMeasure + calculateMemoryGasCost pre.memory.size := by
+    have hs : (charged.memExtends [(index, size)]).memory.size = post.memory.size := rfl
+    have hg : post.gasMeasure = charged.gasMeasure := rfl
+    rw [Devm.memExtends_gasMeasure, Nat.add_zero, hs, ← hg] at hc
+    exact hc
+  have hlen : post.output.length = size := memory_slice_length charged.memory.data index size 0
+  have hsize : size ≤ post.memory.size := by
+    change size ≤ memExtSize charged.memory.size index size
+    by_cases hz : size = 0
+    · rw [hz]
+      exact Nat.zero_le _
+    · have hw := memExtSize_access_le charged.memory.size index size hz
+      omega
+  have hcost := calculateMemoryGasCost_mono hsize
+  refine ⟨heq, ?_⟩
+  rw [hlen]
+  omega
+
+/-- Terminal instructions preserve the charged memory/gas potential on both
+raw outcomes; enclosing output is inherited or produced by a charged read. -/
+theorem Linst.run_memory_accounting_output (sevm : Sevm) (pre : Devm) (l : Linst)
+    (hstate : sevm.benvStat.rules.stateGas = none) :
+    let initial := pre.gasMeasure + calculateMemoryGasCost pre.memory.size
+    let accounted := fun post : Devm =>
+      post.gasMeasure + calculateMemoryGasCost post.memory.size ≤ initial ∧
+        (post.output = pre.output ∨
+          calculateMemoryGasCost post.output.length ≤ initial)
+    match Linst.run sevm pre l with
+    | .ok post => accounted post
+    | .error failure => accounted failure.2 := by
+  have hgas := Linst.run_gasLe sevm pre l
+  cases l with
+  | stop => exact ⟨Nat.le_refl _, Or.inl rfl⟩
+  | return_ | revert =>
+      simp only [Linst.run, Devm.popToNat_def, Bind.bind, Except.bind,
+        Functor.mapRev, Functor.map, Except.map, Prod.mapFst, Prod.map] at hgas ⊢
+      rcases hp1 : pre.pop with failure | ⟨index, d1⟩
+      · have hf := pop_memory_output pre
+        rw [hp1] at hf
+        simp only [hp1, Execution.gasMeasure_error] at hgas
+        dsimp only [id_eq]
+        refine ⟨?_, Or.inl hf.2⟩
+        rw [hf.1]
+        exact Nat.add_le_add_right hgas _
+      · have h1 := pop_memory_output pre
+        rw [hp1] at h1
+        simp only [hp1, id_eq] at hgas
+        dsimp only [id_eq]
+        rcases hp2 : d1.pop with failure | ⟨size, d2⟩
+        · have hf := pop_memory_output d1
+          rw [hp2] at hf
+          simp only [hp2, Execution.gasMeasure_error] at hgas
+          dsimp only [id_eq]
+          refine ⟨?_, Or.inl (hf.2.trans h1.2)⟩
+          rw [hf.1, h1.1]
+          exact Nat.add_le_add_right hgas _
+        · have h2 := pop_memory_output d1
+          rw [hp2] at h2
+          have hg1 := Devm.pop_gasMeasure hp1
+          have hg2 := Devm.pop_gasMeasure hp2
+          simp only [hp2] at hgas
+          dsimp only [id_eq]
+          rcases hc : chargeGas (d2.extCost [(index.toNat, size.toNat)]) d2 with failure | charged
+          · have hf := charge_memory_output (d2.extCost [(index.toNat, size.toNat)]) d2
+            rw [hc] at hf
+            simp only [hc, Execution.gasMeasure_error] at hgas
+            dsimp only
+            refine ⟨?_, Or.inl (hf.2.trans (h2.2.trans h1.2))⟩
+            rw [hf.1, h2.1, h1.1]
+            exact Nat.add_le_add_right hgas _
+          · have hb := charged_read_accounting index.toNat size.toNat hc
+            rw [hg2, hg1, h2.1, h1.1] at hb
+            dsimp only
+            exact ⟨Nat.le_of_eq hb.1, Or.inr hb.2⟩
+  | selfdestruct =>
+      have hf : ∀ result : Except (EvmError × Devm) Devm,
+          Linst.run sevm pre .selfdestruct = result →
+            (match result with
+            | .ok post => post.memory = pre.memory ∧ post.output = pre.output
+            | .error failure => failure.2.memory = pre.memory ∧ failure.2.output = pre.output) := by
+        intro result hrun
+        clear hgas
+        cases hs : pre.stack
+        all_goals
+          simp only [Linst.run, hstate, Devm.popToAdr_def, Devm.pop_def, hs,
+            Bind.bind, Except.bind, Functor.mapRev, Functor.map, Except.map,
+            Prod.mapFst, Prod.map, id_eq] at hrun
+        · cases hrun
+          exact ⟨rfl, rfl⟩
+        · rename_i head tail
+          let popped := pre.setMach {pre.mach with stack := tail}
+          let read := (popped.balReadAccount sevm.benvStat.rules head.toAdr).balReadAccount
+            sevm.benvStat.rules sevm.currentTarget
+          let donorBal := (read.getAcct sevm.currentTarget).bal
+          let plan : Devm × Nat :=
+            if head.toAdr ∉ read.accessedAddresses then
+              (addAccessedAddress read head.toAdr,
+                gasSelfDestruct + sevm.benvStat.rules.gas.coldAccountAccess)
+            else (read, gasSelfDestruct)
+          let cost := if (plan.1.getAcct head.toAdr).Empty ∧ donorBal ≠ 0 then
+              plan.2 + gasSelfDestructNewAccount else plan.2
+          have hw : plan.1.memory = pre.memory ∧ plan.1.output = pre.output := by
+            dsimp only [plan]
+            split <;> constructor
+            all_goals
+              dsimp only [read, popped, Devm.balReadAccount]
+              repeat' first | rfl | split
+          change (do
+            let charged ← chargeGas cost plan.1
+            assertDynamic sevm charged
+            let next ← Option.toExcept
+              (.internal (.invariant (.text "InsufficientBalanceError")), charged)
+              (charged.subBal sevm.currentTarget donorBal)
+            let next := next.addBal head.toAdr donorBal
+            if sevm.currentTarget ∈ next.createdAccounts then
+              .ok (addAccountToDelete (next.setBal sevm.currentTarget 0) sevm.currentTarget)
+            else .ok next) = result at hrun
+          rcases hc : chargeGas cost plan.1 with failure | charged
+          · have hf := charge_memory_output cost plan.1
+            rw [hc] at hf
+            simp only [hc, Bind.bind, Except.bind] at hrun
+            cases hrun
+            exact ⟨hf.1.trans hw.1, hf.2.trans hw.2⟩
+          · have hf := charge_memory_output cost plan.1
+            rw [hc] at hf
+            have hcharged : charged.memory = pre.memory ∧ charged.output = pre.output :=
+              ⟨hf.1.trans hw.1, hf.2.trans hw.2⟩
+            simp only [hc, Bind.bind, Except.bind] at hrun
+            by_cases hd : (!sevm.isStatic) = true
+            · simp only [assertDynamic, Except.assert, hd, ite_true, Bind.bind,
+                Devm.subBal, Option.bind, Option.toExcept] at hrun
+              rcases hb : charged.state.subBal sevm.currentTarget donorBal with _ | state
+              · simp only [hb] at hrun
+                cases hrun
+                exact hcharged
+              · simp only [hb] at hrun
+                split at hrun <;> cases hrun <;> exact hcharged
+            · simp only [assertDynamic, Except.assert, hd] at hrun
+              cases hrun
+              exact hcharged
+      rcases hx : Linst.run sevm pre .selfdestruct with failure | post
+      · have hfields := hf _ hx
+        rw [hx] at hgas
+        dsimp only at hfields hgas ⊢
+        refine ⟨?_, Or.inl hfields.2⟩
+        rw [hfields.1]
+        exact Nat.add_le_add_right hgas _
+      ·
+        have hfields := hf _ hx
+        rw [hx] at hgas
+        dsimp only at hfields hgas ⊢
+        refine ⟨?_, Or.inl hfields.2⟩
+        rw [hfields.1]
+        exact Nat.add_le_add_right hgas _
+
 end Jaune
