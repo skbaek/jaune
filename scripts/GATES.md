@@ -245,7 +245,7 @@ with the same executable inputs.
 | `scripts/check-legacy.sh --bls` | BLS12-381 + point-evaluation vs hand-authored target baseline. **Unique protection:** it is CI's only BLS12-381/point-evaluation conformance (the nightly job); the mainnet suites carry the same EIP-2537/EIP-4844 modules from a newer release but run only locally | 29 | 76.0 s at `--jobs auto` (3 jobs, 2026-09-21 catalogue); 171.9 s summed per-file, sequential, 2026-08-25 host-local report (pre-4.34) |
 | `scripts/check-ec.sh` | EC differential oracle (pinned, differential, identity cases) | — | 11.6 s including compiling its Lean checker (2026-09-21 catalogue) |
 | `scripts/check-vectors.sh` | generated vector conformance + controls + declared-case-count coverage | 53 files, 1,990 cases, 5 controls | ~7.8 min; **~1.5 min at `--jobs 10`**; 197.8 s at `--jobs auto` (2026-09-21 catalogue); `auto` is resource-dependent |
-| `scripts/check-elab.sh` | per-module elaboration time vs the ignored host-local `scripts/baseline-elab.txt` (auto-initialized on first run) | 35 modules, host-dependent | 87.8 s on the catalogue host (2026-09-24) |
+| `scripts/check-elab.sh` | per-module elaboration time vs the ignored host-local `scripts/baseline-elab.txt` (auto-initialized on first run) | 41 modules, discovered from the default targets | 170.898 s genesis on the readiness host (2026-10-11); no historical timing comparison |
 | `lake build && scripts/check.sh --no-build` in the Blanc checkout carrying the candidate pin | that a Jaune change has not broken its downstream consumer: Blanc's integration elaboration and its axiom audit. **The cheapest Blanc-side falsifier after a pin bump** — the rest of Blanc's set is catalogued in Blanc's own file | count-free here; use Blanc's gate summaries | current Blanc catalogue |
 
 ### Long sequentially — but mostly not long in parallel
@@ -321,6 +321,26 @@ reference-only. Read-only archive verification overlapped the mainnet run.
 | `check-memory-probe.sh` | both call families, 256 MiB budget | 0.461 | PASS |
 | `python3 -m unittest discover -s scripts/tests` | 219 tests | 5.059 | PASS |
 | `check-ec.sh` | differential oracle including checker compilation | 26.585 | PASS |
+
+Final semantic candidate `e8ce266` on the same host and containment, with one
+heavy gate at a time:
+
+| command | scale | wall seconds | raw verdict |
+|---|---|---:|---|
+| `check-mainnet.sh --suite full --no-build --jobs 6` | 4,968 files / 34,449 cases | 428.241 | PASS |
+| `check-mainnet.sh --lane amsterdam --suite amsterdam-full --no-build --jobs 6` | 3,354 files / 26,587 declared cases | 293.605 | RED, exactly four DP-1 findings |
+| `check-legacy.sh --full --no-build --jobs 6` | 2,983 files | 666.775 | RED, exactly five owner-approved classification changes |
+| `check-legacy.sh --bls --no-build --jobs 6` | 29 files | 66.158 | PASS |
+| `check-vectors.sh --jobs 6` | 53 files / 1,990 cases / 5 controls | 93.044 | PASS |
+| `check-elab.sh --no-build` after the owned warm full build | 41 modules | 170.898 | PASS, host-local baseline genesis only |
+
+The host's single compilation owner supplies elab's warm-build precondition
+through the owned wrapper immediately before the gate. No historical timing
+comparison is claimed. The actual first discovered module was `Examples.lean`:
+its cold first row was 5.560 s, and the required isolated repeat was 1.497 s.
+The repeat is the accepted warm observation; the generated baseline's initial
+row remains unchanged and must not be presented as a warm reference. No
+baseline was copied, hand-edited or rebased.
 
 ### The Amsterdam lane
 
