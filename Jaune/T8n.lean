@@ -850,6 +850,7 @@ def runBlockchain (benv : Benv) (txs : List (TxParse Tx)) (wds : List Withdrawal
       processUncheckedSystemTransaction benv historyStorageAddress lastHash.toBytes
   let bal := ({} : BalBuilder).incorporateSystem rules 0 benv.state stHistory
     (historyStorageAddress :: outHistory.accountReads.toList) outHistory.storageReads.toList
+    outHistory.storageWrites.toList
   let benv := benv.withState stHistory
   let ⟨stBeacon, outBeacon⟩ ←
     Except.mapError TransitionError.vm <|
@@ -857,12 +858,13 @@ def runBlockchain (benv : Benv) (txs : List (TxParse Tx)) (wds : List Withdrawal
         benv.stat.parentBeaconBlockRoot.toBytes
   let bal := bal.incorporateSystem rules 0 benv.state stBeacon
     (beaconRootsAddress :: outBeacon.accountReads.toList) outBeacon.storageReads.toList
+    outBeacon.storageWrites.toList
   let benv := benv.withState stBeacon
   let ⟨benv, bout, rej⟩ ← foldTxs txs.putIndex benv {BlockOutput.init with bal := bal} []
   let postIndex := txs.length + 1
   let ⟨stWds, bout⟩ := processWithdrawals benv bout wds
   let balWds := bout.bal.incorporateSystem rules postIndex benv.state stWds
-    (wds.map Withdrawal.recipient) []
+    (wds.map Withdrawal.recipient) [] []
   let bout := {bout with bal := balWds}
   let benv := benv.withState stWds
   match processGeneralPurposeRequestsAt postIndex benv bout with

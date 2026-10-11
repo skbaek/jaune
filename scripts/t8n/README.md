@@ -1,6 +1,6 @@
 # The `check-t8n.sh` corpus
 
-Thirty-nine cases, each a complete `t8n` invocation, with goldens generated from the
+Forty-nine cases, each a complete `t8n` invocation, with goldens generated from the
 pinned conformance target. `scripts/check-t8n.sh` runs them; this file says
 what they are and how to change them.
 
@@ -46,12 +46,30 @@ keeps the two modes byte-identical without hiding how inputs are composed.
 | `requests` | a real EIP-7002 withdrawal request, so `requests` is non-empty and `requestsHash` is not the empty digest |
 | `block-exception` | a failing checked system transaction landing in `blockException` instead of aborting the run |
 
-These nine cases run at Prague. Two of the lane's other four forks, BPO1 and
-BPO2, differ from Prague only in their blob schedule, which no case here
-exercises; a BPO case would need blob transactions and is a fair successor
-rather than a gap this corpus pretends to cover. Osaka has no case of its own
-either. The fifth fork, Amsterdam, is covered separately by the thirty `am-*`
-cases below.
+These nine cases run at Prague. The thirty `am-*` cases below exercise
+Amsterdam's metering in both tool modes. Ten further cases cover storage-only
+creation and empty-account deletion on Prague, Osaka, BPO1, BPO2 and Amsterdam.
+
+### Storage semantics at the v21 pin
+
+`storage-create-<fork>` contains eighteen transactions: creation transactions,
+CREATE and CREATE2, each with zero/nonzero pre-existing target balance and
+successful, reverting or out-of-gas initcode. The target has zero nonce, no
+code, and pre-existing storage. Successful initcode reads a wiped slot, writes
+that slot again (checking original-value gas accounting), and leaves another
+old slot untouched. The failing variants check rollback of the wipe.
+
+`storage-delete-<fork>` gives an empty coinbase pre-existing storage. A zero-tip
+fee credit deletes that storage, then a later transaction funds the account
+again. Amsterdam results also check that implicit deletion does not appear as
+SSTORE-to-zero entries in the block access list.
+
+These are authored differential inputs, not release fixtures. At the pinned
+EELS commit, the corresponding `test_create_collision.py` storage-only cases
+and `test_deleted_account_storage.py` are explicitly skipped as undefined until
+EIP-8253 and absent from the release archive. The goldens here record the
+pinned implementation's actual behavior on Jaune's five runnable forks; they
+do not claim Frontier-through-Amsterdam release coverage.
 
 ## Amsterdam lane
 

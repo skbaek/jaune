@@ -592,6 +592,7 @@ private def preparedTopLevelMsg (msg : Msg) (devm : Devm) : Msg :=
       msg.benv with
       state := devm.state
       createdAccounts := devm.createdAccounts
+      storageWrites := devm.world.storageWrites
     }
     tenv := {msg.tenv with transientStorage := devm.transientStorage}
     accessedAddresses := devm.accessedAddresses
@@ -623,13 +624,12 @@ private def dispatchTopLevelAmsterdam (state : StateGasRules) (msg : Msg)
   let devm := devm.balReadAccount msg.benv.stat.rules msg.currentTarget
   if msg.target.isNone then
     let isCollision :=
-      accountHasCodeOrNonce devm.state msg.currentTarget ||
-        accountHasStorage devm.state msg.currentTarget
+      accountHasCodeOrNonce devm.state msg.currentTarget
     if isCollision then
       .error ⟨.halt (.addressCollision .none), devm⟩
     else do
       let devm ←
-        if msg.benv.stat.origState.get msg.currentTarget = .nil then
+        if (msg.benv.stat.origState.get msg.currentTarget).Empty then
           chargeStateGas state.newAccount devm
         else .ok devm
       .ok ⟨preparedTopLevelMsg msg devm, devm⟩
@@ -669,7 +669,8 @@ private def runPreparedTopFrame (frame : Frame) (prepared : Devm) :
   | .ok benv =>
     let inner := frame.inner.withBenv benv
     let dyna :=
-      (prepared.withState benv.state).withCreatedAccounts benv.createdAccounts
+      ((prepared.withState benv.state).withStorageWrites benv.storageWrites).withCreatedAccounts
+        benv.createdAccounts
     let evm : Evm := {pc := 0, sta := initSevm inner, dyna := dyna}
     let raw :=
       match inner.codeAddress with
@@ -697,6 +698,7 @@ private def msgCallOutputAmsterdam (msg : Msg) (evm : Devm) :
   .ok ⟨evm.state, {
     accountReads := evm.meta.accountReads
     storageReads := evm.meta.storageReads
+    storageWrites := evm.world.storageWrites
     gasLeft := evm.gasLeft
     refundCounter := refundCounter
     logs := logs
@@ -727,6 +729,7 @@ def settleTopLevelPreparationFailure (msg : Msg) (error : EvmError)
     .ok ⟨msg.benv.state, {
       accountReads := devm.meta.accountReads
       storageReads := devm.meta.storageReads
+      storageWrites := msg.benv.storageWrites
       gasLeft := devm.gasLeft
       refundCounter := 0
       logs := []
@@ -761,8 +764,7 @@ def processMessageCall.create (msg : Msg) :
   | none =>
     let benv := msg.benv
     let isCollision : Bool :=
-      accountHasCodeOrNonce benv.state msg.currentTarget ||
-        accountHasStorage benv.state msg.currentTarget
+      accountHasCodeOrNonce benv.state msg.currentTarget
     if isCollision then
       return ⟨benv.state,
         { gasLeft := 0, refundCounter := 0, logs := [],
@@ -866,9 +868,9 @@ structure Receipt : Type where
 A block-scoped builder beside `BlockOutput`, fed once per incorporation --
 each pre-execution system call at index 0, the `i`-th transaction at `i + 1`,
 the withdrawals batch and each request-producing system call at `n + 1` --
-with the *diff* of the incorporated state against the block's cumulative state
-(net-zero filtered by construction: a write of the value already there is not
-a change) and with the read sets the interpreter recorded (`Meta.accountReads`,
+with account-field changes and explicit surviving storage writes, netted
+against the state at the start of that index, and with the read sets the
+interpreter recorded (`Meta.accountReads`,
 `Meta.storageReads`), which survive reverts. `build` then produces the pinned
 canonical form -- accounts by address, slots by number, changes by index, a
 slot among the changes excluded from the reads, an account with nothing but
@@ -981,7 +983,7 @@ captured at the start of `idx`, then the merge of the read sets. An address or
 slot restored by a later operation sharing `idx` removes only that index's
 change, leaving changes from other indices and the recorded reads intact. -/
 def incorporate (b : BalBuilder) (idx : Nat) (pre post : State)
-    (accountReads : List Adr) (storageReads : List (Adr × B256)) : BalBuilder :=
+    (accountReads : List Adr) (storageReads storageWrites : List (Adr × B256)) : BalBuilder :=
   let addrs : List Adr := (pre.keys ++ post.keys).eraseDups
   let b := addrs.foldl (init := b) fun b a =>
     let acPre := pre.get a
@@ -1000,13 +1002,15 @@ def incorporate (b : BalBuilder) (idx : Nat) (pre post : State)
     let b :=
       if acStart.code.data ≠ acPost.code.data then b.modify a (·.addCodeChange idx acPost.code)
       else if accountChanged then b.modify a (·.removeCodeChange idx) else b
-    let slots : List B256 := (acPre.stor.keys ++ acPost.stor.keys).eraseDups
-    slots.foldl (init := b) fun b k =>
-      let changed := acPre.stor.get k ≠ acPost.stor.get k
-      let ⟨b, startValue⟩ :=
-        if changed then b.startStorage idx a k (acPre.stor.get k) else (b, acPre.stor.get k)
-      if startValue ≠ acPost.stor.get k then b.modify a (·.addStorageWrite k idx (acPost.stor.get k))
-      else if changed then b.modify a (·.removeStorageWrite k idx) else b
+    b
+  -- Only explicit writes participate. Storage clearing is not a write of zero
+  -- to every old slot. Even a same-value write visits the index-start cache,
+  -- so another system operation at this index can remove an earlier change.
+  let b := storageWrites.foldl (init := b) fun b ⟨a, k⟩ =>
+    let ⟨b, startValue⟩ := b.startStorage idx a k ((pre.get a).stor.get k)
+    let value := (post.get a).stor.get k
+    if startValue ≠ value then b.modify a (·.addStorageWrite k idx value)
+    else b.modify a (·.removeStorageWrite k idx)
   let b := storageReads.foldl (init := b) fun b ⟨a, k⟩ => b.modify a (·.addStorageRead k)
   accountReads.foldl (init := b) fun b a => b.ensure a
 
@@ -1919,8 +1923,8 @@ private def amsterdamTxMaxGas : Nat :=
 #guard prepareCreateGuard true =
   some ⟨0, 200000, some (.halt (.addressCollision .none))⟩
 
--- Fixture-compatible top-level creation rejects a target with storage alone;
--- code and nonce remain independent collision controls in both lanes.
+-- Storage-only top-level creation deploys and wipes storage in both lanes;
+-- code and nonce remain independent collision controls.
 private def legacyStorageOnlyCreateGuard : Bool :=
   let address : Adr := 12
   let state := State.setStorVal .empty address 1 1
@@ -1929,17 +1933,18 @@ private def legacyStorageOnlyCreateGuard : Bool :=
       benv := {(default : Benv) with state := state}
       target := none, currentTarget := address, gas := 20000, depth := 1024}
   match processMessageCall.create msg with
-  | .ok ⟨_, output⟩ =>
-    output.gasLeft == 0 && output.error == some (.halt (.addressCollision .none))
+  | .ok ⟨post, output⟩ =>
+    output.error.isNone && (post.get address).stor.isEmpty && (post.get address).nonce == 1
   | .error _ => false
 
 private def amsterdamStorageOnlyCreateGuard : Bool :=
   let address : Adr := 13
   let state := State.setStorVal .empty address 1 1
   let msg := fixtureAmsterdamMsg state state none address 0 20000 200000
-  match prepareTopLevelAmsterdam amsterdamStateGasRules msg with
-  | .error ⟨.halt (.addressCollision .none), _⟩ => true
-  | _ => false
+  match processMessageCall.create msg with
+  | .ok ⟨post, output⟩ =>
+    output.error.isNone && (post.get address).stor.isEmpty && (post.get address).nonce == 1
+  | .error _ => false
 
 private def legacyCreateCollisionGuard (code : Bool) : Bool :=
   let address : Adr := 14
@@ -2194,7 +2199,15 @@ def processTransaction
   let priorityFeePerGas := effectiveGasPrice - benv.stat.baseFeePerGas
   let transactionFee := settlement.gasUsed * priorityFeePerGas
   let state := state.addBal sender gasRefundAmount.toB256
+  let storageWrites :=
+    if (state.get sender).Empty then txOutput.storageWrites.eraseAddress sender
+    else txOutput.storageWrites
   let state := state.addBal benv.stat.coinbase transactionFee.toB256
+  let storageWrites :=
+    if (state.get benv.stat.coinbase).Empty then storageWrites.eraseAddress benv.stat.coinbase
+    else storageWrites
+  let storageWrites := txOutput.accountsToDelete.toList.foldl
+    (fun writes a => writes.eraseAddress a) storageWrites
   let state := settleSelfdestructs benv.stat.rules
     txOutput.accountsToDelete.toList state
   let bout ← .ok (bout.withGasSettlement settlement txBlobGasUsed)
@@ -2206,15 +2219,15 @@ def processTransaction
     receiptsTrie := bout.receiptsTrie.insert receiptKey receipt
     blockLogs := bout.blockLogs ++ txOutput.logs}
   -- EIP-7928: `incorporate_tx_into_block` at `index + 1`, after the
-  -- self-destruct settlement: the transaction's writes as a diff against the
-  -- block's cumulative state, plus its reads and the transaction-level ones --
+  -- self-destruct settlement: surviving explicit storage writes and account
+  -- changes, plus reads and the transaction-level ones --
   -- the sender (`check_transaction`, `update_sender_state`, the refund) and
   -- the coinbase (`disburse_gas_fees` credits it even a zero fee).
   let bal := match benv.stat.rules.bal with
     | none => bout.bal
     | some _ => bout.bal.incorporate (index + 1) benv.state state
         (sender :: benv.stat.coinbase :: txOutput.accountReads.toList)
-        txOutput.storageReads.toList
+        txOutput.storageReads.toList storageWrites.toList
   .ok ⟨state, {bout with bal := bal}⟩
 
 /-- Under a legacy schedule, the real transaction producer preserves the
@@ -2796,7 +2809,7 @@ def runRequestContracts (idx : Nat) :
     let bal := match benv.stat.rules.bal with
       | none => bal
       | some _ => bal.incorporate idx benv.state state
-          (address :: output.accountReads.toList) output.storageReads.toList
+          (address :: output.accountReads.toList) output.storageReads.toList output.storageWrites.toList
     runRequestContracts idx rest (benv.withState state) acc bal
 
 /-- Run the block's request-producing system contracts and collect their output.
@@ -2886,11 +2899,12 @@ theorem applyTransactions_init_legacyGasAccounting
 read, or the withdrawals batch's credits plus each recipient `create_ether`
 read -- at `idx`, under rules that carry a block-level access list. -/
 def BalBuilder.incorporateSystem (bal : BalBuilder) (rules : ForkRules) (idx : Nat)
-    (pre post : State) (accountReads : List Adr) (storageReads : List (Adr × B256)) :
+    (pre post : State) (accountReads : List Adr)
+    (storageReads storageWrites : List (Adr × B256)) :
     BalBuilder :=
   match rules.bal with
   | none => bal
-  | some _ => bal.incorporate idx pre post accountReads storageReads
+  | some _ => bal.incorporate idx pre post accountReads storageReads storageWrites
 
 /-- `validate_block_access_list_gas_limit`, inside `apply_body` before any
 header comparison: `items > gasLimit // itemCost` is a block rejection. -/
@@ -2916,6 +2930,7 @@ def applyBody
   -- EIP-7928: the two pre-execution system calls incorporate at index 0.
   let bal := BalBuilder.incorporateSystem {} benv.stat.rules 0 benv.state stBeacon
     (beaconRootsAddress :: outBeacon.accountReads.toList) outBeacon.storageReads.toList
+    outBeacon.storageWrites.toList
   let benvBeacon : Benv := benv.withState stBeacon
   let lastHash ←
      benvBeacon.stat.blockHashes.getLast?.toExcept
@@ -2927,6 +2942,7 @@ def applyBody
         lastHash.toBytes
   let bal := bal.incorporateSystem benv.stat.rules 0 benvBeacon.state stHistory
     (historyStorageAddress :: outHistory.accountReads.toList) outHistory.storageReads.toList
+    outHistory.storageWrites.toList
   let benvHistory := benvBeacon.withState stHistory
   let ⟨benvTxs, boutTxs⟩ ←
     applyTransactions (← txs.mapM decodeTx).putIndex benvHistory {BlockOutput.init with bal := bal}
@@ -2935,7 +2951,7 @@ def applyBody
   -- EIP-7928: the withdrawals batch is one incorporation at `n + 1`; every
   -- recipient is read by `create_ether` whatever the amount.
   let balWds := boutWds.bal.incorporateSystem benv.stat.rules
-    (boutTxs.receiptKeys.length + 1) benvTxs.state stWds (wds.map Withdrawal.recipient) []
+    (boutTxs.receiptKeys.length + 1) benvTxs.state stWds (wds.map Withdrawal.recipient) [] []
   let boutWds := {boutWds with bal := balWds}
   let ⟨stReq, boutReq⟩ ← processGeneralPurposeRequests (benvTxs.withState stWds) boutWds
   -- `build_block_access_list`, then the item rule -- before any header check.
@@ -2977,7 +2993,7 @@ theorem applyBody_legacyGasAccounting {benv : Benv}
   obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
   cases hp
   let balWds := boutWds.bal.incorporateSystem benv.stat.rules
-    (boutTxs.receiptKeys.length + 1) benvTxs.state stWds (wds.map Withdrawal.recipient) []
+    (boutTxs.receiptKeys.length + 1) benvTxs.state stWds (wds.map Withdrawal.recipient) [] []
   have hreq := processGeneralPurposeRequests_legacyGasAccounting
     (bout := {boutWds with bal := balWds}) hwLegacy hq'
   exact hreq
@@ -5821,13 +5837,13 @@ private theorem runPreparedTopFrame_canonicalSettle {frame : Frame}
   · have hb := Msg.benvAfterTransfer_ok_canonical hf.2 hbt
     have hi := Msg.Canonical.withBenv hf.2 hb
     have hd :
-        ((prepared.withState benv.state).withCreatedAccounts
+        (((prepared.withState benv.state).withStorageWrites benv.storageWrites).withCreatedAccounts
           benv.createdAccounts).Canonical :=
-      Devm.Canonical.of_world_eq (hp.withState hb.1) rfl
+      ⟨hb.1, hp.2⟩
     let evm : Evm := {
       pc := 0
       sta := initSevm (frame.inner.withBenv benv)
-      dyna := (prepared.withState benv.state).withCreatedAccounts
+      dyna := ((prepared.withState benv.state).withStorageWrites benv.storageWrites).withCreatedAccounts
         benv.createdAccounts
     }
     have hevm : evm.Canonical := ⟨initSevm_canonical hi, hd⟩
@@ -6709,12 +6725,12 @@ private def balGuardView (b : BalBuilder) :
 -- A slot written back to its original value is no change and -- because
 -- `SSTORE` recorded it -- surfaces as a read.
 #guard balGuardView (({} : BalBuilder).incorporate 1 balGuardPre balGuardPre
-    [balGuardA] [(balGuardA, 1)]) ==
+    [balGuardA] [(balGuardA, 1)] [(balGuardA, 1)]) ==
   [(balGuardA, [], [1], [], [])]
 
 -- A slot both read and written appears only among the changes.
 #guard balGuardView (({} : BalBuilder).incorporate 1 balGuardPre
-    (balGuardPre.setStorVal balGuardA 1 8) [balGuardA] [(balGuardA, 1)]) ==
+    (balGuardPre.setStorVal balGuardA 1 8) [balGuardA] [(balGuardA, 1)] [(balGuardA, 1)]) ==
   [(balGuardA, [(1, [(1, 8)])], [], [], [])]
 
 -- Two calls at one index net against the index start, not against each other:
@@ -6723,8 +6739,8 @@ private def balGuardView (b : BalBuilder) :
   let st0 := balGuardPre
   let st1 := st0.setStorVal balGuardA 1 8
   let st2 := st1.setStorVal balGuardA 1 7
-  let b := ({} : BalBuilder).incorporate 0 st0 st1 [balGuardA] [(balGuardA, 1)]
-  let b := b.incorporate 0 st1 st2 [balGuardA] [(balGuardA, 1)]
+  let b := ({} : BalBuilder).incorporate 0 st0 st1 [balGuardA] [(balGuardA, 1)] [(balGuardA, 1)]
+  let b := b.incorporate 0 st1 st2 [balGuardA] [(balGuardA, 1)] [(balGuardA, 1)]
   balGuardView b == [(balGuardA, [], [1], [], [])]
 
 -- Removing a later same-index slot change preserves that slot's earlier index
@@ -6734,9 +6750,9 @@ private def balGuardView (b : BalBuilder) :
   let st1 := st0.setStorVal balGuardA 1 8
   let st2 := st1.setStorVal balGuardA 1 9
   let st3 := st2.setStorVal balGuardA 1 8
-  let b := ({} : BalBuilder).incorporate 1 st0 st1 [balGuardA] [(balGuardA, 1)]
-  let b := b.incorporate 2 st1 st2 [balGuardA] [(balGuardA, 1)]
-  let b := b.incorporate 2 st2 st3 [balGuardA] [(balGuardA, 1)]
+  let b := ({} : BalBuilder).incorporate 1 st0 st1 [balGuardA] [(balGuardA, 1)] [(balGuardA, 1)]
+  let b := b.incorporate 2 st1 st2 [balGuardA] [(balGuardA, 1)] [(balGuardA, 1)]
+  let b := b.incorporate 2 st2 st3 [balGuardA] [(balGuardA, 1)] [(balGuardA, 1)]
   balGuardView b == [(balGuardA, [(1, [(1, 8)])], [], [], [])]
 
 -- Full forwarding cancels only its own balance entry, while half forwarding
@@ -6747,12 +6763,12 @@ private def balGuardView (b : BalBuilder) :
   let stCredited := stPrior.setBal balGuardA 160
   let stForwarded := stCredited.setBal balGuardA 110
   let stHalf := stCredited.setBal balGuardA 135
-  let full := ({} : BalBuilder).incorporate 1 st0 stPrior [balGuardA, balGuardB] [(balGuardA, 1)]
-  let full := full.incorporate 2 stPrior stCredited [balGuardA] []
-  let full := full.incorporate 2 stCredited stForwarded [balGuardA] []
-  let half := ({} : BalBuilder).incorporate 1 st0 stPrior [balGuardA, balGuardB] [(balGuardA, 1)]
-  let half := half.incorporate 2 stPrior stCredited [balGuardA] []
-  let half := half.incorporate 2 stCredited stHalf [balGuardA] []
+  let full := ({} : BalBuilder).incorporate 1 st0 stPrior [balGuardA, balGuardB] [(balGuardA, 1)] [(balGuardA, 1)]
+  let full := full.incorporate 2 stPrior stCredited [balGuardA] [] []
+  let full := full.incorporate 2 stCredited stForwarded [balGuardA] [] []
+  let half := ({} : BalBuilder).incorporate 1 st0 stPrior [balGuardA, balGuardB] [(balGuardA, 1)] [(balGuardA, 1)]
+  let half := half.incorporate 2 stPrior stCredited [balGuardA] [] []
+  let half := half.incorporate 2 stCredited stHalf [balGuardA] [] []
   balGuardView full ==
       [(balGuardA, [(1, [(1, 8)])], [], [(1, 110)], []), (balGuardB, [], [], [(1, 9)], [])] ∧
     balGuardView half ==
@@ -6766,8 +6782,8 @@ private def balGuardView (b : BalBuilder) :
   let changed : Acct := {nonce := 1, bal := 0, stor := .empty, code := .mk (.mk [0x00])}
   let st1 := st0.set balGuardB changed
   let st2 := st1.set balGuardB .nil
-  let b := ({} : BalBuilder).incorporate 0 st0 st1 [balGuardB] []
-  let b := b.incorporate 0 st1 st2 [balGuardB] []
+  let b := ({} : BalBuilder).incorporate 0 st0 st1 [balGuardB] [] []
+  let b := b.incorporate 0 st1 st2 [balGuardB] [] []
   match b.build with
   | [c] => c.address == balGuardB && c.storageChanges.isEmpty && c.storageReads.isEmpty &&
       c.balanceChanges.isEmpty && c.nonceChanges.isEmpty && c.codeChanges.isEmpty
@@ -6782,20 +6798,20 @@ private def balGuardView (b : BalBuilder) :
   let st2 := st1.setBal balGuardA 80
   let st3 := st2.setBal balGuardA 70
   let st4 := st3.setBal balGuardA 170
-  let b := ({} : BalBuilder).incorporate 0 st0 stSys [balGuardB] []
-  let b := b.incorporate 1 stSys st1 [balGuardA] []
-  let b := b.incorporate 2 st1 st2 [balGuardA] []
-  let b := b.incorporate 3 st2 st3 [balGuardA] []
-  let b := b.incorporate 4 st3 st4 [balGuardA] []
+  let b := ({} : BalBuilder).incorporate 0 st0 stSys [balGuardB] [] [(balGuardB, 3)]
+  let b := b.incorporate 1 stSys st1 [balGuardA] [] []
+  let b := b.incorporate 2 st1 st2 [balGuardA] [] []
+  let b := b.incorporate 3 st2 st3 [balGuardA] [] []
+  let b := b.incorporate 4 st3 st4 [balGuardA] [] []
   balGuardView b ==
     [(balGuardA, [], [], [(1, 90), (2, 80), (3, 70), (4, 170)], []),
      (balGuardB, [(3, [(0, 4)])], [], [], [])]
 
--- A created-then-self-destructed account leaves no state behind, so its
--- storage writes are no diff, and the slots `SSTORE` recorded are reads
+-- A created-then-self-destructed account has no surviving storage writes;
+-- the slots `SSTORE` recorded remain reads
 -- (the pinned `destroyStorage` conversion).
 #guard balGuardView (({} : BalBuilder).incorporate 1 balGuardPre balGuardPre
-    [balGuardB] [(balGuardB, 5)]) ==
+    [balGuardB] [(balGuardB, 5)] []) ==
   [(balGuardB, [], [5], [], [])]
 
 -- A failed child's reads survive the merge into its parent.

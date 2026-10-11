@@ -1521,8 +1521,7 @@ private theorem genericCreate_memory_accounting
     simp only [ite_eq_right hfail]
     let accessed := addAccessedAddress (current.incrNonce sevm.currentTarget) newAddress
     by_cases hcollision : (accessed.state.get newAddress).nonce ≠ (0 : UInt64) ∨
-        (accessed.state.get newAddress).code.size ≠ 0 ∨
-        (accessed.state.get newAddress).stor.size ≠ 0
+        (accessed.state.get newAddress).code.size ≠ 0
     · dsimp only [accessed, current, withheld, grant] at hcollision
       simp only [ite_eq_left hcollision]
       refine xResult_rebase (pre := pre) (middle := accessed)
@@ -2233,8 +2232,7 @@ private theorem genericCreate_spawn_accounting
     simp only [ite_eq_right hfail]
     let accessed := addAccessedAddress (current.incrNonce sevm.currentTarget) newAddress
     by_cases hcollision : (accessed.state.get newAddress).nonce ≠ (0 : UInt64) ∨
-        (accessed.state.get newAddress).code.size ≠ 0 ∨
-        (accessed.state.get newAddress).stor.size ≠ 0
+        (accessed.state.get newAddress).code.size ≠ 0
     · dsimp only [accessed, current, withheld, grant] at hcollision
       simp only [ite_eq_left hcollision]
       exact spawnResult_done_push 0 accessed 0 pre

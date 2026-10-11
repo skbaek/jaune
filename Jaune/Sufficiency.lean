@@ -288,6 +288,12 @@ theorem spill_le_gasMeasure (devm : Devm) : devm.spill ≤ devm.gasMeasure := by
 @[simp] theorem setWorld_gasMeasure (devm : Devm) (world : World) :
     (devm.setWorld world).gasMeasure = devm.gasMeasure := rfl
 
+@[simp] theorem withStorageWrites_gasMeasure (devm : Devm) (writes : KeySet) :
+    (devm.withStorageWrites writes).gasMeasure = devm.gasMeasure := rfl
+
+@[simp] theorem clearStorageWritesIfEmpty_gasMeasure (devm : Devm) (a : Adr) :
+    (devm.clearStorageWritesIfEmpty a).gasMeasure = devm.gasMeasure := rfl
+
 theorem withGasLeft_gasMeasure (devm : Devm) (n : Nat) :
     (devm.withGasLeft n).gasMeasure = n + devm.spill := by
   simp only [Devm.withGasLeft, Devm.setMach, Devm.gasMeasure, Mach.gasMeasure,
@@ -3116,7 +3122,7 @@ theorem Jinst.runCore_gasLe (pc : Nat) (devm : Devm) (sevm : Sevm) (j : Jinst) :
   rcases hs : devm.state.subBal a v with _ | state <;> rw [hs] at h <;>
     simp only [bind, Option.bind, Option.some.injEq] at h
   · nomatch h
-  · rw [← h, Devm.withState_gasMeasure]
+  · rw [← h, Devm.clearStorageWritesIfEmpty_gasMeasure, Devm.withState_gasMeasure]
 
 @[simp] theorem Devm.setBal_gasMeasure (devm : Devm) (a : Adr) (v : B256) :
     (devm.setBal a v).gasMeasure = devm.gasMeasure := rfl
@@ -4095,7 +4101,7 @@ theorem processMessage.settle_ok_gasLe {msg : Msg}
     simp only [processMessage.settle, bind, Except.bind] at h
     split at h
     · simp only [Except.ok.injEq] at h
-      rw [← h, Devm.rollback_gasMeasure]
+      rw [← h, Devm.withStorageWrites_gasMeasure, Devm.rollback_gasMeasure]
     · simp only [Except.ok.injEq] at h
       rw [← h]
 
@@ -4119,14 +4125,14 @@ theorem processCreateMessage.settle_ok_gasLe {msg : Msg}
           dsimp only at h
           split at h
           · simp only [Except.ok.injEq] at h
-            rw [← h]
+            rw [← h, Devm.withStorageWrites_gasMeasure]
             unfold processCreateMessage.exceptionalHalt
             rw [Devm.setMeta_gasMeasure, Devm.withGasLeft_gasMeasure,
               Devm.rollback_spill]
             have hm := Devm.gasMeasure_eq d1
             omega
           · simp only [Except.ok.injEq] at h
-            rw [← h]
+            rw [← h, Devm.withStorageWrites_gasMeasure]
             unfold processCreateMessage.exceptionalHaltAmsterdam
             rw [Devm.setMeta_gasMeasure]
             exact Nat.le_trans (Devm.forfeitRemainingGas_gasMeasure_le _)
@@ -4139,7 +4145,7 @@ theorem processCreateMessage.settle_ok_gasLe {msg : Msg}
         rw [← h, Devm.setCode_gasMeasure]
         exact hc
     · simp only [Except.ok.injEq] at h
-      rw [← h, Devm.rollback_gasMeasure]
+      rw [← h, Devm.withStorageWrites_gasMeasure, Devm.rollback_gasMeasure]
 
 theorem Frame.settleMsg_ok_gasLe {f : Frame}
     {r : Except (EvmError × State × AdrSet × Tra) Devm} {d : Devm}

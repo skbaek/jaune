@@ -216,6 +216,66 @@
       "expected/result.json": "59d13d8e870bf5b31f8d50f70140a33cab8f389aa9d80b3859aac8760abb3cad",
       "txs.json": "cb5e3b89e420c457680309b80c40b75fa3aa480ab9acc492d3ff66929d7c4c9d"
     },
+    "storage-create-amsterdam": {
+      "expected/alloc.json": "4635ac4f03a30e7b2b805c04b42728b5143ab1165ae1d090096ccf5a9d5d618d",
+      "expected/body.json": "e296c5280b15abeef6805a1cc27c4293d3dff46c4367ba7d96c65bd1c6913f38",
+      "expected/result.json": "a404c1644aa3e895e3b6d4ca3e57f78fd8b7f499319ffb816514c6e027ea1a90",
+      "txs.json": "44b2e91cbaa62a9bec0396bea9d847fbf4d90d39fb68630e8bd394dd437310ea"
+    },
+    "storage-create-bpo1": {
+      "expected/alloc.json": "ef0ffff9438edeadc53d658a9e53094b37575f2b27baf21991cd1e98dec27940",
+      "expected/body.json": "e296c5280b15abeef6805a1cc27c4293d3dff46c4367ba7d96c65bd1c6913f38",
+      "expected/result.json": "aa67a4cc5509909a54897b408963ddb2bbf9331342271baf2fd0fcf9a6ffe9d6",
+      "txs.json": "44b2e91cbaa62a9bec0396bea9d847fbf4d90d39fb68630e8bd394dd437310ea"
+    },
+    "storage-create-bpo2": {
+      "expected/alloc.json": "ef0ffff9438edeadc53d658a9e53094b37575f2b27baf21991cd1e98dec27940",
+      "expected/body.json": "e296c5280b15abeef6805a1cc27c4293d3dff46c4367ba7d96c65bd1c6913f38",
+      "expected/result.json": "aa67a4cc5509909a54897b408963ddb2bbf9331342271baf2fd0fcf9a6ffe9d6",
+      "txs.json": "44b2e91cbaa62a9bec0396bea9d847fbf4d90d39fb68630e8bd394dd437310ea"
+    },
+    "storage-create-osaka": {
+      "expected/alloc.json": "ef0ffff9438edeadc53d658a9e53094b37575f2b27baf21991cd1e98dec27940",
+      "expected/body.json": "e296c5280b15abeef6805a1cc27c4293d3dff46c4367ba7d96c65bd1c6913f38",
+      "expected/result.json": "aa67a4cc5509909a54897b408963ddb2bbf9331342271baf2fd0fcf9a6ffe9d6",
+      "txs.json": "44b2e91cbaa62a9bec0396bea9d847fbf4d90d39fb68630e8bd394dd437310ea"
+    },
+    "storage-create-prague": {
+      "expected/alloc.json": "ef0ffff9438edeadc53d658a9e53094b37575f2b27baf21991cd1e98dec27940",
+      "expected/body.json": "e296c5280b15abeef6805a1cc27c4293d3dff46c4367ba7d96c65bd1c6913f38",
+      "expected/result.json": "aa67a4cc5509909a54897b408963ddb2bbf9331342271baf2fd0fcf9a6ffe9d6",
+      "txs.json": "44b2e91cbaa62a9bec0396bea9d847fbf4d90d39fb68630e8bd394dd437310ea"
+    },
+    "storage-delete-amsterdam": {
+      "expected/alloc.json": "f91d3ef1120d0bc391d58633079f57adfc748142105e3624fedb83407ca082e3",
+      "expected/body.json": "deb6874db5799e99beaf0b99a1d3274a6472697b849ac4eb93a5e5484f58b2eb",
+      "expected/result.json": "f219e07ccc1575a0471a456564a1f3896783d6e27dd375f35c4f47445e9197bd",
+      "txs.json": "7f5b42f8414db7938b7b56bab7e700fde08b0f4f57725e5a8e6af82bbfb5623e"
+    },
+    "storage-delete-bpo1": {
+      "expected/alloc.json": "71a6462812bbca44cd635f97d483fd29fcf9e75d108e3fb3d3085c895c22b23e",
+      "expected/body.json": "deb6874db5799e99beaf0b99a1d3274a6472697b849ac4eb93a5e5484f58b2eb",
+      "expected/result.json": "24f573b1d6cd82f2ea8ed15e71b730f0aabdc0c123e5c1d1d29a2bba98fdc782",
+      "txs.json": "7f5b42f8414db7938b7b56bab7e700fde08b0f4f57725e5a8e6af82bbfb5623e"
+    },
+    "storage-delete-bpo2": {
+      "expected/alloc.json": "71a6462812bbca44cd635f97d483fd29fcf9e75d108e3fb3d3085c895c22b23e",
+      "expected/body.json": "deb6874db5799e99beaf0b99a1d3274a6472697b849ac4eb93a5e5484f58b2eb",
+      "expected/result.json": "24f573b1d6cd82f2ea8ed15e71b730f0aabdc0c123e5c1d1d29a2bba98fdc782",
+      "txs.json": "7f5b42f8414db7938b7b56bab7e700fde08b0f4f57725e5a8e6af82bbfb5623e"
+    },
+    "storage-delete-osaka": {
+      "expected/alloc.json": "71a6462812bbca44cd635f97d483fd29fcf9e75d108e3fb3d3085c895c22b23e",
+      "expected/body.json": "deb6874db5799e99beaf0b99a1d3274a6472697b849ac4eb93a5e5484f58b2eb",
+      "expected/result.json": "24f573b1d6cd82f2ea8ed15e71b730f0aabdc0c123e5c1d1d29a2bba98fdc782",
+      "txs.json": "7f5b42f8414db7938b7b56bab7e700fde08b0f4f57725e5a8e6af82bbfb5623e"
+    },
+    "storage-delete-prague": {
+      "expected/alloc.json": "56be7edd602ac54131c18b3348240c38f516141d53b0f30f3861b5f73f9b91a3",
+      "expected/body.json": "deb6874db5799e99beaf0b99a1d3274a6472697b849ac4eb93a5e5484f58b2eb",
+      "expected/result.json": "32acb02755b88ab573e19cce944c93877f4d09fd0b6a7155bec5128497c89ae1",
+      "txs.json": "7f5b42f8414db7938b7b56bab7e700fde08b0f4f57725e5a8e6af82bbfb5623e"
+    },
     "transfer-blockchain": {
       "expected/alloc.json": "8ddfdbb05ee6df305c228459096b595a3b2ca84dfce0728ba966154af1de9379",
       "expected/body.json": "b2c18078e9436a2c8530330581d9e3cbb99e5ac99e5186566def91ab47a2a812",

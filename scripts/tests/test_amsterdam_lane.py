@@ -684,12 +684,13 @@ class AmsterdamT8nCorpusTests(unittest.TestCase):
     def case(self, scenario: str, mode: str) -> Path:
         return T8N / "cases" / f"{scenario}-{mode}"
 
-    def test_appendix_f_has_exactly_fifteen_scenarios_in_both_modes(self):
+    def test_amsterdam_cases_cover_appendix_f_and_storage_semantics(self):
         expected = {
             f"{scenario}-{mode}"
             for scenario in AMSTERDAM_T8N_SCENARIOS
             for mode in ("blockchain", "state-test")
         }
+        expected.update({"storage-create-amsterdam", "storage-delete-amsterdam"})
         actual = {
             path.name
             for path in (T8N / "cases").iterdir()

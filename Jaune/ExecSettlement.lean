@@ -336,10 +336,10 @@ lemma State.setStor_bal {st : Jaune.State} {a : Adr} {s : Stor} :
     (st.setStor a s).bal = st.bal := State.set_bal rfl
 
 lemma State.incrNonce_bal {st : Jaune.State} {a : Adr} :
-    (st.incrNonce a).bal = st.bal := State.set_bal rfl
+    (st.incrNonce a).bal = st.bal := State.set_bal (Acct.clearIfEmpty_bal _)
 
 lemma State.setCode_bal {st : Jaune.State} {a : Adr} {cd : ByteArray} :
-    (st.setCode a cd).bal = st.bal := State.set_bal rfl
+    (st.setCode a cd).bal = st.bal := State.set_bal (Acct.clearIfEmpty_bal _)
 
 /-- CREATE's nonce and access-list preparation leaves the complete world
 balance map unchanged. -/
@@ -353,10 +353,11 @@ theorem genericCreate_prepared_bal
   change (pre.state.incrNonce sevm.currentTarget).bal = pre.state.bal
   exact State.incrNonce_bal
 
-/-- CREATE's nonce/access-list preparation preserves persistent storage at
-every address. -/
+/-- CREATE's nonce/access-list preparation preserves persistent storage when
+the creator's incremented nonce is nonzero (as enforced by CREATE's overflow check). -/
 theorem genericCreate_prepared_getStor
-    (sevm : Sevm) (pre : Devm) (newAddress : Adr) :
+    (sevm : Sevm) (pre : Devm) (newAddress : Adr)
+    (hnonce : (pre.state.get sevm.currentTarget).nonce + 1 ≠ 0) :
     (addAccessedAddress
         (((pre.withGasLeft
             (pre.gasLeft - except64th pre.gasLeft)).withReturnData
@@ -365,11 +366,8 @@ theorem genericCreate_prepared_getStor
   funext address
   change (pre.state.incrNonce sevm.currentTarget).getStor address =
     pre.state.getStor address
-  simp only [State.incrNonce, State.getStor]
-  by_cases target : sevm.currentTarget = address
-  · subst target
-    rw [State.get_set_self]
-  · rw [State.get_set_ne _ target]
+  simp only [State.getStor, State.incrNonce_get_stor]
+  simp [Acct.Empty, hnonce]
 
 /-- CREATE message preparation clears the prospective account storage and
 increments its nonce, but leaves the complete world-balance map unchanged. -/
@@ -464,13 +462,13 @@ theorem ProcessCreateMessage.ok_state_eq_inner_of_no_error
                     have heq := Except.ok.inj hsettle
                     rw [heq] at herror
                     simp [processCreateMessage.exceptionalHalt,
-                      Devm.error, Devm.setMeta] at herror
+                      Devm.error, Devm.withStorageWrites, Devm.setWorld, Devm.setMeta] at herror
                 | some _ =>
                     rw [hsg] at hsettle
                     have heq := Except.ok.inj hsettle
                     rw [heq] at herror
                     simp [processCreateMessage.exceptionalHaltAmsterdam,
-                      Devm.error, Devm.setMeta] at herror
+                      Devm.error, Devm.withStorageWrites, Devm.setWorld, Devm.setMeta] at herror
             | revert => cases hsettle
             | crypto reason => cases hsettle
             | internal reason => cases hsettle

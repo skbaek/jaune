@@ -282,6 +282,7 @@ def initDevm (msg : Msg) : Devm :=
               world := {
                   state := msg.benv.state
                   transientStorage := msg.tenv.transientStorage
+                  storageWrites := msg.benv.storageWrites
                 }
               }
               msg.caller msg.currentTarget msg.value).logs
@@ -298,6 +299,7 @@ def initDevm (msg : Msg) : Devm :=
     world := {
       state := msg.benv.state
       transientStorage := msg.tenv.transientStorage
+      storageWrites := msg.benv.storageWrites
     }
   }
 
@@ -401,7 +403,11 @@ def callMsg
     (code : ByteArray)
     (disablePrecompiles: Bool) : Msg :=
   {
-    benv := {state := evm1.state, createdAccounts := evm1.createdAccounts, stat := sevm.benvStat}
+    benv := {
+      state := evm1.state
+      createdAccounts := evm1.createdAccounts
+      stat := sevm.benvStat
+      storageWrites := evm1.world.storageWrites}
     tenv := {transientStorage := evm1.transientStorage, stat := sevm.tenvStat}
     caller := caller
     target := target
@@ -430,7 +436,7 @@ def createMsg
     (sevm : Sevm) (devm : Devm) (createGas : Nat) (endowment : B256)
     (newAddress : Adr) (calldata : Bytes) : Msg :=
   {
-    benv := Benv.mk devm.state devm.createdAccounts sevm.benvStat
+    benv := Benv.mk devm.state devm.createdAccounts sevm.benvStat devm.world.storageWrites
     tenv := {transientStorage := devm.transientStorage, stat := sevm.tenvStat}
     caller := sevm.currentTarget
     target := .none
@@ -480,7 +486,8 @@ def processMessage.settle (msg : Msg)
     Except (EvmError × State × AdrSet × Tra) Devm := do
   let evm ← r
   if evm.error.isSome then
-    .ok (evm.rollback msg.benv.state msg.tenv.transientStorage)
+    .ok ((evm.rollback msg.benv.state msg.tenv.transientStorage).withStorageWrites
+      msg.benv.storageWrites)
   else
     .ok evm
 
@@ -496,10 +503,10 @@ def processCreateMessage.settle (msg : Msg)
         (match msg.benv.stat.rules.stateGas with
          | none =>
            processCreateMessage.exceptionalHalt evm reason
-             msg.benv.state msg.tenv.transientStorage
+             msg.benv.state msg.tenv.transientStorage |>.withStorageWrites msg.benv.storageWrites
          | some _ =>
            processCreateMessage.exceptionalHaltAmsterdam evm reason
-             msg.benv.state msg.tenv.transientStorage)
+             msg.benv.state msg.tenv.transientStorage |>.withStorageWrites msg.benv.storageWrites)
     | .error ⟨.revert, evm⟩ =>
       .error ⟨.revert, evm.state, evm.createdAccounts, evm.transientStorage⟩
     | .error ⟨.crypto reason, evm⟩ =>
@@ -508,7 +515,8 @@ def processCreateMessage.settle (msg : Msg)
       .error ⟨.internal reason, evm.state, evm.createdAccounts,
         evm.transientStorage⟩
   else
-    .ok (evm.rollback msg.benv.state msg.tenv.transientStorage)
+    .ok ((evm.rollback msg.benv.state msg.tenv.transientStorage).withStorageWrites
+      msg.benv.storageWrites)
 
 def Frame.settleMsg (f : Frame)
     (r : Except (EvmError × State × AdrSet × Tra) Devm) :
@@ -718,8 +726,7 @@ def genericCreate.step
     if
       (let target := devm.state.get newAddress
        target.nonce ≠ (0 : UInt64) ∨
-       target.code.size ≠ 0 ∨
-       target.stor.size ≠ 0) then
+       target.code.size ≠ 0) then
       let devm ← devm.push 0
       return .done (.ok devm)
     let childMsg :=
@@ -807,8 +814,7 @@ def genericCreateAmsterdam.step
     if
       (let target := devm.state.get newAddress
        target.nonce ≠ (0 : UInt64) ∨
-       target.code.size ≠ 0 ∨
-       target.stor.size ≠ 0) then
+       target.code.size ≠ 0) then
       let devm := devm.incrNonce sevm.currentTarget
       let devm ← devm.push 0
       return .done (.ok devm)
@@ -1905,15 +1911,15 @@ private def flattenGuardCreateAmsterdamCollision (code : Bool) : Bool :=
 #guard flattenGuardCreateAmsterdamCollision true
 #guard flattenGuardCreateAmsterdamCollision false
 
--- Fixture-compatible collision behavior: storage alone blocks both shared
--- CREATE helpers. CREATE2 reaches these same helpers through `Xinst.step`.
+-- Storage alone admits a child in both shared CREATE helpers. CREATE2
+-- reaches these same helpers through `Xinst.step`; child entry wipes storage.
 private def flattenGuardCreateStorageOnly : Bool :=
   let target : Adr := 0x41
   let state := State.setStorVal .empty target 1 1
   let msg : Msg :=
     {(flattenGuardMsg [] 100000 8) with benv := {(default : Benv) with state := state}}
   match genericCreate.step (initSevm msg) (initDevm msg) 0 target 0 0 with
-  | .done (.ok devm) => devm.stack.head? == some 0
+  | .spawn _ _ => true
   | _ => false
 
 private def flattenGuardCreateAmsterdamStorageOnly : Bool :=
@@ -1926,7 +1932,7 @@ private def flattenGuardCreateAmsterdamStorageOnly : Bool :=
       stateGasGrant := 200000}
   match genericCreateAmsterdam.step (initSevm msg) amsterdamStateGasRules (initDevm msg)
       0 target 0 0 with
-  | .done (.ok devm) => devm.stack.head? == some 0
+  | .spawn _ _ => true
   | _ => false
 
 #guard flattenGuardCreateStorageOnly
@@ -2574,6 +2580,8 @@ structure MsgCallOutput : Type where
   accountReads : AdrSet := .emptyWithCapacity
   /-- EIP-7928: the storage slots read. -/
   storageReads : KeySet := .emptyWithCapacity
+  /-- Explicit writes surviving frame rollback and storage deletion. -/
+  storageWrites : KeySet := .emptyWithCapacity
 
 def Except.bimap
   {ε : Type u0} {δ : Type u1} {ξ : Type u2} {υ : Type u3}
@@ -3000,8 +3008,8 @@ theorem processCreateMessage.settle_canonicalSettle {msg : Msg}
           exact hc
         exact Devm.Canonical.setCode hok _ _
     · split
-      · exact processCreateMessage.exceptionalHalt_canonical _ hm.1.1 hm.2
-      · exact processCreateMessage.exceptionalHaltAmsterdam_canonical _ hm.1.1 hm.2
+      · exact ⟨hm.1.1, hm.2⟩
+      · exact ⟨hm.1.1, hm.2⟩
     · next d' heq => exact ⟨(hcanon heq).1, (hcanon heq).2⟩
     · next d' heq => exact ⟨(hcanon heq).1, (hcanon heq).2⟩
     · next d' heq => exact ⟨(hcanon heq).1, (hcanon heq).2⟩
@@ -3894,8 +3902,8 @@ theorem processCreateMessage.settle_stateGasZero {msg : Msg}
         rw [heq] at hc
         exact hc
     · split
-      · exact processCreateMessage.exceptionalHalt_stateGasZero
-          (hzero (by assumption)) _ _ _
+      · have hz := hzero (by assumption)
+        exact hz
       · simp_all
     · trivial
     · trivial
@@ -4252,29 +4260,34 @@ theorem execFueled_run_gasMeasure_eq_gasLeft {fuel : Nat} {evm : Evm}
 
 --------------- ACCOUNT ACCESSORS OVER STATE WRITERS ---------------
 
--- Each writer sets one account through `State.set`, so a reader of another
--- field, or of another account, is unchanged. Names and binders follow the
--- copies Blanc carried before these moved here.
+-- Account-field writers normalize empty accounts. Balance, nonce, and code
+-- projections survive normalization, but storage is cleared on deletion.
+-- Readers at another address remain unchanged.
 
 theorem Devm.getCode_state (d : Devm) (a : Adr) :
     d.getCode a = d.state.getCode a := rfl
 
 theorem State.setBal_get_self {st : Jaune.State} {adr : Adr} {v : B256} :
-    (st.setBal adr v).get adr = (st.get adr).withBal v := State.get_set_self _ _ _
+    (st.setBal adr v).get adr = ((st.get adr).withBal v).clearIfEmpty :=
+  State.setAccount_get_self _ _ _
 
 theorem State.setBal_get_ne {st : Jaune.State} {adr a : Adr} {v : B256} (h : adr ≠ a) :
-    (st.setBal adr v).get a = st.get a := State.get_set_ne _ h _
+    (st.setBal adr v).get a = st.get a := State.setAccount_get_ne _ h _
 
+/-- A balance update clears storage exactly when it deletes the account. -/
 theorem State.setBal_get_stor {st : Jaune.State} {b a : Adr} {v : B256} :
-    ((st.setBal b v).get a).stor = (st.get a).stor := by
+    ((st.setBal b v).get a).stor =
+      if b = a ∧ ((st.get b).withBal v).Empty then .empty else (st.get a).stor := by
   by_cases h : b = a
-  · subst h; rw [State.setBal_get_self]; rfl
-  · rw [State.setBal_get_ne h]
+  · subst h
+    simp only [State.setBal_get_self, Acct.clearIfEmpty_stor, eq_self, true_and]
+    rfl
+  · simp only [State.setBal_get_ne h, h, false_and, ite_false]
 
 theorem State.setBal_get_code {st : Jaune.State} {b a : Adr} {v : B256} :
     ((st.setBal b v).get a).code = (st.get a).code := by
   by_cases h : b = a
-  · subst h; rw [State.setBal_get_self]; rfl
+  · subst h; rw [State.setBal_get_self, Acct.clearIfEmpty_code]; rfl
   · rw [State.setBal_get_ne h]
 
 theorem State.of_subBal {st st' : Jaune.State} {ct : Adr} {wad : B256}
@@ -4289,22 +4302,27 @@ theorem State.incrNonce_get_bal {st : Jaune.State} {adr a : Adr} :
     ((st.incrNonce adr).get a).bal = (st.get a).bal := by
   simp only [State.incrNonce]
   by_cases h : adr = a
-  · subst h; rw [State.get_set_self]
-  · rw [State.get_set_ne _ h]
+  · subst h; rw [State.setAccount_get_self, Acct.clearIfEmpty_bal]
+  · rw [State.setAccount_get_ne _ h]
 
+/-- The general nonce mutator includes wraparound; callers rule out overflow.
+Storage is cleared exactly when its resulting account is empty. -/
 theorem State.incrNonce_get_stor {st : Jaune.State} {adr a : Adr} :
-    ((st.incrNonce adr).get a).stor = (st.get a).stor := by
+    ((st.incrNonce adr).get a).stor =
+      if adr = a ∧ ({st.get adr with nonce := (st.get adr).nonce + 1} : Acct).Empty
+      then .empty else (st.get a).stor := by
   simp only [State.incrNonce]
   by_cases h : adr = a
-  · subst h; rw [State.get_set_self]
-  · rw [State.get_set_ne _ h]
+  · subst h
+    simp only [State.setAccount_get_self, Acct.clearIfEmpty_stor, eq_self, true_and]
+  · simp only [State.setAccount_get_ne _ h, h, false_and, ite_false]
 
 theorem State.incrNonce_get_code {st : Jaune.State} {adr a : Adr} :
     ((st.incrNonce adr).get a).code = (st.get a).code := by
   simp only [State.incrNonce]
   by_cases h : adr = a
-  · subst h; rw [State.get_set_self]
-  · rw [State.get_set_ne _ h]
+  · subst h; rw [State.setAccount_get_self, Acct.clearIfEmpty_code]
+  · rw [State.setAccount_get_ne _ h]
 
 theorem State.setBal_getCode (st : State) (adr a : Adr) (val : B256) :
     (st.setBal adr val).getCode a = st.getCode a :=
@@ -4331,12 +4349,14 @@ theorem Benv.incrNonce_getCode {benv : Benv} {adr a : Adr} :
     (benv.incrNonce adr).state.getCode a = benv.state.getCode a :=
   State.incrNonce_get_code
 
-/-- The storage at `ca` is blind to a credit. -/
+/-- A credit clears storage at `ca` precisely when it deletes that account. -/
 theorem getStor_addBal (w : Jaune.State) (ca a : Adr) (val : B256) :
-    (w.addBal a val).getStor ca = w.getStor ca :=
+    (w.addBal a val).getStor ca =
+      if a = ca ∧ ((w.get a).withBal (w.bal a + val)).Empty
+      then .empty else w.getStor ca :=
   State.setBal_get_stor
 
-/-- Persistent storage writes preserve every account's code. -/
+/-- Persistent storage writes preserve account code. -/
 theorem Devm.setStorVal_getCode (devm : Devm) (owner : Adr)
     (key value : B256) (address : Adr) :
     (devm.setStorVal owner key value).getCode address =
@@ -4349,17 +4369,20 @@ theorem Devm.setStorVal_getCode (devm : Devm) (owner : Adr)
     rw [State.get_set_self]
   · rw [State.get_set_ne _ h]
 
-/-- Installing account code preserves every account's persistent storage. -/
+/-- Installing code clears storage precisely when it deletes an empty account. -/
 theorem Devm.setCode_getStor (devm : Devm) (address : Adr)
     (code : ByteArray) :
-    Devm.getStor (devm.setCode address code) = Devm.getStor devm := by
+    Devm.getStor (devm.setCode address code) = fun target =>
+      if address = target ∧ ({devm.state.get address with code := code} : Acct).Empty
+      then .empty else devm.getStor target := by
   funext target
-  change ((devm.state.setCode address code).get target).stor =
-    (devm.state.get target).stor
+  change ((devm.state.setCode address code).get target).stor = _
   unfold State.setCode
   by_cases h : address = target
   · subst h
-    rw [State.get_set_self]
-  · rw [State.get_set_ne _ h]
+    simp only [State.setAccount_get_self, Acct.clearIfEmpty_stor, eq_self, true_and]
+    rfl
+  · simp only [State.setAccount_get_ne _ h, h, false_and, ite_false]
+    rfl
 
 end Jaune

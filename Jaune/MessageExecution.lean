@@ -159,15 +159,15 @@ theorem processMessage_eq_settle_exec
 
 /-- The message-settled machine produced by a raw REVERT outcome. -/
 def settledRevert (msg : Msg) (raw : Devm) : Devm :=
-  (raw.withError (some .revert)).rollback
-    msg.benv.state msg.tenv.transientStorage
+  ((raw.withError (some .revert)).rollback
+    msg.benv.state msg.tenv.transientStorage).withStorageWrites msg.benv.storageWrites
 
 /-- The message-settled machine produced by a raw exceptional halt. -/
 def settledHalt
     (msg : Msg) (reason : ExceptionalHalt) (raw : Devm) : Devm :=
   (((raw.withGasLeft 0).setMeta
       {raw.meta with output := [], error := some (.halt reason)}).rollback
-    msg.benv.state msg.tenv.transientStorage)
+    msg.benv.state msg.tenv.transientStorage).withStorageWrites msg.benv.storageWrites
 
 /-- A clean execution from the actual post-transfer environment settles to the
 same clean machine. -/
@@ -183,7 +183,8 @@ theorem processMessage_clean_of_exec_afterTransfer
   simp [Frame.ofCall, Frame.settle, Frame.settleMsg,
     executeCode.handleErrorWith_ok, processMessage.settle]
   change (if post.error.isSome = true then
-    Except.ok (post.rollback msg.benv.state msg.tenv.transientStorage)
+    Except.ok ((post.rollback msg.benv.state msg.tenv.transientStorage).withStorageWrites
+        msg.benv.storageWrites)
     else Except.ok post) = Except.ok post
   rw [herror]
   rfl
@@ -248,7 +249,8 @@ theorem processMessage_clean_of_exec_afterTransfer_of_codeEntry
   simp [Frame.ofCall, Frame.settle, Frame.settleMsg,
     executeCode.handleErrorWith_ok, processMessage.settle]
   change (if post.error.isSome = true then
-    Except.ok (post.rollback msg.benv.state msg.tenv.transientStorage)
+    Except.ok ((post.rollback msg.benv.state msg.tenv.transientStorage).withStorageWrites
+        msg.benv.storageWrites)
     else Except.ok post) = Except.ok post
   rw [herror]
   rfl

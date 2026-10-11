@@ -40,6 +40,7 @@ structure Devm.Rels : Type where
   (stateGas : StateGasMeter → StateGasMeter → Prop)
   (accountReads : AdrSet → AdrSet → Prop)
   (storageReads : KeySet → KeySet → Prop)
+  (storageWrites : KeySet → KeySet → Prop)
 
 /-- Canonical relation between dynamic EVM states, assembled field by field. -/
 structure Devm.Rel (rels : Devm.Rels) (devm devm' : Devm) : Prop where
@@ -67,6 +68,8 @@ structure Devm.Rel (rels : Devm.Rels) (devm devm' : Devm) : Prop where
     rels.accountReads devm.meta.accountReads devm'.meta.accountReads )
   ( storageReads :
     rels.storageReads devm.meta.storageReads devm'.meta.storageReads )
+  ( storageWrites :
+    rels.storageWrites devm.world.storageWrites devm'.world.storageWrites )
 
 def Devm.Rels.eq : Devm.Rels :=
   {
@@ -87,6 +90,7 @@ def Devm.Rels.eq : Devm.Rels :=
     stateGas := _root_.Eq,
     accountReads := _root_.Eq,
     storageReads := _root_.Eq
+    storageWrites := _root_.Eq
   }
 
 def Devm.Burn : Devm → Devm → Prop :=
@@ -114,7 +118,7 @@ def Devm.Rels.Refl (r : Devm.Rels) : Prop :=
   ReflexiveRel r.accessedAddresses ∧ ReflexiveRel r.accessedStorageKeys ∧
   ReflexiveRel r.state ∧ ReflexiveRel r.createdAccounts ∧
   ReflexiveRel r.transientStorage ∧ ReflexiveRel r.stateGas ∧
-  ReflexiveRel r.accountReads ∧ ReflexiveRel r.storageReads
+  ReflexiveRel r.accountReads ∧ ReflexiveRel r.storageReads ∧ ReflexiveRel r.storageWrites
 
 def Devm.Rels.Trans (r : Devm.Rels) : Prop :=
   TransitiveRel r.stack ∧ TransitiveRel r.memory ∧ TransitiveRel r.gasLeft ∧
@@ -123,19 +127,19 @@ def Devm.Rels.Trans (r : Devm.Rels) : Prop :=
   TransitiveRel r.accessedAddresses ∧ TransitiveRel r.accessedStorageKeys ∧
   TransitiveRel r.state ∧ TransitiveRel r.createdAccounts ∧
   TransitiveRel r.transientStorage ∧ TransitiveRel r.stateGas ∧
-  TransitiveRel r.accountReads ∧ TransitiveRel r.storageReads
+  TransitiveRel r.accountReads ∧ TransitiveRel r.storageReads ∧ TransitiveRel r.storageWrites
 
 theorem Devm.rel_refl {r : Devm.Rels} (hr : Devm.Rels.Refl r) :
     ReflexiveRel (Devm.Rel r) := by
   intro d
-  obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h16, h17⟩ := hr
+  obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h16, h17, h18⟩ := hr
   exact ⟨h1 _, h2 _, h3 _, h4 _, h5 _, h6 _, h7 _, h8 _, h9 _, h10 _, h11 _, h12 _,
-    h13 _, h14 _, h15 _, h16 _, h17 _⟩
+    h13 _, h14 _, h15 _, h16 _, h17 _, h18 _⟩
 
 theorem Devm.rel_trans {r : Devm.Rels} (hr : Devm.Rels.Trans r) :
     TransitiveRel (Devm.Rel r) := by
   intro a b c hab hbc
-  obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h16, h17⟩ := hr
+  obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h16, h17, h18⟩ := hr
   exact ⟨h1 hab.stack hbc.stack, h2 hab.memory hbc.memory, h3 hab.gasLeft hbc.gasLeft,
     h4 hab.logs hbc.logs, h5 hab.refundCounter hbc.refundCounter,
     h6 hab.output hbc.output, h7 hab.accountsToDelete hbc.accountsToDelete,
@@ -144,11 +148,12 @@ theorem Devm.rel_trans {r : Devm.Rels} (hr : Devm.Rels.Trans r) :
     h11 hab.accessedStorageKeys hbc.accessedStorageKeys, h12 hab.state hbc.state,
     h13 hab.createdAccounts hbc.createdAccounts,
     h14 hab.transientStorage hbc.transientStorage, h15 hab.stateGas hbc.stateGas,
-    h16 hab.accountReads hbc.accountReads, h17 hab.storageReads hbc.storageReads⟩
+    h16 hab.accountReads hbc.accountReads, h17 hab.storageReads hbc.storageReads,
+    h18 hab.storageWrites hbc.storageWrites⟩
 
 /-- A relation that is equality off the machine fields relates `d` only to
 `d` with a new `Mach`. Consumers read the equation instead of unpacking the
-seventeen fields positionally. -/
+fields positionally. -/
 theorem Devm.Rel.eq_setMach {stack : List B256 → List B256 → Prop}
     {memory : Mem → Mem → Prop} {gasLeft : Nat → Nat → Prop}
     {stateGas : StateGasMeter → StateGasMeter → Prop} {d d' : Devm}
@@ -156,15 +161,15 @@ theorem Devm.Rel.eq_setMach {stack : List B256 → List B256 → Prop}
       stack := stack, memory := memory, gasLeft := gasLeft, stateGas := stateGas} d d') :
     d' = d.setMach d'.mach := by
   obtain ⟨_, _, _, hlogs, hrefund, houtput, hdel, hret, herr, haddr, hkeys, hstate,
-    hcreated, htra, _, hreads, hsreads⟩ := h
+    hcreated, htra, _, hreads, hsreads, hwrites⟩ := h
   rcases d with ⟨mach, ⟨logs, refund, output, toDelete, returnData, err, addr, keys, created,
-    reads, sreads⟩, ⟨state, tra⟩⟩
+    reads, sreads⟩, ⟨state, tra, writes⟩⟩
   rcases d' with ⟨mach', ⟨logs', refund', output', toDelete', returnData', err', addr', keys',
-    created', reads', sreads'⟩, ⟨state', tra'⟩⟩
+    created', reads', sreads'⟩, ⟨state', tra', writes'⟩⟩
   simp only [Devm.Rels.eq] at *
   cases hlogs; cases hrefund; cases houtput; cases hdel; cases hret; cases herr
   cases haddr; cases hkeys; cases hstate; cases hcreated; cases htra; cases hreads
-  cases hsreads
+  cases hsreads; cases hwrites
   rfl
 
 /-- `Devm.Burn` changes only the machine. -/
@@ -519,7 +524,8 @@ lemma of_benvAfterTransfer {msg : Msg} {benv' : Benv}
     (h_stv : msg.shouldTransferValue = true)
     (h : msg.benvAfterTransfer = .ok benv') :
     ∃ st_mid, msg.benv.state.subBal msg.caller msg.value = some st_mid ∧
-      benv' = (msg.benv.withState st_mid).addBal msg.currentTarget msg.value := by
+      benv' = ((msg.benv.withState st_mid).clearStorageWritesIfEmpty msg.caller).addBal
+        msg.currentTarget msg.value := by
   unfold Msg.benvAfterTransfer at h
   rw [h_stv] at h
   simp only [ite_true] at h
@@ -540,14 +546,37 @@ lemma benvAfterTransfer_ok_getCode {msg : Msg} {benv : Benv}
     exact (State.addBal_getCode _ _ _ _).trans (State.subBal_getCode h_sub)
   · rw [of_benvAfterTransfer_no h_stv h]
 
-/-- Value transfer changes balances but preserves storage. -/
+/-- Value transfer preserves storage at an account protected from empty-account
+cleanup by a nonzero nonce or nonempty code. Balance alone does not protect it. -/
 lemma benvAfterTransfer_ok_getStor {msg : Msg} {benv : Benv}
-    (h : msg.benvAfterTransfer = .ok benv) (a : Adr) :
+    (h : msg.benvAfterTransfer = .ok benv) (a : Adr)
+    (hprotected : (msg.benv.state.get a).nonce ≠ 0 ∨
+      (msg.benv.state.get a).code.size ≠ 0) :
     benv.state.getStor a = msg.benv.state.getStor a := by
+  have preserve {st : State} {b : Adr} {v : B256}
+      (hp : (st.get a).nonce ≠ 0 ∨ (st.get a).code.size ≠ 0) :
+      ((st.setBal b v).get a).stor = (st.get a).stor := by
+    rw [State.setBal_get_stor]
+    split
+    · rename_i he
+      rcases he with ⟨rfl, he⟩
+      rcases hp with hn | hc
+      · exact (hn he.2.1).elim
+      · exact (hc he.1).elim
+    · rfl
   by_cases h_stv : msg.shouldTransferValue = true
   · obtain ⟨st_mid, h_sub, rfl⟩ := of_benvAfterTransfer h_stv h
+    have hmid : (st_mid.get a).nonce ≠ 0 ∨ (st_mid.get a).code.size ≠ 0 := by
+      rw [(State.of_subBal h_sub).2]
+      by_cases ha : msg.caller = a
+      · rw [ha, State.setBal_get_self]
+        simpa only [Acct.clearIfEmpty_nonce, Acct.clearIfEmpty_code, Acct.withBal]
+          using hprotected
+      · rw [State.setBal_get_ne ha]
+        exact hprotected
+    apply (preserve hmid).trans
     rw [(State.of_subBal h_sub).2]
-    exact State.setBal_get_stor.trans State.setBal_get_stor
+    exact preserve hprotected
   · rw [of_benvAfterTransfer_no h_stv h]
 
 /-- A zero-value message entry preserves the complete balance map, including
@@ -566,7 +595,7 @@ lemma benvAfterTransfer_bal_of_value_zero {msg : Msg} {post : Benv}
         ((st.setBal b v).get a).bal = (st.get a).bal := by
       intro st b v hv
       by_cases hb : b = a
-      · subst hb; rw [State.setBal_get_self, hv]; rfl
+      · subst hb; rw [State.setBal_get_self, Acct.clearIfEmpty_bal, hv]; rfl
       · rw [State.setBal_get_ne hb]
     rw [hself _ _ _ (by simp only [State.bal]; exact B256.add_zero _)]
     exact hself _ _ _ (B256.sub_zero _)
@@ -578,7 +607,8 @@ lemma benvAfterTransfer_exists_of_value_zero {msg : Msg} (hzero : msg.value = 0)
   unfold Msg.benvAfterTransfer
   split
   · have hsub : msg.benv.subBal msg.caller msg.value =
-        some (msg.benv.withState (msg.benv.state.setBal msg.caller (msg.benv.state.bal msg.caller - msg.value))) := by
+        some ((msg.benv.withState (msg.benv.state.setBal msg.caller
+          (msg.benv.state.bal msg.caller - msg.value))).clearStorageWritesIfEmpty msg.caller) := by
       unfold Benv.subBal State.subBal
       rw [ite_eq_right_iff.mpr (fun h => absurd h (by rw [hzero, B256.not_lt]; exact B256.zero_le _))]
       rfl

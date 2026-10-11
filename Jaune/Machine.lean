@@ -889,6 +889,8 @@ structure Benv : Type where
   state : State
   createdAccounts : AdrSet
   stat : BenvStat
+  /-- Committed SSTORE keys in the current transaction, rolled back with state. -/
+  storageWrites : KeySet := .emptyWithCapacity
 
 structure TenvStat : Type where
   origin: Adr
@@ -946,9 +948,11 @@ def Benv.withState (benv : Benv) (st : State) : Benv :=
 -- what `SSTORE` compares against to tell a clean update from a dirty one
 -- (finding 3.8). Every normal and system transaction must open with this so
 -- that its own input state, rather than the block prestate, is the original
--- state. Everything else about the environment is preserved.
+-- state. The transaction write ledger starts empty; the remaining environment is preserved.
 def Benv.beginTransaction (benv : Benv) : Benv :=
-  {benv with stat := {benv.stat with origState := benv.state}}
+  {benv with
+    stat := {benv.stat with origState := benv.state}
+    storageWrites := .emptyWithCapacity}
 
 -- EIP-7823 rejects an oversized `MODEXP` length header with a bare
 -- `ExceptionalHalt` rather than one of the specification's named subclasses.
@@ -1911,6 +1915,9 @@ structure Meta : Type where
 structure World : Type where
   state : State
   transientStorage : Tra
+  /-- Explicit storage writes; implicit storage deletion removes keys here.
+  This belongs to the rollback snapshot, unlike the read sets in Meta. -/
+  storageWrites : KeySet := .emptyWithCapacity
 
 @[ext]
 structure Devm : Type where
@@ -2172,6 +2179,9 @@ def Devm.withCreatedAccounts (devm : Devm) (createdAccounts : AdrSet) : Devm :=
 
 def Devm.withState (devm : Devm) (state : State) : Devm :=
   devm.setWorld {devm.world with state := state}
+
+def Devm.withStorageWrites (devm : Devm) (writes : KeySet) : Devm :=
+  devm.setWorld {devm.world with storageWrites := writes}
 
 def Devm.withTransientStorage (devm : Devm) (transientStorage : Tra) : Devm :=
   devm.setWorld {devm.world with transientStorage := transientStorage}
@@ -3426,17 +3436,62 @@ abbrev AccountExists (wor : State) (adr : Adr) : Prop :=
   let acct := wor.get adr
   ¬ (acct.Empty ∧ acct.stor.isEmpty)
 
--- dedicated function for 'destroying touched empty accounts' is
--- not necessary for this implementation, as all functions for
--- modifying world state are designed to immediately destroy any
--- account if it becomes empty as a result of the modification
+/-- Account-field mutation deletes an empty account, including its storage.
+Raw `State.set` remains available for pre-state construction and storage writes. -/
+def Acct.clearIfEmpty (ac : Acct) : Acct :=
+  if ac.Empty then .nil else ac
+
+/-- EELS `modify_state`: normalize after changing balance, nonce, or code. -/
+def State.setAccount (w : State) (a : Adr) (ac : Acct) : State :=
+  w.set a ac.clearIfEmpty
+
+/-- Storage deletion is not a collection of SSTORE-to-zero operations. -/
+def KeySet.eraseAddress (writes : KeySet) (a : Adr) : KeySet :=
+  writes.filter fun key => key.1 != a
+
+def Benv.clearStorageWritesIfEmpty (benv : Benv) (a : Adr) : Benv :=
+  {benv with storageWrites :=
+    if (benv.state.get a).Empty then benv.storageWrites.eraseAddress a
+    else benv.storageWrites}
+
+def Devm.clearStorageWritesIfEmpty (devm : Devm) (a : Adr) : Devm :=
+  devm.withStorageWrites
+    (if (devm.state.get a).Empty then devm.world.storageWrites.eraseAddress a
+     else devm.world.storageWrites)
+
+@[simp] theorem Acct.clearIfEmpty_bal (ac : Acct) :
+    ac.clearIfEmpty.bal = ac.bal := by
+  unfold Acct.clearIfEmpty
+  split
+  · rename_i h; exact h.2.2.symm
+  · rfl
+
+@[simp] theorem Acct.clearIfEmpty_nonce (ac : Acct) :
+    ac.clearIfEmpty.nonce = ac.nonce := by
+  unfold Acct.clearIfEmpty
+  split
+  · rename_i h; exact h.2.1.symm
+  · rfl
+
+@[simp] theorem Acct.clearIfEmpty_code (ac : Acct) :
+    ac.clearIfEmpty.code = ac.code := by
+  unfold Acct.clearIfEmpty
+  split
+  · rename_i h; exact (ByteArray.size_eq_zero_iff.mp h.1).symm
+  · rfl
+
+/-- Storage is precisely the field lost when an empty account is deleted. -/
+theorem Acct.clearIfEmpty_stor (ac : Acct) :
+    ac.clearIfEmpty.stor = if ac.Empty then .empty else ac.stor := by
+  unfold Acct.clearIfEmpty
+  split <;> rfl
 
 def Tra.set (τ : Tra) (a : Adr) (s : Stor) : Tra :=
   if s.isEmpty then τ.erase a else τ.insert a s
 
 def State.setCode (ω : State) (a : Adr) (cd : ByteArray) : State :=
   let ac := ω.get a
-  ω.set a {ac with code := cd}
+  ω.setAccount a {ac with code := cd}
 
 def getOrigAcct (sevm : Sevm) (a : Adr) : Acct :=
   sevm.benvStat.origState.get a
@@ -3467,10 +3522,13 @@ def State.setStorVal (wor : State) (adr : Adr) (key val : B256) : State :=
   wor.set adr {acct with stor := acct.stor.set key val}
 
 def Benv.setStorVal (benv : Benv) (adr : Adr) (key val : B256) : Benv :=
-  {benv with state := benv.state.setStorVal adr key val}
+  {benv with
+    state := benv.state.setStorVal adr key val
+    storageWrites := benv.storageWrites.insert (adr, key)}
 
 def Devm.setStorVal (devm : Devm) (adr : Adr) (key val : B256) : Devm :=
-  devm.withState (devm.state.setStorVal adr key val)
+  (devm.withState (devm.state.setStorVal adr key val)).withStorageWrites
+    (devm.world.storageWrites.insert (adr, key))
 
 def Tra.setStorVal (tra : Tra) (adr : Adr) (key val : B256) : Tra :=
   let stor : Stor := tra.getD adr .empty
@@ -3484,6 +3542,12 @@ def Devm.setTransVal (devm : Devm) (adr : Adr) (key val : B256) : Devm :=
 
 def getOrigStorVal (sevm : Sevm) (adr : Adr) (key : B256) : B256 :=
   (getOrigAcct sevm adr).stor.get key
+
+/-- A created account's original storage is zero even when a storage-only
+pre-state account occupied its address. Otherwise read the transaction-start
+snapshot, which already includes earlier transactions' committed wipes. -/
+def Devm.getOrigStorVal (devm : Devm) (sevm : Sevm) (adr : Adr) (key : B256) : B256 :=
+  if adr ∈ devm.createdAccounts then 0 else Jaune.getOrigStorVal sevm adr key
 
 def Devm.getTransVal (devm : Devm) (adr : Adr) (key : B256) : B256 :=
   (devm.transientStorage.getD adr .empty).get key
@@ -4120,7 +4184,7 @@ def Rinst.runCore
         (gCallStipend < devm.gasLeft)
         ⟨.halt (.outOfGas .none), devm⟩
       let ct := sevm.currentTarget
-      let original_value := getOrigStorVal sevm ct key
+      let original_value := devm.getOrigStorVal sevm ct key
       -- `get_storage_original` records nothing; `get_storage` records the
       -- slot (EIP-7928).
       let devm := devm.balReadStorage sevm.benvStat.rules ct key
@@ -4167,7 +4231,7 @@ def Rinst.runCore
         ⟨.halt (.outOfGas .none), devm⟩
       -- STATE ACCESS. Only now is the slot read, and only now is it warmed.
       let devm := if cold then addAccessedStorageKey devm ct key else devm
-      let original_value := getOrigStorVal sevm ct key
+      let original_value := devm.getOrigStorVal sevm ct key
       -- `get_storage_original` records nothing; `get_storage` records the
       -- slot (EIP-7928).
       let devm := devm.balReadStorage sevm.benvStat.rules ct key
@@ -5152,7 +5216,7 @@ def Jinst.run (evm : Evm) (j : Jinst) : Except (EvmError × Devm) (Nat × Devm) 
 def State.bal (w : State) (a : Adr) : B256 := (w.get a).bal
 
 def State.setBal (st : State) (adr : Adr) (val : B256) : State :=
-  st.set adr <| (st.get adr).withBal val
+  st.setAccount adr <| (st.get adr).withBal val
 
 def State.addBal (st : State) (adr : Adr) (val : B256) : State :=
   st.setBal adr <| (st.bal adr + val)
@@ -5164,24 +5228,24 @@ def State.subBal (st : State) (adr : Adr) (val : B256) : Option State :=
   else st.setBal adr (st.bal adr - val)
 
 def Benv.setBal (benv : Benv) (adr : Adr) (val : B256) : Benv :=
-  {benv with state := benv.state.setBal adr val}
+  ({benv with state := benv.state.setBal adr val} : Benv).clearStorageWritesIfEmpty adr
 
 def Benv.subBal (benv : Benv) (adr : Adr) (val : B256) : Option Benv := do
   let wor ← benv.state.subBal adr val
-  some <| benv.withState wor
+  some <| (benv.withState wor).clearStorageWritesIfEmpty adr
 
 def Benv.addBal (benv : Benv) (adr : Adr) (val : B256) : Benv :=
-  benv.withState (benv.state.addBal adr val)
+  (benv.withState (benv.state.addBal adr val)).clearStorageWritesIfEmpty adr
 
 def Devm.setBal (devm : Devm) (adr : Adr) (val : B256) : Devm :=
-  devm.withState (devm.state.setBal adr val)
+  (devm.withState (devm.state.setBal adr val)).clearStorageWritesIfEmpty adr
 
 def Devm.subBal (devm : Devm) (adr : Adr) (val : B256) : Option Devm := do
   let state ← devm.state.subBal adr val
-  some <| devm.withState state
+  some <| (devm.withState state).clearStorageWritesIfEmpty adr
 
 def Devm.addBal (devm : Devm) (adr : Adr) (val : B256) : Devm :=
-  devm.withState (devm.state.addBal adr val)
+  (devm.withState (devm.state.addBal adr val)).clearStorageWritesIfEmpty adr
 
 def Linst.run (sevm : Sevm) (devm : Devm) :
     Linst → Except (EvmError × Devm) Devm
@@ -5299,7 +5363,8 @@ def incorporateChildOnError (parent child : Devm) (returnData : Bytes) : Devm :=
   parent.setWorld
     {parent.world with
       state := child.state
-      transientStorage := child.transientStorage}
+      transientStorage := child.transientStorage
+      storageWrites := child.world.storageWrites}
 
 def incorporateChildOnSuccess (parent child : Devm) (returnData : Bytes) : Devm :=
   let parent := parent.setMach
@@ -5318,7 +5383,8 @@ def incorporateChildOnSuccess (parent child : Devm) (returnData : Bytes) : Devm 
   parent.setWorld
     {parent.world with
       state := child.state
-      transientStorage := child.transientStorage}
+      transientStorage := child.transientStorage
+      storageWrites := child.world.storageWrites}
 
 /-! ### Child incorporation under the two-dimensional meter
 
@@ -5387,7 +5453,8 @@ def incorporateChildAmsterdamOnError (parent child : Devm) (returnData : Bytes) 
   parent.setWorld
     {parent.world with
       state := child.state
-      transientStorage := child.transientStorage}
+      transientStorage := child.transientStorage
+      storageWrites := child.world.storageWrites}
 
 /-- `incorporate_child` on a successful child, under `stateGas = some _`.
 
@@ -5419,7 +5486,8 @@ def incorporateChildAmsterdamOnSuccess (parent child : Devm) (returnData : Bytes
   parent.setWorld
     {parent.world with
       state := child.state
-      transientStorage := child.transientStorage}
+      transientStorage := child.transientStorage
+      storageWrites := child.world.storageWrites}
 
 /-- Absorbing a failed child conserves the measure, up to the committed spill a
 child cannot have. -/
@@ -6173,35 +6241,36 @@ def create2NewAddress
 def State.incrNonce (w : State) (a : Adr) : State :=
   let ac := w.get a
   let ac' : Acct := {ac with nonce := ac.nonce + 1}
-  w.set a ac'
+  w.setAccount a ac'
 
 def Msg.incrNonce (msg : Msg) (adr : Adr) : Msg :=
   {
     msg with
-    benv := {
-      msg.benv with
-      state := msg.benv.state.incrNonce adr
-    }
+    benv := ({msg.benv with state := msg.benv.state.incrNonce adr} : Benv)
+      |>.clearStorageWritesIfEmpty adr
   }
 
 def Devm.incrNonce (devm : Devm) (adr : Adr) : Devm :=
-  devm.withState (devm.state.incrNonce adr)
+  (devm.withState (devm.state.incrNonce adr)).clearStorageWritesIfEmpty adr
 
 def Benv.incrNonce (benv : Benv) (adr : Adr) : Benv :=
-  {benv with state := benv.state.incrNonce adr}
+  ({benv with state := benv.state.incrNonce adr} : Benv).clearStorageWritesIfEmpty adr
 
 def State.setStor (w : State) (a : Adr) (s : Stor) : State :=
   let ac := (w.get a)
   w.set a {ac with stor := s}
 
 def Benv.setStor (benv : Benv) (adr : Adr) (stor : Stor) : Benv :=
-  {benv with state := benv.state.setStor adr stor}
+  {benv with
+    state := benv.state.setStor adr stor
+    storageWrites := benv.storageWrites.eraseAddress adr}
 
 def Msg.setCode (msg : Msg) (adr : Adr) (code : ByteArray) : Msg :=
-  {msg with benv := {msg.benv with state := msg.benv.state.setCode adr code}}
+  {msg with benv :=
+    ({msg.benv with state := msg.benv.state.setCode adr code} : Benv).clearStorageWritesIfEmpty adr}
 
 def Devm.setCode (devm : Devm) (adr : Adr) (code : ByteArray) : Devm :=
-  devm.withState (devm.state.setCode adr code)
+  (devm.withState (devm.state.setCode adr code)).clearStorageWritesIfEmpty adr
 
 def Devm.rollback (devm : Devm) (wor : State) (tra : Tra) : Devm :=
   devm.setWorld {devm.world with state := wor, transientStorage := tra}
@@ -6460,6 +6529,23 @@ theorem State.get_set_ne (w : State) {a b : Adr} (h : a ≠ b) (ac : Acct) :
     (w.set a ac).get b = w.get b := by
   rw [State.get_eq_getD, State.get_eq_getD, State.getElem?_set, if_neg h]
 
+theorem State.setAccount_get_self (w : State) (a : Adr) (ac : Acct) :
+    (w.setAccount a ac).get a = ac.clearIfEmpty :=
+  State.get_set_self w a ac.clearIfEmpty
+
+theorem State.setAccount_get_ne (w : State) {a b : Adr} (h : a ≠ b) (ac : Acct) :
+    (w.setAccount a ac).get b = w.get b :=
+  State.get_set_ne w h ac.clearIfEmpty
+
+theorem State.Canonical.setAccount {w : State} (h : State.Canonical w) (a : Adr)
+    {ac : Acct} (hs : Stor.Canonical ac.stor) :
+    State.Canonical (w.setAccount a ac) := by
+  apply h.set a
+  unfold Acct.clearIfEmpty
+  split
+  · exact Stor.canonical_empty
+  · exact hs
+
 --------------- CANONICALITY OF THE PRIMITIVE MUTATORS ---------------
 
 -- One theorem per named state mutator. Each derives its `State.set` premise
@@ -6472,11 +6558,11 @@ theorem State.Canonical.destroyAccount {w : State} (h : State.Canonical w)
 
 theorem State.Canonical.setCode {w : State} (h : State.Canonical w) (a : Adr)
     (cd : ByteArray) : State.Canonical (w.setCode a cd) :=
-  h.set a (h.stor a)
+  h.setAccount a (h.stor a)
 
 theorem State.Canonical.setBal {w : State} (h : State.Canonical w) (a : Adr)
     (v : B256) : State.Canonical (w.setBal a v) :=
-  h.set a (h.stor a)
+  h.setAccount a (h.stor a)
 
 theorem State.Canonical.addBal {w : State} (h : State.Canonical w) (a : Adr)
     (v : B256) : State.Canonical (w.addBal a v) :=
@@ -6491,7 +6577,7 @@ theorem State.Canonical.subBal {w w' : State} (h : State.Canonical w) {a : Adr}
 
 theorem State.Canonical.incrNonce {w : State} (h : State.Canonical w) (a : Adr) :
     State.Canonical (w.incrNonce a) :=
-  h.set a (h.stor a)
+  h.setAccount a (h.stor a)
 
 /-- `State.setStor` carries its real premise: the storage map handed in must
 already be canonical. -/
