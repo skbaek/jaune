@@ -519,16 +519,16 @@ lemma of_benvAfterTransfer_no {msg : Msg} {benv' : Benv}
   simp only [h_stv] at h
   exact (Except.ok.inj h).symm
 
-/-- `benvAfterTransfer` with a value transfer is a debit then a credit. -/
+/-- `benvAfterTransfer` with a nonzero value transfer is a debit then a credit. -/
 lemma of_benvAfterTransfer {msg : Msg} {benv' : Benv}
     (h_stv : msg.shouldTransferValue = true)
+    (h_nonzero : msg.value ≠ 0)
     (h : msg.benvAfterTransfer = .ok benv') :
     ∃ st_mid, msg.benv.state.subBal msg.caller msg.value = some st_mid ∧
       benv' = ((msg.benv.withState st_mid).clearStorageWritesIfEmpty msg.caller).addBal
         msg.currentTarget msg.value := by
   unfold Msg.benvAfterTransfer at h
-  rw [h_stv] at h
-  simp only [ite_true] at h
+  rw [ite_eq_left ⟨h_stv, h_nonzero⟩] at h
   unfold Benv.subBal at h
   rcases hq : msg.benv.state.subBal msg.caller msg.value with _ | st_mid <;>
     rw [hq] at h <;>
@@ -541,18 +541,27 @@ lemma of_benvAfterTransfer {msg : Msg} {benv' : Benv}
 lemma benvAfterTransfer_ok_getCode {msg : Msg} {benv : Benv}
     (h : msg.benvAfterTransfer = .ok benv) (a : Adr) :
     benv.state.getCode a = msg.benv.state.getCode a := by
+  by_cases hzero : msg.value = 0
+  · rw [Msg.benvAfterTransfer_of_value_zero hzero] at h
+    cases h
+    rfl
   by_cases h_stv : msg.shouldTransferValue = true
-  · obtain ⟨st_mid, h_sub, rfl⟩ := of_benvAfterTransfer h_stv h
+  · obtain ⟨st_mid, h_sub, rfl⟩ := of_benvAfterTransfer h_stv hzero h
     exact (State.addBal_getCode _ _ _ _).trans (State.subBal_getCode h_sub)
   · rw [of_benvAfterTransfer_no h_stv h]
 
-/-- Value transfer preserves storage at an account protected from empty-account
-cleanup by a nonzero nonce or nonempty code. Balance alone does not protect it. -/
+/-- Zero-value entry preserves storage everywhere. Nonzero value transfer preserves
+storage at an account protected by a nonzero nonce or nonempty code. -/
 lemma benvAfterTransfer_ok_getStor {msg : Msg} {benv : Benv}
     (h : msg.benvAfterTransfer = .ok benv) (a : Adr)
-    (hprotected : (msg.benv.state.get a).nonce ≠ 0 ∨
+    (hpreserved : msg.value = 0 ∨ (msg.benv.state.get a).nonce ≠ 0 ∨
       (msg.benv.state.get a).code.size ≠ 0) :
     benv.state.getStor a = msg.benv.state.getStor a := by
+  by_cases hzero : msg.value = 0
+  · rw [Msg.benvAfterTransfer_of_value_zero hzero] at h
+    cases h
+    rfl
+  have hprotected := hpreserved.resolve_left hzero
   have preserve {st : State} {b : Adr} {v : B256}
       (hp : (st.get a).nonce ≠ 0 ∨ (st.get a).code.size ≠ 0) :
       ((st.setBal b v).get a).stor = (st.get a).stor := by
@@ -565,7 +574,7 @@ lemma benvAfterTransfer_ok_getStor {msg : Msg} {benv : Benv}
       · exact (hc he.1).elim
     · rfl
   by_cases h_stv : msg.shouldTransferValue = true
-  · obtain ⟨st_mid, h_sub, rfl⟩ := of_benvAfterTransfer h_stv h
+  · obtain ⟨st_mid, h_sub, rfl⟩ := of_benvAfterTransfer h_stv hzero h
     have hmid : (st_mid.get a).nonce ≠ 0 ∨ (st_mid.get a).code.size ≠ 0 := by
       rw [(State.of_subBal h_sub).2]
       by_cases ha : msg.caller = a
@@ -585,36 +594,14 @@ lemma benvAfterTransfer_bal_of_value_zero {msg : Msg} {post : Benv}
     (hzero : msg.value = 0)
     (hrun : msg.benvAfterTransfer = .ok post) :
     post.state.bal = msg.benv.state.bal := by
-  by_cases hstv : msg.shouldTransferValue = true
-  · obtain ⟨debit, hsub, rfl⟩ := of_benvAfterTransfer hstv hrun
-    rw [hzero] at hsub ⊢
-    obtain ⟨_, rfl⟩ := State.of_subBal hsub
-    funext a
-    show ((((msg.benv.state.setBal msg.caller _).setBal msg.currentTarget _)).get a).bal = _
-    have hself : ∀ (st : State) (b : Adr) (v : B256), v = st.bal b →
-        ((st.setBal b v).get a).bal = (st.get a).bal := by
-      intro st b v hv
-      by_cases hb : b = a
-      · subst hb; rw [State.setBal_get_self, Acct.clearIfEmpty_bal, hv]; rfl
-      · rw [State.setBal_get_ne hb]
-    rw [hself _ _ _ (by simp only [State.bal]; exact B256.add_zero _)]
-    exact hself _ _ _ (B256.sub_zero _)
-  · rw [of_benvAfterTransfer_no hstv hrun]
+  rw [Msg.benvAfterTransfer_of_value_zero hzero] at hrun
+  cases hrun
+  rfl
 
 /-- A zero-value message entry always succeeds. -/
 lemma benvAfterTransfer_exists_of_value_zero {msg : Msg} (hzero : msg.value = 0) :
     ∃ post, msg.benvAfterTransfer = .ok post := by
-  unfold Msg.benvAfterTransfer
-  split
-  · have hsub : msg.benv.subBal msg.caller msg.value =
-        some ((msg.benv.withState (msg.benv.state.setBal msg.caller
-          (msg.benv.state.bal msg.caller - msg.value))).clearStorageWritesIfEmpty msg.caller) := by
-      unfold Benv.subBal State.subBal
-      rw [ite_eq_right_iff.mpr (fun h => absurd h (by rw [hzero, B256.not_lt]; exact B256.zero_le _))]
-      rfl
-    rw [hsub]
-    exact ⟨_, rfl⟩
-  · exact ⟨_, rfl⟩
+  exact ⟨msg.benv, Msg.benvAfterTransfer_of_value_zero hzero⟩
 
 /-- `initSevm` copies the message's block context. -/
 lemma initSevm_benvStat (msg : Msg) : (initSevm msg).benvStat = msg.benv.stat :=

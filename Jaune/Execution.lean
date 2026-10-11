@@ -327,7 +327,7 @@ def initEvm (msg : Msg) : Evm :=
 
 def Msg.benvAfterTransfer (msg : Msg) :
     Except (EvmError × State × AdrSet × Tra) Benv :=
-  if msg.shouldTransferValue then do
+  if msg.shouldTransferValue ∧ msg.value ≠ 0 then do
     let benv ←
       (msg.benv.subBal msg.caller msg.value).toExcept
         ⟨.internal (.assertion .none), msg.benv.state, msg.benv.createdAccounts,
@@ -335,6 +335,11 @@ def Msg.benvAfterTransfer (msg : Msg) :
     .ok <| benv.addBal msg.currentTarget msg.value
   else
     .ok msg.benv
+
+/-- A zero-value message entry leaves the entire block environment untouched. -/
+@[simp] theorem Msg.benvAfterTransfer_of_value_zero {msg : Msg} (hzero : msg.value = 0) :
+    msg.benvAfterTransfer = .ok msg.benv := by
+  simp [Msg.benvAfterTransfer, hzero]
 
 def executeCode.handleError :
     Execution → Except (EvmError × State × AdrSet × Tra) Devm
