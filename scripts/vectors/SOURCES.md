@@ -33,123 +33,58 @@ downloads the EEST release, the full legacy corpus, or the frozen oracle
 packages. Run the bootstrap and long fixture tiers locally only when their
 network, disk, and runtime requirements above are available.
 
-## Canonical current-mainnet lane
+## Mainnet and Amsterdam release lanes
 
-The current conformance source is
-[`execution-specs` `tests@v20.0.2`](https://github.com/ethereum/execution-specs/releases/tag/tests%40v20.0.2),
-resolved to commit `abbe05777ab83fb94ce18c425daaa7ab79e779c1`. Its official
-`fixtures.tar.gz` asset has SHA-256
-`1280540950a4c3470a421416b6f35458a9b635827265c29e5aef1ae839ae1788`.
-Install it separately from frozen EEST material:
-
-```sh
-python3 scripts/bootstrap_mainnet.py                 # ~/eest-mainnet-v20.0.2
-python3 scripts/env_doctor.py --mainnet-root ~/eest-mainnet-v20.0.2 --mainnet-deep
-```
-
-The extracted files total 9,091,923,053 logical bytes (about 9.1 GB), and
-the archive is 540,487,005 bytes. Actual disk allocation depends on the
-filesystem. Retain the existing guidance of at least 13 GB free for a fresh
-install, covering the archive, extraction staging and filesystem overhead.
-Keep the previous installation separate during a reference update. The download is a single public
-GitHub release asset; exact transfer time depends on your connection. Of the
-extracted trees only `blockchain_tests` (4,007,807,537 logical bytes) is the runner's; the rest are
-kept as shipped because the release is verified whole against the publisher's
-manifest, and a pruned tree would no longer match it.
-
-The asset is verified before extraction. Its `fixtures/.meta/index.json` is
-also checked for the publisher's root hash, timestamp, and case count. Generate
-or verify the exact suite/exclusion inventory with
-`scripts/gen_mainnet_manifest.py`; never edit `scripts/mainnet/manifests.json`
-by hand. `scripts/check-mainnet.sh --suite smoke` and `--suite prague` execute
-only generated Prague entries with an explicit `--network Prague`. The Osaka
-and supported transition suites also run; `--suite full` selects their complete
-union. Bare BPO1/BPO2 suites are refused because this release contains no static
-fixtures for them; their scheduled transitions remain covered.
-
-## Glamsterdam devnet lane (installed, inventoried, run)
-
-A **second, separate** fixture lane, for Amsterdam. It was installed, pinned,
-verified and inventoried before any Amsterdam semantics were written against
-it, so that the corpus the implementation would be judged against — and the
-`execution-specs` revision its numbers are checked against — was fixed first.
-Its static `Amsterdam` suites now run (`scripts/check-mainnet.sh --lane
-amsterdam --suite amsterdam`, `--suite amsterdam-smoke`, `--dir <subtree>`);
-its transition suite (`BPO2ToAmsterdamAtTime15k`) also runs following
-`jaune-amsterdam-currency-v1`. The owning gate catalogue records its four
-remaining exception-identity findings; running the suite is not a claim that
-those findings are resolved.
-
-The source is
-[`execution-specs` `tests-glamsterdam-devnet@v8.1.4`](https://github.com/ethereum/execution-specs/releases/tag/tests-glamsterdam-devnet%40v8.1.4),
-a **prerelease**, resolved to commit
-`7341820b5b394b1934dfe7bb6f621fcdab7baf7f` — a merge of `forks/amsterdam` into
-`devnets/glamsterdam/8`. Its `fixtures_glamsterdam-devnet.tar.gz` asset is
-946,283,655 bytes with SHA-256
-`aed315489163dc67c4e5607d7bbb8902e8329afe939be58193b125f2e81a85d4`.
+Both lanes use [`execution-specs` `tests@v21.0.1`](https://github.com/ethereum/execution-specs/releases/tag/tests%40v21.0.1),
+commit `1562e2f8b5cb1efda7e0d7c517f2dfb5742c0a43`. The official `fixtures.tar.gz`
+is 999,553,432 bytes, SHA-256
+`b9b14391ed1a625e4ca9a058c055d0eacd98a42b76c7a6127c640cdc2d3c9439`.
+They share the versioned install directory by default and retain separate
+manifests, suite namespaces and environment overrides.
 
 ```sh
-python3 scripts/bootstrap_mainnet.py --lane amsterdam   # ~/eest-glamsterdam-devnet-v8.1.4
-python3 scripts/env_doctor.py \
-  --amsterdam-root ~/eest-glamsterdam-devnet-v8.1.4 --amsterdam-deep
+python3 scripts/bootstrap_mainnet.py                 # ~/eest-mainnet-v21.0.1
+python3 scripts/bootstrap_mainnet.py --lane amsterdam # same release/root
+python3 scripts/env_doctor.py --mainnet-root ~/eest-mainnet-v21.0.1 --mainnet-deep
+python3 scripts/env_doctor.py --amsterdam-root ~/eest-mainnet-v21.0.1 --amsterdam-deep
+python3 scripts/gen_mainnet_manifest.py --fixtures-root ~/eest-mainnet-v21.0.1/fixtures --check
+python3 scripts/gen_mainnet_manifest.py --lane amsterdam --fixtures-root ~/eest-mainnet-v21.0.1/fixtures --check
 ```
 
-The extracted tree is **48,734 files** (the archive's member count, which
-`env_doctor.py --amsterdam-deep` verifies file by file; the 48,491 this
-paragraph carried until goal `jaune-amsterdam-currency-v1` was stale). Its
-size on disk is a host observation, not a fact of the release: 14 GB on this
-host's ext4 (`du -sh`, 2026-09-06; the archive itself is a further 903 MB), so
-allow at least 20 GB of free space for a fresh install. Verification is the mainnet lane's, verbatim:
-the same bootstrap, the same member-by-member safe extractor, the same digest
-check before a single byte is written, the same release-index check against
-`fixtures/.meta/index.json` (root hash
-`0x417b20736eef8fe20cd98ca22aa0f736a5315c7e58f0cdce72803d03f3db4d9d`,
-340,012 cases). It is one code path with a `--lane` parameter rather than a
-copy, because a second archive extractor is a second place for a traversal or
-link check to be missing.
+Keep previous installations separate. Verification checks the archive digest,
+safe extraction and every extracted member against the archive. The release
+index records root hash
+`0xc9f9db837189f64011d8195b97fcaaa43f7d2456ebcae95ed6429b4919cf3a68`
+and 354,684 cases across all shipped fixture families. Only selected blockchain
+fixtures run here; unsupported labels and non-blockchain families remain
+inventoried. Never prune a verified release or hand-edit a generated manifest.
 
-**The same commit is the transition-tool anchor.** `sources.json`'s
-`conformance_target` points at `7341820` too, so the fixtures, the executable
-specification `scripts/gen-fork-constants.py` reads, and the goldens
-`scripts/check-t8n.sh` compares against are one revision by construction rather
-than by coincidence.
-
-`scripts/gen_mainnet_manifest.py --lane amsterdam` writes
-`scripts/amsterdam/manifests.json`; never edit it by hand. The inventory is the
-lane's product:
-
-| suite | files | cases |
+| lane / suite | files | cases |
 |---|---:|---:|
-| `amsterdam` (static) | 3,159 | 24,901 |
-| `amsterdam-transitions` (`BPO2ToAmsterdamAtTime15k`) | 42 | 127 |
-| `amsterdam-smoke` | 16 | 60 |
-| `amsterdam-full` | 3,201 | 25,028 |
+| mainnet / Prague | 2,506 | 16,790 |
+| mainnet / Osaka | 2,449 | 17,550 |
+| mainnet / transitions | 13 | 109 |
+| mainnet / full | 4,968 | 34,449 |
+| mainnet / smoke | 16 | 243 |
+| Amsterdam / static | 3,296 | 26,398 |
+| Amsterdam / transitions | 58 | 189 |
+| Amsterdam / smoke | 16 | 346 |
+| Amsterdam / full | 3,354 | 26,587 |
 
-(Counts are `manifests.json`'s at `tests-glamsterdam-devnet@v8.1.4`, re-read
-from the manifest regenerated at that pin on 2026-09-06; the earlier rows here
-were v8.1.3's — 3,140 / 24,840, 16 / 62 and 3,182 / 24,967 — and were stale
-from the 2026-09-04 re-pin until goal `jaune-amsterdam-currency-v1`.)
+These are the generated inventories, not an all-PASS assertion. Amsterdam's
+transition/full gates retain the four DP-1 identity findings described in
+[`../GATES.md`](../GATES.md#the-amsterdam-lane). Static BPO1/BPO2 suites are
+empty and refused; their scheduled transitions are covered. BPO3 and later
+forks remain unsupported. A mistyped or empty `--dir` is refused, as is an
+on-disk subtree count that differs from its manifest.
 
-Across 24 labels the corpus holds 12,002 blockchain-test files and 99,151
-cases. The Prague, Osaka and BPO transition labels it also carries are
-inventoried under `covered_without_suite`: they are the current-mainnet lane's
-subject at that lane's own pin, and running them here would test the same rules
-against a second, weaker corpus while reporting it as Amsterdam coverage.
-`BPO2ToBPO3AtTime15k` and `BPO3ToBPO4AtTime15k` are **excluded**, each naming
-the fork this build does not declare — the release publishes them, and Jaune
-has no BPO3 or BPO4 identity.
-
-**Every suite runs.** This paragraph said "every suite is refused" when the
-lane was created (goal A, 2026-09-03): each `--suite` exited 2 naming the goal
-that owned the semantics it would need. Goal C (2026-09-06) activated the two
-static suites, `amsterdam` and `amsterdam-smoke`, and goal
-`jaune-amsterdam-currency-v1` activated `amsterdam-transitions` and the union
-`amsterdam-full` by gating the `BPO2ToAmsterdamAtTime15k` activation boundary.
-What still refuses is a mistyped or empty `--dir` subtree, a subtree whose
-on-disk file count disagrees with the manifest's, and the other lane's suite
-names — each answered by name before any fixture runs. See
-[`../GATES.md`](../GATES.md) for the selection rules and
-`scripts/tests/test_amsterdam_lane.py` for the tests that hold them.
+`conformance_target` uses the same release commit in a separate checkout at
+`~/execution-specs-t8n-v21.0.1`; its registered wrapper is carried at `9fc6c99c1`.
+The constants extractor and t8n golden generator use that checkout. The frozen
+`execution_specs` oracle at `4198b9c` is unchanged. The 49-case t8n corpus
+includes ten authored storage-only creation/deletion cases across the five
+runnable forks. The release skipped those upstream cases; authored agreement
+does not claim published release coverage of them.
 
 ## Legacy fixture Git bootstrap
 
@@ -554,5 +489,8 @@ The `legacy_tests_submodule` section continues to describe the original
 restoration contains Cancun/Constantinople historical cases, not Prague cases.
 It is inventory evidence, not a replacement root for `check-legacy.sh --full`.
 The Prague files at the `ethereum_tests` pin still encode EIP-7610 in five
-families; the Amsterdam-readiness report records that unresolved corpus finding.
+families. The owner accepted exactly those five classification changes while
+retaining the raw RED legacy verdict, all fixture/baseline bytes and a ten-case
+original-input replay against pinned EELS. Any additional delta fails readiness
+acceptance; this is not a clean legacy baseline.
 No baseline entry or fixture byte is changed by selecting the restoration.

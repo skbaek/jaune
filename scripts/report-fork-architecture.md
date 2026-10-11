@@ -11,7 +11,7 @@ unchanged.
 
 ## The three separated ideas
 
-`Elevm/Fork.lean` deliberately keeps apart what a fork *is*, what its rules
+`Jaune/Fork.lean` deliberately keeps apart what a fork *is*, what its rules
 *say*, and *when* a chain adopts them.
 
 | concept | type | role |
@@ -125,9 +125,11 @@ ForkRules := { fork : Fork, blob : BlobSchedule, code : CodeLimits,
   BPO1/BPO2 remain data-only reparameterisations of this schedule.
 - `code : CodeLimits` — `maxCodeSize`, `maxInitCodeSize` (EIP-170, EIP-3860).
   Formerly globals of the same names.
-- `tx : TransactionLimits` (added in Step 5) — optional `maxGas` and
-  `maxBlobCount`. Prague states both limits as inactive; Osaka carries EIP-7825
-  and EIP-7594's `2^24` and `6` boundaries.
+- `tx : TransactionLimits` (added in Step 5) — optional `maxGas`, `maxTotalGas` and
+  `maxBlobCount`. Amsterdam limits total transaction gas to `2^32 - 1`, while
+  `maxGas = 2^24` remains the independent execution-gas bound. Prague leaves
+  these limits inactive; Osaka carries EIP-7825 and EIP-7594's `2^24` and `6`
+  boundaries.
 - `block : BlockLimits` (added in Step 5) — optional `maxRlpSize`. Osaka carries
   EIP-7934's 8,388,608-byte maximum on the original input encoding.
 - `modexp : ModexpRules` (added in Step 4) — `maxLength`, `flatComplexity`,
@@ -241,10 +243,10 @@ instructions are gated the same way — `SLOTNUM` by `rules.op.slotnum`,
 `DUPN`/`SWAPN`/`EXCHANGE` by `rules.op.stackAccess` — decoded at every fork
 (EIP-8024's two-byte forms are sized by `getInst` fork-independently) and
 refused as `InvalidOpcode` where the rule is off. The jumpdest claim has two
-halves and they have different standing: `pinnedJumpDestsFrom_eq_legacy`
-**proves** that the pinned Amsterdam destination walk and the pre-Amsterdam
-walk agree on every byte array (so the three immediates change no
-destination); the bridge from those walks to Jaune's own `jumpable`/
+halves and they have different standing: at EELS `1562e2f`,
+`pinnedJumpDestsFrom` aliases the legacy PUSH walk (#3618), and
+`pinnedJumpDestsFrom_eq_legacy` is definitional equality (`rfl`);
+the bridge from those walks to Jaune's own `jumpable`/
 `noPushBefore` scan is **sampled** by `scripts/check-jumpdest.sh`, not proved
 (goal C's independent review, P2; re-implementing `jumpable` on the walk is
 reserved to the owner).
@@ -290,12 +292,12 @@ sites were the right place to land this first.
 `Fork.osaka.rules?` resolves to the complete static Osaka execution rule set:
 Step 4's `MODEXP`, `CLZ`, and `P256VERIFY` delta plus Step 5's transaction gas
 cap, six-blob transaction limit, blob reserve-price formula, and original block
-RLP limit. `check-mainnet.sh --suite osaka` is active only because all 2,514
-manifest files (17,323 cases) pass.
+RLP limit. The v21.0.1 manifest selects 2,449 files (17,550 cases) for
+`check-mainnet.sh --suite osaka`, checked under its all-PASS rule.
 
 ## Labels, schedules, and the named mainnet configuration
 
-Step 6 completed activation. Three additions, all in `Elevm/Fork.lean`:
+Step 6 completed activation. Three additions, all in `Jaune/Fork.lean`:
 
 | name | role |
 |---|---|
@@ -374,7 +376,8 @@ Rule consumers, and where each reads its rule:
 | `BLOBBASEFEE` in `Rinst.runCore` | `sevm.benvStat.rules.blob` |
 | `calculateExcessBlobGas` (via `validateHeader`) | `rules.blob`, including `reserveBaseCost` |
 | `checkTransactionGasLimits` | `benv.stat.rules.blob.max` |
-| `checkTransactionGasCap` (via `validateTransaction`) | `rules.tx.maxGas` |
+| `checkTransactionGasCap` / `allocateEvmGas` | `rules.tx.maxGas` |
+| `checkTransactionTotalGasCap` (via `validateTransaction`) | `rules.tx.maxTotalGas` |
 | `checkTransactionBlobData` | `benv.stat.rules.blob` and `rules.tx.maxBlobCount` |
 | `checkBlockRlpSize` (via `addBlockToChainCore`) | `rules.block.maxRlpSize` plus original byte length |
 | `calculate_data_fee` (via `processTransaction`) | `benv.stat.rules.blob` |
@@ -480,6 +483,23 @@ at one fork, so a transition label there is an error rather than an ambiguity.
   non-increasing fork sequence would describe a chain running backwards.
 - Selection is by the last activation at or before the block timestamp, so the
   activation block itself already runs the new rules.
+
+## Storage and BAL at the v21.0.1 pin
+
+Both fixture lanes and the transition tool refer to EELS `1562e2f`. EIP-7610
+is withdrawn: CREATE, CREATE2 and creation transactions collide only with
+nonzero nonce or nonempty code, on every runnable fork. Existing storage is
+wiped before initcode, including original-storage reads; deleting an empty
+account also clears storage. Rollback restores the parent world. This is a
+shared semantic correction, including Prague, rather than Amsterdam rule data.
+
+BAL netting compares explicit writes with values at the start of each block
+access index. Later operations at the same index can remove a net-zero change.
+The rollback-owned `storageWrites` set distinguishes explicit writes from an
+implicit account-storage clear; a clear is not a write of zero to every old
+slot. The release BAL fixtures and t8n hash/list goldens test this behavior.
+The omitted release storage-only cases are covered by authored five-fork
+evidence, with the legacy mismatch limitations stated in `TRUSTED.md`.
 
 ## Downstream (Blanc) consequences
 

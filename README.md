@@ -10,10 +10,10 @@ language that compiles through a verified compiler and proves its contracts
 against these semantics. It is Jaune's end-to-end case study.
 
 **Jaune** is an executable formal specification of the EVM in Lean 4. Its
-strict current-mainnet lane passes **5,006/5,006 supported fixture files and
-34,205/34,205 cases**, Prague through BPO2 including configured transitions,
+strict current-mainnet lane passes **4,968/4,968 supported fixture files and
+34,449/34,449 cases**, Prague through BPO2 including configured transitions,
 against [execution-specs](https://github.com/ethereum/execution-specs)
-`tests@v20.0.2`. Its semantics are demonstrated sufficient for real
+`tests@v21.0.1`. Its semantics are demonstrated sufficient for real
 verification: a WETH implementation's solvency is proven to be preserved over
 every state reachable along a valid configured chain, including histories that
 cross scheduled fork activations, through a verified compiler, with no `sorry`
@@ -22,8 +22,9 @@ and no `native_decide` in the trusted path. Jaune is MIT-licensed.
 Jaune was originally written from the Yellow Paper, then rebuilt on a pinned
 2025 execution-specs revision; later forks were implemented and checked
 explicitly. The frozen legacy fixture corpus is retained as independently-filled
-regression evidence; its five non-passing files are diagnosed, and none is a
-defect in Jaune, as described under Verification status.
+regression evidence. It has five unchanged baseline failures and five additional
+files with stale storage-collision expectations; the raw legacy gate is RED,
+with exactly those five changes accepted for this release as described below.
 
 ## Prerequisite
 
@@ -85,8 +86,8 @@ repository; install the pinned current-mainnet release first, and run fixtures
 from its `blockchain_tests` directory:
 
 ```sh
-python3 scripts/bootstrap_mainnet.py     # ~/eest-mainnet-v20.0.2
-FIX=~/eest-mainnet-v20.0.2/fixtures/blockchain_tests
+python3 scripts/bootstrap_mainnet.py     # ~/eest-mainnet-v21.0.1
+FIX=~/eest-mainnet-v21.0.1/fixtures/blockchain_tests
 lake exe jaune $FIX/for_prague/ported_static/vmArithmeticTest/mul/mul.json
 ```
 
@@ -194,10 +195,10 @@ requirements.
   declaration. [`TRUSTED.md`](TRUSTED.md) states exactly what the theorem does
   and does not claim.
 - **Supported forks:** Prague, Osaka, BPO1, and BPO2, plus the transitions
-  between them; Amsterdam also runs, against a devnet prerelease corpus (see
+  between them; Amsterdam also runs, against the same v21.0.1 release (see
   below). Jaune's primary Prague evidence is the strict all-PASS
   current-mainnet lane over the separately installed `execution-specs`
-  `tests@v20.0.2` release: 2,526/2,526 Prague fixtures and 5,006/5,006 across
+  `tests@v21.0.1` release: 2,506/2,506 Prague fixtures and 4,968/4,968 across
   the whole manifest, with no expected-failure allowance. Its generated
   manifests activate Prague as a whole suite
   (`scripts/check-mainnet.sh --suite prague`, or the deterministic
@@ -207,7 +208,7 @@ requirements.
   (`P256VERIFY`), EIP-7825 (transaction gas cap), EIP-7594 (six blobs per
   transaction), EIP-7918 (blob reserve price), and EIP-7934 (original block-RLP
   size). `scripts/check-mainnet.sh --suite osaka` is a strict all-PASS gate;
-  the pinned manifest is 2,467/2,467 files (17,423 cases).
+  the pinned manifest is 2,449/2,449 files (17,550 cases).
 - **BPO1 and BPO2 are supported as rule data** (EIP-7892): each is Osaka with a
   different blob target, ceiling, and base-fee update fraction, and nothing
   else. A chain selects them from its own activation schedule, so a fixture
@@ -218,7 +219,7 @@ requirements.
   The pinned release publishes no fixture whose network is a bare `BPO1` or
   `BPO2`, so `--suite bpo1` and `--suite bpo2` select nothing and are refused
   rather than reported as vacuously green.
-- **`Amsterdam` runs, against the Glamsterdam devnet-8 prerelease corpus.**
+- **`Amsterdam` runs against `tests@v21.0.1`.**
   `Fork.amsterdam.rules?` resolves to `amsterdamRules`, the fifth complete rule
   record: the repriced gas numbers and EIP-8037's state-gas dimension (the
   metering goal), EIP-7954's code limits, EIP-7843 `SLOTNUM`, EIP-8024
@@ -226,22 +227,28 @@ requirements.
   EIP-8282's two further request contracts, and EIP-7928's block-level access
   list — read set, builder, canonical encoding, item rule and header hash check
   — every number machine-checked against the pinned `execution-specs` revision
-  by `scripts/check-fork-constants.sh`. Nothing a Prague, Osaka, BPO1 or BPO2
-  fixture observes has changed: every Amsterdam behaviour sits behind rule data
-  that is off on those forks, and their lanes are re-run on every candidate.
-  The devnet corpus is its own lane (`python3 scripts/bootstrap_mainnet.py
+  by `scripts/check-fork-constants.sh`. The total transaction gas limit is
+  `2^32 - 1`; the independent execution-gas bound remains `2^24`. Storage-only
+  creation follows the pinned reference on all five runnable forks: nonce or
+  code causes a collision, storage alone does not, and creation wipes old storage
+  before initcode. Empty-account deletion also clears storage.
+  Amsterdam retains its own suite lane (`python3 scripts/bootstrap_mainnet.py
   --lane amsterdam`, `scripts/check-mainnet.sh --lane amsterdam --suite
   amsterdam`), inventoried in `scripts/amsterdam/manifests.json`. All four of
   its suites run: the static `Amsterdam` suite and its smoke tier, and the
   `BPO2ToAmsterdamAtTime15k` transition suite together with the union of both.
-  The transition suite passes all 42 files except four recorded identity
+  The static suite contains 3,296 files (26,398 cases). The transition suite
+  passes all 58 files except four recorded identity
   findings, where Jaune agrees that the block is invalid but names a different
-  exception than the fixture (see [`scripts/GATES.md`](scripts/GATES.md#the-glamsterdam-devnet-lane)).
-  A committed 39-case transition-tool corpus exercises the transaction
+  exception than the fixture (see [`scripts/GATES.md`](scripts/GATES.md#the-amsterdam-lane)).
+  A committed 49-case transition-tool corpus exercises the transaction
   semantics and the block-level access list through `jaune t8n --state.fork
   Amsterdam` against the pinned executable reference, and `jaune t8n --forks`
-  advertises all five forks, Amsterdam included.
-- **Reference:** mirrors [execution-specs](https://github.com/ethereum/execution-specs)
+  advertises all five forks, Amsterdam included. Ten authored cases cover
+  storage-only creation and deletion across those five forks. The corresponding
+  upstream release fixtures were skipped and are absent; no pre-Prague coverage
+  or upstream consensus on those skipped scenarios is claimed.
+- **Frozen arithmetic/vector oracle:** [execution-specs](https://github.com/ethereum/execution-specs)
   `mainnet` at commit
   [`4198…7694`](https://github.com/ethereum/execution-specs/tree/4198b9c5996713b268aed602739d5aa40e277694)
   (as of 2025-09-19).
@@ -251,8 +258,8 @@ requirements.
   [`scripts/vectors/SOURCES.md`](scripts/vectors/SOURCES.md):
   - *legacy* — `ethereum/tests` @ `3129f16` (plus its `LegacyTests` @ `2339b9a`);
   - *EEST* — release `v5.4.0` (SHA-256 `92cf1b47…`).
-  - *current mainnet* — `execution-specs` `tests@v20.0.2` @ `abbe057`, asset
-    SHA-256 `12805409…`; installed separately at `~/eest-mainnet-v20.0.2`.
+  - *current mainnet* — `execution-specs` `tests@v21.0.1` @ `1562e2f`, asset
+    SHA-256 `b9b14391…`; installed separately at `~/eest-mainnet-v21.0.1`.
 - **Gate catalogue** — [`scripts/GATES.md`](scripts/GATES.md) is the
   authoritative reference for every verification gate: exact commands, pass
   criteria, runtimes, and which gate to reach for when. The legacy, current-
@@ -279,7 +286,7 @@ requirements.
   The frozen `ethereum/tests` corpus is retained as an independently-filled
   regression instrument. Its `--full` tier is the entire `BlockchainTests`
   corpus, dominated by the `GeneralStateTests/` subtree — which passes
-  **2633 of 2634**. Its five baselined FAILs are diagnosed, and none is a
+  **2628 of 2634**. Its five baselined FAILs are diagnosed, and none is a
   defect in Jaune: two
   (`stEIP1559/intrinsicCancun.json`, `bcEIP1559/intrinsicOrFailCancun.json`)
   are the corpus's only two fixtures with no case in the supported fork
@@ -290,6 +297,19 @@ requirements.
   the fee cap before intrinsic gas) and omit the specification's: the frozen
   EELS oracle validates intrinsic gas first and reports exactly the identity
   Jaune reports, on all three (see the per-tier `scripts/baseline-*.txt`).
+
+  The five additional PASS→FAIL files are `stCreate2/RevertInCreateInInitCreate2Paris.json`,
+  `stCreate2/create2collisionStorageParis.json`,
+  `stExtCodeHash/dynamicAccountOverwriteEmpty_Paris.json`,
+  `stRevertTest/RevertInCreateInInit_Paris.json`, and
+  `stSStoreTest/InitCollisionParis.json`, all under `GeneralStateTests/`. Their
+  ten Prague cases agree with EELS `1562e2f` on replay of the original prestate,
+  signed transactions and environment; their old header gas values disagree.
+  All fixture and baseline bytes are preserved. The full run reports 2,973 PASS
+  and 10 FAIL, with a raw RED verdict on exactly these five approved changes.
+  Any further classification change fails readiness acceptance. The separate
+  historical LegacyTests restoration pin `41404287` is unmerged PR18 and has
+  no Prague cases; it does not replace this corpus.
 
 ## Semantic integrity
 
@@ -381,7 +401,7 @@ stating exactly, because the badge above reports only the first of them.
   tier.
 
 **The current-mainnet suite is not a CI gate.** The headline result on this
-page — 5,006/5,006 supported fixture files, 34,205/34,205 cases — is produced
+page — 4,968/4,968 supported fixture files, 34,449/34,449 cases — is produced
 by [`scripts/check-mainnet.sh`](scripts/check-mainnet.sh), which runs locally
 against a corpus this repository does not vendor. A green badge attests to
 the four `ci.yml` jobs above; it does not attest to the current-mainnet

@@ -313,13 +313,25 @@ to write**. They establish nothing about unreached paths.
 Prague and remains the input to its registered vector generators. It is not
 an identity claim for Jaune's whole current semantics. Osaka and BPO support
 was originally built from EIP text and validated against `tests@v20.0.1`;
-the current-mainnet fixture lane now uses `tests@v20.0.2`. The separate
-transition-tool/Amsterdam anchor remains `7341820b5b394b1934dfe7bb6f621fcdab7baf7f`.
-Jaune retains fixture-compatible rejection of storage-only creation collisions
-as an intentional difference from that transition-tool snapshot; the current
-upstream fixtures exclude this ambiguous account shape. Agreement on generated arithmetic vectors
-or fixtures does not establish equivalence to every part of any one Python
-revision, nor final Amsterdam support.
+both current fixture lanes now use `tests@v21.0.1`, and their transition-tool
+anchor is `1562e2f8b5cb1efda7e0d7c517f2dfb5742c0a43`. Creation collides only
+with nonzero nonce or nonempty code on every runnable fork. Storage-only
+accounts may be created into; their storage is cleared before initcode, and
+deleting an empty account clears its storage too. The release omitted the
+upstream storage-only creation/deletion tests. Ten authored t8n cases cover
+Prague, Osaka, BPO1, BPO2 and Amsterdam; they are substitute finite evidence,
+not published release coverage or an upstream consensus claim.
+
+The frozen Prague legacy corpus retains five stale storage-collision files.
+All ten cases in those files agree with the new pinned EELS on original-input
+replay, including gas usage and poststate, but disagree with their old header
+expectations. The owner accepted exactly those five classification changes;
+the raw legacy regression gate remains RED and all fixture/baseline bytes are
+unchanged. The independently pinned historical PR18 restoration is unmerged
+and contains no Prague cases. Amsterdam also retains the four documented DP-1
+header-identity findings. Agreement on generated vectors or fixtures does not
+establish equivalence to every part of any Python revision, nor final
+Amsterdam support.
 
 **The differential oracles** — 21,593 U256/word/hash cases
 (`scripts/check-u256.sh`), 240 fake-exponential cases
