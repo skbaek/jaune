@@ -53,6 +53,10 @@ for s in $SEEDS; do
   fi
   if [ "$MS" -gt "$SLOWEST" ]; then SLOWEST=$MS; SLOWSEED=$s; fi
 done
+if [ "$RUNS" -eq 0 ]; then
+  echo "RED — jumpdest: no seeds selected; an empty comparison is not evidence"
+  exit 1
+fi
 if [ "$FAILS" -ne 0 ]; then
   echo "RED — jumpdest: $FAILS of $RUNS seed(s) disagreed at $SIZE bytes; see the lines above"
   exit 1
