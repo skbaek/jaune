@@ -116,8 +116,10 @@ deriving DecidableEq, Repr
 sentinel. This lets Prague retain its exact validation path while Osaka adds
 EIP-7825 and EIP-7594 without a fork comparison at either use site. -/
 structure TransactionLimits : Type where
-  /-- EIP-7825: the largest gas limit a transaction may specify. -/
+  /-- EIP-7825: whole-transaction cap before Amsterdam; execution-gas cap thereafter. -/
   maxGas : Option Nat
+  /-- EIP-8037: total transaction gas, including the state-gas reservoir. -/
+  maxTotalGas : Option Nat := none
   /-- EIP-7594: the largest number of blobs one type-3 transaction may carry. -/
   maxBlobCount : Option Nat
 deriving DecidableEq, Repr
@@ -804,14 +806,19 @@ def amsterdamRequests : List (UInt8 × Adr) := pragueRequests ++ [
 `GasCosts.BLOCK_ACCESS_LIST_ITEM = 2000`. -/
 def amsterdamBalRules : BalRules := { itemCost := 2000 }
 
+/-- Amsterdam retains the execution cap and adds the EIP-8037 total cap. -/
+def amsterdamTransactionLimits : TransactionLimits :=
+  { osakaTransactionLimits with maxTotalGas := some (2 ^ 32 - 1) }
+
 /-- The Amsterdam rule set, composed from the sub-records the goals that own
 them introduced: goal A's header flags and request list shape, goal B's
 shared-formula gas schedule and state-gas dimension, and this goal's
 block-level rules -- the access-list item cost, the two opcode flags, the raised
-code limits, the two further request contracts, and both header fields.
+code limits, the total transaction gas cap, the two further request contracts,
+and both header fields.
 
 Written as an update of `bpo2Rules` so that every field Amsterdam does *not*
-move -- the blob schedule, the transaction and block limits, `MODEXP`, the
+move -- the blob schedule, the block limits, `MODEXP`, the
 precompile set -- is BPO2's by construction, and the record-update guards below
 state, field by field and as a whole, exactly which fields moved. Nothing here
 is inherited by accident: the anonymous-constructor `example` beside those
@@ -830,6 +837,7 @@ def amsterdamRules : ForkRules :=
   { bpo2Rules with
     fork := .amsterdam
     code := amsterdamCodeLimits
+    tx := amsterdamTransactionLimits
     op := amsterdamOpcodeRules
     gas := amsterdamGasSchedule
     stateGas := some amsterdamStateGasRules
@@ -1963,15 +1971,17 @@ example : bpo2Rules =
 -- is what the anonymous-constructor `example` after the per-field guards is
 -- for: it is the G1 "no silent inheritance" rule made executable.
 #guard { amsterdamRules with
-  fork := .bpo2, code := pragueCodeLimits, op := osakaOpcodeRules,
+  fork := .bpo2, code := pragueCodeLimits, tx := osakaTransactionLimits,
+  op := osakaOpcodeRules,
   gas := pragueGasSchedule, stateGas := none, header := pragueHeaderRules,
   requests := pragueRequests, bal := none } = bpo2Rules
 #guard { bpo2Rules with
-  fork := .amsterdam, code := amsterdamCodeLimits, op := amsterdamOpcodeRules,
+  fork := .amsterdam, code := amsterdamCodeLimits, tx := amsterdamTransactionLimits,
+  op := amsterdamOpcodeRules,
   gas := amsterdamGasSchedule, stateGas := some amsterdamStateGasRules,
   header := amsterdamHeaderRules, requests := amsterdamRequests,
   bal := some amsterdamBalRules } = amsterdamRules
--- The eight moved fields, one guard each, so a failure names the field.
+-- The moved fields, one guard each, so a failure names the field.
 #guard amsterdamRules.fork = .amsterdam
 #guard amsterdamRules.code = amsterdamCodeLimits
 #guard amsterdamRules.op = amsterdamOpcodeRules
@@ -1980,9 +1990,11 @@ example : bpo2Rules =
 #guard amsterdamRules.header = amsterdamHeaderRules
 #guard amsterdamRules.requests = amsterdamRequests
 #guard amsterdamRules.bal = some amsterdamBalRules
--- The four inherited fields, each BPO2's -- named rather than assumed.
+-- The inherited fields and the distinct Amsterdam transaction limits.
 #guard amsterdamRules.blob = bpo2BlobSchedule
-#guard amsterdamRules.tx = osakaTransactionLimits
+#guard amsterdamRules.tx = amsterdamTransactionLimits
+#guard amsterdamRules.tx.maxGas = some (2 ^ 24)
+#guard amsterdamRules.tx.maxTotalGas = some (2 ^ 32 - 1)
 #guard amsterdamRules.block = osakaBlockLimits
 #guard amsterdamRules.modexp = osakaModexpRules
 #guard amsterdamRules.precompiles = osakaPrecompiles
@@ -1993,7 +2005,7 @@ example : bpo2Rules =
 -- until the field is placed here as moved or inherited. Its siblings for
 -- Prague, Osaka, BPO1 and BPO2 sit beside their own record guards above.
 example : amsterdamRules =
-    ⟨.amsterdam, bpo2BlobSchedule, amsterdamCodeLimits, osakaTransactionLimits,
+    ⟨.amsterdam, bpo2BlobSchedule, amsterdamCodeLimits, amsterdamTransactionLimits,
      osakaBlockLimits, osakaModexpRules, amsterdamOpcodeRules,
      amsterdamGasSchedule, some amsterdamStateGasRules, amsterdamHeaderRules,
      amsterdamRequests, some amsterdamBalRules, osakaPrecompiles⟩ := rfl

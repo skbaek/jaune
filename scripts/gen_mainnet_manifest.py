@@ -121,12 +121,12 @@ LANES = {
     # second, weaker corpus while reporting it as Amsterdam coverage.
     "amsterdam": LaneSpec(
         name="amsterdam",
-        sources_key="glamsterdam_devnet",
+        sources_key="amsterdam",
         statics=AMSTERDAM_STATIC,
         suite_statics=("Amsterdam",),
         smoke_network="Amsterdam",
         suite_prefix="amsterdam-",
-        report_label="glamsterdam-devnet",
+        report_label="amsterdam",
         output=ROOT / "amsterdam" / "manifests.json",
         # Amsterdam's own rules resolve in this build, so the static suites run,
         # and the activation boundary is gated too: `BPO2ToAmsterdamAtTime15k`

@@ -837,16 +837,16 @@ def deep_compare_current_mainnet(manifest: dict, mainnet_root: Path) -> list[Che
 
 
 def check_amsterdam(manifest: dict, amsterdam_root: Path) -> list[Check]:
-    """Check the separately installed Glamsterdam devnet fixture lane."""
+    """Check the pinned release for the Amsterdam fixture lane."""
     return check_release_lane(
-        manifest, amsterdam_root, "glamsterdam_devnet", "glamsterdam-devnet"
+        manifest, amsterdam_root, "amsterdam", "amsterdam"
     )
 
 
 def deep_compare_amsterdam(manifest: dict, amsterdam_root: Path) -> list[Check]:
-    """Deep-check the Glamsterdam devnet tree against its pinned release asset."""
+    """Deep-check the Amsterdam tree against its pinned release asset."""
     return deep_compare_release_lane(
-        manifest, amsterdam_root, "glamsterdam_devnet", "glamsterdam-devnet"
+        manifest, amsterdam_root, "amsterdam", "amsterdam"
     )
 
 
@@ -1150,9 +1150,9 @@ def main(argv: list[str]) -> int:
     else:
         mainnet_root = None
 
-    if args.amsterdam_root is not None and "glamsterdam_devnet" not in manifest:
+    if args.amsterdam_root is not None and "amsterdam" not in manifest:
         print(
-            "error: --amsterdam-root requires a glamsterdam_devnet manifest section",
+            "error: --amsterdam-root requires an amsterdam manifest section",
             file=sys.stderr,
         )
         return 2
@@ -1160,8 +1160,8 @@ def main(argv: list[str]) -> int:
         amsterdam_root = args.amsterdam_root.expanduser()
     elif os.environ.get("EEST_AMSTERDAM_ROOT"):
         amsterdam_root = Path(os.environ["EEST_AMSTERDAM_ROOT"]).expanduser()
-    elif "glamsterdam_devnet" in manifest:
-        amsterdam_root = Path.home() / manifest["glamsterdam_devnet"]["default_subpath_from_home"]
+    elif "amsterdam" in manifest:
+        amsterdam_root = Path.home() / manifest["amsterdam"]["default_subpath_from_home"]
     else:
         amsterdam_root = None
 

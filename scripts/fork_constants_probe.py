@@ -405,8 +405,12 @@ def extract(label: str, fork: str) -> dict:
     # across every module they are known to inhabit, newest location first.
     max_blob_gas, max_blob_gas_source = _require(
         fork, "MAX_BLOB_GAS_PER_BLOCK", ("vm.gas", "fork"))
-    tx_max_gas, tx_max_gas_source = _find(
-        fork, "TX_MAX_GAS_LIMIT", ("transactions", "fork"))
+    if hasattr(costs, "TX_MAX_GAS_LIMIT"):
+        tx_max_gas = _require_int(costs, "TX_MAX_GAS_LIMIT", fork)
+        tx_max_gas_source = "vm.gas.GasCosts.TX_MAX_GAS_LIMIT"
+    else:
+        tx_max_gas, tx_max_gas_source = _find(
+            fork, "TX_MAX_GAS_LIMIT", ("transactions", "fork"))
     blob_count, blob_count_source = _find(
         fork, "BLOB_COUNT_LIMIT", ("transactions", "fork"))
     max_rlp, max_rlp_source = _find(
@@ -426,6 +430,8 @@ def extract(label: str, fork: str) -> dict:
         field("code.maxInitCodeSize", _require_int(interpreter, "MAX_INIT_CODE_SIZE", fork),
               "vm.interpreter.MAX_INIT_CODE_SIZE"),
         field("tx.maxGas", tx_max_gas, tx_max_gas_source),
+        field("tx.maxTotalGas", _opt_int(costs, "TX_MAX_TOTAL_GAS_LIMIT"),
+              "vm.gas.GasCosts.TX_MAX_TOTAL_GAS_LIMIT (absent before EIP-8037)"),
         field("tx.maxBlobCount", blob_count, blob_count_source),
         field("block.maxRlpSize", max_rlp, max_rlp_source),
         field("op.clz", hasattr(instructions.Ops, "CLZ"),

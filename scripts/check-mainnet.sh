@@ -99,15 +99,15 @@ done
 
 case "$LANE" in
   mainnet)
-    LANE_ROOT_DEFAULT="${EEST_MAINNET_ROOT:-$HOME/eest-mainnet-v20.0.2}/fixtures"
+    LANE_ROOT_DEFAULT="${EEST_MAINNET_ROOT:-$HOME/eest-mainnet-v21.0.1}/fixtures"
     LANE_BOOTSTRAP="python3 scripts/bootstrap_mainnet.py"
     LANE_ROOT_ENV="EEST_MAINNET_ROOT"
     LANE_NAME="current-mainnet" ;;
   amsterdam)
-    LANE_ROOT_DEFAULT="${EEST_AMSTERDAM_ROOT:-$HOME/eest-glamsterdam-devnet-v8.1.4}/fixtures"
+    LANE_ROOT_DEFAULT="${EEST_AMSTERDAM_ROOT:-$HOME/eest-mainnet-v21.0.1}/fixtures"
     LANE_BOOTSTRAP="python3 scripts/bootstrap_mainnet.py --lane amsterdam"
     LANE_ROOT_ENV="EEST_AMSTERDAM_ROOT"
-    LANE_NAME="glamsterdam-devnet" ;;
+    LANE_NAME="amsterdam" ;;
   *) echo "error: unknown lane $LANE; expected mainnet or amsterdam" >&2; exit 2 ;;
 esac
 [ -n "$FIXTURES_ROOT" ] || FIXTURES_ROOT="$LANE_ROOT_DEFAULT"

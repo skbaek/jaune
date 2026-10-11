@@ -260,6 +260,7 @@ def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
     ("code.maxCodeSize", jNat r.code.maxCodeSize),
     ("code.maxInitCodeSize", jNat r.code.maxInitCodeSize),
     ("tx.maxGas", jOptNat r.tx.maxGas),
+    ("tx.maxTotalGas", jOptNat r.tx.maxTotalGas),
     ("tx.maxBlobCount", jOptNat r.tx.maxBlobCount),
     ("block.maxRlpSize", jOptNat r.block.maxRlpSize),
     ("modexp.maxLength", jOptNat r.modexp.maxLength),

@@ -74,6 +74,7 @@ COVERAGE = {
     "code.maxCodeSize": "checked",
     "code.maxInitCodeSize": "checked",
     "tx.maxGas": "checked",
+    "tx.maxTotalGas": "checked",
     "tx.maxBlobCount": "checked",
     "block.maxRlpSize": "checked",
     "op.clz": "checked",

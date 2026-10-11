@@ -1453,10 +1453,9 @@ def checkInitcodeSize (code : CodeLimits) (receiver : Option Adr)
   else
     .ok ()
 
-/-- Enforce the fork's per-transaction gas cap, when one is active. -/
-def checkTransactionGasCap (limits : TransactionLimits) (gas : Nat) :
+private def checkTransactionGasLimit (limit : Option Nat) (gas : Nat) :
     Except TxValidationError Unit :=
-  match limits.maxGas with
+  match limit with
   | none => .ok ()
   | some maxGas =>
     if gas > maxGas then
@@ -1465,6 +1464,16 @@ def checkTransactionGasCap (limits : TransactionLimits) (gas : Nat) :
            maximum = {maxGas}"
     else
       .ok ()
+
+/-- Enforce the pre-Amsterdam whole-transaction EIP-7825 cap. -/
+def checkTransactionGasCap (limits : TransactionLimits) (gas : Nat) :
+    Except TxValidationError Unit :=
+  checkTransactionGasLimit limits.maxGas gas
+
+/-- Enforce Amsterdam's separate EIP-8037 total transaction gas cap. -/
+def checkTransactionTotalGasCap (limits : TransactionLimits) (gas : Nat) :
+    Except TxValidationError Unit :=
+  checkTransactionGasLimit limits.maxTotalGas gas
 
 private def checkTransactionPriorityFeeRelation (tx : Tx) :
     Except TxValidationError Unit :=
@@ -1524,6 +1533,7 @@ def validateTransaction (rules : ForkRules) (tx : Tx) (sender : Adr) :
     if tx.nonce = UInt64.max then
       .error <| .nonceIsMax <| .text "transaction nonce is 2^64 - 1"
     checkInitcodeSize rules.code tx.type.receiver? tx.data.length
+    checkTransactionTotalGasCap rules.tx tx.gas
     checkTransactionPriorityFeeRelation tx
     checkTransactionBlobShape rules tx
     checkTransactionReceiver tx
@@ -1975,6 +1985,15 @@ private def txvFails {α : Type} (p : TxValidationError → Bool) :
   validateTransaction pragueRules {fixtureTestTx with nonce := UInt64.max} 0
 #guard txvFails (fun | .initcodeSizeExceeded _ => true | _ => false) <|
   checkInitcodeSize pragueRules.code none (pragueRules.code.maxInitCodeSize + 1)
+
+-- EIP-8037 admits the total-cap boundary, rejects the next unit, and
+-- leaves EIP-7825 as the independent execution bound in `allocateEvmGas`.
+#guard (validateTransaction amsterdamRules
+    {plainAmsterdamTransfer with gas := 2 ^ 32 - 1} 1).toOption.isSome
+#guard txvFails (fun | .transactionGasLimitExceeded _ => true | _ => false) <|
+  validateTransaction amsterdamRules
+    {plainAmsterdamTransfer with gas := 2 ^ 32} 1
+#guard (checkTransactionTotalGasCap bpo2Rules.tx (2 ^ 32)).toOption.isSome
 
 -- EIP-7825 is inclusive at `2 ^ 24`, and absent at Prague.
 #guard (checkTransactionGasCap osakaRules.tx (2 ^ 24 - 1)).toOption.isSome

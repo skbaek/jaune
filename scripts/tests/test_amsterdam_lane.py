@@ -1,4 +1,4 @@
-"""Synthetic tests for the Glamsterdam devnet lane.
+"""Synthetic tests for the Amsterdam fixture lane.
 
 The lane is now *fully runnable*, and that is what these tests hold in place.
 This build implements Amsterdam and gates the BPO2-to-Amsterdam activation
@@ -25,7 +25,7 @@ admissions). Four properties matter and are checked below.
   count for the selected suite is an error, never a smaller pass.
 * **The two lanes cannot be confused.** Their suite namespaces are disjoint,
   each names the other's suites when one is asked for on the wrong lane, and
-  neither reads the other's manifest or install root.
+  each reads its own manifest and root selector.
 """
 from __future__ import annotations
 
@@ -129,7 +129,7 @@ class LaneRefusalTests(unittest.TestCase):
                 self.assertEqual(run.returncode, 2, run.stderr)
                 self.assertNotIn("is installed but refused", run.stderr)
                 self.assertNotIn("jaune-amsterdam-currency-v1", run.stderr)
-                self.assertIn("glamsterdam-devnet blockchain fixture root not found", run.stderr)
+                self.assertIn("amsterdam blockchain fixture root not found", run.stderr)
 
     def test_no_refusal_repeats_a_claim_a_later_build_falsified(self):
         """`Fork.amsterdam.rules?` resolves and the activation boundary is
@@ -163,7 +163,7 @@ class LaneRefusalTests(unittest.TestCase):
                     )
                 self.assertEqual(run.returncode, 2, run.stderr)
                 self.assertNotIn("is installed but refused", run.stderr)
-                self.assertIn("glamsterdam-devnet blockchain fixture root not found", run.stderr)
+                self.assertIn("amsterdam blockchain fixture root not found", run.stderr)
 
     def test_usage_states_which_devnet_suites_run(self):
         run = run_check_mainnet()
@@ -326,7 +326,7 @@ class SyntheticLaneRunTests(unittest.TestCase):
 
     @classmethod
     def build_corpus(cls, fixtures: Path) -> None:
-        release = json.loads((SCRIPTS / "sources.json").read_text())["glamsterdam_devnet"]
+        release = json.loads((SCRIPTS / "sources.json").read_text())["amsterdam"]
         for name in release["expected_top_level_dirs"]:
             (fixtures / name).mkdir(parents=True)
         # The publisher's own release index, carrying the identity `sources.json`
@@ -633,7 +633,7 @@ class LaneManifestFieldTests(unittest.TestCase):
         """The convention check is per lane, so a section cannot be pointed at
         the other lane's root by copying its `default_env_var`."""
         swapped = json.loads(json.dumps(self.sources))
-        swapped["glamsterdam_devnet"]["default_env_var"] = "EEST_MAINNET_ROOT"
+        swapped["amsterdam"]["default_env_var"] = "EEST_MAINNET_ROOT"
         with self.assertRaises(bootstrap_mainnet.CurrentMainnetBootstrapError):
             bootstrap_mainnet.validate_current_mainnet_manifest(
                 swapped, bootstrap_mainnet.LANES["amsterdam"]
@@ -641,30 +641,32 @@ class LaneManifestFieldTests(unittest.TestCase):
 
     def test_a_missing_section_is_named(self):
         without = json.loads(json.dumps(self.sources))
-        del without["glamsterdam_devnet"]
+        del without["amsterdam"]
         with self.assertRaises(bootstrap_mainnet.CurrentMainnetBootstrapError) as caught:
             bootstrap_mainnet.validate_current_mainnet_manifest(
                 without, bootstrap_mainnet.LANES["amsterdam"]
             )
-        self.assertIn("glamsterdam_devnet", str(caught.exception))
+        self.assertIn("amsterdam", str(caught.exception))
 
-    def test_the_lanes_install_to_different_roots(self):
+    def test_the_lanes_share_the_same_release_root(self):
         mainnet = bootstrap_mainnet.current_mainnet_root_from_args(
             None, self.sources, bootstrap_mainnet.LANES["mainnet"]
         )
         amsterdam = bootstrap_mainnet.current_mainnet_root_from_args(
             None, self.sources, bootstrap_mainnet.LANES["amsterdam"]
         )
-        self.assertNotEqual(mainnet, amsterdam)
+        self.assertEqual(mainnet, amsterdam)
 
-    def test_the_release_identity_is_pinned_to_the_devnet_commit(self):
-        devnet = self.sources["glamsterdam_devnet"]
-        self.assertEqual(devnet["release_tag"], "tests-glamsterdam-devnet@v8.1.4")
+    def test_the_release_identity_matches_both_lanes_and_target(self):
+        amsterdam = self.sources["amsterdam"]
+        self.assertEqual(amsterdam["release_tag"], "tests@v21.0.1")
+        for field in ("release_tag", "release_commit", "archive_sha256", "archive_size_bytes"):
+            self.assertEqual(amsterdam[field], self.sources["current_mainnet"][field])
         # The fixture release and the transition-tool anchor must name one
         # revision: that is what makes the extracted constants and the fixtures
         # agree by construction rather than by coincidence.
         self.assertEqual(
-            devnet["release_commit"], self.sources["conformance_target"]["commit"]
+            amsterdam["release_commit"], self.sources["conformance_target"]["commit"]
         )
 
     def test_the_doctor_reports_the_lane_under_its_own_name(self):
@@ -673,7 +675,7 @@ class LaneManifestFieldTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             checks = env_doctor.check_amsterdam(self.sources, Path(tmp) / "absent")
         self.assertTrue(checks)
-        self.assertTrue(all(c.name.startswith("glamsterdam-devnet") for c in checks))
+        self.assertTrue(all(c.name.startswith("amsterdam") for c in checks))
 
 
 class AmsterdamT8nCorpusTests(unittest.TestCase):

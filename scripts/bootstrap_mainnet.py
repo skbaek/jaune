@@ -12,11 +12,10 @@ Two lanes exist and `--lane` selects between them:
 
 - `mainnet` (the default, and every historical invocation of this script) reads
   `current_mainnet` and installs the current-mainnet release;
-- `amsterdam` reads `glamsterdam_devnet` and installs the Glamsterdam devnet-8
-  prerelease.
+- `amsterdam` reads `amsterdam` and installs the release for Amsterdam suites.
 
-They differ only in manifest key, environment variable, and install root. The
-extraction, checksum, safety, and provenance logic below is shared verbatim,
+They have separate manifest keys and environment variables, with a shared
+default install root. The extraction, checksum, safety, and provenance logic is shared,
 because a second copy of an archive extractor is a second place for a traversal
 or link check to be missing.
 
@@ -77,7 +76,7 @@ class Lane:
 LANES = {
     "mainnet": Lane("mainnet", "current_mainnet", "EEST_MAINNET_ROOT", "current-mainnet"),
     "amsterdam": Lane(
-        "amsterdam", "glamsterdam_devnet", "EEST_AMSTERDAM_ROOT", "glamsterdam-devnet"
+        "amsterdam", "amsterdam", "EEST_AMSTERDAM_ROOT", "amsterdam"
     ),
 }
 DEFAULT_LANE = LANES["mainnet"]
