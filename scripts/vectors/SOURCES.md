@@ -538,3 +538,21 @@ is the Prague schedule and `modexp_eip7883` the Osaka one — and each fails
 wholesale under the other fork. `jaune --vectors` additionally refuses a file
 whose address is not a precompile under the requested fork, so a vector can
 never be exercised under rules that do not activate its address.
+
+### Historical EIP-7610 restoration
+
+`sources.json` now separately pins `legacy_restoration`, the owner-approved,
+unmerged legacytests PR18 commit. Install it in its own versioned directory;
+`JAUNE_LEGACY_RESTORATION_ROOT` overrides that directory. Clone the section's
+`repo_url` without checkout into a fresh directory, fetch its exact `commit`,
+and check out that commit detached. `python3 scripts/env_doctor.py --legacy-only`
+checks its revision, origin and tracked cleanliness alongside the frozen sources.
+An existing installation must not be reset or overwritten to install this pin.
+
+The `legacy_tests_submodule` section continues to describe the original
+`ethereum/tests` gitlink, preserving the frozen oracle installation. The separate
+restoration contains Cancun/Constantinople historical cases, not Prague cases.
+It is inventory evidence, not a replacement root for `check-legacy.sh --full`.
+The Prague files at the `ethereum_tests` pin still encode EIP-7610 in five
+families; the Amsterdam-readiness report records that unresolved corpus finding.
+No baseline entry or fixture byte is changed by selecting the restoration.

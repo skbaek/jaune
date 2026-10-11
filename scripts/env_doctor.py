@@ -120,6 +120,10 @@ def load_manifest(path: Path) -> dict:
             "full_lock_status",
         ),
     }
+    if "legacy_restoration" in data:
+        required_fields["legacy_restoration"] = (
+            "repo_url", "commit", "default_env_var", "default_subpath_from_home",
+        )
     for section, fields in required_fields.items():
         if not isinstance(data[section], dict):
             raise ManifestError(
@@ -307,6 +311,17 @@ def _normalize_git_url(url: str) -> str:
 def check_execution_specs(manifest: dict, root: Path) -> list[Check]:
     spec = manifest["execution_specs"]
     return check_git_checkout("execution-specs", root, spec["repo_url"], spec["commit"])
+
+
+def check_legacy_restoration(manifest: dict) -> list[Check]:
+    """Verify the separately pinned historical restoration, not the Prague lane."""
+    spec = manifest.get("legacy_restoration")
+    if spec is None:
+        return []
+    root = Path(os.environ.get(spec["default_env_var"]) or
+                Path.home() / spec["default_subpath_from_home"]).expanduser()
+    return check_git_checkout("LegacyTests restoration", root,
+                              spec["repo_url"], spec["commit"])
 
 
 def check_ethereum_tests(manifest: dict, execution_specs_root: Path) -> list[Check]:
@@ -1182,6 +1197,7 @@ def main(argv: list[str]) -> int:
     checks.extend(check_required_commands())
     checks.extend(check_execution_specs(manifest, execution_specs_root))
     checks.extend(check_ethereum_tests(manifest, execution_specs_root))
+    checks.extend(check_legacy_restoration(manifest))
     if not args.legacy_only:
         checks.extend(check_eest(manifest, eest_root))
         if args.eest_deep:

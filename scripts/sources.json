@@ -134,5 +134,14 @@
       "test_count": 354684
     },
     "_comment": "The v21.0.1 mainnet fixture release. Both lanes and the conformance target pin the same release; suites and manifests remain separate. Identity verified against the official release API and checksum-verified archive."
+  },
+  "legacy_restoration": {
+    "repo_url": "https://github.com/ethereum/legacytests.git",
+    "commit": "41404287f520406a100f4767c0524e7ca2131ef8",
+    "default_env_var": "JAUNE_LEGACY_RESTORATION_ROOT",
+    "default_subpath_from_home": "legacytests-41404287",
+    "upstream_pr": "https://github.com/ethereum/legacytests/pull/18",
+    "merged_at_selection": false,
+    "_comment": "Owner-approved unmerged restoration pin for the G8 historical corpus inventory, installed separately from the frozen ethereum/tests LegacyTests gitlink. These Cancun/Constantinople files contain no Prague cases and do not replace the Prague BlockchainTests gate or its baseline; the separate ethereum/tests EIP-7610 mismatch remains a recorded G8 finding."
   }
 }

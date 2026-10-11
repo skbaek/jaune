@@ -17,6 +17,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+from unittest import mock
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
@@ -196,6 +197,23 @@ class ManifestParsingTests(unittest.TestCase):
 
 
 class GitCheckoutTests(unittest.TestCase):
+    def test_restoration_root_must_match_its_own_pin(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "restoration"
+            commit = make_git_repo(root, origin="https://example.invalid/legacy.git")
+            spec = {"repo_url": "https://example.invalid/legacy.git", "commit": commit,
+                    "default_env_var": "JAUNE_LEGACY_RESTORATION_ROOT",
+                    "default_subpath_from_home": "unused"}
+            with mock.patch.dict(env_doctor.os.environ,
+                                 {"JAUNE_LEGACY_RESTORATION_ROOT": str(root)}):
+                checks = env_doctor.check_legacy_restoration({"legacy_restoration": spec})
+                self.assertTrue(all(c.status == env_doctor.STATUS_OK for c in checks))
+                spec["commit"] = "0" * 40
+                checks = env_doctor.check_legacy_restoration({"legacy_restoration": spec})
+                self.assertTrue(any(c.name.endswith(": HEAD") and
+                                    c.status == env_doctor.STATUS_FAIL for c in checks))
+            self.assertEqual(env_doctor.check_legacy_restoration({}), [])
+
     def test_success(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp) / "repo"
