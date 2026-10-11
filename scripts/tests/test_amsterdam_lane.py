@@ -690,7 +690,8 @@ class AmsterdamT8nCorpusTests(unittest.TestCase):
             for scenario in AMSTERDAM_T8N_SCENARIOS
             for mode in ("blockchain", "state-test")
         }
-        expected.update({"storage-create-amsterdam", "storage-delete-amsterdam"})
+        expected.update({"storage-create-amsterdam", "storage-delete-amsterdam",
+                         "zero-value-storage-amsterdam"})
         actual = {
             path.name
             for path in (T8N / "cases").iterdir()
