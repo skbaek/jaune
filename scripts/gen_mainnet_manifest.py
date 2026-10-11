@@ -7,12 +7,13 @@ the complete static-fork, transition, and exclusion inventories.  A fixed
 lexicographic rule over a pinned seed derives the smoke suite; no path is
 hand-selected.
 
-``--lane`` selects which release the manifest describes:
+``--lane`` selects the source-lock section and suite scope. At v21 both
+sections name one release:
 
 - ``mainnet`` (the default) inventories the current-mainnet release over the
   forks whose rules this build implements: Prague, Osaka, BPO1, BPO2;
-- ``amsterdam`` inventories the Glamsterdam devnet-8 prerelease over those plus
-  the *declared* fork ``Amsterdam``.
+- ``amsterdam`` inventories that release over those plus the runnable fork
+  ``Amsterdam``, raising suites only for Amsterdam and its transition boundary.
 
 A label is *in a lane* when every fork it names is one that lane covers, which
 for a transition is the same rule ``ForkTransition.ofString?`` applies in Lean.
@@ -113,12 +114,10 @@ LANES = {
         report_label="current-mainnet",
         output=ROOT / "mainnet" / "manifests.json",
     ),
-    # The devnet lane *covers* every fork a devnet label can name -- otherwise
-    # `BPO2ToAmsterdamAtTime15k` would be excluded for naming BPO2 -- but it
-    # raises a suite only over Amsterdam itself. The Prague-BPO2 fixtures this
-    # prerelease also carries are the mainnet lane's subject at the mainnet
-    # lane's own pin, and running them here would test the same rules against a
-    # second, weaker corpus while reporting it as Amsterdam coverage.
+    # This lane covers Prague-BPO2 as transition endpoints, otherwise
+    # `BPO2ToAmsterdamAtTime15k` would be excluded for naming BPO2. It raises
+    # suites only over Amsterdam itself; the mainnet lane owns Prague-BPO2
+    # coverage from the same release, so it is not counted twice.
     "amsterdam": LaneSpec(
         name="amsterdam",
         sources_key="amsterdam",
@@ -383,9 +382,9 @@ def inventory(fixtures_root: Path, sources: dict, lane: LaneSpec = DEFAULT_LANE)
     )
     # A transition belongs to this lane's suite when it is in the lane *and*
     # at least one endpoint is a fork this lane raises a suite over. Without
-    # the second condition the devnet lane's transitions suite would carry the
-    # three Prague-BPO2 transitions the mainnet lane already owns, at a second
-    # pin, and report them as Amsterdam coverage. For the mainnet lane the two
+    # the second condition the Amsterdam transitions suite would carry the
+    # three Prague-BPO2 transitions the mainnet lane already owns and report
+    # them as Amsterdam coverage. For the mainnet lane the two
     # conditions coincide, because it raises a suite over every fork it covers.
     supported_transitions = [
         label
@@ -432,8 +431,8 @@ def inventory(fixtures_root: Path, sources: dict, lane: LaneSpec = DEFAULT_LANE)
     }
 
     # A label may be inside the lane and still raise no suite of its own -- the
-    # devnet corpus carries the whole Prague-BPO2 history alongside Amsterdam,
-    # and that history is the mainnet lane's subject at the mainnet lane's pin.
+    # release carries Prague-BPO2 alongside Amsterdam, and the mainnet lane
+    # owns that history from the same release.
     # Such a label is neither run here nor excluded, so it is stated outright
     # rather than left to be inferred from the difference of two other lists.
     suite_networks = {

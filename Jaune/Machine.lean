@@ -2474,7 +2474,7 @@ def Mach.restoreChildGas (gas reservoir : Nat) (mach : Mach) : Mach :=
     stateGas :=
       { mach.stateGas with left := mach.stateGas.left + reservoir } }
 
-/-- `repay_state_gas_spill`, new at the pinned revision (`7341820`, #3478).
+/-- `repay_state_gas_spill`, introduced at the historical devnet-8 revision (#3478).
 
 A refund can land in a different frame than the charge it undoes: the
 refunding frame's spill may be smaller than the refund, so the excess credits
@@ -2601,7 +2601,7 @@ theorem Mach.restoreChildGas_gasMeasure (gas reservoir : Nat) (mach : Mach) :
   simp only [Mach.restoreChildGas, Mach.gasMeasure]
   omega
 
-/-- The v8.1.4 repay-on-merge rule moves gas from the reservoir to `gasLeft`
+/-- The repay-on-merge rule moves gas from the reservoir to `gasLeft`
 while cancelling an equal amount of spill. Neutral. -/
 theorem Mach.repayStateGasSpill_gasMeasure (mach : Mach) :
     mach.repayStateGasSpill.gasMeasure = mach.gasMeasure := by
@@ -5398,7 +5398,7 @@ settled -- rolled back to its baseline, its spill refilled, its refunds
 discarded -- so absorbing its meter unconditionally reclaims exactly what it
 gives back. Everything else -- logs, scheduled self-destructs, warmed access
 sets -- survives only on success, dying with the reverted state. A successful
-merge then ends with `repayStateGasSpill`, the rule new at `7341820` (#3478).
+merge then ends with `repayStateGasSpill`, introduced during devnet-8 (#3478).
 
 Committed spill is not absorbed, because a child never has any: only the top
 frame commits, and it commits after `set_delegation`, which no child runs.

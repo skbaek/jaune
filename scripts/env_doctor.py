@@ -1082,17 +1082,16 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help="current-mainnet install root containing fixtures.tar.gz and extracted "
-        "fixtures/ (default: $EEST_MAINNET_ROOT or ~/eest-mainnet-v20.0.2)",
+        "fixtures/ (default: $EEST_MAINNET_ROOT or ~/eest-mainnet-v21.0.1)",
     )
     parser.add_argument(
         "--amsterdam-root",
         type=Path,
         default=None,
-        help="Glamsterdam devnet install root containing the release archive and "
-        "extracted fixtures/ (default: $EEST_AMSTERDAM_ROOT or "
-        "~/eest-glamsterdam-devnet-v8.1.4). This lane holds fixtures for a fork "
-        "whose rules this build does not implement; installing it claims nothing "
-        "about running it.",
+        help="Amsterdam install root containing the release archive and extracted "
+        "fixtures/ (default: $EEST_AMSTERDAM_ROOT or "
+        "~/eest-mainnet-v21.0.1). Uses the pinned release with a separate "
+        "Amsterdam suite manifest.",
     )
     parser.add_argument(
         "--venv",
@@ -1122,7 +1121,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--amsterdam-deep",
         action="store_true",
-        help="additionally deep-verify the Glamsterdam devnet fixture tree "
+        help="additionally deep-verify the Amsterdam fixture tree "
         "against its release archive. Ignored with --legacy-only.",
     )
     parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
@@ -1180,10 +1179,9 @@ def main(argv: list[str]) -> int:
     else:
         amsterdam_root = None
 
-    # The devnet lane is optional in a way the mainnet lane is not: it is a
-    # prerelease corpus no in-tree gate runs today, so an installation that is
-    # simply absent is not a failure. It is checked when it is asked for
-    # explicitly, and when it is actually installed.
+    # An absent optional Amsterdam installation is checked only when requested
+    # explicitly. An installed root is always checked. At v21 both lanes
+    # default to the same release root but retain separate overrides.
     check_amsterdam_lane = amsterdam_root is not None and (
         args.amsterdam_root is not None
         or args.amsterdam_deep

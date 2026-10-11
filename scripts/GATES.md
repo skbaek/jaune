@@ -306,6 +306,22 @@ catalogue. The legacy premise (baseline lines identical, patch/rlp4 files
 `--rebase` of `baseline-full.txt`. The subsets stay available, and remain the
 right tools, for iterating.
 
+### Readiness measurements (2026-10-11)
+
+WSL2 Linux, Lean 4.34.0, candidate `ea74b79` (semantic source `af9a705`),
+14 GiB memory-high / 16 GiB maximum / zero-swap containment. These are measured
+command wall times, including harness work; parallel fixture timings are
+reference-only. Read-only archive verification overlapped the mainnet run.
+
+| command | scale | wall seconds | raw verdict |
+|---|---|---:|---|
+| `check-mainnet.sh --suite full --no-build --jobs 6` | 4,968 files / 34,449 cases | 469.788 | PASS |
+| `check-t8n.sh --red-test` | 49 cases + 3 controls | 10.283 | PASS |
+| `check-jumpdest.sh` | 9 × 65,536-byte blobs | 7.194 | PASS |
+| `check-memory-probe.sh` | both call families, 256 MiB budget | 0.461 | PASS |
+| `python3 -m unittest discover -s scripts/tests` | 219 tests | 5.059 | PASS |
+| `check-ec.sh` | differential oracle including checker compilation | 26.585 | PASS |
+
 ### The Amsterdam lane
 
 `check-mainnet.sh` takes `--lane (mainnet|amsterdam)`. Both lanes now pin
