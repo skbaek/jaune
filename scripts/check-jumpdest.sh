@@ -1,14 +1,11 @@
 #!/usr/bin/env bash
 # The jump-destination control for EIP-8024 (goal C, G4; programme D8 and R3).
 #
-# `Jaune/Machine.lean` proves `pinnedJumpDestsFrom_eq_legacy`: the pinned
-# Amsterdam `get_valid_jump_destinations` walk, which skips the immediate of an
-# accepted `DUPN`/`SWAPN`/`EXCHANGE`, computes the same destinations as the
-# pre-Amsterdam walk on every byte array. This gate is the falsifier for that
-# theorem's *statement* and for the interpreter's backward scan `jumpable`
-# agreeing with both: `jaune --jumpdest-control` generates a reproducible
-# pseudo-random blob per seed at EIP-7954's 64 KiB code ceiling and compares
-# the three computations position by position, printing per-phase times.
+# At the v21 conformance pin, `pinnedJumpDestsFrom` aliases the legacy walk.
+# Their equality is definitional and has no sampled duplicate here. This gate
+# checks the remaining unproved bridge to the interpreter's backward scan
+# `jumpable`: reproducible 64 KiB blobs, compared position by position, with
+# per-phase timings. EIP-7954 supplies the code ceiling.
 #
 # The seeds are an explicit list, and that is deliberate: on this host a
 # 64 KiB blob at seeds 20260906, 20260910, 20260911, 20260912, 20260916,
@@ -16,8 +13,7 @@
 # a gate over consecutive seeds would not terminate inside the catalogue's
 # runtime rule. Those seeds are programme R3's measurement -- the cost of the
 # jump-destination analysis at the raised code ceiling -- and are recorded in
-# goal C's evidence; they are not evidence about the theorem, whose statement
-# this gate falsifies on the blobs it runs. Pass `--seeds` to run others.
+# goal C's evidence; they are not theorem evidence. Pass `--seeds` to run others.
 #
 # Usage: scripts/check-jumpdest.sh [--seeds "s1 s2 ..."] [--size N]
 #   defaults: seeds 20260905 20260907 20260908 20260909 20260913 20260914
@@ -61,5 +57,5 @@ if [ "$FAILS" -ne 0 ]; then
   echo "RED — jumpdest: $FAILS of $RUNS seed(s) disagreed at $SIZE bytes; see the lines above"
   exit 1
 fi
-echo "OK — jumpdest: pinned walk = legacy walk = jumpable on $RUNS blob(s) × $SIZE bytes (seeds $SEEDS); slowest blob $SLOWEST ms (seed $SLOWSEED)"
+echo "OK — jumpdest: pinned walk = jumpable on $RUNS blob(s) × $SIZE bytes (seeds $SEEDS); slowest blob $SLOWEST ms (seed $SLOWSEED)"
 exit 0

@@ -351,16 +351,12 @@ def runRulesPrinter (label : String) : IO Unit := do
 /-- `jaune --jumpdest-control <seed> <blobs> <size>`: the programme's D8
 random-blob control for the jump-destination analysis (goal C, G4).
 
-For each of `blobs` pseudo-random byte arrays of `size` bytes (a 64-bit LCG
-seeded from `seed + i`, so the run is reproducible), compares three
-computations of the valid jump-destination set: the pinned Amsterdam forward
-walk `pinnedJumpDestsFrom` (with EIP-8024's `DUPN`/`SWAPN`/`EXCHANGE` cases),
-the pre-Amsterdam forward walk `legacyJumpDestsFrom`, and the interpreter's own
-backward scan `jumpable`. The first two are proved equal on every input
-(`pinnedJumpDestsFrom_eq_legacy`); this control is the falsifier for that
-theorem's *statement* and for `jumpable` agreeing with it, run on blobs large
-enough to exercise EIP-7954's 64 KiB code ceiling. It also reports the slowest
-blob's `jumpable` scan time, which is programme R3's measurement. -/
+For each reproducible pseudo-random byte array, compare the pinned forward
+walk with the interpreter's backward scan `jumpable` at EIP-7954's 64 KiB
+code ceiling. The pinned walk is now the legacy walk by definition; their
+identity is proved by `pinnedJumpDestsFrom_eq_legacy` and needs no sampled
+comparison. This control covers only the remaining, unproved bridge to
+`jumpable`, and records its scan time for programme R3. -/
 def runJumpdestControl (seedStr blobsStr sizeStr : String) : IO Bool := do
   let some seed := seedStr.toNat?
     | .throw s!"error : --jumpdest-control seed is not a number: {repr seedStr}"
@@ -400,36 +396,29 @@ def runJumpdestControl (seedStr blobsStr sizeStr : String) : IO Bool := do
     let pinned := pinnedJumpDestsFrom cd 0
     IO.println s!"blob {i}: pinned walk: {pinned.length} destination(s)"
     (← IO.getStdout).flush
-    let tPinned ← IO.monoMsNow
-    let legacy := legacyJumpDestsFrom cd 0
-    IO.println s!"blob {i}: legacy walk: {legacy.length} destination(s)"
-    (← IO.getStdout).flush
     let t0 ← IO.monoMsNow
     let scanned := (List.range size).filter (jumpable cd)
     IO.println s!"blob {i}: jumpable scan: {scanned.length} destination(s)"
     (← IO.getStdout).flush
     let t1 ← IO.monoMsNow
     IO.println
-      s!"blob {i}: generate {tWalk - tGen} ms, pinned walk {tPinned - tWalk} ms, \
-         legacy walk {t0 - tPinned} ms, jumpable scan {t1 - t0} ms"
+      s!"blob {i}: generate {tWalk - tGen} ms, pinned walk {t0 - tWalk} ms, \
+         jumpable scan {t1 - t0} ms"
     if t0 - tWalk > slowestWalkMs then
       slowestWalkMs := t0 - tWalk
     if t1 - t0 > slowestMs then
       slowestMs := t1 - t0
       slowestBlob := i
     destinations := destinations + pinned.length
-    if pinned ≠ legacy then
-      IO.println s!"RED — jumpdest-control: blob {i}: pinned walk ≠ legacy walk"
-      ok := false
     if pinned ≠ scanned then
       IO.println s!"RED — jumpdest-control: blob {i}: pinned walk ≠ jumpable scan"
       ok := false
   if ok then
     IO.println
       s!"OK — jumpdest-control: {blobs} blob(s) × {size} bytes (seed {seed}): \
-         pinned walk = legacy walk = jumpable on every blob; {destinations} \
+         pinned walk = jumpable on every blob; {destinations} \
          destination(s), {stackAccessBytes} DUPN/SWAPN/EXCHANGE byte(s); slowest \
-         jumpable scan {slowestMs} ms (blob {slowestBlob}); slowest forward walks \
+         jumpable scan {slowestMs} ms (blob {slowestBlob}); slowest forward walk \
          {slowestWalkMs} ms"
   else
     IO.println

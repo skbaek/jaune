@@ -5059,51 +5059,9 @@ example :
 
 --------------- EIP-8024 AND THE JUMP-DESTINATION SET ---------------
 
--- The pinned `get_valid_jump_destinations` (`vm/runtime.py` at Amsterdam) is
--- *not* the pre-Amsterdam walk: at a `DUPN`, `SWAPN` or `EXCHANGE` byte it
--- skips the following immediate unless that immediate lies in the opcode's
--- forbidden range, in which case the byte stays at an instruction boundary.
--- So "the jump-destination set is unchanged" is a theorem to discharge, not an
--- observation, and here it is: both walks are written out as forward passes
--- listing every destination at or after `pc`, and `pinnedJumpDestsFrom_eq_legacy`
--- proves them equal on every byte array. The argument is exactly that both
--- forbidden ranges (`0x5B–0x7F` and `0x52–0x7F`) contain `JUMPDEST` (0x5B) and
--- every `PUSH1`–`PUSH32` byte (`0x60–0x7F`): an *accepted* immediate is
--- therefore never a destination and never a push, so the legacy walk, which
--- steps onto it, adds nothing and steps off again, landing where the pinned
--- walk landed in one step; a *forbidden* immediate is deliberately not
--- skipped, so both walks step onto it alike.
---
--- `jumpable`/`noPushBefore` -- the backward scan the interpreter runs -- keep
--- their definitions. The programme's random-blob control (`scripts/check-jumpdest.sh`)
--- compares `jumpable` against `pinnedJumpDestsFrom` on 64 KiB blobs, as the
--- falsifier for this theorem's *statement*; the theorem is what makes the
--- unchanged definitions correct on adversarial code, not just sampled code.
-
-/-- The pinned Amsterdam `get_valid_jump_destinations`, from `pc`: `JUMPDEST`
-is a destination; `PUSH1`–`PUSH32` skip their data; `DUPN`/`SWAPN` skip their
-immediate unless it is in `0x5B–0x7F`, `EXCHANGE` unless it is in `0x52–0x7F`;
-every other byte -- `PUSH0` and undefined opcodes included -- advances one.
-An immediate past the end of code reads as `0`, which is accepted, so the
-last-byte case skips past the end exactly as the pinned `pc + 1 < len(code)`
-guard does. -/
-def pinnedJumpDestsFrom (cd : ByteArray) (pc : Nat) : List Nat :=
-  if h : pc < cd.size then
-    let b := cd[pc]
-    if b = 0x5B then pc :: pinnedJumpDestsFrom cd (pc + 1)
-    else if 0x60 ≤ b ∧ b ≤ 0x7F then pinnedJumpDestsFrom cd (pc + (b.toNat - 0x5F) + 1)
-    else if b = 0xE6 ∨ b = 0xE7 then
-      if 0x5B ≤ cd.byteD (pc + 1) ∧ cd.byteD (pc + 1) ≤ 0x7F then
-        pinnedJumpDestsFrom cd (pc + 1)
-      else pinnedJumpDestsFrom cd (pc + 2)
-    else if b = 0xE8 then
-      if 0x52 ≤ cd.byteD (pc + 1) ∧ cd.byteD (pc + 1) ≤ 0x7F then
-        pinnedJumpDestsFrom cd (pc + 1)
-      else pinnedJumpDestsFrom cd (pc + 2)
-    else pinnedJumpDestsFrom cd (pc + 1)
-  else []
-termination_by cd.size - pc
-decreasing_by all_goals omega
+-- At the v21 conformance pin, Amsterdam uses the legacy forward walk.
+-- The interpreter retains its backward `jumpable`/`noPushBefore` scan;
+-- `scripts/check-jumpdest.sh` samples the bridge between those algorithms.
 
 /-- The pre-Amsterdam walk: the same pass with no immediate-carrying opcode
 other than the pushes, which is the walk `noPushBefore` characterises. -/
@@ -5132,50 +5090,21 @@ theorem legacyJumpDestsFrom_skip (cd : ByteArray) (pc : Nat)
     rw [legacyJumpDestsFrom]
     rw [dif_neg (by omega)]
 
-/-- Appendix D of goal C: the pinned Amsterdam walk and the pre-Amsterdam walk
-compute the same destinations on every byte array. -/
-theorem pinnedJumpDestsFrom_eq_legacy (cd : ByteArray) (pc : Nat) :
-    pinnedJumpDestsFrom cd pc = legacyJumpDestsFrom cd pc := by
-  rw [pinnedJumpDestsFrom, legacyJumpDestsFrom]
-  split
-  · rename_i h
-    -- An immediate outside a forbidden range `[lo, 0x7F]` with `lo ≤ 0x5B` is
-    -- neither `JUMPDEST` nor a `PUSH1`–`PUSH32` byte, so the legacy walk steps
-    -- off it without adding a destination.
-    have key : ∀ lo : UInt8, lo ≤ 0x5B →
-        ¬ (lo ≤ cd.byteD (pc + 1) ∧ cd.byteD (pc + 1) ≤ 0x7F) →
-        legacyJumpDestsFrom cd (pc + 1) = legacyJumpDestsFrom cd (pc + 2) := by
-      intro lo hlo hnot
-      apply legacyJumpDestsFrom_skip
-      · intro heq
-        apply hnot
-        rw [heq]
-        exact ⟨hlo, by decide⟩
-      · intro ⟨h1, h2⟩
-        apply hnot
-        exact ⟨UInt8.le_trans hlo (UInt8.le_trans (by decide) h1), h2⟩
-    dsimp only
-    split_ifs <;> first
-      | exact congrArg _ (pinnedJumpDestsFrom_eq_legacy cd (pc + 1))
-      | exact pinnedJumpDestsFrom_eq_legacy cd (pc + 1)
-      | exact pinnedJumpDestsFrom_eq_legacy cd _
-      | (rw [pinnedJumpDestsFrom_eq_legacy cd (pc + 2)]
-         exact (key 0x5B (by decide) (by assumption)).symm)
-      | (rw [pinnedJumpDestsFrom_eq_legacy cd (pc + 2)]
-         exact (key 0x52 (by decide) (by assumption)).symm)
-  · rfl
-termination_by cd.size - pc
-decreasing_by all_goals omega
+/-- The pinned Amsterdam `get_valid_jump_destinations` is the legacy walk:
+only PUSH1–PUSH32 skip data. EELS #3618 removed the stack-access cases. -/
+abbrev pinnedJumpDestsFrom := legacyJumpDestsFrom
 
--- The guard points of Appendix D, on both walks and on `jumpable`.
--- `[0xE6, 0x5B]` / `[0xE8, 0x5B]`: a forbidden immediate is not skipped, so
--- `1` is a destination; `[0xE6, 0x80, 0x5B]` / `[0xE8, 0x00, 0x5B]`: an
--- accepted immediate is skipped, `2` is a destination and `1` is not.
+/-- The pinned and legacy forward walks are now definitionally identical. -/
+theorem pinnedJumpDestsFrom_eq_legacy (cd : ByteArray) (pc : Nat) :
+    pinnedJumpDestsFrom cd pc = legacyJumpDestsFrom cd pc := rfl
+
+-- Stack-access immediates are visited as ordinary bytes by the pinned walk.
+-- JUMPDEST remains a destination; a following PUSH still skips its data.
 #guard pinnedJumpDestsFrom ⟨#[0xE6, 0x5B]⟩ 0 = [1]
 #guard pinnedJumpDestsFrom ⟨#[0xE8, 0x5B]⟩ 0 = [1]
 #guard pinnedJumpDestsFrom ⟨#[0xE6, 0x80, 0x5B]⟩ 0 = [2]
 #guard pinnedJumpDestsFrom ⟨#[0xE8, 0x00, 0x5B]⟩ 0 = [2]
--- 0x7F is forbidden, so it is not skipped -- and it is PUSH32, which eats the
+-- 0x7F is PUSH32, which eats the
 -- JUMPDEST behind it: the set is empty on both walks and for `jumpable`.
 #guard pinnedJumpDestsFrom ⟨#[0xE7, 0x7F, 0x5B]⟩ 0 = []
 #guard (List.range 3).filter (jumpable ⟨#[0xE7, 0x7F, 0x5B]⟩) = []
