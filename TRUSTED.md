@@ -320,7 +320,9 @@ accounts may be created into; their storage is cleared before initcode, and
 deleting an empty account clears its storage too. The release omitted the
 upstream storage-only creation/deletion tests. Ten authored t8n cases cover
 Prague, Osaka, BPO1, BPO2 and Amsterdam; they are substitute finite evidence,
-not published release coverage or an upstream consensus claim.
+not published release coverage or an upstream consensus claim. Five further
+cases compare zero-value transaction, CALL and STATICCALL entry against the
+pinned implementation; these entries preserve storage-only empty accounts.
 
 The frozen Prague legacy corpus retains five stale storage-collision files.
 All ten cases in those files agree with the new pinned EELS on original-input

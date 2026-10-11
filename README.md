@@ -241,13 +241,15 @@ requirements.
   passes all 58 files except four recorded identity
   findings, where Jaune agrees that the block is invalid but names a different
   exception than the fixture (see [`scripts/GATES.md`](scripts/GATES.md#the-amsterdam-lane)).
-  A committed 49-case transition-tool corpus exercises the transaction
+  A committed 54-case transition-tool corpus exercises the transaction
   semantics and the block-level access list through `jaune t8n --state.fork
   Amsterdam` against the pinned executable reference, and `jaune t8n --forks`
   advertises all five forks, Amsterdam included. Ten authored cases cover
-  storage-only creation and deletion across those five forks. The corresponding
-  upstream release fixtures were skipped and are absent; no pre-Prague coverage
-  or upstream consensus on those skipped scenarios is claimed.
+  storage-only creation and deletion across those five forks. The upstream release
+  fixtures for those ten creation/deletion scenarios were skipped and are absent;
+  no pre-Prague coverage or upstream consensus on those skipped scenarios is claimed.
+  Five further cases compare zero-value transaction, CALL and STATICCALL entry
+  against pinned EELS, with storage-only empty accounts retaining their storage.
 - **Frozen arithmetic/vector oracle:** [execution-specs](https://github.com/ethereum/execution-specs)
   `mainnet` at commit
   [`4198…7694`](https://github.com/ethereum/execution-specs/tree/4198b9c5996713b268aed602739d5aa40e277694)

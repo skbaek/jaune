@@ -49,6 +49,8 @@ keeps the two modes byte-identical without hiding how inputs are composed.
 These nine cases run at Prague. The thirty `am-*` cases below exercise
 Amsterdam's metering in both tool modes. Ten further cases cover storage-only
 creation and empty-account deletion on Prague, Osaka, BPO1, BPO2 and Amsterdam.
+Five further cases cover zero-value transaction, CALL and STATICCALL entry on
+those same forks (54 cases in total).
 
 ### Storage semantics at the v21 pin
 
@@ -64,8 +66,14 @@ fee credit deletes that storage, then a later transaction funds the account
 again. Amsterdam results also check that implicit deletion does not appear as
 SSTORE-to-zero entries in the block access list.
 
-These are authored differential inputs, not release fixtures. At the pinned
-EELS commit, the corresponding `test_create_collision.py` storage-only cases
+`zero-value-storage-<fork>` calls three distinct storage-only empty accounts
+through a zero-value transaction, CALL and STATICCALL. Both slots survive in
+the pinned reference. The final alloc and state root directly observe storage
+preservation; caller storage also records successful CALL and STATICCALL.
+
+These are authored differential inputs, not release fixtures. For the ten
+creation/deletion cases, the corresponding `test_create_collision.py` storage-only cases
+at the pinned EELS commit
 and `test_deleted_account_storage.py` are explicitly skipped as undefined until
 EIP-8253 and absent from the release archive. The goldens here record the
 pinned implementation's actual behavior on Jaune's five runnable forks; they

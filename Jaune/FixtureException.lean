@@ -513,7 +513,8 @@ def fixtureInventory : List String :=
     "TransactionException.TYPE_3_TX_ZERO_BLOBS" ]                                                           -- 1
     ++ [ "TransactionException.TYPE_4_EMPTY_AUTHORIZATION_LIST",                                           -- current mainnet 1
          "TransactionException.TYPE_4_TX_CONTRACT_CREATION" ]                                               -- current mainnet 1
-    -- The Glamsterdam devnet lane's `for_amsterdam/amsterdam/eip*` subtrees at
+    -- Historical provenance: the Glamsterdam devnet lane's
+    -- `for_amsterdam/amsterdam/eip*` subtrees at
     -- `tests-glamsterdam-devnet@v8.1.4` (goal C, Appendix C): the three EIP-7928
     -- identities, the two alternations, the malformed-list identity, and the
     -- gas-used alternation the block-accounting subtree carries.
@@ -523,7 +524,8 @@ def fixtureInventory : List String :=
          "BlockException.INVALID_BAL_HASH|BlockException.INVALID_BLOCK_HASH",                               -- devnet 1
          "BlockException.INCORRECT_BLOCK_FORMAT",                                                           -- devnet 2
          "BlockException.GAS_USED_OVERFLOW|TransactionException.GAS_ALLOWANCE_EXCEEDED" ]                   -- devnet 9
-    -- The devnet lane's `for_bpo2toamsterdamattime15k/` transition corpus
+    -- Historical provenance: the devnet lane's
+    -- `for_bpo2toamsterdamattime15k/` transition corpus
     -- (goal D): the empty-request-contract identity of EIP-8282's
     -- `test_contract_deployment.py` `deploy_after_fork` cases.
     ++ [ "BlockException.SYSTEM_CONTRACT_EMPTY" ]                                                          -- devnet transitions 4

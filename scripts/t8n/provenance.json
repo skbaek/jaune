@@ -293,6 +293,36 @@
       "expected/body.json": "b2c18078e9436a2c8530330581d9e3cbb99e5ac99e5186566def91ab47a2a812",
       "expected/result.json": "261851dc6777bcc52b4d4cf42f2056930c9e33daf7bec4b24f1eef38fb2f3933",
       "txs.json": "76069ef7712b25a9109d06a69744e2fbcf74ca2c79e2908209362a60f7fc4751"
+    },
+    "zero-value-storage-amsterdam": {
+      "expected/alloc.json": "720b5f532578a018bb3d234de05a209b38b6bd10db7ccf25742dae5d4010280d",
+      "expected/body.json": "f108643976b7bbf97f694d218f79b9246fafb54b6e980aae7b6e79a803880abb",
+      "expected/result.json": "acc36e04efe9efca92c0d1620e55407e90ba2ddab747df139e714666ad40b9b8",
+      "txs.json": "edb3a4f346b1a5b92ab87873f332d12380c26cbc4fc96ae96254782ce0e7a8f8"
+    },
+    "zero-value-storage-bpo1": {
+      "expected/alloc.json": "614168140c68cd8c5b12a3d38a15fadaf9930ea772d311e555121b83e9e95d9a",
+      "expected/body.json": "f108643976b7bbf97f694d218f79b9246fafb54b6e980aae7b6e79a803880abb",
+      "expected/result.json": "4ed9c16c798aa9c52681ea8726ccbb30aa9ce8505a37ee95115b003fc0059865",
+      "txs.json": "edb3a4f346b1a5b92ab87873f332d12380c26cbc4fc96ae96254782ce0e7a8f8"
+    },
+    "zero-value-storage-bpo2": {
+      "expected/alloc.json": "614168140c68cd8c5b12a3d38a15fadaf9930ea772d311e555121b83e9e95d9a",
+      "expected/body.json": "f108643976b7bbf97f694d218f79b9246fafb54b6e980aae7b6e79a803880abb",
+      "expected/result.json": "4ed9c16c798aa9c52681ea8726ccbb30aa9ce8505a37ee95115b003fc0059865",
+      "txs.json": "edb3a4f346b1a5b92ab87873f332d12380c26cbc4fc96ae96254782ce0e7a8f8"
+    },
+    "zero-value-storage-osaka": {
+      "expected/alloc.json": "614168140c68cd8c5b12a3d38a15fadaf9930ea772d311e555121b83e9e95d9a",
+      "expected/body.json": "f108643976b7bbf97f694d218f79b9246fafb54b6e980aae7b6e79a803880abb",
+      "expected/result.json": "4ed9c16c798aa9c52681ea8726ccbb30aa9ce8505a37ee95115b003fc0059865",
+      "txs.json": "edb3a4f346b1a5b92ab87873f332d12380c26cbc4fc96ae96254782ce0e7a8f8"
+    },
+    "zero-value-storage-prague": {
+      "expected/alloc.json": "614168140c68cd8c5b12a3d38a15fadaf9930ea772d311e555121b83e9e95d9a",
+      "expected/body.json": "f108643976b7bbf97f694d218f79b9246fafb54b6e980aae7b6e79a803880abb",
+      "expected/result.json": "4ed9c16c798aa9c52681ea8726ccbb30aa9ce8505a37ee95115b003fc0059865",
+      "txs.json": "edb3a4f346b1a5b92ab87873f332d12380c26cbc4fc96ae96254782ce0e7a8f8"
     }
   },
   "conformance_target_commit": "1562e2f8b5cb1efda7e0d7c517f2dfb5742c0a43"

@@ -1,0 +1,12 @@
+{
+  "description": "Zero-value transaction, CALL and STATICCALL to distinct nonce-zero, balance-zero, code-empty accounts with storage. Both original slots must survive; caller storage records successful CALL/STATICCALL. Final alloc and state root directly observe preservation.",
+  "fork": "BPO1",
+  "chainid": 1,
+  "reward": -1,
+  "mode": "blockchain",
+  "covers": [
+    "zero-value-transaction-storage-preservation",
+    "zero-value-call-storage-preservation",
+    "staticcall-storage-preservation"
+  ]
+}
