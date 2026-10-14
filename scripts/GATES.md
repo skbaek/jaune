@@ -456,6 +456,17 @@ Two different contracts, and confusing them is the most common misreading:
   The separate unmerged historical restoration `41404287` has no Prague cases
   and does not replace the active legacy root. This amendment does not change
   the harness's exit status, baseline comparison or general pass rule.
+  The smoke and nightly CI aggregate implements this same qualification with
+  `scripts/legacy_qualification.py`: it checks the entire raw report against
+  the unchanged baseline and requires the exact two smoke/five full deltas,
+  then replays all ten original-input cases against both the candidate binary
+  and the manifest-pinned EELS target. Its verdict is **QUALIFIED**, with the
+  raw **RED** exit retained, never an all-PASS legacy verdict. It verifies
+  fixture Git blobs, preserves signed transaction fields, compares complete
+  result/body/account-state JSON, and rejects stale or partial replay output.
+  CI uploads the raw report and every replay input, output and command. A
+  different classification delta, failed replay, changed baseline or missing
+  evidence fails the aggregate; BLS remains an independent all-PASS check.
 - **`check-mainnet.sh` suites and `check-legacy.sh --patch`/`--rlp4` are all-PASS
   targets.** Any non-PASS fails. They have no baseline to rebase.
 - **`check-vectors.sh` is an all-PASS target that also checks coverage.** Every
@@ -763,7 +774,7 @@ not imported by `Examples.lean`) under R1–R4; R1 also recursively scans Jaune,
 so a nested module cannot escape the absence rule. Existing allowlists and
 budgets apply unchanged. Missing example tree/root is a setup failure.
 
-`python3 scripts/check-consumer-boundary.py` is a static CI check that the eight
+`python3 scripts/check-consumer-boundary.py` is a static CI check that the nine
 canonical execution modules are reachable from `Jaune.lean`, every source under
 `Examples/` is reachable from `Examples.lean`, and both libraries retain default
 Lake registration. It rejects Blanc/Creme imports in either source tree and

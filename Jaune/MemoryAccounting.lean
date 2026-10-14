@@ -472,6 +472,9 @@ theorem Linst.run_memory_accounting_output (sevm : Sevm) (pre : Devm) (l : Linst
             if sevm.currentTarget ∈ next.createdAccounts then
               .ok (addAccountToDelete (next.setBal sevm.currentTarget 0) sevm.currentTarget)
             else .ok next) = result at hrun
+          -- The remaining argument depends only on the preserved fields, not
+          -- on the account reads and access-cost calculation defining them.
+          clear_value cost plan donorBal read popped
           rcases hc : chargeGas cost plan.1 with failure | charged
           · have hf := charge_memory_output cost plan.1
             rw [hc] at hf

@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # import must not silently remove that surface from the default library build.
 EXECUTION_MODULES = {
     "Jaune.ExecFrame", "Jaune.Exec", "Jaune.ExecDeriv",
-    "Jaune.ExecSettlement", "Jaune.ExecChronology",
+    "Jaune.ExecSettlement", "Jaune.ExecChronology", "Jaune.MemoryAccounting",
     "Jaune.MessageExecution", "Jaune.SymbolicPush", "Jaune.SymbolicArith",
 }
 

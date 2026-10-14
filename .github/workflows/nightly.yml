@@ -10,8 +10,10 @@
 # It provisions both corpora first (bootstrap_legacy.py, bootstrap_eest.py,
 # each cached). Observed wall time on hosted runners: ~44-45 min.
 #
-# Baseline discipline: if a tier surfaces drift, every CHANGE line is reported
-# verbatim and the run fails. Do not rebaseline to go green.
+# Baseline discipline: every CHANGE remains visible and the raw gate stays
+# RED. Only the exact owner-qualified Prague delta plus a fresh pinned-EELS
+# replay can qualify the aggregate (scripts/GATES.md). Any other drift fails;
+# the baselines remain unchanged.
 #
 # Scope boundary, stated so no badge implies more than it checks: this covers
 # the frozen legacy corpus and the BLS tier. The current-mainnet suite
@@ -35,6 +37,7 @@ concurrency:
 env:
   EELS_ROOT: ${{ github.workspace }}/.fixtures/execution-specs
   EEST_ROOT: ${{ github.workspace }}/.fixtures/eest
+  JAUNE_T8N_TARGET: ${{ github.workspace }}/.fixtures/execution-specs-t8n-v21.0.1
 
 jobs:
   full-and-bls:
@@ -66,10 +69,21 @@ jobs:
       - name: Provision EEST fixtures
         run: python3 scripts/bootstrap_eest.py --eest-root "$EEST_ROOT"
 
-      - name: Full conformance tier (check-legacy.sh --full)
+      - uses: ./.github/actions/setup-conformance-target
+
+      # One step: raw exit recorded, step status is the qualifier.
+      - name: Raw full tier plus Prague qualification
         run: |
+          set +e
           JAUNE_FIXTURES="$EELS_ROOT/tests/fixtures/ethereum_tests/BlockchainTests" \
             scripts/check-legacy.sh --full --no-build
+          RAW_EXIT=$?
+          set -e
+          echo "RAW-EXIT=$RAW_EXIT (raw gate verdict recorded; step status is the qualifier below)"
+          python3 scripts/legacy_qualification.py --tier full --raw-exit "$RAW_EXIT" \
+            --report scripts/report-full.txt \
+            --fixtures "$EELS_ROOT/tests/fixtures/ethereum_tests/BlockchainTests" \
+            --output "$RUNNER_TEMP/legacy-qual-full"
       # Run bls even if --full flagged drift, so both reports always exist.
       - name: BLS / point-evaluation tier (check-legacy.sh --bls)
         if: always()
@@ -85,4 +99,5 @@ jobs:
           path: |
             scripts/report-full.txt
             scripts/report-bls.txt
+            ${{ runner.temp }}/legacy-qual-full
           if-no-files-found: warn

@@ -16,6 +16,7 @@ import Jaune.Execution
 import Jaune.Sufficiency
 import Jaune.ExecFrame
 import Jaune.Exec
+import Jaune.MemoryAccounting
 import Jaune.ExecDeriv
 import Jaune.ExecSettlement
 import Jaune.ExecChronology
