@@ -902,7 +902,7 @@ theorem calculateMsgCallGas_zero_cost
       (calculateMsgCallGas value gas gasLeft 0 0 cs).1 +
         (if value = 0 then 0 else cs) := by
   unfold calculateMsgCallGas
-  split <;> split <;> simp_all <;> omega
+  split <;> split <;> simp_all
 
 /-! ## Pilot
 

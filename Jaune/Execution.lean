@@ -1539,29 +1539,27 @@ private theorem Xinst.stepCached_fst
   case call =>
     rcases hs : sevm.benvStat.rules.stateGas with _ | state
     · refine XStep.ofExceptCached_fst cache ?_
-      simp only [Except.map_bind', Except.map_map', Except.map_pure',
-        Except.map_ok', Except.map_error', apply_ite (Except.map Prod.fst),
+      simp only [Except.map_bind', Except.map_pure',
+        apply_ite (Except.map Prod.fst),
         genericCall.stepCached_fst]
     · rfl
   case callcode =>
     rcases hs : sevm.benvStat.rules.stateGas with _ | state
     · refine XStep.ofExceptCached_fst cache ?_
-      simp only [Except.map_bind', Except.map_map', Except.map_pure',
-        Except.map_ok', Except.map_error', apply_ite (Except.map Prod.fst),
+      simp only [Except.map_bind', Except.map_pure',
+        apply_ite (Except.map Prod.fst),
         genericCall.stepCached_fst]
     · rfl
   case delegatecall =>
     rcases hs : sevm.benvStat.rules.stateGas with _ | state
     · refine XStep.ofExceptCached_fst cache ?_
-      simp only [Except.map_bind', Except.map_map', Except.map_pure',
-        Except.map_ok', Except.map_error', apply_ite (Except.map Prod.fst),
+      simp only [Except.map_bind', Except.map_pure',
         genericCall.stepCached_fst]
     · rfl
   case staticcall =>
     rcases hs : sevm.benvStat.rules.stateGas with _ | state
     · refine XStep.ofExceptCached_fst cache ?_
-      simp only [Except.map_bind', Except.map_map', Except.map_pure',
-        Except.map_ok', Except.map_error', apply_ite (Except.map Prod.fst),
+      simp only [Except.map_bind', Except.map_pure',
         genericCall.stepCached_fst]
     · rfl
 
