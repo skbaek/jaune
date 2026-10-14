@@ -677,6 +677,36 @@ def Nat.powMod (base exp m : Nat) : Nat :=
         go (e / 2) b' res'
     go exp base 1
 
+/-- The accumulator of square-and-multiply represents multiplication modulo `m`. -/
+private theorem Nat.powMod_go_eq (m e b res : Nat) (hres : res % m = res) :
+    Nat.powMod.go m e b res = (res * b ^ e) % m := by
+  induction e using Nat.strong_induction_on generalizing b res with
+  | h e ih =>
+    cases e with
+    | zero => simpa only [Nat.powMod.go, Nat.pow_zero, Nat.mul_one] using hres.symm
+    | succ k =>
+      rw [Nat.powMod.go]
+      have decrease : (k + 1) / 2 < k + 1 := Nat.div_lt_self (by omega) (by decide)
+      have square : (b * b % m) ^ ((k + 1) / 2) % m =
+          b ^ (2 * ((k + 1) / 2)) % m := by
+        rw [← Nat.pow_mod, ← Nat.pow_two, ← Nat.pow_mul]
+      split
+      · have parity : (2 * ((k + 1) / 2)).succ = k + 1 := by omega
+        rw [ih _ decrease _ _ (Nat.mod_mod _ _), Nat.mod_mul_mod,
+          Nat.mul_mod, square, ← Nat.mul_mod, Nat.mul_right_comm res b,
+          Nat.mul_assoc, ← Nat.pow_succ, parity]
+      · have parity : 2 * ((k + 1) / 2) = k + 1 := by omega
+        rw [ih _ decrease _ _ hres, Nat.mul_mod, square, ← Nat.mul_mod, parity]
+
+/-- EVM modular exponentiation, including its zero result for modulus zero. -/
+theorem Nat.powMod_eq (base exp m : Nat) :
+    Nat.powMod base exp m = if m ≤ 1 then 0 else base ^ exp % m := by
+  unfold Nat.powMod
+  split
+  · rfl
+  · rw [Nat.powMod_go_eq m exp base 1 (Nat.mod_eq_of_lt (by omega))]
+    rw [Nat.one_mul]
+
 def B256.bexp (xs ys : B256) : B256 :=
   (Nat.powMod xs.toNat ys.toNat (2 ^ 256)).toB256
 
