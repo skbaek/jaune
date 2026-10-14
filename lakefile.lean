@@ -39,4 +39,4 @@ Exact axiom expectations for the canonical execution surface
 @[default_target]
 lean_lib «Assurance» where
   srcDir := "scripts"
-  roots := #[`AxiomAudit, `ExecutionAxioms, `UnionAxiomsControls, `UnionAxiomsFixture.Good, `UnionAxiomsFixture.Bad, `UnionAxiomsFixture.Dep, `UnionAxiomsFixture.ViaDep]
+  roots := #[`AxiomAudit, `ExecutionAxioms, `JauneUnionAxioms, `UnionAxiomsControls, `UnionAxiomsFixture.Good, `UnionAxiomsFixture.Bad, `UnionAxiomsFixture.Dep, `UnionAxiomsFixture.ViaDep]

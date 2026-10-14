@@ -378,9 +378,9 @@ theorem rounds_eq (p : Array UInt8) (n : Nat) :
                 w.getD ((t % 16 + 14) % 16) 0 >>> 10))
           = W.getD t 0 := by
       by_cases hlt : t < 16
-      · rw [if_pos hlt, hW, getD_schedule_lt _ _ hlt, hM]
+      · rw [ite_eq_left hlt, hW, getD_schedule_lt _ _ hlt, hM]
         simp [FIPS.toWords, Nat.mod_eq_of_lt hlt, hlt]
-      · rw [if_neg hlt]
+      · rw [ite_eq_right hlt]
         have h16 : 16 ≤ t := by omega
         rw [hW, getD_schedule_rec _ _ h16 htlt]
         rw [show t % 16 = (t - 16) % 16 by omega,
@@ -513,7 +513,7 @@ theorem splitToArray_aux_succ {ξ : Type u} (idx : Nat) (a : Array ξ) (n : Nat)
 theorem writeD_cons {ξ : Type u} (a : Array ξ) (n : Nat) (y : ξ) (ys : List ξ)
     (h : n < a.size) :
     Array.writeD a n (y :: ys) = Array.writeD (a.set n y h) (n + 1) ys := by
-  rw [Array.writeD, dif_pos h]
+  rw [Array.writeD, dite_eq_left h]
 
 /-- `List.splitToArray`'s worker, in closed form, for as long as the list has
 entries left to give. -/

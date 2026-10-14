@@ -77,7 +77,7 @@ theorem B256.toNat_mul_eq_of_nofm {x y : B256} (h : B256.Nofm x y) :
 theorem B256.toNat_div {x y : B256} (h : y ≠ 0) :
     (x / y).toNat = x.toNat / y.toNat := by
   show (B256.divMod x y).fst.toNat = _
-  rw [B256.divMod, if_neg h]
+  rw [B256.divMod, ite_eq_right h]
   exact B256.toNat_toB256_of_lt
     (Nat.lt_of_le_of_lt (Nat.div_le_self _ _) (B256.toNat_lt x))
 
@@ -85,13 +85,13 @@ theorem B256.toNat_div {x y : B256} (h : y ≠ 0) :
 truncation: the identity that makes it usable as an exact-arithmetic primitive. -/
 theorem B256.toNat_mulmod {x y z : B256} (h : z ≠ 0) :
     (B256.mulmod x y z).toNat = x.toNat * y.toNat % z.toNat := by
-  rw [B256.mulmod, if_neg h]
+  rw [B256.mulmod, ite_eq_right h]
   exact B256.toNat_toB256_of_lt
     (Nat.lt_trans (Nat.mod_lt _ (B256.toNat_pos h)) (B256.toNat_lt z))
 
 theorem B256.toNat_addmod {x y z : B256} (h : z ≠ 0) :
     (B256.addmod x y z).toNat = (x.toNat + y.toNat) % z.toNat := by
-  rw [B256.addmod, if_neg h]
+  rw [B256.addmod, ite_eq_right h]
   exact B256.toNat_toB256_of_lt
     (Nat.lt_trans (Nat.mod_lt _ (B256.toNat_pos h)) (B256.toNat_lt z))
 
@@ -118,8 +118,8 @@ theorem ceilDiv_eq_add_sub_one_div {d : Nat} (hd : d ≠ 0) (n : Nat) :
   have hdiv : (d - 1) / d = 0 := Nat.div_eq_of_lt (by omega)
   rw [hsub, Nat.add_div hd', hmod, hdiv, ceilDiv, Nat.add_zero]
   rcases Nat.eq_zero_or_pos (n % d) with h | h
-  · rw [if_pos h, if_neg (by omega)]
-  · rw [if_neg (by omega), if_pos (by omega)]
+  · rw [ite_eq_left h, ite_eq_right (by omega)]
+  · rw [ite_eq_right (by omega), ite_eq_left (by omega)]
 
 /-- Ceiling division agrees with "floor, plus one unless the division is exact". -/
 theorem ceilDiv_eq_div_add_ite (n d : Nat) :
@@ -135,8 +135,8 @@ theorem le_ceilDiv_mul {d : Nat} (hd : d ≠ 0) (n : Nat) : n ≤ ceilDiv n d * 
   have hlt := Nat.mod_lt n hd'
   rw [ceilDiv, Nat.add_mul]
   rcases Nat.eq_zero_or_pos (n % d) with hm | hm
-  · rw [if_pos hm, Nat.zero_mul, Nat.add_zero]; omega
-  · rw [if_neg (by omega), Nat.one_mul]; omega
+  · rw [ite_eq_left hm, Nat.zero_mul, Nat.add_zero]; omega
+  · rw [ite_eq_right (by omega), Nat.one_mul]; omega
 
 /-- The complementary ceiling bound: it overshoots by less than one quantum. -/
 theorem ceilDiv_mul_lt {d : Nat} (hd : d ≠ 0) (n : Nat) : ceilDiv n d * d < n + d := by
@@ -145,8 +145,8 @@ theorem ceilDiv_mul_lt {d : Nat} (hd : d ≠ 0) (n : Nat) : ceilDiv n d * d < n 
   have hlt := Nat.mod_lt n hd'
   rw [ceilDiv, Nat.add_mul]
   rcases Nat.eq_zero_or_pos (n % d) with hm | hm
-  · rw [if_pos hm, Nat.zero_mul, Nat.add_zero]; omega
-  · rw [if_neg (by omega), Nat.one_mul]; omega
+  · rw [ite_eq_left hm, Nat.zero_mul, Nat.add_zero]; omega
+  · rw [ite_eq_right (by omega), Nat.one_mul]; omega
 
 /-- Exactness of the floor division is exactly divisibility. -/
 theorem Nat.mul_div_mul_eq_iff_dvd (a b d : Nat) :
@@ -164,7 +164,7 @@ theorem ceilDiv_le_iff {d : Nat} (hd : d ≠ 0) (n k : Nat) :
 /-- A ceiling division that is exact returns the multiplier unchanged. -/
 theorem ceilDiv_mul_self {d : Nat} (hd : d ≠ 0) (x : Nat) : ceilDiv (x * d) d = x := by
   have hmod : x * d % d = 0 := Nat.dvd_iff_mod_eq_zero.mp ⟨x, Nat.mul_comm x d⟩
-  rw [ceilDiv, hmod, if_pos rfl, Nat.add_zero,
+  rw [ceilDiv, hmod, ite_eq_left rfl, Nat.add_zero,
     Nat.mul_div_cancel x (Nat.pos_of_ne_zero hd)]
 
 /-! ## A2 — which way each division rounds, and the degenerate cases -/
@@ -178,8 +178,8 @@ theorem Nat.div_eq_ceilDiv_iff_dvd (n d : Nat) :
     n / d = ceilDiv n d ↔ d ∣ n := by
   rw [ceilDiv, Nat.dvd_iff_mod_eq_zero]
   rcases Nat.eq_zero_or_pos (n % d) with h | h
-  · rw [if_pos h]; omega
-  · rw [if_neg (by omega)]; omega
+  · rw [ite_eq_left h]; omega
+  · rw [ite_eq_right (by omega)]; omega
 
 /-- Dividing by the scale you multiplied by is exact. -/
 theorem Nat.mul_div_self_eq {d : Nat} (hd : d ≠ 0) (a : Nat) : a * d / d = a :=
@@ -189,7 +189,7 @@ theorem Nat.zero_mul_div (b d : Nat) : 0 * b / d = 0 := by
   rw [Nat.zero_mul, Nat.zero_div]
 
 theorem ceilDiv_zero_dividend (d : Nat) : ceilDiv 0 d = 0 := by
-  rw [ceilDiv, Nat.zero_div, Nat.zero_mod, if_pos rfl]
+  rw [ceilDiv, Nat.zero_div, Nat.zero_mod, ite_eq_left rfl]
 
 /-- Jaune's `ceilDiv` at a zero divisor, characterized here so that no proof has
 to rely on it silently. It is `1` on every positive dividend, which is not a

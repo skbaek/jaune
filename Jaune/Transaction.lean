@@ -4478,7 +4478,7 @@ configured entry points perform is redundant on this path, by construction. -/
 theorem ConfiguredChain.checkChainId_eq_ok (pc : ConfiguredChain) :
     pc.config.checkChainId pc.chain.val = .ok () := by
   unfold ChainConfig.checkChainId
-  rw [if_pos pc.chainId_eq]
+  rw [ite_eq_left pc.chainId_eq]
 
 /-- Check EIP-7934 against the authoritative original RLP byte length.
 
@@ -6182,41 +6182,41 @@ theorem validateHeader_links {rules : ForkRules} {chain : BlockChain}
   subst hpar
   dsimp only at h
   by_cases hph : header.parentHash = tip.header.hash
-  · rw [if_neg (by simpa [Header.hash] using hph)] at h
+  · rw [ite_eq_right (by simpa [Header.hash] using hph)] at h
     refine ⟨hph, ?_⟩
     obtain ⟨bf, hbf, h⟩ := Except.bind_eq_ok h
     by_cases h1 : header.excessBlobGas ≠ calculateExcessBlobGas rules.blob tip.header
-    · rw [if_pos h1] at h
+    · rw [ite_eq_left h1] at h
       obtain ⟨_, hb, _⟩ := Except.bind_eq_ok h
       exact absurd hb (by simp)
-    rw [if_neg h1] at h
+    rw [ite_eq_right h1] at h
     by_cases h2 : header.gasUsed > header.gasLimit
-    · rw [if_pos h2] at h
+    · rw [ite_eq_left h2] at h
       obtain ⟨_, hb, _⟩ := Except.bind_eq_ok h
       exact absurd hb (by simp)
-    rw [if_neg h2] at h
+    rw [ite_eq_right h2] at h
     by_cases h3 : bf ≠ header.baseFeePerGas
-    · rw [if_pos h3] at h
+    · rw [ite_eq_left h3] at h
       obtain ⟨_, hb, _⟩ := Except.bind_eq_ok h
       exact absurd hb (by simp)
-    rw [if_neg h3] at h
+    rw [ite_eq_right h3] at h
     by_cases h4 : header.timestamp ≤ tip.header.timestamp
-    · rw [if_pos h4] at h
+    · rw [ite_eq_left h4] at h
       obtain ⟨_, hb, _⟩ := Except.bind_eq_ok h
       exact absurd hb (by simp)
-    rw [if_neg h4] at h
+    rw [ite_eq_right h4] at h
     by_cases h5 : header.number ≠ tip.header.number + 1
-    · rw [if_pos h5] at h
+    · rw [ite_eq_left h5] at h
       obtain ⟨_, hb, _⟩ := Except.bind_eq_ok h
       exact absurd hb (by simp)
     · simpa using h5
   · exfalso
-    rw [if_pos (by simpa [Header.hash] using hph)] at h
+    rw [ite_eq_left (by simpa [Header.hash] using hph)] at h
     by_cases hz : header.parentHash = 0
-    · rw [if_pos hz] at h
+    · rw [ite_eq_left hz] at h
       obtain ⟨_, hb, _⟩ := Except.bind_eq_ok h
       exact absurd hb (by simp)
-    · rw [if_neg hz] at h
+    · rw [ite_eq_right hz] at h
       obtain ⟨_, hb, _⟩ := Except.bind_eq_ok h
       exact absurd hb (by simp)
 
@@ -6232,17 +6232,17 @@ theorem stateTransitionChecks_stateRoot {bout : BlockOutput} {header : Header}
   unfold stateTransitionChecks at h
   dsimp only at h
   by_cases h1 : max bout.blockGasUsed bout.blockStateGasUsed ≠ header.gasUsed
-  · rw [if_pos h1] at h
+  · rw [ite_eq_left h1] at h
     obtain ⟨_, hb, _⟩ := Except.bind_eq_ok h
     exact absurd hb (by simp)
-  rw [if_neg h1] at h
+  rw [ite_eq_right h1] at h
   by_cases h2 : transactionsRoot ≠ header.txsRoot
-  · rw [if_pos h2] at h
+  · rw [ite_eq_left h2] at h
     obtain ⟨_, hb, _⟩ := Except.bind_eq_ok h
     exact absurd hb (by simp)
-  rw [if_neg h2] at h
+  rw [ite_eq_right h2] at h
   by_cases h3 : blockStateRoot ≠ header.stateRoot
-  · rw [if_pos h3] at h
+  · rw [ite_eq_left h3] at h
     obtain ⟨_, hb, _⟩ := Except.bind_eq_ok h
     exact absurd hb (by simp)
   · simpa using h3

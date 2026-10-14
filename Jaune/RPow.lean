@@ -247,7 +247,7 @@ theorem rpowTreeLoop_eval (s c x initial : Nat) (zt xt : RoundTree) (n : Nat) :
 
 theorem rpowTree_eval_with_initial (s c x initial n : Nat) (hx : x ≠ 0) :
     (rpowTree c n).eval s x initial = rpow s c x n := by
-  rw [rpowTree, rpow, if_neg hx]
+  rw [rpowTree, rpow, ite_eq_right hx]
   split
   · rfl
   · simpa only [RoundTree.eval, apply_ite] using
@@ -649,7 +649,7 @@ theorem rpowTree_eval_of_valid_offset {s c x initial n : Nat} (hc : c < s) :
     cases n with
     | zero => simp [rpowTree, rpow, RoundTree.eval]
     | succ n =>
-        rw [rpow, if_pos rfl, if_neg (Nat.succ_ne_zero _)]
+        rw [rpow, ite_eq_left rfl, ite_eq_right (Nat.succ_ne_zero _)]
         apply (rpowTree c (n + 1)).eval_zero_of_baseCount_pos (rpowTree_valid hc)
         rw [rpowTree_baseCount]
         omega
@@ -756,10 +756,10 @@ theorem rpowLoop_eq_mulrChain (s c z x n : Nat) :
       split
       · rfl
       · by_cases hbit : n % 2 = 1
-        · simp only [hbit, if_pos, mulrChain]
+        · simp only [hbit, ite_eq_left, mulrChain]
           exact ih (n / 2) (by omega)
             (mulr s c z (mulr s c x x)) (mulr s c x x)
-        · simp only [hbit, if_false]
+        · simp only [hbit, ite_false]
           exact ih (n / 2) (by omega) z (mulr s c x x)
 
 theorem rpowLoopFactors_length (s c x n : Nat) :
@@ -770,9 +770,9 @@ theorem rpowLoopFactors_length (s c x n : Nat) :
       split
       · rfl
       · by_cases hbit : n % 2 = 1
-        · simp only [hbit, if_pos, List.length_cons]
+        · simp only [hbit, ite_eq_left, List.length_cons]
           rw [ih (n / 2) (by omega)]
-        · simp only [hbit, if_false]
+        · simp only [hbit, ite_false]
           simpa using ih (n / 2) (by omega) (mulr s c x x)
 
 /-- B2's exact additive telescope instantiated on the binary loop's dynamic
@@ -1216,20 +1216,20 @@ theorem B256.toNat_rpowLoop {s c z x : B256} (hs : s ≠ 0) (n : Nat)
   induction n using Nat.strong_induction_on generalizing z x with
   | h n ih =>
       by_cases hn : n = 0
-      · rw [B256.rpowLoop, Jaune.rpowLoop, dif_pos hn, dif_pos hn]
-      · rw [B256.RPowLoopGuards, dif_neg hn] at hguards
+      · rw [B256.rpowLoop, Jaune.rpowLoop, dite_eq_left hn, dite_eq_left hn]
+      · rw [B256.RPowLoopGuards, dite_eq_right hn] at hguards
         rcases hguards with ⟨hxxMul, hxxAdd, hzx, hnext⟩
         have hxx := B256.toNat_mulr hs hxxMul hxxAdd
-        rw [B256.rpowLoop, Jaune.rpowLoop, dif_neg hn, dif_neg hn]
+        rw [B256.rpowLoop, Jaune.rpowLoop, dite_eq_right hn, dite_eq_right hn]
         by_cases hbit : n % 2 = 1
-        · simp only [hbit, if_pos] at hzx hnext ⊢
+        · simp only [hbit, ite_eq_left] at hzx hnext ⊢
           rcases hzx with ⟨hzxMul, hzxAdd⟩
           have hzxNat := B256.toNat_mulr hs hzxMul hzxAdd
           simpa only [hxx, hzxNat] using
             ih (n / 2) (by omega)
               (z := B256.mulr s c z (B256.mulr s c x x))
               (x := B256.mulr s c x x) hnext
-        · simp only [hbit, if_false] at hzx hnext ⊢
+        · simp only [hbit, ite_false] at hzx hnext ⊢
           simpa only [hxx] using
             ih (n / 2) (by omega) (z := z) (x := B256.mulr s c x x) hnext
 
@@ -1239,13 +1239,13 @@ theorem B256.toNat_rpow {s c x : B256} (hs : s ≠ 0) (n : Nat)
   rw [B256.rpow, Jaune.rpow]
   by_cases hx : x = 0
   · subst x
-    cases n <;> simp only [B256.toNat_zero, if_pos, Nat.succ_ne_zero, if_false]
+    cases n <;> simp only [B256.toNat_zero, ite_eq_left, Nat.succ_ne_zero, ite_false]
   · have hxNat : x.toNat ≠ 0 := B256.toNat_ne_zero hx
-    rw [if_neg hx, if_neg hxNat]
+    rw [ite_eq_right hx, ite_eq_right hxNat]
     by_cases hn : n = 0
-    · rw [if_pos hn, if_pos hn]
-    · rw [if_neg hn, if_neg hn]
-      rw [B256.RPowGuards, if_neg hx, if_neg hn] at hguards
+    · rw [ite_eq_left hn, ite_eq_left hn]
+    · rw [ite_eq_right hn, ite_eq_right hn]
+      rw [B256.RPowGuards, ite_eq_right hx, ite_eq_right hn] at hguards
       simpa only [apply_ite] using
         B256.toNat_rpowLoop hs (n / 2) hguards
 

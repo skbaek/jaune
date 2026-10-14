@@ -395,11 +395,11 @@ theorem chargeGas_gasMeasure {c : Nat} {devm devm' : Devm}
     (h : chargeGas c devm = .ok devm') : devm'.gasMeasure + c = devm.gasMeasure := by
   rw [chargeGas_def] at h
   by_cases hle : c ≤ devm.gasLeft
-  · simp only [safeSub, if_pos hle, Except.ok.injEq] at h
+  · simp only [safeSub, ite_eq_left hle, Except.ok.injEq] at h
     subst h
     simp only [Devm.setMach, Mach.gasMeasure, Devm.gasMeasure, Devm.gasLeft] at hle ⊢
     omega
-  · exact absurd h (by simp [safeSub, if_neg hle])
+  · exact absurd h (by simp [safeSub, ite_eq_right hle])
 
 /-! ## Stack primitives
 
@@ -786,7 +786,7 @@ theorem Resume.run_ok_gasMeasure {rsm : Resume}
       · have hsettled : child.AmsterdamFailedChildSettled := by
           by_contra hn
           simp [Except.assert, hn] at h
-        simp only [Except.assert, if_pos hsettled] at h
+        simp only [Except.assert, ite_eq_left hsettled] at h
         rcases hp :
           (if newAccountCharged then
               (incorporateChildAmsterdamOnError parent child child.output).creditStateGasRefund
@@ -803,7 +803,7 @@ theorem Resume.run_ok_gasMeasure {rsm : Resume}
       · have huncommitted : child.AmsterdamChildUncommitted := by
           by_contra hn
           simp [Except.assert, hn] at h
-        simp only [Except.assert, if_pos huncommitted] at h
+        simp only [Except.assert, ite_eq_left huncommitted] at h
         rw [Devm.push_gasMeasure h]
         simp only [Resume.parentGas]
         have he := incorporateChildAmsterdamOnSuccess_gasMeasure_of_child_uncommitted
@@ -819,7 +819,7 @@ theorem Resume.run_ok_gasMeasure {rsm : Resume}
       · have hsettled : child.AmsterdamFailedChildSettled := by
           by_contra hn
           simp [Except.assert, hn] at h
-        simp only [Except.assert, if_pos hsettled] at h
+        simp only [Except.assert, ite_eq_left hsettled] at h
         rcases hp :
           (if newAccountCharged then
               (incorporateChildAmsterdamOnError parent child child.output).creditStateGasRefund
@@ -836,7 +836,7 @@ theorem Resume.run_ok_gasMeasure {rsm : Resume}
       · have huncommitted : child.AmsterdamChildUncommitted := by
           by_contra hn
           simp [Except.assert, hn] at h
-        simp only [Except.assert, if_pos huncommitted] at h
+        simp only [Except.assert, ite_eq_left huncommitted] at h
         rcases hp :
           (incorporateChildAmsterdamOnSuccess parent child child.output).push 1 with
           ⟨e⟩ | ⟨d⟩ <;> simp only [hp] at h
@@ -1114,9 +1114,9 @@ theorem Xinst.step_call_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
     have hcall := GasSchedule.Valid.stipend_le_callValue hv.gas
     by_cases hv : value = 0
     · have : value.toNat = 0 := by rw [hv]; rfl
-      rw [if_pos this]
+      rw [ite_eq_left this]
       omega
-    · rw [if_neg hv]
+    · rw [ite_eq_right hv]
       split <;> omega
   obtain ⟨d8, pcharge, hstep⟩ := Except.bind_eq_ok hstep
   obtain ⟨-, -, hstep⟩ := Except.bind_eq_ok hstep
@@ -1194,12 +1194,12 @@ theorem Xinst.step_call_gasDecreasing (sevm : Sevm) (devm : Devm) :
       have hcall := GasSchedule.Valid.stipend_le_callValue hv.gas
       by_cases hvalue : value = 0
       · have : value.toNat = 0 := by rw [hvalue]; rfl
-        rw [if_pos this, if_pos hvalue]
+        rw [ite_eq_left this, ite_eq_left hvalue]
         omega
       · have hto : value.toNat ≠ 0 := by
           intro hz
           exact hvalue (B256.toNat_inj value 0 (by rw [hz, B256.toNat_zero]))
-        rw [if_neg hto, if_neg hvalue]
+        rw [ite_eq_right hto, ite_eq_right hvalue]
         omega
     have echarge := chargeGas_gasMeasure pcharge
     dsimp only at echarge hstep
@@ -1442,7 +1442,7 @@ theorem Rinst.balance_runCore_gasLt {pc : Nat} {devm devm' : Devm}
     rcases p with ⟨x, mach1⟩
     simp only [hp] at hcore
     by_cases hw : x.toAdr ∈ devm.meta.accessedAddresses
-    · simp only [hw, if_pos] at hcore
+    · simp only [hw, ite_eq_left] at hcore
       cases hc : Mach.chargeGas gasWarmAccess mach1 with
       | error e => simp [hc] at hcore
       | ok p =>
@@ -1462,7 +1462,7 @@ theorem Rinst.balance_runCore_gasLt {pc : Nat} {devm devm' : Devm}
           rw [hout, hv]
           unfold gasWarmAccess at ec
           omega
-    · simp only [hw, if_false] at hcore
+    · simp only [hw, ite_false] at hcore
       cases hc : Mach.chargeGas sevm.benvStat.rules.gas.coldAccountAccess
           mach1 with
       | error e => simp [hc] at hcore
@@ -2137,9 +2137,9 @@ theorem Xinst.step_callcode_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
     have hcall := GasSchedule.Valid.stipend_le_callValue hv.gas
     by_cases hv : value = 0
     · have : value.toNat = 0 := by rw [hv]; rfl
-      rw [if_pos this]
+      rw [ite_eq_left this]
       omega
-    · rw [if_neg hv]
+    · rw [ite_eq_right hv]
       split <;> omega
   obtain ⟨d8, pcharge, hstep⟩ := Except.bind_eq_ok hstep
   have key := call_charge_stipend_lt (devm := devm) hstip eA pcharge
@@ -2213,12 +2213,12 @@ theorem Xinst.step_callcode_gasDecreasing (sevm : Sevm) (devm : Devm) :
       have hcall := GasSchedule.Valid.stipend_le_callValue hv.gas
       by_cases hvalue : value = 0
       · have hto : value.toNat = 0 := by rw [hvalue]; rfl
-        rw [if_pos hto, if_pos hvalue]
+        rw [ite_eq_left hto, ite_eq_left hvalue]
         omega
       · have hto : value.toNat ≠ 0 := by
           intro hz
           exact hvalue (B256.toNat_inj value 0 (by rw [hz, B256.toNat_zero]))
-        rw [if_neg hto, if_neg hvalue]
+        rw [ite_eq_right hto, ite_eq_right hvalue]
         omega
     have key := call_charge_stipend_lt (devm := devm) hstip eA pcharge
     simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
@@ -2261,7 +2261,7 @@ theorem Xinst.step_delegatecall_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
           (sevm.benvStat.rules.gas.accessDelegation (addAccessedAddress d6 codeAddress)
             codeAddress).2.2.2.1) +
         d6.extCost [(inputIndex, inputSize), (outputIndex, outputSize)] := by
-    simp only [if_pos]
+    simp only [ite_eq_left]
     have hac := GasSchedule.access_cost_pos hv.gas codeAddress d6.accessedAddresses
     omega
   obtain ⟨d7, pcharge, hstep⟩ := Except.bind_eq_ok hstep
@@ -2319,7 +2319,7 @@ theorem Xinst.step_delegatecall_gasDecreasing (sevm : Sevm) (devm : Devm) :
               (sevm.benvStat.rules.gas.delegationCost
                 (addAccessedAddress d6 codeAddress) codeAddress).2.2) +
             d6.extCost [(inputIndex, inputSize), (outputIndex, outputSize)] := by
-      simp only [if_pos]
+      simp only [ite_eq_left]
       have hac := GasSchedule.access_cost_pos hv.gas codeAddress d6.accessedAddresses
       omega
     have key := call_charge_stipend_lt (devm := devm) hstip eA pcharge
@@ -2363,7 +2363,7 @@ theorem Xinst.step_staticcall_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
           (sevm.benvStat.rules.gas.accessDelegation
             (addAccessedAddress d6 target) target).2.2.2.1) +
         d6.extCost [(inputIndex, inputSize), (outputIndex, outputSize)] := by
-    simp only [if_pos]
+    simp only [ite_eq_left]
     have hac := GasSchedule.access_cost_pos hv.gas target d6.accessedAddresses
     omega
   obtain ⟨d7, pcharge, hstep⟩ := Except.bind_eq_ok hstep
@@ -2421,7 +2421,7 @@ theorem Xinst.step_staticcall_gasDecreasing (sevm : Sevm) (devm : Devm) :
               (sevm.benvStat.rules.gas.delegationCost
                 (addAccessedAddress d6 codeAddress) codeAddress).2.2) +
             d6.extCost [(inputIndex, inputSize), (outputIndex, outputSize)] := by
-      simp only [if_pos]
+      simp only [ite_eq_left]
       have hac := GasSchedule.access_cost_pos hv.gas codeAddress d6.accessedAddresses
       omega
     have key := call_charge_stipend_lt (devm := devm) hstip eA pcharge
@@ -2519,7 +2519,7 @@ theorem executeCode.handleErrorWith_ok_gasLe {stateGas : Option StateGasRules}
     (chargeGas cost devm).gasMeasure ≤ devm.gasMeasure := by
   rw [chargeGas_def]
   by_cases hc : cost ≤ devm.gasLeft
-  · simp only [safeSub, hc, if_pos, Execution.gasMeasure_ok,
+  · simp only [safeSub, hc, ite_eq_left, Execution.gasMeasure_ok,
       Devm.setMach_gasMeasure]
     simp only [Mach.gasMeasure, Devm.gasMeasure, Devm.gasLeft]
     omega
@@ -2671,9 +2671,9 @@ namespace Mach
     machResultGas (Mach.chargeGas c mach) ≤ mach.gasMeasure := by
   unfold Mach.chargeGas safeSub
   by_cases hc : c ≤ mach.gasLeft
-  · simp only [if_pos hc, machResultGas, Mach.gasMeasure]
+  · simp only [ite_eq_left hc, machResultGas, Mach.gasMeasure]
     omega
-  · simp only [if_neg hc, machResultGas, Mach.gasMeasure]
+  · simp only [ite_eq_right hc, machResultGas, Mach.gasMeasure]
     omega
 
 @[simp] theorem pushItem_machResultGas (x : B256) (c : Nat) (mach : Mach) :
@@ -4452,20 +4452,20 @@ theorem Resume.run_gasLe {rsm : Resume}
       simp only [Resume.run, liftToExecution, bind, Except.bind, Resume.parentGas]
       split
       · by_cases hsettled : child.AmsterdamFailedChildSettled
-        · simp only [Except.assert, if_pos hsettled, Devm.push_gasLe, apply_ite,
+        · simp only [Except.assert, ite_eq_left hsettled, Devm.push_gasLe, apply_ite,
             Devm.creditStateGasRefund_gasMeasure, ite_self]
           have he := incorporateChildAmsterdamOnError_gasMeasure_of_child_settled
             (parent := parent) (child := child) (rd := child.output) hsettled
           omega
-        · simp only [Except.assert, if_neg hsettled, Execution.gasMeasure_error]
+        · simp only [Except.assert, ite_eq_right hsettled, Execution.gasMeasure_error]
           omega
       · by_cases huncommitted : child.AmsterdamChildUncommitted
-        · simp only [Except.assert, if_pos huncommitted, Devm.push_gasLe]
+        · simp only [Except.assert, ite_eq_left huncommitted, Devm.push_gasLe]
           have he :=
             incorporateChildAmsterdamOnSuccess_gasMeasure_of_child_uncommitted
               (parent := parent) (child := child) (rd := []) huncommitted
           omega
-        · simp only [Except.assert, if_neg huncommitted, Execution.gasMeasure_error]
+        · simp only [Except.assert, ite_eq_right huncommitted, Execution.gasMeasure_error]
           omega
   | callAmsterdam state parent outputIndex outputSize newAccountCharged =>
     cases r with
@@ -4479,24 +4479,24 @@ theorem Resume.run_gasLe {rsm : Resume}
       simp only [Resume.run, liftToExecution, bind, Except.bind, Resume.parentGas]
       split
       · by_cases hsettled : child.AmsterdamFailedChildSettled
-        · simp only [Except.assert, if_pos hsettled]
+        · simp only [Except.assert, ite_eq_left hsettled]
           refine gasLe_bind_id ?_ (fun d => by simp)
           simp only [Devm.push_gasLe, apply_ite,
             Devm.creditStateGasRefund_gasMeasure, ite_self]
           have he := incorporateChildAmsterdamOnError_gasMeasure_of_child_settled
             (parent := parent) (child := child) (rd := child.output) hsettled
           omega
-        · simp only [Except.assert, if_neg hsettled, Execution.gasMeasure_error]
+        · simp only [Except.assert, ite_eq_right hsettled, Execution.gasMeasure_error]
           omega
       · by_cases huncommitted : child.AmsterdamChildUncommitted
-        · simp only [Except.assert, if_pos huncommitted]
+        · simp only [Except.assert, ite_eq_left huncommitted]
           refine gasLe_bind_id ?_ (fun d => by simp)
           simp only [Devm.push_gasLe]
           have he :=
             incorporateChildAmsterdamOnSuccess_gasMeasure_of_child_uncommitted
               (parent := parent) (child := child) (rd := child.output) huncommitted
           omega
-        · simp only [Except.assert, if_neg huncommitted, Execution.gasMeasure_error]
+        · simp only [Except.assert, ite_eq_right huncommitted, Execution.gasMeasure_error]
           omega
 
 /-! ## The step-level obligation

@@ -126,8 +126,8 @@ lemma ite_eq_ite_of_iff {α} {p q : Prop} [Decidable p] [Decidable q]
     {a b c d : α} (pq : p ↔ q) (ac : a = c) (bd : b = d) :
     (if p then a else b) = (if q then c else d) := by
   rw [ac, bd]; by_cases h : p
-  · rw [if_pos h, if_pos (pq.mp h)]
-  · rw [if_neg h, if_neg (mt pq.mpr h)]
+  · rw [ite_eq_left h, ite_eq_left (pq.mp h)]
+  · rw [ite_eq_right h, ite_eq_right (mt pq.mpr h)]
 
 lemma toUInt64_toNat (x : UInt64) : x.toNat.toUInt64 = x :=
   UInt64.ofNat_toNat
@@ -362,7 +362,7 @@ theorem B256.toNat_mul (x y : B256) :
 theorem B256.toNat_mod {x y : B256} (h : y ≠ 0) :
     (x % y).toNat = x.toNat % y.toNat := by
   show (B256.divMod x y).snd.toNat = _
-  rw [B256.divMod, if_neg h]
+  rw [B256.divMod, ite_eq_right h]
   exact B256.toNat_toB256_of_lt
     (Nat.lt_of_le_of_lt (Nat.mod_le _ _) (B256.toNat_lt x))
 
@@ -1181,12 +1181,12 @@ theorem Bytes.toQuantityB256?_eq_none_iff {xs : Bytes} :
 /-- Round trip through the canonical fixed-width encoder. -/
 theorem Bytes.toQuantityB64?_toBytes (x : UInt64) :
     Bytes.toQuantityB64? (UInt64.toBytes x) = some x := by
-  rw [Bytes.toQuantityB64?, if_pos (by rw [UInt64.length_toBytes])]
+  rw [Bytes.toQuantityB64?, ite_eq_left (by rw [UInt64.length_toBytes])]
   rw [UInt64.toUInt64_toBytes]
 
 theorem Bytes.toQuantityB256?_toBytes (x : B256) :
     Bytes.toQuantityB256? x.toBytes = some x := by
-  rw [Bytes.toQuantityB256?, if_pos (by rw [B256.length_toBytes])]
+  rw [Bytes.toQuantityB256?, ite_eq_left (by rw [B256.length_toBytes])]
   rw [B256.toB256_toBytes]
 
 /-- Strictly weaker than the exact-width decoder: whatever `Bytes.toUInt64?`
@@ -1194,7 +1194,7 @@ accepts, this accepts with the same value. -/
 theorem Bytes.toQuantityB64?_of_toUInt64? {xs : Bytes} {v : UInt64}
     (h : Bytes.toUInt64? xs = some v) : Bytes.toQuantityB64? xs = some v := by
   rw [Bytes.toUInt64?] at h; split at h
-  · rw [Bytes.toQuantityB64?, if_pos (by omega)]; exact h
+  · rw [Bytes.toQuantityB64?, ite_eq_left (by omega)]; exact h
   · cases h
 
 /-- And strictly weaker than the RLP scalar decoder, whose extra condition is
@@ -1204,7 +1204,7 @@ theorem Bytes.toQuantityB64?_of_toScalarB64? {xs : Bytes} {v : UInt64}
   rw [Bytes.toScalarB64?] at h; split at h
   · rename_i hc
     rw [Bytes.isCanonicalScalar] at hc
-    rw [Bytes.toQuantityB64?, if_pos (by simp_all)]; exact h
+    rw [Bytes.toQuantityB64?, ite_eq_left (by simp_all)]; exact h
   · cases h
 
 theorem Bytes.toQuantityB256?_of_toScalarB256? {xs : Bytes} {v : B256}
@@ -1212,7 +1212,7 @@ theorem Bytes.toQuantityB256?_of_toScalarB256? {xs : Bytes} {v : B256}
   rw [Bytes.toScalarB256?] at h; split at h
   · rename_i hc
     rw [Bytes.isCanonicalScalar] at hc
-    rw [Bytes.toQuantityB256?, if_pos (by simp_all)]; exact h
+    rw [Bytes.toQuantityB256?, ite_eq_left (by simp_all)]; exact h
   · cases h
 
 -- Boundaries at 0, 1, n, and n+1 bytes, plus the leading-zero cases that must

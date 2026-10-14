@@ -102,7 +102,7 @@ theorem ProcessMessage.clean_input_state_of_settle
   refine ⟨raw, rfl, rawSome, ?_⟩
   unfold processMessage.settle at hresult
   dsimp only [bind, Except.bind] at hresult
-  rw [if_neg (by simp [rawSome])] at hresult
+  rw [ite_eq_right (by simp [rawSome])] at hresult
   exact congrArg Devm.state (Except.ok.inj hresult).symm
 
 private theorem processCreateMessage_clean_input
@@ -235,7 +235,7 @@ no retained frame, even if its raw execution itself committed. -/
     (hnot : Frame.settlementCommits f raw ≠ true) :
     Exec.descendantFrames (Exec.runOk hstep henter child hr next) =
       Exec.descendantFrames next := by
-  simp only [Exec.descendantFrames, dif_neg hnot, List.nil_append]
+  simp only [Exec.descendantFrames, dite_eq_right hnot, List.nil_append]
 
 /-- In particular, a CREATE child whose raw execution commits but whose
 code-deposit settlement rolls back contributes no descendant frame.  The raw
@@ -447,7 +447,7 @@ theorem ProcessCreateMessage.ok_state_eq_inner_of_no_error
       unfold processCreateMessage.settle at hsettle
       simp only [bind, Except.bind] at hsettle
       by_cases hinnerNone : inner.error.isNone = true
-      · rw [if_pos hinnerNone] at hsettle
+      · rw [ite_eq_left hinnerNone] at hsettle
         cases hcharge :
           processCreateMessage.chargeCodeGas
             msg.benv.stat.rules inner with
@@ -489,7 +489,7 @@ theorem ProcessCreateMessage.ok_state_eq_inner_of_no_error
                   State.setCode_bal]
               _ = inner.state.bal :=
                 processCreateMessage.chargeCodeGas_bal_eq hcharge
-      · rw [if_neg hinnerNone] at hsettle
+      · rw [ite_eq_right hinnerNone] at hsettle
         have heq := Except.ok.inj hsettle
         rw [heq] at herror
         simp [Devm.rollback, Devm.setWorld, Devm.error] at herror

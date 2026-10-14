@@ -2509,11 +2509,11 @@ theorem Mach.chargeGas_gasMeasure {cost : Nat} {mach mach' : Mach} {u : Unit}
     mach'.gasMeasure + cost = mach.gasMeasure := by
   unfold Mach.chargeGas safeSub at h
   by_cases hle : cost ≤ mach.gasLeft
-  · simp only [if_pos hle, Except.ok.injEq, Prod.mk.injEq] at h
+  · simp only [ite_eq_left hle, Except.ok.injEq, Prod.mk.injEq] at h
     rw [← h.2]
     simp only [Mach.gasMeasure]
     omega
-  · exact absurd h (by simp [if_neg hle])
+  · exact absurd h (by simp [ite_eq_right hle])
 
 /-- A state charge is measure-neutral in both of its branches: a reservoir draw
 moves nothing the measure counts, and a spill moves exactly as much out of
@@ -4598,7 +4598,7 @@ private lemma ByteArray.toList_loop_step (bs : ByteArray) (i : Nat) (r : List UI
     (h : i < bs.size) :
     _root_.ByteArray.toList.loop bs i r = _root_.ByteArray.toList.loop bs (i + 1) (bs[i] :: r) := by
   conv => lhs; unfold _root_.ByteArray.toList.loop
-  rw [if_pos h]
+  rw [ite_eq_left h]
   congr 2
   conv => lhs; whnf
   generalize Nat.decLt _ _ = d
@@ -4616,7 +4616,7 @@ private lemma ByteArray.toList_eq_toList_data' {xs : ByteArray} :
     induction ys generalizing xs with
       | nil =>
         unfold _root_.ByteArray.toList.loop
-        rw [if_neg _, List.reverse_reverse, List.append_nil]
+        rw [ite_eq_right _, List.reverse_reverse, List.append_nil]
         simp [ByteArray.size]
       | cons y ys ih =>
         rw [ByteArray.toList_loop_step _ _ _ (by simp [ByteArray.size])]
@@ -4663,9 +4663,9 @@ theorem noPushBefore_eq_true_iff (cd : ByteArray) :
       have hgt : ∀ b : UInt8, ((127 : UInt8) < b) ↔ (127 < b.toNat) := by
         intro b; rw [UInt8.lt_iff_toNat_lt]; rfl
       by_cases hk : k < cd.size
-      · rw [dif_pos hk]
+      · rw [dite_eq_left hk]
         by_cases hc : (decide (cd[k] < 127 - m.toUInt8) || decide (127 < cd[k])) = true
-        · rw [if_pos hc, ih m hm]
+        · rw [ite_eq_left hc, ih m hm]
           simp only [Bool.or_eq_true, decide_eq_true_eq, hthr, hgt] at hc
           constructor
           · intro h p h1 h2 hp h3 h4 h5
@@ -4677,15 +4677,15 @@ theorem noPushBefore_eq_true_iff (cd : ByteArray) :
             exact h p (by omega) (by omega) hp h3 h4 h5
         · simp only [Bool.or_eq_true, decide_eq_true_eq, hthr, hgt, not_or,
             Nat.not_lt] at hc
-          rw [if_neg (by simp [hthr, hgt]; omega)]
+          rw [ite_eq_right (by simp [hthr, hgt]; omega)]
           by_cases hreal : noPushBefore cd k 32 = true
-          · rw [if_pos hreal]
+          · rw [ite_eq_left hreal]
             constructor
             · intro hf; cases hf
             · intro h
               rw [h k (by omega) (by omega) hk (by omega) (by omega) (by omega)] at hreal
               exact hreal
-          · rw [if_neg hreal, ih m hm]
+          · rw [ite_eq_right hreal, ih m hm]
             constructor
             · intro h p h1 h2 hp h3 h4 h5
               rcases Nat.lt_or_ge p k with hlt | hge
@@ -4694,7 +4694,7 @@ theorem noPushBefore_eq_true_iff (cd : ByteArray) :
                 subst hpk; simpa using hreal
             · intro h p h1 h2 hp h3 h4 h5
               exact h p (by omega) (by omega) hp h3 h4 h5
-      · rw [dif_neg hk, ih m hm]
+      · rw [dite_eq_right hk, ih m hm]
         constructor
         · intro h p h1 h2 hp h3 h4 h5
           rcases Nat.lt_or_ge p k with hlt | hge
@@ -5149,10 +5149,10 @@ theorem legacyJumpDestsFrom_skip (cd : ByteArray) (pc : Nat)
   · rename_i h
     have hb : cd[pc] = cd.byteD pc := by simp [ByteArray.byteD, h]
     simp only [hb]
-    rw [if_neg hj, if_neg hp]
+    rw [ite_eq_right hj, ite_eq_right hp]
   · rename_i h
     rw [legacyJumpDestsFrom]
-    rw [dif_neg (by omega)]
+    rw [dite_eq_right (by omega)]
 
 /-- The pinned Amsterdam `get_valid_jump_destinations` is the legacy walk:
 only PUSH1–PUSH32 skip data. EELS #3618 removed the stack-access cases. -/
@@ -6342,12 +6342,12 @@ theorem Stor.get_eq_getD_find? (s : Stor) (k : B256) :
   exact Std.TreeMap.getD_eq_getD_getElem?
 
 theorem Stor.get_set_self (s : Stor) (k v : B256) : (s.set k v).get k = v := by
-  rw [Stor.get_eq_getD_find?, Stor.find?_set, if_pos rfl]
+  rw [Stor.get_eq_getD_find?, Stor.find?_set, ite_eq_left rfl]
   split <;> simp_all
 
 theorem Stor.get_set_ne (s : Stor) {k a : B256} (h : k ≠ a) (v : B256) :
     (s.set k v).get a = s.get a := by
-  rw [Stor.get_eq_getD_find?, Stor.get_eq_getD_find?, Stor.find?_set, if_neg h]
+  rw [Stor.get_eq_getD_find?, Stor.get_eq_getD_find?, Stor.find?_set, ite_eq_right h]
 
 /-- A storage map is canonical when it stores no zero-valued slot.
 
@@ -6522,12 +6522,12 @@ theorem State.Canonical.stor {w : State} (h : State.Canonical w) (a : Adr) :
 
 theorem State.get_set_self (w : State) (a : Adr) (ac : Acct) :
     (w.set a ac).get a = ac := by
-  rw [State.get_eq_getD, State.getElem?_set, if_pos rfl]
+  rw [State.get_eq_getD, State.getElem?_set, ite_eq_left rfl]
   split <;> simp_all
 
 theorem State.get_set_ne (w : State) {a b : Adr} (h : a ≠ b) (ac : Acct) :
     (w.set a ac).get b = w.get b := by
-  rw [State.get_eq_getD, State.get_eq_getD, State.getElem?_set, if_neg h]
+  rw [State.get_eq_getD, State.get_eq_getD, State.getElem?_set, ite_eq_right h]
 
 theorem State.setAccount_get_self (w : State) (a : Adr) (ac : Acct) :
     (w.setAccount a ac).get a = ac.clearIfEmpty :=

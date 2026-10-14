@@ -436,7 +436,7 @@ lemma of_guard_eq_some {p : Prop} [hd : Decidable p] {ξ} {ox : Option ξ} {x} :
   intro h
   cases em p with
   | inl hp => simp [hp] at h; constructor <;> assumption
-  | inr hp => simp [guard, if_neg hp] at h
+  | inr hp => simp [guard, ite_eq_right hp] at h
 
 def List.drop? {ξ : Type u} : Nat → List ξ → Option (List ξ)
   | 0, xs => some xs
@@ -1037,13 +1037,13 @@ lemma Nat.concat_modadd_concat {m n x x' y y' : Nat}
   have pow_le : 2 ^ n ≤ 2 ^ (m + n) := by
     apply Nat.pow_le_pow_right <;> omega
   by_cases h : x' + y' < 2 ^ n
-  · rw [if_pos h, Nat.add_zero, Nat.add_assoc]
+  · rw [ite_eq_left h, Nat.add_zero, Nat.add_assoc]
     rw [Nat.add_mod_two_pow_distrib (Nat.dvd_mul_left _ _) h]
     apply congr_arg₂
     · rw [← Nat.mod_two_pow_mul_two_pow]
     · rw [Nat.mod_eq_of_lt h]
       rw [Nat.mod_eq_of_lt (Nat.lt_of_lt_of_le h pow_le)]
-  · rw [if_neg h]
+  · rw [ite_eq_right h]
     have rw :
         (x + y) * 2 ^ n + x' + y' =
         (x + y + 1) * 2 ^ n + ((x' + y') % 2 ^ n) := by
@@ -1096,7 +1096,7 @@ lemma Nat.concat_modsub_concat {m n x x' y y' : Nat}
   have h_le : 2 ^ n ≤ 2 ^ (m + n) := by
     apply Nat.pow_le_pow_right <;> omega
   by_cases h : x' < y'
-  · rw [if_pos h]
+  · rw [ite_eq_left h]
     have h' :
         (2 ^ m + x - y) * 2 ^ n + x' - y' =
         (2 ^ m + x - y - 1) * 2 ^ n + (2 ^ n + x' - y') := by
@@ -1111,7 +1111,7 @@ lemma Nat.concat_modsub_concat {m n x x' y y' : Nat}
     · rw [← Nat.mod_two_pow_mul_two_pow]
     · rw [Nat.mod_eq_of_lt h_lt]
       rw [Nat.mod_eq_of_lt (Nat.lt_of_lt_of_le h_lt h_le)]
-  · rw [if_neg h]; rw [not_lt] at h
+  · rw [ite_eq_right h]; rw [not_lt] at h
     rw [Nat.add_sub_assoc h, Nat.add_sub_assoc h]
     rw [Nat.sub_zero, Nat.add_mod_left]
     have h_lt : x' - y' < 2 ^ n :=
