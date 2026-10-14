@@ -665,50 +665,31 @@ def B256.testBit (xs : B256) (n : Nat) : Bool :=
   then xs.2.testBit n
   else xs.1.testBit (n - 128)
 
-/-- Efficient modular exponentiation using the square-and-multiply algorithm -/
+/-- Efficient modular exponentiation with the EVM convention at modulus zero.
+Lean's kernel definition specifies the result; its runtime implementation uses
+native modular exponentiation. Keep the zero/one branch explicit: Lean's
+`Nat.powMod` follows natural-number remainder at zero instead. -/
 def Nat.powMod (base exp m : Nat) : Nat :=
-  if m ≤ 1 then 0 else
-    let rec go (e : Nat) (b : Nat) (res : Nat) : Nat :=
-      match e with
-      | 0 => res
-      | e@(_ + 1) =>
-        let res' := if e % 2 = 1 then (res * b) % m else res
-        let b' := (b * b) % m
-        go (e / 2) b' res'
-    go exp base 1
-
-/-- The accumulator of square-and-multiply represents multiplication modulo `m`. -/
-private theorem Nat.powMod_go_eq (m e b res : Nat) (hres : res % m = res) :
-    Nat.powMod.go m e b res = (res * b ^ e) % m := by
-  induction e using Nat.strong_induction_on generalizing b res with
-  | h e ih =>
-    cases e with
-    | zero => simpa only [Nat.powMod.go, Nat.pow_zero, Nat.mul_one] using hres.symm
-    | succ k =>
-      rw [Nat.powMod.go]
-      have decrease : (k + 1) / 2 < k + 1 := Nat.div_lt_self (by omega) (by decide)
-      have square : (b * b % m) ^ ((k + 1) / 2) % m =
-          b ^ (2 * ((k + 1) / 2)) % m := by
-        rw [← Nat.pow_mod, ← Nat.pow_two, ← Nat.pow_mul]
-      split
-      · have parity : (2 * ((k + 1) / 2)).succ = k + 1 := by omega
-        rw [ih _ decrease _ _ (Nat.mod_mod _ _), Nat.mod_mul_mod,
-          Nat.mul_mod, square, ← Nat.mul_mod, Nat.mul_right_comm res b,
-          Nat.mul_assoc, ← Nat.pow_succ, parity]
-      · have parity : 2 * ((k + 1) / 2) = k + 1 := by omega
-        rw [ih _ decrease _ _ hres, Nat.mul_mod, square, ← Nat.mul_mod, parity]
+  if m ≤ 1 then 0 else _root_.Nat.powMod base exp m
 
 /-- EVM modular exponentiation, including its zero result for modulus zero. -/
 theorem Nat.powMod_eq (base exp m : Nat) :
     Nat.powMod base exp m = if m ≤ 1 then 0 else base ^ exp % m := by
-  unfold Nat.powMod
-  split
-  · rfl
-  · rw [Nat.powMod_go_eq m exp base 1 (Nat.mod_eq_of_lt (by omega))]
-    rw [Nat.one_mul]
+  simp only [Nat.powMod, _root_.Nat.powMod_def]
 
 def B256.bexp (xs ys : B256) : B256 :=
   (Nat.powMod xs.toNat ys.toNat (2 ^ 256)).toB256
+
+/-- Reason about word exponentiation without unfolding its implementation. -/
+theorem B256.bexp_eq (x y : B256) :
+    B256.bexp x y = (x.toNat ^ y.toNat % (2 ^ 256)).toB256 := by
+  simp only [B256.bexp, Nat.powMod_eq, show ¬ (2 : Nat) ^ 256 ≤ 1 by decide,
+    ite_false]
+
+/-- The zero exponent is independent of the base word. -/
+theorem B256.bexp_zero (x : B256) : B256.bexp x 0 = 1 := by
+  rw [B256.bexp_eq, show (0 : B256).toNat = 0 from rfl, Nat.pow_zero]
+  rfl
 
 instance : HPow B256 B256 B256 := ⟨B256.bexp⟩
 
