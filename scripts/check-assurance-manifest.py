@@ -5,7 +5,8 @@ Fails when a `#expect_axioms` row in the manifest's axiom file has no manifest
 entry, when a manifest entry has no row, when a row's expected set differs from
 its entry's, when either side repeats a declaration, or when a public rule of a
 coverage module has no row. It reads source only; the Lean build decides whether
-each row's set is the declaration's actual axiom closure.
+each row's set is the declaration's actual axiom closure. Also requires the
+whole-library audit to import every Jaune source module transitively.
 """
 import importlib.util
 import json
@@ -77,6 +78,32 @@ def public_rules(path):
     return result
 
 
+def check_union_coverage(root=ROOT):
+    """Every Jaune source module must be imported by the whole-library audit."""
+    tree = root / "Jaune"
+    if not tree.is_dir() or not (root / "Jaune.lean").is_file():
+        raise ValueError("missing Jaune source tree or umbrella")
+    paths = [root / "Jaune.lean", *sorted(tree.rglob("*.lean"))]
+    graph = {".".join(p.relative_to(root).with_suffix("").parts):
+             _boundary.imports(p) for p in paths}
+    pending = _boundary.imports(root / "scripts" / "JauneUnionAxioms.lean")
+    reached = set()
+    while pending:
+        module = pending.pop()
+        if module != "Jaune" and not module.startswith("Jaune."):
+            continue
+        if module in reached:
+            continue
+        if module not in graph:
+            raise ValueError(f"missing local union-audit dependency: {module}")
+        reached.add(module)
+        pending.extend(graph[module])
+    missing = sorted(set(graph) - reached)
+    if missing:
+        raise ValueError("modules outside whole-library axiom audit: " + ", ".join(missing))
+    return len(reached)
+
+
 def check(root=ROOT):
     manifest_path = root / "scripts" / "assurance-manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -121,8 +148,10 @@ if __name__ == "__main__":
         sys.exit(2)
     try:
         n, covered, modules = check()
+        union_modules = check_union_coverage()
     except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
         print(f"REGRESSION — assurance manifest: {error}", file=sys.stderr)
         sys.exit(1)
     print(f"OK — assurance manifest: {n} rows match {n} entries; "
-          f"{covered} public rules in {modules} coverage modules all audited")
+          f"{covered} public rules in {modules} coverage modules all audited; "
+          f"whole-library union imports all {union_modules} Jaune modules")

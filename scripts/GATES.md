@@ -773,15 +773,18 @@ an inductive the population mentions and through a private theorem (a private
 name is a root).
 
 The default `Assurance` library also elaborates `scripts/JauneUnionAxioms.lean`:
-one `#union_axioms_of_modules Jaune` walk over every kernel constant of all 29
-`Jaune` modules — the 25 `Jaune.lean` reaches plus the four runner-side modules
-only `Main` imports (`BLSGuards`, `ChainStore`, `FixtureException`, `T8n`) —
+one `#union_axioms_of_modules Jaune` walk over every kernel constant of all
+`Jaune` modules, including the runner-side modules outside `Jaune.lean` and the
+standalone tracer (`Trace`, `TraceJson`, `TraceTransaction`). The source-only
+assurance-manifest gate requires every Jaune source module to be transitively
+imported by this audit, so adding a module cannot silently omit it. The walk is
 against the standard `propext, Classical.choice, Quot.sound`. It complements the
 53 exact rows and never replaces them: a union says no declaration uses a
 non-standard axiom, not which standard ones a pinned declaration uses. Blanc's
 union covers only `Blanc.…` modules, so this is the only audit of the Jaune
-constants Blanc does not reach. Measured on WSL with Lean 4.35.0 (2026-10-15):
-`roots=12278 modules=29 visited=23337`, about 2 s.
+constants Blanc does not reach. Before the standalone tracer was integrated, measured on WSL with Lean 4.35.0
+(2026-10-15): `roots=12278 modules=29 visited=23337`, about 2 s. That historical
+measurement does not cover the subsequently added tracing modules.
 
 ### Ambient execution examples
 
