@@ -119,10 +119,10 @@ cleanup() {
 trap cleanup EXIT
 
 # Trees scanned recursively, and the root modules of the default targets
-# (Jaune, Examples, jaune, jaune-memory-probe). The Assurance library's modules
-# live under its own srcDir and are discovered from lakefile.lean below.
+# (Jaune, Examples, jaune, jaune-memory-probe, jaune-trace). The Assurance
+# library's modules live under its own srcDir and are discovered from lakefile.lean below.
 SRC_DIRS="Jaune Examples"
-ROOT_MODULES="Jaune.lean Examples.lean Main.lean MemoryProbe.lean"
+ROOT_MODULES="Jaune.lean Examples.lean Main.lean MemoryProbe.lean TraceMain.lean"
 BASELINE="$SCRIPT_DIR/baseline-elab.txt"
 REPORT="$SCRIPT_DIR/report-elab.txt"
 
