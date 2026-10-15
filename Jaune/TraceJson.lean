@@ -13,6 +13,7 @@ open Lean Jaune
 structure Config where
   runId : String
   memory : Bool := false
+  deferSummary : Bool := false
   maxDataBytes : Nat := 1048576
   maxSteps : Option Nat := none
   maxRowBytes : Nat := 1048576
@@ -85,6 +86,7 @@ structure OpenFrame where
 structure State where
   frames : List OpenFrame := []
   childRefundBase : Option Int := none
+  rootRefund : Nat := 0
   steps : Nat := 0
   started : Bool := false
   closed : Bool := false
@@ -127,7 +129,7 @@ def consume (cfg : Config) (state : State) (event : Trace.Event) :
     let base ←
       if state.frames.isEmpty then do
         if state.started || ctx.frame != 0 then throw "invalid root entry"
-        pure 0
+        pure (Int.ofNat state.rootRefund)
       else state.childRefundBase.toExcept "child entry has no spawn observation"
     let parent := state.frames.head?.map fun f => ("parent", number f.id)
     let state := { state with
@@ -160,7 +162,7 @@ def consume (cfg : Config) (state : State) (event : Trace.Event) :
   | .settled ctx frame result =>
     let _ ← current cfg state ctx
     let tail := state.frames.tail
-    let row ← if tail.isEmpty then do
+    let row ← if tail.isEmpty && !cfg.deferSummary then do
       match result with
       | .error ⟨error, _⟩ => throw ("root execution failed: " ++ error.render)
       | .ok result => some <$> rootSummary cfg frame result

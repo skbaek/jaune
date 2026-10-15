@@ -2,6 +2,7 @@
 """Native trace serialization/CLI controls, not a second execution-fidelity suite."""
 import argparse
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -25,13 +26,21 @@ def request(code):
                         "gas": "0x100000", "accessedAddresses": [CALLER, ADDRESS, CHILD]}}
 
 
+def transaction_request(case="call-logs", fork="Prague"):
+    directory = ROOT / "scripts/t8n/cases" / case
+    return {"runId": "transaction-control", "fork": fork, "memory": True,
+            "alloc": json.loads((directory / "alloc.json").read_text()),
+            "env": json.loads((directory / "env.json").read_text()),
+            "transaction": json.loads((directory / "txs.json").read_text())[0]}
+
+
 class TraceControls(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
 
-    def run_request(self, value, expect=0):
+    def run_request(self, value, expect=0, outcome="executed"):
         src, out = self.root / "request.json", self.root / "output"
         src.write_text(json.dumps(value))
         result = subprocess.run([str(BINARY), str(src), str(out)], capture_output=True, timeout=30)
@@ -42,9 +51,13 @@ class TraceControls(unittest.TestCase):
             normalize(row)
         if expect == 0:
             self.assertEqual(result.stderr, b"")
-            self.assertTrue(json.loads((out / "run.json").read_text())["complete"])
-            self.assertEqual(sum("pass" in row for row in rows), 1)
-            self.assertIn("pass", rows[-1])
+            metadata = json.loads((out / "run.json").read_text())
+            self.assertTrue(metadata["complete"])
+            self.assertEqual(metadata["outcome"], outcome)
+            self.assertEqual(metadata["traceComplete"], outcome == "executed")
+            self.assertEqual(sum("pass" in row for row in rows), int(outcome == "executed"))
+            if outcome == "executed":
+                self.assertIn("pass", rows[-1])
         else:
             self.assertFalse((out / "run.json").exists())
             self.assertFalse(any("pass" in row for row in rows))
@@ -189,6 +202,122 @@ class TraceControls(unittest.TestCase):
                 data[field] = value
                 self.run_request(data, 2)
                 self.assertFalse((self.root / "output").exists())
+
+    def test_transaction_summary_has_settled_gas_and_wire_identity(self):
+        value = transaction_request()
+        rows, _ = self.run_request(value)
+        self.assertEqual(int(rows[-1]["gasUsed"], 16), 21000 + sum(int(r["gasCost"], 16) for r in rows[:-1]))
+        metadata = json.loads((self.root / "output/run.json").read_text())
+        self.assertEqual(metadata["scope"], "transaction")
+        self.assertEqual(metadata["transactionIndex"], 0)
+        self.assertEqual(metadata["transactionHash"], "0xa6b4da4327822d815dc46cc0f40259191130a8d8c0eed57591c3a22710e41971")
+        frames = [json.loads(line) for line in (self.root / "output/frames.jsonl").read_text().splitlines()]
+        self.assertTrue(all(r["runId"] == value["runId"] for r in frames))
+
+    def test_zero_instruction_transaction_still_has_settled_summary(self):
+        value = transaction_request()
+        value["alloc"][ADDRESS]["code"] = "0x"
+        value["maxSteps"] = "0x0"
+        rows, _ = self.run_request(value)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["gasUsed"], "0x5208")
+
+    def test_transaction_rejection_is_not_a_complete_execution_trace(self):
+        value = transaction_request()
+        value["alloc"].pop("0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b")
+        rows, _ = self.run_request(value, outcome="rejected")
+        self.assertEqual(rows, [])
+        metadata = json.loads((self.root / "output/run.json").read_text())
+        self.assertTrue(metadata["error"])
+
+    def test_transaction_exception_is_executed_but_pass_false(self):
+        value = transaction_request()
+        value["alloc"][ADDRESS]["code"] = "0xfe"
+        rows, _ = self.run_request(value)
+        self.assertFalse(rows[-1]["pass"])
+        self.assertNotIn("gasCost", rows[0])
+
+    def test_authorization_refund_is_visible_in_root_and_child(self):
+        value = transaction_request("am-delegation-state-test")
+        target = value["transaction"]["to"]
+        value["alloc"][target]["code"] = "0x60006000600060006000600061030061fffff100"
+        value["alloc"][CHILD] = {"nonce": "0x00", "balance": "0x00", "code": "0x00", "storage": {}}
+        rows, _ = self.run_request(value)
+        self.assertTrue(any(r["depth"] == 2 for r in rows[:-1]))
+        self.assertTrue(all(r["refund"] == 25000 for r in rows[:-1]))
+        metadata = json.loads((self.root / "output/run.json").read_text())
+        self.assertEqual(metadata["authorizationRefund"], 25000)
+
+    def test_amsterdam_prepared_frame_has_no_guessed_gas_cost(self):
+        rows, _ = self.run_request(transaction_request("am-delegation-state-test", "Amsterdam"))
+        self.assertGreater(len(rows), 1)
+        self.assertTrue(all("gasCost" not in r for r in rows[:-1]))
+
+    def test_transaction_creation_serializes_initcode_output(self):
+        rows, _ = self.run_request(transaction_request("am-create-state-test"))
+        self.assertEqual(rows[-1]["output"], "0x00")
+        self.assertTrue(rows[-1]["pass"])
+
+    def test_transaction_step_limit_never_emits_frame_summary(self):
+        value = transaction_request()
+        value["maxSteps"] = "0x1"
+        rows, result = self.run_request(value, 2)
+        self.assertEqual(len(rows), 1)
+        self.assertIn(b"instruction limit", result.stderr)
+
+    def test_transaction_output_limit_applies_after_settlement(self):
+        value = transaction_request()
+        value["alloc"][ADDRESS]["code"] = "0x602a60005360016000f3"
+        value.update(memory=False, maxDataBytes="0x0")
+        _, result = self.run_request(value, 2)
+        self.assertIn(b"output exceeds", result.stderr)
+
+    def test_ambiguous_or_absent_execution_scope_refused(self):
+        for ambiguous in [False, True]:
+            value = transaction_request()
+            if ambiguous:
+                value["message"] = request("00")["message"]
+            else:
+                value.pop("transaction")
+            _, result = self.run_request(value, 2)
+            self.assertIn(b"exactly one", result.stderr)
+            self.assertFalse((self.root / "output").exists())
+
+    @unittest.skipUnless(os.name == "posix", "requires POSIX file-size limits")
+    def test_write_failure_cannot_complete(self):
+        import resource
+        import signal
+        def limit_output():
+            signal.signal(signal.SIGXFSZ, signal.SIG_IGN)
+            resource.setrlimit(resource.RLIMIT_FSIZE, (256, 256))
+        src, out = self.root / "request.json", self.root / "output"
+        src.write_text(json.dumps(transaction_request()))
+        result = subprocess.run([str(BINARY), str(src), str(out)], capture_output=True,
+                                timeout=30, preexec_fn=limit_output)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertTrue(result.stderr)
+        self.assertFalse((out / "run.json").exists())
+        # Real I/O failure may tear a JSON row. Comparing the partial file to
+        # itself must still reject it, never turn it into agreement.
+        comparison = subprocess.run(["python3", str(ROOT / "scripts/compare-traces.py"),
+                                     str(out / "trace.jsonl"), str(out / "trace.jsonl")],
+                                    capture_output=True, timeout=30)
+        self.assertEqual(comparison.returncode, 2, comparison.stdout + comparison.stderr)
+
+    def test_creation_collision_has_summary_without_entered_frame(self):
+        value = transaction_request("am-create-state-test")
+        value["alloc"]["0x6295ee1b4f6dd65047762f924ecd367c17eabf8f"] = {
+            "nonce": "0x01", "balance": "0x00", "code": "0x00", "storage": {}}
+        rows, _ = self.run_request(value)
+        self.assertEqual(len(rows), 1)
+        self.assertFalse(rows[0]["pass"])
+        self.assertEqual((self.root / "output/frames.jsonl").read_text(), "")
+
+    def test_amsterdam_intrinsic_rejection_has_no_synthetic_frame(self):
+        rows, _ = self.run_request(transaction_request("am-reject-intrinsic-state-test", "Amsterdam"),
+                                   outcome="rejected")
+        self.assertEqual(rows, [])
+        self.assertEqual((self.root / "output/frames.jsonl").read_text(), "")
 
 
 if __name__ == "__main__":

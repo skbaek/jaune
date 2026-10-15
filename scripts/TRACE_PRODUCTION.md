@@ -1,9 +1,11 @@
-# Producing message traces
+# Producing execution traces
 
 `jaune-trace REQUEST.json NEW_OUTPUT_DIRECTORY` runs one explicitly identified
-message through `Jaune.Trace.runFrame`, the streaming driver whose returned
-value carries an erasure certificate to `Jaune.runFrame`. The executable is a
-default build target and remains outside `Jaune.lean`'s import closure.
+message or signed transaction. Message mode uses `Jaune.Trace.runFrame`;
+transaction mode uses `Jaune.TraceTransaction.runTransaction`. Both actual
+drivers carry kernel-checked execution erasure certificates to the existing
+public operations. The executable is a default build target and remains
+outside `Jaune.lean`'s import closure.
 
 Build through the host's owned wrapper, then run the binary directly:
 
@@ -23,7 +25,7 @@ executor. Error names differ between clients and are never silently aliased.
 
 ## Message boundary
 
-This executable runs a **message**, not a signed transaction. There is no
+With the `message` field, the executable runs one explicit message. There is no
 intrinsic gas charge, sender nonce or fee processing, authorization processing,
 transaction refund cap, receipt, or block finalization. Creation takes an
 explicit destination address; it does not derive it or advance its creator's
@@ -33,8 +35,7 @@ for creation; it excludes transaction settlement. Amsterdam accepts an explicit
 state-gas grant but does not apply the transaction runner's preparation.
 
 The existing `jaune t8n` trace refusals and ordinary behavior remain unchanged.
-Full transaction tracing is a separate integration obligation. The driver
-shares core step/entry/settlement functions, but does not inherit the ordinary
+The drivers share core step/entry/settlement functions, but do not inherit the ordinary
 native executor's private calldata-cache optimization. Its theorem proves
 execution projection, not serialization, I/O success or memory equivalence.
 
@@ -62,7 +63,8 @@ This minimal request executes `PUSH1 2; PUSH1 3; ADD; STOP`:
 }
 ```
 
-`runId`, `fork`, `alloc`, `env` and `message` are required. Fork selection uses
+`runId`, `fork`, `alloc`, `env` and exactly one of `message` or `transaction`
+are required. Fork selection uses
 the existing supported-fork decoder with no fallback. Allocation and block
 environment reuse `T8n` parsing, including its canonical state construction,
 hex-byte allocation values and environment defaults/derivations. `chainId`
@@ -90,12 +92,75 @@ explicitly: a transaction-like context normally warms the sender, target,
 coinbase and active precompiles, plus its access list. There is no implicit
 transaction access-list preparation here.
 
+## Signed transaction boundary
+
+Use `transaction` instead of `message` for one signed JSON transaction in the
+existing `T8n.decodeTx` format (types 0–4, including its refusal/validation
+rules). The existing allocation/environment decoders are shared. For example,
+using a repository fixture as real signed input:
+
+```sh
+python3 - <<'PYCODE'
+import json
+from pathlib import Path
+case = Path("scripts/t8n/cases/call-logs")
+request = {"runId": "call-logs-tx", "fork": "Prague", "memory": True,
+           "alloc": json.loads((case / "alloc.json").read_text()),
+           "env": json.loads((case / "env.json").read_text()),
+           "transaction": json.loads((case / "txs.json").read_text())[0]}
+Path("request-transaction.json").write_text(json.dumps(request))
+PYCODE
+.lake/build/bin/jaune-trace request-transaction.json transaction-output
+```
+
+The allocation is the explicit state immediately before this transaction.
+The driver performs validation, sender recovery, intrinsic gas, sender nonce
+and fees, authorization/delegation, creation address derivation, prepared
+Amsterdam execution, gas refunds, receipts and transaction bookkeeping.
+It starts with empty block output and transaction index zero. It does not run
+block system calls, withdrawals, requests or block finalization. Supplying
+block context in `env` does not request those operations. To replay a
+transaction from a block, supply the appropriate pre-transaction state.
+
+Exactly one transaction is accepted per invocation; arrays and combined
+message/transaction requests are refused. Give each run its own runId and new
+output directory. `run.json` includes scope, transactionIndex and the
+**type-prefixed wire transaction hash** used by the existing t8n emitter.
+These identify the run even when its execution emits no instruction. Never
+concatenate trace files from separate runs.
+
+Transaction `gasUsed` is the settled receipt gas (including intrinsic gas and
+refund/call-data-floor treatment), and `stateRoot` is the state after fee and
+SELFDESTRUCT settlement. Root frame settlement therefore emits no summary;
+the runner writes the one terminal summary after the transaction finishes.
+A reverted or exceptionally halted accepted transaction has outcome `executed`
+and summary `pass: false`. A creation collision may have no entered frame yet
+still have a complete transaction summary.
+
+A transaction rejected by validation or execution has outcome `rejected`,
+`traceComplete: false`, and a diagnostic in `run.json`; no terminal execution
+summary is invented. Exit 0 means the requested processing completed, including
+that rejection. Parse errors and operational/I/O/limit failures exit 2.
+A rejection file cannot compare as a complete execution, even against itself.
+
+The geth call-frame adapter's gasUsed is frame-scoped. For transaction traces,
+compare its `output,pass` summary projection and selected instruction fields;
+compare transaction gas/state/hash/status separately against the reference's
+transaction result/receipt. Do not compare frame gas with settled transaction
+gas. Both tools need the same explicit prestate and fork. Block system calls
+must have no effect on the chosen reference input, or must already be reflected
+in the supplied pre-transaction state; otherwise state roots have different
+boundaries.
+
 ## Observations and limits
 
 Pre-step stack is bottom-to-top; memory, when enabled, is an array of 32-byte
 words in increasing address order, with logical zero padding. Return data is
 always emitted, including empty bytes. Refund is the sum of the current
-frame's local counter and suspended ancestors' counters. A negative sum is
+frame's local counter and suspended ancestors' counters, plus the legacy
+transaction authorization refund when present. That refund is observed from
+the actual authorization processing before root entry; it is not recalculated.
+Amsterdam starts from its prepared machine's counter. A negative sum is
 unavailable rather than clamped to zero. Child rollback is reflected when the
 parent resumes. Errors are Jaune's rendered text encoded as UTF-8 hex bytes.
 
@@ -123,16 +188,20 @@ observations; this memory claim concerns the shipped IO runner.
 
 The output directory must not exist. It contains:
 
-- `trace.jsonl`: strict instruction rows and one root message summary.
+- `trace.jsonl`: instruction rows and one summary at the selected scope, except
+  rejected transactions have no completing summary.
 - `frames.jsonl`: lifecycle sidecar with runId, unique frame number, depth and
   event (`entered`, `instruction`, `empty-code`, `exited`, `settled`, `resumed`).
   Entry records identify parents; instruction records identify zero-based trace
   step ordinals; resumed records identify the child. A settled root is marked.
-- `run.json`: written only after successful completion, recording identity,
-  fork, message scope and instruction count.
+- `run.json`: completion metadata recording identity, fork, scope, instruction
+  count, outcome and traceComplete. Transaction metadata also records its wire
+  hash, index and observed legacy authorization refund.
 
-Exit 0 means tracing completed, including executions whose summary pass is
-false. Exit 2 means input, execution infrastructure, limit or I/O failure.
+Exit 0 means processing completed; inspect outcome and traceComplete to
+distinguish execution from transaction rejection. A complete execution may
+have summary pass false. Exit 2 means input, execution infrastructure, limit
+or I/O failure.
 Errors go to stderr; successful execution prints nothing. Each JSONL write is
 flushed. Failure may leave partial files, so callers must check exit status and
 run.json. Limits or exhausted fuel do not produce a completing trace summary;

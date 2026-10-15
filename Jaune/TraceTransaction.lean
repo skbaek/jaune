@@ -227,7 +227,7 @@ theorem legacyCall_eq (msg : Msg) (hfork : msg.benv.stat.rules.stateGas = none) 
   · cases setDelegation msg <;> rfl
 
 def runMessageCall {m : Type → Type} [Monad m] (sink : Trace.Sink m)
-    (msg : Msg) (runId : String) :
+    (authorizationRefund : Nat → m Unit) (msg : Msg) (runId : String) :
     m (Certified (Jaune.processMessageCall.call msg)) := do
   match hfork : msg.benv.stat.rules.stateGas with
   | some state =>
@@ -241,6 +241,7 @@ def runMessageCall {m : Type → Type} [Monad m] (sink : Trace.Sink m)
         rw [legacyCall_eq msg hfork, hauth]
         rfl⟩
     | .ok ⟨delegated, refund⟩ =>
+      authorizationRefund refund
       let result ← Trace.runFrame sink (Frame.ofCall (resolveLegacyDelegation delegated)) runId
       pure ⟨legacyOutput refund result.value, by
         rw [legacyCall_eq msg hfork, hauth]
@@ -249,14 +250,14 @@ def runMessageCall {m : Type → Type} [Monad m] (sink : Trace.Sink m)
 
 /-- Trace the exact message operation invoked by `processTransaction`. -/
 def runMessage {m : Type → Type} [Monad m] (sink : Trace.Sink m)
-    (msg : Msg) (runId : String) :
+    (authorizationRefund : Nat → m Unit) (msg : Msg) (runId : String) :
     m (Certified (Jaune.processMessageCall msg)) := do
   if htarget : msg.target.isNone then
     let result ← runMessageCreate sink msg runId
     pure ⟨result.value, by
       simpa [Jaune.processMessageCall, htarget] using result.erases⟩
   else
-    let result ← runMessageCall sink msg runId
+    let result ← runMessageCall sink authorizationRefund msg runId
     pure ⟨result.value, by
       simpa [Jaune.processMessageCall, htarget] using result.erases⟩
 
@@ -388,7 +389,7 @@ Validation, fee/nonce preparation, message execution, gas/receipt settlement,
 SELFDESTRUCT and block-access bookkeeping are connected to the public pipeline
 by the certificate. The original transaction executor is never run a second time. -/
 def runTransaction {m : Type → Type} [Monad m] (sink : Trace.Sink m)
-    (benv : Benv) (bout : BlockOutput) (tx : Tx) (index : Nat) (runId : String) :
+    (authorizationRefund : Nat → m Unit) (benv : Benv) (bout : BlockOutput) (tx : Tx) (index : Nat) (runId : String) :
     m (TransactionResult benv bout tx index) := do
   match hprep : prepareTransaction benv bout tx index with
   | .error error =>
@@ -399,7 +400,7 @@ def runTransaction {m : Type → Type} [Monad m] (sink : Trace.Sink m)
         rw [processTransaction_eq, hprep]
         rfl }
   | .ok prepared =>
-    let message ← runMessage sink prepared.msg runId
+    let message ← runMessage sink authorizationRefund prepared.msg runId
     let value : Except TransitionError (State × BlockOutput) := do
       let ⟨state, output⟩ ← Except.mapError TransitionError.vm message.value
       finishTransaction prepared tx index state output
@@ -419,10 +420,11 @@ theorem runTransaction_erasure {benv : Benv} {bout : BlockOutput} {tx : Tx} {ind
     (result : TransactionResult benv bout tx index) :
     result.value = Jaune.processTransaction benv bout tx index := result.erases
 
-theorem runTransaction_id_erasure (sink : Trace.Sink Id) (benv : Benv)
+theorem runTransaction_id_erasure (sink : Trace.Sink Id)
+    (authorizationRefund : Nat → Id Unit) (benv : Benv)
     (bout : BlockOutput) (tx : Tx) (index : Nat) (runId : String) :
-    (runTransaction sink benv bout tx index runId).value =
+    (runTransaction sink authorizationRefund benv bout tx index runId).value =
       Jaune.processTransaction benv bout tx index :=
-  (runTransaction sink benv bout tx index runId).erases
+  (runTransaction sink authorizationRefund benv bout tx index runId).erases
 
 end Jaune.TraceTransaction
