@@ -30,6 +30,11 @@ path builds is an instrument that rots.
 lean_exe «jaune-memory-probe» where
   root := `MemoryProbe
 
+/-- Optional streaming message tracer, outside Jaune's production import closure. -/
+@[default_target]
+lean_exe «jaune-trace» where
+  root := `TraceMain
+
 /--
 Exact axiom expectations for the canonical execution surface
 (`scripts/ExecutionAxioms.lean`), checked by the from-scratch walker in
