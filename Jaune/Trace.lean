@@ -35,15 +35,22 @@ abbrev Sink (m : Type → Type) := Event → m Unit
 
 /-- Proof fields are erased at runtime. `nextFrame` is the next unused number,
 threaded across child execution and subsequent parent execution. -/
-structure Result (evm : Evm) (fuel : Nat) where
+structure CertifiedResult (expected : Fueled (EvmError × Devm) Devm) where
   value : Fueled (EvmError × Devm) Devm
   nextFrame : Nat
-  erases : value = Jaune.execFueled evm fuel
+  erases : value = expected
+
+/-- Index by the expected result so proof transport erases to runtime identity. -/
+abbrev Result (evm : Evm) (fuel : Nat) := CertifiedResult (Jaune.execFueled evm fuel)
 
 /-- A production driver with an arbitrary monadic streaming sink. Fuel zero
 emits no instruction. Child events precede the parent's next instruction.
 The recursive computation never reruns the original executor to certify its
-answer: each branch constructs its erasure proof from the child certificate. -/
+answer: each branch constructs its erasure proof from the child certificate.
+Parent continuations use `cast` on the whole monadic result. Rebuilding a
+certificate after binding the recursive result prevents native tail calls and
+retains one continuation per instruction. Proof transport erases completely;
+only child execution needs a runtime continuation to settle and resume. -/
 def execFueled {m : Type → Type} [Monad m] (sink : Sink m) :
     (evm : Evm) → (fuel : Nat) → Context → Nat → m (Result evm fuel)
   | evm, 0, context, nextFrame => do
@@ -57,9 +64,9 @@ def execFueled {m : Type → Type} [Monad m] (sink : Sink m) :
       pure ⟨Fueled.ofExcept raw, nextFrame, by simp only [Jaune.execFueled, hstep]⟩
     | .cont pc devm =>
       sink (.instruction context evm (.cont pc devm))
-      let result ← execFueled sink ⟨pc, evm.sta, devm⟩ fuel context nextFrame
-      pure ⟨result.value, result.nextFrame, by
-        simpa only [Jaune.execFueled, hstep] using result.erases⟩
+      cast (congrArg (fun expected => m (CertifiedResult expected)) (by
+        simp only [Jaune.execFueled, hstep]))
+        (execFueled sink ⟨pc, evm.sta, devm⟩ fuel context nextFrame)
     | .spawn frame rsm pc =>
       sink (.instruction context evm (.spawn frame rsm pc))
       let childContext := { context with frame := nextFrame, depth := context.depth + 1 }
@@ -75,9 +82,9 @@ def execFueled {m : Type → Type} [Monad m] (sink : Sink m) :
             simp only [Jaune.execFueled, hstep, hentry, hresume]⟩
         | .ok devm =>
           sink (.resumed context nextFrame (.ok devm))
-          let result ← execFueled sink ⟨pc, evm.sta, devm⟩ fuel context (nextFrame + 1)
-          pure ⟨result.value, result.nextFrame, by
-            simpa only [Jaune.execFueled, hstep, hentry, hresume] using result.erases⟩
+          cast (congrArg (fun expected => m (CertifiedResult expected)) (by
+            simp only [Jaune.execFueled, hstep, hentry, hresume]))
+            (execFueled sink ⟨pc, evm.sta, devm⟩ fuel context (nextFrame + 1))
       | .run child =>
         sink (.entered childContext frame (.run child))
         let childResult ← execFueled sink child fuel childContext (nextFrame + 1)
@@ -99,11 +106,11 @@ def execFueled {m : Type → Type} [Monad m] (sink : Sink m) :
                 hchild, hresume]⟩
           | .ok devm =>
             sink (.resumed context nextFrame (.ok devm))
-            let result ← execFueled sink ⟨pc, evm.sta, devm⟩ fuel context childResult.nextFrame
-            pure ⟨result.value, result.nextFrame, by
+            cast (congrArg (fun expected => m (CertifiedResult expected)) (by
               dsimp only [settled] at hresume
-              simpa only [Jaune.execFueled, hstep, hentry, ← childResult.erases,
-                hchild, hresume] using result.erases⟩
+              simp only [Jaune.execFueled, hstep, hentry, ← childResult.erases,
+                hchild, hresume]))
+              (execFueled sink ⟨pc, evm.sta, devm⟩ fuel context childResult.nextFrame)
   termination_by _ fuel _ _ => fuel
 
 /-- The exact execution projection of every successfully returned production

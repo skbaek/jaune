@@ -114,7 +114,12 @@ memory/return/output byte strings before encoding. `maxRowBytes` defaults
 `0x100000`, including newline. Optional `maxSteps` bounds emitted instructions;
 zero permits only zero-instruction executions. Without maxSteps, output length
 is unbounded. State retained by serialization is proportional to active frame
-depth plus one bounded row; the EVM's own memory/state is separate.
+depth plus one bounded row; the EVM's own memory/state is separate. The native
+IO driver tail-calls continuation steps, retaining execution continuations only
+for active child frames. Its certificate transport is proof-only: rebuilding
+a certificate after each recursive call would retain instruction history on
+the native stack. An arbitrary caller-supplied monad or sink can itself retain
+observations; this memory claim concerns the shipped IO runner.
 
 The output directory must not exist. It contains:
 
