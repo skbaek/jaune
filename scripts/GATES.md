@@ -51,6 +51,7 @@ Choose the gate by what you changed, cheapest falsifier first:
 | a number a fork carries as rule data (`Jaune/Fork.lean`) | `scripts/check-fork-constants.sh` | `scripts/check-mainnet.sh --suite full --no-build --jobs auto` |
 | the runner's CLI, its refusals or its case selection (`Main.lean`) | `scripts/check-cli.sh` + `scripts/check-mainnet.sh --suite smoke` | `scripts/check-legacy.sh --smoke --no-build --jobs auto` |
 | the `t8n` frontend (`Jaune/T8n.lean`) or its corpus | `scripts/check-t8n.sh --red-test` | `scripts/check-mainnet.sh --suite smoke` |
+| trace serialization or the standalone message runner | owned build of `jaune-trace`, then `python3 scripts/check-trace.py` | ordinary CLI controls; reference trace comparison under an explicit projection |
 | harness / generators | `python3 scripts/check-legacy-baseline.py self-test` + `python3 -m unittest discover -s scripts/tests` | `python3 scripts/env_doctor.py` |
 | a module's imports, or an added `#guard` / heavy elaboration | `lake build` | `scripts/check-elab.sh` |
 | anything Blanc consumes | `lake build && scripts/check.sh --no-build` in the Blanc checkout carrying the candidate pin — its goal worktree during goal work, `~/blanc` otherwise | Blanc's full set — see [Blanc's gates](#blancs-gates) |
@@ -238,6 +239,15 @@ with the same executable inputs.
 | `scripts/check-mainnet.sh --suite transitions` | fork-transition validity | 13 files / 109 cases | Historical: 18.0 s on the 2026-09-21 corpus; not a v21 measurement |
 
 ### Medium — before a commit or push candidate
+
+The standalone tracer also has a cheap native gate, `python3 scripts/check-trace.py`
+(optional `--binary PATH`). It requires the built `jaune-trace` default target,
+takes no lock and writes only a temporary directory. It checks instruction
+observations, frame identity, nested/refunded rollback observations, zero-step
+frames, unavailable exceptional gas cost, byte/instruction limits and CLI
+refusals. It does not duplicate the trace driver's execution-erasure theorem.
+Usage and the message-versus-transaction boundary are in
+[`TRACE_PRODUCTION.md`](TRACE_PRODUCTION.md).
 
 | gate | proves | scale | time |
 |---|---|---|---|
