@@ -9,7 +9,6 @@ import Mathlib.Data.List.TakeDrop
 import Mathlib.Data.List.TakeWhile
 import Mathlib.Data.UInt
 import Mathlib.Tactic.NormNum
-import Std.Tactic.BVDecide
 
 namespace Jaune
 
