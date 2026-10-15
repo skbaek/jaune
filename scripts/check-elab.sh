@@ -300,9 +300,16 @@ RESULTS=""
 RCFILE="$(mktemp)"
 
 for f in $FILES; do
-  TIMEFORMAT='%R'
+  # Bash 5.3 can round a microsecond fraction to 1000000 without carrying
+  # into seconds, printing e.g. 1.:00 at the default three-place precision.
+  # Six places avoid that rounding; older Bash clamps to its supported precision.
+  TIMEFORMAT='%6R'
   ELAPSED="$( { time { lake env lean "$f" >/dev/null 2>&1; echo $? >"$RCFILE"; } ; } 2>&1 )"
   RC="$(cat "$RCFILE")"
+  if ! [[ "$ELAPSED" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+    printf 'REGRESSION — elab: invalid elapsed time %q for %s\n' "$ELAPSED" "$f"
+    exit 2
+  fi
   if [ "$RC" -eq 0 ]; then STATUS="OK"; else STATUS="ERROR"; fi
   printf '%s\t%s\t%s\n' "$STATUS" "$ELAPSED" "$f"
   RESULTS="$RESULTS$STATUS	$ELAPSED	$f
