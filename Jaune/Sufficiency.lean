@@ -3130,6 +3130,9 @@ theorem Jinst.runCore_gasLe (pc : Nat) (devm : Devm) (sevm : Sevm) (j : Jinst) :
 @[simp] theorem addAccountToDelete_gasMeasure (devm : Devm) (a : Adr) :
     (addAccountToDelete devm a).gasMeasure = devm.gasMeasure := rfl
 
+@[simp] theorem Devm.recordTouch_gasMeasure (devm : Devm) (rules : ForkRules) (cond : Bool)
+    (a : Adr) : (devm.recordTouch rules cond a).gasMeasure = devm.gasMeasure := rfl
+
 @[simp] theorem Devm.addBal_gasMeasure (devm : Devm) (a : Adr) (v : B256) :
     (devm.addBal a v).gasMeasure = devm.gasMeasure := rfl
 
@@ -4101,9 +4104,10 @@ theorem processMessage.settle_ok_gasLe {msg : Msg}
     simp only [processMessage.settle, bind, Except.bind] at h
     split at h
     · simp only [Except.ok.injEq] at h
-      rw [← h, Devm.withStorageWrites_gasMeasure, Devm.rollback_gasMeasure]
+      rw [← h, Devm.recordTouch_gasMeasure, Devm.withStorageWrites_gasMeasure,
+        Devm.rollback_gasMeasure]
     · simp only [Except.ok.injEq] at h
-      rw [← h]
+      rw [← h, Devm.recordTouch_gasMeasure]
 
 theorem processCreateMessage.settle_ok_gasLe {msg : Msg}
     {r : Except (EvmError × State × AdrSet × Tra) Devm} {d : Devm}

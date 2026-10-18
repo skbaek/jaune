@@ -775,6 +775,8 @@ def processMessageCall.create (msg : Msg) :
       let logs := if evm.error.isNone then evm.logs else []
       let accountsToDelete :=
         if evm.error.isNone then evm.accountsToDelete else .emptyWithCapacity
+      let touchedAccounts :=
+        if evm.error.isNone then evm.meta.touchedAccounts else .emptyWithCapacity
       let refundCounter ←
         if evm.error.isNone then
          (Int.toNat? evm.refundCounter).toExcept
@@ -789,7 +791,8 @@ def processMessageCall.create (msg : Msg) :
           logs := logs,
           accountsToDelete := accountsToDelete,
           error := evm.error,
-          returnData := evm.output
+          returnData := evm.output,
+          touchedAccounts := touchedAccounts
         }
       ⟩
   | some state =>
@@ -826,6 +829,9 @@ def processMessageCall.call (msg : Msg) :
     let logs := if evm.error.isNone then evm.logs else []
     let accountsToDelete :=
       if evm.error.isNone then evm.accountsToDelete else .emptyWithCapacity
+    -- EIP-161: a failed transaction keeps no touch (`touched_accounts = set()`).
+    let touchedAccounts :=
+      if evm.error.isNone then evm.meta.touchedAccounts else .emptyWithCapacity
     .ok ⟨
       evm.state,
       {
@@ -834,7 +840,8 @@ def processMessageCall.call (msg : Msg) :
         logs := logs,
         accountsToDelete := accountsToDelete,
         error := evm.error,
-        returnData := evm.output
+        returnData := evm.output,
+        touchedAccounts := touchedAccounts
       }
     ⟩
   | some state =>
@@ -2210,6 +2217,9 @@ def processTransaction
     (fun writes a => writes.eraseAddress a) storageWrites
   let state := settleSelfdestructs benv.stat.rules
     txOutput.accountsToDelete.toList state
+  -- EIP-161: `destroy_touched_empty_accounts` (Spurious Dragon to Gray Glacier).
+  let state := sweepTouchedAccounts benv.stat.rules
+    txOutput.touchedAccounts.toList state
   let bout ← .ok (bout.withGasSettlement settlement txBlobGasUsed)
   let receipt :=
     makeReceipt tx txOutput.error bout.cumulativeGasUsed txOutput.logs
@@ -5987,6 +5997,22 @@ theorem State.Canonical.settleSelfdestructs {state : State}
     | cons address addresses ih =>
       exact ih (State.Canonical.clearAccountPreservingBalance h address)
 
+/-- The EIP-161 sweep only erases accounts, so it keeps a state canonical. -/
+theorem State.Canonical.sweepTouchedAccounts {state : State}
+    (h : state.Canonical) (rules : ForkRules) (addresses : List Adr) :
+    (sweepTouchedAccounts rules addresses state).Canonical := by
+  unfold Jaune.sweepTouchedAccounts
+  split
+  · induction addresses generalizing state with
+    | nil => exact h
+    | cons address addresses ih =>
+      simp only [List.foldl_cons]
+      apply ih
+      split
+      · exact h.destroyAccount address
+      · exact h
+  · exact h
+
 /-- A successful transaction leaves a canonical state: the fee movements go
 through `incrNonce`/`subBal`/`addBal`, the call itself through
 `processMessageCall`, and settlement follows the fork's SELFDESTRUCT rule. -/
@@ -6014,8 +6040,8 @@ theorem processTransaction_canonical {benv : Benv} (h : benv.Canonical)
     prepareMessage_canonical (by exact ⟨hst1c, h.1⟩)
       (by exact Tra.canonical_empty) hmsg
   have hqc := processMessageCall_canonical hmsgc (Except.mapError_eq_ok_iff.mp hq)
-  exact State.Canonical.settleSelfdestructs
-    (State.Canonical.addBal (State.Canonical.addBal hqc _ _) _ _) _ _
+  exact State.Canonical.sweepTouchedAccounts (State.Canonical.settleSelfdestructs
+    (State.Canonical.addBal (State.Canonical.addBal hqc _ _) _ _) _ _) _ _
 
 theorem processWithdrawalsState_canonical {st : State} (h : st.Canonical)
     (wds : List Withdrawal) : (processWithdrawalsState st wds).Canonical := by
@@ -6836,5 +6862,81 @@ private def balGuardList (n : Nat) : BlockAccessList :=
 #guard checkBlockAccessListGasLimit amsterdamRules 6000 (balGuardList 3)
   matches .error (.block (.blockAccessListGasLimit _))
 #guard checkBlockAccessListGasLimit bpo2Rules 6000 (balGuardList 3) matches .ok _
+
+/-! ### EIP-161: touched accounts and the end-of-transaction sweep
+
+Concrete checks of the three EELS touch sites and of the sweep, under Gray
+Glacier (the last rule set that sweeps) against Prague (which does not). Jaune
+never stores an empty storage-less account, so "exists and is empty" is an
+account holding only storage: `touchE`, and 0x03 for the RIPEMD-160 quirk. -/
+
+private def touchParent : Adr := 0x1000
+private def touchE : Adr := 0x2000
+private def touchC : Adr := 0x4000
+
+/-- `CALL(gas, to, 0, 0, 0, 0, 0)`, then `POP` the success word. -/
+private def touchCall (dest gas : Nat) : List UInt8 :=
+  [0x60, 0, 0x60, 0, 0x60, 0, 0x60, 0, 0x60, 0,
+   0x61, (dest / 256).toUInt8, (dest % 256).toUInt8,
+   0x61, (gas / 256).toUInt8, (gas % 256).toUInt8, 0xF1, 0x50]
+
+private def touchRevert : List UInt8 := [0x60, 0, 0x60, 0, 0xFD]
+
+private def touchState (parentCode cCode : List UInt8) : State :=
+  let st := (State.setStorVal .empty touchE 1 1).setStorVal ripemd160Address 1 1
+  let st := State.setCode st touchParent ⟨parentCode.toArray⟩
+  State.setCode st touchC ⟨cCode.toArray⟩
+
+private def touchMsg (fork : Fork) (parentCode cCode : List UInt8) : Msg :=
+  let state := touchState parentCode cCode
+  { (default : Msg) with
+    benv := { (default : Benv) with
+      state := state
+      stat := { (default : BenvStat) with fork := fork, origState := state } }
+    caller := 0x5000
+    target := some touchParent
+    currentTarget := touchParent
+    codeAddress := some touchParent
+    code := ⟨parentCode.toArray⟩
+    gas := 200000
+    depth := 8 }
+
+/-- The transaction-level touched set `processMessageCall` reports. -/
+private def touchedOf (fork : Fork) (parentCode : List UInt8)
+    (cCode : List UInt8 := []) : Option (List Adr) :=
+  match processMessageCall (touchMsg fork parentCode cCode) with
+  | .ok (_, out) => some out.touchedAccounts.toList
+  | .error _ => none
+
+-- A successful child's empty target is touched; Prague records nothing.
+#guard touchedOf .grayGlacier (touchCall 0x2000 1000 ++ [0x00]) = some [touchE]
+#guard touchedOf .prague (touchCall 0x2000 1000 ++ [0x00]) = some []
+-- A `SELFDESTRUCT` beneficiary that is empty is erased by the credit itself
+-- (`State.setAccount`), so no touch is needed to remove it.
+private def touchSelfdestructErases (fork : Fork) : Option Bool :=
+  match processMessageCall (touchMsg fork [0x61, 0x20, 0x00, 0xFF] []) with
+  | .ok (state, out) => some (state[touchE]?.isNone && out.touchedAccounts.isEmpty)
+  | .error _ => none
+#guard touchSelfdestructErases .grayGlacier = some true
+-- A failed child's touches die with it ...
+#guard touchedOf .grayGlacier (touchCall 0x4000 50000 ++ [0x00])
+    (touchCall 0x2000 1000 ++ touchRevert) = some []
+-- ... except 0x03: the quirk keeps a touch of RIPEMD-160 made inside the
+-- failed child,
+#guard touchedOf .grayGlacier (touchCall 0x4000 50000 ++ [0x00])
+    (touchCall 0x03 1000 ++ touchRevert) = some [ripemd160Address]
+-- and a failed call to 0x03 itself (out of gas) still touches it.
+#guard touchedOf .grayGlacier (touchCall 0x03 1 ++ [0x00]) = some [ripemd160Address]
+#guard touchedOf .prague (touchCall 0x03 1 ++ [0x00]) = some []
+-- A failed transaction keeps no touch at all.
+#guard touchedOf .grayGlacier (touchCall 0x2000 1000 ++ touchRevert) = some []
+
+-- The sweep erases a touched account that is still empty, keeps a touched
+-- account that is not, and is the identity without `touchedSweep`.
+#guard (sweepTouchedAccounts grayGlacierRules [touchE, touchParent]
+    (touchState [0x00] []))[touchE]?.isNone
+#guard (sweepTouchedAccounts grayGlacierRules [touchE, touchParent]
+    (touchState [0x00] []))[touchParent]?.isSome
+#guard (sweepTouchedAccounts pragueRules [touchE] (touchState [0x00] []))[touchE]?.isSome
 
 end Jaune
