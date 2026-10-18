@@ -2186,5 +2186,89 @@
       "module": "ethereum.forks.prague"
     }
   },
+  "mainnet_schedule": {
+    "Amsterdam": {
+      "source": "ethereum.forks.amsterdam.FORK_CRITERIA (Unscheduled)",
+      "value": null
+    },
+    "ArrowGlacier": {
+      "source": "ethereum.forks.arrow_glacier.FORK_CRITERIA (ByBlockNumber)",
+      "value": {
+        "block": 13773000
+      }
+    },
+    "BPO1": {
+      "source": "ethereum.forks.bpo1.FORK_CRITERIA (ByTimestamp)",
+      "value": 1765290071
+    },
+    "BPO2": {
+      "source": "ethereum.forks.bpo2.FORK_CRITERIA (ByTimestamp)",
+      "value": 1767747671
+    },
+    "Berlin": {
+      "source": "ethereum.forks.berlin.FORK_CRITERIA (ByBlockNumber)",
+      "value": {
+        "block": 12244000
+      }
+    },
+    "Byzantium": {
+      "source": "ethereum.forks.byzantium.FORK_CRITERIA (ByBlockNumber)",
+      "value": {
+        "block": 4370000
+      }
+    },
+    "Cancun": {
+      "source": "ethereum.forks.cancun.FORK_CRITERIA (ByTimestamp)",
+      "value": 1710338135
+    },
+    "GrayGlacier": {
+      "source": "ethereum.forks.gray_glacier.FORK_CRITERIA (ByBlockNumber)",
+      "value": {
+        "block": 15050000
+      }
+    },
+    "Istanbul": {
+      "source": "ethereum.forks.istanbul.FORK_CRITERIA (ByBlockNumber)",
+      "value": {
+        "block": 9069000
+      }
+    },
+    "London": {
+      "source": "ethereum.forks.london.FORK_CRITERIA (ByBlockNumber)",
+      "value": {
+        "block": 12965000
+      }
+    },
+    "MuirGlacier": {
+      "source": "ethereum.forks.muir_glacier.FORK_CRITERIA (ByBlockNumber)",
+      "value": {
+        "block": 9200000
+      }
+    },
+    "Osaka": {
+      "source": "ethereum.forks.osaka.FORK_CRITERIA (ByTimestamp)",
+      "value": 1764798551
+    },
+    "Paris": {
+      "source": "ethereum.forks.paris.FORK_CRITERIA (ByBlockNumber)",
+      "value": {
+        "block": 15537394
+      }
+    },
+    "Petersburg": {
+      "source": "ethereum.forks.constantinople.FORK_CRITERIA (ByBlockNumber)",
+      "value": {
+        "block": 7280000
+      }
+    },
+    "Prague": {
+      "source": "ethereum.forks.prague.FORK_CRITERIA (ByTimestamp)",
+      "value": 1746612311
+    },
+    "Shanghai": {
+      "source": "ethereum.forks.shanghai.FORK_CRITERIA (ByTimestamp)",
+      "value": 1681338455
+    }
+  },
   "schema_version": 2
 }

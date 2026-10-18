@@ -269,7 +269,7 @@ examples. The symbolic example proofs also unfold the `Devm` accessors
 |---|---|---|
 | machine and world state | `Jaune.Machine` | `Evm`, `Sevm`, `Devm` (`mach` / `meta` / `world` and accessors such as `Devm.stack`, `Devm.gasLeft`, `Devm.state`, `Devm.getBal`), `Execution`, `Msg`, `Benv`, `Tenv`, `Header`, `Block`, `Tx`, `BlockChain`, `State` (`State.get`, `State.set`, `State.get_set_self`, `State.get_set_ne`, `State.bal`, `State.setBal`), `Stor.set`, `Stor.get_set_self`, `Stor.get_set_ne` |
 | account and instruction types | `Jaune.Types` | `Acct` (`nonce`, `bal`, `stor`, `code`), `Stor`, `Stor.get`, `Adr`, `Rinst`, `Linst`, `Jinst` |
-| fork rules and schedules | `Jaune.Fork` | `Fork`, `Fork.rules?`, `Fork.supported`, `ForkRules`, `ChainConfig`, `mainnetChainConfig` |
+| fork rules and schedules | `Jaune.Fork` | `Fork`, `Fork.rules?`, `Fork.supported`, `ForkRules`, `ForkCriterion`, `ChainConfig` (`forkAt`/`rulesAt` at a block number and timestamp), `mainnetChainConfig` |
 | words, bytes and RLP | `Jaune.Basic` | `Bytes`, `B256`, `Bytes.toB256`, `B256.toBytes`, `BLT`, `BLT.toBytes`, `Bytes.toBLT?` |
 | hashes | `Jaune.Hash`, `Jaune.SHA256Spec` | `Bytes.keccak`, `Bytes.sha256`, `Bytes.sha256_eq_fips` |
 | state root | `Jaune.Transaction` | `State.root` |

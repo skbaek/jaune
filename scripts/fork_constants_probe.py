@@ -38,8 +38,43 @@ FORKS = {
 }
 
 
+# Every EELS fork module from Byzantium on -> Jaune's `Fork.toString` label, for
+# the mainnet schedule (design §4 of jaune-historical-forks-v1). EELS's
+# `constantinople` module is Petersburg's rules (mainnet never ran EIP-1283),
+# so it maps to Jaune's `Petersburg`; Jaune's `Constantinople` has no module.
+SCHEDULE_FORKS = {
+    "Byzantium": "byzantium",
+    "Petersburg": "constantinople",
+    "Istanbul": "istanbul",
+    "MuirGlacier": "muir_glacier",
+    "Berlin": "berlin",
+    "London": "london",
+    "ArrowGlacier": "arrow_glacier",
+    "GrayGlacier": "gray_glacier",
+    "Paris": "paris",
+    "Shanghai": "shanghai",
+    "Cancun": "cancun",
+    "Prague": "prague",
+    "Osaka": "osaka",
+    "BPO1": "bpo1",
+    "BPO2": "bpo2",
+    "Amsterdam": "amsterdam",
+}
+
+
 class ProbeError(Exception):
     pass
+
+
+def criterion_value(criteria):
+    """A `FORK_CRITERIA` as the gate compares it: a timestamp as a bare
+    integer (the `mainnetActivation` row's shape since D13), a block number as
+    `{"block": n}`, and anything else (`Unscheduled`) as `None`."""
+    if hasattr(criteria, "timestamp"):
+        return int(criteria.timestamp)
+    if hasattr(criteria, "block_number"):
+        return {"block": int(criteria.block_number)}
+    return None
 
 
 def _mod(fork: str, suffix: str = ""):
@@ -974,7 +1009,7 @@ def extract(label: str, fork: str) -> dict:
     # `fork_criteria` below for the `--table` report.
     entries.append(field(
         "mainnetActivation",
-        int(criteria.timestamp) if hasattr(criteria, "timestamp") else None,
+        criterion_value(criteria),
         f"FORK_CRITERIA ({type(criteria).__name__})",
     ))
     return {
@@ -991,7 +1026,24 @@ def extract(label: str, fork: str) -> dict:
     }
 
 
+def schedule() -> dict:
+    """Every fork module's mainnet `FORK_CRITERIA`, from Byzantium on."""
+    out = {}
+    for label, fork in SCHEDULE_FORKS.items():
+        criteria = _mod(fork).FORK_CRITERIA
+        out[label] = {
+            "value": criterion_value(criteria),
+            "source": f"ethereum.forks.{fork}.FORK_CRITERIA "
+            f"({type(criteria).__name__})",
+        }
+    return out
+
+
 def main() -> int:
+    if sys.argv[1:] == ["--schedule"]:
+        json.dump(schedule(), sys.stdout, indent=2, sort_keys=True)
+        sys.stdout.write("\n")
+        return 0
     out = {label: extract(label, fork) for label, fork in FORKS.items()}
     json.dump(out, sys.stdout, indent=2, sort_keys=True)
     sys.stdout.write("\n")

@@ -4083,7 +4083,7 @@ def ChainConfig.checkChainId (cfg : ChainConfig) (chain : BlockChain) :
     .error (.chainIdMismatch cfg.chainId chain.chainId)
 
 /-- The block state transition on a configured chain, deriving the active fork
-from the block's timestamp and the chain's activation schedule.
+from the block's number and timestamp and the chain's activation schedule.
 
 Checks the configuration against the snapshot's chain identity before doing
 anything else -- P0.1's fix -- then proceeds exactly as before. -/
@@ -4091,7 +4091,8 @@ def stateTransitionUsing (cfg : ChainConfig) (ch : BlockChain) (block : Block) :
     Except String BlockChain := do
   Except.mapError ChainContextError.render (cfg.checkChainId ch)
   stateTransitionAt
-    (← Except.mapError RulesLookupError.render (cfg.forkAt block.header.timestamp))
+    (← Except.mapError RulesLookupError.render
+      (cfg.forkAt block.header.number block.header.timestamp))
     ch block
 
 /-- The Prague state transition.
@@ -5235,7 +5236,7 @@ bytes at all -- P0.1 and P0.5's frozen ordering (design report §3.3): a
 contradictory or unusable configuration is a context failure regardless of
 what the caller supplied as a block, so it must not depend on decoding
 succeeding first. The era a decoded timestamp falls in is checked after
-decode, inside `cfg.rulesAt` below, because no timestamp exists before
+decode, inside `cfg.forkAt` below, because no number or timestamp exists before
 decode. -/
 def addBlockToChainUsingE (cfg : ChainConfig) (chain : BlockChain)
     (blockRlp : Bytes) : Except ImportFailure (ImportOutcome BlockChain) := do
@@ -5246,7 +5247,7 @@ def addBlockToChainUsingE (cfg : ChainConfig) (chain : BlockChain)
   | .ok ⟨block, _⟩ =>
     let fork ←
       Except.mapError ImportFailure.ofLookup
-        (cfg.forkAt block.header.timestamp)
+        (cfg.forkAt block.header.number block.header.timestamp)
     addBlockToChainCanonicalE fork chain
       (CanonicalBlock.ofDecode (rlpToBlock_eq_ok_iff.mpr h))
 
@@ -6218,7 +6219,7 @@ private def transitionAtE (f : Fork) (ch : BlockChain) (block : Block) :
 
 private def transitionUsingE (cfg : ChainConfig) (ch : BlockChain)
     (block : Block) : Except TransitionError BlockChain :=
-  match cfg.forkAt block.header.timestamp with
+  match cfg.forkAt block.header.number block.header.timestamp with
   | .error _ => .error (.internal (.assertion .none))
   | .ok f => stateTransitionE f ch block
 
@@ -6240,7 +6241,7 @@ private def transitionUsingE (cfg : ChainConfig) (ch : BlockChain)
 -- runs the new ones.
 
 private def guardChainSchedule : ChainConfig :=
-  ChainConfig.mk 1 [⟨.prague, 0⟩, ⟨.osaka, 100⟩, ⟨.bpo1, 200⟩, ⟨.bpo2, 300⟩]
+  ChainConfig.mk 1 [.atTime .prague 0, .atTime .osaka 100, .atTime .bpo1 200, .atTime .bpo2 300]
 
 #guard ¬ transitionBlobVerdict
   (transitionUsingE guardChainSchedule guardParentChain
@@ -6286,7 +6287,7 @@ private def guardChainSchedule : ChainConfig :=
 -- A rejected block reports on the typed rejection channel, and the verdicts
 -- are compared as constructors.
 private def guardOsakaToBpo1Config : ChainConfig :=
-  (⟨.osaka, .bpo1, 15000⟩ : ForkTransition).chainConfig 1
+  (⟨.osaka, .bpo1, .byTimestamp 15000⟩ : ForkTransition).chainConfig 1
 
 private def guardChildRlp (timestamp excessBlobGas : Nat) : Bytes :=
   (guardChildBlock timestamp excessBlobGas).toBLT.toBytes
@@ -6368,7 +6369,7 @@ theorem stateTransitionUsing_eq_of_chainId_eq
     (heq : cfg.chainId = ch.chainId) :
     stateTransitionUsing cfg ch block
       = (Except.mapError RulesLookupError.render
-          (cfg.forkAt block.header.timestamp)).bind
+          (cfg.forkAt block.header.number block.header.timestamp)).bind
           (fun f => stateTransitionAt f ch block) := by
   unfold stateTransitionUsing ChainConfig.checkChainId
   simp [heq, Except.mapError, Bind.bind, Except.bind]
@@ -6420,7 +6421,7 @@ theorem addBlockToChainUsing_preserves_chainId
 -- and it fires before decoding even touches the candidate bytes: `[0xFF]` is
 -- not valid block RLP at all, yet `addBlockToChainUsing` still reports the
 -- mismatch rather than a decode error, because the check runs first.
-private def guardMismatchConfig : ChainConfig := ChainConfig.mk 7 [⟨.prague, 0⟩]
+private def guardMismatchConfig : ChainConfig := ChainConfig.mk 7 [.atTime .prague 0]
 
 #guard errorText?
     (stateTransitionUsing guardMismatchConfig guardEmptyChain (guardBlockAt 0))
@@ -7206,7 +7207,7 @@ repeated, and the snapshot is not rechecked at all; what remains is the rule
 lookup, which is the only part that depends on the candidate's timestamp. -/
 def stateTransitionConfigured (pc : ConfiguredChain) (cb : CanonicalBlock) :
     Except RulesLookupError (Except TransitionError BlockChain) := do
-  let f ← pc.config.forkAt cb.block.header.timestamp
+  let f ← pc.config.forkAt cb.block.header.number cb.block.header.timestamp
   .ok (stateTransitionE f pc.chain.val cb.block)
 
 /-- The configured checked path agrees with the raw configured entry point on
@@ -7220,7 +7221,7 @@ theorem stateTransitionConfigured_eq (pc : ConfiguredChain) (cb : CanonicalBlock
   unfold stateTransitionConfigured stateTransitionUsing
   rw [pc.checkChainId_eq_ok]
   simp only [bind, Except.bind, Except.mapError]
-  cases hr : pc.config.forkAt cb.block.header.timestamp <;>
+  cases hr : pc.config.forkAt cb.block.header.number cb.block.header.timestamp <;>
     simp [Except.mapError, stateTransitionAt]
 
 /-- The checked output of a successful configured checked transition. -/

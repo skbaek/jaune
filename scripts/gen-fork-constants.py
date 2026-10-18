@@ -276,10 +276,9 @@ def target() -> "tuple[Path, Path, str]":
     return root, python, entry["commit"]
 
 
-def build() -> dict:
-    root, python, commit = target()
+def probe(root: Path, python: Path, *args: str) -> dict:
     run = subprocess.run(
-        [str(python), str(PROBE)],
+        [str(python), str(PROBE), *args],
         capture_output=True,
         text=True,
         cwd=str(root),
@@ -288,9 +287,20 @@ def build() -> dict:
     if run.returncode != 0:
         fail(f"constant probe failed in {root}:\n{run.stderr.strip()}")
     try:
-        forks = json.loads(run.stdout)
+        return json.loads(run.stdout)
     except json.JSONDecodeError as error:
         fail(f"constant probe emitted unreadable JSON: {error}")
+
+
+def build() -> dict:
+    root, python, commit = target()
+    forks = probe(root, python)
+    # The mainnet schedule from Byzantium (goal jaune-historical-forks-v1,
+    # design §4): every fork module's `FORK_CRITERIA`, compared by
+    # `check-fork-constants.sh` against `jaune --mainnet-schedule` for every
+    # declared fork, refused ones included -- the per-fork `mainnetActivation`
+    # row covers only the forks `--rules` prints.
+    mainnet_schedule = probe(root, python, "--schedule")
 
     extracted = {
         path for fork in forks.values() for path in fork["constants"]
@@ -336,6 +346,7 @@ def build() -> dict:
             for path, status in sorted(COVERAGE.items())
         },
         "forks": forks,
+        "mainnet_schedule": mainnet_schedule,
     }
 
 

@@ -1710,11 +1710,61 @@ theorem Fork.rules?_valid {f : Fork} {r : ForkRules} (h : f.rules? = some r) :
   | bpo2 => simp only [Fork.rules?] at h; cases h; exact bpo2Rules_valid
   | amsterdam => simp only [Fork.rules?] at h; cases h; exact amsterdamRules_valid
 
-/-- A fork's rules become active at this timestamp. -/
+/-- When a fork activates, in the two kinds EELS's `FORK_CRITERIA` uses.
+
+Byzantium through Paris activate at a block number (`ByBlockNumber`; Paris
+too, since EELS does not model the terminal total difficulty), Shanghai and
+later at a timestamp (`ByTimestamp`). EELS orders every block-number criterion
+before every timestamp criterion, and `ChainConfig.validate` requires a
+schedule to do the same. -/
+inductive ForkCriterion : Type
+  /-- Active from this block number on. -/
+  | byBlock (number : Nat)
+  /-- Active from this timestamp on. -/
+  | byTimestamp (timestamp : Nat)
+deriving DecidableEq, Repr
+
+namespace ForkCriterion
+
+/-- Whether a block at `number` and `timestamp` has reached the criterion. -/
+def reached : ForkCriterion → Nat → Nat → Bool
+  | .byBlock n, number, _ => decide (n ≤ number)
+  | .byTimestamp t, _, timestamp => decide (t ≤ timestamp)
+
+/-- The criterion's number, of whichever kind. -/
+def value : ForkCriterion → Nat
+  | .byBlock n => n
+  | .byTimestamp t => t
+
+/-- Whether the criterion is a block number. -/
+def isBlock : ForkCriterion → Bool
+  | .byBlock _ => true
+  | .byTimestamp _ => false
+
+/-- How a criterion reads in a message: `block 5` or `5` (a bare timestamp, the
+spelling the configured-chain messages have always used). -/
+def render : ForkCriterion → String
+  | .byBlock n => s!"block {n}"
+  | .byTimestamp t => s!"{t}"
+
+end ForkCriterion
+
+/-- A fork's rules become active once a block reaches `criterion`.
+
+The field is `criterion` rather than design §4's `at`, which is a Lean
+keyword. -/
 structure ForkActivation : Type where
   fork : Fork
-  timestamp : Nat
+  criterion : ForkCriterion
 deriving DecidableEq, Repr
+
+/-- A timestamp activation, the only kind before the Byzantium extension. -/
+abbrev ForkActivation.atTime (fork : Fork) (timestamp : Nat) : ForkActivation :=
+  ⟨fork, .byTimestamp timestamp⟩
+
+/-- A block-number activation. -/
+abbrev ForkActivation.atBlock (fork : Fork) (number : Nat) : ForkActivation :=
+  ⟨fork, .byBlock number⟩
 
 /-- A chain's identity and its fork activation schedule.
 
@@ -1857,8 +1907,12 @@ block. -/
 inductive ChainContextError : Type
   /-- The activation schedule names no fork at all. -/
   | emptySchedule
-  /-- Two adjacent activations do not move strictly forward in time. -/
+  /-- Two adjacent activations of the same kind do not move strictly forward
+  (in time, or in block number). -/
   | nonIncreasingActivations (prev next : ForkActivation)
+  /-- A block-number activation follows a timestamp activation: EELS orders
+  every block-number criterion first. -/
+  | blockAfterTimestamp (prev next : ForkActivation)
   /-- Two adjacent activations do not move forward through the fork order. -/
   | nonForwardActivations (prev next : ForkActivation)
   /-- The configured chain identity is not the snapshot's. -/
@@ -1876,9 +1930,14 @@ def ChainContextError.render : ChainContextError → String
   | .emptySchedule =>
     s!"{invalidChainConfigTag} : the activation schedule is empty"
   | .nonIncreasingActivations prev next =>
-    s!"{invalidChainConfigTag} : activation timestamps must strictly \
-       increase, but {next.fork} at {next.timestamp} does not follow \
-       {prev.fork} at {prev.timestamp}"
+    s!"{invalidChainConfigTag} : activation \
+       {if next.criterion.isBlock then "block numbers" else "timestamps"} \
+       must strictly increase, but {next.fork} at {next.criterion.render} \
+       does not follow {prev.fork} at {prev.criterion.render}"
+  | .blockAfterTimestamp prev next =>
+    s!"{invalidChainConfigTag} : block-number activations must precede every \
+       timestamp activation, but {next.fork} at {next.criterion.render} \
+       follows {prev.fork} at timestamp {prev.criterion.render}"
   | .nonForwardActivations prev next =>
     s!"{invalidChainConfigTag} : activations must move forward through the \
        fork order, but {next.fork} does not follow {prev.fork}"
@@ -1927,6 +1986,9 @@ inductive SupportError : Type
   | unsupportedFork (fork : Fork)
   /-- A timestamp before the earliest era this configuration supports. -/
   | unsupportedEra (timestamp floor : Nat)
+  /-- A block number before the earliest era this configuration supports,
+  when that era begins at a block number (mainnet: Byzantium, 4,370,000). -/
+  | unsupportedBlockEra (number floor : Nat)
 deriving DecidableEq, Repr
 
 /-- The one renderer for `SupportError`. The first arm reproduces today's
@@ -1938,16 +2000,19 @@ def SupportError.render : SupportError → String
   | .unsupportedEra timestamp floor =>
     s!"{unsupportedEraTag} : timestamp {timestamp} precedes the earliest \
        era this configuration supports, which begins at {floor}"
+  | .unsupportedBlockEra number floor =>
+    s!"{unsupportedEraTag} : block {number} precedes the earliest era this \
+       configuration supports, which begins at block {floor}"
 
 -- Golden guards, one representative per constructor. Each pins the exact
 -- rendered bytes, so a later step cannot change an externally observed
 -- message by accident while migrating a producer.
 #guard ChainContextError.render .emptySchedule
   = "InvalidChainConfigError : the activation schedule is empty"
-#guard ChainContextError.render (.nonIncreasingActivations ⟨.prague, 5⟩ ⟨.osaka, 5⟩)
+#guard ChainContextError.render (.nonIncreasingActivations (.atTime .prague 5) (.atTime .osaka 5))
   = "InvalidChainConfigError : activation timestamps must strictly increase, \
      but Osaka at 5 does not follow Prague at 5"
-#guard ChainContextError.render (.nonForwardActivations ⟨.osaka, 5⟩ ⟨.prague, 9⟩)
+#guard ChainContextError.render (.nonForwardActivations (.atTime .osaka 5) (.atTime .prague 9))
   = "InvalidChainConfigError : activations must move forward through the fork \
      order, but Prague does not follow Osaka"
 #guard ChainContextError.render (.chainIdMismatch 7 1)
@@ -2270,67 +2335,146 @@ theorem Fork.validRules?_rules (f : Fork) :
 
 namespace ChainConfig
 
-/-- Every activation after the first must move strictly forward in both time
-and fork order. Equal timestamps would make the active fork depend on list
-order, and a non-increasing fork sequence would describe a chain that goes
-backwards. -/
+/-- Every activation after the first must move strictly forward in fork order
+and in its criterion, and EELS's order of kinds holds: every block-number
+activation precedes every timestamp activation. Equal criteria of one kind
+would make the active fork depend on list order, and a non-increasing fork
+sequence would describe a chain that goes backwards. A step from a block
+number to a timestamp is always forward in its criterion: the two kinds are
+not compared with each other. -/
 private def validateSteps : List ForkActivation → Except ChainContextError Unit
   | [] => .ok ()
   | [_] => .ok ()
   | prev :: next :: rest => do
-    if next.timestamp ≤ prev.timestamp then
-      .error (.nonIncreasingActivations prev next)
+    match prev.criterion, next.criterion with
+    | .byTimestamp _, .byBlock _ => .error (.blockAfterTimestamp prev next)
+    | .byBlock a, .byBlock b =>
+      if b ≤ a then .error (.nonIncreasingActivations prev next)
+    | .byTimestamp a, .byTimestamp b =>
+      if b ≤ a then .error (.nonIncreasingActivations prev next)
+    | .byBlock _, .byTimestamp _ => pure ()
     if next.fork.index ≤ prev.fork.index then
       .error (.nonForwardActivations prev next)
     validateSteps (next :: rest)
 
 /-- A schedule is usable when it covers every block unambiguously: it names at
-least one fork, and every later activation moves strictly forward in time and
-fork order. There is deliberately no requirement that the first activation
-begin at timestamp 0 -- a configuration may support only eras from some later
-floor onward, and a timestamp before that floor is `SupportError.unsupportedEra`
-(from `forkAt` below), never `InvalidChainConfigError`. -/
+least one fork, and every later activation moves strictly forward in its
+criterion and in fork order, block numbers first. There is deliberately no
+requirement that the first activation begin at genesis -- a configuration may
+support only eras from some later floor onward, and a block before that floor
+is `SupportError.unsupportedEra` or `unsupportedBlockEra` (from `forkAt`
+below), never `InvalidChainConfigError`. -/
 def validate (cfg : ChainConfig) : Except ChainContextError Unit := do
   match cfg.activations with
   | [] => .error .emptySchedule
   | _ :: _ =>
     validateSteps cfg.activations
 
-/-- The last activation at or before `timestamp`, without validating the
-schedule. Callers should prefer `forkAt`. -/
-def forkAt? (cfg : ChainConfig) (timestamp : Nat) : Option Fork :=
-  (cfg.activations.filter (·.timestamp ≤ timestamp)).getLast?.map
+/-- The last activation a block at `number` and `timestamp` has reached,
+without validating the schedule. Callers should prefer `forkAt`. On a valid
+schedule the reached activations of each kind are a prefix of that kind's
+entries, so the last reached one is EELS's choice: the latest fork whose
+`FORK_CRITERIA` the block meets. -/
+def forkAt? (cfg : ChainConfig) (number timestamp : Nat) : Option Fork :=
+  (cfg.activations.filter (·.criterion.reached number timestamp)).getLast?.map
     ForkActivation.fork
 
-/-- The fork active at `timestamp`, rejecting schedules that do not determine
-one and timestamps that precede this configuration's earliest supported era.
-A timestamp before the first activation is `SupportError.unsupportedEra`, not
-an invalid configuration: the schedule is exactly as usable as any other, this
-build simply does not implement anything before its declared floor. -/
-def forkAt (cfg : ChainConfig) (timestamp : Nat) :
+/-- The era error for a block that reaches no activation: the first
+activation's criterion is the floor, of whichever kind it is. -/
+def eraError (first : ForkCriterion) (number timestamp : Nat) : SupportError :=
+  match first with
+  | .byBlock floor => .unsupportedBlockEra number floor
+  | .byTimestamp floor => .unsupportedEra timestamp floor
+
+/-- The fork active for a block at `number` and `timestamp`, rejecting
+schedules that do not determine one and blocks that precede this
+configuration's earliest supported era. A block before the first activation is
+`SupportError.unsupportedEra` (a timestamp floor) or `unsupportedBlockEra` (a
+block-number floor), not an invalid configuration: the schedule is exactly as
+usable as any other, this build simply does not implement anything before its
+declared floor. -/
+def forkAt (cfg : ChainConfig) (number timestamp : Nat) :
     Except RulesLookupError Fork := do
   Except.mapError RulesLookupError.context cfg.validate
-  match cfg.forkAt? timestamp with
+  match cfg.forkAt? number timestamp with
   | some f => .ok f
   | none =>
     -- `cfg.validate` above guarantees `cfg.activations` is nonempty, so
     -- `head?` always finds the floor; the fallback is unreachable in practice
     -- but keeps this total without threading a nonemptiness proof through.
-    let floor := (cfg.activations.head?.map (·.timestamp)).getD 0
-    .error (.support (.unsupportedEra timestamp floor))
+    let first := (cfg.activations.head?.map (·.criterion)).getD (.byTimestamp 0)
+    .error (.support (eraError first number timestamp))
 
-/-- The rules active at `timestamp`. Fails if the schedule is unusable or if
-the selected fork's rules are not implemented. -/
-def rulesAt (cfg : ChainConfig) (timestamp : Nat) :
+/-- The rules active for a block at `number` and `timestamp`. Fails if the
+schedule is unusable or if the selected fork's rules are not implemented. -/
+def rulesAt (cfg : ChainConfig) (number timestamp : Nat) :
     Except RulesLookupError ForkRules := do
-  Except.mapError RulesLookupError.support (← cfg.forkAt timestamp).rules
+  Except.mapError RulesLookupError.support (← cfg.forkAt number timestamp).rules
+
+/-- Every activation is a timestamp activation: the only schedules before the
+Byzantium extension, and the ones `forkAtTime`/`rulesAtTime` are for. -/
+def TimestampOnly (cfg : ChainConfig) : Prop :=
+  ∀ a ∈ cfg.activations, a.criterion.isBlock = false
+
+instance (cfg : ChainConfig) : Decidable cfg.TimestampOnly := by
+  unfold ChainConfig.TimestampOnly; infer_instance
+
+/-- The timestamp-only lookup, kept for one release as a wrapper over `forkAt`
+for timestamp-only schedules. The block number is read as `0`, which a
+timestamp-only schedule never consults (`forkAt_timestampOnly`). -/
+def forkAtTime (cfg : ChainConfig) (timestamp : Nat) :
+    Except RulesLookupError Fork :=
+  cfg.forkAt 0 timestamp
+
+/-- The timestamp-only rule lookup, kept for one release as a wrapper over
+`rulesAt` for timestamp-only schedules. -/
+def rulesAtTime (cfg : ChainConfig) (timestamp : Nat) :
+    Except RulesLookupError ForkRules :=
+  cfg.rulesAt 0 timestamp
+
+private theorem filter_reached_timestampOnly {as : List ForkActivation}
+    (h : ∀ a ∈ as, a.criterion.isBlock = false) (n n' t : Nat) :
+    as.filter (·.criterion.reached n t) = as.filter (·.criterion.reached n' t) := by
+  apply List.filter_congr
+  intro a ha
+  have := h a ha
+  cases hc : a.criterion with
+  | byBlock _ => rw [hc] at this; cases this
+  | byTimestamp _ => rfl
+
+/-- On a timestamp-only schedule the block number is never consulted, so the
+wrappers agree with the two-argument lookups at every block number. -/
+theorem forkAt_timestampOnly {cfg : ChainConfig} (h : cfg.TimestampOnly)
+    (number timestamp : Nat) :
+    cfg.forkAt number timestamp = cfg.forkAtTime timestamp := by
+  have hq : cfg.forkAt? number timestamp = cfg.forkAt? 0 timestamp := by
+    unfold ChainConfig.forkAt?
+    rw [filter_reached_timestampOnly h number 0 timestamp]
+  have hfirst : ∃ t, (cfg.activations.head?.map (·.criterion)).getD
+      (.byTimestamp 0) = .byTimestamp t := by
+    cases hh : cfg.activations with
+    | nil => exact ⟨0, rfl⟩
+    | cons a rest =>
+      have ha := h a (by simp [hh])
+      cases hc : a.criterion with
+      | byBlock _ => rw [hc] at ha; cases ha
+      | byTimestamp t => exact ⟨t, by simp [hc]⟩
+  obtain ⟨t, ht⟩ := hfirst
+  unfold ChainConfig.forkAtTime ChainConfig.forkAt
+  simp only [hq, ht, eraError]
+
+theorem rulesAt_timestampOnly {cfg : ChainConfig} (h : cfg.TimestampOnly)
+    (number timestamp : Nat) :
+    cfg.rulesAt number timestamp = cfg.rulesAtTime timestamp := by
+  unfold ChainConfig.rulesAt ChainConfig.rulesAtTime ChainConfig.rulesAt
+  rw [forkAt_timestampOnly h number timestamp, forkAtTime]
 
 /-- Every rule set a configured lookup produces is structurally usable, so the
 configured entry points carry `ForkRules.Valid` without checking for it. -/
-theorem rulesAt_valid {cfg : ChainConfig} {timestamp : Nat} {r : ForkRules}
-    (h : cfg.rulesAt timestamp = .ok r) : r.Valid := by
+theorem rulesAt_valid {cfg : ChainConfig} {number timestamp : Nat} {r : ForkRules}
+    (h : cfg.rulesAt number timestamp = .ok r) : r.Valid := by
   rw [ChainConfig.rulesAt] at h
-  cases hf : cfg.forkAt timestamp with
+  cases hf : cfg.forkAt number timestamp with
   | error e => rw [hf] at h; cases h
   | ok f =>
     rw [hf] at h
@@ -2373,7 +2517,7 @@ theorem valid_iff {cfg : ChainConfig} : cfg.Valid ↔ cfg.validate = .ok () := b
 /-- The configuration of a chain that is at Prague from genesis and never
 transitions. -/
 def pragueOnly (chainId : UInt64) : ChainConfig :=
-  { chainId := chainId, activations := [⟨.prague, 0⟩] }
+  { chainId := chainId, activations := [.atTime .prague 0] }
 
 -- The two `pragueOnly` bridge facts below exist for downstream proof clients
 -- (Blanc's `BlockChain.Reach.toReachUsing` connects the fixed-Prague
@@ -2393,17 +2537,62 @@ theorem pragueOnly_valid (chainId : UInt64) : (pragueOnly chainId).Valid :=
 
 /-- A Prague-only schedule selects Prague's rules at every timestamp: its
 single activation floor is 0, so no timestamp precedes the supported era. -/
-theorem pragueOnly_rulesAt (chainId : UInt64) (timestamp : Nat) :
-    (pragueOnly chainId).rulesAt timestamp = .ok pragueRules := rfl
+theorem pragueOnly_rulesAt (chainId : UInt64) (number timestamp : Nat) :
+    (pragueOnly chainId).rulesAt number timestamp = .ok pragueRules := rfl
+
+/-- A Prague-only schedule selects Prague at every block. -/
+theorem pragueOnly_forkAt (chainId : UInt64) (number timestamp : Nat) :
+    (pragueOnly chainId).forkAt number timestamp = .ok .prague := rfl
+
+/-- A Prague-only schedule is timestamp-only. -/
+theorem pragueOnly_timestampOnly (chainId : UInt64) :
+    (pragueOnly chainId).TimestampOnly := by
+  simp [TimestampOnly, pragueOnly, ForkCriterion.isBlock]
 
 end ChainConfig
 
-/-- Mainnet's activation timestamps, read from the `FORK_CRITERIA` of the EELS
-fork modules at the pinned fixture-release revision.
+/-- Mainnet's activation criteria, read from the `FORK_CRITERIA` of the EELS
+fork modules at the pinned fixture-release revision: block numbers from
+Byzantium through Paris (EELS Paris is `ByBlockNumber`, not the terminal total
+difficulty), timestamps from Shanghai on.
 
 They are recorded as named constants, and used only by `mainnetChainConfig`
-below, because an activation timestamp is a fact about one chain and never a
-rule: nothing in `ForkRules` may learn them. -/
+below, because an activation is a fact about one chain and never a rule:
+nothing in `ForkRules` may learn them. -/
+def mainnetByzantiumBlock : Nat := 4370000
+
+/-- Mainnet's Constantinople activation, which ran EELS's `constantinople`
+module: Petersburg's rules (EIP-1283 never activated on mainnet). -/
+def mainnetPetersburgBlock : Nat := 7280000
+
+/-- Mainnet's Istanbul activation. -/
+def mainnetIstanbulBlock : Nat := 9069000
+
+/-- Mainnet's Muir Glacier activation. -/
+def mainnetMuirGlacierBlock : Nat := 9200000
+
+/-- Mainnet's Berlin activation. -/
+def mainnetBerlinBlock : Nat := 12244000
+
+/-- Mainnet's London activation. -/
+def mainnetLondonBlock : Nat := 12965000
+
+/-- Mainnet's Arrow Glacier activation. -/
+def mainnetArrowGlacierBlock : Nat := 13773000
+
+/-- Mainnet's Gray Glacier activation. -/
+def mainnetGrayGlacierBlock : Nat := 15050000
+
+/-- Mainnet's Paris activation, the first proof-of-stake block. -/
+def mainnetParisBlock : Nat := 15537394
+
+/-- Mainnet's Shanghai activation, 2023-04-12 22:27:35 UTC. -/
+def mainnetShanghaiTimestamp : Nat := 1681338455
+
+/-- Mainnet's Cancun activation, 2024-03-13 13:55:35 UTC. -/
+def mainnetCancunTimestamp : Nat := 1710338135
+
+/-- Mainnet's Prague activation, 2025-05-07 10:05:11 UTC. -/
 def mainnetPragueTimestamp : Nat := 1746612311
 
 /-- Mainnet's Osaka activation (EIP-7607), 2025-12-03 21:49:11 UTC. -/
@@ -2415,36 +2604,54 @@ def mainnetBpo1Timestamp : Nat := 1765290071
 /-- Mainnet's BPO2 activation, 2026-01-07 01:01:11 UTC. -/
 def mainnetBpo2Timestamp : Nat := 1767747671
 
-/-- Ethereum mainnet, over the chain of forks this build supports.
+/-- Ethereum mainnet, from Byzantium.
 
-The supported transition chain begins at Prague, at its real historical
-activation `mainnetPragueTimestamp` -- not at genesis. This build implements no
-pre-Prague era, so a configured mainnet block timestamped before that floor
-must not silently run under Prague rules: `ChainConfig.forkAt` reports it as
-`SupportError.unsupportedEra` rather than resolving it to any fork at all. -/
+The schedule begins at Byzantium, at its real activation block
+`mainnetByzantiumBlock` -- not at genesis. This build implements no
+pre-Byzantium era, so a configured mainnet block numbered before that floor
+must not silently run under any rules: `ChainConfig.forkAt` reports it as
+`SupportError.unsupportedBlockEra` rather than resolving it to a fork. A
+scheduled fork is not thereby a runnable one: the twelve pre-Prague forks are
+refused at `Fork.rules?`, so `rulesAt` reports a block in their era as
+`SupportError.unsupportedFork`. -/
 def mainnetChainConfig : ChainConfig := {
   chainId := 1
   activations := [
-    ⟨.prague, mainnetPragueTimestamp⟩,
-    ⟨.osaka, mainnetOsakaTimestamp⟩,
-    ⟨.bpo1, mainnetBpo1Timestamp⟩,
-    ⟨.bpo2, mainnetBpo2Timestamp⟩
+    .atBlock .byzantium mainnetByzantiumBlock,
+    .atBlock .petersburg mainnetPetersburgBlock,
+    .atBlock .istanbul mainnetIstanbulBlock,
+    .atBlock .muirGlacier mainnetMuirGlacierBlock,
+    .atBlock .berlin mainnetBerlinBlock,
+    .atBlock .london mainnetLondonBlock,
+    .atBlock .arrowGlacier mainnetArrowGlacierBlock,
+    .atBlock .grayGlacier mainnetGrayGlacierBlock,
+    .atBlock .paris mainnetParisBlock,
+    .atTime .shanghai mainnetShanghaiTimestamp,
+    .atTime .cancun mainnetCancunTimestamp,
+    .atTime .prague mainnetPragueTimestamp,
+    .atTime .osaka mainnetOsakaTimestamp,
+    .atTime .bpo1 mainnetBpo1Timestamp,
+    .atTime .bpo2 mainnetBpo2Timestamp
   ]
 }
 
 /-- One activation boundary, as named by a fixture `network` label of the form
-`<before>To<after>AtTime<n>`.
+`<before>To<after>AtTime<n>` (a timestamp activation, Shanghai on) or
+`<before>To<after>At<n>` (a block-number activation, the fork-block form of the
+legacy corpus: `BerlinToLondonAt5`, `ByzantiumToConstantinopleFixAt5`). The
+terminal-total-difficulty form `...AtDiffC0000` is not modelled, because EELS
+does not model the terminal total difficulty.
 
 A transition is a *schedule*, not a fork: it is turned into a `ChainConfig` by
-`chainConfig` below, and execution then reads rules from the block timestamp
-exactly as it does on a configured chain. -/
+`chainConfig` below, and execution then reads rules from the block number and
+timestamp exactly as it does on a configured chain. -/
 structure ForkTransition : Type where
-  /-- The fork active from genesis up to, but excluding, `timestamp`. -/
+  /-- The fork active from genesis up to, but excluding, `criterion`. -/
   before : Fork
-  /-- The fork active from `timestamp` onwards. -/
+  /-- The fork active from `criterion` onwards. -/
   after : Fork
-  /-- The activation timestamp. -/
-  timestamp : Nat
+  /-- The activation criterion. -/
+  criterion : ForkCriterion
 deriving DecidableEq, Repr
 
 namespace ForkTransition
@@ -2470,24 +2677,46 @@ private def timestampToString (timestamp : Nat) : String :=
   else
     ToString.toString timestamp
 
+/-- The `At` suffix of the fork-block form: plain decimal digits, as every
+corpus label spells it. -/
+private def blockOfString? (s : String) : Option Nat :=
+  if s.all Char.isDigit then s.toNat? else none
+
 /-- The canonical label. -/
 def toString (t : ForkTransition) : String :=
-  s!"{t.before}To{t.after}AtTime{timestampToString t.timestamp}"
+  match t.criterion with
+  | .byTimestamp ts => s!"{t.before}To{t.after}AtTime{timestampToString ts}"
+  | .byBlock n => s!"{t.before}To{t.after}At{n}"
 
 instance : ToString ForkTransition := ⟨ForkTransition.toString⟩
 
-/-- Strict label parsing. Both fork names must be forks this build knows, so a
-historical transition such as `CancunToPragueAtTime15k` fails here rather than
-being run through one of its endpoints. -/
-def ofString? (label : String) : Option ForkTransition := do
-  let ⟨forkLabels, timeLabel⟩ ← splitPair? "AtTime" label
-  let timestamp ← timestampOfString? timeLabel
+/-- The two endpoint labels, both forks this build knows. -/
+private def forksOfString? (forkLabels : String) : Option (Fork × Fork) := do
   let ⟨beforeLabel, afterLabel⟩ ← splitPair? "To" forkLabels
   let before ← Fork.ofString? beforeLabel
   let after ← Fork.ofString? afterLabel
-  return ⟨before, after, timestamp⟩
+  return ⟨before, after⟩
 
-/-- The schedule a transition label names.
+/-- Strict label parsing. Both fork names must be forks this build knows, so a
+transition such as `EIP158ToByzantiumAt5` fails here rather than being run
+through one of its endpoints. A label containing `AtTime` is the timestamp
+form and nothing else; only a label without it is read as the fork-block form,
+so `...AtTime15k` can never be misread as a block number. -/
+def ofString? (label : String) : Option ForkTransition := do
+  if (label.splitOn "AtTime").length > 1 then
+    let ⟨forkLabels, timeLabel⟩ ← splitPair? "AtTime" label
+    let timestamp ← timestampOfString? timeLabel
+    let ⟨before, after⟩ ← forksOfString? forkLabels
+    return ⟨before, after, .byTimestamp timestamp⟩
+  else
+    let ⟨forkLabels, blockLabel⟩ ← splitPair? "At" label
+    let number ← blockOfString? blockLabel
+    let ⟨before, after⟩ ← forksOfString? forkLabels
+    return ⟨before, after, .byBlock number⟩
+
+/-- The schedule a transition label names: the `before` fork from genesis --
+block 0 for the fork-block form, timestamp 0 for the timestamp form, as
+before -- and the `after` fork from the label's criterion.
 
 Whether it is *usable* is `ChainConfig.validate`'s answer, not this function's:
 a label may name an activation at genesis or a backwards step, and those are
@@ -2497,7 +2726,9 @@ on which chain runs it, so a caller that only wants to check the schedule
 shape (`Main.lean`'s `--network` validation, before any fixture supplies a
 concrete chain ID) needs no placeholder identity to construct one. -/
 def activations (t : ForkTransition) : List ForkActivation :=
-  [⟨t.before, 0⟩, ⟨t.after, t.timestamp⟩]
+  match t.criterion with
+  | .byTimestamp _ => [.atTime t.before 0, ⟨t.after, t.criterion⟩]
+  | .byBlock _ => [.atBlock t.before 0, ⟨t.after, t.criterion⟩]
 
 def chainConfig (chainId : UInt64) (t : ForkTransition) : ChainConfig :=
   { chainId := chainId, activations := t.activations }
@@ -2553,7 +2784,9 @@ private def lookupFails {α : Type} (p : RulesLookupError → Bool) :
 private def isContextL : RulesLookupError → Bool
   | .context _ => true | _ => false
 private def isEraL : RulesLookupError → Bool
-  | .support (.unsupportedEra _ _) => true | _ => false
+  | .support (.unsupportedEra _ _) => true
+  | .support (.unsupportedBlockEra _ _) => true
+  | _ => false
 
 -- Fork labels round-trip, and nothing else parses.
 #guard Fork.all.all (fun f => Fork.ofString? f.toString = some f)
@@ -3274,32 +3507,32 @@ example : amsterdamRules =
 -- one -- `ChainConfig.forkAt` is where a too-early timestamp is refused.
 #guard (ChainConfig.pragueOnly 1).validate.toOption.isSome
 #guard (ChainConfig.mk 1 []).validate = .error .emptySchedule
-#guard (ChainConfig.mk 1 [⟨.prague, 1⟩]).validate.toOption.isSome
-#guard (ChainConfig.mk 1 [⟨.prague, 0⟩, ⟨.osaka, 0⟩]).validate
-  = .error (.nonIncreasingActivations ⟨.prague, 0⟩ ⟨.osaka, 0⟩)
-#guard (ChainConfig.mk 1 [⟨.prague, 0⟩, ⟨.osaka, 100⟩, ⟨.bpo1, 100⟩]).validate
-  = .error (.nonIncreasingActivations ⟨.osaka, 100⟩ ⟨.bpo1, 100⟩)
-#guard (ChainConfig.mk 1 [⟨.osaka, 0⟩, ⟨.prague, 100⟩]).validate
-  = .error (.nonForwardActivations ⟨.osaka, 0⟩ ⟨.prague, 100⟩)
-#guard (ChainConfig.mk 1 [⟨.prague, 0⟩, ⟨.osaka, 100⟩, ⟨.osaka, 200⟩]).validate
-  = .error (.nonForwardActivations ⟨.osaka, 100⟩ ⟨.osaka, 200⟩)
-#guard (ChainConfig.mk 1 [⟨.prague, 0⟩, ⟨.osaka, 100⟩, ⟨.bpo1, 200⟩,
-  ⟨.bpo2, 300⟩]).validate.toOption.isSome
+#guard (ChainConfig.mk 1 [⟨.prague, .byTimestamp 1⟩]).validate.toOption.isSome
+#guard (ChainConfig.mk 1 [⟨.prague, .byTimestamp 0⟩, ⟨.osaka, .byTimestamp 0⟩]).validate
+  = .error (.nonIncreasingActivations ⟨.prague, .byTimestamp 0⟩ ⟨.osaka, .byTimestamp 0⟩)
+#guard (ChainConfig.mk 1 [⟨.prague, .byTimestamp 0⟩, ⟨.osaka, .byTimestamp 100⟩, ⟨.bpo1, .byTimestamp 100⟩]).validate
+  = .error (.nonIncreasingActivations ⟨.osaka, .byTimestamp 100⟩ ⟨.bpo1, .byTimestamp 100⟩)
+#guard (ChainConfig.mk 1 [⟨.osaka, .byTimestamp 0⟩, ⟨.prague, .byTimestamp 100⟩]).validate
+  = .error (.nonForwardActivations ⟨.osaka, .byTimestamp 0⟩ ⟨.prague, .byTimestamp 100⟩)
+#guard (ChainConfig.mk 1 [⟨.prague, .byTimestamp 0⟩, ⟨.osaka, .byTimestamp 100⟩, ⟨.osaka, .byTimestamp 200⟩]).validate
+  = .error (.nonForwardActivations ⟨.osaka, .byTimestamp 100⟩ ⟨.osaka, .byTimestamp 200⟩)
+#guard (ChainConfig.mk 1 [⟨.prague, .byTimestamp 0⟩, ⟨.osaka, .byTimestamp 100⟩, ⟨.bpo1, .byTimestamp 200⟩,
+  ⟨.bpo2, .byTimestamp 300⟩]).validate.toOption.isSome
 
 -- Selection is by the last activation at or before the block timestamp, so the
 -- activation block itself already runs the new rules.
 private def guardSchedule : ChainConfig :=
-  ChainConfig.mk 1 [⟨.prague, 0⟩, ⟨.osaka, 100⟩, ⟨.bpo1, 200⟩, ⟨.bpo2, 300⟩]
+  ChainConfig.mk 1 [⟨.prague, .byTimestamp 0⟩, ⟨.osaka, .byTimestamp 100⟩, ⟨.bpo1, .byTimestamp 200⟩, ⟨.bpo2, .byTimestamp 300⟩]
 
-#guard guardSchedule.forkAt 0 = .ok .prague
-#guard guardSchedule.forkAt 99 = .ok .prague
-#guard guardSchedule.forkAt 100 = .ok .osaka
-#guard guardSchedule.forkAt 101 = .ok .osaka
-#guard guardSchedule.forkAt 199 = .ok .osaka
-#guard guardSchedule.forkAt 200 = .ok .bpo1
-#guard guardSchedule.forkAt 299 = .ok .bpo1
-#guard guardSchedule.forkAt 300 = .ok .bpo2
-#guard guardSchedule.forkAt 1000000 = .ok .bpo2
+#guard guardSchedule.forkAt 0 0 = .ok .prague
+#guard guardSchedule.forkAt 0 99 = .ok .prague
+#guard guardSchedule.forkAt 0 100 = .ok .osaka
+#guard guardSchedule.forkAt 0 101 = .ok .osaka
+#guard guardSchedule.forkAt 0 199 = .ok .osaka
+#guard guardSchedule.forkAt 0 200 = .ok .bpo1
+#guard guardSchedule.forkAt 0 299 = .ok .bpo1
+#guard guardSchedule.forkAt 0 300 = .ok .bpo2
+#guard guardSchedule.forkAt 0 1000000 = .ok .bpo2
 
 -- A schedule whose first activation is not at genesis is usable, and a
 -- timestamp before its floor is `SupportError.unsupportedEra`, not
@@ -3307,101 +3540,170 @@ private def guardSchedule : ChainConfig :=
 -- mainnet's own timestamps below. One before the floor fails; the floor
 -- itself, and everything after, selects normally.
 private def guardFloorSchedule : ChainConfig :=
-  ChainConfig.mk 1 [⟨.prague, 1000⟩, ⟨.osaka, 2000⟩]
+  ChainConfig.mk 1 [⟨.prague, .byTimestamp 1000⟩, ⟨.osaka, .byTimestamp 2000⟩]
 
 #guard guardFloorSchedule.validate.toOption.isSome
-#guard lookupFails isEraL (guardFloorSchedule.forkAt 999)
-#guard guardFloorSchedule.forkAt 999
+#guard lookupFails isEraL (guardFloorSchedule.forkAt 0 999)
+#guard guardFloorSchedule.forkAt 0 999
   = .error (.support (.unsupportedEra 999 1000))
-#guard guardFloorSchedule.forkAt 1000 = .ok .prague
-#guard guardFloorSchedule.forkAt 1999 = .ok .prague
-#guard guardFloorSchedule.forkAt 2000 = .ok .osaka
-#guard ¬ lookupFails isContextL (guardFloorSchedule.forkAt 999)
+#guard guardFloorSchedule.forkAt 0 1000 = .ok .prague
+#guard guardFloorSchedule.forkAt 0 1999 = .ok .prague
+#guard guardFloorSchedule.forkAt 0 2000 = .ok .osaka
+#guard ¬ lookupFails isContextL (guardFloorSchedule.forkAt 0 999)
 
 -- The whole supported chain is now executable, so every point of the schedule
 -- resolves to rules, and each segment resolves to its own.
-#guard guardSchedule.rulesAt 0 = .ok pragueRules
-#guard guardSchedule.rulesAt 99 = .ok pragueRules
-#guard guardSchedule.rulesAt 100 = .ok osakaRules
-#guard guardSchedule.rulesAt 199 = .ok osakaRules
-#guard guardSchedule.rulesAt 200 = .ok bpo1Rules
-#guard guardSchedule.rulesAt 299 = .ok bpo1Rules
-#guard guardSchedule.rulesAt 300 = .ok bpo2Rules
-#guard (ChainConfig.pragueOnly 1).rulesAt 0 = .ok pragueRules
-#guard (ChainConfig.pragueOnly 1).rulesAt 999999 = .ok pragueRules
+#guard guardSchedule.rulesAt 0 0 = .ok pragueRules
+#guard guardSchedule.rulesAt 0 99 = .ok pragueRules
+#guard guardSchedule.rulesAt 0 100 = .ok osakaRules
+#guard guardSchedule.rulesAt 0 199 = .ok osakaRules
+#guard guardSchedule.rulesAt 0 200 = .ok bpo1Rules
+#guard guardSchedule.rulesAt 0 299 = .ok bpo1Rules
+#guard guardSchedule.rulesAt 0 300 = .ok bpo2Rules
+#guard (ChainConfig.pragueOnly 1).rulesAt 0 0 = .ok pragueRules
+#guard (ChainConfig.pragueOnly 1).rulesAt 0 999999 = .ok pragueRules
 
 -- The blob schedule a block runs under is decided by its timestamp alone, and
 -- the three BPO-visible numbers change at exactly the two BPO boundaries.
-#guard (guardSchedule.rulesAt 199).map (ForkRules.blob) = .ok osakaBlobSchedule
-#guard (guardSchedule.rulesAt 200).map (ForkRules.blob) = .ok bpo1BlobSchedule
-#guard (guardSchedule.rulesAt 299).map (ForkRules.blob) = .ok bpo1BlobSchedule
-#guard (guardSchedule.rulesAt 300).map (ForkRules.blob) = .ok bpo2BlobSchedule
+#guard (guardSchedule.rulesAt 0 199).map (ForkRules.blob) = .ok osakaBlobSchedule
+#guard (guardSchedule.rulesAt 0 200).map (ForkRules.blob) = .ok bpo1BlobSchedule
+#guard (guardSchedule.rulesAt 0 299).map (ForkRules.blob) = .ok bpo1BlobSchedule
+#guard (guardSchedule.rulesAt 0 300).map (ForkRules.blob) = .ok bpo2BlobSchedule
 
 -- An invalid schedule fails before any fork is selected, rather than silently
 -- resolving to whichever activation happens to sort first.
-#guard (ChainConfig.mk 1 []).forkAt 0 = .error (.context .emptySchedule)
-#guard (ChainConfig.mk 1 []).rulesAt 0 = .error (.context .emptySchedule)
+#guard (ChainConfig.mk 1 []).forkAt 0 0 = .error (.context .emptySchedule)
+#guard (ChainConfig.mk 1 []).rulesAt 0 0 = .error (.context .emptySchedule)
 
--- Mainnet's schedule is usable, and each of its recorded activation timestamps
--- is a boundary: the second before it still runs the old rules. Genesis, and
--- everything up to one second before the real Prague activation, is outside
--- this build's declared domain -- the exact P0.5 fix, since Jaune implements
--- no pre-Prague era and must not silently answer those blocks as Prague.
+-- Mainnet's schedule is usable, and each of its recorded activations is a
+-- boundary: the block (or second) before it still runs the old fork. Genesis,
+-- and every block before Byzantium's, is outside this build's declared domain
+-- -- the P0.5 fix with its floor moved from Prague's timestamp to Byzantium's
+-- block (design §4): Jaune implements no pre-Byzantium era and must not
+-- silently answer those blocks. A scheduled fork is not a runnable one: the
+-- twelve pre-Prague eras resolve to their fork and are then refused at
+-- `Fork.rules?`, as `unsupportedFork`, never run under Prague's rules.
 #guard mainnetChainConfig.validate.toOption.isSome
 #guard mainnetChainConfig.Valid
 #guard ¬ (ChainConfig.mk 1 []).Valid
 #guard mainnetChainConfig.chainId = 1
-#guard lookupFails isEraL (mainnetChainConfig.forkAt 0)
-#guard lookupFails isEraL
-  (mainnetChainConfig.forkAt (mainnetPragueTimestamp - 1))
-#guard mainnetChainConfig.forkAt (mainnetPragueTimestamp - 1)
-  = .error (.support (.unsupportedEra (mainnetPragueTimestamp - 1)
-      mainnetPragueTimestamp))
-#guard mainnetChainConfig.forkAt mainnetPragueTimestamp = .ok .prague
-#guard mainnetChainConfig.forkAt (mainnetOsakaTimestamp - 1) = .ok .prague
-#guard mainnetChainConfig.forkAt mainnetOsakaTimestamp = .ok .osaka
-#guard mainnetChainConfig.forkAt (mainnetBpo1Timestamp - 1) = .ok .osaka
-#guard mainnetChainConfig.forkAt mainnetBpo1Timestamp = .ok .bpo1
-#guard mainnetChainConfig.forkAt (mainnetBpo2Timestamp - 1) = .ok .bpo1
-#guard mainnetChainConfig.forkAt mainnetBpo2Timestamp = .ok .bpo2
-#guard mainnetChainConfig.rulesAt mainnetBpo2Timestamp = .ok bpo2Rules
--- D13 of the Amsterdam programme: the mainnet schedule keeps its four
--- activations until upstream `FORK_CRITERIA` carries a real Amsterdam
--- timestamp. Neither declaring the identity (goal A) nor resolving its rules
--- (goal C) adds an activation, so this is stated against the four scheduled
--- forks and against Amsterdam's absence directly, never against `Fork.all` or
--- -- since Amsterdam resolves -- `Fork.supported`. (Goal A stated the first
--- guard as `= Fork.supported`, which Amsterdam resolving made false.)
+#guard ¬ mainnetChainConfig.TimestampOnly
+#guard lookupFails isEraL (mainnetChainConfig.forkAt 0 0)
+#guard mainnetChainConfig.forkAt (mainnetByzantiumBlock - 1) 0
+  = .error (.support (.unsupportedBlockEra (mainnetByzantiumBlock - 1)
+      mainnetByzantiumBlock))
+#guard mainnetChainConfig.forkAt mainnetByzantiumBlock 0 = .ok .byzantium
+#guard mainnetChainConfig.forkAt (mainnetPetersburgBlock - 1) 0 = .ok .byzantium
+#guard mainnetChainConfig.forkAt mainnetPetersburgBlock 0 = .ok .petersburg
+#guard mainnetChainConfig.forkAt mainnetIstanbulBlock 0 = .ok .istanbul
+#guard mainnetChainConfig.forkAt mainnetMuirGlacierBlock 0 = .ok .muirGlacier
+#guard mainnetChainConfig.forkAt mainnetBerlinBlock 0 = .ok .berlin
+#guard mainnetChainConfig.forkAt mainnetLondonBlock 0 = .ok .london
+#guard mainnetChainConfig.forkAt mainnetArrowGlacierBlock 0 = .ok .arrowGlacier
+#guard mainnetChainConfig.forkAt mainnetGrayGlacierBlock 0 = .ok .grayGlacier
+#guard mainnetChainConfig.forkAt (mainnetParisBlock - 1) 0 = .ok .grayGlacier
+#guard mainnetChainConfig.forkAt mainnetParisBlock 0 = .ok .paris
+-- Past Paris the timestamp decides: the last Paris second, then Shanghai.
+#guard mainnetChainConfig.forkAt mainnetParisBlock (mainnetShanghaiTimestamp - 1)
+  = .ok .paris
+#guard mainnetChainConfig.forkAt mainnetParisBlock mainnetShanghaiTimestamp
+  = .ok .shanghai
+#guard mainnetChainConfig.forkAt mainnetParisBlock mainnetCancunTimestamp = .ok .cancun
+#guard mainnetChainConfig.forkAt mainnetParisBlock (mainnetPragueTimestamp - 1)
+  = .ok .cancun
+-- Mainnet block 22,431,084 is the first Prague block.
+#guard mainnetChainConfig.forkAt 22431084 mainnetPragueTimestamp = .ok .prague
+#guard mainnetChainConfig.forkAt 22431084 (mainnetOsakaTimestamp - 1) = .ok .prague
+#guard mainnetChainConfig.forkAt 22431084 mainnetOsakaTimestamp = .ok .osaka
+#guard mainnetChainConfig.forkAt 22431084 (mainnetBpo1Timestamp - 1) = .ok .osaka
+#guard mainnetChainConfig.forkAt 22431084 mainnetBpo1Timestamp = .ok .bpo1
+#guard mainnetChainConfig.forkAt 22431084 (mainnetBpo2Timestamp - 1) = .ok .bpo1
+#guard mainnetChainConfig.forkAt 22431084 mainnetBpo2Timestamp = .ok .bpo2
+#guard mainnetChainConfig.rulesAt 22431084 mainnetBpo2Timestamp = .ok bpo2Rules
+#guard mainnetChainConfig.rulesAt 22431084 mainnetPragueTimestamp = .ok pragueRules
+-- Scheduled but refused: a Byzantium-era or Cancun-era block is an
+-- `unsupportedFork` refusal naming its own fork, not an era error and never
+-- Prague's rules.
+#guard mainnetChainConfig.rulesAt mainnetByzantiumBlock 0
+  = .error (.support (.unsupportedFork .byzantium))
+#guard mainnetChainConfig.rulesAt mainnetParisBlock mainnetCancunTimestamp
+  = .error (.support (.unsupportedFork .cancun))
+-- D13 of the Amsterdam programme: the mainnet schedule names no Amsterdam
+-- activation until upstream `FORK_CRITERIA` carries a real Amsterdam
+-- timestamp. It names, in order, every fork mainnet ran from Byzantium, with
+-- Petersburg (EELS's `constantinople` module) and never EIP-1283's
+-- `constantinople`.
 #guard mainnetChainConfig.activations.map ForkActivation.fork
-  = [.prague, .osaka, .bpo1, .bpo2]
-#guard mainnetChainConfig.activations.length = 4
+  = [.byzantium, .petersburg, .istanbul, .muirGlacier, .berlin, .london,
+    .arrowGlacier, .grayGlacier, .paris, .shanghai, .cancun, .prague, .osaka,
+    .bpo1, .bpo2]
+#guard mainnetChainConfig.activations.length = 15
 #guard ¬ (mainnetChainConfig.activations.map ForkActivation.fork).contains
   .amsterdam
+#guard ¬ (mainnetChainConfig.activations.map ForkActivation.fork).contains
+  .constantinople
+#guard (mainnetChainConfig.activations.filter (·.criterion.isBlock)).length = 9
 
 -- The mainnet activations are strictly ordered in the same direction as the
--- fork chain, which is the fact `validate` enforces and the reason the four
--- timestamps may not be reordered by a later edit.
+-- fork chain within each kind, which is the fact `validate` enforces and the
+-- reason the numbers may not be reordered by a later edit.
+#guard mainnetParisBlock < 22431084
+#guard mainnetShanghaiTimestamp < mainnetCancunTimestamp
+#guard mainnetCancunTimestamp < mainnetPragueTimestamp
 #guard mainnetPragueTimestamp < mainnetOsakaTimestamp
 #guard mainnetOsakaTimestamp < mainnetBpo1Timestamp
 #guard mainnetBpo1Timestamp < mainnetBpo2Timestamp
 
+-- A mixed schedule: block activations first, strictly increasing within each
+-- kind. A block activation after a timestamp one is refused, and so is a
+-- repeated block number; the step from a block to a timestamp compares
+-- nothing across kinds.
+#guard (ChainConfig.mk 1 [.atBlock .berlin 0, .atBlock .london 5]).validate = .ok ()
+#guard (ChainConfig.mk 1 [.atBlock .paris 100, .atTime .shanghai 0]).validate = .ok ()
+#guard (ChainConfig.mk 1 [.atTime .shanghai 0, .atBlock .cancun 5]).validate
+  = .error (.blockAfterTimestamp (.atTime .shanghai 0) (.atBlock .cancun 5))
+#guard (ChainConfig.mk 1 [.atBlock .berlin 5, .atBlock .london 5]).validate
+  = .error (.nonIncreasingActivations (.atBlock .berlin 5) (.atBlock .london 5))
+#guard (ChainConfig.mk 1 [.atBlock .london 0, .atBlock .berlin 5]).validate
+  = .error (.nonForwardActivations (.atBlock .london 0) (.atBlock .berlin 5))
+#guard ((ChainConfig.mk 1 [.atBlock .london 0, .atBlock .berlin 5]).validate
+  |>.mapError ChainContextError.render)
+  == .error "InvalidChainConfigError : activations must move forward through \
+     the fork order, but Berlin does not follow London"
+#guard ChainContextError.render
+    (.nonIncreasingActivations (.atBlock .berlin 5) (.atBlock .london 5))
+  = "InvalidChainConfigError : activation block numbers must strictly \
+     increase, but London at block 5 does not follow Berlin at block 5"
+#guard ChainContextError.render
+    (.blockAfterTimestamp (.atTime .shanghai 0) (.atBlock .cancun 5))
+  = "InvalidChainConfigError : block-number activations must precede every \
+     timestamp activation, but Cancun at block 5 follows Shanghai at timestamp 0"
+#guard SupportError.render (.unsupportedBlockEra 4369999 4370000)
+  = "UnsupportedEraError : block 4369999 precedes the earliest era this \
+     configuration supports, which begins at block 4370000"
+-- The timestamp-only wrappers agree with the two-argument lookup on the
+-- timestamp-only schedules they are kept for.
+#guard guardSchedule.TimestampOnly
+#guard guardSchedule.forkAtTime 150 = guardSchedule.forkAt 99999 150
+#guard guardSchedule.rulesAtTime 250 = .ok bpo1Rules
+
 -- Transition labels parse into schedules. Both endpoints must be forks this
 -- build knows: a historical transition names one it does not.
 #guard ForkTransition.ofString? "PragueToOsakaAtTime15k"
-  = some ⟨.prague, .osaka, 15000⟩
+  = some ⟨.prague, .osaka, .byTimestamp 15000⟩
 #guard ForkTransition.ofString? "OsakaToBPO1AtTime15k"
-  = some ⟨.osaka, .bpo1, 15000⟩
+  = some ⟨.osaka, .bpo1, .byTimestamp 15000⟩
 #guard ForkTransition.ofString? "BPO1ToBPO2AtTime15k"
-  = some ⟨.bpo1, .bpo2, 15000⟩
+  = some ⟨.bpo1, .bpo2, .byTimestamp 15000⟩
 #guard ForkTransition.ofString? "PragueToOsakaAtTime15000"
-  = some ⟨.prague, .osaka, 15000⟩
+  = some ⟨.prague, .osaka, .byTimestamp 15000⟩
 #guard ForkTransition.ofString? "BPO2ToAmsterdamAtTime15k"
-  = some ⟨.bpo2, .amsterdam, 15000⟩
+  = some ⟨.bpo2, .amsterdam, .byTimestamp 15000⟩
 #guard ForkTransition.ofString? "CancunToPragueAtTime15k"
-  = some ⟨.cancun, .prague, 15000⟩
+  = some ⟨.cancun, .prague, .byTimestamp 15000⟩
 #guard (ForkTransition.ofString? "BPO2ToBPO3AtTime15k").isNone
 #guard ForkTransition.ofString? "ShanghaiToCancunAtTime15k"
-  = some ⟨.shanghai, .cancun, 15000⟩
+  = some ⟨.shanghai, .cancun, .byTimestamp 15000⟩
 #guard (ForkTransition.ofString? "Prague").isNone
 #guard (ForkTransition.ofString? "PragueToOsaka").isNone
 #guard (ForkTransition.ofString? "PragueToOsakaAtTime").isNone
@@ -3414,26 +3716,68 @@ private def guardFloorSchedule : ChainConfig :=
 -- Labels round-trip through the canonical printer, which is what lets fixture
 -- case selection stay an exact string comparison.
 private def guardTransitions : List ForkTransition := [
-  ⟨.prague, .osaka, 15000⟩, ⟨.osaka, .bpo1, 15000⟩, ⟨.bpo1, .bpo2, 15000⟩,
-  ⟨.prague, .bpo2, 1⟩, ⟨.osaka, .bpo2, 1234567⟩
+  ⟨.prague, .osaka, .byTimestamp 15000⟩, ⟨.osaka, .bpo1, .byTimestamp 15000⟩, ⟨.bpo1, .bpo2, .byTimestamp 15000⟩,
+  ⟨.prague, .bpo2, .byTimestamp 1⟩, ⟨.osaka, .bpo2, .byTimestamp 1234567⟩
 ]
 
 #guard guardTransitions.all
   (fun t => ForkTransition.ofString? t.toString = some t)
-#guard (⟨.prague, .osaka, 15000⟩ : ForkTransition).toString
+#guard (⟨.prague, .osaka, .byTimestamp 15000⟩ : ForkTransition).toString
   = "PragueToOsakaAtTime15k"
-#guard (⟨.osaka, .bpo1, 1234567⟩ : ForkTransition).toString
+#guard (⟨.osaka, .bpo1, .byTimestamp 1234567⟩ : ForkTransition).toString
   = "OsakaToBPO1AtTime1234567"
+
+-- The fork-block form (design §4, S3): `<A>To<B>At<n>`, a block-number
+-- activation with the `before` fork from block 0. `ConstantinopleFix` is
+-- Petersburg, so the canonical spelling of that label names Petersburg and
+-- still parses back to the same transition. The TTD form is not modelled, and
+-- a label containing `AtTime` is never read as a block number.
+#guard ForkTransition.ofString? "BerlinToLondonAt5"
+  = some ⟨.berlin, .london, .byBlock 5⟩
+#guard ForkTransition.ofString? "ByzantiumToConstantinopleFixAt5"
+  = some ⟨.byzantium, .petersburg, .byBlock 5⟩
+#guard (⟨.byzantium, .petersburg, .byBlock 5⟩ : ForkTransition).toString
+  = "ByzantiumToPetersburgAt5"
+#guard (⟨.berlin, .london, .byBlock 5⟩ : ForkTransition).toString
+  = "BerlinToLondonAt5"
+#guard (ForkTransition.ofString? "ArrowGlacierToParisAtDiffC0000").isNone
+#guard (ForkTransition.ofString? "EIP158ToByzantiumAt5").isNone
+#guard (ForkTransition.ofString? "BerlinToLondonAt").isNone
+#guard (ForkTransition.ofString? "BerlinToLondonAt5k").isNone
+#guard (ForkTransition.ofString? "BerlinToLondonAt5At6").isNone
+#guard (ForkTransition.ofString? "BerlinToLondonAtTime5At6").isNone
+#guard [(⟨.berlin, .london, .byBlock 5⟩ : ForkTransition),
+    ⟨.byzantium, .petersburg, .byBlock 5⟩, ⟨.petersburg, .istanbul, .byBlock 1000⟩].all
+  (fun t => ForkTransition.ofString? t.toString = some t)
+#guard NetworkSpec.ofString? "BerlinToLondonAt5"
+  = some (.transition ⟨.berlin, .london, .byBlock 5⟩)
+-- Its schedule starts Berlin at block 0 and London at block 5, whatever the
+-- timestamp; block 5 itself is the first London block.
+private def guardBerlinToLondon : ForkTransition := ⟨.berlin, .london, .byBlock 5⟩
+#guard guardBerlinToLondon.activations = [.atBlock .berlin 0, .atBlock .london 5]
+#guard (guardBerlinToLondon.chainConfig 1).validate = .ok ()
+#guard (guardBerlinToLondon.chainConfig 1).forkAt 0 0 = .ok .berlin
+#guard (guardBerlinToLondon.chainConfig 1).forkAt 4 (10 ^ 12) = .ok .berlin
+#guard (guardBerlinToLondon.chainConfig 1).forkAt 5 0 = .ok .london
+#guard (guardBerlinToLondon.chainConfig 1).forkAt 6 0 = .ok .london
+-- Both endpoints stay refused at rule lookup.
+#guard (guardBerlinToLondon.chainConfig 1).rulesAt 4 0
+  = .error (.support (.unsupportedFork .berlin))
+#guard (guardBerlinToLondon.chainConfig 1).rulesAt 5 0
+  = .error (.support (.unsupportedFork .london))
+-- A fork block at genesis is the unusable schedule it is in the timestamp form.
+#guard lookupFails isContextL
+  (((⟨.berlin, .london, .byBlock 0⟩ : ForkTransition).chainConfig 1).forkAt 0 0)
 
 -- A transition is a schedule: the `before` fork runs from genesis and the
 -- `after` fork from the named timestamp, with no third possibility.
-private def guardOsakaToBpo1 : ForkTransition := ⟨.osaka, .bpo1, 15000⟩
+private def guardOsakaToBpo1 : ForkTransition := ⟨.osaka, .bpo1, .byTimestamp 15000⟩
 
 #guard (guardOsakaToBpo1.chainConfig 1).validate.toOption.isSome
-#guard (guardOsakaToBpo1.chainConfig 1).rulesAt 0 = .ok osakaRules
-#guard (guardOsakaToBpo1.chainConfig 1).rulesAt 14999 = .ok osakaRules
-#guard (guardOsakaToBpo1.chainConfig 1).rulesAt 15000 = .ok bpo1Rules
-#guard (guardOsakaToBpo1.chainConfig 1).rulesAt 15001 = .ok bpo1Rules
+#guard (guardOsakaToBpo1.chainConfig 1).rulesAt 0 0 = .ok osakaRules
+#guard (guardOsakaToBpo1.chainConfig 1).rulesAt 0 14999 = .ok osakaRules
+#guard (guardOsakaToBpo1.chainConfig 1).rulesAt 0 15000 = .ok bpo1Rules
+#guard (guardOsakaToBpo1.chainConfig 1).rulesAt 0 15001 = .ok bpo1Rules
 #guard (guardOsakaToBpo1.chainConfig 7).chainId = 7
 
 -- The devnet corpus's transition label. Its schedule is usable -- both
@@ -3442,40 +3786,40 @@ private def guardOsakaToBpo1 : ForkTransition := ⟨.osaka, .bpo1, 15000⟩
 -- runs BPO2's rules, which is what makes a transition fixture's pre-fork
 -- blocks meaningful rather than skipped. (Goal A guarded that `rulesAt 15000`
 -- was the support refusal naming Amsterdam; rewritten to the resolution.)
-private def guardBpo2ToAmsterdam : ForkTransition := ⟨.bpo2, .amsterdam, 15000⟩
+private def guardBpo2ToAmsterdam : ForkTransition := ⟨.bpo2, .amsterdam, .byTimestamp 15000⟩
 
 #guard NetworkSpec.ofString? "BPO2ToAmsterdamAtTime15k"
   = some (.transition guardBpo2ToAmsterdam)
 #guard (NetworkSpec.transition guardBpo2ToAmsterdam).forks = [.bpo2, .amsterdam]
 #guard (guardBpo2ToAmsterdam.chainConfig 1).validate.toOption.isSome
-#guard (guardBpo2ToAmsterdam.chainConfig 1).rulesAt 0 = .ok bpo2Rules
-#guard (guardBpo2ToAmsterdam.chainConfig 1).rulesAt 14999 = .ok bpo2Rules
-#guard (guardBpo2ToAmsterdam.chainConfig 1).forkAt 15000 = .ok .amsterdam
-#guard (guardBpo2ToAmsterdam.chainConfig 1).rulesAt 15000 = .ok amsterdamRules
-#guard (guardBpo2ToAmsterdam.chainConfig 1).rulesAt 15001 = .ok amsterdamRules
+#guard (guardBpo2ToAmsterdam.chainConfig 1).rulesAt 0 0 = .ok bpo2Rules
+#guard (guardBpo2ToAmsterdam.chainConfig 1).rulesAt 0 14999 = .ok bpo2Rules
+#guard (guardBpo2ToAmsterdam.chainConfig 1).forkAt 0 15000 = .ok .amsterdam
+#guard (guardBpo2ToAmsterdam.chainConfig 1).rulesAt 0 15000 = .ok amsterdamRules
+#guard (guardBpo2ToAmsterdam.chainConfig 1).rulesAt 0 15001 = .ok amsterdamRules
 -- Neither side of the boundary is a context failure: the schedule is usable.
-#guard ¬ lookupFails isContextL ((guardBpo2ToAmsterdam.chainConfig 1).rulesAt 15000)
+#guard ¬ lookupFails isContextL ((guardBpo2ToAmsterdam.chainConfig 1).rulesAt 0 15000)
 
 -- A parseable label may still name an unusable schedule; it is refused where
 -- every other unusable schedule is, rather than at the parser.
 #guard ForkTransition.ofString? "OsakaToPragueAtTime15k"
-  = some ⟨.osaka, .prague, 15000⟩
+  = some ⟨.osaka, .prague, .byTimestamp 15000⟩
 #guard lookupFails isContextL
-  (((⟨.osaka, .prague, 15000⟩ : ForkTransition).chainConfig 1).rulesAt 0)
+  (((⟨.osaka, .prague, .byTimestamp 15000⟩ : ForkTransition).chainConfig 1).rulesAt 0 0)
 #guard lookupFails isContextL
-  (((⟨.prague, .osaka, 0⟩ : ForkTransition).chainConfig 1).rulesAt 0)
+  (((⟨.prague, .osaka, .byTimestamp 0⟩ : ForkTransition).chainConfig 1).rulesAt 0 0)
 
 -- A `network` label is either a static fork or a transition, and the two
 -- parsers do not overlap.
 #guard NetworkSpec.ofString? "Prague" = some (.static .prague)
 #guard NetworkSpec.ofString? "BPO2" = some (.static .bpo2)
 #guard NetworkSpec.ofString? "OsakaToBPO1AtTime15k"
-  = some (.transition ⟨.osaka, .bpo1, 15000⟩)
+  = some (.transition ⟨.osaka, .bpo1, .byTimestamp 15000⟩)
 #guard NetworkSpec.ofString? "Cancun" = some (.static .cancun)
 #guard NetworkSpec.ofString? "ConstantinopleFix" = some (.static .petersburg)
 #guard NetworkSpec.ofString? "Merge" = some (.static .paris)
 #guard NetworkSpec.ofString? "CancunToPragueAtTime15k"
-  = some (.transition ⟨.cancun, .prague, 15000⟩)
+  = some (.transition ⟨.cancun, .prague, .byTimestamp 15000⟩)
 #guard (NetworkSpec.ofString? "").isNone
 #guard Fork.all.all
   (fun f => NetworkSpec.ofString? f.toString = some (.static f))
@@ -3490,19 +3834,19 @@ private def guardBpo2ToAmsterdam : ForkTransition := ⟨.bpo2, .amsterdam, 15000
 #guard (match (ChainConfig.mk 1 []).validate with
   | .error e => e.render == "InvalidChainConfigError : the activation schedule is empty"
   | .ok _ => false)
-#guard (match (ChainConfig.mk 1 [⟨.prague, 0⟩, ⟨.osaka, 0⟩]).validate with
+#guard (match (ChainConfig.mk 1 [⟨.prague, .byTimestamp 0⟩, ⟨.osaka, .byTimestamp 0⟩]).validate with
   | .error e => e.render ==
       "InvalidChainConfigError : activation timestamps must strictly increase, \
        but Osaka at 0 does not follow Prague at 0"
   | .ok _ => false)
-#guard (match guardFloorSchedule.forkAt 999 with
+#guard (match guardFloorSchedule.forkAt 0 999 with
   | .error e => e.render ==
       "UnsupportedEraError : timestamp 999 precedes the earliest era this \
        configuration supports, which begins at 1000"
   | .ok _ => false)
-#guard (match mainnetChainConfig.forkAt 0 with
+#guard (match mainnetChainConfig.forkAt 0 0 with
   | .error e => e ==
-      .support (.unsupportedEra 0 mainnetPragueTimestamp)
+      .support (.unsupportedBlockEra 0 mainnetByzantiumBlock)
   | .ok _ => false)
 
 ----------------- THE BPO2-TO-AMSTERDAM ACTIVATION BOUNDARY (goal D) -----------------
@@ -3516,11 +3860,11 @@ private def guardBpo2ToAmsterdam : ForkTransition := ⟨.bpo2, .amsterdam, 15000
 -- already resolves to the `before` fork rather than an unsupported era.
 #guard ForkTransition.ofString? "BPO2ToAmsterdamAtTime15k" = some guardBpo2ToAmsterdam
 #guard (guardBpo2ToAmsterdam.chainConfig 1).validate = .ok ()
-#guard (guardBpo2ToAmsterdam.chainConfig 1).forkAt 0 = .ok .bpo2
-#guard (guardBpo2ToAmsterdam.chainConfig 1).forkAt 14999 = .ok .bpo2
+#guard (guardBpo2ToAmsterdam.chainConfig 1).forkAt 0 0 = .ok .bpo2
+#guard (guardBpo2ToAmsterdam.chainConfig 1).forkAt 0 14999 = .ok .bpo2
 -- The schedule is chain-neutral: the same answers on another chain identity.
-#guard (guardBpo2ToAmsterdam.chainConfig 12345).rulesAt 14999 = .ok bpo2Rules
-#guard (guardBpo2ToAmsterdam.chainConfig 12345).rulesAt 15000 = .ok amsterdamRules
+#guard (guardBpo2ToAmsterdam.chainConfig 12345).rulesAt 0 14999 = .ok bpo2Rules
+#guard (guardBpo2ToAmsterdam.chainConfig 12345).rulesAt 0 15000 = .ok amsterdamRules
 
 -- What switches at that second. Header-field presence: `validateHeader` keys
 -- on these two flags, so a pre-activation block carrying either field and an
@@ -3543,16 +3887,16 @@ private def guardBpo2ToAmsterdam : ForkTransition := ⟨.bpo2, .amsterdam, 15000
 #guard bpo2Rules.requests.length = 2
 #guard amsterdamRules.requests.length = 4
 
--- D13 (goal D, G5): mainnet's schedule keeps exactly its four activations and
--- names no Amsterdam one while the pinned `FORK_CRITERIA` is `Unscheduled` --
--- the shape is guarded with the schedule above (`activations.length = 4`, the
+-- D13 (goal D, G5): mainnet's schedule names no Amsterdam activation while the
+-- pinned `FORK_CRITERIA` is `Unscheduled` -- the shape is guarded with the
+-- schedule above (`activations.length = 15`, the
 -- fork list, `¬ contains .amsterdam`). What goal D adds is the gate:
 -- `scripts/check-fork-constants.sh` compares that criterion against this
 -- schedule through the `mainnetActivation` row of `--rules`, so the day the
 -- number exists the red gate names the missing `mainnetAmsterdamTimestamp`;
 -- nothing here pre-empts it. Until then BPO2 is the last era, however far
 -- ahead the block timestamp lies.
-#guard mainnetChainConfig.forkAt? mainnetBpo2Timestamp = some .bpo2
-#guard mainnetChainConfig.forkAt? (mainnetBpo2Timestamp + 10 ^ 9) = some .bpo2
+#guard mainnetChainConfig.forkAt? 22431084 mainnetBpo2Timestamp = some .bpo2
+#guard mainnetChainConfig.forkAt? 22431084 (mainnetBpo2Timestamp + 10 ^ 9) = some .bpo2
 
 end Jaune

@@ -18,9 +18,13 @@
 # case and a BPO2-to-Amsterdam transition, each differing from unsupported.json
 # only in the label) are kept and asserted the other way round: they pass rule
 # resolution, are never refused as unsupported, and fail only on the synthetic
-# fixture's absent block data. `Cancun` (rule 3) is still a label this build
-# does not know, so the distinction between "unknown" and "declared" survives
-# as the difference between rule 3 and these two admissions.
+# fixture's absent block data. Since goal jaune-historical-forks-v1 (U1)
+# declares the twelve pre-Prague forks, `Cancun` is a label this build parses
+# and refuses per case with UnsupportedForkError (the usage text's "every case
+# at it is then refused"), so rule 3 is pinned with `Frontier`, a label this
+# build does not know, and the Cancun file pins the declared-but-refused path
+# (5d). The distinction between "unknown" and "declared" survives as the
+# difference between rule 3, the two admissions, and 5d.
 #
 # Nothing else pinned them. The conformance tiers only ever run well-formed
 # corpus files, `scripts/golden-messages.txt` covers block-rejection reasons
@@ -166,6 +170,16 @@ echo '{}' > "$TMP/loose/empty.json"
 
 cat > "$TMP/loose/unsupported.json" <<'EOF'
 {
+  "tests/frontier/opcodes/test_dup.py::test_dup[fork_Frontier-blockchain_test]": {
+    "network": "Frontier",
+    "_info": { "fixture-format": "blockchain_test" }
+  }
+}
+EOF
+
+# A declared fork whose rules this build does not implement (U1's twelve).
+cat > "$TMP/loose/declared_refused.json" <<'EOF'
+{
   "tests/frontier/opcodes/test_dup.py::test_dup[fork_Cancun-blockchain_test]": {
     "network": "Cancun",
     "_info": { "fixture-format": "blockchain_test" }
@@ -243,8 +257,24 @@ expect_refusal "empty file" \
 
 # 5. Out of this build's fork range: report the labels, both sides.
 expect_refusal "unsupported network" \
-  "runs at a network this build supports; the file's labels are [Cancun]" \
+  "runs at a network this build supports; the file's labels are [Frontier]" \
   "$TMP/loose/unsupported.json"
+
+# 5d. A declared fork this build does not run (Cancun, one of the twelve
+#     pre-Prague forks `Fork.rules?` refuses) is refused with
+#     UnsupportedForkError naming it, never as an unknown network and never
+#     run under another fork's rules.
+CHECKS=$((CHECKS + 1))
+run_jaune "$TMP/loose/declared_refused.json"
+if [ "$RUN_RC" -eq 0 ]; then
+  fail "declared but refused network (Cancun): a refused fork's case passed"
+elif ! has "UnsupportedForkError : fork Cancun" "$RUN_ERR"; then
+  fail "declared but refused network (Cancun): not refused with UnsupportedForkError"
+  detail "got: ${RUN_ERR:-<empty stderr>}"
+elif has "runs at a network this build supports" "$RUN_ERR"; then
+  fail "declared but refused network (Cancun): refused as an unknown network"
+  detail "got: ${RUN_ERR:-<empty stderr>}"
+fi
 
 # 5b. Amsterdam is a label this build parses *and* runs (goal C). The case is
 #     admitted past both fork guards -- neither "unsupported" (rule 3) nor
@@ -383,6 +413,36 @@ run_jaune t8n --state.fork Amsterdam \
   --input.alloc "$TMP/absent-amsterdam-alloc.json"
 if [ "$RUN_RC" -ne 1 ] || has "UnsupportedForkError" "$RUN_ERR"; then
   fail "t8n Amsterdam: expected rule resolution before the missing input"
+  detail "rc=$RUN_RC stderr: ${RUN_ERR:-<empty stderr>}"
+fi
+
+# The target's t8n names for the twelve pre-Prague forks (goal
+# jaune-historical-forks-v1, U9) resolve and are then refused at rule lookup,
+# before any input is read: `ConstantinopleFix` (Petersburg), `Merge` (Paris)
+# and the fork-block label `BerlinToLondonAt5` all reach UnsupportedForkError.
+# The two Jaune-only labels the target refuses, `Petersburg` and
+# `Constantinople`, are refused here as unknown t8n forks.
+for name in ConstantinopleFix Merge BerlinToLondonAt5; do
+  CHECKS=$((CHECKS + 1))
+  run_jaune t8n --state.fork "$name" --input.alloc "$TMP/absent-amsterdam-alloc.json"
+  if [ "$RUN_RC" -ne 1 ] || ! has "UnsupportedForkError" "$RUN_ERR"; then
+    fail "t8n $name: expected an UnsupportedForkError refusal before the inputs"
+    detail "rc=$RUN_RC stderr: ${RUN_ERR:-<empty stderr>}"
+  fi
+done
+for name in Petersburg Constantinople; do
+  CHECKS=$((CHECKS + 1))
+  run_jaune t8n --state.fork "$name" --input.alloc "$TMP/absent-amsterdam-alloc.json"
+  if [ "$RUN_RC" -ne 1 ] || ! has "t8n does not support the fork" "$RUN_ERR"; then
+    fail "t8n $name: expected the unknown-fork refusal the target gives"
+    detail "rc=$RUN_RC stderr: ${RUN_ERR:-<empty stderr>}"
+  fi
+done
+# `--state.reward` is read: a non-integer is refused, not ignored.
+CHECKS=$((CHECKS + 1))
+run_jaune t8n --state.fork Prague --state.reward abc
+if [ "$RUN_RC" -ne 1 ] || ! has "--state.reward expects an integer" "$RUN_ERR"; then
+  fail "t8n --state.reward abc: expected the integer refusal"
   detail "rc=$RUN_RC stderr: ${RUN_ERR:-<empty stderr>}"
 fi
 
