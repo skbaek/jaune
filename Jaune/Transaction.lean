@@ -3698,8 +3698,9 @@ rules-taking adapter and this one had the same domain, so the duplicate layer
 was retired into this name rather than kept as a synonym; there is no longer a
 rules-taking entry point that could be handed a record no fork realises. The
 `UnsupportedForkError` route this function used to take for an unimplemented
-fork is gone with it -- `Fork.ruleSet` is total -- and the vocabulary is
-retained where `Fork.rules` still renders it. -/
+fork is live again for the twelve pre-Prague forks -- `Fork.rules` refuses
+them, while `Fork.ruleSet` stays total beside it -- and the vocabulary is
+retained where `Fork.rules` renders it. -/
 def stateTransitionAt (f : Fork) (ch : BlockChain) (block : Block) :
   Except String BlockChain :=
   (stateTransitionE f ch block).mapError TransitionError.render
@@ -4843,8 +4844,9 @@ Named `addBlockToChainWith` and taking a `ForkRules` until goal
 `jaune-forks-by-construction-v1`; with a machine carrying a `Fork` the
 rules-taking adapter and the fork-taking one had the same domain, and the
 duplicate layer was retired into this name. The `.support` channel this
-function used to route an unimplemented fork through is gone with it:
-`Fork.ruleSet` is total. -/
+function used to route an unimplemented fork through is live again for the
+twelve pre-Prague forks: `Fork.rules` refuses them, while `Fork.ruleSet`
+stays total beside it. -/
 def addBlockToChainAt (f : Fork) (chain : BlockChain) (blockRlp : Bytes) :
     Except String (BlockChain ⊕ String) :=
   ImportOutcome.renderLegacy (addBlockToChainAtE f chain blockRlp)
@@ -5002,9 +5004,9 @@ example (chain : BlockChain) (blockRlp : Bytes) :
 
 -- A block whose fork a build cannot run would be refused *before* anything is
 -- decoded or executed, so an unimplemented fork could never be mistaken for a
--- rule the build actually applied. No fork is in that state here: `Fork.ruleSet`
--- is total, and the guards below record that the support channel is
--- unreachable through any declared label.
+-- rule the build actually applied. Twelve forks are in that state here:
+-- `Fork.rules` refuses them, and the guards below record that the support
+-- channel answers through exactly those declared labels.
 
 private def guardEmptyChain : BlockChain :=
   { blocks := [], state := .empty, chainId := 1 }
@@ -5114,15 +5116,16 @@ private def guardBlobParent (baseFee blobGasUsed : Nat) : Header :=
     | .error (.internal _) => true
     | _ => false)
 
--- The complement, at the same entry point and on the same chain, is vacuous
--- by construction: `Fork.ruleSet` is total, so `Fork.unimplemented_eq_nil` is a
--- theorem and this guard records today's list rather than establishing it.
--- Goal A's guard here asserted that Amsterdam was refused on
--- the support channel before any block was examined; it is rewritten to say
--- that Amsterdam reaches execution like every other fork (the no-parent
--- invariant, never a support failure), and that the support channel is
--- unreachable through any declared label.
-#guard Fork.unimplemented = []
+-- The complement, at the same entry point and on the same chain: the twelve
+-- pre-Prague forks never reach execution, because `Fork.rules` refuses them
+-- before any block is examined. Goal A's guard here asserted that Amsterdam
+-- was refused on the support channel before any block was examined; it was
+-- rewritten to say that Amsterdam reaches execution like every other
+-- supported fork when Amsterdam resolved, and it is rewritten again here to
+-- say that the twelve pre-Prague forks are refused where Amsterdam was.
+#guard Fork.unimplemented = [.byzantium, .constantinople, .petersburg, .istanbul,
+  .muirGlacier, .berlin, .london, .arrowGlacier, .grayGlacier, .paris,
+  .shanghai, .cancun]
 #guard (match addBlockToChainAtE .amsterdam guardEmptyChain
     (guardBlockAt 0).toBLT.toBytes with
   | .error (.support _) => false
@@ -5346,10 +5349,10 @@ private def presenceFails {α : Type} : Except TransitionError α → Bool
 
 -- One field at a time: each flag is independent of the other.
 #guard presenceFails (validateHeader
-  { bpo2Rules with header := { blockAccessListHash := false, slotNumber := true } }
+  { bpo2Rules with header := { blockAccessListHash := false, slotNumber := true, baseFee := false, withdrawalsRoot := false, blobGas := false, parentBeaconBlockRoot := false, requestsHash := false } }
   guardParentChain guardChild21.header)
 #guard presenceFails (validateHeader
-  { bpo2Rules with header := { blockAccessListHash := true, slotNumber := false } }
+  { bpo2Rules with header := { blockAccessListHash := true, slotNumber := false, baseFee := false, withdrawalsRoot := false, blobGas := false, parentBeaconBlockRoot := false, requestsHash := false } }
   guardParentChain guardChild21.header)
 
 -- P0.2, the history half: `RetainedHistoryValid` has teeth, and is decided

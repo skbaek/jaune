@@ -180,11 +180,11 @@ def advertisedForkLane : List Fork := Fork.supported
 
 -- The advertised lane is the runnable lane, stated both ways so that a fork
 -- added to `Fork.all` without rules would be neither advertised nor silently
--- omitted from a hand-kept list. Since goal `jaune-forks-by-construction-v1`
--- no fork can be in that state -- `Fork.ruleSet` is total, and
--- `Fork.supported_eq_all` and `Fork.unimplemented_eq_nil` are theorems -- so
+-- omitted from a hand-kept list. Twelve declared forks are in that refused
+-- state -- `Fork.rules?` is partial, and the runnable and refused lists are
+-- guards where `Fork.supported` and `Fork.unimplemented` are defined -- so
 -- these guards record today's lists rather than establishing them, and the
--- advertised lane is `Fork.all`. (Goal C's guards here said the lane was a *prefix* of
+-- advertised lane is the five runnable forks. (Goal C's guards here said the lane was a *prefix* of
 -- the runnable one with `[.amsterdam]` the only runnable fork not advertised;
 -- goal B's said `Fork.unimplemented = [.amsterdam]` and named the metering
 -- vehicle; each is rewritten to the statement that replaced it.)
@@ -193,9 +193,11 @@ def advertisedForkLane : List Fork := Fork.supported
 #guard advertisedForkLane.all (fun f => f.rules?.isSome)
 #guard Fork.supported.filter (fun f => !advertisedForkLane.contains f) = []
 #guard Fork.all.filter (fun f => !advertisedForkLane.contains f) = Fork.unimplemented
-#guard Fork.unimplemented = []
+#guard Fork.unimplemented = [.byzantium, .constantinople, .petersburg, .istanbul,
+  .muirGlacier, .berlin, .london, .arrowGlacier, .grayGlacier, .paris,
+  .shanghai, .cancun]
 #guard Fork.amsterdam.rules = .ok amsterdamRules
-#guard Fork.all.all (fun f => f.rules.toOption.isSome)
+#guard Fork.supported.all (fun f => f.rules.toOption.isSome)
 #guard Fork.prague.rules = .ok pragueRules
 #guard Fork.bpo2.rules = .ok bpo2Rules
 
@@ -1328,7 +1330,7 @@ def printInfo : IO Unit := do
   IO.println
     s!"t8n resolves: \
        {String.intercalate " " (Fork.supported.map Fork.toString)} \
-       (every declared fork, through Fork.rules?; the same list as the lane, \
+       (every runnable fork, through Fork.rules?; the same list as the lane, \
        by construction)"
   IO.println s!"t8n modes: blockchain (default), state-test (--state-test)"
   IO.println s!"t8n tracing: not claimed"

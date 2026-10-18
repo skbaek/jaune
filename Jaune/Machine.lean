@@ -692,9 +692,9 @@ always called, in the same order. -/
       [(1, withdrawalRequestPredeployAddress),
        (2, consolidationRequestPredeployAddress)] := rfl
 
-/-- Prague carries neither Amsterdam header field. -/
+/-- Prague carries neither Amsterdam header field (and every pre-Prague one). -/
 @[simp] theorem pragueRules_header :
-    pragueRules.header = { blockAccessListHash := false, slotNumber := false } :=
+    pragueRules.header = { blockAccessListHash := false, slotNumber := false, baseFee := true, withdrawalsRoot := true, blobGas := true, parentBeaconBlockRoot := true, requestsHash := true } :=
   rfl
 
 /-- Prague meters in one dimension.

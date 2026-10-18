@@ -462,7 +462,28 @@ theorem Linst.run_memory_accounting_output (sevm : Sevm) (pre : Devm) (l : Linst
             all_goals
               dsimp only [read, popped, Devm.balReadAccount]
               repeat' first | rfl | split
-          change (do
+          -- Fold `hrun` through the `let`s before restating it: the unfolded
+          -- account reads repeat a dozen times in its type. `change` against
+          -- that form elaborates the tail into the match type and thrashes;
+          -- folding first and restating with `replace` keeps both sides small.
+          -- (Heartbeat edge: this is the slowest defeq in the file; keep the
+          -- tail and these equations in sync.)
+          have hpopped : popped = pre.setMach { pre.mach with stack := tail } :=
+            rfl
+          have hread : read = (popped.balReadAccount sevm.benvStat.rules
+            head.toAdr).balReadAccount sevm.benvStat.rules
+            sevm.currentTarget := rfl
+          have hdonorBal : donorBal = (read.getAcct sevm.currentTarget).bal :=
+            rfl
+          have hplan : plan = (if head.toAdr ∉ read.accessedAddresses then
+              (addAccessedAddress read head.toAdr,
+                gasSelfDestruct + sevm.benvStat.rules.gas.coldAccountAccess)
+              else (read, gasSelfDestruct)) := rfl
+          have hcost : cost = (if (plan.1.getAcct head.toAdr).Empty ∧
+              donorBal ≠ 0 then plan.2 + gasSelfDestructNewAccount
+              else plan.2) := rfl
+          simp only [← hpopped, ← hread, ← hdonorBal, ← hplan, ← hcost] at hrun
+          replace hrun : (do
             let charged ← chargeGas cost plan.1
             assertDynamic sevm charged
             let next ← Option.toExcept
@@ -471,7 +492,7 @@ theorem Linst.run_memory_accounting_output (sevm : Sevm) (pre : Devm) (l : Linst
             let next := next.addBal head.toAdr donorBal
             if sevm.currentTarget ∈ next.createdAccounts then
               .ok (addAccountToDelete (next.setBal sevm.currentTarget 0) sevm.currentTarget)
-            else .ok next) = result at hrun
+            else .ok next) = result := hrun
           -- The remaining argument depends only on the preserved fields, not
           -- on the account reads and access-cost calculation defining them.
           clear_value cost plan donorBal read popped
@@ -3202,6 +3223,32 @@ theorem pragueModexpGasCost_large_modulus
   simp only [modexpGasCost, modexpComplexity, pragueModexpRules, Nat.one_mul]
   exact Nat.le_trans hcost (Nat.le_max_right _ _)
 
+/-- The EIP-198 MODEXP schedule alone rejects a modulus header this large
+within any 256-bit gas grant: the divisor is 20 rather than 3, but a
+2^160-byte modulus still costs far past it. -/
+theorem eip198ModexpGasCost_large_modulus
+    {baseLength modulusLength expLength expHead : Nat}
+    (hmod : 2 ^ 160 ≤ modulusLength) :
+    2 ^ 256 + gCallStipend ≤ modexpGasCost eip198ModexpRules
+      baseLength modulusLength expLength expHead := by
+  let words := ceilDiv (max baseLength modulusLength) 8
+  have hw : 2 ^ 157 ≤ words :=
+    ceilDiv8_ge_pow157_of_ge_pow160
+      (Nat.le_trans hmod (Nat.le_max_right baseLength modulusLength))
+  have hsq : (2 ^ 157) ^ 2 ≤ words ^ 2 := Nat.pow_le_pow_left hw 2
+  have hiter : 1 ≤ modexpIterations eip198ModexpRules expLength expHead := by
+    unfold modexpIterations
+    exact Nat.le_max_right _ _
+  have hmul : words ^ 2 ≤ words ^ 2 *
+      modexpIterations eip198ModexpRules expLength expHead := by
+    simpa only [mul_one] using Nat.mul_le_mul_left (words ^ 2) hiter
+  have hbig : 20 * (2 ^ 256 + gCallStipend) ≤ (2 ^ 157) ^ 2 := by decide
+  have hcost : 2 ^ 256 + gCallStipend ≤
+      (words ^ 2 * modexpIterations eip198ModexpRules expLength expHead) / 20 := by
+    omega
+  simp only [modexpGasCost, modexpComplexity, eip198ModexpRules, Nat.one_mul]
+  exact Nat.le_trans hcost (Nat.le_max_right _ _)
+
 private theorem executeModexp_ok_lengthsInBounds {evm : Evm} {cost : Nat}
     {output : Bytes} (h : executeModexp evm = .ok cost output) :
     modexpLengthsInBounds evm.sta.benvStat.rules.modexp
@@ -3225,11 +3272,13 @@ private theorem osaka_modexp_modulus_le (baseLength expLength modulusLength : Na
 
 private theorem initialized_modexp_rules (evm : Evm) :
     evm.sta.benvStat.rules.modexp = pragueModexpRules ∨
-      evm.sta.benvStat.rules.modexp = osakaModexpRules := by
+      evm.sta.benvStat.rules.modexp = osakaModexpRules ∨
+      evm.sta.benvStat.rules.modexp = eip198ModexpRules := by
   change (Fork.ruleSet evm.sta.benvStat.fork).modexp = pragueModexpRules ∨
-    (Fork.ruleSet evm.sta.benvStat.fork).modexp = osakaModexpRules
+    (Fork.ruleSet evm.sta.benvStat.fork).modexp = osakaModexpRules ∨
+    (Fork.ruleSet evm.sta.benvStat.fork).modexp = eip198ModexpRules
   cases evm.sta.benvStat.fork <;>
-    first | exact Or.inl rfl | exact Or.inr rfl
+    first | exact Or.inl rfl | exact Or.inr (Or.inl rfl) | exact Or.inr (Or.inr rfl)
 
 /-- Under a word-sized gas grant, a successful initialized MODEXP reply has
 the strict size needed by CALL return-data accounting on every selected fork. -/
@@ -3240,7 +3289,7 @@ theorem executeModexp_ok_output_length_lt_two_pow_160
     output.length < 2 ^ 160 := by
   have hlen := executeModexp_ok_output_length_le h
   have hprice := executeModexp_ok_selected_cost h
-  rcases initialized_modexp_rules evm with hprague | hosaka
+  rcases initialized_modexp_rules evm with hprague | hosaka | heip198
   · rw [hprague] at hprice
     by_contra hnot
     have hmod : 2 ^ 160 ≤ Bytes.sliceToNat evm.sta.data 64 32 := by omega
@@ -3259,6 +3308,17 @@ theorem executeModexp_ok_output_length_lt_two_pow_160
         rw [← hosaka]
         exact executeModexp_ok_lengthsInBounds h)
     have hsmall : 1024 < (2 : Nat) ^ 160 := by decide
+    omega
+  · rw [heip198] at hprice
+    by_contra hnot
+    have hmod : 2 ^ 160 ≤ Bytes.sliceToNat evm.sta.data 64 32 := by omega
+    have hlarge := eip198ModexpGasCost_large_modulus
+      (baseLength := Bytes.sliceToNat evm.sta.data 0 32)
+      (modulusLength := Bytes.sliceToNat evm.sta.data 64 32)
+      (expLength := Bytes.sliceToNat evm.sta.data 32 32)
+      (expHead := Bytes.sliceToNat evm.sta.data
+        (96 + Bytes.sliceToNat evm.sta.data 0 32)
+        (min 32 (Bytes.sliceToNat evm.sta.data 32 32))) hmod
     omega
 
 /-- The selected MODEXP precompile inherits the strict reply bound from the

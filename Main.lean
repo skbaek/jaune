@@ -272,6 +272,17 @@ def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
     ("op.clz", Lean.Json.bool r.op.clz),
     ("op.slotnum", Lean.Json.bool r.op.slotnum),
     ("op.stackAccess", Lean.Json.bool r.op.stackAccess),
+    ("op.shifts", Lean.Json.bool r.op.shifts),
+    ("op.extCodeHash", Lean.Json.bool r.op.extCodeHash),
+    ("op.create2", Lean.Json.bool r.op.create2),
+    ("op.chainId", Lean.Json.bool r.op.chainId),
+    ("op.selfBalance", Lean.Json.bool r.op.selfBalance),
+    ("op.baseFee", Lean.Json.bool r.op.baseFee),
+    ("op.push0", Lean.Json.bool r.op.push0),
+    ("op.transient", Lean.Json.bool r.op.transient),
+    ("op.mcopy", Lean.Json.bool r.op.mcopy),
+    ("op.blobHash", Lean.Json.bool r.op.blobHash),
+    ("op.blobBaseFee", Lean.Json.bool r.op.blobBaseFee),
     ("precompiles",
       Lean.Json.arr ((r.precompiles.map (fun a => jNat a.toNat)).toArray)),
     ("gas.coldAccountAccess", jNat r.gas.coldAccountAccess),
@@ -313,10 +324,58 @@ def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
       jOptNat (r.stateGas.map StateGasRules.systemMaxSstoresPerCall)),
     ("header.blockAccessListHash", Lean.Json.bool r.header.blockAccessListHash),
     ("header.slotNumber", Lean.Json.bool r.header.slotNumber),
+    ("header.baseFee", Lean.Json.bool r.header.baseFee),
+    ("header.withdrawalsRoot", Lean.Json.bool r.header.withdrawalsRoot),
+    ("header.blobGas", Lean.Json.bool r.header.blobGas),
+    ("header.parentBeaconBlockRoot", Lean.Json.bool r.header.parentBeaconBlockRoot),
+    ("header.requestsHash", Lean.Json.bool r.header.requestsHash),
     -- EIP-7928's block-level access-list rules, under the same `present` +
     -- per-field `null` convention as `stateGas`.
     ("bal.present", Lean.Json.bool r.bal.isSome),
     ("bal.itemCost", jOptNat (r.bal.map BalRules.itemCost)),
+    -- The Byzantium..Cancun extension (goal U1). Flat access prices print
+    -- under the same `present` + per-field `null` convention as `stateGas`:
+    -- under EIP-2929 pricing there are no flat prices to print.
+    ("access.shape",
+      Lean.Json.str (match r.access with
+        | .flat _ => "flat" | .eip2929 => "eip2929")),
+    ("access.balance",
+      jOptNat (match r.access with | .flat g => some g.balance | _ => none)),
+    ("access.extCode",
+      jOptNat (match r.access with | .flat g => some g.extCode | _ => none)),
+    ("access.extCodeHash",
+      jOptNat (match r.access with | .flat g => some g.extCodeHash | _ => none)),
+    ("access.sload",
+      jOptNat (match r.access with | .flat g => some g.sload | _ => none)),
+    ("access.call",
+      jOptNat (match r.access with | .flat g => some g.call | _ => none)),
+    ("sstore.netMetering", Lean.Json.bool r.sstore.netMetering),
+    ("sstore.stipendSentry", Lean.Json.bool r.sstore.stipendSentry),
+    ("settle.refundQuotient", jNat r.settle.refundQuotient),
+    ("settle.selfdestructRefund", jNat r.settle.selfdestructRefund),
+    ("settle.selfdestructOnlyCreated",
+      Lean.Json.bool r.settle.selfdestructOnlyCreated),
+    ("settle.touchedSweep", Lean.Json.bool r.settle.touchedSweep),
+    ("txr.maxType", jNat r.txr.maxType),
+    ("txr.dataNonZero", jNat r.txr.dataNonZero),
+    ("txr.calldataFloor", Lean.Json.bool r.txr.calldataFloor),
+    ("txr.warmCoinbase", Lean.Json.bool r.txr.warmCoinbase),
+    ("creation.initCodeLimit", Lean.Json.bool r.creation.initCodeLimit),
+    ("creation.rejectEf", Lean.Json.bool r.creation.rejectEf),
+    -- Proof of work under the same `present` + `null` convention: no numbers
+    -- once the seal leaves the execution layer.
+    ("pow.present", Lean.Json.bool r.pow.isSome),
+    ("pow.blockReward", jOptNat (r.pow.map PowRules.blockReward)),
+    ("pow.bombDelay", jOptNat (r.pow.map PowRules.bombDelay)),
+    ("sys.beaconRoots", Lean.Json.bool r.sys.beaconRoots),
+    ("sys.historyStorage", Lean.Json.bool r.sys.historyStorage),
+    ("bn254.add", jNat r.bn254.add),
+    ("bn254.mul", jNat r.bn254.mul),
+    ("bn254.pairingBase", jNat r.bn254.pairingBase),
+    ("bn254.pairingPerPair", jNat r.bn254.pairingPerPair),
+    ("modexpComplexity",
+      Lean.Json.str (match r.modexpComplexity with
+        | .eip198 => "eip198" | .eip2565 => "eip2565")),
     ("requests",
       Lean.Json.arr ((r.requests.map (fun p =>
         Lean.Json.arr #[jNat p.fst.toNat,
@@ -325,15 +384,14 @@ def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
 
 /-- `jaune --rules <fork>`.
 
-A fork whose rules this build does not implement would be refused here exactly
+A fork whose rules this build does not implement is refused here exactly
 as it is everywhere else: there is nothing to print, and printing another
 fork's record would be the silent fallback the whole architecture exists to
-prevent. **No fork can be in that state**: `Fork.ruleSet` is total, so the
-refusal is unreachable by construction rather than by inspection
-(`Fork.supported_eq_all`). It stays because reintroducing a partial lookup is
-what a fork identity declared ahead of its rules would require, and because
-`scripts/check-fork-constants.sh` asserts its text. The gate's fork list and
-`Fork.supported` are the same list by construction. -/
+prevent. Twelve declared forks are in that state -- the pre-Prague forks,
+refused with `UnsupportedForkError` through `Fork.rules`. The refusal stays
+because a fork identity declared ahead of its rules is exactly what those
+twelve are, and because `scripts/check-fork-constants.sh` asserts its text.
+The gate's fork list and `Fork.supported` are the same list by construction. -/
 def runRulesPrinter (label : String) : IO Unit := do
   let some f := Fork.ofString? label
     | .throw
@@ -621,8 +679,9 @@ def runBlockchainStTest (spec : NetworkSpec) : (Nat × String × Lean.Json) → 
     -- Every fork this case's network label can select must be one this build
     -- runs, and that is settled here -- before a header, a prestate, or a
     -- block is read. A declared fork whose rules a build did not implement
-    -- would be outside its domain, not evidence about the candidate (no fork
-    -- is in that state here: `Fork.ruleSet` is total): routed through
+    -- would be outside its domain, not evidence about the candidate (twelve
+    -- forks are in that state here: the pre-Prague forks `Fork.rules`
+    -- refuses): routed through
     -- the import path it would surface as `BLOCK #0 was expected valid but
     -- failed`, which reads as a verdict on a block this build never examined.
     -- A transition label is checked at both endpoints for the same reason,
@@ -1188,11 +1247,10 @@ constructed `ForkTransition`, not written out by hand, so this text cannot
 drift from what the build actually does -- which is exactly how the README's
 fork list came to disagree with the binary. The declared and runnable sets are
 printed separately because they answer different questions -- what this build
-parses against what it will also run. They are the same list today, and
-provably so (`Fork.supported_eq_all`); folding them would still be wrong,
-because a build that declared a fork ahead of its rules would then claim
-support it does not have, and the reader could not tell the two questions
-apart. -/
+parses against what it will also run. They differ by the twelve pre-Prague
+forks, and a guard where `Fork.supported` is defined pins the runnable list;
+folding them would still be wrong, because the build would then claim support
+it does not have, and the reader could not tell the two questions apart. -/
 def usage : String :=
   s!"usage:
   jaune <fixture.json> [--network <label>] [--name <case>] \

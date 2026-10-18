@@ -120,6 +120,60 @@ COVERAGE = {
     # as `ForkRules.bal = none` prints.
     "bal.present": "checked",
     "bal.itemCost": "checked",
+    # The Byzantium..Cancun extension (goal U1: twelve historical rule sets).
+    # Every fork carries these rows; a fork that cannot read a field carries
+    # the value it takes when it first activates (dormant), and flat access
+    # prices and proof-of-work numbers print `null` where the shape is absent,
+    # exactly as `stateGas`/`bal` do. They are classified here so the key-set
+    # check stays exact, but compared elsewhere: the probe covers the
+    # Prague..Amsterdam lane, and per-fork historical extraction against the
+    # old EELS modules is U10's per-fork generator extension. The values are
+    # pinned instead by the `#guard`s in `Jaune/Fork.lean`, which state every
+    # number against the EELS table the design records.
+    "op.shifts": "elsewhere",
+    "op.extCodeHash": "elsewhere",
+    "op.create2": "elsewhere",
+    "op.chainId": "elsewhere",
+    "op.selfBalance": "elsewhere",
+    "op.baseFee": "elsewhere",
+    "op.push0": "elsewhere",
+    "op.transient": "elsewhere",
+    "op.mcopy": "elsewhere",
+    "op.blobHash": "elsewhere",
+    "op.blobBaseFee": "elsewhere",
+    "header.baseFee": "elsewhere",
+    "header.withdrawalsRoot": "elsewhere",
+    "header.blobGas": "elsewhere",
+    "header.parentBeaconBlockRoot": "elsewhere",
+    "header.requestsHash": "elsewhere",
+    "access.shape": "elsewhere",
+    "access.balance": "elsewhere",
+    "access.extCode": "elsewhere",
+    "access.extCodeHash": "elsewhere",
+    "access.sload": "elsewhere",
+    "access.call": "elsewhere",
+    "sstore.netMetering": "elsewhere",
+    "sstore.stipendSentry": "elsewhere",
+    "settle.refundQuotient": "elsewhere",
+    "settle.selfdestructRefund": "elsewhere",
+    "settle.selfdestructOnlyCreated": "elsewhere",
+    "settle.touchedSweep": "elsewhere",
+    "txr.maxType": "elsewhere",
+    "txr.dataNonZero": "elsewhere",
+    "txr.calldataFloor": "elsewhere",
+    "txr.warmCoinbase": "elsewhere",
+    "creation.initCodeLimit": "elsewhere",
+    "creation.rejectEf": "elsewhere",
+    "pow.present": "elsewhere",
+    "pow.blockReward": "elsewhere",
+    "pow.bombDelay": "elsewhere",
+    "sys.beaconRoots": "elsewhere",
+    "sys.historyStorage": "elsewhere",
+    "bn254.add": "elsewhere",
+    "bn254.mul": "elsewhere",
+    "bn254.pairingBase": "elsewhere",
+    "bn254.pairingPerPair": "elsewhere",
+    "modexpComplexity": "elsewhere",
     # The six MODEXP parameters are inline literals inside `complexity`,
     # `iterations` and `gas_cost` in the pinned modules -- upstream gives them
     # no names to read. Reading them would mean re-deriving each one from
@@ -142,6 +196,38 @@ ELSEWHERE_REASON = (
     "eip7823_modexp_upper_bounds and eip7883_modexp_gas_increase subtrees of "
     "scripts/check-mainnet.sh --suite osaka."
 )
+
+HISTORICAL_ELSEWHERE_REASON = (
+    "historical rule data (Byzantium..Cancun, goal U1): pinned by the #guards "
+    "in Jaune/Fork.lean against the per-fork EELS table the design records. "
+    "Per-fork extraction against the old EELS modules is U10's per-fork "
+    "generator extension."
+)
+
+# Coverage keys whose `elsewhere` reason is not the MODEXP one above. Every
+# key with status `elsewhere` must appear here or fall back to it, so the
+# generated artifact never carries a wrong derivation.
+HISTORICAL_ELSEWHERE_KEYS = {
+    "op.shifts", "op.extCodeHash", "op.create2", "op.chainId",
+    "op.selfBalance", "op.baseFee", "op.push0", "op.transient", "op.mcopy",
+    "op.blobHash", "op.blobBaseFee", "header.baseFee",
+    "header.withdrawalsRoot", "header.blobGas", "header.parentBeaconBlockRoot",
+    "header.requestsHash", "access.shape", "access.balance", "access.extCode",
+    "access.extCodeHash", "access.sload", "access.call",
+    "sstore.netMetering", "sstore.stipendSentry", "settle.refundQuotient",
+    "settle.selfdestructRefund", "settle.selfdestructOnlyCreated",
+    "settle.touchedSweep", "txr.maxType", "txr.dataNonZero",
+    "txr.calldataFloor", "txr.warmCoinbase", "creation.initCodeLimit",
+    "creation.rejectEf", "pow.present", "pow.blockReward", "pow.bombDelay",
+    "sys.beaconRoots", "sys.historyStorage", "bn254.add", "bn254.mul",
+    "bn254.pairingBase", "bn254.pairingPerPair", "modexpComplexity",
+}
+
+
+def elsewhere_reason(path: str) -> str:
+    if path in HISTORICAL_ELSEWHERE_KEYS:
+        return HISTORICAL_ELSEWHERE_REASON
+    return ELSEWHERE_REASON
 
 
 def fail(message: str) -> None:
@@ -245,6 +331,22 @@ def build() -> dict:
             "the probe and the coverage table disagree about which fields are "
             f"checked: missing {missing}, unexpected {extra}"
         )
+    elsewhere = {path for path, status in COVERAGE.items() if status == "elsewhere"}
+    if HISTORICAL_ELSEWHERE_KEYS - elsewhere:
+        fail(
+            "historical elsewhere keys missing from the coverage table: "
+            f"{sorted(HISTORICAL_ELSEWHERE_KEYS - elsewhere)}"
+        )
+    modexp_elsewhere = {
+        "modexp.maxLength", "modexp.flatComplexity", "modexp.complexityCoeff",
+        "modexp.iterationCoeff", "modexp.gasDivisor", "modexp.minGas",
+    }
+    if elsewhere - HISTORICAL_ELSEWHERE_KEYS - modexp_elsewhere:
+        fail(
+            "elsewhere keys with no assigned reason: "
+            f"{sorted(elsewhere - HISTORICAL_ELSEWHERE_KEYS - modexp_elsewhere)}; "
+            "extend elsewhere_reason"
+        )
 
     return {
         # 2: the metering vehicle's per-fork `fork_coverage` table is gone.
@@ -262,7 +364,7 @@ def build() -> dict:
             path: (
                 {"status": status}
                 if status == "checked"
-                else {"status": status, "reason": ELSEWHERE_REASON}
+                else {"status": status, "reason": elsewhere_reason(path)}
             )
             for path, status in sorted(COVERAGE.items())
         },
