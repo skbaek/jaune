@@ -175,25 +175,22 @@ theorem processMessage_clean_of_exec_afterTransfer
     (msg : Msg) (afterTransfer : Benv) (post : Devm)
     (hentry : msg.benvAfterTransfer = .ok afterTransfer)
     (hdisable : msg.disablePrecompiles = true)
+    (hsweep : msg.benv.stat.rules.settle.touchedSweep = false)
     (hexec : exec (initEvm (msg.withBenv afterTransfer)) = .ok post)
     (herror : post.error = none) :
     processMessage msg = .ok post := by
   rw [processMessage_eq_settle_exec_afterTransfer
     msg afterTransfer hentry hdisable, hexec]
   simp [Frame.ofCall, Frame.settle, Frame.settleMsg,
-    executeCode.handleErrorWith_ok, processMessage.settle]
-  change (if post.error.isSome = true then
-    Except.ok ((post.rollback msg.benv.state msg.tenv.transientStorage).withStorageWrites
-        msg.benv.storageWrites)
-    else Except.ok post) = Except.ok post
-  rw [herror]
-  rfl
+    executeCode.handleErrorWith_ok, processMessage.settle, herror, hsweep,
+    Bind.bind, Except.bind]
 
 /-- A clean raw execution settles to the same clean machine. -/
 theorem processMessage_clean_of_exec
     (msg : Msg) (post : Devm)
     (hentry : msg.benvAfterTransfer = .ok msg.benv)
     (hdisable : msg.disablePrecompiles = true)
+    (hsweep : msg.benv.stat.rules.settle.touchedSweep = false)
     (hexec : exec (initEvm msg) = .ok post)
     (herror : post.error = none) :
     processMessage msg = .ok post := by
@@ -201,7 +198,7 @@ theorem processMessage_clean_of_exec
     cases msg
     rfl
   exact processMessage_clean_of_exec_afterTransfer
-    msg msg.benv post hentry hdisable
+    msg msg.benv post hentry hdisable hsweep
       (by simpa only [hself] using hexec) herror
 
 /-- A raw REVERT from the actual post-transfer environment settles to
@@ -211,12 +208,14 @@ theorem processMessage_revert_of_exec_afterTransfer
     (hentry : msg.benvAfterTransfer = .ok afterTransfer)
     (hdisable : msg.disablePrecompiles = true)
     (hgas : msg.benv.stat.rules.stateGas = none)
+    (hsweep : msg.benv.stat.rules.settle.touchedSweep = false)
     (hexec : exec (initEvm (msg.withBenv afterTransfer)) =
       .error (.revert, raw)) :
     processMessage msg = .ok (settledRevert msg raw) := by
   rw [processMessage_eq_settle_exec_afterTransfer
     msg afterTransfer hentry hdisable, hexec]
   simp only [Frame.settle_eq_settleMsg_handleErrorWith, Frame.ofCall, hgas]
+  simp only [Frame.settleMsg, processMessage.settle, Devm.recordTouch_of_not_touchedSweep hsweep]
   rfl
 
 /-- A raw REVERT from creation code with no separate code address settles to
@@ -226,12 +225,14 @@ theorem processMessage_revert_of_exec_afterTransfer_of_noCodeAddress
     (hentry : msg.benvAfterTransfer = .ok afterTransfer)
     (hcodeAddress : msg.codeAddress = .none)
     (hgas : msg.benv.stat.rules.stateGas = none)
+    (hsweep : msg.benv.stat.rules.settle.touchedSweep = false)
     (hexec : exec (initEvm (msg.withBenv afterTransfer)) =
       .error (.revert, raw)) :
     processMessage msg = .ok (settledRevert msg raw) := by
   rw [processMessage_eq_settle_exec_afterTransfer_of_noCodeAddress
     msg afterTransfer hentry hcodeAddress, hexec]
   simp only [Frame.settle_eq_settleMsg_handleErrorWith, Frame.ofCall, hgas]
+  simp only [Frame.settleMsg, processMessage.settle, Devm.recordTouch_of_not_touchedSweep hsweep]
   rfl
 
 /-- A clean raw execution from an exact post-transfer interpreter entry
@@ -241,19 +242,15 @@ theorem processMessage_clean_of_exec_afterTransfer_of_codeEntry
     (hentry : msg.benvAfterTransfer = .ok benv)
     (hcodeEntry : executeCode.enter (msg.withBenv benv) =
       .inl (initEvm (msg.withBenv benv)))
+    (hsweep : msg.benv.stat.rules.settle.touchedSweep = false)
     (hexec : exec (initEvm (msg.withBenv benv)) = .ok post)
     (herror : post.error = none) :
     processMessage msg = .ok post := by
   rw [processMessage_eq_settle_exec_afterTransfer_of_codeEntry
     msg benv hentry hcodeEntry, hexec]
   simp [Frame.ofCall, Frame.settle, Frame.settleMsg,
-    executeCode.handleErrorWith_ok, processMessage.settle]
-  change (if post.error.isSome = true then
-    Except.ok ((post.rollback msg.benv.state msg.tenv.transientStorage).withStorageWrites
-        msg.benv.storageWrites)
-    else Except.ok post) = Except.ok post
-  rw [herror]
-  rfl
+    executeCode.handleErrorWith_ok, processMessage.settle, herror, hsweep,
+    Bind.bind, Except.bind]
 
 /-- A raw REVERT settles to `settledRevert`. -/
 theorem processMessage_revert_of_exec
@@ -261,13 +258,14 @@ theorem processMessage_revert_of_exec
     (hentry : msg.benvAfterTransfer = .ok msg.benv)
     (hdisable : msg.disablePrecompiles = true)
     (hgas : msg.benv.stat.rules.stateGas = none)
+    (hsweep : msg.benv.stat.rules.settle.touchedSweep = false)
     (hexec : exec (initEvm msg) = .error (.revert, raw)) :
     processMessage msg = .ok (settledRevert msg raw) := by
   have hself : msg.withBenv msg.benv = msg := by
     cases msg
     rfl
   exact processMessage_revert_of_exec_afterTransfer
-    msg msg.benv raw hentry hdisable hgas
+    msg msg.benv raw hentry hdisable hgas hsweep
       (by simpa only [hself] using hexec)
 
 /-- A raw exceptional halt from the actual post-transfer environment settles
@@ -278,12 +276,14 @@ theorem processMessage_halt_of_exec_afterTransfer
     (hentry : msg.benvAfterTransfer = .ok afterTransfer)
     (hdisable : msg.disablePrecompiles = true)
     (hgas : msg.benv.stat.rules.stateGas = none)
+    (hsweep : msg.benv.stat.rules.settle.touchedSweep = false)
     (hexec : exec (initEvm (msg.withBenv afterTransfer)) =
       .error (.halt reason, raw)) :
     processMessage msg = .ok (settledHalt msg reason raw) := by
   rw [processMessage_eq_settle_exec_afterTransfer
     msg afterTransfer hentry hdisable, hexec]
   simp only [Frame.settle_eq_settleMsg_handleErrorWith, Frame.ofCall, hgas]
+  simp only [Frame.settleMsg, processMessage.settle, Devm.recordTouch_of_not_touchedSweep hsweep]
   rfl
 
 /-- A raw exceptional halt settles to `settledHalt`. -/
@@ -292,13 +292,14 @@ theorem processMessage_halt_of_exec
     (hentry : msg.benvAfterTransfer = .ok msg.benv)
     (hdisable : msg.disablePrecompiles = true)
     (hgas : msg.benv.stat.rules.stateGas = none)
+    (hsweep : msg.benv.stat.rules.settle.touchedSweep = false)
     (hexec : exec (initEvm msg) = .error (.halt reason, raw)) :
     processMessage msg = .ok (settledHalt msg reason raw) := by
   have hself : msg.withBenv msg.benv = msg := by
     cases msg
     rfl
   exact processMessage_halt_of_exec_afterTransfer
-    msg msg.benv reason raw hentry hdisable hgas
+    msg msg.benv reason raw hentry hdisable hgas hsweep
       (by simpa only [hself] using hexec)
 
 @[simp] theorem settledRevert_error (msg : Msg) (raw : Devm) :

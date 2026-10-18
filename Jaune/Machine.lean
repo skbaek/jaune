@@ -1961,6 +1961,14 @@ structure Meta : Type where
   accountReads : AdrSet := .emptyWithCapacity
   /-- EIP-7928: the storage slots read (`get_storage`), under the same rules. -/
   storageReads : KeySet := .emptyWithCapacity
+  /-- EIP-161: the accounts this frame and its incorporated children touched
+  (EELS `Evm.touched_accounts`), swept at the end of the transaction when they
+  are still empty. Recorded only under `rules.settle.touchedSweep` (Spurious
+  Dragon through Gray Glacier), so it stays empty under every Paris-and-later
+  rule set. Defaulted so that every `Meta` literal keeps elaborating. It dies
+  with a failed child, except for EELS's RIPEMD-160 quirk
+  (`incorporateChildOnError`). -/
+  touchedAccounts : AdrSet := .emptyWithCapacity
 
 @[ext]
 structure World : Type where
@@ -3551,6 +3559,83 @@ def destroyAccount (w : State) (a : Adr) : State := w.erase a
 abbrev AccountExists (wor : State) (adr : Adr) : Prop :=
   let acct := wor.get adr
   ¬ (acct.Empty ∧ acct.stor.isEmpty)
+
+/-! ### EIP-161: touched accounts (Spurious Dragon through Gray Glacier)
+
+EELS records a touch at three sites, each only when the account
+`account_exists_and_is_empty` at that moment: a successful child's target
+(`incorporate_child_on_success`, and the top-level call target in
+`process_message_call`), a `SELFDESTRUCT` beneficiary, and the RIPEMD-160
+failed-child quirk (`incorporate_child_on_error`). After every transaction,
+`destroy_touched_empty_accounts` erases the touched accounts that are still
+empty. Paris removes the sweep: `modify_state` then erases an emptied account
+at once, which is what `State.setAccount` does under every rule set.
+
+Jaune never stores `Acct.nil`, so an empty account "exists" here only when it
+still carries storage (`AccountExists`). An empty storage-less account that
+EELS would hold until the sweep is already absent in Jaune, so not recording
+it changes nothing the sweep could observe.
+
+Only the two frame-level sites are recorded (`processMessage.settle`,
+`incorporateChildOnError`). The `SELFDESTRUCT` beneficiary is credited through
+`State.setAccount`, which erases it at once if it is empty, so after the credit
+it can never exist and be empty: the EELS touch there could never pass the
+sweep's test, and recording it would be dead code. -/
+
+/-- EELS `account_exists_and_is_empty`, over Jaune's notion of existence. -/
+def accountExistsAndIsEmpty (wor : State) (adr : Adr) : Prop :=
+  AccountExists wor adr ∧ (wor.get adr).Empty
+
+instance {wor : State} {adr : Adr} : Decidable (accountExistsAndIsEmpty wor adr) := by
+  unfold accountExistsAndIsEmpty; infer_instance
+
+/-- The RIPEMD-160 precompile's address, which EELS exempts from the rollback
+of a failed child's touches (mainnet block 2675119). -/
+def ripemd160Address : Adr := 0x03
+
+/-- Record `adr` as touched when the rules sweep, `cond` holds, and `adr`
+exists and is empty in the current state. Only `touchedAccounts` moves, so
+every other projection is definitionally unchanged. -/
+def Devm.recordTouch (rules : ForkRules) (cond : Bool) (adr : Adr) (devm : Devm) :
+    Devm :=
+  devm.setMeta {devm.meta with
+    touchedAccounts :=
+      if rules.settle.touchedSweep && cond && decide (accountExistsAndIsEmpty devm.state adr)
+      then devm.meta.touchedAccounts.insert adr
+      else devm.meta.touchedAccounts}
+
+@[simp] theorem Devm.recordTouch_mach (devm : Devm) (rules : ForkRules) (cond : Bool)
+    (adr : Adr) : (devm.recordTouch rules cond adr).mach = devm.mach := rfl
+@[simp] theorem Devm.recordTouch_world (devm : Devm) (rules : ForkRules) (cond : Bool)
+    (adr : Adr) : (devm.recordTouch rules cond adr).world = devm.world := rfl
+@[simp] theorem Devm.recordTouch_state (devm : Devm) (rules : ForkRules) (cond : Bool)
+    (adr : Adr) : (devm.recordTouch rules cond adr).state = devm.state := rfl
+@[simp] theorem Devm.recordTouch_error (devm : Devm) (rules : ForkRules) (cond : Bool)
+    (adr : Adr) : (devm.recordTouch rules cond adr).error = devm.error := rfl
+@[simp] theorem Devm.recordTouch_output (devm : Devm) (rules : ForkRules) (cond : Bool)
+    (adr : Adr) : (devm.recordTouch rules cond adr).output = devm.output := rfl
+
+/-- Under a rule set without the sweep, recording is the identity. -/
+@[simp] theorem Devm.recordTouch_of_not_touchedSweep {rules : ForkRules}
+    (h : rules.settle.touchedSweep = false) (cond : Bool) (adr : Adr) (devm : Devm) :
+    devm.recordTouch rules cond adr = devm := by
+  simp [Devm.recordTouch, h, Devm.setMeta]
+
+/-- `destroy_touched_empty_accounts`: erase every touched account that still
+exists and is empty. The identity unless the rules sweep. Each test reads only
+its own address, and erasing one account changes no other, so the order of
+`addresses` does not matter. -/
+def sweepTouchedAccounts (rules : ForkRules) (addresses : List Adr) (state : State) :
+    State :=
+  if rules.settle.touchedSweep then
+    addresses.foldl (fun state adr =>
+      if accountExistsAndIsEmpty state adr then destroyAccount state adr else state) state
+  else state
+
+@[simp] theorem sweepTouchedAccounts_of_not_touchedSweep {rules : ForkRules}
+    (h : rules.settle.touchedSweep = false) (addresses : List Adr) (state : State) :
+    sweepTouchedAccounts rules addresses state = state := by
+  simp [sweepTouchedAccounts, h]
 
 /-- Account-field mutation deletes an empty account, including its storage.
 Raw `State.set` remains available for pre-state construction and storage writes. -/
@@ -5851,7 +5936,15 @@ def incorporateChildOnError (parent child : Devm) (returnData : Bytes) : Devm :=
       -- EIP-7928: a failed child's reads survive (the pinned snapshot shares
       -- the read sets by reference and rolls back only the writes).
       accountReads := parent.meta.accountReads.union child.meta.accountReads
-      storageReads := parent.meta.storageReads.union child.meta.storageReads}
+      storageReads := parent.meta.storageReads.union child.meta.storageReads
+      -- EIP-161's RIPEMD-160 quirk: a touch of 0x03 survives the failure. The
+      -- child's own frame settlement has already recorded 0x03 when it was
+      -- the child's target (`processMessage.settle`); the set is empty unless the
+      -- rules sweep.
+      touchedAccounts :=
+        if child.meta.touchedAccounts.contains ripemd160Address
+        then parent.meta.touchedAccounts.insert ripemd160Address
+        else parent.meta.touchedAccounts}
   parent.setWorld
     {parent.world with
       state := child.state
@@ -5871,7 +5964,10 @@ def incorporateChildOnSuccess (parent child : Devm) (returnData : Bytes) : Devm 
       accessedAddresses := parent.accessedAddresses.union child.accessedAddresses
       accessedStorageKeys := parent.accessedStorageKeys.union child.accessedStorageKeys
       accountReads := parent.meta.accountReads.union child.meta.accountReads
-      storageReads := parent.meta.storageReads.union child.meta.storageReads}
+      storageReads := parent.meta.storageReads.union child.meta.storageReads
+      -- EIP-161: the child's touches, including its own target, which its
+      -- frame settlement recorded (`processMessage.settle`).
+      touchedAccounts := parent.meta.touchedAccounts.union child.meta.touchedAccounts}
   parent.setWorld
     {parent.world with
       state := child.state

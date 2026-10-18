@@ -172,10 +172,13 @@ def legacyOutput (authorizationRefund : Nat)
   let logs := if evm.error.isNone then evm.logs else []
   let accountsToDelete :=
     if evm.error.isNone then evm.accountsToDelete else .emptyWithCapacity
+  let touchedAccounts :=
+    if evm.error.isNone then evm.meta.touchedAccounts else .emptyWithCapacity
   pure ⟨evm.state, {
     gasLeft := evm.gasLeft, refundCounter := authorizationRefund + refund,
     logs := logs, accountsToDelete := accountsToDelete,
-    error := evm.error, returnData := evm.output }⟩
+    error := evm.error, returnData := evm.output,
+    touchedAccounts := touchedAccounts }⟩
 
 def runMessageCreate {m : Type → Type} [Monad m] (sink : Trace.Sink m)
     (msg : Msg) (runId : String) :
@@ -352,6 +355,9 @@ def finishTransaction (prepared : PreparedTransaction) (tx : Tx) (index : Nat)
     (fun writes a => writes.eraseAddress a) storageWrites
   let state := settleSelfdestructs benv.stat.rules
     txOutput.accountsToDelete.toList state
+  -- EIP-161: `destroy_touched_empty_accounts` (Spurious Dragon to Gray Glacier).
+  let state := sweepTouchedAccounts benv.stat.rules
+    txOutput.touchedAccounts.toList state
   let bout ← .ok (bout.withGasSettlement settlement txBlobGasUsed)
   let receipt :=
     makeReceipt tx txOutput.error bout.cumulativeGasUsed txOutput.logs
@@ -430,5 +436,45 @@ theorem runTransaction_id_erasure (sink : Trace.Sink Id)
     (runTransaction sink authorizationRefund benv bout tx index runId).value =
       Jaune.processTransaction benv bout tx index :=
   (runTransaction sink authorizationRefund benv bout tx index runId).erases
+
+/-! ### EIP-161: the sweep runs in transaction settlement
+
+`processTransaction_eq` makes `finishTransaction` the public settlement, so
+these checks pin that `processTransaction` sweeps the touched accounts its
+message call reports: an account holding only storage is erased under Gray
+Glacier and kept under Prague. -/
+
+private def sweepGuardAdr : Adr := 0x2000
+
+private def sweepGuardSurvives (fork : Fork) : Bool :=
+  let state := State.setStorVal .empty sweepGuardAdr 1 1
+  let benv : Benv := { (default : Benv) with
+    state := state
+    stat := { (default : BenvStat) with fork := fork, origState := state } }
+  let prepared : PreparedTransaction :=
+    ⟨benv, .init, 0x5000, 0, 0, 0, default⟩
+  let tx : Tx := {
+    nonce := 0
+    gas := 0
+    value := 0
+    data := []
+    v := 27
+    r := []
+    s := []
+    type := .zero 0 (some 0) }
+  let out : MsgCallOutput := {
+    gasLeft := 0
+    refundCounter := 0
+    logs := []
+    accountsToDelete := .emptyWithCapacity
+    error := none
+    returnData := []
+    touchedAccounts := (.emptyWithCapacity : AdrSet).insert sweepGuardAdr }
+  match finishTransaction prepared tx 0 state out with
+  | .ok (post, _) => post[sweepGuardAdr]?.isSome
+  | .error _ => true
+
+#guard !sweepGuardSurvives .grayGlacier
+#guard sweepGuardSurvives .prague
 
 end Jaune.TraceTransaction

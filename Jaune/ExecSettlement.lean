@@ -103,7 +103,8 @@ theorem ProcessMessage.clean_input_state_of_settle
   unfold processMessage.settle at hresult
   dsimp only [bind, Except.bind] at hresult
   rw [ite_eq_right (by simp [rawSome])] at hresult
-  exact congrArg Devm.state (Except.ok.inj hresult).symm
+  rw [← Except.ok.inj hresult]
+  rfl
 
 private theorem processCreateMessage_clean_input
     {msg : Msg}

@@ -41,6 +41,7 @@ structure Devm.Rels : Type where
   (accountReads : AdrSet → AdrSet → Prop)
   (storageReads : KeySet → KeySet → Prop)
   (storageWrites : KeySet → KeySet → Prop)
+  (touchedAccounts : AdrSet → AdrSet → Prop)
 
 /-- Canonical relation between dynamic EVM states, assembled field by field. -/
 structure Devm.Rel (rels : Devm.Rels) (devm devm' : Devm) : Prop where
@@ -70,6 +71,8 @@ structure Devm.Rel (rels : Devm.Rels) (devm devm' : Devm) : Prop where
     rels.storageReads devm.meta.storageReads devm'.meta.storageReads )
   ( storageWrites :
     rels.storageWrites devm.world.storageWrites devm'.world.storageWrites )
+  ( touchedAccounts :
+    rels.touchedAccounts devm.meta.touchedAccounts devm'.meta.touchedAccounts )
 
 def Devm.Rels.eq : Devm.Rels :=
   {
@@ -91,6 +94,7 @@ def Devm.Rels.eq : Devm.Rels :=
     accountReads := _root_.Eq,
     storageReads := _root_.Eq
     storageWrites := _root_.Eq
+    touchedAccounts := _root_.Eq
   }
 
 def Devm.Burn : Devm → Devm → Prop :=
@@ -118,7 +122,8 @@ def Devm.Rels.Refl (r : Devm.Rels) : Prop :=
   ReflexiveRel r.accessedAddresses ∧ ReflexiveRel r.accessedStorageKeys ∧
   ReflexiveRel r.state ∧ ReflexiveRel r.createdAccounts ∧
   ReflexiveRel r.transientStorage ∧ ReflexiveRel r.stateGas ∧
-  ReflexiveRel r.accountReads ∧ ReflexiveRel r.storageReads ∧ ReflexiveRel r.storageWrites
+  ReflexiveRel r.accountReads ∧ ReflexiveRel r.storageReads ∧ ReflexiveRel r.storageWrites ∧
+  ReflexiveRel r.touchedAccounts
 
 def Devm.Rels.Trans (r : Devm.Rels) : Prop :=
   TransitiveRel r.stack ∧ TransitiveRel r.memory ∧ TransitiveRel r.gasLeft ∧
@@ -127,19 +132,22 @@ def Devm.Rels.Trans (r : Devm.Rels) : Prop :=
   TransitiveRel r.accessedAddresses ∧ TransitiveRel r.accessedStorageKeys ∧
   TransitiveRel r.state ∧ TransitiveRel r.createdAccounts ∧
   TransitiveRel r.transientStorage ∧ TransitiveRel r.stateGas ∧
-  TransitiveRel r.accountReads ∧ TransitiveRel r.storageReads ∧ TransitiveRel r.storageWrites
+  TransitiveRel r.accountReads ∧ TransitiveRel r.storageReads ∧ TransitiveRel r.storageWrites ∧
+  TransitiveRel r.touchedAccounts
 
 theorem Devm.rel_refl {r : Devm.Rels} (hr : Devm.Rels.Refl r) :
     ReflexiveRel (Devm.Rel r) := by
   intro d
-  obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h16, h17, h18⟩ := hr
+  obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h16, h17, h18,
+    h19⟩ := hr
   exact ⟨h1 _, h2 _, h3 _, h4 _, h5 _, h6 _, h7 _, h8 _, h9 _, h10 _, h11 _, h12 _,
-    h13 _, h14 _, h15 _, h16 _, h17 _, h18 _⟩
+    h13 _, h14 _, h15 _, h16 _, h17 _, h18 _, h19 _⟩
 
 theorem Devm.rel_trans {r : Devm.Rels} (hr : Devm.Rels.Trans r) :
     TransitiveRel (Devm.Rel r) := by
   intro a b c hab hbc
-  obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h16, h17, h18⟩ := hr
+  obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h16, h17, h18,
+    h19⟩ := hr
   exact ⟨h1 hab.stack hbc.stack, h2 hab.memory hbc.memory, h3 hab.gasLeft hbc.gasLeft,
     h4 hab.logs hbc.logs, h5 hab.refundCounter hbc.refundCounter,
     h6 hab.output hbc.output, h7 hab.accountsToDelete hbc.accountsToDelete,
@@ -149,7 +157,8 @@ theorem Devm.rel_trans {r : Devm.Rels} (hr : Devm.Rels.Trans r) :
     h13 hab.createdAccounts hbc.createdAccounts,
     h14 hab.transientStorage hbc.transientStorage, h15 hab.stateGas hbc.stateGas,
     h16 hab.accountReads hbc.accountReads, h17 hab.storageReads hbc.storageReads,
-    h18 hab.storageWrites hbc.storageWrites⟩
+    h18 hab.storageWrites hbc.storageWrites,
+    h19 hab.touchedAccounts hbc.touchedAccounts⟩
 
 /-- A relation that is equality off the machine fields relates `d` only to
 `d` with a new `Mach`. Consumers read the equation instead of unpacking the
@@ -161,15 +170,15 @@ theorem Devm.Rel.eq_setMach {stack : List B256 → List B256 → Prop}
       stack := stack, memory := memory, gasLeft := gasLeft, stateGas := stateGas} d d') :
     d' = d.setMach d'.mach := by
   obtain ⟨_, _, _, hlogs, hrefund, houtput, hdel, hret, herr, haddr, hkeys, hstate,
-    hcreated, htra, _, hreads, hsreads, hwrites⟩ := h
+    hcreated, htra, _, hreads, hsreads, hwrites, htouched⟩ := h
   rcases d with ⟨mach, ⟨logs, refund, output, toDelete, returnData, err, addr, keys, created,
-    reads, sreads⟩, ⟨state, tra, writes⟩⟩
+    reads, sreads, touched⟩, ⟨state, tra, writes⟩⟩
   rcases d' with ⟨mach', ⟨logs', refund', output', toDelete', returnData', err', addr', keys',
-    created', reads', sreads'⟩, ⟨state', tra', writes'⟩⟩
+    created', reads', sreads', touched'⟩, ⟨state', tra', writes'⟩⟩
   simp only [Devm.Rels.eq] at *
   cases hlogs; cases hrefund; cases houtput; cases hdel; cases hret; cases herr
   cases haddr; cases hkeys; cases hstate; cases hcreated; cases htra; cases hreads
-  cases hsreads; cases hwrites
+  cases hsreads; cases hwrites; cases htouched
   rfl
 
 /-- `Devm.Burn` changes only the machine. -/

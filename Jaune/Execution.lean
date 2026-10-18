@@ -500,15 +500,30 @@ instance {f : Frame} : Decidable (Frame.Canonical f) := by
 theorem Frame.canonical_ofCall {msg : Msg} (h : Msg.Canonical msg) :
     Frame.Canonical (Frame.ofCall msg) := ⟨h, h⟩
 
+/-- `process_message`'s settlement: a failed frame rolls back.
+
+EIP-161 (Spurious Dragon through Gray Glacier; the identity otherwise): the
+frame's own target is touched here when it exists and is empty in the settled
+state. EELS takes that touch in the parent at incorporation --
+`incorporate_child_on_success` touches the child's target,
+`incorporate_child_on_error` touches 0x03 when it was the failed child's
+target, and `process_message_call` touches the top-level call target -- each
+reading the state the child left, which is this settled state, so this is the
+same test at the same state. A failed child's touches other than 0x03 are
+dropped by `incorporateChildOnError`, and a failed transaction's by
+`processMessageCall`. A creation's target already has nonce 1 here
+(`processCreateMessage.msg`), so it is never empty and EELS's omission of the
+top-level creation target is immaterial. -/
 def processMessage.settle (msg : Msg)
     (r : Except (EvmError × State × AdrSet × Tra) Devm) :
     Except (EvmError × State × AdrSet × Tra) Devm := do
   let evm ← r
   if evm.error.isSome then
-    .ok ((evm.rollback msg.benv.state msg.tenv.transientStorage).withStorageWrites
-      msg.benv.storageWrites)
+    .ok (((evm.rollback msg.benv.state msg.tenv.transientStorage).withStorageWrites
+      msg.benv.storageWrites).recordTouch msg.benv.stat.rules
+        (msg.currentTarget == ripemd160Address) msg.currentTarget)
   else
-    .ok evm
+    .ok (evm.recordTouch msg.benv.stat.rules true msg.currentTarget)
 
 def processCreateMessage.settle (msg : Msg)
     (r : Except (EvmError × State × AdrSet × Tra) Devm) :
@@ -2786,6 +2801,10 @@ structure MsgCallOutput : Type where
   storageReads : KeySet := .emptyWithCapacity
   /-- Explicit writes surviving frame rollback and storage deletion. -/
   storageWrites : KeySet := .emptyWithCapacity
+  /-- EIP-161: the accounts the transaction touched, for the end-of-transaction
+  sweep. Empty when the transaction failed, on the Amsterdam path, and under
+  every rule set without `settle.touchedSweep`. -/
+  touchedAccounts : AdrSet := .emptyWithCapacity
 
 def Except.bimap
   {ε : Type u0} {δ : Type u1} {ξ : Type u2} {υ : Type u3}
