@@ -2,7 +2,7 @@
 
 Sixty-five cases, each a complete `t8n` invocation, with goldens generated from the
 pinned conformance target. `scripts/check-t8n.sh` runs them; this file says
-what they are and how to change them. Fifty-eight conform and seven are
+what they are and how to change them. Sixty-one conform and four are
 registered refusals (the still-refused historical forks below).
 
 ## Layout
@@ -51,8 +51,8 @@ These nine cases run at Prague. The thirty `am-*` cases below exercise
 Amsterdam's metering in both tool modes. Ten further cases cover storage-only
 creation and empty-account deletion on Prague, Osaka, BPO1, BPO2 and Amsterdam.
 Five further cases cover zero-value transaction, CALL and STATICCALL entry on
-those same forks (58 conforming cases in total; 65 with the historical eleven,
-four of which now pass).
+those same forks (61 conforming cases in total; 65 with the historical eleven,
+seven of which now pass).
 
 ### Storage semantics at the v21 pin
 
@@ -141,8 +141,8 @@ pins, so goldens and emission always come from one revision.
 
 ## Historical cases (goal U10)
 
-Eleven further cases cover the pre-Prague forks, one transfer per fork (seven
-still refused, four passing since units U11a/U11b):
+Eleven further cases cover the pre-Prague forks, one transfer per fork (four
+still refused, seven passing since units U11a/U11b/U11d):
 
 | case | fork label | reward |
 |---|---|---|
@@ -160,18 +160,21 @@ still refused, four passing since units U11a/U11b):
 
 Labels are the target's `--state.fork` names (`ConstantinopleFix` for its
 `constantinople` module, `Merge` for Paris); Jaune parses the same labels.
-Since units U11a/U11b, London, `Merge` (Paris), Shanghai and Cancun resolve
-and conform against their goldens byte for byte: the `result` document
+Since units U11a/U11b/U11d, Berlin, London, ArrowGlacier, GrayGlacier,
+`Merge` (Paris), Shanghai and Cancun resolve and conform against their goldens
+byte for byte (U11d: before London no base fee is read from `env`, as the
+target's `_resolve_base_fee_per_gas` returns `None` there, and before the
+merge `DIFFICULTY` reads the resolved difficulty): the `result` document
 carries `currentDifficulty` pre-merge, and `currentBaseFee`,
 `withdrawalsRoot`, the blob pair and the requests pair exactly when the
 fork's header rules carry the field, as the target's `exclude_none=True`
-does. Jaune refuses the other seven with `UnsupportedForkError` before reading
+does. Jaune refuses the other four with `UnsupportedForkError` before reading
 any input, because `Fork.rules?` is none for their forks. That refusal is the
 expected red: `scripts/t8n/expected-refusals.json` registers each such case
 with its reason, and the gate requires the refusal rather than marking it
 passing. The goldens, generated from the pinned target by the registered
 generator, record the behavior later units will conform to for the remaining
-seven. There is no
+four. There is no
 `Constantinople` (EIP-1283) case: the target refuses that label too
 (`UNSUPPORTED_FORKS`), so no golden can be generated for it; its evidence is
 the legacy corpus and the constants gate's all-dormant row.

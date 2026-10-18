@@ -4065,7 +4065,7 @@ rules-taking adapter and this one had the same domain, so the duplicate layer
 was retired into this name rather than kept as a synonym; there is no longer a
 rules-taking entry point that could be handed a record no fork realises. The
 `UnsupportedForkError` route this function used to take for an unimplemented
-fork is live again for the eight still-refused pre-Prague forks --
+fork is live again for the five still-refused pre-Berlin forks --
 `Fork.rules` refuses them, while `Fork.ruleSet` stays total beside it -- and
 the vocabulary is retained where `Fork.rules` renders it. -/
 def stateTransitionAt (f : Fork) (ch : BlockChain) (block : Block) :
@@ -5283,7 +5283,7 @@ Named `addBlockToChainWith` and taking a `ForkRules` until goal
 rules-taking adapter and the fork-taking one had the same domain, and the
 duplicate layer was retired into this name. The `.support` channel this
 function used to route an unimplemented fork through is live again for the
-eight still-refused pre-Prague forks: `Fork.rules` refuses them, while
+five still-refused pre-Berlin forks: `Fork.rules` refuses them, while
 `Fork.ruleSet` stays total beside it. -/
 def addBlockToChainAt (f : Fork) (chain : BlockChain) (blockRlp : Bytes) :
     Except String (BlockChain ⊕ String) :=
@@ -5606,10 +5606,10 @@ private def guardBlobParent (baseFee blobGasUsed : Nat) : Header :=
 -- Amsterdam was refused on the support channel before any block was examined;
 -- it was rewritten to say that Amsterdam reaches execution like every other
 -- supported fork when Amsterdam resolved, and it is rewritten again here to
--- say that the eight still-refused pre-Prague forks are refused where
+-- say that the five still-refused pre-Berlin forks are refused where
 -- Amsterdam was.
 #guard Fork.unimplemented = [.byzantium, .constantinople, .petersburg, .istanbul,
-  .muirGlacier, .berlin, .arrowGlacier, .grayGlacier]
+  .muirGlacier]
 #guard (match addBlockToChainAtE .amsterdam guardEmptyChain
     (guardBlockAt 0).toBLT.toBytes with
   | .error (.support _) => false

@@ -412,10 +412,10 @@ def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
 A fork whose rules this build does not implement is refused here exactly
 as it is everywhere else: there is nothing to print, and printing another
 fork's record would be the silent fallback the whole architecture exists to
-prevent. Eight declared forks are in that state -- the still-refused
-pre-Prague forks, refused with `UnsupportedForkError` through `Fork.rules`.
+prevent. Five declared forks are in that state -- the still-refused
+pre-Berlin forks, refused with `UnsupportedForkError` through `Fork.rules`.
 The refusal stays because a fork identity declared ahead of its rules is
-exactly what those eight are, and because `scripts/check-fork-constants.sh`
+exactly what those five are, and because `scripts/check-fork-constants.sh`
 asserts its text.
 The gate's fork list and `Fork.supported` are the same list by construction. -/
 def runRulesPrinter (label : String) : IO Unit := do
@@ -434,9 +434,9 @@ Evidence surface for `scripts/check-fork-constants.sh` (goal U10): it prints
 `Fork.ruleSet` -- the total function every declared fork's literal lives
 under -- through the same `toGateJson` as `--rules`, so the gate can compare
 the twelve pre-Prague literals against the pinned `execution-specs` modules
-while `--rules` keeps refusing the eight still-refused ones. Execution never
+while `--rules` keeps refusing the five still-refused ones. Execution never
 reads this: every runner
-resolves through `Fork.rules?` / `Fork.rules`, which still refuse the eight
+resolves through `Fork.rules?` / `Fork.rules`, which still refuse the five
 still-refused forks with `UnsupportedForkError`. -/
 def runRulesLiteralPrinter (label : String) : IO Unit := do
   let some f := Fork.ofString? label
@@ -787,8 +787,8 @@ def runBlockchainStTest (spec : NetworkSpec) : (Nat × String × Lean.Json) → 
     -- Every fork this case's network label can select must be one this build
     -- runs, and that is settled here -- before a header, a prestate, or a
     -- block is read. A declared fork whose rules a build did not implement
-    -- would be outside its domain, not evidence about the candidate (eight
-    -- forks are in that state here: the still-refused pre-Prague forks
+    -- would be outside its domain, not evidence about the candidate (five
+    -- forks are in that state here: the still-refused pre-Berlin forks
     -- `Fork.rules` refuses): routed through
     -- the import path it would surface as `BLOCK #0 was expected valid but
     -- failed`, which reads as a verdict on a block this build never examined.
@@ -1383,8 +1383,8 @@ constructed `ForkTransition`, not written out by hand, so this text cannot
 drift from what the build actually does -- which is exactly how the README's
 fork list came to disagree with the binary. The declared and runnable sets are
 printed separately because they answer different questions -- what this build
-parses against what it will also run. They differ by the eight still-refused
-pre-Prague forks, and a guard where `Fork.supported` is defined pins the
+parses against what it will also run. They differ by the five still-refused
+pre-Berlin forks, and a guard where `Fork.supported` is defined pins the
 runnable list;
 folding them would still be wrong, because the build would then claim support
 it does not have, and the reader could not tell the two questions apart. -/

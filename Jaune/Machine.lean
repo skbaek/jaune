@@ -979,6 +979,21 @@ structure Msg : Type where
   construction keeps elaborating and every `none`-path frame starts with an
   empty reservoir -- which `initDevm` then seeds as `StateGasMeter.zero`. -/
   stateGasGrant : Nat := 0
+  /-- The accounts the frame's ancestors have scheduled for deletion when the
+  frame is entered, which the frame's own `accountsToDelete` starts from.
+
+  EELS's pre-London `SELFDESTRUCT` pays `REFUND_SELF_DESTRUCT` only when the
+  originator is not in `refunded_accounts`, which is the frame's
+  `accounts_to_delete` updated with every ancestor's (the loop over
+  `parent_evm` aliases the frame's own set, berlin/vm/instructions/system.py),
+  and a successful sibling's deletions are already merged into its parent's
+  set. Starting a child's set from its parent's is therefore exactly that set:
+  the merge on success is a union, and a failed child's set is discarded, so
+  the deletions settled at the end of a transaction are unchanged. Only a fork
+  that pays the refund carries the set (`callMsg`, `createMsg`); every other
+  machine, Prague's included, enters with the empty set as before (unit U11d).
+  Defaulted for the reason `stateGasGrant` is. -/
+  inheritedDeletions : AdrSet := .emptyWithCapacity
 
 def Msg.withBenv (msg : Msg) (benv : Benv) : Msg :=
   {msg with benv := benv}

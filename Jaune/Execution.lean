@@ -303,7 +303,7 @@ def initDevm (msg : Msg) : Devm :=
           else []
       refundCounter := 0
       output := []
-      accountsToDelete := .emptyWithCapacity
+      accountsToDelete := msg.inheritedDeletions
       returnData := []
       error := .none
       accessedAddresses := msg.accessedAddresses
@@ -442,6 +442,9 @@ def callMsg
     accessedAddresses := evm1.accessedAddresses
     accessedStorageKeys := evm1.accessedStorageKeys
     disablePrecompiles := disablePrecompiles
+    inheritedDeletions :=
+      if sevm.benvStat.rules.settle.selfdestructRefund = 0 then .emptyWithCapacity
+      else evm1.accountsToDelete
   }
 
 /-!
@@ -471,6 +474,9 @@ def createMsg
     accessedAddresses := devm.accessedAddresses
     accessedStorageKeys := devm.accessedStorageKeys
     disablePrecompiles := false
+    inheritedDeletions :=
+      if sevm.benvStat.rules.settle.selfdestructRefund = 0 then .emptyWithCapacity
+      else devm.accountsToDelete
   }
 
 structure Frame : Type where
