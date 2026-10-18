@@ -86,14 +86,28 @@ def Bytes.sliceToNat (data : Bytes) (start : Nat) (length : Nat) : Nat :=
       else Bytes.toNat <| tail.takeD length (0 : UInt8)
     else Bytes.toNat <| tail.take length
 
+-- def eip198Complexity
+/-- EIP-198's multiplication complexity (Byzantium .. Muir Glacier): the
+piecewise polynomial in the raw byte lengths, against EIP-2565's `words ^ 2`
+below. -/
+def eip198Complexity (baseLength modulusLength : Nat) : Nat :=
+  let maxLength := max baseLength modulusLength
+  if maxLength ≤ 64 then maxLength ^ 2
+  else if maxLength ≤ 1024 then maxLength ^ 2 / 4 + 96 * maxLength - 3072
+  else maxLength ^ 2 / 16 + 480 * maxLength - 199680
+
 -- def complexity
 def modexpComplexity
-  (m : ModexpRules) (baseLength modulusLength : Nat) : Nat :=
-  let maxLength := max baseLength modulusLength
-  let words := ceilDiv maxLength 8
-  match m.flatComplexity with
-  | some flat => if maxLength ≤ 32 then flat else m.complexityCoeff * words ^ 2
-  | none => m.complexityCoeff * words ^ 2
+  (c : ModexpComplexity) (m : ModexpRules)
+  (baseLength modulusLength : Nat) : Nat :=
+  match c with
+  | .eip198 => eip198Complexity baseLength modulusLength
+  | .eip2565 =>
+    let maxLength := max baseLength modulusLength
+    let words := ceilDiv maxLength 8
+    match m.flatComplexity with
+    | some flat => if maxLength ≤ 32 then flat else m.complexityCoeff * words ^ 2
+    | none => m.complexityCoeff * words ^ 2
 
 -- def iterations
 def modexpIterations (m : ModexpRules) (expLength : Nat) (expHead : Nat) : Nat :=
@@ -113,8 +127,9 @@ def modexpIterations (m : ModexpRules) (expLength : Nat) (expHead : Nat) : Nat :
 
 -- def gas_cost
 def modexpGasCost
-  (m : ModexpRules) (baseLength modulusLength expLength expHead : Nat) : Nat :=
-  let mulComplexity := modexpComplexity m baseLength modulusLength
+  (c : ModexpComplexity) (m : ModexpRules)
+  (baseLength modulusLength expLength expHead : Nat) : Nat :=
+  let mulComplexity := modexpComplexity c m baseLength modulusLength
   let iterationCount := modexpIterations m expLength expHead
   let cost := (mulComplexity * iterationCount) / m.gasDivisor
   max m.minGas cost
@@ -135,6 +150,7 @@ def modexpLengthsInBounds
 def executeModexp (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
   let m : ModexpRules := evm.sta.benvStat.rules.modexp
+  let c : ModexpComplexity := evm.sta.benvStat.rules.modexpComplexity
   let baseLength : Nat := Bytes.sliceToNat data 0 32
   let expLength : Nat := Bytes.sliceToNat data 32 32
   let modulusLength : Nat := Bytes.sliceToNat data 64 32
@@ -142,7 +158,7 @@ def executeModexp (evm : Evm) : PrecompResult :=
     .error (.halt (.modexpInputLimit .none)) 0
   else
   let expHead : Nat := Bytes.sliceToNat data (96 + baseLength) (min 32 expLength)
-  let cost : Nat := modexpGasCost m baseLength modulusLength expLength expHead
+  let cost : Nat := modexpGasCost c m baseLength modulusLength expLength expHead
   PrecompResult.chargeGas cost evm fun () =>
     if baseLength = 0 ∧ modulusLength = 0 then .ok cost []
     else
@@ -161,16 +177,26 @@ def executeModexp (evm : Evm) : PrecompResult :=
 
 -- The multiplication complexity agrees at the 32-byte boundary and diverges
 -- immediately above it, where Osaka charges the doubled quadratic term.
-#guard modexpComplexity pragueModexpRules 32 32 = 16
-#guard modexpComplexity osakaModexpRules 32 32 = 16
-#guard modexpComplexity pragueModexpRules 33 0 = 25
-#guard modexpComplexity osakaModexpRules 33 0 = 50
-#guard modexpComplexity osakaModexpRules 0 32 = 16
-#guard modexpComplexity osakaModexpRules 0 33 = 50
+#guard modexpComplexity .eip2565 pragueModexpRules 32 32 = 16
+#guard modexpComplexity .eip2565 osakaModexpRules 32 32 = 16
+#guard modexpComplexity .eip2565 pragueModexpRules 33 0 = 25
+#guard modexpComplexity .eip2565 osakaModexpRules 33 0 = 50
+#guard modexpComplexity .eip2565 osakaModexpRules 0 32 = 16
+#guard modexpComplexity .eip2565 osakaModexpRules 0 33 = 50
 -- Below the boundary the flat term is what Osaka charges, not the quadratic
 -- one Prague would have used.
-#guard modexpComplexity pragueModexpRules 8 8 = 1
-#guard modexpComplexity osakaModexpRules 8 8 = 16
+#guard modexpComplexity .eip2565 pragueModexpRules 8 8 = 1
+#guard modexpComplexity .eip2565 osakaModexpRules 8 8 = 16
+
+-- EIP-198's piecewise polynomial in the raw byte lengths: `x ^ 2` at or below
+-- 64 bytes, `x ^ 2 / 4 + 96 * x - 3072` through 1024, and
+-- `x ^ 2 / 16 + 480 * x - 199680` above. The knot rows agree from both sides.
+#guard modexpComplexity .eip198 eip198ModexpRules 0 0 = 0
+#guard modexpComplexity .eip198 eip198ModexpRules 32 32 = 1024
+#guard modexpComplexity .eip198 eip198ModexpRules 64 0 = 4096
+#guard modexpComplexity .eip198 eip198ModexpRules 65 0 = 4224
+#guard modexpComplexity .eip198 eip198ModexpRules 1024 0 = 357376
+#guard modexpComplexity .eip198 eip198ModexpRules 1025 0 = 357984
 
 -- The exponent-length term doubles above 32 bytes; at or below it, both forks
 -- read the same `bit_length - 1` of the exponent head.
@@ -183,8 +209,11 @@ def executeModexp (evm : Evm) : PrecompResult :=
 #guard modexpIterations osakaModexpRules 8 255 = 7
 
 -- The floor rises from 200 to 500.
-#guard modexpGasCost pragueModexpRules 32 32 32 0 = 200
-#guard modexpGasCost osakaModexpRules 32 32 32 0 = 500
+#guard modexpGasCost .eip2565 pragueModexpRules 32 32 32 0 = 200
+#guard modexpGasCost .eip2565 osakaModexpRules 32 32 32 0 = 500
+-- Before Berlin the divisor is 20, there is no floor, and the complexity above
+-- is EIP-198's: `1024 * 1 / 20`.
+#guard modexpGasCost .eip198 eip198ModexpRules 32 32 32 0 = 51
 
 -- EIP-7823 bounds every header at 1024 and only from Osaka.
 #guard modexpLengthsInBounds pragueModexpRules 1025 1025 1025
@@ -195,33 +224,35 @@ def executeModexp (evm : Evm) : PrecompResult :=
 
 def executeEcadd (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
-  PrecompResult.chargeGas 150 evm fun () =>
+  let g : Nat := evm.sta.benvStat.rules.bn254.add
+  PrecompResult.chargeGas g evm fun () =>
     let x0 : Nat := Bytes.toNat <| data.sliceD 0 32 (0 : UInt8)
     let y0 : Nat := Bytes.toNat <| data.sliceD 32 32 (0 : UInt8)
     let x1 : Nat := Bytes.toNat <| data.sliceD 64 32 (0 : UInt8)
     let y1 : Nat := Bytes.toNat <| data.sliceD 96 32 (0 : UInt8)
     if ¬ (x0 < altBn128Prime ∧ y0 < altBn128Prime ∧ x1 < altBn128Prime ∧ y1 < altBn128Prime) then
-      .error (.halt (.outOfGas .none)) 150
+      .error (.halt (.outOfGas .none)) g
     else
       match BNP.mk? x0 y0 with
-      | none => .error (.halt (.outOfGas .none)) 150
+      | none => .error (.halt (.outOfGas .none)) g
       | some p0 =>
         match BNP.mk? x1 y1 with
-        | none => .error (.halt (.outOfGas .none)) 150
-        | some p1 => .ok 150 (BNP.toBytes (p0 + p1))
+        | none => .error (.halt (.outOfGas .none)) g
+        | some p1 => .ok g (BNP.toBytes (p0 + p1))
 
 def executeEcmul (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
-  PrecompResult.chargeGas 6000 evm fun () =>
+  let g : Nat := evm.sta.benvStat.rules.bn254.mul
+  PrecompResult.chargeGas g evm fun () =>
     let x : Nat := Bytes.toNat <| data.sliceD 0 32 (0 : UInt8)
     let y : Nat := Bytes.toNat <| data.sliceD 32 32 (0 : UInt8)
     let n : Nat := Bytes.toNat <| data.sliceD 64 32 (0 : UInt8)
     if ¬ (x < altBn128Prime ∧ y < altBn128Prime) then
-      .error (.halt (.outOfGas .none)) 6000
+      .error (.halt (.outOfGas .none)) g
     else
       match BNP.mk? x y with
-      | none => .error (.halt (.outOfGas .none)) 6000
-      | some p => .ok 6000 (BNP.toBytes (p * n))
+      | none => .error (.halt (.outOfGas .none)) g
+      | some p => .ok g (BNP.toBytes (p * n))
 
 def b2R1 : UInt64 := 32
 def b2R2 : UInt64 := 24
@@ -995,7 +1026,8 @@ def executePairingCheckInner (data : Bytes) (cost : Nat) :
 
 def executePairingCheck (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
-  let cost := (34000 * (data.length / 192)) + 45000
+  let g := evm.sta.benvStat.rules.bn254
+  let cost := (g.pairingPerPair * (data.length / 192)) + g.pairingBase
   PrecompResult.chargeGas cost evm fun () =>
     let inner := executePairingCheckInner data cost
     match inner with
