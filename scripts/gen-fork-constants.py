@@ -292,9 +292,136 @@ def probe(root: Path, python: Path, *args: str) -> dict:
         fail(f"constant probe emitted unreadable JSON: {error}")
 
 
+# A cell is dormant for a fork when Jaune's literal carries a value that
+# fork's rules never read: the first-activation carryover that keeps the
+# `Valid` predicates well-formed (goal U10). Dormant cells are classified
+# here, not compared by `check-fork-constants.sh`. Absence facts (`null`,
+# `false`, `[]` on both sides, e.g. `stateGas.*` or `bal.*`) stay compared:
+# they pin that the fork lacks the feature, exactly as the modern gate does.
+_DORMANT_BLOB_PRE_CANCUN = (
+    "no blob schedule before Cancun (EIP-4844); carries Prague's schedule "
+    "so BlobSchedule.Valid holds"
+)
+_DORMANT_INITCODE_PRE_SHANGHAI = (
+    "no initcode limit before Shanghai (EIP-3860); carries Prague's limit"
+)
+_DORMANT_PRE_PRAGUE = {
+    "tx.maxGas": "no whole-transaction cap before Osaka (EIP-7825)",
+    "tx.maxTotalGas": "no total-transaction cap before Amsterdam (EIP-8037)",
+    "block.maxRlpSize": "no RLP envelope cap before Osaka (EIP-7934)",
+    "gas.floorTokenCost": (
+        "no calldata floor before Prague (EIP-7623); carries Prague's"
+    ),
+    "gas.perAuthIntrinsic": (
+        "no EIP-7702 authorisations before Prague; carries Prague's"
+    ),
+}
+_DORMANT_PRE_BERLIN = {
+    "gas.coldAccountAccess": (
+        "no warm/cold pricing before Berlin (EIP-2929); carries Prague's"
+    ),
+    "gas.txAccessListAddress": (
+        "no access-list pricing before Berlin (EIP-2930); carries Prague's"
+    ),
+    "gas.txAccessListStorageKey": (
+        "no access-list pricing before Berlin (EIP-2930); carries Prague's"
+    ),
+}
+_DORMANT_BYZANTIUM_ONLY = {
+    "access.extCodeHash": (
+        "EXTCODEHASH (EIP-1052) is undefined at Byzantium; carries the "
+        "Constantinople price so AccessPrices.Valid holds"
+    ),
+}
+_DORMANT_FLAT_POST_BERLIN = (
+    "EIP-2929 warm/cold pricing from Berlin; no flat prices to print"
+)
+
+_PRE_CANCUN_LABELS = (
+    "Byzantium", "Petersburg", "Istanbul", "MuirGlacier", "Berlin",
+    "London", "ArrowGlacier", "GrayGlacier", "Paris", "Shanghai",
+)
+_PRE_SHANGHAI_LABELS = (
+    "Byzantium", "Petersburg", "Istanbul", "MuirGlacier", "Berlin",
+    "London", "ArrowGlacier", "GrayGlacier", "Paris",
+)
+_PRE_BERLIN_LABELS = (
+    "Byzantium", "Constantinople", "Petersburg", "Istanbul", "MuirGlacier",
+)
+_BERLIN_PLUS_LABELS = (
+    "Berlin", "London", "ArrowGlacier", "GrayGlacier", "Paris",
+    "Shanghai", "Cancun",
+)
+_HISTORICAL_LABELS = (
+    "Byzantium", "Constantinople", "Petersburg", "Istanbul", "MuirGlacier",
+    "Berlin", "London", "ArrowGlacier", "GrayGlacier", "Paris",
+    "Shanghai", "Cancun",
+)
+
+_NO_MODULE_REASON = (
+    "no EELS fork module carries EIP-1283 Constantinople (it never "
+    "activated; mainnet went Byzantium straight to Petersburg): the literal "
+    "is a record update of petersburgRules differing only in sstore, and is "
+    "fixture-grounded by the legacy corpus, not by a module extraction"
+)
+
+
+def dormant_for(label: str) -> "dict[str, str]":
+    """The classified dormant cells of one historical fork (goal U10)."""
+    if label not in _HISTORICAL_LABELS:
+        return {}
+    dormant: dict[str, str] = dict(_DORMANT_PRE_PRAGUE)
+    if label in _PRE_CANCUN_LABELS or label == "Constantinople":
+        for field in (
+            "blob.target", "blob.max", "blob.baseFeeUpdateFraction",
+        ):
+            dormant[field] = _DORMANT_BLOB_PRE_CANCUN
+    if label in _PRE_SHANGHAI_LABELS or label == "Constantinople":
+        dormant["code.maxInitCodeSize"] = _DORMANT_INITCODE_PRE_SHANGHAI
+    if label in _PRE_BERLIN_LABELS:
+        dormant.update(_DORMANT_PRE_BERLIN)
+    if label == "Byzantium":
+        dormant.update(_DORMANT_BYZANTIUM_ONLY)
+    if label in _BERLIN_PLUS_LABELS:
+        for field in (
+            "access.balance", "access.extCode", "access.extCodeHash",
+            "access.sload", "access.call",
+        ):
+            dormant[field] = _DORMANT_FLAT_POST_BERLIN
+    if label == "Constantinople":
+        for field in [f for f in COVERAGE if COVERAGE[f] == "checked"]:
+            dormant.setdefault(field, _NO_MODULE_REASON)
+    return dormant
+
+
+def constantinople_entry() -> dict:
+    """The fixture-only fork's entry: no module, every cell dormant.
+
+    The generator knows nothing about Jaune, so there are no values to
+    carry: every checked field is present with a `null` value and a dormant
+    classification, which is exactly what keeps the coverage key set uniform
+    and the comparison skipping it.
+    """
+    constants = {
+        field: {"value": None, "source": _NO_MODULE_REASON}
+        for field, status in COVERAGE.items()
+        if status == "checked"
+    }
+    return {
+        "label": "Constantinople",
+        "module": None,
+        "fork_criteria": {"kind": "NoModule", "timestamp": None},
+        "header_field_count": None,
+        "constants": constants,
+    }
+
+
 def build() -> dict:
     root, python, commit = target()
     forks = probe(root, python)
+    historical = probe(root, python, "--historical")
+    forks.update(historical)
+    forks["Constantinople"] = constantinople_entry()
     # The mainnet schedule from Byzantium (goal jaune-historical-forks-v1,
     # design §4): every fork module's `FORK_CRITERIA`, compared by
     # `check-fork-constants.sh` against `jaune --mainnet-schedule` for every
@@ -325,15 +452,33 @@ def build() -> dict:
             "extend elsewhere_reason"
         )
 
+    # Goal U10: every historical fork carries its dormant classification.
+    # A dormant key outside the checked set is a generator bug, not a quiet
+    # skip, and a fork the table does not know stays fully compared.
+    checked = {path for path, status in COVERAGE.items() if status == "checked"}
+    for label in sorted(forks):
+        dormant = dormant_for(label)
+        unknown = sorted(set(dormant) - checked)
+        if unknown:
+            fail(
+                f"dormant keys of {label} are outside the coverage table: "
+                f"{unknown}"
+            )
+        forks[label]["dormant"] = dormant
+
     return {
-        # 2: the metering vehicle's per-fork `fork_coverage` table is gone.
-        # Every declared fork resolves, so every field of every fork's record
-        # is compared or classified by the single `coverage` table above.
-        "schema_version": 2,
+        # 3: goal U10 adds the pre-Prague forks. Every fork entry carries a
+        # `dormant` map (empty for the runnable forks): cells Jaune's literal
+        # carries but the fork never reads, classified here and skipped by
+        # the comparison. Constantinople has no EELS module, so its entry is
+        # synthesised with every cell dormant.
+        "schema_version": 3,
         "_comment": (
             "Generated by scripts/gen-fork-constants.py from the pinned "
             "conformance target. Never hand-edited: scripts/check-fork-constants.sh "
-            "compares it against `lake exe jaune --rules <fork>`, and "
+            "compares it against `lake exe jaune --rules <fork>` (runnable "
+            "forks) and `lake exe jaune --rules-literal <fork>` (refused "
+            "forks, dormant cells classified, not compared), and "
             "`--check` fails if this file is stale."
         ),
         "conformance_target_commit": commit,

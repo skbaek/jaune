@@ -1,0 +1,7 @@
+{
+  "description": "A plain value transfer at Shanghai, in blockchain mode: one successful legacy transaction, no block reward under proof of stake. Jaune refuses the fork; the golden records the pinned target.",
+  "fork": "Shanghai",
+  "chainid": 1,
+  "reward": -1,
+  "mode": "blockchain"
+}

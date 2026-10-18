@@ -192,6 +192,72 @@
       "expected/result.json": "f6fe2c89884c6a4b07a862c1725083f0fac1ce3e178118cbd1838249174f9b1b",
       "txs.json": "7b1fdfbcaca752e73020803560b6c871371523d6998b309daddc2388dedd58b5"
     },
+    "hist-transfer-arrowglacier": {
+      "expected/alloc.json": "ec3ad3c2f244e18dec74fe16e47eb6d206cefaf788a30be6f6cfc937c8dbc919",
+      "expected/body.json": "b2c18078e9436a2c8530330581d9e3cbb99e5ac99e5186566def91ab47a2a812",
+      "expected/result.json": "e47df7087858147b521f66108848acbdf35c697597ef1247edeafcb7a14af423",
+      "txs.json": "76069ef7712b25a9109d06a69744e2fbcf74ca2c79e2908209362a60f7fc4751"
+    },
+    "hist-transfer-berlin": {
+      "expected/alloc.json": "c0f8c732dc58ba116a0fbdc92525b93c75318eeed827280c7be839a6aa7bb4a1",
+      "expected/body.json": "b2c18078e9436a2c8530330581d9e3cbb99e5ac99e5186566def91ab47a2a812",
+      "expected/result.json": "3ca6f49a99588a0bb66f92c03a7f85e2a11a77b2ecd1370964de487e24b5d31d",
+      "txs.json": "76069ef7712b25a9109d06a69744e2fbcf74ca2c79e2908209362a60f7fc4751"
+    },
+    "hist-transfer-byzantium": {
+      "expected/alloc.json": "1fb5902353ba5491a199a17b657be4223e82c919819ebe1110800defa11f0cf4",
+      "expected/body.json": "b2c18078e9436a2c8530330581d9e3cbb99e5ac99e5186566def91ab47a2a812",
+      "expected/result.json": "e53789cdeb6fe499cf19c094540938e55808c0ecdc6b77d29b5969a64a418446",
+      "txs.json": "76069ef7712b25a9109d06a69744e2fbcf74ca2c79e2908209362a60f7fc4751"
+    },
+    "hist-transfer-cancun": {
+      "expected/alloc.json": "c7e74e220db871082ba50777b0f875b1470662bda602cf2c70c5e3306fe1a072",
+      "expected/body.json": "b2c18078e9436a2c8530330581d9e3cbb99e5ac99e5186566def91ab47a2a812",
+      "expected/result.json": "3f6410c86349374f35b55c28aef4722d0053a9a1db8b2854e192c37f835e8d9b",
+      "txs.json": "76069ef7712b25a9109d06a69744e2fbcf74ca2c79e2908209362a60f7fc4751"
+    },
+    "hist-transfer-constantinoplefix": {
+      "expected/alloc.json": "f0e7d0dcc1573756e9e353c741c6624154bcb55bf0600a1dc79e7e1a0eb20820",
+      "expected/body.json": "b2c18078e9436a2c8530330581d9e3cbb99e5ac99e5186566def91ab47a2a812",
+      "expected/result.json": "449c2f582a21f3774125b6f831680de8d8e67e3ddf0796a2493ee49df1dfe590",
+      "txs.json": "76069ef7712b25a9109d06a69744e2fbcf74ca2c79e2908209362a60f7fc4751"
+    },
+    "hist-transfer-grayglacier": {
+      "expected/alloc.json": "ec3ad3c2f244e18dec74fe16e47eb6d206cefaf788a30be6f6cfc937c8dbc919",
+      "expected/body.json": "b2c18078e9436a2c8530330581d9e3cbb99e5ac99e5186566def91ab47a2a812",
+      "expected/result.json": "e47df7087858147b521f66108848acbdf35c697597ef1247edeafcb7a14af423",
+      "txs.json": "76069ef7712b25a9109d06a69744e2fbcf74ca2c79e2908209362a60f7fc4751"
+    },
+    "hist-transfer-istanbul": {
+      "expected/alloc.json": "f0e7d0dcc1573756e9e353c741c6624154bcb55bf0600a1dc79e7e1a0eb20820",
+      "expected/body.json": "b2c18078e9436a2c8530330581d9e3cbb99e5ac99e5186566def91ab47a2a812",
+      "expected/result.json": "449c2f582a21f3774125b6f831680de8d8e67e3ddf0796a2493ee49df1dfe590",
+      "txs.json": "76069ef7712b25a9109d06a69744e2fbcf74ca2c79e2908209362a60f7fc4751"
+    },
+    "hist-transfer-london": {
+      "expected/alloc.json": "ec3ad3c2f244e18dec74fe16e47eb6d206cefaf788a30be6f6cfc937c8dbc919",
+      "expected/body.json": "b2c18078e9436a2c8530330581d9e3cbb99e5ac99e5186566def91ab47a2a812",
+      "expected/result.json": "e47df7087858147b521f66108848acbdf35c697597ef1247edeafcb7a14af423",
+      "txs.json": "76069ef7712b25a9109d06a69744e2fbcf74ca2c79e2908209362a60f7fc4751"
+    },
+    "hist-transfer-merge": {
+      "expected/alloc.json": "c7e74e220db871082ba50777b0f875b1470662bda602cf2c70c5e3306fe1a072",
+      "expected/body.json": "b2c18078e9436a2c8530330581d9e3cbb99e5ac99e5186566def91ab47a2a812",
+      "expected/result.json": "f3a41d27da3c67aa861093c99746b75f47e23b8c7f926aed91c3bbd4051b5b0d",
+      "txs.json": "76069ef7712b25a9109d06a69744e2fbcf74ca2c79e2908209362a60f7fc4751"
+    },
+    "hist-transfer-muirglacier": {
+      "expected/alloc.json": "f0e7d0dcc1573756e9e353c741c6624154bcb55bf0600a1dc79e7e1a0eb20820",
+      "expected/body.json": "b2c18078e9436a2c8530330581d9e3cbb99e5ac99e5186566def91ab47a2a812",
+      "expected/result.json": "449c2f582a21f3774125b6f831680de8d8e67e3ddf0796a2493ee49df1dfe590",
+      "txs.json": "76069ef7712b25a9109d06a69744e2fbcf74ca2c79e2908209362a60f7fc4751"
+    },
+    "hist-transfer-shanghai": {
+      "expected/alloc.json": "c7e74e220db871082ba50777b0f875b1470662bda602cf2c70c5e3306fe1a072",
+      "expected/body.json": "b2c18078e9436a2c8530330581d9e3cbb99e5ac99e5186566def91ab47a2a812",
+      "expected/result.json": "f8c553ee704a27abc522924fab2b9e6727ce155e1aaad9b9a9b642c4956354e5",
+      "txs.json": "76069ef7712b25a9109d06a69744e2fbcf74ca2c79e2908209362a60f7fc4751"
+    },
     "reject-execution": {
       "expected/alloc.json": "5e418ec9552bc33220e152953a7428af83edbbbe2d4f4a83e2adce44ab6ad599",
       "expected/body.json": "55c25f61e55ccf39d967f94e22ac286f045fe598fc3994477efd8b4c9192d020",

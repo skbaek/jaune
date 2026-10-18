@@ -91,6 +91,11 @@ class LaneSpec:
     # Empty on the default lane, whose manifest has no such section at all.
     deferred_labels: tuple[str, ...] = ()
     deferral_reason: str = ""
+    # Forks whose cases must declare a blob schedule. `None` (the default)
+    # keeps the current rule -- every in-lane fork must declare one. The
+    # historical lane sets `()` because no pre-Cancun case declares a blob
+    # schedule: there was nothing to declare.
+    blob_forks: tuple[str, ...] | None = None
 
     def suite(self, kind: str) -> str:
         """The name of one of this lane's derived suites.
@@ -113,6 +118,36 @@ LANES = {
         suite_prefix="",
         report_label="current-mainnet",
         output=ROOT / "mainnet" / "manifests.json",
+    ),
+    # Goal U10: the historical lane inventories the same v21 release over the
+    # twelve pre-Prague forks, one suite per fork plus the transition
+    # fixtures, all strict all-PASS. Prague is covered as a transition
+    # endpoint only (`CancunToPragueAtTime15k`), exactly as the Amsterdam
+    # lane covers Prague-BPO2: the mainnet lane owns that coverage, so no
+    # suite is raised over it here and it is reported as covered without a
+    # suite. EIP-1283 `Constantinople` selects no file in this release (it
+    # is fixture-only in the legacy trees); its suite exists and is empty,
+    # which the harness refuses rather than running vacantly. Petersburg's
+    # fixture label is `ConstantinopleFix`, which raises its own suite. No
+    # case in this lane declares a blob schedule, so none is required.
+    "historical": LaneSpec(
+        name="historical",
+        sources_key="current_mainnet",
+        statics=(
+            "Byzantium", "Constantinople", "ConstantinopleFix", "Petersburg",
+            "Istanbul", "MuirGlacier", "Berlin", "London", "ArrowGlacier",
+            "GrayGlacier", "Paris", "Shanghai", "Cancun", "Prague",
+        ),
+        suite_statics=(
+            "Byzantium", "Constantinople", "ConstantinopleFix", "Petersburg",
+            "Istanbul", "MuirGlacier", "Berlin", "London", "ArrowGlacier",
+            "GrayGlacier", "Paris", "Shanghai", "Cancun",
+        ),
+        smoke_network="Cancun",
+        suite_prefix="hist-",
+        report_label="historical",
+        output=ROOT / "historical" / "manifests.json",
+        blob_forks=(),
     ),
     # This lane covers Prague-BPO2 as transition endpoints, otherwise
     # `BPO2ToAmsterdamAtTime15k` would be excluded for naming BPO2. It raises
@@ -235,7 +270,8 @@ def declared_blob_schedule(path: Path, name: str, case: dict, forks: tuple[str, 
 
 
 def read_cases(
-    path: Path, statics: tuple[str, ...] = SUPPORTED_STATIC
+    path: Path, statics: tuple[str, ...] = SUPPORTED_STATIC,
+    blob_forks: tuple[str, ...] | None = None,
 ) -> tuple[str, list[str], dict, str]:
     """The label, case names, declared blob schedules, and content digest.
 
@@ -273,7 +309,8 @@ def read_cases(
             raise InventoryError(f"mixed network labels in one fixture file: {path}")
         forks = label_forks(label, statics)
         if forks is not None:
-            for fork, values in declared_blob_schedule(path, name, case, forks).items():
+            wanted = tuple(f for f in forks if blob_forks is None or f in blob_forks)
+            for fork, values in declared_blob_schedule(path, name, case, wanted).items():
                 if schedules.setdefault(fork, values) != values:
                     raise InventoryError(
                         f"{path}: cases disagree about the {fork} blob schedule"
@@ -334,7 +371,7 @@ def inventory(fixtures_root: Path, sources: dict, lane: LaneSpec = DEFAULT_LANE)
     with_content_digest = lane.name != DEFAULT_LANE.name
     for path in sorted(blockchain.rglob("*.json")):
         relative = path.relative_to(blockchain).as_posix()
-        label, names, schedules, content = read_cases(path, statics)
+        label, names, schedules, content = read_cases(path, statics, lane.blob_forks)
         entry = {
             "path": relative,
             "network": label,
