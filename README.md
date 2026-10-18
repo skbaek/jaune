@@ -313,6 +313,30 @@ requirements.
   historical LegacyTests restoration pin `41404287` is unmerged PR18 and has
   no Prague cases; it does not replace this corpus.
 
+  **Why the storage-collision files are name-only stale, not Jaune defects
+  (goal `jaune-historical-forks-v1`, U11c, 2026-10-19).** They expect a CREATE
+  into an account with storage but zero nonce and no code to collide
+  (EIP-7610). Primary sources, all public:
+  [EIP-7610](https://github.com/ethereum/EIPs/blob/master/EIPS/eip-7610.md)
+  is still Last Call and was removed from Glamsterdam's scope by EIPs PR
+  #12189 (`f9976e68`, 2026-08-20), so it has never been part of any activated
+  mainnet fork. Pinned EELS `1562e2f` tests only nonce and code
+  (`src/ethereum/forks/prague/state_tracker.py:281-289`, `account_deployable`);
+  the storage clause was removed from every fork module by execution-specs PR
+  #3417 (`2ce2191`, 2026-08-25: "declined ... no mainnet account has non-empty
+  storage with empty code and nonce"). Production clients agree at their
+  current releases: geth v1.17.8 `core/vm/evm.go:584-585` (removed by #35581,
+  `1aea939a5`; before that PR #34718 had only hardcoded the 28 known accounts),
+  Nethermind 2.2.0 `TransactionProcessor.cs:1858-1866` (#12935, `7a63aa02d`),
+  Besu 26.10.0 `ContractCreationProcessor.java:122-123` ("storage alone does
+  not block creation"), revm `journal/inner.rs:556` (Reth's
+  `expected_failures.yaml:24-36` lists the EIP-7610 tests as unreachable),
+  and Erigon v3.7.1 `tools/eest-spec-shards.yml:74-75,151-152` excludes these
+  very fixtures. About 28 pre-EIP-161 accounts with that shape do exist on
+  mainnet, but creating into one needs a CREATE/CREATE2 address preimage
+  collision, so no mainnet block can distinguish the two rules. Jaune
+  follows the pinned EELS, which is the specification it targets.
+
 ## Semantic integrity
 
 Jaune closes the P0 semantic-integrity gaps identified in review — chain-ID
