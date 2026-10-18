@@ -504,8 +504,12 @@ theorem Linst.run_memory_accounting_output (sevm : Sevm) (pre : Devm) (l : Linst
                 (.internal (.invariant (.text "InsufficientBalanceError")), charged)
                 (charged.subBal sevm.currentTarget donorBal)
               let next := next.addBal head.toAdr donorBal
-              if sevm.currentTarget ∈ next.createdAccounts then
-                .ok (addAccountToDelete (next.setBal sevm.currentTarget 0) sevm.currentTarget)
+              if sevm.currentTarget ∈ next.createdAccounts ∨
+                  sevm.benvStat.rules.settle.selfdestructOnlyCreated = false then
+                .ok (creditSelfdestructRefund sevm.benvStat.rules
+                  (sevm.currentTarget ∈ next.accountsToDelete)
+                  (addAccountToDelete (next.setBal sevm.currentTarget 0)
+                    sevm.currentTarget))
               else .ok next) = result := hrun
             -- The remaining argument depends only on the preserved fields, not
             -- on the account reads and access-cost calculation defining them.
@@ -529,7 +533,14 @@ theorem Linst.run_memory_accounting_output (sevm : Sevm) (pre : Devm) (l : Linst
                   cases hrun
                   exact hcharged
                 · simp only [hb] at hrun
-                  split at hrun <;> cases hrun <;> exact hcharged
+                  split at hrun
+                  · cases hrun
+                    dsimp only
+                    simp only [creditSelfdestructRefund_memory,
+                      creditSelfdestructRefund_output]
+                    exact hcharged
+                  · cases hrun
+                    exact hcharged
               · simp only [assertDynamic, Except.assert, hd] at hrun
                 cases hrun
                 exact hcharged
@@ -1401,33 +1412,69 @@ private theorem regular_memory_accounting (pc : Nat) (pre : Devm) (sevm : Sevm) 
       Rinst.runCore_gasLe pc pre sevm .balance
   case sstore =>
     rw [hstate]
-    refine nonspawnResult_bind (nonspawn_pop pre) ?_
-    intro key
-    refine nonspawnResult_bind (nonspawn_pop key.2) ?_
-    intro value
-    refine nonspawnResult_bind
-      (nonspawn_assert (gCallStipend < value.2.gasLeft) (.halt (.outOfGas .none)) value.2) ?_
-    intro _
-    refine nonspawnResult_bind (projectFirst := Prod.fst) ?_ ?_
-    · split
-      · exact nonspawnPreserved_trans
-          (nonspawn_balReadStorage sevm.benvStat.rules sevm.currentTarget key.1 value.2)
-          (nonspawn_addAccessedStorageKey _ sevm.currentTarget key.1)
-      · exact nonspawn_balReadStorage sevm.benvStat.rules sevm.currentTarget key.1 value.2
-    · intro accessed
-      refine nonspawnResult_bind (projectFirst := fun _ : Nat => accessed.1) ?_ ?_
-      · exact ⟨Nat.le_refl _, rfl⟩
-      · intro cost
-        refine nonspawnResult_bind (projectFirst := id) ?_ ?_
+    dsimp only
+    split
+    · -- Prague: the body it has always been.
+      refine nonspawnResult_bind (nonspawn_pop pre) ?_
+      intro key
+      refine nonspawnResult_bind (nonspawn_pop key.2) ?_
+      intro value
+      refine nonspawnResult_bind
+        (nonspawn_assert (gCallStipend < value.2.gasLeft) (.halt (.outOfGas .none)) value.2) ?_
+      intro _
+      refine nonspawnResult_bind (projectFirst := Prod.fst) ?_ ?_
+      · split
+        · exact nonspawnPreserved_trans
+            (nonspawn_balReadStorage sevm.benvStat.rules sevm.currentTarget key.1 value.2)
+            (nonspawn_addAccessedStorageKey _ sevm.currentTarget key.1)
+        · exact nonspawn_balReadStorage sevm.benvStat.rules sevm.currentTarget key.1 value.2
+      · intro accessed
+        refine nonspawnResult_bind (projectFirst := fun _ : Nat => accessed.1) ?_ ?_
         · exact ⟨Nat.le_refl _, rfl⟩
-        · intro refunded
-          refine nonspawnResult_bind (nonspawn_charge cost refunded) ?_
-          intro charged
-          refine nonspawnResult_bind (nonspawn_assertDynamic sevm charged) ?_
-          intro _
-          exact nonspawnPreserved_trans
-            (nonspawn_balReadAccount sevm.benvStat.rules sevm.currentTarget charged)
-            ⟨Nat.le_refl _, rfl⟩
+        · intro cost
+          refine nonspawnResult_bind (projectFirst := id) ?_ ?_
+          · exact ⟨Nat.le_refl _, rfl⟩
+          · intro refunded
+            refine nonspawnResult_bind (nonspawn_charge cost refunded) ?_
+            intro charged
+            refine nonspawnResult_bind (nonspawn_assertDynamic sevm charged) ?_
+            intro _
+            exact nonspawnPreserved_trans
+              (nonspawn_balReadAccount sevm.benvStat.rules sevm.currentTarget charged)
+              ⟨Nat.le_refl _, rfl⟩
+    · -- The pre-Berlin regimes: the sentry is gated and the cold pair cases
+      -- on access, then on the slot's warmth. The tail is unchanged.
+      refine nonspawnResult_bind (nonspawn_pop pre) ?_
+      intro key
+      refine nonspawnResult_bind (nonspawn_pop key.2) ?_
+      intro value
+      refine nonspawnResult_bind
+        (nonspawn_assert
+          (sevm.benvStat.rules.sstore.stipendSentry = true → gCallStipend < value.2.gasLeft)
+          (.halt (.outOfGas .none)) value.2) ?_
+      intro _
+      refine nonspawnResult_bind (projectFirst := Prod.fst) ?_ ?_
+      · split
+        · exact nonspawn_balReadStorage sevm.benvStat.rules sevm.currentTarget key.1 value.2
+        · split
+          · exact nonspawnPreserved_trans
+              (nonspawn_balReadStorage sevm.benvStat.rules sevm.currentTarget key.1 value.2)
+              (nonspawn_addAccessedStorageKey _ sevm.currentTarget key.1)
+          · exact nonspawn_balReadStorage sevm.benvStat.rules sevm.currentTarget key.1 value.2
+      · intro accessed
+        refine nonspawnResult_bind (projectFirst := fun _ : Nat => accessed.1) ?_ ?_
+        · exact ⟨Nat.le_refl _, rfl⟩
+        · intro cost
+          refine nonspawnResult_bind (projectFirst := id) ?_ ?_
+          · exact ⟨Nat.le_refl _, rfl⟩
+          · intro refunded
+            refine nonspawnResult_bind (nonspawn_charge cost refunded) ?_
+            intro charged
+            refine nonspawnResult_bind (nonspawn_assertDynamic sevm charged) ?_
+            intro _
+            exact nonspawnPreserved_trans
+              (nonspawn_balReadAccount sevm.benvStat.rules sevm.currentTarget charged)
+              ⟨Nat.le_refl _, rfl⟩
 
 private def accountedTerminal (pre post : Devm) : Prop :=
   post.gasMeasure + calculateMemoryGasCost post.memory.size ≤
