@@ -295,8 +295,12 @@ def prepareTransaction (benv : Benv) (bout : BlockOutput) (tx : Tx) (index : Nat
   let state : State := benv.state.incrNonce sender
   let state ← (state.subBal sender (effectiveGasFee + blobGasFee).toB256).toExcept
     (TransitionError.internal (.invariant (.text "balance underflow")))
+  -- EIP-3651 (Shanghai) warms the coinbase; before it only the access list is
+  -- pre-warmed.
   let preaccessedAddresses : AdrSet :=
+    if benv.stat.rules.txr.warmCoinbase then
     .ofList (benv.stat.coinbase :: tx.accessList.map Prod.fst)
+    else .ofList (tx.accessList.map Prod.fst)
   let preaccessedStorageKeys : KeySet :=
     .ofList (tx.accessList.map <| λ ⟨adr, keys⟩ => keys.map (⟨adr, ·⟩)).flatten
   let tenv : Tenv := {

@@ -707,6 +707,13 @@ existing single-dimension code path by `match` reduction -- which is what makes
 a claim about the source. -/
 @[simp] theorem pragueRules_stateGas : pragueRules.stateGas = none := rfl
 
+/-- Prague prices access by EIP-2929. The bridge every access arm's `.eip2929`
+branch reduces through, as `pragueRules_stateGas` is for the metering
+dimension: the arms are `match`es on `rules.access`, and a Prague-stated goal
+rewrites to `.eip2929` here and then to the warm/cold code by `match`
+reduction. -/
+@[simp] theorem pragueRules_access : pragueRules.access = .eip2929 := rfl
+
 /-- The two literals `GasSchedule.Valid` spells out are the globals it means.
 
 `Jaune/Fork.lean` is upstream of this module and cannot name `gasWarmAccess` or
@@ -3918,8 +3925,15 @@ def Rinst.balanceCore (rules : ForkRules) (world : World) (mach : Mach)
   | .ok (x, mach') =>
     let a := x.toAdr
     let warm := a ∈ view.accessedAddresses
-    let view' := if warm then view else view.addAccessedAddress a
-    let cost := if warm then gasWarmAccess else rules.gas.coldAccountAccess
+    -- Before EIP-2929 the price is flat and the accessed set is untouched.
+    let view' :=
+      match rules.access with
+      | .eip2929 => if warm then view else view.addAccessedAddress a
+      | .flat _ => view
+    let cost :=
+      match rules.access with
+      | .eip2929 => if warm then gasWarmAccess else rules.gas.coldAccountAccess
+      | .flat g => g.balance
     match Mach.chargeGas cost mach' with
     | .error (err, mach'') => .error (err, (mach'', view'))
     | .ok (_, mach'') =>
@@ -3985,11 +3999,14 @@ def Rinst.runCore
     let ⟨adr, devm⟩ ← devm.popToAdr
     let gas := sevm.benvStat.rules.gas
     let devm ←
+      match sevm.benvStat.rules.access with
+      | .eip2929 =>
       if adr ∈ devm.accessedAddresses
       then chargeGas (gasWarmAccess + gas.codeReadSurcharge) devm
       else
         chargeGas (gas.coldAccountAccess + gas.codeReadSurcharge)
           (addAccessedAddress devm adr)
+      | .flat g => chargeGas (g.extCode + gas.codeReadSurcharge) devm
     -- `get_account(address)` after the charge (EIP-7928).
     let devm := devm.balReadAccount sevm.benvStat.rules adr
     let codesize := (devm.getCode adr).size.toB256
@@ -4004,6 +4021,8 @@ def Rinst.runCore
     let extend_memory_cost := devm.extCost [⟨memory_start_index, size⟩]
     let gas := sevm.benvStat.rules.gas
     let devm ←
+      match sevm.benvStat.rules.access with
+      | .eip2929 =>
       if adr ∈ devm.accessedAddresses
       then
         chargeGas
@@ -4015,6 +4034,11 @@ def Rinst.runCore
           (gas.coldAccountAccess + gas.codeReadSurcharge + copy_gas_cost
             + extend_memory_cost)
           (addAccessedAddress devm adr)
+      | .flat g =>
+        chargeGas
+          (g.extCode + gas.codeReadSurcharge + copy_gas_cost
+            + extend_memory_cost)
+          devm
     -- `get_account(address)` after the charge (EIP-7928).
     let devm := devm.balReadAccount sevm.benvStat.rules adr
     let code := devm.getCode adr
@@ -4040,11 +4064,14 @@ def Rinst.runCore
   | .extcodehash => do
     let ⟨adr, devm⟩ ← devm.popToAdr
     let devm ←
+      match sevm.benvStat.rules.access with
+      | .eip2929 =>
       if adr ∈ devm.accessedAddresses then
         chargeGas gasWarmAccess devm
       else
         chargeGas sevm.benvStat.rules.gas.coldAccountAccess
           (addAccessedAddress devm adr)
+      | .flat g => chargeGas g.extCodeHash devm
     -- `get_account(address)` after the charge (EIP-7928).
     let devm := devm.balReadAccount sevm.benvStat.rules adr
     let account := devm.getAcct adr
@@ -4157,11 +4184,14 @@ def Rinst.runCore
     let ⟨key, devm⟩ ← devm.pop
     let ct := sevm.currentTarget
     let devm ←
+      match sevm.benvStat.rules.access with
+      | .eip2929 =>
       if ⟨ct, key⟩ ∈ devm.accessedStorageKeys then
         chargeGas gasWarmAccess devm
       else
         chargeGas gasColdSload
           (addAccessedStorageKey devm ct key)
+      | .flat g => chargeGas g.sload devm
     -- `get_storage` after the charge (EIP-7928).
     let devm := devm.balReadStorage sevm.benvStat.rules ct key
     devm.push (devm.getStorVal ct key)
@@ -4553,6 +4583,50 @@ private def guardSlotnum (fork : Fork) (slot : UInt64) (gasLeft : Nat)
 #guard guardClzErr (guardClz .osaka 100 []) = "StackUnderflowError"
 #guard guardClzErr (guardClz .osaka (gLow - 1) [0]) = "OutOfGasError"
 #guard (guardClz .osaka gLow [0]).toOption.map Devm.gasLeft = some 0
+
+/-! Design S1: the access shape at the account- and slot-access arms. Under the
+flat (pre-EIP-2929) schedule each family charges its own fixed price and leaves
+the accessed sets untouched; under EIP-2929 the same arm charges the cold price
+and records the access. Each opcode gets a flat row and a Prague row on the same
+input, so an arm that ignored the shape fails one of the two. -/
+private def guardAccess (fork : Fork) (r : Rinst) (stack : List B256) :
+    Execution :=
+  Rinst.runCore 0 (((default : Devm).withGasLeft 10000).withStack stack)
+    (guardSevmAt fork) r
+
+private def guardAccessCharge (fork : Fork) (r : Rinst) (stack : List B256) :
+    Option Nat :=
+  (guardAccess fork r stack).toOption.map (10000 - ·.gasLeft)
+
+private def guardAccessWarmed (fork : Fork) (r : Rinst) (x : B256) : Option Bool :=
+  (guardAccess fork r [x]).toOption.map fun d =>
+    decide (x.toAdr ∈ d.accessedAddresses) ||
+      decide (((default : Sevm).currentTarget, x) ∈ d.accessedStorageKeys)
+
+#guard guardAccessCharge .byzantium .balance [0x1000] = some 400
+#guard guardAccessCharge .istanbul .balance [0x1000] = some 700
+#guard guardAccessCharge .prague .balance [0x1000] = some 2600
+#guard guardAccessCharge .byzantium .extcodesize [0x1000] = some 700
+#guard guardAccessCharge .prague .extcodesize [0x1000] = some 2600
+#guard guardAccessCharge .petersburg .extcodehash [0x1000] = some 400
+#guard guardAccessCharge .istanbul .extcodehash [0x1000] = some 700
+#guard guardAccessCharge .prague .extcodehash [0x1000] = some 2600
+#guard guardAccessCharge .byzantium .sload [7] = some 200
+#guard guardAccessCharge .istanbul .sload [7] = some 800
+#guard guardAccessCharge .prague .sload [7] = some 2100
+-- `EXTCODECOPY` of zero bytes: the access price alone (`[address, memory
+-- offset, code offset, size]`, top first).
+#guard guardAccessCharge .byzantium .extcodecopy [0x1000, 0, 0, 0] = some 700
+#guard guardAccessCharge .prague .extcodecopy [0x1000, 0, 0, 0] = some 2600
+-- The flat shape records nothing; EIP-2929 records the cold access.
+#guard guardAccessWarmed .byzantium .balance 0x1000 = some false
+#guard guardAccessWarmed .prague .balance 0x1000 = some true
+#guard guardAccessWarmed .byzantium .extcodesize 0x1000 = some false
+#guard guardAccessWarmed .prague .extcodesize 0x1000 = some true
+#guard guardAccessWarmed .istanbul .extcodehash 0x1000 = some false
+#guard guardAccessWarmed .prague .extcodehash 0x1000 = some true
+#guard guardAccessWarmed .byzantium .sload 7 = some false
+#guard guardAccessWarmed .prague .sload 7 = some true
 
 instance : Inhabited Execution := ⟨.ok default⟩
 
@@ -5284,12 +5358,15 @@ def Linst.run (sevm : Sevm) (devm : Devm) :
         sevm.benvStat.rules donor
       let donorBal ← .ok (devm.getAcct sevm.currentTarget).bal
       let ⟨devm, gasCost2⟩ ← .ok <|
+        match sevm.benvStat.rules.access with
+        | .eip2929 =>
         if donee ∉ devm.accessedAddresses
           then
             ( ⟨ addAccessedAddress devm donee,
                 gasSelfDestruct + sevm.benvStat.rules.gas.coldAccountAccess ⟩ : Devm × Nat )
           else
             ⟨devm, gasSelfDestruct⟩
+        | .flat _ => (⟨devm, gasSelfDestruct⟩ : Devm × Nat)
       let gasCost3 ← .ok <|
         if (devm.getAcct donee).Empty ∧ donorBal ≠ 0 then
           gasCost2 + gasSelfDestructNewAccount
@@ -5906,18 +5983,18 @@ theorem Rinst.balanceCore_stateGas_eq (rules : ForkRules) (world : World)
   | ok a =>
     have hm := Mach.pop_stateGas_eq mach
     rw [hp] at hm
-    cases hc : a.2.chargeGas (if a.1.toAdr ∈ view.accessedAddresses
-        then gasWarmAccess else rules.gas.coldAccountAccess) with
+    simp only []
+    generalize (match rules.access with
+      | .eip2929 => if a.1.toAdr ∈ view.accessedAddresses
+          then gasWarmAccess else rules.gas.coldAccountAccess
+      | .flat g => g.balance) = cost
+    cases hc : a.2.chargeGas cost with
     | error e =>
-      have hc' := Mach.chargeGas_stateGas_eq
-        (if a.1.toAdr ∈ view.accessedAddresses
-          then gasWarmAccess else rules.gas.coldAccountAccess) a.2
+      have hc' := Mach.chargeGas_stateGas_eq cost a.2
       rw [hc] at hc'
       simpa [hp, hc, Footprint.MachMetaStateGasEq] using hc'.trans hm
     | ok b =>
-      have hc' := Mach.chargeGas_stateGas_eq
-        (if a.1.toAdr ∈ view.accessedAddresses
-          then gasWarmAccess else rules.gas.coldAccountAccess) a.2
+      have hc' := Mach.chargeGas_stateGas_eq cost a.2
       rw [hc] at hc'
       have hpush := Mach.push_stateGas_eq (world.state.get a.1.toAdr).bal b.2
       cases hq : b.2.push (world.state.get a.1.toAdr).bal <;> rw [hq] at hpush
@@ -6021,7 +6098,7 @@ theorem Rinst.run_stateGasZero {evm : Evm} (h : evm.dyna.StateGasZero)
       fun _ hd => Except.stateGasZeroOn_ok hd
   case extcodesize =>
     refine Except.StateGasZeroOn.bind (Devm.popToAdr_stateGasZero h) fun a ha => ?_
-    split <;>
+    split <;> (try split) <;>
       exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ ha)
         fun _ hd => Devm.push_stateGasZero _ hd
   case extcodecopy =>
@@ -6029,7 +6106,7 @@ theorem Rinst.run_stateGasZero {evm : Evm} (h : evm.dyna.StateGasZero)
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero ha) fun b hb => ?_
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hb) fun c hc => ?_
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hc) fun e he => ?_
-    split <;>
+    split <;> (try split) <;>
       exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ he)
         fun _ hd => Except.stateGasZeroOn_ok hd
   case returndatacopy =>
@@ -6044,7 +6121,7 @@ theorem Rinst.run_stateGasZero {evm : Evm} (h : evm.dyna.StateGasZero)
     · exact Except.stateGasZeroOn_ok hd
   case extcodehash =>
     refine Except.StateGasZeroOn.bind (Devm.popToAdr_stateGasZero h) fun a ha => ?_
-    split <;>
+    split <;> (try split) <;>
       exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ ha)
         fun _ hd => Devm.push_stateGasZero _ hd
   case blockhash =>
@@ -6071,7 +6148,7 @@ theorem Rinst.run_stateGasZero {evm : Evm} (h : evm.dyna.StateGasZero)
       fun _ hd => Except.stateGasZeroOn_ok hd
   case sload =>
     refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
-    split <;>
+    split <;> (try split) <;>
       exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ ha)
         fun _ hd => Devm.push_stateGasZero _ hd
   case sstore =>
@@ -6174,7 +6251,7 @@ theorem Linst.run_stateGasZero {sevm : Sevm} {devm : Devm}
     intro donorBal _
     refine Except.StateGasZeroOn.bind
       (P := fun p : Devm × Nat => p.1.StateGasZero) ?_ ?_
-    · exact Except.stateGasZeroOn_ok (by split <;> exact h1)
+    · exact Except.stateGasZeroOn_ok (by split <;> (try split) <;> exact h1)
     rintro ⟨d2, cost⟩ h2
     refine Except.StateGasZeroOn.bind
       (P := fun _ => True) (Except.stateGasZeroOn_ok trivial) ?_
@@ -7461,15 +7538,22 @@ theorem Rinst.balanceCore_worldFrame {rules : ForkRules} {pre devm : Devm}
     fun _ ha hc _ => h.keep rfl ha.symm hc.symm
   rcases hp : devm.mach.pop with ⟨err, m⟩ | ⟨⟨x, m⟩⟩
   · exact hv _ rfl rfl m
-  have h1 : (if x.toAdr ∈ devm.meta.accessedAddresses then devm.meta
-      else devm.meta.addAccessedAddress x.toAdr).accountsToDelete =
+  have h1 : (match rules.access with
+      | .eip2929 => if x.toAdr ∈ devm.meta.accessedAddresses then devm.meta
+          else devm.meta.addAccessedAddress x.toAdr
+      | .flat _ => devm.meta).accountsToDelete =
         devm.meta.accountsToDelete ∧
-      (if x.toAdr ∈ devm.meta.accessedAddresses then devm.meta
-      else devm.meta.addAccessedAddress x.toAdr).createdAccounts =
-        devm.meta.createdAccounts := by split <;> exact ⟨rfl, rfl⟩
+      (match rules.access with
+      | .eip2929 => if x.toAdr ∈ devm.meta.accessedAddresses then devm.meta
+          else devm.meta.addAccessedAddress x.toAdr
+      | .flat _ => devm.meta).createdAccounts =
+        devm.meta.createdAccounts := by
+    split <;> (try split) <;> exact ⟨rfl, rfl⟩
   simp only
-  rcases Mach.chargeGas (if x.toAdr ∈ devm.meta.accessedAddresses then gasWarmAccess
-      else rules.gas.coldAccountAccess) m with ⟨err, m'⟩ | ⟨_, m'⟩
+  rcases Mach.chargeGas (match rules.access with
+      | .eip2929 => if x.toAdr ∈ devm.meta.accessedAddresses then gasWarmAccess
+          else rules.gas.coldAccountAccess
+      | .flat g => g.balance) m with ⟨err, m'⟩ | ⟨_, m'⟩
   · exact hv _ h1.1 h1.2 m'
   simp only
   rcases Mach.push (devm.world.state.get x.toAdr).bal m' with ⟨err, m''⟩ | ⟨_, m''⟩ <;>
@@ -7554,7 +7638,7 @@ theorem Rinst.runCore_worldFrame (pc : Nat) (sevm : Sevm) (devm : Devm)
       fun d hd => hd.keep rfl rfl rfl
   case extcodesize | extcodehash =>
     refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) fun a ha => ?_
-    split <;>
+    split <;> (try split) <;>
       exact Except.WorldFrameOn.bind
         (liftMachExecution_worldFrame (ha.keep rfl rfl rfl))
         fun d hd => liftMachExecution_worldFrame (Devm.balReadAccount_worldFrame hd)
@@ -7563,7 +7647,7 @@ theorem Rinst.runCore_worldFrame (pc : Nat) (sevm : Sevm) (devm : Devm)
     refine Except.WorldFrameOn.bind (liftMach_worldFrameOn ha) fun b hb => ?_
     refine Except.WorldFrameOn.bind (liftMach_worldFrameOn hb) fun c hc => ?_
     refine Except.WorldFrameOn.bind (liftMach_worldFrameOn hc) fun e he => ?_
-    split <;>
+    split <;> (try split) <;>
       exact Except.WorldFrameOn.bind
         (liftMachExecution_worldFrame (he.keep rfl rfl rfl))
         fun d hd => (Devm.balReadAccount_worldFrame hd).keep rfl rfl rfl
@@ -7592,7 +7676,7 @@ theorem Rinst.runCore_worldFrame (pc : Nat) (sevm : Sevm) (devm : Devm)
       fun d hd => hd.keep rfl rfl rfl
   case sload =>
     refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) fun a ha => ?_
-    split <;>
+    split <;> (try split) <;>
       exact Except.WorldFrameOn.bind
         (liftMachExecution_worldFrame (ha.keep rfl rfl rfl))
         fun d hd => liftMachExecution_worldFrame (Devm.balReadStorage_worldFrame hd)
@@ -7746,7 +7830,7 @@ theorem Linst.run_canonical {sevm : Sevm} {devm : Devm}
       refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
       refine Except.canonicalOn_bind_ok ?_
       refine Except.canonicalOn_bind_ok ?_
-      split <;>
+      split <;> (try split) <;>
         (refine Except.canonicalOn_bind_ok ?_
          refine Except.CanonicalOn.bind
            (liftMachExecution_canonical (Devm.Canonical.of_world_eq ha rfl))

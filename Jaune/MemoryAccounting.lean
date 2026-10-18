@@ -449,76 +449,90 @@ theorem Linst.run_memory_accounting_output (sevm : Sevm) (pre : Devm) (l : Linst
           let read := (popped.balReadAccount sevm.benvStat.rules head.toAdr).balReadAccount
             sevm.benvStat.rules sevm.currentTarget
           let donorBal := (read.getAcct sevm.currentTarget).bal
-          let plan : Devm × Nat :=
-            if head.toAdr ∉ read.accessedAddresses then
-              (addAccessedAddress read head.toAdr,
-                gasSelfDestruct + sevm.benvStat.rules.gas.coldAccountAccess)
-            else (read, gasSelfDestruct)
-          let cost := if (plan.1.getAcct head.toAdr).Empty ∧ donorBal ≠ 0 then
-              plan.2 + gasSelfDestructNewAccount else plan.2
-          have hw : plan.1.memory = pre.memory ∧ plan.1.output = pre.output := by
-            dsimp only [plan]
-            split <;> constructor
-            all_goals
-              dsimp only [read, popped, Devm.balReadAccount]
-              repeat' first | rfl | split
-          -- Fold `hrun` through the `let`s before restating it: the unfolded
-          -- account reads repeat a dozen times in its type. `change` against
-          -- that form elaborates the tail into the match type and thrashes;
-          -- folding first and restating with `replace` keeps both sides small.
-          -- (Heartbeat edge: this is the slowest defeq in the file; keep the
-          -- tail and these equations in sync.)
-          have hpopped : popped = pre.setMach { pre.mach with stack := tail } :=
-            rfl
-          have hread : read = (popped.balReadAccount sevm.benvStat.rules
-            head.toAdr).balReadAccount sevm.benvStat.rules
-            sevm.currentTarget := rfl
-          have hdonorBal : donorBal = (read.getAcct sevm.currentTarget).bal :=
-            rfl
-          have hplan : plan = (if head.toAdr ∉ read.accessedAddresses then
-              (addAccessedAddress read head.toAdr,
-                gasSelfDestruct + sevm.benvStat.rules.gas.coldAccountAccess)
-              else (read, gasSelfDestruct)) := rfl
-          have hcost : cost = (if (plan.1.getAcct head.toAdr).Empty ∧
-              donorBal ≠ 0 then plan.2 + gasSelfDestructNewAccount
-              else plan.2) := rfl
-          simp only [← hpopped, ← hread, ← hdonorBal, ← hplan, ← hcost] at hrun
-          replace hrun : (do
-            let charged ← chargeGas cost plan.1
-            assertDynamic sevm charged
-            let next ← Option.toExcept
-              (.internal (.invariant (.text "InsufficientBalanceError")), charged)
-              (charged.subBal sevm.currentTarget donorBal)
-            let next := next.addBal head.toAdr donorBal
-            if sevm.currentTarget ∈ next.createdAccounts then
-              .ok (addAccountToDelete (next.setBal sevm.currentTarget 0) sevm.currentTarget)
-            else .ok next) = result := hrun
-          -- The remaining argument depends only on the preserved fields, not
-          -- on the account reads and access-cost calculation defining them.
-          clear_value cost plan donorBal read popped
-          rcases hc : chargeGas cost plan.1 with failure | charged
-          · have hf := charge_memory_output cost plan.1
-            rw [hc] at hf
-            simp only [hc, Bind.bind, Except.bind] at hrun
-            cases hrun
-            exact ⟨hf.1.trans hw.1, hf.2.trans hw.2⟩
-          · have hf := charge_memory_output cost plan.1
-            rw [hc] at hf
-            have hcharged : charged.memory = pre.memory ∧ charged.output = pre.output :=
-              ⟨hf.1.trans hw.1, hf.2.trans hw.2⟩
-            simp only [hc, Bind.bind, Except.bind] at hrun
-            by_cases hd : (!sevm.isStatic) = true
-            · simp only [assertDynamic, Except.assert, hd, ite_true, Bind.bind,
-                Devm.subBal, Option.bind, Option.toExcept] at hrun
-              rcases hb : charged.state.subBal sevm.currentTarget donorBal with _ | state
-              · simp only [hb] at hrun
+          -- The access shape decides the plan: EIP-2929 warms a cold
+          -- beneficiary and charges its surcharge; the flat schedule charges the
+          -- base alone and leaves the set untouched. The rest is shape-blind.
+          rcases hA : sevm.benvStat.rules.access with g | _ <;> rw [hA] at hrun
+          on_goal 1 =>
+            let plan : Devm × Nat := (read, gasSelfDestruct)
+            have hw : plan.1.memory = pre.memory ∧ plan.1.output = pre.output := by
+              constructor
+              all_goals
+                dsimp only [plan, read, popped, Devm.balReadAccount]
+                repeat' first | rfl | split
+            have hplan : plan = (read, gasSelfDestruct) := rfl
+          on_goal 2 =>
+            let plan : Devm × Nat :=
+              if head.toAdr ∉ read.accessedAddresses then
+                (addAccessedAddress read head.toAdr,
+                  gasSelfDestruct + sevm.benvStat.rules.gas.coldAccountAccess)
+              else (read, gasSelfDestruct)
+            have hw : plan.1.memory = pre.memory ∧ plan.1.output = pre.output := by
+              dsimp only [plan]
+              split <;> constructor
+              all_goals
+                dsimp only [read, popped, Devm.balReadAccount]
+                repeat' first | rfl | split
+            have hplan : plan = (if head.toAdr ∉ read.accessedAddresses then
+                (addAccessedAddress read head.toAdr,
+                  gasSelfDestruct + sevm.benvStat.rules.gas.coldAccountAccess)
+                else (read, gasSelfDestruct)) := rfl
+          all_goals
+            let cost := if (plan.1.getAcct head.toAdr).Empty ∧ donorBal ≠ 0 then
+                plan.2 + gasSelfDestructNewAccount else plan.2
+            -- Fold `hrun` through the `let`s before restating it: the unfolded
+            -- account reads repeat a dozen times in its type. `change` against
+            -- that form elaborates the tail into the match type and thrashes;
+            -- folding first and restating with `replace` keeps both sides small.
+            -- (Heartbeat edge: this is the slowest defeq in the file; keep the
+            -- tail and these equations in sync.)
+            have hpopped : popped = pre.setMach { pre.mach with stack := tail } :=
+              rfl
+            have hread : read = (popped.balReadAccount sevm.benvStat.rules
+              head.toAdr).balReadAccount sevm.benvStat.rules
+              sevm.currentTarget := rfl
+            have hdonorBal : donorBal = (read.getAcct sevm.currentTarget).bal :=
+              rfl
+            have hcost : cost = (if (plan.1.getAcct head.toAdr).Empty ∧
+                donorBal ≠ 0 then plan.2 + gasSelfDestructNewAccount
+                else plan.2) := rfl
+            simp only [← hpopped, ← hread, ← hdonorBal, ← hplan, ← hcost] at hrun
+            replace hrun : (do
+              let charged ← chargeGas cost plan.1
+              assertDynamic sevm charged
+              let next ← Option.toExcept
+                (.internal (.invariant (.text "InsufficientBalanceError")), charged)
+                (charged.subBal sevm.currentTarget donorBal)
+              let next := next.addBal head.toAdr donorBal
+              if sevm.currentTarget ∈ next.createdAccounts then
+                .ok (addAccountToDelete (next.setBal sevm.currentTarget 0) sevm.currentTarget)
+              else .ok next) = result := hrun
+            -- The remaining argument depends only on the preserved fields, not
+            -- on the account reads and access-cost calculation defining them.
+            clear_value cost plan donorBal read popped
+            rcases hc : chargeGas cost plan.1 with failure | charged
+            · have hf := charge_memory_output cost plan.1
+              rw [hc] at hf
+              simp only [hc, Bind.bind, Except.bind] at hrun
+              cases hrun
+              exact ⟨hf.1.trans hw.1, hf.2.trans hw.2⟩
+            · have hf := charge_memory_output cost plan.1
+              rw [hc] at hf
+              have hcharged : charged.memory = pre.memory ∧ charged.output = pre.output :=
+                ⟨hf.1.trans hw.1, hf.2.trans hw.2⟩
+              simp only [hc, Bind.bind, Except.bind] at hrun
+              by_cases hd : (!sevm.isStatic) = true
+              · simp only [assertDynamic, Except.assert, hd, ite_true, Bind.bind,
+                  Devm.subBal, Option.bind, Option.toExcept] at hrun
+                rcases hb : charged.state.subBal sevm.currentTarget donorBal with _ | state
+                · simp only [hb] at hrun
+                  cases hrun
+                  exact hcharged
+                · simp only [hb] at hrun
+                  split at hrun <;> cases hrun <;> exact hcharged
+              · simp only [assertDynamic, Except.assert, hd] at hrun
                 cases hrun
                 exact hcharged
-              · simp only [hb] at hrun
-                split at hrun <;> cases hrun <;> exact hcharged
-            · simp only [assertDynamic, Except.assert, hd] at hrun
-              cases hrun
-              exact hcharged
       rcases hx : Linst.run sevm pre .selfdestruct with failure | post
       · have hfields := hf _ hx
         rw [hx] at hgas
@@ -1031,25 +1045,46 @@ private theorem resultMemoryFields_balance (rules : ForkRules) (pre : Devm) :
   | cons word rest =>
       by_cases hw : word.toAdr ∈ view.accessedAddresses
       all_goals by_cases hb : rules.bal.isSome = true
+      all_goals rcases hA : rules.access with g | _
       all_goals
         simp only [liftMachMetaWorldExecution, liftMachMetaExecution, liftMachMeta,
           Footprint.toExecution, Footprint.liftOutcome, Rinst.balanceCore, Mach.pop,
-          hw, hb, ite_true, ite_false]
-        cases hc : safeSub gasLeft
-            (if word.toAdr ∈ view.accessedAddresses then gasWarmAccess
-              else rules.gas.coldAccountAccess) with
-        | none =>
-            simp only [hw, ite_true, ite_false] at hc
-            simp only [Mach.chargeGas, hc]
-            exact ⟨rfl, rfl⟩
-        | some gas =>
-            simp only [hw, ite_true, ite_false] at hc
-            simp only [Mach.chargeGas, hc, Mach.push]
-            by_cases hp : rest.length < 1024
-            · simp only [ite_eq_left hp]
-              exact ⟨rfl, rfl⟩
-            · simp only [ite_eq_right hp]
-              exact ⟨rfl, rfl⟩
+          hw, hb, hA, ite_true, ite_false]
+        -- The charge is one of three constants: warm, cold, or the flat price.
+        first
+        | (cases hc : safeSub gasLeft gasWarmAccess with
+            | none =>
+                simp only [Mach.chargeGas, hc]
+                exact ⟨rfl, rfl⟩
+            | some gas =>
+                simp only [Mach.chargeGas, hc, Mach.push]
+                by_cases hp : rest.length < 1024
+                · simp only [ite_eq_left hp]
+                  exact ⟨rfl, rfl⟩
+                · simp only [ite_eq_right hp]
+                  exact ⟨rfl, rfl⟩)
+        | (cases hc : safeSub gasLeft rules.gas.coldAccountAccess with
+            | none =>
+                simp only [Mach.chargeGas, hc]
+                exact ⟨rfl, rfl⟩
+            | some gas =>
+                simp only [Mach.chargeGas, hc, Mach.push]
+                by_cases hp : rest.length < 1024
+                · simp only [ite_eq_left hp]
+                  exact ⟨rfl, rfl⟩
+                · simp only [ite_eq_right hp]
+                  exact ⟨rfl, rfl⟩)
+        | (cases hc : safeSub gasLeft g.balance with
+            | none =>
+                simp only [Mach.chargeGas, hc]
+                exact ⟨rfl, rfl⟩
+            | some gas =>
+                simp only [Mach.chargeGas, hc, Mach.push]
+                by_cases hp : rest.length < 1024
+                · simp only [ite_eq_left hp]
+                  exact ⟨rfl, rfl⟩
+                · simp only [ite_eq_right hp]
+                  exact ⟨rfl, rfl⟩)
 
 private theorem regular_memory_accounting (pc : Nat) (pre : Devm) (sevm : Sevm) (r : Rinst)
     (hstate : sevm.benvStat.rules.stateGas = none) :
@@ -1128,12 +1163,18 @@ private theorem regular_memory_accounting (pc : Nat) (pre : Devm) (sevm : Sevm) 
     refine nonspawnResult_bind (nonspawn_popToAdr pre) ?_
     intro popped
     split
-    · refine nonspawnResult_bind (nonspawn_charge _ popped.2) ?_
-      intro charged
-      exact nonspawnResult_trans (nonspawn_balReadAccount sevm.benvStat.rules
-        popped.1 charged) (nonspawn_push _ _)
-    · refine nonspawnResult_trans (nonspawn_addAccessedAddress popped.2 popped.1) ?_
-      refine nonspawnResult_bind (nonspawn_charge _ _) ?_
+    · split
+      · refine nonspawnResult_bind (nonspawn_charge _ popped.2) ?_
+        intro charged
+        exact nonspawnResult_trans (nonspawn_balReadAccount sevm.benvStat.rules
+          popped.1 charged) (nonspawn_push _ _)
+      · refine nonspawnResult_trans (nonspawn_addAccessedAddress popped.2 popped.1) ?_
+        refine nonspawnResult_bind (nonspawn_charge _ _) ?_
+        intro charged
+        exact nonspawnResult_trans (nonspawn_balReadAccount sevm.benvStat.rules
+          popped.1 charged) (nonspawn_push _ _)
+    · -- Flat: one fixed price, the accessed set untouched.
+      refine nonspawnResult_bind (nonspawn_charge _ popped.2) ?_
       intro charged
       exact nonspawnResult_trans (nonspawn_balReadAccount sevm.benvStat.rules
         popped.1 charged) (nonspawn_push _ _)
@@ -1141,12 +1182,18 @@ private theorem regular_memory_accounting (pc : Nat) (pre : Devm) (sevm : Sevm) 
     refine nonspawnResult_bind (nonspawn_popToAdr pre) ?_
     intro popped
     split
-    · refine nonspawnResult_bind (nonspawn_charge _ popped.2) ?_
-      intro charged
-      exact nonspawnResult_trans (nonspawn_balReadAccount sevm.benvStat.rules
-        popped.1 charged) (nonspawn_push _ _)
-    · refine nonspawnResult_trans (nonspawn_addAccessedAddress popped.2 popped.1) ?_
-      refine nonspawnResult_bind (nonspawn_charge _ _) ?_
+    · split
+      · refine nonspawnResult_bind (nonspawn_charge _ popped.2) ?_
+        intro charged
+        exact nonspawnResult_trans (nonspawn_balReadAccount sevm.benvStat.rules
+          popped.1 charged) (nonspawn_push _ _)
+      · refine nonspawnResult_trans (nonspawn_addAccessedAddress popped.2 popped.1) ?_
+        refine nonspawnResult_bind (nonspawn_charge _ _) ?_
+        intro charged
+        exact nonspawnResult_trans (nonspawn_balReadAccount sevm.benvStat.rules
+          popped.1 charged) (nonspawn_push _ _)
+    · -- Flat: one fixed price, the accessed set untouched.
+      refine nonspawnResult_bind (nonspawn_charge _ popped.2) ?_
       intro charged
       exact nonspawnResult_trans (nonspawn_balReadAccount sevm.benvStat.rules
         popped.1 charged) (nonspawn_push _ _)
@@ -1154,13 +1201,19 @@ private theorem regular_memory_accounting (pc : Nat) (pre : Devm) (sevm : Sevm) 
     refine nonspawnResult_bind (nonspawn_pop pre) ?_
     intro popped
     split
-    · refine nonspawnResult_bind (nonspawn_charge gasWarmAccess popped.2) ?_
-      intro charged
-      exact nonspawnResult_trans (nonspawn_balReadStorage sevm.benvStat.rules
-        sevm.currentTarget popped.1 charged) (nonspawn_push _ _)
-    · refine nonspawnResult_trans (nonspawn_addAccessedStorageKey popped.2
-        sevm.currentTarget popped.1) ?_
-      refine nonspawnResult_bind (nonspawn_charge gasColdSload _) ?_
+    · split
+      · refine nonspawnResult_bind (nonspawn_charge gasWarmAccess popped.2) ?_
+        intro charged
+        exact nonspawnResult_trans (nonspawn_balReadStorage sevm.benvStat.rules
+          sevm.currentTarget popped.1 charged) (nonspawn_push _ _)
+      · refine nonspawnResult_trans (nonspawn_addAccessedStorageKey popped.2
+          sevm.currentTarget popped.1) ?_
+        refine nonspawnResult_bind (nonspawn_charge gasColdSload _) ?_
+        intro charged
+        exact nonspawnResult_trans (nonspawn_balReadStorage sevm.benvStat.rules
+          sevm.currentTarget popped.1 charged) (nonspawn_push _ _)
+    · -- Flat: one fixed price, the accessed set untouched.
+      refine nonspawnResult_bind (nonspawn_charge _ popped.2) ?_
       intro charged
       exact nonspawnResult_trans (nonspawn_balReadStorage sevm.benvStat.rules
         sevm.currentTarget popped.1 charged) (nonspawn_push _ _)
@@ -1301,17 +1354,24 @@ private theorem regular_memory_accounting (pc : Nat) (pre : Devm) (sevm : Sevm) 
     refine nonspawnResult_bind (nonspawn_popToNat codeIndex.2) ?_
     intro size
     split
-    · refine nonspawn_charged_memory [(memoryIndex.1, size.1)]
-        (gasWarmAccess + sevm.benvStat.rules.gas.codeReadSurcharge +
-          gasCopy * ceilDiv size.1 32) size.2 _ ?_
-      intro charged
-      exact nonspawn_external_copy sevm.benvStat.rules address.1
-        memoryIndex.1 codeIndex.1 size.1 charged
-    · refine nonspawnResult_trans (nonspawn_addAccessedAddress size.2 address.1) ?_
+    · split
+      · refine nonspawn_charged_memory [(memoryIndex.1, size.1)]
+          (gasWarmAccess + sevm.benvStat.rules.gas.codeReadSurcharge +
+            gasCopy * ceilDiv size.1 32) size.2 _ ?_
+        intro charged
+        exact nonspawn_external_copy sevm.benvStat.rules address.1
+          memoryIndex.1 codeIndex.1 size.1 charged
+      · refine nonspawnResult_trans (nonspawn_addAccessedAddress size.2 address.1) ?_
+        refine nonspawn_charged_memory [(memoryIndex.1, size.1)]
+          (sevm.benvStat.rules.gas.coldAccountAccess +
+            sevm.benvStat.rules.gas.codeReadSurcharge + gasCopy * ceilDiv size.1 32)
+          (addAccessedAddress size.2 address.1) _ ?_
+        intro charged
+        exact nonspawn_external_copy sevm.benvStat.rules address.1
+          memoryIndex.1 codeIndex.1 size.1 charged
+    · -- Flat: one fixed price, the accessed set untouched.
       refine nonspawn_charged_memory [(memoryIndex.1, size.1)]
-        (sevm.benvStat.rules.gas.coldAccountAccess +
-          sevm.benvStat.rules.gas.codeReadSurcharge + gasCopy * ceilDiv size.1 32)
-        (addAccessedAddress size.2 address.1) _ ?_
+        _ size.2 _ ?_
       intro charged
       exact nonspawn_external_copy sevm.benvStat.rules address.1
         memoryIndex.1 codeIndex.1 size.1 charged
@@ -1680,38 +1740,49 @@ private theorem executable_memory_accounting (sevm : Sevm) (pre : Devm) (x : Xin
     intro outputIndex
     refine xResult_bind (nonspawn_popToNat outputIndex.2) ?_
     intro outputSize
-    let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
-    let lookup := sevm.benvStat.rules.gas.accessDelegation
-      (addAccessedAddress outputSize.2 codeAddress.1) codeAddress.1
-    let parent := lookup.2.2.2.2
-    have hp : nonspawnPreserved outputSize.2 parent :=
-      nonspawnPreserved_trans (nonspawn_addAccessedAddress outputSize.2 codeAddress.1)
-        (nonspawn_delegation sevm.benvStat.rules.gas _ codeAddress.1)
-    refine xResult_rebase (pre := outputSize.2) (middle := parent)
-      (inner := 0) (outer := 0) hp.1 hp.2 ?_
-    have hm : parent.memory = outputSize.2.memory :=
-      (delegation_memory_output sevm.benvStat.rules.gas
-        (addAccessedAddress outputSize.2 codeAddress.1) codeAddress.1).1
-    have hext : outputSize.2.extCost pairs = parent.extCost pairs := by
-      simp only [Devm.extCost, hm]
-    change xResult parent 0 (chargeGas
-      ((calculateMsgCallGas 0 gas.1.toNat parent.gasLeft (outputSize.2.extCost pairs)
-        (sevm.benvStat.rules.gas.accessCost codeAddress.1 outputSize.2.accessedAddresses +
-          lookup.2.2.2.1)).1 + outputSize.2.extCost pairs) parent >>= _)
-    rw [hext]
-    let costs := calculateMsgCallGas 0 gas.1.toNat parent.gasLeft (parent.extCost pairs)
-      (sevm.benvStat.rules.gas.accessCost codeAddress.1 outputSize.2.accessedAddresses +
-        lookup.2.2.2.1)
-    refine xResult_charged_call pairs costs.1 costs.2 parent ?_ _ ?_
-    · exact calculateMsgCallGas_refund_le_base 0 gas.1.toNat parent.gasLeft
-        (parent.extCost pairs)
-        (sevm.benvStat.rules.gas.accessCost codeAddress.1 outputSize.2.accessedAddresses +
-          lookup.2.2.2.1) gCallStipend (Nat.zero_le _)
-    · intro charged
-      exact genericCall_memory_allowance sevm (charged.memExtends pairs) costs.2
-        sevm.value sevm.caller sevm.currentTarget lookup.2.1
-        false false inputIndex.1 inputSize.1 outputIndex.1 outputSize.1
-        lookup.2.2.1 lookup.1
+    -- The access step of either shape: a price `price` and a recorder `dA`.
+    rcases hA : sevm.benvStat.rules.access with g | _
+    on_goal 1 =>
+      let price := g.call
+      let dA := outputSize.2
+      have hdA : nonspawnPreserved outputSize.2 dA := ⟨Nat.le_refl _, rfl⟩
+    on_goal 2 =>
+      let price := sevm.benvStat.rules.gas.accessCost codeAddress.1 outputSize.2.accessedAddresses
+      let dA := addAccessedAddress outputSize.2 codeAddress.1
+      have hdA := nonspawn_addAccessedAddress outputSize.2 codeAddress.1
+    all_goals
+      let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
+      let lookup := sevm.benvStat.rules.gas.accessDelegation
+        dA codeAddress.1
+      let parent := lookup.2.2.2.2
+      have hp : nonspawnPreserved outputSize.2 parent :=
+        nonspawnPreserved_trans hdA
+          (nonspawn_delegation sevm.benvStat.rules.gas _ codeAddress.1)
+      refine xResult_rebase (pre := outputSize.2) (middle := parent)
+        (inner := 0) (outer := 0) hp.1 hp.2 ?_
+      have hm : parent.memory = outputSize.2.memory :=
+        (delegation_memory_output sevm.benvStat.rules.gas
+          dA codeAddress.1).1
+      have hext : outputSize.2.extCost pairs = parent.extCost pairs := by
+        simp only [Devm.extCost, hm]
+      change xResult parent 0 (chargeGas
+        ((calculateMsgCallGas 0 gas.1.toNat parent.gasLeft (outputSize.2.extCost pairs)
+          (price +
+            lookup.2.2.2.1)).1 + outputSize.2.extCost pairs) parent >>= _)
+      rw [hext]
+      let costs := calculateMsgCallGas 0 gas.1.toNat parent.gasLeft (parent.extCost pairs)
+        (price +
+          lookup.2.2.2.1)
+      refine xResult_charged_call pairs costs.1 costs.2 parent ?_ _ ?_
+      · exact calculateMsgCallGas_refund_le_base 0 gas.1.toNat parent.gasLeft
+          (parent.extCost pairs)
+          (price +
+            lookup.2.2.2.1) gCallStipend (Nat.zero_le _)
+      · intro charged
+        exact genericCall_memory_allowance sevm (charged.memExtends pairs) costs.2
+          sevm.value sevm.caller sevm.currentTarget lookup.2.1
+          false false inputIndex.1 inputSize.1 outputIndex.1 outputSize.1
+          lookup.2.2.1 lookup.1
 
   case staticcall =>
     apply xAccounting_ofExcept
@@ -1727,38 +1798,49 @@ private theorem executable_memory_accounting (sevm : Sevm) (pre : Devm) (x : Xin
     intro outputIndex
     refine xResult_bind (nonspawn_popToNat outputIndex.2) ?_
     intro outputSize
-    let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
-    let lookup := sevm.benvStat.rules.gas.accessDelegation
-      (addAccessedAddress outputSize.2 target.1) target.1
-    let parent := lookup.2.2.2.2
-    have hp : nonspawnPreserved outputSize.2 parent :=
-      nonspawnPreserved_trans (nonspawn_addAccessedAddress outputSize.2 target.1)
-        (nonspawn_delegation sevm.benvStat.rules.gas _ target.1)
-    refine xResult_rebase (pre := outputSize.2) (middle := parent)
-      (inner := 0) (outer := 0) hp.1 hp.2 ?_
-    have hm : parent.memory = outputSize.2.memory :=
-      (delegation_memory_output sevm.benvStat.rules.gas
-        (addAccessedAddress outputSize.2 target.1) target.1).1
-    have hext : outputSize.2.extCost pairs = parent.extCost pairs := by
-      simp only [Devm.extCost, hm]
-    change xResult parent 0 (chargeGas
-      ((calculateMsgCallGas 0 gas.1.toNat parent.gasLeft (outputSize.2.extCost pairs)
-        (sevm.benvStat.rules.gas.accessCost target.1 outputSize.2.accessedAddresses +
-          lookup.2.2.2.1)).1 + outputSize.2.extCost pairs) parent >>= _)
-    rw [hext]
-    let costs := calculateMsgCallGas 0 gas.1.toNat parent.gasLeft (parent.extCost pairs)
-      (sevm.benvStat.rules.gas.accessCost target.1 outputSize.2.accessedAddresses +
-        lookup.2.2.2.1)
-    refine xResult_charged_call pairs costs.1 costs.2 parent ?_ _ ?_
-    · exact calculateMsgCallGas_refund_le_base 0 gas.1.toNat parent.gasLeft
-        (parent.extCost pairs)
-        (sevm.benvStat.rules.gas.accessCost target.1 outputSize.2.accessedAddresses +
-          lookup.2.2.2.1) gCallStipend (Nat.zero_le _)
-    · intro charged
-      exact genericCall_memory_allowance sevm (charged.memExtends pairs) costs.2
-        0 sevm.currentTarget target.1 lookup.2.1
-        true true inputIndex.1 inputSize.1 outputIndex.1 outputSize.1
-        lookup.2.2.1 lookup.1
+    -- The access step of either shape: a price `price` and a recorder `dA`.
+    rcases hA : sevm.benvStat.rules.access with g | _
+    on_goal 1 =>
+      let price := g.call
+      let dA := outputSize.2
+      have hdA : nonspawnPreserved outputSize.2 dA := ⟨Nat.le_refl _, rfl⟩
+    on_goal 2 =>
+      let price := sevm.benvStat.rules.gas.accessCost target.1 outputSize.2.accessedAddresses
+      let dA := addAccessedAddress outputSize.2 target.1
+      have hdA := nonspawn_addAccessedAddress outputSize.2 target.1
+    all_goals
+      let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
+      let lookup := sevm.benvStat.rules.gas.accessDelegation
+        dA target.1
+      let parent := lookup.2.2.2.2
+      have hp : nonspawnPreserved outputSize.2 parent :=
+        nonspawnPreserved_trans hdA
+          (nonspawn_delegation sevm.benvStat.rules.gas _ target.1)
+      refine xResult_rebase (pre := outputSize.2) (middle := parent)
+        (inner := 0) (outer := 0) hp.1 hp.2 ?_
+      have hm : parent.memory = outputSize.2.memory :=
+        (delegation_memory_output sevm.benvStat.rules.gas
+          dA target.1).1
+      have hext : outputSize.2.extCost pairs = parent.extCost pairs := by
+        simp only [Devm.extCost, hm]
+      change xResult parent 0 (chargeGas
+        ((calculateMsgCallGas 0 gas.1.toNat parent.gasLeft (outputSize.2.extCost pairs)
+          (price +
+            lookup.2.2.2.1)).1 + outputSize.2.extCost pairs) parent >>= _)
+      rw [hext]
+      let costs := calculateMsgCallGas 0 gas.1.toNat parent.gasLeft (parent.extCost pairs)
+        (price +
+          lookup.2.2.2.1)
+      refine xResult_charged_call pairs costs.1 costs.2 parent ?_ _ ?_
+      · exact calculateMsgCallGas_refund_le_base 0 gas.1.toNat parent.gasLeft
+          (parent.extCost pairs)
+          (price +
+            lookup.2.2.2.1) gCallStipend (Nat.zero_le _)
+      · intro charged
+        exact genericCall_memory_allowance sevm (charged.memExtends pairs) costs.2
+          0 sevm.currentTarget target.1 lookup.2.1
+          true true inputIndex.1 inputSize.1 outputIndex.1 outputSize.1
+          lookup.2.2.1 lookup.1
   case call =>
     apply xAccounting_ofExcept
     refine xResult_bind (nonspawn_pop pre) ?_
@@ -1775,51 +1857,61 @@ private theorem executable_memory_accounting (sevm : Sevm) (pre : Devm) (x : Xin
     intro outputIndex
     refine xResult_bind (nonspawn_popToNat outputIndex.2) ?_
     intro outputSize
-    let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
-    let lookup := sevm.benvStat.rules.gas.accessDelegation
-      (addAccessedAddress outputSize.2 callee.1) callee.1
-    let parent := lookup.2.2.2.2
-    have hp : nonspawnPreserved outputSize.2 parent :=
-      nonspawnPreserved_trans (nonspawn_addAccessedAddress outputSize.2 callee.1)
-        (nonspawn_delegation sevm.benvStat.rules.gas _ callee.1)
-    refine xResult_rebase (pre := outputSize.2) (middle := parent)
-      (inner := 0) (outer := 0) hp.1 hp.2 ?_
-    have hm : parent.memory = outputSize.2.memory :=
-      (delegation_memory_output sevm.benvStat.rules.gas
-        (addAccessedAddress outputSize.2 callee.1) callee.1).1
-    have hext : outputSize.2.extCost pairs = parent.extCost pairs := by
-      simp only [Devm.extCost, hm]
-    let accessCost := sevm.benvStat.rules.gas.accessCost callee.1
-      outputSize.2.accessedAddresses + lookup.2.2.2.1
-    let createCost : Nat := if ¬(parent.getAcct callee.1).Empty ∨ value.1 = 0 then 0 else gNewAccount
-    change xResult parent 0 (chargeGas
-      ((calculateMsgCallGas value.1.toNat gas.1.toNat parent.gasLeft
-        (outputSize.2.extCost pairs)
-        (accessCost + createCost + if value.1 = 0 then 0 else sevm.benvStat.rules.gas.callValue)).1 +
-          outputSize.2.extCost pairs) parent >>= _)
-    rw [hext]
-    let costs := calculateMsgCallGas value.1.toNat gas.1.toNat parent.gasLeft
-      (parent.extCost pairs)
-      (accessCost + createCost + if value.1 = 0 then 0 else sevm.benvStat.rules.gas.callValue)
-    refine xResult_charged_call pairs costs.1 costs.2 parent ?_ _ ?_
-    · exact value_call_refund_le_base sevm value.1 gas.1.toNat parent.gasLeft
-        (parent.extCost pairs) accessCost createCost
-    · intro charged
-      refine xResult_bind
-        (nonspawn_assert_at ((!sevm.isStatic) = true ∨ value.1 = 0)
-          (.halt (.writeInStaticContext .none)) charged (charged.memExtends pairs)
-          (nonspawn_before_paid pairs charged)) ?_
-      intro _
-      let paid := charged.memExtends pairs
-      by_cases hb : (paid.getAcct sevm.currentTarget).bal < value.1
-      · dsimp only [paid, pairs] at hb
-        simp only [ite_eq_left hb]
-        exact balance_refund_accounting paid costs.2
-      · dsimp only [paid, pairs] at hb
-        simp only [ite_eq_right hb]
-        exact genericCall_memory_allowance sevm paid costs.2 value.1
-          sevm.currentTarget callee.1 lookup.2.1 true false
-          inputIndex.1 inputSize.1 outputIndex.1 outputSize.1 lookup.2.2.1 lookup.1
+    -- The access step of either shape: a price `price` and a recorder `dA`.
+    rcases hA : sevm.benvStat.rules.access with g | _
+    on_goal 1 =>
+      let price := g.call
+      let dA := outputSize.2
+      have hdA : nonspawnPreserved outputSize.2 dA := ⟨Nat.le_refl _, rfl⟩
+    on_goal 2 =>
+      let price := sevm.benvStat.rules.gas.accessCost callee.1 outputSize.2.accessedAddresses
+      let dA := addAccessedAddress outputSize.2 callee.1
+      have hdA := nonspawn_addAccessedAddress outputSize.2 callee.1
+    all_goals
+      let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
+      let lookup := sevm.benvStat.rules.gas.accessDelegation
+        dA callee.1
+      let parent := lookup.2.2.2.2
+      have hp : nonspawnPreserved outputSize.2 parent :=
+        nonspawnPreserved_trans hdA
+          (nonspawn_delegation sevm.benvStat.rules.gas _ callee.1)
+      refine xResult_rebase (pre := outputSize.2) (middle := parent)
+        (inner := 0) (outer := 0) hp.1 hp.2 ?_
+      have hm : parent.memory = outputSize.2.memory :=
+        (delegation_memory_output sevm.benvStat.rules.gas
+          dA callee.1).1
+      have hext : outputSize.2.extCost pairs = parent.extCost pairs := by
+        simp only [Devm.extCost, hm]
+      let accessCost := price + lookup.2.2.2.1
+      let createCost : Nat := if ¬(parent.getAcct callee.1).Empty ∨ value.1 = 0 then 0 else gNewAccount
+      change xResult parent 0 (chargeGas
+        ((calculateMsgCallGas value.1.toNat gas.1.toNat parent.gasLeft
+          (outputSize.2.extCost pairs)
+          (accessCost + createCost + if value.1 = 0 then 0 else sevm.benvStat.rules.gas.callValue)).1 +
+            outputSize.2.extCost pairs) parent >>= _)
+      rw [hext]
+      let costs := calculateMsgCallGas value.1.toNat gas.1.toNat parent.gasLeft
+        (parent.extCost pairs)
+        (accessCost + createCost + if value.1 = 0 then 0 else sevm.benvStat.rules.gas.callValue)
+      refine xResult_charged_call pairs costs.1 costs.2 parent ?_ _ ?_
+      · exact value_call_refund_le_base sevm value.1 gas.1.toNat parent.gasLeft
+          (parent.extCost pairs) accessCost createCost
+      · intro charged
+        refine xResult_bind
+          (nonspawn_assert_at ((!sevm.isStatic) = true ∨ value.1 = 0)
+            (.halt (.writeInStaticContext .none)) charged (charged.memExtends pairs)
+            (nonspawn_before_paid pairs charged)) ?_
+        intro _
+        let paid := charged.memExtends pairs
+        by_cases hb : (paid.getAcct sevm.currentTarget).bal < value.1
+        · dsimp only [paid, pairs] at hb
+          simp only [ite_eq_left hb]
+          exact balance_refund_accounting paid costs.2
+        · dsimp only [paid, pairs] at hb
+          simp only [ite_eq_right hb]
+          exact genericCall_memory_allowance sevm paid costs.2 value.1
+            sevm.currentTarget callee.1 lookup.2.1 true false
+            inputIndex.1 inputSize.1 outputIndex.1 outputSize.1 lookup.2.2.1 lookup.1
 
   case callcode =>
     apply xAccounting_ofExcept
@@ -1837,46 +1929,56 @@ private theorem executable_memory_accounting (sevm : Sevm) (pre : Devm) (x : Xin
     intro outputIndex
     refine xResult_bind (nonspawn_popToNat outputIndex.2) ?_
     intro outputSize
-    let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
-    let lookup := sevm.benvStat.rules.gas.accessDelegation
-      (addAccessedAddress outputSize.2 codeAddress.1) codeAddress.1
-    let parent := lookup.2.2.2.2
-    have hp : nonspawnPreserved outputSize.2 parent :=
-      nonspawnPreserved_trans (nonspawn_addAccessedAddress outputSize.2 codeAddress.1)
-        (nonspawn_delegation sevm.benvStat.rules.gas _ codeAddress.1)
-    refine xResult_rebase (pre := outputSize.2) (middle := parent)
-      (inner := 0) (outer := 0) hp.1 hp.2 ?_
-    have hm : parent.memory = outputSize.2.memory :=
-      (delegation_memory_output sevm.benvStat.rules.gas
-        (addAccessedAddress outputSize.2 codeAddress.1) codeAddress.1).1
-    have hext : outputSize.2.extCost pairs = parent.extCost pairs := by
-      simp only [Devm.extCost, hm]
-    let accessCost := sevm.benvStat.rules.gas.accessCost codeAddress.1
-      outputSize.2.accessedAddresses + lookup.2.2.2.1
-    let createCost : Nat := 0
-    change xResult parent 0 (chargeGas
-      ((calculateMsgCallGas value.1.toNat gas.1.toNat parent.gasLeft
-        (outputSize.2.extCost pairs)
-        (accessCost + createCost + if value.1 = 0 then 0 else sevm.benvStat.rules.gas.callValue)).1 +
-          outputSize.2.extCost pairs) parent >>= _)
-    rw [hext]
-    let costs := calculateMsgCallGas value.1.toNat gas.1.toNat parent.gasLeft
-      (parent.extCost pairs)
-      (accessCost + createCost + if value.1 = 0 then 0 else sevm.benvStat.rules.gas.callValue)
-    refine xResult_charged_call pairs costs.1 costs.2 parent ?_ _ ?_
-    · exact value_call_refund_le_base sevm value.1 gas.1.toNat parent.gasLeft
-        (parent.extCost pairs) accessCost createCost
-    · intro charged
-      let paid := charged.memExtends pairs
-      by_cases hb : (paid.getAcct sevm.currentTarget).bal < value.1
-      · dsimp only [paid, pairs] at hb
-        simp only [ite_eq_left hb]
-        exact balance_refund_accounting paid costs.2
-      · dsimp only [paid, pairs] at hb
-        simp only [ite_eq_right hb]
-        exact genericCall_memory_allowance sevm paid costs.2 value.1
-          sevm.currentTarget sevm.currentTarget lookup.2.1 true false
-          inputIndex.1 inputSize.1 outputIndex.1 outputSize.1 lookup.2.2.1 lookup.1
+    -- The access step of either shape: a price `price` and a recorder `dA`.
+    rcases hA : sevm.benvStat.rules.access with g | _
+    on_goal 1 =>
+      let price := g.call
+      let dA := outputSize.2
+      have hdA : nonspawnPreserved outputSize.2 dA := ⟨Nat.le_refl _, rfl⟩
+    on_goal 2 =>
+      let price := sevm.benvStat.rules.gas.accessCost codeAddress.1 outputSize.2.accessedAddresses
+      let dA := addAccessedAddress outputSize.2 codeAddress.1
+      have hdA := nonspawn_addAccessedAddress outputSize.2 codeAddress.1
+    all_goals
+      let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
+      let lookup := sevm.benvStat.rules.gas.accessDelegation
+        dA codeAddress.1
+      let parent := lookup.2.2.2.2
+      have hp : nonspawnPreserved outputSize.2 parent :=
+        nonspawnPreserved_trans hdA
+          (nonspawn_delegation sevm.benvStat.rules.gas _ codeAddress.1)
+      refine xResult_rebase (pre := outputSize.2) (middle := parent)
+        (inner := 0) (outer := 0) hp.1 hp.2 ?_
+      have hm : parent.memory = outputSize.2.memory :=
+        (delegation_memory_output sevm.benvStat.rules.gas
+          dA codeAddress.1).1
+      have hext : outputSize.2.extCost pairs = parent.extCost pairs := by
+        simp only [Devm.extCost, hm]
+      let accessCost := price + lookup.2.2.2.1
+      let createCost : Nat := 0
+      change xResult parent 0 (chargeGas
+        ((calculateMsgCallGas value.1.toNat gas.1.toNat parent.gasLeft
+          (outputSize.2.extCost pairs)
+          (accessCost + createCost + if value.1 = 0 then 0 else sevm.benvStat.rules.gas.callValue)).1 +
+            outputSize.2.extCost pairs) parent >>= _)
+      rw [hext]
+      let costs := calculateMsgCallGas value.1.toNat gas.1.toNat parent.gasLeft
+        (parent.extCost pairs)
+        (accessCost + createCost + if value.1 = 0 then 0 else sevm.benvStat.rules.gas.callValue)
+      refine xResult_charged_call pairs costs.1 costs.2 parent ?_ _ ?_
+      · exact value_call_refund_le_base sevm value.1 gas.1.toNat parent.gasLeft
+          (parent.extCost pairs) accessCost createCost
+      · intro charged
+        let paid := charged.memExtends pairs
+        by_cases hb : (paid.getAcct sevm.currentTarget).bal < value.1
+        · dsimp only [paid, pairs] at hb
+          simp only [ite_eq_left hb]
+          exact balance_refund_accounting paid costs.2
+        · dsimp only [paid, pairs] at hb
+          simp only [ite_eq_right hb]
+          exact genericCall_memory_allowance sevm paid costs.2 value.1
+            sevm.currentTarget sevm.currentTarget lookup.2.1 true false
+            inputIndex.1 inputSize.1 outputIndex.1 outputSize.1 lookup.2.2.1 lookup.1
 
 private def rawTerminalAccounted (pre : Devm) (raw : Execution) : Prop :=
   match raw with
@@ -2346,38 +2448,49 @@ private theorem executable_spawn_accounting (sevm : Sevm) (pre : Devm) (x : Xins
     intro outputIndex
     refine spawnResult_bind (nonspawn_popToNat outputIndex.2) ?_
     intro outputSize
-    let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
-    let lookup := sevm.benvStat.rules.gas.accessDelegation
-      (addAccessedAddress outputSize.2 codeAddress.1) codeAddress.1
-    let parent := lookup.2.2.2.2
-    have hp : nonspawnPreserved outputSize.2 parent :=
-      nonspawnPreserved_trans (nonspawn_addAccessedAddress outputSize.2 codeAddress.1)
-        (nonspawn_delegation sevm.benvStat.rules.gas _ codeAddress.1)
-    refine spawnResult_rebase (pre := outputSize.2) (middle := parent)
-      (inner := 0) (outer := 0) hp.1 hp.2 ?_
-    have hm : parent.memory = outputSize.2.memory :=
-      (delegation_memory_output sevm.benvStat.rules.gas
-        (addAccessedAddress outputSize.2 codeAddress.1) codeAddress.1).1
-    have hext : outputSize.2.extCost pairs = parent.extCost pairs := by
-      simp only [Devm.extCost, hm]
-    change spawnResult parent 0 (chargeGas
-      ((calculateMsgCallGas 0 gas.1.toNat parent.gasLeft (outputSize.2.extCost pairs)
-        (sevm.benvStat.rules.gas.accessCost codeAddress.1 outputSize.2.accessedAddresses +
-          lookup.2.2.2.1)).1 + outputSize.2.extCost pairs) parent >>= _)
-    rw [hext]
-    let costs := calculateMsgCallGas 0 gas.1.toNat parent.gasLeft (parent.extCost pairs)
-      (sevm.benvStat.rules.gas.accessCost codeAddress.1 outputSize.2.accessedAddresses +
-        lookup.2.2.2.1)
-    refine spawnResult_charged_call pairs costs.1 costs.2 parent ?_ _ ?_
-    · exact calculateMsgCallGas_refund_le_base 0 gas.1.toNat parent.gasLeft
-        (parent.extCost pairs)
-        (sevm.benvStat.rules.gas.accessCost codeAddress.1 outputSize.2.accessedAddresses +
-          lookup.2.2.2.1) gCallStipend (Nat.zero_le _)
-    · intro charged
-      exact genericCall_spawn_allowance sevm (charged.memExtends pairs) costs.2
-        sevm.value sevm.caller sevm.currentTarget lookup.2.1
-        false false inputIndex.1 inputSize.1 outputIndex.1 outputSize.1
-        lookup.2.2.1 lookup.1 (call_output_window charged inputIndex.1 inputSize.1 outputIndex.1 outputSize.1)
+    -- The access step of either shape: a price `price` and a recorder `dA`.
+    rcases hA : sevm.benvStat.rules.access with g | _
+    on_goal 1 =>
+      let price := g.call
+      let dA := outputSize.2
+      have hdA : nonspawnPreserved outputSize.2 dA := ⟨Nat.le_refl _, rfl⟩
+    on_goal 2 =>
+      let price := sevm.benvStat.rules.gas.accessCost codeAddress.1 outputSize.2.accessedAddresses
+      let dA := addAccessedAddress outputSize.2 codeAddress.1
+      have hdA := nonspawn_addAccessedAddress outputSize.2 codeAddress.1
+    all_goals
+      let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
+      let lookup := sevm.benvStat.rules.gas.accessDelegation
+        dA codeAddress.1
+      let parent := lookup.2.2.2.2
+      have hp : nonspawnPreserved outputSize.2 parent :=
+        nonspawnPreserved_trans hdA
+          (nonspawn_delegation sevm.benvStat.rules.gas _ codeAddress.1)
+      refine spawnResult_rebase (pre := outputSize.2) (middle := parent)
+        (inner := 0) (outer := 0) hp.1 hp.2 ?_
+      have hm : parent.memory = outputSize.2.memory :=
+        (delegation_memory_output sevm.benvStat.rules.gas
+          dA codeAddress.1).1
+      have hext : outputSize.2.extCost pairs = parent.extCost pairs := by
+        simp only [Devm.extCost, hm]
+      change spawnResult parent 0 (chargeGas
+        ((calculateMsgCallGas 0 gas.1.toNat parent.gasLeft (outputSize.2.extCost pairs)
+          (price +
+            lookup.2.2.2.1)).1 + outputSize.2.extCost pairs) parent >>= _)
+      rw [hext]
+      let costs := calculateMsgCallGas 0 gas.1.toNat parent.gasLeft (parent.extCost pairs)
+        (price +
+          lookup.2.2.2.1)
+      refine spawnResult_charged_call pairs costs.1 costs.2 parent ?_ _ ?_
+      · exact calculateMsgCallGas_refund_le_base 0 gas.1.toNat parent.gasLeft
+          (parent.extCost pairs)
+          (price +
+            lookup.2.2.2.1) gCallStipend (Nat.zero_le _)
+      · intro charged
+        exact genericCall_spawn_allowance sevm (charged.memExtends pairs) costs.2
+          sevm.value sevm.caller sevm.currentTarget lookup.2.1
+          false false inputIndex.1 inputSize.1 outputIndex.1 outputSize.1
+          lookup.2.2.1 lookup.1 (call_output_window charged inputIndex.1 inputSize.1 outputIndex.1 outputSize.1)
 
   case staticcall =>
     apply spawnAccounting_ofExcept
@@ -2393,38 +2506,49 @@ private theorem executable_spawn_accounting (sevm : Sevm) (pre : Devm) (x : Xins
     intro outputIndex
     refine spawnResult_bind (nonspawn_popToNat outputIndex.2) ?_
     intro outputSize
-    let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
-    let lookup := sevm.benvStat.rules.gas.accessDelegation
-      (addAccessedAddress outputSize.2 target.1) target.1
-    let parent := lookup.2.2.2.2
-    have hp : nonspawnPreserved outputSize.2 parent :=
-      nonspawnPreserved_trans (nonspawn_addAccessedAddress outputSize.2 target.1)
-        (nonspawn_delegation sevm.benvStat.rules.gas _ target.1)
-    refine spawnResult_rebase (pre := outputSize.2) (middle := parent)
-      (inner := 0) (outer := 0) hp.1 hp.2 ?_
-    have hm : parent.memory = outputSize.2.memory :=
-      (delegation_memory_output sevm.benvStat.rules.gas
-        (addAccessedAddress outputSize.2 target.1) target.1).1
-    have hext : outputSize.2.extCost pairs = parent.extCost pairs := by
-      simp only [Devm.extCost, hm]
-    change spawnResult parent 0 (chargeGas
-      ((calculateMsgCallGas 0 gas.1.toNat parent.gasLeft (outputSize.2.extCost pairs)
-        (sevm.benvStat.rules.gas.accessCost target.1 outputSize.2.accessedAddresses +
-          lookup.2.2.2.1)).1 + outputSize.2.extCost pairs) parent >>= _)
-    rw [hext]
-    let costs := calculateMsgCallGas 0 gas.1.toNat parent.gasLeft (parent.extCost pairs)
-      (sevm.benvStat.rules.gas.accessCost target.1 outputSize.2.accessedAddresses +
-        lookup.2.2.2.1)
-    refine spawnResult_charged_call pairs costs.1 costs.2 parent ?_ _ ?_
-    · exact calculateMsgCallGas_refund_le_base 0 gas.1.toNat parent.gasLeft
-        (parent.extCost pairs)
-        (sevm.benvStat.rules.gas.accessCost target.1 outputSize.2.accessedAddresses +
-          lookup.2.2.2.1) gCallStipend (Nat.zero_le _)
-    · intro charged
-      exact genericCall_spawn_allowance sevm (charged.memExtends pairs) costs.2
-        0 sevm.currentTarget target.1 lookup.2.1
-        true true inputIndex.1 inputSize.1 outputIndex.1 outputSize.1
-        lookup.2.2.1 lookup.1 (call_output_window charged inputIndex.1 inputSize.1 outputIndex.1 outputSize.1)
+    -- The access step of either shape: a price `price` and a recorder `dA`.
+    rcases hA : sevm.benvStat.rules.access with g | _
+    on_goal 1 =>
+      let price := g.call
+      let dA := outputSize.2
+      have hdA : nonspawnPreserved outputSize.2 dA := ⟨Nat.le_refl _, rfl⟩
+    on_goal 2 =>
+      let price := sevm.benvStat.rules.gas.accessCost target.1 outputSize.2.accessedAddresses
+      let dA := addAccessedAddress outputSize.2 target.1
+      have hdA := nonspawn_addAccessedAddress outputSize.2 target.1
+    all_goals
+      let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
+      let lookup := sevm.benvStat.rules.gas.accessDelegation
+        dA target.1
+      let parent := lookup.2.2.2.2
+      have hp : nonspawnPreserved outputSize.2 parent :=
+        nonspawnPreserved_trans hdA
+          (nonspawn_delegation sevm.benvStat.rules.gas _ target.1)
+      refine spawnResult_rebase (pre := outputSize.2) (middle := parent)
+        (inner := 0) (outer := 0) hp.1 hp.2 ?_
+      have hm : parent.memory = outputSize.2.memory :=
+        (delegation_memory_output sevm.benvStat.rules.gas
+          dA target.1).1
+      have hext : outputSize.2.extCost pairs = parent.extCost pairs := by
+        simp only [Devm.extCost, hm]
+      change spawnResult parent 0 (chargeGas
+        ((calculateMsgCallGas 0 gas.1.toNat parent.gasLeft (outputSize.2.extCost pairs)
+          (price +
+            lookup.2.2.2.1)).1 + outputSize.2.extCost pairs) parent >>= _)
+      rw [hext]
+      let costs := calculateMsgCallGas 0 gas.1.toNat parent.gasLeft (parent.extCost pairs)
+        (price +
+          lookup.2.2.2.1)
+      refine spawnResult_charged_call pairs costs.1 costs.2 parent ?_ _ ?_
+      · exact calculateMsgCallGas_refund_le_base 0 gas.1.toNat parent.gasLeft
+          (parent.extCost pairs)
+          (price +
+            lookup.2.2.2.1) gCallStipend (Nat.zero_le _)
+      · intro charged
+        exact genericCall_spawn_allowance sevm (charged.memExtends pairs) costs.2
+          0 sevm.currentTarget target.1 lookup.2.1
+          true true inputIndex.1 inputSize.1 outputIndex.1 outputSize.1
+          lookup.2.2.1 lookup.1 (call_output_window charged inputIndex.1 inputSize.1 outputIndex.1 outputSize.1)
   case call =>
     apply spawnAccounting_ofExcept
     refine spawnResult_bind (nonspawn_pop pre) ?_
@@ -2441,52 +2565,62 @@ private theorem executable_spawn_accounting (sevm : Sevm) (pre : Devm) (x : Xins
     intro outputIndex
     refine spawnResult_bind (nonspawn_popToNat outputIndex.2) ?_
     intro outputSize
-    let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
-    let lookup := sevm.benvStat.rules.gas.accessDelegation
-      (addAccessedAddress outputSize.2 callee.1) callee.1
-    let parent := lookup.2.2.2.2
-    have hp : nonspawnPreserved outputSize.2 parent :=
-      nonspawnPreserved_trans (nonspawn_addAccessedAddress outputSize.2 callee.1)
-        (nonspawn_delegation sevm.benvStat.rules.gas _ callee.1)
-    refine spawnResult_rebase (pre := outputSize.2) (middle := parent)
-      (inner := 0) (outer := 0) hp.1 hp.2 ?_
-    have hm : parent.memory = outputSize.2.memory :=
-      (delegation_memory_output sevm.benvStat.rules.gas
-        (addAccessedAddress outputSize.2 callee.1) callee.1).1
-    have hext : outputSize.2.extCost pairs = parent.extCost pairs := by
-      simp only [Devm.extCost, hm]
-    let accessCost := sevm.benvStat.rules.gas.accessCost callee.1
-      outputSize.2.accessedAddresses + lookup.2.2.2.1
-    let createCost : Nat := if ¬(parent.getAcct callee.1).Empty ∨ value.1 = 0 then 0 else gNewAccount
-    change spawnResult parent 0 (chargeGas
-      ((calculateMsgCallGas value.1.toNat gas.1.toNat parent.gasLeft
-        (outputSize.2.extCost pairs)
-        (accessCost + createCost + if value.1 = 0 then 0 else sevm.benvStat.rules.gas.callValue)).1 +
-          outputSize.2.extCost pairs) parent >>= _)
-    rw [hext]
-    let costs := calculateMsgCallGas value.1.toNat gas.1.toNat parent.gasLeft
-      (parent.extCost pairs)
-      (accessCost + createCost + if value.1 = 0 then 0 else sevm.benvStat.rules.gas.callValue)
-    refine spawnResult_charged_call pairs costs.1 costs.2 parent ?_ _ ?_
-    · exact value_call_refund_le_base sevm value.1 gas.1.toNat parent.gasLeft
-        (parent.extCost pairs) accessCost createCost
-    · intro charged
-      refine spawnResult_bind
-        (nonspawn_assert_at ((!sevm.isStatic) = true ∨ value.1 = 0)
-          (.halt (.writeInStaticContext .none)) charged (charged.memExtends pairs)
-          (nonspawn_before_paid pairs charged)) ?_
-      intro _
-      let paid := charged.memExtends pairs
-      by_cases hb : (paid.getAcct sevm.currentTarget).bal < value.1
-      · dsimp only [paid, pairs] at hb
-        simp only [ite_eq_left hb]
-        cases hp : paid.push 0 <;> trivial
-      · dsimp only [paid, pairs] at hb
-        simp only [ite_eq_right hb]
-        exact genericCall_spawn_allowance sevm paid costs.2 value.1
-          sevm.currentTarget callee.1 lookup.2.1 true false
-          inputIndex.1 inputSize.1 outputIndex.1 outputSize.1 lookup.2.2.1 lookup.1
-          (call_output_window charged inputIndex.1 inputSize.1 outputIndex.1 outputSize.1)
+    -- The access step of either shape: a price `price` and a recorder `dA`.
+    rcases hA : sevm.benvStat.rules.access with g | _
+    on_goal 1 =>
+      let price := g.call
+      let dA := outputSize.2
+      have hdA : nonspawnPreserved outputSize.2 dA := ⟨Nat.le_refl _, rfl⟩
+    on_goal 2 =>
+      let price := sevm.benvStat.rules.gas.accessCost callee.1 outputSize.2.accessedAddresses
+      let dA := addAccessedAddress outputSize.2 callee.1
+      have hdA := nonspawn_addAccessedAddress outputSize.2 callee.1
+    all_goals
+      let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
+      let lookup := sevm.benvStat.rules.gas.accessDelegation
+        dA callee.1
+      let parent := lookup.2.2.2.2
+      have hp : nonspawnPreserved outputSize.2 parent :=
+        nonspawnPreserved_trans hdA
+          (nonspawn_delegation sevm.benvStat.rules.gas _ callee.1)
+      refine spawnResult_rebase (pre := outputSize.2) (middle := parent)
+        (inner := 0) (outer := 0) hp.1 hp.2 ?_
+      have hm : parent.memory = outputSize.2.memory :=
+        (delegation_memory_output sevm.benvStat.rules.gas
+          dA callee.1).1
+      have hext : outputSize.2.extCost pairs = parent.extCost pairs := by
+        simp only [Devm.extCost, hm]
+      let accessCost := price + lookup.2.2.2.1
+      let createCost : Nat := if ¬(parent.getAcct callee.1).Empty ∨ value.1 = 0 then 0 else gNewAccount
+      change spawnResult parent 0 (chargeGas
+        ((calculateMsgCallGas value.1.toNat gas.1.toNat parent.gasLeft
+          (outputSize.2.extCost pairs)
+          (accessCost + createCost + if value.1 = 0 then 0 else sevm.benvStat.rules.gas.callValue)).1 +
+            outputSize.2.extCost pairs) parent >>= _)
+      rw [hext]
+      let costs := calculateMsgCallGas value.1.toNat gas.1.toNat parent.gasLeft
+        (parent.extCost pairs)
+        (accessCost + createCost + if value.1 = 0 then 0 else sevm.benvStat.rules.gas.callValue)
+      refine spawnResult_charged_call pairs costs.1 costs.2 parent ?_ _ ?_
+      · exact value_call_refund_le_base sevm value.1 gas.1.toNat parent.gasLeft
+          (parent.extCost pairs) accessCost createCost
+      · intro charged
+        refine spawnResult_bind
+          (nonspawn_assert_at ((!sevm.isStatic) = true ∨ value.1 = 0)
+            (.halt (.writeInStaticContext .none)) charged (charged.memExtends pairs)
+            (nonspawn_before_paid pairs charged)) ?_
+        intro _
+        let paid := charged.memExtends pairs
+        by_cases hb : (paid.getAcct sevm.currentTarget).bal < value.1
+        · dsimp only [paid, pairs] at hb
+          simp only [ite_eq_left hb]
+          cases hp : paid.push 0 <;> trivial
+        · dsimp only [paid, pairs] at hb
+          simp only [ite_eq_right hb]
+          exact genericCall_spawn_allowance sevm paid costs.2 value.1
+            sevm.currentTarget callee.1 lookup.2.1 true false
+            inputIndex.1 inputSize.1 outputIndex.1 outputSize.1 lookup.2.2.1 lookup.1
+            (call_output_window charged inputIndex.1 inputSize.1 outputIndex.1 outputSize.1)
 
   case callcode =>
     apply spawnAccounting_ofExcept
@@ -2504,47 +2638,57 @@ private theorem executable_spawn_accounting (sevm : Sevm) (pre : Devm) (x : Xins
     intro outputIndex
     refine spawnResult_bind (nonspawn_popToNat outputIndex.2) ?_
     intro outputSize
-    let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
-    let lookup := sevm.benvStat.rules.gas.accessDelegation
-      (addAccessedAddress outputSize.2 codeAddress.1) codeAddress.1
-    let parent := lookup.2.2.2.2
-    have hp : nonspawnPreserved outputSize.2 parent :=
-      nonspawnPreserved_trans (nonspawn_addAccessedAddress outputSize.2 codeAddress.1)
-        (nonspawn_delegation sevm.benvStat.rules.gas _ codeAddress.1)
-    refine spawnResult_rebase (pre := outputSize.2) (middle := parent)
-      (inner := 0) (outer := 0) hp.1 hp.2 ?_
-    have hm : parent.memory = outputSize.2.memory :=
-      (delegation_memory_output sevm.benvStat.rules.gas
-        (addAccessedAddress outputSize.2 codeAddress.1) codeAddress.1).1
-    have hext : outputSize.2.extCost pairs = parent.extCost pairs := by
-      simp only [Devm.extCost, hm]
-    let accessCost := sevm.benvStat.rules.gas.accessCost codeAddress.1
-      outputSize.2.accessedAddresses + lookup.2.2.2.1
-    let createCost : Nat := 0
-    change spawnResult parent 0 (chargeGas
-      ((calculateMsgCallGas value.1.toNat gas.1.toNat parent.gasLeft
-        (outputSize.2.extCost pairs)
-        (accessCost + createCost + if value.1 = 0 then 0 else sevm.benvStat.rules.gas.callValue)).1 +
-          outputSize.2.extCost pairs) parent >>= _)
-    rw [hext]
-    let costs := calculateMsgCallGas value.1.toNat gas.1.toNat parent.gasLeft
-      (parent.extCost pairs)
-      (accessCost + createCost + if value.1 = 0 then 0 else sevm.benvStat.rules.gas.callValue)
-    refine spawnResult_charged_call pairs costs.1 costs.2 parent ?_ _ ?_
-    · exact value_call_refund_le_base sevm value.1 gas.1.toNat parent.gasLeft
-        (parent.extCost pairs) accessCost createCost
-    · intro charged
-      let paid := charged.memExtends pairs
-      by_cases hb : (paid.getAcct sevm.currentTarget).bal < value.1
-      · dsimp only [paid, pairs] at hb
-        simp only [ite_eq_left hb]
-        cases hp : paid.push 0 <;> trivial
-      · dsimp only [paid, pairs] at hb
-        simp only [ite_eq_right hb]
-        exact genericCall_spawn_allowance sevm paid costs.2 value.1
-          sevm.currentTarget sevm.currentTarget lookup.2.1 true false
-          inputIndex.1 inputSize.1 outputIndex.1 outputSize.1 lookup.2.2.1 lookup.1
-          (call_output_window charged inputIndex.1 inputSize.1 outputIndex.1 outputSize.1)
+    -- The access step of either shape: a price `price` and a recorder `dA`.
+    rcases hA : sevm.benvStat.rules.access with g | _
+    on_goal 1 =>
+      let price := g.call
+      let dA := outputSize.2
+      have hdA : nonspawnPreserved outputSize.2 dA := ⟨Nat.le_refl _, rfl⟩
+    on_goal 2 =>
+      let price := sevm.benvStat.rules.gas.accessCost codeAddress.1 outputSize.2.accessedAddresses
+      let dA := addAccessedAddress outputSize.2 codeAddress.1
+      have hdA := nonspawn_addAccessedAddress outputSize.2 codeAddress.1
+    all_goals
+      let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
+      let lookup := sevm.benvStat.rules.gas.accessDelegation
+        dA codeAddress.1
+      let parent := lookup.2.2.2.2
+      have hp : nonspawnPreserved outputSize.2 parent :=
+        nonspawnPreserved_trans hdA
+          (nonspawn_delegation sevm.benvStat.rules.gas _ codeAddress.1)
+      refine spawnResult_rebase (pre := outputSize.2) (middle := parent)
+        (inner := 0) (outer := 0) hp.1 hp.2 ?_
+      have hm : parent.memory = outputSize.2.memory :=
+        (delegation_memory_output sevm.benvStat.rules.gas
+          dA codeAddress.1).1
+      have hext : outputSize.2.extCost pairs = parent.extCost pairs := by
+        simp only [Devm.extCost, hm]
+      let accessCost := price + lookup.2.2.2.1
+      let createCost : Nat := 0
+      change spawnResult parent 0 (chargeGas
+        ((calculateMsgCallGas value.1.toNat gas.1.toNat parent.gasLeft
+          (outputSize.2.extCost pairs)
+          (accessCost + createCost + if value.1 = 0 then 0 else sevm.benvStat.rules.gas.callValue)).1 +
+            outputSize.2.extCost pairs) parent >>= _)
+      rw [hext]
+      let costs := calculateMsgCallGas value.1.toNat gas.1.toNat parent.gasLeft
+        (parent.extCost pairs)
+        (accessCost + createCost + if value.1 = 0 then 0 else sevm.benvStat.rules.gas.callValue)
+      refine spawnResult_charged_call pairs costs.1 costs.2 parent ?_ _ ?_
+      · exact value_call_refund_le_base sevm value.1 gas.1.toNat parent.gasLeft
+          (parent.extCost pairs) accessCost createCost
+      · intro charged
+        let paid := charged.memExtends pairs
+        by_cases hb : (paid.getAcct sevm.currentTarget).bal < value.1
+        · dsimp only [paid, pairs] at hb
+          simp only [ite_eq_left hb]
+          cases hp : paid.push 0 <;> trivial
+        · dsimp only [paid, pairs] at hb
+          simp only [ite_eq_right hb]
+          exact genericCall_spawn_allowance sevm paid costs.2 value.1
+            sevm.currentTarget sevm.currentTarget lookup.2.1 true false
+            inputIndex.1 inputSize.1 outputIndex.1 outputSize.1 lookup.2.2.1 lookup.1
+            (call_output_window charged inputIndex.1 inputSize.1 outputIndex.1 outputSize.1)
 
 private theorem step_spawn_resume_accounting
     (evm : Evm) (hstate : evm.sta.benvStat.rules.stateGas = none)
@@ -4159,62 +4303,72 @@ private theorem xinst_call_reply_bound (sevm : Sevm) (pre : Devm)
   intro outputIndex outputIndexPotential
   refine callStepReplyBound_bind (nonspawn_popToNat outputIndex.2) ?_ outputIndexPotential
   intro outputSize outputSizePotential
-  let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
-  let lookup := sevm.benvStat.rules.gas.accessDelegation
-    (addAccessedAddress outputSize.2 callee.1) callee.1
-  let parent := lookup.2.2.2.2
-  have preserved : nonspawnPreserved outputSize.2 parent :=
-    nonspawnPreserved_trans (nonspawn_addAccessedAddress outputSize.2 callee.1)
-      (nonspawn_delegation sevm.benvStat.rules.gas _ callee.1)
-  have parentPotential : parent.gasMeasure + calculateMemoryGasCost parent.memory.size < 2 ^ 256 :=
-    Nat.lt_of_le_of_lt preserved.1 outputSizePotential
-  have memory : parent.memory = outputSize.2.memory :=
-    (delegation_memory_output sevm.benvStat.rules.gas
-      (addAccessedAddress outputSize.2 callee.1) callee.1).1
-  have extension : outputSize.2.extCost pairs = parent.extCost pairs := by
-    simp only [Devm.extCost, memory]
-  let accessCost := sevm.benvStat.rules.gas.accessCost callee.1
-    outputSize.2.accessedAddresses + lookup.2.2.2.1
-  let createCost : Nat := if ¬(parent.getAcct callee.1).Empty ∨ value.1 = 0 then 0 else gNewAccount
-  let extraGas := accessCost + createCost + if value.1 = 0 then 0 else sevm.benvStat.rules.gas.callValue
-  change callStepReplyBound (XStep.ofExcept (chargeGas
-    ((calculateMsgCallGas value.1.toNat gas.1.toNat parent.gasLeft
-      (outputSize.2.extCost pairs) extraGas).1 + outputSize.2.extCost pairs) parent >>= _))
-  rw [extension]
-  let costs := calculateMsgCallGas value.1.toNat gas.1.toNat parent.gasLeft
-    (parent.extCost pairs) extraGas
-  cases charge : chargeGas (costs.1 + parent.extCost pairs) parent with
-  | error failure =>
-      simp only [bind, Except.bind, XStep.ofExcept]
-      intro xl post hfilled hrun
-      cases hrun.2
-  | ok charged =>
-      simp only [bind, Except.bind]
-      by_cases static : (!sevm.isStatic) = true ∨ value.1 = 0
-      · simp only [Except.assert, ite_eq_left static]
-        let paid := charged.memExtends pairs
-        by_cases balance : (paid.getAcct sevm.currentTarget).bal < value.1
-        · dsimp only [paid, pairs] at balance
-          simp only [ite_eq_left balance]
-          intro xl post hfilled hrun
-          change XStep.Run (XStep.ofExcept (paid.push 0 >>= _)) xl (.ok post) at hrun
-          cases pushed : paid.push 0 with
-          | error failure =>
-              simp only [pushed, bind, Except.bind, XStep.ofExcept, XStep.Run] at hrun
-              cases hrun.2
-          | ok next =>
-              simp only [pushed, bind, Except.bind, Pure.pure, Except.pure,
-                XStep.ofExcept, XStep.Run] at hrun
-              cases hrun.2
-              change (0 : Nat) < 2 ^ 160
-              decide
-        · dsimp only [paid, pairs] at balance
-          simp only [ite_eq_right balance, Pure.pure, Except.pure, XStep.ofExcept]
-          exact charged_genericCall_reply_bound costs.1 gas.1 value.1 extraGas
-            inputIndex.1 inputSize.1 outputIndex.1 outputSize.1 charge (Or.inl parentPotential) hstate
-      · simp only [Except.assert, ite_eq_right static, XStep.ofExcept]
+  -- The access step of either shape: a price `price` and a recorder `dA`.
+  rcases hA : sevm.benvStat.rules.access with g | _
+  on_goal 1 =>
+    let price := g.call
+    let dA := outputSize.2
+    have hdA : nonspawnPreserved outputSize.2 dA := ⟨Nat.le_refl _, rfl⟩
+  on_goal 2 =>
+    let price := sevm.benvStat.rules.gas.accessCost callee.1 outputSize.2.accessedAddresses
+    let dA := addAccessedAddress outputSize.2 callee.1
+    have hdA := nonspawn_addAccessedAddress outputSize.2 callee.1
+  all_goals
+    let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
+    let lookup := sevm.benvStat.rules.gas.accessDelegation
+      dA callee.1
+    let parent := lookup.2.2.2.2
+    have preserved : nonspawnPreserved outputSize.2 parent :=
+      nonspawnPreserved_trans hdA
+        (nonspawn_delegation sevm.benvStat.rules.gas _ callee.1)
+    have parentPotential : parent.gasMeasure + calculateMemoryGasCost parent.memory.size < 2 ^ 256 :=
+      Nat.lt_of_le_of_lt preserved.1 outputSizePotential
+    have memory : parent.memory = outputSize.2.memory :=
+      (delegation_memory_output sevm.benvStat.rules.gas
+        dA callee.1).1
+    have extension : outputSize.2.extCost pairs = parent.extCost pairs := by
+      simp only [Devm.extCost, memory]
+    let accessCost := price + lookup.2.2.2.1
+    let createCost : Nat := if ¬(parent.getAcct callee.1).Empty ∨ value.1 = 0 then 0 else gNewAccount
+    let extraGas := accessCost + createCost + if value.1 = 0 then 0 else sevm.benvStat.rules.gas.callValue
+    change callStepReplyBound (XStep.ofExcept (chargeGas
+      ((calculateMsgCallGas value.1.toNat gas.1.toNat parent.gasLeft
+        (outputSize.2.extCost pairs) extraGas).1 + outputSize.2.extCost pairs) parent >>= _))
+    rw [extension]
+    let costs := calculateMsgCallGas value.1.toNat gas.1.toNat parent.gasLeft
+      (parent.extCost pairs) extraGas
+    cases charge : chargeGas (costs.1 + parent.extCost pairs) parent with
+    | error failure =>
+        simp only [bind, Except.bind, XStep.ofExcept]
         intro xl post hfilled hrun
         cases hrun.2
+    | ok charged =>
+        simp only [bind, Except.bind]
+        by_cases static : (!sevm.isStatic) = true ∨ value.1 = 0
+        · simp only [Except.assert, ite_eq_left static]
+          let paid := charged.memExtends pairs
+          by_cases balance : (paid.getAcct sevm.currentTarget).bal < value.1
+          · dsimp only [paid, pairs] at balance
+            simp only [ite_eq_left balance]
+            intro xl post hfilled hrun
+            change XStep.Run (XStep.ofExcept (paid.push 0 >>= _)) xl (.ok post) at hrun
+            cases pushed : paid.push 0 with
+            | error failure =>
+                simp only [pushed, bind, Except.bind, XStep.ofExcept, XStep.Run] at hrun
+                cases hrun.2
+            | ok next =>
+                simp only [pushed, bind, Except.bind, Pure.pure, Except.pure,
+                  XStep.ofExcept, XStep.Run] at hrun
+                cases hrun.2
+                change (0 : Nat) < 2 ^ 160
+                decide
+          · dsimp only [paid, pairs] at balance
+            simp only [ite_eq_right balance, Pure.pure, Except.pure, XStep.ofExcept]
+            exact charged_genericCall_reply_bound costs.1 gas.1 value.1 extraGas
+              inputIndex.1 inputSize.1 outputIndex.1 outputSize.1 charge (Or.inl parentPotential) hstate
+        · simp only [Except.assert, ite_eq_right static, XStep.ofExcept]
+          intro xl post hfilled hrun
+          cases hrun.2
 
 /-- Fixed actual CALL operands provide the identity precompile's input bound
 without any bound on the enclosing caller's initial gas or memory potential. -/
@@ -4232,57 +4386,65 @@ private theorem xinst_call_reply_bound_of_input_size
   simp only [Xinst.step, hstate, Devm.popToAdr_def, Devm.popToNat_def,
     Devm.pop_def, Devm.stack, Devm.setMach, bind, Except.bind, Functor.mapRev, Functor.map, Except.map,
     Prod.mapFst, Prod.map, id_eq]
-  let pairs := [(inputIndex.toNat, inputSize.toNat), (outputIndex.toNat, outputSize.toNat)]
-  let lookup := sevm.benvStat.rules.gas.accessDelegation
-    (addAccessedAddress base callee.toAdr) callee.toAdr
-  let parent := lookup.2.2.2.2
-  have memory : parent.memory = base.memory :=
-    (delegation_memory_output sevm.benvStat.rules.gas
-      (addAccessedAddress base callee.toAdr) callee.toAdr).1
-  have extension : base.extCost pairs = parent.extCost pairs := by
-    simp only [Devm.extCost, memory]
-  let accessCost := sevm.benvStat.rules.gas.accessCost callee.toAdr
-    base.accessedAddresses + lookup.2.2.2.1
-  let createCost : Nat := if ¬(parent.getAcct callee.toAdr).Empty ∨ value = 0 then 0 else gNewAccount
-  let extraGas := accessCost + createCost + if value = 0 then 0 else sevm.benvStat.rules.gas.callValue
-  change callStepReplyBound (XStep.ofExcept (chargeGas
-    ((calculateMsgCallGas value.toNat gas.toNat parent.gasLeft
-      (base.extCost pairs) extraGas).1 + base.extCost pairs) parent >>= _))
-  rw [extension]
-  let costs := calculateMsgCallGas value.toNat gas.toNat parent.gasLeft
-    (parent.extCost pairs) extraGas
-  cases charge : chargeGas (costs.1 + parent.extCost pairs) parent with
-  | error failure =>
-      simp only [bind, Except.bind, XStep.ofExcept]
-      intro xl post hfilled hrun
-      cases hrun.2
-  | ok charged =>
-      simp only [bind, Except.bind]
-      by_cases static : (!sevm.isStatic) = true ∨ value = 0
-      · simp only [Except.assert, ite_eq_left static]
-        let paid := charged.memExtends pairs
-        by_cases balance : (paid.getAcct sevm.currentTarget).bal < value
-        · dsimp only [paid, pairs] at balance
-          simp only [ite_eq_left balance]
-          intro xl post hfilled hrun
-          change XStep.Run (XStep.ofExcept (paid.push 0 >>= _)) xl (.ok post) at hrun
-          cases pushed : paid.push 0 with
-          | error failure =>
-              simp only [pushed, bind, Except.bind, XStep.ofExcept, XStep.Run] at hrun
-              cases hrun.2
-          | ok next =>
-              simp only [pushed, bind, Except.bind, Pure.pure, Except.pure,
-                XStep.ofExcept, XStep.Run] at hrun
-              cases hrun.2
-              change (0 : Nat) < 2 ^ 160
-              decide
-        · dsimp only [paid, pairs] at balance
-          simp only [ite_eq_right balance, Pure.pure, Except.pure, XStep.ofExcept]
-          exact charged_genericCall_reply_bound costs.1 gas value extraGas
-            inputIndex.toNat inputSize.toNat outputIndex.toNat outputSize.toNat charge (Or.inr hinput) hstate
-      · simp only [Except.assert, ite_eq_right static, XStep.ofExcept]
+  -- The access step of either shape: a price `price` and a recorder `dA`.
+  rcases hA : sevm.benvStat.rules.access with g | _
+  on_goal 1 =>
+    let price := g.call
+    let dA := base
+  on_goal 2 =>
+    let price := sevm.benvStat.rules.gas.accessCost callee.toAdr base.accessedAddresses
+    let dA := addAccessedAddress base callee.toAdr
+  all_goals
+    let pairs := [(inputIndex.toNat, inputSize.toNat), (outputIndex.toNat, outputSize.toNat)]
+    let lookup := sevm.benvStat.rules.gas.accessDelegation
+      dA callee.toAdr
+    let parent := lookup.2.2.2.2
+    have memory : parent.memory = base.memory :=
+      (delegation_memory_output sevm.benvStat.rules.gas
+        dA callee.toAdr).1
+    have extension : base.extCost pairs = parent.extCost pairs := by
+      simp only [Devm.extCost, memory]
+    let accessCost := price + lookup.2.2.2.1
+    let createCost : Nat := if ¬(parent.getAcct callee.toAdr).Empty ∨ value = 0 then 0 else gNewAccount
+    let extraGas := accessCost + createCost + if value = 0 then 0 else sevm.benvStat.rules.gas.callValue
+    change callStepReplyBound (XStep.ofExcept (chargeGas
+      ((calculateMsgCallGas value.toNat gas.toNat parent.gasLeft
+        (base.extCost pairs) extraGas).1 + base.extCost pairs) parent >>= _))
+    rw [extension]
+    let costs := calculateMsgCallGas value.toNat gas.toNat parent.gasLeft
+      (parent.extCost pairs) extraGas
+    cases charge : chargeGas (costs.1 + parent.extCost pairs) parent with
+    | error failure =>
+        simp only [bind, Except.bind, XStep.ofExcept]
         intro xl post hfilled hrun
         cases hrun.2
+    | ok charged =>
+        simp only [bind, Except.bind]
+        by_cases static : (!sevm.isStatic) = true ∨ value = 0
+        · simp only [Except.assert, ite_eq_left static]
+          let paid := charged.memExtends pairs
+          by_cases balance : (paid.getAcct sevm.currentTarget).bal < value
+          · dsimp only [paid, pairs] at balance
+            simp only [ite_eq_left balance]
+            intro xl post hfilled hrun
+            change XStep.Run (XStep.ofExcept (paid.push 0 >>= _)) xl (.ok post) at hrun
+            cases pushed : paid.push 0 with
+            | error failure =>
+                simp only [pushed, bind, Except.bind, XStep.ofExcept, XStep.Run] at hrun
+                cases hrun.2
+            | ok next =>
+                simp only [pushed, bind, Except.bind, Pure.pure, Except.pure,
+                  XStep.ofExcept, XStep.Run] at hrun
+                cases hrun.2
+                change (0 : Nat) < 2 ^ 160
+                decide
+          · dsimp only [paid, pairs] at balance
+            simp only [ite_eq_right balance, Pure.pure, Except.pure, XStep.ofExcept]
+            exact charged_genericCall_reply_bound costs.1 gas value extraGas
+              inputIndex.toNat inputSize.toNat outputIndex.toNat outputSize.toNat charge (Or.inr hinput) hstate
+        · simp only [Except.assert, ite_eq_right static, XStep.ofExcept]
+          intro xl post hfilled hrun
+          cases hrun.2
 
 /-- A real successful legacy CALL instruction installs full returndata below
 `2^160`. The filled slot supplies actual recursive child execution; no callee
