@@ -1,7 +1,0 @@
-{
-  "description": "A value transfer at London with two ommers (deltas 1 and 4): the coinbase is credited the block reward plus two inclusions, each ommer's coinbase its age-weighted share. Jaune refuses the fork; the golden records the pinned target.",
-  "fork": "London",
-  "chainid": 1,
-  "reward": 2000000000000000000,
-  "mode": "blockchain"
-}

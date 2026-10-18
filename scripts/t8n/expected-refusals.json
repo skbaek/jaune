@@ -8,7 +8,6 @@
   "hist-transfer-london": "UnsupportedForkError",
   "hist-transfer-arrowglacier": "UnsupportedForkError",
   "hist-transfer-grayglacier": "UnsupportedForkError",
-  "hist-ommers-london": "UnsupportedForkError",
   "hist-transfer-merge": "UnsupportedForkError",
   "hist-transfer-shanghai": "UnsupportedForkError",
   "hist-transfer-cancun": "UnsupportedForkError"

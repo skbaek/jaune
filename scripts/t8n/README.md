@@ -1,8 +1,8 @@
 # The `check-t8n.sh` corpus
 
-Sixty-six cases, each a complete `t8n` invocation, with goldens generated from the
+Sixty-five cases, each a complete `t8n` invocation, with goldens generated from the
 pinned conformance target. `scripts/check-t8n.sh` runs them; this file says
-what they are and how to change them. Fifty-four conform and twelve are
+what they are and how to change them. Fifty-four conform and eleven are
 registered refusals (the historical forks below).
 
 ## Layout
@@ -51,7 +51,7 @@ These nine cases run at Prague. The thirty `am-*` cases below exercise
 Amsterdam's metering in both tool modes. Ten further cases cover storage-only
 creation and empty-account deletion on Prague, Osaka, BPO1, BPO2 and Amsterdam.
 Five further cases cover zero-value transaction, CALL and STATICCALL entry on
-those same forks (54 conforming cases in total; 66 with the historical twelve).
+those same forks (54 conforming cases in total; 65 with the historical eleven).
 
 ### Storage semantics at the v21 pin
 
@@ -139,8 +139,7 @@ pins, so goldens and emission always come from one revision.
 
 ## Historical cases (goal U10)
 
-Twelve further cases cover the pre-Prague forks, one transfer per fork plus
-an ommers case at London:
+Eleven further cases cover the pre-Prague forks, one transfer per fork:
 
 | case | fork label | reward |
 |---|---|---|
@@ -152,7 +151,6 @@ an ommers case at London:
 | `hist-transfer-london` | `London` | 2 ETH, honored |
 | `hist-transfer-arrowglacier` | `ArrowGlacier` | 2 ETH, honored |
 | `hist-transfer-grayglacier` | `GrayGlacier` | 2 ETH, honored |
-| `hist-ommers-london` | `London`, two ommers (deltas 1 and 4) | 2 ETH, honored |
 | `hist-transfer-merge` | `Merge` (Paris) | proof of stake, `-1` |
 | `hist-transfer-shanghai` | `Shanghai` | proof of stake, `-1` |
 | `hist-transfer-cancun` | `Cancun` | proof of stake, `-1` |
@@ -160,7 +158,7 @@ an ommers case at London:
 Labels are the target's `--state.fork` names (`ConstantinopleFix` for its
 `constantinople` module, `Merge` for Paris); Jaune parses the same labels and
 refuses every one of them with `UnsupportedForkError` before reading any
-input, because `Fork.rules?` is none for all twelve. That refusal is the
+input, because `Fork.rules?` is none for all eleven. That refusal is the
 expected red: `scripts/t8n/expected-refusals.json` registers each case with
 its reason, and the gate requires the refusal rather than marking it
 passing. The goldens, generated from the pinned target by the registered
@@ -172,19 +170,23 @@ the legacy corpus and the constants gate's all-dormant row.
 Pre-merge environments carry no `currentBaseFee` (London and later do), no
 withdrawals (Shanghai and later do), and no blob fields (Cancun does); they
 carry `parentTimestamp`, `parentDifficulty` and `parentGasUsed`, which the
-target's difficulty step requires. The ommers case carries `env.ommers` as
-`delta` (hex quantity) / `address` entries -- the shape the target's
-`_parse_ommers_from_env_json` and Jaune's `readOmmer` both read -- but its
-golden cannot be generated yet: the pinned target validates `env` through a
-pydantic `Environment` whose `ommers` is `List[Hash]` (a `delta`/`address`
-entry dies in `model_validate` with `TypeError: 'str' object cannot be
-interpreted as an integer`), while hash entries survive validation only to
-die in the raw fallback parser (`TypeError: string indices must be
-integers`). The two stages demand incompatible shapes, so no `env.ommers`
-reaches `pay_block_rewards` through this CLI; ommer rewards stay covered by
-the legacy corpus's `uncleHeaders` until the target side is revisited (U11).
-The case inputs and the refusal entry stay committed as the requirement's
-statement.
+target's difficulty step requires.
+
+### Open for U11: ommers golden
+
+The brief also wants a case with ommers, which U11 should add once a
+producible input shape is found. The natural shape is `env.ommers` as
+`delta` (hex quantity) / `address` entries -- what the target's
+`_parse_ommers_from_env_json` and Jaune's `readOmmer` both read -- but no
+golden can be generated from the pinned target yet: it validates `env`
+through a pydantic `Environment` whose `ommers` is `List[Hash]` (a
+`delta`/`address` entry dies in `model_validate` with `TypeError: 'str'
+object cannot be interpreted as an integer`), while hash entries survive
+validation only to die in the raw fallback parser (`TypeError: string
+indices must be integers`). The two stages demand incompatible shapes, so
+no `env.ommers` reaches `pay_block_rewards` through this CLI; ommer rewards
+stay covered by the legacy corpus's `uncleHeaders` until the target side is
+revisited.
 
 ## `deviations.json`
 
