@@ -49,9 +49,12 @@
 #
 # A fork this build declares but does not implement is expected to be refused
 # by `--rules`; that is checked too, so the gate's fork list and
-# `Fork.supported` cannot drift apart. Every fork the extraction names resolves
-# today, so that branch is unreachable through a declared label; it stays for
-# the next declared-but-unimplemented fork, which is precisely when it bites.
+# `Fork.supported` cannot drift apart. Refusal is not the end of the story
+# for such a fork (goal U10): its committed literal is still compared against
+# the pinned `execution-specs` module through `--rules-literal`, which prints
+# `Fork.ruleSet` without resolving it. Dormant cells -- fields the fork never
+# reads, classified in the extraction's per-fork `dormant` map -- are skipped,
+# never compared; everything else is compared exactly as for a runnable fork.
 #
 # Usage: scripts/check-fork-constants.sh [--table]
 #
@@ -110,6 +113,11 @@ for FORK in $FORKS; do
   else
     printf 'refused\n' > "$TMP/$FORK.refused"
   fi
+  if "$BIN" --rules-literal "$FORK" > "$TMP/$FORK.literal.json" 2> "$TMP/$FORK.literal.err"; then
+    : > "$TMP/$FORK.literal.ok"
+  else
+    printf 'failed\n' > "$TMP/$FORK.literal.ok"
+  fi
 done
 
 python3 - "$EXTRACTION" "$SOURCES" "$TMP" "$TABLE" <<'PYEOF'
@@ -133,7 +141,10 @@ if taken != pinned:
 coverage = extraction["coverage"]
 checked = {k for k, v in coverage.items() if v["status"] == "checked"}
 compared = 0
+literal_compared = 0
+dormant_skipped = 0
 runnable = []
+literal_forks = []
 
 
 def compare_fields(fork, entry, printed, fields):
@@ -180,8 +191,28 @@ def compare_fields(fork, entry, printed, fields):
         n += 1
     return n
 
+def check_key_set(fork, printed, printer):
+    if set(printed) != set(coverage):
+        missing = sorted(set(printed) - set(coverage))
+        extra = sorted(set(coverage) - set(printed))
+        problems.append(
+            f"{fork}: the {printer} fields and the coverage table disagree — "
+            f"unclassified {missing}, classified-but-absent {extra}. A new "
+            "ForkRules field must be classified in scripts/gen-fork-constants.py "
+            "before this gate can pass."
+        )
+
+
 for fork, entry in sorted(extraction["forks"].items()):
     refused = (tmp / f"{fork}.refused").read_text().strip() == "refused"
+    dormant = entry.get("dormant", {})
+    unknown_dormant = sorted(set(dormant) - set(checked))
+    if unknown_dormant:
+        problems.append(
+            f"{fork}: the extraction classifies dormant cells outside the "
+            f"coverage table: {unknown_dormant}"
+        )
+    live = sorted(checked - set(dormant))
     if refused:
         # A declared-but-unimplemented fork. `--rules` must refuse it, and
         # must refuse it for the stated reason rather than by falling over.
@@ -192,8 +223,25 @@ for fork, entry in sorted(extraction["forks"].items()):
                 f"{err.strip()[:200]}"
             )
 
-        # Nothing of a refused fork is compared: there is no record to
-        # compare. The refusal itself is the whole check.
+        # Goal U10: the refusal is the execution check, and the literal is
+        # the constants check. `--rules-literal` prints the committed
+        # record without resolving it; every live cell is compared, every
+        # dormant cell is classified, not compared.
+        if (tmp / f"{fork}.literal.ok").read_text().strip() != "":
+            lit_err = (tmp / f"{fork}.literal.err").read_text()
+            problems.append(
+                f"{fork}: --rules-literal failed: {lit_err.strip()[:200]}"
+            )
+            continue
+        try:
+            printed = json.loads((tmp / f"{fork}.literal.json").read_text())
+        except json.JSONDecodeError as error:
+            problems.append(f"{fork}: --rules-literal did not print JSON: {error}")
+            continue
+        check_key_set(fork, printed, "--rules-literal printer's")
+        literal_forks.append(fork)
+        literal_compared += compare_fields(fork, entry, printed, live)
+        dormant_skipped += len(dormant)
         continue
     runnable.append(fork)
     try:
@@ -203,15 +251,7 @@ for fork, entry in sorted(extraction["forks"].items()):
         continue
 
     # Check 3, the one that keeps this gate from quietly shrinking.
-    if set(printed) != set(coverage):
-        missing = sorted(set(printed) - set(coverage))
-        extra = sorted(set(coverage) - set(printed))
-        problems.append(
-            f"{fork}: the printer's fields and the coverage table disagree — "
-            f"unclassified {missing}, classified-but-absent {extra}. A new "
-            "ForkRules field must be classified in scripts/gen-fork-constants.py "
-            "before this gate can pass."
-        )
+    check_key_set(fork, printed, "printer's")
 
     compared += compare_fields(fork, entry, printed, sorted(checked))
 
@@ -275,7 +315,10 @@ declared_refused = len(extraction["forks"]) - len(runnable)
 print(
     f"OK — fork-constants: {compared} comparison(s) across {len(runnable)} "
     f"runnable fork(s) ({', '.join(runnable)}) match execution-specs "
-    f"{taken[:12]}; {declared_refused} declared fork(s) refused; mainnet "
+    f"{taken[:12]}; {literal_compared} literal comparison(s) across "
+    f"{len(literal_forks)} refused fork(s) ({', '.join(literal_forks)}), "
+    f"{dormant_skipped} dormant cell(s) classified, not compared; "
+    f"{declared_refused} declared fork(s) refused; mainnet "
     f"schedule: {schedule_rows} fork(s) match FORK_CRITERIA"
 )
 PYEOF

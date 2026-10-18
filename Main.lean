@@ -427,6 +427,22 @@ def runRulesPrinter (label : String) : IO Unit := do
   -- so the definition above lands at the root while `ForkRules` is `Jaune`'s.
   .println (ForkRules.toGateJson rules).pretty
 
+/-- `jaune --rules-literal <fork>`: the committed rule literal, even refused.
+
+Evidence surface for `scripts/check-fork-constants.sh` (goal U10): it prints
+`Fork.ruleSet` -- the total function every declared fork's literal lives
+under -- through the same `toGateJson` as `--rules`, so the gate can compare
+the twelve pre-Prague literals against the pinned `execution-specs` modules
+while `--rules` keeps refusing them. Execution never reads this: every runner
+resolves through `Fork.rules?` / `Fork.rules`, which still refuse those
+twelve with `UnsupportedForkError`. -/
+def runRulesLiteralPrinter (label : String) : IO Unit := do
+  let some f := Fork.ofString? label
+    | .throw
+        s!"error : unknown --rules-literal label {repr label}; declared labels \
+           are {Fork.all.map Fork.toString}"
+  .println (ForkRules.toGateJson f.ruleSet).pretty
+
 /-- `jaune --mainnet-schedule`: `mainnetChainConfig`'s activation criterion for
 every declared fork, refused forks included, as the constants gate compares it
 against each EELS fork module's `FORK_CRITERIA` (`criterionGateJson`; `null`
@@ -1346,6 +1362,9 @@ def main : List String → IO Unit
   | "--rules" :: label :: [] => runRulesPrinter label
   | "--rules" :: _ =>
     .throw "error : --rules takes exactly one fork label"
+  | "--rules-literal" :: label :: [] => runRulesLiteralPrinter label
+  | "--rules-literal" :: _ =>
+    .throw "error : --rules-literal takes exactly one fork label"
   | "--mainnet-schedule" :: [] => .println mainnetScheduleJson.pretty
   | "--mainnet-schedule" :: _ =>
     .throw "error : --mainnet-schedule takes no arguments"
