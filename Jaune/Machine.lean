@@ -104,11 +104,19 @@ structure Header : Type where
   extraData : Bytes
   prevRandao : B256
   nonce : UInt64
-  baseFeePerGas : Nat
-  withdrawalsRoot : B256
-  blobGasUsed : Nat
-  excessBlobGas : Nat
-  parentBeaconBlockRoot : B256
+  /-- EIP-1559 (London). Like every field below it, optional in the sense
+  `requestsHash` is: the field exists on the wire only at forks that define it,
+  `ForkRules.header` says which those are, and `none` is "this fork has no
+  such field", never "the field is zero". -/
+  baseFeePerGas : Option Nat
+  /-- EIP-4895 (Shanghai). -/
+  withdrawalsRoot : Option B256
+  /-- EIP-4844 (Cancun); present exactly when `excessBlobGas` is. -/
+  blobGasUsed : Option Nat
+  /-- EIP-4844 (Cancun). -/
+  excessBlobGas : Option Nat
+  /-- EIP-4788 (Cancun). -/
+  parentBeaconBlockRoot : Option B256
   requestsHash : Option B256
   /-- EIP-7928: the commitment to the block-level access list.
 
@@ -123,20 +131,23 @@ structure Header : Type where
 
 /-- The canonical RLP encoding of a header.
 
-The three optional fields are emitted in nested order -- `requestsHash`, then
-`blockAccessListHash`, then `slotNumber` -- which is the order upstream's
-header dataclass declares them and the order the fixtures carry them. Nesting
-rather than concatenating three independent options is deliberate: it makes
-the encodable shapes exactly **20, 21 and 23** fields, so the 22-field
-encoding that would result from an incoherent record cannot be produced at
-all. `BLT.toExHeader` accepts exactly those three shapes and rejects 22, and
-`validateHeader` is what rejects a record whose field presence disagrees with
-the rules it is being validated under.
+The fork-dependent fields are emitted in nested order -- `baseFeePerGas`, then
+`withdrawalsRoot`, then the Cancun triple `blobGasUsed`, `excessBlobGas`,
+`parentBeaconBlockRoot`, then `requestsHash`, `blockAccessListHash` and
+`slotNumber` -- which is the order upstream's header dataclasses declare them
+and the order the fixtures carry them. Each field is emitted only when every
+field before it is, and the Cancun triple only as a whole. Nesting rather than
+concatenating independent options is deliberate: it makes the encodable shapes
+exactly **15, 16, 17, 20, 21, 22 and 23** fields (Byzantium through Berlin,
+London through Paris, Shanghai, Cancun, Prague through BPO2, a requests hash
+with a block-access-list hash, Amsterdam), so that no 18- or 19-field encoding
+can be produced at all. `BLT.toExHeader` accepts the six fork shapes and
+rejects 22, and `validateHeader` is what rejects a record whose field presence
+disagrees with the rules it is being validated under.
 
-A header with the two new fields absent encodes exactly as it did before they
-existed -- the inner `match` on an absent `blockAccessListHash` reduces to the
-empty tail the old code wrote literally -- which is why `Header.hash` is
-unchanged on every 21-field header by `rfl`. -/
+A header with every field through `parentBeaconBlockRoot` present encodes
+exactly as it did when those fields were mandatory: the nested matches on
+present fields reduce to the list the old code wrote literally. -/
 def Header.toBLT (header : Header) : BLT :=
   BLT.list <| [
     BLT.bytes header.parentHash.toBytes,
@@ -153,27 +164,38 @@ def Header.toBLT (header : Header) : BLT :=
     BLT.bytes header.timestamp.toBytes,
     BLT.bytes header.extraData,
     BLT.bytes header.prevRandao.toBytes,
-    BLT.bytes header.nonce.toBytes,
-    BLT.bytes header.baseFeePerGas.toBytes,
-    BLT.bytes header.withdrawalsRoot.toBytes,
-    BLT.bytes header.blobGasUsed.toBytes,
-    BLT.bytes header.excessBlobGas.toBytes,
-    BLT.bytes header.parentBeaconBlockRoot.toBytes
+    BLT.bytes header.nonce.toBytes
   ] ++
-    match header.requestsHash with
+    match header.baseFeePerGas with
     | none => []
-    | some rh =>
-      BLT.bytes rh.toBytes ::
-        match header.blockAccessListHash with
-        | none => []
-        | some balHash =>
-          BLT.bytes balHash.toBytes ::
-            match header.slotNumber with
-            | none => []
-            -- A canonical scalar, like `number` and `gasLimit` above and
-            -- unlike `nonce`: upstream's `slot_number` is a `U64` quantity, so
-            -- it is encoded minimally and `toRlpB64` decodes it that way.
-            | some slot => [BLT.bytes slot.toNat.toBytes]
+    | some baseFee =>
+      BLT.bytes baseFee.toBytes ::
+      match header.withdrawalsRoot with
+      | none => []
+      | some withdrawalsRoot =>
+        BLT.bytes withdrawalsRoot.toBytes ::
+        match header.blobGasUsed, header.excessBlobGas,
+            header.parentBeaconBlockRoot with
+        | some blobGasUsed, some excessBlobGas, some parentBeaconBlockRoot =>
+          BLT.bytes blobGasUsed.toBytes ::
+          BLT.bytes excessBlobGas.toBytes ::
+          BLT.bytes parentBeaconBlockRoot.toBytes ::
+          match header.requestsHash with
+          | none => []
+          | some rh =>
+            BLT.bytes rh.toBytes ::
+              match header.blockAccessListHash with
+              | none => []
+              | some balHash =>
+                BLT.bytes balHash.toBytes ::
+                  match header.slotNumber with
+                  | none => []
+                  -- A canonical scalar, like `number` and `gasLimit` above
+                  -- and unlike `nonce`: upstream's `slot_number` is a `U64`
+                  -- quantity, so it is encoded minimally and `toRlpB64`
+                  -- decodes it that way.
+                  | some slot => [BLT.bytes slot.toNat.toBytes]
+        | _, _, _ => []
 
 /-- A header's identity: the keccak of its canonical RLP encoding.
 
@@ -612,6 +634,9 @@ def elasticityMultiplier : Nat := 2
 def gasLimitAdjustmentFactor : Nat := 1024
 def gasLimitMinimum : Nat := 5000
 def baseFeeMaxChangeDenominator := 8
+-- EIP-1559's `INITIAL_BASE_FEE` (EELS `london/fork.py`): the base fee of the
+-- first block whose header carries one, which reads no parent base fee.
+def initialBaseFee : Nat := 1000000000
 -- The three interpreter divisors that are global constants rather than rule
 -- data. Their positivity is a closed fact, not a hypothesis anything carries:
 -- `ForkRules.Valid` deliberately says nothing about them, because no caller can
@@ -1705,9 +1730,9 @@ def Header.WireWellFormed (h : Header) : Prop :=
   h.gasLimit < 2 ^ 256 ∧
   h.gasUsed < 2 ^ 256 ∧
   h.timestamp < 2 ^ 256 ∧
-  h.baseFeePerGas < 2 ^ 256 ∧
-  h.blobGasUsed < 2 ^ 64 ∧
-  h.excessBlobGas < 2 ^ 64
+  (∀ b ∈ h.baseFeePerGas, b < 2 ^ 256) ∧
+  (∀ b ∈ h.blobGasUsed, b < 2 ^ 64) ∧
+  (∀ b ∈ h.excessBlobGas, b < 2 ^ 64)
 
 instance (h : Header) : Decidable (Header.WireWellFormed h) := by
   unfold Header.WireWellFormed; infer_instance

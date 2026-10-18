@@ -3387,8 +3387,59 @@ def calculateBaseFeePerGas
         targetFeeGasDelta / baseFeeMaxChangeDenominator
       .ok <| parentBaseFeePerGas - baseFeePerGasDelta
 
+/-- One header field's presence against the rule that defines it, in both
+directions; see `validateHeader`. -/
+def checkHeaderFieldPresence (name : String) (present defined : Bool) :
+    Except TransitionError Unit :=
+  if present ≠ defined then
+    .error <| .block <| .headerFieldPresence <| .text
+      s!"{name} is {if present then "present" else "absent"}, \
+         but these rules {if defined then "require" else "do not define"} it"
+  else .ok ()
+
+/-- The pre-Prague fork-dependent header fields against `rules.header`, in
+both directions: London's base fee, Shanghai's withdrawals root, and Cancun's
+blob-gas pair and parent beacon block root. In EELS a header of the wrong
+shape fails to decode as the fork's `Header` class at all, before any rule
+reads a field, so these run first. The newer fields keep their place at the
+end of `validateHeader`. -/
+def checkHeaderShape (rules : ForkRules) (header : Header) :
+    Except TransitionError Unit := do
+  checkHeaderFieldPresence "baseFeePerGas"
+    header.baseFeePerGas.isSome rules.header.baseFee
+  checkHeaderFieldPresence "withdrawalsRoot"
+    header.withdrawalsRoot.isSome rules.header.withdrawalsRoot
+  checkHeaderFieldPresence "blobGasUsed"
+    header.blobGasUsed.isSome rules.header.blobGas
+  checkHeaderFieldPresence "excessBlobGas"
+    header.excessBlobGas.isSome rules.header.blobGas
+  checkHeaderFieldPresence "parentBeaconBlockRoot"
+    header.parentBeaconBlockRoot.isSome rules.header.parentBeaconBlockRoot
+
+/-- The base fee a child header must carry, or `none` for a child whose rules
+define no base fee.
+
+Three cases, keyed on header shape. A child without the field runs only the
+gas-limit check (EELS Berlin `validate_header`). A child with the field whose
+parent lacks it is London's first block: the base fee is `INITIAL_BASE_FEE` and
+no gas-limit check runs (EELS `london/fork.py`, keyed there on
+`FORK_CRITERIA`; on every valid schedule the parent lacks the field exactly at
+that block). Otherwise the EIP-1559 update rule, which includes the gas-limit
+check. -/
+def expectedBaseFee (header parent : Header) :
+    Except BlockValidationError (Option Nat) :=
+  match header.baseFeePerGas, parent.baseFeePerGas with
+  | none, _ => do
+    checkGasLimit header.gasLimit parent.gasLimit
+    .ok none
+  | some _, none => .ok (some initialBaseFee)
+  | some _, some parentBaseFee =>
+    some <$> calculateBaseFeePerGas
+      header.gasLimit parent.gasLimit parent.gasUsed parentBaseFee
+
 def validateHeader (rules : ForkRules) (chain : BlockChain) (header : Header) :
   Except TransitionError Unit := do
+  checkHeaderShape rules header
   -- An empty snapshot names no parent to validate against. The runner can
   -- never supply one (a checked snapshot is nonempty by construction), so
   -- this is a caller-context invariant breach, typed internal and fail-closed
@@ -3413,14 +3464,13 @@ def validateHeader (rules : ForkRules) (chain : BlockChain) (header : Header) :
          block; this chain ends at {blockParentHash}"
   let expectedBaseFeePerGas ←
     Except.mapError TransitionError.block <|
-      calculateBaseFeePerGas
-        header.gasLimit
-        parent.header.gasLimit
-        parent.header.gasUsed
-        parent.header.baseFeePerGas
-  if header.excessBlobGas ≠ calculateExcessBlobGas rules.blob parent.header then do
+      expectedBaseFee header parent.header
+  -- Read only where the header carries the field; `checkHeaderShape` has
+  -- already tied its presence to the rules.
+  if header.excessBlobGas.any (· != calculateExcessBlobGas rules.blob parent.header)
+  then do
     .error <| .block <| .excessBlobGas <| .text
-      s!"excess blob gas = {header.excessBlobGas} ≠ \
+      s!"excess blob gas = {header.excessBlobGas.getD 0} ≠ \
          expected = {calculateExcessBlobGas rules.blob parent.header}"
   if header.gasUsed > header.gasLimit then do
     .error <| .block <| .gasUsedOverflow <| .text
@@ -3428,8 +3478,8 @@ def validateHeader (rules : ForkRules) (chain : BlockChain) (header : Header) :
          gas limit = {header.gasLimit}"
   if expectedBaseFeePerGas ≠ header.baseFeePerGas then do
     .error <| .block <| .baseFeePerGas <| .text
-      s!"base fee per gas = {header.baseFeePerGas} ≠ \
-         expected = {expectedBaseFeePerGas}"
+      s!"base fee per gas = {header.baseFeePerGas.getD 0} ≠ \
+         expected = {expectedBaseFeePerGas.getD 0}"
   if header.timestamp ≤ parent.header.timestamp then do
     .error <| .block <| .timestampOlderThanParent <| .text
       s!"timestamp = {header.timestamp} ≤ \
@@ -3499,14 +3549,16 @@ def stateTransitionChecks (bout : BlockOutput) (header : Header)
   if blockLogsBloom ≠ header.bloom then
     .error <| .logBloom <| .text
       s!"computed logs bloom ≠ header logs bloom"
-  if withdrawalsRoot ≠ header.withdrawalsRoot then
+  -- Compared only where the header carries the field; `validateHeader` has
+  -- already tied its presence to the rules.
+  if header.withdrawalsRoot.any (· != withdrawalsRoot) then
     .error <| .withdrawalsRoot <| .text
       s!"computed withdrawals root = {withdrawalsRoot} ≠ \
-         header withdrawals root = {header.withdrawalsRoot}"
-  if bout.blobGasUsed ≠ header.blobGasUsed then
+         header withdrawals root = {header.withdrawalsRoot.getD 0}"
+  if header.blobGasUsed.any (· != bout.blobGasUsed) then
     .error <| .blobGasUsed <| .text
       s!"computed blob gas used = {bout.blobGasUsed} ≠ \
-         header blob gas used = {header.blobGasUsed}"
+         header blob gas used = {header.blobGasUsed.getD 0}"
   if some requestsHash ≠ header.requestsHash then
     .error <| .requestsHash <| .text
       s!"computed requests hash = {requestsHash} ≠ \
@@ -3537,11 +3589,14 @@ def initBenvStat (fork : Fork) (chain : BlockChain) (header : Header) :
     blockHashes := getLast256BlockHashes chain,
     coinbase := header.coinbase,
     number := header.number,
-    baseFeePerGas := header.baseFeePerGas,
+    -- Absent before London and Cancun respectively, where nothing that reads
+    -- them is reachable: `BASEFEE`, `BLOBBASEFEE` and blob transactions are
+    -- gated off, and base fee 0 is EELS Berlin's fee rule exactly.
+    baseFeePerGas := header.baseFeePerGas.getD 0,
     time := header.timestamp.toB256,
     prevRandao := header.prevRandao,
-    excessBlobGas := header.excessBlobGas,
-    parentBeaconBlockRoot := header.parentBeaconBlockRoot,
+    excessBlobGas := header.excessBlobGas.getD 0,
+    parentBeaconBlockRoot := header.parentBeaconBlockRoot.getD 0,
     -- EIP-7843: absent before Amsterdam, where nothing reads it.
     slotNumber := header.slotNumber.getD 0
   }
@@ -5027,11 +5082,11 @@ private def guardTestHeader : Header := {
   extraData := []
   prevRandao := 0
   nonce := 0
-  baseFeePerGas := 7
-  withdrawalsRoot := 0
-  blobGasUsed := 0
-  excessBlobGas := 0
-  parentBeaconBlockRoot := 0
+  baseFeePerGas := some 7
+  withdrawalsRoot := some 0
+  blobGasUsed := some 0
+  excessBlobGas := some 0
+  parentBeaconBlockRoot := some 0
   requestsHash := none
   blockAccessListHash := none
   slotNumber := none
@@ -5050,9 +5105,9 @@ private def guardBlockAt (timestamp : Nat) : Block :=
 -- the reserve branch. Prague has no reserve branch at the same inputs.
 private def guardBlobParent (baseFee blobGasUsed : Nat) : Header :=
   { guardTestHeader with
-    baseFeePerGas := baseFee
-    blobGasUsed := blobGasUsed
-    excessBlobGas := 0 }
+    baseFeePerGas := some baseFee
+    blobGasUsed := some blobGasUsed
+    excessBlobGas := some 0 }
 
 #guard calculateExcessBlobGas osakaBlobSchedule
   (guardBlobParent 16 osakaBlobSchedule.target) = 0
@@ -5137,8 +5192,8 @@ private def guardBlobParent (baseFee blobGasUsed : Nat) : Header :=
 private def guardParentHeader : Header :=
   { guardTestHeader with
     number := 0
-    baseFeePerGas := 16
-    blobGasUsed := 21 * 131072 }
+    baseFeePerGas := some 16
+    blobGasUsed := some (21 * 131072) }
 
 private def guardParentChain : BlockChain :=
   { blocks := [{ header := guardParentHeader, txs := [], ommers := [], wds := [] }]
@@ -5149,7 +5204,7 @@ private def guardChildBlock (timestamp excessBlobGas : Nat) : Block :=
   { header := { guardTestHeader with
       number := guardParentHeader.number + 1
       timestamp := timestamp
-      excessBlobGas := excessBlobGas
+      excessBlobGas := some excessBlobGas
       parentHash := (Header.toBLT guardParentHeader).toBytes.keccak }
     txs := []
     ommers := []
@@ -5182,8 +5237,9 @@ private def bltFields : BLT → Nat
   | .list l => l.length
   | .bytes _ => 0
 
--- The encoder emits exactly 20, 21 or 23 fields. 22 is not merely rejected on
--- input -- it is unreachable on output, because the three options nest.
+-- The encoder emits the current forks' widths: 20, 21 or 23 fields. (A
+-- requests hash with a block-access-list hash and no slot number would emit
+-- 22; the decoder refuses that width below.)
 #guard bltFields (Header.toBLT guardTestHeader) = 20
 #guard bltFields (Header.toBLT guardHeader21) = 21
 #guard bltFields (Header.toBLT guardHeader23) = 23
@@ -5220,7 +5276,7 @@ private def guardHeader22BLT : BLT :=
 #guard guardHeader22BLT.toExHeader.toOption.isNone
 #guard (match guardHeader22BLT.toExHeader with
   | .error e => e.render ==
-      "RlpStructureError : header : expected 20, 21 or 23 fields, but found 22"
+      "RlpStructureError : header : expected 15, 16, 17, 20, 21 or 23 fields, but found 22"
   | .ok _ => false)
 
 -- A 24-field header is refused for the same reason, so the rule is "these
@@ -5229,15 +5285,21 @@ private def guardHeader22BLT : BLT :=
   | .list l => (BLT.list (l ++ [BLT.bytes []])).toExHeader.toOption.isNone
   | _ => false)
 
-/-- A header carrying neither Amsterdam field encodes exactly as it did before
-those fields existed.
+/-- A header carrying the five pre-Prague fork fields and neither Amsterdam
+field encodes exactly as it did before any of those fields was optional.
 
-`rfl` on an arbitrary header, so this is a fact about *every* 20- or 21-field
-header rather than about a sample -- which is what makes "no Prague, Osaka,
-BPO1 or BPO2 block's hash moved" a structural claim and not a test result. The
-right-hand side is the encoder's body as it stood before this change. -/
-example (h : Header) :
-    Header.toBLT { h with blockAccessListHash := none, slotNumber := none }
+`rfl` on an arbitrary header and arbitrary field values, so this is a fact about
+*every* 20- or 21-field header rather than about a sample -- which is what makes
+"no Prague, Osaka, BPO1 or BPO2 block's hash moved" a structural claim and not a
+test result. The right-hand side is the encoder's body as it stood before the
+Amsterdam fields existed. -/
+example (h : Header) (baseFee : Nat) (withdrawalsRoot : B256)
+    (blobGasUsed excessBlobGas : Nat) (parentBeaconBlockRoot : B256) :
+    Header.toBLT { h with
+        baseFeePerGas := some baseFee, withdrawalsRoot := some withdrawalsRoot
+        blobGasUsed := some blobGasUsed, excessBlobGas := some excessBlobGas
+        parentBeaconBlockRoot := some parentBeaconBlockRoot
+        blockAccessListHash := none, slotNumber := none }
       = BLT.list ([
           BLT.bytes h.parentHash.toBytes,
           BLT.bytes h.ommersHash.toBytes,
@@ -5254,19 +5316,24 @@ example (h : Header) :
           BLT.bytes h.extraData,
           BLT.bytes h.prevRandao.toBytes,
           BLT.bytes h.nonce.toBytes,
-          BLT.bytes h.baseFeePerGas.toBytes,
-          BLT.bytes h.withdrawalsRoot.toBytes,
-          BLT.bytes h.blobGasUsed.toBytes,
-          BLT.bytes h.excessBlobGas.toBytes,
-          BLT.bytes h.parentBeaconBlockRoot.toBytes
+          BLT.bytes baseFee.toBytes,
+          BLT.bytes withdrawalsRoot.toBytes,
+          BLT.bytes blobGasUsed.toBytes,
+          BLT.bytes excessBlobGas.toBytes,
+          BLT.bytes parentBeaconBlockRoot.toBytes
         ] ++
           match h.requestsHash with
           | none => []
           | some rh => [BLT.bytes rh.toBytes]) := rfl
 
 /-- Therefore the identity of every such header is unchanged. -/
-example (h : Header) :
-    Header.hash { h with blockAccessListHash := none, slotNumber := none }
+example (h : Header) (baseFee : Nat) (withdrawalsRoot : B256)
+    (blobGasUsed excessBlobGas : Nat) (parentBeaconBlockRoot : B256) :
+    Header.hash { h with
+        baseFeePerGas := some baseFee, withdrawalsRoot := some withdrawalsRoot
+        blobGasUsed := some blobGasUsed, excessBlobGas := some excessBlobGas
+        parentBeaconBlockRoot := some parentBeaconBlockRoot
+        blockAccessListHash := none, slotNumber := none }
       = (BLT.list ([
           BLT.bytes h.parentHash.toBytes, BLT.bytes h.ommersHash.toBytes,
           BLT.bytes h.coinbase.toBytes, BLT.bytes h.stateRoot.toBytes,
@@ -5275,10 +5342,10 @@ example (h : Header) :
           BLT.bytes h.number.toBytes, BLT.bytes h.gasLimit.toBytes,
           BLT.bytes h.gasUsed.toBytes, BLT.bytes h.timestamp.toBytes,
           BLT.bytes h.extraData, BLT.bytes h.prevRandao.toBytes,
-          BLT.bytes h.nonce.toBytes, BLT.bytes h.baseFeePerGas.toBytes,
-          BLT.bytes h.withdrawalsRoot.toBytes, BLT.bytes h.blobGasUsed.toBytes,
-          BLT.bytes h.excessBlobGas.toBytes,
-          BLT.bytes h.parentBeaconBlockRoot.toBytes
+          BLT.bytes h.nonce.toBytes, BLT.bytes baseFee.toBytes,
+          BLT.bytes withdrawalsRoot.toBytes, BLT.bytes blobGasUsed.toBytes,
+          BLT.bytes excessBlobGas.toBytes,
+          BLT.bytes parentBeaconBlockRoot.toBytes
         ] ++
           match h.requestsHash with
           | none => []
@@ -5309,13 +5376,13 @@ private def guardBothFieldsRules : ForkRules := amsterdamRules
 private def guardChild21 : Block :=
   guardChildBlockWith
     { (guardChildBlock 1 917504).header with
-        baseFeePerGas := 14
+        baseFeePerGas := some 14
         requestsHash := some guardRequestsHash }
 
 private def guardChild23 : Block :=
   guardChildBlockWith
     { (guardChildBlock 1 917504).header with
-        baseFeePerGas := 14
+        baseFeePerGas := some 14
         requestsHash := some guardRequestsHash
         blockAccessListHash := some guardBalHash
         slotNumber := some 4096 }
@@ -5349,11 +5416,178 @@ private def presenceFails {α : Type} : Except TransitionError α → Bool
 
 -- One field at a time: each flag is independent of the other.
 #guard presenceFails (validateHeader
-  { bpo2Rules with header := { blockAccessListHash := false, slotNumber := true, baseFee := false, withdrawalsRoot := false, blobGas := false, parentBeaconBlockRoot := false, requestsHash := false } }
+  { bpo2Rules with header := { bpo2Rules.header with slotNumber := true } }
   guardParentChain guardChild21.header)
 #guard presenceFails (validateHeader
-  { bpo2Rules with header := { blockAccessListHash := true, slotNumber := false, baseFee := false, withdrawalsRoot := false, blobGas := false, parentBeaconBlockRoot := false, requestsHash := false } }
+  { bpo2Rules with header := { bpo2Rules.header with blockAccessListHash := true } }
   guardParentChain guardChild21.header)
+
+---------------- HEADER SHAPES BEFORE PRAGUE (design S3) ----------------
+
+-- The five pre-Prague fork fields are optional in shape on the same terms as
+-- the newer ones. Each historical width encodes, decodes and round-trips; the
+-- in-between widths are refused; and `validateHeader` ties each field's
+-- presence to `rules.header` in both directions. These guards call
+-- `validateHeader` with a historical record directly: nothing here makes a
+-- historical fork reachable through `Fork.rules?`.
+
+/-- Byzantium through Berlin: no fork-dependent field. -/
+private def guardHeader15 : Header :=
+  { guardTestHeader with
+      baseFeePerGas := none, withdrawalsRoot := none, blobGasUsed := none
+      excessBlobGas := none, parentBeaconBlockRoot := none }
+
+/-- London through Paris: the base fee. -/
+private def guardHeader16 : Header :=
+  { guardHeader15 with baseFeePerGas := some 7 }
+
+/-- Shanghai: the withdrawals root. -/
+private def guardHeader17 : Header :=
+  { guardHeader16 with withdrawalsRoot := some 0 }
+
+#guard bltFields (Header.toBLT guardHeader15) = 15
+#guard bltFields (Header.toBLT guardHeader16) = 16
+#guard bltFields (Header.toBLT guardHeader17) = 17
+#guard roundTrips guardHeader15
+#guard roundTrips guardHeader16
+#guard roundTrips guardHeader17
+-- The round trip keeps presence, not merely the encoding.
+#guard (match (Header.toBLT guardHeader16).toExHeader with
+  | .ok h => h.baseFeePerGas == some 7 && h.withdrawalsRoot.isNone
+      && h.blobGasUsed.isNone && h.parentBeaconBlockRoot.isNone
+  | .error _ => false)
+#guard (match (Header.toBLT guardHeader17).toExHeader with
+  | .ok h => h.withdrawalsRoot == some 0 && h.excessBlobGas.isNone
+  | .error _ => false)
+#guard (match (Header.toBLT guardTestHeader).toExHeader with
+  | .ok h => h.blobGasUsed == some 0 && h.excessBlobGas == some 0
+      && h.parentBeaconBlockRoot == some 0 && h.requestsHash.isNone
+  | .error _ => false)
+
+-- The nesting makes an incoherent record encode as the longest coherent
+-- prefix it carries: a withdrawals root without a base fee is not emitted, and
+-- neither is half of Cancun's triple. No 18- or 19-field encoding exists.
+#guard bltFields (Header.toBLT { guardHeader15 with withdrawalsRoot := some 0 }) = 15
+#guard bltFields (Header.toBLT { guardHeader17 with blobGasUsed := some 0 }) = 17
+#guard bltFields (Header.toBLT
+  { guardHeader17 with blobGasUsed := some 0, excessBlobGas := some 0 }) = 17
+
+-- 18 and 19 fields are refused on input, as structure errors naming the width.
+private def guardHeaderPrefixBLT (n : Nat) : BLT :=
+  match Header.toBLT guardTestHeader with
+  | .list l => .list (l.take n)
+  | b => b
+
+#guard (match (guardHeaderPrefixBLT 18).toExHeader with
+  | .error e => e.render ==
+      "RlpStructureError : header : expected 15, 16, 17, 20, 21 or 23 fields, but found 18"
+  | .ok _ => false)
+#guard (match (guardHeaderPrefixBLT 19).toExHeader with
+  | .error e => e.render ==
+      "RlpStructureError : header : expected 15, 16, 17, 20, 21 or 23 fields, but found 19"
+  | .ok _ => false)
+-- and 14 is refused as a malformed list.
+#guard (guardHeaderPrefixBLT 14).toExHeader.toOption.isNone
+
+/-- A one-block chain ending at `parent`. -/
+private def guardChainAt (parent : Header) : BlockChain :=
+  { blocks := [{ header := parent, txs := [], ommers := [], wds := [] }]
+    state := .empty
+    chainId := 1 }
+
+/-- `child` placed directly after `parent`: number, parent hash and a later
+timestamp, so that only the rule under test can decide. -/
+private def guardChildAfter (parent child : Header) : Header :=
+  { child with
+      number := parent.number + 1
+      timestamp := parent.timestamp + 1
+      parentHash := parent.hash }
+
+private def guardParent15 : Header := { guardHeader15 with number := 0 }
+private def guardParent16 : Header := { guardHeader16 with number := 0 }
+private def guardParent17 : Header := { guardHeader17 with number := 0 }
+
+private def baseFeeFails {α : Type} : Except TransitionError α → Bool
+  | .error (.block (.baseFeePerGas _)) => true
+  | _ => false
+
+private def gasLimitFails {α : Type} : Except TransitionError α → Bool
+  | .error (.block (.gasLimitAdjustment _)) => true
+  | _ => false
+
+-- Presence, both directions, for each pre-Prague field. A Berlin-shaped header
+-- passes under Berlin's rules and fails under London's; a London-shaped one the
+-- reverse; and so on up to Cancun. The reason names the field.
+#guard (validateHeader berlinRules (guardChainAt guardParent15)
+  (guardChildAfter guardParent15 guardHeader15)).toOption.isSome
+#guard (match validateHeader londonRules (guardChainAt guardParent15)
+    (guardChildAfter guardParent15 guardHeader15) with
+  | .error e => e.render.startsWith "HeaderFieldPresenceError : baseFeePerGas is absent"
+  | .ok _ => false)
+#guard (match validateHeader berlinRules (guardChainAt guardParent15)
+    (guardChildAfter guardParent15 { guardHeader16 with baseFeePerGas := some initialBaseFee }) with
+  | .error e => e.render.startsWith "HeaderFieldPresenceError : baseFeePerGas is present"
+  | .ok _ => false)
+#guard (match validateHeader parisRules (guardChainAt guardParent16)
+    (guardChildAfter guardParent16 guardHeader17) with
+  | .error e => e.render.startsWith "HeaderFieldPresenceError : withdrawalsRoot is present"
+  | .ok _ => false)
+#guard (match validateHeader shanghaiRules (guardChainAt guardParent16)
+    (guardChildAfter guardParent16 guardHeader16) with
+  | .error e => e.render.startsWith "HeaderFieldPresenceError : withdrawalsRoot is absent"
+  | .ok _ => false)
+#guard (match validateHeader shanghaiRules (guardChainAt guardParent17)
+    (guardChildAfter guardParent17 guardTestHeader) with
+  | .error e => e.render.startsWith "HeaderFieldPresenceError : blobGasUsed is present"
+  | .ok _ => false)
+#guard (match validateHeader cancunRules (guardChainAt guardParent17)
+    (guardChildAfter guardParent17 guardHeader17) with
+  | .error e => e.render.startsWith "HeaderFieldPresenceError : blobGasUsed is absent"
+  | .ok _ => false)
+-- The beacon root separately from the blob pair: a record carrying the pair
+-- but not the root.
+#guard (match validateHeader cancunRules (guardChainAt guardParent17)
+    (guardChildAfter guardParent17
+      { guardHeader17 with blobGasUsed := some 0, excessBlobGas := some 0 }) with
+  | .error e => e.render.startsWith "HeaderFieldPresenceError : parentBeaconBlockRoot is absent"
+  | .ok _ => false)
+-- A Prague-shaped header under Prague's rules is not touched by the new checks.
+#guard (validateHeader bpo2Rules guardParentChain guardChild21.header).toOption.isSome
+
+-- London's first block (EELS `london/fork.py`): a parent without a base fee
+-- makes the expected base fee `INITIAL_BASE_FEE`, and no gas-limit check runs
+-- on that block -- here the gas limit doubles, far outside the 1/1024 window.
+private def guardLondonFirst (baseFee gasLimit : Nat) : Header :=
+  guardChildAfter guardParent15
+    { guardHeader16 with baseFeePerGas := some baseFee, gasLimit := gasLimit }
+
+#guard (validateHeader londonRules (guardChainAt guardParent15)
+  (guardLondonFirst initialBaseFee 30000000)).toOption.isSome
+#guard (validateHeader londonRules (guardChainAt guardParent15)
+  (guardLondonFirst initialBaseFee 60000000)).toOption.isSome
+#guard baseFeeFails (validateHeader londonRules (guardChainAt guardParent15)
+  (guardLondonFirst 7 30000000))
+-- Every later London block runs the update rule and its gas-limit check.
+#guard gasLimitFails (validateHeader londonRules (guardChainAt guardParent16)
+  (guardChildAfter guardParent16 { guardHeader16 with gasLimit := 60000000 }))
+-- Before London the gas-limit check runs although no base fee is computed.
+#guard gasLimitFails (validateHeader berlinRules (guardChainAt guardParent15)
+  (guardChildAfter guardParent15 { guardHeader15 with gasLimit := 60000000 }))
+
+-- Cancun's first block (EELS `cancun/vm/gas.py`, keyed on the parent header's
+-- class): a parent without the blob fields counts them as zero.
+#guard calculateExcessBlobGas cancunRules.blob guardParent17 = 0
+#guard (validateHeader cancunRules (guardChainAt guardParent17)
+  (guardChildAfter guardParent17 guardTestHeader)).toOption.isSome
+#guard (match validateHeader cancunRules (guardChainAt guardParent17)
+    (guardChildAfter guardParent17 { guardTestHeader with excessBlobGas := some 1 }) with
+  | .error (.block (.excessBlobGas _)) => true
+  | _ => false)
+
+-- `initBenvStat` reads an absent field as zero.
+#guard (initBenvStat .prague (guardChainAt guardParent15) guardHeader15).baseFeePerGas = 0
+#guard (initBenvStat .prague (guardChainAt guardParent15) guardHeader15).excessBlobGas = 0
+#guard (initBenvStat .prague (guardChainAt guardParent15) guardHeader15).parentBeaconBlockRoot = 0
 
 -- P0.2, the history half: `RetainedHistoryValid` has teeth, and is decided
 -- rather than assumed. A genesis-rooted chain whose blocks are consecutively
@@ -6179,6 +6413,7 @@ theorem validateHeader_links {rules : ForkRules} {chain : BlockChain}
     header.parentHash = tip.header.hash ∧
       header.number = tip.header.number + 1 := by
   unfold validateHeader at h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
   obtain ⟨parent, hpar, h⟩ := Except.bind_eq_ok h
   rw [htip] at hpar
   simp only [Option.toExcept, Except.ok.injEq] at hpar
@@ -6188,7 +6423,8 @@ theorem validateHeader_links {rules : ForkRules} {chain : BlockChain}
   · rw [ite_eq_right (by simpa [Header.hash] using hph)] at h
     refine ⟨hph, ?_⟩
     obtain ⟨bf, hbf, h⟩ := Except.bind_eq_ok h
-    by_cases h1 : header.excessBlobGas ≠ calculateExcessBlobGas rules.blob tip.header
+    by_cases h1 : (header.excessBlobGas.any
+        (· != calculateExcessBlobGas rules.blob tip.header)) = true
     · rw [ite_eq_left h1] at h
       obtain ⟨_, hb, _⟩ := Except.bind_eq_ok h
       exact absurd hb (by simp)
@@ -6495,13 +6731,13 @@ theorem BlockChain.check_eq_some_of_checked (cc : CheckedBlockChain) :
   (Header.WireWellFormed { guardTestHeader with gasLimit := 2 ^ 256 - 1 })
 #guard ¬ decide (Header.WireWellFormed { guardTestHeader with gasLimit := 2 ^ 256 })
 #guard decide
-  (Header.WireWellFormed { guardTestHeader with blobGasUsed := 2 ^ 64 - 1 })
+  (Header.WireWellFormed { guardTestHeader with blobGasUsed := some (2 ^ 64 - 1) })
 #guard ¬ decide
-  (Header.WireWellFormed { guardTestHeader with blobGasUsed := 2 ^ 64 })
+  (Header.WireWellFormed { guardTestHeader with blobGasUsed := some (2 ^ 64) })
 #guard decide
-  (Header.WireWellFormed { guardTestHeader with excessBlobGas := 2 ^ 64 - 1 })
+  (Header.WireWellFormed { guardTestHeader with excessBlobGas := some (2 ^ 64 - 1) })
 #guard ¬ decide
-  (Header.WireWellFormed { guardTestHeader with excessBlobGas := 2 ^ 64 })
+  (Header.WireWellFormed { guardTestHeader with excessBlobGas := some (2 ^ 64) })
 
 private def wireGuardWithdrawal (amount : B256) : Withdrawal :=
   { globalIndex := 0, validatorIndex := 0, recipient := 0, amount := amount }
@@ -6547,7 +6783,7 @@ private def wireGuardWithdrawal (amount : B256) : Withdrawal :=
 #guard (CheckedHeader.ofHeader? { guardTestHeader with bloom := [] }).isNone
 #guard (CheckedHeader.ofHeader? { guardTestHeader with gasUsed := 2 ^ 256 }).isNone
 #guard (CheckedHeader.ofHeader?
-  { guardTestHeader with excessBlobGas := 2 ^ 64 }).isNone
+  { guardTestHeader with excessBlobGas := some (2 ^ 64) }).isNone
 #guard (CheckedWithdrawal.ofWithdrawal?
   (wireGuardWithdrawal (2 ^ 64 - 1 : Nat).toB256)).isSome
 #guard (CheckedWithdrawal.ofWithdrawal?

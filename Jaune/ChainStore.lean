@@ -167,11 +167,11 @@ private def synthHeader (parentHash : B256) (number : Nat) (tag : Bytes) : Heade
     extraData := tag
     prevRandao := 0
     nonce := 0
-    baseFeePerGas := 0
-    withdrawalsRoot := 0
-    blobGasUsed := 0
-    excessBlobGas := 0
-    parentBeaconBlockRoot := 0
+    baseFeePerGas := some 0
+    withdrawalsRoot := some 0
+    blobGasUsed := some 0
+    excessBlobGas := some 0
+    parentBeaconBlockRoot := some 0
     requestsHash := none
     blockAccessListHash := none
     slotNumber := none }
