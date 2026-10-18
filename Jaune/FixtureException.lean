@@ -87,6 +87,9 @@ inductive FixtureException where
   | txType3TxZeroBlobs
   | txType4EmptyAuthorizationList
   | txType4TxContractCreation
+  -- Goal U11a: a typed transaction before its type's fork.
+  | txType3TxPreFork
+  | txType4TxPreFork
 deriving DecidableEq, BEq, Repr, Inhabited
 
 namespace FixtureException
@@ -141,6 +144,7 @@ def all : List FixtureException :=
     txType3TxInvalidBlobVersionedHash,
     txType3TxZeroBlobs ]
     ++ [txType4EmptyAuthorizationList, txType4TxContractCreation]
+    ++ [txType3TxPreFork, txType4TxPreFork]
 
 /-- The canonical spelling of an identity: byte-for-byte the token the fixtures
 use. -/
@@ -200,6 +204,8 @@ def toString : FixtureException → String
   | txType3TxZeroBlobs => "TransactionException.TYPE_3_TX_ZERO_BLOBS"
   | txType4EmptyAuthorizationList => "TransactionException.TYPE_4_EMPTY_AUTHORIZATION_LIST"
   | txType4TxContractCreation => "TransactionException.TYPE_4_TX_CONTRACT_CREATION"
+  | txType3TxPreFork => "TransactionException.TYPE_3_TX_PRE_FORK"
+  | txType4TxPreFork => "TransactionException.TYPE_4_TX_PRE_FORK"
 
 instance : ToString FixtureException := ⟨toString⟩
 
@@ -231,11 +237,74 @@ def ofString? (s : String) : Option FixtureException :=
     some blockInvalidGasUsed
   | "TransactionException.INVALID_SIGNATURE_VRS" =>
     some txSenderNotEoa
+  -- The Shanghai-to-Cancun pre-fork blob fixture (goal U11a) permits the
+  -- block-level spelling of the versioned-hash rejection as an alternative to
+  -- `TYPE_3_TX_PRE_FORK`; it names the same reason as the transaction-level
+  -- identity.
+  | "BlockException.INVALID_VERSIONED_HASHES" =>
+    some txType3TxInvalidBlobVersionedHash
   -- The withdrawal-root fixtures permit the historical block-hash spelling as
   -- an alternative oracle name for the same header-commitment mismatch.
   | "BlockException.INVALID_BLOCK_HASH" =>
     some blockInvalidWithdrawalsRoot
   | _ => all.find? (fun e => e.toString = s)
+
+/-- The legacy (retesteth) exception names of the `legacytests` restoration
+corpus, each with the canonical expectation upstream itself renamed it to.
+
+The restoration tree (`ethereum/tests` at 41404287, the historical lane's
+legacy side) predates the canonical vocabulary and spells expectations as
+retesteth tokens (`TR_IntrinsicGas`, `PostParisUncleHashIsNotEmpty`, ...).
+The later `ethereum/tests` tree under `execution-specs` carries the same tests
+with canonical identities, so each row here is upstream's own rename, not a
+judgment of this build: `scripts/check-legacy-exception-aliases.py` re-derives
+every row from the two trees (the same test, case and block, at Cancun in the
+later tree) and fails on a row no pair attests, on a pair that contradicts a
+row, and on a row whose target this vocabulary does not parse (goal U11a).
+A token maps to a whole expectation, which may be a set (`TR_NoFundsOrGas` is
+`INSUFFICIENT_ACCOUNT_FUNDS|INTRINSIC_GAS_TOO_LOW`). -/
+-- BEGIN legacyAliases (checked by scripts/check-legacy-exception-aliases.py)
+def legacyAliases : List (String × String) := [
+  ("1559BlockImportImpossible_BaseFeeWrong", "BlockException.INVALID_BASEFEE_PER_GAS"),
+  ("ExtraDataTooBig", "BlockException.EXTRA_DATA_TOO_BIG"),
+  ("IntrinsicGas", "TransactionException.INTRINSIC_GAS_TOO_LOW"),
+  ("InvalidGasLimit", "BlockException.GASLIMIT_TOO_BIG"),
+  ("InvalidGasLimit2", "BlockException.INVALID_GASLIMIT"),
+  ("InvalidGasUsed", "BlockException.INVALID_GAS_USED"),
+  ("InvalidLogBloom", "BlockException.INVALID_LOG_BLOOM"),
+  ("InvalidNumber", "BlockException.INVALID_BLOCK_NUMBER"),
+  ("InvalidReceiptsStateRoot", "BlockException.INVALID_RECEIPTS_ROOT"),
+  ("InvalidStateRoot", "BlockException.INVALID_STATE_ROOT"),
+  ("InvalidTimestampOlderParent", "BlockException.INVALID_BLOCK_TIMESTAMP_OLDER_THAN_PARENT"),
+  ("InvalidTransactionsRoot", "BlockException.INVALID_TRANSACTIONS_ROOT"),
+  ("InvalidWithdrawals", "BlockException.INVALID_WITHDRAWALS_ROOT"),
+  ("PostParisDifficultyIsNot0", "BlockException.IMPORT_IMPOSSIBLE_DIFFICULTY_OVER_PARIS"),
+  ("PostParisUncleHashIsNotEmpty", "BlockException.IMPORT_IMPOSSIBLE_UNCLES_OVER_PARIS"),
+  ("RLP_ExpectedAsList", "BlockException.RLP_STRUCTURES_ENCODING|BlockException.RLP_WITHDRAWALS_NOT_READ"),
+  ("SenderNotEOA", "TransactionException.SENDER_NOT_EOA"),
+  ("SenderNotEOAorNoCASH", "TransactionException.SENDER_NOT_EOA|TransactionException.INSUFFICIENT_ACCOUNT_FUNDS"),
+  ("TR_BLOBCREATE", "TransactionException.TYPE_3_TX_CONTRACT_CREATION"),
+  ("TR_BLOBLIST_OVERSIZE", "TransactionException.TYPE_3_TX_BLOB_COUNT_EXCEEDED"),
+  ("TR_BLOBVERSION_INVALID", "TransactionException.TYPE_3_TX_INVALID_BLOB_VERSIONED_HASH"),
+  ("TR_EMPTYBLOB", "TransactionException.TYPE_3_TX_ZERO_BLOBS"),
+  ("TR_FeeCapLessThanBlocks", "TransactionException.INSUFFICIENT_MAX_FEE_PER_GAS"),
+  ("TR_FeeCapLessThanBlocksORGasLimitReached", "TransactionException.INSUFFICIENT_MAX_FEE_PER_GAS|TransactionException.GAS_ALLOWANCE_EXCEEDED"),
+  ("TR_FeeCapLessThanBlocksORNoFunds", "TransactionException.INSUFFICIENT_MAX_FEE_PER_GAS|TransactionException.INSUFFICIENT_ACCOUNT_FUNDS"),
+  ("TR_GasLimitReached", "TransactionException.GAS_ALLOWANCE_EXCEEDED"),
+  ("TR_InitCodeLimitExceeded", "TransactionException.INITCODE_SIZE_EXCEEDED"),
+  ("TR_IntrinsicGas", "TransactionException.INTRINSIC_GAS_TOO_LOW"),
+  ("TR_NoFunds", "TransactionException.INSUFFICIENT_ACCOUNT_FUNDS"),
+  ("TR_NoFundsOrGas", "TransactionException.INSUFFICIENT_ACCOUNT_FUNDS|TransactionException.INTRINSIC_GAS_TOO_LOW"),
+  ("TR_NoFundsX", "TransactionException.INSUFFICIENT_ACCOUNT_FUNDS|TransactionException.GASLIMIT_PRICE_PRODUCT_OVERFLOW"),
+  ("TR_NonceHasMaxValue", "TransactionException.NONCE_IS_MAX"),
+  ("TR_NonceTooHigh", "TransactionException.NONCE_MISMATCH_TOO_HIGH"),
+  ("TR_NonceTooLow", "TransactionException.NONCE_MISMATCH_TOO_LOW"),
+  ("TR_TipGtFeeCap", "TransactionException.PRIORITY_GREATER_THAN_MAX_FEE_PER_GAS"),
+  ("TooMuchGasUsed", "BlockException.GAS_USED_OVERFLOW"),
+  ("UnknownParent", "BlockException.UNKNOWN_PARENT"),
+  ("UnknownParent2", "BlockException.UNKNOWN_PARENT_ZERO")
+]
+-- END legacyAliases
 
 /-- The delimiter separating the alternatives of an `expectException` set. -/
 def delimiter : String := "|"
@@ -259,9 +328,19 @@ def parseExpectation (s : String) : Except String (List FixtureException) := do
              (stray or duplicated {repr delimiter} delimiter)"
       else
         match ofString? tok with
-        | some e => .ok e
-        | none => .error s!"unknown expected exception identity {repr tok} in {repr s}"
-  .ok es.eraseDups
+        | some e => .ok [e]
+        | none =>
+          -- A legacy token expands to its canonical expectation, which is
+          -- itself parsed by the canonical spellings only (no alias chains).
+          match legacyAliases.lookup tok with
+          | some canonical =>
+            (canonical.splitOn delimiter).mapM fun t =>
+              match ofString? t with
+              | some e => .ok e
+              | none => .error
+                s!"legacy alias {repr tok} names {repr t}, which is not a canonical identity"
+          | none => .error s!"unknown expected exception identity {repr tok} in {repr s}"
+  .ok es.flatten.eraseDups
 
 ------------------- CONSTRUCTOR CLASSIFICATION --------------------
 
@@ -283,6 +362,7 @@ def ofDecodeError : DecodeError → Option FixtureException
   | .leadingZeros _ => some blockRlpStructuresEncoding
   | .withdrawalsNotRead _ => some blockRlpWithdrawalsNotRead
   | .roundTrip _ => some blockRlpStructuresEncoding
+  | .headerWidth _ => some blockIncorrectBlockFormat
 
 /-- The official identity of a transaction-validation rejection. Every one of
 the twenty-one reasons has an identity; the blob-fee reason shares
@@ -311,6 +391,12 @@ def ofTxValidationError : TxValidationError → Option FixtureException
   | .type3ZeroBlobs _ => some txType3TxZeroBlobs
   | .type4ContractCreation _ => some txType4TxContractCreation
   | .emptyAuthorizationList _ => some txType4EmptyAuthorizationList
+  -- Types 1 and 2 before Berlin and London have identities of their own in
+  -- the fixture vocabulary; they fail closed until the wave that runs those
+  -- forks assigns them.
+  | .typePreFork 3 _ => some txType3TxPreFork
+  | .typePreFork 4 _ => some txType4TxPreFork
+  | .typePreFork _ _ => none
 
 /-- The official identity of a block-validation rejection.
 
@@ -405,11 +491,13 @@ open FixtureException
 
 -- The vocabulary is the reviewed current-mainnet identity set reached by the
 -- supported static Prague and Osaka lanes, plus the four the Glamsterdam
--- devnet lane's `eip7928_*` subtree names (goal C).
-#guard all.length = 48
+-- devnet lane's `eip7928_*` subtree names (goal C), plus the two pre-fork
+-- transaction-type identities the Shanghai-to-Cancun and Cancun-to-Prague
+-- transition fixtures name (goal U11a).
+#guard all.length = 50
 
 -- `toString` is injective, so no two identities collapse to one token.
-#guard (all.map toString).eraseDups.length = 48
+#guard (all.map toString).eraseDups.length = 50
 
 -- `toString`/`ofString?` round trip on all 47, in both directions.
 #guard all.all (fun e => ofString? e.toString == some e)
@@ -427,6 +515,14 @@ private def parseRejects (s : String) : Bool := (parseExpectation s).toOption.is
 -- Every identity's own spelling parses as the one-element set naming it. This
 -- covers all 31 singleton `expectException` strings in the inventory.
 #guard all.all (fun e => parsesTo e.toString [e])
+
+-- Legacy tokens expand to their canonical sets; unknown ones are still refused.
+#guard parsesTo "TR_IntrinsicGas" [txIntrinsicGasTooLow]
+#guard parsesTo "TR_NoFundsOrGas" [txInsufficientAccountFunds, txIntrinsicGasTooLow]
+#guard parsesTo "TR_NoFunds|TR_IntrinsicGas" [txInsufficientAccountFunds, txIntrinsicGasTooLow]
+#guard parseRejects "TR_NoSuchToken"
+#guard legacyAliases.all fun (_, c) => ((c.splitOn delimiter).all fun t => (ofString? t).isSome)
+#guard (legacyAliases.map Prod.fst).eraseDups.length = legacyAliases.length
 
 -- `ofString?` is exact: near misses are unknown tokens, not near matches.
 #guard (ofString? "BlockException.EXTRA_DATA_TOO_BIG").isSome
@@ -602,8 +698,11 @@ def fixtureInventory : List String :=
 -- Coverage in the fixture-to-producer direction: every one of the 43
 -- identities is reachable from some typed rejection constructor, so a newly
 -- observed expected identity cannot silently remain unclassifiable.
+-- (`TxValidationError.all` carries one representative `typePreFork`, type 3;
+-- type 4's identity is reached by the same constructor at type 4.)
 #guard all.all fun e =>
   TxValidationError.all.any (fun r => ofTxValidationError r == some e) ||
+  ofTxValidationError (.typePreFork 4 .none) == some e ||
   BlockValidationError.all.any (fun r => ofBlockValidationError r == some e) ||
   DecodeError.all.any (fun r => ofDecodeError r == some e) ||
   ofCryptoError (.invalidSignature .none) == some e
@@ -630,6 +729,10 @@ def fixtureInventory : List String :=
 -- the omitted-withdrawals reasons keep their own.
 #guard ofDecodeError (.rlpStructure .none) == some blockRlpStructuresEncoding
 #guard ofDecodeError (.roundTrip .none) == some blockRlpStructuresEncoding
+#guard ofDecodeError (.headerWidth .none) == some blockIncorrectBlockFormat
+#guard ofTxValidationError (.typePreFork 3 .none) == some txType3TxPreFork
+#guard ofTxValidationError (.typePreFork 4 .none) == some txType4TxPreFork
+#guard (ofTxValidationError (.typePreFork 1 .none)).isNone
 #guard ofDecodeError (.leadingZeros .none) == some blockRlpStructuresEncoding
 #guard ofDecodeError (.fieldOverflow64 .none) == some blockRlpInvalidFieldOverflow64
 #guard ofDecodeError (.withdrawalsNotRead .none) == some blockRlpWithdrawalsNotRead

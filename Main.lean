@@ -412,10 +412,10 @@ def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
 A fork whose rules this build does not implement is refused here exactly
 as it is everywhere else: there is nothing to print, and printing another
 fork's record would be the silent fallback the whole architecture exists to
-prevent. Twelve declared forks are in that state -- the pre-Prague forks,
+prevent. Ten declared forks are in that state -- the pre-Shanghai forks,
 refused with `UnsupportedForkError` through `Fork.rules`. The refusal stays
 because a fork identity declared ahead of its rules is exactly what those
-twelve are, and because `scripts/check-fork-constants.sh` asserts its text.
+ten are, and because `scripts/check-fork-constants.sh` asserts its text.
 The gate's fork list and `Fork.supported` are the same list by construction. -/
 def runRulesPrinter (label : String) : IO Unit := do
   let some f := Fork.ofString? label
@@ -432,10 +432,10 @@ def runRulesPrinter (label : String) : IO Unit := do
 Evidence surface for `scripts/check-fork-constants.sh` (goal U10): it prints
 `Fork.ruleSet` -- the total function every declared fork's literal lives
 under -- through the same `toGateJson` as `--rules`, so the gate can compare
-the twelve pre-Prague literals against the pinned `execution-specs` modules
+the ten pre-Shanghai literals against the pinned `execution-specs` modules
 while `--rules` keeps refusing them. Execution never reads this: every runner
 resolves through `Fork.rules?` / `Fork.rules`, which still refuse those
-twelve with `UnsupportedForkError`. -/
+ten with `UnsupportedForkError`. -/
 def runRulesLiteralPrinter (label : String) : IO Unit := do
   let some f := Fork.ofString? label
     | .throw
@@ -706,12 +706,20 @@ def checkFixtureBlobSchedule (spec : NetworkSpec) (json : Lean.Json) : IO Unit :
   let some config := json.find? "config" | pure ()
   let some schedule := config.find? "blobSchedule" | pure ()
   for f in spec.forks do
+    let rules ← IO.ofExcept (f.rules.mapError SupportError.render)
+    -- A fork before Cancun has no blob schedule, and a transition fixture
+    -- from one (`ShanghaiToCancunAtTime15k`) declares an entry for its blob
+    -- fork only. Such a fork must have no entry; every fork with blob rules
+    -- must have one, checked exactly as before.
+    if !rules.header.blobGas then
+      .guard (schedule.find? f.toString).isNone
+        s!"error : fixture declares a blob schedule entry for {f}, which has none"
+      continue
     let declared ← (schedule.find? f.toString).toIO
       s!"error : fixture declares a blob schedule but no entry for {f}"
     let target ← declared.find "target" >>= Lean.Json.toIoHexNat
     let ceiling ← declared.find "max" >>= Lean.Json.toIoHexNat
     let fraction ← declared.find "baseFeeUpdateFraction" >>= Lean.Json.toIoHexNat
-    let rules ← IO.ofExcept (f.rules.mapError SupportError.render)
     .guard (rules.blob.target = target * gasPerBlob)
       s!"error : {f} blob target = {rules.blob.target}, fixture declares \
          {target} blobs = {target * gasPerBlob}"
@@ -729,8 +737,8 @@ def runBlockchainStTest (spec : NetworkSpec) : (Nat × String × Lean.Json) → 
     -- Every fork this case's network label can select must be one this build
     -- runs, and that is settled here -- before a header, a prestate, or a
     -- block is read. A declared fork whose rules a build did not implement
-    -- would be outside its domain, not evidence about the candidate (twelve
-    -- forks are in that state here: the pre-Prague forks `Fork.rules`
+    -- would be outside its domain, not evidence about the candidate (ten
+    -- forks are in that state here: the pre-Shanghai forks `Fork.rules`
     -- refuses): routed through
     -- the import path it would surface as `BLOCK #0 was expected valid but
     -- failed`, which reads as a verdict on a block this build never examined.
@@ -1298,7 +1306,7 @@ constructed `ForkTransition`, not written out by hand, so this text cannot
 drift from what the build actually does -- which is exactly how the README's
 fork list came to disagree with the binary. The declared and runnable sets are
 printed separately because they answer different questions -- what this build
-parses against what it will also run. They differ by the twelve pre-Prague
+parses against what it will also run. They differ by the ten pre-Shanghai
 forks, and a guard where `Fork.supported` is defined pins the runnable list;
 folding them would still be wrong, because the build would then claim support
 it does not have, and the reader could not tell the two questions apart. -/

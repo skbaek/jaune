@@ -8,11 +8,11 @@ open Jaune
 private def rlpTags : List String :=
   [ rlpStructureTag, rlpFixedWidthTag, rlpFieldOverflow64Tag,
     rlpFieldOverflow256Tag, rlpLeadingZerosTag,
-    rlpWithdrawalsNotReadTag, rlpRoundTripTag ]
+    rlpWithdrawalsNotReadTag, rlpRoundTripTag, rlpHeaderWidthTag ]
 
 -- The tags are distinct, and none is a prefix of another, so no rendered
 -- decode reason can be read as another by a `" : "`-delimited reader.
-#guard rlpTags.eraseDups.length = 7
+#guard rlpTags.eraseDups.length = 8
 #guard rlpTags.all fun t => (rlpTags.filter fun u => t.isPrefixOf u).length = 1
 
 
@@ -2556,6 +2556,15 @@ private def HeaderOptionals.Bounded (o : HeaderOptionals) : Prop :=
   (∀ b ∈ o.blobGasUsed, b < 2 ^ 64) ∧
   (∀ b ∈ o.excessBlobGas, b < 2 ^ 64)
 
+/-- The rejection of a header tail no fork's shape accepts. A count that is
+some fork's width (an item of the wrong kind at that width) stays a structure
+error; any other count is `headerWidth`, the fixture vocabulary's
+`INCORRECT_BLOCK_FORMAT` (goal U11a). The rendered detail is unchanged. -/
+private def headerWidthError (n : Nat) : DecodeError :=
+  let detail := s!"header : expected 15, 16, 17, 20, 21 or 23 fields, but found {n}"
+  if n ∈ [15, 16, 17, 20, 21, 23] then .rlpStructure (.text detail)
+  else .headerWidth (.text detail)
+
 /-- Decode a header's fork-dependent trailing fields: everything after `nonce`.
 
 Its own function, and not inlined into `BLT.toExHeader`, for two reasons: the
@@ -2567,7 +2576,7 @@ Exactly six tails are accepted, mirroring `Header.toBLT`'s nesting: none
 (15 fields, Byzantium through Berlin), the base fee (16, London through
 Paris), the withdrawals root (17, Shanghai), the Cancun triple (20), the
 requests hash (21, Prague through BPO2), and the Amsterdam pair (23).
-**18, 19 and 22 fields are rejected.** A header carrying a block-access-list
+**18, 19 and 22 fields are rejected** (as `headerWidth`, see `headerWidthError`). A header carrying a block-access-list
 hash but no slot number, or half of Cancun's triple, is not a header of any
 fork, and accepting it would mean guessing which field the sender omitted.
 Which shape a given fork requires is `validateHeader`'s rule, not this one's. -/
@@ -2608,11 +2617,9 @@ private def decodeHeaderOptionals :
         blockAccessListHash := some balHash
         slotNumber := some slotNumber }
     | tail =>
-      .error <| DecodeError.structure "header"
-        s!"expected 15, 16, 17, 20, 21 or 23 fields, but found {20 + tail.length}"
+      .error <| headerWidthError (20 + tail.length)
   | tail =>
-    .error <| DecodeError.structure "header"
-      s!"expected 15, 16, 17, 20, 21 or 23 fields, but found {15 + tail.length}"
+    .error <| headerWidthError (15 + tail.length)
 
 /-- Every tail `decodeHeaderOptionals` accepts carries its fields' widths. -/
 private theorem decodeHeaderOptionals_bounded {tail : List BLT}

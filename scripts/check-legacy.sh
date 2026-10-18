@@ -22,11 +22,13 @@
 #                 selects under its `ConstantinopleFix` alias, and the three
 #                 bomb-only forks, which name no legacy file, are refused
 #                 with the reason).
-#                 Target gates, not baseline-comparison tiers: each succeeds
-#                 iff every file PASSes, and none has a committed baseline --
-#                 writing baselines is U11's work, when the forks resolve.
-#                 Today every historical fork is refused, so these tiers are
-#                 expected RED at the refusal; they are the U11 inventory.
+#                 A tier with no committed baseline is a target gate: it
+#                 succeeds iff every file PASSes. Writing a baseline is U11's
+#                 work, once the fork resolves and the tier is all-PASS
+#                 (`--rebase` creates it); from then on the tier compares
+#                 against it like --smoke. Shanghai and Cancun have one
+#                 (U11a); the refused forks' tiers stay RED at the refusal,
+#                 the U11 inventory.
 #   --dir <path>  run one .json fixture, or every .json fixture under a
 #                 directory (the path must be inside the fixture root); ad hoc
 #                 — if no baseline-dir.txt exists, the gate passes iff every
@@ -310,7 +312,7 @@ case "$TIER" in
   hist-berlin) HIST_NET="Berlin"; HIST_LABELS="Berlin|BerlinToLondonAt5" ;;
   hist-london) HIST_NET="London"; HIST_LABELS="London|BerlinToLondonAt5" ;;
   hist-paris) HIST_NET="Paris"; HIST_LABELS="Paris|ArrowGlacierToParisAtDiffC0000|ParisToShanghaiAtTime15k" ;;
-  hist-shanghai) HIST_NET="Shanghai"; HIST_LABELS="Shanghai|ParisToShanghaiAtTime15k|ShanghaiToCancunAtTime15k" ;;
+  hist-shanghai) HIST_NET="Shanghai"; HIST_LABELS="Shanghai|ShanghaiToCancunAtTime15k" ;;
   hist-cancun) HIST_NET="Cancun"; HIST_LABELS="Cancun|ShanghaiToCancunAtTime15k" ;;
   hist-muirglacier|hist-arrowglacier|hist-grayglacier)
     echo "error: tier $TIER selects no file: the bomb-only forks name no legacy fixture" >&2
@@ -318,6 +320,25 @@ case "$TIER" in
     exit 2 ;;
   *) HIST_NET="Prague"; HIST_LABELS="" ;;
 esac
+# A transition fixture runs in a tier once both its endpoints resolve, so
+# `ParisToShanghaiAtTime15k` is selected by hist-paris only (goal U11a: it
+# was in hist-shanghai too, where it could only fail at Paris's refusal).
+#
+# The `--network` a selected file runs under: the tier's fork when the file
+# has cases at it, else the transition label it was selected by (goal U11a).
+# A transition-only file run under the tier's fork would select no case. The
+# non-historical tiers have no labels and always run under Prague.
+hist_file_net() {
+  if [ -z "$HIST_LABELS" ] \
+     || grep -qE "\"network\"[ ]*:[ ]*\"${HIST_NET}\"" "$1"; then
+    printf '%s' "$HIST_NET"
+  else
+    grep -oE "\"network\"[ ]*:[ ]*\"(${HIST_LABELS})\"" "$1" | head -1 \
+      | sed -E 's/.*"([^"]+)"$/\1/'
+  fi
+}
+export -f hist_file_net
+export HIST_NET HIST_LABELS
 # A parallel run's workers contend, so the guard rises to 2000s there. It stays
 # a hang detector in both modes, never a performance budget. An explicit
 # JAUNE_TIMEOUT still wins in either mode.
@@ -328,13 +349,23 @@ else
 fi
 
 # Target-gate tiers succeed iff every listed file is PASS; they have no
-# baseline and never rebase. The historical tiers join them: no correctness
-# baseline is committed for a refused fork (U11 writes baselines once the
-# forks resolve), so each tier passes iff every file PASSes -- RED today, at
-# the refusal, which is the U11 inventory.
+# baseline and never rebase. A historical tier is a target gate until its
+# fork resolves and its correctness baseline is written (U11, one wave at a
+# time): with no committed `baseline-hist-<fork>.txt` it passes iff every
+# file PASSes -- RED at the refusal for a refused fork, which is the U11
+# inventory. Once the fork resolves and the tier is all-PASS, the two-verb
+# procedure writes its baseline: `--rebase` creates it (the helper's
+# "correctness baseline created"), and from then on the tier is an ordinary
+# baseline-comparison tier, `--refresh-times` included.
 case "$TIER" in
-  patch|rlp4|hist-*) IS_TARGET=1 ;;
-  *)                 IS_TARGET=0 ;;
+  patch|rlp4) IS_TARGET=1 ;;
+  hist-*)
+    if [ -f "$SCRIPT_DIR/baseline-$TIER.txt" ] || [ "$REBASE" -eq 1 ]; then
+      IS_TARGET=0
+    else
+      IS_TARGET=1
+    fi ;;
+  *)          IS_TARGET=0 ;;
 esac
 if [ "$REBASE" -eq 1 ] && [ "$REFRESH" -eq 1 ]; then
   echo "usage error: --rebase and --refresh-times are mutually exclusive; --rebase accepts new classifications, --refresh-times refuses them" >&2
@@ -540,7 +571,7 @@ if [ "$JOBS" -gt 1 ]; then
   # and execs the runner. No fixture path in either corpus contains whitespace.
   xargs -P "$JOBS" -I{} bash -c '
     set -- $1
-    exec "$0" "$RF_BIN" "$RF_GUARD" "$RF_OUT" "$1" "$RF_FIX/$2" "$RF_NET" "$2"
+    exec "$0" "$RF_BIN" "$RF_GUARD" "$RF_OUT" "$1" "$RF_FIX/$2" "$(hist_file_net "$RF_FIX/$2")" "$2"
   ' "$RUNNER" {} < "$WORK/dispatch"
 
   # A guard trip aborts the pool via exit 255 and leaves this sentinel. It is a
@@ -596,7 +627,7 @@ while IFS= read -r REL; do
     alarm 0;
     my $st = $?;
     exit($st & 127 ? 128 + ($st & 127) : $st >> 8);
-  ' "$GUARD" "$BIN" "$FIXTURES/$REL" --network "$HIST_NET" \
+  ' "$GUARD" "$BIN" "$FIXTURES/$REL" --network "$(hist_file_net "$FIXTURES/$REL")" \
     > /dev/null 2>&1
   RC=$?
   ELAPSED="$(perl -e 'printf "%.2f", $ARGV[1] - $ARGV[0]' \

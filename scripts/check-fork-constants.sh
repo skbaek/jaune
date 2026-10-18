@@ -55,6 +55,11 @@
 # `Fork.ruleSet` without resolving it. Dormant cells -- fields the fork never
 # reads, classified in the extraction's per-fork `dormant` map -- are skipped,
 # never compared; everything else is compared exactly as for a runnable fork.
+# The same classification holds once such a fork resolves (goal U11a: Shanghai
+# and Cancun): a runnable fork's dormant cells are skipped too, so the
+# extraction's `dormant` map decides what is compared, not whether `--rules`
+# refuses. The five current forks classify no dormant cell, so their rows are
+# unchanged.
 #
 # Usage: scripts/check-fork-constants.sh [--table]
 #
@@ -253,7 +258,8 @@ for fork, entry in sorted(extraction["forks"].items()):
     # Check 3, the one that keeps this gate from quietly shrinking.
     check_key_set(fork, printed, "printer's")
 
-    compared += compare_fields(fork, entry, printed, sorted(checked))
+    compared += compare_fields(fork, entry, printed, live)
+    dormant_skipped += len(dormant)
 
 # The mainnet schedule, every declared fork.
 schedule_rows = 0
