@@ -962,55 +962,61 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
             sevm.currentTarget (devm.state.get sevm.currentTarget).nonce
         return genericCreateAmsterdam.step
           sevm state devm endowment newAddress memoryIndex memorySize
+  -- S8 (EIP-1014): availability first, the `CLZ` pattern in
+  -- `Rinst.runCore`: without the fork the byte is an undefined instruction
+  -- whatever the stack holds. The two metering shapes below are untouched.
   | .create2 =>
-    match sevm.benvStat.rules.stateGas with
-    | none =>
-      XStep.ofExcept do
-        let ⟨endowment, devm⟩ ← devm.pop
-        let ⟨memoryIndex, devm⟩ ← devm.popToNat
-        let ⟨memorySize, devm⟩ ← devm.popToNat
-        let ⟨salt, devm⟩ ← devm.pop
-        let extendCost := devm.extCost [⟨memoryIndex, memorySize⟩]
-        let initCodeHashCost := gasKeccak256Word * ceilDiv memorySize 32
-        let initCodeCost := gasInitCodeWordCost * ceilDiv memorySize 32
-        let devm ←
-          chargeGas
-            (sevm.benvStat.rules.gas.createAccess + initCodeHashCost + extendCost
-              + initCodeCost)
-            devm
-        let devm := devm.memExtends [⟨memoryIndex, memorySize⟩]
-        let newAddress :=
-          create2NewAddress
-            sevm.currentTarget salt
-            (devm.memory.data.sliceD memoryIndex memorySize 0)
-        return genericCreate.step
-          sevm devm endowment newAddress memoryIndex memorySize
-    | some state =>
-      XStep.ofExcept do
-        -- `create2` at the pin: as `create`, plus the initcode hashing words.
-        assertDynamic sevm devm
-        let ⟨endowment, devm⟩ ← devm.pop
-        let ⟨memoryIndex, devm⟩ ← devm.popToNat
-        let ⟨memorySize, devm⟩ ← devm.popToNat
-        let ⟨salt, devm⟩ ← devm.pop
-        let extendCost := devm.extCost [⟨memoryIndex, memorySize⟩]
-        let initCodeHashCost := gasKeccak256Word * ceilDiv memorySize 32
-        let initCodeCost := gasInitCodeWordCost * ceilDiv memorySize 32
-        let devm ←
-          chargeGas
-            (sevm.benvStat.rules.gas.createAccess + initCodeHashCost + extendCost
-              + initCodeCost)
-            devm
-        Except.assert
-          (memorySize ≤ sevm.benvStat.rules.code.maxInitCodeSize)
-          ⟨.halt (.outOfGas .none), devm⟩
-        let devm := devm.memExtends [⟨memoryIndex, memorySize⟩]
-        let newAddress :=
-          create2NewAddress
-            sevm.currentTarget salt
-            (devm.memory.data.sliceD memoryIndex memorySize 0)
-        return genericCreateAmsterdam.step
-          sevm state devm endowment newAddress memoryIndex memorySize
+    if sevm.benvStat.rules.op.create2 then
+      match sevm.benvStat.rules.stateGas with
+      | none =>
+        XStep.ofExcept do
+          let ⟨endowment, devm⟩ ← devm.pop
+          let ⟨memoryIndex, devm⟩ ← devm.popToNat
+          let ⟨memorySize, devm⟩ ← devm.popToNat
+          let ⟨salt, devm⟩ ← devm.pop
+          let extendCost := devm.extCost [⟨memoryIndex, memorySize⟩]
+          let initCodeHashCost := gasKeccak256Word * ceilDiv memorySize 32
+          let initCodeCost := gasInitCodeWordCost * ceilDiv memorySize 32
+          let devm ←
+            chargeGas
+              (sevm.benvStat.rules.gas.createAccess + initCodeHashCost + extendCost
+                + initCodeCost)
+              devm
+          let devm := devm.memExtends [⟨memoryIndex, memorySize⟩]
+          let newAddress :=
+            create2NewAddress
+              sevm.currentTarget salt
+              (devm.memory.data.sliceD memoryIndex memorySize 0)
+          return genericCreate.step
+            sevm devm endowment newAddress memoryIndex memorySize
+      | some state =>
+        XStep.ofExcept do
+          -- `create2` at the pin: as `create`, plus the initcode hashing words.
+          assertDynamic sevm devm
+          let ⟨endowment, devm⟩ ← devm.pop
+          let ⟨memoryIndex, devm⟩ ← devm.popToNat
+          let ⟨memorySize, devm⟩ ← devm.popToNat
+          let ⟨salt, devm⟩ ← devm.pop
+          let extendCost := devm.extCost [⟨memoryIndex, memorySize⟩]
+          let initCodeHashCost := gasKeccak256Word * ceilDiv memorySize 32
+          let initCodeCost := gasInitCodeWordCost * ceilDiv memorySize 32
+          let devm ←
+            chargeGas
+              (sevm.benvStat.rules.gas.createAccess + initCodeHashCost + extendCost
+                + initCodeCost)
+              devm
+          Except.assert
+            (memorySize ≤ sevm.benvStat.rules.code.maxInitCodeSize)
+            ⟨.halt (.outOfGas .none), devm⟩
+          let devm := devm.memExtends [⟨memoryIndex, memorySize⟩]
+          let newAddress :=
+            create2NewAddress
+              sevm.currentTarget salt
+              (devm.memory.data.sliceD memoryIndex memorySize 0)
+          return genericCreateAmsterdam.step
+            sevm state devm endowment newAddress memoryIndex memorySize
+    else
+      XStep.ofExcept (.error ⟨.halt (.invalidOpcode .none), devm⟩)
   | .call =>
     match sevm.benvStat.rules.stateGas with
     | none =>
@@ -1566,11 +1572,17 @@ private theorem Xinst.stepCached_fst
 def Ninst.step (evm : Evm) (n : Ninst) : Step :=
   let pc := evm.pc + n.size
   match n with
+  -- S8 (EIP-3855): `PUSH0` is the empty push. Without the fork the byte is an
+  -- undefined instruction whatever the stack and gas hold, exactly as for
+  -- `CLZ` in `Rinst.runCore`; a nonzero push is untouched.
   | .push xs _ =>
-    let cost := if xs = [] then gBase else gVerylow
-    Step.ofExecution pc <| do
-      let devm ← chargeGas cost evm.dyna
-      devm.push xs.toB256
+    if xs = [] && !evm.sta.benvStat.rules.op.push0 then
+      Step.ofExecution pc (.error ⟨.halt (.invalidOpcode .none), evm.dyna⟩)
+    else
+      let cost := if xs = [] then gBase else gVerylow
+      Step.ofExecution pc <| do
+        let devm ← chargeGas cost evm.dyna
+        devm.push xs.toB256
   | .reg r => Step.ofExecution pc (r.run evm)
   | .exec x => XStep.toStep pc (Xinst.step evm.sta evm.dyna x)
   -- EIP-8024 (`vm/instructions/stack.py` `dupn`/`swapn`/`exchange`): the
@@ -1705,6 +1717,28 @@ private def guardStackOf (n : Nat) : List Nat := List.range n
 -- And `SLOTNUM` from code, for the same fixture: `BASE`, the push, `pc += 1`.
 #guard stackAccessGuard .amsterdam [0x4B] 100 [] = ("ok", 100 - gBase, [0], 1)
 #guard (stackAccessGuard .bpo2 [0x4B] 100 []).1 = "InvalidOpcode"
+
+-- S8 (EIP-1014) `CREATE2` availability (unit U5): without the fork the byte is
+-- an undefined instruction whatever the stack holds; with it an empty stack
+-- reaches the first pop instead (the gate passed, the stack failed).
+private def guardCreate2 (fork : Fork) : XStep :=
+  Xinst.step
+    { (default : Sevm) with
+      benvStat := { (default : BenvStat) with fork := fork } }
+    default .create2
+
+#guard match guardCreate2 .byzantium with
+  | .done (.error ⟨.halt (.invalidOpcode _), _⟩) => true
+  | _ => false
+#guard match guardCreate2 .prague with
+  | .done (.error ⟨.halt (.stackUnderflow _), _⟩) => true
+  | _ => false
+
+-- S8 (EIP-3855) `PUSH0` availability (unit U5): where defined it pushes zero
+-- for `BASE`; without the fork the byte is undefined and charges nothing.
+#guard stackAccessGuard .shanghai [0x5F] 100 [] = ("ok", 100 - gBase, [0], 1)
+#guard stackAccessGuard .istanbul [0x5F] 100 [] = ("InvalidOpcode", 100, [], 0)
+#guard (stackAccessGuard .istanbul [0x5F] 0 []).1 = "InvalidOpcode"
 
 private def Ninst.stepCached
     (evm : Evm) (cache : Option CalldataCache) (n : Ninst) :
@@ -3393,26 +3427,34 @@ theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
       · exact Devm.Canonical.of_world_eq hd1 rfl
   case create2 =>
     split
-    · refine XStep.ofExcept_canonical ?_
-      refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
-      refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
-      refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
-      refine Except.CanonicalOn.bind (liftMach_canonicalOn hc) fun e he => ?_
-      refine Except.CanonicalOn.bind (liftMachExecution_canonical he) fun d hd1 => ?_
-      exact Except.canonicalOn_ok
-        (genericCreate.step_canonical hs (by exact hd1) _ _ _ _)
-    · refine XStep.ofExcept_canonical ?_
-      refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
-      refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
-      refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
-      refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
-      refine Except.CanonicalOn.bind (liftMach_canonicalOn hc) fun e he => ?_
-      refine Except.CanonicalOn.bind (liftMachExecution_canonical he) fun d hd1 => ?_
-      refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd1) fun _ _ => ?_
-      apply Except.canonicalOn_ok
-      apply genericCreateAmsterdam.step_canonical
-      · exact hs
-      · exact Devm.Canonical.of_world_eq hd1 rfl
+    · split
+      · refine XStep.ofExcept_canonical ?_
+        refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
+        refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+        refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
+        refine Except.CanonicalOn.bind (liftMach_canonicalOn hc) fun e he => ?_
+        refine Except.CanonicalOn.bind (liftMachExecution_canonical he)
+          fun d hd1 => ?_
+        exact Except.canonicalOn_ok
+          (genericCreate.step_canonical hs (by exact hd1) _ _ _ _)
+      · refine XStep.ofExcept_canonical ?_
+        refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd)
+          fun _ _ => ?_
+        refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
+        refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+        refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
+        refine Except.CanonicalOn.bind (liftMach_canonicalOn hc) fun e he => ?_
+        refine Except.CanonicalOn.bind (liftMachExecution_canonical he)
+          fun d hd1 => ?_
+        refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd1)
+          fun _ _ => ?_
+        apply Except.canonicalOn_ok
+        apply genericCreateAmsterdam.step_canonical
+        · exact hs
+        · exact Devm.Canonical.of_world_eq hd1 rfl
+    · -- Gate off: the undefined-opcode error keeps the machine.
+      refine XStep.ofExcept_canonical ?_
+      exact hd
   case call =>
     split
     · refine XStep.ofExcept_canonical ?_
@@ -3613,9 +3655,14 @@ theorem Ninst.step_canonical {evm : Evm} (h : evm.Canonical) (n : Ninst) :
     (Ninst.step evm n).Canonical := by
   cases n with
   | push xs prf =>
-    refine Step.ofExecution_canonical _ ?_
-    exact Except.CanonicalOn.bind (liftMachExecution_canonical h.2)
-      fun d hd => liftMachExecution_canonical hd
+    simp only [Ninst.step]
+    split
+    · -- Gate off: the undefined-opcode error keeps the machine.
+      refine Step.ofExecution_canonical _ ?_
+      exact h.2
+    · refine Step.ofExecution_canonical _ ?_
+      exact Except.CanonicalOn.bind (liftMachExecution_canonical h.2)
+        fun d hd => liftMachExecution_canonical hd
   | reg r => exact Step.ofExecution_canonical _ (Rinst.run_canonical h.2 r)
   | exec x => exact XStep.toStep_canonical _ (Xinst.step_canonical h.1 h.2 x)
   | dupn imm =>
@@ -4032,14 +4079,18 @@ theorem Xinst.step_stateGasZero {sevm : Sevm} {devm : Devm}
     exact Except.stateGasZeroOn_ok
       (genericCreate.step_stateGasZero hrules (by exact hd) _ _ _ _)
   case create2 =>
-    refine XStep.ofExcept_stateGasZero ?_
-    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
-    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero ha) fun b hb => ?_
-    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hb) fun c hc => ?_
-    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero hc) fun e he => ?_
-    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ he) fun d hd => ?_
-    exact Except.stateGasZeroOn_ok
-      (genericCreate.step_stateGasZero hrules (by exact hd) _ _ _ _)
+    split
+    · refine XStep.ofExcept_stateGasZero ?_
+      refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
+      refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero ha) fun b hb => ?_
+      refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hb) fun c hc => ?_
+      refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero hc) fun e he => ?_
+      refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ he) fun d hd => ?_
+      exact Except.stateGasZeroOn_ok
+        (genericCreate.step_stateGasZero hrules (by exact hd) _ _ _ _)
+    · -- Gate off: the undefined-opcode error keeps the machine.
+      refine XStep.ofExcept_stateGasZero ?_
+      exact h
   case call =>
     refine XStep.ofExcept_stateGasZero ?_
     refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
@@ -4110,10 +4161,15 @@ theorem Ninst.step_stateGasZero {evm : Evm} (h : evm.StateGasZero)
     (n : Ninst) : (Ninst.step evm n).StateGasZero := by
   cases n with
   | push xs prf =>
-      refine Step.ofExecution_stateGasZero _ ?_
-      refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h.2) ?_
-      intro d hd
-      exact Devm.push_stateGasZero _ hd
+      simp only [Ninst.step]
+      split
+      · -- Gate off: the undefined-opcode error keeps the machine.
+        refine Step.ofExecution_stateGasZero _ ?_
+        exact Except.stateGasZeroOn_error h.2
+      · refine Step.ofExecution_stateGasZero _ ?_
+        refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h.2) ?_
+        intro d hd
+        exact Devm.push_stateGasZero _ hd
   | reg r =>
       exact Step.ofExecution_stateGasZero _
         (Rinst.run_stateGasZero h.2 h.1 r)

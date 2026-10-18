@@ -297,7 +297,7 @@ lemma Step.spawn_depth_lt {pc : Nat} {sevm : Sevm} {devm : Devm}
     rcases n with r | x | ⟨xs, hxs⟩ | a | a | a <;> simp only [Ninst.step] at hs
     · cases Step.ofExecution_ne_spawn hs
     · exact Xinst.step_spawn_depth (XStep.toStep_spawn hs)
-    · cases Step.ofExecution_ne_spawn hs
+    · split at hs <;> cases Step.ofExecution_ne_spawn hs
     · cases Step.ofExecution_ne_spawn hs
     · cases Step.ofExecution_ne_spawn hs
     · cases Step.ofExecution_ne_spawn hs

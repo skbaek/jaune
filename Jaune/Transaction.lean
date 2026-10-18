@@ -2627,12 +2627,30 @@ theorem Bytes.toExTx_wireWellFormed {xs : Bytes} {tx : Tx}
     · exact absurd h (by simp)
     · exact absurd h (by simp)
 
+/-- S5 admission: a decoded transaction is admissible only when its type
+number fits the rules (`tx.type.index ≤ rules.txr.maxType`). A typed envelope
+from a later fork fails here with the decode-channel reason -- EELS's own
+decode of those bytes fails structurally under the earlier fork, so the block
+is invalid rather than internally unclassifiable. Pre-London needs nothing
+more: fees are unchanged because the base fee is 0 there. -/
+def checkTxTypeAdmitted (rules : ForkRules) (tx : Tx) :
+    Except TransitionError Unit :=
+  if tx.type.index ≤ rules.txr.maxType then .ok ()
+  else
+    .error <| .decode <| DecodeError.structure "typed transaction"
+      s!"type-{tx.type.index} transaction needs maxType ≥ {tx.type.index}, \
+         these rules admit at most {rules.txr.maxType}"
+
 /-- Decode a block-body transaction slot: opaque typed-envelope bytes through
-the strict envelope decoder, an already-decoded legacy slot as itself. The
-`.inr` arm is not a bypass on the checked path: `CanonicalBlock.decodeTx_inr`
-certifies what it returns there. -/
-def decodeTx : Bytes ⊕ Tx → Except TransitionError Tx
-  | .inl xs => xs.toExTx
+the strict envelope decoder plus the S5 admission check, an already-decoded
+legacy slot as itself. The `.inr` arm is not a bypass on the checked path:
+`CanonicalBlock.decodeTx_inr` certifies what it returns there, and every
+certified slot is legacy, which every `maxType` admits. -/
+def decodeTx (rules : ForkRules) : Bytes ⊕ Tx → Except TransitionError Tx
+  | .inl xs => do
+    let tx ← xs.toExTx
+    checkTxTypeAdmitted rules tx
+    .ok tx
   | .inr tx => .ok tx
 
 
@@ -2945,7 +2963,7 @@ def applyBody
     outHistory.storageWrites.toList
   let benvHistory := benvBeacon.withState stHistory
   let ⟨benvTxs, boutTxs⟩ ←
-    applyTransactions (← txs.mapM decodeTx).putIndex benvHistory {BlockOutput.init with bal := bal}
+    applyTransactions (← txs.mapM (decodeTx benvHistory.stat.rules)).putIndex benvHistory {BlockOutput.init with bal := bal}
   let ⟨stWds, boutWds⟩ :=
     processWithdrawals benvTxs boutTxs wds
   -- EIP-7928: the withdrawals batch is one incorporation at `n + 1`; every
@@ -3539,7 +3557,15 @@ def initBenvStat (fork : Fork) (chain : BlockChain) (header : Header) :
     number := header.number,
     baseFeePerGas := header.baseFeePerGas,
     time := header.timestamp.toB256,
-    prevRandao := header.prevRandao,
+    -- S8 0x44 (unit U5): before the merge there is no RANDAO, so `DIFFICULTY`
+    -- reads the header's difficulty instead of `prevRandao`. The opcode keeps
+    -- reading this field unchanged; the selection lives here, at environment
+    -- construction. Post-merge (`pow = none`) it is the header's `prevRandao`
+    -- as before, so every reachable (refused-history) machine is unaffected.
+    prevRandao :=
+      match fork.ruleSet.pow with
+      | some _ => Nat.toB256 header.difficulty
+      | none => header.prevRandao,
     excessBlobGas := header.excessBlobGas,
     parentBeaconBlockRoot := header.parentBeaconBlockRoot,
     -- EIP-7843: absent before Amsterdam, where nothing reads it.
@@ -4216,15 +4242,17 @@ theorem CanonicalBlock.toChecked_val (cb : CanonicalBlock) :
 
 /-- P0.3's trust bypass, discharged rather than relocated.
 
-`decodeTx (.inr tx) = .ok tx` still holds -- revalidating a decoder-produced
-legacy transaction late in `applyBody` is exactly what the plan forbids -- but
+`decodeTx rules (.inr tx) = .ok tx` still holds -- revalidating a
+decoder-produced legacy transaction late in `applyBody` is exactly what the
+plan forbids -- but
 on the checked path it is no longer an *assumption*. Every decoded slot of a
 canonical outer block is a wire-well-formed legacy transaction, so what
 `decodeTx` returns there is certified, and the ingress side can no longer be
 handed an uncertified `.inr Tx` at all. -/
 theorem CanonicalBlock.decodeTx_inr {cb : CanonicalBlock} {tx : Tx}
+    (rules : ForkRules)
     (h : Sum.inr tx ∈ cb.block.txs) :
-    decodeTx (.inr tx) = .ok tx ∧
+    decodeTx rules (.inr tx) = .ok tx ∧
       Tx.WireWellFormed tx ∧ tx.type.isLegacy = true :=
   ⟨rfl, cb.rlpCanonical.2.2.2 _ h⟩
 
@@ -4676,6 +4704,28 @@ private def reencodes (type : UInt8) (v : Bytes) : Bool :=
 #guard reencodes 0x03 <| type3Vector [0x01] testRecipient testBlobHash
 #guard reencodes 0x04 <| type4Vector testRecipient goodAuth
 
+-- S5 admission through `decodeTx`: the envelope type must fit the rules'
+-- `maxType`, and a too-new envelope fails on the decode channel (the block is
+-- invalid, as EELS's own structural decode failure makes it). Byzantium admits
+-- only legacy; Berlin adds type 1; London type 2; Cancun type 3; Prague
+-- (maxType 4) everything the decoder produces.
+#guard txDecFails isStructureD <| decodeTx byzantiumRules (.inl
+  (type1Vector [0x01] [0x01] testRecipient [0x01] (.list [])))
+#guard (decodeTx berlinRules (.inl
+  (type1Vector [0x01] [0x01] testRecipient [0x01] (.list [])))).toOption.isSome
+#guard txDecFails isStructureD <| decodeTx berlinRules (.inl
+  (type2Vector [0x0a] testRecipient [0x02]))
+#guard (decodeTx londonRules (.inl
+  (type2Vector [0x0a] testRecipient [0x02]))).toOption.isSome
+#guard txDecFails isStructureD <| decodeTx londonRules (.inl
+  (type3Vector [0x01] testRecipient testBlobHash))
+#guard (decodeTx cancunRules (.inl
+  (type3Vector [0x01] testRecipient testBlobHash))).toOption.isSome
+#guard txDecFails isStructureD <| decodeTx cancunRules (.inl
+  (type4Vector testRecipient goodAuth))
+#guard (decodeTx pragueRules (.inl
+  (type4Vector testRecipient goodAuth))).toOption.isSome
+
 -- An authorization signature scalar below 2^248 encodes canonically in fewer
 -- than thirty-two bytes. It must re-encode minimally: a fixed 32-byte
 -- re-encoding diverges from the canonical bytes for ~0.8% of valid
@@ -5044,6 +5094,14 @@ private def guardBlockAt (timestamp : Nat) : Block :=
     ommers := []
     wds := []
   }
+
+-- S8 0x44 (unit U5): `DIFFICULTY` source selection at environment
+-- construction. Under proof of work the opcode reads the header's difficulty;
+-- post-merge it reads `prevRandao`, so Prague is unaffected.
+#guard (initBenvStat .byzantium guardEmptyChain
+  { guardTestHeader with difficulty := 19 }).prevRandao = Nat.toB256 19
+#guard (initBenvStat .prague guardEmptyChain
+  { guardTestHeader with difficulty := 19 }).prevRandao = 0
 
 -- EIP-7918 uses a strict price comparison. At the 16-wei equality boundary
 -- the ordinary target subtraction still applies; one wei above it activates

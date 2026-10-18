@@ -1073,19 +1073,23 @@ private theorem regular_memory_accounting (pc : Nat) (pre : Devm) (sevm : Sevm) 
     rw [← pushItem_def]
     exact nonspawn_pushItem _ _ _
   case blobhash =>
-    refine nonspawnResult_bind (nonspawn_pop pre) ?_
-    intro popped
-    rw [← pushItem_def]
-    exact nonspawn_pushItem _ _ _
+    split
+    · refine nonspawnResult_bind (nonspawn_pop pre) ?_
+      intro popped
+      rw [← pushItem_def]
+      exact nonspawn_pushItem _ _ _
+    · exact ⟨Nat.le_refl _, rfl⟩
   case blockhash =>
     refine nonspawnResult_bind (nonspawn_pop pre) ?_
     intro popped
     rw [← pushItem_def]
     exact nonspawn_pushItem _ _ _
   case tload =>
-    refine nonspawnResult_bind (nonspawn_pop pre) ?_
-    intro popped
-    exact nonspawn_pushItem _ _ _
+    split
+    · refine nonspawnResult_bind (nonspawn_pop pre) ?_
+      intro popped
+      exact nonspawn_pushItem _ _ _
+    · exact ⟨Nat.le_refl _, rfl⟩
   case gas =>
     refine nonspawnResult_bind (nonspawn_charge gBase pre) ?_
     intro charged
@@ -1098,11 +1102,21 @@ private theorem regular_memory_accounting (pc : Nat) (pre : Devm) (sevm : Sevm) 
     split
     · exact nonspawn_pushItem _ _ _
     · exact ⟨Nat.le_refl _, rfl⟩
+  case shl | shr | sar =>
+    split
+    · exact nonspawn_binary _ _ _
+    · exact ⟨Nat.le_refl _, rfl⟩
+  case chainid | basefee | blobbasefee =>
+    split
+    · exact nonspawn_pushItem _ _ _
+    · exact ⟨Nat.le_refl _, rfl⟩
   case selfbalance =>
-    refine nonspawnResult_bind (nonspawn_charge gLow pre) ?_
-    intro charged
-    exact nonspawnResult_trans (nonspawn_balReadAccount sevm.benvStat.rules
-      sevm.currentTarget charged) (nonspawn_push _ _)
+    split
+    · refine nonspawnResult_bind (nonspawn_charge gLow pre) ?_
+      intro charged
+      exact nonspawnResult_trans (nonspawn_balReadAccount sevm.benvStat.rules
+        sevm.currentTarget charged) (nonspawn_push _ _)
+    · exact ⟨Nat.le_refl _, rfl⟩
   case dup n =>
     refine nonspawnResult_bind (nonspawn_charge gVerylow pre) ?_
     intro charged
@@ -1138,18 +1152,20 @@ private theorem regular_memory_accounting (pc : Nat) (pre : Devm) (sevm : Sevm) 
       exact nonspawnResult_trans (nonspawn_balReadAccount sevm.benvStat.rules
         popped.1 charged) (nonspawn_push _ _)
   case extcodehash =>
-    refine nonspawnResult_bind (nonspawn_popToAdr pre) ?_
-    intro popped
     split
-    · refine nonspawnResult_bind (nonspawn_charge _ popped.2) ?_
-      intro charged
-      exact nonspawnResult_trans (nonspawn_balReadAccount sevm.benvStat.rules
-        popped.1 charged) (nonspawn_push _ _)
-    · refine nonspawnResult_trans (nonspawn_addAccessedAddress popped.2 popped.1) ?_
-      refine nonspawnResult_bind (nonspawn_charge _ _) ?_
-      intro charged
-      exact nonspawnResult_trans (nonspawn_balReadAccount sevm.benvStat.rules
-        popped.1 charged) (nonspawn_push _ _)
+    · refine nonspawnResult_bind (nonspawn_popToAdr pre) ?_
+      intro popped
+      split
+      · refine nonspawnResult_bind (nonspawn_charge _ popped.2) ?_
+        intro charged
+        exact nonspawnResult_trans (nonspawn_balReadAccount sevm.benvStat.rules
+          popped.1 charged) (nonspawn_push _ _)
+      · refine nonspawnResult_trans (nonspawn_addAccessedAddress popped.2 popped.1) ?_
+        refine nonspawnResult_bind (nonspawn_charge _ _) ?_
+        intro charged
+        exact nonspawnResult_trans (nonspawn_balReadAccount sevm.benvStat.rules
+          popped.1 charged) (nonspawn_push _ _)
+    · exact ⟨Nat.le_refl _, rfl⟩
   case sload =>
     refine nonspawnResult_bind (nonspawn_pop pre) ?_
     intro popped
@@ -1165,16 +1181,18 @@ private theorem regular_memory_accounting (pc : Nat) (pre : Devm) (sevm : Sevm) 
       exact nonspawnResult_trans (nonspawn_balReadStorage sevm.benvStat.rules
         sevm.currentTarget popped.1 charged) (nonspawn_push _ _)
   case tstore =>
-    simp only [hstate]
-    refine nonspawnResult_bind (nonspawn_pop pre) ?_
-    intro popped
-    refine nonspawnResult_bind (nonspawn_pop popped.2) ?_
-    intro poppedAgain
-    refine nonspawnResult_bind (nonspawn_charge gasWarmAccess poppedAgain.2) ?_
-    intro charged
-    refine nonspawnResult_bind (nonspawn_assertDynamic sevm charged) ?_
-    intro _
-    exact ⟨Nat.le_refl _, rfl⟩
+    split
+    · simp only [hstate]
+      refine nonspawnResult_bind (nonspawn_pop pre) ?_
+      intro popped
+      refine nonspawnResult_bind (nonspawn_pop popped.2) ?_
+      intro poppedAgain
+      refine nonspawnResult_bind (nonspawn_charge gasWarmAccess poppedAgain.2) ?_
+      intro charged
+      refine nonspawnResult_bind (nonspawn_assertDynamic sevm charged) ?_
+      intro _
+      exact ⟨Nat.le_refl _, rfl⟩
+    · exact ⟨Nat.le_refl _, rfl⟩
   case mload =>
     refine nonspawnResult_bind (nonspawn_popToNat pre) ?_
     intro popped
@@ -1258,21 +1276,23 @@ private theorem regular_memory_accounting (pc : Nat) (pre : Devm) (sevm : Sevm) 
       simpa only [list_slice_length] using
         nonspawn_write charged popped.1 (List.sliceD charged.returnData dataIndex.1 size.1 0)
   case mcopy =>
-    refine nonspawnResult_bind (nonspawn_popToNat pre) ?_
-    intro destination
-    refine nonspawnResult_bind (nonspawn_popToNat destination.2) ?_
-    intro source
-    refine nonspawnResult_bind (nonspawn_popToNat source.2) ?_
-    intro size
-    refine nonspawn_charged_memory [(source.1, size.1), (destination.1, size.1)]
-      (gVerylow + gasCopy * ceilDiv size.1 32) size.2 _ ?_
-    intro charged
-    have hw := nonspawn_write (charged.memRead source.1 size.1).2 destination.1
-      (charged.memRead source.1 size.1).1
-    have hl : (charged.memRead source.1 size.1).1.length = size.1 :=
-      memory_slice_length charged.memory.data source.1 size.1 0
-    rw [hl] at hw
-    exact hw
+    split
+    · refine nonspawnResult_bind (nonspawn_popToNat pre) ?_
+      intro destination
+      refine nonspawnResult_bind (nonspawn_popToNat destination.2) ?_
+      intro source
+      refine nonspawnResult_bind (nonspawn_popToNat source.2) ?_
+      intro size
+      refine nonspawn_charged_memory [(source.1, size.1), (destination.1, size.1)]
+        (gVerylow + gasCopy * ceilDiv size.1 32) size.2 _ ?_
+      intro charged
+      have hw := nonspawn_write (charged.memRead source.1 size.1).2 destination.1
+        (charged.memRead source.1 size.1).1
+      have hl : (charged.memRead source.1 size.1).1.length = size.1 :=
+        memory_slice_length charged.memory.data source.1 size.1 0
+      rw [hl] at hw
+      exact hw
+    · exact ⟨Nat.le_refl _, rfl⟩
   case log n =>
     refine nonspawnResult_bind (nonspawn_popToNat pre) ?_
     intro popped
@@ -1644,28 +1664,33 @@ private theorem executable_memory_accounting (sevm : Sevm) (pre : Devm) (x : Xin
       (genericCreate_memory_accounting sevm _ endowment.1 _ memoryIndex.1 memorySize.1)
     omega
   case create2 =>
-    apply xAccounting_ofExcept
-    refine xResult_bind (nonspawn_pop pre) ?_
-    intro endowment
-    refine xResult_bind (nonspawn_popToNat endowment.2) ?_
-    intro memoryIndex
-    refine xResult_bind (nonspawn_popToNat memoryIndex.2) ?_
-    intro memorySize
-    refine xResult_bind (nonspawn_pop memorySize.2) ?_
-    intro salt
-    rw [Nat.add_right_comm
-      (sevm.benvStat.rules.gas.createAccess + gasKeccak256Word * ceilDiv memorySize.1 32)
-      (salt.2.extCost [(memoryIndex.1, memorySize.1)])
-      (gasInitCodeWordCost * ceilDiv memorySize.1 32)]
-    refine xResult_charged_memory [(memoryIndex.1, memorySize.1)]
-      (sevm.benvStat.rules.gas.createAccess + gasKeccak256Word * ceilDiv memorySize.1 32 +
-        gasInitCodeWordCost * ceilDiv memorySize.1 32)
-      salt.2 _ ?_
-    intro charged
-    refine xAccounting_rebase (pre := charged.memExtends [(memoryIndex.1, memorySize.1)])
-      (inner := 0) ?_ rfl
-      (genericCreate_memory_accounting sevm _ endowment.1 _ memoryIndex.1 memorySize.1)
-    omega
+    by_cases hf : sevm.benvStat.rules.op.create2 = true
+    · simp only [ite_eq_left hf]
+      apply xAccounting_ofExcept
+      refine xResult_bind (nonspawn_pop pre) ?_
+      intro endowment
+      refine xResult_bind (nonspawn_popToNat endowment.2) ?_
+      intro memoryIndex
+      refine xResult_bind (nonspawn_popToNat memoryIndex.2) ?_
+      intro memorySize
+      refine xResult_bind (nonspawn_pop memorySize.2) ?_
+      intro salt
+      rw [Nat.add_right_comm
+        (sevm.benvStat.rules.gas.createAccess + gasKeccak256Word * ceilDiv memorySize.1 32)
+        (salt.2.extCost [(memoryIndex.1, memorySize.1)])
+        (gasInitCodeWordCost * ceilDiv memorySize.1 32)]
+      refine xResult_charged_memory [(memoryIndex.1, memorySize.1)]
+        (sevm.benvStat.rules.gas.createAccess + gasKeccak256Word * ceilDiv memorySize.1 32 +
+          gasInitCodeWordCost * ceilDiv memorySize.1 32)
+        salt.2 _ ?_
+      intro charged
+      refine xAccounting_rebase (pre := charged.memExtends [(memoryIndex.1, memorySize.1)])
+        (inner := 0) ?_ rfl
+        (genericCreate_memory_accounting sevm _ endowment.1 _ memoryIndex.1 memorySize.1)
+      omega
+    · simp only [ite_eq_right hf]
+      apply xAccounting_ofExcept
+      exact ⟨Nat.le_refl _, rfl⟩
   case delegatecall =>
     apply xAccounting_ofExcept
     refine xResult_bind (nonspawn_pop pre) ?_
@@ -1920,10 +1945,15 @@ private theorem nonterminal_memory_accounting (evm : Evm) (n : Ninst)
   case exec x =>
     exact ofXStep_accounted _ (executable_memory_accounting evm.sta evm.dyna x hstate)
   case push bytes bound =>
-    apply ofExecution_accounted
-    refine nonspawnResult_bind (nonspawn_charge _ evm.dyna) ?_
-    intro charged
-    exact nonspawn_push bytes.toB256 charged
+    by_cases hf : (decide (bytes = []) && !evm.sta.benvStat.rules.op.push0) = true
+    · simp only [ite_eq_left hf]
+      apply ofExecution_accounted
+      exact ⟨Nat.le_refl _, rfl⟩
+    · simp only [ite_eq_right hf]
+      apply ofExecution_accounted
+      refine nonspawnResult_bind (nonspawn_charge _ evm.dyna) ?_
+      intro charged
+      exact nonspawn_push bytes.toB256 charged
   case dupn imm =>
     apply ofExecution_accounted
     by_cases hf : evm.sta.benvStat.rules.op.stackAccess = true
@@ -2310,28 +2340,33 @@ private theorem executable_spawn_accounting (sevm : Sevm) (pre : Devm) (x : Xins
       (genericCreate_spawn_accounting sevm _ endowment.1 _ memoryIndex.1 memorySize.1)
     omega
   case create2 =>
-    apply spawnAccounting_ofExcept
-    refine spawnResult_bind (nonspawn_pop pre) ?_
-    intro endowment
-    refine spawnResult_bind (nonspawn_popToNat endowment.2) ?_
-    intro memoryIndex
-    refine spawnResult_bind (nonspawn_popToNat memoryIndex.2) ?_
-    intro memorySize
-    refine spawnResult_bind (nonspawn_pop memorySize.2) ?_
-    intro salt
-    rw [Nat.add_right_comm
-      (sevm.benvStat.rules.gas.createAccess + gasKeccak256Word * ceilDiv memorySize.1 32)
-      (salt.2.extCost [(memoryIndex.1, memorySize.1)])
-      (gasInitCodeWordCost * ceilDiv memorySize.1 32)]
-    refine spawnResult_charged_memory [(memoryIndex.1, memorySize.1)]
-      (sevm.benvStat.rules.gas.createAccess + gasKeccak256Word * ceilDiv memorySize.1 32 +
-        gasInitCodeWordCost * ceilDiv memorySize.1 32)
-      salt.2 _ ?_
-    intro charged
-    refine spawnAccounting_rebase (pre := charged.memExtends [(memoryIndex.1, memorySize.1)])
-      (inner := 0) ?_ rfl
-      (genericCreate_spawn_accounting sevm _ endowment.1 _ memoryIndex.1 memorySize.1)
-    omega
+    by_cases hf : sevm.benvStat.rules.op.create2 = true
+    · simp only [ite_eq_left hf]
+      apply spawnAccounting_ofExcept
+      refine spawnResult_bind (nonspawn_pop pre) ?_
+      intro endowment
+      refine spawnResult_bind (nonspawn_popToNat endowment.2) ?_
+      intro memoryIndex
+      refine spawnResult_bind (nonspawn_popToNat memoryIndex.2) ?_
+      intro memorySize
+      refine spawnResult_bind (nonspawn_pop memorySize.2) ?_
+      intro salt
+      rw [Nat.add_right_comm
+        (sevm.benvStat.rules.gas.createAccess + gasKeccak256Word * ceilDiv memorySize.1 32)
+        (salt.2.extCost [(memoryIndex.1, memorySize.1)])
+        (gasInitCodeWordCost * ceilDiv memorySize.1 32)]
+      refine spawnResult_charged_memory [(memoryIndex.1, memorySize.1)]
+        (sevm.benvStat.rules.gas.createAccess + gasKeccak256Word * ceilDiv memorySize.1 32 +
+          gasInitCodeWordCost * ceilDiv memorySize.1 32)
+        salt.2 _ ?_
+      intro charged
+      refine spawnAccounting_rebase (pre := charged.memExtends [(memoryIndex.1, memorySize.1)])
+        (inner := 0) ?_ rfl
+        (genericCreate_spawn_accounting sevm _ endowment.1 _ memoryIndex.1 memorySize.1)
+      omega
+    · simp only [ite_eq_right hf]
+      apply spawnAccounting_ofExcept
+      trivial
   case delegatecall =>
     apply spawnAccounting_ofExcept
     refine spawnResult_bind (nonspawn_pop pre) ?_

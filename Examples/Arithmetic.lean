@@ -77,6 +77,7 @@ theorem step0 (gas : 9 ≤ g) (room : s.length < 1023) :
     SymbolicPush.step_success _ [a] (by simp)
       (by simp [SymbolicPush.cost, initial, Devm.gasLeft, Devm.setMach, gVerylow]; omega)
       (by simp [initial, Devm.stack, Devm.setMach]; omega)
+      (Or.inl (by simp))
 
 theorem step2 (gas : 9 ≤ g) (room : s.length < 1023) :
     Evm.step ⟨2, sevm env a b, afterFirst base a g s⟩ =
@@ -86,6 +87,7 @@ theorem step2 (gas : 9 ≤ g) (room : s.length < 1023) :
       (by simp [SymbolicPush.cost, SymbolicPush.post, afterFirst, initial, Devm.gasLeft,
             Devm.setMach, gVerylow]; omega)
       (by simp [SymbolicPush.post, afterFirst, initial, Devm.stack, Devm.setMach]; omega)
+      (Or.inl (by simp))
 
 theorem step4 (gas : 9 ≤ g) (room : s.length < 1023) :
     Evm.step ⟨4, sevm env a b, afterSecond base a b g s⟩ =
