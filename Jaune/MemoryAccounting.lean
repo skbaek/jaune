@@ -3144,7 +3144,8 @@ theorem executeModexp_ok_output_length_le {evm : Evm} {cost : Nat} {output : Byt
 actual gas guard, including when its output is empty. -/
 theorem executeModexp_ok_selected_cost {evm : Evm} {cost : Nat} {output : Bytes}
     (h : executeModexp evm = .ok cost output) :
-    cost = modexpGasCost evm.sta.benvStat.rules.modexp
+    cost = modexpGasCost evm.sta.benvStat.rules.modexpComplexity
+      evm.sta.benvStat.rules.modexp
       (Bytes.sliceToNat evm.sta.data 0 32)
       (Bytes.sliceToNat evm.sta.data 64 32)
       (Bytes.sliceToNat evm.sta.data 32 32)
@@ -3172,7 +3173,8 @@ theorem executeModexp_ok_selected_cost {evm : Evm} {cost : Nat} {output : Bytes}
 theorem executePrecomp_modexp_ok_selected_cost {evm : Evm} {post : Devm}
     (h : executePrecomp evm 5 = .ok post) :
     ∃ cost, executeModexp evm = .ok cost post.output ∧
-      cost = modexpGasCost evm.sta.benvStat.rules.modexp
+      cost = modexpGasCost evm.sta.benvStat.rules.modexpComplexity
+        evm.sta.benvStat.rules.modexp
         (Bytes.sliceToNat evm.sta.data 0 32)
         (Bytes.sliceToNat evm.sta.data 64 32)
         (Bytes.sliceToNat evm.sta.data 32 32)
@@ -3203,7 +3205,7 @@ within any 256-bit gas grant. -/
 theorem pragueModexpGasCost_large_modulus
     {baseLength modulusLength expLength expHead : Nat}
     (hmod : 2 ^ 160 ≤ modulusLength) :
-    2 ^ 256 + gCallStipend ≤ modexpGasCost pragueModexpRules
+    2 ^ 256 + gCallStipend ≤ modexpGasCost .eip2565 pragueModexpRules
       baseLength modulusLength expLength expHead := by
   let words := ceilDiv (max baseLength modulusLength) 8
   have hw : 2 ^ 157 ≤ words :=
@@ -3223,30 +3225,66 @@ theorem pragueModexpGasCost_large_modulus
   simp only [modexpGasCost, modexpComplexity, pragueModexpRules, Nat.one_mul]
   exact Nat.le_trans hcost (Nat.le_max_right _ _)
 
+/-- Above 1024 bytes EIP-198 charges its third branch. -/
+private theorem eip198Complexity_third
+    {baseLength modulusLength : Nat}
+    (h : 1024 < max baseLength modulusLength) :
+    eip198Complexity baseLength modulusLength =
+      (max baseLength modulusLength) ^ 2 / 16 +
+        480 * (max baseLength modulusLength) - 199680 := by
+  have h64 : ¬ max baseLength modulusLength ≤ 64 := by omega
+  have h1024 : ¬ max baseLength modulusLength ≤ 1024 := by omega
+  simp only [eip198Complexity, h64, h1024, ite_false]
+
+/-- EIP-198's third branch alone prices a 2^160-byte modulus past any 256-bit
+gas grant at divisor 20: `x ^ 2 / 16` at `x = 2 ^ 160` is already `2 ^ 316`. -/
+private theorem eip198Complexity_third_large
+    {baseLength modulusLength : Nat}
+    (hmod : 2 ^ 160 ≤ modulusLength) :
+    20 * (2 ^ 256 + gCallStipend) ≤
+      eip198Complexity baseLength modulusLength := by
+  have hX : 2 ^ 160 ≤ max baseLength modulusLength :=
+    Nat.le_trans hmod (Nat.le_max_right baseLength modulusLength)
+  have h1024 : 1024 < max baseLength modulusLength := by
+    calc (1024 : Nat) < 2 ^ 160 := by decide
+    _ ≤ max baseLength modulusLength := hX
+  rw [eip198Complexity_third h1024]
+  have h157 : (2 ^ 157) ^ 2 ≤ (2 ^ 160) ^ 2 := by decide
+  have hsq : (2 ^ 157) ^ 2 ≤ (max baseLength modulusLength) ^ 2 :=
+    Nat.le_trans h157 (Nat.pow_le_pow_left hX 2)
+  have hdiv : (2 ^ 157) ^ 2 / 16 ≤ (max baseLength modulusLength) ^ 2 / 16 :=
+    Nat.div_le_div_right hsq
+  have hmul : 480 * 2 ^ 160 ≤ 480 * max baseLength modulusLength :=
+    Nat.mul_le_mul_left 480 hX
+  have hbig : 20 * (2 ^ 256 + gCallStipend) ≤
+      (2 ^ 157) ^ 2 / 16 + 480 * 2 ^ 160 - 199680 := by decide
+  have hle : (2 ^ 157) ^ 2 / 16 + 480 * 2 ^ 160 - 199680 ≤
+      (max baseLength modulusLength) ^ 2 / 16 +
+        480 * (max baseLength modulusLength) - 199680 :=
+    Nat.sub_le_sub_right (Nat.add_le_add hdiv hmul) 199680
+  exact Nat.le_trans hbig hle
+
 /-- The EIP-198 MODEXP schedule alone rejects a modulus header this large
 within any 256-bit gas grant: the divisor is 20 rather than 3, but a
 2^160-byte modulus still costs far past it. -/
 theorem eip198ModexpGasCost_large_modulus
     {baseLength modulusLength expLength expHead : Nat}
     (hmod : 2 ^ 160 ≤ modulusLength) :
-    2 ^ 256 + gCallStipend ≤ modexpGasCost eip198ModexpRules
+    2 ^ 256 + gCallStipend ≤ modexpGasCost .eip198 eip198ModexpRules
       baseLength modulusLength expLength expHead := by
-  let words := ceilDiv (max baseLength modulusLength) 8
-  have hw : 2 ^ 157 ≤ words :=
-    ceilDiv8_ge_pow157_of_ge_pow160
-      (Nat.le_trans hmod (Nat.le_max_right baseLength modulusLength))
-  have hsq : (2 ^ 157) ^ 2 ≤ words ^ 2 := Nat.pow_le_pow_left hw 2
   have hiter : 1 ≤ modexpIterations eip198ModexpRules expLength expHead := by
     unfold modexpIterations
     exact Nat.le_max_right _ _
-  have hmul : words ^ 2 ≤ words ^ 2 *
-      modexpIterations eip198ModexpRules expLength expHead := by
-    simpa only [mul_one] using Nat.mul_le_mul_left (words ^ 2) hiter
-  have hbig : 20 * (2 ^ 256 + gCallStipend) ≤ (2 ^ 157) ^ 2 := by decide
+  have hbig := eip198Complexity_third_large (baseLength := baseLength) hmod
+  have hmul : eip198Complexity baseLength modulusLength ≤
+      eip198Complexity baseLength modulusLength *
+        modexpIterations eip198ModexpRules expLength expHead := by
+    simpa only [mul_one] using Nat.mul_le_mul_left _ hiter
   have hcost : 2 ^ 256 + gCallStipend ≤
-      (words ^ 2 * modexpIterations eip198ModexpRules expLength expHead) / 20 := by
+      (eip198Complexity baseLength modulusLength *
+        modexpIterations eip198ModexpRules expLength expHead) / 20 := by
     omega
-  simp only [modexpGasCost, modexpComplexity, eip198ModexpRules, Nat.one_mul]
+  simp only [modexpGasCost, modexpComplexity, eip198ModexpRules]
   exact Nat.le_trans hcost (Nat.le_max_right _ _)
 
 private theorem executeModexp_ok_lengthsInBounds {evm : Evm} {cost : Nat}
@@ -3271,14 +3309,21 @@ private theorem osaka_modexp_modulus_le (baseLength expLength modulusLength : Na
   exact h.2
 
 private theorem initialized_modexp_rules (evm : Evm) :
-    evm.sta.benvStat.rules.modexp = pragueModexpRules ∨
-      evm.sta.benvStat.rules.modexp = osakaModexpRules ∨
-      evm.sta.benvStat.rules.modexp = eip198ModexpRules := by
-  change (Fork.ruleSet evm.sta.benvStat.fork).modexp = pragueModexpRules ∨
-    (Fork.ruleSet evm.sta.benvStat.fork).modexp = osakaModexpRules ∨
-    (Fork.ruleSet evm.sta.benvStat.fork).modexp = eip198ModexpRules
+    (evm.sta.benvStat.rules.modexpComplexity = .eip2565 ∧
+      evm.sta.benvStat.rules.modexp = pragueModexpRules) ∨
+    (evm.sta.benvStat.rules.modexpComplexity = .eip2565 ∧
+      evm.sta.benvStat.rules.modexp = osakaModexpRules) ∨
+    (evm.sta.benvStat.rules.modexpComplexity = .eip198 ∧
+      evm.sta.benvStat.rules.modexp = eip198ModexpRules) := by
+  change ((Fork.ruleSet evm.sta.benvStat.fork).modexpComplexity = .eip2565 ∧
+      (Fork.ruleSet evm.sta.benvStat.fork).modexp = pragueModexpRules) ∨
+    ((Fork.ruleSet evm.sta.benvStat.fork).modexpComplexity = .eip2565 ∧
+      (Fork.ruleSet evm.sta.benvStat.fork).modexp = osakaModexpRules) ∨
+    ((Fork.ruleSet evm.sta.benvStat.fork).modexpComplexity = .eip198 ∧
+      (Fork.ruleSet evm.sta.benvStat.fork).modexp = eip198ModexpRules)
   cases evm.sta.benvStat.fork <;>
-    first | exact Or.inl rfl | exact Or.inr (Or.inl rfl) | exact Or.inr (Or.inr rfl)
+    first | exact Or.inl ⟨rfl, rfl⟩ | exact Or.inr (Or.inl ⟨rfl, rfl⟩) |
+      exact Or.inr (Or.inr ⟨rfl, rfl⟩)
 
 /-- Under a word-sized gas grant, a successful initialized MODEXP reply has
 the strict size needed by CALL return-data accounting on every selected fork. -/
@@ -3289,8 +3334,8 @@ theorem executeModexp_ok_output_length_lt_two_pow_160
     output.length < 2 ^ 160 := by
   have hlen := executeModexp_ok_output_length_le h
   have hprice := executeModexp_ok_selected_cost h
-  rcases initialized_modexp_rules evm with hprague | hosaka | heip198
-  · rw [hprague] at hprice
+  rcases initialized_modexp_rules evm with ⟨hc, hm⟩ | ⟨hc, hm⟩ | ⟨hc, hm⟩
+  · rw [hc, hm] at hprice
     by_contra hnot
     have hmod : 2 ^ 160 ≤ Bytes.sliceToNat evm.sta.data 64 32 := by omega
     have hlarge := pragueModexpGasCost_large_modulus
@@ -3305,11 +3350,11 @@ theorem executeModexp_ok_output_length_lt_two_pow_160
       (Bytes.sliceToNat evm.sta.data 0 32)
       (Bytes.sliceToNat evm.sta.data 32 32)
       (Bytes.sliceToNat evm.sta.data 64 32) (by
-        rw [← hosaka]
+        rw [← hm]
         exact executeModexp_ok_lengthsInBounds h)
     have hsmall : 1024 < (2 : Nat) ^ 160 := by decide
     omega
-  · rw [heip198] at hprice
+  · rw [hc, hm] at hprice
     by_contra hnot
     have hmod : 2 ^ 160 ≤ Bytes.sliceToNat evm.sta.data 64 32 := by omega
     have hlarge := eip198ModexpGasCost_large_modulus
