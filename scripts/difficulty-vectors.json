@@ -1,0 +1,81 @@
+{
+  "ArrowGlacier": [
+    {
+      "block_number": 10699999,
+      "block_timestamp": 1013,
+      "expected": 3400000000000000,
+      "parent_difficulty": 3400000000000000,
+      "parent_has_ommers": false,
+      "parent_timestamp": 1000
+    },
+    {
+      "block_number": 10700000,
+      "block_timestamp": 1013,
+      "expected": 3400000000000000,
+      "parent_difficulty": 3400000000000000,
+      "parent_has_ommers": false,
+      "parent_timestamp": 1000
+    },
+    {
+      "block_number": 11800000,
+      "block_timestamp": 1013,
+      "expected": 3400000000000512,
+      "parent_difficulty": 3400000000000000,
+      "parent_has_ommers": false,
+      "parent_timestamp": 1000
+    }
+  ],
+  "GrayGlacier": [
+    {
+      "block_number": 11399999,
+      "block_timestamp": 1013,
+      "expected": 3400000000000000,
+      "parent_difficulty": 3400000000000000,
+      "parent_has_ommers": false,
+      "parent_timestamp": 1000
+    },
+    {
+      "block_number": 11400000,
+      "block_timestamp": 1013,
+      "expected": 3400000000000000,
+      "parent_difficulty": 3400000000000000,
+      "parent_has_ommers": false,
+      "parent_timestamp": 1000
+    },
+    {
+      "block_number": 12500000,
+      "block_timestamp": 1013,
+      "expected": 3400000000000512,
+      "parent_difficulty": 3400000000000000,
+      "parent_has_ommers": false,
+      "parent_timestamp": 1000
+    }
+  ],
+  "MuirGlacier": [
+    {
+      "block_number": 8999999,
+      "block_timestamp": 1013,
+      "expected": 3400000000000000,
+      "parent_difficulty": 3400000000000000,
+      "parent_has_ommers": false,
+      "parent_timestamp": 1000
+    },
+    {
+      "block_number": 9000000,
+      "block_timestamp": 1013,
+      "expected": 3400000000000000,
+      "parent_difficulty": 3400000000000000,
+      "parent_has_ommers": false,
+      "parent_timestamp": 1000
+    },
+    {
+      "block_number": 10100000,
+      "block_timestamp": 1013,
+      "expected": 3400000000000512,
+      "parent_difficulty": 3400000000000000,
+      "parent_has_ommers": false,
+      "parent_timestamp": 1000
+    }
+  ],
+  "_comment": "Authored difficulty-bomb boundary vectors for the three bomb-only forks (goal U10). Each vector names its inputs; `expected` is filled by scripts/gen-difficulty-vectors.py from the pinned conformance target's calculate_block_difficulty and never by hand. Block numbers sit below, at, and well above each fork's bomb delay (MuirGlacier 9M, ArrowGlacier 10.7M, GrayGlacier 11.4M): the first two observe the flat grace window, the third observes the exponential (fake number delay + 1.1M, so 2**(11-2) = 512 above the parent). The ommer flag is `parent_has_ommers`, the target function's own parameter name. No theorem states this function, so these vectors are finite evidence a theorem does not cover."
+}

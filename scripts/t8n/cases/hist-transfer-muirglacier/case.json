@@ -1,0 +1,7 @@
+{
+  "description": "A plain value transfer at MuirGlacier (bomb-only against Istanbul), in blockchain mode: one successful legacy transaction, block reward honored (2 ETH). Jaune refuses the fork; the golden records the pinned target.",
+  "fork": "MuirGlacier",
+  "chainid": 1,
+  "reward": 2000000000000000000,
+  "mode": "blockchain"
+}

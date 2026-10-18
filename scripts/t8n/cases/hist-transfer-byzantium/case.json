@@ -1,0 +1,7 @@
+{
+  "description": "A plain value transfer at Byzantium, in blockchain mode: one successful legacy transaction, block reward honored (3 ETH). Jaune refuses the fork; the golden records the pinned target.",
+  "fork": "Byzantium",
+  "chainid": 1,
+  "reward": 3000000000000000000,
+  "mode": "blockchain"
+}

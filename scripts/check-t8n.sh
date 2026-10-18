@@ -91,6 +91,7 @@ RED = os.environ["JAUNE_T8N_RED"] == "1"
 CASES = ROOT / "scripts" / "t8n" / "cases"
 PROVENANCE = ROOT / "scripts" / "t8n" / "provenance.json"
 DEVIATIONS = ROOT / "scripts" / "t8n" / "deviations.json"
+REFUSALS = ROOT / "scripts" / "t8n" / "expected-refusals.json"
 SOURCES = ROOT / "scripts" / "sources.json"
 
 OUTPUTS = ("result.json", "alloc.json", "body.json")
@@ -186,6 +187,30 @@ def run_case(case_dir, work):
         args.append("--state-test")
     run = subprocess.run(args, capture_output=True, text=True)
     return run, spec
+
+
+def check_refusal(name, reason, failures):
+    """A registered refusal: Jaune must fail with the registered reason.
+
+    Goal U10: the historical forks are declared but unimplemented, so `jaune
+    t8n` refuses them before reading any input. The gate requires exactly
+    that refusal -- a pass here would mean the fork silently started
+    resolving, and any other failure would mean the refusal changed shape.
+    Refusals are never marked passing.
+    """
+    case_dir = CASES / name
+    with tempfile.TemporaryDirectory() as tmp:
+        run, spec = run_case(case_dir, Path(tmp))
+        if run.returncode == 0:
+            failures.append(
+                f"{name}: expected refusal ({reason}) but jaune t8n exited 0"
+            )
+            return
+        if reason not in run.stderr:
+            failures.append(
+                f"{name}: jaune t8n failed, but not with {reason}: "
+                f"{run.stderr.strip()[:300]}"
+            )
 
 
 def check_case(name, expected_root, deviations, failures):
@@ -300,47 +325,79 @@ def select():
     return names
 
 
+def load_refusals(failures):
+    try:
+        document = json.loads(REFUSALS.read_text())
+    except (OSError, json.JSONDecodeError) as error:
+        failures.append(f"scripts/t8n/expected-refusals.json is unreadable: {error}")
+        return {}
+    document.pop("_comment", None)
+    for name, reason in document.items():
+        if not isinstance(reason, str) or not reason:
+            failures.append(
+                f"scripts/t8n/expected-refusals.json: {name} carries no reason"
+            )
+        elif not (CASES / name).is_dir():
+            failures.append(
+                f"scripts/t8n/expected-refusals.json: no case named {name!r}"
+            )
+    return {n: r for n, r in document.items() if isinstance(r, str) and r}
+
+
 def main():
     names = select()
     failures = []
     deviations = json.loads(DEVIATIONS.read_text())
+    refusals = load_refusals(failures)
     provenance = check_provenance(failures)
     for name in names:
-        check_case(name, CASES, deviations, failures)
+        if name in refusals:
+            check_refusal(name, refusals[name], failures)
+        else:
+            check_case(name, CASES, deviations, failures)
     for failure in failures:
         print(f"T8N — {failure}")
 
     if RED:
         # The gate must be able to go red. Corrupt one byte of one expectation
         # in a scratch copy of the corpus and require a failure; a gate that
-        # cannot fail is not evidence.
-        with tempfile.TemporaryDirectory() as tmp:
-            scratch = Path(tmp) / "cases"
-            shutil.copytree(CASES, scratch)
-            victim = scratch / names[0] / "expected" / "result.json"
-            corrupted = json.loads(victim.read_text())
-            root = corrupted["stateRoot"]
-            corrupted["stateRoot"] = root[:-1] + ("0" if root[-1] != "0" else "1")
-            victim.write_text(json.dumps(corrupted, indent=4))
-            red_failures = []
-            check_case(names[0], scratch, deviations, red_failures)
-            if not red_failures:
-                print(
-                    "T8N — the red test did not fail: a corrupted stateRoot in "
-                    f"{names[0]} was accepted"
-                )
-                failures.append("red test did not fail")
-            else:
-                print(
-                    "OK — t8n red test: a corrupted stateRoot in "
-                    f"{names[0]} is rejected"
-                )
+        # cannot fail is not evidence. Refusal cases carry no conformance
+        # comparison, so the victim is the first conforming case.
+        conforming = [name for name in names if name not in refusals]
+        if not conforming:
+            print("T8N — the red test needs a conforming case and all selected cases are refusals")
+            failures.append("red test has no conforming case")
+            conforming = []
+        else:
+            with tempfile.TemporaryDirectory() as tmp:
+                scratch = Path(tmp) / "cases"
+                shutil.copytree(CASES, scratch)
+                victim = scratch / conforming[0] / "expected" / "result.json"
+                corrupted = json.loads(victim.read_text())
+                root = corrupted["stateRoot"]
+                corrupted["stateRoot"] = root[:-1] + ("0" if root[-1] != "0" else "1")
+                victim.write_text(json.dumps(corrupted, indent=4))
+                red_failures = []
+                check_case(conforming[0], scratch, deviations, red_failures)
+                if not red_failures:
+                    print(
+                        "T8N — the red test did not fail: a corrupted stateRoot in "
+                        f"{conforming[0]} was accepted"
+                    )
+                    failures.append("red test did not fail")
+                else:
+                    print(
+                        "OK — t8n red test: a corrupted stateRoot in "
+                        f"{conforming[0]} is rejected"
+                    )
 
         # The registry must also be doing real work: a difference that is not
         # registered must fail, and a registered entry whose target side moved
-        # must fail too. Both are proved on a surviving registered deviation.
+        # must fail too. Both are proved on a surviving registered deviation
+        # over a conforming case.
         registered = [
-            entry for entry in deviations["fields"] if entry.get("case") in names
+            entry for entry in deviations["fields"]
+            if entry.get("case") in names and entry.get("case") not in refusals
         ]
         if registered:
             entry = registered[0]
@@ -389,16 +446,19 @@ def main():
                     f"side moved is rejected at {label}"
                 )
 
+    refused = [name for name in names if name in refusals]
     if failures:
         print(
             f"REGRESSION — t8n: {len(failures)} failure(s) over "
-            f"{len(names)} case(s)"
+            f"{len(names)} case(s) ({len(refused)} refusal(s))"
         )
         return 1
     commit = provenance["conformance_target_commit"] if provenance else "?"
     print(
-        f"OK — t8n: {len(names)} case(s) byte-identical to goldens generated "
-        f"from execution-specs {commit[:12]}, deterministic over two runs"
+        f"OK — t8n: {len(names) - len(refused)} case(s) byte-identical to goldens generated "
+        f"from execution-specs {commit[:12]}, deterministic over two runs; "
+        f"{len(refused)} refusal case(s) refused as registered "
+        f"({', '.join(sorted(set(refusals[name] for name in refused))) or 'none'})"
     )
     return 0
 
