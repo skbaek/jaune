@@ -3886,6 +3886,131 @@ def sstoreNewRefundCounter (gas : GasSchedule) (new_value : B256)
       rc''
   else rc
 
+/-- The pre-net-metering refund (Byzantium/Petersburg): add and remove the
+clear refund on clearing and restoring a cleared slot, and nothing otherwise.
+It shares `sstoreNewRefundCounter`'s first two adjustments through the same
+`gas.storageClearRefund` field; the restore-refund block is the net-metering
+addition, absent here. -/
+def sstoreLegacyRefundCounter (gas : GasSchedule) (new_value : B256)
+    (original_value : B256) (current_value : B256) (rc : Int) : Int :=
+  if current_value ≠ new_value then
+    if original_value ≠ 0 ∧ current_value ≠ 0 ∧ new_value = 0 then
+      rc + gas.storageClearRefund
+    else if original_value ≠ 0 ∧ current_value = 0 then
+      rc - gas.storageClearRefund
+    else
+      rc
+  else rc
+
+/-- A no-change write refunds nothing under the legacy schedule. -/
+theorem sstoreLegacyRefundCounter_noop (gas : GasSchedule) (new_value : B256)
+    (original_value : B256) (rc : Int) :
+    sstoreLegacyRefundCounter gas new_value original_value new_value rc = rc := by
+  unfold sstoreLegacyRefundCounter
+  simp
+
+/-- Clearing a non-zero slot to zero refunds the clear refund. -/
+theorem sstoreLegacyRefundCounter_clear (gas : GasSchedule)
+    (original_value current_value : B256) (rc : Int)
+    (horig : original_value ≠ 0) (hcurr : current_value ≠ 0) :
+    sstoreLegacyRefundCounter gas 0 original_value current_value rc =
+      rc + gas.storageClearRefund := by
+  have hne : current_value ≠ (0 : B256) := hcurr
+  unfold sstoreLegacyRefundCounter
+  simp [hne, horig]
+
+/-- Restoring a freshly set slot refunds the set premium: what the first
+change charged over the warm access. -/
+theorem sstoreNewRefundCounter_restore_set (gas : GasSchedule)
+    (current_value : B256) (rc : Int) (hcurr : current_value ≠ 0) :
+    sstoreNewRefundCounter gas 0 0 current_value rc =
+      rc + (gasStorageSet - gasWarmAccess) := by
+  unfold sstoreNewRefundCounter
+  simp [hcurr]
+
+/-- The execution gas one pre-Berlin net-metered `SSTORE` charges on top of
+the cold term (zero under flat access): the EIP-1283/EIP-2200 schedule --
+20000 for a fresh set, 5000 for a fresh update, the flat no-op price when
+nothing changes. The legacy schedule (no net metering) pays SET/UPDATE and
+5000 for the no-op, likewise without any cold term. -/
+def sstoreRegimeGasCost (sstore : SstoreRules) (access : AccessSchedule)
+    (gasCost2 : Nat) (new_value original_value current_value : B256) : Nat :=
+  if sstore.netMetering then
+    if original_value = current_value ∧ current_value ≠ new_value then
+      if original_value = 0 then
+        gasCost2 + gasStorageSet
+      else
+        gasCost2 + match access with
+          | .flat _ => gasStorageUpdate
+          | .eip2929 => gasStorageUpdate - gasColdSload
+    else
+      gasCost2 + match access with
+        | .flat g => g.sload
+        | .eip2929 => gasWarmAccess
+  else
+    if original_value = current_value ∧ current_value ≠ new_value then
+      if original_value = 0 then gasStorageSet else gasStorageUpdate
+    else gasStorageUpdate
+
+/-- Every row of the pre-Berlin schedule is positive: the literals are, and
+the flat no-op price is positive on valid access schedules. The termination
+argument's need for the regimes the `none`-lane generalisation adds. -/
+theorem sstoreRegimeGasCost_pos (sstore : SstoreRules) {access : AccessSchedule}
+    (hacc : access.Valid) (gasCost2 : Nat)
+    (new_value original_value current_value : B256) :
+    0 < sstoreRegimeGasCost sstore access gasCost2 new_value original_value
+      current_value := by
+  cases access with
+  | flat g =>
+    have hsload : 0 < g.sload := by
+      simp only [AccessSchedule.Valid, FlatAccessGas.Valid] at hacc
+      exact hacc.2.2.2.1
+    unfold sstoreRegimeGasCost
+    dsimp only
+    unfold gasStorageSet gasStorageUpdate
+    split_ifs <;> omega
+  | eip2929 =>
+    unfold sstoreRegimeGasCost
+    dsimp only
+    unfold gasStorageSet gasStorageUpdate gasWarmAccess gasColdSload
+    split_ifs <;> omega
+
+/-- The flat net-metered refund (EIP-1283 Constantinople, EIP-2200
+Istanbul/Muir Glacier): `sstoreNewRefundCounter`'s shape with every access
+price read as the flat no-op price instead of the Berlin cold/warm pair --
+the restore terms refund the set/update premium over `sload`. -/
+def sstoreFlatRefundCounter (gas : GasSchedule) (sload : Nat)
+    (new_value : B256) (original_value : B256) (current_value : B256)
+    (rc : Int) : Int :=
+  if current_value ≠ new_value then
+    let rc' :=
+      if original_value ≠ 0 ∧ current_value ≠ 0 ∧ new_value = 0 then
+        rc + gas.storageClearRefund
+      else
+        rc
+    let rc'' :=
+      if original_value ≠ 0 ∧ current_value = 0 then
+        rc' - gas.storageClearRefund
+      else
+        rc'
+    if original_value = new_value then
+      if original_value = 0 then
+        rc'' + (gasStorageSet - sload)
+      else
+        rc'' + (gasStorageUpdate - sload)
+    else
+      rc''
+  else rc
+
+/-- Restoring a freshly set slot under flat net metering refunds the set
+premium over that fork's no-op price. -/
+theorem sstoreFlatRefundCounter_restore_set (gas : GasSchedule) (sload : Nat)
+    (current_value : B256) (rc : Int) (hcurr : current_value ≠ 0) :
+    sstoreFlatRefundCounter gas sload 0 0 current_value rc =
+      rc + (gasStorageSet - sload) := by
+  unfold sstoreFlatRefundCounter
+  simp [hcurr]
+
 /-- `sstore`'s refund contribution under the Amsterdam metering shape.
 
 A sibling of `sstoreNewRefundCounter` rather than a widening of it, because the
@@ -4242,44 +4367,103 @@ def Rinst.runCore
   -- dimension. Under `none` the body below is the body it has always been.
   | .sstore =>
     match sevm.benvStat.rules.stateGas with
-    | none => do
-      let ⟨key, devm⟩ ← devm.pop
-      let ⟨new_value, devm⟩ ← devm.pop
-      .assert
-        (gCallStipend < devm.gasLeft)
-        ⟨.halt (.outOfGas .none), devm⟩
-      let ct := sevm.currentTarget
-      let original_value := devm.getOrigStorVal sevm ct key
-      -- `get_storage_original` records nothing; `get_storage` records the
-      -- slot (EIP-7928).
-      let devm := devm.balReadStorage sevm.benvStat.rules ct key
-      let current_value := devm.getStorVal ct key
-      let ⟨devm, gasCost2⟩ ← .ok <|
-        if ⟨ct, key⟩ ∉ devm.accessedStorageKeys then
-          ( ⟨ addAccessedStorageKey devm ct key,
-              gasColdSload ⟩ : Devm × Nat )
-        else
-          ⟨devm, 0⟩
-      let gasCost3 ← .ok <|
-        if original_value = current_value ∧ current_value ≠ new_value then
-          if original_value = 0 then
-            gasCost2 + gasStorageSet
+    | none =>
+      match sevm.benvStat.rules.sstore, sevm.benvStat.rules.access with
+      | ⟨true, true⟩, .eip2929 => do
+        let ⟨key, devm⟩ ← devm.pop
+        let ⟨new_value, devm⟩ ← devm.pop
+        .assert
+          (gCallStipend < devm.gasLeft)
+          ⟨.halt (.outOfGas .none), devm⟩
+        let ct := sevm.currentTarget
+        let original_value := devm.getOrigStorVal sevm ct key
+        -- `get_storage_original` records nothing; `get_storage` records the
+        -- slot (EIP-7928).
+        let devm := devm.balReadStorage sevm.benvStat.rules ct key
+        let current_value := devm.getStorVal ct key
+        let ⟨devm, gasCost2⟩ ← .ok <|
+          if ⟨ct, key⟩ ∉ devm.accessedStorageKeys then
+            ( ⟨ addAccessedStorageKey devm ct key,
+                gasColdSload ⟩ : Devm × Nat )
           else
-            gasCost2 + (gasStorageUpdate - gasColdSload)
-        else
-          gasCost2 + gasWarmAccess
-      let devm ← .ok <| devm.withRefundCounter <|
-        sstoreNewRefundCounter
-          sevm.benvStat.rules.gas
-          new_value
-          original_value
-          current_value
-          devm.refundCounter
-      let devm ← chargeGas gasCost3 devm
-      assertDynamic sevm devm
-      -- `set_storage` asserts `get_account_optional(address)`: an account read.
-      .ok ((devm.balReadAccount sevm.benvStat.rules ct).setStorVal
-        sevm.currentTarget key new_value)
+            ⟨devm, 0⟩
+        let gasCost3 ← .ok <|
+          if original_value = current_value ∧ current_value ≠ new_value then
+            if original_value = 0 then
+              gasCost2 + gasStorageSet
+            else
+              gasCost2 + (gasStorageUpdate - gasColdSload)
+          else
+            gasCost2 + gasWarmAccess
+        let devm ← .ok <| devm.withRefundCounter <|
+          sstoreNewRefundCounter
+            sevm.benvStat.rules.gas
+            new_value
+            original_value
+            current_value
+            devm.refundCounter
+        let devm ← chargeGas gasCost3 devm
+        assertDynamic sevm devm
+        -- `set_storage` asserts `get_account_optional(address)`: an account read.
+        .ok ((devm.balReadAccount sevm.benvStat.rules ct).setStorVal
+          sevm.currentTarget key new_value)
+      | _, _ => do
+        let ⟨key, devm⟩ ← devm.pop
+        let ⟨new_value, devm⟩ ← devm.pop
+        -- EIP-2200's stipend sentry (Istanbul onward); vacuous before, so the
+        -- pre-Istanbul regimes skip the check without changing shape.
+        .assert
+          (sevm.benvStat.rules.sstore.stipendSentry →
+            gCallStipend < devm.gasLeft)
+          ⟨.halt (.outOfGas .none), devm⟩
+        let ct := sevm.currentTarget
+        let original_value := devm.getOrigStorVal sevm ct key
+        -- `get_storage_original` records nothing; `get_storage` records the
+        -- slot (EIP-7928).
+        let devm := devm.balReadStorage sevm.benvStat.rules ct key
+        let current_value := devm.getStorVal ct key
+        -- Cold surcharge and warming only under EIP-2929 access; under flat
+        -- access the slot is neither warmed nor surcharged.
+        let ⟨devm, gasCost2⟩ ← .ok <|
+          match sevm.benvStat.rules.access with
+          | .flat _ => (⟨devm, 0⟩ : Devm × Nat)
+          | .eip2929 =>
+            if ((ct, key) : Adr × B256) ∉ devm.accessedStorageKeys then
+              ( ⟨ addAccessedStorageKey devm ct key,
+                  gasColdSload ⟩ : Devm × Nat )
+            else
+              (⟨devm, 0⟩ : Devm × Nat)
+        let gasCost3 ← .ok <|
+          sstoreRegimeGasCost sevm.benvStat.rules.sstore
+            sevm.benvStat.rules.access gasCost2 new_value original_value
+            current_value
+        let devm ← .ok <| devm.withRefundCounter <|
+          match sevm.benvStat.rules.sstore.netMetering,
+              sevm.benvStat.rules.access with
+          | false, _ => sstoreLegacyRefundCounter
+              sevm.benvStat.rules.gas
+              new_value
+              original_value
+              current_value
+              devm.refundCounter
+          | true, .flat g => sstoreFlatRefundCounter
+              sevm.benvStat.rules.gas
+              g.sload
+              new_value
+              original_value
+              current_value
+              devm.refundCounter
+          | true, .eip2929 => sstoreNewRefundCounter
+              sevm.benvStat.rules.gas
+              new_value
+              original_value
+              current_value
+              devm.refundCounter
+        let devm ← chargeGas gasCost3 devm
+        assertDynamic sevm devm
+        -- `set_storage` asserts `get_account_optional(address)`: an account read.
+        .ok ((devm.balReadAccount sevm.benvStat.rules ct).setStorVal
+          sevm.currentTarget key new_value)
     | some state => do
       -- The static check now precedes everything, including the pops.
       assertDynamic sevm devm
@@ -6162,20 +6346,43 @@ theorem Rinst.run_stateGasZero {evm : Evm} (h : evm.dyna.StateGasZero)
         fun _ hd => Devm.push_stateGasZero _ hd
   case sstore =>
     rw [hrules]
-    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
-    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero ha) fun b hb => ?_
-    refine Except.StateGasZeroOn.bind (Except.stateGasZeroOn_assert hb) fun _ _ => ?_
-    refine Except.StateGasZeroOn.bind
-      (P := fun p : Devm × Nat => p.1.StateGasZero) ?_ fun p hp => ?_
-    · exact Except.stateGasZeroOn_ok (by split <;> exact hb)
-    refine Except.StateGasZeroOn.bind
-      (P := fun _ => True) (Except.stateGasZeroOn_ok trivial) fun _ _ => ?_
-    refine Except.StateGasZeroOn.bind
-      (Except.stateGasZeroOn_ok (Devm.withRefundCounter_stateGasZero hp _))
-      fun d hd => ?_
-    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ hd) fun d' hd' => ?_
-    refine Except.StateGasZeroOn.bind (Except.stateGasZeroOn_assert hd') fun _ _ => ?_
-    exact Except.stateGasZeroOn_ok hd'
+    dsimp only
+    split
+    · -- Prague: the body it has always been.
+      refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
+      refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero ha) fun b hb => ?_
+      refine Except.StateGasZeroOn.bind (Except.stateGasZeroOn_assert hb) fun _ _ => ?_
+      refine Except.StateGasZeroOn.bind
+        (P := fun p : Devm × Nat => p.1.StateGasZero) ?_ fun p hp => ?_
+      · exact Except.stateGasZeroOn_ok (by split <;> exact hb)
+      refine Except.StateGasZeroOn.bind
+        (P := fun _ => True) (Except.stateGasZeroOn_ok trivial) fun _ _ => ?_
+      refine Except.StateGasZeroOn.bind
+        (Except.stateGasZeroOn_ok (Devm.withRefundCounter_stateGasZero hp _))
+        fun d hd => ?_
+      refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ hd) fun d' hd' => ?_
+      refine Except.StateGasZeroOn.bind (Except.stateGasZeroOn_assert hd') fun _ _ => ?_
+      exact Except.stateGasZeroOn_ok hd'
+    · -- The pre-Berlin regimes: the sentry is gated, the cold term is zero
+      -- under flat access, and the refund dispatches on the regime. The walk
+      -- has the same shape; only the cold-pair proof cases on access.
+      refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
+      refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero ha) fun b hb => ?_
+      refine Except.StateGasZeroOn.bind (Except.stateGasZeroOn_assert hb) fun _ _ => ?_
+      refine Except.StateGasZeroOn.bind
+        (P := fun p : Devm × Nat => p.1.StateGasZero) ?_ fun p hp => ?_
+      · exact Except.stateGasZeroOn_ok (by
+          split
+          · exact hb
+          · split <;> exact hb)
+      refine Except.StateGasZeroOn.bind
+        (P := fun _ => True) (Except.stateGasZeroOn_ok trivial) fun _ _ => ?_
+      refine Except.StateGasZeroOn.bind
+        (Except.stateGasZeroOn_ok (Devm.withRefundCounter_stateGasZero hp _))
+        fun d hd => ?_
+      refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ hd) fun d' hd' => ?_
+      refine Except.StateGasZeroOn.bind (Except.stateGasZeroOn_assert hd') fun _ _ => ?_
+      exact Except.stateGasZeroOn_ok hd'
   case tload =>
     refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
     exact pushItem_stateGasZero _ _ ha
@@ -7767,19 +7974,47 @@ theorem Rinst.runCore_canonical (pc : Nat) {devm : Devm} (sevm : Sevm)
   · subst hs
     simp only [Rinst.runCore]
     split
-    · -- Prague: the body it has always been.
-      refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
-      refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
-      refine Except.CanonicalOn.bind (Except.canonicalOn_assert hb) fun _ _ => ?_
-      split <;>
-        (refine Except.canonicalOn_bind_ok ?_
-         refine Except.canonicalOn_bind_ok ?_
-         refine Except.canonicalOn_bind_ok ?_
-         refine Except.CanonicalOn.bind
-           (liftMachExecution_canonical (Devm.Canonical.of_world_eq hb rfl))
-           fun d hd => ?_
-         refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
-         exact Devm.Canonical.setStorVal hd _ _ _)
+    · -- The `none` arm: Prague first, then the pre-Berlin regimes.
+      split
+      · -- Prague: the body it has always been.
+        refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+        refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+        refine Except.CanonicalOn.bind (Except.canonicalOn_assert hb) fun _ _ => ?_
+        split <;>
+          (refine Except.canonicalOn_bind_ok ?_
+           refine Except.canonicalOn_bind_ok ?_
+           refine Except.canonicalOn_bind_ok ?_
+           refine Except.CanonicalOn.bind
+             (liftMachExecution_canonical (Devm.Canonical.of_world_eq hb rfl))
+             fun d hd => ?_
+           refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
+           exact Devm.Canonical.setStorVal hd _ _ _)
+      · -- The pre-Berlin regimes: the same binds; the cold pair cases on
+        -- access, and the cold branch on the slot's warmth.
+        refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+        refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+        refine Except.CanonicalOn.bind (Except.canonicalOn_assert hb) fun _ _ => ?_
+        cases hac : sevm.benvStat.rules.access with
+        | flat _ =>
+          (refine Except.canonicalOn_bind_ok ?_
+           refine Except.canonicalOn_bind_ok ?_
+           refine Except.canonicalOn_bind_ok ?_
+           refine Except.CanonicalOn.bind
+             (liftMachExecution_canonical (Devm.Canonical.of_world_eq hb rfl))
+             fun d hd => ?_
+           refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
+           exact Devm.Canonical.setStorVal hd _ _ _)
+        | eip2929 =>
+          dsimp only
+          split <;>
+            (refine Except.canonicalOn_bind_ok ?_
+             refine Except.canonicalOn_bind_ok ?_
+             refine Except.canonicalOn_bind_ok ?_
+             refine Except.CanonicalOn.bind
+               (liftMachExecution_canonical (Devm.Canonical.of_world_eq hb rfl))
+               fun d hd => ?_
+             refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
+             exact Devm.Canonical.setStorVal hd _ _ _)
     · -- Amsterdam: the static check first, the pops, the pre-check, then the
       -- two charges, neither of which touches the world.
       refine Except.CanonicalOn.bind (assertDynamic_canonicalOn h) fun _ _ => ?_

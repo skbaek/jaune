@@ -1706,38 +1706,67 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
       (by intros; simp only [Devm.memWrite_gasMeasure, Devm.memRead_gasMeasure]) h
   case sstore =>
     split at h
-    · -- Prague: the body it has always been.
-      obtain ⟨⟨key, d1⟩, h1, h⟩ := Except.bind_eq_ok h
-      obtain ⟨⟨value, d2⟩, h2, h⟩ := Except.bind_eq_ok h
-      obtain ⟨_, hStipend, h⟩ := Except.bind_eq_ok h
-      have _hStipend := Except.assert_eq_ok hStipend
-      obtain ⟨gasPair, hPair, h⟩ := Except.bind_eq_ok h
-      obtain ⟨cost, hCost, h⟩ := Except.bind_eq_ok h
-      obtain ⟨d3, hRefund, h⟩ := Except.bind_eq_ok h
-      obtain ⟨d4, hCharge, h⟩ := Except.bind_eq_ok h
-      obtain ⟨_, _hDynamic, hFinal⟩ := Except.bind_eq_ok h
-      simp only [Except.ok.injEq] at hPair hCost hRefund hFinal
-      have e1 := Devm.pop_gasMeasure h1
-      have e2 := Devm.pop_gasMeasure h2
-      have e3 := chargeGas_gasMeasure hCharge
-      have hPairGas : gasPair.1.gasMeasure = d2.gasMeasure := by
-        rw [← hPair]
-        split <;> simp only [addAccessedStorageKey_gasMeasure, Devm.balReadStorage_gasMeasure]
-      have hRefundGas : d3.gasMeasure = d2.gasMeasure := by
-        rw [← hRefund, Devm.withRefundCounter_gasMeasure, hPairGas]
-      have hCostPos : 0 < cost := by
-        rw [← hCost]
-        split
-        · split
-          · unfold gasStorageSet
+    · split at h
+      · -- Prague: the body it has always been.
+        obtain ⟨⟨key, d1⟩, h1, h⟩ := Except.bind_eq_ok h
+        obtain ⟨⟨value, d2⟩, h2, h⟩ := Except.bind_eq_ok h
+        obtain ⟨_, hStipend, h⟩ := Except.bind_eq_ok h
+        have _hStipend := Except.assert_eq_ok hStipend
+        obtain ⟨gasPair, hPair, h⟩ := Except.bind_eq_ok h
+        obtain ⟨cost, hCost, h⟩ := Except.bind_eq_ok h
+        obtain ⟨d3, hRefund, h⟩ := Except.bind_eq_ok h
+        obtain ⟨d4, hCharge, h⟩ := Except.bind_eq_ok h
+        obtain ⟨_, _hDynamic, hFinal⟩ := Except.bind_eq_ok h
+        simp only [Except.ok.injEq] at hPair hCost hRefund hFinal
+        have e1 := Devm.pop_gasMeasure h1
+        have e2 := Devm.pop_gasMeasure h2
+        have e3 := chargeGas_gasMeasure hCharge
+        have hPairGas : gasPair.1.gasMeasure = d2.gasMeasure := by
+          rw [← hPair]
+          split <;> simp only [addAccessedStorageKey_gasMeasure, Devm.balReadStorage_gasMeasure]
+        have hRefundGas : d3.gasMeasure = d2.gasMeasure := by
+          rw [← hRefund, Devm.withRefundCounter_gasMeasure, hPairGas]
+        have hCostPos : 0 < cost := by
+          rw [← hCost]
+          split
+          · split
+            · unfold gasStorageSet
+              omega
+            · unfold gasStorageUpdate gasColdSload
+              omega
+          · unfold gasWarmAccess
             omega
-          · unfold gasStorageUpdate gasColdSload
-            omega
-        · unfold gasWarmAccess
-          omega
-      dsimp only at e1 e2 hFinal
-      rw [← hFinal, Devm.setStorVal_gasMeasure, Devm.balReadAccount_gasMeasure]
-      omega
+        dsimp only at e1 e2 hFinal
+        rw [← hFinal, Devm.setStorVal_gasMeasure, Devm.balReadAccount_gasMeasure]
+        omega
+      · -- The pre-Berlin regimes: the same binds; the cold pair cases on
+        -- access and the execution cost is the regime schedule.
+        obtain ⟨⟨key, d1⟩, h1, h⟩ := Except.bind_eq_ok h
+        obtain ⟨⟨value, d2⟩, h2, h⟩ := Except.bind_eq_ok h
+        obtain ⟨_, hStipend, h⟩ := Except.bind_eq_ok h
+        have _hStipend := Except.assert_eq_ok hStipend
+        obtain ⟨gasPair, hPair, h⟩ := Except.bind_eq_ok h
+        obtain ⟨cost, hCost, h⟩ := Except.bind_eq_ok h
+        obtain ⟨d3, hRefund, h⟩ := Except.bind_eq_ok h
+        obtain ⟨d4, hCharge, h⟩ := Except.bind_eq_ok h
+        obtain ⟨_, _hDynamic, hFinal⟩ := Except.bind_eq_ok h
+        simp only [Except.ok.injEq] at hPair hCost hRefund hFinal
+        have e1 := Devm.pop_gasMeasure h1
+        have e2 := Devm.pop_gasMeasure h2
+        have e3 := chargeGas_gasMeasure hCharge
+        have hPairGas : gasPair.1.gasMeasure = d2.gasMeasure := by
+          rw [← hPair]
+          split
+          · simp only [Devm.balReadStorage_gasMeasure]
+          · split <;> simp only [addAccessedStorageKey_gasMeasure, Devm.balReadStorage_gasMeasure]
+        have hRefundGas : d3.gasMeasure = d2.gasMeasure := by
+          rw [← hRefund, Devm.withRefundCounter_gasMeasure, hPairGas]
+        have hCostPos : 0 < cost := by
+          rw [← hCost]
+          exact sstoreRegimeGasCost_pos _ (ForkRules.Valid.access hv) _ _ _ _
+        dsimp only at e1 e2 hFinal
+        rw [← hFinal, Devm.setStorVal_gasMeasure, Devm.balReadAccount_gasMeasure]
+        omega
     · -- Amsterdam: `vm/instructions/storage.py` `sstore`. The credit and the
       -- state charge are measure-neutral; the execution charge is at least a
       -- warm access, and that is the whole decrease.
@@ -3063,26 +3092,50 @@ theorem Rinst.runCore_gasLe (pc : Nat) (devm : Devm) (sevm : Sevm) (r : Rinst) :
     simp
   case sstore =>
     split
-    · -- Prague.
-      refine gasLe_bind_snd (by simp) ?_
-      rintro ⟨key, d1⟩
-      refine gasLe_bind_snd (by simp) ?_
-      rintro ⟨val, d2⟩
-      refine gasLe_bind_const (devm := d2) (by simp) ?_
-      intro _
-      refine gasLe_bind (proj := Prod.fst) ?_ ?_
-      · simp only [resultGas_ok]
-        split <;> simp
-      · rintro ⟨d3, cost2⟩
-        refine gasLe_bind_const (devm := d3) (by simp) ?_
+    · split
+      · -- Prague.
+        refine gasLe_bind_snd (by simp) ?_
+        rintro ⟨key, d1⟩
+        refine gasLe_bind_snd (by simp) ?_
+        rintro ⟨val, d2⟩
+        refine gasLe_bind_const (devm := d2) (by simp) ?_
         intro _
-        refine gasLe_bind_id (by simp) ?_
-        intro d4
-        refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
-        intro d5
-        refine gasLe_bind_const (devm := d5) (by simp) ?_
+        refine gasLe_bind (proj := Prod.fst) ?_ ?_
+        · simp only [resultGas_ok]
+          split <;> simp
+        · rintro ⟨d3, cost2⟩
+          refine gasLe_bind_const (devm := d3) (by simp) ?_
+          intro _
+          refine gasLe_bind_id (by simp) ?_
+          intro d4
+          refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
+          intro d5
+          refine gasLe_bind_const (devm := d5) (by simp) ?_
+          intro _
+          simp
+      · -- The pre-Berlin regimes: the same binds; the cold pair cases on
+        -- access, then on the slot's warmth.
+        refine gasLe_bind_snd (by simp) ?_
+        rintro ⟨key, d1⟩
+        refine gasLe_bind_snd (by simp) ?_
+        rintro ⟨val, d2⟩
+        refine gasLe_bind_const (devm := d2) (by simp) ?_
         intro _
-        simp
+        refine gasLe_bind (proj := Prod.fst) ?_ ?_
+        · simp only [resultGas_ok]
+          split
+          · simp
+          · split <;> simp
+        · rintro ⟨d3, cost2⟩
+          refine gasLe_bind_const (devm := d3) (by simp) ?_
+          intro _
+          refine gasLe_bind_id (by simp) ?_
+          intro d4
+          refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
+          intro d5
+          refine gasLe_bind_const (devm := d5) (by simp) ?_
+          intro _
+          simp
     · -- Amsterdam.
       refine gasLe_bind_const (devm := devm) (by simp) ?_
       intro _
