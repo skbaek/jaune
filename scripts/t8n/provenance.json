@@ -192,6 +192,12 @@
       "expected/result.json": "f6fe2c89884c6a4b07a862c1725083f0fac1ce3e178118cbd1838249174f9b1b",
       "txs.json": "7b1fdfbcaca752e73020803560b6c871371523d6998b309daddc2388dedd58b5"
     },
+    "hist-selfdestruct-empty-berlin": {
+      "expected/alloc.json": "cf6fe5686be7ff7bf449330ede6af4d4a2ba6f30419ed56ea987991cd3829cff",
+      "expected/body.json": "a90b6be341c2d25a98d81f3ef0734b40749a55596c1f815c3e7f6f2ff152ecac",
+      "expected/result.json": "7f541a239acddee5b2c13e6c81a2ddb5c33077303a0928edaad1d9fe13f5f284",
+      "txs.json": "87c5d8ff4bf41377d7b79ffe8086d1cbd900c995da04598967e427d767b76cca"
+    },
     "hist-transfer-arrowglacier": {
       "expected/alloc.json": "ec3ad3c2f244e18dec74fe16e47eb6d206cefaf788a30be6f6cfc937c8dbc919",
       "expected/body.json": "b2c18078e9436a2c8530330581d9e3cbb99e5ac99e5186566def91ab47a2a812",

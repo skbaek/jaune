@@ -3402,6 +3402,12 @@ theorem Jinst.runCore_gasLe (pc : Nat) (devm : Devm) (sevm : Sevm) (j : Jinst) :
 @[simp] theorem Devm.addBal_gasMeasure (devm : Devm) (a : Adr) (v : B256) :
     (devm.addBal a v).gasMeasure = devm.gasMeasure := rfl
 
+@[simp] theorem Devm.creditBeneficiary_gasMeasure (devm : Devm) (rules : ForkRules)
+    (a : Adr) (v : B256) :
+    (devm.creditBeneficiary rules a v).gasMeasure = devm.gasMeasure := by
+  unfold Devm.creditBeneficiary
+  split <;> rfl
+
 @[simp] theorem Devm.emitTransferLog_gasMeasure
     (devm : Devm) (sender recipient : Adr) (amount : B256) :
     (devm.emitTransferLog sender recipient amount).gasMeasure = devm.gasMeasure := by

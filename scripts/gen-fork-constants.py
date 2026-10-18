@@ -159,6 +159,7 @@ COVERAGE = {
     "settle.selfdestructRefund": "checked",
     "settle.selfdestructOnlyCreated": "checked",
     "settle.touchedSweep": "checked",
+    "settle.eraseEmptyOnModify": "checked",
     "txr.maxType": "checked",
     "txr.dataNonZero": "checked",
     "txr.calldataFloor": "checked",

@@ -839,6 +839,20 @@ def _settle(fork: str, fork_module, historical: bool = False) -> "list[tuple[str
         pass
     if state_module is not None:
         sweep = sweep or "touched" in inspect.getsource(state_module).lower()
+    # `modify_state` (goal U6b): from Paris it destroys an account the
+    # modification leaves empty; before Paris it is `set_account` alone.
+    erase_module = None
+    for name in ("state_tracker", "state"):
+        try:
+            erase_module = _mod(fork, name)
+        except ImportError:
+            continue
+        if hasattr(erase_module, "modify_state"):
+            break
+        erase_module = None
+    if erase_module is None:
+        raise SystemExit(f"{fork}: no state module defines modify_state")
+    erase = "destroy_account" in inspect.getsource(erase_module.modify_state)
     return [
         ("settle.refundQuotient",
          {"value": quotient, "source": quotient_source}),
@@ -853,6 +867,11 @@ def _settle(fork: str, fork_module, historical: bool = False) -> "list[tuple[str
             "value": sweep,
             "source": "absent: fork applies no touched-empty sweep "
             "(EIP-161 sweep dropped at Paris)",
+        }),
+        ("settle.eraseEmptyOnModify", {
+            "value": erase,
+            "source": f"{erase_module.__name__}.modify_state calls "
+            "destroy_account on an emptied account",
         }),
     ]
 

@@ -381,6 +381,7 @@ def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
     ("settle.selfdestructOnlyCreated",
       Lean.Json.bool r.settle.selfdestructOnlyCreated),
     ("settle.touchedSweep", Lean.Json.bool r.settle.touchedSweep),
+    ("settle.eraseEmptyOnModify", Lean.Json.bool r.settle.eraseEmptyOnModify),
     ("txr.maxType", jNat r.txr.maxType),
     ("txr.dataNonZero", jNat r.txr.dataNonZero),
     ("txr.calldataFloor", Lean.Json.bool r.txr.calldataFloor),
