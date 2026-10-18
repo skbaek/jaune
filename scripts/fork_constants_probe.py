@@ -25,6 +25,7 @@ import dataclasses
 import importlib
 import inspect
 import json
+import re
 import sys
 
 # Jaune's `Fork.toString` label -> the EELS fork module under ethereum.forks.
@@ -364,6 +365,493 @@ def _bal(fork: str) -> "list[tuple[str, dict]]":
     ]
 
 
+# U1c: the eleven pre-Osaka opcode flags. Each is a source-presence fact in
+# the same style as `op.clz`: whether `vm.instructions.Ops` defines the
+# member. Flags that activate together are read together -- EIP-145 assigns
+# SHL/SHR/SAR as one feature and EIP-1153 TLOAD/TSTORE as one -- and, as with
+# `_stack_access`, a partial definition raises instead of rounding to a bool.
+_OPCODE_SINGLES = (
+    ("op.extCodeHash", "EXTCODEHASH", "EIP-1052"),
+    ("op.create2", "CREATE2", "EIP-1014"),
+    ("op.chainId", "CHAINID", "EIP-1344"),
+    ("op.selfBalance", "SELFBALANCE", "EIP-1884"),
+    ("op.baseFee", "BASEFEE", "EIP-3198"),
+    ("op.push0", "PUSH0", "EIP-3855"),
+    ("op.mcopy", "MCOPY", "EIP-5656"),
+    ("op.blobHash", "BLOBHASH", "EIP-4844"),
+    ("op.blobBaseFee", "BLOBBASEFEE", "EIP-7516"),
+)
+
+_OPCODE_GROUPS = (
+    ("op.shifts", ("SHL", "SHR", "SAR"), "EIP-145"),
+    ("op.transient", ("TLOAD", "TSTORE"), "EIP-1153"),
+)
+
+
+def _all_or_none(fork: str, names: "tuple[str, ...]", eip: str, where: str,
+                 present) -> "tuple[bool, str]":
+    """One boolean over several names that activate together.
+
+    Both extremes are values; a partial definition raises, because the
+    feature was split upstream and a single flag no longer models it.
+    """
+    defined = [name for name in names if present(name)]
+    tag = ", ".join(names)
+    if len(defined) == len(names):
+        return True, f"{where} defines all of {tag} ({eip})"
+    if not defined:
+        return False, f"{where} defines none of {tag} ({eip})"
+    missing = [name for name in names if name not in defined]
+    raise ProbeError(
+        f"{fork}: {where} defines {defined} but not {missing}; "
+        f"{eip} assigns them together, so a partial definition is drift, "
+        "not a boolean"
+    )
+
+
+def _opcodes(fork: str, ops) -> "list[tuple[str, dict]]":
+    """The eleven pre-Osaka opcode-availability flags (goal U1)."""
+    rows = []
+    for path, member, eip in _OPCODE_SINGLES:
+        value = hasattr(ops, member)
+        rows.append((path, {
+            "value": value,
+            "source": f"vm.instructions.Ops.{member} is defined ({eip})",
+        }))
+    for path, members, eip in _OPCODE_GROUPS:
+        value, source = _all_or_none(
+            fork, members, eip, "vm.instructions.Ops",
+            lambda name: hasattr(ops, name))
+        rows.append((path, {"value": value, "source": source}))
+    return rows
+
+
+# U1c: the five pre-Prague header flags. `blobGas` is one boolean over the
+# two EIP-4844 fields, which activate together.
+_HEADER_SINGLES = (
+    ("header.baseFee", "base_fee_per_gas", "EIP-1559"),
+    ("header.withdrawalsRoot", "withdrawals_root", "EIP-4895"),
+    ("header.parentBeaconBlockRoot", "parent_beacon_block_root", "EIP-4788"),
+    ("header.requestsHash", "requests_hash", "EIP-7685"),
+)
+
+
+def _headers(fork: str, header_fields) -> "list[tuple[str, dict]]":
+    """The five pre-Prague header-presence flags (goal U1)."""
+    rows = []
+    for path, field_name, eip in _HEADER_SINGLES:
+        value = field_name in header_fields
+        rows.append((path, {
+            "value": value,
+            "source": f"blocks.Header has a {field_name} field ({eip})",
+        }))
+    value, source = _all_or_none(
+        fork, ("blob_gas_used", "excess_blob_gas"), "EIP-4844",
+        "blocks.Header", lambda name: name in header_fields)
+    rows.append(("header.blobGas", {"value": value, "source": source}))
+    return rows
+
+
+def _access(fork: str) -> "list[tuple[str, dict]]":
+    """The access-pricing shape and its flat prices (goal U1).
+
+    Every fork this probe covers prices access the EIP-2929 way, so the
+    shape is `eip2929` and the five flat prices are `null` -- exactly what
+    `ForkRules.access = .eip2929` prints. The nulls are absence rows in the
+    style of `_state_gas`: the source says which presence implies them. A
+    fork without the warm/cold schedule raises: its flat prices would need
+    per-fork historical extraction, which is U10's work, not a null.
+    """
+    costs = _mod(fork, "vm.gas").GasCosts
+    if not (hasattr(costs, "WARM_ACCESS")
+            and hasattr(costs, "COLD_ACCOUNT_ACCESS")):
+        raise ProbeError(
+            f"{fork}: no EIP-2929 warm/cold schedule in vm.gas.GasCosts; "
+            "flat access prices need historical extraction (U10)"
+        )
+    source = (
+        "vm.gas.GasCosts defines WARM_ACCESS and COLD_ACCOUNT_ACCESS "
+        "(EIP-2929): access is warm/cold priced, so there are no flat "
+        "prices to print"
+    )
+    rows = [("access.shape", {"value": "eip2929", "source": source})]
+    for name in ("balance", "extCode", "extCodeHash", "sload", "call"):
+        rows.append((f"access.{name}", {"value": None, "source": source}))
+    return rows
+
+
+def _sstore(fork: str) -> "list[tuple[str, dict]]":
+    """The SSTORE shape: net metering and the stipend sentry (goal U1).
+
+    Both are source-presence facts about `sstore`. Net metering needs the
+    slot's transaction-start value, so it is the `get_storage_original`
+    read (EIP-1283's rule, kept through EIP-2200 and EIP-2929); the sentry
+    is the `CALL_STIPEND` check (EIP-2200, Istanbul onwards).
+    """
+    source = inspect.getsource(_mod(fork, "vm.instructions.storage").sstore)
+    net = "get_storage_original" in source
+    sentry = "CALL_STIPEND" in source
+    return [
+        ("sstore.netMetering", {
+            "value": net,
+            "source": "vm.instructions.storage.sstore reads "
+            "get_storage_original (EIP-1283/2200/2929 net metering)",
+        }),
+        ("sstore.stipendSentry", {
+            "value": sentry,
+            "source": "vm.instructions.storage.sstore checks "
+            "GasCosts.CALL_STIPEND (EIP-2200 stipend sentry)",
+        }),
+    ]
+
+
+def _refund_quotient(fork: str) -> "tuple[int, str]":
+    """The refund cap's divisor: the `// Uint(N)` in the refund computation.
+
+    Upstream gives the fifth-cap no name -- Prague through BPO2 write
+    `tx_gas_used_before_refund // Uint(5)` in `fork.py`, Amsterdam writes
+    `gas_used_before_refund // Uint(5)` in `vm.gas.settle_transaction_gas`
+    -- so it is read as the divisor literal, in the same spirit as the
+    code-reading surcharge. Both candidate modules are searched and the
+    distinct values must agree; anything else is drift, not a number.
+    """
+    found: dict[int, str] = {}
+    for suffix in ("fork", "vm.gas"):
+        module = _mod(fork, suffix)
+        module_source = inspect.getsource(module)
+        tree = ast.parse(module_source)
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.BinOp)
+                    and isinstance(node.op, ast.FloorDiv)):
+                continue
+            left = ast.get_source_segment(module_source, node.left) or ""
+            right = node.right
+            if "before_refund" not in left:
+                continue
+            if (isinstance(right, ast.Call)
+                    and isinstance(right.func, ast.Name)
+                    and right.func.id == "Uint"
+                    and len(right.args) == 1
+                    and isinstance(right.args[0], ast.Constant)):
+                value = int(right.args[0].value)
+                found.setdefault(value, f"{suffix} (line {node.lineno})")
+    if len(found) != 1:
+        raise ProbeError(
+            f"{fork}: refund divisor is not one literal: {found or 'none found'}"
+        )
+    value = next(iter(found))
+    return value, (
+        f"the refund computation divides pre-refund usage by Uint({value}) "
+        f"({found[value]}, EIP-3529 fifth-cap)"
+    )
+
+
+def _selfdestruct_refund(fork: str) -> "tuple[int, str]":
+    """The SELFDESTRUCT gas refund: zero by absence since EIP-3529 (goal U1).
+
+    Either a named refund constant answers, in which case its value is the
+    row, or no constant and no refund in `selfdestruct`'s source means the
+    refund is gone and the row is 0. A refund through any other path
+    raises rather than rounding to 0.
+    """
+    value, source = _find(
+        fork, "REFUND_SELF_DESTRUCT", ("vm.gas", "fork", "transactions"))
+    if value is not None:
+        return value, source
+    system = _mod(fork, "vm.instructions.system")
+    selfdestruct_source = inspect.getsource(system.selfdestruct)
+    if "refund" in selfdestruct_source.lower():
+        raise ProbeError(
+            f"{fork}: vm.instructions.system.selfdestruct mentions a refund "
+            "but no REFUND_SELF_DESTRUCT constant names it; classify by hand"
+        )
+    return 0, (
+        "absent: no REFUND_SELF_DESTRUCT in vm.gas, fork or transactions, "
+        "and vm.instructions.system.selfdestruct grants none (EIP-3529)"
+    )
+
+
+def _settle(fork: str, fork_module) -> "list[tuple[str, dict]]":
+    """The settlement numbers and switches (goal U1)."""
+    quotient, quotient_source = _refund_quotient(fork)
+    refund, refund_source = _selfdestruct_refund(fork)
+    system_source = inspect.getsource(
+        _mod(fork, "vm.instructions.system").selfdestruct)
+    only_created = "same transaction" in system_source
+    fork_source = inspect.getsource(fork_module)
+    sweep = "touched" in fork_source.lower()
+    state_module = None
+    try:
+        state_module = _mod(fork, "state")
+    except ImportError:
+        pass
+    if state_module is not None:
+        sweep = sweep or "touched" in inspect.getsource(state_module).lower()
+    return [
+        ("settle.refundQuotient",
+         {"value": quotient, "source": quotient_source}),
+        ("settle.selfdestructRefund",
+         {"value": refund, "source": refund_source}),
+        ("settle.selfdestructOnlyCreated", {
+            "value": only_created,
+            "source": "vm.instructions.system.selfdestruct deletes only an "
+            "account created in the same transaction (EIP-6780)",
+        }),
+        ("settle.touchedSweep", {
+            "value": sweep,
+            "source": "absent: fork applies no touched-empty sweep "
+            "(EIP-161 sweep dropped at Paris)",
+        }),
+    ]
+
+
+def _max_type(fork: str) -> "tuple[int, str]":
+    """The largest admitted EIP-2718 type, from `decode_transaction`.
+
+    The type bytes are read out of the `tx[0] == N` dispatch in source
+    order, paired with the class each branch decodes to -- the order is
+    irrelevant here, only the largest byte matters, but recording the
+    mapping is what makes a new type visible in the artifact. Legacy
+    type 0 is bare RLP (the `else` branch), never a dispatch byte.
+    """
+    transactions = _mod(fork, "transactions")
+    tree = ast.parse(inspect.getsource(transactions))
+    fn = next(
+        (
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef)
+            and node.name == "decode_transaction"
+        ),
+        None,
+    )
+    if fn is None:
+        raise ProbeError(f"{fork}.transactions has no decode_transaction")
+    mapping: dict[int, str] = {}
+    pending: int | None = None
+    for node in _in_source_order(fn):
+        if (isinstance(node, ast.Compare) and len(node.ops) == 1
+                and isinstance(node.ops[0], ast.Eq)):
+            left, compared = node.left, node.comparators[0]
+            if (isinstance(left, ast.Subscript)
+                    and isinstance(compared, ast.Constant)
+                    and isinstance(compared.value, int)):
+                pending = compared.value
+        elif (isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "decode_to"
+                and node.args
+                and isinstance(node.args[0], ast.Name)
+                and pending is not None):
+            mapping.setdefault(pending, node.args[0].id)
+            pending = None
+    if not mapping:
+        raise ProbeError(
+            f"{fork}: decode_transaction has no tx[0] == N dispatch"
+        )
+    pairs = ", ".join(f"{byte}: {name}"
+                      for byte, name in sorted(mapping.items()))
+    return max(mapping), (
+        "transactions.decode_transaction dispatches type bytes "
+        f"{{{pairs}}} (legacy type 0 is bare RLP)"
+    )
+
+
+def _data_nonzero(fork: str) -> "tuple[int, str]":
+    """The per-nonzero-byte data cost: tokens times the token price (goal U1).
+
+    Since EIP-7623 a nonzero byte costs tokens, not gas directly:
+    `tokens_in_calldata = num_zeros + num_non_zeros * Uint(N)` in
+    `transactions.py`, each token priced at
+    `vm.gas.GasCosts.TX_DATA_TOKEN_STANDARD`. The row is the product;
+    the derivation is the source string, not a second implementation.
+    """
+    standard = _require_int(
+        _mod(fork, "vm.gas").GasCosts, "TX_DATA_TOKEN_STANDARD",
+        f"{fork}.vm.gas.GasCosts")
+    source = inspect.getsource(_mod(fork, "transactions"))
+    mults = {int(match.group(1)) for match in
+             re.finditer(r"num_non_zeros \* Uint\((\d+)\)", source)}
+    if len(mults) != 1:
+        raise ProbeError(
+            f"{fork}: nonzero-byte tokenisation is not one literal: "
+            f"{sorted(mults) or 'none found'}"
+        )
+    tokens = mults.pop()
+    return tokens * standard, (
+        f"transactions tokenises a nonzero byte as {tokens} tokens "
+        f"(num_non_zeros * Uint({tokens})) at "
+        f"vm.gas.GasCosts.TX_DATA_TOKEN_STANDARD ({standard})"
+    )
+
+
+def _warm_coinbase(fork: str, fork_module) -> "tuple[bool, str]":
+    """Whether the coinbase starts warm (EIP-3651, goal U1).
+
+    Prague through BPO2 add it to the transaction's access-list addresses
+    in `fork.py`; Amsterdam warms it into the frame's accessed addresses in
+    `vm.interpreter` instead. Either site answers; neither means cold.
+    """
+    if "access_list_addresses.add(block_env.coinbase)" in inspect.getsource(
+            fork_module):
+        return True, (
+            "fork warms block_env.coinbase into the access-list "
+            "addresses (EIP-3651)"
+        )
+    interpreter_source = inspect.getsource(_mod(fork, "vm.interpreter"))
+    if "accessed_addresses.add(block_env.coinbase)" in interpreter_source:
+        return True, (
+            "vm.interpreter warms block_env.coinbase into the frame's "
+            "accessed addresses (EIP-3651)"
+        )
+    return False, (
+        "absent: neither fork nor vm.interpreter warms the coinbase"
+    )
+
+
+def _txr(fork: str, fork_module) -> "list[tuple[str, dict]]":
+    """The transaction admission and intrinsic-cost switches (goal U1)."""
+    max_type, max_type_source = _max_type(fork)
+    data_nonzero, data_nonzero_source = _data_nonzero(fork)
+    transactions = _mod(fork, "transactions")
+    intrinsic_fields = {f.name for f in dataclasses.fields(
+        transactions.IntrinsicGasCost)}
+    floor = "calldata_floor" in intrinsic_fields
+    warm, warm_source = _warm_coinbase(fork, fork_module)
+    return [
+        ("txr.maxType", {"value": max_type, "source": max_type_source}),
+        ("txr.dataNonZero",
+         {"value": data_nonzero, "source": data_nonzero_source}),
+        ("txr.calldataFloor", {
+            "value": floor,
+            "source": "transactions.IntrinsicGasCost has a calldata_floor "
+            "field (EIP-7623)",
+        }),
+        ("txr.warmCoinbase", {"value": warm, "source": warm_source}),
+    ]
+
+
+def _creation(fork: str, interpreter) -> "list[tuple[str, dict]]":
+    """The creation-time switches (goal U1).
+
+    `initCodeLimit` is whether `MAX_INIT_CODE_SIZE` exists to enforce
+    (EIP-3860, the same site `code.maxInitCodeSize` reads); `rejectEf` is
+    whether the interpreter refuses `0xEF`-leading deposited code
+    (EIP-3541).
+    """
+    limit = hasattr(interpreter, "MAX_INIT_CODE_SIZE")
+    reject = "0xEF" in inspect.getsource(interpreter)
+    return [
+        ("creation.initCodeLimit", {
+            "value": limit,
+            "source": "vm.interpreter.MAX_INIT_CODE_SIZE is defined "
+            "(EIP-3860)",
+        }),
+        ("creation.rejectEf", {
+            "value": reject,
+            "source": "vm.interpreter refuses 0xEF-leading deposited code "
+            "(EIP-3541)",
+        }),
+    ]
+
+
+def _pow(fork: str, fork_module) -> "list[tuple[str, dict]]":
+    """The proof-of-work numbers, or nulls for a post-merge fork (goal U1).
+
+    The same Option convention as `_state_gas`: a fork whose seal left the
+    execution layer carries `pow.present` false and both numbers `null`,
+    exactly as `ForkRules.pow = none` prints. A fork that still defines a
+    block reward raises: its numbers would need reading, not nulling.
+    """
+    if hasattr(fork_module, "BLOCK_REWARD"):
+        raise ProbeError(
+            f"{fork}: fork.BLOCK_REWARD is defined but Jaune carries "
+            "pow = none; read the numbers instead of nulling them"
+        )
+    absent = (
+        "fork.fork has no BLOCK_REWARD: the seal left the execution layer "
+        "at the merge, so there is no reward or bomb delay to print"
+    )
+    return [
+        ("pow.present", {
+            "value": False,
+            "source": absent,
+        }),
+        ("pow.blockReward", {"value": None, "source": absent}),
+        ("pow.bombDelay", {"value": None, "source": absent}),
+    ]
+
+
+def _sys(fork: str, fork_module) -> "list[tuple[str, dict]]":
+    """The pre-transaction system calls (goal U1).
+
+    Each flag is whether the fork's system-call address is both defined and
+    actually called as a `target_address`: EIP-4788's beacon roots and
+    EIP-2935's history storage. A defined-but-uncalled address raises
+    rather than rounding to either boolean.
+    """
+    fork_source = inspect.getsource(fork_module)
+    rows = []
+    for path, address, eip in (
+        ("sys.beaconRoots", "BEACON_ROOTS_ADDRESS", "EIP-4788"),
+        ("sys.historyStorage", "HISTORY_STORAGE_ADDRESS", "EIP-2935"),
+    ):
+        defined = hasattr(fork_module, address)
+        called = re.search(
+            rf"target_address\s*=\s*{address}\b", fork_source) is not None
+        if defined != called:
+            raise ProbeError(
+                f"{fork}: fork.{address} is "
+                f"{'defined but never called' if defined else 'called but not defined'}"
+                f" ({eip}); classify by hand"
+            )
+        rows.append((path, {
+            "value": defined,
+            "source": f"fork.{address} is defined and called as a "
+            f"system-call target_address ({eip})",
+        }))
+    return rows
+
+
+def _bn254(fork: str) -> "list[tuple[str, dict]]":
+    """The alt_bn128 precompile prices, repriced by EIP-1108 (goal U1).
+
+    Read off `vm.gas.GasCosts`, where the precompile functions charge
+    them: add and mul directly, the pairing as base plus per-point.
+    """
+    costs = _mod(fork, "vm.gas").GasCosts
+    rows = []
+    for path, name in (
+        ("bn254.add", "PRECOMPILE_ECADD"),
+        ("bn254.mul", "PRECOMPILE_ECMUL"),
+        ("bn254.pairingBase", "PRECOMPILE_ECPAIRING_BASE"),
+        ("bn254.pairingPerPair", "PRECOMPILE_ECPAIRING_PER_POINT"),
+    ):
+        rows.append((path, {
+            "value": _require_int(costs, name, f"{fork}.vm.gas.GasCosts"),
+            "source": f"vm.gas.GasCosts.{name}",
+        }))
+    return rows
+
+
+def _modexp_complexity(fork: str) -> "tuple[str, str]":
+    """Which MODEXP complexity formula the fork prices (goal U1).
+
+    EIP-2565 sizes words as `words ** 2` with `words = (length + 7) // 8`;
+    EIP-198's piecewise polynomial has no `words` in it. Any other shape
+    raises rather than guessing.
+    """
+    source = inspect.getsource(_mod(fork, "vm.precompiled_contracts.modexp"))
+    if "words **" in source:
+        return "eip2565", (
+            "vm.precompiled_contracts.modexp.complexity sizes words as "
+            "words**2 (EIP-2565), not the EIP-198 piecewise polynomial"
+        )
+    raise ProbeError(
+        f"{fork}: unrecognised MODEXP complexity shape; classify by hand"
+    )
+
+
 def extract(label: str, fork: str) -> dict:
     gas = _mod(fork, "vm.gas")
     costs = gas.GasCosts
@@ -379,6 +867,7 @@ def extract(label: str, fork: str) -> dict:
     surcharge, surcharge_source = _code_read_surcharge(fork)
     requests, requests_source = _requests(fork)
     stack_access, stack_access_source = _stack_access(fork, instructions.Ops)
+    complexity, complexity_source = _modexp_complexity(fork)
 
     def field(path, value, source):
         return (path, {"value": value, "source": source})
@@ -468,7 +957,12 @@ def extract(label: str, fork: str) -> dict:
         field("header.slotNumber", "slot_number" in header_fields,
               "blocks.Header has a slot_number field (EIP-7843)"),
         field("requests", requests, requests_source),
-    ] + _state_gas(fork) + _bal(fork)
+        field("modexpComplexity", complexity, complexity_source),
+    ] + _state_gas(fork) + _bal(fork) + _opcodes(fork, instructions.Ops) \
+        + _headers(fork, header_fields) + _access(fork) + _sstore(fork) \
+        + _settle(fork, fork_module) + _txr(fork, fork_module) \
+        + _creation(fork, interpreter) + _pow(fork, fork_module) \
+        + _sys(fork, fork_module) + _bn254(fork)
     seen = [path for path, _ in entries]
     if len(seen) != len(set(seen)):
         raise ProbeError(f"{label}: duplicate field path in the extraction table")
