@@ -412,10 +412,11 @@ def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
 A fork whose rules this build does not implement is refused here exactly
 as it is everywhere else: there is nothing to print, and printing another
 fork's record would be the silent fallback the whole architecture exists to
-prevent. Ten declared forks are in that state -- the pre-Shanghai forks,
-refused with `UnsupportedForkError` through `Fork.rules`. The refusal stays
-because a fork identity declared ahead of its rules is exactly what those
-ten are, and because `scripts/check-fork-constants.sh` asserts its text.
+prevent. Eight declared forks are in that state -- the still-refused
+pre-Prague forks, refused with `UnsupportedForkError` through `Fork.rules`.
+The refusal stays because a fork identity declared ahead of its rules is
+exactly what those eight are, and because `scripts/check-fork-constants.sh`
+asserts its text.
 The gate's fork list and `Fork.supported` are the same list by construction. -/
 def runRulesPrinter (label : String) : IO Unit := do
   let some f := Fork.ofString? label
@@ -432,10 +433,11 @@ def runRulesPrinter (label : String) : IO Unit := do
 Evidence surface for `scripts/check-fork-constants.sh` (goal U10): it prints
 `Fork.ruleSet` -- the total function every declared fork's literal lives
 under -- through the same `toGateJson` as `--rules`, so the gate can compare
-the ten pre-Shanghai literals against the pinned `execution-specs` modules
-while `--rules` keeps refusing them. Execution never reads this: every runner
-resolves through `Fork.rules?` / `Fork.rules`, which still refuse those
-ten with `UnsupportedForkError`. -/
+the twelve pre-Prague literals against the pinned `execution-specs` modules
+while `--rules` keeps refusing the eight still-refused ones. Execution never
+reads this: every runner
+resolves through `Fork.rules?` / `Fork.rules`, which still refuse the eight
+still-refused forks with `UnsupportedForkError`. -/
 def runRulesLiteralPrinter (label : String) : IO Unit := do
   let some f := Fork.ofString? label
     | .throw
@@ -580,6 +582,42 @@ def fixtureImportFork (spec : NetworkSpec) (chainId : UInt64)
     Except.mapError ImportFailure.context (cfg.checkChainId parent.val)
     Except.mapError ImportFailure.ofLookup (cfg.forkAt header.number header.timestamp)
 
+/-- Strictly decode a fixture block's body under the fork that runs it.
+
+The wire shape is fork-relative (three elements before Shanghai carry no
+withdrawals list), so the header -- whose own encoding is fork-independent
+-- is read first to select the block's fork: a static label names it, a
+transition label resolves it from the header's number and timestamp through
+its chain configuration, the same resolution `fixtureImportFork` applies once
+the parent is known. A body that does not decode under its fork's rules is
+the scored `decode` verdict, exactly as the single-shape decoder's failures
+were; only the rule lookup itself is an import failure. -/
+def decodeFixtureBlockBody (spec : NetworkSpec) (chainId : UInt64)
+    (blockRlp : Bytes) : Except ImportFailure (Except DecodeError Block) :=
+  match (Bytes.toBLT? blockRlp).toExcept
+      (DecodeError.structure "block RLP" "cannot decode the outer RLP item") with
+  | .error e => .ok (.error e)
+  | .ok blt =>
+    match blt with
+    | .list (headerBlt :: _) =>
+      match headerBlt.toExHeader with
+      | .error e => .ok (.error e)
+      | .ok header =>
+        match spec with
+        | .static f =>
+          match f.rules with
+          | .error err => .error (.support err)
+          | .ok rules => .ok ((rlpToBlockEAt rules blockRlp).map (·.1))
+        | .transition t =>
+          match (t.chainConfig chainId).forkAt header.number header.timestamp with
+          | .error err => .error (ImportFailure.ofLookup err)
+          | .ok f =>
+            match f.rules with
+            | .error err => .error (.support err)
+            | .ok rules => .ok ((rlpToBlockEAt rules blockRlp).map (·.1))
+    | _ => .ok (.error (DecodeError.structure "block"
+      "expected [header, transactions, ommers, withdrawals] lists"))
+
 /-- Strictly decode a fixture block once, select its parent snapshot by the
 decoded `parentHash`, and import it into that snapshot through the checked
 core. The result is the canonical two-level shape: an operational
@@ -588,28 +626,40 @@ as a harness fault, never score -- and a typed candidate verdict on the inner
 one. Nothing is rendered here; text appears only at the logging and reporting
 boundary.
 
-The parent is a `CheckedBlockChain`, so its integrity is evidence rather than
-a recomputation, and the child snapshot this returns carries the same evidence
--- built from the checks the import already performed. -/
+The block is decoded in its fork's wire shape (see `decodeFixtureBlockBody`)
+and normalised to the canonical four-element form before the envelope is
+built. The parent is a `CheckedBlockChain`, so its integrity is evidence
+rather than a recomputation, and the child snapshot this returns carries the
+same evidence -- built from the checks the import already performed. -/
 def evaluateFixtureBlock (spec : NetworkSpec) (chainId : UInt64) (store : ChainStore)
     (blockRlp : Bytes) : Except ImportFailure (ImportOutcome CheckedBlockChain) :=
-  match hd : rlpToBlockE blockRlp with
-  | .error reason => .ok (.inr (.decode reason))
-  | .ok ⟨block, _⟩ =>
-    -- One strict decode, kept as the canonical envelope the checked import
-    -- core consumes; the parent is already a checked snapshot, so no state
-    -- root is recomputed for it.
-    match store.findParent block.header.parentHash with
-    | .error reason => .ok (.inr (.block reason))
-    | .ok parent =>
-      match fixtureImportFork spec chainId parent block.header with
-      | .error failure => .error failure
-      | .ok f =>
-        match him : addBlockToChainChecked f parent
-            (CanonicalBlock.ofDecode (rlpToBlock_eq_ok_iff.mpr hd)) with
+  match decodeFixtureBlockBody spec chainId blockRlp with
+  | .error failure => .error failure
+  | .ok (.error reason) => .ok (.inr (.decode reason))
+  | .ok (.ok block) =>
+    -- The checked import core reasons about the canonical four-element form
+    -- under every fork, so the fork-relative body is normalised through its
+    -- own re-encoding before the envelope is built. Every part was strictly
+    -- decoded, so the normalised bytes strictly re-decode by construction; a
+    -- failure here is a stated invariant not holding, never a verdict. The
+    -- parent is already a checked snapshot, so no state root is recomputed
+    -- for it.
+    match hnorm : rlpToBlock (block.toBLT.toBytes) with
+    | .error _ =>
+      .error (.internal (.assertion (.text
+        "normalised fixture block does not strictly re-decode")))
+    | .ok ⟨canon, _⟩ =>
+      match store.findParent canon.header.parentHash with
+      | .error reason => .ok (.inr (.block reason))
+      | .ok parent =>
+        match fixtureImportFork spec chainId parent canon.header with
         | .error failure => .error failure
-        | .ok (.inr rejection) => .ok (.inr rejection)
-        | .ok (.inl _) => .ok (.inl (CheckedBlockChain.ofImport him))
+        | .ok f =>
+          match him : addBlockToChainChecked f parent
+              (CanonicalBlock.ofDecode hnorm) with
+          | .error failure => .error failure
+          | .ok (.inr rejection) => .ok (.inr rejection)
+          | .ok (.inl _) => .ok (.inl (CheckedBlockChain.ofImport him))
 
 /-- Score one failed block evaluation against the fixture's expected set.
 
@@ -737,9 +787,9 @@ def runBlockchainStTest (spec : NetworkSpec) : (Nat × String × Lean.Json) → 
     -- Every fork this case's network label can select must be one this build
     -- runs, and that is settled here -- before a header, a prestate, or a
     -- block is read. A declared fork whose rules a build did not implement
-    -- would be outside its domain, not evidence about the candidate (ten
-    -- forks are in that state here: the pre-Shanghai forks `Fork.rules`
-    -- refuses): routed through
+    -- would be outside its domain, not evidence about the candidate (eight
+    -- forks are in that state here: the still-refused pre-Prague forks
+    -- `Fork.rules` refuses): routed through
     -- the import path it would surface as `BLOCK #0 was expected valid but
     -- failed`, which reads as a verdict on a block this build never examined.
     -- A transition label is checked at both endpoints for the same reason,
@@ -760,7 +810,23 @@ def runBlockchainStTest (spec : NetworkSpec) : (Nat × String × Lean.Json) → 
       s!"error : genesis block header hash, expected = {gbh_hash}, computed = {gbh_hash'}"
 
     let genesisRLP ← json.find "genesisRLP" >>= Lean.Json.toIoBytes
-    let genesisRLP' := gb.toBLT.toBytes
+    -- The genesis block's wire shape follows the fork active where it sits:
+    -- withdrawals ride along from Shanghai, so a pre-Shanghai genesis block
+    -- encodes three elements, not four. `Block.toBLT` always writes the
+    -- withdrawals element (it is the canonical block encoding the proven
+    -- paths hash and compare through); the fixture's `genesisRLP` is the
+    -- fork's own encoding, so the comparison drops the element exactly when
+    -- the genesis fork's rules do not carry withdrawals. A transition's
+    -- genesis sits in its before era. Prague and later keep the four-element
+    -- form, textually unchanged.
+    let genesisFork ← IO.ofExcept ((match spec with
+      | .static f => f.rules
+      | .transition t => t.before.rules).mapError SupportError.render)
+    let genesisRLP' :=
+      if genesisFork.header.withdrawalsRoot then gb.toBLT.toBytes
+      else (BLT.list [Header.toBLT gb.header,
+        .list (gb.txs.map B8LOrTxToBLT),
+        .list (gb.ommers.map Header.toBLT)]).toBytes
     .guard (genesisRLP = genesisRLP') "error : unexpected genesis block RLP."
     let (chainId : Nat) ←
       match gbh_json.find? "chainId" with
@@ -775,7 +841,18 @@ def runBlockchainStTest (spec : NetworkSpec) : (Nat × String × Lean.Json) → 
     -- prestate are compared against *that* decoded genesis. The prestate root
     -- check is the one this runner never made: without it the whole chain
     -- executes from a world its own genesis header does not commit to.
-    let genesisEnvelope ← (CanonicalBlock.ofRlp? genesisRLP).toIO
+    -- The genesis block arrives in its fork's wire shape (three elements
+    -- before Shanghai), while the envelope below holds the canonical
+    -- four-element form; it is decoded under the genesis fork's rules and
+    -- normalised through its own re-encoding, the same two stages every
+    -- candidate block passes through. The fixed message is unchanged: a
+    -- genesis that does not decode under its fork's rules was never a
+    -- scorable verdict.
+    let genesisBlock ← match rlpToBlockEAt genesisFork genesisRLP with
+      | .ok ⟨block, _⟩ => pure block
+      | .error _ => .throw "error : genesis RLP is not canonical block RLP"
+    let genesisEnvelope ←
+      (CanonicalBlock.ofRlp? (genesisBlock.toBLT.toBytes)).toIO
       "error : genesis RLP is not canonical block RLP"
     .guard (genesisEnvelope.headerHash = gbh_hash)
       s!"error : decoded genesis header hash does not match\n  \
@@ -1306,8 +1383,9 @@ constructed `ForkTransition`, not written out by hand, so this text cannot
 drift from what the build actually does -- which is exactly how the README's
 fork list came to disagree with the binary. The declared and runnable sets are
 printed separately because they answer different questions -- what this build
-parses against what it will also run. They differ by the ten pre-Shanghai
-forks, and a guard where `Fork.supported` is defined pins the runnable list;
+parses against what it will also run. They differ by the eight still-refused
+pre-Prague forks, and a guard where `Fork.supported` is defined pins the
+runnable list;
 folding them would still be wrong, because the build would then claim support
 it does not have, and the reader could not tell the two questions apart. -/
 def usage : String :=

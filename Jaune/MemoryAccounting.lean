@@ -1633,7 +1633,8 @@ private theorem genericCreate_memory_accounting
   unfold genericCreate.step
   apply xAccounting_ofExcept
   refine xResult_bind
-    (nonspawn_assert (memorySize ≤ sevm.benvStat.rules.code.maxInitCodeSize)
+    (nonspawn_assert (sevm.benvStat.rules.creation.initCodeLimit →
+        memorySize ≤ sevm.benvStat.rules.code.maxInitCodeSize)
       (.halt (.outOfGas .none)) pre) ?_
   intro _
   let grant := except64th pre.gasLeft
@@ -1761,9 +1762,11 @@ private theorem executable_memory_accounting (sevm : Sevm) (pre : Devm) (x : Xin
     intro memorySize
     rw [Nat.add_right_comm sevm.benvStat.rules.gas.createAccess
       (memorySize.2.extCost [(memoryIndex.1, memorySize.1)])
-      (gasInitCodeWordCost * ceilDiv memorySize.1 32)]
+      (if sevm.benvStat.rules.creation.initCodeLimit then
+        gasInitCodeWordCost * ceilDiv memorySize.1 32 else 0)]
     refine xResult_charged_memory [(memoryIndex.1, memorySize.1)]
-      (sevm.benvStat.rules.gas.createAccess + gasInitCodeWordCost * ceilDiv memorySize.1 32)
+      (sevm.benvStat.rules.gas.createAccess + if sevm.benvStat.rules.creation.initCodeLimit then
+        gasInitCodeWordCost * ceilDiv memorySize.1 32 else 0)
       memorySize.2 _ ?_
     intro charged
     refine xAccounting_rebase (pre := charged.memExtends [(memoryIndex.1, memorySize.1)])
@@ -1785,10 +1788,12 @@ private theorem executable_memory_accounting (sevm : Sevm) (pre : Devm) (x : Xin
       rw [Nat.add_right_comm
         (sevm.benvStat.rules.gas.createAccess + gasKeccak256Word * ceilDiv memorySize.1 32)
         (salt.2.extCost [(memoryIndex.1, memorySize.1)])
-        (gasInitCodeWordCost * ceilDiv memorySize.1 32)]
+        (if sevm.benvStat.rules.creation.initCodeLimit then
+          gasInitCodeWordCost * ceilDiv memorySize.1 32 else 0)]
       refine xResult_charged_memory [(memoryIndex.1, memorySize.1)]
         (sevm.benvStat.rules.gas.createAccess + gasKeccak256Word * ceilDiv memorySize.1 32 +
-          gasInitCodeWordCost * ceilDiv memorySize.1 32)
+          if sevm.benvStat.rules.creation.initCodeLimit then
+            gasInitCodeWordCost * ceilDiv memorySize.1 32 else 0)
         salt.2 _ ?_
       intro charged
       refine xAccounting_rebase (pre := charged.memExtends [(memoryIndex.1, memorySize.1)])
@@ -2406,7 +2411,8 @@ private theorem genericCreate_spawn_accounting
   unfold genericCreate.step
   apply spawnAccounting_ofExcept
   refine spawnResult_bind
-    (nonspawn_assert (memorySize ≤ sevm.benvStat.rules.code.maxInitCodeSize)
+    (nonspawn_assert (sevm.benvStat.rules.creation.initCodeLimit →
+        memorySize ≤ sevm.benvStat.rules.code.maxInitCodeSize)
       (.halt (.outOfGas .none)) pre) ?_
   intro _
   let grant := except64th pre.gasLeft
@@ -2479,9 +2485,11 @@ private theorem executable_spawn_accounting (sevm : Sevm) (pre : Devm) (x : Xins
     intro memorySize
     rw [Nat.add_right_comm sevm.benvStat.rules.gas.createAccess
       (memorySize.2.extCost [(memoryIndex.1, memorySize.1)])
-      (gasInitCodeWordCost * ceilDiv memorySize.1 32)]
+      (if sevm.benvStat.rules.creation.initCodeLimit then
+        gasInitCodeWordCost * ceilDiv memorySize.1 32 else 0)]
     refine spawnResult_charged_memory [(memoryIndex.1, memorySize.1)]
-      (sevm.benvStat.rules.gas.createAccess + gasInitCodeWordCost * ceilDiv memorySize.1 32)
+      (sevm.benvStat.rules.gas.createAccess + if sevm.benvStat.rules.creation.initCodeLimit then
+        gasInitCodeWordCost * ceilDiv memorySize.1 32 else 0)
       memorySize.2 _ ?_
     intro charged
     refine spawnAccounting_rebase (pre := charged.memExtends [(memoryIndex.1, memorySize.1)])
@@ -2503,10 +2511,12 @@ private theorem executable_spawn_accounting (sevm : Sevm) (pre : Devm) (x : Xins
       rw [Nat.add_right_comm
         (sevm.benvStat.rules.gas.createAccess + gasKeccak256Word * ceilDiv memorySize.1 32)
         (salt.2.extCost [(memoryIndex.1, memorySize.1)])
-        (gasInitCodeWordCost * ceilDiv memorySize.1 32)]
+        (if sevm.benvStat.rules.creation.initCodeLimit then
+          gasInitCodeWordCost * ceilDiv memorySize.1 32 else 0)]
       refine spawnResult_charged_memory [(memoryIndex.1, memorySize.1)]
         (sevm.benvStat.rules.gas.createAccess + gasKeccak256Word * ceilDiv memorySize.1 32 +
-          gasInitCodeWordCost * ceilDiv memorySize.1 32)
+          if sevm.benvStat.rules.creation.initCodeLimit then
+            gasInitCodeWordCost * ceilDiv memorySize.1 32 else 0)
         salt.2 _ ?_
       intro charged
       refine spawnAccounting_rebase (pre := charged.memExtends [(memoryIndex.1, memorySize.1)])

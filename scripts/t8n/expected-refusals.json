@@ -1,12 +1,10 @@
 {
-  "_comment": "Goal U10: the historical t8n cases Jaune refuses (U11a moved hist-transfer-shanghai and hist-transfer-cancun to passing). Every fork they name is declared but unimplemented (Fork.rules? is none), so `jaune t8n` fails before reading any input with UnsupportedForkError, exactly as `lake exe jaune --rules <fork>` does. These cases are never marked passing: the gate requires the refusal, with this reason, and the goldens (generated from the pinned target) record the behavior U11 will conform to.",
+  "_comment": "Goal U10 registered the historical t8n cases Jaune refused; units U11a (Shanghai, Cancun) and U11b (London, Paris) resolved four of them, so hist-transfer-london, hist-transfer-merge (Paris), hist-transfer-shanghai and hist-transfer-cancun now conform against their goldens. The seven remaining forks are declared but unimplemented (Fork.rules? is none), so `jaune t8n` fails before reading any input with UnsupportedForkError, exactly as `lake exe jaune --rules <fork>` does. These cases are never marked passing: the gate requires the refusal, with this reason, and the goldens (generated from the pinned target) record the behavior later units will conform to.",
   "hist-transfer-byzantium": "UnsupportedForkError",
   "hist-transfer-constantinoplefix": "UnsupportedForkError",
   "hist-transfer-istanbul": "UnsupportedForkError",
   "hist-transfer-muirglacier": "UnsupportedForkError",
   "hist-transfer-berlin": "UnsupportedForkError",
-  "hist-transfer-london": "UnsupportedForkError",
   "hist-transfer-arrowglacier": "UnsupportedForkError",
-  "hist-transfer-grayglacier": "UnsupportedForkError",
-  "hist-transfer-merge": "UnsupportedForkError"
+  "hist-transfer-grayglacier": "UnsupportedForkError"
 }

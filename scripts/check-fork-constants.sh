@@ -258,6 +258,14 @@ for fork, entry in sorted(extraction["forks"].items()):
     # Check 3, the one that keeps this gate from quietly shrinking.
     check_key_set(fork, printed, "printer's")
 
+    # Goals U11a/U11b: a runnable pre-Prague fork carries dormant values the
+    # pinned fork module never defines (no blob schedule before EIP-4844, no
+    # init-code limit before EIP-3860, no Prague floor/authorisation numbers),
+    # exactly as the refused path classifies them. `live` is `checked` minus
+    # the extraction's per-fork `dormant` map, so the Prague-family forks --
+    # whose dormant map is empty -- compare exactly as before, and London,
+    # Paris, Shanghai and Cancun skip what the extraction classifies rather
+    # than compare against its `None`.
     compared += compare_fields(fork, entry, printed, live)
     dormant_skipped += len(dormant)
 

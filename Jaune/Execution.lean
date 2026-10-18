@@ -744,8 +744,11 @@ def genericCreate.step
     (newAddress : Adr) (memoryIndex memorySize : Nat) : XStep :=
   XStep.ofExcept do
     let calldata := devm.memory.data.sliceD memoryIndex memorySize 0
+    -- EIP-3860 (Shanghai): the initcode bound applies only once
+    -- `creation.initCodeLimit` activates; before that every size spawns.
     Except.assert
-      (memorySize ≤ sevm.benvStat.rules.code.maxInitCodeSize)
+      (sevm.benvStat.rules.creation.initCodeLimit →
+        memorySize ≤ sevm.benvStat.rules.code.maxInitCodeSize)
       ⟨.halt (.outOfGas .none), devm⟩
     let createGas := except64th devm.gasLeft
     let devm := devm.withGasLeft (devm.gasLeft - createGas)
@@ -960,7 +963,11 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
         let ⟨memoryIndex, devm⟩ ← devm.popToNat
         let ⟨memorySize, devm⟩ ← devm.popToNat
         let extendCost := devm.extCost [⟨memoryIndex, memorySize⟩]
-        let initCodeCost := gasInitCodeWordCost * ceilDiv memorySize 32
+        -- EIP-3860 (Shanghai): initcode is metered per word only once
+        -- `creation.initCodeLimit` activates; before that a creation pays no
+        -- initcode words.
+        let initCodeCost := if sevm.benvStat.rules.creation.initCodeLimit then
+          gasInitCodeWordCost * ceilDiv memorySize 32 else 0
         let devm ←
           chargeGas (sevm.benvStat.rules.gas.createAccess + extendCost + initCodeCost) devm
         let devm := devm.memExtends [⟨memoryIndex, memorySize⟩]
@@ -1005,7 +1012,11 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
           let ⟨salt, devm⟩ ← devm.pop
           let extendCost := devm.extCost [⟨memoryIndex, memorySize⟩]
           let initCodeHashCost := gasKeccak256Word * ceilDiv memorySize 32
-          let initCodeCost := gasInitCodeWordCost * ceilDiv memorySize 32
+          -- EIP-3860 (Shanghai): initcode is metered per word only once
+          -- `creation.initCodeLimit` activates; before that a creation pays no
+          -- initcode words. The hashing words above are EIP-1014 and stay.
+          let initCodeCost := if sevm.benvStat.rules.creation.initCodeLimit then
+            gasInitCodeWordCost * ceilDiv memorySize 32 else 0
           let devm ←
             chargeGas
               (sevm.benvStat.rules.gas.createAccess + initCodeHashCost + extendCost
@@ -2137,7 +2148,7 @@ machine carrying it, which is how a *third* legacy-shaped record proved that
 the instruction sites read the *selected* `rules.gas` rather than the globals
 or a hard-wired Prague/Amsterdam pair. A machine now carries a `Fork`, so no
 such record can reach a machine, and no machine-driven evaluation can make the
-distinction any more: of the five fork records the four with `stateGas = none`
+distinction any more: of the nine fork records the eight with `stateGas = none`
 all carry `pragueGasSchedule`, and `pragueGasSchedule`'s three numbers equal
 the globals by `rfl`, so on every reachable machine "reads the record" and
 "reads the global" compute the same number. The three schedules the legacy lane

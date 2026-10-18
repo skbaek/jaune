@@ -19,20 +19,23 @@
 # only in the label) are kept and asserted the other way round: they pass rule
 # resolution, are never refused as unsupported, and fail only on the synthetic
 # fixture's absent block data. Since goal jaune-historical-forks-v1 (U1)
-# declares the twelve pre-Prague forks, `Paris` is a label this build parses
+# declares the twelve pre-Prague forks, `Berlin` is a label this build parses
 # and refuses per case with UnsupportedForkError (the usage text's "every case
 # at it is then refused"), so rule 3 is pinned with `Frontier`, a label this
-# build does not know, and the Paris file pins the declared-but-refused path
-# (5d). (U9 and U10 pinned 5d with `Cancun`; U11a made Cancun runnable and
-# moved the pin to Paris, still refused.) The distinction between "unknown" and "declared" survives as the
-# difference between rule 3, the two admissions, and 5d.
+# build does not know, and the Berlin file pins the declared-but-refused path
+# (5d). (U9 and U10 pinned 5d with `Cancun`; U11a moved the pin to Paris, and
+# the U11a/U11b merge moves it to Berlin, still refused.) The distinction
+# between "unknown" and "declared" survives as the difference between rule 3,
+# the admissions, and 5d.
 #
 # Nothing else pinned them. The conformance tiers only ever run well-formed
 # corpus files, `scripts/golden-messages.txt` covers block-rejection reasons
 # observed *inside* a run, and the Python tests under `scripts/tests/` cover the
 # bootstrap and generator scripts. The t8n handshake also needs a small
-# boundary here: `t8n --forks` must name exactly the runnable lane -- the five
-# supported forks, Amsterdam included since goal jaune-amsterdam-currency-v1
+# boundary here: `t8n --forks` must name exactly the runnable lane -- the nine
+# supported forks, London, Paris, Shanghai and Cancun included since goal
+# jaune-historical-forks-v1 units U11a/U11b (Amsterdam included since goal
+# jaune-amsterdam-currency-v1)
 # took the owner-consulted step goal C surfaced -- and agree with
 # `sources.json`'s `conformance_target.fork_lane`; `--info` must state the lane
 # and its basis and no longer call Amsterdam pending; and an Amsterdam
@@ -181,8 +184,8 @@ EOF
 # A declared fork whose rules this build does not implement (U1's twelve).
 cat > "$TMP/loose/declared_refused.json" <<'EOF'
 {
-  "tests/frontier/opcodes/test_dup.py::test_dup[fork_Paris-blockchain_test]": {
-    "network": "Paris",
+  "tests/frontier/opcodes/test_dup.py::test_dup[fork_Berlin-blockchain_test]": {
+    "network": "Berlin",
     "_info": { "fixture-format": "blockchain_test" }
   }
 }
@@ -261,19 +264,19 @@ expect_refusal "unsupported network" \
   "runs at a network this build supports; the file's labels are [Frontier]" \
   "$TMP/loose/unsupported.json"
 
-# 5d. A declared fork this build does not run (Paris, one of the ten
-#     pre-Shanghai forks `Fork.rules?` refuses) is refused with
+# 5d. A declared fork this build does not run (Berlin, one of the eight
+#     still-refused pre-Prague forks `Fork.rules?` refuses) is refused with
 #     UnsupportedForkError naming it, never as an unknown network and never
 #     run under another fork's rules.
 CHECKS=$((CHECKS + 1))
 run_jaune "$TMP/loose/declared_refused.json"
 if [ "$RUN_RC" -eq 0 ]; then
-  fail "declared but refused network (Paris): a refused fork's case passed"
-elif ! has "UnsupportedForkError : fork Paris" "$RUN_ERR"; then
-  fail "declared but refused network (Paris): not refused with UnsupportedForkError"
+  fail "declared but refused network (Berlin): a refused fork's case passed"
+elif ! has "UnsupportedForkError : fork Berlin" "$RUN_ERR"; then
+  fail "declared but refused network (Berlin): not refused with UnsupportedForkError"
   detail "got: ${RUN_ERR:-<empty stderr>}"
 elif has "runs at a network this build supports" "$RUN_ERR"; then
-  fail "declared but refused network (Paris): refused as an unknown network"
+  fail "declared but refused network (Berlin): refused as an unknown network"
   detail "got: ${RUN_ERR:-<empty stderr>}"
 fi
 
@@ -366,8 +369,8 @@ if [ "$RUN_RC" -eq 0 ] || has '"gas.txBase"' "$RUN_OUT"; then
 fi
 
 # 9. The t8n handshake. The advertised lane is the runnable lane: `--forks`
-#    names the seven supported forks, Shanghai through Amsterdam (five until
-#    U11a made Shanghai and Cancun runnable), and is byte-equal to
+#    names the nine supported forks, London, Paris, Shanghai and Cancun
+#    included, and is byte-equal to
 #    `sources.json`'s `conformance_target.fork_lane`, so a fork cannot be
 #    advertised in one place and not the other; `--info` states the lane, its
 #    basis, and the resolved list, and no longer says Amsterdam is pending.
@@ -381,8 +384,8 @@ run_jaune t8n --forks
 LANE_FROM_SOURCES="$(python3 -c '
 import json, sys
 print(" ".join(json.load(open(sys.argv[1]))["conformance_target"]["fork_lane"]))' "$ROOT/scripts/sources.json")"
-if [ "$RUN_RC" -ne 0 ] || [ "$RUN_OUT" != "Shanghai Cancun Prague Osaka BPO1 BPO2 Amsterdam" ]; then
-  fail "t8n --forks: expected the seven-fork lane, Shanghai through Amsterdam"
+if [ "$RUN_RC" -ne 0 ] || [ "$RUN_OUT" != "London Paris Shanghai Cancun Prague Osaka BPO1 BPO2 Amsterdam" ]; then
+  fail "t8n --forks: expected the nine-fork lane, London, Paris, Shanghai and Cancun included"
   detail "rc=$RUN_RC stdout: ${RUN_OUT:-<empty stdout>}"
 fi
 
@@ -395,10 +398,10 @@ fi
 CHECKS=$((CHECKS + 1))
 run_jaune t8n --info
 if [ "$RUN_RC" -ne 0 ] \
-  || ! has "t8n fork lane: Shanghai Cancun Prague Osaka BPO1 BPO2 Amsterdam" "$RUN_OUT" \
+  || ! has "t8n fork lane: London Paris Shanghai Cancun Prague Osaka BPO1 BPO2 Amsterdam" "$RUN_OUT" \
   || ! has "t8n lane basis: the advertised lane is every fork this build runs" "$RUN_OUT" \
-  || ! has "t8n resolves: Shanghai Cancun Prague Osaka BPO1 BPO2 Amsterdam" "$RUN_OUT"; then
-  fail "t8n --info: expected the seven-fork lane, its basis, and the resolved fork list"
+  || ! has "t8n resolves: London Paris Shanghai Cancun Prague Osaka BPO1 BPO2 Amsterdam" "$RUN_OUT"; then
+  fail "t8n --info: expected the nine-fork lane, its basis, and the resolved fork list"
   detail "rc=$RUN_RC stdout: ${RUN_OUT:-<empty stdout>}"
 fi
 
@@ -418,17 +421,28 @@ if [ "$RUN_RC" -ne 1 ] || has "UnsupportedForkError" "$RUN_ERR"; then
   detail "rc=$RUN_RC stderr: ${RUN_ERR:-<empty stderr>}"
 fi
 
-# The target's t8n names for the twelve pre-Prague forks (goal
+# The target's t8n names for the eight still-refused pre-Prague forks (goal
 # jaune-historical-forks-v1, U9) resolve and are then refused at rule lookup,
-# before any input is read: `ConstantinopleFix` (Petersburg), `Merge` (Paris)
-# and the fork-block label `BerlinToLondonAt5` all reach UnsupportedForkError.
+# before any input is read: `ConstantinopleFix` (Petersburg) and the
+# fork-block label `BerlinToLondonAt5` (whose Berlin endpoint stays refused)
+# both reach UnsupportedForkError. `London`, `Merge` (Paris), `Shanghai` and
+# `Cancun` resolve since units U11a/U11b and are admitted past rule lookup
+# exactly like Amsterdam above.
 # The two Jaune-only labels the target refuses, `Petersburg` and
 # `Constantinople`, are refused here as unknown t8n forks.
-for name in ConstantinopleFix Merge BerlinToLondonAt5; do
+for name in ConstantinopleFix BerlinToLondonAt5; do
   CHECKS=$((CHECKS + 1))
   run_jaune t8n --state.fork "$name" --input.alloc "$TMP/absent-amsterdam-alloc.json"
   if [ "$RUN_RC" -ne 1 ] || ! has "UnsupportedForkError" "$RUN_ERR"; then
     fail "t8n $name: expected an UnsupportedForkError refusal before the inputs"
+    detail "rc=$RUN_RC stderr: ${RUN_ERR:-<empty stderr>}"
+  fi
+done
+for name in London Merge Shanghai Cancun; do
+  CHECKS=$((CHECKS + 1))
+  run_jaune t8n --state.fork "$name" --input.alloc "$TMP/absent-amsterdam-alloc.json"
+  if [ "$RUN_RC" -ne 1 ] || has "UnsupportedForkError" "$RUN_ERR"; then
+    fail "t8n $name: expected rule resolution before the missing input"
     detail "rc=$RUN_RC stderr: ${RUN_ERR:-<empty stderr>}"
   fi
 done
@@ -455,5 +469,5 @@ if [ "$FAILS" -ne 0 ]; then
   exit 1
 fi
 
-echo "OK — cli: $CHECKS checks; fixture refusals, the Amsterdam admissions, the rule-data printer, and the t8n handshake hold"
+echo "OK — cli: $CHECKS checks; fixture refusals, the Amsterdam and London/Paris/Shanghai/Cancun admissions, the rule-data printer, and the t8n handshake hold"
 exit 0

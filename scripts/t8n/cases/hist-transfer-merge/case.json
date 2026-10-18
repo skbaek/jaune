@@ -1,5 +1,5 @@
 {
-  "description": "A plain value transfer at Merge (Paris), in blockchain mode: one successful legacy transaction, no block reward under proof of stake. Jaune refuses the fork; the golden records the pinned target.",
+  "description": "A plain value transfer at Merge (Paris), in blockchain mode: one successful legacy transaction, no block reward under proof of stake. Byte-identical to the pinned target's golden.",
   "fork": "Merge",
   "chainid": 1,
   "reward": -1,
