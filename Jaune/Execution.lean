@@ -1025,8 +1025,15 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
         let extendCost :=
           devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
         let gasRules := sevm.benvStat.rules.gas
-        let preAccessCost := gasRules.accessCost callee devm.accessedAddresses
-        let devm := addAccessedAddress devm callee
+        -- Before EIP-2929 the base is flat and the accessed set is untouched.
+        let preAccessCost :=
+          match sevm.benvStat.rules.access with
+          | .eip2929 => gasRules.accessCost callee devm.accessedAddresses
+          | .flat g => g.call
+        let devm :=
+          match sevm.benvStat.rules.access with
+          | .eip2929 => addAccessedAddress devm callee
+          | .flat _ => devm
         let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
           gasRules.accessDelegation devm callee
         let accessCost := preAccessCost + delegatedAccessGasCost
@@ -1118,8 +1125,15 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
         let extendCost :=
           devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
         let gasRules := sevm.benvStat.rules.gas
-        let preAccessCost := gasRules.accessCost codeAddress devm.accessedAddresses
-        let devm := addAccessedAddress devm codeAddress
+        -- Before EIP-2929 the base is flat and the accessed set is untouched.
+        let preAccessCost :=
+          match sevm.benvStat.rules.access with
+          | .eip2929 => gasRules.accessCost codeAddress devm.accessedAddresses
+          | .flat g => g.call
+        let devm :=
+          match sevm.benvStat.rules.access with
+          | .eip2929 => addAccessedAddress devm codeAddress
+          | .flat _ => devm
         let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
           gasRules.accessDelegation devm codeAddress
         let accessCost := preAccessCost + delegatedAccessGasCost
@@ -1197,8 +1211,15 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
         let extendCost :=
           devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
         let gasRules := sevm.benvStat.rules.gas
-        let preAccessCost := gasRules.accessCost codeAddress devm.accessedAddresses
-        let devm := addAccessedAddress devm codeAddress
+        -- Before EIP-2929 the base is flat and the accessed set is untouched.
+        let preAccessCost :=
+          match sevm.benvStat.rules.access with
+          | .eip2929 => gasRules.accessCost codeAddress devm.accessedAddresses
+          | .flat g => g.call
+        let devm :=
+          match sevm.benvStat.rules.access with
+          | .eip2929 => addAccessedAddress devm codeAddress
+          | .flat _ => devm
         let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
           gasRules.accessDelegation devm codeAddress
         let accessCost := preAccessCost + delegatedAccessGasCost
@@ -1265,8 +1286,15 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
         let extendCost :=
           devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
         let gasRules := sevm.benvStat.rules.gas
-        let preAccessCost := gasRules.accessCost target devm.accessedAddresses
-        let devm := addAccessedAddress devm target
+        -- Before EIP-2929 the base is flat and the accessed set is untouched.
+        let preAccessCost :=
+          match sevm.benvStat.rules.access with
+          | .eip2929 => gasRules.accessCost target devm.accessedAddresses
+          | .flat g => g.call
+        let devm :=
+          match sevm.benvStat.rules.access with
+          | .eip2929 => addAccessedAddress devm target
+          | .flat _ => devm
         let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
           gasRules.accessDelegation devm target
         let accessCost := preAccessCost + delegatedAccessGasCost
@@ -1398,8 +1426,15 @@ private def Xinst.stepCached
       let extendCost :=
         devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
       let gasRules := sevm.benvStat.rules.gas
-      let preAccessCost := gasRules.accessCost callee devm.accessedAddresses
-      let devm := addAccessedAddress devm callee
+      -- Before EIP-2929 the base is flat and the accessed set is untouched.
+      let preAccessCost :=
+        match sevm.benvStat.rules.access with
+        | .eip2929 => gasRules.accessCost callee devm.accessedAddresses
+        | .flat g => g.call
+      let devm :=
+        match sevm.benvStat.rules.access with
+        | .eip2929 => addAccessedAddress devm callee
+        | .flat _ => devm
       let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
         gasRules.accessDelegation devm callee
       let accessCost := preAccessCost + delegatedAccessGasCost
@@ -1442,8 +1477,15 @@ private def Xinst.stepCached
       let extendCost :=
         devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
       let gasRules := sevm.benvStat.rules.gas
-      let preAccessCost := gasRules.accessCost codeAddress devm.accessedAddresses
-      let devm := addAccessedAddress devm codeAddress
+      -- Before EIP-2929 the base is flat and the accessed set is untouched.
+      let preAccessCost :=
+        match sevm.benvStat.rules.access with
+        | .eip2929 => gasRules.accessCost codeAddress devm.accessedAddresses
+        | .flat g => g.call
+      let devm :=
+        match sevm.benvStat.rules.access with
+        | .eip2929 => addAccessedAddress devm codeAddress
+        | .flat _ => devm
       let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
         gasRules.accessDelegation devm codeAddress
       let accessCost := preAccessCost + delegatedAccessGasCost
@@ -1483,8 +1525,15 @@ private def Xinst.stepCached
       let extendCost :=
         devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
       let gasRules := sevm.benvStat.rules.gas
-      let preAccessCost := gasRules.accessCost codeAddress devm.accessedAddresses
-      let devm := addAccessedAddress devm codeAddress
+      -- Before EIP-2929 the base is flat and the accessed set is untouched.
+      let preAccessCost :=
+        match sevm.benvStat.rules.access with
+        | .eip2929 => gasRules.accessCost codeAddress devm.accessedAddresses
+        | .flat g => g.call
+      let devm :=
+        match sevm.benvStat.rules.access with
+        | .eip2929 => addAccessedAddress devm codeAddress
+        | .flat _ => devm
       let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
         gasRules.accessDelegation devm codeAddress
       let accessCost := preAccessCost + delegatedAccessGasCost
@@ -1514,8 +1563,15 @@ private def Xinst.stepCached
       let extendCost :=
         devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
       let gasRules := sevm.benvStat.rules.gas
-      let preAccessCost := gasRules.accessCost target devm.accessedAddresses
-      let devm := addAccessedAddress devm target
+      -- Before EIP-2929 the base is flat and the accessed set is untouched.
+      let preAccessCost :=
+        match sevm.benvStat.rules.access with
+        | .eip2929 => gasRules.accessCost target devm.accessedAddresses
+        | .flat g => g.call
+      let devm :=
+        match sevm.benvStat.rules.access with
+        | .eip2929 => addAccessedAddress devm target
+        | .flat _ => devm
       let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
         gasRules.accessDelegation devm target
       let accessCost := preAccessCost + delegatedAccessGasCost
@@ -2273,10 +2329,31 @@ private def meteringGuardDelegatedCharge (gas : GasSchedule) (value : B256) : Na
     .staticcall [0, meteringGuardCallee.toB256, 0, 0, 0, 0]
   = some (3000, 0)
 
+-- Design S1: under the flat (pre-EIP-2929) schedule the four legacy arms charge
+-- the fixed `call` base (700, EIP-150) and no warm/cold price: the same inputs
+-- as the Prague rows above, whose 2,600 cold access becomes 700. A value-bearing
+-- CALL to an empty account still pays the 25,000 surcharge and the 9,000 value
+-- charge.
+#guard meteringGuardCallCharges .byzantium 0 .call
+    [0, meteringGuardCallee.toB256, 1, 0, 0, 0, 0]
+  = some (34700, 0)
+#guard meteringGuardCallCharges .byzantium 0 .callcode
+    [0, meteringGuardCallee.toB256, 1, 0, 0, 0, 0]
+  = some (9700, 0)
+#guard meteringGuardCallCharges .byzantium 0 .delegatecall
+    [0, meteringGuardCallee.toB256, 0, 0, 0, 0]
+  = some (700, 0)
+#guard meteringGuardCallCharges .byzantium 0 .staticcall
+    [0, meteringGuardCallee.toB256, 0, 0, 0, 0]
+  = some (700, 0)
+
 -- A cold sweep to a new beneficiary: Amsterdam replaces the legacy 25,000
 -- execution surcharge with ACCOUNT_WRITE plus NEW_ACCOUNT state gas, and emits
 -- the EIP-7708 transfer log.
 #guard meteringGuardSelfdestructCharges .prague 0 = some (32600, 0, 0)
+-- Design S1: the flat schedule has no cold surcharge, so the same sweep into an
+-- empty beneficiary pays the 5,000 base and the 25,000 creation alone.
+#guard meteringGuardSelfdestructCharges .byzantium 0 = some (30000, 0, 0)
 #guard meteringGuardSelfdestructCharges .amsterdam
     meteringGuardStateGas
   = some (17000, 183600, 1)
@@ -3427,7 +3504,10 @@ theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
         (liftMachExecution_canonical
           (GasSchedule.accessDelegation_canonical
             (gas := sevm.benvStat.rules.gas)
-            (devm := addAccessedAddress g.2 b.1) (by exact hg) _))
+            (devm := match sevm.benvStat.rules.access with
+              | .eip2929 => addAccessedAddress g.2 b.1
+              | .flat _ => g.2)
+            (by split <;> exact hg) _))
         fun d2 hd2 => ?_
       refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd2) fun _ _ => ?_
       split
@@ -3487,7 +3567,10 @@ theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
         (liftMachExecution_canonical
           (GasSchedule.accessDelegation_canonical
             (gas := sevm.benvStat.rules.gas)
-            (devm := addAccessedAddress g.2 b.1) (by exact hg) _))
+            (devm := match sevm.benvStat.rules.access with
+              | .eip2929 => addAccessedAddress g.2 b.1
+              | .flat _ => g.2)
+            (by split <;> exact hg) _))
         fun d2 hd2 => ?_
       split
       · refine Except.CanonicalOn.bind
@@ -3535,7 +3618,10 @@ theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
         (liftMachExecution_canonical
           (GasSchedule.accessDelegation_canonical
             (gas := sevm.benvStat.rules.gas)
-            (devm := addAccessedAddress f.2 b.1) (by exact hf) _))
+            (devm := match sevm.benvStat.rules.access with
+              | .eip2929 => addAccessedAddress f.2 b.1
+              | .flat _ => f.2)
+            (by split <;> exact hf) _))
         fun d2 hd2 => ?_
       exact Except.canonicalOn_ok
         (genericCall.step_canonical hs (by exact hd2)
@@ -3578,7 +3664,10 @@ theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
         (liftMachExecution_canonical
           (GasSchedule.accessDelegation_canonical
             (gas := sevm.benvStat.rules.gas)
-            (devm := addAccessedAddress f.2 b.1) (by exact hf) _))
+            (devm := match sevm.benvStat.rules.access with
+              | .eip2929 => addAccessedAddress f.2 b.1
+              | .flat _ => f.2)
+            (by split <;> exact hf) _))
         fun d2 hd2 => ?_
       exact Except.canonicalOn_ok
         (genericCall.step_canonical hs (by exact hd2)
@@ -4050,7 +4139,10 @@ theorem Xinst.step_stateGasZero {sevm : Sevm} {devm : Devm}
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero he) fun f hf => ?_
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hf) fun g hg => ?_
     have haccess := GasSchedule.accessDelegation_stateGasZero
-      (gas := sevm.benvStat.rules.gas) (devm := addAccessedAddress g.2 b.1) hg b.1
+      (gas := sevm.benvStat.rules.gas) (devm := match sevm.benvStat.rules.access with
+              | .eip2929 => addAccessedAddress g.2 b.1
+              | .flat _ => g.2)
+      (by split <;> exact hg) b.1
     refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ haccess) fun d2 hd2 => ?_
     refine Except.StateGasZeroOn.bind (Except.stateGasZeroOn_assert hd2) fun _ _ => ?_
     split
@@ -4069,7 +4161,10 @@ theorem Xinst.step_stateGasZero {sevm : Sevm} {devm : Devm}
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero he) fun f hf => ?_
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hf) fun g hg => ?_
     have haccess := GasSchedule.accessDelegation_stateGasZero
-      (gas := sevm.benvStat.rules.gas) (devm := addAccessedAddress g.2 b.1) hg b.1
+      (gas := sevm.benvStat.rules.gas) (devm := match sevm.benvStat.rules.access with
+              | .eip2929 => addAccessedAddress g.2 b.1
+              | .flat _ => g.2)
+      (by split <;> exact hg) b.1
     refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ haccess) fun d2 hd2 => ?_
     split
     · refine Except.StateGasZeroOn.bind (Devm.push_stateGasZero _ hd2) fun d3 hd3 => ?_
@@ -4086,7 +4181,10 @@ theorem Xinst.step_stateGasZero {sevm : Sevm} {devm : Devm}
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hd) fun e he => ?_
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero he) fun f hf => ?_
     have haccess := GasSchedule.accessDelegation_stateGasZero
-      (gas := sevm.benvStat.rules.gas) (devm := addAccessedAddress f.2 b.1) hf b.1
+      (gas := sevm.benvStat.rules.gas) (devm := match sevm.benvStat.rules.access with
+              | .eip2929 => addAccessedAddress f.2 b.1
+              | .flat _ => f.2)
+      (by split <;> exact hf) b.1
     refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ haccess) fun d2 hd2 => ?_
     exact Except.stateGasZeroOn_ok
       (genericCall.step_stateGasZero hrules (by exact hd2)
@@ -4100,7 +4198,10 @@ theorem Xinst.step_stateGasZero {sevm : Sevm} {devm : Devm}
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hd) fun e he => ?_
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero he) fun f hf => ?_
     have haccess := GasSchedule.accessDelegation_stateGasZero
-      (gas := sevm.benvStat.rules.gas) (devm := addAccessedAddress f.2 b.1) hf b.1
+      (gas := sevm.benvStat.rules.gas) (devm := match sevm.benvStat.rules.access with
+              | .eip2929 => addAccessedAddress f.2 b.1
+              | .flat _ => f.2)
+      (by split <;> exact hf) b.1
     refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ haccess) fun d2 hd2 => ?_
     exact Except.stateGasZeroOn_ok
       (genericCall.step_stateGasZero hrules (by exact hd2)

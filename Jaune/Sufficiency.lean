@@ -888,6 +888,14 @@ theorem GasSchedule.gasWarmAccess_le_access_cost {gas : GasSchedule}
     gasWarmAccess ≤ gas.accessCost x a :=
   hv.warmAccess_le_accessCost x a
 
+/-- Under the flat (pre-EIP-2929) schedule every family's price is positive:
+the termination argument's one need of that shape, from `ForkRules.Valid`. -/
+theorem ForkRules.Valid.flatAccess {r : ForkRules} (hv : r.Valid)
+    {g : FlatAccessGas} (h : r.access = .flat g) : g.Valid := by
+  have ha := hv.access
+  rw [h] at ha
+  exact ha
+
 theorem calculateMsgCallGas_stipend_lt
     {value gas gasLeft memoryCost extraGas cs : Nat}
     (hstip : (if value = 0 then 0 else cs) < extraGas + memoryCost) :
@@ -1074,71 +1082,88 @@ theorem Xinst.step_call_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
     (hstate : sevm.benvStat.rules.stateGas = none) :
     (Xinst.step sevm devm .call).GasDecreasing sevm devm.gasMeasure := by
   have hv := Sevm.rules_valid sevm
-  simp only [Xinst.step, hstate]
-  apply XStep.ofExcept_gasDecreasing
-  intro step hstep
-  obtain ⟨⟨gas, d1⟩, p1, hstep⟩ := Except.bind_eq_ok hstep
-  obtain ⟨⟨callee, d2⟩, p2, hstep⟩ := Except.bind_eq_ok hstep
-  obtain ⟨⟨value, d3⟩, p3, hstep⟩ := Except.bind_eq_ok hstep
-  obtain ⟨⟨inputIndex, d4⟩, p4, hstep⟩ := Except.bind_eq_ok hstep
-  obtain ⟨⟨inputSize, d5⟩, p5, hstep⟩ := Except.bind_eq_ok hstep
-  obtain ⟨⟨outputIndex, d6⟩, p6, hstep⟩ := Except.bind_eq_ok hstep
-  obtain ⟨⟨outputSize, d7⟩, p7, hstep⟩ := Except.bind_eq_ok hstep
-  dsimp only at hstep
-  have e1 := Devm.pop_gasMeasure p1
-  have e2 := Devm.popToAdr_gasMeasure p2
-  have e3 := Devm.pop_gasMeasure p3
-  have e4 := Devm.popToNat_gasMeasure p4
-  have e5 := Devm.popToNat_gasMeasure p5
-  have e6 := Devm.popToNat_gasMeasure p6
-  have e7 := Devm.popToNat_gasMeasure p7
-  dsimp only at e2 e3 e4 e5 e6 e7
-  -- The delegation lookup can warm one more address but never touches gas.
-  have eA : (sevm.benvStat.rules.gas.accessDelegation
-      (addAccessedAddress d7 callee) callee).2.2.2.2.gasMeasure = devm.gasMeasure := by
-    rw [GasSchedule.accessDelegation_gasMeasure, addAccessedAddress_gasMeasure]
-    omega
-  -- `extra_gas` strictly covers the stipend: a warm access alone costs 100, and
-  -- a value-bearing call pays `gasCallValue` against a `gCallStipend` stipend.
-  have hstip :
-      (if value.toNat = 0 then 0 else gCallStipend) <
-        ((sevm.benvStat.rules.gas.accessCost callee d7.accessedAddresses +
-              (sevm.benvStat.rules.gas.accessDelegation
-                (addAccessedAddress d7 callee) callee).2.2.2.1 +
-            if ¬((sevm.benvStat.rules.gas.accessDelegation
-                    (addAccessedAddress d7 callee) callee).2.2.2.2.getAcct
-                    callee).Empty ∨ value = 0 then 0 else gNewAccount) +
-          if value = 0 then 0 else sevm.benvStat.rules.gas.callValue) +
-        d7.extCost [(inputIndex, inputSize), (outputIndex, outputSize)] := by
-    have hac := GasSchedule.access_cost_pos hv.gas callee d7.accessedAddresses
-    have hcall := GasSchedule.Valid.stipend_le_callValue hv.gas
-    by_cases hv : value = 0
-    · have : value.toNat = 0 := by rw [hv]; rfl
-      rw [ite_eq_left this]
+  have hacc := hv.access
+  -- The access step, of either shape: the arms reduce by `match` on the
+  -- schedule, and both leave a positive price `pre` and a gas-neutral `dA`.
+  rcases hA : sevm.benvStat.rules.access with g | _ <;> rw [hA] at hacc
+  all_goals
+    simp only [Xinst.step, hstate, hA]
+    apply XStep.ofExcept_gasDecreasing
+    intro step hstep
+    obtain ⟨⟨gas, d1⟩, p1, hstep⟩ := Except.bind_eq_ok hstep
+    obtain ⟨⟨callee, d2⟩, p2, hstep⟩ := Except.bind_eq_ok hstep
+    obtain ⟨⟨value, d3⟩, p3, hstep⟩ := Except.bind_eq_ok hstep
+    obtain ⟨⟨inputIndex, d4⟩, p4, hstep⟩ := Except.bind_eq_ok hstep
+    obtain ⟨⟨inputSize, d5⟩, p5, hstep⟩ := Except.bind_eq_ok hstep
+    obtain ⟨⟨outputIndex, d6⟩, p6, hstep⟩ := Except.bind_eq_ok hstep
+    obtain ⟨⟨outputSize, d7⟩, p7, hstep⟩ := Except.bind_eq_ok hstep
+    dsimp only at hstep
+    have e1 := Devm.pop_gasMeasure p1
+    have e2 := Devm.popToAdr_gasMeasure p2
+    have e3 := Devm.pop_gasMeasure p3
+    have e4 := Devm.popToNat_gasMeasure p4
+    have e5 := Devm.popToNat_gasMeasure p5
+    have e6 := Devm.popToNat_gasMeasure p6
+    have e7 := Devm.popToNat_gasMeasure p7
+    dsimp only at e2 e3 e4 e5 e6 e7
+  on_goal 1 =>
+    have hpre : 0 < g.call := by
+      simp only [AccessSchedule.Valid, FlatAccessGas.Valid] at hacc
       omega
-    · rw [ite_eq_right hv]
-      split <;> omega
-  obtain ⟨d8, pcharge, hstep⟩ := Except.bind_eq_ok hstep
-  obtain ⟨-, -, hstep⟩ := Except.bind_eq_ok hstep
-  have key := call_charge_stipend_lt (devm := devm) hstip eA pcharge
-  split at hstep
-  · -- Insufficient sender balance: the stipend is refunded, nothing is spawned.
-    obtain ⟨d9, ppush, hstep⟩ := Except.bind_eq_ok hstep
-    simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
-    rw [← hstep]
-    intro devm' hd
-    simp only [Except.ok.injEq] at hd
-    rw [← hd]
-    simp only [Devm.withGasLeft_gasMeasure, Devm.withReturnData_spill]
-    rw [Nat.add_right_comm, ← Devm.gasMeasure_eq, Devm.push_gasMeasure ppush,
-      Devm.memExtends_gasMeasure]
-    exact key
-  · -- The spawn: the child's whole budget is the stipend.
-    simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
-    rw [← hstep]
-    apply genericCall.step_gasDecreasing
-    rw [Devm.memExtends_gasMeasure]
-    exact key
+    generalize g.call = pre at hpre hstep
+    let dA := d7
+    have hdA : dA.gasMeasure = d7.gasMeasure := rfl
+  on_goal 2 =>
+    have hpre := GasSchedule.access_cost_pos hv.gas callee d7.accessedAddresses
+    have hdA := addAccessedAddress_gasMeasure d7 callee
+    generalize sevm.benvStat.rules.gas.accessCost callee d7.accessedAddresses = pre at hpre hstep
+    generalize addAccessedAddress d7 callee = dA at hdA hstep
+  all_goals
+    -- The delegation lookup can warm one more address but never touches gas.
+    have eA : (sevm.benvStat.rules.gas.accessDelegation
+        dA callee).2.2.2.2.gasMeasure = devm.gasMeasure := by
+      rw [GasSchedule.accessDelegation_gasMeasure, hdA]
+      omega
+    -- `extra_gas` strictly covers the stipend: a warm access alone costs 100, and
+    -- a value-bearing call pays `gasCallValue` against a `gCallStipend` stipend.
+    have hstip :
+        (if value.toNat = 0 then 0 else gCallStipend) <
+          ((pre +
+                (sevm.benvStat.rules.gas.accessDelegation
+                  dA callee).2.2.2.1 +
+              if ¬((sevm.benvStat.rules.gas.accessDelegation
+                      dA callee).2.2.2.2.getAcct
+                      callee).Empty ∨ value = 0 then 0 else gNewAccount) +
+            if value = 0 then 0 else sevm.benvStat.rules.gas.callValue) +
+          d7.extCost [(inputIndex, inputSize), (outputIndex, outputSize)] := by
+      have hcall := GasSchedule.Valid.stipend_le_callValue hv.gas
+      by_cases hv : value = 0
+      · have : value.toNat = 0 := by rw [hv]; rfl
+        rw [ite_eq_left this]
+        omega
+      · rw [ite_eq_right hv]
+        split <;> omega
+    obtain ⟨d8, pcharge, hstep⟩ := Except.bind_eq_ok hstep
+    obtain ⟨-, -, hstep⟩ := Except.bind_eq_ok hstep
+    have key := call_charge_stipend_lt (devm := devm) hstip eA pcharge
+    split at hstep
+    · -- Insufficient sender balance: the stipend is refunded, nothing is spawned.
+      obtain ⟨d9, ppush, hstep⟩ := Except.bind_eq_ok hstep
+      simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
+      rw [← hstep]
+      intro devm' hd
+      simp only [Except.ok.injEq] at hd
+      rw [← hd]
+      simp only [Devm.withGasLeft_gasMeasure, Devm.withReturnData_spill]
+      rw [Nat.add_right_comm, ← Devm.gasMeasure_eq, Devm.push_gasMeasure ppush,
+        Devm.memExtends_gasMeasure]
+      exact key
+    · -- The spawn: the child's whole budget is the stipend.
+      simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
+      rw [← hstep]
+      apply genericCall.step_gasDecreasing
+      rw [Devm.memExtends_gasMeasure]
+      exact key
 
 theorem Xinst.step_call_gasDecreasing (sevm : Sevm) (devm : Devm) :
     (Xinst.step sevm devm .call).GasDecreasing sevm devm.gasMeasure := by
@@ -1288,21 +1313,29 @@ theorem Rinst.runCore_extcodesize_gasLt {pc : Nat} {devm : Devm} {sevm : Sevm}
   -- continuation into both arms; both charge a positive constant, and the cold
   -- arm's `addAccessedAddress` preserves gas.
   split at h
-  · obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
+  · split at h
+    · obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
+      have e2 := chargeGas_gasMeasure h2
+      have e3 := Devm.push_gasMeasure h3
+      simp only [Devm.balReadAccount_gasMeasure] at e3
+      unfold gasWarmAccess at e2
+      omega
+    · obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
+      have e2 := chargeGas_gasMeasure h2
+      rw [addAccessedAddress_gasMeasure] at e2
+      have e3 := Devm.push_gasMeasure h3
+      simp only [Devm.balReadAccount_gasMeasure] at e3
+      -- The cold half is now whatever the fork's schedule says, so positivity
+      -- comes from `Valid` rather than from a literal.
+      have hc := hv.gas.warmAccess_le
+      unfold gasWarmAccess at hc
+      omega
+  · -- Flat: one fixed positive price, the accessed set untouched.
+    obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
     have e2 := chargeGas_gasMeasure h2
     have e3 := Devm.push_gasMeasure h3
     simp only [Devm.balReadAccount_gasMeasure] at e3
-    unfold gasWarmAccess at e2
-    omega
-  · obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
-    have e2 := chargeGas_gasMeasure h2
-    rw [addAccessedAddress_gasMeasure] at e2
-    have e3 := Devm.push_gasMeasure h3
-    simp only [Devm.balReadAccount_gasMeasure] at e3
-    -- The cold half is now whatever the fork's schedule says, so positivity
-    -- comes from `Valid` rather than from a literal.
-    have hc := hv.gas.warmAccess_le
-    unfold gasWarmAccess at hc
+    obtain ⟨_, _, _, _, _⟩ := hv.flatAccess (by assumption)
     omega
 
 theorem Jinst.runCore_jumpdest_gasLt {pc : Nat} {devm : Devm} {sevm : Sevm}
@@ -1441,6 +1474,29 @@ theorem Rinst.balance_runCore_gasLt {pc : Nat} {devm devm' : Devm}
   | ok p =>
     rcases p with ⟨x, mach1⟩
     simp only [hp] at hcore
+    rcases hA : sevm.benvStat.rules.access with g | _
+    · -- Flat: one fixed positive price, the accessed set untouched.
+      obtain ⟨hb, -, -, -, -⟩ := hvalid.flatAccess hA
+      simp only [hA] at hcore
+      cases hc : Mach.chargeGas g.balance mach1 with
+      | error e => simp [hc] at hcore
+      | ok p =>
+        rcases p with ⟨u2, mach2⟩
+        simp only [hc] at hcore
+        cases hpush : Mach.push (devm.world.state.get x.toAdr).bal mach2 with
+        | error e => simp [hpush] at hcore
+        | ok p =>
+          rcases p with ⟨u3, mach3⟩
+          simp only [hpush, Except.ok.injEq, Prod.mk.injEq] at hcore
+          have ep := Mach.pop_gasMeasure hp
+          have ec := Mach.chargeGas_gasMeasure hc
+          have eq := Mach.push_gasMeasure hpush
+          have hv : view'.1.gasMeasure = mach3.gasMeasure :=
+            congrArg Mach.gasMeasure (congrArg Prod.fst hcore.2).symm
+          show devm'.mach.gasMeasure < devm.mach.gasMeasure
+          rw [hout, hv]
+          omega
+    simp only [hA] at hcore
     by_cases hw : x.toAdr ∈ devm.meta.accessedAddresses
     · simp only [hw, ite_eq_left] at hcore
       cases hc : Mach.chargeGas gasWarmAccess mach1 with
@@ -1592,19 +1648,27 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
     have e4 := Devm.popToNat_gasMeasure h4
     dsimp only at h e1 e2 e3 e4
     split at h
-    · obtain ⟨d5, h5, h6⟩ := Except.bind_eq_ok h
+    · split at h
+      · obtain ⟨d5, h5, h6⟩ := Except.bind_eq_ok h
+        simp only [Except.ok.injEq] at h6
+        have e5 := chargeGas_gasMeasure h5
+        rw [← h6, Devm.memWrite_gasMeasure, Devm.balReadAccount_gasMeasure]
+        unfold gasWarmAccess at e5
+        omega
+      · obtain ⟨d5, h5, h6⟩ := Except.bind_eq_ok h
+        simp only [Except.ok.injEq] at h6
+        have e5 := chargeGas_gasMeasure h5
+        rw [addAccessedAddress_gasMeasure] at e5
+        rw [← h6, Devm.memWrite_gasMeasure, Devm.balReadAccount_gasMeasure]
+        have hc := hv.gas.warmAccess_le
+        unfold gasWarmAccess at hc
+        omega
+    · -- Flat: one fixed positive price, the accessed set untouched.
+      obtain ⟨d5, h5, h6⟩ := Except.bind_eq_ok h
       simp only [Except.ok.injEq] at h6
       have e5 := chargeGas_gasMeasure h5
       rw [← h6, Devm.memWrite_gasMeasure, Devm.balReadAccount_gasMeasure]
-      unfold gasWarmAccess at e5
-      omega
-    · obtain ⟨d5, h5, h6⟩ := Except.bind_eq_ok h
-      simp only [Except.ok.injEq] at h6
-      have e5 := chargeGas_gasMeasure h5
-      rw [addAccessedAddress_gasMeasure] at e5
-      rw [← h6, Devm.memWrite_gasMeasure, Devm.balReadAccount_gasMeasure]
-      have hc := hv.gas.warmAccess_le
-      unfold gasWarmAccess at hc
+      obtain ⟨_, _, _, _, _⟩ := hv.flatAccess (by assumption)
       omega
   case extcodesize =>
     apply Rinst.runCore_extcodesize_gasLt (pc := pc) (sevm := sevm)
@@ -1616,19 +1680,27 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
     dsimp only at h h1
     have e1 := Devm.popToAdr_gasMeasure h1
     split at h
-    · obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
+    · split at h
+      · obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
+        have e2 := chargeGas_gasMeasure h2
+        have e3 := Devm.push_gasMeasure h3
+        simp only [Devm.balReadAccount_gasMeasure] at e3
+        unfold gasWarmAccess at e2
+        omega
+      · obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
+        have e2 := chargeGas_gasMeasure h2
+        rw [addAccessedAddress_gasMeasure] at e2
+        have e3 := Devm.push_gasMeasure h3
+        simp only [Devm.balReadAccount_gasMeasure] at e3
+        have hc := hv.gas.warmAccess_le
+        unfold gasWarmAccess at hc
+        omega
+    · -- Flat: one fixed positive price, the accessed set untouched.
+      obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
       have e2 := chargeGas_gasMeasure h2
       have e3 := Devm.push_gasMeasure h3
       simp only [Devm.balReadAccount_gasMeasure] at e3
-      unfold gasWarmAccess at e2
-      omega
-    · obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
-      have e2 := chargeGas_gasMeasure h2
-      rw [addAccessedAddress_gasMeasure] at e2
-      have e3 := Devm.push_gasMeasure h3
-      simp only [Devm.balReadAccount_gasMeasure] at e3
-      have hc := hv.gas.warmAccess_le
-      unfold gasWarmAccess at hc
+      obtain ⟨_, _, _, _, _⟩ := hv.flatAccess (by assumption)
       omega
   case selfbalance =>
     obtain ⟨d1, h1, h⟩ := Except.bind_eq_ok h
@@ -1754,18 +1826,26 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
     have e1 := Devm.pop_gasMeasure h1
     dsimp only at h e1
     split at h
-    · obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
+    · split at h
+      · obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
+        have e2 := chargeGas_gasMeasure h2
+        have e3 := Devm.push_gasMeasure h3
+        simp only [Devm.balReadStorage_gasMeasure] at e3
+        unfold gasWarmAccess at e2
+        omega
+      · obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
+        have e2 := chargeGas_gasMeasure h2
+        rw [addAccessedStorageKey_gasMeasure] at e2
+        have e3 := Devm.push_gasMeasure h3
+        simp only [Devm.balReadStorage_gasMeasure] at e3
+        unfold gasColdSload at e2
+        omega
+    · -- Flat: one fixed positive price, the accessed set untouched.
+      obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
       have e2 := chargeGas_gasMeasure h2
       have e3 := Devm.push_gasMeasure h3
       simp only [Devm.balReadStorage_gasMeasure] at e3
-      unfold gasWarmAccess at e2
-      omega
-    · obtain ⟨d2, h2, h3⟩ := Except.bind_eq_ok h
-      have e2 := chargeGas_gasMeasure h2
-      rw [addAccessedStorageKey_gasMeasure] at e2
-      have e3 := Devm.push_gasMeasure h3
-      simp only [Devm.balReadStorage_gasMeasure] at e3
-      unfold gasColdSload at e2
+      obtain ⟨_, _, _, _, _⟩ := hv.flatAccess (by assumption)
       omega
   case tload =>
     obtain ⟨⟨key, d1⟩, h1, h2⟩ := Except.bind_eq_ok h
@@ -2101,64 +2181,81 @@ theorem Xinst.step_callcode_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
     (hstate : sevm.benvStat.rules.stateGas = none) :
     (Xinst.step sevm devm .callcode).GasDecreasing sevm devm.gasMeasure := by
   have hv := Sevm.rules_valid sevm
-  simp only [Xinst.step, hstate]
-  apply XStep.ofExcept_gasDecreasing
-  intro step hstep
-  obtain ⟨⟨gas, d1⟩, p1, hstep⟩ := Except.bind_eq_ok hstep
-  obtain ⟨⟨codeAddress, d2⟩, p2, hstep⟩ := Except.bind_eq_ok hstep
-  obtain ⟨⟨value, d3⟩, p3, hstep⟩ := Except.bind_eq_ok hstep
-  obtain ⟨⟨inputIndex, d4⟩, p4, hstep⟩ := Except.bind_eq_ok hstep
-  obtain ⟨⟨inputSize, d5⟩, p5, hstep⟩ := Except.bind_eq_ok hstep
-  obtain ⟨⟨outputIndex, d6⟩, p6, hstep⟩ := Except.bind_eq_ok hstep
-  obtain ⟨⟨outputSize, d7⟩, p7, hstep⟩ := Except.bind_eq_ok hstep
-  dsimp only at hstep
-  have e1 := Devm.pop_gasMeasure p1
-  have e2 := Devm.popToAdr_gasMeasure p2
-  have e3 := Devm.pop_gasMeasure p3
-  have e4 := Devm.popToNat_gasMeasure p4
-  have e5 := Devm.popToNat_gasMeasure p5
-  have e6 := Devm.popToNat_gasMeasure p6
-  have e7 := Devm.popToNat_gasMeasure p7
-  dsimp only at e2 e3 e4 e5 e6 e7
-  have eA :
-      (sevm.benvStat.rules.gas.accessDelegation
-        (addAccessedAddress d7 codeAddress) codeAddress).2.2.2.2.gasMeasure
-        = devm.gasMeasure := by
-    rw [GasSchedule.accessDelegation_gasMeasure, addAccessedAddress_gasMeasure]
-    omega
-  have hstip :
-      (if value.toNat = 0 then 0 else gCallStipend) <
-        ((sevm.benvStat.rules.gas.accessCost codeAddress d7.accessedAddresses +
-            (sevm.benvStat.rules.gas.accessDelegation (addAccessedAddress d7 codeAddress)
-              codeAddress).2.2.2.1) +
-          if value = 0 then 0 else sevm.benvStat.rules.gas.callValue) +
-        d7.extCost [(inputIndex, inputSize), (outputIndex, outputSize)] := by
-    have hac := GasSchedule.access_cost_pos hv.gas codeAddress d7.accessedAddresses
-    have hcall := GasSchedule.Valid.stipend_le_callValue hv.gas
-    by_cases hv : value = 0
-    · have : value.toNat = 0 := by rw [hv]; rfl
-      rw [ite_eq_left this]
+  have hacc := hv.access
+  -- The access step, of either shape: the arms reduce by `match` on the
+  -- schedule, and both leave a positive price `pre` and a gas-neutral `dA`.
+  rcases hA : sevm.benvStat.rules.access with g | _ <;> rw [hA] at hacc
+  all_goals
+    simp only [Xinst.step, hstate, hA]
+    apply XStep.ofExcept_gasDecreasing
+    intro step hstep
+    obtain ⟨⟨gas, d1⟩, p1, hstep⟩ := Except.bind_eq_ok hstep
+    obtain ⟨⟨codeAddress, d2⟩, p2, hstep⟩ := Except.bind_eq_ok hstep
+    obtain ⟨⟨value, d3⟩, p3, hstep⟩ := Except.bind_eq_ok hstep
+    obtain ⟨⟨inputIndex, d4⟩, p4, hstep⟩ := Except.bind_eq_ok hstep
+    obtain ⟨⟨inputSize, d5⟩, p5, hstep⟩ := Except.bind_eq_ok hstep
+    obtain ⟨⟨outputIndex, d6⟩, p6, hstep⟩ := Except.bind_eq_ok hstep
+    obtain ⟨⟨outputSize, d7⟩, p7, hstep⟩ := Except.bind_eq_ok hstep
+    dsimp only at hstep
+    have e1 := Devm.pop_gasMeasure p1
+    have e2 := Devm.popToAdr_gasMeasure p2
+    have e3 := Devm.pop_gasMeasure p3
+    have e4 := Devm.popToNat_gasMeasure p4
+    have e5 := Devm.popToNat_gasMeasure p5
+    have e6 := Devm.popToNat_gasMeasure p6
+    have e7 := Devm.popToNat_gasMeasure p7
+    dsimp only at e2 e3 e4 e5 e6 e7
+  on_goal 1 =>
+    have hpre : 0 < g.call := by
+      simp only [AccessSchedule.Valid, FlatAccessGas.Valid] at hacc
       omega
-    · rw [ite_eq_right hv]
-      split <;> omega
-  obtain ⟨d8, pcharge, hstep⟩ := Except.bind_eq_ok hstep
-  have key := call_charge_stipend_lt (devm := devm) hstip eA pcharge
-  split at hstep
-  · obtain ⟨d9, ppush, hstep⟩ := Except.bind_eq_ok hstep
-    simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
-    rw [← hstep]
-    intro devm' hd
-    simp only [Except.ok.injEq] at hd
-    rw [← hd]
-    simp only [Devm.withGasLeft_gasMeasure, Devm.withReturnData_gasMeasure]
-    rw [Nat.add_right_comm, ← Devm.gasMeasure_eq, Devm.push_gasMeasure ppush,
-      Devm.memExtends_gasMeasure]
-    exact key
-  · simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
-    rw [← hstep]
-    apply genericCall.step_gasDecreasing
-    rw [Devm.memExtends_gasMeasure]
-    exact key
+    generalize g.call = pre at hpre hstep
+    let dA := d7
+    have hdA : dA.gasMeasure = d7.gasMeasure := rfl
+  on_goal 2 =>
+    have hpre := GasSchedule.access_cost_pos hv.gas codeAddress d7.accessedAddresses
+    have hdA := addAccessedAddress_gasMeasure d7 codeAddress
+    generalize sevm.benvStat.rules.gas.accessCost codeAddress d7.accessedAddresses = pre at hpre hstep
+    generalize addAccessedAddress d7 codeAddress = dA at hdA hstep
+  all_goals
+    have eA :
+        (sevm.benvStat.rules.gas.accessDelegation
+          dA codeAddress).2.2.2.2.gasMeasure
+          = devm.gasMeasure := by
+      rw [GasSchedule.accessDelegation_gasMeasure, hdA]
+      omega
+    have hstip :
+        (if value.toNat = 0 then 0 else gCallStipend) <
+          ((pre +
+              (sevm.benvStat.rules.gas.accessDelegation dA
+                codeAddress).2.2.2.1) +
+            if value = 0 then 0 else sevm.benvStat.rules.gas.callValue) +
+          d7.extCost [(inputIndex, inputSize), (outputIndex, outputSize)] := by
+      have hcall := GasSchedule.Valid.stipend_le_callValue hv.gas
+      by_cases hv : value = 0
+      · have : value.toNat = 0 := by rw [hv]; rfl
+        rw [ite_eq_left this]
+        omega
+      · rw [ite_eq_right hv]
+        split <;> omega
+    obtain ⟨d8, pcharge, hstep⟩ := Except.bind_eq_ok hstep
+    have key := call_charge_stipend_lt (devm := devm) hstip eA pcharge
+    split at hstep
+    · obtain ⟨d9, ppush, hstep⟩ := Except.bind_eq_ok hstep
+      simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
+      rw [← hstep]
+      intro devm' hd
+      simp only [Except.ok.injEq] at hd
+      rw [← hd]
+      simp only [Devm.withGasLeft_gasMeasure, Devm.withReturnData_gasMeasure]
+      rw [Nat.add_right_comm, ← Devm.gasMeasure_eq, Devm.push_gasMeasure ppush,
+        Devm.memExtends_gasMeasure]
+      exact key
+    · simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
+      rw [← hstep]
+      apply genericCall.step_gasDecreasing
+      rw [Devm.memExtends_gasMeasure]
+      exact key
 
 theorem Xinst.step_callcode_gasDecreasing (sevm : Sevm) (devm : Devm) :
     (Xinst.step sevm devm .callcode).GasDecreasing sevm devm.gasMeasure := by
@@ -2232,45 +2329,62 @@ theorem Xinst.step_delegatecall_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
     (hstate : sevm.benvStat.rules.stateGas = none) :
     (Xinst.step sevm devm .delegatecall).GasDecreasing sevm devm.gasMeasure := by
   have hv := Sevm.rules_valid sevm
-  simp only [Xinst.step, hstate]
-  apply XStep.ofExcept_gasDecreasing
-  intro step hstep
-  obtain ⟨⟨gas, d1⟩, p1, hstep⟩ := Except.bind_eq_ok hstep
-  obtain ⟨⟨codeAddress, d2⟩, p2, hstep⟩ := Except.bind_eq_ok hstep
-  obtain ⟨⟨inputIndex, d3⟩, p3, hstep⟩ := Except.bind_eq_ok hstep
-  obtain ⟨⟨inputSize, d4⟩, p4, hstep⟩ := Except.bind_eq_ok hstep
-  obtain ⟨⟨outputIndex, d5⟩, p5, hstep⟩ := Except.bind_eq_ok hstep
-  obtain ⟨⟨outputSize, d6⟩, p6, hstep⟩ := Except.bind_eq_ok hstep
-  dsimp only at hstep
-  have e1 := Devm.pop_gasMeasure p1
-  have e2 := Devm.popToAdr_gasMeasure p2
-  have e3 := Devm.popToNat_gasMeasure p3
-  have e4 := Devm.popToNat_gasMeasure p4
-  have e5 := Devm.popToNat_gasMeasure p5
-  have e6 := Devm.popToNat_gasMeasure p6
-  dsimp only at e2 e3 e4 e5 e6
-  have eA :
-      (sevm.benvStat.rules.gas.accessDelegation
-        (addAccessedAddress d6 codeAddress) codeAddress).2.2.2.2.gasMeasure
-        = devm.gasMeasure := by
-    rw [GasSchedule.accessDelegation_gasMeasure, addAccessedAddress_gasMeasure]
-    omega
-  have hstip :
-      (if (0 : Nat) = 0 then 0 else gCallStipend) <
-        (sevm.benvStat.rules.gas.accessCost codeAddress d6.accessedAddresses +
-          (sevm.benvStat.rules.gas.accessDelegation (addAccessedAddress d6 codeAddress)
-            codeAddress).2.2.2.1) +
-        d6.extCost [(inputIndex, inputSize), (outputIndex, outputSize)] := by
-    simp only [ite_eq_left]
-    have hac := GasSchedule.access_cost_pos hv.gas codeAddress d6.accessedAddresses
-    omega
-  obtain ⟨d7, pcharge, hstep⟩ := Except.bind_eq_ok hstep
-  have key := call_charge_stipend_lt (devm := devm) hstip eA pcharge
-  simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
-  rw [← hstep]
-  apply genericCall.step_gasDecreasing
-  rw [Devm.memExtends_gasMeasure]
-  exact key
+  have hacc := hv.access
+  -- The access step, of either shape: the arms reduce by `match` on the
+  -- schedule, and both leave a positive price `pre` and a gas-neutral `dA`.
+  rcases hA : sevm.benvStat.rules.access with g | _ <;> rw [hA] at hacc
+  all_goals
+    simp only [Xinst.step, hstate, hA]
+    apply XStep.ofExcept_gasDecreasing
+    intro step hstep
+    obtain ⟨⟨gas, d1⟩, p1, hstep⟩ := Except.bind_eq_ok hstep
+    obtain ⟨⟨codeAddress, d2⟩, p2, hstep⟩ := Except.bind_eq_ok hstep
+    obtain ⟨⟨inputIndex, d3⟩, p3, hstep⟩ := Except.bind_eq_ok hstep
+    obtain ⟨⟨inputSize, d4⟩, p4, hstep⟩ := Except.bind_eq_ok hstep
+    obtain ⟨⟨outputIndex, d5⟩, p5, hstep⟩ := Except.bind_eq_ok hstep
+    obtain ⟨⟨outputSize, d6⟩, p6, hstep⟩ := Except.bind_eq_ok hstep
+    dsimp only at hstep
+    have e1 := Devm.pop_gasMeasure p1
+    have e2 := Devm.popToAdr_gasMeasure p2
+    have e3 := Devm.popToNat_gasMeasure p3
+    have e4 := Devm.popToNat_gasMeasure p4
+    have e5 := Devm.popToNat_gasMeasure p5
+    have e6 := Devm.popToNat_gasMeasure p6
+    dsimp only at e2 e3 e4 e5 e6
+  on_goal 1 =>
+    have hpre : 0 < g.call := by
+      simp only [AccessSchedule.Valid, FlatAccessGas.Valid] at hacc
+      omega
+    generalize g.call = pre at hpre hstep
+    let dA := d6
+    have hdA : dA.gasMeasure = d6.gasMeasure := rfl
+  on_goal 2 =>
+    have hpre := GasSchedule.access_cost_pos hv.gas codeAddress d6.accessedAddresses
+    have hdA := addAccessedAddress_gasMeasure d6 codeAddress
+    generalize sevm.benvStat.rules.gas.accessCost codeAddress d6.accessedAddresses = pre at hpre hstep
+    generalize addAccessedAddress d6 codeAddress = dA at hdA hstep
+  all_goals
+    have eA :
+        (sevm.benvStat.rules.gas.accessDelegation
+          dA codeAddress).2.2.2.2.gasMeasure
+          = devm.gasMeasure := by
+      rw [GasSchedule.accessDelegation_gasMeasure, hdA]
+      omega
+    have hstip :
+        (if (0 : Nat) = 0 then 0 else gCallStipend) <
+          (pre +
+            (sevm.benvStat.rules.gas.accessDelegation dA
+              codeAddress).2.2.2.1) +
+          d6.extCost [(inputIndex, inputSize), (outputIndex, outputSize)] := by
+      simp only [ite_eq_left]
+      omega
+    obtain ⟨d7, pcharge, hstep⟩ := Except.bind_eq_ok hstep
+    have key := call_charge_stipend_lt (devm := devm) hstip eA pcharge
+    simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
+    rw [← hstep]
+    apply genericCall.step_gasDecreasing
+    rw [Devm.memExtends_gasMeasure]
+    exact key
 
 theorem Xinst.step_delegatecall_gasDecreasing (sevm : Sevm) (devm : Devm) :
     (Xinst.step sevm devm .delegatecall).GasDecreasing sevm devm.gasMeasure := by
@@ -2334,45 +2448,62 @@ theorem Xinst.step_staticcall_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
     (hstate : sevm.benvStat.rules.stateGas = none) :
     (Xinst.step sevm devm .staticcall).GasDecreasing sevm devm.gasMeasure := by
   have hv := Sevm.rules_valid sevm
-  simp only [Xinst.step, hstate]
-  apply XStep.ofExcept_gasDecreasing
-  intro step hstep
-  obtain ⟨⟨gas, d1⟩, p1, hstep⟩ := Except.bind_eq_ok hstep
-  obtain ⟨⟨target, d2⟩, p2, hstep⟩ := Except.bind_eq_ok hstep
-  obtain ⟨⟨inputIndex, d3⟩, p3, hstep⟩ := Except.bind_eq_ok hstep
-  obtain ⟨⟨inputSize, d4⟩, p4, hstep⟩ := Except.bind_eq_ok hstep
-  obtain ⟨⟨outputIndex, d5⟩, p5, hstep⟩ := Except.bind_eq_ok hstep
-  obtain ⟨⟨outputSize, d6⟩, p6, hstep⟩ := Except.bind_eq_ok hstep
-  dsimp only at hstep
-  have e1 := Devm.pop_gasMeasure p1
-  have e2 := Devm.popToAdr_gasMeasure p2
-  have e3 := Devm.popToNat_gasMeasure p3
-  have e4 := Devm.popToNat_gasMeasure p4
-  have e5 := Devm.popToNat_gasMeasure p5
-  have e6 := Devm.popToNat_gasMeasure p6
-  dsimp only at e2 e3 e4 e5 e6
-  have eA :
-      (sevm.benvStat.rules.gas.accessDelegation
-        (addAccessedAddress d6 target) target).2.2.2.2.gasMeasure
-        = devm.gasMeasure := by
-    rw [GasSchedule.accessDelegation_gasMeasure, addAccessedAddress_gasMeasure]
-    omega
-  have hstip :
-      (if (0 : Nat) = 0 then 0 else gCallStipend) <
-        (sevm.benvStat.rules.gas.accessCost target d6.accessedAddresses +
-          (sevm.benvStat.rules.gas.accessDelegation
-            (addAccessedAddress d6 target) target).2.2.2.1) +
-        d6.extCost [(inputIndex, inputSize), (outputIndex, outputSize)] := by
-    simp only [ite_eq_left]
-    have hac := GasSchedule.access_cost_pos hv.gas target d6.accessedAddresses
-    omega
-  obtain ⟨d7, pcharge, hstep⟩ := Except.bind_eq_ok hstep
-  have key := call_charge_stipend_lt (devm := devm) hstip eA pcharge
-  simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
-  rw [← hstep]
-  apply genericCall.step_gasDecreasing
-  rw [Devm.memExtends_gasMeasure]
-  exact key
+  have hacc := hv.access
+  -- The access step, of either shape: the arms reduce by `match` on the
+  -- schedule, and both leave a positive price `pre` and a gas-neutral `dA`.
+  rcases hA : sevm.benvStat.rules.access with g | _ <;> rw [hA] at hacc
+  all_goals
+    simp only [Xinst.step, hstate, hA]
+    apply XStep.ofExcept_gasDecreasing
+    intro step hstep
+    obtain ⟨⟨gas, d1⟩, p1, hstep⟩ := Except.bind_eq_ok hstep
+    obtain ⟨⟨target, d2⟩, p2, hstep⟩ := Except.bind_eq_ok hstep
+    obtain ⟨⟨inputIndex, d3⟩, p3, hstep⟩ := Except.bind_eq_ok hstep
+    obtain ⟨⟨inputSize, d4⟩, p4, hstep⟩ := Except.bind_eq_ok hstep
+    obtain ⟨⟨outputIndex, d5⟩, p5, hstep⟩ := Except.bind_eq_ok hstep
+    obtain ⟨⟨outputSize, d6⟩, p6, hstep⟩ := Except.bind_eq_ok hstep
+    dsimp only at hstep
+    have e1 := Devm.pop_gasMeasure p1
+    have e2 := Devm.popToAdr_gasMeasure p2
+    have e3 := Devm.popToNat_gasMeasure p3
+    have e4 := Devm.popToNat_gasMeasure p4
+    have e5 := Devm.popToNat_gasMeasure p5
+    have e6 := Devm.popToNat_gasMeasure p6
+    dsimp only at e2 e3 e4 e5 e6
+  on_goal 1 =>
+    have hpre : 0 < g.call := by
+      simp only [AccessSchedule.Valid, FlatAccessGas.Valid] at hacc
+      omega
+    generalize g.call = pre at hpre hstep
+    let dA := d6
+    have hdA : dA.gasMeasure = d6.gasMeasure := rfl
+  on_goal 2 =>
+    have hpre := GasSchedule.access_cost_pos hv.gas target d6.accessedAddresses
+    have hdA := addAccessedAddress_gasMeasure d6 target
+    generalize sevm.benvStat.rules.gas.accessCost target d6.accessedAddresses = pre at hpre hstep
+    generalize addAccessedAddress d6 target = dA at hdA hstep
+  all_goals
+    have eA :
+        (sevm.benvStat.rules.gas.accessDelegation
+          dA target).2.2.2.2.gasMeasure
+          = devm.gasMeasure := by
+      rw [GasSchedule.accessDelegation_gasMeasure, hdA]
+      omega
+    have hstip :
+        (if (0 : Nat) = 0 then 0 else gCallStipend) <
+          (pre +
+            (sevm.benvStat.rules.gas.accessDelegation
+              dA target).2.2.2.1) +
+          d6.extCost [(inputIndex, inputSize), (outputIndex, outputSize)] := by
+      simp only [ite_eq_left]
+      omega
+    obtain ⟨d7, pcharge, hstep⟩ := Except.bind_eq_ok hstep
+    have key := call_charge_stipend_lt (devm := devm) hstip eA pcharge
+    simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
+    rw [← hstep]
+    apply genericCall.step_gasDecreasing
+    rw [Devm.memExtends_gasMeasure]
+    exact key
 
 theorem Xinst.step_staticcall_gasDecreasing (sevm : Sevm) (devm : Devm) :
     (Xinst.step sevm devm .staticcall).GasDecreasing sevm devm.gasMeasure := by
@@ -2829,6 +2960,8 @@ theorem Rinst.balanceCore_machMetaResultGas (rules : ForkRules) (world : World)
   have hp := Mach.pop_machResultGas mach
   have hc : ∀ (c : Nat) (m : Mach), machResultGas (Mach.chargeGas c m) ≤ m.gasMeasure :=
     Mach.chargeGas_machResultGas
+  have hc' : ∀ {c : Nat} {m : Mach} {r}, Mach.chargeGas c m = r →
+      machResultGas r ≤ m.gasMeasure := fun h => h ▸ hc _ _
   have hs : ∀ (x : B256) (m : Mach), machResultGas (Mach.push x m) = m.gasMeasure :=
     Mach.push_machResultGas
   unfold Rinst.balanceCore
@@ -2842,16 +2975,12 @@ theorem Rinst.balanceCore_machMetaResultGas (rules : ForkRules) (world : World)
     dsimp only
     split
     · rename_i err m2 heq2
-      have := hc (if x.toAdr ∈ view.accessedAddresses then gasWarmAccess
-        else rules.gas.coldAccountAccess) m1
-      rw [heq2] at this
+      have := hc' heq2
       simp only [machResultGas] at this
       simp only [machMetaResultGas]
       omega
     · rename_i u m2 heq2
-      have h2 := hc (if x.toAdr ∈ view.accessedAddresses then gasWarmAccess
-        else rules.gas.coldAccountAccess) m1
-      rw [heq2] at h2
+      have h2 := hc' heq2
       simp only [machResultGas] at h2
       split
       · rename_i err m3 heq3
@@ -2980,21 +3109,27 @@ theorem Rinst.runCore_gasLe (pc : Nat) (devm : Devm) (sevm : Sevm) (r : Rinst) :
     refine gasLe_bind_snd (by simp) ?_
     rintro ⟨adr, d1⟩
     split
+    · split
+      · exact gasLe_bind_id (chargeGas_result_gasLe _ _)
+          (fun d => by simp)
+      · exact gasLe_bind_id
+          (Nat.le_trans (chargeGas_result_gasLe _ _)
+            (Nat.le_of_eq (addAccessedAddress_gasMeasure _ _)))
+          (fun d => by simp)
     · exact gasLe_bind_id (chargeGas_result_gasLe _ _)
-        (fun d => by simp)
-    · exact gasLe_bind_id
-        (Nat.le_trans (chargeGas_result_gasLe _ _)
-          (Nat.le_of_eq (addAccessedAddress_gasMeasure _ _)))
         (fun d => by simp)
   case sload =>
     refine gasLe_bind_snd (by simp) ?_
     rintro ⟨key, d1⟩
     split
+    · split
+      · exact gasLe_bind_id (chargeGas_result_gasLe _ _)
+          (fun d => by simp)
+      · exact gasLe_bind_id
+          (Nat.le_trans (chargeGas_result_gasLe _ _)
+            (Nat.le_of_eq (addAccessedStorageKey_gasMeasure _ _ _)))
+          (fun d => by simp)
     · exact gasLe_bind_id (chargeGas_result_gasLe _ _)
-        (fun d => by simp)
-    · exact gasLe_bind_id
-        (Nat.le_trans (chargeGas_result_gasLe _ _)
-          (Nat.le_of_eq (addAccessedStorageKey_gasMeasure _ _ _)))
         (fun d => by simp)
   case extcodecopy =>
     refine gasLe_bind_snd (by simp) ?_
@@ -3006,11 +3141,13 @@ theorem Rinst.runCore_gasLe (pc : Nat) (devm : Devm) (sevm : Sevm) (r : Rinst) :
     refine gasLe_bind_snd (by simp) ?_
     rintro ⟨z, d4⟩
     split
+    · split
+      · exact gasLe_bind_id (chargeGas_result_gasLe _ _) (fun d => by simp)
+      · exact gasLe_bind_id
+          (Nat.le_trans (chargeGas_result_gasLe _ _)
+            (Nat.le_of_eq (addAccessedAddress_gasMeasure _ _)))
+          (fun d => by simp)
     · exact gasLe_bind_id (chargeGas_result_gasLe _ _) (fun d => by simp)
-    · exact gasLe_bind_id
-        (Nat.le_trans (chargeGas_result_gasLe _ _)
-          (Nat.le_of_eq (addAccessedAddress_gasMeasure _ _)))
-        (fun d => by simp)
   case swap n =>
     refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
     intro d1
@@ -3173,7 +3310,7 @@ theorem Linst.run_gasLe (sevm : Sevm) (devm : Devm) (l : Linst) :
       intro donorBal
       refine gasLe_bind (proj := Prod.fst) ?_ ?_
       · simp only [resultGas_ok]
-        split <;> simp
+        split <;> (try split) <;> simp
       · rintro ⟨d2, cost2⟩
         refine gasLe_bind_const (devm := d2) (by simp) ?_
         intro cost3
@@ -3664,8 +3801,8 @@ theorem Xinst.step_halt_legacy (sevm : Sevm) (devm : Devm) (x : Xinst)
     refine xstepHalt_bind (Devm.popToNat_haltOut h6) ?_
     rintro ⟨outputSize, d7⟩ h7
     refine xstepHalt_bind (chargeGas_haltOut (by
-      simpa only [GasSchedule.accessDelegation_stateGas,
-        addAccessedAddress_stateGas] using h7)) ?_
+      simp only [GasSchedule.accessDelegation_stateGas]
+      split <;> simpa only [addAccessedAddress_stateGas] using h7)) ?_
     intro d8 h8
     refine xstepHalt_bind (assert_haltOut (by decide) h8) ?_
     intro _ _
@@ -3689,8 +3826,8 @@ theorem Xinst.step_halt_legacy (sevm : Sevm) (devm : Devm) (x : Xinst)
     refine xstepHalt_bind (Devm.popToNat_haltOut h6) ?_
     rintro ⟨outputSize, d7⟩ h7
     refine xstepHalt_bind (chargeGas_haltOut (by
-      simpa only [GasSchedule.accessDelegation_stateGas,
-        addAccessedAddress_stateGas] using h7)) ?_
+      simp only [GasSchedule.accessDelegation_stateGas]
+      split <;> simpa only [addAccessedAddress_stateGas] using h7)) ?_
     intro d8 h8
     split
     · exact xstepHalt_bind (Devm.push_haltOut (by simpa using h8))
@@ -3710,8 +3847,8 @@ theorem Xinst.step_halt_legacy (sevm : Sevm) (devm : Devm) (x : Xinst)
     refine xstepHalt_bind (Devm.popToNat_haltOut h5) ?_
     rintro ⟨outputSize, d6⟩ h6
     refine xstepHalt_bind (chargeGas_haltOut (by
-      simpa only [GasSchedule.accessDelegation_stateGas,
-        addAccessedAddress_stateGas] using h6)) ?_
+      simp only [GasSchedule.accessDelegation_stateGas]
+      split <;> simpa only [addAccessedAddress_stateGas] using h6)) ?_
     intro d7 h7
     exact genericCall.step_halt _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ (by simpa using h7) hsn
   case staticcall =>
@@ -3728,8 +3865,8 @@ theorem Xinst.step_halt_legacy (sevm : Sevm) (devm : Devm) (x : Xinst)
     refine xstepHalt_bind (Devm.popToNat_haltOut h5) ?_
     rintro ⟨outputSize, d6⟩ h6
     refine xstepHalt_bind (chargeGas_haltOut (by
-      simpa only [GasSchedule.accessDelegation_stateGas,
-        addAccessedAddress_stateGas] using h6)) ?_
+      simp only [GasSchedule.accessDelegation_stateGas]
+      split <;> simpa only [addAccessedAddress_stateGas] using h6)) ?_
     intro d7 h7
     exact genericCall.step_halt _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ (by simpa using h7) hsn
 
