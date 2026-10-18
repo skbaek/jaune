@@ -877,9 +877,9 @@ structure BenvStat : Type where
   The machine carries the *fork*, and `BenvStat.rules` below derives the rule
   record from it with `Fork.ruleSet`. That is what makes `ForkRules.Valid` a
   fact about every machine rather than a premise every statement has to carry:
-  the only rule sets a machine can hold are the five fork records, each proved
-  usable once by `Fork.ruleSet_valid`. A rule record that describes no fork is
-  not rejected, it is inexpressible.
+  the only rule sets a machine can hold are the seven fork records, each
+  proved usable once by `Fork.ruleSet_valid`. A rule record that describes no
+  fork is not rejected, it is inexpressible.
 
   Carrying it here, rather than as an extra argument, is what keeps a single
   interpreter: every function that already sees a `BenvStat` -- directly, or
@@ -909,8 +909,9 @@ structure BenvStat : Type where
 
 Kept under its former name and type -- `BenvStat → ForkRules` -- so that every
 *read* of the active rules, in this repository and downstream, is textually
-unchanged. What moved is construction: there is no `rules` field to set, so the
-only rule sets a machine can carry are the five `Fork.ruleSet` records. -/
+unchanged. What moved is construction: there is no `rules` field to set, so
+the only rule sets a machine can carry are the seven `Fork.ruleSet`
+records. -/
 def BenvStat.rules (s : BenvStat) : ForkRules := Fork.ruleSet s.fork
 
 /-- The machine's fork index and the record it reads agree. -/

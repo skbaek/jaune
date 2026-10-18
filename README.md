@@ -229,7 +229,7 @@ requirements.
   — every number machine-checked against the pinned `execution-specs` revision
   by `scripts/check-fork-constants.sh`. The total transaction gas limit is
   `2^32 - 1`; the independent execution-gas bound remains `2^24`. Storage-only
-  creation follows the pinned reference on all five runnable forks: nonce or
+  creation follows the pinned reference on all seven runnable forks: nonce or
   code causes a collision, storage alone does not, and creation wipes old storage
   before initcode. Empty-account deletion also clears storage.
   Amsterdam retains its own suite lane (`python3 scripts/bootstrap_mainnet.py
@@ -244,8 +244,9 @@ requirements.
   A committed 54-case transition-tool corpus exercises the transaction
   semantics and the block-level access list through `jaune t8n --state.fork
   Amsterdam` against the pinned executable reference, and `jaune t8n --forks`
-  advertises all five forks, Amsterdam included. Ten authored cases cover
-  storage-only creation and deletion across those five forks. The upstream release
+  advertises all seven forks, London and Paris included. Ten authored cases cover
+  storage-only creation and deletion across five of them (Prague, Osaka, BPO1,
+  BPO2, Amsterdam). The upstream release
   fixtures for those ten creation/deletion scenarios were skipped and are absent;
   no pre-Prague coverage or upstream consensus on those skipped scenarios is claimed.
   Five further cases compare zero-value transaction, CALL and STATICCALL entry

@@ -30,8 +30,9 @@
 # corpus files, `scripts/golden-messages.txt` covers block-rejection reasons
 # observed *inside* a run, and the Python tests under `scripts/tests/` cover the
 # bootstrap and generator scripts. The t8n handshake also needs a small
-# boundary here: `t8n --forks` must name exactly the runnable lane -- the five
-# supported forks, Amsterdam included since goal jaune-amsterdam-currency-v1
+# boundary here: `t8n --forks` must name exactly the runnable lane -- the seven
+# supported forks, London and Paris included since goal jaune-historical-forks-v1
+# unit U11b (Amsterdam included since goal jaune-amsterdam-currency-v1)
 # took the owner-consulted step goal C surfaced -- and agree with
 # `sources.json`'s `conformance_target.fork_lane`; `--info` must state the lane
 # and its basis and no longer call Amsterdam pending; and an Amsterdam
@@ -365,7 +366,7 @@ if [ "$RUN_RC" -eq 0 ] || has '"gas.txBase"' "$RUN_OUT"; then
 fi
 
 # 9. The t8n handshake. The advertised lane is the runnable lane: `--forks`
-#    names the five supported forks, Amsterdam included, and is byte-equal to
+#    names the seven supported forks, London and Paris included, and is byte-equal to
 #    `sources.json`'s `conformance_target.fork_lane`, so a fork cannot be
 #    advertised in one place and not the other; `--info` states the lane, its
 #    basis, and the resolved list, and no longer says Amsterdam is pending.
@@ -379,8 +380,8 @@ run_jaune t8n --forks
 LANE_FROM_SOURCES="$(python3 -c '
 import json, sys
 print(" ".join(json.load(open(sys.argv[1]))["conformance_target"]["fork_lane"]))' "$ROOT/scripts/sources.json")"
-if [ "$RUN_RC" -ne 0 ] || [ "$RUN_OUT" != "Prague Osaka BPO1 BPO2 Amsterdam" ]; then
-  fail "t8n --forks: expected the five-fork lane, Amsterdam included"
+if [ "$RUN_RC" -ne 0 ] || [ "$RUN_OUT" != "London Paris Prague Osaka BPO1 BPO2 Amsterdam" ]; then
+  fail "t8n --forks: expected the seven-fork lane, London and Paris included"
   detail "rc=$RUN_RC stdout: ${RUN_OUT:-<empty stdout>}"
 fi
 
@@ -393,10 +394,10 @@ fi
 CHECKS=$((CHECKS + 1))
 run_jaune t8n --info
 if [ "$RUN_RC" -ne 0 ] \
-  || ! has "t8n fork lane: Prague Osaka BPO1 BPO2 Amsterdam" "$RUN_OUT" \
+  || ! has "t8n fork lane: London Paris Prague Osaka BPO1 BPO2 Amsterdam" "$RUN_OUT" \
   || ! has "t8n lane basis: the advertised lane is every fork this build runs" "$RUN_OUT" \
-  || ! has "t8n resolves: Prague Osaka BPO1 BPO2 Amsterdam" "$RUN_OUT"; then
-  fail "t8n --info: expected the five-fork lane, its basis, and the resolved fork list"
+  || ! has "t8n resolves: London Paris Prague Osaka BPO1 BPO2 Amsterdam" "$RUN_OUT"; then
+  fail "t8n --info: expected the seven-fork lane, its basis, and the resolved fork list"
   detail "rc=$RUN_RC stdout: ${RUN_OUT:-<empty stdout>}"
 fi
 
@@ -416,17 +417,27 @@ if [ "$RUN_RC" -ne 1 ] || has "UnsupportedForkError" "$RUN_ERR"; then
   detail "rc=$RUN_RC stderr: ${RUN_ERR:-<empty stderr>}"
 fi
 
-# The target's t8n names for the twelve pre-Prague forks (goal
+# The target's t8n names for the ten still-refused pre-Prague forks (goal
 # jaune-historical-forks-v1, U9) resolve and are then refused at rule lookup,
-# before any input is read: `ConstantinopleFix` (Petersburg), `Merge` (Paris)
-# and the fork-block label `BerlinToLondonAt5` all reach UnsupportedForkError.
+# before any input is read: `ConstantinopleFix` (Petersburg) and the
+# fork-block label `BerlinToLondonAt5` (whose Berlin endpoint stays refused)
+# both reach UnsupportedForkError. `Merge` (Paris) and `London` resolve since
+# unit U11b and are admitted past rule lookup exactly like Amsterdam above.
 # The two Jaune-only labels the target refuses, `Petersburg` and
 # `Constantinople`, are refused here as unknown t8n forks.
-for name in ConstantinopleFix Merge BerlinToLondonAt5; do
+for name in ConstantinopleFix BerlinToLondonAt5; do
   CHECKS=$((CHECKS + 1))
   run_jaune t8n --state.fork "$name" --input.alloc "$TMP/absent-amsterdam-alloc.json"
   if [ "$RUN_RC" -ne 1 ] || ! has "UnsupportedForkError" "$RUN_ERR"; then
     fail "t8n $name: expected an UnsupportedForkError refusal before the inputs"
+    detail "rc=$RUN_RC stderr: ${RUN_ERR:-<empty stderr>}"
+  fi
+done
+for name in London Merge; do
+  CHECKS=$((CHECKS + 1))
+  run_jaune t8n --state.fork "$name" --input.alloc "$TMP/absent-amsterdam-alloc.json"
+  if [ "$RUN_RC" -ne 1 ] || has "UnsupportedForkError" "$RUN_ERR"; then
+    fail "t8n $name: expected rule resolution before the missing input"
     detail "rc=$RUN_RC stderr: ${RUN_ERR:-<empty stderr>}"
   fi
 done
@@ -453,5 +464,5 @@ if [ "$FAILS" -ne 0 ]; then
   exit 1
 fi
 
-echo "OK — cli: $CHECKS checks; fixture refusals, the Amsterdam admissions, the rule-data printer, and the t8n handshake hold"
+echo "OK — cli: $CHECKS checks; fixture refusals, the Amsterdam and London/Paris admissions, the rule-data printer, and the t8n handshake hold"
 exit 0

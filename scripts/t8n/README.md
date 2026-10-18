@@ -2,8 +2,8 @@
 
 Sixty-five cases, each a complete `t8n` invocation, with goldens generated from the
 pinned conformance target. `scripts/check-t8n.sh` runs them; this file says
-what they are and how to change them. Fifty-four conform and eleven are
-registered refusals (the historical forks below).
+what they are and how to change them. Fifty-six conform and nine are
+registered refusals (the still-refused historical forks below).
 
 ## Layout
 
@@ -51,7 +51,8 @@ These nine cases run at Prague. The thirty `am-*` cases below exercise
 Amsterdam's metering in both tool modes. Ten further cases cover storage-only
 creation and empty-account deletion on Prague, Osaka, BPO1, BPO2 and Amsterdam.
 Five further cases cover zero-value transaction, CALL and STATICCALL entry on
-those same forks (54 conforming cases in total; 65 with the historical eleven).
+those same forks (56 conforming cases in total; 65 with the historical eleven,
+two of which now pass).
 
 ### Storage semantics at the v21 pin
 
@@ -139,7 +140,8 @@ pins, so goldens and emission always come from one revision.
 
 ## Historical cases (goal U10)
 
-Eleven further cases cover the pre-Prague forks, one transfer per fork:
+Eleven further cases cover the pre-Prague forks, one transfer per fork (nine
+still refused, two passing since unit U11b):
 
 | case | fork label | reward |
 |---|---|---|
@@ -157,12 +159,14 @@ Eleven further cases cover the pre-Prague forks, one transfer per fork:
 
 Labels are the target's `--state.fork` names (`ConstantinopleFix` for its
 `constantinople` module, `Merge` for Paris); Jaune parses the same labels and
-refuses every one of them with `UnsupportedForkError` before reading any
-input, because `Fork.rules?` is none for all eleven. That refusal is the
+refuses the nine still-refused ones with `UnsupportedForkError` before reading
+any input, because `Fork.rules?` is none for those nine. That refusal is the
 expected red: `scripts/t8n/expected-refusals.json` registers each case with
 its reason, and the gate requires the refusal rather than marking it
-passing. The goldens, generated from the pinned target by the registered
-generator, record the behavior U11 will conform to. There is no
+passing. London and `Merge` (Paris) resolve since unit U11b and conform
+against their goldens byte for byte. The goldens, generated from the pinned
+target by the registered generator, record the behavior later units will
+conform to for the remaining nine. There is no
 `Constantinople` (EIP-1283) case: the target refuses that label too
 (`UNSUPPORTED_FORKS`), so no golden can be generated for it; its evidence is
 the legacy corpus and the constants gate's all-dormant row.

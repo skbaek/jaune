@@ -180,22 +180,22 @@ def advertisedForkLane : List Fork := Fork.supported
 
 -- The advertised lane is the runnable lane, stated both ways so that a fork
 -- added to `Fork.all` without rules would be neither advertised nor silently
--- omitted from a hand-kept list. Twelve declared forks are in that refused
+-- omitted from a hand-kept list. Ten declared forks are in that refused
 -- state -- `Fork.rules?` is partial, and the runnable and refused lists are
 -- guards where `Fork.supported` and `Fork.unimplemented` are defined -- so
 -- these guards record today's lists rather than establishing them, and the
--- advertised lane is the five runnable forks. (Goal C's guards here said the lane was a *prefix* of
+-- advertised lane is the seven runnable forks. (Goal C's guards here said the lane was a *prefix* of
 -- the runnable one with `[.amsterdam]` the only runnable fork not advertised;
 -- goal B's said `Fork.unimplemented = [.amsterdam]` and named the metering
 -- vehicle; each is rewritten to the statement that replaced it.)
 #guard advertisedForkLane = Fork.supported
-#guard advertisedForkLane = [.prague, .osaka, .bpo1, .bpo2, .amsterdam]
+#guard advertisedForkLane
+  = [.london, .paris, .prague, .osaka, .bpo1, .bpo2, .amsterdam]
 #guard advertisedForkLane.all (fun f => f.rules?.isSome)
 #guard Fork.supported.filter (fun f => !advertisedForkLane.contains f) = []
 #guard Fork.all.filter (fun f => !advertisedForkLane.contains f) = Fork.unimplemented
 #guard Fork.unimplemented = [.byzantium, .constantinople, .petersburg, .istanbul,
-  .muirGlacier, .berlin, .london, .arrowGlacier, .grayGlacier, .paris,
-  .shanghai, .cancun]
+  .muirGlacier, .berlin, .arrowGlacier, .grayGlacier, .shanghai, .cancun]
 #guard Fork.amsterdam.rules = .ok amsterdamRules
 #guard Fork.supported.all (fun f => f.rules.toOption.isSome)
 #guard Fork.prague.rules = .ok pragueRules
@@ -393,9 +393,11 @@ structure T8nOmmer : Type where
 deriving DecidableEq
 
 /-- Everything `env` contributes to a `BenvStat`, after the target's two
-derivations have been applied. Fields no lane consumes -- `currentDifficulty`,
-`extraData`, the block-access-list pair -- are accepted and dropped, exactly
-as the target accepts and does not consume them. -/
+derivations have been applied. Fields no lane consumes -- `extraData`, the
+block-access-list pair -- are accepted and dropped, exactly as the target
+accepts and does not consume them. `difficulty` is the target's resolved block
+difficulty (`currentDifficulty` if given, else the fork's difficulty function
+over the parent fields); only the pre-merge result document reads it. -/
 structure T8nEnv : Type where
   coinbase : Adr
   gasLimit : Nat
@@ -403,6 +405,7 @@ structure T8nEnv : Type where
   timestamp : Nat
   prevRandao : B256
   baseFeePerGas : Nat
+  difficulty : Nat := 0
   excessBlobGas : Nat
   parentBeaconBlockRoot : B256
   blockHashes : List B256
@@ -499,8 +502,8 @@ def readOmmers (rules : ForkRules) (j : Lean.Json) : IO (List T8nOmmer) := do
     match rules.pow with
     | none => do
       IO.guard a.isEmpty
-        "error : t8n env.ommers is non-empty; the Prague-BPO2 lane is \
-         proof-of-stake and has no ommers"
+        s!"error : t8n env.ommers is non-empty; {rules.fork} is \
+          proof-of-stake and has no ommers"
       pure []
     | some _ => a.toList.mapM readOmmer
   | _ => pure []
@@ -527,6 +530,28 @@ def decodeEnv (rules : ForkRules) (stateTest : Bool) (j : Lean.Json) : IO T8nEnv
       IO.ofExcept <|
         (calculateBaseFeePerGas gasLimit parentGasLimit parentGasUsed parentBaseFee).mapError
           BlockValidationError.render
+  -- `currentDifficulty` if given, else the target's parent derivation: the
+  -- fork's difficulty function over the parent fields, or `0x20000` when the
+  -- parent difficulty is absent too. Post-merge the value is never read, so
+  -- the `pow = none` arm stays zero without consulting the parent fields.
+  let difficulty ←
+    match field? j "currentDifficulty" with
+    | some v => readNat "env.currentDifficulty" v
+    | none =>
+      match rules.pow with
+      | none => pure 0
+      | some pow =>
+        match field? j "parentDifficulty" with
+        | none => pure 0x20000
+        | some _ => do
+          let parentDifficulty ← natOr j "parentDifficulty" 0
+          let parentTimestamp ← natOr j "parentTimestamp" 0
+          let parentUncleHash ←
+            match field? j "parentUncleHash" with
+            | none => pure emptyOmmerHash
+            | some v => readB256 "env.parentUncleHash" v
+          pure (calculateBlockDifficulty pow.bombDelay number timestamp
+            parentTimestamp parentDifficulty (parentUncleHash != emptyOmmerHash))
   -- `currentExcessBlobGas` if given, else the target's parent derivation,
   -- which feeds `calculate_excess_blob_gas` a header carrying only the three
   -- parent fields it reads.
@@ -567,7 +592,8 @@ def decodeEnv (rules : ForkRules) (stateTest : Bool) (j : Lean.Json) : IO T8nEnv
   return {
     coinbase := coinbase, gasLimit := gasLimit, number := number,
     timestamp := timestamp, prevRandao := prevRandao.toB256,
-    baseFeePerGas := baseFeePerGas, excessBlobGas := excessBlobGas,
+    baseFeePerGas := baseFeePerGas, difficulty := difficulty,
+    excessBlobGas := excessBlobGas,
     parentBeaconBlockRoot := parentBeaconBlockRoot,
     blockHashes := blockHashes, withdrawals := withdrawals,
     slotNumber := slotNumber.toUInt64, ommers := ommers
@@ -898,7 +924,8 @@ beacon-roots call (`sys.beaconRoots`), the withdrawals
 
 Block rewards (`reward`, from `resolveReward`) are paid after the transactions
 and before the withdrawals, as the target pays them; they are `none` under
-proof of stake, so every runnable fork here pays none. `ommers` is `env.ommers`.
+proof of stake, so of the runnable forks only London pays one. `ommers` is
+`env.ommers`.
 
 EIP-7928 (goal C): the two pre-execution system calls are incorporated into
 the block-level access list at index 0, each transaction at its index plus one
@@ -1276,10 +1303,13 @@ private def resultGasUsed (bout : BlockOutput) : Nat :=
 /-- The `result` document.
 
 Key order is the target's pydantic declaration order, which is what its
-`model_dump` emits -- note that `requestsHash` precedes `requests`. Absent
-keys are the ones its `exclude_none=True` drops: `currentDifficulty` is
-`None` on a proof-of-stake lane, the block-access-list pair (EIP-7928, goal
-C) is present exactly when the rules carry a block-level access list -- the
+`model_dump` emits -- note that `currentDifficulty` precedes `gasUsed`, and
+`requestsHash` precedes `requests`. Absent keys are the ones its
+`exclude_none=True` drops, one per fork-dependent shape: `currentDifficulty`
+is `None` post-merge (`pow = none`), `currentBaseFee` without EIP-1559,
+`withdrawalsRoot` without EIP-4895, the blob pair without EIP-4844, and the
+request pair without EIP-7685. The block-access-list pair (EIP-7928, goal C)
+is present exactly when the rules carry a block-level access list -- the
 list's RLP and its keccak, the empty list's `0xc0` in state-test mode, where
 the target never builds one -- and traces are not claimed by this tool at
 all. The key spellings are the ones goal B's first golden recorded. -/
@@ -1292,15 +1322,22 @@ def resultJson (rules : ForkRules) (env : T8nEnv) (o : Outcome) : JOut :=
     ⟨"logsHash", .str (hexB256 logsHash)⟩,
     ⟨"logsBloom", .str (hexBytes (logsBloom o.bout.blockLogs))⟩,
     ⟨"receipts", .arr (o.bout.receiptKeys.filterMap (receiptJson o.bout))⟩,
-    ⟨"rejected", .arr (o.rejected.map rejectionJson)⟩,
-    ⟨"gasUsed", .str (hexQuantity (resultGasUsed o.bout))⟩,
-    ⟨"currentBaseFee", .str (hexQuantity env.baseFeePerGas)⟩,
-    ⟨"withdrawalsRoot", .str (hexB256 (getWithdrawalsRoot o.bout))⟩,
-    ⟨"currentExcessBlobGas", .str (hexQuantity env.excessBlobGas)⟩,
-    ⟨"blobGasUsed", .str (hexQuantity o.bout.blobGasUsed)⟩,
-    ⟨"requestsHash", .str (hexB256 (computeRequestsHash o.bout.requests))⟩,
-    ⟨"requests", .arr (o.bout.requests.map fun r => .str (hexBytes r))⟩
+    ⟨"rejected", .arr (o.rejected.map rejectionJson)⟩
   ]
+    ++ (if rules.pow.isSome then
+      [⟨"currentDifficulty", .str (hexQuantity env.difficulty)⟩] else [])
+    ++ [⟨"gasUsed", .str (hexQuantity (resultGasUsed o.bout))⟩]
+    ++ (if rules.header.baseFee then
+      [⟨"currentBaseFee", .str (hexQuantity env.baseFeePerGas)⟩] else [])
+    ++ (if rules.header.withdrawalsRoot then
+      [⟨"withdrawalsRoot", .str (hexB256 (getWithdrawalsRoot o.bout))⟩] else [])
+    ++ (if rules.header.blobGas then
+      [⟨"currentExcessBlobGas", .str (hexQuantity env.excessBlobGas)⟩,
+       ⟨"blobGasUsed", .str (hexQuantity o.bout.blobGasUsed)⟩] else [])
+    ++ (if rules.header.requestsHash then
+      [⟨"requestsHash", .str (hexB256 (computeRequestsHash o.bout.requests))⟩,
+       ⟨"requests", .arr (o.bout.requests.map fun r => .str (hexBytes r))⟩]
+      else [])
   let base := match rules.bal with
     | none => base
     | some _ => base ++ [
@@ -1388,8 +1425,8 @@ def select (number : Nat) : T8nForkLabel → Fork
 
 end T8nForkLabel
 
--- The twelve forks have target names, and they resolve to the fork the target
--- runs; the two Jaune-only labels do not.
+-- The twelve pre-Prague forks have target names, and they resolve to the fork
+-- the target runs; the two Jaune-only labels do not.
 #guard T8nForkLabel.ofString? "ConstantinopleFix" = some (.fork .petersburg)
 #guard T8nForkLabel.ofString? "Merge" = some (.fork .paris)
 #guard T8nForkLabel.ofString? "Paris" = some (.fork .paris)
@@ -1410,15 +1447,24 @@ end T8nForkLabel
     (T8nForkLabel.select 5) = some .petersburg
 #guard (T8nForkLabel.ofString? "ConstantinopleToIstanbulAt5").map
     (T8nForkLabel.select 0) = some .petersburg
--- Every one of them is still refused at rule lookup: this unit adds the names,
--- and later units switch each fork on.
+-- Every one of them but London and `Merge` (Paris) is still refused at rule
+-- lookup: U9 adds the names, and later units switch each fork on. `London`
+-- and `Merge` resolve, and the fork-block label `BerlinToLondonAt5` is mixed:
+-- its London endpoint resolves while its Berlin endpoint stays refused.
 #guard ["Byzantium", "ConstantinopleFix", "Istanbul", "MuirGlacier", "Berlin",
-    "London", "ArrowGlacier", "GrayGlacier", "Merge", "Shanghai", "Cancun",
-    "BerlinToLondonAt5", "ByzantiumToConstantinopleAt5",
+    "ArrowGlacier", "GrayGlacier", "Shanghai", "Cancun",
+    "ByzantiumToConstantinopleAt5",
     "ConstantinopleToIstanbulAt5"].all
   (fun l => match T8nForkLabel.ofString? l with
     | some label => label.forks.all (fun f => f.rules?.isNone)
     | none => false)
+#guard ["London", "Merge"].all
+  (fun l => match T8nForkLabel.ofString? l with
+    | some label => label.forks.all (fun f => f.rules?.isSome)
+    | none => false)
+#guard match T8nForkLabel.ofString? "BerlinToLondonAt5" with
+  | some label => label.forks.map (fun f => f.rules?.isSome) = [false, true]
+  | none => false
 
 structure Opts : Type where
   inputAlloc : String := "alloc.json"

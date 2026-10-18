@@ -4060,9 +4060,9 @@ rules-taking adapter and this one had the same domain, so the duplicate layer
 was retired into this name rather than kept as a synonym; there is no longer a
 rules-taking entry point that could be handed a record no fork realises. The
 `UnsupportedForkError` route this function used to take for an unimplemented
-fork is live again for the twelve pre-Prague forks -- `Fork.rules` refuses
-them, while `Fork.ruleSet` stays total beside it -- and the vocabulary is
-retained where `Fork.rules` renders it. -/
+fork is live again for the ten still-refused pre-Prague forks --
+`Fork.rules` refuses them, while `Fork.ruleSet` stays total beside it -- and
+the vocabulary is retained where `Fork.rules` renders it. -/
 def stateTransitionAt (f : Fork) (ch : BlockChain) (block : Block) :
   Except String BlockChain :=
   (stateTransitionE f ch block).mapError TransitionError.render
@@ -4311,6 +4311,49 @@ success. This is the bridge every string-level client inverts through. -/
 theorem rlpToBlock_eq_ok_iff {rlp : Bytes} {p : Block × B256} :
     rlpToBlock rlp = .ok p ↔ rlpToBlockE rlp = .ok p :=
   Except.mapError_eq_ok_iff
+
+---------------- FORK-RELATIVE WIRE DECODER ---------------
+
+/-- The fork-relative wire encoding of a block body: the withdrawals element
+rides along from Shanghai, so a pre-Shanghai body encodes three elements, not
+four. `Block.toBLT` stays the canonical four-element encoding the proven
+paths hash and compare through; this is the shape the fork's own fixtures
+carry. Under Shanghai rules and later it is `Block.toBLT`, definitionally. -/
+def Block.toBLTAt (rules : ForkRules) (b : Block) : BLT :=
+  if rules.header.withdrawalsRoot then b.toBLT
+  else .list [Header.toBLT b.header, .list (b.txs.map B8LOrTxToBLT),
+    .list (b.ommers.map Header.toBLT)]
+
+/-- The fork-relative strict body decoder: a three-element body decodes with
+no withdrawals exactly when the rules do not carry them, and is the
+`withdrawalsNotRead` error `BLT.toExBlock` reports when they do. A
+four-element body decodes through `BLT.toExBlock` under every fork, so the
+post-Shanghai shape and every error it reports are shared, not duplicated. -/
+def BLT.toExBlockAt (rules : ForkRules) : BLT → Except DecodeError Block
+  | .list [HeaderBLT, .list TxBLTs, .list OmmerBLTs] =>
+    if rules.header.withdrawalsRoot then
+      .error (.withdrawalsNotRead (.text
+        "post-Shanghai block body omits the withdrawals list"))
+    else BLT.toExBlock
+      (.list [HeaderBLT, .list TxBLTs, .list OmmerBLTs, .list []])
+  | blt => blt.toExBlock
+
+/-- The fork-relative strict block decoder: `rlpToBlockE` on the fork's own
+wire shape. The round trip compares against the fork-relative encoding, so a
+pre-Shanghai three-element body re-encodes to itself; under Shanghai rules
+and later the comparison -- and every success and failure -- is
+`rlpToBlockE`'s. `rlpToBlockE` itself is untouched: the proven envelope keeps
+its equation. -/
+def rlpToBlockEAt (rules : ForkRules) (rlp : Bytes) :
+    Except DecodeError (Block × B256) := do
+  let block_blt ← (Bytes.toBLT? rlp).toExcept <|
+    DecodeError.structure "block RLP" "cannot decode the outer RLP item"
+  let block ← block_blt.toExBlockAt rules
+  let canonicalRlp := (block.toBLTAt rules).toBytes
+  if rlp ≠ canonicalRlp then
+    .error <| .roundTrip <|
+      .text "decoded block does not re-encode byte-for-byte"
+  .ok ⟨block, (Header.toBLT block.header).toBytes.keccak⟩
 
 --------------- THE CANONICAL OUTER-BLOCK ENVELOPE ---------------
 
@@ -5232,8 +5275,8 @@ Named `addBlockToChainWith` and taking a `ForkRules` until goal
 rules-taking adapter and the fork-taking one had the same domain, and the
 duplicate layer was retired into this name. The `.support` channel this
 function used to route an unimplemented fork through is live again for the
-twelve pre-Prague forks: `Fork.rules` refuses them, while `Fork.ruleSet`
-stays total beside it. -/
+ten still-refused pre-Prague forks: `Fork.rules` refuses them, while
+`Fork.ruleSet` stays total beside it. -/
 def addBlockToChainAt (f : Fork) (chain : BlockChain) (blockRlp : Bytes) :
     Except String (BlockChain ⊕ String) :=
   ImportOutcome.renderLegacy (addBlockToChainAtE f chain blockRlp)
@@ -5391,7 +5434,7 @@ example (chain : BlockChain) (blockRlp : Bytes) :
 
 -- A block whose fork a build cannot run would be refused *before* anything is
 -- decoded or executed, so an unimplemented fork could never be mistaken for a
--- rule the build actually applied. Twelve forks are in that state here:
+-- rule the build actually applied. Ten forks are in that state here:
 -- `Fork.rules` refuses them, and the guards below record that the support
 -- channel answers through exactly those declared labels.
 
@@ -5427,6 +5470,34 @@ private def guardTestHeader : Header := {
 private def guardBlockAt (timestamp : Nat) : Block :=
   {
     header := { guardTestHeader with timestamp := timestamp }
+    txs := []
+    ommers := []
+    wds := []
+  }
+
+/-- The no-parent probe block carrying exactly the fork-dependent header fields
+the rules define: a Prague-shaped header would fail field presence under
+London/Paris rules before reaching the invariant the sweeps below pin. The
+five fields are `checkHeaderShape`'s five, so a fork the shape rules out is
+shaped out here too -- and a new fork-dependent field fails the next sweep
+loudly rather than riding along as `some`. -/
+private def guardBlockAtRules (rules : ForkRules) (timestamp : Nat) : Block :=
+  {
+    header := { guardTestHeader with
+      timestamp := timestamp
+      baseFeePerGas :=
+        if rules.header.baseFee then guardTestHeader.baseFeePerGas else none
+      withdrawalsRoot :=
+        if rules.header.withdrawalsRoot then guardTestHeader.withdrawalsRoot
+        else none
+      blobGasUsed :=
+        if rules.header.blobGas then guardTestHeader.blobGasUsed else none
+      excessBlobGas :=
+        if rules.header.blobGas then guardTestHeader.excessBlobGas else none
+      parentBeaconBlockRoot :=
+        if rules.header.parentBeaconBlockRoot then
+          guardTestHeader.parentBeaconBlockRoot
+        else none }
     txs := []
     ommers := []
     wds := []
@@ -5496,31 +5567,36 @@ private def guardBlobParent (baseFee blobGasUsed : Nat) : Header :=
   = [917504, 917504, 917504]
 
 -- Every fork this build runs reaches execution; none is refused for want of
--- rules. This chain has no parent block, so each verdict is the fail-closed
--- no-parent invariant on the outer operational channel -- never a support
--- failure.
-#guard Fork.supported.all (fun f =>
-  match addBlockToChainAtE f guardEmptyChain (guardBlockAt 0).toBLT.toBytes with
-  | .error (.support _) => false
-  | _ => true)
+-- rules. Each probe block carries exactly the fork-dependent fields its rules
+-- define (`guardBlockAtRules`), so field presence passes and each verdict is
+-- the fail-closed no-parent invariant on the outer operational channel --
+-- never a support failure.
 #guard Fork.supported.all (fun f =>
   match f.rules with
   | .error _ => false
-  | .ok _ =>
-    match stateTransitionE f guardEmptyChain (guardBlockAt 0) with
+  | .ok rules =>
+    match addBlockToChainAtE f guardEmptyChain
+        (guardBlockAtRules rules 0).toBLT.toBytes with
+    | .error (.support _) => false
+    | _ => true)
+#guard Fork.supported.all (fun f =>
+  match f.rules with
+  | .error _ => false
+  | .ok rules =>
+    match stateTransitionE f guardEmptyChain (guardBlockAtRules rules 0) with
     | .error (.internal _) => true
     | _ => false)
 
--- The complement, at the same entry point and on the same chain: the twelve
--- pre-Prague forks never reach execution, because `Fork.rules` refuses them
--- before any block is examined. Goal A's guard here asserted that Amsterdam
--- was refused on the support channel before any block was examined; it was
--- rewritten to say that Amsterdam reaches execution like every other
+-- The complement, at the same entry point and on the same chain: the ten
+-- still-refused pre-Prague forks never reach execution, because `Fork.rules`
+-- refuses them before any block is examined. Goal A's guard here asserted that
+-- Amsterdam was refused on the support channel before any block was examined;
+-- it was rewritten to say that Amsterdam reaches execution like every other
 -- supported fork when Amsterdam resolved, and it is rewritten again here to
--- say that the twelve pre-Prague forks are refused where Amsterdam was.
+-- say that the ten still-refused pre-Prague forks are refused where Amsterdam
+-- was.
 #guard Fork.unimplemented = [.byzantium, .constantinople, .petersburg, .istanbul,
-  .muirGlacier, .berlin, .london, .arrowGlacier, .grayGlacier, .paris,
-  .shanghai, .cancun]
+  .muirGlacier, .berlin, .arrowGlacier, .grayGlacier, .shanghai, .cancun]
 #guard (match addBlockToChainAtE .amsterdam guardEmptyChain
     (guardBlockAt 0).toBLT.toBytes with
   | .error (.support _) => false
@@ -5780,6 +5856,41 @@ private def guardHeader15 : Header :=
 /-- London through Paris: the base fee. -/
 private def guardHeader16 : Header :=
   { guardHeader15 with baseFeePerGas := some 7 }
+
+-- The rules-shaped probe headers for London and Paris are this header: one
+-- shaping, not two. Both start from `guardTestHeader` and touch the same five
+-- fields, so pinning those five (and the base-fee value) is exact.
+private def guardShapedIs16 (rules : ForkRules) : Bool :=
+  (guardBlockAtRules rules 0).header.baseFeePerGas == some 7
+    && (guardBlockAtRules rules 0).header.withdrawalsRoot.isNone
+    && (guardBlockAtRules rules 0).header.blobGasUsed.isNone
+    && (guardBlockAtRules rules 0).header.excessBlobGas.isNone
+    && (guardBlockAtRules rules 0).header.parentBeaconBlockRoot.isNone
+
+#guard guardShapedIs16 londonRules
+#guard guardShapedIs16 parisRules
+
+-- The fork-relative body decoder: three elements decode with no withdrawals
+-- under London rules, stay `withdrawalsNotRead` under Shanghai rules, and a
+-- four-element body decodes the same under both.
+#guard (match BLT.toExBlockAt londonRules
+    (.list [Header.toBLT guardHeader16, .list [], .list []]) with
+  | .ok b => b.wds.isEmpty
+  | .error _ => false)
+#guard decFails isWithdrawalsNotReadD <| BLT.toExBlockAt shanghaiRules
+  (.list [Header.toBLT guardHeader16, .list [], .list []])
+#guard (match BLT.toExBlockAt londonRules
+    (.list [Header.toBLT guardHeader16, .list [], .list [], .list []]) with
+  | .ok b => b.wds.isEmpty
+  | .error _ => false)
+-- The fork-relative encoding is the canonical one from Shanghai on.
+#guard ((guardBlockAt 0).toBLTAt pragueRules).toBytes
+  == (guardBlockAt 0).toBLT.toBytes
+-- A London probe block round-trips through the fork-relative decoder.
+#guard (match rlpToBlockEAt londonRules
+    ((guardBlockAtRules londonRules 0).toBLTAt londonRules).toBytes with
+  | .ok ⟨b, _⟩ => b.wds.isEmpty
+  | .error _ => false)
 
 /-- Shanghai: the withdrawals root. -/
 private def guardHeader17 : Header :=
