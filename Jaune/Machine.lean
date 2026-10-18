@@ -3584,18 +3584,19 @@ EELS records a touch at three sites, each only when the account
 failed-child quirk (`incorporate_child_on_error`). After every transaction,
 `destroy_touched_empty_accounts` erases the touched accounts that are still
 empty. Paris removes the sweep: `modify_state` then erases an emptied account
-at once, which is what `State.setAccount` does under every rule set.
+at once (`settle.eraseEmptyOnModify`), which is what `State.setAccount` does.
 
 Jaune never stores `Acct.nil`, so an empty account "exists" here only when it
 still carries storage (`AccountExists`). An empty storage-less account that
 EELS would hold until the sweep is already absent in Jaune, so not recording
 it changes nothing the sweep could observe.
 
-Only the two frame-level sites are recorded (`processMessage.settle`,
-`incorporateChildOnError`). The `SELFDESTRUCT` beneficiary is credited through
-`State.setAccount`, which erases it at once if it is empty, so after the credit
-it can never exist and be empty: the EELS touch there could never pass the
-sweep's test, and recording it would be dead code. -/
+All three sites are recorded: the two frame-level ones
+(`processMessage.settle`, `incorporateChildOnError`) and the `SELFDESTRUCT`
+beneficiary (`Devm.creditBeneficiary`). The last is the one modification
+before Paris that can leave an account existing and empty: a zero credit to a
+storage-only beneficiary, which `modify_state` keeps and the touch hands to the
+sweep. -/
 
 /-- EELS `account_exists_and_is_empty`, over Jaune's notion of existence. -/
 def accountExistsAndIsEmpty (wor : State) (adr : Adr) : Prop :=
@@ -5825,6 +5826,58 @@ def Devm.subBal (devm : Devm) (adr : Adr) (val : B256) : Option Devm := do
 def Devm.addBal (devm : Devm) (adr : Adr) (val : B256) : Devm :=
   (devm.withState (devm.state.addBal adr val)).clearStorageWritesIfEmpty adr
 
+/-- `SELFDESTRUCT`'s beneficiary credit: EELS `set_account_balance`, then
+"mark beneficiary as touched" (`account_exists_and_is_empty`).
+
+From Paris (`settle.eraseEmptyOnModify`) the credit is `Devm.addBal`, whose
+`modify_state` erases an account it leaves empty, so the beneficiary can never
+be touched and empty and the touch is moot. Before Paris `modify_state` is
+`set_account` alone: a zero credit to a storage-only beneficiary keeps it,
+storage and all, and the touch hands it to the EIP-161 sweep, which erases it
+at the end of the transaction unless something funds it first.
+
+Every other account-field write Jaune makes before Paris goes through the
+erasing `State.setAccount`, because none of them can leave an account empty
+where EELS would keep it: a value transfer moves a nonzero value from a caller
+that has code or a nonzero nonce; nonce increments and code deposits leave a
+nonzero nonce; block and ommer rewards are positive; and the coinbase fee
+credit is EELS's own explicit `destroy_account` of an emptied coinbase.
+The touch is recorded after the credit rather than after the donor's balance is
+zeroed: the donor has code or a nonzero nonce, so zeroing it cannot change
+whether the beneficiary exists and is empty. -/
+def Devm.creditBeneficiary (rules : ForkRules) (donee : Adr) (val : B256)
+    (devm : Devm) : Devm :=
+  if rules.settle.eraseEmptyOnModify then devm.addBal donee val
+  else
+    (devm.withState (devm.state.set donee
+      ((devm.state.get donee).withBal (devm.state.bal donee + val)))).recordTouch
+      rules true donee
+
+/-- Under the erasing rules (Paris on) the beneficiary credit is `addBal`. -/
+@[simp] theorem Devm.creditBeneficiary_of_eraseEmptyOnModify {rules : ForkRules}
+    (h : rules.settle.eraseEmptyOnModify = true) (donee : Adr) (val : B256)
+    (devm : Devm) : devm.creditBeneficiary rules donee val = devm.addBal donee val := by
+  simp [Devm.creditBeneficiary, h]
+
+/-- The credit moves only the world and the touched set: the machine, and with
+it memory and gas, is unchanged. -/
+@[simp] theorem Devm.creditBeneficiary_mach (rules : ForkRules) (donee : Adr)
+    (val : B256) (devm : Devm) : (devm.creditBeneficiary rules donee val).mach = devm.mach := by
+  unfold Devm.creditBeneficiary; split <;> rfl
+
+@[simp] theorem Devm.creditBeneficiary_output (rules : ForkRules) (donee : Adr)
+    (val : B256) (devm : Devm) :
+    (devm.creditBeneficiary rules donee val).output = devm.output := by
+  unfold Devm.creditBeneficiary; split <;> rfl
+
+@[simp] theorem Devm.creditBeneficiary_memory (rules : ForkRules) (donee : Adr)
+    (val : B256) (devm : Devm) :
+    (devm.creditBeneficiary rules donee val).memory = devm.memory := by
+  unfold Devm.creditBeneficiary; split <;> rfl
+
+@[simp] theorem pragueRules_settle_eraseEmptyOnModify :
+    pragueRules.settle.eraseEmptyOnModify = true := rfl
+
 def Linst.run (sevm : Sevm) (devm : Devm) :
     Linst → Except (EvmError × Devm) Devm
   | .stop => .ok devm
@@ -5881,15 +5934,16 @@ def Linst.run (sevm : Sevm) (devm : Devm) :
       let devm ←
         (devm.subBal donor donorBal).toExcept
           ⟨.internal (.invariant (.text "InsufficientBalanceError")), devm⟩
-      let devm ← .ok <| devm.addBal donee donorBal
+      let devm ← .ok <| devm.creditBeneficiary sevm.benvStat.rules donee donorBal
       -- EIP-6780 (Cancun): only an account created in the same transaction is
       -- scheduled for deletion; before that every `SELFDESTRUCT` schedules.
       -- That is `¬ (onlyCreated ∧ donor ∉ created)`, i.e. the disjunction
       -- below; under `selfdestructOnlyCreated` its taken branch is the old
       -- scheduling body plus the refund hook. The hook credits
       -- `selfdestructRefund` (24000 before EIP-3529, 0 from London) when this
-      -- `SELFDESTRUCT` newly schedules the donor; the beneficiary touch is
-      -- the `balReadAccount` reads above.
+      -- `SELFDESTRUCT` newly schedules the donor. The EIP-7928 beneficiary
+      -- read is the `balReadAccount` above; the EIP-161 touch is in
+      -- `creditBeneficiary`.
       if donor ∈ devm.createdAccounts ∨
           sevm.benvStat.rules.settle.selfdestructOnlyCreated = false then
         .ok (creditSelfdestructRefund sevm.benvStat.rules
@@ -6490,6 +6544,14 @@ theorem Devm.addBal_stateGasZero {devm : Devm} (h : devm.StateGasZero)
 theorem Devm.setBal_stateGasZero {devm : Devm} (h : devm.StateGasZero)
     (adr : Adr) (value : B256) : (devm.setBal adr value).StateGasZero := h
 
+theorem Devm.creditBeneficiary_stateGasZero {devm : Devm} (h : devm.StateGasZero)
+    (rules : ForkRules) (adr : Adr) (value : B256) :
+    (devm.creditBeneficiary rules adr value).StateGasZero := by
+  unfold Devm.creditBeneficiary
+  split
+  · exact h
+  · exact h
+
 theorem Devm.withRefundCounter_stateGasZero {devm : Devm}
     (h : devm.StateGasZero) (refund : Int) :
     (devm.withRefundCounter refund).StateGasZero := h
@@ -6847,7 +6909,7 @@ theorem Linst.run_stateGasZero {sevm : Sevm} {devm : Devm}
       | some d4 => exact Except.stateGasZeroOn_ok (Devm.subBal_stateGasZero h5 hs)
     · intro d4 h6
       refine Except.StateGasZeroOn.bind
-        (Except.stateGasZeroOn_ok (Devm.addBal_stateGasZero h6 _ _)) ?_
+        (Except.stateGasZeroOn_ok (Devm.creditBeneficiary_stateGasZero h6 _ _ _)) ?_
       intro d5 h7
       split
       · exact Except.stateGasZeroOn_ok (creditSelfdestructRefund_stateGasZero
@@ -7829,6 +7891,16 @@ theorem Devm.Canonical.addBal {devm : Devm} (h : devm.Canonical)
     (adr : Adr) (v : B256) : (devm.addBal adr v).Canonical :=
   h.withState (State.Canonical.addBal h.1 adr v)
 
+theorem Devm.Canonical.creditBeneficiary {devm : Devm} (h : devm.Canonical)
+    (rules : ForkRules) (adr : Adr) (v : B256) :
+    (devm.creditBeneficiary rules adr v).Canonical := by
+  unfold Devm.creditBeneficiary
+  split
+  · exact h.addBal adr v
+  · exact Devm.Canonical.of_world_eq
+      (h.withState (h.1.set adr (ac := (devm.state.get adr).withBal (devm.state.bal adr + v))
+        (h.1.stor adr))) rfl
+
 theorem Devm.Canonical.subBal {devm devm' : Devm} (h : devm.Canonical)
     {adr : Adr} {v : B256} (hs : devm.subBal adr v = some devm') :
     devm'.Canonical := by
@@ -8505,8 +8577,8 @@ theorem Linst.run_canonical {sevm : Sevm} {devm : Devm}
            split
            · exact creditSelfdestructRefund_canonical
                (Devm.Canonical.of_world_eq
-                 (Devm.Canonical.setBal (Devm.Canonical.addBal hd' a.1 _) _ 0) rfl)
-           · exact Devm.Canonical.addBal hd' a.1 _)
+                 (Devm.Canonical.setBal (hd'.creditBeneficiary _ a.1 _) _ 0) rfl)
+           · exact hd'.creditBeneficiary _ a.1 _)
     · -- Amsterdam: the static check, the pop, the pre-check, the two charges
       -- (neither touches the world), the sweep, the log, the schedule.
       refine Except.CanonicalOn.bind (assertDynamic_canonicalOn h) fun _ _ => ?_

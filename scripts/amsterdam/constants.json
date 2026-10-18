@@ -203,6 +203,9 @@
     "requests": {
       "status": "checked"
     },
+    "settle.eraseEmptyOnModify": {
+      "status": "checked"
+    },
     "settle.refundQuotient": {
       "status": "checked"
     },
@@ -556,6 +559,10 @@
               "0x000064d678505ad48f8ccb093bc65613800e8282"
             ]
           ]
+        },
+        "settle.eraseEmptyOnModify": {
+          "source": "ethereum.forks.amsterdam.state_tracker.modify_state calls destroy_account on an emptied account",
+          "value": true
         },
         "settle.refundQuotient": {
           "source": "the refund computation divides pre-refund usage by Uint(5) (vm.gas (line 1212), EIP-3529 fifth-cap)",
@@ -920,6 +927,10 @@
         "requests": {
           "source": "absent: fork.fork has no process_general_purpose_requests (pre-Prague): no request-producing system calls",
           "value": []
+        },
+        "settle.eraseEmptyOnModify": {
+          "source": "ethereum.forks.arrow_glacier.state_tracker.modify_state calls destroy_account on an emptied account",
+          "value": false
         },
         "settle.refundQuotient": {
           "source": "the refund computation divides pre-refund usage by Uint(5) (fork (line 801), EIP-3529 fifth-cap)",
@@ -1316,6 +1327,10 @@
             ]
           ]
         },
+        "settle.eraseEmptyOnModify": {
+          "source": "ethereum.forks.bpo1.state_tracker.modify_state calls destroy_account on an emptied account",
+          "value": true
+        },
         "settle.refundQuotient": {
           "source": "the refund computation divides pre-refund usage by Uint(5) (fork (line 933), EIP-3529 fifth-cap)",
           "value": 5
@@ -1696,6 +1711,10 @@
             ]
           ]
         },
+        "settle.eraseEmptyOnModify": {
+          "source": "ethereum.forks.bpo2.state_tracker.modify_state calls destroy_account on an emptied account",
+          "value": true
+        },
         "settle.refundQuotient": {
           "source": "the refund computation divides pre-refund usage by Uint(5) (fork (line 933), EIP-3529 fifth-cap)",
           "value": 5
@@ -2059,6 +2078,10 @@
         "requests": {
           "source": "absent: fork.fork has no process_general_purpose_requests (pre-Prague): no request-producing system calls",
           "value": []
+        },
+        "settle.eraseEmptyOnModify": {
+          "source": "ethereum.forks.berlin.state_tracker.modify_state calls destroy_account on an emptied account",
+          "value": false
         },
         "settle.refundQuotient": {
           "source": "the refund computation divides pre-refund usage by Uint(2) (fork (line 698), EIP-3529 fifth-cap)",
@@ -2438,6 +2461,10 @@
           "source": "absent: fork.fork has no process_general_purpose_requests (pre-Prague): no request-producing system calls",
           "value": []
         },
+        "settle.eraseEmptyOnModify": {
+          "source": "ethereum.forks.byzantium.state_tracker.modify_state calls destroy_account on an emptied account",
+          "value": false
+        },
         "settle.refundQuotient": {
           "source": "the refund computation divides pre-refund usage by Uint(2) (fork (line 675), EIP-3529 fifth-cap)",
           "value": 2
@@ -2815,6 +2842,10 @@
           "source": "absent: fork.fork has no process_general_purpose_requests (pre-Prague): no request-producing system calls",
           "value": []
         },
+        "settle.eraseEmptyOnModify": {
+          "source": "ethereum.forks.cancun.state_tracker.modify_state calls destroy_account on an emptied account",
+          "value": true
+        },
         "settle.refundQuotient": {
           "source": "the refund computation divides pre-refund usage by Uint(5) (fork (line 758), EIP-3529 fifth-cap)",
           "value": 5
@@ -3178,6 +3209,10 @@
           "source": "no EELS fork module carries EIP-1283 Constantinople (it never activated; mainnet went Byzantium straight to Petersburg): the literal is a record update of petersburgRules differing only in sstore, and is fixture-grounded by the legacy corpus, not by a module extraction",
           "value": null
         },
+        "settle.eraseEmptyOnModify": {
+          "source": "no EELS fork module carries EIP-1283 Constantinople (it never activated; mainnet went Byzantium straight to Petersburg): the literal is a record update of petersburgRules differing only in sstore, and is fixture-grounded by the legacy corpus, not by a module extraction",
+          "value": null
+        },
         "settle.refundQuotient": {
           "source": "no EELS fork module carries EIP-1283 Constantinople (it never activated; mainnet went Byzantium straight to Petersburg): the literal is a record update of petersburgRules differing only in sstore, and is fixture-grounded by the legacy corpus, not by a module extraction",
           "value": null
@@ -3343,6 +3378,7 @@
         "pow.present": "no EELS fork module carries EIP-1283 Constantinople (it never activated; mainnet went Byzantium straight to Petersburg): the literal is a record update of petersburgRules differing only in sstore, and is fixture-grounded by the legacy corpus, not by a module extraction",
         "precompiles": "no EELS fork module carries EIP-1283 Constantinople (it never activated; mainnet went Byzantium straight to Petersburg): the literal is a record update of petersburgRules differing only in sstore, and is fixture-grounded by the legacy corpus, not by a module extraction",
         "requests": "no EELS fork module carries EIP-1283 Constantinople (it never activated; mainnet went Byzantium straight to Petersburg): the literal is a record update of petersburgRules differing only in sstore, and is fixture-grounded by the legacy corpus, not by a module extraction",
+        "settle.eraseEmptyOnModify": "no EELS fork module carries EIP-1283 Constantinople (it never activated; mainnet went Byzantium straight to Petersburg): the literal is a record update of petersburgRules differing only in sstore, and is fixture-grounded by the legacy corpus, not by a module extraction",
         "settle.refundQuotient": "no EELS fork module carries EIP-1283 Constantinople (it never activated; mainnet went Byzantium straight to Petersburg): the literal is a record update of petersburgRules differing only in sstore, and is fixture-grounded by the legacy corpus, not by a module extraction",
         "settle.selfdestructOnlyCreated": "no EELS fork module carries EIP-1283 Constantinople (it never activated; mainnet went Byzantium straight to Petersburg): the literal is a record update of petersburgRules differing only in sstore, and is fixture-grounded by the legacy corpus, not by a module extraction",
         "settle.selfdestructRefund": "no EELS fork module carries EIP-1283 Constantinople (it never activated; mainnet went Byzantium straight to Petersburg): the literal is a record update of petersburgRules differing only in sstore, and is fixture-grounded by the legacy corpus, not by a module extraction",
@@ -3627,6 +3663,10 @@
         "requests": {
           "source": "absent: fork.fork has no process_general_purpose_requests (pre-Prague): no request-producing system calls",
           "value": []
+        },
+        "settle.eraseEmptyOnModify": {
+          "source": "ethereum.forks.gray_glacier.state_tracker.modify_state calls destroy_account on an emptied account",
+          "value": false
         },
         "settle.refundQuotient": {
           "source": "the refund computation divides pre-refund usage by Uint(5) (fork (line 801), EIP-3529 fifth-cap)",
@@ -4007,6 +4047,10 @@
           "source": "absent: fork.fork has no process_general_purpose_requests (pre-Prague): no request-producing system calls",
           "value": []
         },
+        "settle.eraseEmptyOnModify": {
+          "source": "ethereum.forks.istanbul.state_tracker.modify_state calls destroy_account on an emptied account",
+          "value": false
+        },
         "settle.refundQuotient": {
           "source": "the refund computation divides pre-refund usage by Uint(2) (fork (line 675), EIP-3529 fifth-cap)",
           "value": 2
@@ -4383,6 +4427,10 @@
         "requests": {
           "source": "absent: fork.fork has no process_general_purpose_requests (pre-Prague): no request-producing system calls",
           "value": []
+        },
+        "settle.eraseEmptyOnModify": {
+          "source": "ethereum.forks.london.state_tracker.modify_state calls destroy_account on an emptied account",
+          "value": false
         },
         "settle.refundQuotient": {
           "source": "the refund computation divides pre-refund usage by Uint(5) (fork (line 810), EIP-3529 fifth-cap)",
@@ -4762,6 +4810,10 @@
         "requests": {
           "source": "absent: fork.fork has no process_general_purpose_requests (pre-Prague): no request-producing system calls",
           "value": []
+        },
+        "settle.eraseEmptyOnModify": {
+          "source": "ethereum.forks.muir_glacier.state_tracker.modify_state calls destroy_account on an emptied account",
+          "value": false
         },
         "settle.refundQuotient": {
           "source": "the refund computation divides pre-refund usage by Uint(2) (fork (line 677), EIP-3529 fifth-cap)",
@@ -5156,6 +5208,10 @@
             ]
           ]
         },
+        "settle.eraseEmptyOnModify": {
+          "source": "ethereum.forks.osaka.state_tracker.modify_state calls destroy_account on an emptied account",
+          "value": true
+        },
         "settle.refundQuotient": {
           "source": "the refund computation divides pre-refund usage by Uint(5) (fork (line 933), EIP-3529 fifth-cap)",
           "value": 5
@@ -5519,6 +5575,10 @@
         "requests": {
           "source": "absent: fork.fork has no process_general_purpose_requests (pre-Prague): no request-producing system calls",
           "value": []
+        },
+        "settle.eraseEmptyOnModify": {
+          "source": "ethereum.forks.paris.state_tracker.modify_state calls destroy_account on an emptied account",
+          "value": true
         },
         "settle.refundQuotient": {
           "source": "the refund computation divides pre-refund usage by Uint(5) (fork (line 578), EIP-3529 fifth-cap)",
@@ -5897,6 +5957,10 @@
         "requests": {
           "source": "absent: fork.fork has no process_general_purpose_requests (pre-Prague): no request-producing system calls",
           "value": []
+        },
+        "settle.eraseEmptyOnModify": {
+          "source": "ethereum.forks.constantinople.state_tracker.modify_state calls destroy_account on an emptied account",
+          "value": false
         },
         "settle.refundQuotient": {
           "source": "the refund computation divides pre-refund usage by Uint(2) (fork (line 675), EIP-3529 fifth-cap)",
@@ -6290,6 +6354,10 @@
             ]
           ]
         },
+        "settle.eraseEmptyOnModify": {
+          "source": "ethereum.forks.prague.state_tracker.modify_state calls destroy_account on an emptied account",
+          "value": true
+        },
         "settle.refundQuotient": {
           "source": "the refund computation divides pre-refund usage by Uint(5) (fork (line 916), EIP-3529 fifth-cap)",
           "value": 5
@@ -6651,6 +6719,10 @@
         "requests": {
           "source": "absent: fork.fork has no process_general_purpose_requests (pre-Prague): no request-producing system calls",
           "value": []
+        },
+        "settle.eraseEmptyOnModify": {
+          "source": "ethereum.forks.shanghai.state_tracker.modify_state calls destroy_account on an emptied account",
+          "value": true
         },
         "settle.refundQuotient": {
           "source": "the refund computation divides pre-refund usage by Uint(5) (fork (line 590), EIP-3529 fifth-cap)",

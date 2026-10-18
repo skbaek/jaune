@@ -271,6 +271,11 @@ structure SettlementRules : Type where
   /-- EIP-161's end-of-transaction sweep of touched empty accounts;
   EELS drops it from Paris. -/
   touchedSweep : Bool
+  /-- EELS `modify_state` destroys an account the modification leaves empty
+  (`account_exists_and_is_empty`, then `destroy_account`) from Paris on.
+  Before Paris it is `set_account` alone: the emptied account, with its
+  storage, stays until the EIP-161 sweep removes it if it was touched. -/
+  eraseEmptyOnModify : Bool
 deriving DecidableEq, Repr
 
 /-- Transaction admission and intrinsic-cost switches that move before Prague. -/
@@ -965,25 +970,30 @@ def constantinopleSstore : SstoreRules := { netMetering := true, stipendSentry :
 def istanbulSstore : SstoreRules := { netMetering := true, stipendSentry := true }
 
 /-- Settlement before EIP-3529 (London): halved refunds, 24000 selfdestruct
-refund, EIP-161 sweep. -/
+refund, EIP-161 sweep, and no erase on modification (the sweep does it). -/
 def byzantiumSettle : SettlementRules :=
   { refundQuotient := 2, selfdestructRefund := 24000,
-    selfdestructOnlyCreated := false, touchedSweep := true }
+    selfdestructOnlyCreated := false, touchedSweep := true,
+    eraseEmptyOnModify := false }
 
 /-- London (through Gray Glacier): EIP-3529 fifths, no selfdestruct refund. -/
 def londonSettle : SettlementRules :=
   { refundQuotient := 5, selfdestructRefund := 0,
-    selfdestructOnlyCreated := false, touchedSweep := true }
+    selfdestructOnlyCreated := false, touchedSweep := true,
+    eraseEmptyOnModify := false }
 
-/-- Paris (through Shanghai): the touched sweep is gone. -/
+/-- Paris (through Shanghai): the touched sweep is gone, and `modify_state`
+erases an account it empties at once. -/
 def parisSettle : SettlementRules :=
   { refundQuotient := 5, selfdestructRefund := 0,
-    selfdestructOnlyCreated := false, touchedSweep := false }
+    selfdestructOnlyCreated := false, touchedSweep := false,
+    eraseEmptyOnModify := true }
 
 /-- Cancun onwards: EIP-6780 same-transaction-only selfdestruct. -/
 def cancunSettle : SettlementRules :=
   { refundQuotient := 5, selfdestructRefund := 0,
-    selfdestructOnlyCreated := true, touchedSweep := false }
+    selfdestructOnlyCreated := true, touchedSweep := false,
+    eraseEmptyOnModify := true }
 
 /-- Byzantium through Petersburg admission: no typed transactions, 68-gas
 nonzero bytes. -/
@@ -3013,13 +3023,16 @@ private def isEraL : RulesLookupError → Bool
 #guard istanbulRules.sstore.stipendSentry = true
 #guard berlinRules.sstore.stipendSentry = true
 
--- Settlement: halves then fifths, sweep until Paris, 6780 from Cancun.
+-- Settlement: halves then fifths, sweep until Paris, erase-on-modify from
+-- Paris, 6780 from Cancun.
 #guard byzantiumRules.settle.refundQuotient = 2
 #guard byzantiumRules.settle.selfdestructRefund = 24000
 #guard londonRules.settle.refundQuotient = 5
 #guard londonRules.settle.selfdestructRefund = 0
 #guard grayGlacierRules.settle.touchedSweep = true
 #guard parisRules.settle.touchedSweep = false
+#guard grayGlacierRules.settle.eraseEmptyOnModify = false
+#guard parisRules.settle.eraseEmptyOnModify = true
 #guard cancunRules.settle.selfdestructOnlyCreated = true
 #guard londonRules.settle.selfdestructOnlyCreated = false
 

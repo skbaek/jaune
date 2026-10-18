@@ -1,8 +1,8 @@
 # The `check-t8n.sh` corpus
 
-Sixty-five cases, each a complete `t8n` invocation, with goldens generated from the
+Sixty-six cases, each a complete `t8n` invocation, with goldens generated from the
 pinned conformance target. `scripts/check-t8n.sh` runs them; this file says
-what they are and how to change them. Fifty-six conform and nine are
+what they are and how to change them. Fifty-six conform and ten are
 registered refusals (the historical forks below).
 
 ## Layout
@@ -52,7 +52,7 @@ Amsterdam's metering in both tool modes. Ten further cases cover storage-only
 creation and empty-account deletion on Prague, Osaka, BPO1, BPO2 and Amsterdam.
 Five further cases cover zero-value transaction, CALL and STATICCALL entry on
 those same forks (54 such cases; with the two historical cases U11a made
-conforming, 56 conform, and 65 cases in total with the nine historical refusals).
+conforming, 56 conform, and 66 cases in total with the ten historical refusals).
 
 ### Storage semantics at the v21 pin
 
@@ -172,6 +172,15 @@ generator, record the behavior U11 will conform to. There is no
 `Constantinople` (EIP-1283) case: the target refuses that label too
 (`UNSUPPORTED_FORKS`), so no golden can be generated for it; its evidence is
 the legacy corpus and the constants gate's all-dormant row.
+
+`hist-selfdestruct-empty-berlin` (goal U6b) is a twelfth historical case,
+also refused until the Berlin wave. Two contracts self-destruct with zero
+balance to two storage-only beneficiaries (`0x0300`, `0x0400`), and the parent
+then sends `0x0300` 1 wei. Before Paris `modify_state` does not erase an
+account it leaves empty (`settle.eraseEmptyOnModify`), so both beneficiaries
+stay, storage and all, and are touched: in the target's alloc `0x0300`
+survives the EIP-161 sweep funded and with its slot, and `0x0400` is swept.
+Under an always-erasing credit `0x0300` would lose its storage.
 
 Pre-merge environments carry no `currentBaseFee` (London and later do), no
 withdrawals (Shanghai and later do), and no blob fields (Cancun does); they
