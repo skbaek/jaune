@@ -219,6 +219,15 @@ def TxType.accessList : TxType → AccessList
   | .three _ _ _ _ al _ _ => al
   | .four _ _ _ _ al _ => al
 
+/-- EELS's transaction-type number: legacy is 0, each typed envelope its
+type byte. Unit U5 (S5) admission compares it against `rules.txr.maxType`. -/
+def TxType.index : TxType → Nat
+  | .zero _ _ => 0
+  | .one _ _ _ _ => 1
+  | .two _ _ _ _ _ => 2
+  | .three _ _ _ _ _ _ _ => 3
+  | .four _ _ _ _ _ _ => 4
+
 def Tx.accessList (tx : Tx) : AccessList := tx.type.accessList
 
 def Tx.auths (tx : Tx) : List Auth :=
@@ -3949,15 +3958,27 @@ def Rinst.runCore
   (devm : Devm)
   (sevm : Sevm) : Rinst → Execution
   | .address => pushItem sevm.currentTarget.toB256 gBase devm
-  | .basefee => pushItem sevm.benvStat.baseFeePerGas.toB256 gBase devm
-  | .blobhash => do
-    let ⟨x, devm⟩ ← devm.pop
-    let y : B256 := sevm.tenvStat.blobVersionedHashes.getD x.toNat 0
-    chargeGas gHashopcode devm >>= Devm.push y
-  | .blobbasefee => do
-    let fee :=
-      calculateBlobGasPrice sevm.benvStat.rules.blob sevm.benvStat.excessBlobGas
-    pushItem fee.toB256 gBase devm
+  -- S8 (EIP-3198): availability first, the `CLZ` pattern.
+  | .basefee =>
+    if sevm.benvStat.rules.op.baseFee then
+      pushItem sevm.benvStat.baseFeePerGas.toB256 gBase devm
+    else
+      .error ⟨.halt (.invalidOpcode .none), devm⟩
+  -- S8 (EIP-4844): availability first, the `CLZ` pattern.
+  | .blobhash =>
+    if sevm.benvStat.rules.op.blobHash then do
+      let ⟨x, devm⟩ ← devm.pop
+      let y : B256 := sevm.tenvStat.blobVersionedHashes.getD x.toNat 0
+      chargeGas gHashopcode devm >>= Devm.push y
+    else
+      .error ⟨.halt (.invalidOpcode .none), devm⟩
+  | .blobbasefee =>
+    if sevm.benvStat.rules.op.blobBaseFee then do
+      let fee :=
+        calculateBlobGasPrice sevm.benvStat.rules.blob sevm.benvStat.excessBlobGas
+      pushItem fee.toB256 gBase devm
+    else
+      .error ⟨.halt (.invalidOpcode .none), devm⟩
   | .balance =>
     liftMachMetaWorldExecution (Rinst.balanceCore sevm.benvStat.rules) devm
   | .origin => pushItem sevm.tenvStat.origin.toB256 gBase devm
@@ -4061,31 +4082,44 @@ def Rinst.runCore
   -- `EXTCODEHASH` takes the repriced cold access and *no* surcharge: upstream
   -- adds the code-reading cost at `EXTCODESIZE` and `EXTCODECOPY` only, which
   -- is a fact about those two arms rather than about reading code.
-  | .extcodehash => do
-    let ⟨adr, devm⟩ ← devm.popToAdr
-    let devm ←
-      match sevm.benvStat.rules.access with
-      | .eip2929 =>
-      if adr ∈ devm.accessedAddresses then
-        chargeGas gasWarmAccess devm
-      else
-        chargeGas sevm.benvStat.rules.gas.coldAccountAccess
-          (addAccessedAddress devm adr)
-      | .flat g => chargeGas g.extCodeHash devm
-    -- `get_account(address)` after the charge (EIP-7928).
-    let devm := devm.balReadAccount sevm.benvStat.rules adr
-    let account := devm.getAcct adr
-    let codehash : B256 :=
-      if account.Empty then 0
-      else ByteArray.keccak 0 account.code.size account.code
-    devm.push codehash
+  -- S8 (EIP-1052): availability first, the `CLZ` pattern.
+  | .extcodehash =>
+    if sevm.benvStat.rules.op.extCodeHash then do
+      let ⟨adr, devm⟩ ← devm.popToAdr
+      let devm ←
+        match sevm.benvStat.rules.access with
+        | .eip2929 =>
+        if adr ∈ devm.accessedAddresses then
+          chargeGas gasWarmAccess devm
+        else
+          chargeGas sevm.benvStat.rules.gas.coldAccountAccess
+            (addAccessedAddress devm adr)
+        | .flat g => chargeGas g.extCodeHash devm
+      -- `get_account(address)` after the charge (EIP-7928).
+      let devm := devm.balReadAccount sevm.benvStat.rules adr
+      let account := devm.getAcct adr
+      let codehash : B256 :=
+        if account.Empty then 0
+        else ByteArray.keccak 0 account.code.size account.code
+      devm.push codehash
+    else
+      .error ⟨.halt (.invalidOpcode .none), devm⟩
   -- `environment.py` `self_balance`: `charge_gas(LOW)`, then `get_account`
   -- on the current target -- recorded for EIP-7928 -- then the push.
-  | .selfbalance => do
-    let devm ← chargeGas gLow devm
-    (devm.balReadAccount sevm.benvStat.rules sevm.currentTarget).push
-      (devm.getBal sevm.currentTarget)
-  | .chainid => pushItem sevm.benvStat.chainId.toB256 gBase devm
+  -- S8 (EIP-1884): availability first, the `CLZ` pattern.
+  | .selfbalance =>
+    if sevm.benvStat.rules.op.selfBalance then do
+      let devm ← chargeGas gLow devm
+      (devm.balReadAccount sevm.benvStat.rules sevm.currentTarget).push
+        (devm.getBal sevm.currentTarget)
+    else
+      .error ⟨.halt (.invalidOpcode .none), devm⟩
+  -- S8 (EIP-1344): availability first, the `CLZ` pattern.
+  | .chainid =>
+    if sevm.benvStat.rules.op.chainId then
+      pushItem sevm.benvStat.chainId.toB256 gBase devm
+    else
+      .error ⟨.halt (.invalidOpcode .none), devm⟩
   | .number => pushItem sevm.benvStat.number.toB256 gBase devm
   | .timestamp => pushItem sevm.benvStat.time gBase devm
   | .gaslimit => pushItem sevm.benvStat.blockGasLimit.toB256 gBase devm
@@ -4127,9 +4161,24 @@ def Rinst.runCore
   | .pop => (devm.pop <&> Prod.snd) >>= chargeGas gBase
   | .byte =>
     applyBinary (λ x y => (List.getD y.toBytes x.toNat 0).toB256) gVerylow devm
-  | .shl => applyBinary (fun x y => y <<< x.toNat) gVerylow devm
-  | .shr => applyBinary (fun x y => y >>> x.toNat) gVerylow devm
-  | .sar => applyBinary (fun x y => B256.arithShiftRight y x.toNat) gVerylow devm
+  -- S8 (EIP-145): the availability check comes before the pops, exactly as for
+  -- `CLZ` below, so without the fork each byte is an undefined instruction
+  -- whatever the stack holds.
+  | .shl =>
+    if sevm.benvStat.rules.op.shifts then
+      applyBinary (fun x y => y <<< x.toNat) gVerylow devm
+    else
+      .error ⟨.halt (.invalidOpcode .none), devm⟩
+  | .shr =>
+    if sevm.benvStat.rules.op.shifts then
+      applyBinary (fun x y => y >>> x.toNat) gVerylow devm
+    else
+      .error ⟨.halt (.invalidOpcode .none), devm⟩
+  | .sar =>
+    if sevm.benvStat.rules.op.shifts then
+      applyBinary (fun x y => B256.arithShiftRight y x.toNat) gVerylow devm
+    else
+      .error ⟨.halt (.invalidOpcode .none), devm⟩
   | .clz =>
     -- The availability check comes before the pop, so under rules without
     -- EIP-7939 a `CLZ` byte behaves exactly like any other undefined opcode:
@@ -4195,9 +4244,13 @@ def Rinst.runCore
     -- `get_storage` after the charge (EIP-7928).
     let devm := devm.balReadStorage sevm.benvStat.rules ct key
     devm.push (devm.getStorVal ct key)
-  | .tload => do
-    let ⟨key, devm⟩ ← devm.pop
-    pushItem (devm.getTransVal sevm.currentTarget key) gasWarmAccess devm
+  -- S8 (EIP-1153): availability first, the `CLZ` pattern.
+  | .tload =>
+    if sevm.benvStat.rules.op.transient then do
+      let ⟨key, devm⟩ ← devm.pop
+      pushItem (devm.getTransVal sevm.currentTarget key) gasWarmAccess devm
+    else
+      .error ⟨.halt (.invalidOpcode .none), devm⟩
   | .pc => pushItem pc.toB256 gBase devm
   -- `vm/instructions/storage.py` `sstore`. The two shapes differ in more than
   -- numbers, so this is a `match` on the switch rather than a schedule read:
@@ -4289,33 +4342,42 @@ def Rinst.runCore
           devm
       -- `set_storage` asserts `get_account_optional(address)`: an account read.
       .ok ((devm.balReadAccount sevm.benvStat.rules ct).setStorVal ct key new_value)
+  -- S8 (EIP-1153): availability first, the `CLZ` pattern; the two metering
+  -- shapes below are untouched.
   | .tstore =>
-    match sevm.benvStat.rules.stateGas with
-    | none => do
-      let ⟨key, devm⟩ ← devm.pop
-      let ⟨new_value, devm⟩ ← devm.pop
-      let devm ← chargeGas gasWarmAccess devm
-      assertDynamic sevm devm
-      .ok (devm.setTransVal sevm.currentTarget key new_value)
-    | some _ => do
-      -- `storage.py.tstore` at the pin: static execution is rejected before
-      -- stack access or charging, so failure preserves both stack and gas.
-      assertDynamic sevm devm
-      let ⟨key, devm⟩ ← devm.pop
-      let ⟨new_value, devm⟩ ← devm.pop
-      let devm ← chargeGas gasWarmAccess devm
-      .ok (devm.setTransVal sevm.currentTarget key new_value)
-  | .mcopy => do
-    let ⟨destination, devm⟩ ← devm.popToNat
-    let ⟨source, devm⟩ ← devm.popToNat
-    let ⟨length, devm⟩ ← devm.popToNat
-    let words := ceilDiv length 32
-    let copy_gas_cost := gasCopy * words
-    let extend_memory_cost :=
-      devm.extCost [⟨source, length⟩, ⟨destination, length⟩]
-    let devm ← chargeGas (gVerylow + copy_gas_cost + extend_memory_cost) devm
-    let ⟨value, devm⟩ := devm.memRead source length
-    .ok (devm.memWrite destination value)
+    if sevm.benvStat.rules.op.transient then
+      match sevm.benvStat.rules.stateGas with
+      | none => do
+        let ⟨key, devm⟩ ← devm.pop
+        let ⟨new_value, devm⟩ ← devm.pop
+        let devm ← chargeGas gasWarmAccess devm
+        assertDynamic sevm devm
+        .ok (devm.setTransVal sevm.currentTarget key new_value)
+      | some _ => do
+        -- `storage.py.tstore` at the pin: static execution is rejected before
+        -- stack access or charging, so failure preserves both stack and gas.
+        assertDynamic sevm devm
+        let ⟨key, devm⟩ ← devm.pop
+        let ⟨new_value, devm⟩ ← devm.pop
+        let devm ← chargeGas gasWarmAccess devm
+        .ok (devm.setTransVal sevm.currentTarget key new_value)
+    else
+      .error ⟨.halt (.invalidOpcode .none), devm⟩
+  -- S8 (EIP-5656): availability first, the `CLZ` pattern.
+  | .mcopy =>
+    if sevm.benvStat.rules.op.mcopy then do
+      let ⟨destination, devm⟩ ← devm.popToNat
+      let ⟨source, devm⟩ ← devm.popToNat
+      let ⟨length, devm⟩ ← devm.popToNat
+      let words := ceilDiv length 32
+      let copy_gas_cost := gasCopy * words
+      let extend_memory_cost :=
+        devm.extCost [⟨source, length⟩, ⟨destination, length⟩]
+      let devm ← chargeGas (gVerylow + copy_gas_cost + extend_memory_cost) devm
+      let ⟨value, devm⟩ := devm.memRead source length
+      .ok (devm.memWrite destination value)
+    else
+      .error ⟨.halt (.invalidOpcode .none), devm⟩
   | .log n => do
     let ⟨memory_start_index, devm⟩ ← devm.popToNat
     let ⟨size, devm⟩ ← devm.popToNat
@@ -4627,6 +4689,64 @@ private def guardAccessWarmed (fork : Fork) (r : Rinst) (x : B256) : Option Bool
 #guard guardAccessWarmed .prague .extcodehash 0x1000 = some true
 #guard guardAccessWarmed .byzantium .sload 7 = some false
 #guard guardAccessWarmed .prague .sload 7 = some true
+-- S8 opcode availability (unit U5): each of the eleven `OpcodeRules` flags
+-- gates its opcodes exactly as `clz` gates `CLZ`. Under rules without the fork
+-- the byte is an invalid instruction whatever the stack and gas hold (not a
+-- stack or gas failure, and no gas is charged); under Prague, where all eleven
+-- flags are on, each runs its Prague body.
+private def guardRinst (fork : Fork) (gasLeft : Nat) (stack : List B256)
+    (r : Rinst) : Execution :=
+  Rinst.runCore 0 (((default : Devm).withGasLeft gasLeft).withStack stack)
+    (guardSevmAt fork) r
+
+-- EIP-145 shifts: Byzantium has none of them.
+#guard guardClzErr (guardRinst .byzantium 100 [1, 7] .shl) = "InvalidOpcode"
+#guard guardClzErr (guardRinst .byzantium 100 [1, 7] .shr) = "InvalidOpcode"
+#guard guardClzErr (guardRinst .byzantium 100 [1, 7] .sar) = "InvalidOpcode"
+#guard guardClzErr (guardRinst .byzantium 100 [] .shl) = "InvalidOpcode"
+#guard guardClzErr (guardRinst .byzantium 0 [1, 7] .shl) = "InvalidOpcode"
+-- Under Prague each shifts: the top word is the shift amount.
+#guard (guardRinst .prague 100 [1, 7] .shl).toOption.map Devm.stack
+  = some [Nat.toB256 14]
+#guard (guardRinst .prague 100 [1, 7] .shr).toOption.map Devm.stack
+  = some [Nat.toB256 3]
+#guard (guardRinst .prague 100 [1, 7] .sar).toOption.map Devm.stack
+  = some [Nat.toB256 3]
+#guard (guardRinst .prague 100 [1, 7] .shl).toOption.map Devm.gasLeft
+  = some (100 - gVerylow)
+-- EIP-1052 `EXTCODEHASH`, EIP-1344 `CHAINID`, EIP-1884 `SELFBALANCE`,
+-- EIP-3198 `BASEFEE`: Constantinople/Istanbul/London each add theirs, so
+-- Byzantium has none and Prague has all.
+#guard guardClzErr (guardRinst .byzantium 100000 [27] .extcodehash)
+  = "InvalidOpcode"
+#guard guardClzErr (guardRinst .byzantium 100 [] .chainid) = "InvalidOpcode"
+#guard guardClzErr (guardRinst .byzantium 100 [] .selfbalance) = "InvalidOpcode"
+#guard guardClzErr (guardRinst .byzantium 100 [] .basefee) = "InvalidOpcode"
+#guard (guardRinst .prague 100000 [27] .extcodehash).toOption.map Devm.stack
+  = some [Nat.toB256 0]
+#guard (guardRinst .prague 100 [] .chainid).toOption.map Devm.stack
+  = some [Nat.toB256 0]
+#guard (guardRinst .prague 100 [] .selfbalance).toOption.map Devm.stack
+  = some [Nat.toB256 0]
+#guard (guardRinst .prague 100 [] .basefee).toOption.map Devm.stack
+  = some [Nat.toB256 0]
+-- EIP-4844 `BLOBHASH`/`BLOBBASEFEE`: Cancun only.
+#guard guardClzErr (guardRinst .shanghai 100 [5] .blobhash) = "InvalidOpcode"
+#guard guardClzErr (guardRinst .shanghai 100 [] .blobbasefee) = "InvalidOpcode"
+#guard (guardRinst .prague 100 [5] .blobhash).toOption.map Devm.stack
+  = some [Nat.toB256 0]
+#guard (guardRinst .prague 100 [5] .blobhash).toOption.map Devm.gasLeft
+  = some (100 - gHashopcode)
+#guard (guardRinst .prague 100 [] .blobbasefee).toOption.isSome = true
+-- EIP-1153 transient storage and EIP-5656 `MCOPY`: Cancun only.
+#guard guardClzErr (guardRinst .shanghai 100 [7] .tload) = "InvalidOpcode"
+#guard guardClzErr (guardRinst .shanghai 100 [7, 8] .tstore) = "InvalidOpcode"
+#guard guardClzErr (guardRinst .shanghai 100 [0, 0, 0] .mcopy) = "InvalidOpcode"
+#guard (guardRinst .prague 100 [7] .tload).toOption.map Devm.stack
+  = some [Nat.toB256 0]
+#guard (guardRinst .prague 100 [7, 8] .tstore).toOption.map Devm.stack
+  = some []
+#guard (guardRinst .prague 100000 [0, 0, 32] .mcopy).toOption.isSome = true
 
 instance : Inhabited Execution := ⟨.ok default⟩
 
@@ -6019,17 +6139,27 @@ theorem Rinst.run_stateGasZero {evm : Evm} (h : evm.dyna.StateGasZero)
   cases r <;> simp only [Rinst.runCore]
   case iszero | not => exact applyUnary_stateGasZero _ _ h
   case add | mul | sub | div | sdiv | mod | smod | signextend | lt | gt | slt |
-      sgt | eq | and | or | xor | byte | shl | shr | sar =>
+      sgt | eq | and | or | xor | byte =>
     exact applyBinary_stateGasZero _ _ h
+  case shl | shr | sar =>
+    split
+    · exact applyBinary_stateGasZero _ _ h
+    · exact Except.stateGasZeroOn_error h
   case addmod | mulmod => exact applyTernary_stateGasZero _ _ h
-  case address | basefee | blobbasefee | origin | caller | callvalue |
+  case address | origin | caller | callvalue |
       calldatasize | codesize | gasprice | returndatasize |
-      chainid | number | timestamp | gaslimit | prevrandao | coinbase | msize |
+      number | timestamp | gaslimit | prevrandao | coinbase | msize |
       pc =>
     exact pushItem_stateGasZero _ _ h
+  case basefee | blobbasefee | chainid =>
+    split
+    · exact pushItem_stateGasZero _ _ h
+    · exact Except.stateGasZeroOn_error h
   case selfbalance =>
-    exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h)
-      fun d hd => Devm.push_stateGasZero _ hd
+    split
+    · exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h)
+        fun d hd => Devm.push_stateGasZero _ hd
+    · exact Except.stateGasZeroOn_error h
   case balance => exact Rinst.balance_stateGasZero _ h
   case mload =>
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) ?_
@@ -6046,15 +6176,17 @@ theorem Rinst.run_stateGasZero {evm : Evm} (h : evm.dyna.StateGasZero)
     intro d3 h3
     exact Devm.push_stateGasZero _ (Devm.memRead_stateGasZero start size h3)
   case mcopy =>
-    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) ?_
-    rintro ⟨dest, d1⟩ h1
-    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h1) ?_
-    rintro ⟨src, d2⟩ h2
-    refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h2) ?_
-    rintro ⟨len, d3⟩ h3
-    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h3) ?_
-    intro d4 h4
-    exact Except.stateGasZeroOn_ok (Devm.memRead_stateGasZero src len h4)
+    split
+    · refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) ?_
+      rintro ⟨dest, d1⟩ h1
+      refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h1) ?_
+      rintro ⟨src, d2⟩ h2
+      refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h2) ?_
+      rintro ⟨len, d3⟩ h3
+      refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h3) ?_
+      intro d4 h4
+      exact Except.stateGasZeroOn_ok (Devm.memRead_stateGasZero src len h4)
+    · exact Except.stateGasZeroOn_error h
   case log =>
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) ?_
     rintro ⟨start, d1⟩ h1
@@ -6120,18 +6252,22 @@ theorem Rinst.run_stateGasZero {evm : Evm} (h : evm.dyna.StateGasZero)
         fun _ _ => Except.stateGasZeroOn_ok hd
     · exact Except.stateGasZeroOn_ok hd
   case extcodehash =>
-    refine Except.StateGasZeroOn.bind (Devm.popToAdr_stateGasZero h) fun a ha => ?_
-    split <;> (try split) <;>
-      exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ ha)
-        fun _ hd => Devm.push_stateGasZero _ hd
+    split
+    · refine Except.StateGasZeroOn.bind (Devm.popToAdr_stateGasZero h) fun a ha => ?_
+      split <;> (try split) <;>
+        exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ ha)
+          fun _ hd => Devm.push_stateGasZero _ hd
+    · exact Except.stateGasZeroOn_error h
   case blockhash =>
     refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
     exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ ha)
       fun _ hd => Devm.push_stateGasZero _ hd
   case blobhash =>
-    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
-    exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ ha)
-      fun _ hd => Devm.push_stateGasZero _ hd
+    split
+    · refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
+      exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ ha)
+        fun _ hd => Devm.push_stateGasZero _ hd
+    · exact Except.stateGasZeroOn_error h
   case pop =>
     exact Except.StateGasZeroOn.bind
       (Except.StateGasZeroOn.map (Devm.pop_stateGasZero h) fun _ ha => ha)
@@ -6168,15 +6304,21 @@ theorem Rinst.run_stateGasZero {evm : Evm} (h : evm.dyna.StateGasZero)
     refine Except.StateGasZeroOn.bind (Except.stateGasZeroOn_assert hd') fun _ _ => ?_
     exact Except.stateGasZeroOn_ok hd'
   case tload =>
-    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
-    exact pushItem_stateGasZero _ _ ha
+    split
+    · refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
+      exact pushItem_stateGasZero _ _ ha
+    · exact Except.stateGasZeroOn_error h
   case tstore =>
-    rw [hrules]
-    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
-    refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero ha) fun b hb => ?_
-    refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ hb) fun d hd => ?_
-    refine Except.StateGasZeroOn.bind (Except.stateGasZeroOn_assert hd) fun _ _ => ?_
-    exact Except.stateGasZeroOn_ok hd
+    split
+    · rw [hrules]
+      refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
+      refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero ha) fun b hb => ?_
+      refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ hb)
+        fun d hd => ?_
+      refine Except.StateGasZeroOn.bind (Except.stateGasZeroOn_assert hd)
+        fun _ _ => ?_
+      exact Except.stateGasZeroOn_ok hd
+    · exact Except.stateGasZeroOn_error h
   case gas =>
     exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h)
       fun _ hd => Devm.push_stateGasZero _ hd
@@ -7586,16 +7728,18 @@ theorem Rinst.runCore_worldFrame (pc : Nat) (sevm : Sevm) (devm : Devm)
     rcases hread : d3.memRead start size with ⟨arg, d4⟩
     exact liftMachExecution_worldFrame (Devm.memRead_eq_worldFrame h3 hread)
   case mcopy =>
-    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) ?_
-    rintro ⟨dest, d1⟩ h1
-    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h1) ?_
-    rintro ⟨src, d2⟩ h2
-    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h2) ?_
-    rintro ⟨len, d3⟩ h3
-    refine Except.WorldFrameOn.bind (liftMachExecution_worldFrame h3) ?_
-    intro d4 h4
-    rcases hread : d4.memRead src len with ⟨val, d5⟩
-    exact (Devm.memRead_eq_worldFrame h4 hread).keep rfl rfl rfl
+    split
+    · refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) ?_
+      rintro ⟨dest, d1⟩ h1
+      refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h1) ?_
+      rintro ⟨src, d2⟩ h2
+      refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h2) ?_
+      rintro ⟨len, d3⟩ h3
+      refine Except.WorldFrameOn.bind (liftMachExecution_worldFrame h3) ?_
+      intro d4 h4
+      rcases hread : d4.memRead src len with ⟨val, d5⟩
+      exact (Devm.memRead_eq_worldFrame h4 hread).keep rfl rfl rfl
+    · exact h
   case log =>
     refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) ?_
     rintro ⟨start, d1⟩ h1
@@ -7623,9 +7767,19 @@ theorem Rinst.runCore_worldFrame (pc : Nat) (sevm : Sevm) (devm : Devm)
     split
     · exact liftMachExecution_worldFrame h
     · exact h
+  case shl | shr | sar =>
+    split
+    · exact liftMachExecution_worldFrame h
+    · exact h
+  case chainid | basefee | blobbasefee =>
+    split
+    · exact liftMachExecution_worldFrame h
+    · exact h
   case selfbalance =>
-    exact Except.WorldFrameOn.bind (liftMachExecution_worldFrame h)
-      fun d hd => liftMachExecution_worldFrame (Devm.balReadAccount_worldFrame hd)
+    split
+    · exact Except.WorldFrameOn.bind (liftMachExecution_worldFrame h)
+        fun d hd => liftMachExecution_worldFrame (Devm.balReadAccount_worldFrame hd)
+    · exact h
   case calldataload =>
     refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) fun a ha => ?_
     exact Except.WorldFrameOn.bind (liftMachExecution_worldFrame ha)
@@ -7636,12 +7790,20 @@ theorem Rinst.runCore_worldFrame (pc : Nat) (sevm : Sevm) (devm : Devm)
     refine Except.WorldFrameOn.bind (liftMach_worldFrameOn hb) fun c hc => ?_
     exact Except.WorldFrameOn.bind (liftMachExecution_worldFrame hc)
       fun d hd => hd.keep rfl rfl rfl
-  case extcodesize | extcodehash =>
+  case extcodesize =>
     refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) fun a ha => ?_
     split <;> (try split) <;>
       exact Except.WorldFrameOn.bind
         (liftMachExecution_worldFrame (ha.keep rfl rfl rfl))
         fun d hd => liftMachExecution_worldFrame (Devm.balReadAccount_worldFrame hd)
+  case extcodehash =>
+    split
+    · refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) fun a ha => ?_
+      split <;> (try split) <;>
+        exact Except.WorldFrameOn.bind
+          (liftMachExecution_worldFrame (ha.keep rfl rfl rfl))
+          fun d hd => liftMachExecution_worldFrame (Devm.balReadAccount_worldFrame hd)
+    · exact h
   case extcodecopy =>
     refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) fun a ha => ?_
     refine Except.WorldFrameOn.bind (liftMach_worldFrameOn ha) fun b hb => ?_
@@ -7661,10 +7823,16 @@ theorem Rinst.runCore_worldFrame (pc : Nat) (sevm : Sevm) (devm : Devm)
         (Except.worldFrameOn_error (P := fun _ => True) hd)
         fun _ _ => hd.keep rfl rfl rfl
     · exact hd.keep rfl rfl rfl
-  case blockhash | blobhash =>
+  case blockhash =>
     refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) fun a ha => ?_
     exact Except.WorldFrameOn.bind (liftMachExecution_worldFrame ha)
       fun d hd => liftMachExecution_worldFrame hd
+  case blobhash =>
+    split
+    · refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) fun a ha => ?_
+      exact Except.WorldFrameOn.bind (liftMachExecution_worldFrame ha)
+        fun d hd => liftMachExecution_worldFrame hd
+    · exact h
   case pop =>
     exact Except.WorldFrameOn.bind
       (Except.WorldFrameOn.map (liftMach_worldFrameOn h) fun _ ha => ha)
@@ -7681,8 +7849,10 @@ theorem Rinst.runCore_worldFrame (pc : Nat) (sevm : Sevm) (devm : Devm)
         (liftMachExecution_worldFrame (ha.keep rfl rfl rfl))
         fun d hd => liftMachExecution_worldFrame (Devm.balReadStorage_worldFrame hd)
   case tload =>
-    refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) fun a ha => ?_
-    exact liftMachExecution_worldFrame ha
+    split
+    · refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) fun a ha => ?_
+      exact liftMachExecution_worldFrame ha
+    · exact h
   case gas =>
     exact Except.WorldFrameOn.bind (liftMachExecution_worldFrame h)
       fun d hd => liftMachExecution_worldFrame hd
@@ -7781,16 +7951,24 @@ theorem Rinst.runCore_canonical (pc : Nat) {devm : Devm} (sevm : Sevm)
   · subst ht
     simp only [Rinst.runCore]
     split
-    · refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
-      refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
-      refine Except.CanonicalOn.bind (liftMachExecution_canonical hb) fun d hd => ?_
-      refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
-      exact Devm.Canonical.setTransVal hd _ _ _
-    · refine Except.CanonicalOn.bind (assertDynamic_canonicalOn h) fun _ _ => ?_
-      refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
-      refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
-      refine Except.CanonicalOn.bind (liftMachExecution_canonical hb) fun d hd => ?_
-      exact Devm.Canonical.setTransVal hd _ _ _
+    · -- Gate on: the two metering shapes below, as before.
+      split
+      · refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+        refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+        refine Except.CanonicalOn.bind (liftMachExecution_canonical hb)
+          fun d hd => ?_
+        refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd)
+          fun _ _ => ?_
+        exact Devm.Canonical.setTransVal hd _ _ _
+      · refine Except.CanonicalOn.bind (assertDynamic_canonicalOn h)
+          fun _ _ => ?_
+        refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
+        refine Except.CanonicalOn.bind (liftMach_canonicalOn ha) fun b hb => ?_
+        refine Except.CanonicalOn.bind (liftMachExecution_canonical hb)
+          fun d hd => ?_
+        exact Devm.Canonical.setTransVal hd _ _ _
+    · -- Gate off: the undefined-opcode error keeps the machine.
+      exact h
   exact (Rinst.runCore_worldFrame pc sevm devm r hs ht).canonical h
 
 theorem Rinst.run_canonical {evm : Evm} (h : evm.dyna.Canonical) (r : Rinst) :

@@ -44,10 +44,12 @@ def execution (env : Sevm) (base : Devm) (a b : UInt8) :
   apply SymbolicPush.prepend [a] (by simp) (first a b)
   · simp [SymbolicPush.cost, initial, Devm.gasLeft, Devm.setMach, gVerylow]
   · simp [initial, Devm.stack, Devm.setMach]
+  · exact Or.inl (by simp)
   apply SymbolicPush.prepend [b] (by simp) (second a b)
   · simp [SymbolicPush.cost, SymbolicPush.post, initial, Devm.gasLeft,
       Devm.setMach, gVerylow]
   · simp [SymbolicPush.post, initial, Devm.stack, Devm.setMach]
+  · exact Or.inl (by simp)
   exact .halt (Jaune.Evm.step_last (devm := finalState base a b) (l := .stop) (last a b))
 
 theorem final_stack (base : Devm) (a b : UInt8) :

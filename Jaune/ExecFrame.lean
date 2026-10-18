@@ -363,7 +363,7 @@ lemma Ninst.step_cont_pc {evm : Evm} {n : Ninst} {pc' : Nat} {devm' : Devm}
     split at h
     · exact (Step.ofExecution_cont h).1
     · cases h
-  · exact (Step.ofExecution_cont h).1
+  · split at h <;> exact (Step.ofExecution_cont h).1
   · exact (Step.ofExecution_cont h).1
   · exact (Step.ofExecution_cont h).1
   · exact (Step.ofExecution_cont h).1
@@ -378,7 +378,7 @@ lemma Ninst.step_spawn_pc {evm : Evm} {n : Ninst}
     split at h
     · cases Step.ofExecution_ne_spawn h
     · cases h; rfl
-  · cases Step.ofExecution_ne_spawn h
+  · split at h <;> cases Step.ofExecution_ne_spawn h
   · cases Step.ofExecution_ne_spawn h
   · cases Step.ofExecution_ne_spawn h
   · cases Step.ofExecution_ne_spawn h
@@ -392,7 +392,7 @@ lemma Ninst.step_ne_halt_ok {evm : Evm} {n : Ninst} {devm' : Devm} :
     split
     · exact Step.ofExecution_ne_halt_ok
     · simp
-  · exact Step.ofExecution_ne_halt_ok
+  · split <;> exact Step.ofExecution_ne_halt_ok
   · exact Step.ofExecution_ne_halt_ok
   · exact Step.ofExecution_ne_halt_ok
   · exact Step.ofExecution_ne_halt_ok
@@ -404,9 +404,13 @@ lemma Ninst.step_reg {evm : Evm} {r : Rinst} :
 
 lemma Ninst.step_push {evm : Evm} {xs : Bytes} {le : xs.length ≤ 32} :
     Ninst.step evm (.push xs le) =
-      Step.ofExecution (evm.pc + xs.length + 1)
-        (do let d ← chargeGas (if xs = [] then gBase else gVerylow) evm.dyna
-            d.push xs.toB256) := rfl
+      if xs = [] && !evm.sta.benvStat.rules.op.push0 then
+        Step.ofExecution (evm.pc + xs.length + 1)
+          (.error ⟨.halt (.invalidOpcode .none), evm.dyna⟩)
+      else
+        Step.ofExecution (evm.pc + xs.length + 1)
+          (do let d ← chargeGas (if xs = [] then gBase else gVerylow) evm.dyna
+              d.push xs.toB256) := rfl
 
 lemma Ninst.step_exec {evm : Evm} {x : Xinst} :
     Ninst.step evm (.exec x) =
@@ -698,7 +702,8 @@ lemma Ninst.step_spawn_inv {evm : Evm} {n : Ninst}
   rcases n with r | x | ⟨xs, hxs⟩ | a | a | a
   · rw [Ninst.step_reg] at h; cases Step.ofExecution_ne_spawn h
   · rw [Ninst.step_exec] at h; exact ⟨x, rfl, XStep.toStep_spawn h⟩
-  · rw [Ninst.step_push] at h; cases Step.ofExecution_ne_spawn h
+  · rw [Ninst.step_push] at h
+    split at h <;> cases Step.ofExecution_ne_spawn h
   · unfold Ninst.step at h; simp only [] at h; cases Step.ofExecution_ne_spawn h
   · unfold Ninst.step at h; simp only [] at h; cases Step.ofExecution_ne_spawn h
   · unfold Ninst.step at h; simp only [] at h; cases Step.ofExecution_ne_spawn h
@@ -919,7 +924,7 @@ lemma Evm.step_spawn_inv {pc : Nat} {sevm : Sevm} {devm : Devm}
       split at hs
       · cases Step.ofExecution_ne_spawn hs
       · cases hs; rfl
-    · cases Step.ofExecution_ne_spawn hs
+    · split at hs <;> cases Step.ofExecution_ne_spawn hs
     · cases Step.ofExecution_ne_spawn hs
     · cases Step.ofExecution_ne_spawn hs
     · cases Step.ofExecution_ne_spawn hs
