@@ -329,6 +329,10 @@ def ofBlockValidationError : BlockValidationError → Option FixtureException
   | .baseFeePerGas _ => some blockInvalidBaseFeePerGas
   | .difficultyOverParis _ => some blockImportImpossibleDifficultyOverParis
   | .ommersOverParis _ => some blockImportImpossibleUnclesOverParis
+  -- Pre-merge consensus (U7): no identity in the installed fixture
+  -- vocabulary, so both fail closed, as `.headerNonce` does.
+  | .invalidDifficulty _ => none
+  | .invalidOmmers _ => none
   | .extraDataTooBig _ => some blockExtraDataTooBig
   | .unknownParent _ => some blockUnknownParent
   | .unknownParentZero _ => some blockUnknownParentZero
@@ -558,8 +562,9 @@ def fixtureInventory : List String :=
 ----------------- CONSTRUCTOR-CLASSIFICATION CHECKS ------------------
 
 -- Totality of the deliberate assignment: every decode and transaction reason
--- has an identity; exactly two block reasons -- the header nonce, and the
--- fork-dependent header-field presence rule -- are knowingly unmapped; the
+-- has an identity; exactly four block reasons -- the header nonce, the
+-- fork-dependent header-field presence rule, and the two pre-merge reasons
+-- (difficulty, ommers) -- are knowingly unmapped; the
 -- four EIP-7928 reasons each have their own; and of the cryptographic reasons
 -- only the malformed signature classifies.
 --
@@ -572,7 +577,9 @@ def fixtureInventory : List String :=
 #guard DecodeError.all.all (fun e => (ofDecodeError e).isSome)
 #guard TxValidationError.all.all (fun e => (ofTxValidationError e).isSome)
 #guard (BlockValidationError.all.filter
-  (fun e => (ofBlockValidationError e).isNone)).length = 2
+  (fun e => (ofBlockValidationError e).isNone)).length = 4
+#guard (ofBlockValidationError (.invalidDifficulty .none)).isNone
+#guard (ofBlockValidationError (.invalidOmmers .none)).isNone
 #guard (ofBlockValidationError (.headerNonce .none)).isNone
 #guard (ofBlockValidationError (.headerNonce (.text "detail"))).isNone
 #guard (ofBlockValidationError (.headerFieldPresence .none)).isNone

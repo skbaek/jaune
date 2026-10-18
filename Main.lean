@@ -140,6 +140,14 @@ def refineBlockAccessListRejection (blockJson : Lean.Json) (blockRlp : Bytes) :
              computed block access list hash = {computed}")))
   | rejection => pure rejection
 
+/-- Read an optional fixture field: `none` when absent, a read failure when
+present but malformed. -/
+def Lean.Json.findIo? {α : Type} (json : Lean.Json) (key : String)
+    (read : Lean.Json → IO α) : IO (Option α) :=
+  match json.find? key with
+  | none => pure none
+  | some v => some <$> read v
+
 def Lean.Json.toHeader (json : Lean.Json) : IO Header := do
   let parentHash ← json.find "parentHash" >>= Lean.Json.toIoB256
   let ommersHash ← json.find "uncleHash" >>= Lean.Json.toIoB256
@@ -156,11 +164,17 @@ def Lean.Json.toHeader (json : Lean.Json) : IO Header := do
   let extraData ← json.find "extraData" >>= Lean.Json.toIoBytes
   let prevRandao ← json.find "mixHash" >>= Lean.Json.toIoB256
   let nonce ← json.find "nonce" >>= Lean.Json.toIoB64
-  let baseFeePerGas ← (json.find "baseFeePerGas" >>= Lean.Json.toIoBytes) <&> Bytes.toNat
-  let withdrawalsRoot ← json.find "withdrawalsRoot" >>= Lean.Json.toIoB256
-  let blobGasUsed ← (json.find "blobGasUsed" >>= Lean.Json.toIoBytes) <&> Bytes.toNat
-  let excessBlobGas ← (json.find "excessBlobGas" >>= Lean.Json.toIoBytes) <&> Bytes.toNat
-  let parentBeaconBlockRoot ← json.find "parentBeaconBlockRoot" >>= Lean.Json.toIoB256
+  -- The fork-dependent fields: absent in a fixture whose fork does not define
+  -- them, present otherwise, and read exactly when present.
+  let baseFeePerGas ←
+    json.findIo? "baseFeePerGas" fun v => Bytes.toNat <$> v.toIoBytes
+  let withdrawalsRoot ← json.findIo? "withdrawalsRoot" Lean.Json.toIoB256
+  let blobGasUsed ←
+    json.findIo? "blobGasUsed" fun v => Bytes.toNat <$> v.toIoBytes
+  let excessBlobGas ←
+    json.findIo? "excessBlobGas" fun v => Bytes.toNat <$> v.toIoBytes
+  let parentBeaconBlockRoot ←
+    json.findIo? "parentBeaconBlockRoot" Lean.Json.toIoB256
   let requestsHash := (json.find? "requestsHash" >>= Lean.Json.toB256?)
   -- The two Amsterdam header fields, read exactly as `requestsHash` is: absent
   -- in a fixture whose fork does not define them, present otherwise. Reading

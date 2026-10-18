@@ -145,6 +145,10 @@ inductive BlockValidationError : Type
   | baseFeePerGas (detail : ErrorDetail)
   | difficultyOverParis (detail : ErrorDetail)
   | ommersOverParis (detail : ErrorDetail)
+  /-- Before Paris: a difficulty other than `calculateBlockDifficulty`'s. -/
+  | invalidDifficulty (detail : ErrorDetail)
+  /-- Before Paris: the block's ommers break a rule of `validateOmmers`. -/
+  | invalidOmmers (detail : ErrorDetail)
   | extraDataTooBig (detail : ErrorDetail)
   | unknownParent (detail : ErrorDetail)
   | unknownParentZero (detail : ErrorDetail)
@@ -204,6 +208,8 @@ def BlockValidationError.tag : BlockValidationError → String
   | .baseFeePerGas _ => baseFeePerGasTag
   | .difficultyOverParis _ => difficultyOverParisTag
   | .ommersOverParis _ => ommersOverParisTag
+  | .invalidDifficulty _ => invalidDifficultyTag
+  | .invalidOmmers _ => invalidOmmersTag
   | .extraDataTooBig _ => extraDataTooBigTag
   | .unknownParent _ => unknownParentTag
   | .unknownParentZero _ => unknownParentZeroTag
@@ -231,6 +237,7 @@ def BlockValidationError.detail : BlockValidationError → ErrorDetail
   | .gasLimitTooBig d | .gasLimitAdjustment d | .gasUsedOverflow d
   | .gasUsedMismatch d | .timestampOlderThanParent d | .blockNumber d
   | .baseFeePerGas d | .difficultyOverParis d | .ommersOverParis d
+  | .invalidDifficulty d | .invalidOmmers d
   | .extraDataTooBig d | .unknownParent d | .unknownParentZero d
   | .stateRoot d | .transactionsRoot d | .receiptsRoot d | .logBloom d
   | .withdrawalsRoot d | .headerNonce d | .excessBlobGas d
@@ -250,7 +257,8 @@ def BlockValidationError.all : List BlockValidationError :=
   [ .gasLimitTooBig .none, .gasLimitAdjustment .none, .gasUsedOverflow .none,
     .gasUsedMismatch .none, .timestampOlderThanParent .none,
     .blockNumber .none, .baseFeePerGas .none, .difficultyOverParis .none,
-    .ommersOverParis .none, .extraDataTooBig .none, .unknownParent .none,
+    .ommersOverParis .none, .invalidDifficulty .none, .invalidOmmers .none,
+    .extraDataTooBig .none, .unknownParent .none,
     .unknownParentZero .none, .stateRoot .none, .transactionsRoot .none,
     .receiptsRoot .none, .logBloom .none, .withdrawalsRoot .none,
     .headerNonce .none, .excessBlobGas .none, .blobGasUsed .none,
@@ -444,10 +452,10 @@ theorem TransitionError.render_split (e : TransitionError) :
 #guard TxValidationError.render (.intrinsicGasTooLow (.text "needs 21000, has 20999"))
   = "IntrinsicGasTooLowError : needs 21000, has 20999"
 
-#guard BlockValidationError.all.length = 30
-#guard BlockValidationError.all.eraseDups.length = 30
+#guard BlockValidationError.all.length = 32
+#guard BlockValidationError.all.eraseDups.length = 32
 #guard BlockValidationError.all.map BlockValidationError.tag = blockExceptionTags
-#guard (BlockValidationError.all.map BlockValidationError.tag).eraseDups.length = 30
+#guard (BlockValidationError.all.map BlockValidationError.tag).eraseDups.length = 32
 #guard BlockValidationError.render (.stateRoot .none) = "StateRootError"
 #guard BlockValidationError.render (.blockRlpSizeExceeded (.text "1 byte over the limit"))
   = "BlockRlpSizeExceededError : 1 byte over the limit"
@@ -2941,58 +2949,135 @@ def checkBlockAccessListGasLimit (rules : ForkRules) (blockGasLimit : Nat)
            gasLimit / itemCost = {blockGasLimit / r.itemCost}"
     else .ok ()
 
+/-- EIP-4788's pre-execution beacon-roots call (Cancun on), with its
+block-level access-list incorporation at index 0; under rules without
+`sys.beaconRoots` the identity: the state as given and an empty builder. -/
+def beaconRootsCall (rules : ForkRules) (benv : Benv) :
+    Except TransitionError (State × BalBuilder) :=
+  if rules.sys.beaconRoots then do
+    let ⟨st, out⟩ ←
+      Except.mapError TransitionError.vm <|
+        processUncheckedSystemTransaction benv
+          beaconRootsAddress
+          benv.stat.parentBeaconBlockRoot.toBytes
+    .ok ⟨st, BalBuilder.incorporateSystem {} rules 0 benv.state st
+      (beaconRootsAddress :: out.accountReads.toList) out.storageReads.toList
+      out.storageWrites.toList⟩
+  else .ok ⟨benv.state, {}⟩
+
+/-- EIP-2935's pre-execution history-storage call (Prague on), incorporated at
+index 0; under rules without `sys.historyStorage` the identity. -/
+def historyStorageCall (rules : ForkRules) (benv : Benv) (bal : BalBuilder) :
+    Except TransitionError (State × BalBuilder) :=
+  if rules.sys.historyStorage then do
+    let lastHash ←
+       benv.stat.blockHashes.getLast?.toExcept
+         (TransitionError.internal (.invariant (.text "block hashes is empty")))
+    let ⟨st, out⟩ ←
+      Except.mapError TransitionError.vm <|
+        processUncheckedSystemTransaction benv
+          historyStorageAddress
+          lastHash.toBytes
+    .ok ⟨st, bal.incorporateSystem rules 0 benv.state st
+      (historyStorageAddress :: out.accountReads.toList) out.storageReads.toList
+      out.storageWrites.toList⟩
+  else .ok ⟨benv.state, bal⟩
+
+/-- EIP-4895's withdrawals (Shanghai on), gated by `header.withdrawalsRoot`:
+the credits, the withdrawals trie, and -- EIP-7928 -- one incorporation at
+`n + 1`, every recipient read by `create_ether` whatever the amount. Under
+rules without the field the identity. -/
+def withdrawalsPass (rules : ForkRules) (benv : Benv) (bout : BlockOutput)
+    (wds : List Withdrawal) : State × BlockOutput :=
+  if rules.header.withdrawalsRoot then
+    let ⟨stWds, boutWds⟩ := processWithdrawals benv bout wds
+    let balWds := boutWds.bal.incorporateSystem rules
+      (bout.receiptKeys.length + 1) benv.state stWds (wds.map Withdrawal.recipient) [] []
+    ⟨stWds, {boutWds with bal := balWds}⟩
+  else ⟨benv.state, bout⟩
+
+/-- EIP-7685's request pass (Prague on), deposit-log parsing included, gated by
+`header.requestsHash`; under rules without the field the identity. -/
+def requestsPass (rules : ForkRules) (benv : Benv) (bout : BlockOutput) :
+    Except TransitionError (State × BlockOutput) :=
+  if rules.header.requestsHash then processGeneralPurposeRequests benv bout
+  else .ok ⟨benv.state, bout⟩
+
+/-- `pay_rewards`, Byzantium through Gray Glacier: the block reward plus
+`reward / 32` per ommer to the block's coinbase, then to each ommer's coinbase
+`(8 - age) * reward / 8`, where `age = number - ommer.number`. Written
+`(8 + ommer.number - number)`, which is the same number for every age
+`validateOmmers` admits (1 to 6). Each credit is `create_ether`, which is
+`State.addBal`. The reward is minted: no account is debited. -/
+def payRewards (pow : PowRules) (number : Nat) (coinbase : Adr)
+    (ommers : List Header) (st : State) : State :=
+  let minerReward := pow.blockReward + ommers.length * (pow.blockReward / 32)
+  ommers.foldl
+    (fun acc ommer =>
+      acc.addBal ommer.coinbase ((8 + ommer.number - number) * pow.blockReward / 8).toB256)
+    (st.addBal coinbase minerReward.toB256)
+
+/-- `apply_body`, every fork from Byzantium on, with each fork-dependent step
+gated by rule data and the identity where its rule is off: the beacon-roots
+call (`sys.beaconRoots`), the history-storage call (`sys.historyStorage`), the
+withdrawals (`header.withdrawalsRoot`), the request pass with its deposit-log
+parsing (`header.requestsHash`), and the proof-of-work rewards
+(`pow = some _`), paid last. `ommers` is the block's ommer list, the EELS
+pre-merge signature; after Paris `checkBlockOmmers` has already required it
+empty and nothing reads it.
+
+The rewards are not incorporated into a block-level access list: no fork
+carries both `pow = some _` and `bal = some _`. -/
 def applyBody
-  (benv : Benv) (txs : List (Bytes ⊕ Tx)) (wds : List Withdrawal) :
+  (benv : Benv) (txs : List (Bytes ⊕ Tx)) (ommers : List Header)
+  (wds : List Withdrawal) :
   Except TransitionError (State × BlockOutput) := do
-  let ⟨stBeacon, outBeacon⟩ ←
-    Except.mapError TransitionError.vm <|
-      processUncheckedSystemTransaction benv
-        beaconRootsAddress
-        benv.stat.parentBeaconBlockRoot.toBytes
+  let rules := benv.stat.rules
   -- EIP-7928: the two pre-execution system calls incorporate at index 0.
-  let bal := BalBuilder.incorporateSystem {} benv.stat.rules 0 benv.state stBeacon
-    (beaconRootsAddress :: outBeacon.accountReads.toList) outBeacon.storageReads.toList
-    outBeacon.storageWrites.toList
+  let ⟨stBeacon, bal⟩ ← beaconRootsCall rules benv
   let benvBeacon : Benv := benv.withState stBeacon
-  let lastHash ←
-     benvBeacon.stat.blockHashes.getLast?.toExcept
-       (TransitionError.internal (.invariant (.text "block hashes is empty")))
-  let ⟨stHistory, outHistory⟩ ←
-    Except.mapError TransitionError.vm <|
-      processUncheckedSystemTransaction benvBeacon
-        historyStorageAddress
-        lastHash.toBytes
-  let bal := bal.incorporateSystem benv.stat.rules 0 benvBeacon.state stHistory
-    (historyStorageAddress :: outHistory.accountReads.toList) outHistory.storageReads.toList
-    outHistory.storageWrites.toList
+  let ⟨stHistory, bal⟩ ← historyStorageCall rules benvBeacon bal
   let benvHistory := benvBeacon.withState stHistory
   let ⟨benvTxs, boutTxs⟩ ←
     applyTransactions (← txs.mapM (decodeTx benvHistory.stat.rules)).putIndex benvHistory {BlockOutput.init with bal := bal}
-  let ⟨stWds, boutWds⟩ :=
-    processWithdrawals benvTxs boutTxs wds
-  -- EIP-7928: the withdrawals batch is one incorporation at `n + 1`; every
-  -- recipient is read by `create_ether` whatever the amount.
-  let balWds := boutWds.bal.incorporateSystem benv.stat.rules
-    (boutTxs.receiptKeys.length + 1) benvTxs.state stWds (wds.map Withdrawal.recipient) [] []
-  let boutWds := {boutWds with bal := balWds}
-  let ⟨stReq, boutReq⟩ ← processGeneralPurposeRequests (benvTxs.withState stWds) boutWds
+  let ⟨stWds, boutWds⟩ := withdrawalsPass rules benvTxs boutTxs wds
+  let ⟨stReq, boutReq⟩ ← requestsPass rules (benvTxs.withState stWds) boutWds
+  let stRewards := match rules.pow with
+    | none => stReq
+    | some pow => payRewards pow benv.stat.number benv.stat.coinbase ommers stReq
   -- `build_block_access_list`, then the item rule -- before any header check.
-  let list := match benv.stat.rules.bal with
+  let list := match rules.bal with
     | none => []
     | some _ => boutReq.bal.build
-  checkBlockAccessListGasLimit benv.stat.rules benv.stat.blockGasLimit list
-  .ok ⟨stReq, {boutReq with blockAccessList := list}⟩
+  checkBlockAccessListGasLimit rules benv.stat.blockGasLimit list
+  .ok ⟨stRewards, {boutReq with blockAccessList := list}⟩
+
+theorem withdrawalsPass_legacyGasAccounting {rules : ForkRules} {benv : Benv}
+    {bout : BlockOutput} (hb : bout.LegacyGasAccounting) (wds : List Withdrawal) :
+    (withdrawalsPass rules benv bout wds).2.LegacyGasAccounting := by
+  unfold withdrawalsPass
+  split
+  · exact processWithdrawals_legacyGasAccounting (benv := benv) hb wds
+  · exact hb
+
+theorem requestsPass_legacyGasAccounting {rules : ForkRules} {benv : Benv}
+    {bout : BlockOutput} (hb : bout.LegacyGasAccounting) {p}
+    (hp : requestsPass rules benv bout = .ok p) : p.2.LegacyGasAccounting := by
+  unfold requestsPass at hp
+  split at hp
+  · exact processGeneralPurposeRequests_legacyGasAccounting hb hp
+  · cases hp; exact hb
 
 /-- A successful legacy block body starts from `BlockOutput.init`, preserves
-the relation through every transaction, and keeps it through withdrawals and
-the request pass. -/
+the relation through every transaction, and keeps it through withdrawals,
+the request pass and the rewards, each of which is the identity on the gas
+counters whether its rule is on or off. -/
 theorem applyBody_legacyGasAccounting {benv : Benv}
     (hnone : benv.stat.rules.stateGas = none)
-    {txs : List (Bytes ⊕ Tx)} {wds : List Withdrawal} {p}
-    (hp : applyBody benv txs wds = .ok p) : p.2.LegacyGasAccounting := by
+    {txs : List (Bytes ⊕ Tx)} {ommers : List Header} {wds : List Withdrawal} {p}
+    (hp : applyBody benv txs ommers wds = .ok p) : p.2.LegacyGasAccounting := by
   unfold applyBody at hp
   obtain ⟨q1, _, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨q2, _, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨txsD, _, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
@@ -3004,21 +3089,16 @@ theorem applyBody_legacyGasAccounting {benv : Benv}
       (by simp [BlockOutput.LegacyGasAccounting, BlockOutput.init]) hq
   obtain ⟨benvTxs, boutTxs⟩ := q
   dsimp only at hp hqLegacy
-  rcases hw : processWithdrawals benvTxs boutTxs wds with ⟨stWds, boutWds⟩
-  simp only [hw] at hp
-  have hwLegacy := processWithdrawals_legacyGasAccounting
-    (benv := benvTxs) hqLegacy wds
-  simp only [hw] at hwLegacy
-  -- The withdrawals' access-list incorporation, the request pass, the item
-  -- rule and the built list touch no gas counter.
+  have hwLegacy := withdrawalsPass_legacyGasAccounting
+    (rules := benv.stat.rules) (benv := benvTxs) hqLegacy wds
+  rcases hw : withdrawalsPass benv.stat.rules benvTxs boutTxs wds with ⟨stWds, boutWds⟩
+  simp only [hw] at hp hwLegacy
+  -- The request pass, the rewards, the item rule and the built list touch no
+  -- gas counter.
   obtain ⟨q', hq', hp⟩ := Except.bind_eq_ok hp
   obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
   cases hp
-  let balWds := boutWds.bal.incorporateSystem benv.stat.rules
-    (boutTxs.receiptKeys.length + 1) benvTxs.state stWds (wds.map Withdrawal.recipient) [] []
-  have hreq := processGeneralPurposeRequests_legacyGasAccounting
-    (bout := {boutWds with bal := balWds}) hwLegacy hq'
-  exact hreq
+  exact requestsPass_legacyGasAccounting (p := q') hwLegacy hq'
 
 def getLast256BlockHashes (chain : BlockChain) : List B256 :=
   match chain.blocks.reverse.take 255 with
@@ -3409,8 +3489,133 @@ def calculateBaseFeePerGas
         targetFeeGasDelta / baseFeeMaxChangeDenominator
       .ok <| parentBaseFeePerGas - baseFeePerGasDelta
 
+/-- One header field's presence against the rule that defines it, in both
+directions; see `validateHeader`. -/
+def checkHeaderFieldPresence (name : String) (present defined : Bool) :
+    Except TransitionError Unit :=
+  if present ≠ defined then
+    .error <| .block <| .headerFieldPresence <| .text
+      s!"{name} is {if present then "present" else "absent"}, \
+         but these rules {if defined then "require" else "do not define"} it"
+  else .ok ()
+
+/-- The pre-Prague fork-dependent header fields against `rules.header`, in
+both directions: London's base fee, Shanghai's withdrawals root, and Cancun's
+blob-gas pair and parent beacon block root. In EELS a header of the wrong
+shape fails to decode as the fork's `Header` class at all, before any rule
+reads a field, so these run first. The newer fields keep their place at the
+end of `validateHeader`. -/
+def checkHeaderShape (rules : ForkRules) (header : Header) :
+    Except TransitionError Unit := do
+  checkHeaderFieldPresence "baseFeePerGas"
+    header.baseFeePerGas.isSome rules.header.baseFee
+  checkHeaderFieldPresence "withdrawalsRoot"
+    header.withdrawalsRoot.isSome rules.header.withdrawalsRoot
+  checkHeaderFieldPresence "blobGasUsed"
+    header.blobGasUsed.isSome rules.header.blobGas
+  checkHeaderFieldPresence "excessBlobGas"
+    header.excessBlobGas.isSome rules.header.blobGas
+  checkHeaderFieldPresence "parentBeaconBlockRoot"
+    header.parentBeaconBlockRoot.isSome rules.header.parentBeaconBlockRoot
+
+/-- The base fee a child header must carry, or `none` for a child whose rules
+define no base fee.
+
+Three cases, keyed on header shape. A child without the field runs only the
+gas-limit check (EELS Berlin `validate_header`). A child with the field whose
+parent lacks it is London's first block: the base fee is `INITIAL_BASE_FEE` and
+no gas-limit check runs (EELS `london/fork.py`, keyed there on
+`FORK_CRITERIA`; on every valid schedule the parent lacks the field exactly at
+that block). Otherwise the EIP-1559 update rule, which includes the gas-limit
+check. -/
+def expectedBaseFee (header parent : Header) :
+    Except BlockValidationError (Option Nat) :=
+  match header.baseFeePerGas, parent.baseFeePerGas with
+  | none, _ => do
+    checkGasLimit header.gasLimit parent.gasLimit
+    .ok none
+  | some _, none => .ok (some initialBaseFee)
+  | some _, some parentBaseFee =>
+    some <$> calculateBaseFeePerGas
+      header.gasLimit parent.gasLimit parent.gasUsed parentBaseFee
+
+/-- `MINIMUM_DIFFICULTY`, Byzantium through Gray Glacier. -/
+def minimumDifficulty : Nat := 131072
+
+/-- `MAX_OMMER_DEPTH`, Byzantium through Gray Glacier. -/
+def maxOmmerDepth : Nat := 6
+
+/-- `calculate_block_difficulty`, Byzantium through Gray Glacier.
+
+The function body is byte-identical in every EELS fork module from Byzantium
+to Gray Glacier; only the module constant `BOMB_DELAY_BLOCKS` differs, which
+is why it is a parameter here and `PowRules.bombDelay` in the rule data. Both
+divisions are Python floor divisions; `Int.fdiv` is that division (the
+numerators can be negative only in the bomb term, and the divisor is
+positive). The time delta is a natural number because `validateHeader` has
+already rejected a timestamp no later than the parent's. -/
+def calculateBlockDifficulty (bombDelay : Nat)
+    (number timestamp parentTimestamp parentDifficulty : Nat)
+    (parentHasOmmers : Bool) : Nat :=
+  let adjust : Int :=
+    max ((if parentHasOmmers then 2 else 1) - ((timestamp - parentTimestamp) / 9 : Nat))
+      (-99)
+  let offset : Int := ((parentDifficulty / 2048 : Nat) : Int) * adjust
+  let difficulty : Int := (parentDifficulty : Int) + offset
+  let bombPeriods : Int := Int.fdiv ((number : Int) - bombDelay) 100000 - 2
+  let difficulty : Int :=
+    if 0 ≤ bombPeriods then difficulty + 2 ^ bombPeriods.toNat else difficulty
+  (max difficulty (minimumDifficulty : Int)).toNat
+
+/-- The difficulty a child header must carry under proof-of-work rules: the
+parent's difficulty and timestamp, and whether the parent carried ommers. -/
+def expectedDifficulty (pow : PowRules) (header parent : Header) : Nat :=
+  calculateBlockDifficulty pow.bombDelay header.number header.timestamp
+    parent.timestamp parent.difficulty (parent.ommersHash != emptyOmmerHash)
+
+/-- The consensus-specific header rules, after every rule the two regimes
+share.
+
+Under proof of stake (`rules.pow = none`, Paris on) the three EIP-3675
+constants: difficulty 0, nonce 0 and the empty-list ommers hash. Under proof
+of work (`rules.pow = some _`) the difficulty must be
+`calculateBlockDifficulty`'s; the ommers hash is compared with the ommer list
+by `validateOmmers`, which sees the body.
+
+**The proof-of-work seal is not checked.** EELS `validate_header` ends with
+`validate_proof_of_work`: ethash `hashimoto_light` over the header's
+`mixHash` (here `prevRandao`) and `nonce`, against a target derived from the
+difficulty. Jaune omits it, as a named boundary (the fixtures' `NoProof` seal
+engine): any `mixHash`/`nonce` pair is accepted, for blocks and for ommers.
+Nothing in execution reads either field before Paris, so the omission widens
+only the set of accepted headers -- every history Jaune accepts with a valid
+seal is accepted, and some with an invalid seal are accepted too. Recorded in
+`TRUSTED.md`. -/
+def checkConsensusFields (rules : ForkRules) (header parent : Header) :
+    Except TransitionError Unit := do
+  match rules.pow with
+  | none =>
+    if header.difficulty ≠ 0 then do
+      .error <| .block <| .difficultyOverParis <| .text
+        s!"difficulty = {header.difficulty} ≠ 0, \
+           which is impossible after Paris"
+    if header.nonce ≠ 0 then do
+      .error <| .block <| .headerNonce <| .text
+        s!"nonce = {header.nonce} ≠ 0, \
+           which is impossible after Paris"
+    if header.ommersHash ≠ emptyOmmerHash then do
+      .error <| .block <| .ommersOverParis <| .text
+        s!"ommers hash = {header.ommersHash} ≠ \
+           empty-list hash = {emptyOmmerHash}, which is impossible after Paris"
+  | some pow =>
+    if header.difficulty ≠ expectedDifficulty pow header parent then do
+      .error <| .block <| .invalidDifficulty <| .text
+        s!"difficulty = {header.difficulty} ≠ \
+           expected = {expectedDifficulty pow header parent}"
+
 def validateHeader (rules : ForkRules) (chain : BlockChain) (header : Header) :
   Except TransitionError Unit := do
+  checkHeaderShape rules header
   -- An empty snapshot names no parent to validate against. The runner can
   -- never supply one (a checked snapshot is nonempty by construction), so
   -- this is a caller-context invariant breach, typed internal and fail-closed
@@ -3435,14 +3640,13 @@ def validateHeader (rules : ForkRules) (chain : BlockChain) (header : Header) :
          block; this chain ends at {blockParentHash}"
   let expectedBaseFeePerGas ←
     Except.mapError TransitionError.block <|
-      calculateBaseFeePerGas
-        header.gasLimit
-        parent.header.gasLimit
-        parent.header.gasUsed
-        parent.header.baseFeePerGas
-  if header.excessBlobGas ≠ calculateExcessBlobGas rules.blob parent.header then do
+      expectedBaseFee header parent.header
+  -- Read only where the header carries the field; `checkHeaderShape` has
+  -- already tied its presence to the rules.
+  if header.excessBlobGas.any (· != calculateExcessBlobGas rules.blob parent.header)
+  then do
     .error <| .block <| .excessBlobGas <| .text
-      s!"excess blob gas = {header.excessBlobGas} ≠ \
+      s!"excess blob gas = {header.excessBlobGas.getD 0} ≠ \
          expected = {calculateExcessBlobGas rules.blob parent.header}"
   if header.gasUsed > header.gasLimit then do
     .error <| .block <| .gasUsedOverflow <| .text
@@ -3450,8 +3654,8 @@ def validateHeader (rules : ForkRules) (chain : BlockChain) (header : Header) :
          gas limit = {header.gasLimit}"
   if expectedBaseFeePerGas ≠ header.baseFeePerGas then do
     .error <| .block <| .baseFeePerGas <| .text
-      s!"base fee per gas = {header.baseFeePerGas} ≠ \
-         expected = {expectedBaseFeePerGas}"
+      s!"base fee per gas = {header.baseFeePerGas.getD 0} ≠ \
+         expected = {expectedBaseFeePerGas.getD 0}"
   if header.timestamp ≤ parent.header.timestamp then do
     .error <| .block <| .timestampOlderThanParent <| .text
       s!"timestamp = {header.timestamp} ≤ \
@@ -3464,18 +3668,9 @@ def validateHeader (rules : ForkRules) (chain : BlockChain) (header : Header) :
     .error <| .block <| .extraDataTooBig <| .text
       s!"extra data is {header.extraData.length} bytes, \
          exceeding the 32-byte maximum"
-  if header.difficulty ≠ 0 then do
-    .error <| .block <| .difficultyOverParis <| .text
-      s!"difficulty = {header.difficulty} ≠ 0, \
-         which is impossible after Paris"
-  if header.nonce ≠ 0 then do
-    .error <| .block <| .headerNonce <| .text
-      s!"nonce = {header.nonce} ≠ 0, \
-         which is impossible after Paris"
-  if header.ommersHash ≠ emptyOmmerHash then do
-    .error <| .block <| .ommersOverParis <| .text
-      s!"ommers hash = {header.ommersHash} ≠ \
-         empty-list hash = {emptyOmmerHash}, which is impossible after Paris"
+  -- Proof of stake's three constants, or proof of work's difficulty (the
+  -- seal is a named boundary; see `checkConsensusFields`).
+  checkConsensusFields rules header parent.header
   -- A header carries exactly the fork-dependent fields its rules define, in
   -- both directions. Absent-when-required and present-when-undefined are the
   -- same rule and the same reason: the wire form of a header is fixed by the
@@ -3499,7 +3694,7 @@ def validateHeader (rules : ForkRules) (chain : BlockChain) (header : Header) :
 
 def stateTransitionChecks (bout : BlockOutput) (header : Header)
     (transactionsRoot blockStateRoot receiptRoot : B256)
-    (blockLogsBloom : Bytes) (withdrawalsRoot requestsHash : B256) :
+    (blockLogsBloom : Bytes) (withdrawalsRoot : B256) (requestsHash : Option B256) :
     Except BlockValidationError Unit := do
   let totalBlockGasUsed := max bout.blockGasUsed bout.blockStateGasUsed
   if totalBlockGasUsed ≠ header.gasUsed then
@@ -3521,17 +3716,21 @@ def stateTransitionChecks (bout : BlockOutput) (header : Header)
   if blockLogsBloom ≠ header.bloom then
     .error <| .logBloom <| .text
       s!"computed logs bloom ≠ header logs bloom"
-  if withdrawalsRoot ≠ header.withdrawalsRoot then
+  -- Compared only where the header carries the field; `validateHeader` has
+  -- already tied its presence to the rules.
+  if header.withdrawalsRoot.any (· != withdrawalsRoot) then
     .error <| .withdrawalsRoot <| .text
       s!"computed withdrawals root = {withdrawalsRoot} ≠ \
-         header withdrawals root = {header.withdrawalsRoot}"
-  if bout.blobGasUsed ≠ header.blobGasUsed then
+         header withdrawals root = {header.withdrawalsRoot.getD 0}"
+  if header.blobGasUsed.any (· != bout.blobGasUsed) then
     .error <| .blobGasUsed <| .text
       s!"computed blob gas used = {bout.blobGasUsed} ≠ \
-         header blob gas used = {header.blobGasUsed}"
-  if some requestsHash ≠ header.requestsHash then
+         header blob gas used = {header.blobGasUsed.getD 0}"
+  -- `requestsHash` is `none` exactly under rules without the field (before
+  -- Prague), where the header must not carry one either.
+  if requestsHash ≠ header.requestsHash then
     .error <| .requestsHash <| .text
-      s!"computed requests hash = {requestsHash} ≠ \
+      s!"computed requests hash = {requestsHash.getD 0} ≠ \
          header requests hash = {header.requestsHash}"
 
 /-- EIP-7928: the header's `blockAccessListHash` against the computed list, the
@@ -3559,7 +3758,10 @@ def initBenvStat (fork : Fork) (chain : BlockChain) (header : Header) :
     blockHashes := getLast256BlockHashes chain,
     coinbase := header.coinbase,
     number := header.number,
-    baseFeePerGas := header.baseFeePerGas,
+    -- Absent before London and Cancun respectively, where nothing that reads
+    -- them is reachable: `BASEFEE`, `BLOBBASEFEE` and blob transactions are
+    -- gated off, and base fee 0 is EELS Berlin's fee rule exactly.
+    baseFeePerGas := header.baseFeePerGas.getD 0,
     time := header.timestamp.toB256,
     -- S8 0x44 (unit U5): before the merge there is no RANDAO, so `DIFFICULTY`
     -- reads the header's difficulty instead of `prevRandao`. The opcode keeps
@@ -3570,8 +3772,8 @@ def initBenvStat (fork : Fork) (chain : BlockChain) (header : Header) :
       match fork.ruleSet.pow with
       | some _ => Nat.toB256 header.difficulty
       | none => header.prevRandao,
-    excessBlobGas := header.excessBlobGas,
-    parentBeaconBlockRoot := header.parentBeaconBlockRoot,
+    excessBlobGas := header.excessBlobGas.getD 0,
+    parentBeaconBlockRoot := header.parentBeaconBlockRoot.getD 0,
     -- EIP-7843: absent before Amsterdam, where nothing reads it.
     slotNumber := header.slotNumber.getD 0
   }
@@ -3611,6 +3813,81 @@ def stateTransitionOmmersCheck (ommers : List Header) :
     .error <| .ommersOverParis <| .text
       s!"block body contains {ommers.length} ommer(s), \
          which is impossible after Paris"
+
+/-- The hash a header's `ommersHash` commits to: the keccak of the RLP list
+of the ommer headers. `emptyOmmerHash` is its value on the empty list. -/
+def ommersListHash (ommers : List Header) : B256 :=
+  (BLT.list (ommers.map Header.toBLT)).toBytes.keccak
+
+private def ommersFail (msg : String) : Except TransitionError Unit :=
+  .error <| .block <| .invalidOmmers <| .text msg
+
+/-- One ommer's own header, EELS `validate_ommers`'s first loop: its number
+lies strictly between 0 and the block's, and it is a valid header against its
+own parent -- the retained block numbered one below it -- under the block's
+rules, except the seal (`checkConsensusFields`). -/
+def validateOmmerHeader (rules : ForkRules) (chain : BlockChain)
+    (header ommer : Header) : Except TransitionError Unit := do
+  if ommer.number < 1 ∨ ommer.number ≥ header.number then
+    ommersFail s!"ommer number = {ommer.number} is not between 1 and \
+      block number = {header.number}"
+  let parent ← (chain.blocks.find? (·.header.number + 1 = ommer.number)).toExcept
+    (TransitionError.block <| .invalidOmmers <| .text
+      s!"ommer number = {ommer.number} has no retained parent")
+  match validateHeader rules { chain with blocks := [parent] } ommer with
+  | .ok () => .ok ()
+  | .error (.block e) => ommersFail s!"ommer header is invalid: {e.render}"
+  | .error e => .error e
+
+/-- `validate_ommers`, Byzantium through Gray Glacier, in EELS's order: the
+list against `header.ommersHash`; each ommer's own header; at most two; no
+duplicate; then for each ommer, that it is not the block itself, not one of
+the `maxOmmerDepth + 1` most recent canonical blocks, not already an ommer of
+one of them, between 1 and `maxOmmerDepth` blocks older than the block, a
+child of one of those recent canonical blocks, and not a sibling of the block
+(its parent is not the block's own parent). Every rule is vacuous on an empty
+list once the hash matches. -/
+def validateOmmers (rules : ForkRules) (chain : BlockChain) (header : Header)
+    (ommers : List Header) : Except TransitionError Unit := do
+  if ommersListHash ommers ≠ header.ommersHash then
+    ommersFail s!"ommers hash = {header.ommersHash} ≠ \
+      hash of the ommer list = {ommersListHash ommers}"
+  for ommer in ommers do
+    validateOmmerHeader rules chain header ommer
+  if ommers.length > 2 then
+    ommersFail s!"block body contains {ommers.length} ommers, more than 2"
+  let hashes := ommers.map Header.hash
+  if hashes.eraseDups.length ≠ hashes.length then
+    ommersFail "an ommer is listed twice"
+  let recent := (chain.blocks.reverse.take (maxOmmerDepth + 1)).map (·.header)
+  let recentHashes := recent.map Header.hash
+  let recentOmmerHashes :=
+    ((chain.blocks.reverse.take (maxOmmerDepth + 1)).flatMap (·.ommers)).map Header.hash
+  let blockHash := header.hash
+  for ommer in ommers do
+    let ommerHash := ommer.hash
+    if ommerHash = blockHash then
+      ommersFail s!"ommer {ommerHash} is the block itself"
+    if recentHashes.contains ommerHash then
+      ommersFail s!"ommer {ommerHash} is a recent canonical block"
+    if recentOmmerHashes.contains ommerHash then
+      ommersFail s!"ommer {ommerHash} is already an ommer of a recent block"
+    let age := header.number - ommer.number
+    if age < 1 ∨ age > maxOmmerDepth then
+      ommersFail s!"ommer {ommerHash} is {age} blocks old, \
+        outside 1 to {maxOmmerDepth}"
+    if ¬ recentHashes.contains ommer.parentHash then
+      ommersFail s!"ommer {ommerHash} has a parent outside the recent canonical blocks"
+    if ommer.parentHash = header.parentHash then
+      ommersFail s!"ommer {ommerHash} is a sibling of the block"
+
+/-- The block's ommers against its rules: after Paris the list must be empty
+(`stateTransitionOmmersCheck`, unchanged); before it, `validateOmmers`. -/
+def checkBlockOmmers (rules : ForkRules) (chain : BlockChain) (header : Header)
+    (ommers : List Header) : Except TransitionError Unit :=
+  match rules.pow with
+  | none => Except.mapError TransitionError.block (stateTransitionOmmersCheck ommers)
+  | some _ => validateOmmers rules chain header ommers
 
 def appendBlock (blks : List Block) (blk : Block) : List Block :=
   (blk :: blks.reverse.take 254).reverse
@@ -3702,15 +3979,16 @@ def stateTransitionE (f : Fork) (ch : BlockChain) (block : Block) :
   Except TransitionError BlockChain := do
   let rules := f.ruleSet
   validateHeader rules ch block.header
-  Except.mapError TransitionError.block (stateTransitionOmmersCheck block.ommers)
+  checkBlockOmmers rules ch block.header block.ommers
   let benv : Benv := initBenv f ch block.header
-  let ⟨st, bout⟩ ← applyBody benv block.txs block.wds
+  let ⟨st, bout⟩ ← applyBody benv block.txs block.ommers block.wds
   let blockStateRoot : B256 := st.root
   let transactionsRoot : B256 := getTransactionsRoot bout
   let receiptRoot : B256 := getReceiptRoot bout
   let blockLogsBloom : Bytes := logsBloom bout.blockLogs
   let withdrawalsRoot : B256 := getWithdrawalsRoot bout
-  let requestsHash := computeRequestsHash bout.requests
+  let requestsHash :=
+    if rules.header.requestsHash then some (computeRequestsHash bout.requests) else none
   Except.mapError TransitionError.block <|
     stateTransitionChecks bout block.header
       transactionsRoot blockStateRoot receiptRoot
@@ -5081,11 +5359,11 @@ private def guardTestHeader : Header := {
   extraData := []
   prevRandao := 0
   nonce := 0
-  baseFeePerGas := 7
-  withdrawalsRoot := 0
-  blobGasUsed := 0
-  excessBlobGas := 0
-  parentBeaconBlockRoot := 0
+  baseFeePerGas := some 7
+  withdrawalsRoot := some 0
+  blobGasUsed := some 0
+  excessBlobGas := some 0
+  parentBeaconBlockRoot := some 0
   requestsHash := none
   blockAccessListHash := none
   slotNumber := none
@@ -5112,9 +5390,9 @@ private def guardBlockAt (timestamp : Nat) : Block :=
 -- the reserve branch. Prague has no reserve branch at the same inputs.
 private def guardBlobParent (baseFee blobGasUsed : Nat) : Header :=
   { guardTestHeader with
-    baseFeePerGas := baseFee
-    blobGasUsed := blobGasUsed
-    excessBlobGas := 0 }
+    baseFeePerGas := some baseFee
+    blobGasUsed := some blobGasUsed
+    excessBlobGas := some 0 }
 
 #guard calculateExcessBlobGas osakaBlobSchedule
   (guardBlobParent 16 osakaBlobSchedule.target) = 0
@@ -5199,8 +5477,8 @@ private def guardBlobParent (baseFee blobGasUsed : Nat) : Header :=
 private def guardParentHeader : Header :=
   { guardTestHeader with
     number := 0
-    baseFeePerGas := 16
-    blobGasUsed := 21 * 131072 }
+    baseFeePerGas := some 16
+    blobGasUsed := some (21 * 131072) }
 
 private def guardParentChain : BlockChain :=
   { blocks := [{ header := guardParentHeader, txs := [], ommers := [], wds := [] }]
@@ -5211,7 +5489,7 @@ private def guardChildBlock (timestamp excessBlobGas : Nat) : Block :=
   { header := { guardTestHeader with
       number := guardParentHeader.number + 1
       timestamp := timestamp
-      excessBlobGas := excessBlobGas
+      excessBlobGas := some excessBlobGas
       parentHash := (Header.toBLT guardParentHeader).toBytes.keccak }
     txs := []
     ommers := []
@@ -5244,8 +5522,9 @@ private def bltFields : BLT → Nat
   | .list l => l.length
   | .bytes _ => 0
 
--- The encoder emits exactly 20, 21 or 23 fields. 22 is not merely rejected on
--- input -- it is unreachable on output, because the three options nest.
+-- The encoder emits the current forks' widths: 20, 21 or 23 fields. (A
+-- requests hash with a block-access-list hash and no slot number would emit
+-- 22; the decoder refuses that width below.)
 #guard bltFields (Header.toBLT guardTestHeader) = 20
 #guard bltFields (Header.toBLT guardHeader21) = 21
 #guard bltFields (Header.toBLT guardHeader23) = 23
@@ -5282,7 +5561,7 @@ private def guardHeader22BLT : BLT :=
 #guard guardHeader22BLT.toExHeader.toOption.isNone
 #guard (match guardHeader22BLT.toExHeader with
   | .error e => e.render ==
-      "RlpStructureError : header : expected 20, 21 or 23 fields, but found 22"
+      "RlpStructureError : header : expected 15, 16, 17, 20, 21 or 23 fields, but found 22"
   | .ok _ => false)
 
 -- A 24-field header is refused for the same reason, so the rule is "these
@@ -5291,15 +5570,21 @@ private def guardHeader22BLT : BLT :=
   | .list l => (BLT.list (l ++ [BLT.bytes []])).toExHeader.toOption.isNone
   | _ => false)
 
-/-- A header carrying neither Amsterdam field encodes exactly as it did before
-those fields existed.
+/-- A header carrying the five pre-Prague fork fields and neither Amsterdam
+field encodes exactly as it did before any of those fields was optional.
 
-`rfl` on an arbitrary header, so this is a fact about *every* 20- or 21-field
-header rather than about a sample -- which is what makes "no Prague, Osaka,
-BPO1 or BPO2 block's hash moved" a structural claim and not a test result. The
-right-hand side is the encoder's body as it stood before this change. -/
-example (h : Header) :
-    Header.toBLT { h with blockAccessListHash := none, slotNumber := none }
+`rfl` on an arbitrary header and arbitrary field values, so this is a fact about
+*every* 20- or 21-field header rather than about a sample -- which is what makes
+"no Prague, Osaka, BPO1 or BPO2 block's hash moved" a structural claim and not a
+test result. The right-hand side is the encoder's body as it stood before the
+Amsterdam fields existed. -/
+example (h : Header) (baseFee : Nat) (withdrawalsRoot : B256)
+    (blobGasUsed excessBlobGas : Nat) (parentBeaconBlockRoot : B256) :
+    Header.toBLT { h with
+        baseFeePerGas := some baseFee, withdrawalsRoot := some withdrawalsRoot
+        blobGasUsed := some blobGasUsed, excessBlobGas := some excessBlobGas
+        parentBeaconBlockRoot := some parentBeaconBlockRoot
+        blockAccessListHash := none, slotNumber := none }
       = BLT.list ([
           BLT.bytes h.parentHash.toBytes,
           BLT.bytes h.ommersHash.toBytes,
@@ -5316,19 +5601,24 @@ example (h : Header) :
           BLT.bytes h.extraData,
           BLT.bytes h.prevRandao.toBytes,
           BLT.bytes h.nonce.toBytes,
-          BLT.bytes h.baseFeePerGas.toBytes,
-          BLT.bytes h.withdrawalsRoot.toBytes,
-          BLT.bytes h.blobGasUsed.toBytes,
-          BLT.bytes h.excessBlobGas.toBytes,
-          BLT.bytes h.parentBeaconBlockRoot.toBytes
+          BLT.bytes baseFee.toBytes,
+          BLT.bytes withdrawalsRoot.toBytes,
+          BLT.bytes blobGasUsed.toBytes,
+          BLT.bytes excessBlobGas.toBytes,
+          BLT.bytes parentBeaconBlockRoot.toBytes
         ] ++
           match h.requestsHash with
           | none => []
           | some rh => [BLT.bytes rh.toBytes]) := rfl
 
 /-- Therefore the identity of every such header is unchanged. -/
-example (h : Header) :
-    Header.hash { h with blockAccessListHash := none, slotNumber := none }
+example (h : Header) (baseFee : Nat) (withdrawalsRoot : B256)
+    (blobGasUsed excessBlobGas : Nat) (parentBeaconBlockRoot : B256) :
+    Header.hash { h with
+        baseFeePerGas := some baseFee, withdrawalsRoot := some withdrawalsRoot
+        blobGasUsed := some blobGasUsed, excessBlobGas := some excessBlobGas
+        parentBeaconBlockRoot := some parentBeaconBlockRoot
+        blockAccessListHash := none, slotNumber := none }
       = (BLT.list ([
           BLT.bytes h.parentHash.toBytes, BLT.bytes h.ommersHash.toBytes,
           BLT.bytes h.coinbase.toBytes, BLT.bytes h.stateRoot.toBytes,
@@ -5337,10 +5627,10 @@ example (h : Header) :
           BLT.bytes h.number.toBytes, BLT.bytes h.gasLimit.toBytes,
           BLT.bytes h.gasUsed.toBytes, BLT.bytes h.timestamp.toBytes,
           BLT.bytes h.extraData, BLT.bytes h.prevRandao.toBytes,
-          BLT.bytes h.nonce.toBytes, BLT.bytes h.baseFeePerGas.toBytes,
-          BLT.bytes h.withdrawalsRoot.toBytes, BLT.bytes h.blobGasUsed.toBytes,
-          BLT.bytes h.excessBlobGas.toBytes,
-          BLT.bytes h.parentBeaconBlockRoot.toBytes
+          BLT.bytes h.nonce.toBytes, BLT.bytes baseFee.toBytes,
+          BLT.bytes withdrawalsRoot.toBytes, BLT.bytes blobGasUsed.toBytes,
+          BLT.bytes excessBlobGas.toBytes,
+          BLT.bytes parentBeaconBlockRoot.toBytes
         ] ++
           match h.requestsHash with
           | none => []
@@ -5371,13 +5661,13 @@ private def guardBothFieldsRules : ForkRules := amsterdamRules
 private def guardChild21 : Block :=
   guardChildBlockWith
     { (guardChildBlock 1 917504).header with
-        baseFeePerGas := 14
+        baseFeePerGas := some 14
         requestsHash := some guardRequestsHash }
 
 private def guardChild23 : Block :=
   guardChildBlockWith
     { (guardChildBlock 1 917504).header with
-        baseFeePerGas := 14
+        baseFeePerGas := some 14
         requestsHash := some guardRequestsHash
         blockAccessListHash := some guardBalHash
         slotNumber := some 4096 }
@@ -5411,11 +5701,377 @@ private def presenceFails {α : Type} : Except TransitionError α → Bool
 
 -- One field at a time: each flag is independent of the other.
 #guard presenceFails (validateHeader
-  { bpo2Rules with header := { blockAccessListHash := false, slotNumber := true, baseFee := false, withdrawalsRoot := false, blobGas := false, parentBeaconBlockRoot := false, requestsHash := false } }
+  { bpo2Rules with header := { bpo2Rules.header with slotNumber := true } }
   guardParentChain guardChild21.header)
 #guard presenceFails (validateHeader
-  { bpo2Rules with header := { blockAccessListHash := true, slotNumber := false, baseFee := false, withdrawalsRoot := false, blobGas := false, parentBeaconBlockRoot := false, requestsHash := false } }
+  { bpo2Rules with header := { bpo2Rules.header with blockAccessListHash := true } }
   guardParentChain guardChild21.header)
+
+---------------- HEADER SHAPES BEFORE PRAGUE (design S3) ----------------
+
+-- The five pre-Prague fork fields are optional in shape on the same terms as
+-- the newer ones. Each historical width encodes, decodes and round-trips; the
+-- in-between widths are refused; and `validateHeader` ties each field's
+-- presence to `rules.header` in both directions. These guards call
+-- `validateHeader` with a historical record directly: nothing here makes a
+-- historical fork reachable through `Fork.rules?`.
+
+/-- Byzantium through Berlin: no fork-dependent field. -/
+private def guardHeader15 : Header :=
+  { guardTestHeader with
+      baseFeePerGas := none, withdrawalsRoot := none, blobGasUsed := none
+      excessBlobGas := none, parentBeaconBlockRoot := none }
+
+/-- London through Paris: the base fee. -/
+private def guardHeader16 : Header :=
+  { guardHeader15 with baseFeePerGas := some 7 }
+
+/-- Shanghai: the withdrawals root. -/
+private def guardHeader17 : Header :=
+  { guardHeader16 with withdrawalsRoot := some 0 }
+
+#guard bltFields (Header.toBLT guardHeader15) = 15
+#guard bltFields (Header.toBLT guardHeader16) = 16
+#guard bltFields (Header.toBLT guardHeader17) = 17
+#guard roundTrips guardHeader15
+#guard roundTrips guardHeader16
+#guard roundTrips guardHeader17
+-- The round trip keeps presence, not merely the encoding.
+#guard (match (Header.toBLT guardHeader16).toExHeader with
+  | .ok h => h.baseFeePerGas == some 7 && h.withdrawalsRoot.isNone
+      && h.blobGasUsed.isNone && h.parentBeaconBlockRoot.isNone
+  | .error _ => false)
+#guard (match (Header.toBLT guardHeader17).toExHeader with
+  | .ok h => h.withdrawalsRoot == some 0 && h.excessBlobGas.isNone
+  | .error _ => false)
+#guard (match (Header.toBLT guardTestHeader).toExHeader with
+  | .ok h => h.blobGasUsed == some 0 && h.excessBlobGas == some 0
+      && h.parentBeaconBlockRoot == some 0 && h.requestsHash.isNone
+  | .error _ => false)
+
+-- The nesting makes an incoherent record encode as the longest coherent
+-- prefix it carries: a withdrawals root without a base fee is not emitted, and
+-- neither is half of Cancun's triple. No 18- or 19-field encoding exists.
+#guard bltFields (Header.toBLT { guardHeader15 with withdrawalsRoot := some 0 }) = 15
+#guard bltFields (Header.toBLT { guardHeader17 with blobGasUsed := some 0 }) = 17
+#guard bltFields (Header.toBLT
+  { guardHeader17 with blobGasUsed := some 0, excessBlobGas := some 0 }) = 17
+
+-- 18 and 19 fields are refused on input, as structure errors naming the width.
+private def guardHeaderPrefixBLT (n : Nat) : BLT :=
+  match Header.toBLT guardTestHeader with
+  | .list l => .list (l.take n)
+  | b => b
+
+#guard (match (guardHeaderPrefixBLT 18).toExHeader with
+  | .error e => e.render ==
+      "RlpStructureError : header : expected 15, 16, 17, 20, 21 or 23 fields, but found 18"
+  | .ok _ => false)
+#guard (match (guardHeaderPrefixBLT 19).toExHeader with
+  | .error e => e.render ==
+      "RlpStructureError : header : expected 15, 16, 17, 20, 21 or 23 fields, but found 19"
+  | .ok _ => false)
+-- and 14 is refused as a malformed list.
+#guard (guardHeaderPrefixBLT 14).toExHeader.toOption.isNone
+
+/-- A one-block chain ending at `parent`. -/
+private def guardChainAt (parent : Header) : BlockChain :=
+  { blocks := [{ header := parent, txs := [], ommers := [], wds := [] }]
+    state := .empty
+    chainId := 1 }
+
+/-- `child` placed directly after `parent`: number, parent hash and a later
+timestamp, so that only the rule under test can decide. -/
+private def guardChildAfter (parent child : Header) : Header :=
+  { child with
+      number := parent.number + 1
+      timestamp := parent.timestamp + 1
+      parentHash := parent.hash }
+
+/-- `guardChildAfter` under proof-of-work rules: the parent's difficulty is 0
+and the child is one second later, so the expected difficulty is the floor
+`minimumDifficulty` for every bomb delay (block 1 is far below each). -/
+private def guardPowChildAfter (parent child : Header) : Header :=
+  { guardChildAfter parent child with difficulty := minimumDifficulty }
+
+private def guardParent15 : Header := { guardHeader15 with number := 0 }
+private def guardParent16 : Header := { guardHeader16 with number := 0 }
+private def guardParent17 : Header := { guardHeader17 with number := 0 }
+
+private def baseFeeFails {α : Type} : Except TransitionError α → Bool
+  | .error (.block (.baseFeePerGas _)) => true
+  | _ => false
+
+private def gasLimitFails {α : Type} : Except TransitionError α → Bool
+  | .error (.block (.gasLimitAdjustment _)) => true
+  | _ => false
+
+-- Presence, both directions, for each pre-Prague field. A Berlin-shaped header
+-- passes under Berlin's rules and fails under London's; a London-shaped one the
+-- reverse; and so on up to Cancun. The reason names the field.
+#guard (validateHeader berlinRules (guardChainAt guardParent15)
+  (guardPowChildAfter guardParent15 guardHeader15)).toOption.isSome
+#guard (match validateHeader londonRules (guardChainAt guardParent15)
+    (guardChildAfter guardParent15 guardHeader15) with
+  | .error e => e.render.startsWith "HeaderFieldPresenceError : baseFeePerGas is absent"
+  | .ok _ => false)
+#guard (match validateHeader berlinRules (guardChainAt guardParent15)
+    (guardChildAfter guardParent15 { guardHeader16 with baseFeePerGas := some initialBaseFee }) with
+  | .error e => e.render.startsWith "HeaderFieldPresenceError : baseFeePerGas is present"
+  | .ok _ => false)
+#guard (match validateHeader parisRules (guardChainAt guardParent16)
+    (guardChildAfter guardParent16 guardHeader17) with
+  | .error e => e.render.startsWith "HeaderFieldPresenceError : withdrawalsRoot is present"
+  | .ok _ => false)
+#guard (match validateHeader shanghaiRules (guardChainAt guardParent16)
+    (guardChildAfter guardParent16 guardHeader16) with
+  | .error e => e.render.startsWith "HeaderFieldPresenceError : withdrawalsRoot is absent"
+  | .ok _ => false)
+#guard (match validateHeader shanghaiRules (guardChainAt guardParent17)
+    (guardChildAfter guardParent17 guardTestHeader) with
+  | .error e => e.render.startsWith "HeaderFieldPresenceError : blobGasUsed is present"
+  | .ok _ => false)
+#guard (match validateHeader cancunRules (guardChainAt guardParent17)
+    (guardChildAfter guardParent17 guardHeader17) with
+  | .error e => e.render.startsWith "HeaderFieldPresenceError : blobGasUsed is absent"
+  | .ok _ => false)
+-- The beacon root separately from the blob pair: a record carrying the pair
+-- but not the root.
+#guard (match validateHeader cancunRules (guardChainAt guardParent17)
+    (guardChildAfter guardParent17
+      { guardHeader17 with blobGasUsed := some 0, excessBlobGas := some 0 }) with
+  | .error e => e.render.startsWith "HeaderFieldPresenceError : parentBeaconBlockRoot is absent"
+  | .ok _ => false)
+-- A Prague-shaped header under Prague's rules is not touched by the new checks.
+#guard (validateHeader bpo2Rules guardParentChain guardChild21.header).toOption.isSome
+
+-- London's first block (EELS `london/fork.py`): a parent without a base fee
+-- makes the expected base fee `INITIAL_BASE_FEE`, and no gas-limit check runs
+-- on that block -- here the gas limit doubles, far outside the 1/1024 window.
+private def guardLondonFirst (baseFee gasLimit : Nat) : Header :=
+  guardPowChildAfter guardParent15
+    { guardHeader16 with baseFeePerGas := some baseFee, gasLimit := gasLimit }
+
+#guard (validateHeader londonRules (guardChainAt guardParent15)
+  (guardLondonFirst initialBaseFee 30000000)).toOption.isSome
+#guard (validateHeader londonRules (guardChainAt guardParent15)
+  (guardLondonFirst initialBaseFee 60000000)).toOption.isSome
+#guard baseFeeFails (validateHeader londonRules (guardChainAt guardParent15)
+  (guardLondonFirst 7 30000000))
+-- Every later London block runs the update rule and its gas-limit check.
+#guard gasLimitFails (validateHeader londonRules (guardChainAt guardParent16)
+  (guardChildAfter guardParent16 { guardHeader16 with gasLimit := 60000000 }))
+-- Before London the gas-limit check runs although no base fee is computed.
+#guard gasLimitFails (validateHeader berlinRules (guardChainAt guardParent15)
+  (guardChildAfter guardParent15 { guardHeader15 with gasLimit := 60000000 }))
+
+-- Cancun's first block (EELS `cancun/vm/gas.py`, keyed on the parent header's
+-- class): a parent without the blob fields counts them as zero.
+#guard calculateExcessBlobGas cancunRules.blob guardParent17 = 0
+#guard (validateHeader cancunRules (guardChainAt guardParent17)
+  (guardChildAfter guardParent17 guardTestHeader)).toOption.isSome
+#guard (match validateHeader cancunRules (guardChainAt guardParent17)
+    (guardChildAfter guardParent17 { guardTestHeader with excessBlobGas := some 1 }) with
+  | .error (.block (.excessBlobGas _)) => true
+  | _ => false)
+
+-- `initBenvStat` reads an absent field as zero.
+#guard (initBenvStat .prague (guardChainAt guardParent15) guardHeader15).baseFeePerGas = 0
+#guard (initBenvStat .prague (guardChainAt guardParent15) guardHeader15).excessBlobGas = 0
+#guard (initBenvStat .prague (guardChainAt guardParent15) guardHeader15).parentBeaconBlockRoot = 0
+
+------------------- PRE-MERGE CONSENSUS (U7) --------------------
+
+-- `calculateBlockDifficulty` against EELS `calculate_block_difficulty`
+-- (`byzantium/fork.py`, `gray_glacier/fork.py`; values computed by those
+-- functions at the pinned t8n target). Byzantium at its activation block with
+-- a parent carrying ommers (the `2 -` arm), a slow block (negative
+-- adjustment) and a very slow one (the `-99` floor), each with the bomb's
+-- `2 ^ 11` term at delay 3M; the minimum floor; Gray Glacier at its own
+-- activation block with delay 11.4M (no bomb term), and a small parent.
+#guard calculateBlockDifficulty 3000000 4370000 1500000013 1500000000
+  3000000000000000 true = 3001464843752048
+#guard calculateBlockDifficulty 3000000 4370000 1500000100 1500000000
+  3000000000000000 false = 2985351562502048
+#guard calculateBlockDifficulty 3000000 4370000 1500002000 1500000000
+  3000000000000000 false = 2854980468752048
+#guard calculateBlockDifficulty 3000000 1 1 0 0 false = 131072
+#guard calculateBlockDifficulty 11400000 15050000 1655000005 1655000000
+  12000000000000000 false = 12005876554869184
+#guard calculateBlockDifficulty 11400000 1000 1010 1000 200000 true = 200097
+-- The rule data feeds it: Byzantium's delay is the 3M above.
+private def guardByzantiumActivationParent : Header :=
+  { guardHeader15 with
+      timestamp := 1500000000
+      difficulty := 3000000000000000
+      ommersHash := 0 }
+
+#guard byzantiumRules.pow.map (fun pow => expectedDifficulty pow
+    { guardHeader15 with number := 4370000, timestamp := 1500000013 }
+    guardByzantiumActivationParent)
+  = some 3001464843752048
+
+-- A Byzantium-shaped chain: genesis `g`, its child `p`, and a block `b` on
+-- `p` that names `o` -- a second child of `g`, mined by another coinbase --
+-- as its one ommer.
+private def guardPowCoinbase : Adr := 0xc0
+private def guardOmmerCoinbase : Adr := 0x0e
+
+private def guardPowAt (parent : Header) (timestamp : Nat) (coinbase : Adr) : Header :=
+  let child : Header :=
+    { guardHeader15 with
+        number := parent.number + 1, timestamp := timestamp,
+        parentHash := parent.hash, coinbase := coinbase }
+  { child with difficulty := match byzantiumRules.pow with
+      | some pow => expectedDifficulty pow child parent
+      | none => 0 }
+
+private def guardPowGenesis : Header :=
+  { guardHeader15 with number := 0, difficulty := 131072 }
+private def guardPowParent : Header := guardPowAt guardPowGenesis 5 guardPowCoinbase
+private def guardPowOmmer : Header := guardPowAt guardPowGenesis 6 guardOmmerCoinbase
+private def guardPowBlockWith (ommers : List Header) : Header :=
+  { guardPowAt guardPowParent 20 guardPowCoinbase with
+      ommersHash := ommersListHash ommers }
+private def guardPowChain : BlockChain :=
+  { blocks := [guardPowGenesis, guardPowParent].map
+      (fun h => { header := h, txs := [], ommers := [], wds := [] })
+    state := .empty
+    chainId := 1 }
+
+private def ommersRejected : Except TransitionError Unit → Bool
+  | .error (.block (.invalidOmmers _)) => true
+  | _ => false
+
+#guard ommersListHash [] = emptyOmmerHash
+-- The difficulty the chain needs: a block within 9 seconds of its parent
+-- raises the parent's by 1/2048.
+#guard guardPowParent.difficulty = 131072 + 131072 / 2048
+#guard (validateHeader byzantiumRules guardPowChain (guardPowBlockWith [guardPowOmmer])).toOption.isSome
+#guard (match validateHeader byzantiumRules guardPowChain
+    { guardPowBlockWith [guardPowOmmer] with difficulty := 131072 } with
+  | .error (.block (.invalidDifficulty _)) => true
+  | _ => false)
+-- Proof of work accepts what proof of stake refuses: a nonzero nonce (the seal
+-- is not checked) and a nonempty ommers hash.
+#guard (validateHeader byzantiumRules guardPowChain
+    { guardPowBlockWith [guardPowOmmer] with nonce := 42, prevRandao := 7 }).toOption.isSome
+-- The ommer is accepted; each rule refuses its own violation.
+#guard (checkBlockOmmers byzantiumRules guardPowChain
+    (guardPowBlockWith [guardPowOmmer]) [guardPowOmmer]).toOption.isSome
+#guard (checkBlockOmmers byzantiumRules guardPowChain
+    (guardPowBlockWith []) []).toOption.isSome
+#guard ommersRejected (validateOmmers byzantiumRules guardPowChain
+    (guardPowBlockWith []) [guardPowOmmer])                       -- list hash
+#guard ommersRejected (validateOmmers byzantiumRules guardPowChain
+    (guardPowBlockWith [guardPowOmmer, guardPowOmmer])
+    [guardPowOmmer, guardPowOmmer])                               -- duplicate
+#guard ommersRejected (validateOmmers byzantiumRules guardPowChain
+    (guardPowBlockWith [guardPowParent]) [guardPowParent])         -- canonical
+#guard ommersRejected (validateOmmers byzantiumRules guardPowChain
+    (guardPowBlockWith [{ guardPowOmmer with difficulty := 1 }])
+    [{ guardPowOmmer with difficulty := 1 }])                      -- its header
+#guard ommersRejected (validateOmmers byzantiumRules guardPowChain
+    (guardPowBlockWith [guardPowGenesis]) [guardPowGenesis])       -- number 0
+-- Three valid-looking ommers are too many (the count is checked after each
+-- ommer's own header, as in EELS).
+private def guardPowOmmerN (ts : Nat) : Header :=
+  guardPowAt guardPowGenesis ts guardOmmerCoinbase
+#guard ommersRejected (validateOmmers byzantiumRules guardPowChain
+    (guardPowBlockWith [guardPowOmmerN 6, guardPowOmmerN 7, guardPowOmmerN 8])
+    [guardPowOmmerN 6, guardPowOmmerN 7, guardPowOmmerN 8])
+#guard (validateOmmers byzantiumRules guardPowChain
+    (guardPowBlockWith [guardPowOmmerN 6, guardPowOmmerN 7])
+    [guardPowOmmerN 6, guardPowOmmerN 7]).toOption.isSome
+-- Depth: on a line of eight blocks (numbers 0 to 7), a block numbered 8 may
+-- name a second child of block 1 (age 6, its parent among the seven most
+-- recent blocks), but not a second child of genesis (age 7).
+private def guardPowLine : Nat → List Header
+  | 0 => [guardPowGenesis]
+  | n + 1 =>
+    let l := guardPowLine n
+    l ++ [guardPowAt (l.getLastD guardPowGenesis) (5 * (n + 1)) guardPowCoinbase]
+
+private def guardPowLineChain : BlockChain :=
+  { guardPowChain with
+      blocks := (guardPowLine 7).map
+        (fun h => { header := h, txs := [], ommers := [], wds := [] }) }
+
+private def guardPowLineBlockWith (ommers : List Header) : Header :=
+  { guardPowAt ((guardPowLine 7).getLastD guardPowGenesis) 40 guardPowCoinbase with
+      ommersHash := ommersListHash ommers }
+
+private def guardPowLineOmmer (parentNumber : Nat) : Header :=
+  guardPowAt ((guardPowLine 7).getD parentNumber guardPowGenesis)
+    (5 * parentNumber + 1) guardOmmerCoinbase
+
+#guard (validateOmmers byzantiumRules guardPowLineChain
+    (guardPowLineBlockWith [guardPowLineOmmer 1]) [guardPowLineOmmer 1]).toOption.isSome
+#guard ommersRejected (validateOmmers byzantiumRules guardPowLineChain
+    (guardPowLineBlockWith [guardPowLineOmmer 0]) [guardPowLineOmmer 0])
+-- After Paris the old rule is untouched: any ommer is refused as over Paris.
+#guard (match checkBlockOmmers pragueRules guardPowChain
+    (guardPowBlockWith [guardPowOmmer]) [guardPowOmmer] with
+  | .error (.block (.ommersOverParis _)) => true
+  | _ => false)
+
+-- The rewards (EELS `pay_rewards`, Byzantium's 3 ETH): the miner gets
+-- `3 + 3/32` ETH for one ommer, and the age-1 ommer's miner `7/8` of 3 ETH.
+#guard (payRewards { blockReward := 3 * 10 ^ 18, bombDelay := 3000000 } 2
+    guardPowCoinbase [guardPowOmmer] .empty).bal guardPowCoinbase
+  = (3093750000000000000 : Nat).toB256
+#guard (payRewards { blockReward := 3 * 10 ^ 18, bombDelay := 3000000 } 2
+    guardPowCoinbase [guardPowOmmer] .empty).bal guardOmmerCoinbase
+  = (2625000000000000000 : Nat).toB256
+-- Age 2 pays 6/8; no ommer pays the miner the bare block reward.
+#guard (payRewards { blockReward := 2 * 10 ^ 18, bombDelay := 5000000 } 3
+    guardPowCoinbase [guardPowOmmer] .empty).bal guardOmmerCoinbase
+  = (1500000000000000000 : Nat).toB256
+#guard (payRewards { blockReward := 2 * 10 ^ 18, bombDelay := 5000000 } 3
+    guardPowCoinbase [] .empty).bal guardPowCoinbase
+  = (2 * 10 ^ 18 : Nat).toB256
+
+-- The whole Byzantium body on that block: the two system calls, the
+-- withdrawals and the request pass are gated off, so the state the body
+-- leaves is exactly the input state plus the rewards -- two accounts.
+private def guardPowBenv : Benv :=
+  initBenv .byzantium guardPowChain (guardPowBlockWith [guardPowOmmer])
+
+#guard (match applyBody guardPowBenv [] [guardPowOmmer] [] with
+  | .ok ⟨st, bout⟩ =>
+      st.bal guardPowCoinbase == (3093750000000000000 : Nat).toB256 &&
+      st.bal guardOmmerCoinbase == (2625000000000000000 : Nat).toB256 &&
+      st.toList.length == 2 && bout.requests.isEmpty
+  | .error _ => false)
+-- The two system-call gates, observed: with a storage-writing contract at
+-- both system addresses and no block hashes, Byzantium's body leaves both
+-- contracts' storage empty and never asks for a parent hash, while Cancun's
+-- runs the beacon-roots call and still never asks for one (its history call
+-- is gated off too).
+private def guardSysCode : ByteArray := ⟨#[0x60, 0x01, 0x60, 0x00, 0x55, 0x00]⟩
+
+private def guardSysBenv (benv : Benv) : Benv :=
+  { benv with
+      state := (State.setCode .empty beaconRootsAddress guardSysCode).setCode
+        historyStorageAddress guardSysCode
+      stat := { benv.stat with blockHashes := [] } }
+
+#guard (match applyBody (guardSysBenv guardPowBenv) [] [guardPowOmmer] [] with
+  | .ok ⟨st, _⟩ => (st.get beaconRootsAddress).stor.isEmpty &&
+      (st.get historyStorageAddress).stor.isEmpty
+  | .error _ => false)
+#guard (match applyBody (guardSysBenv (initBenv .cancun guardPowChain guardTestHeader))
+    [] [] [] with
+  | .ok ⟨st, _⟩ => !(st.get beaconRootsAddress).stor.isEmpty &&
+      (st.get historyStorageAddress).stor.isEmpty
+  | .error _ => false)
+
+-- Under Prague's rules the same body runs every step: the request pass calls
+-- the request contracts, which this chain has not deployed.
+#guard (match applyBody (initBenv .prague guardPowChain (guardPowBlockWith []))
+    [] [guardPowOmmer] [] with
+  | .error (.block (.systemContractEmpty _)) => true
+  | _ => false)
 
 -- P0.2, the history half: `RetainedHistoryValid` has teeth, and is decided
 -- rather than assumed. A genesis-rooted chain whose blocks are consecutively
@@ -6155,37 +6811,89 @@ theorem applyTransactions_canonical :
     exact applyTransactions_canonical txis
       (by exact ⟨processTransaction_canonical h hq, h.2⟩) hp
 
+theorem beaconRootsCall_canonical {rules : ForkRules} {benv : Benv}
+    (h : benv.Canonical) {p} (hp : beaconRootsCall rules benv = .ok p) :
+    State.Canonical p.1 := by
+  unfold beaconRootsCall at hp
+  split at hp
+  · obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
+    cases hp
+    exact processUncheckedSystemTransaction_canonical h (Except.mapError_eq_ok_iff.mp hq)
+  · cases hp; exact h.1
+
+theorem historyStorageCall_canonical {rules : ForkRules} {benv : Benv}
+    (h : benv.Canonical) {bal : BalBuilder} {p}
+    (hp : historyStorageCall rules benv bal = .ok p) : State.Canonical p.1 := by
+  unfold historyStorageCall at hp
+  split at hp
+  · obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
+    obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
+    cases hp
+    exact processUncheckedSystemTransaction_canonical h (Except.mapError_eq_ok_iff.mp hq)
+  · cases hp; exact h.1
+
+theorem withdrawalsPass_canonical {rules : ForkRules} {benv : Benv}
+    (h : benv.state.Canonical) {bout : BlockOutput} (wds : List Withdrawal) :
+    (withdrawalsPass rules benv bout wds).1.Canonical := by
+  unfold withdrawalsPass
+  split
+  · exact processWithdrawalsState_canonical h wds
+  · exact h
+
+theorem requestsPass_canonical {rules : ForkRules} {benv : Benv}
+    (h : benv.Canonical) {bout : BlockOutput} {p}
+    (hp : requestsPass rules benv bout = .ok p) : State.Canonical p.1 := by
+  unfold requestsPass at hp
+  split at hp
+  · exact processGeneralPurposeRequests_canonical h hp
+  · cases hp; exact h.1
+
+/-- The rewards are balance credits, so they preserve canonicality. -/
+theorem payRewards_canonical {st : State} (h : st.Canonical) (pow : PowRules)
+    (number : Nat) (coinbase : Adr) (ommers : List Header) :
+    (payRewards pow number coinbase ommers st).Canonical := by
+  unfold payRewards
+  dsimp only
+  generalize hs : st.addBal coinbase _ = st'
+  have h' : st'.Canonical := hs ▸ State.Canonical.addBal h _ _
+  clear hs h
+  induction ommers generalizing st' with
+  | nil => exact h'
+  | cons o os ih => exact ih _ (State.Canonical.addBal h' _ _)
+
 /-- A successful block body leaves a canonical state: system transactions,
-ordinary transactions, withdrawals, and general-purpose requests all
-preserve the invariant. -/
+ordinary transactions, withdrawals, general-purpose requests and the
+proof-of-work rewards all preserve the invariant, whether each is run or
+gated off. -/
 theorem applyBody_canonical {benv : Benv} (h : benv.Canonical)
-    {txs : List (Bytes ⊕ Tx)} {wds : List Withdrawal} {p}
-    (hp : applyBody benv txs wds = .ok p) : State.Canonical p.1 := by
+    {txs : List (Bytes ⊕ Tx)} {ommers : List Header} {wds : List Withdrawal} {p}
+    (hp : applyBody benv txs ommers wds = .ok p) : State.Canonical p.1 := by
   unfold applyBody at hp
   obtain ⟨q1, hq1, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨lh, _, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨q2, hq2, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨txsD, _, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨q3, hq3, hp⟩ := Except.bind_eq_ok hp
-  have hb1 : q1.1.Canonical :=
-    processUncheckedSystemTransaction_canonical h (Except.mapError_eq_ok_iff.mp hq1)
+  have hb1 : q1.1.Canonical := beaconRootsCall_canonical h hq1
   have hb2 : q2.1.Canonical :=
-    processUncheckedSystemTransaction_canonical (by exact ⟨hb1, h.2⟩)
-      (Except.mapError_eq_ok_iff.mp hq2)
+    historyStorageCall_canonical (benv := benv.withState q1.1) (by exact ⟨hb1, h.2⟩) hq2
   have hb3 : q3.1.Canonical :=
     applyTransactions_canonical _ (by exact ⟨hb2, h.2⟩) hq3
   obtain ⟨benvTxs, boutTxs⟩ := q3
   dsimp only at hp hb3
-  -- The withdrawals pass is a pair literal; the access-list incorporation,
-  -- the item rule and the built list carry no state.
-  simp only [processWithdrawals] at hp
+  have hw := withdrawalsPass_canonical (rules := benv.stat.rules) (bout := boutTxs) hb3.1 wds
+  rcases hwp : withdrawalsPass benv.stat.rules benvTxs boutTxs wds with ⟨stWds, boutWds⟩
+  simp only [hwp] at hp hw
+  -- The access-list incorporation, the item rule and the built list carry no
+  -- state.
   obtain ⟨q4, hq4, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
   cases hp
-  have hc := processGeneralPurposeRequests_canonical
-    (benv := benvTxs.withState (processWithdrawalsState benvTxs.state wds))
-    ⟨processWithdrawalsState_canonical hb3.1 _, hb3.2⟩ hq4
-  exact hc
+  have hc := requestsPass_canonical
+    (benv := benvTxs.withState stWds) ⟨hw, hb3.2⟩ hq4
+  dsimp only
+  split
+  · exact hc
+  · exact payRewards_canonical hc _ _ _ _
 
 /-- **Raw successful block transition preserves canonicality.** The output
 chain's execution state is the body's final state, and its original state is
@@ -6241,6 +6949,7 @@ theorem validateHeader_links {rules : ForkRules} {chain : BlockChain}
     header.parentHash = tip.header.hash ∧
       header.number = tip.header.number + 1 := by
   unfold validateHeader at h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
   obtain ⟨parent, hpar, h⟩ := Except.bind_eq_ok h
   rw [htip] at hpar
   simp only [Option.toExcept, Except.ok.injEq] at hpar
@@ -6250,7 +6959,8 @@ theorem validateHeader_links {rules : ForkRules} {chain : BlockChain}
   · rw [ite_eq_right (by simpa [Header.hash] using hph)] at h
     refine ⟨hph, ?_⟩
     obtain ⟨bf, hbf, h⟩ := Except.bind_eq_ok h
-    by_cases h1 : header.excessBlobGas ≠ calculateExcessBlobGas rules.blob tip.header
+    by_cases h1 : (header.excessBlobGas.any
+        (· != calculateExcessBlobGas rules.blob tip.header)) = true
     · rw [ite_eq_left h1] at h
       obtain ⟨_, hb, _⟩ := Except.bind_eq_ok h
       exact absurd hb (by simp)
@@ -6290,7 +7000,7 @@ header's own -- which is exactly the tip/root agreement the resulting snapshot
 needs, already paid for. -/
 theorem stateTransitionChecks_stateRoot {bout : BlockOutput} {header : Header}
     {transactionsRoot blockStateRoot receiptRoot : B256} {blockLogsBloom : Bytes}
-    {withdrawalsRoot requestsHash : B256}
+    {withdrawalsRoot : B256} {requestsHash : Option B256}
     (h : stateTransitionChecks bout header transactionsRoot blockStateRoot
       receiptRoot blockLogsBloom withdrawalsRoot requestsHash = .ok ()) :
     blockStateRoot = header.stateRoot := by
@@ -6557,13 +7267,13 @@ theorem BlockChain.check_eq_some_of_checked (cc : CheckedBlockChain) :
   (Header.WireWellFormed { guardTestHeader with gasLimit := 2 ^ 256 - 1 })
 #guard ¬ decide (Header.WireWellFormed { guardTestHeader with gasLimit := 2 ^ 256 })
 #guard decide
-  (Header.WireWellFormed { guardTestHeader with blobGasUsed := 2 ^ 64 - 1 })
+  (Header.WireWellFormed { guardTestHeader with blobGasUsed := some (2 ^ 64 - 1) })
 #guard ¬ decide
-  (Header.WireWellFormed { guardTestHeader with blobGasUsed := 2 ^ 64 })
+  (Header.WireWellFormed { guardTestHeader with blobGasUsed := some (2 ^ 64) })
 #guard decide
-  (Header.WireWellFormed { guardTestHeader with excessBlobGas := 2 ^ 64 - 1 })
+  (Header.WireWellFormed { guardTestHeader with excessBlobGas := some (2 ^ 64 - 1) })
 #guard ¬ decide
-  (Header.WireWellFormed { guardTestHeader with excessBlobGas := 2 ^ 64 })
+  (Header.WireWellFormed { guardTestHeader with excessBlobGas := some (2 ^ 64) })
 
 private def wireGuardWithdrawal (amount : B256) : Withdrawal :=
   { globalIndex := 0, validatorIndex := 0, recipient := 0, amount := amount }
@@ -6609,7 +7319,7 @@ private def wireGuardWithdrawal (amount : B256) : Withdrawal :=
 #guard (CheckedHeader.ofHeader? { guardTestHeader with bloom := [] }).isNone
 #guard (CheckedHeader.ofHeader? { guardTestHeader with gasUsed := 2 ^ 256 }).isNone
 #guard (CheckedHeader.ofHeader?
-  { guardTestHeader with excessBlobGas := 2 ^ 64 }).isNone
+  { guardTestHeader with excessBlobGas := some (2 ^ 64) }).isNone
 #guard (CheckedWithdrawal.ofWithdrawal?
   (wireGuardWithdrawal (2 ^ 64 - 1 : Nat).toB256)).isSome
 #guard (CheckedWithdrawal.ofWithdrawal?

@@ -2508,33 +2508,118 @@ def addLogToBloom (bloom : Bytes) (log : Log) : Bytes :=
 def logsBloom (l : List Log) : Bytes :=
   List.foldl addLogToBloom (List.replicate 256 0x00) l
 
-/-- Decode a header's optional trailing fields.
+/-- A header's fork-dependent trailing fields, as `decodeHeaderOptionals`
+produces them. -/
+private structure HeaderOptionals : Type where
+  baseFeePerGas : Option Nat := none
+  withdrawalsRoot : Option B256 := none
+  blobGasUsed : Option Nat := none
+  excessBlobGas : Option Nat := none
+  parentBeaconBlockRoot : Option B256 := none
+  requestsHash : Option B256 := none
+  blockAccessListHash : Option B256 := none
+  slotNumber : Option UInt64 := none
+
+/-- The representation facts the trailing fields carry: the base fee is a
+`U256`, the two blob-gas fields are `U64`. -/
+private def HeaderOptionals.Bounded (o : HeaderOptionals) : Prop :=
+  (∀ b ∈ o.baseFeePerGas, b < 2 ^ 256) ∧
+  (∀ b ∈ o.blobGasUsed, b < 2 ^ 64) ∧
+  (∀ b ∈ o.excessBlobGas, b < 2 ^ 64)
+
+/-- Decode a header's fork-dependent trailing fields: everything after `nonce`.
 
 Its own function, and not inlined into `BLT.toExHeader`, for two reasons: the
 accepted shapes are a statement worth reading on their own, and the header
-decoder's soundness proof then sees one `←` here rather than a case split whose
-arms all establish the same thing. None of these three fields contributes to
-`Header.WireWellFormed` -- each is width-exact by its own type -- so the proof
-genuinely does not need to look inside.
+decoder's soundness proof then sees one `←` here and one bounds lemma about it,
+rather than a case split whose arms all establish the same thing.
 
-Exactly three tails are accepted, mirroring `Header.toBLT`'s nesting: none, the
-requests hash alone, and all three. **22 fields is rejected.** A header
-carrying a block-access-list hash but no slot number is not a header of any
-fork, and accepting it would mean guessing which field the sender omitted. -/
+Exactly six tails are accepted, mirroring `Header.toBLT`'s nesting: none
+(15 fields, Byzantium through Berlin), the base fee (16, London through
+Paris), the withdrawals root (17, Shanghai), the Cancun triple (20), the
+requests hash (21, Prague through BPO2), and the Amsterdam pair (23).
+**18, 19 and 22 fields are rejected.** A header carrying a block-access-list
+hash but no slot number, or half of Cancun's triple, is not a header of any
+fork, and accepting it would mean guessing which field the sender omitted.
+Which shape a given fork requires is `validateHeader`'s rule, not this one's. -/
 private def decodeHeaderOptionals :
-    List BLT → Except DecodeError (Option B256 × Option B256 × Option UInt64)
-  | [] => .ok ⟨none, none, none⟩
-  | [.bytes requestsHash] => do
-    let requestsHash ← requestsHash.toRlpHash "header requestsHash"
-    .ok ⟨some requestsHash, none, none⟩
-  | [.bytes requestsHash, .bytes balHash, .bytes slotNumber] => do
-    let requestsHash ← requestsHash.toRlpHash "header requestsHash"
-    let balHash ← balHash.toRlpHash "header blockAccessListHash"
-    let slotNumber ← slotNumber.toRlpB64 "header slotNumber"
-    .ok ⟨some requestsHash, some balHash, some slotNumber⟩
+    List BLT → Except DecodeError HeaderOptionals
+  | [] => .ok {}
+  | [.bytes baseFee] => do
+    let baseFee ← baseFee.toRlpNat "header baseFeePerGas" 32
+    .ok { baseFeePerGas := some baseFee }
+  | [.bytes baseFee, .bytes withdrawalsRoot] => do
+    let baseFee ← baseFee.toRlpNat "header baseFeePerGas" 32
+    let withdrawalsRoot ← withdrawalsRoot.toRlpHash "header withdrawalsRoot"
+    .ok { baseFeePerGas := some baseFee, withdrawalsRoot := some withdrawalsRoot }
+  | .bytes baseFee :: .bytes withdrawalsRoot :: .bytes blobGasUsed ::
+      .bytes excessBlobGas :: .bytes parentBeaconBlockRoot :: tail => do
+    let baseFee ← baseFee.toRlpNat "header baseFeePerGas" 32
+    let withdrawalsRoot ← withdrawalsRoot.toRlpHash "header withdrawalsRoot"
+    let blobGasUsed ← blobGasUsed.toRlpB64 "header blobGasUsed"
+    let excessBlobGas ← excessBlobGas.toRlpB64 "header excessBlobGas"
+    let parentBeaconBlockRoot ←
+      parentBeaconBlockRoot.toRlpHash "header parentBeaconBlockRoot"
+    let cancun : HeaderOptionals :=
+      { baseFeePerGas := some baseFee, withdrawalsRoot := some withdrawalsRoot
+        blobGasUsed := some blobGasUsed.toNat
+        excessBlobGas := some excessBlobGas.toNat
+        parentBeaconBlockRoot := some parentBeaconBlockRoot }
+    match tail with
+    | [] => .ok cancun
+    | [.bytes requestsHash] => do
+      let requestsHash ← requestsHash.toRlpHash "header requestsHash"
+      .ok { cancun with requestsHash := some requestsHash }
+    | [.bytes requestsHash, .bytes balHash, .bytes slotNumber] => do
+      let requestsHash ← requestsHash.toRlpHash "header requestsHash"
+      let balHash ← balHash.toRlpHash "header blockAccessListHash"
+      let slotNumber ← slotNumber.toRlpB64 "header slotNumber"
+      .ok { cancun with
+        requestsHash := some requestsHash
+        blockAccessListHash := some balHash
+        slotNumber := some slotNumber }
+    | tail =>
+      .error <| DecodeError.structure "header"
+        s!"expected 15, 16, 17, 20, 21 or 23 fields, but found {20 + tail.length}"
   | tail =>
     .error <| DecodeError.structure "header"
-      s!"expected 20, 21 or 23 fields, but found {20 + tail.length}"
+      s!"expected 15, 16, 17, 20, 21 or 23 fields, but found {15 + tail.length}"
+
+/-- Every tail `decodeHeaderOptionals` accepts carries its fields' widths. -/
+private theorem decodeHeaderOptionals_bounded {tail : List BLT}
+    {o : HeaderOptionals} (h : decodeHeaderOptionals tail = .ok o) :
+    o.Bounded := by
+  unfold decodeHeaderOptionals at h
+  split at h
+  · cases h; exact ⟨by simp, by simp, by simp⟩
+  · simp only [Except.bind_eq_ok_iff] at h
+    obtain ⟨_, hbf, hm⟩ := h
+    simp only [Except.ok.injEq] at hm
+    subst hm
+    exact ⟨by simpa using Bytes.toRlpNat_lt_two_pow_256 hbf, by simp, by simp⟩
+  · simp only [Except.bind_eq_ok_iff] at h
+    obtain ⟨_, hbf, _, _, hm⟩ := h
+    simp only [Except.ok.injEq] at hm
+    subst hm
+    exact ⟨by simpa using Bytes.toRlpNat_lt_two_pow_256 hbf, by simp, by simp⟩
+  · simp only [Except.bind_eq_ok_iff] at h
+    obtain ⟨bf, hbf, _, _, bgu, _, ebg, _, _, _, hm⟩ := h
+    have hb : ∀ b ∈ (some bf : Option Nat), b < 2 ^ 256 := by
+      simpa using Bytes.toRlpNat_lt_two_pow_256 hbf
+    have hg : ∀ b ∈ (some bgu.toNat : Option Nat), b < 2 ^ 64 := by
+      simpa using bgu.toNat_lt
+    have he : ∀ b ∈ (some ebg.toNat : Option Nat), b < 2 ^ 64 := by
+      simpa using ebg.toNat_lt
+    split at hm
+    · cases hm; exact ⟨hb, hg, he⟩
+    · simp only [Except.bind_eq_ok_iff, Except.ok.injEq] at hm
+      obtain ⟨_, _, rfl⟩ := hm
+      exact ⟨hb, hg, he⟩
+    · simp only [Except.bind_eq_ok_iff, Except.ok.injEq] at hm
+      obtain ⟨_, _, _, _, _, _, rfl⟩ := hm
+      exact ⟨hb, hg, he⟩
+    · exact absurd hm (by simp)
+  · exact absurd h (by simp)
 
 def BLT.toExHeader : BLT → Except DecodeError Header
   | .list (
@@ -2553,11 +2638,6 @@ def BLT.toExHeader : BLT → Except DecodeError Header
       .bytes extraData ::
       .bytes prevRandao ::
       .bytes nonce ::
-      .bytes baseFeePerGas ::
-      .bytes withdrawalsRoot ::
-      .bytes blobGasUsed ::
-      .bytes excessBlobGas ::
-      .bytes parentBeaconBlockRoot ::
       tail
     ) => do
       -- Every field is checked for shape before its value is converted. The
@@ -2582,12 +2662,6 @@ def BLT.toExHeader : BLT → Except DecodeError Header
       let timestamp ← timestamp.toRlpNat "header timestamp" 32
       let prevRandao ← prevRandao.toRlpHash "header prevRandao"
       let nonce ← nonce.toRlpFixedB64 "header nonce"
-      let baseFeePerGas ← baseFeePerGas.toRlpNat "header baseFeePerGas" 32
-      let withdrawalsRoot ← withdrawalsRoot.toRlpHash "header withdrawalsRoot"
-      let blobGasUsed := (← blobGasUsed.toRlpB64 "header blobGasUsed").toNat
-      let excessBlobGas := (← excessBlobGas.toRlpB64 "header excessBlobGas").toNat
-      let previousBeaconBlockRoot ←
-        parentBeaconBlockRoot.toRlpHash "header parentBeaconBlockRoot"
       -- Shape-optional, but exactly typed when present: an absent field and a
       -- malformed one are different failures.
       let optionals ← decodeHeaderOptionals tail
@@ -2607,18 +2681,18 @@ def BLT.toExHeader : BLT → Except DecodeError Header
         extraData := extraData
         prevRandao := prevRandao
         nonce := nonce
-        baseFeePerGas := baseFeePerGas
-        withdrawalsRoot := withdrawalsRoot
-        blobGasUsed := blobGasUsed
-        excessBlobGas := excessBlobGas
-        parentBeaconBlockRoot := previousBeaconBlockRoot
-        requestsHash := optionals.1
-        blockAccessListHash := optionals.2.1
-        slotNumber := optionals.2.2
+        baseFeePerGas := optionals.baseFeePerGas
+        withdrawalsRoot := optionals.withdrawalsRoot
+        blobGasUsed := optionals.blobGasUsed
+        excessBlobGas := optionals.excessBlobGas
+        parentBeaconBlockRoot := optionals.parentBeaconBlockRoot
+        requestsHash := optionals.requestsHash
+        blockAccessListHash := optionals.blockAccessListHash
+        slotNumber := optionals.slotNumber
       }
   | _ =>
     .error <| DecodeError.structure "header"
-      "expected a list of 20, 21 or 23 byte-string fields"
+      "expected a list of 15, 16, 17, 20, 21 or 23 byte-string fields"
 
 /-- Strict header-decoder soundness (P0.3/P0.4). Every header this decoder
 produces satisfies `Header.WireWellFormed`, which is what makes that predicate
@@ -2630,22 +2704,18 @@ theorem BLT.toExHeader_wireWellFormed {blt : BLT} {hdr : Header}
   split at h
   · simp only [Except.bind_eq_ok_iff] at h
     obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, hbl, _, hdf, _, hnb,
-      _, hgl, _, hgu, _, hts, _, _, _, _, _, hbf, _, _, bgu, _, ebg, _,
-      _, _, hm⟩ := h
+      _, hgl, _, hgu, _, hts, _, _, _, _, opt, hopt, hm⟩ := h
     have hb := Bytes.toRlpFixed_eq_ok hbl
     have h2 := Bytes.toRlpNat_lt_two_pow_256 hdf
     have h3 := Bytes.toRlpNat_lt_two_pow_256 hnb
     have h4 := Bytes.toRlpNat_lt_two_pow_256 hgl
     have h5 := Bytes.toRlpNat_lt_two_pow_256 hgu
     have h6 := Bytes.toRlpNat_lt_two_pow_256 hts
-    have h7 := Bytes.toRlpNat_lt_two_pow_256 hbf
-    have h8 : bgu.toNat < 2 ^ 64 := bgu.toNat_lt
-    have h9 : ebg.toNat < 2 ^ 64 := ebg.toNat_lt
-    -- The optional tail is decoded by `decodeHeaderOptionals`, and none of the
-    -- three fields it produces appears in `WireWellFormed`, so one bind step
-    -- discharges every accepted shape at once.
+    -- The trailing fields' widths are `decodeHeaderOptionals`'s own lemma, so
+    -- one bind step discharges every accepted shape at once.
+    obtain ⟨h7, h8, h9⟩ := decodeHeaderOptionals_bounded hopt
     simp only [Except.ok.injEq] at hm
-    obtain ⟨_, _, rfl⟩ := hm
+    subst hm
     exact ⟨hb, h2, h3, h4, h5, h6, h7, h8, h9⟩
   · exact absurd h (by simp)
 
@@ -2657,8 +2727,14 @@ one block late. Osaka's EIP-7918 branch also reads both fees from the parent
 header: the blob fee at the parent's excess and the execution base fee the
 parent actually carried. -/
 def calculateExcessBlobGas (blob : BlobSchedule) (parentHeader : Header) : Nat :=
+  -- Cancun's first block: a parent header without the blob fields counts them
+  -- as zero. EELS keys this on the parent header's class
+  -- (`cancun/vm/gas.py`, `isinstance(parent_header, Header)`), which is this
+  -- shape test; every later parent carries both fields.
+  let parentExcessBlobGas := parentHeader.excessBlobGas.getD 0
+  let parentBlobGasUsed := parentHeader.blobGasUsed.getD 0
   let parentBlobGas : Nat :=
-    parentHeader.excessBlobGas + parentHeader.blobGasUsed
+    parentExcessBlobGas + parentBlobGasUsed
   if parentBlobGas < blob.target then
     0
   else
@@ -2668,12 +2744,12 @@ def calculateExcessBlobGas (blob : BlobSchedule) (parentHeader : Header) : Nat :
     | some reserveBaseCost =>
       let targetBlobGasPrice :=
         gasPerBlob *
-          calculateBlobGasPrice blob parentHeader.excessBlobGas
+          calculateBlobGasPrice blob parentExcessBlobGas
       let baseBlobTxPrice :=
-        reserveBaseCost * parentHeader.baseFeePerGas
+        reserveBaseCost * parentHeader.baseFeePerGas.getD 0
       if baseBlobTxPrice > targetBlobGasPrice then
-        parentHeader.excessBlobGas +
-          parentHeader.blobGasUsed * (blob.max - blob.target) / blob.max
+        parentExcessBlobGas +
+          parentBlobGasUsed * (blob.max - blob.target) / blob.max
       else
         parentBlobGas - blob.target
 

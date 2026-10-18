@@ -511,9 +511,10 @@ def decodeEnv (rules : ForkRules) (stateTest : Bool) (j : Lean.Json) : IO T8nEnv
           txsRoot := 0, receiptRoot := 0, bloom := List.replicate 256 0,
           difficulty := 0, number := 0, gasLimit := 0, gasUsed := 0,
           timestamp := 0, extraData := [], prevRandao := 0, nonce := 0,
-          baseFeePerGas := parentBaseFee, withdrawalsRoot := 0,
-          blobGasUsed := parentBlobGasUsed, excessBlobGas := parentExcessBlobGas,
-          parentBeaconBlockRoot := 0, requestsHash := none,
+          baseFeePerGas := some parentBaseFee, withdrawalsRoot := some 0,
+          blobGasUsed := some parentBlobGasUsed,
+          excessBlobGas := some parentExcessBlobGas,
+          parentBeaconBlockRoot := some 0, requestsHash := none,
           blockAccessListHash := none, slotNumber := none }
       pure (calculateExcessBlobGas rules.blob parentHeader)
   -- A state test performs no system operations, so the parent beacon block
@@ -986,13 +987,13 @@ private def balPipelineBalances (list : BlockAccessList) (address : Adr)
   | none => false
 
 private def balPipelineRequestNetApplyBody : Bool :=
-  match applyBody (balPipelineBenv balPipelineToggleState) [] [] with
+  match applyBody (balPipelineBenv balPipelineToggleState) [] [] [] with
   | .ok ⟨state, bout⟩ =>
     (state.get balPipelineHelper).stor.get 0 == 0 && balPipelineHelperNoNet bout.blockAccessList
   | .error _ => false
 
 private def balPipelineRequestOneWriteApplyBody : Bool :=
-  match applyBody (balPipelineBenv balPipelineOneCallState) [] [] with
+  match applyBody (balPipelineBenv balPipelineOneCallState) [] [] [] with
   | .ok ⟨state, bout⟩ =>
     (state.get balPipelineHelper).stor.get 0 == 1 && balPipelineHelperOneWrite bout.blockAccessList
   | .error _ => false
@@ -1015,7 +1016,7 @@ private def balPipelineForwardApplyBody (half : Bool) : Bool :=
   let forwarded := if half then amount / 2 else amount
   let wds : List Withdrawal :=
     [{ globalIndex := 0, validatorIndex := 0, recipient := balPipelineWithdrawalRequestsAddress, amount := 2 }]
-  match applyBody (balPipelineBenv (balPipelineForwardState half)) [] wds with
+  match applyBody (balPipelineBenv (balPipelineForwardState half)) [] [] wds with
   | .ok ⟨state, bout⟩ =>
     (state.get balPipelineWithdrawalRequestsAddress).bal == retained &&
       (state.get balPipelineBeneficiary).bal == forwarded &&
