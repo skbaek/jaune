@@ -179,14 +179,28 @@ def processCreateMessage.msg (msg : Msg) : Msg :=
   let benv := benv.incrNonce adr
   msg.withBenv benv
 
+/-- Prague rejects 0xEF-leading deposits: its creation gate is on. -/
+@[simp] theorem pragueRules_creation_rejectEf :
+    pragueRules.creation.rejectEf = true := rfl
+
 def processCreateMessage.chargeCodeGas (rules : ForkRules) (devm : Devm) :
     Execution :=
   let contractCode := devm.output
   match rules.stateGas with
   | none =>
     let contractCodeGas := contractCode.length * gasCodeDeposit
+    -- EIP-3541 (London): deposited code may not start with 0xEF. Before that
+    -- the prefix deposits like any other code. At Prague the gate is on, so
+    -- the taken arm is the old body verbatim.
     match contractCode with
-    | 0xEF :: _ => .error ⟨.halt (.invalidContractPrefix .none), devm⟩
+    | 0xEF :: _ =>
+      if rules.creation.rejectEf then
+        .error ⟨.halt (.invalidContractPrefix .none), devm⟩
+      else do
+        let devm ← chargeGas contractCodeGas devm
+        if rules.code.maxCodeSize < contractCode.length
+        then .error ⟨.halt (.outOfGas .none), devm⟩
+        else .ok devm
     | _ => do
       let devm ← chargeGas contractCodeGas devm
       if rules.code.maxCodeSize < contractCode.length
@@ -2870,7 +2884,12 @@ theorem processCreateMessage.chargeCodeGas_canonical {rules : ForkRules}
   dsimp only
   split
   · split
-    · exact h
+    · split
+      · exact h
+      · refine Except.CanonicalOn.bind (liftMachExecution_canonical h) fun d hd => ?_
+        split
+        · exact hd
+        · exact hd
     · refine Except.CanonicalOn.bind (liftMachExecution_canonical h) fun d hd => ?_
       split
       · exact hd
@@ -3876,7 +3895,11 @@ theorem processCreateMessage.chargeCodeGas_stateGasZero
     (processCreateMessage.chargeCodeGas rules devm).StateGasZero := by
   simp only [processCreateMessage.chargeCodeGas, hrules]
   split
-  · exact h
+  · split
+    · exact h
+    · refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h) ?_
+      intro d hd
+      split <;> exact hd
   · refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h) ?_
     intro d hd
     split <;> exact hd

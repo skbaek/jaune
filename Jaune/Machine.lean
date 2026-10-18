@@ -1999,6 +1999,9 @@ def Devm.withLogs (devm : Devm) (logs : List Log) : Devm :=
 def Devm.withRefundCounter (devm : Devm) (refundCounter : Int) : Devm :=
   devm.setMeta {devm.meta with refundCounter := refundCounter}
 
+theorem Devm.withRefundCounter_refundCounter (devm : Devm) (rc : Int) :
+    (devm.withRefundCounter rc).refundCounter = rc := rfl
+
 def Devm.withOutput (devm : Devm) (output : Bytes) : Devm :=
   devm.setMeta {devm.meta with output := output}
 
@@ -3367,6 +3370,68 @@ theorem Devm.balReadStorage_none {rules : ForkRules} (h : rules.bal = none) (a :
 
 def addAccountToDelete (devm : Devm) (a : Adr) : Devm :=
   devm.withAccountsToDelete (devm.accountsToDelete.insert a)
+
+/-- The `SELFDESTRUCT` refund hook (`REFUND_SELF_DESTRUCT`): 24000 before
+EIP-3529 (London), 0 after, credited when this `SELFDESTRUCT` newly schedules
+the donor -- `alreadyScheduled` is the donor's membership in
+`accountsToDelete` before scheduling. At Prague the credit is 0, so the hook
+is the identity there. -/
+def creditSelfdestructRefund (rules : ForkRules) (alreadyScheduled : Prop)
+    [Decidable alreadyScheduled] (devm : Devm) : Devm :=
+  if alreadyScheduled then devm
+  else devm.withRefundCounter (devm.refundCounter + rules.settle.selfdestructRefund)
+
+/-- Prague pays no selfdestruct refund and deletes only created accounts. -/
+@[simp] theorem pragueRules_settle_selfdestructRefund :
+    pragueRules.settle.selfdestructRefund = 0 := rfl
+@[simp] theorem pragueRules_settle_selfdestructOnlyCreated :
+    pragueRules.settle.selfdestructOnlyCreated = true := rfl
+
+/-- The hook preserves the refund-counter projection. -/
+theorem creditSelfdestructRefund_refundCounter {rules : ForkRules}
+    {alreadyScheduled : Prop} [Decidable alreadyScheduled] {devm : Devm} :
+    (creditSelfdestructRefund rules alreadyScheduled devm).refundCounter =
+      if alreadyScheduled then devm.refundCounter
+      else devm.refundCounter + rules.settle.selfdestructRefund := by
+  unfold creditSelfdestructRefund
+  split
+  · rfl
+  · rw [Devm.withRefundCounter_refundCounter]
+
+/-- The hook is meta-only: it preserves memory and output. -/
+theorem creditSelfdestructRefund_memory {rules : ForkRules}
+    {alreadyScheduled : Prop} [Decidable alreadyScheduled] {devm : Devm} :
+    (creditSelfdestructRefund rules alreadyScheduled devm).memory =
+      devm.memory := by
+  unfold creditSelfdestructRefund
+  split <;> rfl
+
+theorem creditSelfdestructRefund_output {rules : ForkRules}
+    {alreadyScheduled : Prop} [Decidable alreadyScheduled] {devm : Devm} :
+    (creditSelfdestructRefund rules alreadyScheduled devm).output =
+      devm.output := by
+  unfold creditSelfdestructRefund
+  split <;> rfl
+
+/-- The hook fires exactly when the regime still pays the refund and this
+`SELFDESTRUCT` newly schedules the donor. -/
+theorem creditSelfdestructRefund_ne_iff {rules : ForkRules}
+    {alreadyScheduled : Prop} [Decidable alreadyScheduled] {devm : Devm} :
+    (creditSelfdestructRefund rules alreadyScheduled devm).refundCounter ≠
+        devm.refundCounter ↔
+      ¬alreadyScheduled ∧ rules.settle.selfdestructRefund ≠ 0 := by
+  rw [creditSelfdestructRefund_refundCounter]
+  by_cases hb : alreadyScheduled <;> simp [hb]
+
+/-- The new credit cannot drive the counter negative. -/
+theorem creditSelfdestructRefund_nonneg_of_nonneg {rules : ForkRules}
+    {alreadyScheduled : Prop} [Decidable alreadyScheduled] {devm : Devm}
+    (h : 0 ≤ devm.refundCounter) :
+    0 ≤ (creditSelfdestructRefund rules alreadyScheduled devm).refundCounter := by
+  unfold creditSelfdestructRefund
+  split
+  · exact h
+  · exact add_nonneg h (by positivity)
 
 def addCreatedAccount (benv : Benv) (adr : Adr) : Benv :=
   {benv with createdAccounts := benv.createdAccounts.insert adr}
@@ -5301,8 +5366,19 @@ def Linst.run (sevm : Sevm) (devm : Devm) :
         (devm.subBal donor donorBal).toExcept
           ⟨.internal (.invariant (.text "InsufficientBalanceError")), devm⟩
       let devm ← .ok <| devm.addBal donee donorBal
-      if donor ∈ devm.createdAccounts then
-        .ok (addAccountToDelete (devm.setBal donor 0) donor)
+      -- EIP-6780 (Cancun): only an account created in the same transaction is
+      -- scheduled for deletion; before that every `SELFDESTRUCT` schedules.
+      -- That is `¬ (onlyCreated ∧ donor ∉ created)`, i.e. the disjunction
+      -- below; under `selfdestructOnlyCreated` its taken branch is the old
+      -- scheduling body plus the refund hook. The hook credits
+      -- `selfdestructRefund` (24000 before EIP-3529, 0 from London) when this
+      -- `SELFDESTRUCT` newly schedules the donor; the beneficiary touch is
+      -- the `balReadAccount` reads above.
+      if donor ∈ devm.createdAccounts ∨
+          sevm.benvStat.rules.settle.selfdestructOnlyCreated = false then
+        .ok (creditSelfdestructRefund sevm.benvStat.rules
+          (donor ∈ devm.accountsToDelete)
+          (addAccountToDelete (devm.setBal donor 0) donor))
       else
         .ok devm
     | some state => do
@@ -5891,6 +5967,16 @@ theorem Devm.withRefundCounter_stateGasZero {devm : Devm}
     (h : devm.StateGasZero) (refund : Int) :
     (devm.withRefundCounter refund).StateGasZero := h
 
+/-- The hook preserves the state-gas baseline. -/
+theorem creditSelfdestructRefund_stateGasZero {rules : ForkRules}
+    {alreadyScheduled : Prop} [Decidable alreadyScheduled] {devm : Devm}
+    (h : devm.StateGasZero) :
+    (creditSelfdestructRefund rules alreadyScheduled devm).StateGasZero := by
+  unfold creditSelfdestructRefund
+  split
+  · exact h
+  · exact Devm.withRefundCounter_stateGasZero h _
+
 theorem addAccountToDelete_stateGasZero {devm : Devm} (h : devm.StateGasZero)
     (adr : Adr) : (addAccountToDelete devm adr).StateGasZero := h
 
@@ -6192,8 +6278,8 @@ theorem Linst.run_stateGasZero {sevm : Sevm} {devm : Devm}
         (Except.stateGasZeroOn_ok (Devm.addBal_stateGasZero h6 _ _)) ?_
       intro d5 h7
       split
-      · exact Except.stateGasZeroOn_ok
-          (addAccountToDelete_stateGasZero (Devm.setBal_stateGasZero h7 _ _) _)
+      · exact Except.stateGasZeroOn_ok (creditSelfdestructRefund_stateGasZero
+          (addAccountToDelete_stateGasZero (Devm.setBal_stateGasZero h7 _ _) _))
       · exact Except.stateGasZeroOn_ok h7
 
 @[simp] theorem Devm.stateGasZero_gasMeasure {devm : Devm}
@@ -7133,6 +7219,20 @@ theorem addAccountToDelete_canonical {devm : Devm} {a : Adr}
     (h : devm.Canonical) : (addAccountToDelete devm a).Canonical :=
   h.of_world_eq rfl
 
+/-- Canonicality sees only the world: the refund hook is meta-only. -/
+theorem Devm.Canonical.withRefundCounter {devm : Devm} (h : devm.Canonical)
+    (rc : Int) : (devm.withRefundCounter rc).Canonical :=
+  h
+
+theorem creditSelfdestructRefund_canonical {rules : ForkRules}
+    {alreadyScheduled : Prop} [Decidable alreadyScheduled] {devm : Devm}
+    (h : devm.Canonical) :
+    (creditSelfdestructRefund rules alreadyScheduled devm).Canonical := by
+  unfold creditSelfdestructRefund
+  split
+  · exact h
+  · exact h.withRefundCounter _
+
 theorem assertDynamic_canonicalOn {sevm : Sevm} {devm : Devm}
     (h : devm.Canonical) :
     (assertDynamic sevm devm).CanonicalOn (fun _ => True) :=
@@ -7760,8 +7860,9 @@ theorem Linst.run_canonical {sevm : Sevm} {devm : Devm}
            | some d1 => exact Devm.Canonical.subBal hd hs
          · refine Except.canonicalOn_bind_ok ?_
            split
-           · exact Devm.Canonical.of_world_eq
-               (Devm.Canonical.setBal (Devm.Canonical.addBal hd' a.1 _) _ 0) rfl
+           · exact creditSelfdestructRefund_canonical
+               (Devm.Canonical.of_world_eq
+                 (Devm.Canonical.setBal (Devm.Canonical.addBal hd' a.1 _) _ 0) rfl)
            · exact Devm.Canonical.addBal hd' a.1 _)
     · -- Amsterdam: the static check, the pop, the pre-check, the two charges
       -- (neither touches the world), the sweep, the log, the schedule.

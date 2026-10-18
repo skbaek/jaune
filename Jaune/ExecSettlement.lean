@@ -404,7 +404,17 @@ theorem processCreateMessage.chargeCodeGas_bal_eq
   dsimp only at h
   split at h
   · split at h
-    · cases h
+    · split at h
+      · cases h
+      · rcases Except.bind_eq_ok h with ⟨charged, hcharge, hrest⟩
+        split at hrest
+        · cases hrest
+        · cases hrest
+          rw [chargeGas_def] at hcharge
+          split at hcharge
+          · contradiction
+          · cases hcharge
+            rfl
     · rcases Except.bind_eq_ok h with ⟨charged, hcharge, hrest⟩
       split at hrest
       · cases hrest

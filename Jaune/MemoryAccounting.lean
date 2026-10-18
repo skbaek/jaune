@@ -490,8 +490,12 @@ theorem Linst.run_memory_accounting_output (sevm : Sevm) (pre : Devm) (l : Linst
               (.internal (.invariant (.text "InsufficientBalanceError")), charged)
               (charged.subBal sevm.currentTarget donorBal)
             let next := next.addBal head.toAdr donorBal
-            if sevm.currentTarget ∈ next.createdAccounts then
-              .ok (addAccountToDelete (next.setBal sevm.currentTarget 0) sevm.currentTarget)
+            if sevm.currentTarget ∈ next.createdAccounts ∨
+                sevm.benvStat.rules.settle.selfdestructOnlyCreated = false then
+              .ok (creditSelfdestructRefund sevm.benvStat.rules
+                (sevm.currentTarget ∈ next.accountsToDelete)
+                (addAccountToDelete (next.setBal sevm.currentTarget 0)
+                  sevm.currentTarget))
             else .ok next) = result := hrun
           -- The remaining argument depends only on the preserved fields, not
           -- on the account reads and access-cost calculation defining them.
@@ -515,7 +519,14 @@ theorem Linst.run_memory_accounting_output (sevm : Sevm) (pre : Devm) (l : Linst
                 cases hrun
                 exact hcharged
               · simp only [hb] at hrun
-                split at hrun <;> cases hrun <;> exact hcharged
+                split at hrun
+                · cases hrun
+                  dsimp only
+                  simp only [creditSelfdestructRefund_memory,
+                    creditSelfdestructRefund_output]
+                  exact hcharged
+                · cases hrun
+                  exact hcharged
             · simp only [assertDynamic, Except.assert, hd] at hrun
               cases hrun
               exact hcharged

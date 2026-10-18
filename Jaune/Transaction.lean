@@ -1370,6 +1370,12 @@ def checkTransaction (benv : Benv) (blockOut : BlockOutput) (tx : Tx) :
     txBlobGasUsed
   ⟩
 
+/-- Prague's intrinsic-cost switches: 16-gas nonzero bytes, calldata floor on,
+coinbase pre-warmed. -/
+@[simp] theorem pragueRules_txr_dataNonZero : pragueRules.txr.dataNonZero = 16 := rfl
+@[simp] theorem pragueRules_txr_calldataFloor : pragueRules.txr.calldataFloor = true := rfl
+@[simp] theorem pragueRules_txr_warmCoinbase : pragueRules.txr.warmCoinbase = true := rfl
+
 /-- The transaction's intrinsic cost and its calldata floor.
 
 The five numbers this formula reads that Amsterdam reprices arrive through
@@ -1391,8 +1397,12 @@ def calculateIntrinsicCost (rules : ForkRules) (tx : Tx) (sender : Adr) : Nat ×
     match rules.stateGas with
     | none => tokensInCalldata
     | some _ => tx.data.length * standardCallDataTokenCost
+  -- `TX_DATA_COST_PER_NON_ZERO`: 68 before EIP-2028 (Istanbul), 16 after.
+  -- Zero bytes stay 4. At Prague `dataNonZero = 16`, so this agrees with the
+  -- old `tokensInCalldata * standardCallDataTokenCost` on every input.
   let dataCost : Nat :=
-    tokensInCalldata * standardCallDataTokenCost
+    tx.data.foldl
+      (fun acc x => acc + (if x = 0 then standardCallDataTokenCost else rules.txr.dataNonZero)) 0
   let recipientCost : Nat :=
       match tx.type.receiver? with
       | none => rules.gas.createAccess
@@ -1402,8 +1412,12 @@ def calculateIntrinsicCost (rules : ForkRules) (tx : Tx) (sender : Adr) : Nat ×
         | some state =>
           if recipient = sender then 0
           else rules.gas.coldAccountAccess + if tx.value = 0 then 0 else state.txValueCost
+  -- EIP-3860 (Shanghai): initcode is metered per word only once
+  -- `creation.initCodeLimit` activates. Dormant (zero) before.
   let initCost : Nat :=
-    if tx.type.receiver?.isNone then initCodeCost tx.data.length else 0
+    if rules.creation.initCodeLimit then
+      if tx.type.receiver?.isNone then initCodeCost tx.data.length else 0
+    else 0
   let accessList :=
     match tx.type with
     | .zero _ _ => []
@@ -1440,9 +1454,13 @@ def calculateIntrinsicCost (rules : ForkRules) (tx : Tx) (sender : Adr) : Nat ×
     match rules.stateGas with
     | none => rules.gas.txBase
     | some _ => baseExecutionGas
+  -- EIP-7623's calldata floor (Prague): absent (zero) while
+  -- `txr.calldataFloor` is off, so the `max` with intrinsic is the intrinsic.
   let callDataFloorGasCost :=
-    (floorTokensInCalldata + accessListFloorTokens) * rules.gas.floorTokenCost
-      + floorBaseGas
+    if rules.txr.calldataFloor then
+      (floorTokensInCalldata + accessListFloorTokens) * rules.gas.floorTokenCost
+        + floorBaseGas
+    else 0
   ⟨
     baseExecutionGas + initCost + dataCost + accessListCost + authCost,
     callDataFloorGasCost
@@ -1456,6 +1474,20 @@ def checkInitcodeSize (code : CodeLimits) (receiver : Option Adr)
          exceeding the {code.maxInitCodeSize}-byte maximum"
   else
     .ok ()
+
+/-- EIP-3860 (Shanghai): the initcode size bound is enforced only once
+`creation.initCodeLimit` activates; before that the limit field is dormant.
+At Prague it is always on, so this is `checkInitcodeSize` there. -/
+def checkInitcodeLimit (rules : ForkRules) (receiver : Option Adr)
+    (dataLength : Nat) : Except TxValidationError Unit :=
+  if rules.creation.initCodeLimit then
+    checkInitcodeSize rules.code receiver dataLength
+  else
+    .ok ()
+
+/-- Prague enforces the initcode bound: its creation limit is on. -/
+@[simp] theorem pragueRules_creation_initCodeLimit :
+    pragueRules.creation.initCodeLimit = true := rfl
 
 private def checkTransactionGasLimit (limit : Option Nat) (gas : Nat) :
     Except TxValidationError Unit :=
@@ -1522,10 +1554,10 @@ def validateTransaction (rules : ForkRules) (tx : Tx) (sender : Adr) :
       -- Keep Prague's established error precedence byte-for-byte.
       if tx.nonce = UInt64.max then
         .error <| .nonceIsMax <| .text "transaction nonce is 2^64 - 1"
-      checkInitcodeSize rules.code tx.type.receiver? tx.data.length
+      checkInitcodeLimit rules tx.type.receiver? tx.data.length
     | some _ =>
       -- Osaka keeps its EIP-7825 whole-transaction cap.
-      checkInitcodeSize rules.code tx.type.receiver? tx.data.length
+      checkInitcodeLimit rules tx.type.receiver? tx.data.length
       checkTransactionGasCap rules.tx tx.gas
       if tx.nonce = UInt64.max then
         .error <| .nonceIsMax <| .text "transaction nonce is 2^64 - 1"
@@ -1536,7 +1568,7 @@ def validateTransaction (rules : ForkRules) (tx : Tx) (sender : Adr) :
     -- invalid inputs; the whole-transaction EIP-7825 cap is not applied.
     if tx.nonce = UInt64.max then
       .error <| .nonceIsMax <| .text "transaction nonce is 2^64 - 1"
-    checkInitcodeSize rules.code tx.type.receiver? tx.data.length
+    checkInitcodeLimit rules tx.type.receiver? tx.data.length
     checkTransactionTotalGasCap rules.tx tx.gas
     checkTransactionPriorityFeeRelation tx
     checkTransactionBlobShape rules tx
@@ -1611,12 +1643,12 @@ def settleTransactionGas (rules : ForkRules) (txGas calldataFloor gasLeft
   match rules.stateGas with
   | none =>
     let gasUsedBeforeRefund := txGas - gasLeft
-    let gasRefund := min (gasUsedBeforeRefund / 5) refundCounter
+    let gasRefund := min (gasUsedBeforeRefund / rules.settle.refundQuotient) refundCounter
     let gasUsed := max (gasUsedBeforeRefund - gasRefund) calldataFloor
     ⟨gasUsed, txGas - gasUsed, gasUsed, 0⟩
   | some _ =>
     let gasUsedBeforeRefund := txGas - gasLeft - stateGasLeft
-    let gasRefund := min (gasUsedBeforeRefund / 5) refundCounter
+    let gasRefund := min (gasUsedBeforeRefund / rules.settle.refundQuotient) refundCounter
     let gasUsed := max (gasUsedBeforeRefund - gasRefund) calldataFloor
     let stateGasUsed := Int.toNat netStateGasUsed
     let executionGasUsed :=
@@ -1633,6 +1665,18 @@ theorem settleTransactionGas_none_invariants {rules : ForkRules}
     settlement.executionGasUsed = settlement.gasUsed ∧
       settlement.stateGasUsed = 0 := by
   simp [settleTransactionGas, h]
+
+/-- The refund cap is monotone in the quotient: a larger divisor (London's 5
+over the pre-London 2) caps the refund at no more. -/
+theorem gasRefund_mono_quotient {used refundCounter q₁ q₂ : Nat}
+    (h : q₁ ≤ q₂) (hpos : 0 < q₁) :
+    min (used / q₂) refundCounter ≤ min (used / q₁) refundCounter := by
+  have hdiv : used / q₂ ≤ used / q₁ := Nat.div_le_div_left h hpos
+  omega
+
+/-- Prague keeps the historical fifth: its settlement quotient is 5. -/
+@[simp] theorem pragueRules_settle_refundQuotient :
+    pragueRules.settle.refundQuotient = 5 := rfl
 
 /-- The actual block-counter update performed after transaction settlement. -/
 def BlockOutput.withGasSettlement (bout : BlockOutput)
@@ -2167,8 +2211,12 @@ def processTransaction
   let state : State := benv.state.incrNonce sender
   let state ← (state.subBal sender (effectiveGasFee + blobGasFee).toB256).toExcept
     (TransitionError.internal (.invariant (.text "balance underflow")))
+  -- EIP-3651 (Shanghai): the coinbase starts warm only once
+  -- `txr.warmCoinbase` activates; before that it is not pre-warmed.
   let preaccessedAddresses : AdrSet :=
-    .ofList (benv.stat.coinbase :: tx.accessList.map Prod.fst)
+    .ofList
+      ((if benv.stat.rules.txr.warmCoinbase then [benv.stat.coinbase] else [])
+        ++ tx.accessList.map Prod.fst)
   let preaccessedStorageKeys : KeySet :=
     .ofList (tx.accessList.map <| λ ⟨adr, keys⟩ => keys.map (⟨adr, ·⟩)).flatten
   let tenv : Tenv := {

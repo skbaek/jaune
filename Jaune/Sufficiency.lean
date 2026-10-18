@@ -312,6 +312,14 @@ theorem withGasLeft_gasMeasure (devm : Devm) (n : Nat) :
 @[simp] theorem withRefundCounter_gasMeasure (devm : Devm) (rc : Int) :
     (devm.withRefundCounter rc).gasMeasure = devm.gasMeasure := rfl
 
+/-- The `SELFDESTRUCT` refund hook is meta-only: it preserves the gas measure. -/
+@[simp] theorem creditSelfdestructRefund_gasMeasure (rules : ForkRules)
+    (alreadyScheduled : Prop) [Decidable alreadyScheduled] (devm : Devm) :
+    (creditSelfdestructRefund rules alreadyScheduled devm).gasMeasure =
+      devm.gasMeasure := by
+  unfold creditSelfdestructRefund
+  split <;> simp [withRefundCounter_gasMeasure]
+
 @[simp] theorem withReturnData_gasMeasure (devm : Devm) (returnData : Bytes) :
     (devm.withReturnData returnData).gasMeasure = devm.gasMeasure := rfl
 
@@ -4014,7 +4022,11 @@ theorem processCreateMessage.chargeCodeGas_gasLe (rules : ForkRules) (devm : Dev
   dsimp only
   split
   · split
-    · simp
+    · split
+      · simp
+      · refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
+        intro d
+        split <;> simp
     · refine gasLe_bind_id (chargeGas_result_gasLe _ _) ?_
       intro d
       split <;> simp
@@ -4046,7 +4058,13 @@ theorem processCreateMessage.chargeCodeGas_ok_eq_setMach {rules : ForkRules}
   dsimp only at h
   split at h
   · split at h
-    · cases h
+    · split at h
+      · cases h
+      · obtain ⟨d, hd, hrest⟩ := Except.bind_eq_ok h
+        split at hrest
+        · cases hrest
+        · cases hrest
+          exact liftMachExecution_ok_eq_setMach hd
     · obtain ⟨d, hd, hrest⟩ := Except.bind_eq_ok h
       split at hrest
       · cases hrest
