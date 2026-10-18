@@ -19,11 +19,12 @@
 # only in the label) are kept and asserted the other way round: they pass rule
 # resolution, are never refused as unsupported, and fail only on the synthetic
 # fixture's absent block data. Since goal jaune-historical-forks-v1 (U1)
-# declares the twelve pre-Prague forks, `Cancun` is a label this build parses
+# declares the twelve pre-Prague forks, `Paris` is a label this build parses
 # and refuses per case with UnsupportedForkError (the usage text's "every case
 # at it is then refused"), so rule 3 is pinned with `Frontier`, a label this
-# build does not know, and the Cancun file pins the declared-but-refused path
-# (5d). The distinction between "unknown" and "declared" survives as the
+# build does not know, and the Paris file pins the declared-but-refused path
+# (5d). (U9 and U10 pinned 5d with `Cancun`; U11a made Cancun runnable and
+# moved the pin to Paris, still refused.) The distinction between "unknown" and "declared" survives as the
 # difference between rule 3, the two admissions, and 5d.
 #
 # Nothing else pinned them. The conformance tiers only ever run well-formed
@@ -180,8 +181,8 @@ EOF
 # A declared fork whose rules this build does not implement (U1's twelve).
 cat > "$TMP/loose/declared_refused.json" <<'EOF'
 {
-  "tests/frontier/opcodes/test_dup.py::test_dup[fork_Cancun-blockchain_test]": {
-    "network": "Cancun",
+  "tests/frontier/opcodes/test_dup.py::test_dup[fork_Paris-blockchain_test]": {
+    "network": "Paris",
     "_info": { "fixture-format": "blockchain_test" }
   }
 }
@@ -260,19 +261,19 @@ expect_refusal "unsupported network" \
   "runs at a network this build supports; the file's labels are [Frontier]" \
   "$TMP/loose/unsupported.json"
 
-# 5d. A declared fork this build does not run (Cancun, one of the twelve
-#     pre-Prague forks `Fork.rules?` refuses) is refused with
+# 5d. A declared fork this build does not run (Paris, one of the ten
+#     pre-Shanghai forks `Fork.rules?` refuses) is refused with
 #     UnsupportedForkError naming it, never as an unknown network and never
 #     run under another fork's rules.
 CHECKS=$((CHECKS + 1))
 run_jaune "$TMP/loose/declared_refused.json"
 if [ "$RUN_RC" -eq 0 ]; then
-  fail "declared but refused network (Cancun): a refused fork's case passed"
-elif ! has "UnsupportedForkError : fork Cancun" "$RUN_ERR"; then
-  fail "declared but refused network (Cancun): not refused with UnsupportedForkError"
+  fail "declared but refused network (Paris): a refused fork's case passed"
+elif ! has "UnsupportedForkError : fork Paris" "$RUN_ERR"; then
+  fail "declared but refused network (Paris): not refused with UnsupportedForkError"
   detail "got: ${RUN_ERR:-<empty stderr>}"
 elif has "runs at a network this build supports" "$RUN_ERR"; then
-  fail "declared but refused network (Cancun): refused as an unknown network"
+  fail "declared but refused network (Paris): refused as an unknown network"
   detail "got: ${RUN_ERR:-<empty stderr>}"
 fi
 
@@ -365,7 +366,8 @@ if [ "$RUN_RC" -eq 0 ] || has '"gas.txBase"' "$RUN_OUT"; then
 fi
 
 # 9. The t8n handshake. The advertised lane is the runnable lane: `--forks`
-#    names the five supported forks, Amsterdam included, and is byte-equal to
+#    names the seven supported forks, Shanghai through Amsterdam (five until
+#    U11a made Shanghai and Cancun runnable), and is byte-equal to
 #    `sources.json`'s `conformance_target.fork_lane`, so a fork cannot be
 #    advertised in one place and not the other; `--info` states the lane, its
 #    basis, and the resolved list, and no longer says Amsterdam is pending.
@@ -379,8 +381,8 @@ run_jaune t8n --forks
 LANE_FROM_SOURCES="$(python3 -c '
 import json, sys
 print(" ".join(json.load(open(sys.argv[1]))["conformance_target"]["fork_lane"]))' "$ROOT/scripts/sources.json")"
-if [ "$RUN_RC" -ne 0 ] || [ "$RUN_OUT" != "Prague Osaka BPO1 BPO2 Amsterdam" ]; then
-  fail "t8n --forks: expected the five-fork lane, Amsterdam included"
+if [ "$RUN_RC" -ne 0 ] || [ "$RUN_OUT" != "Shanghai Cancun Prague Osaka BPO1 BPO2 Amsterdam" ]; then
+  fail "t8n --forks: expected the seven-fork lane, Shanghai through Amsterdam"
   detail "rc=$RUN_RC stdout: ${RUN_OUT:-<empty stdout>}"
 fi
 
@@ -393,10 +395,10 @@ fi
 CHECKS=$((CHECKS + 1))
 run_jaune t8n --info
 if [ "$RUN_RC" -ne 0 ] \
-  || ! has "t8n fork lane: Prague Osaka BPO1 BPO2 Amsterdam" "$RUN_OUT" \
+  || ! has "t8n fork lane: Shanghai Cancun Prague Osaka BPO1 BPO2 Amsterdam" "$RUN_OUT" \
   || ! has "t8n lane basis: the advertised lane is every fork this build runs" "$RUN_OUT" \
-  || ! has "t8n resolves: Prague Osaka BPO1 BPO2 Amsterdam" "$RUN_OUT"; then
-  fail "t8n --info: expected the five-fork lane, its basis, and the resolved fork list"
+  || ! has "t8n resolves: Shanghai Cancun Prague Osaka BPO1 BPO2 Amsterdam" "$RUN_OUT"; then
+  fail "t8n --info: expected the seven-fork lane, its basis, and the resolved fork list"
   detail "rc=$RUN_RC stdout: ${RUN_OUT:-<empty stdout>}"
 fi
 

@@ -44,7 +44,7 @@ EXPECTED = {
     ),
     "hist-shanghai": (
         "Shanghai",
-        {"ParisToShanghaiAtTime15k", "Shanghai", "ShanghaiToCancunAtTime15k"},
+        {"Shanghai", "ShanghaiToCancunAtTime15k"},
     ),
     "hist-cancun": ("Cancun", {"Cancun", "ShanghaiToCancunAtTime15k"}),
 }
