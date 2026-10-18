@@ -76,9 +76,10 @@ START_AT=1
 JOBS=1
 
 usage() {
-  echo "usage: scripts/check-mainnet.sh [--lane (mainnet|amsterdam)] (--suite SUITE | --dir REL --suite SUITE) [--fixtures-root PATH] [--no-build] [--start-at N] [--jobs <n>|auto]" >&2
-  echo "  --lane mainnet   suites: prague osaka transitions smoke full" >&2
-  echo "  --lane amsterdam suites: amsterdam amsterdam-smoke amsterdam-transitions amsterdam-full" >&2
+  echo "usage: scripts/check-mainnet.sh [--lane (mainnet|amsterdam|historical)] (--suite SUITE | --dir REL --suite SUITE) [--fixtures-root PATH] [--no-build] [--start-at N] [--jobs <n>|auto]" >&2
+  echo "  --lane mainnet     suites: prague osaka transitions smoke full" >&2
+  echo "  --lane amsterdam   suites: amsterdam amsterdam-smoke amsterdam-transitions amsterdam-full" >&2
+  echo "  --lane historical suites: byzantium constantinople constantinoplefix petersburg istanbul muirglacier berlin london arrowglacier grayglacier paris shanghai cancun hist-smoke hist-transitions hist-full" >&2
   exit 2
 }
 
@@ -108,7 +109,12 @@ case "$LANE" in
     LANE_BOOTSTRAP="python3 scripts/bootstrap_mainnet.py --lane amsterdam"
     LANE_ROOT_ENV="EEST_AMSTERDAM_ROOT"
     LANE_NAME="amsterdam" ;;
-  *) echo "error: unknown lane $LANE; expected mainnet or amsterdam" >&2; exit 2 ;;
+  historical)
+    LANE_ROOT_DEFAULT="${EEST_MAINNET_ROOT:-$HOME/eest-mainnet-v21.0.1}/fixtures"
+    LANE_BOOTSTRAP="python3 scripts/bootstrap_mainnet.py"
+    LANE_ROOT_ENV="EEST_MAINNET_ROOT"
+    LANE_NAME="historical" ;;
+  *) echo "error: unknown lane $LANE; expected mainnet, amsterdam or historical" >&2; exit 2 ;;
 esac
 [ -n "$FIXTURES_ROOT" ] || FIXTURES_ROOT="$LANE_ROOT_DEFAULT"
 
@@ -135,6 +141,7 @@ if [ "$LANE" = "amsterdam" ]; then
     prague|osaka|transitions|smoke|full)
       echo "error: suite $SUITE is a --lane mainnet suite; the devnet lane's suites are amsterdam, amsterdam-transitions, amsterdam-smoke, amsterdam-full" >&2
       exit 2 ;;
+    hist-*|byzantium|constantinople|constantinoplefix|petersburg|istanbul|muirglacier|berlin|london|arrowglacier|grayglacier|paris|shanghai|cancun) historical_mismatch "$SUITE" ;;
     *) echo "error: unknown suite $SUITE for lane amsterdam" >&2; exit 2 ;;
   esac
   # The same path-shape check the mainnet lane applies, in the same position
@@ -181,6 +188,29 @@ lane_mismatch() {
   exit 2
 }
 
+historical_mismatch() {
+  echo "error: suite $1 is a --lane historical suite and this run is on --lane $LANE" >&2
+  echo "       Run it as: scripts/check-mainnet.sh --lane historical --suite $1" >&2
+  exit 2
+}
+
+# Goal U10: the historical suites with no EEST v21 fixtures are refused with
+# a named reason rather than run vacant, exactly as bpo1/bpo2 are refused.
+historical_refusal() {
+  case "$1" in
+    muirglacier|arrowglacier|grayglacier)
+      echo "error: suite $1 selects no file: the bomb-only forks have no EEST v21 fixtures" >&2
+      echo "       Their evidence is the constants gate (bombDelay), the t8n goldens, and one difficulty vector each" >&2 ;;
+    petersburg)
+      echo "error: suite petersburg selects no file: Petersburg's fixtures are labeled ConstantinopleFix" >&2
+      echo "       Run it as: scripts/check-mainnet.sh --lane historical --suite constantinoplefix" >&2 ;;
+    constantinople)
+      echo "error: suite constantinople selects no file: EIP-1283 Constantinople never activated and has no fixtures" >&2
+      echo "       It is fixture-only in the legacy trees; its constants row is all-dormant" >&2 ;;
+  esac
+  exit 2
+}
+
 bpo_refusal() {
   LABEL="$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"
   echo "error: suite $1 selects no file: the pinned release publishes no fixture whose network is $LABEL." >&2
@@ -192,12 +222,35 @@ bpo_refusal() {
 # targeted instrument for landing one semantic change at a time: the entries
 # still come from the generated manifest, every one of them still has to PASS,
 # and an empty or unlisted selection is an error.
+if [ "$LANE" = "historical" ]; then
+  case "$SUITE" in
+    byzantium|constantinoplefix|istanbul|berlin|london|paris|shanghai|cancun|hist-smoke|hist-transitions|hist-full) ;;
+    muirglacier|arrowglacier|grayglacier|petersburg|constantinople) historical_refusal "$SUITE" ;;
+    prague|osaka|transitions|smoke|full)
+      echo "error: suite $SUITE is a --lane mainnet suite; the historical lane's suites are byzantium, constantinople, constantinoplefix, petersburg, istanbul, muirglacier, berlin, london, arrowglacier, grayglacier, paris, shanghai, cancun, hist-smoke, hist-transitions, hist-full" >&2
+      exit 2 ;;
+    amsterdam|amsterdam-*) lane_mismatch "$SUITE" ;;
+    *) echo "error: unknown suite $SUITE for lane historical" >&2; exit 2 ;;
+  esac
+  if [ -n "$SUBDIR" ]; then
+    case "$SUITE" in
+      hist-full)
+        echo "error: suite hist-full has no per-directory form; name the component suite" >&2
+        exit 2 ;;
+    esac
+    case "$SUBDIR" in
+      /*|*..*) echo "error: --dir must be a relative path inside blockchain_tests" >&2; exit 2 ;;
+    esac
+  fi
+fi
+
 if [ "$LANE" = "mainnet" ]; then
   if [ -n "$SUBDIR" ]; then
     case "$SUITE" in
       prague|smoke|osaka|transitions) ;;
       bpo1|bpo2) bpo_refusal "$SUITE" ;;
       amsterdam|amsterdam-*) lane_mismatch "$SUITE" ;;
+      hist-*|byzantium|constantinople|constantinoplefix|petersburg|istanbul|muirglacier|berlin|london|arrowglacier|grayglacier|paris|shanghai|cancun) historical_mismatch "$SUITE" ;;
       full)
         echo "error: suite full has no per-directory form; name the component suite" >&2
         exit 2 ;;
@@ -211,6 +264,7 @@ if [ "$LANE" = "mainnet" ]; then
       prague|osaka|transitions|smoke|full) ;;
       bpo1|bpo2) bpo_refusal "$SUITE" ;;
       amsterdam|amsterdam-*) lane_mismatch "$SUITE" ;;
+      hist-*|byzantium|constantinople|constantinoplefix|petersburg|istanbul|muirglacier|berlin|london|arrowglacier|grayglacier|paris|shanghai|cancun) historical_mismatch "$SUITE" ;;
       *) echo "error: unknown suite $SUITE" >&2; exit 2 ;;
     esac
   fi
@@ -262,7 +316,7 @@ fi
 # transitions stay outside it, so the cheap suites you run while iterating are
 # never hostage to a long one. See scripts/gate-lock.sh.
 case "$SUITE" in
-  osaka|prague|full|amsterdam|amsterdam-full) HEAVY=1 ;;
+  osaka|prague|full|amsterdam|amsterdam-full|hist-full|byzantium|constantinople|constantinoplefix|petersburg|istanbul|muirglacier|berlin|london|arrowglacier|grayglacier|paris|shanghai|cancun) HEAVY=1 ;;
   *)                                          HEAVY=0 ;;
 esac
 if [ "$JOBS" -gt 1 ]; then HEAVY=1; fi
@@ -292,6 +346,8 @@ case "$LANE" in
     ALLOWED_NETWORKS="Prague Osaka BPO1 BPO2 PragueToOsakaAtTime15k OsakaToBPO1AtTime15k BPO1ToBPO2AtTime15k" ;;
   amsterdam)
     ALLOWED_NETWORKS="Amsterdam BPO2ToAmsterdamAtTime15k" ;;
+  historical)
+    ALLOWED_NETWORKS="Byzantium Constantinople ConstantinopleFix Petersburg Istanbul MuirGlacier Berlin London ArrowGlacier GrayGlacier Paris Shanghai Cancun ParisToShanghaiAtTime15k ShanghaiToCancunAtTime15k CancunToPragueAtTime15k" ;;
 esac
 
 LIST="$(mktemp)"

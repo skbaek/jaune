@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fixture-test harness for Jaune (refactor plan Phase 0, step 0.1).
 #
-# Usage: scripts/check-legacy.sh (--depth | --smoke | --full | --patch | --rlp4 | --bls | --dir <path>) [--report <path>] [--rebase | --refresh-times] [--no-build] [--jobs <n>|auto]
+# Usage: scripts/check-legacy.sh (--depth | --smoke | --full | --patch | --rlp4 | --bls | --hist-<fork> | --dir <path>) [--report <path>] [--rebase | --refresh-times] [--no-build] [--jobs <n>|auto]
 #
 #   --depth       run the fuel/call-depth stress set (scripts/depth-tests.txt)
 #   --smoke       run the smoke set (scripts/smoke-tests.txt)
@@ -15,6 +15,18 @@
 #                 the committed hand-authored target baseline
 #                 scripts/baseline-bls.txt (precompile plan Step 9); the fixture
 #                 root differs — see Environment
+#   --hist-<fork> run the fork's `.json` fixtures across both historical
+#                 restoration trees with `--network <Fork>` (goal U10: one
+#                 tier per fork over the legacy `Cancun/` and `Constantinople/`
+#                 trees, selected by each file's `network` label; Petersburg
+#                 selects under its `ConstantinopleFix` alias, and the three
+#                 bomb-only forks, which name no legacy file, are refused
+#                 with the reason).
+#                 Target gates, not baseline-comparison tiers: each succeeds
+#                 iff every file PASSes, and none has a committed baseline --
+#                 writing baselines is U11's work, when the forks resolve.
+#                 Today every historical fork is refused, so these tiers are
+#                 expected RED at the refusal; they are the U11 inventory.
 #   --dir <path>  run one .json fixture, or every .json fixture under a
 #                 directory (the path must be inside the fixture root); ad hoc
 #                 — if no baseline-dir.txt exists, the gate passes iff every
@@ -203,9 +215,12 @@ cleanup() {
 trap cleanup EXIT
 
 usage() {
-  echo "usage: scripts/check-legacy.sh (--depth | --smoke | --full | --patch | --rlp4 | --bls | --dir <path>) [--report <path>] [--rebase | --refresh-times] [--no-build] [--jobs <n>|auto]" >&2
+  echo "usage: scripts/check-legacy.sh (--depth | --smoke | --full | --patch | --rlp4 | --bls | --hist-<fork> | --dir <path>) [--report <path>] [--rebase | --refresh-times] [--no-build] [--jobs <n>|auto]" >&2
   exit 2
 }
+
+# Goal U10: one tier per pre-Prague fork, over the restoration root.
+HIST_TIERS="hist-byzantium hist-constantinople hist-petersburg hist-istanbul hist-muirglacier hist-berlin hist-london hist-arrowglacier hist-grayglacier hist-paris hist-shanghai hist-cancun"
 
 TIER=""
 DIR_PATH=""
@@ -217,6 +232,12 @@ JOBS=1
 while [ $# -gt 0 ]; do
   case "$1" in
     --depth|--smoke|--full|--patch|--rlp4|--bls) TIER="${1#--}" ;;
+    --hist-*)
+      CANDIDATE="${1#--}"
+      case " $HIST_TIERS " in
+        *" $CANDIDATE "*) TIER="$CANDIDATE" ;;
+        *) echo "unknown historical tier: $1" >&2; usage ;;
+      esac ;;
     --dir)
       TIER="dir"
       shift
@@ -264,9 +285,39 @@ fi
 # hang detector, not a per-tier performance budget.
 if [ "$TIER" = "bls" ]; then
   FIXTURES="${JAUNE_FIXTURES:-$HOME/eest-fixtures/fixtures/blockchain_tests}"
+elif [[ "$TIER" == hist-* ]]; then
+  FIXTURES="${JAUNE_FIXTURES:-${JAUNE_LEGACY_RESTORATION_ROOT:-$HOME/legacytests-41404287}}"
 else
   FIXTURES="${JAUNE_FIXTURES:-$HOME/execution-specs/tests/fixtures/ethereum_tests/BlockchainTests}"
 fi
+
+# Goal U10: the `--network` label each historical tier runs under, and the
+# fixture labels it selects. The restoration files carry one `network` per
+# file, so each tier selects exactly its fork's files (plus the transition
+# fixtures that name it) across both the `Cancun/` and the `Constantinople/`
+# trees. Petersburg's fixture label is `ConstantinopleFix` -- the alias its
+# differential evidence goes through -- so that tier selects and runs under
+# the alias; when U11 resolves the fork, the same tier command starts
+# selecting real cases instead of failing at the refusal. The three
+# bomb-only forks name no legacy file at all (design §5); their tiers are
+# refused with the reason rather than run vacant, exactly as target gates
+# refuse unwritable work.
+case "$TIER" in
+  hist-byzantium) HIST_NET="Byzantium"; HIST_LABELS="Byzantium|EIP158ToByzantiumAt5|ByzantiumToConstantinopleFixAt5" ;;
+  hist-constantinople) HIST_NET="Constantinople"; HIST_LABELS="Constantinople" ;;
+  hist-petersburg) HIST_NET="ConstantinopleFix"; HIST_LABELS="ConstantinopleFix|ByzantiumToConstantinopleFixAt5" ;;
+  hist-istanbul) HIST_NET="Istanbul"; HIST_LABELS="Istanbul" ;;
+  hist-berlin) HIST_NET="Berlin"; HIST_LABELS="Berlin|BerlinToLondonAt5" ;;
+  hist-london) HIST_NET="London"; HIST_LABELS="London|BerlinToLondonAt5" ;;
+  hist-paris) HIST_NET="Paris"; HIST_LABELS="Paris|ArrowGlacierToParisAtDiffC0000|ParisToShanghaiAtTime15k" ;;
+  hist-shanghai) HIST_NET="Shanghai"; HIST_LABELS="Shanghai|ParisToShanghaiAtTime15k|ShanghaiToCancunAtTime15k" ;;
+  hist-cancun) HIST_NET="Cancun"; HIST_LABELS="Cancun|ShanghaiToCancunAtTime15k" ;;
+  hist-muirglacier|hist-arrowglacier|hist-grayglacier)
+    echo "error: tier $TIER selects no file: the bomb-only forks name no legacy fixture" >&2
+    echo "       Their evidence is the constants gate (bombDelay), the t8n goldens, and one difficulty vector each" >&2
+    exit 2 ;;
+  *) HIST_NET="Prague"; HIST_LABELS="" ;;
+esac
 # A parallel run's workers contend, so the guard rises to 2000s there. It stays
 # a hang detector in both modes, never a performance budget. An explicit
 # JAUNE_TIMEOUT still wins in either mode.
@@ -277,10 +328,13 @@ else
 fi
 
 # Target-gate tiers succeed iff every listed file is PASS; they have no
-# baseline and never rebase.
+# baseline and never rebase. The historical tiers join them: no correctness
+# baseline is committed for a refused fork (U11 writes baselines once the
+# forks resolve), so each tier passes iff every file PASSes -- RED today, at
+# the refusal, which is the U11 inventory.
 case "$TIER" in
-  patch|rlp4) IS_TARGET=1 ;;
-  *)          IS_TARGET=0 ;;
+  patch|rlp4|hist-*) IS_TARGET=1 ;;
+  *)                 IS_TARGET=0 ;;
 esac
 if [ "$REBASE" -eq 1 ] && [ "$REFRESH" -eq 1 ]; then
   echo "usage error: --rebase and --refresh-times are mutually exclusive; --rebase accepts new classifications, --refresh-times refuses them" >&2
@@ -333,6 +387,20 @@ case "$TIER" in
     # .meta/ holds fixture-index metadata, not tests.
     FILES="$(find "$FIXTURES" -name '*.json' | sed "s|^$FIXTURES/||" \
       | grep -v -e '^\.meta/' -e '/\.meta/' | sort)"
+    ;;
+  hist-*)
+    # Goal U10: the fork's files across both restoration trees, by their
+    # exact `network` label (the closing quote keeps `Constantinople` from
+    # matching `ConstantinopleFix`; the bomb-only tiers are refused above,
+    # so HIST_LABELS is always set here). Each tree is named explicitly
+    # because `grep -r` does not follow a symlinked tree given only its
+    # parent. `.git/` holds version control, not tests.
+    FILES="$({ for tree in Cancun Constantinople; do
+      if [ -d "$FIXTURES/$tree" ]; then
+        grep -rl --include='*.json' --exclude-dir='.git' -E \
+          "\"network\"[ ]*:[ ]*\"(${HIST_LABELS})\"" "$FIXTURES/$tree"
+      fi
+    done } | sed "s|^$FIXTURES/||" | sort)"
     ;;
   dir)
     if [ ! -e "$DIR_PATH" ]; then
@@ -408,8 +476,8 @@ REPORT="$(cd "$(dirname "$REPORT")" && pwd)/$(basename "$REPORT")"
 # sub-second target gates and a sequential --depth or --dir stay outside it, so
 # the cheap check you run while iterating is never hostage to a --full.
 case "$TIER" in
-  smoke|bls|full) HEAVY=1 ;;
-  *)              HEAVY=0 ;;
+  smoke|bls|full|hist-*) HEAVY=1 ;;
+  *)                     HEAVY=0 ;;
 esac
 if [ "$JOBS" -gt 1 ]; then HEAVY=1; fi
 if [ "$HEAVY" -eq 1 ]; then
@@ -466,7 +534,7 @@ if [ "$JOBS" -gt 1 ]; then
   echo "dispatching $TOTAL files across $JOBS workers (guard ${GUARD}s, longest-first)" >&2
 
   RF_BIN="$BIN"; RF_GUARD="$GUARD"; RF_OUT="$LINES"
-  RF_FIX="$FIXTURES"; RF_NET="Prague"
+  RF_FIX="$FIXTURES"; RF_NET="$HIST_NET"
   export RF_BIN RF_GUARD RF_OUT RF_FIX RF_NET
   # `{}` carries the whole "idx rel" line as one argument; the shim re-splits it
   # and execs the runner. No fixture path in either corpus contains whitespace.
@@ -528,7 +596,7 @@ while IFS= read -r REL; do
     alarm 0;
     my $st = $?;
     exit($st & 127 ? 128 + ($st & 127) : $st >> 8);
-  ' "$GUARD" "$BIN" "$FIXTURES/$REL" --network Prague \
+  ' "$GUARD" "$BIN" "$FIXTURES/$REL" --network "$HIST_NET" \
     > /dev/null 2>&1
   RC=$?
   ELAPSED="$(perl -e 'printf "%.2f", $ARGV[1] - $ARGV[0]' \
