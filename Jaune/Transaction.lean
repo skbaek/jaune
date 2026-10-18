@@ -7853,13 +7853,20 @@ private def touchedOf (fork : Fork) (parentCode : List UInt8)
 -- A successful child's empty target is touched; Prague records nothing.
 #guard touchedOf .grayGlacier (touchCall 0x2000 1000 ++ [0x00]) = some [touchE]
 #guard touchedOf .prague (touchCall 0x2000 1000 ++ [0x00]) = some []
--- A `SELFDESTRUCT` beneficiary that is empty is erased by the credit itself
--- (`State.setAccount`), so no touch is needed to remove it.
-private def touchSelfdestructErases (fork : Fork) : Option Bool :=
+-- A zero `SELFDESTRUCT` credit to the storage-only `touchE` (U6b,
+-- `settle.eraseEmptyOnModify`): before Paris `modify_state` keeps it, storage
+-- and all, and the beneficiary touch hands it to the sweep; from Paris the
+-- credit erases it at once and nothing is touched. Reported as (`touchE` still
+-- present, its slot 1, the touched set).
+private def touchSelfdestruct (fork : Fork) : Option (Bool × B256 × List Adr) :=
   match processMessageCall (touchMsg fork [0x61, 0x20, 0x00, 0xFF] []) with
-  | .ok (state, out) => some (state[touchE]?.isNone && out.touchedAccounts.isEmpty)
+  | .ok (state, out) =>
+    some (state[touchE]?.isSome, (state.get touchE).stor.get 1, out.touchedAccounts.toList)
   | .error _ => none
-#guard touchSelfdestructErases .grayGlacier = some true
+#guard touchSelfdestruct .berlin = some (true, 1, [touchE])
+#guard touchSelfdestruct .grayGlacier = some (true, 1, [touchE])
+#guard touchSelfdestruct .paris = some (false, 0, [])
+#guard touchSelfdestruct .prague = some (false, 0, [])
 -- A failed child's touches die with it ...
 #guard touchedOf .grayGlacier (touchCall 0x4000 50000 ++ [0x00])
     (touchCall 0x2000 1000 ++ touchRevert) = some []
@@ -7880,5 +7887,31 @@ private def touchSelfdestructErases (fork : Fork) : Option Bool :=
 #guard (sweepTouchedAccounts grayGlacierRules [touchE, touchParent]
     (touchState [0x00] []))[touchParent]?.isSome
 #guard (sweepTouchedAccounts pragueRules [touchE] (touchState [0x00] []))[touchE]?.isSome
+
+/-- `CALL(gas, to, value, 0, 0, 0, 0)`, then `POP` the success word. -/
+private def touchCallValue (dest gas value : Nat) : List UInt8 :=
+  [0x60, 0, 0x60, 0, 0x60, 0, 0x60, 0, 0x60, value.toUInt8,
+   0x61, (dest / 256).toUInt8, (dest % 256).toUInt8,
+   0x61, (gas / 256).toUInt8, (gas % 256).toUInt8, 0xF1, 0x50]
+
+/-- U6b end to end: the parent (funded with 1 wei) calls `touchC`, which
+self-destructs to the storage-only `touchE` with a zero balance, and then
+sends `touchE` 1 wei; the transaction's sweep follows. Before Paris the kept
+`touchE` is funded before the sweep, so it survives with its storage; from
+Paris the zero credit already erased it, so the 1 wei lands in a fresh
+account. Reported as (`touchE`'s balance, its slot 1). -/
+private def touchSelfdestructThenFund (fork : Fork) : Option (B256 × B256) :=
+  let parentCode := touchCall 0x4000 50000 ++ touchCallValue 0x2000 1000 1 ++ [0x00]
+  let msg := touchMsg fork parentCode [0x61, 0x20, 0x00, 0xFF]
+  let msg := { msg with benv := msg.benv.setBal touchParent 1 }
+  match processMessageCall msg with
+  | .ok (state, out) =>
+    let state := sweepTouchedAccounts msg.benv.stat.rules out.touchedAccounts.toList state
+    some ((state.get touchE).bal, (state.get touchE).stor.get 1)
+  | .error _ => none
+#guard touchSelfdestructThenFund .berlin = some (1, 1)
+#guard touchSelfdestructThenFund .grayGlacier = some (1, 1)
+#guard touchSelfdestructThenFund .paris = some (1, 0)
+#guard touchSelfdestructThenFund .prague = some (1, 0)
 
 end Jaune

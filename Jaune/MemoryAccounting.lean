@@ -503,7 +503,7 @@ theorem Linst.run_memory_accounting_output (sevm : Sevm) (pre : Devm) (l : Linst
               let next ← Option.toExcept
                 (.internal (.invariant (.text "InsufficientBalanceError")), charged)
                 (charged.subBal sevm.currentTarget donorBal)
-              let next := next.addBal head.toAdr donorBal
+              let next := next.creditBeneficiary sevm.benvStat.rules head.toAdr donorBal
               if sevm.currentTarget ∈ next.createdAccounts ∨
                   sevm.benvStat.rules.settle.selfdestructOnlyCreated = false then
                 .ok (creditSelfdestructRefund sevm.benvStat.rules
@@ -538,9 +538,11 @@ theorem Linst.run_memory_accounting_output (sevm : Sevm) (pre : Devm) (l : Linst
                     dsimp only
                     simp only [creditSelfdestructRefund_memory,
                       creditSelfdestructRefund_output]
-                    exact hcharged
+                    exact ⟨(Devm.creditBeneficiary_memory _ _ _ _).trans hcharged.1,
+                      (Devm.creditBeneficiary_output _ _ _ _).trans hcharged.2⟩
                   · cases hrun
-                    exact hcharged
+                    exact ⟨(Devm.creditBeneficiary_memory _ _ _ _).trans hcharged.1,
+                      (Devm.creditBeneficiary_output _ _ _ _).trans hcharged.2⟩
               · simp only [assertDynamic, Except.assert, hd] at hrun
                 cases hrun
                 exact hcharged

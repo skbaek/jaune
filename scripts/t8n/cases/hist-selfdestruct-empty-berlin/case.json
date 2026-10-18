@@ -1,0 +1,7 @@
+{
+  "description": "Goal U6b: at Berlin `modify_state` does not erase an account it empties. Two contracts self-destruct with zero balance to two storage-only beneficiaries; the parent then sends one beneficiary 1 wei. Before Paris the zero credit keeps both, storage and all, and touches them: the funded one survives the EIP-161 sweep with its storage, the other is swept. Jaune refuses the fork until the Berlin wave; the golden records the pinned target.",
+  "fork": "Berlin",
+  "chainid": 1,
+  "reward": 2000000000000000000,
+  "mode": "blockchain"
+}
