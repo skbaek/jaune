@@ -38,6 +38,15 @@
 # goal the criterion was only *printed*, under `--table`, and compared to
 # nothing.
 #
+# The same schedule fact is also compared for every declared fork, refused ones
+# included: `jaune --mainnet-schedule` prints `mainnetChainConfig`'s criterion
+# for each fork, and the extraction's `mainnet_schedule` carries every EELS
+# fork module's `FORK_CRITERIA` from Byzantium on (goal
+# jaune-historical-forks-v1, design §4). A timestamp is a bare number, a block
+# number `{"block": n}`, no activation `null`; a declared fork with no EELS
+# module (Jaune's EIP-1283 `Constantinople`) must print `null`. These rows are
+# counted apart from the rule comparisons.
+#
 # A fork this build declares but does not implement is expected to be refused
 # by `--rules`; that is checked too, so the gate's fork list and
 # `Fork.supported` cannot drift apart. Every fork the extraction names resolves
@@ -89,6 +98,11 @@ FORKS="$(python3 -c '
 import json, sys
 print(" ".join(sorted(json.load(open(sys.argv[1]))["forks"])))' "$EXTRACTION")" || {
   echo "REGRESSION — fork-constants: could not read $EXTRACTION"; exit 2; }
+
+if ! "$BIN" --mainnet-schedule > "$TMP/schedule.json" 2> "$TMP/schedule.err"; then
+  echo "REGRESSION — fork-constants: jaune --mainnet-schedule failed: $(head -c 200 "$TMP/schedule.err")"
+  exit 2
+fi
 
 for FORK in $FORKS; do
   if "$BIN" --rules "$FORK" > "$TMP/$FORK.json" 2> "$TMP/$FORK.err"; then
@@ -201,6 +215,42 @@ for fork, entry in sorted(extraction["forks"].items()):
 
     compared += compare_fields(fork, entry, printed, sorted(checked))
 
+# The mainnet schedule, every declared fork.
+schedule_rows = 0
+want_schedule = extraction.get("mainnet_schedule")
+if want_schedule is None:
+    problems.append(
+        "the extraction has no mainnet_schedule; regenerate with "
+        "scripts/gen-fork-constants.py"
+    )
+else:
+    try:
+        got_schedule = json.loads((tmp / "schedule.json").read_text())
+    except json.JSONDecodeError as error:
+        problems.append(f"--mainnet-schedule did not print JSON: {error}")
+        got_schedule = {}
+    for fork, upstream in sorted(want_schedule.items()):
+        if fork not in got_schedule:
+            problems.append(
+                f"{fork}.mainnetSchedule: the printer names no fork {fork}"
+            )
+            continue
+        if got_schedule[fork] != upstream["value"]:
+            problems.append(
+                f"{fork}.mainnetSchedule: mainnetChainConfig activates {fork} "
+                f"at {got_schedule[fork]!r}, {taken[:12]} at "
+                f"{upstream['value']!r} ({upstream['source']})"
+            )
+        schedule_rows += 1
+    for fork in sorted(set(got_schedule) - set(want_schedule)):
+        if got_schedule[fork] is not None:
+            problems.append(
+                f"{fork}.mainnetSchedule: mainnetChainConfig activates {fork} "
+                f"at {got_schedule[fork]!r}, but no {taken[:12]} fork module "
+                "names it"
+            )
+        schedule_rows += 1
+
 if want_table == "1":
     amsterdam = extraction["forks"].get("Amsterdam")
     if amsterdam is not None:
@@ -225,7 +275,8 @@ declared_refused = len(extraction["forks"]) - len(runnable)
 print(
     f"OK — fork-constants: {compared} comparison(s) across {len(runnable)} "
     f"runnable fork(s) ({', '.join(runnable)}) match execution-specs "
-    f"{taken[:12]}; {declared_refused} declared fork(s) refused"
+    f"{taken[:12]}; {declared_refused} declared fork(s) refused; mainnet "
+    f"schedule: {schedule_rows} fork(s) match FORK_CRITERIA"
 )
 PYEOF
 exit $?

@@ -251,11 +251,23 @@ private def jOptNat : Option Nat → Lean.Json
   | none => .null
   | some n => jNat n
 
+/-- A mainnet activation criterion as the constants gate compares it: a
+timestamp as a bare number (the row's shape since D13), a block number as
+`{"block": n}`, and no activation as `null`. -/
+def criterionGateJson : Option ForkCriterion → Lean.Json
+  | none => .null
+  | some (.byTimestamp t) => jNat t
+  | some (.byBlock n) => Lean.Json.mkObj [("block", jNat n)]
+
+/-- The criterion at which `mainnetChainConfig` activates `f`, if it does. -/
+def mainnetCriterion? (f : Fork) : Option ForkCriterion :=
+  (mainnetChainConfig.activations.find? (·.fork == f)).map (·.criterion)
+
 /-- One rule record as the flat JSON the constants gate compares.
 
-One row is not a field of the record: `mainnetActivation` is the timestamp at
-which `mainnetChainConfig` activates this record's fork on mainnet, or `null`
-when the schedule names no such activation. It is printed here because the
+One row is not a field of the record: `mainnetActivation` is the criterion at
+which `mainnetChainConfig` activates this record's fork on mainnet
+(`criterionGateJson`), or `null` when the schedule names no such activation. It is printed here because the
 pinned specification carries the same fact per fork as `FORK_CRITERIA`, and
 D13 of the Amsterdam programme says the constants gate compares the two: the
 day the pin's criterion for a fork becomes `ByTimestamp`, this row disagrees
@@ -265,8 +277,7 @@ build actually activates. -/
 def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
   Lean.Json.mkObj [
     ("mainnetActivation",
-      jOptNat ((mainnetChainConfig.activations.find? (·.fork == r.fork)).map
-        (·.timestamp))),
+      criterionGateJson (mainnetCriterion? r.fork)),
     ("blob.target", jNat r.blob.target),
     ("blob.max", jNat r.blob.max),
     ("blob.baseFeeUpdateFraction", jNat r.blob.baseFeeUpdateFraction),
@@ -416,6 +427,15 @@ def runRulesPrinter (label : String) : IO Unit := do
   -- so the definition above lands at the root while `ForkRules` is `Jaune`'s.
   .println (ForkRules.toGateJson rules).pretty
 
+/-- `jaune --mainnet-schedule`: `mainnetChainConfig`'s activation criterion for
+every declared fork, refused forks included, as the constants gate compares it
+against each EELS fork module's `FORK_CRITERIA` (`criterionGateJson`; `null`
+for a fork the schedule does not activate). Read from the schedule itself, so
+the printer reports what the build activates rather than a second copy. -/
+def mainnetScheduleJson : Lean.Json :=
+  Lean.Json.mkObj (Fork.all.map fun f =>
+    (f.toString, criterionGateJson (mainnetCriterion? f)))
+
 -- Goal B's `--rules-partial` printer and `ForkRules.toMeteringGateJson`, the
 -- metering vehicle's partial view, are retired with the vehicle: every
 -- declared fork is printed whole by `--rules`.
@@ -542,7 +562,7 @@ def fixtureImportFork (spec : NetworkSpec) (chainId : UInt64)
     let cfg := t.chainConfig chainId
     Except.mapError ImportFailure.context cfg.validate
     Except.mapError ImportFailure.context (cfg.checkChainId parent.val)
-    Except.mapError ImportFailure.ofLookup (cfg.forkAt header.timestamp)
+    Except.mapError ImportFailure.ofLookup (cfg.forkAt header.number header.timestamp)
 
 /-- Strictly decode a fixture block once, select its parent snapshot by the
 decoded `parentHash`, and import it into that snapshot through the checked
@@ -812,7 +832,8 @@ def requireSupportedSpec (label : String) : IO NetworkSpec := do
     | .throw
         s!"error : unknown --network label {repr label}; declared labels are \
            {Fork.all.map Fork.toString} and transitions of the form \
-           <fork>To<fork>AtTime<seconds>. Of those, this build runs \
+           <fork>To<fork>AtTime<seconds> or <fork>To<fork>At<block>. Of \
+           those, this build runs \
            {Fork.supported.map Fork.toString}"
   if let .transition t := spec then
     IO.ofExcept ((ChainConfig.mk 0 t.activations).validate.mapError
@@ -1272,6 +1293,7 @@ def usage : String :=
   jaune t8n [options] --state.fork <label>
   jaune --vectors <address> <file.json> [--network <fork>]
   jaune --rules <fork>
+  jaune --mainnet-schedule
   jaune --u256 <file.json>
   jaune --fake-exp <file.json>
   jaune --jumpdest-control <seed> <blobs> <size>
@@ -1299,7 +1321,9 @@ runs under the rules its own network label names.
 declared networks:
   {Fork.all.map Fork.toString}
   transitions of the form <fork>To<fork>AtTime<seconds>, for example \
-{ForkTransition.toString ⟨.prague, .osaka, 15000⟩}
+{ForkTransition.toString ⟨.prague, .osaka, .byTimestamp 15000⟩}, or \
+<fork>To<fork>At<block>, for example \
+{ForkTransition.toString ⟨.berlin, .london, .byBlock 5⟩}
 
 runs at:
   {Fork.supported.map Fork.toString}
@@ -1322,6 +1346,9 @@ def main : List String → IO Unit
   | "--rules" :: label :: [] => runRulesPrinter label
   | "--rules" :: _ =>
     .throw "error : --rules takes exactly one fork label"
+  | "--mainnet-schedule" :: [] => .println mainnetScheduleJson.pretty
+  | "--mainnet-schedule" :: _ =>
+    .throw "error : --mainnet-schedule takes no arguments"
   | "--u256" :: pathStr :: [] => do
     if !(← runU256VectorFile pathStr) then IO.Process.exit 1
   | "--jumpdest-control" :: seed :: blobs :: size :: [] => do

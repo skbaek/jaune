@@ -384,6 +384,14 @@ def natReq (j : Lean.Json) (k : String) : IO Nat := do
 
 ----------------- INPUT: THE ENVIRONMENT ------------------
 
+/-- One `env.ommers` entry, the target's `Ommer`: the two fields its
+`pay_block_rewards` reads -- the ommer's age relative to the current block and
+its coinbase. -/
+structure T8nOmmer : Type where
+  delta : Nat
+  address : Adr
+deriving DecidableEq
+
 /-- Everything `env` contributes to a `BenvStat`, after the target's two
 derivations have been applied. Fields no lane consumes -- `currentDifficulty`,
 `extraData`, the block-access-list pair -- are accepted and dropped, exactly
@@ -404,6 +412,10 @@ structure T8nEnv : Type where
   an absent field through as `None`, on which no consuming instruction can
   run at all; this lane reads an absent field as zero. -/
   slotNumber : UInt64
+  /-- The pre-merge `ommers` the target's reward step reads: each ommer's age
+  (`delta`) and coinbase. Empty under proof of stake, where a non-empty list is
+  refused. -/
+  ommers : List T8nOmmer := []
 
 def envKnownFields : List String :=
   [ "currentCoinbase", "currentGasLimit", "currentNumber", "currentTimestamp",
@@ -469,14 +481,33 @@ def readBlockHashes (j : Lean.Json) (number : Nat) : IO (List B256) := do
         s!"error : t8n env.blockHashes has no entry for block {want}; the \
            window this tool needs is blocks {first} through {number - 1}"
 
-def decodeEnv (rules : ForkRules) (stateTest : Bool) (j : Lean.Json) : IO T8nEnv := do
-  requireKnownFields "env" j envKnownFields
+/-- One `env.ommers` entry: `delta` a hex quantity, `address` an address, the
+two fields the target's `_parse_ommers_from_env_json` reads. -/
+def readOmmer (v : Lean.Json) : IO T8nOmmer := do
+  requireKnownFields "ommer" v ["delta", "address"]
+  let delta ← natReq v "delta"
+  let addressJson ← (field? v "address").toIO "error : t8n ommer is missing address"
+  let address ← readAdr "ommer address" addressJson
+  return { delta := delta, address := address }
+
+/-- `env.ommers`. Under proof of stake (`pow = none`) a non-empty list is
+refused, as it always was on this lane; under proof of work each entry is read
+for the reward step. -/
+def readOmmers (rules : ForkRules) (j : Lean.Json) : IO (List T8nOmmer) := do
   match field? j "ommers" with
   | some (.arr a) =>
-    IO.guard a.isEmpty
-      "error : t8n env.ommers is non-empty; the Prague-BPO2 lane is \
-       proof-of-stake and has no ommers"
-  | _ => pure ()
+    match rules.pow with
+    | none => do
+      IO.guard a.isEmpty
+        "error : t8n env.ommers is non-empty; the Prague-BPO2 lane is \
+         proof-of-stake and has no ommers"
+      pure []
+    | some _ => a.toList.mapM readOmmer
+  | _ => pure []
+
+def decodeEnv (rules : ForkRules) (stateTest : Bool) (j : Lean.Json) : IO T8nEnv := do
+  requireKnownFields "env" j envKnownFields
+  let ommers ← readOmmers rules j
   let coinbase ←
     match field? j "currentCoinbase" with
     | none => (hexToAdr? defaultCoinbaseHex).toIO "error : bad default coinbase"
@@ -539,7 +570,7 @@ def decodeEnv (rules : ForkRules) (stateTest : Bool) (j : Lean.Json) : IO T8nEnv
     baseFeePerGas := baseFeePerGas, excessBlobGas := excessBlobGas,
     parentBeaconBlockRoot := parentBeaconBlockRoot,
     blockHashes := blockHashes, withdrawals := withdrawals,
-    slotNumber := slotNumber.toUInt64
+    slotNumber := slotNumber.toUInt64, ommers := ommers
   }
 
 ----------------- INPUT: TRANSACTIONS ------------------
@@ -822,11 +853,52 @@ def runStateTest (benv : Benv) (txs : List (TxParse Tx)) :
   let ⟨benv, bout, rej⟩ ← foldTxs selected benv .init []
   .ok ⟨benv.state, bout, rej, none⟩
 
-/-- Blockchain mode: the target's `_run_blockchain_test`, step for step.
+/-- The reward `--state.reward` asks for, as the target resolves it
+(`_resolve_state_reward`, then `_run_blockchain_test`'s guard): under proof of
+stake nothing is paid, whatever the flag says; under proof of work an absent
+flag is the fork's `BLOCK_REWARD`, `-1` is the target's "skip block rewards"
+sentinel, and any other non-negative value is paid as given. A negative value
+other than `-1` is refused: the target's `U256` cannot hold it. -/
+def resolveReward (rules : ForkRules) (stateReward : Option Int) :
+    Except String (Option Nat) :=
+  match rules.pow with
+  | none => .ok none
+  | some pow =>
+    match stateReward with
+    | none => .ok (some pow.blockReward)
+    | some r =>
+      if r = -1 then .ok none
+      else if 0 ≤ r then .ok (some r.toNat)
+      else .error s!"error : --state.reward {r} is negative and not the -1 \
+        sentinel; the block reward is a U256"
 
-Block rewards are absent because they are unreachable on this lane: the
-target pays them only when the fork is not proof-of-stake, and every runnable
-or metering fork here is proof-of-stake.
+/-- The target's `pay_block_rewards`: `reward + count * (reward / 32)` to the
+block's coinbase, then `(8 - delta) * reward / 8` to each ommer's coinbase,
+each credit a `create_ether`, which is `State.addBal`. The target computes
+`8 - delta` in `U256` and so fails on an ommer older than 8; `run` refuses
+such an ommer before this is reached (`ommerAgesOk`). The block importer's
+`payRewards` reads ommer headers instead; the two agree on every admissible
+age, since `(8 + ommer.number - number)` is `8 - delta`. -/
+def payT8nRewards (reward : Nat) (coinbase : Adr) (ommers : List T8nOmmer)
+    (st : State) : State :=
+  let minerReward := reward + ommers.length * (reward / 32)
+  ommers.foldl
+    (fun acc ommer => acc.addBal ommer.address ((8 - ommer.delta) * reward / 8).toB256)
+    (st.addBal coinbase minerReward.toB256)
+
+/-- Every ommer age the target's `U256` subtraction `8 - delta` can take. -/
+def ommerAgesOk (ommers : List T8nOmmer) : Bool :=
+  ommers.all (·.delta ≤ 8)
+
+/-- Blockchain mode: the target's `_run_blockchain_test`, step for step, each
+fork-dependent step gated by the rule data that stands for the target's
+`has_*` flag: the history-storage call (`sys.historyStorage`), the
+beacon-roots call (`sys.beaconRoots`), the withdrawals
+(`header.withdrawalsRoot`) and the request pass (`header.requestsHash`).
+
+Block rewards (`reward`, from `resolveReward`) are paid after the transactions
+and before the withdrawals, as the target pays them; they are `none` under
+proof of stake, so every runnable fork here pays none. `ommers` is `env.ommers`.
 
 EIP-7928 (goal C): the two pre-execution system calls are incorporated into
 the block-level access list at index 0, each transaction at its index plus one
@@ -837,7 +909,8 @@ once, before withdrawals; Appendix E item 2 of the goal). The list is built
 after the requests and the item rule is applied to it; a violation is the
 `blockException` of a result that still carries the list, as the target
 assigns `block_output.block_access_list` before validating it. -/
-def runBlockchain (benv : Benv) (txs : List (TxParse Tx)) (wds : List Withdrawal) :
+def runBlockchain (benv : Benv) (txs : List (TxParse Tx)) (wds : List Withdrawal)
+    (reward : Option Nat := none) (ommers : List T8nOmmer := []) :
     Except TransitionError Outcome := do
   let rules := benv.stat.rules
   -- The parent hash the history-storage system transaction records. The
@@ -848,29 +921,40 @@ def runBlockchain (benv : Benv) (txs : List (TxParse Tx)) (wds : List Withdrawal
   -- so this records the zero hash and continues; on every input the target
   -- can process at all, the window is non-empty and this is its last entry.
   let lastHash := benv.stat.blockHashes.getLast?.getD 0
-  let ⟨stHistory, outHistory⟩ ←
-    Except.mapError TransitionError.vm <|
-      processUncheckedSystemTransaction benv historyStorageAddress lastHash.toBytes
-  let bal := ({} : BalBuilder).incorporateSystem rules 0 benv.state stHistory
-    (historyStorageAddress :: outHistory.accountReads.toList) outHistory.storageReads.toList
-    outHistory.storageWrites.toList
-  let benv := benv.withState stHistory
-  let ⟨stBeacon, outBeacon⟩ ←
-    Except.mapError TransitionError.vm <|
-      processUncheckedSystemTransaction benv beaconRootsAddress
-        benv.stat.parentBeaconBlockRoot.toBytes
-  let bal := bal.incorporateSystem rules 0 benv.state stBeacon
-    (beaconRootsAddress :: outBeacon.accountReads.toList) outBeacon.storageReads.toList
-    outBeacon.storageWrites.toList
-  let benv := benv.withState stBeacon
+  let ⟨benv, bal⟩ ← if rules.sys.historyStorage then do
+      let ⟨stHistory, outHistory⟩ ←
+        Except.mapError TransitionError.vm <|
+          processUncheckedSystemTransaction benv historyStorageAddress lastHash.toBytes
+      let bal := ({} : BalBuilder).incorporateSystem rules 0 benv.state stHistory
+        (historyStorageAddress :: outHistory.accountReads.toList)
+        outHistory.storageReads.toList outHistory.storageWrites.toList
+      pure (benv.withState stHistory, bal)
+    else pure (benv, ({} : BalBuilder))
+  let ⟨benv, bal⟩ ← if rules.sys.beaconRoots then do
+      let ⟨stBeacon, outBeacon⟩ ←
+        Except.mapError TransitionError.vm <|
+          processUncheckedSystemTransaction benv beaconRootsAddress
+            benv.stat.parentBeaconBlockRoot.toBytes
+      let bal := bal.incorporateSystem rules 0 benv.state stBeacon
+        (beaconRootsAddress :: outBeacon.accountReads.toList)
+        outBeacon.storageReads.toList outBeacon.storageWrites.toList
+      pure (benv.withState stBeacon, bal)
+    else pure (benv, bal)
   let ⟨benv, bout, rej⟩ ← foldTxs txs.putIndex benv {BlockOutput.init with bal := bal} []
+  let benv := match reward with
+    | none => benv
+    | some r => benv.withState (payT8nRewards r benv.stat.coinbase ommers benv.state)
   let postIndex := txs.length + 1
-  let ⟨stWds, bout⟩ := processWithdrawals benv bout wds
-  let balWds := bout.bal.incorporateSystem rules postIndex benv.state stWds
-    (wds.map Withdrawal.recipient) [] []
-  let bout := {bout with bal := balWds}
-  let benv := benv.withState stWds
-  match processGeneralPurposeRequestsAt postIndex benv bout with
+  let ⟨benv, bout⟩ := if rules.header.withdrawalsRoot then
+      let ⟨stWds, bout⟩ := processWithdrawals benv bout wds
+      let balWds := bout.bal.incorporateSystem rules postIndex benv.state stWds
+        (wds.map Withdrawal.recipient) [] []
+      (benv.withState stWds, {bout with bal := balWds})
+    else (benv, bout)
+  let requests := if rules.header.requestsHash then
+      processGeneralPurposeRequestsAt postIndex benv bout
+    else .ok ⟨benv.state, bout⟩
+  match requests with
   | .ok ⟨st, bout'⟩ =>
     let list := match rules.bal with
       | none => []
@@ -1049,6 +1133,58 @@ private def balPipelineForwardT8n (half : Bool) : Bool :=
 #guard balPipelineForwardT8n false
 #guard balPipelineForwardT8n true
 
+-- Proof-of-work rewards through the blockchain frontend (`--state.reward` and
+-- `env.ommers`), on a Byzantium environment with no transactions: the system
+-- calls, withdrawals and requests are gated off, so the post-state is the
+-- input state plus exactly the target's `pay_block_rewards` credits. A 3 ETH
+-- reward with ommers aged 1 and 2 pays the miner `3 + 2 * 3/32` ETH and the
+-- ommers 7/8 and 6/8 of 3 ETH.
+private def rewardCoinbase : Adr := 0xc0
+private def rewardOmmerA : Adr := 0xa1
+private def rewardOmmerB : Adr := 0xa2
+
+private def rewardBenv (fork : Fork) : Benv :=
+  let b := balPipelineBenv .empty
+  { b with stat := { b.stat with fork := fork, coinbase := rewardCoinbase } }
+
+private def rewardOmmers : List T8nOmmer :=
+  [⟨1, rewardOmmerA⟩, ⟨2, rewardOmmerB⟩]
+
+private def rewardBalances (fork : Fork) (reward : Option Nat) :
+    Option (B256 × B256 × B256) :=
+  match runBlockchain (rewardBenv fork) [] [] reward rewardOmmers with
+  | .ok out =>
+    if out.blockException.isNone then
+      some ((out.state.get rewardCoinbase).bal, (out.state.get rewardOmmerA).bal,
+        (out.state.get rewardOmmerB).bal)
+    else none
+  | .error _ => none
+
+#guard rewardBalances .byzantium (some (3 * 10 ^ 18))
+  = some ((3187500000000000000 : Nat).toB256, (2625000000000000000 : Nat).toB256,
+      (2250000000000000000 : Nat).toB256)
+-- No reward (the `-1` sentinel, or proof of stake): nothing is credited.
+#guard rewardBalances .byzantium none = some (0, 0, 0)
+-- The two reward paths agree: the t8n step and the importer's `payRewards`
+-- on one ommer of age 1 (ommer number = block number - delta).
+#guard (payT8nRewards (3 * 10 ^ 18) rewardCoinbase [⟨1, rewardOmmerA⟩] .empty).bal
+    rewardCoinbase = (3093750000000000000 : Nat).toB256
+#guard (payT8nRewards (3 * 10 ^ 18) rewardCoinbase [⟨1, rewardOmmerA⟩] .empty).bal
+    rewardOmmerA = (2625000000000000000 : Nat).toB256
+#guard ommerAgesOk rewardOmmers
+#guard ¬ ommerAgesOk [⟨9, rewardOmmerA⟩]
+-- `--state.reward` resolution: under proof of work an absent flag is the
+-- fork's `BLOCK_REWARD`, `-1` skips, a value is paid as given, and any other
+-- negative value is refused; under proof of stake nothing is ever paid.
+#guard resolveReward (Fork.ruleSet .byzantium) none = .ok (some (3 * 10 ^ 18))
+#guard resolveReward (Fork.ruleSet .petersburg) none = .ok (some (2 * 10 ^ 18))
+#guard resolveReward (Fork.ruleSet .byzantium) (some (-1)) = .ok none
+#guard resolveReward (Fork.ruleSet .byzantium) (some 5) = .ok (some 5)
+#guard (resolveReward (Fork.ruleSet .byzantium) (some (-2))).toOption.isNone
+#guard resolveReward pragueRules none = .ok none
+#guard resolveReward pragueRules (some 5) = .ok none
+#guard resolveReward (Fork.ruleSet .paris) none = .ok none
+
 ----------------- REJECTION AND BLOCK-EXCEPTION TEXT ------------------
 
 -- `rejected[].error` and `blockException` carry free text with no normative
@@ -1209,6 +1345,81 @@ handshake. It names the frontend contract, not the library: the pins the
 handshake reports all come from `scripts/sources.json`. -/
 def version : String := "0.1.0"
 
+/-- What a `--state.fork` label names, read as the target's `find_fork` reads
+it: one fork, or one of its fork-block exception labels, which select a fork
+by `env.currentNumber`. -/
+inductive T8nForkLabel : Type
+  | fork (f : Fork)
+  /-- `before` below block `number`, `after` from it. -/
+  | atBlock (before after : Fork) (number : Nat)
+deriving DecidableEq, Repr
+
+namespace T8nForkLabel
+
+/-- The target's `--state.fork` names over the forks this build declares.
+
+The fork names are the target's: a fork module's CamelCase name, `Merge` for
+Paris, and `ConstantinopleFix` for the target's `constantinople` module, which
+is Petersburg. Two of Jaune's own labels are not target names and are refused
+here exactly as the target refuses them: `Constantinople` (its
+`UNSUPPORTED_FORKS`; Jaune's EIP-1283 rule set exists only for the legacy
+fixtures) and `Petersburg` (no target module has that name). The three
+fork-block labels are the target's `EXCEPTION_MAPS` entries whose forks are
+all declared here; `ByzantiumToConstantinopleAt5` resolves to the target's
+`constantinople` module, so its second fork is Petersburg. -/
+def ofString? : String → Option T8nForkLabel
+  | "Constantinople" => none
+  | "Petersburg" => none
+  | "ByzantiumToConstantinopleAt5" => some (.atBlock .byzantium .petersburg 5)
+  | "ConstantinopleToIstanbulAt5" => some (.atBlock .petersburg .istanbul 5)
+  | "BerlinToLondonAt5" => some (.atBlock .berlin .london 5)
+  | label => (Fork.ofString? label).map .fork
+
+/-- Every fork the label can select. -/
+def forks : T8nForkLabel → List Fork
+  | .fork f => [f]
+  | .atBlock before after _ => [before, after]
+
+/-- The fork the label selects for a block at `number`: the target's loop over
+`fork_blocks`, keeping the last one whose block the number has reached. -/
+def select (number : Nat) : T8nForkLabel → Fork
+  | .fork f => f
+  | .atBlock before after n => if n ≤ number then after else before
+
+end T8nForkLabel
+
+-- The twelve forks have target names, and they resolve to the fork the target
+-- runs; the two Jaune-only labels do not.
+#guard T8nForkLabel.ofString? "ConstantinopleFix" = some (.fork .petersburg)
+#guard T8nForkLabel.ofString? "Merge" = some (.fork .paris)
+#guard T8nForkLabel.ofString? "Paris" = some (.fork .paris)
+#guard ["Byzantium", "ConstantinopleFix", "Istanbul", "MuirGlacier", "Berlin",
+    "London", "ArrowGlacier", "GrayGlacier", "Merge", "Shanghai", "Cancun"].map
+    (fun l => (T8nForkLabel.ofString? l).map T8nForkLabel.forks)
+  = [.byzantium, .petersburg, .istanbul, .muirGlacier, .berlin, .london,
+    .arrowGlacier, .grayGlacier, .paris, .shanghai, .cancun].map (some [·])
+#guard T8nForkLabel.ofString? "Constantinople" = none
+#guard T8nForkLabel.ofString? "Petersburg" = none
+#guard Fork.supported.all
+  (fun f => T8nForkLabel.ofString? f.toString = some (.fork f))
+#guard (T8nForkLabel.ofString? "BerlinToLondonAt5").map (T8nForkLabel.select 4)
+  = some .berlin
+#guard (T8nForkLabel.ofString? "BerlinToLondonAt5").map (T8nForkLabel.select 5)
+  = some .london
+#guard (T8nForkLabel.ofString? "ByzantiumToConstantinopleAt5").map
+    (T8nForkLabel.select 5) = some .petersburg
+#guard (T8nForkLabel.ofString? "ConstantinopleToIstanbulAt5").map
+    (T8nForkLabel.select 0) = some .petersburg
+-- Every one of them is still refused at rule lookup: this unit adds the names,
+-- and later units switch each fork on.
+#guard ["Byzantium", "ConstantinopleFix", "Istanbul", "MuirGlacier", "Berlin",
+    "London", "ArrowGlacier", "GrayGlacier", "Merge", "Shanghai", "Cancun",
+    "BerlinToLondonAt5", "ByzantiumToConstantinopleAt5",
+    "ConstantinopleToIstanbulAt5"].all
+  (fun l => match T8nForkLabel.ofString? l with
+    | some label => label.forks.all (fun f => f.rules?.isNone)
+    | none => false)
+
 structure Opts : Type where
   inputAlloc : String := "alloc.json"
   inputEnv : String := "env.json"
@@ -1219,6 +1430,8 @@ structure Opts : Type where
   outputBasedir : String := "."
   forkLabel : String := ""
   chainId : Nat := 1
+  /-- `--state.reward`, as given; `resolveReward` reads it. -/
+  reward : Option Int := none
   stateTest : Bool := false
   info : Bool := false
   forks : Bool := false
@@ -1254,10 +1467,14 @@ def parseOpts : Opts → List String → IO Opts
   | o, "--state.chainid" :: v :: rest => do
     let some n := v.toNat? | IO.throw s!"error : --state.chainid expects a number, got {repr v}"
     parseOpts {o with chainId := n} rest
-  -- Accepted and not consumed. The target pays block rewards only when the
-  -- fork is not proof-of-stake, and every fork on this lane is, so the value
-  -- cannot change the transition. `fill` always passes it.
-  | o, "--state.reward" :: _ :: rest => parseOpts o rest
+  -- Read, and consumed only under proof of work (`resolveReward`): the
+  -- target pays block rewards only when the fork is not proof-of-stake, so
+  -- under every fork this build runs today the value cannot change the
+  -- transition. `fill` always passes it.
+  | o, "--state.reward" :: v :: rest => do
+    let some n := v.toInt?
+      | IO.throw s!"error : --state.reward expects an integer, got {repr v}"
+    parseOpts {o with reward := some n} rest
   | o, "--state-test" :: rest => parseOpts {o with stateTest := true} rest
   | o, "--info" :: rest => parseOpts {o with info := true} rest
   | o, "--forks" :: rest => parseOpts {o with forks := true} rest
@@ -1376,12 +1593,15 @@ def run (args : List String) : IO Unit := do
     IO.throw
       s!"error : t8n requires --state.fork; there is no default fork, and the \
          runnable labels are {Fork.supported.map Fork.toString}"
-  let some f := Fork.ofString? o.forkLabel
+  let some label := T8nForkLabel.ofString? o.forkLabel
     | IO.throw
         s!"error : t8n does not support the fork {repr o.forkLabel}; this \
            build's runnable lane is {Fork.supported.map Fork.toString}, and \
            there is no fallback"
-  let rules ← IO.ofExcept (f.rules.mapError SupportError.render)
+  -- Every fork the label can select must be runnable, settled before any
+  -- input is read: a plain label is refused here exactly as before, and a
+  -- fork-block label at both endpoints.
+  let _ ← IO.ofExcept ((label.forks.mapM Fork.rules).mapError SupportError.render)
   let usesStdin :=
     o.inputAlloc = "stdin" ∨ o.inputEnv = "stdin" ∨ o.inputTxs = "stdin"
   let stdinDoc ←
@@ -1395,7 +1615,16 @@ def run (args : List String) : IO Unit := do
   let envJsonIn ← readInput stdinDoc o.inputEnv "env"
   let txsJsonIn ← readInput stdinDoc o.inputTxs "txs"
   let preState ← allocJsonIn.toWorld
+  -- A fork-block label selects its fork by the block number, as the target's
+  -- `find_fork` does; a plain label ignores it.
+  let f := label.select (← natOr envJsonIn "currentNumber" defaultNumber)
+  let rules ← IO.ofExcept (f.rules.mapError SupportError.render)
   let env ← decodeEnv rules o.stateTest envJsonIn
+  let reward ← IO.ofExcept (resolveReward rules o.reward)
+  if reward.isSome then
+    IO.guard (ommerAgesOk env.ommers)
+      "error : t8n env.ommers has a delta above 8; the target's reward step \
+       computes 8 - delta in U256 and fails"
   let txs ← decodeTxs txsJsonIn
   let benv : Benv := {
     state := preState,
@@ -1419,7 +1648,8 @@ def run (args : List String) : IO Unit := do
   let outcome ←
     IO.ofExcept <|
       (if o.stateTest then runStateTest benv txs
-        else runBlockchain benv txs env.withdrawals).mapError TransitionError.render
+        else runBlockchain benv txs env.withdrawals reward env.ommers).mapError
+          TransitionError.render
   let resultText := (resultJson rules env outcome).toString
   let allocText := (allocJson outcome.state).toString
   let bodyText := quoted (bodyHex txs)
@@ -1459,8 +1689,11 @@ emits. Options may be spelled --flag=value or --flag value.
                          default and no fallback.
   --state-test           apply exactly one transaction with no system
                          operations, no withdrawals and no requests.
-  --state.reward <n>     accepted and not consumed: every fork on this lane is
-                         proof-of-stake, so block rewards are unreachable.
+  --state.reward <n>     the block reward, paid only under proof of work, as
+                         the target pays it: absent is the fork's
+                         BLOCK_REWARD, -1 skips rewards. Every fork this build
+                         runs is proof-of-stake, so today it is read and not
+                         consumed.
   --info                 print the version, the advertised fork lane and its
                          basis, every fork this build resolves, and the pins recorded in
                          scripts/sources.json. Needs that file: pass
