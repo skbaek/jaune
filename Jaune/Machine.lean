@@ -1085,6 +1085,15 @@ def difficultyOverParisTag : String := "DifficultyOverParisError"
 /-- An ommers hash other than the empty-list hash, impossible after Paris. -/
 def ommersOverParisTag : String := "OmmersOverParisError"
 
+/-- Before Paris: the header's difficulty disagrees with
+`calculateBlockDifficulty` from the parent. -/
+def invalidDifficultyTag : String := "InvalidDifficultyError"
+
+/-- Before Paris: the block's ommers break a rule of `validateOmmers` -- the
+list hash, the count, a duplicate, an ommer that is canonical or already
+included, its depth or its parent, or the ommer's own header. -/
+def invalidOmmersTag : String := "InvalidOmmersError"
+
 /-- Extra data longer than 32 bytes. -/
 def extraDataTooBigTag : String := "ExtraDataTooBigError"
 
@@ -1158,6 +1167,7 @@ def blockExceptionTags : List String :=
   [ gasLimitTooBigTag, gasLimitAdjustmentTag, gasUsedOverflowTag,
     gasUsedMismatchTag, timestampOlderThanParentTag, blockNumberTag,
     baseFeePerGasTag, difficultyOverParisTag, ommersOverParisTag,
+    invalidDifficultyTag, invalidOmmersTag,
     extraDataTooBigTag, unknownParentTag, unknownParentZeroTag,
     stateRootTag, transactionsRootTag, receiptsRootTag, logBloomTag,
     withdrawalsRootTag, headerNonceTag, excessBlobGasTag, blobGasUsedTag,
@@ -1170,8 +1180,8 @@ def blockExceptionTags : List String :=
 -- The tags are distinct, and none is a prefix of another, so no rendered
 -- reason can be read as another by any " : "-delimited reader -- and none is
 -- the broad category the vocabulary replaced.
-#guard blockExceptionTags.length = 30
-#guard blockExceptionTags.eraseDups.length = 30
+#guard blockExceptionTags.length = 32
+#guard blockExceptionTags.eraseDups.length = 32
 #guard blockExceptionTags.all fun t =>
   (blockExceptionTags.filter fun u => t.isPrefixOf u).length = 1
 #guard blockExceptionTags.all fun t => t ≠ "InvalidBlock"

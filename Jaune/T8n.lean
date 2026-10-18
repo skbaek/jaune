@@ -987,13 +987,13 @@ private def balPipelineBalances (list : BlockAccessList) (address : Adr)
   | none => false
 
 private def balPipelineRequestNetApplyBody : Bool :=
-  match applyBody (balPipelineBenv balPipelineToggleState) [] [] with
+  match applyBody (balPipelineBenv balPipelineToggleState) [] [] [] with
   | .ok ⟨state, bout⟩ =>
     (state.get balPipelineHelper).stor.get 0 == 0 && balPipelineHelperNoNet bout.blockAccessList
   | .error _ => false
 
 private def balPipelineRequestOneWriteApplyBody : Bool :=
-  match applyBody (balPipelineBenv balPipelineOneCallState) [] [] with
+  match applyBody (balPipelineBenv balPipelineOneCallState) [] [] [] with
   | .ok ⟨state, bout⟩ =>
     (state.get balPipelineHelper).stor.get 0 == 1 && balPipelineHelperOneWrite bout.blockAccessList
   | .error _ => false
@@ -1016,7 +1016,7 @@ private def balPipelineForwardApplyBody (half : Bool) : Bool :=
   let forwarded := if half then amount / 2 else amount
   let wds : List Withdrawal :=
     [{ globalIndex := 0, validatorIndex := 0, recipient := balPipelineWithdrawalRequestsAddress, amount := 2 }]
-  match applyBody (balPipelineBenv (balPipelineForwardState half)) [] wds with
+  match applyBody (balPipelineBenv (balPipelineForwardState half)) [] [] wds with
   | .ok ⟨state, bout⟩ =>
     (state.get balPipelineWithdrawalRequestsAddress).bal == retained &&
       (state.get balPipelineBeneficiary).bal == forwarded &&
