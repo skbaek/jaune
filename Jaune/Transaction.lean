@@ -65,6 +65,8 @@ inductive TxValidationError : Type
   | type3ZeroBlobs (detail : ErrorDetail)
   | type4ContractCreation (detail : ErrorDetail)
   | emptyAuthorizationList (detail : ErrorDetail)
+  /-- A typed transaction whose type number exceeds the fork's `maxType`. -/
+  | typePreFork (txType : Nat) (detail : ErrorDetail)
 deriving DecidableEq, Repr
 
 /-- The tag a transaction-rejection reason renders under. -/
@@ -90,6 +92,7 @@ def TxValidationError.tag : TxValidationError → String
   | .type3ZeroBlobs _ => type3ZeroBlobsTag
   | .type4ContractCreation _ => type4ContractCreationTag
   | .emptyAuthorizationList _ => emptyAuthorizationListTag
+  | .typePreFork _ _ => typePreForkTag
 
 /-- The diagnostic payload of a transaction-rejection reason. -/
 def TxValidationError.detail : TxValidationError → ErrorDetail
@@ -103,7 +106,7 @@ def TxValidationError.detail : TxValidationError → ErrorDetail
   | .type3BlobCountExceeded d | .type3BlobCountLimitExceeded d
   | .type3ContractCreation d | .type3InvalidBlobVersionedHash d
   | .type3ZeroBlobs d | .type4ContractCreation d
-  | .emptyAuthorizationList d => d
+  | .emptyAuthorizationList d | .typePreFork _ d => d
 
 /-- The one renderer for `TxValidationError`. -/
 def TxValidationError.render (e : TxValidationError) : String :=
@@ -121,7 +124,7 @@ def TxValidationError.all : List TxValidationError :=
     .type3BlobCountExceeded .none, .type3BlobCountLimitExceeded .none,
     .type3ContractCreation .none, .type3InvalidBlobVersionedHash .none,
     .type3ZeroBlobs .none, .type4ContractCreation .none,
-    .emptyAuthorizationList .none ]
+    .emptyAuthorizationList .none, .typePreFork 3 .none ]
 
 /-- `B256` carries no `Repr` of its own; the block-rejection type below derives
 one, and its `blockAccessListHash` reason now carries a hash as data. Rendered
@@ -440,10 +443,10 @@ theorem TransitionError.render_split (e : TransitionError) :
 -- Golden guards. Each vocabulary is pinned constructor-by-constructor to the
 -- tag it renders under, so a migrated producer cannot silently change an
 -- externally observed message or route a reason to the wrong identity.
-#guard TxValidationError.all.length = 21
-#guard TxValidationError.all.eraseDups.length = 21
+#guard TxValidationError.all.length = 22
+#guard TxValidationError.all.eraseDups.length = 22
 #guard TxValidationError.all.map TxValidationError.tag = transactionExceptionTags
-#guard (TxValidationError.all.map TxValidationError.tag).eraseDups.length = 21
+#guard (TxValidationError.all.map TxValidationError.tag).eraseDups.length = 22
 #guard TxValidationError.render
     (.insufficientMaxFeePerBlobGas (.text "insufficient max fee per blob gas"))
   = "InsufficientMaxFeePerBlobGasError : insufficient max fee per blob gas"
@@ -2695,15 +2698,17 @@ theorem Bytes.toExTx_wireWellFormed {xs : Bytes} {tx : Tx}
 
 /-- S5 admission: a decoded transaction is admissible only when its type
 number fits the rules (`tx.type.index ≤ rules.txr.maxType`). A typed envelope
-from a later fork fails here with the decode-channel reason -- EELS's own
-decode of those bytes fails structurally under the earlier fork, so the block
-is invalid rather than internally unclassifiable. Pre-London needs nothing
-more: fees are unchanged because the base fee is 0 there. -/
+from a later fork fails here with its own transaction reason, `typePreFork`
+-- EELS's own decode of those bytes fails under the earlier fork, so the block
+is invalid rather than internally unclassifiable, and the fixture vocabulary
+names the reason per type (`TYPE_3_TX_PRE_FORK`, `TYPE_4_TX_PRE_FORK`; goal
+U11a moved it off the decode channel to carry that identity). Pre-London
+needs nothing more: fees are unchanged because the base fee is 0 there. -/
 def checkTxTypeAdmitted (rules : ForkRules) (tx : Tx) :
     Except TransitionError Unit :=
   if tx.type.index ≤ rules.txr.maxType then .ok ()
   else
-    .error <| .decode <| DecodeError.structure "typed transaction"
+    .error <| .transaction <| .typePreFork tx.type.index <| .text
       s!"type-{tx.type.index} transaction needs maxType ≥ {tx.type.index}, \
          these rules admit at most {rules.txr.maxType}"
 
@@ -4060,7 +4065,7 @@ rules-taking adapter and this one had the same domain, so the duplicate layer
 was retired into this name rather than kept as a synonym; there is no longer a
 rules-taking entry point that could be handed a record no fork realises. The
 `UnsupportedForkError` route this function used to take for an unimplemented
-fork is live again for the ten still-refused pre-Prague forks --
+fork is live again for the eight still-refused pre-Prague forks --
 `Fork.rules` refuses them, while `Fork.ruleSet` stays total beside it -- and
 the vocabulary is retained where `Fork.rules` renders it. -/
 def stateTransitionAt (f : Fork) (ch : BlockChain) (block : Block) :
@@ -4958,6 +4963,8 @@ private def isStructureD : DecodeError → Bool
   | .rlpStructure _ => true | _ => false
 private def isWithdrawalsNotReadD : DecodeError → Bool
   | .withdrawalsNotRead _ => true | _ => false
+private def txPreForkFails {α : Type} (type : Nat) : Except TransitionError α → Bool :=
+  txFails fun e => match e with | .transaction (.typePreFork t _) => t == type | _ => false
 
 -- Both withdrawal index positions reject nine bytes at the field boundary;
 -- neither can reach the truncating `Bytes.toUInt64` conversion unchecked.
@@ -5085,23 +5092,24 @@ private def reencodes (type : UInt8) (v : Bytes) : Bool :=
 #guard reencodes 0x04 <| type4Vector testRecipient goodAuth
 
 -- S5 admission through `decodeTx`: the envelope type must fit the rules'
--- `maxType`, and a too-new envelope fails on the decode channel (the block is
--- invalid, as EELS's own structural decode failure makes it). Byzantium admits
+-- `maxType`, and a too-new envelope fails with `typePreFork` naming its type
+-- (the block is invalid, as EELS's own decode failure makes it; the decode
+-- channel until goal U11a). Byzantium admits
 -- only legacy; Berlin adds type 1; London type 2; Cancun type 3; Prague
 -- (maxType 4) everything the decoder produces.
-#guard txDecFails isStructureD <| decodeTx byzantiumRules (.inl
+#guard txPreForkFails 1 <| decodeTx byzantiumRules (.inl
   (type1Vector [0x01] [0x01] testRecipient [0x01] (.list [])))
 #guard (decodeTx berlinRules (.inl
   (type1Vector [0x01] [0x01] testRecipient [0x01] (.list [])))).toOption.isSome
-#guard txDecFails isStructureD <| decodeTx berlinRules (.inl
+#guard txPreForkFails 2 <| decodeTx berlinRules (.inl
   (type2Vector [0x0a] testRecipient [0x02]))
 #guard (decodeTx londonRules (.inl
   (type2Vector [0x0a] testRecipient [0x02]))).toOption.isSome
-#guard txDecFails isStructureD <| decodeTx londonRules (.inl
+#guard txPreForkFails 3 <| decodeTx londonRules (.inl
   (type3Vector [0x01] testRecipient testBlobHash))
 #guard (decodeTx cancunRules (.inl
   (type3Vector [0x01] testRecipient testBlobHash))).toOption.isSome
-#guard txDecFails isStructureD <| decodeTx cancunRules (.inl
+#guard txPreForkFails 4 <| decodeTx cancunRules (.inl
   (type4Vector testRecipient goodAuth))
 #guard (decodeTx pragueRules (.inl
   (type4Vector testRecipient goodAuth))).toOption.isSome
@@ -5275,7 +5283,7 @@ Named `addBlockToChainWith` and taking a `ForkRules` until goal
 rules-taking adapter and the fork-taking one had the same domain, and the
 duplicate layer was retired into this name. The `.support` channel this
 function used to route an unimplemented fork through is live again for the
-ten still-refused pre-Prague forks: `Fork.rules` refuses them, while
+eight still-refused pre-Prague forks: `Fork.rules` refuses them, while
 `Fork.ruleSet` stays total beside it. -/
 def addBlockToChainAt (f : Fork) (chain : BlockChain) (blockRlp : Bytes) :
     Except String (BlockChain ⊕ String) :=
@@ -5434,7 +5442,7 @@ example (chain : BlockChain) (blockRlp : Bytes) :
 
 -- A block whose fork a build cannot run would be refused *before* anything is
 -- decoded or executed, so an unimplemented fork could never be mistaken for a
--- rule the build actually applied. Ten forks are in that state here:
+-- rule the build actually applied. Eight forks are in that state here:
 -- `Fork.rules` refuses them, and the guards below record that the support
 -- channel answers through exactly those declared labels.
 
@@ -5566,6 +5574,11 @@ private def guardBlobParent (baseFee blobGasUsed : Nat) : Header :=
     (fun blob => calculateExcessBlobGas blob (guardBlobParent 17 (21 * 131072)))
   = [917504, 917504, 917504]
 
+-- (U11a shaped this same probe block by fork identity as `guardShapedBlock`;
+-- the merge keeps the rules-driven `guardBlockAtRules` above, which reuses
+-- `guardTestHeader`'s reviewed values and is pinned to `guardHeader16`, and
+-- drops the fork-driven duplicate.)
+
 -- Every fork this build runs reaches execution; none is refused for want of
 -- rules. Each probe block carries exactly the fork-dependent fields its rules
 -- define (`guardBlockAtRules`), so field presence passes and each verdict is
@@ -5587,16 +5600,16 @@ private def guardBlobParent (baseFee blobGasUsed : Nat) : Header :=
     | .error (.internal _) => true
     | _ => false)
 
--- The complement, at the same entry point and on the same chain: the ten
+-- The complement, at the same entry point and on the same chain: the eight
 -- still-refused pre-Prague forks never reach execution, because `Fork.rules`
 -- refuses them before any block is examined. Goal A's guard here asserted that
 -- Amsterdam was refused on the support channel before any block was examined;
 -- it was rewritten to say that Amsterdam reaches execution like every other
 -- supported fork when Amsterdam resolved, and it is rewritten again here to
--- say that the ten still-refused pre-Prague forks are refused where Amsterdam
--- was.
+-- say that the eight still-refused pre-Prague forks are refused where
+-- Amsterdam was.
 #guard Fork.unimplemented = [.byzantium, .constantinople, .petersburg, .istanbul,
-  .muirGlacier, .berlin, .arrowGlacier, .grayGlacier, .shanghai, .cancun]
+  .muirGlacier, .berlin, .arrowGlacier, .grayGlacier]
 #guard (match addBlockToChainAtE .amsterdam guardEmptyChain
     (guardBlockAt 0).toBLT.toBytes with
   | .error (.support _) => false
@@ -5692,7 +5705,7 @@ private def guardHeader22BLT : BLT :=
 #guard guardHeader22BLT.toExHeader.toOption.isNone
 #guard (match guardHeader22BLT.toExHeader with
   | .error e => e.render ==
-      "RlpStructureError : header : expected 15, 16, 17, 20, 21 or 23 fields, but found 22"
+      "RlpHeaderWidthError : header : expected 15, 16, 17, 20, 21 or 23 fields, but found 22"
   | .ok _ => false)
 
 -- A 24-field header is refused for the same reason, so the rule is "these
@@ -5923,7 +5936,8 @@ private def guardHeader17 : Header :=
 #guard bltFields (Header.toBLT
   { guardHeader17 with blobGasUsed := some 0, excessBlobGas := some 0 }) = 17
 
--- 18 and 19 fields are refused on input, as structure errors naming the width.
+-- 18 and 19 fields are refused on input, as header-width errors naming the
+-- width (`INCORRECT_BLOCK_FORMAT`; structure errors until goal U11a).
 private def guardHeaderPrefixBLT (n : Nat) : BLT :=
   match Header.toBLT guardTestHeader with
   | .list l => .list (l.take n)
@@ -5931,11 +5945,11 @@ private def guardHeaderPrefixBLT (n : Nat) : BLT :=
 
 #guard (match (guardHeaderPrefixBLT 18).toExHeader with
   | .error e => e.render ==
-      "RlpStructureError : header : expected 15, 16, 17, 20, 21 or 23 fields, but found 18"
+      "RlpHeaderWidthError : header : expected 15, 16, 17, 20, 21 or 23 fields, but found 18"
   | .ok _ => false)
 #guard (match (guardHeaderPrefixBLT 19).toExHeader with
   | .error e => e.render ==
-      "RlpStructureError : header : expected 15, 16, 17, 20, 21 or 23 fields, but found 19"
+      "RlpHeaderWidthError : header : expected 15, 16, 17, 20, 21 or 23 fields, but found 19"
   | .ok _ => false)
 -- and 14 is refused as a malformed list.
 #guard (guardHeaderPrefixBLT 14).toExHeader.toOption.isNone

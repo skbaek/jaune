@@ -2,7 +2,7 @@
 
 Sixty-five cases, each a complete `t8n` invocation, with goldens generated from the
 pinned conformance target. `scripts/check-t8n.sh` runs them; this file says
-what they are and how to change them. Fifty-six conform and nine are
+what they are and how to change them. Fifty-eight conform and seven are
 registered refusals (the still-refused historical forks below).
 
 ## Layout
@@ -51,8 +51,8 @@ These nine cases run at Prague. The thirty `am-*` cases below exercise
 Amsterdam's metering in both tool modes. Ten further cases cover storage-only
 creation and empty-account deletion on Prague, Osaka, BPO1, BPO2 and Amsterdam.
 Five further cases cover zero-value transaction, CALL and STATICCALL entry on
-those same forks (56 conforming cases in total; 65 with the historical eleven,
-two of which now pass).
+those same forks (58 conforming cases in total; 65 with the historical eleven,
+four of which now pass).
 
 ### Storage semantics at the v21 pin
 
@@ -86,7 +86,8 @@ do not claim Frontier-through-Amsterdam release coverage.
 `jaune t8n --state.fork Amsterdam` resolves Amsterdam through `Fork.rules?`
 like every other fork, and since goal `jaune-amsterdam-currency-v1`
 `jaune t8n --forks` advertises it: the lane printed there is `Fork.supported`
-itself -- `Prague Osaka BPO1 BPO2 Amsterdam` -- so the advertised lane and the
+itself -- `Shanghai Cancun Prague Osaka BPO1 BPO2 Amsterdam` since U11a
+made Shanghai and Cancun runnable -- so the advertised lane and the
 runnable lane cannot differ, `scripts/sources.json`'s
 `conformance_target.fork_lane` is the same list (pinned by
 `scripts/check-cli.sh`), and `jaune t8n --info` states the lane, its basis
@@ -140,8 +141,8 @@ pins, so goldens and emission always come from one revision.
 
 ## Historical cases (goal U10)
 
-Eleven further cases cover the pre-Prague forks, one transfer per fork (nine
-still refused, two passing since unit U11b):
+Eleven further cases cover the pre-Prague forks, one transfer per fork (seven
+still refused, four passing since units U11a/U11b):
 
 | case | fork label | reward |
 |---|---|---|
@@ -158,15 +159,19 @@ still refused, two passing since unit U11b):
 | `hist-transfer-cancun` | `Cancun` | proof of stake, `-1` |
 
 Labels are the target's `--state.fork` names (`ConstantinopleFix` for its
-`constantinople` module, `Merge` for Paris); Jaune parses the same labels and
-refuses the nine still-refused ones with `UnsupportedForkError` before reading
-any input, because `Fork.rules?` is none for those nine. That refusal is the
-expected red: `scripts/t8n/expected-refusals.json` registers each case with
-its reason, and the gate requires the refusal rather than marking it
-passing. London and `Merge` (Paris) resolve since unit U11b and conform
-against their goldens byte for byte. The goldens, generated from the pinned
-target by the registered generator, record the behavior later units will
-conform to for the remaining nine. There is no
+`constantinople` module, `Merge` for Paris); Jaune parses the same labels.
+Since units U11a/U11b, London, `Merge` (Paris), Shanghai and Cancun resolve
+and conform against their goldens byte for byte: the `result` document
+carries `currentDifficulty` pre-merge, and `currentBaseFee`,
+`withdrawalsRoot`, the blob pair and the requests pair exactly when the
+fork's header rules carry the field, as the target's `exclude_none=True`
+does. Jaune refuses the other seven with `UnsupportedForkError` before reading
+any input, because `Fork.rules?` is none for their forks. That refusal is the
+expected red: `scripts/t8n/expected-refusals.json` registers each such case
+with its reason, and the gate requires the refusal rather than marking it
+passing. The goldens, generated from the pinned target by the registered
+generator, record the behavior later units will conform to for the remaining
+seven. There is no
 `Constantinople` (EIP-1283) case: the target refuses that label too
 (`UNSUPPORTED_FORKS`), so no golden can be generated for it; its evidence is
 the legacy corpus and the constants gate's all-dormant row.

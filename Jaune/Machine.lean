@@ -877,7 +877,7 @@ structure BenvStat : Type where
   The machine carries the *fork*, and `BenvStat.rules` below derives the rule
   record from it with `Fork.ruleSet`. That is what makes `ForkRules.Valid` a
   fact about every machine rather than a premise every statement has to carry:
-  the only rule sets a machine can hold are the seven fork records, each
+  the only rule sets a machine can hold are the nine fork records, each
   proved usable once by `Fork.ruleSet_valid`. A rule record that describes no
   fork is not rejected, it is inexpressible.
 
@@ -910,7 +910,7 @@ structure BenvStat : Type where
 Kept under its former name and type -- `BenvStat → ForkRules` -- so that every
 *read* of the active rules, in this repository and downstream, is textually
 unchanged. What moved is construction: there is no `rules` field to set, so
-the only rule sets a machine can carry are the seven `Fork.ruleSet`
+the only rule sets a machine can carry are the nine `Fork.ruleSet`
 records. -/
 def BenvStat.rules (s : BenvStat) : ForkRules := Fork.ruleSet s.fork
 
@@ -1039,6 +1039,9 @@ def type3InvalidBlobVersionedHashTag : String :=
   "Type3InvalidBlobVersionedHashError"
 def type3ZeroBlobsTag : String := "Type3ZeroBlobsError"
 def type4ContractCreationTag : String := "Type4ContractCreationError"
+/-- A typed transaction whose type the fork does not admit (unit U5's
+`maxType`; goal U11a gave it its own reason). -/
+def typePreForkTag : String := "TypePreForkError"
 def emptyAuthorizationListTag : String := "EmptyAuthorizationListError"
 
 def transactionExceptionTags : List String :=
@@ -1052,10 +1055,10 @@ def transactionExceptionTags : List String :=
     type3BlobCountExceededTag, type3BlobCountLimitExceededTag,
     type3ContractCreationTag,
     type3InvalidBlobVersionedHashTag, type3ZeroBlobsTag,
-    type4ContractCreationTag, emptyAuthorizationListTag ]
+    type4ContractCreationTag, emptyAuthorizationListTag, typePreForkTag ]
 
-#guard transactionExceptionTags.length = 21
-#guard transactionExceptionTags.eraseDups.length = 21
+#guard transactionExceptionTags.length = 22
+#guard transactionExceptionTags.eraseDups.length = 22
 #guard transactionExceptionTags.all fun t =>
   (transactionExceptionTags.filter fun u => t.isPrefixOf u).length = 1
 
@@ -1241,6 +1244,14 @@ an initial structural decoding failure even though both map to the fixture's
 `RLP_STRUCTURES_ENCODING` identity. -/
 def rlpRoundTripTag : String := "RlpRoundTripError"
 
+/-- A header is a list of well-formed items whose count is none of the
+widths any fork's header has (15, 16, 17, 20, 21 or 23). Kept apart from
+`rlpStructureTag` because the fixture vocabulary gives it its own identity,
+`INCORRECT_BLOCK_FORMAT`: the Shanghai-to-Cancun transition fixtures build
+exactly such headers, a Shanghai header with the blob fields or a Cancun one
+without them (goal U11a). -/
+def rlpHeaderWidthTag : String := "RlpHeaderWidthError"
+
 --------------- TYPED SEMANTIC REASONS: CODEC AND VM ---------------
 
 -- Declarations, renderers, and golden guards only; no producer is migrated
@@ -1278,6 +1289,8 @@ inductive DecodeError : Type
   | withdrawalsNotRead (detail : ErrorDetail)
   /-- Local field shapes decoded, but the canonical re-encoding differs. -/
   | roundTrip (detail : ErrorDetail)
+  /-- A header's field count is no fork's header width. -/
+  | headerWidth (detail : ErrorDetail)
 deriving DecidableEq, Repr
 
 /-- The tag a decode reason renders under. -/
@@ -1289,12 +1302,13 @@ def DecodeError.tag : DecodeError → String
   | .leadingZeros _ => rlpLeadingZerosTag
   | .withdrawalsNotRead _ => rlpWithdrawalsNotReadTag
   | .roundTrip _ => rlpRoundTripTag
+  | .headerWidth _ => rlpHeaderWidthTag
 
 /-- The diagnostic payload of a decode reason. -/
 def DecodeError.detail : DecodeError → ErrorDetail
   | .rlpStructure d | .fixedWidth d | .fieldOverflow64 d
   | .fieldOverflow256 d | .leadingZeros d | .withdrawalsNotRead d
-  | .roundTrip d => d
+  | .roundTrip d | .headerWidth d => d
 
 /-- The one renderer for `DecodeError`. -/
 def DecodeError.render (e : DecodeError) : String :=
@@ -1304,7 +1318,7 @@ def DecodeError.render (e : DecodeError) : String :=
 def DecodeError.all : List DecodeError :=
   [ .rlpStructure .none, .fixedWidth .none, .fieldOverflow64 .none,
     .fieldOverflow256 .none, .leadingZeros .none,
-    .withdrawalsNotRead .none, .roundTrip .none ]
+    .withdrawalsNotRead .none, .roundTrip .none, .headerWidth .none ]
 
 /-- A reason the machine stops a frame with no gas returned and its state
 changes rolled back.
@@ -1474,8 +1488,8 @@ def SettledHalt.toEvmError : SettledHalt → EvmError
 #guard DecodeError.all.map DecodeError.tag
   = [ "RlpStructureError", "RlpFixedWidthError", "RlpFieldOverflow64Error",
       "RlpFieldOverflow256Error", "RlpLeadingZerosError",
-      "RlpWithdrawalsNotReadError", "RlpRoundTripError" ]
-#guard DecodeError.all.length = 7
+      "RlpWithdrawalsNotReadError", "RlpRoundTripError", "RlpHeaderWidthError" ]
+#guard DecodeError.all.length = 8
 #guard DecodeError.render (.rlpStructure (.text "withdrawals : expected a list"))
   = "RlpStructureError : withdrawals : expected a list"
 #guard DecodeError.render (.fixedWidth (.text "root must be exactly 32 bytes, but is 31"))
@@ -1485,6 +1499,7 @@ def SettledHalt.toEvmError : SettledHalt → EvmError
 #guard DecodeError.render (.leadingZeros .none) = "RlpLeadingZerosError"
 #guard DecodeError.render (.withdrawalsNotRead .none) = "RlpWithdrawalsNotReadError"
 #guard DecodeError.render (.roundTrip .none) = "RlpRoundTripError"
+#guard DecodeError.render (.headerWidth .none) = "RlpHeaderWidthError"
 
 #guard ExceptionalHalt.all.map ExceptionalHalt.tag
   = [ "StackUnderflowError", "StackOverflowError", "OutOfGasError",
@@ -1522,12 +1537,12 @@ def SettledHalt.toEvmError : SettledHalt → EvmError
 #guard SettledHalt.render (.halt (.invalidJumpDest .none)) = "InvalidJumpDestError"
 #guard SettledHalt.render (.halt (.addressCollision .none)) = "AddressCollision"
 
--- The seven decode tags the typed reasons render under are exactly the seven
+-- The eight decode tags the typed reasons render under are exactly the eight
 -- the strict decoders emit today, in the order the vocabulary declares them.
 #guard DecodeError.all.map DecodeError.tag
   = [ rlpStructureTag, rlpFixedWidthTag, rlpFieldOverflow64Tag,
       rlpFieldOverflow256Tag, rlpLeadingZerosTag, rlpWithdrawalsNotReadTag,
-      rlpRoundTripTag ]
+      rlpRoundTripTag, rlpHeaderWidthTag ]
 
 
 /-- The structure reason for an RLP item that is not what the field requires.

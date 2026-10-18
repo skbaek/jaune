@@ -114,9 +114,9 @@ def ofString? : String → Option Fork
 /-- Every *declared* fork, in activation order.
 
 Being listed here means the *identity* is known, not that its rules are
-implemented: only London, Paris, and Prague through Amsterdam resolve (see
-`Fork.rules?`), and the ten other pre-Prague forks stay refused. The two names
-are kept apart because
+implemented: only London, Paris, Shanghai, Cancun, and Prague through
+Amsterdam resolve (see `Fork.rules?`), and the eight other pre-Prague forks
+stay refused. The two names are kept apart because
 they answer different questions -- what this build *parses* against what it
 will also *execute* -- and because a user-facing message must keep
 distinguishing a label this build does not recognise from one it recognises
@@ -1564,7 +1564,7 @@ theorem byzantiumAccessGas_valid : byzantiumAccessGas.Valid := by decide
 /-- Error tag for a fork whose identity is known but whose rules this build
 does not implement.
 
-The ten still-refused pre-Prague forks produce it through `Fork.rules` and
+The eight still-refused pre-Prague forks produce it through `Fork.rules` and
 `Fork.rules?`; the guards at the end of this file record each refusal. It is
 kept because
 `scripts/check-fork-constants.sh` and `scripts/check-cli.sh` assert this exact
@@ -1577,10 +1577,11 @@ def unsupportedForkTag : String := "UnsupportedForkError"
 /-- The single place where a fork identity becomes rule data.
 
 This is a **total** function: every declared fork names the rule record built
-for it, including the twelve pre-Prague forks, ten of which this build parses
-but does not run. The resolving lookups -- `Fork.rules?`, `Fork.rules`, and
-everything reached through `ChainConfig.rulesAt` -- are partial over it and
-refuse those ten (see `Fork.rules?`), while `BenvStat.rules` reads it
+for it, including the twelve pre-Prague forks, eight of which this build
+parses but does not run. The resolving lookups -- `Fork.rules?`,
+`Fork.rules`, and everything reached through `ChainConfig.rulesAt` -- are
+partial over it and refuse those eight (see `Fork.rules?`), while
+`BenvStat.rules` reads it
 directly for the fork the entry point already resolved, so
 `Fork.ruleSet_valid` below discharges `ForkRules.Valid` once for every rule
 set any machine can carry.
@@ -1610,7 +1611,7 @@ def Fork.ruleSet : Fork → ForkRules
 
 This is the theorem the rest of the tree lives off. Because `BenvStat` carries
 a `Fork` and derives its rules through `Fork.ruleSet`, every machine's rule set
-is one of these seven records, so no statement about a machine needs a
+is one of these nine records, so no statement about a machine needs a
 `ForkRules.Valid` premise: `BenvStat.rules_valid`, `Sevm.rules_valid` and
 `Evm.rules_valid` in `Jaune/Machine.lean` are one-line corollaries.
 
@@ -1630,7 +1631,7 @@ theorem Fork.ruleSet_fork (f : Fork) : f.ruleSet.fork = f := by
 
 /-- Rule lookup as an `Option`, kept for its callers and its vocabulary.
 
-`some` for the seven forks this build runs, `none` for the ten pre-Prague
+`some` for the nine forks this build runs, `none` for the eight pre-Prague
 forks whose identities it parses but whose rules it does not implement. The
 literals stay total under `Fork.ruleSet` beside this lookup, so the rule data
 is still reviewed in place; what changed is that no caller resolves a
@@ -1648,8 +1649,8 @@ def Fork.rules? : Fork → Option ForkRules
   | .arrowGlacier => none
   | .grayGlacier => none
   | .paris => some parisRules
-  | .shanghai => none
-  | .cancun => none
+  | .shanghai => some shanghaiRules
+  | .cancun => some cancunRules
   | .prague => some pragueRules
   | .osaka => some osakaRules
   | .bpo1 => some bpo1Rules
@@ -1661,7 +1662,7 @@ def Fork.rules? : Fork → Option ForkRules
 Derived from `Fork.rules?` rather than written out, so it cannot drift from
 what resolves. This is the list a message means when it says "supported":
 `Fork.all` is what this build *parses*, and these are the labels it will also
-execute. The two are different lists -- the ten still-refused pre-Prague
+execute. The two are different lists -- the eight still-refused pre-Prague
 forks parse and are refused -- and the guard below pins the runnable one as it
 reads today. -/
 def Fork.supported : List Fork := Fork.all.filter (fun f => f.rules?.isSome)
@@ -1669,22 +1670,23 @@ def Fork.supported : List Fork := Fork.all.filter (fun f => f.rules?.isSome)
 /-- The declared forks whose rules this build does not implement.
 
 The complement of `Fork.supported` within `Fork.all`, for the diagnostics that
-have to name exactly which labels parse and are then refused. It is the ten
+have to name exactly which labels parse and are then refused. It is the eight
 still-refused pre-Prague forks, and the guard below pins the list as it reads
 today. -/
 def Fork.unimplemented : List Fork := Fork.all.filter (fun f => f.rules?.isNone)
 
--- The runnable forks, as they read today: London, Paris, and Prague through
--- Amsterdam. A guard, not a theorem -- a theorem would claim parsing and
--- executing admit the same labels, which they do not while ten declared forks
--- stay refused.
-#guard Fork.supported = [.london, .paris, .prague, .osaka, .bpo1, .bpo2, .amsterdam]
+-- The runnable forks, as they read today: London, Paris, Shanghai, Cancun,
+-- and Prague through Amsterdam. A guard, not a theorem -- a theorem would
+-- claim parsing and executing admit the same labels, which they do not while
+-- eight declared forks stay refused.
+#guard Fork.supported = [.london, .paris, .shanghai, .cancun, .prague, .osaka,
+  .bpo1, .bpo2, .amsterdam]
 
--- The refused forks, as they read today: the ten pre-Prague forks whose rules
--- stay unresolved. A guard, not a theorem, for the same reason as
+-- The refused forks, as they read today: the eight pre-Prague forks whose
+-- rules stay unresolved. A guard, not a theorem, for the same reason as
 -- `Fork.supported` above.
 #guard Fork.unimplemented = [.byzantium, .constantinople, .petersburg, .istanbul,
-  .muirGlacier, .berlin, .arrowGlacier, .grayGlacier, .shanghai, .cancun]
+  .muirGlacier, .berlin, .arrowGlacier, .grayGlacier]
 
 /-- Every rule set a fork identity resolves to is structurally usable.
 
@@ -1707,8 +1709,8 @@ theorem Fork.rules?_valid {f : Fork} {r : ForkRules} (h : f.rules? = some r) :
   | arrowGlacier => simp [Fork.rules?] at h
   | grayGlacier => simp [Fork.rules?] at h
   | paris => simp only [Fork.rules?] at h; cases h; exact parisRules_valid
-  | shanghai => simp [Fork.rules?] at h
-  | cancun => simp [Fork.rules?] at h
+  | shanghai => simp only [Fork.rules?] at h; cases h; exact shanghaiRules_valid
+  | cancun => simp only [Fork.rules?] at h; cases h; exact cancunRules_valid
   | prague => simp only [Fork.rules?] at h; cases h; exact pragueRules_valid
   | osaka => simp only [Fork.rules?] at h; cases h; exact osakaRules_valid
   | bpo1 => simp only [Fork.rules?] at h; cases h; exact bpo1Rules_valid
@@ -2059,7 +2061,7 @@ def SupportError.render : SupportError → String
 
 /-- Rule lookup in the `Except` shape the explicit-fork entry points use.
 
-It succeeds for the seven forks this build runs and refuses the ten
+It succeeds for the nine forks this build runs and refuses the eight
 still-refused pre-Prague forks with `.unsupportedFork`, through `Fork.rules?`
 above -- one resolver for every label, so the CLI, the transition tool, and
 the configured lookup all refuse the same labels. The name, the type and the
@@ -2617,7 +2619,7 @@ The schedule begins at Byzantium, at its real activation block
 pre-Byzantium era, so a configured mainnet block numbered before that floor
 must not silently run under any rules: `ChainConfig.forkAt` reports it as
 `SupportError.unsupportedBlockEra` rather than resolving it to a fork. A
-scheduled fork is not thereby a runnable one: the ten still-refused
+scheduled fork is not thereby a runnable one: the eight still-refused
 pre-Prague forks are refused at `Fork.rules?`, so `rulesAt` reports a block in
 their era as `SupportError.unsupportedFork`. -/
 def mainnetChainConfig : ChainConfig := {
@@ -2825,7 +2827,7 @@ private def isEraL : RulesLookupError → Bool
   13, 14, 15, 16]
 
 -- The declared set and the runnable set are both derived from `Fork.rules?`
--- rather than restated, and they differ by exactly the ten still-refused
+-- rather than restated, and they differ by exactly the eight still-refused
 -- pre-Prague forks. The runnable and refused lists *as they read today* are
 -- guarded where
 -- `Fork.supported` and `Fork.unimplemented` are defined above; what is
@@ -3439,7 +3441,7 @@ example : amsterdamRules =
    (3, (0x0000BFF46984E3725691FA540A8C7589300D8282 : Adr)),
    (4, (0x000064D678505AD48F8CCB093BC65613800E8282 : Adr))]
 -- Only Amsterdam carries a block-level access list, and it is the only fork
--- whose header commits to one: the `Valid` conjunct is checked on all seven.
+-- whose header commits to one: the `Valid` conjunct is checked on all nine.
 #guard Fork.supported.all (fun f =>
   match f.rules? with
   | some r => r.bal.isSome == r.header.blockAccessListHash
@@ -3455,17 +3457,18 @@ example : amsterdamRules =
 #guard Fork.amsterdam.rules?.isSome
 #guard Fork.supported.contains .amsterdam
 
--- The seven forks this build runs resolve to rules that name them back, and
--- the ten still-refused pre-Prague forks are refused with
+-- The nine forks this build runs resolve to rules that name them back, and
+-- the eight still-refused pre-Prague forks are refused with
 -- `UnsupportedForkError` through both lookups. (Goal A guarded here that
 -- `Fork.amsterdam.rules = .error (.unsupportedFork .amsterdam)` and that the
 -- refusal rendered the `UnsupportedForkError` golden; both were rewritten to
 -- the admission that replaced them when Amsterdam resolved, and the twelve
--- rows below are that same refusal in its new place; this unit rewrites
--- London's and Paris's two rows to the admission that replaces them.) That
--- `rules?` resolves and names the fork back is `Fork.rules?`'s definition
--- with `Fork.ruleSet_fork`; that the ten do not resolve is the rows below,
--- which pin `rules` and `validRules?` fork by fork.
+-- rows below are that same refusal in its new place; units U11a/U11b rewrite
+-- London's, Paris's, Shanghai's and Cancun's four rows to the admission that
+-- replaces them.) That `rules?` resolves and names the fork back is
+-- `Fork.rules?`'s definition with `Fork.ruleSet_fork`; that the eight do not
+-- resolve is the rows below, which pin `rules` and `validRules?` fork by
+-- fork.
 #guard Fork.byzantium.rules = .error (.unsupportedFork .byzantium)
 #guard Fork.constantinople.rules = .error (.unsupportedFork .constantinople)
 #guard Fork.petersburg.rules = .error (.unsupportedFork .petersburg)
@@ -3476,8 +3479,8 @@ example : amsterdamRules =
 #guard Fork.arrowGlacier.rules = .error (.unsupportedFork .arrowGlacier)
 #guard Fork.grayGlacier.rules = .error (.unsupportedFork .grayGlacier)
 #guard Fork.paris.rules = .ok parisRules
-#guard Fork.shanghai.rules = .error (.unsupportedFork .shanghai)
-#guard Fork.cancun.rules = .error (.unsupportedFork .cancun)
+#guard Fork.shanghai.rules = .ok shanghaiRules
+#guard Fork.cancun.rules = .ok cancunRules
 #guard Fork.prague.rules = .ok pragueRules
 #guard Fork.osaka.rules = .ok osakaRules
 #guard Fork.bpo1.rules = .ok bpo1Rules
@@ -3493,8 +3496,8 @@ example : amsterdamRules =
 #guard Fork.arrowGlacier.rules? = none
 #guard Fork.grayGlacier.rules? = none
 #guard Fork.paris.rules? = some parisRules
-#guard Fork.shanghai.rules? = none
-#guard Fork.cancun.rules? = none
+#guard Fork.shanghai.rules? = some shanghaiRules
+#guard Fork.cancun.rules? = some cancunRules
 #guard Fork.amsterdam.validRules?.isSome
 #guard Fork.supported.all (fun f => f.validRules?.isSome)
 -- The admission a user actually gets, from the live producer, on the exact
@@ -3507,7 +3510,7 @@ example : amsterdamRules =
 -- longer reaches it through any lookup rather than that it would read so.
 #guard (Fork.all.filter (fun f => f.rules = .error (.unsupportedFork f)))
   = [.byzantium, .constantinople, .petersburg, .istanbul, .muirGlacier, .berlin,
-    .arrowGlacier, .grayGlacier, .shanghai, .cancun]
+    .arrowGlacier, .grayGlacier]
 
 -- A usable schedule is non-empty and moves strictly forward in both time and
 -- fork order. It need not start at genesis: a schedule may support only eras
@@ -3589,7 +3592,7 @@ private def guardFloorSchedule : ChainConfig :=
 -- -- the P0.5 fix with its floor moved from Prague's timestamp to Byzantium's
 -- block (design §4): Jaune implements no pre-Byzantium era and must not
 -- silently answer those blocks. A scheduled fork is not a runnable one: the
--- ten still-refused pre-Prague eras resolve to their fork and are then
+-- eight still-refused pre-Prague eras resolve to their fork and are then
 -- refused at `Fork.rules?`, as `unsupportedFork`, never run under another
 -- fork's rules.
 #guard mainnetChainConfig.validate.toOption.isSome
@@ -3630,13 +3633,17 @@ private def guardFloorSchedule : ChainConfig :=
 #guard mainnetChainConfig.forkAt 22431084 mainnetBpo2Timestamp = .ok .bpo2
 #guard mainnetChainConfig.rulesAt 22431084 mainnetBpo2Timestamp = .ok bpo2Rules
 #guard mainnetChainConfig.rulesAt 22431084 mainnetPragueTimestamp = .ok pragueRules
--- Scheduled but refused: a Byzantium-era or Cancun-era block is an
--- `unsupportedFork` refusal naming its own fork, not an era error and never
--- Prague's rules.
+-- Scheduled but refused: a Byzantium-era block is an `unsupportedFork`
+-- refusal naming its own fork, not an era error and never Prague's rules. A
+-- Paris-era, Shanghai-era or Cancun-era block resolves to its own fork's
+-- rules (goals U11a/U11b).
 #guard mainnetChainConfig.rulesAt mainnetByzantiumBlock 0
   = .error (.support (.unsupportedFork .byzantium))
+#guard mainnetChainConfig.rulesAt mainnetParisBlock 0 = .ok parisRules
+#guard mainnetChainConfig.rulesAt mainnetParisBlock mainnetShanghaiTimestamp
+  = .ok shanghaiRules
 #guard mainnetChainConfig.rulesAt mainnetParisBlock mainnetCancunTimestamp
-  = .error (.support (.unsupportedFork .cancun))
+  = .ok cancunRules
 -- D13 of the Amsterdam programme: the mainnet schedule names no Amsterdam
 -- activation until upstream `FORK_CRITERIA` carries a real Amsterdam
 -- timestamp. It names, in order, every fork mainnet ran from Byzantium, with

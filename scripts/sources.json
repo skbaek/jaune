@@ -86,13 +86,15 @@
     "fork_lane": [
       "London",
       "Paris",
+      "Shanghai",
+      "Cancun",
       "Prague",
       "Osaka",
       "BPO1",
       "BPO2",
       "Amsterdam"
     ],
-    "_comment": "The transition-tool conformance anchor for `jaune t8n`, chosen 2026-08-03 because this checkout's `fill` defaults to the in-process ExecutionSpecsTransitionTool, which calls this same checkout's EELS in process (client_clis/__init__.py sets the default tool; clis/execution_specs.py runs T8N.run). It is a GATE ANCHOR, not a fork-scope commitment: `fork_lane` is the block-validation handshake advertised by `jaune t8n --forks` and is, since goal jaune-historical-forks-v1 unit U11b, the build's own runnable lane (`Fork.supported`: London, Paris, Prague, Osaka, BPO1, BPO2, Amsterdam), with scripts/check-cli.sh pinning that the binary and this list agree; every label on it resolves through the one resolver `Fork.rules?` (the separate transaction-metering vehicle that `--state.fork Amsterdam` once resolved, and whose omitted block semantics `--info` once named, was retired by goal C). No BPO3-5 path is selected. This checkout is SEPARATE from execution_specs above -- that one is the frozen oracle pin for check-fake-exp.sh and the vector generators, and is never repointed. This one has its own venv (`uv sync --no-default-groups --group test`), which scripts/gen-t8n-goldens.py and scripts/check-t8n.sh drive.",
+    "_comment": "The transition-tool conformance anchor for `jaune t8n`, chosen 2026-08-03 because this checkout's `fill` defaults to the in-process ExecutionSpecsTransitionTool, which calls this same checkout's EELS in process (client_clis/__init__.py sets the default tool; clis/execution_specs.py runs T8N.run). It is a GATE ANCHOR, not a fork-scope commitment: `fork_lane` is the block-validation handshake advertised by `jaune t8n --forks` and is, since goal jaune-historical-forks-v1 units U11a/U11b, the build's own runnable lane (`Fork.supported`: London, Paris, Shanghai, Cancun, Prague, Osaka, BPO1, BPO2, Amsterdam), with scripts/check-cli.sh pinning that the binary and this list agree; every label on it resolves through the one resolver `Fork.rules?` (the separate transaction-metering vehicle that `--state.fork Amsterdam` once resolved, and whose omitted block semantics `--info` once named, was retired by goal C). No BPO3-5 path is selected. This checkout is SEPARATE from execution_specs above -- that one is the frozen oracle pin for check-fake-exp.sh and the vector generators, and is never repointed. This one has its own venv (`uv sync --no-default-groups --group test`), which scripts/gen-t8n-goldens.py and scripts/check-t8n.sh drive.",
     "_comment_repin": "History: the predecessor used the devnet-8 release. Goal jaune-amsterdam-readiness-v1 moves both fixture lanes and this anchor to tests@v21.0.1 (1562e2f); the four framework-side wrapper paths are carried in commit 9fc6c99c1. The frozen execution_specs oracle above is unchanged."
   },
   "python_oracle": {

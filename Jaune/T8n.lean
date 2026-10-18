@@ -180,22 +180,23 @@ def advertisedForkLane : List Fork := Fork.supported
 
 -- The advertised lane is the runnable lane, stated both ways so that a fork
 -- added to `Fork.all` without rules would be neither advertised nor silently
--- omitted from a hand-kept list. Ten declared forks are in that refused
+-- omitted from a hand-kept list. Eight declared forks are in that refused
 -- state -- `Fork.rules?` is partial, and the runnable and refused lists are
 -- guards where `Fork.supported` and `Fork.unimplemented` are defined -- so
 -- these guards record today's lists rather than establishing them, and the
--- advertised lane is the seven runnable forks. (Goal C's guards here said the lane was a *prefix* of
+-- advertised lane is the nine runnable forks. (Goal C's guards here said the lane was a *prefix* of
 -- the runnable one with `[.amsterdam]` the only runnable fork not advertised;
 -- goal B's said `Fork.unimplemented = [.amsterdam]` and named the metering
 -- vehicle; each is rewritten to the statement that replaced it.)
 #guard advertisedForkLane = Fork.supported
 #guard advertisedForkLane
-  = [.london, .paris, .prague, .osaka, .bpo1, .bpo2, .amsterdam]
+  = [.london, .paris, .shanghai, .cancun, .prague, .osaka, .bpo1, .bpo2,
+    .amsterdam]
 #guard advertisedForkLane.all (fun f => f.rules?.isSome)
 #guard Fork.supported.filter (fun f => !advertisedForkLane.contains f) = []
 #guard Fork.all.filter (fun f => !advertisedForkLane.contains f) = Fork.unimplemented
 #guard Fork.unimplemented = [.byzantium, .constantinople, .petersburg, .istanbul,
-  .muirGlacier, .berlin, .arrowGlacier, .grayGlacier, .shanghai, .cancun]
+  .muirGlacier, .berlin, .arrowGlacier, .grayGlacier]
 #guard Fork.amsterdam.rules = .ok amsterdamRules
 #guard Fork.supported.all (fun f => f.rules.toOption.isSome)
 #guard Fork.prague.rules = .ok pragueRules
@@ -1338,6 +1339,9 @@ def resultJson (rules : ForkRules) (env : T8nEnv) (o : Outcome) : JOut :=
       [⟨"requestsHash", .str (hexB256 (computeRequestsHash o.bout.requests))⟩,
        ⟨"requests", .arr (o.bout.requests.map fun r => .str (hexBytes r))⟩]
       else [])
+-- (U11a gated these same four groups; the `currentDifficulty` group above is
+-- U11b's, needed pre-merge. The kept form is the union: every group U11a
+-- gates, plus the difficulty one London needs.)
   let base := match rules.bal with
     | none => base
     | some _ => base ++ [
@@ -1447,18 +1451,18 @@ end T8nForkLabel
     (T8nForkLabel.select 5) = some .petersburg
 #guard (T8nForkLabel.ofString? "ConstantinopleToIstanbulAt5").map
     (T8nForkLabel.select 0) = some .petersburg
--- Every one of them but London and `Merge` (Paris) is still refused at rule
--- lookup: U9 adds the names, and later units switch each fork on. `London`
--- and `Merge` resolve, and the fork-block label `BerlinToLondonAt5` is mixed:
--- its London endpoint resolves while its Berlin endpoint stays refused.
+-- Four labels resolve at rule lookup -- `London`, `Merge` (Paris), `Shanghai`
+-- and `Cancun` -- and every other historical label but the fork-block
+-- `BerlinToLondonAt5` is still refused: U9 adds the names, and later units
+-- switch each fork on. `BerlinToLondonAt5` is mixed: its London endpoint
+-- resolves while its Berlin endpoint stays refused.
 #guard ["Byzantium", "ConstantinopleFix", "Istanbul", "MuirGlacier", "Berlin",
-    "ArrowGlacier", "GrayGlacier", "Shanghai", "Cancun",
-    "ByzantiumToConstantinopleAt5",
+    "ArrowGlacier", "GrayGlacier", "ByzantiumToConstantinopleAt5",
     "ConstantinopleToIstanbulAt5"].all
   (fun l => match T8nForkLabel.ofString? l with
     | some label => label.forks.all (fun f => f.rules?.isNone)
     | none => false)
-#guard ["London", "Merge"].all
+#guard ["London", "Merge", "Shanghai", "Cancun"].all
   (fun l => match T8nForkLabel.ofString? l with
     | some label => label.forks.all (fun f => f.rules?.isSome)
     | none => false)
