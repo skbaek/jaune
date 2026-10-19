@@ -267,6 +267,10 @@ judgment of this build: `scripts/check-legacy-exception-aliases.py` re-derives
 every row from the two trees (the same test, case and block, at Cancun in the
 later tree) and fails on a row no pair attests, on a pair that contradicts a
 row, and on a row whose target this vocabulary does not parse (goal U11a).
+The one exception is a token upstream never converted (`TR_RLP_WRONGVALUE`, the
+unconverted `ValueOverflow` block tests): its row is listed with its reason in
+the gate's `DEFINITIONAL` table, which fails the moment an upstream pair
+appears (goal U11c).
 A token maps to a whole expectation, which may be a set (`TR_NoFundsOrGas` is
 `INSUFFICIENT_ACCOUNT_FUNDS|INTRINSIC_GAS_TOO_LOW`). -/
 -- BEGIN legacyAliases (checked by scripts/check-legacy-exception-aliases.py)
@@ -312,6 +316,7 @@ def legacyAliases : List (String × String) := [
   ("TR_NonceHasMaxValue", "TransactionException.NONCE_IS_MAX"),
   ("TR_NonceTooHigh", "TransactionException.NONCE_MISMATCH_TOO_HIGH"),
   ("TR_NonceTooLow", "TransactionException.NONCE_MISMATCH_TOO_LOW"),
+  ("TR_RLP_WRONGVALUE", "BlockException.RLP_STRUCTURES_ENCODING"),
   ("TR_TipGtFeeCap", "TransactionException.PRIORITY_GREATER_THAN_MAX_FEE_PER_GAS"),
   ("TooMuchGasUsed", "BlockException.GAS_USED_OVERFLOW"),
   ("UnknownParent", "BlockException.UNKNOWN_PARENT"),

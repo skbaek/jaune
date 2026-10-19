@@ -15,7 +15,7 @@ same test and indices ("sibling" evidence) only when that case has no
 same-fork pair.
 
 It fails when
-  - a table row has no agreeing pair (an explained pair attests nothing);
+  - a non-definitional row has no agreeing pair (an explained pair attests nothing);
   - a pair of either kind contradicts a row: a same-fork pair naming another
     expectation, or a Cancun-sibling pair whose different reason no fork
     difference explains (U11d: sibling pairs are judged too, never shadowed by
@@ -27,6 +27,14 @@ It fails when
   - the table or the vocabulary cannot be read.
 The verdict counts the rows attested by sibling pairs only: such a row rests
 on the Cancun rename of the same case, not on a same-fork rename.
+A token that upstream never converted has no pair at all (the later tree keeps
+its block tests under LegacyTests, still spelled with the retesteth token).
+Only the accepted TR_RLP_WRONGVALUE row is listed in DEFINITIONAL below, with
+its reason. It must have the listed canonical value, occur in the restoration
+tree, and carry the fixture's required marker at every occurrence. Any new
+pair of either kind invalidates this exception. The vocabulary check applies
+to definitional rows too (U11c integrated with U11d).
+
 It reports, without failing, the restoration tree's retesteth tokens with no
 row: a fixture expecting one fails at parse in the runner, which is where an
 unattested token belongs (goal U11a).
@@ -48,6 +56,31 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "Jaune" / "FixtureException.lean"
 CANONICAL = ("TransactionException.", "BlockException.")
+
+# Rows no upstream pair can attest, each with the canonical identity, the
+# per-block fixture marker every block expecting the token must carry, and the
+# reason. Anything not listed here must be attested by a pair.
+DEFINITIONAL = {
+    "TR_RLP_WRONGVALUE": {
+        "canonical": "BlockException.RLP_STRUCTURES_ENCODING",
+        "marker": ("hasBigInt", "true"),
+        "reason": (
+            "stTransactionTest/ValueOverflow{,Paris} send a legacy transaction whose "
+            "value is a 33-byte integer (> 2**256-1) inside a well-formed block RLP; "
+            "upstream ported only the transaction-test siblings "
+            "(TransactionException.VALUE_OVERFLOW, tests/frontier/validation/"
+            "test_transaction_rlp.py::test_field_overflow) and left these block tests "
+            "unconverted (src/InvalidRLP/ConvertThisTestValueOverflowParis.txt). "
+            "The pinned EELS rejects the block in rlp.decode_to(Block) at every fork "
+            "(DecodingError on the transaction's U256 value), which is the class "
+            "packages/testing/.../exceptions/block.py defines as "
+            "RLP_STRUCTURES_ENCODING: the block's rlp encoding is valid but the "
+            "ethereum structures in it are invalid."
+        ),
+    },
+}
+
+MARKERS = sorted({spec["marker"][0] for spec in DEFINITIONAL.values()})
 
 
 def read_table(text: str) -> dict[str, str]:
@@ -152,6 +185,7 @@ def main() -> int:
     sibling = collections.defaultdict(collections.Counter)
     sibling_nets = collections.defaultdict(collections.Counter)
     seen = collections.Counter()
+    marks = collections.defaultdict(collections.Counter)
     for tree in ("Cancun", "Constantinople"):
         old_root = Path(args.old) / tree / "BlockchainTests"
         if not old_root.is_dir():
@@ -177,6 +211,8 @@ def main() -> int:
                         if not e or e.startswith(CANONICAL):
                             continue
                         seen[e] += 1
+                        for mk in MARKERS:
+                            marks[e][(mk, b.get(mk))] += 1
                         nc = ncases.get((key, net))
                         target = same
                         if nc is None and net != "Cancun":
@@ -193,7 +229,38 @@ def main() -> int:
     problems = []
     kinds = collections.Counter()
     explained = collections.Counter()
+    definitional = 0
+    for tok in sorted(DEFINITIONAL):
+        if tok not in table:
+            problems.append(f"{tok}: listed in DEFINITIONAL but has no row in {SOURCE.name}")
     for tok, canon in sorted(table.items()):
+        # This check precedes the definitional branch's continue: every row's
+        # target must be accepted by the source vocabulary, without exception.
+        unparsed = [t for t in canon.split("|") if t not in vocab]
+        if unparsed:
+            problems.append(f"{tok}: the row's target names {unparsed}, which "
+                            f"{SOURCE.name}'s vocabulary does not parse")
+        if tok in DEFINITIONAL:
+            spec = DEFINITIONAL[tok]
+            if same.get(tok) or sibling.get(tok):
+                problems.append(f"{tok}: upstream now has pairs "
+                                f"(same-fork {dict(same.get(tok, {}))}, "
+                                f"Cancun-sibling {dict(sibling.get(tok, {}))}); "
+                                f"drop it from DEFINITIONAL and let the pairs govern")
+            elif canon != spec["canonical"]:
+                problems.append(f"{tok}: the row says {canon!r}, the definitional listing "
+                                f"says {spec['canonical']!r}")
+            elif not seen[tok]:
+                problems.append(f"{tok}: no block in the restoration tree expects it")
+            else:
+                mk, want = spec["marker"]
+                bad = {k: v for k, v in marks[tok].items() if k != (mk, want)}
+                if bad:
+                    problems.append(f"{tok}: {sum(bad.values())} block(s) expecting it lack "
+                                    f"the fixture marker {mk}={want!r}: {bad}")
+                else:
+                    definitional += 1
+            continue
         # Review U11a #1 (fixed in U11d): every pair of either kind is judged.
         # A same-fork pair must name the row's expectation. A Cancun-sibling
         # pair names the reason the *Cancun* run of the case rejects for, which
@@ -231,10 +298,6 @@ def main() -> int:
                             f"{sorted(named)}; {sorted(want - named)} is unattested")
         else:
             kinds["same-fork" if agree_same else "sibling"] += 1
-        unparsed = [t for t in canon.split("|") if t not in vocab]
-        if unparsed:
-            problems.append(f"{tok}: the row's target names {unparsed}, which "
-                            f"{SOURCE.name}'s vocabulary does not parse")
 
     unmapped = sorted(t for t in seen if t not in table)
     for tok in unmapped:
@@ -245,9 +308,11 @@ def main() -> int:
             print(f"  - {p}")
         print(f"REGRESSION — legacy-aliases: {len(problems)} row problem(s) in {SOURCE.name}")
         return 1
-    print(f"OK — legacy-aliases: {len(table)} row(s), each attested by upstream's own rename "
+    print(f"OK — legacy-aliases: {len(table)} row(s), {len(table) - definitional} attested "
+          f"by upstream's own rename and {definitional} definitional (no upstream pair; "
+          f"DEFINITIONAL); pair-attested rows "
           f"({kinds['same-fork']} by same-fork pairs, {kinds['sibling']} by Cancun-sibling pairs "
-          f"only), contradicted by no pair of either kind, and parsed by the vocabulary "
+          f"only), contradicted by no pair of either kind; every row parsed by the vocabulary "
           f"({sum(explained.values())} sibling pair(s) explained by a fork difference: "
           f"{dict(sorted(explained.items()))}); {len(unmapped)} unmapped token(s) noted")
     return 0
