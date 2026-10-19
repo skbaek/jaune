@@ -40,6 +40,86 @@ def genesisFork : FixtureNetwork → Fork
 
 end FixtureNetwork
 
+/-- Observation of the actual checked parent lookup; fields are absent until
+that stage is reached. No metadata or last-visited snapshot supplies a parent. -/
+structure FixtureObserved (α : Type) : Type where
+  decodedParentHash : Option B256
+  parent : Option CheckedBlockChain
+  outcome : Except ImportFailure (ImportOutcome α)
+
+namespace FixtureObserved
+
+def map (f : α → β) (observed : FixtureObserved α) : FixtureObserved β :=
+  { observed with outcome := match observed.outcome with
+    | .error failure => .error failure
+    | .ok (.inr reason) => .ok (.inr reason)
+    | .ok (.inl child) => .ok (.inl (f child)) }
+
+end FixtureObserved
+
+namespace FixtureClosure
+
+/-- Diagnostic expectation status; unknown lexical tokens are not aliases. -/
+inductive Expected : Type
+  | absent
+  | known (identities : List FixtureException)
+  | unknown (detail : String)
+  | malformed (detail : String)
+
+inductive Behavior : Type
+  | matched | rejectedValid | importedInvalid | operational | malformedExpectation
+  deriving DecidableEq, BEq
+
+inductive Identity : Type
+  | notApplicable | matched | unparsedExpected | unmappedActual | mismatch | malformedExpected
+  deriving DecidableEq, BEq
+
+structure Score : Type where
+  behavior : Behavior
+  identity : Identity
+
+def identityFor (expected : List FixtureException) (rejection : BlockRejection) : Identity :=
+  match FixtureException.ofBlockRejection rejection with
+  | none => .unmappedActual
+  | some actual => if expected.contains actual then .matched else .mismatch
+
+/-- The explicit diagnostic policy. It never turns a naming gap into strict
+success, and only typed behavioral agreement may continue a case. -/
+def score (expected : Expected)
+    (outcome : Except ImportFailure (ImportOutcome α)) : Score :=
+  match expected, outcome with
+  | .malformed _, _ => ⟨.malformedExpectation, .malformedExpected⟩
+  | _, .error _ => ⟨.operational, .notApplicable⟩
+  | .absent, .ok (.inl _) => ⟨.matched, .notApplicable⟩
+  | .absent, .ok (.inr _) => ⟨.rejectedValid, .notApplicable⟩
+  | .known _, .ok (.inl _) | .unknown _, .ok (.inl _) =>
+      ⟨.importedInvalid, .notApplicable⟩
+  | .known identities, .ok (.inr rejection) => ⟨.matched, identityFor identities rejection⟩
+  | .unknown _, .ok (.inr _) => ⟨.matched, .unparsedExpected⟩
+
+def Score.mayContinue (score : Score) : Bool := score.behavior == .matched
+
+def Score.strictAccepted (score : Score) : Bool :=
+  score.mayContinue && (score.identity == .matched || score.identity == .notApplicable)
+
+def Expected.wellFormedPresent : Expected → Prop
+  | .known _ | .unknown _ => True
+  | .absent | .malformed _ => False
+
+/-- One quantified policy law: only an expected-valid checked import or a
+well-formed expected-invalid typed rejection can advance. Operational,
+behavioral and malformed-expectation failures cannot advance. -/
+theorem score_continue_iff (expected : Expected)
+    (outcome : Except ImportFailure (ImportOutcome α)) :
+    (score expected outcome).mayContinue = true ↔
+      (∃ child, expected = .absent ∧ outcome = .ok (.inl child)) ∨
+      (expected.wellFormedPresent ∧ ∃ rejection, outcome = .ok (.inr rejection)) := by
+  cases expected <;> cases outcome with
+  | error failure => simp [score, Score.mayContinue, Expected.wellFormedPresent]; rfl
+  | ok value => cases value <;> simp [score, Score.mayContinue, Expected.wellFormedPresent] <;> rfl
+
+end FixtureClosure
+
 namespace FixtureTTD
 
 /-- The threshold of the one supported fixture label, not mainnet fork data. -/
@@ -407,21 +487,51 @@ private def importBody (store : Store) (raw : Bytes) (header : Header)
 
 /-- Structural header decode, exact parent lookup, phase-selected body decode,
 then the existing static checked importer. Existing typed channels are retained. -/
-def evaluate (store : Store) (raw : Bytes) :
-    Except ImportFailure (ImportOutcome (Accepted store raw)) :=
+def evaluateObserved (store : Store) (raw : Bytes) :
+    FixtureObserved (Accepted store raw) :=
   match outer : Bytes.toBLT? raw with
-  | none => .ok (.inr (.decode
-      (DecodeError.structure "block RLP" "cannot decode the outer RLP item")))
+  | none => ⟨none, none, .ok (.inr (.decode
+      (DecodeError.structure "block RLP" "cannot decode the outer RLP item")))⟩
   | some (.list (headerBlt :: tail)) =>
     match decodedHeader : headerBlt.toExHeader with
-    | .error reason => .ok (.inr (.decode reason))
+    | .error reason => ⟨none, none, .ok (.inr (.decode reason))⟩
     | .ok header =>
       match found : store.find? header.parentHash with
-      | none => .ok (.inr (missingParent header.parentHash))
-      | some parent => importBody store raw header parent
-          ⟨headerBlt, tail, outer, decodedHeader⟩ found
-  | some _ => .ok (.inr (.decode (DecodeError.structure "block"
-      "expected [header, transactions, ommers, withdrawals] lists")))
+      | none => ⟨some header.parentHash, none, .ok (.inr (missingParent header.parentHash))⟩
+      | some parent => ⟨some header.parentHash, some parent.chain,
+          importBody store raw header parent ⟨headerBlt, tail, outer, decodedHeader⟩ found⟩
+  | some _ => ⟨none, none, .ok (.inr (.decode (DecodeError.structure "block"
+      "expected [header, transactions, ommers, withdrawals] lists")))⟩
+
+/-- The old typed API erases observations from the sole execution path. -/
+def evaluate (store : Store) (raw : Bytes) :
+    Except ImportFailure (ImportOutcome (Accepted store raw)) :=
+  (evaluateObserved store raw).outcome
+
+/-- Exact erasure to the prior evaluator expression, including equations used
+by Faithful. This statement is a specification, not a second executable path. -/
+theorem evaluateObserved_erases (store : Store) (raw : Bytes) :
+    (evaluateObserved store raw).outcome =
+    match outer : Bytes.toBLT? raw with
+    | none => .ok (.inr (.decode
+        (DecodeError.structure "block RLP" "cannot decode the outer RLP item")))
+    | some (.list (headerBlt :: tail)) =>
+      match decodedHeader : headerBlt.toExHeader with
+      | .error reason => .ok (.inr (.decode reason))
+      | .ok header =>
+        match found : store.find? header.parentHash with
+        | none => .ok (.inr (missingParent header.parentHash))
+        | some parent => importBody store raw header parent
+            ⟨headerBlt, tail, outer, decodedHeader⟩ found
+    | some _ => .ok (.inr (.decode (DecodeError.structure "block"
+        "expected [header, transactions, ommers, withdrawals] lists"))) := by
+  unfold evaluateObserved
+  split
+  · rfl
+  · split
+    · rfl
+    · split <;> rfl
+  · rfl
 
 /-- Acceptance certifies original-body decoding and checked import under the
 same phase-selected fork, with the selected header retained at the child tip. -/

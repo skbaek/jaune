@@ -538,11 +538,20 @@ def runJumpdestControl (seedStr blobsStr sizeStr : String) : IO Bool := do
          a walk disagreed; see the lines above"
   return ok
 
-def getPostStateRoot (json : Lean.Json) : IO B256 :=
+inductive FixturePostSource where
+  | postState | postStateHash
+
+/-- Return the source actually selected by the existing post-state reader.
+A successfully converted postState wins; any conversion failure falls back. -/
+def getPostStateRootWithSource (json : Lean.Json) : IO (B256 × FixturePostSource) :=
   ( do let stateJson ← json.find "postState"
        let state ← stateJson.toWorld
-       .ok state.root ) <|>
-  (json.find "postStateHash" >>= Lean.Json.toIoB256)
+       .ok (state.root, .postState) ) <|>
+  (do let root ← json.find "postStateHash" >>= Lean.Json.toIoB256
+      pure (root, .postStateHash))
+
+def getPostStateRoot (json : Lean.Json) : IO B256 :=
+  Prod.fst <$> getPostStateRootWithSource json
 
 def Except.toIO {ξ : Type} : Except String ξ → IO ξ
   | .ok x => .ok x
@@ -633,43 +642,90 @@ and normalised to the canonical four-element form before the envelope is
 built. The parent is a `CheckedBlockChain`, so its integrity is evidence
 rather than a recomputation, and the child snapshot this returns carries the
 same evidence -- built from the checks the import already performed. -/
-def evaluateFixtureBlock (spec : NetworkSpec) (chainId : UInt64) (store : ChainStore)
-    (blockRlp : Bytes) : Except ImportFailure (ImportOutcome CheckedBlockChain) :=
+def evaluateFixtureBlockObserved (spec : NetworkSpec) (chainId : UInt64)
+    (store : ChainStore) (blockRlp : Bytes) : FixtureObserved CheckedBlockChain :=
   match decodeFixtureBlockBody spec chainId blockRlp with
-  | .error failure => .error failure
-  | .ok (.error reason) => .ok (.inr (.decode reason))
+  | .error failure => ⟨none, none, .error failure⟩
+  | .ok (.error reason) => ⟨none, none, .ok (.inr (.decode reason))⟩
   | .ok (.ok block) =>
-    -- The checked import core reasons about the canonical four-element form
-    -- under every fork, so the fork-relative body is normalised through its
-    -- own re-encoding before the envelope is built. Every part was strictly
-    -- decoded, so the normalised bytes strictly re-decode by construction; a
-    -- failure here is a stated invariant not holding, never a verdict. The
-    -- parent is already a checked snapshot, so no state root is recomputed
-    -- for it.
     match hnorm : rlpToBlock (block.toBLT.toBytes) with
-    | .error _ =>
-      .error (.internal (.assertion (.text
-        "normalised fixture block does not strictly re-decode")))
+    | .error _ => ⟨none, none, .error (.internal (.assertion (.text
+        "normalised fixture block does not strictly re-decode")))⟩
     | .ok ⟨canon, _⟩ =>
       match store.findParent canon.header.parentHash with
-      | .error reason => .ok (.inr (.block reason))
+      | .error reason => ⟨some canon.header.parentHash, none, .ok (.inr (.block reason))⟩
       | .ok parent =>
-        match fixtureImportFork spec chainId parent canon.header with
-        | .error failure => .error failure
-        | .ok f =>
-          match spec with
-          | .static _ =>
-            match him : addBlockToChainChecked f parent
-                (CanonicalBlock.ofDecode hnorm) with
-            | .error failure => .error failure
-            | .ok (.inr rejection) => .ok (.inr rejection)
-            | .ok (.inl _) => .ok (.inl (CheckedBlockChain.ofImport him))
-          | .transition t =>
-            match him : addBlockToChainScheduledChecked (t.chainConfig chainId) f parent
-                (CanonicalBlock.ofDecode hnorm) with
-            | .error failure => .error failure
-            | .ok (.inr rejection) => .ok (.inr rejection)
-            | .ok (.inl _) => .ok (.inl (CheckedBlockChain.ofScheduledImport him))
+        let outcome :=
+          match fixtureImportFork spec chainId parent canon.header with
+          | .error failure => .error failure
+          | .ok f =>
+            match spec with
+            | .static _ =>
+              match him : addBlockToChainChecked f parent
+                  (CanonicalBlock.ofDecode hnorm) with
+              | .error failure => .error failure
+              | .ok (.inr rejection) => .ok (.inr rejection)
+              | .ok (.inl _) => .ok (.inl (CheckedBlockChain.ofImport him))
+            | .transition t =>
+              match him : addBlockToChainScheduledChecked (t.chainConfig chainId) f parent
+                  (CanonicalBlock.ofDecode hnorm) with
+              | .error failure => .error failure
+              | .ok (.inr rejection) => .ok (.inr rejection)
+              | .ok (.inl _) => .ok (.inl (CheckedBlockChain.ofScheduledImport him))
+        ⟨some canon.header.parentHash, some parent, outcome⟩
+
+/-- Strict and diagnostic policies project the same single checked evaluator. -/
+def evaluateFixtureBlock (spec : NetworkSpec) (chainId : UInt64) (store : ChainStore)
+    (blockRlp : Bytes) : Except ImportFailure (ImportOutcome CheckedBlockChain) :=
+  (evaluateFixtureBlockObserved spec chainId store blockRlp).outcome
+
+/-- Exact erasure to the previous typed evaluator, including scheduled London
+import dispatch. The old expression exists only in this proposition. -/
+theorem evaluateFixtureBlockObserved_erases (spec : NetworkSpec) (chainId : UInt64)
+    (store : ChainStore) (blockRlp : Bytes) :
+    (evaluateFixtureBlockObserved spec chainId store blockRlp).outcome =
+    match decodeFixtureBlockBody spec chainId blockRlp with
+    | .error failure => .error failure
+    | .ok (.error reason) => .ok (.inr (.decode reason))
+    | .ok (.ok block) =>
+      -- The checked import core reasons about the canonical four-element form
+      -- under every fork, so the fork-relative body is normalised through its
+      -- own re-encoding before the envelope is built. Every part was strictly
+      -- decoded, so the normalised bytes strictly re-decode by construction; a
+      -- failure here is a stated invariant not holding, never a verdict. The
+      -- parent is already a checked snapshot, so no state root is recomputed
+      -- for it.
+      match hnorm : rlpToBlock (block.toBLT.toBytes) with
+      | .error _ =>
+        .error (.internal (.assertion (.text
+          "normalised fixture block does not strictly re-decode")))
+      | .ok ⟨canon, _⟩ =>
+        match store.findParent canon.header.parentHash with
+        | .error reason => .ok (.inr (.block reason))
+        | .ok parent =>
+          match fixtureImportFork spec chainId parent canon.header with
+          | .error failure => .error failure
+          | .ok f =>
+            match spec with
+            | .static _ =>
+              match him : addBlockToChainChecked f parent
+                  (CanonicalBlock.ofDecode hnorm) with
+              | .error failure => .error failure
+              | .ok (.inr rejection) => .ok (.inr rejection)
+              | .ok (.inl _) => .ok (.inl (CheckedBlockChain.ofImport him))
+            | .transition t =>
+              match him : addBlockToChainScheduledChecked (t.chainConfig chainId) f parent
+                  (CanonicalBlock.ofDecode hnorm) with
+              | .error failure => .error failure
+              | .ok (.inr rejection) => .ok (.inr rejection)
+              | .ok (.inl _) => .ok (.inl (CheckedBlockChain.ofScheduledImport him)) := by
+  unfold evaluateFixtureBlockObserved
+  split
+  · rfl
+  · rfl
+  · split
+    · rfl
+    · split <;> rfl
 
 /-- Score one failed block evaluation against the fixture's expected set.
 
@@ -754,23 +810,27 @@ private def processBlockJsonsWith {σ : Type}
         processBlockJsonsWith evaluate next rest
   | [] => .ok store
 
+/-- The sole scheduled store update pairs the checked child with its next store. -/
+private def evaluateScheduledStore (spec : NetworkSpec) (chainId : UInt64)
+    (store : ChainStore) (raw : Bytes) : FixtureObserved (CheckedBlockChain × ChainStore) :=
+  (evaluateFixtureBlockObserved spec chainId store raw).map
+    (fun child => (child, store.addResult (.inl child)))
+
+/-- The TTD observer retains its proof-produced atomic next ledger. -/
+private def evaluateTTDStore (store : FixtureTTD.Store) (raw : Bytes) :
+    FixtureObserved (CheckedBlockChain × FixtureTTD.Store) :=
+  (FixtureTTD.evaluateObserved store raw).map (fun result => (result.child, result.next))
+
 /-- Scheduled imports retain their existing decoder and London dispatch. -/
 def processBlockJsons (spec : NetworkSpec) (chainId : UInt64) (store : ChainStore)
     (blocks : List (Nat × Lean.Json)) : IO ChainStore :=
   processBlockJsonsWith (fun store raw =>
-    match evaluateFixtureBlock spec chainId store raw with
-    | .error failure => .error failure
-    | .ok (.inr reason) => .ok (.inr reason)
-    | .ok (.inl child) => .ok (.inl (child, store.addResult (.inl child)))) store blocks
+    (evaluateScheduledStore spec chainId store raw).outcome) store blocks
 
 /-- TTD acceptance already carries its indivisible branch-ledger update. -/
 private def processTTDBlockJsons (store : FixtureTTD.Store)
     (blocks : List (Nat × Lean.Json)) : IO FixtureTTD.Store :=
-  processBlockJsonsWith (fun store raw =>
-    match FixtureTTD.evaluate store raw with
-    | .error failure => .error failure
-    | .ok (.inr reason) => .ok (.inr reason)
-    | .ok (.inl accepted) => .ok (.inl (accepted.child, accepted.next))) store blocks
+  processBlockJsonsWith (fun store raw => (evaluateTTDStore store raw).outcome) store blocks
 
 /-- Check a fixture's own declared blob schedule against the rules this run
 will apply.
@@ -810,130 +870,414 @@ def checkFixtureBlobSchedule (spec : FixtureNetwork) (json : Lean.Json) : IO Uni
       s!"error : {f} blob base-fee update fraction = \
          {rules.blob.baseFeeUpdateFraction}, fixture declares {fraction}"
 
+/-- Shared original checked-genesis ingress. Strict and diagnostic modes
+run these validations once through the identical implementation and ordering. -/
+private def prepareFixtureCase (spec : FixtureNetwork) (json : Lean.Json) :
+    IO (CheckedBlockChain × UInt64 × List Lean.Json) := do
+  -- Every fork this case's network label can select must be one this build
+  -- runs, and that is settled here -- before a header, a prestate, or a
+  -- block is read. A declared fork whose rules a build did not implement
+  -- would be outside its domain, not evidence about the candidate (five
+  -- forks are in that state here: the still-refused pre-Berlin forks
+  -- `Fork.rules` refuses): routed through
+  -- the import path it would surface as `BLOCK #0 was expected valid but
+  -- failed`, which reads as a verdict on a block this build never examined.
+  -- A transition label is checked at both endpoints for the same reason,
+  -- since its pre-fork blocks would otherwise run and only the post-fork
+  -- ones refuse, halfway through a case.
+  let _ ← IO.ofExcept
+    ((spec.forks.mapM Fork.rules).mapError SupportError.render)
+  checkFixtureBlobSchedule spec json
+
+  let gbh_json ← json.find "genesisBlockHeader"
+  let gbh ← gbh_json.toHeader
+  let gb : Block := {header := gbh, txs := [], ommers := [], wds := []}
+  let gbh_hash ← gbh_json.find "hash" >>= Lean.Json.toIoB256
+  let gbh_hash' := (BLT.toBytes (Header.toBLT gbh)).keccak
+
+  .guard
+    (gbh_hash = gbh_hash')
+    s!"error : genesis block header hash, expected = {gbh_hash}, computed = {gbh_hash'}"
+
+  let genesisRLP ← json.find "genesisRLP" >>= Lean.Json.toIoBytes
+  -- The genesis block's wire shape follows the fork active where it sits:
+  -- withdrawals ride along from Shanghai, so a pre-Shanghai genesis block
+  -- encodes three elements, not four. `Block.toBLT` always writes the
+  -- withdrawals element (it is the canonical block encoding the proven
+  -- paths hash and compare through); the fixture's `genesisRLP` is the
+  -- fork's own encoding, so the comparison drops the element exactly when
+  -- the genesis fork's rules do not carry withdrawals. A transition's
+  -- genesis sits in its before era. Prague and later keep the four-element
+  -- form, textually unchanged.
+  let genesisFork ← IO.ofExcept (spec.genesisFork.rules.mapError SupportError.render)
+  let genesisRLP' :=
+    if genesisFork.header.withdrawalsRoot then gb.toBLT.toBytes
+    else (BLT.list [Header.toBLT gb.header,
+      .list (gb.txs.map B8LOrTxToBLT),
+      .list (gb.ommers.map Header.toBLT)]).toBytes
+  .guard (genesisRLP = genesisRLP') "error : unexpected genesis block RLP."
+  let (chainId : Nat) ←
+    match gbh_json.find? "chainId" with
+    | .none => .ok 1
+    | .some chainIdJson => chainIdJson.toIoB64 <&> UInt64.toNat
+
+  let preState ← json.find "pre" >>= Lean.Json.toWorldAt genesisFork
+
+  -- P0.2 item 6. The genesis block enters through the same strict decoder
+  -- every candidate does, rather than being trusted because a hand-built
+  -- record re-encodes to itself, and the declared hash and the parsed
+  -- prestate are compared against *that* decoded genesis. The prestate root
+  -- check is the one this runner never made: without it the whole chain
+  -- executes from a world its own genesis header does not commit to.
+  -- The genesis block arrives in its fork's wire shape (three elements
+  -- before Shanghai), while the envelope below holds the canonical
+  -- four-element form; it is decoded under the genesis fork's rules and
+  -- normalised through its own re-encoding, the same two stages every
+  -- candidate block passes through. The fixed message is unchanged: a
+  -- genesis that does not decode under its fork's rules was never a
+  -- scorable verdict.
+  let genesisBlock ← match rlpToBlockEAt genesisFork genesisRLP with
+    | .ok ⟨block, _⟩ => pure block
+    | .error _ => .throw "error : genesis RLP is not canonical block RLP"
+  let genesisEnvelope ←
+    (CanonicalBlock.ofRlp? (genesisBlock.toBLT.toBytes)).toIO
+    "error : genesis RLP is not canonical block RLP"
+  .guard (genesisEnvelope.headerHash = gbh_hash)
+    s!"error : decoded genesis header hash does not match\n  \
+       expected : {gbh_hash}\n  computed : {genesisEnvelope.headerHash}"
+  let genesisStateRoot := genesisEnvelope.block.header.stateRoot
+  -- The prestate's root is computed here, once, and the proof of the
+  -- comparison is what builds the checked snapshot -- so nothing downstream
+  -- recomputes it, and no unchecked genesis snapshot can be built at all.
+  let preStateRoot := preState.root
+  let genesisChecked ←
+    if hnum : genesisEnvelope.block.header.number = 0 then
+      if hcanon : preState.Canonical then
+        if hroot : preStateRoot = genesisStateRoot then
+          pure (CheckedBlockChain.ofGenesis genesisEnvelope preState
+            chainId.toUInt64 hnum hcanon hroot)
+        else
+          .throw s!"error : genesis prestate root does not match the genesis \
+            header\n  expected : {genesisStateRoot}\n  computed : {preStateRoot}"
+      else
+        .throw "error : genesis prestate is not a canonical world"
+    else
+      .throw s!"error : genesis block number = \
+        {genesisEnvelope.block.header.number}, expected 0"
+
+  let blockJsons ← json.find "blocks" >>= Lean.Json.toIoList
+  pure (genesisChecked, chainId.toUInt64, blockJsons)
+
+private structure FixtureFinalObservation where
+  lastSnapshotFound : Bool
+  lastExpected : B256
+  lastComputed : Option B256 := none
+  postSourceKind : Option FixturePostSource := none
+  postExpected : Option B256 := none
+  postComputed : Option B256 := none
+  postRootChecked : Bool := false
+
+/-- Shared original final assertions. The optional observer records the values
+at the assertion site, including a partial failure, without recomputing roots. -/
+private def verifyFixtureFinal (json : Lean.Json)
+    (findLast : B256 → Except ImportFailure CheckedBlockChain)
+    (observe : FixtureFinalObservation → IO Unit := fun _ => pure ()) : IO Unit := do
+  let lastBlockHash ← json.find "lastblockhash" >>= Lean.Json.toIoB256
+  let chain ← match findLast lastBlockHash with
+    | .error failure => do
+      observe { lastSnapshotFound := false, lastExpected := lastBlockHash }
+      .throw failure.render
+    | .ok chain => pure chain
+  let lastBlockHash' := chain.tipHash
+  let observedFinal : FixtureFinalObservation :=
+    { lastSnapshotFound := true, lastExpected := lastBlockHash,
+      lastComputed := some lastBlockHash', postComputed := some chain.stateRoot }
+  observe observedFinal
+  .guard
+    (lastBlockHash = lastBlockHash')
+    s!"error : last block hash does not match\n  expected : {lastBlockHash}\n  computed : {lastBlockHash'}"
+  let (postStateRoot, source) ← getPostStateRootWithSource json
+  let postStateRoot' := chain.stateRoot
+  observe { observedFinal with
+    postSourceKind := some source
+    postExpected := some postStateRoot
+    postRootChecked := postStateRoot == postStateRoot' }
+  .guard
+    (postStateRoot = postStateRoot')
+    s!"error : end state root does not match\n  expected : {postStateRoot}\n  computed : {postStateRoot'}"
+
 def runBlockchainStTest (spec : FixtureNetwork) : (Nat × String × Lean.Json) → IO Unit
   | ⟨idx, name, json⟩ => do
     .println s!"TEST NAME : {name}"
     .println s!"TEST INDEX : {idx}"
-    -- Every fork this case's network label can select must be one this build
-    -- runs, and that is settled here -- before a header, a prestate, or a
-    -- block is read. A declared fork whose rules a build did not implement
-    -- would be outside its domain, not evidence about the candidate (five
-    -- forks are in that state here: the still-refused pre-Berlin forks
-    -- `Fork.rules` refuses): routed through
-    -- the import path it would surface as `BLOCK #0 was expected valid but
-    -- failed`, which reads as a verdict on a block this build never examined.
-    -- A transition label is checked at both endpoints for the same reason,
-    -- since its pre-fork blocks would otherwise run and only the post-fork
-    -- ones refuse, halfway through a case.
-    let _ ← IO.ofExcept
-      ((spec.forks.mapM Fork.rules).mapError SupportError.render)
-    checkFixtureBlobSchedule spec json
-
-    let gbh_json ← json.find "genesisBlockHeader"
-    let gbh ← gbh_json.toHeader
-    let gb : Block := {header := gbh, txs := [], ommers := [], wds := []}
-    let gbh_hash ← gbh_json.find "hash" >>= Lean.Json.toIoB256
-    let gbh_hash' := (BLT.toBytes (Header.toBLT gbh)).keccak
-
-    .guard
-      (gbh_hash = gbh_hash')
-      s!"error : genesis block header hash, expected = {gbh_hash}, computed = {gbh_hash'}"
-
-    let genesisRLP ← json.find "genesisRLP" >>= Lean.Json.toIoBytes
-    -- The genesis block's wire shape follows the fork active where it sits:
-    -- withdrawals ride along from Shanghai, so a pre-Shanghai genesis block
-    -- encodes three elements, not four. `Block.toBLT` always writes the
-    -- withdrawals element (it is the canonical block encoding the proven
-    -- paths hash and compare through); the fixture's `genesisRLP` is the
-    -- fork's own encoding, so the comparison drops the element exactly when
-    -- the genesis fork's rules do not carry withdrawals. A transition's
-    -- genesis sits in its before era. Prague and later keep the four-element
-    -- form, textually unchanged.
-    let genesisFork ← IO.ofExcept (spec.genesisFork.rules.mapError SupportError.render)
-    let genesisRLP' :=
-      if genesisFork.header.withdrawalsRoot then gb.toBLT.toBytes
-      else (BLT.list [Header.toBLT gb.header,
-        .list (gb.txs.map B8LOrTxToBLT),
-        .list (gb.ommers.map Header.toBLT)]).toBytes
-    .guard (genesisRLP = genesisRLP') "error : unexpected genesis block RLP."
-    let (chainId : Nat) ←
-      match gbh_json.find? "chainId" with
-      | .none => .ok 1
-      | .some chainIdJson => chainIdJson.toIoB64 <&> UInt64.toNat
-
-    let preState ← json.find "pre" >>= Lean.Json.toWorldAt genesisFork
-
-    -- P0.2 item 6. The genesis block enters through the same strict decoder
-    -- every candidate does, rather than being trusted because a hand-built
-    -- record re-encodes to itself, and the declared hash and the parsed
-    -- prestate are compared against *that* decoded genesis. The prestate root
-    -- check is the one this runner never made: without it the whole chain
-    -- executes from a world its own genesis header does not commit to.
-    -- The genesis block arrives in its fork's wire shape (three elements
-    -- before Shanghai), while the envelope below holds the canonical
-    -- four-element form; it is decoded under the genesis fork's rules and
-    -- normalised through its own re-encoding, the same two stages every
-    -- candidate block passes through. The fixed message is unchanged: a
-    -- genesis that does not decode under its fork's rules was never a
-    -- scorable verdict.
-    let genesisBlock ← match rlpToBlockEAt genesisFork genesisRLP with
-      | .ok ⟨block, _⟩ => pure block
-      | .error _ => .throw "error : genesis RLP is not canonical block RLP"
-    let genesisEnvelope ←
-      (CanonicalBlock.ofRlp? (genesisBlock.toBLT.toBytes)).toIO
-      "error : genesis RLP is not canonical block RLP"
-    .guard (genesisEnvelope.headerHash = gbh_hash)
-      s!"error : decoded genesis header hash does not match\n  \
-         expected : {gbh_hash}\n  computed : {genesisEnvelope.headerHash}"
-    let genesisStateRoot := genesisEnvelope.block.header.stateRoot
-    -- The prestate's root is computed here, once, and the proof of the
-    -- comparison is what builds the checked snapshot -- so nothing downstream
-    -- recomputes it, and no unchecked genesis snapshot can be built at all.
-    let preStateRoot := preState.root
-    let genesisChecked ←
-      if hnum : genesisEnvelope.block.header.number = 0 then
-        if hcanon : preState.Canonical then
-          if hroot : preStateRoot = genesisStateRoot then
-            pure (CheckedBlockChain.ofGenesis genesisEnvelope preState
-              chainId.toUInt64 hnum hcanon hroot)
-          else
-            .throw s!"error : genesis prestate root does not match the genesis \
-              header\n  expected : {genesisStateRoot}\n  computed : {preStateRoot}"
-        else
-          .throw "error : genesis prestate is not a canonical world"
-      else
-        .throw s!"error : genesis block number = \
-          {genesisEnvelope.block.header.number}, expected 0"
-
-    let blockJsons ← json.find "blocks" >>= Lean.Json.toIoList
+    let (genesisChecked, chainId, blockJsons) ← prepareFixtureCase spec json
     let findLast : B256 → Except ImportFailure CheckedBlockChain ←
       match spec with
       | .scheduled scheduled => do
-        let store ← processBlockJsons scheduled chainId.toUInt64 (.init genesisChecked)
+        let store ← processBlockJsons scheduled chainId (.init genesisChecked)
           blockJsons.putIndex
         pure (fun hash => store.findLast hash)
       | .arrowGlacierParisTTD => do
         let initial ← ((FixtureTTD.init genesisChecked).mapError ImportFailure.render).toIO
         let store ← processTTDBlockJsons initial blockJsons.putIndex
         pure (fun hash => store.findLast hash)
-    let lastBlockHash ← json.find "lastblockhash" >>= Lean.Json.toIoB256
-    let chain ← ((findLast lastBlockHash).mapError ImportFailure.render).toIO
-    let lastBlockHash' := chain.tipHash
-    .guard
-      (lastBlockHash = lastBlockHash')
-      s!"error : last block hash does not match\n  expected : {lastBlockHash}\n  computed : {lastBlockHash'}"
+    verifyFixtureFinal json findLast
 
-    let postStateRoot ← getPostStateRoot json
-    -- Read the committed root instead of rebuilding it, exactly as the tip-hash
-    -- check above reads `tipHash`. `CheckedBlockChain.stateRoot_eq` is the proof
-    -- that this is the same comparison as against `chain.val.state.root`, so no
-    -- fixture can classify differently -- and the world-state trie, which this
-    -- runner was reconstructing once per fixture on top of the one
-    -- `stateTransitionE` already built and checked, is not rebuilt at all.
-    let postStateRoot' := chain.stateRoot
-    .guard
-      (postStateRoot = postStateRoot')
-      s!"error : end state root does not match\n  expected : {postStateRoot}\n  computed : {postStateRoot'}"
+/-! The explicit diagnostic policy serializes observations only. No field in
+this report changes fork selection, checked import, expectation vocabulary or
+strict mode. Hash custody belongs to the external evidence collector. -/
+
+private def closureHash (hash : B256) : Lean.Json := .str ("0x" ++ hash.toHex)
+
+private def closureOptHash : Option B256 → Lean.Json
+  | none => .null
+  | some hash => closureHash hash
+
+/-- Diagnostic syntax only: each pipe alternative is an ASCII dotted
+identifier, [A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*, exactly as the collector checks.
+This does not recognize an identity or change the ordinary strict parser. -/
+private def closureExpected (raw : Option Lean.Json) : FixtureClosure.Expected :=
+  match raw with
+  | none => .absent
+  | some (.str text) =>
+    let lexical := (text.splitOn FixtureException.delimiter).all fun token =>
+      (token.splitOn ".").all fun component =>
+        !component.isEmpty && component.toList.all (fun c => c.isAlphanum || c == '_')
+    let parsed := FixtureException.parseExpectation text
+    if !lexical then
+      .malformed (match parsed with
+        | .error detail => detail
+        | .ok _ => "expectException alternatives must be ASCII dotted identifiers")
+    else match parsed with
+      | .ok expected => .known expected
+      | .error detail => .unknown detail
+  | some _ => .malformed "expectException must be a JSON string"
+
+private def closureExpectedJson : FixtureClosure.Expected → Lean.Json
+  | .absent => .mkObj [("status", .str "absent"), ("canonical", .null), ("detail", .null)]
+  | .known expected => .mkObj [("status", .str "known"),
+      ("canonical", .arr ((expected.map (fun e => Lean.Json.str e.toString)).toArray)),
+      ("detail", .null)]
+  | .unknown detail => .mkObj [("status", .str "unknown"), ("canonical", .null),
+      ("detail", .str detail)]
+  | .malformed detail => .mkObj [("status", .str "malformed"), ("canonical", .null),
+      ("detail", .str detail)]
+
+private def closureIdentityString : FixtureClosure.Identity → String
+  | .notApplicable => "notApplicable"
+  | .matched => "matched"
+  | .unparsedExpected => "unparsedExpected"
+  | .unmappedActual => "unmappedActual"
+  | .mismatch => "mismatch"
+  | .malformedExpected => "malformedExpected"
+
+/-- Existing constructor-derived reason tags, never rendered-message parsing. -/
+private def closureRejectionTag : BlockRejection → String
+  | .transaction reason => "BlockRejection.transaction." ++ reason.tag
+  | .block reason => "BlockRejection.block." ++ reason.tag
+  | .decode reason => "BlockRejection.decode." ++ reason.tag
+  | .senderRecovery (.invalidSignature _) => "BlockRejection.senderRecovery.invalidSignature"
+  | .senderRecovery (.pointCompression _) => "BlockRejection.senderRecovery.pointCompression"
+  | .senderRecovery (.value _) => "BlockRejection.senderRecovery.value"
+
+private def closureFailureTag : ImportFailure → String
+  | .context _ => "ImportFailure.context"
+  | .support _ => "ImportFailure.support"
+  | .harness _ => "ImportFailure.harness"
+  | .internal (.assertion _) => "ImportFailure.internal.assertion"
+  | .internal (.invariant _) => "ImportFailure.internal.invariant"
+  | .vm _ => "ImportFailure.vm"
+
+/-- Typed observations are rendered only at the JSON boundary. No rendered
+name or human detail is carried into evaluation or scoring. -/
+private inductive ClosureActual where
+  | notEvaluated
+  | operational (failure : ImportFailure)
+  | rejected (reason : BlockRejection)
+  | imported
+
+private inductive ClosureDisposition where
+  | notEvaluated | unchanged | insertCheckedChild
+
+private def closureCandidateJson (idx : Nat) (blockJson : Lean.Json)
+    (expected : FixtureClosure.Expected) (rawHex : String) (reached : Bool)
+    (actual : ClosureActual) (identity : FixtureClosure.Identity)
+    (disposition : ClosureDisposition) (decodedParent : Option B256 := none)
+    (parent : Option CheckedBlockChain := none) : Lean.Json :=
+  let rawExpected := blockJson.find? "expectException"
+  let (channel, tag, canonical, detail) : String × Lean.Json × Lean.Json × Lean.Json :=
+    match actual with
+    | .notEvaluated => ("not_evaluated", Lean.Json.null, .null, match expected with
+        | .malformed detail => .str detail
+        | _ => .null)
+    | .operational failure => ("operational", .str (closureFailureTag failure), .null,
+        .str failure.render)
+    | .rejected reason => ("candidate_rejected", .str (closureRejectionTag reason),
+        match FixtureException.ofBlockRejection reason with
+        | none => .null
+        | some exception => .str exception.toString, .str reason.render)
+    | .imported => ("imported", .str "ImportOutcome.inl", .null, .null)
+  .mkObj [
+    ("original_block_index", Lean.toJson idx), ("rlp_hex", .str rawHex),
+    ("expectation", .mkObj [("present", .bool rawExpected.isSome),
+      ("raw", rawExpected.getD .null)]),
+    ("expected_parse", closureExpectedJson expected),
+    ("reached", .bool reached), ("evaluation_engine", .str "shared_checked_evaluator"),
+    ("actual_channel", .str channel), ("actual_typed_tag", tag),
+    ("actual_canonical", canonical),
+    ("identity_status", .str (closureIdentityString identity)),
+    ("state_disposition", .str (match disposition with
+      | .notEvaluated => "not_evaluated"
+      | .unchanged => "unchanged"
+      | .insertCheckedChild => "insert_checked_child")),
+    ("decoded_parent_hash", closureOptHash decodedParent),
+    ("resolved_checked_parent", match parent with
+      | none => .null
+      | some checked => .mkObj [("tip_hash", closureHash checked.tipHash),
+          ("state_root", closureHash checked.stateRoot)]),
+    ("actual_detail", detail)]
+
+private def closureOriginalRlp (blockJson : Lean.Json) : String :=
+  (blockJson.find? "rlp" >>= Lean.Json.toString?).getD ""
+
+private def closureUnreached (block : Nat × Lean.Json) : Lean.Json :=
+  closureCandidateJson block.1 block.2 (closureExpected (block.2.find? "expectException"))
+    (closureOriginalRlp block.2) false
+    .notEvaluated .notApplicable .notEvaluated
+
+private structure ClosureStep (σ : Type) where
+  store : σ
+  row : Lean.Json
+  mayContinue : Bool
+  strictAccepted : Bool
+
+/-- A single candidate is evaluated once. IO faults abort; typed behavioral
+agreement is the only continuation rule. The immutable next store is adopted
+only for an expected-valid checked import. -/
+private def closureCandidateStep {σ : Type}
+    (evaluate : σ → Bytes → FixtureObserved (CheckedBlockChain × σ))
+    (store : σ) (idx : Nat) (blockJson : Lean.Json) : IO (ClosureStep σ) := do
+  let expected := closureExpected (blockJson.find? "expectException")
+  if let .malformed detail := expected then
+    .println s!"IDENTITY CLOSURE BLOCK #{idx} malformed expectation: {detail}"
+    return ⟨store, closureCandidateJson idx blockJson expected (closureOriginalRlp blockJson)
+      false .notEvaluated .malformedExpected .notEvaluated, false, false⟩
+  let captured ← IO.mkRef (none : Option (FixtureObserved (CheckedBlockChain × σ)))
+  let capturedRaw ← IO.mkRef (none : Option Bytes)
+  try
+    let raw ← blockJson.find "rlp" >>= Lean.Json.toIoBytes
+    capturedRaw.set (some raw)
+    let observed := evaluate store raw
+    captured.set (some observed)
+    let observed ← match observed.outcome with
+      | .ok (.inr reason) => do
+        let refined ← refineBlockAccessListRejection blockJson raw reason
+        pure { observed with outcome := .ok (.inr refined) }
+      | _ => pure observed
+    let score := FixtureClosure.score expected observed.outcome
+    let actual := match observed.outcome with
+      | .error failure => ClosureActual.operational failure
+      | .ok (.inr reason) => .rejected reason
+      | .ok (.inl _) => .imported
+    let (next, disposition) := match expected, observed.outcome with
+      | .absent, .ok (.inl (_, next)) => (next, ClosureDisposition.insertCheckedChild)
+      | _, _ => (store, .unchanged)
+    let row := closureCandidateJson idx blockJson expected ("0x" ++ raw.toHex) true actual
+      score.identity disposition observed.decodedParentHash observed.parent
+    return ⟨next, row, score.mayContinue, score.strictAccepted⟩
+  catch error =>
+    let observed? ← captured.get
+    let raw? ← capturedRaw.get
+    let failure := ImportFailure.harness (.text error.toString)
+    .println s!"IDENTITY CLOSURE BLOCK #{idx} operational failure: {failure.render}"
+    let row := closureCandidateJson idx blockJson expected
+      (raw?.map (fun raw => "0x" ++ raw.toHex) |>.getD (closureOriginalRlp blockJson))
+      observed?.isSome (.operational failure) .notApplicable
+      .unchanged (observed?.bind (·.decodedParentHash)) (observed?.bind (·.parent))
+    return ⟨store, row, false, false⟩
+
+private structure ClosureFold (σ : Type) where
+  store : σ
+  rows : List Lean.Json
+  complete : Bool
+  strictAccepted : Bool
+
+private def processClosureBlocks {σ : Type}
+    (evaluate : σ → Bytes → FixtureObserved (CheckedBlockChain × σ)) (store : σ) :
+    List (Nat × Lean.Json) → IO (ClosureFold σ)
+  | [] => pure ⟨store, [], true, true⟩
+  | (idx, blockJson) :: rest => do
+    let chainname := (blockJson.find? "chainname" >>= Lean.Json.toString?).getD "default"
+    .println s!"BLOCK INDEX : {idx}"
+    .println s!"CHAIN NAME : {chainname}"
+    let step ← closureCandidateStep evaluate store idx blockJson
+    if step.mayContinue then
+      let result ← processClosureBlocks evaluate step.store rest
+      return ⟨result.store, step.row :: result.rows, result.complete,
+        step.strictAccepted && result.strictAccepted⟩
+    else
+      return ⟨store, step.row :: rest.map closureUnreached, false, false⟩
+
+private def closureFinalJson (check : FixtureFinalObservation) : Lean.Json :=
+  .mkObj [("last_snapshot_found", .bool check.lastSnapshotFound),
+    ("lastblockhash_expected", closureHash check.lastExpected),
+    ("lastblockhash_computed", closureOptHash check.lastComputed),
+    ("post_source_kind", match check.postSourceKind with
+      | none => .null
+      | some .postState => .str "postState"
+      | some .postStateHash => .str "postStateHash"),
+    ("post_root_expected", closureOptHash check.postExpected),
+    ("post_root_computed", closureOptHash check.postComputed),
+    ("post_root_checked", .bool check.postRootChecked)]
+
+/-- Per-case failures are retained as failures and cannot suppress independent
+later selected cases. Only the explicit diagnostic mode catches them here. -/
+private def runClosureCase (spec : FixtureNetwork) (case : Nat × String × Lean.Json) :
+    IO (Lean.Json × Bool) := do
+  let (idx, name, json) := case
+  .println s!"TEST NAME : {name}"
+  .println s!"TEST INDEX : {idx}"
+  let genesisDone ← IO.mkRef false
+  let rows ← IO.mkRef ([] : List Lean.Json)
+  let final ← IO.mkRef (none : Option FixtureFinalObservation)
+  let completed ← IO.mkRef false
+  let strict ← IO.mkRef false
+  let originals := ((json.find? "blocks").bind fun value => match value with
+    | .arr values => some values.toList
+    | _ => none).getD []
+  try
+    let (genesisChecked, chainId, blockJsons) ← prepareFixtureCase spec json
+    let (findLast, traversalComplete, strictScores) ← match spec with
+      | .scheduled scheduled => do
+        let initial := ChainStore.init genesisChecked
+        genesisDone.set true
+        let result ← processClosureBlocks (evaluateScheduledStore scheduled chainId)
+          initial blockJsons.putIndex
+        rows.set result.rows
+        pure ((fun hash => result.store.findLast hash), result.complete, result.strictAccepted)
+      | .arrowGlacierParisTTD => do
+        let initial ← ((FixtureTTD.init genesisChecked).mapError ImportFailure.render).toIO
+        genesisDone.set true
+        let result ← processClosureBlocks evaluateTTDStore initial blockJsons.putIndex
+        rows.set result.rows
+        pure ((fun hash => result.store.findLast hash), result.complete, result.strictAccepted)
+    if traversalComplete then
+      verifyFixtureFinal json findLast (fun observed => final.set (some observed))
+      completed.set true
+      strict.set strictScores
+  catch error =>
+    .println s!"IDENTITY CLOSURE CASE {name} failure: {error.toString}"
+  let observedRows ← rows.get
+  let allRows := if observedRows.isEmpty then originals.putIndex.map closureUnreached else observedRows
+  let finalCheck ← final.get
+  let report := Lean.Json.mkObj [("case_key", .str name),
+    ("original_case_index_sorted_keys", Lean.toJson idx),
+    ("network", (json.find? "network").getD .null),
+    ("genesis_checks_complete", .bool (← genesisDone.get)),
+    ("case_complete", .bool (← completed.get)),
+    ("candidates", .arr allRows.toArray),
+    ("final_assertions", (finalCheck.map closureFinalJson).getD .null)]
+  pure (report, ← strict.get)
 
 /-- The fixture network labels this build can actually run.
 
@@ -977,6 +1321,12 @@ def requireSupportedSpec (label : String) : IO FixtureNetwork := do
       ChainContextError.render)
   return spec
 
+/-- A requested label retained together with the supported spec its parser
+resolved. Filtering uses that spec; diagnostic JSON preserves the supplied label. -/
+structure FixtureNetworkSelection where
+  rawLabel : String
+  spec : FixtureNetwork
+
 /-- Every filter a fixture run can carry, plus the positional arguments seen.
 
 Each filter field is limitative: it can only remove cases from the selection,
@@ -985,11 +1335,12 @@ so that options may appear before or after the fixture path, and `main` can
 report "exactly one file" as its own error rather than as an unknown option. It
 is accumulated in reverse, as the parser prepends. -/
 structure FixtureOpts where
-  net : Option FixtureNetwork := none
+  net : Option FixtureNetworkSelection := none
   testIdx : Option Nat := none
   incls : List String := []
   excls : List String := []
   paths : List String := []
+  identityClosure : Option System.FilePath := none
 
 /-- The case's own network spec, if the case survives every filter.
 
@@ -1017,7 +1368,7 @@ def fixtureCaseSpec? (o : FixtureOpts) :
     let label ← json.find "network" >>= Lean.Json.toIoString
     let some spec := supportedSpec? label | return none
     if let some requested := o.net then
-      if spec ≠ requested then return none
+      if spec ≠ requested.spec then return none
     return some spec
 
 /-- One fixture case's declared `network` label, for reporting. -/
@@ -1060,7 +1411,8 @@ def blockchainTestSibling? (path : String) : Option String :=
     let rewritten := path.replace s!"/{tree}/" "/blockchain_tests/"
     if rewritten == path then none else some rewritten
 
-def runTestFile (o : FixtureOpts) (path : String) : IO Unit := do
+private def selectFixtureCases (o : FixtureOpts) (path : String) :
+    IO (List (FixtureNetwork × (Nat × String × Lean.Json))) := do
   .println "\n================================================================\n"
   .println s!"TEST FILE : {path}\n"
   let rb ← readJsonFile path >>= Lean.Json.toIoRBNode
@@ -1109,8 +1461,41 @@ def runTestFile (o : FixtureOpts) (path : String) : IO Unit := do
     s!"ERROR : the filters select no case in {path}; {supported.length} of its \
        {js.length} cases run at a supported network, with labels \
        {supported.eraseDups}"
-  let _ ← selected.mapM (fun p => runBlockchainStTest p.fst p.snd)
-  .ok ()
+  pure selected
+
+/-- Publish a complete JSON file atomically without overwriting any existing
+path. The sibling temp is exclusively created; hardLink itself is no-clobber. -/
+private def writeClosureReport (reportPath : System.FilePath) (report : Lean.Json) : IO Unit := do
+  let nonce ← IO.monoNanosNow
+  let temporary : System.FilePath := reportPath.toString ++ s!".tmp-{nonce}"
+  IO.FS.withFile temporary .writeNew fun handle => do
+    try
+      handle.putStr (report.pretty ++ "\n")
+      handle.flush
+      IO.FS.hardLink temporary reportPath
+    finally
+      IO.FS.removeFile temporary
+
+def runTestFile (o : FixtureOpts) (path : String) : IO Unit := do
+  match o.identityClosure with
+  | none =>
+    let selected ← selectFixtureCases o path
+    let _ ← selected.mapM (fun p => runBlockchainStTest p.fst p.snd)
+    pure ()
+  | some reportPath =>
+    .guard ((path : System.FilePath).isAbsolute && reportPath.isAbsolute)
+      "error : --identity-closure requires absolute input and report paths"
+    .guard (path ≠ reportPath.toString) "error : --identity-closure report must differ from input"
+    .guard (!(← reportPath.pathExists))
+      "error : --identity-closure report must not already exist"
+    let selected ← selectFixtureCases o path
+    let results ← selected.mapM (fun p => runClosureCase p.fst p.snd)
+    let report := Lean.Json.mkObj [
+      ("schema", .str "jaune-original-identity-closure-v1"), ("input_path", .str path),
+      ("network_filter", .str ((o.net.map (·.rawLabel)).getD "")),
+      ("cases", .arr ((results.map Prod.fst).toArray))]
+    writeClosureReport reportPath report
+    if !(results.all Prod.snd) then IO.Process.exit 1
 
 /-- Parse the fixture-mode options.
 
@@ -1125,13 +1510,25 @@ that far better than an empty selection would. `--name` and `--notName` do
 repeat -- they accumulate within their own dimension, which stays limitative
 because the dimension as a whole still only removes cases. -/
 def parseFixtureOpts : FixtureOpts → List String → IO FixtureOpts
-  | o, [] => return o
+  | o, [] => do
+    if o.identityClosure.isSome then
+      .guard o.net.isSome "error : --identity-closure requires explicit --network"
+      .guard (o.testIdx.isNone && o.incls.isEmpty && o.excls.isEmpty)
+        "error : --identity-closure forbids --name, --notName and --index"
+    return o
+  | o, "--identity-closure" :: report :: rest => do
+    .guard (!o.identityClosure.isSome) "error : --identity-closure given more than once"
+    .guard (!report.isEmpty && !report.startsWith "-")
+      "error : --identity-closure takes a report path"
+    parseFixtureOpts { o with identityClosure := some (report : System.FilePath) } rest
+  | _, "--identity-closure" :: [] =>
+    .throw "error : --identity-closure takes a report path"
   | o, "--network" :: label :: rest => do
     if o.net.isSome then
       .throw
         s!"error : --network given more than once; a case has exactly one \
            network, so a second one can only select nothing"
-    parseFixtureOpts { o with net := some (← requireSupportedSpec label) } rest
+    parseFixtureOpts { o with net := some ⟨label, ← requireSupportedSpec label⟩ } rest
   | o, "--name" :: name :: rest =>
     parseFixtureOpts { o with incls := name :: o.incls } rest
   | o, "--notName" :: name :: rest =>
@@ -1429,6 +1826,7 @@ def usage : String :=
   s!"usage:
   jaune <fixture.json> [--network <label>] [--name <case>] \
 [--notName <case>] [--index <n>]
+  jaune <fixture.json> --network <label> --identity-closure <report.json>
   jaune t8n [options] --state.fork <label>
   jaune --vectors <address> <file.json> [--network <fork>]
   jaune --rules <fork>
@@ -1447,7 +1845,7 @@ state_tests and transaction_tests -- under a single file name; only
 blockchain_tests is this runner's. Install the corpus with
 `python3 scripts/bootstrap_mainnet.py`.
 
-Every option is a filter: each one only narrows the set of cases that run, and
+Selection options are filters: each only narrows the set of cases that run, and
 the selection is always narrowed to the networks this build supports. The run
 fails if no case survives. Given no --network, every supported case in the file
 runs under the rules its own network label names.
@@ -1456,6 +1854,10 @@ runs under the rules its own network label names.
   --name <case>      run only these cases; repeatable
   --notName <case>   skip these cases; repeatable
   --index <n>        run only the case at this index
+  --identity-closure <report.json>
+                     report original behavior and identities separately; names
+                     remain failures. Requires --network, absolute input/report
+                     paths, a new report path, and no case/name/index filters.
 
 declared networks:
   {Fork.all.map Fork.toString}
@@ -1500,6 +1902,8 @@ def main : List String → IO Unit
   | "--fake-exp" :: pathStr :: [] => do
     if !(← runFakeExpVectorFile pathStr) then IO.Process.exit 1
   | "--vectors" :: addrStr :: pathStr :: opts => do
+    .guard (!opts.contains "--identity-closure")
+      "error : --identity-closure is only available in fixture mode"
     let addrStr2 := remove0x addrStr
     let paddedAddrStr :=
       String.ofList (List.replicate (40 - addrStr2.length) '0') ++ addrStr2
