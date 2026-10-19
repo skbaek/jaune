@@ -43,6 +43,7 @@ from typing import Optional
 DEFAULT_MANIFEST = Path(__file__).resolve().parent / "sources.json"
 sys.path.insert(0, str(DEFAULT_MANIFEST.parent))
 from conformance_reference import ReferenceError, target_root, verify_reference
+import fixture_corrections
 
 STATUS_OK = "ok"
 STATUS_MISSING = "missing"
@@ -77,8 +78,8 @@ def load_manifest(path: Path) -> dict:
     except OSError as error:
         raise ManifestError(f"cannot read manifest {path}: {error}") from error
     try:
-        data = json.loads(text)
-    except json.JSONDecodeError as error:
+        data = fixture_corrections.parse(text)
+    except (json.JSONDecodeError, fixture_corrections.CorrectionError) as error:
         raise ManifestError(f"manifest {path} is not valid JSON: {error}") from error
 
     if not isinstance(data, dict):
@@ -136,6 +137,10 @@ def load_manifest(path: Path) -> dict:
                 raise ManifestError(
                     f"manifest {path} section {section!r} is missing field {field!r}"
                 )
+    try:
+        fixture_corrections.validate_sources(data, path.resolve().parent.parent)
+    except (fixture_corrections.CorrectionError, OSError) as error:
+        raise ManifestError(str(error)) from error
     return data
 
 
@@ -870,18 +875,33 @@ def deep_compare_current_mainnet(manifest: dict, mainnet_root: Path) -> list[Che
     )
 
 
-def check_amsterdam(manifest: dict, amsterdam_root: Path) -> list[Check]:
+def _check_fixture_correction(manifest: dict, root: Path, manifest_path: Path) -> list[Check]:
+    try:
+        package = fixture_corrections.active_package(manifest, "amsterdam",
+            manifest_path.resolve().parent.parent, root / manifest["amsterdam"]["fixtures_subpath"])
+        if package is None:
+            return []
+        identity = fixture_corrections.correction_identity(package)
+        return [Check("amsterdam: explicit fixture correction", STATUS_OK,
+                      f"{identity['id']}; archive {identity['archive_sha256']}; index {identity['index_sha256']}")]
+    except (fixture_corrections.CorrectionError, OSError) as error:
+        return [Check("amsterdam: explicit fixture correction", STATUS_FAIL, str(error))]
+
+
+def check_amsterdam(manifest: dict, amsterdam_root: Path,
+                    manifest_path: Path = DEFAULT_MANIFEST) -> list[Check]:
     """Check the pinned release for the Amsterdam fixture lane."""
     return check_release_lane(
         manifest, amsterdam_root, "amsterdam", "amsterdam"
-    )
+    ) + _check_fixture_correction(manifest, amsterdam_root, manifest_path)
 
 
-def deep_compare_amsterdam(manifest: dict, amsterdam_root: Path) -> list[Check]:
+def deep_compare_amsterdam(manifest: dict, amsterdam_root: Path,
+                          manifest_path: Path = DEFAULT_MANIFEST) -> list[Check]:
     """Deep-check the Amsterdam tree against its pinned release asset."""
     return deep_compare_release_lane(
         manifest, amsterdam_root, "amsterdam", "amsterdam"
-    )
+    ) + _check_fixture_correction(manifest, amsterdam_root, manifest_path)
 
 
 def check_python_oracle(
@@ -1227,9 +1247,9 @@ def main(argv: list[str]) -> int:
         if args.mainnet_deep and mainnet_root is not None:
             checks.extend(deep_compare_current_mainnet(manifest, mainnet_root))
         if check_amsterdam_lane:
-            checks.extend(check_amsterdam(manifest, amsterdam_root))
+            checks.extend(check_amsterdam(manifest, amsterdam_root, args.manifest))
         if args.amsterdam_deep and amsterdam_root is not None:
-            checks.extend(deep_compare_amsterdam(manifest, amsterdam_root))
+            checks.extend(deep_compare_amsterdam(manifest, amsterdam_root, args.manifest))
         checks.extend(check_python_oracle(manifest, venv_path, args.manifest))
 
     ok = all(check.status == STATUS_OK for check in checks)

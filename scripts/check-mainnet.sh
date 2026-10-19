@@ -97,6 +97,7 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 [ -n "$SUITE" ] || usage
+MANIFEST_SUITE="$SUITE"
 
 case "$LANE" in
   mainnet)
@@ -400,6 +401,24 @@ TOTAL="$(wc -l < "$LIST" | tr -d ' ')"
 [ "$START_AT" -le "$TOTAL" ] || {
   echo "error: --start-at $START_AT exceeds $SUITE manifest size $TOTAL" >&2; exit 2;
 }
+# One verified physical mapping serves both dispatch modes. Keep logical labels
+# and manifest positions independent of cache paths, including paths with spaces.
+WORK="$(mktemp -d)"
+mkdir -p "$ROOT/.lake/fixture-input-receipts"
+INPUT_RECEIPT="$(mktemp "$ROOT/.lake/fixture-input-receipts/run.XXXXXXXX")"
+rm "$INPUT_RECEIPT"
+python3 "$SCRIPT_DIR/fixture_corrections.py" prepare-dispatch \
+  --sources "$SCRIPT_DIR/sources.json" --manifest "$SCRIPT_DIR/$LANE/manifests.json" \
+  --lane "$LANE" --suite "$MANIFEST_SUITE" --subdir "$SUBDIR" \
+  --fixtures-root "$FIXTURES_ROOT" --selection "$LIST" --start-at "$START_AT" \
+  --allowed-networks "$ALLOWED_NETWORKS" --receipt "$INPUT_RECEIPT" > "$WORK/dispatch"
+INPUT_RECEIPT_SHA="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$INPUT_RECEIPT")"
+echo "input identity receipt: $INPUT_RECEIPT sha256 $INPUT_RECEIPT_SHA" >&2
+verify_inputs() {
+  python3 "$SCRIPT_DIR/fixture_corrections.py" verify-dispatch \
+    --receipt "$INPUT_RECEIPT" --sha256 "$INPUT_RECEIPT_SHA"
+}
+
 # Two counters. POS is the manifest position, for the progress line; PASS
 # counts only files this run actually verified. The sequential exit line once
 # seeded PASS with START_AT-1 and so reported every skipped entry as passing
@@ -414,47 +433,18 @@ if [ "$JOBS" -gt 1 ]; then
   [ -x "$RUNNER" ] || {
     echo "error: parallel runner not found or not executable: $RUNNER" >&2; exit 2;
   }
-  WORK="$(mktemp -d)"
   LINES="$WORK/lines"
   mkdir -p "$LINES"
 
-  # Validate the whole selection up front rather than per-iteration. The
-  # sequential path can afford to check as it goes because it stops at the first
-  # problem; a pool cannot, and a malformed entry or missing file is a harness
-  # error that must never be reachable as a fixture classification.
-  tail -n +"$START_AT" "$LIST" \
-    | awk -F'\t' -v root="$FIXTURES_ROOT/blockchain_tests" -v start="$START_AT" \
-          -v nets=" $ALLOWED_NETWORKS " '
-        {
-          if (NF != 2 || $1 == "" || $2 == "") {
-            printf "error: malformed generated manifest entry at line %d\n", FNR > "/dev/stderr"; bad = 1; exit 1
-          }
-          n = $2
-          if (index(nets, " " n " ") == 0) {
-            printf "error: unknown manifest network %s\n", n > "/dev/stderr"; bad = 1; exit 1
-          }
-          printf "%d %s %s\n", FNR + start - 1, $1, n
-        }
-        END { if (bad) exit 1 }' > "$WORK/dispatch" || exit 2
-
-  while read -r _IDX REL _NET; do
-    [ -f "$FIXTURES_ROOT/blockchain_tests/$REL" ] || {
-      echo "error: missing manifest fixture file: $FIXTURES_ROOT/blockchain_tests/$REL" >&2
-      exit 2
-    }
-  done < "$WORK/dispatch"
-
-  SELECTED_N="$(wc -l < "$WORK/dispatch" | tr -d ' ')"
+  SELECTED_N=$((TOTAL - START_AT + 1))
   echo "dispatching $SELECTED_N of $TOTAL manifest files across $JOBS workers (guard ${GUARD}s)" >&2
 
-  RF_BIN="$BIN"; RF_GUARD="$GUARD"; RF_OUT="$LINES"
-  RF_FIX="$FIXTURES_ROOT/blockchain_tests"
-  export RF_BIN RF_GUARD RF_OUT RF_FIX
+  RF_BIN="$BIN"; RF_GUARD="$GUARD"; RF_OUT="$LINES"; RF_RUNNER="$RUNNER"
+  export RF_BIN RF_GUARD RF_OUT RF_RUNNER
   set +e
-  xargs -P "$JOBS" -I{} bash -c '
-    set -- $1
-    exec "$0" "$RF_BIN" "$RF_GUARD" "$RF_OUT" "$1" "$RF_FIX/$2" "$3" "$2"
-  ' "$RUNNER" {} < "$WORK/dispatch"
+  xargs -0 -n 4 -P "$JOBS" bash -c '
+    exec "$RF_RUNNER" "$RF_BIN" "$RF_GUARD" "$RF_OUT" "$1" "$4" "$3" "$2"
+  ' _ < "$WORK/dispatch"
   set -e
 
   if [ -f "$LINES/.guard-tripped" ]; then
@@ -465,7 +455,8 @@ if [ "$JOBS" -gt 1 ]; then
 
   : > "$REPORT"
   MISSING=0
-  while read -r IDX REL _NET; do
+  while IFS= read -r -d '' IDX && IFS= read -r -d '' REL &&
+        IFS= read -r -d '' _NET && IFS= read -r -d '' _FILE; do
     if [ -f "$LINES/$IDX.line" ]; then
       cat "$LINES/$IDX.line" >> "$REPORT"
     else
@@ -488,6 +479,7 @@ if [ "$JOBS" -gt 1 ]; then
     echo "RED — $SUITE: $NFAIL of $SELECTED_N manifest files non-PASS in ${ELAPSED}s (--jobs $JOBS, timings reference-only); see $REPORT"
     exit 1
   fi
+  verify_inputs || exit 2
   # Name the skip rather than folding it into the numerator. The sequential path
   # seeds PASS with START_AT-1 and so reports every skipped entry as passing;
   # counting files that never ran as PASS is the permissive oracle this harness
@@ -500,17 +492,8 @@ if [ "$JOBS" -gt 1 ]; then
   exit 0
 fi
 
-while IFS=$'\t' read -r REL NETWORK; do
-  [ -n "$REL" ] && [ -n "$NETWORK" ] || {
-    echo "error: malformed generated manifest entry" >&2; exit 2;
-  }
-  # This lane's admitted labels, resolved once above.
-  case " $ALLOWED_NETWORKS " in
-    *" $NETWORK "*) ;;
-    *) echo "error: unknown manifest network $NETWORK" >&2; exit 2;;
-  esac
-  FILE="$FIXTURES_ROOT/blockchain_tests/$REL"
-  [ -f "$FILE" ] || { echo "error: missing manifest fixture file: $FILE" >&2; exit 2; }
+while IFS= read -r -d '' IDX && IFS= read -r -d '' REL &&
+      IFS= read -r -d '' NETWORK && IFS= read -r -d '' FILE; do
   set +e
   perl -e '
     my $t = shift @ARGV;
@@ -533,7 +516,8 @@ while IFS=$'\t' read -r REL NETWORK; do
   POS=$((POS + 1))
   PASS=$((PASS + 1))
   printf '[%d/%d] PASS %s\n' "$POS" "$TOTAL" "$REL" >&2
-done < <(tail -n +"$START_AT" "$LIST")
+done < "$WORK/dispatch"
+verify_inputs || exit 2
 END_ALL="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
 ELAPSED="$(perl -e 'printf "%.2f", $ARGV[1] - $ARGV[0]' "$START_ALL" "$END_ALL")"
 if [ "$START_AT" -gt 1 ]; then

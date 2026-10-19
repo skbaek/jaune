@@ -396,6 +396,36 @@ Suite names remain disjoint, so a mistyped lane does not silently select the
 other lane's corpus. Historical devnet timings are retained in dated table
 cells above and must not be presented as current-release measurements.
 
+The optional explicit fixture-correction mechanism is inactive unless the
+Amsterdam source-lock section names an exact registered package. Its verifier
+is `scripts/fixture_corrections.py`; its bounded packager is
+`scripts/gen-amsterdam-fixture-correction.py`. Packaging accepted generated
+bytes is distinct from authorizing their adoption. Registration preserves the
+official base archive/index and verifies a separate correction archive, index,
+source patch and portable generation receipt. Setup uses
+`python3 scripts/fixture_corrections.py install --lane amsterdam --base-root PATH`;
+missing or invalid setup is refused, with no fallback to old fixture bytes.
+The extended doctor still deep-compares every official base file, including
+paths with replacements. An active correction produces an explicitly composite
+Amsterdam manifest; other lane manifests and logical selections retain their
+existing identities. Both dispatch modes use the same verified mapping and
+NUL-delimited argument transport. Each run retains its input receipt under
+`.lake/fixture-input-receipts/` and checks it, source/index identities and
+selected input hashes again before accepting a passing aggregate. The verdict
+names an active correction's ID and archive/index digests. Small package,
+semantic-delta, routing and post-run controls are in
+`scripts/tests/test_fixture_corrections.py`. This mechanism changes neither the
+recorded original-release results above nor the all-PASS rule; adopting a
+correction remains a separate reserved corpus/reference decision.
+After adoption, the packager's `--check` accepts the unchanged active source
+lock only when `--output` is the exact registered package directory and its
+registration, package and base release match. It reproduces packaging from the
+accepted `--experiment-receipt` and `--base-root` inputs; it does not rerun EELS.
+Normal package installation/verification and fixture dispatch need only the
+portable committed package and official base, not the experiment checkout or
+its detailed private evidence. New proposal generation still requires an
+inactive pointer.
+
 ### The historical lane (goal U10)
 
 One suite per pre-Prague fork over the same v21 release, strict all-PASS,

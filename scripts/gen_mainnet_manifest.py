@@ -51,6 +51,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import env_doctor
+import fixture_corrections
 
 
 ROOT = Path(__file__).resolve().parent
@@ -344,7 +345,8 @@ def verify_release_index(fixtures_root: Path, release: dict, label: str) -> None
         )
 
 
-def inventory(fixtures_root: Path, sources: dict, lane: LaneSpec = DEFAULT_LANE) -> dict:
+def inventory(fixtures_root: Path, sources: dict, lane: LaneSpec = DEFAULT_LANE,
+              repo_root: Path = ROOT.parent, correction_cache: Path | None = None) -> dict:
     statics = lane.statics
     release = sources[lane.sources_key]
     verify_release_index(fixtures_root, release, lane.report_label)
@@ -392,6 +394,21 @@ def inventory(fixtures_root: Path, sources: dict, lane: LaneSpec = DEFAULT_LANE)
 
     if not all_files:
         raise InventoryError("zero blockchain fixture files")
+    package = fixture_corrections.active_package(sources, lane.name, repo_root,
+                                                 fixtures_root, correction_cache)
+    if package is not None:
+        by_path = {entry["path"]: entry for entries in grouped.values() for entry in entries}
+        for replacement in package["registration"]["entries"]:
+            entry = by_path.get(replacement["path"])
+            if entry is None:
+                raise InventoryError("registered correction missing from base inventory")
+            effective = package["cache"] / "fixtures/blockchain_tests" / entry["path"]
+            network, names, schedules, content = read_cases(effective, statics, lane.blob_forks)
+            original = read_cases(blockchain / entry["path"], statics, lane.blob_forks)
+            if (network, names, schedules) != original[:3] or content != replacement["generated_sha256"]:
+                raise InventoryError("correction changes label/case/schedule selection facts")
+            entry["fixture_correction"] = {"id": package["registration"]["id"],
+                                           "effective_content_sha256": content}
     suites = {
         label.lower(): {
             "network": label,
@@ -559,6 +576,9 @@ def inventory(fixtures_root: Path, sources: dict, lane: LaneSpec = DEFAULT_LANE)
             if blocked:
                 suite["refusal_reason"] = lane.deferral_reason
         result["runnable"] = any(suite["runnable"] for suite in suites.values())
+    if package is not None:
+        result["schema_version"] = 3
+        result["source"]["fixture_correction"] = fixture_corrections.correction_identity(package)
     return result
 
 
@@ -575,6 +595,7 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--fixtures-root", type=Path, required=True)
     parser.add_argument("--sources", type=Path, default=DEFAULT_SOURCES)
+    parser.add_argument("--correction-cache", type=Path, help="cache location only; registration identity is mandatory")
     parser.add_argument(
         "--lane",
         choices=sorted(LANES),
@@ -599,8 +620,9 @@ def main(argv: list[str]) -> int:
     output = args.output if args.output is not None else lane.output
     try:
         sources = load_sources(args.sources)
-        actual = inventory(args.fixtures_root, sources, lane)
-    except (env_doctor.ManifestError, InventoryError) as error:
+        actual = inventory(args.fixtures_root, sources, lane,
+                           args.sources.resolve().parent.parent, args.correction_cache)
+    except (env_doctor.ManifestError, InventoryError, fixture_corrections.CorrectionError, OSError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
     if args.check:
