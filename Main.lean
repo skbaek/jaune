@@ -1817,11 +1817,10 @@ constructed `ForkTransition`, not written out by hand, so this text cannot
 drift from what the build actually does -- which is exactly how the README's
 fork list came to disagree with the binary. The declared and runnable sets are
 printed separately because they answer different questions -- what this build
-parses against what it will also run. They differ by the five still-refused
-pre-Berlin forks, and a guard where `Fork.supported` is defined pins the
-runnable list;
-folding them would still be wrong, because the build would then claim support
-it does not have, and the reader could not tell the two questions apart. -/
+parses against what it will also run. The sets currently coincide; keeping
+both projections explicit preserves the distinction if a declared fork is
+not yet runnable in a future build. The guard beside `Fork.supported` pins
+the runnable list. -/
 def usage : String :=
   s!"usage:
   jaune <fixture.json> [--network <label>] [--name <case>] \
