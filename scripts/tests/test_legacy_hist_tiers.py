@@ -28,7 +28,7 @@ CHECK_LEGACY = SCRIPTS / "check-legacy.sh"
 EXPECTED = {
     "hist-byzantium": (
         "Byzantium",
-        {"Byzantium", "EIP158ToByzantiumAt5", "ByzantiumToConstantinopleFixAt5"},
+        {"Byzantium", "ByzantiumToConstantinopleFixAt5"},
     ),
     "hist-constantinople": ("Constantinople", {"Constantinople"}),
     "hist-petersburg": (
@@ -55,8 +55,8 @@ def parse_mapping(script: str) -> dict[str, tuple[str, str]]:
     """The HIST_NET/HIST_LABELS assignments, parsed out of the real script."""
     found = {}
     for match in re.finditer(
-        r"^\s*hist-([a-z]+)\) HIST_NET=\"([^\"]+)\";"
-        r" HIST_LABELS=\"([^\"]*)\"",
+        r"^\s*hist-([a-z]+)\)\s*HIST_NET=\"([^\"]+)\";"
+        r"\s*HIST_LABELS=\"([^\"]*)\"",
         script,
         re.MULTILINE,
     ):
@@ -116,24 +116,41 @@ class HistTierSelectionTests(unittest.TestCase):
                 "Constantinople/f.json": "Byzantium",
                 "Constantinople/g.json": "Constantinople",
                 "Constantinople/h.json": "ShanghaiToCancunAtTime15k",
+                "Cancun/earlier.json": "EIP158ToByzantiumAt5",
+                "Cancun/transition.json": "ByzantiumToConstantinopleFixAt5",
             }
             for relative, network in fixtures.items():
                 path = root / relative
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(json.dumps({"t": {"network": network}}))
             byzantium = self.selection(root, self.mapping["hist-byzantium"][1])
-            self.assertEqual(byzantium, ["Cancun/a.json", "Constantinople/f.json"])
+            self.assertEqual(byzantium, [
+                "Cancun/a.json", "Cancun/transition.json", "Constantinople/f.json",
+            ])
             # The closing quote keeps Constantinople from matching its Fix.
             constantinople = self.selection(
                 root, self.mapping["hist-constantinople"][1])
             self.assertEqual(
                 constantinople, ["Cancun/c.json", "Constantinople/g.json"])
             petersburg = self.selection(root, self.mapping["hist-petersburg"][1])
-            self.assertEqual(petersburg, ["Cancun/b.json"])
+            self.assertEqual(petersburg, ["Cancun/b.json", "Cancun/transition.json"])
             berlin = self.selection(root, self.mapping["hist-berlin"][1])
             self.assertEqual(berlin, ["Cancun/d.json"])
             shanghai = self.selection(root, self.mapping["hist-shanghai"][1])
             self.assertEqual(shanghai, ["Constantinople/h.json"])
+
+    def test_byzantium_scope_is_visible(self):
+        start = self.script.index('case "$TIER" in\n  hist-byzantium)')
+        end = self.script.index('\nesac', start) + len('\nesac')
+        run = subprocess.run(
+            ["bash", "-c", 'TIER=hist-byzantium\n' + self.script[start:end]],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertIn("SCOPE — hist-byzantium:", run.stdout)
+        self.assertIn("EIP158ToByzantiumAt5 is outside this tier", run.stdout)
+        self.assertIn("original fixture retained and reported separately", run.stdout)
 
     def test_bomb_tiers_refuse_before_any_lock(self):
         for tier in BOMB_TIERS:
