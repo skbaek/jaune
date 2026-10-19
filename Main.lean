@@ -3,6 +3,7 @@ import «Jaune».Sufficiency
 import «Jaune».Transaction
 import «Jaune».FixtureException
 import «Jaune».ChainStore
+import «Jaune».FixtureTransition
 import «Jaune».BLSGuards
 import «Jaune».T8n
 
@@ -696,8 +697,10 @@ def requireExpectedFailure (idx : Nat) (chainname : String)
 /-- Process every fixture block in list order while deriving ancestry only
 from each decoded header's `parentHash`. Expected-invalid blocks are checked
 exactly, leave the snapshot store unchanged, and never stop later blocks. -/
-def processBlockJsons (spec : NetworkSpec) (chainId : UInt64) (store : ChainStore) :
-  List (Nat × Lean.Json) → IO ChainStore
+private def processBlockJsonsWith {σ : Type}
+    (evaluate : σ → Bytes → Except ImportFailure
+      (ImportOutcome (CheckedBlockChain × σ))) (store : σ) :
+    List (Nat × Lean.Json) → IO σ
   | ⟨idx, blockJson⟩ :: rest => do
     -- Hand-authored blockchain fixtures carry `chainname`; blockchain tests
     -- generated from GeneralStateTests do not.  The label is diagnostic only:
@@ -715,7 +718,7 @@ def processBlockJsons (spec : NetworkSpec) (chainId : UInt64) (store : ChainStor
         | .ok expected => pure (some expected)
         | .error err =>
           .throw s!"BLOCK #{idx} ({chainname}) has invalid expectException: {err}"
-    match evaluateFixtureBlock spec chainId store blockRlp with
+    match evaluate store blockRlp with
     | .error failure =>
       -- An operational failure: the question was not answered, so this can
       -- never satisfy an expected exception -- with or without an
@@ -726,7 +729,7 @@ def processBlockJsons (spec : NetworkSpec) (chainId : UInt64) (store : ChainStor
           raw actual: {repr failure.render}\ncanonical actual: <unknown canonical identity>"
       | some expected =>
         requireExpectedFailure idx chainname expected failure.render none
-        processBlockJsons spec chainId store rest
+        processBlockJsonsWith evaluate store rest
     | .ok (.inr consensusRejection) =>
       -- An Amsterdam access-list hash rejection is refined with the fixture's
       -- published list before scoring; every other rejection passes through.
@@ -740,16 +743,34 @@ def processBlockJsons (spec : NetworkSpec) (chainId : UInt64) (store : ChainStor
       | some expected =>
         requireExpectedFailure idx chainname expected rejection.render
           (FixtureException.ofBlockRejection rejection)
-        processBlockJsons spec chainId store rest
-    | .ok (.inl child) =>
+        processBlockJsonsWith evaluate store rest
+    | .ok (.inl (child, next)) =>
       match expected? with
       | some expected =>
         .throw s!"BLOCK #{idx} ({chainname}) was expected invalid but imported\n\
           expected: {expected.map FixtureException.toString}\n\
           computed tip: {child.tipHash}"
       | none =>
-        processBlockJsons spec chainId (store.addResult (.inl child)) rest
+        processBlockJsonsWith evaluate next rest
   | [] => .ok store
+
+/-- Scheduled imports retain their existing decoder and London dispatch. -/
+def processBlockJsons (spec : NetworkSpec) (chainId : UInt64) (store : ChainStore)
+    (blocks : List (Nat × Lean.Json)) : IO ChainStore :=
+  processBlockJsonsWith (fun store raw =>
+    match evaluateFixtureBlock spec chainId store raw with
+    | .error failure => .error failure
+    | .ok (.inr reason) => .ok (.inr reason)
+    | .ok (.inl child) => .ok (.inl (child, store.addResult (.inl child)))) store blocks
+
+/-- TTD acceptance already carries its indivisible branch-ledger update. -/
+private def processTTDBlockJsons (store : FixtureTTD.Store)
+    (blocks : List (Nat × Lean.Json)) : IO FixtureTTD.Store :=
+  processBlockJsonsWith (fun store raw =>
+    match FixtureTTD.evaluate store raw with
+    | .error failure => .error failure
+    | .ok (.inr reason) => .ok (.inr reason)
+    | .ok (.inl accepted) => .ok (.inl (accepted.child, accepted.next))) store blocks
 
 /-- Check a fixture's own declared blob schedule against the rules this run
 will apply.
@@ -761,7 +782,7 @@ all a BPO fork consists of -- instead of trusting that both were transcribed
 from the specification the same way. Older fixture families carry no `config`
 section; where the declaration exists it is checked exactly, and requiring it
 to exist on the current lane is the manifest generator's job. -/
-def checkFixtureBlobSchedule (spec : NetworkSpec) (json : Lean.Json) : IO Unit := do
+def checkFixtureBlobSchedule (spec : FixtureNetwork) (json : Lean.Json) : IO Unit := do
   let some config := json.find? "config" | pure ()
   let some schedule := config.find? "blobSchedule" | pure ()
   for f in spec.forks do
@@ -789,7 +810,7 @@ def checkFixtureBlobSchedule (spec : NetworkSpec) (json : Lean.Json) : IO Unit :
       s!"error : {f} blob base-fee update fraction = \
          {rules.blob.baseFeeUpdateFraction}, fixture declares {fraction}"
 
-def runBlockchainStTest (spec : NetworkSpec) : (Nat × String × Lean.Json) → IO Unit
+def runBlockchainStTest (spec : FixtureNetwork) : (Nat × String × Lean.Json) → IO Unit
   | ⟨idx, name, json⟩ => do
     .println s!"TEST NAME : {name}"
     .println s!"TEST INDEX : {idx}"
@@ -828,9 +849,7 @@ def runBlockchainStTest (spec : NetworkSpec) : (Nat × String × Lean.Json) → 
     -- the genesis fork's rules do not carry withdrawals. A transition's
     -- genesis sits in its before era. Prague and later keep the four-element
     -- form, textually unchanged.
-    let genesisFork ← IO.ofExcept ((match spec with
-      | .static f => f.rules
-      | .transition t => t.before.rules).mapError SupportError.render)
+    let genesisFork ← IO.ofExcept (spec.genesisFork.rules.mapError SupportError.render)
     let genesisRLP' :=
       if genesisFork.header.withdrawalsRoot then gb.toBLT.toBytes
       else (BLT.list [Header.toBLT gb.header,
@@ -887,11 +906,18 @@ def runBlockchainStTest (spec : NetworkSpec) : (Nat × String × Lean.Json) → 
           {genesisEnvelope.block.header.number}, expected 0"
 
     let blockJsons ← json.find "blocks" >>= Lean.Json.toIoList
-    let store ←
-      processBlockJsons spec chainId.toUInt64 (.init genesisChecked)
-        blockJsons.putIndex
+    let findLast : B256 → Except ImportFailure CheckedBlockChain ←
+      match spec with
+      | .scheduled scheduled => do
+        let store ← processBlockJsons scheduled chainId.toUInt64 (.init genesisChecked)
+          blockJsons.putIndex
+        pure (fun hash => store.findLast hash)
+      | .arrowGlacierParisTTD => do
+        let initial ← ((FixtureTTD.init genesisChecked).mapError ImportFailure.render).toIO
+        let store ← processTTDBlockJsons initial blockJsons.putIndex
+        pure (fun hash => store.findLast hash)
     let lastBlockHash ← json.find "lastblockhash" >>= Lean.Json.toIoB256
-    let chain ← ((store.findLast lastBlockHash).mapError ImportFailure.render).toIO
+    let chain ← ((findLast lastBlockHash).mapError ImportFailure.render).toIO
     let lastBlockHash' := chain.tipHash
     .guard
       (lastBlockHash = lastBlockHash')
@@ -909,19 +935,20 @@ def runBlockchainStTest (spec : NetworkSpec) : (Nat × String × Lean.Json) → 
       (postStateRoot = postStateRoot')
       s!"error : end state root does not match\n  expected : {postStateRoot}\n  computed : {postStateRoot'}"
 
-/-- The network specs this build can actually run.
+/-- The fixture network labels this build can actually run.
 
-Rule 2 of the selection model below. A label is supported when it parses to a
-`NetworkSpec` and, for a transition, names a usable schedule: a transition that
+The exact TTD fixture label is separate from ordinary protocol schedules.
+For scheduled labels, rule 2 of the selection model below is unchanged: a label
+must parse to a `NetworkSpec` and name a usable schedule. A transition that
 activates at genesis or runs the fork chain backwards determines no unambiguous
 fork at every block, so no chain can run it. That is the answer `--network` has
 always given such a label; it is applied here to the labels fixtures carry as
 well, so both come from one definition of "supported". -/
-def supportedSpec? (label : String) : Option NetworkSpec := do
-  let spec ← NetworkSpec.ofString? label
+def supportedSpec? (label : String) : Option FixtureNetwork := do
+  let spec ← FixtureNetwork.ofString? label
   match spec with
-  | .static _ => return spec
-  | .transition t =>
+  | .arrowGlacierParisTTD | .scheduled (.static _) => return spec
+  | .scheduled (.transition t) =>
     match (ChainConfig.mk 0 t.activations).validate with
     | .ok _ => return spec
     | .error _ => none
@@ -937,15 +964,15 @@ schedule that parses but is unusable are different mistakes.
 The `0` chain ID is a placeholder: `ChainConfig.validate` never reads
 `chainId`, so it is not a second, independently-chosen chain identity. The
 actual chain ID is read per fixture and threaded by `evaluateFixtureBlock`. -/
-def requireSupportedSpec (label : String) : IO NetworkSpec := do
-  let some spec := NetworkSpec.ofString? label
+def requireSupportedSpec (label : String) : IO FixtureNetwork := do
+  let some spec := FixtureNetwork.ofString? label
     | .throw
         s!"error : unknown --network label {repr label}; declared labels are \
            {Fork.all.map Fork.toString} and transitions of the form \
            <fork>To<fork>AtTime<seconds> or <fork>To<fork>At<block>. Of \
-           those, this build runs \
-           {Fork.supported.map Fork.toString}"
-  if let .transition t := spec then
+           those, this build runs {Fork.supported.map Fork.toString}; fixture \
+           mode also supports ArrowGlacierToParisAtDiffC0000"
+  if let .scheduled (.transition t) := spec then
     IO.ofExcept ((ChainConfig.mk 0 t.activations).validate.mapError
       ChainContextError.render)
   return spec
@@ -958,7 +985,7 @@ so that options may appear before or after the fixture path, and `main` can
 report "exactly one file" as its own error rather than as an unknown option. It
 is accumulated in reverse, as the parser prepends. -/
 structure FixtureOpts where
-  net : Option NetworkSpec := none
+  net : Option FixtureNetwork := none
   testIdx : Option Nat := none
   incls : List String := []
   excls : List String := []
@@ -979,7 +1006,7 @@ There is deliberately no default fork. The spec returned is the one the case's
 own `network` label names, so each selected case runs under its own rules and
 nothing downstream falls back to a hardcoded one. -/
 def fixtureCaseSpec? (o : FixtureOpts) :
-    (Nat × String × Lean.Json) → IO (Option NetworkSpec)
+    (Nat × String × Lean.Json) → IO (Option FixtureNetwork)
   | ⟨idx, name, json⟩ => do
     if let some specIdx := o.testIdx then
       if specIdx ≠ idx then return none
@@ -1076,7 +1103,8 @@ def runTestFile (o : FixtureOpts) (path : String) : IO Unit := do
   .guard (¬ supported.isEmpty)
     s!"ERROR : no case in {path} runs at a network this build supports; the \
        file's labels are {labels.eraseDups}, and the supported labels are \
-       {Fork.supported.map Fork.toString} and transitions between them"
+       {Fork.supported.map Fork.toString}, transitions between them, and the exact \
+       fixture label ArrowGlacierToParisAtDiffC0000"
   .guard (¬ selected.isEmpty)
     s!"ERROR : the filters select no case in {path}; {supported.length} of its \
        {js.length} cases run at a supported network, with labels \
