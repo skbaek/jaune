@@ -129,11 +129,11 @@ def Lean.Json.toAcct : Lean.Json → IO Acct
     return ⟨nonce, bal, Stor.ofList storPairs, code.toByteArray⟩
   | _ => .throw "cannot parse account (not .obj)"
 
--- The prestate is built through `State.ofList`, i.e. through `State.set`, so
--- `State.canonical_ofList` applies: every account comes out of `toAcct`, whose
--- storage is a `Stor.ofList` and hence canonical. An explicit `Acct.nil` or an
--- explicitly zero-valued slot in `pre` is dropped rather than stored, which is
--- what keeps the parsed state's trie root the committed one.
+-- Parse exact state membership through `State.ofPresentList`: an explicitly
+-- empty account stays present, while toAcct still normalizes zero storage.
+-- The t8n target uses MaterializedAlloc directly and permits such entries at
+-- every fork. The legacy blockchain loader's separate fork policy is applied
+-- only by toWorldAt below.
 def Lean.Json.toWorld (j : Lean.Json) : IO State := do
   let aux (xy : String × Lean.Json) : IO (Adr × Acct) := do
     let adr ← (Hex.toAdr? <| remove0x xy.fst).toIO ""
@@ -141,7 +141,18 @@ def Lean.Json.toWorld (j : Lean.Json) : IO State := do
     return ⟨adr, acct⟩
   let ob ← j.toIoRBNode
   let entries ← List.mapM aux ob.toArray.toList
-  return State.ofList entries
+  return State.ofPresentList entries
+
+/-- The pinned legacy blockchain loader rejects empty account fields from
+Paris on. Storage does not affect that test. This policy is not t8n's
+MaterializedAlloc policy, so the transition-tool path uses `toWorld` directly. -/
+def Lean.Json.toWorldAt (rules : ForkRules) (j : Lean.Json) : IO State := do
+  let world ← j.toWorld
+  if rules.pow.isNone then
+    for (address, account) in world.toList do
+      if account.Empty then
+        .throw s!"error : empty account in proof-of-stake prestate at 0x{address}"
+  return world
 
 def Lean.Json.find? : String → Lean.Json → Option Lean.Json
   | k, .obj r => r.get? k
@@ -180,23 +191,23 @@ def advertisedForkLane : List Fork := Fork.supported
 
 -- The advertised lane is the runnable lane, stated both ways so that a fork
 -- added to `Fork.all` without rules would be neither advertised nor silently
--- omitted from a hand-kept list. Eight declared forks are in that refused
+-- omitted from a hand-kept list. Five declared forks are in that refused
 -- state -- `Fork.rules?` is partial, and the runnable and refused lists are
 -- guards where `Fork.supported` and `Fork.unimplemented` are defined -- so
 -- these guards record today's lists rather than establishing them, and the
--- advertised lane is the nine runnable forks. (Goal C's guards here said the lane was a *prefix* of
+-- advertised lane is the twelve runnable forks. (Goal C's guards here said the lane was a *prefix* of
 -- the runnable one with `[.amsterdam]` the only runnable fork not advertised;
 -- goal B's said `Fork.unimplemented = [.amsterdam]` and named the metering
 -- vehicle; each is rewritten to the statement that replaced it.)
 #guard advertisedForkLane = Fork.supported
 #guard advertisedForkLane
-  = [.london, .paris, .shanghai, .cancun, .prague, .osaka, .bpo1, .bpo2,
-    .amsterdam]
+  = [.berlin, .london, .arrowGlacier, .grayGlacier, .paris, .shanghai,
+    .cancun, .prague, .osaka, .bpo1, .bpo2, .amsterdam]
 #guard advertisedForkLane.all (fun f => f.rules?.isSome)
 #guard Fork.supported.filter (fun f => !advertisedForkLane.contains f) = []
 #guard Fork.all.filter (fun f => !advertisedForkLane.contains f) = Fork.unimplemented
 #guard Fork.unimplemented = [.byzantium, .constantinople, .petersburg, .istanbul,
-  .muirGlacier, .berlin, .arrowGlacier, .grayGlacier]
+  .muirGlacier]
 #guard Fork.amsterdam.rules = .ok amsterdamRules
 #guard Fork.supported.all (fun f => f.rules.toOption.isSome)
 #guard Fork.prague.rules = .ok pragueRules
@@ -520,8 +531,15 @@ def decodeEnv (rules : ForkRules) (stateTest : Bool) (j : Lean.Json) : IO T8nEnv
   let number ← natOr j "currentNumber" defaultNumber
   let timestamp ← natOr j "currentTimestamp" defaultTimestamp
   let prevRandao ← natOr j "currentRandom" 0
-  -- `currentBaseFee` if given, else the target's parent derivation.
+  -- `currentBaseFee` if given, else the target's parent derivation. Before
+  -- London no base fee exists and none is read: the target's
+  -- `_resolve_base_fee_per_gas` returns `None` when the fork lacks
+  -- `calculate_base_fee_per_gas` (t8n/block_environment.py), and Jaune's
+  -- execution reads `0` there, which prices every pre-London fee exactly as
+  -- the pre-London fork does (the whole gas price is the priority fee, and
+  -- nothing is burned). U11d, when Berlin ran.
   let baseFeePerGas ←
+    if !rules.header.baseFee then pure 0 else
     match field? j "currentBaseFee" with
     | some v => readNat "env.currentBaseFee" v
     | none => do
@@ -1451,24 +1469,21 @@ end T8nForkLabel
     (T8nForkLabel.select 5) = some .petersburg
 #guard (T8nForkLabel.ofString? "ConstantinopleToIstanbulAt5").map
     (T8nForkLabel.select 0) = some .petersburg
--- Four labels resolve at rule lookup -- `London`, `Merge` (Paris), `Shanghai`
--- and `Cancun` -- and every other historical label but the fork-block
--- `BerlinToLondonAt5` is still refused: U9 adds the names, and later units
--- switch each fork on. `BerlinToLondonAt5` is mixed: its London endpoint
--- resolves while its Berlin endpoint stays refused.
-#guard ["Byzantium", "ConstantinopleFix", "Istanbul", "MuirGlacier", "Berlin",
-    "ArrowGlacier", "GrayGlacier", "ByzantiumToConstantinopleAt5",
-    "ConstantinopleToIstanbulAt5"].all
+-- Seven historical labels resolve at rule lookup -- `Berlin`, `London`,
+-- `ArrowGlacier`, `GrayGlacier`, `Merge` (Paris), `Shanghai` and `Cancun` --
+-- and so does the fork-block `BerlinToLondonAt5`, both of whose endpoints
+-- resolve since U11d. Every pre-Berlin label is still refused: U9 adds the
+-- names, and later units switch each fork on.
+#guard ["Byzantium", "ConstantinopleFix", "Istanbul", "MuirGlacier",
+    "ByzantiumToConstantinopleAt5", "ConstantinopleToIstanbulAt5"].all
   (fun l => match T8nForkLabel.ofString? l with
     | some label => label.forks.all (fun f => f.rules?.isNone)
     | none => false)
-#guard ["London", "Merge", "Shanghai", "Cancun"].all
+#guard ["Berlin", "London", "ArrowGlacier", "GrayGlacier", "Merge", "Shanghai",
+    "Cancun", "BerlinToLondonAt5"].all
   (fun l => match T8nForkLabel.ofString? l with
     | some label => label.forks.all (fun f => f.rules?.isSome)
     | none => false)
-#guard match T8nForkLabel.ofString? "BerlinToLondonAt5" with
-  | some label => label.forks.map (fun f => f.rules?.isSome) = [false, true]
-  | none => false
 
 structure Opts : Type where
   inputAlloc : String := "alloc.json"
@@ -1689,7 +1704,15 @@ def run (args : List String) : IO Unit := do
       number := env.number,
       baseFeePerGas := env.baseFeePerGas,
       time := env.timestamp.toB256,
-      prevRandao := env.prevRandao,
+      -- Before the merge `DIFFICULTY` (0x44) reads the block's difficulty,
+      -- exactly as the block path's `initBenv` selects it (unit U5); the
+      -- target's pre-merge block environment carries `difficulty` and no
+      -- `prev_randao`. Post-merge (`pow = none`) it is `currentRandom` as
+      -- before. U11d.
+      prevRandao :=
+        match rules.pow with
+        | some _ => Nat.toB256 env.difficulty
+        | none => env.prevRandao,
       excessBlobGas := env.excessBlobGas,
       parentBeaconBlockRoot := env.parentBeaconBlockRoot,
       slotNumber := env.slotNumber

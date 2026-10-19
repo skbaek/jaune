@@ -87,9 +87,12 @@ inductive FixtureException where
   | txType3TxZeroBlobs
   | txType4EmptyAuthorizationList
   | txType4TxContractCreation
-  -- Goal U11a: a typed transaction before its type's fork.
+  -- Goal U11a: a typed transaction before its type's fork (types 1 and 2
+  -- since U11d, when Berlin's pre-London cases ran).
   | txType3TxPreFork
   | txType4TxPreFork
+  | txType1TxPreFork
+  | txType2TxPreFork
 deriving DecidableEq, BEq, Repr, Inhabited
 
 namespace FixtureException
@@ -145,6 +148,7 @@ def all : List FixtureException :=
     txType3TxZeroBlobs ]
     ++ [txType4EmptyAuthorizationList, txType4TxContractCreation]
     ++ [txType3TxPreFork, txType4TxPreFork]
+    ++ [txType1TxPreFork, txType2TxPreFork]
 
 /-- The canonical spelling of an identity: byte-for-byte the token the fixtures
 use. -/
@@ -206,6 +210,8 @@ def toString : FixtureException → String
   | txType4TxContractCreation => "TransactionException.TYPE_4_TX_CONTRACT_CREATION"
   | txType3TxPreFork => "TransactionException.TYPE_3_TX_PRE_FORK"
   | txType4TxPreFork => "TransactionException.TYPE_4_TX_PRE_FORK"
+  | txType1TxPreFork => "TransactionException.TYPE_1_TX_PRE_FORK"
+  | txType2TxPreFork => "TransactionException.TYPE_2_TX_PRE_FORK"
 
 instance : ToString FixtureException := ⟨toString⟩
 
@@ -265,6 +271,13 @@ A token maps to a whole expectation, which may be a set (`TR_NoFundsOrGas` is
 `INSUFFICIENT_ACCOUNT_FUNDS|INTRINSIC_GAS_TOO_LOW`). -/
 -- BEGIN legacyAliases (checked by scripts/check-legacy-exception-aliases.py)
 def legacyAliases : List (String × String) := [
+  -- U11d: retesteth's EIP-3675 token for a pre-merge-shaped block at Paris,
+  -- which upstream renamed per block to the reason that block fails for
+  -- (66 Cancun-sibling pairs `IMPORT_IMPOSSIBLE_UNCLES_OVER_PARIS`, one,
+  -- bcInvalidHeaderTest/wrongDifficulty, `..._DIFFICULTY_OVER_PARIS`;
+  -- EELS paris/fork.py validate_header rejects both). Paris and Cancun share
+  -- both rules, so the sibling pairs are same-rule evidence.
+  ("3675PreParis1559BlockRejected", "BlockException.IMPORT_IMPOSSIBLE_UNCLES_OVER_PARIS|BlockException.IMPORT_IMPOSSIBLE_DIFFICULTY_OVER_PARIS"),
   ("1559BlockImportImpossible_BaseFeeWrong", "BlockException.INVALID_BASEFEE_PER_GAS"),
   ("ExtraDataTooBig", "BlockException.EXTRA_DATA_TOO_BIG"),
   ("IntrinsicGas", "TransactionException.INTRINSIC_GAS_TOO_LOW"),
@@ -391,9 +404,14 @@ def ofTxValidationError : TxValidationError → Option FixtureException
   | .type3ZeroBlobs _ => some txType3TxZeroBlobs
   | .type4ContractCreation _ => some txType4TxContractCreation
   | .emptyAuthorizationList _ => some txType4EmptyAuthorizationList
-  -- Types 1 and 2 before Berlin and London have identities of their own in
-  -- the fixture vocabulary; they fail closed until the wave that runs those
-  -- forks assigns them.
+  -- Each admitted type has its own pre-fork identity in the fixture
+  -- vocabulary (`TransactionException.TYPE_{1,2,3,4}_TX_PRE_FORK`,
+  -- execution_testing/exceptions/exceptions/transaction.py at the pin); types
+  -- 1 and 2 since U11d, when Berlin's EEST cases expect `TYPE_2_TX_PRE_FORK`
+  -- (for_berlin/london/eip1559_fee_market_change/tx_type). No other type has
+  -- one, so any other fails closed.
+  | .typePreFork 1 _ => some txType1TxPreFork
+  | .typePreFork 2 _ => some txType2TxPreFork
   | .typePreFork 3 _ => some txType3TxPreFork
   | .typePreFork 4 _ => some txType4TxPreFork
   | .typePreFork _ _ => none
@@ -493,11 +511,12 @@ open FixtureException
 -- supported static Prague and Osaka lanes, plus the four the Glamsterdam
 -- devnet lane's `eip7928_*` subtree names (goal C), plus the two pre-fork
 -- transaction-type identities the Shanghai-to-Cancun and Cancun-to-Prague
--- transition fixtures name (goal U11a).
-#guard all.length = 50
+-- transition fixtures name (goal U11a), plus the type-1 and type-2 pre-fork
+-- identities the pre-London cases name (U11d).
+#guard all.length = 52
 
 -- `toString` is injective, so no two identities collapse to one token.
-#guard (all.map toString).eraseDups.length = 50
+#guard (all.map toString).eraseDups.length = 52
 
 -- `toString`/`ofString?` round trip on all 47, in both directions.
 #guard all.all (fun e => ofString? e.toString == some e)
@@ -699,10 +718,12 @@ def fixtureInventory : List String :=
 -- identities is reachable from some typed rejection constructor, so a newly
 -- observed expected identity cannot silently remain unclassifiable.
 -- (`TxValidationError.all` carries one representative `typePreFork`, type 3;
--- type 4's identity is reached by the same constructor at type 4.)
+-- types 1, 2 and 4 reach theirs through the same constructor.)
 #guard all.all fun e =>
   TxValidationError.all.any (fun r => ofTxValidationError r == some e) ||
   ofTxValidationError (.typePreFork 4 .none) == some e ||
+  ofTxValidationError (.typePreFork 1 .none) == some e ||
+  ofTxValidationError (.typePreFork 2 .none) == some e ||
   BlockValidationError.all.any (fun r => ofBlockValidationError r == some e) ||
   DecodeError.all.any (fun r => ofDecodeError r == some e) ||
   ofCryptoError (.invalidSignature .none) == some e
@@ -732,7 +753,10 @@ def fixtureInventory : List String :=
 #guard ofDecodeError (.headerWidth .none) == some blockIncorrectBlockFormat
 #guard ofTxValidationError (.typePreFork 3 .none) == some txType3TxPreFork
 #guard ofTxValidationError (.typePreFork 4 .none) == some txType4TxPreFork
-#guard (ofTxValidationError (.typePreFork 1 .none)).isNone
+#guard ofTxValidationError (.typePreFork 1 .none) == some txType1TxPreFork
+#guard ofTxValidationError (.typePreFork 2 .none) == some txType2TxPreFork
+#guard (ofTxValidationError (.typePreFork 0 .none)).isNone
+#guard (ofTxValidationError (.typePreFork 5 .none)).isNone
 #guard ofDecodeError (.leadingZeros .none) == some blockRlpStructuresEncoding
 #guard ofDecodeError (.fieldOverflow64 .none) == some blockRlpInvalidFieldOverflow64
 #guard ofDecodeError (.withdrawalsNotRead .none) == some blockRlpWithdrawalsNotRead
