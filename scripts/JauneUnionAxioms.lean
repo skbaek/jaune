@@ -3,6 +3,7 @@ import Jaune
 -- Runner-side modules that `Jaune.lean` does not import; `Main` does.
 import Jaune.BLSGuards
 import Jaune.ChainStore
+import Jaune.FixtureTransition
 import Jaune.FixtureException
 import Jaune.T8n
 -- Standalone tracer modules, outside the production umbrella.
