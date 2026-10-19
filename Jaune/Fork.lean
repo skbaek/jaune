@@ -603,6 +603,10 @@ structure ForkRules : Type where
   modexpComplexity : ModexpComplexity
 deriving DecidableEq
 
+/-- EIP-7702 code delegation activates with type-4 transaction admission. -/
+def ForkRules.delegationEnabled (rules : ForkRules) : Bool :=
+  decide (4 ≤ rules.txr.maxType)
+
 /-- An address carries a precompile under these rules.
 
 This replaces the former global `Adr.isPrecomp`, whose hard-wired `1 ≤ n ≤ 17`
@@ -1615,6 +1619,13 @@ def Fork.ruleSet : Fork → ForkRules
   | .bpo1 => bpo1Rules
   | .bpo2 => bpo2Rules
   | .amsterdam => amsterdamRules
+
+/-- Delegation is disabled on every pre-Prague rule set, including refused forks. -/
+theorem Fork.ruleSet_delegationEnabled (f : Fork) :
+    f.ruleSet.delegationEnabled = (match f with
+      | .prague | .osaka | .bpo1 | .bpo2 | .amsterdam => true
+      | _ => false) := by
+  cases f <;> rfl
 
 /-- **Rule validity, proved once, for every fork.**
 

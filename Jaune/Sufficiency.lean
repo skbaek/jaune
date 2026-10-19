@@ -958,6 +958,22 @@ covering a spawn and both of its refund branches. -/
   dsimp only
   split <;> simp only [addAccessedAddress_stateGas]
 
+@[simp] theorem ForkRules.accessDelegation_gasMeasure
+    (rules : ForkRules) (devm : Devm) (adr : Adr) :
+    (rules.accessDelegation devm adr).2.2.2.2.gasMeasure = devm.gasMeasure := by
+  unfold ForkRules.accessDelegation
+  split
+  · exact GasSchedule.accessDelegation_gasMeasure rules.gas devm adr
+  · rfl
+
+@[simp] theorem ForkRules.accessDelegation_stateGas
+    (rules : ForkRules) (devm : Devm) (adr : Adr) :
+    (rules.accessDelegation devm adr).2.2.2.2.mach.stateGas = devm.mach.stateGas := by
+  unfold ForkRules.accessDelegation
+  split
+  · exact GasSchedule.accessDelegation_stateGas rules.gas devm adr
+  · rfl
+
 @[simp] theorem completeDelegationAccess_gasMeasure
     (devm : Devm) (delegated : Bool) (adr : Adr) :
     (completeDelegationAccess devm delegated adr).2.gasMeasure =
@@ -1128,18 +1144,18 @@ theorem Xinst.step_call_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
     generalize addAccessedAddress d7 callee = dA at hdA hstep
   all_goals
     -- The delegation lookup can warm one more address but never touches gas.
-    have eA : (sevm.benvStat.rules.gas.accessDelegation
+    have eA : (sevm.benvStat.rules.accessDelegation
         dA callee).2.2.2.2.gasMeasure = devm.gasMeasure := by
-      rw [GasSchedule.accessDelegation_gasMeasure, hdA]
+      rw [ForkRules.accessDelegation_gasMeasure, hdA]
       omega
     -- `extra_gas` strictly covers the stipend: a warm access alone costs 100, and
     -- a value-bearing call pays `gasCallValue` against a `gCallStipend` stipend.
     have hstip :
         (if value.toNat = 0 then 0 else gCallStipend) <
           ((pre +
-                (sevm.benvStat.rules.gas.accessDelegation
+                (sevm.benvStat.rules.accessDelegation
                   dA callee).2.2.2.1 +
-              if ¬((sevm.benvStat.rules.gas.accessDelegation
+              if ¬((sevm.benvStat.rules.accessDelegation
                       dA callee).2.2.2.2.getAcct
                       callee).Empty ∨ value = 0 then 0 else gNewAccount) +
             if value = 0 then 0 else sevm.benvStat.rules.gas.callValue) +
@@ -1205,12 +1221,12 @@ theorem Xinst.step_call_gasDecreasing (sevm : Sevm) (devm : Devm) :
     have eA :
         (completeDelegationAccess
           (Devm.balReadAccount sevm.benvStat.rules
-            (sevm.benvStat.rules.gas.delegationCost
+            (sevm.benvStat.rules.delegationCost
               (addAccessedAddress d7 callee) callee).2.1
             (Devm.balReadAccount sevm.benvStat.rules callee (addAccessedAddress d7 callee)))
-          (sevm.benvStat.rules.gas.delegationCost
+          (sevm.benvStat.rules.delegationCost
             (addAccessedAddress d7 callee) callee).1
-          (sevm.benvStat.rules.gas.delegationCost
+          (sevm.benvStat.rules.delegationCost
             (addAccessedAddress d7 callee) callee).2.1).2.gasMeasure =
           devm.gasMeasure := by
       rw [completeDelegationAccess_gasMeasure]
@@ -1220,7 +1236,7 @@ theorem Xinst.step_call_gasDecreasing (sevm : Sevm) (devm : Devm) :
         (if value.toNat = 0 then 0 else gCallStipend) <
           (sevm.benvStat.rules.gas.accessCost callee d7.accessedAddresses +
               (if value = 0 then 0 else sevm.benvStat.rules.gas.callValue) +
-              (sevm.benvStat.rules.gas.delegationCost
+              (sevm.benvStat.rules.delegationCost
                 (addAccessedAddress d7 callee) callee).2.2) +
             d7.extCost [(inputIndex, inputSize), (outputIndex, outputSize)] := by
       have hac := GasSchedule.access_cost_pos hv.gas callee d7.accessedAddresses
@@ -1240,19 +1256,19 @@ theorem Xinst.step_call_gasDecreasing (sevm : Sevm) (devm : Devm) :
         d8.gasMeasure +
             ((sevm.benvStat.rules.gas.accessCost callee d7.accessedAddresses +
                 (if value = 0 then 0 else sevm.benvStat.rules.gas.callValue) +
-                (sevm.benvStat.rules.gas.delegationCost
+                (sevm.benvStat.rules.delegationCost
                   (addAccessedAddress d7 callee) callee).2.2) +
               d7.extCost [(inputIndex, inputSize), (outputIndex, outputSize)]) =
           devm.gasMeasure := by
       calc
         _ = (completeDelegationAccess
               (Devm.balReadAccount sevm.benvStat.rules
-                (sevm.benvStat.rules.gas.delegationCost
+                (sevm.benvStat.rules.delegationCost
                   (addAccessedAddress d7 callee) callee).2.1
                 (Devm.balReadAccount sevm.benvStat.rules callee (addAccessedAddress d7 callee)))
-              (sevm.benvStat.rules.gas.delegationCost
+              (sevm.benvStat.rules.delegationCost
                 (addAccessedAddress d7 callee) callee).1
-              (sevm.benvStat.rules.gas.delegationCost
+              (sevm.benvStat.rules.delegationCost
                 (addAccessedAddress d7 callee) callee).2.1).2.gasMeasure := echarge
         _ = devm.gasMeasure := eA
     have hpaid :
@@ -1262,7 +1278,7 @@ theorem Xinst.step_call_gasDecreasing (sevm : Sevm) (devm : Devm) :
         _ < d8.gasMeasure +
               ((sevm.benvStat.rules.gas.accessCost callee d7.accessedAddresses +
                   (if value = 0 then 0 else sevm.benvStat.rules.gas.callValue) +
-                  (sevm.benvStat.rules.gas.delegationCost
+                  (sevm.benvStat.rules.delegationCost
                     (addAccessedAddress d7 callee) callee).2.2) +
                 d7.extCost [(inputIndex, inputSize), (outputIndex, outputSize)]) :=
             Nat.add_lt_add_left hstip _
@@ -2281,15 +2297,15 @@ theorem Xinst.step_callcode_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
     generalize addAccessedAddress d7 codeAddress = dA at hdA hstep
   all_goals
     have eA :
-        (sevm.benvStat.rules.gas.accessDelegation
+        (sevm.benvStat.rules.accessDelegation
           dA codeAddress).2.2.2.2.gasMeasure
           = devm.gasMeasure := by
-      rw [GasSchedule.accessDelegation_gasMeasure, hdA]
+      rw [ForkRules.accessDelegation_gasMeasure, hdA]
       omega
     have hstip :
         (if value.toNat = 0 then 0 else gCallStipend) <
           ((pre +
-              (sevm.benvStat.rules.gas.accessDelegation dA
+              (sevm.benvStat.rules.accessDelegation dA
                 codeAddress).2.2.2.1) +
             if value = 0 then 0 else sevm.benvStat.rules.gas.callValue) +
           d7.extCost [(inputIndex, inputSize), (outputIndex, outputSize)] := by
@@ -2350,12 +2366,12 @@ theorem Xinst.step_callcode_gasDecreasing (sevm : Sevm) (devm : Devm) :
     have eA :
         (completeDelegationAccess
           (Devm.balReadAccount sevm.benvStat.rules
-            (sevm.benvStat.rules.gas.delegationCost
+            (sevm.benvStat.rules.delegationCost
               (addAccessedAddress d7 codeAddress) codeAddress).2.1
             (Devm.balReadAccount sevm.benvStat.rules codeAddress (addAccessedAddress d7 codeAddress)))
-          (sevm.benvStat.rules.gas.delegationCost
+          (sevm.benvStat.rules.delegationCost
             (addAccessedAddress d7 codeAddress) codeAddress).1
-          (sevm.benvStat.rules.gas.delegationCost
+          (sevm.benvStat.rules.delegationCost
             (addAccessedAddress d7 codeAddress) codeAddress).2.1).2.gasMeasure =
           devm.gasMeasure := by
       rw [completeDelegationAccess_gasMeasure]
@@ -2365,7 +2381,7 @@ theorem Xinst.step_callcode_gasDecreasing (sevm : Sevm) (devm : Devm) :
         (if value.toNat = 0 then 0 else gCallStipend) <
           ((sevm.benvStat.rules.gas.accessCost codeAddress d7.accessedAddresses +
               (if value = 0 then 0 else sevm.benvStat.rules.gas.callValue) +
-              (sevm.benvStat.rules.gas.delegationCost
+              (sevm.benvStat.rules.delegationCost
                 (addAccessedAddress d7 codeAddress) codeAddress).2.2) +
             d7.extCost [(inputIndex, inputSize), (outputIndex, outputSize)]) := by
       have hac := GasSchedule.access_cost_pos hv.gas codeAddress d7.accessedAddresses
@@ -2427,15 +2443,15 @@ theorem Xinst.step_delegatecall_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
     generalize addAccessedAddress d6 codeAddress = dA at hdA hstep
   all_goals
     have eA :
-        (sevm.benvStat.rules.gas.accessDelegation
+        (sevm.benvStat.rules.accessDelegation
           dA codeAddress).2.2.2.2.gasMeasure
           = devm.gasMeasure := by
-      rw [GasSchedule.accessDelegation_gasMeasure, hdA]
+      rw [ForkRules.accessDelegation_gasMeasure, hdA]
       omega
     have hstip :
         (if (0 : Nat) = 0 then 0 else gCallStipend) <
           (pre +
-            (sevm.benvStat.rules.gas.accessDelegation dA
+            (sevm.benvStat.rules.accessDelegation dA
               codeAddress).2.2.2.1) +
           d6.extCost [(inputIndex, inputSize), (outputIndex, outputSize)] := by
       simp only [ite_eq_left]
@@ -2477,12 +2493,12 @@ theorem Xinst.step_delegatecall_gasDecreasing (sevm : Sevm) (devm : Devm) :
     have eA :
         (completeDelegationAccess
           (Devm.balReadAccount sevm.benvStat.rules
-            (sevm.benvStat.rules.gas.delegationCost
+            (sevm.benvStat.rules.delegationCost
               (addAccessedAddress d6 codeAddress) codeAddress).2.1
             (Devm.balReadAccount sevm.benvStat.rules codeAddress (addAccessedAddress d6 codeAddress)))
-          (sevm.benvStat.rules.gas.delegationCost
+          (sevm.benvStat.rules.delegationCost
             (addAccessedAddress d6 codeAddress) codeAddress).1
-          (sevm.benvStat.rules.gas.delegationCost
+          (sevm.benvStat.rules.delegationCost
             (addAccessedAddress d6 codeAddress) codeAddress).2.1).2.gasMeasure =
           devm.gasMeasure := by
       rw [completeDelegationAccess_gasMeasure]
@@ -2492,7 +2508,7 @@ theorem Xinst.step_delegatecall_gasDecreasing (sevm : Sevm) (devm : Devm) :
         (if (0 : Nat) = 0 then 0 else gCallStipend) <
           (sevm.benvStat.rules.gas.accessCost codeAddress d6.accessedAddresses +
               0 +
-              (sevm.benvStat.rules.gas.delegationCost
+              (sevm.benvStat.rules.delegationCost
                 (addAccessedAddress d6 codeAddress) codeAddress).2.2) +
             d6.extCost [(inputIndex, inputSize), (outputIndex, outputSize)] := by
       simp only [ite_eq_left]
@@ -2546,15 +2562,15 @@ theorem Xinst.step_staticcall_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
     generalize addAccessedAddress d6 target = dA at hdA hstep
   all_goals
     have eA :
-        (sevm.benvStat.rules.gas.accessDelegation
+        (sevm.benvStat.rules.accessDelegation
           dA target).2.2.2.2.gasMeasure
           = devm.gasMeasure := by
-      rw [GasSchedule.accessDelegation_gasMeasure, hdA]
+      rw [ForkRules.accessDelegation_gasMeasure, hdA]
       omega
     have hstip :
         (if (0 : Nat) = 0 then 0 else gCallStipend) <
           (pre +
-            (sevm.benvStat.rules.gas.accessDelegation
+            (sevm.benvStat.rules.accessDelegation
               dA target).2.2.2.1) +
           d6.extCost [(inputIndex, inputSize), (outputIndex, outputSize)] := by
       simp only [ite_eq_left]
@@ -2596,12 +2612,12 @@ theorem Xinst.step_staticcall_gasDecreasing (sevm : Sevm) (devm : Devm) :
     have eA :
         (completeDelegationAccess
           (Devm.balReadAccount sevm.benvStat.rules
-            (sevm.benvStat.rules.gas.delegationCost
+            (sevm.benvStat.rules.delegationCost
               (addAccessedAddress d6 codeAddress) codeAddress).2.1
             (Devm.balReadAccount sevm.benvStat.rules codeAddress (addAccessedAddress d6 codeAddress)))
-          (sevm.benvStat.rules.gas.delegationCost
+          (sevm.benvStat.rules.delegationCost
             (addAccessedAddress d6 codeAddress) codeAddress).1
-          (sevm.benvStat.rules.gas.delegationCost
+          (sevm.benvStat.rules.delegationCost
             (addAccessedAddress d6 codeAddress) codeAddress).2.1).2.gasMeasure =
           devm.gasMeasure := by
       rw [completeDelegationAccess_gasMeasure]
@@ -2611,7 +2627,7 @@ theorem Xinst.step_staticcall_gasDecreasing (sevm : Sevm) (devm : Devm) :
         (if (0 : Nat) = 0 then 0 else gCallStipend) <
           (sevm.benvStat.rules.gas.accessCost codeAddress d6.accessedAddresses +
               0 +
-              (sevm.benvStat.rules.gas.delegationCost
+              (sevm.benvStat.rules.delegationCost
                 (addAccessedAddress d6 codeAddress) codeAddress).2.2) +
             d6.extCost [(inputIndex, inputSize), (outputIndex, outputSize)] := by
       simp only [ite_eq_left]
@@ -3947,7 +3963,7 @@ theorem Xinst.step_halt_legacy (sevm : Sevm) (devm : Devm) (x : Xinst)
     refine xstepHalt_bind (Devm.popToNat_haltOut h6) ?_
     rintro ⟨outputSize, d7⟩ h7
     refine xstepHalt_bind (chargeGas_haltOut (by
-      simp only [GasSchedule.accessDelegation_stateGas]
+      simp only [ForkRules.accessDelegation_stateGas]
       split <;> simpa only [addAccessedAddress_stateGas] using h7)) ?_
     intro d8 h8
     refine xstepHalt_bind (assert_haltOut (by decide) h8) ?_
@@ -3972,7 +3988,7 @@ theorem Xinst.step_halt_legacy (sevm : Sevm) (devm : Devm) (x : Xinst)
     refine xstepHalt_bind (Devm.popToNat_haltOut h6) ?_
     rintro ⟨outputSize, d7⟩ h7
     refine xstepHalt_bind (chargeGas_haltOut (by
-      simp only [GasSchedule.accessDelegation_stateGas]
+      simp only [ForkRules.accessDelegation_stateGas]
       split <;> simpa only [addAccessedAddress_stateGas] using h7)) ?_
     intro d8 h8
     split
@@ -3993,7 +4009,7 @@ theorem Xinst.step_halt_legacy (sevm : Sevm) (devm : Devm) (x : Xinst)
     refine xstepHalt_bind (Devm.popToNat_haltOut h5) ?_
     rintro ⟨outputSize, d6⟩ h6
     refine xstepHalt_bind (chargeGas_haltOut (by
-      simp only [GasSchedule.accessDelegation_stateGas]
+      simp only [ForkRules.accessDelegation_stateGas]
       split <;> simpa only [addAccessedAddress_stateGas] using h6)) ?_
     intro d7 h7
     exact genericCall.step_halt _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ (by simpa using h7) hsn
@@ -4011,7 +4027,7 @@ theorem Xinst.step_halt_legacy (sevm : Sevm) (devm : Devm) (x : Xinst)
     refine xstepHalt_bind (Devm.popToNat_haltOut h5) ?_
     rintro ⟨outputSize, d6⟩ h6
     refine xstepHalt_bind (chargeGas_haltOut (by
-      simp only [GasSchedule.accessDelegation_stateGas]
+      simp only [ForkRules.accessDelegation_stateGas]
       split <;> simpa only [addAccessedAddress_stateGas] using h6)) ?_
     intro d7 h7
     exact genericCall.step_halt _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ (by simpa using h7) hsn
@@ -4092,12 +4108,12 @@ theorem Xinst.step_halt (sevm : Sevm) (devm : Devm) (x : Xinst)
         have haccess :
             (completeDelegationAccess
               (Devm.balReadAccount sevm.benvStat.rules
-                (sevm.benvStat.rules.gas.delegationCost
+                (sevm.benvStat.rules.delegationCost
                   (addAccessedAddress d7 callee) callee).2.1
                 (Devm.balReadAccount sevm.benvStat.rules callee (addAccessedAddress d7 callee)))
-              (sevm.benvStat.rules.gas.delegationCost
+              (sevm.benvStat.rules.delegationCost
                 (addAccessedAddress d7 callee) callee).1
-              (sevm.benvStat.rules.gas.delegationCost
+              (sevm.benvStat.rules.delegationCost
                 (addAccessedAddress d7 callee) callee).2.1).2.gasMeasure ≤ n := by
           simpa only [completeDelegationAccess_gasMeasure, Devm.balReadAccount_gasMeasure]
             using hfull
@@ -4142,12 +4158,12 @@ theorem Xinst.step_halt (sevm : Sevm) (devm : Devm) (x : Xinst)
         have haccess :
             (completeDelegationAccess
               (Devm.balReadAccount sevm.benvStat.rules
-                (sevm.benvStat.rules.gas.delegationCost
+                (sevm.benvStat.rules.delegationCost
                   (addAccessedAddress d7 codeAddress) codeAddress).2.1
                 (Devm.balReadAccount sevm.benvStat.rules codeAddress (addAccessedAddress d7 codeAddress)))
-              (sevm.benvStat.rules.gas.delegationCost
+              (sevm.benvStat.rules.delegationCost
                 (addAccessedAddress d7 codeAddress) codeAddress).1
-              (sevm.benvStat.rules.gas.delegationCost
+              (sevm.benvStat.rules.delegationCost
                 (addAccessedAddress d7 codeAddress) codeAddress).2.1).2.gasMeasure ≤ n := by
           simpa only [completeDelegationAccess_gasMeasure, Devm.balReadAccount_gasMeasure]
             using hfull
@@ -4178,12 +4194,12 @@ theorem Xinst.step_halt (sevm : Sevm) (devm : Devm) (x : Xinst)
         have haccess :
             (completeDelegationAccess
               (Devm.balReadAccount sevm.benvStat.rules
-                (sevm.benvStat.rules.gas.delegationCost
+                (sevm.benvStat.rules.delegationCost
                   (addAccessedAddress d6 codeAddress) codeAddress).2.1
                 (Devm.balReadAccount sevm.benvStat.rules codeAddress (addAccessedAddress d6 codeAddress)))
-              (sevm.benvStat.rules.gas.delegationCost
+              (sevm.benvStat.rules.delegationCost
                 (addAccessedAddress d6 codeAddress) codeAddress).1
-              (sevm.benvStat.rules.gas.delegationCost
+              (sevm.benvStat.rules.delegationCost
                 (addAccessedAddress d6 codeAddress) codeAddress).2.1).2.gasMeasure ≤ n := by
           simpa only [completeDelegationAccess_gasMeasure, Devm.balReadAccount_gasMeasure]
             using hfull
@@ -4214,12 +4230,12 @@ theorem Xinst.step_halt (sevm : Sevm) (devm : Devm) (x : Xinst)
         have haccess :
             (completeDelegationAccess
               (Devm.balReadAccount sevm.benvStat.rules
-                (sevm.benvStat.rules.gas.delegationCost
+                (sevm.benvStat.rules.delegationCost
                   (addAccessedAddress d6 codeAddress) codeAddress).2.1
                 (Devm.balReadAccount sevm.benvStat.rules codeAddress (addAccessedAddress d6 codeAddress)))
-              (sevm.benvStat.rules.gas.delegationCost
+              (sevm.benvStat.rules.delegationCost
                 (addAccessedAddress d6 codeAddress) codeAddress).1
-              (sevm.benvStat.rules.gas.delegationCost
+              (sevm.benvStat.rules.delegationCost
                 (addAccessedAddress d6 codeAddress) codeAddress).2.1).2.gasMeasure ≤ n := by
           simpa only [completeDelegationAccess_gasMeasure, Devm.balReadAccount_gasMeasure]
             using hfull

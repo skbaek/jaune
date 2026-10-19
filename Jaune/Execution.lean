@@ -165,6 +165,50 @@ def GasSchedule.delegationCost (gas : GasSchedule) (devm : Devm) (adr : Adr) :
     ⟨true, delegated, gas.accessCost delegated devm.accessedAddresses⟩
   | none => ⟨false, adr, 0⟩
 
+/-- The effective code-designation lookup under the selected fork rules. -/
+def ForkRules.delegatedCodeAddress (rules : ForkRules) (code : ByteArray) : Option Adr :=
+  if rules.delegationEnabled then getDelegatedCodeAddress code else none
+
+/-- Fork-aware nested code access. Disabled delegation leaves the machine unchanged. -/
+def ForkRules.accessDelegation (rules : ForkRules) (devm : Devm) (adr : Adr) :
+    Bool × Adr × ByteArray × Nat × Devm :=
+  if rules.delegationEnabled then rules.gas.accessDelegation devm adr
+  else ⟨false, adr, devm.state.getCode adr, 0, devm⟩
+
+/-- Fork-aware price discovery; warming and code access remain separate. -/
+def ForkRules.delegationCost (rules : ForkRules) (devm : Devm) (adr : Adr) : Bool × Adr × Nat :=
+  if rules.delegationEnabled then rules.gas.delegationCost devm adr else ⟨false, adr, 0⟩
+
+theorem ForkRules.delegatedCodeAddress_enabled {rules : ForkRules}
+    (h : rules.delegationEnabled = true) (code : ByteArray) :
+    rules.delegatedCodeAddress code = getDelegatedCodeAddress code := by
+  simp only [ForkRules.delegatedCodeAddress, h, ↓reduceIte]
+
+theorem ForkRules.delegatedCodeAddress_disabled {rules : ForkRules}
+    (h : rules.delegationEnabled = false) (code : ByteArray) :
+    rules.delegatedCodeAddress code = none := by
+  simp only [ForkRules.delegatedCodeAddress, h, Bool.false_eq_true, ↓reduceIte]
+
+theorem ForkRules.accessDelegation_enabled {rules : ForkRules}
+    (h : rules.delegationEnabled = true) (devm : Devm) (adr : Adr) :
+    rules.accessDelegation devm adr = rules.gas.accessDelegation devm adr := by
+  simp only [ForkRules.accessDelegation, h, ↓reduceIte]
+
+theorem ForkRules.accessDelegation_disabled {rules : ForkRules}
+    (h : rules.delegationEnabled = false) (devm : Devm) (adr : Adr) :
+    rules.accessDelegation devm adr = ⟨false, adr, devm.state.getCode adr, 0, devm⟩ := by
+  simp only [ForkRules.accessDelegation, h, Bool.false_eq_true, ↓reduceIte]
+
+theorem ForkRules.delegationCost_enabled {rules : ForkRules}
+    (h : rules.delegationEnabled = true) (devm : Devm) (adr : Adr) :
+    rules.delegationCost devm adr = rules.gas.delegationCost devm adr := by
+  simp only [ForkRules.delegationCost, h, ↓reduceIte]
+
+theorem ForkRules.delegationCost_disabled {rules : ForkRules}
+    (h : rules.delegationEnabled = false) (devm : Devm) (adr : Adr) :
+    rules.delegationCost devm adr = ⟨false, adr, 0⟩ := by
+  simp only [ForkRules.delegationCost, h, Bool.false_eq_true, ↓reduceIte]
+
 /-- The state-access half of delegation resolution, called only after the
 delegated access price has passed its affordability check. -/
 def completeDelegationAccess (devm : Devm) (delegated : Bool) (adr : Adr) :
@@ -1087,7 +1131,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
           | .eip2929 => addAccessedAddress devm callee
           | .flat _ => devm
         let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
-          gasRules.accessDelegation devm callee
+          sevm.benvStat.rules.accessDelegation devm callee
         let accessCost := preAccessCost + delegatedAccessGasCost
         let createCost :=
           if (¬ (devm.getAcct callee).Empty) ∨ value = 0 then 0 else gNewAccount
@@ -1137,7 +1181,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
           ⟨.halt (.outOfGas .none), devm⟩
         let devm := addAccessedAddress devm callee
         let ⟨disablePrecompiles, newCodeAddress, delegatedAccessGasCost⟩ :=
-          gasRules.delegationCost devm callee
+          sevm.benvStat.rules.delegationCost devm callee
         -- `calculate_delegation_cost`: `get_account(to)` is a read (EIP-7928).
         let devm := devm.balReadAccount sevm.benvStat.rules callee
         let extraGas := accessGas + transferCost + delegatedAccessGasCost
@@ -1187,7 +1231,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
           | .eip2929 => addAccessedAddress devm codeAddress
           | .flat _ => devm
         let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
-          gasRules.accessDelegation devm codeAddress
+          sevm.benvStat.rules.accessDelegation devm codeAddress
         let accessCost := preAccessCost + delegatedAccessGasCost
         let transferCost := if value = 0 then 0 else gasRules.callValue
         let ⟨msgCallCost, msgCallStipend⟩ :=
@@ -1230,7 +1274,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
           ⟨.halt (.outOfGas .none), devm⟩
         let devm := addAccessedAddress devm codeAddress
         let ⟨disablePrecompiles, newCodeAddress, delegatedAccessGasCost⟩ :=
-          gasRules.delegationCost devm codeAddress
+          sevm.benvStat.rules.delegationCost devm codeAddress
         -- `calculate_delegation_cost`: `get_account(to)` is a read (EIP-7928).
         let devm := devm.balReadAccount sevm.benvStat.rules codeAddress
         let extraGas := accessGas + transferCost + delegatedAccessGasCost
@@ -1273,7 +1317,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
           | .eip2929 => addAccessedAddress devm codeAddress
           | .flat _ => devm
         let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
-          gasRules.accessDelegation devm codeAddress
+          sevm.benvStat.rules.accessDelegation devm codeAddress
         let accessCost := preAccessCost + delegatedAccessGasCost
         let ⟨msgCallCost, msgCallStipend⟩ :=
           calculateMsgCallGas 0 gas.toNat devm.gasLeft extendCost accessCost
@@ -1305,7 +1349,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
           ⟨.halt (.outOfGas .none), devm⟩
         let devm := addAccessedAddress devm codeAddress
         let ⟨disablePrecompiles, newCodeAddress, delegatedAccessGasCost⟩ :=
-          gasRules.delegationCost devm codeAddress
+          sevm.benvStat.rules.delegationCost devm codeAddress
         -- `calculate_delegation_cost`: `get_account(to)` is a read (EIP-7928).
         let devm := devm.balReadAccount sevm.benvStat.rules codeAddress
         let extraGas := accessGas + transferCost + delegatedAccessGasCost
@@ -1348,7 +1392,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
           | .eip2929 => addAccessedAddress devm target
           | .flat _ => devm
         let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
-          gasRules.accessDelegation devm target
+          sevm.benvStat.rules.accessDelegation devm target
         let accessCost := preAccessCost + delegatedAccessGasCost
         let ⟨msgCallCost, msgCallStipend⟩ :=
           calculateMsgCallGas 0 gas.toNat devm.gasLeft extendCost accessCost
@@ -1380,7 +1424,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
           ⟨.halt (.outOfGas .none), devm⟩
         let devm := addAccessedAddress devm codeAddress
         let ⟨disablePrecompiles, newCodeAddress, delegatedAccessGasCost⟩ :=
-          gasRules.delegationCost devm codeAddress
+          sevm.benvStat.rules.delegationCost devm codeAddress
         -- `calculate_delegation_cost`: `get_account(to)` is a read (EIP-7928).
         let devm := devm.balReadAccount sevm.benvStat.rules codeAddress
         let extraGas := accessGas + transferCost + delegatedAccessGasCost
@@ -1488,7 +1532,7 @@ private def Xinst.stepCached
         | .eip2929 => addAccessedAddress devm callee
         | .flat _ => devm
       let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
-        gasRules.accessDelegation devm callee
+        sevm.benvStat.rules.accessDelegation devm callee
       let accessCost := preAccessCost + delegatedAccessGasCost
       let createCost :=
         if (¬ (devm.getAcct callee).Empty) ∨ value = 0 then 0 else gNewAccount
@@ -1539,7 +1583,7 @@ private def Xinst.stepCached
         | .eip2929 => addAccessedAddress devm codeAddress
         | .flat _ => devm
       let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
-        gasRules.accessDelegation devm codeAddress
+        sevm.benvStat.rules.accessDelegation devm codeAddress
       let accessCost := preAccessCost + delegatedAccessGasCost
       let transferCost := if value = 0 then 0 else gasRules.callValue
       let ⟨msgCallCost, msgCallStipend⟩ :=
@@ -1587,7 +1631,7 @@ private def Xinst.stepCached
         | .eip2929 => addAccessedAddress devm codeAddress
         | .flat _ => devm
       let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
-        gasRules.accessDelegation devm codeAddress
+        sevm.benvStat.rules.accessDelegation devm codeAddress
       let accessCost := preAccessCost + delegatedAccessGasCost
       let ⟨msgCallCost, msgCallStipend⟩ :=
         calculateMsgCallGas 0 gas.toNat devm.gasLeft extendCost accessCost
@@ -1625,7 +1669,7 @@ private def Xinst.stepCached
         | .eip2929 => addAccessedAddress devm target
         | .flat _ => devm
       let ⟨disablePrecompiles, newCodeAddress, code, delegatedAccessGasCost, devm⟩ :=
-        gasRules.accessDelegation devm target
+        sevm.benvStat.rules.accessDelegation devm target
       let accessCost := preAccessCost + delegatedAccessGasCost
       let ⟨msgCallCost, msgCallStipend⟩ :=
         calculateMsgCallGas 0 gas.toNat devm.gasLeft extendCost accessCost
@@ -3092,6 +3136,14 @@ theorem GasSchedule.accessDelegation_canonical {gas : GasSchedule} {devm : Devm}
   · exact Devm.Canonical.of_world_eq h rfl
   · exact h
 
+theorem ForkRules.accessDelegation_canonical {rules : ForkRules} {devm : Devm}
+    (h : devm.Canonical) (adr : Adr) :
+    (rules.accessDelegation devm adr).2.2.2.2.Canonical := by
+  unfold ForkRules.accessDelegation
+  split
+  · exact GasSchedule.accessDelegation_canonical h adr
+  · exact h
+
 theorem completeDelegationAccess_canonical {devm : Devm}
     (h : devm.Canonical) (delegated : Bool) (adr : Adr) :
     (completeDelegationAccess devm delegated adr).2.Canonical := by
@@ -3685,8 +3737,8 @@ theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
       refine Except.CanonicalOn.bind (liftMach_canonicalOn hf) fun g hg => ?_
       refine Except.CanonicalOn.bind
         (liftMachExecution_canonical
-          (GasSchedule.accessDelegation_canonical
-            (gas := sevm.benvStat.rules.gas)
+          (ForkRules.accessDelegation_canonical
+            (rules := sevm.benvStat.rules)
             (devm := match sevm.benvStat.rules.access with
               | .eip2929 => addAccessedAddress g.2 b.1
               | .flat _ => g.2)
@@ -3715,12 +3767,12 @@ theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
       refine Except.CanonicalOn.bind (Except.canonicalOn_assert hbase) fun _ _ => ?_
       have haccess := completeDelegationAccess_canonical
         (show (Devm.balReadAccount sevm.benvStat.rules
-            (sevm.benvStat.rules.gas.delegationCost (addAccessedAddress g.2 b.1) b.1).2.1
+            (sevm.benvStat.rules.delegationCost (addAccessedAddress g.2 b.1) b.1).2.1
             (Devm.balReadAccount sevm.benvStat.rules b.1 (addAccessedAddress g.2 b.1))).Canonical
           from hbase)
-        (sevm.benvStat.rules.gas.delegationCost
+        (sevm.benvStat.rules.delegationCost
           (addAccessedAddress g.2 b.1) b.1).1
-        (sevm.benvStat.rules.gas.delegationCost
+        (sevm.benvStat.rules.delegationCost
           (addAccessedAddress g.2 b.1) b.1).2.1
       refine Except.CanonicalOn.bind (liftMachExecution_canonical haccess) fun d2 hd2 => ?_
       split
@@ -3748,8 +3800,8 @@ theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
       refine Except.CanonicalOn.bind (liftMach_canonicalOn hf) fun g hg => ?_
       refine Except.CanonicalOn.bind
         (liftMachExecution_canonical
-          (GasSchedule.accessDelegation_canonical
-            (gas := sevm.benvStat.rules.gas)
+          (ForkRules.accessDelegation_canonical
+            (rules := sevm.benvStat.rules)
             (devm := match sevm.benvStat.rules.access with
               | .eip2929 => addAccessedAddress g.2 b.1
               | .flat _ => g.2)
@@ -3776,12 +3828,12 @@ theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
       refine Except.CanonicalOn.bind (Except.canonicalOn_assert hbase) fun _ _ => ?_
       have haccess := completeDelegationAccess_canonical
         (show (Devm.balReadAccount sevm.benvStat.rules
-            (sevm.benvStat.rules.gas.delegationCost (addAccessedAddress g.2 b.1) b.1).2.1
+            (sevm.benvStat.rules.delegationCost (addAccessedAddress g.2 b.1) b.1).2.1
             (Devm.balReadAccount sevm.benvStat.rules b.1 (addAccessedAddress g.2 b.1))).Canonical
           from hbase)
-        (sevm.benvStat.rules.gas.delegationCost
+        (sevm.benvStat.rules.delegationCost
           (addAccessedAddress g.2 b.1) b.1).1
-        (sevm.benvStat.rules.gas.delegationCost
+        (sevm.benvStat.rules.delegationCost
           (addAccessedAddress g.2 b.1) b.1).2.1
       refine Except.CanonicalOn.bind (liftMachExecution_canonical haccess) fun d2 hd2 => ?_
       apply Except.canonicalOn_ok
@@ -3799,8 +3851,8 @@ theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
       refine Except.CanonicalOn.bind (liftMach_canonicalOn he) fun f hf => ?_
       refine Except.CanonicalOn.bind
         (liftMachExecution_canonical
-          (GasSchedule.accessDelegation_canonical
-            (gas := sevm.benvStat.rules.gas)
+          (ForkRules.accessDelegation_canonical
+            (rules := sevm.benvStat.rules)
             (devm := match sevm.benvStat.rules.access with
               | .eip2929 => addAccessedAddress f.2 b.1
               | .flat _ => f.2)
@@ -3822,12 +3874,12 @@ theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
       refine Except.CanonicalOn.bind (Except.canonicalOn_assert hbase) fun _ _ => ?_
       have haccess := completeDelegationAccess_canonical
         (show (Devm.balReadAccount sevm.benvStat.rules
-            (sevm.benvStat.rules.gas.delegationCost (addAccessedAddress f.2 b.1) b.1).2.1
+            (sevm.benvStat.rules.delegationCost (addAccessedAddress f.2 b.1) b.1).2.1
             (Devm.balReadAccount sevm.benvStat.rules b.1 (addAccessedAddress f.2 b.1))).Canonical
           from hbase)
-        (sevm.benvStat.rules.gas.delegationCost
+        (sevm.benvStat.rules.delegationCost
           (addAccessedAddress f.2 b.1) b.1).1
-        (sevm.benvStat.rules.gas.delegationCost
+        (sevm.benvStat.rules.delegationCost
           (addAccessedAddress f.2 b.1) b.1).2.1
       refine Except.CanonicalOn.bind (liftMachExecution_canonical haccess) fun d2 hd2 => ?_
       apply Except.canonicalOn_ok
@@ -3845,8 +3897,8 @@ theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
       refine Except.CanonicalOn.bind (liftMach_canonicalOn he) fun f hf => ?_
       refine Except.CanonicalOn.bind
         (liftMachExecution_canonical
-          (GasSchedule.accessDelegation_canonical
-            (gas := sevm.benvStat.rules.gas)
+          (ForkRules.accessDelegation_canonical
+            (rules := sevm.benvStat.rules)
             (devm := match sevm.benvStat.rules.access with
               | .eip2929 => addAccessedAddress f.2 b.1
               | .flat _ => f.2)
@@ -3868,12 +3920,12 @@ theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
       refine Except.CanonicalOn.bind (Except.canonicalOn_assert hbase) fun _ _ => ?_
       have haccess := completeDelegationAccess_canonical
         (show (Devm.balReadAccount sevm.benvStat.rules
-            (sevm.benvStat.rules.gas.delegationCost (addAccessedAddress f.2 b.1) b.1).2.1
+            (sevm.benvStat.rules.delegationCost (addAccessedAddress f.2 b.1) b.1).2.1
             (Devm.balReadAccount sevm.benvStat.rules b.1 (addAccessedAddress f.2 b.1))).Canonical
           from hbase)
-        (sevm.benvStat.rules.gas.delegationCost
+        (sevm.benvStat.rules.delegationCost
           (addAccessedAddress f.2 b.1) b.1).1
-        (sevm.benvStat.rules.gas.delegationCost
+        (sevm.benvStat.rules.delegationCost
           (addAccessedAddress f.2 b.1) b.1).2.1
       refine Except.CanonicalOn.bind (liftMachExecution_canonical haccess) fun d2 hd2 => ?_
       apply Except.canonicalOn_ok
@@ -4292,6 +4344,14 @@ theorem GasSchedule.accessDelegation_stateGasZero {gas : GasSchedule}
   dsimp only
   split <;> exact h
 
+theorem ForkRules.accessDelegation_stateGasZero {rules : ForkRules}
+    {devm : Devm} (h : devm.StateGasZero) (adr : Adr) :
+    (rules.accessDelegation devm adr).2.2.2.2.StateGasZero := by
+  unfold ForkRules.accessDelegation
+  split
+  · exact GasSchedule.accessDelegation_stateGasZero h adr
+  · exact h
+
 theorem completeDelegationAccess_stateGasZero {devm : Devm}
     (h : devm.StateGasZero) (delegated : Bool) (adr : Adr) :
     (completeDelegationAccess devm delegated adr).2.StateGasZero := by
@@ -4334,8 +4394,8 @@ theorem Xinst.step_stateGasZero {sevm : Sevm} {devm : Devm}
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hd) fun e he => ?_
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero he) fun f hf => ?_
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hf) fun g hg => ?_
-    have haccess := GasSchedule.accessDelegation_stateGasZero
-      (gas := sevm.benvStat.rules.gas) (devm := match sevm.benvStat.rules.access with
+    have haccess := ForkRules.accessDelegation_stateGasZero
+      (rules := sevm.benvStat.rules) (devm := match sevm.benvStat.rules.access with
               | .eip2929 => addAccessedAddress g.2 b.1
               | .flat _ => g.2)
       (by split <;> exact hg) b.1
@@ -4356,8 +4416,8 @@ theorem Xinst.step_stateGasZero {sevm : Sevm} {devm : Devm}
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hd) fun e he => ?_
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero he) fun f hf => ?_
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hf) fun g hg => ?_
-    have haccess := GasSchedule.accessDelegation_stateGasZero
-      (gas := sevm.benvStat.rules.gas) (devm := match sevm.benvStat.rules.access with
+    have haccess := ForkRules.accessDelegation_stateGasZero
+      (rules := sevm.benvStat.rules) (devm := match sevm.benvStat.rules.access with
               | .eip2929 => addAccessedAddress g.2 b.1
               | .flat _ => g.2)
       (by split <;> exact hg) b.1
@@ -4376,8 +4436,8 @@ theorem Xinst.step_stateGasZero {sevm : Sevm} {devm : Devm}
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hc) fun d hd => ?_
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hd) fun e he => ?_
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero he) fun f hf => ?_
-    have haccess := GasSchedule.accessDelegation_stateGasZero
-      (gas := sevm.benvStat.rules.gas) (devm := match sevm.benvStat.rules.access with
+    have haccess := ForkRules.accessDelegation_stateGasZero
+      (rules := sevm.benvStat.rules) (devm := match sevm.benvStat.rules.access with
               | .eip2929 => addAccessedAddress f.2 b.1
               | .flat _ => f.2)
       (by split <;> exact hf) b.1
@@ -4393,8 +4453,8 @@ theorem Xinst.step_stateGasZero {sevm : Sevm} {devm : Devm}
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hc) fun d hd => ?_
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hd) fun e he => ?_
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero he) fun f hf => ?_
-    have haccess := GasSchedule.accessDelegation_stateGasZero
-      (gas := sevm.benvStat.rules.gas) (devm := match sevm.benvStat.rules.access with
+    have haccess := ForkRules.accessDelegation_stateGasZero
+      (rules := sevm.benvStat.rules) (devm := match sevm.benvStat.rules.access with
               | .eip2929 => addAccessedAddress f.2 b.1
               | .flat _ => f.2)
       (by split <;> exact hf) b.1

@@ -205,19 +205,10 @@ def runMessageCreate {m : Type → Type} [Monad m] (sink : Trace.Sink m)
 
 /-- Authorization processing before the ordinary call frame. -/
 def legacyAuthorization (msg : Msg) : Except EvmError (Msg × Nat) :=
-  if msg.tenv.stat.auths.isEmpty then .ok ⟨msg, 0⟩ else do
-    let ⟨delegated, refund⟩ ← setDelegation msg
-    pure ⟨delegated, refund.toNat⟩
+  Jaune.processMessageCall.legacyAuthorization msg
 
 def resolveLegacyDelegation (msg : Msg) : Msg :=
-  match getDelegatedCodeAddress msg.code with
-  | none => msg
-  | some address =>
-    { msg with
-      disablePrecompiles := true
-      accessedAddresses := msg.accessedAddresses.insert address
-      code := msg.benv.state.getCode address
-      codeAddress := some address }
+  msg.resolveCodeDelegation
 
 theorem legacyCall_eq (msg : Msg) (hfork : msg.benv.stat.rules.stateGas = none) :
     Jaune.processMessageCall.call msg =
@@ -225,9 +216,7 @@ theorem legacyCall_eq (msg : Msg) (hfork : msg.benv.stat.rules.stateGas = none) 
         legacyOutput pair.2 (Jaune.processMessage (resolveLegacyDelegation pair.1))) := by
   simp only [Jaune.processMessageCall.call, hfork, legacyAuthorization,
     legacyOutput, resolveLegacyDelegation]
-  split
-  · rfl
-  · cases setDelegation msg <;> rfl
+  cases Jaune.processMessageCall.legacyAuthorization msg <;> rfl
 
 def runMessageCall {m : Type → Type} [Monad m] (sink : Trace.Sink m)
     (authorizationRefund : Nat → m Unit) (msg : Msg) (runId : String) :

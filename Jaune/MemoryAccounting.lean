@@ -1706,6 +1706,20 @@ private theorem nonspawn_delegation (gasRules : GasSchedule) (pre : Devm) (adr :
   refine ⟨?_, hf.2⟩
   rw [GasSchedule.accessDelegation_gasMeasure, hf.1]
 
+private theorem rules_delegation_memory_output (rules : ForkRules) (pre : Devm) (adr : Adr) :
+    (rules.accessDelegation pre adr).2.2.2.2.memory = pre.memory ∧
+      (rules.accessDelegation pre adr).2.2.2.2.output = pre.output := by
+  unfold ForkRules.accessDelegation
+  split
+  · exact delegation_memory_output rules.gas pre adr
+  · exact ⟨rfl, rfl⟩
+
+private theorem nonspawn_rules_delegation (rules : ForkRules) (pre : Devm) (adr : Adr) :
+    nonspawnPreserved pre (rules.accessDelegation pre adr).2.2.2.2 := by
+  have hf := rules_delegation_memory_output rules pre adr
+  refine ⟨?_, hf.2⟩
+  rw [ForkRules.accessDelegation_gasMeasure, hf.1]
+
 private theorem xResult_charged_call (pairs : List (Nat × Nat)) (cost refund : Nat)
     (pre : Devm) (hrefund : refund ≤ cost)
     (action : Devm → Except (EvmError × Devm) XStep)
@@ -1831,16 +1845,16 @@ private theorem executable_memory_accounting (sevm : Sevm) (pre : Devm) (x : Xin
       have hdA := nonspawn_addAccessedAddress outputSize.2 codeAddress.1
     all_goals
       let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
-      let lookup := sevm.benvStat.rules.gas.accessDelegation
+      let lookup := sevm.benvStat.rules.accessDelegation
         dA codeAddress.1
       let parent := lookup.2.2.2.2
       have hp : nonspawnPreserved outputSize.2 parent :=
         nonspawnPreserved_trans hdA
-          (nonspawn_delegation sevm.benvStat.rules.gas _ codeAddress.1)
+          (nonspawn_rules_delegation sevm.benvStat.rules _ codeAddress.1)
       refine xResult_rebase (pre := outputSize.2) (middle := parent)
         (inner := 0) (outer := 0) hp.1 hp.2 ?_
       have hm : parent.memory = outputSize.2.memory :=
-        (delegation_memory_output sevm.benvStat.rules.gas
+        (rules_delegation_memory_output sevm.benvStat.rules
           dA codeAddress.1).1
       have hext : outputSize.2.extCost pairs = parent.extCost pairs := by
         simp only [Devm.extCost, hm]
@@ -1889,16 +1903,16 @@ private theorem executable_memory_accounting (sevm : Sevm) (pre : Devm) (x : Xin
       have hdA := nonspawn_addAccessedAddress outputSize.2 target.1
     all_goals
       let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
-      let lookup := sevm.benvStat.rules.gas.accessDelegation
+      let lookup := sevm.benvStat.rules.accessDelegation
         dA target.1
       let parent := lookup.2.2.2.2
       have hp : nonspawnPreserved outputSize.2 parent :=
         nonspawnPreserved_trans hdA
-          (nonspawn_delegation sevm.benvStat.rules.gas _ target.1)
+          (nonspawn_rules_delegation sevm.benvStat.rules _ target.1)
       refine xResult_rebase (pre := outputSize.2) (middle := parent)
         (inner := 0) (outer := 0) hp.1 hp.2 ?_
       have hm : parent.memory = outputSize.2.memory :=
-        (delegation_memory_output sevm.benvStat.rules.gas
+        (rules_delegation_memory_output sevm.benvStat.rules
           dA target.1).1
       have hext : outputSize.2.extCost pairs = parent.extCost pairs := by
         simp only [Devm.extCost, hm]
@@ -1948,16 +1962,16 @@ private theorem executable_memory_accounting (sevm : Sevm) (pre : Devm) (x : Xin
       have hdA := nonspawn_addAccessedAddress outputSize.2 callee.1
     all_goals
       let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
-      let lookup := sevm.benvStat.rules.gas.accessDelegation
+      let lookup := sevm.benvStat.rules.accessDelegation
         dA callee.1
       let parent := lookup.2.2.2.2
       have hp : nonspawnPreserved outputSize.2 parent :=
         nonspawnPreserved_trans hdA
-          (nonspawn_delegation sevm.benvStat.rules.gas _ callee.1)
+          (nonspawn_rules_delegation sevm.benvStat.rules _ callee.1)
       refine xResult_rebase (pre := outputSize.2) (middle := parent)
         (inner := 0) (outer := 0) hp.1 hp.2 ?_
       have hm : parent.memory = outputSize.2.memory :=
-        (delegation_memory_output sevm.benvStat.rules.gas
+        (rules_delegation_memory_output sevm.benvStat.rules
           dA callee.1).1
       have hext : outputSize.2.extCost pairs = parent.extCost pairs := by
         simp only [Devm.extCost, hm]
@@ -2020,16 +2034,16 @@ private theorem executable_memory_accounting (sevm : Sevm) (pre : Devm) (x : Xin
       have hdA := nonspawn_addAccessedAddress outputSize.2 codeAddress.1
     all_goals
       let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
-      let lookup := sevm.benvStat.rules.gas.accessDelegation
+      let lookup := sevm.benvStat.rules.accessDelegation
         dA codeAddress.1
       let parent := lookup.2.2.2.2
       have hp : nonspawnPreserved outputSize.2 parent :=
         nonspawnPreserved_trans hdA
-          (nonspawn_delegation sevm.benvStat.rules.gas _ codeAddress.1)
+          (nonspawn_rules_delegation sevm.benvStat.rules _ codeAddress.1)
       refine xResult_rebase (pre := outputSize.2) (middle := parent)
         (inner := 0) (outer := 0) hp.1 hp.2 ?_
       have hm : parent.memory = outputSize.2.memory :=
-        (delegation_memory_output sevm.benvStat.rules.gas
+        (rules_delegation_memory_output sevm.benvStat.rules
           dA codeAddress.1).1
       have hext : outputSize.2.extCost pairs = parent.extCost pairs := by
         simp only [Devm.extCost, hm]
@@ -2554,16 +2568,16 @@ private theorem executable_spawn_accounting (sevm : Sevm) (pre : Devm) (x : Xins
       have hdA := nonspawn_addAccessedAddress outputSize.2 codeAddress.1
     all_goals
       let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
-      let lookup := sevm.benvStat.rules.gas.accessDelegation
+      let lookup := sevm.benvStat.rules.accessDelegation
         dA codeAddress.1
       let parent := lookup.2.2.2.2
       have hp : nonspawnPreserved outputSize.2 parent :=
         nonspawnPreserved_trans hdA
-          (nonspawn_delegation sevm.benvStat.rules.gas _ codeAddress.1)
+          (nonspawn_rules_delegation sevm.benvStat.rules _ codeAddress.1)
       refine spawnResult_rebase (pre := outputSize.2) (middle := parent)
         (inner := 0) (outer := 0) hp.1 hp.2 ?_
       have hm : parent.memory = outputSize.2.memory :=
-        (delegation_memory_output sevm.benvStat.rules.gas
+        (rules_delegation_memory_output sevm.benvStat.rules
           dA codeAddress.1).1
       have hext : outputSize.2.extCost pairs = parent.extCost pairs := by
         simp only [Devm.extCost, hm]
@@ -2612,16 +2626,16 @@ private theorem executable_spawn_accounting (sevm : Sevm) (pre : Devm) (x : Xins
       have hdA := nonspawn_addAccessedAddress outputSize.2 target.1
     all_goals
       let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
-      let lookup := sevm.benvStat.rules.gas.accessDelegation
+      let lookup := sevm.benvStat.rules.accessDelegation
         dA target.1
       let parent := lookup.2.2.2.2
       have hp : nonspawnPreserved outputSize.2 parent :=
         nonspawnPreserved_trans hdA
-          (nonspawn_delegation sevm.benvStat.rules.gas _ target.1)
+          (nonspawn_rules_delegation sevm.benvStat.rules _ target.1)
       refine spawnResult_rebase (pre := outputSize.2) (middle := parent)
         (inner := 0) (outer := 0) hp.1 hp.2 ?_
       have hm : parent.memory = outputSize.2.memory :=
-        (delegation_memory_output sevm.benvStat.rules.gas
+        (rules_delegation_memory_output sevm.benvStat.rules
           dA target.1).1
       have hext : outputSize.2.extCost pairs = parent.extCost pairs := by
         simp only [Devm.extCost, hm]
@@ -2671,16 +2685,16 @@ private theorem executable_spawn_accounting (sevm : Sevm) (pre : Devm) (x : Xins
       have hdA := nonspawn_addAccessedAddress outputSize.2 callee.1
     all_goals
       let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
-      let lookup := sevm.benvStat.rules.gas.accessDelegation
+      let lookup := sevm.benvStat.rules.accessDelegation
         dA callee.1
       let parent := lookup.2.2.2.2
       have hp : nonspawnPreserved outputSize.2 parent :=
         nonspawnPreserved_trans hdA
-          (nonspawn_delegation sevm.benvStat.rules.gas _ callee.1)
+          (nonspawn_rules_delegation sevm.benvStat.rules _ callee.1)
       refine spawnResult_rebase (pre := outputSize.2) (middle := parent)
         (inner := 0) (outer := 0) hp.1 hp.2 ?_
       have hm : parent.memory = outputSize.2.memory :=
-        (delegation_memory_output sevm.benvStat.rules.gas
+        (rules_delegation_memory_output sevm.benvStat.rules
           dA callee.1).1
       have hext : outputSize.2.extCost pairs = parent.extCost pairs := by
         simp only [Devm.extCost, hm]
@@ -2744,16 +2758,16 @@ private theorem executable_spawn_accounting (sevm : Sevm) (pre : Devm) (x : Xins
       have hdA := nonspawn_addAccessedAddress outputSize.2 codeAddress.1
     all_goals
       let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
-      let lookup := sevm.benvStat.rules.gas.accessDelegation
+      let lookup := sevm.benvStat.rules.accessDelegation
         dA codeAddress.1
       let parent := lookup.2.2.2.2
       have hp : nonspawnPreserved outputSize.2 parent :=
         nonspawnPreserved_trans hdA
-          (nonspawn_delegation sevm.benvStat.rules.gas _ codeAddress.1)
+          (nonspawn_rules_delegation sevm.benvStat.rules _ codeAddress.1)
       refine spawnResult_rebase (pre := outputSize.2) (middle := parent)
         (inner := 0) (outer := 0) hp.1 hp.2 ?_
       have hm : parent.memory = outputSize.2.memory :=
-        (delegation_memory_output sevm.benvStat.rules.gas
+        (rules_delegation_memory_output sevm.benvStat.rules
           dA codeAddress.1).1
       have hext : outputSize.2.extCost pairs = parent.extCost pairs := by
         simp only [Devm.extCost, hm]
@@ -4454,16 +4468,16 @@ private theorem xinst_call_reply_bound (sevm : Sevm) (pre : Devm)
     have hdA := nonspawn_addAccessedAddress outputSize.2 callee.1
   all_goals
     let pairs := [(inputIndex.1, inputSize.1), (outputIndex.1, outputSize.1)]
-    let lookup := sevm.benvStat.rules.gas.accessDelegation
+    let lookup := sevm.benvStat.rules.accessDelegation
       dA callee.1
     let parent := lookup.2.2.2.2
     have preserved : nonspawnPreserved outputSize.2 parent :=
       nonspawnPreserved_trans hdA
-        (nonspawn_delegation sevm.benvStat.rules.gas _ callee.1)
+        (nonspawn_rules_delegation sevm.benvStat.rules _ callee.1)
     have parentPotential : parent.gasMeasure + calculateMemoryGasCost parent.memory.size < 2 ^ 256 :=
       Nat.lt_of_le_of_lt preserved.1 outputSizePotential
     have memory : parent.memory = outputSize.2.memory :=
-      (delegation_memory_output sevm.benvStat.rules.gas
+      (rules_delegation_memory_output sevm.benvStat.rules
         dA callee.1).1
     have extension : outputSize.2.extCost pairs = parent.extCost pairs := by
       simp only [Devm.extCost, memory]
@@ -4535,11 +4549,11 @@ private theorem xinst_call_reply_bound_of_input_size
     let dA := addAccessedAddress base callee.toAdr
   all_goals
     let pairs := [(inputIndex.toNat, inputSize.toNat), (outputIndex.toNat, outputSize.toNat)]
-    let lookup := sevm.benvStat.rules.gas.accessDelegation
+    let lookup := sevm.benvStat.rules.accessDelegation
       dA callee.toAdr
     let parent := lookup.2.2.2.2
     have memory : parent.memory = base.memory :=
-      (delegation_memory_output sevm.benvStat.rules.gas
+      (rules_delegation_memory_output sevm.benvStat.rules
         dA callee.toAdr).1
     have extension : base.extCost pairs = parent.extCost pairs := by
       simp only [Devm.extCost, memory]

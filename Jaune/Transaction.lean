@@ -613,7 +613,7 @@ private def preparedTopLevelMsg (msg : Msg) (devm : Devm) : Msg :=
 private def resolveTopLevelCallAmsterdam (msg : Msg) (devm : Devm) :
     Except (EvmError × Devm) (Msg × Devm) := do
   let ⟨delegated, codeAddress, accessCost⟩ :=
-    msg.benv.stat.rules.gas.delegationCost devm msg.currentTarget
+    msg.benv.stat.rules.delegationCost devm msg.currentTarget
   let devm ← chargeGas accessCost devm
   let ⟨code, devm⟩ := completeDelegationAccess devm delegated codeAddress
   -- `create_evm`: `get_account(code_address)` is a read (EIP-7928).
@@ -809,27 +809,77 @@ def processMessageCall.create (msg : Msg) :
   | some state =>
     processTopLevelAmsterdam state msg Frame.ofCreate
 
+/-- Ordinary top-level authorization follows the active fork's delegation rule. -/
+def processMessageCall.legacyAuthorization (msg : Msg) : Except EvmError (Msg × Nat) :=
+  if !msg.benv.stat.rules.delegationEnabled || msg.tenv.stat.auths.isEmpty then
+    .ok ⟨msg, 0⟩
+  else do
+    let ⟨delegated, refund⟩ ← setDelegation msg
+    .ok ⟨delegated, refund.toNat⟩
+
+/-- Top-level resolution warms the delegate without a nested-call surcharge. -/
+def Msg.resolveCodeDelegation (msg : Msg) : Msg :=
+  match msg.benv.stat.rules.delegatedCodeAddress msg.code with
+  | none => msg
+  | some address =>
+    { msg with
+      disablePrecompiles := true
+      accessedAddresses := msg.accessedAddresses.insert address
+      code := msg.benv.state.getCode address
+      codeAddress := some address }
+
+theorem processMessageCall.legacyAuthorization_disabled (msg : Msg)
+    (h : msg.benv.stat.rules.delegationEnabled = false) :
+    legacyAuthorization msg = .ok ⟨msg, 0⟩ := by
+  simp only [legacyAuthorization, h, Bool.not_false, Bool.true_or, ↓reduceIte]
+
+theorem processMessageCall.legacyAuthorization_enabled (msg : Msg)
+    (h : msg.benv.stat.rules.delegationEnabled = true) :
+    legacyAuthorization msg =
+      (if msg.tenv.stat.auths.isEmpty then .ok ⟨msg, 0⟩ else do
+        let ⟨delegated, refund⟩ ← setDelegation msg
+        .ok ⟨delegated, refund.toNat⟩) := by
+  simp only [legacyAuthorization, h, Bool.not_true, Bool.false_or]
+
+theorem Msg.resolveCodeDelegation_disabled (msg : Msg)
+    (h : msg.benv.stat.rules.delegationEnabled = false) :
+    msg.resolveCodeDelegation = msg := by
+  simp only [resolveCodeDelegation, ForkRules.delegatedCodeAddress_disabled h msg.code]
+
+theorem Msg.resolveCodeDelegation_enabled (msg : Msg)
+    (h : msg.benv.stat.rules.delegationEnabled = true) :
+    msg.resolveCodeDelegation =
+      (match getDelegatedCodeAddress msg.code with
+      | none => msg
+      | some address =>
+        { msg with
+          disablePrecompiles := true
+          accessedAddresses := msg.accessedAddresses.insert address
+          code := msg.benv.state.getCode address
+          codeAddress := some address }) := by
+  simp only [resolveCodeDelegation, ForkRules.delegatedCodeAddress_enabled h]
+
+theorem Msg.resolveCodeDelegation_canonical {msg : Msg} (h : msg.Canonical) :
+    msg.resolveCodeDelegation.Canonical := by
+  unfold resolveCodeDelegation
+  split <;> exact h
+
+theorem processMessageCall.legacyAuthorization_canonical {msg : Msg}
+    (h : msg.Canonical) {p} (hp : legacyAuthorization msg = .ok p) :
+    p.1.Canonical := by
+  unfold legacyAuthorization at hp
+  split at hp
+  · cases hp; exact h
+  · obtain ⟨pair, hpair, hp⟩ := Except.bind_eq_ok hp
+    cases hp
+    exact setDelegation_canonical h hpair
+
 def processMessageCall.call (msg : Msg) :
   Except EvmError (State × MsgCallOutput) := do
   match msg.benv.stat.rules.stateGas with
   | none =>
-    let (⟨msgDelegation, refundDelegation⟩ : Msg × Nat) ←
-      if msg.tenv.stat.auths.isEmpty then
-        .ok (⟨msg, 0⟩ : Msg × Nat)
-      else do
-        let ⟨msgDelegation, setDelegationValue⟩ ← setDelegation msg
-        .ok ⟨msgDelegation, setDelegationValue.toNat⟩
-    let msgPc :=
-      match getDelegatedCodeAddress msgDelegation.code with
-      | none => msgDelegation
-      | some dca =>
-        {
-          msgDelegation with
-          disablePrecompiles := true,
-          accessedAddresses := msgDelegation.accessedAddresses.insert dca,
-          code := msgDelegation.benv.state.getCode dca,
-          codeAddress := some dca
-        }
+    let ⟨msgDelegation, refundDelegation⟩ ← legacyAuthorization msg
+    let msgPc := msgDelegation.resolveCodeDelegation
     let evm ← Except.bimap Prod.fst id (processMessage msgPc)
     let refundProcessMessage ←
       if evm.error.isNone then
@@ -1361,6 +1411,56 @@ def checkTransactionSenderAccount
   else
     checkTransactionSenderCode senderAccount
 
+/-- Fork-aware sender code admission, retaining the raw EIP-7702 helper. -/
+def checkTransactionSenderCodeFor (rules : ForkRules) (senderAccount : Acct) :
+    Except TxValidationError Unit :=
+  if rules.delegationEnabled then checkTransactionSenderCode senderAccount
+  else if senderAccount.code.isEmpty then .ok ()
+  else .error <| .senderNotEoa <| .text "sender has non-delegation code"
+
+/-- Keep nonce, funds and existing code failures ahead of historical code admission. -/
+def checkTransactionSenderAccountFor (rules : ForkRules)
+    (senderAccount : Acct) (tx : Tx) (maxGasFee : Nat) :
+    Except TxValidationError Unit := do
+  checkTransactionSenderAccount senderAccount tx maxGasFee
+  checkTransactionSenderCodeFor rules senderAccount
+
+theorem checkTransactionSenderCodeFor_enabled {rules : ForkRules}
+    (h : rules.delegationEnabled = true) (senderAccount : Acct) :
+    checkTransactionSenderCodeFor rules senderAccount =
+      checkTransactionSenderCode senderAccount := by
+  simp only [checkTransactionSenderCodeFor, h, ↓reduceIte]
+
+theorem checkTransactionSenderCodeFor_disabled {rules : ForkRules}
+    (h : rules.delegationEnabled = false) (senderAccount : Acct) :
+    checkTransactionSenderCodeFor rules senderAccount =
+      (if senderAccount.code.isEmpty then .ok ()
+       else .error (.senderNotEoa (.text "sender has non-delegation code"))) := by
+  simp only [checkTransactionSenderCodeFor, h, Bool.false_eq_true, ↓reduceIte]
+
+theorem checkTransactionSenderAccountFor_enabled {rules : ForkRules}
+    (h : rules.delegationEnabled = true) (senderAccount : Acct) (tx : Tx)
+    (maxGasFee : Nat) :
+    checkTransactionSenderAccountFor rules senderAccount tx maxGasFee =
+      checkTransactionSenderAccount senderAccount tx maxGasFee := by
+  unfold checkTransactionSenderAccountFor
+  rw [checkTransactionSenderCodeFor_enabled h]
+  unfold checkTransactionSenderAccount
+  split
+  · rfl
+  · split
+    · rfl
+    · split
+      · rfl
+      · unfold checkTransactionSenderCode
+        split <;> rfl
+
+theorem checkTransactionSenderAccountFor_error (rules : ForkRules)
+    (senderAccount : Acct) (tx : Tx) (maxGasFee : Nat) (error : TxValidationError)
+    (h : checkTransactionSenderAccount senderAccount tx maxGasFee = .error error) :
+    checkTransactionSenderAccountFor rules senderAccount tx maxGasFee = .error error := by
+  simp only [checkTransactionSenderAccountFor, h, Bind.bind, Except.bind]
+
 /-- The whole transaction admission check. Its carrier is the transition union
 because it joins two typed channels: every rule above is a
 `TxValidationError`, while sender recovery reports on the cryptographic
@@ -1380,7 +1480,7 @@ def checkTransaction (benv : Benv) (blockOut : BlockOutput) (tx : Tx) :
   Except.mapError TransitionError.transaction (checkTransactionReceiver tx)
   Except.mapError TransitionError.transaction (checkTransactionAuthorizationList tx)
   Except.mapError TransitionError.transaction
-    (checkTransactionSenderAccount senderAccount tx maxGasFee)
+    (checkTransactionSenderAccountFor benv.stat.rules senderAccount tx maxGasFee)
   .ok ⟨
     senderAddress,
     effectiveGasPrice,
@@ -6681,7 +6781,7 @@ private theorem resolveTopLevelCallAmsterdam_canonical {msg : Msg}
     (resolveTopLevelCallAmsterdam msg devm).CanonicalOn
       (fun r => r.1.Canonical ∧ r.2.Canonical) := by
   unfold resolveTopLevelCallAmsterdam
-  rcases msg.benv.stat.rules.gas.delegationCost devm msg.currentTarget
+  rcases msg.benv.stat.rules.delegationCost devm msg.currentTarget
     with ⟨delegated, codeAddress, accessCost⟩
   refine Except.CanonicalOn.bind (chargeGas_canonical hd)
     fun charged hcharged => ?_
@@ -6822,35 +6922,17 @@ theorem processMessageCall.call_canonical {msg : Msg} (h : msg.Canonical)
   unfold processMessageCall.call at hp
   dsimp only at hp
   split at hp
-  · split at hp <;>
-      first
-      | (-- no authorizations: the join point receives the message unchanged
-         obtain ⟨x0, hx0, hp⟩ := Except.bind_eq_ok hp
-         cases hx0
-         dsimp only at hp
-         split at hp <;>
-           (obtain ⟨evm, hevm, hp⟩ := Except.bind_eq_ok hp
-            have hcan := processMessage_ok_canonical (by exact h)
-              (Except.bimap_id_eq_ok hevm)
-            split at hp <;>
-              (obtain ⟨rc, _, hp⟩ := Except.bind_eq_ok hp
-               cases hp
-               exact hcan.1)))
-      | (-- delegation processed first
-         obtain ⟨w, hw, hp⟩ := Except.bind_eq_ok hp
-         have hwc := setDelegation_canonical h hw
-         obtain ⟨wm, wv⟩ := w
-         obtain ⟨x0, hx0, hp⟩ := Except.bind_eq_ok hp
-         cases hx0
-         dsimp only at hp
-         split at hp <;>
-           (obtain ⟨evm, hevm, hp⟩ := Except.bind_eq_ok hp
-            have hcan := processMessage_ok_canonical (by exact hwc)
-              (Except.bimap_id_eq_ok hevm)
-            split at hp <;>
-              (obtain ⟨rc, _, hp⟩ := Except.bind_eq_ok hp
-               cases hp
-               exact hcan.1)))
+  · obtain ⟨pair, hpair, hp⟩ := Except.bind_eq_ok hp
+    obtain ⟨delegated, refund⟩ := pair
+    have hm := processMessageCall.legacyAuthorization_canonical h hpair
+    dsimp only at hp
+    obtain ⟨evm, hevm, hp⟩ := Except.bind_eq_ok hp
+    have hcan := processMessage_ok_canonical
+      (Msg.resolveCodeDelegation_canonical hm) (Except.bimap_id_eq_ok hevm)
+    split at hp <;>
+      (obtain ⟨rc, _, hp⟩ := Except.bind_eq_ok hp
+       cases hp
+       exact hcan.1)
   · exact processTopLevelAmsterdam_canonical h Frame.ofCall
       (fun hm => Frame.canonical_ofCall hm) hp
 
