@@ -305,7 +305,10 @@ fi
 # refused with the reason rather than run vacant, exactly as target gates
 # refuse unwritable work.
 case "$TIER" in
-  hist-byzantium) HIST_NET="Byzantium"; HIST_LABELS="Byzantium|EIP158ToByzantiumAt5|ByzantiumToConstantinopleFixAt5" ;;
+  hist-byzantium)
+    HIST_NET="Byzantium"; HIST_LABELS="Byzantium|ByzantiumToConstantinopleFixAt5"
+    echo "SCOPE — hist-byzantium: EIP158ToByzantiumAt5 is outside this tier: its EIP158 predecessor is unsupported; original fixture retained and reported separately"
+    ;;
   hist-constantinople) HIST_NET="Constantinople"; HIST_LABELS="Constantinople" ;;
   hist-petersburg) HIST_NET="ConstantinopleFix"; HIST_LABELS="ConstantinopleFix|ByzantiumToConstantinopleFixAt5" ;;
   hist-istanbul) HIST_NET="Istanbul"; HIST_LABELS="Istanbul" ;;

@@ -299,6 +299,27 @@ the next section.
 Everything in this section is evidence of a different kind from everything
 above it. None of it is a theorem.
 
+**Historical proof-of-work boundary.** When `rules.pow` is present,
+Jaune checks the modeled header rules, including parentage, number and
+timestamp, gas bounds, fork-dependent field shape and calculated difficulty.
+It checks ommer limits, ancestry and headers and applies the modeled rewards.
+It does not validate Ethash seals for either blocks or ommers: `mixHash`
+(`prevRandao` in the header carrier) and `nonce` are not checked against an
+Ethash result. Relative to the same modeled checks with a seal predicate,
+this omission admits a superset of histories. A universal safety property
+over that superset also holds on its valid-seal subset. An accepted witness
+history does not establish proof-of-work minability; this boundary is not a
+claim of complete equivalence to the pinned execution specification.
+
+**Synthetic Constantinople boundary.** `Fork.constantinople` denotes
+fixture-grounded EIP-1283 semantics, not an activated mainnet fork. It has no
+mainnet activation and no pinned EELS differential oracle. At the pinned
+target, the module named `constantinople` implements Petersburg's plain
+SSTORE and is selected by `ConstantinopleFix`; the target refuses the
+synthetic `Constantinople` label. General rule lookup controls which forks
+this build can execute. A declared rule record or a fixture result does not
+turn this synthetic boundary into a mainnet or EELS-conformance claim.
+
 **The fixture corpora** are pinned by commit and SHA-256 in
 [`scripts/sources.json`](scripts/sources.json), with the bootstrap and
 verification procedure in

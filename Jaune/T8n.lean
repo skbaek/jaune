@@ -167,45 +167,29 @@ namespace T8n
 
 ----------------- THE FORK LANE -----------------
 
-/-- The forks `jaune t8n --forks` advertises to a transition-tool framework.
+/-- A fork's canonical transition-tool name. Synthetic EIP-1283
+Constantinople is fixture-only; Petersburg uses the pinned target's alias. -/
+def targetForkName? : Fork → Option String
+  | .constantinople => none
+  | .petersburg => some "ConstantinopleFix"
+  | f => some f.toString
 
-This is the block-validation handshake. Goal A fixed it at the four forks
-whose static and transition corpora the build then ran end to end, spelled out
-as a hand-kept list; goal C composed `amsterdamRules` and left the list alone
-on purpose (its fixed decision 7: advertising a fork is a user-consulted step,
-not a side effect of `rules?` resolving). Goal `jaune-amsterdam-currency-v1`
-took that step and made the line the build's own: the advertised lane *is* the
-runnable lane, `Fork.supported`, and a guard says so, rather than a guard that
-enumerates the gap. A fork therefore cannot be advertised here and refused by
-`--state.fork`, nor run by `--state.fork` and hidden here. The basis for
-advertising each fork is the evidence a framework then relies on: the fixture
-corpora of `scripts/check-mainnet.sh` (the mainnet lane for Prague–BPO2, the
-Glamsterdam devnet lane's static and transition suites for Amsterdam) and the
-39-case transition-tool differential of `scripts/check-t8n.sh`.
-`scripts/sources.json`'s `conformance_target.fork_lane` is the same list, and
-`scripts/check-cli.sh` pins that the two agree.
+/-- Runnable forks with a pinned-target transition-tool name.
+General execution support remains `Fork.supported`; synthetic Constantinople
+has no target name and is deliberately absent from this handshake. -/
+def advertisedForkLane : List Fork :=
+  Fork.supported.filter (fun f => (targetForkName? f).isSome)
 
-Goal B's transaction-metering resolver (`meteringRules?`, `meteringForks`,
-`laneRules`) is retired: there is one resolver, `Fork.rules`, for every label. -/
-def advertisedForkLane : List Fork := Fork.supported
+/-- Canonical static names advertised to transition-tool frameworks. Aliases
+and fork-block labels remain accepted by `T8nForkLabel.ofString?`. -/
+def advertisedForkNames : List String :=
+  advertisedForkLane.filterMap targetForkName?
 
--- The advertised lane is the runnable lane, stated both ways so that a fork
--- added to `Fork.all` without rules would be neither advertised nor silently
--- omitted from a hand-kept list. Five declared forks are in that refused
--- state -- `Fork.rules?` is partial, and the runnable and refused lists are
--- guards where `Fork.supported` and `Fork.unimplemented` are defined -- so
--- these guards record today's lists rather than establishing them, and the
--- advertised lane is the twelve runnable forks. (Goal C's guards here said the lane was a *prefix* of
--- the runnable one with `[.amsterdam]` the only runnable fork not advertised;
--- goal B's said `Fork.unimplemented = [.amsterdam]` and named the metering
--- vehicle; each is rewritten to the statement that replaced it.)
-#guard advertisedForkLane = Fork.supported
+-- Every supported target fork is advertised; the only supported general
+-- fork without a target name is synthetic EIP-1283 Constantinople.
 #guard advertisedForkLane
   = [.berlin, .london, .arrowGlacier, .grayGlacier, .paris, .shanghai,
     .cancun, .prague, .osaka, .bpo1, .bpo2, .amsterdam]
-#guard advertisedForkLane.all (fun f => f.rules?.isSome)
-#guard Fork.supported.filter (fun f => !advertisedForkLane.contains f) = []
-#guard Fork.all.filter (fun f => !advertisedForkLane.contains f) = Fork.unimplemented
 #guard Fork.unimplemented = [.byzantium, .constantinople, .petersburg, .istanbul,
   .muirGlacier]
 #guard Fork.amsterdam.rules = .ok amsterdamRules
@@ -1459,8 +1443,18 @@ end T8nForkLabel
     .arrowGlacier, .grayGlacier, .paris, .shanghai, .cancun].map (some [·])
 #guard T8nForkLabel.ofString? "Constantinople" = none
 #guard T8nForkLabel.ofString? "Petersburg" = none
-#guard Fork.supported.all
-  (fun f => T8nForkLabel.ofString? f.toString = some (.fork f))
+/-- Every projected target name resolves back to its general fork. -/
+theorem targetForkName_roundtrip {f : Fork} {label : String}
+    (h : targetForkName? f = some label) :
+    T8nForkLabel.ofString? label = some (.fork f) := by
+  cases f <;> simp_all [targetForkName?, Fork.toString] <;> subst label <;> rfl
+
+/-- No runnable target fork is hidden by the projection. -/
+theorem mem_advertisedForkLane (f : Fork) :
+    f ∈ advertisedForkLane ↔ f ∈ Fork.supported ∧ f ≠ .constantinople := by
+  cases f <;> simp [advertisedForkLane, targetForkName?, Fork.supported, Fork.rules?]
+
+#guard Fork.all.all (fun f => (targetForkName? f).isNone == (f == .constantinople))
 #guard (T8nForkLabel.ofString? "BerlinToLondonAt5").map (T8nForkLabel.select 4)
   = some .berlin
 #guard (T8nForkLabel.ofString? "BerlinToLondonAt5").map (T8nForkLabel.select 5)
@@ -1602,19 +1596,15 @@ def printInfo : IO Unit := do
   IO.println s!"lean toolchain: {Lean.versionString}"
   IO.println
     s!"t8n fork lane: \
-       {String.intercalate " " (advertisedForkLane.map Fork.toString)}"
+       {String.intercalate " " advertisedForkNames}"
   IO.println
-    s!"t8n lane basis: the advertised lane is every fork this build runs \
-       (Fork.supported), each carried by its fixture corpus under \
-       scripts/check-mainnet.sh (the current-mainnet lane for Prague, Osaka, \
-       BPO1 and BPO2; the Glamsterdam devnet lane, static and transition \
-       suites, for Amsterdam) and by the transition-tool differential of \
-       scripts/check-t8n.sh against the conformance target below"
+    "t8n lane basis: runnable forks with a pinned-target transition-tool \
+       name; Petersburg is advertised as ConstantinopleFix. Synthetic \
+       EIP-1283 Constantinople is fixture-only and has no t8n target name."
   IO.println
-    s!"t8n resolves: \
-       {String.intercalate " " (Fork.supported.map Fork.toString)} \
-       (every runnable fork, through Fork.rules?; the same list as the lane, \
-       by construction)"
+    s!"t8n resolves: {String.intercalate " " advertisedForkNames} \
+       (canonical static names; accepted aliases and fork-block labels are \
+       documented separately)"
   IO.println s!"t8n modes: blockchain (default), state-test (--state-test)"
   IO.println s!"t8n tracing: not claimed"
   IO.println s!"sources manifest: {path}"
@@ -1646,10 +1636,9 @@ def run (args : List String) : IO Unit := do
   -- `--info` it must answer from any working directory and must not depend on
   -- the sources manifest being reachable.
   if o.forks then
-    -- The advertised lane. This line is a wrapper's whole basis for deciding
-    -- what to send, so it names exactly the forks the very next step would
-    -- run: `advertisedForkLane` is `Fork.supported`.
-    IO.println (String.intercalate " " (advertisedForkLane.map Fork.toString))
+    -- Canonical static target names: every runnable target fork exactly once,
+    -- including Petersburg as ConstantinopleFix; no synthetic target name.
+    IO.println (String.intercalate " " advertisedForkNames)
     return ()
   if o.info then
     printInfo
@@ -1657,11 +1646,11 @@ def run (args : List String) : IO Unit := do
   if o.forkLabel.isEmpty then
     IO.throw
       s!"error : t8n requires --state.fork; there is no default fork, and the \
-         runnable labels are {Fork.supported.map Fork.toString}"
+         runnable labels are {advertisedForkNames}"
   let some label := T8nForkLabel.ofString? o.forkLabel
     | IO.throw
         s!"error : t8n does not support the fork {repr o.forkLabel}; this \
-           build's runnable lane is {Fork.supported.map Fork.toString}, and \
+           build's runnable lane is {advertisedForkNames}, and \
            there is no fallback"
   -- Every fork the label can select must be runnable, settled before any
   -- input is read: a plain label is refused here exactly as before, and a
@@ -1758,7 +1747,7 @@ Executes one state transition outside any block-validation context and emits
 emits. Options may be spelled --flag=value or --flag value.
 
   --state.fork <label>   required; one of the runnable labels
-                         {Fork.supported.map Fork.toString}. There is no
+                         {advertisedForkNames}. There is no
                          default and no fallback.
   --state-test           apply exactly one transaction with no system
                          operations, no withdrawals and no requests.

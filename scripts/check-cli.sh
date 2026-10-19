@@ -396,11 +396,24 @@ if [ "$RUN_OUT" != "$LANE_FROM_SOURCES" ]; then
   detail "binary: ${RUN_OUT:-<empty>}; sources.json: $LANE_FROM_SOURCES"
 fi
 
+# Every advertised target name resolves before any input is read. This also
+# rejects advertising a general-only spelling such as Petersburg.
+for name in $LANE_FROM_SOURCES; do
+  CHECKS=$((CHECKS + 1))
+  run_jaune t8n --state.fork "$name" --input.alloc "$TMP/absent-target-label-alloc.json"
+  if [ "$RUN_RC" -ne 1 ] || ! has "$TMP/absent-target-label-alloc.json" "$RUN_ERR" \
+      || has "UnsupportedForkError" "$RUN_ERR" || has "does not support the fork" "$RUN_ERR"; then
+    fail "t8n $name: advertised target name did not reach the missing input"
+    detail "rc=$RUN_RC stderr: ${RUN_ERR:-<empty stderr>}"
+  fi
+done
+
+
 CHECKS=$((CHECKS + 1))
 run_jaune t8n --info
 if [ "$RUN_RC" -ne 0 ] \
   || ! has "t8n fork lane: Berlin London ArrowGlacier GrayGlacier Paris Shanghai Cancun Prague Osaka BPO1 BPO2 Amsterdam" "$RUN_OUT" \
-  || ! has "t8n lane basis: the advertised lane is every fork this build runs" "$RUN_OUT" \
+  || ! has "t8n lane basis: runnable forks with a pinned-target transition-tool" "$RUN_OUT" \
   || ! has "t8n resolves: Berlin London ArrowGlacier GrayGlacier Paris Shanghai Cancun Prague Osaka BPO1 BPO2 Amsterdam" "$RUN_OUT"; then
   fail "t8n --info: expected the twelve-fork lane, its basis, and the resolved fork list"
   detail "rc=$RUN_RC stdout: ${RUN_OUT:-<empty stdout>}"
