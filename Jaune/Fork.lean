@@ -3927,4 +3927,135 @@ private def guardBpo2ToAmsterdam : ForkTransition := ⟨.bpo2, .amsterdam, .byTi
 #guard mainnetChainConfig.forkAt? 22431084 mainnetBpo2Timestamp = some .bpo2
 #guard mainnetChainConfig.forkAt? 22431084 (mainnetBpo2Timestamp + 10 ^ 9) = some .bpo2
 
+namespace ChainConfig
+
+/-- A chain at one fork from genesis; `pragueOnly` is its Prague instance. -/
+def single (chainId : UInt64) (f : Fork) : ChainConfig :=
+  { chainId := chainId, activations := [.atTime f 0] }
+
+theorem pragueOnly_eq_single (chainId : UInt64) :
+    pragueOnly chainId = single chainId .prague := rfl
+
+theorem single_valid (chainId : UInt64) (f : Fork) : (single chainId f).Valid :=
+  valid_iff.mpr rfl
+
+theorem single_forkAt (chainId : UInt64) (f : Fork) (number timestamp : Nat) :
+    (single chainId f).forkAt number timestamp = .ok f := rfl
+
+private theorem forkAt_some {cfg : ChainConfig} {number timestamp : Nat} {f : Fork}
+    (h : cfg.forkAt number timestamp = .ok f) : cfg.forkAt? number timestamp = some f := by
+  unfold ChainConfig.forkAt at h
+  cases hv : cfg.validate with
+  | error e =>
+    simp only [bind, Except.bind, Except.mapError, hv, reduceCtorEq] at h
+  | ok u =>
+    cases hq : cfg.forkAt? number timestamp with
+    | none => simp only [bind, Except.bind, Except.mapError, hv, hq, reduceCtorEq] at h
+    | some g =>
+      simp only [bind, Except.bind, Except.mapError, hv, hq, Except.ok.injEq] at h
+      rw [h]
+
+/-- Hoisted from Blanc, with both schedule coordinates. -/
+theorem forkAt_mem {cfg : ChainConfig} {number timestamp : Nat} {f : Fork}
+    (h : cfg.forkAt number timestamp = .ok f) : f ∈ cfg.activations.map (·.fork) := by
+  have hsome := forkAt_some h
+  unfold ChainConfig.forkAt? at hsome
+  obtain ⟨a, ha, rfl⟩ := Option.map_eq_some_iff.mp hsome
+  exact List.mem_map.mpr
+    ⟨a, List.mem_of_mem_filter (List.mem_of_getLast? ha), rfl⟩
+
+private theorem validateSteps_pairwise {activations : List ForkActivation}
+    (h : validateSteps activations = .ok ()) :
+    activations.Pairwise (fun a b => a.fork.index < b.fork.index) := by
+  induction activations with
+  | nil => exact .nil
+  | cons a rest ih =>
+    cases rest with
+    | nil => exact .cons (by intro b hb; cases hb) .nil
+    | cons b rest =>
+      unfold validateSteps at h
+      have hh : a.fork.index < b.fork.index ∧ validateSteps (b :: rest) = .ok () := by
+        cases ha : a.criterion <;> cases hb : b.criterion <;>
+          simp only [ha, hb, bind, Except.bind, reduceCtorEq] at h <;>
+          split_ifs at h <;> exact ⟨by omega, h⟩
+      have hp := ih hh.2
+      refine List.pairwise_cons.mpr ⟨?_, hp⟩
+      intro c hc
+      rcases List.mem_cons.mp hc with rfl | hc
+      · exact hh.1
+      · have hbc := (List.pairwise_cons.mp hp).1 c hc
+        omega
+
+private theorem forkAt_pairwise {cfg : ChainConfig} {n t : Nat} {f : Fork}
+    (h : cfg.forkAt n t = .ok f) :
+    cfg.activations.Pairwise (fun a b => a.fork.index < b.fork.index) := by
+  unfold forkAt at h
+  cases hv : cfg.validate with
+  | error e =>
+    simp only [hv, Except.mapError, bind, Except.bind, reduceCtorEq] at h
+  | ok u =>
+    cases u
+    apply validateSteps_pairwise
+    unfold validate at hv
+    cases ha : cfg.activations with
+    | nil => simp only [ha, reduceCtorEq] at hv
+    | cons a rest => simpa only [ha] using hv
+
+private theorem index_le_last {activations : List ForkActivation} {a b : ForkActivation}
+    (hp : activations.Pairwise (fun a b => a.fork.index < b.fork.index))
+    (ha : a ∈ activations) (hb : activations.getLast? = some b) :
+    a.fork.index ≤ b.fork.index := by
+  obtain ⟨rest, rfl⟩ := List.getLast?_eq_some_iff.mp hb
+  rcases List.mem_append.mp ha with ha | ha
+  · exact Nat.le_of_lt (hp.rel_of_mem_append ha (by simp only [List.mem_singleton]))
+  · rw [List.mem_singleton.mp ha]
+
+private theorem reached_mono (criterion : ForkCriterion) {n n' t t' : Nat}
+    (hn : n ≤ n') (ht : t ≤ t') (h : criterion.reached n t = true) :
+    criterion.reached n' t' = true := by
+  cases criterion <;> simp only [ForkCriterion.reached, decide_eq_true_eq] at h ⊢ <;> omega
+
+/-- Forks only move forward: a later block (in both coordinates) runs a fork no earlier. -/
+theorem forkAt_index_mono {cfg : ChainConfig} {n n' t t' : Nat} {f f' : Fork}
+    (hn : n ≤ n') (ht : t ≤ t')
+    (h : cfg.forkAt n t = .ok f) (h' : cfg.forkAt n' t' = .ok f') :
+    f.index ≤ f'.index := by
+  obtain ⟨a, ha, hfa⟩ := Option.map_eq_some_iff.mp (forkAt_some h)
+  obtain ⟨b, hb, hfb⟩ := Option.map_eq_some_iff.mp (forkAt_some h')
+  have ham := List.mem_filter.mp (List.mem_of_getLast? ha)
+  have hanew : a ∈ cfg.activations.filter (·.criterion.reached n' t') :=
+    List.mem_filter.mpr ⟨ham.1, reached_mono a.criterion hn ht ham.2⟩
+  have hp := (forkAt_pairwise h').filter (·.criterion.reached n' t')
+  simpa only [hfa, hfb] using index_le_last hp hanew hb
+
+private theorem fork_index_injective : Function.Injective Fork.index := by
+  intro a b
+  cases a <;> cases b <;> decide
+
+/-- A fork changes only at a scheduled activation of the new fork, reached at the later block
+and not at the earlier one. -/
+theorem forkAt_change {cfg : ChainConfig} {n n' t t' : Nat} {f f' : Fork}
+    (hn : n ≤ n') (ht : t ≤ t')
+    (h : cfg.forkAt n t = .ok f) (h' : cfg.forkAt n' t' = .ok f') (hne : f ≠ f') :
+    ∃ a ∈ cfg.activations, a.fork = f' ∧
+      a.criterion.reached n' t' = true ∧ a.criterion.reached n t = false := by
+  obtain ⟨a, ha, hfa⟩ := Option.map_eq_some_iff.mp (forkAt_some h)
+  obtain ⟨b, hb, hfb⟩ := Option.map_eq_some_iff.mp (forkAt_some h')
+  have hbm := List.mem_filter.mp (List.mem_of_getLast? hb)
+  refine ⟨b, hbm.1, hfb, hbm.2, ?_⟩
+  cases hold : b.criterion.reached n t with
+  | false => rfl
+  | true =>
+    have hbmem : b ∈ cfg.activations.filter (·.criterion.reached n t) :=
+      List.mem_filter.mpr ⟨hbm.1, hold⟩
+    have hp := (forkAt_pairwise h).filter (·.criterion.reached n t)
+    have hle : f'.index ≤ f.index := by
+      simpa only [hfa, hfb] using index_le_last hp hbmem ha
+    have hmono := forkAt_index_mono hn ht h h'
+    exact False.elim (hne (fork_index_injective (Nat.le_antisymm hmono hle)))
+
+theorem mainnetChainConfig_valid : mainnetChainConfig.Valid := by decide
+
+end ChainConfig
+
 end Jaune

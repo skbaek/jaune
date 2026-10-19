@@ -3584,9 +3584,11 @@ Three cases, keyed on header shape. A child without the field runs only the
 gas-limit check (EELS Berlin `validate_header`). A child with the field whose
 parent lacks it is London's first block: the base fee is `INITIAL_BASE_FEE` and
 no gas-limit check runs (EELS `london/fork.py`, keyed there on
-`FORK_CRITERIA`; on every valid schedule the parent lacks the field exactly at
-that block). Otherwise the EIP-1559 update rule, which includes the gas-limit
-check. -/
+`FORK_CRITERIA`). `expectedBaseFee_first` records the initial-fee arm;
+`parent_baseFee_none_iff` ties the parent's missing field to its rules when
+its header shape is checked. `ChainConfig.ShapeCoherent` supplies that shape
+condition at configured chain heads. Otherwise the EIP-1559 update rule,
+which includes the gas-limit check. -/
 def expectedBaseFee (header parent : Header) :
     Except BlockValidationError (Option Nat) :=
   match header.baseFeePerGas, parent.baseFeePerGas with
@@ -7913,5 +7915,176 @@ private def touchSelfdestructThenFund (fork : Fork) : Option (B256 × B256) :=
 #guard touchSelfdestructThenFund .grayGlacier = some (1, 1)
 #guard touchSelfdestructThenFund .paris = some (1, 0)
 #guard touchSelfdestructThenFund .prague = some (1, 0)
+
+namespace ChainConfig
+
+/-- The proof-of-work mint of one block under rules `pow`: what `payRewards` credits. -/
+def rewardTotal (pow : PowRules) (number : Nat) (ommers : List Header) : Nat :=
+  (pow.blockReward + ommers.length * (pow.blockReward / 32)) +
+    (ommers.map fun o => (8 + o.number - number) * pow.blockReward / 8).sum
+
+/-- The mint the configured schedule's fork pays for `block` (0 from Paris on). -/
+def rewardAt (cfg : ChainConfig) (block : Block) : Nat :=
+  match cfg.forkAt block.header.number block.header.timestamp with
+  | .ok f => match f.ruleSet.pow with
+    | some pow => rewardTotal pow block.header.number block.ommers
+    | none => 0
+  | .error _ => 0
+
+theorem rewardAt_eq_zero {cfg : ChainConfig} {block : Block} {f : Fork}
+    (h : cfg.forkAt block.header.number block.header.timestamp = .ok f)
+    (hpos : f.ruleSet.pow = none) : cfg.rewardAt block = 0 := by
+  simp only [rewardAt, h, hpos]
+
+theorem single_prague_rewardAt (chainId : UInt64) (block : Block) :
+    (single chainId .prague).rewardAt block = 0 := rfl
+
+end ChainConfig
+
+private theorem checkHeaderFieldPresence_eq {name : String} {present defined : Bool}
+    (h : checkHeaderFieldPresence name present defined = .ok ()) : present = defined := by
+  unfold checkHeaderFieldPresence at h
+  split at h
+  · cases h
+  · rename_i heq
+    exact not_not.mp heq
+
+theorem checkHeaderShape_baseFee {rules : ForkRules} {header : Header}
+    (h : checkHeaderShape rules header = .ok ()) :
+    header.baseFeePerGas.isSome = rules.header.baseFee := by
+  unfold checkHeaderShape at h
+  obtain ⟨u, hb, _⟩ := Except.bind_eq_ok h
+  cases u
+  exact checkHeaderFieldPresence_eq hb
+
+theorem checkHeaderShape_blobGas {rules : ForkRules} {header : Header}
+    (h : checkHeaderShape rules header = .ok ()) :
+    header.excessBlobGas.isSome = rules.header.blobGas ∧
+      header.blobGasUsed.isSome = rules.header.blobGas := by
+  unfold checkHeaderShape at h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨u, hu, h⟩ := Except.bind_eq_ok h
+  obtain ⟨v, hv, _⟩ := Except.bind_eq_ok h
+  cases u
+  cases v
+  exact ⟨checkHeaderFieldPresence_eq hv, checkHeaderFieldPresence_eq hu⟩
+
+/-- The first London block carries the initial fee when its parent carries no fee. -/
+theorem expectedBaseFee_first {header parent : Header}
+    (hb : header.baseFeePerGas.isSome = true) (hp : parent.baseFeePerGas = none) :
+    expectedBaseFee header parent = .ok (some initialBaseFee) := by
+  cases hh : header.baseFeePerGas with
+  | none => simp only [hh, Option.isSome_none, Bool.false_eq_true] at hb
+  | some fee => simp only [expectedBaseFee, hh, hp]
+
+theorem parent_baseFee_none_iff {rules₀ : ForkRules} {parent : Header}
+    (hp : checkHeaderShape rules₀ parent = .ok ()) :
+    parent.baseFeePerGas = none ↔ rules₀.header.baseFee = false := by
+  have hshape := checkHeaderShape_baseFee hp
+  rw [← hshape]
+  cases parent.baseFeePerGas <;> simp only [Option.isSome_none, Option.isSome_some,
+    reduceCtorEq]
+
+/-- Every configured step of a single-fork schedule is that fork's fixed-fork step. -/
+theorem stateTransitionUsing_single {chainId : UInt64} {f : Fork} {ch : BlockChain}
+    {block : Block} (hid : chainId = ch.chainId) :
+    stateTransitionUsing (ChainConfig.single chainId f) ch block =
+      stateTransitionAt f ch block := by
+  rw [stateTransitionUsing_eq_of_chainId_eq hid, ChainConfig.single_forkAt]
+  rfl
+
+private theorem stateTransitionUsing_run {cfg : ChainConfig} {ch ch' : BlockChain}
+    {block : Block} (h : stateTransitionUsing cfg ch block = .ok ch') :
+    ∃ f, cfg.forkAt block.header.number block.header.timestamp = .ok f ∧
+      stateTransitionE f ch block = .ok ch' := by
+  unfold stateTransitionUsing at h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨f, hf, h⟩ := Except.bind_eq_ok h
+  exact ⟨f, Except.mapError_eq_ok_iff.mp hf, stateTransitionAt_eq_ok_iff.mp h⟩
+
+/-- A successful step leaves the new block as the chain's last block. -/
+theorem stateTransitionE_getLast {f : Fork} {ch ch' : BlockChain} {block : Block}
+    (h : stateTransitionE f ch block = .ok ch') :
+    ch'.blocks.getLast? = some block := by
+  have hb := (stateTransitionAt_eq_ok (stateTransitionAt_eq_ok_iff.mpr h)).2.1
+  rw [hb, appendBlock_getLast?]
+
+/-- Header-shape coherence of the chain head with its scheduled fork. -/
+def ChainConfig.ShapeCoherent (cfg : ChainConfig) (ch : BlockChain) : Prop :=
+  ∀ b, ch.blocks.getLast? = some b →
+    ∃ f, cfg.forkAt b.header.number b.header.timestamp = .ok f ∧
+      checkHeaderShape f.ruleSet b.header = .ok ()
+
+theorem stateTransitionUsing_shapeCoherent {cfg : ChainConfig} {ch ch' : BlockChain}
+    {block : Block} (h : stateTransitionUsing cfg ch block = .ok ch') :
+    cfg.ShapeCoherent ch' := by
+  obtain ⟨f, hf, hrun⟩ := stateTransitionUsing_run h
+  intro b hb
+  rw [stateTransitionE_getLast hrun] at hb
+  cases hb
+  refine ⟨f, hf, ?_⟩
+  have hv := (stateTransitionAt_eq_ok (stateTransitionAt_eq_ok_iff.mpr hrun)).1
+  unfold validateHeader at hv
+  obtain ⟨u, hshape, _⟩ := Except.bind_eq_ok hv
+  cases u
+  exact hshape
+
+/-- A successful block step extends the chain by one block number and a later timestamp. -/
+theorem stateTransitionE_header_succ {f : Fork} {ch ch' : BlockChain} {block : Block}
+    (h : stateTransitionE f ch block = .ok ch') :
+    ∃ parent, ch.blocks.getLast? = some parent ∧
+      block.header.number = parent.header.number + 1 ∧
+      parent.header.timestamp < block.header.timestamp := by
+  have hv := (stateTransitionAt_eq_ok (stateTransitionAt_eq_ok_iff.mpr h)).1
+  have hv0 := hv
+  unfold validateHeader at hv
+  obtain ⟨_, _, hv⟩ := Except.bind_eq_ok hv
+  obtain ⟨parent, hpar, hv⟩ := Except.bind_eq_ok hv
+  have hlast : ch.blocks.getLast? = some parent := by
+    cases hh : ch.blocks.getLast? with
+    | none => simp only [hh, Option.toExcept, reduceCtorEq] at hpar
+    | some p =>
+      simpa only [hh, Option.toExcept, Except.ok.injEq, Option.some.injEq] using hpar
+  obtain ⟨hph, hnum⟩ := validateHeader_links hlast hv0
+  refine ⟨parent, hlast, hnum, ?_⟩
+  dsimp only at hv
+  rw [ite_eq_right (by simpa only [Header.hash, not_not] using hph)] at hv
+  obtain ⟨bf, _, hv⟩ := Except.bind_eq_ok hv
+  by_cases h1 : (block.header.excessBlobGas.any
+      (· != calculateExcessBlobGas f.ruleSet.blob parent.header)) = true
+  · rw [ite_eq_left h1] at hv
+    obtain ⟨_, hb, _⟩ := Except.bind_eq_ok hv
+    cases hb
+  rw [ite_eq_right h1] at hv
+  by_cases h2 : block.header.gasUsed > block.header.gasLimit
+  · rw [ite_eq_left h2] at hv
+    obtain ⟨_, hb, _⟩ := Except.bind_eq_ok hv
+    cases hb
+  rw [ite_eq_right h2] at hv
+  by_cases h3 : bf ≠ block.header.baseFeePerGas
+  · rw [ite_eq_left h3] at hv
+    obtain ⟨_, hb, _⟩ := Except.bind_eq_ok hv
+    cases hb
+  rw [ite_eq_right h3] at hv
+  by_cases h4 : block.header.timestamp ≤ parent.header.timestamp
+  · rw [ite_eq_left h4] at hv
+    obtain ⟨_, hb, _⟩ := Except.bind_eq_ok hv
+    cases hb
+  · omega
+
+/-- The configured fork is no earlier than the parent's scheduled fork. -/
+theorem stateTransitionUsing_fork_mono {cfg : ChainConfig} {ch ch' : BlockChain}
+    {block parent : Block} {f₀ : Fork}
+    (hlast : ch.blocks.getLast? = some parent)
+    (h₀ : cfg.forkAt parent.header.number parent.header.timestamp = .ok f₀)
+    (h : stateTransitionUsing cfg ch block = .ok ch') :
+    ∃ f, cfg.forkAt block.header.number block.header.timestamp = .ok f ∧
+      f₀.index ≤ f.index ∧ stateTransitionE f ch block = .ok ch' := by
+  obtain ⟨f, hf, hrun⟩ := stateTransitionUsing_run h
+  obtain ⟨tip, htip, hnum, htime⟩ := stateTransitionE_header_succ hrun
+  rw [hlast] at htip
+  cases htip
+  exact ⟨f, hf, ChainConfig.forkAt_index_mono (by omega) (by omega) h₀ hf, hrun⟩
 
 end Jaune

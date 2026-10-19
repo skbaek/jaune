@@ -2772,7 +2772,10 @@ Every parameter is read from the *child's* blob schedule, which is what makes a
 BPO transition take effect on the first block of the new schedule rather than
 one block late. Osaka's EIP-7918 branch also reads both fees from the parent
 header: the blob fee at the parent's excess and the execution base fee the
-parent actually carried. -/
+parent actually carried. The downstream `checkHeaderShape_blobGas` theorem
+in `Jaune.Transaction` ties both parent fields' presence to its rules;
+`ChainConfig.ShapeCoherent` supplies that condition at configured chain heads,
+so a pre-Cancun parent contributes zero through the absent fields below. -/
 def calculateExcessBlobGas (blob : BlobSchedule) (parentHeader : Header) : Nat :=
   -- Cancun's first block: a parent header without the blob fields counts them
   -- as zero. EELS keys this on the parent header's class
