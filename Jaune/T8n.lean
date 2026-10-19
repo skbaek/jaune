@@ -188,10 +188,9 @@ def advertisedForkNames : List String :=
 -- Every supported target fork is advertised; the only supported general
 -- fork without a target name is synthetic EIP-1283 Constantinople.
 #guard advertisedForkLane
-  = [.berlin, .london, .arrowGlacier, .grayGlacier, .paris, .shanghai,
-    .cancun, .prague, .osaka, .bpo1, .bpo2, .amsterdam]
-#guard Fork.unimplemented = [.byzantium, .constantinople, .petersburg, .istanbul,
-  .muirGlacier]
+  = [.byzantium, .petersburg, .istanbul, .muirGlacier, .berlin, .london,
+    .arrowGlacier, .grayGlacier, .paris, .shanghai, .cancun, .prague, .osaka,
+    .bpo1, .bpo2, .amsterdam]
 #guard Fork.amsterdam.rules = .ok amsterdamRules
 #guard Fork.supported.all (fun f => f.rules.toOption.isSome)
 #guard Fork.prague.rules = .ok pragueRules
@@ -1454,7 +1453,6 @@ theorem mem_advertisedForkLane (f : Fork) :
     f ∈ advertisedForkLane ↔ f ∈ Fork.supported ∧ f ≠ .constantinople := by
   cases f <;> simp [advertisedForkLane, targetForkName?, Fork.supported, Fork.rules?]
 
-#guard Fork.all.all (fun f => (targetForkName? f).isNone == (f == .constantinople))
 #guard (T8nForkLabel.ofString? "BerlinToLondonAt5").map (T8nForkLabel.select 4)
   = some .berlin
 #guard (T8nForkLabel.ofString? "BerlinToLondonAt5").map (T8nForkLabel.select 5)
@@ -1463,15 +1461,14 @@ theorem mem_advertisedForkLane (f : Fork) :
     (T8nForkLabel.select 5) = some .petersburg
 #guard (T8nForkLabel.ofString? "ConstantinopleToIstanbulAt5").map
     (T8nForkLabel.select 0) = some .petersburg
--- Seven historical labels resolve at rule lookup -- `Berlin`, `London`,
--- `ArrowGlacier`, `GrayGlacier`, `Merge` (Paris), `Shanghai` and `Cancun` --
--- and so does the fork-block `BerlinToLondonAt5`, both of whose endpoints
--- resolve since U11d. Every pre-Berlin label is still refused: U9 adds the
--- names, and later units switch each fork on.
+-- U9 added the historical target labels; U11a/U11b/U11d resolved Berlin
+-- through Cancun. This candidate also resolves the pre-Berlin target labels
+-- and both endpoints of their target fork-block labels. These lookup
+-- snapshots do not establish fixture conformance.
 #guard ["Byzantium", "ConstantinopleFix", "Istanbul", "MuirGlacier",
     "ByzantiumToConstantinopleAt5", "ConstantinopleToIstanbulAt5"].all
   (fun l => match T8nForkLabel.ofString? l with
-    | some label => label.forks.all (fun f => f.rules?.isNone)
+    | some label => label.forks.all (fun f => f.rules?.isSome)
     | none => false)
 #guard ["Berlin", "London", "ArrowGlacier", "GrayGlacier", "Merge", "Shanghai",
     "Cancun", "BerlinToLondonAt5"].all
@@ -1762,7 +1759,7 @@ emits. Options may be spelled --flag=value or --flag value.
                          JAUNE_SOURCES if it is not at scripts/ from the
                          working directory.
   --forks                print the advertised fork lane and nothing else, on
-                         one line ({advertisedForkLane.map Fork.toString}).
+                         one line ({advertisedForkNames}).
                          Answers from anywhere.
 
 Tracing is not claimed: --trace, its variants and --opcode.count are refused

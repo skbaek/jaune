@@ -114,8 +114,8 @@ def ofString? : String → Option Fork
 /-- Every *declared* fork, in activation order.
 
 Being listed here means the *identity* is known, not that its rules are
-implemented: only Berlin through Amsterdam resolve (see `Fork.rules?`), and
-the five pre-Berlin forks stay refused. The two names are kept apart because
+implemented. This candidate resolves each declared fork's existing record
+(see `Fork.rules?`). The two names are kept apart because
 they answer different questions -- what this build *parses* against what it
 will also *execute* -- and because a user-facing message must keep
 distinguishing a label this build does not recognise from one it recognises
@@ -1577,24 +1577,20 @@ theorem byzantiumAccessGas_valid : byzantiumAccessGas.Valid := by decide
 /-- Error tag for a fork whose identity is known but whose rules this build
 does not implement.
 
-The five still-refused pre-Berlin forks produce it through `Fork.rules` and
-`Fork.rules?`; the guards at the end of this file record each refusal. It is
-kept because
-`scripts/check-fork-constants.sh` and `scripts/check-cli.sh` assert this exact
-refusal text, and because the CLI's declared-versus-runnable distinction is
-user-facing vocabulary. Falling back to another fork's rules would turn a missing
-implementation into a silent consensus fault, so there is deliberately no
-fallback to fall back to. -/
+Earlier historical waves produced this error for unresolved pre-Berlin
+records. This candidate resolves those records, while the error vocabulary
+and renderer remain available for absent rule lookup. Falling back to another
+fork's rules would turn a missing implementation into a silent consensus
+fault, so there is deliberately no fallback. -/
 def unsupportedForkTag : String := "UnsupportedForkError"
 
 /-- The single place where a fork identity becomes rule data.
 
 This is a **total** function: every declared fork names the rule record built
-for it, including the twelve pre-Prague forks, five of which this build
-parses but does not run. The resolving lookups -- `Fork.rules?`,
-`Fork.rules`, and everything reached through `ChainConfig.rulesAt` -- are
-partial over it and refuse those five (see `Fork.rules?`), while
-`BenvStat.rules` reads it
+for it, including the pre-Prague forks. The resolving lookups --
+`Fork.rules?`, `Fork.rules`, and everything reached through
+`ChainConfig.rulesAt` -- retain their fallible interfaces, and this candidate
+resolves every declared record. `BenvStat.rules` reads it
 directly for the fork the entry point already resolved, so
 `Fork.ruleSet_valid` below discharges `ForkRules.Valid` once for every rule
 set any machine can carry.
@@ -1651,19 +1647,16 @@ theorem Fork.ruleSet_fork (f : Fork) : f.ruleSet.fork = f := by
 
 /-- Rule lookup as an `Option`, kept for its callers and its vocabulary.
 
-`some` for the twelve forks this build runs, `none` for the five pre-Berlin
-forks whose identities it parses but whose rules it does not implement. The
-literals stay total under `Fork.ruleSet` beside this lookup, so the rule data
-is still reviewed in place; what changed is that no caller resolves a
-still-refused fork to them. Falling back to another fork's record would turn a
-missing implementation into a silent consensus fault, so there is deliberately
-no fallback. -/
+Every declared fork in this source candidate resolves to its existing rule
+record. The `Option` interface is retained: an absent implementation must not
+fall back to another fork's record. Resolver admission here does not establish
+fixture conformance. -/
 def Fork.rules? : Fork → Option ForkRules
-  | .byzantium => none
-  | .constantinople => none
-  | .petersburg => none
-  | .istanbul => none
-  | .muirGlacier => none
+  | .byzantium => some byzantiumRules
+  | .constantinople => some constantinopleRules
+  | .petersburg => some petersburgRules
+  | .istanbul => some istanbulRules
+  | .muirGlacier => some muirGlacierRules
   | .berlin => some berlinRules
   | .london => some londonRules
   | .arrowGlacier => some arrowGlacierRules
@@ -1677,35 +1670,30 @@ def Fork.rules? : Fork → Option ForkRules
   | .bpo2 => some bpo2Rules
   | .amsterdam => some amsterdamRules
 
-/-- The declared forks this build can actually run.
+/-- The declared forks whose rule records this candidate resolves.
 
 Derived from `Fork.rules?` rather than written out, so it cannot drift from
-what resolves. This is the list a message means when it says "supported":
-`Fork.all` is what this build *parses*, and these are the labels it will also
-execute. The two are different lists -- the five still-refused pre-Berlin
-forks parse and are refused -- and the guard below pins the runnable one as it
-reads today. -/
+what resolves. `Fork.all` names known identities; this filter names the ones
+that resolve. They currently coincide, and the exact inventory below records
+that resolver state without claiming conformance. -/
 def Fork.supported : List Fork := Fork.all.filter (fun f => f.rules?.isSome)
 
-/-- The declared forks whose rules this build does not implement.
+/-- The declared forks whose rule lookup is absent.
 
-The complement of `Fork.supported` within `Fork.all`, for the diagnostics that
-have to name exactly which labels parse and are then refused. It is the five
-still-refused pre-Berlin forks, and the guard below pins the list as it reads
-today. -/
+The complement of `Fork.supported` within `Fork.all`, retained for diagnostics
+that distinguish a known identity from an available rule record. It is empty
+in this candidate; the snapshot below records that lookup boundary. -/
 def Fork.unimplemented : List Fork := Fork.all.filter (fun f => f.rules?.isNone)
 
--- The runnable forks, as they read today: Berlin through Amsterdam. A guard,
--- not a theorem -- a theorem would claim parsing and executing admit the same
--- labels, which they do not while five declared forks stay refused.
-#guard Fork.supported = [.berlin, .london, .arrowGlacier, .grayGlacier, .paris,
-  .shanghai, .cancun, .prague, .osaka, .bpo1, .bpo2, .amsterdam]
+-- Exact candidate resolver inventory, in declared order. This snapshot
+-- checks admission to rule records, not per-fork execution conformance.
+#guard Fork.supported = [.byzantium, .constantinople, .petersburg, .istanbul,
+  .muirGlacier, .berlin, .london, .arrowGlacier, .grayGlacier, .paris, .shanghai,
+  .cancun, .prague, .osaka, .bpo1, .bpo2, .amsterdam]
 
--- The refused forks, as they read today: the five pre-Berlin forks whose
--- rules stay unresolved. A guard, not a theorem, for the same reason as
--- `Fork.supported` above.
-#guard Fork.unimplemented = [.byzantium, .constantinople, .petersburg, .istanbul,
-  .muirGlacier]
+-- No declared rule record remains absent in this candidate. Retain the
+-- complement snapshot alongside the exact resolver inventory.
+#guard Fork.unimplemented = []
 
 /-- Every rule set a fork identity resolves to is structurally usable.
 
@@ -1718,11 +1706,11 @@ an `Option` rather than a `Fork`. -/
 theorem Fork.rules?_valid {f : Fork} {r : ForkRules} (h : f.rules? = some r) :
     r.Valid := by
   cases f with
-  | byzantium => simp [Fork.rules?] at h
-  | constantinople => simp [Fork.rules?] at h
-  | petersburg => simp [Fork.rules?] at h
-  | istanbul => simp [Fork.rules?] at h
-  | muirGlacier => simp [Fork.rules?] at h
+  | byzantium => simp only [Fork.rules?] at h; cases h; exact byzantiumRules_valid
+  | constantinople => simp only [Fork.rules?] at h; cases h; exact constantinopleRules_valid
+  | petersburg => simp only [Fork.rules?] at h; cases h; exact petersburgRules_valid
+  | istanbul => simp only [Fork.rules?] at h; cases h; exact istanbulRules_valid
+  | muirGlacier => simp only [Fork.rules?] at h; cases h; exact muirGlacierRules_valid
   | berlin => simp only [Fork.rules?] at h; cases h; exact berlinRules_valid
   | london => simp only [Fork.rules?] at h; cases h; exact londonRules_valid
   | arrowGlacier => simp only [Fork.rules?] at h; cases h; exact arrowGlacierRules_valid
@@ -2080,10 +2068,10 @@ def SupportError.render : SupportError → String
 
 /-- Rule lookup in the `Except` shape the explicit-fork entry points use.
 
-It succeeds for the twelve forks this build runs and refuses the five
-still-refused pre-Berlin forks with `.unsupportedFork`, through `Fork.rules?`
-above -- one resolver for every label, so the CLI, the transition tool, and
-the configured lookup all refuse the same labels. The name, the type and the
+It delegates to `Fork.rules?` above, with `.unsupportedFork` for an absent
+record. Every declared record resolves in this candidate. The CLI, transition
+tool and configured lookup share that resolver; their label parsers retain
+their respective vocabularies. The name, the type and the
 rendered message
 are unchanged: the shape is what ten call sites and the CLI's refusal surface
 are written against. -/
@@ -2638,9 +2626,9 @@ The schedule begins at Byzantium, at its real activation block
 pre-Byzantium era, so a configured mainnet block numbered before that floor
 must not silently run under any rules: `ChainConfig.forkAt` reports it as
 `SupportError.unsupportedBlockEra` rather than resolving it to a fork. A
-scheduled fork is not thereby a runnable one: the five still-refused
-pre-Berlin forks are refused at `Fork.rules?`, so `rulesAt` reports a block in
-their era as `SupportError.unsupportedFork`. -/
+scheduled fork still passes through `Fork.rules?`; this candidate resolves
+its declared eras to their existing records. Schedule selection alone is not
+a conformance claim. -/
 def mainnetChainConfig : ChainConfig := {
   chainId := 1
   activations := [
@@ -2845,10 +2833,9 @@ private def isEraL : RulesLookupError → Bool
 #guard Fork.all.map Fork.index = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
   13, 14, 15, 16]
 
--- The declared set and the runnable set are both derived from `Fork.rules?`
--- rather than restated, and they differ by exactly the five still-refused
--- pre-Berlin forks. The runnable and refused lists *as they read today* are
--- guarded where
+-- The runnable and absent-record sets are derived by filtering Fork.all
+-- through Fork.rules?. Their exact inventories, including this candidate's
+-- empty absent-record set, are guarded where
 -- `Fork.supported` and `Fork.unimplemented` are defined above; what is
 -- re-guarded here is that the two partition the declared set.
 -- (Goal A's guards here asserted `Fork.supported = [.prague, .osaka, .bpo1,
@@ -3479,23 +3466,17 @@ example : amsterdamRules =
 #guard Fork.amsterdam.rules?.isSome
 #guard Fork.supported.contains .amsterdam
 
--- The twelve forks this build runs resolve to rules that name them back, and
--- the five still-refused pre-Berlin forks are refused with
--- `UnsupportedForkError` through both lookups. (Goal A guarded here that
--- `Fork.amsterdam.rules = .error (.unsupportedFork .amsterdam)` and that the
--- refusal rendered the `UnsupportedForkError` golden; both were rewritten to
--- the admission that replaced them when Amsterdam resolved, and the twelve
--- rows below are that same refusal in its new place; units U11a/U11b/U11d
--- rewrite the seven rows of Berlin through Cancun to the admission that
--- replaces them.) That `rules?` resolves and names the fork back is
--- `Fork.rules?`'s definition with `Fork.ruleSet_fork`; that the five do not
--- resolve is the rows below, which pin `rules` and `validRules?` fork by
--- fork.
-#guard Fork.byzantium.rules = .error (.unsupportedFork .byzantium)
-#guard Fork.constantinople.rules = .error (.unsupportedFork .constantinople)
-#guard Fork.petersburg.rules = .error (.unsupportedFork .petersburg)
-#guard Fork.istanbul.rules = .error (.unsupportedFork .istanbul)
-#guard Fork.muirGlacier.rules = .error (.unsupportedFork .muirGlacier)
+-- Every declared fork now resolves to its own record through both lookups.
+-- Goal A guarded Amsterdam's support refusal here; that row became an
+-- admission when Amsterdam resolved. U11a/U11b/U11d similarly moved Berlin
+-- through Cancun to admission, and this candidate admits the remaining
+-- pre-Berlin records. The rows retain the exact lookup inventory; they do
+-- not establish fixture conformance.
+#guard Fork.byzantium.rules = .ok byzantiumRules
+#guard Fork.constantinople.rules = .ok constantinopleRules
+#guard Fork.petersburg.rules = .ok petersburgRules
+#guard Fork.istanbul.rules = .ok istanbulRules
+#guard Fork.muirGlacier.rules = .ok muirGlacierRules
 #guard Fork.berlin.rules = .ok berlinRules
 #guard Fork.london.rules = .ok londonRules
 #guard Fork.arrowGlacier.rules = .ok arrowGlacierRules
@@ -3508,11 +3489,11 @@ example : amsterdamRules =
 #guard Fork.bpo1.rules = .ok bpo1Rules
 #guard Fork.bpo2.rules = .ok bpo2Rules
 #guard Fork.amsterdam.rules = .ok amsterdamRules
-#guard Fork.byzantium.rules? = none
-#guard Fork.constantinople.rules? = none
-#guard Fork.petersburg.rules? = none
-#guard Fork.istanbul.rules? = none
-#guard Fork.muirGlacier.rules? = none
+#guard Fork.byzantium.rules? = some byzantiumRules
+#guard Fork.constantinople.rules? = some constantinopleRules
+#guard Fork.petersburg.rules? = some petersburgRules
+#guard Fork.istanbul.rules? = some istanbulRules
+#guard Fork.muirGlacier.rules? = some muirGlacierRules
 #guard Fork.berlin.rules? = some berlinRules
 #guard Fork.london.rules? = some londonRules
 #guard Fork.arrowGlacier.rules? = some arrowGlacierRules
@@ -3530,8 +3511,7 @@ example : amsterdamRules =
 -- The renderer's bytes for the constructor are unchanged (the Osaka golden
 -- above pins the same text); this guard records that the label Amsterdam no
 -- longer reaches it through any lookup rather than that it would read so.
-#guard (Fork.all.filter (fun f => f.rules = .error (.unsupportedFork f)))
-  = [.byzantium, .constantinople, .petersburg, .istanbul, .muirGlacier]
+#guard (Fork.all.filter (fun f => f.rules = .error (.unsupportedFork f))) = []
 
 -- A usable schedule is non-empty and moves strictly forward in both time and
 -- fork order. It need not start at genesis: a schedule may support only eras
@@ -3612,10 +3592,9 @@ private def guardFloorSchedule : ChainConfig :=
 -- and every block before Byzantium's, is outside this build's declared domain
 -- -- the P0.5 fix with its floor moved from Prague's timestamp to Byzantium's
 -- block (design §4): Jaune implements no pre-Byzantium era and must not
--- silently answer those blocks. A scheduled fork is not a runnable one: the
--- five still-refused pre-Berlin eras resolve to their fork and are then
--- refused at `Fork.rules?`, as `unsupportedFork`, never run under another
--- fork's rules.
+-- silently answer those blocks. Schedule selection and rule availability
+-- remain separate lookups: this candidate resolves each declared era to its
+-- own record, while the pre-Byzantium floor remains refused.
 #guard mainnetChainConfig.validate.toOption.isSome
 #guard mainnetChainConfig.Valid
 #guard ¬ (ChainConfig.mk 1 []).Valid
@@ -3654,12 +3633,10 @@ private def guardFloorSchedule : ChainConfig :=
 #guard mainnetChainConfig.forkAt 22431084 mainnetBpo2Timestamp = .ok .bpo2
 #guard mainnetChainConfig.rulesAt 22431084 mainnetBpo2Timestamp = .ok bpo2Rules
 #guard mainnetChainConfig.rulesAt 22431084 mainnetPragueTimestamp = .ok pragueRules
--- Scheduled but refused: a Byzantium-era block is an `unsupportedFork`
--- refusal naming its own fork, not an era error and never Prague's rules. A
--- block of any era from Berlin through Cancun resolves to its own fork's
--- rules (units U11a/U11b/U11d).
-#guard mainnetChainConfig.rulesAt mainnetByzantiumBlock 0
-  = .error (.support (.unsupportedFork .byzantium))
+-- A Byzantium-era block now resolves to its own rules. The Berlin-through-
+-- Cancun admissions from U11a/U11b/U11d remain unchanged; the earlier floor
+-- refusal above still distinguishes an unsupported era from a named fork.
+#guard mainnetChainConfig.rulesAt mainnetByzantiumBlock 0 = .ok byzantiumRules
 #guard mainnetChainConfig.rulesAt mainnetParisBlock 0 = .ok parisRules
 #guard mainnetChainConfig.rulesAt mainnetBerlinBlock 0 = .ok berlinRules
 #guard mainnetChainConfig.rulesAt mainnetGrayGlacierBlock 0 = .ok grayGlacierRules
