@@ -1,0 +1,86 @@
+diff --git a/tests/amsterdam/eip7928_block_level_access_lists/test_fork_transition.py b/tests/amsterdam/eip7928_block_level_access_lists/test_fork_transition.py
+index e92eac8..0209b38 100644
+--- a/tests/amsterdam/eip7928_block_level_access_lists/test_fork_transition.py
++++ b/tests/amsterdam/eip7928_block_level_access_lists/test_fork_transition.py
+@@ -30,6 +30,7 @@ from execution_testing import (
+     TransactionReceipt,
+     TransitionFork,
+ )
++from execution_testing.fixtures import BlockchainFixture
+ 
+ from ..eip7708_eth_transfer_logs.spec import transfer_log
+ from .spec import ref_spec_7928
+@@ -40,6 +41,19 @@ REFERENCE_SPEC_VERSION = ref_spec_7928.version
+ FORK_TIMESTAMP = 15_000
+ 
+ 
++def _header_field_exception(
++    request: pytest.FixtureRequest,
++    engine_exception: BlockException,
++) -> BlockException:
++    """Keep raw header-shape errors distinct from Engine payload errors."""
++    fixture_format = getattr(request.node, "fixture_format", None)
++    if fixture_format is None:
++        fixture_format = request.node.callspec.params["blockchain_test"]
++    if fixture_format == BlockchainFixture:
++        return BlockException.INCORRECT_BLOCK_FORMAT
++    return engine_exception
++
++
+ @EIPChecklist.BlockHeaderField.Test.ForkTransition.Initial()
+ @pytest.mark.valid_at_transition_to("Amsterdam")
+ def test_bal_fork_transition_happy_path(
+@@ -102,11 +116,15 @@ def test_bal_fork_transition_happy_path(
+ def test_invalid_pre_fork_block_with_bal_hash_field(
+     blockchain_test: BlockchainTestFiller,
+     pre: Alloc,
++    request: pytest.FixtureRequest,
+ ) -> None:
+     """
+     Reject a pre-Amsterdam block whose header carries
+     `block_access_list_hash`.
+ 
++    The raw blockchain fixture has an invalid header field count and
++    expects INCORRECT_BLOCK_FORMAT.
++
+     The engine fixture omits `blockAccessList`, keeping the pre-fork API
+     parameters valid. Its block hash still commits to the extra header
+     field, so the client's reconstructed header cannot match it.
+@@ -124,7 +142,9 @@ def test_invalid_pre_fork_block_with_bal_hash_field(
+                 timestamp=FORK_TIMESTAMP - 1,
+                 txs=[tx],
+                 rlp_modifier=Header(block_access_list_hash=Hash(0)),
+-                exception=BlockException.INVALID_BLOCK_HASH,
++                exception=_header_field_exception(
++                    request, BlockException.INVALID_BLOCK_HASH
++                ),
+             ),
+         ],
+     )
+@@ -171,11 +191,15 @@ def test_bal_invalid_engine_payload_field_before_fork(
+ def test_invalid_post_fork_block_without_bal_hash_field(
+     blockchain_test: BlockchainTestFiller,
+     pre: Alloc,
++    request: pytest.FixtureRequest,
+ ) -> None:
+     """
+     Reject an Amsterdam activation block whose header is missing
+     `block_access_list_hash`.
+ 
++    The raw blockchain fixture has an invalid header field count and
++    expects INCORRECT_BLOCK_FORMAT.
++
+     The engine fixture sends `newPayloadV5` with the `blockAccessList`
+     param omitted, which must return `-32602: Invalid params`.
+     """
+@@ -194,7 +218,9 @@ def test_invalid_post_fork_block_without_bal_hash_field(
+                 rlp_modifier=Header(
+                     block_access_list_hash=Header.REMOVE_FIELD,
+                 ),
+-                exception=BlockException.INVALID_BAL_HASH,
++                exception=_header_field_exception(
++                    request, BlockException.INVALID_BAL_HASH
++                ),
+                 engine_api_error_code=EngineAPIError.InvalidParams,
+             ),
+         ],

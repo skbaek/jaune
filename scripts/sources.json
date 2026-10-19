@@ -154,7 +154,12 @@
       "created_at": "2026-10-07T03:09:21.815580Z",
       "test_count": 354684
     },
-    "_comment": "The v21.0.1 mainnet fixture release. Both lanes and the conformance target pin the same release; suites and manifests remain separate. Identity verified against the official release API and checksum-verified archive."
+    "_comment": "The v21.0.1 mainnet fixture release. Both lanes and the conformance target pin the same release; suites and manifests remain separate. Identity verified against the official release API and checksum-verified archive.",
+    "fixture_correction": {
+      "id": "bal-header-format-v1",
+      "registration": "scripts/amsterdam/corrections/bal-header-format-v1/registration.json",
+      "registration_sha256": "ea36613e6b34d3465e4f2a2daf42572884b6fb3626fc83f1ec0e28b5e25776f9"
+    }
   },
   "legacy_restoration": {
     "repo_url": "https://github.com/ethereum/legacytests.git",

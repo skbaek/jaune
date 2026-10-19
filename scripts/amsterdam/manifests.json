@@ -78918,9 +78918,15 @@
     "transaction_tests"
   ],
   "runnable": true,
-  "schema_version": 2,
+  "schema_version": 3,
   "source": {
     "archive_sha256": "b9b14391ed1a625e4ca9a058c055d0eacd98a42b76c7a6127c640cdc2d3c9439",
+    "fixture_correction": {
+      "archive_sha256": "fcb9633c952e17a74ce496464ecb4358bfc642e379240a375e66648cb08ecf34",
+      "generation_receipt_sha256": "832fa02c6a418d04297ed803630aba60f21025d33aab417a140ef2e789dda167",
+      "id": "bal-header-format-v1",
+      "index_sha256": "ba2ba73dd1477cde048b09a2d1c8ada64e1917f722066307398ec4c4d0a04390"
+    },
     "metadata_json_expected": {
       "created_at": "2026-10-07T03:09:21.815580Z",
       "root_hash": "0xc9f9db837189f64011d8195b97fcaaa43f7d2456ebcae95ed6429b4919cf3a68",
@@ -135684,6 +135690,10 @@
           ],
           "case_names_sha256": "0fa022651360bd554491882b72502f0ca60841e5bba9497bc9edd865040936c2",
           "content_sha256": "45c5c1f3316b9227b084efa673090895b70545a29aaa0dece4e46496980d3862",
+          "fixture_correction": {
+            "effective_content_sha256": "0b77442f4e074616ef1f776cf4bf8ee99b6fbc231c2d47207ef1e1feba23aeda",
+            "id": "bal-header-format-v1"
+          },
           "network": "BPO2ToAmsterdamAtTime15k",
           "path": "for_bpo2toamsterdamattime15k/amsterdam/eip7928_block_level_access_lists/fork_transition/invalid_post_fork_block_without_bal_hash_field.json"
         },
@@ -135694,6 +135704,10 @@
           ],
           "case_names_sha256": "262296de73283649a3341ee9e8578167304aae391290d27f6d717aa6d0de6c32",
           "content_sha256": "576863e67cf87ad2d6749cac6ccb49884ef22eda64f779559833e972d8730f15",
+          "fixture_correction": {
+            "effective_content_sha256": "c020accb908330f0a3c5effdfff38dac6a4ef8b638ba8a67d415b26c65cf5e5e",
+            "id": "bal-header-format-v1"
+          },
           "network": "BPO2ToAmsterdamAtTime15k",
           "path": "for_bpo2toamsterdamattime15k/amsterdam/eip7928_block_level_access_lists/fork_transition/invalid_pre_fork_block_with_bal_hash_field.json"
         },
@@ -136458,6 +136472,10 @@
           ],
           "case_names_sha256": "0fa022651360bd554491882b72502f0ca60841e5bba9497bc9edd865040936c2",
           "content_sha256": "45c5c1f3316b9227b084efa673090895b70545a29aaa0dece4e46496980d3862",
+          "fixture_correction": {
+            "effective_content_sha256": "0b77442f4e074616ef1f776cf4bf8ee99b6fbc231c2d47207ef1e1feba23aeda",
+            "id": "bal-header-format-v1"
+          },
           "network": "BPO2ToAmsterdamAtTime15k",
           "path": "for_bpo2toamsterdamattime15k/amsterdam/eip7928_block_level_access_lists/fork_transition/invalid_post_fork_block_without_bal_hash_field.json"
         },
@@ -136468,6 +136486,10 @@
           ],
           "case_names_sha256": "262296de73283649a3341ee9e8578167304aae391290d27f6d717aa6d0de6c32",
           "content_sha256": "576863e67cf87ad2d6749cac6ccb49884ef22eda64f779559833e972d8730f15",
+          "fixture_correction": {
+            "effective_content_sha256": "c020accb908330f0a3c5effdfff38dac6a4ef8b638ba8a67d415b26c65cf5e5e",
+            "id": "bal-header-format-v1"
+          },
           "network": "BPO2ToAmsterdamAtTime15k",
           "path": "for_bpo2toamsterdamattime15k/amsterdam/eip7928_block_level_access_lists/fork_transition/invalid_pre_fork_block_with_bal_hash_field.json"
         },
