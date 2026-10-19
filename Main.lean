@@ -656,11 +656,19 @@ def evaluateFixtureBlock (spec : NetworkSpec) (chainId : UInt64) (store : ChainS
         match fixtureImportFork spec chainId parent canon.header with
         | .error failure => .error failure
         | .ok f =>
-          match him : addBlockToChainChecked f parent
-              (CanonicalBlock.ofDecode hnorm) with
-          | .error failure => .error failure
-          | .ok (.inr rejection) => .ok (.inr rejection)
-          | .ok (.inl _) => .ok (.inl (CheckedBlockChain.ofImport him))
+          match spec with
+          | .static _ =>
+            match him : addBlockToChainChecked f parent
+                (CanonicalBlock.ofDecode hnorm) with
+            | .error failure => .error failure
+            | .ok (.inr rejection) => .ok (.inr rejection)
+            | .ok (.inl _) => .ok (.inl (CheckedBlockChain.ofImport him))
+          | .transition t =>
+            match him : addBlockToChainScheduledChecked (t.chainConfig chainId) f parent
+                (CanonicalBlock.ofDecode hnorm) with
+            | .error failure => .error failure
+            | .ok (.inr rejection) => .ok (.inr rejection)
+            | .ok (.inl _) => .ok (.inl (CheckedBlockChain.ofScheduledImport him))
 
 /-- Score one failed block evaluation against the fixture's expected set.
 

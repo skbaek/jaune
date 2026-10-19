@@ -3682,9 +3682,10 @@ define no base fee.
 
 Three cases, keyed on header shape. A child without the field runs only the
 gas-limit check (EELS Berlin `validate_header`). A child with the field whose
-parent lacks it is London's first block: the base fee is `INITIAL_BASE_FEE` and
-no gas-limit check runs (EELS `london/fork.py`, keyed there on
-`FORK_CRITERIA`). `expectedBaseFee_first` records the initial-fee arm;
+parent lacks it receives `INITIAL_BASE_FEE`; this helper does not check gas
+limits in that arm. `validateHeader` separately checks the child's gas limit
+against twice the actual parent's limit before calling this helper.
+`expectedBaseFee_first` records the initial-fee arm;
 `parent_baseFee_none_iff` ties the parent's missing field to its rules when
 its header shape is checked. `ChainConfig.ShapeCoherent` supplies that shape
 condition at configured chain heads. Otherwise the EIP-1559 update rule,
@@ -3699,6 +3700,13 @@ def expectedBaseFee (header parent : Header) :
   | some _, some parentBaseFee =>
     some <$> calculateBaseFeePerGas
       header.gasLimit parent.gasLimit parent.gasUsed parentBaseFee
+
+/-- The separate activation gas check uses the actual parent's elastic limit;
+fee calculation itself retains its unconditional initial-fee arm. -/
+def checkFirstFeeGasLimit (header parent : Header) : Except BlockValidationError Unit :=
+  if header.baseFeePerGas.isSome && parent.baseFeePerGas.isNone then
+    checkGasLimit header.gasLimit (elasticityMultiplier * parent.gasLimit)
+  else .ok ()
 
 /-- `MINIMUM_DIFFICULTY`, Byzantium through Gray Glacier. -/
 def minimumDifficulty : Nat := 131072
@@ -3799,6 +3807,9 @@ def validateHeader (rules : ForkRules) (chain : BlockChain) (header : Header) :
     .error <| .block <| .unknownParent <| .text
       s!"parent hash = {header.parentHash} names no known \
          block; this chain ends at {blockParentHash}"
+  -- The first fee-bearing header uses the elastic parent gas limit. Keep
+  -- this validation separate from the initial-fee calculation itself.
+  Except.mapError TransitionError.block (checkFirstFeeGasLimit header parent.header)
   let expectedBaseFeePerGas ←
     Except.mapError TransitionError.block <|
       expectedBaseFee header parent.header
@@ -3983,38 +3994,41 @@ def ommersListHash (ommers : List Header) : B256 :=
 private def ommersFail (msg : String) : Except TransitionError Unit :=
   .error <| .block <| .invalidOmmers <| .text msg
 
-/-- One ommer's own header, EELS `validate_ommers`'s first loop: its number
-lies strictly between 0 and the block's, and it is a valid header against its
-own parent -- the retained block numbered one below it -- under the block's
-rules, except the seal (`checkConsensusFields`). -/
-def validateOmmerHeader (rules : ForkRules) (chain : BlockChain)
-    (header ommer : Header) : Except TransitionError Unit := do
+/-- Number and retained canonical parent checks precede ommer rule lookup.
+The full header check below authenticates the parent's exact hash. -/
+def ommerParent (chain : BlockChain) (header ommer : Header) :
+    Except TransitionError Block := do
   if ommer.number < 1 ∨ ommer.number ≥ header.number then
-    ommersFail s!"ommer number = {ommer.number} is not between 1 and \
+    .error <| .block <| .invalidOmmers <| .text
+      s!"ommer number = {ommer.number} is not between 1 and \
       block number = {header.number}"
-  let parent ← (chain.blocks.find? (·.header.number + 1 = ommer.number)).toExcept
+  (chain.blocks.find? (·.header.number + 1 = ommer.number)).toExcept
     (TransitionError.block <| .invalidOmmers <| .text
       s!"ommer number = {ommer.number} has no retained parent")
+
+/-- Validate an ommer against its retained parent, preserving the existing
+ommer diagnostic and internal-error channels. -/
+def validateOmmerWithParent (rules : ForkRules) (chain : BlockChain)
+    (ommer : Header) (parent : Block) : Except TransitionError Unit :=
   match validateHeader rules { chain with blocks := [parent] } ommer with
   | .ok () => .ok ()
   | .error (.block e) => ommersFail s!"ommer header is invalid: {e.render}"
   | .error e => .error e
 
-/-- `validate_ommers`, Byzantium through Gray Glacier, in EELS's order: the
-list against `header.ommersHash`; each ommer's own header; at most two; no
-duplicate; then for each ommer, that it is not the block itself, not one of
-the `maxOmmerDepth + 1` most recent canonical blocks, not already an ommer of
-one of them, between 1 and `maxOmmerDepth` blocks older than the block, a
-child of one of those recent canonical blocks, and not a sibling of the block
-(its parent is not the block's own parent). Every rule is vacuous on an empty
-list once the hash matches. -/
-def validateOmmers (rules : ForkRules) (chain : BlockChain) (header : Header)
+/-- Static ommer validation: the caller's explicit rules govern every header. -/
+def validateOmmerHeader (rules : ForkRules) (chain : BlockChain)
+    (header ommer : Header) : Except TransitionError Unit := do
+  let parent ← ommerParent chain header ommer
+  validateOmmerWithParent rules chain ommer parent
+
+private def validateOmmerHeadersE {ε : Type}
+    (check : Header → Except ε Unit) : List Header → Except ε Unit
+  | [] => .ok ()
+  | o :: os => do check o; validateOmmerHeadersE check os
+
+/-- The containing block's list restrictions, after individual headers pass. -/
+def validateOmmerList (chain : BlockChain) (header : Header)
     (ommers : List Header) : Except TransitionError Unit := do
-  if ommersListHash ommers ≠ header.ommersHash then
-    ommersFail s!"ommers hash = {header.ommersHash} ≠ \
-      hash of the ommer list = {ommersListHash ommers}"
-  for ommer in ommers do
-    validateOmmerHeader rules chain header ommer
   if ommers.length > 2 then
     ommersFail s!"block body contains {ommers.length} ommers, more than 2"
   let hashes := ommers.map Header.hash
@@ -4041,6 +4055,24 @@ def validateOmmers (rules : ForkRules) (chain : BlockChain) (header : Header)
       ommersFail s!"ommer {ommerHash} has a parent outside the recent canonical blocks"
     if ommer.parentHash = header.parentHash then
       ommersFail s!"ommer {ommerHash} is a sibling of the block"
+
+/-- One ommer algorithm with a typed per-header resolver. Hash validation
+precedes header lookup; list eligibility follows it. -/
+def validateOmmersWith {ε : Type} (embed : TransitionError → ε)
+    (check : Header → Except ε Unit) (chain : BlockChain) (header : Header)
+    (ommers : List Header) : Except ε Unit := do
+  if ommersListHash ommers ≠ header.ommersHash then
+    Except.mapError embed <| ommersFail
+      s!"ommers hash = {header.ommersHash} ≠ \
+      hash of the ommer list = {ommersListHash ommers}"
+  validateOmmerHeadersE check ommers
+  Except.mapError embed (validateOmmerList chain header ommers)
+
+/-- Static EELS-ordered ommer validation. Every header uses the explicit rules
+while count, uniqueness, ancestry and age remain containing-block checks. -/
+def validateOmmers (rules : ForkRules) (chain : BlockChain) (header : Header)
+    (ommers : List Header) : Except TransitionError Unit :=
+  validateOmmersWith id (validateOmmerHeader rules chain header) chain header ommers
 
 /-- The block's ommers against its rules: after Paris the list must be empty
 (`stateTransitionOmmersCheck`, unchanged); before it, `validateOmmers`. -/
@@ -4128,21 +4160,19 @@ theorem BlockChain.retainedHistoryValid_appendBlock {chain chain' : BlockChain}
         List.length_cons, List.length_nil]
       omega
 
-/-- The block state transition at an explicitly named fork: the typed
-canonical core. Every other state-transition entry point below only decides
-*which* fork to hand it, and the retained stringly names are renderer adapters
-over this one function.
-
-It takes a `Fork` rather than a `ForkRules` because the machine it builds
-carries a fork (`BenvStat.fork`): there is no rule record to hand it that is
-not some fork's, so the parameter says exactly what the caller can choose. -/
-def stateTransitionE (f : Fork) (ch : BlockChain) (block : Block) :
-  Except TransitionError BlockChain := do
+/-- Shared typed transition algorithm. The caller supplies only the ommer
+check and a typed embedding for transition failures; header validation and
+execution remain common to static and scheduled callers. The ommer action is
+suspended until after the containing header has passed. -/
+def stateTransitionCoreE {ε : Type} (embed : TransitionError → ε)
+    (f : Fork) (ch : BlockChain) (block : Block)
+    (checkOmmers : Unit → Except ε Unit) : Except ε BlockChain := do
   let rules := f.ruleSet
-  validateHeader rules ch block.header
-  checkBlockOmmers rules ch block.header block.ommers
+  Except.mapError embed (validateHeader rules ch block.header)
+  checkOmmers ()
   let benv : Benv := initBenv f ch block.header
-  let ⟨st, bout⟩ ← applyBody benv block.txs block.ommers block.wds
+  let ⟨st, bout⟩ ← Except.mapError embed
+    (applyBody benv block.txs block.ommers block.wds)
   let blockStateRoot : B256 := st.root
   let transactionsRoot : B256 := getTransactionsRoot bout
   let receiptRoot : B256 := getReceiptRoot bout
@@ -4150,12 +4180,193 @@ def stateTransitionE (f : Fork) (ch : BlockChain) (block : Block) :
   let withdrawalsRoot : B256 := getWithdrawalsRoot bout
   let requestsHash :=
     if rules.header.requestsHash then some (computeRequestsHash bout.requests) else none
-  Except.mapError TransitionError.block <|
+  Except.mapError (embed ∘ TransitionError.block) <|
     stateTransitionChecks bout block.header
       transactionsRoot blockStateRoot receiptRoot
       blockLogsBloom withdrawalsRoot requestsHash
-  Except.mapError TransitionError.block <| blockAccessListCheck rules bout block.header
+  Except.mapError (embed ∘ TransitionError.block) <|
+    blockAccessListCheck rules bout block.header
   .ok ⟨appendBlock ch.blocks block, st, ch.chainId⟩
+
+private theorem transition_mapError_id {α : Type} (r : Except TransitionError α) :
+    r.mapError id = r := by
+  cases r <;> rfl
+
+private theorem transition_mapError_bind {ε ε' α β : Type}
+    (g : ε → ε') (r : Except ε α) (k : α → Except ε β) :
+    (r.bind k).mapError g = (r.mapError g).bind (fun a => (k a).mapError g) := by
+  cases r <;> rfl
+
+private theorem transition_mapError_comp {ε ε' ε'' α : Type}
+    (g : ε → ε') (g' : ε' → ε'') (r : Except ε α) :
+    (r.mapError g).mapError g' = r.mapError (g' ∘ g) := by
+  cases r <;> rfl
+
+private theorem validateOmmerHeadersE_mapError {ε : Type}
+    (embed : TransitionError → ε) (check : Header → Except TransitionError Unit)
+    (ommers : List Header) :
+    validateOmmerHeadersE (fun o => (check o).mapError embed) ommers =
+      (validateOmmerHeadersE check ommers).mapError embed := by
+  induction ommers with
+  | nil => rfl
+  | cons o os ih =>
+    simp only [validateOmmerHeadersE, bind, transition_mapError_bind, ih]
+
+private theorem validateOmmersWith_mapError {ε : Type}
+    (embed : TransitionError → ε) (check : Header → Except TransitionError Unit)
+    (chain : BlockChain) (header : Header) (ommers : List Header) :
+    validateOmmersWith embed (fun o => (check o).mapError embed) chain header ommers =
+      (validateOmmersWith id check chain header ommers).mapError embed := by
+  unfold validateOmmersWith
+  split <;> simp only [bind, transition_mapError_bind, transition_mapError_id,
+    validateOmmerHeadersE_mapError]
+
+
+/-- Embedding the static transition's error type commutes with the whole
+algorithm, including failures. This is the constant-action specialization used
+by a single-fork schedule. -/
+theorem stateTransitionCoreE_mapError {ε : Type} (embed : TransitionError → ε)
+    (f : Fork) (ch : BlockChain) (block : Block)
+    (checkOmmers : Unit → Except TransitionError Unit) :
+    stateTransitionCoreE embed f ch block
+      (fun u => (checkOmmers u).mapError embed) =
+      (stateTransitionCoreE id f ch block checkOmmers).mapError embed := by
+  simp only [stateTransitionCoreE, transition_mapError_id, Function.id_comp, bind,
+    transition_mapError_bind, transition_mapError_comp]
+  rfl
+
+/-- The static transition uses one explicitly named fork for both the block
+and every ommer. It does not consult an activation schedule. -/
+def stateTransitionE (f : Fork) (ch : BlockChain) (block : Block) :
+  Except TransitionError BlockChain :=
+  stateTransitionCoreE id f ch block
+    (fun _ => checkBlockOmmers f.ruleSet ch block.header block.ommers)
+
+/-- Scheduled ommer validation uses the ommer's own number and timestamp,
+then validates against its actual retained parent. Lookup failures and candidate
+failures remain distinct constructors. -/
+def validateOmmerHeaderScheduledE (cfg : ChainConfig) (chain : BlockChain)
+    (header ommer : Header) : Except (RulesLookupError ⊕ TransitionError) Unit := do
+  let parent ← (ommerParent chain header ommer).mapError Sum.inr
+  let f ← (cfg.forkAt ommer.number ommer.timestamp).mapError Sum.inl
+  if f.ruleSet.pow.isNone then
+    .error <| .inr <| .block <| .invalidOmmers <| .text
+      "ommer's own scheduled fork does not permit proof of work"
+  (validateOmmerWithParent f.ruleSet chain ommer parent).mapError Sum.inr
+
+/-- Containing rules still decide whether ommers are allowed at all; after
+Paris no resolver is consulted. The list's other restrictions are shared. -/
+def checkBlockOmmersScheduledE (cfg : ChainConfig) (rules : ForkRules)
+    (chain : BlockChain) (header : Header) (ommers : List Header) :
+    Except (RulesLookupError ⊕ TransitionError) Unit :=
+  match rules.pow with
+  | none => (stateTransitionOmmersCheck ommers).mapError (Sum.inr ∘ TransitionError.block)
+  | some _ => validateOmmersWith Sum.inr
+      (validateOmmerHeaderScheduledE cfg chain header) chain header ommers
+
+private def splitScheduled {α : Type} :
+    Except (RulesLookupError ⊕ TransitionError) α →
+      Except RulesLookupError (Except TransitionError α)
+  | .error (.inl e) => .error e
+  | .error (.inr e) => .ok (.error e)
+  | .ok a => .ok (.ok a)
+
+/-- A configured transition after the containing fork has been selected. Chain
+identity and containing-fork lookup belong to the caller; every ommer lookup
+stays on the outer typed channel. -/
+def stateTransitionScheduledE (cfg : ChainConfig) (f : Fork)
+    (ch : BlockChain) (block : Block) :
+    Except RulesLookupError (Except TransitionError BlockChain) :=
+  splitScheduled <| stateTransitionCoreE Sum.inr f ch block
+    (fun _ => checkBlockOmmersScheduledE cfg f.ruleSet ch block.header block.ommers)
+
+private theorem validateOmmerHeaderScheduledE_single (chainId : UInt64) (f : Fork)
+    (chain : BlockChain) (header ommer : Header) (hp : f.ruleSet.pow.isNone = false) :
+    validateOmmerHeaderScheduledE (ChainConfig.single chainId f) chain header ommer =
+      (validateOmmerHeader f.ruleSet chain header ommer).mapError Sum.inr := by
+  simp only [validateOmmerHeaderScheduledE, validateOmmerHeader, bind,
+    ChainConfig.single_forkAt, Except.mapError, Except.bind,
+    hp, Bool.false_eq_true, ↓reduceIte]
+  cases ommerParent chain header ommer <;> rfl
+
+private theorem checkBlockOmmersScheduledE_single (chainId : UInt64) (f : Fork)
+    (chain : BlockChain) (header : Header) (ommers : List Header) :
+    checkBlockOmmersScheduledE (ChainConfig.single chainId f) f.ruleSet chain header ommers =
+      (checkBlockOmmers f.ruleSet chain header ommers).mapError Sum.inr := by
+  unfold checkBlockOmmersScheduledE checkBlockOmmers
+  cases hp : f.ruleSet.pow with
+  | none => simp only [transition_mapError_comp]
+  | some p =>
+    simp only [validateOmmers]
+    have hh : validateOmmerHeaderScheduledE (ChainConfig.single chainId f) chain header =
+        (fun o => (validateOmmerHeader f.ruleSet chain header o).mapError Sum.inr) := by
+      funext o
+      exact validateOmmerHeaderScheduledE_single chainId f chain header o (by simp [hp])
+    rw [hh, validateOmmersWith_mapError]
+
+/-- All results, including every transition error, agree with the static core
+under a constant schedule. No ommer lookup can fail on that schedule. -/
+theorem stateTransitionScheduledE_single (chainId : UInt64) (f : Fork)
+    (ch : BlockChain) (block : Block) :
+    stateTransitionScheduledE (ChainConfig.single chainId f) f ch block =
+      .ok (stateTransitionE f ch block) := by
+  unfold stateTransitionScheduledE stateTransitionE
+  simp only [checkBlockOmmersScheduledE_single]
+  rw [stateTransitionCoreE_mapError]
+  cases stateTransitionCoreE id f ch block
+    (fun _ => checkBlockOmmers f.ruleSet ch block.header block.ommers) <;> rfl
+
+/-- With no proof-of-work ommers, configured and static cores agree on all
+results for any schedule: the containing list prohibition runs first. -/
+theorem stateTransitionScheduledE_of_pow_none (cfg : ChainConfig) (f : Fork)
+    (ch : BlockChain) (block : Block) (hp : f.ruleSet.pow = none) :
+    stateTransitionScheduledE cfg f ch block = .ok (stateTransitionE f ch block) := by
+  unfold stateTransitionScheduledE stateTransitionE
+  have ho : checkBlockOmmersScheduledE cfg f.ruleSet ch block.header block.ommers =
+      (checkBlockOmmers f.ruleSet ch block.header block.ommers).mapError Sum.inr := by
+    simp only [checkBlockOmmersScheduledE, checkBlockOmmers, hp, transition_mapError_comp]
+  simp only [ho]
+  rw [stateTransitionCoreE_mapError]
+  cases stateTransitionCoreE id f ch block
+    (fun _ => checkBlockOmmers f.ruleSet ch block.header block.ommers) <;> rfl
+
+theorem stateTransitionScheduledE_eq_ok_iff {cfg : ChainConfig} {f : Fork}
+    {ch ch' : BlockChain} {block : Block} :
+    stateTransitionScheduledE cfg f ch block = .ok (.ok ch') ↔
+      stateTransitionCoreE Sum.inr f ch block
+        (fun _ => checkBlockOmmersScheduledE cfg f.ruleSet ch block.header block.ommers)
+        = .ok ch' := by
+  unfold stateTransitionScheduledE
+  cases stateTransitionCoreE Sum.inr f ch block
+      (fun _ => checkBlockOmmersScheduledE cfg f.ruleSet ch block.header block.ommers) with
+  | error e => cases e <;> simp [splitScheduled]
+  | ok a => simp [splitScheduled]
+
+theorem stateTransitionCoreE_header {ε : Type} {embed : TransitionError → ε}
+    {f : Fork} {ch ch' : BlockChain} {block : Block}
+    {checkOmmers : Unit → Except ε Unit}
+    (h : stateTransitionCoreE embed f ch block checkOmmers = .ok ch') :
+    validateHeader f.ruleSet ch block.header = .ok () := by
+  unfold stateTransitionCoreE at h
+  obtain ⟨u, hu, _⟩ := Except.bind_eq_ok h
+  cases u
+  exact Except.mapError_eq_ok_iff.mp hu
+
+/-- Error embeddings and ommer resolution cannot change the chain identity
+copied by any successful execution of the common algorithm. -/
+theorem stateTransitionCoreE_preserves_chainId {ε : Type} {embed : TransitionError → ε}
+    {f : Fork} {ch ch' : BlockChain} {block : Block}
+    {checkOmmers : Unit → Except ε Unit}
+    (h : stateTransitionCoreE embed f ch block checkOmmers = .ok ch') :
+    ch'.chainId = ch.chainId := by
+  unfold stateTransitionCoreE at h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨⟨st, bout⟩, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  cases h
+  rfl
 
 /-- Legacy renderer adapter over `stateTransitionE`, byte-identical on every
 input, and the entry point for static fixture suites, which state their fork
@@ -4207,10 +4418,26 @@ anything else -- P0.1's fix -- then proceeds exactly as before. -/
 def stateTransitionUsing (cfg : ChainConfig) (ch : BlockChain) (block : Block) :
     Except String BlockChain := do
   Except.mapError ChainContextError.render (cfg.checkChainId ch)
-  stateTransitionAt
-    (← Except.mapError RulesLookupError.render
-      (cfg.forkAt block.header.number block.header.timestamp))
-    ch block
+  let f ← Except.mapError RulesLookupError.render
+    (cfg.forkAt block.header.number block.header.timestamp)
+  match stateTransitionScheduledE cfg f ch block with
+  | .error e => .error e.render
+  | .ok r => r.mapError TransitionError.render
+
+private theorem stateTransitionUsing_run {cfg : ChainConfig} {ch ch' : BlockChain}
+    {block : Block} (h : stateTransitionUsing cfg ch block = .ok ch') :
+    ∃ f, cfg.forkAt block.header.number block.header.timestamp = .ok f ∧
+      stateTransitionScheduledE cfg f ch block = .ok (.ok ch') := by
+  unfold stateTransitionUsing at h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨f, hf, h⟩ := Except.bind_eq_ok h
+  refine ⟨f, Except.mapError_eq_ok_iff.mp hf, ?_⟩
+  cases hs : stateTransitionScheduledE cfg f ch block with
+  | error e => rw [hs] at h; cases h
+  | ok r =>
+    rw [hs] at h
+    have hr : r = .ok ch' := Except.mapError_eq_ok_iff.mp h
+    rw [hr]
 
 /-- The Prague state transition.
 
@@ -5336,6 +5563,47 @@ def addBlockToChainCanonicalE (f : Fork) (chain : BlockChain)
       | .inr rejection => .ok (.inr rejection)
     | .ok chain' => .ok (.inl chain')
 
+/-- Canonical-envelope configured import after the containing fork lookup.
+Size rejection precedes the shared transition. Ommer lookup failures are
+operational import failures and can never become scored block rejections. -/
+def addBlockToChainScheduledCanonicalE (cfg : ChainConfig) (f : Fork)
+    (chain : BlockChain) (cb : CanonicalBlock) :
+    Except ImportFailure (ImportOutcome BlockChain) :=
+  match checkBlockRlpSize f.ruleSet.block cb.rawSize with
+  | .error err => .ok (.inr (.block err))
+  | .ok () =>
+    match stateTransitionScheduledE cfg f chain cb.block with
+    | .error e => .error (ImportFailure.ofLookup e)
+    | .ok (.error e) =>
+      match e.split with
+      | .inl failure => .error failure
+      | .inr rejection => .ok (.inr rejection)
+    | .ok (.ok chain') => .ok (.inl chain')
+
+/-- A scheduled ommer lookup failure stays operational at the import boundary. -/
+theorem addBlockToChainScheduledCanonicalE_lookup_error {cfg : ChainConfig} {f : Fork}
+    {chain : BlockChain} {cb : CanonicalBlock} {e : RulesLookupError}
+    (hsize : checkBlockRlpSize f.ruleSet.block cb.rawSize = .ok ())
+    (hlookup : stateTransitionScheduledE cfg f chain cb.block = .error e) :
+    addBlockToChainScheduledCanonicalE cfg f chain cb = .error (ImportFailure.ofLookup e) := by
+  simp only [addBlockToChainScheduledCanonicalE, hsize, hlookup]
+
+theorem addBlockToChainScheduledCanonicalE_eq_ok_inl {cfg : ChainConfig} {f : Fork}
+    {chain chain' : BlockChain} {cb : CanonicalBlock}
+    (h : addBlockToChainScheduledCanonicalE cfg f chain cb = .ok (.inl chain')) :
+    checkBlockRlpSize f.ruleSet.block cb.rawSize = .ok () ∧
+      stateTransitionScheduledE cfg f chain cb.block = .ok (.ok chain') := by
+  unfold addBlockToChainScheduledCanonicalE at h
+  split at h
+  · simp at h
+  · rename_i u hsize
+    split at h
+    · simp at h
+    · split at h <;> simp_all
+    · rename_i ch hst
+      simp only [Except.ok.injEq, Sum.inl.injEq] at h
+      exact ⟨hsize, h ▸ hst⟩
+
 /-- Collapse a typed import result onto the legacy stringly channels: the
 operational failure renders on the outer `.error`, the candidate rejection on
 the inner `.inr`. This is the single renderer every legacy import adapter
@@ -5411,7 +5679,7 @@ def addBlockToChainUsingE (cfg : ChainConfig) (chain : BlockChain)
     let fork ←
       Except.mapError ImportFailure.ofLookup
         (cfg.forkAt block.header.number block.header.timestamp)
-    addBlockToChainCanonicalE fork chain
+    addBlockToChainScheduledCanonicalE cfg fork chain
       (CanonicalBlock.ofDecode (rlpToBlock_eq_ok_iff.mpr h))
 
 /-- Legacy renderer adapter over `addBlockToChainUsingE`. -/
@@ -6127,19 +6395,17 @@ private def gasLimitFails {α : Type} : Except TransitionError α → Bool
 -- A Prague-shaped header under Prague's rules is not touched by the new checks.
 #guard (validateHeader bpo2Rules guardParentChain guardChild21.header).toOption.isSome
 
--- London's first block (EELS `london/fork.py`): a parent without a base fee
--- makes the expected base fee `INITIAL_BASE_FEE`, and no gas-limit check runs
--- on that block -- here the gas limit doubles, far outside the 1/1024 window.
+-- A parent without a base fee selects `INITIAL_BASE_FEE`; header validation
+-- separately checks the doubled parent gas limit. The quantified success
+-- theorem below covers that gas check; retain the existing fee-path checks.
 private def guardLondonFirst (baseFee gasLimit : Nat) : Header :=
   guardPowChildAfter guardParent15
     { guardHeader16 with baseFeePerGas := some baseFee, gasLimit := gasLimit }
 
 #guard (validateHeader londonRules (guardChainAt guardParent15)
-  (guardLondonFirst initialBaseFee 30000000)).toOption.isSome
-#guard (validateHeader londonRules (guardChainAt guardParent15)
   (guardLondonFirst initialBaseFee 60000000)).toOption.isSome
 #guard baseFeeFails (validateHeader londonRules (guardChainAt guardParent15)
-  (guardLondonFirst 7 30000000))
+  (guardLondonFirst 7 60000000))
 -- Every later London block runs the update rule and its gas-limit check.
 #guard gasLimitFails (validateHeader londonRules (guardChainAt guardParent16)
   (guardChildAfter guardParent16 { guardHeader16 with gasLimit := 60000000 }))
@@ -6580,7 +6846,8 @@ theorem stateTransitionAt_preserves_chainId
     (h : stateTransitionAt f ch block = .ok ch') :
     ch'.chainId = ch.chainId := by
   rw [stateTransitionAt_eq_ok_iff] at h
-  unfold stateTransitionE at h
+  unfold stateTransitionE stateTransitionCoreE at h
+  simp only [transition_mapError_id, Function.id_comp] at h
   obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
   obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
   obtain ⟨⟨st, bout⟩, _, h⟩ := Except.bind_eq_ok h
@@ -6593,10 +6860,8 @@ theorem stateTransitionUsing_preserves_chainId
     {cfg : ChainConfig} {ch : BlockChain} {block : Block} {ch' : BlockChain}
     (h : stateTransitionUsing cfg ch block = .ok ch') :
     ch'.chainId = ch.chainId := by
-  unfold stateTransitionUsing at h
-  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
-  obtain ⟨rules, _, h⟩ := Except.bind_eq_ok h
-  exact stateTransitionAt_preserves_chainId h
+  obtain ⟨f, _, hs⟩ := stateTransitionUsing_run h
+  exact stateTransitionCoreE_preserves_chainId (stateTransitionScheduledE_eq_ok_iff.mp hs)
 
 /-- A same-ID configured transition is exactly the rule-selected core: the
 identity check Step 2 adds is a no-op whenever the caller's IDs already agree,
@@ -6607,7 +6872,10 @@ theorem stateTransitionUsing_eq_of_chainId_eq
     stateTransitionUsing cfg ch block
       = (Except.mapError RulesLookupError.render
           (cfg.forkAt block.header.number block.header.timestamp)).bind
-          (fun f => stateTransitionAt f ch block) := by
+          (fun f =>
+            match stateTransitionScheduledE cfg f ch block with
+            | .error e => .error e.render
+            | .ok r => r.mapError TransitionError.render) := by
   unfold stateTransitionUsing ChainConfig.checkChainId
   simp [heq, Except.mapError, Bind.bind, Except.bind]
 
@@ -6648,9 +6916,9 @@ theorem addBlockToChainUsing_preserves_chainId
       split at hE
       · simp at hE
       · obtain ⟨rules, _, hE⟩ := Except.bind_eq_ok hE
-        obtain ⟨_, hst⟩ := addBlockToChainCanonicalE_eq_ok_inl hE
-        exact stateTransitionAt_preserves_chainId
-          (stateTransitionAt_eq_ok_iff.mpr hst)
+        obtain ⟨_, hst⟩ := addBlockToChainScheduledCanonicalE_eq_ok_inl hE
+        exact stateTransitionCoreE_preserves_chainId
+          (stateTransitionScheduledE_eq_ok_iff.mp hst)
 
 -- P0.1 negative guards: config ID 7 against a chain ID 1 snapshot, matching
 -- the acceptance evidence's own example. The mismatch is a context failure on
@@ -7175,6 +7443,22 @@ theorem applyBody_canonical {benv : Benv} (h : benv.Canonical)
   · exact hc
   · exact payRewards_canonical hc _ _ _ _
 
+/-- Canonicality depends on the common execution body, not the resolver or
+its error carrier. -/
+theorem stateTransitionCoreE_canonical {ε : Type} {embed : TransitionError → ε}
+    {f : Fork} {ch : BlockChain} (h : ch.Canonical) {block : Block} {ch'}
+    {checkOmmers : Unit → Except ε Unit}
+    (hp : stateTransitionCoreE embed f ch block checkOmmers = .ok ch') :
+    ch'.Canonical := by
+  unfold stateTransitionCoreE at hp
+  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
+  cases hp
+  exact applyBody_canonical (by exact ⟨h, h⟩) (Except.mapError_eq_ok_iff.mp hq)
+
 /-- **Raw successful block transition preserves canonicality.** The output
 chain's execution state is the body's final state, and its original state is
 the input chain's. -/
@@ -7182,7 +7466,8 @@ theorem stateTransitionAt_canonical {f : Fork} {ch : BlockChain}
     (h : ch.Canonical) {block : Block} {ch'}
     (hp : stateTransitionAt f ch block = .ok ch') : ch'.Canonical := by
   rw [stateTransitionAt_eq_ok_iff] at hp
-  unfold stateTransitionE at hp
+  unfold stateTransitionE stateTransitionCoreE at hp
+  simp only [transition_mapError_id, Function.id_comp] at hp
   obtain ⟨u1, _, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨u2, _, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
@@ -7200,10 +7485,8 @@ theorem stateTransition_canonical {ch : BlockChain} (h : ch.Canonical)
 theorem stateTransitionUsing_canonical {cfg : ChainConfig} {ch : BlockChain}
     (h : ch.Canonical) {block : Block} {ch'}
     (hp : stateTransitionUsing cfg ch block = .ok ch') : ch'.Canonical := by
-  unfold stateTransitionUsing at hp
-  obtain ⟨u1, _, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨r, _, hp⟩ := Except.bind_eq_ok hp
-  exact stateTransitionAt_canonical (f := r) h hp
+  obtain ⟨f, _, hs⟩ := stateTransitionUsing_run hp
+  exact stateTransitionCoreE_canonical h (stateTransitionScheduledE_eq_ok_iff.mp hs)
 
 --------------- THE CHECKED TRANSITION (P0.2, STEP 6) ---------------
 
@@ -7238,6 +7521,7 @@ theorem validateHeader_links {rules : ForkRules} {chain : BlockChain}
   by_cases hph : header.parentHash = tip.header.hash
   · rw [ite_eq_right (by simpa [Header.hash] using hph)] at h
     refine ⟨hph, ?_⟩
+    obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
     obtain ⟨bf, hbf, h⟩ := Except.bind_eq_ok h
     by_cases h1 : (header.excessBlobGas.any
         (· != calculateExcessBlobGas rules.blob tip.header)) = true
@@ -7275,6 +7559,29 @@ theorem validateHeader_links {rules : ForkRules} {chain : BlockChain}
       obtain ⟨_, hb, _⟩ := Except.bind_eq_ok h
       exact absurd hb (by simp)
 
+/-- A successful first fee-bearing header passed the complete gas-limit
+check against the elastic limit of its actual retained parent. -/
+theorem validateHeader_firstFee_gasLimit {rules : ForkRules} {chain : BlockChain}
+    {header : Header} {parent : Block}
+    (htip : chain.blocks.getLast? = some parent)
+    (h : validateHeader rules chain header = .ok ())
+    (hb : header.baseFeePerGas.isSome = true) (hp : parent.header.baseFeePerGas = none) :
+    checkGasLimit header.gasLimit (elasticityMultiplier * parent.header.gasLimit) = .ok () := by
+  have hph := (validateHeader_links htip h).1
+  unfold validateHeader at h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨p, hpar, h⟩ := Except.bind_eq_ok h
+  rw [htip] at hpar
+  simp only [Option.toExcept, Except.ok.injEq] at hpar
+  subst hpar
+  dsimp only at h
+  rw [ite_eq_right (by simpa only [Header.hash, not_not] using hph)] at h
+  obtain ⟨u, hgas, _⟩ := Except.bind_eq_ok h
+  cases u
+  have hg := Except.mapError_eq_ok_iff.mp hgas
+  simpa only [checkFirstFeeGasLimit, hb, hp, Option.isNone_none, Bool.and_self,
+    ↓reduceIte] using hg
+
 /-- The block checks establish the computed post-state root against the child
 header's own -- which is exactly the tip/root agreement the resulting snapshot
 needs, already paid for. -/
@@ -7302,6 +7609,41 @@ theorem stateTransitionChecks_stateRoot {bout : BlockOutput} {header : Header}
     exact absurd hb (by simp)
   · simpa using h3
 
+/-- Success inversion shared by static and scheduled transitions. -/
+theorem stateTransitionCoreE_eq_ok {ε : Type} {embed : TransitionError → ε}
+    {f : Fork} {ch ch' : BlockChain} {block : Block}
+    {checkOmmers : Unit → Except ε Unit}
+    (h : stateTransitionCoreE embed f ch block checkOmmers = .ok ch') :
+    validateHeader f.ruleSet ch block.header = .ok () ∧
+      ch'.blocks = appendBlock ch.blocks block ∧
+      ch'.state.root = block.header.stateRoot := by
+  unfold stateTransitionCoreE at h
+  obtain ⟨u1, hvh, h⟩ := Except.bind_eq_ok h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨q, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨u3, hchk, h⟩ := Except.bind_eq_ok h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  cases u1
+  cases u3
+  cases h
+  exact ⟨Except.mapError_eq_ok_iff.mp hvh, rfl,
+    stateTransitionChecks_stateRoot (Except.mapError_eq_ok_iff.mp hchk)⟩
+
+/-- The checked output witness is derived from checks already performed by
+the common algorithm, with no second root computation. -/
+theorem BlockChain.validContext_of_scheduled {cfg : ChainConfig} {f : Fork}
+    {cc : CheckedBlockChain} {cb : CanonicalBlock} {ch' : BlockChain}
+    (h : stateTransitionScheduledE cfg f cc.val cb.block = .ok (.ok ch')) :
+    ch'.blocks.getLast? = some cb.block ∧ ch'.RetainedHistoryValid ∧
+      ch'.state.Canonical ∧ ch'.state.root = cb.block.header.stateRoot := by
+  have hc := stateTransitionScheduledE_eq_ok_iff.mp h
+  obtain ⟨hvh, hblocks, hroot⟩ := stateTransitionCoreE_eq_ok hc
+  obtain ⟨hph, hnum⟩ := validateHeader_links cc.tip_is_last hvh
+  refine ⟨?_, ?_, stateTransitionCoreE_canonical cc.canonicalState hc, hroot⟩
+  · rw [hblocks]; exact appendBlock_getLast? _ _
+  · exact BlockChain.retainedHistoryValid_appendBlock cc.retainedHistory
+      cc.tip_is_last ⟨hnum, hph⟩ cb.rlpCanonical.1 hblocks
+
 /-- Inversion of a successful raw transition: header validation passed, the
 result's blocks are the parent's with this block appended, and its state is
 the one the child header commits to. -/
@@ -7311,7 +7653,8 @@ theorem stateTransitionAt_eq_ok {f : Fork} {ch ch' : BlockChain}
       ch'.blocks = appendBlock ch.blocks block ∧
       ch'.state.root = block.header.stateRoot := by
   rw [stateTransitionAt_eq_ok_iff] at h
-  unfold stateTransitionE at h
+  unfold stateTransitionE stateTransitionCoreE at h
+  simp only [transition_mapError_id, Function.id_comp] at h
   obtain ⟨u1, hvh, h⟩ := Except.bind_eq_ok h
   obtain ⟨u2, _, h⟩ := Except.bind_eq_ok h
   obtain ⟨q, _, h⟩ := Except.bind_eq_ok h
@@ -7443,7 +7786,7 @@ lookup, which is the only part that depends on the candidate's timestamp. -/
 def stateTransitionConfigured (pc : ConfiguredChain) (cb : CanonicalBlock) :
     Except RulesLookupError (Except TransitionError BlockChain) := do
   let f ← pc.config.forkAt cb.block.header.number cb.block.header.timestamp
-  .ok (stateTransitionE f pc.chain.val cb.block)
+  stateTransitionScheduledE pc.config f pc.chain.val cb.block
 
 /-- The configured checked path agrees with the raw configured entry point on
 every input, through the renderer: what it drops is exactly the check its
@@ -7456,8 +7799,16 @@ theorem stateTransitionConfigured_eq (pc : ConfiguredChain) (cb : CanonicalBlock
   unfold stateTransitionConfigured stateTransitionUsing
   rw [pc.checkChainId_eq_ok]
   simp only [bind, Except.bind, Except.mapError]
-  cases hr : pc.config.forkAt cb.block.header.number cb.block.header.timestamp <;>
-    simp [Except.mapError, stateTransitionAt]
+  cases hr : pc.config.forkAt cb.block.header.number cb.block.header.timestamp <;> simp
+
+theorem ConfiguredChain.validContext_of_transition {pc : ConfiguredChain}
+    {cb : CanonicalBlock} {r : Except TransitionError BlockChain} {ch' : BlockChain}
+    (h : stateTransitionConfigured pc cb = .ok r) (hr : r = .ok ch') :
+    ch'.blocks.getLast? = some cb.block ∧ ch'.RetainedHistoryValid ∧
+      ch'.state.Canonical ∧ ch'.state.root = cb.block.header.stateRoot := by
+  obtain ⟨f, _, hst⟩ := Except.bind_eq_ok h
+  rw [hr] at hst
+  exact BlockChain.validContext_of_scheduled (cc := pc.chain) hst
 
 /-- The checked output of a successful configured checked transition. -/
 def CheckedBlockChain.ofConfiguredTransition {pc : ConfiguredChain}
@@ -7465,26 +7816,32 @@ def CheckedBlockChain.ofConfiguredTransition {pc : ConfiguredChain}
     (h : stateTransitionConfigured pc cb = .ok r) (hr : r = .ok ch') :
     CheckedBlockChain :=
   CheckedBlockChain.ofEvidence ch' cb.block
-    (by
-      obtain ⟨f, _, hst⟩ := Except.bind_eq_ok h
-      simp only [Except.ok.injEq] at hst
-      exact (BlockChain.validContext_of_transition (cc := pc.chain)
-        (stateTransitionAt_eq_ok_iff.mpr (hst ▸ hr))).1)
-    (by
-      obtain ⟨f, _, hst⟩ := Except.bind_eq_ok h
-      simp only [Except.ok.injEq] at hst
-      exact (BlockChain.validContext_of_transition (cc := pc.chain)
-        (stateTransitionAt_eq_ok_iff.mpr (hst ▸ hr))).2.1)
-    (by
-      obtain ⟨f, _, hst⟩ := Except.bind_eq_ok h
-      simp only [Except.ok.injEq] at hst
-      exact (BlockChain.validContext_of_transition (cc := pc.chain)
-        (stateTransitionAt_eq_ok_iff.mpr (hst ▸ hr))).2.2.1)
-    (by
-      obtain ⟨f, _, hst⟩ := Except.bind_eq_ok h
-      simp only [Except.ok.injEq] at hst
-      exact (BlockChain.validContext_of_transition (cc := pc.chain)
-        (stateTransitionAt_eq_ok_iff.mpr (hst ▸ hr))).2.2.2)
+    (ConfiguredChain.validContext_of_transition h hr).1
+    (ConfiguredChain.validContext_of_transition h hr).2.1
+    (ConfiguredChain.validContext_of_transition h hr).2.2.1
+    (ConfiguredChain.validContext_of_transition h hr).2.2.2
+
+/-- Checked configured import with its already-selected containing fork.
+The caller retains the schedule for individual ommer validation. -/
+def addBlockToChainScheduledChecked (cfg : ChainConfig) (f : Fork)
+    (cc : CheckedBlockChain) (cb : CanonicalBlock) :
+    Except ImportFailure (ImportOutcome BlockChain) :=
+  addBlockToChainScheduledCanonicalE cfg f cc.val cb
+
+/-- Build the scheduled import's output witness from its successful checks. -/
+def CheckedBlockChain.ofScheduledImport {cfg : ChainConfig} {f : Fork}
+    {cc : CheckedBlockChain} {cb : CanonicalBlock} {ch' : BlockChain}
+    (h : addBlockToChainScheduledChecked cfg f cc cb = .ok (.inl ch')) :
+    CheckedBlockChain :=
+  CheckedBlockChain.ofEvidence ch' cb.block
+    (BlockChain.validContext_of_scheduled
+      (addBlockToChainScheduledCanonicalE_eq_ok_inl h).2).1
+    (BlockChain.validContext_of_scheduled
+      (addBlockToChainScheduledCanonicalE_eq_ok_inl h).2).2.1
+    (BlockChain.validContext_of_scheduled
+      (addBlockToChainScheduledCanonicalE_eq_ok_inl h).2).2.2.1
+    (BlockChain.validContext_of_scheduled
+      (addBlockToChainScheduledCanonicalE_eq_ok_inl h).2).2.2.2
 
 --------------- CHECKED/RAW BRIDGES (FOR STEP 11) ---------------
 
@@ -8074,16 +8431,8 @@ theorem stateTransitionUsing_single {chainId : UInt64} {f : Fork} {ch : BlockCha
     stateTransitionUsing (ChainConfig.single chainId f) ch block =
       stateTransitionAt f ch block := by
   rw [stateTransitionUsing_eq_of_chainId_eq hid, ChainConfig.single_forkAt]
-  rfl
-
-private theorem stateTransitionUsing_run {cfg : ChainConfig} {ch ch' : BlockChain}
-    {block : Block} (h : stateTransitionUsing cfg ch block = .ok ch') :
-    ∃ f, cfg.forkAt block.header.number block.header.timestamp = .ok f ∧
-      stateTransitionE f ch block = .ok ch' := by
-  unfold stateTransitionUsing at h
-  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
-  obtain ⟨f, hf, h⟩ := Except.bind_eq_ok h
-  exact ⟨f, Except.mapError_eq_ok_iff.mp hf, stateTransitionAt_eq_ok_iff.mp h⟩
+  simp only [Except.mapError, Except.bind, stateTransitionScheduledE_single,
+    stateTransitionAt]
 
 /-- A successful step leaves the new block as the chain's last block. -/
 theorem stateTransitionE_getLast {f : Fork} {ch ch' : BlockChain} {block : Block}
@@ -8103,22 +8452,25 @@ theorem stateTransitionUsing_shapeCoherent {cfg : ChainConfig} {ch ch' : BlockCh
     cfg.ShapeCoherent ch' := by
   obtain ⟨f, hf, hrun⟩ := stateTransitionUsing_run h
   intro b hb
-  rw [stateTransitionE_getLast hrun] at hb
+  have hc := stateTransitionScheduledE_eq_ok_iff.mp hrun
+  have hblocks := (stateTransitionCoreE_eq_ok hc).2.1
+  rw [hblocks, appendBlock_getLast?] at hb
   cases hb
   refine ⟨f, hf, ?_⟩
-  have hv := (stateTransitionAt_eq_ok (stateTransitionAt_eq_ok_iff.mpr hrun)).1
+  have hv := stateTransitionCoreE_header hc
   unfold validateHeader at hv
   obtain ⟨u, hshape, _⟩ := Except.bind_eq_ok hv
   cases u
   exact hshape
 
-/-- A successful block step extends the chain by one block number and a later timestamp. -/
-theorem stateTransitionE_header_succ {f : Fork} {ch ch' : BlockChain} {block : Block}
-    (h : stateTransitionE f ch block = .ok ch') :
+/-- Successful header validation advances number and timestamp independently
+of how the caller selected the rules. -/
+theorem validateHeader_succ {rules : ForkRules} {ch : BlockChain} {header : Header}
+    (h : validateHeader rules ch header = .ok ()) :
     ∃ parent, ch.blocks.getLast? = some parent ∧
-      block.header.number = parent.header.number + 1 ∧
-      parent.header.timestamp < block.header.timestamp := by
-  have hv := (stateTransitionAt_eq_ok (stateTransitionAt_eq_ok_iff.mpr h)).1
+      header.number = parent.header.number + 1 ∧
+      parent.header.timestamp < header.timestamp := by
+  have hv := h
   have hv0 := hv
   unfold validateHeader at hv
   obtain ⟨_, _, hv⟩ := Except.bind_eq_ok hv
@@ -8132,28 +8484,38 @@ theorem stateTransitionE_header_succ {f : Fork} {ch ch' : BlockChain} {block : B
   refine ⟨parent, hlast, hnum, ?_⟩
   dsimp only at hv
   rw [ite_eq_right (by simpa only [Header.hash, not_not] using hph)] at hv
+  obtain ⟨_, _, hv⟩ := Except.bind_eq_ok hv
   obtain ⟨bf, _, hv⟩ := Except.bind_eq_ok hv
-  by_cases h1 : (block.header.excessBlobGas.any
-      (· != calculateExcessBlobGas f.ruleSet.blob parent.header)) = true
+  by_cases h1 : (header.excessBlobGas.any
+      (· != calculateExcessBlobGas rules.blob parent.header)) = true
   · rw [ite_eq_left h1] at hv
     obtain ⟨_, hb, _⟩ := Except.bind_eq_ok hv
     cases hb
   rw [ite_eq_right h1] at hv
-  by_cases h2 : block.header.gasUsed > block.header.gasLimit
+  by_cases h2 : header.gasUsed > header.gasLimit
   · rw [ite_eq_left h2] at hv
     obtain ⟨_, hb, _⟩ := Except.bind_eq_ok hv
     cases hb
   rw [ite_eq_right h2] at hv
-  by_cases h3 : bf ≠ block.header.baseFeePerGas
+  by_cases h3 : bf ≠ header.baseFeePerGas
   · rw [ite_eq_left h3] at hv
     obtain ⟨_, hb, _⟩ := Except.bind_eq_ok hv
     cases hb
   rw [ite_eq_right h3] at hv
-  by_cases h4 : block.header.timestamp ≤ parent.header.timestamp
+  by_cases h4 : header.timestamp ≤ parent.header.timestamp
   · rw [ite_eq_left h4] at hv
     obtain ⟨_, hb, _⟩ := Except.bind_eq_ok hv
     cases hb
   · omega
+
+
+/-- A successful block step extends the chain by one block number and a later timestamp. -/
+theorem stateTransitionE_header_succ {f : Fork} {ch ch' : BlockChain} {block : Block}
+    (h : stateTransitionE f ch block = .ok ch') :
+    ∃ parent, ch.blocks.getLast? = some parent ∧
+      block.header.number = parent.header.number + 1 ∧
+      parent.header.timestamp < block.header.timestamp := by
+  exact validateHeader_succ (stateTransitionCoreE_header h)
 
 /-- The configured fork is no earlier than the parent's scheduled fork. -/
 theorem stateTransitionUsing_fork_mono {cfg : ChainConfig} {ch ch' : BlockChain}
@@ -8162,11 +8524,53 @@ theorem stateTransitionUsing_fork_mono {cfg : ChainConfig} {ch ch' : BlockChain}
     (h₀ : cfg.forkAt parent.header.number parent.header.timestamp = .ok f₀)
     (h : stateTransitionUsing cfg ch block = .ok ch') :
     ∃ f, cfg.forkAt block.header.number block.header.timestamp = .ok f ∧
-      f₀.index ≤ f.index ∧ stateTransitionE f ch block = .ok ch' := by
+      f₀.index ≤ f.index ∧
+      stateTransitionScheduledE cfg f ch block = .ok (.ok ch') := by
   obtain ⟨f, hf, hrun⟩ := stateTransitionUsing_run h
-  obtain ⟨tip, htip, hnum, htime⟩ := stateTransitionE_header_succ hrun
+  obtain ⟨tip, htip, hnum, htime⟩ := validateHeader_succ
+    (stateTransitionCoreE_header (stateTransitionScheduledE_eq_ok_iff.mp hrun))
   rw [hlast] at htip
   cases htip
   exact ⟨f, hf, ChainConfig.forkAt_index_mono (by omega) (by omega) h₀ hf, hrun⟩
+
+/-- On a selected proof-of-stake fork, the original static-success conclusion
+is valid for any schedule; no uniformity premise is added to the frozen theorem. -/
+theorem stateTransitionUsing_fork_mono_static_of_pow_none
+    {cfg : ChainConfig} {ch ch' : BlockChain} {block parent : Block} {f₀ : Fork}
+    (hlast : ch.blocks.getLast? = some parent)
+    (h₀ : cfg.forkAt parent.header.number parent.header.timestamp = .ok f₀)
+    (h : stateTransitionUsing cfg ch block = .ok ch') :
+    ∃ f, cfg.forkAt block.header.number block.header.timestamp = .ok f ∧
+      f₀.index ≤ f.index ∧
+      (f.ruleSet.pow = none → stateTransitionE f ch block = .ok ch') := by
+  obtain ⟨f, hf, hm, hs⟩ := stateTransitionUsing_fork_mono hlast h₀ h
+  refine ⟨f, hf, hm, ?_⟩
+  intro hp
+  rw [stateTransitionScheduledE_of_pow_none cfg f ch block hp] at hs
+  exact Except.ok.inj hs
+
+/-- Schedule shape coherence identifies the fee activation by rule flags,
+including schedules which skip forks. The actual parent and successful shared
+validation supply the elastic gas-limit bound, with no hardcoded height. -/
+theorem stateTransitionScheduledE_firstFee_gasLimit
+    {cfg : ChainConfig} {f f₀ : Fork} {ch ch' : BlockChain} {block parent : Block}
+    (hshape : cfg.ShapeCoherent ch) (hlast : ch.blocks.getLast? = some parent)
+    (h₀ : cfg.forkAt parent.header.number parent.header.timestamp = .ok f₀)
+    (hfee₀ : f₀.ruleSet.header.baseFee = false) (hfee : f.ruleSet.header.baseFee = true)
+    (h : stateTransitionScheduledE cfg f ch block = .ok (.ok ch')) :
+    checkGasLimit block.header.gasLimit
+      (elasticityMultiplier * parent.header.gasLimit) = .ok () := by
+  obtain ⟨fp, hfp, hp⟩ := hshape parent hlast
+  rw [h₀] at hfp
+  cases hfp
+  have hv := stateTransitionCoreE_header (stateTransitionScheduledE_eq_ok_iff.mp h)
+  have hc : checkHeaderShape f.ruleSet block.header = .ok () := by
+    unfold validateHeader at hv
+    obtain ⟨u, hu, _⟩ := Except.bind_eq_ok hv
+    cases u
+    exact hu
+  exact validateHeader_firstFee_gasLimit hlast hv
+    ((checkHeaderShape_baseFee hc).trans hfee)
+    ((parent_baseFee_none_iff hp).mpr hfee₀)
 
 end Jaune
