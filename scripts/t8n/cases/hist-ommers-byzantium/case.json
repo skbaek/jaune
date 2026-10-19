@@ -1,0 +1,7 @@
+{
+  "description": "Historical pre-merge reward, ommer and parent-derived difficulty conformance.",
+  "fork": "Byzantium",
+  "chainid": 1,
+  "reward": 3000000000000000000,
+  "mode": "blockchain"
+}

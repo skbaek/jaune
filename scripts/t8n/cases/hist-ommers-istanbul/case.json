@@ -1,0 +1,7 @@
+{
+  "description": "Historical pre-merge reward, ommer and parent-derived difficulty conformance.",
+  "fork": "Istanbul",
+  "chainid": 1,
+  "reward": 2000000000000000000,
+  "mode": "blockchain"
+}
