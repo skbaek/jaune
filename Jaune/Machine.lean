@@ -4061,20 +4061,14 @@ def sstoreNewRefundCounter (gas : GasSchedule) (new_value : B256)
       rc''
   else rc
 
-/-- The pre-net-metering refund (Byzantium/Petersburg): add and remove the
-clear refund on clearing and restoring a cleared slot, and nothing otherwise.
-It shares `sstoreNewRefundCounter`'s first two adjustments through the same
-`gas.storageClearRefund` field; the restore-refund block is the net-metering
-addition, absent here. -/
+/-- The pre-net-metering refund (Byzantium/Petersburg): add the clear refund
+whenever a currently non-zero slot is cleared. The original value does not
+affect this schedule, and restoring a cleared slot does not reverse a refund.
+The original-value parameter is retained for the shared refund interface. -/
 def sstoreLegacyRefundCounter (gas : GasSchedule) (new_value : B256)
     (original_value : B256) (current_value : B256) (rc : Int) : Int :=
-  if current_value ≠ new_value then
-    if original_value ≠ 0 ∧ current_value ≠ 0 ∧ new_value = 0 then
-      rc + gas.storageClearRefund
-    else if original_value ≠ 0 ∧ current_value = 0 then
-      rc - gas.storageClearRefund
-    else
-      rc
+  if current_value ≠ 0 ∧ new_value = 0 then
+    rc + gas.storageClearRefund
   else rc
 
 /-- A no-change write refunds nothing under the legacy schedule. -/
@@ -4090,9 +4084,7 @@ theorem sstoreLegacyRefundCounter_clear (gas : GasSchedule)
     (horig : original_value ≠ 0) (hcurr : current_value ≠ 0) :
     sstoreLegacyRefundCounter gas 0 original_value current_value rc =
       rc + gas.storageClearRefund := by
-  have hne : current_value ≠ (0 : B256) := hcurr
-  unfold sstoreLegacyRefundCounter
-  simp [hne, horig]
+  simp [sstoreLegacyRefundCounter, hcurr]
 
 /-- Restoring a freshly set slot refunds the set premium: what the first
 change charged over the warm access. -/
@@ -4107,7 +4099,8 @@ theorem sstoreNewRefundCounter_restore_set (gas : GasSchedule)
 the cold term (zero under flat access): the EIP-1283/EIP-2200 schedule --
 20000 for a fresh set, 5000 for a fresh update, the flat no-op price when
 nothing changes. The legacy schedule (no net metering) pays SET/UPDATE and
-5000 for the no-op, likewise without any cold term. -/
+5000 for the no-op, likewise without any cold term: only the current and new
+values decide the legacy charge, independently of the original value. -/
 def sstoreRegimeGasCost (sstore : SstoreRules) (access : AccessSchedule)
     (gasCost2 : Nat) (new_value original_value current_value : B256) : Nat :=
   if sstore.netMetering then
@@ -4123,8 +4116,7 @@ def sstoreRegimeGasCost (sstore : SstoreRules) (access : AccessSchedule)
         | .flat g => g.sload
         | .eip2929 => gasWarmAccess
   else
-    if original_value = current_value ∧ current_value ≠ new_value then
-      if original_value = 0 then gasStorageSet else gasStorageUpdate
+    if current_value = 0 ∧ new_value ≠ 0 then gasStorageSet
     else gasStorageUpdate
 
 /-- Every row of the pre-Berlin schedule is positive: the literals are, and
