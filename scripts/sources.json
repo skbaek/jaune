@@ -84,6 +84,10 @@
     "t8n_command": "ethereum-spec-evm",
     "fill_command": "fill",
     "fork_lane": [
+      "Byzantium",
+      "ConstantinopleFix",
+      "Istanbul",
+      "MuirGlacier",
       "Berlin",
       "London",
       "ArrowGlacier",

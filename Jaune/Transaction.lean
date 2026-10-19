@@ -4377,10 +4377,9 @@ Named `stateTransitionWith` and taking a `ForkRules` until goal
 rules-taking adapter and this one had the same domain, so the duplicate layer
 was retired into this name rather than kept as a synonym; there is no longer a
 rules-taking entry point that could be handed a record no fork realises. The
-`UnsupportedForkError` route this function used to take for an unimplemented
-fork is live again for the five still-refused pre-Berlin forks --
-`Fork.rules` refuses them, while `Fork.ruleSet` stays total beside it -- and
-the vocabulary is retained where `Fork.rules` renders it. -/
+`UnsupportedForkError` vocabulary remains where `Fork.rules` renders an
+absent record. Earlier historical waves used that route for pre-Berlin
+forks; this candidate resolves their records too. -/
 def stateTransitionAt (f : Fork) (ch : BlockChain) (block : Block) :
   Except String BlockChain :=
   (stateTransitionE f ch block).mapError TransitionError.render
@@ -5651,10 +5650,9 @@ Step-10 report).
 Named `addBlockToChainWith` and taking a `ForkRules` until goal
 `jaune-forks-by-construction-v1`; with a machine carrying a `Fork` the
 rules-taking adapter and the fork-taking one had the same domain, and the
-duplicate layer was retired into this name. The `.support` channel this
-function used to route an unimplemented fork through is live again for the
-five still-refused pre-Berlin forks: `Fork.rules` refuses them, while
-`Fork.ruleSet` stays total beside it. -/
+duplicate layer was retired into this name. Its `.support` channel remains
+for an absent rule record. Earlier historical waves used that route for
+pre-Berlin forks; this candidate resolves their records too. -/
 def addBlockToChainAt (f : Fork) (chain : BlockChain) (blockRlp : Bytes) :
     Except String (BlockChain ⊕ String) :=
   ImportOutcome.renderLegacy (addBlockToChainAtE f chain blockRlp)
@@ -5970,16 +5968,14 @@ private def guardBlobParent (baseFee blobGasUsed : Nat) : Header :=
     | .error (.internal _) => true
     | _ => false)
 
--- The complement, at the same entry point and on the same chain: the eight
--- still-refused pre-Prague forks never reach execution, because `Fork.rules`
--- refuses them before any block is examined. Goal A's guard here asserted that
+-- The complement, at the same entry point and on the same chain, is empty:
+-- every declared fork now resolves to its existing rule record. Goal A's
+-- guard here asserted that
 -- Amsterdam was refused on the support channel before any block was examined;
 -- it was rewritten to say that Amsterdam reaches execution like every other
--- supported fork when Amsterdam resolved, and it is rewritten again here to
--- say that the five still-refused pre-Berlin forks are refused where
--- Amsterdam was.
-#guard Fork.unimplemented = [.byzantium, .constantinople, .petersburg, .istanbul,
-  .muirGlacier]
+-- supported fork when Amsterdam resolved. The later historical waves moved
+-- that refusal boundary to the five pre-Berlin forks; this candidate resolves
+-- their records too. This snapshot is not a conformance claim.
 #guard (match addBlockToChainAtE .amsterdam guardEmptyChain
     (guardBlockAt 0).toBLT.toBytes with
   | .error (.support _) => false

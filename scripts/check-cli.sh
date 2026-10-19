@@ -19,25 +19,18 @@
 # only in the label) are kept and asserted the other way round: they pass rule
 # resolution, are never refused as unsupported, and fail only on the synthetic
 # fixture's absent block data. Since goal jaune-historical-forks-v1 (U1)
-# declares the twelve pre-Prague forks, `Istanbul` is a label this build parses
-# and refuses per case with UnsupportedForkError (the usage text's "every case
-# at it is then refused"), so rule 3 is pinned with `Frontier`, a label this
-# build does not know, and the Istanbul file pins the declared-but-refused path
-# (5d). (U9 and U10 pinned 5d with `Cancun`; U11a moved the pin to Paris, the
-# U11a/U11b merge moved it to Berlin, and U11d, which resolves Berlin, moves it
-# to Istanbul, still refused.) The distinction
-# between "unknown" and "declared" survives as the difference between rule 3,
-# the admissions, and 5d.
+# declared the pre-Prague forks, earlier candidates parsed Istanbul but
+# refused it per case with UnsupportedForkError. U9/U10 used Cancun
+# for that check; U11a moved it to Paris, U11b to Berlin, and U11d to Istanbul.
+# This experimental candidate admits the remaining records: the Istanbul file
+# now pins admission (5d), while Frontier retains the unknown-network refusal.
 #
 # Nothing else pinned them. The conformance tiers only ever run well-formed
 # corpus files, `scripts/golden-messages.txt` covers block-rejection reasons
 # observed *inside* a run, and the Python tests under `scripts/tests/` cover the
 # bootstrap and generator scripts. The t8n handshake also needs a small
-# boundary here: `t8n --forks` must name exactly the runnable lane -- the nine
-# supported forks, London, Paris, Shanghai and Cancun included since goal
-# jaune-historical-forks-v1 units U11a/U11b (Amsterdam included since goal
-# jaune-amsterdam-currency-v1)
-# took the owner-consulted step goal C surfaced -- and agree with
+# boundary here: `t8n --forks` must name the canonical target projection of
+# the runnable lane and agree with
 # `sources.json`'s `conformance_target.fork_lane`; `--info` must state the lane
 # and its basis and no longer call Amsterdam pending; and an Amsterdam
 # invocation must pass rule resolution before it reaches its inputs. So all of these surfaces are kept by this falsifier: it builds
@@ -265,22 +258,6 @@ expect_refusal "unsupported network" \
   "runs at a network this build supports; the file's labels are [Frontier]" \
   "$TMP/loose/unsupported.json"
 
-# 5d. A declared fork this build does not run (Istanbul, one of the five
-#     still-refused pre-Berlin forks `Fork.rules?` refuses) is refused with
-#     UnsupportedForkError naming it, never as an unknown network and never
-#     run under another fork's rules.
-CHECKS=$((CHECKS + 1))
-run_jaune "$TMP/loose/declared_refused.json"
-if [ "$RUN_RC" -eq 0 ]; then
-  fail "declared but refused network (Istanbul): a refused fork's case passed"
-elif ! has "UnsupportedForkError : fork Istanbul" "$RUN_ERR"; then
-  fail "declared but refused network (Istanbul): not refused with UnsupportedForkError"
-  detail "got: ${RUN_ERR:-<empty stderr>}"
-elif has "runs at a network this build supports" "$RUN_ERR"; then
-  fail "declared but refused network (Istanbul): refused as an unknown network"
-  detail "got: ${RUN_ERR:-<empty stderr>}"
-fi
-
 # 5b. Amsterdam is a label this build parses *and* runs (goal C). The case is
 #     admitted past both fork guards -- neither "unsupported" (rule 3) nor
 #     "unimplemented" (the retired fifth refusal) -- and fails only on the
@@ -295,14 +272,19 @@ expect_admitted_past_fork_guards() { # <label> <argv...>
     return
   fi
   if has "UnsupportedForkError" "$RUN_ERR"; then
-    fail "$label: refused as an unimplemented fork, but Amsterdam resolves"
+    fail "$label: refused as an unimplemented fork, but this declared fork resolves"
     detail "got: ${RUN_ERR:-<empty stderr>}"
   fi
   if has "runs at a network this build supports" "$RUN_ERR"; then
-    fail "$label: refused as an unknown network, but Amsterdam is declared and runs"
+    fail "$label: refused as an unknown network, but this label is declared and runnable"
     detail "got: ${RUN_ERR:-<empty stderr>}"
   fi
 }
+# 5d. The formerly refused Istanbul case now passes both fork guards.
+# The unknown-network refusal remains pinned by the Frontier case above.
+expect_admitted_past_fork_guards "declared and implemented network (Istanbul)" \
+  "$TMP/loose/declared_refused.json"
+
 expect_admitted_past_fork_guards "declared and implemented network (Amsterdam)" \
   "$TMP/loose/declared_unimplemented.json"
 
@@ -369,9 +351,9 @@ if [ "$RUN_RC" -eq 0 ] || has '"gas.txBase"' "$RUN_OUT"; then
   detail "rc=$RUN_RC stdout: ${RUN_OUT:-<empty stdout>}"
 fi
 
-# 9. The t8n handshake. The advertised lane is the runnable lane: `--forks`
-#    names the twelve supported forks, Berlin through Cancun included, and
-#    is byte-equal to
+# 9. The t8n handshake. `--forks` names the runnable target projection,
+#    with Petersburg as ConstantinopleFix and synthetic Constantinople
+#    omitted. Its output is byte-equal to
 #    `sources.json`'s `conformance_target.fork_lane`, so a fork cannot be
 #    advertised in one place and not the other; `--info` states the lane, its
 #    basis, and the resolved list, and no longer says Amsterdam is pending.
@@ -385,8 +367,8 @@ run_jaune t8n --forks
 LANE_FROM_SOURCES="$(python3 -c '
 import json, sys
 print(" ".join(json.load(open(sys.argv[1]))["conformance_target"]["fork_lane"]))' "$ROOT/scripts/sources.json")"
-if [ "$RUN_RC" -ne 0 ] || [ "$RUN_OUT" != "Berlin London ArrowGlacier GrayGlacier Paris Shanghai Cancun Prague Osaka BPO1 BPO2 Amsterdam" ]; then
-  fail "t8n --forks: expected the twelve-fork lane, Berlin through Cancun included"
+if [ "$RUN_RC" -ne 0 ] || [ "$RUN_OUT" != "Byzantium ConstantinopleFix Istanbul MuirGlacier Berlin London ArrowGlacier GrayGlacier Paris Shanghai Cancun Prague Osaka BPO1 BPO2 Amsterdam" ]; then
+  fail "t8n --forks: expected the canonical target-name lane"
   detail "rc=$RUN_RC stdout: ${RUN_OUT:-<empty stdout>}"
 fi
 
@@ -412,10 +394,10 @@ done
 CHECKS=$((CHECKS + 1))
 run_jaune t8n --info
 if [ "$RUN_RC" -ne 0 ] \
-  || ! has "t8n fork lane: Berlin London ArrowGlacier GrayGlacier Paris Shanghai Cancun Prague Osaka BPO1 BPO2 Amsterdam" "$RUN_OUT" \
+  || ! has "t8n fork lane: Byzantium ConstantinopleFix Istanbul MuirGlacier Berlin London ArrowGlacier GrayGlacier Paris Shanghai Cancun Prague Osaka BPO1 BPO2 Amsterdam" "$RUN_OUT" \
   || ! has "t8n lane basis: runnable forks with a pinned-target transition-tool" "$RUN_OUT" \
-  || ! has "t8n resolves: Berlin London ArrowGlacier GrayGlacier Paris Shanghai Cancun Prague Osaka BPO1 BPO2 Amsterdam" "$RUN_OUT"; then
-  fail "t8n --info: expected the twelve-fork lane, its basis, and the resolved fork list"
+  || ! has "t8n resolves: Byzantium ConstantinopleFix Istanbul MuirGlacier Berlin London ArrowGlacier GrayGlacier Paris Shanghai Cancun Prague Osaka BPO1 BPO2 Amsterdam" "$RUN_OUT"; then
+  fail "t8n --info: expected the canonical target-name lane, its basis, and the resolved fork list"
   detail "rc=$RUN_RC stdout: ${RUN_OUT:-<empty stdout>}"
 fi
 
@@ -435,21 +417,15 @@ if [ "$RUN_RC" -ne 1 ] || has "UnsupportedForkError" "$RUN_ERR"; then
   detail "rc=$RUN_RC stderr: ${RUN_ERR:-<empty stderr>}"
 fi
 
-# The target's t8n names for the five still-refused pre-Berlin forks (goal
-# jaune-historical-forks-v1, U9) resolve and are then refused at rule lookup,
-# before any input is read: `ConstantinopleFix` (Petersburg) and the
-# fork-block label `ByzantiumToConstantinopleAt5` both reach
-# UnsupportedForkError. `Berlin`, `London`, `ArrowGlacier`, `GrayGlacier`,
-# `Merge` (Paris), `Shanghai`, `Cancun` and the fork-block `BerlinToLondonAt5`
-# resolve since units U11a/U11b/U11d and are admitted past rule lookup exactly
-# like Amsterdam above.
-# The two Jaune-only labels the target refuses, `Petersburg` and
-# `Constantinople`, are refused here as unknown t8n forks.
+# The canonical Petersburg target name and historical transition now pass
+# rule lookup before input loading. General-only Petersburg and synthetic
+# Constantinople remain unknown t8n names below.
 for name in ConstantinopleFix ByzantiumToConstantinopleAt5; do
   CHECKS=$((CHECKS + 1))
   run_jaune t8n --state.fork "$name" --input.alloc "$TMP/absent-amsterdam-alloc.json"
-  if [ "$RUN_RC" -ne 1 ] || ! has "UnsupportedForkError" "$RUN_ERR"; then
-    fail "t8n $name: expected an UnsupportedForkError refusal before the inputs"
+  if [ "$RUN_RC" -ne 1 ] || has "UnsupportedForkError" "$RUN_ERR" \
+      || ! has "$TMP/absent-amsterdam-alloc.json" "$RUN_ERR"; then
+    fail "t8n $name: expected rule resolution before the missing input"
     detail "rc=$RUN_RC stderr: ${RUN_ERR:-<empty stderr>}"
   fi
 done
