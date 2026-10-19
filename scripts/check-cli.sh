@@ -540,6 +540,79 @@ for allocation in empty storage-only; do
   fi
 done
 
+# Explicit original-identity diagnostics require a full network selection and
+# a new absolute report path. These controls exercise only the new CLI/report
+# boundary; the existing synthetic case deliberately has no genesis data.
+expect_refusal "identity closure missing report" "--identity-closure takes a report path" \
+  "$TMP/loose/undeclared.json" --network Prague --identity-closure
+expect_refusal "identity closure duplicate report" "--identity-closure given more than once" \
+  "$TMP/loose/undeclared.json" --network Prague \
+  --identity-closure "$TMP/closure.json" --identity-closure "$TMP/other.json"
+expect_refusal "identity closure missing network" "--identity-closure requires explicit --network" \
+  "$TMP/loose/undeclared.json" --identity-closure "$TMP/closure.json"
+for option in --name --notName --index; do
+  expect_refusal "identity closure $option filter" \
+    "--identity-closure forbids --name, --notName and --index" \
+    "$TMP/loose/undeclared.json" --network Prague \
+    --identity-closure "$TMP/closure.json" "$option" 0
+done
+expect_refusal "identity closure relative report" \
+  "--identity-closure requires absolute input and report paths" \
+  "$TMP/loose/undeclared.json" --network Prague --identity-closure relative-report.json
+expect_refusal "identity closure relative input" \
+  "--identity-closure requires absolute input and report paths" \
+  relative-input.json --network Prague --identity-closure "$TMP/closure.json"
+expect_refusal "identity closure vector mode" "--identity-closure is only available in fixture mode" \
+  --vectors 00 "$TMP/loose/undeclared.json" --identity-closure "$TMP/closure.json"
+
+cp "$TMP/loose/undeclared.json" "$TMP/input-before.json"
+expect_refusal "identity closure input collision" "--identity-closure report must differ from input" \
+  "$TMP/loose/undeclared.json" --network Prague --identity-closure "$TMP/loose/undeclared.json"
+CHECKS=$((CHECKS + 1))
+if ! cmp -s "$TMP/input-before.json" "$TMP/loose/undeclared.json"; then
+  fail "identity closure input collision: input bytes changed"
+fi
+printf 'retained report sentinel\n' > "$TMP/existing-report.json"
+cp "$TMP/existing-report.json" "$TMP/report-before.json"
+expect_refusal "identity closure existing report" "--identity-closure report must not already exist" \
+  "$TMP/loose/undeclared.json" --network Prague --identity-closure "$TMP/existing-report.json"
+CHECKS=$((CHECKS + 1))
+if ! cmp -s "$TMP/report-before.json" "$TMP/existing-report.json"; then
+  fail "identity closure existing report: report bytes changed"
+fi
+
+CHECKS=$((CHECKS + 1))
+run_jaune "$TMP/loose/undeclared.json" --network Prague --identity-closure "$TMP/closure.json"
+if [ "$RUN_RC" -ne 1 ] \
+  || ! has "SELECTED CASES : 1" "$RUN_OUT" \
+  || ! has "TEST NAME : tests/frontier/opcodes/test_dup.py::test_dup[fork_Prague-blockchain_test]" "$RUN_OUT" \
+  || ! has "TEST INDEX : 0" "$RUN_OUT"; then
+  fail "identity closure fatal genesis: expected raw failure and original case markers"
+  detail "rc=$RUN_RC stdout: ${RUN_OUT:-<empty stdout>} stderr: ${RUN_ERR:-<empty stderr>}"
+elif ! python3 - "$TMP/closure.json" "$TMP/loose/undeclared.json" <<'EOF_CLOSURE'
+import json
+import sys
+from pathlib import Path
+report_path, input_path = map(Path, sys.argv[1:])
+report = json.loads(report_path.read_text())
+assert report["schema"] == "jaune-original-identity-closure-v1", report
+assert report["input_path"] == str(input_path) and report["network_filter"] == "Prague", report
+assert len(report["cases"]) == 1, report
+case = report["cases"][0]
+assert case["case_key"] == next(iter(json.loads(input_path.read_text()))), case
+assert case["original_case_index_sorted_keys"] == 0 and case["network"] == "Prague", case
+assert case["genesis_checks_complete"] is False and case["case_complete"] is False, case
+assert case["candidates"] == [] and case["final_assertions"] is None, case
+assert not list(report_path.parent.glob(report_path.name + ".tmp-*")), report_path
+EOF_CLOSURE
+then
+  fail "identity closure fatal genesis: missing/incorrect partial report or leaked temporary file"
+fi
+CHECKS=$((CHECKS + 1))
+if ! cmp -s "$TMP/input-before.json" "$TMP/loose/undeclared.json"; then
+  fail "identity closure fatal genesis: input bytes changed"
+fi
+
 # ----------------------------------------------------------------- verdict --
 
 if [ "$FAILS" -ne 0 ]; then
