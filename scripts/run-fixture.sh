@@ -14,11 +14,23 @@
 # Exit 255 on a guard trip, which makes xargs abort the whole pool immediately
 # (BSD and GNU xargs both treat 255 as "stop now"). A guard trip also drops a
 # sentinel so the caller can distinguish it from any other nonzero exit.
+# Exit 1 without a classification if a monotonic clock read or interval fails.
 set -u
 
 BIN="$1"; GUARD="$2"; OUTDIR="$3"; IDX="$4"; FILE="$5"; NETWORK="$6"; LABEL="$7"
 
-START="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
+monotonic_now() {
+  perl -MTime::HiRes=clock_gettime,CLOCK_MONOTONIC -MPOSIX=isfinite -e '
+    my $now = clock_gettime(CLOCK_MONOTONIC);
+    die "invalid monotonic clock reading\n" unless isfinite($now) && $now >= 0;
+    printf "%.9f", $now;
+  '
+}
+clock_failure() {
+  printf 'HARNESS ERROR — %s: monotonic elapsed clock failed; no classification recorded\n' "$LABEL" >&2
+  exit 1
+}
+START="$(monotonic_now)" || clock_failure
 # Same guard runner as the sequential paths: fork the binary, alarm the parent,
 # SIGKILL the child on trip and exit 142 *normally* so bash prints no "Alarm
 # clock" notice. A child killed by the guard reports 128+9 = 137, so it can
@@ -36,8 +48,13 @@ perl -e '
   exit($st & 127 ? 128 + ($st & 127) : $st >> 8);
 ' "$GUARD" "$BIN" "$FILE" --network "$NETWORK" > /dev/null 2>&1
 RC=$?
-ELAPSED="$(perl -e 'printf "%.2f", $ARGV[1] - $ARGV[0]' \
-  "$START" "$(perl -MTime::HiRes=time -e 'printf "%.3f", time')")"
+STOP="$(monotonic_now)" || clock_failure
+ELAPSED="$(perl -MPOSIX=isfinite -e '
+  my ($start, $stop) = @ARGV;
+  die "invalid monotonic interval\n"
+    unless isfinite($start) && isfinite($stop) && $start >= 0 && $stop >= $start;
+  printf "%.2f", $stop - $start;
+' "$START" "$STOP")" || clock_failure
 
 if [ "$RC" -eq 142 ]; then
   printf '%s\t%ss\n' "$LABEL" "$ELAPSED" > "$OUTDIR/.guard-tripped"
