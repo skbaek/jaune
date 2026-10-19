@@ -9,9 +9,9 @@ committed values against the target's current output (`--check`).
 
 Inputs are bound to the target function by parameter name, so a renamed
 parameter fails loudly instead of binding positionally to the wrong value.
-The checkout revision is verified exactly as `gen-fork-constants.py`
-verifies it: the pin, or the pin plus the framework-side Jaune wrapper, and
-nothing else under `src/ethereum`.
+The shared verifier accepts the semantic pin, the existing four-path
+framework wrapper, or the exact registered CLI adapter. All specification
+files remain byte-identical to the semantic base in every accepted form.
 
 Usage:
   python3 scripts/gen-difficulty-vectors.py [--check]
@@ -26,16 +26,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+from conformance_reference import ReferenceError, verify_reference
+
 SCRIPTS = Path(__file__).resolve().parent
 SOURCES = SCRIPTS / "sources.json"
 OUTPUT = SCRIPTS / "difficulty-vectors.json"
 
-WRAPPER_PATHS = {
-    "packages/testing/src/execution_testing/client_clis/__init__.py",
-    "packages/testing/src/execution_testing/client_clis/clis/jaune.py",
-    "packages/testing/src/execution_testing/client_clis/tests/test_jaune.py",
-    "packages/testing/src/execution_testing/client_clis/transition_tool.py",
-}
+# Reference admission is shared in conformance_reference.py.
+
 
 MODULES = {
     "MuirGlacier": "muir_glacier",
@@ -54,35 +52,14 @@ def git(root: Path, *args: str) -> "subprocess.CompletedProcess[str]":
 
 
 def verify_revision(root: Path, pinned: str) -> None:
-    head = git(root, "rev-parse", "HEAD")
-    if head.returncode != 0:
-        fail(f"{root} is not a git checkout: {head.stderr.strip()}")
-    dirty = git(root, "status", "--porcelain")
-    if dirty.stdout.strip():
-        fail(
-            f"conformance-target checkout {root} has uncommitted changes; "
-            "vectors are filled from a committed revision"
-        )
-    actual = head.stdout.strip()
-    if actual != pinned:
-        ancestry = git(root, "merge-base", "--is-ancestor", pinned, "HEAD")
-        changed = git(root, "diff", "--name-only", pinned, "HEAD")
-        unexpected = sorted(set(changed.stdout.split()) - WRAPPER_PATHS)
-        if ancestry.returncode != 0 or unexpected:
-            detail = f"; it changes {unexpected}" if unexpected else ""
-            fail(
-                f"conformance-target checkout {root} is at {actual}, which is "
-                f"not {pinned} nor that revision plus the local Jaune "
-                f"wrapper{detail}"
-            )
-    spec_diff = git(root, "diff", "--name-only", pinned, "HEAD", "--", "src/ethereum")
-    if spec_diff.returncode != 0:
-        fail(f"could not diff {root} against {pinned}: {spec_diff.stderr.strip()}")
-    if spec_diff.stdout.strip():
-        fail(
-            f"conformance-target checkout {root} differs from {pinned} under "
-            f"src/ethereum: {sorted(spec_diff.stdout.split())}"
-        )
+    """Verify the semantic base, legacy wrapper, or exact registered adapter."""
+    entry = json.loads(SOURCES.read_text())["conformance_target"]
+    if pinned != entry["commit"]:
+        fail("reference verifier received a different semantic pin")
+    try:
+        verify_reference(root, entry, SCRIPTS)
+    except (ReferenceError, OSError) as error:
+        fail(str(error))
 
 
 SNIPPET = r"""

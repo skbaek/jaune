@@ -38,6 +38,8 @@ from pathlib import Path
 
 SCRIPTS_DIR = Path(__file__).resolve().parent
 ROOT = SCRIPTS_DIR.parent
+sys.path.insert(0, str(SCRIPTS_DIR))
+from conformance_reference import ReferenceError, verify_reference
 
 # Exact baselines and delta accepted by the GATES.md owner amendment (2026-10-11).
 # The baseline hashes pin the unchanged owner-reviewed baselines; changing a
@@ -688,6 +690,7 @@ def run_qualification(
     manifest: dict,
     reward: str = "-1",
     runner=run_command,
+    reference_identity: dict | None = None,
 ) -> dict:
     """Strict-classify, live-replay all ten cases, and write JSON evidence."""
     verdict = qualify(tier, baseline, report, raw_exit)
@@ -740,6 +743,8 @@ def run_qualification(
         "jaune_binary_sha256": sha256_file(jaune_bin),
         "replays": replays,
     }
+    if reference_identity is not None:
+        record["reference_identity"] = reference_identity
     (output_dir / "evidence.json").write_text(json.dumps(record, indent=2) + "\n")
     return record
 
@@ -773,6 +778,7 @@ def main(argv: list[str] | None = None) -> int:
         baseline = baseline_path.read_bytes()
         report = args.report.read_bytes()
         ref_t8n, _, reference_commit = resolve_conformance_target()
+        reference_identity = verify_reference(ref_t8n.parents[2], manifest["conformance_target"], SCRIPTS_DIR)
         record = run_qualification(
             args.tier,
             baseline,
@@ -784,8 +790,9 @@ def main(argv: list[str] | None = None) -> int:
             reference_commit,
             args.output,
             manifest,
+            reference_identity=reference_identity,
         )
-    except (QualificationError, OSError) as error:
+    except (QualificationError, ReferenceError, OSError) as error:
         print(json.dumps({"verdict": "REJECTED", "detail": str(error)}))
         return 1
     print(json.dumps(record, indent=2))

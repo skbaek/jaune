@@ -1,0 +1,16 @@
+--- a/packages/testing/src/execution_testing/evm_tools/t8n/cli.py
++++ b/packages/testing/src/execution_testing/evm_tools/t8n/cli.py
+@@ -345,7 +345,12 @@
+     blob_params = _parse_blob_params_from_options(options, stdin)
+ 
+     alloc = TestingAlloc.model_validate(raw_alloc_json)
+-    env = TestingEnvironment.model_validate(raw_env_json)
++    # Reward summaries use the CLI-only {delta, address} shape. The testing
++    # Environment.ommers field is a list of header hashes, not summaries.
++    # Keep raw_env_json intact for _parse_ommers_from_env_json below.
++    typed_env_json = raw_env_json.copy()
++    typed_env_json.pop("ommers", None)
++    env = TestingEnvironment.model_validate(typed_env_json)
+     txs, _body = _parse_txs_json_to_testing(
+         raw_txs_json, fork_module, TestingTransaction
+     )

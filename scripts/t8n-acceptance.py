@@ -34,6 +34,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from conformance_reference import ReferenceError, verify_reference
+
 SCRIPTS = Path(__file__).resolve().parent
 CASES = SCRIPTS / "t8n" / "cases"
 SOURCES = SCRIPTS / "sources.json"
@@ -131,12 +133,12 @@ def target_tool():
     binary = root / entry["venv_subpath"] / "bin" / entry["t8n_command"]
     if not binary.exists():
         fail(f"conformance target not found at {binary}")
-    head = subprocess.run(
-        ["git", "-C", str(root), "rev-parse", "HEAD"],
-        capture_output=True,
-        text=True,
-    )
-    return binary, head.stdout.strip(), entry["commit"]
+    try:
+        identity = verify_reference(root, entry, SCRIPTS)
+    except (ReferenceError, OSError) as error:
+        fail(str(error))
+    return binary, identity["checkout_head"], entry["commit"], identity
+
 
 
 def run(binary, subcommand, case, work, spec):
@@ -168,11 +170,12 @@ def main() -> int:
     jaune = ROOT / ".lake" / "build" / "bin" / "jaune"
     if not jaune.exists():
         fail(f"no jaune binary at {jaune}; run `lake build`")
-    target, target_head, target_pin = target_tool()
+    target, target_head, target_pin, target_identity = target_tool()
     third = Path(options.third)
     if not third.exists():
         fail(f"third tool not found at {third}")
 
+    print("reference identity: " + json.dumps(target_identity, sort_keys=True))
     print("sides:")
     print(f"  jaune   {jaune}")
     print(f"          {subprocess.run([str(jaune), '-v'], capture_output=True, text=True).stdout.strip()}")

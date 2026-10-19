@@ -1,5 +1,9 @@
-name: Set up pinned conformance EELS
-description: Restore or provision the exact manifest-pinned EELS checkout and locked test environment.
+name: Set up registered conformance EELS
+description: Provision and verify the semantic base or the exact optional CLI adapter.
+inputs:
+  cli-adapter:
+    description: Use the registered CLI compatibility adapter in a dedicated target path.
+    default: 'false'
 runs:
   using: composite
   steps:
@@ -7,38 +11,19 @@ runs:
       uses: actions/cache@v4
       with:
         path: ${{ env.JAUNE_T8N_TARGET }}
-        key: eels-t8n-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/sources.json') }}
-
-    # Exact-pinned EELS checkout for the ten-case Prague replay. An existing
-    # checkout is accepted only when its HEAD equals the manifest commit
-    # with no uncommitted changes; any other existing checkout fails
-    # without being repaired, reset, or overwritten. No existing bootstrap
-    # provisions this target (bootstrap_legacy.py pins a different commit,
-    # bootstrap_oracle.py builds a different venv), so the logic is inline.
+        key: eels-t8n-${{ runner.os }}-${{ runner.arch }}-${{ inputs.cli-adapter }}-${{ hashFiles('scripts/sources.json', 'scripts/reference-patches/*.patch') }}
     - name: Provision conformance EELS target
       shell: bash
+      env:
+        CLI_ADAPTER: ${{ inputs.cli-adapter }}
       run: |
         UV_VERSION="$(python3 -c "import json; print(json.load(open('scripts/sources.json'))['python_oracle']['package_manager_tested_version'])")"
         python3 -m pip install "uv==$UV_VERSION"
-        python3 - "$JAUNE_T8N_TARGET" <<'PY'
-        import json, subprocess, sys
-        from pathlib import Path
-        dest = Path(sys.argv[1])
-        pin = json.load(open('scripts/sources.json'))['conformance_target']
-        def git(*args, cwd=dest):
-            run = subprocess.run(['git', '-C', str(cwd), *args], capture_output=True, text=True)
-            if run.returncode != 0:
-                print(f"error: git {' '.join(args)} failed: {run.stderr.strip()}", file=sys.stderr)
-                raise SystemExit(1)
-            return run.stdout.strip()
-        if dest.exists():
-            head, dirty = git('rev-parse', 'HEAD'), git('status', '--porcelain')
-            if head != pin['commit'] or dirty:
-                print(f"error: refusing mismatching EELS checkout at {dest} (never overwritten)", file=sys.stderr)
-                raise SystemExit(1)
-            print(f"NO-OP — EELS checkout already at {pin['commit']}")
-        else:
-            subprocess.run(['git', 'clone', '--no-checkout', '--origin', 'origin', '--', pin['repo_url'], str(dest)], check=True)
-            git('checkout', '--detach', pin['commit'])
-        subprocess.run(['uv', 'sync', '--frozen', '--no-default-groups', '--group', 'test'], cwd=str(dest), check=True)
-        PY
+        args=(--root "$JAUNE_T8N_TARGET")
+        case "$CLI_ADAPTER" in
+          true) args+=(--with-cli-adapter) ;;
+          false) ;;
+          *) echo 'error: cli-adapter must be true or false' >&2; exit 1 ;;
+        esac
+        python3 scripts/bootstrap_conformance.py "${args[@]}"
+        (cd "$JAUNE_T8N_TARGET" && uv sync --frozen --no-default-groups --group test)

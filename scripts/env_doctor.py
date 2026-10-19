@@ -41,6 +41,8 @@ from pathlib import Path, PurePosixPath
 from typing import Optional
 
 DEFAULT_MANIFEST = Path(__file__).resolve().parent / "sources.json"
+sys.path.insert(0, str(DEFAULT_MANIFEST.parent))
+from conformance_reference import ReferenceError, target_root, verify_reference
 
 STATUS_OK = "ok"
 STATUS_MISSING = "missing"
@@ -322,6 +324,23 @@ def check_legacy_restoration(manifest: dict) -> list[Check]:
                 Path.home() / spec["default_subpath_from_home"]).expanduser()
     return check_git_checkout("LegacyTests restoration", root,
                               spec["repo_url"], spec["commit"])
+
+
+def check_conformance_target(manifest: dict, manifest_path: Path, explicit: Path | None) -> list[Check]:
+    entry = manifest.get("conformance_target")
+    if entry is None:
+        if explicit is not None:
+            return [Check("conformance target", STATUS_FAIL, "manifest section is missing")]
+        return []
+    root = explicit.expanduser() if explicit is not None else target_root(entry)
+    # Like the optional Amsterdam install: absent/unrequested is not required.
+    if explicit is None and not os.environ.get(entry["default_env_var"]) and not root.exists():
+        return []
+    try:
+        identity = verify_reference(root, entry, manifest_path.resolve().parent)
+        return [Check("conformance target", STATUS_OK, json.dumps(identity, sort_keys=True))]
+    except (ReferenceError, OSError, ValueError, TypeError, KeyError) as error:
+        return [Check("conformance target", STATUS_FAIL, str(error))]
 
 
 def check_ethereum_tests(manifest: dict, execution_specs_root: Path) -> list[Check]:
@@ -1124,6 +1143,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="additionally deep-verify the Amsterdam fixture tree "
         "against its release archive. Ignored with --legacy-only.",
     )
+    parser.add_argument("--conformance-target", type=Path, help="verify a dedicated conformance target checkout")
     parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     return parser
 
@@ -1196,6 +1216,8 @@ def main(argv: list[str]) -> int:
     checks.extend(check_execution_specs(manifest, execution_specs_root))
     checks.extend(check_ethereum_tests(manifest, execution_specs_root))
     checks.extend(check_legacy_restoration(manifest))
+    if not args.legacy_only or args.conformance_target is not None:
+        checks.extend(check_conformance_target(manifest, args.manifest, args.conformance_target))
     if not args.legacy_only:
         checks.extend(check_eest(manifest, eest_root))
         if args.eest_deep:

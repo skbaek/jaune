@@ -78,6 +78,16 @@
     "repo_url": "https://github.com/ethereum/execution-specs.git",
     "branch": "forks/amsterdam",
     "commit": "1562e2f8b5cb1efda7e0d7c517f2dfb5742c0a43",
+    "cli_adapter": {
+      "id": "ommer-reward-summary-cli-v1",
+      "path": "packages/testing/src/execution_testing/evm_tools/t8n/cli.py",
+      "base_git_blob": "60bcaeee82c5c0db741b2d89b0faa723c1e77296",
+      "adapted_git_blob": "6c37e33615d07623a5a604db153963179db00295",
+      "adapted_sha256": "6ae79cf39f96ea40744a228d86d8c9376dd0503f87e88955a52542fabd864abd",
+      "mode": "100644",
+      "patch_subpath": "reference-patches/ommer-reward-summary-cli-v1.patch",
+      "patch_sha256": "da5c038c183ca9f3a4eac437d6187d66b5ecd0ee5fb4626d37820e0f2dcb2920"
+    },
     "default_env_var": "JAUNE_T8N_TARGET",
     "default_subpath_from_home": "execution-specs-t8n-v21.0.1",
     "venv_subpath": ".venv",

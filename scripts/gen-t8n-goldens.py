@@ -39,6 +39,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from conformance_reference import ReferenceError, verify_reference
+
 from t8n_inputs import T8nInputError, materialize_alloc, materialize_txs_source
 
 SCRIPTS = Path(__file__).resolve().parent
@@ -55,19 +57,8 @@ def fail(message: str) -> "NoReturn":  # type: ignore[valid-type]
     raise SystemExit(2)
 
 
-# The checkout also carries the local Jaune wrapper: a small framework-side
-# patch, applied on top of the pinned commit, that adds a client wrapper, its
-# tests, and one opt-in flag on the transition-tool base class -- none of
-# which the `ethereum-spec-evm t8n` entry point reaches. So the generator
-# accepts a checkout that is the anchor *plus exactly those files*, and
-# refuses anything else -- a change under `src/ethereum/` would change the
-# goldens and must never pass unnoticed.
-WRAPPER_PATHS = {
-    "packages/testing/src/execution_testing/client_clis/__init__.py",
-    "packages/testing/src/execution_testing/client_clis/clis/jaune.py",
-    "packages/testing/src/execution_testing/client_clis/tests/test_jaune.py",
-    "packages/testing/src/execution_testing/client_clis/transition_tool.py",
-}
+# Reference admission is shared in conformance_reference.py.
+
 
 
 def git(root: Path, *args: str) -> "subprocess.CompletedProcess[str]":
@@ -77,30 +68,14 @@ def git(root: Path, *args: str) -> "subprocess.CompletedProcess[str]":
 
 
 def verify_revision(root: Path, pinned: str) -> None:
-    """Refuse a checkout that could generate against a different revision."""
-    head = git(root, "rev-parse", "HEAD")
-    if head.returncode != 0:
-        fail(f"{root} is not a git checkout: {head.stderr.strip()}")
-    dirty = git(root, "status", "--porcelain")
-    if dirty.stdout.strip():
-        fail(
-            f"conformance-target checkout {root} has uncommitted changes; "
-            "goldens are generated from a committed revision"
-        )
-    if head.stdout.strip() == pinned:
-        return
-    ancestry = git(root, "merge-base", "--is-ancestor", pinned, "HEAD")
-    changed = git(root, "diff", "--name-only", pinned, "HEAD")
-    unexpected = sorted(set(changed.stdout.split()) - WRAPPER_PATHS)
-    if ancestry.returncode != 0 or unexpected:
-        detail = (
-            f"; it changes {unexpected}" if unexpected else ""
-        )
-        fail(
-            f"conformance-target checkout {root} is at {head.stdout.strip()}, "
-            f"which is not {pinned} nor that revision plus the local Jaune "
-            f"wrapper{detail}; goldens and emission must come from one revision"
-        )
+    """Verify the semantic base, legacy wrapper, or exact registered adapter."""
+    entry = json.loads(SOURCES.read_text())["conformance_target"]
+    if pinned != entry["commit"]:
+        fail("reference verifier received a different semantic pin")
+    try:
+        verify_reference(root, entry, SCRIPTS)
+    except (ReferenceError, OSError) as error:
+        fail(str(error))
 
 
 def target_paths() -> "tuple[Path, Path, str]":
@@ -219,6 +194,11 @@ def main() -> int:
     options = parser.parse_args()
 
     t8n, python, commit = target_paths()
+    entry = json.loads(SOURCES.read_text())["conformance_target"]
+    try:
+        identity = verify_reference(t8n.parents[2], entry, SCRIPTS)
+    except (ReferenceError, OSError) as error:
+        fail(str(error))
     names = sorted(p.name for p in CASES_DIR.iterdir() if p.is_dir())
     if options.case:
         if options.case not in names:
@@ -230,11 +210,16 @@ def main() -> int:
         previous = json.loads(PROVENANCE.read_text())
         if options.case:
             provenance["cases"] = previous.get("cases", {})
+            if "reference_identities" in previous:
+                provenance["reference_identities"] = previous["reference_identities"]
 
     drift = []
     with tempfile.TemporaryDirectory() as tmp:
         for name in names:
             case = CASES_DIR / name
+            env = json.loads((case / "env.json").read_text())
+            if env.get("ommers") and identity["kind"] != "cli-adapter":
+                fail(f"{name}: nonempty ommers require the registered CLI adapter checkout")
             work = Path(tmp) / name
             work.mkdir()
             sign_txs(python, case, work)
@@ -257,19 +242,24 @@ def main() -> int:
                     shutil.copyfile(path, committed)
                 entry[relative] = digest(path)
             provenance["cases"][name] = entry
+            provenance.setdefault("reference_identities", {})[name] = identity
             print(f"  {name}: {len(produced)} file(s)")
 
+    reference_label = commit
+    if identity["kind"] == "cli-adapter":
+        reference_label += (f' with CLI adapter {identity["cli_adapter"]["id"]}'
+                            f' (checkout {identity["checkout_head"]})')
     if options.check:
         if drift:
             print("DRIFT — t8n goldens differ from the target's current output:")
             for item in drift:
                 print(f"  {item}")
             return 1
-        print(f"OK — t8n goldens: {len(names)} case(s) match the target at {commit}")
+        print(f"OK — t8n goldens: {len(names)} case(s) match the target at {reference_label}")
         return 0
 
     PROVENANCE.write_text(json.dumps(provenance, indent=2, sort_keys=True) + "\n")
-    print(f"OK — t8n goldens: {len(names)} case(s) generated from {commit}")
+    print(f"OK — t8n goldens: {len(names)} case(s) generated from {reference_label}")
     return 0
 
 

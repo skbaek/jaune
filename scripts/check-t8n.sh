@@ -83,6 +83,7 @@ from pathlib import Path
 ROOT = Path(sys.argv[1])
 sys.path.insert(0, str(ROOT / "scripts"))
 from t8n_inputs import T8nInputError, materialize_alloc
+from conformance_reference import ReferenceError, check_reference_records
 
 BIN = Path(os.environ["JAUNE_T8N_BIN"])
 ONLY = os.environ["JAUNE_T8N_ONLY"]
@@ -312,6 +313,11 @@ def check_provenance(failures):
                     f"{name}: {relative} does not match its recorded digest; "
                     "a golden is generated evidence and is never edited by hand"
                 )
+    try:
+        target = json.loads(SOURCES.read_text())["conformance_target"]
+        check_reference_records(provenance, target, ROOT / "scripts", CASES)
+    except (ReferenceError, OSError, ValueError, TypeError) as error:
+        failures.append(f"reference provenance: {error}")
     return provenance
 
 
@@ -454,6 +460,11 @@ def main():
         )
         return 1
     commit = provenance["conformance_target_commit"] if provenance else "?"
+    adapter_ids = sorted({record["cli_adapter"]["id"]
+                          for record in provenance.get("reference_identities", {}).values()
+                          if record.get("kind") == "cli-adapter"})
+    if adapter_ids:
+        print(f"Reference CLI compatibility: {', '.join(adapter_ids)} (recorded per case)")
     print(
         f"OK — t8n: {len(names) - len(refused)} case(s) byte-identical to goldens generated "
         f"from execution-specs {commit[:12]}, deterministic over two runs; "
