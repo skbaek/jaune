@@ -4665,11 +4665,10 @@ theorem Devm.setStorVal_getCode (devm : Devm) (owner : Adr)
       devm.getCode address := by
   show ((devm.state.setStorVal owner key value).get address).code =
     (devm.state.get address).code
-  unfold State.setStorVal
   by_cases h : owner = address
   · subst h
-    rw [State.get_set_self]
-  · rw [State.get_set_ne _ h]
+    rw [State.setStorVal_get_self]
+  · rw [State.setStorVal_get_ne _ h]
 
 /-- Installing code clears storage precisely when it deletes an empty account. -/
 theorem Devm.setCode_getStor (devm : Devm) (address : Adr)

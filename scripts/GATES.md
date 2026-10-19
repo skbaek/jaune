@@ -606,6 +606,13 @@ Two different contracts, and confusing them is the most common misreading:
   bootstrap and generator scripts, so all four messages were verified by hand
   once and could rot silently.
 
+  The allocation boundary checks also require `t8n` to retain an explicitly
+  empty account at Berlin and Paris, with zero storage slots normalized, and
+  the blockchain fixture loader to reject empty account fields from Paris on.
+  These are distinct pinned upstream paths: t8n uses `MaterializedAlloc`, while
+  the legacy blockchain loader uses `Load.json_to_state`. A storage-only
+  account is empty for the latter policy, independently of its storage root.
+
   **It pins the guards, not the run beneath them.** The permissive half of the
   wrong-tree rule — a case declaring no `_info.fixture-format` is passed through
   — is checked as an A/B pair of files identical but for the `_info` block, and

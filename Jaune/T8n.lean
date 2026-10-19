@@ -129,11 +129,11 @@ def Lean.Json.toAcct : Lean.Json → IO Acct
     return ⟨nonce, bal, Stor.ofList storPairs, code.toByteArray⟩
   | _ => .throw "cannot parse account (not .obj)"
 
--- The prestate is built through `State.ofList`, i.e. through `State.set`, so
--- `State.canonical_ofList` applies: every account comes out of `toAcct`, whose
--- storage is a `Stor.ofList` and hence canonical. An explicit `Acct.nil` or an
--- explicitly zero-valued slot in `pre` is dropped rather than stored, which is
--- what keeps the parsed state's trie root the committed one.
+-- Parse exact state membership through `State.ofPresentList`: an explicitly
+-- empty account stays present, while toAcct still normalizes zero storage.
+-- The t8n target uses MaterializedAlloc directly and permits such entries at
+-- every fork. The legacy blockchain loader's separate fork policy is applied
+-- only by toWorldAt below.
 def Lean.Json.toWorld (j : Lean.Json) : IO State := do
   let aux (xy : String × Lean.Json) : IO (Adr × Acct) := do
     let adr ← (Hex.toAdr? <| remove0x xy.fst).toIO ""
@@ -141,7 +141,18 @@ def Lean.Json.toWorld (j : Lean.Json) : IO State := do
     return ⟨adr, acct⟩
   let ob ← j.toIoRBNode
   let entries ← List.mapM aux ob.toArray.toList
-  return State.ofList entries
+  return State.ofPresentList entries
+
+/-- The pinned legacy blockchain loader rejects empty account fields from
+Paris on. Storage does not affect that test. This policy is not t8n's
+MaterializedAlloc policy, so the transition-tool path uses `toWorld` directly. -/
+def Lean.Json.toWorldAt (rules : ForkRules) (j : Lean.Json) : IO State := do
+  let world ← j.toWorld
+  if rules.pow.isNone then
+    for (address, account) in world.toList do
+      if account.Empty then
+        .throw s!"error : empty account in proof-of-stake prestate at 0x{address}"
+  return world
 
 def Lean.Json.find? : String → Lean.Json → Option Lean.Json
   | k, .obj r => r.get? k

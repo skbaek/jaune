@@ -325,7 +325,8 @@ and typed internal errors. See
 closure report.
 
 - **Checked entry points are the recommended API.** `CheckedBlockChain` binds
-  an executable snapshot to canonical state, validated hash-linked/
+  an executable snapshot to state with canonical storage (including explicit
+  empty accounts in historical states), validated hash-linked/
   consecutively numbered retained history (sufficient for `BLOCKHASH`), and
   tip-state-root agreement; `ConfiguredChain` additionally validates a
   `ChainConfig`'s activation schedule and its chain-ID agreement with the

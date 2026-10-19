@@ -834,7 +834,7 @@ def runBlockchainStTest (spec : NetworkSpec) : (Nat × String × Lean.Json) → 
       | .none => .ok 1
       | .some chainIdJson => chainIdJson.toIoB64 <&> UInt64.toNat
 
-    let preState ← json.find "pre" >>= Lean.Json.toWorld
+    let preState ← json.find "pre" >>= Lean.Json.toWorldAt genesisFork
 
     -- P0.2 item 6. The genesis block enters through the same strict decoder
     -- every candidate does, rather than being trusted because a hand-built

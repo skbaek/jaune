@@ -464,6 +464,69 @@ if [ "$RUN_RC" -ne 1 ] || ! has "--state.reward expects an integer" "$RUN_ERR"; 
   detail "rc=$RUN_RC stderr: ${RUN_ERR:-<empty stderr>}"
 fi
 
+# Historical allocations retain explicit empty accounts. The fork-aware
+# blockchain-prestate policy rejects the same empty fields from Paris on,
+# including nonempty storage. The t8n MaterializedAlloc path stays permissive.
+cat > "$TMP/empty-alloc.json" <<'EOF_ALLOC'
+{"0x1111111111111111111111111111111111111111":
+ {"nonce":"0x00","balance":"0x00","code":"0x","storage":{"0x00":"0x00"}}}
+EOF_ALLOC
+cat > "$TMP/storage-only-alloc.json" <<'EOF_ALLOC'
+{"0x1111111111111111111111111111111111111111":
+ {"nonce":"0x00","balance":"0x00","code":"0x","storage":{"0x00":"0x01"}}}
+EOF_ALLOC
+printf '[]\n' > "$TMP/empty-txs.json"
+for fork in Berlin Merge; do
+  case "$fork" in Berlin) environment=berlin ;; Merge) environment=merge ;; esac
+  mkdir -p "$TMP/empty-$fork"
+CHECKS=$((CHECKS + 1))
+run_jaune t8n --state.fork "$fork" --state.reward=-1 \
+  --input.alloc "$TMP/empty-alloc.json" \
+  --input.env "$ROOT/scripts/t8n/cases/hist-transfer-$environment/env.json" \
+  --input.txs "$TMP/empty-txs.json" --output.basedir "$TMP/empty-$fork" \
+  --output.alloc alloc.json --output.result result.json --output.body body.json
+if [ "$RUN_RC" -ne 0 ]; then
+  fail "$fork t8n empty allocation: expected a successful transition"
+  detail "rc=$RUN_RC stderr: ${RUN_ERR:-<empty stderr>}"
+elif ! python3 - "$TMP/empty-$fork/alloc.json" <<'EOF_CHECK'
+import json
+import sys
+from pathlib import Path
+allocation = json.loads(Path(sys.argv[1]).read_text())
+assert set(allocation) == {"0x1111111111111111111111111111111111111111"}, allocation
+account = next(iter(allocation.values()))
+assert int(account["nonce"], 16) == 0 and int(account["balance"], 16) == 0, account
+assert account["code"] == "0x" and account["storage"] == {}, account
+EOF_CHECK
+then
+  fail "$fork t8n empty allocation: empty account was lost or zero storage retained"
+fi
+done
+# A fixed canonical Paris genesis envelope lets these synthetic cases reach
+# the blockchain prestate policy. Header/RLP source: legacy restoration
+# 41404287, NonZeroValue_TransactionCALL_ToEmpty_Paris_d0g0v0_Paris.
+# Neither case has a valid root for its altered prestate: if the policy is
+# removed, it must fail at a different boundary and this control turns red.
+python3 - "$TMP" <<'EOF_FIXTURES'
+import json
+import sys
+from pathlib import Path
+root = Path(sys.argv[1])
+base = json.loads(r'''{"network":"Paris","genesisBlockHeader":{"baseFeePerGas":"0x0b","bloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","coinbase":"0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba","difficulty":"0x00","extraData":"0x00","gasLimit":"0x989680","gasUsed":"0x00","hash":"0x416404aa6551fdeb78e92b675ae8b70f3637fdbc3c7706baf4313381786ef85b","mixHash":"0x0000000000000000000000000000000000000000000000000000000000020000","nonce":"0x0000000000000000","number":"0x00","parentHash":"0x0000000000000000000000000000000000000000000000000000000000000000","receiptTrie":"0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421","stateRoot":"0xa1f80a72f40cdf16c2a64b31f74d9cc75a77d74061b7963c128417693e520056","timestamp":"0x00","transactionsTrie":"0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421","uncleHash":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"},"genesisRLP":"0xf901f6f901f1a00000000000000000000000000000000000000000000000000000000000000000a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347942adc25665018aa1fe0e6bc666dac8fc2697ff9baa0a1f80a72f40cdf16c2a64b31f74d9cc75a77d74061b7963c128417693e520056a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b9010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000808083989680808000a000000000000000000000000000000000000000000000000000000000000200008800000000000000000bc0c0"}''')
+for variant in ("empty", "storage-only"):
+    case = dict(base, pre=json.loads((root / f"{variant}-alloc.json").read_text()))
+    (root / f"paris-{variant}.json").write_text(json.dumps({f"empty-policy-{variant}": case}))
+EOF_FIXTURES
+for allocation in empty storage-only; do
+  CHECKS=$((CHECKS + 1))
+  run_jaune "$TMP/paris-$allocation.json"
+  if [ "$RUN_RC" -ne 1 ] \
+    || ! has "empty account in proof-of-stake prestate" "$RUN_ERR"; then
+    fail "Paris $allocation blockchain allocation: expected the empty-prestate refusal"
+    detail "rc=$RUN_RC stdout: ${RUN_OUT:-<empty stdout>} stderr: ${RUN_ERR:-<empty stderr>}"
+  fi
+done
+
 # ----------------------------------------------------------------- verdict --
 
 if [ "$FAILS" -ne 0 ]; then

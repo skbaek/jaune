@@ -3576,8 +3576,14 @@ example : decide ({ Acct.nil with bal := 1 } = .nil) = false ∧
 def State.get (w : State) (a : Adr) : Acct :=
   w.getD a .nil
 
+/-- Erasing convenience update: writing the default account removes the key. -/
 def State.set (w : State) (a : Adr) (ac : Acct) : State :=
   if ac = .nil then w.erase a else w.insert a ac
+
+/-- Store an account as present, including an explicitly empty account.
+Deletion is a separate operation, `destroyAccount`. -/
+def State.setPresent (w : State) (a : Adr) (ac : Acct) : State :=
+  w.insert a ac
 
 def Acct.Empty (a : Acct) : Prop :=
   a.code.size = 0 ∧ a.nonce = 0 ∧ a.bal = 0
@@ -3587,9 +3593,9 @@ instance {a : Acct} : Decidable a.Empty := by
 
 def destroyAccount (w : State) (a : Adr) : State := w.erase a
 
+/-- Existence is trie membership, independently of the account's fields. -/
 abbrev AccountExists (wor : State) (adr : Adr) : Prop :=
-  let acct := wor.get adr
-  ¬ (acct.Empty ∧ acct.stor.isEmpty)
+  (wor[adr]?).isSome = true
 
 /-! ### EIP-161: touched accounts (Spurious Dragon through Gray Glacier)
 
@@ -3602,17 +3608,16 @@ failed-child quirk (`incorporate_child_on_error`). After every transaction,
 empty. Paris removes the sweep: `modify_state` then erases an emptied account
 at once (`settle.eraseEmptyOnModify`), which is what `State.setAccount` does.
 
-Jaune never stores `Acct.nil`, so an empty account "exists" here only when it
-still carries storage (`AccountExists`). An empty storage-less account that
-EELS would hold until the sweep is already absent in Jaune, so not recording
-it changes nothing the sweep could observe.
+Historical prestates may contain an explicitly present `Acct.nil`. Existence
+is trie membership, so those accounts are recorded and swept just like empty
+accounts that still carry storage. An untouched empty prestate account stays
+present; neither parsing nor a fork crossing globally clears it.
 
 All three sites are recorded: the two frame-level ones
 (`processMessage.settle`, `incorporateChildOnError`) and the `SELFDESTRUCT`
-beneficiary (`Devm.creditBeneficiary`). The last is the one modification
-before Paris that can leave an account existing and empty: a zero credit to a
-storage-only beneficiary, which `modify_state` keeps and the touch hands to the
-sweep. -/
+beneficiary (`Devm.creditBeneficiary`). The last includes a zero credit to an
+empty beneficiary, which legacy `modify_state` keeps present and the touch
+hands to the sweep. -/
 
 /-- EELS `account_exists_and_is_empty`, over Jaune's notion of existence. -/
 def accountExistsAndIsEmpty (wor : State) (adr : Adr) : Prop :=
@@ -3669,8 +3674,9 @@ def sweepTouchedAccounts (rules : ForkRules) (addresses : List Adr) (state : Sta
     sweepTouchedAccounts rules addresses state = state := by
   simp [sweepTouchedAccounts, h]
 
-/-- Account-field mutation deletes an empty account, including its storage.
-Raw `State.set` remains available for pre-state construction and storage writes. -/
+/-- Modern account-field mutation deletes an empty account, including its storage.
+Historical allocations and legacy beneficiary credits use `State.setPresent`;
+storage setters preserve an existing owner's presence. -/
 def Acct.clearIfEmpty (ac : Acct) : Acct :=
   if ac.Empty then .nil else ac
 
@@ -3752,7 +3758,8 @@ def Stor.set (s : Stor) (k v : B256) : Stor :=
 
 def State.setStorVal (wor : State) (adr : Adr) (key val : B256) : State :=
   let acct : Acct := wor.get adr
-  wor.set adr {acct with stor := acct.stor.set key val}
+  if AccountExists wor adr then wor.setPresent adr {acct with stor := acct.stor.set key val}
+  else wor.set adr {acct with stor := acct.stor.set key val}
 
 def Benv.setStorVal (benv : Benv) (adr : Adr) (key val : B256) : Benv :=
   {benv with
@@ -5865,7 +5872,7 @@ def Devm.creditBeneficiary (rules : ForkRules) (donee : Adr) (val : B256)
     (devm : Devm) : Devm :=
   if rules.settle.eraseEmptyOnModify then devm.addBal donee val
   else
-    (devm.withState (devm.state.set donee
+    (devm.withState (devm.state.setPresent donee
       ((devm.state.get donee).withBal (devm.state.bal donee + val)))).recordTouch
       rules true donee
 
@@ -6994,7 +7001,8 @@ def Benv.incrNonce (benv : Benv) (adr : Adr) : Benv :=
 
 def State.setStor (w : State) (a : Adr) (s : Stor) : State :=
   let ac := (w.get a)
-  w.set a {ac with stor := s}
+  if AccountExists w a then w.setPresent a {ac with stor := s}
+  else w.set a {ac with stor := s}
 
 def Benv.setStor (benv : Benv) (adr : Adr) (stor : Stor) : Benv :=
   {benv with
@@ -7023,9 +7031,10 @@ def liftToExecution (devm : Devm)
 --------------- CANONICAL STATE AND STORAGE (P0.4) ---------------
 
 -- `State` and `Stor` are raw `Std.TreeMap`s, so nothing in their *types* stops
--- a map from storing a zero slot or an exact `Acct.nil`. Every mutator below
--- erases such an entry instead of storing it, but direct map construction
--- bypasses all of them. `State.root` serialises whatever the map holds, so two
+-- a map from storing a zero slot or an exact `Acct.nil`. Zero storage slots
+-- are noncanonical; a present `Acct.nil` is a valid historical account.
+-- `State.set` erases nil by convenience, while `State.setPresent` retains it.
+-- `State.root` serialises whatever the map holds, so two
 -- states with identical EVM-level reads can commit to different trie roots --
 -- which is why canonicality is a real commitment-level property and not a
 -- tidiness convention, and why `State.root` may never be changed to hide the
@@ -7039,9 +7048,9 @@ def liftToExecution (devm : Devm)
 -- storage, and `State.setStor` only when its storage argument is canonical.
 -- Nothing here is stated more strongly than that.
 --
--- Note the predicate is `≠ Acct.nil`, never `¬ Acct.Empty`: an account holding
--- storage is not the representational default even at zero code, nonce, and
--- balance, so erasing it would lose state.
+-- Canonicality constrains storage, not account existence. `State.NoNil`
+-- separately names the old no-default-payload convention; account membership
+-- remains commitment-relevant even when all payload reads return defaults.
 
 /-- A storage slot's own optional lookup.
 
@@ -7180,17 +7189,31 @@ theorem State.getElem?_set (w : State) (a b : Adr) (ac : Acct) :
   rw [State.set]
   split <;> simp_all [Std.TreeMap.getElem?_erase, Std.TreeMap.getElem?_insert]
 
+/-- Presence-preserving insertion never identifies `some Acct.nil` with `none`. -/
+theorem State.getElem?_setPresent (w : State) (a b : Adr) (ac : Acct) :
+    (w.setPresent a ac)[b]? = if a = b then some ac else w[b]? := by
+  simp only [State.setPresent, Std.TreeMap.getElem?_insert, Std.compare_eq_iff_eq]
+
+theorem State.accountExists_setPresent (w : State) (a : Adr) (ac : Acct) :
+    AccountExists (w.setPresent a ac) a := by
+  simp only [AccountExists, State.getElem?_setPresent, ite_true, Option.isSome_some]
+
 theorem State.getElem?_erase (w : State) (a b : Adr) :
     (w.erase a)[b]? = if a = b then none else w[b]? := by
   simp [Std.TreeMap.getElem?_erase]
 
-/-- A world state is canonical when it stores no `Acct.nil` and every account
-it stores has canonical storage.
-
-`≠ Acct.nil`, deliberately, and not `¬ Acct.Empty`: an account with storage is
-not the representational default even at zero code, nonce, and balance. -/
+/-- A world state is canonical when every present account has canonical
+storage. Present empty accounts are valid historical state entries; their
+membership is observed separately from default-valued account reads. -/
 def State.Canonical (w : State) : Prop :=
-  ∀ e ∈ w.toList, e.2 ≠ Acct.nil ∧ Stor.Canonical e.2.stor
+  ∀ e ∈ w.toList, Stor.Canonical e.2.stor
+
+/-- The stronger sparse-account property used by the erasing constructors.
+It is separate from canonicality: historical prestates may store `Acct.nil`. -/
+def State.NoNil (w : State) : Prop :=
+  ∀ e ∈ w.toList, e.2 ≠ Acct.nil
+
+instance {w : State} : Decidable (State.NoNil w) := List.decidableBAll _ _
 
 instance {w : State} : Decidable (State.Canonical w) := List.decidableBAll _ _
 
@@ -7202,7 +7225,7 @@ theorem State.mem_toList_iff {w : State} {a : Adr} {ac : Acct} :
 theorem State.canonical_iff {w : State} :
     State.Canonical w
       ↔ ∀ (a : Adr) (ac : Acct),
-          w[a]? = some ac → ac ≠ Acct.nil ∧ Stor.Canonical ac.stor := by
+          w[a]? = some ac → Stor.Canonical ac.stor := by
   constructor
   · intro h a ac hac; exact h (a, ac) (State.mem_toList_iff.mpr hac)
   · intro h e he; exact h e.1 e.2 (State.mem_toList_iff.mp (by simpa using he))
@@ -7224,7 +7247,17 @@ theorem State.Canonical.set {w : State} (h : State.Canonical w) (a : Adr)
   split at hb
   · split at hb
     · cases hb
-    · cases hb; exact ⟨by assumption, hs⟩
+    · cases hb; exact hs
+  · exact h b ac' hb
+
+theorem State.Canonical.setPresent {w : State} (h : State.Canonical w) (a : Adr)
+    {ac : Acct} (hs : Stor.Canonical ac.stor) :
+    State.Canonical (w.setPresent a ac) := by
+  rw [State.canonical_iff] at h ⊢
+  intro b ac' hb
+  rw [State.getElem?_setPresent] at hb
+  split at hb
+  · cases hb; exact hs
   · exact h b ac' hb
 
 theorem State.Canonical.erase {w : State} (h : State.Canonical w) (a : Adr) :
@@ -7235,15 +7268,48 @@ theorem State.Canonical.erase {w : State} (h : State.Canonical w) (a : Adr) :
   · cases hb
   · exact h b ac hb
 
-/-- On a canonical state, reading `Acct.nil` and being absent are the same
-thing. This is the account-level counterpart of `Stor.Canonical.get_eq_zero_iff`
-and the regression an explicitly stored `Acct.nil` violates. -/
-theorem State.Canonical.get_eq_nil_iff {w : State} (h : State.Canonical w)
-    (a : Adr) : w.get a = .nil ↔ w[a]? = none := by
+theorem State.noNil_iff {w : State} :
+    State.NoNil w ↔ ∀ (a : Adr) (ac : Acct), w[a]? = some ac → ac ≠ Acct.nil := by
+  constructor
+  · intro h a ac hac; exact h (a, ac) (State.mem_toList_iff.mpr hac)
+  · intro h e he; exact h e.1 e.2 (State.mem_toList_iff.mp (by simpa using he))
+
+/-- Canonicality with `NoNil` recovers the former sparse-state invariant. -/
+theorem State.canonical_noNil_iff {w : State} :
+    State.Canonical w ∧ State.NoNil w ↔
+      ∀ (a : Adr) (ac : Acct), w[a]? = some ac →
+        ac ≠ Acct.nil ∧ Stor.Canonical ac.stor := by
+  constructor
+  · rintro ⟨hc, hn⟩ a ac ha
+    exact ⟨State.noNil_iff.mp hn a ac ha, State.canonical_iff.mp hc a ac ha⟩
+  · intro h
+    exact ⟨State.canonical_iff.mpr (fun a ac ha => (h a ac ha).2),
+      State.noNil_iff.mpr (fun a ac ha => (h a ac ha).1)⟩
+
+theorem State.noNil_empty : State.NoNil .empty := by
+  rw [State.noNil_iff]
+  intro a ac ha
+  cases ha
+
+theorem State.NoNil.set {w : State} (h : State.NoNil w) (a : Adr) (ac : Acct) :
+    State.NoNil (w.set a ac) := by
+  rw [State.noNil_iff] at h ⊢
+  intro b ac' hb
+  rw [State.getElem?_set] at hb
+  split at hb
+  · split at hb
+    · cases hb
+    · cases hb; assumption
+  · exact h b ac' hb
+
+/-- Default reads identify absence only with the explicit no-nil premise.
+Canonical storage alone permits present-empty historical accounts. -/
+theorem State.Canonical.get_eq_nil_iff {w : State} (_h : State.Canonical w)
+    (hnil : State.NoNil w) (a : Adr) : w.get a = .nil ↔ w[a]? = none := by
   rw [State.get_eq_getD]
   cases ha : w[a]? with
   | none => simp
-  | some ac => simp [(State.canonical_iff.mp h a ac ha).1]
+  | some ac => simp [(State.noNil_iff.mp hnil a ac ha)]
 
 /-- Every account *read* out of a canonical state has canonical storage --
 including an absent one, whose `Acct.nil` carries the empty map. This is what
@@ -7254,7 +7320,7 @@ theorem State.Canonical.stor {w : State} (h : State.Canonical w) (a : Adr) :
   rw [State.get_eq_getD]
   cases ha : w[a]? with
   | none => exact Acct.canonical_nil_stor
-  | some ac => exact (State.canonical_iff.mp h a ac ha).2
+  | some ac => exact State.canonical_iff.mp h a ac ha
 
 theorem State.get_set_self (w : State) (a : Adr) (ac : Acct) :
     (w.set a ac).get a = ac := by
@@ -7264,6 +7330,55 @@ theorem State.get_set_self (w : State) (a : Adr) (ac : Acct) :
 theorem State.get_set_ne (w : State) {a b : Adr} (h : a ≠ b) (ac : Acct) :
     (w.set a ac).get b = w.get b := by
   rw [State.get_eq_getD, State.get_eq_getD, State.getElem?_set, ite_eq_right h]
+
+theorem State.get_setPresent_self (w : State) (a : Adr) (ac : Acct) :
+    (w.setPresent a ac).get a = ac := by
+  rw [State.get_eq_getD, State.getElem?_setPresent, ite_eq_left rfl]
+  rfl
+
+theorem State.get_setPresent_ne (w : State) {a b : Adr} (h : a ≠ b) (ac : Acct) :
+    (w.setPresent a ac).get b = w.get b := by
+  rw [State.get_eq_getD, State.get_eq_getD, State.getElem?_setPresent, ite_eq_right h]
+
+theorem State.setStorVal_get_self (w : State) (a : Adr) (k v : B256) :
+    (w.setStorVal a k v).get a = {w.get a with stor := (w.get a).stor.set k v} := by
+  unfold State.setStorVal
+  split
+  · exact State.get_setPresent_self _ _ _
+  · exact State.get_set_self _ _ _
+
+theorem State.setStorVal_get_ne (w : State) {a b : Adr} (h : a ≠ b) (k v : B256) :
+    (w.setStorVal a k v).get b = w.get b := by
+  unfold State.setStorVal
+  split
+  · exact State.get_setPresent_ne _ h _
+  · exact State.get_set_ne _ h _
+
+/-- A storage write does not change membership or payload at another address. -/
+theorem State.getElem?_setStorVal_ne (w : State) {a b : Adr} (h : a ≠ b) (k v : B256) :
+    (w.setStorVal a k v)[b]? = w[b]? := by
+  unfold State.setStorVal
+  split
+  · rw [State.getElem?_setPresent, ite_eq_right h]
+  · rw [State.getElem?_set, ite_eq_right h]
+
+theorem State.getElem?_setStor_ne (w : State) {a b : Adr} (h : a ≠ b) (stor : Stor) :
+    (w.setStor a stor)[b]? = w[b]? := by
+  unfold State.setStor
+  split
+  · rw [State.getElem?_setPresent, ite_eq_right h]
+  · rw [State.getElem?_set, ite_eq_right h]
+
+/-- Clearing storage never deletes an account that is already present. -/
+theorem State.getElem?_setStorVal_self_of_exists (w : State) (a : Adr) (k v : B256)
+    (h : AccountExists w a) :
+    (w.setStorVal a k v)[a]? = some {w.get a with stor := (w.get a).stor.set k v} := by
+  rw [State.setStorVal, ite_eq_left h, State.getElem?_setPresent, ite_eq_left rfl]
+
+theorem State.getElem?_setStor_self_of_exists (w : State) (a : Adr) (stor : Stor)
+    (h : AccountExists w a) :
+    (w.setStor a stor)[a]? = some {w.get a with stor := stor} := by
+  rw [State.setStor, ite_eq_left h, State.getElem?_setPresent, ite_eq_left rfl]
 
 theorem State.setAccount_get_self (w : State) (a : Adr) (ac : Acct) :
     (w.setAccount a ac).get a = ac.clearIfEmpty :=
@@ -7318,12 +7433,18 @@ theorem State.Canonical.incrNonce {w : State} (h : State.Canonical w) (a : Adr) 
 /-- `State.setStor` carries its real premise: the storage map handed in must
 already be canonical. -/
 theorem State.Canonical.setStor {w : State} (h : State.Canonical w) (a : Adr)
-    {s : Stor} (hs : Stor.Canonical s) : State.Canonical (w.setStor a s) :=
-  h.set a hs
+    {s : Stor} (hs : Stor.Canonical s) : State.Canonical (w.setStor a s) := by
+  unfold State.setStor
+  split
+  · exact h.setPresent a hs
+  · exact h.set a hs
 
 theorem State.Canonical.setStorVal {w : State} (h : State.Canonical w) (a : Adr)
-    (k v : B256) : State.Canonical (w.setStorVal a k v) :=
-  h.set a ((h.stor a).set k v)
+    (k v : B256) : State.Canonical (w.setStorVal a k v) := by
+  unfold State.setStorVal
+  split
+  · exact h.setPresent a ((h.stor a).set k v)
+  · exact h.set a ((h.stor a).set k v)
 
 /-- The canonical smart constructor for world states. Its premise is the honest
 one: the accounts handed in must have canonical storage, which `Stor.ofList`
@@ -7357,6 +7478,43 @@ theorem State.ofList_concat (l : List (Adr × Acct)) (a : Adr) (ac : Acct) :
 theorem State.get_ofList_concat (l : List (Adr × Acct)) (a : Adr) (ac : Acct) :
     (State.ofList (l ++ [(a, ac)])).get a = ac := by
   rw [State.ofList_concat, State.get_set_self]
+
+theorem State.noNil_ofList (l : List (Adr × Acct)) : State.NoNil (State.ofList l) := by
+  have hfold : ∀ {w : State}, State.NoNil w →
+      State.NoNil (l.foldl (fun w e => w.set e.1 e.2) w) := by
+    induction l with
+    | nil => intro w h; exact h
+    | cons e l ih => intro w h; exact ih (h.set e.1 e.2)
+  exact hfold State.noNil_empty
+
+/-- Construct an allocation without dropping explicitly present empty accounts. -/
+def State.ofPresentList (l : List (Adr × Acct)) : State :=
+  l.foldl (fun w e => w.setPresent e.1 e.2) .empty
+
+theorem State.canonical_foldl_setPresent (l : List (Adr × Acct))
+    (hl : ∀ e ∈ l, Stor.Canonical e.2.stor) :
+    ∀ {w : State}, State.Canonical w →
+      State.Canonical (l.foldl (fun w e => w.setPresent e.1 e.2) w) := by
+  induction l with
+  | nil => intro w h; exact h
+  | cons e l ih =>
+    intro w h
+    exact ih (fun x hx => hl x (List.mem_cons_of_mem _ hx))
+      (h.setPresent e.1 (hl e List.mem_cons_self))
+
+theorem State.canonical_ofPresentList {l : List (Adr × Acct)}
+    (hl : ∀ e ∈ l, Stor.Canonical e.2.stor) :
+    State.Canonical (State.ofPresentList l) :=
+  State.canonical_foldl_setPresent l hl State.canonical_empty
+
+theorem State.ofPresentList_concat (l : List (Adr × Acct)) (a : Adr) (ac : Acct) :
+    State.ofPresentList (l ++ [(a, ac)]) = (State.ofPresentList l).setPresent a ac := by
+  rw [State.ofPresentList, State.ofPresentList, List.foldl_append, List.foldl_cons,
+      List.foldl_nil]
+
+theorem State.getElem?_ofPresentList_concat (l : List (Adr × Acct)) (a : Adr) (ac : Acct) :
+    (State.ofPresentList (l ++ [(a, ac)]))[a]? = some ac := by
+  rw [State.ofPresentList_concat, State.getElem?_setPresent, ite_eq_left rfl]
 
 --------------- CANONICAL TRANSIENT STORAGE ---------------
 
@@ -7525,40 +7683,6 @@ theorem Msg.Canonical.rollback {msg : Msg} (h : Msg.Canonical msg)
     (devm : Devm) :
     Devm.Canonical (devm.rollback msg.benv.state msg.tenv.transientStorage) :=
   ⟨h.1.1, h.2⟩
-
---------------- NEGATIVE REGRESSIONS ---------------
-
--- An absent account and an explicitly stored `Acct.nil` read alike and must
--- not both count as canonical; the same for an absent and an explicitly stored
--- zero storage slot. These are the exact cases P0.4 names.
-
-/-- A world state holding an explicit `Acct.nil`, which no mutator can build. -/
-private def nilStoredState : State :=
-  Std.TreeMap.empty.insert (0 : Adr) Acct.nil
-
-/-- A storage map holding an explicit zero slot, likewise unreachable. -/
-private def zeroStoredStor : Stor :=
-  (Std.TreeMap.empty : Stor).insert (0 : B256) 0
-
--- The reads agree with the empty map ...
-#guard State.get nilStoredState 0 = Acct.nil
-#guard State.get (Std.TreeMap.empty : State) 0 = Acct.nil
-#guard zeroStoredStor.get 0 = 0
-#guard Stor.empty.get 0 = 0
--- ... and canonicality tells them apart.
-#guard ¬ State.Canonical nilStoredState
-#guard State.Canonical (Std.TreeMap.empty : State)
-#guard ¬ Stor.Canonical zeroStoredStor
-#guard Stor.Canonical Stor.empty
--- The canonicalising mutator and the smart constructor both refuse to store it.
-#guard Stor.Canonical (Stor.empty.set 0 0)
-#guard Stor.Canonical (Stor.ofList [(0, 0), (1, 7), (2, 0)])
-#guard (Stor.ofList [(0, 0), (1, 7), (2, 0)]).get 1 = 7
-#guard (Stor.ofList [(0, 0), (1, 7), (2, 0)]).get 0 = 0
-#guard State.Canonical (State.ofList [((0 : Adr), Acct.nil)])
--- An `Acct.nil` handed to the smart constructor is dropped, not stored.
-#guard (State.ofList [((0 : Adr), Acct.nil)]).isEmpty
-#guard ¬ nilStoredState.isEmpty
 
 /-! ### Site table: the account-access sites, at both metering shapes
 
@@ -7914,7 +8038,7 @@ theorem Devm.Canonical.creditBeneficiary {devm : Devm} (h : devm.Canonical)
   split
   · exact h.addBal adr v
   · exact Devm.Canonical.of_world_eq
-      (h.withState (h.1.set adr (ac := (devm.state.get adr).withBal (devm.state.bal adr + v))
+      (h.withState (h.1.setPresent adr (ac := (devm.state.get adr).withBal (devm.state.bal adr + v))
         (h.1.stor adr))) rfl
 
 theorem Devm.Canonical.subBal {devm devm' : Devm} (h : devm.Canonical)

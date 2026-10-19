@@ -333,8 +333,25 @@ lemma State.set_bal {st : Jaune.State} {a : Adr} {ac : Acct}
   · show ((st.set a ac).get b).bal = (st.get b).bal
     rw [State.get_set_ne _ (fun hc => hb hc.symm)]
 
+/-- Presence-preserving updates also preserve every balance when the written
+account's balance agrees with the prior account. -/
+lemma State.setPresent_bal {st : Jaune.State} {a : Adr} {ac : Acct}
+    (h : ac.bal = (st.get a).bal) : (st.setPresent a ac).bal = st.bal := by
+  funext b
+  by_cases hb : b = a
+  · subst hb
+    show ((st.setPresent b ac).get b).bal = (st.get b).bal
+    rw [State.get_setPresent_self]
+    exact h
+  · show ((st.setPresent a ac).get b).bal = (st.get b).bal
+    rw [State.get_setPresent_ne _ (fun hc => hb hc.symm)]
+
 lemma State.setStor_bal {st : Jaune.State} {a : Adr} {s : Stor} :
-    (st.setStor a s).bal = st.bal := State.set_bal rfl
+    (st.setStor a s).bal = st.bal := by
+  unfold State.setStor
+  split
+  · exact State.setPresent_bal rfl
+  · exact State.set_bal rfl
 
 lemma State.incrNonce_bal {st : Jaune.State} {a : Adr} :
     (st.incrNonce a).bal = st.bal := State.set_bal (Acct.clearIfEmpty_bal _)

@@ -508,7 +508,7 @@ private abbrev AmsterdamDelegationResult := Devm × AdrSet × AdrSet
 
 private def chargeNewAuthorityAmsterdam (state : StateGasRules)
     (authority : Adr) (devm : Devm) : Execution :=
-  if devm.state.get authority = .nil then
+  if ¬ AccountExists devm.state authority then
     chargeStateGas state.newAccount devm
   else .ok devm
 
@@ -646,7 +646,7 @@ private def dispatchTopLevelAmsterdam (state : StateGasRules) (msg : Msg)
       .ok ⟨preparedTopLevelMsg msg devm, devm⟩
   else do
     let devm ←
-      if msg.value != 0 && ¬ AccountExists devm.state msg.currentTarget then
+      if msg.value != 0 && decide (devm.state.get msg.currentTarget).Empty then
         chargeStateGas state.newAccount devm
       else .ok devm
     resolveTopLevelCallAmsterdam msg devm
