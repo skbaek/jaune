@@ -332,10 +332,9 @@ requirements.
   not block creation"), revm `journal/inner.rs:556` (Reth's
   `expected_failures.yaml:24-36` lists the EIP-7610 tests as unreachable),
   and Erigon v3.7.1 `tools/eest-spec-shards.yml:74-75,151-152` excludes these
-  very fixtures. About 28 pre-EIP-161 accounts with that shape do exist on
-  mainnet, but creating into one needs a CREATE/CREATE2 address preimage
-  collision, so no mainnet block can distinguish the two rules. Jaune
-  follows the pinned EELS, which is the specification it targets.
+  very fixtures. EIP-7610 records 28 mainnet accounts with that shape. Jaune
+  follows the nonce-and-code collision rule in pinned EELS `1562e2f`; the
+  retained original-input replays establish agreement for these fixtures.
 
 ## Semantic integrity
 
