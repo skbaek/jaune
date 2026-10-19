@@ -623,6 +623,19 @@ Two different contracts, and confusing them is the most common misreading:
   the legacy blockchain loader uses `Load.json_to_state`. A storage-only
   account is empty for the latter policy, independently of its storage root.
 
+  `scripts/check-expectation-fields.py`, called by this gate, checks the shared
+  fixture-field reader through the built strict and diagnostic frontends.
+  The reader selects only modern `expectException`, `expectExceptionALL`, or
+  `expectException` plus the original case's exact network label. Applicable
+  fields have no precedence: ambiguity (even equal values), a selected
+  non-string, or unsupported `exceptions` is a format error. Foreign suffixes
+  remain provenance only. Focused controls cover ALL/selected-network wiring,
+  original transition-label selection, foreign-only isolation, ambiguity/type
+  handling, and complete/unreached v2 field provenance. They require no corpus
+  installation and do not duplicate `FixtureClosure.score_continue_iff`'s
+  abstract continuation policy. Diagnostic reports are schema v2; prior v1
+  receipts remain evidence of their original binary, not this changed runner.
+
   **It pins the guards, not the run beneath them.** The permissive half of the
   wrong-tree rule — a case declaring no `_info.fixture-format` is passed through
   — is checked as an A/B pair of files identical but for the `_info` block, and

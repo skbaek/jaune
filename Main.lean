@@ -48,13 +48,57 @@ def Lean.Json.toB64? (j : Json) : Option UInt64 := do
   let bytes ← Hex.toBytes x
   Bytes.toQuantityB64? bytes
 
-def getTxExMap (j : Lean.Json) : IO (Option String × Bytes) := do
+private inductive FixtureExpectationError where
+  | unsupportedField | multipleApplicable | nonString
+
+private def FixtureExpectationError.tag : FixtureExpectationError → String
+  | .unsupportedField => "unsupported_field"
+  | .multipleApplicable => "multiple_applicable"
+  | .nonString => "non_string"
+
+private def FixtureExpectationError.detail : FixtureExpectationError → String
+  | .unsupportedField => "unsupported expectation field: exceptions"
+  | .multipleApplicable => "multiple applicable expectation fields"
+  | .nonString => "selected expectation field must be a JSON string"
+
+private structure FixtureExpectationSelection where
+  caseNetwork : String
+  fields : List (String × Lean.Json)
+  applicable : List (String × Lean.Json)
+  selected : Option (String × Lean.Json) := none
+  selectionError : Option FixtureExpectationError := none
+
+/-- Select by the original case label, never the CLI filter or a block's active
+fork. Foreign suffixes are provenance only. Applicable fields have no precedence:
+even equal alternatives conflict. Presence and JSON null remain distinct. -/
+private def readFixtureExpectation (caseNetwork : String) (j : Lean.Json) :
+    FixtureExpectationSelection :=
+  let fields := match j with
+    | .obj obj => obj.toArray.toList.filter fun (key, _) =>
+      key.startsWith "expectException" || key == "exceptions"
+    | _ => []
+  let applicable := fields.filter fun (key, _) =>
+    key == "expectException" || key == "expectExceptionALL" ||
+      key == ("expectException" ++ caseNetwork)
+  let base : FixtureExpectationSelection := { caseNetwork, fields, applicable }
+  if fields.any (fun entry => entry.1 == "exceptions") then
+    { base with selectionError := some .unsupportedField }
+  else match applicable with
+    | [] => base
+    | [(key, value)] =>
+      let selected := { base with selected := some (key, value) }
+      match value with
+      | .str _ => selected
+      | _ => { selected with selectionError := some .nonString }
+    | _ => { base with selectionError := some .multipleApplicable }
+
+private def readFixtureBlock (caseNetwork : String) (j : Lean.Json) :
+    IO (FixtureExpectationSelection × Bytes) := do
+  let selected := readFixtureExpectation caseNetwork j
+  if let some error := selected.selectionError then
+    .throw s!"error : expectation field format error ({error.tag}): {error.detail}"
   let rlp ← j.find "rlp" >>= Lean.Json.toIoBytes
-  match j.find? "expectException" with
-  | .none => pure ⟨.none, rlp⟩
-  | .some exj => do
-    let exs ← exj.toIoString
-    pure ⟨.some exs, rlp⟩
+  pure ⟨selected, rlp⟩
 
 /-- The block-level access list a Glamsterdam fixture publishes beside an
 Amsterdam block (`rlp_decoded.blockAccessList`, or `blockAccessList` on a
@@ -754,6 +798,7 @@ def requireExpectedFailure (idx : Nat) (chainname : String)
 from each decoded header's `parentHash`. Expected-invalid blocks are checked
 exactly, leave the snapshot store unchanged, and never stop later blocks. -/
 private def processBlockJsonsWith {σ : Type}
+    (caseNetwork : String)
     (evaluate : σ → Bytes → Except ImportFailure
       (ImportOutcome (CheckedBlockChain × σ))) (store : σ) :
     List (Nat × Lean.Json) → IO σ
@@ -765,7 +810,8 @@ private def processBlockJsonsWith {σ : Type}
       (blockJson.find? "chainname" >>= Lean.Json.toString?).getD "default"
     .println s!"BLOCK INDEX : {idx}"
     .println s!"CHAIN NAME : {chainname}"
-    let ⟨rawExpected?, blockRlp⟩ ← getTxExMap blockJson
+    let ⟨selected, blockRlp⟩ ← readFixtureBlock caseNetwork blockJson
+    let rawExpected? := selected.selected.map Prod.snd >>= Lean.Json.toString?
     let expected? ←
       match rawExpected? with
       | none => pure none
@@ -785,7 +831,7 @@ private def processBlockJsonsWith {σ : Type}
           raw actual: {repr failure.render}\ncanonical actual: <unknown canonical identity>"
       | some expected =>
         requireExpectedFailure idx chainname expected failure.render none
-        processBlockJsonsWith evaluate store rest
+        processBlockJsonsWith caseNetwork evaluate store rest
     | .ok (.inr consensusRejection) =>
       -- An Amsterdam access-list hash rejection is refined with the fixture's
       -- published list before scoring; every other rejection passes through.
@@ -799,7 +845,7 @@ private def processBlockJsonsWith {σ : Type}
       | some expected =>
         requireExpectedFailure idx chainname expected rejection.render
           (FixtureException.ofBlockRejection rejection)
-        processBlockJsonsWith evaluate store rest
+        processBlockJsonsWith caseNetwork evaluate store rest
     | .ok (.inl (child, next)) =>
       match expected? with
       | some expected =>
@@ -807,7 +853,7 @@ private def processBlockJsonsWith {σ : Type}
           expected: {expected.map FixtureException.toString}\n\
           computed tip: {child.tipHash}"
       | none =>
-        processBlockJsonsWith evaluate next rest
+        processBlockJsonsWith caseNetwork evaluate next rest
   | [] => .ok store
 
 /-- The sole scheduled store update pairs the checked child with its next store. -/
@@ -822,15 +868,15 @@ private def evaluateTTDStore (store : FixtureTTD.Store) (raw : Bytes) :
   (FixtureTTD.evaluateObserved store raw).map (fun result => (result.child, result.next))
 
 /-- Scheduled imports retain their existing decoder and London dispatch. -/
-def processBlockJsons (spec : NetworkSpec) (chainId : UInt64) (store : ChainStore)
+def processBlockJsons (caseNetwork : String) (spec : NetworkSpec) (chainId : UInt64) (store : ChainStore)
     (blocks : List (Nat × Lean.Json)) : IO ChainStore :=
-  processBlockJsonsWith (fun store raw =>
+  processBlockJsonsWith caseNetwork (fun store raw =>
     (evaluateScheduledStore spec chainId store raw).outcome) store blocks
 
 /-- TTD acceptance already carries its indivisible branch-ledger update. -/
-private def processTTDBlockJsons (store : FixtureTTD.Store)
+private def processTTDBlockJsons (caseNetwork : String) (store : FixtureTTD.Store)
     (blocks : List (Nat × Lean.Json)) : IO FixtureTTD.Store :=
-  processBlockJsonsWith (fun store raw => (evaluateTTDStore store raw).outcome) store blocks
+  processBlockJsonsWith caseNetwork (fun store raw => (evaluateTTDStore store raw).outcome) store blocks
 
 /-- Check a fixture's own declared blob schedule against the rules this run
 will apply.
@@ -1010,16 +1056,17 @@ def runBlockchainStTest (spec : FixtureNetwork) : (Nat × String × Lean.Json) �
   | ⟨idx, name, json⟩ => do
     .println s!"TEST NAME : {name}"
     .println s!"TEST INDEX : {idx}"
+    let caseNetwork ← json.find "network" >>= Lean.Json.toIoString
     let (genesisChecked, chainId, blockJsons) ← prepareFixtureCase spec json
     let findLast : B256 → Except ImportFailure CheckedBlockChain ←
       match spec with
       | .scheduled scheduled => do
-        let store ← processBlockJsons scheduled chainId (.init genesisChecked)
+        let store ← processBlockJsons caseNetwork scheduled chainId (.init genesisChecked)
           blockJsons.putIndex
         pure (fun hash => store.findLast hash)
       | .arrowGlacierParisTTD => do
         let initial ← ((FixtureTTD.init genesisChecked).mapError ImportFailure.render).toIO
-        let store ← processTTDBlockJsons initial blockJsons.putIndex
+        let store ← processTTDBlockJsons caseNetwork initial blockJsons.putIndex
         pure (fun hash => store.findLast hash)
     verifyFixtureFinal json findLast
 
@@ -1052,6 +1099,27 @@ private def closureExpected (raw : Option Lean.Json) : FixtureClosure.Expected :
       | .ok expected => .known expected
       | .error detail => .unknown detail
   | some _ => .malformed "expectException must be a JSON string"
+
+private def closureSelectedExpected (selected : FixtureExpectationSelection) :
+    FixtureClosure.Expected :=
+  match selected.selectionError with
+  | some error => .malformed error.detail
+  | none => closureExpected (selected.selected.map Prod.snd)
+
+private def closureSelectionJson (selected : FixtureExpectationSelection) : Lean.Json :=
+  let entries (fields : List (String × Lean.Json)) : Lean.Json :=
+    .arr ((fields.map fun (key, value) =>
+      Lean.Json.mkObj [("key", .str key), ("value", value)]).toArray)
+  .mkObj [("case_network", .str selected.caseNetwork),
+    ("fields", entries selected.fields), ("applicable", entries selected.applicable),
+    ("present", .bool (!selected.applicable.isEmpty)),
+    ("selected_key", match selected.selected with
+      | none => .null
+      | some (key, _) => .str key),
+    ("raw", (selected.selected.map Prod.snd).getD .null),
+    ("selection_error", match selected.selectionError with
+      | none => .null
+      | some error => .mkObj [("tag", .str error.tag), ("detail", .str error.detail)])]
 
 private def closureExpectedJson : FixtureClosure.Expected → Lean.Json
   | .absent => .mkObj [("status", .str "absent"), ("canonical", .null), ("detail", .null)]
@@ -1099,12 +1167,11 @@ private inductive ClosureActual where
 private inductive ClosureDisposition where
   | notEvaluated | unchanged | insertCheckedChild
 
-private def closureCandidateJson (idx : Nat) (blockJson : Lean.Json)
+private def closureCandidateJson (idx : Nat) (selected : FixtureExpectationSelection)
     (expected : FixtureClosure.Expected) (rawHex : String) (reached : Bool)
     (actual : ClosureActual) (identity : FixtureClosure.Identity)
     (disposition : ClosureDisposition) (decodedParent : Option B256 := none)
     (parent : Option CheckedBlockChain := none) : Lean.Json :=
-  let rawExpected := blockJson.find? "expectException"
   let (channel, tag, canonical, detail) : String × Lean.Json × Lean.Json × Lean.Json :=
     match actual with
     | .notEvaluated => ("not_evaluated", Lean.Json.null, .null, match expected with
@@ -1119,8 +1186,7 @@ private def closureCandidateJson (idx : Nat) (blockJson : Lean.Json)
     | .imported => ("imported", .str "ImportOutcome.inl", .null, .null)
   .mkObj [
     ("original_block_index", Lean.toJson idx), ("rlp_hex", .str rawHex),
-    ("expectation", .mkObj [("present", .bool rawExpected.isSome),
-      ("raw", rawExpected.getD .null)]),
+    ("expectation", closureSelectionJson selected),
     ("expected_parse", closureExpectedJson expected),
     ("reached", .bool reached), ("evaluation_engine", .str "shared_checked_evaluator"),
     ("actual_channel", .str channel), ("actual_typed_tag", tag),
@@ -1140,8 +1206,9 @@ private def closureCandidateJson (idx : Nat) (blockJson : Lean.Json)
 private def closureOriginalRlp (blockJson : Lean.Json) : String :=
   (blockJson.find? "rlp" >>= Lean.Json.toString?).getD ""
 
-private def closureUnreached (block : Nat × Lean.Json) : Lean.Json :=
-  closureCandidateJson block.1 block.2 (closureExpected (block.2.find? "expectException"))
+private def closureUnreached (caseNetwork : String) (block : Nat × Lean.Json) : Lean.Json :=
+  let selected := readFixtureExpectation caseNetwork block.2
+  closureCandidateJson block.1 selected (closureSelectedExpected selected)
     (closureOriginalRlp block.2) false
     .notEvaluated .notApplicable .notEvaluated
 
@@ -1155,12 +1222,14 @@ private structure ClosureStep (σ : Type) where
 agreement is the only continuation rule. The immutable next store is adopted
 only for an expected-valid checked import. -/
 private def closureCandidateStep {σ : Type}
+    (caseNetwork : String)
     (evaluate : σ → Bytes → FixtureObserved (CheckedBlockChain × σ))
     (store : σ) (idx : Nat) (blockJson : Lean.Json) : IO (ClosureStep σ) := do
-  let expected := closureExpected (blockJson.find? "expectException")
+  let selected := readFixtureExpectation caseNetwork blockJson
+  let expected := closureSelectedExpected selected
   if let .malformed detail := expected then
     .println s!"IDENTITY CLOSURE BLOCK #{idx} malformed expectation: {detail}"
-    return ⟨store, closureCandidateJson idx blockJson expected (closureOriginalRlp blockJson)
+    return ⟨store, closureCandidateJson idx selected expected (closureOriginalRlp blockJson)
       false .notEvaluated .malformedExpected .notEvaluated, false, false⟩
   let captured ← IO.mkRef (none : Option (FixtureObserved (CheckedBlockChain × σ)))
   let capturedRaw ← IO.mkRef (none : Option Bytes)
@@ -1182,7 +1251,7 @@ private def closureCandidateStep {σ : Type}
     let (next, disposition) := match expected, observed.outcome with
       | .absent, .ok (.inl (_, next)) => (next, ClosureDisposition.insertCheckedChild)
       | _, _ => (store, .unchanged)
-    let row := closureCandidateJson idx blockJson expected ("0x" ++ raw.toHex) true actual
+    let row := closureCandidateJson idx selected expected ("0x" ++ raw.toHex) true actual
       score.identity disposition observed.decodedParentHash observed.parent
     return ⟨next, row, score.mayContinue, score.strictAccepted⟩
   catch error =>
@@ -1190,7 +1259,7 @@ private def closureCandidateStep {σ : Type}
     let raw? ← capturedRaw.get
     let failure := ImportFailure.harness (.text error.toString)
     .println s!"IDENTITY CLOSURE BLOCK #{idx} operational failure: {failure.render}"
-    let row := closureCandidateJson idx blockJson expected
+    let row := closureCandidateJson idx selected expected
       (raw?.map (fun raw => "0x" ++ raw.toHex) |>.getD (closureOriginalRlp blockJson))
       observed?.isSome (.operational failure) .notApplicable
       .unchanged (observed?.bind (·.decodedParentHash)) (observed?.bind (·.parent))
@@ -1203,6 +1272,7 @@ private structure ClosureFold (σ : Type) where
   strictAccepted : Bool
 
 private def processClosureBlocks {σ : Type}
+    (caseNetwork : String)
     (evaluate : σ → Bytes → FixtureObserved (CheckedBlockChain × σ)) (store : σ) :
     List (Nat × Lean.Json) → IO (ClosureFold σ)
   | [] => pure ⟨store, [], true, true⟩
@@ -1210,13 +1280,13 @@ private def processClosureBlocks {σ : Type}
     let chainname := (blockJson.find? "chainname" >>= Lean.Json.toString?).getD "default"
     .println s!"BLOCK INDEX : {idx}"
     .println s!"CHAIN NAME : {chainname}"
-    let step ← closureCandidateStep evaluate store idx blockJson
+    let step ← closureCandidateStep caseNetwork evaluate store idx blockJson
     if step.mayContinue then
-      let result ← processClosureBlocks evaluate step.store rest
+      let result ← processClosureBlocks caseNetwork evaluate step.store rest
       return ⟨result.store, step.row :: result.rows, result.complete,
         step.strictAccepted && result.strictAccepted⟩
     else
-      return ⟨store, step.row :: rest.map closureUnreached, false, false⟩
+      return ⟨store, step.row :: rest.map (closureUnreached caseNetwork), false, false⟩
 
 private def closureFinalJson (check : FixtureFinalObservation) : Lean.Json :=
   .mkObj [("last_snapshot_found", .bool check.lastSnapshotFound),
@@ -1237,6 +1307,7 @@ private def runClosureCase (spec : FixtureNetwork) (case : Nat × String × Lean
   let (idx, name, json) := case
   .println s!"TEST NAME : {name}"
   .println s!"TEST INDEX : {idx}"
+  let caseNetwork ← json.find "network" >>= Lean.Json.toIoString
   let genesisDone ← IO.mkRef false
   let rows ← IO.mkRef ([] : List Lean.Json)
   let final ← IO.mkRef (none : Option FixtureFinalObservation)
@@ -1251,14 +1322,14 @@ private def runClosureCase (spec : FixtureNetwork) (case : Nat × String × Lean
       | .scheduled scheduled => do
         let initial := ChainStore.init genesisChecked
         genesisDone.set true
-        let result ← processClosureBlocks (evaluateScheduledStore scheduled chainId)
+        let result ← processClosureBlocks caseNetwork (evaluateScheduledStore scheduled chainId)
           initial blockJsons.putIndex
         rows.set result.rows
         pure ((fun hash => result.store.findLast hash), result.complete, result.strictAccepted)
       | .arrowGlacierParisTTD => do
         let initial ← ((FixtureTTD.init genesisChecked).mapError ImportFailure.render).toIO
         genesisDone.set true
-        let result ← processClosureBlocks evaluateTTDStore initial blockJsons.putIndex
+        let result ← processClosureBlocks caseNetwork evaluateTTDStore initial blockJsons.putIndex
         rows.set result.rows
         pure ((fun hash => result.store.findLast hash), result.complete, result.strictAccepted)
     if traversalComplete then
@@ -1268,7 +1339,8 @@ private def runClosureCase (spec : FixtureNetwork) (case : Nat × String × Lean
   catch error =>
     .println s!"IDENTITY CLOSURE CASE {name} failure: {error.toString}"
   let observedRows ← rows.get
-  let allRows := if observedRows.isEmpty then originals.putIndex.map closureUnreached else observedRows
+  let allRows := if observedRows.isEmpty then
+    originals.putIndex.map (closureUnreached caseNetwork) else observedRows
   let finalCheck ← final.get
   let report := Lean.Json.mkObj [("case_key", .str name),
     ("original_case_index_sorted_keys", Lean.toJson idx),
@@ -1491,7 +1563,7 @@ def runTestFile (o : FixtureOpts) (path : String) : IO Unit := do
     let selected ← selectFixtureCases o path
     let results ← selected.mapM (fun p => runClosureCase p.fst p.snd)
     let report := Lean.Json.mkObj [
-      ("schema", .str "jaune-original-identity-closure-v1"), ("input_path", .str path),
+      ("schema", .str "jaune-original-identity-closure-v2"), ("input_path", .str path),
       ("network_filter", .str ((o.net.map (·.rawLabel)).getD "")),
       ("cases", .arr ((results.map Prod.fst).toArray))]
     writeClosureReport reportPath report

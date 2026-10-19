@@ -571,7 +571,7 @@ import sys
 from pathlib import Path
 report_path, input_path = map(Path, sys.argv[1:])
 report = json.loads(report_path.read_text())
-assert report["schema"] == "jaune-original-identity-closure-v1", report
+assert report["schema"] == "jaune-original-identity-closure-v2", report
 assert report["input_path"] == str(input_path) and report["network_filter"] == "Prague", report
 assert len(report["cases"]) == 1, report
 case = report["cases"][0]
@@ -587,6 +587,13 @@ fi
 CHECKS=$((CHECKS + 1))
 if ! cmp -s "$TMP/input-before.json" "$TMP/loose/undeclared.json"; then
   fail "identity closure fatal genesis: input bytes changed"
+fi
+
+# Shared historical expectation-field ingress and exact v2 provenance. The
+# focused helper owns its own temporary files and never needs a corpus.
+CHECKS=$((CHECKS + 1))
+if ! python3 "$SCRIPT_DIR/check-expectation-fields.py" --binary "$BIN"; then
+  fail "expectation-field ingress: focused compiled controls failed"
 fi
 
 # ----------------------------------------------------------------- verdict --
