@@ -146,6 +146,15 @@ constructors, `parseExpectation` is the sole external-string parser).
 
 ## 6. Totality inventory: before/after and every residual allowlist item
 
+**Historical snapshot (2026-08-01).** The 56-row table below, including
+`getTxExMap`, describes the exact Step 12 tips named above. It is preserved
+as measured history, not the current inventory. At the 2026-10-19
+historical-forks candidate, `getTxExMap` has been replaced by typed
+expectation-field selection and its obsolete allowance removed; the current
+gate reports 57 retained occurrences (43 R3 and 14 R4), zero pending. See
+[`../TRUSTED.md`](../TRUSTED.md#what-is-deliberately-absent-and-what-enforces-the-absence) and the command
+`scripts/check-integrity.sh` for the live boundary.
+
 `check-integrity.sh`'s pending budget (a shrink-only defect count) over the
 arc:
 

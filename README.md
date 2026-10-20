@@ -103,8 +103,9 @@ fails if no case survives, so a green run never means "nothing was checked".
 
 Given no `--network`, every supported case in the file runs under the rules its
 own `network` label names. A file holding a mix of networks contributes its
-supported part; one whose cases all predate Prague is reported as out of scope
-rather than passing vacuously.
+supported part; a file with no case in the supported fork range is reported
+as out of scope rather than passing vacuously. The range now begins at
+Byzantium; earlier forks remain out of scope.
 
 | option | means |
 |---|---|
@@ -143,8 +144,11 @@ any `--input.*` value; outputs may be written to `stdout` the same way.
 Options accept `--flag value` and `--flag=value` alike. `--state-test` applies
 exactly one transaction with no system operations.
 
-**The supported lane is Prague, Osaka, BPO1, BPO2 and Amsterdam** — the same
-forks the fixture runner supports, and unsupported input fails closed. There is no
+**The advertised lane is Byzantium, ConstantinopleFix (Petersburg), Istanbul,
+MuirGlacier, Berlin, London, ArrowGlacier, GrayGlacier, Paris, Shanghai, Cancun,
+Prague, Osaka, BPO1, BPO2 and Amsterdam.** Unsupported input fails closed.
+Synthetic EIP-1283 `Constantinople` is fixture-only: Jaune can execute its
+fixtures, but both `t8n` and the pinned target refuse that target label. There is no
 default fork and no fallback: an out-of-lane `--state.fork`, a missing one, an
 unrecognised flag, an unrecognised input field, and the RLP-string form of
 `txs` are each an explicit error with a non-zero exit. Tracing is not claimed,
@@ -158,7 +162,7 @@ the fork lane, the modes, and the corpus and oracle pins, all read from
 working directory; `lake exe jaune -v` prints the banner a framework
 identifies the binary by.
 
-Conformance is gated. `scripts/check-t8n.sh` compares thirty-nine cases against
+Conformance is gated. `scripts/check-t8n.sh` compares 76 cases against
 goldens generated from a pinned `execution-specs` revision, with every
 normalization and declared difference explicit — see
 [`scripts/t8n/README.md`](scripts/t8n/README.md) for the corpus, the
@@ -194,9 +198,14 @@ requirements.
   the transcription a read, which is the point of citing the standard at every
   declaration. [`TRUSTED.md`](TRUSTED.md) states exactly what the theorem does
   and does not claim.
-- **Supported forks:** Prague, Osaka, BPO1, and BPO2, plus the transitions
-  between them; Amsterdam also runs, against the same v21.0.1 release (see
-  below). Jaune's primary Prague evidence is the strict all-PASS
+- **Runnable forks:** Byzantium through Cancun, followed by Prague, Osaka,
+  BPO1, BPO2 and the Amsterdam snapshot, with configured fork transitions.
+  The historical EEST lane passes all 3,692 files (38,896 cases) selected by
+  its v21.0.1 manifest. Synthetic EIP-1283 Constantinople has legacy-fixture
+  evidence but no independent EELS oracle or target golden. Muir Glacier,
+  Arrow Glacier and Gray Glacier have no static EEST or legacy suite; their
+  difficulty and transition-tool evidence is described in the gate catalogue.
+  Jaune's primary Prague evidence is the strict all-PASS
   current-mainnet lane over the separately installed `execution-specs`
   `tests@v21.0.1` release: 2,506/2,506 Prague fixtures and 4,968/4,968 across
   the whole manifest, with no expected-failure allowance. Its generated
@@ -220,7 +229,7 @@ requirements.
   `BPO2`, so `--suite bpo1` and `--suite bpo2` select nothing and are refused
   rather than reported as vacuously green.
 - **`Amsterdam` runs against `tests@v21.0.1`.**
-  `Fork.amsterdam.rules?` resolves to `amsterdamRules`, the fifth complete rule
+  `Fork.amsterdam.rules?` resolves to `amsterdamRules`, its complete rule
   record: the repriced gas numbers and EIP-8037's state-gas dimension (the
   metering goal), EIP-7954's code limits, EIP-7843 `SLOTNUM`, EIP-8024
   `DUPN`/`SWAPN`/`EXCHANGE` (with the jumpdest set proved unchanged),
@@ -228,8 +237,8 @@ requirements.
   list — read set, builder, canonical encoding, item rule and header hash check
   — every number machine-checked against the pinned `execution-specs` revision
   by `scripts/check-fork-constants.sh`. The total transaction gas limit is
-  `2^32 - 1`; the independent execution-gas bound remains `2^24`. Storage-only
-  creation follows the pinned reference on all seven runnable forks: nonce or
+  `2^32 - 1`; the independent execution-gas bound remains `2^24`. In the authored
+  five-fork corpus, storage-only creation follows the pinned reference: nonce or
   code causes a collision, storage alone does not, and creation wipes old storage
   before initcode. Empty-account deletion also clears storage.
   Amsterdam retains its own suite lane (`python3 scripts/bootstrap_mainnet.py
@@ -237,14 +246,21 @@ requirements.
   amsterdam`), inventoried in `scripts/amsterdam/manifests.json`. All four of
   its suites run: the static `Amsterdam` suite and its smoke tier, and the
   `BPO2ToAmsterdamAtTime15k` transition suite together with the union of both.
-  The static suite contains 3,296 files (26,398 cases). The transition suite
-  passes all 58 files except four recorded identity
-  findings, where Jaune agrees that the block is invalid but names a different
-  exception than the fixture (see [`scripts/GATES.md`](scripts/GATES.md#the-amsterdam-lane)).
-  A committed 54-case transition-tool corpus exercises the transaction
-  semantics and the block-level access list through `jaune t8n --state.fork
-  Amsterdam` against the pinned executable reference, and `jaune t8n --forks`
-  advertises all seven forks, London and Paris included. Ten authored cases cover
+  The static suite contains 3,296 files (26,398 cases), and transitions add
+  58 files (189 cases). With the explicitly approved two-fixture correction
+  `bal-header-format-v1`, all 3,354 files (26,587 cases) pass the strict full
+  gate. The official archive remains unchanged: its uncorrected full run
+  reports 3,352 PASS and two BAL-header exception-name failures. Earlier
+  four-failure results remain historical; Jaune's header-width identity repair
+  resolved the two slot-number findings. The overlay changes only two raw
+  expected exception names plus generation metadata; it preserves block wire
+  bytes, payloads, prestate and poststate. It is a local registered correction,
+  not a newly published official release (see
+  [`scripts/GATES.md`](scripts/GATES.md#the-amsterdam-lane)).
+  The committed 76-case transition-tool corpus includes the 30 Amsterdam
+  metering cases and compares against the pinned executable reference.
+  `jaune t8n --forks` advertises the 16 target-backed forks listed above.
+  Ten authored cases cover
   storage-only creation and deletion across five of them (Prague, Osaka, BPO1,
   BPO2, Amsterdam). The upstream release
   fixtures for those ten creation/deletion scenarios were skipped and are absent;
@@ -288,13 +304,13 @@ requirements.
 
   The frozen `ethereum/tests` corpus is retained as an independently-filled
   regression instrument. Its `--full` tier is the entire `BlockchainTests`
-  corpus, dominated by the `GeneralStateTests/` subtree — which passes
-  **2628 of 2634**. Its five baselined FAILs are diagnosed, and none is a
+  corpus, including the `GeneralStateTests/` subtree. Its five baselined FAILs
+  are diagnosed, and none is a
   defect in Jaune: two
   (`stEIP1559/intrinsicCancun.json`, `bcEIP1559/intrinsicOrFailCancun.json`)
-  are the corpus's only two fixtures with no case in the supported fork
-  range, refused under the fail-closed era policy above rather than reported
-  as a vacuous pass; the other three, under `InvalidBlocks/bcStateTests/`,
+  contain only Cancun cases, so the ordinary legacy tier's `--network Prague`
+  filter selects no case. They fail closed on that empty selection rather
+  than being reported as a vacuous pass; Cancun itself is supported; the other three, under `InvalidBlocks/bcStateTests/`,
   are multiply-invalid fixtures whose pipe-separated expected-exception
   alternatives reflect their fill generator's check ordering (evmone tests
   the fee cap before intrinsic gas) and omit the specification's: the frozen
@@ -310,6 +326,11 @@ requirements.
   signed transactions and environment; their old header gas values disagree.
   All fixture and baseline bytes are preserved. The full run reports 2,973 PASS
   and 10 FAIL, with a raw RED verdict on exactly these five approved changes.
+  The registered full-tier qualifier returns `QUALIFIED` after ten fresh
+  original-input Prague replays agree with pinned EELS; this does not turn the
+  raw gate into an all-PASS result. Historical legacy tiers use a separate
+  restoration corpus and exact per-tier naming/order baselines, not this
+  Prague qualification or a network-wide waiver.
   Any further classification change fails readiness acceptance. The separate
   historical LegacyTests restoration pin `41404287` is unmerged PR18 and has
   no Prague cases; it does not replace this corpus.

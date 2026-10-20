@@ -1,9 +1,10 @@
 # The `check-t8n.sh` corpus
 
-Sixty-six cases, each a complete `t8n` invocation, with goldens generated from the
-pinned conformance target. `scripts/check-t8n.sh` runs them; this file says
-what they are and how to change them. Sixty-two conform and four are
-registered refusals (the still-refused historical forks below).
+Seventy-six cases, each a complete `t8n` invocation, with goldens generated
+from the pinned conformance target. `scripts/check-t8n.sh` runs them; this
+file says what they are and how to change them. All 76 conform, with no
+registered refusal cases. The exact approved CLI adapter used by ommer cases
+is recorded per case; it does not move the semantic reference pin.
 
 ## Layout
 
@@ -51,9 +52,9 @@ These nine cases run at Prague. The thirty `am-*` cases below exercise
 Amsterdam's metering in both tool modes. Ten further cases cover storage-only
 creation and empty-account deletion on Prague, Osaka, BPO1, BPO2 and Amsterdam.
 Five further cases cover zero-value transaction, CALL and STATICCALL entry on
-those same forks (62 conforming cases in total; 66 with the historical twelve,
-eight of which now pass, U6b's pre-Paris SELFDESTRUCT case among them since
-U11d resolved Berlin).
+those same forks. Together these are 54 cases. The historical corpus adds
+eleven transfers, one Berlin SELFDESTRUCT case, seven ommer cases and three
+Muir difficulty cases, for 76 total.
 
 ### Storage semantics at the v21 pin
 
@@ -79,7 +80,7 @@ creation/deletion cases, the corresponding `test_create_collision.py` storage-on
 at the pinned EELS commit
 and `test_deleted_account_storage.py` are explicitly skipped as undefined until
 EIP-8253 and absent from the release archive. The goldens here record the
-pinned implementation's actual behavior on Jaune's five runnable forks; they
+pinned implementation's actual behavior on those five authored forks; they
 do not claim Frontier-through-Amsterdam release coverage.
 
 ## Amsterdam lane
@@ -87,9 +88,8 @@ do not claim Frontier-through-Amsterdam release coverage.
 `jaune t8n --state.fork Amsterdam` resolves Amsterdam through `Fork.rules?`
 like every other fork, and since goal `jaune-amsterdam-currency-v1`
 `jaune t8n --forks` advertises it: the lane printed there is `Fork.supported`
-itself -- `Shanghai Cancun Prague Osaka BPO1 BPO2 Amsterdam` since U11a
-made Shanghai and Cancun runnable -- so the advertised lane and the
-runnable lane cannot differ, `scripts/sources.json`'s
+restricted to target-backed labels, with synthetic `Constantinople` omitted.
+It advertises 16 forks, Byzantium through Amsterdam; `scripts/sources.json`'s
 `conformance_target.fork_lane` is the same list (pinned by
 `scripts/check-cli.sh`), and `jaune t8n --info` states the lane, its basis
 (the fixture corpora of `check-mainnet.sh` and the differential of
@@ -142,8 +142,8 @@ pins, so goldens and emission always come from one revision.
 
 ## Historical cases (goal U10)
 
-Eleven further cases cover the pre-Prague forks, one transfer per fork (four
-still refused, seven passing since units U11a/U11b/U11d):
+Eleven cases cover the target-backed pre-Prague forks, one transfer per fork;
+all conform against their registered goldens:
 
 | case | fork label | reward |
 |---|---|---|
@@ -161,27 +161,17 @@ still refused, seven passing since units U11a/U11b/U11d):
 
 Labels are the target's `--state.fork` names (`ConstantinopleFix` for its
 `constantinople` module, `Merge` for Paris); Jaune parses the same labels.
-Since units U11a/U11b/U11d, Berlin, London, ArrowGlacier, GrayGlacier,
-`Merge` (Paris), Shanghai and Cancun resolve and conform against their goldens
-byte for byte (U11d: before London no base fee is read from `env`, as the
-target's `_resolve_base_fee_per_gas` returns `None` there, and before the
-merge `DIFFICULTY` reads the resolved difficulty): the `result` document
-carries `currentDifficulty` pre-merge, and `currentBaseFee`,
-`withdrawalsRoot`, the blob pair and the requests pair exactly when the
-fork's header rules carry the field, as the target's `exclude_none=True`
-does. Jaune refuses the other four with `UnsupportedForkError` before reading
-any input, because `Fork.rules?` is none for their forks. That refusal is the
-expected red: `scripts/t8n/expected-refusals.json` registers each such case
-with its reason, and the gate requires the refusal rather than marking it
-passing. The goldens, generated from the pinned target by the registered
-generator, record the behavior later units will conform to for the remaining
-four. There is no
-`Constantinople` (EIP-1283) case: the target refuses that label too
-(`UNSUPPORTED_FORKS`), so no golden can be generated for it; its evidence is
-the legacy corpus and the constants gate's all-dormant row.
+All eleven labels resolve. Before London no base fee is read from `env`,
+and before the merge `DIFFICULTY` reads the resolved difficulty. The result
+carries `currentDifficulty` pre-merge, and `currentBaseFee`, withdrawals,
+blob and request fields exactly when the selected fork carries them.
+There is no synthetic `Constantinople` (EIP-1283) golden: the target refuses
+that label (`UNSUPPORTED_FORKS`), even though Jaune can execute it. Its
+finite evidence is the separate legacy tier; dormant constants are classified,
+not treated as independent EELS comparisons.
 
 `hist-selfdestruct-empty-berlin` (goal U6b) is a twelfth historical case,
-refused until the Berlin wave and conforming since U11d resolved Berlin. Two contracts self-destruct with zero
+originally refused until the Berlin wave and now conforming. Two contracts self-destruct with zero
 balance to two storage-only beneficiaries (`0x0300`, `0x0400`), and the parent
 then sends `0x0300` 1 wei. Before Paris `modify_state` does not erase an
 account it leaves empty (`settle.eraseEmptyOnModify`), so both beneficiaries
@@ -189,26 +179,30 @@ stay, storage and all, and are touched: in the target's alloc `0x0300`
 survives the EIP-161 sweep funded and with its slot, and `0x0400` is swept.
 Under an always-erasing credit `0x0300` would lose its storage.
 
-Pre-merge environments carry no `currentBaseFee` (London and later do), no
-withdrawals (Shanghai and later do), and no blob fields (Cancun does); they
-carry `parentTimestamp`, `parentDifficulty` and `parentGasUsed`, which the
-target's difficulty step requires.
+Environment field boundaries are independent: no `currentBaseFee` before
+London, no withdrawals before Shanghai, and no blob fields before Cancun.
+London, ArrowGlacier and GrayGlacier are pre-Merge and do carry a base fee.
+The authored pre-Merge cases supply `parentTimestamp` and `parentDifficulty`
+for the target's difficulty step, together with `parentGasUsed` as parent
+block context.
 
-### Open for U11: ommers golden
+### Ommer rewards and Muir difficulty
 
-The brief also wants a case with ommers, which U11 should add once a
-producible input shape is found. The natural shape is `env.ommers` as
-`delta` (hex quantity) / `address` entries -- what the target's
-`_parse_ommers_from_env_json` and Jaune's `readOmmer` both read -- but no
-golden can be generated from the pinned target yet: it validates `env`
-through a pydantic `Environment` whose `ommers` is `List[Hash]` (a
-`delta`/`address` entry dies in `model_validate` with `TypeError: 'str'
-object cannot be interpreted as an integer`), while hash entries survive
-validation only to die in the raw fallback parser (`TypeError: string
-indices must be integers`). The two stages demand incompatible shapes, so
-no `env.ommers` reaches `pay_block_rewards` through this CLI; ommer rewards
-stay covered by the legacy corpus's `uncleHeaders` until the target side is
-revisited.
+Seven `hist-ommers-*` cases cover Byzantium, ConstantinopleFix, Istanbul,
+Berlin, London, ArrowGlacier and GrayGlacier. Three `hist-muir-difficulty-*`
+cases cover Muir's difficulty boundary, including one with ommers. These ten
+cases were added through the registered generator and exact approved golden
+adoption; the original 66 cases and provenance output rows were preserved.
+
+The unmodified pinned CLI has incompatible validation and raw reward-parser
+shapes for `env.ommers`. The eight nonempty-ommer cases therefore record the
+approved `ommer-reward-summary-cli-v1` adapter at its exact file/blob/hash
+identity. It removes reward tuples only from the copy passed to the typed
+Environment validator; the original raw reward-parser input remains intact.
+The semantic EELS base remains 1562e2f; the dedicated
+adapter checkout is 247cc2ae. The two empty-ommer Muir cases retain their
+original unadapted provenance. This compatibility boundary is explicit,
+not an upstream CLI fix or a new semantic reference revision.
 
 ## `deviations.json`
 

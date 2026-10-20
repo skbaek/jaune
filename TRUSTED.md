@@ -202,7 +202,7 @@ scripts/check-integrity.sh
 ```
 
 Today: hygiene reports 1 occurrence, allowlisted (the `@[csimp]` row below);
-integrity reports 58 occurrences allowlisted, 0 pending, pending budget 0.
+integrity reports 57 occurrences allowlisted, 0 pending, pending budget 0.
 
 **The trust surface is now enforced, not merely reported.** `check-hygiene.sh`
 fails on any un-allowlisted `axiom`, `opaque`, `@[extern]`, `@[implemented_by]`,
@@ -271,13 +271,13 @@ axiom audit](scripts/GATES.md#destination-axiom-audit)). Blanc, which does use
 with a dedicated check (`scripts/check.sh`) that rejects `_native.` axioms by
 name.
 
-**58 retained allowlist rows, zero pending.** 43 R3 rows for explicitly
-justified optimized or reference operations and 15 R4 rows for legacy renderers
+**57 retained allowlist rows, zero pending.** 43 R3 rows for explicitly
+justified optimized or reference operations and 14 R4 rows for legacy renderers
 and external parser boundaries — and **no R2 rows at all**, so there is no
 `panic` anywhere in the closure. Every retained row is a reviewed `KEEP` naming
 its wrapper, theorem, adapter, or boundary; no `PENDING` row remains and the
 budget is 0. A retained row is a **scoped, mechanically checked exception**, not
-an unclassified defect — but it is an exception, and 58 of them is the honest
+an unclassified defect — but it is an exception, and 57 of them is the honest
 count of places where the strong reading of "no raw bang operations, no
 stringly-typed errors" does not literally hold.
 
@@ -351,8 +351,13 @@ replay, including gas usage and poststate, but disagree with their old header
 expectations. The owner accepted exactly those five classification changes;
 the raw legacy regression gate remains RED and all fixture/baseline bytes are
 unchanged. The independently pinned historical PR18 restoration is unmerged
-and contains no Prague cases. Amsterdam also retains the four documented DP-1
-header-identity findings. Agreement on generated vectors or fixtures does not
+and contains no Prague cases. The original official Amsterdam corpus still
+has two BAL-header exception-name failures after the slot-number identity
+repair. The separately approved `bal-header-format-v1` overlay changes those
+two raw expected names, preserves execution inputs and outcomes, and makes the
+strict 3,354-file Amsterdam full gate pass. Original failing results and the
+official archive remain unchanged; this local correction is not an official
+upstream release. Agreement on generated vectors or fixtures does not
 establish equivalence to every part of any Python revision, nor final
 Amsterdam support.
 

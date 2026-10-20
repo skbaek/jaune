@@ -216,14 +216,14 @@ with the same executable inputs.
 | gate | proves | scale | time |
 |---|---|---|---|
 | `scripts/check-hygiene.sh` | source hygiene (`dbg_trace`, `sorry`) **and the trust surface** (`axiom`, `opaque`, `@[extern]`, `@[implemented_by]`, `@[csimp]`, `partial def`, `unsafe`, `native_decide`) under `Jaune/` **plus `MemoryProbe.lean`**, allowlist in `hygiene-allow.txt`. `@[csimp]` is on this list because it is the attribute that makes the compiled binary run a different function from the elaborated definition, and every fixture gate measures the compiled binary | 10 patterns, 1 occurrence, 1 allowlist row (`Jaune.execFueled_eq_cached`, justified in `hygiene-allow.txt`) | sub-second |
-| `scripts/check-integrity.sh` | no panic / raw bang op / stringly semantic carrier in `Jaune.lean`'s import closure (R4 also covers the runner boundary and `MemoryProbe.lean`; R1's absence rule covers `MemoryProbe.lean` too), allowlist in `integrity-allow.txt` | 58 rows, 0 pending | sub-second |
+| `scripts/check-integrity.sh` | no panic / raw bang op / stringly semantic carrier in `Jaune.lean`'s import closure (R4 also covers the runner boundary and `MemoryProbe.lean`; R1's absence rule covers `MemoryProbe.lean` too), allowlist in `integrity-allow.txt` | 57 rows, 0 pending | sub-second |
 | `scripts/check-canonical-opcode-names.sh` | the eight retired constructor/API spellings and three abbreviated render strings are absent from live Lean source; syntax-qualified SELFDESTRUCT matching leaves ordinary destination locals alone | 8 symbol families, 3 render strings | sub-second |
 | `python3 scripts/check-assurance-manifest.py` | that the [destination axiom audit](#destination-axiom-audit)'s `#expect_axioms` rows and `scripts/assurance-manifest.json` name the same declarations with the same expected sets, in both directions and without repeats, and that every public theorem/lemma and `Exec`-valued def of `Jaune/SymbolicPush.lean` and `Jaune/SymbolicArith.lean` has a row. Source-only: whether each set is the declaration's actual closure is the build's verdict | 53 rows / 53 entries, 9 covered rules | sub-second |
-| `scripts/check-rule-data-reads.sh` | that no interpreter site reads a repriced gas number from the global that shadows it instead of from the selected `rules.gas`. Inventories every live mention of `gasColdAccountAccess`, `gasCallValue` and `gasCreate` under `Jaune/` and in `Main.lean` against the shrink-only `scripts/rule-data-allow.txt`; a new occurrence anywhere fails until it is classified. It is structural rather than an evaluation guard on purpose (goal `jaune-forks-by-construction-v1`, D-F6): once `BenvStat` carries a `Fork`, every machine that can reach the `stateGas = none` lane runs `pragueGasSchedule`, whose three repriced numbers equal these globals by `rfl`, so a site reading the global would compute the same number on every reachable machine and no `#guard` could see it. **This gate is the whole of the replacement's site coverage.** The schedule-level rows beside `meteringGuardLegacySchedule` in `Jaune/Execution.lean` record two of the four quantities the retired `meteringGuardLegacyRules` rows priced (14,500 / 5,400), through `GasSchedule.accessCost`, `GasSchedule.accessDelegation` and `GasSchedule.delegationCost`. The CREATE (31,000) and SELFDESTRUCT (32,700) rows restated a literal and arithmetic over definitions, could not fail for anything an instruction site does, and were removed on 2026-09-23 (evidence-economy trim); those two quantities have no function-level control. Negative controls, both run in a disposable tree: replacing `gasRules.callValue` by `gasCallValue` in `Xinst.step`'s legacy CALL arm, and `sevm.benvStat.rules.gas.coldAccountAccess` by `gasColdAccountAccess` in `Linst.run`'s legacy SELFDESTRUCT arm (`Jaune/Machine.lean`), each leave the tree green with every `#guard` still passing and turn **this** gate red naming the new occurrence; reverting only the edit restores green | 3 shadowed globals, 15 occurrences / 14 allowlist rows | sub-second |
+| `scripts/check-rule-data-reads.sh` | that no interpreter site reads a repriced gas number from the global that shadows it instead of from the selected `rules.gas`. Inventories every live mention of `gasColdAccountAccess`, `gasCallValue` and `gasCreate` under `Jaune/` and in `Main.lean` against the shrink-only `scripts/rule-data-allow.txt`; a new occurrence anywhere fails until it is classified. It is structural rather than an evaluation guard on purpose (goal `jaune-forks-by-construction-v1`, D-F6): when this gate was introduced, every reachable `stateGas = none` machine ran `pragueGasSchedule`, so a global read could agree numerically and escape an evaluation guard. Historical forks now carry distinct schedules; this gate continues to enforce the selected-rule read boundary rather than relying on coincident literal values. **This gate is the whole of the replacement's site coverage.** The schedule-level rows beside `meteringGuardLegacySchedule` in `Jaune/Execution.lean` record two of the four quantities the retired `meteringGuardLegacyRules` rows priced (14,500 / 5,400), through `GasSchedule.accessCost`, `GasSchedule.accessDelegation` and `GasSchedule.delegationCost`. The CREATE (31,000) and SELFDESTRUCT (32,700) rows restated a literal and arithmetic over definitions, could not fail for anything an instruction site does, and were removed on 2026-09-23 (evidence-economy trim); those two quantities have no function-level control. Negative controls, both run in a disposable tree: replacing `gasRules.callValue` by `gasCallValue` in `Xinst.step`'s legacy CALL arm, and `sevm.benvStat.rules.gas.coldAccountAccess` by `gasColdAccountAccess` in `Linst.run`'s legacy SELFDESTRUCT arm (`Jaune/Machine.lean`), each leave the tree green with every `#guard` still passing and turn **this** gate red naming the new occurrence; reverting only the edit restores green | 3 shadowed globals, 15 occurrences / 14 allowlist rows | sub-second |
 | `lake build` | integration elaboration. Its default targets are `Jaune`, `Examples`, `Assurance`, `jaune`, `jaune-memory-probe` and `jaune-trace`, so the bounded memory probe is elaborated by the ordinary build rather than only on request, and the ordinary build fails on any [destination axiom audit](#destination-axiom-audit) mismatch | 1,822 jobs (2026-10-11) | ~8 s |
-| `scripts/check-cli.sh` | the runner's four fixture-file refusals — wrong sibling tree, no cases, no supported network, filters select nothing — and the undeclared-format pass-through, against synthetic fixtures, and the admission of `Amsterdam` — the fifth supported fork — past the fork guards in both its static and its transition form (the guards that once refused it, rewritten to their new true statement rather than deleted), still distinct from the unknown-label refusal. Also the rule-data printer: `--rules` answers the whole record for every one of the five supported forks, `Amsterdam` included, and the retired `--rules-partial` is refused. The t8n handshake checks require `--forks` to print the five-fork runnable lane (`Fork.supported`, Amsterdam included) and to equal `sources.json`'s `conformance_target.fork_lane`, and `--info` to state the lane, its basis and the resolved set with no "pending goal" clause (goal `jaune-amsterdam-currency-v1` rewrote goal C's four-fork assertions) | 21 checks | sub-second |
-| `scripts/check-fork-constants.sh` | that every constant each declared fork carries as rule data equals the pinned `execution-specs` revision's, by comparing `scripts/amsterdam/constants.json` (written by `scripts/gen-fork-constants.py` from that revision) against `lake exe jaune --rules <fork>`. Also that the extraction was taken at the commit `sources.json` currently pins, and — the row that keeps the gate from shrinking — that the printer's field set is exactly the set the extraction's coverage table classifies, so a new `ForkRules` field must be classified before this can pass. The Amsterdam column is compared in full: `bal.itemCost` from `vm.gas.GasCosts.BLOCK_ACCESS_LIST_ITEM`, `op.slotnum`/`op.stackAccess` as source-presence facts on `vm.instructions.Ops`, the code limits from `vm.interpreter`, the four request `(type, address)` pairs in `process_general_purpose_requests` call order; no field of any fork is classified as owned by a later goal. One row is schedule data rather than rule data (programme D13, goal `jaune-amsterdam-currency-v1`): `mainnetActivation`, the pinned `FORK_CRITERIA` timestamp against `mainnetChainConfig`'s activation for the fork — `null` on both sides for Amsterdam while upstream keeps it `Unscheduled`, so the day the pin says `ByTimestamp` this gate turns red at `Amsterdam.mainnetActivation` and names the `mainnetAmsterdamTimestamp` to write (before that goal the criterion was only printed, under `--table`). Negative controls: one Amsterdam literal mutated in a disposable worktree turns this gate red at the named field (`Amsterdam.bal.itemCost: this build has 2001, 1562e2f8b5cb has 2000`, readiness control) and the gas-limit boundary fixture red; the D13 row's three-part control is recorded in goal D's work records. The mainnet schedule is also compared for every declared fork, refused ones included (goal `jaune-historical-forks-v1`, design §4): `lake exe jaune --mainnet-schedule` against the extraction's `mainnet_schedule`, every EELS fork module's `FORK_CRITERIA` from Byzantium (`ByBlockNumber` as `{"block": n}`, `ByTimestamp` as the bare number, `Unscheduled` as `null`; Jaune's EIP-1283 `Constantinople`, which has no module, must print `null`). Goal U10 compares the twelve refused forks' committed literals too, through the evidence-surface printer `lake exe jaune --rules-literal <fork>` (which prints `Fork.ruleSet` without resolving it, while `--rules` keeps refusing with `UnsupportedForkError`): every live cell against that fork's EELS module, every dormant cell classified in the extraction's per-fork `dormant` map and skipped. Since U11a the same `dormant` map applies to a runnable fork: Berlin through Cancun resolve through `--rules` (Shanghai and Cancun since U11a, London and Paris since U11b, Berlin, Arrow Glacier and Gray Glacier since U11d), and their dormant cells are skipped there as they were under `--rules-literal` (the five current forks classify none) | 939 comparisons across 12 runnable forks + 295 literal comparisons across the 5 refused forks, 228 dormant cells classified, plus 17 mainnet-schedule rows | sub-second |
-| `scripts/check-t8n.sh` | the `t8n` transition-tool frontend against goldens generated from the pinned conformance target: `result`, `alloc` and `body` byte-identical per case, each case run twice for determinism, every golden's digest checked against `scripts/t8n/provenance.json`. The original Amsterdam half is the Appendix-F 15-by-2 scenario/mode matrix; ten additional authored cases cover storage-only creation/deletion across all five runnable forks because the release skipped those upstream tests. Five further authored cases compare zero-value transaction, CALL and STATICCALL storage preservation against pinned EELS. All are compared byte-for-byte including the EIP-7928 `blockAccessList`/`blockAccessListHash` pair the tool now emits (the former target-only deviation entries are gone; the registry keeps two field deviations and four message-normalization rows, the `INTRINSIC_GAS_TOO_LOW` row carrying its owner and date). Eleven further authored cases cover the pre-Prague forks (one transfer each; the ommers case stays open for U11, see the t8n README). Since U11a/U11b/U11d the Berlin, London, Arrow Glacier, Gray Glacier, Paris, Shanghai and Cancun cases conform, as does the Berlin `SELFDESTRUCT`-to-storage-only-account case U6b added (`hist-selfdestruct-empty-berlin`); Jaune refuses the other four with `UnsupportedForkError`, which `scripts/t8n/expected-refusals.json` registers and the gate requires rather than marking passing. `--red-test` additionally corrupts one golden, injects an unregistered difference, and moves a registered deviation's target side, proving all three controls bite (the corruption victim and deviation controls skip refusal cases) | 62 conforming cases + 4 registered refusals | Historical: 6.6 s on the smaller 2026-09-21 corpus; not a measurement of these cases |
+| `scripts/check-cli.sh` | the runner's fixture-file refusals (wrong sibling tree, no cases, no supported network, and filters selecting nothing), undeclared-format pass-through and supported static/transition admissions, tested with synthetic inputs. The original Amsterdam refusal guards were rewritten as admission assertions rather than deleted; unknown labels still fail closed. The rule-data printer answers `--rules` for all 17 runnable rule sets, while the retired `--rules-partial` flag is refused. The t8n handshake verifies the 16 target-backed names against `sources.json`'s `conformance_target.fork_lane`, with Petersburg advertised as `ConstantinopleFix`; synthetic EIP-1283 `Constantinople` is fixture-only and has no t8n target name. `--info` states the advertised lane, its basis and resolved set without an obsolete pending-goal clause. Allocation boundaries and the shared expectation-field helper additionally check strict/diagnostic selection and complete/unreached provenance | 71 checks; the helper separately reports 20 focused ingress invocations | Current WSL timing pending |
+| `scripts/check-fork-constants.sh` | that each live rule-data field classified for comparison agrees with the pinned `execution-specs` module where that module exists, by comparing `scripts/amsterdam/constants.json` (written by `scripts/gen-fork-constants.py` from that revision) against `lake exe jaune --rules <fork>`. Also that the extraction was taken at the commit `sources.json` currently pins, and — the row that keeps the gate from shrinking — that the printer's field set is exactly the set the extraction's coverage table classifies, so a new `ForkRules` field must be classified before this can pass. The Amsterdam column is compared in full: `bal.itemCost` from `vm.gas.GasCosts.BLOCK_ACCESS_LIST_ITEM`, `op.slotnum`/`op.stackAccess` as source-presence facts on `vm.instructions.Ops`, the code limits from `vm.interpreter`, the four request `(type, address)` pairs in `process_general_purpose_requests` call order; no field of any fork is classified as owned by a later goal. One row is schedule data rather than rule data (programme D13, goal `jaune-amsterdam-currency-v1`): `mainnetActivation`, the pinned `FORK_CRITERIA` timestamp against `mainnetChainConfig`'s activation for the fork — `null` on both sides for Amsterdam while upstream keeps it `Unscheduled`, so the day the pin says `ByTimestamp` this gate turns red at `Amsterdam.mainnetActivation` and names the `mainnetAmsterdamTimestamp` to write (before that goal the criterion was only printed, under `--table`). Negative controls: one Amsterdam literal mutated in a disposable worktree turns this gate red at the named field (`Amsterdam.bal.itemCost: this build has 2001, 1562e2f8b5cb has 2000`, readiness control) and the gas-limit boundary fixture red; the D13 row's three-part control is recorded in goal D's work records. The mainnet schedule is compared for all 17 declared forks (goal `jaune-historical-forks-v1`, design §4): `lake exe jaune --mainnet-schedule` against the extraction's `mainnet_schedule` and each available EELS module's `FORK_CRITERIA` from Byzantium (`ByBlockNumber` as `{"block": n}`, `ByTimestamp` as the bare number, `Unscheduled` as `null`; synthetic EIP-1283 `Constantinople`, which has no EELS module or mainnet activation, must print `null`). Originally U10 inspected twelve then-refused forks through `lake exe jaune --rules-literal <fork>`, which prints `Fork.ruleSet` without resolving it; that refusal context is historical. Today all 17 declared rule sets resolve through `--rules`. Across them, 228 cells are explicitly classified dormant and skipped rather than compared. Synthetic Constantinople's cells are all dormant because there is no independent EELS module; its executable record is not an oracle comparison. Every emitted field still requires a coverage classification, so dormant/no-oracle cells cannot silently become claimed comparisons | 1,234 comparisons across 17 runnable forks, no refused forks, 228 dormant cells classified, plus 17 mainnet-schedule rows | sub-second |
+| `scripts/check-t8n.sh` | the `t8n` transition-tool frontend against goldens generated from the pinned conformance target: `result`, `alloc` and `body` byte-identical per case, each case run twice for determinism, every golden's digest checked against `scripts/t8n/provenance.json`. The original Amsterdam half is the Appendix-F 15-by-2 scenario/mode matrix; ten additional authored cases cover storage-only creation/deletion across the five authored forks because the release skipped those upstream tests. Five further authored cases compare zero-value transaction, CALL and STATICCALL storage preservation against pinned EELS. All are compared byte-for-byte including the EIP-7928 `blockAccessList`/`blockAccessListHash` pair the tool now emits (the former target-only deviation entries are gone; the registry keeps two field deviations and four message-normalization rows, the `INTRINSIC_GAS_TOO_LOW` row carrying its owner and date). Twenty-two historical cases comprise eleven transfers, the Berlin SELFDESTRUCT case, seven per-fork ommer cases and three Muir difficulty cases (see the t8n README). All 76 registered cases conform; `scripts/t8n/expected-refusals.json` contains no refusal entries. Synthetic EIP-1283 Constantinople has no pinned-target golden. `--red-test` additionally corrupts one golden, injects an unregistered difference, and moves a registered deviation's target side, proving all three controls bite (the corruption victim and deviation controls skip refusal cases) | 76 conforming cases, no registered refusals | Historical: 6.6 s on the smaller 2026-09-21 corpus; not a measurement of these cases |
 | `scripts/check-jumpdest.sh` | the sampled half of the jumpdest claim. **Definitional identity** (`Jaune/Machine.lean`): at the v21 pin, `pinnedJumpDestsFrom` aliases the legacy forward walk (EELS #3618); `pinnedJumpDestsFrom_eq_legacy` is `rfl` and its equality has no sampled duplicate. **Sampled, not proved**: the bridge from either walk to Jaune's own `jumpable`/`noPushBefore` scan (`jumpable cd k ↔ k ∈ legacyJumpDestsFrom cd 0`), which this gate checks on nine 64 KiB pseudo-random blobs (fixed seeds, EIP-7954's raised ceiling), with per-phase timings forced before each clock read (`jaune --jumpdest-control <seed> 1 65536`). The seed list omits seven measured seeds on which `jumpable` does not finish inside 45 s at 64 KiB (a cost artifact — goal C's review ran them at 8 and 16 KiB and found agreement); re-implementing `jumpable` on the walk is packet P2, reserved to the owner. A falsifier for the sampled half, run as well as the theorem, never instead of it | 9 blobs × 65,536 bytes | ~7 s |
 | `scripts/check-memory-probe.sh` | that a 1,000,000-byte call input driven through a 1,024-deep call path does not retain one calldata copy per frame, for **both** call families. Runs `jaune-memory-probe --staticcall 1024 1000000` and `--call 1024 1000000` and asserts each child's peak resident set against a fixed budget. **Peak mechanism:** `getrusage(RUSAGE_CHILDREN).ru_maxrss` (kibibytes on Linux, bytes on macOS, converted by `scripts/memory_probe_budget.py`), bounded by a sampling watchdog that kills a child crossing the budget — `/proc/<pid>/statm` on Linux, `ps -o rss=` elsewhere. **No cgroup, container, privilege, platform or memory-size dependency**: this is the portable form of the assertion, and it is what makes the regression enforceable on an ordinary developer machine rather than only on a 16 GB Linux host. The cgroup collector `scripts/measure-resource.py` remains the instrument for the Linux resource-acceptance rows, which do need Linux. Needs the built binary and no corpus, like `check-cli.sh`; takes no lock and writes nothing under the repository. Losing the property costs about 32 MB per live frame, so it crosses this budget by depth 8 — a mutant that removes the `@[csimp]` substitution turns this row red at the assertion and restores green when reverted | 2 points, 256 MiB asserted peak (measured ~104 MiB, ~2.5x margin) | ~0.3 s |
 | `python3 scripts/check-legacy-exception-aliases.py` | that every row of `FixtureException.legacyAliases` -- the retesteth token (`TR_IntrinsicGas`, ...) the `legacytests` restoration tree expects, mapped to a canonical expectation -- is attested by upstream's own rename or the accepted definitional exception: re-derived from the same test, case and block in the later ethereum/tests tree under `execution-specs` (at Cancun, or the Cancun sibling of a case at another fork when that case has no same-fork pair), failing on a non-definitional row no agreeing pair attests, on a set-valued row one of whose members no pair names, on a contradicting pair of either kind, and on a row whose target the source's own vocabulary (its `toString` and `ofString?` arms) does not parse; a sibling pair that names a post-merge identity for a pre-Paris case, or the fee-market identity for a pre-London case, is explained by the fork difference and attests nothing (U11d, review U11a #1); the accepted `TR_RLP_WRONGVALUE` row is definitional because upstream never converted its block tests: its `DEFINITIONAL` listing requires the exact canonical value, an occurrence in the restoration tree, every occurrence's `hasBigInt` marker, and no upstream pair of either kind (U11c); the vocabulary check applies to this row too. Tokens with no row are noted, not failed (the runner refuses them at parse). Needs no build, takes no lock (goal U11a). Negative controls: moving `TR_NoFunds` to `INTRINSIC_GAS_TOO_LOW` turns it red at that row (U11a work record); dropping the pre-Paris explanation turns 16 rows red at their sibling pairs, and renaming one `toString` arm turns the three rows naming it red at the vocabulary check (U11d work record); moving `TR_RLP_WRONGVALUE`'s value, emptying its `DEFINITIONAL` entry, and flipping its marker each turn it red, with restored bytes identical (U11c work record). Integration controls exercise sibling contradictions despite same-fork agreement, unattested set members, vocabulary refusal including the definitional row, missing/changed definitional identity or marker, and newly appearing pairs | pair-attested rows plus the accepted definitional row | ~7 s |
@@ -234,7 +234,7 @@ with the same executable inputs.
 | `scripts/check-mainnet.sh --suite smoke` | current-mainnet smoke | 16 | sub-second |
 | `scripts/check-legacy.sh --depth` | fuel/call-depth stress set | 67 | ~13 s |
 | `python3 scripts/check-legacy-baseline.py self-test` | tracked correctness / ignored timing separation, timing genesis/new-fixture extension, refresh refusal, rebase isolation, drift, duplicate rejection, and host-local dispatch weights | 11 controls | sub-second |
-| `python3 -m unittest discover -s scripts/tests` | harness/generator unit tests. **This suite must stay lock-free**: it is a light row that runs while anything else on the host may hold the host-global heavy-gate lock, so no test here may shell out to a suite that takes it (`osaka`, `prague`, `full`, `amsterdam`, `amsterdam-full`, and the historical static suites) against the real `$HOME`; the heavy-suite dispatches, the synthetic `amsterdam-full` union, the synthetic historical lane and the synthetic legacy tier selection, run with `$HOME` pointed at a private directory, so the lock path `gate-lock.sh` derives from it is the test's own | 326 tests | Historical: 16.2 s on 213 tests (2026-09-21 catalogue) |
+| `python3 -m unittest discover -s scripts/tests` | harness/generator unit tests. **This suite must stay lock-free**: it is a light row that runs while anything else on the host may hold the host-global heavy-gate lock, so no test here may shell out to a suite that takes it (`osaka`, `prague`, `full`, `amsterdam`, `amsterdam-full`, and the historical static suites) against the real `$HOME`; the heavy-suite dispatches, the synthetic `amsterdam-full` union, the synthetic historical lane and the synthetic legacy tier selection, run with `$HOME` pointed at a private directory, so the lock path `gate-lock.sh` derives from it is the test's own | harness, generator, reference, correction and clock tests; the suite reports the collected total | Historical: 16.2 s on 213 tests (2026-09-21 catalogue) |
 | `scripts/check-mainnet.sh --lane amsterdam --suite amsterdam-smoke` | Amsterdam release smoke (16 lowest SHA-256 ranks of the static suite) | 16 files / 346 cases | Historical devnet corpus: 14.7 s wall, ~4 s of it fixtures (2026-09-21 catalogue); not a v21 measurement |
 | `scripts/check-mainnet.sh --lane amsterdam --dir for_amsterdam/amsterdam/<subtree> --suite amsterdam` | one `eip*` subtree of the release corpus, all-PASS, count-checked against the manifest | manifest-selected subtree | 0.2 s – 110 s (`eip8037_*` is the slow one) |
 | `scripts/check-mainnet.sh --suite transitions` | fork-transition validity | 13 files / 109 cases | Historical: 18.0 s on the 2026-09-21 corpus; not a v21 measurement |
@@ -268,7 +268,7 @@ Usage and the message-versus-transaction boundary are in
 | `scripts/check-mainnet.sh --suite prague` | strict all-PASS | 2,506 | ~12 min | **341.7 s** (2026-09-21 catalogue) |
 | `scripts/check-mainnet.sh --suite full` | strict all-PASS, whole manifest; **supersedes `osaka`, `prague`, `transitions` and `smoke` in a closure bundle** | 4,968 | ~20.8 min | **618.9 s** (2026-09-21 catalogue) |
 | `scripts/check-mainnet.sh --lane amsterdam --suite amsterdam` | strict all-PASS over the static Amsterdam corpus, zero exclusions inside `for_amsterdam` | 3,296 | not measured; run it parallel | **454.5 s** (2026-09-21 catalogue; 267 s at `--jobs 6`, 2026-09-06) |
-| `scripts/check-mainnet.sh --lane amsterdam --suite amsterdam-full` | the union of `amsterdam` and `amsterdam-transitions`; pass rule as `amsterdam-transitions`: all-PASS modulo DP-1's four recorded files; **supersedes both, and `amsterdam-smoke`, in a closure bundle** | 3,354 | not measured; run it parallel | **463.6 s** (2026-09-21 catalogue, a run RED on exactly DP-1's four files) |
+| `scripts/check-mainnet.sh --lane amsterdam --suite amsterdam-full` | the union of `amsterdam` and `amsterdam-transitions`; strict all-PASS with the exact registered `bal-header-format-v1` correction; **supersedes both, and `amsterdam-smoke`, in a closure bundle** | 3,354 | not measured; run it parallel | **463.6 s** (2026-09-21 catalogue, a run RED on exactly DP-1's four files) |
 | `scripts/check-legacy.sh --full` | every legacy fixture vs baseline; **supersedes `--smoke`, `--depth`, `--patch` and `--rlp4` in a closure bundle** | 2,983 | **≥ 19 min** | **501.3 s** at 4 jobs (2026-09-21 catalogue) |
 
 The scales above describe `tests@v21.0.1`. Dated 2026-09-21 runtime cells
@@ -368,27 +368,31 @@ bytes fail `--check`. Empty or miscounted `--dir` selections fail before a run.
 |---|---|---:|---|
 | `amsterdam` | static `Amsterdam` under `for_amsterdam` | 3,296 / 26,398 | all-PASS, zero exclusions; heavy lock |
 | `amsterdam-smoke` | 16 lowest SHA-256 ranks of `release_commit:path` in static | 16 / 346 | all-PASS; no lock |
-| `amsterdam-transitions` | `BPO2ToAmsterdamAtTime15k`, rules selected per block timestamp | 58 / 189 | all-PASS modulo the four DP-1 findings below; zero exclusions; no lock when sequential |
-| `amsterdam-full` | union of static and transitions | 3,354 / 26,587 | same DP-1 qualification; heavy lock |
+| `amsterdam-transitions` | `BPO2ToAmsterdamAtTime15k`, rules selected per block timestamp | 58 / 189 | strict all-PASS with the registered correction below; zero exclusions; no lock when sequential |
+| `amsterdam-full` | union of static and transitions | 3,354 / 26,587 | strict all-PASS with the registered correction below; heavy lock |
 
-At v21.0.1, DP-1 remains exactly these four transition files:
+The official v21.0.1 archive is preserved unchanged. Its full run after the
+header-width identity repair reports 3,352 PASS and two FAIL: under
+`for_bpo2toamsterdamattime15k/amsterdam/eip7928_block_level_access_lists/fork_transition/`,
+`invalid_post_fork_block_without_bal_hash_field.json` and
+`invalid_pre_fork_block_with_bal_hash_field.json`. Their raw 22-field headers
+are structurally invalid; the original raw expectations name `INVALID_BAL_HASH`
+and `INVALID_BLOCK_HASH`, respectively. The earlier four-failure DP-1 result
+also included the two slot-number files under `eip7843_slotnum`; the repair
+now reports their expected `INCORRECT_BLOCK_FORMAT`. Those earlier results
+remain historical, not current four-file failures.
 
-- `amsterdam/eip7843_slotnum/fork_transition/invalid_post_fork_block_without_slot_number.json`
-- `amsterdam/eip7843_slotnum/fork_transition/invalid_pre_fork_block_with_slot_number.json`
-- `amsterdam/eip7928_block_level_access_lists/fork_transition/invalid_post_fork_block_without_bal_hash_field.json`
-- `amsterdam/eip7928_block_level_access_lists/fork_transition/invalid_pre_fork_block_with_bal_hash_field.json`
-
-Paths are relative to `for_bpo2toamsterdamattime15k`. Each carries a 22-field
-RLP header. `BLT.toExHeader` rejects it as `RLP_STRUCTURES_ENCODING`
-(programme D4 accepts 21 or 23 fields); the first two fixtures expect
-`INCORRECT_BLOCK_FORMAT`, the third `INVALID_BAL_HASH`, and the fourth
-`INVALID_BLOCK_HASH`. Verdicts agree that the block is invalid. The owner’s
-existing DP-1 ruling remains “record, do not alias”; raw suite output remains
-RED on exactly these four files, with 54/58 transition files passing. Upstream
-#3698 adjusts BAL handling before failed system calls and disallows combined
-rejected-transaction/block exceptions; it does not resolve this header shape.
-No exclusion or identity alias was added. DP-2's `SYSTEM_CONTRACT_EMPTY`
-identity is implemented and its deployment fixtures pass.
+The explicitly approved `bal-header-format-v1` package changes only the two
+BAL raw expectations to `INCORRECT_BLOCK_FORMAT` plus generation metadata.
+It preserves the raw block bytes, prestate/poststate, Engine payloads and
+Engine expectations. The official base remains independently verified,
+including both replaced paths. With that exact separate overlay, the strict
+`amsterdam-full` gate passes all 3,354 files (26,587 cases), and the transition
+subset passes all 58. Registration/source provenance and archive/index hashes
+are in `scripts/amsterdam/corrections/bal-header-format-v1/`; this is a local
+registered correction, not a corrected official release. No exclusion or
+exception alias was introduced. DP-2's `SYSTEM_CONTRACT_EMPTY` identity is
+implemented and its deployment fixtures pass.
 
 The lane's parser, suite derivation, admission and dispatch, empty selections
 and manifest-drift controls are in `scripts/tests/test_amsterdam_lane.py`.
@@ -396,8 +400,9 @@ Suite names remain disjoint, so a mistyped lane does not silently select the
 other lane's corpus. Historical devnet timings are retained in dated table
 cells above and must not be presented as current-release measurements.
 
-The optional explicit fixture-correction mechanism is inactive unless the
-Amsterdam source-lock section names an exact registered package. Its verifier
+The explicit fixture-correction mechanism is active for Amsterdam through
+the approved `bal-header-format-v1` registration in `scripts/sources.json`.
+Without such an exact registration it is inactive. Its verifier
 is `scripts/fixture_corrections.py`; its bounded packager is
 `scripts/gen-amsterdam-fixture-correction.py`. Packaging accepted generated
 bytes is distinct from authorizing their adoption. Registration preserves the
@@ -415,8 +420,8 @@ selected input hashes again before accepting a passing aggregate. The verdict
 names an active correction's ID and archive/index digests. Small package,
 semantic-delta, routing and post-run controls are in
 `scripts/tests/test_fixture_corrections.py`. This mechanism changes neither the
-recorded original-release results above nor the all-PASS rule; adopting a
-correction remains a separate reserved corpus/reference decision.
+recorded original-release results above nor the all-PASS rule; any further
+correction adoption remains a separate reserved corpus/reference decision.
 After adoption, the packager's `--check` accepts the unchanged active source
 lock only when `--output` is the exact registered package directory and its
 registration, package and base release match. It reproduces packaging from the
@@ -436,46 +441,35 @@ plus the transition fixtures: `byzantium`, `constantinople`,
 (`ParisToShanghaiAtTime15k`, `ShanghaiToCancunAtTime15k`,
 `CancunToPragueAtTime15k`, whose Prague endpoint the mainnet lane owns) and
 the union `hist-full`, inventoried in `scripts/historical/manifests.json`.
-No case in this lane declares a blob schedule, so none is required; the
-empty `constantinople` suite is refused rather than run vacantly. Every
-historical fork but Shanghai and Cancun is refused today, so those suites
-are RED at the refusal -- they are the U11 inventory, not a conformance
-claim. Since U11a (wave 1) `shanghai` (258 files) and `cancun` (2,325) are
-strict all-PASS, as are the `hist-transitions` files whose endpoints both
-resolve (`--dir for_shanghaitocancunattime15k`, 12, and
-`--dir for_cancuntopragueattime15k`, 10); `ParisToShanghaiAtTime15k` waits
-for Paris. Lane controls are in
-`scripts/tests/test_historical_lane.py`.
+No case in this lane declares a blob schedule, so none is required. All
+17 declared forks now resolve. The historical EEST union is strict all-PASS:
+3,692 files and 38,896 cases, including all 23 transition files. There are no
+static EEST inputs for synthetic EIP-1283 `constantinople`, Muir Glacier,
+Arrow Glacier or Gray Glacier; empty suites are refused, not vacuously green.
+Petersburg's nonempty EEST suite is named `constantinoplefix`; use that label.
+Lane controls are in `scripts/tests/test_historical_lane.py`.
 
-The legacy side is `scripts/check-legacy.sh --hist-<fork>`, one target tier
-per fork over the `legacytests` restoration root (both the `Cancun/` and the
-`Constantinople/` trees) with `--network <Fork>`, or, for a file with no
-case at the fork, the transition label it was selected by (U11a: such a
-file used to select no case). A transition is selected by a tier only once
-both its endpoints resolve, so `ParisToShanghaiAtTime15k` is hist-paris's.
-A tier with no committed `baseline-hist-<fork>.txt` is a target gate (all
-PASS); once its fork resolves and it is all-PASS, `--rebase` (sequential)
-writes the baseline and it compares like `--smoke` from then on. The tree
-spells expectations as retesteth tokens, which the runner expands through
-`FixtureException.legacyAliases` (checked by
-`check-legacy-exception-aliases.py`). The refused forks' tiers are RED at
-the refusal, which is the inventory. U11c status: `--hist-shanghai` (3,012
-files) and `--hist-cancun` (3,115) are each all-PASS but three, and carry a
-tracked baseline (`baseline-hist-shanghai.txt`, `baseline-hist-cancun.txt`)
-that records those three as FAIL: `InvalidBlocks/bcStateTests/EmptyTransaction`,
-`UserTransactionGasLimitIsTooLowWhenZeroCost` and `txCost-sec73`. They are
-failures in name only: multiply-invalid fixtures whose pipe-separated
-alternatives follow evmone's fill ordering (fee cap before intrinsic gas),
-exception identity under several invalidities is not consensus-determined
-(ethereum/tests#1456), and the pinned EELS agrees with Jaune (commit
-`47e08e0` and the README's legacy section). The fourth U11a file,
-`stTransactionTest/ValueOverflowParis`, now PASSes: its `TR_RLP_WRONGVALUE`
-(a legacy transaction whose value is 33 bytes inside a well-formed block) maps
-to `RLP_STRUCTURES_ENCODING`, the identity Jaune reports for that decode
-failure (`RlpFieldOverflow256Error`) and the class the pinned EELS rejects it
-under at every fork (a `DecodingError` in `rlp.decode_to(Block)`); upstream
-never converted this block test, so the row is *definitional* in
-`check-legacy-exception-aliases.py` rather than pair-attested.
+Historical legacy tiers use the separate pinned `legacytests` restoration,
+not the ordinary Prague corpus. Nine `--hist-<fork>` tiers have tracked
+`baseline-hist-<fork>.txt` correctness baselines: Byzantium, Constantinople,
+Petersburg, Istanbul, Berlin, London, Paris, Shanghai and Cancun. They compare
+ordered selected file classifications with their exact per-tier baselines;
+a matching gate can be green while containing recorded FAIL rows. The seven
+new baselines were generated by the registered helper from accepted complete
+reports under the owner's bounded naming/order authority; Shanghai/Cancun's
+existing baselines remain unchanged. No blanket network-wide waiver follows.
+Transition memberships retain their exact selected network labels; historical
+tiers do not substitute for strict historical EEST conformance.
+
+The reader selects exact `expectException`, `expectExceptionALL` or the
+original case-network suffix and refuses conflicting/non-string applicable
+fields. Foreign suffixes alone grant no expected-invalid permission. Aliases
+and error scoring are unchanged. Each accepted FAIL retains its original
+wire/predicate/final-state review and its qualifications: multiply-invalid
+ordering is not a universal alias; seals are NoProof; synthetic Constantinople
+has no independent EELS oracle; the accepted London activation-gas correction
+and reconstructed TTD lineage are not general reference-equivalence claims.
+Earlier dated U11 refusal and partial-run results remain historical evidence.
 
 The bomb-only forks' finite evidence is `scripts/check-difficulty-vectors.sh`:
 nine authored boundary vectors (below, at, and above each of the 9M, 10.7M
@@ -534,8 +528,10 @@ Two different contracts, and confusing them is the most common misreading:
 - **`check-legacy.sh` tiers are regression gates.** They pass iff every file's
   classification *equals the tracked correctness baseline's* — **not** iff every file
   passes. The legacy corpus has 5 known FAILs, all diagnosed and none a Jaune
-  defect: two files have no case in the supported fork range, while the other
-  three carry wrong expected exceptions and the frozen oracle agrees with
+  defect: two Cancun-only files have no case selected by the ordinary tier's
+  `--network Prague` filter and fail closed on the empty selection (Cancun
+  itself is supported), while the other three carry wrong expected exceptions
+  and the frozen oracle agrees with
   Jaune. A FAIL turning into a PASS is a gate failure exactly like the reverse.
   Correctness baselines are tracked `STATUS<TAB>path` files at
   `scripts/baseline-<tier>.txt`. Reports and host-local timing baselines are
@@ -637,14 +633,14 @@ Two different contracts, and confusing them is the most common misreading:
   inventory and `--pending` to read the full pending set.
 
 - **`scripts/check-cli.sh` is an all-hold assertion gate on the runner's
-  refusals.** Each check pins one refusal path — its exit status and a substring
-  of the message a user actually reads — against a synthetic fixture built in a
-  temp dir; any check that does not hold fails the gate. It exists because
-  nothing else covers this surface: the conformance tiers only ever run
-  well-formed corpus files, `scripts/golden-messages.txt` covers block-rejection
-  reasons observed *inside* a run, and `scripts/tests/` covers the Python
-  bootstrap and generator scripts, so all four messages were verified by hand
-  once and could rot silently.
+  refusals, admissions, rule-data printer, handshake and field provenance.**
+  Each assertion requires its expected exit status and output; synthetic
+  fixtures and temporary files isolate the boundary, and any failed assertion
+  fails the gate. The original four fixture-refusal messages could otherwise
+  rot silently: corpus conformance exercises well-formed inputs, golden
+  messages cover block-rejection reasons *inside* a run, and the Python tests
+  cover bootstrap and generator scripts. The gate now also checks the expanded
+  runnable rule sets and their distinct target-backed advertised projection.
 
   The allocation boundary checks also require `t8n` to retain an explicitly
   empty account at Berlin and Paris, with zero storage slots normalized, and

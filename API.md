@@ -287,10 +287,10 @@ and `b` is read. `State.set` erases an account set to `Acct.nil`
 
 ### Toolchain and dependencies
 
-The only supported pair is the one this revision declares: `lean-toolchain`
-(currently `leanprover/lean4:v4.34.0`), and Mathlib as required in
-`lakefile.lean` (`v4.34.0`) and resolved in `lake-manifest.json`. A consumer
-must use the same Lean toolchain. The files are the record; read them rather
+The only supported pair is the one this revision declares: the Lean
+toolchain named in `lean-toolchain`, and Mathlib as required in
+`lakefile.lean` and resolved to an exact revision in `lake-manifest.json`.
+A consumer must use the same Lean toolchain. The files are the record; read them rather
 than this paragraph:
 
 ```sh
@@ -340,16 +340,25 @@ sibling path or symlink.
 
 ### Fork coverage of the proof layer
 
-- **Fork-generic.** The `Exec` type, adequacy, the derivation operations, the
-  frame spawn lemmas and the PUSH / `ADD` / `SUB` / `MUL` rules quantify over
-  every `Sevm`, whatever rule record it carries. They therefore hold for every
-  fork Jaune models: Prague, Osaka, BPO1, BPO2 and the Amsterdam snapshot. The
-  spawn lemmas have separate Amsterdam CALL/CREATE forms.
-- **Pre-Amsterdam only.** The revert and exceptional-halt settlement theorems
-  in `Jaune.MessageExecution` (`processMessage_revert_of_exec*`,
-  `processMessage_halt_of_exec*`) assume `msg.benv.stat.rules.stateGas = none`.
-  That holds for Prague, Osaka, BPO1 and BPO2 and fails for Amsterdam. No
-  Amsterdam form is proved.
+- **Rule-parametric.** `Exec`, adequacy, derivation operations and the PUSH /
+  `ADD` / `SUB` / `MUL` rules are stated over the model's `Sevm` and rule
+  data. Historical fork instances retain each declaration's explicit decoding,
+  gas, stack and execution premises; this is not an unconditional theorem for
+  every opcode or every specialization. Frame spawn lemmas have distinct
+  ordinary and Amsterdam CALL/CREATE forms; use their stated hypotheses.
+- **Conditional settlement.** The revert and exceptional-halt theorems in
+  `Jaune.MessageExecution` (`processMessage_revert_of_exec*`,
+  `processMessage_halt_of_exec*`) require both
+  `msg.benv.stat.rules.stateGas = none` and
+  `msg.benv.stat.rules.settle.touchedSweep = false`, together with their
+  entry/transfer and execution premises. The usual forms require
+  `msg.disablePrecompiles = true`; the REVERT variant
+  `processMessage_revert_of_exec_afterTransfer_of_noCodeAddress` instead
+  requires `msg.codeAddress = none`, without disabling precompiles. Both rule
+  conditions hold for the declared Paris, Shanghai, Cancun, Prague, Osaka,
+  BPO1 and BPO2 presets. The pre-Paris touched-account sweep and Amsterdam's
+  state-gas dimension prevent applying these forms unchanged. No Amsterdam
+  revert/exceptional-halt settlement form is claimed here.
 - **What the theorems are about.** They are statements about Jaune's model.
   How faithfully that model follows each fork is evidence from testing, not
   proof. Amsterdam support is a devnet snapshot, not final Amsterdam. See
