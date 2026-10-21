@@ -5,9 +5,10 @@
 **[skbaek.github.io/jaune](https://skbaek.github.io/jaune/)** — the guided
 tour: claim, evidence, trust boundaries, roadmap.
 **[Blanc](https://github.com/skbaek/blanc)**
-([site](https://skbaek.github.io/blanc/)) — the sibling project: a contract
-language that compiles through a verified compiler and proves its contracts
-against these semantics. It is Jaune's end-to-end case study.
+([site](https://skbaek.github.io/blanc/)) — the sibling project: a
+verification stack built on these semantics, which proves theorems about
+Ethereum bytecode as it is deployed and offers a native contract language with
+a verified compiler. It is Jaune's end-to-end case study.
 
 **Jaune** is an executable formal specification of the EVM in Lean 4. Its
 strict current-mainnet lane passes **4,968/4,968 supported fixture files and
