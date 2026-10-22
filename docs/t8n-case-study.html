@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>What a full-output reader sees in t8n — Jaune</title>
-<meta name="description" content="A reproducible comparison of Jaune, EELS, and Geth on rejected transactions: two t8n emission divergences, why the fixture framework did not expose them, and their exact impact boundaries.">
+<meta name="description" content="A reproducible comparison of Jaune, EELS, and Geth on rejected transactions: two t8n emission divergences, why the fixture framework did not expose them, their exact impact boundaries, and how both were resolved upstream on 21 October 2026.">
 <meta property="og:type" content="article">
 <meta property="og:title" content="What a full-output reader sees in t8n">
 <meta property="og:description" content="Jaune, EELS, and Geth on rejected transactions—and two emitted artifacts the fixture framework did not expose.">
@@ -12,7 +12,7 @@
 <meta property="og:site_name" content="Jaune">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-08-12">
-<meta property="article:modified_time" content="2026-09-25">
+<meta property="article:modified_time" content="2026-10-22">
 <link rel="canonical" href="https://skbaek.github.io/jaune/t8n-case-study.html">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="What a full-output reader sees in t8n">
@@ -217,7 +217,7 @@ footer{border-top:3px double var(--rule-2);padding:34px 0 46px;color:var(--ink-3
           <span class="pill">tool emission only</span>
           <span class="pill">no consensus impact</span>
           <span class="pill">no known fixture-corpus impact</span>
-          <span class="pill">filed upstream</span>
+          <span class="pill">resolved upstream</span>
         </div>
 
         <div class="threeway" aria-label="Three implementations over the same input">
@@ -262,7 +262,7 @@ footer{border-top:3px double var(--rule-2);padding:34px 0 46px;color:var(--ink-3
             A <span class="mono">t8n</span> tool takes a pre-state, a block environment, and signed
             transactions, then emits the post-state and the artifacts needed to assemble a block.
             Jaune implements that interface over the same Lean definitions used by its fixture runner
-            and proof stack. Its gate — nine cases when this study was written, thirty-nine now — compares <span class="mono">result</span>,
+            and proof stack. Its gate — nine cases when this study was written, fifty-four now — compares <span class="mono">result</span>,
             <span class="mono">alloc</span>, and <span class="mono">body</span> against goldens generated
             by a pinned EELS checkout, with every normalization and deviation explicit.
           </p>
@@ -473,26 +473,41 @@ footer{border-top:3px double var(--rule-2);padding:34px 0 46px;color:var(--ink-3
           </div>
           <div class="panel">
             <strong>Not a Jaune mismatch</strong>
-            <p class="dim">Jaune reproduces its frozen target by design. The target has since been re-pinned twice, to <span class="mono">8ca2f4c</span> and <span class="mono">7341820</span> (3 and 4 September 2026); this case’s goldens were regenerated at each and came out byte-identical, so the pinned target still emits both behaviors.</p>
+            <p class="dim">Jaune reproduces its frozen target by design. The target has since been re-pinned several times, most recently to <span class="mono">forks/amsterdam</span> <span class="mono">1562e2f8</span>, the <span class="mono">tests@v21.0.1</span> release (11 October 2026). This case’s goldens are byte-identical to those first generated on 10 August 2026, so the pinned target still emits both behaviors; both were corrected upstream after that pin (below).</p>
           </div>
         </div>
 
         <div class="filings">
           <a class="filing" href="https://github.com/ethereum/execution-specs/issues/3362">
-            <span class="kind">Upstream issue · #3362 · filed 11 August 2026</span>
+            <span class="kind">Upstream issue · #3362 · filed 11 August 2026 · closed 21 October 2026 by #3849</span>
             <h3>Rejected transactions produce inconsistent transaction and receipt roots</h3>
             <p>Minimized repro, direct trie reconstruction, Amsterdam block-access evidence, and two candidate designs for maintainer direction.</p>
           </a>
           <a class="filing" href="https://github.com/ethereum/execution-specs/pull/3361">
-            <span class="kind">Upstream pull request · #3361 · filed 11 August 2026</span>
+            <span class="kind">Upstream pull request · #3361 · filed 11 August 2026 · merged 21 October 2026</span>
             <h3>Encode accepted transactions in the t8n body</h3>
-            <p>A focused implementation plus a legacy / rejected / type-2 regression test. The trie-indexing behavior is intentionally out of scope.</p>
+            <p>The legacy-encoding correction. Merged as <span class="mono">9154c29e</span> after a rebase onto #3849, with its regression folded into #3849’s rejected-transaction test.</p>
+          </a>
+          <a class="filing" href="https://github.com/ethereum/execution-specs/pull/3849">
+            <span class="kind">Upstream pull request · #3849 by alok-108 · merged 21 October 2026</span>
+            <h3>Number t8n output by accepted transactions</h3>
+            <p>Resolves #3362 with an accepted-transaction counter, the first design the issue offered, and drops rejected transactions from the body. Merged as <span class="mono">0bf0f45b</span>.</p>
           </a>
         </div>
         <p class="caption">
-          Both filings were open when this page was prepared on 12 August 2026, and both were still open
-          on 25 September 2026. This page does not treat
-          an open filing as maintainer confirmation or claim that either change has landed.
+          Both filings were open when this page was prepared on 12 August 2026. Both closed on 21 October 2026
+          on <span class="mono">forks/bogota</span>, the repository’s default branch. Issue #3362 was resolved by
+          <a href="https://github.com/ethereum/execution-specs/pull/3849">PR #3849</a> from alok-108, which
+          numbers the tool’s output by accepted transactions and lists only accepted transactions in the body.
+          <a href="https://github.com/ethereum/execution-specs/pull/3361">PR #3361</a> was then rebased onto it
+          and merged with its legacy-encoding correction. fselmo, who merged both, folded the #3361 regression into
+          #3849’s rejected-transaction test, so the body is now checked against the framework’s encoding on every
+          fork and for every transaction type each fork supports, and
+          <a href="https://github.com/ethereum/execution-specs/pull/3361#pullrequestreview-5603897691">reported</a>
+          that filling every module with rejected transactions, Frontier to Bogota, produced identical fixtures
+          before and after the change — fill never reads the <span class="mono">t8n</span> body. That is the
+          no-fixture-impact boundary above, confirmed upstream. No release tag contained both changes when this
+          note was written; Jaune’s pinned target predates both, so its goldens still record the earlier behavior.
         </p>
       </div>
     </section>
@@ -534,24 +549,23 @@ footer{border-top:3px double var(--rule-2);padding:34px 0 46px;color:var(--ink-3
 
         <p class="caption">
           Current Jaune still carries the case and its goldens unchanged, but its corpus has grown to
-          thirty-nine cases, thirty of them Amsterdam’s, while the three-way divergence registry was
+          fifty-four cases, thirty-three of them Amsterdam’s, while the three-way divergence registry was
           recorded against the nine-case corpus; the three-way run is therefore reproduced at
-          <span class="mono">df58966</span> rather than at the tip. The body correction
-          reproduces separately in the focused regression of PR #3361, pinned below to the head the
-          pull request carried on 25 September 2026: rejection at input 1, an inline legacy
-          transaction, a typed byte envelope, and exactly the accepted-only body — 204 bytes on this
-          input. The pull request’s branch was rewritten on 22 August 2026, and the test moved under
-          <span class="mono">packages/testing</span>; the head this page first cited,
-          <span class="mono">0b79966</span>, is no longer in the branch’s history, so fetching the
-          pull request no longer brings it into a fresh clone.
+          <span class="mono">df58966</span> rather than at the tip. Upstream, both corrections now sit in
+          one merged test at <span class="mono">9154c29e</span>, the #3361 merge on
+          <span class="mono">forks/bogota</span>: it runs a block with one rejected transaction — first,
+          middle, last, or alone — beside the same block without it, and requires the body, roots,
+          receipts and block access list to be identical, on every non-BPO fork from Frontier and every
+          transaction type each fork supports. The standalone body regression this page cited earlier, at
+          PR heads <span class="mono">0b79966</span> and <span class="mono">6d963d31</span>, was folded into
+          that test and its JSON fixtures dropped when the pull request merged.
         </p>
         <div class="term" aria-label="Body regression commands"><pre><span class="prompt">$</span> git clone https://github.com/ethereum/execution-specs.git
 <span class="prompt">$</span> cd execution-specs
-<span class="prompt">$</span> git fetch origin pull/3361/head
-<span class="prompt">$</span> git checkout --detach 6d963d31e539fd82284ea52a10d3b331d6186b7a
+<span class="prompt">$</span> git checkout --detach 9154c29ed38afaf40e99a1d4288ab35bb1d3db8f
 <span class="prompt">$</span> uv sync --frozen --no-default-groups --group test
 <span class="prompt">$</span> uv run --no-sync pytest -q \
-    packages/testing/src/execution_testing/evm_tools/tests/test_t8n_body.py</pre></div>
+    packages/testing/src/execution_testing/client_clis/tests/test_execution_specs_rejected_txs.py</pre></div>
 
         <ul class="sources">
           <li><a href="https://github.com/skbaek/jaune/blob/df58966f01786adfdc8f6315d53580468225e9eb/scripts/report-t8n.md">Completion report and three-way ledger</a></li>
@@ -564,7 +578,9 @@ footer{border-top:3px double var(--rule-2);padding:34px 0 46px;color:var(--ink-3
           <li><a href="https://github.com/ethereum/execution-specs/blob/5b2b22c75f69bda02615204396b70a91e00529e0/packages/testing/src/execution_testing/client_clis/cli_types.py#L750-L771">Fixture output loader does not consume body</a></li>
           <li><a href="https://github.com/ethereum/execution-specs/blob/5b2b22c75f69bda02615204396b70a91e00529e0/src/ethereum/forks/amsterdam/fork.py#L1010-L1091">EELS transaction-processing path</a></li>
           <li><a href="https://github.com/ethereum/execution-specs/blob/5b2b22c75f69bda02615204396b70a91e00529e0/src/ethereum_spec_tools/evm_tools/t8n/__init__.py#L324-L391">EELS t8n reject-and-continue path</a></li>
-          <li><a href="https://github.com/ethereum/execution-specs/blob/6d963d31e539fd82284ea52a10d3b331d6186b7a/packages/testing/src/execution_testing/evm_tools/tests/test_t8n_body.py#L19-L53">PR #3361 body regression, at its 25 September 2026 head</a></li>
+          <li><a href="https://github.com/ethereum/execution-specs/blob/9154c29ed38afaf40e99a1d4288ab35bb1d3db8f/packages/testing/src/execution_testing/client_clis/tests/test_execution_specs_rejected_txs.py#L148-L224">Merged rejected-transaction test, body and roots, at the #3361 merge</a></li>
+          <li><a href="https://github.com/ethereum/execution-specs/pull/3849">PR #3849 (alok-108): number t8n output by accepted transactions — resolves #3362</a></li>
+          <li><a href="https://github.com/ethereum/execution-specs/pull/3361#pullrequestreview-5603897691">Merge review on #3361: fixtures identical before and after, Frontier to Bogota</a></li>
         </ul>
 
         <div class="note">
