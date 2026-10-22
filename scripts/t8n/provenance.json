@@ -98,14 +98,14 @@
     },
     "am-reject-intrinsic-blockchain": {
       "expected/alloc.json": "5542709ca326a6ff97b0cf750f5a9d40568bf64012a2328c2343349a8fd3ad80",
-      "expected/body.json": "2cfb857d88d03b9bdf97a14c49c1ab0e790e1b090ae85feb45b3d687b0e9ab78",
-      "expected/result.json": "b1e339097b234e50c4fec01857e02bd550889501cdefcb07cf5e2bf163efbc13",
+      "expected/body.json": "530c57000a0384c1676b034b2bc1f6b5319524c7fe06f2e65063b7d61985176c",
+      "expected/result.json": "87f7c11ac0b6ec7045f237f7d7b71857ed4e349bcc95907eae6426a954dbc454",
       "txs.json": "4ed4e16e80d102fee0d831c4768546282dbdf45cc791376dc811ffa2c4434ab0"
     },
     "am-reject-intrinsic-state-test": {
       "expected/alloc.json": "59d5126baeee6621aa80c41533bf4c136e7a923864da11e3b9b85dd1c0d380f7",
-      "expected/body.json": "2cfb857d88d03b9bdf97a14c49c1ab0e790e1b090ae85feb45b3d687b0e9ab78",
-      "expected/result.json": "8dcb600624838bdb587d8898099cb3eb163a31516b07b753dc492832604273b3",
+      "expected/body.json": "530c57000a0384c1676b034b2bc1f6b5319524c7fe06f2e65063b7d61985176c",
+      "expected/result.json": "e99a39a33d15d0b40fb447eef7919cfd4cae6ca4acd6ca34edd688825ecfff26",
       "txs.json": "4ed4e16e80d102fee0d831c4768546282dbdf45cc791376dc811ffa2c4434ab0"
     },
     "am-reservoir-blockchain": {
@@ -182,7 +182,7 @@
     },
     "block-exception": {
       "expected/alloc.json": "8daadaa05c198068b6c13146765cbcafdaf9526d7fe1255aa8cc83df7e1a8a19",
-      "expected/body.json": "b2c18078e9436a2c8530330581d9e3cbb99e5ac99e5186566def91ab47a2a812",
+      "expected/body.json": "80d7716107e802914ce8ac438bc8e6e5e15fb72cd3fb55a64ab4820a9f4ee64c",
       "expected/result.json": "389ca745a1485949ed93b6312152c003322406f69939d4e3fec06a21ce97b48e",
       "txs.json": "76069ef7712b25a9109d06a69744e2fbcf74ca2c79e2908209362a60f7fc4751"
     },
@@ -194,20 +194,20 @@
     },
     "reject-execution": {
       "expected/alloc.json": "5e418ec9552bc33220e152953a7428af83edbbbe2d4f4a83e2adce44ab6ad599",
-      "expected/body.json": "55c25f61e55ccf39d967f94e22ac286f045fe598fc3994477efd8b4c9192d020",
-      "expected/result.json": "7ca6808db1bb0a5b810868c049e7f8faac00172e8ed2646f6b85b20021f5bf48",
+      "expected/body.json": "530c57000a0384c1676b034b2bc1f6b5319524c7fe06f2e65063b7d61985176c",
+      "expected/result.json": "3e8c9d8d82abbdceedf2183635b8a54fe0e48578f991d04b451f66ffae35ecdb",
       "txs.json": "f7b22f2073d34b70edd4e80882f60312467cf5ffd4879d1a61a4430d684517af"
     },
     "reject-middle": {
       "expected/alloc.json": "b528c744738885bdb4a7560501b508f35be37c8b931609773e3abc1a6c893f95",
-      "expected/body.json": "0548d1eb7f1f0cfe4bd9057e890a3f42ddaab7f7d2dab71057abb9db78f3f990",
-      "expected/result.json": "7ed95bf623e8baddf6d3c81501d15700629337f685906729f33bc432dd194349",
+      "expected/body.json": "6975cfd7ff651ef50957c2297a287a237a7e6578cd0907dd60e14bfbc7d9359e",
+      "expected/result.json": "99982e90391d17eab5be01de2da6a6cbec0a91841aa31168105a88bf322f56cd",
       "txs.json": "dd97b554e2527768695aaaca50c76868968f654717b0253e1535eb4f1d3fef9c"
     },
     "reject-parse": {
       "expected/alloc.json": "8ddfdbb05ee6df305c228459096b595a3b2ca84dfce0728ba966154af1de9379",
-      "expected/body.json": "21257dde5a9a8b0d40dbdcae7d39bbd9039518376db7ad02e83c4fee85056290",
-      "expected/result.json": "962bc1a201f222cf5b185501bb5797febacd5fe466f013edfadfb7e23cb3f4fa",
+      "expected/body.json": "80d7716107e802914ce8ac438bc8e6e5e15fb72cd3fb55a64ab4820a9f4ee64c",
+      "expected/result.json": "27a6591ba19bfa34b4828e40e7beae4eda32ff41ae231d54e7705cfd4b947841",
       "txs.json": "341fdfa93ade2bb19f53e5f9f113576bebaeeb0bd234c32c4585c328848e005d"
     },
     "requests": {
@@ -218,112 +218,112 @@
     },
     "storage-create-amsterdam": {
       "expected/alloc.json": "4635ac4f03a30e7b2b805c04b42728b5143ab1165ae1d090096ccf5a9d5d618d",
-      "expected/body.json": "e296c5280b15abeef6805a1cc27c4293d3dff46c4367ba7d96c65bd1c6913f38",
+      "expected/body.json": "57e77d67de478f8417d3338f1d33866ffd86e2a074586175dc99cfd82db6c106",
       "expected/result.json": "a404c1644aa3e895e3b6d4ca3e57f78fd8b7f499319ffb816514c6e027ea1a90",
       "txs.json": "44b2e91cbaa62a9bec0396bea9d847fbf4d90d39fb68630e8bd394dd437310ea"
     },
     "storage-create-bpo1": {
       "expected/alloc.json": "ef0ffff9438edeadc53d658a9e53094b37575f2b27baf21991cd1e98dec27940",
-      "expected/body.json": "e296c5280b15abeef6805a1cc27c4293d3dff46c4367ba7d96c65bd1c6913f38",
+      "expected/body.json": "57e77d67de478f8417d3338f1d33866ffd86e2a074586175dc99cfd82db6c106",
       "expected/result.json": "aa67a4cc5509909a54897b408963ddb2bbf9331342271baf2fd0fcf9a6ffe9d6",
       "txs.json": "44b2e91cbaa62a9bec0396bea9d847fbf4d90d39fb68630e8bd394dd437310ea"
     },
     "storage-create-bpo2": {
       "expected/alloc.json": "ef0ffff9438edeadc53d658a9e53094b37575f2b27baf21991cd1e98dec27940",
-      "expected/body.json": "e296c5280b15abeef6805a1cc27c4293d3dff46c4367ba7d96c65bd1c6913f38",
+      "expected/body.json": "57e77d67de478f8417d3338f1d33866ffd86e2a074586175dc99cfd82db6c106",
       "expected/result.json": "aa67a4cc5509909a54897b408963ddb2bbf9331342271baf2fd0fcf9a6ffe9d6",
       "txs.json": "44b2e91cbaa62a9bec0396bea9d847fbf4d90d39fb68630e8bd394dd437310ea"
     },
     "storage-create-osaka": {
       "expected/alloc.json": "ef0ffff9438edeadc53d658a9e53094b37575f2b27baf21991cd1e98dec27940",
-      "expected/body.json": "e296c5280b15abeef6805a1cc27c4293d3dff46c4367ba7d96c65bd1c6913f38",
+      "expected/body.json": "57e77d67de478f8417d3338f1d33866ffd86e2a074586175dc99cfd82db6c106",
       "expected/result.json": "aa67a4cc5509909a54897b408963ddb2bbf9331342271baf2fd0fcf9a6ffe9d6",
       "txs.json": "44b2e91cbaa62a9bec0396bea9d847fbf4d90d39fb68630e8bd394dd437310ea"
     },
     "storage-create-prague": {
       "expected/alloc.json": "ef0ffff9438edeadc53d658a9e53094b37575f2b27baf21991cd1e98dec27940",
-      "expected/body.json": "e296c5280b15abeef6805a1cc27c4293d3dff46c4367ba7d96c65bd1c6913f38",
+      "expected/body.json": "57e77d67de478f8417d3338f1d33866ffd86e2a074586175dc99cfd82db6c106",
       "expected/result.json": "aa67a4cc5509909a54897b408963ddb2bbf9331342271baf2fd0fcf9a6ffe9d6",
       "txs.json": "44b2e91cbaa62a9bec0396bea9d847fbf4d90d39fb68630e8bd394dd437310ea"
     },
     "storage-delete-amsterdam": {
       "expected/alloc.json": "f91d3ef1120d0bc391d58633079f57adfc748142105e3624fedb83407ca082e3",
-      "expected/body.json": "deb6874db5799e99beaf0b99a1d3274a6472697b849ac4eb93a5e5484f58b2eb",
+      "expected/body.json": "5bd5410bce60c490ea695984582b968bcf55ae385b2000d34d467e60fa56b107",
       "expected/result.json": "f219e07ccc1575a0471a456564a1f3896783d6e27dd375f35c4f47445e9197bd",
       "txs.json": "7f5b42f8414db7938b7b56bab7e700fde08b0f4f57725e5a8e6af82bbfb5623e"
     },
     "storage-delete-bpo1": {
       "expected/alloc.json": "71a6462812bbca44cd635f97d483fd29fcf9e75d108e3fb3d3085c895c22b23e",
-      "expected/body.json": "deb6874db5799e99beaf0b99a1d3274a6472697b849ac4eb93a5e5484f58b2eb",
+      "expected/body.json": "5bd5410bce60c490ea695984582b968bcf55ae385b2000d34d467e60fa56b107",
       "expected/result.json": "24f573b1d6cd82f2ea8ed15e71b730f0aabdc0c123e5c1d1d29a2bba98fdc782",
       "txs.json": "7f5b42f8414db7938b7b56bab7e700fde08b0f4f57725e5a8e6af82bbfb5623e"
     },
     "storage-delete-bpo2": {
       "expected/alloc.json": "71a6462812bbca44cd635f97d483fd29fcf9e75d108e3fb3d3085c895c22b23e",
-      "expected/body.json": "deb6874db5799e99beaf0b99a1d3274a6472697b849ac4eb93a5e5484f58b2eb",
+      "expected/body.json": "5bd5410bce60c490ea695984582b968bcf55ae385b2000d34d467e60fa56b107",
       "expected/result.json": "24f573b1d6cd82f2ea8ed15e71b730f0aabdc0c123e5c1d1d29a2bba98fdc782",
       "txs.json": "7f5b42f8414db7938b7b56bab7e700fde08b0f4f57725e5a8e6af82bbfb5623e"
     },
     "storage-delete-osaka": {
       "expected/alloc.json": "71a6462812bbca44cd635f97d483fd29fcf9e75d108e3fb3d3085c895c22b23e",
-      "expected/body.json": "deb6874db5799e99beaf0b99a1d3274a6472697b849ac4eb93a5e5484f58b2eb",
+      "expected/body.json": "5bd5410bce60c490ea695984582b968bcf55ae385b2000d34d467e60fa56b107",
       "expected/result.json": "24f573b1d6cd82f2ea8ed15e71b730f0aabdc0c123e5c1d1d29a2bba98fdc782",
       "txs.json": "7f5b42f8414db7938b7b56bab7e700fde08b0f4f57725e5a8e6af82bbfb5623e"
     },
     "storage-delete-prague": {
       "expected/alloc.json": "56be7edd602ac54131c18b3348240c38f516141d53b0f30f3861b5f73f9b91a3",
-      "expected/body.json": "deb6874db5799e99beaf0b99a1d3274a6472697b849ac4eb93a5e5484f58b2eb",
+      "expected/body.json": "5bd5410bce60c490ea695984582b968bcf55ae385b2000d34d467e60fa56b107",
       "expected/result.json": "32acb02755b88ab573e19cce944c93877f4d09fd0b6a7155bec5128497c89ae1",
       "txs.json": "7f5b42f8414db7938b7b56bab7e700fde08b0f4f57725e5a8e6af82bbfb5623e"
     },
     "transfer-blockchain": {
       "expected/alloc.json": "8ddfdbb05ee6df305c228459096b595a3b2ca84dfce0728ba966154af1de9379",
-      "expected/body.json": "b2c18078e9436a2c8530330581d9e3cbb99e5ac99e5186566def91ab47a2a812",
+      "expected/body.json": "80d7716107e802914ce8ac438bc8e6e5e15fb72cd3fb55a64ab4820a9f4ee64c",
       "expected/result.json": "ab222043be4f19dcec1ca98829d9a84efe515e40045cd91df50c30ea9e730293",
       "txs.json": "76069ef7712b25a9109d06a69744e2fbcf74ca2c79e2908209362a60f7fc4751"
     },
     "transfer-state-test": {
       "expected/alloc.json": "7a821ddfbe95f0b3dcc45dd3a8154b42c7cf3b077ce1d0a2b946db58344ec34b",
-      "expected/body.json": "b2c18078e9436a2c8530330581d9e3cbb99e5ac99e5186566def91ab47a2a812",
+      "expected/body.json": "80d7716107e802914ce8ac438bc8e6e5e15fb72cd3fb55a64ab4820a9f4ee64c",
       "expected/result.json": "8cbde2c436b1f1e69e72bfd2facf803ac0e4f807eac3b89c93e7d1fb4508da87",
       "txs.json": "76069ef7712b25a9109d06a69744e2fbcf74ca2c79e2908209362a60f7fc4751"
     },
     "withdrawals": {
       "expected/alloc.json": "27da9d45ca3b98c4c66b91d9829e825f629006ea1a57ec9f043b39114bd04bfc",
-      "expected/body.json": "b2c18078e9436a2c8530330581d9e3cbb99e5ac99e5186566def91ab47a2a812",
+      "expected/body.json": "80d7716107e802914ce8ac438bc8e6e5e15fb72cd3fb55a64ab4820a9f4ee64c",
       "expected/result.json": "261851dc6777bcc52b4d4cf42f2056930c9e33daf7bec4b24f1eef38fb2f3933",
       "txs.json": "76069ef7712b25a9109d06a69744e2fbcf74ca2c79e2908209362a60f7fc4751"
     },
     "zero-value-storage-amsterdam": {
       "expected/alloc.json": "720b5f532578a018bb3d234de05a209b38b6bd10db7ccf25742dae5d4010280d",
-      "expected/body.json": "f108643976b7bbf97f694d218f79b9246fafb54b6e980aae7b6e79a803880abb",
+      "expected/body.json": "7bbaece0749e7188a80653aaad686b5312d7fc973ea60194cba96218621f0313",
       "expected/result.json": "acc36e04efe9efca92c0d1620e55407e90ba2ddab747df139e714666ad40b9b8",
       "txs.json": "edb3a4f346b1a5b92ab87873f332d12380c26cbc4fc96ae96254782ce0e7a8f8"
     },
     "zero-value-storage-bpo1": {
       "expected/alloc.json": "614168140c68cd8c5b12a3d38a15fadaf9930ea772d311e555121b83e9e95d9a",
-      "expected/body.json": "f108643976b7bbf97f694d218f79b9246fafb54b6e980aae7b6e79a803880abb",
+      "expected/body.json": "7bbaece0749e7188a80653aaad686b5312d7fc973ea60194cba96218621f0313",
       "expected/result.json": "4ed9c16c798aa9c52681ea8726ccbb30aa9ce8505a37ee95115b003fc0059865",
       "txs.json": "edb3a4f346b1a5b92ab87873f332d12380c26cbc4fc96ae96254782ce0e7a8f8"
     },
     "zero-value-storage-bpo2": {
       "expected/alloc.json": "614168140c68cd8c5b12a3d38a15fadaf9930ea772d311e555121b83e9e95d9a",
-      "expected/body.json": "f108643976b7bbf97f694d218f79b9246fafb54b6e980aae7b6e79a803880abb",
+      "expected/body.json": "7bbaece0749e7188a80653aaad686b5312d7fc973ea60194cba96218621f0313",
       "expected/result.json": "4ed9c16c798aa9c52681ea8726ccbb30aa9ce8505a37ee95115b003fc0059865",
       "txs.json": "edb3a4f346b1a5b92ab87873f332d12380c26cbc4fc96ae96254782ce0e7a8f8"
     },
     "zero-value-storage-osaka": {
       "expected/alloc.json": "614168140c68cd8c5b12a3d38a15fadaf9930ea772d311e555121b83e9e95d9a",
-      "expected/body.json": "f108643976b7bbf97f694d218f79b9246fafb54b6e980aae7b6e79a803880abb",
+      "expected/body.json": "7bbaece0749e7188a80653aaad686b5312d7fc973ea60194cba96218621f0313",
       "expected/result.json": "4ed9c16c798aa9c52681ea8726ccbb30aa9ce8505a37ee95115b003fc0059865",
       "txs.json": "edb3a4f346b1a5b92ab87873f332d12380c26cbc4fc96ae96254782ce0e7a8f8"
     },
     "zero-value-storage-prague": {
       "expected/alloc.json": "614168140c68cd8c5b12a3d38a15fadaf9930ea772d311e555121b83e9e95d9a",
-      "expected/body.json": "f108643976b7bbf97f694d218f79b9246fafb54b6e980aae7b6e79a803880abb",
+      "expected/body.json": "7bbaece0749e7188a80653aaad686b5312d7fc973ea60194cba96218621f0313",
       "expected/result.json": "4ed9c16c798aa9c52681ea8726ccbb30aa9ce8505a37ee95115b003fc0059865",
       "txs.json": "edb3a4f346b1a5b92ab87873f332d12380c26cbc4fc96ae96254782ce0e7a8f8"
     }
   },
-  "conformance_target_commit": "1562e2f8b5cb1efda7e0d7c517f2dfb5742c0a43"
+  "conformance_target_commit": "9154c29ed38afaf40e99a1d4288ab35bb1d3db8f"
 }

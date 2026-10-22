@@ -358,7 +358,11 @@ baseline was copied, hand-edited or rebased.
 
 `check-mainnet.sh` takes `--lane (mainnet|amsterdam)`. Both lanes now pin
 `tests@v21.0.1`, EELS `1562e2f8b5cb1efda7e0d7c517f2dfb5742c0a43`, and default
-to `~/eest-mainnet-v21.0.1`. Their suite namespaces, generated manifests and
+to `~/eest-mainnet-v21.0.1`. The `t8n` conformance target alone runs ahead, at
+`forks/bogota` `9154c29ed38afaf40e99a1d4288ab35bb1d3db8f`, which descends from
+that commit and carries ethereum/execution-specs#3849 and #3361; both
+generators refuse a target checkout that does not descend from the lanes'
+release (`conformance_target.fixture_release_commit` in `scripts/sources.json`). Their suite namespaces, generated manifests and
 environment overrides remain separate. The manifest generator validates the
 release index and every selected file's `content_sha256`; changed counts or
 bytes fail `--check`. Empty or miscounted `--dir` selections fail before a run.

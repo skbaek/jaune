@@ -662,12 +662,16 @@ class LaneManifestFieldTests(unittest.TestCase):
         self.assertEqual(amsterdam["release_tag"], "tests@v21.0.1")
         for field in ("release_tag", "release_commit", "archive_sha256", "archive_size_bytes"):
             self.assertEqual(amsterdam[field], self.sources["current_mainnet"][field])
-        # The fixture release and the transition-tool anchor must name one
-        # revision: that is what makes the extracted constants and the fixtures
-        # agree by construction rather than by coincidence.
-        self.assertEqual(
-            amsterdam["release_commit"], self.sources["conformance_target"]["commit"]
-        )
+        # The transition-tool anchor may run ahead of the fixture release, but
+        # only along its history, and it must name the release it descends
+        # from. The generators check the descent against the checkout; the
+        # fork-constant extraction (taken at the anchor) and the fixture lanes
+        # (run at the release) then fail one gate or the other if a constant
+        # differed between the two.
+        target = self.sources["conformance_target"]
+        self.assertEqual(amsterdam["release_commit"], target["fixture_release_commit"])
+        self.assertRegex(target["commit"], r"^[0-9a-f]{40}$")
+        self.assertRegex(target["uv_version"], r"^\d+\.\d+\.\d+$")
 
     def test_the_doctor_reports_the_lane_under_its_own_name(self):
         """Both lanes go through one checker, so the reported names are what

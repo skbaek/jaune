@@ -18,7 +18,7 @@ runs:
     - name: Provision conformance EELS target
       shell: bash
       run: |
-        UV_VERSION="$(python3 -c "import json; print(json.load(open('scripts/sources.json'))['python_oracle']['package_manager_tested_version'])")"
+        UV_VERSION="$(python3 -c "import json; print(json.load(open('scripts/sources.json'))['conformance_target']['uv_version'])")"
         python3 -m pip install "uv==$UV_VERSION"
         python3 - "$JAUNE_T8N_TARGET" <<'PY'
         import json, subprocess, sys
