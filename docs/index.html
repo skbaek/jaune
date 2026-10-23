@@ -352,7 +352,7 @@ footer a:hover{color:var(--ink)}
       <a href="#casestudy">Case study</a>
       <a href="#trajectory">Roadmap</a>
       <a href="#build">Build</a>
-      <a class="ghbtn sib" href="https://skbaek.github.io/blanc/" title="Blanc — the sibling project: a minimal contract language proved over this semantics">
+      <a class="ghbtn sib" href="https://skbaek.github.io/blanc/" title="Blanc — the sibling project: a verification stack for EVM bytecode built on this semantics">
         <span class="sqo"></span>Blanc
       </a>
       <a class="ghbtn" href="https://github.com/skbaek/jaune" target="_blank" rel="noopener">
@@ -422,7 +422,8 @@ footer a:hover{color:var(--ink)}
       deviation explicit. Its canonical execution-derivation type, adequacy theorem, and symbolic
       instruction rules ship in the library itself, with checked examples, a task-organized API guide,
       and exact axiom pins that the ordinary build enforces. The semantics is demonstrated strong enough for real verification: the
-      sibling Blanc language has carried contract invariants through it — a WETH’s
+      sibling Blanc verification stack has carried contract invariants through it in its native
+      language — a WETH’s
       solvency across scheduled fork activations, Registry integrity for a port of Lido’s deployed
       CircuitBreaker from an official-parameters deployment to every reachable state of a valid
       configured chain, and the eth2 deposit contract’s Merkle root through twelve SHA-256
@@ -1007,9 +1008,10 @@ footer a:hover{color:var(--ink)}
     <p class="lede" style="margin-top:18px">
       The claim that a semantics “supports verification” is cheap until someone pays it.
       <a href="https://skbaek.github.io/blanc/" style="text-decoration:underline;text-underline-offset:3px"><strong style="color:var(--ink)">Blanc</strong></a><span class="dimmer"> (fr. “white”, as in whitepaper)</span>
-      is the payment: a deliberately minimal contract language — four constructors, a compiler into
-      EVM bytecode, a machine-checked compiler-correctness theorem — that carries real invariants
-      through Jaune’s semantics at every altitude. Its deepest single exercise of the semantics is
+      is the payment: a verification stack on Jaune that proves theorems about Ethereum bytecode as
+      it is deployed, and whose optional native language — four constructors, a compiler into EVM
+      bytecode, a machine-checked compiler-correctness theorem — carries real invariants through
+      Jaune’s semantics at every altitude. The language’s deepest single exercise of the semantics is
       a port of the CircuitBreaker that Lido deployed in 2026: an emergency brake whose admin grants
       pauser addresses time-limited authority over registered protocol contracts. The invariant is
       Registry integrity: <em>the guardian’s book of authorizations stays coherent, whatever any
@@ -1103,11 +1105,12 @@ footer a:hover{color:var(--ink)}
             integer-arithmetic layer — and on since, as the Blanc page records.
           </p>
           <p class="dim" style="font-size:.94rem;margin-bottom:0">
-            Scope, unchanged since the first port: these are <strong>reimplementations</strong>,
+            Scope of these ports, unchanged since the first: they are <strong>reimplementations</strong>,
             never verification of the code at the reference addresses. Each port’s observable
-            differences are catalogued in its own deviation registry, and every theorem is about
+            differences are catalogued in its own deviation registry, and every port theorem is about
             the bytecode Blanc’s compiler emits — transferring one to a deployed original would
-            need a separate argument that nobody here has made.
+            need a separate argument that nobody here has made. Blanc’s theorems about deployed
+            bytecode are a separate line of work, stated over the bytes read from mainnet.
           </p>
         </div>
       </div>
@@ -1136,9 +1139,10 @@ footer a:hover{color:var(--ink)}
           </p>
         </div>
         <p class="note" style="margin-top:16px">
-          The division of labour is exact: Jaune owns what the machine does; Blanc owns programs,
-          the compiler, and everything proved about particular contracts. The full portfolio —
-          ports from the WETH to the eth2 deposit contract and Lido’s CircuitBreaker, gateway,
+          The division of labour is exact: Jaune owns what the machine does; Blanc, the verification
+          stack built on it, owns everything proved about particular contracts — bytecode read from
+          mainnet, and programs written in its native language with their compiler. The full
+          portfolio — the deployed artifacts, and the language’s ports from the WETH to the eth2 deposit contract and Lido’s CircuitBreaker, gateway,
           and proxy, plus arithmetic études, each with an evidence page of its own — lives at
           <a href="https://skbaek.github.io/blanc/" style="text-decoration:underline;text-underline-offset:3px">skbaek.github.io/blanc</a>.
         </p>

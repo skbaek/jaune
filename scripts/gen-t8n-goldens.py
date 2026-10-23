@@ -78,6 +78,26 @@ def verify_revision(root: Path, pinned: str) -> None:
         fail(str(error))
 
 
+def verify_descent(root: Path, entry: dict) -> None:
+    """Refuse a target that does not descend from the fixture lanes' release.
+
+    The fixture lanes and this target used to name one commit. Since goal
+    devcon8-talk-v1 the target may run ahead of the release, but only along
+    its history: `fixture_release_commit` must be an ancestor of the checkout.
+    A shallow clone cannot answer that and is refused the same way.
+    """
+    release = entry.get("fixture_release_commit")
+    if not release:
+        fail("scripts/sources.json conformance_target has no fixture_release_commit")
+    descent = git(root, "merge-base", "--is-ancestor", release, "HEAD")
+    if descent.returncode != 0:
+        fail(
+            f"conformance-target checkout {root} does not descend from the "
+            f"fixture release commit {release} (or is too shallow to show it); "
+            "the target must not leave the fixture lanes' history"
+        )
+
+
 def target_paths() -> "tuple[Path, Path, str]":
     """The conformance-target checkout, its interpreter, and its commit."""
     sources = json.loads(SOURCES.read_text())
@@ -98,6 +118,7 @@ def target_paths() -> "tuple[Path, Path, str]":
             f"{entry['repo_url']} at {entry['commit']}"
         )
     verify_revision(root, entry["commit"])
+    verify_descent(root, entry)
     python = root / entry["venv_subpath"] / "bin" / "python"
     t8n = root / entry["venv_subpath"] / "bin" / entry["t8n_command"]
     if not t8n.exists():

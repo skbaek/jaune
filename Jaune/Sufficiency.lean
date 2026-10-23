@@ -1626,6 +1626,8 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
     · exact pushItem_gasLt (by decide) h
     · simp at h
   case keccak256 =>
+    change Rinst.runCore pc devm sevm .keccak256 = .ok devm' at h
+    rw [Rinst.runCore_keccak256_eq_reference] at h
     obtain ⟨⟨start, d1⟩, h1, h⟩ := Except.bind_eq_ok h
     obtain ⟨⟨size, d2⟩, h2, h⟩ := Except.bind_eq_ok h
     obtain ⟨d3, h3, h4⟩ := Except.bind_eq_ok h
@@ -1633,8 +1635,7 @@ theorem Rinst.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
     have e2 := Devm.popToNat_gasMeasure h2
     have e3 := chargeGas_gasMeasure h3
     have e4 := Devm.push_gasMeasure h4
-    dsimp only at e1 e2 e3 e4
-    rw [Devm.memRead_gasMeasure] at e4
+    rw [Devm.withMemory_gasMeasure] at e4
     unfold gKeccak256 at e3
     omega
   case balance =>

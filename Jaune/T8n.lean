@@ -833,6 +833,8 @@ structure Outcome : Type where
   bout : BlockOutput
   rejected : List Rejection
   blockException : Option BlockValidationError
+  /-- The accepted transactions, in input order: what `body` encodes. -/
+  included : List Tx
 
 /-- An operational failure is not a rejection. The target catches
 `EthereumException` around each transaction -- which covers its transaction,
@@ -842,44 +844,38 @@ def operational : TransitionError → Bool
   | .internal _ => true
   | _ => false
 
-/-- The target's `process_transaction` writes the transaction into
-`block_output.transactions_trie` *before* validating it, on a block output it
-mutates in place, so a transaction rejected during execution stays in that
-trie and contributes to `txRoot`. `processTransaction` is pure and discards
-its whole result on failure, so the frontend reinstates exactly that one
-insertion -- the same key, the same value, in the same place. A transaction
-rejected during *parse* never reaches that line in the target either, and does
-not get one here. -/
-def insertIntoTxTrie (bout : BlockOutput) (index : Nat) (tx : Tx) : BlockOutput :=
-  {bout with
-    transactionsTrie :=
-      bout.transactionsTrie.insert (BLT.bytes index.toBytes).toBytes tx}
-
 /-- The reject-and-continue fold: the one piece of control flow a transition
 tool needs that a block importer must not have. Every arm calls
 `processTransaction` unchanged, and a rejected transaction is rolled back by
-not threading its state. -/
+not threading its state.
+
+A rejected transaction leaves no trace in the block: each accepted transaction
+is processed at the count of transactions accepted before it, so the ones that
+follow a rejection take the position it would have had, in the transactions
+trie, the receipts trie and the block-level access list alike. Rejections are
+still reported under their position in the input. This is the target's rule
+since ethereum/execution-specs#3849 (rejected transactions are numbered out)
+and #3361 (the body lists only accepted transactions). -/
 def foldTxs :
-    List (Nat × TxParse Tx) → Benv → BlockOutput → List Rejection →
-    Except TransitionError (Benv × BlockOutput × List Rejection)
-  | [], benv, bout, rej => .ok ⟨benv, bout, rej⟩
-  | ⟨i, .error e⟩ :: rest, benv, bout, rej =>
-    foldTxs rest benv bout (rej ++ [⟨i, .parse e⟩])
-  | ⟨i, .ok tx⟩ :: rest, benv, bout, rej =>
-    match processTransaction benv bout tx i with
-    | .ok ⟨st, bout'⟩ => foldTxs rest (benv.withState st) bout' rej
+    List (Nat × TxParse Tx) → Benv → BlockOutput → List Rejection → List Tx →
+    Except TransitionError (Benv × BlockOutput × List Rejection × List Tx)
+  | [], benv, bout, rej, inc => .ok ⟨benv, bout, rej, inc⟩
+  | ⟨i, .error e⟩ :: rest, benv, bout, rej, inc =>
+    foldTxs rest benv bout (rej ++ [⟨i, .parse e⟩]) inc
+  | ⟨i, .ok tx⟩ :: rest, benv, bout, rej, inc =>
+    match processTransaction benv bout tx inc.length with
+    | .ok ⟨st, bout'⟩ => foldTxs rest (benv.withState st) bout' rej (inc ++ [tx])
     | .error err =>
       if operational err then .error err
-      else
-        foldTxs rest benv (insertIntoTxTrie bout i tx) (rej ++ [⟨i, .execution err⟩])
+      else foldTxs rest benv bout (rej ++ [⟨i, .execution err⟩]) inc
 
 /-- State-test mode: exactly one transaction, no system operations, no
 withdrawals, no requests. -/
 def runStateTest (benv : Benv) (txs : List (TxParse Tx)) :
     Except TransitionError Outcome := do
   let selected := match txs with | [] => [] | t :: _ => [⟨0, t⟩]
-  let ⟨benv, bout, rej⟩ ← foldTxs selected benv .init []
-  .ok ⟨benv.state, bout, rej, none⟩
+  let ⟨benv, bout, rej, inc⟩ ← foldTxs selected benv .init [] []
+  .ok ⟨benv.state, bout, rej, none, inc⟩
 
 /-- The reward `--state.reward` asks for, as the target resolves it
 (`_resolve_state_reward`, then `_run_blockchain_test`'s guard): under proof of
@@ -932,9 +928,9 @@ proof of stake, so of the runnable forks only London pays one. `ommers` is
 EIP-7928 (goal C): the two pre-execution system calls are incorporated into
 the block-level access list at index 0, each transaction at its index plus one
 inside `processTransaction`, and the post-execution operations -- withdrawals,
-then each request call -- at `len(txs) + 1`, the tool's count of the
-transactions it was handed, rejected ones included (the driver sets the index
-once, before withdrawals; Appendix E item 2 of the goal). The list is built
+then each request call -- at the count of accepted transactions plus
+one (the driver sets the index once, before withdrawals; Appendix E item 2 of
+the goal, as renumbered by ethereum/execution-specs#3849). The list is built
 after the requests and the item rule is applied to it; a violation is the
 `blockException` of a result that still carries the list, as the target
 assigns `block_output.block_access_list` before validating it. -/
@@ -969,11 +965,11 @@ def runBlockchain (benv : Benv) (txs : List (TxParse Tx)) (wds : List Withdrawal
         outBeacon.storageReads.toList outBeacon.storageWrites.toList
       pure (benv.withState stBeacon, bal)
     else pure (benv, bal)
-  let ⟨benv, bout, rej⟩ ← foldTxs txs.putIndex benv {BlockOutput.init with bal := bal} []
+  let ⟨benv, bout, rej, inc⟩ ← foldTxs txs.putIndex benv {BlockOutput.init with bal := bal} [] []
   let benv := match reward with
     | none => benv
     | some r => benv.withState (payT8nRewards r benv.stat.coinbase ommers benv.state)
-  let postIndex := txs.length + 1
+  let postIndex := inc.length + 1
   let ⟨benv, bout⟩ := if rules.header.withdrawalsRoot then
       let ⟨stWds, bout⟩ := processWithdrawals benv bout wds
       let balWds := bout.bal.incorporateSystem rules postIndex benv.state stWds
@@ -990,13 +986,13 @@ def runBlockchain (benv : Benv) (txs : List (TxParse Tx)) (wds : List Withdrawal
       | some _ => bout'.bal.build
     let bout' := {bout' with blockAccessList := list}
     match checkBlockAccessListGasLimit rules benv.stat.blockGasLimit list with
-    | .ok () => .ok ⟨st, bout', rej, none⟩
-    | .error (.block reason) => .ok ⟨st, bout', rej, some reason⟩
+    | .ok () => .ok ⟨st, bout', rej, none, inc⟩
+    | .error (.block reason) => .ok ⟨st, bout', rej, some reason, inc⟩
     | .error err => .error err
   | .error (.block reason) =>
     -- The target raises `InvalidBlock` out of the step and builds its result
     -- from whatever the block environment and block output already hold.
-    .ok ⟨benv.state, bout, rej, some reason⟩
+    .ok ⟨benv.state, bout, rej, some reason, inc⟩
   | .error err => .error err
 
 -- Focused EIP-7928 carry tests for the two block frontends. The request
@@ -1373,12 +1369,17 @@ canonicalises both sides before comparing. -/
 def allocJson (st : State) : JOut :=
   .obj <| st.toList.map fun kv => ⟨hexAdr kv.fst, acctJson kv.snd⟩
 
-/-- The `body` document: an RLP list whose members are the transactions'
-type-prefixed encodings, as byte strings. Written as a bare JSON string,
-which is what the target's `json.dump(body_hex, f)` produces. -/
-def bodyHex (txs : List (TxParse Tx)) : String :=
-  let encoded := txs.filterMap fun t => t.toOption.map txEncoding
-  hexBytes (BLT.list (encoded.map BLT.bytes)).toBytes
+/-- The `body` document: the RLP list of the accepted transactions, as a block
+body carries them -- a legacy transaction as its own RLP list, a typed one as
+the byte string of its type-prefixed encoding (the target's
+`fork.encode_transaction`). Written as a bare JSON string, which is what the
+target's `json.dump(body_hex, f)` produces. -/
+def bodyHex (txs : List Tx) : String :=
+  let item (tx : Tx) : BLT :=
+    match tx.type with
+    | .zero _ _ => tx.toBLT
+    | _ => BLT.bytes (txEncoding tx)
+  hexBytes (BLT.list (txs.map item)).toBytes
 
 ----------------- THE COMMAND LINE ------------------
 
@@ -1711,11 +1712,11 @@ def run (args : List String) : IO Unit := do
           TransitionError.render
   let resultText := (resultJson rules env outcome).toString
   let allocText := (allocJson outcome.state).toString
-  let bodyText := quoted (bodyHex txs)
+  let bodyText := quoted (bodyHex outcome.included)
   let basedir : System.FilePath := o.outputBasedir
   let mut stdoutFields : List (String × JOut) := []
   if o.outputBody = "stdout" then
-    stdoutFields := stdoutFields ++ [⟨"body", .str (bodyHex txs)⟩]
+    stdoutFields := stdoutFields ++ [⟨"body", .str (bodyHex outcome.included)⟩]
   else if ¬ o.outputBody.isEmpty then
     IO.FS.writeFile (basedir.join o.outputBody) bodyText
   if o.outputAlloc = "stdout" then

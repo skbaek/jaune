@@ -71,25 +71,17 @@
       "created_at": "2026-10-07T03:09:21.815580Z",
       "test_count": 354684
     },
-    "_comment": "The v21.0.1 mainnet fixture release. Both lanes and the conformance target pin the same release; suites and manifests remain separate. Identity verified against the official release API and checksum-verified archive.",
+    "_comment": "The v21.0.1 mainnet fixture release. Both lanes pin this release; the conformance target descends from its commit (conformance_target.fixture_release_commit); suites and manifests remain separate. Identity verified against the official release API and checksum-verified archive.",
     "archive_size_bytes": 999553432
   },
   "conformance_target": {
     "repo_url": "https://github.com/ethereum/execution-specs.git",
-    "branch": "forks/amsterdam",
-    "commit": "1562e2f8b5cb1efda7e0d7c517f2dfb5742c0a43",
-    "cli_adapter": {
-      "id": "ommer-reward-summary-cli-v1",
-      "path": "packages/testing/src/execution_testing/evm_tools/t8n/cli.py",
-      "base_git_blob": "60bcaeee82c5c0db741b2d89b0faa723c1e77296",
-      "adapted_git_blob": "6c37e33615d07623a5a604db153963179db00295",
-      "adapted_sha256": "6ae79cf39f96ea40744a228d86d8c9376dd0503f87e88955a52542fabd864abd",
-      "mode": "100644",
-      "patch_subpath": "reference-patches/ommer-reward-summary-cli-v1.patch",
-      "patch_sha256": "da5c038c183ca9f3a4eac437d6187d66b5ecd0ee5fb4626d37820e0f2dcb2920"
-    },
+    "branch": "forks/bogota",
+    "commit": "9154c29ed38afaf40e99a1d4288ab35bb1d3db8f",
+    "fixture_release_commit": "1562e2f8b5cb1efda7e0d7c517f2dfb5742c0a43",
+    "uv_version": "0.13.4",
     "default_env_var": "JAUNE_T8N_TARGET",
-    "default_subpath_from_home": "execution-specs-t8n-v21.0.1",
+    "default_subpath_from_home": "execution-specs-t8n-9154c29e",
     "venv_subpath": ".venv",
     "t8n_command": "ethereum-spec-evm",
     "fill_command": "fill",
@@ -112,7 +104,17 @@
       "Amsterdam"
     ],
     "_comment": "The transition-tool conformance anchor for `jaune t8n`, chosen 2026-08-03 because this checkout's `fill` defaults to the in-process ExecutionSpecsTransitionTool, which calls this same checkout's EELS in process (client_clis/__init__.py sets the default tool; clis/execution_specs.py runs T8N.run). It is a GATE ANCHOR, not a fork-scope commitment: `fork_lane` is the block-validation handshake of canonical static target names advertised by `jaune t8n --forks`, derived from the build's runnable general forks through T8n.targetForkName?: Petersburg is spelled ConstantinopleFix, and synthetic EIP-1283 Constantinople has no target name and is omitted. scripts/check-cli.sh pins that the binary and this list agree and that every advertised name resolves before input; every label on it resolves through the one resolver `Fork.rules?` (the separate transaction-metering vehicle that `--state.fork Amsterdam` once resolved, and whose omitted block semantics `--info` once named, was retired by goal C). No BPO3-5 path is selected. This checkout is SEPARATE from execution_specs above -- that one is the frozen oracle pin for check-fake-exp.sh and the vector generators, and is never repointed. This one has its own venv (`uv sync --no-default-groups --group test`), which scripts/gen-t8n-goldens.py and scripts/check-t8n.sh drive.",
-    "_comment_repin": "History: the predecessor used the devnet-8 release. Goal jaune-amsterdam-readiness-v1 moves both fixture lanes and this anchor to tests@v21.0.1 (1562e2f); the four framework-side wrapper paths are carried in commit 9fc6c99c1. The frozen execution_specs oracle above is unchanged."
+    "_comment_repin": "History: the predecessor used the devnet-8 release. Goal jaune-amsterdam-readiness-v1 moves both fixture lanes and this anchor to tests@v21.0.1 (1562e2f); the four framework-side wrapper paths are carried in commit 9fc6c99c1. The frozen execution_specs oracle above is unchanged. Goal devcon8-talk-v1 (user decision devcon8-t8n-pin-split-20261022) moves this anchor alone to forks/bogota 9154c29e, the merge of ethereum/execution-specs#3361, which also carries #3849: the tool now numbers its output by accepted transactions and its body lists only those. No fixture release carries both fixes, so the two fixture lanes stay at tests@v21.0.1 and the same-commit rule becomes descent: fixture_release_commit must be an ancestor of commit (both generators check it against the checkout, and scripts/tests/test_amsterdam_lane.py checks it names the lanes' release). The fork-constant extraction is taken at commit while the fixture lanes run at fixture_release_commit, so a constant that differed between the two would fail either check-fork-constants.sh or the fixture lanes. uv_version is this checkout's own uv requirement (it refuses uv < 0.13.4), separate from the frozen oracle's. Re-unify all three pins at the next tests@ mainnet release that contains both fixes. Historical ommer reward summaries use the separately registered ommer-reward-summary-cli-v1 projection before typed environment validation; its exact CLI bytes and actual checkout identity are recorded per generated case. This compatibility projection does not change the semantic target revision.",
+    "cli_adapter": {
+      "id": "ommer-reward-summary-cli-v1",
+      "path": "packages/testing/src/execution_testing/evm_tools/t8n/cli.py",
+      "base_git_blob": "778cb9168bb809c5e219493d2d1bebe43a5d36c2",
+      "adapted_git_blob": "b5c2b8ff6486964d34e222c8dfabe9ae2995bbc4",
+      "adapted_sha256": "6432775fba2eb9777f705c1b00329af857da098229884e7847d174183cde4833",
+      "mode": "100644",
+      "patch_subpath": "reference-patches/ommer-reward-summary-cli-v1.patch",
+      "patch_sha256": "7f39fabdd05f47b9e33a93112f46aabe7dc323bcf28eb17027801c835f88f9a5"
+    }
   },
   "python_oracle": {
     "intended_version": "3.11.9",
@@ -154,7 +156,7 @@
       "created_at": "2026-10-07T03:09:21.815580Z",
       "test_count": 354684
     },
-    "_comment": "The v21.0.1 mainnet fixture release. Both lanes and the conformance target pin the same release; suites and manifests remain separate. Identity verified against the official release API and checksum-verified archive.",
+    "_comment": "The v21.0.1 mainnet fixture release. Both lanes pin this release; the conformance target descends from its commit (conformance_target.fixture_release_commit); suites and manifests remain separate. Identity verified against the official release API and checksum-verified archive.",
     "fixture_correction": {
       "id": "bal-header-format-v1",
       "registration": "scripts/amsterdam/corrections/bal-header-format-v1/registration.json",

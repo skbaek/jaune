@@ -308,9 +308,10 @@ class SyntheticLaneRunTests(unittest.TestCase):
         """A throwaway copy of the harness, with a stub binary in place of Lean.
 
         Only the top-level files of `scripts/` are copied: the harness, the
-        generator, the lock, and `sources.json`, which is the real one -- the
-        release identity that seeds the smoke ranking has to be the pinned one
-        for this to be a test of the shipped selection rule.
+        generator, the lock, and the pinned release identity in `sources.json`.
+        This miniature selection corpus has no official correction inputs; its
+        private source copy therefore keeps the correction inactive. Active
+        correction verification and routing have their own dedicated tests.
         """
         scripts = checkout / "scripts"
         scripts.mkdir(parents=True)
@@ -318,6 +319,10 @@ class SyntheticLaneRunTests(unittest.TestCase):
             if path.is_file():
                 shutil.copy2(path, scripts / path.name)
         (scripts / "amsterdam").mkdir()
+        sources_path = scripts / "sources.json"
+        sources = json.loads(sources_path.read_text())
+        sources["amsterdam"].pop("fixture_correction", None)
+        sources_path.write_text(json.dumps(sources))
         stub = checkout / ".lake" / "build" / "bin"
         stub.mkdir(parents=True)
         binary = stub / "jaune"
@@ -662,12 +667,16 @@ class LaneManifestFieldTests(unittest.TestCase):
         self.assertEqual(amsterdam["release_tag"], "tests@v21.0.1")
         for field in ("release_tag", "release_commit", "archive_sha256", "archive_size_bytes"):
             self.assertEqual(amsterdam[field], self.sources["current_mainnet"][field])
-        # The fixture release and the transition-tool anchor must name one
-        # revision: that is what makes the extracted constants and the fixtures
-        # agree by construction rather than by coincidence.
-        self.assertEqual(
-            amsterdam["release_commit"], self.sources["conformance_target"]["commit"]
-        )
+        # The transition-tool anchor may run ahead of the fixture release, but
+        # only along its history, and it must name the release it descends
+        # from. The generators check the descent against the checkout; the
+        # fork-constant extraction (taken at the anchor) and the fixture lanes
+        # (run at the release) then fail one gate or the other if a constant
+        # differed between the two.
+        target = self.sources["conformance_target"]
+        self.assertEqual(amsterdam["release_commit"], target["fixture_release_commit"])
+        self.assertRegex(target["commit"], r"^[0-9a-f]{40}$")
+        self.assertRegex(target["uv_version"], r"^\d+\.\d+\.\d+$")
 
     def test_the_doctor_reports_the_lane_under_its_own_name(self):
         """Both lanes go through one checker, so the reported names are what

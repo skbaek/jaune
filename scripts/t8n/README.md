@@ -2,9 +2,9 @@
 
 Seventy-six cases, each a complete `t8n` invocation, with goldens generated
 from the pinned conformance target. `scripts/check-t8n.sh` runs them; this
-file says what they are and how to change them. All 76 conform, with no
-registered refusal cases. The exact approved CLI adapter used by ommer cases
-is recorded per case; it does not move the semantic reference pin.
+file says what they are and how to change them. The corpus registers no
+refusal cases. The exact CLI adapter used by ommer cases is recorded per
+case independently of the semantic reference pin.
 
 ## Layout
 
@@ -226,9 +226,11 @@ both:
   sides. A row is that identity on its own, or an object carrying it under
   `jaune` beside the `owner` and `recorded` metadata of the goal that ruled on
   the row.
-- **Field exemptions.** Two, both in `reject-parse` and both caused by a
-  transaction shape Jaune's types cannot represent. See each entry's own `why`
-  and `upstream` metadata.
+- **Field exemptions.** None. The two that stood in `reject-parse` (`txRoot`
+  and `body`) were retired on 2026-10-22, when the target moved past
+  ethereum/execution-specs#3849 and #3361: the target now numbers its output by
+  accepted transactions and lists only those in `body`, which is what Jaune
+  emits. See `scripts/report-t8n.md`, "Re-pin past the upstream fixes".
 
 Beyond the registry, the gate applies one **canonicalisation** to `alloc`: both
 sides are sorted, addresses lexically and storage keys numerically. The target

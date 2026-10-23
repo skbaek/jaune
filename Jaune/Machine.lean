@@ -3858,6 +3858,151 @@ def Devm.memRead (devm : Devm) (index size : Nat) : Bytes × Devm :=
   let ⟨val, mem⟩ := devm.memory.read index size
   ⟨val, devm.withMemory mem⟩
 
+/-- Indexed KECCAK absorber: for `7 < n` absorbs one eight-byte lane from the
+reader and recurses; for `n < 8` delegates directly to the existing list
+absorber on the bounded range-mapped reader sequence, reusing its exact
+padding. Only the full-eight-byte branch is newly implemented. -/
+private def keccakReadRun (read : Nat → UInt8) (pos n : Nat)
+    (wc : Fin 17) (ws : Vector UInt64 25) : B256 :=
+  if h : 7 < n then
+    let b0 := read pos
+    let b1 := read (pos + 1)
+    let b2 := read (pos + 2)
+    let b3 := read (pos + 3)
+    let b4 := read (pos + 4)
+    let b5 := read (pos + 5)
+    let b6 := read (pos + 6)
+    let b7 := read (pos + 7)
+    let t : UInt64 := UInt64.ofBytes b7 b6 b5 b4 b3 b2 b1 b0
+    let ws' := KECCAK.xorLane ws wc.val (by have := wc.isLt; omega) t
+    keccakReadRun read (pos + 8) (n - 8) (wc + 1) <|
+      if _hw : wc = 16 then KECCAK.f1600 ws' else ws'
+  else
+    KECCAK.Bytes.run wc ((List.range n).map (fun j => read (pos + j))) ws
+  termination_by n
+  decreasing_by omega
+
+/-- Adapted from Blanc `CommonProofs.lean` `Array.sliceD_aux_eq` (source
+attribution; never import Blanc into Jaune). -/
+private theorem Array.sliceD_aux_eq' {ξ : Type} (xs : Array ξ) (d : ξ) :
+    ∀ (n : Nat) (Acc : List ξ) (m : Nat),
+      Array.sliceD.aux xs Acc m n d
+        = (List.range n).map (fun j => xs.getD (m + j) d) ++ Acc := by
+  intro n
+  induction n with
+  | zero => intro Acc m; rfl
+  | succ n ih =>
+    intro Acc m
+    rw [show Array.sliceD.aux xs Acc m (n + 1) d
+          = Array.sliceD.aux xs (xs.getD (m + n) d :: Acc) m n d from rfl,
+      ih, List.range_succ]
+    simp only [Array.getD_eq_getD_getElem?, List.map_append, List.map_cons, List.map_nil,
+      List.append_assoc, List.cons_append, List.nil_append]
+
+/-- Adapted from Blanc `CommonProofs.lean` `Array.sliceD_eq_map` (source
+attribution; never import Blanc into Jaune). -/
+private theorem Array.sliceD_eq_map' {ξ : Type} (xs : Array ξ) (m n : Nat) (d : ξ) :
+    Array.sliceD xs m n d = (List.range n).map (fun j => xs.getD (m + j) d) := by
+  rw [show Array.sliceD xs m n d = Array.sliceD.aux xs [] m n d from rfl,
+    Array.sliceD_aux_eq']
+  simp only [Array.getD_eq_getD_getElem?, List.append_nil]
+
+/-- One-element range-map split: the range-mapped reader sequence at length
+`n + 1` is the length-`n` sequence followed by the last reader byte. -/
+private theorem keccakRead_map_succ (read : Nat → UInt8) (pos n : Nat) :
+    (List.range (n + 1)).map (fun j => read (pos + j)) =
+      (List.range n).map (fun j => read (pos + j)) ++ [read (pos + n)] := by
+  rw [List.range_succ, List.map_append, List.map_cons, List.map_nil]
+
+/-- Eight-byte unfold: the range-mapped reader sequence at length `n + 8` is
+the first eight reader bytes followed by the length-`n` sequence at
+`pos + 8`. Uses only `List.range_succ`, list map rules, and addition
+normalization; no array bounds since the accessor is total. -/
+private theorem keccakRead_map_add_eight (read : Nat → UInt8) (pos n : Nat) :
+    (List.range (n + 8)).map (fun j => read (pos + j)) =
+      read pos :: read (pos + 1) :: read (pos + 2) :: read (pos + 3) ::
+      read (pos + 4) :: read (pos + 5) :: read (pos + 6) :: read (pos + 7) ::
+      (List.range n).map (fun j => read (pos + 8 + j)) := by
+  induction n generalizing pos with
+  | zero => rfl
+  | succ n ih =>
+    have h1 : n + 1 + 8 = (n + 8) + 1 := by omega
+    have harg : pos + (n + 8) = pos + 8 + n := by omega
+    rw [h1, keccakRead_map_succ, ih, harg]
+    simp only [List.cons_append]
+    rw [← keccakRead_map_succ]
+
+/-- Reader-level invariant: the indexed absorber agrees with the existing
+list absorber on the range-mapped reader sequence, for every reader,
+position, length, lane counter, and initial state. `f1600` stays opaque:
+both sides call the same `f1600`. -/
+private theorem keccakReadRun_eq_reference (read : Nat → UInt8) (pos n : Nat)
+    (wc : Fin 17) (ws : Vector UInt64 25) :
+    keccakReadRun read pos n wc ws =
+      KECCAK.Bytes.run wc ((List.range n).map (fun j => read (pos + j))) ws := by
+  revert pos wc ws
+  refine @Nat.strongRecOn (fun n => ∀ (pos : Nat) (wc : Fin 17) (ws : Vector UInt64 25),
+    keccakReadRun read pos n wc ws =
+      KECCAK.Bytes.run wc ((List.range n).map (fun j => read (pos + j))) ws) n ?_
+  intro n ih pos wc ws
+  by_cases h7 : 7 < n
+  · obtain ⟨k, rfl⟩ : ∃ k, n = k + 8 := ⟨n - 8, by omega⟩
+    rw [keccakRead_map_add_eight]
+    set lane : UInt64 := UInt64.ofBytes (read (pos + 7)) (read (pos + 6))
+      (read (pos + 5)) (read (pos + 4)) (read (pos + 3)) (read (pos + 2))
+      (read (pos + 1)) (read pos) with hlane
+    set xw : Vector UInt64 25 :=
+      KECCAK.xorLane ws wc.val (by have := wc.isLt; omega) lane with hxw
+    set st : Vector UInt64 25 :=
+      (if _hw : wc = 16 then KECCAK.f1600 xw else xw) with hst
+    set stI : Vector UInt64 25 :=
+      (if wc = 16 then KECCAK.f1600 xw else xw) with hstI
+    have hL : keccakReadRun read pos (k + 8) wc ws =
+        keccakReadRun read (pos + 8) (k + 8 - 8) (wc + 1) st := by
+      conv_lhs => unfold keccakReadRun
+      rw [dite_eq_left h7]
+    have ihk := ih (k + 8 - 8) (by omega) (pos + 8) (wc + 1) st
+    rw [hL, ihk, Nat.add_sub_cancel]
+    show KECCAK.Bytes.run (wc + 1)
+        ((List.range k).map (fun j => read (pos + 8 + j))) st =
+      KECCAK.Bytes.run (wc + 1)
+        ((List.range k).map (fun j => read (pos + 8 + j))) stI
+    rw [hst, hstI]
+    cases Decidable.em (wc = 16) with
+    | inl h => rw [dite_eq_left h, ite_eq_left h]
+    | inr h => rw [dite_eq_right h, ite_eq_right h]
+  · unfold keccakReadRun
+    rw [dite_eq_right h7]
+
+/-- Instantiation to array memory: the indexed absorber on the memory backing
+array agrees with the list absorber on the sliced bytes, with no validity or
+in-bounds premises. Covers empty input, huge/out-of-range starts, every lane
+counter, and all remainder lengths. -/
+private theorem keccakReadRun_data_eq (data : Array UInt8) (start len : Nat)
+    (wc : Fin 17) (ws : Vector UInt64 25) :
+    keccakReadRun (fun j => data.getD j 0) start len wc ws =
+      KECCAK.Bytes.run wc (data.sliceD start len 0) ws := by
+  rw [Array.sliceD_eq_map']
+  exact keccakReadRun_eq_reference _ _ _ _ _
+
+/-- Digest and memory pair: the optimized `(digest, extended memory)` pair
+equals the reference `(memRead digest, memRead memory)`. The backing array is
+unchanged; only the logical extent moves via the existing `Mem.extend`,
+preserving the size-zero rule in `memExtSize`. -/
+private theorem keccakReadRun_memRead_pair (devm : Devm) (start size : Nat) :
+    (keccakReadRun (fun j => devm.memory.data.getD j 0) start size 0
+        (.replicate 25 0),
+      devm.withMemory (devm.memory.extend start size)) =
+    ((devm.memRead start size).1.keccak, (devm.memRead start size).2) := by
+  have hmem : devm.memRead start size =
+      ((devm.memory.data.sliceD start size 0),
+        devm.withMemory (devm.memory.extend start size)) := rfl
+  have h := keccakReadRun_data_eq devm.memory.data start size 0 (.replicate 25 0)
+  rw [hmem, Prod.mk.injEq]
+  refine ⟨?_, rfl⟩
+  unfold Bytes.keccak
+  exact h
+
 theorem Devm.memRead_snd_gasLeft (devm : Devm) (index size : Nat) :
     (devm.memRead index size).2.gasLeft = devm.gasLeft := rfl
 
@@ -4535,8 +4680,9 @@ def Rinst.runCore
     let word_gas_cost := gasKeccak256Word * words
     let extend_memory_cost := devm.extCost [⟨memory_start_index, size⟩]
     let devm ← chargeGas (gKeccak256 + word_gas_cost + extend_memory_cost) devm
-    let ⟨arg, devm⟩ := devm.memRead memory_start_index size
-    devm.push arg.keccak
+    (devm.withMemory (devm.memory.extend memory_start_index size)).push
+      (keccakReadRun (fun j => devm.memory.data.getD j 0) memory_start_index size 0
+        (.replicate 25 0))
   | .sub => applyBinary (· - ·) gVerylow devm
   | .mul => applyBinary (· * ·) gLow devm
   | .exp => do
@@ -4806,6 +4952,32 @@ def Rinst.runCore
     devm.push hash
 
 def Rinst.run (evm : Evm) := Rinst.runCore evm.pc evm.dyna evm.sta
+
+/-- Unconditional KECCAK compatibility: the indexed branch computes the entire
+`Execution` of the reference bind chain — both pops, word and extension gas,
+the charge, memory extension, digest, and push — with no fork, stack, gas,
+well-formedness, or success premise. The right-hand side is exactly the former
+branch. Kept out of the simp set; existing proof bodies rewrite through it
+before destructuring the old branch. -/
+theorem Rinst.runCore_keccak256_eq_reference (pc : Nat) (devm : Devm) (sevm : Sevm) :
+    Rinst.runCore pc devm sevm .keccak256 = (do
+      let ⟨memory_start_index, devm⟩ ← devm.popToNat
+      let ⟨size, devm⟩ ← devm.popToNat
+      let words := ceilDiv size 32
+      let word_gas_cost := gasKeccak256Word * words
+      let extend_memory_cost := devm.extCost [⟨memory_start_index, size⟩]
+      let devm ← chargeGas (gKeccak256 + word_gas_cost + extend_memory_cost) devm
+      let ⟨arg, devm⟩ := devm.memRead memory_start_index size
+      devm.push arg.keccak) := by
+  have htail : ∀ (d3 : Devm) (start size : Nat),
+      (d3.withMemory (d3.memory.extend start size)).push
+        (keccakReadRun (fun j => d3.memory.data.getD j 0) start size 0 (.replicate 25 0)) =
+      (d3.memRead start size).2.push (d3.memRead start size).1.keccak := by
+    intro d3 start size
+    exact congrArg (fun p : B256 × Devm => p.2.push p.1)
+      (keccakReadRun_memRead_pair d3 start size)
+  simp only [Rinst.runCore]
+  simp only [htail]
 
 instance : Inhabited BenvStat := ⟨
   {
@@ -8376,6 +8548,9 @@ theorem Rinst.runCore_worldFrame (pc : Nat) (sevm : Sevm) (devm : Devm)
     rcases hread : d2.memRead start 32 with ⟨val, d3⟩
     exact liftMachExecution_worldFrame (Devm.memRead_eq_worldFrame h2 hread)
   case keccak256 =>
+    have hbr := Rinst.runCore_keccak256_eq_reference pc devm sevm
+    show (Rinst.runCore pc devm sevm .keccak256).WorldFrame devm
+    rw [hbr]
     refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) ?_
     rintro ⟨start, d1⟩ h1
     refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h1) ?_

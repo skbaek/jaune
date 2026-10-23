@@ -334,8 +334,10 @@ to write**. They establish nothing about unreached paths.
 Prague and remains the input to its registered vector generators. It is not
 an identity claim for Jaune's whole current semantics. Osaka and BPO support
 was originally built from EIP text and validated against `tests@v20.0.1`;
-both current fixture lanes now use `tests@v21.0.1`, and their transition-tool
-anchor is `1562e2f8b5cb1efda7e0d7c517f2dfb5742c0a43`. Creation collides only
+both current fixture lanes now use `tests@v21.0.1` (`1562e2f8b5cb1efda7e0d7c517f2dfb5742c0a43`),
+and the transition-tool anchor descends from that commit: `9154c29ed38afaf40e99a1d4288ab35bb1d3db8f`
+on `forks/bogota`, which carries the two upstream `t8n` output fixes
+(ethereum/execution-specs#3849 and #3361) that no fixture release contains yet. Creation collides only
 with nonzero nonce or nonempty code on every runnable fork. Storage-only
 accounts may be created into; their storage is cleared before initcode, and
 deleting an empty account clears its storage too. The release omitted the

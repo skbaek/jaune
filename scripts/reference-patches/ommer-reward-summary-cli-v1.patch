@@ -1,6 +1,6 @@
 --- a/packages/testing/src/execution_testing/evm_tools/t8n/cli.py
 +++ b/packages/testing/src/execution_testing/evm_tools/t8n/cli.py
-@@ -345,7 +345,12 @@
+@@ -342,7 +342,12 @@
      blob_params = _parse_blob_params_from_options(options, stdin)
  
      alloc = TestingAlloc.model_validate(raw_alloc_json)
@@ -11,6 +11,6 @@
 +    typed_env_json = raw_env_json.copy()
 +    typed_env_json.pop("ommers", None)
 +    env = TestingEnvironment.model_validate(typed_env_json)
-     txs, _body = _parse_txs_json_to_testing(
+     txs = _parse_txs_json_to_testing(
          raw_txs_json, fork_module, TestingTransaction
      )
