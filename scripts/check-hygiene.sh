@@ -95,8 +95,12 @@ P_SORRY='\bsorry\b'
 # occupies, so prose about an opaque scrutinee or an external binary is not a
 # hit. `axiom` and `opaque` head a declaration, after any leading modifiers.
 P_DECL='^[[:space:]]*(private[[:space:]]+|protected[[:space:]]+|noncomputable[[:space:]]+|unsafe[[:space:]]+|scoped[[:space:]]+|local[[:space:]]+)*(axiom|opaque)[[:space:]]'
+# Both declaration annotations and line-leading `attribute [...]` commands
+# must expose external bodies and compiler substitutions. The attribute list
+# may also contain local/scoped modifiers or other attributes. This remains
+# a line-local lexical gate, not a Lean parser.
 # `@[extern ...]` / `@[implemented_by ...]` supply a body from outside Lean.
-P_ATTR='@\[[^]]*(extern|implemented_by)\b'
+P_ATTR='(@\[|^[[:space:]]*attribute[[:space:]]*\[)[^]]*(extern|implemented_by)\b'
 # `partial def` defines without establishing termination.
 P_PARTIAL='^[[:space:]]*(private[[:space:]]+|protected[[:space:]]+|unsafe[[:space:]]+)*partial[[:space:]]+def\b'
 # `unsafe` heads a declaration exempted from the kernel's checks.
@@ -106,7 +110,7 @@ P_NATIVE='\bnative_decide\b'
 # `@[csimp]` substitutes a different function into compiled code. Anchored to
 # the attribute position for the same reason as @[extern]: prose about csimp
 # lemmas must not trip the gate, an actual attribute must.
-P_CSIMP='@\[[^]]*csimp\b'
+P_CSIMP='(@\[|^[[:space:]]*attribute[[:space:]]*\[)[^]]*csimp\b'
 
 PATTERN="$P_DEBUG|$P_SORRY|$P_DECL|$P_ATTR|$P_PARTIAL|$P_UNSAFE|$P_NATIVE|$P_CSIMP"
 FORBIDDEN='{dbg_trace, sorry, axiom, opaque, @[extern], @[implemented_by], @[csimp], partial def, unsafe, native_decide}'
