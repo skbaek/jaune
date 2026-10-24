@@ -1475,19 +1475,8 @@ private theorem Except.map_bind' {ε α β γ : Type} (m : Except ε α)
     Except.map f (m >>= k) = m >>= fun a => Except.map f (k a) := by
   cases m <;> rfl
 
-private theorem Except.map_map' {ε α β γ : Type} (m : Except ε α)
-    (g : α → β) (f : β → γ) :
-    Except.map f (g <$> m) = (fun a => f (g a)) <$> m := by
-  cases m <;> rfl
-
 private theorem Except.map_pure' {ε α β : Type} (f : α → β) (a : α) :
     Except.map f (pure a : Except ε α) = pure (f a) := rfl
-
-private theorem Except.map_ok' {ε α β : Type} (f : α → β) (a : α) :
-    Except.map f (Except.ok a : Except ε α) = Except.ok (f a) := rfl
-
-private theorem Except.map_error' {ε α β : Type} (f : α → β) (e : ε) :
-    Except.map f (Except.error e : Except ε α) = Except.error e := rfl
 
 /-- Cache-threaded native specialization. The first component is proved below
 to be exactly `Xinst.step`; all four call opcodes are specialized because all
@@ -2341,23 +2330,6 @@ private def meteringGuardCallCharges
     some
       (meteringGuardGas - parent.gasLeft,
        stateGasGrant - (parent.stateGasLeft + frame.inner.stateGasGrant))
-  | _ => none
-
-private def meteringGuardDelegatedCallCharges
-    (fork : Fork) (x : Xinst) (stack : List B256) : Option Nat :=
-  let msg := meteringGuardDelegatedMsg fork
-  match Xinst.step (initSevm msg) (meteringGuardDelegatedDevm fork stack) x with
-  | .spawn _ resume =>
-    some (meteringGuardGas - (meteringGuardResumeParent resume).gasLeft)
-  | _ => none
-
-private def meteringGuardCachedStaticcallCharge
-    (fork : Fork) (stack : List B256) : Option Nat :=
-  let msg := meteringGuardDelegatedMsg fork
-  match (Xinst.stepCached (initSevm msg)
-      (meteringGuardDelegatedDevm fork stack) none .staticcall).1 with
-  | .spawn _ resume =>
-    some (meteringGuardGas - (meteringGuardResumeParent resume).gasLeft)
   | _ => none
 
 private def meteringGuardSelfdestructCharges
