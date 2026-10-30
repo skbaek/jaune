@@ -10,11 +10,18 @@ verification stack built on these semantics, which proves theorems about
 Ethereum bytecode as it is deployed and offers a native contract language with
 a verified compiler. It is Jaune's end-to-end case study.
 
-**Jaune** is an executable formal specification of the EVM in Lean 4. Its
-strict current-mainnet lane passes **4,968/4,968 supported fixture files and
-34,449/34,449 cases**, Prague through BPO2 including configured transitions,
-against [execution-specs](https://github.com/ethereum/execution-specs)
-`tests@v21.0.1`. Its semantics are demonstrated sufficient for real
+**Jaune** is an executable formal specification of the EVM in Lean 4. It
+passes **100% of the blockchain-test fixtures** of the
+[execution-specs](https://github.com/ethereum/execution-specs) release
+`tests@v21.0.1` whose fork lies in **[Byzantium, BPO2]**: **8,660/8,660 files
+and 73,345/73,345 cases**, including every transition fixture whose two
+endpoints are both in that range, with no expected-failure allowance. Two
+strict all-PASS lanes produce it: the historical lane (Byzantium through
+Cancun plus three transitions, 3,692 files / 38,896 cases) and the
+current-mainnet lane (Prague through BPO2 plus three transitions, 4,968 files
+/ 34,449 cases). The release's other fixture formats (`state_tests`, engine,
+sync and transaction tests) serve other consumers; the runner refuses them,
+so they are not part of this claim. Its semantics are demonstrated sufficient for real
 verification: a WETH implementation's solvency is proven to be preserved over
 every state reachable along a valid configured chain, including histories that
 cross scheduled fork activations, through a verified compiler, with no `sorry`
@@ -23,9 +30,15 @@ and no `native_decide` in the trusted path. Jaune is MIT-licensed.
 Jaune was originally written from the Yellow Paper, then rebuilt on a pinned
 2025 execution-specs revision; later forks were implemented and checked
 explicitly. The frozen legacy fixture corpus is retained as independently-filled
-regression evidence. It has five unchanged baseline failures and five additional
-files with stale storage-collision expectations; the raw legacy gate is RED,
-with exactly those five changes accepted for this release as described below.
+regression evidence. It has five unchanged baseline failures, none a Jaune
+defect: two Cancun-only files select no case under the ordinary tier's Prague
+filter and fail closed rather than pass vacuously (Cancun itself passes in full
+in the historical lane), and three multiply-invalid fixtures list expected
+exceptions in their filler's check order, while the frozen reference reports
+exactly Jaune's. Five further files expect a storage-only CREATE collision from
+EIP-7610, which never activated on any fork; their original inputs replay in
+agreement with the pinned reference. The raw legacy gate is therefore RED on
+exactly those five accepted files, as described below.
 
 ## Prerequisite
 
@@ -201,6 +214,10 @@ requirements.
   and does not claim.
 - **Runnable forks:** Byzantium through Cancun, followed by Prague, Osaka,
   BPO1, BPO2 and the Amsterdam snapshot, with configured fork transitions.
+  Jaune passes 100% of the `tests@v21.0.1` blockchain-test fixtures in
+  [Byzantium, BPO2] — 8,660/8,660 files, 73,345/73,345 cases — as the union
+  of the two strict lanes below. Outside that range lie only pre-Byzantium
+  forks, Amsterdam (its own lane) and transitions naming Amsterdam or later.
   The historical EEST lane passes all 3,692 files (38,896 cases) selected by
   its v21.0.1 manifest. Synthetic EIP-1283 Constantinople has legacy-fixture
   evidence but no independent EELS oracle or target golden. Muir Glacier,
@@ -265,7 +282,8 @@ requirements.
   storage-only creation and deletion across five of them (Prague, Osaka, BPO1,
   BPO2, Amsterdam). The upstream release
   fixtures for those ten creation/deletion scenarios were skipped and are absent;
-  no pre-Prague coverage or upstream consensus on those skipped scenarios is claimed.
+  no pre-Prague storage-only creation/deletion coverage, and no upstream
+  consensus on those skipped scenarios, is claimed.
   Five further cases compare zero-value transaction, CALL and STATICCALL entry
   against pinned EELS, with storage-only empty accounts retaining their storage.
 - **Frozen arithmetic/vector oracle:** [execution-specs](https://github.com/ethereum/execution-specs)
@@ -293,9 +311,13 @@ requirements.
   | tier | files | committed baseline |
   |---|---|---|
   | `--depth` | 67 | all PASS |
-  | `--smoke` | 174 | 173 PASS, 1 FAIL |
+  | `--smoke` | 174 | 173 PASS, 1 FAIL (`InvalidBlocks/bcStateTests/EmptyTransaction.json`, multiply-invalid; see below) |
   | `--bls` | 29 | all PASS (hand-authored target) |
-  | `--full` | 2983 | 2978 PASS, 5 FAIL (diagnosed; none a Jaune defect) |
+  | `--full` | 2983 | 2978 PASS, 5 FAIL (diagnosed; none a Jaune defect)¹ |
+
+  ¹ The raw full run today reports 2,973 PASS / 10 FAIL: the five baselined
+  FAILs plus five accepted stale EIP-7610 storage-collision files, explained
+  below.
 
   These tracked baselines contain only portable `STATUS<TAB>path`
   expectations. Per-fixture wall times are machine-specific and live in
@@ -331,7 +353,14 @@ requirements.
   original-input Prague replays agree with pinned EELS; this does not turn the
   raw gate into an all-PASS result. Historical legacy tiers use a separate
   restoration corpus and exact per-tier naming/order baselines, not this
-  Prague qualification or a network-wide waiver.
+  Prague qualification or a network-wide waiver. Their recorded FAIL rows are
+  fixture or reference artifacts, each reviewed per row: expected-exception
+  alternatives in a filler's check order, proof-of-work seals that Jaune does
+  not check (NoProof), synthetic EIP-1283 Constantinople without an
+  independent reference, the accepted London activation-gas correction, and a
+  reconstructed terminal-total-difficulty lineage (see
+  [`scripts/GATES.md`](scripts/GATES.md#the-historical-lane-goal-u10)).
+  Strict EEST conformance for those forks is the historical lane's 100%.
   Any further classification change fails readiness acceptance. The separate
   historical LegacyTests restoration pin `41404287` is unmerged PR18 and has
   no Prague cases; it does not replace this corpus.
@@ -449,12 +478,13 @@ stating exactly, because the badge above reports only the first of them.
   [`scripts/baseline-full.txt`](scripts/baseline-full.txt)) and the EEST BLS
   tier.
 
-**The current-mainnet suite is not a CI gate.** The headline result on this
-page — 4,968/4,968 supported fixture files, 34,449/34,449 cases — is produced
-by [`scripts/check-mainnet.sh`](scripts/check-mainnet.sh), which runs locally
-against a corpus this repository does not vendor. A green badge attests to
-the four `ci.yml` jobs above; it does not attest to the current-mainnet
-number. [`scripts/GATES.md`](scripts/GATES.md) is
+**The release-fixture lanes are not CI gates.** The headline result on this
+page — 100% of the `tests@v21.0.1` blockchain-test fixtures in [Byzantium,
+BPO2], 8,660/8,660 files and 73,345/73,345 cases — is produced by two runs of
+[`scripts/check-mainnet.sh`](scripts/check-mainnet.sh)
+(`--lane historical --suite hist-full` and `--suite full`), which run locally
+against a release this repository does not vendor. A green badge attests to
+the four `ci.yml` jobs above; it does not attest to that number. [`scripts/GATES.md`](scripts/GATES.md) is
 the authoritative catalogue of which gate checks what, and where each runs.
 
 The workflows intentionally use maintained major-version action tags

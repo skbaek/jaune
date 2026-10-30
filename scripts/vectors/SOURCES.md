@@ -33,14 +33,18 @@ downloads the EEST release, the full legacy corpus, or the frozen oracle
 packages. Run the bootstrap and long fixture tiers locally only when their
 network, disk, and runtime requirements above are available.
 
-## Mainnet and Amsterdam release lanes
+## Historical, mainnet and Amsterdam release lanes
 
-Both lanes use [`execution-specs` `tests@v21.0.1`](https://github.com/ethereum/execution-specs/releases/tag/tests%40v21.0.1),
+All three lanes use [`execution-specs` `tests@v21.0.1`](https://github.com/ethereum/execution-specs/releases/tag/tests%40v21.0.1),
 commit `1562e2f8b5cb1efda7e0d7c517f2dfb5742c0a43`. The official `fixtures.tar.gz`
 is 999,553,432 bytes, SHA-256
 `b9b14391ed1a625e4ca9a058c055d0eacd98a42b76c7a6127c640cdc2d3c9439`.
 They share the versioned install directory by default and retain separate
-manifests, suite namespaces and environment overrides.
+manifests, suite namespaces and environment overrides. The historical lane
+reads the default (mainnet) install; it has no bootstrap lane of its own.
+Together the historical and mainnet lanes pass 100% of the release's
+blockchain-test fixtures in [Byzantium, BPO2]: 8,660/8,660 files and
+73,345/73,345 cases.
 
 ```sh
 python3 scripts/bootstrap_mainnet.py                 # ~/eest-mainnet-v21.0.1
@@ -48,6 +52,7 @@ python3 scripts/bootstrap_mainnet.py --lane amsterdam # same release/root
 python3 scripts/env_doctor.py --mainnet-root ~/eest-mainnet-v21.0.1 --mainnet-deep
 python3 scripts/env_doctor.py --amsterdam-root ~/eest-mainnet-v21.0.1 --amsterdam-deep
 python3 scripts/gen_mainnet_manifest.py --fixtures-root ~/eest-mainnet-v21.0.1/fixtures --check
+python3 scripts/gen_mainnet_manifest.py --lane historical --fixtures-root ~/eest-mainnet-v21.0.1/fixtures --check
 python3 scripts/gen_mainnet_manifest.py --lane amsterdam --fixtures-root ~/eest-mainnet-v21.0.1/fixtures --check
 ```
 
@@ -61,6 +66,17 @@ inventoried. Never prune a verified release or hand-edit a generated manifest.
 
 | lane / suite | files | cases |
 |---|---:|---:|
+| historical / byzantium | 113 | 2,659 |
+| historical / constantinoplefix (Petersburg) | 151 | 2,856 |
+| historical / istanbul | 158 | 3,016 |
+| historical / berlin | 220 | 3,997 |
+| historical / london | 220 | 4,277 |
+| historical / paris | 224 | 4,299 |
+| historical / shanghai | 258 | 4,544 |
+| historical / cancun | 2,325 | 13,050 |
+| historical / hist-transitions | 23 | 198 |
+| historical / hist-smoke | 16 | 58 |
+| historical / hist-full | 3,692 | 38,896 |
 | mainnet / Prague | 2,506 | 16,790 |
 | mainnet / Osaka | 2,449 | 17,550 |
 | mainnet / transitions | 13 | 109 |
@@ -71,10 +87,15 @@ inventoried. Never prune a verified release or hand-edit a generated manifest.
 | Amsterdam / smoke | 16 | 346 |
 | Amsterdam / full | 3,354 | 26,587 |
 
-These are the generated inventories, not an all-PASS assertion. Amsterdam's
-transition/full gates retain the four DP-1 identity findings described in
-[`../GATES.md`](../GATES.md#the-amsterdam-lane). Static BPO1/BPO2 suites are
-empty and refused; their scheduled transitions are covered. BPO3 and later
+These are the generated inventories. Every historical and mainnet suite is
+strict all-PASS. Amsterdam's transition/full gates pass with the registered
+two-fixture correction `bal-header-format-v1`; the unmodified official archive
+reports two BAL-header exception-name findings, structurally invalid headers
+that Jaune also rejects under a different exception name (see
+[`../GATES.md`](../GATES.md#the-amsterdam-lane)). Static BPO1/BPO2 suites are
+empty and refused; their scheduled transitions are covered. Muir, Arrow and
+Gray Glacier and synthetic EIP-1283 Constantinople have no fixtures in the
+release; their empty historical suites are refused likewise. BPO3 and later
 forks remain unsupported. A mistyped or empty `--dir` is refused, as is an
 on-disk subtree count that differs from its manifest.
 
@@ -102,9 +123,9 @@ or `python3 scripts/env_doctor.py --conformance-target /dedicated/path`.
 The default path, base commit, fixture release pins, and frozen oracle are unchanged.
 
 The constants extractor and t8n golden generator use the selected checkout. The frozen
-`execution_specs` oracle at `4198b9c` is unchanged. The 49-case t8n corpus
-includes ten authored storage-only creation/deletion cases across the five
-runnable forks. The release skipped those upstream cases; authored agreement
+`execution_specs` oracle at `4198b9c` is unchanged. The 76-case t8n corpus
+includes ten authored storage-only creation/deletion cases across five of the
+runnable forks (Prague, Osaka, BPO1, BPO2, Amsterdam). The release skipped those upstream cases; authored agreement
 does not claim published release coverage of them.
 
 ## Legacy fixture Git bootstrap

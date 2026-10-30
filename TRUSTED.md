@@ -320,7 +320,12 @@ synthetic `Constantinople` label. General rule lookup controls which forks
 this build can execute. A declared rule record or a fixture result does not
 turn this synthetic boundary into a mainnet or EELS-conformance claim.
 
-**The fixture corpora** are pinned by commit and SHA-256 in
+**The fixture corpora.** Jaune passes 100% of the blockchain-test fixtures
+of the `execution-specs` release `tests@v21.0.1` whose fork lies in
+[Byzantium, BPO2]: 8,660/8,660 files and 73,345/73,345 cases, the union of
+the strict historical lane (`hist-full`) and the strict current-mainnet lane
+(`full`), with no expected-failure allowance. The corpora are pinned by
+commit and SHA-256 in
 [`scripts/sources.json`](scripts/sources.json), with the bootstrap and
 verification procedure in
 [`scripts/vectors/SOURCES.md`](scripts/vectors/SOURCES.md), and
@@ -334,7 +339,7 @@ to write**. They establish nothing about unreached paths.
 Prague and remains the input to its registered vector generators. It is not
 an identity claim for Jaune's whole current semantics. Osaka and BPO support
 was originally built from EIP text and validated against `tests@v20.0.1`;
-both current fixture lanes now use `tests@v21.0.1` (`1562e2f8b5cb1efda7e0d7c517f2dfb5742c0a43`),
+all three release fixture lanes (historical, current-mainnet and Amsterdam) now use `tests@v21.0.1` (`1562e2f8b5cb1efda7e0d7c517f2dfb5742c0a43`),
 and the transition-tool anchor descends from that commit: `9154c29ed38afaf40e99a1d4288ab35bb1d3db8f`
 on `forks/bogota`, which carries the two upstream `t8n` output fixes
 (ethereum/execution-specs#3849 and #3361) that no fixture release contains yet. Creation collides only
@@ -347,8 +352,15 @@ not published release coverage or an upstream consensus claim. Five further
 cases compare zero-value transaction, CALL and STATICCALL entry against the
 pinned implementation; these entries preserve storage-only empty accounts.
 
-The frozen Prague legacy corpus retains five stale storage-collision files.
-All ten cases in those files agree with the new pinned EELS on original-input
+The frozen Prague legacy corpus has five baselined FAILs, none a Jaune
+defect: two Cancun-only files select no case under the tier's Prague filter
+and fail closed rather than pass vacuously (Cancun passes in full in the
+historical lane), and three multiply-invalid fixtures list expected
+exceptions in their filler's check order while the frozen reference reports
+exactly Jaune's (see [README.md](README.md#verification-status)). It also
+retains five stale storage-collision files. They expect EIP-7610's
+storage-only CREATE collision; EIP-7610 was never activated on any fork, and
+the pinned EELS and production clients collide only on nonce or code. All ten cases in those files agree with the new pinned EELS on original-input
 replay, including gas usage and poststate, but disagree with their old header
 expectations. The owner accepted exactly those five classification changes;
 the raw legacy regression gate remains RED and all fixture/baseline bytes are

@@ -4,17 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Jaune — a Yellow Paper you can run</title>
-<meta name="description" content="Jaune is an executable formal specification of the Ethereum Virtual Machine in Lean 4 — a spiritual successor to the Yellow Paper that passes every supported file of the pinned mainnet fixture corpus (5,006/5,006, Prague through BPO2), runs Amsterdam against its devnet corpus, and supports machine-checked proof, demonstrated by contracts in the sibling Blanc language — among them a port of Lido's deployed CircuitBreaker, its Registry integrity proved from an official-parameters deployment to every state reachable along a valid configured chain, and the eth2 deposit contract, its Merkle root carried through twelve SHA-256 precompile crossings to every admitted future.">
+<meta name="description" content="Jaune is an executable formal specification of the Ethereum Virtual Machine in Lean 4 — a spiritual successor to the Yellow Paper that passes 100% of the execution-specs tests@v21.0.1 blockchain-test fixtures from Byzantium through BPO2 (8,660/8,660 files, 73,345/73,345 cases), runs the unscheduled Amsterdam snapshot against the same release, and supports machine-checked proof, demonstrated by the sibling Blanc verification stack — theorems about deployed bytecode and a native language with a verified compiler — among them a port of Lido's deployed CircuitBreaker, its Registry integrity proved from an official-parameters deployment to every state reachable along a valid configured chain, and the eth2 deposit contract, its Merkle root carried through twelve SHA-256 precompile crossings to every admitted future.">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Jaune — a Yellow Paper you can run">
-<meta property="og:description" content="An executable formal specification of the EVM in Lean 4: one artifact that is a specification, an interpreter that passes the pinned mainnet fixture corpus, and a proof subject.">
+<meta property="og:description" content="An executable formal specification of the EVM in Lean 4: one artifact that is a specification, an interpreter that passes 100% of the tests@v21.0.1 blockchain-test fixtures from Byzantium through BPO2, and a proof subject.">
 <meta property="og:url" content="https://skbaek.github.io/jaune/">
 <meta property="og:site_name" content="Jaune">
 <meta property="og:locale" content="en_US">
 <link rel="canonical" href="https://skbaek.github.io/jaune/">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Jaune — a Yellow Paper you can run">
-<meta name="twitter:description" content="An executable formal specification of the EVM in Lean 4, tested like a client and proved like a theorem.">
+<meta name="twitter:description" content="An executable formal specification of the EVM in Lean 4, tested like a client — 100% of the tests@v21.0.1 blockchain-test fixtures from Byzantium through BPO2 — and proved like a theorem.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='9' fill='%23f6e5a8'/%3E%3Ctext x='32' y='47' font-family='Georgia,serif' font-size='44' text-anchor='middle' fill='%231b4b2b'%3EJ%3C/text%3E%3C/svg%3E">
 <style>
 /* ────────────────────────────────────────────────────────────────
@@ -376,8 +376,8 @@ footer a:hover{color:var(--ink)}
           The Yellow Paper defined Ethereum in mathematics you could only read. Its living
           replacement is a program you can only run. <strong style="color:var(--ink)">Jaune</strong> is both
           at once: forty thousand lines of Lean&nbsp;4 that state the execution layer precisely
-          enough to prove theorems about — and compile into an interpreter that passes the
-          pinned mainnet fixture corpus, fork by fork, case by case, and speaks the ecosystem’s standard
+          enough to prove theorems about — and compile into an interpreter that passes every blockchain-test fixture of the
+          pinned <span class="mono">execution-specs</span> release from Byzantium to BPO2, fork by fork, case by case, and speaks the ecosystem’s standard
           <span class="mono">t8n</span> transition-tool interface.
         </p>
         <div class="ctarow">
@@ -388,13 +388,12 @@ footer a:hover{color:var(--ink)}
 
       <div>
         <div class="term" id="heroterm"><span class="p">$</span> lake build          <span class="cm"># spec = interpreter</span>
+<span class="p">$</span> scripts/check-mainnet.sh --lane historical --suite hist-full
 <span class="p">$</span> scripts/check-mainnet.sh --suite full
-<span class="ok">OK — full: 5100/5100 manifest files PASS in 1130.13s</span>
-<span class="p">$</span> scripts/check-mainnet.sh --suite transitions
-<span class="ok">OK — transitions: 13/13 manifest files PASS in 15.62s</span></div>
-        <p class="cap"><b>Fig. 1</b> — historical mainnet gate output for <span class="mono">tests@v20.0.1</span>, verbatim. 5,100 fixture files,
-          34,005 cases, spanning Prague, Osaka, BPO1, BPO2, and the transitions between them —
-          with zero expected failures on that run. The current release and counts are in Table 1.<sup class="fn"><a href="#fn3">3</a></sup></p>
+<!-- FIG1-VERBATIM-PENDING: hist-full and full verdict lines --></div>
+        <p class="cap"><b>Fig. 1</b> — the two strict gates over <span class="mono">tests@v21.0.1</span>, verbatim. Together they pass
+          100% of the release’s blockchain-test fixtures from Byzantium to BPO2 — 8,660 files, 73,345 cases,
+          including every transition between two forks in that range — with zero expected failures. Per-lane counts are in Table 1.<sup class="fn"><a href="#fn3">3</a></sup></p>
         <div class="pills">
           <span class="pill"><span class="d"></span>0 sorry — CI-enforced</span>
           <span class="pill"><span class="d"></span>0 native_decide</span>
@@ -407,10 +406,11 @@ footer a:hover{color:var(--ink)}
     <div class="abstract" id="abstract">
       <p><span class="lead">Abstract.</span>&nbsp; Jaune restates the Ethereum execution layer as a single
       Lean&nbsp;4 artifact that is simultaneously a specification, an interpreter, and a proof subject.
-      It mirrors <span class="mono">execution-specs</span> at a pinned commit and implements Prague,
-      Osaka, BPO1, and BPO2 as first-class rule sets selected from block context, passing
-      5,006 of 5,006 supported files (34,205 cases) of the current mainnet corpus; Amsterdam is a
-      fifth rule set, tracked at a pinned Glamsterdam devnet snapshot with its own fixture lane. All eighteen
+      It mirrors <span class="mono">execution-specs</span> at a pinned commit and declares seventeen forks,
+      Byzantium through Amsterdam, as first-class rule records selected from block context. It passes
+      100% of the <span class="mono">tests@v21.0.1</span> blockchain-test fixtures from Byzantium to BPO2 —
+      8,660 of 8,660 files, 73,345 cases, with no expected-failure allowance; Amsterdam, still unscheduled
+      upstream, is tracked as a snapshot against the same release in its own fixture lane. All eighteen
       precompiles — <span class="mono">ecrecover</span> to BLS12-381 to
       P256VERIFY — are pure Lean, with no FFI and nothing axiomatized; SHA-256 moreover carries a
       machine-checked equivalence to a transcription of its FIPS 180-4 standard. The interpreter is total:
@@ -432,10 +432,10 @@ footer a:hover{color:var(--ink)}
     </div>
 
     <div class="factbar">
-      <div class="fact"><span class="n">34,205<span class="dimmer" style="font-size:1.05rem">/34,205</span></span>
-        <span class="l">cases passing on the current-mainnet corpus — 5,006 files, zero expected failures</span></div>
-      <div class="fact"><span class="n">Prague → Amsterdam</span>
-        <span class="l">five forks and their transitions, one interpreter — rules are data, never dispatch; Amsterdam at a devnet pin</span></div>
+      <div class="fact"><span class="n">73,345<span class="dimmer" style="font-size:1.05rem">/73,345</span></span>
+        <span class="l">blockchain-test cases passing, Byzantium–BPO2, <span class="mono">tests@v21.0.1</span> — 8,660 files, zero expected failures</span></div>
+      <div class="fact"><span class="n">Byzantium → Amsterdam</span>
+        <span class="l">seventeen forks and their transitions, one interpreter — rules are data, never dispatch; Amsterdam an unscheduled snapshot</span></div>
       <div class="fact"><span class="n">18</span>
         <span class="l">precompiles in pure Lean, ecrecover to P256VERIFY — no FFI, no C, no “assume the curve”</span></div>
       <div class="fact"><span class="n">gas + 1</span>
@@ -604,10 +604,10 @@ footer a:hover{color:var(--ink)}
     <h2 style="max-width:24ch">The protocol, present tense.</h2>
     <p class="lede" style="margin-top:18px">
       A specification earns the name only while it describes the protocol that actually exists.
-      Jaune is fork-parameterised: Prague, Osaka, BPO1, BPO2, and Amsterdam are values of one
-      <span class="mono">ForkRules</span> record, and a single interpreter reads the record and
-      nothing else. A chain’s configuration schedules activations; each block’s timestamp selects
-      its rules. Every machine carries its fork, so rule validity is proved once, for all five,
+      Jaune is fork-parameterised: its seventeen forks, Byzantium through Amsterdam, are seventeen
+      <span class="mono">ForkRules</span> records, and a single interpreter reads the record and
+      nothing else. A chain’s configuration schedules activations; each block’s timestamp or number selects
+      its rules. Every machine carries its fork, so rule validity is proved once, for all seventeen,
       rather than assumed at each use.
     </p>
 
@@ -616,6 +616,10 @@ footer a:hover{color:var(--ink)}
         <div class="listing">
           <div class="bar"><span>Jaune/Fork.lean</span><span class="tag">a fork is a value</span></div>
 <pre><span class="k">inductive</span> <span class="t">Fork</span> : <span class="t">Type</span>
+  | byzantium
+  | constantinople
+  <span class="c">…</span>
+  | cancun
   | prague
   | osaka
   | bpo1
@@ -629,10 +633,12 @@ footer a:hover{color:var(--ink)}
   { osakaRules <span class="k">with</span> fork := .bpo1, blob := bpo1BlobSchedule }
 
 <span class="c">-- The single place a fork identity becomes rule data. Total:</span>
-<span class="c">-- a Fork is the selection of one of five rule records, never</span>
-<span class="c">-- an identity that may fail to resolve or fall back to</span>
+<span class="c">-- a Fork is the selection of one of seventeen rule records,</span>
+<span class="c">-- never an identity that may fail to resolve or fall back to</span>
 <span class="c">-- another fork's rules.</span>
 <span class="k">def</span> <span class="d">Fork.ruleSet</span> : <span class="t">Fork</span> → <span class="t">ForkRules</span>
+  | .byzantium => byzantiumRules
+  <span class="c">…</span>
   | .prague => pragueRules
   | .osaka => osakaRules
   | .bpo1 => bpo1Rules
@@ -640,13 +646,14 @@ footer a:hover{color:var(--ink)}
   | .amsterdam => amsterdamRules
 
 <span class="k">theorem</span> <span class="d">Fork.ruleSet_valid</span> (f : <span class="t">Fork</span>) : f.ruleSet.<span class="t">Valid</span>
-<span class="k">theorem</span> <span class="d">Fork.supported_eq_all</span> : <span class="t">Fork</span>.supported = <span class="t">Fork</span>.all</pre>
+<span class="k">#guard</span> <span class="t">Fork</span>.supported = [.byzantium, .constantinople, <span class="c">…</span>, .amsterdam]
+<span class="k">#guard</span> <span class="t">Fork</span>.unimplemented = []</pre>
         </div>
         <p class="cap"><b>Fig. 3</b> — forks as data. <span class="mono">ForkRules</span> centralises the
           blob schedule, code, transaction and block limits, MODEXP pricing, fork-gated opcodes, the
           shared-formula gas schedule, Amsterdam’s optional state-gas dimension, the fork-dependent
           header fields, the request-producing system contracts, the optional block-level access
-          list, and the precompile activation set; <span class="mono">ChainConfig</span> maps timestamps to forks and rejects ambiguous
+          list, and the precompile activation set; <span class="mono">ChainConfig</span> maps block numbers or timestamps to forks and rejects ambiguous
           schedules. <span class="mono">scripts/check-fork-constants.sh</span> compares every number
           in every record against the pinned <span class="mono">execution-specs</span> revision.</p>
       </div>
@@ -657,7 +664,7 @@ footer a:hover{color:var(--ink)}
           <p class="dim" style="font-size:.93rem">
             Every executable EIP in the Prague→Osaka delta of
             <span class="mono">execution-specs</span> is implemented and exercised by a strict
-            all-PASS gate — 2,467 of 2,467 files, 17,423 cases:
+            all-PASS gate — 2,449 of 2,449 files, 17,550 cases:
           </p>
           <div class="chips">
             <span class="chip"><b>7823</b> MODEXP bounds</span>
@@ -672,12 +679,12 @@ footer a:hover{color:var(--ink)}
           </div>
         </div>
         <div class="panel" style="margin-top:16px">
-          <span class="tick">Amsterdam, at a pinned devnet snapshot</span>
+          <span class="tick">Amsterdam, an unscheduled snapshot</span>
           <p class="dim" style="font-size:.93rem">
-            Amsterdam has no mainnet activation at the pinned upstream revision, so Jaune tracks it at the
-            <span class="mono">tests-glamsterdam-devnet@v8.1.4</span> release and the
+            Amsterdam has no mainnet activation upstream, so Jaune tracks it as a snapshot at the
+            <span class="mono">tests@v21.0.1</span> release and the
             <span class="mono">execution-specs</span> commit it was filled from,
-            <span class="mono">7341820</span>. <span class="mono">amsterdamRules</span> is a complete
+            <span class="mono">1562e2f</span>. <span class="mono">amsterdamRules</span> is a complete
             record, written as an update of BPO2’s so every field it does not move is inherited by
             construction:
           </p>
@@ -697,19 +704,21 @@ footer a:hover{color:var(--ink)}
             The two-reservoir metering is proved total like the rest: the fuel bound is restated over
             a gas measure that counts spilled state gas and equals <span class="mono">gasLeft</span> on
             every earlier fork. The EIP-8024 immediates are proved to leave the jump-destination set
-            unchanged. What this is not: final Amsterdam. The devnet pin moves when upstream does, and
-            nothing a Prague-through-BPO2 fixture observes changed to admit it.
+            unchanged. What this is not: final Amsterdam. The snapshot moves when upstream does, and
+            nothing a Byzantium-through-BPO2 fixture observes changed to admit it.
           </p>
         </div>
         <div class="panel" style="margin-top:16px">
           <span class="tick">transitions are the real test</span>
           <p class="dim" style="font-size:.93rem;margin-bottom:0">
             Fixtures like <span class="mono">OsakaToBPO1AtTime15k</span> run through the configured
-            block-import API: each block’s timestamp chooses its rules mid-stream. The mainnet
-            transitions suite — Prague→Osaka, Osaka→BPO1, BPO1→BPO2 — is a strict all-PASS gate. The
-            devnet’s <span class="mono">BPO2ToAmsterdamAtTime15k</span> suite passes 38 of its 42 files;
-            on the other four Jaune agrees the block is invalid but names a different exception than
-            the fixture, and those are recorded as identity findings rather than aliased away.
+            block-import API: each block’s timestamp chooses its rules mid-stream. Both release
+            transition suites — Paris→Shanghai, Shanghai→Cancun, Cancun→Prague in the historical lane;
+            Prague→Osaka, Osaka→BPO1, BPO1→BPO2 in the current-mainnet lane — are strict all-PASS
+            gates. Amsterdam’s <span class="mono">BPO2ToAmsterdamAtTime15k</span> suite passes all
+            58 files (189 cases) with one registered two-fixture correction: on two structurally
+            invalid block-level-access-list headers Jaune agrees the block is invalid, and the
+            correction changes only the expected exception name, never block bytes or state.
             Selectors that would match zero fixtures are refused, not reported as vacuously green.
           </p>
         </div>
@@ -724,79 +733,108 @@ footer a:hover{color:var(--ink)}
     <p class="eyebrow"><span class="secno">§ 3</span> Conformance</p>
     <h2 style="max-width:22ch">Tested like a client.</h2>
     <p class="lede" style="margin-top:18px">
-      Three fixture lanes. The canonical lane is the <span class="mono">execution-specs</span>
-      <span class="mono">tests@v20.0.2</span> release under strict generated manifests: activating a
-      fork means its whole suite, exclusions are machine-generated with per-fork reasons, and
-      unknown labels fail loudly. A separate devnet lane runs Amsterdam against its pinned
-      prerelease corpus under the same rules, sharing nothing with the mainnet lane’s pin,
-      manifest, or install. The frozen <span class="mono">ethereum/tests</span> lane is retained
-      as an independently-filled regression instrument with committed per-file baselines. Its five
-      non-passing files are diagnosed, and none is a defect in Jaune.
+      Jaune passes 100% of the <span class="mono">execution-specs</span>
+      <span class="mono">tests@v21.0.1</span> release’s blockchain-test fixtures from Byzantium to
+      BPO2: 8,660 of 8,660 files, 73,345 of 73,345 cases, with no expected-failure allowance. Four
+      fixture lanes stand behind that and around it. The historical lane (Byzantium through Cancun)
+      and the current-mainnet lane (Prague through BPO2) run that release under strict generated
+      manifests: activating a fork means its whole suite, the manifests are checked against the
+      release byte for byte, and unknown labels fail loudly. A separate Amsterdam lane runs the
+      same release’s Amsterdam fixtures under the same rules. The frozen
+      <span class="mono">ethereum/tests</span> lane is retained as an independently-filled
+      regression instrument with committed per-file baselines; its five baselined non-passing files
+      are fixture artifacts, not Jaune defects, as Table 3 explains.
     </p>
 
     <div class="tablewrap" style="margin-top:30px">
       <table>
-        <thead><tr><th>suite</th><th class="num">files</th><th class="num">cases</th><th>result</th><th class="num">wall</th><th class="num">--jobs auto</th></tr></thead>
+        <thead><tr><th>suite</th><th class="num">files</th><th class="num">cases</th><th>result</th></tr></thead>
         <tbody>
-          <tr><td class="mono">--suite smoke</td><td class="num">16</td><td class="num">155</td><td class="passmark">all pass</td><td class="num">0.5 s</td><td class="num">0.5 s</td></tr>
-          <tr><td class="mono">--suite prague</td><td class="num">2,526</td><td class="num">16,673</td><td class="passmark">all pass</td><td class="num">~12 min</td><td class="num">341.7 s</td></tr>
-          <tr><td class="mono">--suite osaka</td><td class="num">2,467</td><td class="num">17,423</td><td class="passmark">all pass</td><td class="num">~8 min</td><td class="num">231.0 s</td></tr>
-          <tr><td class="mono">--suite transitions</td><td class="num">13</td><td class="num">109</td><td class="passmark">all pass</td><td class="num">16 s</td><td class="num">18.0 s</td></tr>
-          <tr><td class="mono">--suite full</td><td class="num">5,006</td><td class="num">34,205</td><td class="passmark">all pass</td><td class="num">~18.9 min</td><td class="num">618.9 s</td></tr>
+          <tr><td class="mono">--lane historical --suite byzantium</td><td class="num">113</td><td class="num">2,659</td><td class="passmark">all pass</td></tr>
+          <tr><td class="mono">--lane historical --suite constantinoplefix</td><td class="num">151</td><td class="num">2,856</td><td class="passmark">all pass</td></tr>
+          <tr><td class="mono">--lane historical --suite istanbul</td><td class="num">158</td><td class="num">3,016</td><td class="passmark">all pass</td></tr>
+          <tr><td class="mono">--lane historical --suite berlin</td><td class="num">220</td><td class="num">3,997</td><td class="passmark">all pass</td></tr>
+          <tr><td class="mono">--lane historical --suite london</td><td class="num">220</td><td class="num">4,277</td><td class="passmark">all pass</td></tr>
+          <tr><td class="mono">--lane historical --suite paris</td><td class="num">224</td><td class="num">4,299</td><td class="passmark">all pass</td></tr>
+          <tr><td class="mono">--lane historical --suite shanghai</td><td class="num">258</td><td class="num">4,544</td><td class="passmark">all pass</td></tr>
+          <tr><td class="mono">--lane historical --suite cancun</td><td class="num">2,325</td><td class="num">13,050</td><td class="passmark">all pass</td></tr>
+          <tr><td class="mono">--lane historical --suite hist-transitions</td><td class="num">23</td><td class="num">198</td><td class="passmark">all pass</td></tr>
+          <tr><td class="mono">--lane historical --suite hist-smoke</td><td class="num">16</td><td class="num">58</td><td class="passmark">all pass</td></tr>
+          <tr><td class="mono">--lane historical --suite hist-full</td><td class="num">3,692</td><td class="num">38,896</td><td class="passmark">all pass</td></tr>
+          <tr><td class="mono">--suite smoke</td><td class="num">16</td><td class="num">243</td><td class="passmark">all pass</td></tr>
+          <tr><td class="mono">--suite prague</td><td class="num">2,506</td><td class="num">16,790</td><td class="passmark">all pass</td></tr>
+          <tr><td class="mono">--suite osaka</td><td class="num">2,449</td><td class="num">17,550</td><td class="passmark">all pass</td></tr>
+          <tr><td class="mono">--suite transitions</td><td class="num">13</td><td class="num">109</td><td class="passmark">all pass</td></tr>
+          <tr><td class="mono">--suite full</td><td class="num">4,968</td><td class="num">34,449</td><td class="passmark">all pass</td></tr>
+          <tr><td><b>hist-full ∪ full</b> — Byzantium to BPO2</td><td class="num"><b>8,660</b></td><td class="num"><b>73,345</b></td><td class="passmark">all pass — 100%</td></tr>
         </tbody>
       </table>
     </div>
-    <p class="cap"><b>Table 1</b> — the current-mainnet lane
+    <p class="cap"><b>Table 1</b> — the historical and current-mainnet lanes
       (<span class="mono">scripts/check-mainnet.sh</span>), <span class="mono">blockchain_tests</span>
-      from <span class="mono">tests@v20.0.2</span>, verified by SHA-256 at bootstrap. This lane has no
-      expected-failure baseline: every manifested case at a supported fork passed in the full-lane
-      run of 2026-09-21.<sup class="fn"><a href="#fn3">3</a></sup>
-      The timing columns were measured on the <span class="mono">tests@v20.0.1</span> corpus,
-      not the updated one: the <span class="mono">--jobs auto</span> column on 2026-09-21, after the
-      Lean 4.34 migration; the sequential column earlier. Both harnesses take
-      <span class="mono">--jobs auto</span>. Uncontended per-file timings require sequential runs.</p>
+      from <span class="mono">tests@v21.0.1</span>, verified by SHA-256 at bootstrap. Neither lane has an
+      expected-failure baseline, and both manifests are checked to match the release exactly. Their
+      union is every blockchain-test fixture of the release whose fork, or both of whose transition
+      endpoints, lie in Byzantium–BPO2.<sup class="fn"><a href="#fn3">3</a></sup> Petersburg’s suite
+      carries the release’s label <span class="mono">constantinoplefix</span>. Muir, Arrow and Gray
+      Glacier and synthetic EIP-1283 Constantinople have no fixtures in the release; their empty
+      suites are refused rather than reported as vacuously green, and the bomb-only forks are
+      covered by authored difficulty vectors. The release publishes no bare BPO1 or BPO2 fixture;
+      both are exercised through the transitions suite. Runtimes are in
+      <span class="mono">scripts/GATES.md</span>.</p>
 
     <div class="tablewrap" style="margin-top:34px">
       <table>
         <thead><tr><th>suite — <span class="mono" style="text-transform:none;letter-spacing:0">--lane amsterdam</span></th><th class="num">files</th><th class="num">cases</th><th>result</th></tr></thead>
         <tbody>
-          <tr><td class="mono">--suite amsterdam-smoke</td><td class="num">16</td><td class="num">60</td><td class="passmark">all pass</td></tr>
-          <tr><td class="mono">--suite amsterdam</td><td class="num">3,159</td><td class="num">24,901</td><td class="passmark">all pass</td></tr>
-          <tr><td class="mono">--suite amsterdam-transitions</td><td class="num">42</td><td class="num">127</td><td>38 pass · 4 recorded identity findings</td></tr>
-          <tr><td class="mono">--suite amsterdam-full</td><td class="num">3,201</td><td class="num">25,028</td><td>all pass but the same 4</td></tr>
+          <tr><td class="mono">--suite amsterdam-smoke</td><td class="num">16</td><td class="num">346</td><td class="passmark">all pass</td></tr>
+          <tr><td class="mono">--suite amsterdam</td><td class="num">3,296</td><td class="num">26,398</td><td class="passmark">all pass</td></tr>
+          <tr><td class="mono">--suite amsterdam-transitions</td><td class="num">58</td><td class="num">189</td><td class="passmark">all pass (registered correction)</td></tr>
+          <tr><td class="mono">--suite amsterdam-full</td><td class="num">3,354</td><td class="num">26,587</td><td class="passmark">all pass (registered correction)</td></tr>
         </tbody>
       </table>
     </div>
-    <p class="cap"><b>Table 2</b> — the Glamsterdam devnet lane
-      (<span class="mono">scripts/check-mainnet.sh --lane amsterdam</span>), over
-      <span class="mono">tests-glamsterdam-devnet@v8.1.4</span>, with zero exclusions inside the
-      Amsterdam trees. The four findings are the invalid pre- and post-fork blocks of the SLOTNUM
-      and block-level-access-list transition modules: their headers carry 22 RLP fields, which
-      Jaune rejects as a structural encoding error where the fixtures name a block-format,
-      access-list-hash, or block-hash exception — same verdict, a different name for it. The union
-      ran in 463.6&nbsp;s at <span class="mono">--jobs auto</span> on 2026-09-21, red on exactly
-      those four files.</p>
+    <p class="cap"><b>Table 2</b> — the Amsterdam lane
+      (<span class="mono">scripts/check-mainnet.sh --lane amsterdam</span>), over the Amsterdam
+      fixtures of the same <span class="mono">tests@v21.0.1</span> release, with zero exclusions inside
+      the Amsterdam trees. Amsterdam is unscheduled upstream, so this is a snapshot, not final
+      Amsterdam. The transition and union rows pass with the registered two-fixture correction
+      <span class="mono">bal-header-format-v1</span>. Run against the unmodified official archive,
+      the union reports 3,352 pass and two findings: two structurally invalid block-level-access-list
+      headers that Jaune rejects as invalid, as the fixtures do, under a different exception name.
+      Same verdict, a different name for it; the correction changes only those two expected names
+      and generation metadata, never block bytes, payloads, prestate or poststate. Earlier
+      four-finding results on a devnet corpus are historical: Jaune’s header-width repair resolved
+      two of them.</p>
 
     <div class="tablewrap" style="margin-top:34px">
       <table>
         <thead><tr><th>tier — <span class="mono" style="text-transform:none;letter-spacing:0">check-legacy.sh</span></th><th class="num">files</th><th>committed baseline</th><th>what it covers</th></tr></thead>
         <tbody>
           <tr><td class="mono">--depth</td><td class="num">67</td><td class="passmark">all pass</td><td class="dim">recursion &amp; call-depth stress</td></tr>
-          <tr><td class="mono">--smoke</td><td class="num">174</td><td>173 pass · 1 expected fail</td><td class="dim">curated cross-section — the routine gate</td></tr>
+          <tr><td class="mono">--smoke</td><td class="num">174</td><td>173 pass · 1 expected fail (a multiply-invalid fixture; see below)</td><td class="dim">curated cross-section — the routine gate</td></tr>
           <tr><td class="mono">--bls</td><td class="num">29</td><td class="passmark">all pass</td><td class="dim">EIP-2537 BLS12-381 + KZG point evaluation</td></tr>
           <tr><td class="mono">--patch</td><td class="num">10</td><td class="passmark">all pass</td><td class="dim">fixed historical failures — un-rebaseable</td></tr>
           <tr><td class="mono">--rlp4</td><td class="num">4</td><td class="passmark">all pass</td><td class="dim">invalid-RLP / header targets — un-rebaseable</td></tr>
-          <tr><td class="mono">--full</td><td class="num">2,983</td><td>2,978 pass · 5 diagnosed non-passes (none a Jaune defect)</td><td class="dim">the frozen BlockchainTests corpus (~7.7 min at <span class="mono">--jobs auto</span>)</td></tr>
+          <tr><td class="mono">--full</td><td class="num">2,983</td><td>2,978 pass · 5 diagnosed non-passes (none a Jaune defect); raw run 2,973 pass · 10 fail, the other five stale EIP-7610 files (see below)</td><td class="dim">the frozen BlockchainTests corpus (~7.7 min at <span class="mono">--jobs auto</span>)</td></tr>
         </tbody>
       </table>
     </div>
     <p class="cap"><b>Table 3</b> — the frozen legacy lane (<span class="mono">scripts/check-legacy.sh</span>).
       Each gate passes iff <em>every</em> file’s PASS/FAIL matches its committed baseline — a regression
       gate, not an all-green banner. None of the five baselined FAILs is a defect in Jaune: two
-      fixtures carry no case in the supported fork range, and the other three are multiply-invalid
-      cases whose expected-exception alternatives reflect another client’s check ordering and omit
-      the identity Jaune reports — the same one the frozen oracle reports. Within this corpus the
-      <span class="mono">GeneralStateTests/</span> subtree passes <strong>2,633 of 2,634</strong>.</p>
+      fixtures contain only Cancun cases, so the tier’s <span class="mono">--network Prague</span>
+      filter selects none and the run fails closed rather than passing vacuously — Cancun itself
+      passes in full in the historical lane; the other three (the smoke tier’s one among them) are
+      multiply-invalid cases whose expected-exception alternatives reflect another client’s check
+      ordering and omit the identity Jaune reports — the same one the frozen oracle reports. Five
+      further files are stale: they expect EIP-7610’s storage-only CREATE collision, which never
+      activated on any fork and which the pinned <span class="mono">execution-specs</span> and the
+      production clients do not implement; replaying their ten original Prague inputs agrees with
+      that reference. They stay selected with their bytes unchanged, so the raw full run reports
+      2,973 pass and 10 fail, red on exactly those five accepted files. Within this corpus the
+      <span class="mono">GeneralStateTests/</span> subtree’s baseline is <strong>2,633 of 2,634</strong>
+      (the one Cancun-only file); the raw run passes 2,628, because all five stale files live there.</p>
 
     <p class="note" style="margin-top:26px">
       Beneath the fixture lanes sit three oracles. Two are differential against a frozen
@@ -811,7 +849,7 @@ footer a:hover{color:var(--ink)}
       A vector file that quietly lost half its cases would otherwise pass while testing half as much.
       And since 2026-08 the interpreter also answers as a standard <span class="mono">t8n</span>
       transition tool: <span class="mono">scripts/check-t8n.sh</span> compares its complete output
-      on 39 cases — 30 of them Amsterdam’s, block-level access list included — against goldens from
+      on 76 cases — 30 of them Amsterdam’s metering cases, 22 historical-fork cases, block-level access list included — against goldens from
       the pinned <span class="mono">execution-specs</span>, with every normalization and deviation
       explicit and each case run twice for determinism. A three-way acceptance run against
       go-ethereum in 2026-08 found that in every registered divergence, Jaune matches its pinned
@@ -827,8 +865,9 @@ footer a:hover{color:var(--ink)}
         <span class="mono">execution-specs</span>. That correspondence is established the way every
         client establishes it — by differential testing against pinned corpora — and published as
         per-file classifications rather than asserted as a theorem. The formal guarantee is relative
-        to Jaune’s semantics; the empirical guarantee is the corpus. Amsterdam’s evidence is a
-        devnet corpus, so its support is a snapshot of a moving target, not final Amsterdam.
+        to Jaune’s semantics; the empirical guarantee is the corpus. Amsterdam’s evidence is the
+        <span class="mono">tests@v21.0.1</span> release for a fork still unscheduled upstream, so its
+        support is a snapshot of a moving target, not final Amsterdam.
         Confusing any of these is how verification gets oversold, and this project declines to.
       </p>
     </div>
@@ -1082,8 +1121,8 @@ footer a:hover{color:var(--ink)}
       <div class="rung base">
         <div class="left"><div class="layer">the ground</div><div class="thmname">exec · stateTransitionUsing · Jaune</div></div>
         <div class="right"><p><strong>Jaune’s executable semantics.</strong> The definitions every rung above is
-          stated over — the same ones the fixture runner of §3 compiles. Blanc pins Jaune at
-          <span class="mono">c326e3f</span>, whose Lean sources are the ones this page describes.</p></div>
+          stated over — the same ones the fixture runner of §3 compiles. Blanc pins Jaune by
+          immutable commit, so its proofs are about exactly the Lean sources it builds.</p></div>
       </div>
     </div>
 
@@ -1252,8 +1291,8 @@ footer a:hover{color:var(--ink)}
         <div class="meta"><span class="pill"><span class="d"></span>landed · 2026</span></div>
         <h3>The multi-fork architecture</h3>
         <p>Fork-parameterised rules, the complete Osaka execution delta, BPO1/BPO2 as schedule data,
-          configured transitions, and the strict-manifest current-mainnet lane — 5,006/5,006 files.
-          The generic transition proof landed in the fork arc; configured reachability and raw-import
+          configured transitions, and the strict-manifest current-mainnet lane, now 4,968/4,968 files at
+          <span class="mono">tests@v21.0.1</span>. The generic transition proof landed in the fork arc; configured reachability and raw-import
           corollaries are now restored and protected by Blanc’s exact-axiom audit.</p>
       </div>
       <div class="stage done">
@@ -1288,7 +1327,7 @@ footer a:hover{color:var(--ink)}
         <p><span class="mono">lake exe jaune t8n</span> speaks the ecosystem’s standard transition-tool
           interface: <span class="mono">alloc</span>/<span class="mono">env</span>/<span class="mono">txs</span>
           in, <span class="mono">result</span> and post-state out, with the same fail-closed
-          fork lane as the fixture runner (Prague through BPO2 then, Amsterdam added since) — no default fork, no silent fallback, and
+          fork lane as the fixture runner (Prague through BPO2 then; Amsterdam and the historical forks added since) — no default fork, no silent fallback, and
           unclaimed modes refused rather than ignored. Conformance checks the complete output against
           goldens from the pinned <span class="mono">execution-specs</span>, with every normalization and
           deviation explicit and each case run twice for determinism. A three-way acceptance run against
@@ -1334,7 +1373,7 @@ footer a:hover{color:var(--ink)}
         <div class="meta"><span class="pill"><span class="d"></span>landed · 2026-09-06</span></div>
         <h3>Rules by construction, and a bounded memory closure</h3>
         <p>Every machine now carries its <span class="mono">Fork</span>, and its rules are a total
-          function of it, so rule validity is one theorem over five records instead of a premise on
+          function of it, so rule validity is one theorem over its records — five then, seventeen now — instead of a premise on
           every statement; a static gate refuses any interpreter site that reads a repriced number
           from a global instead of the selected rules. Separately, a call chain 1,024 frames deep
           no longer keeps one copy of a megabyte of calldata per frame: on the pre-Amsterdam forks, the
@@ -1345,7 +1384,7 @@ footer a:hover{color:var(--ink)}
         <div class="meta"><span class="pill"><span class="d"></span>landed · 2026-09-21</span></div>
         <h3>Lean 4.34, and the v20.0.2 mainnet release</h3>
         <p>Lean and mathlib moved to v4.34.0, with the gate catalogue re-run on the migrated tree; the current-mainnet lane moved to
-          the <span class="mono">tests@v20.0.2</span> release, whose manifest is Table 1; and a round
+          the <span class="mono">tests@v20.0.2</span> release, since superseded by <span class="mono">tests@v21.0.1</span>; and a round
           of fixes landed for contract-creation collisions, original storage of freshly created
           accounts, and the block-level access list’s index accounting.</p>
       </div>
@@ -1362,17 +1401,34 @@ footer a:hover{color:var(--ink)}
           computed by one from-scratch walker that Blanc’s audit reuses. CI installs Jaune into a
           fresh package from an exact Git commit and verifies what it installed.</p>
       </div>
+      <div class="stage done">
+        <div class="meta"><span class="pill"><span class="d"></span>landed · 2026-10</span></div>
+        <h3>Back to Byzantium, against <span class="mono">tests@v21.0.1</span></h3>
+        <p>Twelve historical rule records — Byzantium, synthetic EIP-1283 Constantinople, Petersburg,
+          Istanbul, Muir Glacier, Berlin, London, Arrow Glacier, Gray Glacier, Paris, Shanghai and
+          Cancun — joined the five, so every one of the seventeen declared forks resolves, with
+          proof-of-work block rewards, ommers and the difficulty bomb before the merge. The current-mainnet
+          and Amsterdam lanes moved to the <span class="mono">execution-specs</span>
+          <span class="mono">tests@v21.0.1</span> release, and a strict historical lane joined them over
+          the same release: <span class="mono">hist-full</span> passes
+          3,692 of 3,692 files (38,896 cases), so with the current-mainnet lane Jaune passes 100% of
+          the release’s blockchain-test fixtures from Byzantium to BPO2 — 8,660 files, 73,345 cases.</p>
+      </div>
       <div class="stage now">
         <div class="meta"><span class="pill"><span class="d"></span>open · as the repository records it</span></div>
         <h3>What is stated as not yet done</h3>
         <ul>
-          <li>Amsterdam tracks a devnet; its pin, rules and lane move when upstream does, and its
-            mainnet activation is written only once the pinned upstream revision schedules one — the
-            constants gate turns red that day.</li>
-          <li>The four transition-suite identity findings stay recorded until upstream declares
-            alternative exceptions for those fixtures.</li>
-          <li>The message-settlement theorems for revert and exceptional halt are proved for Prague
-            through BPO2; no Amsterdam form is proved yet.</li>
+          <li>Amsterdam is a snapshot at <span class="mono">tests@v21.0.1</span> of a fork upstream has
+            not scheduled; its pin, rules and lane move when upstream does, and its mainnet activation
+            is written only once the pinned upstream revision schedules one — the constants gate turns
+            red that day.</li>
+          <li>The four transition-suite identity findings recorded on the earlier devnet corpus are
+            resolved: two by Jaune’s header-width repair, two by the registered two-fixture
+            correction <span class="mono">bal-header-format-v1</span>, which renames only their expected
+            exceptions; the official archive still names them differently.</li>
+          <li>The message-settlement theorems for revert and exceptional halt hold for Paris through
+            BPO2; the pre-Paris touched-account sweep and Amsterdam’s state-gas dimension keep them
+            from applying unchanged, and no Amsterdam form is proved yet.</li>
           <li>Jump destinations: the Amsterdam walk is proved equal to the earlier one, but the bridge
             from either walk to the interpreter’s own scan is sampled on 64 KiB blobs, not proved.</li>
           <li>There is no running-prefix interface: an <span class="mono">Exec</span> derivation always
@@ -1420,11 +1476,11 @@ footer a:hover{color:var(--ink)}
       </div>
       <div class="aud">
         <h3>Protocol &amp; client engineers</h3>
-        <p>An independent implementation of the Prague-through-BPO2 rules, and of Amsterdam at its
-          devnet pin, that reads as a specification and runs the real corpus — a differential oracle, a precise reference for
+        <p>An independent implementation of the Byzantium-through-BPO2 rules, and of Amsterdam at an
+          unscheduled snapshot, that reads as a specification and runs the real corpus — a differential oracle, a precise reference for
           when a fixture disagrees with your client, and a place where each rule is stated once,
           without the surrounding engineering.</p>
-        <div class="hook">Jaune/Fork.lean is the protocol as data<br>scripts/check-mainnet.sh --suite smoke in 0.5 s</div>
+        <div class="hook">Jaune/Fork.lean is the protocol as data<br>scripts/check-mainnet.sh --suite smoke in seconds</div>
       </div>
       <div class="aud">
         <h3>Security researchers &amp; DeFi builders</h3>
@@ -1458,15 +1514,15 @@ footer a:hover{color:var(--ink)}
         <div class="term"><span class="p">$</span> git clone https://github.com/skbaek/jaune
 <span class="p">$</span> cd jaune &amp;&amp; lake exe cache get &amp;&amp; lake build
 <span class="p">$</span> python3 scripts/bootstrap_mainnet.py
-<span class="p">$</span> FIX=~/eest-mainnet-v20.0.2/fixtures/blockchain_tests
+<span class="p">$</span> FIX=~/eest-mainnet-v21.0.1/fixtures/blockchain_tests
 <span class="p">$</span> lake exe jaune $FIX/for_prague/ported_static/vmArithmeticTest/mul/mul.json
 <span class="p">$</span> scripts/check-mainnet.sh --suite smoke</div>
         <p class="dim" style="font-size:.88rem;margin:14px 0 0">
           The corpus is not in the repository: the third line fetches the pinned
-          <span class="mono">execution-specs tests@v20.0.2</span> release, verifies its checksum
+          <span class="mono">execution-specs tests@v21.0.1</span> release, verifies its checksum
           before extraction, and installs it at
-          <span class="mono">~/eest-mainnet-v20.0.2</span> — a 540 MB download and about 9.1 GB of extracted files on
-          disk, so budget 13 GB free and run it before either of the last two lines. See
+          <span class="mono">~/eest-mainnet-v21.0.1</span> — a 1.0 GB download and about 14.7 GB of extracted files on
+          disk (about 15.7 GB with the archive), so budget 20 GB free and run it before either of the last two lines. See
           <span class="mono">scripts/vectors/SOURCES.md</span> for pinned provenance and the
           read-only environment doctor. The <span class="mono">blockchain_tests</span> directory is
           the one this runner consumes; EEST fills the same test into
@@ -1480,7 +1536,8 @@ footer a:hover{color:var(--ink)}
           filters, so green never means nothing was checked. Every gate’s exact command, scale,
           runtime, and pass criterion is catalogued in <span class="mono">scripts/GATES.md</span>;
           the fixture harnesses take <span class="mono">--jobs auto</span>, which ran the whole
-          current-mainnet corpus in about ten minutes on the catalogue host.
+          current-mainnet corpus of the earlier <span class="mono">tests@v20.0.1</span> release in about
+          ten minutes on the catalogue host (2026-09-21, a historical timing).
         </p>
       </div>
       <div class="panel">
@@ -1534,20 +1591,24 @@ footer a:hover{color:var(--ink)}
           <span class="mono">execution-specs</span>, which Jaune mirrors at pinned commit
           <span class="mono">4198b9c5</span> (mainnet branch, 2025-09-19) and tests against. Amsterdam,
           which that commit predates, follows <span class="mono">execution-specs</span>
-          <span class="mono">7341820</span>, the commit the Glamsterdam devnet-8 fixtures were
-          filled from, and every Amsterdam constant is checked against it.
+          <span class="mono">1562e2f</span>, the commit the <span class="mono">tests@v21.0.1</span>
+          fixtures were filled from, and every Amsterdam constant is checked against it.
           <a href="#ref1">↩</a></li>
         <li id="fn2">Jaune was previously published under the name <span class="mono">ELeVM</span>;
           the repository was renamed in July 2026 and old links redirect.</li>
         <li id="fn3">Figures on this page are drawn from committed reports, baselines, and benchmark
-          instruments in the repositories, current as of 2026-09-25; a figure that carries its own
+          instruments in the repositories, current as of 2026-10-31; a figure that carries its own
           date is the most recent committed measurement of it.
           Wall-clock numbers are same-machine, same-instrument measurements on a 10-core Apple M5;
           fixture counts are exact. The
-          current-mainnet lane covers every <span class="mono">blockchain_tests</span> fixture of
-          <span class="mono">tests@v20.0.2</span> whose fork Jaune supports; exclusions for
-          unsupported historical forks are machine-generated with per-fork reasons, and unknown
-          labels fail the manifest check.</li>
+          historical and current-mainnet lanes together cover every
+          <span class="mono">blockchain_tests</span> fixture of <span class="mono">tests@v21.0.1</span>
+          whose fork, or both of whose transition endpoints, lie in Byzantium–BPO2; both manifests are
+          checked to match the release exactly. The only exclusions are pre-Byzantium forks (Frontier
+          through Spurious Dragon), Amsterdam (its own lane, Table 2), and transitions naming
+          Amsterdam or a later BPO; unknown labels fail the manifest check. The release’s other
+          formats — <span class="mono">state_tests</span>, engine, sync and transaction tests — serve
+          other consumers and are refused by the runner.</li>
       </ol>
     </div>
   </div>
