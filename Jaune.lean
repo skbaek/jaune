@@ -1,8 +1,10 @@
 -- This module serves as the root of the `Jaune` library.
 -- Import modules here that should be built as part of the library.
 import Jaune.Basic
+import Jaune.RlpEval
 import Jaune.Types
 import Jaune.MulDiv
+import Jaune.WordFacts
 import Jaune.RPow
 import Jaune.Fork
 import Jaune.Hash
@@ -11,10 +13,12 @@ import Jaune.EC
 import Jaune.BLSConst
 import Jaune.BLS
 import Jaune.Machine
+import Jaune.DevmProjections
 import Jaune.Precompiles
 import Jaune.Execution
 import Jaune.Sufficiency
 import Jaune.ExecFrame
+import Jaune.ExecFrameRel
 import Jaune.Exec
 import Jaune.MemoryAccounting
 import Jaune.ExecDeriv

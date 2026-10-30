@@ -14,6 +14,7 @@ Everything here describes **this revision only**. Read
 - [3. Frame, message and transaction execution](#3-frame-message-and-transaction-execution)
 - [4. Checked block and chain transitions](#4-checked-block-and-chain-transitions)
 - [5. State, accounts, rules, bytes, hashes and codecs](#5-state-accounts-rules-bytes-hashes-and-codecs)
+- [6. Lemma families for downstream proof libraries](#6-lemma-families-for-downstream-proof-libraries)
 - [Compatibility](#compatibility)
 
 ## How declarations are classified
@@ -25,8 +26,8 @@ individual declarations one by one.
 
 | class | meaning | what it covers |
 |---|---|---|
-| **supported** | Intended entry point for a task in this guide. Exercised at this revision by a checked example, a gate or the fixture runner. | The eight canonical execution modules: `Jaune.ExecFrame`, `Jaune.Exec`, `Jaune.ExecDeriv`, `Jaune.ExecSettlement`, `Jaune.ExecChronology`, `Jaune.MessageExecution`, `Jaune.SymbolicPush`, `Jaune.SymbolicArith`. Also the entry-point families named in sections 3–5, such as `exec`, `processMessage`, `processTransaction`, the checked chain types, and `State`/`Stor` access. |
-| **incidental** | Public only because Lean cannot hide it. It may be renamed, restated or removed in any commit, without notice. | Every other public declaration in the `Jaune` library closure, such as interpreter internals in `Jaune.Machine`, `Jaune.Execution` and `Jaune.Sufficiency`, and helper lemmas in `Jaune.Basic` and `Jaune.Types`. Also the `Fueled` residue lemmas in `Jaune.Exec`. Runner-side modules outside `import Jaune` (`Jaune.T8n`, `Jaune.ChainStore`, `Jaune.FixtureException`, `Jaune.BLSGuards`, `Main`, `MemoryProbe`) are adapters, not proof surface. |
+| **supported** | Intended entry point for a task in this guide. Exercised at this revision by a checked example, a gate or the fixture runner. | The eight canonical execution modules: `Jaune.ExecFrame`, `Jaune.Exec`, `Jaune.ExecDeriv`, `Jaune.ExecSettlement`, `Jaune.ExecChronology`, `Jaune.MessageExecution`, `Jaune.SymbolicPush`, `Jaune.SymbolicArith`. Also the entry-point families named in sections 3–5, such as `exec`, `processMessage`, `processTransaction`, the checked chain types, and `State`/`Stor` access, and the lemma families and modules named in section 6. |
+| **incidental** | Public only because Lean cannot hide it. It may be renamed, restated or removed in any commit, without notice. | Every other public declaration (section 6 lifts named families out of this class) in the `Jaune` library closure, such as interpreter internals in `Jaune.Machine`, `Jaune.Execution` and `Jaune.Sufficiency`, and helper lemmas in `Jaune.Basic` and `Jaune.Types`. Also the `Fueled` residue lemmas in `Jaune.Exec`. Runner-side modules outside `import Jaune` (`Jaune.T8n`, `Jaune.ChainStore`, `Jaune.FixtureException`, `Jaune.BLSGuards`, `Main`, `MemoryProbe`) are adapters, not proof surface. |
 | **experimental** | Implemented and gated, but expected to change as its upstream target moves. | The Amsterdam lane: `amsterdamRules`, the `StateGasRules` / `stateGas` dimension, `genericCallAmsterdam` / `genericCreateAmsterdam` and their lemmas, `executeCode.handleErrorAmsterdam`, and the `BlockAccessList` / `Bal*` family. Also the reusable axiom-audit command `#expect_axioms` (`scripts/AxiomAudit.lean`, library `Assurance`). |
 
 A module's class applies to all of its declarations unless this guide says
@@ -282,6 +283,54 @@ and `b` is read. `State.set` erases an account set to `Acct.nil`
 
 [TRUSTED.md](TRUSTED.md) says exactly what `Bytes.sha256_eq_fips` and
 `KECCAK.f1600_eq` do and do not establish.
+
+## 6. Lemma families for downstream proof libraries
+
+**Who this is for.** A library that proves facts about concrete contracts on
+top of Jaune (Blanc is the first) does not stay inside the canonical execution
+modules: it rewrites machine states, word arithmetic and RLP bytes thousands of
+times. The families below are the ones such a consumer names by `rw`/`simp
+only`, so they are **supported**: a rename or restatement updates this guide
+in the same commit. Their `@[simp]` attributes, where present, are not part of
+the promise; a consumer that works by `simp only` names the lemma.
+
+**Naming rule.** An update-projection law is named update-first,
+`<updater>_<accessor>`: `Devm.setMach_stack`, `Devm.addLog_logs`,
+`addAccessedStorageKey_getStorVal` (an updater defined outside `Devm` gives a
+root name). Two older laws read projection-first, `Devm.getStorVal_setMach`
+and `Devm.getCode_setMach`; they keep their names.
+
+**Rule for additions.** A consumer that needs an update-projection pair, a
+comparison-flag fact or a word-literal law that is missing here adds it to the
+Jaune module named below, under the naming rule, instead of proving a local
+copy; a new `Devm` updater lands with its row in `Jaune.DevmProjections`. A
+public codec meant for concrete evidence gets a structural twin and a
+`decide +kernel` control next to it, as `Jaune.RlpEval` does.
+
+| need | module | supported families | why |
+|---|---|---|---|
+| a `Devm` update against an accessor | `Jaune.Machine`, `Jaune.DevmProjections` | `Devm.setMach_*`, `Devm.setMeta_*`, `Devm.setWorld_*`, `Devm.withOutput_*`, `Devm.setMach_setMach`, `Devm.getStorVal_setMach`, `Devm.getCode_setMach`; in `Jaune.DevmProjections` the `addLog`, `addAccessedAddress`, `addAccessedStorageKey`, `setTransVal`, `setStorVal`, `withRefundCounter`, `memWrite`, `memExtends`, `setCode`, `withGasLeft`, `withStack`, `withReturnData`, `incrNonce`, `setBal` rows and the storage read-after-write laws `Devm.setStorVal_getStorVal_self` / `_of_ne` | every symbolic instruction step is a nest of these updaters; downstream walks normalise each step with them |
+| gas and state-gas after an update | `Jaune.Sufficiency` | `Devm.<updater>_gasLeft`, `Devm.<updater>_stateGas` (stated on `.mach.stateGas`), `Devm.<updater>_gasMeasure` | the gas side of every step proof |
+| a frame relation weakened in one field | `Jaune.ExecFrame`, `Jaune.ExecFrameRel` | `Devm.Rels`, `Devm.Rel`, `Devm.Rels.eq`, `Devm.Burn`, `Devm.rel_refl`, `Devm.rel_trans`; `Devm.Rels.Le` (a literal names only the fields that differ), `Devm.Rel.mono`, `Devm.Rel.eq_refl`, `Devm.Rel.of_eq_le` | a new `Devm.Rels` field is repaired here, not at each consumer's literal |
+| word values and the order | `Jaune.Types` | `B256.toNat_toB256`, `B256.toNat_toB256_of_lt`, `B256.toNat_inj`, `B256.toNat_lt`, `B256.toNat_add`, `B256.toNat_sub_eq_of_le`, `B256.lt_iff_toNat_lt_toNat`, `B256.le_iff_toNat_le_toNat`, `B256.toNat_lt_toNat`, `B256.lt_of_toNat_lt_toNat` | the bridge from compiled words to `Nat` arithmetic |
+| comparison flags and literal arithmetic | `Jaune.WordFacts` | `B256.{eq,lt,gt}Check_{ne,eq}_zero_iff`, `B256.eq_of_eqCheck_ne_zero`, `B256.not_lt_of_ltCheck_eq_zero`, `B256.lt_of_{lt,gt}Check_ne_zero`, `B256.{lt,gt}Check_eq_zero_of_toNat_le`, `B256.{lt,gt}Check_ne_zero_of_toNat_lt`, `Nat.toB256_{add,mul}_toB256`, `Nat.toB256_sub_toB256`, `B256.toNat_add_toB256_of_lt` | a branch flag (`EQ`, `LT`, `GT`, `ISZERO` of `EQ`) is discharged by one citation |
+| multiplicative arithmetic | `Jaune.MulDiv` | floor/ceiling `a * b / d` bounds, rounding direction, monotonicity, round-trip loss, and the guarded `B256` bridges (`B256.toNat_mul_mod`, `B256.toNat_mul_eq_of_nofm`, `B256.toNat_div`, `B256.toNat_mulmod`, `B256.toNat_addmod`, …) | ratio pricing in token and vault contracts; every word statement is explicit about `% 2 ^ 256` or carries a no-overflow premise |
+| iterated rounded multiplication | `Jaune.RPow` | `mulr`, `rpow` and their error surface, with guarded `B256` bridges (`B256.toNat_mulr`, …) | Maker-shaped `rpow` loops; no word theorem hides wraparound |
+| memory charged before a CALL | `Jaune.MemoryAccounting` | the `calculateMsgCallGas_*` bounds and the per-kind memory accounting facts | exact gas accounting across a call boundary; these facts do not bound arbitrary parent gas or complete the recursive memory/output invariant |
+| evaluating concrete RLP in the kernel | `Jaune.RlpEval` | `Bytes.toBLT?_eq_toBLTS`, `Bytes.toBLTDiff?_eq_toBLTDiffS`, `Bytes.toBLTs?_eq_toBLTsS`, `BLT.toBytes_eq_toBytesS`, `BLTs.toBytes_eq_toBytesS`, `Nat.toBytes_eq_toBytesS`, and `DecidableEq BLT` | see below |
+
+**Concrete RLP.** `Bytes.toBLTDiff?` / `Bytes.toBLTs?`, `BLT.toBytes` and
+`Nat.toBytes` are compiled by well-founded recursion, so `decide +kernel`
+cannot evaluate them. `Jaune.RlpEval` restates each by structural recursion and
+proves it equal to the public definition on every input. A concrete decode or
+encode is then
+
+```lean
+example : Bytes.toBLT? [0xc1, 0x01] = some (.list [.bytes [0x01]]) := by
+  rw [Bytes.toBLT?_eq_toBLTS]; decide +kernel
+```
+
+The public definitions and their equation lemmas are unchanged.
 
 ## Compatibility
 
