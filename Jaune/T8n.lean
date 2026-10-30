@@ -1751,9 +1751,10 @@ emits. Options may be spelled --flag=value or --flag value.
                          operations, no withdrawals and no requests.
   --state.reward <n>     the block reward, paid only under proof of work, as
                          the target pays it: absent is the fork's
-                         BLOCK_REWARD, -1 skips rewards. Every fork this build
-                         runs is proof-of-stake, so today it is read and not
-                         consumed.
+                         BLOCK_REWARD, -1 skips rewards. Byzantium through
+                         GrayGlacier are proof-of-work and pay it; from Paris
+                         on the fork is proof-of-stake, and the flag is read
+                         and not consumed.
   --info                 print the version, the advertised fork lane and its
                          basis, every fork this build resolves, and the pins recorded in
                          scripts/sources.json. Needs that file: pass
