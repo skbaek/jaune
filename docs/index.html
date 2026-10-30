@@ -388,10 +388,12 @@ footer a:hover{color:var(--ink)}
 
       <div>
         <div class="term" id="heroterm"><span class="p">$</span> lake build          <span class="cm"># spec = interpreter</span>
-<span class="p">$</span> scripts/check-mainnet.sh --lane historical --suite hist-full
-<span class="p">$</span> scripts/check-mainnet.sh --suite full
-<!-- FIG1-VERBATIM-PENDING: hist-full and full verdict lines --></div>
-        <p class="cap"><b>Fig. 1</b> — the two strict gates over <span class="mono">tests@v21.0.1</span>, verbatim. Together they pass
+<span class="p">$</span> scripts/check-mainnet.sh --lane historical --suite hist-full --no-build --jobs auto
+<span class="ok">OK — hist-full: 3692/3692 manifest files PASS in 467.12s (--jobs 3, timings reference-only)</span>
+<span class="p">$</span> scripts/check-mainnet.sh --suite full --no-build --jobs auto
+<span class="ok">OK — full: 4968/4968 manifest files PASS in 436.09s (--jobs 4, timings reference-only)</span></div>
+        <p class="cap"><b>Fig. 1</b> — the two strict gates over <span class="mono">tests@v21.0.1</span>, verbatim
+          (commit <span class="mono">e8db274</span>, run 2026-10-30 on an Apple M5 laptop; parallel runs, so the times are indicative only). Together they pass
           100% of the release’s blockchain-test fixtures from Byzantium to BPO2 — 8,660 files, 73,345 cases,
           including every transition between two forks in that range — with zero expected failures. Per-lane counts are in Table 1.<sup class="fn"><a href="#fn3">3</a></sup></p>
         <div class="pills">
