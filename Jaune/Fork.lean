@@ -1616,7 +1616,7 @@ def Fork.ruleSet : Fork → ForkRules
   | .bpo2 => bpo2Rules
   | .amsterdam => amsterdamRules
 
-/-- Delegation is disabled on every pre-Prague rule set, including refused forks. -/
+/-- Delegation is disabled on every pre-Prague rule set. -/
 theorem Fork.ruleSet_delegationEnabled (f : Fork) :
     f.ruleSet.delegationEnabled = (match f with
       | .prague | .osaka | .bpo1 | .bpo2 | .amsterdam => true
@@ -1627,7 +1627,7 @@ theorem Fork.ruleSet_delegationEnabled (f : Fork) :
 
 This is the theorem the rest of the tree lives off. Because `BenvStat` carries
 a `Fork` and derives its rules through `Fork.ruleSet`, every machine's rule set
-is one of these twelve records, so no statement about a machine needs a
+is one of these seventeen records, so no statement about a machine needs a
 `ForkRules.Valid` premise: `BenvStat.rules_valid`, `Sevm.rules_valid` and
 `Evm.rules_valid` in `Jaune/Machine.lean` are one-line corollaries.
 
