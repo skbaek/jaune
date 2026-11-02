@@ -165,9 +165,9 @@ Synthetic EIP-1283 `Constantinople` is fixture-only: Jaune can execute its
 fixtures, but both `t8n` and the pinned target refuse that target label. There is no
 default fork and no fallback: an out-of-lane `--state.fork`, a missing one, an
 unrecognised flag, an unrecognised input field, and the RLP-string form of
-`txs` are each an explicit error with a non-zero exit. Tracing is not claimed,
-so `--trace`, its variants and `--opcode.count` are refused rather than
-ignored.
+`txs` are each an explicit error with a non-zero exit. `t8n` does not trace:
+`--trace`, its variants and `--opcode.count` are refused rather than ignored;
+tracing is the separate [`jaune-trace`](#tracing-an-execution).
 
 `lake exe jaune t8n --info` is the handshake: the version, the Lean toolchain,
 the fork lane, the modes, and the corpus and oracle pins, all read from
@@ -187,6 +187,18 @@ generator, and the registry of declared differences.
 comparison with EELS and Geth: two transition-tool emission divergences, why
 the ordinary fixture path did not expose them, their upstream filings, and the
 exact boundaries: no consensus impact, and no known fixture-corpus impact.
+
+## Tracing an execution
+
+`lake build jaune-trace` builds a separate tracer, outside `Jaune.lean`'s
+import closure. `.lake/build/bin/jaune-trace REQUEST.json OUTPUT_DIRECTORY`
+runs one explicitly identified message or signed transaction and writes its
+trace; `scripts/compare-traces.py` lines that trace up against another one,
+step by step, under the fields you select. For Geth, convert its call-frame
+trace with the [adapter](scripts/GETH_TRACE_ADAPTER.md) first. The comparison
+shows where two executions part ways; it does not name the Lean definition
+responsible. The request format, the message-versus-transaction boundary and
+worked examples are in [`scripts/TRACE_PRODUCTION.md`](scripts/TRACE_PRODUCTION.md).
 
 ## External test fixtures
 
