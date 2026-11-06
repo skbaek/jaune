@@ -353,6 +353,19 @@ def requireKnownFields (what : String) (j : Lean.Json) (known : List String) :
         s!"error : t8n {what} carries the unrecognised field {repr k}; \
            the recognised fields are {known}"
 
+/-- The refusal of a quantity too wide for the field carrying it. A bare
+`Nat.toUInt64` or `Nat.toB256` reduces modulo the width, which would run a
+different input with no error at all: a chain ID of `2^64 + 1` as chain 1. -/
+def outOfRangeText (label : String) (n bits : Nat) : String :=
+  s!"error : t8n {label} is {n}, which does not fit in {bits} bits; out-of-range \
+     input is refused, never reduced"
+
+/-- Refuse a quantity wider than the `bits` its field holds. Each narrowing of a
+wire quantity in this file follows one of these or `txRequireBits`, at the width
+the target holds it, and only where the target reads the field. -/
+def requireBits (label : String) (bits n : Nat) : IO Unit :=
+  IO.guard (n < 2 ^ bits) (outOfRangeText label n bits)
+
 def readNat (label : String) (v : Lean.Json) : IO Nat :=
   match v with
   | .str s => (hexToNat? s).toIO s!"error : t8n {label} is not a hex quantity"
@@ -438,6 +451,9 @@ def readWithdrawal (v : Lean.Json) : IO Withdrawal := do
   let addressJson ← (field? v "address").toIO "error : t8n withdrawal is missing address"
   let address ← readAdr "withdrawal address" addressJson
   let amount ← natReq v "amount"
+  requireBits "withdrawal index" 64 index
+  requireBits "withdrawal validatorIndex" 64 validatorIndex
+  requireBits "withdrawal amount" 64 amount
   return {
     globalIndex := index.toUInt64,
     validatorIndex := validatorIndex.toUInt64,
@@ -513,7 +529,10 @@ def decodeEnv (rules : ForkRules) (stateTest : Bool) (j : Lean.Json) : IO T8nEnv
   let gasLimit ← natOr j "currentGasLimit" defaultGasLimit
   let number ← natOr j "currentNumber" defaultNumber
   let timestamp ← natOr j "currentTimestamp" defaultTimestamp
+  requireBits "env.currentTimestamp" 256 timestamp
   let prevRandao ← natOr j "currentRandom" 0
+  -- Before the merge `run` reads the difficulty instead, and so does the target.
+  if rules.pow.isNone then requireBits "env.currentRandom" 256 prevRandao
   -- `currentBaseFee` if given, else the target's parent derivation. Before
   -- London no base fee exists and none is read: the target's
   -- `_resolve_base_fee_per_gas` returns `None` when the fork lacks
@@ -591,6 +610,8 @@ def decodeEnv (rules : ForkRules) (stateTest : Bool) (j : Lean.Json) : IO T8nEnv
       let items ← v.toIoList
       items.mapM readWithdrawal
   let slotNumber ← natOr j "slotNumber" 0
+  -- A fork without the slot number reads nothing from this field.
+  if rules.header.slotNumber then requireBits "env.slotNumber" 64 slotNumber
   return {
     coinbase := coinbase, gasLimit := gasLimit, number := number,
     timestamp := timestamp, prevRandao := prevRandao.toB256,
@@ -617,15 +638,22 @@ inductive TxParseError : Type
   | badField (name : String)
   | unsupportedType (ty : Nat)
   -- A shape that is *representable* in the target's transaction classes and
-  -- not in Jaune's, and which every fork on this lane rejects anyway. A
-  -- type-3 or type-4 transaction with no receiver is the whole of this case:
+  -- not in Jaune's, and which every fork on this lane rejects anyway. There are
+  -- two. A type-3 or type-4 transaction with no receiver:
   -- `TxType.three`/`.four` carry a mandatory `Adr`, so the tuple cannot be
   -- built, while the target builds it and rejects it one step later inside
   -- `check_transaction`. Both arrive at the same official identity, and this
   -- constructor is what keeps that true -- the reason it carries is the very
   -- one Jaune's own RLP decoder raises for the same shape
-  -- (`Transaction.lean`, the type-3 receiver check).
+  -- (`Transaction.lean`, the type-3 receiver check). And a nonce of `2^64` or
+  -- more: `Tx.nonce` is 64 bits, while the target holds it in `U256` and raises
+  -- `NonceOverflowError` from every fork's `validate_transaction`.
   | validation (reason : TxValidationError)
+  -- A quantity the target's own field type cannot hold. Its constructor raises
+  -- `OverflowError`, which no transaction handler catches and which ends the
+  -- whole run, so this is never a rejection: `refuseOutOfRange` turns it into
+  -- the same non-zero exit before any transaction executes.
+  | outOfRange (field : String) (n bits : Nat)
 
 def TxParseError.render : TxParseError → String
   | .notObject => "JauneT8n.TX_PARSE_NOT_AN_OBJECT"
@@ -637,8 +665,13 @@ def TxParseError.render : TxParseError → String
     match FixtureException.ofTxValidationError reason with
     | some e => e.toString
     | none => "JauneT8n.TX_PARSE_UNMAPPED: " ++ reason.render
+  | .outOfRange n _ _ => "JauneT8n.TX_PARSE_OUT_OF_RANGE: " ++ n
 
 abbrev TxParse := Except TxParseError
+
+/-- `requireBits` for a transaction field, on the typed channel. -/
+def txRequireBits (field : String) (bits n : Nat) : TxParse Unit :=
+  if n < 2 ^ bits then .ok () else .error (.outOfRange field n bits)
 
 def txKnownFields : List String :=
   [ "type", "chainId", "nonce", "gasPrice", "maxPriorityFeePerGas",
@@ -723,6 +756,10 @@ def txAuths (j : Lean.Json) : TxParse (List Auth) :=
         | _, _ => .error (.missingField "authorizationList.v")
       let r ← txNatOr it "r" 0
       let s ← txNatOr it "s" 0
+      txRequireBits "authorizationList.chainId" 256 chainId
+      txRequireBits "authorizationList.nonce" 64 nonce
+      txRequireBits "authorizationList.r" 256 r
+      txRequireBits "authorizationList.s" 256 s
       .ok {
         chainId := chainId.toB256, address := address, nonce := nonce.toUInt64,
         yParity := yParity, r := r.toB256, s := s.toB256
@@ -763,15 +800,18 @@ def decodeTx (j : Lean.Json) : TxParse Tx := do
       let gasPrice ← txNat j "gasPrice"
       .ok (.zero gasPrice receiver)
     | 1 => do
+      txRequireBits "chainId" 64 chainId
       let gasPrice ← txNat j "gasPrice"
       let al ← txAccessList j
       .ok (.one chainId.toUInt64 gasPrice receiver al)
     | 2 => do
+      txRequireBits "chainId" 64 chainId
       let maxPriorityFee ← txNat j "maxPriorityFeePerGas"
       let maxFee ← txNat j "maxFeePerGas"
       let al ← txAccessList j
       .ok (.two chainId.toUInt64 maxPriorityFee maxFee receiver al)
     | 3 => do
+      txRequireBits "chainId" 64 chainId
       let maxPriorityFee ← txNat j "maxPriorityFeePerGas"
       let maxFee ← txNat j "maxFeePerGas"
       let al ← txAccessList j
@@ -784,6 +824,7 @@ def decodeTx (j : Lean.Json) : TxParse Tx := do
       | some dest =>
         .ok (.three chainId.toUInt64 maxPriorityFee maxFee dest al maxBlobFee hashes)
     | 4 => do
+      txRequireBits "chainId" 64 chainId
       let maxPriorityFee ← txNat j "maxPriorityFeePerGas"
       let maxFee ← txNat j "maxFeePerGas"
       let al ← txAccessList j
@@ -794,6 +835,11 @@ def decodeTx (j : Lean.Json) : TxParse Tx := do
           (.text "type-4 transactions cannot create contracts")))
       | some dest => .ok (.four chainId.toUInt64 maxPriorityFee maxFee dest al auths)
     | n => .error (.unsupportedType n)
+  txRequireBits "nonce" 256 nonce
+  txRequireBits "r" 256 r
+  txRequireBits "s" 256 s
+  if 2 ^ 64 ≤ nonce then
+    .error (.validation (.nonceIsMax (.text "transaction nonce is at least 2^64")))
   .ok {
     nonce := nonce.toUInt64, gas := gas, value := value, data := data,
     v := v, r := r.toB256.toBytes, s := s.toB256.toBytes, type := txType
@@ -811,6 +857,14 @@ def decodeTxs (j : Lean.Json) : IO (List (TxParse Tx)) :=
       "error : RLP-encoded `txs` input is not supported by this t8n entry \
        point; provide a JSON array instead"
   | _ => IO.throw "error : t8n `txs` input must be a JSON array"
+
+/-- End the run on the first selected transaction holding a quantity too wide
+for its field. Under `--state-test` that is only the first transaction, the only
+one either tool looks at. -/
+def refuseOutOfRange (txs : List (TxParse Tx)) : IO Unit :=
+  for ⟨i, tx⟩ in txs.putIndex do
+    if let .error (.outOfRange field n bits) := tx then
+      IO.throw (outOfRangeText s!"txs[{i}].{field}" n bits)
 
 ----------------- THE TRANSITION ------------------
 
@@ -882,7 +936,8 @@ def runStateTest (benv : Benv) (txs : List (TxParse Tx)) :
 stake nothing is paid, whatever the flag says; under proof of work an absent
 flag is the fork's `BLOCK_REWARD`, `-1` is the target's "skip block rewards"
 sentinel, and any other non-negative value is paid as given. A negative value
-other than `-1` is refused: the target's `U256` cannot hold it. -/
+other than `-1` is refused, and so is one of `2^256` or more: the target's `U256`
+cannot hold either. -/
 def resolveReward (rules : ForkRules) (stateReward : Option Int) :
     Except String (Option Nat) :=
   match rules.pow with
@@ -892,6 +947,7 @@ def resolveReward (rules : ForkRules) (stateReward : Option Int) :
     | none => .ok (some pow.blockReward)
     | some r =>
       if r = -1 then .ok none
+      else if 2 ^ 256 ≤ r then .error (outOfRangeText "--state.reward" r.toNat 256)
       else if 0 ≤ r then .ok (some r.toNat)
       else .error s!"error : --state.reward {r} is negative and not the -1 \
         sentinel; the block reward is a U256"
@@ -1206,6 +1262,9 @@ private def rewardBalances (fork : Fork) (reward : Option Nat) :
 #guard resolveReward (Fork.ruleSet .byzantium) (some (-1)) = .ok none
 #guard resolveReward (Fork.ruleSet .byzantium) (some 5) = .ok (some 5)
 #guard (resolveReward (Fork.ruleSet .byzantium) (some (-2))).toOption.isNone
+#guard resolveReward (Fork.ruleSet .byzantium) (some (2 ^ 256 - 1)) = .ok (some (2 ^ 256 - 1))
+#guard (resolveReward (Fork.ruleSet .byzantium) (some (2 ^ 256))).toOption.isNone
+#guard resolveReward pragueRules (some (2 ^ 256)) = .ok none
 #guard resolveReward pragueRules none = .ok none
 #guard resolveReward pragueRules (some 5) = .ok none
 #guard resolveReward (Fork.ruleSet .paris) none = .ok none
@@ -1486,7 +1545,7 @@ structure Opts : Type where
   outputBody : String := ""
   outputBasedir : String := "."
   forkLabel : String := ""
-  chainId : Nat := 1
+  chainId : UInt64 := 1
   /-- `--state.reward`, as given; `resolveReward` reads it. -/
   reward : Option Int := none
   stateTest : Bool := false
@@ -1523,7 +1582,8 @@ def parseOpts : Opts → List String → IO Opts
   | o, "--state.fork" :: v :: rest => parseOpts {o with forkLabel := v} rest
   | o, "--state.chainid" :: v :: rest => do
     let some n := v.toNat? | IO.throw s!"error : --state.chainid expects a number, got {repr v}"
-    parseOpts {o with chainId := n} rest
+    requireBits "--state.chainid" 64 n
+    parseOpts {o with chainId := n.toUInt64} rest
   -- Read, and consumed only under proof of work (`resolveReward`): the
   -- target pays block rewards only when the fork is not proof-of-stake, so
   -- under every fork this build runs today the value cannot change the
@@ -1625,8 +1685,9 @@ def printInfo : IO Unit := do
 /-- `jaune t8n`.
 
 Unsupported input fails closed at every point: an out-of-lane fork, an
-unrecognised flag, an unrecognised input field, and the RLP `txs` string form
-are all errors with a non-zero exit and no fallback. -/
+unrecognised flag, an unrecognised input field, a quantity too wide for its
+field, and the RLP `txs` string form are all errors with a non-zero exit and no
+fallback. -/
 def run (args : List String) : IO Unit := do
   let o ← parseOpts {} (normalizeArgs args)
   -- The fork lane on its own, on one line. This is what a framework wrapper
@@ -1678,12 +1739,13 @@ def run (args : List String) : IO Unit := do
       "error : t8n env.ommers has a delta above 8; the target's reward step \
        computes 8 - delta in U256 and fails"
   let txs ← decodeTxs txsJsonIn
+  refuseOutOfRange (if o.stateTest then txs.take 1 else txs)
   let benv : Benv := {
     state := preState,
     createdAccounts := .emptyWithCapacity,
     stat := {
       fork := f,
-      chainId := o.chainId.toUInt64,
+      chainId := o.chainId,
       origState := preState,
       blockGasLimit := env.gasLimit,
       blockHashes := env.blockHashes,
@@ -1749,6 +1811,9 @@ emits. Options may be spelled --flag=value or --flag value.
                          default and no fallback.
   --state-test           apply exactly one transaction with no system
                          operations, no withdrawals and no requests.
+  --state.chainid <n>    the chain ID, default 1. Like every quantity read
+                         here, it is refused if too wide for its field,
+                         never reduced.
   --state.reward <n>     the block reward, paid only under proof of work, as
                          the target pays it: absent is the fork's
                          BLOCK_REWARD, -1 skips rewards. Byzantium through

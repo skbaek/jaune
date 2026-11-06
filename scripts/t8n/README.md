@@ -204,6 +204,24 @@ adapter checkout is 247cc2ae. The two empty-ommer Muir cases retain their
 original unadapted provenance. This compatibility boundary is explicit,
 not an upstream CLI fix or a new semantic reference revision.
 
+## Out-of-range input
+
+A quantity too wide for the field carrying it is refused with a non-zero exit,
+never reduced modulo the width. The pinned target has the same effect: its
+`U64`/`U256` constructors raise `OverflowError`, which nothing catches. With no
+output to compare there is no golden, so these inputs are not corpus cases;
+`scripts/check-t8n-wide-input.py`, run by `scripts/check-cli.sh`, pins them by
+editing signed cases from this corpus. The widths are the target's, and two
+rules keep the refusal from reaching further than the target does:
+
+- A field nothing reads is not refused. That is `chainId` on a legacy
+  transaction, `slotNumber` before Amsterdam, `currentRandom` before the merge,
+  `--state.reward` under proof of stake, and every transaction after the first
+  under `--state-test`.
+- A transaction nonce from `2^64` to `2^256 - 1` is an ordinary rejection. The
+  target holds it in `U256` and raises `NonceOverflowError`; `Tx.nonce` is 64
+  bits, so Jaune rejects it at parse with the same `NONCE_IS_MAX` identity.
+
 ## `deviations.json`
 
 The registry of every declared difference between `jaune t8n` and the target on

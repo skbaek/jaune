@@ -596,6 +596,13 @@ if ! python3 "$SCRIPT_DIR/check-expectation-fields.py" --binary "$BIN"; then
   fail "expectation-field ingress: focused compiled controls failed"
 fi
 
+# `jaune t8n` refuses a quantity too wide for its field rather than reducing it
+# modulo the width. The helper edits signed corpus cases and owns its temp files.
+CHECKS=$((CHECKS + 1))
+if ! python3 "$SCRIPT_DIR/check-t8n-wide-input.py" --binary "$BIN"; then
+  fail "t8n wide input: a quantity was reduced, or the refusal overreached"
+fi
+
 # ----------------------------------------------------------------- verdict --
 
 if [ "$FAILS" -ne 0 ]; then
@@ -603,5 +610,5 @@ if [ "$FAILS" -ne 0 ]; then
   exit 1
 fi
 
-echo "OK — cli: $CHECKS checks; fixture refusals, the Amsterdam and Berlin-through-Cancun admissions, the rule-data printer, and the t8n handshake hold"
+echo "OK — cli: $CHECKS checks; fixture refusals, the Amsterdam and Berlin-through-Cancun admissions, the rule-data printer, the t8n handshake and its wide-input refusals hold"
 exit 0
