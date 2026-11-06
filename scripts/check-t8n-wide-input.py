@@ -14,6 +14,14 @@ on the same edits, field by field:
 
 The last two kinds keep the refusal from overreaching: a value that fits, a
 field a fork never reads and a transaction `--state-test` never selects all run.
+Three refused rows go further than the target, on purpose. It fails on a wide
+`currentGasLimit`, `currentNumber` or `currentDifficulty` only when a transaction
+runs the opcode pushing it, and Jaune refuses them before executing anything.
+
+No row reads the blob base fee at a large excess. `fakeExpAux` retains every
+accumulator, so that exhausts a host's memory within seconds: `currentExcessBlobGas`
+of 2^64 + 5 under BLOBBASEFEE reached 40 GiB. Each row still runs under
+`RSS_BUDGET`, because a regression must fail here and not take the host down.
 Needs the built binary and the committed corpus, and no reference install.
 """
 import argparse
@@ -23,9 +31,11 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'scripts'))
+from memory_probe_budget import sample_rss_bytes  # noqa: E402
 from t8n_inputs import materialize_alloc  # noqa: E402
 
 CASES = ROOT / 'scripts' / 't8n' / 'cases'
@@ -40,6 +50,8 @@ BERLIN = 'hist-transfer-berlin'
 
 W64 = 2 ** 64
 W256 = 2 ** 256
+RSS_BUDGET = 2 ** 30
+TIMEOUT_SECONDS = 120
 
 
 def refused(label, bits, n):
@@ -75,6 +87,14 @@ def auth(field, value):
 
 def env(field, value):
     def edit(doc):
+        doc['env'][field] = hex(value)
+    return edit
+
+
+def derived(field, value):
+    """Make `env` derive the excess blob gas from a parent field."""
+    def edit(doc):
+        del doc['env']['currentExcessBlobGas']
         doc['env'][field] = hex(value)
     return edit
 
@@ -115,6 +135,18 @@ ROWS = [
     ('currentRandom 2^256 + 1, read', PRAGUE_BLOCK, env('currentRandom', W256 + 1), {},
      refused('env.currentRandom', 256, W256 + 1)),
     ('slotNumber 2^64 + 1, read', TYPE2, env('slotNumber', W64 + 1), {}, refused('env.slotNumber', 64, W64 + 1)),
+    ('currentExcessBlobGas 2^64', LEGACY, env('currentExcessBlobGas', W64), {},
+     refused('env.currentExcessBlobGas', 64, W64)),
+    ('parentExcessBlobGas 2^64', LEGACY, derived('parentExcessBlobGas', W64), {},
+     refused('env.parentExcessBlobGas', 64, W64)),
+    ('parentBlobGasUsed 2^64', LEGACY, derived('parentBlobGasUsed', W64), {},
+     refused('env.parentBlobGasUsed', 64, W64)),
+    ('currentGasLimit 2^256 + 5', LEGACY, env('currentGasLimit', W256 + 5), {},
+     refused('env.currentGasLimit', 256, W256 + 5)),
+    ('currentNumber 2^256 + 5', LEGACY, env('currentNumber', W256 + 5), {},
+     refused('env.currentNumber', 256, W256 + 5)),
+    ('currentDifficulty 2^256 + 5, read', BERLIN, env('currentDifficulty', W256 + 5), {},
+     refused('env.currentDifficulty', 256, W256 + 5)),
     ('withdrawal index 2^64 + 1', WITHDRAWALS, withdrawal('index', W64 + 1), {},
      refused('withdrawal index', 64, W64 + 1)),
     ('withdrawal validatorIndex 2^64 + 1', WITHDRAWALS, withdrawal('validatorIndex', W64 + 1), {},
@@ -135,9 +167,15 @@ ROWS = [
     ('withdrawals control', WITHDRAWALS, None, {}, SAME_ROOT),
     ('currentTimestamp 2^256 - 1', TYPE2, env('currentTimestamp', W256 - 1), {}, SAME_ROOT),
     ('slotNumber 2^64 - 1', TYPE2, env('slotNumber', W64 - 1), {}, SAME_ROOT),
+    ('currentExcessBlobGas 2^64 - 1', LEGACY, env('currentExcessBlobGas', W64 - 1), {}, SAME_ROOT),
+    ('currentGasLimit 2^256 - 1', LEGACY, env('currentGasLimit', W256 - 1), {}, SAME_ROOT),
+    ('currentNumber 2^256 - 1', LEGACY, env('currentNumber', W256 - 1), {}, SAME_ROOT),
+    ('currentDifficulty 2^256 - 1, read', BERLIN, env('currentDifficulty', W256 - 1), {}, SAME_ROOT),
     ('legacy chainId 2^64 + 1, unread', LEGACY, tx('chainId', W64 + 1), {}, SAME_ROOT),
     ('slotNumber 2^64 + 1, before Amsterdam', PRAGUE_BLOCK, env('slotNumber', W64 + 1), {}, SAME_ROOT),
     ('currentRandom 2^256 + 1, before the merge', BERLIN, env('currentRandom', W256 + 1), {}, SAME_ROOT),
+    ('currentDifficulty 2^256 + 5, after the merge', LEGACY, env('currentDifficulty', W256 + 5), {}, SAME_ROOT),
+    ('currentExcessBlobGas 2^64, before Cancun', BERLIN, env('currentExcessBlobGas', W64), {}, SAME_ROOT),
     ('--state.reward 2^256 + 1, proof of stake', LEGACY, None, {'reward': W256 + 1}, SAME_ROOT),
     ('second transaction, --state-test', TYPE2, second_tx('chainId', W64 + 1), {}, SAME_ROOT),
 ]
@@ -165,9 +203,28 @@ def run_row(binary, case, edit, overrides, work):
             f'--output.basedir={work}']
     if spec['mode'] == 'state-test':
         args.append('--state-test')
-    process = subprocess.run(args, capture_output=True, text=True)
+    process, over = run_bounded(args)
     result = work / 'result.json'
-    return process, json.loads(result.read_text()) if result.exists() else None
+    return process, json.loads(result.read_text()) if result.exists() else None, over
+
+
+def run_bounded(args):
+    """The finished process, and why the watchdog killed it, if it did."""
+    process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    started = time.monotonic()
+    over = None
+    while over is None and process.poll() is None:
+        rss = sample_rss_bytes(process.pid)
+        if rss is not None and rss > RSS_BUDGET:
+            over = f'killed above the {RSS_BUDGET}-byte resident budget'
+        elif time.monotonic() - started > TIMEOUT_SECONDS:
+            over = f'killed after {TIMEOUT_SECONDS}s'
+        else:
+            time.sleep(0.02)
+    if over is not None:
+        process.kill()
+    stdout, stderr = process.communicate()
+    return subprocess.CompletedProcess(args, process.returncode, stdout, stderr), over
 
 
 def verdict(row, process, result):
@@ -197,8 +254,8 @@ def main():
     failures = 0
     for row in ROWS:
         with tempfile.TemporaryDirectory() as tmp:
-            process, result = run_row(binary, row[1], row[2], row[3], Path(tmp))
-        reason = verdict(row, process, result)
+            process, result, over = run_row(binary, row[1], row[2], row[3], Path(tmp))
+        reason = over or verdict(row, process, result)
         if reason is not None:
             failures += 1
             print(f'T8N WIDE — {row[0]}: {reason}')

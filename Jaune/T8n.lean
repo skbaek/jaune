@@ -530,6 +530,11 @@ def decodeEnv (rules : ForkRules) (stateTest : Bool) (j : Lean.Json) : IO T8nEnv
   let number ← natOr j "currentNumber" defaultNumber
   let timestamp ← natOr j "currentTimestamp" defaultTimestamp
   requireBits "env.currentTimestamp" 256 timestamp
+  -- `GASLIMIT` and `NUMBER` push these. The target fails only when a transaction
+  -- runs one, which a frontend cannot know before executing; `Benv` keeps them as
+  -- `Nat`, so refusing here is the only way they are never pushed reduced.
+  requireBits "env.currentGasLimit" 256 gasLimit
+  requireBits "env.currentNumber" 256 number
   let prevRandao ← natOr j "currentRandom" 0
   -- Before the merge `run` reads the difficulty instead, and so does the target.
   if rules.pow.isNone then requireBits "env.currentRandom" 256 prevRandao
@@ -573,15 +578,26 @@ def decodeEnv (rules : ForkRules) (stateTest : Bool) (j : Lean.Json) : IO T8nEnv
             | some v => readB256 "env.parentUncleHash" v
           pure (calculateBlockDifficulty pow.bombDelay number timestamp
             parentTimestamp parentDifficulty (parentUncleHash != emptyOmmerHash))
+  -- `DIFFICULTY` pushes it before the merge, as `GASLIMIT` pushes its field above;
+  -- after the merge nothing reads it.
+  if rules.pow.isSome then requireBits "env.currentDifficulty" 256 difficulty
   -- `currentExcessBlobGas` if given, else the target's parent derivation,
   -- which feeds `calculate_excess_blob_gas` a header carrying only the three
-  -- parent fields it reads.
+  -- parent fields it reads. The target holds all of these in `U64`, from Cancun.
+  -- Past that width this is not only a reduction: `calculateBlobGasPrice` is
+  -- `fakeExpAux`, whose accumulator would run the host out of memory.
   let excessBlobGas ←
     match field? j "currentExcessBlobGas" with
-    | some v => readNat "env.currentExcessBlobGas" v
+    | some v => do
+      let excessBlobGas ← readNat "env.currentExcessBlobGas" v
+      if rules.header.blobGas then requireBits "env.currentExcessBlobGas" 64 excessBlobGas
+      pure excessBlobGas
     | none => do
       let parentBlobGasUsed ← natOr j "parentBlobGasUsed" 0
       let parentExcessBlobGas ← natOr j "parentExcessBlobGas" 0
+      if rules.header.blobGas then
+        requireBits "env.parentBlobGasUsed" 64 parentBlobGasUsed
+        requireBits "env.parentExcessBlobGas" 64 parentExcessBlobGas
       let parentBaseFee ← natOr j "parentBaseFee" 0
       let parentHeader : Header :=
         { parentHash := 0, ommersHash := 0, coinbase := coinbase, stateRoot := 0,

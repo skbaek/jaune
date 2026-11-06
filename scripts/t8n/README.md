@@ -222,6 +222,17 @@ rules keep the refusal from reaching further than the target does:
   target holds it in `U256` and raises `NonceOverflowError`; `Tx.nonce` is 64
   bits, so Jaune rejects it at parse with the same `NONCE_IS_MAX` identity.
 
+One rule goes further than the target. It fails on a wide `currentGasLimit`,
+`currentNumber` or pre-merge `currentDifficulty` only when a transaction runs the
+opcode pushing it. Jaune refuses them at parse, since a frontend cannot know that
+before executing and the alternative is pushing the value reduced.
+
+The width check does not bound the blob base fee. `fakeExpAux` retains every
+accumulator, so a value that fits can still exhaust memory: a
+`currentExcessBlobGas` of `2^40` under `BLOBBASEFEE`, or a `parentExcessBlobGas`
+of `2^40` at Osaka with no opcode at all. Run such an input only under a memory
+bound.
+
 ## `deviations.json`
 
 The registry of every declared difference between `jaune t8n` and the target on
