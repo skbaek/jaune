@@ -1372,10 +1372,35 @@ def checkTransactionAuthorizationList (tx : Tx) : Except TxValidationError Unit 
     .error <| .emptyAuthorizationList <| .text "empty authorization list"
   | _ => .ok ()
 
+/-- A legacy `v` that encodes a chain identifier wider than 64 bits never names
+the chain: sender recovery refuses it as a bad signature. -/
+theorem recoverSender_error_of_wide_legacy_v (chainId : UInt64) (tx : Tx)
+    {gasPrice : Nat} {receiver : Option Adr}
+    (htype : tx.type = .zero gasPrice receiver) (hwide : 2 ^ 64 ≤ (tx.v - 35) / 2) :
+    ∃ d, recoverSender chainId tx = .error (.invalidSignature d) := by
+  have hc := chainId.toNat_lt_size
+  have hsize : UInt64.size = 2 ^ 64 := rfl
+  have h1 : tx.v ≠ 27 ∧ tx.v ≠ 28 := by omega
+  have h2 : ¬ (tx.v = 35 + chainId.toNat * 2 ∨ tx.v = 36 + chainId.toNat * 2) := by omega
+  unfold recoverSender
+  simp only [bind, Except.bind, htype]
+  split
+  · exact ⟨_, rfl⟩
+  · split
+    · exact ⟨_, rfl⟩
+    · cases hs : tx.signingHash with
+      | none => exact ⟨_, rfl⟩
+      | some hash =>
+        simp [Option.toExcept, h1, h2, Except.assert]
+
+/-- EIP-155 chain check. A legacy `v` below 35 or encoding a chain identifier
+wider than 64 bits is left to `recoverSender`, which refuses it as a bad
+signature (`recoverSender_error_of_wide_legacy_v`), the pinned `chain_id`'s
+`InvalidSignatureError("bad v")`. -/
 def checkTransactionChainId (benv : Benv) (tx : Tx) : Except TxValidationError Unit :=
   match tx.type with
   | .zero _ _ =>
-    if tx.v < 35 || (tx.v - 35) / 2 = benv.stat.chainId.toNat then .ok ()
+    if tx.v < 35 || 2 ^ 64 ≤ (tx.v - 35) / 2 || (tx.v - 35) / 2 = benv.stat.chainId.toNat then .ok ()
     else .error <| .invalidChainId <| .text
       s!"transaction chain ID = {(tx.v - 35) / 2}"
   | .one chainId _ _ _
