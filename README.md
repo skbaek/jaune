@@ -303,7 +303,7 @@ requirements.
 - **Frozen arithmetic/vector oracle:** [execution-specs](https://github.com/ethereum/execution-specs)
   `mainnet` at commit
   [`4198…7694`](https://github.com/ethereum/execution-specs/tree/4198b9c5996713b268aed602739d5aa40e277694)
-  (as of 2025-09-19).
+  (committed 2025-07-24).
 - **Pinned fixture corpora** — never committed here; provisioned by
   `scripts/bootstrap_*.py`, with provenance in
   [`scripts/sources.json`](scripts/sources.json) and

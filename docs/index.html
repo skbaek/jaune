@@ -553,7 +553,7 @@ footer a:hover{color:var(--ink)}
 <span class="c">-- evidence, so a hand-built Block cannot be certified.</span>
 <span class="k">def</span> <span class="d">CanonicalBlock.ofRlp?</span> (raw : <span class="t">Bytes</span>) : <span class="t">Option</span> <span class="t">CanonicalBlock</span></pre>
         </div>
-        <p class="cap"><b>Fig. 2</b> — sixteen typed error ADTs replaced the strings that used to
+        <p class="cap"><b>Fig. 2</b> — typed error ADTs replaced the strings that used to
           discriminate semantic outcomes. <span class="mono">String</span> survives only at the
           external parsing, rendering, and fixture-compatibility boundary — 57 exact-match
           allowlist rows across the whole gate, with the pending-defect budget held at zero and
@@ -1598,7 +1598,7 @@ footer a:hover{color:var(--ink)}
         <li id="fn1">Successor in spirit, not in office. Jaune is an independent project with no
           affiliation to the Ethereum Foundation. Ethereum’s canonical specification is
           <span class="mono">execution-specs</span>, which Jaune mirrors at pinned commit
-          <span class="mono">4198b9c5</span> (mainnet branch, 2025-09-19) and tests against. Amsterdam,
+          <span class="mono">4198b9c5</span> (on the <span class="mono">mainnet</span> branch, committed 2025-07-24) and tests against. Amsterdam,
           which that commit predates, follows <span class="mono">execution-specs</span>
           <span class="mono">1562e2f</span>, the commit the <span class="mono">tests@v21.0.1</span>
           fixtures were filled from, and every Amsterdam constant is checked against it.
@@ -1609,7 +1609,7 @@ footer a:hover{color:var(--ink)}
         <li id="fn2">Jaune was previously published under the name <span class="mono">ELeVM</span>;
           the repository was renamed in July 2026 and old links redirect.</li>
         <li id="fn3">Figures on this page are drawn from committed reports, baselines, and benchmark
-          instruments in the repositories, current as of 2026-10-31; a figure that carries its own
+          instruments in the repositories, current as of 2026-11-06; a figure that carries its own
           date is the most recent committed measurement of it.
           Wall-clock numbers are same-machine, same-instrument measurements on a 10-core Apple M5;
           fixture counts are exact. The
