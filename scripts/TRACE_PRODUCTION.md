@@ -7,10 +7,10 @@ drivers carry kernel-checked execution erasure certificates to the existing
 public operations. The executable is a default build target and remains
 outside `Jaune.lean`'s import closure.
 
-Build through the host's owned wrapper, then run the binary directly:
+Build it, then run the binary directly:
 
 ```sh
-~/creme/scripts/creme lake-build jaune-execution-tracing-v1 -- jaune-trace
+lake build jaune-trace
 .lake/build/bin/jaune-trace request.json output
 python3 scripts/compare-traces.py output/trace.jsonl reference.jsonl \
   --run-id example --step-fields pc,op,depth,gas,gasCost,stack,memSize,refund \

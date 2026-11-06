@@ -492,7 +492,7 @@ def runRulesLiteralPrinter (label : String) : IO Unit := do
   .println (ForkRules.toGateJson f.ruleSet).pretty
 
 /-- `jaune --mainnet-schedule`: `mainnetChainConfig`'s activation criterion for
-every declared fork, refused forks included, as the constants gate compares it
+every declared fork, as the constants gate compares it
 against each EELS fork module's `FORK_CRITERIA` (`criterionGateJson`; `null`
 for a fork the schedule does not activate). Read from the schedule itself, so
 the printer reports what the build activates rather than a second copy. -/
