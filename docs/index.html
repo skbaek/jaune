@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Jaune — a Yellow Paper you can run</title>
-<meta name="description" content="Jaune is an executable formal specification of the Ethereum Virtual Machine in Lean 4 — a spiritual successor to the Yellow Paper that passes 100% of the execution-specs tests@v21.0.1 blockchain-test fixtures from Byzantium through BPO2 (8,660/8,660 files, 73,345/73,345 cases), runs the unscheduled Amsterdam snapshot against the same release, and supports machine-checked proof, demonstrated by the sibling Blanc verification stack — theorems about deployed bytecode and a native language with a verified compiler — among them a port of Lido's deployed CircuitBreaker, its Registry integrity proved from an official-parameters deployment to every state reachable along a valid configured chain, and the eth2 deposit contract, its Merkle root carried through twelve SHA-256 precompile crossings to every admitted future.">
+<meta name="description" content="Jaune is an executable formal specification of the Ethereum Virtual Machine in Lean 4 — a spiritual successor to the Yellow Paper that passes 100% of the execution-specs tests@v21.0.1 blockchain-test fixtures from Byzantium through BPO2 (8,660/8,660 files, 73,345/73,345 cases), runs the unscheduled Amsterdam snapshot against the same release, and supports machine-checked proof, demonstrated by the sibling Blanc verification stack — theorems about deployed bytecode and a native language with a verified compiler — among them, in Blanc's former contract corpus (archived at tag corpus-v1-20261105, outside Blanc's current library), a port of Lido's deployed CircuitBreaker, its Registry integrity proved from an official-parameters deployment to every state reachable along a valid configured chain, and the eth2 deposit contract, its Merkle root carried through twelve SHA-256 precompile crossings to every admitted future.">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Jaune — a Yellow Paper you can run">
 <meta property="og:description" content="An executable formal specification of the EVM in Lean 4: one artifact that is a specification, an interpreter that passes 100% of the tests@v21.0.1 blockchain-test fixtures from Byzantium through BPO2, and a proof subject.">
@@ -425,7 +425,7 @@ footer a:hover{color:var(--ink)}
       instruction rules ship in the library itself, with checked examples, a task-organized API guide,
       and exact axiom pins that the ordinary build enforces. The semantics is demonstrated strong enough for real verification: the
       sibling Blanc verification stack has carried contract invariants through it in its native
-      language — a WETH’s
+      language — in Blanc’s former contract corpus (archived at tag <a href="https://github.com/skbaek/blanc/tree/corpus-v1-20261105" style="text-decoration:underline;text-underline-offset:3px"><span class="mono">corpus-v1-20261105</span></a>, outside Blanc’s current library), a WETH’s
       solvency across scheduled fork activations, Registry integrity for a port of Lido’s deployed
       CircuitBreaker from an official-parameters deployment to every reachable state of a valid
       configured chain, and the eth2 deposit contract’s Merkle root through twelve SHA-256
@@ -1058,10 +1058,16 @@ footer a:hover{color:var(--ink)}
       Registry integrity: <em>the guardian’s book of authorizations stays coherent, whatever any
       contract it talks to does.</em>
     </p>
+    <p class="note" style="margin-top:16px">
+      This section describes Blanc’s former contract corpus (archived at tag <a href="https://github.com/skbaek/blanc/tree/corpus-v1-20261105" style="text-decoration:underline;text-underline-offset:3px"><span class="mono">corpus-v1-20261105</span></a>, outside Blanc’s
+      current library). Its theorem names, file paths and counts are those of the tag, dated 5 November 2026;
+      Blanc’s current library reads deployed bytecode and is described on
+      <a href="https://skbaek.github.io/blanc/" style="text-decoration:underline;text-underline-offset:3px">its own page</a>.
+    </p>
 
     <div class="thm" style="margin-top:34px">
       <span class="stamp">machine-checked</span>
-      <div class="head">Theorem (<span class="mono">chainUsing_preserves_registryStable</span>, Blanc/LidoCircuitBreakerHistoryChain.lean).</div>
+      <div class="head">Theorem (<span class="mono">chainUsing_preserves_registryStable</span>, <a href="https://github.com/skbaek/blanc/blob/corpus-v1-20261105/Blanc/LidoCircuitBreakerHistoryChain.lean">Blanc/LidoCircuitBreakerHistoryChain.lean</a> at the tag).</div>
       <p class="stmt">From any checkpoint whose state has the CircuitBreaker’s exact compiled
         runtime installed and Registry-coherent storage, every state reachable along a valid
         configured chain whose schedule selects only covered forks still does — with no premise
@@ -1133,7 +1139,7 @@ footer a:hover{color:var(--ink)}
         <div class="panel">
           <span class="tick">where it started, and where it went</span>
           <p class="dim" style="font-size:.94rem">
-            WETH was the first payment on this claim — 244 lines of Blanc compiling to 988 proved
+            WETH was the first payment on this claim — 262 lines of Blanc (<span class="mono">Weth.lean</span> at the tag) compiling to 988 proved
             bytes, its solvency (<em>the contract always holds enough ether to honour every
             balance</em>) carried to the same configured-chain altitude, across scheduled fork
             activations. The frontier then moved through a full 27-selector WETH10,
@@ -1162,9 +1168,10 @@ footer a:hover{color:var(--ink)}
           <p class="dim" style="font-size:.94rem">
             Blanc’s CI checks its whole library with one walk of Jaune’s from-scratch axiom
             walker, failing on anything beyond <span class="mono">propext</span>,
-            <span class="mono">Classical.choice</span>, and <span class="mono">Quot.sound</span>; its
-            <strong>1,105</strong> leaf results — theorems nothing else builds on, the CircuitBreaker
-            family’s history rungs among them — are all covered by that walk. The leaf review
+            <span class="mono">Classical.choice</span>, and <span class="mono">Quot.sound</span>; at the tag its
+            <strong>2,170</strong> leaf results — theorems nothing else builds on, the CircuitBreaker
+            family’s history rungs among them — were all covered by that walk, as are the
+            <strong>2,018</strong> of the current library. The leaf review
             ledger separately records the last review; the audit reports new or changed leaves.
             The history family’s
             own gate pins the exact headers of its public theorems, and the compile witness
@@ -1182,10 +1189,11 @@ footer a:hover{color:var(--ink)}
         <p class="note" style="margin-top:16px">
           The division of labour is exact: Jaune owns what the machine does; Blanc, the verification
           stack built on it, owns everything proved about particular contracts — bytecode read from
-          mainnet, and programs written in its native language with their compiler. The full
-          portfolio — the deployed artifacts, and the language’s ports from the WETH to the eth2 deposit contract and Lido’s CircuitBreaker, gateway,
-          and proxy, plus arithmetic études, each with an evidence page of its own — lives at
-          <a href="https://skbaek.github.io/blanc/" style="text-decoration:underline;text-underline-offset:3px">skbaek.github.io/blanc</a>.
+          mainnet, and programs written in its native language with their compiler. The current
+          portfolio — the deployed artifacts, each with an evidence page of its own — lives at
+          <a href="https://skbaek.github.io/blanc/" style="text-decoration:underline;text-underline-offset:3px">skbaek.github.io/blanc</a>;
+          the language’s former ports, from the WETH to the eth2 deposit contract and Lido’s CircuitBreaker, gateway,
+          and proxy, plus arithmetic études, are archived at tag <a href="https://github.com/skbaek/blanc/tree/corpus-v1-20261105" style="text-decoration:underline;text-underline-offset:3px"><span class="mono">corpus-v1-20261105</span></a>.
         </p>
       </div>
     </div>
@@ -1441,13 +1449,13 @@ footer a:hover{color:var(--ink)}
         <div class="meta"><span class="pill"><span class="d"></span>open direction</span></div>
         <h3>More contracts over the semantics</h3>
         <p>WETH was the existence proof, not the destination — and the sibling project has since
-          moved the frontier repeatedly: Blanc’s WETH10 exercises Jaune’s pipeline end to
+          moved the frontier repeatedly (in its former contract corpus, archived at tag <a href="https://github.com/skbaek/blanc/tree/corpus-v1-20261105" style="text-decoration:underline;text-underline-offset:3px"><span class="mono">corpus-v1-20261105</span></a>, outside Blanc’s current library): Blanc’s WETH10 exercised Jaune’s pipeline end to
           end, from a proved creation transaction through configured-chain reachability with a
-          future-redeemability flagship on top; its Lido CircuitBreaker port carries a deployed
+          future-redeemability flagship on top; its Lido CircuitBreaker port carried a deployed
           guardian’s Registry integrity from an official-parameters deployment to every reachable
-          future, over arbitrary hostile callees; its deposit-contract port crosses the SHA-256
+          future, over arbitrary hostile callees; its deposit-contract port crossed the SHA-256
           precompile — the one hash here that carries a FIPS 180-4 equivalence theorem — twelve
-          times per deposit; and its proxy and gateway ports are the first theorems about
+          times per deposit; and its proxy and gateway ports were the first theorems about
           delegation and about two verified contracts at once. Blanc’s results cover Prague
           through BPO2; Amsterdam coverage there is future work, as Blanc states. The open
           questions are which invariants justify their proof effort, how much block-level reasoning
@@ -1469,12 +1477,12 @@ footer a:hover{color:var(--ink)}
     <div class="grid3" style="margin-top:34px">
       <div class="aud">
         <h3>Proof engineers &amp; PL researchers</h3>
-        <p>A live, non-toy verification target: ~530,000 lines of Lean 4 across the sibling pair,
+        <p>A live, non-toy verification target: about 520,000 lines of Lean 4 across the sibling pair’s libraries (<span class="mono">Jaune.lean</span> and <span class="mono">Jaune/</span>, <span class="mono">Blanc.lean</span> and <span class="mono">Blanc/</span>, as counted on 2026-11-06),
           spanning an executable semantics, a verified compiler, and contract invariants proved to
           chain altitude — with well-posed open problems in representation choice, proof-exposure
           budgeting, and fork-parameterised reasoning. The sufficiency arc alone is a worked case
           study in retrofitting totality onto a large fueled interpreter.</p>
-        <div class="hook">start: API.md → Examples/Arithmetic.lean<br>then: Jaune/Sufficiency.lean → exec<br>and: Blanc/LidoCircuitBreakerHistoryChain.lean → the theorems of §6</div>
+        <div class="hook">start: API.md → Examples/Arithmetic.lean<br>then: Jaune/Sufficiency.lean → exec<br>and: <a href="https://github.com/skbaek/blanc/blob/corpus-v1-20261105/Blanc/LidoCircuitBreakerHistoryChain.lean">Blanc/LidoCircuitBreakerHistoryChain.lean</a> (at tag corpus-v1-20261105) → the theorems of §6</div>
       </div>
       <div class="aud">
         <h3>Protocol &amp; client engineers</h3>
@@ -1490,7 +1498,7 @@ footer a:hover{color:var(--ink)}
           counterexample; this is the other half — a machine-checked proof that, for a stated
           invariant and contract, no counterexample exists in any reachable state, under any schedule
           of the forks the proof covers.</p>
-        <div class="hook">Blanc/Weth.lean — 244 lines → 988 proved bytes<br>skbaek.github.io/blanc — the sibling’s own evidence page</div>
+        <div class="hook"><a href="https://github.com/skbaek/blanc/blob/corpus-v1-20261105/Blanc/Weth.lean">Blanc/Weth.lean</a> (at tag corpus-v1-20261105) — 262 lines → 988 proved bytes<br>skbaek.github.io/blanc — the sibling’s own evidence page</div>
       </div>
     </div>
   </div>

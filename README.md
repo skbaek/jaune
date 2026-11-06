@@ -22,10 +22,12 @@ current-mainnet lane (Prague through BPO2 plus three transitions, 4,968 files
 / 34,449 cases). The release's other fixture formats (`state_tests`, engine,
 sync and transaction tests) serve other consumers; the runner refuses them,
 so they are not part of this claim. Its semantics are demonstrated sufficient for real
-verification: a WETH implementation's solvency is proven to be preserved over
-every state reachable along a valid configured chain, including histories that
-cross scheduled fork activations, through a verified compiler, with no `sorry`
-and no `native_decide` in the trusted path. Jaune is MIT-licensed.
+verification: in Blanc's former contract corpus (archived at tag
+[`corpus-v1-20261105`](https://github.com/skbaek/blanc/tree/corpus-v1-20261105),
+outside Blanc's current library), a WETH implementation's solvency was proven
+to be preserved over every state reachable along a valid configured chain,
+including histories that cross scheduled fork activations, through a verified
+compiler, with no `sorry` and no `native_decide` in the trusted path. Jaune is MIT-licensed.
 
 Jaune was originally written from the Yellow Paper, then rebuilt on a pinned
 2025 execution-specs revision; later forks were implemented and checked
