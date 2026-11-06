@@ -375,7 +375,7 @@ footer a:hover{color:var(--ink)}
         <p class="lede">
           The Yellow Paper defined Ethereum in mathematics you could only read. Its living
           replacement is a program you can only run. <strong style="color:var(--ink)">Jaune</strong> is both
-          at once: forty thousand lines of Lean&nbsp;4 that state the execution layer precisely
+          at once: more than fifty thousand lines of Lean&nbsp;4 that state the execution layer precisely
           enough to prove theorems about — and compile into an interpreter that passes every blockchain-test fixture of the
           pinned <span class="mono">execution-specs</span> release from Byzantium to BPO2, fork by fork, case by case, and speaks the ecosystem’s standard
           <span class="mono">t8n</span> transition-tool interface.
@@ -555,7 +555,7 @@ footer a:hover{color:var(--ink)}
         </div>
         <p class="cap"><b>Fig. 2</b> — sixteen typed error ADTs replaced the strings that used to
           discriminate semantic outcomes. <span class="mono">String</span> survives only at the
-          external parsing, rendering, and fixture-compatibility boundary — 58 exact-match
+          external parsing, rendering, and fixture-compatibility boundary — 57 exact-match
           allowlist rows across the whole gate, with the pending-defect budget held at zero and
           shrink-only.</p>
       </div>
@@ -852,7 +852,7 @@ footer a:hover{color:var(--ink)}
       And since 2026-08 the interpreter also answers as a standard <span class="mono">t8n</span>
       transition tool: <span class="mono">scripts/check-t8n.sh</span> compares its complete output
       on 76 cases — 30 of them Amsterdam’s metering cases, 22 historical-fork cases, block-level access list included — against goldens from
-      the pinned <span class="mono">execution-specs</span>, with every normalization and deviation
+      its pinned conformance target (<span class="mono">execution-specs</span> <span class="mono">forks/bogota</span> <span class="mono">9154c29e</span>), with every normalization and deviation
       explicit and each case run twice for determinism. A three-way acceptance run against
       go-ethereum in 2026-08 found that in every registered divergence, Jaune matches its pinned
       conformance target.
@@ -1268,7 +1268,7 @@ footer a:hover{color:var(--ink)}
           locally, like the corpus suites — holds panics, raw bang operations, and stringly-typed
           semantic carriers to a shrink-only budget over the import closure; the ordinary build
           fails on any drift in the 53 pinned axiom sets; Blanc’s job checks its whole library, and so
-          its 1,105 leaf results, with one union axiom walk. Per push, two conformance gates that need nothing but the binary
+          its 2,018 leaf results, with one union axiom walk. Per push, two conformance gates that need nothing but the binary
           run beside them — <span class="mono">t8n</span> against its pinned goldens, and the word
           and hash primitives — in about a second, and a separate job installs Jaune into a fresh
           package through an exact Git dependency and verifies what it installed. The gates extend
@@ -1551,8 +1551,7 @@ footer a:hover{color:var(--ink)}
 <span class="p">$</span> scripts/check.sh</div>
         <p class="dim" style="font-size:.88rem;margin:14px 0 0">
           <span class="mono">check.sh</span> builds the library and runs the axiom audit — one walk
-          of the whole library, covering its 1,105 leaf results, the history rungs of §&nbsp;6 among
-          them; it exits non-zero on any axiom beyond the standard three, on
+          of the whole library, covering its 2,018 leaf results; it exits non-zero on any axiom beyond the standard three, on
           <span class="mono">sorryAx</span>, <span class="mono">ofReduceBool</span>, or
           <span class="mono">ofReduceNat</span>. No fixture corpus is needed: this side is proof,
           not testing.
@@ -1595,6 +1594,9 @@ footer a:hover{color:var(--ink)}
           which that commit predates, follows <span class="mono">execution-specs</span>
           <span class="mono">1562e2f</span>, the commit the <span class="mono">tests@v21.0.1</span>
           fixtures were filled from, and every Amsterdam constant is checked against it.
+          The <span class="mono">t8n</span> conformance target alone runs ahead of the fixture lanes, at
+          <span class="mono">forks/bogota</span> <span class="mono">9154c29e</span>, which descends from
+          <span class="mono">1562e2f</span>.
           <a href="#ref1">↩</a></li>
         <li id="fn2">Jaune was previously published under the name <span class="mono">ELeVM</span>;
           the repository was renamed in July 2026 and old links redirect.</li>
