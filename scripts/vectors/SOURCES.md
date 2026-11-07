@@ -35,72 +35,77 @@ network, disk, and runtime requirements above are available.
 
 ## Historical, mainnet and Amsterdam release lanes
 
-All three lanes use [`execution-specs` `tests@v21.0.1`](https://github.com/ethereum/execution-specs/releases/tag/tests%40v21.0.1),
-commit `1562e2f8b5cb1efda7e0d7c517f2dfb5742c0a43`. The official `fixtures.tar.gz`
-is 999,553,432 bytes, SHA-256
-`b9b14391ed1a625e4ca9a058c055d0eacd98a42b76c7a6127c640cdc2d3c9439`.
+All three lanes use [`execution-specs` `tests@v21.0.2`](https://github.com/ethereum/execution-specs/releases/tag/tests%40v21.0.2),
+commit `e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e`. The official `fixtures.tar.gz`
+is 939,189,561 bytes, SHA-256
+`e2fa7ea2ea516459f9ab92284b2927892f318f4e1f78ca802cb05a6c3b479ed9`.
 They share the versioned install directory by default and retain separate
 manifests, suite namespaces and environment overrides. The historical lane
 reads the default (mainnet) install; it has no bootstrap lane of its own.
 Together the historical and mainnet lanes pass 100% of the release's
-blockchain-test fixtures in [Byzantium, BPO2]: 8,660/8,660 files and
-73,345/73,345 cases.
+blockchain-test fixtures in [Byzantium, BPO2]: 73,686/73,686 cases and
+8,262/8,262 files. Compare releases by cases: upstream's v21.0.2 consolidated
+pre-allocation groups and call chains (ethereum/execution-specs#3758 and #3876),
+so a file count across releases measures packaging rather than coverage.
 
 ```sh
-python3 scripts/bootstrap_mainnet.py                 # ~/eest-mainnet-v21.0.1
+python3 scripts/bootstrap_mainnet.py                 # ~/eest-mainnet-v21.0.2
 python3 scripts/bootstrap_mainnet.py --lane amsterdam # same release/root
-python3 scripts/env_doctor.py --mainnet-root ~/eest-mainnet-v21.0.1 --mainnet-deep
-python3 scripts/env_doctor.py --amsterdam-root ~/eest-mainnet-v21.0.1 --amsterdam-deep
-python3 scripts/gen_mainnet_manifest.py --fixtures-root ~/eest-mainnet-v21.0.1/fixtures --check
-python3 scripts/gen_mainnet_manifest.py --lane historical --fixtures-root ~/eest-mainnet-v21.0.1/fixtures --check
-python3 scripts/gen_mainnet_manifest.py --lane amsterdam --fixtures-root ~/eest-mainnet-v21.0.1/fixtures --check
+python3 scripts/env_doctor.py --mainnet-root ~/eest-mainnet-v21.0.2 --mainnet-deep
+python3 scripts/env_doctor.py --amsterdam-root ~/eest-mainnet-v21.0.2 --amsterdam-deep
+python3 scripts/gen_mainnet_manifest.py --fixtures-root ~/eest-mainnet-v21.0.2/fixtures --check
+python3 scripts/gen_mainnet_manifest.py --lane historical --fixtures-root ~/eest-mainnet-v21.0.2/fixtures --check
+python3 scripts/gen_mainnet_manifest.py --lane amsterdam --fixtures-root ~/eest-mainnet-v21.0.2/fixtures --check
 ```
 
 Keep previous installations separate. Verification checks the archive digest,
 safe extraction and every extracted member against the archive. The release
 index records root hash
-`0xc9f9db837189f64011d8195b97fcaaa43f7d2456ebcae95ed6429b4919cf3a68`
-and 354,684 cases across all shipped fixture families. Only selected blockchain
+`0x84bfb6eb754557f49acb4f55ecbe72abc6ca495e20d3b18cabf74964c9207945`
+and 356,322 cases across all shipped fixture families. Only selected blockchain
 fixtures run here; unsupported labels and non-blockchain families remain
 inventoried. Never prune a verified release or hand-edit a generated manifest.
 
 | lane / suite | files | cases |
 |---|---:|---:|
-| historical / byzantium | 113 | 2,659 |
-| historical / constantinoplefix (Petersburg) | 151 | 2,856 |
-| historical / istanbul | 158 | 3,016 |
-| historical / berlin | 220 | 3,997 |
-| historical / london | 220 | 4,277 |
-| historical / paris | 224 | 4,299 |
-| historical / shanghai | 258 | 4,544 |
-| historical / cancun | 2,325 | 13,050 |
-| historical / hist-transitions | 23 | 198 |
-| historical / hist-smoke | 16 | 58 |
-| historical / hist-full | 3,692 | 38,896 |
-| mainnet / Prague | 2,506 | 16,790 |
-| mainnet / Osaka | 2,449 | 17,550 |
-| mainnet / transitions | 13 | 109 |
-| mainnet / full | 4,968 | 34,449 |
-| mainnet / smoke | 16 | 243 |
-| Amsterdam / static | 3,296 | 26,398 |
-| Amsterdam / transitions | 58 | 189 |
-| Amsterdam / smoke | 16 | 346 |
-| Amsterdam / full | 3,354 | 26,587 |
+| historical / byzantium | 116 | 2,717 |
+| historical / constantinoplefix (Petersburg) | 154 | 2,914 |
+| historical / istanbul | 161 | 3,074 |
+| historical / berlin | 224 | 4,079 |
+| historical / london | 224 | 4,359 |
+| historical / paris | 228 | 4,381 |
+| historical / shanghai | 262 | 4,626 |
+| historical / cancun | 2,157 | 12,875 |
+| historical / hist-transitions | 24 | 187 |
+| historical / hist-smoke | 16 | 122 |
+| historical / hist-full | 3,550 | 39,212 |
+| mainnet / Prague | 2,341 | 16,538 |
+| mainnet / Osaka | 2,333 | 17,441 |
+| mainnet / BPO1 | 11 | 190 |
+| mainnet / BPO2 | 11 | 190 |
+| mainnet / transitions | 16 | 115 |
+| mainnet / full | 4,712 | 34,474 |
+| mainnet / smoke | 16 | 34 |
+| Amsterdam / static | 3,180 | 26,349 |
+| Amsterdam / transitions | 59 | 193 |
+| Amsterdam / smoke | 16 | 85 |
+| Amsterdam / full | 3,239 | 26,542 |
 
 These are the generated inventories. Every historical and mainnet suite is
 strict all-PASS. Amsterdam's transition/full gates pass with the registered
 two-fixture correction `bal-header-format-v1`; the unmodified official archive
 reports two BAL-header exception-name findings, structurally invalid headers
 that Jaune also rejects under a different exception name (see
-[`../GATES.md`](../GATES.md#the-amsterdam-lane)). Static BPO1/BPO2 suites are
-empty and refused; their scheduled transitions are covered. Muir, Arrow and
-Gray Glacier and synthetic EIP-1283 Constantinople have no fixtures in the
-release; their empty historical suites are refused likewise. BPO3 and later
+[`../GATES.md`](../GATES.md#the-amsterdam-lane)). Static BPO1 and BPO2 fixtures
+first appear in this release; both suites run, inside `full`, and their
+scheduled transitions are covered too. Muir, Arrow and Gray Glacier and synthetic
+EIP-1283 Constantinople have no fixtures in the release; their empty historical
+suites are refused. BPO3 and later
 forks remain unsupported. A mistyped or empty `--dir` is refused, as is an
 on-disk subtree count that differs from its manifest.
 
 `conformance_target` uses the same release commit in a separate checkout at
-`~/execution-specs-t8n-v21.0.1`; its registered wrapper is carried at `9fc6c99c1`.
+`~/execution-specs-t8n-e27f097e`.
 An optional dedicated checkout may instead contain exactly the registered
 `ommer-reward-summary-cli-v1` adapter. The semantic base remains unchanged.
 `sources.json` registers its CLI path, pre/post Git blobs, mode, full-file

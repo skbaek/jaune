@@ -199,8 +199,8 @@ shapes for `env.ommers`. The eight nonempty-ommer cases therefore record the
 approved `ommer-reward-summary-cli-v1` adapter at its exact file/blob/hash
 identity. It removes reward tuples only from the copy passed to the typed
 Environment validator; the original raw reward-parser input remains intact.
-The semantic EELS base remains 1562e2f; the dedicated
-adapter checkout is 247cc2ae. The two empty-ommer Muir cases retain their
+The semantic EELS base is e27f097e; the dedicated
+adapter checkout is 1b0c5792. The two empty-ommer Muir cases retain their
 original unadapted provenance. This compatibility boundary is explicit,
 not an upstream CLI fix or a new semantic reference revision.
 

@@ -410,7 +410,7 @@ sibling path or symlink.
   revert/exceptional-halt settlement form is claimed here.
 - **What the theorems are about.** They are statements about Jaune's model.
   How faithfully that model follows each fork is evidence from testing, not
-  proof. Amsterdam support is a snapshot at `tests@v21.0.1` of a fork still
+  proof. Amsterdam support is a snapshot at `tests@v21.0.2` of a fork still
   unscheduled upstream, not final Amsterdam. See
   [README.md, Verification status](README.md#verification-status) and
   [TRUSTED.md](TRUSTED.md#testing-versus-proof).

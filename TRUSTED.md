@@ -321,8 +321,8 @@ this build can execute. A declared rule record or a fixture result does not
 turn this synthetic boundary into a mainnet or EELS-conformance claim.
 
 **The fixture corpora.** Jaune passes 100% of the blockchain-test fixtures
-of the `execution-specs` release `tests@v21.0.1` whose fork lies in
-[Byzantium, BPO2]: 8,660/8,660 files and 73,345/73,345 cases, the union of
+of the `execution-specs` release `tests@v21.0.2` whose fork lies in
+[Byzantium, BPO2]: 73,686/73,686 cases and 8,262/8,262 files, the union of
 the strict historical lane (`hist-full`) and the strict current-mainnet lane
 (`full`), with no expected-failure allowance. The corpora are pinned by
 commit and SHA-256 in
@@ -339,10 +339,9 @@ to write**. They establish nothing about unreached paths.
 Prague and remains the input to its registered vector generators. It is not
 an identity claim for Jaune's whole current semantics. Osaka and BPO support
 was originally built from EIP text and validated against `tests@v20.0.1`;
-all three release fixture lanes (historical, current-mainnet and Amsterdam) now use `tests@v21.0.1` (`1562e2f8b5cb1efda7e0d7c517f2dfb5742c0a43`),
-and the transition-tool anchor descends from that commit: `9154c29ed38afaf40e99a1d4288ab35bb1d3db8f`
-on `forks/bogota`, which carries the two upstream `t8n` output fixes
-(ethereum/execution-specs#3849 and #3361) that no fixture release contains yet. Creation collides only
+all three release fixture lanes (historical, current-mainnet and Amsterdam) now use `tests@v21.0.2` (`e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e`),
+and the transition-tool anchor is that same commit, on `forks/bogota`, which carries the two upstream `t8n`
+output fixes (ethereum/execution-specs#3849 and #3361). Creation collides only
 with nonzero nonce or nonempty code on every runnable fork. Storage-only
 accounts may be created into; their storage is cleared before initcode, and
 deleting an empty account clears its storage too. The release omitted the
@@ -369,7 +368,7 @@ and contains no Prague cases. The original official Amsterdam corpus still
 has two BAL-header exception-name failures after the slot-number identity
 repair. The separately approved `bal-header-format-v1` overlay changes those
 two raw expected names, preserves execution inputs and outcomes, and makes the
-strict 3,354-file Amsterdam full gate pass. Original failing results and the
+strict 3,239-file Amsterdam full gate pass. Original failing results and the
 official archive remain unchanged; this local correction is not an official
 upstream release. Agreement on generated vectors or fixtures does not
 establish equivalence to every part of any Python revision, nor final

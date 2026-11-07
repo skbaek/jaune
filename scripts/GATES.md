@@ -8,10 +8,10 @@ reports should link here rather than restate it.
 Audience is anyone driving these gates, human or agent, regardless of tool.
 
 **Headline fact these gates produce.** Jaune passes 100% of the
-blockchain-test fixtures of `execution-specs` `tests@v21.0.1` whose fork lies
-in [Byzantium, BPO2]: 8,660/8,660 files and 73,345/73,345 cases, as the union
-of `scripts/check-mainnet.sh --lane historical --suite hist-full` (3,692 /
-38,896) and `scripts/check-mainnet.sh --suite full` (4,968 / 34,449), both
+blockchain-test fixtures of `execution-specs` `tests@v21.0.2` whose fork lies
+in [Byzantium, BPO2]: 73,686/73,686 cases and 8,262/8,262 files, as the union
+of `scripts/check-mainnet.sh --lane historical --suite hist-full` (39,212 cases /
+3,550 files) and `scripts/check-mainnet.sh --suite full` (34,474 / 4,712), both
 strict all-PASS with no expected-failure allowance. Neither is a CI gate.
 
 All commands are run from the root of the Jaune checkout under test — the
@@ -242,9 +242,9 @@ with the same executable inputs.
 | `scripts/check-legacy.sh --depth` | fuel/call-depth stress set | 67 | ~13 s |
 | `python3 scripts/check-legacy-baseline.py self-test` | tracked correctness / ignored timing separation, timing genesis/new-fixture extension, refresh refusal, rebase isolation, drift, duplicate rejection, and host-local dispatch weights | 11 controls | sub-second |
 | `python3 -m unittest discover -s scripts/tests` | harness/generator unit tests. **This suite must stay lock-free**: it is a light row that runs while anything else on the host may hold the host-global heavy-gate lock, so no test here may shell out to a suite that takes it (`osaka`, `prague`, `full`, `amsterdam`, `amsterdam-full`, and the historical static suites) against the real `$HOME`; the heavy-suite dispatches, the synthetic `amsterdam-full` union, the synthetic historical lane and the synthetic legacy tier selection, run with `$HOME` pointed at a private directory, so the lock path `gate-lock.sh` derives from it is the test's own | harness, generator, reference, correction and clock tests; the suite reports the collected total | Historical: 16.2 s on 213 tests (2026-09-21 catalogue) |
-| `scripts/check-mainnet.sh --lane amsterdam --suite amsterdam-smoke` | Amsterdam release smoke (16 lowest SHA-256 ranks of the static suite) | 16 files / 346 cases | Historical devnet corpus: 14.7 s wall, ~4 s of it fixtures (2026-09-21 catalogue); not a v21 measurement |
+| `scripts/check-mainnet.sh --lane amsterdam --suite amsterdam-smoke` | Amsterdam release smoke (16 lowest SHA-256 ranks of the static suite) | 16 files / 85 cases | Historical devnet corpus: 14.7 s wall, ~4 s of it fixtures (2026-09-21 catalogue); not a v21 measurement |
 | `scripts/check-mainnet.sh --lane amsterdam --dir for_amsterdam/amsterdam/<subtree> --suite amsterdam` | one `eip*` subtree of the release corpus, all-PASS, count-checked against the manifest | manifest-selected subtree | 0.2 s – 110 s (`eip8037_*` is the slow one) |
-| `scripts/check-mainnet.sh --suite transitions` | fork-transition validity | 13 files / 109 cases | Historical: 18.0 s on the 2026-09-21 corpus; not a v21 measurement |
+| `scripts/check-mainnet.sh --suite transitions` | fork-transition validity | 16 files / 115 cases | Historical: 18.0 s on the 2026-09-21 corpus; not a v21 measurement |
 
 ### Medium — before a commit or push candidate
 
@@ -271,17 +271,17 @@ Usage and the message-versus-transaction boundary are in
 
 | gate | proves | scale | sequential | `--jobs auto` |
 |---|---|---|---|---|
-| `scripts/check-mainnet.sh --suite osaka` | strict all-PASS | 2,449 | ~8 min | **231.0 s** (2026-09-21 catalogue) |
-| `scripts/check-mainnet.sh --suite prague` | strict all-PASS | 2,506 | ~12 min | **341.7 s** (2026-09-21 catalogue) |
-| `scripts/check-mainnet.sh --suite full` | strict all-PASS, whole manifest; **supersedes `osaka`, `prague`, `transitions` and `smoke` in a closure bundle** | 4,968 | ~20.8 min | **618.9 s** (2026-09-21 catalogue) |
-| `scripts/check-mainnet.sh --lane historical --suite hist-full` | strict all-PASS over every historical suite and `hist-transitions`; **supersedes its declared `component_suites` (the eight nonempty fork suites and `hist-transitions`) in a closure bundle** | 3,692 | not measured | not measured |
-| `scripts/check-mainnet.sh --lane amsterdam --suite amsterdam` | strict all-PASS over the static Amsterdam corpus, zero exclusions inside `for_amsterdam` | 3,296 | not measured; run it parallel | **454.5 s** (2026-09-21 catalogue; 267 s at `--jobs 6`, 2026-09-06) |
-| `scripts/check-mainnet.sh --lane amsterdam --suite amsterdam-full` | the union of `amsterdam` and `amsterdam-transitions`; strict all-PASS with the exact registered `bal-header-format-v1` correction; **supersedes both, and `amsterdam-smoke`, in a closure bundle** | 3,354 | not measured; run it parallel | **463.6 s** (2026-09-21 catalogue, a run RED on exactly DP-1's four files) |
+| `scripts/check-mainnet.sh --suite osaka` | strict all-PASS | 2,333 | ~8 min | **231.0 s** (2026-09-21 catalogue) |
+| `scripts/check-mainnet.sh --suite prague` | strict all-PASS | 2,341 | ~12 min | **341.7 s** (2026-09-21 catalogue) |
+| `scripts/check-mainnet.sh --suite full` | strict all-PASS, whole manifest; **supersedes `osaka`, `prague`, `bpo1`, `bpo2`, `transitions` and `smoke` in a closure bundle** | 4,712 | ~20.8 min | **618.9 s** (2026-09-21 catalogue) |
+| `scripts/check-mainnet.sh --lane historical --suite hist-full` | strict all-PASS over every historical suite and `hist-transitions`; **supersedes its declared `component_suites` (the eight nonempty fork suites and `hist-transitions`) in a closure bundle** | 3,550 | not measured | not measured |
+| `scripts/check-mainnet.sh --lane amsterdam --suite amsterdam` | strict all-PASS over the static Amsterdam corpus, zero exclusions inside `for_amsterdam` | 3,180 | not measured; run it parallel | **454.5 s** (2026-09-21 catalogue; 267 s at `--jobs 6`, 2026-09-06) |
+| `scripts/check-mainnet.sh --lane amsterdam --suite amsterdam-full` | the union of `amsterdam` and `amsterdam-transitions`; strict all-PASS with the exact registered `bal-header-format-v1` correction; **supersedes both, and `amsterdam-smoke`, in a closure bundle** | 3,239 | not measured; run it parallel | **463.6 s** (2026-09-21 catalogue, a run RED on exactly DP-1's four files) |
 | `scripts/check-legacy.sh --full` | every legacy fixture vs baseline; **supersedes `--smoke`, `--depth`, `--patch` and `--rlp4` in a closure bundle** | 2,983 | **≥ 19 min** | **501.3 s** at 4 jobs (2026-09-21 catalogue) |
 
-The scales above describe `tests@v21.0.1`. Dated 2026-09-21 runtime cells
+The scales above describe `tests@v21.0.2`. Dated 2026-09-21 runtime cells
 are historical: mainnet used `tests@v20.0.1` (5,100 files for `full`), while
-Amsterdam used the former devnet release. They are not timings for v21.0.1.
+Amsterdam used the former devnet release. They are not timings for v21.0.2.
 Admission uses the expected runtime of the actual command and host.
 
 **Read the two legacy `--full` cells differently — they have different
@@ -312,7 +312,7 @@ replaced by its smoke tier.**
 **In a closure bundle a superset replaces its components; it never runs beside
 them.** When a candidate owes the whole catalogue (goal closure, a review
 bundle, a toolchain migration), run `check-mainnet.sh --suite full`, not also
-`--suite osaka`, `prague`, `transitions` or `smoke`; run
+`--suite osaka`, `prague`, `bpo1`, `bpo2`, `transitions` or `smoke`; run
 `--lane amsterdam --suite amsterdam-full`, not also `amsterdam`,
 `amsterdam-transitions` or `amsterdam-smoke`; and run `check-legacy.sh --full`,
 not also `--smoke`, `--depth`, `--patch` or `--rlp4`. Each superset runs every
@@ -366,10 +366,9 @@ baseline was copied, hand-edited or rebased.
 ### The Amsterdam lane
 
 `check-mainnet.sh` takes `--lane (mainnet|amsterdam|historical)`. All three lanes now pin
-`tests@v21.0.1`, EELS `1562e2f8b5cb1efda7e0d7c517f2dfb5742c0a43`, and default
-to `~/eest-mainnet-v21.0.1`. The `t8n` conformance target alone runs ahead, at
-`forks/bogota` `9154c29ed38afaf40e99a1d4288ab35bb1d3db8f`, which descends from
-that commit and carries ethereum/execution-specs#3849 and #3361; both
+`tests@v21.0.2`, EELS `e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e`, and default
+to `~/eest-mainnet-v21.0.2`. The `t8n` conformance target is that same commit,
+which carries ethereum/execution-specs#3849 and #3361; both
 generators refuse a target checkout that does not descend from the lanes'
 release (`conformance_target.fixture_release_commit` in `scripts/sources.json`). Their suite namespaces, generated manifests and
 environment overrides remain separate. The manifest generator validates the
@@ -378,13 +377,13 @@ bytes fail `--check`. Empty or miscounted `--dir` selections fail before a run.
 
 | suite | selection | files / cases | pass rule |
 |---|---|---:|---|
-| `amsterdam` | static `Amsterdam` under `for_amsterdam` | 3,296 / 26,398 | all-PASS, zero exclusions; heavy lock |
-| `amsterdam-smoke` | 16 lowest SHA-256 ranks of `release_commit:path` in static | 16 / 346 | all-PASS; no lock |
-| `amsterdam-transitions` | `BPO2ToAmsterdamAtTime15k`, rules selected per block timestamp | 58 / 189 | strict all-PASS with the registered correction below; zero exclusions; no lock when sequential |
-| `amsterdam-full` | union of static and transitions | 3,354 / 26,587 | strict all-PASS with the registered correction below; heavy lock |
+| `amsterdam` | static `Amsterdam` under `for_amsterdam` | 3,180 / 26,349 | all-PASS, zero exclusions; heavy lock |
+| `amsterdam-smoke` | 16 lowest SHA-256 ranks of `release_commit:path` in static | 16 / 85 | all-PASS; no lock |
+| `amsterdam-transitions` | `BPO2ToAmsterdamAtTime15k`, rules selected per block timestamp | 59 / 193 | strict all-PASS with the registered correction below; zero exclusions; no lock when sequential |
+| `amsterdam-full` | union of static and transitions | 3,239 / 26,542 | strict all-PASS with the registered correction below; heavy lock |
 
-The official v21.0.1 archive is preserved unchanged. Its full run after the
-header-width identity repair reports 3,352 PASS and two FAIL: under
+The official v21.0.2 archive is preserved unchanged. Its full run reports
+3,237 PASS and two FAIL, the same two found in v21.0.1: under
 `for_bpo2toamsterdamattime15k/amsterdam/eip7928_block_level_access_lists/fork_transition/`,
 `invalid_post_fork_block_without_bal_hash_field.json` and
 `invalid_pre_fork_block_with_bal_hash_field.json`. Their raw 22-field headers
@@ -398,9 +397,11 @@ The explicitly approved `bal-header-format-v1` package changes only the two
 BAL raw expectations to `INCORRECT_BLOCK_FORMAT` plus generation metadata.
 It preserves the raw block bytes, prestate/poststate, Engine payloads and
 Engine expectations. The official base remains independently verified,
-including both replaced paths. With that exact separate overlay, the strict
-`amsterdam-full` gate passes all 3,354 files (26,587 cases), and the transition
-subset passes all 58. Registration/source provenance and archive/index hashes
+including both replaced paths. Upstream did not change these two tests in
+v21.0.2 (the source is blob `e92eac80` at both releases), so the package was
+re-derived against the new base through its registered packager, from the same
+source patch. With that exact separate overlay, the strict `amsterdam-full` gate
+passes all 26,542 cases (3,239 files), and the transition subset passes all 59. Registration/source provenance and archive/index hashes
 are in `scripts/amsterdam/corrections/bal-header-format-v1/`; this is a local
 registered correction, not a corrected official release. No exclusion or
 exception alias was introduced. DP-2's `SYSTEM_CONTRACT_EMPTY` identity is
@@ -455,7 +456,7 @@ plus the transition fixtures: `byzantium`, `constantinople`,
 the union `hist-full`, inventoried in `scripts/historical/manifests.json`.
 No case in this lane declares a blob schedule, so none is required. All
 17 declared forks now resolve. The historical EEST union is strict all-PASS:
-3,692 files and 38,896 cases, including all 23 transition files. There are no
+39,212 cases in 3,550 files, including all 24 transition files. There are no
 static EEST inputs for synthetic EIP-1283 `constantinople`, Muir Glacier,
 Arrow Glacier or Gray Glacier; empty suites are refused, not vacuously green.
 Petersburg's nonempty EEST suite is named `constantinoplefix`; use that label.
@@ -521,11 +522,11 @@ not vouch for Jaune.
 | command | purpose |
 |---|---|
 | `python3 scripts/env_doctor.py` | validate the configured legacy/EELS/oracle environment |
-| `python3 scripts/env_doctor.py --mainnet-root "$HOME/eest-mainnet-v21.0.1" --mainnet-deep` | validate external fixture identities |
-| `python3 scripts/gen_mainnet_manifest.py --fixtures-root "$HOME/eest-mainnet-v21.0.1/fixtures" --check` | exact current-manifest identity |
-| `python3 scripts/bootstrap_mainnet.py --lane amsterdam` | install the same tests@v21.0.1 release as mainnet (999,553,432-byte archive; separate suite manifest) |
-| `python3 scripts/env_doctor.py --amsterdam-root "$HOME/eest-mainnet-v21.0.1" --amsterdam-deep` | validate that lane's archive digest, layout, release index, and every extracted file against the archive |
-| `python3 scripts/gen_mainnet_manifest.py --lane amsterdam --fixtures-root "$HOME/eest-mainnet-v21.0.1/fixtures" --check` | exact Amsterdam-lane manifest identity |
+| `python3 scripts/env_doctor.py --mainnet-root "$HOME/eest-mainnet-v21.0.2" --mainnet-deep` | validate external fixture identities |
+| `python3 scripts/gen_mainnet_manifest.py --fixtures-root "$HOME/eest-mainnet-v21.0.2/fixtures" --check` | exact current-manifest identity |
+| `python3 scripts/bootstrap_mainnet.py --lane amsterdam` | install the same tests@v21.0.2 release as mainnet (939,189,561-byte archive; separate suite manifest) |
+| `python3 scripts/env_doctor.py --amsterdam-root "$HOME/eest-mainnet-v21.0.2" --amsterdam-deep` | validate that lane's archive digest, layout, release index, and every extracted file against the archive |
+| `python3 scripts/gen_mainnet_manifest.py --lane amsterdam --fixtures-root "$HOME/eest-mainnet-v21.0.2/fixtures" --check` | exact Amsterdam-lane manifest identity |
 | `python3 scripts/gen-fork-constants.py --check` | the committed fork-constant extraction still matches the pinned `execution-specs` revision. Needs that checkout and its venv; `scripts/check-fork-constants.sh` itself needs neither |
 | `python3 scripts/gen-vector-shards.py --check` | the `blsPairing` shards are an exact partition of their source |
 | `python3 scripts/gen-hash-precompile-vectors.py --check` | the committed `sha256.json`/`ripemd160.json` still match the pinned EELS oracle, and that oracle still matches the published FIPS 180-4 / RIPEMD-160 known answers |
@@ -560,7 +561,7 @@ Two different contracts, and confusing them is the most common misreading:
   `stExtCodeHash/dynamicAccountOverwriteEmpty_Paris.json`,
   `stRevertTest/RevertInCreateInInit_Paris.json`, and
   `stSStoreTest/InitCollisionParis.json`. The ten original-input Prague replays
-  agree with pinned EELS `1562e2f`; their old header gas values disagree. Keep
+  agree with pinned EELS `e27f097`; their old header gas values disagree. Keep
   all fixture and baseline bytes unchanged and all files selected. The raw
   regression gate remains RED; qualified readiness acceptance requires exactly
   this delta and the retained ten-case replay. Any additional delta fails.
@@ -765,7 +766,7 @@ incident that motivated it.
 | `check-legacy.sh --smoke`, `--bls`, `--full`, or any `--jobs > 1` | yes | yes |
 | `check-legacy.sh --depth`, `--patch`, `--rlp4`, `--dir` (sequential) | yes | no |
 | `check-mainnet.sh --suite osaka`/`prague`/`full`, or any `--jobs > 1` | parallel only | yes |
-| `check-mainnet.sh --suite smoke`/`transitions` (sequential) | — (writes none) | no |
+| `check-mainnet.sh --suite smoke`/`transitions`/`bpo1`/`bpo2` (sequential) | — (writes none) | no |
 | `check-vectors.sh` | yes | yes |
 | `check-elab.sh` | yes | yes |
 

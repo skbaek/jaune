@@ -13,13 +13,13 @@ a verified compiler. It is Jaune's end-to-end case study.
 **Jaune** is an executable formal specification of the EVM in Lean 4. It
 passes **100% of the blockchain-test fixtures** of the
 [execution-specs](https://github.com/ethereum/execution-specs) release
-`tests@v21.0.1` whose fork lies in **[Byzantium, BPO2]**: **8,660/8,660 files
-and 73,345/73,345 cases**, including every transition fixture whose two
+`tests@v21.0.2` whose fork lies in **[Byzantium, BPO2]**: **73,686/73,686
+cases in 8,262/8,262 files**, including every transition fixture whose two
 endpoints are both in that range, with no expected-failure allowance. Two
 strict all-PASS lanes produce it: the historical lane (Byzantium through
-Cancun plus three transitions, 3,692 files / 38,896 cases) and the
-current-mainnet lane (Prague through BPO2 plus three transitions, 4,968 files
-/ 34,449 cases). The release's other fixture formats (`state_tests`, engine,
+Cancun plus three transitions, 39,212 cases / 3,550 files) and the
+current-mainnet lane (Prague through BPO2 plus three transitions, 34,474 cases
+/ 4,712 files). The release's other fixture formats (`state_tests`, engine,
 sync and transaction tests) serve other consumers; the runner refuses them,
 so they are not part of this claim. Its semantics are demonstrated sufficient for real
 verification: in Blanc's former contract corpus (archived at tag
@@ -102,8 +102,8 @@ repository; install the pinned current-mainnet release first, and run fixtures
 from its `blockchain_tests` directory:
 
 ```sh
-python3 scripts/bootstrap_mainnet.py     # ~/eest-mainnet-v21.0.1
-FIX=~/eest-mainnet-v21.0.1/fixtures/blockchain_tests
+python3 scripts/bootstrap_mainnet.py     # ~/eest-mainnet-v21.0.2
+FIX=~/eest-mainnet-v21.0.2/fixtures/blockchain_tests
 lake exe jaune $FIX/for_prague/ported_static/vmArithmeticTest/mul/mul.json
 ```
 
@@ -228,18 +228,18 @@ requirements.
   and does not claim.
 - **Runnable forks:** Byzantium through Cancun, followed by Prague, Osaka,
   BPO1, BPO2 and the Amsterdam snapshot, with configured fork transitions.
-  Jaune passes 100% of the `tests@v21.0.1` blockchain-test fixtures in
-  [Byzantium, BPO2] — 8,660/8,660 files, 73,345/73,345 cases — as the union
+  Jaune passes 100% of the `tests@v21.0.2` blockchain-test fixtures in
+  [Byzantium, BPO2] — 73,686/73,686 cases, 8,262/8,262 files — as the union
   of the two strict lanes below. Outside that range lie only pre-Byzantium
   forks, Amsterdam (its own lane) and transitions naming Amsterdam or later.
-  The historical EEST lane passes all 3,692 files (38,896 cases) selected by
-  its v21.0.1 manifest. Synthetic EIP-1283 Constantinople has legacy-fixture
+  The historical EEST lane passes all 39,212 cases (3,550 files) selected by
+  its v21.0.2 manifest. Synthetic EIP-1283 Constantinople has legacy-fixture
   evidence but no independent EELS oracle or target golden. Muir Glacier,
   Arrow Glacier and Gray Glacier have no static EEST or legacy suite; their
   difficulty and transition-tool evidence is described in the gate catalogue.
   Jaune's primary Prague evidence is the strict all-PASS
   current-mainnet lane over the separately installed `execution-specs`
-  `tests@v21.0.1` release: 2,506/2,506 Prague fixtures and 4,968/4,968 across
+  `tests@v21.0.2` release: 2,341/2,341 Prague fixtures and 4,712/4,712 across
   the whole manifest, with no expected-failure allowance. Its generated
   manifests activate Prague as a whole suite
   (`scripts/check-mainnet.sh --suite prague`, or the deterministic
@@ -249,18 +249,17 @@ requirements.
   (`P256VERIFY`), EIP-7825 (transaction gas cap), EIP-7594 (six blobs per
   transaction), EIP-7918 (blob reserve price), and EIP-7934 (original block-RLP
   size). `scripts/check-mainnet.sh --suite osaka` is a strict all-PASS gate;
-  the pinned manifest is 2,449/2,449 files (17,550 cases).
+  the pinned manifest is 2,333/2,333 files (17,441 cases).
 - **BPO1 and BPO2 are supported as rule data** (EIP-7892): each is Osaka with a
   different blob target, ceiling, and base-fee update fraction, and nothing
   else. A chain selects them from its own activation schedule, so a fixture
   labelled `OsakaToBPO1AtTime15k` runs through the configured block-import API
   and each block's timestamp chooses its rules.
   `scripts/check-mainnet.sh --suite transitions` is a strict all-PASS gate over
-  the 13 files (109 cases) whose transition labels name two supported forks.
-  The pinned release publishes no fixture whose network is a bare `BPO1` or
-  `BPO2`, so `--suite bpo1` and `--suite bpo2` select nothing and are refused
-  rather than reported as vacuously green.
-- **`Amsterdam` runs against `tests@v21.0.1`.**
+  the 16 files (115 cases) whose transition labels name two supported forks.
+  `--suite bpo1` and `--suite bpo2` run the release's static fixtures for each,
+  11 files (190 cases) apiece, and both are part of `--suite full`.
+- **`Amsterdam` runs against `tests@v21.0.2`.**
   `Fork.amsterdam.rules?` resolves to `amsterdamRules`, its complete rule
   record: the repriced gas numbers and EIP-8037's state-gas dimension (the
   metering goal), EIP-7954's code limits, EIP-7843 `SLOTNUM`, EIP-8024
@@ -278,11 +277,11 @@ requirements.
   amsterdam`), inventoried in `scripts/amsterdam/manifests.json`. All four of
   its suites run: the static `Amsterdam` suite and its smoke tier, and the
   `BPO2ToAmsterdamAtTime15k` transition suite together with the union of both.
-  The static suite contains 3,296 files (26,398 cases), and transitions add
-  58 files (189 cases). With the explicitly approved two-fixture correction
-  `bal-header-format-v1`, all 3,354 files (26,587 cases) pass the strict full
+  The static suite contains 3,180 files (26,349 cases), and transitions add
+  59 files (193 cases). With the explicitly approved two-fixture correction
+  `bal-header-format-v1`, all 26,542 cases (3,239 files) pass the strict full
   gate. The official archive remains unchanged: its uncorrected full run
-  reports 3,352 PASS and two BAL-header exception-name failures. Earlier
+  reports 3,237 PASS and two BAL-header exception-name failures. Earlier
   four-failure results remain historical; Jaune's header-width identity repair
   resolved the two slot-number findings. The overlay changes only two raw
   expected exception names plus generation metadata; it preserves block wire
@@ -310,8 +309,8 @@ requirements.
   [`scripts/vectors/SOURCES.md`](scripts/vectors/SOURCES.md):
   - *legacy* — `ethereum/tests` @ `3129f16` (plus its `LegacyTests` @ `2339b9a`);
   - *EEST* — release `v5.4.0` (SHA-256 `92cf1b47…`).
-  - *current mainnet* — `execution-specs` `tests@v21.0.1` @ `1562e2f`, asset
-    SHA-256 `b9b14391…`; installed separately at `~/eest-mainnet-v21.0.1`.
+  - *current mainnet* — `execution-specs` `tests@v21.0.2` @ `e27f097`, asset
+    SHA-256 `e2fa7ea2…`; installed separately at `~/eest-mainnet-v21.0.2`.
 - **Gate catalogue** — [`scripts/GATES.md`](scripts/GATES.md) is the
   authoritative reference for every verification gate: exact commands, pass
   criteria, runtimes, and which gate to reach for when. The legacy, current-
@@ -359,7 +358,7 @@ requirements.
   `stExtCodeHash/dynamicAccountOverwriteEmpty_Paris.json`,
   `stRevertTest/RevertInCreateInInit_Paris.json`, and
   `stSStoreTest/InitCollisionParis.json`, all under `GeneralStateTests/`. Their
-  ten Prague cases agree with EELS `1562e2f` on replay of the original prestate,
+  ten Prague cases agree with EELS `e27f097` on replay of the original prestate,
   signed transactions and environment; their old header gas values disagree.
   All fixture and baseline bytes are preserved. The full run reports 2,973 PASS
   and 10 FAIL, with a raw RED verdict on exactly these five approved changes.
@@ -386,7 +385,7 @@ requirements.
   [EIP-7610](https://github.com/ethereum/EIPs/blob/master/EIPS/eip-7610.md)
   is still Last Call and was removed from Glamsterdam's scope by EIPs PR
   #12189 (`f9976e68`, 2026-08-20), so it has never been part of any activated
-  mainnet fork. Pinned EELS `1562e2f` tests only nonce and code
+  mainnet fork. Pinned EELS `e27f097` tests only nonce and code
   (`src/ethereum/forks/prague/state_tracker.py:281-289`, `account_deployable`);
   the storage clause was removed from every fork module by execution-specs PR
   #3417 (`2ce2191`, 2026-08-25: "declined ... no mainnet account has non-empty
@@ -399,7 +398,7 @@ requirements.
   `expected_failures.yaml:24-36` lists the EIP-7610 tests as unreachable),
   and Erigon v3.7.1 `tools/eest-spec-shards.yml:74-75,151-152` excludes these
   very fixtures. EIP-7610 records 28 mainnet accounts with that shape. Jaune
-  follows the nonce-and-code collision rule in pinned EELS `1562e2f`; the
+  follows the nonce-and-code collision rule in pinned EELS `e27f097`; the
   retained original-input replays establish agreement for these fixtures.
 
 ## Semantic integrity
@@ -493,8 +492,8 @@ stating exactly, because the badge above reports only the first of them.
   tier.
 
 **The release-fixture lanes are not CI gates.** The headline result on this
-page — 100% of the `tests@v21.0.1` blockchain-test fixtures in [Byzantium,
-BPO2], 8,660/8,660 files and 73,345/73,345 cases — is produced by two runs of
+page — 100% of the `tests@v21.0.2` blockchain-test fixtures in [Byzantium,
+BPO2], 73,686/73,686 cases and 8,262/8,262 files — is produced by two runs of
 [`scripts/check-mainnet.sh`](scripts/check-mainnet.sh)
 (`--lane historical --suite hist-full` and `--suite full`), which run locally
 against a release this repository does not vendor. A green badge attests to
