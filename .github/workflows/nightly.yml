@@ -37,7 +37,7 @@ concurrency:
 env:
   EELS_ROOT: ${{ github.workspace }}/.fixtures/execution-specs
   EEST_ROOT: ${{ github.workspace }}/.fixtures/eest
-  JAUNE_T8N_TARGET: ${{ github.workspace }}/.fixtures/execution-specs-t8n-v21.0.1
+  JAUNE_T8N_TARGET: ${{ github.workspace }}/.fixtures/execution-specs-t8n-e27f097e
 
 jobs:
   full-and-bls:

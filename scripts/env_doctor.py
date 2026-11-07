@@ -1121,7 +1121,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help="current-mainnet install root containing fixtures.tar.gz and extracted "
-        "fixtures/ (default: $EEST_MAINNET_ROOT or ~/eest-mainnet-v21.0.1)",
+        "fixtures/ (default: $EEST_MAINNET_ROOT or ~/eest-mainnet-v21.0.2)",
     )
     parser.add_argument(
         "--amsterdam-root",
@@ -1129,7 +1129,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Amsterdam install root containing the release archive and extracted "
         "fixtures/ (default: $EEST_AMSTERDAM_ROOT or "
-        "~/eest-mainnet-v21.0.1). Uses the pinned release with a separate "
+        "~/eest-mainnet-v21.0.2). Uses the pinned release with a separate "
         "Amsterdam suite manifest.",
     )
     parser.add_argument(

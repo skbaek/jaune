@@ -36,7 +36,7 @@ env:
   # bootstrap_legacy.py installs execution-specs here (its default is
   # ~/execution-specs); pinned into the workspace so actions/cache can hold it.
   EELS_ROOT: ${{ github.workspace }}/.fixtures/execution-specs
-  JAUNE_T8N_TARGET: ${{ github.workspace }}/.fixtures/execution-specs-t8n-v21.0.1
+  JAUNE_T8N_TARGET: ${{ github.workspace }}/.fixtures/execution-specs-t8n-e27f097e
 
 jobs:
   smoke:

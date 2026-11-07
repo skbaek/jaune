@@ -77,7 +77,7 @@ JOBS=1
 
 usage() {
   echo "usage: scripts/check-mainnet.sh [--lane (mainnet|amsterdam|historical)] (--suite SUITE | --dir REL --suite SUITE) [--fixtures-root PATH] [--no-build] [--start-at N] [--jobs <n>|auto]" >&2
-  echo "  --lane mainnet     suites: prague osaka transitions smoke full" >&2
+  echo "  --lane mainnet     suites: prague osaka bpo1 bpo2 transitions smoke full" >&2
   echo "  --lane amsterdam   suites: amsterdam amsterdam-smoke amsterdam-transitions amsterdam-full" >&2
   echo "  --lane historical suites: byzantium constantinople constantinoplefix petersburg istanbul muirglacier berlin london arrowglacier grayglacier paris shanghai cancun hist-smoke hist-transitions hist-full" >&2
   exit 2
@@ -101,17 +101,17 @@ MANIFEST_SUITE="$SUITE"
 
 case "$LANE" in
   mainnet)
-    LANE_ROOT_DEFAULT="${EEST_MAINNET_ROOT:-$HOME/eest-mainnet-v21.0.1}/fixtures"
+    LANE_ROOT_DEFAULT="${EEST_MAINNET_ROOT:-$HOME/eest-mainnet-v21.0.2}/fixtures"
     LANE_BOOTSTRAP="python3 scripts/bootstrap_mainnet.py"
     LANE_ROOT_ENV="EEST_MAINNET_ROOT"
     LANE_NAME="current-mainnet" ;;
   amsterdam)
-    LANE_ROOT_DEFAULT="${EEST_AMSTERDAM_ROOT:-$HOME/eest-mainnet-v21.0.1}/fixtures"
+    LANE_ROOT_DEFAULT="${EEST_AMSTERDAM_ROOT:-$HOME/eest-mainnet-v21.0.2}/fixtures"
     LANE_BOOTSTRAP="python3 scripts/bootstrap_mainnet.py --lane amsterdam"
     LANE_ROOT_ENV="EEST_AMSTERDAM_ROOT"
     LANE_NAME="amsterdam" ;;
   historical)
-    LANE_ROOT_DEFAULT="${EEST_MAINNET_ROOT:-$HOME/eest-mainnet-v21.0.1}/fixtures"
+    LANE_ROOT_DEFAULT="${EEST_MAINNET_ROOT:-$HOME/eest-mainnet-v21.0.2}/fixtures"
     LANE_BOOTSTRAP="python3 scripts/bootstrap_mainnet.py"
     LANE_ROOT_ENV="EEST_MAINNET_ROOT"
     LANE_NAME="historical" ;;
@@ -139,7 +139,7 @@ esac
 if [ "$LANE" = "amsterdam" ]; then
   case "$SUITE" in
     amsterdam|amsterdam-smoke|amsterdam-transitions|amsterdam-full) ;;
-    prague|osaka|transitions|smoke|full)
+    prague|osaka|bpo1|bpo2|transitions|smoke|full)
       echo "error: suite $SUITE is a --lane mainnet suite; the devnet lane's suites are amsterdam, amsterdam-transitions, amsterdam-smoke, amsterdam-full" >&2
       exit 2 ;;
     hist-*|byzantium|constantinople|constantinoplefix|petersburg|istanbul|muirglacier|berlin|london|arrowglacier|grayglacier|paris|shanghai|cancun) historical_mismatch "$SUITE" ;;
@@ -177,12 +177,11 @@ fi
   echo "error: --start-at must be a positive manifest index" >&2; exit 2;
 }
 
-# The pinned release publishes no fixture whose `network` is a bare `BPO1` or
-# `BPO2`: every BPO case in it is a transition case, and those are the
-# `transitions` suite.  Refusing the two static BPO suites is therefore not a
-# step that has yet to happen -- it is the archive's shape.  Reporting an
-# all-PASS verdict over zero selected files would be exactly the permissive
-# oracle this harness exists to prevent.
+# Reporting an all-PASS verdict over zero selected files would be exactly the
+# permissive oracle this harness exists to prevent, so a suite the pinned release
+# leaves empty is refused by name.  `bpo1` and `bpo2` were refused that way until
+# tests@v21.0.2, the first release publishing fixtures whose `network` is a bare
+# `BPO1` or `BPO2`; they are ordinary components of `full` now.
 lane_mismatch() {
   echo "error: suite $1 is a --lane amsterdam suite and this run is on --lane $LANE" >&2
   echo "       Run it as: scripts/check-mainnet.sh --lane amsterdam --suite $1" >&2
@@ -196,7 +195,7 @@ historical_mismatch() {
 }
 
 # Goal U10: the historical suites with no EEST v21 fixtures are refused with
-# a named reason rather than run vacant, exactly as bpo1/bpo2 are refused.
+# a named reason rather than run vacant.
 historical_refusal() {
   case "$1" in
     muirglacier|arrowglacier|grayglacier)
@@ -212,13 +211,6 @@ historical_refusal() {
   exit 2
 }
 
-bpo_refusal() {
-  LABEL="$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"
-  echo "error: suite $1 selects no file: the pinned release publishes no fixture whose network is $LABEL." >&2
-  echo "       $LABEL rules are exercised by --suite transitions (OsakaToBPO1AtTime15k, BPO1ToBPO2AtTime15k)." >&2
-  exit 2
-}
-
 # `--dir` restricts a suite to one subtree of the pinned archive.  It is a
 # targeted instrument for landing one semantic change at a time: the entries
 # still come from the generated manifest, every one of them still has to PASS,
@@ -227,7 +219,7 @@ if [ "$LANE" = "historical" ]; then
   case "$SUITE" in
     byzantium|constantinoplefix|istanbul|berlin|london|paris|shanghai|cancun|hist-smoke|hist-transitions|hist-full) ;;
     muirglacier|arrowglacier|grayglacier|petersburg|constantinople) historical_refusal "$SUITE" ;;
-    prague|osaka|transitions|smoke|full)
+    prague|osaka|bpo1|bpo2|transitions|smoke|full)
       echo "error: suite $SUITE is a --lane mainnet suite; the historical lane's suites are byzantium, constantinople, constantinoplefix, petersburg, istanbul, muirglacier, berlin, london, arrowglacier, grayglacier, paris, shanghai, cancun, hist-smoke, hist-transitions, hist-full" >&2
       exit 2 ;;
     amsterdam|amsterdam-*) lane_mismatch "$SUITE" ;;
@@ -248,8 +240,7 @@ fi
 if [ "$LANE" = "mainnet" ]; then
   if [ -n "$SUBDIR" ]; then
     case "$SUITE" in
-      prague|smoke|osaka|transitions) ;;
-      bpo1|bpo2) bpo_refusal "$SUITE" ;;
+      prague|smoke|osaka|transitions|bpo1|bpo2) ;;
       amsterdam|amsterdam-*) lane_mismatch "$SUITE" ;;
       hist-*|byzantium|constantinople|constantinoplefix|petersburg|istanbul|muirglacier|berlin|london|arrowglacier|grayglacier|paris|shanghai|cancun) historical_mismatch "$SUITE" ;;
       full)
@@ -262,8 +253,7 @@ if [ "$LANE" = "mainnet" ]; then
     esac
   else
     case "$SUITE" in
-      prague|osaka|transitions|smoke|full) ;;
-      bpo1|bpo2) bpo_refusal "$SUITE" ;;
+      prague|osaka|transitions|smoke|full|bpo1|bpo2) ;;
       amsterdam|amsterdam-*) lane_mismatch "$SUITE" ;;
       hist-*|byzantium|constantinople|constantinoplefix|petersburg|istanbul|muirglacier|berlin|london|arrowglacier|grayglacier|paris|shanghai|cancun) historical_mismatch "$SUITE" ;;
       *) echo "error: unknown suite $SUITE" >&2; exit 2 ;;

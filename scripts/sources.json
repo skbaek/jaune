@@ -71,17 +71,17 @@
       "created_at": "2026-10-26T11:15:25.495069Z",
       "test_count": 356322
     },
-    "_comment": "PROBE BRANCH ONLY (jaune-v21-0-2-probe-v1, 2026-10-31): tests@v21.0.2, identity from the GitHub release API (asset digest) and the archive's .meta/index.json. Not an adopted pin.",
+    "_comment": "The v21.0.2 mainnet fixture release, adopted by user decision jaune-v21-0-2-adoption-20261106. All three lanes pin this release; the conformance target is this release's own commit (conformance_target.fixture_release_commit); suites and manifests remain separate. Identity from the official release API, the checksum-verified archive and its .meta/index.json.",
     "archive_size_bytes": 939189561
   },
   "conformance_target": {
     "repo_url": "https://github.com/ethereum/execution-specs.git",
     "branch": "forks/bogota",
-    "commit": "9154c29ed38afaf40e99a1d4288ab35bb1d3db8f",
-    "fixture_release_commit": "1562e2f8b5cb1efda7e0d7c517f2dfb5742c0a43",
+    "commit": "e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e",
+    "fixture_release_commit": "e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e",
     "uv_version": "0.13.4",
     "default_env_var": "JAUNE_T8N_TARGET",
-    "default_subpath_from_home": "execution-specs-t8n-9154c29e",
+    "default_subpath_from_home": "execution-specs-t8n-e27f097e",
     "venv_subpath": ".venv",
     "t8n_command": "ethereum-spec-evm",
     "fill_command": "fill",
@@ -104,7 +104,7 @@
       "Amsterdam"
     ],
     "_comment": "The transition-tool conformance anchor for `jaune t8n`, chosen 2026-08-03 because this checkout's `fill` defaults to the in-process ExecutionSpecsTransitionTool, which calls this same checkout's EELS in process (client_clis/__init__.py sets the default tool; clis/execution_specs.py runs T8N.run). It is a GATE ANCHOR, not a fork-scope commitment: `fork_lane` is the block-validation handshake of canonical static target names advertised by `jaune t8n --forks`, derived from the build's runnable general forks through T8n.targetForkName?: Petersburg is spelled ConstantinopleFix, and synthetic EIP-1283 Constantinople has no target name and is omitted. scripts/check-cli.sh pins that the binary and this list agree and that every advertised name resolves before input; every label on it resolves through the one resolver `Fork.rules?` (the separate transaction-metering vehicle that `--state.fork Amsterdam` once resolved, and whose omitted block semantics `--info` once named, was retired by goal C). No BPO3-5 path is selected. This checkout is SEPARATE from execution_specs above -- that one is the frozen oracle pin for check-fake-exp.sh and the vector generators, and is never repointed. This one has its own venv (`uv sync --no-default-groups --group test`), which scripts/gen-t8n-goldens.py and scripts/check-t8n.sh drive.",
-    "_comment_repin": "History: the predecessor used the devnet-8 release. Goal jaune-amsterdam-readiness-v1 moves both fixture lanes and this anchor to tests@v21.0.1 (1562e2f); the four framework-side wrapper paths are carried in commit 9fc6c99c1. The frozen execution_specs oracle above is unchanged. Goal devcon8-talk-v1 (user decision devcon8-t8n-pin-split-20261022) moves this anchor alone to forks/bogota 9154c29e, the merge of ethereum/execution-specs#3361, which also carries #3849: the tool now numbers its output by accepted transactions and its body lists only those. No fixture release carries both fixes, so the two fixture lanes stay at tests@v21.0.1 and the same-commit rule becomes descent: fixture_release_commit must be an ancestor of commit (both generators check it against the checkout, and scripts/tests/test_amsterdam_lane.py checks it names the lanes' release). The fork-constant extraction is taken at commit while the fixture lanes run at fixture_release_commit, so a constant that differed between the two would fail either check-fork-constants.sh or the fixture lanes. uv_version is this checkout's own uv requirement (it refuses uv < 0.13.4), separate from the frozen oracle's. Re-unify all three pins at the next tests@ mainnet release that contains both fixes. Historical ommer reward summaries use the separately registered ommer-reward-summary-cli-v1 projection before typed environment validation; its exact CLI bytes and actual checkout identity are recorded per generated case. This compatibility projection does not change the semantic target revision.",
+    "_comment_repin": "History: the predecessor used the devnet-8 release. Goal jaune-amsterdam-readiness-v1 moves both fixture lanes and this anchor to tests@v21.0.1 (1562e2f); the four framework-side wrapper paths are carried in commit 9fc6c99c1. The frozen execution_specs oracle above is unchanged. Goal devcon8-talk-v1 (user decision devcon8-t8n-pin-split-20261022) moves this anchor alone to forks/bogota 9154c29e, the merge of ethereum/execution-specs#3361, which also carries #3849: the tool now numbers its output by accepted transactions and its body lists only those. No fixture release carries both fixes, so the two fixture lanes stay at tests@v21.0.1 and the same-commit rule becomes descent: fixture_release_commit must be an ancestor of commit (both generators check it against the checkout, and scripts/tests/test_amsterdam_lane.py checks it names the lanes' release). The fork-constant extraction is taken at commit while the fixture lanes run at fixture_release_commit, so a constant that differed between the two would fail either check-fork-constants.sh or the fixture lanes. uv_version is this checkout's own uv requirement (it refuses uv < 0.13.4), separate from the frozen oracle's. Decision jaune-v21-0-2-adoption-20261106 re-unifies all three pins at tests@v21.0.2 (e27f097e), which contains both fixes; src/ethereum is identical to 9154c29e there, and the descent rule stays as it is. Historical ommer reward summaries use the separately registered ommer-reward-summary-cli-v1 projection before typed environment validation; its exact CLI bytes and actual checkout identity are recorded per generated case. This compatibility projection does not change the semantic target revision.",
     "cli_adapter": {
       "id": "ommer-reward-summary-cli-v1",
       "path": "packages/testing/src/execution_testing/evm_tools/t8n/cli.py",
@@ -156,7 +156,7 @@
       "created_at": "2026-10-26T11:15:25.495069Z",
       "test_count": 356322
     },
-    "_comment": "PROBE BRANCH ONLY (jaune-v21-0-2-probe-v1, 2026-10-31): tests@v21.0.2, identity from the GitHub release API (asset digest) and the archive's .meta/index.json. Not an adopted pin. The v21.0.1-bound fixture_correction bal-header-format-v1 is dropped here (its base identity is v21.0.1); it touches only two BPO2ToAmsterdamAtTime15k transition cases."
+    "_comment": "The v21.0.2 mainnet fixture release, adopted by user decision jaune-v21-0-2-adoption-20261106. All three lanes pin this release; the conformance target is this release's own commit (conformance_target.fixture_release_commit); suites and manifests remain separate. Identity from the official release API, the checksum-verified archive and its .meta/index.json."
   },
   "legacy_restoration": {
     "repo_url": "https://github.com/ethereum/legacytests.git",

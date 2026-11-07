@@ -201,10 +201,11 @@ class LaneRefusalTests(unittest.TestCase):
         self.assertIn("unknown suite", run.stderr)
 
     def test_the_mainnet_lane_is_untouched(self):
-        """The default lane still resolves and still refuses what it always did."""
-        run = run_check_mainnet("--suite", "bpo1", "--no-build")
+        """The default lane still resolves, and admits the static BPO suites of v21.0.2."""
+        run = run_check_mainnet("--suite", "bpo1", "--no-build", "--fixtures-root", "/nonexistent")
         self.assertEqual(run.returncode, 2, run.stderr)
-        self.assertIn("selects no file", run.stderr)
+        self.assertNotIn("selects no file", run.stderr)
+        self.assertIn("fixture root not found", run.stderr)
 
 
 class LaneParserTests(unittest.TestCase):
@@ -664,7 +665,7 @@ class LaneManifestFieldTests(unittest.TestCase):
 
     def test_the_release_identity_matches_both_lanes_and_target(self):
         amsterdam = self.sources["amsterdam"]
-        self.assertEqual(amsterdam["release_tag"], "tests@v21.0.1")
+        self.assertEqual(amsterdam["release_tag"], "tests@v21.0.2")
         for field in ("release_tag", "release_commit", "archive_sha256", "archive_size_bytes"):
             self.assertEqual(amsterdam[field], self.sources["current_mainnet"][field])
         # The transition-tool anchor may run ahead of the fixture release, but

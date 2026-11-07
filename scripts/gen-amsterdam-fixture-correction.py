@@ -25,7 +25,7 @@ def verify_source(root, acceptance, generation, patch):
            generation["source_stable"] and not identity["tracked_status"], "generation source receipt differs")
     F.need(identity["commit"] == acceptance["source_commit"] and identity["tree"] == acceptance["source_tree"],
            "accepted source receipt identity differs")
-    base = "1562e2f8b5cb1efda7e0d7c517f2dfb5742c0a43"
+    base = "e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e"
     F.need(git(root, "rev-parse", "HEAD").decode().strip() == identity["commit"] and
            git(root, "rev-parse", "HEAD^{tree}").decode().strip() == identity["tree"] and
            not git(root, "status", "--porcelain=v1", "--untracked-files=no").strip(), "generation checkout no longer matches")
@@ -145,7 +145,7 @@ def package_bytes(base_root, experiment_receipt, sources):
             command = F.read(experiment / artifact["path"])
             commands.append({"record": artifact["path"], "argv": [portable(a) for a in command["argv"]],
                 "cwd": portable(command["cwd"]), "exit": command["exit"],
-                "started_utc": command["started_utc"], "timing_scope": "Mac local only",
+                "started_utc": command["started_utc"], "timing_scope": command["timing_scope"],
                 "stdout_sha256": command["stdout"]["sha256"], "stderr_sha256": command["stderr"]["sha256"]})
     receipt = {"kind": "jaune-correction-generation-receipt-v1", "id": F.ID, "source": source,
         "environment": {"uv_lock_sha256": corrected_generation["source_before"]["uv_lock_sha256"],
