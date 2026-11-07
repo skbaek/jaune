@@ -156,7 +156,12 @@
       "created_at": "2026-10-26T11:15:25.495069Z",
       "test_count": 356322
     },
-    "_comment": "The v21.0.2 mainnet fixture release, adopted by user decision jaune-v21-0-2-adoption-20261106. All three lanes pin this release; the conformance target is this release's own commit (conformance_target.fixture_release_commit); suites and manifests remain separate. Identity from the official release API, the checksum-verified archive and its .meta/index.json."
+    "_comment": "The v21.0.2 mainnet fixture release, adopted by user decision jaune-v21-0-2-adoption-20261106. All three lanes pin this release; the conformance target is this release's own commit (conformance_target.fixture_release_commit); suites and manifests remain separate. Identity from the official release API, the checksum-verified archive and its .meta/index.json.",
+    "fixture_correction": {
+      "id": "bal-header-format-v1",
+      "registration": "scripts/amsterdam/corrections/bal-header-format-v1/registration.json",
+      "registration_sha256": "44268377199e7aeff130081ec0964673e65050193f144ebe46bf0193aa4b461b"
+    }
   },
   "legacy_restoration": {
     "repo_url": "https://github.com/ethereum/legacytests.git",
