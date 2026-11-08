@@ -193,10 +193,10 @@ def operationsVerdict (c : Case) : IO Verdict := do
     | .ok () => pure .pass
     | .error e => pure (.fail e)
 
-/-- The processing functions for the block and slot runners: A's `process_block`; epoch
-processing rejects until C's `process_epoch` lands. -/
+/-- The processing functions for the block and slot runners: A's `process_block` and C's
+`process_epoch`. -/
 def steps : Steps where
-  processEpoch _ _ _ _ := throw (.assert "process_epoch: not yet merged")
+  processEpoch _ _ ctx state := processEpoch ctx state
   processBlock _ _ ctx state block := processBlock ctx state block
 
 /-- A handler that reports `Except String Unit` as a verdict. -/
