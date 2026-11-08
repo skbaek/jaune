@@ -11,6 +11,7 @@ import JauneConsensus.SSZ.Merkle
 import JauneConsensus.SSZ.Basic
 import JauneConsensus.SSZ.Container
 import JauneConsensus.SSZ.Progressive
+import JauneConsensus.SSZ.Proof
 import JauneConsensus.Containers
 import JauneConsensus.Crypto.HashToCurve
 import JauneConsensus.Crypto.HashToCurveVectors
