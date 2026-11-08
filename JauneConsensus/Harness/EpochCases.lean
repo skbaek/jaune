@@ -1,4 +1,5 @@
 import JauneConsensus.Epoch
+import JauneConsensus.Harness.ConfigOverride
 import JauneConsensus.Harness.Discovery
 import JauneConsensus.Harness.Snappy
 
@@ -16,13 +17,25 @@ checked in addition rather than instead.
 
 namespace JauneConsensus.Harness
 
-/-- A state transition at every preset and fork. -/
-abbrev StateStep := ∀ {P : Preset} {f : CFork}, BeaconState P f → M (BeaconState P f)
+/-- A state transition at every preset and fork, under a configuration. -/
+abbrev StateStep := ∀ {P : Preset} {f : CFork}, Config → BeaconState P f → M (BeaconState P f)
 
 /-- The sub-transition of an `epoch_processing` handler (`process_<handler>`). -/
 def epochStep : String → Option StateStep
+  | "justification_and_finalization" => some processJustificationAndFinalization
+  | "inactivity_updates" => some processInactivityUpdates
+  | "rewards_and_penalties" => some processRewardsAndPenalties
+  | "registry_updates" => some processRegistryUpdates
+  | "slashings" => some processSlashings
   | "eth1_data_reset" => some processEth1DataReset
+  | "pending_consolidations" => some processPendingConsolidations
+  | "effective_balance_updates" => some processEffectiveBalanceUpdates
+  | "slashings_reset" => some processSlashingsReset
+  | "randao_mixes_reset" => some processRandaoMixesReset
+  | "historical_summaries_update" => some processHistoricalSummariesUpdate
   | "participation_flag_updates" => some processParticipationFlagUpdates
+  | "sync_committee_updates" => some processSyncCommitteeUpdates
+  | "proposer_lookahead" => some processProposerLookahead
   | _ => none
 
 /-- The whole `process_epoch`, once every sub-step exists. -/
@@ -43,12 +56,12 @@ def firstDiff (a b : List UInt8) : Nat :=
   ((a.zip b).findIdx? (fun (x, y) => x != y)).getD (min a.length b.length)
 
 /-- Run `step` from `preFile` and compare with `postFile` (or expect a rejection). -/
-def checkTransition (P : Preset) (f : CFork) (c : Case) (step : StateStep)
+def checkTransition (P : Preset) (f : CFork) (cfg : Config) (c : Case) (step : StateStep)
     (preFile postFile : String) : IO (Option String) := do
   let pre ← match ← readState P f c preFile with
     | .ok s => pure s
     | .error e => return some e
-  let got := step pre
+  let got := step cfg pre
   if c.has postFile then
     let want ← match Snappy.decompress (← IO.FS.readBinFile (c.dir / postFile)) with
       | .ok b => pure b.toList
@@ -70,13 +83,15 @@ def epochProcessingCase (c : Case) : IO (Option String) := do
   let some P := Preset.ofName? c.preset | return some s!"no preset {c.preset}"
   let some f := CFork.ofName? c.key.fork | return some s!"no fork {c.key.fork}"
   if !(f.atLeast .electra) then return some s!"fork {c.key.fork} is outside this handler"
+  let some cfg := Config.ofPreset? c.preset | return some s!"no configuration for {c.preset}"
+  if c.has "config.yaml" then return some "unexpected config.yaml"
   let some step := epochStep c.key.handler
     | return some s!"UNIMPLEMENTED: process_{c.key.handler}"
-  if let some why ← checkTransition P f c step "pre.ssz_snappy" "post.ssz_snappy" then
+  if let some why ← checkTransition P f cfg c step "pre.ssz_snappy" "post.ssz_snappy" then
     return some why
   if c.has "pre_epoch.ssz_snappy" then
     let some full := fullEpoch? | return some "UNIMPLEMENTED: process_epoch (pre_epoch present)"
-    if let some why ← checkTransition P f c full "pre_epoch.ssz_snappy" "post_epoch.ssz_snappy" then
+    if let some why ← checkTransition P f cfg c full "pre_epoch.ssz_snappy" "post_epoch.ssz_snappy" then
       return some why
   pure none
 

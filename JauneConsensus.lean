@@ -39,6 +39,7 @@ import JauneConsensus.Harness.Discovery
 import JauneConsensus.Harness.SszGeneric
 import JauneConsensus.Harness.SszGenericTypes
 import JauneConsensus.Harness.SszStatic
+import JauneConsensus.EpochAccessors
 import JauneConsensus.Epoch
 import JauneConsensus.Harness.EpochCases
 import JauneConsensus.Harness.Runner
