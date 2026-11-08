@@ -24,6 +24,13 @@ error that the specification raises for oversized input.
 namespace JauneConsensus
 open Jaune
 
+/-- A decoding scope as an array, so offsets and slices are read by index (linear decoding;
+`Bytes` is a list). -/
+abbrev Scope := Array UInt8
+
+/-- The bytes `[a, b)` of a scope (Python `bs[a:b]`). -/
+@[inline] def slice (bs : Scope) (a b : Nat) : Bytes := (bs.extract a b).toList
+
 /-- The SSZ functions of a type (`ssz/simple-serialize.md`). -/
 class Ssz (α : Type) where
   /-- `none` iff the type is variable-size ("Variable-size and fixed-size"); otherwise the
@@ -40,6 +47,16 @@ class Ssz (α : Type) where
   /-- `false` only for an absent fork-gated container field (`Gated false T`), which has no
   bytes and no Merkle leaf. -/
   present : Bool := true
+  /-- Fast path: `deserialize (slice bs a b)`, which a type may read in place from the scope
+  instead of through a list (`deserializeAt_eq`). Not part of the specification. -/
+  deserializeAt : Scope → Nat → Nat → M α := fun bs a b => deserialize (slice bs a b)
+  deserializeAt_eq : ∀ bs a b, deserializeAt bs a b = deserialize (slice bs a b) := by
+    intros; rfl
+  /-- Fast path: `acc ++ serialize x` built as an array (`serializeTo_eq`). Not part of the
+  specification. -/
+  serializeTo : α → Array UInt8 → Array UInt8 := fun x acc => acc ++ (serialize x).toArray
+  serializeTo_eq : ∀ x acc, (serializeTo x acc).toList = acc.toList ++ serialize x := by
+    intros; simp
 
 export Ssz (serialize deserialize hashTreeRoot)
 
@@ -61,6 +78,17 @@ instance : Ssz Bool where
     | bs => decodeErr (.length 1 bs.length)
   hashTreeRoot b := chunkOf [if b then 1 else 0]
 
+private theorem uint8At_eq (e : Array UInt8) :
+    (if h : e.size = 1 then pure e[0] else decodeErr (.length 1 e.size) : M UInt8) =
+      (match e.toList with
+       | [b] => pure b
+       | bs => decodeErr (.length 1 bs.length)) := by
+  rcases e with ⟨l⟩
+  match l with
+  | [] => rfl
+  | [x] => rfl
+  | _ :: _ :: _ => simp
+
 /-- `byte`: 8-bit opaque data, serialized and hashed as `uint8`. -/
 instance : Ssz UInt8 where
   fixedSize? := some 1
@@ -70,6 +98,12 @@ instance : Ssz UInt8 where
     | [b] => pure b
     | bs => decodeErr (.length 1 bs.length)
   hashTreeRoot b := chunkOf [b]
+  deserializeAt bs a c :=
+    let e := bs.extract a c
+    if h : e.size = 1 then pure e[0] else decodeErr (.length 1 e.size)
+  deserializeAt_eq bs a c := uint8At_eq (bs.extract a c)
+  serializeTo b acc := acc.push b
+  serializeTo_eq b acc := by simp
 
 theorem leNat_lt : ∀ bs : Bytes, leNat bs < 2 ^ (8 * bs.length)
   | [] => by simp [leNat]
@@ -99,6 +133,34 @@ instance {n : Nat} : Ssz (UIntN n) where
     if h : bs.length = n then pure ⟨leNat bs, h ▸ leNat_lt bs⟩ else decodeErr (.length n bs.length)
   hashTreeRoot x := chunkOf (leBytes n x.toNat)
 
+/-- `Bytes.toB256.go` over the bytes `[i, i + n)` of a scope, read by index (no list). -/
+def b256GoAt (bs : Scope) : Nat → Nat → UInt64 → UInt64 → UInt64 → UInt64 → B256
+  | 0, _, l3, l2, l1, l0 => ⟨⟨l3, l2⟩, ⟨l1, l0⟩⟩
+  | n + 1, i, l3, l2, l1, l0 =>
+    match bs[i]? with
+    | some b => b256GoAt bs n (i + 1) ((l3 <<< 8) ||| (l2 >>> 56)) ((l2 <<< 8) ||| (l1 >>> 56))
+        ((l1 <<< 8) ||| (l0 >>> 56)) ((l0 <<< 8) ||| b.toUInt64)
+    | none => ⟨⟨l3, l2⟩, ⟨l1, l0⟩⟩
+
+theorem b256GoAt_eq (bs : Scope) : ∀ (n i : Nat) (l3 l2 l1 l0 : UInt64),
+    b256GoAt bs n i l3 l2 l1 l0 = Bytes.toB256.go l3 l2 l1 l0 ((bs.toList.drop i).take n)
+  | 0, _, _, _, _, _ => by simp [b256GoAt, Bytes.toB256.go]; rfl
+  | n + 1, i, l3, l2, l1, l0 => by
+    unfold b256GoAt
+    by_cases h : i < bs.size
+    · rw [Array.getElem?_eq_getElem h, List.drop_eq_getElem_cons (by simpa using h)]
+      simp only [List.take_succ_cons, Bytes.toB256.go, Array.getElem_toList]
+      exact b256GoAt_eq bs n (i + 1) _ _ _ _
+    · rw [Array.getElem?_eq_none (by omega), List.drop_eq_nil_of_le (by simpa using h)]
+      simp [Bytes.toB256.go]; rfl
+
+theorem slice_eq_take_drop (bs : Scope) (a c : Nat) :
+    slice bs a c = (bs.toList.drop a).take (c - a) := by
+  simp [slice, Array.toList_extract, List.extract]
+
+theorem length_slice (bs : Scope) (a c : Nat) : (slice bs a c).length = min c bs.size - a := by
+  simp [slice]; omega
+
 /-- `Bytes32` / `Root` as a chunk: 32 bytes in order; its root is itself ("Merkleization":
 `merkleize(pack(value))` of a 32-byte vector is the single chunk). -/
 instance : Ssz B256 where
@@ -107,6 +169,18 @@ instance : Ssz B256 where
   deserialize bs :=
     if bs.length = 32 then pure (Bytes.toB256 bs) else decodeErr (.length 32 bs.length)
   hashTreeRoot x := x
+  deserializeAt bs a c :=
+    if min c bs.size - a = 32 then pure (b256GoAt bs 32 a 0 0 0 0)
+    else decodeErr (.length 32 (min c bs.size - a))
+  deserializeAt_eq bs a c := by
+    simp only [length_slice]
+    split
+    · rename_i h
+      rw [b256GoAt_eq, Bytes.toB256, slice_eq_take_drop]
+      have e : (bs.toList.drop a).take 32 = (bs.toList.drop a).take (c - a) := by
+        rw [List.take_eq_take_iff]; simp; omega
+      rw [e]
+    · rfl
 
 /-- `ExecutionAddress` (`Bytes20`) is Jaune's `Adr`: 20 bytes in order, hashed as one
 right-padded chunk. -/
@@ -178,13 +252,6 @@ def serializeParts (ps : List Part) : Bytes :=
   | some _ => xs.map fun x => .fixed (serialize x)
   | none => xs.map fun x => .var (serialize x)
 
-/-- A decoding scope as an array, so offsets and slices are read by index (linear decoding;
-`Bytes` is a list). -/
-abbrev Scope := Array UInt8
-
-/-- The bytes `[a, b)` of a scope (Python `bs[a:b]`). -/
-@[inline] def slice (bs : Scope) (a b : Nat) : Bytes := (bs.extract a b).toList
-
 /-- Read the `uint32` offset at byte `pos`. Callers check `pos + 4 ≤ bs.size` first. -/
 @[inline] def readOffset (bs : Scope) (pos : Nat) : Nat := leNat (slice bs pos (pos + 4))
 
@@ -201,8 +268,8 @@ def cutVariable (bs : Scope) (scope : Nat) : List Nat → M (List Bytes)
 
 /-- Deserialize a homogeneous sequence from a whole scope. `count? = some n` is a vector of
 exactly `n` elements; `none` is a list of at most `limit` elements. -/
-def deserializeSeq {α : Type} [Ssz α] (bs : Bytes) (count? : Option Nat) (limit : Nat) :
-    M (Array α) := do
+def deserializeSeqWith {α : Type} [Ssz α] (readFixed : Scope → Nat → Nat → M α) (bs : Bytes)
+    (count? : Option Nat) (limit : Nat) : M (Array α) := do
   let scope := bs.length
   match Ssz.fixedSize? α with
   | some size =>
@@ -214,8 +281,7 @@ def deserializeSeq {α : Type} [Ssz α] (bs : Bytes) (count? : Option Nat) (limi
       | some n => if count ≠ n then decodeErr (.length (n * size) scope) else pure ()
       | none => if count > limit then decodeErr (.limit limit count) else pure ()
       let arr : Scope := bs.toArray
-      let elems ← (List.range count).mapM fun i =>
-        deserialize (α := α) (slice arr (size * i) (size * (i + 1)))
+      let elems ← (List.range count).mapM fun i => readFixed arr (size * i) (size * (i + 1))
       pure elems.toArray
   | none =>
     if scope = 0 then
@@ -238,6 +304,60 @@ def deserializeSeq {α : Type} [Ssz α] (bs : Bytes) (count? : Option Nat) (limi
         let parts ← cutVariable arr scope offsets
         let elems ← parts.mapM (deserialize (α := α))
         pure elems.toArray
+
+/-- Deserialize a homogeneous sequence from a whole scope (the specification's reading: each
+fixed-size element from its slice). -/
+def deserializeSeq {α : Type} [Ssz α] (bs : Bytes) (count? : Option Nat) (limit : Nat) :
+    M (Array α) :=
+  deserializeSeqWith (fun arr a b => deserialize (α := α) (slice arr a b)) bs count? limit
+
+/-- `deserializeSeq` reading fixed-size elements in place (`Ssz.deserializeAt`). -/
+def deserializeSeqFast {α : Type} [Ssz α] (bs : Bytes) (count? : Option Nat) (limit : Nat) :
+    M (Array α) :=
+  deserializeSeqWith (Ssz.deserializeAt (α := α)) bs count? limit
+
+theorem deserializeSeqFast_eq {α : Type} [Ssz α] (bs : Bytes) (count? : Option Nat)
+    (limit : Nat) : deserializeSeqFast (α := α) bs count? limit = deserializeSeq bs count? limit := by
+  have : (Ssz.deserializeAt (α := α)) = fun arr a b => deserialize (α := α) (slice arr a b) := by
+    funext arr a b; exact Ssz.deserializeAt_eq arr a b
+  simp only [deserializeSeqFast, deserializeSeq, this]
+
+theorem serializeParts_go_fixed {α : Type} (s : α → Bytes) : ∀ (xs : List α) (off : Nat)
+    (facc : List Bytes),
+    serializeParts.go (xs.map fun x => Part.fixed (s x)) off facc [] =
+      (facc.reverse ++ xs.map s).flatten
+  | [], _, _ => by simp [serializeParts.go]
+  | x :: xs, off, facc => by
+    simp only [List.map, serializeParts.go]
+    rw [serializeParts_go_fixed s xs off (s x :: facc)]
+    simp
+
+/-- A sequence of fixed-size parts serializes to the concatenation of its parts. -/
+theorem serializeParts_fixed {α : Type} (s : α → Bytes) (xs : List α) :
+    serializeParts (xs.map fun x => Part.fixed (s x)) = xs.flatMap s := by
+  simp [serializeParts, serializeParts_go_fixed, List.flatMap]
+
+theorem foldl_serializeTo {α : Type} [Ssz α] : ∀ (xs : List α) (acc : Array UInt8),
+    (xs.foldl (fun acc x => Ssz.serializeTo x acc) acc).toList = acc.toList ++ xs.flatMap serialize
+  | [], acc => by simp
+  | x :: xs, acc => by
+    simp only [List.foldl]
+    rw [foldl_serializeTo xs, Ssz.serializeTo_eq]
+    simp
+
+/-- The serialization of a homogeneous sequence, fixed-size elements appended into one array
+(`Ssz.serializeTo`); equal to `serializeParts (seqParts xs)` (`serializeSeq_eq`). -/
+def serializeSeq {α : Type} [Ssz α] (xs : Array α) : Bytes :=
+  match Ssz.fixedSize? α with
+  | some _ => (xs.foldl (fun acc x => Ssz.serializeTo x acc) #[]).toList
+  | none => serializeParts (seqParts xs.toList)
+
+theorem serializeSeq_eq {α : Type} [Ssz α] (xs : Array α) :
+    serializeSeq xs = serializeParts (seqParts xs.toList) := by
+  unfold serializeSeq seqParts
+  split
+  · rw [← Array.foldl_toList, foldl_serializeTo, serializeParts_fixed]; simp
+  · rfl
 
 /-- `hash_tree_root` of a sequence: packed for basic elements, element roots otherwise, into a
 tree sized for `chunkLimit` chunks. -/
@@ -288,11 +408,11 @@ for basic `T`, `merkleize([hash_tree_root(e) for e in value])` otherwise). `N = 
 illegal type and never decodes. -/
 instance {α : Type} {n : Nat} [Ssz α] : Ssz (SszVector α n) where
   fixedSize? := (Ssz.fixedSize? α).map (n * ·)
-  serialize v := serializeParts (seqParts v.toArray.toList)
+  serialize v := serializeSeq v.toArray
   deserialize bs := do
     if n = 0 then decodeErr (.illegalType "Vector[T, 0]")
     else
-      let xs ← deserializeSeq (α := α) bs (some n) n
+      let xs ← deserializeSeqFast (α := α) bs (some n) n
       if h : xs.size = n then pure ⟨xs, h⟩
       else decodeErr (.length n xs.size)
   hashTreeRoot v := seqRootDepth v.toArray.toList (depthOf (seqChunkCount α n))
@@ -301,13 +421,38 @@ instance {α : Type} {n : Nat} [Ssz α] : Ssz (SszVector α n) where
 len(value))` for basic `T`, and with element roots otherwise). -/
 instance {α : Type} {n : Nat} [Ssz α] : Ssz (SszList α n) where
   fixedSize? := none
-  serialize v := serializeParts (seqParts v.toArray.toList)
+  serialize v := serializeSeq v.toArray
   deserialize bs := do
-    let xs ← deserializeSeq (α := α) bs none n
+    let xs ← deserializeSeqFast (α := α) bs none n
     if h : xs.size ≤ n then pure ⟨xs, h⟩
     else decodeErr (.limit n xs.size)
   hashTreeRoot v :=
     mixInLength (seqRootDepth v.toArray.toList (depthOf (seqChunkCount α n))) v.toArray.size
+
+/-- The vector instance's serialization and decoding are the specification's readings
+(`serializeParts (seqParts ...)`, `deserializeSeq`); the instance runs the fast paths. -/
+theorem SszVector.serialize_eq {α : Type} {n : Nat} [Ssz α] (v : SszVector α n) :
+    serialize v = serializeParts (seqParts v.toArray.toList) := serializeSeq_eq _
+
+theorem SszVector.deserialize_eq {α : Type} {n : Nat} [Ssz α] (bs : Bytes) :
+    (deserialize bs : M (SszVector α n)) =
+      (if n = 0 then throw (.decode (.illegalType "Vector[T, 0]"))
+       else do
+        let xs ← deserializeSeq (α := α) bs (some n) n
+        if h : xs.size = n then pure ⟨xs, h⟩ else throw (.decode (.length n xs.size))) := by
+  show (if n = 0 then _ else _) = _
+  simp only [deserializeSeqFast_eq]; rfl
+
+theorem SszList.serialize_eq {α : Type} {n : Nat} [Ssz α] (v : SszList α n) :
+    serialize v = serializeParts (seqParts v.toArray.toList) := serializeSeq_eq _
+
+theorem SszList.deserialize_eq {α : Type} {n : Nat} [Ssz α] (bs : Bytes) :
+    (deserialize bs : M (SszList α n)) =
+      (do
+        let xs ← deserializeSeq (α := α) bs none n
+        if h : xs.size ≤ n then pure ⟨xs, h⟩ else throw (.decode (.limit n xs.size))) := by
+  show (do let xs ← deserializeSeqFast (α := α) bs none n; _) = _
+  simp only [deserializeSeqFast_eq]; rfl
 
 /-! ## Bitfields -/
 
