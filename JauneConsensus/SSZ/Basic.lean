@@ -124,15 +124,19 @@ def serializeParts (ps : List Part) : Bytes :=
   | some _ => xs.map fun x => .fixed (serialize x)
   | none => xs.map fun x => .var (serialize x)
 
-/-- Read the `uint32` offset at byte `pos`. -/
-@[inline] def readOffset (bs : Bytes) (pos : Nat) : Nat := leNat ((bs.drop pos).take 4)
+/-- A decoding scope as an array, so offsets and slices are read by index (linear decoding;
+`Bytes` is a list). -/
+abbrev Scope := Array UInt8
 
-/-- Slice `[a, b)`. -/
-@[inline] def slice (bs : Bytes) (a b : Nat) : Bytes := (bs.drop a).take (b - a)
+/-- The bytes `[a, b)` of a scope (Python `bs[a:b]`). -/
+@[inline] def slice (bs : Scope) (a b : Nat) : Bytes := (bs.extract a b).toList
+
+/-- Read the `uint32` offset at byte `pos`. Callers check `pos + 4 ≤ bs.size` first. -/
+@[inline] def readOffset (bs : Scope) (pos : Nat) : Nat := leNat (slice bs pos (pos + 4))
 
 /-- Check that `offsets` are non-decreasing and at most `scope`, then cut the variable parts:
 element `i` spans `[offsets[i], offsets[i+1])` and the last one ends at `scope`. -/
-def cutVariable (bs : Bytes) (scope : Nat) : List Nat → M (List Bytes)
+def cutVariable (bs : Scope) (scope : Nat) : List Nat → M (List Bytes)
   | [] => pure []
   | [o] => if o ≤ scope then pure [slice bs o scope] else decodeErr (.offset "offset beyond scope")
   | o :: o' :: rest => do
@@ -155,7 +159,9 @@ def deserializeSeq {α : Type} [Ssz α] (bs : Bytes) (count? : Option Nat) (limi
       match count? with
       | some n => if count ≠ n then decodeErr (.length (n * size) scope) else pure ()
       | none => if count > limit then decodeErr (.limit limit count) else pure ()
-      let elems ← (splitEvery size count bs).mapM (deserialize (α := α))
+      let arr : Scope := bs.toArray
+      let elems ← (List.range count).mapM fun i =>
+        deserialize (α := α) (slice arr (size * i) (size * (i + 1)))
       pure elems.toArray
   | none =>
     if scope = 0 then
@@ -164,7 +170,8 @@ def deserializeSeq {α : Type} [Ssz α] (bs : Bytes) (count? : Option Nat) (limi
       | none => pure #[]
     else if scope < BYTES_PER_LENGTH_OFFSET then decodeErr (.offset "scope shorter than an offset")
     else
-      let first := readOffset bs 0
+      let arr : Scope := bs.toArray
+      let first := readOffset arr 0
       if first % BYTES_PER_LENGTH_OFFSET ≠ 0 ∨ first = 0 then
         decodeErr (.offset "first offset not a positive multiple of the offset size")
       else if first > scope then decodeErr (.offset "first offset beyond scope")
@@ -173,8 +180,8 @@ def deserializeSeq {α : Type} [Ssz α] (bs : Bytes) (count? : Option Nat) (limi
         match count? with
         | some n => if count ≠ n then decodeErr (.offset "first offset does not match the vector length") else pure ()
         | none => if count > limit then decodeErr (.limit limit count) else pure ()
-        let offsets := (List.range count).map fun i => readOffset bs (BYTES_PER_LENGTH_OFFSET * i)
-        let parts ← cutVariable bs scope offsets
+        let offsets := (List.range count).map fun i => readOffset arr (BYTES_PER_LENGTH_OFFSET * i)
+        let parts ← cutVariable arr scope offsets
         let elems ← parts.mapM (deserialize (α := α))
         pure elems.toArray
 
@@ -218,6 +225,9 @@ instance {α : Type} {n : Nat} [DecidableEq α] : DecidableEq (SszVector α n) :
 
 instance {α : Type} {n : Nat} [DecidableEq α] : DecidableEq (SszList α n) := fun a b =>
   if h : a.toArray = b.toArray then isTrue (SszList.ext h) else isFalse (fun e => h (e ▸ rfl))
+
+instance {α : Type} {n : Nat} [BEq α] : BEq (SszVector α n) := ⟨fun a b => a.toArray == b.toArray⟩
+instance {α : Type} {n : Nat} [BEq α] : BEq (SszList α n) := ⟨fun a b => a.toArray == b.toArray⟩
 
 /-- `Vector[T, N]` ("Serialization" as a sequence; "Merkleization": `merkleize(pack(value))`
 for basic `T`, `merkleize([hash_tree_root(e) for e in value])` otherwise). `N = 0` is an

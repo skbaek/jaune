@@ -8,3 +8,6 @@ import JauneConsensus.SSZ.Basic
 import JauneConsensus.Harness.Snappy
 import JauneConsensus.Harness.Yaml
 import JauneConsensus.Harness.SszGeneric
+import JauneConsensus.SSZ.Container
+import JauneConsensus.SSZ.Progressive
+import JauneConsensus.Harness.SszGenericTypes

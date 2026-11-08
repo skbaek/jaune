@@ -92,8 +92,9 @@ structure TypeChecks where
   valid : Bytes → Yaml → B256 → Except CaseFail Unit
   invalid : Bytes → Except CaseFail Unit
 
-/-- The checks for a type with SSZ, YAML and equality instances. -/
-def TypeChecks.of (α : Type) [Ssz α] [FromYaml α] [DecidableEq α] : TypeChecks where
+/-- The checks for a type with SSZ, YAML and equality instances. Equality is `BEq` (derived
+field by field for containers), which is what the comparison runs. -/
+def TypeChecks.of (α : Type) [Ssz α] [FromYaml α] [BEq α] : TypeChecks where
   valid ser value root := do
     let v ← match (deserialize ser : M α) with
       | .ok v => pure v
@@ -101,7 +102,7 @@ def TypeChecks.of (α : Type) [Ssz α] [FromYaml α] [DecidableEq α] : TypeChec
     let y ← match (fromYaml value : Except YamlError α) with
       | .ok y => pure y
       | .error e => throw (.yaml e)
-    if v ≠ y then throw .valueMismatch
+    if !(v == y) then throw .valueMismatch
     if serialize y ≠ ser then throw .reserialize
     if hashTreeRoot v ≠ root then throw .rootMismatch
   invalid ser :=
@@ -111,7 +112,7 @@ def TypeChecks.of (α : Type) [Ssz α] [FromYaml α] [DecidableEq α] : TypeChec
 
 /-- A basic element type by its `ssz_generic` name, passed to a continuation. -/
 def withBasic (name : String)
-    (k : (α : Type) → [Ssz α] → [FromYaml α] → [DecidableEq α] → TypeChecks) :
+    (k : (α : Type) → [Ssz α] → [FromYaml α] → [BEq α] → TypeChecks) :
     Option TypeChecks :=
   match name with
   | "bool" => some (k Bool)

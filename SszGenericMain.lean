@@ -1,5 +1,5 @@
 import Lean.Data.Json
-import JauneConsensus.Harness.SszGeneric
+import JauneConsensus.Harness.SszGenericTypes
 
 /-!
 # `jaune-consensus-ssz-generic`: the `ssz_generic` runner (minimal path)
@@ -41,7 +41,7 @@ def readRoot (text : String) : Except CaseFail B256 := do
 /-- Run one case directory. -/
 def runCase (handler suite : String) (dir : System.FilePath) (name : String) :
     IO (Except CaseFail Unit) := do
-  match typeOfCase handler name with
+  match typeOfCaseAll handler name with
   | none => pure (.error (.unknownType name))
   | some checks =>
     let raw ← readBin (dir / "serialized.ssz_snappy")
@@ -56,10 +56,20 @@ def runCase (handler suite : String) (dir : System.FilePath) (name : String) :
       else
         let valueText ← readText (dir / "value.yaml")
         let metaText ← readText (dir / "meta.yaml")
-        pure do
-          let value ← liftYaml (Yaml.parse (← valueText))
-          let root ← readRoot (← metaText)
-          checks.valid ser value root
+        let t0 ← IO.monoMsNow
+        let value := (do liftYaml (Yaml.parse (← valueText)) : Except CaseFail Yaml)
+        match value with
+        | .error e => pure (.error e)
+        | .ok value =>
+        let t1 ← IO.monoMsNow
+        let r := (do checks.valid ser value (← readRoot (← metaText)) : Except CaseFail Unit)
+        match r with
+        | .error e => pure (.error e)
+        | .ok () =>
+        let t2 ← IO.monoMsNow
+        if (← IO.getEnv "SSZ_GENERIC_PHASES").isSome then
+          IO.eprintln s!"phases {name}: yaml {t1 - t0} ms, checks {t2 - t1} ms"
+        pure (.ok ())
 
 /-- Sorted subdirectory names. -/
 def subdirs (p : System.FilePath) : IO (Array String) := do
@@ -78,6 +88,8 @@ def recordedCount (inv : Lean.Json) (handler suite : String) : Option Nat :=
   | .error _ => none
 
 def main (args : List String) : IO UInt32 := do
+  let trace := args.contains "--trace"
+  let args := args.filter (· ≠ "--trace")
   let rec parseArgs : List String → Option System.FilePath → Option System.FilePath →
       List String → Option (System.FilePath × System.FilePath × List String)
     | "--tests" :: d :: rest, _, i, hs => parseArgs rest (some d) i hs
@@ -114,6 +126,7 @@ def main (args : List String) : IO UInt32 := do
       let t0 ← IO.monoMsNow
       let mut pass := 0
       for c in cases do
+        if trace then IO.eprintln s!"case {handler}/{suite}/{c} {← IO.monoMsNow}"; (← IO.getStderr).flush
         match ← runCase handler suite (dir / c) c with
         | .ok () => pass := pass + 1
         | .error e =>

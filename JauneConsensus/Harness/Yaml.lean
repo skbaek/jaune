@@ -231,6 +231,7 @@ def inlineValue (fuel : Nat) : P Yaml := do
 /-- Does the text at the position look like `key:` (a mapping entry)? Checked on a copy of
 the state, so it consumes nothing. -/
 def looksLikeKey (fuel : Nat) : P Bool := do
+  if (← peek) = some '[' ∨ (← peek) = some '{' then return false
   let saved ← get
   let r ← (tryCatch (do let _ ← keyText false fuel; pure ((← peek) == some ':')) (fun _ => pure false))
   set saved
