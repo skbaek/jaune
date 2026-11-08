@@ -1,3 +1,4 @@
+import JauneConsensus.Harness.EpochCases
 import JauneConsensus.Harness.Discovery
 import JauneConsensus.Harness.Snappy
 import JauneConsensus.Shuffle
@@ -186,6 +187,10 @@ def handlerFor (runner handler : String) : Option (Case → IO Verdict) :=
   | "shuffling", "core" => some shufflingCore
   | "ssz_generic", _ => some sszGenericCase
   | "ssz_static", _ => some sszStaticCase
+  | "epoch_processing", _ => some fun c => do
+    match ← epochProcessingCase c with
+    | none => pure .pass
+    | some why => pure (.fail why)
   | "bls", "eth_aggregate_pubkeys" => some blsAggregatePubkeys
   | "bls", "eth_fast_aggregate_verify" => some blsFastAggregateVerify
   | _, _ => none
