@@ -164,12 +164,40 @@ def cmdBenchHashPair (n : Nat) : IO UInt32 := do
     IO.println "bench-hash-pair: DISAGREEMENT"
     pure 1
 
+/-- `--bench-state-root FILE`: time decoding, serializing and hashing a mainnet Electra
+`BeaconState` (`FILE` is a `pre.ssz_snappy`), and the roots of its largest fields. -/
+def cmdBenchStateRoot (file : String) : IO UInt32 := do
+  let raw ← IO.FS.readBinFile file
+  let .ok bytes := JauneConsensus.Harness.Snappy.decompress raw
+    | IO.println "bench-state-root: snappy failed"; return 1
+  let bs := bytes.toList
+  let t0 ← IO.monoMsNow
+  let .ok (s : JauneConsensus.BeaconState .mainnet .electra) := (JauneConsensus.deserialize bs : JauneConsensus.M _)
+    | IO.println "bench-state-root: decode failed"; return 1
+  let t1 ← IO.monoMsNow
+  let ser := JauneConsensus.serialize s
+  let t2 ← IO.monoMsNow
+  let r := JauneConsensus.hashTreeRoot s
+  let t3 ← IO.monoMsNow
+  let r1 := JauneConsensus.hashTreeRoot s.randao_mixes
+  let t4 ← IO.monoMsNow
+  let r2 := JauneConsensus.hashTreeRoot s.block_roots
+  let t5 ← IO.monoMsNow
+  let r3 := JauneConsensus.hashTreeRoot s.validators
+  let t6 ← IO.monoMsNow
+  let r4 := JauneConsensus.hashTreeRoot s.slashings
+  let t7 ← IO.monoMsNow
+  IO.println s!"bytes {bs.length} ser {ser.length} root {r} {r1} {r2} {r3} {r4}"
+  IO.println s!"decode {t1-t0} ms, serialize {t2-t1} ms, hash_tree_root {t3-t2} ms; randao_mixes {t4-t3}, block_roots {t5-t4}, validators {t6-t5}, slashings {t7-t6}"
+  pure 0
+
 def main (args : List String) : IO UInt32 := do
   match args with
   | ["--bench-hash-pair", k] =>
     match k.toNat? with
     | some n => return (← cmdBenchHashPair n)
     | none => IO.eprintln usage; return 2
+  | ["--bench-state-root", f] => return (← cmdBenchStateRoot f)
   | ["--forks"] => return (← cmdForks)
   | ["--fork-rules", n] => return (← cmdForkRules n)
   | _ => pure ()

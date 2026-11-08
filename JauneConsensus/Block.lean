@@ -167,7 +167,8 @@ def getAttestationParticipationFlagIndices (state : BeaconState P f) (data : Att
     out := out ++ [TIMELY_HEAD_FLAG_INDEX]
   pure out
 
-/-- `process_attestation` (Electra, EIP-7549). -/
+/-- `process_attestation` (Electra, EIP-7549; the Deneb version, `specs/deneb/beacon-chain.md`,
+names one committee by `data.index`). -/
 def processAttestation (ctx : Ctx) (state : BeaconState P f) (attestation : Attestation P f) :
     M (BeaconState P f) := do
   let site := "process_attestation"
@@ -178,19 +179,25 @@ def processAttestation (ctx : Ctx) (state : BeaconState P f) (attestation : Atte
   require (data.target.epoch == (← computeEpochAtSlot P data.slot)) s!"{site}: target epoch of slot"
   require ((← U64.add? data.slot (← c64 P.MIN_ATTESTATION_INCLUSION_DELAY) site) ≤ state.slot)
     s!"{site}: inclusion delay"
-  require (data.index == U64.zero) s!"{site}: data.index == 0"
-  let cbits ← Gated.read attestation.committee_bits site
   let bits := attestation.aggregation_bits.bits
-  let mut offset := 0
-  for ci in ← getCommitteeIndices cbits do
-    require (ci < (← getCommitteeCountPerSlot state data.target.epoch)) s!"{site}: committee index"
-    let committee ← getBeaconCommittee state data.slot ci
-    let mut attesters := 0
-    for i in [0:committee.size] do
-      if ← getAt bits (offset + i) "aggregation_bits" then attesters := attesters + 1
-    require (attesters > 0) s!"{site}: committee attesters"
-    offset := offset + committee.size
-  require (bits.size == offset) s!"{site}: bitfield length"
+  if f.atLeast .electra then
+    require (data.index == U64.zero) s!"{site}: data.index == 0"
+    let cbits ← Gated.read attestation.committee_bits site
+    let mut offset := 0
+    for ci in ← getCommitteeIndices cbits do
+      require (ci < (← getCommitteeCountPerSlot state data.target.epoch)) s!"{site}: committee index"
+      let committee ← getBeaconCommittee state data.slot ci
+      let mut attesters := 0
+      for i in [0:committee.size] do
+        if ← getAt bits (offset + i) "aggregation_bits" then attesters := attesters + 1
+      require (attesters > 0) s!"{site}: committee attesters"
+      offset := offset + committee.size
+    require (bits.size == offset) s!"{site}: bitfield length"
+  else
+    -- Deneb (`specs/deneb/beacon-chain.md`): one committee, `data.index`.
+    require (data.index < (← getCommitteeCountPerSlot state data.target.epoch)) s!"{site}: committee index"
+    let committee ← getBeaconCommittee state data.slot data.index
+    require (bits.size == committee.size) s!"{site}: bitfield length"
   let flags ← getAttestationParticipationFlagIndices state data
     (← U64.sub? state.slot data.slot site)
   require (← isValidIndexedAttestation ctx state (← getIndexedAttestation state attestation))
@@ -213,10 +220,24 @@ def processAttestation (ctx : Ctx) (state : BeaconState P f) (attestation : Atte
 
 /-! ## Deposits -/
 
-/-- `apply_deposit` (Electra). -/
+/-- The index of the validator with `pubkey`, if any (`validator_pubkeys.index(pubkey)`). -/
+def validatorIndexOf (state : BeaconState P f) (pubkey : BLSPubkey) : M (Option ValidatorIndex) := do
+  match state.validators.toArray.findIdx? (·.pubkey == pubkey) with
+  | some i => pure (some (← U64.ofNat? i "ValidatorIndex"))
+  | none => pure none
+
+/-- `apply_deposit` (Electra: queue a pending deposit; phase0 to Deneb: credit the balance). -/
 def applyDeposit (ctx : Ctx) (state : BeaconState P f) (pubkey : BLSPubkey) (wc : Bytes32)
     (amount : U64) (signature : BLSSignature) : M (BeaconState P f) := do
   let mut state := state
+  if !(f.atLeast .electra) then
+    -- phase0/Altair (`specs/phase0/beacon-chain.md`): credit the balance directly.
+    match ← validatorIndexOf state pubkey with
+    | none =>
+      if ← isValidDepositSignature ctx pubkey wc amount signature then
+        return (← addValidatorToRegistry state pubkey wc amount)
+      else return state
+    | some index => return (← increaseBalance state index amount)
   if !(state.validators.toArray.any (·.pubkey == pubkey)) then
     if ← isValidDepositSignature ctx pubkey wc amount signature then
       state ← addValidatorToRegistry state pubkey wc U64.zero
@@ -238,7 +259,8 @@ def processDeposit (ctx : Ctx) (state : BeaconState P f) (deposit : Deposit) :
 
 /-! ## Exits and credential changes -/
 
-/-- `process_voluntary_exit` (Electra; the EIP-7044 domain uses `CAPELLA_FORK_VERSION`). -/
+/-- `process_voluntary_exit` (Electra; Deneb lacks the pending-withdrawal check; both use the
+EIP-7044 domain of `CAPELLA_FORK_VERSION`). -/
 def processVoluntaryExit (ctx : Ctx) (state : BeaconState P f) (sve : SignedVoluntaryExit) :
     M (BeaconState P f) := do
   let site := "process_voluntary_exit"
@@ -250,8 +272,9 @@ def processVoluntaryExit (ctx : Ctx) (state : BeaconState P f) (sve : SignedVolu
   require (ve.epoch ≤ current) s!"{site}: epoch"
   require ((← U64.add? validator.activation_epoch (← c64 ctx.cfg.SHARD_COMMITTEE_PERIOD) site) ≤ current)
     s!"{site}: active long enough"
-  require ((← getPendingBalanceToWithdraw state ve.validator_index) == U64.zero)
-    s!"{site}: no pending withdrawals"
+  if f.atLeast .electra then
+    require ((← getPendingBalanceToWithdraw state ve.validator_index) == U64.zero)
+      s!"{site}: no pending withdrawals"
   let domain ← pure <| computeDomain DOMAIN_VOLUNTARY_EXIT (← versionOf ctx.cfg.CAPELLA_FORK_VERSION)
     state.genesis_validators_root
   let root := computeSigningRoot ve domain
@@ -294,7 +317,8 @@ private def withdrawnFor (ws : Array Withdrawal) (index : ValidatorIndex) : M Gw
     else pure acc) U64.zero
 
 /-- `get_expected_withdrawals` (Electra): the withdrawals and the number of processed pending
-partial withdrawals. -/
+partial withdrawals. Before Electra (`specs/capella/beacon-chain.md`) there is no pending queue
+and the partial amount is `balance - MAX_EFFECTIVE_BALANCE`. -/
 def getExpectedWithdrawals (state : BeaconState P f) : M (Array Withdrawal × Nat) := do
   let site := "get_expected_withdrawals"
   let epoch ← getCurrentEpoch state
@@ -303,7 +327,10 @@ def getExpectedWithdrawals (state : BeaconState P f) : M (Array Withdrawal × Na
   let mut withdrawals : Array Withdrawal := #[]
   let mut processed := 0
   let minAct ← c64 P.MIN_ACTIVATION_BALANCE
-  for w in (← state.pendingPartialWithdrawals).toArray do
+  let pendingPartials ← if f.atLeast .electra then
+      pure (← state.pendingPartialWithdrawals).toArray
+    else pure #[]  -- Capella to Deneb: no pending partial withdrawals
+  for w in pendingPartials do
     if epoch < w.withdrawable_epoch || withdrawals.size == P.MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP then
       break
     let validator ← state.validators.get w.validator_index.toNat site
@@ -334,13 +361,14 @@ def getExpectedWithdrawals (state : BeaconState P f) : M (Array Withdrawal × Na
       withdrawals := withdrawals.push
         { index := withdrawalIndex, validator_index := validatorIndex,
           address := ← withdrawalAddress validator,
-          amount := ← U64.sub? balance (← c64 (getMaxEffectiveBalance P validator)) site }
+          amount := ← U64.sub? balance (← c64 (if f.atLeast .electra then
+            getMaxEffectiveBalance P validator else P.MAX_EFFECTIVE_BALANCE)) site }
       withdrawalIndex ← U64.add? withdrawalIndex U64.one site
     if withdrawals.size == P.MAX_WITHDRAWALS_PER_PAYLOAD then break
     validatorIndex ← U64.mod? (← U64.add? validatorIndex U64.one site) (← U64.ofNat? n site) site
   pure (withdrawals, processed)
 
-/-- `process_withdrawals` (Electra). -/
+/-- `process_withdrawals` (Electra; Capella to Deneb have no pending-queue update). -/
 def processWithdrawals (state : BeaconState P f) (payload : ExecutionPayload P) :
     M (BeaconState P f) := do
   let site := "process_withdrawals"
@@ -349,8 +377,9 @@ def processWithdrawals (state : BeaconState P f) (payload : ExecutionPayload P) 
   let mut state := state
   for w in expected do
     state ← decreaseBalance state w.validator_index w.amount
-  let pending ← state.pendingPartialWithdrawals
-  state ← state.setPendingPartialWithdrawals (← SszList.ofArray (pending.toArray.extract processed pending.length) site)
+  if f.atLeast .electra then
+    let pending ← state.pendingPartialWithdrawals
+    state ← state.setPendingPartialWithdrawals (← SszList.ofArray (pending.toArray.extract processed pending.length) site)
   if h : 0 < expected.size then
     let latest := expected[expected.size - 1]
     state := { state with next_withdrawal_index := ← U64.add? latest.index U64.one site }
@@ -372,7 +401,7 @@ def computeTimeAtSlot (cfg : Config) (state : BeaconState P f) (slot : Slot) : M
     "compute_time_at_slot"
 
 /-- `process_execution_payload` (Fulu: the blob limit is `get_blob_parameters(epoch)`;
-Electra: `MAX_BLOBS_PER_BLOCK_ELECTRA`). The engine's verdict is `ctx.executionValid`. -/
+Electra: `MAX_BLOBS_PER_BLOCK_ELECTRA`; Deneb: `MAX_BLOBS_PER_BLOCK`). The engine's verdict is `ctx.executionValid`. -/
 def processExecutionPayload (ctx : Ctx) (state : BeaconState P f) (body : BeaconBlockBody P f) :
     M (BeaconState P f) := do
   let site := "process_execution_payload"
@@ -383,7 +412,8 @@ def processExecutionPayload (ctx : Ctx) (state : BeaconState P f) (body : Beacon
   require (payload.timestamp == (← computeTimeAtSlot ctx.cfg state state.slot)) s!"{site}: timestamp"
   let maxBlobs ←
     if f.atLeast .fulu then pure (← getBlobParameters ctx.cfg epoch).maxBlobsPerBlock.toNat
-    else pure ctx.cfg.MAX_BLOBS_PER_BLOCK_ELECTRA
+    else if f.atLeast .electra then pure ctx.cfg.MAX_BLOBS_PER_BLOCK_ELECTRA
+    else pure ctx.cfg.MAX_BLOBS_PER_BLOCK
   require (body.blob_kzg_commitments.length ≤ maxBlobs) s!"{site}: blob commitments"
   require ctx.executionValid s!"{site}: execution engine"
   pure { state with latest_execution_payload_header :=
@@ -461,12 +491,6 @@ def processDepositRequest (state : BeaconState P f) (dr : DepositRequest) : M (B
     { pubkey := dr.pubkey, withdrawal_credentials := dr.withdrawal_credentials, amount := dr.amount,
       signature := dr.signature, slot := state.slot } "process_deposit_request"
   state.setPendingDeposits pending
-
-/-- The index of the validator with `pubkey`, if any (`validator_pubkeys.index(pubkey)`). -/
-def validatorIndexOf (state : BeaconState P f) (pubkey : BLSPubkey) : M (Option ValidatorIndex) := do
-  match state.validators.toArray.findIdx? (·.pubkey == pubkey) with
-  | some i => pure (some (← U64.ofNat? i "ValidatorIndex"))
-  | none => pure none
 
 /-- `process_withdrawal_request` (Electra). -/
 def processWithdrawalRequest (cfg : Config) (state : BeaconState P f) (wr : WithdrawalRequest) :
@@ -554,13 +578,19 @@ def processConsolidationRequest (cfg : Config) (state : BeaconState P f) (cr : C
 
 /-! ## Operations -/
 
-/-- `process_operations` (Electra). -/
+/-- `process_operations` (Electra; Capella to Deneb: the deposit count is
+`min(MAX_DEPOSITS, eth1_data.deposit_count - eth1_deposit_index)` and there are no execution
+requests). -/
 def processOperations (ctx : Ctx) (state : BeaconState P f) (body : BeaconBlockBody P f) :
     M (BeaconState P f) := do
   let site := "process_operations"
-  let startIndex ← state.depositRequestsStartIndex
+  let startIndex ← if f.atLeast .electra then state.depositRequestsStartIndex
+    else pure U64.max  -- Capella to Deneb: the eth1 deposit count alone bounds deposits
   let limit := if state.eth1_data.deposit_count < startIndex then state.eth1_data.deposit_count
     else startIndex
+  if !(f.atLeast .electra) then
+    -- `eth1_data.deposit_count - eth1_deposit_index` is typed `uint64` and raises on underflow.
+    let _ ← U64.sub? state.eth1_data.deposit_count state.eth1_deposit_index site
   if state.eth1_deposit_index < limit then
     let remaining ← U64.sub? limit state.eth1_deposit_index site
     require (body.deposits.length == min P.MAX_DEPOSITS remaining.toNat) s!"{site}: deposit count"
@@ -573,10 +603,11 @@ def processOperations (ctx : Ctx) (state : BeaconState P f) (body : BeaconBlockB
   for op in body.deposits.toArray do state ← processDeposit ctx state op
   for op in body.voluntary_exits.toArray do state ← processVoluntaryExit ctx state op
   for op in body.bls_to_execution_changes.toArray do state ← processBlsToExecutionChange ctx state op
-  let requests ← Gated.read body.execution_requests "execution_requests"
-  for op in requests.deposits.toArray do state ← processDepositRequest state op
-  for op in requests.withdrawals.toArray do state ← processWithdrawalRequest ctx.cfg state op
-  for op in requests.consolidations.toArray do state ← processConsolidationRequest ctx.cfg state op
+  if f.atLeast .electra then
+    let requests ← Gated.read body.execution_requests "execution_requests"
+    for op in requests.deposits.toArray do state ← processDepositRequest state op
+    for op in requests.withdrawals.toArray do state ← processWithdrawalRequest ctx.cfg state op
+    for op in requests.consolidations.toArray do state ← processConsolidationRequest ctx.cfg state op
   pure state
 
 /-! ## Block -/
