@@ -24,7 +24,7 @@
 # covers the consensus spec layer minus Crypto/ (mapped to Reject.crypto at the
 # call boundary); the consensus harness and runners are outside R4.
 #
-# Five rules, all fail-closed:
+# Six rules, all fail-closed:
 #
 #   R1  ABSENCE, no allowlist. No `partial def`, `implemented_by`, or
 #       `dbg_trace` anywhere recursively under Jaune/ or Examples/, in their
@@ -53,6 +53,15 @@
 #       (getD, getLastD, headD) and no raw UInt64 (the type name, toUInt64, or
 #       `.u64`, U64's field), so wrapping arithmetic, shifts and truncating literals can only
 #       be written inside JauneConsensus/UInt.lean's checked operations.
+#
+#   R6  ABSENCE, no allowlist. Under JauneConsensus/: no nested action `(← ...)`
+#       in a branch of a term-level `if` (one introduced by `:= if` or `← if`)
+#       unless that branch is its own `do` block. Lean lifts a nested action to
+#       the nearest enclosing `do`, so in `let x ← if c then pure (← a) else b`
+#       the action `a` runs whatever `c` is: an Electra-only field read inside
+#       an Electra branch then runs, and rejects, at Deneb. Write
+#       `if c then do pure (← a) else b`. Actions in the condition are allowed
+#       (they run in either reading).
 #
 # An allowlist row is matched line-number-independently: each occurrence is
 # normalised to
@@ -281,6 +290,44 @@ for rule, files, pat in RULES:
             if pat.search(line):
                 rows.append("%s %s %s" % (rule, f, normalise(line)))
 
+# R6: nested actions in the branches of a term-level `if` (see the header).
+# A statement starts at a line containing `:= if` or `← if` and extends over
+# the following lines indented deeper than it. Every `(←` after the first
+# `then` is checked: the text from the nearest preceding `then`/`else` must
+# begin with `do`.
+R6_START = re.compile(r'(:=|←)\s*if\b')
+R6_KW = re.compile(r'\b(then|else)\b')
+consensus_all = sorted(str(p) for p in Path("JauneConsensus").rglob("*.lean"))
+for f in consensus_all:
+    lines = open(f, encoding="utf-8").read().split("\n")
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        m = R6_START.search(line)
+        if not m:
+            i += 1
+            continue
+        ind = len(line) - len(line.lstrip())
+        stmt = [line[m.start():]]
+        j = i + 1
+        while j < len(lines) and lines[j].strip() and \
+                len(lines[j]) - len(lines[j].lstrip()) > ind:
+            stmt.append(lines[j].strip())
+            j += 1
+        # drop line comments before joining
+        text = " ".join(seg.split("--", 1)[0] for seg in stmt)
+        first_then = re.search(r'\bthen\b', text)
+        if first_then:
+            for a in re.finditer(r'\(←', text):
+                if a.start() < first_then.start():
+                    continue
+                kws = [k for k in R6_KW.finditer(text, 0, a.start())]
+                branch = text[kws[-1].end():a.start()].lstrip() if kws else ""
+                if not branch.startswith("do"):
+                    rows.append("R6 %s %s" % (f, normalise(text)))
+                    break
+        i = j
+
 for r in sorted(set(rows)):
     print(r)
 PY
@@ -321,6 +368,13 @@ BADR1="$(printf '%s\n' "$ALLOWED" | grep -c '^R1 ' || true)"
 if [ "$BADR1" -ne 0 ]; then
   echo "INTEGRITY — the allowlist carries $BADR1 R1 row(s); R1 admits no carve-out"
   echo "REGRESSION — integrity: R1 (no partial def / implemented_by / dbg_trace) has no allowlist"
+  exit 1
+fi
+
+BADR6="$(printf '%s\n' "$ALLOWED" | grep -c '^R6 ' || true)"
+if [ "$BADR6" -ne 0 ]; then
+  echo "INTEGRITY — the allowlist carries $BADR6 R6 row(s); R6 admits no carve-out"
+  echo "REGRESSION — integrity: R6 (nested action in a term-level if branch) has no allowlist"
   exit 1
 fi
 
@@ -380,5 +434,5 @@ if [ "$PENDING" -gt "$PENDING_MAX" ]; then
 fi
 
 NHITS="$(printf '%s\n' "$HITS" | grep -c .)"
-echo "OK — integrity: all $NHITS occurrence(s) in the audited scope (Jaune.lean closure + Examples + JauneConsensus tree; runner boundary and MemoryProbe.lean for R4; consensus spec layer for R5) are allowlisted; $PENDING pending (budget $PENDING_MAX); no new ones"
+echo "OK — integrity: all $NHITS occurrence(s) in the audited scope (Jaune.lean closure + Examples + JauneConsensus tree; runner boundary and MemoryProbe.lean for R4; consensus spec layer for R5; JauneConsensus/ for R6) are allowlisted; $PENDING pending (budget $PENDING_MAX); no new ones"
 exit 0
