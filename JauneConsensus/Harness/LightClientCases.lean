@@ -1,4 +1,5 @@
 import JauneConsensus.LightClient
+import JauneConsensus.Harness.LightClientDataCollection
 import JauneConsensus.SSZ.Proof
 import JauneConsensus.Harness.Discovery
 import JauneConsensus.Harness.Snappy
@@ -10,8 +11,8 @@ import JauneConsensus.Harness.Yaml
 `tests/formats/light_client/` and `tests/formats/merkle_proof/` (`consensus-specs` `v1.6.1`):
 
 * `single_merkle_proof/<Type>`: `is_valid_merkle_branch(leaf, branch, floorlog2(leaf_index),
-  get_subtree_index(leaf_index), hash_tree_root(object))` must hold. (The optional check that a
-  self-generated proof equals `branch` needs object-level proof generation, not implemented.)
+  get_subtree_index(leaf_index), hash_tree_root(object))` must hold, and the optional check:
+  `compute_merkle_proof(object, leaf_index)` (`LightClientFullNode.lean`) equals `branch`.
 * `sync`: initialize a `LightClientStore` from `bootstrap` and run the steps, checking the
   finalized and optimistic headers after each. Every fork digest must be one of the case fork's
   (`forkDigestsOf`: from Fulu the digest changes at each `BLOB_SCHEDULE` epoch while the types do
@@ -52,8 +53,9 @@ private def root32 (v : YVal) : Except String B256 := do
 def verifyGindexBranch (leaf : B256) (branch : List B256) (gindex : Nat) (root : B256) : M Bool := do
   isValidMerkleBranch leaf branch (← c64 (floorlog2 gindex)) (← getSubtreeIndex gindex) root
 
-/-- `single_merkle_proof/<Type>` for an object of type `α`. -/
-@[nospecialize] def singleMerkleProof {α : Type} [Ssz α] (c : Case) : IO (Except String Unit) := do
+/-- `single_merkle_proof/<Type>` for an object of type `α` with proof tree `tree`. -/
+@[nospecialize] def singleMerkleProof {α : Type} [Ssz α] (tree : α → ProofTree) (c : Case) :
+    IO (Except String Unit) := do
   if c.files != ["object.ssz_snappy", "proof.yaml"] then return .error s!"unexpected files {c.files}"
   let obj ← readSsz c "object.ssz_snappy"
   let doc ← readYamlFile c "proof.yaml"
@@ -68,6 +70,8 @@ def verifyGindexBranch (leaf : B256) (branch : List B256) (gindex : Nat) (root :
     require' (branch.length == depth) "branch length differs from floorlog2(leaf_index)"
     let ok ← liftM (verifyGindexBranch leaf branch index (hashTreeRoot o)) "is_valid_merkle_branch"
     require' ok "is_valid_merkle_branch failed against hash_tree_root(object)"
+    let regenerated ← liftM (computeMerkleProof (tree o) index) "compute_merkle_proof"
+    require' (regenerated == branch) "compute_merkle_proof(object, leaf_index) differs from branch"
 where require' (b : Bool) (msg : String) : Except String Unit := if b then pure () else throw msg
 
 /-- Check a header against `{slot, beacon_root, execution_root}`. -/
@@ -167,9 +171,11 @@ def lightClientCase (cfg : Config) (c : Case) : IO (Except String Unit) := do
   let some P := Preset.ofName? c.preset | return .error s!"no preset {c.preset}"
   let some f := CFork.ofName? c.key.fork | return .error s!"no fork {c.key.fork}"
   match c.key.handler, c.key.suite with
-  | "single_merkle_proof", "BeaconState" => singleMerkleProof (α := BeaconState P f) c
-  | "single_merkle_proof", "BeaconBlockBody" => singleMerkleProof (α := BeaconBlockBody P f) c
+  | "single_merkle_proof", "BeaconState" => singleMerkleProof (BeaconState.proofTree (P := P) (f := f)) c
+  | "single_merkle_proof", "BeaconBlockBody" =>
+    singleMerkleProof (BeaconBlockBody.proofTree (P := P) (f := f)) c
   | "sync", _ => lightClientSync P f cfg c
+  | "data_collection", _ => lightClientDataCollection P f cfg c
   | "update_ranking", _ => lightClientUpdateRanking P f c
   | h, s => pure (.error s!"UNIMPLEMENTED: no light_client handler {h}/{s}")
 
