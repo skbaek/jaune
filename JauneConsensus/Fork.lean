@@ -164,15 +164,29 @@ def CFork.rules? : CFork → Option ForkData
   | .fulu => some fuluData
   | .gloas => none
 
+/-- Why a fork name is refused for a run. -/
+inductive ForkRefusal where
+  /-- Not a consensus fork this goal implements (for example `eip7805` or a typo). -/
+  | unknown (name : String)
+  /-- A declared fork whose rules do not resolve (Gloas). -/
+  | unimplemented (fork : CFork)
+
+def ForkRefusal.render : ForkRefusal → String
+  | .unknown n => s!"refused: {n} is not a consensus fork this goal implements"
+  | .unimplemented c =>
+    s!"refused: {c.name} is declared (paired with {c.executionForks}) but not implemented; it fails closed"
+
+instance : ToString ForkRefusal := ⟨ForkRefusal.render⟩
+
 /-- Resolve a fork name for a run: the name must be a `CFork` whose rules resolve. Gloas, the
 `eip7805` feature fork and every unknown name are refused; nothing is ever run as Fulu. -/
-def CFork.resolve (n : String) : Except String ForkData :=
+def CFork.resolve (n : String) : Except ForkRefusal ForkData :=
   match CFork.ofName? n with
-  | none => .error s!"refused: {n} is not a consensus fork this goal implements"
+  | none => .error (.unknown n)
   | some c =>
     match c.rules? with
     | some d => .ok d
-    | none => .error s!"refused: {n} is declared (paired with {c.executionForks}) but not implemented; it fails closed"
+    | none => .error (.unimplemented c)
 
 theorem CFork.rules?_fork (c : CFork) (d : ForkData) (h : c.rules? = some d) : d.fork = c := by
   cases c <;> simp [CFork.rules?] at h <;> subst h <;> rfl

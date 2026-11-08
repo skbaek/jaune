@@ -18,7 +18,13 @@
 # If a module joins or leaves the closure the inventory changes with it, which
 # is the point: the gate can never be satisfied by moving code out of reach.
 #
-# Four rules, all fail-closed:
+# The consensus layer (JauneConsensus.lean's closure, every file under
+# JauneConsensus/, and its runner ConsensusMain.lean) is in the scope of R1-R4,
+# and its spec layer (JauneConsensus/ minus UInt.lean and Harness/) of R5. R4
+# covers the consensus spec layer minus Crypto/ (mapped to Reject.crypto at the
+# call boundary); the consensus harness and runners are outside R4.
+#
+# Five rules, all fail-closed:
 #
 #   R1  ABSENCE, no allowlist. No `partial def`, `implemented_by`, or
 #       `dbg_trace` anywhere recursively under Jaune/ or Examples/, in their
@@ -42,6 +48,11 @@
 #       renderer adapter or an external parser/JSON boundary -- and the gate
 #       refuses an R4 PENDING row outright: a new stringly semantic carrier
 #       can no longer be deferred, only reviewed in or rejected.
+#
+#   R5  ABSENCE, no allowlist. In the consensus spec layer: no defaulted read
+#       (getD, getLastD, headD) and no raw UInt64 (the type name, toUInt64, or
+#       `.u64`, U64's field), so wrapping arithmetic, shifts and truncating literals can only
+#       be written inside JauneConsensus/UInt.lean's checked operations.
 #
 # An allowlist row is matched line-number-independently: each occurrence is
 # normalised to
@@ -135,6 +146,51 @@ while stack:
 
 closure_files = sorted(path_of(m) for m in closure)
 
+# ---- the consensus layer (goal jaune-consensus-electra-fulu-v1) ------------
+# A second library root, JauneConsensus.lean, outside Jaune/ so that Blanc
+# does not build it. Its import closure is traversed the same way, and every
+# file under JauneConsensus/ is scanned even when orphaned, so removing an
+# import cannot hide a forbidden construct. ConsensusMain.lean is its runner.
+def cpath_of(mod):
+    return mod.replace(".", "/") + ".lean"
+CIMPORT = re.compile(r'\s*import\s+(JauneConsensus(?:\.[A-Za-z0-9_]+)*)\s*$')
+if not Path("JauneConsensus.lean").is_file() or not Path("JauneConsensus").is_dir():
+    print("SETUP missing consensus root JauneConsensus.lean or its source tree", file=sys.stderr)
+    sys.exit(2)
+cclosure, stack = set(), ["JauneConsensus"]
+while stack:
+    mod = stack.pop()
+    if mod in cclosure:
+        continue
+    cclosure.add(mod)
+    p = cpath_of(mod)
+    if not os.path.exists(p):
+        print("SETUP missing module file for %s (%s)" % (mod, p), file=sys.stderr)
+        sys.exit(2)
+    for line in open(p, encoding="utf-8"):
+        m = CIMPORT.match(line)
+        if m:
+            stack.append(m.group(1))
+consensus_runner = sorted(str(p) for p in Path(".").glob("Consensus*.lean"))
+consensus_files = sorted(set(cpath_of(m) for m in cclosure)
+                         | set(str(p) for p in Path("JauneConsensus").rglob("*.lean"))
+                         | set(consensus_runner))
+# The consensus spec layer: everything but the checked-integer module (the one
+# place raw UInt64 is handled) and the harness (vector readers, outside the
+# semantics). R5 applies here.
+consensus_spec_files = sorted(
+    f for f in consensus_files
+    if f.startswith("JauneConsensus/")
+    and f != "JauneConsensus/UInt.lean"
+    and not f.startswith("JauneConsensus/Harness/"))
+# R4 (typed error carriers) covers the consensus spec layer except the crypto
+# primitives, whose `Except String` failures are mapped to `Reject.crypto` where
+# the spec layer calls them. The harness and the runner executables (vector
+# readers, CLI renderers) are the consensus runner boundary; they are outside
+# R4 here, as a scope choice rather than allowlist rows, and stay under R1-R3.
+consensus_r4_files = sorted(
+    f for f in consensus_spec_files if not f.startswith("JauneConsensus/Crypto/"))
+
 # Examples are consumer code, never production imports. Scan even orphaned
 # examples so removing an import cannot hide a forbidden construct.
 if not Path("Examples").is_dir() or not Path("Examples.lean").is_file():
@@ -149,7 +205,7 @@ if not Path(consumer_file).is_file():
     print("SETUP missing external consumer source", file=sys.stderr)
     sys.exit(2)
 example_files.append(consumer_file)
-protected_files = sorted(set(closure_files) | set(example_files))
+protected_files = sorted(set(closure_files) | set(example_files) | set(consensus_files))
 
 # The post-Step-10 scope of R4: the closure plus the runner boundary, where
 # examples, the fixture parser and the CLI renderer live. Strings there are legitimate
@@ -160,7 +216,8 @@ protected_files = sorted(set(closure_files) | set(example_files))
 # memory-closure repair; an anti-regression instrument that no gate reads is
 # one that rots. It carries a typed ProbeError rather than an `Except String`,
 # so it enters this scope with no allowlist row.
-r4_files = sorted(set(protected_files)
+r4_files = sorted((set(protected_files) - set(consensus_files))
+                  | set(consensus_r4_files)
                   | {"Jaune/ChainStore.lean", "Jaune/FixtureException.lean",
                      "Main.lean", "MemoryProbe.lean"})
 
@@ -172,6 +229,7 @@ r1_files = sorted(
     [str(p) for p in Path("Jaune").rglob("*.lean")]
     + example_files
     + ["Jaune.lean", "Main.lean", "MemoryProbe.lean"]
+    + consensus_files
 )
 
 RULES = [
@@ -198,6 +256,14 @@ RULES = [
                 r'|(?<![A-Za-z0-9_])isExceptionalHalt(?![A-Za-z0-9_])'
                 r'|(?<![A-Za-z0-9_])isBlockException(?![A-Za-z0-9_])'
                 r'|String\.isPrefixOf')),
+    # R5: failure fidelity in the consensus spec layer (goal outcome O5). No
+    # defaulted read (`getD`, `getLastD`, `headD`, `getElem!` is R3) and no raw
+    # `UInt64`: it is reachable only as `U64.u64` or by naming the type, and its
+    # wrapping `+ - * / %`, shifts and `OfNat` literals live only in
+    # JauneConsensus/UInt.lean, behind checked operations. No allowlist rows.
+    ("R5", consensus_spec_files,
+     re.compile(r'(?<![A-Za-z0-9_])(getD|getLastD|headD|getElem\?D|UInt64|toUInt64)(?![A-Za-z0-9_])'
+                r'|\.u64(?![A-Za-z0-9_])')),
 ]
 
 def normalise(s):
@@ -255,6 +321,13 @@ if [ "$BADR1" -ne 0 ]; then
   exit 1
 fi
 
+BADR5="$(printf '%s\n' "$ALLOWED" | grep -c '^R5 ' || true)"
+if [ "$BADR5" -ne 0 ]; then
+  echo "INTEGRITY — the allowlist carries $BADR5 R5 row(s); R5 admits no carve-out"
+  echo "REGRESSION — integrity: R5 (consensus failure fidelity) has no allowlist"
+  exit 1
+fi
+
 # Step 10 completed the typed-error migration: every remaining R4 row is a
 # reviewed KEEP (a named legacy renderer adapter or an external parser
 # boundary). An R4 PENDING row would mean a new stringly semantic carrier was
@@ -304,5 +377,5 @@ if [ "$PENDING" -gt "$PENDING_MAX" ]; then
 fi
 
 NHITS="$(printf '%s\n' "$HITS" | grep -c .)"
-echo "OK — integrity: all $NHITS occurrence(s) in the audited scope (Jaune.lean closure + Examples; runner boundary and MemoryProbe.lean for R4) are allowlisted; $PENDING pending (budget $PENDING_MAX); no new ones"
+echo "OK — integrity: all $NHITS occurrence(s) in the audited scope (Jaune.lean closure + Examples + JauneConsensus tree; runner boundary and MemoryProbe.lean for R4; consensus spec layer for R5) are allowlisted; $PENDING pending (budget $PENDING_MAX); no new ones"
 exit 0

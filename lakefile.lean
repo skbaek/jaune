@@ -59,3 +59,12 @@ pinned `v1.6.1` vectors, and the cross-layer fork pairing printer (`--forks`). -
 @[default_target]
 lean_exe «jaune-consensus» where
   root := `ConsensusMain
+
+/--
+Whole-library axiom union for the consensus layer (`scripts/ConsensusUnionAxioms.lean`).
+Separate from `Assurance`, which Blanc builds in full, so Blanc's build does not grow.
+-/
+@[default_target]
+lean_lib «ConsensusAssurance» where
+  srcDir := "scripts"
+  roots := #[`ConsensusUnionAxioms]

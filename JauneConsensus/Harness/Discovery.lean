@@ -107,7 +107,7 @@ def forkRefusal? (f : String) : Option String :=
     some "refused: eip7805 is a feature fork outside this goal (fails closed)"
   else match CFork.ofName? f with
     | some _ => match CFork.resolve f with
-      | .error e => some e
+      | .error e => some e.render
       | .ok _ => none
     | none => none
 

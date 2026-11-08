@@ -2,6 +2,7 @@ import JauneConsensus.Harness.Discovery
 import JauneConsensus.Harness.Snappy
 import JauneConsensus.Shuffle
 import JauneConsensus.Harness.ConfigOverride
+import JauneConsensus.Harness.SszGenericTypes
 
 /-!
 # Case handlers and strict verdicts (conformance harness)
@@ -57,6 +58,35 @@ def shufflingCore (c : Case) : IO Verdict := do
   | .ok v => pure v
   | .error e => pure (.fail e)
 
+/-- `ssz_generic/<handler>` (`tests/formats/ssz_generic/README.md`): the SSZ type comes from the
+case name; a `valid` case must decode, equal `value.yaml`, re-encode to `serialized` and have the
+`meta.yaml` root; an `invalid` case must fail to decode. The checks run the library's `Ssz`
+instances (`Harness/SszGeneric.lean`). -/
+def sszGenericCase (c : Case) : IO Verdict := do
+  let want := if c.key.suite == "valid" then ["meta.yaml", "serialized.ssz_snappy", "value.yaml"]
+    else ["serialized.ssz_snappy"]
+  if c.files != want then return .fail s!"unexpected files {c.files}"
+  let some checks := typeOfCaseAll c.key.handler c.name
+    | return .fail (CaseFail.unknownType c.name).render
+  let ser ← match Snappy.decompress (← IO.FS.readBinFile (c.dir / "serialized.ssz_snappy")) with
+    | .ok b => pure b.toList
+    | .error e => return .fail (CaseFail.snappy e).render
+  let r : Except CaseFail Unit ←
+    if c.key.suite == "valid" then do
+      let value ← readYaml c "value.yaml"
+      let meta ← readYaml c "meta.yaml"
+      pure do
+        let value ← value.mapError CaseFail.yaml
+        let meta ← meta.mapError CaseFail.yaml
+        meta.expectKeys ["root"] |>.mapError CaseFail.yaml
+        let rootBytes ← ((meta.field "root").bind YVal.asHex).mapError CaseFail.yaml
+        if rootBytes.length != 32 then throw (CaseFail.yaml "root is not 32 bytes")
+        checks.valid ser value (Bytes.toB256 rootBytes)
+    else pure (checks.invalid ser)
+  match r with
+  | .ok () => pure .pass
+  | .error e => pure (.fail e.render)
+
 /-- The configuration a case runs under: the base `Config` of its preset, with the case's
 `config.yaml` applied when it has one (`Config.applyOverrides`). -/
 def caseConfig (c : Case) : IO (Except String Config) := do
@@ -81,6 +111,7 @@ private def overridden (y : String) : Option Config :=
 def handlerFor (runner handler : String) : Option (Case → IO Verdict) :=
   match runner, handler with
   | "shuffling", "core" => some shufflingCore
+  | "ssz_generic", _ => some sszGenericCase
   | _, _ => none
 
 def runCase (c : Case) : IO Verdict := do
