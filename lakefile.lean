@@ -62,3 +62,8 @@ lean_exe «jaune-consensus-bls-bench» where
 target. -/
 lean_exe «jaune-consensus-bls-vectors» where
   root := `ConsensusBLSVectors
+
+/-- Local runner for the general-preset `kzg` vectors (EIP-4844 and EIP-7594), until the
+shared consensus harness lands. Not a default target. -/
+lean_exe «jaune-consensus-kzg-vectors» where
+  root := `ConsensusKZGVectors
