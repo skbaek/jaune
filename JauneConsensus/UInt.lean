@@ -25,15 +25,15 @@ namespace JauneConsensus
 
 /-- `uint64`, with checked arithmetic only. -/
 structure U64 where
-  val : UInt64
+  u64 : UInt64
   deriving DecidableEq, Repr, Hashable, Inhabited
 
 namespace U64
 
 /-- The value as a natural number. -/
-@[inline] def toNat (x : U64) : Nat := x.val.toNat
+@[inline] def toNat (x : U64) : Nat := x.u64.toNat
 
-theorem toNat_lt (x : U64) : x.toNat < 2 ^ 64 := x.val.toNat_lt
+theorem toNat_lt (x : U64) : x.toNat < 2 ^ 64 := x.u64.toNat_lt
 
 /-- `uint64(n)`: rejects with `Reject.overflow` when `n ≥ 2^64`. -/
 @[inline] def ofNat? (n : Nat) (site : String := "uint64") : M U64 :=
@@ -77,9 +77,9 @@ def max : U64 := ⟨0xFFFFFFFFFFFFFFFF⟩
   ofNat? (a.toNat <<< k) site
 
 /-- Bitwise `&`, `|`, `^` on `uint64` (never fail). -/
-@[inline] def and (a b : U64) : U64 := ⟨a.val &&& b.val⟩
-@[inline] def or (a b : U64) : U64 := ⟨a.val ||| b.val⟩
-@[inline] def xor (a b : U64) : U64 := ⟨a.val ^^^ b.val⟩
+@[inline] def and (a b : U64) : U64 := ⟨a.u64 &&& b.u64⟩
+@[inline] def or (a b : U64) : U64 := ⟨a.u64 ||| b.u64⟩
+@[inline] def xor (a b : U64) : U64 := ⟨a.u64 ^^^ b.u64⟩
 
 instance : LT U64 := ⟨fun a b => a.toNat < b.toNat⟩
 instance : LE U64 := ⟨fun a b => a.toNat ≤ b.toNat⟩

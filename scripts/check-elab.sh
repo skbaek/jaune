@@ -121,8 +121,10 @@ trap cleanup EXIT
 # Trees scanned recursively, and the root modules of the default targets
 # (Jaune, Examples, jaune, jaune-memory-probe, jaune-trace). The Assurance
 # library's modules live under its own srcDir and are discovered from lakefile.lean below.
-SRC_DIRS="Jaune Examples"
-ROOT_MODULES="Jaune.lean Examples.lean Main.lean MemoryProbe.lean TraceMain.lean"
+# The consensus layer (JauneConsensus tree, its root, its ssz_generic runner and
+# its separate ConsensusAssurance union module) is a default target too.
+SRC_DIRS="Jaune Examples JauneConsensus"
+ROOT_MODULES="Jaune.lean Examples.lean Main.lean MemoryProbe.lean TraceMain.lean JauneConsensus.lean ConsensusMain.lean scripts/ConsensusUnionAxioms.lean"
 BASELINE="$SCRIPT_DIR/baseline-elab.txt"
 REPORT="$SCRIPT_DIR/report-elab.txt"
 

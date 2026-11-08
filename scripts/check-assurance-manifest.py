@@ -78,19 +78,24 @@ def public_rules(path):
     return result
 
 
-def check_union_coverage(root=ROOT):
-    """Every Jaune source module must be imported by the whole-library audit."""
-    tree = root / "Jaune"
-    if not tree.is_dir() or not (root / "Jaune.lean").is_file():
-        raise ValueError("missing Jaune source tree or umbrella")
-    paths = [root / "Jaune.lean", *sorted(tree.rglob("*.lean"))]
+def check_union_coverage(root=ROOT, prefix="Jaune", union="JauneUnionAxioms.lean"):
+    """Every source module of library `prefix` must be imported by its whole-library audit.
+
+    `prefix` names a source tree `<prefix>/` and its umbrella `<prefix>.lean`; `union`
+    is the audit module under scripts/. Jaune's execution layer and the consensus layer
+    (`JauneConsensus`, audited by `ConsensusUnionAxioms.lean`) are checked separately.
+    """
+    tree = root / prefix
+    if not tree.is_dir() or not (root / f"{prefix}.lean").is_file():
+        raise ValueError(f"missing {prefix} source tree or umbrella")
+    paths = [root / f"{prefix}.lean", *sorted(tree.rglob("*.lean"))]
     graph = {".".join(p.relative_to(root).with_suffix("").parts):
              _boundary.imports(p) for p in paths}
-    pending = _boundary.imports(root / "scripts" / "JauneUnionAxioms.lean")
+    pending = _boundary.imports(root / "scripts" / union)
     reached = set()
     while pending:
         module = pending.pop()
-        if module != "Jaune" and not module.startswith("Jaune."):
+        if module != prefix and not module.startswith(prefix + "."):
             continue
         if module in reached:
             continue
@@ -149,9 +154,12 @@ if __name__ == "__main__":
     try:
         n, covered, modules = check()
         union_modules = check_union_coverage()
+        consensus_modules = check_union_coverage(
+            prefix="JauneConsensus", union="ConsensusUnionAxioms.lean")
     except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
         print(f"REGRESSION — assurance manifest: {error}", file=sys.stderr)
         sys.exit(1)
     print(f"OK — assurance manifest: {n} rows match {n} entries; "
           f"{covered} public rules in {modules} coverage modules all audited; "
-          f"whole-library union imports all {union_modules} Jaune modules")
+          f"whole-library union imports all {union_modules} Jaune modules; "
+          f"consensus union imports all {consensus_modules} JauneConsensus modules")
