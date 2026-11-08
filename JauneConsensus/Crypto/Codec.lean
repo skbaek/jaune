@@ -16,6 +16,7 @@
 import Jaune.Precompiles
 import JauneConsensus.Crypto.HashToCurve
 import JauneConsensus.Crypto.FinalExp
+import JauneConsensus.Crypto.G2Subgroup
 
 namespace JauneConsensus
 
@@ -112,8 +113,13 @@ def signatureToPoint (sig : Bytes) : Except String BLSP2 := do
 /-- `subgroup_check_E1`: the naive check `r * P = identity` (draft section 1.3). -/
 def g1SubgroupCheck (p : BLSP) : Bool := p.mulBy blsCurveOrder = g1Identity
 
-/-- `subgroup_check_E2`: the naive check `r * P = identity`. -/
-def g2SubgroupCheck (p : BLSP2) : Bool := p.mulBy blsCurveOrder = g2Identity
+/-- `subgroup_check_E2` by the naive check `r * P = identity`; the reference for
+`g2SubgroupCheck`. -/
+def g2SubgroupCheckNaive (p : BLSP2) : Bool := p.mulBy blsCurveOrder = g2Identity
+
+/-- `subgroup_check_E2`: the endomorphism test `psi(P) = [t] P` (G2Subgroup.lean),
+which draft-04 Appendix A permits in place of the naive check. -/
+def g2SubgroupCheck (p : BLSP2) : Bool := g2SubgroupCheckFast p
 
 /-- Pairing-product check: `prod_i e(P_i, Q_i) = 1` in `GT`, computed as Jaune's
 `verifyKzgProofImpl` does (the shape of EIP-4844's `pairing_check`): the product

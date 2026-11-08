@@ -13,6 +13,29 @@ namespace JauneConsensus
 
 open Jaune
 
+/-- Subtraction in `Fp` on reduced values without the `Int` round trip of Jaune's
+`FinField.sub`: `(x + p - y) % p`. Equal to `FinField.sub` whenever `y ≤ p`
+(`fpSubFast_eq`), which holds for every value the field operations produce. -/
+def fpSubFast (x y : BLSF) : BLSF := ⟨(x.val + blsPrime - y.val) % blsPrime⟩
+
+theorem fpSubFast_eq (x y : BLSF) (hy : y.val ≤ blsPrime) : fpSubFast x y = x - y := by
+  show fpSubFast x y = FinField.sub x y
+  unfold fpSubFast FinField.sub
+  congr 1
+  have h : ((x.val + blsPrime - y.val : Nat) : Int) = (x.val : Int) - y.val + blsPrime := by
+    omega
+  have h2 : ((x.val : Int) - y.val) % (blsPrime : Int)
+      = (((x.val + blsPrime - y.val) % blsPrime : Nat) : Int) := by
+    rw [Int.natCast_mod, h, Int.add_emod_right]
+  show _ = Int.natAbs (((x.val : Int) - y.val) % (blsPrime : Int))
+  rw [h2, Int.natAbs_natCast]
+
+/-- The G1 arithmetic in this module (Jaune's generic Jacobian formulas) is
+instantiated with `fpSubFast`; `fpSubFast_eq` says this changes no result on reduced
+inputs, and the MSM guards compare against Jaune's `g1MsmSum`, which uses
+`FinField.sub`. -/
+local instance (priority := high) fpSubFastInst : HSub BLSF BLSF BLSF := ⟨fpSubFast⟩
+
 /-- Jacobian G1 points, Jaune's representation. -/
 abbrev G1J : Type := EllipticCurve.JacobianPoint BLSF
 

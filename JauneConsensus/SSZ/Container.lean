@@ -9,8 +9,9 @@ containers, ..."), deserialized by reading the fixed part (fixed-size fields in 
 offsets for variable-size fields) and then cutting the variable parts ("Deserialization"), and
 hashed as `merkleize([hash_tree_root(field) for field in value])` ("Merkleization").
 
-`ssz_container Name where f₁ : T₁ ...` declares the structure and its `Ssz` instance from one
-field list, so every container is declared once and mirrors its pyspec class field by field.
+`ssz_container Name where f₁ : T₁ ...` declares the structure, its field leaves
+`Name.fieldRoots` and its `Ssz` instance from one field list, so every container is declared
+once and mirrors its pyspec class field by field.
 -/
 
 namespace JauneConsensus
@@ -110,9 +111,13 @@ macro_rules
     let ps : Array Lean.Ident := ps.map fun p => ⟨p.raw⟩
     let psT : Array Lean.Term := ps.map fun p => ⟨p.raw⟩
     let ty ← `($n $psT*)
+    let fieldRootsId := Lean.mkIdent (n.getId ++ `fieldRoots)
     `($[$doc?:docComment]? structure $n $[($ps : $pts)]* where
         $[$fs:ident : $ts]*
         deriving DecidableEq, BEq
+      /-- The Merkle leaves of the fields, in order (`none` for an absent fork-gated field):
+      the chunks `hash_tree_root` merkleizes and `compute_merkle_proof` builds proofs over. -/
+      def $fieldRootsId $[{$ps : $pts}]* (x : $ty) : List (Option B256) := [$roots,*]
       instance $[($ps : $pts)]* : Ssz $ty where
         fixedSize? := containerFixedSize [$[Ssz.fixedSize? $ts],*]
         serialize := fun x => serializeParts [$parts,*]
@@ -122,6 +127,6 @@ macro_rules
             let v ← ($dec : FieldDecoder $ty)
             if (← get).isEmpty then pure v
             else throw (.decode (.offset "extra fields"))) scopes
-        hashTreeRoot := fun x => containerRoot [$roots,*])
+        hashTreeRoot := fun x => containerRoot ($fieldRootsId x))
 
 end JauneConsensus

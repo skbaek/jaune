@@ -190,13 +190,21 @@ def interpolatePolynomialcoeffSpec (xs ys : Array Fr) : Except String (Array Fr)
 /-- `interpolate_polynomialcoeff(xs, ys)` in quadratic time: the same Lagrange
 polynomial `sum_i ys[i] * prod_{j != i} (X - xs[j]) / (xs[i] - xs[j])`, with each
 basis numerator obtained as `Z(X) / (X - xs[i])` by synthetic division of the
-vanishing polynomial `Z` and each denominator as one product and one inversion.
+vanishing polynomial `Z` and the denominators as products inverted together.
 The result has the spec's length, `max(1, len(xs))`. Differential `#guard`s
 against `interpolatePolynomialcoeffSpec` are in KZGCellsVectors.lean. -/
 def interpolatePolynomialcoeff (xs ys : Array Fr) : Except String (Array Fr) := do
   kzgAssert (xs.size = ys.size) "interpolate_polynomialcoeff: lengths"
   let n := xs.size
   let z ← vanishingPolynomialcoeff xs          -- length n + 1, monic
+  -- denominators prod_{j != i} (xs[i] - xs[j]), inverted together
+  let dens ← (List.range n).toArray.mapM fun i => do
+    let xi ← idx xs i "xs"
+    let mut den : Fr := 1
+    for j in [0:n] do
+      if j ≠ i then den := den * (xi - (← idx xs j "xs"))
+    return den
+  let denInv := batchInverse dens
   let mut r : Array Fr := Array.replicate (max 1 n) 0
   for i in [0:n] do
     let xi ← idx xs i "xs"
@@ -207,11 +215,7 @@ def interpolatePolynomialcoeff (xs ys : Array Fr) : Except String (Array Fr) := 
       let k := n - t
       carry := (← idx z k "Z") + xi * carry
       q := q.modify (k - 1) fun _ => carry
-    -- denominator prod_{j != i} (xs[i] - xs[j])
-    let mut den : Fr := 1
-    for j in [0:n] do
-      if j ≠ i then den := den * (xi - (← idx xs j "xs"))
-    let w := (← idx ys i "ys") * den⁻¹
+    let w := (← idx ys i "ys") * (← idx denInv i "den⁻¹")
     for t in [0:n] do
       let qt ← idx q t "q"
       r := r.modify t (· + w * qt)
@@ -304,8 +308,9 @@ def verifyCellKzgProofBatchImpl (commitments : Array (Bytes × BLSP)) (commitmen
 
 /-! ### Cells -/
 
-/-- `compute_cells(blob)`. -/
-def computeCells (blob : Bytes) : Except String (Array Bytes) := do
+/-- `compute_cells(blob)` as the spec writes it: Horner evaluation at each of the
+8,192 coset points. The reference for `computeCells`. -/
+def computeCellsSpec (blob : Bytes) : Except String (Array Bytes) := do
   kzgAssert (blob.length = bytesPerBlob) "compute_cells: blob length"
   let polynomial ← blobToPolynomial blob
   let polynomialCoeff ← polynomialEvalToCoeff polynomial
@@ -314,8 +319,11 @@ def computeCells (blob : Bytes) : Except String (Array Bytes) := do
     let ys := coset.map (evaluatePolynomialcoeff polynomialCoeff)
     return cosetEvalsToCell ys
 
-/-- `compute_cells_and_kzg_proofs_polynomialcoeff(polynomial_coeff)`. -/
-def computeCellsAndKzgProofsPolynomialcoeff (polynomialCoeff : Array Fr) :
+/-- `compute_cells_and_kzg_proofs_polynomialcoeff(polynomial_coeff)` as the spec
+writes it: one `compute_kzg_proof_multi_impl` (evaluations, long division by the
+coset's vanishing polynomial, a 4,032-point MSM) per cell. The reference for
+`computeCellsAndKzgProofsPolynomialcoeff`. -/
+def computeCellsAndKzgProofsPolynomialcoeffSpec (polynomialCoeff : Array Fr) :
     Except String (Array Bytes × Array Bytes) := do
   let mut cells : Array Bytes := #[]
   let mut proofs : Array Bytes := #[]
@@ -324,6 +332,120 @@ def computeCellsAndKzgProofsPolynomialcoeff (polynomialCoeff : Array Fr) :
     let (proof, ys) ← computeKzgProofMultiImpl polynomialCoeff coset
     cells := cells.push (cosetEvalsToCell ys)
     proofs := proofs.push (g1Compress proof)
+  return (cells, proofs)
+
+/-! ### Fast cell computation
+
+The two functions below compute the same values as the spec-shaped ones above by
+the methods the spec names for performant implementations.
+
+*Cells.* `coset_for_cell(i)` is the slice `[64 i, 64 (i + 1))` of the bit-reversed
+extended roots of unity, so cell `i` holds `f` evaluated there: the slice of
+`bit_reversal_permutation(fft_field(coeffs padded to 8192, roots))`, because
+`fft_field(v, roots)[k] = sum_j v[j] roots[k]^j`.
+
+*Proofs (the FK20 decomposition).* The coset of cell `c` is `h_c G`, `G` the 64th
+roots of unity, so its vanishing polynomial is `X^64 - a_c` with `a_c = h_c^64`, and
+the long-division quotient of `f = sum_k c_k X^k` (4,096 coefficients) by it is
+`q_c(X) = sum_{m >= 1, r < 64} c_{64m + r} X^r sum_{i < m} a_c^i X^{64(m - 1 - i)}`
+(from `X^{64m+r} - a^m X^r = X^r (X^64 - a) sum_{i<m} a^i X^{64(m-1-i)}`). Hence
+`[q_c(s)] = sum_{i=0}^{62} a_c^i H_i` with
+`H_i = sum_{k < 4096 - 64(i+1)} c_{k + 64(i+1)} [s^k]`, the commitment to `f`
+shifted down by `64(i + 1)` coefficients. The 63 `H_i` are shared by all 128
+cells: 129,024 MSM terms instead of 128 x 4,032 = 516,096, and no polynomial
+division. Agreement with the spec path is checked on the vectors (the runner's
+`@spec` pseudo-handlers). -/
+
+/-- The cells of the extended blob of a coefficient-form polynomial, by one FFT. -/
+def cellsFromCoeff (polynomialCoeff : Array Fr) : Except String (Array (Array Fr)) := do
+  kzgAssert (polynomialCoeff.size ≤ fieldElementsPerExtBlob) "cells: polynomial length"
+  let padded := polynomialCoeff ++ Array.replicate (fieldElementsPerExtBlob - polynomialCoeff.size) 0
+  let evals ← bitReversalPermutation (fftField padded (← rootsOfUnityExtended))
+  return (List.range cellsPerExtBlob).toArray.map fun i =>
+    evals.extract (fieldElementsPerCell * i) (fieldElementsPerCell * (i + 1))
+
+/-- `compute_cells(blob)`, by `cellsFromCoeff`. -/
+def computeCells (blob : Bytes) : Except String (Array Bytes) := do
+  kzgAssert (blob.length = bytesPerBlob) "compute_cells: blob length"
+  let polynomial ← blobToPolynomial blob
+  let polynomialCoeff ← polynomialEvalToCoeff polynomial
+  return (← cellsFromCoeff polynomialCoeff).map cosetEvalsToCell
+
+/-- The FK20 points `H_0, ..., H_62` of a 4,096-coefficient polynomial. -/
+def fk20H (polynomialCoeff : Array Fr) : Except String (Array BLSP) := do
+  let monomial ← kzgSetupG1Monomial
+  let n := fieldElementsPerBlob
+  let l := fieldElementsPerCell
+  (List.range (n / l - 1)).toArray.mapM fun i => do
+    let shift := l * (i + 1)
+    g1Lincomb (monomial.extract 0 (n - shift)) (polynomialCoeff.extract shift n)
+
+/-- `_fft_field` over G1: the same recursion as `fftFieldAux`, with point addition
+and scalar multiplication by the roots (skipped when the root is 1). -/
+def fftG1Aux : Nat → Array BLSP → Array Fr → Array BLSP
+  | 0, vals, _ => vals
+  | fuel + 1, vals, roots =>
+    if vals.size ≤ 1 then vals else
+    let rootsHalf := everyOther roots 0
+    let l := fftG1Aux fuel (everyOther vals 0) rootsHalf
+    let r := fftG1Aux fuel (everyOther vals 1) rootsHalf
+    let yTimesRoot := (r.zip roots).map fun (y, root) => if root = 1 then y else y.mulBy root.val
+    let lo := (l.zip yTimesRoot).map fun (x, yr) => x + yr
+    let hi := (l.zip yTimesRoot).map fun (x, yr) => x + -yr
+    lo ++ hi
+
+/-- The FFT size of the FK20 Toeplitz products: twice the 64 blocks. -/
+def fk20Size : Nat := 2 * (fieldElementsPerBlob / fieldElementsPerCell)
+
+/-- FK20 setup table, computed once on first use. Write `S_k = [s^k]` and, for each
+residue `r < 64`, `s'_r[t] = S_{64 (62 - t) + r}` (`t < 63`, zero-padded to 128).
+Entry `j` holds the 64 points `FFT_G1(s'_r)[j]`, `r < 64`. -/
+def fk20Table : Thunk (Except String (Array (Array BLSP))) := Thunk.mk fun _ => do
+  let monomial ← kzgSetupG1Monomial
+  let roots ← computeRootsOfUnity fk20Size
+  let blocks := fieldElementsPerBlob / fieldElementsPerCell        -- 64
+  let perR ← (List.range fieldElementsPerCell).toArray.mapM fun r => do
+    let sPrime ← (List.range (blocks - 1)).toArray.mapM fun t =>
+      idx monomial (fieldElementsPerCell * (blocks - 2 - t) + r) "KZG_SETUP_G1_MONOMIAL"
+    let padded := sPrime ++ Array.replicate (fk20Size - sPrime.size) g1Identity
+    return fftG1Aux fk20Size padded roots
+  (List.range fk20Size).toArray.mapM fun j => perR.mapM fun pr => idx pr j "fk20 table"
+
+/-- The FK20 points `H_0, ..., H_62` by Toeplitz products in the frequency domain:
+with `a_r[m] = c_{64 m + r}`, `H_i = sum_r (a_r * s'_r)[63 + i]` (a linear
+convolution of lengths 64 and 63, so the size-128 cyclic one does not wrap), and
+`sum_r FFT(a_r) ⊙ FFT_G1(s'_r)` is 128 MSMs of 64 points followed by one inverse G1
+FFT. `fk20H` (direct MSMs) is the reference. -/
+def fk20HFft (polynomialCoeff : Array Fr) : Except String (Array BLSP) := do
+  let table ← fk20Table.get
+  let roots ← computeRootsOfUnity fk20Size
+  let blocks := fieldElementsPerBlob / fieldElementsPerCell
+  let invSize : Fr := (FinField.ofNat fk20Size : Fr)⁻¹
+  let aHat ← (List.range fieldElementsPerCell).toArray.mapM fun r => do
+    let ar ← (List.range blocks).toArray.mapM fun m =>
+      idx polynomialCoeff (fieldElementsPerCell * m + r) "polynomial_coeff"
+    return fftField (ar ++ Array.replicate (fk20Size - blocks) 0) roots
+  let u ← (List.range fk20Size).toArray.mapM fun j => do
+    let scalars ← aHat.mapM fun ah => do return (← idx ah j "aHat") * invSize
+    g1Lincomb (← idx table j "fk20 table") scalars
+  let rootsInv := (roots.extract 0 1) ++ (roots.extract 1 roots.size).reverse
+  let conv := fftG1Aux fk20Size u rootsInv
+  return conv.extract (blocks - 1) (2 * blocks - 2)
+
+/-- `compute_cells_and_kzg_proofs_polynomialcoeff(polynomial_coeff)` by FFT cells and
+the FK20 decomposition. Polynomials of any length other than 4,096 take the spec
+path. -/
+def computeCellsAndKzgProofsPolynomialcoeff (polynomialCoeff : Array Fr) :
+    Except String (Array Bytes × Array Bytes) := do
+  if polynomialCoeff.size ≠ fieldElementsPerBlob then
+    return ← computeCellsAndKzgProofsPolynomialcoeffSpec polynomialCoeff
+  let cells := (← cellsFromCoeff polynomialCoeff).map cosetEvalsToCell
+  let hs ← fk20HFft polynomialCoeff
+  -- proof for cell c is sum_i a_c^i H_i with a_c = h_c^64 = omega_128^(rev7(c)):
+  -- the bit-reversed G1 FFT of (H_0, ..., H_62, 0, ...).
+  let roots ← computeRootsOfUnity fk20Size
+  let padded := hs ++ Array.replicate (fk20Size - hs.size) g1Identity
+  let proofs := (← bitReversalPermutation (fftG1Aux fk20Size padded roots)).map g1Compress
   return (cells, proofs)
 
 /-- `compute_cells_and_kzg_proofs(blob)`. -/
