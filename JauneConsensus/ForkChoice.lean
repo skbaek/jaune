@@ -1,7 +1,7 @@
 import Jaune.Types
 import JauneConsensus.Block
 import JauneConsensus.Epoch
-import JauneConsensus.Transition
+import JauneConsensus.StateTransition
 import JauneConsensus.Crypto.Boundary
 import Std.Data.TreeMap
 import Std.Data.TreeSet
@@ -40,16 +40,8 @@ variable {P : Preset} {f : CFork}
 
 /-! ## The state transition entry points -/
 
-/-- `process_slots(state, slot)` with the spec's `process_epoch` (`specs/phase0/beacon-chain.md`). -/
-def processSlots (ctx : Ctx) (state : BeaconState P f) (slot : Slot) : M (BeaconState P f) :=
-  processSlotsWith (processEpoch ctx) state slot
-
-/-- `state_transition(state, signed_block, validate_result)` with the spec's `process_epoch` and
-`process_block` (`specs/phase0/beacon-chain.md`). -/
-def stateTransition (ctx : Ctx) (state : BeaconState P f) (signedBlock : SignedBeaconBlock P f)
-    (validateResult : Bool := true) : M (BeaconState P f) :=
-  stateTransitionWith (processEpoch ctx) (processBlock ctx) ctx.blsActive state signedBlock
-    validateResult
+-- `processSlots` and `stateTransition` (the spec's `process_slots` and `state_transition` with
+-- `process_epoch` and `process_block`) are in `JauneConsensus/StateTransition.lean`.
 
 /-! ## Constants and the store -/
 

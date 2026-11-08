@@ -18,34 +18,32 @@ namespace JauneConsensus
 
 open Jaune
 
-/-- `DomainType`: four bytes. -/
-abbrev DomainType := Bytes
 
 /-! ## Domain types
 
-`DOMAIN_BEACON_PROPOSER` and `DOMAIN_BEACON_ATTESTER` are in `Accessors.lean` (`get_seed` needs
-them); the others are here. -/
+`DomainType` (four bytes), `DOMAIN_BEACON_PROPOSER` and `DOMAIN_BEACON_ATTESTER` are in
+`Accessors.lean` (`get_seed` needs them); the others are here. -/
 
 /-- `DOMAIN_RANDAO = DomainType('0x02000000')` (`specs/phase0/beacon-chain.md`) -/
-def DOMAIN_RANDAO : DomainType := [0x02, 0x00, 0x00, 0x00]
+def DOMAIN_RANDAO : DomainType := #v[0x02, 0x00, 0x00, 0x00]
 /-- `DOMAIN_DEPOSIT = DomainType('0x03000000')` -/
-def DOMAIN_DEPOSIT : DomainType := [0x03, 0x00, 0x00, 0x00]
+def DOMAIN_DEPOSIT : DomainType := #v[0x03, 0x00, 0x00, 0x00]
 /-- `DOMAIN_VOLUNTARY_EXIT = DomainType('0x04000000')` -/
-def DOMAIN_VOLUNTARY_EXIT : DomainType := [0x04, 0x00, 0x00, 0x00]
+def DOMAIN_VOLUNTARY_EXIT : DomainType := #v[0x04, 0x00, 0x00, 0x00]
 /-- `DOMAIN_SELECTION_PROOF = DomainType('0x05000000')` -/
-def DOMAIN_SELECTION_PROOF : DomainType := [0x05, 0x00, 0x00, 0x00]
+def DOMAIN_SELECTION_PROOF : DomainType := #v[0x05, 0x00, 0x00, 0x00]
 /-- `DOMAIN_AGGREGATE_AND_PROOF = DomainType('0x06000000')` -/
-def DOMAIN_AGGREGATE_AND_PROOF : DomainType := [0x06, 0x00, 0x00, 0x00]
+def DOMAIN_AGGREGATE_AND_PROOF : DomainType := #v[0x06, 0x00, 0x00, 0x00]
 /-- `DOMAIN_APPLICATION_MASK = DomainType('0x00000001')` -/
-def DOMAIN_APPLICATION_MASK : DomainType := [0x00, 0x00, 0x00, 0x01]
+def DOMAIN_APPLICATION_MASK : DomainType := #v[0x00, 0x00, 0x00, 0x01]
 /-- `DOMAIN_SYNC_COMMITTEE = DomainType('0x07000000')` (`specs/altair/beacon-chain.md`) -/
-def DOMAIN_SYNC_COMMITTEE : DomainType := [0x07, 0x00, 0x00, 0x00]
+def DOMAIN_SYNC_COMMITTEE : DomainType := #v[0x07, 0x00, 0x00, 0x00]
 /-- `DOMAIN_SYNC_COMMITTEE_SELECTION_PROOF = DomainType('0x08000000')` -/
-def DOMAIN_SYNC_COMMITTEE_SELECTION_PROOF : DomainType := [0x08, 0x00, 0x00, 0x00]
+def DOMAIN_SYNC_COMMITTEE_SELECTION_PROOF : DomainType := #v[0x08, 0x00, 0x00, 0x00]
 /-- `DOMAIN_CONTRIBUTION_AND_PROOF = DomainType('0x09000000')` -/
-def DOMAIN_CONTRIBUTION_AND_PROOF : DomainType := [0x09, 0x00, 0x00, 0x00]
+def DOMAIN_CONTRIBUTION_AND_PROOF : DomainType := #v[0x09, 0x00, 0x00, 0x00]
 /-- `DOMAIN_BLS_TO_EXECUTION_CHANGE = DomainType('0x0A000000')` (`specs/capella/beacon-chain.md`) -/
-def DOMAIN_BLS_TO_EXECUTION_CHANGE : DomainType := [0x0A, 0x00, 0x00, 0x00]
+def DOMAIN_BLS_TO_EXECUTION_CHANGE : DomainType := #v[0x0A, 0x00, 0x00, 0x00]
 
 /-! ## Versions -/
 
@@ -67,7 +65,7 @@ def computeForkDataRoot (currentVersion : Version) (genesisValidatorsRoot : Root
 def computeDomain (domainType : DomainType) (forkVersion : Version) (genesisValidatorsRoot : Root) :
     Domain :=
   let forkDataRoot := computeForkDataRoot forkVersion genesisValidatorsRoot
-  B256.ofBytes (domainType ++ forkDataRoot.toBytes.take 28)
+  B256.ofBytes (domainType.toList ++ forkDataRoot.toBytes.take 28)
 
 /-- `compute_domain(domain_type)` with the defaults: `GENESIS_FORK_VERSION` and `Root()`. -/
 def computeDomainDefault (cfg : Config) (domainType : DomainType) : M Domain := do
