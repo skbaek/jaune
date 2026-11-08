@@ -17,6 +17,9 @@ import JauneConsensus.Signing
 import JauneConsensus.Transition
 import JauneConsensus.Upgrade
 import JauneConsensus.Accessors
+import JauneConsensus.Ctx
+import JauneConsensus.Deposits
+import JauneConsensus.Block
 import JauneConsensus.Crypto.HashToCurve
 import JauneConsensus.Crypto.HashToCurveVectors
 import JauneConsensus.Crypto.Codec
@@ -42,4 +45,5 @@ import JauneConsensus.Harness.Discovery
 import JauneConsensus.Harness.SszGeneric
 import JauneConsensus.Harness.SszGenericTypes
 import JauneConsensus.Harness.SszStatic
+import JauneConsensus.Harness.Operations
 import JauneConsensus.Harness.Runner
