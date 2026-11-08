@@ -5,6 +5,7 @@ import JauneConsensus.Shuffle
 import JauneConsensus.Harness.ConfigOverride
 import JauneConsensus.Harness.SszGenericTypes
 import JauneConsensus.Harness.SszStatic
+import JauneConsensus.Harness.Operations
 import JauneConsensus.Crypto.Boundary
 import JauneConsensus.Harness.StateTransition
 
@@ -182,6 +183,15 @@ private def overridden (y : String) : Option Config :=
 #guard (overridden "GLOAS_FORK_EPOCH: 0\n").isNone
 #guard (overridden "ALTAIR_FORK_VERSION: 0x0100\n").isNone
 
+/-- `operations/<handler>` (`Harness/Operations.lean`), under the case's configuration. -/
+def operationsVerdict (c : Case) : IO Verdict := do
+  match ← caseConfig c with
+  | .error e => pure (.fail s!"config: {e}")
+  | .ok cfg =>
+    match ← operationsCase cfg c with
+    | .ok () => pure .pass
+    | .error e => pure (.fail e)
+
 /-- A handler that reports `Except String Unit` as a verdict. -/
 def ofResult (h : Case → IO (Except String Unit)) (c : Case) : IO Verdict := do
   match ← h c with
@@ -195,9 +205,12 @@ def handlerFor (runner handler : String) : Option (Case → IO Verdict) :=
   | "ssz_generic", _ => some sszGenericCase
   | "ssz_static", _ => some sszStaticCase
   | "epoch_processing", _ => some fun c => do
-    match ← epochProcessingCase c with
+    -- `JAUNE_CONSENSUS_EPOCH_FULL=1` adds the diagnostic `pre_epoch → post_epoch` check
+    let full := (← IO.getEnv "JAUNE_CONSENSUS_EPOCH_FULL") == some "1"
+    match ← epochProcessingCase c full with
     | none => pure .pass
     | some why => pure (.fail why)
+  | "operations", _ => some operationsVerdict
   | "bls", "eth_aggregate_pubkeys" => some blsAggregatePubkeys
   | "bls", "eth_fast_aggregate_verify" => some blsFastAggregateVerify
   | "fork", "fork" => some (ofResult (forkCase caseConfig))

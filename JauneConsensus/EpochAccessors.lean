@@ -18,17 +18,6 @@ open Jaune (Bytes B256)
 
 variable {P : Preset} {f : CFork}
 
-/-! ## Constants (`specs/altair/beacon-chain.md`) -/
-
-/-- `TIMELY_SOURCE_FLAG_INDEX` -/
-def TIMELY_SOURCE_FLAG_INDEX : Nat := 0
-/-- `TIMELY_TARGET_FLAG_INDEX` -/
-def TIMELY_TARGET_FLAG_INDEX : Nat := 1
-/-- `TIMELY_HEAD_FLAG_INDEX` -/
-def TIMELY_HEAD_FLAG_INDEX : Nat := 2
-/-- `PARTICIPATION_FLAG_WEIGHTS = [TIMELY_SOURCE_WEIGHT, TIMELY_TARGET_WEIGHT, TIMELY_HEAD_WEIGHT]`
-`= [uint64(14), uint64(26), uint64(14)]` -/
-def PARTICIPATION_FLAG_WEIGHTS : List Nat := [14, 26, 14]
 
 /-! ## Participation and rewards -/
 

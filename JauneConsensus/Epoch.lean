@@ -1,4 +1,5 @@
 import JauneConsensus.EpochAccessors
+import JauneConsensus.Deposits
 
 /-!
 # Epoch processing (Electra and Fulu)
@@ -231,7 +232,76 @@ def processEth1DataReset (_cfg : Config) (state : BeaconState P f) : M (BeaconSt
   if r.toNat == 0 then pure { state with eth1_data_votes := SszList.empty }
   else pure state
 
-/-! ## Pending consolidations and effective balances (Electra) -/
+/-! ## Pending deposits, consolidations and effective balances (Electra) -/
+
+/-- The index of the validator with `pubkey` (`validator_pubkeys.index(pubkey)`), if any. -/
+def findValidatorIndex (state : BeaconState P f) (pubkey : BLSPubkey) : Option Nat :=
+  state.validators.toArray.findIdx? (·.pubkey == pubkey)
+
+/-- `apply_pending_deposit(state, deposit)` (`specs/electra/beacon-chain.md`). -/
+def applyPendingDeposit (ctx : Ctx) (state : BeaconState P f) (deposit : PendingDeposit) :
+    M (BeaconState P f) := do
+  match findValidatorIndex state deposit.pubkey with
+  | none =>
+    if ← isValidDepositSignature ctx deposit.pubkey deposit.withdrawal_credentials deposit.amount
+        deposit.signature then
+      addValidatorToRegistry state deposit.pubkey deposit.withdrawal_credentials deposit.amount
+    else pure state
+  | some i => increaseBalance state (← U64.ofNat? i "ValidatorIndex") deposit.amount
+
+/-- `process_pending_deposits(state)` (`specs/electra/beacon-chain.md`). `processed_amount`
+starts as the Python `int` `0` and becomes `Gwei` at its first addition, so its arithmetic is
+`uint64`. -/
+def processPendingDeposits (ctx : Ctx) (state : BeaconState P f) : M (BeaconState P f) := do
+  let site := "process_pending_deposits"
+  let nextEpoch ← (← getCurrentEpoch state).add? U64.one site
+  let availableForProcessing ← (← state.depositBalanceToConsume).add?
+    (← getActivationExitChurnLimit ctx.cfg state) site
+  let mut processedAmount := U64.zero
+  let mut nextDepositIndex := 0
+  let mut depositsToPostpone : Array PendingDeposit := #[]
+  let mut isChurnLimitReached := false
+  let finalizedSlot ← computeStartSlotAtEpoch P state.finalized_checkpoint.epoch
+  let requestsStart ← state.depositRequestsStartIndex
+  let pending ← state.pendingDeposits
+  let mut state := state
+  for deposit in pending.toArray do
+    -- Do not process deposit requests if Eth1 bridge deposits are not yet applied.
+    if deposit.slot > GENESIS_SLOT && state.eth1_deposit_index < requestsStart then break
+    -- Check if deposit has been finalized, otherwise, stop processing.
+    if deposit.slot > finalizedSlot then break
+    -- Check if number of processed deposits has not reached the limit, otherwise, stop processing.
+    if nextDepositIndex ≥ P.MAX_PENDING_DEPOSITS_PER_EPOCH then break
+    -- Read validator state
+    let mut isValidatorExited := false
+    let mut isValidatorWithdrawn := false
+    if let some i := findValidatorIndex state deposit.pubkey then
+      let validator ← state.validators.get i site
+      isValidatorExited := validator.exit_epoch < FAR_FUTURE_EPOCH
+      isValidatorWithdrawn := validator.withdrawable_epoch < nextEpoch
+    if isValidatorWithdrawn then
+      -- Deposited balance will never become active. Increase balance but do not consume churn
+      state ← applyPendingDeposit ctx state deposit
+    else if isValidatorExited then
+      -- Validator is exiting, postpone the deposit until after withdrawable epoch
+      depositsToPostpone := depositsToPostpone.push deposit
+    else
+      -- Check if deposit fits in the churn, otherwise, do no more deposit processing in this epoch.
+      isChurnLimitReached := (← processedAmount.add? deposit.amount site) > availableForProcessing
+      if isChurnLimitReached then break
+      -- Consume churn and apply deposit.
+      processedAmount ← processedAmount.add? deposit.amount site
+      state ← applyPendingDeposit ctx state deposit
+    -- Regardless of how the deposit was handled, we move on in the queue.
+    nextDepositIndex := nextDepositIndex + 1
+  let rest := pending.toArray.extract nextDepositIndex pending.length ++ depositsToPostpone
+  state ← state.setPendingDeposits (← SszList.ofArray rest site)
+  -- Accumulate churn only if the churn limit has been hit.
+  if isChurnLimitReached then
+    state.setDepositBalanceToConsume (← availableForProcessing.sub? processedAmount site)
+  else
+    state.setDepositBalanceToConsume U64.zero
+
 
 /-- `process_pending_consolidations` (`specs/electra/beacon-chain.md`). -/
 def processPendingConsolidations (_cfg : Config) (state : BeaconState P f) :
@@ -351,5 +421,31 @@ def processProposerLookahead (_cfg : Config) (state : BeaconState P f) : M (Beac
     s!"{site}: last epoch proposers fill the tail"
   state.setProposerLookahead
     (← SszVector.ofArray (la.extract P.SLOTS_PER_EPOCH la.size ++ lastEpochProposers) site)
+
+/-! ## `process_epoch` -/
+
+/-- `process_epoch(state)`: Electra's order (`specs/electra/beacon-chain.md`), with Fulu's
+`process_proposer_lookahead` appended (`specs/fulu/beacon-chain.md`); before Electra, Capella's
+order as Deneb keeps it (`specs/capella/beacon-chain.md`: no pending deposits or consolidations).
+-/
+def processEpoch (ctx : Ctx) (state : BeaconState P f) : M (BeaconState P f) := do
+  let cfg := ctx.cfg
+  let state ← processJustificationAndFinalization cfg state
+  let state ← processInactivityUpdates cfg state
+  let state ← processRewardsAndPenalties cfg state
+  let state ← processRegistryUpdates cfg state
+  let state ← processSlashings cfg state
+  let state ← processEth1DataReset cfg state
+  let state ← if f.atLeast .electra then do
+      let state ← processPendingDeposits ctx state
+      processPendingConsolidations cfg state
+    else pure state
+  let state ← processEffectiveBalanceUpdates cfg state
+  let state ← processSlashingsReset cfg state
+  let state ← processRandaoMixesReset cfg state
+  let state ← processHistoricalSummariesUpdate cfg state
+  let state ← processParticipationFlagUpdates cfg state
+  let state ← processSyncCommitteeUpdates cfg state
+  if f.atLeast .fulu then processProposerLookahead cfg state else pure state
 
 end JauneConsensus

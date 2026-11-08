@@ -194,6 +194,17 @@ def DOMAIN_BEACON_ATTESTER : Bytes := [0x01, 0x00, 0x00, 0x00]
 def PROPOSER_WEIGHT : Nat := 8
 /-- `WEIGHT_DENOMINATOR`. -/
 def WEIGHT_DENOMINATOR : Nat := 64
+/-- `TIMELY_SOURCE_FLAG_INDEX` (`specs/altair/beacon-chain.md`). -/
+def TIMELY_SOURCE_FLAG_INDEX : Nat := 0
+/-- `TIMELY_TARGET_FLAG_INDEX`. -/
+def TIMELY_TARGET_FLAG_INDEX : Nat := 1
+/-- `TIMELY_HEAD_FLAG_INDEX`. -/
+def TIMELY_HEAD_FLAG_INDEX : Nat := 2
+/-- `PARTICIPATION_FLAG_WEIGHTS = [TIMELY_SOURCE_WEIGHT, TIMELY_TARGET_WEIGHT, TIMELY_HEAD_WEIGHT]`
+`= [uint64(14), uint64(26), uint64(14)]`. -/
+def PARTICIPATION_FLAG_WEIGHTS : List Nat := [14, 26, 14]
+/-- `SYNC_REWARD_WEIGHT = uint64(2)`. -/
+def SYNC_REWARD_WEIGHT : Nat := 2
 /-- `bls.G2_POINT_AT_INFINITY` (`specs/altair/bls.md`). -/
 def G2_POINT_AT_INFINITY_BYTES : Array UInt8 := #[0xc0] ++ Array.replicate 95 0
 
