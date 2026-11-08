@@ -20,6 +20,8 @@ import JauneConsensus.Accessors
 import JauneConsensus.Ctx
 import JauneConsensus.Deposits
 import JauneConsensus.Block
+import JauneConsensus.DAS
+import JauneConsensus.LightClient
 import JauneConsensus.Crypto.HashToCurve
 import JauneConsensus.Crypto.HashToCurveVectors
 import JauneConsensus.Crypto.Codec
@@ -49,6 +51,8 @@ import JauneConsensus.EpochAccessors
 import JauneConsensus.Epoch
 import JauneConsensus.Harness.EpochCases
 import JauneConsensus.Harness.Operations
+import JauneConsensus.Harness.Networking
+import JauneConsensus.Harness.LightClientCases
 import JauneConsensus.Harness.Runner
 import JauneConsensus.Crypto.G2Subgroup
 import JauneConsensus.Crypto.G2SubgroupVectors
