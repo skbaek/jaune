@@ -13,6 +13,7 @@
 -- maps these strings to `Reject.crypto` when the branches merge.
 
 import Jaune.BLS
+import JauneConsensus.Crypto.G2Subgroup
 
 namespace JauneConsensus
 
@@ -86,9 +87,27 @@ both Jaune's. No cofactor clearing here; `hashToG2` clears once, after adding
 the two mapped points. -/
 def mapToCurveG2 (u : BLSF2) : BLSP2 := isoMapG2 (optimizedSwuG2 u)
 
-/-- `clear_cofactor` for the suite: scalar multiplication by `h_eff`
-(RFC 9380 section 8.8.2). -/
-def clearCofactorG2 (q : BLSP2) : BLSP2 := q.mulBy BLSConst.hEffG2
+/-- `clear_cofactor` for the suite as section 8.8.2 defines it: scalar multiplication by
+`h_eff`. The reference for `clearCofactorG2`. -/
+def clearCofactorG2Ref (q : BLSP2) : BLSP2 := q.mulBy BLSConst.hEffG2
+
+/-- `clear_cofactor_bls12381_g2(P)` (RFC 9380 Appendix G.3, after Budroni and Pintore): the
+same point `h_eff * P` from two 64-bit scalar multiplications and the endomorphism `psi`
+(`g2Psi`, whose constants are G.3's `c1`, `c2`; `psi2` is `psi` applied twice). Differential
+`#guard`s against `clearCofactorG2Ref` in HashToCurveVectors.lean. -/
+def clearCofactorG2 (p : BLSP2) : BLSP2 :=
+  -- c1 = -0xd201000000010000, so c1 * X = -(|c1| * X)
+  let mulC1 (x : BLSP2) : BLSP2 := -(x.mulBy blsAteLoopCount)
+  let t1 := mulC1 p                       -- 1. t1 = c1 * P
+  let t2 := g2Psi p                       -- 2. t2 = psi(P)
+  let t3 := p + p                         -- 3. t3 = 2 * P
+  let t3 := g2Psi (g2Psi t3)              -- 4. t3 = psi2(t3)
+  let t3 := t3 + -t2                      -- 5. t3 = t3 - t2
+  let t2 := t1 + t2                       -- 6. t2 = t1 + t2
+  let t2 := mulC1 t2                      -- 7. t2 = c1 * t2
+  let t3 := t3 + t2                       -- 8. t3 = t3 + t2
+  let t3 := t3 + -t1                      -- 9. t3 = t3 - t1
+  t3 + -p                                 -- 10. Q = t3 - P
 
 /-- RFC 9380 section 3, `hash_to_curve(msg)` for BLS12381G2_XMD:SHA-256_SSWU_RO_
 with domain separation tag `dst`:

@@ -98,4 +98,12 @@ def dstJ10 : Bytes := ascii "QUUX-V01-CS02-with-BLS12381G2_XMD:SHA-256_SSWU_RO_"
     .ok (⟨(BLSF2.mk 0x01a6ba2f9a11fa5598b2d8ace0fbe0a0eacb65deceb476fbbcb64fd24557c2f4b18ecfc5663e54ae16a84f5ab7f62534 0x11fca2ff525572795a801eed17eb12785887c7b63fb77a42be46ce4a34131d71f7a73e95fee3f812aea3de78b4d01569),
       (BLSF2.mk 0x0b6798718c8aed24bc19cb27f866f1c9effcdbf92397ad6448b5c9db90d2b9da6cbabf48adc1adf59a1a28344e79d57e 0x03a47f8e6d1763ba0cad63d6114c0accbef65707825a511b251a660a9b3994249ae4e63fac38b23da0c398689ee2ab52)⟩ : BLSP2)
 
+-- Appendix G.3's cofactor clearing equals multiplication by h_eff (section 8.8.2) on points
+-- of E outside G2 (map-to-curve outputs), on their sums and negations, and on the identity.
+#guard
+  let q0 := mapToCurveG2 (BLSF2.mk 7 11)
+  let q1 := mapToCurveG2 (BLSF2.mk 0x15f7c0aa8f6b296ab5ff9c2c7581ade64f4ee6f1bf18f55179ff44a2cf355fa53dd2a2158c5ecb17d7c52f63e7195771 3)
+  [q0, q1, q0 + q1, -q0, (⟨0, 0⟩ : BLSP2), blsG2Generator].all fun p =>
+    clearCofactorG2 p = clearCofactorG2Ref p
+
 end JauneConsensus.HashToCurveVectors
