@@ -1,0 +1,8109 @@
+{
+ "pinned": true,
+ "presets": {
+  "general": {
+   "cases": 5509,
+   "files": 10925,
+   "forks": {
+    "altair": {
+     "bls": {
+      "eth_aggregate_pubkeys": {
+       "bls": 8
+      },
+      "eth_fast_aggregate_verify": {
+       "bls": 12
+      }
+     }
+    },
+    "deneb": {
+     "kzg": {
+      "blob_to_kzg_commitment": {
+       "kzg-mainnet": 11
+      },
+      "compute_blob_kzg_proof": {
+       "kzg-mainnet": 15
+      },
+      "compute_challenge": {
+       "kzg-mainnet": 9
+      },
+      "compute_kzg_proof": {
+       "kzg-mainnet": 52
+      },
+      "verify_blob_kzg_proof": {
+       "kzg-mainnet": 29
+      },
+      "verify_blob_kzg_proof_batch": {
+       "kzg-mainnet": 24
+      },
+      "verify_kzg_proof": {
+       "kzg-mainnet": 122
+      }
+     }
+    },
+    "fulu": {
+     "kzg": {
+      "compute_cells": {
+       "kzg-mainnet": 11
+      },
+      "compute_cells_and_kzg_proofs": {
+       "kzg-mainnet": 11
+      },
+      "compute_verify_cell_kzg_proof_batch_challenge": {
+       "kzg-mainnet": 10
+      },
+      "recover_cells_and_kzg_proofs": {
+       "kzg-mainnet": 18
+      },
+      "verify_cell_kzg_proof_batch": {
+       "kzg-mainnet": 32
+      }
+     }
+    },
+    "phase0": {
+     "ssz_generic": {
+      "basic_progressive_list": {
+       "invalid": 567,
+       "valid": 320
+      },
+      "basic_vector": {
+       "invalid": 957,
+       "valid": 200
+      },
+      "bitlist": {
+       "invalid": 44,
+       "valid": 450
+      },
+      "bitvector": {
+       "invalid": 31,
+       "valid": 54
+      },
+      "boolean": {
+       "invalid": 4,
+       "valid": 2
+      },
+      "compatible_unions": {
+       "invalid": 311,
+       "valid": 210
+      },
+      "containers": {
+       "invalid": 238,
+       "valid": 463
+      },
+      "progressive_bitlist": {
+       "invalid": 3,
+       "valid": 700
+      },
+      "progressive_containers": {
+       "invalid": 264,
+       "valid": 261
+      },
+      "uints": {
+       "invalid": 18,
+       "valid": 48
+      }
+     }
+    }
+   }
+  },
+  "mainnet": {
+   "cases": 7421,
+   "files": 41147,
+   "forks": {
+    "altair": {
+     "epoch_processing": {
+      "effective_balance_updates": {
+       "pyspec_tests": 1
+      },
+      "eth1_data_reset": {
+       "pyspec_tests": 2
+      },
+      "historical_roots_update": {
+       "pyspec_tests": 1
+      },
+      "inactivity_updates": {
+       "pyspec_tests": 21
+      },
+      "justification_and_finalization": {
+       "pyspec_tests": 10
+      },
+      "participation_flag_updates": {
+       "pyspec_tests": 10
+      },
+      "randao_mixes_reset": {
+       "pyspec_tests": 1
+      },
+      "registry_updates": {
+       "pyspec_tests": 11
+      },
+      "rewards_and_penalties": {
+       "pyspec_tests": 15
+      },
+      "slashings": {
+       "pyspec_tests": 5
+      },
+      "slashings_reset": {
+       "pyspec_tests": 1
+      }
+     },
+     "finality": {
+      "finality": {
+       "pyspec_tests": 5
+      }
+     },
+     "fork": {
+      "fork": {
+       "pyspec_tests": 17
+      }
+     },
+     "fork_choice": {
+      "ex_ante": {
+       "pyspec_tests": 5
+      },
+      "get_head": {
+       "pyspec_tests": 6
+      },
+      "get_proposer_head": {
+       "pyspec_tests": 2
+      },
+      "on_block": {
+       "pyspec_tests": 6
+      }
+     },
+     "light_client": {
+      "single_merkle_proof": {
+       "BeaconState": 3
+      }
+     },
+     "operations": {
+      "attestation": {
+       "pyspec_tests": 41
+      },
+      "attester_slashing": {
+       "pyspec_tests": 30
+      },
+      "block_header": {
+       "pyspec_tests": 6
+      },
+      "deposit": {
+       "pyspec_tests": 19
+      },
+      "proposer_slashing": {
+       "pyspec_tests": 15
+      },
+      "sync_aggregate": {
+       "pyspec_tests": 26
+      },
+      "voluntary_exit": {
+       "pyspec_tests": 9
+      }
+     },
+     "random": {
+      "random": {
+       "pyspec_tests": 16
+      }
+     },
+     "rewards": {
+      "basic": {
+       "pyspec_tests": 11
+      },
+      "leak": {
+       "pyspec_tests": 13
+      },
+      "random": {
+       "pyspec_tests": 10
+      }
+     },
+     "sanity": {
+      "blocks": {
+       "pyspec_tests": 47
+      },
+      "slots": {
+       "pyspec_tests": 7
+      }
+     },
+     "ssz_static": {
+      "AggregateAndProof": {
+       "ssz_random": 5
+      },
+      "Attestation": {
+       "ssz_random": 5
+      },
+      "AttestationData": {
+       "ssz_random": 5
+      },
+      "AttesterSlashing": {
+       "ssz_random": 5
+      },
+      "BeaconBlock": {
+       "ssz_random": 5
+      },
+      "BeaconBlockBody": {
+       "ssz_random": 5
+      },
+      "BeaconBlockHeader": {
+       "ssz_random": 5
+      },
+      "BeaconState": {
+       "ssz_random": 5
+      },
+      "Checkpoint": {
+       "ssz_random": 5
+      },
+      "ContributionAndProof": {
+       "ssz_random": 5
+      },
+      "Deposit": {
+       "ssz_random": 5
+      },
+      "DepositData": {
+       "ssz_random": 5
+      },
+      "DepositMessage": {
+       "ssz_random": 5
+      },
+      "Eth1Block": {
+       "ssz_random": 5
+      },
+      "Eth1Data": {
+       "ssz_random": 5
+      },
+      "Fork": {
+       "ssz_random": 5
+      },
+      "ForkData": {
+       "ssz_random": 5
+      },
+      "HistoricalBatch": {
+       "ssz_random": 5
+      },
+      "IndexedAttestation": {
+       "ssz_random": 5
+      },
+      "LightClientBootstrap": {
+       "ssz_random": 5
+      },
+      "LightClientFinalityUpdate": {
+       "ssz_random": 5
+      },
+      "LightClientHeader": {
+       "ssz_random": 5
+      },
+      "LightClientOptimisticUpdate": {
+       "ssz_random": 5
+      },
+      "LightClientUpdate": {
+       "ssz_random": 5
+      },
+      "PendingAttestation": {
+       "ssz_random": 5
+      },
+      "ProposerSlashing": {
+       "ssz_random": 5
+      },
+      "SignedAggregateAndProof": {
+       "ssz_random": 5
+      },
+      "SignedBeaconBlock": {
+       "ssz_random": 5
+      },
+      "SignedBeaconBlockHeader": {
+       "ssz_random": 5
+      },
+      "SignedContributionAndProof": {
+       "ssz_random": 5
+      },
+      "SignedVoluntaryExit": {
+       "ssz_random": 5
+      },
+      "SigningData": {
+       "ssz_random": 5
+      },
+      "SyncAggregate": {
+       "ssz_random": 5
+      },
+      "SyncAggregatorSelectionData": {
+       "ssz_random": 5
+      },
+      "SyncCommittee": {
+       "ssz_random": 5
+      },
+      "SyncCommitteeContribution": {
+       "ssz_random": 5
+      },
+      "SyncCommitteeMessage": {
+       "ssz_random": 5
+      },
+      "Validator": {
+       "ssz_random": 5
+      },
+      "VoluntaryExit": {
+       "ssz_random": 5
+      }
+     },
+     "transition": {
+      "core": {
+       "pyspec_tests": 22
+      }
+     }
+    },
+    "bellatrix": {
+     "epoch_processing": {
+      "effective_balance_updates": {
+       "pyspec_tests": 1
+      },
+      "eth1_data_reset": {
+       "pyspec_tests": 2
+      },
+      "historical_roots_update": {
+       "pyspec_tests": 1
+      },
+      "inactivity_updates": {
+       "pyspec_tests": 21
+      },
+      "justification_and_finalization": {
+       "pyspec_tests": 10
+      },
+      "participation_flag_updates": {
+       "pyspec_tests": 10
+      },
+      "randao_mixes_reset": {
+       "pyspec_tests": 1
+      },
+      "registry_updates": {
+       "pyspec_tests": 11
+      },
+      "rewards_and_penalties": {
+       "pyspec_tests": 15
+      },
+      "slashings": {
+       "pyspec_tests": 5
+      },
+      "slashings_reset": {
+       "pyspec_tests": 1
+      }
+     },
+     "finality": {
+      "finality": {
+       "pyspec_tests": 5
+      }
+     },
+     "fork": {
+      "fork": {
+       "pyspec_tests": 15
+      }
+     },
+     "fork_choice": {
+      "ex_ante": {
+       "pyspec_tests": 5
+      },
+      "get_head": {
+       "pyspec_tests": 6
+      },
+      "get_proposer_head": {
+       "pyspec_tests": 2
+      },
+      "on_block": {
+       "pyspec_tests": 6
+      },
+      "on_merge_block": {
+       "pyspec_tests": 4
+      },
+      "should_override_forkchoice_update": {
+       "pyspec_tests": 1
+      }
+     },
+     "light_client": {
+      "single_merkle_proof": {
+       "BeaconState": 3
+      }
+     },
+     "operations": {
+      "attestation": {
+       "pyspec_tests": 41
+      },
+      "attester_slashing": {
+       "pyspec_tests": 30
+      },
+      "block_header": {
+       "pyspec_tests": 6
+      },
+      "deposit": {
+       "pyspec_tests": 20
+      },
+      "execution_payload": {
+       "pyspec_tests": 26
+      },
+      "proposer_slashing": {
+       "pyspec_tests": 15
+      },
+      "sync_aggregate": {
+       "pyspec_tests": 26
+      },
+      "voluntary_exit": {
+       "pyspec_tests": 15
+      }
+     },
+     "random": {
+      "random": {
+       "pyspec_tests": 16
+      }
+     },
+     "rewards": {
+      "basic": {
+       "pyspec_tests": 11
+      },
+      "leak": {
+       "pyspec_tests": 13
+      },
+      "random": {
+       "pyspec_tests": 10
+      }
+     },
+     "sanity": {
+      "blocks": {
+       "pyspec_tests": 50
+      },
+      "slots": {
+       "pyspec_tests": 7
+      }
+     },
+     "ssz_static": {
+      "AggregateAndProof": {
+       "ssz_random": 5
+      },
+      "Attestation": {
+       "ssz_random": 5
+      },
+      "AttestationData": {
+       "ssz_random": 5
+      },
+      "AttesterSlashing": {
+       "ssz_random": 5
+      },
+      "BeaconBlock": {
+       "ssz_random": 5
+      },
+      "BeaconBlockBody": {
+       "ssz_random": 5
+      },
+      "BeaconBlockHeader": {
+       "ssz_random": 5
+      },
+      "BeaconState": {
+       "ssz_random": 5
+      },
+      "Checkpoint": {
+       "ssz_random": 5
+      },
+      "ContributionAndProof": {
+       "ssz_random": 5
+      },
+      "Deposit": {
+       "ssz_random": 5
+      },
+      "DepositData": {
+       "ssz_random": 5
+      },
+      "DepositMessage": {
+       "ssz_random": 5
+      },
+      "Eth1Block": {
+       "ssz_random": 5
+      },
+      "Eth1Data": {
+       "ssz_random": 5
+      },
+      "ExecutionPayload": {
+       "ssz_random": 5
+      },
+      "ExecutionPayloadHeader": {
+       "ssz_random": 5
+      },
+      "Fork": {
+       "ssz_random": 5
+      },
+      "ForkData": {
+       "ssz_random": 5
+      },
+      "HistoricalBatch": {
+       "ssz_random": 5
+      },
+      "IndexedAttestation": {
+       "ssz_random": 5
+      },
+      "LightClientBootstrap": {
+       "ssz_random": 5
+      },
+      "LightClientFinalityUpdate": {
+       "ssz_random": 5
+      },
+      "LightClientHeader": {
+       "ssz_random": 5
+      },
+      "LightClientOptimisticUpdate": {
+       "ssz_random": 5
+      },
+      "LightClientUpdate": {
+       "ssz_random": 5
+      },
+      "PendingAttestation": {
+       "ssz_random": 5
+      },
+      "PowBlock": {
+       "ssz_random": 5
+      },
+      "ProposerSlashing": {
+       "ssz_random": 5
+      },
+      "SignedAggregateAndProof": {
+       "ssz_random": 5
+      },
+      "SignedBeaconBlock": {
+       "ssz_random": 5
+      },
+      "SignedBeaconBlockHeader": {
+       "ssz_random": 5
+      },
+      "SignedContributionAndProof": {
+       "ssz_random": 5
+      },
+      "SignedVoluntaryExit": {
+       "ssz_random": 5
+      },
+      "SigningData": {
+       "ssz_random": 5
+      },
+      "SyncAggregate": {
+       "ssz_random": 5
+      },
+      "SyncAggregatorSelectionData": {
+       "ssz_random": 5
+      },
+      "SyncCommittee": {
+       "ssz_random": 5
+      },
+      "SyncCommitteeContribution": {
+       "ssz_random": 5
+      },
+      "SyncCommitteeMessage": {
+       "ssz_random": 5
+      },
+      "Validator": {
+       "ssz_random": 5
+      },
+      "VoluntaryExit": {
+       "ssz_random": 5
+      }
+     },
+     "sync": {
+      "optimistic": {
+       "pyspec_tests": 1
+      }
+     },
+     "transition": {
+      "core": {
+       "pyspec_tests": 22
+      }
+     }
+    },
+    "capella": {
+     "epoch_processing": {
+      "effective_balance_updates": {
+       "pyspec_tests": 1
+      },
+      "eth1_data_reset": {
+       "pyspec_tests": 2
+      },
+      "historical_summaries_update": {
+       "pyspec_tests": 1
+      },
+      "inactivity_updates": {
+       "pyspec_tests": 21
+      },
+      "justification_and_finalization": {
+       "pyspec_tests": 10
+      },
+      "participation_flag_updates": {
+       "pyspec_tests": 10
+      },
+      "randao_mixes_reset": {
+       "pyspec_tests": 1
+      },
+      "registry_updates": {
+       "pyspec_tests": 11
+      },
+      "rewards_and_penalties": {
+       "pyspec_tests": 15
+      },
+      "slashings": {
+       "pyspec_tests": 5
+      },
+      "slashings_reset": {
+       "pyspec_tests": 1
+      }
+     },
+     "finality": {
+      "finality": {
+       "pyspec_tests": 5
+      }
+     },
+     "fork": {
+      "fork": {
+       "pyspec_tests": 15
+      }
+     },
+     "fork_choice": {
+      "ex_ante": {
+       "pyspec_tests": 5
+      },
+      "get_head": {
+       "pyspec_tests": 6
+      },
+      "get_proposer_head": {
+       "pyspec_tests": 2
+      },
+      "on_block": {
+       "pyspec_tests": 6
+      },
+      "should_override_forkchoice_update": {
+       "pyspec_tests": 1
+      }
+     },
+     "light_client": {
+      "single_merkle_proof": {
+       "BeaconBlockBody": 1,
+       "BeaconState": 3
+      }
+     },
+     "operations": {
+      "attestation": {
+       "pyspec_tests": 41
+      },
+      "attester_slashing": {
+       "pyspec_tests": 30
+      },
+      "block_header": {
+       "pyspec_tests": 6
+      },
+      "bls_to_execution_change": {
+       "pyspec_tests": 15
+      },
+      "deposit": {
+       "pyspec_tests": 21
+      },
+      "execution_payload": {
+       "pyspec_tests": 26
+      },
+      "proposer_slashing": {
+       "pyspec_tests": 15
+      },
+      "sync_aggregate": {
+       "pyspec_tests": 26
+      },
+      "voluntary_exit": {
+       "pyspec_tests": 15
+      },
+      "withdrawals": {
+       "pyspec_tests": 53
+      }
+     },
+     "random": {
+      "random": {
+       "pyspec_tests": 16
+      }
+     },
+     "rewards": {
+      "basic": {
+       "pyspec_tests": 11
+      },
+      "leak": {
+       "pyspec_tests": 13
+      },
+      "random": {
+       "pyspec_tests": 10
+      }
+     },
+     "sanity": {
+      "blocks": {
+       "pyspec_tests": 62
+      },
+      "slots": {
+       "pyspec_tests": 7
+      }
+     },
+     "ssz_static": {
+      "AggregateAndProof": {
+       "ssz_random": 5
+      },
+      "Attestation": {
+       "ssz_random": 5
+      },
+      "AttestationData": {
+       "ssz_random": 5
+      },
+      "AttesterSlashing": {
+       "ssz_random": 5
+      },
+      "BLSToExecutionChange": {
+       "ssz_random": 5
+      },
+      "BeaconBlock": {
+       "ssz_random": 5
+      },
+      "BeaconBlockBody": {
+       "ssz_random": 5
+      },
+      "BeaconBlockHeader": {
+       "ssz_random": 5
+      },
+      "BeaconState": {
+       "ssz_random": 5
+      },
+      "Checkpoint": {
+       "ssz_random": 5
+      },
+      "ContributionAndProof": {
+       "ssz_random": 5
+      },
+      "Deposit": {
+       "ssz_random": 5
+      },
+      "DepositData": {
+       "ssz_random": 5
+      },
+      "DepositMessage": {
+       "ssz_random": 5
+      },
+      "Eth1Block": {
+       "ssz_random": 5
+      },
+      "Eth1Data": {
+       "ssz_random": 5
+      },
+      "ExecutionPayload": {
+       "ssz_random": 5
+      },
+      "ExecutionPayloadHeader": {
+       "ssz_random": 5
+      },
+      "Fork": {
+       "ssz_random": 5
+      },
+      "ForkData": {
+       "ssz_random": 5
+      },
+      "HistoricalBatch": {
+       "ssz_random": 5
+      },
+      "HistoricalSummary": {
+       "ssz_random": 5
+      },
+      "IndexedAttestation": {
+       "ssz_random": 5
+      },
+      "LightClientBootstrap": {
+       "ssz_random": 5
+      },
+      "LightClientFinalityUpdate": {
+       "ssz_random": 5
+      },
+      "LightClientHeader": {
+       "ssz_random": 5
+      },
+      "LightClientOptimisticUpdate": {
+       "ssz_random": 5
+      },
+      "LightClientUpdate": {
+       "ssz_random": 5
+      },
+      "PendingAttestation": {
+       "ssz_random": 5
+      },
+      "PowBlock": {
+       "ssz_random": 5
+      },
+      "ProposerSlashing": {
+       "ssz_random": 5
+      },
+      "SignedAggregateAndProof": {
+       "ssz_random": 5
+      },
+      "SignedBLSToExecutionChange": {
+       "ssz_random": 5
+      },
+      "SignedBeaconBlock": {
+       "ssz_random": 5
+      },
+      "SignedBeaconBlockHeader": {
+       "ssz_random": 5
+      },
+      "SignedContributionAndProof": {
+       "ssz_random": 5
+      },
+      "SignedVoluntaryExit": {
+       "ssz_random": 5
+      },
+      "SigningData": {
+       "ssz_random": 5
+      },
+      "SyncAggregate": {
+       "ssz_random": 5
+      },
+      "SyncAggregatorSelectionData": {
+       "ssz_random": 5
+      },
+      "SyncCommittee": {
+       "ssz_random": 5
+      },
+      "SyncCommitteeContribution": {
+       "ssz_random": 5
+      },
+      "SyncCommitteeMessage": {
+       "ssz_random": 5
+      },
+      "Validator": {
+       "ssz_random": 5
+      },
+      "VoluntaryExit": {
+       "ssz_random": 5
+      },
+      "Withdrawal": {
+       "ssz_random": 5
+      }
+     },
+     "sync": {
+      "optimistic": {
+       "pyspec_tests": 1
+      }
+     },
+     "transition": {
+      "core": {
+       "pyspec_tests": 22
+      }
+     }
+    },
+    "deneb": {
+     "epoch_processing": {
+      "effective_balance_updates": {
+       "pyspec_tests": 1
+      },
+      "eth1_data_reset": {
+       "pyspec_tests": 2
+      },
+      "historical_summaries_update": {
+       "pyspec_tests": 1
+      },
+      "inactivity_updates": {
+       "pyspec_tests": 21
+      },
+      "justification_and_finalization": {
+       "pyspec_tests": 10
+      },
+      "participation_flag_updates": {
+       "pyspec_tests": 10
+      },
+      "randao_mixes_reset": {
+       "pyspec_tests": 1
+      },
+      "registry_updates": {
+       "pyspec_tests": 11
+      },
+      "rewards_and_penalties": {
+       "pyspec_tests": 15
+      },
+      "slashings": {
+       "pyspec_tests": 5
+      },
+      "slashings_reset": {
+       "pyspec_tests": 1
+      }
+     },
+     "finality": {
+      "finality": {
+       "pyspec_tests": 5
+      }
+     },
+     "fork": {
+      "fork": {
+       "pyspec_tests": 15
+      }
+     },
+     "fork_choice": {
+      "ex_ante": {
+       "pyspec_tests": 5
+      },
+      "get_head": {
+       "pyspec_tests": 6
+      },
+      "get_proposer_head": {
+       "pyspec_tests": 2
+      },
+      "on_block": {
+       "pyspec_tests": 11
+      },
+      "should_override_forkchoice_update": {
+       "pyspec_tests": 1
+      }
+     },
+     "light_client": {
+      "single_merkle_proof": {
+       "BeaconBlockBody": 1,
+       "BeaconState": 3
+      }
+     },
+     "merkle_proof": {
+      "single_merkle_proof": {
+       "BeaconBlockBody": 4
+      }
+     },
+     "operations": {
+      "attestation": {
+       "pyspec_tests": 41
+      },
+      "attester_slashing": {
+       "pyspec_tests": 30
+      },
+      "block_header": {
+       "pyspec_tests": 6
+      },
+      "bls_to_execution_change": {
+       "pyspec_tests": 14
+      },
+      "deposit": {
+       "pyspec_tests": 21
+      },
+      "execution_payload": {
+       "pyspec_tests": 40
+      },
+      "proposer_slashing": {
+       "pyspec_tests": 15
+      },
+      "sync_aggregate": {
+       "pyspec_tests": 26
+      },
+      "voluntary_exit": {
+       "pyspec_tests": 15
+      },
+      "withdrawals": {
+       "pyspec_tests": 53
+      }
+     },
+     "random": {
+      "random": {
+       "pyspec_tests": 16
+      }
+     },
+     "rewards": {
+      "basic": {
+       "pyspec_tests": 11
+      },
+      "leak": {
+       "pyspec_tests": 13
+      },
+      "random": {
+       "pyspec_tests": 10
+      }
+     },
+     "sanity": {
+      "blocks": {
+       "pyspec_tests": 71
+      },
+      "slots": {
+       "pyspec_tests": 7
+      }
+     },
+     "ssz_static": {
+      "AggregateAndProof": {
+       "ssz_random": 5
+      },
+      "Attestation": {
+       "ssz_random": 5
+      },
+      "AttestationData": {
+       "ssz_random": 5
+      },
+      "AttesterSlashing": {
+       "ssz_random": 5
+      },
+      "BLSToExecutionChange": {
+       "ssz_random": 5
+      },
+      "BeaconBlock": {
+       "ssz_random": 5
+      },
+      "BeaconBlockBody": {
+       "ssz_random": 5
+      },
+      "BeaconBlockHeader": {
+       "ssz_random": 5
+      },
+      "BeaconState": {
+       "ssz_random": 5
+      },
+      "BlobIdentifier": {
+       "ssz_random": 5
+      },
+      "BlobSidecar": {
+       "ssz_random": 5
+      },
+      "Checkpoint": {
+       "ssz_random": 5
+      },
+      "ContributionAndProof": {
+       "ssz_random": 5
+      },
+      "Deposit": {
+       "ssz_random": 5
+      },
+      "DepositData": {
+       "ssz_random": 5
+      },
+      "DepositMessage": {
+       "ssz_random": 5
+      },
+      "Eth1Block": {
+       "ssz_random": 5
+      },
+      "Eth1Data": {
+       "ssz_random": 5
+      },
+      "ExecutionPayload": {
+       "ssz_random": 5
+      },
+      "ExecutionPayloadHeader": {
+       "ssz_random": 5
+      },
+      "Fork": {
+       "ssz_random": 5
+      },
+      "ForkData": {
+       "ssz_random": 5
+      },
+      "HistoricalBatch": {
+       "ssz_random": 5
+      },
+      "HistoricalSummary": {
+       "ssz_random": 5
+      },
+      "IndexedAttestation": {
+       "ssz_random": 5
+      },
+      "LightClientBootstrap": {
+       "ssz_random": 5
+      },
+      "LightClientFinalityUpdate": {
+       "ssz_random": 5
+      },
+      "LightClientHeader": {
+       "ssz_random": 5
+      },
+      "LightClientOptimisticUpdate": {
+       "ssz_random": 5
+      },
+      "LightClientUpdate": {
+       "ssz_random": 5
+      },
+      "PendingAttestation": {
+       "ssz_random": 5
+      },
+      "PowBlock": {
+       "ssz_random": 5
+      },
+      "ProposerSlashing": {
+       "ssz_random": 5
+      },
+      "SignedAggregateAndProof": {
+       "ssz_random": 5
+      },
+      "SignedBLSToExecutionChange": {
+       "ssz_random": 5
+      },
+      "SignedBeaconBlock": {
+       "ssz_random": 5
+      },
+      "SignedBeaconBlockHeader": {
+       "ssz_random": 5
+      },
+      "SignedContributionAndProof": {
+       "ssz_random": 5
+      },
+      "SignedVoluntaryExit": {
+       "ssz_random": 5
+      },
+      "SigningData": {
+       "ssz_random": 5
+      },
+      "SyncAggregate": {
+       "ssz_random": 5
+      },
+      "SyncAggregatorSelectionData": {
+       "ssz_random": 5
+      },
+      "SyncCommittee": {
+       "ssz_random": 5
+      },
+      "SyncCommitteeContribution": {
+       "ssz_random": 5
+      },
+      "SyncCommitteeMessage": {
+       "ssz_random": 5
+      },
+      "Validator": {
+       "ssz_random": 5
+      },
+      "VoluntaryExit": {
+       "ssz_random": 5
+      },
+      "Withdrawal": {
+       "ssz_random": 5
+      }
+     },
+     "sync": {
+      "optimistic": {
+       "pyspec_tests": 1
+      }
+     },
+     "transition": {
+      "core": {
+       "pyspec_tests": 25
+      }
+     }
+    },
+    "eip7805": {
+     "epoch_processing": {
+      "effective_balance_updates": {
+       "pyspec_tests": 2
+      },
+      "eth1_data_reset": {
+       "pyspec_tests": 2
+      },
+      "historical_summaries_update": {
+       "pyspec_tests": 1
+      },
+      "inactivity_updates": {
+       "pyspec_tests": 21
+      },
+      "justification_and_finalization": {
+       "pyspec_tests": 10
+      },
+      "participation_flag_updates": {
+       "pyspec_tests": 10
+      },
+      "pending_consolidations": {
+       "pyspec_tests": 13
+      },
+      "pending_deposits": {
+       "pyspec_tests": 43
+      },
+      "proposer_lookahead": {
+       "pyspec_tests": 2
+      },
+      "randao_mixes_reset": {
+       "pyspec_tests": 1
+      },
+      "registry_updates": {
+       "pyspec_tests": 16
+      },
+      "rewards_and_penalties": {
+       "pyspec_tests": 15
+      },
+      "slashings": {
+       "pyspec_tests": 5
+      },
+      "slashings_reset": {
+       "pyspec_tests": 1
+      }
+     },
+     "finality": {
+      "finality": {
+       "pyspec_tests": 5
+      }
+     },
+     "fork_choice": {
+      "ex_ante": {
+       "pyspec_tests": 3
+      },
+      "get_head": {
+       "pyspec_tests": 5
+      },
+      "on_block": {
+       "pyspec_tests": 6
+      }
+     },
+     "networking": {
+      "compute_columns_for_custody_group": {
+       "pyspec_tests": 5
+      },
+      "get_custody_groups": {
+       "pyspec_tests": 11
+      }
+     },
+     "operations": {
+      "attestation": {
+       "pyspec_tests": 45
+      },
+      "attester_slashing": {
+       "pyspec_tests": 30
+      },
+      "block_header": {
+       "pyspec_tests": 6
+      },
+      "bls_to_execution_change": {
+       "pyspec_tests": 14
+      },
+      "consolidation_request": {
+       "pyspec_tests": 10
+      },
+      "deposit": {
+       "pyspec_tests": 20
+      },
+      "deposit_request": {
+       "pyspec_tests": 11
+      },
+      "execution_payload": {
+       "pyspec_tests": 24
+      },
+      "proposer_slashing": {
+       "pyspec_tests": 15
+      },
+      "sync_aggregate": {
+       "pyspec_tests": 26
+      },
+      "voluntary_exit": {
+       "pyspec_tests": 25
+      },
+      "withdrawal_request": {
+       "pyspec_tests": 19
+      },
+      "withdrawals": {
+       "pyspec_tests": 46
+      }
+     },
+     "rewards": {
+      "basic": {
+       "pyspec_tests": 11
+      },
+      "leak": {
+       "pyspec_tests": 13
+      },
+      "random": {
+       "pyspec_tests": 10
+      }
+     },
+     "sanity": {
+      "blocks": {
+       "pyspec_tests": 55
+      },
+      "slots": {
+       "pyspec_tests": 15
+      }
+     },
+     "ssz_static": {
+      "AggregateAndProof": {
+       "ssz_random": 5
+      },
+      "Attestation": {
+       "ssz_random": 5
+      },
+      "AttestationData": {
+       "ssz_random": 5
+      },
+      "AttesterSlashing": {
+       "ssz_random": 5
+      },
+      "BLSToExecutionChange": {
+       "ssz_random": 5
+      },
+      "BeaconBlock": {
+       "ssz_random": 5
+      },
+      "BeaconBlockBody": {
+       "ssz_random": 5
+      },
+      "BeaconBlockHeader": {
+       "ssz_random": 5
+      },
+      "BeaconState": {
+       "ssz_random": 5
+      },
+      "BlobIdentifier": {
+       "ssz_random": 5
+      },
+      "BlobSidecar": {
+       "ssz_random": 5
+      },
+      "Checkpoint": {
+       "ssz_random": 5
+      },
+      "ConsolidationRequest": {
+       "ssz_random": 5
+      },
+      "ContributionAndProof": {
+       "ssz_random": 5
+      },
+      "DataColumnSidecar": {
+       "ssz_random": 5
+      },
+      "DataColumnsByRootIdentifier": {
+       "ssz_random": 5
+      },
+      "Deposit": {
+       "ssz_random": 5
+      },
+      "DepositData": {
+       "ssz_random": 5
+      },
+      "DepositMessage": {
+       "ssz_random": 5
+      },
+      "DepositRequest": {
+       "ssz_random": 5
+      },
+      "Eth1Block": {
+       "ssz_random": 5
+      },
+      "Eth1Data": {
+       "ssz_random": 5
+      },
+      "ExecutionPayload": {
+       "ssz_random": 5
+      },
+      "ExecutionPayloadHeader": {
+       "ssz_random": 5
+      },
+      "ExecutionRequests": {
+       "ssz_random": 5
+      },
+      "Fork": {
+       "ssz_random": 5
+      },
+      "ForkData": {
+       "ssz_random": 5
+      },
+      "HistoricalBatch": {
+       "ssz_random": 5
+      },
+      "HistoricalSummary": {
+       "ssz_random": 5
+      },
+      "InclusionList": {
+       "ssz_random": 5
+      },
+      "IndexedAttestation": {
+       "ssz_random": 5
+      },
+      "LightClientBootstrap": {
+       "ssz_random": 5
+      },
+      "LightClientFinalityUpdate": {
+       "ssz_random": 5
+      },
+      "LightClientHeader": {
+       "ssz_random": 5
+      },
+      "LightClientOptimisticUpdate": {
+       "ssz_random": 5
+      },
+      "LightClientUpdate": {
+       "ssz_random": 5
+      },
+      "MatrixEntry": {
+       "ssz_random": 5
+      },
+      "PendingAttestation": {
+       "ssz_random": 5
+      },
+      "PendingConsolidation": {
+       "ssz_random": 5
+      },
+      "PendingDeposit": {
+       "ssz_random": 5
+      },
+      "PendingPartialWithdrawal": {
+       "ssz_random": 5
+      },
+      "PowBlock": {
+       "ssz_random": 5
+      },
+      "ProposerSlashing": {
+       "ssz_random": 5
+      },
+      "SignedAggregateAndProof": {
+       "ssz_random": 5
+      },
+      "SignedBLSToExecutionChange": {
+       "ssz_random": 5
+      },
+      "SignedBeaconBlock": {
+       "ssz_random": 5
+      },
+      "SignedBeaconBlockHeader": {
+       "ssz_random": 5
+      },
+      "SignedContributionAndProof": {
+       "ssz_random": 5
+      },
+      "SignedInclusionList": {
+       "ssz_random": 5
+      },
+      "SignedVoluntaryExit": {
+       "ssz_random": 5
+      },
+      "SigningData": {
+       "ssz_random": 5
+      },
+      "SingleAttestation": {
+       "ssz_random": 5
+      },
+      "SyncAggregate": {
+       "ssz_random": 5
+      },
+      "SyncAggregatorSelectionData": {
+       "ssz_random": 5
+      },
+      "SyncCommittee": {
+       "ssz_random": 5
+      },
+      "SyncCommitteeContribution": {
+       "ssz_random": 5
+      },
+      "SyncCommitteeMessage": {
+       "ssz_random": 5
+      },
+      "Validator": {
+       "ssz_random": 5
+      },
+      "VoluntaryExit": {
+       "ssz_random": 5
+      },
+      "Withdrawal": {
+       "ssz_random": 5
+      },
+      "WithdrawalRequest": {
+       "ssz_random": 5
+      }
+     }
+    },
+    "electra": {
+     "epoch_processing": {
+      "effective_balance_updates": {
+       "pyspec_tests": 2
+      },
+      "eth1_data_reset": {
+       "pyspec_tests": 2
+      },
+      "historical_summaries_update": {
+       "pyspec_tests": 1
+      },
+      "inactivity_updates": {
+       "pyspec_tests": 21
+      },
+      "justification_and_finalization": {
+       "pyspec_tests": 10
+      },
+      "participation_flag_updates": {
+       "pyspec_tests": 10
+      },
+      "pending_consolidations": {
+       "pyspec_tests": 13
+      },
+      "pending_deposits": {
+       "pyspec_tests": 43
+      },
+      "randao_mixes_reset": {
+       "pyspec_tests": 1
+      },
+      "registry_updates": {
+       "pyspec_tests": 16
+      },
+      "rewards_and_penalties": {
+       "pyspec_tests": 15
+      },
+      "slashings": {
+       "pyspec_tests": 5
+      },
+      "slashings_reset": {
+       "pyspec_tests": 1
+      }
+     },
+     "finality": {
+      "finality": {
+       "pyspec_tests": 5
+      }
+     },
+     "fork": {
+      "fork": {
+       "pyspec_tests": 22
+      }
+     },
+     "fork_choice": {
+      "ex_ante": {
+       "pyspec_tests": 5
+      },
+      "get_head": {
+       "pyspec_tests": 6
+      },
+      "get_proposer_head": {
+       "pyspec_tests": 2
+      },
+      "on_block": {
+       "pyspec_tests": 11
+      },
+      "should_override_forkchoice_update": {
+       "pyspec_tests": 1
+      }
+     },
+     "light_client": {
+      "single_merkle_proof": {
+       "BeaconBlockBody": 1,
+       "BeaconState": 3
+      }
+     },
+     "merkle_proof": {
+      "single_merkle_proof": {
+       "BeaconBlockBody": 4
+      }
+     },
+     "operations": {
+      "attestation": {
+       "pyspec_tests": 45
+      },
+      "attester_slashing": {
+       "pyspec_tests": 30
+      },
+      "block_header": {
+       "pyspec_tests": 6
+      },
+      "bls_to_execution_change": {
+       "pyspec_tests": 14
+      },
+      "consolidation_request": {
+       "pyspec_tests": 10
+      },
+      "deposit": {
+       "pyspec_tests": 21
+      },
+      "deposit_request": {
+       "pyspec_tests": 11
+      },
+      "execution_payload": {
+       "pyspec_tests": 40
+      },
+      "proposer_slashing": {
+       "pyspec_tests": 15
+      },
+      "sync_aggregate": {
+       "pyspec_tests": 26
+      },
+      "voluntary_exit": {
+       "pyspec_tests": 25
+      },
+      "withdrawal_request": {
+       "pyspec_tests": 19
+      },
+      "withdrawals": {
+       "pyspec_tests": 80
+      }
+     },
+     "random": {
+      "random": {
+       "pyspec_tests": 16
+      }
+     },
+     "rewards": {
+      "basic": {
+       "pyspec_tests": 11
+      },
+      "leak": {
+       "pyspec_tests": 13
+      },
+      "random": {
+       "pyspec_tests": 10
+      }
+     },
+     "sanity": {
+      "blocks": {
+       "pyspec_tests": 89
+      },
+      "slots": {
+       "pyspec_tests": 15
+      }
+     },
+     "ssz_static": {
+      "AggregateAndProof": {
+       "ssz_random": 5
+      },
+      "Attestation": {
+       "ssz_random": 5
+      },
+      "AttestationData": {
+       "ssz_random": 5
+      },
+      "AttesterSlashing": {
+       "ssz_random": 5
+      },
+      "BLSToExecutionChange": {
+       "ssz_random": 5
+      },
+      "BeaconBlock": {
+       "ssz_random": 5
+      },
+      "BeaconBlockBody": {
+       "ssz_random": 5
+      },
+      "BeaconBlockHeader": {
+       "ssz_random": 5
+      },
+      "BeaconState": {
+       "ssz_random": 5
+      },
+      "BlobIdentifier": {
+       "ssz_random": 5
+      },
+      "BlobSidecar": {
+       "ssz_random": 5
+      },
+      "Checkpoint": {
+       "ssz_random": 5
+      },
+      "ConsolidationRequest": {
+       "ssz_random": 5
+      },
+      "ContributionAndProof": {
+       "ssz_random": 5
+      },
+      "Deposit": {
+       "ssz_random": 5
+      },
+      "DepositData": {
+       "ssz_random": 5
+      },
+      "DepositMessage": {
+       "ssz_random": 5
+      },
+      "DepositRequest": {
+       "ssz_random": 5
+      },
+      "Eth1Block": {
+       "ssz_random": 5
+      },
+      "Eth1Data": {
+       "ssz_random": 5
+      },
+      "ExecutionPayload": {
+       "ssz_random": 5
+      },
+      "ExecutionPayloadHeader": {
+       "ssz_random": 5
+      },
+      "ExecutionRequests": {
+       "ssz_random": 5
+      },
+      "Fork": {
+       "ssz_random": 5
+      },
+      "ForkData": {
+       "ssz_random": 5
+      },
+      "HistoricalBatch": {
+       "ssz_random": 5
+      },
+      "HistoricalSummary": {
+       "ssz_random": 5
+      },
+      "IndexedAttestation": {
+       "ssz_random": 5
+      },
+      "LightClientBootstrap": {
+       "ssz_random": 5
+      },
+      "LightClientFinalityUpdate": {
+       "ssz_random": 5
+      },
+      "LightClientHeader": {
+       "ssz_random": 5
+      },
+      "LightClientOptimisticUpdate": {
+       "ssz_random": 5
+      },
+      "LightClientUpdate": {
+       "ssz_random": 5
+      },
+      "PendingAttestation": {
+       "ssz_random": 5
+      },
+      "PendingConsolidation": {
+       "ssz_random": 5
+      },
+      "PendingDeposit": {
+       "ssz_random": 5
+      },
+      "PendingPartialWithdrawal": {
+       "ssz_random": 5
+      },
+      "PowBlock": {
+       "ssz_random": 5
+      },
+      "ProposerSlashing": {
+       "ssz_random": 5
+      },
+      "SignedAggregateAndProof": {
+       "ssz_random": 5
+      },
+      "SignedBLSToExecutionChange": {
+       "ssz_random": 5
+      },
+      "SignedBeaconBlock": {
+       "ssz_random": 5
+      },
+      "SignedBeaconBlockHeader": {
+       "ssz_random": 5
+      },
+      "SignedContributionAndProof": {
+       "ssz_random": 5
+      },
+      "SignedVoluntaryExit": {
+       "ssz_random": 5
+      },
+      "SigningData": {
+       "ssz_random": 5
+      },
+      "SingleAttestation": {
+       "ssz_random": 5
+      },
+      "SyncAggregate": {
+       "ssz_random": 5
+      },
+      "SyncAggregatorSelectionData": {
+       "ssz_random": 5
+      },
+      "SyncCommittee": {
+       "ssz_random": 5
+      },
+      "SyncCommitteeContribution": {
+       "ssz_random": 5
+      },
+      "SyncCommitteeMessage": {
+       "ssz_random": 5
+      },
+      "Validator": {
+       "ssz_random": 5
+      },
+      "VoluntaryExit": {
+       "ssz_random": 5
+      },
+      "Withdrawal": {
+       "ssz_random": 5
+      },
+      "WithdrawalRequest": {
+       "ssz_random": 5
+      }
+     },
+     "sync": {
+      "optimistic": {
+       "pyspec_tests": 1
+      }
+     },
+     "transition": {
+      "core": {
+       "pyspec_tests": 27
+      }
+     }
+    },
+    "fulu": {
+     "epoch_processing": {
+      "effective_balance_updates": {
+       "pyspec_tests": 2
+      },
+      "eth1_data_reset": {
+       "pyspec_tests": 2
+      },
+      "historical_summaries_update": {
+       "pyspec_tests": 1
+      },
+      "inactivity_updates": {
+       "pyspec_tests": 21
+      },
+      "justification_and_finalization": {
+       "pyspec_tests": 10
+      },
+      "participation_flag_updates": {
+       "pyspec_tests": 10
+      },
+      "pending_consolidations": {
+       "pyspec_tests": 13
+      },
+      "pending_deposits": {
+       "pyspec_tests": 43
+      },
+      "proposer_lookahead": {
+       "pyspec_tests": 2
+      },
+      "randao_mixes_reset": {
+       "pyspec_tests": 1
+      },
+      "registry_updates": {
+       "pyspec_tests": 16
+      },
+      "rewards_and_penalties": {
+       "pyspec_tests": 15
+      },
+      "slashings": {
+       "pyspec_tests": 5
+      },
+      "slashings_reset": {
+       "pyspec_tests": 1
+      }
+     },
+     "finality": {
+      "finality": {
+       "pyspec_tests": 5
+      }
+     },
+     "fork": {
+      "fork": {
+       "pyspec_tests": 18
+      }
+     },
+     "fork_choice": {
+      "ex_ante": {
+       "pyspec_tests": 5
+      },
+      "get_head": {
+       "pyspec_tests": 6
+      },
+      "get_proposer_head": {
+       "pyspec_tests": 2
+      },
+      "on_block": {
+       "pyspec_tests": 23
+      },
+      "should_override_forkchoice_update": {
+       "pyspec_tests": 1
+      }
+     },
+     "light_client": {
+      "single_merkle_proof": {
+       "BeaconBlockBody": 1,
+       "BeaconState": 3
+      }
+     },
+     "merkle_proof": {
+      "single_merkle_proof": {
+       "BeaconBlockBody": 4
+      }
+     },
+     "networking": {
+      "compute_columns_for_custody_group": {
+       "pyspec_tests": 5
+      },
+      "get_custody_groups": {
+       "pyspec_tests": 11
+      }
+     },
+     "operations": {
+      "attestation": {
+       "pyspec_tests": 45
+      },
+      "attester_slashing": {
+       "pyspec_tests": 30
+      },
+      "block_header": {
+       "pyspec_tests": 6
+      },
+      "bls_to_execution_change": {
+       "pyspec_tests": 14
+      },
+      "consolidation_request": {
+       "pyspec_tests": 10
+      },
+      "deposit": {
+       "pyspec_tests": 21
+      },
+      "deposit_request": {
+       "pyspec_tests": 11
+      },
+      "execution_payload": {
+       "pyspec_tests": 40
+      },
+      "proposer_slashing": {
+       "pyspec_tests": 15
+      },
+      "sync_aggregate": {
+       "pyspec_tests": 26
+      },
+      "voluntary_exit": {
+       "pyspec_tests": 25
+      },
+      "withdrawal_request": {
+       "pyspec_tests": 19
+      },
+      "withdrawals": {
+       "pyspec_tests": 80
+      }
+     },
+     "random": {
+      "random": {
+       "pyspec_tests": 16
+      }
+     },
+     "rewards": {
+      "basic": {
+       "pyspec_tests": 11
+      },
+      "leak": {
+       "pyspec_tests": 13
+      },
+      "random": {
+       "pyspec_tests": 10
+      }
+     },
+     "sanity": {
+      "blocks": {
+       "pyspec_tests": 80
+      },
+      "slots": {
+       "pyspec_tests": 15
+      }
+     },
+     "ssz_static": {
+      "AggregateAndProof": {
+       "ssz_random": 5
+      },
+      "Attestation": {
+       "ssz_random": 5
+      },
+      "AttestationData": {
+       "ssz_random": 5
+      },
+      "AttesterSlashing": {
+       "ssz_random": 5
+      },
+      "BLSToExecutionChange": {
+       "ssz_random": 5
+      },
+      "BeaconBlock": {
+       "ssz_random": 5
+      },
+      "BeaconBlockBody": {
+       "ssz_random": 5
+      },
+      "BeaconBlockHeader": {
+       "ssz_random": 5
+      },
+      "BeaconState": {
+       "ssz_random": 5
+      },
+      "BlobIdentifier": {
+       "ssz_random": 5
+      },
+      "BlobSidecar": {
+       "ssz_random": 5
+      },
+      "Checkpoint": {
+       "ssz_random": 5
+      },
+      "ConsolidationRequest": {
+       "ssz_random": 5
+      },
+      "ContributionAndProof": {
+       "ssz_random": 5
+      },
+      "DataColumnSidecar": {
+       "ssz_random": 5
+      },
+      "DataColumnsByRootIdentifier": {
+       "ssz_random": 5
+      },
+      "Deposit": {
+       "ssz_random": 5
+      },
+      "DepositData": {
+       "ssz_random": 5
+      },
+      "DepositMessage": {
+       "ssz_random": 5
+      },
+      "DepositRequest": {
+       "ssz_random": 5
+      },
+      "Eth1Block": {
+       "ssz_random": 5
+      },
+      "Eth1Data": {
+       "ssz_random": 5
+      },
+      "ExecutionPayload": {
+       "ssz_random": 5
+      },
+      "ExecutionPayloadHeader": {
+       "ssz_random": 5
+      },
+      "ExecutionRequests": {
+       "ssz_random": 5
+      },
+      "Fork": {
+       "ssz_random": 5
+      },
+      "ForkData": {
+       "ssz_random": 5
+      },
+      "HistoricalBatch": {
+       "ssz_random": 5
+      },
+      "HistoricalSummary": {
+       "ssz_random": 5
+      },
+      "IndexedAttestation": {
+       "ssz_random": 5
+      },
+      "LightClientBootstrap": {
+       "ssz_random": 5
+      },
+      "LightClientFinalityUpdate": {
+       "ssz_random": 5
+      },
+      "LightClientHeader": {
+       "ssz_random": 5
+      },
+      "LightClientOptimisticUpdate": {
+       "ssz_random": 5
+      },
+      "LightClientUpdate": {
+       "ssz_random": 5
+      },
+      "MatrixEntry": {
+       "ssz_random": 5
+      },
+      "PendingAttestation": {
+       "ssz_random": 5
+      },
+      "PendingConsolidation": {
+       "ssz_random": 5
+      },
+      "PendingDeposit": {
+       "ssz_random": 5
+      },
+      "PendingPartialWithdrawal": {
+       "ssz_random": 5
+      },
+      "PowBlock": {
+       "ssz_random": 5
+      },
+      "ProposerSlashing": {
+       "ssz_random": 5
+      },
+      "SignedAggregateAndProof": {
+       "ssz_random": 5
+      },
+      "SignedBLSToExecutionChange": {
+       "ssz_random": 5
+      },
+      "SignedBeaconBlock": {
+       "ssz_random": 5
+      },
+      "SignedBeaconBlockHeader": {
+       "ssz_random": 5
+      },
+      "SignedContributionAndProof": {
+       "ssz_random": 5
+      },
+      "SignedVoluntaryExit": {
+       "ssz_random": 5
+      },
+      "SigningData": {
+       "ssz_random": 5
+      },
+      "SingleAttestation": {
+       "ssz_random": 5
+      },
+      "SyncAggregate": {
+       "ssz_random": 5
+      },
+      "SyncAggregatorSelectionData": {
+       "ssz_random": 5
+      },
+      "SyncCommittee": {
+       "ssz_random": 5
+      },
+      "SyncCommitteeContribution": {
+       "ssz_random": 5
+      },
+      "SyncCommitteeMessage": {
+       "ssz_random": 5
+      },
+      "Validator": {
+       "ssz_random": 5
+      },
+      "VoluntaryExit": {
+       "ssz_random": 5
+      },
+      "Withdrawal": {
+       "ssz_random": 5
+      },
+      "WithdrawalRequest": {
+       "ssz_random": 5
+      }
+     },
+     "sync": {
+      "optimistic": {
+       "pyspec_tests": 1
+      }
+     },
+     "transition": {
+      "core": {
+       "pyspec_tests": 27
+      }
+     }
+    },
+    "gloas": {
+     "epoch_processing": {
+      "builder_pending_payments": {
+       "pyspec_tests": 8
+      },
+      "effective_balance_updates": {
+       "pyspec_tests": 2
+      },
+      "eth1_data_reset": {
+       "pyspec_tests": 2
+      },
+      "historical_summaries_update": {
+       "pyspec_tests": 1
+      },
+      "inactivity_updates": {
+       "pyspec_tests": 21
+      },
+      "justification_and_finalization": {
+       "pyspec_tests": 10
+      },
+      "participation_flag_updates": {
+       "pyspec_tests": 10
+      },
+      "pending_consolidations": {
+       "pyspec_tests": 13
+      },
+      "pending_deposits": {
+       "pyspec_tests": 43
+      },
+      "proposer_lookahead": {
+       "pyspec_tests": 2
+      },
+      "randao_mixes_reset": {
+       "pyspec_tests": 1
+      },
+      "registry_updates": {
+       "pyspec_tests": 16
+      },
+      "rewards_and_penalties": {
+       "pyspec_tests": 15
+      },
+      "slashings": {
+       "pyspec_tests": 5
+      },
+      "slashings_reset": {
+       "pyspec_tests": 1
+      }
+     },
+     "finality": {
+      "finality": {
+       "pyspec_tests": 5
+      }
+     },
+     "fork": {
+      "fork": {
+       "pyspec_tests": 3
+      }
+     },
+     "fork_choice": {
+      "ex_ante": {
+       "pyspec_tests": 3
+      },
+      "get_head": {
+       "pyspec_tests": 5
+      },
+      "on_block": {
+       "pyspec_tests": 6
+      }
+     },
+     "networking": {
+      "compute_columns_for_custody_group": {
+       "pyspec_tests": 5
+      },
+      "get_custody_groups": {
+       "pyspec_tests": 11
+      }
+     },
+     "operations": {
+      "attestation": {
+       "pyspec_tests": 58
+      },
+      "attester_slashing": {
+       "pyspec_tests": 30
+      },
+      "block_header": {
+       "pyspec_tests": 6
+      },
+      "bls_to_execution_change": {
+       "pyspec_tests": 14
+      },
+      "consolidation_request": {
+       "pyspec_tests": 10
+      },
+      "deposit": {
+       "pyspec_tests": 20
+      },
+      "deposit_request": {
+       "pyspec_tests": 11
+      },
+      "execution_payload": {
+       "pyspec_tests": 42
+      },
+      "execution_payload_bid": {
+       "pyspec_tests": 19
+      },
+      "payload_attestation": {
+       "pyspec_tests": 8
+      },
+      "proposer_slashing": {
+       "pyspec_tests": 18
+      },
+      "sync_aggregate": {
+       "pyspec_tests": 26
+      },
+      "voluntary_exit": {
+       "pyspec_tests": 25
+      },
+      "withdrawal_request": {
+       "pyspec_tests": 19
+      },
+      "withdrawals": {
+       "pyspec_tests": 46
+      }
+     },
+     "rewards": {
+      "basic": {
+       "pyspec_tests": 11
+      },
+      "leak": {
+       "pyspec_tests": 13
+      },
+      "random": {
+       "pyspec_tests": 10
+      }
+     },
+     "sanity": {
+      "blocks": {
+       "pyspec_tests": 55
+      },
+      "slots": {
+       "pyspec_tests": 17
+      }
+     },
+     "ssz_static": {
+      "AggregateAndProof": {
+       "ssz_random": 5
+      },
+      "Attestation": {
+       "ssz_random": 5
+      },
+      "AttestationData": {
+       "ssz_random": 5
+      },
+      "AttesterSlashing": {
+       "ssz_random": 5
+      },
+      "BLSToExecutionChange": {
+       "ssz_random": 5
+      },
+      "BeaconBlock": {
+       "ssz_random": 5
+      },
+      "BeaconBlockBody": {
+       "ssz_random": 5
+      },
+      "BeaconBlockHeader": {
+       "ssz_random": 5
+      },
+      "BeaconState": {
+       "ssz_random": 5
+      },
+      "BlobIdentifier": {
+       "ssz_random": 5
+      },
+      "BlobSidecar": {
+       "ssz_random": 5
+      },
+      "BuilderPendingPayment": {
+       "ssz_random": 5
+      },
+      "BuilderPendingWithdrawal": {
+       "ssz_random": 5
+      },
+      "Checkpoint": {
+       "ssz_random": 5
+      },
+      "ConsolidationRequest": {
+       "ssz_random": 5
+      },
+      "ContributionAndProof": {
+       "ssz_random": 5
+      },
+      "DataColumnSidecar": {
+       "ssz_random": 5
+      },
+      "DataColumnsByRootIdentifier": {
+       "ssz_random": 5
+      },
+      "Deposit": {
+       "ssz_random": 5
+      },
+      "DepositData": {
+       "ssz_random": 5
+      },
+      "DepositMessage": {
+       "ssz_random": 5
+      },
+      "DepositRequest": {
+       "ssz_random": 5
+      },
+      "Eth1Block": {
+       "ssz_random": 5
+      },
+      "Eth1Data": {
+       "ssz_random": 5
+      },
+      "ExecutionPayload": {
+       "ssz_random": 5
+      },
+      "ExecutionPayloadBid": {
+       "ssz_random": 5
+      },
+      "ExecutionPayloadEnvelope": {
+       "ssz_random": 5
+      },
+      "ExecutionPayloadHeader": {
+       "ssz_random": 5
+      },
+      "ExecutionRequests": {
+       "ssz_random": 5
+      },
+      "Fork": {
+       "ssz_random": 5
+      },
+      "ForkChoiceNode": {
+       "ssz_random": 5
+      },
+      "ForkData": {
+       "ssz_random": 5
+      },
+      "HistoricalBatch": {
+       "ssz_random": 5
+      },
+      "HistoricalSummary": {
+       "ssz_random": 5
+      },
+      "IndexedAttestation": {
+       "ssz_random": 5
+      },
+      "IndexedPayloadAttestation": {
+       "ssz_random": 5
+      },
+      "LightClientBootstrap": {
+       "ssz_random": 5
+      },
+      "LightClientFinalityUpdate": {
+       "ssz_random": 5
+      },
+      "LightClientHeader": {
+       "ssz_random": 5
+      },
+      "LightClientOptimisticUpdate": {
+       "ssz_random": 5
+      },
+      "LightClientUpdate": {
+       "ssz_random": 5
+      },
+      "MatrixEntry": {
+       "ssz_random": 5
+      },
+      "PayloadAttestation": {
+       "ssz_random": 5
+      },
+      "PayloadAttestationData": {
+       "ssz_random": 5
+      },
+      "PayloadAttestationMessage": {
+       "ssz_random": 5
+      },
+      "PendingAttestation": {
+       "ssz_random": 5
+      },
+      "PendingConsolidation": {
+       "ssz_random": 5
+      },
+      "PendingDeposit": {
+       "ssz_random": 5
+      },
+      "PendingPartialWithdrawal": {
+       "ssz_random": 5
+      },
+      "PowBlock": {
+       "ssz_random": 5
+      },
+      "ProposerSlashing": {
+       "ssz_random": 5
+      },
+      "SignedAggregateAndProof": {
+       "ssz_random": 5
+      },
+      "SignedBLSToExecutionChange": {
+       "ssz_random": 5
+      },
+      "SignedBeaconBlock": {
+       "ssz_random": 5
+      },
+      "SignedBeaconBlockHeader": {
+       "ssz_random": 5
+      },
+      "SignedContributionAndProof": {
+       "ssz_random": 5
+      },
+      "SignedExecutionPayloadBid": {
+       "ssz_random": 5
+      },
+      "SignedExecutionPayloadEnvelope": {
+       "ssz_random": 5
+      },
+      "SignedVoluntaryExit": {
+       "ssz_random": 5
+      },
+      "SigningData": {
+       "ssz_random": 5
+      },
+      "SingleAttestation": {
+       "ssz_random": 5
+      },
+      "SyncAggregate": {
+       "ssz_random": 5
+      },
+      "SyncAggregatorSelectionData": {
+       "ssz_random": 5
+      },
+      "SyncCommittee": {
+       "ssz_random": 5
+      },
+      "SyncCommitteeContribution": {
+       "ssz_random": 5
+      },
+      "SyncCommitteeMessage": {
+       "ssz_random": 5
+      },
+      "Validator": {
+       "ssz_random": 5
+      },
+      "VoluntaryExit": {
+       "ssz_random": 5
+      },
+      "Withdrawal": {
+       "ssz_random": 5
+      },
+      "WithdrawalRequest": {
+       "ssz_random": 5
+      }
+     },
+     "transition": {
+      "core": {
+       "pyspec_tests": 25
+      }
+     }
+    },
+    "phase0": {
+     "epoch_processing": {
+      "effective_balance_updates": {
+       "pyspec_tests": 1
+      },
+      "eth1_data_reset": {
+       "pyspec_tests": 2
+      },
+      "historical_roots_update": {
+       "pyspec_tests": 1
+      },
+      "justification_and_finalization": {
+       "pyspec_tests": 10
+      },
+      "participation_record_updates": {
+       "pyspec_tests": 1
+      },
+      "randao_mixes_reset": {
+       "pyspec_tests": 1
+      },
+      "registry_updates": {
+       "pyspec_tests": 11
+      },
+      "rewards_and_penalties": {
+       "pyspec_tests": 19
+      },
+      "slashings": {
+       "pyspec_tests": 5
+      },
+      "slashings_reset": {
+       "pyspec_tests": 1
+      }
+     },
+     "finality": {
+      "finality": {
+       "pyspec_tests": 5
+      }
+     },
+     "operations": {
+      "attestation": {
+       "pyspec_tests": 41
+      },
+      "attester_slashing": {
+       "pyspec_tests": 30
+      },
+      "block_header": {
+       "pyspec_tests": 6
+      },
+      "deposit": {
+       "pyspec_tests": 17
+      },
+      "proposer_slashing": {
+       "pyspec_tests": 15
+      },
+      "voluntary_exit": {
+       "pyspec_tests": 9
+      }
+     },
+     "random": {
+      "random": {
+       "pyspec_tests": 16
+      }
+     },
+     "rewards": {
+      "basic": {
+       "pyspec_tests": 21
+      },
+      "leak": {
+       "pyspec_tests": 18
+      },
+      "random": {
+       "pyspec_tests": 10
+      }
+     },
+     "sanity": {
+      "blocks": {
+       "pyspec_tests": 40
+      },
+      "slots": {
+       "pyspec_tests": 7
+      }
+     },
+     "shuffling": {
+      "core": {
+       "shuffle": 300
+      }
+     },
+     "ssz_static": {
+      "AggregateAndProof": {
+       "ssz_random": 5
+      },
+      "Attestation": {
+       "ssz_random": 5
+      },
+      "AttestationData": {
+       "ssz_random": 5
+      },
+      "AttesterSlashing": {
+       "ssz_random": 5
+      },
+      "BeaconBlock": {
+       "ssz_random": 5
+      },
+      "BeaconBlockBody": {
+       "ssz_random": 5
+      },
+      "BeaconBlockHeader": {
+       "ssz_random": 5
+      },
+      "BeaconState": {
+       "ssz_random": 5
+      },
+      "Checkpoint": {
+       "ssz_random": 5
+      },
+      "Deposit": {
+       "ssz_random": 5
+      },
+      "DepositData": {
+       "ssz_random": 5
+      },
+      "DepositMessage": {
+       "ssz_random": 5
+      },
+      "Eth1Block": {
+       "ssz_random": 5
+      },
+      "Eth1Data": {
+       "ssz_random": 5
+      },
+      "Fork": {
+       "ssz_random": 5
+      },
+      "ForkData": {
+       "ssz_random": 5
+      },
+      "HistoricalBatch": {
+       "ssz_random": 5
+      },
+      "IndexedAttestation": {
+       "ssz_random": 5
+      },
+      "PendingAttestation": {
+       "ssz_random": 5
+      },
+      "ProposerSlashing": {
+       "ssz_random": 5
+      },
+      "SignedAggregateAndProof": {
+       "ssz_random": 5
+      },
+      "SignedBeaconBlock": {
+       "ssz_random": 5
+      },
+      "SignedBeaconBlockHeader": {
+       "ssz_random": 5
+      },
+      "SignedVoluntaryExit": {
+       "ssz_random": 5
+      },
+      "SigningData": {
+       "ssz_random": 5
+      },
+      "Validator": {
+       "ssz_random": 5
+      },
+      "VoluntaryExit": {
+       "ssz_random": 5
+      }
+     }
+    }
+   }
+  },
+  "minimal": {
+   "cases": 60959,
+   "files": 202311,
+   "forks": {
+    "altair": {
+     "epoch_processing": {
+      "effective_balance_updates": {
+       "pyspec_tests": 1
+      },
+      "eth1_data_reset": {
+       "pyspec_tests": 2
+      },
+      "historical_roots_update": {
+       "pyspec_tests": 1
+      },
+      "inactivity_updates": {
+       "pyspec_tests": 21
+      },
+      "justification_and_finalization": {
+       "pyspec_tests": 10
+      },
+      "participation_flag_updates": {
+       "pyspec_tests": 12
+      },
+      "randao_mixes_reset": {
+       "pyspec_tests": 1
+      },
+      "registry_updates": {
+       "pyspec_tests": 15
+      },
+      "rewards_and_penalties": {
+       "pyspec_tests": 15
+      },
+      "slashings": {
+       "pyspec_tests": 5
+      },
+      "slashings_reset": {
+       "pyspec_tests": 1
+      },
+      "sync_committee_updates": {
+       "pyspec_tests": 5
+      }
+     },
+     "finality": {
+      "finality": {
+       "pyspec_tests": 5
+      }
+     },
+     "fork": {
+      "fork": {
+       "pyspec_tests": 19
+      }
+     },
+     "fork_choice": {
+      "ex_ante": {
+       "pyspec_tests": 3
+      },
+      "get_head": {
+       "pyspec_tests": 10
+      },
+      "get_proposer_head": {
+       "pyspec_tests": 2
+      },
+      "on_block": {
+       "pyspec_tests": 23
+      },
+      "reorg": {
+       "pyspec_tests": 8
+      },
+      "withholding": {
+       "pyspec_tests": 2
+      }
+     },
+     "light_client": {
+      "data_collection": {
+       "pyspec_tests": 1
+      },
+      "single_merkle_proof": {
+       "BeaconState": 3
+      },
+      "sync": {
+       "pyspec_tests": 7
+      },
+      "update_ranking": {
+       "pyspec_tests": 1
+      }
+     },
+     "operations": {
+      "attestation": {
+       "pyspec_tests": 41
+      },
+      "attester_slashing": {
+       "pyspec_tests": 30
+      },
+      "block_header": {
+       "pyspec_tests": 6
+      },
+      "deposit": {
+       "pyspec_tests": 19
+      },
+      "proposer_slashing": {
+       "pyspec_tests": 15
+      },
+      "sync_aggregate": {
+       "pyspec_tests": 24
+      },
+      "voluntary_exit": {
+       "pyspec_tests": 10
+      }
+     },
+     "random": {
+      "random": {
+       "pyspec_tests": 16
+      }
+     },
+     "rewards": {
+      "basic": {
+       "pyspec_tests": 11
+      },
+      "leak": {
+       "pyspec_tests": 13
+      },
+      "random": {
+       "pyspec_tests": 10
+      }
+     },
+     "sanity": {
+      "blocks": {
+       "pyspec_tests": 52
+      },
+      "slots": {
+       "pyspec_tests": 7
+      }
+     },
+     "ssz_static": {
+      "AggregateAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Attestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "AttestationData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "AttesterSlashing": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconBlock": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconBlockBody": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconBlockHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconState": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Checkpoint": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ContributionAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Deposit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "DepositData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "DepositMessage": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Eth1Block": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Eth1Data": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Fork": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ForkData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "HistoricalBatch": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "IndexedAttestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientBootstrap": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientFinalityUpdate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientOptimisticUpdate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientUpdate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PendingAttestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ProposerSlashing": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedAggregateAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedBeaconBlock": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedBeaconBlockHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedContributionAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedVoluntaryExit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SigningData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncAggregate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncAggregatorSelectionData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncCommittee": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncCommitteeContribution": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncCommitteeMessage": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Validator": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "VoluntaryExit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      }
+     },
+     "transition": {
+      "core": {
+       "pyspec_tests": 26
+      }
+     }
+    },
+    "bellatrix": {
+     "epoch_processing": {
+      "effective_balance_updates": {
+       "pyspec_tests": 1
+      },
+      "eth1_data_reset": {
+       "pyspec_tests": 2
+      },
+      "historical_roots_update": {
+       "pyspec_tests": 1
+      },
+      "inactivity_updates": {
+       "pyspec_tests": 21
+      },
+      "justification_and_finalization": {
+       "pyspec_tests": 10
+      },
+      "participation_flag_updates": {
+       "pyspec_tests": 12
+      },
+      "randao_mixes_reset": {
+       "pyspec_tests": 1
+      },
+      "registry_updates": {
+       "pyspec_tests": 15
+      },
+      "rewards_and_penalties": {
+       "pyspec_tests": 15
+      },
+      "slashings": {
+       "pyspec_tests": 5
+      },
+      "slashings_reset": {
+       "pyspec_tests": 1
+      },
+      "sync_committee_updates": {
+       "pyspec_tests": 5
+      }
+     },
+     "finality": {
+      "finality": {
+       "pyspec_tests": 5
+      }
+     },
+     "fork": {
+      "fork": {
+       "pyspec_tests": 17
+      }
+     },
+     "fork_choice": {
+      "ex_ante": {
+       "pyspec_tests": 3
+      },
+      "get_head": {
+       "pyspec_tests": 10
+      },
+      "get_proposer_head": {
+       "pyspec_tests": 2
+      },
+      "on_block": {
+       "pyspec_tests": 23
+      },
+      "on_merge_block": {
+       "pyspec_tests": 4
+      },
+      "reorg": {
+       "pyspec_tests": 8
+      },
+      "should_override_forkchoice_update": {
+       "pyspec_tests": 2
+      },
+      "withholding": {
+       "pyspec_tests": 2
+      }
+     },
+     "light_client": {
+      "data_collection": {
+       "pyspec_tests": 3
+      },
+      "single_merkle_proof": {
+       "BeaconState": 3
+      },
+      "sync": {
+       "pyspec_tests": 10
+      },
+      "update_ranking": {
+       "pyspec_tests": 1
+      }
+     },
+     "operations": {
+      "attestation": {
+       "pyspec_tests": 41
+      },
+      "attester_slashing": {
+       "pyspec_tests": 30
+      },
+      "block_header": {
+       "pyspec_tests": 6
+      },
+      "deposit": {
+       "pyspec_tests": 20
+      },
+      "execution_payload": {
+       "pyspec_tests": 26
+      },
+      "proposer_slashing": {
+       "pyspec_tests": 15
+      },
+      "sync_aggregate": {
+       "pyspec_tests": 24
+      },
+      "voluntary_exit": {
+       "pyspec_tests": 16
+      }
+     },
+     "random": {
+      "random": {
+       "pyspec_tests": 16
+      }
+     },
+     "rewards": {
+      "basic": {
+       "pyspec_tests": 11
+      },
+      "leak": {
+       "pyspec_tests": 13
+      },
+      "random": {
+       "pyspec_tests": 10
+      }
+     },
+     "sanity": {
+      "blocks": {
+       "pyspec_tests": 55
+      },
+      "slots": {
+       "pyspec_tests": 7
+      }
+     },
+     "ssz_static": {
+      "AggregateAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Attestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "AttestationData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "AttesterSlashing": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconBlock": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconBlockBody": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconBlockHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconState": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Checkpoint": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ContributionAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Deposit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "DepositData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "DepositMessage": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Eth1Block": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Eth1Data": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ExecutionPayload": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ExecutionPayloadHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Fork": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ForkData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "HistoricalBatch": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "IndexedAttestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientBootstrap": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientFinalityUpdate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientOptimisticUpdate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientUpdate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PendingAttestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PowBlock": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ProposerSlashing": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedAggregateAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedBeaconBlock": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedBeaconBlockHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedContributionAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedVoluntaryExit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SigningData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncAggregate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncAggregatorSelectionData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncCommittee": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncCommitteeContribution": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncCommitteeMessage": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Validator": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "VoluntaryExit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      }
+     },
+     "sync": {
+      "optimistic": {
+       "pyspec_tests": 1
+      }
+     },
+     "transition": {
+      "core": {
+       "pyspec_tests": 26
+      }
+     }
+    },
+    "capella": {
+     "epoch_processing": {
+      "effective_balance_updates": {
+       "pyspec_tests": 1
+      },
+      "eth1_data_reset": {
+       "pyspec_tests": 2
+      },
+      "historical_summaries_update": {
+       "pyspec_tests": 1
+      },
+      "inactivity_updates": {
+       "pyspec_tests": 21
+      },
+      "justification_and_finalization": {
+       "pyspec_tests": 10
+      },
+      "participation_flag_updates": {
+       "pyspec_tests": 12
+      },
+      "randao_mixes_reset": {
+       "pyspec_tests": 1
+      },
+      "registry_updates": {
+       "pyspec_tests": 15
+      },
+      "rewards_and_penalties": {
+       "pyspec_tests": 15
+      },
+      "slashings": {
+       "pyspec_tests": 5
+      },
+      "slashings_reset": {
+       "pyspec_tests": 1
+      },
+      "sync_committee_updates": {
+       "pyspec_tests": 5
+      }
+     },
+     "finality": {
+      "finality": {
+       "pyspec_tests": 5
+      }
+     },
+     "fork": {
+      "fork": {
+       "pyspec_tests": 17
+      }
+     },
+     "fork_choice": {
+      "ex_ante": {
+       "pyspec_tests": 3
+      },
+      "get_head": {
+       "pyspec_tests": 10
+      },
+      "get_proposer_head": {
+       "pyspec_tests": 2
+      },
+      "on_block": {
+       "pyspec_tests": 23
+      },
+      "reorg": {
+       "pyspec_tests": 8
+      },
+      "should_override_forkchoice_update": {
+       "pyspec_tests": 2
+      },
+      "withholding": {
+       "pyspec_tests": 2
+      }
+     },
+     "light_client": {
+      "data_collection": {
+       "pyspec_tests": 3
+      },
+      "single_merkle_proof": {
+       "BeaconBlockBody": 1,
+       "BeaconState": 3
+      },
+      "sync": {
+       "pyspec_tests": 8
+      },
+      "update_ranking": {
+       "pyspec_tests": 1
+      }
+     },
+     "operations": {
+      "attestation": {
+       "pyspec_tests": 41
+      },
+      "attester_slashing": {
+       "pyspec_tests": 30
+      },
+      "block_header": {
+       "pyspec_tests": 6
+      },
+      "bls_to_execution_change": {
+       "pyspec_tests": 14
+      },
+      "deposit": {
+       "pyspec_tests": 21
+      },
+      "execution_payload": {
+       "pyspec_tests": 26
+      },
+      "proposer_slashing": {
+       "pyspec_tests": 15
+      },
+      "sync_aggregate": {
+       "pyspec_tests": 24
+      },
+      "voluntary_exit": {
+       "pyspec_tests": 16
+      },
+      "withdrawals": {
+       "pyspec_tests": 54
+      }
+     },
+     "random": {
+      "random": {
+       "pyspec_tests": 16
+      }
+     },
+     "rewards": {
+      "basic": {
+       "pyspec_tests": 11
+      },
+      "leak": {
+       "pyspec_tests": 13
+      },
+      "random": {
+       "pyspec_tests": 10
+      }
+     },
+     "sanity": {
+      "blocks": {
+       "pyspec_tests": 69
+      },
+      "slots": {
+       "pyspec_tests": 7
+      }
+     },
+     "ssz_static": {
+      "AggregateAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Attestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "AttestationData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "AttesterSlashing": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BLSToExecutionChange": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconBlock": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconBlockBody": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconBlockHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconState": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Checkpoint": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ContributionAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Deposit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "DepositData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "DepositMessage": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Eth1Block": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Eth1Data": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ExecutionPayload": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ExecutionPayloadHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Fork": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ForkData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "HistoricalBatch": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "HistoricalSummary": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "IndexedAttestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientBootstrap": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientFinalityUpdate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientOptimisticUpdate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientUpdate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PendingAttestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PowBlock": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ProposerSlashing": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedAggregateAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedBLSToExecutionChange": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedBeaconBlock": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedBeaconBlockHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedContributionAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedVoluntaryExit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SigningData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncAggregate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncAggregatorSelectionData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncCommittee": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncCommitteeContribution": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncCommitteeMessage": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Validator": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "VoluntaryExit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Withdrawal": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      }
+     },
+     "sync": {
+      "optimistic": {
+       "pyspec_tests": 1
+      }
+     },
+     "transition": {
+      "core": {
+       "pyspec_tests": 26
+      }
+     }
+    },
+    "deneb": {
+     "epoch_processing": {
+      "effective_balance_updates": {
+       "pyspec_tests": 1
+      },
+      "eth1_data_reset": {
+       "pyspec_tests": 2
+      },
+      "historical_summaries_update": {
+       "pyspec_tests": 1
+      },
+      "inactivity_updates": {
+       "pyspec_tests": 21
+      },
+      "justification_and_finalization": {
+       "pyspec_tests": 10
+      },
+      "participation_flag_updates": {
+       "pyspec_tests": 12
+      },
+      "randao_mixes_reset": {
+       "pyspec_tests": 1
+      },
+      "registry_updates": {
+       "pyspec_tests": 18
+      },
+      "rewards_and_penalties": {
+       "pyspec_tests": 15
+      },
+      "slashings": {
+       "pyspec_tests": 5
+      },
+      "slashings_reset": {
+       "pyspec_tests": 1
+      },
+      "sync_committee_updates": {
+       "pyspec_tests": 5
+      }
+     },
+     "finality": {
+      "finality": {
+       "pyspec_tests": 5
+      }
+     },
+     "fork": {
+      "fork": {
+       "pyspec_tests": 17
+      }
+     },
+     "fork_choice": {
+      "ex_ante": {
+       "pyspec_tests": 3
+      },
+      "get_head": {
+       "pyspec_tests": 10
+      },
+      "get_proposer_head": {
+       "pyspec_tests": 2
+      },
+      "on_block": {
+       "pyspec_tests": 28
+      },
+      "reorg": {
+       "pyspec_tests": 8
+      },
+      "should_override_forkchoice_update": {
+       "pyspec_tests": 2
+      },
+      "withholding": {
+       "pyspec_tests": 2
+      }
+     },
+     "light_client": {
+      "data_collection": {
+       "pyspec_tests": 1
+      },
+      "single_merkle_proof": {
+       "BeaconBlockBody": 1,
+       "BeaconState": 3
+      },
+      "sync": {
+       "pyspec_tests": 6
+      },
+      "update_ranking": {
+       "pyspec_tests": 1
+      }
+     },
+     "merkle_proof": {
+      "single_merkle_proof": {
+       "BeaconBlockBody": 4
+      }
+     },
+     "operations": {
+      "attestation": {
+       "pyspec_tests": 41
+      },
+      "attester_slashing": {
+       "pyspec_tests": 30
+      },
+      "block_header": {
+       "pyspec_tests": 6
+      },
+      "bls_to_execution_change": {
+       "pyspec_tests": 14
+      },
+      "deposit": {
+       "pyspec_tests": 21
+      },
+      "execution_payload": {
+       "pyspec_tests": 40
+      },
+      "proposer_slashing": {
+       "pyspec_tests": 15
+      },
+      "sync_aggregate": {
+       "pyspec_tests": 24
+      },
+      "voluntary_exit": {
+       "pyspec_tests": 16
+      },
+      "withdrawals": {
+       "pyspec_tests": 54
+      }
+     },
+     "random": {
+      "random": {
+       "pyspec_tests": 16
+      }
+     },
+     "rewards": {
+      "basic": {
+       "pyspec_tests": 11
+      },
+      "leak": {
+       "pyspec_tests": 13
+      },
+      "random": {
+       "pyspec_tests": 10
+      }
+     },
+     "sanity": {
+      "blocks": {
+       "pyspec_tests": 78
+      },
+      "slots": {
+       "pyspec_tests": 7
+      }
+     },
+     "ssz_static": {
+      "AggregateAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Attestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "AttestationData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "AttesterSlashing": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BLSToExecutionChange": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconBlock": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconBlockBody": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconBlockHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconState": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BlobIdentifier": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BlobSidecar": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Checkpoint": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ContributionAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Deposit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "DepositData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "DepositMessage": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Eth1Block": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Eth1Data": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ExecutionPayload": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ExecutionPayloadHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Fork": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ForkData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "HistoricalBatch": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "HistoricalSummary": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "IndexedAttestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientBootstrap": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientFinalityUpdate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientOptimisticUpdate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientUpdate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PendingAttestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PowBlock": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ProposerSlashing": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedAggregateAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedBLSToExecutionChange": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedBeaconBlock": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedBeaconBlockHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedContributionAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedVoluntaryExit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SigningData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncAggregate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncAggregatorSelectionData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncCommittee": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncCommitteeContribution": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncCommitteeMessage": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Validator": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "VoluntaryExit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Withdrawal": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      }
+     },
+     "sync": {
+      "optimistic": {
+       "pyspec_tests": 1
+      }
+     },
+     "transition": {
+      "core": {
+       "pyspec_tests": 30
+      }
+     }
+    },
+    "eip7805": {
+     "epoch_processing": {
+      "effective_balance_updates": {
+       "pyspec_tests": 2
+      },
+      "eth1_data_reset": {
+       "pyspec_tests": 2
+      },
+      "historical_summaries_update": {
+       "pyspec_tests": 1
+      },
+      "inactivity_updates": {
+       "pyspec_tests": 21
+      },
+      "justification_and_finalization": {
+       "pyspec_tests": 10
+      },
+      "participation_flag_updates": {
+       "pyspec_tests": 12
+      },
+      "pending_consolidations": {
+       "pyspec_tests": 13
+      },
+      "pending_deposits": {
+       "pyspec_tests": 44
+      },
+      "proposer_lookahead": {
+       "pyspec_tests": 2
+      },
+      "randao_mixes_reset": {
+       "pyspec_tests": 1
+      },
+      "registry_updates": {
+       "pyspec_tests": 23
+      },
+      "rewards_and_penalties": {
+       "pyspec_tests": 15
+      },
+      "slashings": {
+       "pyspec_tests": 5
+      },
+      "slashings_reset": {
+       "pyspec_tests": 1
+      },
+      "sync_committee_updates": {
+       "pyspec_tests": 5
+      }
+     },
+     "finality": {
+      "finality": {
+       "pyspec_tests": 5
+      }
+     },
+     "fork_choice": {
+      "ex_ante": {
+       "pyspec_tests": 3
+      },
+      "get_head": {
+       "pyspec_tests": 9
+      },
+      "on_block": {
+       "pyspec_tests": 23
+      },
+      "reorg": {
+       "pyspec_tests": 8
+      },
+      "withholding": {
+       "pyspec_tests": 2
+      }
+     },
+     "networking": {
+      "compute_columns_for_custody_group": {
+       "pyspec_tests": 5
+      },
+      "get_custody_groups": {
+       "pyspec_tests": 11
+      }
+     },
+     "operations": {
+      "attestation": {
+       "pyspec_tests": 49
+      },
+      "attester_slashing": {
+       "pyspec_tests": 30
+      },
+      "block_header": {
+       "pyspec_tests": 6
+      },
+      "bls_to_execution_change": {
+       "pyspec_tests": 14
+      },
+      "consolidation_request": {
+       "pyspec_tests": 37
+      },
+      "deposit": {
+       "pyspec_tests": 20
+      },
+      "deposit_request": {
+       "pyspec_tests": 11
+      },
+      "execution_payload": {
+       "pyspec_tests": 24
+      },
+      "proposer_slashing": {
+       "pyspec_tests": 15
+      },
+      "sync_aggregate": {
+       "pyspec_tests": 24
+      },
+      "voluntary_exit": {
+       "pyspec_tests": 21
+      },
+      "withdrawal_request": {
+       "pyspec_tests": 29
+      },
+      "withdrawals": {
+       "pyspec_tests": 47
+      }
+     },
+     "rewards": {
+      "basic": {
+       "pyspec_tests": 11
+      },
+      "leak": {
+       "pyspec_tests": 13
+      },
+      "random": {
+       "pyspec_tests": 10
+      }
+     },
+     "sanity": {
+      "blocks": {
+       "pyspec_tests": 62
+      },
+      "slots": {
+       "pyspec_tests": 15
+      }
+     },
+     "ssz_static": {
+      "AggregateAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Attestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "AttestationData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "AttesterSlashing": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BLSToExecutionChange": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconBlock": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconBlockBody": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconBlockHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconState": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BlobIdentifier": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BlobSidecar": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Checkpoint": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ConsolidationRequest": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ContributionAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "DataColumnSidecar": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "DataColumnsByRootIdentifier": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Deposit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "DepositData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "DepositMessage": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "DepositRequest": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Eth1Block": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Eth1Data": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ExecutionPayload": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ExecutionPayloadHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ExecutionRequests": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Fork": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ForkData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "HistoricalBatch": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "HistoricalSummary": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "InclusionList": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "IndexedAttestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientBootstrap": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientFinalityUpdate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientOptimisticUpdate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientUpdate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "MatrixEntry": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PendingAttestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PendingConsolidation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PendingDeposit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PendingPartialWithdrawal": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PowBlock": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ProposerSlashing": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedAggregateAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedBLSToExecutionChange": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedBeaconBlock": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedBeaconBlockHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedContributionAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedInclusionList": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedVoluntaryExit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SigningData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SingleAttestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncAggregate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncAggregatorSelectionData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncCommittee": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncCommitteeContribution": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncCommitteeMessage": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Validator": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "VoluntaryExit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Withdrawal": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "WithdrawalRequest": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      }
+     }
+    },
+    "electra": {
+     "epoch_processing": {
+      "effective_balance_updates": {
+       "pyspec_tests": 2
+      },
+      "eth1_data_reset": {
+       "pyspec_tests": 2
+      },
+      "historical_summaries_update": {
+       "pyspec_tests": 1
+      },
+      "inactivity_updates": {
+       "pyspec_tests": 21
+      },
+      "justification_and_finalization": {
+       "pyspec_tests": 10
+      },
+      "participation_flag_updates": {
+       "pyspec_tests": 12
+      },
+      "pending_consolidations": {
+       "pyspec_tests": 13
+      },
+      "pending_deposits": {
+       "pyspec_tests": 44
+      },
+      "randao_mixes_reset": {
+       "pyspec_tests": 1
+      },
+      "registry_updates": {
+       "pyspec_tests": 23
+      },
+      "rewards_and_penalties": {
+       "pyspec_tests": 15
+      },
+      "slashings": {
+       "pyspec_tests": 5
+      },
+      "slashings_reset": {
+       "pyspec_tests": 1
+      },
+      "sync_committee_updates": {
+       "pyspec_tests": 5
+      }
+     },
+     "finality": {
+      "finality": {
+       "pyspec_tests": 5
+      }
+     },
+     "fork": {
+      "fork": {
+       "pyspec_tests": 24
+      }
+     },
+     "fork_choice": {
+      "deposit_with_reorg": {
+       "pyspec_tests": 1
+      },
+      "ex_ante": {
+       "pyspec_tests": 3
+      },
+      "get_head": {
+       "pyspec_tests": 10
+      },
+      "get_proposer_head": {
+       "pyspec_tests": 2
+      },
+      "on_block": {
+       "pyspec_tests": 28
+      },
+      "reorg": {
+       "pyspec_tests": 8
+      },
+      "should_override_forkchoice_update": {
+       "pyspec_tests": 2
+      },
+      "withholding": {
+       "pyspec_tests": 2
+      }
+     },
+     "light_client": {
+      "data_collection": {
+       "pyspec_tests": 1
+      },
+      "single_merkle_proof": {
+       "BeaconBlockBody": 1,
+       "BeaconState": 3
+      },
+      "sync": {
+       "pyspec_tests": 4
+      },
+      "update_ranking": {
+       "pyspec_tests": 1
+      }
+     },
+     "merkle_proof": {
+      "single_merkle_proof": {
+       "BeaconBlockBody": 4
+      }
+     },
+     "operations": {
+      "attestation": {
+       "pyspec_tests": 49
+      },
+      "attester_slashing": {
+       "pyspec_tests": 30
+      },
+      "block_header": {
+       "pyspec_tests": 6
+      },
+      "bls_to_execution_change": {
+       "pyspec_tests": 14
+      },
+      "consolidation_request": {
+       "pyspec_tests": 37
+      },
+      "deposit": {
+       "pyspec_tests": 21
+      },
+      "deposit_request": {
+       "pyspec_tests": 11
+      },
+      "execution_payload": {
+       "pyspec_tests": 40
+      },
+      "proposer_slashing": {
+       "pyspec_tests": 15
+      },
+      "sync_aggregate": {
+       "pyspec_tests": 24
+      },
+      "voluntary_exit": {
+       "pyspec_tests": 21
+      },
+      "withdrawal_request": {
+       "pyspec_tests": 29
+      },
+      "withdrawals": {
+       "pyspec_tests": 81
+      }
+     },
+     "random": {
+      "random": {
+       "pyspec_tests": 16
+      }
+     },
+     "rewards": {
+      "basic": {
+       "pyspec_tests": 11
+      },
+      "leak": {
+       "pyspec_tests": 13
+      },
+      "random": {
+       "pyspec_tests": 10
+      }
+     },
+     "sanity": {
+      "blocks": {
+       "pyspec_tests": 101
+      },
+      "slots": {
+       "pyspec_tests": 15
+      }
+     },
+     "ssz_static": {
+      "AggregateAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Attestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "AttestationData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "AttesterSlashing": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BLSToExecutionChange": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconBlock": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconBlockBody": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconBlockHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconState": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BlobIdentifier": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BlobSidecar": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Checkpoint": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ConsolidationRequest": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ContributionAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Deposit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "DepositData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "DepositMessage": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "DepositRequest": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Eth1Block": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Eth1Data": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ExecutionPayload": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ExecutionPayloadHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ExecutionRequests": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Fork": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ForkData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "HistoricalBatch": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "HistoricalSummary": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "IndexedAttestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientBootstrap": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientFinalityUpdate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientOptimisticUpdate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientUpdate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PendingAttestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PendingConsolidation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PendingDeposit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PendingPartialWithdrawal": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PowBlock": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ProposerSlashing": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedAggregateAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedBLSToExecutionChange": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedBeaconBlock": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedBeaconBlockHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedContributionAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedVoluntaryExit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SigningData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SingleAttestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncAggregate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncAggregatorSelectionData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncCommittee": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncCommitteeContribution": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncCommitteeMessage": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Validator": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "VoluntaryExit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Withdrawal": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "WithdrawalRequest": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      }
+     },
+     "sync": {
+      "optimistic": {
+       "pyspec_tests": 1
+      }
+     },
+     "transition": {
+      "core": {
+       "pyspec_tests": 33
+      }
+     }
+    },
+    "fulu": {
+     "epoch_processing": {
+      "effective_balance_updates": {
+       "pyspec_tests": 2
+      },
+      "eth1_data_reset": {
+       "pyspec_tests": 2
+      },
+      "historical_summaries_update": {
+       "pyspec_tests": 1
+      },
+      "inactivity_updates": {
+       "pyspec_tests": 21
+      },
+      "justification_and_finalization": {
+       "pyspec_tests": 10
+      },
+      "participation_flag_updates": {
+       "pyspec_tests": 12
+      },
+      "pending_consolidations": {
+       "pyspec_tests": 13
+      },
+      "pending_deposits": {
+       "pyspec_tests": 44
+      },
+      "proposer_lookahead": {
+       "pyspec_tests": 2
+      },
+      "randao_mixes_reset": {
+       "pyspec_tests": 1
+      },
+      "registry_updates": {
+       "pyspec_tests": 23
+      },
+      "rewards_and_penalties": {
+       "pyspec_tests": 15
+      },
+      "slashings": {
+       "pyspec_tests": 5
+      },
+      "slashings_reset": {
+       "pyspec_tests": 1
+      },
+      "sync_committee_updates": {
+       "pyspec_tests": 5
+      }
+     },
+     "finality": {
+      "finality": {
+       "pyspec_tests": 5
+      }
+     },
+     "fork": {
+      "fork": {
+       "pyspec_tests": 20
+      }
+     },
+     "fork_choice": {
+      "deposit_with_reorg": {
+       "pyspec_tests": 1
+      },
+      "ex_ante": {
+       "pyspec_tests": 3
+      },
+      "get_head": {
+       "pyspec_tests": 10
+      },
+      "get_proposer_head": {
+       "pyspec_tests": 2
+      },
+      "on_block": {
+       "pyspec_tests": 40
+      },
+      "reorg": {
+       "pyspec_tests": 8
+      },
+      "should_override_forkchoice_update": {
+       "pyspec_tests": 2
+      },
+      "withholding": {
+       "pyspec_tests": 2
+      }
+     },
+     "light_client": {
+      "data_collection": {
+       "pyspec_tests": 1
+      },
+      "single_merkle_proof": {
+       "BeaconBlockBody": 1,
+       "BeaconState": 3
+      },
+      "sync": {
+       "pyspec_tests": 4
+      },
+      "update_ranking": {
+       "pyspec_tests": 1
+      }
+     },
+     "merkle_proof": {
+      "single_merkle_proof": {
+       "BeaconBlockBody": 4
+      }
+     },
+     "networking": {
+      "compute_columns_for_custody_group": {
+       "pyspec_tests": 5
+      },
+      "get_custody_groups": {
+       "pyspec_tests": 11
+      }
+     },
+     "operations": {
+      "attestation": {
+       "pyspec_tests": 49
+      },
+      "attester_slashing": {
+       "pyspec_tests": 30
+      },
+      "block_header": {
+       "pyspec_tests": 6
+      },
+      "bls_to_execution_change": {
+       "pyspec_tests": 14
+      },
+      "consolidation_request": {
+       "pyspec_tests": 37
+      },
+      "deposit": {
+       "pyspec_tests": 21
+      },
+      "deposit_request": {
+       "pyspec_tests": 11
+      },
+      "execution_payload": {
+       "pyspec_tests": 40
+      },
+      "proposer_slashing": {
+       "pyspec_tests": 15
+      },
+      "sync_aggregate": {
+       "pyspec_tests": 24
+      },
+      "voluntary_exit": {
+       "pyspec_tests": 21
+      },
+      "withdrawal_request": {
+       "pyspec_tests": 29
+      },
+      "withdrawals": {
+       "pyspec_tests": 81
+      }
+     },
+     "random": {
+      "random": {
+       "pyspec_tests": 16
+      }
+     },
+     "rewards": {
+      "basic": {
+       "pyspec_tests": 11
+      },
+      "leak": {
+       "pyspec_tests": 13
+      },
+      "random": {
+       "pyspec_tests": 10
+      }
+     },
+     "sanity": {
+      "blocks": {
+       "pyspec_tests": 92
+      },
+      "slots": {
+       "pyspec_tests": 15
+      }
+     },
+     "ssz_static": {
+      "AggregateAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Attestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "AttestationData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "AttesterSlashing": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BLSToExecutionChange": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconBlock": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconBlockBody": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconBlockHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconState": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BlobIdentifier": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BlobSidecar": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Checkpoint": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ConsolidationRequest": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ContributionAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "DataColumnSidecar": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "DataColumnsByRootIdentifier": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Deposit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "DepositData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "DepositMessage": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "DepositRequest": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Eth1Block": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Eth1Data": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ExecutionPayload": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ExecutionPayloadHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ExecutionRequests": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Fork": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ForkData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "HistoricalBatch": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "HistoricalSummary": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "IndexedAttestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientBootstrap": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientFinalityUpdate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientOptimisticUpdate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientUpdate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "MatrixEntry": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PendingAttestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PendingConsolidation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PendingDeposit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PendingPartialWithdrawal": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PowBlock": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ProposerSlashing": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedAggregateAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedBLSToExecutionChange": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedBeaconBlock": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedBeaconBlockHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedContributionAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedVoluntaryExit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SigningData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SingleAttestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncAggregate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncAggregatorSelectionData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncCommittee": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncCommitteeContribution": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncCommitteeMessage": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Validator": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "VoluntaryExit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Withdrawal": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "WithdrawalRequest": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      }
+     },
+     "sync": {
+      "optimistic": {
+       "pyspec_tests": 1
+      }
+     },
+     "transition": {
+      "core": {
+       "pyspec_tests": 33
+      }
+     }
+    },
+    "gloas": {
+     "epoch_processing": {
+      "builder_pending_payments": {
+       "pyspec_tests": 8
+      },
+      "effective_balance_updates": {
+       "pyspec_tests": 2
+      },
+      "eth1_data_reset": {
+       "pyspec_tests": 2
+      },
+      "historical_summaries_update": {
+       "pyspec_tests": 1
+      },
+      "inactivity_updates": {
+       "pyspec_tests": 21
+      },
+      "justification_and_finalization": {
+       "pyspec_tests": 10
+      },
+      "participation_flag_updates": {
+       "pyspec_tests": 12
+      },
+      "pending_consolidations": {
+       "pyspec_tests": 13
+      },
+      "pending_deposits": {
+       "pyspec_tests": 44
+      },
+      "proposer_lookahead": {
+       "pyspec_tests": 2
+      },
+      "randao_mixes_reset": {
+       "pyspec_tests": 1
+      },
+      "registry_updates": {
+       "pyspec_tests": 23
+      },
+      "rewards_and_penalties": {
+       "pyspec_tests": 15
+      },
+      "slashings": {
+       "pyspec_tests": 5
+      },
+      "slashings_reset": {
+       "pyspec_tests": 1
+      },
+      "sync_committee_updates": {
+       "pyspec_tests": 5
+      }
+     },
+     "finality": {
+      "finality": {
+       "pyspec_tests": 5
+      }
+     },
+     "fork": {
+      "fork": {
+       "pyspec_tests": 3
+      }
+     },
+     "fork_choice": {
+      "ex_ante": {
+       "pyspec_tests": 3
+      },
+      "get_head": {
+       "pyspec_tests": 9
+      },
+      "on_block": {
+       "pyspec_tests": 23
+      },
+      "reorg": {
+       "pyspec_tests": 8
+      },
+      "withholding": {
+       "pyspec_tests": 2
+      }
+     },
+     "networking": {
+      "compute_columns_for_custody_group": {
+       "pyspec_tests": 5
+      },
+      "get_custody_groups": {
+       "pyspec_tests": 11
+      }
+     },
+     "operations": {
+      "attestation": {
+       "pyspec_tests": 62
+      },
+      "attester_slashing": {
+       "pyspec_tests": 30
+      },
+      "block_header": {
+       "pyspec_tests": 6
+      },
+      "bls_to_execution_change": {
+       "pyspec_tests": 14
+      },
+      "consolidation_request": {
+       "pyspec_tests": 37
+      },
+      "deposit": {
+       "pyspec_tests": 20
+      },
+      "deposit_request": {
+       "pyspec_tests": 11
+      },
+      "execution_payload": {
+       "pyspec_tests": 42
+      },
+      "execution_payload_bid": {
+       "pyspec_tests": 19
+      },
+      "payload_attestation": {
+       "pyspec_tests": 8
+      },
+      "proposer_slashing": {
+       "pyspec_tests": 18
+      },
+      "sync_aggregate": {
+       "pyspec_tests": 24
+      },
+      "voluntary_exit": {
+       "pyspec_tests": 21
+      },
+      "withdrawal_request": {
+       "pyspec_tests": 29
+      },
+      "withdrawals": {
+       "pyspec_tests": 47
+      }
+     },
+     "rewards": {
+      "basic": {
+       "pyspec_tests": 11
+      },
+      "leak": {
+       "pyspec_tests": 13
+      },
+      "random": {
+       "pyspec_tests": 10
+      }
+     },
+     "sanity": {
+      "blocks": {
+       "pyspec_tests": 62
+      },
+      "slots": {
+       "pyspec_tests": 17
+      }
+     },
+     "ssz_static": {
+      "AggregateAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Attestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "AttestationData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "AttesterSlashing": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BLSToExecutionChange": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconBlock": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconBlockBody": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconBlockHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconState": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BlobIdentifier": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BlobSidecar": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BuilderPendingPayment": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BuilderPendingWithdrawal": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Checkpoint": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ConsolidationRequest": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ContributionAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "DataColumnSidecar": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "DataColumnsByRootIdentifier": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Deposit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "DepositData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "DepositMessage": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "DepositRequest": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Eth1Block": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Eth1Data": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ExecutionPayload": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ExecutionPayloadBid": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ExecutionPayloadEnvelope": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ExecutionPayloadHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ExecutionRequests": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Fork": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ForkChoiceNode": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ForkData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "HistoricalBatch": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "HistoricalSummary": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "IndexedAttestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "IndexedPayloadAttestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientBootstrap": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientFinalityUpdate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientOptimisticUpdate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "LightClientUpdate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "MatrixEntry": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PayloadAttestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PayloadAttestationData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PayloadAttestationMessage": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PendingAttestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PendingConsolidation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PendingDeposit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PendingPartialWithdrawal": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PowBlock": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ProposerSlashing": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedAggregateAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedBLSToExecutionChange": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedBeaconBlock": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedBeaconBlockHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedContributionAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedExecutionPayloadBid": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedExecutionPayloadEnvelope": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedVoluntaryExit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SigningData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SingleAttestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncAggregate": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncAggregatorSelectionData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncCommittee": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncCommitteeContribution": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SyncCommitteeMessage": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Validator": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "VoluntaryExit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Withdrawal": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "WithdrawalRequest": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      }
+     },
+     "transition": {
+      "core": {
+       "pyspec_tests": 30
+      }
+     }
+    },
+    "phase0": {
+     "epoch_processing": {
+      "effective_balance_updates": {
+       "pyspec_tests": 1
+      },
+      "eth1_data_reset": {
+       "pyspec_tests": 2
+      },
+      "historical_roots_update": {
+       "pyspec_tests": 1
+      },
+      "justification_and_finalization": {
+       "pyspec_tests": 10
+      },
+      "participation_record_updates": {
+       "pyspec_tests": 1
+      },
+      "randao_mixes_reset": {
+       "pyspec_tests": 1
+      },
+      "registry_updates": {
+       "pyspec_tests": 15
+      },
+      "rewards_and_penalties": {
+       "pyspec_tests": 19
+      },
+      "slashings": {
+       "pyspec_tests": 5
+      },
+      "slashings_reset": {
+       "pyspec_tests": 1
+      }
+     },
+     "finality": {
+      "finality": {
+       "pyspec_tests": 5
+      }
+     },
+     "genesis": {
+      "initialization": {
+       "pyspec_tests": 5
+      },
+      "validity": {
+       "pyspec_tests": 5
+      }
+     },
+     "operations": {
+      "attestation": {
+       "pyspec_tests": 41
+      },
+      "attester_slashing": {
+       "pyspec_tests": 30
+      },
+      "block_header": {
+       "pyspec_tests": 6
+      },
+      "deposit": {
+       "pyspec_tests": 17
+      },
+      "proposer_slashing": {
+       "pyspec_tests": 15
+      },
+      "voluntary_exit": {
+       "pyspec_tests": 10
+      }
+     },
+     "random": {
+      "random": {
+       "pyspec_tests": 16
+      }
+     },
+     "rewards": {
+      "basic": {
+       "pyspec_tests": 21
+      },
+      "leak": {
+       "pyspec_tests": 18
+      },
+      "random": {
+       "pyspec_tests": 10
+      }
+     },
+     "sanity": {
+      "blocks": {
+       "pyspec_tests": 45
+      },
+      "slots": {
+       "pyspec_tests": 7
+      }
+     },
+     "shuffling": {
+      "core": {
+       "shuffle": 300
+      }
+     },
+     "ssz_static": {
+      "AggregateAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Attestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "AttestationData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "AttesterSlashing": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconBlock": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconBlockBody": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconBlockHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "BeaconState": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Checkpoint": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Deposit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "DepositData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "DepositMessage": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Eth1Block": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Eth1Data": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Fork": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ForkData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "HistoricalBatch": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "IndexedAttestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "PendingAttestation": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "ProposerSlashing": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedAggregateAndProof": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedBeaconBlock": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedBeaconBlockHeader": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SignedVoluntaryExit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "SigningData": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "Validator": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      },
+      "VoluntaryExit": {
+       "ssz_lengthy": 30,
+       "ssz_max": 1,
+       "ssz_nil": 1,
+       "ssz_one": 30,
+       "ssz_random": 30,
+       "ssz_random_chaos": 30,
+       "ssz_zero": 1
+      }
+     }
+    }
+   }
+  }
+ },
+ "release": "v1.6.1",
+ "tag_commit": "5fa6edcca8ab4cf548653e6680b17b9d3e04d225"
+}
