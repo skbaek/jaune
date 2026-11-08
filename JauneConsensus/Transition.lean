@@ -10,7 +10,9 @@ fork inside their own definitions.
 
 `processSlotsWith` and `stateTransitionWith` take the epoch and block processing functions as
 arguments, so the composition is one definition for every fork; `processSlots` and
-`stateTransition` instantiate them with the spec's `process_epoch` and `process_block`.
+`stateTransition` in `JauneConsensus/StateTransition.lean` instantiate them with the spec's
+`process_epoch` and `process_block` (kept apart so this composition does not depend on the
+processing modules).
 -/
 
 namespace JauneConsensus

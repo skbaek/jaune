@@ -50,6 +50,7 @@ import JauneConsensus.Harness.SszGenericTypes
 import JauneConsensus.Harness.SszStatic
 import JauneConsensus.EpochAccessors
 import JauneConsensus.Epoch
+import JauneConsensus.StateTransition
 import JauneConsensus.Harness.EpochCases
 import JauneConsensus.Harness.Operations
 import JauneConsensus.Harness.Networking
