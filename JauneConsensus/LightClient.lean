@@ -38,8 +38,7 @@ def floorlog2 (x : Nat) : Nat := Nat.log2 x
 def zeroBytesVec (n : Nat) : SszVector UInt8 n := ⟨Array.replicate n 0, by simp⟩
 /-- The zero root vector. -/
 def zeroRootVec (n : Nat) : SszVector Root n := ⟨Array.replicate n (Jaune.Bytes.toB256 []), by simp⟩
-/-- The zero root `Bytes32()`. -/
-def zeroRoot : Root := Jaune.Bytes.toB256 (List.replicate 32 0)
+-- The zero root `Bytes32()` is `zeroRoot` (`Helpers.lean`).
 
 /-- `ExecutionPayloadHeader()`. -/
 def defaultExecutionPayloadHeader : ExecutionPayloadHeader P :=

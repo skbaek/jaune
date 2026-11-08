@@ -55,6 +55,9 @@ inductive Reject where
   | decode (why : DecodeError)
   /-- A cryptographic check failed (invalid point, invalid signature encoding, ...). -/
   | crypto (site : String)
+  /-- A dictionary lookup of an absent key (Python `KeyError`), as in the fork-choice `Store`'s
+  maps (`specs/phase0/fork-choice.md`). -/
+  | key (site : String)
   deriving Repr, BEq
 
 /-- The consensus-layer monad: a computation that either yields a value or rejects with a
