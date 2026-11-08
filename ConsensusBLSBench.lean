@@ -52,6 +52,10 @@ def main (args : List String) : IO Unit := do
   for _ in List.range reps do
     timeIt "pairing (full)" (fun (qp : BLSP2 × BLSP) => blsPairing qp.1 qp.2) (q, p)
       (fun r => toString (r.map (·.val.length)))
+    timeIt "pairing (reference: blsPairingRef)" (fun (qp : BLSP2 × BLSP) => blsPairingRef qp.1 qp.2) (q, p)
+      (fun r => toString (r.map (·.val.length)))
+    timeIt "miller loop only (reference)" (fun (qp : BLSP2 × BLSP) => blsPairingRef qp.1 qp.2 false) (q, p)
+      (fun r => toString (r.map (·.val.length)))
     timeIt "miller loop only" (fun (qp : BLSP2 × BLSP) => blsPairing qp.1 qp.2 false) (q, p)
       (fun r => toString (r.map (·.val.length)))
     match blsPairing q p false with
@@ -59,7 +63,7 @@ def main (args : List String) : IO Unit := do
       timeIt "final exponentiation only"
         (fun (g : BLSF12) => g ^ ((blsPrime ^ 12 - 1) / blsCurveOrder)) f
         (fun r => toString r.val.length)
-      timeIt "final exponentiation, easy/hard split (consensus)" blsFinalExpFast f
+      timeIt "final exponentiation, easy/hard split" blsFinalExpFast f
         (fun r => toString r.val.length)
     | none => IO.println "pairing none"
     timeIt "pairingCheck, 2 pairs (consensus, split final exp)" pairingCheck

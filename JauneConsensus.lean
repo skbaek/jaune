@@ -30,8 +30,6 @@ import JauneConsensus.Crypto.HashToCurveVectors
 import JauneConsensus.Crypto.Codec
 import JauneConsensus.Crypto.BLSSig
 import JauneConsensus.Crypto.CodecVectors
-import JauneConsensus.Crypto.FinalExp
-import JauneConsensus.Crypto.FinalExpVectors
 import JauneConsensus.Crypto.MSM
 import JauneConsensus.Crypto.MSMVectors
 import JauneConsensus.Crypto.TrustedSetup

@@ -24,6 +24,9 @@
 -- What changed is when a failure surfaces: at the next build, rather than as a
 -- live diagnostic while editing `BLS.lean`.
 --
+-- 2026-11-09: the fast pairing's differential guards (below) added about 2 s here; the
+-- bilinearity guard now runs on the fast pairing, which is cheaper than before.
+--
 -- Do not treat this module as the home for guards in general. Guard *count*
 -- does not predict elaboration cost — content does, and every other guard in
 -- the library is cheap. A guard belongs beside the code it checks unless it is
@@ -44,5 +47,17 @@ namespace Jaune
   let eg2 := blsPairing (blsG2Generator.mulBy 2) blsG1Generator
   let egg := blsPairing blsG2Generator (blsG1Generator + blsG1Generator)
   e2g = eg2 ∧ e2g = egg ∧ e2g = eg.map (fun f => f * f) ∧ eg ≠ some 1
+
+-- The fast pairing (`blsMillerLoopFast` and `blsFinalExpFast`) against the reference
+-- (`blsMillerLoop`, plain final power) on the generators (the consensus layer's
+-- `CodecVectors` compares `pairingCheck` with its reference on three more instances), and the pieces of the fast final
+-- exponentiation on Miller values and on one element off the cyclotomic subgroup: the
+-- Frobenius is the `p`-th power, and `blsFinalExpFast` is the power `(p^12 - 1) / r`.
+#guard blsPairing blsG2Generator blsG1Generator = blsPairingRef blsG2Generator blsG1Generator
+#guard
+  let f1 := (blsPairing blsG2Generator blsG1Generator (finalExp := false)).getD 0
+  let f3 : BLSF12 := ⟨[3, 0, 7, 0, 0, 1, 0, 0, 0, 0, 2, 9]⟩
+  f12Frob f1 = f1 ^ blsPrime ∧ f12Frob f3 = f3 ^ blsPrime ∧
+    blsFinalExpFast f3 = f3 ^ blsFinalExponent
 
 end Jaune

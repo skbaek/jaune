@@ -15,7 +15,6 @@
 
 import Jaune.Precompiles
 import JauneConsensus.Crypto.HashToCurve
-import JauneConsensus.Crypto.FinalExp
 import JauneConsensus.Crypto.G2Subgroup
 
 namespace JauneConsensus
@@ -123,13 +122,20 @@ def g2SubgroupCheck (p : BLSP2) : Bool := g2SubgroupCheckFast p
 
 /-- Pairing-product check: `prod_i e(P_i, Q_i) = 1` in `GT`, computed as Jaune's
 `verifyKzgProofImpl` does (the shape of EIP-4844's `pairing_check`): the product
-of the Miller loops, then one final exponentiation, here `blsFinalExpFast`
-(FinalExp.lean; `pairingCheckRef` is the same check with the plain power). A pair
-with a point off its curve fails the check. -/
+of the Miller loops, then one final exponentiation (Jaune's `blsFinalExpFast`;
+`pairingCheckRef` is the same check on Jaune's reference pairing). A pair with a point
+off its curve fails the check. -/
 def pairingCheck (pairs : List (BLSP × BLSP2)) : Bool :=
   let loops := pairs.mapM fun (p, q) => blsPairing q p (finalExp := false)
   match loops with
   | some fs => blsFinalExpFast (fs.foldl (· * ·) (1 : BLSF12)) = 1
+  | none => false
+
+/-- `pairingCheck` on Jaune's reference pairing (`blsPairingRef`, plain final power). -/
+def pairingCheckRef (pairs : List (BLSP × BLSP2)) : Bool :=
+  let loops := pairs.mapM fun (p, q) => blsPairingRef q p (finalExp := false)
+  match loops with
+  | some fs => fs.foldl (· * ·) (1 : BLSF12) ^ blsFinalExponent = 1
   | none => false
 
 end JauneConsensus
