@@ -314,7 +314,9 @@ def getExpectedWithdrawals (state : BeaconState P f) : M (Array Withdrawal × Na
   let mut withdrawals : Array Withdrawal := #[]
   let mut processed := 0
   let minAct ← c64 P.MIN_ACTIVATION_BALANCE
-  let pendingPartials ← if f.atLeast .electra then
+  -- (a nested `←` inside a term-level `if` would run before the `if`, reading the Electra
+  -- field at every fork; the `do` keeps the read inside the Electra branch)
+  let pendingPartials ← if f.atLeast .electra then do
       pure (← state.pendingPartialWithdrawals).toArray
     else pure #[]  -- Capella to Deneb: no pending partial withdrawals
   for w in pendingPartials do
@@ -398,7 +400,7 @@ def processExecutionPayload (ctx : Ctx) (state : BeaconState P f) (body : Beacon
   require (payload.prev_randao == (← getRandaoMix state epoch)) s!"{site}: prev_randao"
   require (payload.timestamp == (← computeTimeAtSlot ctx.cfg state state.slot)) s!"{site}: timestamp"
   let maxBlobs ←
-    if f.atLeast .fulu then pure (← getBlobParameters ctx.cfg epoch).maxBlobsPerBlock.toNat
+    if f.atLeast .fulu then do pure (← getBlobParameters ctx.cfg epoch).maxBlobsPerBlock.toNat
     else if f.atLeast .electra then pure ctx.cfg.MAX_BLOBS_PER_BLOCK_ELECTRA
     else pure ctx.cfg.MAX_BLOBS_PER_BLOCK
   require (body.blob_kzg_commitments.length ≤ maxBlobs) s!"{site}: blob commitments"
