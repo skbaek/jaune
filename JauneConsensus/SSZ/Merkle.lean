@@ -1,5 +1,6 @@
 import Jaune.Hash
 import JauneConsensus.Error
+import JauneConsensus.Crypto.Sha256Pair
 
 /-!
 # SSZ Merkleization helpers
@@ -27,8 +28,13 @@ def BYTES_PER_LENGTH_OFFSET : Nat := 4
 /-- `BITS_PER_BYTE`. -/
 def BITS_PER_BYTE : Nat := 8
 
-/-- `hash(a + b)` for two chunks. -/
-@[inline] def hashPair (a b : B256) : B256 := Bytes.sha256 (a.toBytes ++ b.toBytes)
+/-- `hash(a + b)` for two chunks: SHA-256 of their 64-byte concatenation, computed by
+`Crypto.hashPair` (one message block written into an array, then the constant padding block),
+which is proved equal to Jaune's `Bytes.sha256` (`hashPair_eq`). -/
+@[inline] def hashPair (a b : B256) : B256 := Crypto.hashPair a b
+
+theorem hashPair_eq (a b : B256) : hashPair a b = Bytes.sha256 (a.toBytes ++ b.toBytes) :=
+  Crypto.hashPair_eq a b
 
 /-- The zero chunk `Bytes32()`. -/
 def zeroChunk : B256 := Bytes.toB256 (List.replicate 32 0)
