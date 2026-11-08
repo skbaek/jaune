@@ -187,6 +187,18 @@ def cmdBenchStateRoot (file : String) : IO UInt32 := do
   let t6 ← IO.monoMsNow
   let r4 := JauneConsensus.hashTreeRoot s.slashings
   let t7 ← IO.monoMsNow
+  let rm := JauneConsensus.serialize s.randao_mixes
+  let vs := JauneConsensus.serialize s.validators
+  let t8 ← IO.monoMsNow
+  let .ok (_ : JauneConsensus.SszVector JauneConsensus.Bytes32 65536) := (JauneConsensus.deserialize rm : JauneConsensus.M _)
+    | IO.println "randao decode failed"; return 1
+  let t9 ← IO.monoMsNow
+  let .ok (_ : JauneConsensus.SszList JauneConsensus.Validator 1099511627776) := (JauneConsensus.deserialize vs : JauneConsensus.M _)
+    | IO.println "validators decode failed"; return 1
+  let t10 ← IO.monoMsNow
+  let _ := JauneConsensus.serialize s.randao_mixes
+  let t11 ← IO.monoMsNow
+  IO.println s!"decode randao_mixes {t9-t8} ms ({rm.length} bytes), validators {t10-t9} ms ({vs.length} bytes); serialize randao_mixes {t11-t10} ms"
   IO.println s!"bytes {bs.length} ser {ser.length} root {r} {r1} {r2} {r3} {r4}"
   IO.println s!"decode {t1-t0} ms, serialize {t2-t1} ms, hash_tree_root {t3-t2} ms; randao_mixes {t4-t3}, block_roots {t5-t4}, validators {t6-t5}, slashings {t7-t6}"
   pure 0
