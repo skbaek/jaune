@@ -7,6 +7,7 @@ import JauneConsensus.Harness.SszStatic
 import JauneConsensus.Harness.Operations
 import JauneConsensus.Crypto.Boundary
 import JauneConsensus.Harness.StateTransition
+import JauneConsensus.Block
 
 /-!
 # Case handlers and strict verdicts (conformance harness)
@@ -191,6 +192,12 @@ def operationsVerdict (c : Case) : IO Verdict := do
     | .ok () => pure .pass
     | .error e => pure (.fail e)
 
+/-- The processing functions for the block and slot runners: A's `process_block`; epoch
+processing rejects until C's `process_epoch` lands. -/
+def steps : Steps where
+  processEpoch _ _ _ _ := throw (.assert "process_epoch: not yet merged")
+  processBlock _ _ ctx state block := processBlock ctx state block
+
 /-- A handler that reports `Except String Unit` as a verdict. -/
 def ofResult (h : Case → IO (Except String Unit)) (c : Case) : IO Verdict := do
   match ← h c with
@@ -207,6 +214,11 @@ def handlerFor (runner handler : String) : Option (Case → IO Verdict) :=
   | "bls", "eth_aggregate_pubkeys" => some blsAggregatePubkeys
   | "bls", "eth_fast_aggregate_verify" => some blsFastAggregateVerify
   | "fork", "fork" => some (ofResult (forkCase caseConfig))
+  | "sanity", "slots" => some (ofResult (sanitySlotsCase steps caseConfig))
+  | "sanity", "blocks" => some (ofResult (blocksCase steps caseConfig))
+  | "finality", "finality" => some (ofResult (blocksCase steps caseConfig))
+  | "random", "random" => some (ofResult (blocksCase steps caseConfig))
+  | "transition", "core" => some (ofResult (transitionCase steps caseConfig))
   | _, _ => none
 
 def runCase (c : Case) : IO Verdict := do

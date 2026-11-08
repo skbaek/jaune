@@ -3,6 +3,7 @@ import JauneConsensus.Harness.Snappy
 import JauneConsensus.Harness.ConfigOverride
 import JauneConsensus.Upgrade
 import JauneConsensus.Transition
+import JauneConsensus.Ctx
 
 /-!
 # State-transition case handlers (harness only)
@@ -78,10 +79,11 @@ drive `process_slots` and `state_transition` with the fork's `process_epoch` and
 `process_block`, given here as `Steps` so the handlers do not depend on how those are
 assembled. -/
 
-/-- The per-fork processing functions a run needs, with the configuration and the BLS switch. -/
+/-- The per-fork processing functions a run needs; `Ctx` carries the configuration, the BLS
+switch and the mocked engine verdict (always valid in these formats). -/
 structure Steps where
-  processEpoch : (P : Preset) → (f : CFork) → Config → Bool → BeaconState P f → M (BeaconState P f)
-  processBlock : (P : Preset) → (f : CFork) → Config → Bool → BeaconState P f → BeaconBlock P f →
+  processEpoch : (P : Preset) → (f : CFork) → Ctx → BeaconState P f → M (BeaconState P f)
+  processBlock : (P : Preset) → (f : CFork) → Ctx → BeaconState P f → BeaconBlock P f →
     M (BeaconState P f)
 
 /-- The `meta.yaml` mapping, or an empty mapping when the case has none. -/
@@ -136,13 +138,14 @@ private def verdictOf {P : Preset} {f : CFork} (c : Case) (r : M (BeaconState P 
 /-- `process_slots` with `steps`. -/
 def runSlots (steps : Steps) (P : Preset) (f : CFork) (cfg : Config) (bls : Bool)
     (state : BeaconState P f) (slot : Slot) : M (BeaconState P f) :=
-  processSlotsWith (steps.processEpoch P f cfg bls) state slot
+  processSlotsWith (steps.processEpoch P f { cfg, blsActive := bls }) state slot
 
 /-- `state_transition` over a sequence of signed blocks, with `steps`. -/
 def runBlocks (steps : Steps) (P : Preset) (f : CFork) (cfg : Config) (bls : Bool)
     (state : BeaconState P f) (blocks : List (SignedBeaconBlock P f)) : M (BeaconState P f) :=
   blocks.foldlM (fun s b =>
-    stateTransitionWith (steps.processEpoch P f cfg bls) (steps.processBlock P f cfg bls) bls s b)
+    let ctx : Ctx := { cfg, blsActive := bls }
+    stateTransitionWith (steps.processEpoch P f ctx) (steps.processBlock P f ctx) bls s b)
     state
 
 private def withPF (c : Case) (k : Preset → CFork → IO (Except String Unit)) :
