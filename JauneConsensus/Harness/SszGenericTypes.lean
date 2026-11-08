@@ -12,17 +12,6 @@ library's `ssz_container`, and their YAML readers. `byte` is `UInt8`; `ByteList[
 namespace JauneConsensus.Harness
 open Jaune Yaml
 
-instance : FromYaml UInt8 where
-  fromYaml y := do
-    let v ← natOf y
-    if v < 256 then pure v.toUInt8 else throw (.shape "byte out of range")
-
-/-- `List[byte, N]` and `ByteList[N]` are given as `0x`-prefixed bytes ("JSON mapping"). -/
-instance (priority := high) {n : Nat} : FromYaml (SszList UInt8 n) where
-  fromYaml y := do
-    let bs := (← y.asHex).toArray
-    if h : bs.size ≤ n then pure ⟨bs, h⟩ else throw (.shape "byte list beyond its limit")
-
 /-- `yaml_container Name [f₁, f₂, ...]`: read a container from a mapping by field name. -/
 syntax "yaml_container " ident " [" ident,+ "]" : command
 

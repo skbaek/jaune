@@ -3,6 +3,7 @@ import JauneConsensus.Harness.Snappy
 import JauneConsensus.Shuffle
 import JauneConsensus.Harness.ConfigOverride
 import JauneConsensus.Harness.SszGenericTypes
+import JauneConsensus.Harness.SszStatic
 import JauneConsensus.Crypto.Boundary
 
 /-!
@@ -90,6 +91,32 @@ def sszGenericCase (c : Case) : IO Verdict := do
   | .ok () => pure .pass
   | .error e => pure (.fail e.render)
 
+/-- `ssz_static/<Container>` (`tests/formats/ssz_static/core.md`): `serialized` decodes,
+re-encodes to itself, equals `value.yaml`, and has the `roots.yaml` root, for the container at
+the case's preset and fork (`Harness/SszStatic.lean`). -/
+def sszStaticCase (c : Case) : IO Verdict := do
+  if c.files != ["roots.yaml", "serialized.ssz_snappy", "value.yaml"] then
+    return .fail s!"unexpected files {c.files}"
+  let some P := Preset.ofName? c.preset | return .fail s!"no preset {c.preset}"
+  let some f := CFork.ofName? c.key.fork | return .fail s!"no fork {c.key.fork}"
+  let some checks := sszStaticChecks P f c.key.handler
+    | return .fail (CaseFail.unknownType c.key.handler).render
+  let ser ← match Snappy.decompress (← IO.FS.readBinFile (c.dir / "serialized.ssz_snappy")) with
+    | .ok b => pure b.toList
+    | .error e => return .fail (CaseFail.snappy e).render
+  let value ← readYaml c "value.yaml"
+  let roots ← readYaml c "roots.yaml"
+  let r : Except CaseFail Unit := do
+    let value ← value.mapError CaseFail.yaml
+    let roots ← roots.mapError CaseFail.yaml
+    roots.expectKeys ["root"] |>.mapError CaseFail.yaml
+    let rootBytes ← ((roots.field "root").bind YVal.asHex).mapError CaseFail.yaml
+    if rootBytes.length != 32 then throw (CaseFail.yaml (.shape "root is not 32 bytes"))
+    checks.valid ser value (Bytes.toB256 rootBytes)
+  match r with
+  | .ok () => pure .pass
+  | .error e => pure (.fail e.render)
+
 /-- `bls/eth_aggregate_pubkeys` (`tests/formats/bls/eth_aggregate_pubkeys.md`): `input` is the
 list of pubkeys; `output` is the aggregate, or `null` when pyspec raises. -/
 def blsAggregatePubkeys (c : Case) : IO Verdict := do
@@ -158,6 +185,7 @@ def handlerFor (runner handler : String) : Option (Case → IO Verdict) :=
   match runner, handler with
   | "shuffling", "core" => some shufflingCore
   | "ssz_generic", _ => some sszGenericCase
+  | "ssz_static", _ => some sszStaticCase
   | "bls", "eth_aggregate_pubkeys" => some blsAggregatePubkeys
   | "bls", "eth_fast_aggregate_verify" => some blsFastAggregateVerify
   | _, _ => none

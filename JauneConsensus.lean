@@ -11,6 +11,7 @@ import JauneConsensus.SSZ.Merkle
 import JauneConsensus.SSZ.Basic
 import JauneConsensus.SSZ.Container
 import JauneConsensus.SSZ.Progressive
+import JauneConsensus.Containers
 import JauneConsensus.Crypto.HashToCurve
 import JauneConsensus.Crypto.HashToCurveVectors
 import JauneConsensus.Crypto.Codec
@@ -35,4 +36,5 @@ import JauneConsensus.Harness.Manifest
 import JauneConsensus.Harness.Discovery
 import JauneConsensus.Harness.SszGeneric
 import JauneConsensus.Harness.SszGenericTypes
+import JauneConsensus.Harness.SszStatic
 import JauneConsensus.Harness.Runner

@@ -53,6 +53,34 @@ instance {α : Type} {n : Nat} [FromYaml α] : FromYaml (SszList α n) where
     let xs := (← (← y.asSeq).mapM fromYaml).toArray
     if h : xs.size ≤ n then pure ⟨xs, h⟩ else throw (.shape "list beyond its limit")
 
+instance : FromYaml UInt8 where
+  fromYaml y := do
+    let v ← natOf y
+    if v < 256 then pure v.toUInt8 else throw (.shape "byte out of range")
+
+/-- `List[byte, N]` / `ByteList[N]` are given as `0x`-prefixed bytes ("JSON mapping"). -/
+instance (priority := high) {n : Nat} : FromYaml (SszList UInt8 n) where
+  fromYaml y := do
+    let bs := (← y.asHex).toArray
+    if h : bs.size ≤ n then pure ⟨bs, h⟩ else throw (.shape "byte list beyond its limit")
+
+/-- `ByteVector[N]` / `BytesN`, likewise. -/
+instance (priority := high) {n : Nat} : FromYaml (SszVector UInt8 n) where
+  fromYaml y := do
+    let bs := (← y.asHex).toArray
+    if h : bs.size = n then pure ⟨bs, h⟩ else throw (.shape "byte vector of the wrong length")
+
+instance : FromYaml B256 where
+  fromYaml y := do
+    let bs ← y.asHex
+    if bs.length = 32 then pure (Bytes.toB256 bs) else throw (.shape "expected 32 bytes")
+
+instance : FromYaml Adr where
+  fromYaml y := do
+    match Bytes.toAdr? (← y.asHex) with
+    | some a => pure a
+    | none => throw (.shape "expected 20 bytes")
+
 /-- Bitfields are given as their SSZ bytes. -/
 def fromSszHex {α : Type} [Ssz α] (y : YVal) : Res α := do
   match (deserialize (← y.asHex) : M α) with

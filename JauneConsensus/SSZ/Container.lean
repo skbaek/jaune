@@ -76,6 +76,15 @@ def nextField {α : Type} [Ssz α] : FieldDecoder α := do
     set rest
     StateT.lift (deserialize b : M α)
 
+/-- The Merkle leaf of a field, or none for an absent fork-gated field. -/
+@[inline] def fieldRoot? {α : Type} [Ssz α] (x : α) : Option B256 :=
+  if Ssz.present α then some (hashTreeRoot x) else none
+
+/-- `merkleize` of the present fields' roots (a container's `hash_tree_root`). -/
+def containerRoot (roots : List (Option B256)) : B256 :=
+  let rs := roots.filterMap id
+  merkleizeDepth rs (depthOf rs.length)
+
 /-- The serialization part of a field. -/
 @[inline] def fieldPart {α : Type} [Ssz α] (x : α) : Part :=
   match Ssz.fixedSize? α with
@@ -85,31 +94,34 @@ def nextField {α : Type} [Ssz α] : FieldDecoder α := do
 /-- `ssz_container Name where f₁ : T₁ f₂ : T₂ ...` declares `structure Name` with those fields
 and its `Ssz` instance. Containers with no fields are illegal ("Illegal types"), so the
 syntax requires at least one. -/
-syntax (name := sszContainer) (docComment)? "ssz_container " ident " where"
-  (ppLine ident " : " term:max)+ : command
+syntax (name := sszContainer) (docComment)? "ssz_container " ident
+  ("(" ident " : " term ")")* " where" (ppLine ident " : " term:max)+ : command
 
 macro_rules
-  | `($[$doc?:docComment]? ssz_container $n:ident where $[$fs:ident : $ts:term]*) => do
+  | `($[$doc?:docComment]? ssz_container $n:ident $[($ps:ident : $pts:term)]* where
+      $[$fs:ident : $ts:term]*) => do
     let projs := fs.map fun f => Lean.mkIdent (n.getId ++ f.getId)
     let mk := Lean.mkIdent (n.getId ++ `mk)
-    let k := Lean.Syntax.mkNumLit (toString fs.size)
     let parts ← projs.mapM fun p => `(fieldPart ($p x))
-    let roots ← projs.mapM fun p => `(hashTreeRoot ($p x))
+    let roots ← projs.mapM fun p => `(fieldRoot? ($p x))
     let mut dec ← `($mk <$> nextField)
     for _ in [1:fs.size] do
       dec ← `($dec <*> nextField)
-    `($[$doc?:docComment]? structure $n where
+    let ps : Array Lean.Ident := ps.map fun p => ⟨p.raw⟩
+    let psT : Array Lean.Term := ps.map fun p => ⟨p.raw⟩
+    let ty ← `($n $psT*)
+    `($[$doc?:docComment]? structure $n $[($ps : $pts)]* where
         $[$fs:ident : $ts]*
         deriving DecidableEq, BEq
-      instance : Ssz $n where
+      instance $[($ps : $pts)]* : Ssz $ty where
         fixedSize? := containerFixedSize [$[Ssz.fixedSize? $ts],*]
         serialize := fun x => serializeParts [$parts,*]
         deserialize := fun bs => do
           let scopes ← splitContainer bs [$[Ssz.fixedSize? $ts],*]
           StateT.run' (do
-            let v ← ($dec : FieldDecoder $n)
+            let v ← ($dec : FieldDecoder $ty)
             if (← get).isEmpty then pure v
             else throw (.decode (.offset "extra fields"))) scopes
-        hashTreeRoot := fun x => merkleizeDepth [$roots,*] (depthOf $k))
+        hashTreeRoot := fun x => containerRoot [$roots,*])
 
 end JauneConsensus

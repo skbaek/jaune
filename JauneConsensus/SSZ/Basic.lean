@@ -1,3 +1,4 @@
+import Jaune.Types
 import JauneConsensus.UInt
 import JauneConsensus.SSZ.Merkle
 
@@ -36,6 +37,9 @@ class Ssz (α : Type) where
   deserialize : Bytes → M α
   /-- `hash_tree_root(value)` ("Merkleization"). -/
   hashTreeRoot : α → B256
+  /-- `false` only for an absent fork-gated container field (`Gated false T`), which has no
+  bytes and no Merkle leaf. -/
+  present : Bool := true
 
 export Ssz (serialize deserialize hashTreeRoot)
 
@@ -94,6 +98,56 @@ instance {n : Nat} : Ssz (UIntN n) where
   deserialize bs :=
     if h : bs.length = n then pure ⟨leNat bs, h ▸ leNat_lt bs⟩ else decodeErr (.length n bs.length)
   hashTreeRoot x := chunkOf (leBytes n x.toNat)
+
+/-- `Bytes32` / `Root` as a chunk: 32 bytes in order; its root is itself ("Merkleization":
+`merkleize(pack(value))` of a 32-byte vector is the single chunk). -/
+instance : Ssz B256 where
+  fixedSize? := some 32
+  serialize x := x.toBytes
+  deserialize bs :=
+    if bs.length = 32 then pure (Bytes.toB256 bs) else decodeErr (.length 32 bs.length)
+  hashTreeRoot x := x
+
+/-- `ExecutionAddress` (`Bytes20`) is Jaune's `Adr`: 20 bytes in order, hashed as one
+right-padded chunk. -/
+instance : Ssz Adr where
+  fixedSize? := some 20
+  serialize a := a.toBytes
+  deserialize bs :=
+    match Bytes.toAdr? bs with
+    | some a => pure a
+    | none => decodeErr (.length 20 bs.length)
+  hashTreeRoot a := chunkOf a.toBytes
+
+/-! ## Fork-gated fields -/
+
+/-- A container field a fork introduced: `Gated true T` is `T`; `Gated false T` is an absent
+field. For a concrete fork the gate reduces by `rfl`. -/
+def Gated : Bool → Type → Type
+  | true, α => α
+  | false, _ => Unit
+
+/-- The absent field: no bytes (`fixedSize? = some 0`), no Merkle leaf (`present = false`). -/
+def absentSsz : Ssz Unit where
+  fixedSize? := some 0
+  serialize _ := []
+  deserialize
+    | [] => pure ()
+    | bs => decodeErr (.length 0 bs.length)
+  hashTreeRoot _ := zeroChunk
+  present := false
+
+instance instSszGated {α : Type} [h : Ssz α] : {c : Bool} → Ssz (Gated c α)
+  | true => h
+  | false => absentSsz
+
+instance instBEqGated {α : Type} [h : BEq α] : {c : Bool} → BEq (Gated c α)
+  | true => h
+  | false => ⟨fun _ _ => true⟩
+
+instance instDecidableEqGated {α : Type} [h : DecidableEq α] : {c : Bool} → DecidableEq (Gated c α)
+  | true => h
+  | false => fun a b => isTrue (by cases a; cases b; rfl)
 
 /-! ## Offsets and composite serialization -/
 
