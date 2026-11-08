@@ -4,3 +4,5 @@ import JauneConsensus.Crypto.HashToCurveVectors
 import JauneConsensus.Crypto.Codec
 import JauneConsensus.Crypto.BLSSig
 import JauneConsensus.Crypto.CodecVectors
+import JauneConsensus.Crypto.FinalExp
+import JauneConsensus.Crypto.FinalExpVectors

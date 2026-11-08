@@ -1,8 +1,8 @@
 -- Timing probe for the consensus BLS primitives. Inputs depend on the command line so
 -- that no measured value is a closed term the compiler could hoist to initialisation.
-import Jaune.BLS
+import JauneConsensus.Crypto.BLSSig
 
-open Jaune
+open Jaune JauneConsensus
 
 /-- Run `f x` once and report wall milliseconds; `IO.lazyPure` keeps the pure work
 between the two clock reads. -/
@@ -28,7 +28,15 @@ def main (args : List String) : IO Unit := do
       timeIt "final exponentiation only"
         (fun (g : BLSF12) => g ^ ((blsPrime ^ 12 - 1) / blsCurveOrder)) f
         (fun r => toString r.val.length)
+      timeIt "final exponentiation, easy/hard split (consensus)" blsFinalExpFast f
+        (fun r => toString r.val.length)
     | none => IO.println "pairing none"
+    timeIt "pairingCheck, 2 pairs (consensus, split final exp)" pairingCheck
+      [(p, q), (-p, q)] (fun r => toString r)
+    timeIt "hash_to_curve G2 (RFC 9380, 32-byte msg)"
+      (fun (m : Bytes) => hashToPoint m) (List.replicate 32 k.toUInt8)
+      (fun r => toString (r.toOption.map (·.x.val.length)))
+    timeIt "G2 decompress" signatureToPoint (g2Compress q) (fun r => toString r.toOption.isSome)
     let u : BLSF2 := BLSF2.mk (k + 12345) (k + 678)
     timeIt "map_to_curve G2 (swu + iso, no cofactor)"
       (fun t => isoMapG2 (optimizedSwuG2 t)) u (fun r => toString r.x.val.length)
