@@ -50,4 +50,10 @@ def g2m1 : Bytes := hexNat 0xb5bfd7dd8cdeb128843bc287230af38926187075cbfbefa8100
 #guard keyValidate g1m0
 #guard !keyValidate ((0xc0 : UInt8) :: List.replicate 47 0)
 
+-- The pairing check agrees with the reference on a true and a false instance.
+#guard pairingCheck [(blsG1Generator, blsG2Generator), (-blsG1Generator, blsG2Generator)]
+#guard pairingCheckRef [(blsG1Generator, blsG2Generator), (-blsG1Generator, blsG2Generator)]
+#guard !pairingCheck [(blsG1Generator, blsG2Generator), (blsG1Generator, blsG2Generator)]
+#guard pairingCheck [(blsG1Generator.mulBy 6, blsG2Generator), (-(blsG1Generator.mulBy 2), blsG2Generator.mulBy 3)]
+
 end JauneConsensus.CodecVectors
