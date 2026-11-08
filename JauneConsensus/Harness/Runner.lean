@@ -11,6 +11,7 @@ import JauneConsensus.Harness.LightClientCases
 import JauneConsensus.Crypto.Boundary
 import JauneConsensus.Harness.StateTransition
 import JauneConsensus.Block
+import JauneConsensus.Harness.ForkChoiceCases
 
 /-!
 # Case handlers and strict verdicts (conformance harness)
@@ -253,6 +254,8 @@ def handlerFor (runner handler : String) : Option (Case → IO Verdict) :=
   | "finality", "finality" => some (ofResult (blocksCase steps caseConfig))
   | "random", "random" => some (ofResult (blocksCase steps caseConfig))
   | "transition", "core" => some (ofResult (transitionCase steps caseConfig))
+  | "fork_choice", _ => some (ofResult (forkChoiceCase caseConfig false))
+  | "sync", "optimistic" => some (ofResult (forkChoiceCase caseConfig true))
   | _, _ => none
 
 def runCase (c : Case) : IO Verdict := do

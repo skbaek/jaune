@@ -22,6 +22,8 @@ import JauneConsensus.Deposits
 import JauneConsensus.Block
 import JauneConsensus.DAS
 import JauneConsensus.LightClient
+import JauneConsensus.ForkChoice
+import JauneConsensus.Sync
 import JauneConsensus.Crypto.HashToCurve
 import JauneConsensus.Crypto.HashToCurveVectors
 import JauneConsensus.Crypto.Codec
@@ -53,4 +55,5 @@ import JauneConsensus.Harness.EpochCases
 import JauneConsensus.Harness.Operations
 import JauneConsensus.Harness.Networking
 import JauneConsensus.Harness.LightClientCases
+import JauneConsensus.Harness.ForkChoiceCases
 import JauneConsensus.Harness.Runner

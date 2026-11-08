@@ -158,6 +158,9 @@ def kzgCommitmentToVersionedHash (kzgCommitment : Bytes) : B256 :=
 
 /-! ## Fulu misc (`specs/fulu/beacon-chain.md`, "Misc") -/
 
+/-- The zero root `Bytes32()` (also `Root()`). -/
+def zeroRoot : B256 := Bytes.toB256 (List.replicate 32 0)
+
 /-- `BlobParameters(epoch, max_blobs_per_block)`. -/
 structure BlobParameters where
   epoch : U64
