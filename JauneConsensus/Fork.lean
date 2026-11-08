@@ -1,4 +1,5 @@
 import Jaune.Transaction
+import JauneConsensus.Config
 
 /-!
 # One fork notion across the two layers (outcome O7)
@@ -15,8 +16,8 @@ directions of the pairing live here.
 | `gloas` | `amsterdam` | declared, **refused**: no rule data resolves |
 
 BPO1 and BPO2 are not consensus forks. On the consensus side they are the two entries of Fulu's
-`BLOB_SCHEDULE` (`configs/mainnet.yaml` at `v1.6.1`: epoch 412672, 15 blobs; epoch 419072,
-21 blobs), read by `get_blob_parameters`; on the execution side they are the `bpo1` and `bpo2`
+`BLOB_SCHEDULE` (`configs/mainnet.yaml` at `v1.6.1`, generated into `Config.mainnet`: epoch
+412672, 15 blobs; epoch 419072, 21 blobs), read by `get_blob_parameters`; on the execution side they are the `bpo1` and `bpo2`
 rule sets, which differ from Osaka only in their blob schedule. Before the first entry Fulu uses
 `MAX_BLOBS_PER_BLOCK_ELECTRA` (9), which is Osaka's ceiling.
 
@@ -137,18 +138,23 @@ structure ForkData where
   requestTypes : List UInt8
   deriving Repr
 
+-- The blob counts are read from the generated mainnet configuration (`Config.mainnet`, from
+-- `configs/mainnet.yaml`), so the ties below follow the pinned config, not a restatement.
+
 def denebData : ForkData :=
-  -- `configs/mainnet.yaml`: `MAX_BLOBS_PER_BLOCK: 6`; Deneb has no execution requests.
-  { fork := .deneb, blobs := [(.cancun, 6)], requestTypes := [] }
+  -- `MAX_BLOBS_PER_BLOCK`; Deneb has no execution requests.
+  { fork := .deneb, blobs := [(.cancun, Config.mainnet.MAX_BLOBS_PER_BLOCK)], requestTypes := [] }
 
 def electraData : ForkData :=
-  -- `MAX_BLOBS_PER_BLOCK_ELECTRA: 9`
-  { fork := .electra, blobs := [(.prague, 9)],
+  { fork := .electra, blobs := [(.prague, Config.mainnet.MAX_BLOBS_PER_BLOCK_ELECTRA)],
     requestTypes := [depositRequestType, withdrawalRequestType, consolidationRequestType] }
 
 def fuluData : ForkData :=
-  -- `get_blob_parameters`: Electra's 9 before the first `BLOB_SCHEDULE` entry, then 15, then 21.
-  { fork := .fulu, blobs := [(.osaka, 9), (.bpo1, 15), (.bpo2, 21)],
+  -- `get_blob_parameters`: Electra's count before the first `BLOB_SCHEDULE` entry, then each
+  -- entry in turn; the mainnet schedule's two entries are BPO1 and BPO2.
+  { fork := .fulu,
+    blobs := (.osaka, Config.mainnet.MAX_BLOBS_PER_BLOCK_ELECTRA) ::
+      [Fork.bpo1, Fork.bpo2].zip (Config.mainnet.BLOB_SCHEDULE.map (·.MAX_BLOBS_PER_BLOCK)),
     requestTypes := [depositRequestType, withdrawalRequestType, consolidationRequestType] }
 
 /-- The single resolver. Gloas is declared and refused: `none`. -/

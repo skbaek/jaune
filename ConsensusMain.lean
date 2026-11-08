@@ -96,11 +96,12 @@ def cmdScan (o : Opts) : IO UInt32 := do
   let (ns, bs) ← snappyScan all
   let (ny, by_) ← yamlScan all
   let (nu, bu) ← snappyUintOracle all
-  for b in bs ++ by_ ++ bu do IO.println s!"FAIL {b}"
+  let (nc, bc) ← configScan all
+  for b in bs ++ by_ ++ bu ++ bc do IO.println s!"FAIL {b}"
   let t1 ← IO.monoMsNow
   IO.println s!"jaune-consensus scan: {all.length} cases; snappy {ns - bs.length}/{ns} decoded; \
-    yaml {ny - by_.length}/{ny} parsed; uint oracle {nu - bu.length}/{nu}; {t1 - t0} ms"
-  if bs.isEmpty && by_.isEmpty && bu.isEmpty then
+    yaml {ny - by_.length}/{ny} parsed; uint oracle {nu - bu.length}/{nu}; config overrides {nc - bc.length}/{nc}; {t1 - t0} ms"
+  if bs.isEmpty && by_.isEmpty && bu.isEmpty && bc.isEmpty then
     IO.println "jaune-consensus scan: OK"
     pure 0
   else

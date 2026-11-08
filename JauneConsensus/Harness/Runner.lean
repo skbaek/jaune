@@ -1,6 +1,7 @@
 import JauneConsensus.Harness.Discovery
 import JauneConsensus.Harness.Snappy
 import JauneConsensus.Shuffle
+import JauneConsensus.Harness.ConfigOverride
 
 /-!
 # Case handlers and strict verdicts (conformance harness)
@@ -19,13 +20,6 @@ inductive Verdict
   | fail (why : String)
   deriving BEq, Repr
 
-/-- `SHUFFLE_ROUND_COUNT` (`presets/minimal/phase0.yaml`: 10; `presets/mainnet/phase0.yaml`: 90).
-Until the preset record exists, the harness carries the two values. -/
-def shuffleRoundCount : String → Option Nat
-  | "minimal" => some 10
-  | "mainnet" => some 90
-  | _ => none
-
 private def readYaml (c : Case) (f : String) : IO (Except String YVal) := do
   let bytes ← IO.FS.readBinFile (c.dir / f)
   pure ((parse bytes).mapError (s!"{f}: " ++ ·))
@@ -39,8 +33,8 @@ def b256OfBytes (bs : List UInt8) : Except String B256 :=
 `compute_shuffled_index(i, count, seed) == mapping[i]`, and `mapping` has exactly `count`
 entries. -/
 def shufflingCore (c : Case) : IO Verdict := do
-  let some rounds := shuffleRoundCount c.preset
-    | return .fail s!"no SHUFFLE_ROUND_COUNT for preset {c.preset}"
+  let some P := Preset.ofName? c.preset
+    | return .fail s!"no preset {c.preset}"
   if c.files != ["mapping.yaml"] then return .fail s!"unexpected files {c.files}"
   let doc ← readYaml c "mapping.yaml"
   let r : Except String Verdict := do
@@ -53,7 +47,7 @@ def shufflingCore (c : Case) : IO Verdict := do
       return .fail s!"mapping has {mapping.length} entries, count is {count}"
     let mut i := 0
     for want in mapping do
-      match computeShuffledIndex rounds i count seed with
+      match computeShuffledIndex P i count seed with
       | .ok got =>
         if got != want then return .fail s!"index {i}: computed {got}, expected {want}"
       | .error e => return .fail s!"index {i}: rejected: {repr e}"
@@ -62,6 +56,26 @@ def shufflingCore (c : Case) : IO Verdict := do
   match r with
   | .ok v => pure v
   | .error e => pure (.fail e)
+
+/-- The configuration a case runs under: the base `Config` of its preset, with the case's
+`config.yaml` applied when it has one (`Config.applyOverrides`). -/
+def caseConfig (c : Case) : IO (Except String Config) := do
+  let some base := Config.ofPreset? c.preset
+    | return .error s!"no configuration for preset {c.preset}"
+  if !c.has "config.yaml" then return .ok base
+  let doc ← readYaml c "config.yaml"
+  pure (doc.bind (base.applyOverrides ·))
+
+private def overridden (y : String) : Option Config :=
+  ((parseString y).bind (Config.minimal.applyOverrides ·)).toOption
+
+#guard (overridden "PRESET_BASE: 'minimal'\nALTAIR_FORK_EPOCH: 7\nBLOB_SCHEDULE:\n  - EPOCH: 1\n    MAX_BLOBS_PER_BLOCK: 9\n").map
+  (fun c => (c.ALTAIR_FORK_EPOCH, c.BLOB_SCHEDULE, c.SECONDS_PER_SLOT)) ==
+  some (7, [⟨1, 9⟩], Config.minimal.SECONDS_PER_SLOT)
+#guard (overridden "PRESET_BASE: 'mainnet'\n").isNone
+#guard (overridden "CONFIG_NAME: 'minimal'\n").isNone
+#guard (overridden "GLOAS_FORK_EPOCH: 0\n").isNone
+#guard (overridden "ALTAIR_FORK_VERSION: 0x0100\n").isNone
 
 /-- The handler table. -/
 def handlerFor (runner handler : String) : Option (Case → IO Verdict) :=
@@ -102,6 +116,19 @@ def yamlScan (cs : List Case) : IO (Nat × List String) := do
         match parse (← IO.FS.readBinFile (c.dir / f)) with
         | .ok _ => pure ()
         | .error e => bad := s!"{c.render}/{f}: {e}" :: bad
+  pure (n, bad.reverse)
+
+/-- Every case `config.yaml` in the selection parses into `Config` over its preset's base.
+Returns the number applied and the failures. -/
+def configScan (cs : List Case) : IO (Nat × List String) := do
+  let mut n := 0
+  let mut bad := []
+  for c in cs do
+    if c.has "config.yaml" then
+      n := n + 1
+      match ← caseConfig c with
+      | .ok _ => pure ()
+      | .error e => bad := s!"{c.render}/config.yaml: {e}" :: bad
   pure (n, bad.reverse)
 
 /-- An independent check of the Snappy decoder on real compressed files: for every

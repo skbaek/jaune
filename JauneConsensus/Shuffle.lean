@@ -1,5 +1,6 @@
 import Jaune.Hash
 import JauneConsensus.Error
+import JauneConsensus.Preset
 
 /-!
 # Swap-or-not shuffle
@@ -10,8 +11,8 @@ Jaune's `Bytes.sha256` (proved equal to FIPS 180-4 by `Bytes.sha256_eq_fips`). `
 Jaune's `B256`, serialized big-end first by `B256.toBytes` (byte `i` of the root is byte `i` of the
 digest).
 
-`SHUFFLE_ROUND_COUNT` is a preset value (`presets/minimal/phase0.yaml`: 10;
-`presets/mainnet/phase0.yaml`: 90), passed explicitly until the preset record exists.
+`SHUFFLE_ROUND_COUNT` is the preset's (`presets/minimal/phase0.yaml`: 10;
+`presets/mainnet/phase0.yaml`: 90), read from the generated `Preset` record.
 
 Failure fidelity (outcome O5). `index` and `index_count` are `uint64`; the model takes them as
 `Nat` and rejects a value outside `[0, 2^64)` as the `uint64` constructor would. pyspec computes
@@ -52,20 +53,19 @@ def shuffleRound (seed : B256) (indexCount : Nat) (currentRound : Nat) (index : 
   pure (if bit == 1 then flip else index)
 
 /-- `compute_shuffled_index(index, index_count, seed)`. -/
-def computeShuffledIndex (shuffleRoundCount : Nat) (index indexCount : Nat) (seed : B256) :
-    M Nat := do
+def computeShuffledIndex (P : Preset) (index indexCount : Nat) (seed : B256) : M Nat := do
   if index ≥ 2 ^ 64 || indexCount ≥ 2 ^ 64 then throw (.overflow "compute_shuffled_index: uint64")
   require (index < indexCount) "compute_shuffled_index: index < index_count"
-  (List.range shuffleRoundCount).foldlM (fun i r => shuffleRound seed indexCount r i) index
+  (List.range P.SHUFFLE_ROUND_COUNT).foldlM (fun i r => shuffleRound seed indexCount r i) index
 
 -- The only `count = 10` mapping of the first minimal seed
 -- (`phase0/shuffling/core/shuffle/shuffle_0x23bc..._10`, 10 rounds).
 private def seed23 : B256 :=
   0x23bcd11624a07465b1c2fc1a0fe52996daae4bf87b0fb6bed45926096c644843
 
-#guard ((List.range 10).mapM (fun i => computeShuffledIndex 10 i 10 seed23)).toOption ==
+#guard ((List.range 10).mapM (fun i => computeShuffledIndex .minimal i 10 seed23)).toOption ==
   some [6, 9, 2, 7, 8, 3, 0, 1, 4, 5]
-#guard (computeShuffledIndex 10 10 10 seed23).toBool == false
-#guard (computeShuffledIndex 10 0 0 seed23).toBool == false
+#guard (computeShuffledIndex .minimal 10 10 seed23).toBool == false
+#guard (computeShuffledIndex .minimal 0 0 seed23).toBool == false
 
 end JauneConsensus
