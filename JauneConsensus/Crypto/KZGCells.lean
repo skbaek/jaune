@@ -112,19 +112,37 @@ def polynomialEvalToCoeff (polynomial : Array Fr) : Except String (Array Fr) := 
 /-- `add_polynomialcoeff(a, b)`. -/
 def addPolynomialcoeff (a b : Array Fr) : Array Fr :=
   let (a, b) := if a.size ≥ b.size then (a, b) else (b, a)
-  (List.range a.size).toArray.filterMap fun i =>
-    a[i]?.map fun ai => match b[i]? with
-      | some bi => ai + bi
-      | none => ai
+  a.mapIdx fun i ai => match b[i]? with
+    | some bi => ai + bi
+    | none => ai
 
-/-- `multiply_polynomialcoeff(a, b)`. -/
-def multiplyPolynomialcoeff (a b : Array Fr) : Except String (Array Fr) := do
+/-- `multiply_polynomialcoeff(a, b)` as the spec writes it: the sum over `power` of
+`[0] * power + [coef * x for x in b]`. Quadratic in `len(a)` per call because every
+summand is materialised; kept as the reference for `multiplyPolynomialcoeff`. -/
+def multiplyPolynomialcoeffSpec (a b : Array Fr) : Except String (Array Fr) := do
   kzgAssert (a.size + b.size ≤ fieldElementsPerExtBlob) "multiply_polynomialcoeff: degree"
   let mut r : Array Fr := #[0]
   for power in [0:a.size] do
     let coef ← idx a power "a"
     let summand := Array.replicate power 0 ++ b.map (coef * ·)
     r := addPolynomialcoeff r summand
+  return r
+
+/-- `multiply_polynomialcoeff(a, b)`, computed as the convolution
+`r[k] = sum_{i + j = k} a[i] * b[j]`. This is the spec's sum regrouped by output
+index, with the same result length: `max(1, len(a) - 1 + len(b))` when `a` is
+non-empty and `[0]` when it is empty (the spec's accumulator starts as `[0]` and
+each summand has length `power + len(b)`). Differential `#guard`s against
+`multiplyPolynomialcoeffSpec` are in KZGCellsVectors.lean. -/
+def multiplyPolynomialcoeff (a b : Array Fr) : Except String (Array Fr) := do
+  kzgAssert (a.size + b.size ≤ fieldElementsPerExtBlob) "multiply_polynomialcoeff: degree"
+  if a.size = 0 then return #[0]
+  let mut r : Array Fr := Array.replicate (max 1 (a.size - 1 + b.size)) 0
+  for i in [0:a.size] do
+    let ai ← idx a i "a"
+    for j in [0:b.size] do
+      let bj ← idx b j "b"
+      r := r.modify (i + j) (· + ai * bj)
   return r
 
 /-- `divide_polynomialcoeff(a, b)`: long division. -/
@@ -146,8 +164,17 @@ def dividePolynomialcoeff (a b : Array Fr) : Except String (Array Fr) := do
         a := a.modify (diff + i) fun x => x - bi * quot
   return o.reverse
 
-/-- `interpolate_polynomialcoeff(xs, ys)`. -/
-def interpolatePolynomialcoeff (xs ys : Array Fr) : Except String (Array Fr) := do
+/-- `vanishing_polynomialcoeff(xs)`. -/
+def vanishingPolynomialcoeff (xs : Array Fr) : Except String (Array Fr) := do
+  let mut p : Array Fr := #[1]
+  for x in xs do
+    p ← multiplyPolynomialcoeff p #[-x, 1]
+  return p
+
+/-- `interpolate_polynomialcoeff(xs, ys)` as the spec writes it (Lagrange basis built
+by repeated products, cubic in `len(xs)`); the reference for
+`interpolatePolynomialcoeff`. -/
+def interpolatePolynomialcoeffSpec (xs ys : Array Fr) : Except String (Array Fr) := do
   kzgAssert (xs.size = ys.size) "interpolate_polynomialcoeff: lengths"
   let mut r : Array Fr := #[0]
   for i in [0:xs.size] do
@@ -160,12 +187,35 @@ def interpolatePolynomialcoeff (xs ys : Array Fr) : Except String (Array Fr) := 
     r := addPolynomialcoeff r summand
   return r
 
-/-- `vanishing_polynomialcoeff(xs)`. -/
-def vanishingPolynomialcoeff (xs : Array Fr) : Except String (Array Fr) := do
-  let mut p : Array Fr := #[1]
-  for x in xs do
-    p ← multiplyPolynomialcoeff p #[-x, 1]
-  return p
+/-- `interpolate_polynomialcoeff(xs, ys)` in quadratic time: the same Lagrange
+polynomial `sum_i ys[i] * prod_{j != i} (X - xs[j]) / (xs[i] - xs[j])`, with each
+basis numerator obtained as `Z(X) / (X - xs[i])` by synthetic division of the
+vanishing polynomial `Z` and each denominator as one product and one inversion.
+The result has the spec's length, `max(1, len(xs))`. Differential `#guard`s
+against `interpolatePolynomialcoeffSpec` are in KZGCellsVectors.lean. -/
+def interpolatePolynomialcoeff (xs ys : Array Fr) : Except String (Array Fr) := do
+  kzgAssert (xs.size = ys.size) "interpolate_polynomialcoeff: lengths"
+  let n := xs.size
+  let z ← vanishingPolynomialcoeff xs          -- length n + 1, monic
+  let mut r : Array Fr := Array.replicate (max 1 n) 0
+  for i in [0:n] do
+    let xi ← idx xs i "xs"
+    -- q = Z / (X - xi): q[n-1] = Z[n], q[k-1] = Z[k] + xi * q[k]
+    let mut q : Array Fr := Array.replicate n 0
+    let mut carry : Fr := 0
+    for t in [0:n] do
+      let k := n - t
+      carry := (← idx z k "Z") + xi * carry
+      q := q.modify (k - 1) fun _ => carry
+    -- denominator prod_{j != i} (xs[i] - xs[j])
+    let mut den : Fr := 1
+    for j in [0:n] do
+      if j ≠ i then den := den * (xi - (← idx xs j "xs"))
+    let w := (← idx ys i "ys") * den⁻¹
+    for t in [0:n] do
+      let qt ← idx q t "q"
+      r := r.modify t (· + w * qt)
+  return r
 
 /-- `evaluate_polynomialcoeff(polynomial_coeff, z)`: Horner. -/
 def evaluatePolynomialcoeff (polynomialCoeff : Array Fr) (z : Fr) : Fr :=

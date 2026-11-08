@@ -196,6 +196,15 @@ def kzgHandler (name : String) (inp : Y) : Except String V := do
     let y ← asBytes (← field inp "y")
     let p ← asBytes (← field inp "proof")
     return vOf (verifyKzgProof c z y p) .bool
+  | "verify_kzg_proof@jaune" =>
+    -- Differential: Jaune's execution-layer EIP-4844 verifier (Jaune/Precompiles.lean).
+    let c ← asBytes (← field inp "commitment")
+    let z ← asBytes (← field inp "z")
+    let y ← asBytes (← field inp "y")
+    let p ← asBytes (← field inp "proof")
+    return match Jaune.verifyKzgProof c z y p with
+      | .ok b => .bool b
+      | .error _ => .null
   | "verify_blob_kzg_proof" =>
     let blob ← asBytes (← field inp "blob")
     let c ← asBytes (← field inp "commitment")
@@ -245,10 +254,16 @@ def handlers : List (String × String × Nat) :=
    ("fulu", "compute_verify_cell_kzg_proof_batch_challenge", 10),
    ("fulu", "recover_cells_and_kzg_proofs", 18), ("fulu", "verify_cell_kzg_proof_batch", 32)]
 
+/-- Differential pseudo-handlers, run only when named: (fork, name, directory, count). -/
+def differentials : List (String × String × String × Nat) :=
+  [("deneb", "verify_kzg_proof@jaune", "verify_kzg_proof", 122)]
+
 def main (args : List String) : IO UInt32 := do
   let some root := args.head? | IO.eprintln "usage: jaune-consensus-kzg-vectors <tests/general> [handler ...]"; return 2
   let only := args.drop 1
-  let selected := handlers.filter fun (_, h, _) => only.isEmpty || only.contains h
+  let selected := (handlers.map fun (f, h, n) => (f, h, h, n)).filter (fun (_, h, _, _) =>
+      only.isEmpty || only.contains h)
+    ++ differentials.filter fun (_, h, _, _) => only.contains h
   if selected.isEmpty then IO.eprintln "empty selection"; return 1
   -- Force the decoded setup before timing.
   match kzgSetupG1Lagrange, kzgSetupG1Monomial, kzgSetupG2Monomial with
@@ -256,8 +271,8 @@ def main (args : List String) : IO UInt32 := do
   | _, _, _ => IO.eprintln "setup decode failed"; return 1
   let mut totalPass := 0
   let mut totalFail := 0
-  for (fork, h, expectedCount) in selected do
-    let dir : System.FilePath := root / fork / "kzg" / h / "kzg-mainnet"
+  for (fork, h, hdir, expectedCount) in selected do
+    let dir : System.FilePath := root / fork / "kzg" / hdir / "kzg-mainnet"
     let names := ((← dir.readDir).map (·.fileName)).qsort (· < ·)
     let mut pass := 0
     let mut fail := 0

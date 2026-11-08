@@ -12,3 +12,4 @@ import JauneConsensus.Crypto.TrustedSetup
 import JauneConsensus.Crypto.KZG
 import JauneConsensus.Crypto.KZGCells
 import JauneConsensus.Crypto.KZGVectors
+import JauneConsensus.Crypto.KZGCellsVectors
