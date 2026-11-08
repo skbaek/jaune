@@ -82,7 +82,8 @@ def hashToFieldFp2 (msg dst : Bytes) (count : Nat) : Except String (List BLSF2) 
 
 /-- `map_to_curve` for the suite (RFC 9380 section 6.6.3): the simplified SWU map
 onto the 3-isogenous curve `E'`, then the isogeny map onto `E` (Appendix E.3),
-both Jaune's. No cofactor clearing: that happens once, in `hashToG2`. -/
+both Jaune's. No cofactor clearing here; `hashToG2` clears once, after adding
+the two mapped points. -/
 def mapToCurveG2 (u : BLSF2) : BLSP2 := isoMapG2 (optimizedSwuG2 u)
 
 /-- `clear_cofactor` for the suite: scalar multiplication by `h_eff`
@@ -91,7 +92,13 @@ def clearCofactorG2 (q : BLSP2) : BLSP2 := q.mulBy BLSConst.hEffG2
 
 /-- RFC 9380 section 3, `hash_to_curve(msg)` for BLS12381G2_XMD:SHA-256_SSWU_RO_
 with domain separation tag `dst`:
-`clear_cofactor(map_to_curve(u_0) + map_to_curve(u_1))`. -/
+`clear_cofactor(map_to_curve(u_0) + map_to_curve(u_1))`.
+
+Clearing the cofactor of each mapped point and then adding (which
+`blsMapFp2ToG2` twice would do) gives the same point, since scalar multiplication
+distributes over addition: `h * Q0 + h * Q1 = h * (Q0 + Q1)`. Clearing once after
+the addition, as the RFC writes it, is a cost choice: one 636-bit scalar
+multiplication instead of two. -/
 def hashToG2 (msg dst : Bytes) : Except String BLSP2 := do
   -- 1. u = hash_to_field(msg, 2)
   match ← hashToFieldFp2 msg dst 2 with

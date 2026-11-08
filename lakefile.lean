@@ -56,3 +56,9 @@ lean_lib «JauneConsensus» where
 Not a default target. -/
 lean_exe «jaune-consensus-bls-bench» where
   root := `ConsensusBLSBench
+
+/-- Local runner for the general-preset `bls` vectors (`eth_aggregate_pubkeys`,
+`eth_fast_aggregate_verify`), until the shared consensus harness lands. Not a default
+target. -/
+lean_exe «jaune-consensus-bls-vectors» where
+  root := `ConsensusBLSVectors
