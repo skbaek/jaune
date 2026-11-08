@@ -78,6 +78,29 @@ more is claimed.
 - Variables that no phase0 to Fulu specification file mentions are left out of `Config`. These
   are the Gloas and feature-fork versions, epochs and timings. The generated header lists them.
 
+## Fork choice and optimistic sync
+
+- `JauneConsensus/ForkChoice.lean` and `Sync.lean` are pure functions of their inputs. The
+  `Store` is a value over `Std.TreeMap`/`Std.TreeSet`. A rejected handler returns no store, so an
+  invalid call leaves the caller's store unchanged, as the specification requires. Pyspec's own
+  `on_attestation` can add a checkpoint state before it fails a later assert; the model does not.
+- The implementation-dependent inputs are parameters, not code: `retrieve_blobs_and_proofs`
+  and `retrieve_column_sidecars` (`DataOracle`), `validator_is_connected`, and the execution
+  engine's `PayloadStatusV1` responses in the `sync` model. The harness supplies them from
+  the vector files.
+- **Cyclic-chain divergence.** `get_ancestor`, `filter_block_tree`, `get_head`,
+  `latest_verified_ancestor` and the descendant walks in `Sync.lean` follow parent links. Python
+  bounds these only by the shape of the block tree. The model bounds each by the number of stored
+  blocks plus one, which a walk over distinct blocks never uses up. Running out of steps rejects.
+  That can happen only if the parent relation has a cycle, which would need a hash collision.
+  There, Python recurses until `RecursionError` (`get_ancestor`, `filter_block_tree`) or loops
+  forever (`get_head`). Python's recursion limit (about 1,000 frames) is not modelled. A chain
+  deeper than that raises in pyspec and does not raise in the model. No vector comes near either
+  case.
+- The optimistic head is LMD-GHOST with `INVALIDATED` blocks left out of the tree. The
+  specification describes this in prose. The function is the one in pyspec's test helper
+  `get_opt_head_block_root`.
+
 ## Vector provenance
 
 - `scripts/consensus-vectors.json` pins the three release tarballs (`general`, `minimal`,
