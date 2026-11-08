@@ -82,7 +82,9 @@ def pubkeyToPoint (pk : Bytes) : Except String BLSP :=
 def signatureToPoint (sig : Bytes) : Except String BLSP2 := do
   -- 2. C_bit = 1 requires 96 bytes on E'.
   if sig.length ≠ 96 then throw "compressed G2 point must be 96 bytes"
-  let b0 := (sig.headD 0).toNat
+  let b0 ← match sig with
+    | b :: _ => pure b.toNat
+    | [] => throw "compressed G2 point must be 96 bytes"
   -- 1. m_byte = s_string[0] AND 0xE0; 0x20, 0x60, 0xE0 are INVALID.
   let mByte := b0 &&& 0xe0
   if mByte = 0x20 ∨ mByte = 0x60 ∨ mByte = 0xe0 then throw "invalid G2 metadata bits"

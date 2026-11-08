@@ -42,7 +42,7 @@ def g2m1 : Bytes := hexNat 0xb5bfd7dd8cdeb128843bc287230af38926187075cbfbefa8100
 #guard (signatureToPoint g2m0.tail).toOption = none
 -- x_1 = p is not a field element.
 #guard (signatureToPoint (let x := i2osp blsPrime 48 ++ List.replicate 48 0
-                          ((x.headD 0) ||| 0x80) :: x.tail)).toOption = none
+                          (match x with | b :: rest => (b ||| 0x80) :: rest | [] => []))).toOption = none
 
 -- Subgroup checks.
 #guard g1SubgroupCheck blsG1Generator
