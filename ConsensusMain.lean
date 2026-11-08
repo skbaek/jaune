@@ -21,38 +21,45 @@ Exit status: 0 only when the selection passes every check and every executed cas
 
 open JauneConsensus.Harness
 
+/-- Why the command line was not understood. -/
+inductive UsageError where
+  | unknownArgument (arg : String)
+
+instance : ToString UsageError where
+  toString | .unknownArgument a => s!"unknown or incomplete argument {a}"
+
 structure Opts where
   cmd : String := ""
-  preset : Option String := none
-  fork : Option String := none
-  runner : Option String := none
-  handler : Option String := none
-  suite : Option String := none
+  preset : Option DirName := none
+  fork : Option DirName := none
+  runner : Option DirName := none
+  handler : Option DirName := none
+  suite : Option DirName := none
   tier : Tier := .full
-  vectors : Option String := none
+  vectors : Option System.FilePath := none
   manifestDir : String := "scripts"
 
 def usage : String :=
   "usage: jaune-consensus run|scan --preset P [--fork F] [--runner R] [--handler H] [--suite S] " ++
   "[--tier smoke|full] [--vectors DIR] [--manifest-dir DIR]\n       jaune-consensus --forks\n       jaune-consensus --fork-rules NAME"
 
-def parseOpts : List String → Opts → Except String Opts
+def parseOpts : List String → Opts → Except UsageError Opts
   | [], o => .ok o
   | "--preset" :: v :: r, o => parseOpts r { o with preset := some v }
   | "--fork" :: v :: r, o => parseOpts r { o with fork := some v }
   | "--runner" :: v :: r, o => parseOpts r { o with runner := some v }
   | "--handler" :: v :: r, o => parseOpts r { o with handler := some v }
   | "--suite" :: v :: r, o => parseOpts r { o with suite := some v }
-  | "--vectors" :: v :: r, o => parseOpts r { o with vectors := some v }
+  | "--vectors" :: v :: r, o => parseOpts r { o with vectors := some (System.FilePath.mk v) }
   | "--manifest-dir" :: v :: r, o => parseOpts r { o with manifestDir := v }
   | "--tier" :: "smoke" :: r, o => parseOpts r { o with tier := .smoke }
   | "--tier" :: "full" :: r, o => parseOpts r { o with tier := .full }
-  | a :: _, _ => .error s!"unknown or incomplete argument {a}"
+  | a :: _, _ => .error (.unknownArgument a)
 
 def loadSelection (o : Opts) : IO (Manifest × Selection) := do
   let some preset := o.preset | throw (IO.userError "refused: --preset is required")
   let root ← match o.vectors with
-    | some v => pure (System.FilePath.mk v)
+    | some v => pure v
     | none =>
       match ← IO.getEnv "HOME" with
       | some h => pure (System.FilePath.mk h / "consensus-spec-tests-v1.6.1" / "extracted")
@@ -60,7 +67,7 @@ def loadSelection (o : Opts) : IO (Manifest × Selection) := do
   let md := System.FilePath.mk o.manifestDir
   let prov ← IO.FS.readFile (md / "consensus-vectors.json")
   let inv ← IO.FS.readFile (md / "consensus" / "inventory-v1.6.1.json")
-  let m ← IO.ofExcept ((Manifest.load prov inv).mapError IO.userError)
+  let m ← IO.ofExcept ((Manifest.load prov inv).mapError (IO.userError ∘ toString))
   pure (m, { root, preset, fork := o.fork, runner := o.runner, handler := o.handler,
              suite := o.suite, tier := o.tier })
 

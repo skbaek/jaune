@@ -529,10 +529,12 @@ measured peak RSS is under 200 MB.
 
 | gate | proves | scale | time |
 |---|---|---|---|
-| `.lake/build/bin/jaune-consensus run --preset minimal --runner shuffling` / `--preset mainnet` | `compute_shuffled_index` for every index of every case, strict all-PASS, after the tree check below | 300 + 300 cases | 16.1 s / 145.3 s (WSL, 2026-11-09) |
+| `.lake/build/bin/jaune-consensus run --preset minimal --runner shuffling` / `--preset mainnet` | `compute_shuffled_index` for every index of every case, strict all-PASS, after the tree check below | 300 + 300 cases | 16.1 s / 145.3 s (WSL, 2026-11-09; 17.7 s / 155.6 s after the move to checked `U64`) |
 | `.lake/build/bin/jaune-consensus scan --preset general` / `minimal` / `mainnet` | the tree check over every in-scope suite, then the readers: every `.ssz_snappy` decodes, every `.yaml` is inside the accepted subset, and the 48 `ssz_generic/uints/valid` serializations decode to the little-endian encoding of their `value.yaml` (an independent oracle for the Snappy decoder) | 5,509 / 16,126 / 2,340 cases; 41,591 Snappy and 37,300 YAML files | 17.0 s / 8.8 s / 29.6 s |
 | `.lake/build/bin/jaune-consensus --forks`, `--fork-rules NAME` | the O7 pairing table; `--fork-rules gloas` (and `eip7805`, and any unknown name) exits 1 with a refusal | — | sub-second |
 | `python3 -I scripts/consensus-vector-inventory.py --tarballs DIR --expect scripts/consensus/inventory-v1.6.1.json` | the tarballs match their pinned size and SHA-256, and regenerate the committed inventory exactly (counts and per-suite records) | 3 tarballs, 1.3 GB | 15.6 s (warm page cache) |
+| `python3 -I scripts/consensus-verify-tree.py --tarballs DIR --tree ~/consensus-spec-tests-v1.6.1/extracted [--preset P] [--select FORK[/RUNNER[/HANDLER[/SUITE]]]]` | the extracted tree's **contents**: every in-scope file under the selection is a regular file with the size and SHA-256 of its member in the digest-checked tarball, and the tree holds no entry that is not a selected member. The runner checks names only; run this once per extraction | 78,891 files (all presets) | 19.9 s (warm page cache) |
+| `python3 -I scripts/consensus-preset-generate.py --check` | `JauneConsensus/Preset.lean`, `Config.lean` and `Harness/ConfigOverride.lean` are byte-identical to what the generator writes from the pinned pyspec checkout (`--specs`, default `~/consensus-specs-v1.6.1`, refused unless at the tag commit) | 3 files | sub-second |
 
 **The tree check** runs on every selected suite in every tier (the smoke tier narrows only
 which cases execute): case count against the suite record and the inventory count; SHA-256 of
@@ -544,6 +546,11 @@ present without a record, `--fork gloas` (through `CFork.rules?`, which resolves
 nothing) and `--fork eip7805`. A `(runner, handler)` with no handler is a FAIL
 (`UNIMPLEMENTED`), never a skip. `--tier smoke` executes the first case of each suite.
 
+A case's `config.yaml` (10 minimal light-client cases) is applied over its preset's base
+`Config` by the generated typed setters; `scan` applies every one and refuses a key that is not a
+phase0 to Fulu config variable, a `PRESET_BASE` other than the case's preset, and a byte string of
+the wrong width.
+
 Negative controls (run 2026-11-09 in a disposable copy under
 `~/consensus-spec-tests-v1.6.1/negctl/harness-w4`, restored bytes identical to the extracted
 tree): one mutated expected mapping entry fails exactly that case (`index 0: computed 6, expected
@@ -551,6 +558,14 @@ tree): one mutated expected mapping entry fails exactly that case (`index 0: com
 300, inventory 300`); a renamed case at equal count is refused by the names digest; an extra case
 is refused; one flipped `bls_setting` (1 to 2) is refused by the histogram; one removed Fulu
 `column_` file is refused by the file-path digest; an unknown file name is refused by kind.
+`consensus-verify-tree.py`: one changed byte in an extracted `mapping.yaml` is refused at that file
+(SHA-256 mismatch), an extra file is refused, a missing file is refused, an empty selection is
+refused. Config overrides: an added unknown key, `PRESET_BASE: 'mainnet'`, and a 3-byte
+`GENESIS_FORK_VERSION` are each refused. Preset: `SHUFFLE_ROUND_COUNT` changed by hand in
+`Preset.lean` fails `consensus-preset-generate.py --check`; minimal 10 to 11 fails the build at
+the `Shuffle.lean` mapping guard; mainnet 90 to 89 fails 188 of 300 mainnet shuffling cases by
+name (for example `shuffle_0x23bc..._10: index 0: computed 2, expected 3`); regenerating restores
+the committed bytes and 300/300.
 
 ### Environment and provenance
 

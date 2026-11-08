@@ -3,6 +3,8 @@
 import JauneConsensus.Error
 import JauneConsensus.Preset
 import JauneConsensus.Config
+import JauneConsensus.UInt
+import JauneConsensus.Helpers
 import JauneConsensus.Shuffle
 import JauneConsensus.Fork
 import JauneConsensus.Harness.Snappy

@@ -22,6 +22,23 @@ namespace JauneConsensus.Harness
 open Lean (Json)
 open Jaune
 
+/-- Why the provenance pin or the inventory could not be loaded or did not cross-check. The
+payloads are diagnostic text only. -/
+inductive ManifestError where
+  /-- A file is not valid JSON. -/
+  | json (what : String)
+  /-- A field is missing or has the wrong type. -/
+  | field (what : String)
+  /-- The pin and the inventory disagree, or the inventory is not pinned. -/
+  | mismatch (what : String)
+  deriving Repr
+
+instance : ToString ManifestError where
+  toString
+    | .json w => s!"manifest: invalid JSON: {w}"
+    | .field w => s!"manifest: {w}"
+    | .mismatch w => s!"manifest: {w}"
+
 /-- What the manifest pins for one suite. -/
 structure SuiteRecord where
   cases : Nat
@@ -64,36 +81,36 @@ def inScope (preset fork runner : String) : Bool :=
   preset == "general" || fork == "electra" || fork == "fulu" ||
     (fork == "phase0" && runner == "shuffling")
 
-private def field (j : Json) (k : String) : Except String Json :=
+private def field (j : Json) (k : String) : Except ManifestError Json :=
   match j.getObjVal? k with
   | .ok v => .ok v
-  | .error _ => .error s!"manifest: missing field {k}"
+  | .error _ => .error (.field s!"missing field {k}")
 
-private def str (j : Json) (k : String) : Except String String := do
+private def str (j : Json) (k : String) : Except ManifestError String := do
   match (← field j k).getStr? with
   | .ok s => .ok s
-  | .error _ => .error s!"manifest: field {k} is not a string"
+  | .error _ => .error (.field s!"field {k} is not a string")
 
-private def nat (j : Json) (k : String) : Except String Nat := do
+private def nat (j : Json) (k : String) : Except ManifestError Nat := do
   match (← field j k).getNat? with
   | .ok n => .ok n
-  | .error _ => .error s!"manifest: field {k} is not a natural number"
+  | .error _ => .error (.field s!"field {k} is not a natural number")
 
-private def objEntries (j : Json) (what : String) : Except String (List (String × Json)) :=
+private def objEntries (j : Json) (what : String) : Except ManifestError (List (String × Json)) :=
   match j with
   | .obj o => .ok o.toArray.toList
-  | _ => .error s!"manifest: {what} is not an object"
+  | _ => .error (.field s!"{what} is not an object")
 
-private def suiteRecord (j : Json) : Except String SuiteRecord := do
+private def suiteRecord (j : Json) : Except ManifestError SuiteRecord := do
   let bls ← (← objEntries (← field j "bls_setting") "bls_setting").mapM fun (k, v) =>
     match v.getNat? with
     | .ok n => .ok (k, n)
-    | .error _ => .error s!"manifest: bls_setting {k} is not a natural number"
+    | .error _ => .error (.field s!"bls_setting {k} is not a natural number")
   let overrides ← match (← field j "config_overrides") with
     | .arr xs => xs.toList.mapM fun x => match x.getStr? with
       | .ok s => .ok s
-      | .error _ => .error "manifest: config_overrides entry is not a string"
-    | _ => .error "manifest: config_overrides is not an array"
+      | .error _ => .error (.field "config_overrides entry is not a string")
+    | _ => .error (.field "config_overrides is not an array")
   pure {
     cases := ← nat j "cases"
     namesSha256 := ← str j "names_sha256"
@@ -102,41 +119,41 @@ private def suiteRecord (j : Json) : Except String SuiteRecord := do
     configOverrides := overrides }
 
 /-- The inventory's count for one suite (`presets.<preset>.forks.<fork>.<runner>.<handler>.<suite>`). -/
-private def inventoryCount (inv : Json) (preset : String) (k : SuiteKey) : Except String Nat := do
+private def inventoryCount (inv : Json) (preset : String) (k : SuiteKey) : Except ManifestError Nat := do
   let forks ← field (← field (← field inv "presets") preset) "forks"
   let path := [k.fork, k.runner, k.handler]
   let h ← path.foldlM (fun j p => field j p) forks
   match (← field h k.suite).getNat? with
   | .ok n => .ok n
-  | .error _ => .error s!"manifest: inventory count for {preset}/{k.render} is not a number"
+  | .error _ => .error (.field s!"inventory count for {preset}/{k.render} is not a number")
 
 /-- Load and cross-check the provenance pin and the inventory. Refuses an unpinned inventory, a
 release or tag-commit disagreement, a suite record whose count differs from the inventory's
 count, and an in-scope inventory suite with no record (or the reverse). -/
-def Manifest.load (provenanceText inventoryText : String) : Except String Manifest := do
-  let prov ← Json.parse provenanceText
-  let inv ← Json.parse inventoryText
+def Manifest.load (provenanceText inventoryText : String) : Except ManifestError Manifest := do
+  let prov ← (Json.parse provenanceText).mapError ManifestError.json
+  let inv ← (Json.parse inventoryText).mapError ManifestError.json
   let release ← str prov "release"
   let tagCommit ← str prov "tag_commit"
-  if (← str inv "release") != release then throw "manifest: inventory release differs from the pin"
+  if (← str inv "release") != release then throw (.mismatch "inventory release differs from the pin")
   if (← str inv "tag_commit") != tagCommit then
-    throw "manifest: inventory tag commit differs from the pin"
+    throw (.mismatch "inventory tag commit differs from the pin")
   match (← field inv "pinned").getBool? with
   | .ok true => pure ()
-  | _ => throw "manifest: inventory was not produced from digest-checked tarballs"
+  | _ => throw (.mismatch "inventory was not produced from digest-checked tarballs")
   let tarballs ← field prov "tarballs"
   let mut suites := []
   for preset in presets do
     let _ ← field tarballs preset
     let recs ← objEntries (← field (← field inv "suites") preset) s!"suites.{preset}"
     for (name, j) in recs do
-      let some k := SuiteKey.parse? name | throw s!"manifest: bad suite key {preset}/{name}"
+      let some k := SuiteKey.parse? name | throw (.mismatch s!"bad suite key {preset}/{name}")
       if !inScope preset k.fork k.runner then
-        throw s!"manifest: suite record outside the scope rule: {preset}/{name}"
+        throw (.mismatch s!"suite record outside the scope rule: {preset}/{name}")
       let r ← suiteRecord j
       let n ← inventoryCount inv preset k
       if n != r.cases then
-        throw s!"manifest: {preset}/{name}: suite record says {r.cases} cases, inventory {n}"
+        throw (.mismatch s!"{preset}/{name}: suite record says {r.cases} cases, inventory {n}")
       suites := (preset, k, r, n) :: suites
     -- every in-scope inventory suite has a record
     let forks ← objEntries (← field (← field (← field inv "presets") preset) "forks") "forks"
@@ -147,7 +164,7 @@ def Manifest.load (provenanceText inventoryText : String) : Except String Manife
             for (suite, _) in ← objEntries ss "suites" do
               let k : SuiteKey := ⟨fork, runner, handler, suite⟩
               if !suites.any (fun (p, k', _) => p == preset && k' == k) then
-                throw s!"manifest: in-scope inventory suite {preset}/{k.render} has no record"
+                throw (.mismatch s!"in-scope inventory suite {preset}/{k.render} has no record")
   pure { release, tagCommit, suites := suites.reverse }
 
 /-! ## The digests the manifest pins -/
