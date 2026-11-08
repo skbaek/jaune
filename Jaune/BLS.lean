@@ -196,12 +196,199 @@ def blsMillerLoop (q p : BLSP12) (finalExp : Bool := true) : Option BLSF12 := do
   )
 
 -- def pairing(Q: Point2D[FQ2], P: Point2D[FQ]) -> FQ12:
-def blsPairing (q : BLSP2) (p : BLSP) (finalExp : Bool := true) : Option BLSF12 := do
+-- The reference pairing: py_ecc's non-optimized loop above, with the plain final power.
+-- `blsPairing` below is the fast form; `Jaune/BLSGuards.lean` checks they agree.
+def blsPairingRef (q : BLSP2) (p : BLSP) (finalExp : Bool := true) : Option BLSF12 := do
   guard q.isOnCurve
   guard p.isOnCurve
   if p = ⟨0, 0⟩ ∨ q = ⟨0, 0⟩ then
     return 1
   blsMillerLoop (blsTwist q) (p.toBLSP12) finalExp
+
+-- ---------------------------------------------------------------------------
+-- Fast final exponentiation.
+--
+-- `blsMillerLoop` raises the Miller-loop value to `(p^12 - 1) / r` by square-and-multiply
+-- over the whole 4,314-bit exponent (measured 2026-11-09 on the WSL host, compiled: 804 ms of
+-- an 856 ms pairing). `blsFinalExpFast` computes the same power with the standard split
+-- `(p^12 - 1) / r = (p^6 - 1) * (p^2 + 1) * h`, `h = (p^4 - p^2 + 1) / r`: the easy part by
+-- Frobenius maps and one inversion, the hard part from the base-`p` digits of `h` as one
+-- simultaneous (Straus) exponentiation over four bases. The Frobenius `x ↦ x^p` on
+-- `Fp12 = Fp[w] / (w^12 - 2 w^6 + 2)` is `Fp`-linear and fixes `Fp`, so
+-- `(sum c_i w^i)^p = sum c_i (w^p)^i`. The exponent identities are kernel-checked below;
+-- that the Frobenius is the `p`-th power and that `blsFinalExpFast` equals the plain power
+-- are differential `#guard`s in `Jaune/BLSGuards.lean`.
+-- ---------------------------------------------------------------------------
+
+/-- The reduced pairing's final exponent `(p^12 - 1) / r`. -/
+def blsFinalExponent : Nat := (blsPrime ^ 12 - 1) / blsCurveOrder
+
+/-- `h = (p^4 - p^2 + 1) / r`, the hard part of the final exponent. -/
+def blsHardExponent : Nat := (blsPrime ^ 4 - blsPrime ^ 2 + 1) / blsCurveOrder
+
+theorem blsHardExponent_exact :
+    blsHardExponent * blsCurveOrder = blsPrime ^ 4 - blsPrime ^ 2 + 1 := by decide
+
+theorem blsFinalExponent_split :
+    blsFinalExponent = (blsPrime ^ 6 - 1) * (blsPrime ^ 2 + 1) * blsHardExponent := by
+  decide
+
+/-- The base-`p` digits of `h`, low first. -/
+def blsHardDigits : List Nat :=
+  [blsHardExponent % blsPrime, blsHardExponent / blsPrime % blsPrime,
+   blsHardExponent / blsPrime ^ 2 % blsPrime, blsHardExponent / blsPrime ^ 3]
+
+theorem blsHardDigits_sum :
+    (blsHardDigits.zipIdx.map fun (d, i) => d * blsPrime ^ i).sum = blsHardExponent := by
+  decide
+
+theorem blsHardDigits_lt : ∀ d ∈ blsHardDigits, d < blsPrime := by decide
+
+/-- The coefficients `c_0, ..., c_11` of `sum c_i w^i`, low degree first. -/
+def f12Coeffs (x : BLSF12) : List BLSF :=
+  (List.takeRightV 12 x.val (0 : BLSF)).toList.reverse
+
+/-- `c * x` for `c` in `Fp`. -/
+def f12Scale (c : BLSF) (x : BLSF12) : BLSF12 :=
+  if c = 0 then 0 else ⟨x.val.map (c * ·)⟩
+
+/-- `w^p`, and its powers `(w^p)^i` for `i < 12`. -/
+def blsFrobW : BLSF12 := (⟨[1, 0]⟩ : BLSF12) ^ blsPrime
+
+def blsFrobWPowers : List BLSF12 :=
+  (List.range 12).map fun i => blsFrobW ^ i
+
+/-- The Frobenius `x ↦ x^p` on `Fp12`. -/
+def f12Frob (x : BLSF12) : BLSF12 :=
+  ((f12Coeffs x).zip blsFrobWPowers).foldl (fun acc (c, g) => acc + f12Scale c g) 0
+
+/-- `frob^k`. -/
+def f12FrobN : Nat → BLSF12 → BLSF12
+  | 0, x => x
+  | k + 1, x => f12FrobN k (f12Frob x)
+
+/-- Simultaneous exponentiation `prod_i b_i ^ e_i` for four bases (Straus, 16-entry
+table indexed by the bits of the four exponents at one position). -/
+def f12MultiPow4 (b0 b1 b2 b3 : BLSF12) (e0 e1 e2 e3 : Nat) : BLSF12 :=
+  -- table[j] = prod over set bits k of j of b_k
+  let table : Array BLSF12 := (List.range 16).toArray.map fun j =>
+    (if j.testBit 0 then b0 else 1) * (if j.testBit 1 then b1 else 1) *
+    (if j.testBit 2 then b2 else 1) * (if j.testBit 3 then b3 else 1)
+  let n := max (max e0.log2 e1.log2) (max e2.log2 e3.log2) + 1
+  (List.range n).reverse.foldl (fun acc i =>
+    let j := (if e0.testBit i then 1 else 0) + (if e1.testBit i then 2 else 0) +
+             (if e2.testBit i then 4 else 0) + (if e3.testBit i then 8 else 0)
+    let sq := acc * acc
+    match table[j]? with
+    | some t => if j = 0 then sq else sq * t
+    | none => sq) 1   -- unreachable: j < 16
+
+/-- `f ^ ((p^12 - 1) / r)` by the easy/hard split. -/
+def blsFinalExpFast (f : BLSF12) : BLSF12 :=
+  -- easy part: g = (f^(p^6) / f)^(p^2 + 1)
+  let t := f12FrobN 6 f / f
+  let g := f12FrobN 2 t * t
+  -- hard part: g^h = prod_i (frob^i g)^(l_i)
+  match blsHardDigits with
+  | [l0, l1, l2, l3] =>
+    f12MultiPow4 g (f12Frob g) (f12FrobN 2 g) (f12FrobN 3 g) l0 l1 l2 l3
+  | _ => g ^ blsHardExponent   -- unreachable: `blsHardDigits` has four entries
+
+-- ---------------------------------------------------------------------------
+-- Fast Miller loop.
+--
+-- The reference loop keeps the running point in `E(Fp12)` affine coordinates, so every
+-- step divides in `Fp12`. `blsMillerLoopFast` runs the same loop (same bits, same order)
+-- with the running point `T` in Jacobian coordinates on the twist `E'(Fp2)`, so no step
+-- divides, and evaluates each line at `P` directly as a sparse `Fp12` element. With
+-- `T' = (x_T w^-2, y_T w^-3)` (the twist of `blsTwist`) and the slope `λ` of the line in
+-- `Fp2`, the slope upstairs is `λ w^-1` and the line value is
+-- `y_P - λ x_P w^-1 + (λ x_T - y_T) w^-3`; the loop uses it times `w^3`, and a vertical
+-- line `x_P - x_T w^-2` times `w^2`; the Jacobian forms scale these further by
+-- elements of `Fp2`. `w^2` lies in `Fp6` (its cube is `w^6 = 1 + i`, in
+-- `Fp2`) and `w^3` in `Fp4` (its square is in `Fp2`); `p^6 - 1` and `p^4 - 1` both divide
+-- `(p^12 - 1) / r` (`r` divides `p^4 - p^2 + 1`, a factor of both `p^6 + 1` and
+-- `p^8 + p^4 + 1`), so the final exponentiation sends these factors, and the reference's
+-- `-1` sign, to `1`.
+-- So the final-exponentiated pairing is the same value, which `Jaune/BLSGuards.lean`
+-- checks; the raw Miller values (`finalExp := false`) differ, and every consumer of those
+-- multiplies them and then applies the final exponentiation.
+-- ---------------------------------------------------------------------------
+
+/-- An `Fp12` element from `(degree, coefficient)` pairs (absent degrees are zero). -/
+def blsF12OfCoeffs (cs : List (Nat × BLSF)) : BLSF12 :=
+  ⟨trimZero ((List.range 12).reverse.map fun d =>
+    cs.foldl (fun acc (e, c) => if e = d then acc + c else acc) 0)⟩
+
+/-- The `(c0, c1)` coefficients of `c0 + c1 i` in `Fp2`. -/
+def blsF2Coeffs (a : BLSF2) : BLSF × BLSF :=
+  let cs := List.takeRightV 2 a.val (0 : BLSF)
+  (cs[1], cs[0])
+
+/-- `e(a) - x_P e(b) w^2 + y_P e(c) w^3`, where `e` embeds `Fp2` in `Fp12` as `blsTwist`
+does (`c0 + c1 i ↦ (c0 - c1) + c1 w^6`). -/
+def blsLineOf (a b c : BLSF2) (p : BLSP) : BLSF12 :=
+  let (a0, a1) := blsF2Coeffs a
+  let (b0, b1) := blsF2Coeffs b
+  let (c0, c1) := blsF2Coeffs c
+  blsF12OfCoeffs [(0, a0 - a1), (6, a1), (2, -(p.x * (b0 - b1))), (8, -(p.x * b1)),
+    (3, p.y * (c0 - c1)), (9, p.y * c1)]
+
+/-- Jacobian points of the twist `E'(Fp2)` (Jaune's `EllipticCurve.Jacobian`). -/
+abbrev BLSJ2 : Type := EllipticCurve.JacobianPoint BLSF2
+
+/-- The tangent at `T = (X, Y, Z)` (affine `(X/Z^2, Y/Z^3)`) evaluated at `p` and scaled:
+with `λ = 3X^2 / (2YZ)`, the scaled line `(λ x_T - y_T) - λ x_P w^2 + y_P w^3` times
+`2 Y Z^3` (in `Fp2`) is `(3X^3 - 2Y^2) - 3X^2 Z^2 x_P w^2 + 2Y Z^3 y_P w^3`. -/
+def blsLineDblJ (t : BLSJ2) (p : BLSP) : BLSF12 :=
+  let x2 := t.x * t.x
+  let z2 := t.z * t.z
+  blsLineOf (3 * x2 * t.x - 2 * (t.y * t.y)) (3 * x2 * z2) (2 * t.y * z2 * t.z) p
+
+/-- The chord through `T` (Jacobian) and `q` (affine) at `p`, scaled: with
+`N = y_Q Z^3 - Y`, `D = Z (x_Q Z^2 - X)`, `λ = N / D`, the scaled line times `D Z^3` is
+`(N X Z - Y D) - N Z^3 x_P w^2 + D Z^3 y_P w^3`. When `x_Q Z^2 = X` it is the tangent
+(`N = 0`) or the vertical line `x_P w^2 - x_T` times `Z^2`: `x_P Z^2 w^2 - X`. -/
+def blsLineAddJ (t : BLSJ2) (q : BLSP2) (p : BLSP) : BLSF12 :=
+  let z2 := t.z * t.z
+  let z3 := z2 * t.z
+  let n := q.y * z3 - t.y
+  let u := q.x * z2 - t.x
+  if u = 0 then
+    if n = 0 then blsLineDblJ t p
+    else
+      let (x0, x1) := blsF2Coeffs t.x
+      let (z0, z1) := blsF2Coeffs z2
+      blsF12OfCoeffs [(2, p.x * (z0 - z1)), (8, p.x * z1), (0, -(x0 - x1)), (6, -x1)]
+  else
+    let d := t.z * u
+    blsLineOf (n * t.x * t.z - t.y * d) (n * z3) (d * z3) p
+
+/-- The Miller loop of the reference (same bits, same order), with `T` in Jacobian
+coordinates on the twist and lines evaluated directly at `P` (no final exponentiation and
+no division anywhere). -/
+def blsMillerLoopFast (q : BLSP2) (p : BLSP) : BLSF12 := Id.run do
+  let mut t : BLSJ2 := EllipticCurve.Jacobian.ofAffine q
+  let mut f : BLSF12 := 1
+  for i in (List.range (blsLogAteLoopCount + 1)).reverse do
+    f := f * f * blsLineDblJ t p
+    t := EllipticCurve.Jacobian.double t
+    if blsAteLoopCount.testBit i then
+      f := f * blsLineAddJ t q p
+      t := EllipticCurve.Jacobian.mixedAdd t q
+  return f
+
+-- The pairing: `blsMillerLoopFast` and `blsFinalExpFast`; equal to `blsPairingRef` when
+-- `finalExp` holds (differential guards in `Jaune/BLSGuards.lean`). With `finalExp :=
+-- false` it returns the Miller value, which differs from the reference's by a factor the
+-- final exponentiation removes.
+def blsPairing (q : BLSP2) (p : BLSP) (finalExp : Bool := true) : Option BLSF12 := do
+  guard q.isOnCurve
+  guard p.isOnCurve
+  if p = ⟨0, 0⟩ ∨ q = ⟨0, 0⟩ then
+    return 1
+  let f := blsMillerLoopFast q p
+  return (if finalExp then blsFinalExpFast f else f)
 
 -- py_ecc checks `is_on_curve(G12, b12)` for the twisted generator;
 -- b12 = b = 4, so the G1 embedding must land on the same curve.
@@ -428,11 +615,11 @@ def verifyKzgProofImpl (commitment : BLSP) (z y : Nat) (proof : BLSP) : Bool :=
   let pMinusY : BLSP :=
     commitment + blsG1Generator.mulBy ((blsModulus - y) % blsModulus)
   -- pairing_check[((P_minus_y, -G2), (proof, X_minus_z))]: the product of the
-  -- two Miller loops, final-exponentiated, must equal 1.
+  -- two Miller loops, final-exponentiated (`blsFinalExpFast`), must equal 1.
   match blsPairing (-blsG2Generator) pMinusY (finalExp := false),
         blsPairing xMinusZ proof (finalExp := false) with
   | some t1, some t2 =>
-      (t1 * t2) ^ ((blsPrime ^ 12 - 1) / blsCurveOrder) = 1
+      blsFinalExpFast (t1 * t2) = 1
   | _, _ => false
 
 -- def kzg_commitment_to_versioned_hash(commitment): 0x01 || sha256(c)[1:].

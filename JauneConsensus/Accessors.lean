@@ -187,10 +187,14 @@ end BeaconState
 
 /-! ## Constants -/
 
+/-- `DomainType` (`Bytes4`, `specs/phase0/beacon-chain.md`, "Custom types"): exactly four
+bytes, so no domain of another length can be formed. -/
+abbrev DomainType := Vector UInt8 4
+
 /-- `DOMAIN_BEACON_PROPOSER` (`specs/phase0/beacon-chain.md`, "Domain types"). -/
-def DOMAIN_BEACON_PROPOSER : Bytes := [0x00, 0x00, 0x00, 0x00]
+def DOMAIN_BEACON_PROPOSER : DomainType := #v[0x00, 0x00, 0x00, 0x00]
 /-- `DOMAIN_BEACON_ATTESTER`. -/
-def DOMAIN_BEACON_ATTESTER : Bytes := [0x01, 0x00, 0x00, 0x00]
+def DOMAIN_BEACON_ATTESTER : DomainType := #v[0x01, 0x00, 0x00, 0x00]
 /-- `PROPOSER_WEIGHT` (`specs/altair/beacon-chain.md`). -/
 def PROPOSER_WEIGHT : Nat := 8
 /-- `WEIGHT_DENOMINATOR`. -/
@@ -310,12 +314,12 @@ def getRandaoMix (state : BeaconState P f) (epoch : Epoch) : M Bytes32 := do
 
 /-- `get_seed` (phase0): `hash(domain_type + uint_to_bytes(epoch) + mix)` with the mix of
 `epoch + EPOCHS_PER_HISTORICAL_VECTOR - MIN_SEED_LOOKAHEAD - 1`. -/
-def getSeed (state : BeaconState P f) (epoch : Epoch) (domainType : Bytes) : M Bytes32 := do
+def getSeed (state : BeaconState P f) (epoch : Epoch) (domainType : DomainType) : M Bytes32 := do
   let e ← U64.add? epoch (← c64 P.EPOCHS_PER_HISTORICAL_VECTOR) "get_seed"
   let e ← U64.sub? e (← c64 P.MIN_SEED_LOOKAHEAD) "get_seed"
   let e ← U64.sub? e U64.one "get_seed"
   let mix ← getRandaoMix state e
-  pure (hash (domainType ++ uintToBytes 8 epoch.toNat ++ mix.toBytes))
+  pure (hash (domainType.toList ++ uintToBytes 8 epoch.toNat ++ mix.toBytes))
 
 /-- `get_committee_count_per_slot` (phase0). -/
 def getCommitteeCountPerSlot (state : BeaconState P f) (epoch : Epoch) : M U64 := do

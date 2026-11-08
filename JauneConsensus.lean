@@ -30,8 +30,6 @@ import JauneConsensus.Crypto.HashToCurveVectors
 import JauneConsensus.Crypto.Codec
 import JauneConsensus.Crypto.BLSSig
 import JauneConsensus.Crypto.CodecVectors
-import JauneConsensus.Crypto.FinalExp
-import JauneConsensus.Crypto.FinalExpVectors
 import JauneConsensus.Crypto.MSM
 import JauneConsensus.Crypto.MSMVectors
 import JauneConsensus.Crypto.TrustedSetup
@@ -52,6 +50,7 @@ import JauneConsensus.Harness.SszGenericTypes
 import JauneConsensus.Harness.SszStatic
 import JauneConsensus.EpochAccessors
 import JauneConsensus.Epoch
+import JauneConsensus.StateTransition
 import JauneConsensus.Harness.EpochCases
 import JauneConsensus.Harness.Operations
 import JauneConsensus.Harness.Networking
