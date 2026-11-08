@@ -13,47 +13,6 @@ containers (`JauneConsensus/Containers.lean`) for the case's preset and fork.
 namespace JauneConsensus.Harness
 open Yaml
 
-/-- Reading one container field from a mapping. A fork-gated field that is absent at the
-case's fork must be absent from the mapping. -/
-class FromYamlField (α : Type) where
-  readField : YVal → String → Res α
-
-instance (priority := low) {α : Type} [FromYaml α] : FromYamlField α where
-  readField y k := y.field k >>= fromYaml
-
-instance instFromYamlFieldGated {α : Type} [h : FromYamlField α] :
-    {c : Bool} → FromYamlField (Gated c α)
-  | true => h
-  | false => ⟨fun y k => if (y.get? k).isSome then throw (.shape s!"field {k} present before its fork") else pure ()⟩
-
-/-- Every key of the mapping names a field (absent gated fields are checked per field). -/
-def checkFieldKeys (y : YVal) (known : List String) : Res Unit :=
-  match y with
-  | .map kvs =>
-    if kvs.all fun kv => known.contains kv.1 then pure () else throw (.shape "unknown field in mapping")
-  | _ => throw (.shape "expected a mapping")
-
-/-- `yaml_container Name (P : Preset) ... [f₁, f₂, ...]`: read a container from a mapping by
-field name. -/
-syntax "yaml_container " ident ("(" ident " : " term ")")* " [" ident,+ "]" : command
-
-macro_rules
-  | `(yaml_container $n:ident $[($ps:ident : $pts:term)]* [$fs:ident,*]) => do
-    let fs := fs.getElems
-    let mk := Lean.mkIdent (n.getId ++ `mk)
-    let get (f : Lean.Ident) : Lean.MacroM (Lean.TSyntax `term) :=
-      `((FromYamlField.readField y $(Lean.quote (toString f.getId))))
-    let some f0 := fs[0]? | Lean.Macro.throwError "yaml_container needs a field"
-    let mut acc ← `($mk <$> $(← get f0))
-    for f in fs[1:] do
-      acc ← `($acc <*> $(← get f))
-    let ps : Array Lean.Ident := ps.map fun p => ⟨p.raw⟩
-    let psT : Array Lean.Term := ps.map fun p => ⟨p.raw⟩
-    let ty ← `($n $psT*)
-    let known := fs.map fun f => Lean.quote (k := `term) (toString f.getId)
-    `(instance $[($ps : $pts)]* : FromYaml $ty where
-        fromYaml := fun y => checkFieldKeys y [$known,*] *> $acc)
-
 yaml_container Fork [previous_version, current_version, epoch]
 yaml_container ForkData [current_version, genesis_validators_root]
 yaml_container Checkpoint [epoch, root]

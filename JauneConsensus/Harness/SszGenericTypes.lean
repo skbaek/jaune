@@ -12,21 +12,6 @@ library's `ssz_container`, and their YAML readers. `byte` is `UInt8`; `ByteList[
 namespace JauneConsensus.Harness
 open Jaune Yaml
 
-/-- `yaml_container Name [f₁, f₂, ...]`: read a container from a mapping by field name. -/
-syntax "yaml_container " ident " [" ident,+ "]" : command
-
-macro_rules
-  | `(yaml_container $n:ident [$fs:ident,*]) => do
-    let fs := fs.getElems
-    let mk := Lean.mkIdent (n.getId ++ `mk)
-    let get (f : Lean.Ident) : Lean.MacroM (Lean.TSyntax `term) :=
-      `((Yaml.YVal.field y $(Lean.quote (toString f.getId)) >>= fromYaml))
-    let some f0 := fs[0]? | Lean.Macro.throwError "yaml_container needs a field"
-    let mut acc ← `($mk <$> $(← get f0))
-    for f in fs[1:] do
-      acc ← `($acc <*> $(← get f))
-    `(instance : FromYaml $n where fromYaml := fun y => $acc)
-
 ssz_container SingleFieldTestStruct where
   A : UInt8
 

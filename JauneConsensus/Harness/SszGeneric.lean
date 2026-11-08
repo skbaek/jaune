@@ -90,6 +90,50 @@ def fromSszHex {α : Type} [Ssz α] (y : YVal) : Res α := do
 instance {n : Nat} : FromYaml (Bitvector n) := ⟨fromSszHex⟩
 instance {n : Nat} : FromYaml (Bitlist n) := ⟨fromSszHex⟩
 
+/-- Reading one container field from a mapping. A fork-gated field that is absent at the
+case's fork must be absent from the mapping. -/
+class FromYamlField (α : Type) where
+  readField : YVal → String → Res α
+
+instance (priority := low) {α : Type} [FromYaml α] : FromYamlField α where
+  readField y k := y.field k >>= fromYaml
+
+instance instFromYamlFieldGated {α : Type} [h : FromYamlField α] :
+    {c : Bool} → FromYamlField (Gated c α)
+  | true => h
+  | false => ⟨fun y k => if (y.get? k).isSome then throw (.shape s!"field {k} present before its fork") else pure ()⟩
+
+/-- Every key of the mapping names a field (absent gated fields are checked per field). -/
+def checkFieldKeys (y : YVal) (known : List String) : Res Unit :=
+  match y with
+  | .map kvs =>
+    if kvs.all fun kv => known.contains kv.1 then pure () else throw (.shape "unknown field in mapping")
+  | _ => throw (.shape "expected a mapping")
+
+/-- `yaml_container Name (P : Preset) ... [f₁, f₂, ...]`: read a container from a mapping by
+field name. -/
+syntax "yaml_container " ident ("(" ident " : " term ")")* " [" ident,+ "]" : command
+
+macro_rules
+  | `(yaml_container $n:ident $[($ps:ident : $pts:term)]* [$fs:ident,*]) => do
+    let fs := fs.getElems
+    let get (f : Lean.Ident) : Lean.MacroM (Lean.TSyntax `term) :=
+      `((FromYamlField.readField y $(Lean.quote (toString f.getId))))
+    let some f0 := fs[0]? | Lean.Macro.throwError "yaml_container needs a field"
+    let ps : Array Lean.Ident := ps.map fun p => ⟨p.raw⟩
+    let psT : Array Lean.Term := ps.map fun p => ⟨p.raw⟩
+    let ty ← `($n $psT*)
+    -- Fields are bound by name (structure-instance notation), never by position, so the
+    -- reader cannot silently agree with a container whose field order is wrong.
+    let vs : Array Lean.Ident := fs.map fun f => Lean.mkIdent (.mkSimple ("v_" ++ toString f.getId))
+    let build ← `(fun $vs* => ({ $[$fs:ident := $vs],* } : $ty))
+    let mut acc ← `($build <$> $(← get f0))
+    for f in fs[1:] do
+      acc ← `($acc <*> $(← get f))
+    let known := fs.map fun f => Lean.quote (k := `term) (toString f.getId)
+    `(instance $[($ps : $pts)]* : FromYaml $ty where
+        fromYaml := fun y => checkFieldKeys y [$known,*] *> $acc)
+
 /-- Why a case failed. -/
 inductive CaseFail where
   | snappy (e : Snappy.Error)
