@@ -14,10 +14,11 @@ class HygieneAttributes(unittest.TestCase):
         self.scratch = tempfile.TemporaryDirectory(prefix='jaune-hygiene-')
         self.addCleanup(self.scratch.cleanup)
         self.root = Path(self.scratch.name)
-        for name in ('Jaune', 'Examples', 'scripts/consumer'):
+        for name in ('Jaune', 'Examples', 'JauneConsensus', 'scripts/consumer'):
             (self.root / name).mkdir(parents=True)
         for name in ('Jaune.lean', 'Examples.lean', 'MemoryProbe.lean',
-                     'scripts/consumer/Consumer.lean'):
+                     'scripts/consumer/Consumer.lean', 'JauneConsensus.lean',
+                     'SszGenericMain.lean'):
             (self.root / name).write_text('')
         shutil.copyfile(GATE, self.root / 'scripts/check-hygiene.sh')
 
@@ -26,6 +27,14 @@ class HygieneAttributes(unittest.TestCase):
         (self.root / 'scripts/hygiene-allow.txt').write_text(allow)
         return subprocess.run(['bash', 'scripts/check-hygiene.sh'],
                               cwd=self.root, capture_output=True, text=True)
+
+    def test_consensus_tree_is_scanned(self):
+        (self.root / 'scripts/hygiene-allow.txt').write_text('')
+        (self.root / 'JauneConsensus/Subject.lean').write_text('theorem t : False := sorry\n')
+        result = subprocess.run(['bash', 'scripts/check-hygiene.sh'],
+                                cwd=self.root, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn('JauneConsensus/Subject.lean', result.stdout)
 
     def test_direct_attribute_commands_are_visible(self):
         for text in ('attribute [csimp] replacement',

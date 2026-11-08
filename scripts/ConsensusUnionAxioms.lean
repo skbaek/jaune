@@ -1,0 +1,18 @@
+import AxiomAudit
+import JauneConsensus
+
+/-!
+# Whole-library axiom union for `JauneConsensus`
+
+The consensus layer (goal `jaune-consensus-electra-fulu-v1`) is a second library root outside
+`Jaune/`, so `JauneUnionAxioms` (rooted at modules named `Jaune` or `Jaune.…`; `Name` prefixes
+are compared by component, so `JauneConsensus` is not among them) does not reach it, and Blanc's
+`jaune/Assurance` never builds it. This module audits it the same way: one walk over every
+kernel constant recorded by every imported module named `JauneConsensus` or
+`JauneConsensus.…`. Elaboration fails if the union contains an axiom outside the standard
+`propext, Classical.choice, Quot.sound`, if the population is empty, or if the walk reaches an
+absent constant. `scripts/check-assurance-manifest.py` checks that this module's imports cover
+every source module under `JauneConsensus/`.
+-/
+
+#union_axioms_of_modules JauneConsensus

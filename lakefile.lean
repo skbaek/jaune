@@ -45,3 +45,24 @@ Exact axiom expectations for the canonical execution surface
 lean_lib «Assurance» where
   srcDir := "scripts"
   roots := #[`AxiomAudit, `ExecutionAxioms, `JauneUnionAxioms, `UnionAxiomsControls, `UnionAxiomsFixture.Good, `UnionAxiomsFixture.Bad, `UnionAxiomsFixture.Dep, `UnionAxiomsFixture.ViaDep]
+
+/--
+Consensus layer (goal `jaune-consensus-electra-fulu-v1`): an executable Electra and Fulu
+beacon-chain specification. It lives outside `Jaune/` so that Blanc, whose build needs only
+`jaune/Assurance`, does not build it; `JauneUnionAxioms` covers `Jaune/` only.
+-/
+@[default_target]
+lean_lib «JauneConsensus» where
+
+/-- Minimal `ssz_generic` runner (strict all-PASS, count-checked against the O0 inventory). -/
+lean_exe «jaune-consensus-ssz-generic» where
+  root := `SszGenericMain
+
+/--
+Whole-library axiom union for the consensus layer (`scripts/ConsensusUnionAxioms.lean`).
+Separate from `Assurance`, which Blanc builds in full, so Blanc's build does not grow.
+-/
+@[default_target]
+lean_lib «ConsensusAssurance» where
+  srcDir := "scripts"
+  roots := #[`ConsensusUnionAxioms]
