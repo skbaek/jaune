@@ -1,4 +1,5 @@
 import JauneConsensus.Harness.Runner
+import JauneConsensus.Crypto.Sha256Pair
 
 /-!
 # `jaune-consensus`: the consensus conformance runner
@@ -131,8 +132,44 @@ def cmdForkRules (n : String) : IO UInt32 := do
     IO.println s!"jaune-consensus: {e}"
     pure 1
 
+/-- `--bench-hash-pair N`: time `N` pair hashes three ways (Jaune's `Bytes.sha256` on the
+64-byte list, `hashPairKernel`, `hashPair`) over the same pseudo-random inputs, and check that
+all three agree on every input (a differential run beside `hashPair_eq`). -/
+def cmdBenchHashPair (n : Nat) : IO UInt32 := do
+  let inputs : Array (Jaune.B256 × Jaune.B256) := (Array.range n).map fun k =>
+    (Jaune.Nat.toB256 (k * 0x9e3779b97f4a7c15f39cc0605cedc834 + k ^ 5 + 17),
+     Jaune.Nat.toB256 ((k + 7) * 0xc2b2ae3d27d4eb4f165667b19e3779f9 + k ^ 3))
+  let time (name : String) (f : Jaune.B256 → Jaune.B256 → Jaune.B256) :
+      IO (Array (List UInt8)) := do
+    let t0 ← IO.monoNanosNow
+    let mut acc : UInt8 := 0
+    let mut outs := #[]
+    for (a, b) in inputs do
+      let h := (f a b).toBytes
+      acc := acc ^^^ h.headD 0
+      outs := outs.push h
+    let t1 ← IO.monoNanosNow
+    let per := (t1 - t0).toFloat / n.toFloat / 1000.0
+    IO.println s!"{name}: {n} pairs in {(t1 - t0) / 1000000} ms, {per} us/pair (checksum {acc})"
+    pure outs
+  let _ ← time "baseline (output bytes only, no hash)" (fun a b => if a.toBytes.length == 0 then b else a)
+  let _ ← time "input list a.toBytes ++ b.toBytes only" (fun a b => if (a.toBytes ++ b.toBytes).length == 0 then b else a)
+  let r0 ← time "Bytes.sha256 (a ++ b)" (fun a b => Jaune.Bytes.sha256 (a.toBytes ++ b.toBytes))
+  let r1 ← time "hashPairKernel" JauneConsensus.Crypto.hashPairKernel
+  let r2 ← time "hashPair" JauneConsensus.Crypto.hashPair
+  if r0 == r1 && r1 == r2 then
+    IO.println s!"bench-hash-pair: all three agree on {n} inputs"
+    pure 0
+  else
+    IO.println "bench-hash-pair: DISAGREEMENT"
+    pure 1
+
 def main (args : List String) : IO UInt32 := do
   match args with
+  | ["--bench-hash-pair", k] =>
+    match k.toNat? with
+    | some n => return (← cmdBenchHashPair n)
+    | none => IO.eprintln usage; return 2
   | ["--forks"] => return (← cmdForks)
   | ["--fork-rules", n] => return (← cmdForkRules n)
   | _ => pure ()

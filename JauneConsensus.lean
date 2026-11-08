@@ -7,6 +7,7 @@ import JauneConsensus.UInt
 import JauneConsensus.Helpers
 import JauneConsensus.Shuffle
 import JauneConsensus.Fork
+import JauneConsensus.Crypto.Sha256Pair
 import JauneConsensus.Harness.Snappy
 import JauneConsensus.Harness.Yaml
 import JauneConsensus.Harness.ConfigOverride
