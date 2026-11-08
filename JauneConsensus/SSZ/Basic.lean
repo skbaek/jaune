@@ -133,27 +133,6 @@ instance {n : Nat} : Ssz (UIntN n) where
     if h : bs.length = n then pure ⟨leNat bs, h ▸ leNat_lt bs⟩ else decodeErr (.length n bs.length)
   hashTreeRoot x := chunkOf (leBytes n x.toNat)
 
-/-- `Bytes.toB256.go` over the bytes `[i, i + n)` of a scope, read by index (no list). -/
-def b256GoAt (bs : Scope) : Nat → Nat → UInt64 → UInt64 → UInt64 → UInt64 → B256
-  | 0, _, l3, l2, l1, l0 => ⟨⟨l3, l2⟩, ⟨l1, l0⟩⟩
-  | n + 1, i, l3, l2, l1, l0 =>
-    match bs[i]? with
-    | some b => b256GoAt bs n (i + 1) ((l3 <<< 8) ||| (l2 >>> 56)) ((l2 <<< 8) ||| (l1 >>> 56))
-        ((l1 <<< 8) ||| (l0 >>> 56)) ((l0 <<< 8) ||| b.toUInt64)
-    | none => ⟨⟨l3, l2⟩, ⟨l1, l0⟩⟩
-
-theorem b256GoAt_eq (bs : Scope) : ∀ (n i : Nat) (l3 l2 l1 l0 : UInt64),
-    b256GoAt bs n i l3 l2 l1 l0 = Bytes.toB256.go l3 l2 l1 l0 ((bs.toList.drop i).take n)
-  | 0, _, _, _, _, _ => by simp [b256GoAt, Bytes.toB256.go]; rfl
-  | n + 1, i, l3, l2, l1, l0 => by
-    unfold b256GoAt
-    by_cases h : i < bs.size
-    · rw [Array.getElem?_eq_getElem h, List.drop_eq_getElem_cons (by simpa using h)]
-      simp only [List.take_succ_cons, Bytes.toB256.go, Array.getElem_toList]
-      exact b256GoAt_eq bs n (i + 1) _ _ _ _
-    · rw [Array.getElem?_eq_none (by omega), List.drop_eq_nil_of_le (by simpa using h)]
-      simp [Bytes.toB256.go]; rfl
-
 theorem slice_eq_take_drop (bs : Scope) (a c : Nat) :
     slice bs a c = (bs.toList.drop a).take (c - a) := by
   simp [slice, Array.toList_extract, List.extract]

@@ -1,4 +1,5 @@
 import JauneConsensus.Error
+import Jaune.Basic
 
 /-!
 # Checked unsigned integers
@@ -111,7 +112,7 @@ theorem add?_ok_iff {a b : U64} {site : String} :
     · assumption
     · cases hx
   · intro h
-    exact ⟨⟨(a.toNat + b.toNat).toUInt64⟩, by simp [h]; rfl⟩
+    exact ⟨⟨(a.toNat + b.toNat).toUInt64⟩, by simp only [add?, ofNat?, if_pos h]; rfl⟩
 
 end U64
 
@@ -181,5 +182,34 @@ abbrev U32 := UIntN 4
 abbrev U128 := UIntN 16
 /-- `uint256`. -/
 abbrev U256 := UIntN 32
+
+/-! ## Reading a word from a byte array
+
+The SSZ fast path for `Bytes32` (`SSZ/Basic.lean`) reads its 32 bytes by index. The pass is
+Jaune's word codec `Bytes.toB256.go` (`Jaune/Basic.lean`), which works on raw `UInt64` limbs,
+so it lives here, beside the other raw-word code. -/
+
+open Jaune
+
+/-- `Bytes.toB256.go` over the bytes `[i, i + n)` of a scope, read by index (no list). -/
+def b256GoAt (bs : Array UInt8) : Nat → Nat → UInt64 → UInt64 → UInt64 → UInt64 → B256
+  | 0, _, l3, l2, l1, l0 => ⟨⟨l3, l2⟩, ⟨l1, l0⟩⟩
+  | n + 1, i, l3, l2, l1, l0 =>
+    match bs[i]? with
+    | some b => b256GoAt bs n (i + 1) ((l3 <<< 8) ||| (l2 >>> 56)) ((l2 <<< 8) ||| (l1 >>> 56))
+        ((l1 <<< 8) ||| (l0 >>> 56)) ((l0 <<< 8) ||| b.toUInt64)
+    | none => ⟨⟨l3, l2⟩, ⟨l1, l0⟩⟩
+
+theorem b256GoAt_eq (bs : Array UInt8) : ∀ (n i : Nat) (l3 l2 l1 l0 : UInt64),
+    b256GoAt bs n i l3 l2 l1 l0 = Bytes.toB256.go l3 l2 l1 l0 ((bs.toList.drop i).take n)
+  | 0, _, _, _, _, _ => by simp [b256GoAt, Bytes.toB256.go]; rfl
+  | n + 1, i, l3, l2, l1, l0 => by
+    unfold b256GoAt
+    by_cases h : i < bs.size
+    · rw [Array.getElem?_eq_getElem h, List.drop_eq_getElem_cons (by simpa using h)]
+      simp only [List.take_succ_cons, Bytes.toB256.go, Array.getElem_toList]
+      exact b256GoAt_eq bs n (i + 1) _ _ _ _
+    · rw [Array.getElem?_eq_none (by omega), List.drop_eq_nil_of_le (by simpa using h)]
+      simp [Bytes.toB256.go]; rfl
 
 end JauneConsensus
