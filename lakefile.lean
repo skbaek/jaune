@@ -68,3 +68,13 @@ Separate from `Assurance`, which Blanc builds in full, so Blanc's build does not
 lean_lib «ConsensusAssurance» where
   srcDir := "scripts"
   roots := #[`ConsensusUnionAxioms]
+
+/-- Timing probe for the consensus BLS primitives (pairing, map-to-curve, hash-to-curve).
+Not a default target. -/
+lean_exe «jaune-consensus-bls-bench» where
+  root := `ConsensusBLSBench
+
+/-- Local runner for the general-preset `kzg` vectors (EIP-4844 and EIP-7594), until it is
+folded into `jaune-consensus`. Not a default target. -/
+lean_exe «jaune-consensus-kzg-vectors» where
+  root := `ConsensusKZGVectors

@@ -3,6 +3,7 @@ import JauneConsensus.Harness.Snappy
 import JauneConsensus.Shuffle
 import JauneConsensus.Harness.ConfigOverride
 import JauneConsensus.Harness.SszGenericTypes
+import JauneConsensus.Crypto.Boundary
 
 /-!
 # Case handlers and strict verdicts (conformance harness)
@@ -74,18 +75,61 @@ def sszGenericCase (c : Case) : IO Verdict := do
   let r : Except CaseFail Unit ←
     if c.key.suite == "valid" then do
       let value ← readYaml c "value.yaml"
-      let meta ← readYaml c "meta.yaml"
+      let metaY ← readYaml c "meta.yaml"
       pure do
         let value ← value.mapError CaseFail.yaml
-        let meta ← meta.mapError CaseFail.yaml
-        meta.expectKeys ["root"] |>.mapError CaseFail.yaml
-        let rootBytes ← ((meta.field "root").bind YVal.asHex).mapError CaseFail.yaml
+        let metaV ← metaY.mapError CaseFail.yaml
+        metaV.expectKeys ["root"] |>.mapError CaseFail.yaml
+        let rootBytes ← ((metaV.field "root").bind YVal.asHex).mapError CaseFail.yaml
         if rootBytes.length != 32 then throw (CaseFail.yaml "root is not 32 bytes")
         checks.valid ser value (Bytes.toB256 rootBytes)
     else pure (checks.invalid ser)
   match r with
   | .ok () => pure .pass
   | .error e => pure (.fail e.render)
+
+/-- `bls/eth_aggregate_pubkeys` (`tests/formats/bls/eth_aggregate_pubkeys.md`): `input` is the
+list of pubkeys; `output` is the aggregate, or `null` when pyspec raises. -/
+def blsAggregatePubkeys (c : Case) : IO Verdict := do
+  if c.files != ["data.yaml"] then return .fail s!"unexpected files {c.files}"
+  let doc ← readYaml c "data.yaml"
+  let r : Except String Verdict := do
+    let v ← doc
+    v.expectKeys ["input", "output"]
+    let pks ← (← (← v.field "input").asSeq).mapM YVal.asHex
+    let out ← v.field "output"
+    let got := ethAggregatePubkeysM pks
+    if out.isNull then
+      match got with
+      | .error _ => pure .pass
+      | .ok b => pure (.fail s!"expected a rejection, got {b.length} bytes")
+    else
+      let want ← out.asHex
+      match got with
+      | .ok b => pure (if b == want then .pass else .fail "aggregate differs")
+      | .error e => pure (.fail s!"rejected: {repr e}")
+  match r with
+  | .ok v => pure v
+  | .error e => pure (.fail e)
+
+/-- `bls/eth_fast_aggregate_verify` (`tests/formats/bls/eth_fast_aggregate_verify.md`). -/
+def blsFastAggregateVerify (c : Case) : IO Verdict := do
+  if c.files != ["data.yaml"] then return .fail s!"unexpected files {c.files}"
+  let doc ← readYaml c "data.yaml"
+  let r : Except String Verdict := do
+    let v ← doc
+    v.expectKeys ["input", "output"]
+    let i ← v.field "input"
+    i.expectKeys ["pubkeys", "message", "signature"]
+    let pks ← (← (← i.field "pubkeys").asSeq).mapM YVal.asHex
+    let msg ← (← i.field "message").asHex
+    let sig ← (← i.field "signature").asHex
+    let want ← (← v.field "output").asBool
+    let got := ethFastAggregateVerify pks msg sig
+    pure (if got == want then .pass else .fail s!"verify gave {got}, expected {want}")
+  match r with
+  | .ok v => pure v
+  | .error e => pure (.fail e)
 
 /-- The configuration a case runs under: the base `Config` of its preset, with the case's
 `config.yaml` applied when it has one (`Config.applyOverrides`). -/
@@ -112,6 +156,8 @@ def handlerFor (runner handler : String) : Option (Case → IO Verdict) :=
   match runner, handler with
   | "shuffling", "core" => some shufflingCore
   | "ssz_generic", _ => some sszGenericCase
+  | "bls", "eth_aggregate_pubkeys" => some blsAggregatePubkeys
+  | "bls", "eth_fast_aggregate_verify" => some blsFastAggregateVerify
   | _, _ => none
 
 def runCase (c : Case) : IO Verdict := do

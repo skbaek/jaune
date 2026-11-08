@@ -124,7 +124,7 @@ trap cleanup EXIT
 # The consensus layer (JauneConsensus tree, its root, its ssz_generic runner and
 # its separate ConsensusAssurance union module) is a default target too.
 SRC_DIRS="Jaune Examples JauneConsensus"
-ROOT_MODULES="Jaune.lean Examples.lean Main.lean MemoryProbe.lean TraceMain.lean JauneConsensus.lean ConsensusMain.lean scripts/ConsensusUnionAxioms.lean"
+ROOT_MODULES="Jaune.lean Examples.lean Main.lean MemoryProbe.lean TraceMain.lean JauneConsensus.lean ConsensusMain.lean ConsensusBLSBench.lean ConsensusKZGVectors.lean scripts/ConsensusUnionAxioms.lean"
 BASELINE="$SCRIPT_DIR/baseline-elab.txt"
 REPORT="$SCRIPT_DIR/report-elab.txt"
 

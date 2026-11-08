@@ -30,11 +30,11 @@ Ties checked here by `decide` (each fails to elaborate if either side's data mov
 
 * the pairing and its inverse agree (`CFork.mem_executionForks_iff`);
 * each execution fork's blob-gas ceiling is the consensus layer's blob count times
-  `GAS_PER_BLOB = 2^17` (`ForkData.blobs_tie`);
+  `GAS_PER_BLOB = 2^17` (`CForkData.blobs_tie`);
 * the request types: consensus `WITHDRAWAL_REQUEST_TYPE` and `CONSOLIDATION_REQUEST_TYPE` are
   exactly the system-contract request types in the execution rule data, in order, and
   `DEPOSIT_REQUEST_TYPE` is Jaune's receipt-derived `depositRequestType`
-  (`ForkData.requestTypes_tie`);
+  (`CForkData.requestTypes_tie`);
 * `get_execution_requests_list` (`specs/electra/beacon-chain.md`) returns `Sequence[bytes]`,
   modelled as `ExecutionRequestsList := List Bytes`, which is definitionally the input type of
   Jaune's `computeRequestsHash` (EIP-7685), so a later seam goal can state their equality with no
@@ -127,7 +127,7 @@ def ExecutionRequestsList.requestsHash (l : ExecutionRequestsList) : B256 :=
   computeRequestsHash l
 
 /-- What a resolved consensus fork carries for the cross-layer ties. -/
-structure ForkData where
+structure CForkData where
   fork : CFork
   /-- Each paired execution fork with the consensus layer's maximum blobs per block while it is
   active (`MAX_BLOBS_PER_BLOCK`, `MAX_BLOBS_PER_BLOCK_ELECTRA`, or a `BLOB_SCHEDULE` entry of
@@ -141,15 +141,15 @@ structure ForkData where
 -- The blob counts are read from the generated mainnet configuration (`Config.mainnet`, from
 -- `configs/mainnet.yaml`), so the ties below follow the pinned config, not a restatement.
 
-def denebData : ForkData :=
+def denebData : CForkData :=
   -- `MAX_BLOBS_PER_BLOCK`; Deneb has no execution requests.
   { fork := .deneb, blobs := [(.cancun, Config.mainnet.MAX_BLOBS_PER_BLOCK)], requestTypes := [] }
 
-def electraData : ForkData :=
+def electraData : CForkData :=
   { fork := .electra, blobs := [(.prague, Config.mainnet.MAX_BLOBS_PER_BLOCK_ELECTRA)],
     requestTypes := [depositRequestType, withdrawalRequestType, consolidationRequestType] }
 
-def fuluData : ForkData :=
+def fuluData : CForkData :=
   -- `get_blob_parameters`: Electra's count before the first `BLOB_SCHEDULE` entry, then each
   -- entry in turn; the mainnet schedule's two entries are BPO1 and BPO2.
   { fork := .fulu,
@@ -158,7 +158,7 @@ def fuluData : ForkData :=
     requestTypes := [depositRequestType, withdrawalRequestType, consolidationRequestType] }
 
 /-- The single resolver. Gloas is declared and refused: `none`. -/
-def CFork.rules? : CFork → Option ForkData
+def CFork.rules? : CFork → Option CForkData
   | .deneb => some denebData
   | .electra => some electraData
   | .fulu => some fuluData
@@ -180,7 +180,7 @@ instance : ToString ForkRefusal := ⟨ForkRefusal.render⟩
 
 /-- Resolve a fork name for a run: the name must be a `CFork` whose rules resolve. Gloas, the
 `eip7805` feature fork and every unknown name are refused; nothing is ever run as Fulu. -/
-def CFork.resolve (n : String) : Except ForkRefusal ForkData :=
+def CFork.resolve (n : String) : Except ForkRefusal CForkData :=
   match CFork.ofName? n with
   | none => .error (.unknown n)
   | some c =>
@@ -188,26 +188,26 @@ def CFork.resolve (n : String) : Except ForkRefusal ForkData :=
     | some d => .ok d
     | none => .error (.unimplemented c)
 
-theorem CFork.rules?_fork (c : CFork) (d : ForkData) (h : c.rules? = some d) : d.fork = c := by
+theorem CFork.rules?_fork (c : CFork) (d : CForkData) (h : c.rules? = some d) : d.fork = c := by
   cases c <;> simp [CFork.rules?] at h <;> subst h <;> rfl
 
 theorem CFork.rules?_gloas : CFork.gloas.rules? = none := rfl
 
 /-- The blob list of a resolved fork names exactly its paired execution forks. -/
-theorem ForkData.blobs_forks (c : CFork) (d : ForkData) (h : c.rules? = some d) :
+theorem CForkData.blobs_forks (c : CFork) (d : CForkData) (h : c.rules? = some d) :
     d.blobs.map (·.1) = c.executionForks := by
   cases c <;> simp [CFork.rules?] at h <;> subst h <;> rfl
 
 /-- Blob tie: each paired execution fork's `MAX_BLOB_GAS_PER_BLOCK` (Jaune's rule data) is the
 consensus maximum blob count times `GAS_PER_BLOB`. -/
-theorem ForkData.blobs_tie (c : CFork) (d : ForkData) (h : c.rules? = some d) :
+theorem CForkData.blobs_tie (c : CFork) (d : CForkData) (h : c.rules? = some d) :
     ∀ p ∈ d.blobs, p.1.ruleSet.blob.max = p.2 * gasPerBlob := by
   cases c <;> simp [CFork.rules?] at h <;> subst h <;> decide
 
 /-- Request-type tie: the non-deposit request types are exactly the system-contract request
 types of every paired execution rule set, in order, and the deposit type is Jaune's
 receipt-derived `depositRequestType`. -/
-theorem ForkData.requestTypes_tie (c : CFork) (d : ForkData) (h : c.rules? = some d)
+theorem CForkData.requestTypes_tie (c : CFork) (d : CForkData) (h : c.rules? = some d)
     (hne : d.requestTypes ≠ []) :
     d.requestTypes.head? = some depositRequestType ∧
     [depositRequestType] = Jaune.depositRequestType ∧

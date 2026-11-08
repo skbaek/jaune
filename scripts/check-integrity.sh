@@ -183,6 +183,8 @@ consensus_spec_files = sorted(
     if f.startswith("JauneConsensus/")
     and f != "JauneConsensus/UInt.lean"
     and not f.startswith("JauneConsensus/Harness/"))
+# R5 targets consensus uint64 arithmetic, so it also exempts JauneConsensus/Crypto/
+# (byte- and word-level BLS, KZG and SHA-256 primitives; master decision).
 # R4 (typed error carriers) covers the consensus spec layer except the crypto
 # primitives, whose `Except String` failures are mapped to `Reject.crypto` where
 # the spec layer calls them. The harness and the runner executables (vector
@@ -261,7 +263,7 @@ RULES = [
     # `UInt64`: it is reachable only as `U64.u64` or by naming the type, and its
     # wrapping `+ - * / %`, shifts and `OfNat` literals live only in
     # JauneConsensus/UInt.lean, behind checked operations. No allowlist rows.
-    ("R5", consensus_spec_files,
+    ("R5", [f for f in consensus_spec_files if not f.startswith("JauneConsensus/Crypto/")],
      re.compile(r'(?<![A-Za-z0-9_])(getD|getLastD|headD|getElem\?D|UInt64|toUInt64)(?![A-Za-z0-9_])'
                 r'|\.u64(?![A-Za-z0-9_])')),
 ]

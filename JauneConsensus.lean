@@ -10,6 +10,21 @@ import JauneConsensus.SSZ.Merkle
 import JauneConsensus.SSZ.Basic
 import JauneConsensus.SSZ.Container
 import JauneConsensus.SSZ.Progressive
+import JauneConsensus.Crypto.HashToCurve
+import JauneConsensus.Crypto.HashToCurveVectors
+import JauneConsensus.Crypto.Codec
+import JauneConsensus.Crypto.BLSSig
+import JauneConsensus.Crypto.CodecVectors
+import JauneConsensus.Crypto.FinalExp
+import JauneConsensus.Crypto.FinalExpVectors
+import JauneConsensus.Crypto.MSM
+import JauneConsensus.Crypto.MSMVectors
+import JauneConsensus.Crypto.TrustedSetup
+import JauneConsensus.Crypto.KZG
+import JauneConsensus.Crypto.KZGCells
+import JauneConsensus.Crypto.KZGVectors
+import JauneConsensus.Crypto.KZGCellsVectors
+import JauneConsensus.Crypto.Boundary
 -- Harness modules (vector readers, discovery, case checks), outside the semantics but built with it.
 import JauneConsensus.Harness.Snappy
 import JauneConsensus.Harness.Yaml

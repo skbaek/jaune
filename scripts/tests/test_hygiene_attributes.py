@@ -18,7 +18,8 @@ class HygieneAttributes(unittest.TestCase):
             (self.root / name).mkdir(parents=True)
         for name in ('Jaune.lean', 'Examples.lean', 'MemoryProbe.lean',
                      'scripts/consumer/Consumer.lean', 'JauneConsensus.lean',
-                     'ConsensusMain.lean'):
+                     'ConsensusMain.lean', 'ConsensusBLSBench.lean',
+                     'ConsensusKZGVectors.lean'):
             (self.root / name).write_text('')
         shutil.copyfile(GATE, self.root / 'scripts/check-hygiene.sh')
 
