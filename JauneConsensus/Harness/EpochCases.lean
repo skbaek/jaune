@@ -48,7 +48,7 @@ def epochStep : String → Option StateStep
   | "randao_mixes_reset" => some (ofCfg processRandaoMixesReset)
   | "historical_summaries_update" => some (ofCfg processHistoricalSummariesUpdate)
   | "participation_flag_updates" => some (ofCfg processParticipationFlagUpdates)
-  | "sync_committee_updates" => some (ofCfg processSyncCommitteeUpdates)
+  | "sync_committee_updates" => some processSyncCommitteeUpdates
   | "proposer_lookahead" => some (ofCfg processProposerLookahead)
   | _ => none
 

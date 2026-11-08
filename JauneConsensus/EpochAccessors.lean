@@ -212,14 +212,17 @@ def getNextSyncCommitteeIndices (state : BeaconState P f) : M (Array ValidatorIn
 
 /-- `get_next_sync_committee(state)` (Altair; Electra's sampling from Electra on): the sampled
 validators' pubkeys and their
-aggregate (`eth_aggregate_pubkeys`, `Crypto/Boundary.lean`). -/
-def getNextSyncCommittee (state : BeaconState P f) : M (SyncCommittee P) := do
+aggregate (`eth_aggregate_pubkeys`, `Crypto/Boundary.lean`). Under the BLS switch
+(`blsActive = false`) `eth_aggregate_pubkeys` is the stubbed `bls.AggregatePKs` and returns
+`STUB_PUBKEY` (`Signing.lean`). -/
+def getNextSyncCommittee (blsActive : Bool) (state : BeaconState P f) : M (SyncCommittee P) := do
   let site := "get_next_sync_committee"
   let indices ← if f.atLeast .electra then getNextSyncCommitteeIndices state
     else getNextSyncCommitteeIndicesAltair state
   let pubkeys ← indices.mapM fun i => do
     pure (← state.validators.get i.toNat site).pubkey
-  let agg ← ethAggregatePubkeysM (pubkeys.toList.map (·.toArray.toList))
+  let agg ← if blsActive then ethAggregatePubkeysM (pubkeys.toList.map (·.toArray.toList))
+    else pure STUB_PUBKEY
   let aggregate : BLSPubkey ← SszVector.ofArray agg.toArray site
   pure { pubkeys := ← SszVector.ofArray pubkeys site, aggregate_pubkey := aggregate }
 

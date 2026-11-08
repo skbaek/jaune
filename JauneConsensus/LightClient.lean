@@ -120,8 +120,13 @@ def forkDigestsOf (cfg : Config) (f : CFork) (gvr : Root) : M (List Bytes) := do
     else [start]
   epochs.mapM fun e => do computeForkDigest cfg f gvr (← U64.ofNat? e "fork digest epoch")
 
+/-- `floorlog2(x)` as pyspec computes it (`pysetup/constants.py`): it raises for `x < 1`. -/
+def floorlog2? (x : Nat) : M Nat :=
+  if x < 1 then throw (.assert "floorlog2 accepts only positive values") else pure (floorlog2 x)
+
 /-- `get_subtree_index(generalized_index)`. -/
-def getSubtreeIndex (g : Nat) : M U64 := U64.ofNat? (g % 2 ^ floorlog2 g) "get_subtree_index"
+def getSubtreeIndex (g : Nat) : M U64 := do
+  U64.ofNat? (g % 2 ^ (← floorlog2? g)) "get_subtree_index"
 
 /-- `get_lc_execution_root` (Electra). -/
 def getLcExecutionRoot (cfg : Config) (header : LightClientHeader P) : M Root := do
@@ -172,7 +177,7 @@ def nextSyncCommitteeGindexAtSlot (cfg : Config) (P : Preset) (slot : Slot) : M 
 /-- `is_valid_normalized_merkle_branch` (Altair). -/
 def isValidNormalizedMerkleBranch (leaf : Bytes32) (branch : List Bytes32) (gindex : Nat)
     (root : Root) : M Bool := do
-  let depth := floorlog2 gindex
+  let depth ← floorlog2? gindex
   let index ← getSubtreeIndex gindex
   let numExtra := branch.length - depth
   if (branch.take numExtra).any (· != zeroRoot) then return false
@@ -241,9 +246,10 @@ def validateLightClientUpdate (ctx : Ctx) (store : LightClientStore P f) (update
   let storePeriod ← computeSyncCommitteePeriodAtSlot P store.finalized_header.beacon.slot
   let sigPeriod ← computeSyncCommitteePeriodAtSlot P update.signature_slot
   if isNextSyncCommitteeKnown store then
-    -- `a == b or a == b + 1`: the sum is formed only when the first comparison fails
-    if sigPeriod != storePeriod then
-      require (sigPeriod == (← U64.add? storePeriod U64.one site)) s!"{site}: signature period"
+    -- `update_signature_period in (store_period, store_period + 1)`: the tuple is built first,
+    -- so `store_period + 1` is formed (and raises at the top of `uint64`) unconditionally
+    let nextPeriod ← U64.add? storePeriod U64.one site
+    require (sigPeriod == storePeriod || sigPeriod == nextPeriod) s!"{site}: signature period"
   else
     require (sigPeriod == storePeriod) s!"{site}: signature period"
   let attestedPeriod ← computeSyncCommitteePeriodAtSlot P attestedSlot
@@ -380,5 +386,33 @@ def processLightClientUpdate (ctx : Ctx) (store : LightClientStore P f) (update 
     store ← applyLightClientUpdate store update
     store := { store with best_valid_update := none }
   pure store
+
+/-- `process_light_client_finality_update` (Altair). -/
+def processLightClientFinalityUpdate (ctx : Ctx) (store : LightClientStore P f)
+    (finalityUpdate : LightClientFinalityUpdate P f) (currentSlot : Slot)
+    (genesisValidatorsRoot : Root) : M (LightClientStore P f) := do
+  let update : LightClientUpdate P f :=
+    { attested_header := finalityUpdate.attested_header,
+      next_sync_committee := defaultSyncCommittee,
+      next_sync_committee_branch := zeroRootVec _,
+      finalized_header := finalityUpdate.finalized_header,
+      finality_branch := finalityUpdate.finality_branch,
+      sync_aggregate := finalityUpdate.sync_aggregate,
+      signature_slot := finalityUpdate.signature_slot }
+  processLightClientUpdate ctx store update currentSlot genesisValidatorsRoot
+
+/-- `process_light_client_optimistic_update` (Altair). -/
+def processLightClientOptimisticUpdate (ctx : Ctx) (store : LightClientStore P f)
+    (optimisticUpdate : LightClientOptimisticUpdate P) (currentSlot : Slot)
+    (genesisValidatorsRoot : Root) : M (LightClientStore P f) := do
+  let update : LightClientUpdate P f :=
+    { attested_header := optimisticUpdate.attested_header,
+      next_sync_committee := defaultSyncCommittee,
+      next_sync_committee_branch := zeroRootVec _,
+      finalized_header := defaultLightClientHeader,
+      finality_branch := zeroRootVec _,
+      sync_aggregate := optimisticUpdate.sync_aggregate,
+      signature_slot := optimisticUpdate.signature_slot }
+  processLightClientUpdate ctx store update currentSlot genesisValidatorsRoot
 
 end JauneConsensus

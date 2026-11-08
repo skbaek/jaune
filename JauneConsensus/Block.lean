@@ -428,10 +428,6 @@ def processExecutionPayload (ctx : Ctx) (state : BeaconState P f) (body : Beacon
 
 /-! ## Sync aggregate -/
 
-/-- pyspec's `STUB_PUBKEY` (`b"\x22" * 48`, `eth2spec/utils/bls.py`): what `bls.AggregatePKs`
-returns when the BLS switch is off. -/
-def STUB_PUBKEY : Bytes := List.replicate 48 0x22
-
 /-- `process_sync_aggregate` (Altair). The participant key is computed only when the signature
 is verified (`bls_active`); a key that does not decode fails the verification. -/
 def processSyncAggregate (ctx : Ctx) (state : BeaconState P f) (sa : SyncAggregate P) :

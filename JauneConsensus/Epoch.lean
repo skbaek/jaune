@@ -394,12 +394,12 @@ def processParticipationFlagUpdates (_cfg : Config) (state : BeaconState P f) :
       ← SszList.ofArray (Array.replicate state.validators.toArray.size UIntN.zero) site }
 
 /-- `process_sync_committee_updates` (`specs/altair/beacon-chain.md`). -/
-def processSyncCommitteeUpdates (_cfg : Config) (state : BeaconState P f) :
+def processSyncCommitteeUpdates (ctx : Ctx) (state : BeaconState P f) :
     M (BeaconState P f) := do
   let site := "process_sync_committee_updates"
   let nextEpoch ← (← getCurrentEpoch state).add? U64.one site
   if (← nextEpoch.mod? (← c64 P.EPOCHS_PER_SYNC_COMMITTEE_PERIOD) site).toNat == 0 then
-    let next ← getNextSyncCommittee state
+    let next ← getNextSyncCommittee ctx.blsActive state
     pure { state with current_sync_committee := state.next_sync_committee,
                       next_sync_committee := next }
   else pure state
@@ -445,7 +445,7 @@ def processEpoch (ctx : Ctx) (state : BeaconState P f) : M (BeaconState P f) := 
   let state ← processRandaoMixesReset cfg state
   let state ← processHistoricalSummariesUpdate cfg state
   let state ← processParticipationFlagUpdates cfg state
-  let state ← processSyncCommitteeUpdates cfg state
+  let state ← processSyncCommitteeUpdates ctx state
   if f.atLeast .fulu then processProposerLookahead cfg state else pure state
 
 end JauneConsensus
