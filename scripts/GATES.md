@@ -517,6 +517,41 @@ owes. Blanc pins Jaune by commit, so nothing in Blanc moves until someone moves
 the pin: a red Jaune tree cannot silently break Blanc, and a green Blanc does
 not vouch for Jaune.
 
+### The consensus lane (goal `jaune-consensus-electra-fulu-v1`, in progress)
+
+The consensus conformance runner is the `jaune-consensus` executable (`ConsensusMain.lean`,
+harness under `JauneConsensus/Harness/`). It reads the extracted `ethereum/consensus-specs`
+`v1.6.1` vectors (default `$HOME/consensus-spec-tests-v1.6.1/extracted`, override with
+`--vectors`) and trusts them only as far as they match the committed, generated
+`scripts/consensus-vectors.json` and `scripts/consensus/inventory-v1.6.1.json`. Run from the
+repository root after an owned build of `jaune-consensus`. It takes no lock and writes nothing;
+measured peak RSS is under 200 MB.
+
+| gate | proves | scale | time |
+|---|---|---|---|
+| `.lake/build/bin/jaune-consensus run --preset minimal --runner shuffling` / `--preset mainnet` | `compute_shuffled_index` for every index of every case, strict all-PASS, after the tree check below | 300 + 300 cases | 16.1 s / 145.3 s (WSL, 2026-11-09) |
+| `.lake/build/bin/jaune-consensus scan --preset general` / `minimal` / `mainnet` | the tree check over every in-scope suite, then the readers: every `.ssz_snappy` decodes, every `.yaml` is inside the accepted subset, and the 48 `ssz_generic/uints/valid` serializations decode to the little-endian encoding of their `value.yaml` (an independent oracle for the Snappy decoder) | 5,509 / 16,126 / 2,340 cases; 41,591 Snappy and 37,300 YAML files | 17.0 s / 8.8 s / 29.6 s |
+| `.lake/build/bin/jaune-consensus --forks`, `--fork-rules NAME` | the O7 pairing table; `--fork-rules gloas` (and `eip7805`, and any unknown name) exits 1 with a refusal | — | sub-second |
+| `python3 -I scripts/consensus-vector-inventory.py --tarballs DIR --expect scripts/consensus/inventory-v1.6.1.json` | the tarballs match their pinned size and SHA-256, and regenerate the committed inventory exactly (counts and per-suite records) | 3 tarballs, 1.3 GB | 15.6 s (warm page cache) |
+
+**The tree check** runs on every selected suite in every tier (the smoke tier narrows only
+which cases execute): case count against the suite record and the inventory count; SHA-256 of
+the sorted case names; SHA-256 of the sorted `<case>/<file>` paths; the `bls_setting` histogram
+read from each `meta.yaml`; the set of cases with a per-case `config.yaml`; and every file name
+against the runner's known kinds (`runnerFileKinds`, including Fulu fork-choice
+`column_0x<root>.ssz_snappy`). It refuses an empty selection, a suite missing from the tree or
+present without a record, `--fork gloas` (through `CFork.rules?`, which resolves Gloas to
+nothing) and `--fork eip7805`. A `(runner, handler)` with no handler is a FAIL
+(`UNIMPLEMENTED`), never a skip. `--tier smoke` executes the first case of each suite.
+
+Negative controls (run 2026-11-09 in a disposable copy under
+`~/consensus-spec-tests-v1.6.1/negctl/harness-w4`, restored bytes identical to the extracted
+tree): one mutated expected mapping entry fails exactly that case (`index 0: computed 6, expected
+9`, PASS 299 FAIL 1, exit 1); one removed case directory is refused (`299 cases on disk, manifest
+300, inventory 300`); a renamed case at equal count is refused by the names digest; an extra case
+is refused; one flipped `bls_setting` (1 to 2) is refused by the histogram; one removed Fulu
+`column_` file is refused by the file-path digest; an unknown file name is refused by kind.
+
 ### Environment and provenance
 
 | command | purpose |
