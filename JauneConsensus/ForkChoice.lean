@@ -285,10 +285,11 @@ def filterBlockTree (cfg : Config) (store : Store P f) (fuel : Nat) (blockRoot :
   let votingSource ← getVotingSource cfg store blockRoot
   -- The voting source should be either at the same height as the store's justified checkpoint or
   -- not more than two epochs ago
-  let correctJustified ←
-    if store.justified_checkpoint.epoch == GENESIS_EPOCH then pure true
-    else if votingSource.epoch == store.justified_checkpoint.epoch then pure true
-    else pure ((← votingSource.epoch.add? (← c64 2) site) ≥ currentEpoch)
+  let mut correctJustified := true
+  if !(store.justified_checkpoint.epoch == GENESIS_EPOCH) then
+    if !(votingSource.epoch == store.justified_checkpoint.epoch) then
+      let two ← c64 2
+      correctJustified := (← votingSource.epoch.add? two site) ≥ currentEpoch
   let finalizedCheckpointBlock ← getCheckpointBlock store blockRoot store.finalized_checkpoint.epoch
   let correctFinalized :=
     store.finalized_checkpoint.epoch == GENESIS_EPOCH ||
@@ -463,10 +464,11 @@ def shouldOverrideForkchoiceUpdate (ctx : Ctx) (validatorIsConnected : Validator
   let currentTimeOk := headBlock.slot == currentSlot || (proposalSlot == currentSlot && proposingOnTime)
   let singleSlotReorg := parentSlotOk && currentTimeOk
   -- Check the head weight only if the attestations from the head slot have already been applied.
-  let (headWeak, parentStrong) ←
-    if currentSlot > headBlock.slot then
-      pure (← isHeadWeak cfg store headRoot, ← isParentStrong cfg store parentRoot)
-    else pure (true, true)
+  let mut headWeak := true
+  let mut parentStrong := true
+  if currentSlot > headBlock.slot then
+    headWeak ← isHeadWeak cfg store headRoot
+    parentStrong ← isParentStrong cfg store parentRoot
   pure ([headLate, shufflingStable, ffgCompetitive, finalizationOk, proposingReorgSlot,
     singleSlotReorg, headWeak, parentStrong].all id)
 
@@ -500,10 +502,11 @@ def onTickPerSlot (cfg : Config) (store : Store P f) (time : U64) : M (Store P f
   let store := if currentSlot > previousSlot then { store with proposer_boost_root := zeroRoot }
     else store
   -- If a new epoch, pull-up justification and finalization from previous epoch
-  if currentSlot > previousSlot && (← computeSlotsSinceEpochStart P currentSlot).toNat == 0 then
-    pure (updateCheckpoints store store.unrealized_justified_checkpoint
-      store.unrealized_finalized_checkpoint)
-  else pure store
+  if currentSlot > previousSlot then
+    if (← computeSlotsSinceEpochStart P currentSlot).toNat == 0 then
+      return updateCheckpoints store store.unrealized_justified_checkpoint
+        store.unrealized_finalized_checkpoint
+  pure store
 
 /-- `on_tick(store, time)`. The `while` loop advances `get_current_slot(store)` by exactly one
 per iteration, so it runs at most `tick_slot - get_current_slot(store)` times; the bound is that
