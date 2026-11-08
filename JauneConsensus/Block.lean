@@ -1,5 +1,5 @@
-import JauneConsensus.Accessors
-import JauneConsensus.Crypto.Boundary
+import JauneConsensus.Deposits
+import JauneConsensus.Upgrade
 
 /-!
 # Block processing: header, RANDAO, eth1 data and the operations (Electra and Fulu)
@@ -23,61 +23,18 @@ to `True`) and `executionValid` (the mocked execution engine's verdict, `executi
 namespace JauneConsensus
 open Jaune (Bytes B256)
 
-/-- The processing context: configuration and the harness switches. -/
-structure Ctx where
-  cfg : Config
-  /-- pyspec `bls.bls_active`. -/
-  blsActive : Bool := true
-  /-- The mocked `execution_engine.verify_and_notify_new_payload` verdict. -/
-  executionValid : Bool := true
-
-/-- A BLS verification predicate under the `bls_active` switch: `true` when BLS is off,
-otherwise the predicate (evaluated only then). -/
-@[inline] def blsCheck (ctx : Ctx) (p : Unit → Bool) : Bool := !ctx.blsActive || p ()
-
 /-! ## Constants -/
 
-def DOMAIN_RANDAO : Bytes := [0x02, 0x00, 0x00, 0x00]
-def DOMAIN_DEPOSIT : Bytes := [0x03, 0x00, 0x00, 0x00]
-def DOMAIN_VOLUNTARY_EXIT : Bytes := [0x04, 0x00, 0x00, 0x00]
-def DOMAIN_SYNC_COMMITTEE : Bytes := [0x07, 0x00, 0x00, 0x00]
-def DOMAIN_BLS_TO_EXECUTION_CHANGE : Bytes := [0x0A, 0x00, 0x00, 0x00]
 /-- `PARTICIPATION_FLAG_WEIGHTS = [TIMELY_SOURCE_WEIGHT, TIMELY_TARGET_WEIGHT, TIMELY_HEAD_WEIGHT]`. -/
 def PARTICIPATION_FLAG_WEIGHTS : List Nat := [14, 26, 14]
 def TIMELY_SOURCE_FLAG_INDEX : Nat := 0
 def TIMELY_TARGET_FLAG_INDEX : Nat := 1
 def TIMELY_HEAD_FLAG_INDEX : Nat := 2
 def SYNC_REWARD_WEIGHT : Nat := 2
-/-- `UNSET_DEPOSIT_REQUESTS_START_INDEX = uint64(2**64 - 1)` (Electra). -/
-def UNSET_DEPOSIT_REQUESTS_START_INDEX : U64 := U64.max
 /-- `FULL_EXIT_REQUEST_AMOUNT = uint64(0)` (Electra). -/
 def FULL_EXIT_REQUEST_AMOUNT : U64 := U64.zero
 
 variable {P : Preset} {f : CFork}
-
-/-! ## Signing (local until the shared `Signing.lean` lands) -/
-
-/-- `compute_fork_data_root` (phase0). -/
-private def forkDataRoot (version : Version) (gvr : Root) : Root :=
-  hashTreeRoot ({ current_version := version, genesis_validators_root := gvr } : ForkData)
-
-/-- `compute_domain(domain_type, fork_version, genesis_validators_root)` (phase0). -/
-private def domainOf (domainType : Bytes) (version : Version) (gvr : Root) : M Domain := do
-  let bs := domainType ++ ((forkDataRoot version gvr).toBytes.take 28)
-  if bs.length = 32 then pure (Jaune.Bytes.toB256 bs) else throw (.assert "compute_domain")
-
-/-- A `Version` from configuration bytes. -/
-private def versionOf (bs : Bytes) : M Version := SszVector.ofArray bs.toArray "Version"
-
-/-- `get_domain(state, domain_type, epoch)` (phase0). -/
-private def domainAt (state : BeaconState P f) (domainType : Bytes) (epoch : Epoch) : M Domain :=
-  let version := if epoch < state.fork.epoch then state.fork.previous_version
-    else state.fork.current_version
-  domainOf domainType version state.genesis_validators_root
-
-/-- `compute_signing_root(ssz_object, domain)` (phase0). -/
-private def signingRoot {α : Type} [Ssz α] (x : α) (domain : Domain) : Root :=
-  hashTreeRoot ({ object_root := hashTreeRoot x, domain } : SigningData)
 
 /-- The bytes of a fixed-length byte vector. -/
 private def vbytes {n : Nat} (v : SszVector UInt8 n) : Bytes := v.toArray.toList
@@ -105,8 +62,8 @@ def processRandao (ctx : Ctx) (state : BeaconState P f) (body : BeaconBlockBody 
     M (BeaconState P f) := do
   let epoch ← getCurrentEpoch state
   let proposer ← state.validators.get (← getBeaconProposerIndex state).toNat "process_randao"
-  let root := signingRoot epoch (← domainAt state DOMAIN_RANDAO epoch)
-  require (blsCheck ctx fun _ => verify (vbytes proposer.pubkey) root.toBytes (vbytes body.randao_reveal))
+  let root := computeSigningRoot epoch (← getDomain state DOMAIN_RANDAO (some epoch))
+  require (blsVerify ctx.blsActive proposer.pubkey root body.randao_reveal)
     "process_randao: bls.Verify"
   let mix := xor (← getRandaoMix state epoch) (hash (vbytes body.randao_reveal))
   let i ← U64.mod? epoch (← c64 P.EPOCHS_PER_HISTORICAL_VECTOR) "process_randao"
@@ -146,9 +103,9 @@ def isValidIndexedAttestation (ctx : Ctx) (state : BeaconState P f)
   if indices.size == 0 || !(indices == sortedUnique) then return false
   let mut pubkeys := #[]
   for i in indices do
-    pubkeys := pubkeys.push (vbytes (← state.validators.get i.toNat "is_valid_indexed_attestation").pubkey)
-  let root := signingRoot ia.data (← domainAt state DOMAIN_BEACON_ATTESTER ia.data.target.epoch)
-  pure (blsCheck ctx fun _ => fastAggregateVerify pubkeys.toList root.toBytes (vbytes ia.signature))
+    pubkeys := pubkeys.push (← state.validators.get i.toNat "is_valid_indexed_attestation").pubkey
+  let root := computeSigningRoot ia.data (← getDomain state DOMAIN_BEACON_ATTESTER (some ia.data.target.epoch))
+  pure (blsFastAggregateVerify ctx.blsActive pubkeys.toList root ia.signature)
 
 /-- `process_proposer_slashing` (phase0). -/
 def processProposerSlashing (ctx : Ctx) (state : BeaconState P f) (ps : ProposerSlashing) :
@@ -162,9 +119,9 @@ def processProposerSlashing (ctx : Ctx) (state : BeaconState P f) (ps : Proposer
   require (isSlashableValidator proposer (← getCurrentEpoch state))
     "process_proposer_slashing: slashable"
   for sh in [ps.signed_header_1, ps.signed_header_2] do
-    let domain ← domainAt state DOMAIN_BEACON_PROPOSER (← computeEpochAtSlot P sh.message.slot)
-    let root := signingRoot sh.message domain
-    require (blsCheck ctx fun _ => verify (vbytes proposer.pubkey) root.toBytes (vbytes sh.signature))
+    let domain ← getDomain state DOMAIN_BEACON_PROPOSER (some (← computeEpochAtSlot P sh.message.slot))
+    let root := computeSigningRoot sh.message domain
+    require (blsVerify ctx.blsActive proposer.pubkey root sh.signature)
       "process_proposer_slashing: bls.Verify"
   slashValidator ctx.cfg state h1.proposer_index
 
@@ -256,46 +213,6 @@ def processAttestation (ctx : Ctx) (state : BeaconState P f) (attestation : Atte
 
 /-! ## Deposits -/
 
-/-- `get_validator_from_deposit` (Electra). -/
-def getValidatorFromDeposit (P : Preset) (pubkey : BLSPubkey) (wc : Bytes32) (amount : U64) :
-    M Validator := do
-  let v : Validator :=
-    { pubkey, withdrawal_credentials := wc, effective_balance := U64.zero, slashed := false,
-      activation_eligibility_epoch := FAR_FUTURE_EPOCH, activation_epoch := FAR_FUTURE_EPOCH,
-      exit_epoch := FAR_FUTURE_EPOCH, withdrawable_epoch := FAR_FUTURE_EPOCH }
-  let maxEb ← c64 (getMaxEffectiveBalance P v)
-  let rounded ← U64.sub? amount (← U64.mod? amount (← c64 P.EFFECTIVE_BALANCE_INCREMENT)
-    "get_validator_from_deposit") "get_validator_from_deposit"
-  pure { v with effective_balance := if rounded < maxEb then rounded else maxEb }
-
-/-- `set_or_append_list` (Altair). -/
-def setOrAppendList {α : Type} {n : Nat} (xs : SszList α n) (index : ValidatorIndex) (v : α)
-    (site : String) : M (SszList α n) :=
-  if index.toNat == xs.length then xs.push v site else xs.set index.toNat v site
-
-/-- `add_validator_to_registry` (Electra). -/
-def addValidatorToRegistry (state : BeaconState P f) (pubkey : BLSPubkey) (wc : Bytes32)
-    (amount : U64) : M (BeaconState P f) := do
-  let site := "add_validator_to_registry"
-  let index ← U64.ofNat? state.validators.length "get_index_for_new_validator"
-  let validator ← getValidatorFromDeposit P pubkey wc amount
-  let zeroFlags : ParticipationFlags := UIntN.zero
-  pure { state with
-    validators := ← setOrAppendList state.validators index validator site
-    balances := ← setOrAppendList state.balances index amount site
-    previous_epoch_participation := ← setOrAppendList state.previous_epoch_participation index zeroFlags site
-    current_epoch_participation := ← setOrAppendList state.current_epoch_participation index zeroFlags site
-    inactivity_scores := ← setOrAppendList state.inactivity_scores index U64.zero site }
-
-/-- `is_valid_deposit_signature` (Electra). -/
-def isValidDepositSignature (ctx : Ctx) (pubkey : BLSPubkey) (wc : Bytes32) (amount : U64)
-    (signature : BLSSignature) : M Bool := do
-  let msg : DepositMessage := { pubkey, withdrawal_credentials := wc, amount }
-  let domain ← domainOf DOMAIN_DEPOSIT (← versionOf ctx.cfg.GENESIS_FORK_VERSION)
-    (Jaune.Bytes.toB256 (List.replicate 32 0))
-  let root := signingRoot msg domain
-  pure (blsCheck ctx fun _ => verify (vbytes pubkey) root.toBytes (vbytes signature))
-
 /-- `apply_deposit` (Electra). -/
 def applyDeposit (ctx : Ctx) (state : BeaconState P f) (pubkey : BLSPubkey) (wc : Bytes32)
     (amount : U64) (signature : BLSSignature) : M (BeaconState P f) := do
@@ -335,10 +252,10 @@ def processVoluntaryExit (ctx : Ctx) (state : BeaconState P f) (sve : SignedVolu
     s!"{site}: active long enough"
   require ((← getPendingBalanceToWithdraw state ve.validator_index) == U64.zero)
     s!"{site}: no pending withdrawals"
-  let domain ← domainOf DOMAIN_VOLUNTARY_EXIT (← versionOf ctx.cfg.CAPELLA_FORK_VERSION)
+  let domain ← pure <| computeDomain DOMAIN_VOLUNTARY_EXIT (← versionOf ctx.cfg.CAPELLA_FORK_VERSION)
     state.genesis_validators_root
-  let root := signingRoot ve domain
-  require (blsCheck ctx fun _ => verify (vbytes validator.pubkey) root.toBytes (vbytes sve.signature))
+  let root := computeSigningRoot ve domain
+  require (blsVerify ctx.blsActive validator.pubkey root sve.signature)
     s!"{site}: bls.Verify"
   initiateValidatorExit ctx.cfg state ve.validator_index
 
@@ -352,10 +269,10 @@ def processBlsToExecutionChange (ctx : Ctx) (state : BeaconState P f)
   let wc := validator.withdrawal_credentials.toBytes
   require (wc.take 1 == [BLS_WITHDRAWAL_PREFIX]) s!"{site}: BLS prefix"
   require (wc.drop 1 == (hashBytes (vbytes ac.from_bls_pubkey)).drop 1) s!"{site}: pubkey hash"
-  let domain ← domainOf DOMAIN_BLS_TO_EXECUTION_CHANGE (← versionOf ctx.cfg.GENESIS_FORK_VERSION)
+  let domain ← pure <| computeDomain DOMAIN_BLS_TO_EXECUTION_CHANGE (← versionOf ctx.cfg.GENESIS_FORK_VERSION)
     state.genesis_validators_root
-  let root := signingRoot ac domain
-  require (blsCheck ctx fun _ => verify (vbytes ac.from_bls_pubkey) root.toBytes (vbytes sac.signature))
+  let root := computeSigningRoot ac domain
+  require (blsVerify ctx.blsActive ac.from_bls_pubkey root sac.signature)
     s!"{site}: bls.Verify"
   let newWc := Jaune.Bytes.toB256 (ETH1_ADDRESS_WITHDRAWAL_PREFIX :: List.replicate 11 0 ++
     ac.to_execution_address.toBytes)
@@ -491,9 +408,9 @@ def processSyncAggregate (ctx : Ctx) (state : BeaconState P f) (sa : SyncAggrega
   let bits := sa.sync_committee_bits.bits
   let participants := (bits.filter id).size
   let prevSlot ← U64.sub? (if U64.one < state.slot then state.slot else U64.one) U64.one site
-  let domain ← domainAt state DOMAIN_SYNC_COMMITTEE (← computeEpochAtSlot P prevSlot)
-  let root := signingRoot (← getBlockRootAtSlot state prevSlot) domain
-  let verified := blsCheck ctx fun _ =>
+  let domain ← getDomain state DOMAIN_SYNC_COMMITTEE (some (← computeEpochAtSlot P prevSlot))
+  let root := computeSigningRoot (← getBlockRootAtSlot state prevSlot) domain
+  let verified := !ctx.blsActive ||
     let pks : Option (List Bytes) :=
       if participants == P.SYNC_COMMITTEE_SIZE then
         some [vbytes state.current_sync_committee.aggregate_pubkey]
@@ -675,10 +592,10 @@ def processBlockWith (ctx : Ctx) (state : BeaconState P f) (block : BeaconBlock 
   let state ← processOperations ctx state block.body
   processSyncAggregate ctx state block.body.sync_aggregate
 
-/-- `process_block` with BLS switched by `bls` and the execution engine accepting every
-payload (`executionValid`, default `true`; the `operations` and `sanity` vectors supply it). -/
-def processBlock (cfg : Config) (bls : Bool) (state : BeaconState P f) (block : BeaconBlock P f)
-    (executionValid : Bool := true) : M (BeaconState P f) :=
-  processBlockWith { cfg, blsActive := bls, executionValid } state block
+/-- `process_block`: the entry point (`ctx` carries the configuration, the BLS switch and the
+engine verdict). -/
+def processBlock (ctx : Ctx) (state : BeaconState P f) (block : BeaconBlock P f) :
+    M (BeaconState P f) :=
+  processBlockWith ctx state block
 
 end JauneConsensus

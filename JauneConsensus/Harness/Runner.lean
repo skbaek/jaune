@@ -6,6 +6,7 @@ import JauneConsensus.Harness.SszGenericTypes
 import JauneConsensus.Harness.SszStatic
 import JauneConsensus.Harness.Operations
 import JauneConsensus.Crypto.Boundary
+import JauneConsensus.Harness.StateTransition
 
 /-!
 # Case handlers and strict verdicts (conformance harness)
@@ -190,6 +191,12 @@ def operationsVerdict (c : Case) : IO Verdict := do
     | .ok () => pure .pass
     | .error e => pure (.fail e)
 
+/-- A handler that reports `Except String Unit` as a verdict. -/
+def ofResult (h : Case → IO (Except String Unit)) (c : Case) : IO Verdict := do
+  match ← h c with
+  | .ok () => pure .pass
+  | .error why => pure (.fail why)
+
 /-- The handler table. -/
 def handlerFor (runner handler : String) : Option (Case → IO Verdict) :=
   match runner, handler with
@@ -199,6 +206,7 @@ def handlerFor (runner handler : String) : Option (Case → IO Verdict) :=
   | "operations", _ => some operationsVerdict
   | "bls", "eth_aggregate_pubkeys" => some blsAggregatePubkeys
   | "bls", "eth_fast_aggregate_verify" => some blsFastAggregateVerify
+  | "fork", "fork" => some (ofResult (forkCase caseConfig))
   | _, _ => none
 
 def runCase (c : Case) : IO Verdict := do
