@@ -13,6 +13,9 @@ import JauneConsensus.SSZ.Container
 import JauneConsensus.SSZ.Progressive
 import JauneConsensus.SSZ.Proof
 import JauneConsensus.Containers
+import JauneConsensus.Signing
+import JauneConsensus.Transition
+import JauneConsensus.Upgrade
 import JauneConsensus.Accessors
 import JauneConsensus.Crypto.HashToCurve
 import JauneConsensus.Crypto.HashToCurveVectors
