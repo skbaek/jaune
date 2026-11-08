@@ -147,8 +147,9 @@ def getAttestationParticipationFlagIndices (state : BeaconState P f) (data : Att
   let isMatchingHead := isMatchingTarget && data.beacon_block_root == headRoot
   require isMatchingSource "get_attestation_participation_flag_indices: matching source"
   let mut out := []
-  if isMatchingSource && inclusionDelay ≤ (← integerSquareroot (← c64 P.SLOTS_PER_EPOCH)) then
-    out := out ++ [TIMELY_SOURCE_FLAG_INDEX]
+  if isMatchingSource then
+    if inclusionDelay ≤ (← integerSquareroot (← c64 P.SLOTS_PER_EPOCH)) then
+      out := out ++ [TIMELY_SOURCE_FLAG_INDEX]
   if isMatchingTarget then out := out ++ [TIMELY_TARGET_FLAG_INDEX]
   if isMatchingHead && inclusionDelay.toNat == P.MIN_ATTESTATION_INCLUSION_DELAY then
     out := out ++ [TIMELY_HEAD_FLAG_INDEX]
@@ -192,17 +193,25 @@ def processAttestation (ctx : Ctx) (state : BeaconState P f) (attestation : Atte
   let isCurrent := data.target.epoch == current
   let mut participation :=
     if isCurrent then state.current_epoch_participation else state.previous_epoch_participation
-  let mut numerator := 0
+  -- `proposer_reward_numerator = 0` is a Python `int`, but `0 + Gwei` is `uint64`
+  -- (remerkleable's `__radd__`), so the accumulation and each `get_base_reward * weight`
+  -- (`uint64 * uint64`) raise on overflow
+  let mut numerator := U64.zero
   for index in ← getAttestingIndices state attestation do
     for (flagIndex, weight) in (List.range PARTICIPATION_FLAG_WEIGHTS.length).zip PARTICIPATION_FLAG_WEIGHTS do
-      let cur ← participation.get index.toNat site
-      if flags.contains flagIndex && !(← hasFlag cur flagIndex) then
-        participation ← participation.set index.toNat (← addFlag cur flagIndex) site
-        numerator := numerator + (← getBaseReward state index).toNat * weight
+      -- `flag_index in participation_flag_indices and not has_flag(epoch_participation[index], ...)`
+      -- short-circuits: the participation read happens only for a listed flag
+      if flags.contains flagIndex then
+        let cur ← participation.get index.toNat site
+        if !(← hasFlag cur flagIndex) then
+          participation ← participation.set index.toNat (← addFlag cur flagIndex) site
+          numerator ← U64.add? numerator
+            (← U64.mul? (← getBaseReward state index) (← c64 weight) site) site
   let state := if isCurrent then { state with current_epoch_participation := participation }
     else { state with previous_epoch_participation := participation }
-  let denominator := (WEIGHT_DENOMINATOR - PROPOSER_WEIGHT) * WEIGHT_DENOMINATOR / PROPOSER_WEIGHT
-  let reward ← U64.ofNat? (numerator / denominator) s!"{site}: Gwei(proposer_reward)"
+  let denominator ← U64.div? (← U64.mul? (← c64 (WEIGHT_DENOMINATOR - PROPOSER_WEIGHT))
+    (← c64 WEIGHT_DENOMINATOR) site) (← c64 PROPOSER_WEIGHT) site
+  let reward ← U64.div? numerator denominator s!"{site}: Gwei(proposer_reward)"
   increaseBalance state (← getBeaconProposerIndex state) reward
 
 /-! ## Deposits -/
@@ -401,8 +410,9 @@ def processExecutionPayload (ctx : Ctx) (state : BeaconState P f) (body : Beacon
   require (payload.timestamp == (← computeTimeAtSlot ctx.cfg state state.slot)) s!"{site}: timestamp"
   let maxBlobs ←
     if f.atLeast .fulu then do pure (← getBlobParameters ctx.cfg epoch).maxBlobsPerBlock.toNat
-    else if f.atLeast .electra then pure ctx.cfg.MAX_BLOBS_PER_BLOCK_ELECTRA
-    else pure ctx.cfg.MAX_BLOBS_PER_BLOCK
+    -- configuration values are `uint64` in pyspec, as `get_blob_parameters` reads them
+    else if f.atLeast .electra then do pure (← c64 ctx.cfg.MAX_BLOBS_PER_BLOCK_ELECTRA).toNat
+    else do pure (← c64 ctx.cfg.MAX_BLOBS_PER_BLOCK).toNat
   require (body.blob_kzg_commitments.length ≤ maxBlobs) s!"{site}: blob commitments"
   require ctx.executionValid s!"{site}: execution engine"
   pure { state with latest_execution_payload_header :=
@@ -418,6 +428,10 @@ def processExecutionPayload (ctx : Ctx) (state : BeaconState P f) (body : Beacon
 
 /-! ## Sync aggregate -/
 
+/-- pyspec's `STUB_PUBKEY` (`b"\x22" * 48`, `eth2spec/utils/bls.py`): what `bls.AggregatePKs`
+returns when the BLS switch is off. -/
+def STUB_PUBKEY : Bytes := List.replicate 48 0x22
+
 /-- `process_sync_aggregate` (Altair). The participant key is computed only when the signature
 is verified (`bls_active`); a key that does not decode fails the verification. -/
 def processSyncAggregate (ctx : Ctx) (state : BeaconState P f) (sa : SyncAggregate P) :
@@ -426,25 +440,33 @@ def processSyncAggregate (ctx : Ctx) (state : BeaconState P f) (sa : SyncAggrega
   let pubkeys := state.current_sync_committee.pubkeys.toArray
   let bits := sa.sync_committee_bits.bits
   let participants := (bits.filter id).size
+  -- the participant keys first, as in the specification (its optimized form, from `v1.6.0`)
+  let participantPubkeys : List Bytes ←
+    if participants == P.SYNC_COMMITTEE_SIZE then
+      -- All members participated - use precomputed aggregate key
+      pure [vbytes state.current_sync_committee.aggregate_pubkey]
+    else if participants > P.SYNC_COMMITTEE_SIZE / 2 then do
+      -- More than half participated - subtract non-participant keys
+      let nonPart := ((pubkeys.zip bits).filter (fun (_, b) => !b)).toList.map (vbytes ·.1)
+      -- `eth_aggregate_pubkeys` is `bls.AggregatePKs`, which pyspec's BLS switch stubs to
+      -- `STUB_PUBKEY` (`eth2spec/utils/bls.py`); the point decoding, negation and addition
+      -- that follow are not switched
+      let nonAgg ← if ctx.blsActive then ethAggregatePubkeysM nonPart else pure STUB_PUBKEY
+      let full ← liftCrypto s!"{site}: bls.bytes48_to_G1(aggregate_pubkey)"
+        (pubkeyToPoint (vbytes state.current_sync_committee.aggregate_pubkey))
+      let nonP ← liftCrypto s!"{site}: bls.bytes48_to_G1(non_participant_aggregate)"
+        (pubkeyToPoint nonAgg)
+      pure [g1Compress (full + -nonP)]
+    else
+      -- Less than half participated - aggregate participant keys
+      pure (((pubkeys.zip bits).filter (·.2)).toList.map (vbytes ·.1))
   let prevSlot ← U64.sub? (if U64.one < state.slot then state.slot else U64.one) U64.one site
   let domain ← getDomain state DOMAIN_SYNC_COMMITTEE (some (← computeEpochAtSlot P prevSlot))
   let root := computeSigningRoot (← getBlockRootAtSlot state prevSlot) domain
+  -- under the switch, `eth_fast_aggregate_verify` is `True` (its empty-key check, then the
+  -- stubbed `FastAggregateVerify`)
   let verified := !ctx.blsActive ||
-    let pks : Option (List Bytes) :=
-      if participants == P.SYNC_COMMITTEE_SIZE then
-        some [vbytes state.current_sync_committee.aggregate_pubkey]
-      else if participants > P.SYNC_COMMITTEE_SIZE / 2 then
-        let nonPart := ((pubkeys.zip bits).filter (fun (_, b) => !b)).toList.map (vbytes ·.1)
-        match ethAggregatePubkeys nonPart, pubkeyToPoint (vbytes state.current_sync_committee.aggregate_pubkey) with
-        | .ok agg, .ok full =>
-          match pubkeyToPoint agg with
-          | .ok aggP => some [g1Compress (full + -aggP)]
-          | .error _ => none
-        | _, _ => none
-      else some (((pubkeys.zip bits).filter (·.2)).toList.map (vbytes ·.1))
-    match pks with
-    | some ks => ethFastAggregateVerify ks root.toBytes (vbytes sa.sync_committee_signature)
-    | none => false
+    ethFastAggregateVerify participantPubkeys root.toBytes (vbytes sa.sync_committee_signature)
   require verified s!"{site}: eth_fast_aggregate_verify"
   let totalActiveIncrements ← U64.div? (← getTotalActiveBalance state)
     (← c64 P.EFFECTIVE_BALANCE_INCREMENT) site

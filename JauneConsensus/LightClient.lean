@@ -241,8 +241,9 @@ def validateLightClientUpdate (ctx : Ctx) (store : LightClientStore P f) (update
   let storePeriod ← computeSyncCommitteePeriodAtSlot P store.finalized_header.beacon.slot
   let sigPeriod ← computeSyncCommitteePeriodAtSlot P update.signature_slot
   if isNextSyncCommitteeKnown store then
-    require (sigPeriod == storePeriod || sigPeriod == (← U64.add? storePeriod U64.one site))
-      s!"{site}: signature period"
+    -- `a == b or a == b + 1`: the sum is formed only when the first comparison fails
+    if sigPeriod != storePeriod then
+      require (sigPeriod == (← U64.add? storePeriod U64.one site)) s!"{site}: signature period"
   else
     require (sigPeriod == storePeriod) s!"{site}: signature period"
   let attestedPeriod ← computeSyncCommitteePeriodAtSlot P attestedSlot
@@ -292,12 +293,14 @@ def applyLightClientUpdate (store : LightClientStore P f) (update : LightClientU
   if !isNextSyncCommitteeKnown store then
     require (finalizedPeriod == storePeriod) s!"{site}: finalized period"
     store := { store with next_sync_committee := update.next_sync_committee }
-  else if finalizedPeriod == (← U64.add? storePeriod U64.one site) then
-    store := { store with
-      current_sync_committee := store.next_sync_committee
-      next_sync_committee := update.next_sync_committee
-      previous_max_active_participants := store.current_max_active_participants
-      current_max_active_participants := U64.zero }
+  else
+    -- `elif`: `store_period + 1` is formed only on this branch
+    if finalizedPeriod == (← U64.add? storePeriod U64.one site) then
+      store := { store with
+        current_sync_committee := store.next_sync_committee
+        next_sync_committee := update.next_sync_committee
+        previous_max_active_participants := store.current_max_active_participants
+        current_max_active_participants := U64.zero }
   if store.finalized_header.beacon.slot < update.finalized_header.beacon.slot then
     store := { store with finalized_header := update.finalized_header }
     if store.optimistic_header.beacon.slot < store.finalized_header.beacon.slot then
@@ -329,10 +332,13 @@ def isBetterUpdate (P : Preset) (newU oldU : LightClientUpdate P f) : M Bool := 
   if newSuper != oldSuper then return newSuper
   if !newSuper && newN != oldN then return decide (newN > oldN)
   let period := computeSyncCommitteePeriodAtSlot P
-  let newRelevant := isSyncCommitteeUpdate newU &&
-    (← period newU.attested_header.beacon.slot) == (← period newU.signature_slot)
-  let oldRelevant := isSyncCommitteeUpdate oldU &&
-    (← period oldU.attested_header.beacon.slot) == (← period oldU.signature_slot)
+  -- `and` short-circuits: the periods are computed only for a sync committee update
+  let newRelevant ← if isSyncCommitteeUpdate newU then do
+      pure ((← period newU.attested_header.beacon.slot) == (← period newU.signature_slot))
+    else pure false
+  let oldRelevant ← if isSyncCommitteeUpdate oldU then do
+      pure ((← period oldU.attested_header.beacon.slot) == (← period oldU.signature_slot))
+    else pure false
   if newRelevant != oldRelevant then return newRelevant
   let newFin := isFinalityUpdate newU
   let oldFin := isFinalityUpdate oldU
@@ -364,9 +370,11 @@ def processLightClientUpdate (ctx : Ctx) (store : LightClientStore P f) (update 
       store.optimistic_header.beacon.slot < update.attested_header.beacon.slot then
     store := { store with optimistic_header := update.attested_header }
   let period := computeSyncCommitteePeriodAtSlot P
-  let hasFinalizedNext := !isNextSyncCommitteeKnown store && isSyncCommitteeUpdate update &&
-    isFinalityUpdate update &&
-    (← period update.finalized_header.beacon.slot) == (← period update.attested_header.beacon.slot)
+  let hasFinalizedNext ←
+    if !isNextSyncCommitteeKnown store && isSyncCommitteeUpdate update && isFinalityUpdate update then do
+      pure ((← period update.finalized_header.beacon.slot) ==
+        (← period update.attested_header.beacon.slot))
+    else pure false
   if n * 3 ≥ bits.bits.size * 2 &&
       (store.finalized_header.beacon.slot < update.finalized_header.beacon.slot || hasFinalizedNext) then
     store ← applyLightClientUpdate store update

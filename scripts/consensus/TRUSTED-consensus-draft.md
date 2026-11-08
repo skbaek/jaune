@@ -34,7 +34,21 @@ they agree.
   a cryptographic check.
 - `uint64` values are `U64`. `U64` has no wrapping operators. Arithmetic goes through checked
   operations, which reject exactly where remerkleable raises.
-- Where pyspec computes in Python `int`, the model uses `Nat`, and the site says so.
+- Where pyspec computes in Python `int`, the model uses `Nat`, and the site says so. A Python
+  `int` that meets a `uint64` becomes `uint64` (remerkleable's reflected operators): `sum()` of
+  `Gwei` values, and an `int` accumulator such as `proposer_reward_numerator = 0` after its first
+  `+=`, are checked `U64` sums.
+- Python's `and`, `or`, chained comparisons and `elif` evaluate lazily. The model keeps every
+  fallible operation on the right of one inside the branch that pyspec evaluates
+  (`check-integrity.sh` R6 rejects nested actions in term-level `if` branches).
+- **Residual divergence: bounded sampling loops.** `compute_proposer_index` and both
+  `get_next_sync_committee_indices` (Altair and Electra) are unbounded rejection-sampling loops
+  in pyspec. The model runs them for `SAMPLING_FUEL = 2^28` iterations (`Accessors.lean`) and
+  rejects if that is exhausted, where pyspec would keep drawing. The worst case is every
+  candidate at effective balance 0, where a draw accepts only on a zero random value
+  (probability `2^-16` per draw from Electra, `2^-8` before). Taking the hash as a random
+  oracle, the probability of exhaustion is below `e^-4096` for one acceptance and below
+  `e^-1568` for 512, so the model differs from pyspec only with negligible probability.
 
 ## Primitives reused from Jaune
 

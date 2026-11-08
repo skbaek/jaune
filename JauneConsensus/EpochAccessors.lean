@@ -180,12 +180,12 @@ def getNextSyncCommitteeIndicesAltair (state : BeaconState P f) : M (Array Valid
       let acc := if (← v.effective_balance.mul? maxRandomByte site).toNat ≥
           (← maxEb.mul? (← c64 randomByte.toNat) site).toNat then acc.push candidate else acc
       loop fuel (i + 1) acc
-  loop (2 ^ 20) 0 #[]
+  loop SAMPLING_FUEL 0 #[]
 
 /-- `get_next_sync_committee_indices(state)` (`specs/electra/beacon-chain.md`): sampling weighted
-by effective balance with 16-bit random values. pyspec's `while` loop runs on fuel (`2^20`
-iterations, far beyond any input the specification can produce with non-negligible probability)
-and rejects with `Reject.assert` if it is exhausted. -/
+by effective balance with 16-bit random values. pyspec's `while` loop runs on `SAMPLING_FUEL`
+iterations (`Accessors.lean`, with its probability bound) and rejects with `Reject.assert` if
+it is exhausted. -/
 def getNextSyncCommitteeIndices (state : BeaconState P f) : M (Array ValidatorIndex) := do
   let site := "get_next_sync_committee_indices"
   let epoch ← (← getCurrentEpoch state).add? U64.one site
@@ -208,7 +208,7 @@ def getNextSyncCommitteeIndices (state : BeaconState P f) : M (Array ValidatorIn
       let acc := if (← v.effective_balance.mul? maxRandomValue site).toNat ≥
           (← maxEb.mul? randomValue site).toNat then acc.push candidate else acc
       loop fuel (← i.add? U64.one site) acc
-  loop (2 ^ 20) U64.zero #[]
+  loop SAMPLING_FUEL U64.zero #[]
 
 /-- `get_next_sync_committee(state)` (Altair; Electra's sampling from Electra on): the sampled
 validators' pubkeys and their

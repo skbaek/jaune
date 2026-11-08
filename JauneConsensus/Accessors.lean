@@ -19,9 +19,10 @@ Conventions (goal outcome O5):
   `Reject.index`; there is no defaulted read;
 * a fork-gated state field (`Gated`) is read and written through `Gated.read`/`Gated.write`,
   which reject before the field's fork (unreachable in the Electra and Fulu transitions);
-* pyspec's unbounded `while True` loops (`compute_proposer_index`) run on fuel and reject with
-  `Reject.assert` if the fuel is exhausted. The fuel (`2^20` iterations) is far beyond any
-  input the specification can produce with non-negligible probability.
+* pyspec's unbounded rejection-sampling loops (`compute_proposer_index`,
+  `get_next_sync_committee_indices`) run on `SAMPLING_FUEL` iterations and reject with
+  `Reject.assert` if it is exhausted, where pyspec would keep drawing. This is a residual
+  divergence, bounded in probability: see `SAMPLING_FUEL`.
 
 Configuration values are the runtime `Config` (`cfg`); preset values are the `Preset` `P` that
 also indexes the state's types.
@@ -352,6 +353,17 @@ def getBeaconCommittee (state : BeaconState P f) (slot : Slot) (index : Committe
   computeCommittee P (← getActiveValidatorIndices state epoch)
     (← getSeed state epoch DOMAIN_BEACON_ATTESTER) idx count
 
+/-- The iteration bound of the rejection-sampling loops (`compute_proposer_index`, Altair and
+Electra `get_next_sync_committee_indices`), which are unbounded `while` loops in pyspec. The
+worst case for every loop is all candidates at effective balance 0, where a draw accepts only
+when its random value is 0: probability `2^-16` per draw with Electra's 16-bit values (`2^-8`
+with one byte before Electra). Treating the hash as a random oracle, `2^28` draws expect `4096`
+acceptances; the probability of fewer than one (`compute_proposer_index`) is below `e^-4096`,
+and of fewer than `SYNC_COMMITTEE_SIZE = 512` below `e^-1568` (Chernoff). Only then does the
+model reject where pyspec would continue. The bound costs nothing on ordinary inputs: every loop
+returns at its first or 512th acceptance. -/
+def SAMPLING_FUEL : Nat := 2 ^ 28
+
 /-- `compute_proposer_index`: Electra samples a 16-bit random value against
 `MAX_EFFECTIVE_BALANCE_ELECTRA` (`specs/electra/beacon-chain.md`); before Electra a random byte
 against `MAX_EFFECTIVE_BALANCE` (`specs/phase0/beacon-chain.md`). -/
@@ -386,17 +398,20 @@ def computeProposerIndex (state : BeaconState P f) (indices : Array ValidatorInd
           pure (decide (rhs ≤ lhs))
       if accept then pure candidate
       else loop fuel (← U64.add? i U64.one "compute_proposer_index")
-  loop (2 ^ 20) U64.zero
+  loop SAMPLING_FUEL U64.zero
 
 /-- `compute_proposer_indices` (Fulu). -/
 def computeProposerIndices (state : BeaconState P f) (epoch : Epoch) (seed : Bytes32)
     (indices : Array ValidatorIndex) : M (Array ValidatorIndex) := do
   let startSlot ← computeStartSlotAtEpoch P epoch
-  let mut out := #[]
-  for i in [0:P.SLOTS_PER_EPOCH] do
+  -- `seeds = [hash(seed + uint_to_bytes(Slot(start_slot + i))) for i in range(SLOTS_PER_EPOCH)]`
+  -- is built in full before any `compute_proposer_index`
+  let seeds ← (List.range P.SLOTS_PER_EPOCH).mapM fun i => do
     let s ← U64.add? startSlot (← U64.ofNat? i "Slot") "compute_proposer_indices"
-    out := out.push (← computeProposerIndex state indices
-      (hash (seed.toBytes ++ uintToBytes 8 s.toNat)))
+    pure (hash (seed.toBytes ++ uintToBytes 8 s.toNat))
+  let mut out := #[]
+  for sd in seeds do
+    out := out.push (← computeProposerIndex state indices sd)
   pure out
 
 /-- `get_beacon_proposer_indices` (Fulu). -/
@@ -476,8 +491,11 @@ def getConsolidationChurnLimit (cfg : Config) (state : BeaconState P f) : M Gwei
 
 /-- `get_block_root_at_slot` (phase0). -/
 def getBlockRootAtSlot (state : BeaconState P f) (slot : Slot) : M Root := do
+  -- `assert slot < state.slot <= slot + SLOTS_PER_HISTORICAL_ROOT` chains left to right: the
+  -- sum is formed only when the first comparison holds
+  require (slot < state.slot) "get_block_root_at_slot: slot range"
   let upper ← U64.add? slot (← c64 P.SLOTS_PER_HISTORICAL_ROOT) "get_block_root_at_slot"
-  require (slot < state.slot && state.slot ≤ upper) "get_block_root_at_slot: slot range"
+  require (state.slot ≤ upper) "get_block_root_at_slot: slot range"
   let i ← U64.mod? slot (← c64 P.SLOTS_PER_HISTORICAL_ROOT) "get_block_root_at_slot"
   state.block_roots.get i.toNat "get_block_root_at_slot"
 
@@ -513,8 +531,9 @@ def getAttestingIndices (state : BeaconState P f) (attestation : Attestation P f
         i := i + 1
       offset := offset + committee.size
   else
+    -- phase0 `get_attesting_indices` has no length check (that `assert` is in
+    -- `process_attestation`); a short bitlist raises `IndexError` at `aggregation_bits[i]`
     let committee ← getBeaconCommittee state attestation.data.slot attestation.data.index
-    require (bits.size == committee.size) "get_attesting_indices: bits length"
     let mut i := 0
     for a in committee do
       if ← getAt bits i "aggregation_bits" then out := out.push a
