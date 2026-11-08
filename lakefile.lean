@@ -78,3 +78,7 @@ lean_exe «jaune-consensus-bls-bench» where
 folded into `jaune-consensus`. Not a default target. -/
 lean_exe «jaune-consensus-kzg-vectors» where
   root := `ConsensusKZGVectors
+
+/-- Timing probe for the consensus state transition. Not a default target. -/
+lean_exe «jaune-consensus-transition-bench» where
+  root := `ConsensusTransitionBench

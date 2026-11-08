@@ -1,3 +1,4 @@
+import JauneConsensus.Harness.EpochCases
 import JauneConsensus.Harness.Discovery
 import JauneConsensus.Harness.Snappy
 import JauneConsensus.Shuffle
@@ -7,6 +8,7 @@ import JauneConsensus.Harness.SszStatic
 import JauneConsensus.Harness.Operations
 import JauneConsensus.Crypto.Boundary
 import JauneConsensus.Harness.StateTransition
+import JauneConsensus.Block
 
 /-!
 # Case handlers and strict verdicts (conformance harness)
@@ -191,6 +193,12 @@ def operationsVerdict (c : Case) : IO Verdict := do
     | .ok () => pure .pass
     | .error e => pure (.fail e)
 
+/-- The processing functions for the block and slot runners: A's `process_block` and C's
+`process_epoch`. -/
+def steps : Steps where
+  processEpoch _ _ ctx state := processEpoch ctx state
+  processBlock _ _ ctx state block := processBlock ctx state block
+
 /-- A handler that reports `Except String Unit` as a verdict. -/
 def ofResult (h : Case → IO (Except String Unit)) (c : Case) : IO Verdict := do
   match ← h c with
@@ -203,10 +211,21 @@ def handlerFor (runner handler : String) : Option (Case → IO Verdict) :=
   | "shuffling", "core" => some shufflingCore
   | "ssz_generic", _ => some sszGenericCase
   | "ssz_static", _ => some sszStaticCase
+  | "epoch_processing", _ => some fun c => do
+    -- `JAUNE_CONSENSUS_EPOCH_FULL=1` adds the diagnostic `pre_epoch → post_epoch` check
+    let full := (← IO.getEnv "JAUNE_CONSENSUS_EPOCH_FULL") == some "1"
+    match ← epochProcessingCase c full with
+    | none => pure .pass
+    | some why => pure (.fail why)
   | "operations", _ => some operationsVerdict
   | "bls", "eth_aggregate_pubkeys" => some blsAggregatePubkeys
   | "bls", "eth_fast_aggregate_verify" => some blsFastAggregateVerify
   | "fork", "fork" => some (ofResult (forkCase caseConfig))
+  | "sanity", "slots" => some (ofResult (sanitySlotsCase steps caseConfig))
+  | "sanity", "blocks" => some (ofResult (blocksCase steps caseConfig))
+  | "finality", "finality" => some (ofResult (blocksCase steps caseConfig))
+  | "random", "random" => some (ofResult (blocksCase steps caseConfig))
+  | "transition", "core" => some (ofResult (transitionCase steps caseConfig))
   | _, _ => none
 
 def runCase (c : Case) : IO Verdict := do

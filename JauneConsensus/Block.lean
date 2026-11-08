@@ -1,4 +1,5 @@
 import JauneConsensus.Deposits
+import JauneConsensus.EpochAccessors
 import JauneConsensus.Upgrade
 
 /-!
@@ -25,12 +26,8 @@ open Jaune (Bytes B256)
 
 /-! ## Constants -/
 
-/-- `PARTICIPATION_FLAG_WEIGHTS = [TIMELY_SOURCE_WEIGHT, TIMELY_TARGET_WEIGHT, TIMELY_HEAD_WEIGHT]`. -/
-def PARTICIPATION_FLAG_WEIGHTS : List Nat := [14, 26, 14]
-def TIMELY_SOURCE_FLAG_INDEX : Nat := 0
-def TIMELY_TARGET_FLAG_INDEX : Nat := 1
-def TIMELY_HEAD_FLAG_INDEX : Nat := 2
-def SYNC_REWARD_WEIGHT : Nat := 2
+-- `PARTICIPATION_FLAG_WEIGHTS`, the `TIMELY_*_FLAG_INDEX` values and `SYNC_REWARD_WEIGHT` are in
+-- `Accessors.lean` (shared with epoch processing).
 /-- `FULL_EXIT_REQUEST_AMOUNT = uint64(0)` (Electra). -/
 def FULL_EXIT_REQUEST_AMOUNT : U64 := U64.zero
 
@@ -81,17 +78,7 @@ def processEth1Data (state : BeaconState P f) (body : BeaconBlockBody P f) :
 
 /-! ## Rewards helpers (Altair) -/
 
-/-- `get_base_reward_per_increment` (Altair). -/
-def getBaseRewardPerIncrement (state : BeaconState P f) : M Gwei := do
-  let n ← U64.mul? (← c64 P.EFFECTIVE_BALANCE_INCREMENT) (← c64 P.BASE_REWARD_FACTOR)
-    "get_base_reward_per_increment"
-  U64.div? n (← integerSquareroot (← getTotalActiveBalance state)) "get_base_reward_per_increment"
-
-/-- `get_base_reward` (Altair). -/
-def getBaseReward (state : BeaconState P f) (index : ValidatorIndex) : M Gwei := do
-  let v ← state.validators.get index.toNat "get_base_reward"
-  let increments ← U64.div? v.effective_balance (← c64 P.EFFECTIVE_BALANCE_INCREMENT) "get_base_reward"
-  U64.mul? increments (← getBaseRewardPerIncrement state) "get_base_reward"
+-- `get_base_reward_per_increment` and `get_base_reward` are in `EpochAccessors.lean`.
 
 /-! ## Slashings -/
 
