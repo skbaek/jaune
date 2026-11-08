@@ -45,3 +45,14 @@ Exact axiom expectations for the canonical execution surface
 lean_lib «Assurance» where
   srcDir := "scripts"
   roots := #[`AxiomAudit, `ExecutionAxioms, `JauneUnionAxioms, `UnionAxiomsControls, `UnionAxiomsFixture.Good, `UnionAxiomsFixture.Bad, `UnionAxiomsFixture.Dep, `UnionAxiomsFixture.ViaDep]
+
+/-- Consensus layer (goal `jaune-consensus-electra-fulu-v1`), outside `Jaune/` so Blanc's
+`Assurance` closure does not build it. Minimal target added by the BLS worker; the SSZ
+worker's branch adds the same library and the master reconciles them. -/
+@[default_target]
+lean_lib «JauneConsensus» where
+
+/-- Timing probe for the consensus BLS primitives (pairing, map-to-curve, hash-to-curve).
+Not a default target. -/
+lean_exe «jaune-consensus-bls-bench» where
+  root := `ConsensusBLSBench
