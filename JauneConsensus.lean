@@ -56,3 +56,5 @@ import JauneConsensus.Harness.Networking
 import JauneConsensus.Harness.LightClientDataCollection
 import JauneConsensus.Harness.LightClientCases
 import JauneConsensus.Harness.Runner
+import JauneConsensus.Crypto.G2Subgroup
+import JauneConsensus.Crypto.G2SubgroupVectors

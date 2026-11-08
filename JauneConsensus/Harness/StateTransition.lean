@@ -148,6 +148,25 @@ def runBlocks (steps : Steps) (P : Preset) (f : CFork) (cfg : Config) (bls : Boo
     stateTransitionWith (steps.processEpoch P f ctx) (steps.processBlock P f ctx) bls s b)
     state
 
+/-- The post-fork block sequence of a `transition` case. The generators produce the block at
+the fork slot by upgrading the state at that slot and then applying `process_block` directly
+(`do_fork` in `eth2spec/test/helpers/fork_transition.py`), so a block whose slot is the
+state's slot runs `state_transition` without its `process_slots` step (there is no slot to
+advance); every other block runs the full `state_transition`. Signature and state-root checks
+apply to both. -/
+def runPostForkBlocks (steps : Steps) (P : Preset) (f : CFork) (cfg : Config) (bls : Bool)
+    (state : BeaconState P f) (blocks : List (SignedBeaconBlock P f)) : M (BeaconState P f) :=
+  blocks.foldlM (fun s b => do
+    let ctx : Ctx := { cfg, blsActive := bls }
+    if b.message.slot == s.slot then
+      require (← verifyBlockSignature bls s b) "state_transition: verify_block_signature"
+      let s ← steps.processBlock P f ctx s b.message
+      require (B256.beq b.message.state_root (Ssz.hashTreeRoot s)) "state_transition: block.state_root"
+      pure s
+    else
+      stateTransitionWith (steps.processEpoch P f ctx) (steps.processBlock P f ctx) bls s b)
+    state
+
 private def withPF (c : Case) (k : Preset → CFork → IO (Except String Unit)) :
     IO (Except String Unit) := do
   let some P := Preset.ofName? c.preset | return .error s!"no preset {c.preset}"
@@ -230,7 +249,7 @@ def transitionCase (steps : Steps) (config : Case → IO (Except ConfigError Con
       let s ← runBlocks steps P .deneb cfg bls pre preBlocks
       let s ← toForkSlot steps P .deneb cfg bls s forkEpoch
       let s ← upgradeToElectra cfg s
-      runBlocks steps P .electra cfg bls s postBlocks)
+      runPostForkBlocks steps P .electra cfg bls s postBlocks)
   | "fulu" =>
     let pre ← match ← decodeFile (α := BeaconState P .electra) c "pre.ssz_snappy" with
       | .ok s => pure s | .error e => return .error e
@@ -240,7 +259,7 @@ def transitionCase (steps : Steps) (config : Case → IO (Except ConfigError Con
       let s ← runBlocks steps P .electra cfg bls pre preBlocks
       let s ← toForkSlot steps P .electra cfg bls s forkEpoch
       let s ← upgradeToFulu cfg s
-      runBlocks steps P .fulu cfg bls s postBlocks)
+      runPostForkBlocks steps P .fulu cfg bls s postBlocks)
   | t => pure (.error s!"post_fork {t}: no upgrade in scope")
 
 end JauneConsensus.Harness

@@ -141,4 +141,45 @@ def epochProcessingCase (c : Case) (alsoFullEpoch : Bool := false) : IO (Option 
       return some why
   pure none
 
+/-! ## `rewards` -/
+
+/-- `Deltas` (`tests/formats/rewards/README.md`): the rewards and penalties a deltas function
+returns, one entry per validator. -/
+ssz_container DeltasFile (P : Preset) where
+  rewards : (SszList Gwei P.VALIDATOR_REGISTRY_LIMIT)
+  penalties : (SszList Gwei P.VALIDATOR_REGISTRY_LIMIT)
+
+/-- `rewards/<handler>` (`tests/formats/rewards/README.md`): from `pre`, each of
+`get_flag_index_deltas` for the source, target and head flags and `get_inactivity_penalty_deltas`
+must return exactly the recorded `Deltas`. -/
+def rewardsCase (c : Case) : IO (Option String) := do
+  let some P := Preset.ofName? c.preset | return some s!"no preset {c.preset}"
+  let some f := CFork.ofName? c.key.fork | return some s!"no fork {c.key.fork}"
+  if !(f.atLeast .electra) then return some s!"fork {c.key.fork} is outside this handler"
+  let some cfg := Config.ofPreset? c.preset | return some s!"no configuration for {c.preset}"
+  let want := ["head_deltas.ssz_snappy", "inactivity_penalty_deltas.ssz_snappy", "pre.ssz_snappy",
+    "source_deltas.ssz_snappy", "target_deltas.ssz_snappy"]
+  if c.files != want then return some s!"unexpected files {c.files}"
+  let pre ← match ← readState P f c "pre.ssz_snappy" with
+    | .ok s => pure s
+    | .error e => return some e
+  let computed : List (String × M Deltas) :=
+    [("source_deltas.ssz_snappy", getFlagIndexDeltas pre TIMELY_SOURCE_FLAG_INDEX),
+     ("target_deltas.ssz_snappy", getFlagIndexDeltas pre TIMELY_TARGET_FLAG_INDEX),
+     ("head_deltas.ssz_snappy", getFlagIndexDeltas pre TIMELY_HEAD_FLAG_INDEX),
+     ("inactivity_penalty_deltas.ssz_snappy", getInactivityPenaltyDeltas cfg pre)]
+  for (file, got) in computed do
+    let bytes ← match Snappy.decompress (← IO.FS.readBinFile (c.dir / file)) with
+      | .ok b => pure b.toList
+      | .error e => return some s!"{file}: {e}"
+    let expected ← match (deserialize bytes : M (DeltasFile P)) with
+      | .ok d => pure d
+      | .error r => return some s!"{file}: does not decode: {repr r}"
+    match got with
+    | .error r => return some s!"{file}: rejected ({repr r})"
+    | .ok (rewards, penalties) =>
+      if rewards != expected.rewards.toArray then return some s!"{file}: rewards differ"
+      if penalties != expected.penalties.toArray then return some s!"{file}: penalties differ"
+  pure none
+
 end JauneConsensus.Harness

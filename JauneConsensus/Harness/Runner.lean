@@ -231,6 +231,10 @@ def handlerFor (runner handler : String) : Option (Case → IO Verdict) :=
   | "shuffling", "core" => some shufflingCore
   | "ssz_generic", _ => some sszGenericCase
   | "ssz_static", _ => some sszStaticCase
+  | "rewards", _ => some fun c => do
+    match ← rewardsCase c with
+    | none => pure .pass
+    | some why => pure (.fail why)
   | "epoch_processing", _ => some fun c => do
     -- `JAUNE_CONSENSUS_EPOCH_FULL=1` adds the diagnostic `pre_epoch → post_epoch` check
     let full := (← IO.getEnv "JAUNE_CONSENSUS_EPOCH_FULL") == some "1"

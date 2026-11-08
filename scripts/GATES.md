@@ -532,6 +532,8 @@ measured peak RSS is under 200 MB.
 | `.lake/build/bin/jaune-consensus run --preset minimal --runner shuffling` / `--preset mainnet` | `compute_shuffled_index` for every index of every case, strict all-PASS, after the tree check below | 300 + 300 cases | 16.1 s / 145.3 s (WSL, 2026-11-09; 17.7 s / 155.6 s after the move to checked `U64`) |
 | `.lake/build/bin/jaune-consensus scan --preset general` / `minimal` / `mainnet` | the tree check over every in-scope suite, then the readers: every `.ssz_snappy` decodes, every `.yaml` is inside the accepted subset, and the 48 `ssz_generic/uints/valid` serializations decode to the little-endian encoding of their `value.yaml` (an independent oracle for the Snappy decoder) | 5,509 / 16,126 / 2,340 cases; 41,591 Snappy and 37,300 YAML files | 17.0 s / 8.8 s / 29.6 s |
 | `.lake/build/bin/jaune-consensus --bench-hash-pair N` | times `N` pair hashes three ways (Jaune's `Bytes.sha256` on the 64-byte list, `hashPairKernel`, `hashPair` in `JauneConsensus/Crypto/Sha256Pair.lean`) over the same pseudo-random inputs and requires all three to agree on every input (a differential run beside the theorem `hashPair_eq`); exit 1 on any disagreement | 200,000 pairs | 0.4 s per variant; `hashPair` 1.6-1.7 µs/pair against 2.9-3.0 µs for `Bytes.sha256`, both including about 0.8-0.95 µs of benchmark overhead (output bytes and loop), so about 0.8 µs against 2.0-2.1 µs for the hash itself (WSL, 2026-11-09) |
+| `.lake/build/bin/jaune-consensus run --preset P --fork F --runner epoch_processing` | each `process_<handler>` sub-step from `pre` gives `post` byte for byte, or rejects when the case has no `post` (`JauneConsensus/Epoch.lean`, `EpochAccessors.lean`); `JAUNE_CONSENSUS_EPOCH_FULL=1` adds the diagnostic `pre_epoch → post_epoch` check of the whole `process_epoch`, which every case passes except the two `effective_balance_hysteresis` generators that edit the state after yielding `pre_epoch` | minimal 155 + 157, mainnet 140 + 142 (Electra + Fulu) | minimal 6.2 s / 6.3 s, mainnet 52.6 s / 56.6 s (WSL, 2026-11-09) |
+| `.lake/build/bin/jaune-consensus run --preset P --fork F --runner rewards` | from `pre`, `get_flag_index_deltas` for the source, target and head flags and `get_inactivity_penalty_deltas` return exactly the recorded `Deltas` | 34 per preset and fork, 136 in all | minimal 0.7 s, mainnet 5.7 s per fork |
 | `.lake/build/bin/jaune-consensus --forks`, `--fork-rules NAME` | the O7 pairing table; `--fork-rules gloas` (and `eip7805`, and any unknown name) exits 1 with a refusal | — | sub-second |
 | `python3 -I scripts/consensus-vector-inventory.py --tarballs DIR --expect scripts/consensus/inventory-v1.6.1.json` | the tarballs match their pinned size and SHA-256, and regenerate the committed inventory exactly (counts and per-suite records) | 3 tarballs, 1.3 GB | 15.6 s (warm page cache) |
 | `python3 -I scripts/consensus-verify-tree.py --tarballs DIR --tree ~/consensus-spec-tests-v1.6.1/extracted [--preset P] [--select FORK[/RUNNER[/HANDLER[/SUITE]]]]` | the extracted tree's **contents**: every in-scope file under the selection is a regular file with the size and SHA-256 of its member in the digest-checked tarball, and the tree holds no entry that is not a selected member. The runner checks names only; run this once per extraction | 78,891 files (all presets) | 19.9 s (warm page cache) |
@@ -566,7 +568,11 @@ refused. Config overrides: an added unknown key, `PRESET_BASE: 'mainnet'`, and a
 `Preset.lean` fails `consensus-preset-generate.py --check`; minimal 10 to 11 fails the build at
 the `Shuffle.lean` mapping guard; mainnet 90 to 89 fails 188 of 300 mainnet shuffling cases by
 name (for example `shuffle_0x23bc..._10: index 0: computed 2, expected 3`); regenerating restores
-the committed bytes and 300/300.
+the committed bytes and 300/300. Epoch: minimal `MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA` 64,000,000,000 to
+32,000,000,000 in `Config.lean` fails `--check` and 6 of 155 minimal Electra `epoch_processing`
+cases by name (`pending_deposits/process_pending_deposits_withdrawable_validator_not_churned` at
+`deposit_balance_to_consume`; five `registry_updates` cases, among them `ejection` and
+`ejection_past_churn_limit_min`, at `exit_balance_to_consume`); regenerating restores 155/155.
 
 ### Environment and provenance
 
