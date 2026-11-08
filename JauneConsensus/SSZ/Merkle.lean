@@ -104,12 +104,58 @@ def pairUp (z : B256) : List B256 → List B256
   | [a] => [hashPair a z]
   | a :: b :: rest => hashPair a b :: pairUp z rest
 
+/-- The hash of a pair, reusing a remembered `(a, b, hash a b)` when the pair repeats. -/
+@[inline] def hashPairMemo (m : Option (B256 × B256 × B256)) (a b : B256) : B256 :=
+  match m with
+  | some (a', b', h') => if a' = a ∧ b' = b then h' else hashPair a b
+  | none => hashPair a b
+
+/-- A remembered pair is correct: its third component is the hash of the first two. -/
+def MemoOk : Option (B256 × B256 × B256) → Prop
+  | some (a, b, h) => h = hashPair a b
+  | none => True
+
+theorem hashPairMemo_eq {m : Option (B256 × B256 × B256)} (hm : MemoOk m) (a b : B256) :
+    hashPairMemo m a b = hashPair a b := by
+  match m, hm with
+  | some (a', b', h'), hm =>
+    simp only [hashPairMemo]
+    split
+    · rename_i h; obtain ⟨rfl, rfl⟩ := h; exact hm
+    · rfl
+  | none, _ => rfl
+
+/-- `pairUp` as a tail-recursive loop that reuses the previous pair's hash when adjacent pairs
+repeat (long runs of equal chunks, such as zero roots or unchanged RANDAO mixes, hash once per
+run). Equal to `pairUp` (`pairUpFast_eq`). -/
+def pairUpGo (z : B256) : Option (B256 × B256 × B256) → List B256 → List B256 → List B256
+  | _, acc, [] => acc.reverse
+  | m, acc, [a] => (hashPairMemo m a z :: acc).reverse
+  | m, acc, a :: b :: rest =>
+    let h := hashPairMemo m a b
+    pairUpGo z (some (a, b, h)) (h :: acc) rest
+
+theorem pairUpGo_eq (z : B256) : ∀ (xs : List B256) (m : Option (B256 × B256 × B256))
+    (acc : List B256), MemoOk m → pairUpGo z m acc xs = acc.reverse ++ pairUp z xs
+  | [], m, acc, _ => by simp [pairUpGo, pairUp]
+  | [a], m, acc, hm => by simp [pairUpGo, pairUp, hashPairMemo_eq hm]
+  | a :: b :: rest, m, acc, hm => by
+    simp only [pairUpGo, pairUp]
+    rw [pairUpGo_eq z rest _ _ (by simp [MemoOk, hashPairMemo_eq hm])]
+    simp [hashPairMemo_eq hm]
+
+/-- `pairUp` computed by `pairUpGo`. -/
+def pairUpFast (z : B256) (xs : List B256) : List B256 := pairUpGo z none [] xs
+
+theorem pairUpFast_eq (z : B256) (xs : List B256) : pairUpFast z xs = pairUp z xs := by
+  simp [pairUpFast, pairUpGo_eq z xs none [] trivial]
+
 /-- Merkleize `chunks` into a tree of depth `depth`, starting at height `level`. The caller
 guarantees `chunks.length ≤ 2^depth`. -/
 def merkleizeAt : (depth level : Nat) → List B256 → B256
   | depth, level, [] => zeroHashAt (level + depth)
   | 0, _, c :: _ => c
-  | depth + 1, level, cs => merkleizeAt depth (level + 1) (pairUp (zeroHashAt level) cs)
+  | depth + 1, level, cs => merkleizeAt depth (level + 1) (pairUpFast (zeroHashAt level) cs)
 
 /-- Merkleize `chunks` padded virtually to `2^depth` leaves. -/
 @[inline] def merkleizeDepth (chunks : List B256) (depth : Nat) : B256 :=

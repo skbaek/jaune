@@ -6,6 +6,8 @@ import JauneConsensus.Harness.ConfigOverride
 import JauneConsensus.Harness.SszGenericTypes
 import JauneConsensus.Harness.SszStatic
 import JauneConsensus.Harness.Operations
+import JauneConsensus.Harness.Networking
+import JauneConsensus.Harness.LightClientCases
 import JauneConsensus.Crypto.Boundary
 import JauneConsensus.Harness.StateTransition
 import JauneConsensus.Block
@@ -205,6 +207,24 @@ def ofResult (h : Case → IO (Except String Unit)) (c : Case) : IO Verdict := d
   | .ok () => pure .pass
   | .error why => pure (.fail why)
 
+/-- `networking/<handler>` (`Harness/Networking.lean`), under the case's configuration. -/
+def networkingVerdict (c : Case) : IO Verdict := do
+  match ← caseConfig c with
+  | .error e => pure (.fail s!"config: {e}")
+  | .ok cfg =>
+    match ← networkingCase cfg c with
+    | .ok () => pure .pass
+    | .error e => pure (.fail e)
+
+/-- `light_client/<handler>` and `merkle_proof/<handler>` (`Harness/LightClientCases.lean`). -/
+def lightClientVerdict (c : Case) : IO Verdict := do
+  match ← caseConfig c with
+  | .error e => pure (.fail s!"config: {e}")
+  | .ok cfg =>
+    match ← lightClientCase cfg c with
+    | .ok () => pure .pass
+    | .error e => pure (.fail e)
+
 /-- The handler table. -/
 def handlerFor (runner handler : String) : Option (Case → IO Verdict) :=
   match runner, handler with
@@ -222,6 +242,9 @@ def handlerFor (runner handler : String) : Option (Case → IO Verdict) :=
     | none => pure .pass
     | some why => pure (.fail why)
   | "operations", _ => some operationsVerdict
+  | "networking", _ => some networkingVerdict
+  | "light_client", _ => some lightClientVerdict
+  | "merkle_proof", _ => some lightClientVerdict
   | "bls", "eth_aggregate_pubkeys" => some blsAggregatePubkeys
   | "bls", "eth_fast_aggregate_verify" => some blsFastAggregateVerify
   | "fork", "fork" => some (ofResult (forkCase caseConfig))
