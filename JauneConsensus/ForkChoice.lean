@@ -677,8 +677,8 @@ def isDataAvailableColumns (cfg : Config) (oracle : DataOracle P) (beaconBlockRo
   return true
 
 /-- `on_block(store, signed_block)`: Deneb's handler for Electra (with `is_data_available` over
-blobs), Fulu's for Fulu (over data-column sidecars). The two differ otherwise only in where the
-parent state is copied, which no observable outcome depends on. -/
+blobs), Fulu's for Fulu (over data-column sidecars). Each keeps its own operation order: Fulu
+copies the parent state right after the parent check, Deneb after the availability check. -/
 def onBlock (ctx : Ctx) (oracle : DataOracle P) (store : Store P f)
     (signedBlock : SignedBeaconBlock P f) : M (Store P f) := do
   let cfg := ctx.cfg
@@ -686,6 +686,10 @@ def onBlock (ctx : Ctx) (oracle : DataOracle P) (store : Store P f)
   let block := signedBlock.message
   -- Parent block must be known
   require (store.block_states.contains block.parent_root) s!"{site}: parent known"
+  -- [Fulu] Make a copy of the state to avoid mutability issues
+  let fuluPreState ← if f.atLeast .fulu then
+      some <$> lookup store.block_states block.parent_root s!"{site}: store.block_states[parent]"
+    else pure none
   -- Blocks cannot be in the future.
   require ((← getCurrentSlot cfg store) ≥ block.slot) s!"{site}: not from the future"
   -- Check that block is later than the finalized epoch slot
@@ -697,14 +701,20 @@ def onBlock (ctx : Ctx) (oracle : DataOracle P) (store : Store P f)
   require (store.finalized_checkpoint.root == finalizedCheckpointBlock)
     s!"{site}: descends from the finalized checkpoint"
   -- Check if blob data is available
-  let blockRoot : Root := Ssz.hashTreeRoot block
-  if f.atLeast .fulu then
-    require (← isDataAvailableColumns cfg oracle blockRoot) s!"{site}: is_data_available"
-  else
-    require (← isDataAvailableBlobs oracle blockRoot block.body.blob_kzg_commitments.toArray.toList)
-      s!"{site}: is_data_available"
+  let state ← match fuluPreState with
+    | some state => do
+      -- [Fulu] `is_data_available(hash_tree_root(block))`
+      require (← isDataAvailableColumns cfg oracle (Ssz.hashTreeRoot block))
+        s!"{site}: is_data_available"
+      pure state
+    | none => do
+      -- [Deneb] `is_data_available(hash_tree_root(block), block.body.blob_kzg_commitments)`
+      require (← isDataAvailableBlobs oracle (Ssz.hashTreeRoot block)
+        block.body.blob_kzg_commitments.toArray.toList) s!"{site}: is_data_available"
+      -- [Deneb] Make a copy of the state to avoid mutability issues
+      lookup store.block_states block.parent_root s!"{site}: store.block_states[parent]"
   -- Check the block is valid and compute the post-state
-  let state ← lookup store.block_states block.parent_root s!"{site}: store.block_states[parent]"
+  let blockRoot : Root := Ssz.hashTreeRoot block
   let state ← stateTransition ctx state signedBlock true
   -- Add new block and its state to the store
   let store := { store with

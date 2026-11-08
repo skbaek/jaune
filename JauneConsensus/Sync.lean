@@ -188,16 +188,26 @@ def onBlockOptimistic (ctx : Ctx) (oracle : DataOracle P) (store : Store P f)
       if status.status.isNotValidated then
         { optStore with optimistic_roots := optStore.optimistic_roots.insert blockRoot }
       else if status.status == .valid then
-        -- NOT_VALIDATED -> VALID carries every ancestor to VALID
-        (ancestorsOf store'.blocks blockRoot).foldl
+        -- the block and, NOT_VALIDATED -> VALID carrying every ancestor to VALID, its ancestors
+        -- leave `optimistic_roots`
+        (blockRoot :: ancestorsOf store'.blocks blockRoot).foldl
           (fun s r => { s with optimistic_roots := s.optimistic_roots.erase r }) optStore
       else optStore
     pure (store', optStore, true)
   | .error _ =>
-    if status.status == .invalid then
-      match invalidBlockOf store.blocks block status.latestValidHash with
-      | some r => pure (store, optStore.invalidate (withDescendants store.blocks r), false)
-      | none => pure (store, optStore, false)
+    if status.status.isInvalidated then
+      -- `INVALID` locates `invalidBlock` by `latestValidHash`; `INVALID_BLOCK_HASH`, like a null
+      -- or unmatched hash, designates the block in question. It and its descendants become
+      -- `INVALIDATED` (the block itself is in the store only when it was imported before).
+      let located := if status.status == .invalid then
+          invalidBlockOf store.blocks block status.latestValidHash
+        else none
+      let invalidBlock := match located with
+        | some r => r
+        | none => blockRoot
+      if store.blocks.contains invalidBlock then
+        pure (store, optStore.invalidate (withDescendants store.blocks invalidBlock), false)
+      else pure (store, optStore, false)
     else pure (store, optStore, false)
 
 /-- The optimistic node's head: `get_head` with `INVALIDATED` blocks removed from the tree. -/
