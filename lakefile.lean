@@ -45,3 +45,17 @@ Exact axiom expectations for the canonical execution surface
 lean_lib «Assurance» where
   srcDir := "scripts"
   roots := #[`AxiomAudit, `ExecutionAxioms, `JauneUnionAxioms, `UnionAxiomsControls, `UnionAxiomsFixture.Good, `UnionAxiomsFixture.Bad, `UnionAxiomsFixture.Dep, `UnionAxiomsFixture.ViaDep]
+
+/--
+Consensus layer (goal `jaune-consensus-electra-fulu-v1`): an executable Electra and Fulu
+beacon-chain specification. It lives outside `Jaune/` so that Blanc, whose build needs only
+`jaune/Assurance`, does not build it; `JauneUnionAxioms` covers `Jaune/` only.
+-/
+@[default_target]
+lean_lib «JauneConsensus» where
+
+/-- The consensus conformance runner (`ConsensusMain.lean`): strict, count-checked runs of the
+pinned `v1.6.1` vectors, and the cross-layer fork pairing printer (`--forks`). -/
+@[default_target]
+lean_exe «jaune-consensus» where
+  root := `ConsensusMain

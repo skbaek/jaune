@@ -24,6 +24,20 @@ negative control, which must show that a tarball with one case removed yields
 different counts, and its output is marked unpinned so it can never stand in
 for the pinned inventory.
 
+For every in-scope suite the inventory also records, under ``suites``, what the
+conformance runner (``lake exe jaune-consensus``) pins case by case:
+
+* ``names_sha256``: SHA-256 of the sorted case directory names, one per line,
+  each line ending in ``\n``. A missing, extra or renamed case changes it.
+* ``files_sha256``: SHA-256 of the sorted ``<case>/<file>`` paths, same
+  framing. A missing, extra or renamed file (for example a Fulu fork-choice
+  ``column_<hex>.ssz_snappy``) changes it.
+* ``bls_setting``: a histogram of each case's ``meta.yaml`` ``bls_setting``
+  (``absent`` when the case has no ``meta.yaml`` or the key is not present).
+* ``config_overrides``: the sorted names of cases carrying a ``config.yaml``.
+
+These are read from the verified tarball, never from an extracted tree.
+
 Exit status: 0 on success, 1 on a digest, size, layout or count mismatch.
 """
 
@@ -33,6 +47,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
 import tarfile
 from collections import Counter, defaultdict
@@ -69,11 +84,33 @@ def check_tarball(path: str, want: dict) -> None:
         fail(f"{path}: sha256 {got} != pinned {want['sha256']}")
 
 
-def scan(path: str, preset: str) -> tuple[Counter, int]:
+BLS_RE = re.compile(rb"(?:^|[{,\s])bls_setting:\s*([0-9]+)\s*(?:[,}\n]|$)")
+
+
+def bls_setting_of(data: bytes, where: str) -> str:
+    """The ``bls_setting`` of one ``meta.yaml``, as a histogram key. Fails
+    closed on a mention the pattern does not account for."""
+    hits = BLS_RE.findall(data)
+    if len(hits) != data.count(b"bls_setting"):
+        fail(f"{where}: unrecognised bls_setting form")
+    if len(hits) > 1:
+        fail(f"{where}: repeated bls_setting")
+    if not hits:
+        return "absent"
+    v = hits[0].decode()
+    if v not in ("0", "1", "2"):
+        fail(f"{where}: bls_setting {v} outside 0, 1, 2")
+    return v
+
+
+def scan(path: str, preset: str, details: dict | None = None) -> tuple[Counter, int]:
     """Return a counter of case keys (fork, runner, handler, suite) and the
-    number of regular files seen."""
+    number of regular files seen. When ``details`` is a dict, fill it with the
+    per-suite records described in the module docstring, for in-scope suites."""
     cases: set[tuple[str, ...]] = set()
     files = 0
+    case_files: dict = defaultdict(list)
+    case_bls: dict = {}
     with tarfile.open(path, mode="r|gz") as tar:
         for m in tar:
             if not m.isfile():
@@ -86,10 +123,34 @@ def scan(path: str, preset: str) -> tuple[Counter, int]:
             if parts[1] != preset:
                 fail(f"{path}: member outside preset {preset!r}: {m.name!r}")
             files += 1
-            cases.add(tuple(parts[2:7]))
+            key = tuple(parts[2:7])
+            cases.add(key)
+            if details is not None and in_scope(preset, parts[2], parts[3]):
+                rel = "/".join(parts[7:])
+                case_files[key].append(rel)
+                if rel == "meta.yaml":
+                    fh = tar.extractfile(m)
+                    if fh is None:
+                        fail(f"{path}: unreadable {m.name!r}")
+                    case_bls[key] = bls_setting_of(fh.read(), m.name)
     per_suite: Counter = Counter()
     for fork, runner, handler, suite, _case in cases:
         per_suite[(fork, runner, handler, suite)] += 1
+    if details is not None:
+        grouped: dict = defaultdict(list)
+        for key in case_files:
+            grouped[key[:4]].append(key)
+        for skey, ckeys in sorted(grouped.items()):
+            names = sorted(k[4] for k in ckeys)
+            paths = sorted(f"{k[4]}/{rel}" for k in ckeys for rel in case_files[k])
+            hist: Counter = Counter(case_bls.get(k, "absent") for k in ckeys)
+            details["/".join(skey)] = {
+                "cases": len(names),
+                "names_sha256": hashlib.sha256("".join(n + "\n" for n in names).encode()).hexdigest(),
+                "files_sha256": hashlib.sha256("".join(q + "\n" for q in paths).encode()).hexdigest(),
+                "bls_setting": dict(sorted(hist.items())),
+                "config_overrides": sorted(k[4] for k in ckeys if "config.yaml" in case_files[k]),
+            }
     return per_suite, files
 
 
@@ -99,6 +160,7 @@ def build_inventory(tar_dir: str, prov: dict, pinned: bool) -> dict:
         "tag_commit": prov["tag_commit"],
         "pinned": pinned,
         "presets": {},
+        "suites": {},
     }
     for preset in PRESETS:
         meta = prov["tarballs"][preset]
@@ -107,7 +169,9 @@ def build_inventory(tar_dir: str, prov: dict, pinned: bool) -> dict:
             fail(f"missing tarball {path}")
         if pinned:
             check_tarball(path, meta)
-        per_suite, files = scan(path, preset)
+        details: dict = {}
+        per_suite, files = scan(path, preset, details)
+        out["suites"][preset] = details
         if not per_suite:
             fail(f"{path}: no cases")
         tree: dict = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
@@ -181,6 +245,22 @@ def markdown(inv: dict) -> str:
             s = ", ".join(f"{k}:{v}" for k, v in sorted(suites.items()))
             L.append(f"| {pr} | {f} | {r} | {h} | {n} | {s} |")
     L.append("")
+    L.append("## bls_setting and per-case config overrides (in scope)")
+    L.append("")
+    L.append("Histogram of `meta.yaml` `bls_setting` per preset (`absent`: no `meta.yaml` or no key), "
+             "and cases carrying a `config.yaml`. Per-suite values, with the case-name and file-path "
+             "digests the runner checks, are in the JSON under `suites`.")
+    L.append("")
+    L.append("| preset | absent | 0 | 1 | 2 | config overrides |")
+    L.append("|---|---:|---:|---:|---:|---:|")
+    for pr, recs in inv.get("suites", {}).items():
+        h: Counter = Counter()
+        nover = 0
+        for r_ in recs.values():
+            h.update(r_["bls_setting"])
+            nover += len(r_["config_overrides"])
+        L.append(f"| {pr} | {h['absent']} | {h['0']} | {h['1']} | {h['2']} | {nover} |")
+    L.append("")
     L.append("## Out-of-scope forks, for context")
     L.append("")
     L.append("| preset | fork | cases outside scope |")
@@ -224,6 +304,14 @@ def main() -> int:
     if a.expect:
         with open(a.expect, encoding="utf-8") as f:
             want = json.load(f)
+        if want.get("suites") != inv["suites"]:
+            ws, gs = want.get("suites") or {}, inv["suites"]
+            for pr in sorted(set(ws) | set(gs)):
+                a_, b_ = ws.get(pr, {}), gs.get(pr, {})
+                for k in sorted(set(a_) | set(b_)):
+                    if a_.get(k) != b_.get(k):
+                        print(f"suite record mismatch {pr}/{k}", file=sys.stderr)
+            fail("suite records differ from " + a.expect)
         if want["presets"] != inv["presets"]:
             got_rows = {(pr, fo, r, h): n for pr, fo, r, h, _s, n in handler_rows(inv)}
             want_rows = {(pr, fo, r, h): n for pr, fo, r, h, _s, n in handler_rows(want)}

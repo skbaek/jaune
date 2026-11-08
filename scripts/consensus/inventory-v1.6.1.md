@@ -534,6 +534,16 @@ Suites are listed as `name:count`.
 | mainnet | fulu | transition | core | 27 | pyspec_tests:27 |
 | mainnet | phase0 | shuffling | core | 300 | shuffle:300 |
 
+## bls_setting and per-case config overrides (in scope)
+
+Histogram of `meta.yaml` `bls_setting` per preset (`absent`: no `meta.yaml` or no key), and cases carrying a `config.yaml`. Per-suite values, with the case-name and file-path digests the runner checks, are in the JSON under `suites`.
+
+| preset | absent | 0 | 1 | 2 | config overrides |
+|---|---:|---:|---:|---:|---:|
+| general | 5509 | 0 | 0 | 0 | 0 |
+| minimal | 15894 | 0 | 226 | 6 | 10 |
+| mainnet | 2132 | 0 | 202 | 6 | 0 |
+
 ## Out-of-scope forks, for context
 
 | preset | fork | cases outside scope |
