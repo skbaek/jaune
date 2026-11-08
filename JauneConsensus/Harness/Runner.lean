@@ -22,14 +22,13 @@ inductive Verdict
   | fail (why : String)
   deriving BEq, Repr
 
-private def readYaml (c : Case) (f : String) : IO (Except String YVal) := do
-  let bytes ← IO.FS.readBinFile (c.dir / f)
-  pure ((parse bytes).mapError (s!"{f}: " ++ ·))
+private def readYaml (c : Case) (f : String) : IO (Except YamlError YVal) := do
+  pure (parse (← IO.FS.readBinFile (c.dir / f)))
 
-/-- Big-endian bytes to `B256` (a `Bytes32` read from a vector). -/
-def b256OfBytes (bs : List UInt8) : Except String B256 :=
-  if bs.length == 32 then .ok (bs.foldl (fun (n : Nat) (b : UInt8) => 256 * n + b.toNat) 0).toB256
-  else .error s!"expected 32 bytes, got {bs.length}"
+/-- A `Bytes32` read from a vector: exactly 32 bytes. -/
+def b256OfBytes (bs : List UInt8) : Except YamlError B256 :=
+  if bs.length == 32 then .ok (B256.ofBytes bs)
+  else .error (.shape s!"expected 32 bytes, got {bs.length}")
 
 /-- `shuffling/core` (`tests/formats/shuffling/README.md`): for every `i < count`,
 `compute_shuffled_index(i, count, seed) == mapping[i]`, and `mapping` has exactly `count`
@@ -39,7 +38,7 @@ def shufflingCore (c : Case) : IO Verdict := do
     | return .fail s!"no preset {c.preset}"
   if c.files != ["mapping.yaml"] then return .fail s!"unexpected files {c.files}"
   let doc ← readYaml c "mapping.yaml"
-  let r : Except String Verdict := do
+  let r : Except YamlError Verdict := do
     let v ← doc
     v.expectKeys ["seed", "count", "mapping"]
     let seed ← b256OfBytes (← (← v.field "seed").asHex)
@@ -47,17 +46,20 @@ def shufflingCore (c : Case) : IO Verdict := do
     let mapping ← (← (← v.field "mapping").asSeq).mapM YVal.asNat
     if mapping.length != count then
       return .fail s!"mapping has {mapping.length} entries, count is {count}"
+    let toU64 (n : Nat) : Except YamlError U64 :=
+      (U64.ofNat? n "vector uint64").mapError (fun e => .shape s!"{repr e}")
+    let countU ← toU64 count
     let mut i := 0
     for want in mapping do
-      match computeShuffledIndex P i count seed with
+      match computeShuffledIndex P (← toU64 i) countU seed with
       | .ok got =>
-        if got != want then return .fail s!"index {i}: computed {got}, expected {want}"
+        if got.toNat != want then return .fail s!"index {i}: computed {got}, expected {want}"
       | .error e => return .fail s!"index {i}: rejected: {repr e}"
       i := i + 1
     pure .pass
   match r with
   | .ok v => pure v
-  | .error e => pure (.fail e)
+  | .error e => pure (.fail (toString e))
 
 /-- `ssz_generic/<handler>` (`tests/formats/ssz_generic/README.md`): the SSZ type comes from the
 case name; a `valid` case must decode, equal `value.yaml`, re-encode to `serialized` and have the
@@ -81,7 +83,7 @@ def sszGenericCase (c : Case) : IO Verdict := do
         let metaV ← metaY.mapError CaseFail.yaml
         metaV.expectKeys ["root"] |>.mapError CaseFail.yaml
         let rootBytes ← ((metaV.field "root").bind YVal.asHex).mapError CaseFail.yaml
-        if rootBytes.length != 32 then throw (CaseFail.yaml "root is not 32 bytes")
+        if rootBytes.length != 32 then throw (CaseFail.yaml (.shape "root is not 32 bytes"))
         checks.valid ser value (Bytes.toB256 rootBytes)
     else pure (checks.invalid ser)
   match r with
@@ -93,7 +95,7 @@ list of pubkeys; `output` is the aggregate, or `null` when pyspec raises. -/
 def blsAggregatePubkeys (c : Case) : IO Verdict := do
   if c.files != ["data.yaml"] then return .fail s!"unexpected files {c.files}"
   let doc ← readYaml c "data.yaml"
-  let r : Except String Verdict := do
+  let r : Except YamlError Verdict := do
     let v ← doc
     v.expectKeys ["input", "output"]
     let pks ← (← (← v.field "input").asSeq).mapM YVal.asHex
@@ -110,13 +112,13 @@ def blsAggregatePubkeys (c : Case) : IO Verdict := do
       | .error e => pure (.fail s!"rejected: {repr e}")
   match r with
   | .ok v => pure v
-  | .error e => pure (.fail e)
+  | .error e => pure (.fail (toString e))
 
 /-- `bls/eth_fast_aggregate_verify` (`tests/formats/bls/eth_fast_aggregate_verify.md`). -/
 def blsFastAggregateVerify (c : Case) : IO Verdict := do
   if c.files != ["data.yaml"] then return .fail s!"unexpected files {c.files}"
   let doc ← readYaml c "data.yaml"
-  let r : Except String Verdict := do
+  let r : Except YamlError Verdict := do
     let v ← doc
     v.expectKeys ["input", "output"]
     let i ← v.field "input"
@@ -129,19 +131,19 @@ def blsFastAggregateVerify (c : Case) : IO Verdict := do
     pure (if got == want then .pass else .fail s!"verify gave {got}, expected {want}")
   match r with
   | .ok v => pure v
-  | .error e => pure (.fail e)
+  | .error e => pure (.fail (toString e))
 
 /-- The configuration a case runs under: the base `Config` of its preset, with the case's
 `config.yaml` applied when it has one (`Config.applyOverrides`). -/
-def caseConfig (c : Case) : IO (Except String Config) := do
+def caseConfig (c : Case) : IO (Except ConfigError Config) := do
   let some base := Config.ofPreset? c.preset
-    | return .error s!"no configuration for preset {c.preset}"
+    | return .error (.presetBase c.preset "minimal or mainnet")
   if !c.has "config.yaml" then return .ok base
   let doc ← readYaml c "config.yaml"
-  pure (doc.bind (base.applyOverrides ·))
+  pure ((doc.mapError ConfigError.yaml).bind (base.applyOverrides ·))
 
 private def overridden (y : String) : Option Config :=
-  ((parseString y).bind (Config.minimal.applyOverrides ·)).toOption
+  (((parseString y).mapError ConfigError.yaml).bind (Config.minimal.applyOverrides ·)).toOption
 
 #guard (overridden "PRESET_BASE: 'minimal'\nALTAIR_FORK_EPOCH: 7\nBLOB_SCHEDULE:\n  - EPOCH: 1\n    MAX_BLOBS_PER_BLOCK: 9\n").map
   (fun c => (c.ALTAIR_FORK_EPOCH, c.BLOB_SCHEDULE, c.SECONDS_PER_SLOT)) ==
@@ -231,7 +233,7 @@ def snappyUintOracle (cs : List Case) : IO (Nat × List String) := do
       (if bits > 64 then YVal.asQuotedNat else YVal.asNat)
     match dec, val with
     | .ok out, .ok v =>
-      if out.toList != uintToBytes (bits / 8) v || v ≥ 2 ^ bits then
+      if out.toList != JauneConsensus.uintToBytes (bits / 8) v || v ≥ 2 ^ bits then
         bad := s!"{c.render}: decoded bytes differ from value.yaml" :: bad
     | .error e, _ => bad := s!"{c.render}: {e}" :: bad
     | _, .error e => bad := s!"{c.render}: {e}" :: bad

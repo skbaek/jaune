@@ -38,7 +38,27 @@ inductive YVal where
   | map (kvs : List (String × YVal))
   deriving Repr, Inhabited, BEq
 
-abbrev Res (α : Type) := Except String α
+/-- Why the reader or a typed value conversion failed. The payloads are diagnostic text only;
+no caller branches on them. -/
+inductive YamlError where
+  /-- The input is outside the accepted subset, or malformed. -/
+  | syntax (what : String)
+  /-- An iteration bound was exhausted (unreachable for the bounds this module passes). -/
+  | fuel
+  /-- A value has the wrong shape for the typed reader. -/
+  | shape (what : String)
+  /-- A required mapping key is absent. -/
+  | missingKey (key : String)
+  deriving Repr, BEq
+
+instance : ToString YamlError where
+  toString
+    | .syntax w => s!"yaml: {w}"
+    | .fuel => "yaml: iteration bound exhausted"
+    | .shape w => s!"yaml: {w}"
+    | .missingKey k => s!"yaml: missing key {k}"
+
+abbrev Res (α : Type) := Except YamlError α
 
 /-! ## Characters -/
 
@@ -90,10 +110,10 @@ def skipWs : Nat → Nat → Nat
 /-- A single-quoted scalar whose opening quote is at `pos - 1`. Returns text and the position
 after the closing quote. -/
 def singleQ : Nat → Nat → List Char → Res (String × Nat)
-  | 0, _, _ => .error "yaml: fuel"
+  | 0, _, _ => .error .fuel
   | fuel + 1, pos, acc =>
     match at? buf lim pos with
-    | none => .error "yaml: unterminated single-quoted scalar"
+    | none => .error (.syntax "unterminated single-quoted scalar")
     | some c =>
       if c == ch '\'' then
         if at? buf lim (pos + 1) == some (ch '\'') then singleQ fuel (pos + 2) ('\'' :: acc)
@@ -102,10 +122,10 @@ def singleQ : Nat → Nat → List Char → Res (String × Nat)
 
 /-- A double-quoted scalar whose opening quote is at `pos - 1`. -/
 def doubleQ : Nat → Nat → List Char → Res (String × Nat)
-  | 0, _, _ => .error "yaml: fuel"
+  | 0, _, _ => .error .fuel
   | fuel + 1, pos, acc =>
     match at? buf lim pos with
-    | none => .error "yaml: unterminated double-quoted scalar"
+    | none => .error (.syntax "unterminated double-quoted scalar")
     | some c =>
       if c == ch '"' then .ok (foldLines acc.reverse, pos + 1)
       else if c == ch '\\' then
@@ -117,14 +137,14 @@ def doubleQ : Nat → Nat → List Char → Res (String × Nat)
             else if e == ch 't' then some '\t' else none
           match r with
           | some d => doubleQ fuel (pos + 2) (d :: acc)
-          | none => .error s!"yaml: unsupported escape \\{charOf e}"
-        | none => .error "yaml: unterminated double-quoted scalar"
+          | none => .error (.syntax s!"unsupported escape \\{charOf e}")
+        | none => .error (.syntax "unterminated double-quoted scalar")
       else doubleQ fuel (pos + 1) (charOf c :: acc)
 
 /-- Scan a plain scalar in flow context starting at `pos`: up to a flow indicator, a `:`
 followed by a space, line break or the limit, or the limit. Returns the end position. -/
 def plainEnd : Nat → Nat → Res Nat
-  | 0, _ => .error "yaml: fuel"
+  | 0, _ => .error .fuel
   | fuel + 1, pos =>
     match at? buf lim pos with
     | none => .ok pos
@@ -134,7 +154,7 @@ def plainEnd : Nat → Nat → Res Nat
         match at? buf lim (pos + 1) with
         | none => .ok pos
         | some d => if isSpaceOrNl d then .ok pos else plainEnd fuel (pos + 1)
-      else if c == ch '#' then .error "yaml: '#' in a plain scalar (comment) is outside the subset"
+      else if c == ch '#' then .error (.syntax "'#' in a plain scalar (comment) is outside the subset")
       else plainEnd fuel (pos + 1)
 
 def plainText (start stop : Nat) : String :=
@@ -144,10 +164,10 @@ def plainText (start stop : Nat) : String :=
 mutual
 /-- One flow node at `pos` (whitespace already skipped). -/
 def node : Nat → Nat → Res (YVal × Nat)
-  | 0, _ => .error "yaml: fuel"
+  | 0, _ => .error .fuel
   | fuel + 1, pos =>
     match at? buf lim pos with
-    | none => .error "yaml: missing value"
+    | none => .error (.syntax "missing value")
     | some c =>
       if c == ch '[' then seqItems fuel (skipWs buf lim (lim + 1) (pos + 1)) [] true
       else if c == ch '{' then mapItems fuel (skipWs buf lim (lim + 1) (pos + 1)) [] true
@@ -157,15 +177,15 @@ def node : Nat → Nat → Res (YVal × Nat)
       else if c == ch '"' then do
         let (s, p) ← doubleQ buf lim (lim + 1) (pos + 1) []
         pure (.scalar s true, p)
-      else if isIndicator c then .error s!"yaml: plain scalar starts with indicator '{charOf c}'"
+      else if isIndicator c then .error (.syntax s!"plain scalar starts with indicator '{charOf c}'")
       else do
         let stop ← plainEnd buf lim (lim + 1) pos
         let s := plainText buf pos stop
-        if s.isEmpty then .error "yaml: empty plain scalar" else pure (.scalar s false, stop)
+        if s.isEmpty then .error (.syntax "empty plain scalar") else pure (.scalar s false, stop)
 
 /-- Items of a flow sequence; `pos` is past `[` and whitespace. -/
 def seqItems : Nat → Nat → List YVal → Bool → Res (YVal × Nat)
-  | 0, _, _, _ => .error "yaml: fuel"
+  | 0, _, _, _ => .error .fuel
   | fuel + 1, pos, acc, first =>
     if first && at? buf lim pos == some (ch ']') then .ok (.seq [], pos + 1) else do
     let (v, p) ← node fuel pos
@@ -174,23 +194,23 @@ def seqItems : Nat → Nat → List YVal → Bool → Res (YVal × Nat)
     | some c =>
       if c == ch ',' then seqItems fuel (skipWs buf lim (lim + 1) (p + 1)) (v :: acc) false
       else if c == ch ']' then .ok (.seq (v :: acc).reverse, p + 1)
-      else .error s!"yaml: expected ',' or ']' in flow sequence, found '{charOf c}'"
-    | none => .error "yaml: unterminated flow sequence"
+      else .error (.syntax s!"expected ',' or ']' in flow sequence, found '{charOf c}'")
+    | none => .error (.syntax "unterminated flow sequence")
 
 /-- Entries of a flow mapping; `pos` is past `{` and whitespace. -/
 def mapItems : Nat → Nat → List (String × YVal) → Bool → Res (YVal × Nat)
-  | 0, _, _, _ => .error "yaml: fuel"
+  | 0, _, _, _ => .error .fuel
   | fuel + 1, pos, acc, first =>
     if first && at? buf lim pos == some (ch '}') then .ok (.map [], pos + 1) else do
     let (k, p) ← node fuel pos
     let key ← match k with
       | .scalar s _ => pure s
-      | _ => .error "yaml: non-scalar mapping key"
+      | _ => .error (.syntax "non-scalar mapping key")
     let p := skipWs buf lim (lim + 1) p
-    if at? buf lim p != some (ch ':') then .error s!"yaml: expected ':' after key {key}"
+    if at? buf lim p != some (ch ':') then .error (.syntax s!"expected ':' after key {key}")
     else if !(at? buf lim (p + 1)).any isSpaceOrNl then
-      .error s!"yaml: expected space after ':' (key {key})"
-    else if acc.any (·.1 == key) then .error s!"yaml: duplicate key {key}"
+      .error (.syntax s!"expected space after ':' (key {key})")
+    else if acc.any (·.1 == key) then .error (.syntax s!"duplicate key {key}")
     else do
     let (v, q) ← node fuel (skipWs buf lim (lim + 1) (p + 1))
     let q := skipWs buf lim (lim + 1) q
@@ -198,15 +218,15 @@ def mapItems : Nat → Nat → List (String × YVal) → Bool → Res (YVal × N
     | some c =>
       if c == ch ',' then mapItems fuel (skipWs buf lim (lim + 1) (q + 1)) ((key, v) :: acc) false
       else if c == ch '}' then .ok (.map ((key, v) :: acc).reverse, q + 1)
-      else .error s!"yaml: expected ',' or '}}' in flow mapping, found '{charOf c}'"
-    | none => .error "yaml: unterminated flow mapping"
+      else .error (.syntax s!"expected ',' or '}}' in flow mapping, found '{charOf c}'")
+    | none => .error (.syntax "unterminated flow mapping")
 end
 
 /-- A complete inline node occupying `[pos, lim)` up to trailing whitespace. -/
 def inline (pos : Nat) : Res YVal := do
   let (v, p) ← node buf lim (2 * lim + 2) (skipWs buf lim (lim + 1) pos)
   if skipWs buf lim (lim + 1) p == lim then pure v
-  else .error s!"yaml: trailing content at byte {p}"
+  else .error (.syntax s!"trailing content at byte {p}")
 
 end Flow
 
@@ -265,7 +285,7 @@ def gather (first : Line) (minCol : Nat) : List Line → Nat × List Line
 mutual
 /-- A node whose first line is `l` (with indentation `l.col ≥ minCol`). -/
 def blockNode : Nat → Line → List Line → Nat → Res (YVal × List Line)
-  | 0, _, _, _ => .error "yaml: fuel"
+  | 0, _, _, _ => .error .fuel
   | fuel + 1, l, ls, minCol =>
     if isDash buf l then blockSeq fuel l.col (l :: ls) []
     else if (mapEntry? buf l).isSome then blockMap fuel l.col (l :: ls) []
@@ -277,11 +297,11 @@ def blockNode : Nat → Line → List Line → Nat → Res (YVal × List Line)
 
 /-- Entries of a block sequence at column `col`. -/
 def blockSeq : Nat → Nat → List Line → List YVal → Res (YVal × List Line)
-  | 0, _, _, _ => .error "yaml: fuel"
+  | 0, _, _, _ => .error .fuel
   | _, _, [], acc => .ok (.seq acc.reverse, [])
   | fuel + 1, col, l :: ls, acc =>
     if l.col < col then .ok (.seq acc.reverse, l :: ls)
-    else if l.col > col then .error s!"yaml: unexpected indentation at byte {l.start}"
+    else if l.col > col then .error (.syntax s!"unexpected indentation at byte {l.start}")
     else if !isDash buf l then .ok (.seq acc.reverse, l :: ls)
     else do
       let (v, rest) ←
@@ -289,8 +309,8 @@ def blockSeq : Nat → Nat → List Line → List YVal → Res (YVal × List Lin
           match ls with
           | m :: ms =>
             if m.col > col then blockNode fuel m ms (col + 1)
-            else .error s!"yaml: empty sequence entry at byte {l.start}"
-          | [] => .error s!"yaml: empty sequence entry at byte {l.start}"
+            else .error (.syntax s!"empty sequence entry at byte {l.start}")
+          | [] => .error (.syntax s!"empty sequence entry at byte {l.start}")
         else
           let rec firstNonSpace : Nat → Nat → Nat
             | 0, j => j
@@ -302,17 +322,17 @@ def blockSeq : Nat → Nat → List Line → List YVal → Res (YVal × List Lin
 
 /-- Entries of a block mapping at column `col`. -/
 def blockMap : Nat → Nat → List Line → List (String × YVal) → Res (YVal × List Line)
-  | 0, _, _, _ => .error "yaml: fuel"
+  | 0, _, _, _ => .error .fuel
   | _, _, [], acc => .ok (.map acc.reverse, [])
   | fuel + 1, col, l :: ls, acc =>
     if l.col < col then .ok (.map acc.reverse, l :: ls)
-    else if l.col > col then .error s!"yaml: unexpected indentation at byte {l.start}"
+    else if l.col > col then .error (.syntax s!"unexpected indentation at byte {l.start}")
     else match mapEntry? buf l with
     | none =>
-      if isDash buf l then .error s!"yaml: sequence entry inside a mapping at byte {l.start}"
-      else .error s!"yaml: expected a mapping entry at byte {l.start}"
+      if isDash buf l then .error (.syntax s!"sequence entry inside a mapping at byte {l.start}")
+      else .error (.syntax s!"expected a mapping entry at byte {l.start}")
     | some (key, vpos) =>
-      if acc.any (·.1 == key) then .error s!"yaml: duplicate key {key}" else do
+      if acc.any (·.1 == key) then .error (.syntax s!"duplicate key {key}") else do
       let (v, rest) ←
         if vpos < l.stop then
           let (stop, rest) := gather { l with start := vpos } (col + 1) ls
@@ -324,8 +344,8 @@ def blockMap : Nat → Nat → List Line → List (String × YVal) → Res (YVal
           | m :: ms =>
             if m.col > col then blockNode fuel m ms (col + 1)
             else if m.col == col && isDash buf m then blockSeq fuel col (m :: ms) []
-            else .error s!"yaml: empty value for key {key}"
-          | [] => .error s!"yaml: empty value for key {key}"
+            else .error (.syntax s!"empty value for key {key}")
+          | [] => .error (.syntax s!"empty value for key {key}")
       blockMap fuel col rest ((key, v) :: acc)
 end
 
@@ -338,7 +358,7 @@ line inside the document; an optional final `...` line. -/
 def lines (buf : ByteArray) : Res (List Line) := do
   for b in buf.data do
     if b != 0x0a && (b < 0x20 || b > 0x7e) then
-      throw s!"yaml: byte {b} outside the accepted subset (printable ASCII and line breaks)"
+      throw (.syntax s!"byte {b} outside the accepted subset (printable ASCII and line breaks)")
   -- line boundaries
   let mut out : Array Line := #[]
   let mut begin := 0
@@ -359,21 +379,21 @@ def lines (buf : ByteArray) : Res (List Line) := do
   | [] => pure ()
   let docLines := ls.reverse
   for l in docLines do
-    if l.start == l.stop then throw s!"yaml: blank line at byte {l.start} is outside the subset"
+    if l.start == l.stop then throw (.syntax s!"blank line at byte {l.start} is outside the subset")
     let t := lineText buf l
     if l.col == 0 && (t == "---" || t.startsWith "--- " || t == "..." || t.startsWith "%") then
-      throw s!"yaml: document marker or directive '{t}' is outside the subset"
+      throw (.syntax s!"document marker or directive '{t}' is outside the subset")
   pure docLines
 
 /-- Parse one document of the accepted subset. -/
 def parse (buf : ByteArray) : Res YVal := do
   let ls ← lines buf
   match ls with
-  | [] => throw "yaml: empty document"
+  | [] => throw (.syntax "empty document")
   | l :: rest =>
-    if l.col != 0 then throw "yaml: document does not start at column 0"
+    if l.col != 0 then throw (.syntax "document does not start at column 0")
     let (v, rest) ← blockNode buf (2 * ls.length + 2) l rest 0
-    if !rest.isEmpty then throw "yaml: trailing content after the document node"
+    if !rest.isEmpty then throw (.syntax "trailing content after the document node")
     pure v
 
 def parseString (s : String) : Res YVal := parse s.toUTF8
@@ -395,34 +415,34 @@ def keys : YVal → List String
 def field (v : YVal) (key : String) : Res YVal :=
   match v.get? key with
   | some x => .ok x
-  | none => .error s!"yaml: missing key {key}"
+  | none => .error (.missingKey key)
 
 /-- Require a mapping with exactly the given keys (in any order). -/
 def expectKeys (v : YVal) (ks : List String) : Res Unit :=
   match v with
   | .map kvs =>
     if kvs.length == ks.length && ks.all (fun k => kvs.any (·.1 == k)) then .ok ()
-    else .error s!"yaml: expected exactly keys {ks}, found {kvs.map (·.1)}"
-  | _ => .error "yaml: expected a mapping"
+    else .error (.shape s!"expected exactly keys {ks}, found {kvs.map (·.1)}")
+  | _ => .error (.shape "expected a mapping")
 
 def asSeq : YVal → Res (List YVal)
   | .seq xs => .ok xs
-  | _ => .error "yaml: expected a sequence"
+  | _ => .error (.shape "expected a sequence")
 
 /-- A plain decimal natural number: digits only, no sign, no leading zero (except `0`). -/
 def asNat : YVal → Res Nat
   | .scalar s false =>
     let cs := s.toList
     if cs.isEmpty || !cs.all Char.isDigit || (cs.length > 1 && cs.head? == some '0') then
-      .error s!"yaml: not a decimal natural: {s}"
+      .error (.shape s!"not a decimal natural: {s}")
     else .ok (cs.foldl (fun n c => 10 * n + (c.toNat - '0'.toNat)) 0)
-  | _ => .error "yaml: expected a plain decimal scalar"
+  | _ => .error (.shape "expected a plain decimal scalar")
 
 /-- A quoted decimal natural (the vectors quote integers wider than 64 bits). Same digit rules
 as `asNat`. -/
 def asQuotedNat : YVal → Res Nat
   | .scalar s true => asNat (.scalar s false)
-  | _ => .error "yaml: expected a quoted decimal scalar"
+  | _ => .error (.shape "expected a quoted decimal scalar")
 
 def hexVal (c : Char) : Option Nat :=
   if '0' ≤ c && c ≤ '9' then some (c.toNat - '0'.toNat)
@@ -447,14 +467,14 @@ def asHex : YVal → Res (List UInt8)
     | '0' :: 'x' :: cs =>
       match hexBytes cs with
       | some bs => .ok bs
-      | none => .error s!"yaml: bad hex string {s}"
-    | _ => .error s!"yaml: hex string without 0x prefix: {s}"
-  | _ => .error "yaml: expected a hex scalar"
+      | none => .error (.shape s!"bad hex string {s}")
+    | _ => .error (.shape s!"hex string without 0x prefix: {s}")
+  | _ => .error (.shape "expected a hex scalar")
 
 def asBool : YVal → Res Bool
   | .scalar "true" false => .ok true
   | .scalar "false" false => .ok false
-  | _ => .error "yaml: expected true or false"
+  | _ => .error (.shape "expected true or false")
 
 def isNull : YVal → Bool
   | .scalar "null" false => true

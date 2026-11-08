@@ -36,28 +36,28 @@ instance : FromYaml Bool := ⟨YVal.asBool⟩
 instance : FromYaml U64 where
   fromYaml y := do
     let n ← natOf y
-    if h : n < 2 ^ 64 then pure (U64.ofNatLt n h) else throw "uint64 out of range"
+    if h : n < 2 ^ 64 then pure (U64.ofNatLt n h) else throw (.shape "uint64 out of range")
 
 instance {n : Nat} : FromYaml (UIntN n) where
   fromYaml y := do
     let v ← natOf y
-    if h : v < 2 ^ (8 * n) then pure ⟨v, h⟩ else throw "uintN out of range"
+    if h : v < 2 ^ (8 * n) then pure ⟨v, h⟩ else throw (.shape "uintN out of range")
 
 instance {α : Type} {n : Nat} [FromYaml α] : FromYaml (SszVector α n) where
   fromYaml y := do
     let xs := (← (← y.asSeq).mapM fromYaml).toArray
-    if h : xs.size = n then pure ⟨xs, h⟩ else throw "vector of the wrong length"
+    if h : xs.size = n then pure ⟨xs, h⟩ else throw (.shape "vector of the wrong length")
 
 instance {α : Type} {n : Nat} [FromYaml α] : FromYaml (SszList α n) where
   fromYaml y := do
     let xs := (← (← y.asSeq).mapM fromYaml).toArray
-    if h : xs.size ≤ n then pure ⟨xs, h⟩ else throw "list beyond its limit"
+    if h : xs.size ≤ n then pure ⟨xs, h⟩ else throw (.shape "list beyond its limit")
 
 /-- Bitfields are given as their SSZ bytes. -/
 def fromSszHex {α : Type} [Ssz α] (y : YVal) : Res α := do
   match (deserialize (← y.asHex) : M α) with
   | .ok v => pure v
-  | .error _ => throw "undecodable SSZ bytes"
+  | .error _ => throw (.shape "undecodable SSZ bytes")
 
 instance {n : Nat} : FromYaml (Bitvector n) := ⟨fromSszHex⟩
 instance {n : Nat} : FromYaml (Bitlist n) := ⟨fromSszHex⟩
@@ -65,7 +65,7 @@ instance {n : Nat} : FromYaml (Bitlist n) := ⟨fromSszHex⟩
 /-- Why a case failed. -/
 inductive CaseFail where
   | snappy (e : Snappy.Error)
-  | yaml (e : String)
+  | yaml (e : YamlError)
   | decode (r : Reject)
   | valueMismatch
   | reserialize
@@ -77,7 +77,7 @@ inductive CaseFail where
 /-- A one-line rendering of a failure. -/
 def CaseFail.render : CaseFail → String
   | .snappy e => s!"snappy: {e}"
-  | .yaml e => s!"yaml: {e}"
+  | .yaml e => toString e
   | .decode r => s!"decode rejected: {repr r}"
   | .valueMismatch => "decoded value differs from value.yaml"
   | .reserialize => "re-serialization differs from serialized"

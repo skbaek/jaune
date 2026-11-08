@@ -4,6 +4,7 @@ import JauneConsensus.Error
 import JauneConsensus.UInt
 import JauneConsensus.Preset
 import JauneConsensus.Config
+import JauneConsensus.Helpers
 import JauneConsensus.Shuffle
 import JauneConsensus.Fork
 import JauneConsensus.SSZ.Merkle
@@ -25,6 +26,7 @@ import JauneConsensus.Crypto.KZGCells
 import JauneConsensus.Crypto.KZGVectors
 import JauneConsensus.Crypto.KZGCellsVectors
 import JauneConsensus.Crypto.Boundary
+import JauneConsensus.Crypto.Sha256Pair
 -- Harness modules (vector readers, discovery, case checks), outside the semantics but built with it.
 import JauneConsensus.Harness.Snappy
 import JauneConsensus.Harness.Yaml

@@ -15,13 +15,13 @@ open Jaune Yaml
 instance : FromYaml UInt8 where
   fromYaml y := do
     let v ← natOf y
-    if v < 256 then pure v.toUInt8 else throw "byte out of range"
+    if v < 256 then pure v.toUInt8 else throw (.shape "byte out of range")
 
 /-- `List[byte, N]` and `ByteList[N]` are given as `0x`-prefixed bytes ("JSON mapping"). -/
 instance (priority := high) {n : Nat} : FromYaml (SszList UInt8 n) where
   fromYaml y := do
     let bs := (← y.asHex).toArray
-    if h : bs.size ≤ n then pure ⟨bs, h⟩ else throw "byte list beyond its limit"
+    if h : bs.size ≤ n then pure ⟨bs, h⟩ else throw (.shape "byte list beyond its limit")
 
 /-- `yaml_container Name [f₁, f₂, ...]`: read a container from a mapping by field name. -/
 syntax "yaml_container " ident " [" ident,+ "]" : command
@@ -204,14 +204,14 @@ instance : FromYaml CompatibleUnionA where
   fromYaml y := do
     match ← unionParts y with
     | (1, d) => .s1 <$> fromYaml d
-    | _ => throw "CompatibleUnionA selector"
+    | _ => throw (.shape "CompatibleUnionA selector")
 
 instance : FromYaml CompatibleUnionBC where
   fromYaml y := do
     match ← unionParts y with
     | (2, d) => .s2 <$> fromYaml d
     | (3, d) => .s3 <$> fromYaml d
-    | _ => throw "CompatibleUnionBC selector"
+    | _ => throw (.shape "CompatibleUnionBC selector")
 
 instance : FromYaml CompatibleUnionABCA where
   fromYaml y := do
@@ -220,7 +220,7 @@ instance : FromYaml CompatibleUnionABCA where
     | (2, d) => .s2 <$> fromYaml d
     | (3, d) => .s3 <$> fromYaml d
     | (4, d) => .s4 <$> fromYaml d
-    | _ => throw "CompatibleUnionABCA selector"
+    | _ => throw (.shape "CompatibleUnionABCA selector")
 
 
 /-- The container type of a `containers` case, by structure name. -/

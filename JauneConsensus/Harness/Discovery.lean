@@ -100,14 +100,15 @@ def runnerFileKinds : String → List String
 /-! ## Refused forks -/
 
 /-- Why a fork directory is refused by name, if it is. Gloas is a declared `CFork` whose rules do
-not resolve (`CFork.resolve` gives the reason); `eip7805` is a feature-fork directory of the
-`v1.6.1` vectors with no `CFork` value. Both fail closed; neither is ever run as Fulu. -/
-def forkRefusal? (f : String) : Option String :=
-  if f == "eip7805" then
-    some "refused: eip7805 is a feature fork outside this goal (fails closed)"
+not resolve (`CFork.resolve` gives `notImplemented`); `eip7805` is a feature-fork directory of the
+`v1.6.1` vectors with no `CFork` value (`unknown`). Both fail closed; neither is ever run as Fulu.
+Other directory names that are not `CFork`s (`phase0`, `altair`, ... where formats were
+introduced) are not refused here: the scope rule decides them. -/
+def forkRefusal? (f : String) : Option ForkRefusal :=
+  if f == "eip7805" then some (.unknown f)
   else match CFork.ofName? f with
     | some _ => match CFork.resolve f with
-      | .error e => some e.render
+      | .error e => some e
       | .ok _ => none
     | none => none
 
@@ -122,13 +123,16 @@ def forkRefusal? (f : String) : Option String :=
 inductive Tier | smoke | full
   deriving BEq, Repr
 
+/-- A directory name used as a selection filter (a fork, runner, handler or suite name). -/
+abbrev DirName := String
+
 structure Selection where
   root : System.FilePath
   preset : String
-  fork : Option String := none
-  runner : Option String := none
-  handler : Option String := none
-  suite : Option String := none
+  fork : Option DirName := none
+  runner : Option DirName := none
+  handler : Option DirName := none
+  suite : Option DirName := none
   tier : Tier := .full
 
 /-- One discovered case: its suite and directory, with its sorted file names. -/
@@ -143,7 +147,7 @@ def Case.render (c : Case) : String := s!"{c.preset}/{c.key.render}/{c.name}"
 
 def Case.has (c : Case) (f : String) : Bool := c.files.contains f
 
-private def matches? (filter : Option String) (v : String) : Bool :=
+private def matches? (filter : Option DirName) (v : String) : Bool :=
   match filter with
   | none => true
   | some f => f == v
@@ -188,7 +192,7 @@ def discover (m : Manifest) (sel : Selection) : IO (List Case) := do
   if !presets.contains sel.preset then
     throw (IO.userError s!"refused: unknown preset {sel.preset}")
   if let some f := sel.fork then
-    if let some why := forkRefusal? f then throw (IO.userError why)
+    if let some why := forkRefusal? f then throw (IO.userError (toString why))
   -- in-scope suites of the manifest under the selection
   let wanted := m.suites.filter fun (p, k, _, _) =>
     p == sel.preset && matches? sel.fork k.fork && matches? sel.runner k.runner &&
@@ -202,7 +206,7 @@ def discover (m : Manifest) (sel : Selection) : IO (List Case) := do
     if !matches? sel.fork fork then continue
     for runner in ← listDir (base / fork) true true do
       if !matches? sel.runner runner || !inScope sel.preset fork runner then continue
-      if let some why := forkRefusal? fork then throw (IO.userError why)
+      if let some why := forkRefusal? fork then throw (IO.userError (toString why))
       for handler in ← listDir (base / fork / runner) true true do
         if !matches? sel.handler handler then continue
         for suite in ← listDir (base / fork / runner / handler) true true do
