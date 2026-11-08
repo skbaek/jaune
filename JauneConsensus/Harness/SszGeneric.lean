@@ -119,9 +119,11 @@ structure TypeChecks where
   valid : Bytes → YVal → B256 → Except CaseFail Unit
   invalid : Bytes → Except CaseFail Unit
 
-/-- The checks for a type with SSZ, YAML and equality instances. Equality is `BEq` (derived
+/-- The checks for a type with SSZ, YAML and equality instances (not specialized per type: the
+harness dispatches over dozens of container types, and per-type specialization of the whole
+codec made one generated C function of 72,000 lines). Equality is `BEq` (derived
 field by field for containers), which is what the comparison runs. -/
-def TypeChecks.of (α : Type) [Ssz α] [FromYaml α] [BEq α] : TypeChecks where
+@[nospecialize, noinline] def TypeChecks.of (α : Type) [Ssz α] [FromYaml α] [BEq α] : TypeChecks where
   valid ser value root := do
     let v ← match (deserialize ser : M α) with
       | .ok v => pure v
