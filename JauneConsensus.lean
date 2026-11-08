@@ -12,6 +12,7 @@ import JauneConsensus.SSZ.Merkle
 import JauneConsensus.SSZ.Basic
 import JauneConsensus.SSZ.Container
 import JauneConsensus.SSZ.Progressive
+import JauneConsensus.SSZ.Proof
 -- Harness modules (vector readers, discovery, case checks), outside the semantics but built with it.
 import JauneConsensus.Harness.Snappy
 import JauneConsensus.Harness.Yaml
