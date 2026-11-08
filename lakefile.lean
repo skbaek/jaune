@@ -74,8 +74,9 @@ Not a default target. -/
 lean_exe «jaune-consensus-bls-bench» where
   root := `ConsensusBLSBench
 
-/-- Local runner for the general-preset `kzg` vectors (EIP-4844 and EIP-7594), until it is
-folded into `jaune-consensus`. Not a default target. -/
+/-- Differential tool for the general-preset `kzg` vectors (the spec-shaped cell paths and
+Jaune's `verifyKzgProof`); the catalogue gate is `jaune-consensus run --runner kzg`. Not a
+default target. -/
 lean_exe «jaune-consensus-kzg-vectors» where
   root := `ConsensusKZGVectors
 

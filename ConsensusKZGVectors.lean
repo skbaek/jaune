@@ -1,4 +1,6 @@
--- Local runner for the general-preset `kzg` vectors of consensus-specs v1.6.1:
+-- Differential tool for the general-preset `kzg` vectors of consensus-specs v1.6.1 (the
+-- catalogue gate is `jaune-consensus run --preset general --runner kzg`; this keeps the
+-- `@spec` and `@jaune` pseudo-handlers, which compare alternative implementations):
 -- `tests/general/deneb/kzg/*/kzg-mainnet/*` and `tests/general/fulu/kzg/*/kzg-mainnet/*`.
 -- Usage: jaune-consensus-kzg-vectors <tests/general dir> [handler ...]
 --
