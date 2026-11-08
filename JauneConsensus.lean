@@ -14,6 +14,7 @@ import JauneConsensus.SSZ.Progressive
 import JauneConsensus.SSZ.Proof
 import JauneConsensus.Containers
 import JauneConsensus.Accessors
+import JauneConsensus.Block
 import JauneConsensus.Crypto.HashToCurve
 import JauneConsensus.Crypto.HashToCurveVectors
 import JauneConsensus.Crypto.Codec
@@ -39,4 +40,5 @@ import JauneConsensus.Harness.Discovery
 import JauneConsensus.Harness.SszGeneric
 import JauneConsensus.Harness.SszGenericTypes
 import JauneConsensus.Harness.SszStatic
+import JauneConsensus.Harness.Operations
 import JauneConsensus.Harness.Runner
