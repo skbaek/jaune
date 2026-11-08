@@ -50,3 +50,5 @@ import JauneConsensus.Epoch
 import JauneConsensus.Harness.EpochCases
 import JauneConsensus.Harness.Operations
 import JauneConsensus.Harness.Runner
+import JauneConsensus.Crypto.G2Subgroup
+import JauneConsensus.Crypto.G2SubgroupVectors
