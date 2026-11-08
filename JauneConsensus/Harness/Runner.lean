@@ -10,6 +10,7 @@ import JauneConsensus.Harness.Networking
 import JauneConsensus.Harness.LightClientCases
 import JauneConsensus.Crypto.Boundary
 import JauneConsensus.Harness.StateTransition
+import JauneConsensus.Harness.KzgCases
 import JauneConsensus.Block
 import JauneConsensus.Harness.ForkChoiceCases
 
@@ -249,6 +250,7 @@ def handlerFor (runner handler : String) : Option (Case → IO Verdict) :=
   | "bls", "eth_aggregate_pubkeys" => some blsAggregatePubkeys
   | "bls", "eth_fast_aggregate_verify" => some blsFastAggregateVerify
   | "fork", "fork" => some (ofResult (forkCase caseConfig))
+  | "kzg", _ => some (ofResult kzgCase)
   | "sanity", "slots" => some (ofResult (sanitySlotsCase steps caseConfig))
   | "sanity", "blocks" => some (ofResult (blocksCase steps caseConfig))
   | "finality", "finality" => some (ofResult (blocksCase steps caseConfig))
