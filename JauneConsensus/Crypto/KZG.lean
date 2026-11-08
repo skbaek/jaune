@@ -157,6 +157,22 @@ def rootsOfUnityBrp : Except String (Array Fr) := do
 def kzgSetupG1LagrangeBrp : Except String (Array BLSP) := do
   bitReversalPermutation (← kzgSetupG1Lagrange)
 
+/-- Montgomery batch inversion: the inverses of all entries with one field
+inversion. Zero entries map to 0, as `FinField.inv` does; for nonzero entries the
+inverse in a prime field is unique, so each output equals `x⁻¹` (differential
+`#guard`s in KZGVectors.lean). Used where the spec divides by many values in a loop:
+`a / b` is `a * b⁻¹` by definition of `FinField.div`. -/
+def batchInverse (xs : Array Fr) : Array Fr :=
+  -- pre[i] = product of the nonzero entries before i
+  let (pre, total) := xs.foldl
+    (fun (acc : Array Fr × Fr) x => (acc.1.push acc.2, if x = 0 then acc.2 else acc.2 * x))
+    (#[], 1)
+  let (_, out) := (xs.zip pre).foldr
+    (fun (x, p) (acc : Fr × Array Fr) =>
+      if x = 0 then (acc.1, acc.2.push 0) else (acc.1 * x, acc.2.push (acc.1 * p)))
+    (total⁻¹, #[])
+  out.reverse
+
 /-! ### Polynomials -/
 
 /-- `evaluate_polynomial_in_evaluation_form(polynomial, z)`. -/
@@ -169,11 +185,12 @@ def evaluatePolynomialInEvaluationForm (polynomial : Array Fr) (z : Fr) : Except
   match roots.findIdx? (· = z) with
   | some evalIndex => idx polynomial evalIndex "evaluate_polynomial_in_evaluation_form"
   | none =>
+    -- the divisions `a / b` below use one batch inversion of all the `b`
+    let bInv := batchInverse (roots.map (z - ·))
     let mut result : Fr := 0
     for i in [0:width] do
       let a := (← idx polynomial i "polynomial") * (← idx roots i "roots")
-      let b := z - (← idx roots i "roots")
-      result := result + a / b
+      result := result + a * (← idx bInv i "b⁻¹")
     let r := z ^ width - 1
     return result * r * inverseWidth
 
@@ -226,14 +243,15 @@ def verifyKzgProofBatch (commitments : Array (Bytes × BLSP)) (zs ys : Array Fr)
 /-- `compute_quotient_eval_within_domain(z, polynomial, y)`. -/
 def computeQuotientEvalWithinDomain (z : Fr) (polynomial : Array Fr) (y : Fr) : Except String Fr := do
   let roots ← rootsOfUnityBrp
+  -- one batch inversion for all `denominator`s (the skipped one is 0 and unused)
+  let denominatorInv := batchInverse (roots.map fun omegaI => z * (z - omegaI))
   let mut result : Fr := 0
   for i in [0:roots.size] do
     let omegaI ← idx roots i "roots"
     if omegaI = z then continue
     let fI := (← idx polynomial i "polynomial") - y
     let numerator := fI * omegaI
-    let denominator := z * (z - omegaI)
-    result := result + numerator / denominator
+    result := result + numerator * (← idx denominatorInv i "denominator⁻¹")
   return result
 
 /-- `compute_kzg_proof_impl(polynomial, z)`. -/
@@ -244,6 +262,7 @@ def computeKzgProofImpl (polynomial : Array Fr) (z : Fr) : Except String (BLSP �
   let polynomialShifted := polynomial.map (· - y)
   -- For all x_i, compute (x_i - z)
   let denominatorPoly := roots.map (· - z)
+  let denominatorInv := batchInverse denominatorPoly
   -- Compute the quotient polynomial directly in evaluation form
   let mut quotientPolynomial : Array Fr := Array.replicate fieldElementsPerBlob 0
   for i in [0:fieldElementsPerBlob] do
@@ -253,7 +272,7 @@ def computeKzgProofImpl (polynomial : Array Fr) (z : Fr) : Except String (BLSP �
       quotientPolynomial := quotientPolynomial.setIfInBounds i
         (← computeQuotientEvalWithinDomain (← idx roots i "roots") polynomial y)
     else
-      quotientPolynomial := quotientPolynomial.setIfInBounds i (a / b)
+      quotientPolynomial := quotientPolynomial.setIfInBounds i (a * (← idx denominatorInv i "b⁻¹"))
   return (← g1Lincomb (← kzgSetupG1LagrangeBrp) quotientPolynomial, y)
 
 /-- `compute_kzg_proof(blob, z_bytes)`: the proof and `y` as bytes. -/

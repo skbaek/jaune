@@ -20,4 +20,10 @@ open Jaune JauneConsensus
 -- Bit reversal on 8 entries.
 #guard bitReversalPermutation #[0, 1, 2, 3, 4, 5, 6, 7] = .ok #[0, 4, 2, 6, 1, 5, 3, 7]
 
+-- Batch inversion equals elementwise inversion, zeros included.
+def frs : Array Fr := #[3, 0, 7, FinField.ofNat (blsModulus - 1), 1, 0, 123456789]
+#guard batchInverse frs = frs.map (·⁻¹)
+#guard batchInverse #[] = (#[] : Array Fr)
+#guard batchInverse #[0, 0] = (#[0, 0] : Array Fr)
+
 end JauneConsensus.KZGVectors

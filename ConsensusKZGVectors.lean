@@ -218,6 +218,16 @@ def kzgHandler (name : String) (inp : Y) : Except String V := do
   | "compute_cells" =>
     let blob ← asBytes (← field inp "blob")
     return vOf (computeCells blob) fun cells => .list (cells.toList.map vBytes)
+  | "compute_cells@spec" =>
+    let blob ← asBytes (← field inp "blob")
+    return vOf (computeCellsSpec blob) fun cells => .list (cells.toList.map vBytes)
+  | "compute_cells_and_kzg_proofs@spec" =>
+    let blob ← asBytes (← field inp "blob")
+    let r : Except String (Array Bytes × Array Bytes) := do
+      kzgAssert (blob.length = bytesPerBlob) "blob length"
+      computeCellsAndKzgProofsPolynomialcoeffSpec (← polynomialEvalToCoeff (← blobToPolynomial blob))
+    return vOf r fun (cells, proofs) =>
+      .list [.list (cells.toList.map vBytes), .list (proofs.toList.map vBytes)]
   | "compute_cells_and_kzg_proofs" =>
     let blob ← asBytes (← field inp "blob")
     return vOf (computeCellsAndKzgProofs blob) fun (cells, proofs) =>
@@ -256,7 +266,9 @@ def handlers : List (String × String × Nat) :=
 
 /-- Differential pseudo-handlers, run only when named: (fork, name, directory, count). -/
 def differentials : List (String × String × String × Nat) :=
-  [("deneb", "verify_kzg_proof@jaune", "verify_kzg_proof", 122)]
+  [("deneb", "verify_kzg_proof@jaune", "verify_kzg_proof", 122),
+   ("fulu", "compute_cells@spec", "compute_cells", 11),
+   ("fulu", "compute_cells_and_kzg_proofs@spec", "compute_cells_and_kzg_proofs", 11)]
 
 def main (args : List String) : IO UInt32 := do
   let some root := args.head? | IO.eprintln "usage: jaune-consensus-kzg-vectors <tests/general> [handler ...]"; return 2
@@ -279,10 +291,13 @@ def main (args : List String) : IO UInt32 := do
     let t0 ← IO.monoMsNow
     for name in names do
       let y := parseYaml (← IO.FS.readFile (dir / name / "data.yaml"))
+      let tc0 ← IO.monoMsNow
       let r ← IO.lazyPure fun _ => do
         let expected ← V.ofY (← field y "output")
         let got ← kzgHandler h (← field y "input")
         return got == expected
+      let tc1 ← IO.monoMsNow
+      if tc1 - tc0 ≥ 2000 then IO.println s!"  {name}: {tc1 - tc0} ms"
       match r with
       | .ok true => pass := pass + 1
       | .ok false => fail := fail + 1; IO.println s!"FAIL {fork}/{h}/{name}"

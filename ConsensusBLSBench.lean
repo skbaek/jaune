@@ -39,6 +39,14 @@ def main (args : List String) : IO Unit := do
     timeIt "interpolate 64 points (quadratic)" (fun (c : Array Fr) => interpolatePolynomialcoeff coset (c.extract 0 64)) scal (fun r => toString (r.toOption.map (·.size)))
     timeIt "interpolate 64 points (spec, cubic)" (fun (c : Array Fr) => interpolatePolynomialcoeffSpec coset (c.extract 0 64)) scal (fun r => toString (r.toOption.map (·.size)))
   | .error e => IO.println e
+  timeIt "FK20 table (64 G1 FFTs of 128, once per process)" (fun (_ : Nat) => fk20Table.get) k
+    (fun r => toString (r.toOption.map (·.size)))
+  timeIt "fk20H (direct MSMs, reference)" fk20H scal (fun r => toString (r.toOption.map (·.size)))
+  timeIt "fk20HFft (Toeplitz in frequency domain)" fk20HFft scal (fun r => toString (r.toOption.map (·.size)))
+  IO.println s!"fk20HFft = fk20H on this polynomial: {decide ((fk20HFft scal).toOption = (fk20H scal).toOption)}"
+  timeIt "computeCellsAndKzgProofsPolynomialcoeff (FFT cells + FK20), one blob"
+    computeCellsAndKzgProofsPolynomialcoeff scal (fun r => toString (r.toOption.map (·.2.size)))
+  timeIt "cellsFromCoeff (FFT), one blob" cellsFromCoeff scal (fun r => toString (r.toOption.map (·.size)))
   let _ := mono
   let reps := 1
   for _ in List.range reps do
@@ -70,5 +78,7 @@ def main (args : List String) : IO Unit := do
       (fun r => toString r.x.val)
     timeIt "G2 subgroup check (mulBy r)" (fun (t : BLSP2) => t.mulBy blsCurveOrder) q
       (fun r => toString r.x.val)
+    timeIt "G2 subgroup check, psi endomorphism (consensus)" g2SubgroupCheckFast q
+      (fun r => toString r)
     timeIt "G1 subgroup check (mulBy r)" (fun (t : BLSP) => t.mulBy blsCurveOrder) p
       (fun r => toString r.x.val)

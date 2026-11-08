@@ -13,3 +13,5 @@ import JauneConsensus.Crypto.KZG
 import JauneConsensus.Crypto.KZGCells
 import JauneConsensus.Crypto.KZGVectors
 import JauneConsensus.Crypto.KZGCellsVectors
+import JauneConsensus.Crypto.G2Subgroup
+import JauneConsensus.Crypto.G2SubgroupVectors
