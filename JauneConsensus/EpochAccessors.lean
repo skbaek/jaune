@@ -1,4 +1,5 @@
 import JauneConsensus.Accessors
+import JauneConsensus.Signing
 import JauneConsensus.Crypto.Boundary
 
 /-!
@@ -28,8 +29,6 @@ def TIMELY_HEAD_FLAG_INDEX : Nat := 2
 /-- `PARTICIPATION_FLAG_WEIGHTS = [TIMELY_SOURCE_WEIGHT, TIMELY_TARGET_WEIGHT, TIMELY_HEAD_WEIGHT]`
 `= [uint64(14), uint64(26), uint64(14)]` -/
 def PARTICIPATION_FLAG_WEIGHTS : List Nat := [14, 26, 14]
-/-- `DOMAIN_SYNC_COMMITTEE = DomainType('0x07000000')` -/
-def DOMAIN_SYNC_COMMITTEE : Bytes := [0x07, 0x00, 0x00, 0x00]
 
 /-! ## Participation and rewards -/
 
@@ -88,9 +87,14 @@ def getEligibleValidatorIndices (state : BeaconState P f) : M (Array ValidatorIn
   let mut out := #[]
   let mut i := 0
   for v in state.validators.toArray do
-    let next ← previous.add? U64.one "get_eligible_validator_indices: previous_epoch + 1"
-    if isActiveValidator v previous || (v.slashed && next < v.withdrawable_epoch) then
-      out := out.push (← U64.ofNat? i "ValidatorIndex")
+    -- `active or (slashed and previous_epoch + 1 < withdrawable_epoch)`, short-circuiting
+    let eligible ←
+      if isActiveValidator v previous then pure true
+      else if v.slashed then do
+        let next ← previous.add? U64.one "get_eligible_validator_indices: previous_epoch + 1"
+        pure (next < v.withdrawable_epoch)
+      else pure false
+    if eligible then out := out.push (← U64.ofNat? i "ValidatorIndex")
     i := i + 1
   pure out
 
@@ -160,6 +164,35 @@ def getInactivityPenaltyDeltas (cfg : Config) (state : BeaconState P f) : M Delt
 
 /-! ## The next sync committee -/
 
+/-- `get_next_sync_committee_indices(state)` before Electra (`specs/altair/beacon-chain.md`):
+sampling weighted by effective balance with one random byte per candidate, against
+`MAX_EFFECTIVE_BALANCE`. Fuel as below. -/
+def getNextSyncCommitteeIndicesAltair (state : BeaconState P f) : M (Array ValidatorIndex) := do
+  let site := "get_next_sync_committee_indices"
+  let epoch ← (← getCurrentEpoch state).add? U64.one site
+  let maxRandomByte ← c64 (2 ^ 8 - 1)
+  let active ← getActiveValidatorIndices state epoch
+  let count ← U64.ofNat? active.size site
+  let seed ← getSeed state epoch DOMAIN_SYNC_COMMITTEE
+  let maxEb ← c64 P.MAX_EFFECTIVE_BALANCE
+  -- `i` is a Python `int`; `uint64(i % count)` and `uint64(i // 32)` are the typed casts
+  let rec loop (fuel : Nat) (i : Nat) (acc : Array ValidatorIndex) : M (Array ValidatorIndex) := do
+    match fuel with
+    | 0 => throw (.assert s!"{site}: loop bound")
+    | fuel + 1 =>
+      if acc.size ≥ P.SYNC_COMMITTEE_SIZE then return acc
+      if count.toNat == 0 then throw (.divByZero s!"{site}: i % active_validator_count")
+      let shuffled ← computeShuffledIndex P (← U64.ofNat? (i % count.toNat) site) count seed
+      let candidate ← getAt active shuffled.toNat site
+      let block ← U64.ofNat? (i / 32) site
+      let randomByte ← getAt (hashBytes (seed.toBytes ++ uintToBytes 8 block.toNat)).toArray
+        (i % 32) site
+      let v ← state.validators.get candidate.toNat site
+      let acc := if (← v.effective_balance.mul? maxRandomByte site).toNat ≥
+          (← maxEb.mul? (← c64 randomByte.toNat) site).toNat then acc.push candidate else acc
+      loop fuel (i + 1) acc
+  loop (2 ^ 20) 0 #[]
+
 /-- `get_next_sync_committee_indices(state)` (`specs/electra/beacon-chain.md`): sampling weighted
 by effective balance with 16-bit random values. pyspec's `while` loop runs on fuel (`2^20`
 iterations, far beyond any input the specification can produce with non-negligible probability)
@@ -188,11 +221,13 @@ def getNextSyncCommitteeIndices (state : BeaconState P f) : M (Array ValidatorIn
       loop fuel (← i.add? U64.one site) acc
   loop (2 ^ 20) U64.zero #[]
 
-/-- `get_next_sync_committee(state)` (Altair): the sampled validators' pubkeys and their
+/-- `get_next_sync_committee(state)` (Altair; Electra's sampling from Electra on): the sampled
+validators' pubkeys and their
 aggregate (`eth_aggregate_pubkeys`, `Crypto/Boundary.lean`). -/
 def getNextSyncCommittee (state : BeaconState P f) : M (SyncCommittee P) := do
   let site := "get_next_sync_committee"
-  let indices ← getNextSyncCommitteeIndices state
+  let indices ← if f.atLeast .electra then getNextSyncCommitteeIndices state
+    else getNextSyncCommitteeIndicesAltair state
   let pubkeys ← indices.mapM fun i => do
     pure (← state.validators.get i.toNat site).pubkey
   let agg ← ethAggregatePubkeysM (pubkeys.toList.map (·.toArray.toList))

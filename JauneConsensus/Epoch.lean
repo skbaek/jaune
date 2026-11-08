@@ -125,9 +125,10 @@ def processRewardsAndPenalties (cfg : Config) (state : BeaconState P f) : M (Bea
 
 /-! ## Registry and slashings -/
 
-/-- `process_registry_updates` (`specs/electra/beacon-chain.md`). Each iteration reads the
-validator from the current state, as pyspec's view does. -/
-def processRegistryUpdates (cfg : Config) (state : BeaconState P f) : M (BeaconState P f) := do
+/-- `process_registry_updates`, Electra (`specs/electra/beacon-chain.md`). Each iteration reads
+the validator from the current state, as pyspec's view does. -/
+def processRegistryUpdatesElectra (cfg : Config) (state : BeaconState P f) :
+    M (BeaconState P f) := do
   let site := "process_registry_updates"
   let currentEpoch ← getCurrentEpoch state
   let activationEpoch ← computeActivationExitEpoch P currentEpoch
@@ -146,8 +147,54 @@ def processRegistryUpdates (cfg : Config) (state : BeaconState P f) : M (BeaconS
         ← state.validators.set i { validator with activation_epoch := activationEpoch } site }
   pure state
 
-/-- `process_slashings` (`specs/electra/beacon-chain.md`). `sum(state.slashings)` adds typed
-`Gwei` values, so it is checked `uint64` addition. -/
+/-- `get_validator_activation_churn_limit(state)` (`specs/deneb/beacon-chain.md`, EIP-7514):
+`min(MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT, get_validator_churn_limit(state))`. -/
+def getValidatorActivationChurnLimit (cfg : Config) (state : BeaconState P f) : M U64 := do
+  let maxChurn ← c64 cfg.MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT
+  let churn ← getValidatorChurnLimit cfg state
+  pure (if maxChurn < churn then maxChurn else churn)
+
+/-- `process_registry_updates`, Deneb (`specs/deneb/beacon-chain.md`): eligibility and ejections,
+then the activation queue sorted by `(activation_eligibility_epoch, index)` and cut at the
+activation churn limit. -/
+def processRegistryUpdatesDeneb (cfg : Config) (state : BeaconState P f) :
+    M (BeaconState P f) := do
+  let site := "process_registry_updates"
+  let ejection ← c64 cfg.EJECTION_BALANCE
+  let mut state := state
+  for i in List.range state.validators.toArray.size do
+    let validator ← state.validators.get i site
+    if isEligibleForActivationQueue P f validator then
+      let e ← (← getCurrentEpoch state).add? U64.one site
+      state := { state with validators :=
+        ← state.validators.set i { validator with activation_eligibility_epoch := e } site }
+    let validator ← state.validators.get i site
+    if isActiveValidator validator (← getCurrentEpoch state) &&
+        validator.effective_balance ≤ ejection then
+      state ← initiateValidatorExit cfg state (← U64.ofNat? i "ValidatorIndex")
+  let mut queue : List (Nat × Nat) := []
+  let mut i := 0
+  for v in state.validators.toArray do
+    if isEligibleForActivation state v then queue := (v.activation_eligibility_epoch.toNat, i) :: queue
+    i := i + 1
+  let sorted := queue.reverse.mergeSort (fun a b => decide (a.1 < b.1 ∨ (a.1 = b.1 ∧ a.2 ≤ b.2)))
+  let limit := (← getValidatorActivationChurnLimit cfg state).toNat
+  for (_, index) in sorted.take limit do
+    let validator ← state.validators.get index site
+    let e ← computeActivationExitEpoch P (← getCurrentEpoch state)
+    state := { state with validators :=
+      ← state.validators.set index { validator with activation_epoch := e } site }
+  pure state
+
+/-- `process_registry_updates`: Electra from Electra on, Deneb before. -/
+def processRegistryUpdates (cfg : Config) (state : BeaconState P f) : M (BeaconState P f) :=
+  if f.atLeast .electra then processRegistryUpdatesElectra cfg state
+  else processRegistryUpdatesDeneb cfg state
+
+/-- `process_slashings`: Electra (`specs/electra/beacon-chain.md`) computes a penalty per
+effective-balance increment; Bellatrix to Deneb (`specs/bellatrix/beacon-chain.md`) scale each
+validator's increments by the adjusted total and divide by the total balance.
+`sum(state.slashings)` adds typed `Gwei` values, so it is checked `uint64` addition. -/
 def processSlashings (_cfg : Config) (state : BeaconState P f) : M (BeaconState P f) := do
   let site := "process_slashings"
   let epoch ← getCurrentEpoch state
@@ -156,16 +203,25 @@ def processSlashings (_cfg : Config) (state : BeaconState P f) : M (BeaconState 
   let scaled ← sumSlashings.mul? (← c64 P.PROPORTIONAL_SLASHING_MULTIPLIER_BELLATRIX) site
   let adjusted := if scaled < totalBalance then scaled else totalBalance
   let increment ← c64 P.EFFECTIVE_BALANCE_INCREMENT
-  let penaltyPerIncrement ← adjusted.div? (← totalBalance.div? increment site) site
   let half ← c64 (P.EPOCHS_PER_SLASHINGS_VECTOR / 2)
-  let target ← epoch.add? half site
   let mut state := state
-  for i in List.range state.validators.toArray.size do
-    let validator ← state.validators.get i site
-    if validator.slashed && target == validator.withdrawable_epoch then
-      let increments ← validator.effective_balance.div? increment site
-      let penalty ← penaltyPerIncrement.mul? increments site
-      state ← decreaseBalance state (← U64.ofNat? i "ValidatorIndex") penalty
+  if f.atLeast .electra then
+    let penaltyPerIncrement ← adjusted.div? (← totalBalance.div? increment site) site
+    for i in List.range state.validators.toArray.size do
+      let validator ← state.validators.get i site
+      if validator.slashed then
+        if (← epoch.add? half site) == validator.withdrawable_epoch then
+          let increments ← validator.effective_balance.div? increment site
+          let penalty ← penaltyPerIncrement.mul? increments site
+          state ← decreaseBalance state (← U64.ofNat? i "ValidatorIndex") penalty
+  else
+    for i in List.range state.validators.toArray.size do
+      let validator ← state.validators.get i site
+      if validator.slashed then
+        if (← epoch.add? half site) == validator.withdrawable_epoch then
+          let numerator ← (← validator.effective_balance.div? increment site).mul? adjusted site
+          let penalty ← (← numerator.div? totalBalance site).mul? increment site
+          state ← decreaseBalance state (← U64.ofNat? i "ValidatorIndex") penalty
   pure state
 
 /-- `process_eth1_data_reset` (`specs/phase0/beacon-chain.md`). -/
@@ -199,7 +255,9 @@ def processPendingConsolidations (_cfg : Config) (state : BeaconState P f) :
     next := next + 1
   state.setPendingConsolidations (← SszList.ofArray (pending.toArray.extract next pending.length) site)
 
-/-- `process_effective_balance_updates` (`specs/electra/beacon-chain.md`). -/
+/-- `process_effective_balance_updates`: the ceiling is `get_max_effective_balance(validator)` from
+Electra (`specs/electra/beacon-chain.md`), `MAX_EFFECTIVE_BALANCE` before
+(`specs/phase0/beacon-chain.md`). -/
 def processEffectiveBalanceUpdates (_cfg : Config) (state : BeaconState P f) :
     M (BeaconState P f) := do
   let site := "process_effective_balance_updates"
@@ -211,7 +269,8 @@ def processEffectiveBalanceUpdates (_cfg : Config) (state : BeaconState P f) :
   for i in List.range validators.toArray.size do
     let validator ← validators.get i site
     let balance ← state.balances.get i site
-    let maxEffective ← c64 (getMaxEffectiveBalance P validator)
+    let maxEffective ← c64 (if f.atLeast .electra then getMaxEffectiveBalance P validator
+      else P.MAX_EFFECTIVE_BALANCE)
     -- `a < b or c < d`, short-circuiting as Python's `or` does
     let low ← balance.add? downward site
     let update ← if low < validator.effective_balance then pure true
