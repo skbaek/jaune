@@ -24,6 +24,7 @@ import JauneConsensus.Facts.Gloas.InvariantsAttest
 import JauneConsensus.Facts.Gloas.InvariantsQueues
 import JauneConsensus.Facts.Gloas.InvariantsRefs
 import JauneConsensus.Facts.Gloas.InvariantsWindow
+import JauneConsensus.Facts.Gloas.InvariantsCrossing
 
 /-!
 # Whole-library axiom union for `JauneConsensus`
