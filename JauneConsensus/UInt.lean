@@ -264,6 +264,85 @@ theorem ne_of_beq_eq_false {a b : U64} (h : (a == b) = false) : a ≠ b := by
   rw [hT] at h
   cases h
 
+-- W2b bridging lemmas
+
+theorem sub?_ok_iff {a b : U64} {site : String} :
+    (∃ x, sub? a b site = .ok x) ↔ b.toNat ≤ a.toNat := by
+  unfold sub?
+  constructor
+  · rintro ⟨x, hx⟩
+    split at hx
+    · assumption
+    · cases hx
+  · intro h
+    exact ⟨⟨(a.toNat - b.toNat).toUInt64⟩, by simp only [sub?, if_pos h]; rfl⟩
+
+theorem toNat_div? {a b x : U64} {site : String} (h : div? a b site = .ok x) :
+    x.toNat = a.toNat / b.toNat := by
+  unfold div? at h
+  split at h
+  · cases h
+  · cases h
+    simp only [toNat, Nat.toUInt64]
+    exact Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt (Nat.div_le_self _ _) (toNat_lt _))
+
+theorem div?_ok_iff {a b : U64} {site : String} :
+    (∃ x, div? a b site = .ok x) ↔ b.toNat ≠ 0 := by
+  unfold div?
+  constructor
+  · rintro ⟨x, hx⟩
+    split at hx
+    · cases hx
+    · assumption
+  · intro h
+    exact ⟨⟨(a.toNat / b.toNat).toUInt64⟩, by simp only [div?, if_neg h]; rfl⟩
+
+theorem toNat_mod? {a b x : U64} {site : String} (h : mod? a b site = .ok x) :
+    x.toNat = a.toNat % b.toNat := by
+  unfold mod? at h
+  split at h
+  · cases h
+  · cases h
+    simp only [toNat, Nat.toUInt64]
+    have hb : 0 < b.toNat := Nat.pos_of_ne_zero ‹_›
+    exact Nat.mod_eq_of_lt (Nat.lt_trans (Nat.mod_lt _ hb) (toNat_lt _))
+
+theorem ofNat?_ok_iff {n : Nat} {site : String} :
+    (∃ x : U64, ofNat? n site = .ok x) ↔ n < 2 ^ 64 := by
+  unfold ofNat?
+  constructor
+  · rintro ⟨x, hx⟩
+    split at hx
+    · assumption
+    · cases hx
+  · intro h
+    exact ⟨⟨n.toUInt64⟩, by simp only [ofNat?, if_pos h]; rfl⟩
+
+theorem le_iff {a b : U64} : a ≤ b ↔ a.toNat ≤ b.toNat := Iff.rfl
+
+theorem lt_iff {a b : U64} : a < b ↔ a.toNat < b.toNat := Iff.rfl
+
+theorem toNat_zero : (zero).toNat = 0 := rfl
+
+theorem toNat_one : (one).toNat = 1 := rfl
+
+theorem toNat_max : (max).toNat = 2 ^ 64 - 1 := by decide
+
+theorem min_toNat (a b : U64) :
+    (if a < b then a else b).toNat = min a.toNat b.toNat := by
+  by_cases h : a < b
+  · simp only [if_pos h, Nat.min_eq_left (Nat.le_of_lt h)]
+  · simp only [if_neg h, Nat.min_eq_right (Nat.le_of_not_gt h)]
+
+theorem ofNat?_toNat {n : Nat} {site : String} {m : U64}
+    (h : ofNat? n site = .ok m) : m.toNat = n := by
+  unfold ofNat? at h
+  split at h
+  · cases h
+    simp only [toNat, Nat.toUInt64]
+    exact Nat.mod_eq_of_lt ‹n < 2 ^ 64›
+  · cases h
+
 end U64
 
 end JauneConsensus

@@ -1,6 +1,7 @@
 import AxiomAudit
 import JauneConsensus
 import JauneConsensus.Facts.Operations
+import JauneConsensus.Facts.ExpectedWithdrawals
 
 /-!
 # Whole-library axiom union for `JauneConsensus`
