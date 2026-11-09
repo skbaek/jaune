@@ -51,8 +51,8 @@ theorem ok_bind_ite {α β : Type} {c : Prop} [Decidable c] {x y : M α} {k : α
     {Q : β → Prop} (h : Ok (if c then x >>= k else y >>= k) Q) :
     Ok ((if c then x else y) >>= k) Q := by
   by_cases hc : c
-  · rw [if_pos hc] at h ⊢; exact h
-  · rw [if_neg hc] at h ⊢; exact h
+  · rw [ite_eq_left_of_eq_true _ _ (eq_true hc)] at h ⊢; exact h
+  · rw [ite_eq_right_of_eq_false _ _ (eq_false hc)] at h ⊢; exact h
 
 /-! ## Join points -/
 
@@ -215,20 +215,6 @@ elab "loop_pres " h:ident : tactic => withMainContext do
   let (_, hbG) ← hb.mvarId!.introN 2
   replaceMainGoal [hp.mvarId!, hbG, rest.mvarId!]
 
-/-- Debug: print the head of each `Ok` goal. -/
-elab "trace_ok" : tactic => do
-  for g in (← getGoals).take 1 do
-    g.withContext do
-      let t ← instantiateMVars (← g.getType)
-      match okParts? t with
-      | some (_, c, Q) =>
-        let c := c.headBeta
-        let hd := match c with
-          | .letE n .. => s!"let {n.eraseMacroScopes}"
-          | _ => s!"{c.getAppFn.constName?.getD `fvar} / {c.getAppNumArgs}"
-        logInfo m!"OK {hd} :: size {c.approxDepth} :: Q {(← ppExpr Q).pretty.take 120}"
-      | none => logInfo m!"OTHER {(← ppExpr t).pretty.take 200}"
-
 end Meta
 
 theorem pres_ite {f1 f2 : CFork} {s : BeaconState P f1} {a b : BeaconState P f2} {c : Prop}
@@ -377,10 +363,10 @@ theorem arrRel_set_eb {V V' : SszList Validator P.VALIDATOR_REGISTRY_LIMIT} {i :
   rw [hVe, Array.getElem?_set] at hw
   by_cases hj : i = j
   · subst hj
-    simp only [hi, if_true] at hw
+    simp only [↓reduceIte] at hw
     cases hw
     exact ⟨v, hv, credKeep_of_wc rfl, id⟩
-  · simp only [hj, if_false] at hw
+  · simp only [hj, ↓reduceIte] at hw
     exact ⟨w, hw, CredKeep.refl _, id⟩
 
 theorem pres_of_arrRel {s : BeaconState P f} {V : SszList Validator P.VALIDATOR_REGISTRY_LIMIT}
@@ -403,7 +389,7 @@ theorem processEffectiveBalanceUpdates_pres (cfg : Config) {s s' : BeaconState P
   all_goals first
     | (cases hb; exact ArrRel.refl _)
     | (cases hb; exact arrRel_set_eb (by assumption) (by assumption))
-    | (cases hb; done)
+    | cases hb
 
 /-! ## Slots -/
 
@@ -426,5 +412,163 @@ theorem processSlotsWith_pres {pe : BeaconState P f → M (BeaconState P f)}
   unfold processSlotsWith
   repeat pstep
 
+
+/-! ## `process_epoch`, `process_slots` and `state_transition` (Electra and later) -/
+
+theorem processEpoch_pres (ctx : Ctx) (hf : f.atLeast .electra = true) {s s' : BeaconState P f}
+    (h : processEpoch ctx s = .ok s') : Pres s s' := by
+  unfold processEpoch at h
+  obtain ⟨s1, h1, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨s2, h2, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨s3, h3, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨s4, h4, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨s5, h5, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨s6, h6, h⟩ := bind_eq_ok_iff.mp h
+  dsimp only at h
+  rw [ite_eq_left_of_eq_true _ _ (eq_true hf)] at h
+  obtain ⟨s7a, h7a, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨s7, h7, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨s8, h8, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨s9, h9, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨s10, h10, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨s11, h11, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨s12, h12, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨s13, h13, h⟩ := bind_eq_ok_iff.mp h
+  refine (processJustificationAndFinalization_pres _ h1).trans <|
+    (processInactivityUpdates_pres _ h2).trans <| (processRewardsAndPenalties_pres _ h3).trans <|
+    (processRegistryUpdates_pres _ hf h4).trans <| (processSlashings_pres _ h5).trans <|
+    (processEth1DataReset_pres _ h6).trans <| (processPendingDeposits_pres _ h7a).trans <|
+    (processPendingConsolidations_pres _ h7).trans <|
+    (processEffectiveBalanceUpdates_pres _ h8).trans <| (processSlashingsReset_pres _ h9).trans <|
+    (processRandaoMixesReset_pres _ h10).trans <|
+    (processHistoricalSummariesUpdate_pres _ h11).trans <|
+    (processParticipationFlagUpdates_pres _ h12).trans <|
+    (processSyncCommitteeUpdates_pres _ h13).trans ?_
+  split at h
+  · exact processProposerLookahead_pres _ h
+  · cases h; exact Pres.refl _
+
+theorem processSlots_pres (ctx : Ctx) (hf : f.atLeast .electra = true) {s s' : BeaconState P f}
+    {slot : Slot} (h : processSlots ctx s slot = .ok s') : Pres s s' :=
+  processSlotsWith_pres (fun _ _ hab => processEpoch_pres ctx hf hab) h
+
+macro_rules | `(tactic| pres_of $h) => do
+  let hE := Lean.mkIdent `hE
+  `(tactic| exact processSlotsWith_pres $hE $h)
+macro_rules | `(tactic| pres_of $h) => do
+  let hB := Lean.mkIdent `hB
+  `(tactic| exact $hB _ _ _ $h)
+
+theorem stateTransitionWith_pres {pe : BeaconState P f → M (BeaconState P f)}
+    {pb : BeaconState P f → BeaconBlock P f → M (BeaconState P f)}
+    (hE : ∀ a b, pe a = .ok b → Pres a b) (hB : ∀ a blk b, pb a blk = .ok b → Pres a b)
+    {bls : Bool} {s s' : BeaconState P f} {sb : SignedBeaconBlock P f} {vr : Bool}
+    (h : stateTransitionWith pe pb bls s sb vr = .ok s') : Pres s s' := by
+  revert s' h
+  show Ok (stateTransitionWith pe pb bls s sb vr) (Pres s)
+  unfold stateTransitionWith
+  repeat pstep
+
+theorem stateTransition_pres (ctx : Ctx) (hf : f.atLeast .electra = true) {s s' : BeaconState P f}
+    {sb : SignedBeaconBlock P f} {vr : Bool} (h : stateTransition ctx s sb vr = .ok s') :
+    Pres s s' :=
+  stateTransitionWith_pres (fun _ _ hab => processEpoch_pres ctx hf hab)
+    (fun _ _ _ hab => processBlock_pres ctx hab) h
+
+/-! ## The joint step -/
+
+open Jaune in
+theorem jointStep_electra_pres {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+    {beacon : BeaconState P .electra} {exec : BlockChain} {sb : SignedBeaconBlock P .electra}
+    {s' : JointState P} (h : jointStep cfg ccfg bls ⟨.electra, beacon, exec⟩ ⟨.electra, sb⟩ = .ok s') :
+    Pres beacon s'.beacon := by
+  obtain ⟨_, req, b', e', _, _, hst, rfl⟩ := jointStep_electra_ok_iff.mp h
+  exact stateTransition_pres _ (by decide) hst
+
+open Jaune in
+theorem jointStep_fulu_pres {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+    {beacon : BeaconState P .fulu} {exec : BlockChain} {sb : SignedBeaconBlock P .fulu}
+    {s' : JointState P} (h : jointStep cfg ccfg bls ⟨.fulu, beacon, exec⟩ ⟨.fulu, sb⟩ = .ok s') :
+    Pres beacon s'.beacon := by
+  obtain ⟨req, b', e', _, _, hst, rfl⟩ := jointStep_fulu_ok_iff.mp h
+  exact stateTransition_pres _ (by decide) hst
+
+open Jaune in
+theorem jointStep_cross_pres {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+    {beacon : BeaconState P .electra} {exec : BlockChain} {sb : SignedBeaconBlock P .fulu}
+    {s' : JointState P} (h : jointStep cfg ccfg bls ⟨.electra, beacon, exec⟩ ⟨.fulu, sb⟩ = .ok s') :
+    Pres beacon s'.beacon := by
+  obtain ⟨_, _, req, fslot, b1, b2, b', e', _, hb1, hb2, _, _, hb', rfl⟩ :=
+    jointStep_cross_ok_iff.mp h
+  have p1 : Pres beacon b1 := by
+    split at hb1
+    · exact processSlots_pres _ (by decide) hb1
+    · cases hb1; exact Pres.refl _
+  have p3 : Pres b2 b' := by
+    split at hb'
+    · revert hb'
+      generalize b' = x
+      revert x
+      show Ok _ (Pres b2)
+      repeat pstep
+    · exact stateTransition_pres _ (by decide) hb'
+  exact p1.trans ((upgradeToFulu_pres _ hb2).trans p3)
+
+open Jaune in
+/-- One successful joint step preserves `Pres` between the beacon states (Electra/Electra and
+Fulu/Fulu via `state_transition`; Electra→Fulu via `process_slots`, `upgrade_to_fulu` and the
+block). -/
+theorem jointStep_pres {cfg : ChainConfig} {ccfg : Config} {bls : Bool} {s s' : JointState P}
+    {b : AnySignedBlock P} (h : jointStep cfg ccfg bls s b = .ok s') : Pres s.beacon s'.beacon := by
+  obtain ⟨fs, beacon, exec⟩ := s
+  obtain ⟨fb, sb⟩ := b
+  cases fs <;> cases fb
+  all_goals first
+    | exact jointStep_electra_pres h
+    | exact jointStep_fulu_pres h
+    | exact jointStep_cross_pres h
+    | (unfold jointStep at h; cases h)
+
+open Jaune in
+theorem jointStep_anchorInv {cfg : ChainConfig} {ccfg : Config} {bls : Bool} {s s' : JointState P}
+    {b : AnySignedBlock P} (h : jointStep cfg ccfg bls s b = .ok s') (hI : AnchorInv s.beacon) :
+    AnchorInv s'.beacon :=
+  (jointStep_pres h).anchor hI
+
+open Jaune in
+theorem jointStep_addrStable {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+    {s s' : JointState P} {b : AnySignedBlock P} (h : jointStep cfg ccfg bls s b = .ok s') :
+    AddrStable s.beacon s'.beacon :=
+  (jointStep_pres h).addr
+
+open Jaune in
+/-- States reachable from `s₀` by successful joint steps. -/
+inductive JointReach (cfg : ChainConfig) (ccfg : Config) (bls : Bool) (s₀ : JointState P) :
+    JointState P → Prop
+  | refl : JointReach cfg ccfg bls s₀ s₀
+  | step {s s' : JointState P} (b : AnySignedBlock P) : JointReach cfg ccfg bls s₀ s →
+      jointStep cfg ccfg bls s b = .ok s' → JointReach cfg ccfg bls s₀ s'
+
+open Jaune in
+theorem JointReach.pres {cfg : ChainConfig} {ccfg : Config} {bls : Bool} {s₀ s : JointState P}
+    (h : JointReach cfg ccfg bls s₀ s) : Pres s₀.beacon s.beacon := by
+  induction h with
+  | refl => exact Pres.refl _
+  | step _ _ hs ih => exact ih.trans (jointStep_pres hs)
+
+open Jaune in
+/-- **Run-level anchor invariant.** If the anchor's beacon state satisfies `AnchorInv`, so does the
+beacon state after every successful joint step along any run from it (each prefix of a run is a
+`JointReach`). -/
+theorem JointReach.anchorInv {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+    {s₀ s : JointState P} (h : JointReach cfg ccfg bls s₀ s) (h0 : AnchorInv s₀.beacon) :
+    AnchorInv s.beacon :=
+  h.pres.anchor h0
+
+open Jaune in
+/-- **Run-level address stability.** -/
+theorem JointReach.addrStable {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+    {s₀ s : JointState P} (h : JointReach cfg ccfg bls s₀ s) : AddrStable s₀.beacon s.beacon :=
+  h.pres.addr
 
 end JauneConsensus.Facts
