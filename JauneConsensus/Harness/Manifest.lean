@@ -74,9 +74,15 @@ structure Manifest where
   /-- `(preset, suite, record, inventory count)` -/
   suites : List (String × SuiteKey × SuiteRecord × Nat)
 
-/-- The presets this runner reads. The inventory also records the `comptests` tarball
-(`minimal`-preset `fork_choice_compliance` cases), which no runner here executes yet. -/
-def presets : List String := ["general", "minimal", "mainnet"]
+/-- The tarballs this runner reads, by the name `--preset` selects them with: the three presets and
+`comptests`, beta.4's `minimal`-preset `fork_choice_compliance` tarball (extracted to
+`<root>/comptests/tests/minimal/...`). -/
+def presets : List String := ["general", "minimal", "mainnet", "comptests"]
+
+/-- The consensus preset of a tarball's cases: `comptests` holds `minimal`-preset cases; every
+other tarball is named by its preset. -/
+def casePresetOf (tarball : String) : String :=
+  if tarball == "comptests" then "minimal" else tarball
 
 /-- The committed inventory file, under `<manifest-dir>/consensus/`. -/
 def inventoryFile : String := "inventory-v1.7.0-beta.4.json"

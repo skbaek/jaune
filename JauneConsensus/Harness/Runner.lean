@@ -259,6 +259,7 @@ def handlerFor (runner handler : String) : Option (Case → IO Verdict) :=
   | "fork_choice", _ => some (ofResult (forkChoiceCase caseConfig .forkChoice))
   | "sync", "optimistic" => some (ofResult (forkChoiceCase caseConfig .sync))
   | "fast_confirmation", _ => some (ofResult (forkChoiceCase caseConfig .fastConfirmation))
+  | "fork_choice_compliance", _ => some (ofResult (forkChoiceCase caseConfig .compliance))
   | _, _ => none
 
 def runCase (c : Case) : IO Verdict := do

@@ -6,10 +6,13 @@ import JauneConsensus.Harness.Yaml
 import JauneConsensus.Harness.ConfigOverride
 
 /-!
-# The fork-choice family: `fork_choice`, `sync`, `fast_confirmation` (harness only)
+# The fork-choice family: `fork_choice`, `sync`, `fast_confirmation`, `fork_choice_compliance`
+(harness only)
 
 `tests/formats/fork_choice/README.md`, `tests/formats/sync/README.md` and
-`tests/formats/fast_confirmation/README.md` at `v1.7.0-beta.4`. The store is
+`tests/formats/fast_confirmation/README.md` at `v1.7.0-beta.4`, and for the comptests
+`fork_choice_compliance` suites (which have no `tests/formats` entry) the reference runner
+`tests/generators/compliance_runners/fork_choice/runner/test_run.py` at the tag. The store is
 initialised with `get_forkchoice_store(anchor_state, anchor_block)` (and, for
 `fast_confirmation`, `get_fast_confirmation_store(store)`), and the steps of `steps.yaml` run in
 order:
@@ -18,7 +21,9 @@ order:
 * `block` (with `valid`, default `true`): `on_block(store, block)`, then, when it applied,
   `on_attestation(store, a, is_from_block=True)` for each attestation of the block and
   `on_attester_slashing(store, s)` for each of its attester slashings (the format's
-  "Condition"; the pyspec helper `add_block` runs both); any rejection fails the case.
+  "Condition"; the pyspec helper `add_block` runs both). The comptests reference runner
+  suppresses an `AssertionError` from those block-carried messages, so in `fork_choice_compliance`
+  an assertion rejection there is skipped; elsewhere any rejection fails the case.
   `blobs`/`proofs` are the values `retrieve_blobs_and_proofs` returns (empty lists when absent);
   `columns` are the sidecars `retrieve_column_sidecars` returns (an empty list when absent, a
   rejection when the list is empty);
@@ -28,7 +33,8 @@ order:
 * `checks`: `head` (`get_head(store).root` and its slot, the optimistic head for `sync`), `time`
   and `genesis_time` (`milliseconds_to_seconds` of the store's), `justified_checkpoint`,
   `finalized_checkpoint`, `proposer_boost_root`, `get_proposer_head` (of `get_head(store)` at
-  `get_current_slot(store)`).
+  `get_current_slot(store)`), and `viable_for_head_roots_and_weights` (the leaves of the filtered
+  node tree with their `get_weight`, compared as a set as the reference runner does).
   `fast_confirmation` has no explicit step for its handler: the generator runs
   `on_fast_confirmation` and then yields a checks step carrying the fast-confirmation keys
   (`previous_epoch_observed_justified_checkpoint`, `current_epoch_observed_justified_checkpoint`,
@@ -37,10 +43,11 @@ order:
   `on_fast_confirmation` first and then compares all its keys; a checks step carrying only some
   of them fails the case.
 
-A step marked `valid: false` must reject, and leaves the store unchanged. Any other key fails the
-case. `bls_setting` 0 (or absent) allows BLS
+A step marked `valid: false` must reject, and leaves the store unchanged; in
+`fork_choice_compliance` the rejection must be an assertion or an index error
+(`expect_assertion_error`). Any other key fails the case. `bls_setting` 0 (or absent) allows BLS
 on or off; the handler verifies signatures unless `JAUNE_CONSENSUS_FC_BLS=0`; `bls_setting` 2
-(every `fast_confirmation` case) runs with BLS off.
+(every `fast_confirmation` and `fork_choice_compliance` case) runs with BLS off.
 -/
 
 namespace JauneConsensus.Harness
@@ -107,7 +114,7 @@ private def payloadStatusOf (v : YVal) : H PayloadStatusV1 := do
 
 /-- Which runner of the family a case belongs to. -/
 inductive FcMode
-  | forkChoice | sync | fastConfirmation
+  | forkChoice | sync | fastConfirmation | compliance
   deriving BEq
 
 /-- The harness's state across steps: the fork-choice store, the optimistic store and the mocked
@@ -124,11 +131,35 @@ private def fcrKeys : List String :=
    "previous_epoch_greatest_unrealized_checkpoint", "previous_slot_head", "current_slot_head",
    "confirmed_root", "safe_execution_block_hash"]
 
+/-- `expect_assertion_error`'s accepted failures: `AssertionError` and `IndexError`. -/
+private def isAssertionLike : Reject → Bool
+  | .assert _ | .index .. => true
+  | _ => false
+
+/-- `get_viable_for_head_checks(spec, store)` (`tests/core/pyspec/.../helpers/fork_choice.py`):
+the leaves of the filtered node tree reached from the justified root, each with its
+`get_weight`. -/
+private def viableForHead (cfg : Config) (store : Store P f) : M (List (Root × Gwei)) := do
+  let nodes ← getFilteredNodeTree cfg store
+  let mut pending : List ForkChoiceNode := [{ root := store.justified_checkpoint.root }]
+  let mut leaves : Array ForkChoiceNode := #[]
+  for _ in [0:store.blocks.size + 1] do
+    match pending with
+    | [] => break
+    | node :: rest =>
+      pending := rest
+      let children := (getNodeChildren store node).filter nodes.contains
+      if children.isEmpty then leaves := leaves.push node
+      else pending := children ++ pending
+  if !pending.isEmpty then throw (.assert "viable_for_head: walk longer than the block tree")
+  leaves.toList.mapM fun n => do pure (n.root, ← getWeight cfg store n)
+
 /-- Run the steps of one case at preset `P`, fork `f`. -/
 private def runSteps (P : Preset) (f : CFork) (c : Case) (ctx : Ctx) (mode : FcMode) :
     H Unit := do
   let cfg := ctx.cfg
   let sync := mode == .sync
+  let compliance := mode == .compliance
   let anchorState : BeaconState P f ← decodeFile c "anchor_state.ssz_snappy"
   let anchorBlock : BeaconBlock P f ← decodeFile c "anchor_block.ssz_snappy"
   let steps ← yamlE "steps.yaml" ((parse (← IO.FS.readBinFile (c.dir / "steps.yaml"))).bind YVal.asSeq)
@@ -140,6 +171,11 @@ private def runSteps (P : Preset) (f : CFork) (c : Case) (ctx : Ctx) (mode : FcM
     let here := s!"step {i}"
     i := i + 1
     let keys := s.keys
+    -- A `valid: false` step must reject; in the comptests with an assertion or index error.
+    let expectReject (what : String) (r : Reject) : H Unit :=
+      if compliance && !isAssertionLike r then
+        throw s!"{here}: {what} rejected with {repr r}, expected an assertion error"
+      else pure ()
     if keys.contains "tick" then
       if !(keys.all (· ∈ ["tick", "valid"])) then throw s!"{here}: keys {keys}"
       let t ← u64Of "tick" (← yamlE here (s.field "tick"))
@@ -148,7 +184,7 @@ private def runSteps (P : Preset) (f : CFork) (c : Case) (ctx : Ctx) (mode : FcM
       | .ok st, true => run := { run with store := st }
       | .error r, true => throw s!"{here}: on_tick rejected: {repr r}"
       | .ok _, false => throw s!"{here}: on_tick applied, expected invalid"
-      | .error _, false => pure ()
+      | .error r, false => expectReject "on_tick" r
     else if keys.contains "block" then
       if !(keys.all (· ∈ ["block", "valid", "blobs", "proofs", "columns"])) then
         throw s!"{here}: keys {keys}"
@@ -198,16 +234,26 @@ private def runSteps (P : Preset) (f : CFork) (c : Case) (ctx : Ctx) (mode : FcM
       match applied with
       | .error r =>
         if valid then throw s!"{here}: on_block {name} rejected: {repr r}"
+        else expectReject s!"on_block {name}" r
       | .ok (st, opt, imported) =>
         run := { run with opt }
         if imported != valid then
           throw s!"{here}: on_block {name} imported={imported}, expected valid={valid}"
         if imported then
           let mut st := st
+          -- The comptests reference runner suppresses `AssertionError` here.
           for a in signed.message.body.attestations.toArray do
-            st ← rejectE s!"{here}: on_attestation (from block)" (onAttestation ctx st a true)
+            match onAttestation ctx st a true with
+            | .ok st' => st := st'
+            | .error r =>
+              if !(compliance && r matches .assert _) then
+                throw s!"{here}: on_attestation (from block) rejected: {repr r}"
           for sl in signed.message.body.attester_slashings.toArray do
-            st ← rejectE s!"{here}: on_attester_slashing (from block)" (onAttesterSlashing ctx st sl)
+            match onAttesterSlashing ctx st sl with
+            | .ok st' => st := st'
+            | .error r =>
+              if !(compliance && r matches .assert _) then
+                throw s!"{here}: on_attester_slashing (from block) rejected: {repr r}"
           run := { run with store := st }
     else if keys.contains "attestation" then
       if !(keys.all (· ∈ ["attestation", "valid"])) then throw s!"{here}: keys {keys}"
@@ -219,18 +265,21 @@ private def runSteps (P : Preset) (f : CFork) (c : Case) (ctx : Ctx) (mode : FcM
       | .ok st, true => run := { run with store := st }
       | .error r, true => throw s!"{here}: on_attestation rejected: {repr r}"
       | .ok _, false => throw s!"{here}: on_attestation applied, expected invalid"
-      | .error _, false => pure ()
+      | .error r, false => expectReject "on_attestation" r
     else if keys.contains "attester_slashing" then
       if !(keys.all (· ∈ ["attester_slashing", "valid"])) then throw s!"{here}: keys {keys}"
       let name ← match s.get? "attester_slashing" with
         | some (.scalar n _) => pure n
         | _ => throw s!"{here}: attester_slashing name"
       let sl : AttesterSlashing P f ← decodeFile c s!"{name}.ssz_snappy"
-      match onAttesterSlashing ctx run.store sl, ← stepValid s with
+      let valid ← stepValid s
+      -- the comptests reference runner asserts `valid` for this step
+      if compliance && !valid then throw s!"{here}: invalid attester_slashing in a comptests case"
+      match onAttesterSlashing ctx run.store sl, valid with
       | .ok st, true => run := { run with store := st }
       | .error r, true => throw s!"{here}: on_attester_slashing rejected: {repr r}"
       | .ok _, false => throw s!"{here}: on_attester_slashing applied, expected invalid"
-      | .error _, false => pure ()
+      | .error r, false => expectReject "on_attester_slashing" r
     else if keys.contains "block_hash" then
       if !sync then throw s!"{here}: payload status outside a sync case"
       yamlE here (s.expectKeys ["block_hash", "payload_status"])
@@ -284,6 +333,18 @@ private def runSteps (P : Preset) (f : CFork) (c : Case) (ctx : Ctx) (mode : FcM
           let got ← rejectE s!"{here}: get_proposer_head" (do
             getProposerHead cfg store (← getHead cfg store) (← getCurrentSlot cfg store))
           checkRoot k v got.root
+        | "viable_for_head_roots_and_weights" =>
+          let xs ← yamlE k v.asSeq
+          let want ← xs.mapM fun x => do
+            yamlE k (x.expectKeys ["root", "weight"])
+            pure ((← rootOf "root" (← yamlE k (x.field "root"))).toHex,
+              (← u64Of "weight" (← yamlE k (x.field "weight"))).toNat)
+          let got ← rejectE s!"{here}: viable_for_head" (viableForHead cfg store)
+          let got := got.map fun (r, w) => (r.toHex, w.toNat)
+          let norm (l : List (String × Nat)) :=
+            (l.mergeSort (fun a b => a.1 < b.1 || (a.1 == b.1 && a.2 ≤ b.2))).eraseDups
+          if norm got != norm want then
+            throw s!"{here}: viable_for_head_roots_and_weights {norm got}, expected {norm want}"
         | "previous_epoch_observed_justified_checkpoint" =>
           checkCheckpoint k v fcr.previous_epoch_observed_justified_checkpoint
         | "current_epoch_observed_justified_checkpoint" =>
@@ -298,7 +359,8 @@ private def runSteps (P : Preset) (f : CFork) (c : Case) (ctx : Ctx) (mode : FcM
         | other => throw s!"{here}: unknown check {other}"
     else throw s!"{here}: unknown step keys {keys}"
 
-/-- `fork_choice/<handler>`, `sync/optimistic` and `fast_confirmation/<handler>`. `config` gives the case's configuration. -/
+/-- `fork_choice/<handler>`, `sync/optimistic`, `fast_confirmation/<handler>` and
+`fork_choice_compliance/<handler>`. `config` gives the case's configuration. -/
 def forkChoiceCase (config : Case → IO (Except ConfigError Config)) (mode : FcMode) (c : Case) :
     IO (Except String Unit) := do
   let some P := Preset.ofName? c.preset | return .error s!"no preset {c.preset}"

@@ -13,7 +13,9 @@ Accepted:
 * block mappings `key: value` and block sequences `- item`, nested by indentation, including a
   block sequence at the same indentation as its parent key (PyYAML's default);
 * flow sequences `[a, b]` and flow mappings `{k: v}`, which may span lines;
-* plain scalars (possibly folded over several lines inside flow context), single-quoted scalars
+* plain scalars (possibly folded over several lines inside flow context; a negative integer such
+  as `-3`, which the `v1.7.0-beta.4` comptests `meta.yaml` mutation lists carry, is the one plain
+  scalar that may start with an indicator), single-quoted scalars
   (`''` escape) and double-quoted scalars (escapes `\\`, `\"`, `\/`, `\n`, `\t` only); a line
   break inside a scalar folds to one space;
 * one optional trailing `...` document-end line.
@@ -177,7 +179,8 @@ def node : Nat → Nat → Res (YVal × Nat)
       else if c == ch '"' then do
         let (s, p) ← doubleQ buf lim (lim + 1) (pos + 1) []
         pure (.scalar s true, p)
-      else if isIndicator c then .error (.syntax s!"plain scalar starts with indicator '{charOf c}'")
+      else if isIndicator c && !(c == ch '-' && (at? buf lim (pos + 1)).any (fun d => ch '0' ≤ d && d ≤ ch '9')) then
+        .error (.syntax s!"plain scalar starts with indicator '{charOf c}'")
       else do
         let stop ← plainEnd buf lim (lim + 1) pos
         let s := plainText buf pos stop
