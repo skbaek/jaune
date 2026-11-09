@@ -264,6 +264,24 @@ theorem ne_of_beq_eq_false {a b : U64} (h : (a == b) = false) : a ≠ b := by
   rw [hT] at h
   cases h
 
+/-! ## W2e bridging lemmas
+
+`U64 ↔ Nat` bridges for the EIP-7002 order-sensitivity lemmas
+(`JauneConsensus.Facts.WithdrawalOrder`): `toNat` of the maximum value and
+injection from `toNat` to zero.
+-/
+
+/-- `toNat` of the maximum `uint64` value. -/
+theorem toNat_max : U64.max.toNat = 2 ^ 64 - 1 := by decide
+
+/-- A `U64` with `toNat` zero is zero. -/
+theorem eq_zero_of_toNat_eq_zero {x : U64} (h : x.toNat = 0) : x = U64.zero := by
+  obtain ⟨u⟩ := x
+  simp only [toNat] at h
+  have h0 : (0 : UInt64).toNat = 0 := rfl
+  have hu : u = 0 := UInt64.toNat_inj.mp (by rw [h, h0])
+  exact congrArg U64.mk hu
+
 end U64
 
 end JauneConsensus
