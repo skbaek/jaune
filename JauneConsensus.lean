@@ -88,3 +88,5 @@ import JauneConsensus.GloasLightClientFullNode
 import JauneConsensus.Harness.GossipCases
 import JauneConsensus.Harness.GossipStoreFree
 import JauneConsensus.Harness.GossipTable
+import JauneConsensus.GloasUpgrade
+import JauneConsensus.GloasTransition

@@ -11,10 +11,11 @@ Layout (`tests/formats/README.md` at the pin):
 
 A selection names a preset and optionally a fork, runner, handler and suite. Discovery
 
-1. refuses Gloas (through the single resolver `CFork.rules?`) for every runner but
-   `ssz_static`, and the `eip7805` feature fork, by name (`forkRefusal?`), and any selection
+1. refuses Gloas (through the single resolver `CFork.rules?`) for every runner outside
+   `gloasRunners`, and the `eip7805` feature fork, by name (`forkRefusal?`), and any selection
    naming no in-scope suite. Gloas `ssz_static` only decodes, re-encodes and hashes the Gloas
-   containers; no Gloas rule runs, and `--fork-rules gloas` still refuses;
+   containers; the other admitted Gloas runners run the separate Gloas modules, and
+   `--fork-rules gloas` still refuses;
 2. walks the in-scope part of the tree under the selection and compares it to the manifest: a
    selected suite missing on disk, or present on disk without a record, is refused;
 3. for every selected suite checks the case count (manifest and inventory), the digest of the
@@ -87,9 +88,13 @@ def runnerFileKinds : String → List String
     ["pre.ssz_snappy", "source_deltas.ssz_snappy", "target_deltas.ssz_snappy",
      "head_deltas.ssz_snappy", "inactivity_penalty_deltas.ssz_snappy"]
   | "sanity" => ["meta.yaml", "pre.ssz_snappy", "post.ssz_snappy", "slots.yaml",
-     "blocks_N.ssz_snappy"]
+     "blocks_N.ssz_snappy",
+     -- the Gloas payload-attestation cases (`GLOAS_FORK_EPOCH: 0`)
+     "config.yaml"]
   | "finality" | "random" | "transition" =>
-    ["meta.yaml", "pre.ssz_snappy", "post.ssz_snappy", "blocks_N.ssz_snappy"]
+    ["meta.yaml", "pre.ssz_snappy", "post.ssz_snappy", "blocks_N.ssz_snappy",
+     -- every Gloas `random` case
+     "config.yaml"]
   | "fork" => ["meta.yaml", "pre.ssz_snappy", "post.ssz_snappy"]
   | "fork_choice" =>
     ["meta.yaml", "steps.yaml", "anchor_state.ssz_snappy", "anchor_block.ssz_snappy",
@@ -138,10 +143,12 @@ semantics exist (goal `eip8282-gloas-cross-layer-v1`, U3: `epoch_processing` ove
 `GloasWithdrawals.lean`, `GloasOperations.lean` and `GloasBlock.lean`; U7a: `networking`, whose
 custody helpers are fork-independent and whose `gossip_*` handlers dispatch by fork in
 `Harness/GossipTable.lean`; U7b: `light_client` over `GloasLightClient.lean` and
-`GloasLightClientFullNode.lean`, whose Gloas `data_collection` fails closed until the Gloas state
-transition lands). Gloas ships no `merkle_proof` suite. Every other runner still refuses Gloas. -/
+`GloasLightClientFullNode.lean`; U5: `fork` over `GloasUpgrade.lean`, and `sanity`, `random`,
+`finality` and the Fulu → Gloas `transition` over `GloasTransition.lean`). Gloas ships no
+`merkle_proof` suite. Every other runner still refuses Gloas. -/
 def gloasRunners : List String :=
-  containerOnlyRunners ++ ["epoch_processing", "rewards", "operations", "networking", "light_client"]
+  containerOnlyRunners ++ ["epoch_processing", "rewards", "operations", "networking", "light_client",
+    "fork", "sanity", "random", "finality", "transition"]
 
 /-- Why a fork directory is refused by name for a runner (`none`: any runner), if it is. Gloas is
 a declared `CFork` whose rules do not resolve (`CFork.resolve` gives `notImplemented`); it is
@@ -163,9 +170,11 @@ def forkRefusal? (f : String) (runner : Option String := none) : Option ForkRefu
 #guard (forkRefusal? "gloas" (some "ssz_static")).isNone
 #guard (forkRefusal? "gloas" (some "epoch_processing")).isNone
 #guard (forkRefusal? "gloas" (some "rewards")).isNone
-#guard (forkRefusal? "gloas" (some "sanity")).isSome
+#guard (forkRefusal? "gloas" (some "sanity")).isNone
+#guard (forkRefusal? "gloas" (some "transition")).isNone
 #guard (forkRefusal? "gloas" (some "networking")).isNone
 #guard (forkRefusal? "gloas" (some "light_client")).isNone
+#guard (forkRefusal? "gloas" (some "fork_choice")).isSome
 #guard (forkRefusal? "gloas" (some "merkle_proof")).isSome
 #guard (forkRefusal? "eip7805" (some "ssz_static")).isSome
 #guard (forkRefusal? "fulu").isNone
