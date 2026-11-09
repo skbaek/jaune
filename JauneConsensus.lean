@@ -76,3 +76,6 @@ import JauneConsensus.GloasOps
 import JauneConsensus.GloasMutators
 import JauneConsensus.GloasEpochAccessors
 import JauneConsensus.GloasEpoch
+import JauneConsensus.GloasWithdrawals
+import JauneConsensus.GloasOperations
+import JauneConsensus.GloasBlock

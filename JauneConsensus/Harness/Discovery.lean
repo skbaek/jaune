@@ -77,7 +77,11 @@ def runnerFileKinds : String → List String
      "block.ssz_snappy", "body.ssz_snappy", "consolidation_request.ssz_snappy",
      "deposit.ssz_snappy", "deposit_request.ssz_snappy", "execution_payload.ssz_snappy",
      "proposer_slashing.ssz_snappy", "sync_aggregate.ssz_snappy", "voluntary_exit.ssz_snappy",
-     "withdrawal_request.ssz_snappy"]
+     "withdrawal_request.ssz_snappy",
+     -- Gloas (`tests/formats/operations/README.md` at `v1.7.0-beta.4`); the
+     -- `payload_attestation` cases ship a `config.yaml` (`GLOAS_FORK_EPOCH: 0`)
+     "builder_deposit_request.ssz_snappy", "builder_exit_request.ssz_snappy",
+     "execution_payload_bid.ssz_snappy", "payload_attestation.ssz_snappy", "config.yaml"]
   | "rewards" =>
     ["pre.ssz_snappy", "source_deltas.ssz_snappy", "target_deltas.ssz_snappy",
      "head_deltas.ssz_snappy", "inactivity_penalty_deltas.ssz_snappy"]
@@ -113,9 +117,11 @@ def containerOnlyRunners : List String := ["ssz_static"]
 
 /-- The runners admitted at Gloas: the container-only runners, and the runners whose Gloas
 semantics exist (goal `eip8282-gloas-cross-layer-v1`, U3: `epoch_processing` over
-`JauneConsensus/GloasEpoch.lean`, `rewards` over `GloasEpochAccessors.lean`). Every other runner
-still refuses Gloas. -/
-def gloasRunners : List String := containerOnlyRunners ++ ["epoch_processing", "rewards"]
+`JauneConsensus/GloasEpoch.lean`, `rewards` over `GloasEpochAccessors.lean`; U4: `operations` over
+`GloasWithdrawals.lean`, `GloasOperations.lean` and `GloasBlock.lean`). Every other runner still
+refuses Gloas. -/
+def gloasRunners : List String :=
+  containerOnlyRunners ++ ["epoch_processing", "rewards", "operations"]
 
 /-- Why a fork directory is refused by name for a runner (`none`: any runner), if it is. Gloas is
 a declared `CFork` whose rules do not resolve (`CFork.resolve` gives `notImplemented`); it is
@@ -133,7 +139,7 @@ def forkRefusal? (f : String) (runner : Option String := none) : Option ForkRefu
     | none => none
 
 #guard (forkRefusal? "gloas").isSome
-#guard (forkRefusal? "gloas" (some "operations")).isSome
+#guard (forkRefusal? "gloas" (some "operations")).isNone
 #guard (forkRefusal? "gloas" (some "ssz_static")).isNone
 #guard (forkRefusal? "gloas" (some "epoch_processing")).isNone
 #guard (forkRefusal? "gloas" (some "rewards")).isNone
