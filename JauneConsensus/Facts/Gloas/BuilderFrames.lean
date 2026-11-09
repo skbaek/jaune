@@ -124,15 +124,20 @@ macro_rules
   | `(tactic| gstep_of $h) =>
     `(tactic| (have hh := StepRel.of_ok (applyPendingDeposit_builderFrame _ _ _) $h; exact hh))
 
+section PendingDeposits
+
 /-- Loops whose state is a `MProd` of mutable variables with the step's state last (four
-mutable variables before it, as in `process_pending_deposits`). -/
-macro_rules
+mutable variables before it, as in `process_pending_deposits`). Local: elsewhere it would be
+tried, and fail noisily, on every loop. -/
+local macro_rules
   | `(tactic| gstep_of $h) =>
     `(tactic| (refine StepRel.forIn_array_rel _ (fun x => x.2.2.2.2) ?_ _ _ $h; intro _ _; gvcg))
 
 theorem processPendingDeposits_builderFrame (ctx : Ctx) (s : JauneConsensus.Gloas.BeaconState P) :
     Ok (JauneConsensus.Gloas.processPendingDeposits ctx s) (builderFrame.R s) := by
   unfold JauneConsensus.Gloas.processPendingDeposits; gvcg
+
+end PendingDeposits
 
 /-- **B3/B7.** `process_pending_deposits` (Gloas, CL:1659-1714) keeps the builders. -/
 theorem processPendingDeposits_builders {ctx : Ctx} {m m' : JauneConsensus.Gloas.BeaconState P}
@@ -1109,5 +1114,124 @@ theorem applyParentExecutionPayload_withdrawableEpoch (hspe : 2 ≤ P.SLOTS_PER_
     intro heq
     simp only [Option.map_some, Option.some.injEq] at heq
     exact hp (hpk'.symm.trans heq.symm)
+
+
+/-! ## The rest of a Gloas block keeps the builders' pubkeys and withdrawable epochs -/
+
+/-- The builder registry is unchanged (the builder queues may change). -/
+def BuildersEq (s s' : JauneConsensus.Gloas.BeaconState P) : Prop := s'.builders = s.builders
+
+/-- `BuildersEq` as a step relation. -/
+def buildersEq : StepRel (JauneConsensus.Gloas.BeaconState P) where
+  R := BuildersEq
+  refl _ := rfl
+  trans h₁ h₂ := Eq.trans h₂ h₁
+
+macro_rules
+  | `(tactic| gstep_close) => `(tactic| exact (show BuildersEq _ _ from rfl))
+macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (have hh := StepRel.of_ok (increaseBalance_builderFrame _ _ _) $h; exact (show BuildersEq _ _ from hh.1)))
+macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (have hh := StepRel.of_ok (decreaseBalance_builderFrame _ _ _) $h; exact (show BuildersEq _ _ from hh.1)))
+macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (have hh := StepRel.of_ok (initiateValidatorExit_builderFrame _ _ _) $h; exact (show BuildersEq _ _ from hh.1)))
+macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (have hh := StepRel.of_ok (slashValidator_paymentsCleared _ _ _ _) $h; exact (show BuildersEq _ _ from hh.1)))
+macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (have hh := StepRel.of_ok (processVoluntaryExit_builderFrame _ _ _) $h; exact (show BuildersEq _ _ from hh.1)))
+macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (have hh := StepRel.of_ok (processBlsToExecutionChange_builderFrame _ _ _) $h; exact (show BuildersEq _ _ from hh.1)))
+
+theorem processProposerSlashing_buildersEq (ctx : Ctx) (s : JauneConsensus.Gloas.BeaconState P)
+    (ps : ProposerSlashing) :
+    Ok (JauneConsensus.Gloas.processProposerSlashing ctx s ps) (buildersEq.R s) := by
+  unfold JauneConsensus.Gloas.processProposerSlashing; gvcg
+  all_goals exact fun x hx => (slashValidator_paymentsCleared _ _ _ _ x hx).1
+
+theorem processAttesterSlashing_buildersEq (ctx : Ctx) (s : JauneConsensus.Gloas.BeaconState P)
+    (as : JauneConsensus.Gloas.AttesterSlashing) :
+    Ok (JauneConsensus.Gloas.processAttesterSlashing ctx s as) (buildersEq.R s) := by
+  unfold JauneConsensus.Gloas.processAttesterSlashing; gvcg
+
+section AttestationFrame
+
+/-- `process_attestation` credits the proposer on a state chosen by an `if` (current or previous
+participation): the leaf rule closes the `if` by cases. Local to this section. -/
+local macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (have hh := StepRel.of_ok (increaseBalance_builderFrame _ _ _) $h; exact (show BuildersEq _ _ from hh.1.trans (by split <;> rfl))))
+
+set_option maxHeartbeats 2000000 in
+theorem processAttestation_buildersEq (ctx : Ctx) (s : JauneConsensus.Gloas.BeaconState P)
+    (a : JauneConsensus.Gloas.Attestation P) (ps : Slot) :
+    Ok (JauneConsensus.Gloas.processAttestation ctx s a ps) (buildersEq.R s) := by
+  unfold JauneConsensus.Gloas.processAttestation; gvcg
+
+end AttestationFrame
+
+theorem processPayloadAttestation_buildersEq (ctx : Ctx) (s : JauneConsensus.Gloas.BeaconState P)
+    (pa : JauneConsensus.Gloas.PayloadAttestation P) :
+    Ok (JauneConsensus.Gloas.processPayloadAttestation ctx s pa) (buildersEq.R s) := by
+  unfold JauneConsensus.Gloas.processPayloadAttestation; gvcg
+
+macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (have hh := StepRel.of_ok (processProposerSlashing_buildersEq _ _ _) $h; exact hh))
+macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (have hh := StepRel.of_ok (processAttesterSlashing_buildersEq _ _ _) $h; exact hh))
+macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (have hh := StepRel.of_ok (processAttestation_buildersEq _ _ _ _) $h; exact hh))
+macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (have hh := StepRel.of_ok (processPayloadAttestation_buildersEq _ _ _) $h; exact hh))
+
+theorem processOperations_buildersEq (ctx : Ctx) (s : JauneConsensus.Gloas.BeaconState P)
+    (body : JauneConsensus.Gloas.BeaconBlockBody P) (ps : Slot) :
+    Ok (JauneConsensus.Gloas.processOperations ctx s body ps) (buildersEq.R s) := by
+  unfold JauneConsensus.Gloas.processOperations; gvcg
+
+theorem processBlockHeader_buildersEq (s : JauneConsensus.Gloas.BeaconState P)
+    (blk : JauneConsensus.Gloas.BeaconBlock P) :
+    Ok (JauneConsensus.Gloas.processBlockHeader s blk) (buildersEq.R s) := by
+  unfold JauneConsensus.Gloas.processBlockHeader; gvcg
+
+theorem processRandao_buildersEq (ctx : Ctx) (s : JauneConsensus.Gloas.BeaconState P)
+    (body : JauneConsensus.Gloas.BeaconBlockBody P) :
+    Ok (JauneConsensus.Gloas.processRandao ctx s body) (buildersEq.R s) := by
+  unfold JauneConsensus.Gloas.processRandao; gvcg
+
+theorem processEth1Data_buildersEq (s : JauneConsensus.Gloas.BeaconState P)
+    (body : JauneConsensus.Gloas.BeaconBlockBody P) :
+    Ok (JauneConsensus.Gloas.processEth1Data s body) (buildersEq.R s) := by
+  unfold JauneConsensus.Gloas.processEth1Data; gvcg
+
+set_option maxHeartbeats 2000000 in
+theorem processSyncAggregate_buildersEq (ctx : Ctx) (s : JauneConsensus.Gloas.BeaconState P)
+    (sa : SyncAggregate P) :
+    Ok (JauneConsensus.Gloas.processSyncAggregate ctx s sa) (buildersEq.R s) := by
+  unfold JauneConsensus.Gloas.processSyncAggregate; gvcg
+
+section BidFrame
+
+/-- A sub-step given inline (an `if` whose branches build the state): its relation lemma is
+proved on the spot by the generator. Local to this section. -/
+local macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (exact StepRel.of_ok (Q := buildersEq.R _) (by gvcg) $h))
+
+theorem processExecutionPayloadBid_buildersEq (ctx : Ctx) (s : JauneConsensus.Gloas.BeaconState P)
+    (sb : JauneConsensus.Gloas.SignedExecutionPayloadBid) :
+    Ok (JauneConsensus.Gloas.processExecutionPayloadBid ctx s sb) (buildersEq.R s) := by
+  unfold JauneConsensus.Gloas.processExecutionPayloadBid; gvcg
+
+end BidFrame
 
 end JauneConsensus.Facts.Gloas
