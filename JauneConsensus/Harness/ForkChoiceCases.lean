@@ -7,11 +7,11 @@ import JauneConsensus.Harness.ConfigOverride
 /-!
 # `fork_choice` and `sync` case checks (harness only)
 
-`tests/formats/fork_choice/README.md` and `tests/formats/sync/README.md` (`v1.6.1`): the store is
+`tests/formats/fork_choice/README.md` and `tests/formats/sync/README.md` (`v1.7.0-beta.4`): the store is
 initialised with `get_forkchoice_store(anchor_state, anchor_block)` and the steps of
 `steps.yaml` run in order:
 
-* `tick`: `on_tick(store, tick)`;
+* `tick`: `on_tick(store, seconds_to_milliseconds(tick))`;
 * `block` (with `valid`, default `true`): `on_block(store, block)`, then, when it applied,
   `on_attestation(store, a, is_from_block=True)` for each attestation of the block and
   `on_attester_slashing(store, s)` for each of its attester slashings (the format's
@@ -22,10 +22,11 @@ initialised with `get_forkchoice_store(anchor_state, anchor_block)` and the step
 * `attestation`, `attester_slashing` (with `valid`): the handlers;
 * `block_hash` + `payload_status` (`sync` only): the mocked engine's response for that payload,
   used by the next `on_block` whose payload has that hash (`JauneConsensus/Sync.lean`);
-* `checks`: `head` (`get_head`, the optimistic head for `sync`), `time`, `genesis_time`,
-  `justified_checkpoint`, `finalized_checkpoint`, `proposer_boost_root`, `get_proposer_head`
-  (of `get_head(store)` at `get_current_slot(store)`) and `should_override_forkchoice_update`
-  (of `get_head(store)`, with the recorded `validator_is_connected`).
+* `checks`: `head` (`get_head(store).root` and its slot, the optimistic head for `sync`), `time`
+  and `genesis_time` (`milliseconds_to_seconds` of the store's), `justified_checkpoint`,
+  `finalized_checkpoint`, `proposer_boost_root` and `get_proposer_head` (of `get_head(store)` at
+  `get_current_slot(store)`). `should_override_forkchoice_update` left the format at
+  `v1.7.0-beta.4`.
 
 A step marked `valid: false` must reject, and leaves the store unchanged. Any other key fails
 the case. `bls_setting` 0 (or absent) allows BLS on or off; the handler verifies signatures
@@ -120,7 +121,7 @@ private def runSteps (P : Preset) (f : CFork) (c : Case) (ctx : Ctx) (sync : Boo
       if !(keys.all (· ∈ ["tick", "valid"])) then throw s!"{here}: keys {keys}"
       let t ← u64Of "tick" (← yamlE here (s.field "tick"))
       let valid ← stepValid s
-      match onTick cfg run.store t, valid with
+      match (do onTick cfg run.store (← secondsToMilliseconds t)), valid with
       | .ok st, true => run := { run with store := st }
       | .error r, true => throw s!"{here}: on_tick rejected: {repr r}"
       | .ok _, false => throw s!"{here}: on_tick applied, expected invalid"
@@ -223,17 +224,19 @@ private def runSteps (P : Preset) (f : CFork) (c : Case) (ctx : Ctx) (sync : Boo
           yamlE here (v.expectKeys ["slot", "root"])
           let head ← rejectE s!"{here}: get_head"
             (if sync then getOptimisticHead cfg store run.opt else getHead cfg store)
-          let block ← rejectE s!"{here}: head block" (lookup store.blocks head "head")
+          let block ← rejectE s!"{here}: head block" (lookup store.blocks head.root "head")
           let wantRoot ← rootOf "head.root" (← yamlE here (v.field "root"))
           let wantSlot ← u64Of "head.slot" (← yamlE here (v.field "slot"))
-          if head != wantRoot || block.slot != wantSlot then
-            throw s!"{here}: head is {head.toHex} at slot {block.slot}, expected {wantRoot.toHex} at {wantSlot}"
+          if head.root != wantRoot || block.slot != wantSlot then
+            throw s!"{here}: head is {head.root.toHex} at slot {block.slot}, expected {wantRoot.toHex} at {wantSlot}"
         | "time" =>
           let want ← u64Of "time" v
-          if store.time != want then throw s!"{here}: time {store.time}, expected {want}"
+          let got ← rejectE here (millisecondsToSeconds store.time_ms)
+          if got != want then throw s!"{here}: time {got}, expected {want}"
         | "genesis_time" =>
           let want ← u64Of "genesis_time" v
-          if store.genesis_time != want then throw s!"{here}: genesis_time {store.genesis_time}, expected {want}"
+          let got ← rejectE here (millisecondsToSeconds store.genesis_time_ms)
+          if got != want then throw s!"{here}: genesis_time {got}, expected {want}"
         | "justified_checkpoint" =>
           let want ← checkpointOf k v
           if store.justified_checkpoint != want then
@@ -250,14 +253,8 @@ private def runSteps (P : Preset) (f : CFork) (c : Case) (ctx : Ctx) (sync : Boo
           let want ← rootOf k v
           let got ← rejectE s!"{here}: get_proposer_head" (do
             getProposerHead cfg store (← getHead cfg store) (← getCurrentSlot cfg store))
-          if got != want then throw s!"{here}: get_proposer_head {got.toHex}, expected {want.toHex}"
-        | "should_override_forkchoice_update" =>
-          yamlE here (v.expectKeys ["validator_is_connected", "result"])
-          let connected ← yamlE k ((v.field "validator_is_connected").bind YVal.asBool)
-          let want ← yamlE k ((v.field "result").bind YVal.asBool)
-          let got ← rejectE s!"{here}: should_override_forkchoice_update" (do
-            shouldOverrideForkchoiceUpdate ctx (fun _ => connected) store (← getHead cfg store))
-          if got != want then throw s!"{here}: should_override_forkchoice_update {got}, expected {want}"
+          if got.root != want then
+            throw s!"{here}: get_proposer_head {got.root.toHex}, expected {want.toHex}"
         | other => throw s!"{here}: unknown check {other}"
     else throw s!"{here}: unknown step keys {keys}"
 

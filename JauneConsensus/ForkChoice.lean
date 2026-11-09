@@ -9,24 +9,31 @@ import Std.Data.TreeSet
 /-!
 # Fork choice (Electra and Fulu)
 
-`specs/phase0/fork-choice.md` with the later forks' modifications at `v1.6.1`:
-`specs/bellatrix/fork-choice.md` (`should_override_forkchoice_update`),
-`specs/capella/fork-choice.md` (`on_block` without the merge check),
-`specs/deneb/fork-choice.md` (`is_data_available` over blobs, the `on_block` Electra uses; Electra's
-fork-choice document adds nothing) and `specs/fulu/fork-choice.md` (`is_data_available` over
-data-column sidecars, with `verify_data_column_sidecar` and
-`verify_data_column_sidecar_kzg_proofs` from `specs/fulu/p2p-interface.md`).
+`specs/phase0/fork-choice.md` with the later forks' modifications at `v1.7.0-beta.4`:
+`specs/bellatrix/fork-choice.md` and `specs/capella/fork-choice.md` (`on_block` without the merge
+check), `specs/deneb/fork-choice.md` (`is_data_available` over blobs, the `on_block` Electra uses;
+Electra's fork-choice document adds nothing) and `specs/fulu/fork-choice.md` (`is_data_available`
+over data-column sidecars, with `verify_data_column_sidecar` and
+`verify_data_column_sidecar_kzg_proofs` from `specs/fulu/p2p-interface.md`, and `get_proposer_head`
+without the shuffling-stability condition).
+
+The release moved the store to milliseconds (`time_ms`, `genesis_time_ms`), introduced the
+`ForkChoiceNode` abstraction (a block root in Phase0; Gloas adds the payload status), split the
+weight into `get_attestation_score` and the proposer score, made `on_block` idempotent and its
+proposer boost conditional on the shuffling dependent root, added `is_proposer_equivocation` to
+`get_proposer_head`, counted equivocating head-slot committee members in `is_head_weak`, and
+removed `should_override_forkchoice_update`.
 
 The `Store` is a value; every handler returns the updated store or a typed rejection, so an
 invalid call leaves the caller's store as it was ("Invalid calls to handlers must not modify
 `store`"). Its dictionaries are `Std.TreeMap`s under the existing `Ord B256` order, its sets
 `Std.TreeSet`s. Validator indices key them by `toNat`.
 
-The spec's two implementation-dependent oracles are parameters: `retrieve_blobs_and_proofs` and
-`retrieve_column_sidecars` (`DataOracle`), and `validator_is_connected`.
+The spec's implementation-dependent oracles `retrieve_blobs_and_proofs` and
+`retrieve_column_sidecars` are a parameter (`DataOracle`).
 
 Loops and recursions that the Python bounds only by the shape of the block tree
-(`get_ancestor`, `filter_block_tree`, `get_head`) carry fuel equal to the number of blocks in
+(`get_ancestor`, `filter_node_tree`, `get_head`) carry fuel equal to the number of blocks in
 the store plus one, which a walk along parent links over distinct blocks never exhausts; running
 out (possible only for a cyclic parent relation, where Python recurses or loops forever) is a
 rejection.
@@ -43,10 +50,24 @@ variable {P : Preset} {f : CFork}
 -- `processSlots` and `stateTransition` (the spec's `process_slots` and `state_transition` with
 -- `process_epoch` and `process_block`) are in `JauneConsensus/StateTransition.lean`.
 
-/-! ## Constants and the store -/
+/-! ## Constants, nodes and the store -/
 
-/-- `BASIS_POINTS` (`specs/phase0/fork-choice.md`, "Constant"). -/
+/-- `BASIS_POINTS` (`specs/phase0/fork-choice.md`, "Constants"). -/
 def BASIS_POINTS : Nat := 10000
+
+/-- `ForkChoiceNode` (`specs/phase0/fork-choice.md`): in Phase0 to Fulu one-to-one with blocks.
+Gloas extends it with a `payload_status`; every function here takes and returns nodes where the
+spec does, so that extension changes the node's fields and `ForkChoiceNode.cmp`, not the
+signatures. -/
+structure ForkChoiceNode where
+  root : Root
+  deriving DecidableEq, BEq
+
+/-- The order keying sets of nodes: by root. -/
+def ForkChoiceNode.cmp (a b : ForkChoiceNode) : Ordering := compare a.root b.root
+
+/-- A set of nodes (the spec's `Sequence[ForkChoiceNode]` where only membership is read). -/
+abbrev NodeSet := Std.TreeSet ForkChoiceNode ForkChoiceNode.cmp
 
 /-- `LatestMessage` (`specs/phase0/fork-choice.md`). -/
 structure LatestMessage where
@@ -63,8 +84,8 @@ abbrev RootMap (α : Type) := Std.TreeMap Root α compare
 
 /-- `Store` (`specs/phase0/fork-choice.md`). -/
 structure Store (P : Preset) (f : CFork) where
-  time : U64
-  genesis_time : U64
+  time_ms : U64
+  genesis_time_ms : U64
   justified_checkpoint : Checkpoint
   finalized_checkpoint : Checkpoint
   unrealized_justified_checkpoint : Checkpoint
@@ -85,6 +106,11 @@ structure Store (P : Preset) (f : CFork) where
   | some a => pure a
   | none => throw (.key site)
 
+/-! ## Time -/
+
+-- `seconds_to_milliseconds`, `milliseconds_to_seconds`, `compute_time_at_slot_ms` and
+-- `compute_slot_at_time_ms` are in `JauneConsensus/Block.lean`.
+
 /-- `get_forkchoice_store(anchor_state, anchor_block)`. -/
 def getForkchoiceStore (cfg : Config) (anchorState : BeaconState P f)
     (anchorBlock : BeaconBlock P f) : M (Store P f) := do
@@ -94,12 +120,10 @@ def getForkchoiceStore (cfg : Config) (anchorState : BeaconState P f)
   let anchorEpoch ← getCurrentEpoch anchorState
   let justifiedCheckpoint : Checkpoint := { epoch := anchorEpoch, root := anchorRoot }
   let finalizedCheckpoint : Checkpoint := { epoch := anchorEpoch, root := anchorRoot }
-  -- `v1.7.0-beta.4` keeps the store in milliseconds; this store keeps seconds, so the anchor
-  -- time is `compute_time_at_slot`, the seconds form of `compute_time_at_slot_ms`.
-  let time ← computeTimeAtSlotOf cfg anchorState.genesis_time anchorState.slot
+  let genesisTimeMs ← secondsToMilliseconds anchorState.genesis_time
   pure {
-    time
-    genesis_time := anchorState.genesis_time
+    time_ms := ← computeTimeAtSlotMs cfg genesisTimeMs anchorState.slot
+    genesis_time_ms := genesisTimeMs
     justified_checkpoint := justifiedCheckpoint
     finalized_checkpoint := finalizedCheckpoint
     unrealized_justified_checkpoint := justifiedCheckpoint
@@ -114,22 +138,25 @@ def getForkchoiceStore (cfg : Config) (anchorState : BeaconState P f)
     latest_messages := ∅
     unrealized_justifications := (∅ : RootMap _).insert anchorRoot justifiedCheckpoint }
 
-/-! ## Time -/
-
 /-- `get_slots_since_genesis(store)`. -/
-def getSlotsSinceGenesis (cfg : Config) (store : Store P f) : M U64 := do
-  computeSlotAtTime cfg store.genesis_time store.time
+def getSlotsSinceGenesis (cfg : Config) (store : Store P f) : M Slot :=
+  computeSlotAtTimeMs cfg store.genesis_time_ms store.time_ms
 
 /-- `get_current_slot(store)`. -/
-def getCurrentSlot (cfg : Config) (store : Store P f) : M Slot := do
-  GENESIS_SLOT.add? (← getSlotsSinceGenesis cfg store) "get_current_slot"
+def getCurrentSlot (cfg : Config) (store : Store P f) : M Slot :=
+  getSlotsSinceGenesis cfg store
+
+/-- `get_time_into_slot_ms(store)`. -/
+def getTimeIntoSlotMs (cfg : Config) (store : Store P f) : M U64 := do
+  store.time_ms.sub? (← computeTimeAtSlotMs cfg store.genesis_time_ms (← getCurrentSlot cfg store))
+    "get_time_into_slot_ms"
 
 /-- `get_current_store_epoch(store)`. -/
 def getCurrentStoreEpoch (cfg : Config) (store : Store P f) : M Epoch := do
   computeEpochAtSlot P (← getCurrentSlot cfg store)
 
 /-- `compute_slots_since_epoch_start(slot)`. -/
-def computeSlotsSinceEpochStart (P : Preset) (slot : Slot) : M U64 := do
+def computeSlotsSinceEpochStart (P : Preset) (slot : Slot) : M Slot := do
   slot.sub? (← computeStartSlotAtEpoch P (← computeEpochAtSlot P slot))
     "compute_slots_since_epoch_start"
 
@@ -139,43 +166,80 @@ def getSlotComponentDurationMs (cfg : Config) (basisPoints : U64) : M U64 := do
   (← basisPoints.mul? (← u64 cfg.SLOT_DURATION_MS "SLOT_DURATION_MS") site).div?
     (← c64 BASIS_POINTS) site
 
-/-- `get_attestation_due_ms(epoch)`. -/
-def getAttestationDueMs (cfg : Config) (_epoch : Epoch) : M U64 := do
+/-- `get_attestation_due_ms()`. -/
+def getAttestationDueMs (cfg : Config) : M U64 := do
   getSlotComponentDurationMs cfg (← u64 cfg.ATTESTATION_DUE_BPS "ATTESTATION_DUE_BPS")
 
-/-- `get_proposer_reorg_cutoff_ms(epoch)`. -/
-def getProposerReorgCutoffMs (cfg : Config) (_epoch : Epoch) : M U64 := do
+/-- `get_proposer_reorg_cutoff_ms()`. -/
+def getProposerReorgCutoffMs (cfg : Config) : M U64 := do
   getSlotComponentDurationMs cfg (← u64 cfg.PROPOSER_REORG_CUTOFF_BPS "PROPOSER_REORG_CUTOFF_BPS")
-
-/-- `seconds_to_milliseconds(store.time - store.genesis_time) % SLOT_DURATION_MS`, the time into
-the current slot as `on_block` and `is_proposing_on_time` compute it. -/
-def timeIntoSlotMs (cfg : Config) (store : Store P f) : M U64 := do
-  let secondsSinceGenesis ← store.time.sub? store.genesis_time "seconds_since_genesis"
-  (← secondsToMilliseconds secondsSinceGenesis).mod? (← u64 cfg.SLOT_DURATION_MS "SLOT_DURATION_MS")
-    "time_into_slot_ms"
 
 /-! ## Block tree helpers -/
 
 /-- `get_ancestor` with an explicit bound on the number of parent steps. -/
-def getAncestorFuel (blocks : RootMap (BeaconBlock P f)) : Nat → Root → Slot → M Root
+def getAncestorFuel (blocks : RootMap (BeaconBlock P f)) :
+    Nat → ForkChoiceNode → Slot → M ForkChoiceNode
   | 0, _, _ => throw (.assert "get_ancestor: parent chain longer than the store")
-  | fuel + 1, root, slot => do
-    let block ← lookup blocks root "get_ancestor: store.blocks[root]"
-    if block.slot > slot then getAncestorFuel blocks fuel block.parent_root slot else pure root
+  | fuel + 1, node, slot => do
+    let block ← lookup blocks node.root "get_ancestor: store.blocks[node.root]"
+    if block.slot > slot then getAncestorFuel blocks fuel { root := block.parent_root } slot
+    else pure node
 
-/-- `get_ancestor(store, root, slot)`. -/
-def getAncestor (store : Store P f) (root : Root) (slot : Slot) : M Root :=
-  getAncestorFuel store.blocks (store.blocks.size + 1) root slot
+/-- `get_ancestor(store, node, slot)`. -/
+def getAncestor (store : Store P f) (node : ForkChoiceNode) (slot : Slot) : M ForkChoiceNode :=
+  getAncestorFuel store.blocks (store.blocks.size + 1) node slot
 
-/-- `calculate_committee_fraction(state, committee_percent)`. -/
+/-- `is_ancestor(store, node, ancestor)`. -/
+def isAncestor (store : Store P f) (node ancestor : ForkChoiceNode) : M Bool := do
+  let ancestorBlock ← lookup store.blocks ancestor.root "is_ancestor: store.blocks[ancestor.root]"
+  pure ((← getAncestor store node ancestorBlock.slot) == ancestor)
+
+/-- The unslashed members of `get_active_validator_indices(state, get_current_epoch(state))`, in
+index order, reading `state.validators[index].slashed` for each as the spec's loops do. -/
+def unslashedActiveIndices (state : BeaconState P f) (site : String) : M (Array ValidatorIndex) := do
+  let active ← getActiveValidatorIndices state (← getCurrentEpoch state)
+  let mut out : Array ValidatorIndex := #[]
+  for i in active do
+    if !(← state.validators.get i.toNat s!"{site}: state.validators[index]").slashed then
+      out := out.push i
+  pure out
+
+/-- `calculate_committee_fraction(state, committee_percent)`: over the unslashed active
+balance (`get_total_balance` of the set, so with its `EFFECTIVE_BALANCE_INCREMENT` floor). -/
 def calculateCommitteeFraction (state : BeaconState P f) (committeePercent : U64) : M Gwei := do
   let site := "calculate_committee_fraction"
-  let committeeWeight ← (← getTotalActiveBalance state).div? (← c64 P.SLOTS_PER_EPOCH) site
+  let totalBalance ← getTotalBalance state (← unslashedActiveIndices state site)
+  let committeeWeight ← totalBalance.div? (← c64 P.SLOTS_PER_EPOCH) site
   (← committeeWeight.mul? committeePercent site).div? (← c64 100) site
 
 /-- `get_checkpoint_block(store, root, epoch)`. -/
 def getCheckpointBlock (store : Store P f) (root : Root) (epoch : Epoch) : M Root := do
-  getAncestor store root (← computeStartSlotAtEpoch P epoch)
+  pure (← getAncestor store { root } (← computeStartSlotAtEpoch P epoch)).root
+
+/-- `get_supported_node(store, message)`. -/
+def getSupportedNode (message : LatestMessage) : ForkChoiceNode := { root := message.root }
+
+/-- `get_attestation_score(store, node, state)`: in index order, the effective balances (at
+`state`) of its unslashed active validators whose latest message is not equivocating and
+supports a descendant of `node`; the conditions are evaluated as Python's `and` does, left to
+right. -/
+def getAttestationScore (store : Store P f) (node : ForkChoiceNode) (state : BeaconState P f) :
+    M Gwei := do
+  let site := "get_attestation_score"
+  let mut score := U64.zero
+  for i in ← unslashedActiveIndices state site do
+    match store.latest_messages.get? i.toNat with
+    | none => pure ()
+    | some message =>
+      if !store.equivocating_indices.contains i.toNat then
+        if ← isAncestor store (getSupportedNode message) node then
+          let v ← state.validators.get i.toNat s!"{site}: state.validators[index]"
+          score ← score.add? v.effective_balance site
+  pure score
+
+/-- `compute_proposer_score(state)`. -/
+def computeProposerScore (cfg : Config) (state : BeaconState P f) : M Gwei := do
+  calculateCommitteeFraction state (← u64 cfg.PROPOSER_SCORE_BOOST "PROPOSER_SCORE_BOOST")
 
 /-- `store.checkpoint_states[store.justified_checkpoint]`. -/
 def justifiedCheckpointState (store : Store P f) (site : String) : M (BeaconState P f) :=
@@ -184,43 +248,21 @@ def justifiedCheckpointState (store : Store P f) (site : String) : M (BeaconStat
 
 /-- `get_proposer_score(store)`. -/
 def getProposerScore (cfg : Config) (store : Store P f) : M Gwei := do
-  let site := "get_proposer_score"
-  let justifiedCheckpointState ← justifiedCheckpointState store site
-  let committeeWeight ← (← getTotalActiveBalance justifiedCheckpointState).div?
-    (← c64 P.SLOTS_PER_EPOCH) site
-  (← committeeWeight.mul? (← u64 cfg.PROPOSER_SCORE_BOOST "PROPOSER_SCORE_BOOST") site).div?
-    (← c64 100) site
+  computeProposerScore cfg (← justifiedCheckpointState store "get_proposer_score")
 
-/-- `get_weight(store, root)`. The attestation score sums, in index order, the effective
-balances of the unslashed active validators (at the justified checkpoint state) whose latest
-message is not equivocating and descends from `root`; the conditions are evaluated as Python's
-`and` does, left to right. -/
-def getWeight (cfg : Config) (store : Store P f) (root : Root) : M Gwei := do
+/-- `get_weight(store, node)`. -/
+def getWeight (cfg : Config) (store : Store P f) (node : ForkChoiceNode) : M Gwei := do
   let site := "get_weight"
   let state ← justifiedCheckpointState store site
-  let active ← getActiveValidatorIndices state (← getCurrentEpoch state)
-  let mut unslashedAndActive : Array ValidatorIndex := #[]
-  for i in active do
-    if !(← state.validators.get i.toNat s!"{site}: state.validators[i]").slashed then
-      unslashedAndActive := unslashedAndActive.push i
-  let mut attestationScore := U64.zero
-  for i in unslashedAndActive do
-    match store.latest_messages.get? i.toNat with
-    | none => pure ()
-    | some message =>
-      if !store.equivocating_indices.contains i.toNat then
-        let block ← lookup store.blocks root s!"{site}: store.blocks[root]"
-        if (← getAncestor store message.root block.slot) == root then
-          let v ← state.validators.get i.toNat s!"{site}: state.validators[i]"
-          attestationScore ← attestationScore.add? v.effective_balance site
+  let attestationScore ← getAttestationScore store node state
   if store.proposer_boost_root == zeroRoot then
     -- Return only attestation score if `proposer_boost_root` is not set
     return attestationScore
   -- Calculate proposer score if `proposer_boost_root` is set
   let mut proposerScore := U64.zero
-  -- Boost is applied if `root` is an ancestor of `proposer_boost_root`
-  let block ← lookup store.blocks root s!"{site}: store.blocks[root]"
-  if (← getAncestor store store.proposer_boost_root block.slot) == root then
+  let proposerBoostNode : ForkChoiceNode := { root := store.proposer_boost_root }
+  -- Boost is applied if `node` is an ancestor of `proposer_boost_node`
+  if ← isAncestor store proposerBoostNode node then
     proposerScore ← getProposerScore cfg store
   attestationScore.add? proposerScore site
 
@@ -238,85 +280,81 @@ def getVotingSource (cfg : Config) (store : Store P f) (blockRoot : Root) : M Ch
     let headState ← lookup store.block_states blockRoot s!"{site}: store.block_states"
     pure headState.current_justified_checkpoint
 
-/-- The roots whose block's `parent_root` is `parent`, in key order (`[root for root in
-blocks.keys() if blocks[root].parent_root == parent]`). -/
-def childrenOf (blocks : RootMap (BeaconBlock P f)) (parent : Root) : List Root :=
-  blocks.toList.filterMap fun (r, b) => if b.parent_root == parent then some r else none
+/-- `get_node_children(store, node)`: the nodes whose block's `parent_root` is `node.root`, in
+key order. -/
+def getNodeChildren (store : Store P f) (node : ForkChoiceNode) : List ForkChoiceNode :=
+  store.blocks.toList.filterMap fun (r, b) =>
+    if b.parent_root == node.root then some { root := r } else none
 
-/-- `filter_block_tree(store, block_root, blocks)`, returning the viability and the updated
-`blocks`. Every child is visited before the results are combined, as the Python list
-comprehension does. -/
-def filterBlockTree (cfg : Config) (store : Store P f) (fuel : Nat) (blockRoot : Root)
-    (blocks : RootMap (BeaconBlock P f)) : M (Bool × RootMap (BeaconBlock P f)) := do
-  let site := "filter_block_tree"
-  match fuel with
-  | 0 => throw (.assert s!"{site}: block tree deeper than the store")
-  | fuel + 1 =>
-  let block ← lookup store.blocks blockRoot s!"{site}: store.blocks[block_root]"
-  let children := childrenOf store.blocks blockRoot
+/-- `filter_node_tree(store, node)`, returning the viable nodes of the subtree as a set (the
+callers only test membership). Every child is visited before the results are combined, as the
+Python loop does. -/
+def filterNodeTree (cfg : Config) (store : Store P f) : Nat → ForkChoiceNode → M NodeSet
+  | 0, _ => throw (.assert "filter_node_tree: node tree deeper than the store")
+  | fuel + 1, node => do
+  let site := "filter_node_tree"
+  let children := getNodeChildren store node
   -- If any children branches contain expected finalized/justified checkpoints,
-  -- add to filtered block-tree and signal viability to parent.
+  -- include this node and those descendants in the filtered node tree.
   if !children.isEmpty then
-    let mut blocks := blocks
-    let mut anyViable := false
+    let mut viableNodes : NodeSet := ∅
     for child in children do
-      let (viable, blocks') ← filterBlockTree cfg store fuel child blocks
-      blocks := blocks'
-      anyViable := anyViable || viable
-    if anyViable then
-      return (true, blocks.insert blockRoot block)
-    return (false, blocks)
+      viableNodes := viableNodes.insertMany (← filterNodeTree cfg store fuel child)
+    if !viableNodes.isEmpty then
+      return viableNodes.insert node
+    return ∅
   let currentEpoch ← getCurrentStoreEpoch cfg store
-  let votingSource ← getVotingSource cfg store blockRoot
+  let votingSource ← getVotingSource cfg store node.root
   -- The voting source should be either at the same height as the store's justified checkpoint or
   -- not more than two epochs ago
-  let mut correctJustified := true
-  if !(store.justified_checkpoint.epoch == GENESIS_EPOCH) then
-    if !(votingSource.epoch == store.justified_checkpoint.epoch) then
-      let two ← c64 2
-      correctJustified := (← votingSource.epoch.add? two site) ≥ currentEpoch
-  let finalizedCheckpointBlock ← getCheckpointBlock store blockRoot store.finalized_checkpoint.epoch
+  let correctJustified ←
+    if store.justified_checkpoint.epoch == GENESIS_EPOCH then pure true
+    else if votingSource.epoch == store.justified_checkpoint.epoch then pure true
+    else pure ((← votingSource.epoch.add? (← c64 2) site) ≥ currentEpoch)
+  let finalizedCheckpointBlock ← getCheckpointBlock store node.root store.finalized_checkpoint.epoch
   let correctFinalized :=
     store.finalized_checkpoint.epoch == GENESIS_EPOCH ||
       store.finalized_checkpoint.root == finalizedCheckpointBlock
-  -- If expected finalized/justified, add to viable block-tree and signal viability to parent.
+  -- If expected finalized/justified, add to viable node tree and signal viability to parent.
   if correctJustified && correctFinalized then
-    return (true, blocks.insert blockRoot block)
+    return (∅ : NodeSet).insert node
   -- Otherwise, branch not viable
-  return (false, blocks)
+  return ∅
 
-/-- `get_filtered_block_tree(store)`. -/
-def getFilteredBlockTree (cfg : Config) (store : Store P f) : M (RootMap (BeaconBlock P f)) := do
-  let base := store.justified_checkpoint.root
-  let (_, blocks) ← filterBlockTree cfg store (store.blocks.size + 1) base ∅
-  pure blocks
+/-- `get_filtered_node_tree(store)`. -/
+def getFilteredNodeTree (cfg : Config) (store : Store P f) : M NodeSet := do
+  let base : ForkChoiceNode := { root := store.justified_checkpoint.root }
+  filterNodeTree cfg store (store.blocks.size + 1) base
 
-/-- The LMD-GHOST walk of `get_head` over the filtered block tree, skipping the children for
+/-- The LMD-GHOST walk of `get_head` over the filtered node tree, skipping the children for
 which `excluded` holds. `get_head` excludes nothing; optimistic sync excludes `INVALIDATED`
 blocks (`JauneConsensus/Sync.lean`). Children are compared by `(get_weight, root)`, ties in
 weight broken by the lexicographically higher root (`Root` order is byte order). -/
-def getHeadExcluding (cfg : Config) (store : Store P f) (excluded : Root → Bool) : M Root := do
-  -- Get filtered block tree that only includes viable branches
-  let blocks ← getFilteredBlockTree cfg store
+def getHeadExcluding (cfg : Config) (store : Store P f) (excluded : Root → Bool) :
+    M ForkChoiceNode := do
+  -- Get filtered node tree that only includes viable branches
+  let nodes ← getFilteredNodeTree cfg store
   -- Execute the LMD-GHOST fork choice
-  let mut head := store.justified_checkpoint.root
-  for _ in [0:blocks.size + 1] do
-    let children := (childrenOf blocks head).filter (fun r => !excluded r)
+  let mut head : ForkChoiceNode := { root := store.justified_checkpoint.root }
+  for _ in [0:store.blocks.size + 1] do
+    let children := (getNodeChildren store head).filter
+      (fun c => nodes.contains c && !excluded c.root)
     if children.isEmpty then return head
     -- Sort by latest attesting balance with ties broken lexicographically
-    let mut best : Option (Gwei × Root) := none
+    let mut best : Option (Gwei × ForkChoiceNode) := none
     for child in children do
       let w ← getWeight cfg store child
       best := match best with
         | none => some (w, child)
-        | some (bw, br) => if bw < w || (bw == w && br < child) then some (w, child) else some (bw, br)
+        | some (bw, b) =>
+          if bw < w || (bw == w && b.root < child.root) then some (w, child) else some (bw, b)
     match best with
-    | some (_, r) => head := r
+    | some (_, n) => head := n
     | none => return head
   throw (.assert "get_head: walk longer than the block tree")
 
 /-- `get_head(store)`. -/
-def getHead (cfg : Config) (store : Store P f) : M Root :=
+def getHead (cfg : Config) (store : Store P f) : M ForkChoiceNode :=
   getHeadExcluding cfg store (fun _ => false)
 
 /-- `update_checkpoints(store, justified_checkpoint, finalized_checkpoint)`. -/
@@ -337,6 +375,9 @@ def updateUnrealizedCheckpoints (store : Store P f)
       { store with unrealized_justified_checkpoint := unrealizedJustified } else store
   if unrealizedFinalized.epoch > store.unrealized_finalized_checkpoint.epoch then
     { store with unrealized_finalized_checkpoint := unrealizedFinalized } else store
+
+/-- `get_latest_message_epoch(latest_message)`. -/
+def getLatestMessageEpoch (latestMessage : LatestMessage) : Epoch := latestMessage.epoch
 
 /-! ## Proposer head and re-org helpers -/
 
@@ -363,41 +404,67 @@ def isFinalizationOk (cfg : Config) (store : Store P f) (slot : Slot) : M Bool :
 
 /-- `is_proposing_on_time(store)`. -/
 def isProposingOnTime (cfg : Config) (store : Store P f) : M Bool := do
-  let timeIntoSlotMs ← timeIntoSlotMs cfg store
-  let epoch ← getCurrentStoreEpoch cfg store
-  let proposerReorgCutoffMs ← getProposerReorgCutoffMs cfg epoch
-  pure (timeIntoSlotMs ≤ proposerReorgCutoffMs)
+  pure ((← getTimeIntoSlotMs cfg store) ≤ (← getProposerReorgCutoffMs cfg))
 
-/-- `is_head_weak(store, head_root)`. -/
+/-- `is_head_weak(store, head_root)`: the attestation score of the head at the justified state
+plus the justified-state effective balances of the equivocating members of the head slot's
+committees (computed from the head's post-state), against the head threshold. -/
 def isHeadWeak (cfg : Config) (store : Store P f) (headRoot : Root) : M Bool := do
-  let justifiedState ← justifiedCheckpointState store "is_head_weak"
+  let site := "is_head_weak"
+  -- Calculate weight threshold for weak head
+  let justifiedState ← justifiedCheckpointState store site
   let reorgThreshold ← calculateCommitteeFraction justifiedState
     (← u64 cfg.REORG_HEAD_WEIGHT_THRESHOLD "REORG_HEAD_WEIGHT_THRESHOLD")
-  let headWeight ← getWeight cfg store headRoot
+  -- Compute head weight including equivocations
+  let headState ← lookup store.block_states headRoot s!"{site}: store.block_states[head_root]"
+  let headBlock ← lookup store.blocks headRoot s!"{site}: store.blocks[head_root]"
+  let epoch ← computeEpochAtSlot P headBlock.slot
+  let mut headWeight ← getAttestationScore store { root := headRoot } justifiedState
+  for index in [0:(← getCommitteeCountPerSlot headState epoch).toNat] do
+    let committee ← getBeaconCommittee headState headBlock.slot (← u64 index "CommitteeIndex")
+    let mut equivocating := U64.zero
+    for i in committee do
+      if store.equivocating_indices.contains i.toNat then
+        let v ← justifiedState.validators.get i.toNat s!"{site}: justified_state.validators[index]"
+        equivocating ← equivocating.add? v.effective_balance site
+    headWeight ← headWeight.add? equivocating site
   pure (headWeight < reorgThreshold)
 
-/-- `is_parent_strong(store, parent_root)`. -/
-def isParentStrong (cfg : Config) (store : Store P f) (parentRoot : Root) : M Bool := do
-  let justifiedState ← justifiedCheckpointState store "is_parent_strong"
+/-- `is_parent_strong(store, root)`: the attestation score of `root`'s parent. -/
+def isParentStrong (cfg : Config) (store : Store P f) (root : Root) : M Bool := do
+  let site := "is_parent_strong"
+  let justifiedState ← justifiedCheckpointState store site
   let parentThreshold ← calculateCommitteeFraction justifiedState
     (← u64 cfg.REORG_PARENT_WEIGHT_THRESHOLD "REORG_PARENT_WEIGHT_THRESHOLD")
-  let parentWeight ← getWeight cfg store parentRoot
+  let parentRoot := (← lookup store.blocks root s!"{site}: store.blocks[root]").parent_root
+  let parentWeight ← getAttestationScore store { root := parentRoot } justifiedState
   pure (parentWeight > parentThreshold)
 
-/-- `get_proposer_head(store, head_root, slot)`. Every condition is computed before they are
-combined, as the Python builds the list passed to `all`. -/
-def getProposerHead (cfg : Config) (store : Store P f) (headRoot : Root) (slot : Slot) :
-    M Root := do
+/-- `is_proposer_equivocation(store, root)`: more than one stored block has `root`'s proposer
+and slot. -/
+def isProposerEquivocation (store : Store P f) (root : Root) : M Bool := do
+  let block ← lookup store.blocks root "is_proposer_equivocation: store.blocks[root]"
+  let matching := store.blocks.toList.filter fun (_, b) =>
+    b.proposer_index == block.proposer_index && b.slot == block.slot
+  pure (matching.length > 1)
+
+/-- `get_proposer_head(store, head_node, slot)`: Phase0's, or from Fulu on the modified one
+without the shuffling-stability condition (`specs/fulu/fork-choice.md`). Every condition is
+computed before they are combined, as the Python builds the lists passed to `all`. -/
+def getProposerHead (cfg : Config) (store : Store P f) (headNode : ForkChoiceNode) (slot : Slot) :
+    M ForkChoiceNode := do
   let site := "get_proposer_head"
-  let headBlock ← lookup store.blocks headRoot s!"{site}: store.blocks[head_root]"
+  let headBlock ← lookup store.blocks headNode.root s!"{site}: store.blocks[head_node.root]"
   let parentRoot := headBlock.parent_root
   let parentBlock ← lookup store.blocks parentRoot s!"{site}: store.blocks[parent_root]"
+  let parentNode : ForkChoiceNode := { root := parentRoot }
   -- Only re-org the head block if it arrived later than the attestation deadline.
-  let headLate ← isHeadLate store headRoot
+  let headLate ← isHeadLate store headNode.root
   -- Do not re-org on an epoch boundary where the proposer shuffling could change.
-  let shufflingStable ← isShufflingStable P slot
+  -- [Removed in Fulu] the proposer lookahead fixes proposer assignments before the boundary.
+  let shufflingStable ← if f.atLeast .fulu then pure true else isShufflingStable P slot
   -- Ensure that the FFG information of the new head will be competitive with the current head.
-  let ffgCompetitive ← isFfgCompetitive store headRoot parentRoot
+  let ffgCompetitive ← isFfgCompetitive store headNode.root parentRoot
   -- Do not re-org if the chain is not finalizing with acceptable frequency.
   let finalizationOk ← isFinalizationOk cfg store slot
   -- Only re-org if we are proposing on-time.
@@ -407,55 +474,20 @@ def getProposerHead (cfg : Config) (store : Store P f) (headRoot : Root) (slot :
   let currentTimeOk := (← headBlock.slot.add? U64.one site) == slot
   let singleSlotReorg := parentSlotOk && currentTimeOk
   -- Check that the head has few enough votes to be overpowered by our proposer boost.
-  require (store.proposer_boost_root != headRoot) s!"{site}: boost has worn off"
-  let headWeak ← isHeadWeak cfg store headRoot
+  require (store.proposer_boost_root != headNode.root) s!"{site}: boost has worn off"
+  let headWeak ← isHeadWeak cfg store headNode.root
   -- Check that the missing votes are assigned to the parent and not being hoarded.
-  let parentStrong ← isParentStrong cfg store parentRoot
+  let parentStrong ← isParentStrong cfg store headNode.root
+  -- Re-org more aggressively if there is a proposer equivocation in the previous slot.
+  let proposerEquivocation ← isProposerEquivocation store headNode.root
   if [headLate, shufflingStable, ffgCompetitive, finalizationOk, proposingOnTime,
       singleSlotReorg, headWeak, parentStrong].all id then
-    -- We can re-org the current head by building upon its parent block.
-    pure parentRoot
+    -- We can re-org the current head by building upon its parent node.
+    pure parentNode
+  else if [headWeak, currentTimeOk, proposerEquivocation].all id then
+    pure parentNode
   else
-    pure headRoot
-
-/-- `should_override_forkchoice_update(store, head_root)` (`specs/bellatrix/fork-choice.md`),
-with the node's `validator_is_connected` given. -/
-def shouldOverrideForkchoiceUpdate (ctx : Ctx) (validatorIsConnected : ValidatorIndex → Bool)
-    (store : Store P f) (headRoot : Root) : M Bool := do
-  let cfg := ctx.cfg
-  let site := "should_override_forkchoice_update"
-  let headBlock ← lookup store.blocks headRoot s!"{site}: store.blocks[head_root]"
-  let parentRoot := headBlock.parent_root
-  let parentBlock ← lookup store.blocks parentRoot s!"{site}: store.blocks[parent_root]"
-  let currentSlot ← getCurrentSlot cfg store
-  let proposalSlot ← headBlock.slot.add? U64.one site
-  -- Only re-org the head_block block if it arrived later than the attestation deadline.
-  let headLate ← isHeadLate store headRoot
-  -- Shuffling stable.
-  let shufflingStable ← isShufflingStable P proposalSlot
-  -- FFG information of the new head_block will be competitive with the current head.
-  let ffgCompetitive ← isFfgCompetitive store headRoot parentRoot
-  -- Do not re-org if the chain is not finalizing with acceptable frequency.
-  let finalizationOk ← isFinalizationOk cfg store proposalSlot
-  -- Only suppress the fork choice update if we are confident that we will propose the next block.
-  let parentStateAdvanced ← lookup store.block_states parentRoot s!"{site}: store.block_states"
-  let parentStateAdvanced ← processSlots ctx parentStateAdvanced proposalSlot
-  let proposerIndex ← getBeaconProposerIndex parentStateAdvanced
-  let proposingReorgSlot := validatorIsConnected proposerIndex
-  -- Single slot re-org.
-  let parentSlotOk := (← parentBlock.slot.add? U64.one site) == headBlock.slot
-  let proposingOnTime ← isProposingOnTime cfg store
-  -- Note that this condition is different from `get_proposer_head`
-  let currentTimeOk := headBlock.slot == currentSlot || (proposalSlot == currentSlot && proposingOnTime)
-  let singleSlotReorg := parentSlotOk && currentTimeOk
-  -- Check the head weight only if the attestations from the head slot have already been applied.
-  let mut headWeak := true
-  let mut parentStrong := true
-  if currentSlot > headBlock.slot then
-    headWeak ← isHeadWeak cfg store headRoot
-    parentStrong ← isParentStrong cfg store parentRoot
-  pure ([headLate, shufflingStable, ffgCompetitive, finalizationOk, proposingReorgSlot,
-    singleSlotReorg, headWeak, parentStrong].all id)
+    pure headNode
 
 /-! ## Pull-up tip and tick handlers -/
 
@@ -477,11 +509,11 @@ def computePulledUpTip (cfg : Config) (store : Store P f) (blockRoot : Root) : M
     pure (updateCheckpoints store state.current_justified_checkpoint state.finalized_checkpoint)
   else pure store
 
-/-- `on_tick_per_slot(store, time)`. -/
-def onTickPerSlot (cfg : Config) (store : Store P f) (time : U64) : M (Store P f) := do
+/-- `on_tick_per_slot(store, time_ms)`. -/
+def onTickPerSlot (cfg : Config) (store : Store P f) (timeMs : U64) : M (Store P f) := do
   let previousSlot ← getCurrentSlot cfg store
   -- Update store time
-  let store := { store with time }
+  let store := { store with time_ms := timeMs }
   let currentSlot ← getCurrentSlot cfg store
   -- If this is a new slot, reset store.proposer_boost_root
   let store := if currentSlot > previousSlot then { store with proposer_boost_root := zeroRoot }
@@ -493,24 +525,24 @@ def onTickPerSlot (cfg : Config) (store : Store P f) (time : U64) : M (Store P f
         store.unrealized_finalized_checkpoint
   pure store
 
-/-- `on_tick(store, time)`. The `while` loop advances `get_current_slot(store)` by exactly one
+/-- `on_tick(store, time_ms)`. The `while` loop advances `get_current_slot(store)` by exactly one
 per iteration, so it runs at most `tick_slot - get_current_slot(store)` times; the bound is that
 count, and the loop condition is re-checked on every iteration as in the Python. -/
-def onTick (cfg : Config) (store : Store P f) (time : U64) : M (Store P f) := do
+def onTick (cfg : Config) (store : Store P f) (timeMs : U64) : M (Store P f) := do
   let site := "on_tick"
-  -- If the `store.time` falls behind, while loop catches up slot by slot
+  -- If the `store.time_ms` falls behind, while loop catches up slot by slot
   -- to ensure that every previous slot is processed with `on_tick_per_slot`
-  let tickSlot ← computeSlotAtTime cfg store.genesis_time time
+  let tickSlot ← computeSlotAtTimeMs cfg store.genesis_time_ms timeMs
   let bound := tickSlot.toNat - (← getCurrentSlot cfg store).toNat
   let mut store := store
   for _ in [0:bound] do
     let currentSlot ← getCurrentSlot cfg store
     if currentSlot < tickSlot then
-      let previousTime ← computeTimeAtSlotOf cfg store.genesis_time
-        (← currentSlot.add? U64.one site)
-      store ← onTickPerSlot cfg store previousTime
+      let nextSlot ← currentSlot.add? U64.one site
+      let nextSlotTimeMs ← computeTimeAtSlotMs cfg store.genesis_time_ms nextSlot
+      store ← onTickPerSlot cfg store nextSlotTimeMs
   require (!((← getCurrentSlot cfg store) < tickSlot)) s!"{site}: catch-up loop bound"
-  onTickPerSlot cfg store time
+  onTickPerSlot cfg store timeMs
 
 /-! ## Attestation and attester-slashing handlers -/
 
@@ -520,10 +552,10 @@ def validateTargetEpochAgainstCurrentTime (cfg : Config) (store : Store P f)
   let target := attestation.data.target
   -- Attestations must be from the current or previous epoch
   let currentEpoch ← getCurrentStoreEpoch cfg store
-  -- Use GENESIS_EPOCH for previous when genesis to avoid underflow
-  let previousEpoch ← if currentEpoch > GENESIS_EPOCH then
+  -- `saturating_sub(current_epoch, 1)`
+  let previousEpoch ← if currentEpoch > U64.one then
       currentEpoch.sub? U64.one "validate_target_epoch_against_current_time"
-    else pure GENESIS_EPOCH
+    else currentEpoch.sub? currentEpoch "validate_target_epoch_against_current_time"
   -- If attestation target is from a future epoch, delay consideration until the epoch arrives
   require (target.epoch == currentEpoch || target.epoch == previousEpoch)
     "validate_target_epoch_against_current_time: target epoch"
@@ -660,14 +692,62 @@ def isDataAvailableColumns (cfg : Config) (oracle : DataOracle P) (beaconBlockRo
     if !(← verifyDataColumnSidecarKzgProofs sidecar) then return false
   return true
 
+/-- `record_block_timeliness(store, root)`. -/
+def recordBlockTimeliness (cfg : Config) (store : Store P f) (root : Root) : M (Store P f) := do
+  let block ← lookup store.blocks root "record_block_timeliness: store.blocks[root]"
+  let timeIntoSlotMs ← getTimeIntoSlotMs cfg store
+  let attestationThresholdMs ← getAttestationDueMs cfg
+  let isBeforeAttestingInterval := timeIntoSlotMs < attestationThresholdMs
+  let isTimely := (← getCurrentSlot cfg store) == block.slot && isBeforeAttestingInterval
+  pure { store with block_timeliness := store.block_timeliness.insert root isTimely }
+
+/-- `saturating_sub(a, b)` on `Uint64` (`specs/phase0/beacon-chain.md`): `a - b` if `a > b`, else
+`a - a`. -/
+def saturatingSubU64 (a b : U64) (site : String) : M U64 :=
+  if a > b then a.sub? b site else a.sub? a site
+
+/-- `compute_shuffling_lookahead_start_slot(epoch)`. -/
+def computeShufflingLookaheadStartSlot (P : Preset) (epoch : Epoch) : M Slot := do
+  let site := "compute_shuffling_lookahead_start_slot"
+  computeStartSlotAtEpoch P (← saturatingSubU64 epoch (← c64 P.MIN_SEED_LOOKAHEAD) site)
+
+/-- `compute_shuffling_dependent_slot(epoch)`. -/
+def computeShufflingDependentSlot (P : Preset) (epoch : Epoch) : M Slot := do
+  saturatingSubU64 (← computeShufflingLookaheadStartSlot P epoch) U64.one
+    "compute_shuffling_dependent_slot"
+
+/-- `get_shuffling_dependent_root(store, root, epoch)`. -/
+def getShufflingDependentRoot (store : Store P f) (root : Root) (epoch : Epoch) : M Root := do
+  pure (← getAncestor store { root } (← computeShufflingDependentSlot P epoch)).root
+
+/-- `update_proposer_boost_root(store, head, root)`: the boost goes to a timely first block of the
+slot whose shuffling dependent root equals the canonical head's. -/
+def updateProposerBoostRoot (cfg : Config) (store : Store P f) (head root : Root) :
+    M (Store P f) := do
+  let isFirstBlock := store.proposer_boost_root == zeroRoot
+  let isTimely ← lookup store.block_timeliness root "update_proposer_boost_root: block_timeliness"
+  let epoch ← getCurrentStoreEpoch cfg store
+  let headDependentRoot ← getShufflingDependentRoot store head epoch
+  let blockDependentRoot ← getShufflingDependentRoot store root epoch
+  let isSameDependentRoot := headDependentRoot == blockDependentRoot
+  -- Add proposer score boost if the block is timely, not conflicting with an
+  -- existing block, with the same dependent root as the canonical chain head.
+  if isTimely && isFirstBlock && isSameDependentRoot then
+    pure { store with proposer_boost_root := root }
+  else pure store
+
 /-- `on_block(store, signed_block)`: Deneb's handler for Electra (with `is_data_available` over
 blobs), Fulu's for Fulu (over data-column sidecars). Each keeps its own operation order: Fulu
-copies the parent state right after the parent check, Deneb after the availability check. -/
+copies the parent state right after the parent check, Deneb after the availability check. A
+known block returns the store unchanged. -/
 def onBlock (ctx : Ctx) (oracle : DataOracle P) (store : Store P f)
     (signedBlock : SignedBeaconBlock P f) : M (Store P f) := do
   let cfg := ctx.cfg
   let site := "on_block"
   let block := signedBlock.message
+  let blockRoot : Root := Ssz.hashTreeRoot block
+  -- Return early if the block is already known
+  if store.blocks.contains blockRoot then return store
   -- Parent block must be known
   require (store.block_states.contains block.parent_root) s!"{site}: parent known"
   -- [Fulu] Make a copy of the state to avoid mutability issues
@@ -687,34 +767,25 @@ def onBlock (ctx : Ctx) (oracle : DataOracle P) (store : Store P f)
   -- Check if blob data is available
   let state ← match fuluPreState with
     | some state => do
-      -- [Fulu] `is_data_available(hash_tree_root(block))`
-      require (← isDataAvailableColumns cfg oracle (Ssz.hashTreeRoot block))
-        s!"{site}: is_data_available"
+      -- [Fulu] `is_data_available(block_root)`
+      require (← isDataAvailableColumns cfg oracle blockRoot) s!"{site}: is_data_available"
       pure state
     | none => do
-      -- [Deneb] `is_data_available(hash_tree_root(block), block.body.blob_kzg_commitments)`
-      require (← isDataAvailableBlobs oracle (Ssz.hashTreeRoot block)
+      -- [Deneb] `is_data_available(block_root, block.body.blob_kzg_commitments)`
+      require (← isDataAvailableBlobs oracle blockRoot
         block.body.blob_kzg_commitments.toArray.toList) s!"{site}: is_data_available"
       -- [Deneb] Make a copy of the state to avoid mutability issues
       lookup store.block_states block.parent_root s!"{site}: store.block_states[parent]"
   -- Check the block is valid and compute the post-state
-  let blockRoot : Root := Ssz.hashTreeRoot block
   let state ← stateTransition ctx state signedBlock true
+  -- Compute head before applying the block
+  let head ← getHead cfg store
   -- Add new block and its state to the store
   let store := { store with
     blocks := store.blocks.insert blockRoot block
     block_states := store.block_states.insert blockRoot state }
-  -- Add block timeliness to the store
-  let timeIntoSlotMs ← timeIntoSlotMs cfg store
-  let epoch ← getCurrentStoreEpoch cfg store
-  let attestationThresholdMs ← getAttestationDueMs cfg epoch
-  let isBeforeAttestingInterval := timeIntoSlotMs < attestationThresholdMs
-  let isTimely := (← getCurrentSlot cfg store) == block.slot && isBeforeAttestingInterval
-  let store := { store with block_timeliness := store.block_timeliness.insert blockRoot isTimely }
-  -- Add proposer score boost if the block is timely and not conflicting with an existing block
-  let isFirstBlock := store.proposer_boost_root == zeroRoot
-  let store := if isTimely && isFirstBlock then { store with proposer_boost_root := blockRoot }
-    else store
+  let store ← recordBlockTimeliness cfg store blockRoot
+  let store ← updateProposerBoostRoot cfg store head.root blockRoot
   -- Update checkpoints in store if necessary
   let store := updateCheckpoints store state.current_justified_checkpoint state.finalized_checkpoint
   -- Eagerly compute unrealized justification and finality.

@@ -3,7 +3,8 @@ import JauneConsensus.ForkChoice
 /-!
 # Optimistic sync
 
-`sync/optimistic.md` at `v1.6.1`: the `OptimisticStore`, its helpers (`is_optimistic`,
+`specs/bellatrix/optimistic-sync.md` at `v1.7.0-beta.4` (`sync/optimistic.md` before it; the
+move changed no rule): the `OptimisticStore`, its helpers (`is_optimistic`,
 `latest_verified_ancestor`, `is_execution_block`, `is_optimistic_candidate_block`), and the
 mechanisms the `sync` vectors exercise:
 
@@ -17,7 +18,7 @@ mechanisms the `sync` vectors exercise:
 * "How to apply `latestValidHash` when payload status is `INVALID`".
 * The head: LMD-GHOST over the fork-choice store with `INVALIDATED` blocks removed from the
   block tree (`getHeadExcluding`), as the pyspec test helper `get_opt_head_block_root`
-  (`tests/core/pyspec/eth2spec/test/helpers/optimistic_sync.py`) computes it.
+  (`tests/core/pyspec/eth_consensus_specs/test/helpers/optimistic_sync.py`) computes it.
 
 The execution engine's responses (`PayloadStatusV1`) are inputs.
 -/
@@ -28,7 +29,7 @@ open Jaune (Bytes B256)
 
 variable {P : Preset} {f : CFork}
 
-/-- `SAFE_SLOTS_TO_IMPORT_OPTIMISTICALLY` (`sync/optimistic.md`, "Constants"). -/
+/-- `SAFE_SLOTS_TO_IMPORT_OPTIMISTICALLY` (`specs/bellatrix/optimistic-sync.md`, "Constants"). -/
 def SAFE_SLOTS_TO_IMPORT_OPTIMISTICALLY : Nat := 128
 
 /-- The `status` of an engine API `PayloadStatusV1`. -/
@@ -52,7 +53,7 @@ structure PayloadStatusV1 where
   latestValidHash : Option Hash32
   deriving DecidableEq, Repr
 
-/-- `OptimisticStore` (`sync/optimistic.md`), with the set of blocks designated `INVALIDATED`
+/-- `OptimisticStore` (`specs/bellatrix/optimistic-sync.md`), with the set of blocks designated `INVALIDATED`
 the consensus engine "MUST track". -/
 structure OptimisticStore (P : Preset) (f : CFork) where
   optimistic_roots : Std.TreeSet Root compare
@@ -212,7 +213,7 @@ def onBlockOptimistic (ctx : Ctx) (oracle : DataOracle P) (store : Store P f)
 
 /-- The optimistic node's head: `get_head` with `INVALIDATED` blocks removed from the tree. -/
 def getOptimisticHead (cfg : Config) (store : Store P f) (optStore : OptimisticStore P f) :
-    M Root :=
+    M ForkChoiceNode :=
   getHeadExcluding cfg store (fun r => optStore.invalidated.contains r)
 
 end JauneConsensus
