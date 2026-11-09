@@ -388,6 +388,141 @@ implementations of the same misunderstanding agree perfectly.
 [`scripts/GATES.md`](scripts/GATES.md) is the authoritative catalogue of every
 gate, its exact command, pass criteria, and runtime.
 
+## The consensus layer
+
+`JauneConsensus/` is an executable model of the Ethereum consensus layer for
+Electra and Fulu. It is transcribed from `ethereum/consensus-specs` release
+`v1.6.1` (tag commit `5fa6edcca8ab4cf548653e6680b17b9d3e04d225`, licence
+CC0-1.0). It is a separate library target. Blanc does not build it, and the
+execution layer does not import it.
+
+The claim is about tests, not proofs. The model passes the release's official
+test vectors for those forks. That is evidence that the Lean matches the
+Python specification on those cases. It is not a proof that they agree.
+
+**Trusted base.** Pure Lean. There is no `@[extern]`, `opaque`, `partial`,
+`unsafe`, `native_decide`, `panic` or `sorry` in `JauneConsensus/`. There is
+no foreign code and no FFI. The hygiene gate scans `JauneConsensus/`, its
+root and its runner with no new allowlist rows. Integrity rules R1 to R4
+cover the consensus closure and `ConsensusMain.lean`. R5 bars defaulted reads
+and raw `UInt64` in the spec layer outside `UInt.lean`, `Harness/` and
+`Crypto/`. R6 bars nested actions in term-level `if` branches, because Lean
+lifts such an action above the branch and an Electra-only read would then run
+at Deneb. Axiom evidence is the union walk over `ConsensusAssurance`
+(`scripts/ConsensusUnionAxioms.lean`), never `#print axioms`. The axioms are
+the three standard ones.
+
+**Vector provenance.** `scripts/consensus-vectors.json` pins the three
+release tarballs (`general`, `minimal`, `mainnet`) by name, size and SHA-256.
+`scripts/consensus-vector-inventory.py` streams the tarballs, checks their
+digests, and writes `scripts/consensus/inventory-v1.6.1.json`. That file
+records every case count by preset, fork, runner, handler and suite, plus
+per-suite name and path digests, the `bls_setting` histogram, and the
+per-case `config.yaml` set.
+`scripts/consensus-verify-tree.py` compares an extracted tree file by file
+with the digest-checked tarballs: same size, same SHA-256, nothing extra.
+Run it once per extraction. No vector is ever edited. Where a vector
+disagrees with the specification text, the vector's tag is followed and the
+disagreement is recorded.
+
+**The KZG trusted setup.** The setup is
+`presets/mainnet/trusted_setups/trusted_setup_4096.json` from the pinned
+release. The minimal preset's copy is byte-identical. Its SHA-256 is
+`f8e44a31ebf0a6d0734dcb301b0716e2c77f3ae18ed0cab0870fbcc2ca55616f`.
+`scripts/consensus-trusted-setup-generate.py` writes
+`Crypto/TrustedSetup.lean` from that file. It refuses any other digest and
+checks the entry counts and encodings. `--check` fails unless the committed
+file is what the generator writes. The file is never edited by hand. The
+setup points are decoded without a subgroup check. The decoder still rejects
+points that are not on the curve. The pinned digest is what vouches for
+subgroup membership. No Lean check does. This is a trusted input, like the
+setup itself.
+
+**Presets and configuration.** `Preset.lean` and `Config.lean` are generated
+by `scripts/consensus-preset-generate.py` from the pinned release's
+`presets/` and `configs/` files, for phase0 through Fulu. The generator
+refuses a checkout that is not at the tag commit, and `--check` fails on any
+drift. Variables that no phase0 to Fulu specification file mentions are left
+out of `Config`. These are the Gloas and feature-fork versions, epochs and
+timings. The generated header lists them.
+
+**The harness boundary.** The harness is `JauneConsensus/Harness/` and
+`ConsensusMain.lean` (`lake exe jaune-consensus`). It reads vectors. It
+defines no consensus behaviour, and its outputs are evidence only through
+the checks below. It has its own Snappy raw-block decoder
+(`Harness/Snappy.lean`) and YAML-subset reader (`Harness/Yaml.lean`), both
+pure Lean and fail-closed. Every in-scope `.ssz_snappy` file decodes. The
+`ssz_generic/uints/valid` cases check the Snappy decoder independently.
+Before running a selection, the runner checks it against the inventory: case
+counts, the name and file-path digests, `bls_setting` and the `config.yaml`
+set. It refuses an empty selection, a missing or extra case or file, and any
+mismatch. Contents are vouched for by the tarball digests together with
+`consensus-verify-tree.py`. Verdicts are strict all-PASS. A runner or
+handler without an implementation fails. Nothing is skipped. There is no
+expected-failure list. Gloas and the `eip7805` feature fork are refused by
+name. `CFork.rules?` resolves Gloas to nothing, so nothing falls back to
+Fulu. Fork-choice vectors verify signatures unless `JAUNE_CONSENSUS_FC_BLS=0`
+(the catalogue records both modes). Caches live only in the harness, never
+in the semantics.
+
+**Accepted divergences.** Each was checked against the code on the candidate.
+`compute_proposer_index` and both `get_next_sync_committee_indices` run for
+`SAMPLING_FUEL = 2 ^ 28` iterations (`Accessors.lean`, `EpochAccessors.lean`)
+and reject on exhaustion, where pyspec loops unbounded. Under a random-oracle
+reading of the hash the exhaustion probability is negligible, and the code
+says so at each site. `get_ancestor`, `filter_block_tree`, `get_head` and
+the descendant walks in `Sync.lean` bound each walk by the number of stored
+blocks plus one (`ForkChoice.lean`). Exhaustion rejects. That needs a cycle
+in the parent relation, which needs a hash collision. `process_slashings`
+adds and multiplies with checked operations (`Epoch.lean`) and rejects past
+`2^64 - 1`, where pyspec sums in unbounded integers and clamps with `min`.
+Reaching it needs more slashed Gwei in one window than exists. Reviewers
+also flagged the BLS-switch paths: `getNextSyncCommittee` and the
+sync-aggregate subtract path thread `blsActive` explicitly and use
+`STUB_PUBKEY` when off (`EpochAccessors.lean`, `Block.lean`). Cases that
+need real BLS carry a `bls_setting` that keeps it on, so no vector reaches
+the flagged inputs.
+
+**What is only differential.** These fast paths have a kept reference and
+agree with it on tested inputs. Nothing more is claimed. `fk20H` (direct
+MSMs) is the reference for `fk20HFft` (Toeplitz products in the frequency
+domain) in `Crypto/KZGCells.lean`, beside `fftField` and `cosetFftField`.
+`g2SubgroupCheckFast` is the psi-based G2 subgroup test in
+`Crypto/G2Subgroup.lean`, pinned by differential guards. The fast Miller
+loop and fast final exponentiation in `Jaune/BLS.lean` sit beside
+`blsPairingRef` and a square-and-multiply reference; the Frobenius map
+`x ↦ x^p` they use is checked by guards on Miller-loop values, not proved.
+`clearCofactorG2` (the ten-step RFC G.3 clearing) sits beside
+`clearCofactorG2Ref` (multiply by `hEffG2`) in `Crypto/HashToCurve.lean`.
+KZG and the EIP-7594 cell functions are checked against the official `kzg`
+vectors and against Jaune's own `verifyKzgProofImpl`. RFC 9380
+hash-to-curve and the signature ciphersuite are checked against RFC
+appendix vectors and the official `bls` vectors.
+
+**The cross-layer fork pairing.** Electra pairs with Prague. Fulu pairs with
+Osaka, BPO1 and BPO2. Gloas pairs with Amsterdam, declared and refused.
+Deneb pairs with Cancun as Electra's pre-fork side. `decide` proves the
+ties against Jaune's rule data: the blob ceilings, the request types, and
+the pairing with its inverse (`Fork.lean`). `ExecutionRequestsList`, the
+result type of `get_execution_requests_list`, is `List Bytes`
+(`Fork.lean`). That is the type Jaune's execution layer hashes, so a later
+seam goal needs no conversion.
+
+**Consensus-primitive provenance.** Execution-layer rows come from
+`jaune-primitive-provenance-v1` and are not repeated here. Columns match its
+P0 table: primitive, reference, transcription source, proved, tested only.
+
+| primitive | reference and section | transcription source | proved | tested only |
+|---|---|---|---|---|
+| SSZ serialize, deserialize, `hash_tree_root` | `ethereum/consensus-specs` v1.6.1 `ssz/simple-serialize.md` | the spec markdown and pyspec | `hashPair_eq` (`JauneConsensus/SSZ/Merkle.lean`, `JauneConsensus/Crypto/Sha256Pair.lean`) | `ssz_generic`, `ssz_static`, `merkle_proof`, `light_client` vectors |
+| `hashPair` 256-bit fast path | same SSZ merkleization | Jaune `Bytes.sha256` | `hashPair_eq`, `hashPair_eq_hashPairKernel` | `--bench-hash-pair` differential plus the corpora above |
+| RFC 9380 hash-to-curve (`expand_message_xmd`, `hash_to_field`, SWU with isogeny, `map_to_curve` on G2) | RFC 9380 §5.3 and §8 | the RFC text | none; `#guard` vectors only | RFC appendix vectors as guards (`Crypto/HashToCurveVectors.lean`), official `bls` vectors |
+| BLS POP ciphersuite `BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_` (KeyValidate, CoreVerify, Aggregate, FastAggregateVerify, the `eth_*` wrappers) | draft-irtf-cfrg-bls-signature-04 §§2.4 to 2.7 and §3.3; `specs/altair/bls.md` | the draft and the spec text | none; `#guard` vectors only | official `bls` vectors, including the infinity-pubkey case |
+| BLS12-381 fast paths (fast Miller loop, fast final exponentiation, psi subgroup test, psi cofactor clearing) | `specs/deneb/polynomial-commitments.md` as used; RFC 9380 App. G for the clearing steps | Jaune `BLS.lean` and the consensus crypto modules | none; differential guards only | in-tree guard files (`Crypto/G2SubgroupVectors.lean`, KZG vector files), official `bls` and `kzg` vectors |
+| KZG for EIP-4844 | `specs/deneb/polynomial-commitments.md` | the spec markdown | none | official `kzg` vectors, Deneb handlers; cross-checked against Jaune `verifyKzgProofImpl` |
+| EIP-7594 cells (`compute_cells`, proofs, recovery, batch verification) | `specs/fulu/polynomial-commitments-sampling.md` | the spec markdown | none (`fk20H` reference vs `fk20HFft` fast path, differential) | official `kzg` vectors, Fulu handlers |
+| shuffling (`compute_shuffled_index`) | `specs/phase0/beacon-chain.md` | pyspec | none | `shuffling` vectors on both presets |
+
 ## What the theorems actually say — and what this document does not answer
 
 This document is about whether the proofs are **sound**. It is not about
