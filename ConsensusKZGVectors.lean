@@ -1,5 +1,7 @@
 -- Differential tool for the general-preset `kzg` vectors of consensus-specs v1.6.1 (the
--- catalogue gate is `jaune-consensus run --preset general --runner kzg`; this keeps the
+-- general-only provenance entry `general` of scripts/consensus-vectors.json; the minimal,
+-- mainnet and comptests vectors are pinned at v1.7.0-beta.4, whose general tarball has no
+-- `kzg`) (the catalogue gate is `jaune-consensus run --preset general --runner kzg`; this keeps the
 -- `@spec` and `@jaune` pseudo-handlers, which compare alternative implementations):
 -- `tests/general/deneb/kzg/*/kzg-mainnet/*` and `tests/general/fulu/kzg/*/kzg-mainnet/*`.
 -- Usage: jaune-consensus-kzg-vectors <tests/general dir> [handler ...]
@@ -256,7 +258,9 @@ def kzgHandler (name : String) (inp : Y) : Except String V := do
       .list [.list (cells.toList.map vBytes), .list (proofs.toList.map vBytes)]
   | _ => throw s!"unknown handler {name}"
 
-/-- Handlers and their inventory counts (scripts/consensus/inventory-v1.6.1.json). -/
+/-- Handlers and their inventory counts (the v1.6.1 general tarball's counts, recorded in
+scripts/consensus/inventory-v1.7.0-beta.4.json under `general`; until 2026-11-10 in
+scripts/consensus/inventory-v1.6.1.json). -/
 def handlers : List (String × String × Nat) :=
   [("deneb", "blob_to_kzg_commitment", 11), ("deneb", "compute_blob_kzg_proof", 15),
    ("deneb", "compute_challenge", 9), ("deneb", "compute_kzg_proof", 52),

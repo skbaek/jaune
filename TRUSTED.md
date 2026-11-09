@@ -418,7 +418,7 @@ the corpus it runs over. The last eight rows are the consensus layer's
 | `BLS12-381 map Fp to G1` (0x10) | EIP-2537 (MAP_FP_TO_G1); RFC 9380 §6.6.3 (simplified SWU via an 11-isogeny, Appendix E.2) and §7 | `executeBls12MapFpToG1` (`Jaune/Precompiles.lean:919`) via `blsMapFpToG1` (`Jaune/BLS.lean:299`) | none about values | `map_fp_to_G1_bls.json`, `blsMapG1.json` and their `fail-` files via `check-vectors.sh`; `check-legacy.sh --bls` (the EEST BLS/point-evaluation tier); fixtures |
 | `BLS12-381 map Fp2 to G2` (0x11) | EIP-2537 (MAP_FP2_TO_G2); RFC 9380 §6.6.3 (simplified SWU via a 3-isogeny, Appendix E.3) and §7 | `executeBls12MapFp2ToG2` (`Jaune/Precompiles.lean:967`) via `blsMapFp2ToG2` (`Jaune/BLS.lean:361`) | none about values | `map_fp2_to_G2_bls.json`, `blsMapG2.json` and their `fail-` files via `check-vectors.sh`; `check-legacy.sh --bls` (the EEST BLS/point-evaluation tier); fixtures |
 | `KZG point evaluation` (0x0A) | EIP-4844 (point evaluation precompile); Deneb `polynomial-commitments.md` (`verify_kzg_proof`) | `executePointEval` (`Jaune/Precompiles.lean:843`) via `verifyKzgProofImpl` (`Jaune/BLS.lean:423`) | none about values | `pointEvaluation.json` (1 case) via `check-vectors.sh`; `check-legacy.sh --bls` (the EEST BLS/point-evaluation tier); fixtures |
-| SSZ serialize, deserialize, `hash_tree_root` (consensus layer) | `ethereum/consensus-specs` v1.6.1 `ssz/simple-serialize.md` | the spec markdown and pyspec | `hashPair_eq` (`JauneConsensus/SSZ/Merkle.lean`, `JauneConsensus/Crypto/Sha256Pair.lean`) | `ssz_generic`, `ssz_static`, `merkle_proof`, `light_client` vectors |
+| SSZ serialize, deserialize, `hash_tree_root` (consensus layer) | `ethereum/consensus-specs` v1.6.1 `ssz/simple-serialize.md` (from v1.7.0 the SSZ specification lives in `ethereum/ssz-specs`; the pinned `v1.7.0-beta.4` carries no `ssz/` directory and its README points there) | the spec markdown and pyspec | `hashPair_eq` (`JauneConsensus/SSZ/Merkle.lean`, `JauneConsensus/Crypto/Sha256Pair.lean`) | `ssz_generic`, `ssz_static`, `merkle_proof`, `light_client` vectors |
 | `hashPair` 256-bit fast path (consensus layer) | same SSZ merkleization | Jaune `Bytes.sha256` | `hashPair_eq`, `hashPair_eq_hashPairKernel` | `--bench-hash-pair` differential plus the corpora above |
 | RFC 9380 hash-to-curve (`expand_message_xmd`, `hash_to_field`, SWU with isogeny, `map_to_curve` on G2) (consensus layer) | RFC 9380 §5.3 and §8 | the RFC text | none; `#guard` vectors only | RFC appendix vectors as guards (`JauneConsensus/Crypto/HashToCurveVectors.lean`), official `bls` vectors |
 | BLS POP ciphersuite `BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_` (KeyValidate, CoreVerify, Aggregate, FastAggregateVerify, the `eth_*` wrappers) (consensus layer) | draft-irtf-cfrg-bls-signature-04 §§2.4 to 2.7 and §3.3; `specs/altair/bls.md` | the draft and the spec text | none; `#guard` vectors only | official `bls` vectors, including the infinity-pubkey case |
@@ -429,9 +429,13 @@ the corpus it runs over. The last eight rows are the consensus layer's
 ## The consensus layer
 
 `JauneConsensus/` is an executable model of the Ethereum consensus layer for
-Electra and Fulu. It is transcribed from `ethereum/consensus-specs` release
-`v1.6.1` (tag commit `5fa6edcca8ab4cf548653e6680b17b9d3e04d225`, licence
-CC0-1.0). It is a separate library target. Blanc does not build it, and the
+Electra and Fulu, with Gloas in progress (goal `eip8282-gloas-cross-layer-v1`;
+the Gloas runners not yet implemented refuse by name). It is transcribed from
+`ethereum/consensus-specs` release `v1.7.0-beta.4` (tag commit
+`aa16bb4c156184e9548a997d53efaf2a228a6304`, licence CC0-1.0). History: it was
+first transcribed from `v1.6.1` (tag commit
+`5fa6edcca8ab4cf548653e6680b17b9d3e04d225`) and moved to `v1.7.0-beta.4` on
+2026-11-10 (Jaune `a09c3df9`). It is a separate library target. Blanc does not build it, and the
 execution layer does not import it.
 
 The claim is about tests, not proofs. The model passes the release's official
@@ -451,10 +455,15 @@ at Deneb. Axiom evidence is the union walk over `ConsensusAssurance`
 (`scripts/ConsensusUnionAxioms.lean`), never `#print axioms`. The axioms are
 the three standard ones.
 
-**Vector provenance.** `scripts/consensus-vectors.json` pins the three
-release tarballs (`general`, `minimal`, `mainnet`) by name, size and SHA-256.
+**Vector provenance.** `scripts/consensus-vectors.json` pins `v1.7.0-beta.4`'s
+`minimal`, `mainnet` and `comptests` tarballs, and, as a second, general-only
+entry `general`, the `v1.6.1` `general` tarball (beta.4's own `general` tarball
+holds only the 20 altair `bls` cases, with no `ssz_generic` or `kzg`), each by
+name, size and SHA-256. History: until 2026-11-10 it pinned the three `v1.6.1`
+tarballs (`general`, `minimal`, `mainnet`) and the inventory was
+`scripts/consensus/inventory-v1.6.1.json`.
 `scripts/consensus-vector-inventory.py` streams the tarballs, checks their
-digests, and writes `scripts/consensus/inventory-v1.6.1.json`. That file
+digests, and writes `scripts/consensus/inventory-v1.7.0-beta.4.json`. That file
 records every case count by preset, fork, runner, handler and suite, plus
 per-suite name and path digests, the `bls_setting` histogram, and the
 per-case `config.yaml` set.
@@ -465,8 +474,9 @@ disagrees with the specification text, the vector's tag is followed and the
 disagreement is recorded.
 
 **The KZG trusted setup.** The setup is
-`presets/mainnet/trusted_setups/trusted_setup_4096.json` from the pinned
-release. The minimal preset's copy is byte-identical. Its SHA-256 is
+`presets/mainnet/trusted_setups/trusted_setup_4096.json`; the generator reads
+it from a `v1.6.1` checkout, and the file in `v1.7.0-beta.4` is byte-identical
+(same SHA-256). The minimal preset's copy is byte-identical. Its SHA-256 is
 `f8e44a31ebf0a6d0734dcb301b0716e2c77f3ae18ed0cab0870fbcc2ca55616f`.
 `scripts/consensus-trusted-setup-generate.py` writes
 `Crypto/TrustedSetup.lean` from that file. It refuses any other digest and
@@ -479,11 +489,11 @@ setup itself.
 
 **Presets and configuration.** `Preset.lean` and `Config.lean` are generated
 by `scripts/consensus-preset-generate.py` from the pinned release's
-`presets/` and `configs/` files, for phase0 through Fulu. The generator
-refuses a checkout that is not at the tag commit, and `--check` fails on any
-drift. Variables that no phase0 to Fulu specification file mentions are left
-out of `Config`. These are the Gloas and feature-fork versions, epochs and
-timings. The generated header lists them.
+(`v1.7.0-beta.4`) `presets/` and `configs/` files, for phase0 through Gloas.
+The generator refuses a checkout that is not at the tag commit, and `--check`
+fails on any drift. Variables that no phase0 to Gloas specification file
+mentions are left out of `Config`. These are the feature-fork and later-fork
+versions, epochs and timings. The generated header lists them.
 
 **The harness boundary.** The harness is `JauneConsensus/Harness/` and
 `ConsensusMain.lean` (`lake exe jaune-consensus`). It reads vectors. It
@@ -498,9 +508,11 @@ set. It refuses an empty selection, a missing or extra case or file, and any
 mismatch. Contents are vouched for by the tarball digests together with
 `consensus-verify-tree.py`. Verdicts are strict all-PASS. A runner or
 handler without an implementation fails. Nothing is skipped. There is no
-expected-failure list. Gloas and the `eip7805` feature fork are refused by
-name. `CFork.rules?` resolves Gloas to nothing, so nothing falls back to
-Fulu. Fork-choice vectors verify signatures unless `JAUNE_CONSENSUS_FC_BLS=0`
+expected-failure list. The `eip7805` feature fork is refused by name, and
+so is Gloas for every runner outside `gloasRunners`
+(`Harness/Discovery.lean`). `CFork.rules?` resolves Gloas to nothing, so
+nothing falls back to Fulu; the admitted Gloas runners run the separate Gloas
+modules. Fork-choice vectors verify signatures unless `JAUNE_CONSENSUS_FC_BLS=0`
 (the catalogue records both modes). Caches live only in the harness, never
 in the semantics.
 

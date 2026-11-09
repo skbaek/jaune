@@ -11,7 +11,7 @@ lake exe jaune-consensus run  --preset P [--fork F] [--runner R] [--handler H] [
                               [--tier smoke|full] [--vectors DIR] [--manifest-dir DIR]
 lake exe jaune-consensus scan --preset P [selection as above]     reader scans (Snappy, YAML)
 lake exe jaune-consensus --forks                                  cross-layer fork pairing
-lake exe jaune-consensus --fork-rules NAME                        resolve one fork (Gloas refused)
+lake exe jaune-consensus --fork-rules NAME                        resolve one fork (Gloas: pairing only)
 lake exe jaune-consensus recorded-pairs [--dir DIR] [--negative-control]
 lake exe jaune-consensus recorded-pairs-gloas [--dir DIR]          Gloas devnet pairs, control built in
 ```
@@ -87,7 +87,9 @@ def cmdRun (o : Opts) : IO UInt32 := do
   let (m, sel) ← loadSelection o
   let all ← discover m sel
   let todo := tierCases sel.tier all
-  IO.println s!"jaune-consensus: release {m.release} ({m.tagCommit}), preset {sel.preset}, \
+  let (rel, tag) := if sel.preset == "general" then (m.generalRelease, m.generalTagCommit)
+    else (m.release, m.tagCommit)
+  IO.println s!"jaune-consensus: release {rel} ({tag}), preset {sel.preset}, \
     {all.length} cases checked against the manifest, {todo.length} to run \
     ({if sel.tier == .smoke then "smoke" else "full"} tier)"
   let mut pass := 0
@@ -127,12 +129,25 @@ def cmdScan (o : Opts) : IO UInt32 := do
     pure 1
 
 /-- `--forks`: the cross-layer pairing (outcome O7). `--fork-rules NAME`: resolve one consensus
-fork through `CFork.resolve`, failing closed for Gloas, `eip7805` and unknown names. -/
+fork through `CFork.resolve`, failing closed for `eip7805` and unknown names. Gloas, whose
+`CFork.rules?` stays `none` (the runner refusals rely on it), is answered by `gloasPairing`: its
+execution pairing only (goal `eip8282-gloas-cross-layer-v1`, G2). -/
 def cmdForks : IO UInt32 := do
   for l in JauneConsensus.pairingTable do IO.println l
   pure 0
 
+/-- The execution forks paired with Gloas, read from the inverse pairing
+`Jaune.Fork.consensusFork?` over every known execution fork (no second table). -/
+def gloasPairing : List Jaune.Fork :=
+  Jaune.Fork.all.filter (·.consensusFork? == some .gloas)
+
+#guard gloasPairing == [.amsterdam]
+
 def cmdForkRules (n : String) : IO UInt32 := do
+  if JauneConsensus.CFork.ofName? n == some .gloas then
+    IO.println s!"gloas: execution {gloasPairing} (pairing only: the Gloas rules are the separate \
+      Gloas modules, not a CFork.rules? entry)"
+    return 0
   match JauneConsensus.CFork.resolve n with
   | .ok d =>
     IO.println s!"{d.fork}: execution {d.blobs.map (·.1)}, max blobs {d.blobs.map (·.2)}, \

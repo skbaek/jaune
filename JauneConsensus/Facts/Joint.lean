@@ -33,13 +33,6 @@ private theorem eq_false_of_not_true {b : Bool} (h : ¬(b = true)) : b = false :
   | true => simp [hb] at h
   | false => rfl
 
-/-- A `require` succeeds iff its condition holds. -/
-private theorem require_eq_ok {c : Bool} {site : String} :
-    require c site = .ok () ↔ c = true := by
-  cases c with
-  | true => exact iff_of_true rfl rfl
-  | false => exact iff_of_false (by simp [require]) (by decide)
-
 /-- A `require true` is a silent success. -/
 private theorem require_true {site : String} : require true site = .ok () := rfl
 
@@ -260,11 +253,11 @@ theorem jointTransitionAt_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool
       · rw [ite_eq_left hat] at h
         obtain ⟨sigv, hsig, h⟩ := Except.bind_eq_ok h
         obtain ⟨_, hsigreq, h⟩ := Except.bind_eq_ok h
-        have hsigv : sigv = true := require_eq_ok.mp hsigreq
+        have hsigv : sigv = true := require_eq_ok_iff.mp hsigreq
         obtain ⟨s, hproc, h⟩ := Except.bind_eq_ok h
         obtain ⟨_, hbeqreq, h⟩ := Except.bind_eq_ok h
         have hbeqv : B256.beq sb.message.state_root (Ssz.hashTreeRoot s) = true :=
-          require_eq_ok.mp hbeqreq
+          require_eq_ok_iff.mp hbeqreq
         obtain ⟨bv, hbv, h⟩ := Except.bind_eq_ok h
         have hbv' : Except.ok s = Except.ok bv := hbv
         cases hbv'
@@ -286,11 +279,11 @@ theorem jointTransitionAt_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool
     · rw [ite_eq_left hat] at hT ⊢
       obtain ⟨sigv, hsig, hT⟩ := Except.bind_eq_ok hT
       obtain ⟨_, hsigreq, hT⟩ := Except.bind_eq_ok hT
-      have hsigv : sigv = true := require_eq_ok.mp hsigreq
+      have hsigv : sigv = true := require_eq_ok_iff.mp hsigreq
       obtain ⟨s, hproc, hT⟩ := Except.bind_eq_ok hT
       obtain ⟨_, hbeqreq, hT⟩ := Except.bind_eq_ok hT
       have hbeqv : B256.beq sb.message.state_root (Ssz.hashTreeRoot s) = true :=
-        require_eq_ok.mp hbeqreq
+        require_eq_ok_iff.mp hbeqreq
       have hs_eq : s = beacon' := by
         have h' : Except.ok s = Except.ok beacon' := hT
         cases h'
@@ -319,7 +312,7 @@ theorem jointStep_electra_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool
     simp only [jointStep] at h
     obtain ⟨_, hslotreq, h⟩ := Except.bind_eq_ok h
     have hslot : sb.message.slot.toNat < fuluForkSlot (P := P) ccfg :=
-      of_decide_eq_true (require_eq_ok.mp hslotreq)
+      of_decide_eq_true (require_eq_ok_iff.mp hslotreq)
     obtain ⟨p, hjt, h⟩ := Except.bind_eq_ok h
     obtain ⟨beacon', exec'⟩ := p
     dsimp only at h
@@ -334,7 +327,7 @@ theorem jointStep_electra_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool
       decide_eq_true hslot
     have hreq0 : require (decide (sb.message.slot.toNat < fuluForkSlot (P := P) ccfg))
         "joint step: an Electra block at or after the Fulu fork slot" = .ok () := by
-      rw [require_eq_ok]; exact hdec
+      rw [require_eq_ok_iff]; exact hdec
     have hjt : jointTransitionAt cfg ccfg bls beacon exec sb = .ok (beacon', exec') := by
       rw [jointTransitionAt_ok_iff]
       refine ⟨req, hreq, hverdict, ?_⟩
@@ -404,7 +397,7 @@ theorem jointStep_cross_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     obtain ⟨_, hslotreq, h⟩ := Except.bind_eq_ok h
     have hslot : beacon.slot.toNat ≤ fuluForkSlot (P := P) ccfg ∧
         fuluForkSlot (P := P) ccfg ≤ sb.message.slot.toNat :=
-      of_decide_eq_true (require_eq_ok.mp hslotreq)
+      of_decide_eq_true (require_eq_ok_iff.mp hslotreq)
     obtain ⟨forkSlot, hforkSlot, h⟩ := Except.bind_eq_ok h
     by_cases hlt : beacon.slot < forkSlot
     · rw [ite_eq_left hlt] at h
@@ -447,7 +440,7 @@ theorem jointStep_cross_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     have hreq0 : require (decide (beacon.slot.toNat ≤ fuluForkSlot (P := P) ccfg ∧
         fuluForkSlot (P := P) ccfg ≤ sb.message.slot.toNat))
         "joint step: a Fulu block crossing from an Electra state" = .ok () := by
-      rw [require_eq_ok]; exact hdec
+      rw [require_eq_ok_iff]; exact hdec
     have hjt : jointTransitionAt cfg ccfg bls beacon2 exec sb
         (sb.message.slot == beacon2.slot) = .ok (beacon', exec') := by
       rw [jointTransitionAt_ok_iff]

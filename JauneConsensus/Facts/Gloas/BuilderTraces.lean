@@ -15,7 +15,7 @@ The mid-list states of the builder-deposit and builder-exit loops of
   builder loops, run from the state `processBlock` receives (`st`), with the same calls as
   `processParentExecutionPayload` (an EMPTY parent carries no requests, so both traces are
   `[st]`);
-* the factoring: `applyParentExecutionPayload_eq` (the function is prefix, deposit loop, exit
+* the factoring: `applyParentExecutionPayload_factor` (the function is prefix, deposit loop, exit
   loop, suffix), `forIn_eq_scanM` (a loop is the last element of its trace), the step lemmas
   `builderDepositTrace_step`/`builderExitTrace_step` (`tr[k] → tr[k+1]` is one request call), and
   `processParentExecutionPayload_traces` (a successful parent settlement ends at the last
@@ -187,7 +187,7 @@ private theorem ite_bind_M {α β : Type} (c : Prop) [Decidable c] (x y : M α) 
   split <;> rfl
 
 /-- The factoring of `apply_parent_execution_payload` at the builder loops. -/
-theorem applyParentExecutionPayload_eq (ctx : Ctx) (st : BeaconState P)
+theorem applyParentExecutionPayload_factor (ctx : Ctx) (st : BeaconState P)
     (requests : ExecutionRequests) :
     applyParentExecutionPayload ctx st requests = (do
       let s ← applyParentPrefix ctx st requests
@@ -447,7 +447,7 @@ theorem processParentExecutionPayload_traces {ctx : Ctx} {st s' : Gloas.BeaconSt
     split at h
     · rename_i hq
       simp only [bind, Except.bind, pure, Except.pure] at h
-      rw [Gloas.applyParentExecutionPayload_eq, Gloas.applyParentPrefix_ctx,
+      rw [Gloas.applyParentExecutionPayload_factor, Gloas.applyParentPrefix_ctx,
         Gloas.processBuilderDepositRequest_ctx] at h
       simp only [bind_eq_ok_iff] at h
       obtain ⟨s0, h0, s1, h1, s2, h2, h3⟩ := h

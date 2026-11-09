@@ -231,4 +231,17 @@ private def l8 : List B256 := (List.range 8).map L
   | _, _ => false
 #guard (verifyMerkleMultiproof [L 0] [] [8, 9] r4).toBool == false
 
+/-- `compute_merkle_branch_root(leaf, branch, depth, index)` (`specs/phase0/beacon-chain.md`);
+`branch[i]` out of range raises. -/
+def computeMerkleBranchRoot (leaf : B256) (branch : List B256) (depth index : Nat) :
+    M B256 := do
+  let mut value := leaf
+  for i in List.range depth do
+    let b ← match branch[i]? with
+      | some b => pure b
+      | none => throw (.index "compute_merkle_branch_root: branch[i]" i branch.length)
+    if index / 2 ^ i % 2 == 1 then value := hashPair b value
+    else value := hashPair value b
+  pure value
+
 end JauneConsensus

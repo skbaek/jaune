@@ -15,7 +15,8 @@ A selection names a preset and optionally a fork, runner, handler and suite. Dis
    `gloasRunners`, and the `eip7805` feature fork, by name (`forkRefusal?`), and any selection
    naming no in-scope suite. Gloas `ssz_static` only decodes, re-encodes and hashes the Gloas
    containers; the other admitted Gloas runners run the separate Gloas modules, and
-   `--fork-rules gloas` still refuses;
+   `--fork-rules gloas` reports only the Gloas ↔ Amsterdam pairing (`ConsensusMain.lean`,
+   `gloasPairing`), leaving `CFork.rules?` at `none`;
 2. walks the in-scope part of the tree under the selection and compares it to the manifest: a
    selected suite missing on disk, or present on disk without a record, is refused;
 3. for every selected suite checks the case count (manifest and inventory), the digest of the

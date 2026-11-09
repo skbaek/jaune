@@ -24,15 +24,6 @@ own processing call (`for_ops`), so the per-request structure is visible to the 
 
 namespace JauneConsensus
 
-namespace Bitvector
-
-/-- `bits[i] = b`, rejecting out of range. -/
-def set {n : Nat} (xs : Bitvector n) (i : Nat) (b : Bool) (site : String) : M (Bitvector n) :=
-  if h : i < xs.bits.size then pure ⟨xs.bits.set i b h, by simpa using xs.size_eq⟩
-  else throw (.index site i xs.bits.size)
-
-end Bitvector
-
 namespace Gloas
 
 open Jaune

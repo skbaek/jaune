@@ -1,6 +1,7 @@
 import JauneConsensus.LightClient
 import JauneConsensus.ContainersGloas
 import JauneConsensus.GossipCore
+import JauneConsensus.SSZ.Proof
 
 /-!
 # Gloas light-client sync protocol
@@ -89,19 +90,6 @@ def forkDigests (cfg : Config) (gvr : Root) : M (List Bytes) := do
   epochs.mapM fun e => do computeForkDigest cfg gvr (← U64.ofNat? e "fork digest epoch")
 
 /-! ## Helpers -/
-
-/-- `compute_merkle_branch_root(leaf, branch, depth, index)` (`specs/phase0/beacon-chain.md`);
-`branch[i]` out of range raises. -/
-def computeMerkleBranchRoot (leaf : Bytes32) (branch : List Bytes32) (depth index : Nat) :
-    M Root := do
-  let mut value := leaf
-  for i in List.range depth do
-    let b ← match branch[i]? with
-      | some b => pure b
-      | none => throw (.index "compute_merkle_branch_root: branch[i]" i branch.length)
-    if index / 2 ^ i % 2 == 1 then value := hashPair b value
-    else value := hashPair value b
-  pure value
 
 /-- Python's `xs[a:]` for a possibly negative `a`. -/
 private def sliceFrom {α : Type} (xs : List α) (a : Int) : List α :=

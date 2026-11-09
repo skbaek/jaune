@@ -1,5 +1,6 @@
 import JauneConsensus.LightClient
 import JauneConsensus.SSZ.Proof
+import JauneConsensus.SSZ.Progressive
 
 /-!
 # Light-client data derivation on a full node
@@ -44,6 +45,32 @@ def ProofTree.ofFields (roots : List (Option B256)) : ProofTree := .ofChunks (ro
 def ProofTree.expand (t : ProofTree) (i : Nat) (sub : ProofTree) : ProofTree :=
   match t with
   | .node cs => .node (cs.mapIdx fun j (r, s) => if j = i then (r, some sub) else (r, s))
+
+/-- The spine of `merkleize_progressive(chunks, num_leaves)` along `.successorRight` as a proof
+tree entry `(root, tree)`: the empty input is the zero chunk; otherwise the node over this level's
+`num_leaves` chunks (zero-padded) and the rest of the spine. Total by fuel. -/
+def ProofTree.progressiveSpine : Nat → List (B256 × Option ProofTree) → Nat →
+    B256 × Option ProofTree
+  | 0, _, _ => (zeroChunk, none)
+  | _ + 1, [], _ => (zeroChunk, none)
+  | fuel + 1, cs, n =>
+    let level := cs.take n
+    let padded := level ++ List.replicate (n - level.length) (zeroChunk, none)
+    let entry : B256 × Option ProofTree :=
+      -- a one-chunk level is its chunk (`padded` is `[c]` here: `level` is non-empty)
+      if n = 1 then (match padded with | e :: _ => e | [] => (zeroChunk, none))
+      else (merkleizeDepth (level.map (·.1)) (depthOf n), some (.node padded))
+    let succ := progressiveSpine fuel (cs.drop n) (n * 4)
+    (Spine.successorRight.node succ.1 entry.1, some (.node [entry, succ]))
+
+/-- The proof tree of a progressive container whose `active_fields` are all `1` (every Gloas
+container; EIP-7688, `SSZ/Progressive.lean`), from its field chunks with their expansions:
+`mix_in_active_fields(merkleize_progressive(chunks), active_fields)`. The root node is
+`(spine root, active-fields chunk)`, and each spine node is `(subtree of this level, rest of the
+spine)`, the levels holding 1, 4, 16, ... chunks. -/
+def ProofTree.ofProgressive (fields : List (B256 × Option ProofTree)) : ProofTree :=
+  let sp := progressiveSpine (fields.length + 1) fields 1
+  .node [sp, (chunkOf (bitsToBytes (List.replicate fields.length true)), none)]
 
 /-- The tree of a `List[T, N]` of composite `T`: `mix_in_length(merkleize(roots, limit=N), len)`,
 that is a node over the data root (expanded into the `N` element roots, zero-padded) and the
