@@ -68,3 +68,4 @@ import JauneConsensus.Crypto.G2Subgroup
 import JauneConsensus.Crypto.G2SubgroupVectors
 import JauneConsensus.Facts.AnchorInv
 import JauneConsensus.Facts.AnchorInvComposite
+import JauneConsensus.Facts.WithdrawalsFloor
