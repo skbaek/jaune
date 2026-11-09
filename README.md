@@ -210,6 +210,31 @@ execution-specs/legacy-fixture and EEST bootstrap, frozen Python oracle,
 environment doctor, path overrides, disk requirements, and long-test
 requirements.
 
+## Consensus layer
+
+Jaune contains an executable specification of the Ethereum consensus layer
+for Electra and Fulu, written in pure Lean from `ethereum/consensus-specs`
+release `v1.6.1`. It passes every case of that release's official test
+vectors whose fork is Electra or Fulu, on both the minimal and mainnet
+presets, plus every general-preset case those forks use, with no
+expected-failure allowance: 23,975/23,975 in-scope cases (5,509 general,
+16,126 minimal, 2,340 mainnet). It does so under Jaune's existing trusted base
+and gate discipline: pure Lean with no FFI, the R1 to R6 integrity rules over
+the consensus modules, and axiom evidence by the repository's union walk. The
+consensus lane's commands are in [`scripts/GATES.md`](scripts/GATES.md).
+
+Not claimed:
+
+- That the Lean equals the Python specification. Vectors are evidence from
+  testing, not proof, as for the execution layer.
+- Anything about any client implementation.
+- Any fork other than Electra and Fulu, except the Deneb state and blocks
+  that Electra's `fork` and `transition` vectors need as their pre-fork side.
+- Any cross-layer theorem, or any proved property of the consensus layer.
+  Those are future work.
+- Performance at real mainnet state scale, or anything about ZK.
+- That Jaune is Ethereum.
+
 ## Verification status
 
 - **What you are trusting** — [`TRUSTED.md`](TRUSTED.md) states the trusted
@@ -217,13 +242,17 @@ requirements.
   and which gate enforces each absence, the known exceptions, and where the
   line between testing and proof falls. Every figure in it names the command
   that regenerates it.
-- **SHA-256 computes the published function, by theorem.**
-  [`Jaune/SHA256Spec.lean`](Jaune/SHA256Spec.lean) transcribes NIST FIPS 180-4
-  section by section, and `Jaune.Bytes.sha256_eq_fips` proves the optimized
-  kernel equal to that transcription for every input, with the standard axioms
-  and no `sorry`. The reader still owes the transcription a read, which is the
-  point of citing the standard at every declaration. [`TRUSTED.md`](TRUSTED.md)
-  states exactly what the theorem does and does not claim.
+- **SHA-256 and Keccak-256 compute their published functions, by theorem.**
+  [`Jaune/SHA256Spec.lean`](Jaune/SHA256Spec.lean) and
+  [`Jaune/KeccakSpec.lean`](Jaune/KeccakSpec.lean) transcribe NIST FIPS 180-4
+  and FIPS 202 section by section, and `Jaune.Bytes.sha256_eq_fips` and
+  `Jaune.Bytes.keccak_eq_fips` prove the optimized kernels equal to those
+  transcriptions for every input, with the standard axioms and no `sorry`.
+  Keccak-256 here is Ethereum's `KECCAK[512](M, 256)`, without SHA-3's
+  domain-separation bits. The reader still owes the transcriptions a read,
+  which is the point of citing the standard at every declaration.
+  [`TRUSTED.md`](TRUSTED.md) states exactly what the theorems do and do not
+  claim, and gives the provenance of every other primitive.
 - **Runnable forks:** Byzantium through Cancun, followed by Prague, Osaka,
   BPO1, BPO2 and the Amsterdam snapshot, with configured fork transitions.
   Jaune passes 100% of the `tests@v21.0.2` blockchain-test fixtures in
