@@ -27,6 +27,9 @@ import JauneConsensus.Facts.Gloas.InvariantsWindow
 import JauneConsensus.Facts.Gloas.InvariantsCrossing
 import JauneConsensus.Facts.Gloas.InvariantsControls
 import JauneConsensus.Facts.Gloas.InvariantsCover
+import JauneConsensus.Facts.Gloas.InvariantsVLen
+import JauneConsensus.Facts.Gloas.InvariantsWithdrawals
+import JauneConsensus.Facts.Gloas.InvariantsCoverBlock
 
 /-!
 # Whole-library axiom union for `JauneConsensus`
