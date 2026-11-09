@@ -79,3 +79,9 @@ import JauneConsensus.GloasEpoch
 import JauneConsensus.GloasWithdrawals
 import JauneConsensus.GloasOperations
 import JauneConsensus.GloasBlock
+import JauneConsensus.GossipCore
+import JauneConsensus.Gossip
+import JauneConsensus.GloasGossip
+import JauneConsensus.Harness.GossipCases
+import JauneConsensus.Harness.GossipStoreFree
+import JauneConsensus.Harness.GossipTable
