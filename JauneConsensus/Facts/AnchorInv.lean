@@ -709,4 +709,136 @@ theorem processConsolidationRequest_pres (cfg : Config) {s s' : BeaconState P f}
     | exact ok_of fun _ h => consol_leaf h rfl (by assumption) (by assumption) (by assumption)
         (consolidationChurn_frame cfg (by assumption)))
 
+/-! ## The generic `Pres` generator -/
+
+theorem ok_pres_trans {f1 f2 f3 : CFork} {s : BeaconState P f1} {s1 : BeaconState P f2}
+    {c : M (BeaconState P f3)} (hp : Pres s s1) (h : Ok c (Pres s1)) : Ok c (Pres s) :=
+  fun a ha => hp.trans (h a ha)
+
+/-- `Pres` facts for a call `h : g … = .ok s'`; extended by `macro_rules` as mutators are proved. -/
+syntax "pres_of " ident : tactic
+macro_rules | `(tactic| pres_of $h) => `(tactic| exact (increaseBalance_frame $h).pres)
+macro_rules | `(tactic| pres_of $h) => `(tactic| exact (decreaseBalance_frame $h).pres)
+macro_rules | `(tactic| pres_of $h) => `(tactic| exact (exitChurn_frame _ $h).pres)
+macro_rules | `(tactic| pres_of $h) => `(tactic| exact (consolidationChurn_frame _ $h).pres)
+macro_rules | `(tactic| pres_of $h) => `(tactic| exact (queueExcess_frame $h).pres)
+macro_rules | `(tactic| pres_of $h) => `(tactic| exact (setPendingConsolidations_frame $h).pres)
+macro_rules | `(tactic| pres_of $h) => `(tactic| exact initiateValidatorExit_pres _ $h)
+macro_rules | `(tactic| pres_of $h) => `(tactic| exact slashValidator_pres _ $h)
+macro_rules | `(tactic| pres_of $h) => `(tactic| exact switchToCompoundingValidator_pres $h)
+macro_rules | `(tactic| pres_of $h) => `(tactic| exact processBlsToExecutionChange_pres _ $h)
+macro_rules | `(tactic| pres_of $h) => `(tactic| exact processWithdrawalRequest_pres _ $h)
+macro_rules | `(tactic| pres_of $h) => `(tactic| exact processConsolidationRequest_pres _ $h)
+
+/-- One generator step: binds (moving the precondition state past known mutators), branches,
+matches and leaves. -/
+macro "pres_step" : tactic => `(tactic| first
+  | with_reducible exact ok_throw
+  | with_reducible exact ok_throw_bind
+  | with_reducible exact ok_pure (Pres.refl _)
+  | exact ok_of fun _ hh => by pres_of hh
+  | (with_reducible apply ok_bind; intro _ hx; try (refine ok_pres_trans (by pres_of hx) ?_))
+  | (with_reducible apply ok_ite <;> intro _)
+  | dsimp only
+  | (rename_i x _; cases x; all_goals dsimp only))
+
+/-! ## Setters and the registry -/
+
+theorem setPendingDeposits_frame {s s' : BeaconState P f}
+    {l : SszList PendingDeposit P.PENDING_DEPOSITS_LIMIT}
+    (h : s.setPendingDeposits l = .ok s') : Frame s s' := by
+  unfold BeaconState.setPendingDeposits at h
+  obtain ⟨g, _, h⟩ := bind_eq_ok_iff.mp h
+  cases h; exact ⟨rfl, rfl⟩
+
+theorem setDepositBalanceToConsume_frame {s s' : BeaconState P f} {x : Gwei}
+    (h : s.setDepositBalanceToConsume x = .ok s') : Frame s s' := by
+  unfold BeaconState.setDepositBalanceToConsume at h
+  obtain ⟨g, _, h⟩ := bind_eq_ok_iff.mp h
+  cases h; exact ⟨rfl, rfl⟩
+
+theorem setDepositRequestsStartIndex_frame {s s' : BeaconState P f} {x : U64}
+    (h : s.setDepositRequestsStartIndex x = .ok s') : Frame s s' := by
+  unfold BeaconState.setDepositRequestsStartIndex at h
+  obtain ⟨g, _, h⟩ := bind_eq_ok_iff.mp h
+  cases h; exact ⟨rfl, rfl⟩
+
+macro_rules | `(tactic| pres_of $h) => `(tactic| exact (setPendingDeposits_frame $h).pres)
+macro_rules | `(tactic| pres_of $h) => `(tactic| exact (setDepositBalanceToConsume_frame $h).pres)
+macro_rules | `(tactic| pres_of $h) => `(tactic| exact (setDepositRequestsStartIndex_frame $h).pres)
+
+theorem getValidatorFromDeposit_exitOk {P : Preset} {f : CFork} {pk : BLSPubkey} {wc : Bytes32} {amt : U64}
+    {v : Validator} (h : getValidatorFromDeposit P f pk wc amt = .ok v) : ExitOk v := by
+  unfold getValidatorFromDeposit at h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  cases h
+  intro _; rfl
+
+theorem addValidatorToRegistry_pres {s s' : BeaconState P f} {pk : BLSPubkey} {wc : Bytes32} {amt : U64}
+    (h : addValidatorToRegistry s pk wc amt = .ok s') : Pres s s' := by
+  unfold addValidatorToRegistry at h
+  obtain ⟨idx, hidx, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨v, hv, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨V, hV, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  cases h
+  have hn : idx.toNat = s.validators.toArray.size := U64.toNat_ofNat? hidx
+  unfold setOrAppendList at hV
+  have hc : (idx.toNat == s.validators.length) = true := by
+    simp only [SszList.length, hn, beq_self_eq_true]
+  rw [if_pos hc] at hV
+  exact pres_of_valRel (valRel_push (push_ok hV) (getValidatorFromDeposit_exitOk hv))
+    (pendingStep_same rfl)
+
+macro_rules | `(tactic| pres_of $h) => `(tactic| exact addValidatorToRegistry_pres $h)
+
+/-! ## Block operations -/
+
+theorem processVoluntaryExit_pres (ctx : Ctx) {s s' : BeaconState P f} {sve : SignedVoluntaryExit}
+    (h : processVoluntaryExit ctx s sve = .ok s') : Pres s s' := by
+  revert s' h
+  show Ok (processVoluntaryExit ctx s sve) (Pres s)
+  unfold processVoluntaryExit
+  repeat pres_step
+
+theorem processProposerSlashing_pres (ctx : Ctx) {s s' : BeaconState P f} {ps : ProposerSlashing}
+    (h : processProposerSlashing ctx s ps = .ok s') : Pres s s' := by
+  revert s' h
+  show Ok (processProposerSlashing ctx s ps) (Pres s)
+  unfold processProposerSlashing
+  repeat pres_step
+
+theorem applyDeposit_pres (ctx : Ctx) {s s' : BeaconState P f} {pk : BLSPubkey} {wc : Bytes32}
+    {amt : U64} {sig : BLSSignature} (h : applyDeposit ctx s pk wc amt sig = .ok s') : Pres s s' := by
+  revert s' h
+  show Ok (applyDeposit ctx s pk wc amt sig) (Pres s)
+  unfold applyDeposit
+  repeat pres_step
+
+macro_rules | `(tactic| pres_of $h) => `(tactic| exact applyDeposit_pres _ $h)
+
+theorem processDeposit_pres (ctx : Ctx) {s s' : BeaconState P f} {d : Deposit}
+    (h : processDeposit ctx s d = .ok s') : Pres s s' := by
+  unfold processDeposit at h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  dsimp only at h
+  have h2 := applyDeposit_pres ctx h
+  exact (pres_frame rfl rfl).trans h2
+
+theorem processDepositRequest_pres {s s' : BeaconState P f} {dr : DepositRequest}
+    (h : processDepositRequest s dr = .ok s') : Pres s s' := by
+  revert s' h
+  show Ok (processDepositRequest s dr) (Pres s)
+  unfold processDepositRequest
+  repeat pres_step
+
 end JauneConsensus.Facts
