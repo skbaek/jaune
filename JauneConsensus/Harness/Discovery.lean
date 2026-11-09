@@ -68,7 +68,9 @@ def runnerFileKinds : String → List String
   | "ssz_static" => ["roots.yaml", "serialized.ssz_snappy", "value.yaml"]
   | "epoch_processing" =>
     ["meta.yaml", "pre.ssz_snappy", "post.ssz_snappy", "pre_epoch.ssz_snappy",
-     "post_epoch.ssz_snappy"]
+     "post_epoch.ssz_snappy",
+     -- the Gloas `ptc_window` case (`spec_state_test_with_matching_config`)
+     "config.yaml"]
   | "operations" =>
     ["meta.yaml", "pre.ssz_snappy", "post.ssz_snappy", "execution.yaml",
      "address_change.ssz_snappy", "attestation.ssz_snappy", "attester_slashing.ssz_snappy",
@@ -109,9 +111,15 @@ def runnerFileKinds : String → List String
 so a fork whose rules do not resolve (Gloas) is accepted for them. -/
 def containerOnlyRunners : List String := ["ssz_static"]
 
+/-- The runners admitted at Gloas: the container-only runners, and the runners whose Gloas
+semantics exist (goal `eip8282-gloas-cross-layer-v1`, U3: `epoch_processing` over
+`JauneConsensus/GloasEpoch.lean`, `rewards` over `GloasEpochAccessors.lean`). Every other runner
+still refuses Gloas. -/
+def gloasRunners : List String := containerOnlyRunners ++ ["epoch_processing", "rewards"]
+
 /-- Why a fork directory is refused by name for a runner (`none`: any runner), if it is. Gloas is
 a declared `CFork` whose rules do not resolve (`CFork.resolve` gives `notImplemented`); it is
-accepted only for a container-only runner (`containerOnlyRunners`). `eip7805` is a feature-fork
+accepted only for a runner of `gloasRunners`. `eip7805` is a feature-fork
 directory of the `v1.6.1` vectors with no `CFork` value (`unknown`). Both fail closed otherwise;
 neither is ever run as Fulu. Other directory names that are not `CFork`s (`phase0`, `altair`,
 ... where formats were introduced) are not refused here: the scope rule decides them. -/
@@ -120,13 +128,16 @@ def forkRefusal? (f : String) (runner : Option String := none) : Option ForkRefu
   else match CFork.ofName? f with
     | some c => match CFork.resolve f with
       | .error e =>
-        if c == .gloas && runner.any containerOnlyRunners.contains then none else some e
+        if c == .gloas && runner.any gloasRunners.contains then none else some e
       | .ok _ => none
     | none => none
 
 #guard (forkRefusal? "gloas").isSome
 #guard (forkRefusal? "gloas" (some "operations")).isSome
 #guard (forkRefusal? "gloas" (some "ssz_static")).isNone
+#guard (forkRefusal? "gloas" (some "epoch_processing")).isNone
+#guard (forkRefusal? "gloas" (some "rewards")).isNone
+#guard (forkRefusal? "gloas" (some "sanity")).isSome
 #guard (forkRefusal? "eip7805" (some "ssz_static")).isSome
 #guard (forkRefusal? "fulu").isNone
 #guard (forkRefusal? "electra").isNone
