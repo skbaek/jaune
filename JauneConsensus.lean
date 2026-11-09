@@ -86,3 +86,5 @@ import JauneConsensus.GloasGossip
 import JauneConsensus.Harness.GossipCases
 import JauneConsensus.Harness.GossipStoreFree
 import JauneConsensus.Harness.GossipTable
+import JauneConsensus.GloasForkChoice
+import JauneConsensus.Harness.GloasTransition
