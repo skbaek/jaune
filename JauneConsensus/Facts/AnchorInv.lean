@@ -595,6 +595,12 @@ theorem ok_ite {α : Type} {c : Prop} [Decidable c] {t e : M α} {Q : α → Pro
   · rw [if_pos hc]; exact ht hc
   · rw [if_neg hc]; exact he hc
 
+theorem ok_dite {α : Type} {c : Prop} [Decidable c] {t : c → M α} {e : ¬c → M α} {Q : α → Prop}
+    (ht : ∀ hc, Ok (t hc) Q) (he : ∀ hc, Ok (e hc) Q) : Ok (dite c t e) Q := by
+  by_cases hc : c
+  · rw [dif_pos hc]; exact ht hc
+  · rw [dif_neg hc]; exact he hc
+
 theorem ok_pure {α : Type} {a : α} {Q : α → Prop} (h : Q a) : Ok (pure a : M α) Q := by
   intro b hb; cases hb; exact h
 
@@ -613,6 +619,7 @@ macro "vcg_step" : tactic => `(tactic| first
   | with_reducible exact ok_pure (Pres.refl _)
   | (with_reducible apply ok_bind; intro _ _)
   | (with_reducible apply ok_ite <;> intro _)
+  | (with_reducible apply ok_dite <;> intro _)
   | dsimp only
   | (rename_i x _; cases x; all_goals dsimp only))
 
@@ -736,9 +743,11 @@ macro "pres_step" : tactic => `(tactic| first
   | with_reducible exact ok_throw
   | with_reducible exact ok_throw_bind
   | with_reducible exact ok_pure (Pres.refl _)
+  | exact ok_pure (pres_frame rfl rfl)
   | exact ok_of fun _ hh => by pres_of hh
   | (with_reducible apply ok_bind; intro _ hx; try (refine ok_pres_trans (by pres_of hx) ?_))
   | (with_reducible apply ok_ite <;> intro _)
+  | (with_reducible apply ok_dite <;> intro _)
   | dsimp only
   | (rename_i x _; cases x; all_goals dsimp only))
 
@@ -839,6 +848,77 @@ theorem processDepositRequest_pres {s s' : BeaconState P f} {dr : DepositRequest
   revert s' h
   show Ok (processDepositRequest s dr) (Pres s)
   unfold processDepositRequest
+  repeat pres_step
+
+theorem processAttesterSlashing_pres (ctx : Ctx) {s s' : BeaconState P f} {as : AttesterSlashing P f}
+    (h : processAttesterSlashing ctx s as = .ok s') : Pres s s' := by
+  unfold processAttesterSlashing at h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨r, hr, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  cases h
+  refine list_forIn_rel (fun (x y : BeaconState P f × Bool) => Pres x.1 y.1) (fun _ => Pres.refl _)
+    (fun _ _ _ h1 h2 => Pres.trans h1 h2) _ ?_ _ _ _ hr
+  intro a b r hb
+  revert r hb
+  show Ok _ (fun (r : ForInStep (BeaconState P f × Bool)) => Pres b.1 r.value.1)
+  repeat (first
+    | dsimp only
+    | with_reducible exact ok_throw
+    | (with_reducible apply ok_bind; intro _ _)
+    | (with_reducible apply ok_ite <;> intro _)
+    | exact ok_pure (Pres.refl _)
+    | exact ok_of fun _ hh => by cases hh; exact slashValidator_pres _ ‹_›)
+
+/-! ## `process_withdrawals` -/
+
+/-- A `for` loop whose body is one frame step followed by `yield` is a frame. -/
+theorem forIn_frame {α : Type} {xs : Array α} {init out : BeaconState P f}
+    {g : α → BeaconState P f → M (BeaconState P f)} (hg : ∀ a b b', g a b = .ok b' → Frame b b')
+    (h : forIn xs init (fun a b => do let b' ← g a b; pure (ForInStep.yield b')) = .ok out) :
+    Frame init out := by
+  refine array_forIn_rel (fun a b => Frame a b) Frame.refl (fun _ _ _ => Frame.trans) _ ?_ xs init out h
+  intro a b r hb
+  obtain ⟨b', h1, h2⟩ := bind_eq_ok_iff.mp hb
+  cases h2
+  exact hg a b b' h1
+
+macro_rules | `(tactic| pres_of $h) => `(tactic|
+    exact (forIn_frame (fun _ _ _ hh => decreaseBalance_frame hh) $h).pres)
+
+/-- The pending queue rewritten to a slice of itself. -/
+theorem setPending_extract_pres {T s' : BeaconState P f}
+    {l l' : SszList PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT} {a b : Nat}
+    {site : String}
+    (h : T.setPendingPartialWithdrawals l' = .ok s')
+    (hl : T.pendingPartialWithdrawals = .ok l)
+    (ho : SszList.ofArray (l.toArray.extract a b) site = .ok l') : Pres T s' := by
+  obtain ⟨hV, hl'⟩ := setPending_ok h
+  refine pres_of_valRel (valRel_same (by rw [hV])) ?_
+  intro m hm p hp
+  rw [hl'] at hm
+  cases hm
+  unfold SszList.ofArray at ho
+  split at ho
+  · cases ho
+    left
+    exact ⟨l, hl, by
+      rw [Array.toList_extract] at hp
+      exact List.mem_of_mem_drop (List.mem_of_mem_take hp)⟩
+  · cases ho
+
+macro_rules | `(tactic| pres_of $h) => `(tactic|
+    exact setPending_extract_pres $h (by assumption) (by assumption))
+
+theorem processWithdrawals_pres {s s' : BeaconState P f} {pl : ExecutionPayload P}
+    (h : processWithdrawals s pl = .ok s') : Pres s s' := by
+  revert s' h
+  show Ok (processWithdrawals s pl) (Pres s)
+  unfold processWithdrawals
   repeat pres_step
 
 end JauneConsensus.Facts
