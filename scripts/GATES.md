@@ -631,6 +631,18 @@ meta.yaml root`): every case of `ExecutionRequests` and of the six containers th
 with a progressive list or container at the root check, which is how the `eth-ssz-specs`
 revision was found.
 
+Gloas fork choice (M4, 2026-11-10, Mac, reverted, restored bytes identical by SHA-256):
+`PAYLOAD_TIMELY_THRESHOLD` `PTC_SIZE // 2` to `PTC_SIZE // 2 + 1` in
+`JauneConsensus/GloasForkChoice.lean` fails exactly 3 of 92 minimal Gloas `fork_choice` cases, each
+at step 9's `head` check (the `EMPTY` node chosen over the expected `FULL` head):
+`get_head/get_head_full_payload_tiebreak`,
+`payload_data_availability/payload_data_availability_above_threshold_returns_true`,
+`payload_timeliness/payload_timeliness_above_threshold_returns_true` (PASS 89 FAIL 3, exit 1);
+restoring gives 92/92. With the Gloas arms in place the Electra and Fulu family reruns stay strict
+(same binary, Mac, 2026-11-10, all exit 0, BLS off): `fork_choice` minimal 56/56 and 68/68, mainnet
+26/26 and 38/38; `fast_confirmation` 184/184 and 184/184; comptests 1,472/1,472 in 1,695.9 s and
+1,472/1,472 in 1,514.3 s.
+
 Gloas epoch (U3, 2026-11-10, reverted, restored bytes identical by SHA-256): replacing the Gloas
 `get_exit_churn_limit` call in `Gloas.computeExitEpochAndUpdateChurn` (`JauneConsensus/GloasMutators.lean`,
 reached from `Gloas.initiateValidatorExit`) with a local copy of Electra's
