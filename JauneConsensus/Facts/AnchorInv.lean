@@ -722,20 +722,54 @@ theorem ok_pres_trans {f1 f2 f3 : CFork} {s : BeaconState P f1} {s1 : BeaconStat
     {c : M (BeaconState P f3)} (hp : Pres s s1) (h : Ok c (Pres s1)) : Ok c (Pres s) :=
   fun a ha => hp.trans (h a ha)
 
+open Lean Elab Tactic Meta in
+/-- Succeeds when hypothesis `h` is an equation whose left side is a `forIn` application. -/
+elab "is_forIn " h:ident : tactic => withMainContext do
+  let d ← getLocalDeclFromUserName h.getId
+  let t ← instantiateMVars d.type
+  match t.eq? with
+  | some (_, lhs, _) =>
+    unless lhs.getAppFn.isConstOf ``ForIn.forIn do throwError "not a forIn"
+  | none => throwError "not an equation"
+
 /-- `Pres` facts for a call `h : g … = .ok s'`; extended by `macro_rules` as mutators are proved. -/
 syntax "pres_of " ident : tactic
-macro_rules | `(tactic| pres_of $h) => `(tactic| exact (increaseBalance_frame $h).pres)
-macro_rules | `(tactic| pres_of $h) => `(tactic| exact (decreaseBalance_frame $h).pres)
-macro_rules | `(tactic| pres_of $h) => `(tactic| exact (exitChurn_frame _ $h).pres)
-macro_rules | `(tactic| pres_of $h) => `(tactic| exact (consolidationChurn_frame _ $h).pres)
-macro_rules | `(tactic| pres_of $h) => `(tactic| exact (queueExcess_frame $h).pres)
-macro_rules | `(tactic| pres_of $h) => `(tactic| exact (setPendingConsolidations_frame $h).pres)
-macro_rules | `(tactic| pres_of $h) => `(tactic| exact initiateValidatorExit_pres _ $h)
-macro_rules | `(tactic| pres_of $h) => `(tactic| exact slashValidator_pres _ $h)
-macro_rules | `(tactic| pres_of $h) => `(tactic| exact switchToCompoundingValidator_pres $h)
-macro_rules | `(tactic| pres_of $h) => `(tactic| exact processBlsToExecutionChange_pres _ $h)
-macro_rules | `(tactic| pres_of $h) => `(tactic| exact processWithdrawalRequest_pres _ $h)
-macro_rules | `(tactic| pres_of $h) => `(tactic| exact processConsolidationRequest_pres _ $h)
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact (increaseBalance_frame $h).pres)
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact (decreaseBalance_frame $h).pres)
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact (exitChurn_frame _ $h).pres)
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact (consolidationChurn_frame _ $h).pres)
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact (queueExcess_frame $h).pres)
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact (setPendingConsolidations_frame $h).pres)
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact initiateValidatorExit_pres _ $h)
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact slashValidator_pres _ $h)
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact switchToCompoundingValidator_pres $h)
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact processBlsToExecutionChange_pres _ $h)
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact processWithdrawalRequest_pres _ $h)
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact processConsolidationRequest_pres _ $h)
+
+/-- A validator write at one index that keeps credentials and the exit invariant. -/
+theorem pres_set_field {T X : BeaconState P f} {V : SszList Validator P.VALIDATOR_REGISTRY_LIMIT}
+    {i : Nat} {v v' : Validator} {site site' : String}
+    (hX : X.validators = V) (hP : X.pending_partial_withdrawals = T.pending_partial_withdrawals)
+    (hV : T.validators.set i v' site = .ok V) (hv : T.validators.get i site' = .ok v)
+    (hk : CredKeep v v') (hx : ExitOk v → ExitOk v') : Pres T X := by
+  obtain ⟨hi, hVe⟩ := set_ok hV
+  exact pres_of_valRel (valRel_set (st' := X) rfl hi (by rw [hX]; exact hVe) (get_ok hv) hk hx)
+    (pendingStep_same hP)
+
+theorem okT {f1 f2 f3 : CFork} {γ : Type} {s : BeaconState P f1} {s1 : BeaconState P f2}
+    {g : γ → BeaconState P f3} {c : M γ} (hp : Pres s s1) (h : Ok c (fun r => Pres s1 (g r))) :
+    Ok c (fun r => Pres s (g r)) :=
+  fun a ha => hp.trans (h a ha)
+
+theorem okL {f1 f3 : CFork} {γ : Type} {s : BeaconState P f1} {g : γ → BeaconState P f3} {a : γ}
+    (h : Pres s (g a)) : Ok (pure a : M γ) (fun r => Pres s (g r)) := ok_pure h
+
+/-- Close a `Pres A B` goal for a literal update of `A`. -/
+macro "pres_close" : tactic => `(tactic| first
+  | exact Pres.refl _
+  | exact pres_frame rfl rfl
+  | (apply pres_set_field; rfl; rfl; assumption; assumption; exact credKeep_of_wc rfl; exact id))
 
 /-- One generator step: binds (moving the precondition state past known mutators), branches,
 matches and leaves. -/
@@ -744,12 +778,47 @@ macro "pres_step" : tactic => `(tactic| first
   | with_reducible exact ok_throw_bind
   | with_reducible exact ok_pure (Pres.refl _)
   | exact ok_pure (pres_frame rfl rfl)
+  | (refine ok_pure ?_; try dsimp only
+     pres_close)
   | exact ok_of fun _ hh => by pres_of hh
-  | (with_reducible apply ok_bind; intro _ hx; try (refine ok_pres_trans (by pres_of hx) ?_))
+  | (refine ok_of fun _ hh => ?_; have h2 := by pres_of hh
+     exact Pres.trans (by pres_close) h2)
+  | (with_reducible apply ok_bind; intro _ hx
+     first | (refine okT (Pres.trans ?_ (by pres_of hx)) ?_; pres_close) | skip)
   | (with_reducible apply ok_ite <;> intro _)
   | (with_reducible apply ok_dite <;> intro _)
   | dsimp only
   | (rename_i x _; cases x; all_goals dsimp only))
+
+theorem list_forIn_pres {α : Type} {xs : List α} {init out : BeaconState P f}
+    {body : α → BeaconState P f → M (ForInStep (BeaconState P f))}
+    (hb : ∀ a b, Ok (body a b) (fun r => Pres b r.value)) (h : forIn xs init body = .ok out) :
+    Pres init out :=
+  list_forIn_rel (fun a b => Pres a b) Pres.refl (fun _ _ _ h1 h2 => h1.trans h2) body
+    (fun a b r hr => hb a b r hr) xs init out h
+
+theorem array_forIn_pres {α : Type} {xs : Array α} {init out : BeaconState P f}
+    {body : α → BeaconState P f → M (ForInStep (BeaconState P f))}
+    (hb : ∀ a b, Ok (body a b) (fun r => Pres b r.value)) (h : forIn xs init body = .ok out) :
+    Pres init out :=
+  array_forIn_rel (fun a b => Pres a b) Pres.refl (fun _ _ _ h1 h2 => h1.trans h2) body
+    (fun a b r hr => hb a b r hr) xs init out h
+
+theorem list_forIn_pres_fst {α γ : Type} {xs : List α} {init out : BeaconState P f × γ}
+    {body : α → BeaconState P f × γ → M (ForInStep (BeaconState P f × γ))}
+    (hb : ∀ a b, Ok (body a b) (fun r => Pres b.1 r.value.1)) (h : forIn xs init body = .ok out) :
+    Pres init.1 out.1 :=
+  list_forIn_rel (fun (a b : BeaconState P f × γ) => Pres a.1 b.1) (fun _ => Pres.refl _)
+    (fun _ _ _ h1 h2 => Pres.trans h1 h2) body
+    (fun a b r hr => hb a b r hr) xs init out h
+
+theorem array_forIn_pres_fst {α γ : Type} {xs : Array α} {init out : BeaconState P f × γ}
+    {body : α → BeaconState P f × γ → M (ForInStep (BeaconState P f × γ))}
+    (hb : ∀ a b, Ok (body a b) (fun r => Pres b.1 r.value.1)) (h : forIn xs init body = .ok out) :
+    Pres init.1 out.1 :=
+  array_forIn_rel (fun (a b : BeaconState P f × γ) => Pres a.1 b.1) (fun _ => Pres.refl _)
+    (fun _ _ _ h1 h2 => Pres.trans h1 h2) body
+    (fun a b r hr => hb a b r hr) xs init out h
 
 /-! ## Setters and the registry -/
 
@@ -772,9 +841,9 @@ theorem setDepositRequestsStartIndex_frame {s s' : BeaconState P f} {x : U64}
   obtain ⟨g, _, h⟩ := bind_eq_ok_iff.mp h
   cases h; exact ⟨rfl, rfl⟩
 
-macro_rules | `(tactic| pres_of $h) => `(tactic| exact (setPendingDeposits_frame $h).pres)
-macro_rules | `(tactic| pres_of $h) => `(tactic| exact (setDepositBalanceToConsume_frame $h).pres)
-macro_rules | `(tactic| pres_of $h) => `(tactic| exact (setDepositRequestsStartIndex_frame $h).pres)
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact (setPendingDeposits_frame $h).pres)
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact (setDepositBalanceToConsume_frame $h).pres)
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact (setDepositRequestsStartIndex_frame $h).pres)
 
 theorem getValidatorFromDeposit_exitOk {P : Preset} {f : CFork} {pk : BLSPubkey} {wc : Bytes32} {amt : U64}
     {v : Validator} (h : getValidatorFromDeposit P f pk wc amt = .ok v) : ExitOk v := by
@@ -805,7 +874,7 @@ theorem addValidatorToRegistry_pres {s s' : BeaconState P f} {pk : BLSPubkey} {w
   exact pres_of_valRel (valRel_push (push_ok hV) (getValidatorFromDeposit_exitOk hv))
     (pendingStep_same rfl)
 
-macro_rules | `(tactic| pres_of $h) => `(tactic| exact addValidatorToRegistry_pres $h)
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact addValidatorToRegistry_pres $h)
 
 /-! ## Block operations -/
 
@@ -830,7 +899,7 @@ theorem applyDeposit_pres (ctx : Ctx) {s s' : BeaconState P f} {pk : BLSPubkey} 
   unfold applyDeposit
   repeat pres_step
 
-macro_rules | `(tactic| pres_of $h) => `(tactic| exact applyDeposit_pres _ $h)
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact applyDeposit_pres _ $h)
 
 theorem processDeposit_pres (ctx : Ctx) {s s' : BeaconState P f} {d : Deposit}
     (h : processDeposit ctx s d = .ok s') : Pres s s' := by
@@ -888,7 +957,7 @@ theorem forIn_frame {α : Type} {xs : Array α} {init out : BeaconState P f}
   exact hg a b b' h1
 
 macro_rules | `(tactic| pres_of $h) => `(tactic|
-    exact (forIn_frame (fun _ _ _ hh => decreaseBalance_frame hh) $h).pres)
+    (is_forIn $h; exact (forIn_frame (fun _ _ _ hh => decreaseBalance_frame hh) $h).pres))
 
 /-- The pending queue rewritten to a slice of itself. -/
 theorem setPending_extract_pres {T s' : BeaconState P f}
@@ -919,6 +988,40 @@ theorem processWithdrawals_pres {s s' : BeaconState P f} {pl : ExecutionPayload 
   revert s' h
   show Ok (processWithdrawals s pl) (Pres s)
   unfold processWithdrawals
+  repeat pres_step
+
+/-! ## Loops in the generator -/
+
+macro_rules | `(tactic| pres_of $h) => `(tactic|
+    (is_forIn $h; exact list_forIn_pres (fun _ _ => by repeat pres_step) $h))
+macro_rules | `(tactic| pres_of $h) => `(tactic|
+    (is_forIn $h; exact array_forIn_pres (fun _ _ => by repeat pres_step) $h))
+macro_rules | `(tactic| pres_of $h) => `(tactic|
+    (is_forIn $h; exact list_forIn_pres_fst (fun _ _ => by repeat pres_step) $h))
+macro_rules | `(tactic| pres_of $h) => `(tactic|
+    (is_forIn $h; exact array_forIn_pres_fst (fun _ _ => by repeat pres_step) $h))
+
+/-! ## Epoch processing -/
+
+theorem processRegistryUpdatesElectra_pres (cfg : Config) {s s' : BeaconState P f}
+    (h : processRegistryUpdatesElectra cfg s = .ok s') : Pres s s' := by
+  revert s' h
+  show Ok (processRegistryUpdatesElectra cfg s) (Pres s)
+  unfold processRegistryUpdatesElectra
+  apply ok_bind; intro _ _
+  apply ok_bind; intro _ _
+  apply ok_bind; intro _ _
+  dsimp only
+  apply ok_bind; intro r hr
+  refine okT (list_forIn_pres (fun _ _ => ?_) hr) ?_
+  · repeat pres_step
+  · repeat pres_step
+
+theorem processPendingConsolidations_pres (cfg : Config) {s s' : BeaconState P f}
+    (h : processPendingConsolidations cfg s = .ok s') : Pres s s' := by
+  revert s' h
+  show Ok (processPendingConsolidations cfg s) (Pres s)
+  unfold processPendingConsolidations
   repeat pres_step
 
 end JauneConsensus.Facts
