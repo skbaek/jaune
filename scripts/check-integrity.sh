@@ -187,7 +187,7 @@ consensus_files = sorted(set(cpath_of(m) for m in cclosure)
 # The consensus spec layer: everything but the checked-integer module (the one
 # place raw UInt64 is handled), the harness (vector readers, outside the
 # semantics) and the byte and word primitives under Crypto/ (master decision
-# 2026-11-09: bit-level codecs such as Sha256Pair's 64-bit byte extraction are
+# 2026-11-09: bit-level codecs such as the 64-bit byte extraction in Sha256Pair are
 # not consensus uint64 arithmetic). R5 applies here.
 consensus_spec_files = sorted(
     f for f in consensus_files

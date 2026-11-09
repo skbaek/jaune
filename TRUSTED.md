@@ -395,8 +395,8 @@ proved about each one's values, and what rests on finite testing alone.
 Each row below names one cryptographic primitive and the standard it answers
 to. *Proved* names a theorem about the primitive's values, with the exact Lean
 name; *Tested only* names finite evidence — the gate or script that runs it and
-the corpus it runs over. Consensus-layer primitives get rows in the same
-columns from the consensus work, added later.
+the corpus it runs over. The last eight rows are the consensus layer's
+(`JauneConsensus/`); the rest serve the execution layer.
 
 | Primitive | Reference (standard, section) | Transcription source | Proved (theorem names) | Tested only (corpora) |
 |---|---|---|---|---|
@@ -418,7 +418,14 @@ columns from the consensus work, added later.
 | `BLS12-381 map Fp to G1` (0x10) | EIP-2537 (MAP_FP_TO_G1); RFC 9380 §6.6.3 (simplified SWU via an 11-isogeny, Appendix E.2) and §7 | `executeBls12MapFpToG1` (`Jaune/Precompiles.lean:919`) via `blsMapFpToG1` (`Jaune/BLS.lean:299`) | none about values | `map_fp_to_G1_bls.json`, `blsMapG1.json` and their `fail-` files via `check-vectors.sh`; `check-legacy.sh --bls` (the EEST BLS/point-evaluation tier); fixtures |
 | `BLS12-381 map Fp2 to G2` (0x11) | EIP-2537 (MAP_FP2_TO_G2); RFC 9380 §6.6.3 (simplified SWU via a 3-isogeny, Appendix E.3) and §7 | `executeBls12MapFp2ToG2` (`Jaune/Precompiles.lean:967`) via `blsMapFp2ToG2` (`Jaune/BLS.lean:361`) | none about values | `map_fp2_to_G2_bls.json`, `blsMapG2.json` and their `fail-` files via `check-vectors.sh`; `check-legacy.sh --bls` (the EEST BLS/point-evaluation tier); fixtures |
 | `KZG point evaluation` (0x0A) | EIP-4844 (point evaluation precompile); Deneb `polynomial-commitments.md` (`verify_kzg_proof`) | `executePointEval` (`Jaune/Precompiles.lean:843`) via `verifyKzgProofImpl` (`Jaune/BLS.lean:423`) | none about values | `pointEvaluation.json` (1 case) via `check-vectors.sh`; `check-legacy.sh --bls` (the EEST BLS/point-evaluation tier); fixtures |
-
+| SSZ serialize, deserialize, `hash_tree_root` (consensus layer) | `ethereum/consensus-specs` v1.6.1 `ssz/simple-serialize.md` | the spec markdown and pyspec | `hashPair_eq` (`JauneConsensus/SSZ/Merkle.lean`, `JauneConsensus/Crypto/Sha256Pair.lean`) | `ssz_generic`, `ssz_static`, `merkle_proof`, `light_client` vectors |
+| `hashPair` 256-bit fast path (consensus layer) | same SSZ merkleization | Jaune `Bytes.sha256` | `hashPair_eq`, `hashPair_eq_hashPairKernel` | `--bench-hash-pair` differential plus the corpora above |
+| RFC 9380 hash-to-curve (`expand_message_xmd`, `hash_to_field`, SWU with isogeny, `map_to_curve` on G2) (consensus layer) | RFC 9380 §5.3 and §8 | the RFC text | none; `#guard` vectors only | RFC appendix vectors as guards (`JauneConsensus/Crypto/HashToCurveVectors.lean`), official `bls` vectors |
+| BLS POP ciphersuite `BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_` (KeyValidate, CoreVerify, Aggregate, FastAggregateVerify, the `eth_*` wrappers) (consensus layer) | draft-irtf-cfrg-bls-signature-04 §§2.4 to 2.7 and §3.3; `specs/altair/bls.md` | the draft and the spec text | none; `#guard` vectors only | official `bls` vectors, including the infinity-pubkey case |
+| BLS12-381 fast paths (fast Miller loop, fast final exponentiation, psi subgroup test, psi cofactor clearing) (consensus layer) | `specs/deneb/polynomial-commitments.md` as used; RFC 9380 App. G for the clearing steps | Jaune `BLS.lean` and the consensus crypto modules | none; differential guards only | in-tree guard files (`JauneConsensus/Crypto/G2SubgroupVectors.lean`, KZG vector files), official `bls` and `kzg` vectors |
+| KZG for EIP-4844 (consensus layer) | `specs/deneb/polynomial-commitments.md` | the spec markdown | none | official `kzg` vectors, Deneb handlers; cross-checked against Jaune `verifyKzgProofImpl` |
+| EIP-7594 cells (`compute_cells`, proofs, recovery, batch verification) (consensus layer) | `specs/fulu/polynomial-commitments-sampling.md` | the spec markdown | none (`fk20H` reference vs `fk20HFft` fast path, differential) | official `kzg` vectors, Fulu handlers |
+| shuffling (`compute_shuffled_index`) (consensus layer) | `specs/phase0/beacon-chain.md` | pyspec | none | `shuffling` vectors on both presets |
 ## The consensus layer
 
 `JauneConsensus/` is an executable model of the Ethereum consensus layer for
@@ -540,20 +547,11 @@ result type of `get_execution_requests_list`, is `List Bytes`
 (`Fork.lean`). That is the type Jaune's execution layer hashes, so a statement
 that joins the two layers needs no conversion.
 
-**Consensus-primitive provenance.** Execution-layer primitives are covered
-by their own provenance rows and are not repeated here. Columns: primitive,
-reference, transcription source, proved, tested only.
-
-| primitive | reference and section | transcription source | proved | tested only |
-|---|---|---|---|---|
-| SSZ serialize, deserialize, `hash_tree_root` | `ethereum/consensus-specs` v1.6.1 `ssz/simple-serialize.md` | the spec markdown and pyspec | `hashPair_eq` (`JauneConsensus/SSZ/Merkle.lean`, `JauneConsensus/Crypto/Sha256Pair.lean`) | `ssz_generic`, `ssz_static`, `merkle_proof`, `light_client` vectors |
-| `hashPair` 256-bit fast path | same SSZ merkleization | Jaune `Bytes.sha256` | `hashPair_eq`, `hashPair_eq_hashPairKernel` | `--bench-hash-pair` differential plus the corpora above |
-| RFC 9380 hash-to-curve (`expand_message_xmd`, `hash_to_field`, SWU with isogeny, `map_to_curve` on G2) | RFC 9380 §5.3 and §8 | the RFC text | none; `#guard` vectors only | RFC appendix vectors as guards (`Crypto/HashToCurveVectors.lean`), official `bls` vectors |
-| BLS POP ciphersuite `BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_` (KeyValidate, CoreVerify, Aggregate, FastAggregateVerify, the `eth_*` wrappers) | draft-irtf-cfrg-bls-signature-04 §§2.4 to 2.7 and §3.3; `specs/altair/bls.md` | the draft and the spec text | none; `#guard` vectors only | official `bls` vectors, including the infinity-pubkey case |
-| BLS12-381 fast paths (fast Miller loop, fast final exponentiation, psi subgroup test, psi cofactor clearing) | `specs/deneb/polynomial-commitments.md` as used; RFC 9380 App. G for the clearing steps | Jaune `BLS.lean` and the consensus crypto modules | none; differential guards only | in-tree guard files (`Crypto/G2SubgroupVectors.lean`, KZG vector files), official `bls` and `kzg` vectors |
-| KZG for EIP-4844 | `specs/deneb/polynomial-commitments.md` | the spec markdown | none | official `kzg` vectors, Deneb handlers; cross-checked against Jaune `verifyKzgProofImpl` |
-| EIP-7594 cells (`compute_cells`, proofs, recovery, batch verification) | `specs/fulu/polynomial-commitments-sampling.md` | the spec markdown | none (`fk20H` reference vs `fk20HFft` fast path, differential) | official `kzg` vectors, Fulu handlers |
-| shuffling (`compute_shuffled_index`) | `specs/phase0/beacon-chain.md` | pyspec | none | `shuffling` vectors on both presets |
+**Consensus-primitive provenance.** The consensus layer's primitives — SSZ
+merkleization and its `hashPair` fast path, RFC 9380 hash-to-curve, the BLS
+POP ciphersuite, the BLS12-381 fast paths, KZG for EIP-4844, EIP-7594 cells,
+and shuffling — have rows in [Primitive provenance](#primitive-provenance),
+in the same table as the execution-layer primitives.
 
 ## What the theorems actually say — and what this document does not answer
 
