@@ -699,7 +699,7 @@ theorem okL {f1 f3 : CFork} {γ : Type} {s : BeaconState P f1} {g : γ → Beaco
 
 /-- Close a `Pres A B` goal for a literal update of `A`. -/
 macro "pres_close" : tactic => `(tactic| first
-  | exact Pres.refl _
+  | with_reducible exact Pres.refl _
   | exact pres_frame rfl rfl
   | (apply pres_set_field; rfl; rfl; assumption; assumption; exact credKeep_of_wc rfl; exact id))
 
@@ -719,8 +719,8 @@ macro "pres_step" : tactic => `(tactic| first
      first | (refine okT (Pres.trans ?_ (by pres_of hx)) ?_; pres_close) | skip)
   | (with_reducible apply ok_ite <;> intro _)
   | (with_reducible apply ok_dite <;> intro _)
-  | dsimp only
-  | (rename_i x _; is_small_inductive x; cases x; all_goals dsimp only)
+  | (set_option simprocs false in dsimp only)
+  | (rename_i x _; is_small_inductive x; cases x; all_goals (set_option simprocs false in dsimp only))
   | split)
 
 theorem list_forIn_pres {α : Type} {xs : List α} {init out : BeaconState P f}
@@ -1047,5 +1047,61 @@ theorem upgradeToFulu_pres (cfg : Config) {pre : BeaconState P .electra} {post :
   repeat (with_reducible apply ok_bind; intro _ _)
   refine ok_pure (pres_of_valRel (valRel_same rfl) (pendingStep_of_eq fun l hl => ?_))
   exact Eq.trans (by assumption) hl
+
+/-! ## Block steps and remaining epoch steps -/
+
+theorem setProposerLookahead_frame {s s' : BeaconState P f}
+    {l : SszVector ValidatorIndex ((P.MIN_SEED_LOOKAHEAD + 1) * P.SLOTS_PER_EPOCH)}
+    (h : s.setProposerLookahead l = .ok s') : Frame s s' := by
+  unfold BeaconState.setProposerLookahead at h
+  obtain ⟨g, _, h⟩ := bind_eq_ok_iff.mp h
+  cases h; exact ⟨rfl, rfl⟩
+
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact (setProposerLookahead_frame $h).pres)
+
+theorem processBlockHeader_pres {blk : BeaconBlock P f} {s s' : BeaconState P f}
+    (h : processBlockHeader s blk = .ok s') : Pres s s' := by
+  revert s' h
+  show Ok (processBlockHeader s blk) (Pres s)
+  unfold processBlockHeader
+  repeat pres_step
+
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact processBlockHeader_pres $h)
+
+theorem processRandao_pres (ctx : Ctx) {body : BeaconBlockBody P f} {s s' : BeaconState P f}
+    (h : processRandao ctx s body = .ok s') : Pres s s' := by
+  revert s' h
+  show Ok (processRandao ctx s body) (Pres s)
+  unfold processRandao
+  repeat pres_step
+
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact processRandao_pres _ $h)
+
+theorem processEth1Data_pres {body : BeaconBlockBody P f} {s s' : BeaconState P f}
+    (h : processEth1Data s body = .ok s') : Pres s s' := by
+  revert s' h
+  show Ok (processEth1Data s body) (Pres s)
+  unfold processEth1Data
+  repeat pres_step
+
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact processEth1Data_pres $h)
+
+theorem processExecutionPayload_pres (ctx : Ctx) {body : BeaconBlockBody P f} {s s' : BeaconState P f}
+    (h : processExecutionPayload ctx s body = .ok s') : Pres s s' := by
+  revert s' h
+  show Ok (processExecutionPayload ctx s body) (Pres s)
+  unfold processExecutionPayload
+  repeat pres_step
+
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact processExecutionPayload_pres _ $h)
+
+theorem processProposerLookahead_pres (cfg : Config) {s s' : BeaconState P f}
+    (h : processProposerLookahead cfg s = .ok s') : Pres s s' := by
+  revert s' h
+  show Ok (processProposerLookahead cfg s) (Pres s)
+  unfold processProposerLookahead
+  repeat pres_step
+
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact processProposerLookahead_pres _ $h)
 
 end JauneConsensus.Facts
