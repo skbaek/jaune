@@ -15,7 +15,7 @@ selected by the published order tables, and MD4-style padding.
 This module is that definition, transcribed from **H. Dobbertin, A. Bosselaers
 and B. Preneel, "RIPEMD-160: A Strengthened Version of RIPEMD", FSE 1996** —
 section numbers are cited at each declaration; the same algorithm is ISO/IEC
-10118-3:2004 §8 "Dedicated Hash-Function 2" — and the `#guard`s at the end pin
+10118-3:2004's "Dedicated Hash-Function 1" — and the `#guard`s at the end pin
 the published test values and the kernel's `Bytes.ripemd160` against it.
 
 The transcription is written from the paper, never read back out of the kernel:

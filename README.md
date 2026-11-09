@@ -221,11 +221,9 @@ requirements.
   [`Jaune/SHA256Spec.lean`](Jaune/SHA256Spec.lean) transcribes NIST FIPS 180-4
   section by section, and `Jaune.Bytes.sha256_eq_fips` proves the optimized
   kernel equal to that transcription for every input, with the standard axioms
-  and no `sorry`. It is the only hash here whose conformance rests on a theorem
-  rather than on differential vectors and fixtures — and the reader still owes
-  the transcription a read, which is the point of citing the standard at every
-  declaration. [`TRUSTED.md`](TRUSTED.md) states exactly what the theorem does
-  and does not claim.
+  and no `sorry`. The reader still owes the transcription a read, which is the
+  point of citing the standard at every declaration. [`TRUSTED.md`](TRUSTED.md)
+  states exactly what the theorem does and does not claim.
 - **Runnable forks:** Byzantium through Cancun, followed by Prague, Osaka,
   BPO1, BPO2 and the Amsterdam snapshot, with configured fork transitions.
   Jaune passes 100% of the `tests@v21.0.2` blockchain-test fixtures in

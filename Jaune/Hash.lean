@@ -793,8 +793,8 @@ theorem f1600_toVec (ws : Vector UInt64 25) :
 /-- **The retained reference transcription and the production kernel compute
 the same permutation.** `f1600`'s doc comment asserted this; this is the
 proof. It says the optimization preserved the transcribed algorithm — it does
-not say the transcription is FIPS-202, which remains a conformance question
-answered by the differential oracle and the fixture corpora. -/
+not by itself say the transcription is FIPS 202; `Keccak.FIPS.f1600_eq_keccakP`
+in `Jaune/KeccakSpec.lean` builds on it to tie `f1600` to Keccak-p[1600, 24]. -/
 theorem f1600_eq (ws : Vector UInt64 25) :
     f1600 ws = f rndc ws UInt64.rol := by
   rw [f1600_toVec]

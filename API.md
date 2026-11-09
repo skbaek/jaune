@@ -272,7 +272,7 @@ examples. The symbolic example proofs also unfold the `Devm` accessors
 | account and instruction types | `Jaune.Types` | `Acct` (`nonce`, `bal`, `stor`, `code`), `Stor`, `Stor.get`, `Adr`, `Rinst`, `Linst`, `Jinst` |
 | fork rules and schedules | `Jaune.Fork` | `Fork`, `Fork.rules?`, `Fork.supported`, `ForkRules`, `ForkCriterion`, `ChainConfig` (`forkAt`/`rulesAt` at a block number and timestamp), `mainnetChainConfig` |
 | words, bytes and RLP | `Jaune.Basic` | `Bytes`, `B256`, `Bytes.toB256`, `B256.toBytes`, `BLT`, `BLT.toBytes`, `Bytes.toBLT?` |
-| hashes | `Jaune.Hash`, `Jaune.SHA256Spec`, `Jaune.KeccakSpec` | `Bytes.keccak`, `Bytes.sha256`, `Bytes.sha256_eq_fips`, `Bytes.keccak_eq_fips` |
+| hashes | `Jaune.Hash`, `Jaune.SHA256Spec`, `Jaune.KeccakSpec` | `Bytes.keccak`, `Bytes.sha256`, `Bytes.sha256_eq_fips`, `Bytes.keccak_eq_fips`, `ByteArray.keccak_eq_fips` |
 | state root | `Jaune.Transaction` | `State.root` |
 
 `Stor.get_set_ne` and `State.get_set_ne` take the same hypothesis orientation:
