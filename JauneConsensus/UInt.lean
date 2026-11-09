@@ -345,4 +345,112 @@ theorem ofNat?_toNat {n : Nat} {site : String} {m : U64}
 
 end U64
 
+
+/-! ## W2d bridging lemmas -/
+
+-- W2d bridging lemmas
+namespace U64
+
+/-- Equal values are the equal `toNat`s. -/
+theorem ext_toNat {x y : U64} (h : x.toNat = y.toNat) : x = y := by
+  cases x with
+  | mk u => cases y with
+    | mk v =>
+      congr
+      exact UInt64.toNat_inj.mp h
+
+
+/-- Adding a nonzero amount to `FAR_FUTURE_EPOCH` (`U64.max`) overflows, so a checked sum of the
+maximum value is the maximum value with a zero addend. -/
+theorem max_add?_eq {d w : U64} {site : String} (h : U64.add? U64.max d site = .ok w) :
+    d = U64.zero ∧ w = U64.max := by
+  have hw := toNat_add? h
+  rw [toNat_max] at hw
+  have hd : d.toNat = 0 := by
+    have := w.toNat_lt
+    omega
+  refine ⟨ext_toNat (by rw [hd]; rfl), ext_toNat ?_⟩
+  rw [hw, hd, toNat_max]
+  simp
+
+end U64
+
+-- W2d bridging lemmas: the byte codec round trip (`toBytes ∘ toB256` on 32-byte lists), used by
+-- `Facts/AnchorInv.lean` for `switch_to_compounding_validator`. Candidates for `Jaune/Basic.lean`.
+
+theorem u16_ofBytes_toNat (a b : UInt8) :
+    (Jaune.UInt16.ofBytes a b).toNat = a.toNat * 256 + b.toNat := by
+  have ha := a.toNat_lt; have hb := b.toNat_lt
+  simp only [Jaune.UInt16.ofBytes, UInt16.toNat_or, UInt16.toNat_shiftLeft, UInt8.toNat_toUInt16]
+  have h8 : UInt16.toNat 8 % 16 = 8 := rfl
+  rw [h8, Nat.mod_eq_of_lt (by rw [Nat.shiftLeft_eq]; omega),
+    ← Jaune.Nat.mul_two_pow_add_eq_shl_or (by omega)]
+  rfl
+
+theorem u16_toBytes_ofBytes (a b : UInt8) :
+    Jaune.UInt16.toBytes (Jaune.UInt16.ofBytes a b) = [a, b] := by
+  have ha := a.toNat_lt; have hb := b.toNat_lt
+  have hn := u16_ofBytes_toNat a b
+  simp only [Jaune.UInt16.toBytes, List.cons.injEq, and_true]
+  constructor
+  · apply UInt8.toNat_inj.mp
+    simp only [UInt16.toNat_toUInt8, UInt16.toNat_shiftRight, hn]
+    have h8 : UInt16.toNat 8 % 16 = 8 := rfl
+    rw [h8, Nat.shiftRight_eq_div_pow]; omega
+  · apply UInt8.toNat_inj.mp
+    simp only [UInt16.toNat_toUInt8, hn]; omega
+
+theorem u32_toBytes_halves (x y : UInt16) :
+    Jaune.UInt32.toBytes ((x.toUInt32 <<< 16) ||| y.toUInt32) =
+      Jaune.UInt16.toBytes x ++ Jaune.UInt16.toBytes y := by
+  have hx := x.toNat_lt; have hy := y.toNat_lt
+  have hn : ((x.toUInt32 <<< 16) ||| y.toUInt32).toNat = x.toNat * 2 ^ 16 + y.toNat := by
+    simp only [UInt32.toNat_or, UInt32.toNat_shiftLeft, UInt16.toNat_toUInt32]
+    have h : UInt32.toNat 16 % 32 = 16 := rfl
+    rw [h, Nat.mod_eq_of_lt (by rw [Nat.shiftLeft_eq]; omega),
+      ← Jaune.Nat.mul_two_pow_add_eq_shl_or (by omega)]
+  simp only [Jaune.UInt32.toBytes]
+  congr 2
+  · apply UInt16.toNat_inj.mp
+    simp only [UInt32.toNat_toUInt16, UInt32.toNat_shiftRight, hn]
+    have h : UInt32.toNat 16 % 32 = 16 := rfl
+    rw [h, Nat.shiftRight_eq_div_pow]; omega
+  · apply UInt16.toNat_inj.mp
+    simp only [UInt32.toNat_toUInt16, hn]; omega
+
+theorem u64_toBytes_halves (x y : UInt32) :
+    Jaune.UInt64.toBytes ((x.toUInt64 <<< 32) ||| y.toUInt64) =
+      Jaune.UInt32.toBytes x ++ Jaune.UInt32.toBytes y := by
+  have hx := x.toNat_lt; have hy := y.toNat_lt
+  have hn : ((x.toUInt64 <<< 32) ||| y.toUInt64).toNat = x.toNat * 2 ^ 32 + y.toNat := by
+    simp only [UInt64.toNat_or, UInt64.toNat_shiftLeft, UInt32.toNat_toUInt64]
+    have h : UInt64.toNat 32 % 64 = 32 := rfl
+    rw [h, Nat.mod_eq_of_lt (by rw [Nat.shiftLeft_eq]; omega),
+      ← Jaune.Nat.mul_two_pow_add_eq_shl_or (by omega)]
+  simp only [Jaune.UInt64.toBytes]
+  congr 2
+  · apply UInt32.toNat_inj.mp
+    simp only [UInt64.toNat_toUInt32, UInt64.toNat_shiftRight, hn]
+    have h : UInt64.toNat 32 % 64 = 32 := rfl
+    rw [h, Nat.shiftRight_eq_div_pow]; omega
+  · apply UInt32.toNat_inj.mp
+    simp only [UInt64.toNat_toUInt32, hn]; omega
+
+theorem u64_toBytes_ofBytes (a b c d e f g h : UInt8) :
+    Jaune.UInt64.toBytes (Jaune.UInt64.ofBytes a b c d e f g h) = [a, b, c, d, e, f, g, h] := by
+  rw [Jaune.UInt64.ofBytes_eq_halves, u64_toBytes_halves, Jaune.UInt32.ofBytes_eq_halves,
+    Jaune.UInt32.ofBytes_eq_halves, u32_toBytes_halves, u32_toBytes_halves, u16_toBytes_ofBytes,
+    u16_toBytes_ofBytes, u16_toBytes_ofBytes, u16_toBytes_ofBytes]
+  rfl
+
+/-- `toBytes ∘ toB256` is the identity on 32-byte lists. -/
+theorem b256_toBytes_toB256 (l : Jaune.Bytes) (hl : l.length = 32) :
+    (Jaune.Bytes.toB256 l).toBytes = l := by
+  match l, hl with
+  | [a0, a1, a2, a3, a4, a5, a6, a7, b0, b1, b2, b3, b4, b5, b6, b7,
+     c0, c1, c2, c3, c4, c5, c6, c7, d0, d1, d2, d3, d4, d5, d6, d7], _ =>
+    simp only [Jaune.Bytes.toB256, Jaune.Bytes.toB256_go_eight_cons]
+    simp only [Jaune.Bytes.toB256.go, Jaune.B256.toBytes, Jaune.B128.toBytes, u64_toBytes_ofBytes]
+    rfl
+
 end JauneConsensus
