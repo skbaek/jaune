@@ -1,4 +1,5 @@
 import JauneConsensus.Harness.GossipStoreFree
+import JauneConsensus.Harness.GossipStoreCases
 
 /-!
 # The gossip handler table (harness only; goal `eip8282-gloas-cross-layer-v1`, U7a)
@@ -49,6 +50,12 @@ private def storeFree (dir : String) : Option GossipHandler :=
   | some (_, topic, pfx, _) => some (storeFreeHandler topic pfx (dir.drop 7).toString)
   | none => none
 
+/-- The Store-dependent row for a handler directory (`GossipStoreCases.lean`). -/
+private def storeDep (dir : String) : Option GossipHandler :=
+  match gossipTopics.find? (·.1 == dir) with
+  | some (_, topic, pfx, _) => some (storeGossipHandler topic pfx topic)
+  | none => none
+
 /-- The handler table. -/
 def gossipHandlers : String → Option GossipHandler
   | "gossip_proposer_slashing" => storeFree "gossip_proposer_slashing"
@@ -59,12 +66,12 @@ def gossipHandlers : String → Option GossipHandler
   | "gossip_sync_committee_contribution_and_proof" =>
     storeFree "gossip_sync_committee_contribution_and_proof"
   -- M6 (Store-dependent): replace `none` with the handler
-  | "gossip_beacon_block" => none
-  | "gossip_beacon_attestation" => none
-  | "gossip_beacon_aggregate_and_proof" => none
-  | "gossip_blob_sidecar" => none
-  | "gossip_data_column_sidecar" => none
-  | "gossip_partial_data_column_sidecar" => none
+  | "gossip_beacon_block" => storeDep "gossip_beacon_block"
+  | "gossip_beacon_attestation" => storeDep "gossip_beacon_attestation"
+  | "gossip_beacon_aggregate_and_proof" => storeDep "gossip_beacon_aggregate_and_proof"
+  | "gossip_blob_sidecar" => storeDep "gossip_blob_sidecar"
+  | "gossip_data_column_sidecar" => storeDep "gossip_data_column_sidecar"
+  | "gossip_partial_data_column_sidecar" => storeDep "gossip_partial_data_column_sidecar"
   | "gossip_execution_payload_envelope" => none
   | "gossip_payload_attestation_message" => none
   | "gossip_execution_payload_bid" => none
@@ -73,6 +80,7 @@ def gossipHandlers : String → Option GossipHandler
 
 #guard (gossipHandlers "gossip_voluntary_exit").map (·.filePrefix) == some "voluntary_exit_"
 #guard (gossipHandlers "gossip_sync_committee_message").map (·.topic) == some "sync_committee"
-#guard (gossipHandlers "gossip_beacon_block").isNone
+#guard (gossipHandlers "gossip_beacon_block").map (·.filePrefix) == some "block_"
+#guard (gossipHandlers "gossip_execution_payload_bid").isNone
 
 end JauneConsensus.Harness
