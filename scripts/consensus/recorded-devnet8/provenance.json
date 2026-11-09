@@ -1,0 +1,176 @@
+{
+ "_comment": "Recorded glamsterdam-devnet-8 pairs for the Gloas payload -> execution block control (goal eip8282-gloas-cross-layer-v1, G4; jaune-consensus recorded-pairs-gloas). Files are byte-for-byte copies of the WSL master's Plans snapshot evidence/eip8282-gloas-cross-layer-v1/g4-snapshot-devnet8-20261110 (read-only public GETs and RPC reads, not refetched); SHA256SUMS lines are copied verbatim from that snapshot's SHA256SUMS. In each pair, beacon block S carries the request in parent_execution_requests and the producing EL block is the payload of the envelope at slot S-1.",
+ "network": "glamsterdam-devnet-8 (Plataberget), run by ethpandaops",
+ "fetched_at": "2026-11-09T20:36:47Z",
+ "beacon_node": "https://beacon.glamsterdam-devnet-8.ethpandaops.io (Lighthouse/v8.3.1)",
+ "el_rpc": "https://rpc.glamsterdam-devnet-8.ethpandaops.io",
+ "cl_config": "https://config.glamsterdam-devnet-8.ethpandaops.io/cl/config.yaml",
+ "el_genesis": "https://config.glamsterdam-devnet-8.ethpandaops.io/el/genesis.json",
+ "genesis_validators_root": "0xbb4a1a9e3f7f4e10edcd734e4acc3b5ffd4f830efe0af2748fa458cfee5d2658",
+ "genesis_fork_version": "0x10733183",
+ "gloas_fork": {
+  "version": "0x80733183",
+  "epoch": 1536
+ },
+ "el_chain_id": 7091047534,
+ "el_amsterdam_time": 1787212224,
+ "preset": "mainnet",
+ "spec_relation": [
+  "The devnet targets consensus-specs v1.7.0-alpha.14; Jaune's pin is v1.7.0-beta.4, 121 commits ahead. Every container this control touches has an identical field list in both: ExecutionPayload (19), ExecutionRequests (5), BeaconBlockBody, BuilderDepositRequest/BuilderExitRequest, ExecutionPayloadEnvelope, ExecutionPayloadBid.",
+  "The request types (0x03/0x04), DOMAIN_BUILDER_DEPOSIT and the EIP-8282 citation (de4c6f02) are identical too.",
+  "The EIP-8282 contracts at the mainnet addresses 0x0000bFF4...8282 and 0x000064D6...8282 have bytecode byte-identical to Jaune's scripts/t8n/amsterdam-system-alloc.json.",
+  "The devnet's EL release is devnet-8, while Jaune's Amsterdam pin is tests@v21.0.2. That matters only for executing transactions, not for the header and requests hashes this control checks."
+ ],
+ "pairs": [
+  {
+   "beacon_slot": 614027,
+   "envelope_slot": 614026,
+   "el_number": 533221,
+   "request": "builder exit",
+   "block": {
+    "file": "ssz/blk_614027.ssz",
+    "url": "https://beacon.glamsterdam-devnet-8.ethpandaops.io/eth/v2/beacon/blocks/614027",
+    "accept": "application/octet-stream"
+   },
+   "envelope": {
+    "file": "ssz/env_614026.ssz",
+    "url": "https://beacon.glamsterdam-devnet-8.ethpandaops.io/eth/v1/beacon/execution_payload_envelopes/0x3483bdbca3c451c5f2a284a03a739b07ab937a04b6e2c1c2cc48825b77406113",
+    "accept": "application/octet-stream"
+   },
+   "el_block": {
+    "file": "json/el_0x209c50a92ee194fde3a4efe325460bd2d2685388593d4efb6827d7ba42bce3aa.json",
+    "rpc": "https://rpc.glamsterdam-devnet-8.ethpandaops.io",
+    "method": "eth_getBlockByHash",
+    "params": [
+     "0x209c50a92ee194fde3a4efe325460bd2d2685388593d4efb6827d7ba42bce3aa",
+     false
+    ]
+   },
+   "recorded": {
+    "hash": "0x209c50a92ee194fde3a4efe325460bd2d2685388593d4efb6827d7ba42bce3aa",
+    "requestsHash": "0xe60bf09ca798216c6d157281a4a0f031cfb3540efd4e20db957740e70c1890cf",
+    "blockAccessListHash": "0x4f460c07307ad16bf09fe1f01d9aea7548e0ba5554f9d245cb8ab7b5cfaaf2a8"
+   }
+  },
+  {
+   "beacon_slot": 614108,
+   "envelope_slot": 614107,
+   "el_number": 533294,
+   "request": "builder exit",
+   "block": {
+    "file": "ssz/blk_614108.ssz",
+    "url": "https://beacon.glamsterdam-devnet-8.ethpandaops.io/eth/v2/beacon/blocks/614108",
+    "accept": "application/octet-stream"
+   },
+   "envelope": {
+    "file": "ssz/env_614107.ssz",
+    "url": "https://beacon.glamsterdam-devnet-8.ethpandaops.io/eth/v1/beacon/execution_payload_envelopes/0xc006d4724f869950e00c01d87c3fc42689148b02c039e9a13210869cfe340f3f",
+    "accept": "application/octet-stream"
+   },
+   "el_block": {
+    "file": "json/el_0xf9bfe7bb62c90d2da5dec4d2e6ebadfa64d8cb47fb52c5c9491a094988505d3a.json",
+    "rpc": "https://rpc.glamsterdam-devnet-8.ethpandaops.io",
+    "method": "eth_getBlockByHash",
+    "params": [
+     "0xf9bfe7bb62c90d2da5dec4d2e6ebadfa64d8cb47fb52c5c9491a094988505d3a",
+     false
+    ]
+   },
+   "recorded": {
+    "hash": "0xf9bfe7bb62c90d2da5dec4d2e6ebadfa64d8cb47fb52c5c9491a094988505d3a",
+    "requestsHash": "0x4319d306e7a3f7f0d97abd75f7e75c1417233447f172db000a3959bd58e68982",
+    "blockAccessListHash": "0x7fbe42a05d659cca6c542151b56f01e203d134f371cf0ac4a5369126e59c7ab7"
+   }
+  },
+  {
+   "beacon_slot": 625741,
+   "envelope_slot": 625740,
+   "el_number": 543667,
+   "request": "builder deposit (repeats the top-up bytes of 629644)",
+   "block": {
+    "file": "ssz/blk_625741.ssz",
+    "url": "https://beacon.glamsterdam-devnet-8.ethpandaops.io/eth/v2/beacon/blocks/625741",
+    "accept": "application/octet-stream"
+   },
+   "envelope": {
+    "file": "ssz/env_625740.ssz",
+    "url": "https://beacon.glamsterdam-devnet-8.ethpandaops.io/eth/v1/beacon/execution_payload_envelopes/0xc99d892e13bdcb09e28dada8fce27e296ff1dcd7e1ea88187d30b2aa09fa6f27",
+    "accept": "application/octet-stream"
+   },
+   "el_block": {
+    "file": "json/el_0xcf4f248ad60c815100c08f36c2a103eb9968364f225d6d13f4eb33e11c08e6ce.json",
+    "rpc": "https://rpc.glamsterdam-devnet-8.ethpandaops.io",
+    "method": "eth_getBlockByHash",
+    "params": [
+     "0xcf4f248ad60c815100c08f36c2a103eb9968364f225d6d13f4eb33e11c08e6ce",
+     false
+    ]
+   },
+   "recorded": {
+    "hash": "0xcf4f248ad60c815100c08f36c2a103eb9968364f225d6d13f4eb33e11c08e6ce",
+    "requestsHash": "0xd4fe2149fd58baece85a33c5542e7df4e44288ccc78aecf8f7c9b455208e505d",
+    "blockAccessListHash": "0xe1546b1a716730b4e205243d5ee4f7c09b4f475b9266a9bb49121a8f1a875cf8"
+   }
+  },
+  {
+   "beacon_slot": 629644,
+   "envelope_slot": 629643,
+   "el_number": 547182,
+   "request": "builder deposit",
+   "block": {
+    "file": "ssz/blk_629644.ssz",
+    "url": "https://beacon.glamsterdam-devnet-8.ethpandaops.io/eth/v2/beacon/blocks/629644",
+    "accept": "application/octet-stream"
+   },
+   "envelope": {
+    "file": "ssz/env_629643.ssz",
+    "url": "https://beacon.glamsterdam-devnet-8.ethpandaops.io/eth/v1/beacon/execution_payload_envelopes/0xc388fe8d6c4fea90d6b0343c4f97a4cd97c0ea54aa91b5a539d6205bf1503d4d",
+    "accept": "application/octet-stream"
+   },
+   "el_block": {
+    "file": "json/el_0x161de7c8e5cf961e85593fc94dddf14b0a8be76065c408600b59f942df1c3abf.json",
+    "rpc": "https://rpc.glamsterdam-devnet-8.ethpandaops.io",
+    "method": "eth_getBlockByHash",
+    "params": [
+     "0x161de7c8e5cf961e85593fc94dddf14b0a8be76065c408600b59f942df1c3abf",
+     false
+    ]
+   },
+   "recorded": {
+    "hash": "0x161de7c8e5cf961e85593fc94dddf14b0a8be76065c408600b59f942df1c3abf",
+    "requestsHash": "0xd4fe2149fd58baece85a33c5542e7df4e44288ccc78aecf8f7c9b455208e505d",
+    "blockAccessListHash": "0x6a83381d430248e01c19ed9f293cf2270d8103d1313fc42ef593f49ccd976f36"
+   }
+  },
+  {
+   "beacon_slot": 635977,
+   "envelope_slot": 635976,
+   "el_number": 552829,
+   "request": "builder deposit",
+   "block": {
+    "file": "ssz/blk_635977.ssz",
+    "url": "https://beacon.glamsterdam-devnet-8.ethpandaops.io/eth/v2/beacon/blocks/635977",
+    "accept": "application/octet-stream"
+   },
+   "envelope": {
+    "file": "ssz/env_635976.ssz",
+    "url": "https://beacon.glamsterdam-devnet-8.ethpandaops.io/eth/v1/beacon/execution_payload_envelopes/0x058549d9f1b9dc631a86b1082a1b24aa30e638a1db5cebe832c890a037a9e219",
+    "accept": "application/octet-stream"
+   },
+   "el_block": {
+    "file": "json/el_0x23bc694dc0fed944eec352e9a7950ef750f1a2e00bef2099e82eeeee2937b240.json",
+    "rpc": "https://rpc.glamsterdam-devnet-8.ethpandaops.io",
+    "method": "eth_getBlockByHash",
+    "params": [
+     "0x23bc694dc0fed944eec352e9a7950ef750f1a2e00bef2099e82eeeee2937b240",
+     false
+    ]
+   },
+   "recorded": {
+    "hash": "0x23bc694dc0fed944eec352e9a7950ef750f1a2e00bef2099e82eeeee2937b240",
+    "requestsHash": "0x61db2cad2696fbb7535c768efeea32cb7a519769227e076bc49e32579a3eb9b8",
+    "blockAccessListHash": "0x127f6e741f8c4975b19ebdb75b31e1fc53e73c24addbd691c329e28a506b440a"
+   }
+  }
+ ]
+}
