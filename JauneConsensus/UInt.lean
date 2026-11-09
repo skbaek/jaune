@@ -34,6 +34,10 @@ namespace U64
 /-- The value as a natural number. -/
 @[inline] def toNat (x : U64) : Nat := x.u64.toNat
 
+/-- The value as the execution layer's 64-bit word, for fields Jaune types as `UInt64` (the engine's
+withdrawal conversion, `JauneConsensus/Engine.lean`). A projection: no arithmetic, no truncation. -/
+@[inline] def toWord (x : U64) : UInt64 := x.u64
+
 theorem toNat_lt (x : U64) : x.toNat < 2 ^ 64 := x.u64.toNat_lt
 
 /-- `uint64(n)`: rejects with `Reject.overflow` when `n ≥ 2^64`. -/

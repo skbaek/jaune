@@ -51,6 +51,8 @@ import JauneConsensus.Harness.SszStatic
 import JauneConsensus.EpochAccessors
 import JauneConsensus.Epoch
 import JauneConsensus.StateTransition
+import JauneConsensus.Engine
+import JauneConsensus.Joint
 import JauneConsensus.Harness.EpochCases
 import JauneConsensus.Harness.Operations
 import JauneConsensus.Harness.Networking
