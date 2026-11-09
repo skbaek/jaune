@@ -12,6 +12,13 @@ import JauneConsensus.Facts.Gloas.WithdrawalsB5
 import JauneConsensus.Facts.Gloas.B5Witnesses
 import JauneConsensus.Facts.Gloas.BuilderWitnesses
 import JauneConsensus.Facts.Gloas.BuilderFrames
+import JauneConsensus.Facts.Gloas.Invariants
+import JauneConsensus.Facts.Gloas.InvariantsFrames
+import JauneConsensus.Facts.Gloas.InvariantsPhases
+import JauneConsensus.Facts.Gloas.InvariantsRequests
+import JauneConsensus.Facts.Gloas.InvariantsSweep
+import JauneConsensus.Facts.Gloas.InvariantsSlots
+import JauneConsensus.Facts.Gloas.InvariantsGen
 
 /-!
 # Whole-library axiom union for `JauneConsensus`
