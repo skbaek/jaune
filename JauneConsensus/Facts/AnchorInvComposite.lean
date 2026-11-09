@@ -199,8 +199,7 @@ elab "loop_pres " h:ident : tactic => withMainContext do
   let (A, gf) ← presParts α Q
   let stepTy ← mkAppM ``ForInStep #[β]
   let hbTy ← forallTelescope (← inferType body) fun as _ => do
-    unless as.size == 2 do throwError "loop_pres: body arity"
-    let b := as[1]!
+    let #[_, b] := as | throwError "loop_pres: body arity"
     let post ← withLocalDeclD `r stepTy fun r => do
       mkLambdaFVars #[r] (← mkAppM ``Pres #[π.beta #[b], π.beta #[← mkAppM ``ForInStep.value #[r]]])
     mkForallFVars as (mkAppN t.getAppFn #[stepTy, (mkAppN body as).headBeta, post])
