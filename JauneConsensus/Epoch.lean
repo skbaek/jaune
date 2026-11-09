@@ -250,7 +250,8 @@ def applyPendingDeposit (ctx : Ctx) (state : BeaconState P f) (deposit : Pending
     else pure state
   | some i => increaseBalance state (← U64.ofNat? i "ValidatorIndex") deposit.amount
 
-/-- `process_pending_deposits(state)` (`specs/electra/beacon-chain.md`). `processed_amount`
+/-- `process_pending_deposits(state)` (`specs/electra/beacon-chain.md`; Fulu's override drops
+the Eth1-bridge break). `processed_amount`
 starts as the Python `int` `0` and becomes `Gwei` at its first addition, so its arithmetic is
 `uint64`. Pyspec's remerkleable `uint64` coerces `int + Gwei` to `uint64` and raises on overflow, so the checked adds here are exact. -/
 def processPendingDeposits (ctx : Ctx) (state : BeaconState P f) : M (BeaconState P f) := do
@@ -267,8 +268,9 @@ def processPendingDeposits (ctx : Ctx) (state : BeaconState P f) : M (BeaconStat
   let pending ← state.pendingDeposits
   let mut state := state
   for deposit in pending.toArray do
-    -- Do not process deposit requests if Eth1 bridge deposits are not yet applied.
-    if deposit.slot > GENESIS_SLOT && state.eth1_deposit_index < requestsStart then break
+    -- Do not process deposit requests if Eth1 bridge deposits are not yet applied
+    -- (Electra; Fulu drops the check, `v1.7.0-beta.4` `specs/fulu/beacon-chain.md`).
+    if !(f.atLeast .fulu) && deposit.slot > GENESIS_SLOT && state.eth1_deposit_index < requestsStart then break
     -- Check if deposit has been finalized, otherwise, stop processing.
     if deposit.slot > finalizedSlot then break
     -- Check if number of processed deposits has not reached the limit, otherwise, stop processing.

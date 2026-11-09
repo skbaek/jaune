@@ -283,7 +283,7 @@ theorem getExpected_recipient (state : BeaconState P f)
         AllRecipientOk state s.2.1) hInit' ?hy ?hd hForIn1
       · intro w hw b hb b' hstep
         by_cases hBreak : (epoch < w.withdrawable_epoch ∨
-          b.2.1.size = P.MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP)
+          b.2.1.size = min P.MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP (P.MAX_WITHDRAWALS_PER_PAYLOAD - 1))
         · rw [if_pos hBreak] at hstep
           have hEq : ForInStep.done b = ForInStep.yield b' := Except.ok.inj hstep
           cases hEq
@@ -328,7 +328,7 @@ theorem getExpected_recipient (state : BeaconState P f)
             exact hb
       · intro w hw b hb b' hstep
         by_cases hBreak : (epoch < w.withdrawable_epoch ∨
-          b.2.1.size = P.MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP)
+          b.2.1.size = min P.MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP (P.MAX_WITHDRAWALS_PER_PAYLOAD - 1))
         · rw [if_pos hBreak] at hstep
           have hEq : b = b' := by
             have hOk : Except.ok (ForInStep.done b) = Except.ok (ForInStep.done b') := hstep
@@ -814,7 +814,7 @@ theorem loop1_emissions (state : BeaconState P f)
       · intro pref x suff b b' hlpref hInv hstep
         obtain ⟨hproc, chosen, hsub, hlen, hcorr⟩ := hInv
         by_cases hBreak : (epoch < x.withdrawable_epoch ∨
-          b.2.1.size = P.MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP)
+          b.2.1.size = min P.MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP (P.MAX_WITHDRAWALS_PER_PAYLOAD - 1))
         · rw [if_pos hBreak] at hstep
           have hEq : ForInStep.done b = ForInStep.yield b' := Except.ok.inj hstep
           cases hEq
@@ -889,7 +889,7 @@ theorem loop1_emissions (state : BeaconState P f)
               exact hcorr i w p hi1 hi2
       · intro pref x suff b b' hlpref hInv hstep
         by_cases hBreak : (epoch < x.withdrawable_epoch ∨
-          b.2.1.size = P.MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP)
+          b.2.1.size = min P.MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP (P.MAX_WITHDRAWALS_PER_PAYLOAD - 1))
         · rw [if_pos hBreak] at hstep
           have hEq : b = b' := ForInStep.done.inj (Except.ok.inj hstep)
           subst hEq

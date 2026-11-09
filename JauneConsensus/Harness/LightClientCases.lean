@@ -8,7 +8,7 @@ import JauneConsensus.Harness.Yaml
 /-!
 # `light_client` and `merkle_proof` case checks (harness only)
 
-`tests/formats/light_client/` and `tests/formats/merkle_proof/` (`consensus-specs` `v1.6.1`):
+`tests/formats/light_client/` and `tests/formats/merkle_proof/` (`consensus-specs` `v1.7.0-beta.4`):
 
 * `single_merkle_proof/<Type>`: `is_valid_merkle_branch(leaf, branch, floorlog2(leaf_index),
   get_subtree_index(leaf_index), hash_tree_root(object))` must hold, and the optional check:
@@ -16,7 +16,10 @@ import JauneConsensus.Harness.Yaml
 * `sync`: initialize a `LightClientStore` from `bootstrap` and run the steps, checking the
   finalized and optimistic headers after each. Every fork digest must be one of the case fork's
   (`forkDigestsOf`: from Fulu the digest changes at each `BLOB_SCHEDULE` epoch while the types do
-  not); a digest of another fork, which would need an object upgrade, is refused.
+  not); a digest of another fork, which would need an object upgrade, is refused. From
+  `v1.7.0-beta.4` the store is named by `store_fork_version`, the version of the fork whose
+  light-client types it holds: Fulu adds none, so an Electra or Fulu store carries
+  `ELECTRA_FORK_VERSION`; any other version, which would need a store upgrade, is refused.
 * `update_ranking`: the `updates_<i>` are in descending precedence: no later update ranks
   better (`is_better_update`) than an earlier one.
 -/
@@ -113,14 +116,18 @@ def lightClientSync (P : Preset) (f : CFork) (cfg : Config) (c : Case) : IO (Exc
   pure do
     let m ← metaDoc
     y (m.expectKeys ["genesis_validators_root", "trusted_block_root", "bootstrap_fork_digest",
-      "store_fork_digest"])
+      "store_fork_version"])
     let gvr ← root32 (← y (m.field "genesis_validators_root"))
     let trusted ← root32 (← y (m.field "trusted_block_root"))
     let digests ← liftM (forkDigestsOf cfg f gvr) "compute_fork_digest"
     let checkDigest (v : Res YVal) (what : String) : Except String Unit := do
       let d ← y (v.bind YVal.asHex)
       if !digests.contains d then throw s!"refused: {what} {d} is not a {f} fork digest"
-    checkDigest (m.field "store_fork_digest") "store_fork_digest"
+    let checkStoreVersion (v : Res YVal) : Except String Unit := do
+      let d ← y (v.bind YVal.asHex)
+      if d != cfg.ELECTRA_FORK_VERSION then
+        throw s!"refused: store_fork_version {d} is not the {f} light-client store's (ELECTRA_FORK_VERSION)"
+    checkStoreVersion (m.field "store_fork_version")
     checkDigest (m.field "bootstrap_fork_digest") "bootstrap_fork_digest"
     let bootstrap : LightClientBootstrap P f ← decodeAs (← bootstrapBytes) "bootstrap"
     let mut store ← liftM (initializeLightClientStore cfg trusted bootstrap) "initialize_light_client_store"
@@ -144,7 +151,8 @@ def lightClientSync (P : Preset) (f : CFork) (cfg : Config) (c : Case) : IO (Exc
         store ← liftM (processLightClientStoreForceUpdate store slot) "force_update"
         runChecks cfg store (← y (fu.field "checks"))
       | .map [("upgrade_store", us)] =>
-        checkDigest (us.field "store_fork_digest") "store_fork_digest"
+        y (us.expectKeys ["store_fork_version", "checks"])
+        checkStoreVersion (us.field "store_fork_version")
         runChecks cfg store (← y (us.field "checks"))
       | _ => throw "unknown sync step"
 
