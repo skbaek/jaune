@@ -6,7 +6,8 @@ import JauneConsensus.Fork
 # Case discovery and the tree-manifest check (conformance harness)
 
 Layout (`tests/formats/README.md` at the pin):
-`<root>/<preset>/tests/<preset>/<fork>/<runner>/<handler>/<suite>/<case>/<file>`.
+`<root>/<preset>/tests/<preset>/<fork>/<runner>/<handler>/<suite>/<case>/<file>`, and for the
+`comptests` tarball `<root>/comptests/tests/minimal/...` (`casePresetOf`).
 
 A selection names a preset and optionally a fork, runner, handler and suite. Discovery
 
@@ -98,6 +99,9 @@ def runnerFileKinds : String → List String
      "column_0xH.ssz_snappy"]
   | "sync" => ["meta.yaml", "steps.yaml", "anchor_state.ssz_snappy", "anchor_block.ssz_snappy",
      "block_0xH.ssz_snappy"]
+  | "fast_confirmation" | "fork_choice_compliance" =>
+    ["meta.yaml", "steps.yaml", "anchor_state.ssz_snappy", "anchor_block.ssz_snappy",
+     "block_0xH.ssz_snappy", "attestation_0xH.ssz_snappy", "attester_slashing_0xH.ssz_snappy"]
   | "light_client" =>
     ["meta.yaml", "config.yaml", "steps.yaml", "proof.yaml", "object.ssz_snappy",
      "bootstrap.ssz_snappy", "initial_state.ssz_snappy", "updates_N.ssz_snappy",
@@ -262,7 +266,7 @@ def discover (m : Manifest) (sel : Selection) : IO (List Case) := do
   if wanted.isEmpty then
     throw (IO.userError "refused: the selection names no in-scope suite of the pinned inventory")
   -- the in-scope part of the tree under the selection
-  let base := sel.root / sel.preset / "tests" / sel.preset
+  let base := sel.root / sel.preset / "tests" / casePresetOf sel.preset
   let mut onDisk : List SuiteKey := []
   for fork in ← listDir base true true do
     if !matches? sel.fork fork then continue
@@ -300,11 +304,12 @@ def discover (m : Manifest) (sel : Selection) : IO (List Case) := do
           throw (IO.userError s!"refused: {label}/{n}: unknown file {f} for runner {k.runner}")
         paths := paths.push s!"{n}/{f}"
       if files.contains "manifest.yaml" then
-        checkCaseManifest (sdir / n) s!"{label}/{n}" [("preset", sel.preset), ("fork", k.fork),
-          ("runner", k.runner), ("handler", k.handler), ("suite", k.suite), ("case", n)]
+        checkCaseManifest (sdir / n) s!"{label}/{n}" [("preset", casePresetOf sel.preset),
+          ("fork", k.fork), ("runner", k.runner), ("handler", k.handler), ("suite", k.suite),
+          ("case", n)]
       let files := files.filter (· != "manifest.yaml")
       suiteCases := suiteCases.push
-        { preset := sel.preset, key := k, name := n, dir := sdir / n, files }
+        { preset := casePresetOf sel.preset, key := k, name := n, dir := sdir / n, files }
     if listDigest (sortStrings paths) != r.filesSha256 then
       throw (IO.userError s!"refused: {label}: file paths differ from the manifest (missing, extra or renamed file)")
     let bls ← suiteCases.toList.mapM blsSettingOf

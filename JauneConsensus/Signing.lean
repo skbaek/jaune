@@ -100,16 +100,13 @@ def getDomain {P : Preset} {f : CFork} (state : BeaconState P f) (domainType : D
 
 pyspec's `bls_active` flag (`eth2spec/utils/bls.py`, `only_with_bls`) turns the verification
 predicates into `True` (`Verify`, `AggregateVerify`, `FastAggregateVerify`, `KeyValidate`) and
-stubs the producers: `Aggregate` and `Sign` return `STUB_SIGNATURE`, `AggregatePKs` returns
-`STUB_PUBKEY`. The executable spec's `eth_aggregate_pubkeys` is `bls.AggregatePKs`
-(`pysetup/constants.py` `OPTIMIZED_BLS_AGGREGATE_PUBKEYS`, installed by the Altair builder's
-`implement_optimizations`), so it is stubbed too. Point codecs and group operations
+stubs the producers: `Aggregate` and `Sign` return `STUB_SIGNATURE`. From `v1.7.0-beta.4`
+(`eth_consensus_specs/utils/bls.py`) `AggregatePKs` is no longer switched: its result is state
+data (`next_sync_committee.aggregate_pubkey`), so the executable spec's `eth_aggregate_pubkeys`
+(`bls.AggregatePKs`, `pysetup/constants.py` `OPTIMIZED_BLS_AGGREGATE_PUBKEYS`) always
+aggregates; `STUB_PUBKEY` is kept for the earlier releases' record only. Point codecs and group operations
 (`bytes48_to_G1`, `add`, `neg`, `G1_to_bytes48`) are not switched. The vectors record the
 setting per case (`bls_setting`). -/
-
-/-- pyspec's `STUB_PUBKEY` (`b"\x22" * 48`, `eth2spec/utils/bls.py`): what `bls.AggregatePKs`
-returns when the BLS switch is off. -/
-def STUB_PUBKEY : Bytes := List.replicate 48 0x22
 
 
 /-- `bls.Verify(pubkey, message, signature)` under the switch. -/

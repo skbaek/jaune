@@ -256,8 +256,10 @@ def handlerFor (runner handler : String) : Option (Case → IO Verdict) :=
   | "finality", "finality" => some (ofResult (blocksCase steps caseConfig))
   | "random", "random" => some (ofResult (blocksCase steps caseConfig))
   | "transition", "core" => some (ofResult (transitionCase steps caseConfig))
-  | "fork_choice", _ => some (ofResult (forkChoiceCase caseConfig false))
-  | "sync", "optimistic" => some (ofResult (forkChoiceCase caseConfig true))
+  | "fork_choice", _ => some (ofResult (forkChoiceCase caseConfig .forkChoice))
+  | "sync", "optimistic" => some (ofResult (forkChoiceCase caseConfig .sync))
+  | "fast_confirmation", _ => some (ofResult (forkChoiceCase caseConfig .fastConfirmation))
+  | "fork_choice_compliance", _ => some (ofResult (forkChoiceCase caseConfig .compliance))
   | _, _ => none
 
 def runCase (c : Case) : IO Verdict := do
