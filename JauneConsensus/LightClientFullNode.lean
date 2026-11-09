@@ -177,6 +177,7 @@ def createLightClientBootstrap (cfg : Config) (state : BeaconState P f)
   require ((← computeEpochAtSlot P state.slot).toNat ≥ cfg.ALTAIR_FORK_EPOCH) s!"{site}: epoch"
   require (state.slot == state.latest_block_header.slot) s!"{site}: state.slot"
   require (hashTreeRoot (stateBlockHeader state) == hashTreeRoot block.message) s!"{site}: block"
+  -- No `normalize_merkle_branch` here (nor in `createLightClientUpdate`): the creators store raw `compute_merkle_proof` output (specs/altair/light-client/full-node.md); only the Electra fork-upgrade functions normalize (specs/electra/light-client/fork.md `upgrade_lc_*_to_electra`).
   let branch ← computeMerkleProof state.proofTree
     (← currentSyncCommitteeGindexAtSlot cfg P state.slot)
   pure { header := ← blockToLightClientHeader cfg block,

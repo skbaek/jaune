@@ -32,8 +32,11 @@ def merkleizeProgressive (chunks : List B256) : B256 :=
   merkleizeProgressiveAux (chunks.length + 1) chunks 1
 
 /-- `mix_in_active_fields(root, active_fields)`: `hash(root, pack_bits(active_fields))`, with
-`active_fields` restricted to at most 256 bits, so `pack_bits` is one chunk. -/
-def mixInActiveFields (root : B256) (activeFields : List Bool) : B256 :=
+`active_fields` restricted to at most 256 bits ("Merkleization": `active_fields` is restricted
+to ≤ 256 bits), so `pack_bits` is one chunk. The bound is a proof obligation, so an overlong
+`active_fields` is rejected at elaboration. -/
+def mixInActiveFields (root : B256) (activeFields : List Bool)
+    (_ : activeFields.length ≤ 256) : B256 :=
   hashPair root (chunkOf (bitsToBytes activeFields))
 
 /-! ## `ProgressiveList[T]` -/
@@ -93,9 +96,11 @@ def activeChunks : List Bool → List B256 → List B256
   | false :: as, rs => zeroChunk :: activeChunks as rs
 
 /-- `hash_tree_root` of a progressive container ("Merkleization":
-`mix_in_active_fields(merkleize_progressive(...), get_active_fields(value))`). -/
-def progressiveContainerRoot (activeFields : List Bool) (roots : List B256) : B256 :=
-  mixInActiveFields (merkleizeProgressive (activeChunks activeFields roots)) activeFields
+`mix_in_active_fields(merkleize_progressive(...), get_active_fields(value))`). The `≤ 256`-bit
+bound travels as a proof obligation, so an overlong `active_fields` is rejected at elaboration. -/
+def progressiveContainerRoot (activeFields : List Bool) (roots : List B256)
+    (h : activeFields.length ≤ 256) : B256 :=
+  mixInActiveFields (merkleizeProgressive (activeChunks activeFields roots)) activeFields h
 
 /-- `ssz_progressive_container Name [a₀, a₁, ...] where f₁ : T₁ ...`: a progressive container
 with the given `active_fields` (each `0` or `1`). The illegal configurations ("Illegal types":
@@ -133,24 +138,38 @@ macro_rules
             let v ← ($dec : FieldDecoder $n)
             if (← get).isEmpty then pure v
             else throw (.decode (.offset "extra fields"))) scopes
-        hashTreeRoot := fun x => progressiveContainerRoot [$activeBools,*] [$roots,*])
+        hashTreeRoot := fun x => progressiveContainerRoot [$activeBools,*] [$roots,*] (by decide))
 
 /-! ## `CompatibleUnion({selector: type})` -/
 
 /-- Serialization of a compatible union ("Compatible unions"):
-`value.selector.to_bytes(1, "little") + serialize(value.data)`. -/
+`value.selector.to_bytes(1, "little") + serialize(value.data)`. The selector is a declared
+option in `1..127` by construction (the value's constructor fixes it), so rejection of an
+out-of-range or undeclared selector lives in `deserializeUnion`, which sees untrusted bytes. -/
 def serializeUnion (selector : Nat) (data : Bytes) : Bytes := leBytes 1 selector ++ data
 
-/-- Deserialization of a compatible union: the first byte is the selector, which must name an
-option (`decodeOption` returns `none` otherwise); the rest of the scope is that option's data.
-An empty scope has no selector. -/
+/-- Deserialization of a compatible union: the first byte is the selector, which must lie in
+`1..127` ("Illegal types": a selector outside `uint8(1)` through `uint8(127)` is illegal) and
+name a declared option (`decodeOption` returns `none` otherwise); the rest of the scope is that
+option's data. An empty scope has no selector. -/
 def deserializeUnion {α : Type} (bs : Bytes) (decodeOption : UInt8 → Bytes → Option (M α)) :
     M α :=
   match bs with
   | [] => throw (.decode (.offset "compatible union without a selector"))
   | sel :: data =>
-    match decodeOption sel data with
-    | some r => r
-    | none => throw (.decode (.selector sel))
+    if sel = 0 ∨ 127 < sel.toNat then throw (.decode (.selector sel))
+    else
+      match decodeOption sel data with
+      | some r => r
+      | none => throw (.decode (.selector sel))
+
+-- A selector outside `1..127`, or one no option declares, is rejected; a declared one decodes.
+private def unionProbe (sel : UInt8) (data : Bytes) : Option (M Nat) :=
+  if sel = 1 then some (pure data.length) else none
+
+#guard ((deserializeUnion (α := Nat) [0] unionProbe).toOption.isNone)
+#guard ((deserializeUnion (α := Nat) [200] unionProbe).toOption.isNone)
+#guard ((deserializeUnion (α := Nat) [5] unionProbe).toOption.isNone)
+#guard ((deserializeUnion [1, 9, 9] unionProbe).toOption == some 2)
 
 end JauneConsensus

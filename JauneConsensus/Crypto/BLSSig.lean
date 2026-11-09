@@ -43,12 +43,16 @@ def keyValidate (pk : Bytes) : Bool :=
   | .ok xP => xP ≠ g1Identity                 -- 3. identity
               && g1SubgroupCheck xP           -- 4. pubkey_subgroup_check
 
-/-- Section 2.4, `SkToPk(SK)`. -/
-def skToPk (sk : Nat) : Bytes := g1Compress (blsG1Generator.mulBy sk)
+/-- Section 2.4, `SkToPk(SK)`: `SK` is an integer in `[1, r-1]`, so `0` and `r` and
+above are rejected (`blsCurveOrder` is `r`; `skToPk r` would otherwise wrap to infinity). -/
+def skToPk (sk : Nat) : Except String Bytes := do
+  if sk = 0 ∨ blsCurveOrder ≤ sk then throw "SkToPk: secret key not in [1, r-1]"
+  return g1Compress (blsG1Generator.mulBy sk)
 
 /-- Section 2.6, `CoreSign(SK, message)`; `Sign` of the proof-of-possession scheme
-(section 3.3). -/
+(section 3.3), with the same `[1, r-1]` secret-key precondition as `SkToPk`. -/
 def sign (sk : Nat) (message : Bytes) : Except String Bytes := do
+  if sk = 0 ∨ blsCurveOrder ≤ sk then throw "Sign: secret key not in [1, r-1]"
   let q ← hashToPoint message                  -- 1. Q = hash_to_point(message)
   return g2Compress (q.mulBy sk)               -- 2.-3. R = SK * Q; point_to_signature(R)
 
@@ -126,5 +130,12 @@ def ethAggregatePubkeys (pubkeys : List Bytes) : Except String Bytes := do
 def ethFastAggregateVerify (pubkeys : List Bytes) (message signature : Bytes) : Bool :=
   if pubkeys.isEmpty ∧ signature = g2PointAtInfinity then true
   else fastAggregateVerify pubkeys message signature
+
+-- Secret keys outside `[1, r-1]` are rejected; `1` is accepted.
+#guard (skToPk 0).toOption.isNone
+#guard (skToPk blsCurveOrder).toOption.isNone
+#guard (skToPk 1).isOk
+#guard (sign 0 []).toOption.isNone
+#guard (sign blsCurveOrder []).toOption.isNone
 
 end JauneConsensus

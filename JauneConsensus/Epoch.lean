@@ -195,7 +195,8 @@ def processRegistryUpdates (cfg : Config) (state : BeaconState P f) : M (BeaconS
 /-- `process_slashings`: Electra (`specs/electra/beacon-chain.md`) computes a penalty per
 effective-balance increment; Bellatrix to Deneb (`specs/bellatrix/beacon-chain.md`) scale each
 validator's increments by the adjusted total and divide by the total balance.
-`sum(state.slashings)` adds typed `Gwei` values, so it is checked `uint64` addition. -/
+`sum(state.slashings)` adds typed `Gwei` values, so it is checked `uint64` addition.
+Pyspec's remerkleable `uint64` coerces `0 + Gwei` and `int + Gwei` to `uint64` and raises on overflow, so the checked adds here are exact. -/
 def processSlashings (_cfg : Config) (state : BeaconState P f) : M (BeaconState P f) := do
   let site := "process_slashings"
   let epoch ← getCurrentEpoch state
@@ -251,7 +252,7 @@ def applyPendingDeposit (ctx : Ctx) (state : BeaconState P f) (deposit : Pending
 
 /-- `process_pending_deposits(state)` (`specs/electra/beacon-chain.md`). `processed_amount`
 starts as the Python `int` `0` and becomes `Gwei` at its first addition, so its arithmetic is
-`uint64`. -/
+`uint64`. Pyspec's remerkleable `uint64` coerces `int + Gwei` to `uint64` and raises on overflow, so the checked adds here are exact. -/
 def processPendingDeposits (ctx : Ctx) (state : BeaconState P f) : M (BeaconState P f) := do
   let site := "process_pending_deposits"
   let nextEpoch ← (← getCurrentEpoch state).add? U64.one site

@@ -443,6 +443,7 @@ def processSyncAggregate (ctx : Ctx) (state : BeaconState P f) (sa : SyncAggrega
       pure [vbytes state.current_sync_committee.aggregate_pubkey]
     else if participants > P.SYNC_COMMITTEE_SIZE / 2 then do
       -- More than half participated - subtract non-participant keys
+      -- No KeyValidate on the stored aggregate: pyspec raw-decodes both points here (specs/altair/beacon-chain.md:592-596); validation lives in `eth_aggregate_pubkeys` (specs/altair/bls.md:47).
       let nonPart := ((pubkeys.zip bits).filter (fun (_, b) => !b)).toList.map (vbytes ·.1)
       -- `eth_aggregate_pubkeys` is `bls.AggregatePKs`, which pyspec's BLS switch stubs to
       -- `STUB_PUBKEY` (`eth2spec/utils/bls.py`); the point decoding, negation and addition
