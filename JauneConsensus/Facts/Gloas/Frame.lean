@@ -21,19 +21,13 @@ abbrev BuilderFrame (s s' : JauneConsensus.Gloas.BeaconState P) : Prop :=
     s'.builder_pending_withdrawals = s.builder_pending_withdrawals
 
 /-- `BuilderFrame` as a step relation. -/
-@[reducible] def builderFrame : StepRel (JauneConsensus.Gloas.BeaconState P) where
+def builderFrame : StepRel (JauneConsensus.Gloas.BeaconState P) where
   R := BuilderFrame
   refl _ := ⟨rfl, rfl, rfl⟩
   trans h₁ h₂ := ⟨h₂.1.trans h₁.1, h₂.2.1.trans h₁.2.1, h₂.2.2.trans h₁.2.2⟩
 
-/-- The generator's `dsimp` unfolds `builderFrame.R` to `BuilderFrame`, from which the relation
-cannot be inferred: name it. -/
-macro_rules
-  | `(tactic| gstep_rebase $h) =>
-    `(tactic| refine StepRel.ok_rebase builderFrame (by gstep_of $h) ?_)
-
 /-- A record update that leaves the three builder fields alone. -/
-macro_rules | `(tactic| gstep_close) => `(tactic| exact ⟨rfl, rfl, rfl⟩)
+macro_rules | `(tactic| gstep_close) => `(tactic| exact (show BuilderFrame _ _ from ⟨rfl, rfl, rfl⟩))
 
 theorem increaseBalance_builderFrame (s : JauneConsensus.Gloas.BeaconState P)
     (i : ValidatorIndex) (d : Gwei) :
@@ -83,5 +77,66 @@ theorem processRegistryUpdates_builderFrame (cfg : Config)
     (s : JauneConsensus.Gloas.BeaconState P) :
     Ok (JauneConsensus.Gloas.processRegistryUpdates cfg s) (builderFrame.R s) := by
   unfold JauneConsensus.Gloas.processRegistryUpdates; gvcg
+
+/-- `process_slashings` keeps the builder registry and queues. -/
+theorem processSlashings_builderFrame (cfg : Config) (s : JauneConsensus.Gloas.BeaconState P) :
+    Ok (JauneConsensus.Gloas.processSlashings cfg s) (builderFrame.R s) := by
+  unfold JauneConsensus.Gloas.processSlashings; gvcg
+
+/-- `process_rewards_and_penalties` keeps the builder registry and queues. -/
+theorem processRewardsAndPenalties_builderFrame (cfg : Config) (s : JauneConsensus.Gloas.BeaconState P) :
+    Ok (JauneConsensus.Gloas.processRewardsAndPenalties cfg s) (builderFrame.R s) := by
+  unfold JauneConsensus.Gloas.processRewardsAndPenalties; gvcg
+
+/-- `process_inactivity_updates` keeps the builder registry and queues. -/
+theorem processInactivityUpdates_builderFrame (cfg : Config) (s : JauneConsensus.Gloas.BeaconState P) :
+    Ok (JauneConsensus.Gloas.processInactivityUpdates cfg s) (builderFrame.R s) := by
+  unfold JauneConsensus.Gloas.processInactivityUpdates; gvcg
+
+/-- `process_eth1_data_reset` keeps the builder registry and queues. -/
+theorem processEth1DataReset_builderFrame (cfg : Config) (s : JauneConsensus.Gloas.BeaconState P) :
+    Ok (JauneConsensus.Gloas.processEth1DataReset cfg s) (builderFrame.R s) := by
+  unfold JauneConsensus.Gloas.processEth1DataReset; gvcg
+
+/-- `process_slashings_reset` keeps the builder registry and queues. -/
+theorem processSlashingsReset_builderFrame (cfg : Config) (s : JauneConsensus.Gloas.BeaconState P) :
+    Ok (JauneConsensus.Gloas.processSlashingsReset cfg s) (builderFrame.R s) := by
+  unfold JauneConsensus.Gloas.processSlashingsReset; gvcg
+
+/-- `process_randao_mixes_reset` keeps the builder registry and queues. -/
+theorem processRandaoMixesReset_builderFrame (cfg : Config) (s : JauneConsensus.Gloas.BeaconState P) :
+    Ok (JauneConsensus.Gloas.processRandaoMixesReset cfg s) (builderFrame.R s) := by
+  unfold JauneConsensus.Gloas.processRandaoMixesReset; gvcg
+
+/-- `process_historical_summaries_update` keeps the builder registry and queues. -/
+theorem processHistoricalSummariesUpdate_builderFrame (cfg : Config) (s : JauneConsensus.Gloas.BeaconState P) :
+    Ok (JauneConsensus.Gloas.processHistoricalSummariesUpdate cfg s) (builderFrame.R s) := by
+  unfold JauneConsensus.Gloas.processHistoricalSummariesUpdate; gvcg
+
+/-- `process_participation_flag_updates` keeps the builder registry and queues. -/
+theorem processParticipationFlagUpdates_builderFrame (cfg : Config) (s : JauneConsensus.Gloas.BeaconState P) :
+    Ok (JauneConsensus.Gloas.processParticipationFlagUpdates cfg s) (builderFrame.R s) := by
+  unfold JauneConsensus.Gloas.processParticipationFlagUpdates; gvcg
+
+/-- `process_proposer_lookahead` keeps the builder registry and queues. -/
+theorem processProposerLookahead_builderFrame (cfg : Config) (s : JauneConsensus.Gloas.BeaconState P) :
+    Ok (JauneConsensus.Gloas.processProposerLookahead cfg s) (builderFrame.R s) := by
+  unfold JauneConsensus.Gloas.processProposerLookahead; gvcg
+
+/-- `process_ptc_window` keeps the builder registry and queues. -/
+theorem processPtcWindow_builderFrame (cfg : Config) (s : JauneConsensus.Gloas.BeaconState P) :
+    Ok (JauneConsensus.Gloas.processPtcWindow cfg s) (builderFrame.R s) := by
+  unfold JauneConsensus.Gloas.processPtcWindow; gvcg
+
+/-- `process_sync_committee_updates` keeps the builder registry and queues. -/
+theorem processSyncCommitteeUpdates_builderFrame (ctx : Ctx) (s : JauneConsensus.Gloas.BeaconState P) :
+    Ok (JauneConsensus.Gloas.processSyncCommitteeUpdates ctx s) (builderFrame.R s) := by
+  unfold JauneConsensus.Gloas.processSyncCommitteeUpdates; gvcg
+
+/-- `process_pending_consolidations` keeps the builder registry and queues. -/
+theorem processPendingConsolidations_builderFrame (cfg : Config)
+    (s : JauneConsensus.Gloas.BeaconState P) :
+    Ok (JauneConsensus.Gloas.processPendingConsolidations cfg s) (builderFrame.R s) := by
+  unfold JauneConsensus.Gloas.processPendingConsolidations; gvcg
 
 end JauneConsensus.Facts.Gloas

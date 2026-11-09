@@ -65,6 +65,19 @@ theorem ok_forIn_array {α β : Type} (proj : β → σ) {xs : Array α} {init :
   fun out h => array_forIn_rel (fun a b => rel.R (proj a) (proj b)) (fun _ => rel.refl _)
     (fun _ _ _ h₁ h₂ => rel.trans h₁ h₂) body (fun a b r hr => hb a b r hr) xs init out h
 
+/-- `ok_forIn_list` applied to a run: the form the loop rules of `gstep_of` use, so that the
+loop state's type comes from `proj` rather than from the goal. -/
+theorem forIn_list_rel {α β : Type} (proj : β → σ) {xs : List α} {body : α → β → M (ForInStep β)}
+    (hb : ∀ a b, Ok (body a b) (fun r => rel.R (proj b) (proj r.value))) (init out : β)
+    (h : forIn xs init body = .ok out) : rel.R (proj init) (proj out) :=
+  rel.ok_forIn_list proj hb out h
+
+/-- `ok_forIn_array` applied to a run. -/
+theorem forIn_array_rel {α β : Type} (proj : β → σ) {xs : Array α} {body : α → β → M (ForInStep β)}
+    (hb : ∀ a b, Ok (body a b) (fun r => rel.R (proj b) (proj r.value))) (init out : β)
+    (h : forIn xs init body = .ok out) : rel.R (proj init) (proj out) :=
+  rel.ok_forIn_array proj hb out h
+
 /-- The relation lemma of a sub-step, in the form `gstep_of` consumes. -/
 theorem of_ok {α : Type} {c : M α} {Q : α → Prop} {x : α} (h : Ok c Q) (hx : c = .ok x) : Q x :=
   h x hx
@@ -93,7 +106,7 @@ macro "gvcg" : tactic => `(tactic| repeat' gstep)
 macro_rules | `(tactic| gstep) => `(tactic| first
   | with_reducible exact ok_throw
   | with_reducible exact ok_throw_bind
-  | (with_reducible apply ok_pure; gstep_close)
+  | ((with_reducible apply ok_pure); gstep_close)
   | (with_reducible apply ok_bind; intro _ hx
      first | gstep_rebase hx | skip)
   | (with_reducible apply ok_ite <;> intro _)
@@ -105,9 +118,17 @@ macro_rules | `(tactic| gstep) => `(tactic| first
 /-- Loops: the loop state is the step's state (`proj = id`). -/
 macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (refine StepRel.of_ok (StepRel.ok_forIn_list _ id ?_) $h; intro _ _; gvcg))
+    `(tactic| (refine StepRel.forIn_list_rel _ id ?_ _ _ $h; intro _ _; gvcg))
 macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (refine StepRel.of_ok (StepRel.ok_forIn_array _ id ?_) $h; intro _ _; gvcg))
+    `(tactic| (refine StepRel.forIn_array_rel _ id ?_ _ _ $h; intro _ _; gvcg))
+
+/-- Loops whose state pairs the step's state with a counter or accumulator (`proj = Prod.fst`). -/
+macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (refine StepRel.forIn_list_rel _ Prod.fst ?_ _ _ $h; intro _ _; gvcg))
+macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (refine StepRel.forIn_array_rel _ Prod.fst ?_ _ _ $h; intro _ _; gvcg))
 
 end JauneConsensus.Facts.Gloas
