@@ -62,6 +62,7 @@ import JauneConsensus.Harness.EpochCases
 import JauneConsensus.Harness.Operations
 import JauneConsensus.Harness.Networking
 import JauneConsensus.Harness.LightClientDataCollection
+import JauneConsensus.Harness.GloasLightClientDataCollection
 import JauneConsensus.Harness.LightClientCases
 import JauneConsensus.Harness.ForkChoiceCases
 import JauneConsensus.Harness.Runner
