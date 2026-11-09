@@ -26,6 +26,7 @@ import JauneConsensus.Facts.WithdrawalOrder
 import JauneConsensus.DAS
 import JauneConsensus.LightClient
 import JauneConsensus.ForkChoice
+import JauneConsensus.FastConfirmation
 import JauneConsensus.Sync
 import JauneConsensus.LightClientFullNode
 import JauneConsensus.Crypto.HashToCurve

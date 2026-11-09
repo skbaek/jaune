@@ -92,6 +92,9 @@ def runnerFileKinds : String → List String
      "column_0xH.ssz_snappy"]
   | "sync" => ["meta.yaml", "steps.yaml", "anchor_state.ssz_snappy", "anchor_block.ssz_snappy",
      "block_0xH.ssz_snappy"]
+  | "fast_confirmation" =>
+    ["meta.yaml", "steps.yaml", "anchor_state.ssz_snappy", "anchor_block.ssz_snappy",
+     "block_0xH.ssz_snappy", "attestation_0xH.ssz_snappy", "attester_slashing_0xH.ssz_snappy"]
   | "light_client" =>
     ["meta.yaml", "config.yaml", "steps.yaml", "proof.yaml", "object.ssz_snappy",
      "bootstrap.ssz_snappy", "initial_state.ssz_snappy", "updates_N.ssz_snappy",

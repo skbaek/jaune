@@ -1,36 +1,46 @@
 import JauneConsensus.Sync
+import JauneConsensus.FastConfirmation
 import JauneConsensus.Harness.Discovery
 import JauneConsensus.Harness.Snappy
 import JauneConsensus.Harness.Yaml
 import JauneConsensus.Harness.ConfigOverride
 
 /-!
-# `fork_choice` and `sync` case checks (harness only)
+# The fork-choice family: `fork_choice`, `sync`, `fast_confirmation` (harness only)
 
-`tests/formats/fork_choice/README.md` and `tests/formats/sync/README.md` (`v1.7.0-beta.4`): the store is
-initialised with `get_forkchoice_store(anchor_state, anchor_block)` and the steps of
-`steps.yaml` run in order:
+`tests/formats/fork_choice/README.md`, `tests/formats/sync/README.md` and
+`tests/formats/fast_confirmation/README.md` at `v1.7.0-beta.4`. The store is
+initialised with `get_forkchoice_store(anchor_state, anchor_block)` (and, for
+`fast_confirmation`, `get_fast_confirmation_store(store)`), and the steps of `steps.yaml` run in
+order:
 
 * `tick`: `on_tick(store, seconds_to_milliseconds(tick))`;
 * `block` (with `valid`, default `true`): `on_block(store, block)`, then, when it applied,
   `on_attestation(store, a, is_from_block=True)` for each attestation of the block and
   `on_attester_slashing(store, s)` for each of its attester slashings (the format's
-  "Condition"; the pyspec helper `add_block` runs both). `blobs`/`proofs` are the values
-  `retrieve_blobs_and_proofs` returns (empty lists when absent); `columns` are the sidecars
-  `retrieve_column_sidecars` returns (an empty list when absent, a rejection when the list is
-  empty);
+  "Condition"; the pyspec helper `add_block` runs both); any rejection fails the case.
+  `blobs`/`proofs` are the values `retrieve_blobs_and_proofs` returns (empty lists when absent);
+  `columns` are the sidecars `retrieve_column_sidecars` returns (an empty list when absent, a
+  rejection when the list is empty);
 * `attestation`, `attester_slashing` (with `valid`): the handlers;
 * `block_hash` + `payload_status` (`sync` only): the mocked engine's response for that payload,
   used by the next `on_block` whose payload has that hash (`JauneConsensus/Sync.lean`);
 * `checks`: `head` (`get_head(store).root` and its slot, the optimistic head for `sync`), `time`
   and `genesis_time` (`milliseconds_to_seconds` of the store's), `justified_checkpoint`,
-  `finalized_checkpoint`, `proposer_boost_root` and `get_proposer_head` (of `get_head(store)` at
-  `get_current_slot(store)`). `should_override_forkchoice_update` left the format at
-  `v1.7.0-beta.4`.
+  `finalized_checkpoint`, `proposer_boost_root`, `get_proposer_head` (of `get_head(store)` at
+  `get_current_slot(store)`).
+  `fast_confirmation` has no explicit step for its handler: the generator runs
+  `on_fast_confirmation` and then yields a checks step carrying the fast-confirmation keys
+  (`previous_epoch_observed_justified_checkpoint`, `current_epoch_observed_justified_checkpoint`,
+  `previous_epoch_greatest_unrealized_checkpoint`, `previous_slot_head`, `current_slot_head`,
+  `confirmed_root`, `safe_execution_block_hash`), so a checks step carrying them runs
+  `on_fast_confirmation` first and then compares all its keys; a checks step carrying only some
+  of them fails the case.
 
-A step marked `valid: false` must reject, and leaves the store unchanged. Any other key fails
-the case. `bls_setting` 0 (or absent) allows BLS on or off; the handler verifies signatures
-unless `JAUNE_CONSENSUS_FC_BLS=0`.
+A step marked `valid: false` must reject, and leaves the store unchanged. Any other key fails the
+case. `bls_setting` 0 (or absent) allows BLS
+on or off; the handler verifies signatures unless `JAUNE_CONSENSUS_FC_BLS=0`; `bls_setting` 2
+(every `fast_confirmation` case) runs with BLS off.
 -/
 
 namespace JauneConsensus.Harness
@@ -95,23 +105,36 @@ private def payloadStatusOf (v : YVal) : H PayloadStatusV1 := do
     | some x => if x.isNull then pure none else some <$> rootOf "latest_valid_hash" x
   pure { status := kind, latestValidHash := lvh }
 
+/-- Which runner of the family a case belongs to. -/
+inductive FcMode
+  | forkChoice | sync | fastConfirmation
+  deriving BEq
+
 /-- The harness's state across steps: the fork-choice store, the optimistic store and the mocked
-engine's responses by payload hash (`sync` only). -/
+engine's responses by payload hash (`sync` only), and the fast-confirmation store. -/
 private structure Run (P : Preset) (f : CFork) where
   store : Store P f
   opt : OptimisticStore P f
   statuses : Std.TreeMap Hash32 PayloadStatusV1 compare
+  fcr : FastConfirmationStore P f
+
+/-- The fast-confirmation check keys. -/
+private def fcrKeys : List String :=
+  ["previous_epoch_observed_justified_checkpoint", "current_epoch_observed_justified_checkpoint",
+   "previous_epoch_greatest_unrealized_checkpoint", "previous_slot_head", "current_slot_head",
+   "confirmed_root", "safe_execution_block_hash"]
 
 /-- Run the steps of one case at preset `P`, fork `f`. -/
-private def runSteps (P : Preset) (f : CFork) (c : Case) (ctx : Ctx) (sync : Bool) :
+private def runSteps (P : Preset) (f : CFork) (c : Case) (ctx : Ctx) (mode : FcMode) :
     H Unit := do
   let cfg := ctx.cfg
+  let sync := mode == .sync
   let anchorState : BeaconState P f ← decodeFile c "anchor_state.ssz_snappy"
   let anchorBlock : BeaconBlock P f ← decodeFile c "anchor_block.ssz_snappy"
   let steps ← yamlE "steps.yaml" ((parse (← IO.FS.readBinFile (c.dir / "steps.yaml"))).bind YVal.asSeq)
   let store ← rejectE "get_forkchoice_store" (getForkchoiceStore cfg anchorState anchorBlock)
   let opt ← rejectE "get_optimistic_store" (getOptimisticStore anchorState anchorBlock)
-  let mut run : Run P f := { store, opt, statuses := ∅ }
+  let mut run : Run P f := { store, opt, statuses := ∅, fcr := getFastConfirmationStore store }
   let mut i := 0
   for s in steps do
     let here := s!"step {i}"
@@ -216,7 +239,24 @@ private def runSteps (P : Preset) (f : CFork) (c : Case) (ctx : Ctx) (sync : Boo
       run := { run with statuses := run.statuses.insert h st }
     else if keys == ["checks"] then
       let checks ← yamlE here (s.field "checks")
+      -- `on_fast_confirmation` precedes the checks step that reports it
+      let present := fcrKeys.filter (checks.keys.contains ·)
+      if !present.isEmpty then
+        if mode != .fastConfirmation then throw s!"{here}: fast-confirmation checks outside fast_confirmation"
+        if present.length != fcrKeys.length then
+          throw s!"{here}: fast-confirmation checks {present}, expected all of {fcrKeys}"
+        let fcr ← rejectE s!"{here}: on_fast_confirmation"
+          (onFastConfirmation ctx (fun _ => true) { run.fcr with store := run.store })
+        run := { run with fcr }
       let store := run.store
+      let fcr := run.fcr
+      let checkCheckpoint (k : String) (v : YVal) (got : Checkpoint) : H Unit := do
+        let want ← checkpointOf k v
+        if got != want then
+          throw s!"{here}: {k} epoch {got.epoch} root {got.root.toHex}, expected epoch {want.epoch} root {want.root.toHex}"
+      let checkRoot (k : String) (v : YVal) (got : Root) : H Unit := do
+        let want ← rootOf k v
+        if got != want then throw s!"{here}: {k} {got.toHex}, expected {want.toHex}"
       for k in checks.keys do
         let v ← yamlE here (checks.field k)
         match k with
@@ -237,29 +277,29 @@ private def runSteps (P : Preset) (f : CFork) (c : Case) (ctx : Ctx) (sync : Boo
           let want ← u64Of "genesis_time" v
           let got ← rejectE here (millisecondsToSeconds store.genesis_time_ms)
           if got != want then throw s!"{here}: genesis_time {got}, expected {want}"
-        | "justified_checkpoint" =>
-          let want ← checkpointOf k v
-          if store.justified_checkpoint != want then
-            throw s!"{here}: justified checkpoint epoch {store.justified_checkpoint.epoch} root {store.justified_checkpoint.root.toHex}, expected epoch {want.epoch} root {want.root.toHex}"
-        | "finalized_checkpoint" =>
-          let want ← checkpointOf k v
-          if store.finalized_checkpoint != want then
-            throw s!"{here}: finalized checkpoint epoch {store.finalized_checkpoint.epoch} root {store.finalized_checkpoint.root.toHex}, expected epoch {want.epoch} root {want.root.toHex}"
-        | "proposer_boost_root" =>
-          let want ← rootOf k v
-          if store.proposer_boost_root != want then
-            throw s!"{here}: proposer_boost_root {store.proposer_boost_root.toHex}, expected {want.toHex}"
+        | "justified_checkpoint" => checkCheckpoint k v store.justified_checkpoint
+        | "finalized_checkpoint" => checkCheckpoint k v store.finalized_checkpoint
+        | "proposer_boost_root" => checkRoot k v store.proposer_boost_root
         | "get_proposer_head" =>
-          let want ← rootOf k v
           let got ← rejectE s!"{here}: get_proposer_head" (do
             getProposerHead cfg store (← getHead cfg store) (← getCurrentSlot cfg store))
-          if got.root != want then
-            throw s!"{here}: get_proposer_head {got.root.toHex}, expected {want.toHex}"
+          checkRoot k v got.root
+        | "previous_epoch_observed_justified_checkpoint" =>
+          checkCheckpoint k v fcr.previous_epoch_observed_justified_checkpoint
+        | "current_epoch_observed_justified_checkpoint" =>
+          checkCheckpoint k v fcr.current_epoch_observed_justified_checkpoint
+        | "previous_epoch_greatest_unrealized_checkpoint" =>
+          checkCheckpoint k v fcr.previous_epoch_greatest_unrealized_checkpoint
+        | "previous_slot_head" => checkRoot k v fcr.previous_slot_head
+        | "current_slot_head" => checkRoot k v fcr.current_slot_head
+        | "confirmed_root" => checkRoot k v fcr.confirmed_root
+        | "safe_execution_block_hash" =>
+          checkRoot k v (← rejectE s!"{here}: get_safe_execution_block_hash" (getSafeExecutionBlockHash fcr))
         | other => throw s!"{here}: unknown check {other}"
     else throw s!"{here}: unknown step keys {keys}"
 
-/-- `fork_choice/<handler>` and `sync/optimistic`. `config` gives the case's configuration. -/
-def forkChoiceCase (config : Case → IO (Except ConfigError Config)) (sync : Bool) (c : Case) :
+/-- `fork_choice/<handler>`, `sync/optimistic` and `fast_confirmation/<handler>`. `config` gives the case's configuration. -/
+def forkChoiceCase (config : Case → IO (Except ConfigError Config)) (mode : FcMode) (c : Case) :
     IO (Except String Unit) := do
   let some P := Preset.ofName? c.preset | return .error s!"no preset {c.preset}"
   let some f := CFork.ofName? c.key.fork | return .error s!"no fork {c.key.fork}"
@@ -275,6 +315,6 @@ def forkChoiceCase (config : Case → IO (Except ConfigError Config)) (sync : Bo
     | "2" => pure false
     | s => return .error s!"bls_setting {s}"
   let ctx : Ctx := { cfg, blsActive := bls }
-  ExceptT.run (runSteps P f c ctx sync)
+  ExceptT.run (runSteps P f c ctx mode)
 
 end JauneConsensus.Harness
