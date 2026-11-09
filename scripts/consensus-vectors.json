@@ -1,0 +1,28 @@
+{
+ "release": "v1.6.1",
+ "repository": "https://github.com/ethereum/consensus-specs",
+ "tag_commit": "5fa6edcca8ab4cf548653e6680b17b9d3e04d225",
+ "published_at": "2025-11-15T13:27:52Z",
+ "licence": "CC0-1.0",
+ "digest_sources": "sha256sum on the downloaded assets (WSL, 2026-11-09), equal to the asset digests the GitHub releases API reports for the tag",
+ "tarballs": {
+  "general": {
+   "name": "general.tar.gz",
+   "url": "https://github.com/ethereum/consensus-specs/releases/download/v1.6.1/general.tar.gz",
+   "size": 169552849,
+   "sha256": "87898ba7a3fa16bc66b08c88b4ccab008833a517a7602cf421c6ce79734e07e9"
+  },
+  "minimal": {
+   "name": "minimal.tar.gz",
+   "url": "https://github.com/ethereum/consensus-specs/releases/download/v1.6.1/minimal.tar.gz",
+   "size": 467646726,
+   "sha256": "e1d0c9dc3d09fb74a98b324c40b2587a17dc555e6149d3f9741601fffcf43901"
+  },
+  "mainnet": {
+   "name": "mainnet.tar.gz",
+   "url": "https://github.com/ethereum/consensus-specs/releases/download/v1.6.1/mainnet.tar.gz",
+   "size": 678708605,
+   "sha256": "8401c58700c461154db2050c2a982af7aca259bd016c2184ec39c454edf6f1c5"
+  }
+ }
+}

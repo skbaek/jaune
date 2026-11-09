@@ -1,0 +1,169 @@
+# Draft: the consensus layer's trust surface
+
+Draft for `TRUSTED.md`, goal `jaune-consensus-electra-fulu-v1` (outcome O8). It is kept here
+until the goal's integration report, so that it does not publish anything before then. Facts
+are as of the integration branch on 2026-11-09. Each count and claim must be rechecked on the
+final candidate.
+
+## What this part of Jaune is
+
+`JauneConsensus/` is an executable model of the Ethereum consensus layer for Electra and Fulu.
+It is transcribed from `ethereum/consensus-specs` release `v1.6.1`
+(tag commit `5fa6edcca8ab4cf548653e6680b17b9d3e04d225`, licence CC0-1.0). It is a separate
+library target. Blanc does not build it, and the execution layer does not import it.
+
+The claim is about tests, not proofs. The model passes the release's official test vectors. That
+is evidence that the Lean matches the Python specification on those cases. It is not a proof that
+they agree.
+
+## The kernel and the base
+
+- Pure Lean. There is no `@[extern]`, `opaque`, `partial`, `unsafe`, `native_decide`, `panic` or
+  `sorry` in `JauneConsensus/`. There is no foreign code and no FFI.
+- The hygiene and integrity gates scan `JauneConsensus/` with no allowlist rows. Integrity rule
+  R5 bars defaulted reads and raw `UInt64` in the spec layer. Three places are exempt: the
+  checked-integer module `UInt.lean`, the harness `Harness/`, and the byte and word primitives
+  `Crypto/`.
+- The axioms are the three standard ones. The evidence is the union walk over
+  `ConsensusAssurance`, not `#print axioms`.
+
+## Failure fidelity
+
+- Every pyspec failure is a typed rejection (`Reject`). This covers an `assert`, an index out of
+  range, `uint64` overflow and underflow, division by zero, a list limit, an SSZ decoding error and
+  a cryptographic check.
+- `uint64` values are `U64`. `U64` has no wrapping operators. Arithmetic goes through checked
+  operations, which reject exactly where remerkleable raises.
+- Where pyspec computes in Python `int`, the model uses `Nat`, and the site says so. A Python
+  `int` that meets a `uint64` becomes `uint64` (remerkleable's reflected operators): `sum()` of
+  `Gwei` values, and an `int` accumulator such as `proposer_reward_numerator = 0` after its first
+  `+=`, are checked `U64` sums.
+- Python's `and`, `or`, chained comparisons and `elif` evaluate lazily. The model keeps every
+  fallible operation on the right of one inside the branch that pyspec evaluates
+  (`check-integrity.sh` R6 rejects nested actions in term-level `if` branches).
+- **Residual divergence: bounded sampling loops.** `compute_proposer_index` and both
+  `get_next_sync_committee_indices` (Altair and Electra) are unbounded rejection-sampling loops
+  in pyspec. The model runs them for `SAMPLING_FUEL = 2^28` iterations (`Accessors.lean`) and
+  rejects if that is exhausted, where pyspec would keep drawing. The worst case is every
+  candidate at effective balance 0, where a draw accepts only on a zero random value
+  (probability `2^-16` per draw from Electra, `2^-8` before). Taking the hash as a random
+  oracle, the probability of exhaustion is below `e^-4096` for one acceptance and below
+  `e^-1568` for 512, so the model differs from pyspec only with negligible probability.
+
+## Primitives reused from Jaune
+
+- SHA-256 is Jaune's `Bytes.sha256`. `Bytes.sha256_eq_fips` proves it equal to FIPS 180-4.
+  The merkleization fast path `Crypto/Sha256Pair.lean` `hashPair` is proved equal to
+  `Bytes.sha256` of the 64-byte concatenation (`hashPair_eq`).
+- The BLS12-381 field, curve and pairing come from `Jaune/BLS.lean` and `Jaune/BLSConst.lean`.
+  There is no second implementation of SHA-256, Keccak or BLS12-381.
+
+## What is checked only by testing
+
+These facts are differential checks, not theorems. They hold on the inputs tested, and nothing
+more is claimed.
+
+- The final exponentiation (`Crypto/FinalExp.lean`) uses a Frobenius map. That `frob x = x^p`,
+  and that the split exponentiation equals `x ^ blsFinalExponent`, are checked by `#guard`s on
+  Miller-loop values of several point pairs. They are not proved: Jaune's `GaloisField` has no
+  field-theory lemmas. The exponent identities themselves are kernel-checked.
+- KZG and the EIP-7594 cell functions are checked against the official `kzg` vectors and against
+  Jaune's own `verifyKzgProofImpl`.
+- RFC 9380 hash-to-curve and the signature ciphersuite are checked against RFC appendix vectors
+  and the official `bls` vectors. (Worker B's branch; confirm on the candidate.)
+
+## The KZG trusted setup
+
+- The setup is `presets/mainnet/trusted_setups/trusted_setup_4096.json` from the pinned release.
+  The minimal preset's copy is byte-identical. Its SHA-256 is
+  `f8e44a31ebf0a6d0734dcb301b0716e2c77f3ae18ed0cab0870fbcc2ca55616f`.
+- `scripts/consensus-trusted-setup-generate.py` writes `Crypto/TrustedSetup.lean` from that file.
+  It refuses any other digest and checks the entry counts and encodings. `--check` fails unless
+  the committed file is what the generator writes. The file is never edited by hand.
+- The setup points are decoded without a subgroup check. The decoder still rejects points that
+  are not on the curve. The pinned digest is what vouches for subgroup membership; no Lean check
+  does. This is a trusted input, like the setup itself.
+
+## Presets and configuration
+
+- `Preset.lean` and `Config.lean` are generated by `scripts/consensus-preset-generate.py` from the
+  pinned release's `presets/` and `configs/` files, for phase0 through Fulu. The generator refuses
+  a checkout that is not at the tag commit, and `--check` fails on any drift.
+- Variables that no phase0 to Fulu specification file mentions are left out of `Config`. These
+  are the Gloas and feature-fork versions, epochs and timings. The generated header lists them.
+
+## Fork choice and optimistic sync
+
+- `JauneConsensus/ForkChoice.lean` and `Sync.lean` are pure functions of their inputs. The
+  `Store` is a value over `Std.TreeMap`/`Std.TreeSet`. A rejected handler returns no store, so an
+  invalid call leaves the caller's store unchanged, as the specification requires. Pyspec's own
+  `on_attestation` can add a checkpoint state before it fails a later assert; the model does not.
+- The implementation-dependent inputs are parameters, not code: `retrieve_blobs_and_proofs`
+  and `retrieve_column_sidecars` (`DataOracle`), `validator_is_connected`, and the execution
+  engine's `PayloadStatusV1` responses in the `sync` model. The harness supplies them from
+  the vector files.
+- **Cyclic-chain divergence.** `get_ancestor`, `filter_block_tree`, `get_head`,
+  `latest_verified_ancestor` and the descendant walks in `Sync.lean` follow parent links. Python
+  bounds these only by the shape of the block tree. The model bounds each by the number of stored
+  blocks plus one, which a walk over distinct blocks never uses up. Running out of steps rejects.
+  That can happen only if the parent relation has a cycle, which would need a hash collision.
+  There, Python recurses until `RecursionError` (`get_ancestor`, `filter_block_tree`) or loops
+  forever (`get_head`). Python's recursion limit (about 1,000 frames) is not modelled. A chain
+  deeper than that raises in pyspec and does not raise in the model. No vector comes near either
+  case.
+- The optimistic head is LMD-GHOST with `INVALIDATED` blocks left out of the tree. The
+  specification describes this in prose. The function is the one in pyspec's test helper
+  `get_opt_head_block_root`.
+
+## Vector provenance
+
+- `scripts/consensus-vectors.json` pins the three release tarballs (`general`, `minimal`,
+  `mainnet`) by name, size and SHA-256.
+- `scripts/consensus-vector-inventory.py` streams the tarballs, checks their digests, and writes
+  `scripts/consensus/inventory-v1.6.1.json`. That file records:
+  - every case's count, by preset, fork, runner, handler and suite;
+  - for every in-scope suite, the SHA-256 of its case names and of its file paths;
+  - its `bls_setting` histogram;
+  - its per-case `config.yaml` set.
+- `scripts/consensus-verify-tree.py` compares an extracted tree, file by file, with the
+  digest-checked tarballs: same size, same SHA-256, nothing extra. Run it once per extraction.
+- No vector is ever edited. Where a vector disagrees with the specification text, the vector's
+  tag is followed and the disagreement is recorded.
+
+## The harness boundary
+
+The harness is `JauneConsensus/Harness/` and `ConsensusMain.lean` (`lake exe jaune-consensus`).
+It reads vectors. It defines no consensus behaviour, and its outputs are evidence only through
+the checks below.
+
+- It has its own Snappy raw-block decoder and YAML-subset reader, both pure Lean and fail-closed.
+  Every in-scope `.ssz_snappy` and `.yaml` file decodes. The 48 `ssz_generic/uints/valid` cases
+  check the Snappy decoder independently.
+- Before running a selection, the runner checks it against the inventory: case counts, the names
+  and file-path digests, `bls_setting` and the `config.yaml` set. It refuses an empty selection,
+  a missing or extra case or file, and any mismatch.
+- The runner checks names. Contents are vouched for by the tarball digests together with
+  `consensus-verify-tree.py`.
+- Verdicts are strict all-PASS. A runner or handler without an implementation fails; nothing is
+  skipped. There is no expected-failure list.
+- Gloas and the `eip7805` feature fork are refused by name. `CFork.rules?` resolves Gloas to
+  nothing, so nothing falls back to Fulu.
+- Caches live only in the harness, never in the semantics.
+
+## What is evidence and what is not
+
+- Evidence: the official vectors, run through the runner on a tree that matches the pins, with
+  every selected case passing.
+- Not evidence: pyspec or another implementation run locally as a differential oracle. These may
+  be used while debugging. No client source and no Etheorem source was read or transcribed.
+- Not claimed: anything about a client, any fork other than Electra and Fulu (Deneb only as
+  Electra's pre-fork side), cross-layer theorems, or performance at real mainnet state scale.
+
+## The cross-layer fork pairing
+
+- The pairing is: Electra with Prague; Fulu with Osaka, BPO1 and BPO2; Gloas with Amsterdam
+  (declared, refused); Deneb with Cancun.
+- `decide` proves three ties against Jaune's rule data: the blob ceilings, the request types, and
+  the pairing with its inverse.
+- `ExecutionRequestsList`, the result type of `get_execution_requests_list`, is `List Bytes`. That
+  is the type Jaune's `computeRequestsHash` takes, so a later seam goal needs no conversion.

@@ -45,3 +45,41 @@ Exact axiom expectations for the canonical execution surface
 lean_lib «Assurance» where
   srcDir := "scripts"
   roots := #[`AxiomAudit, `ExecutionAxioms, `JauneUnionAxioms, `UnionAxiomsControls, `UnionAxiomsFixture.Good, `UnionAxiomsFixture.Bad, `UnionAxiomsFixture.Dep, `UnionAxiomsFixture.ViaDep]
+
+/--
+Consensus layer (goal `jaune-consensus-electra-fulu-v1`): an executable Electra and Fulu
+beacon-chain specification. It lives outside `Jaune/` so that Blanc, whose build needs only
+`jaune/Assurance`, does not build it; `JauneUnionAxioms` covers `Jaune/` only.
+-/
+@[default_target]
+lean_lib «JauneConsensus» where
+
+/-- The consensus conformance runner (`ConsensusMain.lean`): strict, count-checked runs of the
+pinned `v1.6.1` vectors, and the cross-layer fork pairing printer (`--forks`). -/
+@[default_target]
+lean_exe «jaune-consensus» where
+  root := `ConsensusMain
+
+/--
+Whole-library axiom union for the consensus layer (`scripts/ConsensusUnionAxioms.lean`).
+Separate from `Assurance`, which Blanc builds in full, so Blanc's build does not grow.
+-/
+@[default_target]
+lean_lib «ConsensusAssurance» where
+  srcDir := "scripts"
+  roots := #[`ConsensusUnionAxioms]
+
+/-- Timing probe for the consensus BLS primitives (pairing, map-to-curve, hash-to-curve).
+Not a default target. -/
+lean_exe «jaune-consensus-bls-bench» where
+  root := `ConsensusBLSBench
+
+/-- Differential tool for the general-preset `kzg` vectors (the spec-shaped cell paths and
+Jaune's `verifyKzgProof`); the catalogue gate is `jaune-consensus run --runner kzg`. Not a
+default target. -/
+lean_exe «jaune-consensus-kzg-vectors» where
+  root := `ConsensusKZGVectors
+
+/-- Timing probe for the consensus state transition. Not a default target. -/
+lean_exe «jaune-consensus-transition-bench» where
+  root := `ConsensusTransitionBench

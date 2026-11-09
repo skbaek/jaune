@@ -3,7 +3,8 @@
 #
 # Fails if any forbidden pattern appears in the scanned source that is not
 # recorded in the committed allowlist scripts/hygiene-allow.txt. The scanned
-# source is every `*.lean` under Jaune/ and Examples/, plus their roots and MemoryProbe.lean,
+# source is every `*.lean` under Jaune/, Examples/ and JauneConsensus/ (the consensus layer,
+# goal jaune-consensus-electra-fulu-v1), plus their roots, ConsensusMain.lean and MemoryProbe.lean,
 # which is a tracked Lean executable built by the ordinary `lake build` and is
 # therefore part of the surface this gate defends; it was outside the scan
 # until the memory-closure repair brought it in. Forbidden patterns:
@@ -78,12 +79,12 @@ set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
-SRC_DIRS="Jaune Examples"
+SRC_DIRS="Jaune Examples JauneConsensus"
 # Tracked Lean sources outside SRC_DIR that are nonetheless part of the scanned
 # surface. MemoryProbe.lean is the bounded memory regression's executable: it is
 # built by `lake build` and asserted by scripts/check-memory-probe.sh, so it is
 # scanned here rather than left as the one Lean file nothing looks at.
-EXTRA_SRC="Jaune.lean Examples.lean MemoryProbe.lean scripts/consumer/Consumer.lean"
+EXTRA_SRC="Jaune.lean Examples.lean MemoryProbe.lean scripts/consumer/Consumer.lean JauneConsensus.lean ConsensusMain.lean ConsensusBLSBench.lean ConsensusKZGVectors.lean"
 SCAN_LABEL="$SRC_DIRS trees + $EXTRA_SRC"
 ALLOW="$SCRIPT_DIR/hygiene-allow.txt"
 

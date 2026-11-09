@@ -59,6 +59,25 @@ class UnionCoverageTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'missing Jaune source'):
             MODULE.check_union_coverage(self.root)
 
+    def test_current_consensus_tree_is_covered(self):
+        self.assertEqual(
+            MODULE.check_union_coverage(ROOT, prefix='JauneConsensus',
+                                        union='ConsensusUnionAxioms.lean'),
+            1 + len(list((ROOT / 'JauneConsensus').rglob('*.lean'))))
+
+    def test_consensus_new_module_is_detected(self):
+        (self.root / 'JauneConsensus').mkdir()
+        self.write('JauneConsensus.lean', 'import JauneConsensus.SSZ\n')
+        self.write('JauneConsensus/SSZ.lean', 'import Jaune.Core\n')
+        self.write('JauneConsensus/New.lean', 'import Init\n')
+        self.write('scripts/ConsensusUnionAxioms.lean',
+                   'import AxiomAudit\nimport JauneConsensus\n')
+        with self.assertRaisesRegex(ValueError, 'outside whole-library.*JauneConsensus.New'):
+            MODULE.check_union_coverage(self.root, prefix='JauneConsensus',
+                                        union='ConsensusUnionAxioms.lean')
+        # the execution-layer check is unaffected by the consensus tree
+        self.assertEqual(MODULE.check_union_coverage(self.root), 3)
+
 
 if __name__ == '__main__':
     unittest.main()
