@@ -76,3 +76,9 @@ import JauneConsensus.GloasOps
 import JauneConsensus.GloasMutators
 import JauneConsensus.GloasEpochAccessors
 import JauneConsensus.GloasEpoch
+import JauneConsensus.GossipCore
+import JauneConsensus.Gossip
+import JauneConsensus.GloasGossip
+import JauneConsensus.Harness.GossipCases
+import JauneConsensus.Harness.GossipStoreFree
+import JauneConsensus.Harness.GossipTable

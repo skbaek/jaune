@@ -102,7 +102,20 @@ def runnerFileKinds : String → List String
      "update_0xH_sf.ssz_snappy", "update_0xH_sx.ssz_snappy", "update_0xH_xf.ssz_snappy",
      "update_0xH_xx.ssz_snappy"]
   | "merkle_proof" => ["object.ssz_snappy", "proof.yaml"]
-  | "networking" => ["meta.yaml"]
+  | "networking" =>
+    ["meta.yaml",
+     -- `gossip_*` (`tests/formats/networking/gossip_validation.md`; the message prefixes are
+     -- read from the `v1.7.0-beta.4` vectors, `Harness/GossipTable.lean`)
+     "state.ssz_snappy", "config.yaml", "block_0xH.ssz_snappy",
+     "proposer_slashing_0xH.ssz_snappy", "attester_slashing_0xH.ssz_snappy",
+     "voluntary_exit_0xH.ssz_snappy", "bls_to_execution_change_0xH.ssz_snappy",
+     "sync_committee_message_0xH.ssz_snappy", "contribution_0xH.ssz_snappy",
+     "single_attestation_0xH.ssz_snappy", "aggregate_0xH.ssz_snappy",
+     "blob_sidecar_0xH.ssz_snappy", "data_column_sidecar_0xH.ssz_snappy",
+     "partial_data_column_group_id_0xH.ssz_snappy", "partial_data_column_header_0xH.ssz_snappy",
+     "partial_data_column_sidecar_0xH.ssz_snappy", "execution_payload_bid_0xH.ssz_snappy",
+     "execution_payload_envelope_0xH.ssz_snappy", "payload_attestation_message_0xH.ssz_snappy",
+     "proposer_preferences_0xH.ssz_snappy"]
   | _ => []
 
 /-! ## Refused forks -/
@@ -113,9 +126,10 @@ def containerOnlyRunners : List String := ["ssz_static"]
 
 /-- The runners admitted at Gloas: the container-only runners, and the runners whose Gloas
 semantics exist (goal `eip8282-gloas-cross-layer-v1`, U3: `epoch_processing` over
-`JauneConsensus/GloasEpoch.lean`, `rewards` over `GloasEpochAccessors.lean`). Every other runner
-still refuses Gloas. -/
-def gloasRunners : List String := containerOnlyRunners ++ ["epoch_processing", "rewards"]
+`JauneConsensus/GloasEpoch.lean`, `rewards` over `GloasEpochAccessors.lean`; U7a: `networking`,
+whose custody helpers are fork-independent and whose `gossip_*` handlers dispatch by fork in
+`Harness/GossipTable.lean`). Every other runner still refuses Gloas. -/
+def gloasRunners : List String := containerOnlyRunners ++ ["epoch_processing", "rewards", "networking"]
 
 /-- Why a fork directory is refused by name for a runner (`none`: any runner), if it is. Gloas is
 a declared `CFork` whose rules do not resolve (`CFork.resolve` gives `notImplemented`); it is
@@ -138,6 +152,7 @@ def forkRefusal? (f : String) (runner : Option String := none) : Option ForkRefu
 #guard (forkRefusal? "gloas" (some "epoch_processing")).isNone
 #guard (forkRefusal? "gloas" (some "rewards")).isNone
 #guard (forkRefusal? "gloas" (some "sanity")).isSome
+#guard (forkRefusal? "gloas" (some "networking")).isNone
 #guard (forkRefusal? "eip7805" (some "ssz_static")).isSome
 #guard (forkRefusal? "fulu").isNone
 #guard (forkRefusal? "electra").isNone

@@ -1,6 +1,7 @@
 import JauneConsensus.DAS
 import JauneConsensus.Harness.Discovery
 import JauneConsensus.Harness.Yaml
+import JauneConsensus.Harness.GossipTable
 
 /-!
 # `networking` case checks (harness only)
@@ -8,6 +9,10 @@ import JauneConsensus.Harness.Yaml
 `tests/formats/networking/` (`consensus-specs` `v1.6.1`): `meta.yaml` holds the arguments and
 the expected `result`; the helper's output must equal it exactly (as a list). A missing
 `result` would mean the call must reject; the `v1.6.1` vectors always carry one.
+
+The `gossip_*` handlers (`v1.7.0-beta.4`, `tests/formats/networking/gossip_validation.md`) go to
+the gossip driver (`Harness/GossipCases.lean`) through the handler table
+(`Harness/GossipTable.lean`).
 -/
 
 namespace JauneConsensus.Harness
@@ -21,6 +26,7 @@ private def nat (v : YVal) (k : String) : Except String Nat :=
 
 /-- Run a `networking/<handler>` case under `cfg` at preset `P`. -/
 def networkingCase (cfg : Config) (c : Case) : IO (Except String Unit) := do
+  if c.key.handler.startsWith "gossip_" then return ← gossipCase gossipHandlers cfg c
   let some P := Preset.ofName? c.preset | return .error s!"no preset {c.preset}"
   if c.files != ["meta.yaml"] then return .error s!"unexpected files {c.files}"
   let doc := (parse (← IO.FS.readBinFile (c.dir / "meta.yaml"))).mapError toString
