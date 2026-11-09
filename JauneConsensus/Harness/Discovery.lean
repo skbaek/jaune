@@ -10,8 +10,10 @@ Layout (`tests/formats/README.md` at the pin):
 
 A selection names a preset and optionally a fork, runner, handler and suite. Discovery
 
-1. refuses Gloas (through the single resolver `CFork.rules?`) and the `eip7805` feature fork
-   by name (`forkRefusal?`), and any selection naming no in-scope suite;
+1. refuses Gloas (through the single resolver `CFork.rules?`) for every runner but
+   `ssz_static`, and the `eip7805` feature fork, by name (`forkRefusal?`), and any selection
+   naming no in-scope suite. Gloas `ssz_static` only decodes, re-encodes and hashes the Gloas
+   containers; no Gloas rule runs, and `--fork-rules gloas` still refuses;
 2. walks the in-scope part of the tree under the selection and compares it to the manifest: a
    selected suite missing on disk, or present on disk without a record, is refused;
 3. for every selected suite checks the case count (manifest and inventory), the digest of the
@@ -103,21 +105,29 @@ def runnerFileKinds : String → List String
 
 /-! ## Refused forks -/
 
-/-- Why a fork directory is refused by name, if it is. Gloas is a declared `CFork` whose rules do
-not resolve (`CFork.resolve` gives `notImplemented`); `eip7805` is a feature-fork directory of the
-`v1.6.1` vectors with no `CFork` value (`unknown`). Both fail closed; neither is ever run as Fulu.
-Other directory names that are not `CFork`s (`phase0`, `altair`, ... where formats were
-introduced) are not refused here: the scope rule decides them. -/
-def forkRefusal? (f : String) : Option ForkRefusal :=
+/-- The runners whose cases need no fork rules: they only decode, re-encode and hash containers,
+so a fork whose rules do not resolve (Gloas) is accepted for them. -/
+def containerOnlyRunners : List String := ["ssz_static"]
+
+/-- Why a fork directory is refused by name for a runner (`none`: any runner), if it is. Gloas is
+a declared `CFork` whose rules do not resolve (`CFork.resolve` gives `notImplemented`); it is
+accepted only for a container-only runner (`containerOnlyRunners`). `eip7805` is a feature-fork
+directory of the `v1.6.1` vectors with no `CFork` value (`unknown`). Both fail closed otherwise;
+neither is ever run as Fulu. Other directory names that are not `CFork`s (`phase0`, `altair`,
+... where formats were introduced) are not refused here: the scope rule decides them. -/
+def forkRefusal? (f : String) (runner : Option String := none) : Option ForkRefusal :=
   if f == "eip7805" then some (.unknown f)
   else match CFork.ofName? f with
-    | some _ => match CFork.resolve f with
-      | .error e => some e
+    | some c => match CFork.resolve f with
+      | .error e =>
+        if c == .gloas && runner.any containerOnlyRunners.contains then none else some e
       | .ok _ => none
     | none => none
 
 #guard (forkRefusal? "gloas").isSome
-#guard (forkRefusal? "eip7805").isSome
+#guard (forkRefusal? "gloas" (some "operations")).isSome
+#guard (forkRefusal? "gloas" (some "ssz_static")).isNone
+#guard (forkRefusal? "eip7805" (some "ssz_static")).isSome
 #guard (forkRefusal? "fulu").isNone
 #guard (forkRefusal? "electra").isNone
 #guard (forkRefusal? "phase0").isNone
@@ -212,7 +222,7 @@ def discover (m : Manifest) (sel : Selection) : IO (List Case) := do
   if !presets.contains sel.preset then
     throw (IO.userError s!"refused: unknown preset {sel.preset}")
   if let some f := sel.fork then
-    if let some why := forkRefusal? f then throw (IO.userError (toString why))
+    if let some why := forkRefusal? f sel.runner then throw (IO.userError (toString why))
   -- in-scope suites of the manifest under the selection
   let wanted := m.suites.filter fun (p, k, _, _) =>
     p == sel.preset && matches? sel.fork k.fork && matches? sel.runner k.runner &&
@@ -226,7 +236,7 @@ def discover (m : Manifest) (sel : Selection) : IO (List Case) := do
     if !matches? sel.fork fork then continue
     for runner in ← listDir (base / fork) true true do
       if !matches? sel.runner runner || !inScope sel.preset fork runner then continue
-      if let some why := forkRefusal? fork then throw (IO.userError (toString why))
+      if let some why := forkRefusal? fork (some runner) then throw (IO.userError (toString why))
       for handler in ← listDir (base / fork / runner) true true do
         if !matches? sel.handler handler then continue
         for suite in ← listDir (base / fork / runner / handler) true true do

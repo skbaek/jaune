@@ -540,7 +540,7 @@ under 200 MB.
 | gate | proves | scale | time |
 |---|---|---|---|
 | `.lake/build/bin/jaune-consensus run --preset general --runner ssz_generic` | each `valid` case decodes, equals `value.yaml`, re-encodes to `serialized` and has the `meta.yaml` root; each `invalid` case fails to decode (`Harness/SszGeneric.lean`), strict all-PASS, after the tree check below | 5,145 phase0 cases (2,708 valid, 2,437 invalid, 10 handlers) | 147.7 s (closure tier, both forks, BLS on, eight runners concurrent (WSL, 2026-11-09, binary 5c1992d)) |
-| `.lake/build/bin/jaune-consensus run --preset P --fork F --runner ssz_static` | each case's `serialized` decodes to the container at the case's preset and fork, re-encodes to itself, equals `value.yaml` and has the `roots.yaml` root (`Harness/SszStatic.lean`), strict all-PASS, after the tree check below | minimal 6,888 + 7,257; mainnet 280 + 295 (Electra + Fulu) | minimal 80.4 s, mainnet 29.2 s (closure tier, both forks, BLS on, eight runners concurrent (WSL, 2026-11-09, binary 5c1992d)) |
+| `.lake/build/bin/jaune-consensus run --preset P --fork F --runner ssz_static` | each case's `serialized` decodes to the container at the case's preset and fork, re-encodes to itself, equals `value.yaml` and has the `roots.yaml` root (`Harness/SszStatic.lean`), strict all-PASS, after the tree check below. `F` is `electra`, `fulu` or `gloas`: Gloas is accepted for this container-only runner alone (`containerOnlyRunners`), with the Gloas containers of `JauneConsensus/ContainersGloas.lean` (EIP-7688 progressive containers and lists, on `eth-ssz-specs==0.1.0`'s right-leaning `merkleize_progressive`; `SSZ/Progressive.lean` keeps `v1.6.1`'s left-leaning one for `ssz_generic`). Control (2026-11-10): see the Gloas `ssz_static` paragraph below the table | `v1.7.0-beta.4`: minimal 6,765 + 7,380 + 8,979, mainnet 275 + 300 + 365 (Electra + Fulu + Gloas; Gloas 73 types) | minimal 22.3 s / 27.2 s / 14.9 s, mainnet 9.8 s / 9.5 s / 8.4 s (Electra / Fulu / Gloas, one process at a time, WSL, 2026-11-10) |
 | `.lake/build/bin/jaune-consensus run --preset minimal --runner shuffling` / `--preset mainnet` | `compute_shuffled_index` for every index of every case, strict all-PASS, after the tree check below | 300 + 300 cases | 16.1 s / 145.3 s (WSL, 2026-11-09; 17.7 s / 155.6 s after the move to checked `U64`) |
 | `.lake/build/bin/jaune-consensus run --preset general --runner bls` | `eth_aggregate_pubkeys`: `input` aggregates to `output` (`null` exactly where the model raises); `eth_fast_aggregate_verify`: the verification bit equals `output` (`Harness/Runner.lean`), strict all-PASS, after the tree check below | 20 cases (8 + 12) | 1.9 s (closure tier, both forks, BLS on, eight runners concurrent (WSL, 2026-11-09, binary 5c1992d)) |
 | `.lake/build/bin/jaune-consensus scan --preset general` / `minimal` / `mainnet` | the tree check over every in-scope suite, then the readers: every `.ssz_snappy` decodes, every `.yaml` is inside the accepted subset, and the 48 `ssz_generic/uints/valid` serializations decode to the little-endian encoding of their `value.yaml` (an independent oracle for the Snappy decoder) | 5,509 / 16,126 / 2,340 cases; 41,591 Snappy and 37,300 YAML files | 17.0 s / 8.8 s / 29.6 s |
@@ -576,8 +576,9 @@ against the runner's known kinds (`runnerFileKinds`, including Fulu fork-choice
 `column_0x<root>.ssz_snappy`); and, from `v1.7.0-beta.4` on, each case's `manifest.yaml`, whose
 `preset`, `fork`, `runner`, `handler`, `suite` and `case` must equal the case's location (its
 presence is pinned by the file-path digest). It refuses an empty selection, a suite missing from the tree or
-present without a record, `--fork gloas` (through `CFork.rules?`, which resolves Gloas to
-nothing) and `--fork eip7805`. A `(runner, handler)` with no handler is a FAIL
+present without a record, `--fork gloas` for every runner but `ssz_static` (through
+`CFork.rules?`, which resolves Gloas to nothing; `ssz_static` only decodes, re-encodes and hashes
+containers) and `--fork eip7805`. A `(runner, handler)` with no handler is a FAIL
 (`UNIMPLEMENTED`), never a skip. `--tier smoke` executes the first case of each suite.
 
 A case's `config.yaml` (10 minimal light-client cases) is applied over its preset's base
@@ -604,6 +605,17 @@ the committed bytes and 300/300. Epoch: minimal `MIN_PER_EPOCH_CHURN_LIMIT_ELECT
 cases by name (`pending_deposits/process_pending_deposits_withdrawable_validator_not_churned` at
 `deposit_balance_to_consume`; five `registry_updates` cases, among them `ejection` and
 `ejection_past_churn_limit_min`, at `exit_balance_to_consume`); regenerating restores 155/155.
+Gloas `ssz_static` (2026-11-10, reverted, restored bytes identical by SHA-256): changing the
+Gloas `ExecutionRequests` layout from `active_fields(width=5)` to width 6 with a gap at 4
+(`[1, 1, 1, 1, 0, 1]`, same fields, same serialization) in `JauneConsensus/ContainersGloas.lean`
+fails 861 of 8,979 minimal Gloas cases, all at the root check (`hash_tree_root differs from
+meta.yaml root`): every case of `ExecutionRequests` and of the six containers that hold it
+(`ExecutionPayloadEnvelope`, `SignedExecutionPayloadEnvelope`, `NewPayloadRequest`,
+`BeaconBlockBody`, `BeaconBlock`, `SignedBeaconBlock`), 123 each, for example
+`ExecutionRequests/ssz_lengthy/case_0`; restoring gives 8,979/8,979. During the port, the
+`v1.6.1` left-leaning `merkleize_progressive` failed all 141 smoke cases of the 21 Gloas types
+with a progressive list or container at the root check, which is how the `eth-ssz-specs`
+revision was found.
 
 ### Environment and provenance
 

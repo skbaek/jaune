@@ -5,7 +5,9 @@ import JauneConsensus.Fork
 /-!
 # Consensus containers, Deneb to Fulu
 
-The SSZ containers of `ethereum/consensus-specs` `v1.6.1` that the Electra and Fulu vectors use,
+The SSZ containers of `ethereum/consensus-specs` (`v1.6.1`, and `v1.7.0-beta.4` for
+`SszNewPayloadRequest` and the Fulu partial-column containers) that the Electra and Fulu vectors
+use,
 each declared once and indexed by the preset `P` (list and vector sizes) and, where the type
 changed between forks, by the fork `f : CFork`:
 
@@ -421,6 +423,17 @@ ssz_container SingleAttestation where
   data : AttestationData
   signature : BLSSignature
 
+/-- `NewPayloadRequest` (`specs/electra/beacon-chain.md`), the SSZ container of the
+`ssz_static` vectors from `v1.7.0-beta.4` on; named `SszNewPayloadRequest` because
+`JauneConsensus.NewPayloadRequest` (`Engine.lean`) is the engine-facing form with the requests
+already listed. `versioned_hashes` is Deneb's `VersionedHashes`
+(`List[VersionedHash, MAX_BLOB_COMMITMENTS_PER_BLOCK]`). -/
+ssz_container SszNewPayloadRequest (P : Preset) where
+  execution_payload : (ExecutionPayload P)
+  versioned_hashes : (SszList Bytes32 P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
+  parent_beacon_block_root : Root
+  execution_requests : (ExecutionRequests P)
+
 /-! ## Blocks -/
 
 /-- `specs/electra/beacon-chain.md` (`BeaconBlockBody`); the Deneb body
@@ -566,5 +579,30 @@ ssz_container MatrixEntry (P : Preset) where
 ssz_container DataColumnsByRootIdentifier (P : Preset) where
   block_root : Root
   columns : (SszList ColumnIndex P.NUMBER_OF_COLUMNS)
+
+/-- `specs/fulu/partial-columns/p2p-interface.md` (`v1.7.0-beta.4`): `kzg_commitments` is
+`BlobKZGCommitments`, `kzg_commitments_inclusion_proof` is `KZGCommitmentsInclusionProof`. -/
+ssz_container PartialDataColumnHeader (P : Preset) where
+  kzg_commitments : (SszList KZGCommitment P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
+  signed_block_header : SignedBeaconBlockHeader
+  kzg_commitments_inclusion_proof : (SszVector Bytes32 P.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH)
+
+/-- `specs/fulu/partial-columns/p2p-interface.md`: `CellsBitList` is
+`BitList[MAX_BLOB_COMMITMENTS_PER_BLOCK]`, `DataColumn` and `KZGProofs` are lists of that limit,
+and `header` is `OptionalPartialDataColumnHeader` (`List[PartialDataColumnHeader, 1]`). -/
+ssz_container PartialDataColumnSidecar (P : Preset) where
+  cells_present_bitmap : (Bitlist P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
+  partial_column : (SszList (Cell P) P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
+  kzg_proofs : (SszList KZGProof P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
+  header : (SszList (PartialDataColumnHeader P) 1)
+
+/-- `specs/fulu/partial-columns/p2p-interface.md` -/
+ssz_container PartialDataColumnPartsMetadata (P : Preset) where
+  available : (Bitlist P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
+  requests : (Bitlist P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
+
+/-- `specs/fulu/partial-columns/p2p-interface.md` -/
+ssz_container PartialDataColumnGroupID where
+  beacon_block_root : Root
 
 end JauneConsensus

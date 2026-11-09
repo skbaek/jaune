@@ -1,4 +1,5 @@
 import JauneConsensus.Containers
+import JauneConsensus.ContainersGloas
 import JauneConsensus.Harness.SszGeneric
 
 /-!
@@ -72,9 +73,101 @@ yaml_container LightClientOptimisticUpdate (P : Preset) [attested_header, sync_a
 yaml_container DataColumnSidecar (P : Preset) [index, column, kzg_commitments, kzg_proofs, signed_block_header, kzg_commitments_inclusion_proof]
 yaml_container MatrixEntry (P : Preset) [cell, kzg_proof, column_index, row_index]
 yaml_container DataColumnsByRootIdentifier (P : Preset) [block_root, columns]
+yaml_container SszNewPayloadRequest (P : Preset) [execution_payload, versioned_hashes, parent_beacon_block_root, execution_requests]
+yaml_container PartialDataColumnHeader (P : Preset) [kzg_commitments, signed_block_header, kzg_commitments_inclusion_proof]
+yaml_container PartialDataColumnSidecar (P : Preset) [cells_present_bitmap, partial_column, kzg_proofs, header]
+yaml_container PartialDataColumnPartsMetadata (P : Preset) [available, requests]
+yaml_container PartialDataColumnGroupID [beacon_block_root]
 
-/-- The container type of an `ssz_static` handler at a preset and fork. -/
-def sszStaticChecks (P : Preset) (f : CFork) (name : String) : Option TypeChecks :=
+/-! ## Gloas (`JauneConsensus/ContainersGloas.lean`) -/
+
+yaml_container Gloas.Builder [pubkey, version, execution_address, balance, deposit_epoch, withdrawable_epoch]
+yaml_container Gloas.BuilderPendingWithdrawal [fee_recipient, amount, builder_index]
+yaml_container Gloas.BuilderPendingPayment [weight, withdrawal, proposer_index]
+yaml_container Gloas.BuilderDepositRequest [pubkey, withdrawal_credentials, amount, signature]
+yaml_container Gloas.BuilderExitRequest [source_address, pubkey]
+yaml_container Gloas.PayloadAttestationData [beacon_block_root, slot, payload_present, blob_data_available]
+yaml_container Gloas.PayloadAttestation (P : Preset) [aggregation_bits, data, signature]
+yaml_container Gloas.PayloadAttestationMessage [validator_index, data, signature]
+yaml_container Gloas.IndexedPayloadAttestation (P : Preset) [attesting_indices, data, signature]
+yaml_container Gloas.ExecutionPayloadBid [parent_block_hash, parent_block_root, block_hash, prev_randao, fee_recipient, gas_limit, builder_index, slot, value, execution_payment, blob_kzg_commitments, execution_requests_root]
+yaml_container Gloas.SignedExecutionPayloadBid [message, signature]
+yaml_container Gloas.ExecutionPayload (P : Preset) [parent_hash, fee_recipient, state_root, receipts_root, logs_bloom, prev_randao, block_number, gas_limit, gas_used, timestamp, extra_data, base_fee_per_gas, block_hash, transactions, withdrawals, blob_gas_used, excess_blob_gas, block_access_list, slot_number]
+yaml_container Gloas.ExecutionRequests [deposits, withdrawals, consolidations, builder_deposits, builder_exits]
+yaml_container Gloas.ExecutionPayloadEnvelope (P : Preset) [payload, execution_requests, builder_index, beacon_block_root, parent_beacon_block_root]
+yaml_container Gloas.SignedExecutionPayloadEnvelope (P : Preset) [message, signature]
+yaml_container Gloas.Attestation (P : Preset) [aggregation_bits, data, signature, committee_bits]
+yaml_container Gloas.IndexedAttestation [attesting_indices, data, signature]
+yaml_container Gloas.AttesterSlashing [attestation_1, attestation_2]
+yaml_container Gloas.AggregateAndProof (P : Preset) [aggregator_index, aggregate, selection_proof]
+yaml_container Gloas.SignedAggregateAndProof (P : Preset) [message, signature]
+yaml_container Gloas.BeaconBlockBody (P : Preset) [randao_reveal, eth1_data, graffiti, proposer_slashings, attester_slashings, attestations, deposits, voluntary_exits, sync_aggregate, bls_to_execution_changes, signed_execution_payload_bid, payload_attestations, parent_execution_requests]
+yaml_container Gloas.BeaconBlock (P : Preset) [slot, proposer_index, parent_root, state_root, body]
+yaml_container Gloas.SignedBeaconBlock (P : Preset) [message, signature]
+yaml_container Gloas.BeaconState (P : Preset) [genesis_time, genesis_validators_root, slot, fork, latest_block_header, block_roots, state_roots, historical_roots, eth1_data, eth1_data_votes, eth1_deposit_index, validators, balances, randao_mixes, slashings, previous_epoch_participation, current_epoch_participation, justification_bits, previous_justified_checkpoint, current_justified_checkpoint, finalized_checkpoint, inactivity_scores, current_sync_committee, next_sync_committee, latest_block_hash, next_withdrawal_index, next_withdrawal_validator_index, historical_summaries, deposit_requests_start_index, deposit_balance_to_consume, exit_balance_to_consume, earliest_exit_epoch, consolidation_balance_to_consume, earliest_consolidation_epoch, pending_deposits, pending_partial_withdrawals, pending_consolidations, proposer_lookahead, builders, next_withdrawal_builder_index, execution_payload_availability, builder_pending_payments, builder_pending_withdrawals, latest_execution_payload_bid, payload_expected_withdrawals, ptc_window]
+yaml_container Gloas.NewPayloadRequest (P : Preset) [execution_payload, versioned_hashes, parent_beacon_block_root, execution_requests]
+yaml_container Gloas.DataColumnSidecar (P : Preset) [index, column, kzg_proofs, slot, beacon_block_root]
+yaml_container Gloas.ProposerPreferences [dependent_root, proposal_slot, validator_index, fee_recipient, target_gas_limit]
+yaml_container Gloas.SignedProposerPreferences [message, signature]
+yaml_container Gloas.PartialDataColumnSidecar (P : Preset) [cells_present_bitmap, partial_column, kzg_proofs]
+yaml_container Gloas.PartialDataColumnPartsMetadata [available, requests]
+yaml_container Gloas.PartialDataColumnGroupID [beacon_block_root, slot]
+yaml_container Gloas.LightClientHeader [beacon, execution_block_hash, execution_branch]
+yaml_container Gloas.LightClientBootstrap (P : Preset) [header, current_sync_committee, current_sync_committee_branch]
+yaml_container Gloas.LightClientUpdate (P : Preset) [attested_header, next_sync_committee, next_sync_committee_branch, finalized_header, finality_branch, sync_aggregate, signature_slot]
+yaml_container Gloas.LightClientFinalityUpdate (P : Preset) [attested_header, finalized_header, finality_branch, sync_aggregate, signature_slot]
+yaml_container Gloas.LightClientOptimisticUpdate (P : Preset) [attested_header, sync_aggregate, signature_slot]
+
+/-- The Gloas types an `ssz_static` handler names: the new and modified Gloas containers
+(`ContainersGloas.lean`); `none` for the containers Gloas deprecates (`ExecutionPayloadHeader`,
+`PartialDataColumnHeader`) or that earlier releases removed; otherwise `unchanged`, the
+handler's unchanged container. -/
+def gloasStaticChecks (P : Preset) (name : String) (unchanged : Option TypeChecks) :
+    Option TypeChecks :=
+  match name with
+  | "Builder" => some (.of Gloas.Builder)
+  | "BuilderPendingWithdrawal" => some (.of Gloas.BuilderPendingWithdrawal)
+  | "BuilderPendingPayment" => some (.of Gloas.BuilderPendingPayment)
+  | "BuilderDepositRequest" => some (.of Gloas.BuilderDepositRequest)
+  | "BuilderExitRequest" => some (.of Gloas.BuilderExitRequest)
+  | "PayloadAttestationData" => some (.of Gloas.PayloadAttestationData)
+  | "PayloadAttestation" => some (.of (Gloas.PayloadAttestation P))
+  | "PayloadAttestationMessage" => some (.of Gloas.PayloadAttestationMessage)
+  | "IndexedPayloadAttestation" => some (.of (Gloas.IndexedPayloadAttestation P))
+  | "ExecutionPayloadBid" => some (.of Gloas.ExecutionPayloadBid)
+  | "SignedExecutionPayloadBid" => some (.of Gloas.SignedExecutionPayloadBid)
+  | "ExecutionPayload" => some (.of (Gloas.ExecutionPayload P))
+  | "ExecutionRequests" => some (.of Gloas.ExecutionRequests)
+  | "ExecutionPayloadEnvelope" => some (.of (Gloas.ExecutionPayloadEnvelope P))
+  | "SignedExecutionPayloadEnvelope" => some (.of (Gloas.SignedExecutionPayloadEnvelope P))
+  | "Attestation" => some (.of (Gloas.Attestation P))
+  | "IndexedAttestation" => some (.of Gloas.IndexedAttestation)
+  | "AttesterSlashing" => some (.of Gloas.AttesterSlashing)
+  | "AggregateAndProof" => some (.of (Gloas.AggregateAndProof P))
+  | "SignedAggregateAndProof" => some (.of (Gloas.SignedAggregateAndProof P))
+  | "BeaconBlockBody" => some (.of (Gloas.BeaconBlockBody P))
+  | "BeaconBlock" => some (.of (Gloas.BeaconBlock P))
+  | "SignedBeaconBlock" => some (.of (Gloas.SignedBeaconBlock P))
+  | "BeaconState" => some (.of (Gloas.BeaconState P))
+  | "NewPayloadRequest" => some (.of (Gloas.NewPayloadRequest P))
+  | "DataColumnSidecar" => some (.of (Gloas.DataColumnSidecar P))
+  | "ProposerPreferences" => some (.of Gloas.ProposerPreferences)
+  | "SignedProposerPreferences" => some (.of Gloas.SignedProposerPreferences)
+  | "PartialDataColumnSidecar" => some (.of (Gloas.PartialDataColumnSidecar P))
+  | "PartialDataColumnPartsMetadata" => some (.of Gloas.PartialDataColumnPartsMetadata)
+  | "PartialDataColumnGroupID" => some (.of Gloas.PartialDataColumnGroupID)
+  | "LightClientHeader" => some (.of Gloas.LightClientHeader)
+  | "LightClientBootstrap" => some (.of (Gloas.LightClientBootstrap P))
+  | "LightClientUpdate" => some (.of (Gloas.LightClientUpdate P))
+  | "LightClientFinalityUpdate" => some (.of (Gloas.LightClientFinalityUpdate P))
+  | "LightClientOptimisticUpdate" => some (.of (Gloas.LightClientOptimisticUpdate P))
+  | "ExecutionPayloadHeader" | "PartialDataColumnHeader" | "BlobSidecar" | "BlobIdentifier"
+  | "HistoricalBatch" | "PendingAttestation" => none
+  | _ => unchanged
+
+/-- The container type of an `ssz_static` handler at a preset and fork, Deneb to Fulu
+(`Containers.lean`). -/
+def sszStaticChecksPreGloas (P : Preset) (f : CFork) (name : String) : Option TypeChecks :=
   match name with
   | "Fork" => some (.of Fork)
   | "ForkData" => some (.of ForkData)
@@ -135,7 +228,19 @@ def sszStaticChecks (P : Preset) (f : CFork) (name : String) : Option TypeChecks
   | "DataColumnSidecar" => some (.of (DataColumnSidecar P))
   | "MatrixEntry" => some (.of (MatrixEntry P))
   | "DataColumnsByRootIdentifier" => some (.of (DataColumnsByRootIdentifier P))
+  | "NewPayloadRequest" => some (.of (SszNewPayloadRequest P))
+  | "PartialDataColumnHeader" => some (.of (PartialDataColumnHeader P))
+  | "PartialDataColumnSidecar" => some (.of (PartialDataColumnSidecar P))
+  | "PartialDataColumnPartsMetadata" => some (.of (PartialDataColumnPartsMetadata P))
+  | "PartialDataColumnGroupID" => some (.of PartialDataColumnGroupID)
 
   | _ => none
+
+/-- The container type of an `ssz_static` handler at a preset and fork. Gloas's unchanged
+containers are Fulu's. -/
+def sszStaticChecks (P : Preset) (f : CFork) (name : String) : Option TypeChecks :=
+  match f with
+  | .gloas => gloasStaticChecks P name (sszStaticChecksPreGloas P .fulu name)
+  | _ => sszStaticChecksPreGloas P f name
 
 end JauneConsensus.Harness

@@ -52,11 +52,6 @@ yaml_container VarTestStruct [A, B, C]
 yaml_container ComplexTestStruct [A, B, C, D, E, F, G]
 yaml_container BitsStruct [A, B, C, D, E]
 
-instance {α : Type} [FromYaml α] : FromYaml (ProgressiveList α) where
-  fromYaml y := do pure ⟨(← (← y.asSeq).mapM fromYaml).toArray⟩
-
-instance : FromYaml ProgressiveBitlist := ⟨fromSszHex⟩
-
 ssz_container ProgressiveTestStruct where
   A : (ProgressiveList UInt8)
   B : (ProgressiveList U64)

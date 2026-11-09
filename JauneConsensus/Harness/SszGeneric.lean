@@ -1,4 +1,5 @@
 import JauneConsensus.SSZ.Basic
+import JauneConsensus.SSZ.Progressive
 import JauneConsensus.Harness.Snappy
 import JauneConsensus.Harness.Yaml
 
@@ -89,6 +90,16 @@ def fromSszHex {α : Type} [Ssz α] (y : YVal) : Res α := do
 
 instance {n : Nat} : FromYaml (Bitvector n) := ⟨fromSszHex⟩
 instance {n : Nat} : FromYaml (Bitlist n) := ⟨fromSszHex⟩
+
+/-- `ProgressiveList[T]`: a sequence, as a list without limit. -/
+instance {s : Spine} {α : Type} [FromYaml α] : FromYaml (ProgressiveListS s α) where
+  fromYaml y := do pure ⟨(← (← y.asSeq).mapM fromYaml).toArray⟩
+
+/-- `ProgressiveList[Byte]` is given as `0x`-prefixed bytes ("JSON mapping"), like `ByteList`. -/
+instance : FromYaml ProgressiveByteList where
+  fromYaml y := do pure ⟨⟨(← y.asHex).toArray⟩⟩
+
+instance {s : Spine} : FromYaml (ProgressiveBitlistS s) := ⟨fromSszHex⟩
 
 /-- Reading one container field from a mapping. A fork-gated field that is absent at the
 case's fork must be absent from the mapping. -/

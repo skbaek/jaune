@@ -13,6 +13,7 @@ import JauneConsensus.SSZ.Container
 import JauneConsensus.SSZ.Progressive
 import JauneConsensus.SSZ.Proof
 import JauneConsensus.Containers
+import JauneConsensus.ContainersGloas
 import JauneConsensus.Signing
 import JauneConsensus.Transition
 import JauneConsensus.Upgrade
