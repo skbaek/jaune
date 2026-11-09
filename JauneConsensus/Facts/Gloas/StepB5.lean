@@ -33,6 +33,12 @@ B5(ii), provenance per step:
 * **`GStepView.debit_provenance`**: each builder debit is a pending-withdrawal prefix entry that
   is a source of the pre-state, or a withdrawable builder's own sweep to its `execution_address`.
 
+B5(iii), per step: `rotation_fate` (one epoch rotation: each previous-epoch entry is appended at
+the quorum or dropped, each current-epoch entry moves down), `parent_payments` (the settlement:
+nothing, `L`'s direct append, or one `settle_builder_payment`), and **`GStepView.payment_fate`**
+(a live entry of the window the block sees is settled, still live, cleared, or overwritten by the
+block's own bid).
+
 B5(iv), per step: `GStepView.early_return` (an EMPTY parent with `latest_block_hash != L.block_hash`
 withdraws nothing) and `GStepView.carried_withdrawals_equal` (a delivered envelope carries the
 post-block state's `payload_expected_withdrawals` as lists).
@@ -587,6 +593,89 @@ theorem srcLe_ops {s s' : Gloas.BeaconState P} (h : OpsRel s s') : SrcLe s s' :=
       · exact absurd hpos (by decide)
   · rw [c.2.1] at hv hx; exact Or.inr (Or.inr ⟨hv, hx⟩)
 
+/-! ## B5(iii): what happens to a builder payment entry -/
+
+/-- **One epoch rotation**, per entry (CL:1716-1731): an entry of the previous epoch's half has its
+withdrawal appended when its weight reaches the quorum (`quorum`) and is otherwise dropped
+(`droppedSubQuorum`); an entry of the current epoch's half moves down one epoch, unchanged. -/
+theorem rotation_fate {cfg : Config} {a b : Gloas.BeaconState P}
+    (h : Gloas.processBuilderPendingPayments cfg a = .ok b) :
+    ∃ q, Gloas.getBuilderPaymentQuorumThreshold a = .ok q ∧
+      b.builder_pending_withdrawals.toArray.toList =
+        a.builder_pending_withdrawals.toArray.toList ++
+          (((a.builder_pending_payments.toArray.extract 0 P.SLOTS_PER_EPOCH).toList.filter
+            (fun p => decide (q ≤ p.weight))).map (·.withdrawal)) ∧
+      (∀ j p, j < P.SLOTS_PER_EPOCH → a.builder_pending_payments.toArray[j]? = some p →
+        (q ≤ p.weight ∧ p.withdrawal ∈ b.builder_pending_withdrawals.toArray.toList) ∨
+        ¬ q ≤ p.weight) ∧
+      (∀ j, a.builder_pending_payments.toArray[P.SLOTS_PER_EPOCH + j]? =
+        b.builder_pending_payments.toArray[j]? ∨ P.SLOTS_PER_EPOCH ≤ j) := by
+  obtain ⟨-, q, hqh, hW, hP⟩ := processBuilderPendingPayments_frame h
+  refine ⟨q, hqh, hW, fun j p hj hp => ?_, fun j => ?_⟩
+  · by_cases hw : q ≤ p.weight
+    · refine Or.inl ⟨hw, ?_⟩
+      rw [hW, List.mem_append]
+      refine Or.inr (List.mem_map.mpr ⟨p, List.mem_filter.mpr ⟨?_, by simpa using hw⟩, rfl⟩)
+      have hsz := a.builder_pending_payments.size_eq
+      have : (a.builder_pending_payments.toArray.extract 0 P.SLOTS_PER_EPOCH)[j]? = some p := by
+        rw [Array.getElem?_extract]; simp only [Nat.zero_add]; rw [if_pos (by simp; omega)]; exact hp
+      exact mem_of_getElem?' this
+    · exact Or.inr hw
+  · by_cases hj : P.SLOTS_PER_EPOCH ≤ j
+    · exact Or.inr hj
+    · left
+      have hsz := a.builder_pending_payments.size_eq
+      rw [hP, Array.getElem?_append_left (by simp; omega), Array.getElem?_extract, if_pos (by omega)]
+
+/-- The parent settlement's effect on the payments and the builder withdrawals: none (EMPTY, or a
+FULL parent whose payment was outside the window), the direct append of `L`'s withdrawal, or one
+`settle_builder_payment`: its entry emptied, its withdrawal appended when its amount is positive. -/
+theorem parent_payments {ctx : Ctx} {s s1 : Gloas.BeaconState P} {blk : Gloas.BeaconBlock P}
+    (h : Gloas.processParentExecutionPayload ctx s blk = .ok s1) :
+    (s1.builder_pending_payments = s.builder_pending_payments ∧
+      (s1.builder_pending_withdrawals = s.builder_pending_withdrawals ∨
+        (U64.zero < s.latest_execution_payload_bid.value ∧
+          s1.builder_pending_withdrawals.toArray.toList =
+            s.builder_pending_withdrawals.toArray.toList ++
+              [bidWithdrawal s.latest_execution_payload_bid]))) ∨
+    (∃ (idx : Nat) (p : Gloas.BuilderPendingPayment),
+      s.builder_pending_payments.toArray[idx]? = some p ∧
+      s1.builder_pending_payments.toArray[idx]? = some Gloas.BuilderPendingPayment.empty ∧
+      (∀ j, j ≠ idx → s1.builder_pending_payments.toArray[j]? = s.builder_pending_payments.toArray[j]?) ∧
+      (U64.zero < p.withdrawal.amount → s1.builder_pending_withdrawals.toArray.toList =
+        s.builder_pending_withdrawals.toArray.toList ++ [p.withdrawal]) ∧
+      (¬ U64.zero < p.withdrawal.amount → s1.builder_pending_withdrawals = s.builder_pending_withdrawals)) := by
+  rcases processParentExecutionPayload_cases h with ⟨rfl, _⟩ | ⟨_, a, d, e, ha, hd, he, hs⟩
+  · exact Or.inl ⟨rfl, Or.inl rfl⟩
+  have hda : d.builder_pending_payments = a.builder_pending_payments ∧
+      d.builder_pending_withdrawals = a.builder_pending_withdrawals := by
+    refine forIn_yield_inv (fun m => m.builder_pending_payments = a.builder_pending_payments ∧
+      m.builder_pending_withdrawals = a.builder_pending_withdrawals) _
+      (fun m r m' hI hm' => ?_) _ a d hd ⟨rfl, rfl⟩
+    have hm := (depReq_cases hm').1
+    exact ⟨by rw [hm]; exact hI.1, by rw [hm]; exact hI.2⟩
+  have hed : e.builder_pending_payments = a.builder_pending_payments ∧
+      e.builder_pending_withdrawals = a.builder_pending_withdrawals := by
+    refine forIn_yield_inv (fun m => m.builder_pending_payments = a.builder_pending_payments ∧
+      m.builder_pending_withdrawals = a.builder_pending_withdrawals) _
+      (fun m r m' hI hm' => ?_) _ d e he hda
+    have hm := (exitReq_cases hm').1
+    exact ⟨by rw [hm]; exact hI.1, by rw [hm]; exact hI.2⟩
+  obtain ⟨-, hp1, hw1, -⟩ := applyParentSuffix_post hs
+  have e1p : s1.builder_pending_payments = a.builder_pending_payments := hp1.trans hed.1
+  have e1w : s1.builder_pending_withdrawals = a.builder_pending_withdrawals := hw1.trans hed.2
+  obtain ⟨x, fx, hx⟩ := applyParentPrefix_split ha
+  rw [fx.2.1] at e1p
+  rw [fx.2.2.1] at e1w
+  rcases hx with ⟨idx, hset⟩ | ⟨hv, rfl, _⟩ | rfl
+  · obtain ⟨-, p, hp, hpos, hnpos, hemp, hoth⟩ := settleBuilderPayment_frame hset
+    refine Or.inr ⟨idx.toNat, p, hp, by rw [e1p]; exact hemp, fun j hj => by rw [e1p]; exact hoth j hj,
+      fun hz => ?_, fun hz => by rw [e1w]; exact hnpos hz⟩
+    rw [e1w, hpos hz]; simp [ProgressiveListS.push]
+  · refine Or.inl ⟨e1p, Or.inr ⟨hv, ?_⟩⟩
+    rw [e1w]; simp [directAppend, ProgressiveListS.push, bidWithdrawal]
+  · exact Or.inl ⟨e1p, Or.inl e1w⟩
+
 /-! ## B5(i) per step -/
 
 section Balance
@@ -687,6 +776,37 @@ theorem GStepView.builder_balance_equation
     refine ⟨[], b1, by rw [hsw, hc]; rfl, by rw [hpost, e2b]; exact hb1, hid1, by simp [routedSum, hbal1],
       fun k w hw => by simp at hw⟩
 
+/-- **B5(i) per step, over the raw step hypothesis** (the form the run-level theorems and B7's
+per-step conservation consume): the post-slots state and the deposit trace read there exist, and
+for a builder at the same incarnation the balance equation holds. -/
+theorem gloasStep_builder_balance_equation
+    (h : jointStepG cfg ccfg bls (.gloas preB preExec preParent) (.gloas b) env? =
+      .ok (.gloas postB postExec postParent))
+    (quorumPositive : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_INCREMENT)
+    (slotsPerEpoch : 2 ≤ P.SLOTS_PER_EPOCH)
+    (g5 : PendingCovered preB) (g3 : PendingRefsInRange preB) (g4 : ExitedHaveNoPending preB)
+    (g7 : NoLiveWeightOnLatestBid preB) (g8 : LatestBidCoherence preB) (fe : FutureEmpty preB)
+    (hA : LatestBidBuilderActive preB)
+    (validatorsBound : postB.validators.toArray.size ≤ 2 ^ 40)
+    (buildersBound : postB.builders.toArray.size ≤ 2 ^ 40)
+    {bi : Gloas.BuilderIndex} {bb : Gloas.Builder} (hb : preB.builders.toArray[bi.toNat]? = some bb) :
+    ∃ (postSlots : Gloas.BeaconState P) (trD : List (Gloas.BeaconState P)),
+      Gloas.processSlots (gloasCtx ccfg bls) preB b.message.slot = .ok postSlots ∧
+      builderDepositTrace ccfg bls postSlots b = .ok trD ∧
+      (NoRegisterAt ccfg bls bi.toNat trD (blockBuilderDeposits b) →
+        ∃ (ws : List Withdrawal) (bb' : Gloas.Builder),
+          stepWithdrawals ccfg bls postSlots b.message = .ok ws ∧
+          postB.builders.toArray[bi.toNat]? = some bb' ∧ SameIdentity bb bb' ∧
+          bb'.balance.toNat + routedSum bi ws =
+            bb.balance.toNat + creditedAt ccfg bls bi.toNat trD (blockBuilderDeposits b) ∧
+          (∀ k w, ws[k]? = some w → Routes bi w →
+            routedSum bi (ws.take k) + w.amount.toNat ≤
+              bb.balance.toNat + creditedAt ccfg bls bi.toNat trD (blockBuilderDeposits b))) := by
+  obtain ⟨V⟩ := gloasStep_view h
+  obtain ⟨trD, -, hD, -, -⟩ := V.traces
+  exact ⟨V.postSlots, trD, V.slots, hD, fun hno => V.builder_balance_equation quorumPositive
+    slotsPerEpoch g5 g3 g4 g7 g8 fe hA validatorsBound buildersBound hb hD hno⟩
+
 /-! ## B5(iv) per step -/
 
 /-- **B5(iv), early return, per step.** When the state `process_withdrawals` reads after an EMPTY
@@ -735,6 +855,88 @@ theorem GStepView.settled_payload
     {post : BlockChain} (hs : V.settle = .full env req post) :
     preParent = .delivered env req post ∧ postExec = post :=
   ⟨(V.full_iff.mp hs).2.1, (V.full_iff.mp hs).2.2.2⟩
+
+/-! ## B5(iii) per step -/
+
+/-- **B5(iii) per step, the block.** A live (non-empty) payment entry at index `j` of the window
+the block sees (the post-slots state; the epoch rotations before it are `rotation_fate`) is, after
+the block, in one of these situations:
+
+* **settled**: the parent settlement emptied index `j` with `settle_builder_payment`, appending
+  its withdrawal when its amount is positive (CL:1799-1804);
+* **still live**: the post-state's entry `j` carries the same withdrawal and proposer (its weight
+  may have grown by attestations);
+* **cleared**: the post-state's entry `j` is empty though the settlement did not touch it (only
+  `slash_validator` empties an entry in the operations, CL:1579-1581);
+* **overwritten** by the block's own paying bid at its slot's index (impossible under
+  `FutureEmpty`, which leaves that entry empty before the bid).
+
+(`directAppend` is a fate of `L`, not of an entry: `parent_payments`.) -/
+theorem GStepView.payment_fate
+    (V : GStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent)
+    {j : Nat} {p : Gloas.BuilderPendingPayment}
+    (hp : V.postSlots.builder_pending_payments.toArray[j]? = some p)
+    (hne : p ≠ Gloas.BuilderPendingPayment.empty) :
+    (∃ s1, Gloas.processParentExecutionPayload (gloasCtx ccfg bls) V.postSlots b.message = .ok s1 ∧
+        s1.builder_pending_payments.toArray[j]? = some Gloas.BuilderPendingPayment.empty ∧
+        (U64.zero < p.withdrawal.amount → s1.builder_pending_withdrawals.toArray.toList =
+          V.postSlots.builder_pending_withdrawals.toArray.toList ++ [p.withdrawal]) ∧
+        (¬ U64.zero < p.withdrawal.amount →
+          s1.builder_pending_withdrawals = V.postSlots.builder_pending_withdrawals)) ∨
+      (∃ p', postB.builder_pending_payments.toArray[j]? = some p' ∧ p'.withdrawal = p.withdrawal ∧
+        p'.proposer_index = p.proposer_index) ∨
+      postB.builder_pending_payments.toArray[j]? = some Gloas.BuilderPendingPayment.empty ∨
+      (j = P.SLOTS_PER_EPOCH + b.message.body.signed_execution_payload_bid.message.slot.toNat %
+          P.SLOTS_PER_EPOCH ∧ U64.zero < b.message.body.signed_execution_payload_bid.message.value) := by
+  obtain ⟨s1, s2, s3, s4, s5, s6, s7, h1, h2, h3, h4, h5, h6, h7, h8⟩ :=
+    processBlock_phases V.processBlock
+  -- after the parent settlement, either index `j` was settled, or it still holds `p`
+  have hs1 : s1.builder_pending_payments.toArray[j]? = some p ∨
+      (s1.builder_pending_payments.toArray[j]? = some Gloas.BuilderPendingPayment.empty ∧
+        (U64.zero < p.withdrawal.amount → s1.builder_pending_withdrawals.toArray.toList =
+          V.postSlots.builder_pending_withdrawals.toArray.toList ++ [p.withdrawal]) ∧
+        (¬ U64.zero < p.withdrawal.amount →
+          s1.builder_pending_withdrawals = V.postSlots.builder_pending_withdrawals)) := by
+    rcases parent_payments h1 with ⟨hpay, -⟩ | ⟨idx, p0, hp0, hemp, hoth, hpos, hnpos⟩
+    · left; rw [hpay]; exact hp
+    · by_cases hji : j = idx
+      · subst hji; rw [hp] at hp0; cases hp0
+        exact Or.inr ⟨hemp, hpos, hnpos⟩
+      · left; rw [hoth j hji]; exact hp
+  rcases hs1 with hs1 | hs1
+  swap
+  · exact Or.inl ⟨s1, h1, hs1⟩
+  right
+  obtain ⟨_, _, hm2⟩ := processBlockHeader_post h2
+  have w3 := processWithdrawals_wFrame _ _ h3
+  have hs3 : s3.builder_pending_payments.toArray[j]? = some p := by
+    rw [w3.2.2.2.2.1, hm2]; exact hs1
+  have b4 := processExecutionPayloadBid_post h4
+  obtain ⟨-, hslot, -, -, -, -, -, -, -, -, hpz, hpp⟩ := b4
+  have hs4 : s4.builder_pending_payments.toArray[j]? = some p ∨
+      (j = P.SLOTS_PER_EPOCH + b.message.body.signed_execution_payload_bid.message.slot.toNat %
+          P.SLOTS_PER_EPOCH ∧ U64.zero < b.message.body.signed_execution_payload_bid.message.value) := by
+    by_cases hv : U64.zero < b.message.body.signed_execution_payload_bid.message.value
+    · obtain ⟨pi, -, hoth⟩ := hpp hv
+      by_cases hjk : j = P.SLOTS_PER_EPOCH + s3.slot.toNat % P.SLOTS_PER_EPOCH
+      · exact Or.inr ⟨by rw [hslot]; exact hjk, hv⟩
+      · left; rw [hoth j hjk]; exact hs3
+    · left; rw [hpz hv]; exact hs3
+  rcases hs4 with hs4 | hs4
+  swap
+  · exact Or.inr (Or.inr hs4)
+  have f5 := processRandao_invFrame _ _ _ _ h5
+  have f6 := processEth1Data_invFrame _ _ _ h6
+  have o7 := processOperations_ops _ _ _ _ _ h7
+  have f8 := processSyncAggregate_invFrame _ _ _ _ h8
+  have hs6 : s6.builder_pending_payments.toArray[j]? = some p := by
+    rw [f6.2.1, f5.2.1]; exact hs4
+  rw [f8.2.1]
+  rcases o7.2.2 j with he | he | ⟨p0, p', h0, h1', hst⟩
+  · rw [he]; exact Or.inl ⟨p, hs6, rfl, rfl⟩
+  · rw [he]; exact Or.inr (Or.inl rfl)
+  · rw [hs6] at h0; cases h0
+    rw [h1']; exact Or.inl ⟨p', rfl, hst.1.1, hst.1.2.1⟩
 
 /-! ## B5(ii) per step -/
 
