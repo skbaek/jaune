@@ -211,18 +211,16 @@ def getNextSyncCommitteeIndices (state : BeaconState P f) : M (Array ValidatorIn
   loop SAMPLING_FUEL U64.zero #[]
 
 /-- `get_next_sync_committee(state)` (Altair; Electra's sampling from Electra on): the sampled
-validators' pubkeys and their
-aggregate (`eth_aggregate_pubkeys`, `Crypto/Boundary.lean`). Under the BLS switch
-(`blsActive = false`) `eth_aggregate_pubkeys` is the stubbed `bls.AggregatePKs` and returns
-`STUB_PUBKEY` (`Signing.lean`). -/
-def getNextSyncCommittee (blsActive : Bool) (state : BeaconState P f) : M (SyncCommittee P) := do
+validators' pubkeys and their aggregate (`eth_aggregate_pubkeys`, `Crypto/Boundary.lean`). From
+`v1.7.0-beta.4` pyspec computes `bls.AggregatePKs` whatever the BLS switch, because the
+aggregate is state data (`eth_consensus_specs/utils/bls.py`), so it is never stubbed. -/
+def getNextSyncCommittee (state : BeaconState P f) : M (SyncCommittee P) := do
   let site := "get_next_sync_committee"
   let indices ← if f.atLeast .electra then getNextSyncCommitteeIndices state
     else getNextSyncCommitteeIndicesAltair state
   let pubkeys ← indices.mapM fun i => do
     pure (← state.validators.get i.toNat site).pubkey
-  let agg ← if blsActive then ethAggregatePubkeysM (pubkeys.toList.map (·.toArray.toList))
-    else pure STUB_PUBKEY
+  let agg ← ethAggregatePubkeysM (pubkeys.toList.map (·.toArray.toList))
   let aggregate : BLSPubkey ← SszVector.ofArray agg.toArray site
   pure { pubkeys := ← SszVector.ofArray pubkeys site, aggregate_pubkey := aggregate }
 

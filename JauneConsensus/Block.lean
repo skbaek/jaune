@@ -490,10 +490,9 @@ def processSyncAggregate (ctx : Ctx) (state : BeaconState P f) (sa : SyncAggrega
       -- More than half participated - subtract non-participant keys
       -- No KeyValidate on the stored aggregate: pyspec raw-decodes both points here (specs/altair/beacon-chain.md:592-596); validation lives in `eth_aggregate_pubkeys` (specs/altair/bls.md:47).
       let nonPart := ((pubkeys.zip bits).filter (fun (_, b) => !b)).toList.map (vbytes ·.1)
-      -- `eth_aggregate_pubkeys` is `bls.AggregatePKs`, which pyspec's BLS switch stubs to
-      -- `STUB_PUBKEY` (`eth2spec/utils/bls.py`); the point decoding, negation and addition
-      -- that follow are not switched
-      let nonAgg ← if ctx.blsActive then ethAggregatePubkeysM nonPart else pure STUB_PUBKEY
+      -- `eth_aggregate_pubkeys` is `bls.AggregatePKs`, which from `v1.7.0-beta.4` pyspec computes
+      -- whatever the BLS switch (`eth_consensus_specs/utils/bls.py`)
+      let nonAgg ← ethAggregatePubkeysM nonPart
       let full ← liftCrypto s!"{site}: bls.bytes48_to_G1(aggregate_pubkey)"
         (pubkeyToPoint (vbytes state.current_sync_committee.aggregate_pubkey))
       let nonP ← liftCrypto s!"{site}: bls.bytes48_to_G1(non_participant_aggregate)"
