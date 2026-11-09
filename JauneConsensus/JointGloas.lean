@@ -127,12 +127,13 @@ def payloadHeaderG (payload : Gloas.ExecutionPayload P) (parentBeaconRoot : Root
     slotNumber := some payload.slot_number.toWord }
 
 /-- The execution block a Gloas `NewPayloadRequest` stands for: the header with the requests as
-the list `Gloas.getExecutionRequestsList` (types `0x00`–`0x04`), the transactions as undecoded
-bytes, no ommers, the withdrawals. -/
+the list `Gloas.getExecutionRequestsList` (types `0x00`–`0x04`), the transactions through
+`payloadTx` (a legacy RLP-list transaction decoded, a typed envelope kept as bytes), no ommers,
+the withdrawals. -/
 def payloadToBlockG (req : Gloas.NewPayloadRequest P) : Block :=
   { header := payloadHeaderG req.execution_payload req.parent_beacon_block_root
       (Gloas.getExecutionRequestsList req.execution_requests)
-    txs := req.execution_payload.txBytes.map .inl
+    txs := req.execution_payload.txBytes.map payloadTx
     ommers := []
     wds := req.execution_payload.executionWithdrawals }
 
