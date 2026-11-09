@@ -10,6 +10,7 @@ import JauneConsensus.Facts.Gloas.BuilderAuth
 import JauneConsensus.Facts.Gloas.BuilderTraces
 import JauneConsensus.Facts.Gloas.WithdrawalsB5
 import JauneConsensus.Facts.Gloas.B5Witnesses
+import JauneConsensus.Facts.Gloas.BuilderFrames
 
 /-!
 # Whole-library axiom union for `JauneConsensus`
