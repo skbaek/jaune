@@ -13,6 +13,21 @@ import JauneConsensus.Facts.Gloas.B5Witnesses
 import JauneConsensus.Facts.Gloas.BuilderWitnesses
 import JauneConsensus.Facts.Gloas.BuilderFrames
 import JauneConsensus.Facts.Gloas.TraceLink
+import JauneConsensus.Facts.Gloas.Invariants
+import JauneConsensus.Facts.Gloas.InvariantsFrames
+import JauneConsensus.Facts.Gloas.InvariantsPhases
+import JauneConsensus.Facts.Gloas.InvariantsRequests
+import JauneConsensus.Facts.Gloas.InvariantsSweep
+import JauneConsensus.Facts.Gloas.InvariantsSlots
+import JauneConsensus.Facts.Gloas.InvariantsGen
+import JauneConsensus.Facts.Gloas.InvariantsBid
+import JauneConsensus.Facts.Gloas.InvariantsAttest
+import JauneConsensus.Facts.Gloas.InvariantsQueues
+import JauneConsensus.Facts.Gloas.InvariantsRefs
+import JauneConsensus.Facts.Gloas.InvariantsWindow
+import JauneConsensus.Facts.Gloas.InvariantsCrossing
+import JauneConsensus.Facts.Gloas.InvariantsControls
+import JauneConsensus.Facts.Gloas.InvariantsCover
 
 /-!
 # Whole-library axiom union for `JauneConsensus`
