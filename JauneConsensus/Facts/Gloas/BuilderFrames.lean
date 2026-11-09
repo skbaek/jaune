@@ -716,4 +716,170 @@ theorem builderExits_slot {cfg : Config} {s1 s2 : JauneConsensus.Gloas.BeaconSta
   have := exitSlotInv_loop es [] s1 rfl ⟨rfl, c, hc, rfl, Or.inl rfl⟩ h
   simpa using this
 
+
+/-! ## B1: same-payload register then top-up -/
+
+theorem firstMatch_of_first {bs : ProgressiveListR JauneConsensus.Gloas.Builder} {pk : BLSPubkey}
+    {i : Nat} {b : JauneConsensus.Gloas.Builder} (hb : bs.toArray[i]? = some b) (hpk : b.pubkey = pk)
+    (hfirst : ∀ j, j < i → ∀ b', bs.toArray[j]? = some b' → b'.pubkey ≠ pk) :
+    firstMatch bs pk = some i := by
+  unfold firstMatch
+  rw [Array.findIdx?_eq_some_iff_getElem]
+  have hi : i < bs.toArray.size := by
+    rcases Nat.lt_or_ge i bs.toArray.size with h | h
+    · exact h
+    · rw [Array.getElem?_eq_none h] at hb; cases hb
+  refine ⟨hi, ?_, fun j hj hp => ?_⟩
+  · rw [Array.getElem?_eq_getElem hi] at hb
+    cases hb
+    exact pubkey_beq_iff.mpr hpk
+  · exact hfirst j hj _ (Array.getElem?_eq_getElem _) (pubkey_beq_iff.mp hp)
+
+/-- The register-then-top-up invariant: slot `i` holds the fresh record with an accumulated
+balance, and no earlier slot carries its pubkey. -/
+def RegInv (m : JauneConsensus.Gloas.BeaconState P) (i : Nat) (fresh : JauneConsensus.Gloas.Builder)
+    (acc : Nat) (x : JauneConsensus.Gloas.BeaconState P) : Prop :=
+  x.slot = m.slot ∧ (∃ bal : U64, x.builders.toArray[i]? = some { fresh with balance := bal } ∧
+      bal.toNat = acc) ∧
+    ∀ j, j < i → ∀ b', x.builders.toArray[j]? = some b' → b'.pubkey ≠ fresh.pubkey
+
+theorem regInv_step (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Ctx}
+    {m x x' : JauneConsensus.Gloas.BeaconState P} {i : Nat} {fresh : JauneConsensus.Gloas.Builder}
+    (hfar : fresh.withdrawable_epoch = FAR_FUTURE_EPOCH) {acc : Nat}
+    {r' : JauneConsensus.Gloas.BuilderDepositRequest} (hinv : RegInv m i fresh acc x)
+    (h : JauneConsensus.Gloas.processBuilderDepositRequest ctx x r' = .ok x') :
+    RegInv m i fresh (acc + if (r'.pubkey == fresh.pubkey &&
+      JauneConsensus.Gloas.isBuilderWithdrawalCredential r'.withdrawal_credentials) = true
+      then r'.amount.toNat else 0) x' := by
+  obtain ⟨hsl, ⟨bal, hbi, hbal⟩, hfirst⟩ := hinv
+  have hfm : firstMatch x.builders fresh.pubkey = some i := firstMatch_of_first hbi rfl hfirst
+  have h0 := h
+  rw [processBuilderDepositRequest_eq] at h0
+  obtain ⟨o, hco, _⟩ := bind_eq_ok_iff.mp h0
+  obtain ⟨hpre, hbad, htop, hreg⟩ := classifyBuilderDeposit_effect hco h
+  have hslot : x'.slot = x.slot := by rw [(processBuilderDepositRequest_frame h).2.2.2.2.2]
+  -- the earlier slots never gain `fresh.pubkey`
+  have hfirst' : ∀ j, j < i → ∀ b', x'.builders.toArray[j]? = some b' → b'.pubkey ≠ fresh.pubkey := by
+    intro j hj b' hb'
+    obtain ⟨_, _, hat⟩ := processBuilderDepositRequest_at h j
+    rcases hat with heq | ⟨c, c', _, hc, hc', _, hpk, _⟩ | ⟨addr, e, _, _, hat', hall, _⟩
+    · rw [heq] at hb'; exact hfirst j hj b' hb'
+    · rw [hc'] at hb'; cases hb'; rw [hpk]; exact hfirst j hj c hc
+    · rw [hat'] at hb'; cases hb'
+      intro hpk
+      exact hall _ (Array.mem_of_getElem? hbi) hpk.symm
+  refine ⟨hslot.trans hsl, ?_, hfirst'⟩
+  rcases classifyBuilderDeposit_inv hco with ⟨hp, rfl⟩ | ⟨hp, j, c, hfmj, hc, rfl⟩ |
+    ⟨hp, hfmn, _, _, ⟨_, rfl⟩ | ⟨_, _, idx, _, _, rfl⟩⟩
+  · rw [hpre rfl]
+    refine ⟨bal, hbi, ?_⟩
+    simp [hp, hbal]
+  · by_cases hpk : r'.pubkey = fresh.pubkey
+    · rw [hpk, hfm] at hfmj; cases hfmj
+      rw [hbi] at hc; cases hc
+      obtain ⟨c0, c', hc0, hc', _, _, hpk', hver, hex, hdep, hb', _, hwe, _⟩ :=
+        htop i r'.amount _ rfl
+      rw [hbi] at hc0; cases hc0
+      have hreset : ({ fresh with balance := bal }.withdrawable_epoch != FAR_FUTURE_EPOCH &&
+          { fresh with balance := bal }.balance == U64.zero) = false := by
+        simp [hfar]
+      rw [hreset] at hwe
+      have hwe' := hwe rfl
+      refine ⟨c'.balance, ?_, ?_⟩
+      · rw [hc']
+        cases c'
+        simp only at hpk' hver hex hdep hwe' ⊢
+        rw [hpk', hver, hex, hdep, hwe']
+      · rw [hb', hbal]
+        simp [hpk, hp, pubkey_beq_iff.mpr rfl]
+    · have hj : j ≠ i := by
+        intro hji; subst hji
+        obtain ⟨⟨b0, hb0, hpk0⟩, _⟩ := firstMatch_some hfmj
+        rw [hbi] at hb0; cases hb0
+        exact hpk hpk0.symm
+      obtain ⟨_, _, _, _, _, hne, _⟩ := htop j r'.amount _ rfl
+      refine ⟨bal, by rw [hne i (Ne.symm hj)]; exact hbi, ?_⟩
+      have : (r'.pubkey == fresh.pubkey) = false := by
+        cases hh : (r'.pubkey == fresh.pubkey) with
+        | false => rfl
+        | true => exact absurd (pubkey_beq_iff.mp hh) hpk
+      simp [this, hbal]
+  · rw [hbad rfl]
+    refine ⟨bal, hbi, ?_⟩
+    have hne : r'.pubkey ≠ fresh.pubkey := fun heq =>
+      firstMatch_none_iff.mp hfmn _ (Array.mem_of_getElem? hbi) heq.symm
+    have : (r'.pubkey == fresh.pubkey) = false := by
+      cases hh : (r'.pubkey == fresh.pubkey) with
+      | false => rfl
+      | true => exact absurd (pubkey_beq_iff.mp hh) hne
+    simp [this, hbal]
+  · have hne : r'.pubkey ≠ fresh.pubkey := fun heq =>
+      firstMatch_none_iff.mp hfmn _ (Array.mem_of_getElem? hbi) heq.symm
+    have : (r'.pubkey == fresh.pubkey) = false := by
+      cases hh : (r'.pubkey == fresh.pubkey) with
+      | false => rfl
+      | true => exact absurd (pubkey_beq_iff.mp hh) hne
+    obtain ⟨_, _, hat⟩ := processBuilderDepositRequest_at h i
+    rcases hat with heq | ⟨_, _, _, _, _, hcl, _⟩ | ⟨_, e, _, he, _, _, hreuse⟩
+    · refine ⟨bal, by rw [heq]; exact hbi, ?_⟩
+      simp [this, hbal]
+    · rw [hco] at hcl; cases hcl
+    · obtain ⟨hwle, _⟩ := hreuse _ hbi
+      simp only [hfar] at hwle
+      exact absurd hwle (not_far_le_epoch hspe he)
+
+theorem regInv_loop (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Ctx} {m s2 : JauneConsensus.Gloas.BeaconState P}
+    {i : Nat} {fresh : JauneConsensus.Gloas.Builder} (hfar : fresh.withdrawable_epoch = FAR_FUTURE_EPOCH) :
+    ∀ (rest : List JauneConsensus.Gloas.BuilderDepositRequest) (x : JauneConsensus.Gloas.BeaconState P)
+      (acc : Nat), RegInv m i fresh acc x →
+      rest.foldlM (JauneConsensus.Gloas.processBuilderDepositRequest ctx) x = .ok s2 →
+      RegInv m i fresh (acc + ((rest.filter (fun r' => r'.pubkey == fresh.pubkey &&
+        JauneConsensus.Gloas.isBuilderWithdrawalCredential r'.withdrawal_credentials)).map
+          (·.amount.toNat)).sum) s2 := by
+  intro rest
+  induction rest with
+  | nil => intro x acc hinv h; cases h; simpa using hinv
+  | cons r' rest ih =>
+    intro x acc hinv h
+    rw [List.foldlM_cons] at h
+    obtain ⟨x', h1, h2⟩ := bind_eq_ok_iff.mp h
+    have := ih x' _ (regInv_step hspe hfar hinv h1) h2
+    by_cases hc : (r'.pubkey == fresh.pubkey &&
+        JauneConsensus.Gloas.isBuilderWithdrawalCredential r'.withdrawal_credentials) = true
+    · simp only [hc, ↓reduceIte] at this
+      simp only [List.filter_cons, hc, ↓reduceIte, List.map_cons, List.sum_cons]
+      rwa [Nat.add_assoc] at this
+    · simp only [hc, Bool.false_eq_true, ↓reduceIte, Nat.add_zero] at this
+      simpa [List.filter_cons, hc] using this
+
+/-- **B1, same-payload register then top-up (F1).** A builder deposit classified `register i`
+writes the fresh record at `i` (`m1`); after the later deposits of the same list, builder `i` is
+that record with balance `amount + Σ amounts of the later 0xB0 deposits for its pubkey`: no
+reset, no reuse of the slot, no change to any other field. Needs `2 <= SLOTS_PER_EPOCH`. -/
+theorem register_then_topUp (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Ctx}
+    {m m1 m2 : JauneConsensus.Gloas.BeaconState P} {r : JauneConsensus.Gloas.BuilderDepositRequest}
+    {rs : List JauneConsensus.Gloas.BuilderDepositRequest} {i : Nat} {a : U64}
+    (hc : classifyBuilderDeposit ctx.cfg ctx.blsActive m r = .ok (.register i a))
+    (h1 : JauneConsensus.Gloas.processBuilderDepositRequest ctx m r = .ok m1)
+    (h2 : rs.foldlM (JauneConsensus.Gloas.processBuilderDepositRequest ctx) m1 = .ok m2) :
+    ∃ addr e bal, Jaune.Bytes.toAdr? (r.withdrawal_credentials.toBytes.drop 12) = some addr ∧
+      computeEpochAtSlot P m.slot = .ok e ∧
+      m1.builders.toArray[i]? = some (freshBuilder r.pubkey addr r.amount e) ∧
+      m2.builders.toArray[i]? = some { freshBuilder r.pubkey addr r.amount e with balance := bal } ∧
+      bal.toNat = r.amount.toNat + ((rs.filter (fun r' => r'.pubkey == r.pubkey &&
+        JauneConsensus.Gloas.isBuilderWithdrawalCredential r'.withdrawal_credentials)).map
+          (·.amount.toNat)).sum := by
+  obtain ⟨_, _, _, hregm⟩ := classifyBuilderDeposit_meaning hc
+  obtain ⟨_, hall, _, ha, _⟩ := (hregm i a).mp rfl
+  subst ha
+  obtain ⟨_, _, _, hreg⟩ := classifyBuilderDeposit_effect hc h1
+  obtain ⟨addr, e, haddr, he, hat, _, hne, _⟩ := hreg i r.amount rfl
+  have hslot : m1.slot = m.slot := by rw [(processBuilderDepositRequest_frame h1).2.2.2.2.2]
+  have hinv : RegInv m i (freshBuilder r.pubkey addr r.amount e) r.amount.toNat m1 := by
+    refine ⟨hslot, ⟨r.amount, by rw [hat]; rfl, rfl⟩, fun j hj b' hb' => ?_⟩
+    rw [hne j (Nat.ne_of_lt hj)] at hb'
+    exact hall b' (Array.mem_of_getElem? hb')
+  obtain ⟨_, ⟨bal, hbal2, hbaln⟩, _⟩ := regInv_loop hspe rfl rs m1 _ hinv h2
+  exact ⟨addr, e, bal, haddr, he, hat, hbal2, hbaln⟩
+
 end JauneConsensus.Facts.Gloas
