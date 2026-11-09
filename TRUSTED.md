@@ -386,7 +386,38 @@ possibility of a common misreading of a specification. Two independent
 implementations of the same misunderstanding agree perfectly.
 
 [`scripts/GATES.md`](scripts/GATES.md) is the authoritative catalogue of every
-gate, its exact command, pass criteria, and runtime.
+gate, its exact command, pass criteria, and runtime. The next section,
+Primitive provenance, tabulates this boundary primitive by primitive: what is
+proved about each one's values, and what rests on finite testing alone.
+
+## Primitive provenance
+
+Each row below names one cryptographic primitive and the standard it answers
+to. *Proved* names a theorem about the primitive's values, with the exact Lean
+name; *Tested only* names finite evidence — the gate or script that runs it and
+the corpus it runs over. Consensus-layer primitives get rows in the same
+columns from the consensus work, added later.
+
+| Primitive | Reference (standard, section) | Transcription source | Proved (theorem names) | Tested only (corpora) |
+|---|---|---|---|---|
+| `Keccak-256` (KECCAK256 opcode, not a precompile) | NIST FIPS 202 §3 (`Keccak-p[1600,24]`), §4 (sponge), §5.1-5.2 (`pad10*1`); Ethereum uses `KECCAK[512](M, 256)` without SHA-3 domain bits (Yellow Paper Appendix E) | Port of the SHA3IUF C implementation (`Jaune/Hash.lean:292-294`); opcode entry via `keccakReadRun` (`Jaune/Machine.lean:3865`) | `KECCAK.f1600_eq` (optimized kernel equals the in-file reference permutation — not FIPS 202); opcode-side `Rinst.runCore_keccak256_eq_reference` (`Jaune/Machine.lean:4962`) | `check-u256.sh` keccak differential vs pinned EELS; fixture suites <!-- P1: updated when Jaune.Bytes.keccak_eq_fips lands --> |
+| `SHA-256` (0x02) | NIST FIPS 180-4 §4.1.2, §4.2.2, §5.1.1, §5.3.3, §6.2 | Port of Mosnier's C (`Jaune/Hash.lean:167-169`); independent transcription `Jaune/SHA256Spec.lean:14-16` | `Bytes.sha256_eq_fips` (`Jaune/SHA256Spec.lean:740`) | `scripts/vectors/sha256.json` (81 cases); `check-vectors.sh`; fixtures |
+| `RIPEMD-160` (0x03) | Dobbertin-Bosselaers-Preneel, FSE 1996 (Appendix A pseudo-code); ISO/IEC 10118-3 §8; Yellow Paper Appendix E | Port of tiny-ripemd160 C (`Jaune/Hash.lean:13-14`); reference transcription `Jaune/RIPEMD160Spec.lean` | none (agreement shown by `#guard`s only) | `RIPEMD160Spec.lean` guards (8 published test values; kernel agreement on those plus 13 seam lengths); `scripts/vectors/ripemd160.json` (85 cases); fixtures |
+| `BLAKE2 F` (0x09) | RFC 7693 §3.2 (F), §3.1 (G), §2.6-2.7; EIP-152 (framing) | `bCompress` (`Jaune/Precompiles.lean:629`), source previously unstated; reference transcription `Jaune/Blake2Spec.lean` | none about values (`Blake2.roundVec_toArray`, `Blake2.roundsVec_toArray` relate the optimized rounds to the in-file readable rounds, not to the standard) | `Blake2Spec.lean` guards (EIP-152 vectors 4-7, four framing-failure classes, `BLAKE2b-512("abc")`, production agreement); `scripts/vectors/blake2F.json` (5 cases); fixtures |
+| `MODEXP` (0x05) | EIP-198 (semantics); EIP-2565 and EIP-7883 (gas); EIP-7823 (length bound) | `executeModexp` (`Jaune/Precompiles.lean:150`) via `Nat.powMod` (`Jaune/Precompiles.lean:170`) | none about values | `modexp_eip2565.json` (47 cases); `modexp_eip7883.json` (45 cases); 25 `#guard`s (`Jaune/Precompiles.lean:180-223`); fixtures |
+| `secp256k1 recovery (ecrecover)` (0x01) | SEC 1 v2.0 §4.1.6; SEC 2 v2.0 §2.4.1; Yellow Paper Appendices E/F | `executeEcrecover` (`Jaune/Precompiles.lean:15`) into `secp256k1.recover` (`Jaune/EC.lean:851`); ported from execution-specs (`Jaune/EC.lean:1-3`) | none about values | `check-ec.sh` differential vs pinned coincurve/libsecp256k1, py_ecc, and EELS constants; fixtures |
+| `BN254 G1 add` (0x06) | EIP-196; EIP-1108 (gas) | `executeEcadd` (`Jaune/Precompiles.lean:225`) | none about values | `bn256Add.json` (16 cases); `check-ec.lean` multiples; fork gas guards (`Jaune/Fork.lean:3101-3108`); fixtures |
+| `BN254 G1 mul` (0x07) | EIP-196; EIP-1108 (gas) | `executeEcmul` (`Jaune/Precompiles.lean:243`) | none about values | `bn256ScalarMul.json` (19 cases); `check-ec.lean` multiples; fork gas guards; fixtures |
+| `BN254 pairing check` (0x08) | EIP-197; EIP-1108 (gas) | `executePairingCheck` (`Jaune/Precompiles.lean:1028`) via `pairing` (`Jaune/EC.lean:754`) | none about values | `bn256Pairing.json` (14 cases); `twist` guards (`Jaune/EC.lean:640-642`); fork gas guards; fixtures |
+| `P-256 verify` (0x100) | EIP-7951 (supersedes RIP-7212); NIST FIPS 186-5 §6.4.2; SP 800-186 §3.2.1.3 | `executeP256Verify` (`Jaune/Precompiles.lean:45`) into `secp256r1.verify` (`Jaune/EC.lean:929`) | none about values | `p256Verify.json` (782 cases: 567 accept, 215 reject); on-curve and order guards (`Jaune/EC.lean:951-956`); fixtures |
+| `BLS12-381 G1 add` (0x0B) | EIP-2537 (G1ADD) | `executeBls12G1Add` (`Jaune/Precompiles.lean:869`); ported from py_ecc and EELS (`Jaune/BLS.lean:1-6`) | none about values | `add_G1_bls.json`, `blsG1Add.json` and their `fail-` files via `check-vectors.sh`; `check-legacy.sh --bls`; EEST `--bls` tier; fixtures |
+| `BLS12-381 G1 MSM` (0x0C) | EIP-2537 (G1MSM) | `executeBls12G1Msm` (`Jaune/Precompiles.lean:879`) via `g1MsmSum` (`Jaune/BLS.lean:59`) | none about values | `mul_G1_bls.json`, `msm_G1_bls.head.json`, `blsG1Mul.json`, `blsG1MultiExp.head.json` and their `fail-` files via `check-vectors.sh`; `check-legacy.sh --bls`; EEST `--bls` tier; fixtures |
+| `BLS12-381 G2 add` (0x0D) | EIP-2537 (G2ADD) | `executeBls12G2Add` (`Jaune/Precompiles.lean:894`) | none about values | `add_G2_bls.json`, `blsG2Add.json` and their `fail-` files via `check-vectors.sh`; `check-legacy.sh --bls`; EEST `--bls` tier; fixtures |
+| `BLS12-381 G2 MSM` (0x0E) | EIP-2537 (G2MSM) | `executeBls12G2Msm` (`Jaune/Precompiles.lean:904`) | none about values | `mul_G2_bls.json`, `msm_G2_bls.head.json`, `blsG2Mul.json`, `blsG2MultiExp.head.json` and their `fail-` files via `check-vectors.sh`; `check-legacy.sh --bls`; EEST `--bls` tier; fixtures |
+| `BLS12-381 pairing check` (0x0F) | EIP-2537 (PAIRING_CHECK) | `executeBls12Pairing` (`Jaune/Precompiles.lean:995`) via `blsPairing` (`Jaune/BLS.lean:199`) | none about values (bilinearity shown by guards only) | `pairing_check_bls.json`, `blsPairing.shard1-8.json` (the 106 cases of `blsPairing.json`) and their `fail-` files via `check-vectors.sh`; bilinearity guard (`Jaune/BLSGuards.lean:41`); `check-legacy.sh --bls`; EEST `--bls` tier; fixtures |
+| `BLS12-381 map Fp to G1` (0x10) | EIP-2537 (MAP_FP_TO_G1); RFC 9380 §6.6.2 and §7 | `executeBls12MapFpToG1` (`Jaune/Precompiles.lean:919`) via `blsMapFpToG1` (`Jaune/BLS.lean:299`) | none about values | `map_fp_to_G1_bls.json`, `blsMapG1.json` and their `fail-` files via `check-vectors.sh`; `check-legacy.sh --bls`; EEST `--bls` tier; fixtures |
+| `BLS12-381 map Fp2 to G2` (0x11) | EIP-2537 (MAP_FP2_TO_G2); RFC 9380 §6.6.3 and §7 | `executeBls12MapFp2ToG2` (`Jaune/Precompiles.lean:967`) via `blsMapFp2ToG2` (`Jaune/BLS.lean:361`) | none about values | `map_fp2_to_G2_bls.json`, `blsMapG2.json` and their `fail-` files via `check-vectors.sh`; `check-legacy.sh --bls`; EEST `--bls` tier; fixtures |
+| `KZG point evaluation` (0x0A) | EIP-4844 (point evaluation precompile); Deneb `polynomial-commitments.md` (`verify_kzg_proof`) | `executePointEval` (`Jaune/Precompiles.lean:843`) via `verifyKzgProofImpl` (`Jaune/BLS.lean:423`) | none about values | `pointEvaluation.json` (1 case) via `check-vectors.sh`; `check-legacy.sh --bls` (EIP-4844 point evaluation); EEST `--bls` tier; fixtures |
 
 ## What the theorems actually say — and what this document does not answer
 
