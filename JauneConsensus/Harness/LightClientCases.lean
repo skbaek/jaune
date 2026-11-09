@@ -1,6 +1,7 @@
 import JauneConsensus.LightClient
 import JauneConsensus.GloasLightClientFullNode
 import JauneConsensus.Harness.LightClientDataCollection
+import JauneConsensus.Harness.GloasLightClientDataCollection
 import JauneConsensus.SSZ.Proof
 import JauneConsensus.Harness.Discovery
 import JauneConsensus.Harness.Snappy
@@ -24,8 +25,8 @@ import JauneConsensus.Harness.Yaml
   and takes Electra-format data through `upgrade_lc_*_to_gloas` (`GloasLightClientFullNode.lean`);
   any other version is refused.
 * Gloas (`gloasLightClientCase`): `single_merkle_proof` over the Gloas progressive proof trees,
-  `sync` with a Gloas store, `update_ranking` over the Gloas updates; `data_collection` fails
-  closed until the Gloas state transition exists.
+  `sync` with a Gloas store, `update_ranking` over the Gloas updates, `data_collection` over the
+  Gloas state transition (`Harness/GloasLightClientDataCollection.lean`).
 * `update_ranking`: the `updates_<i>` are in descending precedence: no later update ranks
   better (`is_better_update`) than an earlier one.
 -/
@@ -268,8 +269,8 @@ def gloasLightClientUpdateRanking (P : Preset) (c : Case) : IO (Except String Un
 
 /-- A Gloas `light_client` case: `single_merkle_proof` over the Gloas proof trees
 (`GloasLightClientFullNode.lean`), `sync` over the Gloas store, `update_ranking` over the Gloas
-updates. `data_collection` needs the Gloas state transition (goal
-`eip8282-gloas-cross-layer-v1`, unit U5), which is not yet in this tree: it fails closed. -/
+updates, `data_collection` over the Gloas state transition (goal `eip8282-gloas-cross-layer-v1`,
+unit U7c: `Harness/GloasLightClientDataCollection.lean`). -/
 def gloasLightClientCase (P : Preset) (cfg : Config) (c : Case) : IO (Except String Unit) := do
   match c.key.handler, c.key.suite with
   | "single_merkle_proof", "BeaconState" =>
@@ -278,8 +279,7 @@ def gloasLightClientCase (P : Preset) (cfg : Config) (c : Case) : IO (Except Str
     singleMerkleProof (Gloas.BeaconBlockBody.proofTree (P := P)) c
   | "sync", _ => lightClientSync P .gloas cfg c
   | "update_ranking", _ => gloasLightClientUpdateRanking P c
-  | "data_collection", _ =>
-    pure (.error "UNIMPLEMENTED: Gloas data_collection needs the Gloas state transition (unit U5)")
+  | "data_collection", _ => gloasLightClientDataCollection P cfg c
   | h, s => pure (.error s!"UNIMPLEMENTED: no Gloas light_client handler {h}/{s}")
 
 /-- Run a `light_client/<handler>` or `merkle_proof/<handler>` case. -/
