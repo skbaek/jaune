@@ -23,6 +23,7 @@ import JauneConsensus.Facts.Gloas.InvariantsBid
 import JauneConsensus.Facts.Gloas.InvariantsAttest
 import JauneConsensus.Facts.Gloas.InvariantsQueues
 import JauneConsensus.Facts.Gloas.InvariantsRefs
+import JauneConsensus.Facts.Gloas.InvariantsWindow
 
 /-!
 # Whole-library axiom union for `JauneConsensus`

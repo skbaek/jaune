@@ -172,17 +172,16 @@ def LatestBidBuilderActive (s : GSt P) : Prop :=
     ∃ b, s.builders.toArray[s.latest_execution_payload_bid.builder_index.toNat]? = some b ∧
       b.withdrawable_epoch = FAR_FUTURE_EPOCH
 
-/-- The payments of the current epoch's later slots are empty (no bid has been made for them).
-Used by G3-07 for a bid with value `0`, which writes no entry. -/
+/-- The payments of the current epoch's later slots are empty (no bid has been made for them),
+and so is the current slot's while the latest block is older than the slot (no block has been
+processed at this slot). Used by G3-07 for a bid with value `0`, which writes no entry. -/
 def FutureEmpty (s : GSt P) : Prop :=
-  ∀ j, j < P.SLOTS_PER_EPOCH → s.slot.toNat % P.SLOTS_PER_EPOCH < j →
+  (∀ j, j < P.SLOTS_PER_EPOCH → s.slot.toNat % P.SLOTS_PER_EPOCH < j →
     s.builder_pending_payments.toArray[P.SLOTS_PER_EPOCH + j]? =
-      some JauneConsensus.Gloas.BuilderPendingPayment.empty
-
-/-- After `process_slots` (at least one slot advanced): the current slot's payment is empty. -/
-def CurrentEmpty (s : GSt P) : Prop :=
-  s.builder_pending_payments.toArray[P.SLOTS_PER_EPOCH + s.slot.toNat % P.SLOTS_PER_EPOCH]? =
-    some JauneConsensus.Gloas.BuilderPendingPayment.empty
+      some JauneConsensus.Gloas.BuilderPendingPayment.empty) ∧
+  (s.latest_block_header.slot.toNat < s.slot.toNat →
+    s.builder_pending_payments.toArray[P.SLOTS_PER_EPOCH + s.slot.toNat % P.SLOTS_PER_EPOCH]? =
+      some JauneConsensus.Gloas.BuilderPendingPayment.empty)
 
 /-! ## The frame of the fields the invariants read -/
 
