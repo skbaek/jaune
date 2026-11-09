@@ -502,16 +502,6 @@ theorem processBlsToExecutionChange_pres (ctx : Ctx) {s s' : BeaconState P f}
     (credKeep_of_bls _ (beq_iff_eq.mp hb)) id) (pendingStep_same rfl)
 
 open Lean Elab Tactic Meta in
-/-- Succeeds when hypothesis `h` is an equation whose left side is a `forIn` application. -/
-elab "is_forIn " h:ident : tactic => withMainContext do
-  let d ← getLocalDeclFromUserName h.getId
-  let t ← instantiateMVars d.type
-  match t.eq? with
-  | some (_, lhs, _) =>
-    unless lhs.getAppFn.isConstOf ``ForIn.forIn do throwError "not a forIn"
-  | none => throwError "not an equation"
-
-open Lean Elab Tactic Meta in
 /-- Succeeds when `x`'s type is an `Option`, a product or a `Bool` (the shapes `do` matches on). -/
 elab "is_small_inductive " x:ident : tactic => withMainContext do
   let d ← getLocalDeclFromUserName x.getId
@@ -519,6 +509,30 @@ elab "is_small_inductive " x:ident : tactic => withMainContext do
   let ok := t.getAppFn.isConstOf ``Option || t.getAppFn.isConstOf ``Prod ||
     t.getAppFn.isConstOf ``Bool
   unless ok do throwError "not a small inductive"
+
+open Lean Elab Tactic Meta in
+/-- Succeeds when `h : forIn xs init body = _` iterates a `List` (`list = true`) or an `Array`
+(`list = false`) with a state accumulator (`pair = false`) or a pair accumulator (`pair = true`). -/
+elab "forIn_guard " h:ident list:ident pair:ident : tactic => withMainContext do
+  let d ← getLocalDeclFromUserName h.getId
+  let t ← instantiateMVars d.type
+  let some (_, lhs, _) := t.eq? | throwError "not an equation"
+  unless lhs.getAppFn.isConstOf ``ForIn.forIn && lhs.getAppNumArgs ≥ 5 do throwError "not a forIn"
+  let n := lhs.getAppNumArgs
+  let ρ ← whnfR (← inferType (lhs.getArg! (n - 3)))
+  let isList := ρ.isAppOf ``List
+  let isArray := ρ.isAppOf ``Array
+  let wantList := list.getId.eraseMacroScopes == `list
+  unless (wantList && isList) || (!wantList && isArray) do throwError "collection mismatch"
+  let β ← whnfR (← inferType (lhs.getArg! (n - 2)))
+  let isPair ← if β.isAppOfArity ``Prod 2 then do
+      let b ← whnfR (β.getArg! 0)
+      pure (b.getAppFn.isConstOf ``BeaconState)
+    else pure false
+  let wantPair := pair.getId.eraseMacroScopes == `pair
+  unless (wantPair && isPair) || (!wantPair && β.getAppFn.isConstOf ``BeaconState) do
+    throwError "accumulator mismatch"
+
 
 /-! ## A small verification-condition generator for `do` blocks over `Except` -/
 
@@ -890,7 +904,7 @@ theorem forIn_frame {α : Type} {xs : Array α} {init out : BeaconState P f}
   exact hg a b b' h1
 
 macro_rules | `(tactic| pres_of $h) => `(tactic|
-    (is_forIn $h; exact (forIn_frame (fun _ _ _ hh => decreaseBalance_frame hh) $h).pres))
+    (forIn_guard $h array state; exact (forIn_frame (fun _ _ _ hh => decreaseBalance_frame hh) $h).pres))
 
 /-- The pending queue rewritten to a slice of itself. -/
 theorem setPending_extract_pres {T s' : BeaconState P f}
@@ -926,13 +940,13 @@ theorem processWithdrawals_pres {s s' : BeaconState P f} {pl : ExecutionPayload 
 /-! ## Loops in the generator -/
 
 macro_rules | `(tactic| pres_of $h) => `(tactic|
-    (is_forIn $h; exact list_forIn_pres (fun _ _ => by repeat pres_step) $h))
+    (forIn_guard $h list state; exact list_forIn_pres (fun _ _ => by repeat pres_step) $h))
 macro_rules | `(tactic| pres_of $h) => `(tactic|
-    (is_forIn $h; exact array_forIn_pres (fun _ _ => by repeat pres_step) $h))
+    (forIn_guard $h array state; exact array_forIn_pres (fun _ _ => by repeat pres_step) $h))
 macro_rules | `(tactic| pres_of $h) => `(tactic|
-    (is_forIn $h; exact list_forIn_pres_fst (fun _ _ => by repeat pres_step) $h))
+    (forIn_guard $h list pair; exact list_forIn_pres_fst (fun _ _ => by repeat pres_step) $h))
 macro_rules | `(tactic| pres_of $h) => `(tactic|
-    (is_forIn $h; exact array_forIn_pres_fst (fun _ _ => by repeat pres_step) $h))
+    (forIn_guard $h array pair; exact array_forIn_pres_fst (fun _ _ => by repeat pres_step) $h))
 
 /-! ## Epoch processing -/
 
