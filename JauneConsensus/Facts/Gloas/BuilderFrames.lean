@@ -543,4 +543,177 @@ theorem processBuilderExitRequest_at {cfg : Config} {st st' : JauneConsensus.Glo
     rw [hign (fun _ h => by cases h)]
     exact ⟨rfl, rfl, Or.inl rfl⟩
 
+
+/-! ## The builder-deposit and builder-exit loops (B3 writers, B1 register-then-top-up) -/
+
+theorem foldlM_snoc_ok {α β : Type} {f : β → α → M β} {l : List α} {s0 st st' : β} {x : α}
+    (hl : l.foldlM f s0 = .ok st) (hx : f st x = .ok st') : (l ++ [x]).foldlM f s0 = .ok st' := by
+  rw [List.foldlM_append, hl]
+  show List.foldlM f st [x] = .ok st'
+  rw [List.foldlM_cons, hx]
+  rfl
+
+/-- A builder deposit in the list `rs`, reached from `s0` through the deposits before it, is a
+top-up of builder `i` that resets its `withdrawable_epoch` (CL:2354-2358). -/
+def TopUpResetIn (ctx : Ctx) (s0 : JauneConsensus.Gloas.BeaconState P)
+    (rs : List JauneConsensus.Gloas.BuilderDepositRequest) (i : Nat) : Prop :=
+  ∃ pre r post st, rs = pre ++ r :: post ∧
+    pre.foldlM (JauneConsensus.Gloas.processBuilderDepositRequest ctx) s0 = .ok st ∧
+    classifyBuilderDeposit ctx.cfg ctx.blsActive st r = .ok (.topUp i r.amount true)
+
+theorem TopUpResetIn.snoc {ctx : Ctx} {s0 : JauneConsensus.Gloas.BeaconState P}
+    {L : List JauneConsensus.Gloas.BuilderDepositRequest} {i : Nat} (h : TopUpResetIn ctx s0 L i)
+    (x : JauneConsensus.Gloas.BuilderDepositRequest) : TopUpResetIn ctx s0 (L ++ [x]) i := by
+  obtain ⟨pre, r, post, st, rfl, h1, h2⟩ := h
+  exact ⟨pre, r, post ++ [x], st, by simp, h1, h2⟩
+
+/-- The slot-`i` invariant of the deposit loop: builder `i` keeps its pubkey and
+`withdrawable_epoch`, or a reset top-up of `i` happened, or `i` holds a different (fresh) builder
+with `withdrawable_epoch = FAR_FUTURE_EPOCH`. -/
+def DepositSlotInv (ctx : Ctx) (s0 : JauneConsensus.Gloas.BeaconState P)
+    (L : List JauneConsensus.Gloas.BuilderDepositRequest) (i : Nat) (b : JauneConsensus.Gloas.Builder)
+    (x : JauneConsensus.Gloas.BeaconState P) : Prop :=
+  x.slot = s0.slot ∧ ∃ c, x.builders.toArray[i]? = some c ∧
+    ((c.pubkey = b.pubkey ∧ c.withdrawable_epoch = b.withdrawable_epoch) ∨
+      TopUpResetIn ctx s0 L i ∨
+      (c.pubkey ≠ b.pubkey ∧ c.withdrawable_epoch = FAR_FUTURE_EPOCH))
+
+theorem depositSlotInv_step (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Ctx}
+    {s0 st st' : JauneConsensus.Gloas.BeaconState P}
+    {pre : List JauneConsensus.Gloas.BuilderDepositRequest} {r : JauneConsensus.Gloas.BuilderDepositRequest}
+    {i : Nat} {b : JauneConsensus.Gloas.Builder}
+    (hpre : pre.foldlM (JauneConsensus.Gloas.processBuilderDepositRequest ctx) s0 = .ok st)
+    (hinv : DepositSlotInv ctx s0 pre i b st)
+    (h : JauneConsensus.Gloas.processBuilderDepositRequest ctx st r = .ok st') :
+    DepositSlotInv ctx s0 (pre ++ [r]) i b st' := by
+  obtain ⟨hsl, c, hc, hcase⟩ := hinv
+  obtain ⟨hsl', _, hat⟩ := processBuilderDepositRequest_at h i
+  refine ⟨hsl'.trans hsl, ?_⟩
+  have keep : ∀ c' : JauneConsensus.Gloas.Builder, c'.pubkey = c.pubkey →
+      c'.withdrawable_epoch = c.withdrawable_epoch →
+      ((c'.pubkey = b.pubkey ∧ c'.withdrawable_epoch = b.withdrawable_epoch) ∨
+        TopUpResetIn ctx s0 (pre ++ [r]) i ∨
+        (c'.pubkey ≠ b.pubkey ∧ c'.withdrawable_epoch = FAR_FUTURE_EPOCH)) := by
+    intro c' hp hw
+    rcases hcase with ⟨h1, h2⟩ | hR | ⟨h1, h2⟩
+    · exact Or.inl ⟨hp.trans h1, hw.trans h2⟩
+    · exact Or.inr (Or.inl (hR.snoc r))
+    · exact Or.inr (Or.inr ⟨hp ▸ h1, hw.trans h2⟩)
+  rcases hat with heq | ⟨c0, c', reset, hc0, hc', hcl, hpk, _, hres, _⟩ |
+      ⟨addr, e, _, he, hat', hall, hreuse⟩
+  · rw [heq]; exact ⟨c, hc, keep c rfl rfl⟩
+  · rw [hc] at hc0; cases hc0
+    refine ⟨c', hc', ?_⟩
+    cases reset with
+    | false => exact keep c' hpk (hres rfl)
+    | true => exact Or.inr (Or.inl ⟨pre, r, [], st, rfl, hpre, hcl⟩)
+  · refine ⟨_, hat', ?_⟩
+    obtain ⟨hwle, _⟩ := hreuse c hc
+    rcases hcase with ⟨h1, _⟩ | hR | ⟨_, h2⟩
+    · refine Or.inr (Or.inr ⟨fun heqpk => ?_, rfl⟩)
+      exact hall c (Array.mem_of_getElem? hc) (h1.trans heqpk.symm)
+    · exact Or.inr (Or.inl (hR.snoc r))
+    · rw [h2] at hwle
+      exact absurd hwle (not_far_le_epoch hspe he)
+
+theorem depositSlotInv_loop (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Ctx}
+    {s0 s1 : JauneConsensus.Gloas.BeaconState P} {i : Nat} {b : JauneConsensus.Gloas.Builder} :
+    ∀ (rest pre : List JauneConsensus.Gloas.BuilderDepositRequest) (st : JauneConsensus.Gloas.BeaconState P),
+      pre.foldlM (JauneConsensus.Gloas.processBuilderDepositRequest ctx) s0 = .ok st →
+      DepositSlotInv ctx s0 pre i b st →
+      rest.foldlM (JauneConsensus.Gloas.processBuilderDepositRequest ctx) st = .ok s1 →
+      DepositSlotInv ctx s0 (pre ++ rest) i b s1 := by
+  intro rest
+  induction rest with
+  | nil =>
+    intro pre st _ hinv h
+    cases h
+    simpa using hinv
+  | cons r rest ih =>
+    intro pre st hpre hinv h
+    rw [List.foldlM_cons] at h
+    obtain ⟨st', h1, h2⟩ := bind_eq_ok_iff.mp h
+    have := ih (pre ++ [r]) st' (foldlM_snoc_ok hpre h1) (depositSlotInv_step hspe hpre hinv h1) h2
+    simpa using this
+
+/-- **B3, the deposit loop.** Across a list of builder deposits, builder slot `i` keeps its pubkey
+and `withdrawable_epoch`, or one of the deposits is a reset top-up of `i`, or `i` ends holding a
+different builder with `withdrawable_epoch = FAR_FUTURE_EPOCH` (a fresh record on a reused
+slot). Needs `2 <= SLOTS_PER_EPOCH` (`ValidJointG.slotsPerEpoch`). -/
+theorem builderDeposits_slot (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Ctx}
+    {s0 s1 : JauneConsensus.Gloas.BeaconState P} {rs : List JauneConsensus.Gloas.BuilderDepositRequest}
+    (h : rs.foldlM (JauneConsensus.Gloas.processBuilderDepositRequest ctx) s0 = .ok s1)
+    {i : Nat} {b : JauneConsensus.Gloas.Builder} (hb : s0.builders.toArray[i]? = some b) :
+    DepositSlotInv ctx s0 rs i b s1 := by
+  have := depositSlotInv_loop hspe rs [] s0 rfl ⟨rfl, b, hb, Or.inl ⟨rfl, rfl⟩⟩ h
+  simpa using this
+
+/-- A builder exit in the list `es`, reached from `s1` through the exits before it, is classified
+`initiate i` (so it passed the source check, `classifyBuilderExit_meaning`). -/
+def ExitInitiateIn (cfg : Config) (s1 : JauneConsensus.Gloas.BeaconState P)
+    (es : List JauneConsensus.Gloas.BuilderExitRequest) (i : Nat) : Prop :=
+  ∃ pre e post st, es = pre ++ e :: post ∧
+    pre.foldlM (JauneConsensus.Gloas.processBuilderExitRequest cfg) s1 = .ok st ∧
+    classifyBuilderExit cfg st e = .ok (.initiate i)
+
+theorem ExitInitiateIn.snoc {cfg : Config} {s1 : JauneConsensus.Gloas.BeaconState P}
+    {L : List JauneConsensus.Gloas.BuilderExitRequest} {i : Nat} (h : ExitInitiateIn cfg s1 L i)
+    (x : JauneConsensus.Gloas.BuilderExitRequest) : ExitInitiateIn cfg s1 (L ++ [x]) i := by
+  obtain ⟨pre, r, post, st, rfl, h1, h2⟩ := h
+  exact ⟨pre, r, post ++ [x], st, by simp, h1, h2⟩
+
+/-- The slot-`i` invariant of the exit loop. -/
+def ExitSlotInv (cfg : Config) (s1 : JauneConsensus.Gloas.BeaconState P)
+    (L : List JauneConsensus.Gloas.BuilderExitRequest) (i : Nat) (c : JauneConsensus.Gloas.Builder)
+    (x : JauneConsensus.Gloas.BeaconState P) : Prop :=
+  x.slot = s1.slot ∧ ∃ c', x.builders.toArray[i]? = some c' ∧ c'.pubkey = c.pubkey ∧
+    (c'.withdrawable_epoch = c.withdrawable_epoch ∨
+      (c.withdrawable_epoch = FAR_FUTURE_EPOCH ∧ ExitInitiateIn cfg s1 L i))
+
+theorem exitSlotInv_loop {cfg : Config} {s1 s2 : JauneConsensus.Gloas.BeaconState P} {i : Nat}
+    {c : JauneConsensus.Gloas.Builder} :
+    ∀ (rest pre : List JauneConsensus.Gloas.BuilderExitRequest) (st : JauneConsensus.Gloas.BeaconState P),
+      pre.foldlM (JauneConsensus.Gloas.processBuilderExitRequest cfg) s1 = .ok st →
+      ExitSlotInv cfg s1 pre i c st →
+      rest.foldlM (JauneConsensus.Gloas.processBuilderExitRequest cfg) st = .ok s2 →
+      ExitSlotInv cfg s1 (pre ++ rest) i c s2 := by
+  intro rest
+  induction rest with
+  | nil =>
+    intro pre st _ hinv h
+    cases h
+    simpa using hinv
+  | cons r rest ih =>
+    intro pre st hpre hinv h
+    rw [List.foldlM_cons] at h
+    obtain ⟨st', h1, h2⟩ := bind_eq_ok_iff.mp h
+    have hstep : ExitSlotInv cfg s1 (pre ++ [r]) i c st' := by
+      obtain ⟨hsl, c', hc', hpk, hcase⟩ := hinv
+      obtain ⟨hsl', _, hat⟩ := processBuilderExitRequest_at h1 i
+      refine ⟨hsl'.trans hsl, ?_⟩
+      rcases hat with heq | ⟨c0, w, hc0, hc'', hcl, _, hfar⟩
+      · rw [heq]
+        refine ⟨c', hc', hpk, ?_⟩
+        rcases hcase with h | ⟨h1, h2⟩
+        · exact Or.inl h
+        · exact Or.inr ⟨h1, h2.snoc r⟩
+      · rw [hc'] at hc0; cases hc0
+        refine ⟨_, hc'', hpk, Or.inr ⟨?_, ?_⟩⟩
+        · rcases hcase with h | ⟨h1, _⟩
+          · rw [← h]; exact hfar
+          · exact h1
+        · exact ⟨pre, r, [], st, rfl, hpre, hcl⟩
+    simpa using ih (pre ++ [r]) st' (foldlM_snoc_ok hpre h1) hstep h2
+
+/-- **B3, the exit loop.** Across a list of builder exits, builder slot `i` keeps its pubkey, and
+its `withdrawable_epoch` is unchanged or it was `FAR_FUTURE_EPOCH` and one of the exits was
+classified `initiate i`. -/
+theorem builderExits_slot {cfg : Config} {s1 s2 : JauneConsensus.Gloas.BeaconState P}
+    {es : List JauneConsensus.Gloas.BuilderExitRequest}
+    (h : es.foldlM (JauneConsensus.Gloas.processBuilderExitRequest cfg) s1 = .ok s2)
+    {i : Nat} {c : JauneConsensus.Gloas.Builder} (hc : s1.builders.toArray[i]? = some c) :
+    ExitSlotInv cfg s1 es i c s2 := by
+  have := exitSlotInv_loop es [] s1 rfl ⟨rfl, c, hc, rfl, Or.inl rfl⟩ h
+  simpa using this
+
 end JauneConsensus.Facts.Gloas
