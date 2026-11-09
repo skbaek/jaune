@@ -186,17 +186,6 @@ abbrev EnvelopeChecks (cfg : Config) (engine : NewPayloadRequest P → Bool)
 
 /-! ## The characterization -/
 
-/-- A `require` succeeds iff its condition holds. -/
-private theorem require_eq_ok_iff {c : Bool} {site : String} {u : Unit} :
-    require c site = .ok u ↔ c = true := by
-  cases c
-  · simp [require]
-  · exact iff_of_true rfl rfl
-
-/-- An existential over `Unit` is its one instance. -/
-private theorem unit_exists_iff {p : Unit → Prop} : (∃ u : Unit, p u) ↔ p () :=
-  ⟨fun ⟨(), h⟩ => h, fun h => ⟨(), h⟩⟩
-
 /-- `verify_execution_payload_envelope` under the switch `bls` succeeds exactly when every named
 conjunct holds. -/
 theorem verifyExecutionPayloadEnvelopeB_ok_iff {bls : Bool} {cfg : Config}
@@ -205,7 +194,7 @@ theorem verifyExecutionPayloadEnvelopeB_ok_iff {bls : Bool} {cfg : Config}
     verifyExecutionPayloadEnvelopeB bls cfg engine state signedEnvelope = .ok () ↔
       EnvelopeChecksB bls cfg engine state signedEnvelope := by
   simp only [verifyExecutionPayloadEnvelopeB, Except.bind_eq_ok_iff, require_eq_ok_iff,
-    unit_exists_iff, beq_iff_eq]
+    exists_unit_iff, beq_iff_eq]
   constructor
   · rintro ⟨b, hsig, rfl, h1, h2, h3, h4, h5, h6, h7, h8, h9, t, ht, rfl, h10, heng⟩
     exact ⟨hsig, h1, h2, h3, h4, h5, h6, h7, h8, h9, ht, h10, heng⟩

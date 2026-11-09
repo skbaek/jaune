@@ -71,6 +71,10 @@ with the inventory's count for each. -/
 structure Manifest where
   release : String
   tagCommit : String
+  /-- The general-only provenance entry's release and tag commit (the `general` preset's
+  tarball comes from it, not from `release`). -/
+  generalRelease : String
+  generalTagCommit : String
   /-- `(preset, suite, record, inventory count)` -/
   suites : List (String × SuiteKey × SuiteRecord × Nat)
 
@@ -190,7 +194,8 @@ def Manifest.load (provenanceText inventoryText : String) : Except ManifestError
               let k : SuiteKey := ⟨fork, runner, handler, suite⟩
               if !suites.any (fun (p, k', _) => p == preset && k' == k) then
                 throw (.mismatch s!"in-scope inventory suite {preset}/{k.render} has no record")
-  pure { release, tagCommit, suites := suites.reverse }
+  pure { release, tagCommit, generalRelease, generalTagCommit := generalTag,
+         suites := suites.reverse }
 
 /-! ## The digests the manifest pins -/
 

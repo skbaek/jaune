@@ -473,6 +473,12 @@ theorem Bitvector.ext {n : Nat} : ∀ {a b : Bitvector n}, a.bits = b.bits → a
 theorem Bitlist.ext {n : Nat} : ∀ {a b : Bitlist n}, a.bits = b.bits → a = b
   | ⟨_, _⟩, ⟨_, _⟩, rfl => rfl
 
+/-- `bits[i] = b`, rejecting out of range. -/
+def Bitvector.set {n : Nat} (xs : Bitvector n) (i : Nat) (b : Bool) (site : String) :
+    M (Bitvector n) :=
+  if h : i < xs.bits.size then pure ⟨xs.bits.set i b h, by simpa using xs.size_eq⟩
+  else throw (.index site i xs.bits.size)
+
 instance {n : Nat} : DecidableEq (Bitvector n) := fun a b =>
   if h : a.bits = b.bits then isTrue (Bitvector.ext h) else isFalse (fun e => h (e ▸ rfl))
 

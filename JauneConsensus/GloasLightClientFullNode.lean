@@ -15,7 +15,7 @@ Transcribed from `ethereum/consensus-specs` `v1.7.0-beta.4`:
 `compute_merkle_proof` runs over a `ProofTree` (`LightClientFullNode.lean`). Gloas's
 `BeaconState`, `BeaconBlockBody` and `ExecutionPayloadBid` are progressive containers (EIP-7688,
 `eth-ssz-specs==0.1.0`'s right-leaning spine, `SSZ/Progressive.lean`), so their trees are built by
-`ProofTree.ofProgressive`: the root node is `(spine root, active-fields chunk)`, and each spine node
+`ProofTree.ofProgressive` (`LightClientFullNode.lean`): the root node is `(spine root, active-fields chunk)`, and each spine node
 is `(subtree of this level, rest of the spine)`, the levels holding 1, 4, 16, ... chunks. A
 one-chunk level is the chunk itself (`merkleize([x], 1) = x`), so every node of the tree has at
 least two children and every descent of `computeMerkleProof` consumes a level of the generalized
@@ -27,31 +27,6 @@ open Jaune (Bytes B256)
 open JauneConsensus
 
 variable {P : Preset} {f : CFork}
-
-/-! ## Progressive proof trees -/
-
-/-- The spine of `merkleize_progressive(chunks, num_leaves)` along `.successorRight` as a proof
-tree entry `(root, tree)`: the empty input is the zero chunk; otherwise the node over this level's
-`num_leaves` chunks (zero-padded) and the rest of the spine. Total by fuel. -/
-def progressiveSpine : Nat → List (B256 × Option ProofTree) → Nat → B256 × Option ProofTree
-  | 0, _, _ => (zeroChunk, none)
-  | _ + 1, [], _ => (zeroChunk, none)
-  | fuel + 1, cs, n =>
-    let level := cs.take n
-    let padded := level ++ List.replicate (n - level.length) (zeroChunk, none)
-    let entry : B256 × Option ProofTree :=
-      -- a one-chunk level is its chunk (`padded` is `[c]` here: `level` is non-empty)
-      if n = 1 then (match padded with | e :: _ => e | [] => (zeroChunk, none))
-      else (merkleizeDepth (level.map (·.1)) (depthOf n), some (.node padded))
-    let succ := progressiveSpine fuel (cs.drop n) (n * 4)
-    (Spine.successorRight.node succ.1 entry.1, some (.node [entry, succ]))
-
-/-- The proof tree of a progressive container whose `active_fields` are all `1` (every Gloas
-container), from its field chunks with their expansions:
-`mix_in_active_fields(merkleize_progressive(chunks), active_fields)`. -/
-def _root_.JauneConsensus.ProofTree.ofProgressive (fields : List (B256 × Option ProofTree)) : ProofTree :=
-  let sp := progressiveSpine (fields.length + 1) fields 1
-  .node [sp, (chunkOf (bitsToBytes (List.replicate fields.length true)), none)]
 
 /-- The field chunks of a progressive container, field `i` expanded into `sub`. -/
 def expandAt (roots : List B256) (i : Nat) (sub : ProofTree) : List (B256 × Option ProofTree) :=

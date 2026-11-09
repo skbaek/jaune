@@ -171,14 +171,12 @@ def engineTxDecodeNote (payload : Gloas.ExecutionPayload MP) : Option String :=
     some s!"blobVersionedHashesOf refuses transaction(s) {at_}: {repr e}"
 
 /-- The `Gloas.NewPayloadRequest` an envelope stands for, with `execution_requests := reqs`. The
-versioned hashes are those of the payload's blob transactions; a legacy transaction (first byte
-`≥ 0xc0`, an RLP list) carries none. -/
+versioned hashes are the engine's own `blobVersionedHashesOf` over the payload's transactions
+(since SEAMFIX it decodes legacy RLP-list transactions too, which carry none). -/
 def newPayloadRequest (env : Gloas.ExecutionPayloadEnvelope MP) (reqs : Gloas.ExecutionRequests) :
     Except String (Gloas.NewPayloadRequest MP) := do
-  let perTx ← env.payload.txBytes.zipIdx.mapM fun (t, i) =>
-    if t.headD 0 ≥ 0xc0 then pure []
-    else (blobVersionedHashesOf [t]).mapError fun e => s!"transaction {i}: {repr e}"
-  let hashes := perTx.flatten
+  let hashes ← (blobVersionedHashesOf env.payload.txBytes).mapError fun e =>
+    s!"transactions: {repr e}"
   let arr := hashes.toArray
   if h : arr.size ≤ MP.MAX_BLOB_COMMITMENTS_PER_BLOCK then
     pure { execution_payload := env.payload

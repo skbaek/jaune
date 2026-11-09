@@ -68,6 +68,17 @@ abbrev M := Except Reject
 @[inline] def require (cond : Bool) (site : String) : M Unit :=
   if cond then pure () else throw (.assert site)
 
+/-- A `require` succeeds iff its condition holds. -/
+theorem require_eq_ok_iff {c : Bool} {site : String} {u : Unit} :
+    require c site = .ok u ↔ c = true := by
+  cases c
+  · simp [require]
+  · exact iff_of_true rfl rfl
+
+/-- An existential over `Unit` is its one instance. -/
+theorem exists_unit_iff {p : Unit → Prop} : (∃ u : Unit, p u) ↔ p () :=
+  ⟨fun ⟨(), h⟩ => h, fun h => ⟨(), h⟩⟩
+
 /-- A read at `i` of an array, rejecting with `Reject.index` when out of range (pyspec
 `seq[i]`, which raises `IndexError`). -/
 @[inline] def getAt {α : Type} (xs : Array α) (i : Nat) (site : String) : M α :=
