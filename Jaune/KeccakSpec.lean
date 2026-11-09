@@ -885,6 +885,83 @@ end Proof
 
 end Keccak.FIPS
 
+namespace Keccak.FIPS
+
+/-! ### The ranged absorb is the list absorb on the range -/
+
+theorem drop_take_eight (l : List UInt8) (k m : Nat) (h : k + m + 8 ≤ l.length) :
+    (l.drop k).take (m + 8) =
+      l[k] :: l[k + 1] :: l[k + 2] :: l[k + 3] :: l[k + 4] :: l[k + 5] :: l[k + 6] ::
+        l[k + 7] :: (l.drop (k + 8)).take m := by
+  rw [List.drop_eq_getElem_cons (by omega), List.drop_eq_getElem_cons (by omega),
+    List.drop_eq_getElem_cons (by omega), List.drop_eq_getElem_cons (by omega),
+    List.drop_eq_getElem_cons (by omega), List.drop_eq_getElem_cons (by omega),
+    List.drop_eq_getElem_cons (by omega), List.drop_eq_getElem_cons (by omega)]
+  simp only [List.take_succ_cons, Nat.add_assoc]
+
+theorem aux_getD (x : Nat) (y : ByteArray) (z : Nat) (bnd : Nat) (bs : ByteArray)
+    (hb : bnd ≤ bs.size) :
+    ∀ (k m : Nat) (hm : m ≤ bnd) (i : Nat), i < k →
+      (KECCAK.ByteArray.run.aux x y z bnd bs hb m hm k).getD i 0 =
+        ((bs.data.toList.drop (bnd - m)).take m ++ [1]).getD i 0 := by
+  intro k
+  induction k with
+  | zero => intro m hm i hi; omega
+  | succ k ih =>
+    intro m hm i hi
+    rcases m with _ | m
+    · rw [KECCAK.ByteArray.run.aux.eq_def]
+      rcases i with _ | i
+      · simp
+      · simp [List.getD_eq_getElem?_getD, List.getElem?_replicate]
+        split <;> rfl
+    · rw [KECCAK.ByteArray.run.aux.eq_def]
+      simp only []
+      rw [List.drop_eq_getElem_cons (by simp; omega), List.take_succ_cons]
+      rcases i with _ | i
+      · simp; rfl
+      · rw [List.getD_cons_succ, ih m (by omega) i (by omega),
+          show bnd - m = bnd - (m + 1) + 1 by omega, List.cons_append, List.getD_cons_succ]
+
+theorem byteArray_run_eq (bnd : Nat) (bs : ByteArray) (hb : bnd ≤ bs.size) :
+    ∀ (n : Nat) (hn : n ≤ bnd) (wc : Fin 17) (ws : Vector UInt64 25),
+      KECCAK.ByteArray.run bnd bs hb n hn wc ws =
+        KECCAK.Bytes.run wc ((bs.data.toList.drop (bnd - n)).take n) ws := by
+  intro n
+  induction n using Nat.strong_induction_on with
+  | _ n ih =>
+  intro hn wc ws
+  rw [KECCAK.ByteArray.run.eq_1]
+  by_cases h7 : 7 < n
+  · simp only [h7, ↓reduceDIte]
+    obtain ⟨m, rfl⟩ : ∃ m, n = m + 8 := ⟨n - 8, by omega⟩
+    rw [ih (m + 8 - 8) (by omega), drop_take_eight _ _ _ (by simp; omega), run_cons8]
+    simp only [Nat.add_sub_cancel, show bnd - (m + 8) + 8 = bnd - m by omega]
+    have e : ∀ (i : Nat) (h1 : i < bs.size) (j : Nat) (h2 : j < bs.data.toList.length),
+        i = j → bs[i] = bs.data.toList[j] := by
+      intro i h1 j h2 h; subst h; simp only [Array.getElem_toList]; rfl
+    rw [e (bnd - (m + 8 - 7)) _ (bnd - (m + 8) + 7) _ (by omega),
+      e (bnd - (m + 8 - 6)) _ (bnd - (m + 8) + 6) _ (by omega),
+      e (bnd - (m + 8 - 5)) _ (bnd - (m + 8) + 5) _ (by omega),
+      e (bnd - (m + 8 - 4)) _ (bnd - (m + 8) + 4) _ (by omega),
+      e (bnd - (m + 8 - 3)) _ (bnd - (m + 8) + 3) _ (by omega),
+      e (bnd - (m + 8 - 2)) _ (bnd - (m + 8) + 2) _ (by omega),
+      e (bnd - (m + 8 - 1)) _ (bnd - (m + 8) + 1) _ (by omega),
+      e (bnd - (m + 8)) _ (bnd - (m + 8)) _ rfl]
+  · simp only [h7, ↓reduceDIte]
+    have hlen : ((bs.data.toList.drop (bnd - n)).take n).length < 8 := by simp; omega
+    rw [run_short _ _ _ hlen, runTail]
+    have hg : ∀ i, i < 8 →
+        (KECCAK.ByteArray.run.aux bnd bs n bnd bs hb n hn 8).getD i 0 =
+          ((bs.data.toList.drop (bnd - n)).take n ++ [1]).getD i 0 :=
+      fun i hi => aux_getD bnd bs n bnd bs hb 8 n hn i hi
+    simp only [hg 0 (by decide), hg 1 (by decide), hg 2 (by decide), hg 3 (by decide),
+      hg 4 (by decide), hg 5 (by decide), hg 6 (by decide), hg 7 (by decide),
+      Vector.getElem_mk, List.getElem_toArray, takeD_getElem]
+    rfl
+
+end Keccak.FIPS
+
 /-- **Jaune's Keccak-256 is Keccak-256 as published.**
 
 `Bytes.keccak` — the optimized kernel in `Jaune/Hash.lean`, its unrolled
@@ -901,5 +978,32 @@ theorem Bytes.keccak_eq_fips (m : Bytes) : Bytes.keccak m = Keccak.FIPS.keccak25
   simp only [List.nil_append, Keccak.FIPS.keccak256, Keccak.FIPS.keccak256Digest,
     Keccak.FIPS.KECCAK_512_256, Keccak.FIPS.length_h2b]
   rfl
+
+/-- **The ranged kernel is Keccak-256 of its range.** `ByteArray.keccak loc sz
+bs` hashes the `sz` bytes of `bs` from `loc`, reading past the end as zero
+bytes (its documented convention), and equals FIPS 202's Keccak-256 of exactly
+those bytes, on every input. -/
+theorem ByteArray.keccak_eq_fips (loc sz : Nat) (bs : ByteArray) :
+    ByteArray.keccak loc sz bs =
+      Keccak.FIPS.keccak256
+        (((bs.data.toList ++ List.replicate (loc + sz - bs.size) 0).drop loc).take sz) := by
+  unfold ByteArray.keccak
+  split
+  · rename_i h
+    rw [Keccak.FIPS.byteArray_run_eq, show loc + sz - sz = loc by omega,
+      show loc + sz - bs.size = 0 by omega, List.replicate_zero, List.append_nil,
+      ← Bytes.keccak_eq_fips]
+    rfl
+  · rename_i h
+    rw [Keccak.FIPS.byteArray_run_eq, show loc + sz - sz = loc by omega,
+      ← Bytes.keccak_eq_fips]
+    rfl
+
+/-- `ByteArray.keccak` on an in-range slice: Keccak-256 of the slice. -/
+theorem ByteArray.keccak_eq_fips_of_le (loc sz : Nat) (bs : ByteArray)
+    (h : loc + sz ≤ bs.size) :
+    ByteArray.keccak loc sz bs = Keccak.FIPS.keccak256 ((bs.data.toList.drop loc).take sz) := by
+  rw [ByteArray.keccak_eq_fips, show loc + sz - bs.size = 0 by omega, List.replicate_zero,
+    List.append_nil]
 
 end Jaune
