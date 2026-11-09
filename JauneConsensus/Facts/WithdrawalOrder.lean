@@ -16,9 +16,11 @@ premises are derived from W2a's classification lemmas:
 * (b) `fullExit_applied_exit_ne`: applying a classified full exit leaves the
   validator's `exit_epoch` set (not `FAR_FUTURE_EPOCH`);
 * (c) `order_sensitive`: the composed two-fold order-sensitivity theorem, with
-  hypotheses about the pre-state only (plus the second-step successes, the
-  lookup stability through the exit, and the nonzero-amount fact, which are
-  reported as assumed).
+  hypotheses about the pre-state only (both classifications, both applications
+  from the pre-state, Electra or later, and a nonzero
+  `MIN_VALIDATOR_WITHDRAWABILITY_DELAY`); it also derives that both requests
+  carry the same pubkey. The second steps, the nonzero amount and the
+  intermediate reads are derived, not assumed.
 
 P2 control (ii): for each `WithdrawalIgnoreReason` constructor, a
 sufficient-condition lemma naming the abstract state conditions under which
@@ -778,5 +780,275 @@ theorem classify_ignored_noExcess {cfg : Config} {s : BeaconState P f}
   rw [ite_eq_right (show ¬((((!(hasCompoundingWithdrawalCredential v))) = true)) from by simp [hcomp])]
   rw [ite_eq_right (show ¬((((!(decide (minAct ≤ v.effective_balance)))) = true)) from by simp [hsuff])]
   rfl
+
+/-! ## (c) The composed order-sensitivity theorem -/
+
+/-- A classified partial withdrawal withdraws a nonzero amount: the excess gate
+`MIN_ACTIVATION_BALANCE + pending < balance` makes the available amount
+positive, and a partial request's amount is not the (zero) full-exit amount. -/
+theorem classify_partial_amt_ne_zero {cfg : Config} {state : BeaconState P f}
+    {wr : WithdrawalRequest} {i : ValidatorIndex} {amt : Gwei}
+    (h : classifyWithdrawalRequest cfg state wr = .ok (.partialWithdrawal i amt)) :
+    amt ≠ U64.zero := by
+  unfold classifyWithdrawalRequest at h
+  dsimp only at h
+  obtain ⟨q1, h1ok, h1c⟩ := bind_ok_inv h
+  by_cases hb1 : ((q1.length == P.PENDING_PARTIAL_WITHDRAWALS_LIMIT &&
+    !(wr.amount == FULL_EXIT_REQUEST_AMOUNT)) = true)
+  · rw [ite_eq_left hb1] at h1c
+    cases h1c
+  · rw [ite_eq_right hb1] at h1c
+    obtain ⟨v2, h2ok, h2c⟩ := bind_ok_inv h1c
+    cases v2 with
+    | none => cases h2c
+    | some j =>
+      dsimp only at h2c
+      obtain ⟨validator, h3ok, h3c⟩ := bind_ok_inv h2c
+      by_cases hb3 : ((!(hasExecutionWithdrawalCredential validator &&
+        validator.withdrawal_credentials.toBytes.drop 12 ==
+          wr.source_address.toBytes)) = true)
+      · rw [ite_eq_left hb3] at h3c
+        cases h3c
+      · rw [ite_eq_right hb3] at h3c
+        obtain ⟨current, h4ok, h4c⟩ := bind_ok_inv h3c
+        by_cases hb4 : ((!isActiveValidator validator current) = true)
+        · rw [ite_eq_left hb4] at h4c
+          cases h4c
+        · rw [ite_eq_right hb4] at h4c
+          by_cases hb5 : ((validator.exit_epoch != FAR_FUTURE_EPOCH) = true)
+          · rw [ite_eq_left hb5] at h4c
+            cases h4c
+          · rw [ite_eq_right hb5] at h4c
+            obtain ⟨period, h5aok, h5ac⟩ := bind_ok_inv h4c
+            obtain ⟨actSum, h5bok, h5bc⟩ := bind_ok_inv h5ac
+            by_cases hc6 : (current < actSum)
+            · rw [ite_eq_left hc6] at h5bc
+              cases h5bc
+            · rw [ite_eq_right hc6] at h5bc
+              obtain ⟨pendingBalance, h6ok, h6c⟩ := bind_ok_inv h5bc
+              by_cases hb7 : ((wr.amount == FULL_EXIT_REQUEST_AMOUNT) = true)
+              · rw [ite_eq_left hb7] at h6c
+                by_cases hb8 : ((pendingBalance == U64.zero) = true)
+                · rw [ite_eq_left hb8] at h6c
+                  cases h6c
+                · rw [ite_eq_right hb8] at h6c
+                  cases h6c
+              · rw [ite_eq_right hb7] at h6c
+                obtain ⟨minAct, h7ok, h7c⟩ := bind_ok_inv h6c
+                obtain ⟨balance, h8ok, h8c⟩ := bind_ok_inv h7c
+                obtain ⟨sum, h9ok, h9c⟩ := bind_ok_inv h8c
+                by_cases hg : ((hasCompoundingWithdrawalCredential validator &&
+                  decide (minAct ≤ validator.effective_balance) &&
+                  decide (sum < balance)) = true)
+                · rw [ite_eq_left hg] at h9c
+                  obtain ⟨sub1, h10ok, h10c⟩ := bind_ok_inv h9c
+                  obtain ⟨avail, h11ok, h11c⟩ := bind_ok_inv h10c
+                  cases h11c
+                  intro hz
+                  have hn := congrArg U64.toNat hz
+                  rw [U64.toNat_min] at hn
+                  have hz0 : U64.zero.toNat = 0 := rfl
+                  rw [hz0] at hn
+                  have hAvail : avail.toNat = sub1.toNat - pendingBalance.toNat :=
+                    U64.toNat_sub? h11ok
+                  have hSub1 : sub1.toNat = balance.toNat - minAct.toNat :=
+                    U64.toNat_sub? h10ok
+                  have hSum : sum.toNat = minAct.toNat + pendingBalance.toNat :=
+                    U64.toNat_add? h9ok
+                  have hlt : sum.toNat < balance.toNat :=
+                    U64.lt_iff.mp (of_decide_eq_true (Bool.and_eq_true_iff.mp hg).2)
+                  have hamt : wr.amount.toNat ≠ 0 := fun z =>
+                    hb7 (U64.beq_eq_true_iff.mpr (U64.eq_zero_of_toNat_eq_zero z))
+                  omega
+                · rw [ite_eq_right hg] at h9c
+                  by_cases hr1 : ((!hasCompoundingWithdrawalCredential
+                    validator) = true)
+                  · rw [ite_eq_left hr1] at h9c
+                    cases h9c
+                  · rw [ite_eq_right hr1] at h9c
+                    by_cases hr2 : ((!decide
+                      (minAct ≤ validator.effective_balance)) = true)
+                    · rw [ite_eq_left hr2] at h9c
+                      cases h9c
+                    · rw [ite_eq_right hr2] at h9c
+                      cases h9c
+
+/-- With no pending balance for `V` before, a successfully applied partial of
+`amt` for `V` leaves exactly `amt` pending for `V` (no overflow). -/
+theorem pending_after_partial_of_zero {cfg : Config} {s : BeaconState P f}
+    {wp : WithdrawalRequest} {V : ValidatorIndex} {amt : Gwei}
+    {s1 : BeaconState P f}
+    (hpend : getPendingBalanceToWithdraw s V = .ok U64.zero)
+    (happ : applyWithdrawalOutcome cfg s wp (.partialWithdrawal V amt) = .ok s1) :
+    getPendingBalanceToWithdraw s1 V = .ok amt := by
+  obtain ⟨sList, pushed, wd, hsread, hparr, hs1read, -, -, -⟩ :=
+    applyPartial_push happ
+  have hs0 : sList.toArray.foldlM (fun acc w => if w.validator_index == V then
+      U64.add? acc w.amount "get_pending_balance_to_withdraw"
+      else pure acc) U64.zero = .ok U64.zero := by
+    have hsr : Gated.read s.pending_partial_withdrawals
+        "pending_partial_withdrawals" = .ok sList := hsread
+    have h0 := hpend
+    unfold getPendingBalanceToWithdraw at h0
+    rw [hsr] at h0
+    simpa only [bind_ok_cons] using h0
+  have hps1 : getPendingBalanceToWithdraw s1 V =
+      pushed.toArray.foldlM (fun acc w => if w.validator_index == V then
+        U64.add? acc w.amount "get_pending_balance_to_withdraw"
+        else pure acc) U64.zero := by
+    have hs1r : Gated.read s1.pending_partial_withdrawals
+        "pending_partial_withdrawals" = .ok pushed := hs1read
+    unfold getPendingBalanceToWithdraw
+    rw [hs1r]
+    simp only [bind_ok_cons]
+  rw [hps1, hparr, Array.foldlM_push, hs0, bind_ok_cons]
+  have hv : (({ validator_index := V, amount := amt, withdrawable_epoch := wd } :
+      PendingPartialWithdrawal).validator_index == V) = true :=
+    U64.beq_eq_true_iff.mpr rfl
+  rw [ite_eq_left hv]
+  obtain ⟨x, hx⟩ := (U64.add?_ok_iff (a := U64.zero) (b := amt)
+    (site := "get_pending_balance_to_withdraw")).mpr (by
+      have := U64.toNat_lt amt
+      have hz0 : U64.zero.toNat = 0 := rfl
+      omega)
+  have hxa : x = amt := U64.ext_toNat (by
+    rw [U64.toNat_add? hx]
+    have hz0 : U64.zero.toNat = 0 := rfl
+    omega)
+  rw [hx, hxa]
+
+/-- `validatorIndexOf` reads only the validator registry. -/
+theorem validatorIndexOf_congr {s s' : BeaconState P f}
+    (h : s'.validators = s.validators) (p : BLSPubkey) :
+    validatorIndexOf s' p = validatorIndexOf s p := by
+  unfold validatorIndexOf
+  rw [h]
+
+/-- A successful `validatorIndexOf` lookup names a registered validator that
+carries the looked-up pubkey. -/
+theorem validatorIndexOf_pubkey {s : BeaconState P f} {p : BLSPubkey}
+    {V : ValidatorIndex} {site : String}
+    (h : validatorIndexOf s p = .ok (some V)) :
+    ∃ v, s.validators.get V.toNat site = .ok v ∧ v.pubkey = p := by
+  unfold validatorIndexOf at h
+  cases hf : s.validators.toArray.findIdx? (·.pubkey == p) with
+  | none =>
+    rw [hf] at h
+    cases h
+  | some i =>
+    rw [hf] at h
+    obtain ⟨x, hx, hxe⟩ := bind_ok_inv h
+    have hxV : x = V := Option.some.inj (ok_inj_of_pure hxe)
+    have hi : x.toNat = i := U64.toNat_ofNat? hx
+    rw [Array.findIdx?_eq_some_iff_getElem] at hf
+    obtain ⟨hlt, hpk, -⟩ := hf
+    refine ⟨s.validators.toArray[i], ?_, ?_⟩
+    · show getAt s.validators.toArray V.toNat site = _
+      unfold getAt
+      rw [← hxV, hi, Array.getElem?_eq_getElem hlt]
+      rfl
+    · have hb : (s.validators.toArray[i].pubkey.toArray == p.toArray) = true := hpk
+      exact SszVector.ext (beq_iff_eq.mp hb)
+
+/-- (c) P2 negative control (i), order sensitivity. Take a validator `V`, a
+partial withdrawal `wp` and a full exit `wf`, both classified against the same
+pre-state `s` as requests for `V`, with both applications succeeding from `s`
+(Electra or later, nonzero withdrawability delay). Then both requests carry
+the same pubkey, and folding `[wp, wf]` from `s` differs from folding
+`[wf, wp]`: in the first order the full exit is ignored (the partial left a
+pending balance), so the result is the partial's state, whose registry is
+`s`'s; in the second order the exit has set `V`'s `exit_epoch`, and every
+successful outcome of the partial keeps that registry. -/
+theorem order_sensitive {cfg : Config} {s s1 s2 : BeaconState P f}
+    {wp wf : WithdrawalRequest} {V : ValidatorIndex} {amt : Gwei}
+    (he : f.atLeast .electra = true)
+    (hdelay : ∃ d, c64 cfg.MIN_VALIDATOR_WITHDRAWABILITY_DELAY = .ok d ∧
+      d ≠ U64.zero)
+    (hcp : classifyWithdrawalRequest cfg s wp = .ok (.partialWithdrawal V amt))
+    (hcf : classifyWithdrawalRequest cfg s wf = .ok (.fullExit V))
+    (hap : applyWithdrawalOutcome cfg s wp (.partialWithdrawal V amt) = .ok s1)
+    (haf : applyWithdrawalOutcome cfg s wf (.fullExit V) = .ok s2) :
+    wp.validator_pubkey = wf.validator_pubkey ∧
+      foldWithdrawalRequests cfg s [wp, wf] ≠ foldWithdrawalRequests cfg s [wf, wp] := by
+  obtain ⟨hamtF, -, hlookF, ⟨vc, hgetc, hX, hY, ⟨cur, hcur, hact, hexit,
+    ⟨period, hper, ⟨actSum, hsum, hearly⟩⟩⟩⟩, hpend0⟩ := classify_fullExit_iff.mp hcf
+  obtain ⟨_, _, _, -, -, hs1read, hvalid1, hslot1, -⟩ := applyPartial_push hap
+  -- the pubkey pin
+  have hlookP : validatorIndexOf s wp.validator_pubkey = .ok (some V) :=
+    (classify_fullExit_or_partial_spec hcp (Or.inr ⟨amt, rfl⟩)).1
+  have hpk : wp.validator_pubkey = wf.validator_pubkey := by
+    obtain ⟨vp, hgp, hvp⟩ := validatorIndexOf_pubkey
+      (site := "process_withdrawal_request") hlookP
+    obtain ⟨vf, hgf, hvf⟩ := validatorIndexOf_pubkey
+      (site := "process_withdrawal_request") hlookF
+    have hpf : vp = vf := Except.ok.inj (hgp.symm.trans hgf)
+    rw [← hvp, ← hvf, hpf]
+  refine ⟨hpk, ?_⟩
+  -- first order: the full exit after the partial is ignored
+  have hamt0 : amt ≠ U64.zero := classify_partial_amt_ne_zero hcp
+  have hpb1 : getPendingBalanceToWithdraw s1 V = .ok amt :=
+    pending_after_partial_of_zero hpend0 hap
+  have hcur1 : getCurrentEpoch s1 = .ok cur := by
+    unfold getCurrentEpoch
+    rw [hslot1]
+    exact hcur
+  have hget1 : s1.validators.get V.toNat "process_withdrawal_request" = .ok vc := by
+    rw [hvalid1]
+    exact hgetc
+  have hlook1 : validatorIndexOf s1 wf.validator_pubkey = .ok (some V) := by
+    rw [validatorIndexOf_congr hvalid1]
+    exact hlookF
+  have hfullB : (wf.amount == FULL_EXIT_REQUEST_AMOUNT) = true :=
+    U64.beq_eq_true_iff.mpr hamtF
+  have hc1 : classifyWithdrawalRequest cfg s1 wf =
+      .ok (.ignored .fullExitPendingBalance) :=
+    classify_ignored_fullExitPendingBalance hs1read (by simp [hfullB]) hlook1 hget1
+      (by simp [hX, hY]) hcur1 hact (by rw [hexit]; exact far_bne_self_false)
+      hper hsum hearly hpb1 hfullB
+      (Bool.eq_false_iff.mpr (fun h => hamt0 (U64.beq_eq_true_iff.mp h)))
+  have hp1 : processWithdrawalRequest cfg s wp = .ok s1 := by
+    rw [processWithdrawalRequest_eq, hcp]
+    exact hap
+  have hp2 : processWithdrawalRequest cfg s1 wf = .ok s1 := by
+    rw [processWithdrawalRequest_eq, hc1]
+    rfl
+  have hA : foldWithdrawalRequests cfg s [wp, wf] = .ok s1 := by
+    unfold foldWithdrawalRequests
+    simp only [List.foldlM_cons, hp1, ok_bind', hp2]
+    rfl
+  -- second order: the exit changes the registry, which the partial keeps
+  obtain ⟨v2, hget2, hexit2⟩ := fullExit_applied_exit_ne he hdelay hcf haf
+  have hvne : s2.validators ≠ s.validators := by
+    intro heq
+    rw [heq, hgetc] at hget2
+    have hv : vc = v2 := Except.ok.inj hget2
+    exact hexit2 (hv ▸ hexit)
+  have hq1 : processWithdrawalRequest cfg s wf = .ok s2 := by
+    rw [processWithdrawalRequest_eq, hcf]
+    exact haf
+  have hB : ∀ r, processWithdrawalRequest cfg s2 wp = .ok r →
+      r.validators = s2.validators := by
+    intro r hr
+    rw [processWithdrawalRequest_eq] at hr
+    obtain ⟨o, ho, hra⟩ := bind_ok_inv hr
+    cases o with
+    | ignored _ =>
+      have hrs : s2 = r := Except.ok.inj hra
+      rw [hrs]
+    | fullExit j =>
+      exfalso
+      obtain ⟨_, _, -, -, -, hnz⟩ := classify_partial_amount hcp
+      exact hnz (classify_fullExit_iff.mp ho).1
+    | partialWithdrawal j a =>
+      obtain ⟨_, _, _, -, -, -, hv, -, -⟩ := applyPartial_push hra
+      exact hv
+  have hBf : foldWithdrawalRequests cfg s [wf, wp] =
+      processWithdrawalRequest cfg s2 wp := by
+    unfold foldWithdrawalRequests
+    simp only [List.foldlM_cons, List.foldlM_nil, hq1, ok_bind', bind_pure]
+  rw [hA, hBf]
+  intro heq
+  have hr := hB s1 heq.symm
+  exact hvne (hr.symm.trans hvalid1)
 
 end JauneConsensus.Facts
