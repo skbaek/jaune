@@ -882,4 +882,232 @@ theorem register_then_topUp (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Ctx}
   obtain ⟨_, ⟨bal, hbal2, hbaln⟩, _⟩ := regInv_loop hspe rfl rs m1 _ hinv h2
   exact ⟨addr, e, bal, haddr, he, hat, hbal2, hbaln⟩
 
+
+/-! ## The parent execution payload: settlement, then the requests -/
+
+theorem queueExcessActiveBalance_builderFrame (s : JauneConsensus.Gloas.BeaconState P)
+    (i : ValidatorIndex) :
+    Ok (JauneConsensus.Gloas.queueExcessActiveBalance s i) (builderFrame.R s) := by
+  unfold JauneConsensus.Gloas.queueExcessActiveBalance; gvcg
+
+macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (have hh := StepRel.of_ok (queueExcessActiveBalance_builderFrame _ _) $h; exact hh))
+
+theorem switchToCompoundingValidator_builderFrame (s : JauneConsensus.Gloas.BeaconState P)
+    (i : ValidatorIndex) :
+    Ok (JauneConsensus.Gloas.switchToCompoundingValidator s i) (builderFrame.R s) := by
+  unfold JauneConsensus.Gloas.switchToCompoundingValidator; gvcg
+  all_goals exact StepRel.ok_rebase builderFrame ⟨rfl, rfl, rfl⟩ (queueExcessActiveBalance_builderFrame _ _)
+
+macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (have hh := StepRel.of_ok (switchToCompoundingValidator_builderFrame _ _) $h; exact hh))
+
+theorem computeConsolidationEpochAndUpdateChurn_builderFrame (cfg : Config)
+    (s : JauneConsensus.Gloas.BeaconState P) (b : Gwei) :
+    Ok (JauneConsensus.Gloas.computeConsolidationEpochAndUpdateChurn cfg s b)
+      (fun p => builderFrame.R s p.1) := by
+  unfold JauneConsensus.Gloas.computeConsolidationEpochAndUpdateChurn; gvcg
+
+macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (have hh := StepRel.of_ok (computeConsolidationEpochAndUpdateChurn_builderFrame _ _ _) $h; exact hh))
+
+theorem processWithdrawalRequest_builderFrame (cfg : Config) (s : JauneConsensus.Gloas.BeaconState P)
+    (wr : WithdrawalRequest) :
+    Ok (JauneConsensus.Gloas.processWithdrawalRequest cfg s wr) (builderFrame.R s) := by
+  unfold JauneConsensus.Gloas.processWithdrawalRequest; gvcg
+  all_goals exact initiateValidatorExit_builderFrame _ _ _
+
+theorem processConsolidationRequest_builderFrame (cfg : Config)
+    (s : JauneConsensus.Gloas.BeaconState P) (cr : ConsolidationRequest) :
+    Ok (JauneConsensus.Gloas.processConsolidationRequest cfg s cr) (builderFrame.R s) := by
+  unfold JauneConsensus.Gloas.processConsolidationRequest; gvcg
+  all_goals exact switchToCompoundingValidator_builderFrame _ _
+
+theorem forIn_list_bind_yield {α β : Type} (l : List α) (init : β)
+    (body : α → β → M (ForInStep β)) (f : β → α → M β)
+    (hb : ∀ a b, body a b = (f b a >>= fun c => pure (.yield c))) :
+    forIn l init body = l.foldlM f init := by
+  induction l generalizing init with
+  | nil => rfl
+  | cons a l ih =>
+    rw [List.forIn_cons, hb, List.foldlM_cons]
+    cases hf : f init a with
+    | error e => rfl
+    | ok c => exact ih c
+
+/-- The settlement half of `apply_parent_execution_payload` (CL:1776-1812), continued by `k`. -/
+def settleThen (ctx : Ctx) (state : JauneConsensus.Gloas.BeaconState P)
+    (requests : JauneConsensus.Gloas.ExecutionRequests)
+    (k : JauneConsensus.Gloas.BeaconState P → M (JauneConsensus.Gloas.BeaconState P)) :
+    M (JauneConsensus.Gloas.BeaconState P) := do
+  let site := "apply_parent_execution_payload"
+  let parentBid := state.latest_execution_payload_bid
+  let parentSlot := state.latest_block_header.slot
+  let parentEpoch ← computeEpochAtSlot P parentSlot
+  require (requests.withdrawals.length ≤ P.MAX_WITHDRAWAL_REQUESTS_PER_PAYLOAD)
+    s!"{site}: len(requests.withdrawals) <= MAX_WITHDRAWAL_REQUESTS_PER_PAYLOAD"
+  require (requests.consolidations.length ≤ P.MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD)
+    s!"{site}: len(requests.consolidations) <= MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD"
+  require (requests.builder_deposits.length ≤ P.MAX_BUILDER_DEPOSIT_REQUESTS_PER_PAYLOAD)
+    s!"{site}: len(requests.builder_deposits) <= MAX_BUILDER_DEPOSIT_REQUESTS_PER_PAYLOAD"
+  require (requests.builder_exits.length ≤ P.MAX_BUILDER_EXIT_REQUESTS_PER_PAYLOAD)
+    s!"{site}: len(requests.builder_exits) <= MAX_BUILDER_EXIT_REQUESTS_PER_PAYLOAD"
+  let spe ← c64 P.SLOTS_PER_EPOCH
+  let mut state := state
+  if parentEpoch == (← JauneConsensus.Gloas.getCurrentEpoch state) then
+    let paymentIndex ← spe.add? (← parentSlot.mod? spe site) site
+    state ← JauneConsensus.Gloas.settleBuilderPayment state paymentIndex
+  else if parentEpoch == (← JauneConsensus.Gloas.getPreviousEpoch state) then
+    let paymentIndex ← parentSlot.mod? spe site
+    state ← JauneConsensus.Gloas.settleBuilderPayment state paymentIndex
+  else if U64.zero < parentBid.value then
+    let w : JauneConsensus.Gloas.BuilderPendingWithdrawal :=
+      { fee_recipient := parentBid.fee_recipient, amount := parentBid.value,
+        builder_index := parentBid.builder_index }
+    state := { state with builder_pending_withdrawals := state.builder_pending_withdrawals.push w }
+  k state
+
+/-- The request half of `apply_parent_execution_payload` (CL:1813-1831). -/
+def applyRequests (ctx : Ctx) (parentBid : JauneConsensus.Gloas.ExecutionPayloadBid)
+    (parentSlot : Slot) (state : JauneConsensus.Gloas.BeaconState P)
+    (requests : JauneConsensus.Gloas.ExecutionRequests) : M (JauneConsensus.Gloas.BeaconState P) := do
+  let site := "apply_parent_execution_payload"
+  let mut state := state
+  for op in requests.deposits.toArray do state := JauneConsensus.Gloas.processDepositRequest state op
+  for op in requests.withdrawals.toArray do
+    state ← JauneConsensus.Gloas.processWithdrawalRequest ctx.cfg state op
+  for op in requests.consolidations.toArray do
+    state ← JauneConsensus.Gloas.processConsolidationRequest ctx.cfg state op
+  for op in requests.builder_deposits.toArray do
+    state ← JauneConsensus.Gloas.processBuilderDepositRequest ctx state op
+  for op in requests.builder_exits.toArray do
+    state ← JauneConsensus.Gloas.processBuilderExitRequest ctx.cfg state op
+  let i ← parentSlot.mod? (← c64 P.SLOTS_PER_HISTORICAL_ROOT) site
+  pure { state with
+    execution_payload_availability := ← state.execution_payload_availability.set i.toNat true site
+    latest_block_hash := parentBid.block_hash }
+
+/-- `apply_parent_execution_payload` is its settlement continued by its requests. -/
+theorem applyParentExecutionPayload_eq (ctx : Ctx) (s : JauneConsensus.Gloas.BeaconState P)
+    (requests : JauneConsensus.Gloas.ExecutionRequests) :
+    JauneConsensus.Gloas.applyParentExecutionPayload ctx s requests =
+      settleThen ctx s requests (fun st => applyRequests ctx s.latest_execution_payload_bid
+        s.latest_block_header.slot st requests) := rfl
+
+
+macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (have hh := StepRel.of_ok (processWithdrawalRequest_builderFrame _ _ _) $h; exact hh))
+macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (have hh := StepRel.of_ok (processConsolidationRequest_builderFrame _ _ _) $h; exact hh))
+
+/-- The settlement keeps the builders (`settle_builder_payment` and the direct append touch only
+the builder queues). -/
+theorem settleThen_ok {ctx : Ctx} {s post : JauneConsensus.Gloas.BeaconState P}
+    {requests : JauneConsensus.Gloas.ExecutionRequests}
+    {k : JauneConsensus.Gloas.BeaconState P → M (JauneConsensus.Gloas.BeaconState P)}
+    (h : settleThen ctx s requests k = .ok post) :
+    ∃ x, x.builders = s.builders ∧ k x = .ok post := by
+  unfold settleThen at h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  try simp only [] at h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  try simp only [] at h
+  split at h
+  · obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+    obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+    obtain ⟨x, hx, h⟩ := bind_eq_ok_iff.mp h
+    exact ⟨x, (settleBuilderPayment_frame hx).1, h⟩
+  · obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+    split at h
+    · obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+      obtain ⟨x, hx, h⟩ := bind_eq_ok_iff.mp h
+      exact ⟨x, (settleBuilderPayment_frame hx).1, h⟩
+    · split at h
+      · refine ⟨_, ?_, h⟩; rfl
+      · refine ⟨_, ?_, h⟩; rfl
+
+/-- The request half: the validator requests keep the builders; the builder deposits and then
+the builder exits are folds of the real request functions; the final writes keep the builders. -/
+theorem applyRequests_ok {ctx : Ctx} {pb : JauneConsensus.Gloas.ExecutionPayloadBid} {ps : Slot}
+    {x post : JauneConsensus.Gloas.BeaconState P} {requests : JauneConsensus.Gloas.ExecutionRequests}
+    (h : applyRequests ctx pb ps x requests = .ok post) :
+    ∃ s0 s1 s2 : JauneConsensus.Gloas.BeaconState P, s0.builders = x.builders ∧
+      requests.builder_deposits.toArray.toList.foldlM
+        (JauneConsensus.Gloas.processBuilderDepositRequest ctx) s0 = .ok s1 ∧
+      requests.builder_exits.toArray.toList.foldlM
+        (JauneConsensus.Gloas.processBuilderExitRequest ctx.cfg) s1 = .ok s2 ∧
+      post.builders = s2.builders := by
+  unfold applyRequests at h
+  obtain ⟨d, hd, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨w, hw, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨c, hc, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨s1, hs1, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨s2, hs2, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  cases h
+  have fd : BuilderFrame x d :=
+    StepRel.forIn_array_rel builderFrame id (fun _ _ => by gvcg) _ _ hd
+  have fw : BuilderFrame d w :=
+    StepRel.forIn_array_rel builderFrame id (fun _ _ => by gvcg) _ _ hw
+  have fc : BuilderFrame w c :=
+    StepRel.forIn_array_rel builderFrame id (fun _ _ => by gvcg) _ _ hc
+  rw [← Array.forIn_toList,
+    forIn_list_bind_yield _ _ _ (fun st op => JauneConsensus.Gloas.processBuilderDepositRequest ctx st op)
+      (fun _ _ => rfl)] at hs1
+  rw [← Array.forIn_toList,
+    forIn_list_bind_yield _ _ _ (fun st op => JauneConsensus.Gloas.processBuilderExitRequest ctx.cfg st op)
+      (fun _ _ => rfl)] at hs2
+  exact ⟨c, s1, s2, fc.1.trans (fw.1.trans fd.1), hs1, hs2, rfl⟩
+
+/-- **B3, `withdrawableEpoch_writers` over the parent execution payload.** Every change to a
+builder's `withdrawable_epoch` made by `apply_parent_execution_payload` comes from exactly one of:
+an exit initiated by a builder exit request that passed `process_builder_exit_request`'s checks
+(classified `initiate i`, so the source check held, `classifyBuilderExit_meaning`), a reset top-up
+in `process_builder_deposit_request`, or a fresh record on a reused slot (`BuilderCreated`).
+Needs `2 <= SLOTS_PER_EPOCH`. -/
+theorem applyParentExecutionPayload_withdrawableEpoch (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Ctx}
+    {pre post : JauneConsensus.Gloas.BeaconState P} {requests : JauneConsensus.Gloas.ExecutionRequests}
+    (h : JauneConsensus.Gloas.applyParentExecutionPayload ctx pre requests = .ok post)
+    {i : Nat} {b b' : JauneConsensus.Gloas.Builder} (hb : pre.builders.toArray[i]? = some b)
+    (hb' : post.builders.toArray[i]? = some b') (hne : b.withdrawable_epoch ≠ b'.withdrawable_epoch) :
+    ∃ s0 s1 : JauneConsensus.Gloas.BeaconState P, s0.builders = pre.builders ∧
+      requests.builder_deposits.toArray.toList.foldlM
+        (JauneConsensus.Gloas.processBuilderDepositRequest ctx) s0 = .ok s1 ∧
+      ((ExitInitiated pre post i ∧ ExitInitiateIn ctx.cfg s1 requests.builder_exits.toArray.toList i) ∨
+        TopUpResetIn ctx s0 requests.builder_deposits.toArray.toList i ∨
+        BuilderCreated pre post i) := by
+  rw [applyParentExecutionPayload_eq] at h
+  obtain ⟨x, hx, h⟩ := settleThen_ok h
+  obtain ⟨s0, s1, s2, h0, hd, he, hpost⟩ := applyRequests_ok h
+  refine ⟨s0, s1, h0.trans hx, hd, ?_⟩
+  have hb0 : s0.builders.toArray[i]? = some b := by rw [h0, hx]; exact hb
+  obtain ⟨_, c, hc, hcase⟩ := builderDeposits_slot hspe hd hb0
+  obtain ⟨_, c', hc', hpk', hcase'⟩ := builderExits_slot he hc
+  rw [hpost, hc'] at hb'
+  cases hb'
+  rcases hcase with ⟨hp, hw⟩ | hR | ⟨hp, _⟩
+  · rcases hcase' with hw' | ⟨hfar, hex⟩
+    · exact absurd (hw.symm.trans hw'.symm) hne
+    · refine Or.inl ⟨⟨b, b', hb, by rw [hpost]; exact hc', (hpk'.trans hp).symm, hw ▸ hfar, ?_⟩, hex⟩
+      intro hf
+      exact hne (by rw [hf, ← hfar, hw])
+  · exact Or.inr (Or.inl hR)
+  · refine Or.inr (Or.inr ⟨by rw [hpost, hc']; rfl, ?_⟩)
+    rw [hb, hpost, hc']
+    intro heq
+    simp only [Option.map_some, Option.some.injEq] at heq
+    exact hp (hpk'.symm.trans heq.symm)
+
 end JauneConsensus.Facts.Gloas
