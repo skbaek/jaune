@@ -216,4 +216,54 @@ theorem b256GoAt_eq (bs : Array UInt8) : ∀ (n i : Nat) (l3 l2 l1 l0 : UInt64),
     · rw [Array.getElem?_eq_none (by omega), List.drop_eq_nil_of_le (by simpa using h)]
       simp [Bytes.toB256.go]; rfl
 
+/-! ## W2a bridging lemmas
+
+`U64 ↔ Nat` bridges for the EIP-7002 one-request step lemma
+(`JauneConsensus.Facts.WithdrawalRequest`): `toNat` of checked subtraction and
+of the `min` idiom, and the `BEq`↔`Eq` bridges. Kept in this one delimited
+section at the end of the file (unit W2a; unit W2b appends its own section).
+-/
+
+namespace U64
+
+/-- `toNat` of checked subtraction. -/
+theorem toNat_sub? {a b x : U64} {site : String} (h : sub? a b site = .ok x) :
+    x.toNat = a.toNat - b.toNat := by
+  unfold sub? at h
+  split at h
+  · cases h
+    simp only [toNat, Nat.toUInt64]
+    exact Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt (Nat.sub_le _ _) (toNat_lt _))
+  · cases h
+
+/-- `toNat` of the `min` idiom `if a < b then a else b`. -/
+theorem toNat_min {a b : U64} : (if a < b then a else b).toNat = min a.toNat b.toNat := by
+  by_cases h : a < b
+  · rw [ite_eq_left h]
+    have h' : a.toNat < b.toNat := h
+    omega
+  · rw [ite_eq_right h]
+    have hn : ¬ a.toNat < b.toNat := h
+    omega
+
+/-- `BEq` on `U64` agrees with equality (it is `decide`-based). -/
+theorem beq_eq_true_iff {a b : U64} : ((a == b) = true) ↔ (a = b) := by
+  constructor
+  · intro h
+    have hd : decide (a = b) = true := h
+    exact of_decide_eq_true hd
+  · intro h
+    show decide (a = b) = true
+    exact decide_eq_true h
+
+/-- A false `BEq` test is inequality. -/
+theorem ne_of_beq_eq_false {a b : U64} (h : (a == b) = false) : a ≠ b := by
+  intro hcon
+  subst hcon
+  have hT : (a == a) = true := beq_eq_true_iff.mpr rfl
+  rw [hT] at h
+  cases h
+
+end U64
+
 end JauneConsensus
