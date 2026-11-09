@@ -4,13 +4,15 @@ import JauneConsensus.Harness.ConfigOverride
 import JauneConsensus.Upgrade
 import JauneConsensus.Transition
 import JauneConsensus.Ctx
+import JauneConsensus.GloasTransition
 
 /-!
 # State-transition case handlers (harness only)
 
 Handlers for the runners that drive the state transition and the fork upgrades
 (`tests/formats/forks/README.md` first; `sanity`, `finality`, `random` and `transition` as the
-block and epoch processing land). Handlers return `Except String Unit` (the runner maps it to a verdict). A post-state is compared by its full SSZ serialization, which
+block and epoch processing land; the Gloas arms run `GloasUpgrade.lean` and `GloasTransition.lean`,
+goal `eip8282-gloas-cross-layer-v1`, U5). Handlers return `Except String Unit` (the runner maps it to a verdict). A post-state is compared by its full SSZ serialization, which
 fixes its hash-tree-root too.
 -/
 
@@ -41,6 +43,21 @@ private def checkUpgrade {α β : Type} [Ssz α] [Ssz β] (pre post : List UInt8
         | .ok p => .inl s!"post-state differs (root {Ssz.hashTreeRoot s'} vs {Ssz.hashTreeRoot p})"
         | .error e => .inl s!"post-state differs and post does not decode: {repr e}"
 
+private def metaNat? (m : YVal) (k : String) : Except String (Option Nat) :=
+  match m.get? k with
+  | none => .ok none
+  | some v => match v.asNat with
+    | .ok n => .ok (some n)
+    | .error e => .error s!"meta.yaml {k}: {e}"
+
+/-- `bls_setting` (`tests/formats/README.md`): 0 BLS may be on or off, 1 required, 2 ignored.
+The model verifies under 0 and 1. -/
+private def blsActive (m : YVal) : Except String Bool := do
+  match ← metaNat? m "bls_setting" with
+  | none | some 0 | some 1 => pure true
+  | some 2 => pure false
+  | some n => throw s!"bls_setting {n}"
+
 /-- `fork/fork` (`tests/formats/forks/README.md`): `meta.yaml` names the fork transitioned to
 (it must be the case's fork); `pre` is the previous fork's `BeaconState`, `post` the result of
 that fork's upgrade function. `config` is the case's configuration (base preset plus any
@@ -67,6 +84,13 @@ def forkCase (config : Case → IO (Except ConfigError Config)) (c : Case) : IO 
   let r : String ⊕ Unit ← match target with
     | "electra" => pure (checkUpgrade (α := BeaconState P .deneb) pre post (upgradeToElectra cfg))
     | "fulu" => pure (checkUpgrade (α := BeaconState P .electra) pre post (upgradeToFulu cfg))
+    | "gloas" =>
+      -- `upgrade_to_gloas` verifies pending deposit signatures: the case's `bls_setting` applies
+      let bls ← match ← readYamlFile c "meta.yaml" with
+        | .ok m => match blsActive m with | .ok b => pure b | .error e => return .error e
+        | .error e => return .error s!"meta.yaml: {e}"
+      pure (checkUpgrade (α := BeaconState P .fulu) (β := Gloas.BeaconState P) pre post
+        (Gloas.upgradeToGloas { cfg, blsActive := bls }))
     | t => return .error s!"fork {t}: no upgrade in scope"
   match r with
   | .inr () => pure (.ok ())
@@ -92,21 +116,6 @@ private def readMeta (c : Case) : IO (Except String YVal) := do
   match ← readYamlFile c "meta.yaml" with
   | .ok m => pure (.ok m)
   | .error e => pure (.error s!"meta.yaml: {e}")
-
-private def metaNat? (m : YVal) (k : String) : Except String (Option Nat) :=
-  match m.get? k with
-  | none => .ok none
-  | some v => match v.asNat with
-    | .ok n => .ok (some n)
-    | .error e => .error s!"meta.yaml {k}: {e}"
-
-/-- `bls_setting` (`tests/formats/README.md`): 0 BLS may be on or off, 1 required, 2 ignored.
-The model verifies under 0 and 1. -/
-private def blsActive (m : YVal) : Except String Bool := do
-  match ← metaNat? m "bls_setting" with
-  | none | some 0 | some 1 => pure true
-  | some 2 => pure false
-  | some n => throw s!"bls_setting {n}"
 
 private def decodeFile {α : Type} [Ssz α] (c : Case) (f : String) : IO (Except String α) := do
   match ← readSnappy c f with
@@ -173,9 +182,97 @@ private def withPF (c : Case) (k : Preset → CFork → IO (Except String Unit))
   let some f := CFork.ofName? c.key.fork | return .error s!"no fork {c.key.fork}"
   k P f
 
+/-! ## Gloas block and slot sequences
+
+The Gloas state is `Gloas.BeaconState P` (`ContainersGloas.lean`), a separate structure, so the
+Gloas cases run `Gloas.processSlots` and `Gloas.stateTransition` (`GloasTransition.lean`) directly,
+over U3's `process_epoch` and U4's `process_block`; the `Steps` of the earlier forks are used only
+for the Fulu part of a Fulu → Gloas `transition` case. Gloas `sanity/blocks` cases carry blocks
+only: a parent's payload is applied by `process_parent_execution_payload` inside the child's
+`process_block`, so no envelope or engine step is driven. -/
+
+/-- Compare a computed Gloas post-state with `post.ssz_snappy`. -/
+private def comparePostGloas {P : Preset} (c : Case) (s : Gloas.BeaconState P) :
+    IO (Except String Unit) := do
+  match ← readSnappy c "post.ssz_snappy" with
+  | .error e => pure (.error e)
+  | .ok post =>
+    if Ssz.serialize s == post then pure (.ok ())
+    else match (Ssz.deserialize post : M (Gloas.BeaconState P)) with
+      | .ok p => pure (.error s!"post-state differs (slot {s.slot} vs {p.slot}, root {Ssz.hashTreeRoot s} vs {Ssz.hashTreeRoot p})")
+      | .error e => pure (.error s!"post-state differs and post does not decode: {repr e}")
+
+/-- `verdictOf` for a Gloas run. -/
+private def verdictOfGloas {P : Preset} (c : Case) (r : M (Gloas.BeaconState P)) :
+    IO (Except String Unit) := do
+  match r, c.has "post.ssz_snappy" with
+  | .ok s, true => comparePostGloas c s
+  | .ok _, false => pure (.error "expected a rejection (no post state), but the transition succeeded")
+  | .error e, true => pure (.error s!"transition rejected: {repr e}")
+  | .error _, false => pure (.ok ())
+
+/-- The Gloas signed blocks `blocks_lo .. blocks_{hi-1}` of a case. -/
+private def readGloasBlocks (P : Preset) (c : Case) (lo hi : Nat) :
+    IO (Except String (List (Gloas.SignedBeaconBlock P))) := do
+  let mut out := #[]
+  for i in [lo:hi] do
+    match ← decodeFile (α := Gloas.SignedBeaconBlock P) c s!"blocks_{i}.ssz_snappy" with
+    | .ok b => out := out.push b
+    | .error e => return .error e
+  pure (.ok out.toList)
+
+/-- Gloas `state_transition` over a sequence of signed blocks. -/
+def runGloasBlocks {P : Preset} (ctx : Ctx) (state : Gloas.BeaconState P)
+    (blocks : List (Gloas.SignedBeaconBlock P)) : M (Gloas.BeaconState P) :=
+  blocks.foldlM (fun s b => Gloas.stateTransition ctx s b) state
+
+/-- The post-fork Gloas blocks of a `transition` case (`runPostForkBlocks`): a block at the
+state's slot (the generators' block at the fork slot) skips `process_slots`. -/
+def runGloasPostForkBlocks {P : Preset} (ctx : Ctx) (state : Gloas.BeaconState P)
+    (blocks : List (Gloas.SignedBeaconBlock P)) : M (Gloas.BeaconState P) :=
+  blocks.foldlM (fun s b =>
+    if b.message.slot == s.slot then Gloas.processBlockAtSlot ctx s b
+    else Gloas.stateTransition ctx s b) state
+
+/-- The case's preset, configuration and BLS switch as a `Ctx`. -/
+private def gloasCtx (config : Case → IO (Except ConfigError Config)) (c : Case) :
+    IO (Except String (Preset × Ctx × YVal)) := do
+  let some P := Preset.ofName? c.preset | return .error s!"no preset {c.preset}"
+  let cfg ← match ← config c with | .ok x => pure x | .error e => return .error s!"config: {e}"
+  let m ← match ← readMeta c with | .ok m => pure m | .error e => return .error e
+  let bls ← match blsActive m with | .ok b => pure b | .error e => return .error e
+  pure (.ok (P, { cfg, blsActive := bls }, m))
+
+/-- Gloas `sanity/slots`: `Gloas.processSlots(pre, pre.slot + slots)`. -/
+def gloasSanitySlotsCase (config : Case → IO (Except ConfigError Config)) (c : Case) :
+    IO (Except String Unit) := do
+  let (P, ctx, _) ← match ← gloasCtx config c with | .ok x => pure x | .error e => return .error e
+  let n ← match ← readYamlFile c "slots.yaml" with
+    | .ok v => match v.asNat with | .ok n => pure n | .error e => return .error s!"slots.yaml: {e}"
+    | .error e => return .error s!"slots.yaml: {e}"
+  let pre ← match ← decodeFile (α := Gloas.BeaconState P) c "pre.ssz_snappy" with
+    | .ok s => pure s | .error e => return .error e
+  verdictOfGloas c (do
+    let target ← U64.add? pre.slot (← U64.ofNat? n "slots") "pre.slot + slots"
+    Gloas.processSlots ctx pre target)
+
+/-- Gloas `sanity/blocks`, `finality/finality`, `random/random`: `Gloas.stateTransition` for
+each block in order; no `post` means the sequence must be rejected. -/
+def gloasBlocksCase (config : Case → IO (Except ConfigError Config)) (c : Case) :
+    IO (Except String Unit) := do
+  let (P, ctx, m) ← match ← gloasCtx config c with | .ok x => pure x | .error e => return .error e
+  let n ← match metaNat? m "blocks_count" with
+    | .ok (some n) => pure n | .ok none => return .error "meta.yaml: no blocks_count"
+    | .error e => return .error e
+  let pre ← match ← decodeFile (α := Gloas.BeaconState P) c "pre.ssz_snappy" with
+    | .ok s => pure s | .error e => return .error e
+  let blocks ← match ← readGloasBlocks P c 0 n with | .ok bs => pure bs | .error e => return .error e
+  verdictOfGloas c (runGloasBlocks ctx pre blocks)
+
 /-- `sanity/slots` (`tests/formats/sanity/slots.md`): `process_slots(pre, pre.slot + slots)`. -/
 def sanitySlotsCase (steps : Steps) (config : Case → IO (Except ConfigError Config)) (c : Case) :
-    IO (Except String Unit) := withPF c fun P f => do
+    IO (Except String Unit) :=
+  if c.key.fork == "gloas" then gloasSanitySlotsCase config c else withPF c fun P f => do
   let cfg ← match ← config c with | .ok x => pure x | .error e => return .error s!"config: {e}"
   let m ← match ← readMeta c with | .ok m => pure m | .error e => return .error e
   let bls ← match blsActive m with | .ok b => pure b | .error e => return .error e
@@ -201,7 +298,8 @@ private def readBlocks (P : Preset) (f : CFork) (c : Case) (lo hi : Nat) :
 /-- `sanity/blocks`, `finality/finality`, `random/random` (`tests/formats/sanity/blocks.md`):
 `state_transition` for each block in order; no `post` means the sequence must be rejected. -/
 def blocksCase (steps : Steps) (config : Case → IO (Except ConfigError Config)) (c : Case) :
-    IO (Except String Unit) := withPF c fun P f => do
+    IO (Except String Unit) :=
+  if c.key.fork == "gloas" then gloasBlocksCase config c else withPF c fun P f => do
   let cfg ← match ← config c with | .ok x => pure x | .error e => return .error s!"config: {e}"
   let m ← match ← readMeta c with | .ok m => pure m | .error e => return .error e
   let bls ← match blsActive m with | .ok b => pure b | .error e => return .error e
@@ -260,6 +358,20 @@ def transitionCase (steps : Steps) (config : Case → IO (Except ConfigError Con
       let s ← toForkSlot steps P .electra cfg bls s forkEpoch
       let s ← upgradeToFulu cfg s
       runPostForkBlocks steps P .fulu cfg bls s postBlocks)
+  | "gloas" =>
+    -- Fulu blocks, the Fulu `process_slots` to the fork slot and `upgrade_to_gloas`
+    -- (`Gloas.crossFromFulu`), then Gloas blocks. The case forks at `fork_epoch`, so that is the
+    -- run's `GLOAS_FORK_EPOCH` (the generators' `post_spec` sets it where a Gloas rule reads it:
+    -- `get_ptc`, in `test_payload_attestations.py`; no other Gloas rule reads it)
+    let ctx : Ctx := { cfg := { cfg with GLOAS_FORK_EPOCH := forkEpoch }, blsActive := bls }
+    let pre ← match ← decodeFile (α := BeaconState P .fulu) c "pre.ssz_snappy" with
+      | .ok s => pure s | .error e => return .error e
+    let preBlocks ← match ← readBlocks P .fulu c 0 split with | .ok b => pure b | .error e => return .error e
+    let postBlocks ← match ← readGloasBlocks P c split n with | .ok b => pure b | .error e => return .error e
+    verdictOfGloas c (do
+      let s ← runBlocks steps P .fulu cfg bls pre preBlocks
+      let s ← Gloas.crossFromFulu ctx s
+      runGloasPostForkBlocks ctx s postBlocks)
   | t => pure (.error s!"post_fork {t}: no upgrade in scope")
 
 end JauneConsensus.Harness
