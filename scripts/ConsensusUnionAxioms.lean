@@ -4,6 +4,8 @@ import JauneConsensus.Facts.Operations
 import JauneConsensus.Facts.ExpectedWithdrawals
 import JauneConsensus.Facts.Gloas.Step
 import JauneConsensus.Facts.Gloas.Frame
+import JauneConsensus.JointGloas
+import JauneConsensus.Facts.JointGloas
 
 /-!
 # Whole-library axiom union for `JauneConsensus`
