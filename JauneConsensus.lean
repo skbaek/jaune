@@ -60,3 +60,4 @@ import JauneConsensus.Harness.ForkChoiceCases
 import JauneConsensus.Harness.Runner
 import JauneConsensus.Crypto.G2Subgroup
 import JauneConsensus.Crypto.G2SubgroupVectors
+import JauneConsensus.Facts.AnchorInv
