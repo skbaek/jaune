@@ -99,13 +99,15 @@ def computeForkVersion (cfg : Config) (epoch : Epoch) : M Version := do
     else cfg.GENESIS_FORK_VERSION
 
 /-- `compute_fork_digest`: Fulu XORs the fork data root with the hash of the blob parameters
-at `epoch` (`specs/fulu/beacon-chain.md`, EIP-7892); before Fulu it is the first four bytes of
+at `epoch` (`specs/fulu/beacon-chain.md`, EIP-7892), except, from `v1.7.0-beta.4`, at an epoch
+before `FULU_FORK_EPOCH`; before Fulu it is the first four bytes of
 `compute_fork_data_root(current_version, genesis_validators_root)`
 (`specs/phase0/p2p-interface.md`). -/
 def computeForkDigest (cfg : Config) (f : CFork) (gvr : Root) (epoch : Epoch) : M Bytes := do
   let version ← computeForkVersion cfg epoch
   let base := computeForkDataRoot version gvr
-  if f.atLeast .fulu then
+  -- `if epoch < FULU_FORK_EPOCH: return ForkDigest(base_digest[:4])` (new in `v1.7.0-beta.4`)
+  if f.atLeast .fulu && !(epoch.toNat < cfg.FULU_FORK_EPOCH) then
     let bp ← getBlobParameters cfg epoch
     let mask := hash (uintToBytes 8 bp.epoch.toNat ++ uintToBytes 8 bp.maxBlobsPerBlock.toNat)
     pure ((xor base mask).toBytes.take 4)

@@ -101,10 +101,13 @@ def B256.beq (a b : B256) : Bool := a.toBytes == b.toBytes
 
 /-! ## Predicates -/
 
-/-- `is_valid_merkle_branch(leaf, branch, depth, index, root)` (`specs/phase0/beacon-chain.md`).
-A `branch` shorter than `depth` raises `IndexError` in pyspec: `Reject.index`. -/
+/-- `is_valid_merkle_branch(leaf, branch, depth, index, root)` (`specs/phase0/beacon-chain.md`
+at `v1.7.0-beta.4`): `False` unless `depth == len(branch)` (new in that release; before it a short
+`branch` raised `IndexError` and a long one had its tail ignored), then
+`compute_merkle_branch_root(leaf, branch, depth, index) == root`. -/
 def isValidMerkleBranch (leaf : B256) (branch : List B256) (depth index : U64) (root : B256) :
     M Bool := do
+  if depth.toNat != branch.length then return false
   let br := branch.toArray
   let mut value := leaf
   for i in List.range depth.toNat do
@@ -214,7 +217,8 @@ private def sqrt? (n : Nat) : Option Nat := ((integerSquareroot (n64 n)).toOptio
 #guard (isValidMerkleBranch 1 [2] (n64 1) (n64 0) (hash ((1 : B256).toBytes ++ (2 : B256).toBytes))).toOption == some true
 #guard (isValidMerkleBranch 1 [2] (n64 1) (n64 1) (hash ((2 : B256).toBytes ++ (1 : B256).toBytes))).toOption == some true
 #guard (isValidMerkleBranch 1 [2] (n64 1) (n64 1) (hash ((1 : B256).toBytes ++ (2 : B256).toBytes))).toOption == some false
-#guard (isValidMerkleBranch 1 [] (n64 1) (n64 0) 0).toBool == false
+#guard (isValidMerkleBranch 1 [] (n64 1) (n64 0) 0).toOption == some false
+#guard (isValidMerkleBranch 1 [2, 3] (n64 1) (n64 0) (hash ((1 : B256).toBytes ++ (2 : B256).toBytes))).toOption == some false
 -- `get_blob_parameters` over the mainnet schedule (Fulu at 411392, BPO1 at 412672, BPO2 at 419072)
 #guard ((getBlobParameters .mainnet (n64 411392)).toOption.map (fun p => (p.epoch.toNat, p.maxBlobsPerBlock.toNat))) == some (364032, 9)
 #guard ((getBlobParameters .mainnet (n64 412672)).toOption.map (fun p => (p.epoch.toNat, p.maxBlobsPerBlock.toNat))) == some (412672, 15)

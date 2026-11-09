@@ -9,12 +9,12 @@ import JauneConsensus.Harness.Yaml
 /-!
 # `light_client/data_collection` (harness only)
 
-`tests/formats/light_client/data_collection.md` (`consensus-specs` `v1.6.1`): from
+`tests/formats/light_client/data_collection.md` (`consensus-specs` `v1.7.0-beta.4`): from
 `initial_state`, import blocks (`new_block`) and switch heads (`new_head`), collecting light
 client data as a full node does; after each `new_head` the collected data must equal `checks`.
 
 The collection is the test helper that generated the vectors, transcribed from
-`tests/core/pyspec/eth2spec/test/helpers/light_client_data_collection.py` (CC0, same tag); each
+`tests/core/pyspec/eth_consensus_specs/test/helpers/light_client_data_collection.py` (CC0, same tag); each
 definition names the helper function it follows and keeps its order of operations, including
 its mutation of cached data (`_create_lc_finality_update_from_lc_data` moves a cached
 `finalized_slot` back over empty slots) and its pruning of blocks and states at finalization,
@@ -27,10 +27,15 @@ A data-collection case has a single fork (`phases` is `None` in the generator), 
 identity; `spec is None` is `none`. Python dictionaries are insertion-ordered association lists
 (`Dict`): the `bootstraps` check lists `finalized_checkpoint_states` in insertion order.
 
-Divergence, failing closed: `_get_current_sync_committee_for_finalized_period` advances a stored
-checkpoint state in place when the period's start slot is past it, and that object is shared with
-`states` (Python aliasing); the vectors never take that path and the harness refuses it rather
-than model the aliasing. A missing dictionary key or an unbound local in the helper is a failure.
+Aliasing (`v1.7.0-beta.4` vectors take this path): `_get_current_sync_committee_for_finalized_period`
+advances a stored checkpoint state in place (`state.spec, state.data, _ = transition_across_forks(...)`,
+which copies the data and rebinds the `ForkedBeaconState` wrapper) when the period's start slot is
+past it. A `finalized_checkpoint_states` entry stored by `select_new_head` is the very wrapper held
+in `states`, so the advance is seen there too; the entry stored by the setup is a wrapper of its
+own. `states` here keeps each block's post-state, which `add_new_block` builds on (the generator's
+local state, never rebound); `advanced` holds the rebound wrappers' data that `select_new_head`
+reads and prunes by, and `aliased` the state roots whose two entries share one wrapper.
+A missing dictionary key or an unbound local in the helper is a failure.
 -/
 
 namespace JauneConsensus.Harness.DataCollection
@@ -79,6 +84,10 @@ structure Test (P : Preset) (f : CFork) where
   finalizedBlockRoots : Dict Nat Root
   states : Dict Root (BeaconState P f)
   finalizedCheckpointStates : Dict Root (BeaconState P f)
+  /-- The `states` wrappers rebound by an in-place advance (see the module note). -/
+  advanced : Dict Root (BeaconState P f)
+  /-- State roots whose `finalized_checkpoint_states` entry is the `states` wrapper. -/
+  aliased : List Root
   latestFinalizedEpoch : Epoch
   latestFinalizedBid : BlockID
   historicalTailSlot : Slot
@@ -186,7 +195,17 @@ def currentSyncCommitteeForFinalizedPeriod (period : U64) : DC P f (Option (Sync
   let state ← need t.finalizedCheckpointStates block.message.state_root
     "finalized_checkpoint_states"
   if state.slot < syncCommitteeSlot then
-    throw "refused: _get_current_sync_committee_for_finalized_period would advance a shared state"
+    -- `transition_across_forks(state.spec, state.data, sync_committee_slot)`: one fork, so
+    -- `transition_to`, i.e. `process_slots`; the wrapper is rebound, and so is the aliased
+    -- `states` entry
+    let root := block.message.state_root
+    let post ← lift (processSlotsWith (processEpoch t.ctx) state syncCommitteeSlot)
+      "transition_across_forks"
+    modify fun t => { t with
+      finalizedCheckpointStates := t.finalizedCheckpointStates.put root post,
+      advanced := if t.aliased.contains root && (t.states.get? root).isSome then
+        t.advanced.put root post else t.advanced }
+    return some post.current_sync_committee
   pure (some state.current_sync_committee)
 
 /-- `_light_client_header_for_block_id`. -/
@@ -408,7 +427,7 @@ def setup (cfg : Config) (ctx : Ctx) (state : BeaconState P f) : Except String (
     "ALTAIR_FORK_EPOCH"
   let t0 : Test P f :=
     { cfg, ctx, blocks := [], finalizedBlockRoots := [], states := [],
-      finalizedCheckpointStates := [],
+      finalizedCheckpointStates := [], advanced := [], aliased := [],
       latestFinalizedEpoch := state.finalized_checkpoint.epoch,
       latestFinalizedBid := { slot := ← run (computeStartSlotAtEpoch P state.finalized_checkpoint.epoch)
                                 "compute_start_slot_at_epoch",
@@ -444,8 +463,17 @@ def addNewBlock (block : SignedBeaconBlock P f) : DC P f Unit := do
     block) "state_transition"
   let bid := blockToBlockId block
   modify fun t => { t with blocks := t.blocks.put bid.root block,
-                           states := t.states.put block.message.state_root post }
+                           states := t.states.put block.message.state_root post,
+                           advanced := t.advanced.del block.message.state_root,
+                           aliased := t.aliased.filter (· != block.message.state_root) }
   processNewBlockForLightClient post block parentBid
+
+/-- `test.states[root]`: the wrapper's current data (rebound by an in-place advance). -/
+def stateView (root : Root) : DC P f (BeaconState P f) := do
+  let t ← get
+  match t.advanced.get? root with
+  | some s => pure s
+  | none => need t.states root "states"
 
 /-- `select_new_head`, up to the checks. -/
 def selectNewHead (headBid : BlockID) : DC P f Unit := do
@@ -454,7 +482,7 @@ def selectNewHead (headBid : BlockID) : DC P f Unit := do
   -- Process finalization
   let t ← get
   let headBlock ← need t.blocks headBid.root "blocks"
-  let headState ← need t.states headBlock.message.state_root "states"
+  let headState ← stateView headBlock.message.state_root
   if headState.finalized_checkpoint.epoch == GENESIS_EPOCH then return
   let mut block ← need t.blocks headState.finalized_checkpoint.root "blocks"
   let mut bid := blockToBlockId block
@@ -468,9 +496,11 @@ def selectNewHead (headBid : BlockID) : DC P f Unit := do
     let finalizedEpoch ← lift (do computeEpochAtSlot P (← U64.sub?
       (← U64.add? bid.slot (← c64 P.SLOTS_PER_EPOCH)) U64.one)) "compute_epoch_at_slot"
     if oldFinalizedEpoch != some finalizedEpoch then
-      let state ← need (← get).states block.message.state_root "states"
-      modify fun t => { t with finalizedCheckpointStates :=
-        t.finalizedCheckpointStates.put block.message.state_root state }
+      let state ← stateView block.message.state_root
+      modify fun t => { t with
+        finalizedCheckpointStates := t.finalizedCheckpointStates.put block.message.state_root state,
+        aliased := if t.aliased.contains block.message.state_root then t.aliased
+          else block.message.state_root :: t.aliased }
       oldFinalizedEpoch := some finalizedEpoch
     block ← need (← get).blocks block.message.parent_root "blocks"
     bid := blockToBlockId block
@@ -480,7 +510,11 @@ def selectNewHead (headBid : BlockID) : DC P f Unit := do
   processFinalizationForLightClient newFinalizedBid oldFinalizedBid
   modify fun t => { t with
     blocks := t.blocks.filter (fun e => !(e.2.message.slot < newFinalizedBid.slot)),
-    states := t.states.filter (fun e => !(e.2.slot < newFinalizedBid.slot)) }
+    states := t.states.filter (fun e =>
+      !((match t.advanced.get? e.1 with | some a => a | none => e.2).slot < newFinalizedBid.slot)) }
+  modify fun t => { t with
+    advanced := t.advanced.filter (fun e => (t.states.get? e.1).isSome),
+    aliased := t.aliased.filter (fun r => (t.states.get? r).isSome) }
 
 /-! ## Checks -/
 

@@ -312,9 +312,18 @@ private def withdrawnFor (ws : Array Withdrawal) (index : ValidatorIndex) : M Gw
   ws.foldlM (fun acc w => if w.validator_index == index then U64.add? acc w.amount "total_withdrawn"
     else pure acc) U64.zero
 
-/-- `get_expected_withdrawals` (Electra): the withdrawals and the number of processed pending
-partial withdrawals. Before Electra (`specs/capella/beacon-chain.md`) there is no pending queue
-and the partial amount is `balance - MAX_EFFECTIVE_BALANCE`. -/
+/-- `get_expected_withdrawals` (Electra, `v1.7.0-beta.4`): the withdrawals and
+`processed_partial_withdrawals_count`, the two fields of the `ExpectedWithdrawals` dataclass that
+Electra reads (`processed_sweep_withdrawals_count` is read only from Gloas). The spec composes
+`get_pending_partial_withdrawals` and `get_validators_sweep_withdrawals`; their bodies are the two
+loops below, inlined, in the same order, with `get_balance_after_withdrawals` as `withdrawnFor`
+and `is_eligible_for_partial_withdrawals` as `sufficient && excess` under `FAR_FUTURE_EPOCH`.
+The sweep checks `len(all_withdrawals) >= MAX_WITHDRAWALS_PER_PAYLOAD` at the top of each
+iteration; here the check follows the append, which yields the same list because the sweep is
+entered with fewer than `MAX_WITHDRAWALS_PER_PAYLOAD` withdrawals (the partials cap is at most
+`MAX_WITHDRAWALS_PER_PAYLOAD - 1`) and only an append can reach it. The pair return keeps the
+statements of the `Facts` library. Before Electra (`specs/capella/beacon-chain.md`) there is no
+pending queue and the partial amount is `balance - MAX_EFFECTIVE_BALANCE`. -/
 def getExpectedWithdrawals (state : BeaconState P f) : M (Array Withdrawal × Nat) := do
   let site := "get_expected_withdrawals"
   let epoch ← getCurrentEpoch state
@@ -329,7 +338,10 @@ def getExpectedWithdrawals (state : BeaconState P f) : M (Array Withdrawal × Na
       pure (← state.pendingPartialWithdrawals).toArray
     else pure #[]  -- Capella to Deneb: no pending partial withdrawals
   for w in pendingPartials do
-    if epoch < w.withdrawable_epoch || withdrawals.size == P.MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP then
+    -- `withdrawals_limit = min(len(prior_withdrawals) + MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP,
+    -- MAX_WITHDRAWALS_PER_PAYLOAD - 1)` with no prior withdrawals; `size` grows by at most one
+    -- per iteration from 0, so `==` here is the spec's `>=`
+    if epoch < w.withdrawable_epoch || withdrawals.size == min P.MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP (P.MAX_WITHDRAWALS_PER_PAYLOAD - 1) then
       break
     let validator ← state.validators.get w.validator_index.toNat site
     let sufficient := minAct ≤ validator.effective_balance
@@ -366,7 +378,11 @@ def getExpectedWithdrawals (state : BeaconState P f) : M (Array Withdrawal × Na
     validatorIndex ← U64.mod? (← U64.add? validatorIndex U64.one site) (← U64.ofNat? n site) site
   pure (withdrawals, processed)
 
-/-- `process_withdrawals` (Electra; Capella to Deneb have no pending-queue update). -/
+/-- `process_withdrawals` (Electra, `v1.7.0-beta.4`; Capella to Deneb have no pending-queue
+update): `apply_withdrawals`, then `update_pending_partial_withdrawals` (slice by the processed
+count), `update_next_withdrawal_index` and `update_next_withdrawal_validator_index`. The spec
+updates the withdrawal index before the pending queue; the two write disjoint fields from values
+computed before either, so the order is immaterial. -/
 def processWithdrawals (state : BeaconState P f) (payload : ExecutionPayload P) :
     M (BeaconState P f) := do
   let site := "process_withdrawals"
@@ -519,11 +535,14 @@ def processSyncAggregate (ctx : Ctx) (state : BeaconState P f) (sa : SyncAggrega
 
 /-! ## Execution requests (Electra) -/
 
-/-- `process_deposit_request` (Electra). -/
+/-- `process_deposit_request` (Electra; Fulu, from `v1.7.0-beta.4`
+`specs/fulu/beacon-chain.md`, no longer sets `deposit_requests_start_index`, the former deposit
+mechanism being removed). -/
 def processDepositRequest (state : BeaconState P f) (dr : DepositRequest) : M (BeaconState P f) := do
   let mut state := state
-  if (← state.depositRequestsStartIndex) == UNSET_DEPOSIT_REQUESTS_START_INDEX then
-    state ← state.setDepositRequestsStartIndex dr.index
+  if !(f.atLeast .fulu) then
+    if (← state.depositRequestsStartIndex) == UNSET_DEPOSIT_REQUESTS_START_INDEX then
+      state ← state.setDepositRequestsStartIndex dr.index
   let pending ← (← state.pendingDeposits).push
     { pubkey := dr.pubkey, withdrawal_credentials := dr.withdrawal_credentials, amount := dr.amount,
       signature := dr.signature, slot := state.slot } "process_deposit_request"
@@ -617,22 +636,26 @@ def processConsolidationRequest (cfg : Config) (state : BeaconState P f) (cr : C
 
 /-- `process_operations` (Electra; Capella to Deneb: the deposit count is
 `min(MAX_DEPOSITS, eth1_data.deposit_count - eth1_deposit_index)` and there are no execution
-requests). -/
+requests; Fulu, from `v1.7.0-beta.4` `specs/fulu/beacon-chain.md`: `assert len(body.deposits) == 0`
+and no `process_deposit`, the loop below then running over no deposits). -/
 def processOperations (ctx : Ctx) (state : BeaconState P f) (body : BeaconBlockBody P f) :
     M (BeaconState P f) := do
   let site := "process_operations"
-  let startIndex ← if f.atLeast .electra then state.depositRequestsStartIndex
-    else pure U64.max  -- Capella to Deneb: the eth1 deposit count alone bounds deposits
-  let limit := if state.eth1_data.deposit_count < startIndex then state.eth1_data.deposit_count
-    else startIndex
-  if !(f.atLeast .electra) then
-    -- `eth1_data.deposit_count - eth1_deposit_index` is typed `uint64` and raises on underflow.
-    let _ ← U64.sub? state.eth1_data.deposit_count state.eth1_deposit_index site
-  if state.eth1_deposit_index < limit then
-    let remaining ← U64.sub? limit state.eth1_deposit_index site
-    require (body.deposits.length == min P.MAX_DEPOSITS remaining.toNat) s!"{site}: deposit count"
+  if f.atLeast .fulu then
+    require (body.deposits.length == 0) s!"{site}: no deposits (Fulu)"
   else
-    require (body.deposits.length == 0) s!"{site}: no deposits"
+    let startIndex ← if f.atLeast .electra then state.depositRequestsStartIndex
+      else pure U64.max  -- Capella to Deneb: the eth1 deposit count alone bounds deposits
+    let limit := if state.eth1_data.deposit_count < startIndex then state.eth1_data.deposit_count
+      else startIndex
+    if !(f.atLeast .electra) then
+      -- `eth1_data.deposit_count - eth1_deposit_index` is typed `uint64` and raises on underflow.
+      let _ ← U64.sub? state.eth1_data.deposit_count state.eth1_deposit_index site
+    if state.eth1_deposit_index < limit then
+      let remaining ← U64.sub? limit state.eth1_deposit_index site
+      require (body.deposits.length == min P.MAX_DEPOSITS remaining.toNat) s!"{site}: deposit count"
+    else
+      require (body.deposits.length == 0) s!"{site}: no deposits"
   let mut state := state
   for op in body.proposer_slashings.toArray do state ← processProposerSlashing ctx state op
   for op in body.attester_slashings.toArray do state ← processAttesterSlashing ctx state op

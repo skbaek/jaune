@@ -297,7 +297,7 @@ theorem getExpected_floorInv (state : BeaconState P f)
     -- The loop-1 accumulator is `(wid, wsAcc, proc)`; the invariant is on `wsAcc`.
     refine array_forIn_ok_inv (Inv := fun s : WithdrawalIndex × Array Withdrawal × Nat => FloorInv state s.2.1) hInit ?hy1 ?hd1 hForIn1
     · intro w hw b hb b' hstep
-      by_cases hBreak : (epoch < w.withdrawable_epoch ∨ b.2.1.size = P.MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP)
+      by_cases hBreak : (epoch < w.withdrawable_epoch ∨ b.2.1.size = min P.MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP (P.MAX_WITHDRAWALS_PER_PAYLOAD - 1))
       · rw [if_pos hBreak] at hstep
         have hEq : ForInStep.done b = ForInStep.yield b' := Except.ok.inj hstep
         cases hEq
@@ -378,7 +378,7 @@ theorem getExpected_floorInv (state : BeaconState P f)
           subst hEq
           exact hb
     · intro w hw b hb b' hstep
-      by_cases hBreak : (epoch < w.withdrawable_epoch ∨ b.2.1.size = P.MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP)
+      by_cases hBreak : (epoch < w.withdrawable_epoch ∨ b.2.1.size = min P.MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP (P.MAX_WITHDRAWALS_PER_PAYLOAD - 1))
       · rw [if_pos hBreak] at hstep
         have hEq : b = b' := ForInStep.done.inj (Except.ok.inj hstep)
         subst hEq

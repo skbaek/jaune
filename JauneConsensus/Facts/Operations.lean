@@ -21,18 +21,21 @@ the deposit-count check, the slashings, attestations, deposits, voluntary exits 
 def preRequests (ctx : Ctx) (state : BeaconState P f) (body : BeaconBlockBody P f) :
     M (BeaconState P f) := do
   let site := "process_operations"
-  let startIndex ← if f.atLeast .electra then state.depositRequestsStartIndex
-    else pure U64.max  -- Capella to Deneb: the eth1 deposit count alone bounds deposits
-  let limit := if state.eth1_data.deposit_count < startIndex then state.eth1_data.deposit_count
-    else startIndex
-  if !(f.atLeast .electra) then
-    -- `eth1_data.deposit_count - eth1_deposit_index` is typed `uint64` and raises on underflow.
-    let _ ← U64.sub? state.eth1_data.deposit_count state.eth1_deposit_index site
-  if state.eth1_deposit_index < limit then
-    let remaining ← U64.sub? limit state.eth1_deposit_index site
-    require (body.deposits.length == min P.MAX_DEPOSITS remaining.toNat) s!"{site}: deposit count"
+  if f.atLeast .fulu then
+    require (body.deposits.length == 0) s!"{site}: no deposits (Fulu)"
   else
-    require (body.deposits.length == 0) s!"{site}: no deposits"
+    let startIndex ← if f.atLeast .electra then state.depositRequestsStartIndex
+      else pure U64.max  -- Capella to Deneb: the eth1 deposit count alone bounds deposits
+    let limit := if state.eth1_data.deposit_count < startIndex then state.eth1_data.deposit_count
+      else startIndex
+    if !(f.atLeast .electra) then
+      -- `eth1_data.deposit_count - eth1_deposit_index` is typed `uint64` and raises on underflow.
+      let _ ← U64.sub? state.eth1_data.deposit_count state.eth1_deposit_index site
+    if state.eth1_deposit_index < limit then
+      let remaining ← U64.sub? limit state.eth1_deposit_index site
+      require (body.deposits.length == min P.MAX_DEPOSITS remaining.toNat) s!"{site}: deposit count"
+    else
+      require (body.deposits.length == 0) s!"{site}: no deposits"
   let mut state := state
   for op in body.proposer_slashings.toArray do state ← processProposerSlashing ctx state op
   for op in body.attester_slashings.toArray do state ← processAttesterSlashing ctx state op
@@ -113,12 +116,15 @@ theorem processOperations_split (ctx : Ctx) (st : BeaconState P f) (body : Beaco
   unfold processOperations preRequests foldWithdrawalRequests postRequests
   simp only [h, gated_read_get h, forArr_yield, pure_bind, bind_assoc, Bool.not_true,
     Bool.false_eq_true, ite_true, ite_false]
-  cases hx : st.depositRequestsStartIndex with
-  | error e => rfl
-  | ok x =>
-    rw [show (Except.ok x : M U64) = pure x from rfl]
-    simp only [pure_bind]
-    split_ifs <;> simp only [bind_assoc, pure_bind, ok_bind']
+  cases hfu : f.atLeast .fulu
+  · simp only [Bool.false_eq_true, ite_false]
+    cases hx : st.depositRequestsStartIndex with
+    | error e => rfl
+    | ok x =>
+      rw [show (Except.ok x : M U64) = pure x from rfl]
+      simp only [pure_bind]
+      split_ifs <;> simp only [bind_assoc, pure_bind, ok_bind']
+  · simp only [ite_true, bind_assoc, pure_bind, ok_bind']
 
 /-! ## The trace of the withdrawal-requests fold -/
 
