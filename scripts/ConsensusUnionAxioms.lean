@@ -31,8 +31,11 @@ import JauneConsensus.Facts.Gloas.InvariantsCover
 import JauneConsensus.Facts.Gloas.InvariantsVLen
 import JauneConsensus.Facts.Gloas.InvariantsWithdrawals
 import JauneConsensus.Facts.Gloas.InvariantsCoverBlock
+import JauneConsensus.Facts.Gloas.StepB3
+import JauneConsensus.Facts.Gloas.StepB1
 import JauneConsensus.Facts.Gloas.StepB246
 import JauneConsensus.Facts.Gloas.StepB5
+import JauneConsensus.Facts.Gloas.StepB7
 
 /-!
 # Whole-library axiom union for `JauneConsensus`
