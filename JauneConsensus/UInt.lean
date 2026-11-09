@@ -212,4 +212,34 @@ theorem b256GoAt_eq (bs : Array UInt8) : ∀ (n i : Nat) (l3 l2 l1 l0 : UInt64),
     · rw [Array.getElem?_eq_none (by omega), List.drop_eq_nil_of_le (by simpa using h)]
       simp [Bytes.toB256.go]; rfl
 
+/-! ## W2d bridging lemmas -/
+
+-- W2d bridging lemmas
+namespace U64
+
+/-- Equal values are the equal `toNat`s. -/
+theorem ext_toNat {x y : U64} (h : x.toNat = y.toNat) : x = y := by
+  cases x with
+  | mk u => cases y with
+    | mk v =>
+      congr
+      exact UInt64.toNat_inj.mp h
+
+theorem toNat_max : U64.max.toNat = 2 ^ 64 - 1 := rfl
+
+/-- Adding a nonzero amount to `FAR_FUTURE_EPOCH` (`U64.max`) overflows, so a checked sum of the
+maximum value is the maximum value with a zero addend. -/
+theorem max_add?_eq {d w : U64} {site : String} (h : U64.add? U64.max d site = .ok w) :
+    d = U64.zero ∧ w = U64.max := by
+  have hw := toNat_add? h
+  rw [toNat_max] at hw
+  have hd : d.toNat = 0 := by
+    have := w.toNat_lt
+    omega
+  refine ⟨ext_toNat (by rw [hd]; rfl), ext_toNat ?_⟩
+  rw [hw, hd, toNat_max]
+  simp
+
+end U64
+
 end JauneConsensus
