@@ -101,12 +101,17 @@ def runnerFileKinds : String → List String
      "block_0xH.ssz_snappy", "attestation_0xH.ssz_snappy", "attester_slashing_0xH.ssz_snappy",
      "blobs_0xH.ssz_snappy",
      -- Fulu data-column sidecars (`tests/formats/fork_choice/README.md`, `columns`)
-     "column_0xH.ssz_snappy"]
+     "column_0xH.ssz_snappy",
+     -- Gloas envelopes and PTC messages; some Gloas cases ship a `config.yaml`
+     "execution_payload_envelope_0xH.ssz_snappy", "payload_attestation_message_0xH.ssz_snappy",
+     "config.yaml"]
   | "sync" => ["meta.yaml", "steps.yaml", "anchor_state.ssz_snappy", "anchor_block.ssz_snappy",
      "block_0xH.ssz_snappy"]
   | "fast_confirmation" | "fork_choice_compliance" =>
     ["meta.yaml", "steps.yaml", "anchor_state.ssz_snappy", "anchor_block.ssz_snappy",
-     "block_0xH.ssz_snappy", "attestation_0xH.ssz_snappy", "attester_slashing_0xH.ssz_snappy"]
+     "block_0xH.ssz_snappy", "attestation_0xH.ssz_snappy", "attester_slashing_0xH.ssz_snappy",
+     -- Gloas envelopes and PTC messages
+     "execution_payload_envelope_0xH.ssz_snappy", "payload_attestation_message_0xH.ssz_snappy"]
   | "light_client" =>
     ["meta.yaml", "config.yaml", "steps.yaml", "proof.yaml", "object.ssz_snappy",
      "bootstrap.ssz_snappy", "initial_state.ssz_snappy", "updates_N.ssz_snappy",
@@ -148,7 +153,10 @@ custody helpers are fork-independent and whose `gossip_*` handlers dispatch by f
 `merkle_proof` suite. Every other runner still refuses Gloas. -/
 def gloasRunners : List String :=
   containerOnlyRunners ++ ["epoch_processing", "rewards", "operations", "networking", "light_client",
-    "fork", "sanity", "random", "finality", "transition"]
+    "fork", "sanity", "random", "finality", "transition",
+    -- M4: `fork_choice`, `fast_confirmation`, `fork_choice_compliance` over
+    -- `GloasForkChoice.lean` and `GloasFastConfirmation.lean`
+    "fork_choice", "fast_confirmation", "fork_choice_compliance"]
 
 /-- Why a fork directory is refused by name for a runner (`none`: any runner), if it is. Gloas is
 a declared `CFork` whose rules do not resolve (`CFork.resolve` gives `notImplemented`); it is
@@ -174,8 +182,9 @@ def forkRefusal? (f : String) (runner : Option String := none) : Option ForkRefu
 #guard (forkRefusal? "gloas" (some "transition")).isNone
 #guard (forkRefusal? "gloas" (some "networking")).isNone
 #guard (forkRefusal? "gloas" (some "light_client")).isNone
-#guard (forkRefusal? "gloas" (some "fork_choice")).isSome
+#guard (forkRefusal? "gloas" (some "fork_choice")).isNone
 #guard (forkRefusal? "gloas" (some "merkle_proof")).isSome
+#guard (forkRefusal? "gloas" (some "sync")).isSome
 #guard (forkRefusal? "eip7805" (some "ssz_static")).isSome
 #guard (forkRefusal? "fulu").isNone
 #guard (forkRefusal? "electra").isNone
