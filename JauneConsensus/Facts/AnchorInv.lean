@@ -578,6 +578,25 @@ theorem processBlsToExecutionChange_pres (ctx : Ctx) {s s' : BeaconState P f}
   exact pres_of_valRel (valRel_set (v := v) rfl hi hVe (get_ok hv)
     (credKeep_of_bls _ (beq_iff_eq.mp hb)) id) (pendingStep_same rfl)
 
+open Lean Elab Tactic Meta in
+/-- Succeeds when hypothesis `h` is an equation whose left side is a `forIn` application. -/
+elab "is_forIn " h:ident : tactic => withMainContext do
+  let d ← getLocalDeclFromUserName h.getId
+  let t ← instantiateMVars d.type
+  match t.eq? with
+  | some (_, lhs, _) =>
+    unless lhs.getAppFn.isConstOf ``ForIn.forIn do throwError "not a forIn"
+  | none => throwError "not an equation"
+
+open Lean Elab Tactic Meta in
+/-- Succeeds when `x`'s type is an `Option`, a product or a `Bool` (the shapes `do` matches on). -/
+elab "is_small_inductive " x:ident : tactic => withMainContext do
+  let d ← getLocalDeclFromUserName x.getId
+  let t ← whnfR (← instantiateMVars d.type)
+  let ok := t.getAppFn.isConstOf ``Option || t.getAppFn.isConstOf ``Prod ||
+    t.getAppFn.isConstOf ``Bool
+  unless ok do throwError "not a small inductive"
+
 /-! ## A small verification-condition generator for `do` blocks over `Except` -/
 
 /-- Every successful result of `c` satisfies `Q`. -/
@@ -621,7 +640,7 @@ macro "vcg_step" : tactic => `(tactic| first
   | (with_reducible apply ok_ite <;> intro _)
   | (with_reducible apply ok_dite <;> intro _)
   | dsimp only
-  | (rename_i x _; cases x; all_goals dsimp only))
+  | (rename_i x _; is_small_inductive x; cases x; all_goals dsimp only))
 
 /-! ## `process_withdrawal_request` -/
 
@@ -722,16 +741,6 @@ theorem ok_pres_trans {f1 f2 f3 : CFork} {s : BeaconState P f1} {s1 : BeaconStat
     {c : M (BeaconState P f3)} (hp : Pres s s1) (h : Ok c (Pres s1)) : Ok c (Pres s) :=
   fun a ha => hp.trans (h a ha)
 
-open Lean Elab Tactic Meta in
-/-- Succeeds when hypothesis `h` is an equation whose left side is a `forIn` application. -/
-elab "is_forIn " h:ident : tactic => withMainContext do
-  let d ← getLocalDeclFromUserName h.getId
-  let t ← instantiateMVars d.type
-  match t.eq? with
-  | some (_, lhs, _) =>
-    unless lhs.getAppFn.isConstOf ``ForIn.forIn do throwError "not a forIn"
-  | none => throwError "not an equation"
-
 /-- `Pres` facts for a call `h : g … = .ok s'`; extended by `macro_rules` as mutators are proved. -/
 syntax "pres_of " ident : tactic
 macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact (increaseBalance_frame $h).pres)
@@ -788,7 +797,8 @@ macro "pres_step" : tactic => `(tactic| first
   | (with_reducible apply ok_ite <;> intro _)
   | (with_reducible apply ok_dite <;> intro _)
   | dsimp only
-  | (rename_i x _; cases x; all_goals dsimp only))
+  | (rename_i x _; is_small_inductive x; cases x; all_goals dsimp only)
+  | split)
 
 theorem list_forIn_pres {α : Type} {xs : List α} {init out : BeaconState P f}
     {body : α → BeaconState P f → M (ForInStep (BeaconState P f))}
@@ -981,7 +991,7 @@ theorem setPending_extract_pres {T s' : BeaconState P f}
   · cases ho
 
 macro_rules | `(tactic| pres_of $h) => `(tactic|
-    exact setPending_extract_pres $h (by assumption) (by assumption))
+    with_reducible exact setPending_extract_pres $h (by assumption) (by assumption))
 
 theorem processWithdrawals_pres {s s' : BeaconState P f} {pl : ExecutionPayload P}
     (h : processWithdrawals s pl = .ok s') : Pres s s' := by
@@ -1023,5 +1033,96 @@ theorem processPendingConsolidations_pres (cfg : Config) {s s' : BeaconState P f
   show Ok (processPendingConsolidations cfg s) (Pres s)
   unfold processPendingConsolidations
   repeat pres_step
+
+/-! ## Epoch processing, the remaining steps -/
+
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact processRegistryUpdatesElectra_pres _ $h)
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact processPendingConsolidations_pres _ $h)
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact processWithdrawals_pres $h)
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact processVoluntaryExit_pres _ $h)
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact processProposerSlashing_pres _ $h)
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact processAttesterSlashing_pres _ $h)
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact processDeposit_pres _ $h)
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact processDepositRequest_pres $h)
+
+theorem processEth1DataReset_pres (cfg : Config) {s s' : BeaconState P f}
+    (h : processEth1DataReset cfg s = .ok s') : Pres s s' := by
+  revert s' h
+  show Ok (processEth1DataReset cfg s) (Pres s)
+  unfold processEth1DataReset
+  repeat pres_step
+
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact processEth1DataReset_pres _ $h)
+
+theorem applyPendingDeposit_pres (ctx : Ctx) {d : PendingDeposit} {s s' : BeaconState P f}
+    (h : applyPendingDeposit ctx s d = .ok s') : Pres s s' := by
+  revert s' h
+  show Ok (applyPendingDeposit ctx s d) (Pres s)
+  unfold applyPendingDeposit
+  repeat pres_step
+
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact applyPendingDeposit_pres _ $h)
+
+theorem processSlashingsReset_pres (cfg : Config) {s s' : BeaconState P f}
+    (h : processSlashingsReset cfg s = .ok s') : Pres s s' := by
+  revert s' h
+  show Ok (processSlashingsReset cfg s) (Pres s)
+  unfold processSlashingsReset
+  repeat pres_step
+
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact processSlashingsReset_pres _ $h)
+
+theorem processRandaoMixesReset_pres (cfg : Config) {s s' : BeaconState P f}
+    (h : processRandaoMixesReset cfg s = .ok s') : Pres s s' := by
+  revert s' h
+  show Ok (processRandaoMixesReset cfg s) (Pres s)
+  unfold processRandaoMixesReset
+  repeat pres_step
+
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact processRandaoMixesReset_pres _ $h)
+
+theorem processHistoricalSummariesUpdate_pres (cfg : Config) {s s' : BeaconState P f}
+    (h : processHistoricalSummariesUpdate cfg s = .ok s') : Pres s s' := by
+  revert s' h
+  show Ok (processHistoricalSummariesUpdate cfg s) (Pres s)
+  unfold processHistoricalSummariesUpdate
+  repeat pres_step
+
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact processHistoricalSummariesUpdate_pres _ $h)
+
+theorem processParticipationFlagUpdates_pres (cfg : Config) {s s' : BeaconState P f}
+    (h : processParticipationFlagUpdates cfg s = .ok s') : Pres s s' := by
+  revert s' h
+  show Ok (processParticipationFlagUpdates cfg s) (Pres s)
+  unfold processParticipationFlagUpdates
+  repeat pres_step
+
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact processParticipationFlagUpdates_pres _ $h)
+
+theorem processSyncCommitteeUpdates_pres (ctx : Ctx) {s s' : BeaconState P f}
+    (h : processSyncCommitteeUpdates ctx s = .ok s') : Pres s s' := by
+  revert s' h
+  show Ok (processSyncCommitteeUpdates ctx s) (Pres s)
+  unfold processSyncCommitteeUpdates
+  repeat pres_step
+
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact processSyncCommitteeUpdates_pres _ $h)
+
+theorem processRegistryUpdates_pres (cfg : Config) (hf : f.atLeast .electra = true)
+    {s s' : BeaconState P f} (h : processRegistryUpdates cfg s = .ok s') : Pres s s' := by
+  unfold processRegistryUpdates at h
+  rw [if_pos hf] at h
+  exact processRegistryUpdatesElectra_pres cfg h
+
+/-! ## Upgrades -/
+
+theorem upgradeToFulu_pres (cfg : Config) {pre : BeaconState P .electra} {post : BeaconState P .fulu}
+    (h : upgradeToFulu cfg pre = .ok post) : Pres pre post := by
+  revert post h
+  show Ok (upgradeToFulu cfg pre) (Pres pre)
+  unfold upgradeToFulu
+  repeat (with_reducible apply ok_bind; intro _ _)
+  refine ok_pure (pres_of_valRel (valRel_same rfl) (pendingStep_of_eq fun l hl => ?_))
+  exact Eq.trans (by assumption) hl
 
 end JauneConsensus.Facts
