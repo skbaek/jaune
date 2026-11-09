@@ -315,4 +315,133 @@ private def v7out : Bytes :=
 -- `t = 3`, `f` set, twelve rounds) the appendix publishes for `"abc"`.
 #guard blake2b512 [0x61, 0x62, 0x63] == some v5out
 
+/-! ## Equivalence with `bCompress` -/
+
+/-- The same rounds as `rounds`, but counting down like the production loop:
+round index `k - (n + 1)` first, then the remaining `n` rounds. -/
+def roundsR (m : Array UInt64) (k : Nat) : Nat → Array UInt64 → Array UInt64
+  | 0, v => v
+  | n + 1, v => roundsR m k n (round m (sigmaRow (k - (n + 1))) v)
+
+/-- `roundsR` applies the rounds with indices `k - n` through `k - 1` in order. -/
+private theorem roundsR_eq_foldl (m : Array UInt64) (k n : Nat) (v : Array UInt64)
+    (h : n ≤ k) :
+    roundsR m k n v =
+      (List.range' (k - n) n).foldl (fun v i => round m (sigmaRow i) v) v := by
+  induction n generalizing v with
+  | zero => rfl
+  | succ n ih =>
+    have hnk : n ≤ k := by omega
+    have e1 : roundsR m k (n + 1) v
+        = roundsR m k n (round m (sigmaRow (k - (n + 1))) v) := rfl
+    have e2 : List.range' (k - (n + 1)) (n + 1)
+        = (k - (n + 1)) :: List.range' (k - n) n := by
+      have rfl2 : List.range' (k - (n + 1)) (n + 1)
+          = (k - (n + 1)) :: List.range' (k - (n + 1) + 1) n := rfl
+      rw [rfl2, show k - (n + 1) + 1 = k - n by omega]
+    rw [e1, ih _ hnk, e2, List.foldl_cons]
+
+/-- The full `roundsR` run is `rounds`. -/
+private theorem roundsR_eq_rounds (m : Array UInt64) (k : Nat) (v : Array UInt64) :
+    roundsR m k k v = rounds m k v := by
+  rw [roundsR_eq_foldl _ _ _ _ (by omega), Nat.sub_self]
+  unfold rounds
+  congr 1
+  exact List.range_eq_range'.symm
+
+/-- The production table is this module's table. -/
+private theorem blake2IV_eq : ∀ i, i < 8 →
+    Jaune.blake2IV.getD i 0 = iv.getD i 0 := by
+  decide
+
+/-- `Vec.toArray` of an explicit working vector. -/
+private theorem vecToArray16 (a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 : UInt64) :
+    Jaune.Blake2.Vec.toArray ⟨a0, a1, a2, a3, a4, a5, a6, a7,
+      a8, a9, a10, a11, a12, a13, a14, a15⟩
+      = #[a0, a1, a2, a3, a4, a5, a6, a7,
+        a8, a9, a10, a11, a12, a13, a14, a15] := rfl
+
+/-- Array `get` is `getD` with any default (both reduce to the internal get). -/
+private theorem arrGetGetD (a : Array α) (i : Nat) (d : α) (h : i < a.size) :
+    a[i] = a.getD i d := by
+  unfold Array.getD
+  rw [dif_pos h]
+  rfl
+
+/-- `takeD 8` is the identity on eight-byte lists. -/
+private theorem takeD8 (l : List UInt8) (h : l.length = 8) : l.takeD 8 0 = l :=
+  List.takeD_eq_self 0 h.symm
+
+/-- The masked sixth initialization word. -/
+private theorem ivXor6 : (Jaune.blake2IV.getD 6 0).xor Jaune.b2MaskBits
+    = ~~~iv.getD 6 0 := rfl
+
+/-
+-- WIP, not checked: turn-4 stretch main theorem. Proof in progress at the end
+-- of turn 4; kept here so the file builds green. To resume, delete this block
+-- comment wrapper and continue from the `generalize` step (the remaining gaps
+-- were: `blake2IV` vs `iv` in `get?`-normal form, `.xor` vs `^^^`, and the
+-- `takeD`-unfolded vs `reverse` output bytes).
+theorem bCompress_eq (n : Nat) (h m : List UInt64) (t0 t1 : UInt64) (f : Bool)
+    (hh : h.length = 8) (hm : m.length = 16) :
+    Jaune.bCompress n h m t0 t1 f
+      = some (outBytes (F h.toArray m.toArray t0 t1 f n)) := by
+  unfold Jaune.bCompress
+  rw [dif_pos hh, dif_pos hm]
+  simp only [Jaune.Blake2.roundsVec_toArray]
+  simp only [Blake2.Vec.toArray]
+  simp only [F, outBytes]
+  simp [vecToArray16, blake2IV_eq, ivXor6, arrGetGetD, takeD8,
+    List.length_reverse, UInt64.length_toBytes, hh, hm]
+  generalize hA : #[h.toArray.getD 0 0, h.toArray.getD 1 0, h.toArray.getD 2 0,
+      h.toArray.getD 3 0, h.toArray.getD 4 0, h.toArray.getD 5 0,
+      h.toArray.getD 6 0, h.toArray.getD 7 0, iv.getD 0 0, iv.getD 1 0,
+      iv.getD 2 0, iv.getD 3 0, t0 ^^^ iv.getD 4 0, t1 ^^^ iv.getD 5 0,
+      (if f then ~~~iv.getD 6 0 else iv.getD 6 0), iv.getD 7 0] = A
+-/
+
+/-- The RFC 7693 §2.7 table is the production table, literally. -/
+private theorem sigma_eq : sigma = Jaune.blake2Sigma := rfl
+
+/-- Production first-half rotation is `rotR s R1`: `blake2R1 = 64 - b2R1`
+(`Jaune/Precompiles.lean`) and `rotR` (`§3.1` above) spell it the same way. -/
+private theorem rotR_eq1 (s : UInt64) :
+    (s >>> Jaune.b2R1) ^^^ (s <<< Jaune.blake2R1) = rotR s R1 := rfl
+
+/-- Production second-half rotation is `rotR s R2`. -/
+private theorem rotR_eq2 (s : UInt64) :
+    (s >>> Jaune.b2R2) ^^^ (s <<< Jaune.blake2R2) = rotR s R2 := rfl
+
+/-- Production third-half rotation is `rotR s R3`. -/
+private theorem rotR_eq3 (s : UInt64) :
+    (s >>> Jaune.b2R3) ^^^ (s <<< Jaune.blake2R3) = rotR s R3 := rfl
+
+/-- Production fourth-half rotation is `rotR s R4`. -/
+private theorem rotR_eq4 (s : UInt64) :
+    (s >>> Jaune.b2R4) ^^^ (s <<< Jaune.blake2R4) = rotR s R4 := rfl
+
+/-- In-bounds `get!` is `getD` with default `0` on word arrays: the production
+`Blake2.g` reads (`v[a]!`) against this spec's reads (`v.getD a 0`). -/
+private theorem getBang_eq_getD (v : Array UInt64) (i : Nat) (h : i < v.size) :
+    v[i]! = v.getD i 0 :=
+  (getElem!_pos v i h).trans (arrGetGetD _ _ _ h)
+
+/-- In-bounds `get!` is `getD` with default `#[]` on sigma-row arrays. -/
+private theorem getBang_eq_getD_row (a : Array (Array Nat)) (i : Nat)
+    (h : i < a.size) :
+    a[i]! = a.getD i #[] :=
+  (getElem!_pos a i h).trans (arrGetGetD _ _ _ h)
+
+/-- Round `r` uses the production row `r % 10`, in `get!` rather than `getD`
+form: `blake2Sigma.size` is `10` (`Jaune.blake2Sigma_size`). -/
+private theorem sigmaRow_eq (r : Nat) :
+    sigmaRow r = Jaune.blake2Sigma[r % Jaune.blake2Sigma.size]! := by
+  unfold sigmaRow
+  rw [sigma_eq]
+  have h10 : r % 10 < Jaune.blake2Sigma.size := by
+    rw [Jaune.blake2Sigma_size]
+    exact Nat.mod_lt _ (by omega)
+  rw [show r % Jaune.blake2Sigma.size = r % 10 by rw [Jaune.blake2Sigma_size]]
+  exact (getBang_eq_getD_row _ _ h10).symm
+
 end Jaune.Blake2.Spec
