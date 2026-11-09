@@ -103,7 +103,7 @@ theorem processParentExecutionPayload_cases {ctx : Ctx} {s s1 : GSt P}
     simp at hne
   · rename_i hne
     obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
-    rw [JauneConsensus.Gloas.applyParentExecutionPayload_eq] at h
+    rw [JauneConsensus.Gloas.applyParentExecutionPayload_factor] at h
     obtain ⟨a, ha, h⟩ := bind_eq_ok_iff.mp h
     obtain ⟨d, hd, h⟩ := bind_eq_ok_iff.mp h
     obtain ⟨e, he, h⟩ := bind_eq_ok_iff.mp h
