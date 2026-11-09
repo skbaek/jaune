@@ -20,6 +20,7 @@ import JauneConsensus.Accessors
 import JauneConsensus.Ctx
 import JauneConsensus.Deposits
 import JauneConsensus.Block
+import JauneConsensus.Facts.WithdrawalRequest
 import JauneConsensus.DAS
 import JauneConsensus.LightClient
 import JauneConsensus.ForkChoice
