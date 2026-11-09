@@ -403,8 +403,9 @@ Python specification on those cases. It is not a proof that they agree.
 **Trusted base.** Pure Lean. There is no `@[extern]`, `opaque`, `partial`,
 `unsafe`, `native_decide`, `panic` or `sorry` in `JauneConsensus/`. There is
 no foreign code and no FFI. The hygiene gate scans `JauneConsensus/`, its
-root and its runner with no new allowlist rows. Integrity rules R1 to R4
-cover the consensus closure and `ConsensusMain.lean`. R5 bars defaulted reads
+root and its runner with no new allowlist rows. Integrity rules R1 to R3
+cover the consensus closure and `ConsensusMain.lean`; R4 covers the
+consensus spec layer outside `Crypto/`, `UInt.lean` and `Harness/`. R5 bars defaulted reads
 and raw `UInt64` in the spec layer outside `UInt.lean`, `Harness/` and
 `Crypto/`. R6 bars nested actions in term-level `if` branches, because Lean
 lifts such an action above the branch and an Electra-only read would then run
@@ -505,12 +506,12 @@ Deneb pairs with Cancun as Electra's pre-fork side. `decide` proves the
 ties against Jaune's rule data: the blob ceilings, the request types, and
 the pairing with its inverse (`Fork.lean`). `ExecutionRequestsList`, the
 result type of `get_execution_requests_list`, is `List Bytes`
-(`Fork.lean`). That is the type Jaune's execution layer hashes, so a later
-seam goal needs no conversion.
+(`Fork.lean`). That is the type Jaune's execution layer hashes, so a statement
+that joins the two layers needs no conversion.
 
-**Consensus-primitive provenance.** Execution-layer rows come from
-`jaune-primitive-provenance-v1` and are not repeated here. Columns match its
-P0 table: primitive, reference, transcription source, proved, tested only.
+**Consensus-primitive provenance.** Execution-layer primitives are covered
+by their own provenance rows and are not repeated here. Columns: primitive,
+reference, transcription source, proved, tested only.
 
 | primitive | reference and section | transcription source | proved | tested only |
 |---|---|---|---|---|
