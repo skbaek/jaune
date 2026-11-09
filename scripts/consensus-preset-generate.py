@@ -2,20 +2,21 @@
 """Generate the consensus preset and config records from the pinned pyspec.
 
 Reads ``presets/{minimal,mainnet}/<fork>.yaml`` for the forks phase0 through
-fulu, and ``configs/{minimal,mainnet}.yaml``, from an
+gloas, and ``configs/{minimal,mainnet}.yaml``, from an
 ``ethereum/consensus-specs`` checkout at the tag commit recorded in
-``scripts/consensus-vectors.json`` (``v1.6.1``), and writes:
+``scripts/consensus-vectors.json`` (``v1.7.0-beta.4``), and writes:
 
 * ``JauneConsensus/Preset.lean``: ``structure Preset`` (one field per preset
   variable, spec spelling) and ``Preset.minimal`` / ``Preset.mainnet``;
 * ``JauneConsensus/Config.lean``: ``structure Config`` (one field per config
-  variable that ``specs/{phase0..fulu}`` mention, spec spelling, plus
-  ``PRESET_BASE``; ``BLOB_SCHEDULE`` as a list of entries) and
+  variable that ``specs/{phase0..gloas}`` mention, spec spelling, plus
+  ``PRESET_BASE``; ``BLOB_SCHEDULE`` and ``GAS_LIMIT_SCHEDULE`` as lists of
+  entries) and
   ``Config.minimal`` / ``Config.mainnet``;
 * ``JauneConsensus/Harness/ConfigOverride.lean``: one typed setter per config
   field, used by the runner to apply a vector case's ``config.yaml``.
 
-Config variables no phase0..fulu spec file mentions (Gloas and feature-fork
+Config variables no phase0..gloas spec file mentions (feature-fork and Heze
 versions, epochs and timings, ``CONFIG_NAME``) are left out and listed in the
 generated header; a case ``config.yaml`` naming one is refused.
 
@@ -46,7 +47,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 PRESETS = ("minimal", "mainnet")
-FORKS = ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu")
+FORKS = ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas")
 OUT_PRESET = os.path.join(REPO, "JauneConsensus", "Preset.lean")
 OUT_CONFIG = os.path.join(REPO, "JauneConsensus", "Config.lean")
 OUT_OVERRIDE = os.path.join(REPO, "JauneConsensus", "Harness", "ConfigOverride.lean")
@@ -89,9 +90,17 @@ def parse_value(raw: str, where: str):
     fail(f"{where}: unsupported value {raw!r}")
 
 
+# List-of-records config keys and the second key of each entry (the first is
+# ``EPOCH``): ``BLOB_SCHEDULE`` (``specs/fulu/beacon-chain.md``,
+# ``get_blob_parameters``) and ``GAS_LIMIT_SCHEDULE`` (``specs/gloas/beacon-chain.md``,
+# ``get_scheduled_gas_limit``).
+SCHEDULES = {"BLOB_SCHEDULE": ("schedule", "MAX_BLOBS_PER_BLOCK"),
+             "GAS_LIMIT_SCHEDULE": ("gas_schedule", "GAS_LIMIT")}
+
+
 def parse_yaml(path: str) -> list[tuple[str, object]]:
-    """Ordered ``(key, value)`` pairs; ``BLOB_SCHEDULE`` becomes a list of
-    ``(epoch, max_blobs)``."""
+    """Ordered ``(key, value)`` pairs; a schedule key (``SCHEDULES``) becomes a
+    list of ``(epoch, value)``."""
     with open(path, encoding="ascii") as f:
         lines = [strip_comment(l.rstrip("\n")) for l in f]
     out: list[tuple[str, object]] = []
@@ -109,23 +118,24 @@ def parse_yaml(path: str) -> list[tuple[str, object]]:
         key, raw = m.group(1), (m.group(2) or "").strip()
         if any(k == key for k, _ in out):
             fail(f"{path}: duplicate key {key}")
-        if key == "BLOB_SCHEDULE":
+        if key in SCHEDULES:
+            skind, second = SCHEDULES[key]
             entries: list[tuple[int, int]] = []
             if raw == "[]":
                 pass
             elif raw == "":
                 while i + 1 < len(lines) and lines[i].startswith("  - "):
                     a = re.fullmatch(r"  - EPOCH: ([0-9]+)", lines[i])
-                    b = re.fullmatch(r"    MAX_BLOBS_PER_BLOCK: ([0-9]+)", lines[i + 1])
+                    b = re.fullmatch(r"    " + second + r": ([0-9]+)", lines[i + 1])
                     if not a or not b:
-                        fail(f"{path}: bad BLOB_SCHEDULE entry at line {i + 1}")
+                        fail(f"{path}: bad {key} entry at line {i + 1}")
                     entries.append((int(a.group(1)), int(b.group(1))))
                     i += 2
                 if not entries:
-                    fail(f"{path}: empty block BLOB_SCHEDULE")
+                    fail(f"{path}: empty block {key}")
             else:
-                fail(f"{path}: bad BLOB_SCHEDULE value {raw!r}")
-            out.append((key, ("schedule", entries)))
+                fail(f"{path}: bad {key} value {raw!r}")
+            out.append((key, (skind, entries)))
         else:
             if raw == "":
                 fail(f"{path}: empty value for {key}")
@@ -139,7 +149,8 @@ def sha256(path: str) -> str:
 
 
 LEAN_TYPE = {"nat": "Nat", "bytes4": "Bytes", "adr": "Adr", "b256": "B256",
-             "string": "String", "schedule": "List BlobScheduleEntry"}
+             "string": "String", "schedule": "List BlobScheduleEntry",
+             "gas_schedule": "List GasLimitScheduleEntry"}
 
 
 def lean_lit(v) -> str:
@@ -152,7 +163,7 @@ def lean_lit(v) -> str:
         return f"0x{x}"
     if kind == "string":
         return f'"{x}"'
-    if kind == "schedule":
+    if kind in ("schedule", "gas_schedule"):
         if not x:
             return "[]"
         return "[" + ", ".join(f"⟨{e}, {m}⟩" for e, m in x) + "]"
@@ -239,17 +250,17 @@ def generate(specs: str, prov: dict) -> dict[str, str]:
     config_sources = [f"configs/{p}.yaml" for p in PRESETS]
 
     # Preset.lean
-    L = [header("Consensus presets (phase0 through Fulu)", preset_sources, specs, tag, commit)]
+    L = [header("Consensus presets (phase0 through Gloas)", preset_sources, specs, tag, commit)]
     L += [
         "",
         "A preset fixes the compile-time sizes of the specification (`presets/README.md`). The",
-        "`minimal` and `mainnet` records hold every variable of the phase0 to Fulu preset files,",
-        "spelled as in the specification. Feature-fork and Gloas preset files are not read.",
+        "`minimal` and `mainnet` records hold every variable of the phase0 to Gloas preset files,",
+        "spelled as in the specification. Feature-fork and Heze preset files are not read.",
         "-/",
         "",
         "namespace JauneConsensus",
         "",
-        "/-- A consensus preset: the variables of `presets/<name>/<fork>.yaml`, phase0 to Fulu. -/",
+        "/-- A consensus preset: the variables of `presets/<name>/<fork>.yaml`, phase0 to Gloas. -/",
         "structure Preset where",
         "  /-- The preset's name (`PRESET_BASE`). -/",
         "  name : String",
@@ -276,19 +287,20 @@ def generate(specs: str, prov: dict) -> dict[str, str]:
     preset_lean = "\n".join(L)
 
     # Config.lean
-    L = [header("Consensus runtime configuration (phase0 through Fulu)", config_sources, specs,
+    L = [header("Consensus runtime configuration (phase0 through Gloas)", config_sources, specs,
                 tag, commit)]
     L += [
         "",
         "A configuration holds the run-time variables of the specification (`configs/README.md`).",
-        "`Config` has one field per variable of `configs/<name>.yaml` that a phase0 to Fulu",
+        "`Config` has one field per variable of `configs/<name>.yaml` that a phase0 to Gloas",
         "specification file mentions, spelled as in the specification. Left out, because no",
-        "phase0 to Fulu specification file mentions them:",
+        "phase0 to Gloas specification file mentions them:",
         "",
         ", ".join(f"`{k}`" for k in excluded) + ".",
         "",
         "Types follow the value form: decimal `Nat`; four bytes `Bytes`; an execution address",
-        "`Adr`; a 32-byte hash `B256`; `BLOB_SCHEDULE` a list of `BlobScheduleEntry`.",
+        "`Adr`; a 32-byte hash `B256`; `BLOB_SCHEDULE` a list of `BlobScheduleEntry` and",
+        "`GAS_LIMIT_SCHEDULE` a list of `GasLimitScheduleEntry`.",
         "-/",
         "",
         "import Jaune.Types",
@@ -302,7 +314,13 @@ def generate(specs: str, prov: dict) -> dict[str, str]:
          "  EPOCH : Nat",
          "  MAX_BLOBS_PER_BLOCK : Nat",
          "  deriving Repr, DecidableEq", "",
-         "/-- A consensus configuration (`configs/<name>.yaml`), phase0 to Fulu variables. -/",
+         "/-- One entry of `GAS_LIMIT_SCHEDULE` (`specs/gloas/beacon-chain.md`,",
+         "`get_scheduled_gas_limit`). -/",
+         "structure GasLimitScheduleEntry where",
+         "  EPOCH : Nat",
+         "  GAS_LIMIT : Nat",
+         "  deriving Repr, DecidableEq", "",
+         "/-- A consensus configuration (`configs/<name>.yaml`), phase0 to Gloas variables. -/",
          "structure Config where"]
     for k, kind in config_fields:
         L.append(f"  {k} : {LEAN_TYPE[kind]}")
@@ -335,7 +353,7 @@ def generate(specs: str, prov: dict) -> dict[str, str]:
         "configuration the case was generated with. The runner starts from the base `Config` of the",
         "case's preset and sets every key the file names, with the field's type. `PRESET_BASE` must",
         "equal the base's. A key that is not a `Config` field, a value of the wrong form, or a",
-        "malformed `BLOB_SCHEDULE` is refused.",
+        "malformed `BLOB_SCHEDULE` or `GAS_LIMIT_SCHEDULE` is refused.",
         "-/",
         "",
         "namespace JauneConsensus.Harness",
@@ -346,7 +364,7 @@ def generate(specs: str, prov: dict) -> dict[str, str]:
         "inductive ConfigError where",
         "  /-- The file or a value is not readable as the field's type. -/",
         "  | yaml (e : YamlError)",
-        "  /-- A key that is not a phase0 to Fulu `Config` field. -/",
+        "  /-- A key that is not a phase0 to Gloas `Config` field. -/",
         "  | unknownKey (key : String)",
         "  /-- `PRESET_BASE` differs from the case's preset. -/",
         "  | presetBase (got want : String)",
@@ -359,7 +377,7 @@ def generate(specs: str, prov: dict) -> dict[str, str]:
         "instance : ToString ConfigError where",
         "  toString",
         "    | .yaml e => s!\"config: {e}\"",
-        "    | .unknownKey k => s!\"config: {k} is not a phase0 to Fulu configuration variable\"",
+        "    | .unknownKey k => s!\"config: {k} is not a phase0 to Gloas configuration variable\"",
         "    | .presetBase g w => s!\"config: PRESET_BASE {g} differs from the case preset {w}\"",
         "    | .width k n => s!\"config: {k} must be {n} bytes\"",
         "    | .notMapping => \"config: config.yaml is not a mapping\"",
@@ -378,6 +396,12 @@ def generate(specs: str, prov: dict) -> dict[str, str]:
         "    (← v.asSeq).mapM fun e => do",
         "      e.expectKeys [\"EPOCH\", \"MAX_BLOBS_PER_BLOCK\"]",
         "      pure ⟨← (← e.field \"EPOCH\").asNat, ← (← e.field \"MAX_BLOBS_PER_BLOCK\").asNat⟩",
+        "",
+        "private def gasScheduleOf (v : YVal) : Except ConfigError (List GasLimitScheduleEntry) :=",
+        "  Except.mapError ConfigError.yaml do",
+        "    (← v.asSeq).mapM fun e => do",
+        "      e.expectKeys [\"EPOCH\", \"GAS_LIMIT\"]",
+        "      pure ⟨← (← e.field \"EPOCH\").asNat, ← (← e.field \"GAS_LIMIT\").asNat⟩",
         "",
         "/-- Set one configuration key from its YAML value. -/",
         "def _root_.JauneConsensus.Config.setKey (c : Config) (k : String) (v : YVal) :",
@@ -398,6 +422,7 @@ def generate(specs: str, prov: dict) -> dict[str, str]:
             "b256": f'(fun bs => (natOfBytes bs).toB256) <$> hexN v 32 "{k}"',
             "string": None,
             "schedule": "scheduleOf v",
+            "gas_schedule": "gasScheduleOf v",
         }[kind]
         if rhs is None:
             fail(f"no setter for string field {k}")
@@ -421,7 +446,7 @@ def generate(specs: str, prov: dict) -> dict[str, str]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--specs", default=os.path.expanduser("~/consensus-specs-v1.6.1"))
+    ap.add_argument("--specs", default=os.path.expanduser("~/consensus-specs-v1.7.0-beta.4"))
     ap.add_argument("--provenance", default=os.path.join(HERE, "consensus-vectors.json"))
     ap.add_argument("--check", action="store_true")
     a = ap.parse_args()

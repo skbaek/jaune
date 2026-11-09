@@ -21,7 +21,11 @@ A selection names a preset and optionally a fork, runner, handler and suite. Dis
 4. classifies every file name against the runner's known file kinds (for example Fulu
    fork-choice data columns `column_0x<root>.ssz_snappy`) and refuses an unknown name or a
    subdirectory inside a case;
-5. refuses an empty selection.
+5. checks every case's `manifest.yaml` (`tests/formats/README.md` at `v1.7.0-beta.4`, "included
+   in every test case"): its `preset`, `fork`, `runner`, `handler`, `suite` and `case` must equal
+   the case's location. Its presence is pinned by the file-path digest; once checked it is left
+   out of the case's file list, so handlers see the files of their format;
+6. refuses an empty selection.
 
 The checks run on every selected suite in every tier: the smoke tier narrows which cases are
 *executed*, never what is checked.
@@ -166,6 +170,22 @@ def listDir (p : System.FilePath) (dirs : Bool) (strict : Bool) : IO (List Strin
       throw (IO.userError s!"discovery: unexpected {if isDir then "directory" else "file"} {e.path}")
   pure (sortStrings out)
 
+/-- `manifest.yaml`: exactly the six identity keys, each a scalar equal to the case's location. -/
+def checkCaseManifest (dir : System.FilePath) (label : String) (want : List (String × String)) :
+    IO Unit := do
+  match parse (← IO.FS.readBinFile (dir / "manifest.yaml")) with
+  | .error e => throw (IO.userError s!"refused: {label}/manifest.yaml: {e}")
+  | .ok v =>
+    match v.expectKeys (want.map (·.1)) with
+    | .error e => throw (IO.userError s!"refused: {label}/manifest.yaml: {e}")
+    | .ok () => pure ()
+    for (k, w) in want do
+      match v.get? k with
+      | some (.scalar s _) =>
+        if s != w then
+          throw (IO.userError s!"refused: {label}/manifest.yaml: {k} is {s}, the case is at {w}")
+      | _ => throw (IO.userError s!"refused: {label}/manifest.yaml: {k} is not a scalar")
+
 /-- The `bls_setting` of one case, as the manifest's histogram key. -/
 def blsSettingOf (c : Case) : IO String := do
   if !c.has "meta.yaml" then return "absent"
@@ -234,9 +254,13 @@ def discover (m : Manifest) (sel : Selection) : IO (List Case) := do
     for n in names do
       let files ← listDir (sdir / n) false true
       for f in files do
-        if !kinds.contains (normalizeName f) then
+        if f != "manifest.yaml" && !kinds.contains (normalizeName f) then
           throw (IO.userError s!"refused: {label}/{n}: unknown file {f} for runner {k.runner}")
         paths := paths.push s!"{n}/{f}"
+      if files.contains "manifest.yaml" then
+        checkCaseManifest (sdir / n) s!"{label}/{n}" [("preset", sel.preset), ("fork", k.fork),
+          ("runner", k.runner), ("handler", k.handler), ("suite", k.suite), ("case", n)]
+      let files := files.filter (· != "manifest.yaml")
       suiteCases := suiteCases.push
         { preset := sel.preset, key := k, name := n, dir := sdir / n, files }
     if listDigest (sortStrings paths) != r.filesSha256 then

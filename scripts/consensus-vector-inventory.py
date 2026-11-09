@@ -1,22 +1,32 @@
 #!/usr/bin/env python3
 """Inventory the pinned consensus-spec-tests tarballs, case by case.
 
-Reads the ``general``, ``minimal`` and ``mainnet`` tarballs of one
-``ethereum/consensus-specs`` release, checks each against the size and SHA-256
-recorded in ``scripts/consensus-vectors.json``, and counts every test case by
-preset, fork, runner, handler and suite. Nothing is extracted: the archives
-are streamed and only member names are read, so the tarballs stay untrusted
-data.
+Reads the ``minimal``, ``mainnet`` and ``comptests`` tarballs of the pinned
+``ethereum/consensus-specs`` release and the ``general`` tarball of the
+general-only provenance entry (``general`` in ``scripts/consensus-vectors.json``:
+the pinned release's own general tarball has no ``ssz_generic`` or ``kzg``
+cases, so the general rows stay on an earlier release), checks each against
+the size and SHA-256 recorded there, and counts every test case by tarball,
+fork, runner, handler and suite. Nothing is extracted: the archives are
+streamed and only member names are read, so the tarballs stay untrusted data.
 
 A case is the directory ``tests/<preset>/<fork>/<runner>/<handler>/<suite>/<case>``
 of any regular file below it. That is the layout ``tests/formats/README.md``
-defines at the pin.
+defines at the pin. The ``comptests`` tarball uses the same layout under the
+``minimal`` preset (``tests/minimal/<fork>/fork_choice_compliance/...``); it also
+ships the pyspec sources, the format descriptions and the compliance generators
+(``tests/core/``, ``tests/formats/``, ``tests/generators/``), which are not
+cases: they are skipped and their regular-file count per prefix is recorded
+(``skipped_source_members``).
 
 Usage (run with ``python3 -I``)::
 
     python3 -I scripts/consensus-vector-inventory.py \\
-        --tarballs DIR [--provenance scripts/consensus-vectors.json] \\
+        --tarballs DIR [--general-tarballs DIR] \\
+        [--provenance scripts/consensus-vectors.json] \\
         [--json OUT.json] [--markdown OUT.md] [--expect OUT.json]
+
+``--general-tarballs`` defaults to ``~/consensus-spec-tests-<general release>/tarballs``.
 
 ``--expect`` compares the fresh counts with a recorded inventory and fails on
 any difference. ``--unpinned`` skips the digest check; it exists only for the
@@ -52,11 +62,19 @@ import sys
 import tarfile
 from collections import Counter, defaultdict
 
-PRESETS = ("general", "minimal", "mainnet")
-# Forks whose cases the goal must pass on minimal and mainnet. The general
-# preset is in scope whole: every general case lives under a fork directory
-# that names where the format was introduced, not where it is used.
-SCOPE_FORKS = ("electra", "fulu")
+# The tarballs the inventory reads, by key. Each key is also the extraction
+# directory (``<root>/<key>/tests/<preset>/...``); ``TARBALL_PRESET`` maps it to
+# the preset directory inside the tarball.
+PRESETS = ("general", "minimal", "mainnet", "comptests")
+TARBALL_PRESET = {"general": "general", "minimal": "minimal", "mainnet": "mainnet",
+                  "comptests": "minimal"}
+# Member prefixes of the non-case files in the comptests tarball: the pyspec
+# sources, the test-format descriptions and the compliance generators.
+SOURCE_PREFIX = {"comptests": ("tests/core/", "tests/formats/", "tests/generators/")}
+# Forks whose cases the goal must pass on minimal and mainnet (and comptests).
+# The general preset is in scope whole: every general case lives under a fork
+# directory that names where the format was introduced, not where it is used.
+SCOPE_FORKS = ("electra", "fulu", "gloas")
 # Fork-independent runners the goal names outright (O1 names `shuffling` on
 # both presets). Their only cases sit under the fork that introduced them.
 SCOPE_EXTRA = {("phase0", "shuffling")}
@@ -103,12 +121,27 @@ def bls_setting_of(data: bytes, where: str) -> str:
     return v
 
 
-def scan(path: str, preset: str, details: dict | None = None) -> tuple[Counter, int]:
+def tarball_meta(prov: dict, key: str) -> tuple[dict, str, str]:
+    """The pin of tarball ``key``: its record, release and tag commit. The
+    general tarball comes from the general-only provenance entry."""
+    if key == "general":
+        g = prov["general"]
+        return g["tarballs"]["general"], g["release"], g["tag_commit"]
+    return prov["tarballs"][key], prov["release"], prov["tag_commit"]
+
+
+def scan(path: str, tkey: str, details: dict | None = None,
+         skipped: list | None = None) -> tuple[Counter, int]:
     """Return a counter of case keys (fork, runner, handler, suite) and the
-    number of regular files seen. When ``details`` is a dict, fill it with the
-    per-suite records described in the module docstring, for in-scope suites."""
+    number of regular files seen in tarball ``tkey``. When ``details`` is a dict,
+    fill it with the per-suite records described in the module docstring, for
+    in-scope suites. Source members (``SOURCE_PREFIX``) are skipped and counted
+    per prefix in the dict ``skipped[0]``."""
+    preset = TARBALL_PRESET[tkey]
+    skip = SOURCE_PREFIX.get(tkey, ())
     cases: set[tuple[str, ...]] = set()
     files = 0
+    nskip: Counter = Counter()
     case_files: dict = defaultdict(list)
     case_bls: dict = {}
     with tarfile.open(path, mode="r|gz") as tar:
@@ -118,6 +151,10 @@ def scan(path: str, preset: str, details: dict | None = None) -> tuple[Counter, 
             parts = [p for p in m.name.split("/") if p not in ("", ".")]
             if ".." in parts:
                 fail(f"{path}: member with '..': {m.name!r}")
+            pre = next((q for q in skip if "/".join(parts).startswith(q)), None)
+            if pre is not None:
+                nskip[pre] += 1
+                continue
             if len(parts) < 8 or parts[0] != "tests":
                 fail(f"{path}: unexpected member layout: {m.name!r}")
             if parts[1] != preset:
@@ -125,7 +162,7 @@ def scan(path: str, preset: str, details: dict | None = None) -> tuple[Counter, 
             files += 1
             key = tuple(parts[2:7])
             cases.add(key)
-            if details is not None and in_scope(preset, parts[2], parts[3]):
+            if details is not None and in_scope(tkey, parts[2], parts[3]):
                 rel = "/".join(parts[7:])
                 case_files[key].append(rel)
                 if rel == "meta.yaml":
@@ -151,37 +188,49 @@ def scan(path: str, preset: str, details: dict | None = None) -> tuple[Counter, 
                 "bls_setting": dict(sorted(hist.items())),
                 "config_overrides": sorted(k[4] for k in ckeys if "config.yaml" in case_files[k]),
             }
+    if skipped is not None:
+        skipped.append(dict(sorted(nskip.items())))
     return per_suite, files
 
 
-def build_inventory(tar_dir: str, prov: dict, pinned: bool) -> dict:
+def build_inventory(tar_dir: str, general_dir: str, prov: dict, pinned: bool) -> dict:
     out: dict = {
         "release": prov["release"],
         "tag_commit": prov["tag_commit"],
+        "general_release": {"release": prov["general"]["release"],
+                            "tag_commit": prov["general"]["tag_commit"]},
         "pinned": pinned,
         "presets": {},
         "suites": {},
     }
-    for preset in PRESETS:
-        meta = prov["tarballs"][preset]
-        path = os.path.join(tar_dir, meta["name"])
+    for key in PRESETS:
+        meta, _rel, _tag = tarball_meta(prov, key)
+        path = os.path.join(general_dir if key == "general" else tar_dir, meta["name"])
         if not os.path.isfile(path):
             fail(f"missing tarball {path}")
         if pinned:
             check_tarball(path, meta)
         details: dict = {}
-        per_suite, files = scan(path, preset, details)
-        out["suites"][preset] = details
+        skipped: list = []
+        per_suite, files = scan(path, key, details, skipped)
+        out["suites"][key] = details
         if not per_suite:
             fail(f"{path}: no cases")
+        if key not in SOURCE_PREFIX and skipped[0]:
+            fail(f"{path}: {skipped[0]} skipped members in a tarball with no source prefix")
         tree: dict = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
         for (fork, runner, handler, suite), n in sorted(per_suite.items()):
             tree[fork][runner][handler][suite] = n
-        out["presets"][preset] = {
+        rec: dict = {
             "files": files,
             "cases": sum(per_suite.values()),
             "forks": json.loads(json.dumps(tree)),
         }
+        if TARBALL_PRESET[key] != key:
+            rec["preset"] = TARBALL_PRESET[key]
+        if key in SOURCE_PREFIX:
+            rec["skipped_source_members"] = skipped[0]
+        out["presets"][key] = rec
     return out
 
 
@@ -204,24 +253,30 @@ def markdown(inv: dict) -> str:
     L.append("")
     L.append("Generated by `scripts/consensus-vector-inventory.py`. Do not edit by hand.")
     L.append("")
-    L.append(f"Release `{inv['release']}`, tag commit `{inv['tag_commit']}`, "
-             f"digests {'checked' if inv['pinned'] else 'NOT CHECKED (unpinned run)'}.")
-    L.append("In scope: every `general` case, and every `minimal` and `mainnet` case "
-             "whose fork is `electra` or `fulu`, plus `phase0/shuffling` on both presets "
-             "(O1 names it; it has no cases under a later fork).")
+    g = inv["general_release"]
+    L.append(f"Release `{inv['release']}`, tag commit `{inv['tag_commit']}`, for the `minimal`, "
+             f"`mainnet` and `comptests` tarballs; the `general` tarball is release "
+             f"`{g['release']}` (tag commit `{g['tag_commit']}`), because the pinned release's "
+             f"general tarball has no `ssz_generic` or `kzg` cases. "
+             f"Digests {'checked' if inv['pinned'] else 'NOT CHECKED (unpinned run)'}.")
+    L.append("In scope: every `general` case, and every `minimal`, `mainnet` and `comptests` "
+             "case whose fork is `electra`, `fulu` or `gloas`, plus `phase0/shuffling` on both "
+             "presets (O1 names it; it has no cases under a later fork). The `comptests` tarball "
+             "holds `minimal`-preset `fork_choice_compliance` cases.")
     L.append("")
     L.append("## Totals")
     L.append("")
-    L.append("| preset | all cases | in-scope cases | files |")
-    L.append("|---|---:|---:|---:|")
+    L.append("| tarball | all cases | in-scope cases | files | skipped source members |")
+    L.append("|---|---:|---:|---:|---:|")
     grand_all = grand_scope = 0
     for preset, p in inv["presets"].items():
         scope = sum(n for pr, f, r, _h, _s, n in handler_rows(inv)
                     if pr == preset and in_scope(pr, f, r))
         grand_all += p["cases"]
         grand_scope += scope
-        L.append(f"| {preset} | {p['cases']} | {scope} | {p['files']} |")
-    L.append(f"| **total** | {grand_all} | {grand_scope} | |")
+        L.append(f"| {preset} | {p['cases']} | {scope} | {p['files']} | "
+                 f"{sum(p.get('skipped_source_members', {}).values())} |")
+    L.append(f"| **total** | {grand_all} | {grand_scope} | | |")
     L.append("")
     L.append("## In-scope cases by preset, fork and runner")
     L.append("")
@@ -278,7 +333,11 @@ def markdown(inv: dict) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     here = os.path.dirname(os.path.abspath(__file__))
-    ap.add_argument("--tarballs", required=True, help="directory holding the three tarballs")
+    ap.add_argument("--tarballs", required=True,
+                    help="directory holding the pinned release's minimal, mainnet and comptests tarballs")
+    ap.add_argument("--general-tarballs",
+                    help="directory holding the general-only entry's general tarball "
+                         "(default ~/consensus-spec-tests-<general release>/tarballs)")
     ap.add_argument("--provenance", default=os.path.join(here, "consensus-vectors.json"))
     ap.add_argument("--json", help="write the inventory JSON here")
     ap.add_argument("--markdown", help="write the Markdown tables here")
@@ -289,7 +348,9 @@ def main() -> int:
 
     with open(a.provenance, encoding="utf-8") as f:
         prov = json.load(f)
-    inv = build_inventory(a.tarballs, prov, pinned=not a.unpinned)
+    general_dir = a.general_tarballs or os.path.expanduser(
+        f"~/consensus-spec-tests-{prov['general']['release']}/tarballs")
+    inv = build_inventory(a.tarballs, general_dir, prov, pinned=not a.unpinned)
 
     if a.json:
         with open(a.json, "w", encoding="utf-8") as f:

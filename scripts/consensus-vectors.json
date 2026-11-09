@@ -1,28 +1,45 @@
 {
- "release": "v1.6.1",
+ "release": "v1.7.0-beta.4",
  "repository": "https://github.com/ethereum/consensus-specs",
- "tag_commit": "5fa6edcca8ab4cf548653e6680b17b9d3e04d225",
- "published_at": "2025-11-15T13:27:52Z",
+ "tag_commit": "aa16bb4c156184e9548a997d53efaf2a228a6304",
+ "published_at": "2026-10-08T19:27:03Z",
  "licence": "CC0-1.0",
- "digest_sources": "sha256sum on the downloaded assets (WSL, 2026-11-09), equal to the asset digests the GitHub releases API reports for the tag",
+ "digest_sources": "sha256sum on the downloaded assets (WSL, 2026-11-10), equal to the asset digests the GitHub releases API reports for the tag",
  "tarballs": {
-  "general": {
-   "name": "general.tar.gz",
-   "url": "https://github.com/ethereum/consensus-specs/releases/download/v1.6.1/general.tar.gz",
-   "size": 169552849,
-   "sha256": "87898ba7a3fa16bc66b08c88b4ccab008833a517a7602cf421c6ce79734e07e9"
-  },
   "minimal": {
    "name": "minimal.tar.gz",
-   "url": "https://github.com/ethereum/consensus-specs/releases/download/v1.6.1/minimal.tar.gz",
-   "size": 467646726,
-   "sha256": "e1d0c9dc3d09fb74a98b324c40b2587a17dc555e6149d3f9741601fffcf43901"
+   "url": "https://github.com/ethereum/consensus-specs/releases/download/v1.7.0-beta.4/minimal.tar.gz",
+   "size": 468730308,
+   "sha256": "26d09aea70c62ed235a120a95082d544ab1c2e6fe36bd35ea1bd5da62f3b7b68"
   },
   "mainnet": {
    "name": "mainnet.tar.gz",
-   "url": "https://github.com/ethereum/consensus-specs/releases/download/v1.6.1/mainnet.tar.gz",
-   "size": 678708605,
-   "sha256": "8401c58700c461154db2050c2a982af7aca259bd016c2184ec39c454edf6f1c5"
+   "url": "https://github.com/ethereum/consensus-specs/releases/download/v1.7.0-beta.4/mainnet.tar.gz",
+   "size": 967886924,
+   "sha256": "67762986572372a08d3b182535aa760433c86e174e14e0bbd756f350dd19398c"
+  },
+  "comptests": {
+   "name": "comptests.tar.gz",
+   "url": "https://github.com/ethereum/consensus-specs/releases/download/v1.7.0-beta.4/comptests.tar.gz",
+   "size": 313252208,
+   "sha256": "ccb3149d29e4179e852499f1a3d121424dbac22745375908cd9059350aece746",
+   "preset": "minimal",
+   "source_members": "tests/core/pyspec/** (pyspec source files shipped in the tarball, not cases): skipped and counted by the inventory"
+  }
+ },
+ "general": {
+  "why": "v1.7.0-beta.4's general.tar.gz (3,228 bytes, sha256 c4f395f71f606c28093500e32067990e430cc73a2277be6f3bf5090adcce3f67) holds only the 20 altair bls cases, with no ssz_generic and no kzg; the general-preset rows therefore stay on the v1.6.1 general tarball (master decision, eip8282-gloas-cross-layer-v1 W1-a, 2026-11-10)",
+  "release": "v1.6.1",
+  "tag_commit": "5fa6edcca8ab4cf548653e6680b17b9d3e04d225",
+  "published_at": "2025-11-15T13:27:52Z",
+  "digest_sources": "sha256sum on the downloaded assets (WSL, 2026-11-09), equal to the asset digests the GitHub releases API reports for the tag",
+  "tarballs": {
+   "general": {
+    "name": "general.tar.gz",
+    "url": "https://github.com/ethereum/consensus-specs/releases/download/v1.6.1/general.tar.gz",
+    "size": 169552849,
+    "sha256": "87898ba7a3fa16bc66b08c88b4ccab008833a517a7602cf421c6ce79734e07e9"
+   }
   }
  }
 }

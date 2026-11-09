@@ -18,8 +18,15 @@ Usage (run with ``python3 -I``)::
     python3 -I scripts/consensus-verify-tree.py --tarballs DIR --tree ROOT \\
         [--preset P ...] [--select FORK[/RUNNER[/HANDLER[/SUITE]]]]
 
-``ROOT`` holds ``<preset>/tests/<preset>/...`` (the default extraction layout,
-for example ``~/consensus-spec-tests-v1.6.1/extracted``).
+``ROOT`` holds ``<tarball>/tests/<preset>/...`` (the default extraction layout:
+one directory per tarball, for example
+``~/consensus-spec-tests-v1.7.0-beta.4/extracted/comptests/tests/minimal/...``).
+``--preset`` names tarballs (``general``, ``minimal``, ``mainnet``,
+``comptests``); the default is every tarball of the pinned release. The
+``general`` tarball belongs to the general-only provenance entry, an earlier
+release with its own extraction, so it is verified in a separate run:
+``--preset general --tarballs ~/consensus-spec-tests-v1.6.1/tarballs --tree
+~/consensus-spec-tests-v1.6.1/extracted``.
 
 Exit status: 0 when every selected file matches; 1 on any digest, size,
 missing, extra or type mismatch, or an empty selection.
@@ -62,37 +69,41 @@ def file_sha256(path: str) -> str:
     return h.hexdigest()
 
 
-def verify_preset(tar_path: str, tree: str, preset: str, select: list[str]) -> int:
+def verify_preset(tar_path: str, tree: str, key: str, select: list[str]) -> int:
+    preset = inv.TARBALL_PRESET[key]
+    skip = inv.SOURCE_PREFIX.get(key, ())
     expected: set[str] = set()
     with tarfile.open(tar_path, mode="r|gz") as tar:
         for m in tar:
             if not m.isfile():
                 continue
             parts = [p for p in m.name.split("/") if p not in ("", ".")]
+            if ".." not in parts and any("/".join(parts).startswith(q) for q in skip):
+                continue
             if ".." in parts or len(parts) < 8 or parts[0] != "tests" or parts[1] != preset:
                 fail(f"{tar_path}: unexpected member {m.name!r}")
-            if not inv.in_scope(preset, parts[2], parts[3]) or not selected(parts[2:], select):
+            if not inv.in_scope(key, parts[2], parts[3]) or not selected(parts[2:], select):
                 continue
             rel = "/".join(parts)
-            local = os.path.join(tree, preset, rel)
+            local = os.path.join(tree, key, rel)
             try:
                 st = os.lstat(local)
             except FileNotFoundError:
-                fail(f"{preset}/{rel}: missing from the tree")
+                fail(f"{key}/{rel}: missing from the tree")
             if not stat.S_ISREG(st.st_mode):
-                fail(f"{preset}/{rel}: not a regular file in the tree")
+                fail(f"{key}/{rel}: not a regular file in the tree")
             if st.st_size != m.size:
-                fail(f"{preset}/{rel}: size {st.st_size} != tarball {m.size}")
+                fail(f"{key}/{rel}: size {st.st_size} != tarball {m.size}")
             fh = tar.extractfile(m)
             if fh is None:
                 fail(f"{tar_path}: unreadable {m.name!r}")
             want = hashlib.sha256(fh.read()).hexdigest()
             got = file_sha256(local)
             if got != want:
-                fail(f"{preset}/{rel}: sha256 {got} != tarball {want}")
+                fail(f"{key}/{rel}: sha256 {got} != tarball {want}")
             expected.add(rel)
     # nothing extra in the extracted in-scope directories under the selection
-    base = os.path.join(tree, preset)
+    base = os.path.join(tree, key)
     top = os.path.join(base, "tests", preset)
     if not os.path.isdir(top):
         fail(f"{top}: not a directory")
@@ -102,7 +113,7 @@ def verify_preset(tar_path: str, tree: str, preset: str, select: list[str]) -> i
         if not os.path.isdir(fdir) or os.path.islink(fdir):
             fail(f"{fdir}: unexpected entry")
         for runner in sorted(os.listdir(fdir)):
-            if not inv.in_scope(preset, fork, runner):
+            if not inv.in_scope(key, fork, runner):
                 continue
             if not (selected([fork, runner], select[:2])):
                 continue
@@ -117,10 +128,10 @@ def verify_preset(tar_path: str, tree: str, preset: str, select: list[str]) -> i
                     if not selected(rparts[2:], select):
                         continue
                     if rel not in expected:
-                        fail(f"{preset}/{rel}: in the tree but not a selected tarball member")
+                        fail(f"{key}/{rel}: in the tree but not a selected tarball member")
                     seen += 1
     if seen != len(expected):
-        fail(f"{preset}: {seen} files in the tree, {len(expected)} expected")
+        fail(f"{key}: {seen} files in the tree, {len(expected)} expected")
     return len(expected)
 
 
@@ -138,8 +149,8 @@ def main() -> int:
     with open(a.provenance, encoding="utf-8") as f:
         prov = json.load(f)
     total = 0
-    for preset in a.preset or list(inv.PRESETS):
-        meta = prov["tarballs"][preset]
+    for preset in a.preset or list(prov["tarballs"]):
+        meta, _release, _tag = inv.tarball_meta(prov, preset)
         path = os.path.join(a.tarballs, meta["name"])
         if not os.path.isfile(path):
             fail(f"missing tarball {path}")

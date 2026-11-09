@@ -94,8 +94,9 @@ def getForkchoiceStore (cfg : Config) (anchorState : BeaconState P f)
   let anchorEpoch ← getCurrentEpoch anchorState
   let justifiedCheckpoint : Checkpoint := { epoch := anchorEpoch, root := anchorRoot }
   let finalizedCheckpoint : Checkpoint := { epoch := anchorEpoch, root := anchorRoot }
-  let secondsPerSlot ← u64 cfg.SECONDS_PER_SLOT "SECONDS_PER_SLOT"
-  let time ← anchorState.genesis_time.add? (← secondsPerSlot.mul? anchorState.slot site) site
+  -- `v1.7.0-beta.4` keeps the store in milliseconds; this store keeps seconds, so the anchor
+  -- time is `compute_time_at_slot`, the seconds form of `compute_time_at_slot_ms`.
+  let time ← computeTimeAtSlotOf cfg anchorState.genesis_time anchorState.slot
   pure {
     time
     genesis_time := anchorState.genesis_time
@@ -117,9 +118,7 @@ def getForkchoiceStore (cfg : Config) (anchorState : BeaconState P f)
 
 /-- `get_slots_since_genesis(store)`. -/
 def getSlotsSinceGenesis (cfg : Config) (store : Store P f) : M U64 := do
-  let site := "get_slots_since_genesis"
-  (← store.time.sub? store.genesis_time site).div? (← u64 cfg.SECONDS_PER_SLOT "SECONDS_PER_SLOT")
-    site
+  computeSlotAtTime cfg store.genesis_time store.time
 
 /-- `get_current_slot(store)`. -/
 def getCurrentSlot (cfg : Config) (store : Store P f) : M Slot := do
@@ -133,12 +132,6 @@ def getCurrentStoreEpoch (cfg : Config) (store : Store P f) : M Epoch := do
 def computeSlotsSinceEpochStart (P : Preset) (slot : Slot) : M U64 := do
   slot.sub? (← computeStartSlotAtEpoch P (← computeEpochAtSlot P slot))
     "compute_slots_since_epoch_start"
-
-/-- `seconds_to_milliseconds(seconds)`: `UINT64_MAX` when the product would overflow. -/
-def secondsToMilliseconds (seconds : U64) : M U64 := do
-  let thousand ← c64 1000
-  if seconds > (← UINT64_MAX.div? thousand "seconds_to_milliseconds") then return UINT64_MAX
-  seconds.mul? thousand "seconds_to_milliseconds"
 
 /-- `get_slot_component_duration_ms(basis_points)`. -/
 def getSlotComponentDurationMs (cfg : Config) (basisPoints : U64) : M U64 := do
@@ -505,17 +498,16 @@ per iteration, so it runs at most `tick_slot - get_current_slot(store)` times; t
 count, and the loop condition is re-checked on every iteration as in the Python. -/
 def onTick (cfg : Config) (store : Store P f) (time : U64) : M (Store P f) := do
   let site := "on_tick"
-  let secondsPerSlot ← u64 cfg.SECONDS_PER_SLOT "SECONDS_PER_SLOT"
   -- If the `store.time` falls behind, while loop catches up slot by slot
   -- to ensure that every previous slot is processed with `on_tick_per_slot`
-  let tickSlot ← (← time.sub? store.genesis_time site).div? secondsPerSlot site
+  let tickSlot ← computeSlotAtTime cfg store.genesis_time time
   let bound := tickSlot.toNat - (← getCurrentSlot cfg store).toNat
   let mut store := store
   for _ in [0:bound] do
     let currentSlot ← getCurrentSlot cfg store
     if currentSlot < tickSlot then
-      let previousTime ← store.genesis_time.add?
-        (← (← currentSlot.add? U64.one site).mul? secondsPerSlot site) site
+      let previousTime ← computeTimeAtSlotOf cfg store.genesis_time
+        (← currentSlot.add? U64.one site)
       store ← onTickPerSlot cfg store previousTime
   require (!((← getCurrentSlot cfg store) < tickSlot)) s!"{site}: catch-up loop bound"
   onTickPerSlot cfg store time

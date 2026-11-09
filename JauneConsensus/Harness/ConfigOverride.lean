@@ -10,7 +10,7 @@ A vector case may carry a `config.yaml` (`tests/formats/README.md`, "Config"): t
 configuration the case was generated with. The runner starts from the base `Config` of the
 case's preset and sets every key the file names, with the field's type. `PRESET_BASE` must
 equal the base's. A key that is not a `Config` field, a value of the wrong form, or a
-malformed `BLOB_SCHEDULE` is refused.
+malformed `BLOB_SCHEDULE` or `GAS_LIMIT_SCHEDULE` is refused.
 -/
 
 namespace JauneConsensus.Harness
@@ -21,7 +21,7 @@ open Jaune Yaml JauneConsensus
 inductive ConfigError where
   /-- The file or a value is not readable as the field's type. -/
   | yaml (e : YamlError)
-  /-- A key that is not a phase0 to Fulu `Config` field. -/
+  /-- A key that is not a phase0 to Gloas `Config` field. -/
   | unknownKey (key : String)
   /-- `PRESET_BASE` differs from the case's preset. -/
   | presetBase (got want : String)
@@ -34,7 +34,7 @@ inductive ConfigError where
 instance : ToString ConfigError where
   toString
     | .yaml e => s!"config: {e}"
-    | .unknownKey k => s!"config: {k} is not a phase0 to Fulu configuration variable"
+    | .unknownKey k => s!"config: {k} is not a phase0 to Gloas configuration variable"
     | .presetBase g w => s!"config: PRESET_BASE {g} differs from the case preset {w}"
     | .width k n => s!"config: {k} must be {n} bytes"
     | .notMapping => "config: config.yaml is not a mapping"
@@ -53,6 +53,12 @@ private def scheduleOf (v : YVal) : Except ConfigError (List BlobScheduleEntry) 
     (← v.asSeq).mapM fun e => do
       e.expectKeys ["EPOCH", "MAX_BLOBS_PER_BLOCK"]
       pure ⟨← (← e.field "EPOCH").asNat, ← (← e.field "MAX_BLOBS_PER_BLOCK").asNat⟩
+
+private def gasScheduleOf (v : YVal) : Except ConfigError (List GasLimitScheduleEntry) :=
+  Except.mapError ConfigError.yaml do
+    (← v.asSeq).mapM fun e => do
+      e.expectKeys ["EPOCH", "GAS_LIMIT"]
+      pure ⟨← (← e.field "EPOCH").asNat, ← (← e.field "GAS_LIMIT").asNat⟩
 
 /-- Set one configuration key from its YAML value. -/
 def _root_.JauneConsensus.Config.setKey (c : Config) (k : String) (v : YVal) :
@@ -81,7 +87,8 @@ def _root_.JauneConsensus.Config.setKey (c : Config) (k : String) (v : YVal) :
   | "ELECTRA_FORK_EPOCH" => (fun x => { c with ELECTRA_FORK_EPOCH := x }) <$> natOf v
   | "FULU_FORK_VERSION" => (fun x => { c with FULU_FORK_VERSION := x }) <$> hexN v 4 "FULU_FORK_VERSION"
   | "FULU_FORK_EPOCH" => (fun x => { c with FULU_FORK_EPOCH := x }) <$> natOf v
-  | "SECONDS_PER_SLOT" => (fun x => { c with SECONDS_PER_SLOT := x }) <$> natOf v
+  | "GLOAS_FORK_VERSION" => (fun x => { c with GLOAS_FORK_VERSION := x }) <$> hexN v 4 "GLOAS_FORK_VERSION"
+  | "GLOAS_FORK_EPOCH" => (fun x => { c with GLOAS_FORK_EPOCH := x }) <$> natOf v
   | "SLOT_DURATION_MS" => (fun x => { c with SLOT_DURATION_MS := x }) <$> natOf v
   | "SECONDS_PER_ETH1_BLOCK" => (fun x => { c with SECONDS_PER_ETH1_BLOCK := x }) <$> natOf v
   | "MIN_VALIDATOR_WITHDRAWABILITY_DELAY" => (fun x => { c with MIN_VALIDATOR_WITHDRAWABILITY_DELAY := x }) <$> natOf v
@@ -92,6 +99,13 @@ def _root_.JauneConsensus.Config.setKey (c : Config) (k : String) (v : YVal) :
   | "AGGREGATE_DUE_BPS" => (fun x => { c with AGGREGATE_DUE_BPS := x }) <$> natOf v
   | "SYNC_MESSAGE_DUE_BPS" => (fun x => { c with SYNC_MESSAGE_DUE_BPS := x }) <$> natOf v
   | "CONTRIBUTION_DUE_BPS" => (fun x => { c with CONTRIBUTION_DUE_BPS := x }) <$> natOf v
+  | "MIN_BUILDER_WITHDRAWABILITY_DELAY" => (fun x => { c with MIN_BUILDER_WITHDRAWABILITY_DELAY := x }) <$> natOf v
+  | "ATTESTATION_DUE_BPS_GLOAS" => (fun x => { c with ATTESTATION_DUE_BPS_GLOAS := x }) <$> natOf v
+  | "AGGREGATE_DUE_BPS_GLOAS" => (fun x => { c with AGGREGATE_DUE_BPS_GLOAS := x }) <$> natOf v
+  | "SYNC_MESSAGE_DUE_BPS_GLOAS" => (fun x => { c with SYNC_MESSAGE_DUE_BPS_GLOAS := x }) <$> natOf v
+  | "CONTRIBUTION_DUE_BPS_GLOAS" => (fun x => { c with CONTRIBUTION_DUE_BPS_GLOAS := x }) <$> natOf v
+  | "PAYLOAD_DUE_BPS" => (fun x => { c with PAYLOAD_DUE_BPS := x }) <$> natOf v
+  | "PAYLOAD_ATTESTATION_DUE_BPS" => (fun x => { c with PAYLOAD_ATTESTATION_DUE_BPS := x }) <$> natOf v
   | "INACTIVITY_SCORE_BIAS" => (fun x => { c with INACTIVITY_SCORE_BIAS := x }) <$> natOf v
   | "INACTIVITY_SCORE_RECOVERY_RATE" => (fun x => { c with INACTIVITY_SCORE_RECOVERY_RATE := x }) <$> natOf v
   | "EJECTION_BALANCE" => (fun x => { c with EJECTION_BALANCE := x }) <$> natOf v
@@ -100,6 +114,9 @@ def _root_.JauneConsensus.Config.setKey (c : Config) (k : String) (v : YVal) :
   | "MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT" => (fun x => { c with MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT := x }) <$> natOf v
   | "MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA" => (fun x => { c with MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA := x }) <$> natOf v
   | "MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT" => (fun x => { c with MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT := x }) <$> natOf v
+  | "CHURN_LIMIT_QUOTIENT_GLOAS" => (fun x => { c with CHURN_LIMIT_QUOTIENT_GLOAS := x }) <$> natOf v
+  | "CONSOLIDATION_CHURN_LIMIT_QUOTIENT" => (fun x => { c with CONSOLIDATION_CHURN_LIMIT_QUOTIENT := x }) <$> natOf v
+  | "MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT_GLOAS" => (fun x => { c with MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT_GLOAS := x }) <$> natOf v
   | "PROPOSER_SCORE_BOOST" => (fun x => { c with PROPOSER_SCORE_BOOST := x }) <$> natOf v
   | "REORG_HEAD_WEIGHT_THRESHOLD" => (fun x => { c with REORG_HEAD_WEIGHT_THRESHOLD := x }) <$> natOf v
   | "REORG_PARENT_WEIGHT_THRESHOLD" => (fun x => { c with REORG_PARENT_WEIGHT_THRESHOLD := x }) <$> natOf v
@@ -110,7 +127,6 @@ def _root_.JauneConsensus.Config.setKey (c : Config) (k : String) (v : YVal) :
   | "MAX_PAYLOAD_SIZE" => (fun x => { c with MAX_PAYLOAD_SIZE := x }) <$> natOf v
   | "MAX_REQUEST_BLOCKS" => (fun x => { c with MAX_REQUEST_BLOCKS := x }) <$> natOf v
   | "EPOCHS_PER_SUBNET_SUBSCRIPTION" => (fun x => { c with EPOCHS_PER_SUBNET_SUBSCRIPTION := x }) <$> natOf v
-  | "MIN_EPOCHS_FOR_BLOCK_REQUESTS" => (fun x => { c with MIN_EPOCHS_FOR_BLOCK_REQUESTS := x }) <$> natOf v
   | "ATTESTATION_PROPAGATION_SLOT_RANGE" => (fun x => { c with ATTESTATION_PROPAGATION_SLOT_RANGE := x }) <$> natOf v
   | "MAXIMUM_GOSSIP_CLOCK_DISPARITY" => (fun x => { c with MAXIMUM_GOSSIP_CLOCK_DISPARITY := x }) <$> natOf v
   | "MESSAGE_DOMAIN_INVALID_SNAPPY" => (fun x => { c with MESSAGE_DOMAIN_INVALID_SNAPPY := x }) <$> hexN v 4 "MESSAGE_DOMAIN_INVALID_SNAPPY"
@@ -118,24 +134,23 @@ def _root_.JauneConsensus.Config.setKey (c : Config) (k : String) (v : YVal) :
   | "SUBNETS_PER_NODE" => (fun x => { c with SUBNETS_PER_NODE := x }) <$> natOf v
   | "ATTESTATION_SUBNET_COUNT" => (fun x => { c with ATTESTATION_SUBNET_COUNT := x }) <$> natOf v
   | "ATTESTATION_SUBNET_EXTRA_BITS" => (fun x => { c with ATTESTATION_SUBNET_EXTRA_BITS := x }) <$> natOf v
-  | "ATTESTATION_SUBNET_PREFIX_BITS" => (fun x => { c with ATTESTATION_SUBNET_PREFIX_BITS := x }) <$> natOf v
   | "MAX_REQUEST_BLOCKS_DENEB" => (fun x => { c with MAX_REQUEST_BLOCKS_DENEB := x }) <$> natOf v
   | "MIN_EPOCHS_FOR_BLOB_SIDECARS_REQUESTS" => (fun x => { c with MIN_EPOCHS_FOR_BLOB_SIDECARS_REQUESTS := x }) <$> natOf v
   | "BLOB_SIDECAR_SUBNET_COUNT" => (fun x => { c with BLOB_SIDECAR_SUBNET_COUNT := x }) <$> natOf v
   | "MAX_BLOBS_PER_BLOCK" => (fun x => { c with MAX_BLOBS_PER_BLOCK := x }) <$> natOf v
-  | "MAX_REQUEST_BLOB_SIDECARS" => (fun x => { c with MAX_REQUEST_BLOB_SIDECARS := x }) <$> natOf v
   | "BLOB_SIDECAR_SUBNET_COUNT_ELECTRA" => (fun x => { c with BLOB_SIDECAR_SUBNET_COUNT_ELECTRA := x }) <$> natOf v
   | "MAX_BLOBS_PER_BLOCK_ELECTRA" => (fun x => { c with MAX_BLOBS_PER_BLOCK_ELECTRA := x }) <$> natOf v
-  | "MAX_REQUEST_BLOB_SIDECARS_ELECTRA" => (fun x => { c with MAX_REQUEST_BLOB_SIDECARS_ELECTRA := x }) <$> natOf v
   | "NUMBER_OF_CUSTODY_GROUPS" => (fun x => { c with NUMBER_OF_CUSTODY_GROUPS := x }) <$> natOf v
   | "DATA_COLUMN_SIDECAR_SUBNET_COUNT" => (fun x => { c with DATA_COLUMN_SIDECAR_SUBNET_COUNT := x }) <$> natOf v
-  | "MAX_REQUEST_DATA_COLUMN_SIDECARS" => (fun x => { c with MAX_REQUEST_DATA_COLUMN_SIDECARS := x }) <$> natOf v
   | "SAMPLES_PER_SLOT" => (fun x => { c with SAMPLES_PER_SLOT := x }) <$> natOf v
   | "CUSTODY_REQUIREMENT" => (fun x => { c with CUSTODY_REQUIREMENT := x }) <$> natOf v
   | "VALIDATOR_CUSTODY_REQUIREMENT" => (fun x => { c with VALIDATOR_CUSTODY_REQUIREMENT := x }) <$> natOf v
   | "BALANCE_PER_ADDITIONAL_CUSTODY_GROUP" => (fun x => { c with BALANCE_PER_ADDITIONAL_CUSTODY_GROUP := x }) <$> natOf v
   | "MIN_EPOCHS_FOR_DATA_COLUMN_SIDECARS_REQUESTS" => (fun x => { c with MIN_EPOCHS_FOR_DATA_COLUMN_SIDECARS_REQUESTS := x }) <$> natOf v
+  | "MAX_REQUEST_PAYLOADS" => (fun x => { c with MAX_REQUEST_PAYLOADS := x }) <$> natOf v
   | "BLOB_SCHEDULE" => (fun x => { c with BLOB_SCHEDULE := x }) <$> scheduleOf v
+  | "GAS_LIMIT_SCHEDULE" => (fun x => { c with GAS_LIMIT_SCHEDULE := x }) <$> gasScheduleOf v
+  | "CONFIRMATION_BYZANTINE_THRESHOLD" => (fun x => { c with CONFIRMATION_BYZANTINE_THRESHOLD := x }) <$> natOf v
   | _ => .error (.unknownKey k)
 
 /-- Apply a case `config.yaml` (a mapping) on top of `base`. -/

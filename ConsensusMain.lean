@@ -14,9 +14,11 @@ lake exe jaune-consensus --fork-rules NAME                        resolve one fo
 lake exe jaune-consensus recorded-pairs [--dir DIR] [--negative-control]
 ```
 
-`--vectors` is the extracted release (default `$HOME/consensus-spec-tests-v1.6.1/extracted`),
-holding `<preset>/tests/<preset>/...`. `--manifest-dir` holds `consensus-vectors.json` and
-`consensus/inventory-v1.6.1.json` (default `scripts`, so run from the repository root).
+`--vectors` is the extracted release, holding `<preset>/tests/<preset>/...` (default
+`$HOME/consensus-spec-tests-v1.7.0-beta.4/extracted`, and for `--preset general`
+`$HOME/consensus-spec-tests-v1.6.1/extracted`, the general-only provenance entry).
+`--manifest-dir` holds `consensus-vectors.json` and `consensus/inventory-v1.7.0-beta.4.json`
+(default `scripts`, so run from the repository root).
 
 Exit status: 0 only when the selection passes every check and every executed case is `PASS`;
 1 on any refusal or failure; 2 on a usage error.
@@ -69,11 +71,11 @@ def loadSelection (o : Opts) : IO (Manifest × Selection) := do
     | some v => pure v
     | none =>
       match ← IO.getEnv "HOME" with
-      | some h => pure (System.FilePath.mk h / "consensus-spec-tests-v1.6.1" / "extracted")
+      | some h => pure (System.FilePath.mk h / defaultVectorsDir preset / "extracted")
       | none => throw (IO.userError "refused: no --vectors and no HOME")
   let md := System.FilePath.mk o.manifestDir
   let prov ← IO.FS.readFile (md / "consensus-vectors.json")
-  let inv ← IO.FS.readFile (md / "consensus" / "inventory-v1.6.1.json")
+  let inv ← IO.FS.readFile (md / "consensus" / inventoryFile)
   let m ← IO.ofExcept ((Manifest.load prov inv).mapError (IO.userError ∘ toString))
   pure (m, { root, preset, fork := o.fork, runner := o.runner, handler := o.handler,
              suite := o.suite, tier := o.tier })

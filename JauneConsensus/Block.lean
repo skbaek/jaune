@@ -392,11 +392,40 @@ def processWithdrawals (state : BeaconState P f) (payload : ExecutionPayload P) 
 
 /-! ## Execution payload -/
 
-/-- `compute_time_at_slot` (phase0). -/
-def computeTimeAtSlot (cfg : Config) (state : BeaconState P f) (slot : Slot) : M U64 := do
-  let since ← U64.sub? slot GENESIS_SLOT "compute_time_at_slot"
-  U64.add? state.genesis_time (← U64.mul? since (← c64 cfg.SECONDS_PER_SLOT) "compute_time_at_slot")
-    "compute_time_at_slot"
+/-- `seconds_to_milliseconds(seconds)` (`specs/phase0/fork-choice.md` at `v1.7.0-beta.4`):
+`UINT64_MAX` when the product would overflow. -/
+def secondsToMilliseconds (seconds : U64) : M U64 := do
+  let thousand ← c64 1000
+  if seconds > (← UINT64_MAX.div? thousand "seconds_to_milliseconds") then return UINT64_MAX
+  seconds.mul? thousand "seconds_to_milliseconds"
+
+/-- `milliseconds_to_seconds(milliseconds)`: the remainder is discarded. -/
+def millisecondsToSeconds (milliseconds : U64) : M U64 := do
+  milliseconds.div? (← c64 1000) "milliseconds_to_seconds"
+
+/-- `compute_time_at_slot_ms(genesis_time_ms, slot)` (`specs/phase0/beacon-chain.md` at
+`v1.7.0-beta.4`); `Uint64(...)` raises on overflow. -/
+def computeTimeAtSlotMs (cfg : Config) (genesisTimeMs : U64) (slot : Slot) : M U64 := do
+  let site := "compute_time_at_slot_ms"
+  U64.add? genesisTimeMs (← U64.mul? slot (← c64 cfg.SLOT_DURATION_MS) site) site
+
+/-- `compute_slot_at_time_ms(genesis_time_ms, time_ms)`. -/
+def computeSlotAtTimeMs (cfg : Config) (genesisTimeMs timeMs : U64) : M Slot := do
+  let site := "compute_slot_at_time_ms"
+  (← U64.sub? timeMs genesisTimeMs site).div? (← c64 cfg.SLOT_DURATION_MS) site
+
+/-- `compute_time_at_slot(genesis_time, slot)` (`specs/phase0/beacon-chain.md` at
+`v1.7.0-beta.4`, which replaced `SECONDS_PER_SLOT` by `SLOT_DURATION_MS`). -/
+def computeTimeAtSlotOf (cfg : Config) (genesisTime : U64) (slot : Slot) : M U64 := do
+  millisecondsToSeconds (← computeTimeAtSlotMs cfg (← secondsToMilliseconds genesisTime) slot)
+
+/-- `compute_slot_at_time(genesis_time, time)`. -/
+def computeSlotAtTime (cfg : Config) (genesisTime time : U64) : M Slot := do
+  computeSlotAtTimeMs cfg (← secondsToMilliseconds genesisTime) (← secondsToMilliseconds time)
+
+/-- `compute_time_at_slot(state.genesis_time, slot)`. -/
+def computeTimeAtSlot (cfg : Config) (state : BeaconState P f) (slot : Slot) : M U64 :=
+  computeTimeAtSlotOf cfg state.genesis_time slot
 
 /-- `process_execution_payload` (Fulu: the blob limit is `get_blob_parameters(epoch)`;
 Electra: `MAX_BLOBS_PER_BLOCK_ELECTRA`; Deneb: `MAX_BLOBS_PER_BLOCK`). The engine's verdict is `ctx.executionValid`. -/

@@ -8,8 +8,10 @@ The runner trusts an extracted vector tree only as far as it matches two committ
 files (both written by `scripts/consensus-vector-inventory.py` from the tarballs it has checked
 against their pinned SHA-256s):
 
-* `scripts/consensus-vectors.json`: release tag, tag commit, and per-tarball name, size and digest;
-* `scripts/consensus/inventory-v1.6.1.json`: per preset, fork, runner, handler and suite the case
+* `scripts/consensus-vectors.json`: release tag, tag commit, and per-tarball name, size and digest
+  (the `general` tarball under the general-only entry `general`, an earlier release, because the
+  pinned release's general tarball has no `ssz_generic` or `kzg` cases);
+* `scripts/consensus/inventory-v1.7.0-beta.4.json`: per preset, fork, runner, handler and suite the case
   count, and for every in-scope suite (`suites`) the SHA-256 of its sorted case names, the
   SHA-256 of its sorted `<case>/<file>` paths, its `bls_setting` histogram and its cases carrying a
   per-case `config.yaml`.
@@ -72,13 +74,23 @@ structure Manifest where
   /-- `(preset, suite, record, inventory count)` -/
   suites : List (String × SuiteKey × SuiteRecord × Nat)
 
-/-- The presets the vectors ship. -/
+/-- The presets this runner reads. The inventory also records the `comptests` tarball
+(`minimal`-preset `fork_choice_compliance` cases), which no runner here executes yet. -/
 def presets : List String := ["general", "minimal", "mainnet"]
 
+/-- The committed inventory file, under `<manifest-dir>/consensus/`. -/
+def inventoryFile : String := "inventory-v1.7.0-beta.4.json"
+
+/-- The default extraction of a preset's tarball under `$HOME`: the general tarball comes from the
+general-only provenance entry (`v1.6.1`), the others from the pinned release. -/
+def defaultVectorsDir (preset : String) : String :=
+  if preset == "general" then "consensus-spec-tests-v1.6.1" else "consensus-spec-tests-v1.7.0-beta.4"
+
 /-- The goal's scope (`scripts/consensus-vector-inventory.py`, `in_scope`): every `general` case;
-every `minimal` and `mainnet` case of Electra or Fulu; and `phase0/shuffling` on both presets. -/
+every `minimal` and `mainnet` case of Electra, Fulu or Gloas; and `phase0/shuffling` on both
+presets. -/
 def inScope (preset fork runner : String) : Bool :=
-  preset == "general" || fork == "electra" || fork == "fulu" ||
+  preset == "general" || fork == "electra" || fork == "fulu" || fork == "gloas" ||
     (fork == "phase0" && runner == "shuffling")
 
 private def field (j : Json) (k : String) : Except ManifestError Json :=
@@ -142,9 +154,16 @@ def Manifest.load (provenanceText inventoryText : String) : Except ManifestError
   | .ok true => pure ()
   | _ => throw (.mismatch "inventory was not produced from digest-checked tarballs")
   let tarballs ← field prov "tarballs"
+  let general ← field prov "general"
+  let generalRelease ← str general "release"
+  let generalTag ← str general "tag_commit"
+  let invGeneral ← field inv "general_release"
+  if (← str invGeneral "release") != generalRelease || (← str invGeneral "tag_commit") != generalTag then
+    throw (.mismatch "inventory general release differs from the pin's general entry")
+  let generalTarballs ← field general "tarballs"
   let mut suites := []
   for preset in presets do
-    let _ ← field tarballs preset
+    let _ ← field (if preset == "general" then generalTarballs else tarballs) preset
     let recs ← objEntries (← field (← field inv "suites") preset) s!"suites.{preset}"
     for (name, j) in recs do
       let some k := SuiteKey.parse? name | throw (.mismatch s!"bad suite key {preset}/{name}")

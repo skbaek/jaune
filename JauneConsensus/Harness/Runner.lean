@@ -181,11 +181,11 @@ private def overridden (y : String) : Option Config :=
   (((parseString y).mapError ConfigError.yaml).bind (Config.minimal.applyOverrides ·)).toOption
 
 #guard (overridden "PRESET_BASE: 'minimal'\nALTAIR_FORK_EPOCH: 7\nBLOB_SCHEDULE:\n  - EPOCH: 1\n    MAX_BLOBS_PER_BLOCK: 9\n").map
-  (fun c => (c.ALTAIR_FORK_EPOCH, c.BLOB_SCHEDULE, c.SECONDS_PER_SLOT)) ==
-  some (7, [⟨1, 9⟩], Config.minimal.SECONDS_PER_SLOT)
+  (fun c => (c.ALTAIR_FORK_EPOCH, c.BLOB_SCHEDULE, c.SLOT_DURATION_MS)) ==
+  some (7, [⟨1, 9⟩], Config.minimal.SLOT_DURATION_MS)
 #guard (overridden "PRESET_BASE: 'mainnet'\n").isNone
 #guard (overridden "CONFIG_NAME: 'minimal'\n").isNone
-#guard (overridden "GLOAS_FORK_EPOCH: 0\n").isNone
+#guard (overridden "HEZE_FORK_EPOCH: 0\n").isNone
 #guard (overridden "ALTAIR_FORK_VERSION: 0x0100\n").isNone
 
 /-- `operations/<handler>` (`Harness/Operations.lean`), under the case's configuration. -/
