@@ -4,15 +4,15 @@ import JauneConsensus.Facts.Gloas.StepB3
 # B1 over one Gloas joint step (goal `eip8282-gloas-cross-layer-v1`, MBS)
 
 The per-step half of statements.md B1 (rev 3.1, `bls = true`), over ONE Gloas joint step at its
-post-slots state `postSlots` (`gloasStep_ok_iff`); the traces are BF1's, read at `postSlots`.
+post-slots state `postSlots` (`GStepView`, WSL's `StepB246.lean`); the traces are BF1's, read at `postSlots`.
 
-* **Creation provenance** (`processBlock_builderCreated_trace`, `gloasStep_registration`): a
+* **Creation provenance** (`processBlock_builderCreated_trace`, `GStepView.registration`): a
   builder record created at the step (`BuilderCreated postSlots post i`; equivalently from the
   pre-step state, whose builders `postSlots` keeps) was created by the builder deposit request at
   deposit-trace position `k`, classified `register i req.amount` at `trD[k]` under the real BLS
   (`bls = true`), with a `0xB0` prefix, a signature verifying under `DOMAIN_BUILDER_DEPOSIT`, and
   the fresh record at `trD[k+1]` with `execution_address = credentials[12:]`.
-* **Same-payload register then top-up** (in `gloasStep_registration`): after the remaining
+* **Same-payload register then top-up** (in `GStepView.registration`): after the remaining
   deposits of the payload, builder `i` is the fresh record with balance
   `req.amount + Σ later 0xB0 top-ups for its pubkey`.
 * **The fork clause** (`jointStepG_crossing_onboarding`): at the crossing step the builders are
@@ -194,18 +194,17 @@ deposit-trace position `k` of the block's `parent_execution_requests`:
 * **register then top-up**: after the remaining deposits (the last deposit-trace state), builder
   `i` is that record with balance `req.amount + Σ amounts of the later 0xB0 deposits for its
   pubkey`. Needs `2 ≤ SLOTS_PER_EPOCH`. -/
-theorem gloasStep_registration (hspe : 2 ≤ P.SLOTS_PER_EPOCH)
+theorem GStepView.registration (hspe : 2 ≤ P.SLOTS_PER_EPOCH)
     {cfg : ChainConfig} {ccfg : Config}
-    {beacon postSlots post : Gloas.BeaconState P} {exec exec' : BlockChain}
-    {parent parent' : ParentPayload P} {b : Gloas.SignedBeaconBlock P}
+    {preB postB : Gloas.BeaconState P} {preExec postExec : BlockChain}
+    {preParent postParent : ParentPayload P} {b : Gloas.SignedBeaconBlock P}
     {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)}
-    (h : gloasStep cfg ccfg true beacon exec parent b env? = .ok (.gloas post exec' parent'))
-    (hps : Gloas.processSlots (gloasCtx ccfg true) beacon b.message.slot = .ok postSlots)
-    {i : Nat} (created : BuilderCreated postSlots post i) :
+    (V : GStepView cfg ccfg true preB preExec preParent b env? postB postExec postParent)
+    {i : Nat} (created : BuilderCreated V.postSlots postB i) :
     ∃ (k : Nat) (req : Gloas.BuilderDepositRequest) (trD : List (Gloas.BeaconState P))
       (m m' : Gloas.BeaconState P) (dom : Domain) (addr : ExecutionAddress) (e : Epoch) (bal : U64),
       (blockBuilderDeposits b)[k]? = some req ∧
-      builderDepositTrace ccfg true postSlots b = .ok trD ∧ trD[k]? = some m ∧ trD[k + 1]? = some m' ∧
+      builderDepositTrace ccfg true V.postSlots b = .ok trD ∧ trD[k]? = some m ∧ trD[k + 1]? = some m' ∧
       Gloas.processBuilderDepositRequest (gloasCtx ccfg true) m req = .ok m' ∧
       classifyBuilderDeposit ccfg true m req = .ok (.register i req.amount) ∧
       req.withdrawal_credentials.toBytes.head? = some 0xB0 ∧
@@ -214,13 +213,13 @@ theorem gloasStep_registration (hspe : 2 ≤ P.SLOTS_PER_EPOCH)
       Jaune.Bytes.toAdr? (req.withdrawal_credentials.toBytes.drop 12) = some addr ∧
       computeEpochAtSlot P m.slot = .ok e ∧
       m'.builders.toArray[i]? = some (freshBuilder req.pubkey addr req.amount e) ∧
-      (traceLast postSlots trD).builders.toArray[i]? =
+      (traceLast V.postSlots trD).builders.toArray[i]? =
         some { freshBuilder req.pubkey addr req.amount e with balance := bal } ∧
       bal.toNat = req.amount.toNat + ((((blockBuilderDeposits b).drop (k + 1)).filter
         (fun r' => r'.pubkey == req.pubkey &&
           Gloas.isBuilderWithdrawalCredential r'.withdrawal_credentials)).map
           (·.amount.toNat)).sum := by
-  have hpb := gloasStep_processBlock h hps
+  have hpb := V.processBlock
   obtain ⟨trD, k, req, m, m', hD, hr, hm, hm', hcall, hcr⟩ :=
     processBlock_builderCreated_trace hpb created
   obtain ⟨hpre, -, ⟨dom, hdom, hv⟩, hcl, addr, e, haddr, he, hat⟩ :=
@@ -233,8 +232,8 @@ theorem gloasStep_registration (hspe : 2 ≤ P.SLOTS_PER_EPOCH)
     register_then_topUp hspe (ctx := gloasCtx ccfg true) hcl hcall hrest
   rw [haddr] at haddr'; cases haddr'
   rw [he] at he'; cases he'
-  have htl : traceLast s0 trD = traceLast postSlots trD :=
-    traceLast_ne_nil (scanM_ok_ne_nil hsD) s0 postSlots
+  have htl : traceLast s0 trD = traceLast V.postSlots trD :=
+    traceLast_ne_nil (scanM_ok_ne_nil hsD) s0 V.postSlots
   rw [htl] at hat2
   exact ⟨k, req, trD, m, m', dom, addr, e, bal, hr, hD, hm, hm', hcall, hcl, hpre, hdom, hv, haddr,
     he, hat, hat2, hbal⟩
