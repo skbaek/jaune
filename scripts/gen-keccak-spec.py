@@ -148,8 +148,8 @@ theorem round_eq (r : Nat) (h : r < 24) (s : State1600) :
     ι, xorLane, UInt64.rol]
 
 /-- Any 25-lane vector is the vector of its own twenty-five lanes. This is what
-lets the closed forms above, stated over explicit lanes, apply to `f1600`'s
-opaque argument. -/
+lets the closed forms above, stated over explicit lanes, apply to the opaque
+argument of `f1600`. -/
 theorem vec_eta (v : Vector UInt64 25) : v = #v[{etavec}] := by
   apply Vector.ext
   intro i hi

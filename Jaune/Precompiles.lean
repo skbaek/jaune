@@ -347,10 +347,11 @@ def getBlake2Parameters (data : Bytes) :
   let f := Bytes.toNat <| data.drop 212
   ⟨rounds, h, m, t.getD 0 0, t.getD 1 0, f⟩
 
-def blake2R1 : UInt64 := 32
-def blake2R2 : UInt64 := 40
-def blake2R3 : UInt64 := 48
-def blake2R4 : UInt64 := 1
+-- The left rotation amounts are `64 - b2R*`: one source of truth for the pair.
+def blake2R1 : UInt64 := 64 - b2R1
+def blake2R2 : UInt64 := 64 - b2R2
+def blake2R3 : UInt64 := 64 - b2R3
+def blake2R4 : UInt64 := 64 - b2R4
 
 -- `Blake2.g`, `Blake2.round`, and `Blake2.rounds` below are the readable
 -- reference specification of the compression round. They are no longer on the
