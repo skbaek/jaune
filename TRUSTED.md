@@ -409,24 +409,33 @@ stating. Read the statements in
 [`Blanc/Solvent.lean`](https://github.com/skbaek/blanc/blob/main/Blanc/Solvent.lean);
 do not infer them from this document or from a theorem's name.
 
-**`Jaune.KECCAK.f1600_eq` in `Jaune/Hash.lean`** is a second example, and its
-name invites the same overreading. The theorem is
+**`Jaune.Bytes.keccak_eq_fips` in `Jaune/KeccakSpec.lean`** states Keccak-256
+against its standard. The theorem is
 
 ```lean
-theorem f1600_eq (ws : Vector UInt64 25) : f1600 ws = f rndc ws UInt64.rol
+theorem Bytes.keccak_eq_fips (m : Bytes) : Bytes.keccak m = Keccak.FIPS.keccak256 m
 ```
 
-with axioms `[propext, Quot.sound]`. It says the monomorphized production
-kernel `f1600` computes **exactly the same permutation** as the polymorphic
-reference transcription (`θ`/`ρπ`/`χ`/`ι`/`f`) retained above it in the same
-file — and that reference is itself a port of Andrey Jivsov's C
-implementation, not a restatement of FIPS 202. `f1600_eq` is evidence that the
-optimization preserved the transcribed algorithm; it is **not** a proof that
-the transcription implements the Keccak-f[1600] standard, and it should not be
-read or cited as "keccak is verified" or "verified keccak". Conformance with
-the standard is addressed the way every hash function in this library except
-SHA-256 is: `scripts/check-u256.sh`'s differential oracle and the fixture
-corpora — testing, not proof, exactly as the previous section describes.
+with axioms `[propext, Classical.choice, Quot.sound]`, and
+`ByteArray.keccak_eq_fips` (every `loc`/`sz`, the range zero-extended past the
+end as `ByteArray.keccak` documents) carries it to the ranged kernel.
+`Keccak.FIPS.keccak256` is a transcription of **NIST FIPS 202** itself — the
+1600-bit state string and its array view of §3.1, the step mappings θ, ρ, π, χ
+and ι of §3.2 in the standard's `(x, y, z)` indexing, with ρ's offsets computed
+by Algorithm 2's `t`-loop and the round constants by Algorithm 5's LFSR,
+Keccak-p[1600, 24] of §3.3, SPONGE and pad10*1 of §4 and §5.1, `KECCAK[512](M,
+256)` of §5.2, and Appendix B.1's byte/bit conversions — written from the
+published standard and citing it declaration by declaration. It shares no
+declaration with the kernel's `KECCAK` namespace. The older
+`Jaune.KECCAK.f1600_eq` (`f1600 ws = f rndc ws UInt64.rol`, axioms
+`[propext, Quot.sound]`) still says only that the unrolled kernel equals the
+retained port of Andrey Jivsov's C implementation above it in `Jaune/Hash.lean`;
+it is now an intermediate, and `Keccak.FIPS.f1600_eq_keccakP` is the statement
+that ties the permutation to Keccak-p[1600, 24]. As for SHA-256 below, the
+theorem does not excuse a reader from checking the right-hand side against the
+standard, and `scripts/check-u256.sh`'s differential oracle and the fixture
+corpora are kept: they check what the theorem does not, the call sites and
+framing around the hash.
 
 **`Jaune.Bytes.sha256_eq_fips` in `Jaune/SHA256Spec.lean` is a stronger claim
 than `f1600_eq`, and the whole of the difference is the reference.** The
