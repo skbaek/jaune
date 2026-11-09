@@ -394,6 +394,10 @@ theorem consolidationChurn_frame (cfg : Config) {s : BeaconState P f} {b : Gwei}
   repeat' split at h
   all_goals (first | (cases h; exact ⟨rfl, rfl⟩) | cases h)
 
+theorem consolidationChurn_frame' (cfg : Config) {s T : BeaconState P f} {b : Gwei} {q : Epoch}
+    (h : computeConsolidationEpochAndUpdateChurn cfg s b = .ok (T, q)) : Frame s T :=
+  consolidationChurn_frame cfg h
+
 theorem queueExcess_frame {s s' : BeaconState P f} {i : ValidatorIndex}
     (h : queueExcessActiveBalance s i = .ok s') : Frame s s' := by
   unfold queueExcessActiveBalance at h
@@ -574,6 +578,44 @@ theorem processBlsToExecutionChange_pres (ctx : Ctx) {s s' : BeaconState P f}
   exact pres_of_valRel (valRel_set (v := v) rfl hi hVe (get_ok hv)
     (credKeep_of_bls _ (beq_iff_eq.mp hb)) id) (pendingStep_same rfl)
 
+/-! ## A small verification-condition generator for `do` blocks over `Except` -/
+
+/-- Every successful result of `c` satisfies `Q`. -/
+def Ok {α : Type} (c : M α) (Q : α → Prop) : Prop := ∀ a, c = .ok a → Q a
+
+theorem ok_bind {α β : Type} {x : M α} {g : α → M β} {Q : β → Prop}
+    (h : ∀ a, x = .ok a → Ok (g a) Q) : Ok (x >>= g) Q := by
+  intro b hb
+  obtain ⟨a, ha, hg⟩ := bind_eq_ok_iff.mp hb
+  exact h a ha b hg
+
+theorem ok_ite {α : Type} {c : Prop} [Decidable c] {t e : M α} {Q : α → Prop}
+    (ht : c → Ok t Q) (he : ¬c → Ok e Q) : Ok (if c then t else e) Q := by
+  by_cases hc : c
+  · rw [if_pos hc]; exact ht hc
+  · rw [if_neg hc]; exact he hc
+
+theorem ok_pure {α : Type} {a : α} {Q : α → Prop} (h : Q a) : Ok (pure a : M α) Q := by
+  intro b hb; cases hb; exact h
+
+theorem ok_throw {α : Type} {e : Reject} {Q : α → Prop} : Ok (throw e : M α) Q := by
+  intro b hb; cases hb
+
+theorem ok_throw_bind {α β : Type} {e : Reject} {g : α → M β} {Q : β → Prop} :
+    Ok ((throw e : M α) >>= g) Q := by
+  intro b hb; cases hb
+
+theorem ok_of {α : Type} {c : M α} {Q : α → Prop} (h : ∀ a, c = .ok a → Q a) : Ok c Q := h
+
+macro "vcg_step" : tactic => `(tactic| first
+  | with_reducible exact ok_throw
+  | with_reducible exact ok_throw_bind
+  | with_reducible exact ok_pure (Pres.refl _)
+  | (with_reducible apply ok_bind; intro _ _)
+  | (with_reducible apply ok_ite <;> intro _)
+  | dsimp only
+  | (rename_i x _; cases x; all_goals dsimp only))
+
 /-! ## `process_withdrawal_request` -/
 
 theorem gated_write_read {α : Type} {c : Bool} {x : α} {g : Gated c α} {site site' : String}
@@ -629,5 +671,42 @@ theorem processWithdrawalRequest_pres (cfg : Config) {s s' : BeaconState P f} {w
     | exact initiateValidatorExit_pres cfg h
     | exact partial_pres h (by assumption) (by assumption) (exitChurn_frame cfg (by assumption))
         (by assumption) (by assumption)
+
+/-! ## `process_consolidation_request` -/
+
+theorem setPendingConsolidations_frame {s s' : BeaconState P f}
+    {l : SszList PendingConsolidation P.PENDING_CONSOLIDATIONS_LIMIT}
+    (h : s.setPendingConsolidations l = .ok s') : Frame s s' := by
+  unfold BeaconState.setPendingConsolidations at h
+  obtain ⟨g, _, h⟩ := bind_eq_ok_iff.mp h
+  cases h; exact ⟨rfl, rfl⟩
+
+/-- The main path of `process_consolidation_request`: the source's exit and withdrawable epochs. -/
+theorem consol_leaf {s T S s' : BeaconState P f} {V : SszList Validator P.VALIDATOR_REGISTRY_LIMIT}
+    {pc : SszList PendingConsolidation P.PENDING_CONSOLIDATIONS_LIMIT} {i : Nat} {src : Validator}
+    {q d w : U64} {site site2 site3 : String}
+    (h : S.setPendingConsolidations pc = .ok s')
+    (hS : S = { T with validators := V })
+    (hV : T.validators.set i { src with exit_epoch := q, withdrawable_epoch := w } site = .ok V)
+    (hw : U64.add? q d site2 = .ok w)
+    (hsrc : T.validators.get i site3 = .ok src)
+    (hT : Frame s T) : Pres s s' := by
+  subst hS
+  obtain ⟨hi, hVe⟩ := set_ok hV
+  refine (pres_of_valRel (valRel_set (st := s) (st' := { T with validators := V }) (v := src)
+    (v' := { src with exit_epoch := q, withdrawable_epoch := w }) (by rw [hT.1]) hi hVe
+    (by rw [← hT.1]; exact get_ok hsrc) (credKeep_of_wc rfl) (fun _ => exitOk_add hw))
+    (pendingStep_same hT.2)).trans (setPendingConsolidations_frame h).pres
+
+theorem processConsolidationRequest_pres (cfg : Config) {s s' : BeaconState P f}
+    {cr : ConsolidationRequest} (h : processConsolidationRequest cfg s cr = .ok s') : Pres s s' := by
+  revert s' h
+  show Ok (processConsolidationRequest cfg s cr) (Pres s)
+  unfold processConsolidationRequest
+  repeat (first
+    | vcg_step
+    | exact ok_of fun _ h => switchToCompoundingValidator_pres h
+    | exact ok_of fun _ h => consol_leaf h rfl (by assumption) (by assumption) (by assumption)
+        (consolidationChurn_frame cfg (by assumption)))
 
 end JauneConsensus.Facts
