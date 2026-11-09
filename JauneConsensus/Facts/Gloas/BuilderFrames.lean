@@ -1321,4 +1321,103 @@ theorem processWithdrawals_pkWe (s : JauneConsensus.Gloas.BeaconState P) :
 
 end WithdrawalsFrame
 
+
+/-! ## B3: `withdrawableEpoch_writers` over one Gloas block -/
+
+theorem ok_imp {α : Type} {c : M α} {Q Q' : α → Prop} (h : Ok c Q) (hq : ∀ a, Q a → Q' a) :
+    Ok c Q' := fun a ha => hq a (h a ha)
+
+section BlockWriters
+
+local macro_rules
+  | `(tactic| gstep_close) => `(tactic| exact (show BuildersPkWe _ _ from ⟨rfl, fun _ => rfl⟩))
+local macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (have hh := StepRel.of_ok (processBlockHeader_buildersEq _ _) $h; exact pkWe_of_eq hh))
+local macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (have hh := StepRel.of_ok (processWithdrawals_pkWe _) $h; exact hh))
+local macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (have hh := StepRel.of_ok (processExecutionPayloadBid_buildersEq _ _ _) $h; exact pkWe_of_eq hh))
+local macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (have hh := StepRel.of_ok (processRandao_buildersEq _ _ _) $h; exact pkWe_of_eq hh))
+local macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (have hh := StepRel.of_ok (processEth1Data_buildersEq _ _) $h; exact pkWe_of_eq hh))
+local macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (have hh := StepRel.of_ok (processOperations_buildersEq _ _ _ _) $h; exact pkWe_of_eq hh))
+
+/-- After the parent execution payload, the rest of `process_block` keeps every builder's pubkey
+and `withdrawable_epoch`. -/
+theorem processBlock_after_parent (ctx : Ctx) (pre : JauneConsensus.Gloas.BeaconState P)
+    (block : JauneConsensus.Gloas.BeaconBlock P) :
+    Ok (JauneConsensus.Gloas.processBlock ctx pre block) (fun post => ∃ mid,
+      JauneConsensus.Gloas.processParentExecutionPayload ctx pre block = .ok mid ∧
+      BuildersPkWe mid post) := by
+  unfold JauneConsensus.Gloas.processBlock
+  try simp only []
+  apply ok_bind
+  intro mid hmid
+  refine ok_imp (Q := pkWe.R mid) ?_ (fun q hq => ⟨mid, hmid, hq⟩)
+  gvcg
+  all_goals exact fun x hx => pkWe_of_eq (processSyncAggregate_buildersEq _ _ _ x hx)
+
+end BlockWriters
+
+/-- **B3, `withdrawableEpoch_writers`, function level (one Gloas block).** If `process_block`
+changes builder `i`'s `withdrawable_epoch`, the change comes from exactly one of the three writers:
+an exit initiated by a builder exit request of the parent payload that passed
+`process_builder_exit_request`'s checks, the source check included (`ExitInitiated` plus the
+request classified `initiate i` at its mid-list state, `ExitInitiateIn`); a reset top-up by a
+builder deposit request (`TopUpResetIn`); or a fresh record on a reused slot (`BuilderCreated`).
+The deposit and exit lists are the block's `parent_execution_requests`, applied from a state
+whose builders are the block's pre-state builders. Needs `2 <= SLOTS_PER_EPOCH`
+(`ValidJointG.slotsPerEpoch`); with `SLOTS_PER_EPOCH = 1` a slot of epoch `FAR_FUTURE_EPOCH` makes
+a fresh record reusable within one payload. -/
+theorem withdrawableEpoch_writers (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Ctx}
+    {pre post : JauneConsensus.Gloas.BeaconState P} {block : JauneConsensus.Gloas.BeaconBlock P}
+    (h : JauneConsensus.Gloas.processBlock ctx pre block = .ok post)
+    {i : Nat} {b b' : JauneConsensus.Gloas.Builder} (hb : pre.builders.toArray[i]? = some b)
+    (hb' : post.builders.toArray[i]? = some b') (hne : b.withdrawable_epoch ≠ b'.withdrawable_epoch) :
+    ∃ s0 s1 : JauneConsensus.Gloas.BeaconState P, s0.builders = pre.builders ∧
+      block.body.parent_execution_requests.builder_deposits.toArray.toList.foldlM
+        (JauneConsensus.Gloas.processBuilderDepositRequest ctx) s0 = .ok s1 ∧
+      ((ExitInitiated pre post i ∧
+          ExitInitiateIn ctx.cfg s1 block.body.parent_execution_requests.builder_exits.toArray.toList i) ∨
+        TopUpResetIn ctx s0 block.body.parent_execution_requests.builder_deposits.toArray.toList i ∨
+        BuilderCreated pre post i) := by
+  obtain ⟨mid, hmid, hsz, hmap⟩ := processBlock_after_parent ctx pre block post h
+  have hm := hmap i
+  rw [hb'] at hm
+  cases hc : mid.builders.toArray[i]? with
+  | none => rw [hc] at hm; simp at hm
+  | some c =>
+    rw [hc] at hm
+    simp only [Option.map_some, Option.some.injEq, Prod.mk.injEq] at hm
+    obtain ⟨hpk, hwe⟩ := hm
+    unfold JauneConsensus.Gloas.processParentExecutionPayload at hmid
+    try simp only [] at hmid
+    split at hmid
+    · obtain ⟨_, _, hmid⟩ := bind_eq_ok_iff.mp hmid
+      cases hmid
+      rw [hb] at hc; cases hc
+      exact absurd hwe.symm hne
+    · obtain ⟨_, _, hmid⟩ := bind_eq_ok_iff.mp hmid
+      obtain ⟨s0, s1, h0, hd, hcase⟩ :=
+        applyParentExecutionPayload_withdrawableEpoch hspe hmid hb hc (by rw [← hwe]; exact hne)
+      refine ⟨s0, s1, h0, hd, ?_⟩
+      rcases hcase with ⟨⟨b0, c0, hb0, hc0, hp0, hf0, hn0⟩, hex⟩ | hR | ⟨_, hcr⟩
+      · rw [hb] at hb0; cases hb0
+        rw [hc] at hc0; cases hc0
+        exact Or.inl ⟨⟨b, b', hb, hb', hp0.trans hpk.symm, hf0, by rw [hwe]; exact hn0⟩, hex⟩
+      · exact Or.inr (Or.inl hR)
+      · refine Or.inr (Or.inr ⟨by rw [hb']; rfl, ?_⟩)
+        rw [hb, hb']
+        rw [hb, hc] at hcr
+        simp only [Option.map_some, ne_eq, Option.some.injEq] at hcr ⊢
+        rw [hpk]; exact hcr
+
 end JauneConsensus.Facts.Gloas
