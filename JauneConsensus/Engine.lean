@@ -19,7 +19,9 @@ The engine is the specs' definitional composition, not a model of the Engine API
 * `is_valid_block_hash`: the converted header hashes to `payload.block_hash`;
 * `is_valid_versioned_hashes`: the blob transactions' versioned hashes, in order, are the
   commitments' versioned hashes;
-* `notify_new_payload`: the converted block is valid on the paired execution chain, and the
+* `notify_new_payload`: the converted block is within EIP-7934's size limit (checked by Jaune's
+  block import, outside the block transition, on the block's canonical RLP), is valid on the
+  paired execution chain, and the
   requests Jaune's execution produces are `list` itself. The specs state this as validity of
   the payload *and* of the execution requests with respect to the execution state; Engine API
   clients check it through the requests hash, which agrees except on a SHA-256 collision, and
@@ -145,6 +147,8 @@ inductive EngineReject where
   | forkLookup (e : RulesLookupError)
   /-- The selected execution fork is not paired with the block's consensus fork. -/
   | unpairedFork (f : Jaune.Fork)
+  /-- `notify_new_payload`: EIP-7934, the block's RLP exceeds the fork's size limit. -/
+  | blockSize (e : BlockValidationError)
   /-- `notify_new_payload`: the block is not valid on the execution chain. -/
   | transition (e : TransitionError)
   /-- `notify_new_payload`: the block's body does not run (the same run the transition makes). -/
@@ -174,6 +178,7 @@ def engineVerdict (cfg : ChainConfig) (cf : CFork) (exec : BlockChain)
   (cfg.checkChainId exec).mapError .chainContext
   let f ← (cfg.forkAt blk.header.number blk.header.timestamp).mapError .forkLookup
   if f.consensusFork? != some cf then throw (.unpairedFork f)
+  (checkBlockRlpSize f.ruleSet.block blk.toBLT.toBytes.length).mapError .blockSize
   let post ← match stateTransitionScheduledE cfg f exec blk with
     | .error e => throw (.forkLookup e)
     | .ok (.error e) => throw (.transition e)
