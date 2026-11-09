@@ -143,15 +143,15 @@ def getNextSyncCommitteeIndices (state : BeaconState P) : M (Array ValidatorInde
   let indices ← getActiveValidatorIndices state epoch
   computeBalanceWeightedSelection state indices seed P.SYNC_COMMITTEE_SIZE true
 
-/-- `get_next_sync_committee(state)` (Altair), with the Gloas indices. Under the BLS switch
-(`blsActive = false`) the aggregate is `STUB_PUBKEY`, as in `EpochAccessors.lean`. -/
-def getNextSyncCommittee (blsActive : Bool) (state : BeaconState P) : M (SyncCommittee P) := do
+/-- `get_next_sync_committee(state)` (Altair), with the Gloas indices. From `v1.7.0-beta.4` pyspec
+computes `bls.AggregatePKs` whatever the BLS switch, because the aggregate is state data
+(`eth_consensus_specs/utils/bls.py`), so it is never stubbed (as in `EpochAccessors.lean`). -/
+def getNextSyncCommittee (state : BeaconState P) : M (SyncCommittee P) := do
   let site := "get_next_sync_committee"
   let indices ← getNextSyncCommitteeIndices state
   let pubkeys ← indices.mapM fun i => do
     pure (← state.validators.get i.toNat site).pubkey
-  let agg ← if blsActive then ethAggregatePubkeysM (pubkeys.toList.map (·.toArray.toList))
-    else pure STUB_PUBKEY
+  let agg ← ethAggregatePubkeysM (pubkeys.toList.map (·.toArray.toList))
   let aggregate : BLSPubkey ← SszVector.ofArray agg.toArray site
   pure { pubkeys := ← SszVector.ofArray pubkeys site, aggregate_pubkey := aggregate }
 

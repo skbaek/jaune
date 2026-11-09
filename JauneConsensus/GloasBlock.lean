@@ -101,8 +101,9 @@ def processSyncAggregate (ctx : Ctx) (state : BeaconState P) (sa : SyncAggregate
     else if participants > P.SYNC_COMMITTEE_SIZE / 2 then do
       -- More than half participated - subtract non-participant keys
       let nonPart := ((pubkeys.zip bits).filter (fun (_, b) => !b)).toList.map (vbytes ·.1)
-      -- `eth_aggregate_pubkeys` is `bls.AggregatePKs`, stubbed to `STUB_PUBKEY` under the switch
-      let nonAgg ← if ctx.blsActive then ethAggregatePubkeysM nonPart else pure STUB_PUBKEY
+      -- `eth_aggregate_pubkeys` is `bls.AggregatePKs`, which from `v1.7.0-beta.4` pyspec computes
+      -- whatever the BLS switch (`eth_consensus_specs/utils/bls.py`)
+      let nonAgg ← ethAggregatePubkeysM nonPart
       let full ← liftCrypto s!"{site}: bls.bytes48_to_G1(aggregate_pubkey)"
         (pubkeyToPoint (vbytes state.current_sync_committee.aggregate_pubkey))
       let nonP ← liftCrypto s!"{site}: bls.bytes48_to_G1(non_participant_aggregate)"
