@@ -1,5 +1,6 @@
 import JauneConsensus.Harness.Runner
 import JauneConsensus.Harness.RecordedPairs
+import JauneConsensus.Harness.RecordedPairsGloas
 import JauneConsensus.Crypto.Sha256Pair
 
 /-!
@@ -12,6 +13,7 @@ lake exe jaune-consensus scan --preset P [selection as above]     reader scans (
 lake exe jaune-consensus --forks                                  cross-layer fork pairing
 lake exe jaune-consensus --fork-rules NAME                        resolve one fork (Gloas refused)
 lake exe jaune-consensus recorded-pairs [--dir DIR] [--negative-control]
+lake exe jaune-consensus recorded-pairs-gloas [--dir DIR]          Gloas devnet pairs, control built in
 ```
 
 `--vectors` is the extracted release, holding `<preset>/tests/<preset>/...` (default
@@ -48,7 +50,7 @@ structure Opts where
 
 def usage : String :=
   "usage: jaune-consensus run|scan --preset P [--fork F] [--runner R] [--handler H] [--suite S] " ++
-  "[--tier smoke|full] [--vectors DIR] [--manifest-dir DIR]\n       jaune-consensus --forks\n       jaune-consensus --fork-rules NAME\n       jaune-consensus recorded-pairs [--dir DIR] [--negative-control]"
+  "[--tier smoke|full] [--vectors DIR] [--manifest-dir DIR]\n       jaune-consensus --forks\n       jaune-consensus --fork-rules NAME\n       jaune-consensus recorded-pairs [--dir DIR] [--negative-control]\n       jaune-consensus recorded-pairs-gloas [--dir DIR]"
 
 def parseOpts : List String → Opts → Except UsageError Opts
   | [], o => .ok o
@@ -238,6 +240,11 @@ def main (args : List String) : IO UInt32 := do
           | some d => d
           | none => System.FilePath.mk "scripts/consensus/recorded-pairs"
         cmdRecordedPairs dir o.negativeControl
+      | "recorded-pairs-gloas" =>
+        let dir := match o.dir with
+          | some d => d
+          | none => System.FilePath.mk "scripts/consensus/recorded-devnet8"
+        RecordedGloas.cmdRecordedPairsGloas dir
       | _ =>
         IO.eprintln usage
         pure 2
