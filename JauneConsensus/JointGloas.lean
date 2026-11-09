@@ -1,6 +1,7 @@
 import JauneConsensus.Joint
 import JauneConsensus.GloasEnvelope
 import JauneConsensus.GloasBlock
+import JauneConsensus.GloasTransition
 
 /-!
 # The Gloas side of the joint execution–consensus step (goal `eip8282-gloas-cross-layer-v1`, G2)
@@ -28,13 +29,16 @@ its parent FULL or EMPTY. This module is the joint model of that, in the frozen 
   FULL on `.landed` requires empty requests by value; FULL on `.withheld` is refused; EMPTY
   requires empty requests by value and drops a delivered payload;
 * `gloasBlockArm` and `gloasStepWith` are the Gloas→Gloas arm of the step, parametric in
-  `processSlots` and in the post-slots block transition until U5's Gloas `process_slots` and
-  `state_transition` land. The beacon-side parent settlement is *inside* Gloas `processBlock`
+  `processSlots` and in the post-slots block transition; `gloasStep` instantiates them with U5's
+  `Gloas.processSlots` and `Gloas.applySignedBlockWith (Gloas.processBlock ctx)`. The beacon-side parent settlement is *inside* Gloas `processBlock`
   (`processParentExecutionPayload` is its first call), so the arm wraps the block transition
   and adds only the execution-side bookkeeping; `Facts/JointGloas.lean` proves the two read the
-  same FULL test at the same state.
+  same FULL test at the same state;
+* `crossingStep` is the Fulu → Gloas crossing (`Gloas.crossFromFulu`, then the block arm over a
+  `.landed` parent, FULL required), and `jointStepG` the whole step over `GJointState`/`GBlock`,
+  delegating pre-Gloas pairs to `jointStep` and refusing every pairing other than these.
 
-Nothing here changes an existing definition.
+Nothing here changes a pre-Gloas definition.
 -/
 
 namespace JauneConsensus
@@ -56,11 +60,6 @@ inductive ParentPayload (P : Preset) where
   the engine's chain after the payload; the joint state's `exec` is **not** advanced. -/
   | delivered (env : Gloas.SignedExecutionPayloadEnvelope P) (req : Gloas.NewPayloadRequest P)
       (post : BlockChain)
-
-/-- Whether the latest block can still take an envelope: no envelope was recorded for it. -/
-def ParentPayload.awaitsEnvelope : ParentPayload P → Bool
-  | .delivered .. => false
-  | _ => true
 
 /-- The joint state: pre-crossing (the Electra/Fulu `JointState`), or a Gloas beacon state with
 the built-upon execution chain and the status of its latest block's payload. -/
@@ -128,12 +127,13 @@ def payloadHeaderG (payload : Gloas.ExecutionPayload P) (parentBeaconRoot : Root
     slotNumber := some payload.slot_number.toWord }
 
 /-- The execution block a Gloas `NewPayloadRequest` stands for: the header with the requests as
-the list `Gloas.getExecutionRequestsList` (types `0x00`–`0x04`), the transactions as undecoded
-bytes, no ommers, the withdrawals. -/
+the list `Gloas.getExecutionRequestsList` (types `0x00`–`0x04`), the transactions through
+`payloadTx` (a legacy RLP-list transaction decoded, a typed envelope kept as bytes), no ommers,
+the withdrawals. -/
 def payloadToBlockG (req : Gloas.NewPayloadRequest P) : Block :=
   { header := payloadHeaderG req.execution_payload req.parent_beacon_block_root
       (Gloas.getExecutionRequestsList req.execution_requests)
-    txs := req.execution_payload.txBytes.map .inl
+    txs := req.execution_payload.txBytes.map payloadTx
     ommers := []
     wds := req.execution_payload.executionWithdrawals }
 
@@ -210,17 +210,20 @@ def verifyEnvelopeG (cfg : ChainConfig) (ccfg : Config) (bls : Bool) (state : Gl
   | .ok post => pure (req, post)
   | .error _ => throw (.assert "joint step: execution engine")
 
-/-- The envelope arm: a Gloas joint state whose latest block has no envelope yet takes the signed
-envelope `signedEnvelope`, checked by `verifyEnvelopeG` against the state and the built-upon
-chain, and records it as `.delivered`. The beacon state and `exec` do not move. -/
+/-- The envelope arm: a Gloas joint state whose latest block's payload is `.withheld` (the
+state the block arm leaves) takes the signed envelope `signedEnvelope`, checked by
+`verifyEnvelopeG` against the state and the built-upon chain, and records it as `.delivered`.
+The beacon state and `exec` do not move. A `.landed` or `.delivered` parent is refused: an
+envelope is only ever for the block just added. -/
 def deliver (cfg : ChainConfig) (ccfg : Config) (bls : Bool) (s : GJointState P)
     (signedEnvelope : Gloas.SignedExecutionPayloadEnvelope P) : M (GJointState P) :=
   match s with
   | .pre _ => throw (.assert "joint step: an envelope for a pre-Gloas state")
-  | .gloas beacon exec parent => do
-    require parent.awaitsEnvelope "joint step: the latest block already has an envelope"
+  | .gloas beacon exec .withheld => do
     let (req, post) ← verifyEnvelopeG cfg ccfg bls beacon exec signedEnvelope
     pure (.gloas beacon exec (.delivered signedEnvelope req post))
+  | .gloas _ _ _ =>
+    throw (.assert "joint step: an envelope for a block whose payload is not withheld")
 
 /-! ## Parent settlement -/
 
@@ -285,21 +288,21 @@ def settleParent (parent : ParentPayload P) (exec : BlockChain) (full : Bool)
     if childRequests = Gloas.ExecutionRequests.empty then .ok (exec, .empty)
     else .error .emptyRequestsNonEmpty
 
-/-! ## The Gloas block arm (parametric until U5) -/
+/-! ## The Gloas block arm (parametric in the slots and block functions) -/
 
-/-- The shape of Gloas `process_slots(state, slot)` (U5, to come). -/
+/-- The shape of Gloas `process_slots(state, slot)` (U5: `Gloas.processSlots`). -/
 abbrev GloasSlotsFn (P : Preset) := Gloas.BeaconState P → Slot → M (Gloas.BeaconState P)
 
 /-- The shape of the rest of Gloas `state_transition` after `process_slots`: the block signature,
-`process_block` and the state-root check (U5, to come). -/
+`process_block` and the state-root check (U5: `Gloas.applySignedBlockWith`). -/
 abbrev GloasBlockFn (P : Preset) :=
   Gloas.BeaconState P → Gloas.SignedBeaconBlock P → M (Gloas.BeaconState P)
 
 /-- The Gloas→Gloas block arm: `processSlots` to the block's slot (`st0`), the execution-side
 settlement keyed on the FULL test at `st0`, then `blockTransition st0 b`, the rest of
 `state_transition` (the block signature, `process_block`, which settles the parent on the beacon
-side, and the state root). Parametric in both until U5's Gloas `process_slots` and
-`state_transition` land. -/
+side, and the state root). Parametric in both: `gloasStep` instantiates them with U5's
+`Gloas.processSlots` and `gloasBlockTransition`, `crossingStep` with `crossingSlots`. -/
 def gloasBlockArm (processSlots : GloasSlotsFn P)
     (blockTransition : GloasBlockFn P)
     (beacon : Gloas.BeaconState P) (exec : BlockChain) (parent : ParentPayload P)
@@ -310,6 +313,15 @@ def gloasBlockArm (processSlots : GloasSlotsFn P)
   let post ← blockTransition st0 b
   pure (post, settled.1, settled.2)
 
+/-- The end of a Gloas step: the block's own envelope if one is given (`deliver`, always on the
+`.withheld` state the block arm leaves), else the block's payload stays `.withheld`. -/
+def gloasDeliverOpt (cfg : ChainConfig) (ccfg : Config) (bls : Bool) (post : Gloas.BeaconState P)
+    (exec : BlockChain) (env? : Option (Gloas.SignedExecutionPayloadEnvelope P)) :
+    M (GJointState P) :=
+  match env? with
+  | none => pure (.gloas post exec .withheld)
+  | some e => deliver cfg ccfg bls (.gloas post exec .withheld) e
+
 /-- The Gloas→Gloas step: the block arm, then the block's own envelope if one is given
 (`deliver`), else the block's payload is `.withheld`. -/
 def gloasStepWith (processSlots : GloasSlotsFn P)
@@ -318,8 +330,80 @@ def gloasStepWith (processSlots : GloasSlotsFn P)
     (exec : BlockChain) (parent : ParentPayload P) (b : Gloas.SignedBeaconBlock P)
     (env? : Option (Gloas.SignedExecutionPayloadEnvelope P)) : M (GJointState P) := do
   let r ← gloasBlockArm processSlots blockTransition beacon exec parent b
-  match env? with
-  | none => pure (.gloas r.1 r.2.1 .withheld)
-  | some e => deliver cfg ccfg bls (.gloas r.1 r.2.1 .withheld) e
+  gloasDeliverOpt cfg ccfg bls r.1 r.2.1 env?
+
+/-! ## The block arm instantiated with U5 -/
+
+/-- The Gloas processing context of a joint step: the configuration and the BLS switch (the
+Gloas `process_block` does not read the mocked `executionValid`). -/
+def gloasCtx (ccfg : Config) (bls : Bool) : Ctx := { cfg := ccfg, blsActive := bls }
+
+/-- The rest of Gloas `state_transition` after `process_slots` (U5's `applySignedBlockWith` over
+the Gloas `process_block`): the block signature, `process_block` and the state root.
+`Gloas.stateTransition_eq` shows `process_slots` followed by this is `Gloas.stateTransition`. -/
+def gloasBlockTransition (ctx : Ctx) : GloasBlockFn P :=
+  fun st b => Gloas.applySignedBlockWith (Gloas.processBlock ctx) ctx.blsActive st b
+
+/-- The Gloas→Gloas step with U5's `Gloas.processSlots` and post-slots transition. -/
+def gloasStep (cfg : ChainConfig) (ccfg : Config) (bls : Bool) (beacon : Gloas.BeaconState P)
+    (exec : BlockChain) (parent : ParentPayload P) (b : Gloas.SignedBeaconBlock P)
+    (env? : Option (Gloas.SignedExecutionPayloadEnvelope P)) : M (GJointState P) :=
+  gloasStepWith (Gloas.processSlots (gloasCtx ccfg bls)) (gloasBlockTransition (gloasCtx ccfg bls))
+    cfg ccfg bls beacon exec parent b env?
+
+/-! ## The Fulu → Gloas crossing (design.md §2.4) -/
+
+/-- The first slot of `GLOAS_FORK_EPOCH`, as a natural number (the configured epoch may be the
+far-future sentinel, whose slot does not fit a `Slot`). -/
+def gloasForkSlot (ccfg : Config) : Nat := ccfg.GLOAS_FORK_EPOCH * P.SLOTS_PER_EPOCH
+
+/-- The slots function of the crossing's block arm: none when the block is at the upgraded
+state's slot (the fork slot: `Gloas.processBlockAtSlot`, as the generators' `do_fork` applies
+the block), else Gloas `process_slots`. -/
+def crossingSlots (ctx : Ctx) : GloasSlotsFn P := fun st slot =>
+  if slot == st.slot then pure st else Gloas.processSlots ctx st slot
+
+/-- The crossing step: a Fulu joint state strictly before the Gloas fork slot and a Gloas block
+at or after it (G2-3). `Gloas.crossFromFulu` runs the Fulu `process_slots` to the fork slot and
+`upgrade_to_gloas`; then the Gloas block arm runs over the parent `.landed` (the synthetic
+self-build bid `upgrade_to_gloas` leaves is the execution head, its requests applied in the last
+Fulu block). The settlement must be FULL with empty requests (design.md §2.4, derived facts 1–2):
+an EMPTY settlement is refused here by name. -/
+def crossingStep (cfg : ChainConfig) (ccfg : Config) (bls : Bool)
+    (beacon : BeaconState P .fulu) (exec : BlockChain) (b : Gloas.SignedBeaconBlock P)
+    (env? : Option (Gloas.SignedExecutionPayloadEnvelope P)) : M (GJointState P) := do
+  require (decide (beacon.slot.toNat < gloasForkSlot (P := P) ccfg ∧
+      gloasForkSlot (P := P) ccfg ≤ b.message.slot.toNat))
+    "joint step: a Gloas block crossing from a Fulu state"
+  let ctx := gloasCtx ccfg bls
+  let upgraded ← Gloas.crossFromFulu ctx beacon
+  let r ← gloasBlockArm (crossingSlots ctx) (gloasBlockTransition ctx) upgraded exec .landed b
+  match r.2.2 with
+  | .landed => gloasDeliverOpt cfg ccfg bls r.1 r.2.1 env?
+  | _ => throw (.assert "joint step: the first Gloas block settles its landed parent FULL")
+
+/-! ## The joint step -/
+
+/-- One joint step over the sum state (design.md §2.1):
+
+* a pre-Gloas state and block: the Electra/Fulu `jointStep`, with no envelope and the block
+  before the Gloas fork slot;
+* a Fulu state and a Gloas block: the crossing (`crossingStep`);
+* a Gloas state and block: the Gloas arm (`gloasStep`);
+* every other pairing is refused by name (Gloas pairs with Amsterdam only; a pre-Gloas block on a
+  Gloas state, or a Gloas block on an Electra state, fails closed). -/
+def jointStepG (cfg : ChainConfig) (ccfg : Config) (bls : Bool) (s : GJointState P) (b : GBlock P)
+    (env? : Option (Gloas.SignedExecutionPayloadEnvelope P)) : M (GJointState P) :=
+  match s, b with
+  | .pre s, .pre b => do
+    require env?.isNone "joint step: an envelope with a pre-Gloas block"
+    require (decide (b.2.message.slot.toNat < gloasForkSlot (P := P) ccfg))
+      "joint step: a pre-Gloas block at or after the Gloas fork slot"
+    pure (.pre (← jointStep cfg ccfg bls s b))
+  | .pre ⟨.fulu, beacon, exec⟩, .gloas b => crossingStep cfg ccfg bls beacon exec b env?
+  | .pre _, .gloas _ =>
+    throw (.assert "joint step: a Gloas block crossing from a state other than Fulu")
+  | .gloas beacon exec parent, .gloas b => gloasStep cfg ccfg bls beacon exec parent b env?
+  | .gloas .., .pre _ => throw (.assert "joint step: a pre-Gloas block on a Gloas state")
 
 end JauneConsensus
