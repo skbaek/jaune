@@ -1,0 +1,90 @@
+{
+ "_comment": "Recorded Ethereum mainnet block pairs (beacon block + its payload's execution block) carrying EIP-7002 withdrawal requests, for the consensus payload -> execution block conversion control (goal eip7002-cross-layer-v1, O4). Raw provider responses, byte for byte as received on 2026-11-09; the runner checks each file's SHA-256 against this manifest before reading it. Execution blocks: four JSON-RPC providers returned parsed-identical blocks (sha256 of each recorded). Beacon blocks: one provider (publicnode) served these finalized blocks; ChainSafe Lodestar serves only non-finalized slots (HTTP 404), and no provider served SSZ for finalized blocks. Every payload field feeding the execution header is independently pinned by the execution block hash the four execution providers agree on; only the beacon block root rests on the single beacon provider.",
+ "recorded_utc_date": "2026-11-09",
+ "pairs": [
+  {
+   "label": "several-5w",
+   "slot": 15601889,
+   "epoch": 487559,
+   "fork": "fulu",
+   "exec_number": 26362327,
+   "exec_hash": "0xbd037ae9dbfe47ed43a7e20755708b4ff00ec27bb0d059a56ad4c384b77c0858",
+   "beacon": {
+    "provider": "publicnode",
+    "url": "https://ethereum-beacon-api.publicnode.com/eth/v2/beacon/blocks/15601889",
+    "file": "publicnode-beacon-15601889.json",
+    "sha256": "72642f97882d2ea49723e5da6195f40506930e68810410e9c5c82960ffbf94c3",
+    "bytes": 385167
+   },
+   "exec": {
+    "provider": "publicnode",
+    "url": "https://ethereum-rpc.publicnode.com eth_getBlockByNumber(n, true)",
+    "file": "publicnode-exec-26362327.json",
+    "sha256": "06b2bbf0fe982348afa86a4098b82a5d9cb3871b099ba2deef879518c18e8ae1",
+    "bytes": 33540,
+    "agreeing_providers": {
+     "publicnode": "06b2bbf0fe982348afa86a4098b82a5d9cb3871b099ba2deef879518c18e8ae1",
+     "drpc": "c30358d831abf6db11e4e5151b1509dd9471d47677eed4953c38144f61e9c7cd",
+     "blastapi": "9d54d1f5f8cc83640c2d249f4efc2188840e647bd49c1f44b06aa6db437f824b",
+     "mevblocker": "850714b18d614391dd43813d595e855940ec7ccb11fb000b81d72b3d45cad826"
+    }
+   }
+  },
+  {
+   "label": "full-exit-plus-deposit",
+   "slot": 15613807,
+   "epoch": 487931,
+   "fork": "fulu",
+   "exec_number": 26374209,
+   "exec_hash": "0xfd7094d0e517c8121db8b56259a125e74261c8e13d0ef9ae7340612bf72d7df4",
+   "beacon": {
+    "provider": "publicnode",
+    "url": "https://ethereum-beacon-api.publicnode.com/eth/v2/beacon/blocks/15613807",
+    "file": "publicnode-beacon-15613807.json",
+    "sha256": "fa6d94d31368b3f3f6681c75a0be4ab6aa3300dc21a97a382d2aa37b2b1736d4",
+    "bytes": 285398
+   },
+   "exec": {
+    "provider": "publicnode",
+    "url": "https://ethereum-rpc.publicnode.com eth_getBlockByNumber(n, true)",
+    "file": "publicnode-exec-26374209.json",
+    "sha256": "d543b172bb2fa328f3e2910b63c3e3358e652ade27d0782ac99b170b807a5e9b",
+    "bytes": 19055,
+    "agreeing_providers": {
+     "publicnode": "d543b172bb2fa328f3e2910b63c3e3358e652ade27d0782ac99b170b807a5e9b",
+     "drpc": "362a9f73f60a1111c869a91117abe8f57a8ce2548cd67b970bf0f19df88ceeae",
+     "blastapi": "73f267fba4507f52f22658207a4d9d612a7610bdd4f60a965fec1fbf4a5ff82b",
+     "mevblocker": "41dfc02466f14a1fd4e9f74e0dc902d1e526b418db01cd17a406cb3065040028"
+    }
+   }
+  },
+  {
+   "label": "partial-single",
+   "slot": 15613823,
+   "epoch": 487931,
+   "fork": "fulu",
+   "exec_number": 26374225,
+   "exec_hash": "0x86cacdbd80acd53f579665fa19a9c52b00ba81a8d1286f07da9002f7b1a4dcb8",
+   "beacon": {
+    "provider": "publicnode",
+    "url": "https://ethereum-beacon-api.publicnode.com/eth/v2/beacon/blocks/15613823",
+    "file": "publicnode-beacon-15613823.json",
+    "sha256": "1e3f78f06687e2cbaac1f039b38bddfc0e7e441e178a7f47bc97d251a5fba81f",
+    "bytes": 112679
+   },
+   "exec": {
+    "provider": "publicnode",
+    "url": "https://ethereum-rpc.publicnode.com eth_getBlockByNumber(n, true)",
+    "file": "publicnode-exec-26374225.json",
+    "sha256": "b4cb5c3e14fcc7a2661183118ebe80b6d1499c08ee6131dc58b6ecc06e2a8ab0",
+    "bytes": 9663,
+    "agreeing_providers": {
+     "publicnode": "b4cb5c3e14fcc7a2661183118ebe80b6d1499c08ee6131dc58b6ecc06e2a8ab0",
+     "drpc": "3bf547ecae92e96abc3fe70786d344745956cf288c142748ebfd60b5b8b7854b",
+     "blastapi": "00acaafda422f3f16ae1d1190ffd867319042a9060e7129a7766432750239253",
+     "mevblocker": "e085908f7feec782d7c0ddbdef3e311c49858117905833673dce640f6c5ff6d6"
+    }
+   }
+  }
+ ]
+}

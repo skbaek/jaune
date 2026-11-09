@@ -1,4 +1,5 @@
 import JauneConsensus.Harness.Runner
+import JauneConsensus.Harness.RecordedPairs
 import JauneConsensus.Crypto.Sha256Pair
 
 /-!
@@ -10,6 +11,7 @@ lake exe jaune-consensus run  --preset P [--fork F] [--runner R] [--handler H] [
 lake exe jaune-consensus scan --preset P [selection as above]     reader scans (Snappy, YAML)
 lake exe jaune-consensus --forks                                  cross-layer fork pairing
 lake exe jaune-consensus --fork-rules NAME                        resolve one fork (Gloas refused)
+lake exe jaune-consensus recorded-pairs [--dir DIR] [--negative-control]
 ```
 
 `--vectors` is the extracted release (default `$HOME/consensus-spec-tests-v1.6.1/extracted`),
@@ -39,10 +41,12 @@ structure Opts where
   tier : Tier := .full
   vectors : Option System.FilePath := none
   manifestDir : String := "scripts"
+  dir : Option System.FilePath := none
+  negativeControl : Bool := false
 
 def usage : String :=
   "usage: jaune-consensus run|scan --preset P [--fork F] [--runner R] [--handler H] [--suite S] " ++
-  "[--tier smoke|full] [--vectors DIR] [--manifest-dir DIR]\n       jaune-consensus --forks\n       jaune-consensus --fork-rules NAME"
+  "[--tier smoke|full] [--vectors DIR] [--manifest-dir DIR]\n       jaune-consensus --forks\n       jaune-consensus --fork-rules NAME\n       jaune-consensus recorded-pairs [--dir DIR] [--negative-control]"
 
 def parseOpts : List String → Opts → Except UsageError Opts
   | [], o => .ok o
@@ -53,6 +57,8 @@ def parseOpts : List String → Opts → Except UsageError Opts
   | "--suite" :: v :: r, o => parseOpts r { o with suite := some v }
   | "--vectors" :: v :: r, o => parseOpts r { o with vectors := some (System.FilePath.mk v) }
   | "--manifest-dir" :: v :: r, o => parseOpts r { o with manifestDir := v }
+  | "--dir" :: v :: r, o => parseOpts r { o with dir := some (System.FilePath.mk v) }
+  | "--negative-control" :: r, o => parseOpts r { o with negativeControl := true }
   | "--tier" :: "smoke" :: r, o => parseOpts r { o with tier := .smoke }
   | "--tier" :: "full" :: r, o => parseOpts r { o with tier := .full }
   | a :: _, _ => .error (.unknownArgument a)
@@ -225,6 +231,11 @@ def main (args : List String) : IO UInt32 := do
       match cmd with
       | "run" => cmdRun o
       | "scan" => cmdScan o
+      | "recorded-pairs" =>
+        let dir := match o.dir with
+          | some d => d
+          | none => System.FilePath.mk "scripts/consensus/recorded-pairs"
+        cmdRecordedPairs dir o.negativeControl
       | _ =>
         IO.eprintln usage
         pure 2
