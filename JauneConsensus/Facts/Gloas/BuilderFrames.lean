@@ -282,4 +282,153 @@ theorem directAppend_frame (m : JauneConsensus.Gloas.BeaconState P) :
     (directAppend m).builder_pending_payments = m.builder_pending_payments :=
   ⟨rfl, rfl, rfl⟩
 
+
+/-! ## `process_builder_pending_payments` (B7) -/
+
+theorem forIn_list_pure_yield {α β : Type} (l : List α) (init : β)
+    (body : α → β → M (ForInStep β)) (g : β → α → β)
+    (hb : ∀ a b, body a b = .ok (.yield (g b a))) : forIn l init body = .ok (l.foldl g init) := by
+  induction l generalizing init with
+  | nil => rfl
+  | cons a l ih =>
+    rw [List.forIn_cons, hb]
+    exact ih (g init a)
+
+theorem foldl_push_filter_toList {s : Spine} {α γ : Type} (C : α → Prop) [DecidablePred C]
+    (f : α → γ) (l : List α) (init : ProgressiveListS s γ) :
+    (l.foldl (fun w p => if C p then w.push (f p) else w) init).toArray.toList =
+      init.toArray.toList ++ (l.filter (fun p => decide (C p))).map f := by
+  induction l generalizing init with
+  | nil => simp
+  | cons a l ih =>
+    by_cases hc : C a
+    · rw [List.foldl_cons, if_pos hc, ih]
+      simp [ProgressiveListS.push, List.filter_cons, hc]
+    · simp only [List.foldl_cons, hc, ↓reduceIte, ih, List.filter_cons, decide_false,
+        Bool.false_eq_true]
+
+/-- **B7.** `process_builder_pending_payments` (CL:1719): the builders are unchanged; the builder
+withdrawals gain exactly the withdrawals of the previous epoch's payments whose weight reaches the
+quorum, in order; the payments shift down by one epoch and the second half is emptied. -/
+theorem processBuilderPendingPayments_frame {cfg : Config}
+    {m m' : JauneConsensus.Gloas.BeaconState P}
+    (h : JauneConsensus.Gloas.processBuilderPendingPayments cfg m = .ok m') :
+    m'.builders = m.builders ∧
+    ∃ q, JauneConsensus.Gloas.getBuilderPaymentQuorumThreshold m = .ok q ∧
+      m'.builder_pending_withdrawals.toArray.toList =
+        m.builder_pending_withdrawals.toArray.toList ++
+          (((m.builder_pending_payments.toArray.extract 0 P.SLOTS_PER_EPOCH).toList.filter
+            (fun p => decide (q ≤ p.weight))).map (·.withdrawal)) ∧
+      m'.builder_pending_payments.toArray =
+        m.builder_pending_payments.toArray.extract P.SLOTS_PER_EPOCH
+            m.builder_pending_payments.toArray.size ++
+          Array.replicate P.SLOTS_PER_EPOCH JauneConsensus.Gloas.BuilderPendingPayment.empty := by
+  unfold JauneConsensus.Gloas.processBuilderPendingPayments at h
+  obtain ⟨q, hq, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨w, hw, h⟩ := bind_eq_ok_iff.mp h
+  rw [← Array.forIn_toList,
+    forIn_list_pure_yield _ _ _
+      (fun w p => if q ≤ p.weight then w.push p.withdrawal else w)
+      (by intro a b; by_cases hc : q ≤ a.weight <;> simp only [hc, ↓reduceIte] <;> rfl)] at hw
+  cases hw
+  obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨v, hv, h⟩ := bind_eq_ok_iff.mp h
+  cases h
+  unfold SszVector.ofArray at hv
+  split at hv
+  · cases hv
+    exact ⟨rfl, q, hq, foldl_push_filter_toList _ _ _ _, rfl⟩
+  · cases hv
+
+/-! ## B7 controls on closed minimal states -/
+
+/-- **B7 mutant (separation)**: `process_builder_deposit_request` that also credits validator 0
+with the request's amount. -/
+def processBuilderDepositRequestCredit (ctx : Ctx) (state : JauneConsensus.Gloas.BeaconState P)
+    (request : JauneConsensus.Gloas.BuilderDepositRequest) : M (JauneConsensus.Gloas.BeaconState P) := do
+  let state ← JauneConsensus.Gloas.processBuilderDepositRequest ctx state request
+  JauneConsensus.Gloas.increaseBalance state U64.zero request.amount
+
+/-- The B7 separation control state: one validator balance (zero), no builders. -/
+def ctrlBalState (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
+    JauneConsensus.Gloas.BeaconState Preset.minimal :=
+  { s with slot := U64.zero, builders := ⟨#[]⟩, balances := ⟨#[U64.zero]⟩ }
+
+/-- **B7 separation control.** The real `process_builder_deposit_request` keeps the validator
+balances (`processBuilderDepositRequest_frame`); the crediting mutant changes them on a closed
+state. -/
+theorem b7_separation_control (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
+    (∀ m', JauneConsensus.Gloas.processBuilderDepositRequest { cfg := Config.minimal }
+      (ctrlBalState s) ctrlPrefixRequest = .ok m' → m'.balances = (ctrlBalState s).balances) ∧
+    ∃ s', processBuilderDepositRequestCredit { cfg := Config.minimal } (ctrlBalState s)
+      ctrlPrefixRequest = .ok s' ∧ s'.balances ≠ (ctrlBalState s).balances := by
+  refine ⟨fun m' h => (processBuilderDepositRequest_frame h).2.1, ?_⟩
+  refine ⟨{ ctrlBalState s with balances := ⟨#[U64.one]⟩ }, ?_, ?_⟩
+  · unfold processBuilderDepositRequestCredit
+    rw [processBuilderDepositRequest_ignores_prefix (by decide)]
+    with_unfolding_all rfl
+  · intro h
+    have h2 := congrArg (fun l : ProgressiveListR Gwei => l.toArray[0]?) h
+    simp [ctrlBalState] at h2
+    exact absurd (congrArg U64.toNat h2) (by decide)
+
+/-- The total builder balance. -/
+def totalBuilderBalance (st : JauneConsensus.Gloas.BeaconState P) : Nat :=
+  (st.builders.toArray.toList.map (·.balance.toNat)).sum
+
+/-- The builder withdrawals' total amount (validator indices carrying `BUILDER_INDEX_FLAG`). -/
+def builderWithdrawalTotal (ws : Array Withdrawal) : Nat :=
+  ((ws.toList.filter (fun w => JauneConsensus.Gloas.isBuilderIndex w.validator_index)).map
+    (·.amount.toNat)).sum
+
+/-- **B7 mutant (conservation)**: `apply_withdrawals` that skips the builder deduction. -/
+def applyWithdrawalsSkipBuilder (state : JauneConsensus.Gloas.BeaconState P)
+    (withdrawals : Array Withdrawal) : M (JauneConsensus.Gloas.BeaconState P) := do
+  let mut state := state
+  for withdrawal in withdrawals do
+    if JauneConsensus.Gloas.isBuilderIndex withdrawal.validator_index then
+      pure ()
+    else
+      state ← JauneConsensus.Gloas.decreaseBalance state withdrawal.validator_index withdrawal.amount
+  pure state
+
+/-- One builder with balance 10. -/
+def ctrlRichBuilder : JauneConsensus.Gloas.Builder :=
+  { ctrlBuilder with balance := U64.lit 10 }
+
+/-- The B7 conservation control state. -/
+def ctrlWithdrawState (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
+    JauneConsensus.Gloas.BeaconState Preset.minimal :=
+  { s with builders := ⟨#[ctrlRichBuilder]⟩ }
+
+/-- One builder withdrawal of 3 for builder 0 (`validator_index = 0 | BUILDER_INDEX_FLAG`). -/
+def ctrlBuilderWithdrawals : Array Withdrawal :=
+  #[{ index := U64.zero, validator_index := U64.lit (2 ^ 40), address := JauneConsensus.Gloas.zeroAddress,
+      amount := U64.lit 3 }]
+
+/-- **B7 conservation control.** On a closed state with one builder (balance 10) and one builder
+withdrawal of 3, the real `apply_withdrawals` conserves builder balance
+(`post + withdrawn = pre`, 7 + 3 = 10); the mutant that skips the builder deduction does not
+(10 + 3 ≠ 10). -/
+theorem b7_conservation_control (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
+    (∃ s', JauneConsensus.Gloas.applyWithdrawals (ctrlWithdrawState s) ctrlBuilderWithdrawals = .ok s' ∧
+      totalBuilderBalance s' + builderWithdrawalTotal ctrlBuilderWithdrawals =
+        totalBuilderBalance (ctrlWithdrawState s)) ∧
+    (∃ s', applyWithdrawalsSkipBuilder (ctrlWithdrawState s) ctrlBuilderWithdrawals = .ok s' ∧
+      totalBuilderBalance s' + builderWithdrawalTotal ctrlBuilderWithdrawals ≠
+        totalBuilderBalance (ctrlWithdrawState s)) := by
+  have hpre : totalBuilderBalance (ctrlWithdrawState s) = 10 := by with_unfolding_all rfl
+  have hw : builderWithdrawalTotal ctrlBuilderWithdrawals = 3 := by with_unfolding_all rfl
+  have hpost : totalBuilderBalance { ctrlWithdrawState s with
+      builders := ⟨#[{ ctrlRichBuilder with balance := U64.lit 7 }]⟩ } = 7 := by
+    with_unfolding_all rfl
+  refine ⟨⟨{ ctrlWithdrawState s with
+      builders := ⟨#[{ ctrlRichBuilder with balance := U64.lit 7 }]⟩ }, ?_, ?_⟩,
+    ⟨ctrlWithdrawState s, ?_, ?_⟩⟩
+  · with_unfolding_all rfl
+  · rw [hpost, hpre, hw]
+  · with_unfolding_all rfl
+  · rw [hpre, hw]; decide
+
 end JauneConsensus.Facts.Gloas
