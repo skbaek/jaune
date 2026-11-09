@@ -83,6 +83,8 @@ import JauneConsensus.GloasBlock
 import JauneConsensus.GossipCore
 import JauneConsensus.Gossip
 import JauneConsensus.GloasGossip
+import JauneConsensus.GloasLightClient
+import JauneConsensus.GloasLightClientFullNode
 import JauneConsensus.Harness.GossipCases
 import JauneConsensus.Harness.GossipStoreFree
 import JauneConsensus.Harness.GossipTable

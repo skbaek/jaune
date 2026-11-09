@@ -137,9 +137,11 @@ semantics exist (goal `eip8282-gloas-cross-layer-v1`, U3: `epoch_processing` ove
 `JauneConsensus/GloasEpoch.lean`, `rewards` over `GloasEpochAccessors.lean`; U4: `operations` over
 `GloasWithdrawals.lean`, `GloasOperations.lean` and `GloasBlock.lean`; U7a: `networking`, whose
 custody helpers are fork-independent and whose `gossip_*` handlers dispatch by fork in
-`Harness/GossipTable.lean`). Every other runner still refuses Gloas. -/
+`Harness/GossipTable.lean`; U7b: `light_client` over `GloasLightClient.lean` and
+`GloasLightClientFullNode.lean`, whose Gloas `data_collection` fails closed until the Gloas state
+transition lands). Gloas ships no `merkle_proof` suite. Every other runner still refuses Gloas. -/
 def gloasRunners : List String :=
-  containerOnlyRunners ++ ["epoch_processing", "rewards", "operations", "networking"]
+  containerOnlyRunners ++ ["epoch_processing", "rewards", "operations", "networking", "light_client"]
 
 /-- Why a fork directory is refused by name for a runner (`none`: any runner), if it is. Gloas is
 a declared `CFork` whose rules do not resolve (`CFork.resolve` gives `notImplemented`); it is
@@ -163,6 +165,8 @@ def forkRefusal? (f : String) (runner : Option String := none) : Option ForkRefu
 #guard (forkRefusal? "gloas" (some "rewards")).isNone
 #guard (forkRefusal? "gloas" (some "sanity")).isSome
 #guard (forkRefusal? "gloas" (some "networking")).isNone
+#guard (forkRefusal? "gloas" (some "light_client")).isNone
+#guard (forkRefusal? "gloas" (some "merkle_proof")).isSome
 #guard (forkRefusal? "eip7805" (some "ssz_static")).isSome
 #guard (forkRefusal? "fulu").isNone
 #guard (forkRefusal? "electra").isNone
