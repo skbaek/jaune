@@ -7,6 +7,7 @@ import JauneConsensus.Facts.Gloas.Frame
 import JauneConsensus.JointGloas
 import JauneConsensus.Facts.JointGloas
 import JauneConsensus.Facts.Gloas.BuilderAuth
+import JauneConsensus.Facts.Gloas.BuilderWitnesses
 
 /-!
 # Whole-library axiom union for `JauneConsensus`
