@@ -10,6 +10,7 @@ import Jaune.Fork
 import Jaune.Hash
 import Jaune.SHA256Spec
 import Jaune.Blake2Spec
+import Jaune.RIPEMD160Spec
 import Jaune.EC
 import Jaune.BLSConst
 import Jaune.BLS
