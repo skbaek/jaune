@@ -1146,4 +1146,81 @@ theorem b1_signature_control (s : JauneConsensus.Gloas.BeaconState Preset.minima
   refine ⟨_, rfl, ?_⟩
   exact builderCreated_of_none_some rfl rfl
 
+
+/-! ## `get_index_for_new_builder` (CL:2287-2295) -/
+
+theorem getIndexForNewBuilder_loop (C : JauneConsensus.Gloas.Builder → Bool)
+    (body : JauneConsensus.Gloas.Builder → Option U64 × Nat → M (ForInStep (Option U64 × Nat)))
+    (hbody : ∀ x s, (C x = true →
+        body x s = (U64.ofNat? s.2 "BuilderIndex" >>= fun v => pure (.done (some v, s.2)))) ∧
+      (C x = false → body x s = pure (.yield (none, s.2 + 1)))) :
+    ∀ (l : List JauneConsensus.Gloas.Builder) (k : Nat) (out : Option U64 × Nat),
+      forIn l (none, k) body = .ok out →
+      (∀ v, out.1 = some v → ∃ j, ∃ hj : j < l.length, v.toNat = k + j ∧ C l[j] = true) ∧
+      (out.1 = none → ∀ x ∈ l, C x = false) := by
+  intro l
+  induction l with
+  | nil =>
+    intro k out h
+    cases h
+    refine ⟨fun v hv => ?_, fun _ x hx => ?_⟩
+    · simp at hv
+    · simp at hx
+  | cons x l ih =>
+    intro k out h
+    rw [List.forIn_cons] at h
+    obtain ⟨st, hst, h⟩ := bind_eq_ok_iff.mp h
+    cases hc : C x with
+    | true =>
+      rw [(hbody x _).1 hc] at hst
+      obtain ⟨v, hv, hst⟩ := bind_eq_ok_iff.mp hst
+      cases hst
+      cases h
+      refine ⟨fun v' hv' => ?_, fun hn => by cases hn⟩
+      cases hv'
+      exact ⟨0, by simp, by rw [U64.toNat_ofNat? hv]; rfl, by simpa using hc⟩
+    | false =>
+      rw [(hbody x _).2 hc] at hst
+      cases hst
+      obtain ⟨h1, h2⟩ := ih (k + 1) out h
+      refine ⟨fun v hv => ?_, fun hn y hy => ?_⟩
+      · obtain ⟨j, hj, hvj, hcj⟩ := h1 v hv
+        exact ⟨j + 1, by simp; omega, by rw [hvj]; omega, by simpa using hcj⟩
+      · rcases List.mem_cons.mp hy with rfl | hy
+        · exact hc
+        · exact h2 hn y hy
+
+/-- `get_index_for_new_builder` returns the end of the registry or a slot whose builder is exited
+and swept (`withdrawable_epoch <= current_epoch` and `balance == 0`). -/
+theorem getIndexForNewBuilder_spec {m : JauneConsensus.Gloas.BeaconState P} {idx : U64}
+    (h : JauneConsensus.Gloas.getIndexForNewBuilder m = .ok idx) :
+    ∃ e, JauneConsensus.Gloas.getCurrentEpoch m = .ok e ∧
+      (idx.toNat = m.builders.toArray.size ∨
+        ∃ b, m.builders.toArray[idx.toNat]? = some b ∧ b.withdrawable_epoch ≤ e ∧
+          b.balance = U64.zero) := by
+  unfold JauneConsensus.Gloas.getIndexForNewBuilder at h
+  obtain ⟨e, he, h⟩ := bind_eq_ok_iff.mp h
+  refine ⟨e, he, ?_⟩
+  simp only [] at h
+  obtain ⟨st, hst, h⟩ := bind_eq_ok_iff.mp h
+  rw [← Array.forIn_toList] at hst
+  have hloop := getIndexForNewBuilder_loop
+    (fun b => decide (b.withdrawable_epoch ≤ e) && b.balance == U64.zero) _
+    (fun x s => ⟨fun hc => by simp only [hc, ↓reduceIte], fun hc => by
+      simp only [hc, Bool.false_eq_true, ↓reduceIte]⟩) _ 0 st hst
+  cases hs1 : st.1 with
+  | some v =>
+    rw [hs1] at h
+    cases h
+    obtain ⟨j, hj, hvj, hcj⟩ := hloop.1 _ hs1
+    right
+    refine ⟨m.builders.toArray.toList[j], ?_, ?_⟩
+    · rw [hvj, Nat.zero_add]; simp
+    · simp only [Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq] at hcj
+      exact hcj
+  | none =>
+    rw [hs1] at h
+    left
+    exact (U64.toNat_ofNat? h).trans rfl
+
 end JauneConsensus.Facts.Gloas

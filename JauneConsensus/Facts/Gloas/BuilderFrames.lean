@@ -431,4 +431,116 @@ theorem b7_conservation_control (s : JauneConsensus.Gloas.BeaconState Preset.min
   · with_unfolding_all rfl
   · rw [hpre, hw]; decide
 
+
+/-! ## One builder request at one slot -/
+
+/-- With at least two slots per epoch the current epoch is below `FAR_FUTURE_EPOCH` (the
+`slotsPerEpoch` premise of `ValidJointG`), so `FAR_FUTURE_EPOCH <= epoch` never holds. -/
+theorem not_far_le_epoch (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {slot e : U64}
+    (h : computeEpochAtSlot P slot = .ok e) : ¬ FAR_FUTURE_EPOCH ≤ e := by
+  unfold computeEpochAtSlot at h
+  obtain ⟨d, hd, h⟩ := bind_eq_ok_iff.mp h
+  have hdn : d.toNat = P.SLOTS_PER_EPOCH := U64.toNat_ofNat? hd
+  have he : e.toNat = slot.toNat / d.toNat := U64.toNat_div? h
+  have hs := U64.toNat_lt slot
+  have hle : slot.toNat / P.SLOTS_PER_EPOCH ≤ slot.toNat / 2 :=
+    Nat.div_le_div_left hspe (by decide)
+  intro hf
+  rw [U64.le_iff, FAR_FUTURE_EPOCH, U64.toNat_max, he, hdn] at hf
+  omega
+
+/-- What one builder deposit request does at slot `i`: nothing, a top-up of `i` (classified so),
+or a registration at `i` (classified so), which needs `i` to be past the end or to hold an exited,
+swept builder. -/
+theorem processBuilderDepositRequest_at {ctx : Ctx} {st st' : JauneConsensus.Gloas.BeaconState P}
+    {r : JauneConsensus.Gloas.BuilderDepositRequest}
+    (h : JauneConsensus.Gloas.processBuilderDepositRequest ctx st r = .ok st') (i : Nat) :
+    st'.slot = st.slot ∧ st.builders.toArray.size ≤ st'.builders.toArray.size ∧
+    (st'.builders.toArray[i]? = st.builders.toArray[i]? ∨
+     (∃ c c' reset, st.builders.toArray[i]? = some c ∧ st'.builders.toArray[i]? = some c' ∧
+        classifyBuilderDeposit ctx.cfg ctx.blsActive st r = .ok (.topUp i r.amount reset) ∧
+        c'.pubkey = c.pubkey ∧ c'.balance.toNat = c.balance.toNat + r.amount.toNat ∧
+        (reset = false → c'.withdrawable_epoch = c.withdrawable_epoch) ∧
+        (reset = true ↔ c.withdrawable_epoch ≠ FAR_FUTURE_EPOCH ∧ c.balance = U64.zero)) ∨
+     (∃ addr e, classifyBuilderDeposit ctx.cfg ctx.blsActive st r = .ok (.register i r.amount) ∧
+        computeEpochAtSlot P st.slot = .ok e ∧
+        st'.builders.toArray[i]? = some (freshBuilder r.pubkey addr r.amount e) ∧
+        (∀ x ∈ st.builders.toArray, x.pubkey ≠ r.pubkey) ∧
+        (∀ c, st.builders.toArray[i]? = some c →
+          c.withdrawable_epoch ≤ e ∧ c.balance = U64.zero))) := by
+  have hslot : st'.slot = st.slot := by rw [(processBuilderDepositRequest_frame h).2.2.2.2.2]
+  have h0 := h
+  rw [processBuilderDepositRequest_eq] at h0
+  obtain ⟨o, hco, _⟩ := bind_eq_ok_iff.mp h0
+  obtain ⟨hpre, hbad, htop, hreg⟩ := classifyBuilderDeposit_effect hco h
+  obtain ⟨_, htopm, _, hregm⟩ := classifyBuilderDeposit_meaning hco
+  cases o with
+  | ignoredPrefix => have := hpre rfl; subst this; exact ⟨hslot, le_refl _, Or.inl rfl⟩
+  | ignoredBadSignature => have := hbad rfl; subst this; exact ⟨hslot, le_refl _, Or.inl rfl⟩
+  | topUp j a reset =>
+    obtain ⟨_, _, ha, hres⟩ := (htopm j a reset).mp rfl
+    subst ha
+    obtain ⟨c, c', hc, hc', hsz, hne, hpk, _, _, _, hbal, _, hres2, _⟩ := htop j r.amount reset rfl
+    refine ⟨hslot, le_of_eq hsz.symm, ?_⟩
+    by_cases hij : i = j
+    · subst hij
+      obtain ⟨b0, hb0, hr⟩ := hres
+      rw [hc] at hb0; cases hb0
+      exact Or.inr (Or.inl ⟨c, c', reset, hc, hc', hco, hpk, hbal, hres2, hr⟩)
+    · exact Or.inl (hne i hij)
+  | register j a =>
+    obtain ⟨_, hall, _, ha, idx, hidx, hidxj⟩ := (hregm j a).mp rfl
+    subst ha
+    obtain ⟨addr, e, _, he, hat, hsz, hne, _⟩ := hreg j r.amount rfl
+    refine ⟨hslot, hsz, ?_⟩
+    by_cases hij : i = j
+    · subst hij
+      refine Or.inr (Or.inr ⟨addr, e, hco, he, hat, hall, fun c hc => ?_⟩)
+      obtain ⟨e', he', hcase⟩ := getIndexForNewBuilder_spec hidx
+      have hee : e' = e := by
+        have : JauneConsensus.Gloas.getCurrentEpoch st = computeEpochAtSlot P st.slot := rfl
+        rw [this, he] at he'; cases he'; rfl
+      subst hee
+      rcases hcase with hend | ⟨b, hb, hw, hz⟩
+      · rw [← hidxj, hend] at hc; simp at hc
+      · rw [hidxj, hc] at hb; cases hb; exact ⟨hw, hz⟩
+    · exact Or.inl (hne i hij)
+
+/-- What one builder exit request does at slot `i`: nothing, or (classified `initiate i`, after
+the source check) `withdrawable_epoch := current_epoch + MIN_BUILDER_WITHDRAWABILITY_DELAY` on an
+active builder, whose `withdrawable_epoch` was therefore `FAR_FUTURE_EPOCH`. -/
+theorem processBuilderExitRequest_at {cfg : Config} {st st' : JauneConsensus.Gloas.BeaconState P}
+    {r : JauneConsensus.Gloas.BuilderExitRequest}
+    (h : JauneConsensus.Gloas.processBuilderExitRequest cfg st r = .ok st') (i : Nat) :
+    st'.slot = st.slot ∧ st'.builders.toArray.size = st.builders.toArray.size ∧
+    (st'.builders.toArray[i]? = st.builders.toArray[i]? ∨
+     ∃ c w, st.builders.toArray[i]? = some c ∧
+       st'.builders.toArray[i]? = some { c with withdrawable_epoch := w } ∧
+       classifyBuilderExit cfg st r = .ok (.initiate i) ∧
+       c.execution_address = r.source_address ∧ c.withdrawable_epoch = FAR_FUTURE_EPOCH) := by
+  have hm := (processBuilderExitRequest_frame h).2.2.2.2.2
+  have hslot : st'.slot = st.slot := by rw [hm]
+  have h0 := h
+  rw [processBuilderExitRequest_eq] at h0
+  obtain ⟨o, hco, _⟩ := bind_eq_ok_iff.mp h0
+  obtain ⟨hign, hini⟩ := classifyBuilderExit_effect hco h
+  cases o with
+  | initiate j =>
+    obtain ⟨c, e, w, hc, _, _, hc', hsz, hne, _⟩ := hini j rfl
+    refine ⟨hslot, hsz, ?_⟩
+    by_cases hij : i = j
+    · subst hij
+      obtain ⟨_, _, _, _, _, hmi, _⟩ := classifyBuilderExit_meaning hco
+      obtain ⟨b, bi, _, hb, _, hact, hsrc, _⟩ := (hmi i).mp rfl
+      rw [hc] at hb; cases hb
+      have hact' := hact
+      rw [isActiveBuilder_of_get (m := st) (bi := bi) (b := c) (by
+        rw [U64.toNat_ofNat? ‹U64.ofNat? i "BuilderIndex" = .ok bi›]; exact hc)] at hact'
+      simp only [Except.ok.injEq, Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq] at hact'
+      exact Or.inr ⟨c, w, hc, hc', hco, hsrc, hact'.2⟩
+    · exact Or.inl (hne i hij)
+  | _ =>
+    rw [hign (fun _ h => by cases h)]
+    exact ⟨rfl, rfl, Or.inl rfl⟩
+
 end JauneConsensus.Facts.Gloas
