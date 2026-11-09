@@ -1234,4 +1234,91 @@ theorem processExecutionPayloadBid_buildersEq (ctx : Ctx) (s : JauneConsensus.Gl
 
 end BidFrame
 
+
+/-! ## Withdrawals keep builder pubkeys and withdrawable epochs -/
+
+/-- Same number of builders, and each keeps its pubkey and `withdrawable_epoch` (balances may
+change). -/
+def BuildersPkWe (s s' : JauneConsensus.Gloas.BeaconState P) : Prop :=
+  s'.builders.toArray.size = s.builders.toArray.size ∧
+    ∀ j : Nat, (s'.builders.toArray[j]?).map (fun b => (b.pubkey, b.withdrawable_epoch)) =
+      (s.builders.toArray[j]?).map (fun b => (b.pubkey, b.withdrawable_epoch))
+
+/-- `BuildersPkWe` as a step relation. -/
+def pkWe : StepRel (JauneConsensus.Gloas.BeaconState P) where
+  R := BuildersPkWe
+  refl _ := ⟨rfl, fun _ => rfl⟩
+  trans h₁ h₂ := ⟨h₂.1.trans h₁.1, fun j => (h₂.2 j).trans (h₁.2 j)⟩
+
+theorem pkWe_of_eq {s s' : JauneConsensus.Gloas.BeaconState P} (h : s'.builders = s.builders) :
+    BuildersPkWe s s' := ⟨by rw [h], fun j => by rw [h]⟩
+
+theorem pkWe_of_modify {s : JauneConsensus.Gloas.BeaconState P} {i : Nat}
+    {g : JauneConsensus.Gloas.Builder → M JauneConsensus.Gloas.Builder} {site : String}
+    {ys : ProgressiveListR JauneConsensus.Gloas.Builder}
+    (h : s.builders.modify i g site = .ok ys)
+    (hg : ∀ b b', g b = .ok b' → b'.pubkey = b.pubkey ∧ b'.withdrawable_epoch = b.withdrawable_epoch) :
+    BuildersPkWe s { s with builders := ys } := by
+  unfold ProgressiveListS.modify at h
+  obtain ⟨v, hv, h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨v', hv', h⟩ := bind_eq_ok_iff.mp h
+  obtain ⟨h1, h2, h3⟩ := pl_set_ok h
+  refine ⟨h1, fun j => ?_⟩
+  by_cases hj : j = i
+  · subst hj
+    show (ys.toArray[j]?).map _ = _
+    rw [h2, pl_get_ok.mp hv]
+    obtain ⟨e1, e2⟩ := hg v v' hv'
+    simp [e1, e2]
+  · show (ys.toArray[j]?).map _ = _
+    rw [h3 j hj]
+
+section WithdrawalsFrame
+
+local macro_rules
+  | `(tactic| gstep_close) => `(tactic| exact (show BuildersPkWe _ _ from ⟨rfl, fun _ => rfl⟩))
+local macro_rules
+  | `(tactic| gstep_close) =>
+    `(tactic| exact pkWe_of_modify (by assumption) (fun b b' hb => by
+      obtain ⟨_, _, hb⟩ := bind_eq_ok_iff.mp hb; cases hb; exact ⟨rfl, rfl⟩))
+local macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (have hh := StepRel.of_ok (decreaseBalance_builderFrame _ _ _) $h; exact pkWe_of_eq hh.1))
+
+theorem applyWithdrawals_pkWe (s : JauneConsensus.Gloas.BeaconState P) (ws : Array Withdrawal) :
+    Ok (JauneConsensus.Gloas.applyWithdrawals s ws) (pkWe.R s) := by
+  unfold JauneConsensus.Gloas.applyWithdrawals; gvcg
+
+theorem updateNextWithdrawalIndex_pkWe (s : JauneConsensus.Gloas.BeaconState P) (ws : Array Withdrawal) :
+    Ok (JauneConsensus.Gloas.updateNextWithdrawalIndex s ws) (pkWe.R s) := by
+  unfold JauneConsensus.Gloas.updateNextWithdrawalIndex; gvcg
+
+theorem updateNextWithdrawalBuilderIndex_pkWe (s : JauneConsensus.Gloas.BeaconState P) (n : U64) :
+    Ok (JauneConsensus.Gloas.updateNextWithdrawalBuilderIndex s n) (pkWe.R s) := by
+  unfold JauneConsensus.Gloas.updateNextWithdrawalBuilderIndex; gvcg
+
+theorem updateNextWithdrawalValidatorIndex_pkWe (s : JauneConsensus.Gloas.BeaconState P)
+    (ws : Array Withdrawal) :
+    Ok (JauneConsensus.Gloas.updateNextWithdrawalValidatorIndex s ws) (pkWe.R s) := by
+  unfold JauneConsensus.Gloas.updateNextWithdrawalValidatorIndex; gvcg
+
+local macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (have hh := StepRel.of_ok (applyWithdrawals_pkWe _ _) $h; exact hh))
+local macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (have hh := StepRel.of_ok (updateNextWithdrawalIndex_pkWe _ _) $h; exact hh))
+local macro_rules
+  | `(tactic| gstep_of $h) =>
+    `(tactic| (have hh := StepRel.of_ok (updateNextWithdrawalBuilderIndex_pkWe _ _) $h; exact hh))
+
+/-- `process_withdrawals` (Gloas, CL:2042) keeps every builder's pubkey and
+`withdrawable_epoch` (it debits balances only). -/
+theorem processWithdrawals_pkWe (s : JauneConsensus.Gloas.BeaconState P) :
+    Ok (JauneConsensus.Gloas.processWithdrawals s) (pkWe.R s) := by
+  unfold JauneConsensus.Gloas.processWithdrawals; gvcg
+  all_goals exact StepRel.ok_rebase pkWe (by first | exact pkWe.refl _ | exact ⟨rfl, fun _ => rfl⟩) (updateNextWithdrawalValidatorIndex_pkWe _ _)
+
+end WithdrawalsFrame
+
 end JauneConsensus.Facts.Gloas
