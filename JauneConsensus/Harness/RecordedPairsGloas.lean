@@ -158,13 +158,15 @@ def flipFirstBuilderRequest (r : Gloas.ExecutionRequests) :
     | none => .error "no builder request to mutate"
 
 /-- Where the engine's own `blobVersionedHashesOf` refuses the payload's transactions, if it
-does: it decodes every transaction as a typed envelope (`Bytes.toExTx`), so a legacy (RLP list)
-transaction is refused. Reported, not gated: no header field reads it. -/
+does. Since SEAMFIX (`Engine.lean` `payloadTx`/`payloadTxDecode`) it decodes legacy (RLP list)
+transactions through the legacy route, so on the recorded pairs this note no longer fires; it
+stays as a diagnostic for any transaction neither route decodes. Reported, not gated: no header
+field reads it. -/
 def engineTxDecodeNote (payload : Gloas.ExecutionPayload MP) : Option String :=
   match blobVersionedHashesOf payload.txBytes with
   | .ok _ => none
   | .error e =>
-    let bad := payload.txBytes.zipIdx.filter fun (t, _) => !(Bytes.toExTx t).isOk
+    let bad := payload.txBytes.zipIdx.filter fun (t, _) => !(payloadTxDecode t).isOk
     let at_ := bad.map fun (t, i) => s!"{i} (first byte 0x{(t.headD 0).toHex}, {t.length} bytes)"
     some s!"blobVersionedHashesOf refuses transaction(s) {at_}: {repr e}"
 
