@@ -7,15 +7,19 @@ import JauneConsensus.GloasAccessors
 payload") and `verify_execution_payload_envelope` (`specs/gloas/fork-choice.md`) of
 `ethereum/consensus-specs` `v1.7.0-beta.4`, the check the cross-layer seam consumes.
 
-* **BLS is real.** The signature is checked with `Crypto/BLSSig.lean`'s `verify` (the spec's
-  `bls.Verify`), with no switch: `verifyExecutionPayloadEnvelopeSignature_eq_blsVerify` states it
-  is `blsVerify true`.
+* **BLS is switched, real when on.** The `B` forms (`verifyExecutionPayloadEnvelopeSignatureB`,
+  `verifyExecutionPayloadEnvelopeB`, `EnvelopeChecksB`) take the pyspec `bls_active` switch and
+  check the signature with `Signing.lean`'s `blsVerify bls` (`Crypto/BLSSig.lean`'s `verify`, the
+  spec's `bls.Verify`, when `bls = true`; accept when `bls = false`, as the Electra/Fulu switch
+  does). The unswitched names are the `B` forms at `true`, by definition:
+  `verifyExecutionPayloadEnvelopeSignature_eq_blsVerify` states the unswitched check is
+  `blsVerify true`.
 * **The execution engine is a parameter**, `engine : NewPayloadRequest P → Bool`, standing for
   `execution_engine.verify_and_notify_new_payload`. It receives the spec's own Gloas
   `NewPayloadRequest` container. Wiring it to Jaune's Amsterdam execution is the seam's (G2) job.
-* **One `require` per spec `assert`, in spec order**, and `EnvelopeChecks` has one named field
-  per `assert`, in the same order; `verifyExecutionPayloadEnvelope_ok_iff` says the function
-  succeeds exactly when every field holds.
+* **One `require` per spec `assert`, in spec order**, and `EnvelopeChecksB` has one named field
+  per `assert`, in the same order; `verifyExecutionPayloadEnvelopeB_ok_iff` says the function
+  succeeds exactly when every field holds (`verifyExecutionPayloadEnvelope_ok_iff` at `true`).
 
 **Roots and lists.** The spec compares the withdrawals and the execution requests only through
 `hash_tree_root`. `WithdrawalsMatchExpected` is the list form of the withdrawals check, and
@@ -34,16 +38,34 @@ variable {P : Preset}
 
 /-! ## `verify_execution_payload_envelope_signature` -/
 
-/-- `verify_execution_payload_envelope_signature(state, signed_envelope)`: the envelope's
-signing root under `get_domain(state, DOMAIN_BEACON_BUILDER)`, verified with `bls.Verify`
-against the self-build proposer's validator key or the builder's key. Raises (`Reject.index`)
-when the index is out of range. -/
-def verifyExecutionPayloadEnvelopeSignature (state : BeaconState P)
+/-- `verify_execution_payload_envelope_signature(state, signed_envelope)` under the BLS switch
+`bls`: the envelope's signing root under `get_domain(state, DOMAIN_BEACON_BUILDER)`, verified
+with `blsVerify bls` (`bls.Verify` when `bls = true`) against the self-build proposer's validator
+key or the builder's key. Raises (`Reject.index`) when the index is out of range, whatever `bls`
+is. -/
+def verifyExecutionPayloadEnvelopeSignatureB (bls : Bool) (state : BeaconState P)
     (signedEnvelope : SignedExecutionPayloadEnvelope P) : M Bool := do
   let pubkey ← builderSigningPubkey state signedEnvelope.message.builder_index
   let signingRoot :=
     computeSigningRoot signedEnvelope.message (← getDomain state DOMAIN_BEACON_BUILDER)
-  pure (verify pubkey.toArray.toList signingRoot.toBytes signedEnvelope.signature.toArray.toList)
+  pure (blsVerify bls pubkey signingRoot signedEnvelope.signature)
+
+/-- `verify_execution_payload_envelope_signature(state, signed_envelope)` with real BLS: the
+switched check at `bls = true`. -/
+def verifyExecutionPayloadEnvelopeSignature (state : BeaconState P)
+    (signedEnvelope : SignedExecutionPayloadEnvelope P) : M Bool :=
+  verifyExecutionPayloadEnvelopeSignatureB true state signedEnvelope
+
+/-- With the switch **off**, the signature check (the `EnvelopeChecksB.signature` conjunct at
+`bls = false`) holds whenever the key lookup and the domain succeed; the spec's own raises
+remain. -/
+theorem verifyExecutionPayloadEnvelopeSignatureB_false {state : BeaconState P}
+    {signedEnvelope : SignedExecutionPayloadEnvelope P} {pubkey : BLSPubkey} {domain : Domain}
+    (hpk : builderSigningPubkey state signedEnvelope.message.builder_index = .ok pubkey)
+    (hdom : getDomain state DOMAIN_BEACON_BUILDER = .ok domain) :
+    verifyExecutionPayloadEnvelopeSignatureB false state signedEnvelope = .ok true := by
+  simp [verifyExecutionPayloadEnvelopeSignatureB, hpk, hdom, blsVerify]
+  rfl
 
 /-- The signature check is the switched `blsVerify` with the switch **on**. -/
 theorem verifyExecutionPayloadEnvelopeSignature_eq_blsVerify (state : BeaconState P)
@@ -75,14 +97,17 @@ def envelopeNewPayloadRequest (state : BeaconState P)
 
 /-- `verify_execution_payload_envelope(state, signed_envelope, execution_engine)`
 (`specs/gloas/fork-choice.md`), with `engine` for
-`execution_engine.verify_and_notify_new_payload`. One `require` per `assert`, in spec order. -/
-def verifyExecutionPayloadEnvelope (cfg : Config) (engine : NewPayloadRequest P → Bool)
-    (state : BeaconState P) (signedEnvelope : SignedExecutionPayloadEnvelope P) : M Unit := do
+`execution_engine.verify_and_notify_new_payload`, under the BLS switch `bls`. One `require` per
+`assert`, in spec order. -/
+def verifyExecutionPayloadEnvelopeB (bls : Bool) (cfg : Config)
+    (engine : NewPayloadRequest P → Bool) (state : BeaconState P)
+    (signedEnvelope : SignedExecutionPayloadEnvelope P) : M Unit := do
   let site := "verify_execution_payload_envelope"
   let envelope := signedEnvelope.message
   let payload := envelope.payload
   -- Verify signature
-  require (← verifyExecutionPayloadEnvelopeSignature state signedEnvelope) s!"{site}: signature"
+  require (← verifyExecutionPayloadEnvelopeSignatureB bls state signedEnvelope)
+    s!"{site}: signature"
   -- Verify consistency with the beacon block
   require (envelope.beacon_block_root == latestBlockRoot state) s!"{site}: beacon_block_root"
   require (envelope.parent_beacon_block_root == state.latest_block_header.parent_root)
@@ -104,13 +129,19 @@ def verifyExecutionPayloadEnvelope (cfg : Config) (engine : NewPayloadRequest P 
   -- Compute versioned hashes, then the engine
   require (engine (← envelopeNewPayloadRequest state signedEnvelope)) s!"{site}: execution engine"
 
+/-- `verify_execution_payload_envelope` with real BLS: the switched check at `bls = true`. -/
+def verifyExecutionPayloadEnvelope (cfg : Config) (engine : NewPayloadRequest P → Bool)
+    (state : BeaconState P) (signedEnvelope : SignedExecutionPayloadEnvelope P) : M Unit :=
+  verifyExecutionPayloadEnvelopeB true cfg engine state signedEnvelope
+
 /-- The named conjuncts of `verify_execution_payload_envelope`, one per spec `assert`, in spec
 order. The two root checks are the spec's (`hash_tree_root` comparisons); their list forms are
-`WithdrawalsMatchExpected` and `ExecutionRequests.lists`. -/
-structure EnvelopeChecks (cfg : Config) (engine : NewPayloadRequest P → Bool)
+`WithdrawalsMatchExpected` and `ExecutionRequests.lists`. Only `signature` depends on the BLS
+switch `bls`. -/
+structure EnvelopeChecksB (bls : Bool) (cfg : Config) (engine : NewPayloadRequest P → Bool)
     (state : BeaconState P) (signedEnvelope : SignedExecutionPayloadEnvelope P) : Prop where
   /-- `assert verify_execution_payload_envelope_signature(state, signed_envelope)`. -/
-  signature : verifyExecutionPayloadEnvelopeSignature state signedEnvelope = .ok true
+  signature : verifyExecutionPayloadEnvelopeSignatureB bls state signedEnvelope = .ok true
   /-- `assert envelope.beacon_block_root == hash_tree_root(header)`. -/
   beaconBlockRoot : signedEnvelope.message.beacon_block_root = latestBlockRoot state
   /-- `assert envelope.parent_beacon_block_root == state.latest_block_header.parent_root`. -/
@@ -148,6 +179,11 @@ structure EnvelopeChecks (cfg : Config) (engine : NewPayloadRequest P → Bool)
   versioned hashes computed (which raises past `MAX_BLOB_COMMITMENTS_PER_BLOCK`). -/
   engine : ∃ req, envelopeNewPayloadRequest state signedEnvelope = .ok req ∧ engine req = true
 
+/-- The named conjuncts with real BLS: `EnvelopeChecksB` at `bls = true`. -/
+abbrev EnvelopeChecks (cfg : Config) (engine : NewPayloadRequest P → Bool)
+    (state : BeaconState P) (signedEnvelope : SignedExecutionPayloadEnvelope P) : Prop :=
+  EnvelopeChecksB true cfg engine state signedEnvelope
+
 /-! ## The characterization -/
 
 /-- A `require` succeeds iff its condition holds. -/
@@ -161,18 +197,28 @@ private theorem require_eq_ok_iff {c : Bool} {site : String} {u : Unit} :
 private theorem unit_exists_iff {p : Unit → Prop} : (∃ u : Unit, p u) ↔ p () :=
   ⟨fun ⟨(), h⟩ => h, fun h => ⟨(), h⟩⟩
 
-/-- `verify_execution_payload_envelope` succeeds exactly when every named conjunct holds. -/
-theorem verifyExecutionPayloadEnvelope_ok_iff {cfg : Config} {engine : NewPayloadRequest P → Bool}
-    {state : BeaconState P} {signedEnvelope : SignedExecutionPayloadEnvelope P} :
-    verifyExecutionPayloadEnvelope cfg engine state signedEnvelope = .ok () ↔
-      EnvelopeChecks cfg engine state signedEnvelope := by
-  simp only [verifyExecutionPayloadEnvelope, Except.bind_eq_ok_iff, require_eq_ok_iff,
+/-- `verify_execution_payload_envelope` under the switch `bls` succeeds exactly when every named
+conjunct holds. -/
+theorem verifyExecutionPayloadEnvelopeB_ok_iff {bls : Bool} {cfg : Config}
+    {engine : NewPayloadRequest P → Bool} {state : BeaconState P}
+    {signedEnvelope : SignedExecutionPayloadEnvelope P} :
+    verifyExecutionPayloadEnvelopeB bls cfg engine state signedEnvelope = .ok () ↔
+      EnvelopeChecksB bls cfg engine state signedEnvelope := by
+  simp only [verifyExecutionPayloadEnvelopeB, Except.bind_eq_ok_iff, require_eq_ok_iff,
     unit_exists_iff, beq_iff_eq]
   constructor
   · rintro ⟨b, hsig, rfl, h1, h2, h3, h4, h5, h6, h7, h8, h9, t, ht, rfl, h10, heng⟩
     exact ⟨hsig, h1, h2, h3, h4, h5, h6, h7, h8, h9, ht, h10, heng⟩
   · rintro ⟨hsig, h1, h2, h3, h4, h5, h6, h7, h8, h9, ht, h10, heng⟩
     exact ⟨true, hsig, rfl, h1, h2, h3, h4, h5, h6, h7, h8, h9, _, ht, rfl, h10, heng⟩
+
+/-- `verify_execution_payload_envelope` with real BLS succeeds exactly when every named conjunct
+holds. -/
+theorem verifyExecutionPayloadEnvelope_ok_iff {cfg : Config} {engine : NewPayloadRequest P → Bool}
+    {state : BeaconState P} {signedEnvelope : SignedExecutionPayloadEnvelope P} :
+    verifyExecutionPayloadEnvelope cfg engine state signedEnvelope = .ok () ↔
+      EnvelopeChecks cfg engine state signedEnvelope :=
+  verifyExecutionPayloadEnvelopeB_ok_iff
 
 /-! ## List-level predicates for the seam -/
 
@@ -220,6 +266,16 @@ theorem executionRequestsRoot_of_lists_eq {state : BeaconState P}
 /-! ## Rejections (kernel-checked controls for the seam) -/
 
 /-- An envelope whose withdrawals root differs from that of `payload_expected_withdrawals` is
+rejected, under either setting of the BLS switch. -/
+theorem verifyExecutionPayloadEnvelopeB_rejects_of_withdrawalsRoot_ne {bls : Bool} {cfg : Config}
+    {engine : NewPayloadRequest P → Bool} {state : BeaconState P}
+    {signedEnvelope : SignedExecutionPayloadEnvelope P}
+    (hne : Ssz.hashTreeRoot signedEnvelope.message.payload.withdrawals ≠
+      Ssz.hashTreeRoot state.payload_expected_withdrawals) :
+    verifyExecutionPayloadEnvelopeB bls cfg engine state signedEnvelope ≠ .ok () := fun h =>
+  hne (verifyExecutionPayloadEnvelopeB_ok_iff.mp h).withdrawalsRoot
+
+/-- An envelope whose withdrawals root differs from that of `payload_expected_withdrawals` is
 rejected. -/
 theorem verifyExecutionPayloadEnvelope_rejects_of_withdrawalsRoot_ne {cfg : Config}
     {engine : NewPayloadRequest P → Bool} {state : BeaconState P}
@@ -238,6 +294,16 @@ theorem withdrawalsRoot_eq_of_verifyExecutionPayloadEnvelope_ok {cfg : Config}
     Ssz.hashTreeRoot signedEnvelope.message.payload.withdrawals =
       Ssz.hashTreeRoot state.payload_expected_withdrawals :=
   (verifyExecutionPayloadEnvelope_ok_iff.mp h).withdrawalsRoot
+
+/-- An envelope whose execution requests root differs from the committed bid's
+`execution_requests_root` is rejected, under either setting of the BLS switch. -/
+theorem verifyExecutionPayloadEnvelopeB_rejects_of_requestsRoot_ne {bls : Bool} {cfg : Config}
+    {engine : NewPayloadRequest P → Bool} {state : BeaconState P}
+    {signedEnvelope : SignedExecutionPayloadEnvelope P}
+    (hne : Ssz.hashTreeRoot signedEnvelope.message.execution_requests ≠
+      state.latest_execution_payload_bid.execution_requests_root) :
+    verifyExecutionPayloadEnvelopeB bls cfg engine state signedEnvelope ≠ .ok () := fun h =>
+  hne (verifyExecutionPayloadEnvelopeB_ok_iff.mp h).executionRequestsRoot
 
 /-- An envelope whose execution requests root differs from the committed bid's
 `execution_requests_root` is rejected. -/
