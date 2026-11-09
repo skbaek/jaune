@@ -838,4 +838,312 @@ theorem classifyBuilderDeposit_bls_indep {ccfg : Config} {m : JauneConsensus.Glo
   unfold classifyBuilderDeposit
   rw [hs]
 
+
+/-! ## B1: what a created builder record carries -/
+
+theorem head_of_isBuilderWithdrawalCredential {wc : Bytes32}
+    (h : JauneConsensus.Gloas.isBuilderWithdrawalCredential wc = true) :
+    wc.toBytes.head? = some 0xB0 := by
+  unfold JauneConsensus.Gloas.isBuilderWithdrawalCredential credentialPrefix at h
+  split at h
+  · rename_i b rest hb
+    rw [hb]
+    have := beq_iff_eq.mp h
+    rw [this]
+    rfl
+  · exact absurd h (by decide)
+
+/-- **B1, function level.** A builder record that `process_builder_deposit_request` creates
+(`BuilderCreated`: the pubkey at index `i` changed, by append or by reuse) comes from a request
+with `0xB0` credentials and a new pubkey, whose signature verifies under the real BLS
+(`bls = true`) for `DOMAIN_BUILDER_DEPOSIT` (CL:2268-2284), classified `register i`, and the record
+is the fresh one: `execution_address = credentials[12:]`, `balance = amount`,
+`withdrawable_epoch = FAR_FUTURE_EPOCH`. -/
+theorem processBuilderDepositRequest_created {ctx : Ctx} (hbls : ctx.blsActive = true)
+    {m m' : JauneConsensus.Gloas.BeaconState P} {r : JauneConsensus.Gloas.BuilderDepositRequest}
+    (h : JauneConsensus.Gloas.processBuilderDepositRequest ctx m r = .ok m') {i : Nat}
+    (hcr : BuilderCreated m m' i) :
+    r.withdrawal_credentials.toBytes.head? = some 0xB0 ∧
+    (∀ b ∈ m.builders.toArray, b.pubkey ≠ r.pubkey) ∧
+    (∃ dom, builderDepositDomain ctx.cfg = some dom ∧
+      blsVerify true r.pubkey (computeSigningRoot (builderDepositMessage r) dom) r.signature = true) ∧
+    classifyBuilderDeposit ctx.cfg true m r = .ok (.register i r.amount) ∧
+    ∃ addr e, Jaune.Bytes.toAdr? (r.withdrawal_credentials.toBytes.drop 12) = some addr ∧
+      computeEpochAtSlot P m.slot = .ok e ∧
+      m'.builders.toArray[i]? = some (freshBuilder r.pubkey addr r.amount e) := by
+  have h0 := h
+  rw [processBuilderDepositRequest_eq] at h0
+  obtain ⟨o, hco, _⟩ := bind_eq_ok_iff.mp h0
+  obtain ⟨hpre, hbad, htop, hreg⟩ := classifyBuilderDeposit_effect hco h
+  obtain ⟨hcr1, hcr2⟩ := hcr
+  cases o with
+  | ignoredPrefix => exact absurd (by rw [hpre rfl]) hcr2
+  | ignoredBadSignature => exact absurd (by rw [hbad rfl]) hcr2
+  | topUp j a reset =>
+    obtain ⟨b, b', hb, hb', _, hne, hpk, _⟩ := htop j a reset rfl
+    by_cases hij : i = j
+    · subst hij
+      exact absurd (by rw [hb, hb']; simp [hpk]) hcr2
+    · exact absurd (by rw [hne i hij]) hcr2
+  | register j a =>
+    obtain ⟨addr, e, haddr, he, hat, _, hne, _⟩ := hreg j a rfl
+    have hij : i = j := by
+      by_contra hij
+      exact hcr2 (by rw [hne i hij])
+    subst hij
+    obtain ⟨_, _, _, hm⟩ := classifyBuilderDeposit_meaning hco
+    obtain ⟨hp, hall, ⟨dom, hd, hv⟩, ha, _⟩ := (hm i a).mp rfl
+    subst ha
+    rw [hbls] at hv hco
+    exact ⟨head_of_isBuilderWithdrawalCredential hp, hall, ⟨dom, hd, hv⟩, hco, addr, e, haddr, he, hat⟩
+
+/-! ## B1 controls -/
+
+/-- B1 prefix control, real side: a request whose credentials do not carry the builder prefix is
+ignored whatever its pubkey (known or new) and signature: the state is unchanged. -/
+theorem processBuilderDepositRequest_ignores_prefix {ctx : Ctx}
+    {m : JauneConsensus.Gloas.BeaconState P} {r : JauneConsensus.Gloas.BuilderDepositRequest}
+    (hp : JauneConsensus.Gloas.isBuilderWithdrawalCredential r.withdrawal_credentials = false) :
+    JauneConsensus.Gloas.processBuilderDepositRequest ctx m r = .ok m := by
+  unfold JauneConsensus.Gloas.processBuilderDepositRequest
+  simp only [hp, Bool.not_false, ↓reduceIte]
+  rfl
+
+/-- A signature whose first byte is `0x00` has the compression bit clear, so
+`signature_to_point` rejects it before any pairing (`Crypto/Codec.lean`). -/
+theorem blsVerify_true_of_head_zero (pk : BLSPubkey) (msg : Root) (sig : BLSSignature)
+    (h0 : sig.toArray[0]? = some 0) : blsVerify true pk msg sig = false := by
+  have hl : sig.toArray.toList.length = 96 := by simp [sig.size_eq]
+  obtain ⟨t, ht⟩ : ∃ t, sig.toArray.toList = 0 :: t := by
+    cases hs : sig.toArray.toList with
+    | nil => rw [hs] at hl; cases hl
+    | cons x t =>
+      refine ⟨t, ?_⟩
+      have : sig.toArray.toList[0]? = some 0 := by simpa using h0
+      rw [hs] at this
+      simp at this
+      rw [this]
+  have hl' : t.length = 95 := by rw [ht] at hl; simpa using hl
+  have hsp : signatureToPoint (0 :: t) = .error "G2 signature must be compressed" := by
+    simp [signatureToPoint, hl']
+    rfl
+  unfold blsVerify verify coreVerify
+  rw [ht, hsp]
+  rfl
+
+/-- B1 signature control, real side: at `bls = true`, a new-pubkey `0xB0` request whose signature
+starts `0x00` (a corrupted signature) is ignored and creates no record. -/
+theorem processBuilderDepositRequest_ignores_corrupted {ctx : Ctx} (hbls : ctx.blsActive = true)
+    {m : JauneConsensus.Gloas.BeaconState P} {r : JauneConsensus.Gloas.BuilderDepositRequest}
+    (hnew : ∀ b ∈ m.builders.toArray, b.pubkey ≠ r.pubkey)
+    (h0 : r.signature.toArray[0]? = some 0) :
+    ∀ m', JauneConsensus.Gloas.processBuilderDepositRequest ctx m r = .ok m' → m' = m := by
+  intro m' h
+  have h0' := h
+  rw [processBuilderDepositRequest_eq] at h0'
+  obtain ⟨o, hco, _⟩ := bind_eq_ok_iff.mp h0'
+  obtain ⟨hpre, hbad, htop, hreg⟩ := classifyBuilderDeposit_effect hco h
+  obtain ⟨_, htopm, _, hregm⟩ := classifyBuilderDeposit_meaning hco
+  cases o with
+  | ignoredPrefix => exact hpre rfl
+  | ignoredBadSignature => exact hbad rfl
+  | topUp j a reset =>
+    obtain ⟨_, hfm, _⟩ := (htopm j a reset).mp rfl
+    rw [firstMatch_none_iff.mpr hnew] at hfm; cases hfm
+  | register j a =>
+    obtain ⟨_, _, ⟨dom, _, hv⟩, _⟩ := (hregm j a).mp rfl
+    rw [hbls, blsVerify_true_of_head_zero _ _ _ h0] at hv
+    cases hv
+
+
+/-! ## Controls on closed minimal states (B1, B3)
+
+Each mutant is a copy of the real function with one check removed, kept here and never on the
+real path. On a closed minimal state (every field the functions read is fixed; the rest of the
+state is an arbitrary `s`), the real function leaves the state unchanged while the mutant creates
+a record (B1) or initiates an exit (B3), so the mutant falsifies the B1/B3 statements that the
+real function satisfies (`processBuilderDepositRequest_created`, `classifyBuilderExit_meaning`). -/
+
+theorem builderCreated_of_none_some {st st' : JauneConsensus.Gloas.BeaconState P} {i : Nat}
+    {b : JauneConsensus.Gloas.Builder} (h : st.builders.toArray[i]? = none)
+    (h' : st'.builders.toArray[i]? = some b) : BuilderCreated st st' i := by
+  refine ⟨by rw [h']; rfl, ?_⟩
+  rw [h, h']
+  simp
+
+/-- A 48-byte zero pubkey. -/
+def ctrlPk : BLSPubkey := ⟨Array.replicate 48 0, by simp⟩
+
+/-- A 96-byte zero signature: its compression bit is clear (a corrupted signature). -/
+def ctrlSig : BLSSignature := ⟨Array.replicate 96 0, by simp⟩
+
+/-- One registered builder: pubkey `ctrlPk`, execution address zero, deposited at epoch 0,
+not exiting. -/
+def ctrlBuilder : JauneConsensus.Gloas.Builder :=
+  freshBuilder ctrlPk JauneConsensus.Gloas.zeroAddress U64.zero U64.zero
+
+/-- The B3 control state: slot 0, finalized epoch 1 (so `ctrlBuilder` is active), one builder,
+no pending builder payments or withdrawals. -/
+def ctrlExitState (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
+    JauneConsensus.Gloas.BeaconState Preset.minimal :=
+  { s with
+    slot := U64.zero
+    finalized_checkpoint := { epoch := U64.one, root := s.finalized_checkpoint.root }
+    builders := ⟨#[ctrlBuilder]⟩
+    builder_pending_payments :=
+      ⟨Array.replicate 16 JauneConsensus.Gloas.BuilderPendingPayment.empty, by
+        rw [Array.size_replicate]; rfl⟩
+    builder_pending_withdrawals := ⟨#[]⟩ }
+
+/-- An exit request for `ctrlBuilder` from another address. -/
+def ctrlExitRequest : JauneConsensus.Gloas.BuilderExitRequest :=
+  { source_address := ⟨0, 0, 1⟩, pubkey := ctrlPk }
+
+/-- **B3 mutant**: `process_builder_exit_request` without the
+`builder.execution_address != request.source_address` check (CL:2378-2379). -/
+def processBuilderExitRequestNoSource (cfg : Config) (state : JauneConsensus.Gloas.BeaconState P)
+    (request : JauneConsensus.Gloas.BuilderExitRequest) : M (JauneConsensus.Gloas.BeaconState P) := do
+  let some i := state.builders.toArray.findIdx? (·.pubkey == request.pubkey) | return state
+  let builderIndex ← U64.ofNat? i "BuilderIndex"
+  let _builder ← state.builders.get i "process_builder_exit_request"
+  if !(← JauneConsensus.Gloas.isActiveBuilder state builderIndex) then return state
+  if (← JauneConsensus.Gloas.getPendingBalanceToWithdrawForBuilder state builderIndex) != U64.zero then
+    return state
+  JauneConsensus.Gloas.initiateBuilderExit cfg state builderIndex
+
+theorem ctrlExit_findIdx (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
+    (ctrlExitState s).builders.toArray.findIdx? (·.pubkey == ctrlExitRequest.pubkey) = some 0 := by
+  rw [Array.findIdx?_eq_some_iff_getElem]
+  exact ⟨by simp [ctrlExitState], pubkey_beq_iff.mpr rfl, fun j hj => absurd hj (Nat.not_lt_zero _)⟩
+
+theorem ctrlExit_t1 (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
+    JauneConsensus.Gloas.getPendingBalanceToWithdrawForBuilder (ctrlExitState s) U64.zero =
+      .ok U64.zero := rfl
+theorem ctrlExit_t2 (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
+    JauneConsensus.Gloas.getCurrentEpoch (ctrlExitState s) = .ok U64.zero := by
+  with_unfolding_all rfl
+theorem ctrlExit_t4 (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
+    JauneConsensus.Gloas.initiateBuilderExit Config.minimal (ctrlExitState s) U64.zero =
+      .ok { ctrlExitState s with
+      builders := ⟨#[{ ctrlBuilder with withdrawable_epoch := U64.lit 2 }]⟩ } := by
+  with_unfolding_all rfl
+
+/-- **B3 control.** On the closed state, the real function classifies the request `wrongSource`
+and leaves the state unchanged; the mutant without the source check initiates the exit
+(`ExitInitiated` at builder 0). -/
+theorem b3_control (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
+    classifyBuilderExit Config.minimal (ctrlExitState s) ctrlExitRequest = .ok .wrongSource ∧
+    JauneConsensus.Gloas.processBuilderExitRequest Config.minimal (ctrlExitState s) ctrlExitRequest =
+      .ok (ctrlExitState s) ∧
+    ¬ ExitInitiated (ctrlExitState s) (ctrlExitState s) 0 ∧
+    ∃ s', processBuilderExitRequestNoSource Config.minimal (ctrlExitState s) ctrlExitRequest =
+      .ok s' ∧ ExitInitiated (ctrlExitState s) s' 0 := by
+  have hc : classifyBuilderExit Config.minimal (ctrlExitState s) ctrlExitRequest = .ok .wrongSource := by
+    unfold classifyBuilderExit firstMatch
+    rw [ctrlExit_findIdx]
+    rfl
+  refine ⟨hc, ?_, ?_, ?_⟩
+  · rw [processBuilderExitRequest_eq, hc]
+    rfl
+  · rintro ⟨b, b', hb, hb', _, hfar, hne⟩
+    rw [hb] at hb'; cases hb'
+    exact hne hfar
+  · refine ⟨{ ctrlExitState s with
+      builders := ⟨#[{ ctrlBuilder with withdrawable_epoch := U64.lit 2 }]⟩ }, ?_, ?_⟩
+    · unfold processBuilderExitRequestNoSource
+      rw [ctrlExit_findIdx]
+      simp only [show U64.ofNat? 0 "BuilderIndex" = .ok U64.zero from rfl, bind, Except.bind,
+        show (ctrlExitState s).builders.get 0 "process_builder_exit_request" = .ok ctrlBuilder
+          from rfl,
+        show JauneConsensus.Gloas.isActiveBuilder (ctrlExitState s) U64.zero = .ok true from rfl,
+        ctrlExit_t1, ctrlExit_t4, Bool.not_true, bne_self_eq_false, Bool.false_eq_true,
+        ↓reduceIte]
+    · exact ⟨ctrlBuilder, { ctrlBuilder with withdrawable_epoch := U64.lit 2 }, rfl, rfl, rfl, rfl,
+      by decide⟩
+
+/-- The B1 control state: slot 0, no builders. -/
+def ctrlEmptyState (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
+    JauneConsensus.Gloas.BeaconState Preset.minimal :=
+  { s with slot := U64.zero, builders := ⟨#[]⟩ }
+
+theorem ctrlEmpty_findIdx (s : JauneConsensus.Gloas.BeaconState Preset.minimal) (pk : BLSPubkey) :
+    (ctrlEmptyState s).builders.toArray.findIdx? (·.pubkey == pk) = none := by
+  rw [Array.findIdx?_eq_none_iff]
+  intro x hx
+  simp [ctrlEmptyState] at hx
+
+/-- A deposit with `0x00` credentials (not the builder prefix). -/
+def ctrlPrefixRequest : JauneConsensus.Gloas.BuilderDepositRequest :=
+  { pubkey := ctrlPk, withdrawal_credentials := 0, amount := U64.one, signature := ctrlSig }
+
+/-- A `0xB0` deposit for a new pubkey with a corrupted signature. -/
+def ctrlCorruptRequest : JauneConsensus.Gloas.BuilderDepositRequest :=
+  { pubkey := ctrlPk, withdrawal_credentials := Jaune.Bytes.toB256 (0xB0 :: List.replicate 31 0),
+    amount := U64.one, signature := ctrlSig }
+
+/-- **B1 mutant (prefix)**: `process_builder_deposit_request` without the credential-prefix check
+(CL:2336-2337). -/
+def processBuilderDepositRequestNoPrefix (ctx : Ctx) (state : JauneConsensus.Gloas.BeaconState P)
+    (request : JauneConsensus.Gloas.BuilderDepositRequest) : M (JauneConsensus.Gloas.BeaconState P) := do
+  match state.builders.toArray.findIdx? (·.pubkey == request.pubkey) with
+  | none =>
+    if ← JauneConsensus.Gloas.isValidBuilderDepositSignature ctx request then
+      JauneConsensus.Gloas.addBuilderToRegistry state request.pubkey
+        JauneConsensus.Gloas.PAYLOAD_BUILDER_VERSION
+        (← JauneConsensus.Gloas.addressOfCredentials request.withdrawal_credentials) request.amount
+        state.slot
+    else pure state
+  | some i => topUpBuilder ctx.cfg state i request.amount
+
+/-- **B1 mutant (signature)**: `process_builder_deposit_request` without
+`is_valid_builder_deposit_signature` (CL:2340). -/
+def processBuilderDepositRequestNoSignature (ctx : Ctx)
+    (state : JauneConsensus.Gloas.BeaconState P) (request : JauneConsensus.Gloas.BuilderDepositRequest) :
+    M (JauneConsensus.Gloas.BeaconState P) := do
+  if !JauneConsensus.Gloas.isBuilderWithdrawalCredential request.withdrawal_credentials then
+    return state
+  match state.builders.toArray.findIdx? (·.pubkey == request.pubkey) with
+  | none =>
+    JauneConsensus.Gloas.addBuilderToRegistry state request.pubkey
+      JauneConsensus.Gloas.PAYLOAD_BUILDER_VERSION
+      (← JauneConsensus.Gloas.addressOfCredentials request.withdrawal_credentials) request.amount
+      state.slot
+  | some i => topUpBuilder ctx.cfg state i request.amount
+
+/-- **B1 prefix control.** A `0x00`-credential deposit for a new pubkey, with the BLS switch off so
+that the signature check passes: the real function ignores it; the mutant without the prefix
+check creates builder 0, whose credentials lack `0xB0`. -/
+theorem b1_prefix_control (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
+    JauneConsensus.Gloas.isBuilderWithdrawalCredential ctrlPrefixRequest.withdrawal_credentials = false ∧
+    JauneConsensus.Gloas.processBuilderDepositRequest { cfg := Config.minimal, blsActive := false }
+      (ctrlEmptyState s) ctrlPrefixRequest = .ok (ctrlEmptyState s) ∧
+    ∃ s', processBuilderDepositRequestNoPrefix { cfg := Config.minimal, blsActive := false }
+      (ctrlEmptyState s) ctrlPrefixRequest = .ok s' ∧ BuilderCreated (ctrlEmptyState s) s' 0 := by
+  have hp : JauneConsensus.Gloas.isBuilderWithdrawalCredential
+      ctrlPrefixRequest.withdrawal_credentials = false := by decide
+  refine ⟨hp, processBuilderDepositRequest_ignores_prefix hp, ?_⟩
+  unfold processBuilderDepositRequestNoPrefix
+  rw [ctrlEmpty_findIdx]
+  refine ⟨_, rfl, ?_⟩
+  exact builderCreated_of_none_some rfl rfl
+
+/-- **B1 signature control.** At `bls = true`, a `0xB0` deposit for a new pubkey with a corrupted
+signature: the real function ignores it (and the signature does not verify for any domain); the
+mutant without the signature check creates builder 0. -/
+theorem b1_signature_control (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
+    (∀ dom, blsVerify true ctrlCorruptRequest.pubkey
+      (computeSigningRoot (builderDepositMessage ctrlCorruptRequest) dom)
+      ctrlCorruptRequest.signature = false) ∧
+    (∀ m', JauneConsensus.Gloas.processBuilderDepositRequest { cfg := Config.minimal }
+      (ctrlEmptyState s) ctrlCorruptRequest = .ok m' → m' = ctrlEmptyState s) ∧
+    ∃ s', processBuilderDepositRequestNoSignature { cfg := Config.minimal }
+      (ctrlEmptyState s) ctrlCorruptRequest = .ok s' ∧ BuilderCreated (ctrlEmptyState s) s' 0 := by
+  refine ⟨fun dom => blsVerify_true_of_head_zero _ _ _ rfl,
+    processBuilderDepositRequest_ignores_corrupted rfl
+      (fun b hb => by simp [ctrlEmptyState] at hb) rfl, ?_⟩
+  unfold processBuilderDepositRequestNoSignature
+  rw [ctrlEmpty_findIdx]
+  refine ⟨_, rfl, ?_⟩
+  exact builderCreated_of_none_some rfl rfl
+
 end JauneConsensus.Facts.Gloas
