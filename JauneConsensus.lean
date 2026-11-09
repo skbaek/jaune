@@ -72,3 +72,7 @@ import JauneConsensus.Facts.AnchorInvComposite
 import JauneConsensus.Facts.WithdrawalsFloor
 import JauneConsensus.GloasAccessors
 import JauneConsensus.GloasEnvelope
+import JauneConsensus.GloasOps
+import JauneConsensus.GloasMutators
+import JauneConsensus.GloasEpochAccessors
+import JauneConsensus.GloasEpoch
