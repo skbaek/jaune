@@ -65,7 +65,7 @@ inductive PayloadValidationStatus
 /-! ## Helpers -/
 
 /-- Run a model computation inside a gossip validation (its exceptions stay model exceptions). -/
-@[inline] def liftM {α : Type} (x : M α) : GM α := ExceptT.lift x
+@[inline] def liftModel {α : Type} (x : M α) : GM α := ExceptT.lift x
 
 /-- `TARGET_AGGREGATORS_PER_COMMITTEE = 2**4` (`specs/phase0/validator.md`). -/
 def TARGET_AGGREGATORS_PER_COMMITTEE : Nat := 16
@@ -218,7 +218,7 @@ def validateBeaconBlockGossip (ctx : Ctx) (seen : SSeen P) (store : Store P f)
   if executionPayload.timestamp != (← computeTimeAtSlotOf cfg state.genesis_time block.slot) then
     reject "incorrect execution payload timestamp"
   -- [REJECT] The block is from a higher slot than its parent
-  let parent : BeaconBlock P f ← liftM (lookup store.blocks block.parent_root
+  let parent : BeaconBlock P f ← liftModel (lookup store.blocks block.parent_root
     "store.blocks[block.parent_root]")
   if block.slot ≤ parent.slot then reject "block is not from a higher slot than its parent"
   -- [REJECT] The current finalized checkpoint is an ancestor of the block
@@ -254,7 +254,7 @@ def validateBeaconAggregateAndProofGossip (ctx : Ctx) (seen : SSeen P) (store : 
   if aggregate.data.index != U64.zero then reject "aggregate data index is non-zero"
   -- [REJECT] Exactly one committee is specified by the committee bits
   let committeeBits : Bitvector P.MAX_COMMITTEES_PER_SLOT ←
-    liftM (Gated.read aggregate.committee_bits "aggregate.committee_bits")
+    liftModel (Gated.read aggregate.committee_bits "aggregate.committee_bits")
   let committeeIndices ← getCommitteeIndices committeeBits
   let index ← match committeeIndices.toList with
     | [i] => pure i
@@ -432,7 +432,7 @@ def validateBlobSidecarGossip (ctx : Ctx) (seen : SSeen P) (store : Store P f)
       blobSidecar.signed_block_header.signature then
     reject "invalid proposer signature on blob sidecar block header"
   -- [REJECT] The sidecar is from a higher slot than the sidecar's block's parent
-  let parent : BeaconBlock P f ← liftM (lookup store.blocks parentRoot "store.blocks[parent_root]")
+  let parent : BeaconBlock P f ← liftModel (lookup store.blocks parentRoot "store.blocks[parent_root]")
   if blockHeader.slot ≤ parent.slot then
     reject "blob sidecar is not from a higher slot than its parent"
   -- [REJECT] The current finalized_checkpoint is an ancestor of the sidecar's block
@@ -492,7 +492,7 @@ def validateDataColumnSidecarGossip (ctx : Ctx) (seen : SSeen P) (store : Store 
       sidecar.signed_block_header.signature then
     reject "invalid proposer signature on sidecar block header"
   -- [REJECT] The sidecar is from a higher slot than the sidecar's block's parent
-  let parent : BeaconBlock P f ← liftM (lookup store.blocks parentRoot "store.blocks[parent_root]")
+  let parent : BeaconBlock P f ← liftModel (lookup store.blocks parentRoot "store.blocks[parent_root]")
   if blockHeader.slot ≤ parent.slot then reject "sidecar is not from a higher slot than its parent"
   -- [REJECT] The current finalized_checkpoint is an ancestor of the sidecar's block
   let finalizedCheckpointBlock ← getCheckpointBlock store parentRoot
@@ -564,7 +564,7 @@ def validatePartialHeader (ctx : Ctx) (seen : SSeen P) (store : Store P f)
       header.signed_block_header.signature then
     reject "invalid proposer signature on header"
   -- [REJECT] The header is from a higher slot than the header's block's parent
-  let parent : BeaconBlock P f ← liftM (lookup store.blocks parentRoot "store.blocks[parent_root]")
+  let parent : BeaconBlock P f ← liftModel (lookup store.blocks parentRoot "store.blocks[parent_root]")
   if blockHeader.slot ≤ parent.slot then reject "header is not from a higher slot than its parent"
   -- [REJECT] The current finalized_checkpoint is an ancestor of the header's block
   let finalizedCheckpointBlock ← getCheckpointBlock store parentRoot
