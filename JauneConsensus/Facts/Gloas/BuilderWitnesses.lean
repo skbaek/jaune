@@ -9,8 +9,13 @@ run and no `hash_tree_root` of a state.
 
 * B2: the four deposit outcomes. `.ignoredBadSignature` is at `bls = true`, with a signature whose
   first byte (`0x20`) carries invalid metadata bits, so `signatureToPoint` rejects it before any
-  curve arithmetic and no pairing is evaluated. `.register` is closed at `bls = false` and carried
-  to `bls = true` by `classifyBuilderDeposit_bls_indep` under the signature hypothesis.
+  curve arithmetic and no pairing is evaluated. `.register` is closed at `bls = false`
+  (`w_register_blsOff`) and carried to `bls = true` by `classifyBuilderDeposit_bls_indep`
+  (`w_register_blsOn`) for an arbitrary new key and signature under the hypothesis that the
+  signature verifies, which a real key pair satisfies. `w_register_blsOn_flip` is B1's
+  one-byte pair: the same key with the signature's first byte set to `0x00` is
+  `.ignoredBadSignature` at `bls = true`. (B1's mutant control is `b1_signature_control` in
+  `BuilderAuth.lean`.)
 * B4: one witness per exit reason, the ordering witness (`notActive` before `wrongSource`), and
   `every_exit_outcome_occurs`.
 * The G3-01 control (design.md §5): with `builders[0].pubkey = builders[1].pubkey`, resolution is
@@ -219,17 +224,55 @@ theorem w_register_blsOff :
   simp only [sDep, st, dep, firstMatch_list]
   rfl
 
-/-- `.register` at `bls = true`, transferred by `classifyBuilderDeposit_bls_indep` under the
-hypothesis that the request's signature verifies. -/
-theorem w_register_blsOn
+/-- A builder deposit for an arbitrary `key` and `signature`, otherwise `dep _ preB0 _`: `0xB0`
+credentials, amount `10^9`. -/
+def depK (key : BLSPubkey) (s : BLSSignature) : JauneConsensus.Gloas.BuilderDepositRequest :=
+  { pubkey := key, withdrawal_credentials := wc preB0 ⟨3⟩, amount := ⟨1000000000⟩, signature := s }
+
+/-- `s` with its first byte set to `0x00` (a one-byte change of the signature). -/
+def zeroHead (s : BLSSignature) : BLSSignature :=
+  ⟨s.toArray.set 0 0 (by simp [s.size_eq]), by simp [s.size_eq]⟩
+
+/-- `.register` at `bls = true` for any new `key` whose `signature` verifies, transferred from the
+`bls = false` evaluation by `classifyBuilderDeposit_bls_indep`. The hypothesis is satisfiable in
+principle: `key` a valid compressed G1 point (neither all-`0x01` nor all-`0x02`, the registered
+keys) and `signature` its signature over the deposit message. -/
+theorem w_register_blsOn (key : BLSPubkey) (signature : BLSSignature)
+    (hnew : key ≠ pk 1 ∧ key ≠ pk 2)
     (hv : ∀ dom, builderDepositDomain Config.minimal = some dom →
-      blsVerify true (dep 9 preB0 0xc0).pubkey
-        (computeSigningRoot (builderDepositMessage (dep 9 preB0 0xc0)) dom)
-        (dep 9 preB0 0xc0).signature = true) :
-    classifyBuilderDeposit Config.minimal true sDep (dep 9 preB0 0xc0) =
+      blsVerify true key
+        (computeSigningRoot (builderDepositMessage (depK key signature)) dom) signature = true) :
+    classifyBuilderDeposit Config.minimal true sDep (depK key signature) =
       .ok (.register 2 ⟨1000000000⟩) := by
   rw [← classifyBuilderDeposit_bls_indep hv]
-  exact w_register_blsOff
+  have h1 : (pk 1 == key) = false :=
+    Bool.eq_false_iff.mpr fun h => hnew.1 (pubkey_beq_iff.mp h).symm
+  have h2 : (pk 2 == key) = false :=
+    Bool.eq_false_iff.mpr fun h => hnew.2 (pubkey_beq_iff.mp h).symm
+  unfold classifyBuilderDeposit
+  simp only [sDep, st, depK, firstMatch_list, bld, List.findIdx?_cons, h1, h2]
+  rfl
+
+/-- **The B1 flip pair.** For the same `key` and `signature` as `w_register_blsOn`, setting the
+signature's first byte to `0x00` turns the outcome at `bls = true` into `.ignoredBadSignature`:
+the flipped signature fails `blsVerify true` for every key and message
+(`blsVerify_true_of_head_zero`). -/
+theorem w_register_blsOn_flip (key : BLSPubkey) (signature : BLSSignature)
+    (hnew : key ≠ pk 1 ∧ key ≠ pk 2) :
+    classifyBuilderDeposit Config.minimal true sDep (depK key (zeroHead signature)) =
+      .ok .ignoredBadSignature := by
+  have h1 : (pk 1 == key) = false :=
+    Bool.eq_false_iff.mpr fun h => hnew.1 (pubkey_beq_iff.mp h).symm
+  have h2 : (pk 2 == key) = false :=
+    Bool.eq_false_iff.mpr fun h => hnew.2 (pubkey_beq_iff.mp h).symm
+  have h0 : (zeroHead signature).toArray[0]? = some 0 := by
+    simp [zeroHead, signature.size_eq]
+  obtain ⟨dom, hdom⟩ : ∃ dom, computeDomainDefault Config.minimal
+      JauneConsensus.Gloas.DOMAIN_BUILDER_DEPOSIT = .ok dom := ⟨_, rfl⟩
+  unfold classifyBuilderDeposit JauneConsensus.Gloas.isValidBuilderDepositSignature
+  simp only [sDep, st, depK, firstMatch_list, bld, List.findIdx?_cons, h1, h2, hdom,
+    blsVerify_true_of_head_zero _ _ _ h0]
+  rfl
 
 /-! ## Every exit outcome occurs (B4) -/
 
