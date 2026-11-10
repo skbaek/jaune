@@ -2,10 +2,10 @@
 
 Authoritative catalogue of **Jaune's** verification gates: what exists, what
 each one takes, what it proves, and which to reach for when. This file is the
-single source of truth for Jaune gate usage — plans, agent instructions, and
-reports should link here rather than restate it.
+single source of truth for Jaune gate usage — other documents should link here
+rather than restate it.
 
-Audience is anyone driving these gates, human or agent, regardless of tool.
+Audience is anyone driving these gates, regardless of tool.
 
 **Headline fact these gates produce.** Jaune passes 100% of the
 blockchain-test fixtures of `execution-specs` `tests@v21.0.2` whose fork lies
@@ -34,7 +34,7 @@ checks. Blanc consumes Jaune through an ordinary pinned Lake dependency, so
 Blanc's gates appear here only where a *Jaune* change makes them the right
 falsifier — see [Blanc's gates](#blancs-gates) below.
 
-## If you are an agent, start here
+## Which gate to run first
 
 **For routine checks — "did my last edit break anything?" — pass `--jobs auto`.**
 Three harnesses take it — `check-legacy.sh`, `check-mainnet.sh`, `check-vectors.sh` —
@@ -70,12 +70,11 @@ report. A contended run's TIME column reflects scheduling, not the fixture.
 Parallel mode enforces this — it refuses both writing modes outright.
 
 **Long gates are evidence obligations, not optional.** An action expected to
-exceed 1,000 seconds — judged as you will actually run it, parallel mode
-included — is deferred to the user unless the task explicitly authorizes it; a
+exceed 1,000 seconds — judged as it will actually run, parallel mode
+included — is a long gate: it may be deferred rather than run inline, but a
 deferred long gate needs a named owner and must pass before merge. Everything
-under the threshold runs inline (use background execution when one command
-would outlast a foreground tool call), and a deferred gate never substitutes
-for the cheap gates above.
+under the threshold runs inline, and a deferred gate never substitutes for the
+cheap gates above.
 
 ## The `--jobs` contract
 
@@ -955,11 +954,11 @@ line. It does not wait, does not fall back to another path, and writes nothing.
 The heavy-gate lock is host-global — it lives at `~/.codex/locks/gate-heavy.lock`
 and is shared across both this repository and Blanc, and across every checkout
 or worktree of either, because they all contend for the same cores: one host,
-one heavy gate. Before running a timing-authoritative gate, a session must
-already hold the cross-session hard semaphore through
-`python3 -m creme semaphore`; see `~/creme/docs/guides/execution.md` for the
-protocol. The gate lock is the last line of defense, not the coordination
-mechanism. The lock mechanism is `scripts/gate-lock.sh` (`mkdir`, `kill -0`,
+one heavy gate. A timing-authoritative gate is host-exclusive work: where
+host-level admission exists (Creme's semaphore, under the optional Creme
+workflow), it runs under that exclusive reservation, which these gates do not
+take themselves. The gate lock is the last line of defense, not the
+coordination mechanism. The lock mechanism is `scripts/gate-lock.sh` (`mkdir`, `kill -0`,
 one `EXIT` trap — macOS has no `flock`), which also documents the 2026-07-31
 incident that motivated it.
 
