@@ -65,22 +65,26 @@ def gossipHandlers : String → Option GossipHandler
   | "gossip_sync_committee_message" => storeFree "gossip_sync_committee_message"
   | "gossip_sync_committee_contribution_and_proof" =>
     storeFree "gossip_sync_committee_contribution_and_proof"
-  -- M6 (Store-dependent): replace `none` with the handler
+  -- M6 (Store-dependent; Electra and Fulu, and Gloas)
   | "gossip_beacon_block" => storeDep "gossip_beacon_block"
   | "gossip_beacon_attestation" => storeDep "gossip_beacon_attestation"
   | "gossip_beacon_aggregate_and_proof" => storeDep "gossip_beacon_aggregate_and_proof"
   | "gossip_blob_sidecar" => storeDep "gossip_blob_sidecar"
   | "gossip_data_column_sidecar" => storeDep "gossip_data_column_sidecar"
   | "gossip_partial_data_column_sidecar" => storeDep "gossip_partial_data_column_sidecar"
-  | "gossip_execution_payload_envelope" => none
-  | "gossip_payload_attestation_message" => none
-  | "gossip_execution_payload_bid" => none
-  | "gossip_proposer_preferences" => none
+  | "gossip_execution_payload_envelope" => storeDep "gossip_execution_payload_envelope"
+  | "gossip_payload_attestation_message" => storeDep "gossip_payload_attestation_message"
+  -- A bid case interleaves `proposer_preferences_`, `execution_payload_envelope_` and
+  -- `execution_payload_bid_` messages (the bid reads what they put in `Seen`), so the driver's
+  -- single-prefix check is off (empty prefix) and the handler checks the three prefixes itself.
+  | "gossip_execution_payload_bid" =>
+    some (storeGossipHandler "execution_payload_bid" "" "execution_payload_bid")
+  | "gossip_proposer_preferences" => storeDep "gossip_proposer_preferences"
   | _ => none
 
 #guard (gossipHandlers "gossip_voluntary_exit").map (·.filePrefix) == some "voluntary_exit_"
 #guard (gossipHandlers "gossip_sync_committee_message").map (·.topic) == some "sync_committee"
 #guard (gossipHandlers "gossip_beacon_block").map (·.filePrefix) == some "block_"
-#guard (gossipHandlers "gossip_execution_payload_bid").isNone
+#guard (gossipHandlers "gossip_execution_payload_bid").map (·.filePrefix) == some ""
 
 end JauneConsensus.Harness
