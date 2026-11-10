@@ -2,6 +2,10 @@ import AxiomAudit
 import JauneConsensus
 import JauneConsensus.Facts.Operations
 import JauneConsensus.Facts.ExpectedWithdrawals
+import JauneConsensus.Facts.DepositRequest
+import JauneConsensus.Facts.ConsolidationRequest
+import JauneConsensus.Facts.PendingDeposits
+import JauneConsensus.Facts.PendingConsolidations
 import JauneConsensus.Facts.Gloas.Step
 import JauneConsensus.Facts.Gloas.Frame
 import JauneConsensus.JointGloas
