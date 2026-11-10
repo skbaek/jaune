@@ -1,4 +1,6 @@
 import JauneConsensus.Facts.Gloas.StepB3
+import JauneConsensus.Facts.Gloas.FinalizedNotAhead
+import JauneConsensus.Facts.Gloas.StepB5
 
 /-!
 # B1 over one Gloas joint step (goal `eip8282-gloas-cross-layer-v1`, MBS)
@@ -269,5 +271,361 @@ theorem jointStepG_crossing_onboarding {cfg : ChainConfig} {ccfg : Config} {bls 
   have := congrArg (Option.map Prod.fst) (hpk.2 j)
   simp only [Option.map_map, Function.comp_def] at this
   rw [← hbs]; exact this
+
+/-! ## B1's post-state clause (G3d, under FinalizedNotAhead) -/
+
+section PostState
+
+open Inv
+
+/-- The parent prefix (the payment settlement and the validator request loops) keeps the triple
+`I3`, from G3-05, G3-03, G3-04, G3-08 and LatestBidBuilderActive (the prefix half of
+`parent_I3`). -/
+theorem prefix_I3 {ctx : Ctx} {s a : Gloas.BeaconState P} {r : Gloas.ExecutionRequests}
+    (hA : LatestBidBuilderActive s)
+    (ha : Gloas.applyParentPrefix ctx s r = .ok a)
+    (g5 : PendingCovered s) (g3 : PendingRefsInRange s) (g4 : ExitedHaveNoPending s)
+    (g8 : LatestBidCoherence s) : I3 a := by
+  obtain ⟨x, fx, hx⟩ := applyParentPrefix_split ha
+  have px : I3 x := by
+    rcases hx with ⟨idx, hset⟩ | ⟨hv, rfl, hc1, hc2⟩ | rfl
+    · obtain ⟨hb, hr, hp⟩ := settle_refs_pend hset
+      refine ⟨fun i c hc => ?_, hr g3, x04_of hb (fun i => (hp i).le) g4⟩
+      rw [hb] at hc; rw [hp]; exact pendLe_of_covered g5 i c hc
+    · obtain ⟨b, hb, hfar⟩ := hA hv
+      have hnone : bidIndex s = none := by
+        simp only [bidIndex, g8.1, hc1, hc2, ↓reduceIte]
+      have hnl : ¬ BidLive s := by
+        rintro ⟨_, _, hk, _⟩; rw [hnone] at hk; cases hk
+      refine ⟨fun i c hc => ?_, refs_transfer (s := s) (s' := directAppend s) (le_refl _)
+        (fun w hw => ?_) (fun j p hj hne => Or.inl ⟨p, hj, hne, rfl⟩) g3, fun i c hc hne => ?_⟩
+      · change s.builders.toArray[i]? = some c at hc
+        rw [directAppend_pend]
+        have := g5 i c hc
+        rw [expo_of_not_live hnl] at this
+        exact this
+      · simp only [directAppend, ProgressiveListS.push, Array.toList_push, List.mem_append,
+          List.mem_singleton] at hw
+        rcases hw with hw | rfl
+        · exact Or.inl hw
+        · exact Or.inr (Array.getElem?_eq_some_iff.mp hb).1
+      · change s.builders.toArray[i]? = some c at hc
+        rw [directAppend_pend]
+        have h0 := g4 i c hc hne
+        by_cases hi : s.latest_execution_payload_bid.builder_index.toNat = i
+        · subst hi; rw [hb] at hc; cases hc; exact absurd hfar hne
+        · have : wAmt i (bidWithdrawal s.latest_execution_payload_bid) = 0 := by
+            unfold wAmt bidWithdrawal; rw [if_neg hi]
+          omega
+    · exact ⟨pendLe_of_covered g5, g3, g4⟩
+  exact ⟨pendLe_of_eqs fx.1 fx.2.2.1 fx.2.1 px.1, refs_of_inv fx px.2.1,
+    x04_of_eqs fx.1 fx.2.2.1 fx.2.1 px.2.2⟩
+
+/-- **The exit loop keeps a not-yet-active builder.** If builder `i` is `R` at the start of an exit
+loop and the finalized checkpoint is not after `R.deposit_epoch`, no request of the loop
+initiates `i`'s exit (`is_active_builder` needs `deposit_epoch < finalized_checkpoint.epoch`, and
+no request moves the checkpoint), so every state of the loop has `R` at `i`, with the start's
+finalized checkpoint, slot and builder withdrawals. -/
+theorem exitLoop_keeps {cfg : Config} {i : Nat} {R : Gloas.Builder}
+    (rs : List Gloas.BuilderExitRequest) {x0 : Gloas.BeaconState P} {tr : List (Gloas.BeaconState P)}
+    (h : scanM (Gloas.processBuilderExitRequest cfg) x0 rs = .ok tr)
+    (hR : x0.builders.toArray[i]? = some R)
+    (hfin : x0.finalized_checkpoint.epoch.toNat ≤ R.deposit_epoch.toNat) :
+    ∀ (k : Nat) (x : Gloas.BeaconState P), tr[k]? = some x →
+      x.builders.toArray[i]? = some R ∧ FinSlot x0 x ∧
+        x.builder_pending_withdrawals = x0.builder_pending_withdrawals := by
+  refine scanM_inv (fun x : Gloas.BeaconState P => x.builders.toArray[i]? = some R ∧ FinSlot x0 x ∧
+      x.builder_pending_withdrawals = x0.builder_pending_withdrawals)
+    (fun x a y ⟨hx, hfx, hwx⟩ hy => ?_) rs ⟨hR, finSlot.refl _, rfl⟩ h
+  refine ⟨?_, finSlot.trans hfx (processBuilderExitRequest_fs _ _ _ _ hy),
+    ((processBuilderExitRequest_frame hy).2.2.2.2.1).trans hwx⟩
+  have h0 := hy
+  rw [processBuilderExitRequest_eq] at h0
+  obtain ⟨o, hco, -⟩ := bind_eq_ok_iff.mp h0
+  obtain ⟨hign, hini⟩ := classifyBuilderExit_effect hco hy
+  by_cases ho : ∃ j, o = .initiate j
+  · obtain ⟨j, rfl⟩ := ho
+    obtain ⟨b, e, w, hb, -, -, -, -, hoth, -⟩ := hini j rfl
+    by_cases hij : i = j
+    · subst hij
+      exfalso
+      rcases classifyBuilderExit_inv hco with ⟨-, hc⟩ | ⟨i', b0, bi, -, hb0, -, hcase⟩
+      · cases hc
+      · rcases hcase with ⟨-, hc⟩ | ⟨-, -, hc⟩ | ⟨⟨hlt, -⟩, -, p, -, hp⟩
+        · cases hc
+        · cases hc
+        · rcases hp with ⟨-, hc⟩ | ⟨-, hc⟩
+          · cases hc
+          · cases hc
+            rw [hx] at hb0; cases hb0
+            have hlt' : R.deposit_epoch.toNat < x.finalized_checkpoint.epoch.toNat := hlt
+            rw [hfx.1] at hlt'
+            omega
+    · rw [hoth i hij]; exact hx
+  · rw [hign (fun j hj => ho ⟨j, hj⟩)]; exact hx
+
+/-- **A builder that is not exiting and has nothing pending is routed nothing** by the expected
+withdrawals: the builder-withdrawal phase routes it its `pendW` prefix (`0`), the validator phases
+route no builder (N7's `validatorsBound`), and the builders sweep pays only withdrawable
+builders. -/
+theorem expected_routed_fresh (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {s2 : Gloas.BeaconState P}
+    {ex : Gloas.ExpectedWithdrawals} (hex : Gloas.getExpectedWithdrawals s2 = .ok ex)
+    {i : Nat} {R : Gloas.Builder}
+    (hR : s2.builders.toArray[i]? = some R) (hfar : R.withdrawable_epoch = FAR_FUTURE_EPOCH)
+    (hp : pendW s2.builder_pending_withdrawals.toArray.toList i = 0)
+    (hrefs : ∀ w ∈ s2.builder_pending_withdrawals.toArray.toList, w.builder_index.toNat < 2 ^ 40)
+    (hvb : s2.validators.toArray.size ≤ 2 ^ 40) (hbb : s2.builders.toArray.size ≤ 2 ^ 40)
+    {bi : U64} (hbiN : bi.toNat = i) : routedSum bi ex.withdrawals.toList = 0 := by
+  obtain ⟨bw, pw, sw, vw, p2, p3, p4, i1, i2, i3, i4, n2, n3, n4, e1, e2, e3, e4, hws⟩ :=
+    getExpectedWithdrawals_parts hex
+  have hi : i < 2 ^ 40 := lt_of_lt_of_le (Array.getElem?_eq_some_iff.mp hR).1 hbb
+  have r1 : routedSum bi bw.toList = 0 := by
+    obtain ⟨-, hr⟩ := routed_builderWithdrawals e1 hrefs (bi := bi) (by omega)
+    rw [hr, hbiN]
+    have := pendW_take_drop s2.builder_pending_withdrawals.toArray.toList bw.size i
+    omega
+  have r2 := routedSum_validatorPhase (getPendingPartialWithdrawals_inRange _ _ _ _ e2) hvb bi
+  have r4 := routedSum_validatorPhase (getValidatorsSweepWithdrawals_inRange _ _ _ _ e4) hvb bi
+  have r3 : routedSum bi sw.toList = 0 := by
+    refine routedSum_zero (fun w hw hRt => ?_)
+    obtain ⟨k, hk, hkw⟩ := List.mem_iff_getElem.mp hw
+    have hk' : k < sw.size := by simpa using hk
+    have hkw' : sw[k] = w := by rw [← hkw]; simp
+    obtain ⟨bj, b', ep, he, hcv, hb', hwe, -⟩ := getBuildersSweepWithdrawals_provenance e3 k hk'
+    rw [hkw'] at hcv
+    have hbj : bj.toNat < 2 ^ 40 := lt_of_lt_of_le (Array.getElem?_eq_some_iff.mp hb').1 hbb
+    have hij := routes_inj hRt hcv (by omega) hbj
+    rw [← hij, hbiN, hR] at hb'
+    cases hb'
+    have hwe' : R.withdrawable_epoch.toNat ≤ ep.toNat := hwe
+    have hel := epoch_lt_far hspe s2
+    rw [← getCurrentEpoch_toNat he] at hel
+    rw [hfar] at hwe'
+    omega
+  rw [hws, routedSum_append, routedSum_append, routedSum_append, r1, r2, r3, r4]
+
+/-- **`process_withdrawals` keeps a builder that is not exiting and has nothing pending**,
+balance included (`expected_routed_fresh`). -/
+theorem withdrawals_keep_fresh (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {s2 s3 : Gloas.BeaconState P}
+    (h : Gloas.processWithdrawals s2 = .ok s3) {i : Nat} {R : Gloas.Builder}
+    (hR : s2.builders.toArray[i]? = some R) (hfar : R.withdrawable_epoch = FAR_FUTURE_EPOCH)
+    (hp : pendW s2.builder_pending_withdrawals.toArray.toList i = 0)
+    (hrefs : ∀ w ∈ s2.builder_pending_withdrawals.toArray.toList, w.builder_index.toNat < 2 ^ 40)
+    (hvb : s2.validators.toArray.size ≤ 2 ^ 40) (hbb : s2.builders.toArray.size ≤ 2 ^ 40) :
+    s3.builders.toArray[i]? = some R := by
+  rcases processWithdrawals_cases h with rfl | ⟨ex, t, hex, ht, hb3, -, -⟩
+  · exact hR
+  have hi : i < 2 ^ 40 := lt_of_lt_of_le (Array.getElem?_eq_some_iff.mp hR).1 hbb
+  obtain ⟨bi, hbi⟩ := (U64.ofNat?_ok_iff (site := "BuilderIndex")).mpr (by omega : i < 2 ^ 64)
+  have hbiN : bi.toNat = i := U64.toNat_ofNat? hbi
+  have hr0 := expected_routed_fresh hspe hex hR hfar hp hrefs hvb hbb hbiN
+  obtain ⟨b', hb', hbe, hbal⟩ := applyWithdrawals_builder_balance ht (by
+    show s2.builders.toArray.size ≤ 2 ^ 40; omega) (bi := bi) (by rw [hbiN]; exact hR)
+    (by rw [hr0]; omega)
+  rw [hr0] at hbal
+  rw [hb3, ← hbiN, hb', hbe]
+  have : b'.balance = R.balance := U64.ext_toNat (by omega)
+  rw [this]
+
+/-- **A freshly registered builder survives the rest of its step** (any `bls`; G3d). At a Gloas
+step whose pre-state satisfies FinalizedNotAhead (with the G3 invariants and the N7 bounds), let the
+deposit request at deposit-trace position `k` (state `m = trD[k]`) be classified `register i a`,
+and let builder `i` be `R` at the end of the deposit loop, with `withdrawable_epoch = FAR` and
+`deposit_epoch` the epoch of `m`'s slot. Then `i` is `R` at the step's post-state, and the step's
+withdrawals route nothing to `i`.
+
+Why: `R` is not active (`deposit_epoch` is the current epoch, and FinalizedNotAhead keeps the
+finalized checkpoint at or before it), so no exit request of the payload initiates its exit; it has
+nothing pending (`pend = 0` at its registration, by G3-03 for an appended slot and G3-04 for a
+reused one, and the later phases before the withdrawals add no pending withdrawal); and it is not
+withdrawable, so the builders sweep skips it. -/
+theorem GStepView.fresh_survives (hspe : 2 ≤ P.SLOTS_PER_EPOCH)
+    (quorumPositive : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_INCREMENT)
+    {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+    {preB postB : Gloas.BeaconState P} {preExec postExec : BlockChain}
+    {preParent postParent : ParentPayload P} {b : Gloas.SignedBeaconBlock P}
+    {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)}
+    (V : GStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent)
+    (fna : FinalizedNotAhead preB)
+    (g5 : PendingCovered preB) (g3 : PendingRefsInRange preB) (g4 : ExitedHaveNoPending preB)
+    (g7 : NoLiveWeightOnLatestBid preB) (g8 : LatestBidCoherence preB) (fe : FutureEmpty preB)
+    (hA : LatestBidBuilderActive preB)
+    (validatorsBound : postB.validators.toArray.size ≤ 2 ^ 40)
+    (buildersBound : postB.builders.toArray.size ≤ 2 ^ 40)
+    {trD : List (Gloas.BeaconState P)} (hD : builderDepositTrace ccfg bls V.postSlots b = .ok trD)
+    {k i : Nat} {m : Gloas.BeaconState P} {req : Gloas.BuilderDepositRequest} {a : U64}
+    (hm : trD[k]? = some m) (hr : (blockBuilderDeposits b)[k]? = some req)
+    (hcl : classifyBuilderDeposit ccfg bls m req = .ok (.register i a))
+    {R : Gloas.Builder} {e : Epoch} (he : computeEpochAtSlot P m.slot = .ok e)
+    (hat2 : (traceLast V.postSlots trD).builders.toArray[i]? = some R)
+    (hfar : R.withdrawable_epoch = FAR_FUTURE_EPOCH) (hdep : R.deposit_epoch = e) :
+    postB.builders.toArray[i]? = some R ∧
+      ∃ ws : List Withdrawal, stepWithdrawals ccfg bls V.postSlots b.message = .ok ws ∧
+        ∀ bi : U64, bi.toNat = i → routedSum bi ws = 0 := by
+  set S := V.postSlots with hS
+  -- the post-slots state
+  have fnaS := processSlots_finalizedNotAhead V.slots fna
+  have hs := processSlots_pendingCovered quorumPositive (by omega) V.slots ⟨g5, g7, fe⟩
+  have g3' := processSlots_pendingRefsInRange quorumPositive V.slots g3
+  have g4' := processSlots_exitedHaveNoPending quorumPositive V.slots g4
+  have g8' := processSlots_latestBidCoherence V.slots g8
+  have hA' := processSlots_latestBidBuilderActive V.slots hA
+  -- the deposit trace starts at the parent prefix
+  rcases builderDepositTrace_ok hD with ⟨hnil, -, -⟩ | ⟨s0, h0pre, hsD⟩
+  · rw [hnil] at hr; simp at hr
+  have f0 : FinSlot S s0 := applyParentPrefix_fs _ _ _ _ h0pre
+  have i0 : I3 s0 := prefix_I3 hA' h0pre hs.1 g3' g4' g8'
+  have trI := scanM_inv (fun x : Gloas.BeaconState P => FinSlot S x ∧ I3 x ∧
+      x.builder_pending_withdrawals = s0.builder_pending_withdrawals)
+    (fun x a y ⟨hfx, hIx, hwx⟩ hy => ⟨finSlot.trans hfx (processBuilderDepositRequest_fs _ _ _ _ hy),
+      depReq_I3 hspe hy hIx, ((processBuilderDepositRequest_frame hy).2.2.2.2.1).trans hwx⟩)
+    _ ⟨f0, i0, rfl⟩ hsD
+  obtain ⟨fm, Im, wm⟩ := trI k m hm
+  -- the fresh slot has nothing pending at its registration
+  have hpm : pend m i = 0 := by
+    rcases classifyBuilderDeposit_inv hcl with ⟨-, hc⟩ | ⟨-, _, _, _, _, hc⟩ |
+        ⟨-, -, -, -, ⟨-, hc⟩ | ⟨-, -, idx, -, hidx, hc⟩⟩
+    · cases hc
+    · cases hc
+    · cases hc
+    · cases hc
+      obtain ⟨ep, hep, hcase⟩ := getIndexForNewBuilder_spec hidx
+      rcases hcase with hsz | ⟨b0, hb0, hwe, -⟩
+      · exact pend_zero_of_ge Im.2.1 (by omega)
+      · refine Im.2.2 _ b0 hb0 ?_
+        intro hf
+        have hwe' : b0.withdrawable_epoch.toNat ≤ ep.toNat := hwe
+        rw [hf, getCurrentEpoch_toNat hep] at hwe'
+        have := epoch_lt_far hspe m
+        omega
+  have hpWm : pendW m.builder_pending_withdrawals.toArray.toList i = 0 := by
+    unfold pend at hpm; omega
+  -- the last deposit-trace state
+  have hneD := scanM_ok_ne_nil hsD
+  have hlastD : trD[trD.length - 1]? = some (traceLast S trD) := by
+    rw [← List.getLast?_eq_getElem?]; exact getLast?_of_traceLast hneD S
+  obtain ⟨fL, -, wL⟩ := trI _ _ hlastD
+  -- the deposit epoch is the current one, at or after the finalized checkpoint
+  have hfin : (traceLast S trD).finalized_checkpoint.epoch.toNat ≤ R.deposit_epoch.toNat := by
+    rw [hdep, computeEpochAtSlot_toNat he, fm.2, fL.1]
+    exact fnaS
+  -- the block, phase by phase
+  obtain ⟨s1, s2, s3, s4, s5, s6, s7, h1, h2, h3, h4, h5, h6, h7, h8⟩ :=
+    processBlock_phases V.processBlock
+  obtain ⟨trD', trE, hD', hE, -, hEmpty, hFull⟩ := processParentExecutionPayload_traces h1
+  change builderDepositTrace ccfg bls S b = _ at hD'
+  rw [hD] at hD'; cases hD'
+  obtain ⟨trD', hD', hsE, -⟩ := builderExitTrace_ok hE
+  change builderDepositTrace ccfg bls S b = _ at hD'
+  rw [hD] at hD'; cases hD'
+  have exK := exitLoop_keeps _ hsE hat2 hfin
+  have hneE := scanM_ok_ne_nil hsE
+  have hlastE : trE[trE.length - 1]? = some (traceLast S trE) := by
+    rw [← List.getLast?_eq_getElem?]; exact getLast?_of_traceLast hneE S
+  obtain ⟨hRE, -, wE⟩ := exK _ _ hlastE
+  -- the parent settlement is FULL (the block carries a builder deposit)
+  cases hflag : (b.message.body.signed_execution_payload_bid.message.parent_block_hash !=
+      S.latest_execution_payload_bid.block_hash)
+  case true =>
+    obtain ⟨-, htr, -⟩ := hEmpty hflag
+    have hl := builderDepositTrace_length hD
+    rw [htr] at hl
+    have : (blockBuilderDeposits b).length = 0 := by simpa using hl
+    rw [List.length_eq_zero_iff.mp this] at hr; simp at hr
+  case false =>
+  have hsuf := hFull hflag
+  obtain ⟨hb1, -, hw1, -⟩ := applyParentSuffix_post hsuf
+  obtain ⟨_, _, hm2⟩ := processBlockHeader_post h2
+  have e2b : s2.builders = s1.builders := by rw [hm2]
+  have e2w : s2.builder_pending_withdrawals = s1.builder_pending_withdrawals := by rw [hm2]
+  have hR2 : s2.builders.toArray[i]? = some R := by rw [e2b, hb1]; exact hRE
+  have hw2 : s2.builder_pending_withdrawals = m.builder_pending_withdrawals := by
+    rw [e2w, hw1, wE, wL, wm]
+  -- the refs of the withdrawals state, from `parent_I3`
+  obtain ⟨-, r1, -⟩ := parent_I3 hspe hA' h1 hs.1 g3' g4' g8'
+  have w3 := processWithdrawals_wFrame _ _ h3
+  have b4 := processExecutionPayloadBid_post h4
+  have c := afterBid_core h5 h6 h7 h8
+  have hpost : postB.builders = s3.builders := by rw [c.1, b4.2.2.2.2.1]
+  have bb2 : s2.builders.toArray.size ≤ 2 ^ 40 := by
+    have : postB.builders.toArray.size = s2.builders.toArray.size := by
+      rw [hpost]; exact w3.2.2.2.2.2.1
+    omega
+  have vb2 : s2.validators.toArray.size ≤ 2 ^ 40 := by
+    have va : postB.validators.toArray.size = s3.validators.toArray.size :=
+      afterWithdrawals_vlen h4 h5 h6 h7 h8
+    have vb' : s3.validators.toArray.size = s2.validators.toArray.size :=
+      processWithdrawals_vlen _ _ h3
+    omega
+  have hrefs : ∀ w ∈ s2.builder_pending_withdrawals.toArray.toList,
+      w.builder_index.toNat < 2 ^ 40 := fun w hw => by
+    rw [e2w] at hw
+    have := r1.1 w hw
+    rw [← e2b] at this
+    omega
+  have hp2 : pendW s2.builder_pending_withdrawals.toArray.toList i = 0 := by rw [hw2]; exact hpWm
+  refine ⟨by rw [hpost]; exact withdrawals_keep_fresh hspe h3 hR2 hfar hp2 hrefs vb2 bb2, ?_⟩
+  have hsw : stepWithdrawals ccfg bls V.postSlots b.message =
+      (if s2.latest_block_hash != s2.latest_execution_payload_bid.block_hash then pure []
+        else do let ex ← Gloas.getExpectedWithdrawals s2; pure ex.withdrawals.toList) := by
+    simp only [stepWithdrawals, h1, h2, bind, Except.bind]
+  cases hc : (s2.latest_block_hash != s2.latest_execution_payload_bid.block_hash)
+  · obtain ⟨ex, -, hex, -⟩ := processWithdrawals_full hc h3
+    refine ⟨ex.withdrawals.toList, by rw [hsw, hc]; simp [hex, bind, Except.bind, pure,
+      Except.pure], fun bi hbi => expected_routed_fresh hspe hex hR2 hfar hp2 hrefs vb2 bb2 hbi⟩
+  · exact ⟨[], by rw [hsw, hc]; rfl, fun _ _ => by simp [routedSum]⟩
+
+/-- **B1 main with its post-state clause, per step (`bls = true`; G3d).** `GStepView.registration`
+together with the frozen post-state clause of statements.md B1: under FinalizedNotAhead at the
+step's pre-state (with the G3 invariants and the N7 bounds that the step's withdrawals need), the
+builder freshly registered at `i` is, at the step's post-state `postB`, the fresh record
+(`freshBuilder`: `version = 0`, `execution_address = credentials[12:]`, `deposit_epoch` the epoch of
+`trD[k]`'s slot, `withdrawable_epoch = FAR_FUTURE_EPOCH`) with balance `bal`, where
+`bal = req.amount + Σ amounts of the later 0xB0 deposits for its pubkey`; and the step's
+withdrawals route nothing to it (`GStepView.fresh_survives`). -/
+theorem GStepView.registration_post (hspe : 2 ≤ P.SLOTS_PER_EPOCH)
+    (quorumPositive : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_INCREMENT)
+    {cfg : ChainConfig} {ccfg : Config}
+    {preB postB : Gloas.BeaconState P} {preExec postExec : BlockChain}
+    {preParent postParent : ParentPayload P} {b : Gloas.SignedBeaconBlock P}
+    {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)}
+    (V : GStepView cfg ccfg true preB preExec preParent b env? postB postExec postParent)
+    (fna : FinalizedNotAhead preB)
+    (g5 : PendingCovered preB) (g3 : PendingRefsInRange preB) (g4 : ExitedHaveNoPending preB)
+    (g7 : NoLiveWeightOnLatestBid preB) (g8 : LatestBidCoherence preB) (fe : FutureEmpty preB)
+    (hA : LatestBidBuilderActive preB)
+    (validatorsBound : postB.validators.toArray.size ≤ 2 ^ 40)
+    (buildersBound : postB.builders.toArray.size ≤ 2 ^ 40)
+    {i : Nat} (created : BuilderCreated V.postSlots postB i) :
+    ∃ (k : Nat) (req : Gloas.BuilderDepositRequest) (trD : List (Gloas.BeaconState P))
+      (m m' : Gloas.BeaconState P) (dom : Domain) (addr : ExecutionAddress) (e : Epoch) (bal : U64),
+      (blockBuilderDeposits b)[k]? = some req ∧
+      builderDepositTrace ccfg true V.postSlots b = .ok trD ∧ trD[k]? = some m ∧ trD[k + 1]? = some m' ∧
+      Gloas.processBuilderDepositRequest (gloasCtx ccfg true) m req = .ok m' ∧
+      classifyBuilderDeposit ccfg true m req = .ok (.register i req.amount) ∧
+      req.withdrawal_credentials.toBytes.head? = some 0xB0 ∧
+      builderDepositDomain ccfg = some dom ∧
+      blsVerify true req.pubkey (computeSigningRoot (builderDepositMessage req) dom) req.signature = true ∧
+      Jaune.Bytes.toAdr? (req.withdrawal_credentials.toBytes.drop 12) = some addr ∧
+      computeEpochAtSlot P m.slot = .ok e ∧
+      m'.builders.toArray[i]? = some (freshBuilder req.pubkey addr req.amount e) ∧
+      (traceLast V.postSlots trD).builders.toArray[i]? =
+        some { freshBuilder req.pubkey addr req.amount e with balance := bal } ∧
+      postB.builders.toArray[i]? =
+        some { freshBuilder req.pubkey addr req.amount e with balance := bal } ∧
+      bal.toNat = req.amount.toNat + ((((blockBuilderDeposits b).drop (k + 1)).filter
+        (fun r' => r'.pubkey == req.pubkey &&
+          Gloas.isBuilderWithdrawalCredential r'.withdrawal_credentials)).map
+          (·.amount.toNat)).sum ∧
+      ∃ ws : List Withdrawal, stepWithdrawals ccfg true V.postSlots b.message = .ok ws ∧
+        ∀ bi : U64, bi.toNat = i → routedSum bi ws = 0 := by
+  obtain ⟨k, req, trD, m, m', dom, addr, e, bal, hr, hD, hm, hm', hcall, hcl, hpre, hdom, hv, haddr,
+    he, hat, hat2, hbal⟩ := V.registration hspe created
+  obtain ⟨H1, H2⟩ := V.fresh_survives hspe quorumPositive fna g5 g3 g4 g7 g8 fe hA validatorsBound
+    buildersBound hD hm hr hcl he hat2 rfl rfl
+  exact ⟨k, req, trD, m, m', dom, addr, e, bal, hr, hD, hm, hm', hcall, hcl, hpre, hdom, hv, haddr,
+    he, hat, hat2, H1, hbal, H2⟩
+
+end PostState
 
 end JauneConsensus.Facts.Gloas
