@@ -36,6 +36,8 @@ import JauneConsensus.Facts.Gloas.StepB1
 import JauneConsensus.Facts.Gloas.StepB246
 import JauneConsensus.Facts.Gloas.StepB5
 import JauneConsensus.Facts.Gloas.StepB7
+import JauneConsensus.Facts.Gloas.FirstBlockFrames
+import JauneConsensus.Facts.Gloas.HeaderFrames
 
 /-!
 # Whole-library axiom union for `JauneConsensus`
