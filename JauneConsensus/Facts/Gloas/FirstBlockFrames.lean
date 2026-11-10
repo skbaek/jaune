@@ -213,7 +213,6 @@ theorem processSlot_pew (s : GSt P) :
 theorem processBuilderPendingPayments_pew (cfg : Config) (s : GSt P) :
     Ok (JauneConsensus.Gloas.processBuilderPendingPayments cfg s) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processBuilderPendingPayments; gvcg
-  all_goals (apply ok_pure; exact (show PewEq _ _ from rfl))
 
 theorem updateNextWithdrawalBuilderIndex_pew (s : GSt P) (n : U64) :
     Ok (JauneConsensus.Gloas.updateNextWithdrawalBuilderIndex s n) (pewEq.R s) := by
