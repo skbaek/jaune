@@ -976,18 +976,19 @@ theorem processConsolidationRequest_frame_and_queues (h : f.atLeast .electra = t
     · rw [← hq1_get, hpush, hq0_get, Array.toList_push]
       rfl
 
-/-- **Fold specification for `foldConsolidationRequests`** (Electra and Fulu):
-across a list of consolidation requests `reqs`:
-1. `consolidationRequestTrace` produces `tr` of length `reqs.length + 1` with `tr[0] = state` and
-   `tr.last = s'`;
-2. There is an aligned list `outcomes` of `ConsolidationOutcome`s (`outcomes.length = reqs.length`)
-   such that at each step `k`, `classifyConsolidationRequest` yields `outcomes[k]` and
-   `applyConsolidationOutcome` advances `tr[k]` to `tr[k+1]`;
-3. `pending_consolidations` appends `outcomes.filterMap acceptedConsolidation`, and every appended
-   entry has `source_index ≠ target_index`;
-4. `pending_deposits` appends only `GENESIS_SLOT` excess-balance entries;
-5. `slot`, `latest_execution_payload_header`, `latest_block_header`, `pending_partial_withdrawals`,
-   `validators.toArray.size`, and `balances.toArray.size` are all preserved. -/
+/-- **Aggregate frame and queue specification for `foldConsolidationRequests`** (Electra and Fulu):
+on success across a list of requests `reqs`, there exist `outcomes` and `extraDeps` such that:
+1. `outcomes.length = reqs.length`;
+2. `pending_consolidations` appends `outcomes.filterMap acceptedConsolidation`, with distinct source
+   and target indices for every appended entry;
+3. `pending_deposits` appends `extraDeps`, all at `GENESIS_SLOT`;
+4. `slot`, `latest_execution_payload_header`, `latest_block_header`, `pending_partial_withdrawals`,
+   `validators.toArray.size`, and `balances.toArray.size` are preserved.
+
+This aggregate conclusion does not relate `outcomes` pointwise to the classifier. For actual
+per-request state traces, use `consolidationRequestTrace_spec` and
+`consolidationRequestTrace_of_fold`; `processConsolidationRequest_eq` exposes each transition's
+classification and application. -/
 theorem foldConsolidationRequests_frames_and_queues (h : f.atLeast .electra = true)
     (cfg : Config) :
     ∀ (reqs : List ConsolidationRequest) {state s' : BeaconState P f},
