@@ -6,6 +6,8 @@ import Jaune.ChainStore
 import Jaune.FixtureTransition
 import Jaune.FixtureException
 import Jaune.T8n
+-- Standalone proof facts, outside the production umbrella.
+import Jaune.StaticcallEffects
 -- Standalone tracer modules, outside the production umbrella.
 import Jaune.Trace
 import Jaune.TraceJson
