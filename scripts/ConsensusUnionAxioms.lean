@@ -6,6 +6,9 @@ import JauneConsensus.Facts.DepositRequest
 import JauneConsensus.Facts.ConsolidationRequest
 import JauneConsensus.Facts.PendingDeposits
 import JauneConsensus.Facts.PendingConsolidations
+import JauneConsensus.Facts.AnchorInvCorpus
+import JauneConsensus.Facts.SlotEpochFrames
+import JauneConsensus.Facts.AnchorInvControls
 import JauneConsensus.Facts.Gloas.Step
 import JauneConsensus.Facts.Gloas.Frame
 import JauneConsensus.JointGloas

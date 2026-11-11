@@ -663,4 +663,385 @@ theorem applyConsolidation_pending_spec {cfg : Config} {state s' : BeaconState P
       · simp [hj, Ne.symm hj]
     · cases hvals
 
+/-! ## Switch-to-compounding delta, source/target distinctness, and fold trace -/
+
+/-- `Gated.read` succeeds with the same value regardless of error-site label when it succeeds. -/
+private theorem gated_read_ok_site {c : Bool} {α : Type} {g : Gated c α} {s1 s2 : String} {x : α}
+    (h : Gated.read g s1 = .ok x) : Gated.read g s2 = .ok x := by
+  cases c with
+  | false => cases h
+  | true => exact h
+
+/-- A successful `validatorIndexOf` lookup names a registered validator carrying that pubkey. -/
+theorem validatorIndexOf_some_pubkey {state : BeaconState P f} {pk : BLSPubkey}
+    {i : ValidatorIndex} (h : validatorIndexOf state pk = .ok (some i)) :
+    ∃ v, state.validators.toArray[i.toNat]? = some v ∧ v.pubkey = pk := by
+  unfold validatorIndexOf at h
+  cases hf : state.validators.toArray.findIdx? (·.pubkey == pk) with
+  | none => rw [hf] at h; cases h
+  | some idx =>
+    rw [hf] at h
+    obtain ⟨u, hu, heq⟩ := bind_ok_elim h
+    cases heq
+    have hidx : i.toNat = idx := U64.toNat_ofNat? hu
+    rw [Array.findIdx?_eq_some_iff_getElem] at hf
+    obtain ⟨hlt, hpk, -⟩ := hf
+    refine ⟨state.validators.toArray[idx], ?_, sszVector_beq_iff.mp hpk⟩
+    rw [hidx, Array.getElem?_eq_getElem hlt]
+
+/-- Every accepted pending consolidation has distinct source and target validator indices:
+`classifyConsolidationRequest` checks `cr.source_pubkey ≠ cr.target_pubkey` and resolves both keys
+by first match (`validatorIndexOf`), so equal indices would force equal pubkeys. -/
+theorem PendingConsolidationChecks.source_ne_target {cfg : Config} {state : BeaconState P f}
+    {cr : ConsolidationRequest} {s t : ValidatorIndex}
+    (h : PendingConsolidationChecks cfg state cr s t) :
+    s ≠ t := by
+  intro hst
+  subst hst
+  obtain ⟨-, hne, -, -, hs, ht, -⟩ := h
+  obtain ⟨vs, hgs, hpks⟩ := validatorIndexOf_some_pubkey hs
+  obtain ⟨vt, hgt, hpkt⟩ := validatorIndexOf_some_pubkey ht
+  rw [hgs] at hgt
+  cases hgt
+  exact hne (hpks.symm.trans hpkt)
+
+/-- The compounding withdrawal credential computed by `switchToCompoundingValidator`. -/
+def compoundingWithdrawalCredentials (v : Validator) : Bytes32 :=
+  Jaune.Bytes.toB256 (COMPOUNDING_WITHDRAWAL_PREFIX :: v.withdrawal_credentials.toBytes.drop 1)
+
+/-- **State delta of `queue_excess_active_balance`**:
+- Always preserves `validators`, `balances.toArray.size`, `slot`, `pending_consolidations`,
+  `pending_partial_withdrawals`, `latest_execution_payload_header`, and `latest_block_header`;
+- When `balance ≤ MIN_ACTIVATION_BALANCE`, returns `state` unchanged;
+- When `MIN_ACTIVATION_BALANCE < balance`, sets `balances[index] := MIN_ACTIVATION_BALANCE` and
+  appends one `PendingDeposit` with `amount = balance - MIN_ACTIVATION_BALANCE` and
+  `slot = GENESIS_SLOT`. -/
+theorem queueExcessActiveBalance_spec {state s' : BeaconState P f} {index : ValidatorIndex}
+    (h : queueExcessActiveBalance state index = .ok s') :
+    s'.validators = state.validators ∧
+    s'.balances.toArray.size = state.balances.toArray.size ∧
+    s'.slot = state.slot ∧
+    s'.pending_consolidations = state.pending_consolidations ∧
+    s'.pending_partial_withdrawals = state.pending_partial_withdrawals ∧
+    s'.latest_execution_payload_header = state.latest_execution_payload_header ∧
+    s'.latest_block_header = state.latest_block_header ∧
+    ((s' = state ∧
+        ∃ bal minAct, state.balances.toArray[index.toNat]? = some bal ∧
+          c64 P.MIN_ACTIVATION_BALANCE = .ok minAct ∧ ¬ minAct < bal) ∨
+      (∃ bal minAct excess v q q',
+        state.balances.toArray[index.toNat]? = some bal ∧
+        c64 P.MIN_ACTIVATION_BALANCE = .ok minAct ∧
+        minAct < bal ∧
+        U64.sub? bal minAct "queue_excess_active_balance" = .ok excess ∧
+        state.validators.toArray[index.toNat]? = some v ∧
+        state.pendingDeposits = .ok q ∧
+        s'.pendingDeposits = .ok q' ∧
+        q'.toArray = q.toArray.push
+          { pubkey := v.pubkey
+            withdrawal_credentials := v.withdrawal_credentials
+            amount := excess
+            signature := g2PointAtInfinitySignature
+            slot := GENESIS_SLOT } ∧
+        (∀ j, s'.balances.toArray[j]? =
+          if j = index.toNat then some minAct else state.balances.toArray[j]?) ∧
+        s' = { state with balances := s'.balances, pending_deposits := s'.pending_deposits })) := by
+  unfold queueExcessActiveBalance at h
+  dsimp only at h
+  obtain ⟨bal, hbal, h⟩ := bind_ok_elim h
+  obtain ⟨minAct, hmin, h⟩ := bind_ok_elim h
+  have hbal0 := ssz_get_ok_iff.mp hbal
+  by_cases hlt : minAct < bal
+  · rw [ite_eq_left hlt] at h
+    obtain ⟨excess, hex, h⟩ := bind_ok_elim h
+    obtain ⟨bals, hbals, h⟩ := bind_ok_elim h
+    obtain ⟨v, hv, h⟩ := bind_ok_elim h
+    obtain ⟨q, hq, h⟩ := bind_ok_elim h
+    obtain ⟨q', hq', h⟩ := bind_ok_elim h
+    obtain ⟨g, hg, h⟩ := bind_ok_elim h
+    cases h
+    obtain ⟨hbi, hbset⟩ := set_ok hbals
+    have hq0 : state.pendingDeposits = .ok q :=
+      gated_read_ok_site hq
+    have hq1 : ({ state with balances := bals, pending_deposits := g } : BeaconState P f).pendingDeposits = .ok q' := by
+      unfold BeaconState.pendingDeposits
+      exact gated_write_read hg
+    refine ⟨rfl, by simp [hbset], rfl, rfl, rfl, rfl, rfl, .inr ⟨bal, minAct, excess, v, q, q',
+      hbal0, hmin, hlt, hex, ssz_get_ok_iff.mp hv, hq0, hq1, push_ok hq', ?_, rfl⟩⟩
+    intro j
+    show bals.toArray[j]? = _
+    rw [hbset, Array.getElem?_set]
+    by_cases hj : j = index.toNat
+    · subst hj; simp
+    · simp [hj, Ne.symm hj]
+  · rw [ite_eq_right hlt] at h
+    cases h
+    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, .inl ⟨rfl, bal, minAct, hbal0, hmin, hlt⟩⟩
+
+/-- **State delta of `switch_to_compounding_validator`**:
+updates `validators[index].withdrawal_credentials` to `compoundingWithdrawalCredentials v`, keeps
+`validators.toArray.size` and `balances.toArray.size` unchanged, preserves `slot`,
+`pending_consolidations`, `pending_partial_withdrawals`, `latest_execution_payload_header`, and
+`latest_block_header`, and applies `queueExcessActiveBalance` on the updated state (so
+`pending_deposits` is either unchanged or appends one `GENESIS_SLOT` excess-balance entry). -/
+theorem switchToCompoundingValidator_spec {state s' : BeaconState P f} {index : ValidatorIndex}
+    (h : switchToCompoundingValidator state index = .ok s') :
+    ∃ v mid,
+      state.validators.toArray[index.toNat]? = some v ∧
+      mid = { state with validators := mid.validators } ∧
+      mid.validators.toArray.size = state.validators.toArray.size ∧
+      (∀ j, mid.validators.toArray[j]? =
+        if j = index.toNat then
+          some { v with withdrawal_credentials := compoundingWithdrawalCredentials v }
+        else state.validators.toArray[j]?) ∧
+      queueExcessActiveBalance mid index = .ok s' ∧
+      s'.validators = mid.validators ∧
+      s'.balances.toArray.size = state.balances.toArray.size ∧
+      s'.slot = state.slot ∧
+      s'.pending_consolidations = state.pending_consolidations ∧
+      s'.pending_partial_withdrawals = state.pending_partial_withdrawals ∧
+      s'.latest_execution_payload_header = state.latest_execution_payload_header ∧
+      s'.latest_block_header = state.latest_block_header := by
+  unfold switchToCompoundingValidator at h
+  dsimp only at h
+  obtain ⟨v, hv, h⟩ := bind_ok_elim h
+  obtain ⟨vals, hvals, h⟩ := bind_ok_elim h
+  obtain ⟨hvi, hvset⟩ := set_ok hvals
+  have hq := queueExcessActiveBalance_spec h
+  refine ⟨v, { state with validators := vals }, ssz_get_ok_iff.mp hv, rfl,
+    by simp [hvset], ?_, h, hq.1, hq.2.1, hq.2.2.1, hq.2.2.2.1, hq.2.2.2.2.1, hq.2.2.2.2.2.1,
+    hq.2.2.2.2.2.2.1⟩
+  intro j
+  show vals.toArray[j]? = _
+  rw [hvset, Array.getElem?_set]
+  by_cases hj : j = index.toNat
+  · subst hj; simp [compoundingWithdrawalCredentials]
+  · simp [hj, Ne.symm hj]
+
+/-- The `PendingConsolidation` appended by a `ConsolidationOutcome`, if any. -/
+def acceptedConsolidation : ConsolidationOutcome → Option PendingConsolidation
+  | .pendingConsolidation s t => some { source_index := s, target_index := t }
+  | _ => none
+
+/-- Unified three-branch meaning of `classifyConsolidationRequest` + `applyConsolidationOutcome`
+for a single consolidation request (`C-S9` / `D-S9` per-request outcome lemma). -/
+theorem consolidationOutcome_means {cfg : Config} {state s' : BeaconState P f}
+    {cr : ConsolidationRequest} {o : ConsolidationOutcome}
+    (hc : classifyConsolidationRequest cfg state cr = .ok o)
+    (ha : applyConsolidationOutcome cfg state cr o = .ok s') :
+    (∀ r, o = .ignored r → s' = state) ∧
+    (∀ i, o = .switchToCompounding i →
+      SwitchToCompoundingChecks state cr i ∧
+      switchToCompoundingValidator state i = .ok s') ∧
+    (∀ s t, o = .pendingConsolidation s t →
+      PendingConsolidationChecks cfg state cr s t ∧
+      s ≠ t ∧
+      applyConsolidationOutcome cfg state cr (.pendingConsolidation s t) = .ok s') := by
+  have hs := classifyConsolidation_spec hc
+  refine ⟨?_, ?_, ?_⟩
+  · intro r hr; subst hr; cases ha; rfl
+  · intro i hi; subst hi
+    obtain ⟨hvalid, hidx⟩ := hs.1 i rfl
+    obtain ⟨j, hj⟩ := isValidSwitch_true hvalid
+    have hj_eq : j = i := by
+      have hj_idx := hj.2.1
+      rw [hidx] at hj_idx
+      exact (Option.some.inj (Except.ok.inj hj_idx)).symm
+    subst hj_eq
+    exact ⟨hj, ha⟩
+  · intro s t hst; subst hst
+    have hp := hs.2 s t rfl
+    exact ⟨hp, hp.source_ne_target, ha⟩
+
+/-- Full record frame and validator-array size preservation of `applyConsolidationOutcome` on
+`.pendingConsolidation s t`. -/
+theorem applyConsolidation_pending_frame {cfg : Config} {state s' : BeaconState P f}
+    {cr : ConsolidationRequest} {s t : ValidatorIndex}
+    (h : applyConsolidationOutcome cfg state cr (.pendingConsolidation s t) = .ok s') :
+    s' = { state with
+      consolidation_balance_to_consume := s'.consolidation_balance_to_consume
+      earliest_consolidation_epoch := s'.earliest_consolidation_epoch
+      validators := s'.validators
+      pending_consolidations := s'.pending_consolidations } ∧
+    s'.validators.toArray.size = state.validators.toArray.size := by
+  unfold applyConsolidationOutcome at h
+  dsimp only at h
+  obtain ⟨src, _, h⟩ := bind_ok_elim h
+  obtain ⟨⟨st1, exitEpoch⟩, hr1, h⟩ := bind_ok_elim h
+  dsimp only at h
+  obtain ⟨_, _, h⟩ := bind_ok_elim h
+  obtain ⟨_, _, h⟩ := bind_ok_elim h
+  obtain ⟨_, _, h⟩ := bind_ok_elim h
+  obtain ⟨vals, hvals, h⟩ := bind_ok_elim h
+  obtain ⟨_, _, h⟩ := bind_ok_elim h
+  obtain ⟨_, _, h⟩ := bind_ok_elim h
+  obtain ⟨a, e, hst1⟩ := computeConsolidationEpoch_frame hr1
+  simp only at hst1
+  unfold BeaconState.setPendingConsolidations at h
+  obtain ⟨g, _, h⟩ := bind_ok_elim h
+  cases h
+  obtain ⟨_, hvset⟩ := set_ok hvals
+  refine ⟨by rw [hst1], ?_⟩
+  show vals.toArray.size = state.validators.toArray.size
+  rw [hvset, Array.size_set, hst1]
+
+/-- Frame and queue characterization for a single `processConsolidationRequest` call (Electra and
+Fulu): preserves `slot`, `latest_execution_payload_header`, `latest_block_header`,
+`pending_partial_withdrawals`, `validators.toArray.size`, and `balances.toArray.size`; appends
+`acceptedConsolidation o` (with `source_index ≠ target_index`) to `pending_consolidations`; and
+appends at most one `GENESIS_SLOT` entry to `pending_deposits`. -/
+theorem processConsolidationRequest_frame_and_queues (h : f.atLeast .electra = true)
+    {cfg : Config} {state s' : BeaconState P f} {cr : ConsolidationRequest}
+    (hp : processConsolidationRequest cfg state cr = .ok s') :
+    ∃ o extraDep,
+      classifyConsolidationRequest cfg state cr = .ok o ∧
+      applyConsolidationOutcome cfg state cr o = .ok s' ∧
+      s'.slot = state.slot ∧
+      s'.latest_execution_payload_header = state.latest_execution_payload_header ∧
+      s'.latest_block_header = state.latest_block_header ∧
+      s'.pending_partial_withdrawals = state.pending_partial_withdrawals ∧
+      s'.validators.toArray.size = state.validators.toArray.size ∧
+      s'.balances.toArray.size = state.balances.toArray.size ∧
+      (∀ pc, acceptedConsolidation o = some pc → pc.source_index ≠ pc.target_index) ∧
+      (Gated.get h s'.pending_consolidations).toArray.toList =
+        (Gated.get h state.pending_consolidations).toArray.toList ++
+          (acceptedConsolidation o).toList ∧
+      (Gated.get h s'.pending_deposits).toArray.toList =
+        (Gated.get h state.pending_deposits).toArray.toList ++ extraDep ∧
+      (∀ d ∈ extraDep, d.slot = GENESIS_SLOT) := by
+  rw [processConsolidationRequest_eq] at hp
+  obtain ⟨o, hc, ha⟩ := bind_eq_ok_iff.mp hp
+  have hm := consolidationOutcome_means hc ha
+  cases o with
+  | ignored r =>
+    have heq := hm.1 r rfl
+    subst heq
+    exact ⟨.ignored r, [], hc, ha, rfl, rfl, rfl, rfl, rfl, rfl,
+      (by intro _ h; cases h), (by simp [acceptedConsolidation]), (by simp),
+      (by intro _ hd; cases hd)⟩
+  | switchToCompounding i =>
+    obtain ⟨_, hsw⟩ := hm.2.1 i rfl
+    obtain ⟨v, mid, _, hmid_fr, hvsz, _, hqex, hv_eq, hbsz, hslot, hpc, hppw, hel, hlbh⟩ :=
+      switchToCompoundingValidator_spec hsw
+    have hmid_pd : mid.pending_deposits = state.pending_deposits := by rw [hmid_fr]
+    have hq := queueExcessActiveBalance_spec hqex
+    rcases hq.2.2.2.2.2.2.2 with ⟨heq, _⟩ | ⟨bal, minAct, excess, v', q, q', _, _, _, _, _,
+        hq0, hq1, hpush, _, _⟩
+    · refine ⟨.switchToCompounding i, [], hc, ha, hslot, hel, hlbh, hppw,
+        (by rw [hv_eq, hvsz]), hbsz, (by intro _ h; cases h),
+        (by simp [acceptedConsolidation, hpc]), ?_, (by intro _ hd; cases hd)⟩
+      rw [heq, hmid_pd]
+      simp
+    · have hq0_get : q = Gated.get h mid.pending_deposits := by
+        unfold BeaconState.pendingDeposits at hq0
+        rw [gated_read_get h] at hq0
+        exact (Except.ok.inj hq0).symm
+      have hq1_get : q' = Gated.get h s'.pending_deposits := by
+        unfold BeaconState.pendingDeposits at hq1
+        rw [gated_read_get h] at hq1
+        exact (Except.ok.inj hq1).symm
+      let dep : PendingDeposit :=
+        { pubkey := v'.pubkey
+          withdrawal_credentials := v'.withdrawal_credentials
+          amount := excess
+          signature := g2PointAtInfinitySignature
+          slot := GENESIS_SLOT }
+      refine ⟨.switchToCompounding i, [dep], hc, ha, hslot, hel, hlbh, hppw,
+        (by rw [hv_eq, hvsz]), hbsz, (by intro _ h; cases h),
+        (by simp [acceptedConsolidation, hpc]), ?_, ?_⟩
+      · rw [← hq1_get, hpush, hq0_get, hmid_pd, Array.toList_push]
+      · intro d hd
+        simp only [List.mem_singleton] at hd
+        subst hd
+        rfl
+  | pendingConsolidation s t =>
+    obtain ⟨_, hne, hpend⟩ := hm.2.2 s t rfl
+    obtain ⟨hb_eq, hd_eq, hppw_eq, ⟨q, q', hq0, hq1, hpush⟩, _⟩ :=
+      applyConsolidation_pending_spec hpend
+    obtain ⟨hfr, hvsz⟩ := applyConsolidation_pending_frame hpend
+    have hq0_get : q = Gated.get h state.pending_consolidations := by
+      unfold BeaconState.pendingConsolidations at hq0
+      rw [gated_read_get h] at hq0
+      exact (Except.ok.inj hq0).symm
+    have hq1_get : q' = Gated.get h s'.pending_consolidations := by
+      unfold BeaconState.pendingConsolidations at hq1
+      rw [gated_read_get h] at hq1
+      exact (Except.ok.inj hq1).symm
+    refine ⟨.pendingConsolidation s t, [], hc, ha,
+      (by rw [hfr]), (by rw [hfr]), (by rw [hfr]), hppw_eq, hvsz, (by rw [hb_eq]),
+      ?_, ?_, (by simp [hd_eq]), (by intro _ hd; cases hd)⟩
+    · intro pc hpc
+      simp only [acceptedConsolidation, Option.some.injEq] at hpc
+      subst hpc
+      exact hne
+    · rw [← hq1_get, hpush, hq0_get, Array.toList_push]
+      rfl
+
+/-- **Fold specification for `foldConsolidationRequests`** (Electra and Fulu):
+across a list of consolidation requests `reqs`:
+1. `consolidationRequestTrace` produces `tr` of length `reqs.length + 1` with `tr[0] = state` and
+   `tr.last = s'`;
+2. There is an aligned list `outcomes` of `ConsolidationOutcome`s (`outcomes.length = reqs.length`)
+   such that at each step `k`, `classifyConsolidationRequest` yields `outcomes[k]` and
+   `applyConsolidationOutcome` advances `tr[k]` to `tr[k+1]`;
+3. `pending_consolidations` appends `outcomes.filterMap acceptedConsolidation`, and every appended
+   entry has `source_index ≠ target_index`;
+4. `pending_deposits` appends only `GENESIS_SLOT` excess-balance entries;
+5. `slot`, `latest_execution_payload_header`, `latest_block_header`, `pending_partial_withdrawals`,
+   `validators.toArray.size`, and `balances.toArray.size` are all preserved. -/
+theorem foldConsolidationRequests_frames_and_queues (h : f.atLeast .electra = true)
+    (cfg : Config) :
+    ∀ (reqs : List ConsolidationRequest) {state s' : BeaconState P f},
+      foldConsolidationRequests cfg state reqs = .ok s' →
+      ∃ (outcomes : List ConsolidationOutcome) (extraDeps : List PendingDeposit),
+        outcomes.length = reqs.length ∧
+        s'.slot = state.slot ∧
+        s'.latest_execution_payload_header = state.latest_execution_payload_header ∧
+        s'.latest_block_header = state.latest_block_header ∧
+        s'.pending_partial_withdrawals = state.pending_partial_withdrawals ∧
+        s'.validators.toArray.size = state.validators.toArray.size ∧
+        s'.balances.toArray.size = state.balances.toArray.size ∧
+        (∀ pc ∈ outcomes.filterMap acceptedConsolidation, pc.source_index ≠ pc.target_index) ∧
+        (Gated.get h s'.pending_consolidations).toArray.toList =
+          (Gated.get h state.pending_consolidations).toArray.toList ++
+            outcomes.filterMap acceptedConsolidation ∧
+        (Gated.get h s'.pending_deposits).toArray.toList =
+          (Gated.get h state.pending_deposits).toArray.toList ++ extraDeps ∧
+        (∀ d ∈ extraDeps, d.slot = GENESIS_SLOT) := by
+  intro reqs
+  induction reqs with
+  | nil =>
+    intro state s' hp
+    cases hp
+    exact ⟨[], [], rfl, rfl, rfl, rfl, rfl, rfl, rfl,
+      (by intro _ hm; cases hm), (by simp), (by simp), (by intro _ hm; cases hm)⟩
+  | cons cr crs ih =>
+    intro state s' hp
+    unfold foldConsolidationRequests at hp
+    rw [List.foldlM_cons] at hp
+    obtain ⟨mid, h1, hrest⟩ := bind_eq_ok_iff.mp hp
+    obtain ⟨o, extra1, _, _, hslot1, hel1, hlbh1, hppw1, hvsz1, hbsz1, hdist1, hpc1, hpd1,
+      hgen1⟩ := processConsolidationRequest_frame_and_queues h h1
+    obtain ⟨os, extra2, hlen, hslot2, hel2, hlbh2, hppw2, hvsz2, hbsz2, hdist2, hpc2, hpd2,
+      hgen2⟩ := ih hrest
+    refine ⟨o :: os, extra1 ++ extra2, by simp [hlen],
+      hslot2.trans hslot1, hel2.trans hel1, hlbh2.trans hlbh1, hppw2.trans hppw1,
+      hvsz2.trans hvsz1, hbsz2.trans hbsz1, ?_, ?_, ?_, ?_⟩
+    · intro pc hpc
+      simp only [List.filterMap_cons] at hpc
+      cases ho : acceptedConsolidation o with
+      | none => rw [ho] at hpc; exact hdist2 pc hpc
+      | some pc0 =>
+        rw [ho] at hpc
+        rcases List.mem_cons.mp hpc with rfl | hmem
+        · exact hdist1 pc ho
+        · exact hdist2 pc hmem
+    · rw [hpc2, hpc1, List.append_assoc]
+      congr 1
+      cases ho : acceptedConsolidation o <;> simp [ho]
+    · rw [hpd2, hpd1, List.append_assoc]
+    · intro d hd
+      rcases List.mem_append.mp hd with hd1 | hd2
+      · exact hgen1 d hd1
+      · exact hgen2 d hd2
+
 end JauneConsensus.Facts

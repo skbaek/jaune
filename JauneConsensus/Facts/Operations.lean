@@ -229,6 +229,343 @@ theorem foldWithdrawalRequests_eq_trace_last (cfg : Config) (st : BeaconState P 
         rw [hp]
         exact key
 
+/-! ## Deposit-requests and consolidation-requests splits and traces (G1b) -/
+
+/-- The operations of `process_operations` that precede the deposit-requests loop, in spec order:
+the deposit-count check, the slashings, attestations, Eth1 bridge `deposits`, voluntary exits and
+`bls_to_execution_change`s. -/
+def preDeposits (ctx : Ctx) (state : BeaconState P f) (body : BeaconBlockBody P f) :
+    M (BeaconState P f) := do
+  let site := "process_operations"
+  if f.atLeast .fulu then
+    require (body.deposits.length == 0) s!"{site}: no deposits (Fulu)"
+  else
+    let startIndex ← if f.atLeast .electra then state.depositRequestsStartIndex
+      else pure U64.max
+    let limit := if state.eth1_data.deposit_count < startIndex then state.eth1_data.deposit_count
+      else startIndex
+    if !(f.atLeast .electra) then
+      let _ ← U64.sub? state.eth1_data.deposit_count state.eth1_deposit_index site
+    if state.eth1_deposit_index < limit then
+      let remaining ← U64.sub? limit state.eth1_deposit_index site
+      require (body.deposits.length == min P.MAX_DEPOSITS remaining.toNat) s!"{site}: deposit count"
+    else
+      require (body.deposits.length == 0) s!"{site}: no deposits"
+  let mut state := state
+  for op in body.proposer_slashings.toArray do state ← processProposerSlashing ctx state op
+  for op in body.attester_slashings.toArray do state ← processAttesterSlashing ctx state op
+  for op in body.attestations.toArray do state ← processAttestation ctx state op
+  for op in body.deposits.toArray do state ← processDeposit ctx state op
+  for op in body.voluntary_exits.toArray do state ← processVoluntaryExit ctx state op
+  for op in body.bls_to_execution_changes.toArray do state ← processBlsToExecutionChange ctx state op
+  pure state
+
+/-- The deposit-requests loop of `process_operations` (Electra and Fulu): the left fold of
+`process_deposit_request` over the requests, in order. -/
+def foldDepositRequests (state : BeaconState P f) (drs : List DepositRequest) :
+    M (BeaconState P f) :=
+  List.foldlM (fun s dr => processDepositRequest s dr) state drs
+
+/-- The states of the deposit-requests fold: the state before each request, then the final state.
+Its length is `drs.length + 1`, and its last element is the fold's result. -/
+def depositRequestTrace :
+    BeaconState P f → List DepositRequest → M (List (BeaconState P f))
+  | st, [] => pure [st]
+  | st, dr :: rest => do
+    let st' ← processDepositRequest st dr
+    let tr ← depositRequestTrace st' rest
+    pure (st :: tr)
+
+/-- The operations of `process_operations` up to and including the deposit-requests loop
+(`preDeposits >>= foldDepositRequests`), i.e. the state handed to `foldWithdrawalRequests`. -/
+def postDeposits (ctx : Ctx) (state : BeaconState P f) (body : BeaconBlockBody P f) :
+    M (BeaconState P f) :=
+  preRequests ctx state body
+
+/-- The operations of `process_operations` that precede the consolidation-requests loop (Electra and
+Fulu): `preRequests` followed by `foldWithdrawalRequests`. -/
+def preConsolidations (ctx : Ctx) (state : BeaconState P f) (body : BeaconBlockBody P f) :
+    M (BeaconState P f) := do
+  let s ← preRequests ctx state body
+  if f.atLeast .electra then
+    let requests ← Gated.read body.execution_requests "execution_requests"
+    foldWithdrawalRequests ctx.cfg s requests.withdrawals.toArray.toList
+  else
+    pure s
+
+/-- The consolidation-requests loop of `process_operations` (Electra and Fulu): the left fold of
+`process_consolidation_request` over the requests, in order. -/
+def foldConsolidationRequests (cfg : Config) (st : BeaconState P f)
+    (reqs : List ConsolidationRequest) : M (BeaconState P f) :=
+  List.foldlM (fun s cr => processConsolidationRequest cfg s cr) st reqs
+
+/-- The states of the consolidation-requests fold: the state before each request, then the final
+state. Its length is `reqs.length + 1`, and its last element is the fold's result. -/
+def consolidationRequestTrace (cfg : Config) :
+    BeaconState P f → List ConsolidationRequest → M (List (BeaconState P f))
+  | st, [] => pure [st]
+  | st, cr :: rest => do
+    let st' ← processConsolidationRequest cfg st cr
+    let tr ← consolidationRequestTrace cfg st' rest
+    pure (st :: tr)
+
+/-- Generic trace specification for any monadic step fold. -/
+theorem stepTrace_spec {α β : Type} (step : β → α → M β)
+    (trace : β → List α → M (List β))
+    (hnil : ∀ st, trace st [] = pure [st])
+    (hcons : ∀ st x rest, trace st (x :: rest) = (do
+      let st' ← step st x
+      let tr ← trace st' rest
+      pure (st :: tr))) :
+    ∀ (reqs : List α) (st : β) (tr : List β),
+      trace st reqs = .ok tr →
+      tr.length = reqs.length + 1 ∧ tr.head? = some st ∧
+      ∀ (k : Nat) (req : α) (a b : β),
+        reqs[k]? = some req → tr[k]? = some a → tr[k + 1]? = some b →
+        step a req = .ok b
+  | [], st, tr, h => by
+    rw [hnil] at h
+    have htr : tr = [st] := (Except.ok.inj h).symm
+    subst htr
+    refine ⟨rfl, rfl, fun k _ _ _ hk => by simp at hk⟩
+  | req :: rest, st, tr, h => by
+    rw [hcons] at h
+    cases hp : step st req with
+    | error e =>
+      rw [hp] at h
+      change Except.error e = Except.ok tr at h
+      cases h
+    | ok st' =>
+      rw [hp] at h
+      change (trace st' rest >>= fun tr' => pure (st :: tr')) = Except.ok tr at h
+      cases hr : trace st' rest with
+      | error e =>
+        rw [hr] at h
+        change Except.error e = Except.ok tr at h
+        cases h
+      | ok tr' =>
+        rw [hr] at h
+        have htr : tr = st :: tr' := (Except.ok.inj h).symm
+        subst htr
+        obtain ⟨hlen, hhead, hstep⟩ := stepTrace_spec step trace hnil hcons rest st' tr' hr
+        refine ⟨by simp [hlen], by simp, ?_⟩
+        intro k r a b hk ha hb
+        cases k with
+        | zero =>
+          simp only [List.getElem?_cons_zero, Option.some.injEq] at hk ha
+          subst hk ha
+          have hb' : tr'.head? = some b := by rw [List.head?_eq_getElem?]; exact hb
+          rw [hhead] at hb'
+          cases hb'
+          exact hp
+        | succ j =>
+          simp only [List.getElem?_cons_succ] at hk ha hb
+          exact hstep j r a b hk ha hb
+termination_by reqs => reqs.length
+
+/-- Generic equivalence between a `List.foldlM` and the last element of its step trace. -/
+theorem foldlM_eq_stepTrace_last {α β : Type} (step : β → α → M β)
+    (trace : β → List α → M (List β))
+    (hnil : ∀ st, trace st [] = pure [st])
+    (hcons : ∀ st x rest, trace st (x :: rest) = (do
+      let st' ← step st x
+      let tr ← trace st' rest
+      pure (st :: tr))) :
+    ∀ (reqs : List α) (st : β) (tr : List β) (hne : tr ≠ []),
+      trace st reqs = .ok tr →
+      List.foldlM step st reqs = .ok (tr.getLast hne) := by
+  intro reqs
+  induction reqs with
+  | nil =>
+    intro st tr hne h
+    rw [hnil] at h
+    have htr : tr = [st] := (Except.ok.inj h).symm
+    subst htr
+    rfl
+  | cons req rest ih =>
+    intro st tr hne h
+    rw [hcons] at h
+    cases hp : step st req with
+    | error e =>
+      rw [hp] at h
+      change Except.error e = Except.ok tr at h
+      cases h
+    | ok st' =>
+      rw [hp] at h
+      change (trace st' rest >>= fun tr' => pure (st :: tr')) = Except.ok tr at h
+      cases hr : trace st' rest with
+      | error e =>
+        rw [hr] at h
+        change Except.error e = Except.ok tr at h
+        cases h
+      | ok tr' =>
+        rw [hr] at h
+        have htr : tr = st :: tr' := (Except.ok.inj h).symm
+        subst htr
+        have hne' : tr' ≠ [] := by
+          intro e
+          have := (stepTrace_spec step trace hnil hcons rest st' tr' hr).1
+          simp [e] at this
+        have key := ih st' tr' hne' hr
+        rw [List.getLast_cons hne', List.foldlM_cons, hp]
+        exact key
+
+/-- Conversly, every successful `List.foldlM` produces a step trace ending at its result. -/
+theorem stepTrace_of_foldlM {α β : Type} (step : β → α → M β)
+    (trace : β → List α → M (List β))
+    (hnil : ∀ st, trace st [] = pure [st])
+    (hcons : ∀ st x rest, trace st (x :: rest) = (do
+      let st' ← step st x
+      let tr ← trace st' rest
+      pure (st :: tr))) :
+    ∀ (reqs : List α) (st out : β),
+      List.foldlM step st reqs = .ok out →
+      ∃ (tr : List β) (hne : tr ≠ []), trace st reqs = .ok tr ∧ tr.getLast hne = out := by
+  intro reqs
+  induction reqs with
+  | nil =>
+    intro st out h
+    cases h
+    exact ⟨[st], List.cons_ne_nil _ _, hnil st, rfl⟩
+  | cons req rest ih =>
+    intro st out h
+    rw [List.foldlM_cons] at h
+    cases hp : step st req with
+    | error e => rw [hp] at h; cases h
+    | ok st' =>
+      rw [hp] at h
+      obtain ⟨tr', hne', htr', hlast⟩ := ih st' out h
+      refine ⟨st :: tr', List.cons_ne_nil _ _, ?_, ?_⟩
+      · rw [hcons, hp, ok_bind', htr']; rfl
+      · rw [List.getLast_cons hne']; exact hlast
+
+/-- `preRequests` splits into `preDeposits` followed by `foldDepositRequests` (Electra and Fulu). -/
+theorem preRequests_eq_preDeposits_fold (ctx : Ctx) (st : BeaconState P f)
+    (body : BeaconBlockBody P f) (h : f.atLeast .electra = true) :
+    preRequests ctx st body =
+      preDeposits ctx st body >>= fun s =>
+        foldDepositRequests s (Gated.get h body.execution_requests).deposits.toArray.toList := by
+  unfold preRequests preDeposits foldDepositRequests
+  simp only [h, gated_read_get h, forArr_yield, pure_bind, Bool.not_true,
+    Bool.false_eq_true, ite_true, ite_false]
+  cases hfu : f.atLeast .fulu
+  · simp only [Bool.false_eq_true, ite_false]
+    cases hx : st.depositRequestsStartIndex with
+    | error e => rfl
+    | ok x =>
+      rw [show (Except.ok x : M U64) = pure x from rfl]
+      simp only [pure_bind]
+      split_ifs <;> simp only [bind_assoc, ok_bind', bind_pure]
+  · simp only [ite_true, bind_assoc, ok_bind', bind_pure]
+
+/-- `postRequests` is `foldConsolidationRequests` (Electra and Fulu). -/
+theorem postRequests_eq_foldConsolidationRequests (ctx : Ctx) (st : BeaconState P f)
+    (body : BeaconBlockBody P f) (h : f.atLeast .electra = true) :
+    postRequests ctx st body =
+      foldConsolidationRequests ctx.cfg st
+        (Gated.get h body.execution_requests).consolidations.toArray.toList := by
+  unfold postRequests foldConsolidationRequests
+  simp only [h, gated_read_get h, forArr_yield, ite_true, ok_bind', bind_pure]
+
+/-- `preConsolidations` under Electra/Fulu is `preRequests >>= foldWithdrawalRequests`. -/
+theorem preConsolidations_eq (ctx : Ctx) (st : BeaconState P f) (body : BeaconBlockBody P f)
+    (h : f.atLeast .electra = true) :
+    preConsolidations ctx st body =
+      preRequests ctx st body >>= fun s =>
+        foldWithdrawalRequests ctx.cfg s
+          (Gated.get h body.execution_requests).withdrawals.toArray.toList := by
+  unfold preConsolidations
+  simp only [h, gated_read_get h, ite_true, ok_bind']
+
+/-- Split of `process_operations` at its consolidation-requests loop (Electra and Fulu). -/
+theorem processOperations_split_consolidations (ctx : Ctx) (st : BeaconState P f)
+    (body : BeaconBlockBody P f) (h : f.atLeast .electra = true) :
+    processOperations ctx st body =
+      preConsolidations ctx st body >>= fun s =>
+        foldConsolidationRequests ctx.cfg s
+          (Gated.get h body.execution_requests).consolidations.toArray.toList := by
+  rw [processOperations_split ctx st body h, preConsolidations_eq ctx st body h, bind_assoc]
+  apply bind_congr; intro s
+  apply bind_congr; intro s'
+  exact postRequests_eq_foldConsolidationRequests ctx s' body h
+
+/-- Full four-stage split of `process_operations` across all three execution-request loops
+(Electra and Fulu): `preDeposits`, `foldDepositRequests`, `foldWithdrawalRequests`, and
+`foldConsolidationRequests`. -/
+theorem processOperations_split_all (ctx : Ctx) (st : BeaconState P f)
+    (body : BeaconBlockBody P f) (h : f.atLeast .electra = true) :
+    processOperations ctx st body =
+      preDeposits ctx st body >>= fun s1 =>
+        foldDepositRequests s1
+          (Gated.get h body.execution_requests).deposits.toArray.toList >>= fun s2 =>
+          foldWithdrawalRequests ctx.cfg s2
+            (Gated.get h body.execution_requests).withdrawals.toArray.toList >>= fun s3 =>
+            foldConsolidationRequests ctx.cfg s3
+              (Gated.get h body.execution_requests).consolidations.toArray.toList := by
+  rw [processOperations_split ctx st body h, preRequests_eq_preDeposits_fold ctx st body h,
+    bind_assoc]
+  apply bind_congr; intro s1
+  apply bind_congr; intro s2
+  apply bind_congr; intro s3
+  exact postRequests_eq_foldConsolidationRequests ctx s3 body h
+
+/-- Specification of `depositRequestTrace`: length `drs.length + 1`, head `st`, and each consecutive
+pair stepped by `processDepositRequest`. -/
+theorem depositRequestTrace_spec :
+    ∀ (drs : List DepositRequest) (st : BeaconState P f) (tr : List (BeaconState P f)),
+      depositRequestTrace st drs = .ok tr →
+      tr.length = drs.length + 1 ∧ tr.head? = some st ∧
+      ∀ (k : Nat) (dr : DepositRequest) (a b : BeaconState P f),
+        drs[k]? = some dr → tr[k]? = some a → tr[k + 1]? = some b →
+        processDepositRequest a dr = .ok b :=
+  stepTrace_spec (fun s dr => processDepositRequest s dr) depositRequestTrace
+    (fun _ => rfl) (fun _ _ _ => rfl)
+
+/-- `foldDepositRequests` produces the last state of `depositRequestTrace`. -/
+theorem foldDepositRequests_eq_trace_last (st : BeaconState P f) (drs : List DepositRequest)
+    (tr : List (BeaconState P f)) (hne : tr ≠ []) (h : depositRequestTrace st drs = .ok tr) :
+    foldDepositRequests st drs = .ok (tr.getLast hne) :=
+  foldlM_eq_stepTrace_last (fun s dr => processDepositRequest s dr) depositRequestTrace
+    (fun _ => rfl) (fun _ _ _ => rfl) drs st tr hne h
+
+/-- Every successful `foldDepositRequests` yields a `depositRequestTrace` ending at its output. -/
+theorem depositRequestTrace_of_fold {st out : BeaconState P f} {drs : List DepositRequest}
+    (h : foldDepositRequests st drs = .ok out) :
+    ∃ (tr : List (BeaconState P f)) (hne : tr ≠ []),
+      depositRequestTrace st drs = .ok tr ∧ tr.getLast hne = out :=
+  stepTrace_of_foldlM (fun s dr => processDepositRequest s dr) depositRequestTrace
+    (fun _ => rfl) (fun _ _ _ => rfl) drs st out h
+
+/-- Specification of `consolidationRequestTrace`: length `reqs.length + 1`, head `st`, and each
+consecutive pair stepped by `processConsolidationRequest`. -/
+theorem consolidationRequestTrace_spec (cfg : Config) :
+    ∀ (reqs : List ConsolidationRequest) (st : BeaconState P f) (tr : List (BeaconState P f)),
+      consolidationRequestTrace cfg st reqs = .ok tr →
+      tr.length = reqs.length + 1 ∧ tr.head? = some st ∧
+      ∀ (k : Nat) (cr : ConsolidationRequest) (a b : BeaconState P f),
+        reqs[k]? = some cr → tr[k]? = some a → tr[k + 1]? = some b →
+        processConsolidationRequest cfg a cr = .ok b :=
+  stepTrace_spec (fun s cr => processConsolidationRequest cfg s cr) (consolidationRequestTrace cfg)
+    (fun _ => rfl) (fun _ _ _ => rfl)
+
+/-- `foldConsolidationRequests` produces the last state of `consolidationRequestTrace`. -/
+theorem foldConsolidationRequests_eq_trace_last (cfg : Config) (st : BeaconState P f)
+    (reqs : List ConsolidationRequest) (tr : List (BeaconState P f)) (hne : tr ≠ [])
+    (h : consolidationRequestTrace cfg st reqs = .ok tr) :
+    foldConsolidationRequests cfg st reqs = .ok (tr.getLast hne) :=
+  foldlM_eq_stepTrace_last (fun s cr => processConsolidationRequest cfg s cr)
+    (consolidationRequestTrace cfg) (fun _ => rfl) (fun _ _ _ => rfl) reqs st tr hne h
+
+/-- Every successful `foldConsolidationRequests` yields a `consolidationRequestTrace` ending at its
+output. -/
+theorem consolidationRequestTrace_of_fold (cfg : Config) {st out : BeaconState P f}
+    {reqs : List ConsolidationRequest}
+    (h : foldConsolidationRequests cfg st reqs = .ok out) :
+    ∃ (tr : List (BeaconState P f)) (hne : tr ≠ []),
+      consolidationRequestTrace cfg st reqs = .ok tr ∧ tr.getLast hne = out :=
+  stepTrace_of_foldlM (fun s cr => processConsolidationRequest cfg s cr)
+    (consolidationRequestTrace cfg) (fun _ => rfl) (fun _ _ _ => rfl) reqs st out h
+
 
 /-! ## The block -/
 

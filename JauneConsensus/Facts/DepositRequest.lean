@@ -132,11 +132,49 @@ theorem processDepositRequest_frame (h : f.atLeast .electra = true)
 
 /-! ## The deposit-requests loop of a block -/
 
-/-- The deposit-requests loop of `process_operations` (Electra and Fulu): the left fold of
-`process_deposit_request` over the requests, in order. -/
-def foldDepositRequests (state : BeaconState P f) (drs : List DepositRequest) :
-    M (BeaconState P f) :=
-  List.foldlM (fun s dr => processDepositRequest s dr) state drs
+/-- **Full specification of `foldDepositRequests`** (Electra and Fulu): on success, the
+pending-deposit queue appends one `depositRequestPending dr state.slot` per request in order,
+`deposit_requests_start_index` is the left fold of `depositRequestStartIndex f` over the requests,
+and every other field of `BeaconState` (including `slot`, `validators`, `balances`,
+`pending_consolidations`, `pending_partial_withdrawals`, `latest_execution_payload_header`, and
+`latest_block_header`) is unchanged. -/
+theorem foldDepositRequests_spec (h : f.atLeast .electra = true) :
+    ∀ (drs : List DepositRequest) {state s' : BeaconState P f},
+      foldDepositRequests state drs = .ok s' →
+      (Gated.get h s'.pending_deposits).toArray =
+        (Gated.get h state.pending_deposits).toArray ++
+          (drs.map (depositRequestPending · state.slot)).toArray ∧
+      Gated.get h s'.deposit_requests_start_index =
+        drs.foldl (depositRequestStartIndex f) (Gated.get h state.deposit_requests_start_index) ∧
+      s' = { state with
+        deposit_requests_start_index := s'.deposit_requests_start_index
+        pending_deposits := s'.pending_deposits } := by
+  intro drs
+  induction drs with
+  | nil =>
+    intro state s' hp
+    cases hp
+    exact ⟨by simp, rfl, rfl⟩
+  | cons dr drs ih =>
+    intro state s' hp
+    unfold foldDepositRequests at hp
+    rw [List.foldlM_cons] at hp
+    cases h1 : processDepositRequest state dr with
+    | error e => rw [h1] at hp; cases hp
+    | ok s1 =>
+      rw [h1] at hp
+      obtain ⟨hq, hsi, hfr2⟩ := ih hp
+      have hq1 := processDepositRequest_pending h h1
+      have hsi1 := processDepositRequest_startIndex h h1
+      have hfr1 := processDepositRequest_frame h h1
+      have hslot1 : s1.slot = state.slot := by rw [hfr1]
+      refine ⟨?_, ?_, ?_⟩
+      · rw [hq, hq1, hslot1]
+        apply Array.toList_inj.mp
+        simp only [List.map_cons, Array.toList_append, Array.toList_push, List.append_assoc,
+          List.singleton_append]
+      · rw [hsi, List.foldl_cons, hsi1]
+      · rw [hfr2, hfr1]
 
 /-- **D-S9 fate, a block's requests**: on success the pending-deposit queue is the old queue
 followed, positionally, by one `PendingDeposit` per request, each carrying that request's key,
@@ -148,30 +186,22 @@ theorem foldDepositRequests_pending (h : f.atLeast .electra = true) :
         (Gated.get h state.pending_deposits).toArray ++
           (drs.map (depositRequestPending · state.slot)).toArray ∧
       s'.slot = state.slot ∧ s'.validators = state.validators ∧ s'.balances = state.balances := by
-  intro drs
-  induction drs with
-  | nil =>
-    intro state s' hp
-    cases hp
-    simp
-  | cons dr drs ih =>
-    intro state s' hp
-    unfold foldDepositRequests at hp
-    rw [List.foldlM_cons] at hp
-    cases h1 : processDepositRequest state dr with
-    | error e => rw [h1] at hp; cases hp
-    | ok s1 =>
-      rw [h1] at hp
-      obtain ⟨hq, hslot, hv, hb⟩ := ih hp
-      have hq1 := processDepositRequest_pending h h1
-      have hfr := processDepositRequest_frame h h1
-      have hslot1 : s1.slot = state.slot := by rw [hfr]
-      have hv1 : s1.validators = state.validators := by rw [hfr]
-      have hb1 : s1.balances = state.balances := by rw [hfr]
-      refine ⟨?_, hslot.trans hslot1, hv.trans hv1, hb.trans hb1⟩
-      rw [hq, hq1, hslot1]
-      apply Array.toList_inj.mp
-      simp only [List.map_cons, Array.toList_append, Array.toList_push, List.append_assoc,
-        List.singleton_append]
+  intro drs state s' hp
+  obtain ⟨hq, -, hfr⟩ := foldDepositRequests_spec h drs hp
+  exact ⟨hq, by rw [hfr], by rw [hfr], by rw [hfr]⟩
+
+/-- Named field projections preserved across `foldDepositRequests`. -/
+theorem foldDepositRequests_frames (h : f.atLeast .electra = true)
+    {drs : List DepositRequest} {state s' : BeaconState P f}
+    (hp : foldDepositRequests state drs = .ok s') :
+    s'.slot = state.slot ∧
+    s'.validators = state.validators ∧
+    s'.balances = state.balances ∧
+    s'.pending_consolidations = state.pending_consolidations ∧
+    s'.pending_partial_withdrawals = state.pending_partial_withdrawals ∧
+    s'.latest_execution_payload_header = state.latest_execution_payload_header ∧
+    s'.latest_block_header = state.latest_block_header := by
+  obtain ⟨-, -, hfr⟩ := foldDepositRequests_spec h drs hp
+  exact ⟨by rw [hfr], by rw [hfr], by rw [hfr], by rw [hfr], by rw [hfr], by rw [hfr], by rw [hfr]⟩
 
 end JauneConsensus.Facts
