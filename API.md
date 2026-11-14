@@ -319,7 +319,17 @@ public codec meant for concrete evidence gets a structural twin and a
 | iterated rounded multiplication | `Jaune.RPow` | `mulr`, `rpow` and their error surface, with guarded `B256` bridges (`B256.toNat_mulr`, …) | Maker-shaped `rpow` loops; no word theorem hides wraparound |
 | memory charged before a CALL | `Jaune.MemoryAccounting` | the `calculateMsgCallGas_*` bounds and the per-kind memory accounting facts | exact gas accounting across a call boundary; these facts do not bound arbitrary parent gas or complete the recursive memory/output invariant |
 | original-run STATICCALL stack and output-memory effects | `Jaune.StaticcallEffects` | `Ninst.staticcall_run_effects` | from the actual six-operand instruction run, on every fork including state gas: one status word replaces the operands; the output is a write of at most the requested byte count over both prepaid memory windows. No child-success or precompile premise; no gas or whole-world preservation claim |
+| excluding an interpreter child from an enabled native STATICCALL | `Jaune.NativePrecompile` | `Xinst.step_staticcall_not_run_of_precompile` | from the actual six-operand stack, `rules.stateGas = none`, enabled `rules.isPrecomp` and effective direct code designation, the actual `Xinst.step` spawn and `Frame.enter = .run child` equations imply `False`; native failure outcomes are included, with no native-success premise |
 | evaluating concrete RLP in the kernel | `Jaune.RlpEval` | `Bytes.toBLT?_eq_toBLTS`, `Bytes.toBLTDiff?_eq_toBLTDiffS`, `Bytes.toBLTs?_eq_toBLTsS`, `BLT.toBytes_eq_toBytesS`, `BLTs.toBytes_eq_toBytesS`, `Nat.toBytes_eq_toBytesS`, and `DecidableEq BLT` | see below |
+
+**Native STATICCALL entry.** `Xinst.step_staticcall_not_run_of_precompile`
+uses the selected fork's effective `delegatedCodeAddress = none`; it covers
+both flat access pricing and EIP2929 access warming. For Blanc's lifted
+`staticcall_spawn_not_run_of_precompile` wrapper, derive that effective-direct
+premise from the existing conditional raw nondelegation premise and pass the
+actual spawn and entry equations. The lifted `StepRun` / `CallCodeH` code-resolution
+adapter stays in Blanc. The theorem does not construct a spawn or assert that
+native execution succeeds, and its `stateGas = none` premise remains explicit.
 
 **Concrete RLP.** `Bytes.toBLTDiff?` / `Bytes.toBLTs?`, `BLT.toBytes` and
 `Nat.toBytes` are compiled by well-founded recursion, so `decide +kernel`

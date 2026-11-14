@@ -19,6 +19,7 @@ import Jaune.Machine
 import Jaune.DevmProjections
 import Jaune.Precompiles
 import Jaune.Execution
+import Jaune.NativePrecompile
 import Jaune.Sufficiency
 import Jaune.ExecFrame
 import Jaune.ExecFrameRel
