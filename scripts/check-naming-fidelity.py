@@ -265,6 +265,17 @@ class Comparison:
                 continue
             key = encoded(self.normalize(self.left[name], 'before', True))
             candidates = [n for n in buckets[key] if n not in self.reverse]
+            # Try the same (mapped) name first: for a compiler-named declaration
+            # (an anonymous instance) its comparison explains a failure.
+            same, same_error = self.name(name), None
+            if same in self.generated_right and same not in self.reverse and same not in candidates:
+                saved = self.pairs.copy(), self.reverse.copy(), self.checked.copy()
+                try:
+                    self.pair(name, same)
+                    continue
+                except Mismatch as error:
+                    same_error = error
+                    self.pairs, self.reverse, self.checked = saved
             for candidate in candidates:
                 saved = self.pairs.copy(), self.reverse.copy(), self.checked.copy()
                 try:
@@ -273,7 +284,8 @@ class Comparison:
                 except Mismatch:
                     self.pairs, self.reverse, self.checked = saved
             else:
-                raise Mismatch(f'no verified generated-constant match for {name}')
+                raise Mismatch(f'no verified generated-constant match for {name}' +
+                               (f'; same-name comparison: {same_error}' if same_error else ''))
         if self.right.keys() != self.reverse.keys():
             raise Mismatch('additional generated constants after renaming')
         for key in ('guards', 'attributes', 'checks'):
