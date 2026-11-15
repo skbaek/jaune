@@ -43,6 +43,8 @@ def SyntaxProbe.lifted (t : SyntaxProbe.Tx) : IO Nat := do
 
 def SyntaxProbe.built (n : Nat) : SyntaxProbe.Tx := SyntaxProbe.Tx.mk (syntaxProbeGas := n)
 
+def SyntaxProbe.punned (syntaxProbeGas : Nat) : SyntaxProbe.Tx := { syntaxProbeGas }
+
 inductive SyntaxProbe.Op where
   | syntaxProbeGas
   | stop
@@ -107,7 +109,8 @@ def run(directory, exporter):
         if ('match (← pure t.syntaxProbeLimit) with' not in renamed or
                 'SyntaxProbe.Tx.mk (syntaxProbeLimit := n)' not in renamed or
                 '| .syntaxProbeGas, n =>' not in renamed or
-                'case syntaxProbeGas => simp at h; omega' not in renamed):
+                'case syntaxProbeGas => simp at h; omega' not in renamed or
+                '{ syntaxProbeLimit := syntaxProbeGas }' not in renamed):
             raise ValueError('lifted, named-argument or constructor-case provenance changed incorrectly')
         after = export('after')
         verdict = CHECK.check(CHECK.read_exports([before]), CHECK.read_exports([after]), mapping)
@@ -119,8 +122,9 @@ def run(directory, exporter):
         save(inverse_path, inverse)
         inverse_plan = APPLY.build_plan(directory, inverse_path, [(source.name, after.name)])
         APPLY.apply_plan(directory, inverse_plan, inverse_path)
-        if source.read_bytes() != SOURCE.encode():
-            raise ValueError('inverse differs from original bytes')
+        # The inverse keeps the field abbreviation expanded (`{ f := f }`).
+        if source.read_bytes() != SOURCE.replace('{ syntaxProbeGas }', '{ syntaxProbeGas := syntaxProbeGas }').encode():
+            raise ValueError('inverse differs from original bytes (up to the expanded abbreviation)')
         source.write_text(SOURCE.replace('s!"syntaxProbeGas 😀', 's!"changed literal 😀'))
         mutated = export('literal-mutated')
         try:

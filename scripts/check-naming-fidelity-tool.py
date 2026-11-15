@@ -58,6 +58,9 @@ def run(directory, exporter):
         ('inline', renamed.replace(b'@[inline] ', b''), 'attributes'),
         ('reducibility', renamed.replace(b'@[irreducible] ', b''), 'attributes'),
         ('instance-priority', renamed.replace(b'instance :', b'instance (priority := 50) :'), 'attributes'),
+        # A proof edit inside an attributed theorem changes no attribute.
+        ('attributed-proof', renamed.replace(b'@[simp] theorem work_zero : work 0 = 1 := rfl',
+                                             b'@[simp] theorem work_zero : work 0 = 1 := by rfl'), None),
         ('guard', renamed.replace(b'#guard message.gas == 17', b'#guard message.gas == 17 && true'), 'guards'),
         ('drop-guard', renamed.replace(b'#guard message.gas == 17\n', b''), 'guards'),
         ('move-guard', renamed.replace(b'#guard transaction.gasLimit == 11\n', b'').replace(

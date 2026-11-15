@@ -353,6 +353,7 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
         if 'f' in ident and info['definition'] is not None:
             local_uses[span(positions, info['definition'])] = [span(positions, u) for u in info['usages']]
     edits, problems, cover = {}, [], {}
+    local_spans = {(r[0], r[1]) for r in references if r[4]}
 
     def add_cover(spans, what):
         for item in spans:
@@ -403,6 +404,10 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
                 raise ValueError(f'compound reference range {spelling!r} for renamed {const}')
             renamed = replacement(spelling, const, new, renamer,
                                   type_directed=start > 0 and text[start - 1] == '.' and not spelling.startswith('.'))
+            if (start, end) in local_spans and len(comps) == 1:
+                # Field abbreviation `{ gas }` is `{ gas := gas }`: the field is
+                # renamed, the local variable it reads is not.
+                renamed = f'{renamed} := {spelling}'
         except ValueError as error:
             problems.append({'start': start, 'end': end, 'reason': str(error)})
             continue
@@ -532,7 +537,8 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
             if (start < edit['end'] and edit['start'] < end and
                     (local or const is None or not renamer.renames(const)) and
                     not (start == edit['start'] and end == edit['end'] and
-                         (const == edit['declaration'] or (local and edit['declaration'] in renamer.exact)))):
+                         (const == edit['declaration'] or (local and edit['declaration'] in renamer.exact) or
+                          (local and edit['new'].endswith(' := ' + edit['old']))))):
                 problems.append({'start': edit['start'], 'end': edit['end'],
                                  'reason': 'edit overlaps an unchanged compiler reference'})
                 break

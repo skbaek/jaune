@@ -266,8 +266,13 @@ unsafe def main (args : List String) : IO UInt32 := do
   for command in result.commands do
     if unsupportedCommand command then
       throw <| IO.userError "unsupported hash command: command has no registered fidelity representation"
-    unless (attributeSyntax command).isEmpty do
-      attrs := attrs.push (syntaxJson command)
+    let explicit := attributeSyntax command
+    unless explicit.isEmpty do
+      -- The attributes and the declaration names they attach to, never the
+      -- declaration body: theorem proofs are not compared, and a proof edit
+      -- inside an attributed theorem is not an attribute change.
+      let ids := (NamingReferences.syntaxNodes ``Lean.Parser.Command.declId command).map (syntaxJson ·[0])
+      attrs := attrs.push (node "attributeCommand" #[toJson ids, toJson explicit])
     terms := terms ++ guardTerms command
   for tree in trees do
     let unsupported := tree.foldInfo (fun _ info found => found || match info with

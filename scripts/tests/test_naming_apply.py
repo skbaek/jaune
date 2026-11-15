@@ -401,6 +401,18 @@ class NamingApplyTests(unittest.TestCase):
         self.assertEqual(problems, [])
         self.assertEqual([e['new'] for e in edits], ['Address', 'instInhabitedAddress'])
 
+    def test_field_abbreviation_keeps_the_local(self):
+        text = 'def f (gas : Nat) : Tx := { gas }\n'
+        index = index_for(text, [('gas', 'Pilot.Tx.gas', 1, False), ('Tx', 'Pilot.Tx', 0, False)])
+        def lsp(i):
+            return [0, i]
+        first, pun = text.index('gas'), text.index('{ gas }') + 2
+        index['references'][json.dumps({'f': {'m': 'Pilot', 'i': '_uniq.g'}})] = dict(
+            definition=lsp(first) + lsp(first + 3), usages=[lsp(pun) + lsp(pun + 3)])
+        edits, problems = M.plan_file(text, index, [entry()])
+        self.assertEqual(problems, [])
+        self.assertEqual([e['new'] for e in edits], ['gasLimit := gas'])
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
