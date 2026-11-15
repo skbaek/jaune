@@ -341,39 +341,39 @@
     },
     {
       "old": "JauneConsensus.CodecVectors.g1m0",
-      "new": "JauneConsensus.CodecVectors.g1Generator",
+      "new": "JauneConsensus.CodecVectors.g1SetupMonomial0",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: g1m0>g1Generator"
+      "notes": "parts: g1m0>g1SetupMonomial0"
     },
     {
       "old": "JauneConsensus.CodecVectors.g1m1",
-      "new": "JauneConsensus.CodecVectors.g1Point",
+      "new": "JauneConsensus.CodecVectors.g1SetupMonomial1",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: g1m1>g1Point"
+      "notes": "parts: g1m1>g1SetupMonomial1"
     },
     {
       "old": "JauneConsensus.CodecVectors.g2m0",
-      "new": "JauneConsensus.CodecVectors.g2Generator",
+      "new": "JauneConsensus.CodecVectors.g2SetupMonomial0",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: g2m0>g2Generator"
+      "notes": "parts: g2m0>g2SetupMonomial0"
     },
     {
       "old": "JauneConsensus.CodecVectors.g2m1",
-      "new": "JauneConsensus.CodecVectors.g2Point",
+      "new": "JauneConsensus.CodecVectors.g2SetupMonomial1",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: g2m1>g2Point"
+      "notes": "parts: g2m1>g2SetupMonomial1"
     },
     {
       "old": "JauneConsensus.Crypto.BLSSig",
@@ -386,12 +386,12 @@
     },
     {
       "old": "JauneConsensus.Crypto.b256Eq",
-      "new": "JauneConsensus.Crypto.bytes32Eq",
+      "new": "JauneConsensus.Crypto.u256Eq",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "1, 6",
       "source": "pyspec Bytes32 (ssz/simple-serialize.md); Jaune's B256 is retired (rule 6, one concept one name)",
-      "notes": "parts: b256Eq>bytes32Eq"
+      "notes": "parts: b256Eq>u256Eq"
     },
     {
       "old": "JauneConsensus.Ctx",
@@ -1565,12 +1565,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.BQ",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.BuildersQueuesEq",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.BuildersAndQueuesEqual",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: BQ>BuildersQueuesEq, Inv>Invariant"
+      "notes": "parts: BQ>BuildersAndQueuesEqual, Inv>Invariant"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.BidLive",
@@ -1889,12 +1889,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.I3",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.CarriedTriple",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.PendingBalanceReferencesExited",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: I3>CarriedTriple, Inv>Invariant"
+      "notes": "parts: I3>PendingBalanceReferencesExited, Inv>Invariant"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.InvFrame",
@@ -2078,12 +2078,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.QE",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.QueuesEq",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.QueuesEqual",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, QE>QueuesEq"
+      "notes": "parts: Inv>Invariant, QE>QueuesEqual"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.Reusable",
@@ -2204,12 +2204,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.afterParent_refs_x04",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.afterParent_references_x04",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.afterParent_references_exitedHaveNoPending",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, refs>references"
+      "notes": "parts: Inv>Invariant, refs>references, x04>exitedHaveNoPending"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.afterWithdrawals_vlen",
@@ -2330,12 +2330,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.applyWithdrawals_qe",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.applyWithdrawals_queuesEq",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.applyWithdrawals_queuesEqual",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, qe>queuesEq"
+      "notes": "parts: Inv>Invariant, qe>queuesEqual"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.applyWithdrawals_vlen",
@@ -2348,12 +2348,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.applyWithdrawals_wf",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.applyWithdrawals_wellFormed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.applyWithdrawals_withdrawalsFrame",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, wf>wellFormed"
+      "notes": "parts: Inv>Invariant, wf>withdrawalsFrame"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.applyWithdrawals_wq",
@@ -2375,12 +2375,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.att_idx_prev",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.attestation_index_prev",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.attestation_index_previous",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, att>attestation, idx>index"
+      "notes": "parts: Inv>Invariant, att>attestation, idx>index, prev>previous"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.beforeBid_payKeep",
@@ -2465,21 +2465,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.bq",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.buildersQueuesEq",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.buildersAndQueuesEqual",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, bq>buildersQueuesEq"
+      "notes": "parts: Inv>Invariant, bq>buildersAndQueuesEqual"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.c64_toNat",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.uint64Constant_toNat",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.u64Checked_toNat",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, c64>uint64Constant"
+      "notes": "parts: Inv>Invariant, c64>u64Checked"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.canBuilderCoverBid_cover",
@@ -2672,12 +2672,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.depReq_I3",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.depositRequest_CarriedTriple",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.depositRequest_PendingBalanceReferencesExited",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: I3>CarriedTriple, Inv>Invariant, depReq>depositRequest"
+      "notes": "parts: I3>PendingBalanceReferencesExited, Inv>Invariant, depReq>depositRequest"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.depReq_cases",
@@ -2753,12 +2753,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.exitReq_I3",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.exitRequest_CarriedTriple",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.exitRequest_PendingBalanceReferencesExited",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: I3>CarriedTriple, Inv>Invariant, exitReq>exitRequest"
+      "notes": "parts: I3>PendingBalanceReferencesExited, Inv>Invariant, exitReq>exitRequest"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.exitReq_cases",
@@ -3302,21 +3302,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.parent_I3",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.parent_CarriedTriple",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.parent_PendingBalanceReferencesExited",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: I3>CarriedTriple, Inv>Invariant"
+      "notes": "parts: I3>PendingBalanceReferencesExited, Inv>Invariant"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.parent_refs_x04",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.parent_references_x04",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.parent_references_exitedHaveNoPending",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, refs>references"
+      "notes": "parts: Inv>Invariant, refs>references, x04>exitedHaveNoPending"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.payEntryStep_trans",
@@ -5012,12 +5012,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.qe",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.queuesEq",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.queuesEqual",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, qe>queuesEq"
+      "notes": "parts: Inv>Invariant, qe>queuesEqual"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.queueExcessActiveBalance_core",
@@ -5534,12 +5534,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.sv_get_ok",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.slashValidator_get_ok",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.sszVector_get_ok",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, sv>slashValidator"
+      "notes": "parts: Inv>Invariant, sv>sszVector"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.switchToCompoundingValidator_core",
@@ -5579,12 +5579,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.updateNextWithdrawalBuilderIndex_bq",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.updateNextWithdrawalBuilderIndex_buildersQueuesEq",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.updateNextWithdrawalBuilderIndex_buildersAndQueuesEqual",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, bq>buildersQueuesEq"
+      "notes": "parts: Inv>Invariant, bq>buildersAndQueuesEqual"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.updateNextWithdrawalBuilderIndex_fs",
@@ -5615,12 +5615,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.updateNextWithdrawalBuilderIndex_wf",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.updateNextWithdrawalBuilderIndex_wellFormed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.updateNextWithdrawalBuilderIndex_withdrawalsFrame",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, wf>wellFormed"
+      "notes": "parts: Inv>Invariant, wf>withdrawalsFrame"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.updateNextWithdrawalBuilderIndex_wq",
@@ -5633,12 +5633,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.updateNextWithdrawalIndex_bq",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.updateNextWithdrawalIndex_buildersQueuesEq",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.updateNextWithdrawalIndex_buildersAndQueuesEqual",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, bq>buildersQueuesEq"
+      "notes": "parts: Inv>Invariant, bq>buildersAndQueuesEqual"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.updateNextWithdrawalIndex_fs",
@@ -5660,12 +5660,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.updateNextWithdrawalIndex_wf",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.updateNextWithdrawalIndex_wellFormed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.updateNextWithdrawalIndex_withdrawalsFrame",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, wf>wellFormed"
+      "notes": "parts: Inv>Invariant, wf>withdrawalsFrame"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.updateNextWithdrawalIndex_wq",
@@ -5678,12 +5678,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.updateNextWithdrawalValidatorIndex_bq",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.updateNextWithdrawalValidatorIndex_buildersQueuesEq",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.updateNextWithdrawalValidatorIndex_buildersAndQueuesEqual",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, bq>buildersQueuesEq"
+      "notes": "parts: Inv>Invariant, bq>buildersAndQueuesEqual"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.updateNextWithdrawalValidatorIndex_fs",
@@ -5705,12 +5705,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.updateNextWithdrawalValidatorIndex_wf",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.updateNextWithdrawalValidatorIndex_wellFormed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.updateNextWithdrawalValidatorIndex_withdrawalsFrame",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, wf>wellFormed"
+      "notes": "parts: Inv>Invariant, wf>withdrawalsFrame"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.updateNextWithdrawalValidatorIndex_wq",
@@ -5840,21 +5840,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.wf_of_inv",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.wellFormed_of_invariant",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.withdrawalsFrame_of_invariant",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, inv>invariant, wf>wellFormed"
+      "notes": "parts: Inv>Invariant, inv>invariant, wf>withdrawalsFrame"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.wf_of_modify",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.wellFormed_of_modify",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.withdrawalsFrame_of_modify",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, wf>wellFormed"
+      "notes": "parts: Inv>Invariant, wf>withdrawalsFrame"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.wq",
@@ -5876,21 +5876,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.x04_of",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.x04_of",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.exitedHaveNoPending_of",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant"
+      "notes": "parts: Inv>Invariant, x04>exitedHaveNoPending"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.x04_of_eqs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.x04_of_equalities",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.exitedHaveNoPending_of_equalities",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, eqs>equalities"
+      "notes": "parts: Inv>Invariant, eqs>equalities, x04>exitedHaveNoPending"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.InvariantsGen",
@@ -6452,12 +6452,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Witnesses.dep",
-      "new": "JauneConsensus.Facts.Gloas.Witnesses.deposit",
+      "new": "JauneConsensus.Facts.Gloas.Witnesses.depositRequest",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: dep>deposit"
+      "notes": "parts: dep>depositRequest"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Witnesses.depK",
@@ -7019,12 +7019,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.ctrlEmpty_findIdx",
-      "new": "JauneConsensus.Facts.Gloas.controlEmpty_findIdx",
+      "new": "JauneConsensus.Facts.Gloas.controlEmpty_findIndex",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: ctrlEmpty>controlEmpty"
+      "notes": "parts: ctrlEmpty>controlEmpty, findIdx>findIndex"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.ctrlExitRequest",
@@ -7046,12 +7046,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.ctrlExit_findIdx",
-      "new": "JauneConsensus.Facts.Gloas.controlExit_findIdx",
+      "new": "JauneConsensus.Facts.Gloas.controlExit_findIndex",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: ctrlExit>controlExit"
+      "notes": "parts: ctrlExit>controlExit, findIdx>findIndex"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.ctrlExit_t1",
@@ -7379,12 +7379,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.prefix_I3",
-      "new": "JauneConsensus.Facts.Gloas.prefix_CarriedTriple",
+      "new": "JauneConsensus.Facts.Gloas.prefix_PendingBalanceReferencesExited",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: I3>CarriedTriple"
+      "notes": "parts: I3>PendingBalanceReferencesExited"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.processAttestation_hdr",
@@ -8378,12 +8378,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.sv_set_ok",
-      "new": "JauneConsensus.Facts.Gloas.slashValidator_set_ok",
+      "new": "JauneConsensus.Facts.Gloas.sszVector_set_ok",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: sv>slashValidator"
+      "notes": "parts: sv>sszVector"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.switchToCompoundingValidator_hdr",
@@ -8810,12 +8810,12 @@
     },
     {
       "old": "JauneConsensus.Facts.commonSubstep_modify_bal",
-      "new": "JauneConsensus.Facts.commonSubstep_modify_balance",
+      "new": "JauneConsensus.Facts.commonSubstep_modify_balances",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: bal>balance"
+      "notes": "parts: bal>balances"
     },
     {
       "old": "JauneConsensus.Facts.commonSubstep_modify_val",
@@ -8828,12 +8828,12 @@
     },
     {
       "old": "JauneConsensus.Facts.commonSubstep_set_bal",
-      "new": "JauneConsensus.Facts.commonSubstep_set_balance",
+      "new": "JauneConsensus.Facts.commonSubstep_set_balances",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: bal>balance"
+      "notes": "parts: bal>balances"
     },
     {
       "old": "JauneConsensus.Facts.commonSubstep_set_val",
@@ -10493,21 +10493,21 @@
     },
     {
       "old": "JauneConsensus.G2SubgroupVectors.q0",
-      "new": "JauneConsensus.G2SubgroupVectors.quotientZero",
+      "new": "JauneConsensus.G2SubgroupVectors.mapToCurveOutput0",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: q0>quotientZero"
+      "notes": "parts: q0>mapToCurveOutput0"
     },
     {
       "old": "JauneConsensus.G2SubgroupVectors.q1",
-      "new": "JauneConsensus.G2SubgroupVectors.quotientOne",
+      "new": "JauneConsensus.G2SubgroupVectors.mapToCurveOutput1",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: q1>quotientOne"
+      "notes": "parts: q1>mapToCurveOutput1"
     },
     {
       "old": "JauneConsensus.G2_POINT_AT_INFINITY_BYTES",
@@ -10763,12 +10763,12 @@
     },
     {
       "old": "JauneConsensus.Gloas.EnvelopeChecksB.prevRandao",
-      "new": "JauneConsensus.Gloas.EnvelopeChecksWithBls.prevRandao",
+      "new": "JauneConsensus.Gloas.EnvelopeChecksWithBls.previousRandao",
       "kind": "field",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: EnvelopeChecksB>EnvelopeChecksWithBls"
+      "notes": "parts: EnvelopeChecksB>EnvelopeChecksWithBls, prevRandao>previousRandao"
     },
     {
       "old": "JauneConsensus.Gloas.EnvelopeChecksB.signature",
@@ -10808,12 +10808,12 @@
     },
     {
       "old": "JauneConsensus.Gloas.ExecutionPayload.balBytes",
-      "new": "JauneConsensus.Gloas.ExecutionPayload.balanceBytes",
+      "new": "JauneConsensus.Gloas.ExecutionPayload.blockAccessListBytes",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: balBytes>balanceBytes"
+      "notes": "parts: balBytes>blockAccessListBytes"
     },
     {
       "old": "JauneConsensus.Gloas.FINALIZED_CHECKPOINT_FIELD_INDEX",
@@ -11618,12 +11618,12 @@
     },
     {
       "old": "JauneConsensus.Harness.RecordedGloas.elField",
-      "new": "JauneConsensus.Harness.RecordedGloas.elementField",
+      "new": "JauneConsensus.Harness.RecordedGloas.executionLayerField",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: elField>elementField"
+      "notes": "parts: elField>executionLayerField"
     },
     {
       "old": "JauneConsensus.Harness.RecordedGloas.engineTxDecodeNote",
@@ -12185,21 +12185,21 @@
     },
     {
       "old": "JauneConsensus.Harness.vBytes",
-      "new": "JauneConsensus.Harness.valueBytes",
+      "new": "JauneConsensus.Harness.kzgValueOfBytes",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: vBytes>valueBytes"
+      "notes": "parts: vBytes>kzgValueOfBytes"
     },
     {
       "old": "JauneConsensus.Harness.vOf",
-      "new": "JauneConsensus.Harness.valueOf",
+      "new": "JauneConsensus.Harness.kzgValueOfExcept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: vOf>valueOf"
+      "notes": "parts: vOf>kzgValueOfExcept"
     },
     {
       "old": "JauneConsensus.Harness.withPF",
@@ -12509,30 +12509,30 @@
     },
     {
       "old": "JauneConsensus.b256GoAt",
-      "new": "JauneConsensus.bytes32GoAt",
+      "new": "JauneConsensus.u256GoAt",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "1, 6",
       "source": "pyspec Bytes32 (ssz/simple-serialize.md); Jaune's B256 is retired (rule 6, one concept one name)",
-      "notes": "parts: b256GoAt>bytes32GoAt"
+      "notes": "parts: b256GoAt>u256GoAt"
     },
     {
       "old": "JauneConsensus.b256GoAt_eq",
-      "new": "JauneConsensus.bytes32GoAt_eq",
+      "new": "JauneConsensus.u256GoAt_eq",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "1, 6",
       "source": "pyspec Bytes32 (ssz/simple-serialize.md); Jaune's B256 is retired (rule 6, one concept one name)",
-      "notes": "parts: b256GoAt>bytes32GoAt"
+      "notes": "parts: b256GoAt>u256GoAt"
     },
     {
       "old": "JauneConsensus.b256_toBytes_toB256",
-      "new": "JauneConsensus.bytes32_toBytes_toU256",
+      "new": "JauneConsensus.bytes_toU256_toBytes",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "1, 6",
       "source": "pyspec Bytes32 (ssz/simple-serialize.md); Jaune's B256 is retired (rule 6, one concept one name)",
-      "notes": "parts: b256>bytes32, toB256>toU256"
+      "notes": "parts: b256>bytes, toB256>toBytes, toBytes>toU256"
     },
     {
       "old": "JauneConsensus.blobToKzgCommitmentM",
@@ -12563,12 +12563,12 @@
     },
     {
       "old": "JauneConsensus.c64",
-      "new": "JauneConsensus.uint64Constant",
+      "new": "JauneConsensus.u64Checked",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: c64>uint64Constant"
+      "notes": "parts: c64>u64Checked"
     },
     {
       "old": "JauneConsensus.clearCofactorG2Ref",
