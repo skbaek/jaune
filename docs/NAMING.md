@@ -109,7 +109,21 @@ planner, N4 and N3):
 
 - `declaration`, `field`, `constructor`: rename exactly one constant. A
   qualified descendant is not renamed by its parent's row; a source reference
-  to such a descendant is reported until it has its own row.
+  to such a descendant is reported until it has its own row. The namespace
+  that bears a renamed declaration's name follows it in `namespace`, `end`,
+  `open` and `export` syntax (the `B256` namespace follows the `B256` type);
+  a declaration spelled inside that namespace without a row under the new
+  namespace is reported.
+- `field` rows keyed by a constructor binder path (`Jaune.TxType.three.receiver`
+  -> `Jaune.TransactionType.eip4844.to`) rename a constructor argument: its
+  binder in the inductive declaration, that binder's dependent uses (same
+  compiler identity) and named arguments `TxType.three (receiver := ...)`.
+  Binder names are erased in kernel terms, so N4 sees no change from them.
+- A declaration Lean names itself (an anonymous `instance`) regenerates its
+  name from renamed types without a source edit. N4 pairs it by kernel graph,
+  trying its mapped name first; a row for it renames spelled references. A
+  spelled reference to such a name containing a renamed word, without a row,
+  is reported.
 - `namespace`: rename the name and every descendant by prefix (`Jaune.B256`
   -> `Jaune.U256` renames `Jaune.B256.toNat` too), including the namespace in
   `namespace`, `end`, `open` and `export` syntax. The longest enclosing
