@@ -60,7 +60,7 @@ def run(directory, exporter):
         ('instance-priority', renamed.replace(b'instance :', b'instance (priority := 50) :'), 'attributes'),
         # A proof edit inside an attributed theorem changes no attribute.
         ('attributed-proof', renamed.replace(b'@[simp] theorem work_zero : work 0 = 1 := rfl',
-                                             b'@[simp] theorem work_zero : work 0 = 1 := by rfl'), None),
+                                             b'@[simp] theorem work_zero : work 0 = 1 := (rfl)'), None),
         ('guard', renamed.replace(b'#guard message.gas == 17', b'#guard message.gas == 17 && true'), 'guards'),
         ('drop-guard', renamed.replace(b'#guard message.gas == 17\n', b''), 'guards'),
         ('move-guard', renamed.replace(b'#guard transaction.gasLimit == 11\n', b'').replace(
