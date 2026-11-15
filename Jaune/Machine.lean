@@ -2353,62 +2353,6 @@ def liftMachMetaWorldExecution
     (devm : Devm) : Execution :=
   liftMachMetaExecution (core devm.world) devm
 
-/-- A fuel-bounded computation.  The outer `Option` records whether the
-computation exhausted its recursion fuel; the inner `Except` is the ordinary
-semantic result. -/
-abbrev Fueled (ε α : Type) : Type := ExceptT ε Option α
-
-namespace Fueled
-
-/-- The distinguished result for recursion-fuel exhaustion. -/
-def exhausted : Fueled ε α := ExceptT.mk none
-
-/-- Lift an ordinary semantic result into a completed fueled computation. -/
-def ofExcept (x : Except ε α) : Fueled ε α := liftM x
-
-/-- A completed successful computation. -/
-def ok (x : α) : Fueled ε α := pure x
-
-/-- A completed computation that produced an ordinary semantic error. -/
-def error (e : ε) : Fueled ε α := throw e
-
-/-- The fueled analogue of `Except.assert`; failure is a semantic error, not
-fuel exhaustion. -/
-def assert (p : Prop) [Decidable p] (e : ε) : Fueled ε Unit :=
-  if p then pure () else throw e
-
-/-- Apply a transformation to a completed semantic result while propagating
-fuel exhaustion unchanged.  This is used where the old interpreter converted
-between its two semantic error-state types. -/
-def mapResult (f : Except ε α → Except ζ β) (x : Fueled ε α) : Fueled ζ β :=
-  ExceptT.mk <| x.run.map f
-
-/-- Reconstitute the legacy `Except` API at a public boundary. -/
-def toExcept (onExhausted : ε) (x : Fueled ε α) : Except ε α :=
-  match x.run with
-  | none => .error onExhausted
-  | some result => result
-
-@[simp] lemma exhausted_run : (exhausted : Fueled ε α).run = none := rfl
-
-@[simp] lemma ofExcept_run (x : Except ε α) : (ofExcept x).run = some x := rfl
-
-@[simp] lemma ok_run (x : α) : (ok x : Fueled ε α).run = some (.ok x) := rfl
-
-@[simp] lemma error_run (e : ε) :
-    (error e : Fueled ε α).run = some (.error e) := rfl
-
-@[simp] lemma mapResult_run (f : Except ε α → Except ζ β) (x : Fueled ε α) :
-    (mapResult f x).run = x.run.map f := rfl
-
-@[simp] lemma toExcept_exhausted (e : ε) :
-    toExcept e (exhausted : Fueled ε α) = .error e := rfl
-
-@[simp] lemma toExcept_ofExcept (e : ε) (x : Except ε α) :
-    toExcept e (ofExcept x) = x := rfl
-
-end Fueled
-
 def Mach.chargeGas (cost : Nat) (mach : Mach) : Footprint.Outcome Mach Unit :=
   match safeSub mach.gasLeft cost with
   | none => .error (.halt (.outOfGas .none), mach)

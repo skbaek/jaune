@@ -211,7 +211,7 @@ fails on any un-allowlisted `axiom`, `opaque`, `@[extern]`, `@[implemented_by]`,
 the external-consumer smoke source, alongside the original `dbg_trace` and
 `sorry`. Every one of these counts is zero except one: the allowlist carries
 exactly one row, the proved `@[csimp]` substitution `execFueled_eq_cached`
-in `Jaune/Execution.lean`. It is a kernel-checked equality
+in `Jaune/Impl/CachedExec.lean`. It is a kernel-checked equality
 `execFueled = execFueledCached`, and it makes the compiled binary run the
 calldata-sharing implementation. The row's written justification is in the
 allowlist. So the claim this document makes about Jaune's trusted path is

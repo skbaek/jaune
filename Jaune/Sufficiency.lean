@@ -1,4 +1,5 @@
 import Jaune.Execution
+import Jaune.Impl.CachedExec
 
 namespace Jaune
 
@@ -5121,12 +5122,6 @@ theorem execFueled_succ_ne_exhausted (evm : Evm) :
 Everything below is fuel-free. `execFueled` survives as the structurally
 recursive definition downstream proofs reason over, but no consumer has to
 thread a fuel parameter or handle an exhaustion outcome any more. -/
-
-/-- The fuel budget seeded from a frame's gas measure. The additive constant is
-the one `execFueled_succ_ne_exhausted` proves sufficient: **1**. Under
-`rules.stateGas = none` the measure is `gasLeft`, so the seed is the seed it
-always was; under `some _` it also counts the spill a refund can hand back. -/
-def sufficientFuel (gas : Nat) : Nat := gas + 1
 
 theorem execFueled_run_sufficientFuel_isSome (evm : Evm) :
     ((execFueled evm (sufficientFuel evm.dyna.gasMeasure)).run).isSome := by
