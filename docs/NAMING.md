@@ -157,6 +157,16 @@ bundles, maps and plan. This is a tool control, not the goal's real Jaune pilot
 or the N4 fidelity checker. The focused Python controls are in
 `scripts/tests/test_naming_apply.py`.
 
+The reference exporter also resolves simple `case` labels whose proof goal
+descends from an ordinary constructor `cases` goal. It checks the builtin
+elaborator, the actual `casesOn` use, the constructor in the original goal,
+and the direct/delayed metavariable assignment chain to the selected case.
+This keeps a GAS opcode case unchanged when `Tx.gas` is renamed, while a
+constructor rename updates its own case label. Leading-dot constructor
+patterns retain the dot. Explicit/custom eliminators, compound case labels
+and ambiguous or unavailable provenance remain unresolved; no spelling-based
+exception suppresses these reports.
+
 ## 5. Retired names, whole words and source spellings
 
 `scripts/check-naming.py` checks the compiler's declaration inventory, including

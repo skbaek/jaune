@@ -132,14 +132,17 @@ def identifiers(text):
 
 def replacement(spelling, old, new):
     """Keep a reference's qualification level only when it is unambiguous."""
+    # Lean includes the leading dot in constructor-pattern references.
+    leading_dot = spelling.startswith('.')
+    bare = spelling[1:] if leading_dot else spelling
     old_parts, new_parts = old.split('.'), new.split('.')
-    parts = spelling.split('.')
+    parts = bare.split('.')
     if parts != old_parts[-len(parts):]:
         raise ValueError(f'indexed spelling {spelling!r} is not a suffix of {old}')
     # Changing namespace depth needs a separate relocation plan.
     if len(old_parts) != len(new_parts):
         raise ValueError(f'namespace-depth change needs explicit relocation: {old} -> {new}')
-    return '.'.join(new_parts[-len(parts):])
+    return ('.' if leading_dot else '') + '.'.join(new_parts[-len(parts):])
 
 
 def plan_file(text, index, entries):

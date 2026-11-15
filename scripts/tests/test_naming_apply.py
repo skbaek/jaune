@@ -54,6 +54,13 @@ class NamingApplyTests(unittest.TestCase):
         self.assertIn('with gasLimit := 8', text)
         self.assertIn('simp [c, Tx.gasLimit]', text)
 
+    def test_dot_constructor_reference(self):
+        text = 'def f := .gas\n'
+        index = index_for(text, [('.gas', 'Pilot.Op.gas', 0, False)])
+        edits, problems = M.plan_file(text, index, [entry('Pilot.Op.gas', 'Pilot.Op.gasOp')])
+        self.assertEqual(problems, [])
+        self.assertEqual(edits[0]['new'], '.gasOp')
+
     def test_unresolved_use_is_reported(self):
         text = 'def a (x : Tx) := x.gas\n'
         _, problems = M.plan_file(text, index_for(text, []), [entry()])
