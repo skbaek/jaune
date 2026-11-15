@@ -224,6 +224,21 @@ def main():
         with open(rep / "token-hits.txt", "w") as f:
             for t, n in sorted(namer.token_hits.items()):
                 f.write(f"{t}\t{n}\t{D.EXPAND.get(t)}\n")
+        with open(rep / "kept-tokens.tsv", "w") as f:
+            toks = collections.Counter()
+            where = {}
+            for items in kept.values():
+                for mod, line, kind, q, new, cite in items:
+                    if cite:
+                        continue
+                    for seg in new.split("."):
+                        for part in seg.split("_"):
+                            for tk in TOKEN_RE.findall(part):
+                                toks[tk.lower()] += 1
+                                where.setdefault(tk.lower(), new.replace("JauneConsensus.", ""))
+            for tk, n in sorted(toks.items()):
+                cat = ("lean" if tk in D.LEAN_TOKENS else "protocol" if tk in D.PROTOCOL_TOKENS else "word-unreviewed")
+                f.write(f"{tk}\t{n}\t{cat}\t{where[tk]}\n")
         with open(rep / "anonymous-instances.txt", "w") as f:
             for m, n in sorted(anonymous.items()):
                 f.write(f"{m}\t{n}\n")

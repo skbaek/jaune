@@ -252,3 +252,20 @@ PROTOCOL_NAMES = {
     "hashToFieldFp2": "RFC 9380 section 5.2 hash_to_field (Fp2)",
     "clearCofactorG2": "RFC 9380 section 7 clear_cofactor",
 }
+
+
+# Tactic keywords (the string tokens of `macro`/`syntax`/`elab ... : tactic`).  They are neither
+# declarations nor fields, so the map cannot carry them and the compiler-resolved apply tool
+# cannot resolve them: a decision for the master.  Proposed spellings, for the packet only.
+TACTIC_KEYWORDS = {
+    "vcg_step": "verification_step", "jvcg": "join_point_verification", "gvcg": "gloas_verification",
+    "pres_of": "preservation_of", "pres_close": "preservation_close", "pres_step": "preservation_step",
+    "pstep": "preservation_walk", "cstep": "corpus_walk", "jstep": "join_point_walk",
+    "gstep": "gloas_walk", "gstep_close": "gloas_walk_close", "gstep_of": "gloas_walk_of",
+    "gstep_rebase": "gloas_walk_rebase", "hdr_tail": "header_tail", "ftail": "finalized_tail",
+    "ftail_of": "finalized_tail_of", "jp_intro": "join_point_intro", "jp_call": "join_point_call",
+    "jp_abs": "join_point_abstract", "jp_intro_c": "join_point_intro_corpus",
+    "jp_call_c": "join_point_call_corpus", "loop_pres": "loop_preservation",
+    "loop_csub": "loop_common_substep", "csub_of": "common_substep_of",
+    "csub_close": "common_substep_close",
+}
