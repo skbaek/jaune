@@ -94,3 +94,8 @@ lean_exe «jaune-naming-references» where
 lean_lib «NamingToolTests» where
   srcDir := "scripts/tests/naming"
   roots := #[`Pilot]
+
+lean_exe «jaune-naming-fidelity» where
+  srcDir := "scripts"
+  root := `NamingFidelity
+  supportInterpreter := true

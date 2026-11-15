@@ -255,12 +255,17 @@ rename or replace the destination axiom audit.
 | `python3 scripts/check-naming-map.py` | map schema, one-to-one names, nonempty naming sources and retired-token rule | light; sub-second |
 | `python3 -B -m unittest discover -s scripts/tests -p test_naming_apply.py` | conservative planning, unresolved-use reports, shared fields, UTF-16 positions, changed source/map/index and tampered-plan refusals, no writes on preflight refusal | light; 14 controls, sub-second on WSL (2026-11-15) |
 | owned build of `jaune-naming-references`, then `python3 scripts/check-naming-tool.py [--output FRESH_DIRECTORY]` | real compiler references drive the shared-field rename; both versions elaborate with guards and simp proofs; independent refusal controls bite; inverse application restores byte-identical source | one synthetic file elaborated twice; ~3.3 s on WSL (2026-11-15); Lean admission required, no build inside the gate |
-| `python3 -B -m unittest discover -s scripts/tests -p test_naming_lint.py` | whole-word/source separation, exact pinned spellings, fields/constructors, stale bundles and complete-root coverage refusals | light; 12 controls |
+| `python3 -B -m unittest discover -s scripts/tests -p test_naming_lint.py` | whole-word/source separation, exact pinned spellings, fields/constructors, stale bundles and complete-root coverage refusals | light; 13 controls |
 | `python3 scripts/check-naming.py --tree . --policy POLICY.json --source-root SOURCE_ROOT --root Jaune --root JauneConsensus --file SOURCE BUNDLE ...` | retired tokens and whole-word or registered-source names in all compiler-indexed declarations, fields and constructors; every Lean file under both roots must be supplied | light after current compiler exports; policy/source inventory is an explicit review input, not yet registered for production |
 | owned build of `jaune-naming-references`, then `python3 scripts/check-naming-lint-tool.py [--output FRESH_DIRECTORY]` | both layers elaborate; `bal` and `Ctx` mutations fail the lint; baseline bytes restored exactly | ~16.6 s on WSL (2026-11-15), three tiny elaborations; Lean admission required |
+| `python3 -B -m unittest discover -s scripts/tests -p test_naming_fidelity.py` | authored-name map, type/body/attribute changes, generated-constant graph bijection, guard multiplicity and command ownership | light; 12 controls |
+| owned build of `jaune-naming-fidelity`, then `python3 scripts/check-naming-fidelity-tool.py [--output FRESH_DIRECTORY]` | real compiler pilot for names-only equality, body/attribute/guard failures and guard relocation; unsupported commands fail closed | Lean admission required; no build inside the gate |
+| `python3 scripts/check-naming-fidelity.py --map MAP.json --before BEFORE.json --after AFTER.json` (repeat exports as needed) | types, definition bodies, generated graph structure, effective/explicit attributes and guard expressions for the exported modules | light after current compiler exports; import/closure receipts remain separate obligations |
 
 The exporter is an optional tooling target, not part of the production import
-closure. The lint policy schema and current limits are in
+closure. Fidelity scope and unsupported cases are in
+[`docs/NAMING.md`](../docs/NAMING.md#6-compiler-fidelity-comparison).
+The lint policy schema and current limits are in
 [`docs/NAMING.md`](../docs/NAMING.md#5-retired-names-whole-words-and-source-spellings).
 It fails on import or elaboration errors before emitting a bundle.
 The Python gate needs the current built exporter and current imports and takes

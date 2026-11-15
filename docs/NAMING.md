@@ -214,3 +214,67 @@ elaborate and fail the retired-name control. Restoring the baseline bytes is
 the restoration evidence; it is not recompiled. The command needs the built
 reference exporter and host Lean admission. The ordinary Python unit suite
 does not launch Lean.
+
+## 6. Compiler fidelity comparison
+
+Build the optional `jaune-naming-fidelity` target through the owned-build
+launcher. With current imports and Lean admission, export each source on each
+side of a rename:
+
+```sh
+lake env .lake/build/bin/jaune-naming-fidelity SOURCE.lean MODULE BEFORE.json
+python3 scripts/check-naming-fidelity.py --map MAP.json --before BEFORE.json --after AFTER.json
+```
+
+Repeat `--before` and `--after` for every exported module in the comparison.
+Exports include the exact source, compiler navigation index, Lean version,
+checked kernel constants, guard expressions, and attribute-bearing commands.
+Reports bind every bundle and its source plus the map by SHA-256. Exit 0 is
+equality within the exported scope, 1 a failed comparison, and 2 unusable or
+unsupported input. The exporter never builds imports and fails on elaboration
+errors or unsupported expressions/commands.
+
+The comparison checks authored constant names under the exact map, the types
+of all constants, and definition/opaque bodies. It includes inductive,
+constructor and recursor metadata and definition safety. Bound variable names
+and expression metadata are erased; universe parameters are indexed by
+position. Theorem proof terms are not compared: theorem types and attributes
+are checked, while the repository's axiom audit retains its separate job.
+Generated constants are matched by their finite type/body/attribute graphs,
+with a consistent bijection, rather than by generated names. Unreferenced
+generated nodes are included too. A conservative matching failure is a refusal
+to establish fidelity, not evidence that the two definitions differ.
+
+Effective attributes include simp direction/priority, unfolding entries,
+`csimp` and its replacement, inline settings, reducibility, instance priority/
+scope/synthesis order and `implemented_by`. Whole commands carrying explicit
+attributes are additionally compared with compiler-resolved identifiers; this
+catches unfamiliar explicit attributes without treating their arguments as
+free text. It is deliberately stronger than comparing only final attribute
+flags. Local/scoped attribute commands are currently refused because their
+scope histories need a separate comparison.
+
+Guards are compared as a multiset of elaborated closed Boolean expressions,
+so moving a guard to another exported module preserves it, while changing or
+dropping it fails. Parsed and expanded command information is inspected;
+ambiguous or unavailable guard information fails closed. Other hash commands
+(such as `#guard_expr`) are currently refused. The `#[...]` array notation is
+not a hash command.
+
+**Scope limit:** the verdict is labelled `exported-modules`, not whole-tree
+fidelity. Imported constants outside the export set are boundary references;
+their bodies are not proved unchanged by this run. Import lists are reported,
+not validated as a dependency-closure receipt. Before a goal N4 verdict, supply
+the complete affected/old-side dependency closure and bind its current imports
+and unchanged external pins to the candidate. That production orchestration,
+the actual Jaune field pilot, and whole-tree coverage remain work at this
+tooling checkpoint. No theorem bridge or axiom-audit verdict is implied.
+
+`python3 scripts/check-naming-fidelity-tool.py [--output FRESH_DIRECTORY]`
+exercises the compiler and comparison with a shared-field rename, definition
+body and attribute mutations, altered/dropped guards, guard moves within and
+between modules, array literals and an unsupported-command refusal. The
+altered supported files still elaborate: the comparison is the failing
+control. Source restoration is byte-for-byte against the compiled baseline.
+This is tooling evidence; it does not replace WP's two real EVM executions or
+its actual `execFueled_eq_cached` attribute control.

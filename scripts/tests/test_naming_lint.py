@@ -95,6 +95,12 @@ class NamingLintTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'outside source'):
             LINT.declarations(text, index)
 
+    def test_anonymous_example_navigation_entry_is_not_a_declaration(self):
+        index = dict(version=5, module='Test', decls={}, references={
+            json.dumps({'c': {'m': 'Test', 'n': 'Test._example'}}):
+                {'definition': [0, 0, 0, 7], 'usages': []}})
+        self.assertEqual(LINT.declarations('example : True := trivial', index), {})
+
     def test_stale_bundle_and_wrong_version(self):
         pair = self.bundle()
         bundle = LINT.read_json(pair[1])

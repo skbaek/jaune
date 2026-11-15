@@ -65,7 +65,9 @@ def declarations(text, index):
         if const and loc is not None:
             if const['m'] != module:
                 raise ValueError('foreign definition in module reference bundle')
-            APPLY.span(positions, loc)
+            start, end = APPLY.span(positions, loc)
+            if const['n'].endswith('._example') and text[start:end] == 'example' and not info['usages']:
+                continue  # Lean gives anonymous examples a navigation-only pseudo-name.
             names[user_name(const['n'], module)] = loc[:4]
     return names
 
