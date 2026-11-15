@@ -51,7 +51,7 @@ def declarations(text, index):
     """Include fields/constructors, which ilean's decls table alone omits."""
     if index.get('version') != 5:
         raise ValueError('requires Lean ilean format 5')
-    module = index['module']
+    module = APPLY.module_name(index['module'])
     positions = APPLY.Positions(text)
     names = {}
     compiler_named = set()

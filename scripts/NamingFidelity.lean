@@ -216,7 +216,7 @@ unsafe def main (args : List String) : IO UInt32 := do
   let inputCtx := Parser.mkInputContext input source
   let options := ({} : Options).setBool `Elab.async false
   let (header, parserState, messages) ← Parser.parseHeader inputCtx
-  let (env, messages) ← processHeader header options messages inputCtx (mainModule := moduleName.toName)
+  let (env, messages) ← processHeader header options messages inputCtx (mainModule := (moduleName.splitOn ".").foldl Name.str .anonymous)
   if messages.hasErrors then
     for message in messages.toList do IO.eprintln (← message.toString)
     return 1
@@ -241,7 +241,7 @@ unsafe def main (args : List String) : IO UInt32 := do
     result.commandState.infoState.trees.toArray inputCtx.fileMap refs
   let (references, decls) ← refs.toLspModuleRefs
   let index : Lean.Server.Ilean := {
-    module := moduleName.toName
+    module := (moduleName.splitOn ".").foldl Name.str .anonymous
     directImports := Lean.Server.collectImports header
     references, decls }
   let mut checks : Array Syntax := #[]

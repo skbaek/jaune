@@ -210,6 +210,13 @@ def identifiers(text):
             i += 1
 
 
+def module_name(name):
+    """Lean prints a module component that is not an identifier (`bench-ec`)
+    as `«bench-ec»`; inventories spell the file's module plainly."""
+    return '.'.join(part[1:-1] if part.startswith('«') and part.endswith('»') else part
+                    for part in split_name(name))
+
+
 def split_name(name):
     return [part for part in IDENT_PART.findall(name)] if '«' in name else name.split('.')
 
@@ -420,7 +427,7 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
     commands = sorted((*char_span(offsets, r[0], r[1], text), r[3], r[4])
                       for r in syntax_rows(index, 'commands', 6) if r[0] < r[1])
     if universe is not None and commands:
-        module = index['module']
+        module = module_name(index['module'])
         before = universe.lookup('before', module)
         after = universe.lookup('after', module, renamer)
         starts = [c[0] for c in commands]

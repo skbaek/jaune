@@ -12,7 +12,7 @@ unsafe def main (args : List String) : IO UInt32 := do
   let options := ({} : Options).setBool `Elab.async false
   let (header, parserState, messages) ← Parser.parseHeader inputCtx
   let (env, messages) ← processHeader header options messages inputCtx
-    (mainModule := moduleName.toName)
+    (mainModule := (moduleName.splitOn ".").foldl Name.str .anonymous)
   if messages.hasErrors then
     for message in messages.toList do
       IO.eprintln (← message.toString)
@@ -31,7 +31,7 @@ unsafe def main (args : List String) : IO UInt32 := do
     result.commandState.infoState.trees.toArray inputCtx.fileMap refs
   let (references, decls) ← refs.toLspModuleRefs
   let index : Lean.Server.Ilean := {
-    module := moduleName.toName
+    module := (moduleName.splitOn ".").foldl Name.str .anonymous
     directImports := Lean.Server.collectImports header
     references, decls
   }

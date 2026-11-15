@@ -341,7 +341,7 @@ def capture(args):
             target = out / (module + '.export.json')
             data = json.loads(target.read_bytes())
             if (data['schema_version'] != 6 or data['imports'] != discovery[module]['imports'] or
-                data['index']['module'] != module or
+                FIDELITY.APPLY.module_name(data['index']['module']) != module or
                 data['index']['directImports'] != discovery[module]['direct_imports'] or
                 data['lean_version'] != discovery[module]['lean_version'] or
                 sha(data['source'].encode()) != initial['modules'][module]['sha256']):
@@ -400,7 +400,7 @@ def read_snapshot(path, fidelity=True):
         if not export.resolve().is_relative_to(path.parent.resolve()) or file_sha(export) != record['sha256']:
             raise ValueError('export missing, outside snapshot, or digest changed')
         raw = json.loads(export.read_bytes())
-        if (raw['schema_version'] not in (4, 5, 6) or raw['index']['module'] != module or
+        if (raw['schema_version'] not in (4, 5, 6) or FIDELITY.APPLY.module_name(raw['index']['module']) != module or
             sha(raw['source'].encode()) != candidate['modules'][module]['sha256'] or
             [entry[0] for entry in raw['index']['directImports']] != candidate['modules'][module]['imports']):
             raise ValueError('export source does not match candidate inventory')

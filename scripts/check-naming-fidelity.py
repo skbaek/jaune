@@ -78,7 +78,7 @@ def read_exports(paths):
         if version is not None and version != data['lean_version']:
             raise ValueError('mixed Lean versions')
         version = data['lean_version']
-        module = data['index']['module']
+        module = APPLY.module_name(data['index']['module'])
         if module in modules:
             raise ValueError(f'duplicate module {module}')
         modules[module] = data['index']['directImports']

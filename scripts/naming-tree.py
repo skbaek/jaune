@@ -171,7 +171,7 @@ def plan_sources(root, candidate, bundles, mapping):
                                 edits=[], unresolved=problems))
             continue
         if bundle is not None:
-            if bundle['source'] != text or bundle['index']['module'] != module:
+            if bundle['source'] != text or APPLY.module_name(bundle['index']['module']) != module:
                 raise ValueError(f'{relative}: compiler bundle source/module mismatch')
             stats = {}
             edits, problems = APPLY.plan_file(text, bundle['index'], mapping['entries'], renamer,
