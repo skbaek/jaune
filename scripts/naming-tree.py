@@ -74,7 +74,7 @@ def import_spans(text, expected):
     """Lexed import module spans, accepted only when they equal Lean's own
     header parse (the capture's compiler header inventory)."""
     code = code_only(text)
-    found = [(m.start(1), m.end(1), m.group(1)) for m in IMPORT.finditer(code)]
+    found = [(m.start(1), m.end(1), APPLY.module_name(m.group(1))) for m in IMPORT.finditer(code)]
     if [name for _, _, name in found] != list(expected):
         raise ValueError('lexed imports differ from the compiler header inventory')
     return found

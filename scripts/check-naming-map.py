@@ -142,7 +142,7 @@ def split_private(name):
     if not name.startswith("_private."):
         return None
     parts = name.split(".")
-    for i in range(2, len(parts)):
+    for i in range(1, len(parts)):
         if parts[i].isdigit():
             if i + 1 >= len(parts):
                 break
@@ -181,6 +181,30 @@ class Renamer:
                 return ".".join([self.namespaces[prefix]] + parts[i:])
         return name
 
+    def derived(self):
+        """Namespaces renamed only through their members: every exact row whose
+        old parent is P gives the same new parent P'. Ambiguous parents derive
+        nothing (their syntax stays and spellings report)."""
+        if not hasattr(self, '_derived'):
+            parents = {}
+            for old, new in self.exact.items():
+                if old in self.relocations or "." not in old or "." not in new or old.startswith("_private."):
+                    continue
+                parents.setdefault(old.rsplit(".", 1)[0], []).append(new.rsplit(".", 1)[0])
+            # Only a rename of the namespace's own last component (`Gloas.Inv` ->
+            # `Gloas.Invariant`); a member moved deeper renames no namespace.
+            self._derived = {}
+            for parent, news in parents.items():
+                # At least two member rows must agree; one moved member is not
+                # evidence that the namespace itself is renamed.
+                if len(news) < 2 or len(set(news)) != 1:
+                    continue
+                target = news[0]
+                a, b = parent.split("."), target.split(".")
+                if len(a) == len(b) and a[:-1] == b[:-1] and a[-1] != b[-1]:
+                    self._derived[parent] = target
+        return self._derived
+
     def scope(self, name):
         """A namespace as `namespace`/`open` syntax and lexical resolution see it:
         a namespace row, or else the exact row of the declaration that bears
@@ -192,6 +216,8 @@ class Renamer:
                 return ".".join([self.namespaces[prefix]] + parts[i:])
             if prefix in self.exact and prefix not in self.relocations:
                 return ".".join([self.exact[prefix]] + parts[i:])
+            if prefix in self.derived():
+                return ".".join([self.derived()[prefix]] + parts[i:])
         return name
 
     def explain(self, name):

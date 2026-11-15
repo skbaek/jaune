@@ -200,6 +200,11 @@ def identifiers(text):
                 raise ValueError('unterminated escaped identifier')
             yield i, end + 1, text[i + 1:end]
             i = end + 1
+        elif text[i].isdigit():
+            # A numeric literal (`0x7f`, `1e5`, `0b1`) contains no identifier.
+            i += 1
+            while i < len(text) and (text[i].isalnum() or text[i] == '_'):
+                i += 1
         elif text[i].isalpha() or text[i] == '_':
             start = i
             i += 1
@@ -232,6 +237,8 @@ def replacement(spelling, old, new, renamer=None, type_directed=False):
     """
     leading_dot = spelling.startswith('.')
     bare = spelling[1:] if leading_dot else spelling
+    if old.startswith('_private.') and new.startswith('_private.'):
+        old, new = MAP.split_private(old)[2], MAP.split_private(new)[2]
     old_parts, new_parts = split_name(old), split_name(new)
     parts = split_name(bare)
     if parts != old_parts[-len(parts):]:
@@ -342,6 +349,7 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
         raise ValueError('requires Lean ilean format 5')
     renamer = renamer or MAP.Renamer(entries)
     candidates = renamer.words()
+    index_module = module_name(index['module'])
     positions = Positions(text)
     offsets = byte_offsets(text)
     # (start, end, const, component spans, local)
@@ -530,6 +538,40 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
             # variable's uses (same compiler identity) are renamed with it.
             for use in local_uses.get((start, end), []):
                 add_edit(*use, name, split_name(renamer(key))[-1], key)
+    for a, b, name in (metadata.get('imports', []) if metadata.get('version') == 2 else []):
+        start, end = char_span(offsets, a, b, text)
+        add_cover(components(text, start, end) or [], ('module', name))  # Module rows edit imports.
+    quoted = metadata.get('quotation_identifiers', []) if metadata.get('version') == 2 else []
+    if quoted:
+        commands_q = sorted((*char_span(offsets, r[0], r[1], text), r[3], r[4])
+                            for r in syntax_rows(index, 'commands', 6) if r[0] < r[1])
+        starts_q = [c[0] for c in commands_q]
+    for a, b, name in quoted:
+        start, end = char_span(offsets, a, b, text)
+        comps = components(text, start, end)
+        spelling = text[start:end]
+        if comps is None or not any(text[x:y] in candidates for x, y in comps):
+            continue
+        # Lean pre-resolves quoted identifiers as global names in the quoting
+        # command's scope; the same resolution model decides them here.
+        i = bisect.bisect_right(starts_q, start) - 1
+        found = set()
+        if universe is not None and i >= 0 and commands_q[i][0] <= start < commands_q[i][1]:
+            found = resolve(universe.lookup('before', index_module), spelling, commands_q[i][2], commands_q[i][3])
+        if len(found) != 1:
+            add_cover(comps, ('unresolved', 'quotation identifier with no unique global resolution '
+                                            '(a quoted local binder, or outside the modelled scope)'))
+            continue
+        const = next(iter(found))
+        add_cover(comps, ('const', const))
+        if renamer.renames(const) and renamer(const) != const:
+            try:
+                renamed = replacement(spelling, const, renamer(const), renamer)
+            except ValueError as error:
+                problems.append({'start': start, 'end': end, 'reason': str(error)})
+                continue
+            if renamed != spelling:
+                add_edit(start, end, spelling, renamed, const)
     reasons = []
     for a, b, reason in syntax_rows(index, 'unresolved_syntax', 3):
         reasons.append((*char_span(offsets, a, b, text), reason))

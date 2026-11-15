@@ -240,6 +240,22 @@ def constructorBinderRows (commands : Array Syntax) : Array Json := Id.run do
                 toJson name.getId.eraseMacroScopes.toString])
   return rows
 
+partial def quotedIdents (stx : Syntax) : Array Syntax :=
+  if stx.getKind.toString.endsWith "antiquot" || (stx.getKind.toString.splitOn "antiquot").length > 1 then #[]
+  else if stx.isIdent then #[stx]
+  else stx.getArgs.foldl (fun acc child => acc ++ quotedIdents child) #[]
+
+/-- Identifiers inside syntax quotations (outside antiquotations). Lean
+pre-resolves them as global names when the quotation elaborates; they have no
+ordinary reference. -/
+partial def quotationRows (stx : Syntax) : Array Json :=
+  let kind := stx.getKind.toString
+  if (kind.endsWith "quot" || kind.endsWith "Quot") && (kind.splitOn "antiquot").length == 1 then
+    (quotedIdents stx).foldl (fun acc id => match byteRange? id with
+      | some (a, b) => acc.push (toJson #[toJson a, toJson b, toJson id.getId.toString])
+      | none => acc) #[]
+  else stx.getArgs.foldl (fun acc child => acc ++ quotationRows child) #[]
+
 structure Frame where
   ns : Name := .anonymous
   opens : List OpenDecl := []
@@ -397,7 +413,8 @@ def syntaxExtras (env : Environment) (header : Syntax) (trees : Array InfoTree)
   [("named_arguments", toJson (namedArgumentRows env trees commands)),
    ("namespaces", toJson namespaces), ("commands", toJson commandRows), ("eof_scope", eof),
    ("imports", toJson (importRows header)), ("unresolved_syntax", toJson caseRows),
-   ("constructor_binders", toJson (constructorBinderRows commands))]
+   ("constructor_binders", toJson (constructorBinderRows commands)),
+   ("quotation_identifiers", toJson (commands.foldl (fun acc c => acc ++ quotationRows c) #[]))]
 
 partial def identifiersIn (stx : Syntax) : Array Syntax :=
   if stx.isIdent then #[stx]
