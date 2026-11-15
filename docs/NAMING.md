@@ -167,6 +167,15 @@ patterns retain the dot. Explicit/custom eliminators, compound case labels
 and ambiguous or unavailable provenance remain unresolved; no spelling-based
 exception suppresses these reports.
 
+`scripts/tests/naming/RealSharedField.lean` imports the actual `Jaune.Machine`
+module. Its optional `RealSharedField` build target checks inferred projections,
+a transaction literal, Tx and Msg record updates, and downstream `simp` proofs.
+For the real rename pilot, export references for both Machine and this client,
+apply one map to both files in a disposable worktree, then build the client
+against the renamed Machine artifact. Compare both modules with the fidelity
+checker and retain the build/import receipts. This two-module pilot does not
+establish complete migration coverage for every other client.
+
 ## 5. Retired names, whole words and source spellings
 
 `scripts/check-naming.py` checks the compiler's declaration inventory, including

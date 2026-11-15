@@ -93,7 +93,7 @@ lean_exe «jaune-naming-references» where
 /-- Synthetic compiler-driven naming controls; outside production imports. -/
 lean_lib «NamingToolTests» where
   srcDir := "scripts/tests/naming"
-  roots := #[`Pilot]
+  roots := #[`Pilot, `RealSharedField]
 
 lean_exe «jaune-naming-fidelity» where
   srcDir := "scripts"
