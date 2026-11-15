@@ -565,10 +565,12 @@ Independent executables can each define `main`; their kernel constants and
 checked commands are never pooled into one global namespace. A duplicate
 authored constant within a single import environment still refuses. Schema 6
 adds each local equation theorem's parent from Lean's equation registry. Copies
-of a generated equation may coalesce only when neither is authored, both have
-the same recorded parent, and their complete kernel and attribute records are
-identical. Spelling or matching bytes without compiler provenance do not
-suffice; older exports retain the conservative refusal. The parent reference
+of a generated constant may coalesce only when neither is authored and their
+complete kernel and attribute records (equation parent included) are identical:
+Lean realizes auxiliaries such as equation lemmas, `_sparseCasesOn`
+equations and `congr_simp` lemmas in every module that needs them, and an
+importing environment holds one of the agreeing copies. Any difference, or an
+authored name, still refuses. The parent reference
 is itself compared under the map, and verdicts list the equations coalesced
 on each side. Conflicting copies still refuse. Shared dependency
 objects are parsed once and reused across environments. The verdict reports

@@ -9,7 +9,6 @@ from collections import Counter, defaultdict
 import hashlib
 import importlib.util
 import json
-import re
 from pathlib import Path
 import sys
 
@@ -35,24 +34,19 @@ class Mismatch(ValueError):
     pass
 
 
-def _realized(name):
-    """Reserved names Lean realizes per module (not user-chosen)."""
-    last = name.rsplit('.', 1)[-1]
-    return (re.fullmatch(r'(eq|else_eq|eq_def|eq_unfold|fun_cases|induct|mutual_induct)(_[0-9]+)?', last) is not None
-            and any(part.startswith('_') or part.startswith('match_') for part in name.split('.')[:-1]))
-
-
 def merge_constants(existing, roots, incoming, incoming_roots):
     """Union compiler-registered equation copies, never authored collisions."""
     overlap = existing.keys() & incoming.keys()
     for name in sorted(overlap):
         origin = existing[name].get('equation_origin')
         # Lean realizes reserved auxiliaries (equation lemmas, `_sparseCasesOn`
-        # equations) on demand in each module that needs them; one environment
+        # equations, `congr_simp` lemmas) on demand in each module; one environment
         # can import both only because the copies agree. A non-authored copy
         # with an identical kernel and attribute record therefore coalesces;
         # registered equation copies must also agree on their parent.
-        realized = origin is None and incoming[name].get('equation_origin') is None and _realized(name)
+        # Any non-authored identical copy qualifies: an importing environment
+        # (here the capture itself elaborated one) only admits agreeing copies.
+        realized = origin is None and incoming[name].get('equation_origin') is None
         if (name in roots or name in incoming_roots or
                 (origin is None and not realized) or
                 origin != incoming[name].get('equation_origin') or

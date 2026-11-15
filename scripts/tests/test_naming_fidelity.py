@@ -104,10 +104,16 @@ class NamingFidelityTests(unittest.TestCase):
                          {'N.parent.eq_1'})
         self.assertEqual(len(existing), 1)
 
-    def test_equal_bytes_without_provenance_do_not_coalesce(self):
-        existing = {'N.parent.eq_1': constant()}
+    def test_realized_copies_coalesce_only_when_identical_and_not_authored(self):
+        # Lean realizes auxiliaries (`congr_simp`, `_sparseCasesOn` equations)
+        # in every module that needs them; agreeing copies are one constant.
+        existing = {'Std.Range.mk.congr_simp': constant()}
+        self.assertEqual(CHECK.merge_constants(existing, set(), copy.deepcopy(existing), set()),
+                         {'Std.Range.mk.congr_simp'})
         with self.assertRaisesRegex(ValueError, 'duplicate constants'):
-            CHECK.merge_constants(existing, set(), copy.deepcopy(existing), set())
+            CHECK.merge_constants(existing, set(), {'Std.Range.mk.congr_simp': constant(2)}, set())
+        with self.assertRaisesRegex(ValueError, 'duplicate constants'):
+            CHECK.merge_constants(existing, {'Std.Range.mk.congr_simp'}, copy.deepcopy(existing), set())
 
     def test_authored_or_changed_equation_copies_refuse(self):
         equation = constant()
