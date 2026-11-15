@@ -114,8 +114,27 @@ partial def firstAtom (s : Syntax) : Option String :=
   | .atom _ value => some value
   | _ => s.getArgs.foldl (fun found child => found.orElse (fun _ => firstAtom child)) none
 
+/-- These commands have no closed result expression. Preserve their complete
+syntax, including expected diagnostics and options, rather than ignoring them. -/
+def auditCommand (s : Syntax) : Bool :=
+  (firstAtom s).any (fun a => a.trimAscii.toString == "#expect_axioms" || a.trimAscii.toString == "#union_axioms_of_modules")
+
+def checkedCommand (s : Syntax) : Bool :=
+  s.isOfKind ``Lean.guardMsgsCmd || s.isOfKind ``Lean.runCmd || auditCommand s ||
+    (firstAtom s).any (fun a => #["#eval", "#eval!", "#count_heartbeats"].contains a.trimAscii.toString)
+
 def unsupportedCommand (s : Syntax) : Bool :=
-  !s.isOfKind ``Parser.Command.guardCmd && (firstAtom s).any (·.startsWith "#")
+  !s.isOfKind ``Parser.Command.guardCmd && !checkedCommand s &&
+    (firstAtom s).any (·.startsWith "#")
+
+def within (outer inner : Syntax) : Bool :=
+  match outer.getPos?, outer.getTailPos?, inner.getPos?, inner.getTailPos? with
+  | some a, some b, some c, some d => a <= c && d <= b
+  | _, _, _, _ => false
+
+partial def checkedCommands (s : Syntax) : Array Syntax :=
+  if checkedCommand s then #[s]
+  else s.getArgs.foldl (fun acc child => acc ++ checkedCommands child) #[]
 
 def guardJson (trees : Array InfoTree) (term : Syntax) : IO Json := do
   let mut candidates : Array Json := #[]
@@ -222,11 +241,28 @@ unsafe def main (args : List String) : IO UInt32 := do
     module := moduleName.toName
     directImports := Lean.Server.collectImports header
     references, decls }
+  let mut checks : Array Syntax := #[]
+  for command in result.commands do
+    checks := checks ++ checkedCommands command
+  -- A command introduced by a macro may not occur in the original parse tree.
+  for tree in trees do
+    let expanded := tree.foldInfo (fun _ info acc => match info with
+      | .ofCommandInfo ci => if checkedCommand ci.stx then acc.push ci.stx else acc
+      | _ => acc) (#[] : Array Syntax)
+    for command in expanded do
+      unless checks.any (fun outer => within outer command) do checks := checks.push command
+  let guarded := checks.filter (·.isOfKind ``Lean.guardMsgsCmd)
+  -- Preserve the invocation as well as expanded checks. Two equal checks may
+  -- share a macro's source span; their invocation arguments must not disappear.
+  -- This also retains set_option/namespace wrappers around checked commands.
+  for command in result.commands do
+    if checks.any (fun inner => within command inner) && !checks.contains command then
+      checks := checks.push command
   let mut terms : Array Syntax := #[]
   let mut attrs : Array Json := #[]
   for command in result.commands do
     if unsupportedCommand command then
-      throw <| IO.userError "unsupported hash command: fidelity currently exports #guard only"
+      throw <| IO.userError "unsupported hash command: command has no registered fidelity representation"
     unless (attributeSyntax command).isEmpty do
       attrs := attrs.push (syntaxJson command)
     terms := terms ++ guardTerms command
@@ -241,7 +277,16 @@ unsafe def main (args : List String) : IO UInt32 := do
       | _ => acc) (#[] : Array Syntax)
     for term in expanded do
       unless terms.contains term do terms := terms.push term
+  -- Expected failures can leave open or erroneous terms in info trees. Their
+  -- enclosing message check is compared in full syntax, not as a true guard.
+  terms := terms.filter fun term => !guarded.any (fun outer => within outer term)
   let guards ← terms.mapM (guardJson trees)
+  let checksJson := checks.map fun command => Json.mkObj [
+    ("syntax", syntaxJson command),
+    ("literal_names", toJson (auditCommand command)),
+    ("start", toJson (command.getPos?.map (·.byteIdx))),
+    ("end", toJson (command.getTailPos?.map (·.byteIdx))),
+    ("expected_failure_scope", toJson (command.isOfKind ``Lean.guardMsgsCmd))]
   let kernel := env.toKernelEnv
   let mut constants : List (String × Json) := []
   for c in (← env.getLocalConstantInfos) do
@@ -250,10 +295,10 @@ unsafe def main (args : List String) : IO UInt32 := do
     let data ← IO.ofExcept (constantJson info)
     constants := (info.name.toString, Json.mkObj [
       ("kernel", data), ("attributes", attributesJson env info.name)]) :: constants
-  let json := Json.mkObj [("schema_version", toJson (4 : Nat)),
+  let json := Json.mkObj [("schema_version", toJson (5 : Nat)),
     ("lean_version", toJson Lean.versionString), ("imports", imports), ("source", toJson input),
     ("index", toJson index), ("constants", Json.mkObj constants),
-    ("guards", toJson guards), ("attribute_syntax", toJson attrs)]
+    ("guards", toJson guards), ("attribute_syntax", toJson attrs), ("checked_commands", toJson checksJson)]
   IO.FS.writeFile output json.compress
   IO.println s!"OK — naming fidelity: {constants.length} constants, {guards.size} guards"
   return 0

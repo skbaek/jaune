@@ -282,13 +282,29 @@ that share its source span do not substitute for it.
 Proposition guards retain the proposition before Lean inserts its Bool coercion,
 with a distinct tag from Boolean guards. Both still execute through Lean's
 original guard elaborator. Ambiguous or unavailable information fails closed.
-Other hash commands
-(such as `#guard_expr`) are currently refused. The `#[...]` array notation is
-not a hash command.
+Schema 5 also retains additional checked commands:
+`#guard_msgs`, the two axiom-audit commands, `run_cmd`, `#eval`/`#eval!`, and
+`#count_heartbeats`. Their complete parsed syntax is compared, including options,
+expected diagnostics, and enclosed commands. Source invocations and option
+wrappers are retained too, so repeated macro checks cannot collapse merely
+because their expansions share a source span. Compiler-resolved identifiers are
+compared under the rename map. The audit commands read literal qualified names
+with `getId`; those identifiers are mapped as literal names. Expected failures
+are not misreported as successful Boolean guards or missing kernel constants.
+Changes to a checked expression, audit target, allowed set or message filter
+cannot disappear merely because the command creates no constant.
+
+This syntax check is deliberately stricter than expression equality: diagnostic
+text remains literal and changed spellings inside expected messages are not
+silently accepted. Those golden changes still need their reserved gate packet
+and a justified comparison. Local/scoped attribute histories remain unsupported.
+Other hash commands (such as `#guard_expr`) are refused. The `#[...]` array
+notation is not a hash command.
 
 The low-level comparator's verdict remains `exported-modules`. It can compare
-archived schema-3 exports as well as schema 4, but neither a list of bundles nor
-an import list alone binds a candidate. Schema 4 also records the transitive
+archived schema-3 and schema-4 exports as well as schema 5, but neither a list
+of bundles nor an import list alone binds a candidate. Schema 4 introduced
+records of the transitive
 imports actually loaded by the frontend, with the logical paths of each
 `.olean`, `.olean.server`, `.olean.private`, `.ir.sig` and `.ir` part (including
 absent optional parts). `--imports` discovers this environment without
@@ -321,8 +337,9 @@ the graph. It builds all selected local dependency modules through the same
 prefix. It has no bare Lake build default. After that build succeeds, it takes
 admission again, discovers imports, hashes their artifacts, exports the source
 closure, checks that source/tool/artifact bytes stayed fixed, and releases in a
-`finally` block. The header pass likewise always releases its own admission. The caller provides host containment and admission commands
-appropriate to the machine. Comparison itself requires neither Lean nor a hold.
+`finally` block. The header pass likewise always releases its own admission.
+The caller provides host containment and admission commands appropriate to the
+machine. Comparison itself requires neither Lean nor a hold.
 
 Capture output must be outside the checkout. It retains the exact build/export
 commands, terminal exits, logs, full candidate file inventory, module graph,
@@ -336,17 +353,18 @@ Comparison checks both old and new graphs. Every changed Lean source and every
 transitively affected local importer must be exported, even when the importer's
 source did not change. Missing coverage is a setup failure, not an equality
 verdict. The external artifact boundary must match by module/part digest;
-absolute host paths may differ. Tool sources, toolchain, Lake manifest and Lake
-configuration must agree. Changing source-directory layout or build configuration
+absolute host paths may differ. Tool sources (including the map/apply helpers),
+toolchain, Lake manifest and Lake configuration must agree. Changing
+source-directory layout or build configuration
 requires explicit relocation support and is currently refused.
 
 A successful result is labelled `candidate-affected-local-closure`, with both
 candidate inventory digests. The Git HEAD alone is not the input identity: a
 capture may describe an uncommitted control candidate. The source graph and
 fixed external artifacts justify leaving unaffected, byte-identical modules
-outside the export set. Existing unsupported hash commands, module-system visibility and local/scoped
-attribute histories still fail closed; an affected importer using one must be
-supported before a whole-candidate verdict can pass. No theorem bridge, cache
+outside the export set. Unknown hash commands, module-system visibility and
+local/scoped attribute histories still fail closed; an affected importer using
+one must be supported before a whole-candidate verdict can pass. No theorem bridge, cache
 integrity check, axiom audit or full production rename verdict follows merely
 from installing this tooling.
 
@@ -358,3 +376,11 @@ altered supported files still elaborate: the comparison is the failing
 control. Source restoration is byte-for-byte against the compiled baseline.
 This is tooling evidence; it does not replace WP's two real EVM executions or
 its actual `execFueled_eq_cached` attribute control.
+
+`python3 scripts/check-naming-command-tool.py [--output FRESH_DIRECTORY]`
+checks the supported command forms with the compiler. It requires the current
+exporter, `AxiomAudit`, `UnionAxiomsFixture.Good` and
+`Mathlib.Util.CountHeartbeats` artifacts and host admission. A rename passes;
+changed expressions, removed or retargeted audits, widened union expectations,
+changed message options and a removed heartbeat wrapper fail comparison after
+successful elaboration. It never changes the production checks or builds.

@@ -14,7 +14,7 @@ import re
 import subprocess
 import sys
 
-# Reuse the checked map, compiler comparator and fail-closed import lexer.
+# Reuse the checked map, compiler comparator.
 import importlib.util
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -193,7 +193,8 @@ def capture(args):
     local_built = bind_artifacts(local_paths)
     tool_sources = {p: initial['files'].get(p) for p in
                     ('scripts/NamingFidelity.lean', 'scripts/check-naming-fidelity.py',
-                     'scripts/naming-candidate.py')}
+                     'scripts/naming-candidate.py', 'scripts/check-naming-map.py',
+                     'scripts/apply-naming-map.py')}
     run(root, out, 'admit', argv(args.admit_command))
     try:
         imports, discovery, exports = {}, {}, {}
@@ -224,7 +225,7 @@ def capture(args):
             target = out / (module + '.export.json')
             run(root, out, module + '-export', ['lake', 'env', str(exporter), path, module, str(target)])
             data = json.loads(target.read_bytes())
-            if (data['schema_version'] != 4 or data['imports'] != discovery[module]['imports'] or
+            if (data['schema_version'] != 5 or data['imports'] != discovery[module]['imports'] or
                 data['index']['module'] != module or
                 data['index']['directImports'] != discovery[module]['direct_imports'] or
                 data['lean_version'] != discovery[module]['lean_version'] or
@@ -275,7 +276,7 @@ def read_snapshot(path):
         if not export.resolve().is_relative_to(path.parent.resolve()) or file_sha(export) != record['sha256']:
             raise ValueError('export missing, outside snapshot, or digest changed')
         raw = json.loads(export.read_bytes())
-        if (raw['schema_version'] != 4 or raw['index']['module'] != module or
+        if (raw['schema_version'] not in (4, 5) or raw['index']['module'] != module or
             sha(raw['source'].encode()) != candidate['modules'][module]['sha256'] or
             [entry[0] for entry in raw['index']['directImports']] != candidate['modules'][module]['imports']):
             raise ValueError('export source does not match candidate inventory')

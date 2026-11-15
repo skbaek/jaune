@@ -36,11 +36,12 @@ class Mismatch(ValueError):
 
 def read_exports(paths):
     constants, roots, guards, attributes, modules, receipts = {}, set(), [], [], {}, []
+    checks = []
     version = None
     for path in paths:
         raw = Path(path).read_bytes()
         data = json.loads(raw)
-        if data['schema_version'] not in (3, 4) or data['index']['version'] != 5:
+        if data['schema_version'] not in (3, 4, 5) or data['index']['version'] != 5:
             raise ValueError('unsupported fidelity/index schema')
         if version is not None and version != data['lean_version']:
             raise ValueError('mixed Lean versions')
@@ -53,7 +54,11 @@ def read_exports(paths):
         if overlap:
             raise ValueError(f'duplicate constants: {sorted(overlap)}')
         constants.update(data['constants'])
+        command_checks = data['checked_commands'] if data['schema_version'] >= 5 else []
+        failure_scopes = [(row['start'], row['end']) for row in command_checks
+                          if row['expected_failure_scope']]
         names = set(data['index']['decls'])
+        failed_names = set()
         locations = defaultdict(set)
         positions = APPLY.Positions(data['source'])
         byte_offsets = [0]
@@ -67,28 +72,38 @@ def read_exports(paths):
                 a, b = APPLY.span(positions, info['definition'])
                 pseudo_example = (const['n'].endswith('._example') and
                                   data['source'][a:b] == 'example' and not info['usages'])
-                if not pseudo_example:
+                if any(start is not None and end is not None and
+                       start <= byte_offsets[a] and byte_offsets[b] <= end
+                       for start, end in failure_scopes) and const['n'] not in data['constants']:
+                    failed_names.add(const['n'])
+                elif not pseudo_example:
                     names.add(const['n'])
             for loc in info['usages'] + ([info['definition']] if info.get('definition') else []):
                 start, end = APPLY.span(positions, loc)
                 locations[byte_offsets[start], byte_offsets[end]].add(const['n'])
+        names -= failed_names
         missing = names - data['constants'].keys()
         if missing:
             raise ValueError(f'{module}: authored definitions missing from kernel export: {sorted(missing)}')
         roots.update(names)
 
-        def syntax(value):
+        def syntax(value, literal_names=False):
             if not isinstance(value, list):
                 return value
             if len(value) == 4 and value[0] == 'ident':
-                found = locations[value[2], value[3]]
+                if literal_names:
+                    # AxiomAudit reads these identifiers with getId, without
+                    # namespace resolution; its literal qualified names are the semantics.
+                    return ['name', value[1]]
+                found = locations[value[2], value[3]] - failed_names
                 if len(found) > 1:
                     raise ValueError('ambiguous compiler reference in attribute command')
                 return ['name', next(iter(found))] if found else ['token', value[1]]
             if value in (['atom', 'local'], ['atom', 'scoped']):
                 raise ValueError('local/scoped attribute commands require scope-history support')
-            return [syntax(item) for item in value]
+            return [syntax(item, literal_names) for item in value]
 
+        checks.extend(syntax(row['syntax'], row['literal_names']) for row in command_checks)
         guards.extend(data['guards'])
         attributes.extend(syntax(item) for item in data['attribute_syntax'])
         receipts.append(dict(path=str(path), sha256=hashlib.sha256(raw).hexdigest(),
@@ -96,7 +111,7 @@ def read_exports(paths):
     if not modules:
         raise ValueError('no exported modules')
     return dict(constants=constants, roots=roots, guards=guards, attributes=attributes,
-                modules=modules, receipts=receipts, version=version)
+                modules=modules, receipts=receipts, version=version, checks=checks)
 
 
 class Comparison:
@@ -189,14 +204,15 @@ class Comparison:
                 raise Mismatch(f'no verified generated-constant match for {name}')
         if self.right.keys() != self.reverse.keys():
             raise Mismatch('additional generated constants after renaming')
-        for key in ('guards', 'attributes'):
-            left = Counter(encoded(self.normalize(item, 'before')) for item in self.before[key])
-            right = Counter(encoded(item) for item in self.after[key])
+        for key in ('guards', 'attributes', 'checks'):
+            left = Counter(encoded(self.normalize(item, 'before')) for item in self.before.get(key, []))
+            right = Counter(encoded(item) for item in self.after.get(key, []))
             if left != right:
                 raise Mismatch(f'{key}: expression/command multiset changed (missing {sum((left-right).values())}, extra {sum((right-left).values())})')
         return dict(status='OK', scope='exported-modules',
                     authored_constants=len(self.before['roots']), generated_constants=len(self.generated_left),
-                    guards=len(self.before['guards']), attribute_commands=len(self.before['attributes']))
+                    guards=len(self.before['guards']), attribute_commands=len(self.before['attributes']),
+                    checked_commands=len(self.before.get('checks', [])))
 
 
 def check(before, after, mapping):
