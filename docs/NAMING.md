@@ -231,6 +231,19 @@ Version-2 syntax metadata (both exporters) adds compiler-derived rows:
   universes were in scope (used by relocation), plus `eof_scope` and `imports`.
 - `unresolved_syntax`: precise reasons for `case` labels without provenance
   (compound label, several selected goals, no ordinary `cases` origin).
+- `constructor_binders`: constructor argument binders with their constructor's
+  identifier range (binder-path rows, section 3).
+- `quotation_identifiers`: identifiers inside syntax quotations (outside
+  antiquotations). Lean pre-resolves them as global names when the quotation
+  elaborates; they carry no ordinary reference. The planner resolves each with
+  the capture model below in the quoting command's scope and renames it; one
+  without a unique resolution (typically a quoted local binder) is reported.
+
+Numeric literals (`0x7f`) and import module names are not candidate
+identifiers. A namespace renamed only through its members (at least two rows
+agreeing on a rename of its last component, `Gloas.Inv` -> `Gloas.Invariant`)
+is renamed in its syntax and lexical contexts; a lone moved member renames no
+namespace.
 
 Constructor case labels: the origin of a goal created by an ordinary `cases`
 is the position of the `casesOn` minor premise that the goal's metavariable
