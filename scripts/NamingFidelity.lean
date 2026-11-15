@@ -146,13 +146,51 @@ def guardJson (trees : Array InfoTree) (term : Syntax) : IO Json := do
     throw <| IO.userError s!"ambiguous guard expression at byte range {reprStr (term.getPos?.map (·.byteIdx))}..{reprStr (term.getTailPos?.map (·.byteIdx))}; {candidates.size} candidates: {toJson candidates}; provenance: {toJson provenance}"
   return first
 
+/-- All transitive imports actually loaded by this frontend. Record every
+possible data/IR part, including absence, so capture can bind the resolved
+artifacts before and after elaboration. Lean 4.35 imports these five parts. -/
+def importArtifacts (env : Environment) : IO Json := do
+  let cwd ← IO.currentDir
+  let modules ← env.header.moduleNames.mapM fun name => do
+    let olean ← findOLean name
+    let olean := if olean.isAbsolute then olean else cwd / olean
+    let parts ← #["olean", "olean.server", "olean.private", "ir.sig", "ir"].mapM fun ext => do
+      let path := olean.withExtension ext
+      let present ← path.pathExists
+      pure (ext, if present then toJson path.toString else Json.null)
+    pure (name.toString, Json.mkObj parts.toList)
+  return Json.mkObj modules.toList
+
+/-- Parse every candidate header with Lean itself, including modules outside
+an eventual export set. No imported module or source body is elaborated here. -/
+def headerInventory (input output : String) : IO Unit := do
+  let json ← IO.ofExcept (Json.parse (← IO.FS.readFile input))
+  let entries ← IO.ofExcept (fromJson? json : Except String (Array (String × String)))
+  let modules ← entries.mapM fun (moduleName, source) => do
+    let text ← IO.FS.readFile source
+    let ctx := Parser.mkInputContext text source
+    let (header, _, messages) ← Parser.parseHeader ctx
+    if messages.hasErrors then
+      for message in messages.toList do IO.eprintln (← message.toString)
+      throw <| IO.userError s!"invalid module header: {source}"
+    pure (moduleName, Json.mkObj [("path", toJson source), ("is_module", toJson (HeaderSyntax.isModule header)),
+      ("direct_imports", toJson (Lean.Server.collectImports header))])
+  IO.FS.writeFile output (Json.mkObj [("schema_version", toJson (1 : Nat)),
+    ("lean_version", toJson Lean.versionString), ("modules", Json.mkObj modules.toList)]).compress
+
 end NamingFidelity
 
 open NamingFidelity
 
 unsafe def main (args : List String) : IO UInt32 := do
-  let [source, moduleName, output] := args
-    | IO.eprintln "usage: jaune-naming-fidelity SOURCE MODULE OUTPUT"; return 2
+  if let ["--headers", input, output] := args then
+    headerInventory input output
+    return 0
+  let (importsOnly, rest) := match args with
+    | "--imports" :: rest => (true, rest)
+    | rest => (false, rest)
+  let [source, moduleName, output] := rest
+    | IO.eprintln "usage: jaune-naming-fidelity [--imports] SOURCE MODULE OUTPUT"; return 2
   initSearchPath (← findSysroot)
   enableInitializersExecution
   let input ← IO.FS.readFile source
@@ -163,6 +201,14 @@ unsafe def main (args : List String) : IO UInt32 := do
   if messages.hasErrors then
     for message in messages.toList do IO.eprintln (← message.toString)
     return 1
+  let imports ← importArtifacts env
+  if importsOnly then
+    IO.FS.writeFile output (Json.mkObj [
+      ("schema_version", toJson (1 : Nat)), ("module", toJson moduleName),
+      ("lean_version", toJson Lean.versionString),
+      ("direct_imports", toJson (Lean.Server.collectImports header)),
+      ("imports", imports)]).compress
+    return 0
   let state := { Command.mkState env messages options with infoState.enabled := true }
   let result ← IO.processCommands inputCtx parserState state
   if result.commandState.messages.hasErrors then
@@ -204,8 +250,8 @@ unsafe def main (args : List String) : IO UInt32 := do
     let data ← IO.ofExcept (constantJson info)
     constants := (info.name.toString, Json.mkObj [
       ("kernel", data), ("attributes", attributesJson env info.name)]) :: constants
-  let json := Json.mkObj [("schema_version", toJson (3 : Nat)),
-    ("lean_version", toJson Lean.versionString), ("source", toJson input),
+  let json := Json.mkObj [("schema_version", toJson (4 : Nat)),
+    ("lean_version", toJson Lean.versionString), ("imports", imports), ("source", toJson input),
     ("index", toJson index), ("constants", Json.mkObj constants),
     ("guards", toJson guards), ("attribute_syntax", toJson attrs)]
   IO.FS.writeFile output json.compress

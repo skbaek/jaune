@@ -40,7 +40,7 @@ def read_exports(paths):
     for path in paths:
         raw = Path(path).read_bytes()
         data = json.loads(raw)
-        if data['schema_version'] != 3 or data['index']['version'] != 5:
+        if data['schema_version'] not in (3, 4) or data['index']['version'] != 5:
             raise ValueError('unsupported fidelity/index schema')
         if version is not None and version != data['lean_version']:
             raise ValueError('mixed Lean versions')

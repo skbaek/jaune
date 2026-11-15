@@ -286,14 +286,69 @@ Other hash commands
 (such as `#guard_expr`) are currently refused. The `#[...]` array notation is
 not a hash command.
 
-**Scope limit:** the verdict is labelled `exported-modules`, not whole-tree
-fidelity. Imported constants outside the export set are boundary references;
-their bodies are not proved unchanged by this run. Import lists are reported,
-not validated as a dependency-closure receipt. Before a goal N4 verdict, supply
-the complete affected/old-side dependency closure and bind its current imports
-and unchanged external pins to the candidate. That production orchestration,
-the actual Jaune field pilot, and whole-tree coverage remain work at this
-tooling checkpoint. No theorem bridge or axiom-audit verdict is implied.
+The low-level comparator's verdict remains `exported-modules`. It can compare
+archived schema-3 exports as well as schema 4, but neither a list of bundles nor
+an import list alone binds a candidate. Schema 4 also records the transitive
+imports actually loaded by the frontend, with the logical paths of each
+`.olean`, `.olean.server`, `.olean.private`, `.ir.sig` and `.ir` part (including
+absent optional parts). `--imports` discovers this environment without
+elaborating the source body.
+
+### Candidate and dependency binding
+
+`naming-candidate.py` adds source/import binding around the same comparator:
+
+```sh
+python3 scripts/naming-candidate.py capture --root CHECKOUT --source-dir . --source-dir scripts --source-dir scripts/tests/naming --module ROOT_MODULE --build-prefix BUILD_ARGV_JSON --admit-command ADMIT_ARGV_JSON --release-command RELEASE_ARGV_JSON --output FRESH_DIRECTORY
+python3 scripts/naming-candidate.py compare --before BEFORE/snapshot.json --after AFTER/snapshot.json --map MAP.json
+```
+
+Repeat `--module` for multiple roots. The source directories describe Lean's
+module layout; the longest matching directory wins. Every tracked or unignored
+Lean source must be inventoried, including sources outside the selected roots.
+Lean's own parser reads every header in one batch, including unchanged sources
+outside the export set; a line scanner cannot silently miss a multiline import.
+The compiler header inventory is retained and bound to the source inventory.
+Hyphenated script filenames remain inventoried. Selected sources using Lean's
+`module` visibility system are currently refused because that visibility has
+not yet been added to the constant exporter.
+
+All three command arguments are nonempty JSON argv arrays, never shell text.
+The build prefix is the host's authorized owned-build invocation, ending just
+before its targets (for Creme, through the `--` separator). Capture first builds
+`jaune-naming-fidelity`, then uses an admitted compiler header pass to determine
+the graph. It builds all selected local dependency modules through the same
+prefix. It has no bare Lake build default. After that build succeeds, it takes
+admission again, discovers imports, hashes their artifacts, exports the source
+closure, checks that source/tool/artifact bytes stayed fixed, and releases in a
+`finally` block. The header pass likewise always releases its own admission. The caller provides host containment and admission commands
+appropriate to the machine. Comparison itself requires neither Lean nor a hold.
+
+Capture output must be outside the checkout. It retains the exact build/export
+commands, terminal exits, logs, full candidate file inventory, module graph,
+source-bound exports, exporter digest and resolved import artifact digests.
+Local imports must resolve to the artifacts just built in that checkout;
+uninventoried or shadowed local imports fail. Optional artifact parts cannot
+appear or disappear unnoticed. The logical module path is retained before
+following file symlinks, matching Lean's loading of separately cached parts.
+
+Comparison checks both old and new graphs. Every changed Lean source and every
+transitively affected local importer must be exported, even when the importer's
+source did not change. Missing coverage is a setup failure, not an equality
+verdict. The external artifact boundary must match by module/part digest;
+absolute host paths may differ. Tool sources, toolchain, Lake manifest and Lake
+configuration must agree. Changing source-directory layout or build configuration
+requires explicit relocation support and is currently refused.
+
+A successful result is labelled `candidate-affected-local-closure`, with both
+candidate inventory digests. The Git HEAD alone is not the input identity: a
+capture may describe an uncommitted control candidate. The source graph and
+fixed external artifacts justify leaving unaffected, byte-identical modules
+outside the export set. Existing unsupported hash commands, module-system visibility and local/scoped
+attribute histories still fail closed; an affected importer using one must be
+supported before a whole-candidate verdict can pass. No theorem bridge, cache
+integrity check, axiom audit or full production rename verdict follows merely
+from installing this tooling.
 
 `python3 scripts/check-naming-fidelity-tool.py [--output FRESH_DIRECTORY]`
 exercises the compiler and comparison with a shared-field rename, definition

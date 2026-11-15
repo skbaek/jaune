@@ -1,0 +1,173 @@
+import copy
+import importlib.util
+import json
+from pathlib import Path
+import tempfile
+import unittest
+
+ROOT = Path(__file__).parents[2]
+SPEC = importlib.util.spec_from_file_location('naming_candidate', ROOT / 'scripts/naming-candidate.py')
+CHECK = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(CHECK)
+
+
+def module(path, digest, imports=()):
+    return dict(path=path, sha256=digest, imports=list(imports), is_module=False)
+
+
+def snapshot(graph, roots):
+    selected = CHECK.closure(graph, roots)
+    return dict(candidate=dict(head='fixture', source_dirs=['.'], modules=graph,
+                               files={r['path']: r['sha256'] for r in graph.values()}),
+                roots=roots, selected=selected, tool_sources={}, artifacts={},
+                fidelity=dict(constants={}, roots=set(), guards=[], attributes=[],
+                              modules={}, receipts=[], version='fixture'))
+
+
+EMPTY = dict(schema_version=1, entries=[], retired_tokens=[], allowed_abbreviations=[])
+
+
+class CandidateTests(unittest.TestCase):
+    def setUp(self):
+        self.graph = {'Dep': module('Dep.lean', 'a'),
+                      'Client': module('Client.lean', 'b', ['Dep']),
+                      'Untouched': module('Untouched.lean', 'c')}
+        self.before = snapshot(copy.deepcopy(self.graph), ['Client'])
+        self.after = copy.deepcopy(self.before)
+
+    def check(self):
+        return CHECK.compare(self.before, self.after, EMPTY)
+
+    def test_compiler_headers_cover_every_inventoried_module(self):
+        source = dict(modules={'Dep': dict(path='Dep.lean', sha256='a')})
+        headers = dict(schema_version=1, modules={'Dep': dict(path='Dep.lean', is_module=False, direct_imports=[['Init', False, False, False]])})
+        self.assertEqual(CHECK.bind_headers(source, headers)['modules']['Dep']['imports'], ['Init'])
+        headers['modules'].clear()
+        with self.assertRaisesRegex(ValueError, 'does not cover all'):
+            CHECK.bind_headers(source, headers)
+
+    def test_compiler_header_cannot_bind_another_source_path(self):
+        source = dict(modules={'Dep': dict(path='Dep.lean', sha256='a')})
+        headers = dict(schema_version=1, modules={'Dep': dict(path='Other.lean', is_module=False, direct_imports=[])})
+        with self.assertRaisesRegex(ValueError, 'source path differs'):
+            CHECK.bind_headers(source, headers)
+
+    def test_closed_identity_passes(self):
+        self.assertEqual(self.check()['scope'], 'candidate-affected-local-closure')
+
+    def test_dependency_cannot_be_missing_from_closure(self):
+        self.assertEqual(CHECK.closure(self.graph, ['Client']), ['Dep', 'Client'])
+        with self.assertRaisesRegex(ValueError, 'unknown local root'):
+            CHECK.closure(self.graph, ['Missing'])
+        self.graph['Dep']['imports'] = ['Client']
+        with self.assertRaisesRegex(ValueError, 'cycle'):
+            CHECK.closure(self.graph, ['Client'])
+
+    def test_changed_file_outside_exports_is_refused(self):
+        self.after['candidate']['files']['Untouched.lean'] = 'different'
+        with self.assertRaisesRegex(ValueError, 'changed Lean sources outside'):
+            self.check()
+
+    def test_unchanged_importer_of_changed_dependency_must_be_exported(self):
+        self.before = snapshot(copy.deepcopy(self.graph), ['Dep'])
+        self.after = copy.deepcopy(self.before)
+        self.after['candidate']['modules']['Dep']['sha256'] = 'changed'
+        self.after['candidate']['files']['Dep.lean'] = 'changed'
+        with self.assertRaisesRegex(ValueError, 'affected importers.*Client'):
+            self.check()
+
+    def test_removed_import_edge_still_requires_old_importer(self):
+        self.after['candidate']['modules']['Client']['imports'] = []
+        self.after['selected'] = ['Dep']
+        with self.assertRaisesRegex(ValueError, 'affected importers.*Client'):
+            self.check()
+
+    def test_transitive_reverse_closure(self):
+        graph = {**self.graph, 'Top': module('Top.lean', 'd', ['Client'])}
+        after = copy.deepcopy(graph)
+        after['Dep']['sha256'] = 'changed'
+        self.assertEqual(CHECK.affected_modules(graph, after), {'Dep', 'Client', 'Top'})
+
+    def test_configuration_or_tool_change_is_refused(self):
+        for key in CHECK.CONFIG:
+            self.after['candidate']['files'][key] = 'changed'
+            with self.assertRaisesRegex(ValueError, 'configuration changed'):
+                self.check()
+            del self.after['candidate']['files'][key]
+        self.after['tool_sources'] = {'exporter': 'changed'}
+        with self.assertRaisesRegex(ValueError, 'implementation changed'):
+            self.check()
+
+    def test_external_boundary_uses_hashes_not_host_paths(self):
+        parts = {k: None for k in CHECK.PARTS}
+        parts['olean'] = dict(path='/before/Init.olean', sha256='same')
+        self.before['artifacts'] = {'Init': parts}
+        self.after['artifacts'] = copy.deepcopy(self.before['artifacts'])
+        self.after['artifacts']['Init']['olean']['path'] = '/after/Init.olean'
+        self.assertEqual(self.check()['status'], 'OK')
+        self.after['artifacts']['Init']['olean']['sha256'] = 'different'
+        with self.assertRaisesRegex(ValueError, 'external import artifact'):
+            self.check()
+
+    def test_optional_artifact_appearance_and_disappearance_fail(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'Dep.olean'
+            path.write_bytes(b'compiled')
+            parts = CHECK.artifact_parts(path)
+            CHECK.bind_artifacts({'Dep': parts})
+            extra = path.with_suffix('.ir.sig')
+            extra.write_bytes(b'extra')
+            with self.assertRaisesRegex(ValueError, 'appeared, disappeared'):
+                CHECK.bind_artifacts({'Dep': parts})
+            parts = CHECK.artifact_parts(path)
+            extra.unlink()
+            with self.assertRaisesRegex(ValueError, 'appeared, disappeared'):
+                CHECK.bind_artifacts({'Dep': parts})
+
+    def test_artifact_parts_follow_lean_logical_path_before_symlinks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'cache-one').write_bytes(b'olean')
+            (root / 'cache-two').write_bytes(b'private')
+            (root / 'Dep.olean').symlink_to(root / 'cache-one')
+            (root / 'Dep.olean.private').symlink_to(root / 'cache-two')
+            bound = CHECK.bind_artifacts({'Dep': CHECK.artifact_parts(root / 'Dep.olean')})
+            self.assertEqual(bound['Dep']['olean.private']['sha256'], CHECK.sha(b'private'))
+
+    def test_artifact_byte_change_changes_binding(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'Dep.olean'
+            path.write_bytes(b'first')
+            parts = CHECK.artifact_parts(path)
+            first = CHECK.bind_artifacts({'Dep': parts})
+            path.write_bytes(b'other')
+            self.assertNotEqual(first, CHECK.bind_artifacts({'Dep': parts}))
+
+    def test_argv_is_never_shell_text(self):
+        self.assertEqual(CHECK.argv('["command", "literal;$(text)"]'), ['command', 'literal;$(text)'])
+        for bad in ['"shell text"', '[]', '[""]', '[1]']:
+            with self.assertRaises(ValueError):
+                CHECK.argv(bad)
+
+    def test_snapshot_rejects_missing_dependency_export_before_reading_files(self):
+        data = dict(schema_version=2, status='OK', build=dict(exit=0),
+                    candidate=self.before['candidate'], roots=['Client'],
+                    selected=['Dep', 'Client'], exports={'Client': {}})
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'snapshot.json'
+            source = copy.deepcopy(data['candidate'])
+            headers = dict(schema_version=1, modules={})
+            for module, row in source['modules'].items():
+                imports = row.pop('imports')
+                is_module = row.pop('is_module')
+                headers['modules'][module] = dict(path=row['path'], is_module=is_module, direct_imports=[[name, False, False, False] for name in imports])
+            (path.parent / 'source-before.json').write_text(json.dumps(source))
+            (path.parent / 'headers.json').write_text(json.dumps(headers))
+            data['headers_sha256'] = CHECK.file_sha(path.parent / 'headers.json')
+            path.write_text(json.dumps(data))
+            with self.assertRaisesRegex(ValueError, 'incomplete candidate export closure'):
+                CHECK.read_snapshot(path)
+
+
+if __name__ == '__main__':
+    unittest.main()
