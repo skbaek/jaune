@@ -10,9 +10,48 @@ are failures, not invitations to replace a word globally.
 import argparse
 import hashlib
 import importlib.util
+import bisect
 import json
 from pathlib import Path
+import re
 import sys
+
+
+def _load_validator():
+    path = Path(__file__).with_name('check-naming-map.py')
+    spec = importlib.util.spec_from_file_location('naming_schema', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+MAP = _load_validator()
+IDENT_PART = re.compile(r"«[^»]*»|[^\W\d][\w'!?]*")
+
+
+def components(text, start, end):
+    """Component spans of an identifier-shaped reference; None for a compound span.
+
+    Only an identifier occurrence can cover a candidate word. A compiler
+    reference whose range spans a whole expression (Lean records a lifted
+    `(← e)` discriminant as one local variable) is not an occurrence of the
+    identifiers inside it and neither covers nor conflicts with them.
+    """
+    i = start + (1 if text.startswith('.', start) else 0)
+    spans = []
+    while i < end:
+        match = IDENT_PART.match(text, i, end)
+        if not match:
+            return None
+        spans.append((match.start(), match.end()))
+        i = match.end()
+        if i < end:
+            if text[i] != '.':
+                return None
+            i += 1
+            if i == end:
+                return None
+    return spans or None
 
 
 def digest(data):
@@ -88,12 +127,9 @@ def mask_literals(text, index):
     metadata = index.get('naming_syntax')
     if metadata is None:
         return text, []
-    if metadata.get('version') != 1:
+    if metadata.get('version') not in (1, 2):
         raise ValueError('unsupported naming syntax metadata')
-    offsets, byte = {0: 0}, 0
-    for i, char in enumerate(text):
-        byte += len(char.encode('utf-8'))
-        offsets[byte] = i + 1
+    offsets = byte_offsets(text)
     spans = []
     for row in metadata['literal_ranges']:
         if (not isinstance(row, list) or len(row) != 4 or
@@ -174,33 +210,73 @@ def identifiers(text):
             i += 1
 
 
-def replacement(spelling, old, new):
-    """Keep a reference's qualification level only when it is unambiguous."""
-    # Lean includes the leading dot in constructor-pattern references.
+def split_name(name):
+    return [part for part in IDENT_PART.findall(name)] if '«' in name else name.split('.')
+
+
+def replacement(spelling, old, new, renamer=None, type_directed=False):
+    """New spelling for one compiler reference.
+
+    A leading-dot constructor and a generalized field projection (`x.f`) are
+    resolved through a type, so they keep their component count. A lexical
+    spelling resolves in a namespace: the unspelled prefix of the old name. That
+    namespace is renamed by namespace rows (as its `namespace`/`open` syntax is),
+    and the new name must stay inside it; namespace depth below it may change.
+    """
     leading_dot = spelling.startswith('.')
     bare = spelling[1:] if leading_dot else spelling
-    old_parts, new_parts = old.split('.'), new.split('.')
-    parts = bare.split('.')
+    old_parts, new_parts = split_name(old), split_name(new)
+    parts = split_name(bare)
     if parts != old_parts[-len(parts):]:
         raise ValueError(f'indexed spelling {spelling!r} is not a suffix of {old}')
-    # Changing namespace depth needs a separate relocation plan.
-    if len(old_parts) != len(new_parts):
-        raise ValueError(f'namespace-depth change needs explicit relocation: {old} -> {new}')
-    return ('.' if leading_dot else '') + '.'.join(new_parts[-len(parts):])
+    if leading_dot or type_directed:
+        if leading_dot and len(parts) != 1:
+            raise ValueError(f'unsupported qualified leading-dot spelling {spelling!r}')
+        return ('.' if leading_dot else '') + '.'.join(new_parts[-len(parts):])
+    context = '.'.join(old_parts[:-len(parts)])
+    renamed = renamer.namespace(context) if renamer is not None and context else context
+    prefix = renamed.split('.') if renamed else []
+    if new_parts[:len(prefix)] != prefix or len(new_parts) == len(prefix):
+        raise ValueError(f'rename {old} -> {new} leaves the namespace {context or "<root>"!r} '
+                         f'that spelling {spelling!r} resolves in; needs explicit qualification or relocation')
+    return '.'.join(new_parts[len(prefix):])
 
 
-def plan_file(text, index, entries):
+def byte_offsets(text):
+    offsets, byte = {0: 0}, 0
+    for i, char in enumerate(text):
+        byte += len(char.encode('utf-8'))
+        offsets[byte] = i + 1
+    return offsets
+
+
+def syntax_rows(index, key, width):
+    metadata = index.get('naming_syntax') or {}
+    if metadata.get('version', 1) not in (1, 2):
+        raise ValueError('unsupported naming syntax metadata')
+    if metadata.get('version', 1) < 2:
+        return []
+    rows = metadata.get(key)
+    if not isinstance(rows, list) or any(not isinstance(r, list) or len(r) != width for r in rows):
+        raise ValueError(f'invalid naming syntax {key}')
+    return rows
+
+
+def char_span(offsets, a, b, text):
+    if type(a) is not int or type(b) is not int or a not in offsets or b not in offsets or a >= b:
+        raise ValueError('syntax range outside source or splits UTF-8')
+    return offsets[a], offsets[b]
+
+
+def plan_file(text, index, entries, renamer=None):
     if index.get('version') != 5:
         raise ValueError('requires Lean ilean format 5')
-    mappings = {entry['old']: entry['new'] for entry in entries}
-    # Include only components that actually change, not a shared namespace.
-    candidates = {part for old, new in mappings.items()
-                  for i, part in enumerate(old.split('.'))
-                  if i >= len(new.split('.')) or part != new.split('.')[i]}
-    references = []
+    renamer = renamer or MAP.Renamer(entries)
+    candidates = renamer.words()
     positions = Positions(text)
-    edits = {}
-    problems = []
+    offsets = byte_offsets(text)
+    # (start, end, const, component spans, local)
+    references = []
     for key, info in index['references'].items():
         ident = json.loads(key)
         const = ident.get('c', {}).get('n')
@@ -209,27 +285,96 @@ def plan_file(text, index, entries):
             locations.append(info['definition'])
         for location in locations:
             start, end = span(positions, location)
-            references.append((start, end, const))
-            if const not in mappings:
-                continue
-            spelling = text[start:end]
+            references.append((start, end, const, components(text, start, end), 'f' in ident))
+    edits, problems, cover = {}, [], {}
+
+    def add_cover(spans, what):
+        for item in spans:
+            cover.setdefault(item, []).append(what)
+
+    def add_edit(start, end, spelling, renamed, declaration):
+        edit = {'start': start, 'end': end, 'old': spelling, 'new': renamed, 'declaration': declaration}
+        previous = edits.get((start, end))
+        if previous and previous['new'] != renamed:
+            problems.append({'start': start, 'end': end, 'reason': 'conflicting compiler references'})
+        edits[start, end] = edit
+
+    for start, end, const, comps, local in references:
+        if comps is not None:
+            # A local variable denotes its first component only; any further
+            # components are projections with their own references.
+            add_cover(comps[:1] if local else comps, ('local', None) if local else ('const', const))
+        if const is None or not renamer.renames(const):
+            continue
+        new = renamer(const)
+        if new == const:
+            continue  # A relocation that keeps its name changes no spelling.
+        spelling = text[start:end]
+        try:
+            if comps is None:
+                raise ValueError(f'compound reference range {spelling!r} for renamed {const}')
+            renamed = replacement(spelling, const, new, renamer,
+                                  type_directed=start > 0 and text[start - 1] == '.' and not spelling.startswith('.'))
+        except ValueError as error:
+            problems.append({'start': start, 'end': end, 'reason': str(error)})
+            continue
+        if renamed != spelling:
+            add_edit(start, end, spelling, renamed, const)
+    # Namespace syntax: `namespace`, `end`, `open`, `export` resolved by the exporter.
+    for a, b, kind, full, reason in syntax_rows(index, 'namespaces', 5):
+        start, end = char_span(offsets, a, b, text)
+        comps = components(text, start, end)
+        spelling = text[start:end]
+        if kind == 'section' or comps is None:
+            # A section label names no constant or namespace.
+            if kind == 'section' and comps is not None:
+                add_cover(comps, ('section', None))
+            continue
+        if full is None:
+            add_cover(comps, ('unresolved', f'{kind} syntax: {reason}'))
+            continue
+        add_cover(comps, ('namespace', full))
+        new = renamer.namespace(full)
+        if new != full:
             try:
-                renamed = replacement(spelling, const, mappings[const])
+                renamed = replacement(spelling, full, new, renamer)
             except ValueError as error:
                 problems.append({'start': start, 'end': end, 'reason': str(error)})
                 continue
-            if renamed == spelling:
+            if renamed != spelling:
+                add_edit(start, end, spelling, renamed, f'namespace {full}')
+    # Named arguments: a constructor binder is its structure field's name.
+    for a, b, function, param, field, reason in syntax_rows(index, 'named_arguments', 6):
+        start, end = char_span(offsets, a, b, text)
+        comps = components(text, start, end)
+        if comps is None or text[start:end] != param:
+            raise ValueError('named argument range does not match its binder')
+        if reason is not None:
+            add_cover(comps, ('unresolved', reason))
+            continue
+        add_cover(comps, ('binder', function))
+        if field is not None and renamer.renames(field):
+            new_field = renamer(field)
+            parent = field.rsplit('.', 1)[0]
+            if new_field.rsplit('.', 1)[0] != renamer(parent):
+                problems.append({'start': start, 'end': end,
+                                 'reason': f'field {field} -> {new_field} leaves its structure'})
                 continue
-            edit = {'start': start, 'end': end, 'old': spelling,
-                    'new': renamed, 'declaration': const}
-            previous = edits.get((start, end))
-            if previous and previous['new'] != renamed:
-                problems.append({'start': start, 'end': end, 'reason': 'conflicting compiler references'})
-            edits[start, end] = edit
+            add_edit(start, end, param, new_field.rsplit('.', 1)[1], field)
+    reasons = []
+    for a, b, reason in syntax_rows(index, 'unresolved_syntax', 3):
+        reasons.append((*char_span(offsets, a, b, text), reason))
     ordered = sorted(edits.values(), key=lambda e: (e['start'], e['end']))
+    shaped = sorted((r for r in references if r[3] is not None), key=lambda r: r[0])
+    starts = [r[0] for r in shaped]
+    longest = max((r[1] - r[0] for r in shaped), default=0)
     for edit in ordered:
-        for start, end, const in references:
-            if start < edit['end'] and edit['start'] < end and const not in mappings:
+        lo = bisect.bisect_left(starts, edit['start'] - longest)
+        hi = bisect.bisect_left(starts, edit['end'])
+        for start, end, const, _, local in shaped[lo:hi]:
+            if (start < edit['end'] and edit['start'] < end and
+                    (local or const is None or not renamer.renames(const)) and
+                    not (start == edit['start'] and end == edit['end'] and const == edit['declaration'])):
                 problems.append({'start': edit['start'], 'end': edit['end'],
                                  'reason': 'edit overlaps an unchanged compiler reference'})
                 break
@@ -237,31 +382,40 @@ def plan_file(text, index, entries):
         if right['start'] < left['end']:
             problems.append({'start': right['start'], 'end': left['end'], 'reason': 'overlapping edits'})
     masked, literals = mask_literals(text, index)
-    if any(const is not None and a < end and start < b
-           for a, b in literals for start, end, const in references):
-        raise ValueError('literal range overlaps a compiler reference')
+    literal_starts = [a for a, _ in literals]
+    for start, end, const, comps, _ in shaped:
+        if const is None:
+            continue
+        i = bisect.bisect_right(literal_starts, start) - 1
+        for a, b in literals[max(i, 0):i + 2]:
+            if a < end and start < b:
+                raise ValueError('literal range overlaps a compiler reference')
     for start, end, word in identifiers(masked):
         if word not in candidates:
             continue
-        covering = [ref for ref in references if ref[0] <= start and end <= ref[1]]
-        if not covering:
-            problems.append({'start': start, 'end': end, 'reason': f'unresolved token {word!r}'})
-        elif any(const and const not in mappings and
-                 any(const.startswith(old + '.') for old in mappings)
-                 for _, _, const in covering):
+        covering = cover.get((start, end), [])
+        resolved = [what for what in covering if what[0] != 'unresolved']
+        if not resolved:
+            reason = next((r for _, r in [what for what in covering if what[0] == 'unresolved']), None)
+            reason = reason or next((r for a, b, r in reasons if a <= start and end <= b), None)
             problems.append({'start': start, 'end': end,
-                             'reason': 'descendant of renamed declaration needs its own map row'})
+                             'reason': f'unresolved token {word!r}' + (f': {reason}' if reason else '')})
+            continue
+        for kind, const in resolved:
+            if (kind == 'const' and const and renamer.explain(const)[1] != 'exact' and
+                    renamer.exact_ancestor(const)):
+                problems.append({'start': start, 'end': end,
+                                 'reason': 'descendant of renamed declaration needs its own map row'})
+                break
     return ordered, problems
 
 
 def build_plan(root, map_path, files):
     map_bytes = map_path.read_bytes()
     data = json.loads(map_bytes)
-    validator_path = Path(__file__).with_name('check-naming-map.py')
-    spec = importlib.util.spec_from_file_location('naming_schema', validator_path)
-    validator = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(validator)
-    validator.validate_map(data)
+    MAP.validate_map(data)
+    if any(row['kind'] in ('module', 'relocation') for row in data['entries']):
+        raise ValueError('module/relocation rows need whole-tree planning (naming-tree.py)')
     records = []
     for relative, artifact in files:
         source = safe_path(root, relative)

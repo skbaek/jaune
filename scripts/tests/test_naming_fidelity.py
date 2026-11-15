@@ -34,6 +34,63 @@ class NamingFidelityTests(unittest.TestCase):
     def run_check(self):
         return CHECK.Comparison(self.before, self.after, self.renames).run()
 
+    def entries(self, *rows):
+        return CHECK.MAP.Renamer([dict(old=a, new=b, kind=k, **extra) for a, b, k, extra in rows])
+
+    def test_namespace_row_maps_descendants_and_private_names(self):
+        self.before = snapshot({'N.B256': constant(), 'N.B256.toNat': constant(2),
+                                '_private.M.0.N.B256.go': constant(3)},
+                               ['N.B256', 'N.B256.toNat', '_private.M.0.N.B256.go'])
+        self.after = snapshot({'N.U256': constant(), 'N.U256.toNat': constant(2),
+                               '_private.M.0.N.U256.go': constant(3)},
+                              ['N.U256', 'N.U256.toNat', '_private.M.0.N.U256.go'])
+        self.renames = self.entries(('N.B256', 'N.U256', 'namespace', {}))
+        self.assertEqual(self.run_check()['authored_constants'], 3)
+        self.after['constants']['N.U256.toNat'] = constant(9)
+        with self.assertRaises(CHECK.Mismatch):
+            self.run_check()
+
+    def test_module_identity_requires_relocation_rows(self):
+        self.before = snapshot({'N.f': constant()}, ['N.f'])
+        self.after = snapshot({'N.f': constant()}, ['N.f'])
+        self.before['owners'], self.after['owners'] = {'N.f': 'A'}, {'N.f': 'B'}
+        self.renames = {}
+        with self.assertRaisesRegex(CHECK.Mismatch, 'module A became B'):
+            self.run_check()
+        self.renames = self.entries(('N.f', 'N.f', 'relocation', dict(from_module='A', to_module='B')))
+        self.assertEqual(self.run_check()['status'], 'OK')
+        self.renames = self.entries(('N.f', 'N.f', 'relocation', dict(from_module='C', to_module='B')))
+        with self.assertRaisesRegex(CHECK.Mismatch, 'relocation row names module C'):
+            self.run_check()
+        # A module row moves all of its declarations, private prefixes included.
+        self.before = snapshot({'_private.A.0.N.g': constant()}, ['_private.A.0.N.g'])
+        self.after = snapshot({'_private.B.0.N.g': constant()}, ['_private.B.0.N.g'])
+        self.before['owners'], self.after['owners'] = {'_private.A.0.N.g': 'A'}, {'_private.B.0.N.g': 'B'}
+        self.renames = self.entries(('A', 'B', 'module', {}))
+        self.assertEqual(self.run_check()['status'], 'OK')
+
+    def test_compiler_named_declarations_are_graph_matched(self):
+        source = 'instance : Inhabited B256 := ⟨⟨0⟩⟩\ndef B256.f := 1\n'
+        def export(name):
+            index = dict(version=5, module='M', directImports=[], references={},
+                         decls={name: [0, 0, 0, 30, 0, 0, 0, 8], 'N.B256.f': [1, 0, 1, 15, 1, 4, 1, 10]})
+            return dict(schema_version=6, lean_version='x', source=source, index=index,
+                        constants={name: dict(constant(), equation_origin=None),
+                                   'N.B256.f': dict(constant(2), equation_origin=None)},
+                        guards=[], attribute_syntax=[], checked_commands=[], imports={})
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = []
+            for label, name in [('before', 'N.instInhabitedB256'), ('after', 'N.instInhabitedU256')]:
+                path = Path(tmp) / f'{label}.json'
+                path.write_text(json.dumps(export(name)))
+                paths.append(path)
+            before, after = CHECK.read_exports([paths[0]]), CHECK.read_exports([paths[1]])
+            self.assertEqual(before['roots'], {'N.B256.f'})
+            self.renames = {'N.B256.f': 'N.B256.f'} and self.entries()
+            self.before, self.after = before, after
+            result = self.run_check()
+            self.assertEqual(result['generated_constants'], 1)
+
     def test_exact_rename_and_reference_mapping(self):
         self.before['guards'] = [ref('N.old')]
         self.after['guards'] = [ref('N.new')]

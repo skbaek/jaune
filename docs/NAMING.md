@@ -84,10 +84,11 @@ Top-level object fields:
 
 Each entry in `entries` is a JSON object with required non-empty string fields:
 
-- `old`: old qualified Lean name (declaration, field, constructor, or module).
+- `old`: old qualified Lean name (declaration, field, constructor, namespace or
+  module).
 - `new`: new qualified Lean name.
-- `kind`: one of `"declaration"`, `"field"`, `"constructor"`, `"module"`,
-  `"relocation"`.
+- `kind`: one of `"declaration"`, `"field"`, `"constructor"`, `"namespace"`,
+  `"module"`, `"relocation"`.
 - `layer`: one of `"execution"`, `"consensus"`, `"adapter"`.
 - `rule`: rule number `"1"`–`"7"` (or comma-separated primary + secondary rule
   numbers, e.g. `"1, 7"`).
@@ -99,14 +100,41 @@ Optional entry fields:
 
 - `notes`: free-text clarification (for example alternate community spellings
   preserved in doc comments).
+- `from_module`, `to_module`: required for, and only allowed on, `relocation`
+  rows: the module the declaration leaves and the module it moves to.
+
+Row semantics (`Renamer` in `scripts/check-naming-map.py`, shared by the
+planner, N4 and N3):
+
+- `declaration`, `field`, `constructor`: rename exactly one constant. A
+  qualified descendant is not renamed by its parent's row; a source reference
+  to such a descendant is reported until it has its own row.
+- `namespace`: rename the name and every descendant by prefix (`Jaune.B256`
+  -> `Jaune.U256` renames `Jaune.B256.toNat` too), including the namespace in
+  `namespace`, `end`, `open` and `export` syntax. The longest enclosing
+  namespace row applies; an exact row for a descendant overrides it
+  (`Jaune.Tx` namespace row plus `Jaune.Tx.gas` -> `Jaune.Transaction.gasLimit`).
+  Nested namespace rows must agree.
+- `module`: rename a module: its file moves within the same source directory,
+  every import is rewritten, and private names change module prefix.
+- `relocation`: move one declaration's command from `from_module` to
+  `to_module`; `new` may equal `old` (a pure move) or rename it as well.
+  Private names keep their counter and take the target module's prefix.
+
+Private names (`_private.<module>.<counter>.<name>`) are renamed through their
+user name. Module and constant names live in separate name spaces for the
+one-to-one check.
 
 Validation invariants enforced by `scripts/check-naming-map.py`:
 
 1. Every entry has non-empty `old`, `new`, `kind`, `layer`, `rule`, and `source`,
-   with `old != new`. Missing or empty `source` fails closed.
+   with `old != new` except on a relocation row. Missing or empty `source` fails
+   closed. Relocation rows name two different modules.
 2. `kind`, `layer`, and `rule` contain only valid registered values.
-3. The map is a one-to-one bijection on `old -> new`: no duplicate `old` names
-   and no duplicate `new` names.
+3. The map is a one-to-one bijection on `old -> new` within each name space
+   (modules; constants and namespaces): no duplicate `old` names and no
+   duplicate `new` names. The complete expanded bijection (namespace rows over
+   every descendant) is checked by N4's authored-constant comparison.
 4. No `new` identifier segment introduces a token from `retired_tokens` (exact
    camelCase/snake_case token match).
 
@@ -133,12 +161,52 @@ The report states that explicit scope: it is not evidence for unselected
 files. The tool resolves shared field names by declaration identity. It keeps
 UTF-16 source positions, qualified references, local variables and other
 structures' fields distinct. It reports every affected token it cannot resolve,
-including tactic labels or namespace syntax absent from the compiler index.
-Any unresolved token prevents application; exit 1 means an unresolved plan,
-exit 2 a setup/input refusal. No spelling-based global replacement is used.
-Namespace-depth changes and module relocation are currently refused and need
-separate tooling before the full migration. Every renamed descendant needs its
-own map row; a parent rename never silently skips a qualified descendant.
+with the exporter's reason where one exists. Any unresolved token prevents
+application; exit 1 means an unresolved plan, exit 2 a setup/input refusal. No
+spelling-based global replacement is used. The selected-file planner refuses
+`module` and `relocation` rows; they need whole-tree planning (below).
+
+Only an identifier occurrence covers a candidate word: a compiler reference
+whose range is a dotted identifier, with the word as one component (a local
+variable covers only its first component). Lean records a lifted `(← e)`
+discriminant as one local variable spanning the whole expression; such a
+compound range is not an occurrence of the identifiers inside it, so it never
+covers an inner token that lacks its own provenance and never blocks a valid
+inner edit. A renamed constant with a compound range is unresolved.
+
+New spellings: a leading-dot constructor and a generalized projection (`x.f`)
+resolve through a type, so they keep their component count. A lexical
+spelling resolves in the namespace formed by the unspelled prefix of the old
+name; that namespace is itself renamed by namespace rows, and the new name must
+stay inside it. Depth below it may change (`gVerylow` -> `Gas.veryLow` inside
+`namespace Jaune`); leaving it needs explicit qualification and is reported.
+Every renamed descendant of an exact row needs its own map row; a parent rename
+never silently skips a qualified descendant.
+
+Version-2 syntax metadata (both exporters) adds compiler-derived rows:
+
+- `namespaces`: every `namespace`, `end`, `open` (also `open ... in` and
+  term/tactic `open`) and `export` namespace identifier with its resolved full
+  namespace. The exporter replays the scope stack and resolves with Lean's own
+  `resolveNamespace` against the final environment; namespaces are only ever
+  added, so a unique answer is the one Lean found. Ambiguous or `_root_`
+  spellings are reported. Section labels name nothing and are left unchanged.
+- `named_arguments`: each `(x := e)` with the function's constant head from the
+  elaborator's own info for the function syntax, checked against the
+  function's binder names. A binder of a structure constructor is that
+  structure's field, so a field rename renames it; other binders are unchanged.
+  A local or unresolved function head is reported with its reason.
+- `commands`: every top-level command's range, the namespace and open
+  declarations it elaborated under, and whether section variables, options or
+  universes were in scope (used by relocation), plus `eof_scope` and `imports`.
+- `unresolved_syntax`: precise reasons for `case` labels without provenance
+  (compound label, several selected goals, no ordinary `cases` origin).
+
+Constructor case labels: the origin of a goal created by an ordinary `cases`
+is the position of the `casesOn` minor premise that the goal's metavariable
+chain descends from, in the elaborated proof term. The goal's target need not
+mention the constructor (`cases r <;> simp only [...] at h` followed by
+`case gas =>` resolves to `Jaune.Rinst.gas`).
 
 Both exporters supplement the index with versioned, source-bound literal
 ranges from Lean's original parse tree. Plain strings, character literals and
@@ -195,8 +263,23 @@ A newly added file, a change to an unindexed file, a stale import or an edited
 plan refuses before the first write. Source identity is the captured bytes,
 not Git HEAD alone; committing identical bytes does not invalidate a plan.
 Successful application is still followed by an owned build and N4 comparison.
-Namespace syntax, depth changes, module/relocation rows and other unresolved
-constructs remain refusals; whole-tree accounting does not waive them.
+Unresolved constructs remain refusals; whole-tree accounting does not waive
+them.
+
+Module rows move the file within its source directory and rewrite every import
+whose lexed position matches Lean's header parse of that file (a mismatch
+refuses). Any other spelling of the old module name in code (lakefile roots,
+the audit command's module prefix, name literals) is reported for a manual edit
+followed by N4. Relocation rows move the declaration's whole top-level command
+(doc comment and attributes included, renames inside it applied) to the end of
+the target module inside `section`/`open .../namespace ...`/`end` that restores
+its namespace and open declarations. The planner reports, and never invents:
+a command that also declares other names, section variables/options/universes
+in scope, a target ending inside an open scope, a target that does not already
+import a module the command references, an indexed module (the old module
+included) still using the declaration without importing the target, and a
+private declaration still used in its old module. Guards and other checks are
+moved by hand; N4 compares them as expressions (section 6).
 
 The exporters share `NamingReferencesCore` so candidate captures retain the
 same constructor-case provenance as standalone reference exports. The optional
@@ -320,6 +403,15 @@ with a consistent bijection, rather than by generated names. Unreferenced
 generated nodes are included too. A conservative matching failure is a refusal
 to establish fidelity, not evidence that the two definitions differ.
 
+The map is applied as a function on compiler names (namespace prefixes,
+private names, module rows). A declaration that Lean names itself — an
+anonymous `instance`, whose definition range is the `instance` keyword — is
+not authored by spelling: its name follows other names and changes without a
+source edit, so it is matched by its kernel graph like a generated constant.
+Each authored constant must stay in its (module-renamed) module unless a
+relocation row moves it to the row's target; an unrecorded move fails
+comparison, as does a relocation row whose source module is wrong.
+
 Effective attributes include simp direction/priority, unfolding entries,
 `csimp` and its replacement, inline settings, reducibility, instance priority/
 scope/synthesis order and `implemented_by`. Whole commands carrying explicit
@@ -428,10 +520,16 @@ suffice; older exports retain the conservative refusal. The parent reference
 is itself compared under the map, and verdicts list the equations coalesced
 on each side. Conflicting copies still refuse. Shared dependency
 objects are parsed once and reused across environments. The verdict reports
-each environment rather than summing overlapping dependency counts. Moving a
-check between independent environments fails comparison. Environment-root or
-standalone-classification changes require explicit relocation support and
-currently refuse.
+each environment rather than summing overlapping dependency counts. With an
+unchanged root set, moving a check between independent environments fails
+comparison. A standalone-classification change still refuses.
+
+When relocation changes the set of maximal environment roots (a new test
+module that nothing imports), and only when the map has module or relocation
+rows, comparison uses the union of all exported modules as one scope: guards
+and checks are a single multiset, so a hand-moved guard is compared as an
+expression wherever it lands; a name defined in two independent modules is
+keyed per module. Otherwise each environment is still compared separately.
 
 Comparison checks both old and new graphs. Every changed Lean source and every
 transitively affected local importer must be exported, even when the importer's

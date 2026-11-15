@@ -138,14 +138,18 @@ def environments(modules, selected):
     return {root: closure(modules, [root]) for root in sorted(selected - imported)}
 
 
-def read_environments(paths, modules, selected):
+def read_bundles(paths):
+    return {m: FIDELITY.read_exports([path]) for m, path in paths.items()}
+
+
+def read_environments(paths, modules, selected, bundles=None):
     # Parse each module once. Merged environments share the kernel objects of
     # common dependencies, rather than duplicating those graphs per executable.
-    bundles = {m: FIDELITY.read_exports([path]) for m, path in paths.items()}
+    bundles = bundles if bundles is not None else read_bundles(paths)
     result = {}
     for root, members in environments(modules, selected).items():
         merged = dict(constants={}, roots=set(), guards=[], attributes=[],
-                      modules={}, receipts=[], checks=[], version=None, coalesced_equations=[])
+                      modules={}, receipts=[], checks=[], version=None, coalesced_equations=[], owners={})
         for member in members:
             data = bundles[member]
             if merged['version'] is not None and merged['version'] != data['version']:
@@ -159,12 +163,48 @@ def read_environments(paths, modules, selected):
             merged['coalesced_equations'] = sorted(set(merged['coalesced_equations']) | overlap)
             merged['roots'].update(data['roots'])
             merged['modules'].update(data['modules'])
+            for name, owner in data.get('owners', {}).items():
+                merged['owners'].setdefault(name, owner)
             for field in ('guards', 'attributes', 'receipts', 'checks'):
                 merged[field].extend(data[field])
         result[root] = merged
     if not result:
         raise ValueError('no captured source environments')
     return result
+
+
+def union_environment(bundles):
+    """All exported modules as one comparison scope, for relocations that move
+    declarations or checks between independent roots. A name defined in two
+    independent modules (each executable's `main`) is keyed per module."""
+    from collections import Counter
+    counts = Counter(name for data in bundles.values() for name in data['constants'])
+    merged = dict(constants={}, roots=set(), guards=[], attributes=[], modules={}, receipts=[],
+                  checks=[], version=None, coalesced_equations=[], owners={})
+    for module, data in sorted(bundles.items()):
+        if merged['version'] is not None and merged['version'] != data['version']:
+            raise ValueError('mixed Lean versions in capture')
+        merged['version'] = data['version']
+        for name, constant in data['constants'].items():
+            key = name
+            if counts[name] > 1:
+                existing = merged['constants'].get(name)
+                if not (existing is not None and constant.get('equation_origin') is not None and
+                        existing == constant and name not in data['roots']):
+                    key = f'{name}@{module}'
+            if key == name and name in merged['constants']:
+                merged['coalesced_equations'].append(name)
+            merged['constants'][key] = constant
+            merged['owners'].setdefault(key, module)
+            if name in data['roots']:
+                merged['roots'].add(key)
+        merged['modules'].update(data['modules'])
+        for field in ('guards', 'attributes', 'receipts', 'checks'):
+            merged[field].extend(data[field])
+    for key in [k for k in merged['constants'] if '@' in k]:
+        if key.rsplit('@', 1)[0] in merged['constants']:
+            raise ValueError(f'colliding name also defined once without collision: {key}')
+    return merged
 
 
 def artifact_parts(olean):
@@ -352,7 +392,8 @@ def read_snapshot(path):
                 if name not in producers or bound != data['local_built'][name]:
                     raise ValueError('import is outside built local closure')
         exports[module] = export
-    data['fidelity'] = read_environments(exports, candidate['modules'], selected)
+    data['module_bundles'] = read_bundles(exports)
+    data['fidelity'] = read_environments(exports, candidate['modules'], selected, data['module_bundles'])
     if any(candidate['modules'][m]['is_module'] for m in selected):
         raise ValueError('module-system visibility is not yet supported by fidelity exports')
     if any(env['version'] != json.loads(header_path.read_bytes())['lean_version']
@@ -402,9 +443,15 @@ def compare(before, after, mapping):
     if before.get('source_only', []) != after.get('source_only', []):
         raise ValueError('source-only root classification changed between candidates')
     if before['fidelity'].keys() != after['fidelity'].keys():
-        raise ValueError('capture environment roots changed; relocation support is required')
-    results = {root: FIDELITY.check(env, after['fidelity'][root], mapping)
-               for root, env in before['fidelity'].items()}
+        if not any(row['kind'] in ('module', 'relocation') for row in mapping['entries']):
+            raise ValueError('capture environment roots changed without module/relocation rows')
+        # Relocation may move declarations and checks between independent
+        # roots: compare the union of all exported modules, still per module key.
+        results = {'<union>': FIDELITY.check(union_environment(before['module_bundles']),
+                                             union_environment(after['module_bundles']), mapping)}
+    else:
+        results = {root: FIDELITY.check(env, after['fidelity'][root], mapping)
+                   for root, env in before['fidelity'].items()}
     result = dict(status='OK', environments=results)
     result.update(scope='candidate-affected-local-closure',
                   before_candidate=left['head'], after_candidate=right['head'],

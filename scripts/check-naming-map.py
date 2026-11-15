@@ -8,11 +8,13 @@ import sys
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_MAP = ROOT / "scripts" / "naming-map.json"
-VALID_KINDS = frozenset({"declaration", "field", "constructor", "module", "relocation"})
+VALID_KINDS = frozenset({"declaration", "field", "constructor", "namespace", "module", "relocation"})
+# Rows in the module namespace; every other kind names a Lean constant/namespace.
+MODULE_KINDS = frozenset({"module"})
 VALID_LAYERS = frozenset({"execution", "consensus", "adapter"})
 VALID_RULES = frozenset({"1", "2", "3", "4", "5", "6", "7"})
 REQUIRED_FIELDS = ("old", "new", "kind", "layer", "rule", "source")
-OPTIONAL_FIELDS = ("notes",)
+OPTIONAL_FIELDS = ("notes", "from_module", "to_module")
 ALLOWED_ENTRY_FIELDS = frozenset(REQUIRED_FIELDS + OPTIONAL_FIELDS)
 TOKEN_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z0-9]|$)|[A-Z]?[a-z0-9]+")
 
@@ -72,8 +74,8 @@ def validate_map(data):
     if not isinstance(entries, list):
         raise ValueError("top-level 'entries' must be a list")
 
-    seen_old = set()
-    seen_new = set()
+    seen_old = {}
+    seen_new = {}
     for index, entry in enumerate(entries):
         if not isinstance(entry, dict):
             raise ValueError(f"entry {index} must be a JSON object")
@@ -91,20 +93,31 @@ def validate_map(data):
 
         old_name = entry["old"].strip()
         new_name = entry["new"].strip()
-        if old_name == new_name:
-            raise ValueError(f"entry {index} maps '{old_name}' to itself")
         if entry["kind"] not in VALID_KINDS:
             raise ValueError(f"entry {index} invalid kind: {entry['kind']!r}")
+        relocation = entry["kind"] == "relocation"
+        for field in ("from_module", "to_module"):
+            if relocation:
+                if not isinstance(entry.get(field), str) or not entry[field].strip():
+                    raise ValueError(f"entry {index} relocation requires non-empty '{field}'")
+            elif field in entry:
+                raise ValueError(f"entry {index} '{field}' is only valid for relocation rows")
+        if relocation and entry["from_module"] == entry["to_module"]:
+            raise ValueError(f"entry {index} relocates within one module")
+        # A relocation may keep its name: the module is what changes.
+        if old_name == new_name and not relocation:
+            raise ValueError(f"entry {index} maps '{old_name}' to itself")
         if entry["layer"] not in VALID_LAYERS:
             raise ValueError(f"entry {index} invalid layer: {entry['layer']!r}")
         _parse_rules(entry["rule"])
 
-        if old_name in seen_old:
+        space = "module" if entry["kind"] in MODULE_KINDS else "name"
+        if (space, old_name) in seen_old:
             raise ValueError(f"duplicate old name: {old_name}")
-        if new_name in seen_new:
+        if (space, new_name) in seen_new:
             raise ValueError(f"duplicate new name: {new_name}")
-        seen_old.add(old_name)
-        seen_new.add(new_name)
+        seen_old[space, old_name] = entry
+        seen_new[space, new_name] = entry
 
         retired_hits = find_retired_tokens(new_name, retired_tokens)
         if retired_hits:
@@ -112,8 +125,106 @@ def validate_map(data):
                 f"entry {index} new name '{new_name}' contains retired token(s): "
                 + ", ".join(sorted(set(retired_hits)))
             )
+    # Namespace rows rename every descendant; an explicit row for a descendant
+    # overrides it. Two namespace rows may nest only consistently.
+    namespaces = {e["old"]: e["new"] for e in entries if e["kind"] == "namespace"}
+    for old_name, new_name in namespaces.items():
+        renamed = Renamer(entries).namespace(old_name)
+        if renamed != new_name:
+            raise ValueError(f"namespace row {old_name} conflicts with an enclosing namespace row")
 
     return len(entries), len(retired_tokens)
+
+
+def split_private(name):
+    """`_private.<module>.<counter>.<user name>` -> (module, counter, user name)."""
+    if not name.startswith("_private."):
+        return None
+    parts = name.split(".")
+    for i in range(2, len(parts)):
+        if parts[i].isdigit():
+            if i + 1 >= len(parts):
+                break
+            return ".".join(parts[1:i]), parts[i], ".".join(parts[i + 1:])
+    raise ValueError(f"unsupported private name: {name}")
+
+
+class Renamer:
+    """The map as a function on compiler names.
+
+    Exact rows (declaration, field, constructor, relocation) rename one name.
+    A namespace row renames its name and every descendant by prefix; the
+    longest enclosing namespace row applies, and an exact row wins over it.
+    Private names keep their counter; their module prefix follows module rows
+    and, for a relocated declaration, the row's target module.
+    """
+
+    def __init__(self, entries):
+        self.exact, self.namespaces, self.modules, self.relocations = {}, {}, {}, {}
+        for entry in entries:
+            kind = entry["kind"]
+            if kind == "module":
+                self.modules[entry["old"]] = entry["new"]
+            elif kind == "namespace":
+                self.namespaces[entry["old"]] = entry["new"]
+            else:
+                self.exact[entry["old"]] = entry["new"]
+                if kind == "relocation":
+                    self.relocations[entry["old"]] = (entry["from_module"], entry["to_module"])
+
+    def namespace(self, name):
+        parts = name.split(".")
+        for i in range(len(parts), 0, -1):
+            prefix = ".".join(parts[:i])
+            if prefix in self.namespaces:
+                return ".".join([self.namespaces[prefix]] + parts[i:])
+        return name
+
+    def explain(self, name):
+        """(new name, 'exact' | 'namespace' | 'unchanged')."""
+        private = split_private(name)
+        if private:
+            module, counter, user = private
+            new_user, how = self.explain(user)
+            if user in self.relocations:
+                source, target = self.relocations[user]
+                if source != module:
+                    raise ValueError(f"relocation row for {user} names module {source}, not {module}")
+                module, how = target, "exact"
+            elif module in self.modules:
+                module, how = self.modules[module], how if how != "unchanged" else "module"
+            return f"_private.{module}.{counter}.{new_user}", how
+        if name in self.exact:
+            return self.exact[name], "exact"
+        renamed = self.namespace(name)
+        return renamed, "namespace" if renamed != name else "unchanged"
+
+    def __call__(self, name):
+        return self.explain(name)[0]
+
+    def renames(self, name):
+        return self.explain(name)[1] != "unchanged"
+
+    def module(self, name):
+        return self.modules.get(name, name)
+
+    def exact_ancestor(self, name):
+        """A proper ancestor renamed by an exact row, which this name's own
+        rename does not follow (descendants need their own rows)."""
+        parts = name.split(".")
+        for i in range(len(parts) - 1, 0, -1):
+            prefix = ".".join(parts[:i])
+            if prefix in self.exact and self.exact[prefix] != prefix:
+                return prefix
+        return None
+
+    def words(self):
+        """Identifier components whose spelling may change."""
+        result = set()
+        for old, new in list(self.exact.items()) + list(self.namespaces.items()):
+            a, b = old.split("."), new.split(".")
+            result.update(part for i, part in enumerate(a) if i >= len(b) or part != b[i])
+        return result
 
 
 def check_file(map_path=DEFAULT_MAP):

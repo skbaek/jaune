@@ -87,7 +87,7 @@ class CandidateTests(unittest.TestCase):
             for name, value in [('One', 1), ('Two', 2)]:
                 path = directory / (name + '.json')
                 data = dict(schema_version=5, lean_version='fixture', source='def main := 0\n',
-                            index=dict(version=5, module=name, directImports=[], decls={'main': {}}, references={}),
+                            index=dict(version=5, module=name, directImports=[], decls={'main': [0, 0, 0, 13, 0, 4, 0, 8]}, references={}),
                             constants={'main': {'value': value}}, guards=[['lit', value]],
                             attribute_syntax=[], checked_commands=[])
                 path.write_text(json.dumps(data))
@@ -113,6 +113,36 @@ class CandidateTests(unittest.TestCase):
             graph['Two']['imports'] = ['One']
             with self.assertRaisesRegex(ValueError, 'duplicate constants in one import environment'):
                 CHECK.read_environments(paths, graph, ['One', 'Two'])
+
+    def test_relocation_to_a_new_root_compares_the_union(self):
+        def bundle(constants, owner, guards=()):
+            return dict(constants=constants, roots=set(constants), guards=list(guards), attributes=[],
+                        modules={owner: []}, receipts=[], checks=[], version='fixture',
+                        coalesced_equations=[], owners={n: owner for n in constants})
+        value = dict(kernel=['definition', 1])
+        before_graph = {'Spec': module('Spec.lean', 'a'), 'Main': module('Main.lean', 'b', ['Spec'])}
+        after_graph = dict(before_graph, Spec=module('Spec.lean', 'c'), Tests=module('Tests.lean', 'd', ['Spec']))
+        self.before = snapshot(before_graph, ['Main'])
+        self.after = snapshot(after_graph, ['Main', 'Tests'])
+        self.before['module_bundles'] = {'Spec': bundle({'J.f': value, 'J.check': value}, 'Spec', [['g', 1]]),
+                                         'Main': bundle({'main': value}, 'Main')}
+        self.after['module_bundles'] = {'Spec': bundle({'J.f': value}, 'Spec'),
+                                        'Main': bundle({'main': value}, 'Main'),
+                                        'Tests': bundle({'J.check': value}, 'Tests', [['g', 1]])}
+        rows = [dict(old='J.check', new='J.check', kind='relocation', layer='execution', rule='4',
+                     source='fixture', from_module='Spec', to_module='Tests')]
+        mapping = dict(EMPTY, entries=rows)
+        with self.assertRaisesRegex(ValueError, 'without module/relocation rows'):
+            CHECK.compare(self.before, self.after, EMPTY)
+        self.assertEqual(CHECK.compare(self.before, self.after, mapping)['environments']['<union>']['status'], 'OK')
+        # A moved guard is still compared as an expression; changing it fails.
+        self.after['module_bundles']['Tests']['guards'] = [['g', 2]]
+        with self.assertRaises(CHECK.FIDELITY.Mismatch):
+            CHECK.compare(self.before, self.after, mapping)
+        # A declaration that moved without its row fails the module identity check.
+        self.after['module_bundles']['Tests']['guards'] = [['g', 1]]
+        with self.assertRaisesRegex(CHECK.FIDELITY.Mismatch, 'module Spec became Tests'):
+            CHECK.compare(self.before, self.after, dict(EMPTY, entries=[dict(rows[0], old='J.f', new='J.f')]))
 
     def test_dependency_cannot_be_missing_from_closure(self):
         self.assertEqual(CHECK.closure(self.graph, ['Client']), ['Dep', 'Client'])

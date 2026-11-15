@@ -10,6 +10,7 @@ import argparse
 import importlib.util
 import json
 from pathlib import Path
+import re
 import sys
 import subprocess
 
@@ -18,6 +19,7 @@ SPEC = importlib.util.spec_from_file_location('naming_candidate', ROOT / 'script
 CANDIDATE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(CANDIDATE)
 APPLY = CANDIDATE.FIDELITY.APPLY
+MAP = CANDIDATE.FIDELITY.MAP
 
 
 def read_map(path):
@@ -27,8 +29,66 @@ def read_map(path):
 
 
 def words(entries):
-    return {part for row in entries for i, part in enumerate(row['old'].split('.'))
-            if i >= len(row['new'].split('.')) or part != row['new'].split('.')[i]}
+    return MAP.Renamer(entries).words()
+
+
+def code_only(text):
+    """Blank comments and plain string contents, keeping offsets (lexer rules)."""
+    out, i = list(text), 0
+    def blank(a, b):
+        for k in range(a, b):
+            if out[k] not in '\r\n':
+                out[k] = ' '
+    while i < len(text):
+        if text.startswith('--', i):
+            end = text.find('\n', i)
+            end = len(text) if end < 0 else end
+            blank(i, end)
+            i = end
+        elif text.startswith('/-', i):
+            depth, j = 1, i + 2
+            while depth and j < len(text):
+                if text.startswith('/-', j):
+                    depth, j = depth + 1, j + 2
+                elif text.startswith('-/', j):
+                    depth, j = depth - 1, j + 2
+                else:
+                    j += 1
+            blank(i, j)
+            i = j
+        elif text[i] == '"':
+            j = i + 1
+            while j < len(text) and text[j] != '"':
+                j += 2 if text[j] == '\\' else 1
+            blank(i + 1, min(j, len(text)))
+            i = j + 1
+        else:
+            i += 1
+    return ''.join(out)
+
+
+IMPORT = re.compile(r'^[ \t]*(?:(?:public|meta|private)[ \t]+)*import[ \t]+(?:all[ \t]+)?([^\s]+)', re.M)
+
+
+def import_spans(text, expected):
+    """Lexed import module spans, accepted only when they equal Lean's own
+    header parse (the capture's compiler header inventory)."""
+    code = code_only(text)
+    found = [(m.start(1), m.end(1), m.group(1)) for m in IMPORT.finditer(code)]
+    if [name for _, _, name in found] != list(expected):
+        raise ValueError('lexed imports differ from the compiler header inventory')
+    return found
+
+
+def closure_of(modules, root):
+    seen, stack = set(), [root]
+    while stack:
+        module = stack.pop()
+        for dependency in modules.get(module, {}).get('imports', []):
+            if dependency in modules and dependency not in seen:
+                seen.add(dependency)
+                stack.append(dependency)
+    return seen
 
 
 def occurrences(text, affected):
@@ -75,8 +135,9 @@ def current_artifacts(snapshot):
 def plan_sources(root, candidate, bundles, mapping):
     """Pure planning over an already-validated source inventory and bundles."""
     by_path = {row['path']: name for name, row in candidate['modules'].items()}
-    affected = words(mapping['entries'])
-    records = []
+    renamer = MAP.Renamer(mapping['entries'])
+    affected = renamer.words()
+    records, texts = [], {}
     for relative in sorted(candidate['files']):
         if not relative.endswith('.lean'):
             continue
@@ -84,22 +145,228 @@ def plan_sources(root, candidate, bundles, mapping):
         if APPLY.digest(raw) != candidate['files'][relative]:
             raise ValueError(f'{relative}: source changed during planning')
         text = raw.decode('utf-8')
+        texts[relative] = text
         module = by_path.get(relative)
         bundle = bundles.get(module)
         if bundle is not None:
             if bundle['source'] != text or bundle['index']['module'] != module:
                 raise ValueError(f'{relative}: compiler bundle source/module mismatch')
-            edits, problems = APPLY.plan_file(text, bundle['index'], mapping['entries'])
+            edits, problems = APPLY.plan_file(text, bundle['index'], mapping['entries'], renamer)
         else:
             edits = []
             problems = [dict(start=a, end=b, reason=f'affected token {word!r} has no compiler export')
                         for a, b, word in occurrences(text, affected)]
         records.append(dict(path=relative, sha256=APPLY.digest(raw), module=module,
                             indexed=bundle is not None, edits=edits, unresolved=problems))
-    unsupported = [dict(old=row['old'], new=row['new'],
-                        reason='module/relocation rows need explicit relocation support')
-                   for row in mapping['entries'] if row['kind'] in ('module', 'relocation')]
-    return records, unsupported
+    by_record = {row['path']: row for row in records}
+    moves = plan_modules(candidate, texts, by_record, renamer)
+    plan_relocations(candidate, texts, by_record, bundles, mapping, renamer)
+    for row in records:
+        row['edits'].sort(key=lambda e: (e['start'], e['end']))
+        for left, right in zip(row['edits'], row['edits'][1:]):
+            if right['start'] < left['end']:
+                row['unresolved'].append(dict(start=right['start'], end=left['end'],
+                                              reason='overlapping rename and relocation edits'))
+    return records, moves
+
+
+def source_dir(candidate, path):
+    dirs = sorted(candidate['source_dirs'], key=lambda d: len(Path(d).parts), reverse=True)
+    for directory in dirs:
+        if Path(path).is_relative_to(Path(directory)):
+            return Path(directory)
+    raise ValueError(f'{path}: outside every source directory')
+
+
+def plan_modules(candidate, texts, records, renamer):
+    """Module rows: move the file, rewrite every compiler-confirmed import, and
+    report the old module name anywhere else in code (lakefile roots, audit
+    module prefixes, name literals)."""
+    moves = []
+    if not renamer.modules:
+        return moves
+    modules = candidate['modules']
+    targets = set()
+    for old, new in sorted(renamer.modules.items()):
+        if old not in modules:
+            raise ValueError(f'module row names an unknown module: {old}')
+        path = modules[old]['path']
+        target = (source_dir(candidate, path) / Path(*new.split('.'))).with_suffix('.lean').as_posix()
+        if target in candidate['files'] or target in targets or new in modules:
+            raise ValueError(f'module target already exists: {new}')
+        targets.add(target)
+        moves.append([path, target])
+    pattern = re.compile('|'.join(r'(?<![\w.])' + re.escape(old) + r'(?![\w])'
+                                  for old in sorted(renamer.modules, key=len, reverse=True)))
+    for relative, text in texts.items():
+        record = records[relative]
+        spans = []
+        module = record['module']
+        if module is not None:
+            for a, b, name in import_spans(text, modules[module]['imports']):
+                spans.append((a, b))
+                if name in renamer.modules:
+                    record['edits'].append(dict(start=a, end=b, old=name, new=renamer.modules[name],
+                                                declaration=f'module {name}'))
+        code = code_only(text)
+        for match in pattern.finditer(code):
+            if not any(a <= match.start() and match.end() <= b for a, b in spans):
+                record['unresolved'].append(dict(start=match.start(), end=match.end(),
+                    reason=f'module name {match.group(0)!r} spelled outside an import '
+                           '(lakefile root, audit module prefix or name literal): manual edit, then N4'))
+    return moves
+
+
+def render_open(row, renamer):
+    kind = row[0]
+    if kind == 'simple':
+        ns, hidden = renamer.namespace(row[1]), row[2]
+        return f'open {ns}' + (' hiding ' + ' '.join(hidden) if hidden else '')
+    alias, declaration = row[1], renamer(row[2])
+    prefix, _, last = declaration.rpartition('.')
+    if not prefix:
+        raise ValueError(f'cannot render explicit open of root declaration {declaration}')
+    return f'open {prefix} ({last})' if last == alias else f'open {prefix} renaming {last} → {alias}'
+
+
+def plan_relocations(candidate, texts, records, bundles, mapping, renamer):
+    """Move each relocated declaration's whole command to the end of its target
+    module, in a section that restores its namespace and open declarations.
+
+    Import obligations are reported, never invented: the target must already
+    import what the command references, and each indexed module that still uses
+    the declaration must import the target. Section variables, options and
+    universes in scope, a target ending inside an open scope, private names
+    still used in their old module, and commands declaring other names are
+    unresolved: they need a manual edit before planning, then N4.
+    """
+    rows = [row for row in mapping['entries'] if row['kind'] == 'relocation']
+    if not rows:
+        return
+    modules = candidate['modules']
+    by_module = {row['module']: row for row in records.values() if row['module']}
+    moving = {}
+    for row in rows:
+        source, target = row['from_module'], row['to_module']
+        for module in (source, target):
+            if module not in modules:
+                raise ValueError(f'relocation names an unknown module: {module}')
+        record = by_module[source]
+        problem = lambda reason, a=0, b=0: record['unresolved'].append(
+            dict(start=a, end=b, reason=f'relocation {row["old"]}: {reason}'))
+        if source not in bundles or target not in bundles:
+            problem('source and target modules need compiler exports')
+            continue
+        text, index = texts[record['path']], bundles[source]['index']
+        meta = index.get('naming_syntax') or {}
+        if meta.get('version') != 2:
+            problem('export lacks version-2 command scopes')
+            continue
+        positions = APPLY.Positions(text)
+        offsets = APPLY.byte_offsets(text)
+        decls = {}
+        for name, loc in index['decls'].items():
+            user = MAP.split_private(name)
+            decls.setdefault(user[2] if user else name, []).append((name, APPLY.span(positions, loc[:4])))
+        found = decls.get(row['old'], [])
+        if len(found) != 1:
+            problem(f'{len(found)} declarations of this name in {source}')
+            continue
+        full, (a, b) = found[0]
+        commands = [(APPLY.char_span(offsets, r[0], r[1], text), r) for r in meta['commands'] if r[0] < r[1]]
+        containing = [(span, r) for span, r in commands if span[0] <= a and b <= span[1]]
+        if len(containing) != 1:
+            problem('declaration is not inside exactly one top-level command', a, b)
+            continue
+        (start, end), command = containing[0]
+        moving.setdefault((source, start, end), dict(command=command, rows=[], target=target))
+        entry = moving[(source, start, end)]
+        entry['rows'].append(row)
+        if entry['target'] != target:
+            problem('one command relocated to two modules', start, end)
+        entry['private'] = entry.get('private', []) + ([full] if full.startswith('_private.') else [])
+    for (source, start, end), entry in sorted(moving.items()):
+        record = by_module[source]
+        target = entry['target']
+        names = {row['old'] for row in entry['rows']}
+        problem = lambda reason, a=start, b=end: record['unresolved'].append(
+            dict(start=a, end=b, reason=f'relocation of {sorted(names)}: {reason}'))
+        text, index = texts[record['path']], bundles[source]['index']
+        positions = APPLY.Positions(text)
+        command = entry['command']
+        if any(command[5]):
+            problem('command elaborates under section variables, options or universes in scope')
+            continue
+        others = []
+        for name, loc in index['decls'].items():
+            na, nb = APPLY.span(positions, loc[:4])
+            user = MAP.split_private(name)
+            user = user[2] if user else name
+            if start <= na and nb <= end and not any(user == n or user.startswith(n + '.') for n in names):
+                others.append(user)
+        if others:
+            problem(f'command also declares {sorted(others)}')
+            continue
+        target_record = by_module[target]
+        eof = bundles[target]['index']['naming_syntax'].get('eof_scope')
+        if not eof or eof[0] != 0:
+            problem(f'target {target} ends inside an open namespace or section')
+            continue
+        # Imports: references made by the moved command.
+        moved_decls = {name for name, loc in index['decls'].items()
+                       if start <= APPLY.span(positions, loc[:4])[0] < end}
+        needed, users, before = set(), {}, len(record['unresolved'])
+        for key, info in index['references'].items():
+            const = json.loads(key).get('c')
+            if not const:
+                continue
+            for loc in info['usages'] + ([info['definition']] if info['definition'] else []):
+                ra, rb = APPLY.span(positions, loc)
+                if not (start <= ra and rb <= end):
+                    continue
+                if const['m'] != source:
+                    needed.add(const['m'])
+                elif const['n'] not in moved_decls:
+                    needed.add(source)  # It still uses a declaration staying behind.
+        target_closure = closure_of(modules, target) | {target}
+        missing = sorted(m for m in needed if m in modules and m not in target_closure)
+        if missing:
+            problem(f'target {target} does not import {missing}, needed by the moved command')
+        for module, bundle in bundles.items():
+            if module == target:
+                continue
+            module_positions = positions if module == source else APPLY.Positions(bundle['source'])
+            for key, info in bundle['index']['references'].items():
+                const = json.loads(key).get('c')
+                if not const or const['m'] != source or const['n'] not in moved_decls:
+                    continue
+                used = [loc for loc in info['usages']
+                        if module != source or not (start <= APPLY.span(module_positions, loc)[0] < end)]
+                if used:
+                    users[module] = users.get(module, 0) + len(used)
+        for module in sorted(users):
+            if entry.get('private') and module == source:
+                problem('private declaration is still used in its old module')
+            elif target not in closure_of(modules, module) | {module}:
+                problem(f'{module} still uses the moved declaration but does not import {target}')
+        if len(record['unresolved']) != before:
+            continue
+        # Renames inside the moved command travel with its text.
+        inner = [e for e in record['edits'] if start <= e['start'] and e['end'] <= end]
+        record['edits'] = [e for e in record['edits'] if e not in inner]
+        moved = text[start:end]
+        for edit in sorted(inner, key=lambda e: e['start'], reverse=True):
+            moved = moved[:edit['start'] - start] + edit['new'] + moved[edit['end'] - start:]
+        cut = end + 1 if text.startswith('\n', end) else end
+        record['edits'].append(dict(start=start, end=cut, old=text[start:cut], new='',
+                                    declaration=f'relocation {sorted(names)} -> {target}'))
+        ns = renamer.namespace(command[3]) if command[3] != '[anonymous]' else ''
+        lines = ['', 'section'] + [render_open(row, renamer) for row in command[4]]
+        lines += ([f'namespace {ns}'] if ns else []) + [moved] + ([f'end {ns}'] if ns else []) + ['end', '']
+        target_text = texts[target_record['path']]
+        insertion = ('' if target_text.endswith('\n') else '\n') + '\n'.join(lines)
+        target_record['edits'].append(dict(start=len(target_text), end=len(target_text), old='',
+                                           new=insertion, declaration=f'relocation {sorted(names)} <- {source}'))
 
 
 def build_plan(root, snapshot_path, map_path):
@@ -107,13 +374,14 @@ def build_plan(root, snapshot_path, map_path):
     mapping = read_map(map_path)
     snapshot = CANDIDATE.read_snapshot(snapshot_path)
     snapshot.pop('fidelity')  # The apply plan needs references, not retained kernel graphs.
+    snapshot.pop('module_bundles')
     current_inventory(root, snapshot['candidate'])
     current_artifacts(snapshot)
     bundles = {}
     for module, row in snapshot['exports'].items():
         data = json.loads((snapshot_path.parent / row['path']).read_bytes())
         bundles[module] = {key: data[key] for key in ('source', 'index')}
-    records, unsupported = plan_sources(root, snapshot['candidate'], bundles, mapping)
+    records, moves = plan_sources(root, snapshot['candidate'], bundles, mapping)
     current_inventory(root, snapshot['candidate'])
     tools = {name: CANDIDATE.file_sha(ROOT / 'scripts' / name) for name in
              ('naming-tree.py', 'naming-candidate.py', 'apply-naming-map.py',
@@ -122,8 +390,8 @@ def build_plan(root, snapshot_path, map_path):
                 snapshot=str(snapshot_path), snapshot_sha256=CANDIDATE.file_sha(snapshot_path),
                 map_sha256=CANDIDATE.file_sha(map_path), tool_sources=tools,
                 inventory_sha256=APPLY.digest(CANDIDATE.FIDELITY.encoded(snapshot['candidate']).encode()),
-                files=records, unsupported=unsupported,
-                status='unresolved' if unsupported or any(r['unresolved'] for r in records) else 'planned')
+                files=records, moves=moves,
+                status='unresolved' if any(r['unresolved'] for r in records) else 'planned')
 
 
 def apply_plan(root, plan, map_path):
@@ -135,8 +403,20 @@ def apply_plan(root, plan, map_path):
     expected = build_plan(root, Path(plan['snapshot']), map_path)
     if expected != plan:
         raise ValueError('snapshot, tools or plan changed since planning')
+    pending, moves = prepare_writes(root, plan['files'], plan.get('moves', []))
+    snapshot_bytes = Path(plan['snapshot']).read_bytes()
+    if APPLY.digest(snapshot_bytes) != plan['snapshot_sha256']:
+        raise ValueError('snapshot changed after preflight')
+    snapshot = json.loads(snapshot_bytes)
+    current_inventory(root, snapshot['candidate'])
+    # All files and inputs are checked before the first write. Filesystem I/O
+    # failure can still interrupt writes, as with the selected-file editor.
+    return write(pending, moves)
+
+
+def prepare_writes(root, records, move_rows):
     pending = []
-    for row in plan['files']:
+    for row in records:
         path = APPLY.safe_path(root, row['path'])
         text = path.read_bytes().decode('utf-8')
         for edit in reversed(row['edits']):
@@ -145,16 +425,20 @@ def apply_plan(root, plan, map_path):
             text = text[:edit['start']] + edit['new'] + text[edit['end']:]
         if row['edits']:
             pending.append((path, text.encode('utf-8')))
-    snapshot_bytes = Path(plan['snapshot']).read_bytes()
-    if APPLY.digest(snapshot_bytes) != plan['snapshot_sha256']:
-        raise ValueError('snapshot changed after preflight')
-    snapshot = json.loads(snapshot_bytes)
-    current_inventory(root, snapshot['candidate'])
-    # All files and inputs are checked before the first write. Filesystem I/O
-    # failure can still interrupt writes, as with the selected-file editor.
+    moves = [(APPLY.safe_path(root, a), APPLY.safe_path(root, b)) for a, b in move_rows]
+    for _, target in moves:
+        if target.exists():
+            raise ValueError(f'module move target exists: {target}')
+    return pending, moves
+
+
+def write(pending, moves):
     for path, raw in pending:
         path.write_bytes(raw)
-    return len(pending)
+    for source, target in moves:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        source.rename(target)
+    return len(pending) + len(moves)
 
 
 def main():

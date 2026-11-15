@@ -168,13 +168,164 @@ class NamingTreeTests(unittest.TestCase):
         self.assertEqual(len(result['files']), 3)
         self.assertIsNone(result['files'][-1]['module'])
 
-    def test_module_rows_remain_explicitly_unsupported(self):
-        self.mapping['entries'][0]['kind'] = 'module'
-        self.map.write_text(json.dumps(self.mapping))
-        plan = self.plan()
+    def test_module_rows_move_file_and_rewrite_imports(self):
+        files = {'A.lean': 'def a := 1\n', 'B.lean': '/- import A -/\nimport A\ndef b := a\n',
+                 'lakefile.lean': '-- configuration\n'}
+        fixture = TreeFixture(self.directory / 'modules', files, imports={'B': ['A']})
+        fixture.export('B', decls={}, commands=[], eof=[0, '[anonymous]', []])
+        row = dict(old='A', new='Core.A', kind='module', layer='execution', rule='4',
+                   source='Synthetic module relocation control')
+        plan = fixture.plan([row])
+        self.assertEqual(plan['status'], 'planned', plan)
+        self.assertEqual(plan['moves'], [['A.lean', 'Core/A.lean']])
+        self.assertEqual(TREE.apply_plan(fixture.root, plan, fixture.map), 2)
+        self.assertFalse((fixture.root / 'A.lean').exists())
+        self.assertEqual((fixture.root / 'Core/A.lean').read_text(), 'def a := 1\n')
+        self.assertEqual((fixture.root / 'B.lean').read_text(), '/- import A -/\nimport Core.A\ndef b := a\n')
+        # A module name in configuration or a name literal is reported, not guessed.
+        files['lakefile.lean'] = 'lean_lib x where roots := #[`A]\n'
+        fixture = TreeFixture(self.directory / 'modules2', files, imports={'B': ['A']})
+        fixture.export('B', decls={}, commands=[], eof=[0, '[anonymous]', []])
+        plan = fixture.plan([row])
         self.assertEqual(plan['status'], 'unresolved')
-        self.assertTrue(plan['unsupported'])
+        self.assertIn('outside an import', plan['files'][-1]['unresolved'][0]['reason'])
 
+    def test_lexed_imports_must_equal_compiler_headers(self):
+        files = {'A.lean': 'def a := 1\n', 'B.lean': 'import A\ndef b := a\n', 'lakefile.lean': ''}
+        fixture = TreeFixture(self.directory / 'headers', files, imports={'B': []})
+        fixture.export('B', decls={}, commands=[], eof=[0, '[anonymous]', []])
+        row = dict(old='A', new='Core.A', kind='module', layer='execution', rule='4', source='x')
+        with self.assertRaisesRegex(ValueError, 'compiler header'):
+            fixture.plan([row])
+
+    def relocation(self, src_text=None, tgt_text='def t := 0\n', client='import Src\nimport Tgt\ndef c := P.moved\n',
+                   flags=(False, False, False), eof=0):
+        src_text = src_text or 'namespace P\n/-- doc -/\ndef moved := 2\ndef keep := 1\nend P\n'
+        files = {'Src.lean': src_text, 'Tgt.lean': tgt_text, 'Client.lean': client, 'lakefile.lean': ''}
+        imports = {'Client': [line.split()[1] for line in client.splitlines() if line.startswith('import')]}
+        fixture = TreeFixture(self.directory / f'relocation{len(list(self.directory.iterdir()))}', files, imports)
+        moved = src_text.index('/-- doc -/')
+        moved_end = src_text.index('def keep') - 1
+        fixture.export('Src', decls={'P.moved': (moved, moved_end, src_text.index('moved')),
+                                     'P.keep': (src_text.index('def keep'), src_text.index('end P') - 1,
+                                                src_text.index('keep'))},
+                       commands=[(0, 11, 'namespace', '[anonymous]', [], [False] * 3),
+                                 (moved, moved_end, 'declaration', 'P', [['simple', 'Q', []]], list(flags))],
+                       eof=[0, '[anonymous]', []])
+        fixture.export('Tgt', decls={}, commands=[], eof=[eof, '[anonymous]', []])
+        fixture.export('Client', decls={}, commands=[], eof=[0, '[anonymous]', []],
+                       refs=[('P.moved', 'Src', client.index('P.moved'), client.index('P.moved') + 7)])
+        row = dict(old='P.moved', new='P.moved', kind='relocation', layer='execution', rule='4',
+                   source='Synthetic relocation control', from_module='Src', to_module='Tgt')
+        return fixture, fixture.plan([row])
+
+    def test_relocation_moves_command_with_scope(self):
+        fixture, plan = self.relocation()
+        self.assertEqual(plan['status'], 'planned', plan)
+        TREE.apply_plan(fixture.root, plan, fixture.map)
+        self.assertEqual((fixture.root / 'Src.lean').read_text(), 'namespace P\ndef keep := 1\nend P\n')
+        self.assertEqual((fixture.root / 'Tgt.lean').read_text(),
+                         'def t := 0\n\nsection\nopen Q\nnamespace P\n/-- doc -/\ndef moved := 2\nend P\nend\n')
+
+    def test_relocation_obligations_are_reported(self):
+        for kwargs, reason in [(dict(flags=(True, False, False)), 'section variables'),
+                               (dict(eof=1), 'ends inside an open'),
+                               (dict(client='import Src\ndef c := P.moved\n'), 'does not import Tgt')]:
+            with self.subTest(reason=reason):
+                fixture, plan = self.relocation(**kwargs)
+                self.assertEqual(plan['status'], 'unresolved')
+                reasons = [p['reason'] for r in plan['files'] for p in r['unresolved']]
+                self.assertTrue(any(reason in text for text in reasons), reasons)
+                self.assertEqual((fixture.root / 'Src.lean').read_bytes(),
+                                 fixture.files['Src.lean'].encode())
+
+
+class TreeFixture:
+    """A git checkout plus a schema-3 capture whose exports carry syntax rows."""
+
+    def __init__(self, directory, files, imports):
+        self.files = files
+        self.directory = directory
+        self.root = directory / 'repo'
+        self.root.mkdir(parents=True)
+        for name, text in files.items():
+            (self.root / name).write_text(text)
+        subprocess.run(['git', 'init', '-q', str(self.root)], check=True)
+        subprocess.run(['git', '-C', str(self.root), 'add', '.'], check=True)
+        subprocess.run(['git', '-C', str(self.root), '-c', 'user.name=Fixture',
+                        '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false',
+                        'commit', '-qm', 'fixture'], check=True)
+        self.capture = directory / 'capture'
+        self.capture.mkdir()
+        self.candidate = TREE.CANDIDATE.inventory(self.root, ['.'])
+        self.source = copy.deepcopy(self.candidate)
+        self.headers = dict(schema_version=1, lean_version='fixture', modules={})
+        for name, row in self.candidate['modules'].items():
+            row.update(imports=imports.get(name, []), is_module=False)
+            self.headers['modules'][name] = dict(path=row['path'], is_module=False,
+                                                 direct_imports=[[i, False, False] for i in row['imports']])
+        self.exports = {}
+        self.map = directory / 'map.json'
+
+    def lsp(self, text, i):
+        line = text.count('\n', 0, i)
+        return [line, len(text[text.rfind('\n', 0, i) + 1:i].encode('utf-16-le')) // 2]
+
+    def export(self, module, decls, commands, eof, refs=()):
+        text = self.files[module + '.lean']
+        def b(i):
+            return len(text[:i].encode())
+        references = {}
+        for name, (start, end, selection) in decls.items():
+            references[json.dumps({'c': {'m': module, 'n': name}})] = dict(
+                definition=self.lsp(text, selection) + self.lsp(text, selection + len(name.split('.')[-1])),
+                usages=[])
+        for name, owner, start, end in refs:
+            references.setdefault(json.dumps({'c': {'m': owner, 'n': name}}),
+                                  dict(definition=None, usages=[]))['usages'].append(
+                self.lsp(text, start) + self.lsp(text, end))
+        index = dict(version=5, module=module, directImports=self.headers['modules'][module]['direct_imports'],
+                     references=references,
+                     decls={name: self.lsp(text, start) + self.lsp(text, end) +
+                            self.lsp(text, sel) + self.lsp(text, sel + len(name.split('.')[-1]))
+                            for name, (start, end, sel) in decls.items()},
+                     naming_syntax=dict(version=2, literal_ranges=[], named_arguments=[], namespaces=[],
+                                        commands=[[b(x), b(y), *rest] for x, y, *rest in commands],
+                                        imports=[], unresolved_syntax=[], eof_scope=eof))
+        path = self.capture / f'{module}.json'
+        constants = {name: dict(kernel=['theorem'], attributes={}, equation_origin=None) for name in decls}
+        path.write_text(json.dumps(dict(schema_version=6, lean_version='fixture', source=text, index=index,
+                                        constants=constants, guards=[], attribute_syntax=[], checked_commands=[],
+                                        imports={})))
+        self.exports[module] = dict(path=path.name, sha256=TREE.CANDIDATE.file_sha(path))
+
+    def plan(self, entries):
+        self.map.write_text(json.dumps(dict(schema_version=1, retired_tokens=[], allowed_abbreviations=[],
+                                            entries=entries)))
+        (self.capture / 'headers.json').write_text(json.dumps(self.headers))
+        (self.capture / 'source-before.json').write_text(json.dumps(self.source))
+        modules = self.candidate['modules']
+        roots = sorted(self.exports) or []
+        selected = TREE.CANDIDATE.closure(modules, roots)
+        for module in selected:
+            if module not in self.exports:
+                self.export(module, decls={}, commands=[], eof=[0, '[anonymous]', []])
+        producers = TREE.CANDIDATE.build_modules(modules, roots, [])
+        artifacts = self.directory / 'artifacts'
+        artifacts.mkdir(exist_ok=True)
+        paths = {}
+        for module in producers:
+            olean = artifacts / f'{module}.olean'
+            olean.write_bytes(module.encode())
+            paths[module] = TREE.CANDIDATE.artifact_parts(olean)
+        snapshot = dict(schema_version=3, status='OK', build=dict(exit=0), candidate=self.candidate,
+                        roots=roots, selected=selected, source_only=[], producers=producers,
+                        exports=self.exports,
+                        headers_sha256=TREE.CANDIDATE.file_sha(self.capture / 'headers.json'),
+                        tool_sources={}, artifacts={}, local_built=TREE.CANDIDATE.bind_artifacts(paths))
+        path = self.capture / 'snapshot.json'
+        path.write_text(json.dumps(snapshot))
+        return TREE.build_plan(self.root, path, self.map)
 
 if __name__ == '__main__':
     unittest.main()

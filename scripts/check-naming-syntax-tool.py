@@ -35,6 +35,36 @@ def SyntaxProbe.syntaxProbeGas : Nat := 99
 end Shadow
 #guard SyntaxProbe.syntaxProbeGas == 7
 #eval SyntaxProbe.render ⟨3⟩
+
+def SyntaxProbe.lifted (t : SyntaxProbe.Tx) : IO Nat := do
+  match (← pure t.syntaxProbeGas) with
+  | 0 => pure 0
+  | n => pure n
+
+def SyntaxProbe.built (n : Nat) : SyntaxProbe.Tx := SyntaxProbe.Tx.mk (syntaxProbeGas := n)
+
+inductive SyntaxProbe.Op where
+  | syntaxProbeGas
+  | stop
+
+def SyntaxProbe.cost : SyntaxProbe.Op → Nat → Option Nat
+  | .syntaxProbeGas, n => some (n + 1)
+  | .stop, _ => none
+
+theorem SyntaxProbe.cost_le (o : SyntaxProbe.Op) (n m : Nat)
+    (h : SyntaxProbe.cost o n = some m) : m ≤ n + 1 := by
+  cases o <;> simp only [SyntaxProbe.cost] at h
+  case stop => cases h
+  case syntaxProbeGas => simp at h; omega
+'''
+
+# A lifted `(← e)` discriminant is one local reference spanning the whole
+# expression; it must not cover a token inside it that has no provenance.
+HIDDEN = '''
+def SyntaxProbe.hidden : IO Nat := do
+  let f := fun (syntaxProbeGas : Nat) => syntaxProbeGas
+  match (← pure (f (syntaxProbeGas := 2))) with
+  | n => pure n
 '''
 
 
@@ -67,12 +97,18 @@ def run(directory, exporter):
         before = export('before')
         plan = APPLY.build_plan(directory, map_path, [(source.name, before.name)])
         save(directory / 'plan.json', plan)
+        plan_edits = plan['files'][0]['edits']
         APPLY.apply_plan(directory, plan, map_path)
         renamed = source.read_text()
         if ('#expect_axioms SyntaxProbe.syntaxProbeAmount []' not in renamed or
                 'def SyntaxProbe.syntaxProbeGas : Nat := 99' not in renamed or
                 's!"syntaxProbeGas 😀 {t.syntaxProbeLimit}' not in renamed):
             raise ValueError('audit shadowing or literal text changed incorrectly')
+        if ('match (← pure t.syntaxProbeLimit) with' not in renamed or
+                'SyntaxProbe.Tx.mk (syntaxProbeLimit := n)' not in renamed or
+                '| .syntaxProbeGas, n =>' not in renamed or
+                'case syntaxProbeGas => simp at h; omega' not in renamed):
+            raise ValueError('lifted, named-argument or constructor-case provenance changed incorrectly')
         after = export('after')
         verdict = CHECK.check(CHECK.read_exports([before]), CHECK.read_exports([after]), mapping)
         save(directory / 'rename-verdict.json', verdict)
@@ -112,8 +148,16 @@ def run(directory, exporter):
             raise ValueError('unresolved plan applied')
         if source.read_bytes() != unchanged:
             raise ValueError('refused plan wrote source')
-        return dict(status='OK', rename='OK', inverse_identical=True,
-                    literal_mutation='REGRESSION', replacement_elaborator='UNRESOLVED', refusal_no_writes=True)
+        source.write_text(SOURCE + HIDDEN)
+        hidden = export('lifted-hidden')
+        plan = APPLY.build_plan(directory, map_path, [(source.name, hidden.name)])
+        save(directory / 'lifted-hidden-plan.json', plan)
+        reasons = [p['reason'] for p in plan['files'][0]['unresolved']]
+        if plan['status'] != 'unresolved' or not any('without a constant head' in r for r in reasons):
+            raise ValueError(f'token inside a lifted local span was masked: {reasons}')
+        return dict(status='OK', rename='OK', inverse_identical=True, edits=len(plan_edits),
+                    literal_mutation='REGRESSION', replacement_elaborator='UNRESOLVED',
+                    lifted_hidden='UNRESOLVED', refusal_no_writes=True)
     finally:
         source.write_text(SOURCE)
         save(directory / 'restoration.json', dict(identical=source.read_bytes() == SOURCE.encode()))

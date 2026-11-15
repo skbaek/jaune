@@ -25,8 +25,8 @@ unsafe def main (args : List String) : IO UInt32 := do
     return 1
   let refs := Lean.Server.findModuleRefs inputCtx.fileMap
     result.commandState.infoState.trees.toArray (localVars := true)
-  let refs := NamingReferences.addCaseReferences
-    result.commandState.infoState.trees.toArray inputCtx.fileMap refs
+  let trees := result.commandState.infoState.trees.toArray
+  let (refs, caseRows) := NamingReferences.caseReferences trees inputCtx.fileMap refs
   let refs := NamingReferences.addAuditReferences
     result.commandState.infoState.trees.toArray inputCtx.fileMap refs
   let (references, decls) ← refs.toLspModuleRefs
@@ -39,7 +39,8 @@ unsafe def main (args : List String) : IO UInt32 := do
   -- silently be paired with another revision or with edits made during export.
   let json := Json.mkObj [
     ("source", toJson input),
-    ("index", NamingReferences.indexJson index result.commands)
+    ("index", NamingReferences.indexJson index result.commands
+      (NamingReferences.syntaxExtras result.commandState.env header.raw trees result.commands caseRows))
   ]
   IO.FS.writeFile output json.compress
   IO.println s!"OK — naming references: {moduleName}, {references.size} resolved identifiers"

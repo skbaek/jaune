@@ -47,8 +47,26 @@ def merge_constants(existing, roots, incoming, incoming_roots):
     return overlap
 
 
+def spelled_name(source, a, b, name):
+    """Whether the definition range spells the declaration's own name.
+
+    Lean records anonymous instances (`instance : C T`) and other compiler-named
+    declarations at a keyword. Their names derive from other names, so a rename
+    changes them without any source edit: they are matched by kernel graph,
+    like generated constants, not by the map.
+    """
+    spans = APPLY.components(source, a, b)
+    if spans is None:
+        return False
+    spelled = [source[x:y] for x, y in spans]
+    private = MAP.split_private(name)
+    parts = APPLY.split_name(private[2] if private else name)
+    return parts[-len(spelled):] == spelled
+
+
 def read_exports(paths):
     constants, roots, guards, attributes, modules, receipts = {}, set(), [], [], {}, []
+    owners = {}
     checks = []
     coalesced = set()
     version = None
@@ -75,7 +93,9 @@ def read_exports(paths):
         command_checks = data['checked_commands'] if data['schema_version'] >= 5 else []
         failure_scopes = [(row['start'], row['end']) for row in command_checks
                           if row['expected_failure_scope']]
-        names = set(data['index']['decls'])
+        decl_positions = APPLY.Positions(data['source'])
+        names = {name for name, loc in data['index']['decls'].items()
+                 if spelled_name(data['source'], *APPLY.span(decl_positions, loc[4:] if len(loc) == 8 else loc), name)}
         failed_names = set()
         locations = defaultdict(set)
         positions = APPLY.Positions(data['source'])
@@ -94,7 +114,7 @@ def read_exports(paths):
                        start <= byte_offsets[a] and byte_offsets[b] <= end
                        for start, end in failure_scopes) and const['n'] not in data['constants']:
                     failed_names.add(const['n'])
-                elif not pseudo_example:
+                elif not pseudo_example and spelled_name(data['source'], a, b, const['n']):
                     names.add(const['n'])
             for loc in info['usages'] + ([info['definition']] if info.get('definition') else []):
                 start, end = APPLY.span(positions, loc)
@@ -105,6 +125,8 @@ def read_exports(paths):
             raise ValueError(f'{module}: authored definitions missing from kernel export: {sorted(missing)}')
         coalesced |= merge_constants(constants, roots, data['constants'], names)
         roots.update(names)
+        for name in data['constants']:
+            owners.setdefault(name, module)
 
         def syntax(value, literal_names=False):
             if not isinstance(value, list):
@@ -131,12 +153,14 @@ def read_exports(paths):
         raise ValueError('no exported modules')
     return dict(constants=constants, roots=roots, guards=guards, attributes=attributes,
                 modules=modules, receipts=receipts, version=version, checks=checks,
-                coalesced_equations=sorted(coalesced))
+                coalesced_equations=sorted(coalesced), owners=owners)
 
 
 class Comparison:
     def __init__(self, before, after, mapping):
         self.before, self.after = before, after
+        if isinstance(mapping, dict):  # An exact old -> new table.
+            mapping = MAP.Renamer([dict(old=a, new=b, kind='declaration') for a, b in mapping.items()])
         self.mapping = mapping
         self.left = before['constants']
         self.right = after['constants']
@@ -145,7 +169,20 @@ class Comparison:
         self.pairs, self.reverse, self.checked = {}, {}, set()
 
     def name(self, name):
-        return self.mapping.get(name, name)
+        if '@' in name:  # A per-module key for colliding independent roots.
+            base, module = name.rsplit('@', 1)
+            return f'{self.mapping(base)}@{self.module_of(base, module)}'
+        return self.mapping(name)
+
+    def module_of(self, name, module):
+        private = MAP.split_private(name)
+        user = private[2] if private else name
+        if user in self.mapping.relocations:
+            source, target = self.mapping.relocations[user]
+            if source != module:
+                raise Mismatch(f'{name}: relocation row names module {source}, but it is in {module}')
+            return target
+        return self.mapping.module(module)
 
     def compare(self, left, right, path):
         if isinstance(left, list) and len(left) == 2 and left[0] == 'name':
@@ -203,6 +240,21 @@ class Comparison:
             raise Mismatch(f'authored constant set changed: missing={sorted(expected - self.after["roots"])}, extra={sorted(self.after["roots"] - expected)}')
         for name in sorted(self.before['roots']):
             self.pair(name, self.name(name))
+        # Moving a declaration is part of the map: every authored constant
+        # stays in its (renamed) module unless a relocation row moves it.
+        left_owner, right_owner = self.before.get('owners'), self.after.get('owners')
+        if left_owner is not None and right_owner is not None:
+            for name in sorted(self.before['roots']):
+                base = name.rsplit('@', 1)[0]
+                if name in left_owner and self.name(name) in right_owner:
+                    expected = self.module_of(base, left_owner[name])
+                    if right_owner[self.name(name)] != expected:
+                        raise Mismatch(f'{name}: module {left_owner[name]} became '
+                                       f'{right_owner[self.name(name)]}, expected {expected}')
+        for row, (source, target) in sorted(self.mapping.relocations.items()):
+            if not any(MAP.split_private(n)[2] == row if MAP.split_private(n) else n == row
+                       for n in self.before['roots']):
+                raise Mismatch(f'relocation row {row} names no authored constant in scope')
         # Generated constants are not compared by name. Match their finite
         # kernel/attribute graphs bijectively, including unreferenced nodes.
         buckets = defaultdict(list)
@@ -239,7 +291,7 @@ def check(before, after, mapping):
     MAP.validate_map(mapping)
     if before['version'] != after['version']:
         raise ValueError('Lean versions differ')
-    renames = {entry['old']: entry['new'] for entry in mapping['entries']}
+    renames = MAP.Renamer(mapping['entries'])
     # Imports are reported, not silently treated as a proof about their contents.
     result = Comparison(before, after, renames).run()
     result.update(before=before['receipts'], after=after['receipts'],

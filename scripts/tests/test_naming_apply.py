@@ -129,7 +129,7 @@ class NamingApplyTests(unittest.TestCase):
         edits, problems = M.plan_file(text, index, [entry()])
         self.assertEqual(edits, [])
         self.assertEqual(len(problems), 1)  # The unindexed gas after the literal.
-        index['naming_syntax']['version'] = 2
+        index['naming_syntax']['version'] = 3
         with self.assertRaisesRegex(ValueError, 'unsupported naming syntax'):
             M.plan_file(text, index, [entry()])
 
@@ -173,6 +173,150 @@ class NamingApplyTests(unittest.TestCase):
                                  ('gas', 'Pilot.Msg.gas', 0, False)])
         _, problems = M.plan_file(text, index, [entry()])
         self.assertIn('unchanged compiler reference', problems[0]['reason'])
+
+    def syntax(self, text, index, **rows):
+        """Version-2 exporter metadata with byte offsets for the given rows."""
+        def b(i):
+            return len(text[:i].encode())
+        meta = dict(version=2, literal_ranges=[], named_arguments=[], namespaces=[],
+                    commands=[], imports=[], unresolved_syntax=[])
+        for key, values in rows.items():
+            meta[key] = [[b(a), b(z), *rest] for a, z, *rest in values]
+        index['naming_syntax'] = meta
+        return index
+
+    def local_span(self, text, fragment):
+        start = text.index(fragment)
+        def lsp(i):
+            line = text.count('\n', 0, i)
+            return [line, len(text[text.rfind('\n', 0, i) + 1:i].encode('utf-16-le')) // 2]
+        return {json.dumps({'f': {'m': 'Pilot', 'i': '_uniq.lift'}}):
+                dict(definition=None, usages=[lsp(start) + lsp(start + len(fragment))])}
+
+    def test_compound_local_span_does_not_mask_inner_token(self):
+        # Reproducer (PAUSE item 2): Lean records `(← e)` as one local whose
+        # range is the whole lifted expression. An inner candidate without
+        # its own reference must still be reported.
+        text = 'def f := do match (← pure (g (gas := 2))) with | _ => pure ()'
+        index = index_for(text, [])
+        index['references'] = self.local_span(text, '(← pure (g (gas := 2)))')
+        _, problems = M.plan_file(text, index, [entry()])
+        self.assertEqual([text[p['start']:p['end']] for p in problems], ['gas'])
+        self.assertIn('unresolved token', problems[0]['reason'])
+
+    def test_compound_local_span_does_not_block_inner_edit(self):
+        text = 'def f (t : Tx) := do match (← pure t.gas) with | _ => pure ()'
+        index = index_for(text, [('gas', 'Pilot.Tx.gas', 0, False)])
+        index['references'].update(self.local_span(text, '(← pure t.gas)'))
+        edits, problems = M.plan_file(text, index, [entry()])
+        self.assertEqual(problems, [])
+        self.assertEqual([e['new'] for e in edits], ['gasLimit'])
+
+    def test_local_reference_covers_only_its_first_component(self):
+        text = 'def f := x.gas'
+        index = index_for(text, [])
+        index['references'] = self.local_span(text, 'x.gas')
+        _, problems = M.plan_file(text, index, [entry()])
+        self.assertEqual(len(problems), 1)
+
+    def test_compound_const_reference_cannot_be_renamed(self):
+        text = 'def f := (Tx.gas)'
+        index = index_for(text, [('(Tx.gas)', 'Pilot.Tx.gas', 0, False)])
+        _, problems = M.plan_file(text, index, [entry()])
+        self.assertIn('compound reference range', problems[0]['reason'])
+
+    def test_namespace_row_renames_descendants_and_namespace_syntax(self):
+        text = ('namespace Pilot\nnamespace B256\ndef toNat := 0\nend B256\n'
+                'open B256 in\ndef a := toNat + B256.toNat + x.toNat\nexport B256 (toNat)\nend Pilot\n')
+        index = index_for(text, [('toNat', 'Pilot.B256.toNat', 0, True),
+                                 ('toNat', 'Pilot.B256.toNat', 1, False),
+                                 ('B256.toNat', 'Pilot.B256.toNat', 0, False),
+                                 ('toNat', 'Pilot.B256.toNat', 3, False),
+                                 ('toNat', 'Pilot.B256.toNat', 4, False)])
+        rows = []
+        for occurrence, kind in [(0, 'namespace'), (1, 'namespace'), (2, 'open'), (4, 'export')]:
+            start = -1
+            for _ in range(occurrence + 1):
+                start = text.index('B256', start + 1)
+            rows.append((start, start + 4, kind, 'Pilot.B256', ''))
+        self.syntax(text, index, namespaces=rows)
+        row = entry('Pilot.B256', 'Pilot.U256')
+        row['kind'] = 'namespace'
+        edits, problems = M.plan_file(text, index, [row])
+        self.assertEqual(problems, [])
+        for edit in reversed(edits):
+            text = text[:edit['start']] + edit['new'] + text[edit['end']:]
+        self.assertNotIn('B256', text)
+        self.assertIn('U256.toNat + x.toNat', text)
+        # Without the exporter's namespace rows the syntax stays unresolved.
+        index['naming_syntax']['namespaces'] = []
+        _, problems = M.plan_file(text.replace('U256', 'B256'), index_for(text, []), [row])
+        self.assertTrue(problems)
+
+    def test_unresolved_namespace_syntax_reports_reason(self):
+        text = 'open B256'
+        index = self.syntax(text, index_for(text, []),
+                            namespaces=[(5, 9, 'open', None, 'namespace resolves to 2 candidates')])
+        row = entry('Pilot.B256', 'Pilot.U256')
+        row['kind'] = 'namespace'
+        _, problems = M.plan_file(text, index, [row])
+        self.assertIn('2 candidates', problems[0]['reason'])
+
+    def test_depth_change_keeps_resolution_namespace(self):
+        text = 'namespace Pilot\ndef a := gVerylow\nend Pilot\ndef b := Pilot.gVerylow\n'
+        index = index_for(text, [('gVerylow', 'Pilot.gVerylow', 0, False),
+                                 ('Pilot.gVerylow', 'Pilot.gVerylow', 0, False)])
+        edits, problems = M.plan_file(text, index, [entry('Pilot.gVerylow', 'Pilot.Gas.veryLow')])
+        self.assertEqual(problems, [])
+        self.assertEqual([e['new'] for e in edits], ['Gas.veryLow', 'Pilot.Gas.veryLow'])
+        # Leaving the spelling's namespace needs explicit qualification.
+        _, problems = M.plan_file(text, index, [entry('Pilot.gVerylow', 'Gas.veryLow')])
+        self.assertTrue(any('leaves the namespace' in p['reason'] for p in problems))
+
+    def test_projection_keeps_component_count_after_type_rename(self):
+        text = 'def a (t : Tx) := t.gas'
+        index = index_for(text, [('gas', 'Pilot.Tx.gas', 0, False), ('Tx', 'Pilot.Tx', 0, False)])
+        ns = entry('Pilot.Tx', 'Pilot.Transaction')
+        ns['kind'] = 'namespace'
+        edits, problems = M.plan_file(text, index, [ns, entry('Pilot.Tx.gas', 'Pilot.Transaction.gasLimit')])
+        self.assertEqual(problems, [])
+        self.assertEqual([e['new'] for e in edits], ['Transaction', 'gasLimit'])
+
+    def test_named_arguments_follow_constructor_fields_only(self):
+        text = 'def a := Tx.mk (gas := 1)\ndef b := lt (gas := gas)\ndef c := f (gas := 3)\n'
+        def at(n):
+            start = -1
+            for _ in range(n + 1):
+                start = text.index('(gas', start + 1)
+            return start + 1, start + 4
+        index = index_for(text, [])
+        index['references'] = self.local_span(text, 'gas)\ndef c')
+        key = next(iter(index['references']))
+        index['references'][key]['usages'][0][2:] = [1, index['references'][key]['usages'][0][1] + 3]
+        self.syntax(text, index, named_arguments=[
+            (*at(0), 'Pilot.Tx.mk', 'gas', 'Pilot.Tx.gas', None),
+            (*at(1), 'Pilot.lt', 'gas', None, None),
+            (*at(2), None, 'gas', None, 'named argument of a function without a constant head (local or elaborated term)')])
+        edits, problems = M.plan_file(text, index, [entry()])
+        self.assertEqual([(text[e['start']:e['end']], e['new']) for e in edits], [('gas', 'gasLimit')])
+        self.assertEqual(edits[0]['start'], at(0)[0])
+        self.assertEqual(len(problems), 1)
+        self.assertIn('without a constant head', problems[0]['reason'])
+
+    def test_case_label_diagnostic_is_the_reported_reason(self):
+        text = 'case gas => rfl'
+        index = self.syntax(text, index_for(text, []), unresolved_syntax=[
+            (5, 8, 'case label goal has no ordinary `cases` constructor origin')])
+        _, problems = M.plan_file(text, index, [entry()])
+        self.assertIn('constructor origin', problems[0]['reason'])
+
+    def test_whole_tree_rows_refused_by_selected_file_planner(self):
+        row = entry('Jaune.Types', 'Jaune.Word')
+        row['kind'] = 'module'
+        self.map.write_text(json.dumps(dict(schema_version=1, retired_tokens=[],
+                                           allowed_abbreviations=[], entries=[row])))
+        with self.assertRaisesRegex(ValueError, 'whole-tree'):
+            self.plan()
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
