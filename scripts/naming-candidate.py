@@ -240,12 +240,34 @@ def run(root, out, label, command):
     return receipt
 
 
+def reuse_or_run(reuse, root, out, label, command, target):
+    """Resume after a later failure: copy a prior capture's output and receipt
+    for the identical command instead of rerunning it. Every binding check of
+    this capture still runs on the copied files."""
+    if reuse is not None:
+        prior = Path(reuse)
+        receipt = prior / (label + '.command.json')
+        if receipt.is_file() and (prior / target.name).is_file():
+            data = json.loads(receipt.read_bytes())
+            argv = data.get('argv') or []
+            if (argv[:-1] == command[:-1] and Path(argv[-1]).name == Path(command[-1]).name and
+                    data.get('exit') == 0):
+                import shutil
+                shutil.copyfile(prior / target.name, target)
+                shutil.copyfile(prior / (label + '.log'), out / (label + '.log'))
+                save(out / (label + '.command.json'), dict(data, reused_from=str(prior)))
+                return dict(data, reused_from=str(prior))
+    return run(root, out, label, command)
+
+
 def parallel(jobs, calls):
     """Run independent exporter commands, at most `jobs` at once; every receipt
     is kept and the first failure (in input order) is raised after all finish."""
     from concurrent.futures import ThreadPoolExecutor
     def attempt(call):
         try:
+            if len(call) == 6:
+                return reuse_or_run(*call), None
             return run(*call), None
         except ValueError as error:
             return None, error
@@ -282,6 +304,10 @@ def capture(args):
     finally:
         run(root, out, 'header-release', argv(args.release_command))
     initial = bind_headers(source_before, json.loads(header_output.read_bytes()))
+    if args.reuse is not None:
+        prior = json.loads((Path(args.reuse) / 'source-before.json').read_bytes())
+        if prior['files'] != source_before['files']:
+            raise ValueError('reuse refused: the prior capture saw different candidate bytes')
     if inventory(root, source_dirs) != source_before:
         raise ValueError('candidate changed during header discovery')
     selected = closure(initial['modules'], args.module)
@@ -311,9 +337,10 @@ def capture(args):
     try:
         imports, discovery, exports = {}, {}, {}
         # Independent elaborations; the caller's admission covers `--jobs` of them.
-        parallel(args.jobs, [(root, out, module + '-imports',
+        parallel(args.jobs, [(args.reuse, root, out, module + '-imports',
                               ['lake', 'env', str(exporter), '--imports', initial['modules'][module]['path'],
-                               module, str(out / (module + '.imports.json'))]) for module in selected])
+                               module, str(out / (module + '.imports.json'))], out / (module + '.imports.json'))
+                             for module in selected])
         for module in selected:
             target = out / (module + '.imports.json')
             data = json.loads(target.read_bytes())
@@ -334,9 +361,10 @@ def capture(args):
         for name in producers:
             if name in bound and bound[name] != local_built[name]:
                 raise ValueError(f'local artifact changed after build: {name}')
-        parallel(args.jobs, [(root, out, module + '-export',
+        parallel(args.jobs, [(args.reuse, root, out, module + '-export',
                               ['lake', 'env', str(exporter), initial['modules'][module]['path'], module,
-                               str(out / (module + '.export.json'))]) for module in selected])
+                               str(out / (module + '.export.json'))], out / (module + '.export.json'))
+                             for module in selected])
         for module in selected:
             target = out / (module + '.export.json')
             data = json.loads(target.read_bytes())
@@ -498,6 +526,8 @@ def main():
     cap.add_argument('--admit-command', required=True)
     cap.add_argument('--release-command', required=True)
     cap.add_argument('--output', type=Path, required=True)
+    cap.add_argument('--reuse', type=Path,
+                     help='prior capture directory whose identical exporter commands are reused (resume)')
     cap.add_argument('--jobs', type=int, default=1,
                      help='concurrent exporter processes; size the admission command for them')
     comp = commands.add_parser('compare')
