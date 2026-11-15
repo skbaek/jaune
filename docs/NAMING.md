@@ -140,6 +140,26 @@ Namespace-depth changes and module relocation are currently refused and need
 separate tooling before the full migration. Every renamed descendant needs its
 own map row; a parent rename never silently skips a qualified descendant.
 
+Both exporters supplement the index with versioned, source-bound literal
+ranges from Lean's original parse tree. Plain strings, character literals and
+interpolated literal chunks remain unchanged; embedded expressions still need
+compiler references, including nested interpolations and quoted terms. Byte
+ranges are checked against the original UTF-8 text before masking. Without this
+metadata, a string with an unescaped opening brace conservatively scans the
+remaining source as words, so nested quotes cannot hide an affected use. This can overselect files during
+initial inventory; a fresh export supplies the precise literal classification.
+
+The registered `AxiomAudit` elaborators also supply references for literal
+constant names in `#expect_axioms` and the allowed-axiom list of
+`#union_axioms_of_modules`. The resolver uses the command kind, the elaborator's
+owning module, the exact identifier and its environment entry. It never applies
+namespace resolution to these names. The union's module prefix remains a
+module-relocation obligation. A replacement elaborator, absent constant or
+unavailable original source range leaves the token unresolved. Resolving an
+audit name does not authorize changes to production audit rows or expectations.
+`check-naming-syntax-tool.py` exercises these cases with the real compiler,
+including literal-output changes and an unregistered replacement elaborator.
+
 Before applying, the tool rechecks all selected source and bundle digests, the
 map digest, and the entire recomputed edit plan. It validates all files before
 writing the first. Filesystem I/O failures can still interrupt a multi-file

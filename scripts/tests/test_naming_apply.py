@@ -73,6 +73,66 @@ class NamingApplyTests(unittest.TestCase):
         self.assertEqual(len(problems), 1)
         self.assertEqual(text[problems[0]['start']:problems[0]['end']], 'gas')
 
+    def test_parser_literals_preserve_unicode_and_embedded_references(self):
+        text = 'def t := s!"😀 gas {("gas", x.gas).2} gas"\r\n'
+        index = index_for(text, [('gas', 'Pilot.Tx.gas', 2, False)])
+        rows = []
+        for chunk, kind in [('"😀 gas {', 'interpolatedStrLitKind'),
+                            ('"gas"', 'str'), ('} gas"', 'interpolatedStrLitKind')]:
+            a = text.index(chunk)
+            rows.append([len(text[:a].encode()), len(text[:a + len(chunk)].encode()), kind, chunk])
+        index['naming_syntax'] = dict(version=1, literal_ranges=rows)
+        # Use the indexed projection spelling, without changing literal data.
+        edits, problems = M.plan_file(text, index, [entry()])
+        self.assertEqual(problems, [])
+        self.assertEqual(len(edits), 1)
+        changed = text[:edits[0]['start']] + edits[0]['new'] + text[edits[0]['end']:]
+        self.assertEqual(changed, text.replace('x.gas', 'x.gasLimit'))
+        index['references'] = {}
+        _, problems = M.plan_file(text, index, [entry()])
+        self.assertEqual(len(problems), 1)
+        self.assertEqual(text[problems[0]['start']:problems[0]['end']], 'gas')
+
+    def test_unindexed_nested_quotes_cannot_hide_uses(self):
+        text = 'def t := s!"{("literal", x.gas).2}"\ndef u := x.gas\n'
+        matches = [(a, b) for a, b, word in M.identifiers(text) if word == 'gas']
+        self.assertEqual(matches, [(text.index('x.gas') + 2, text.index('x.gas') + 5),
+                                   (text.rindex('x.gas') + 2, text.rindex('x.gas') + 5)])
+
+    def test_interpolation_discovery_does_not_assume_a_prefix(self):
+        for text in ['def t := s! "{x.gas}"', 'def t := dbg_trace "{x.gas}"; 0',
+                     'def t := custom "{("text", x.gas).2}"']:
+            with self.subTest(text=text):
+                self.assertIn('gas', [word for _, _, word in M.identifiers(text)])
+
+    def test_literal_metadata_refuses_invalid_or_conflicting_ranges(self):
+        text = '"😀 gas" gas'
+        row = [0, len('"😀 gas"'.encode()), 'str', '"😀 gas"']
+        for bad in ([1, 2, 'str', 'x'], [0, 999, 'str', 'x'],
+                    [0, row[1], 'str', 'other'], [0, row[1], 'guessed', row[3]]):
+            index = index_for(text, [])
+            index['naming_syntax'] = dict(version=1, literal_ranges=[bad])
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                M.plan_file(text, index, [entry()])
+        index = index_for(text, [])
+        index['naming_syntax'] = dict(version=1, literal_ranges=[row, row])
+        with self.assertRaisesRegex(ValueError, 'overlapping literal'):
+            M.plan_file(text, index, [entry()])
+        index['naming_syntax']['literal_ranges'] = [row]
+        index['references'] = index_for(text, [('gas', 'Pilot.Tx.gas', 0, False)])['references']
+        with self.assertRaisesRegex(ValueError, 'overlaps a compiler reference'):
+            M.plan_file(text, index, [entry()])
+        # A lifted local expression can cover an entire do-term, including a
+        # literal. Its span is not an identifier occurrence inside the literal.
+        index['references'] = {json.dumps({'f': {'m': 'Main', 'i': '_uniq.fixture'}}):
+                               dict(definition=None, usages=[[0, 0, 0, 8]])}
+        edits, problems = M.plan_file(text, index, [entry()])
+        self.assertEqual(edits, [])
+        self.assertEqual(len(problems), 1)  # The unindexed gas after the literal.
+        index['naming_syntax']['version'] = 2
+        with self.assertRaisesRegex(ValueError, 'unsupported naming syntax'):
+            M.plan_file(text, index, [entry()])
+
     def test_utf16_and_crlf(self):
         text = 'def s := "😀"; def f (x : Tx) := x.gas\r\n'
         index = index_for(text, [('gas', 'Pilot.Tx.gas', 0, False)])

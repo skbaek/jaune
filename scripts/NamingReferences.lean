@@ -27,6 +27,8 @@ unsafe def main (args : List String) : IO UInt32 := do
     result.commandState.infoState.trees.toArray (localVars := true)
   let refs := NamingReferences.addCaseReferences
     result.commandState.infoState.trees.toArray inputCtx.fileMap refs
+  let refs := NamingReferences.addAuditReferences
+    result.commandState.infoState.trees.toArray inputCtx.fileMap refs
   let (references, decls) ← refs.toLspModuleRefs
   let index : Lean.Server.Ilean := {
     module := moduleName.toName
@@ -37,7 +39,7 @@ unsafe def main (args : List String) : IO UInt32 := do
   -- silently be paired with another revision or with edits made during export.
   let json := Json.mkObj [
     ("source", toJson input),
-    ("index", toJson index)
+    ("index", NamingReferences.indexJson index result.commands)
   ]
   IO.FS.writeFile output json.compress
   IO.println s!"OK — naming references: {moduleName}, {references.size} resolved identifiers"

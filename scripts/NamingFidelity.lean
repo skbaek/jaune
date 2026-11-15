@@ -237,6 +237,8 @@ unsafe def main (args : List String) : IO UInt32 := do
   let trees := result.commandState.infoState.trees.toArray
   let refs := Lean.Server.findModuleRefs inputCtx.fileMap trees (localVars := true)
   let refs := NamingReferences.addCaseReferences trees inputCtx.fileMap refs
+  let refs := NamingReferences.addAuditReferences
+    result.commandState.infoState.trees.toArray inputCtx.fileMap refs
   let (references, decls) ← refs.toLspModuleRefs
   let index : Lean.Server.Ilean := {
     module := moduleName.toName
@@ -300,7 +302,7 @@ unsafe def main (args : List String) : IO UInt32 := do
       ("equation_origin", toJson (equationOrigin.map nameRef))]) :: constants
   let json := Json.mkObj [("schema_version", toJson (6 : Nat)),
     ("lean_version", toJson Lean.versionString), ("imports", imports), ("source", toJson input),
-    ("index", toJson index), ("constants", Json.mkObj constants),
+    ("index", NamingReferences.indexJson index result.commands), ("constants", Json.mkObj constants),
     ("guards", toJson guards), ("attribute_syntax", toJson attrs), ("checked_commands", toJson checksJson)]
   IO.FS.writeFile output json.compress
   IO.println s!"OK — naming fidelity: {constants.length} constants, {guards.size} guards"

@@ -70,12 +70,62 @@ def span(positions, location):
     return start, end
 
 
+def raw_identifier_words(text, start):
+    """Conservative candidate discovery when no parser classification exists."""
+    i = start
+    while i < len(text):
+        if text[i].isalpha() or text[i] == '_':
+            begin = i
+            i += 1
+            while i < len(text) and (text[i].isalnum() or text[i] in "_'?!"):
+                i += 1
+            yield begin, i, text[begin:i]
+        else:
+            i += 1
+
+
+def mask_literals(text, index):
+    metadata = index.get('naming_syntax')
+    if metadata is None:
+        return text, []
+    if metadata.get('version') != 1:
+        raise ValueError('unsupported naming syntax metadata')
+    offsets, byte = {0: 0}, 0
+    for i, char in enumerate(text):
+        byte += len(char.encode('utf-8'))
+        offsets[byte] = i + 1
+    spans = []
+    for row in metadata['literal_ranges']:
+        if (not isinstance(row, list) or len(row) != 4 or
+                type(row[0]) is not int or type(row[1]) is not int or
+                row[2] not in ('str', 'char', 'interpolatedStrLitKind') or
+                not isinstance(row[3], str)):
+            raise ValueError('invalid literal range')
+        a, b, _, raw = row
+        if a not in offsets or b not in offsets or a >= b:
+            raise ValueError('literal range outside source or splits UTF-8')
+        a, b = offsets[a], offsets[b]
+        if text[a:b] != raw:
+            raise ValueError('literal range source mismatch')
+        spans.append((a, b))
+    spans.sort()
+    if any(right[0] < left[1] for left, right in zip(spans, spans[1:])):
+        raise ValueError('overlapping literal ranges')
+    masked = list(text)
+    for a, b in spans:
+        for i in range(a, b):
+            if masked[i] not in '\r\n':
+                masked[i] = ' '
+    return ''.join(masked), spans
+
+
 def identifiers(text):
     """Lex identifier components, skipping nested comments and plain strings.
 
-    Interpolated strings are deliberately not decoded: their entire contents
-    are scanned conservatively, so an unindexed affected token is reported.
-    This scanner grants no semantic resolution; only the compiler index does.
+    Compiler-proven literal ranges are masked before indexed planning. Without
+    that metadata, a string with an unescaped opening brace triggers raw scanning
+    of the remaining source: nested quotes must not hide embedded uses or later declarations.
+    This may overselect unindexed files; it grants no semantic resolution.
     """
     i = 0
     while i < len(text):
@@ -97,23 +147,17 @@ def identifiers(text):
             if depth:
                 raise ValueError('unterminated comment')
         elif text[i] == '"':
-            # s!, m!, f!, custom interpolators: report their candidate words.
-            interpolated = i > 0 and text[i - 1] == '!'
-            i += 1
-            while i < len(text) and text[i] != '"':
-                if text[i] == '\\':
-                    i += 2
-                elif interpolated and (text[i].isalpha() or text[i] == '_'):
-                    start = i
-                    i += 1
-                    while i < len(text) and (text[i].isalnum() or text[i] in "_'?!"):
-                        i += 1
-                    yield start, i, text[start:i]
-                else:
-                    i += 1
-            if i == len(text):
+            end = i + 1
+            while end < len(text) and text[end] != '"':
+                if text[end] == '{':
+                    # The parser may be invoked by any syntax, not only s!.
+                    # Without its ranges, this can be an embedded expression.
+                    yield from raw_identifier_words(text, i + 1)
+                    return
+                end += 2 if text[end] == '\\' else 1
+            if end >= len(text):
                 raise ValueError('unterminated string')
-            i += 1
+            i = end + 1
         elif text[i] == '«':
             end = text.find('»', i + 1)
             if end < 0:
@@ -192,7 +236,11 @@ def plan_file(text, index, entries):
     for left, right in zip(ordered, ordered[1:]):
         if right['start'] < left['end']:
             problems.append({'start': right['start'], 'end': left['end'], 'reason': 'overlapping edits'})
-    for start, end, word in identifiers(text):
+    masked, literals = mask_literals(text, index)
+    if any(const is not None and a < end and start < b
+           for a, b in literals for start, end, const in references):
+        raise ValueError('literal range overlaps a compiler reference')
+    for start, end, word in identifiers(masked):
         if word not in candidates:
             continue
         covering = [ref for ref in references if ref[0] <= start and end <= ref[1]]

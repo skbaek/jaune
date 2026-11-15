@@ -102,5 +102,53 @@ def addCaseReferences (trees : Array InfoTree) (fileMap : FileMap)
       return found) result
   return result
 
+/-- Literal chunks come from the original parsed syntax, not macro expansions.
+The interpolation parser gives the embedded expressions separate children. -/
+partial def literalRanges (stx : Syntax) : Array Json := Id.run do
+  if stx.isOfKind strLitKind || stx.isOfKind interpolatedStrLitKind ||
+      stx.isOfKind charLitKind then
+    if let .atom (.original _ start _ stop) value := stx[0] then
+      return #[toJson (#[toJson start.byteIdx, toJson stop.byteIdx,
+        toJson stx.getKind.toString, toJson value])]
+  return stx.getArgs.foldl (fun acc child => acc ++ literalRanges child) #[]
+
+def indexJson (index : Server.Ilean) (commands : Array Syntax) : Json :=
+  (toJson index).setObjVal! "naming_syntax" <| Json.mkObj [
+    ("version", toJson (1 : Nat)),
+    ("literal_ranges", toJson (commands.foldl (fun acc stx => acc ++ literalRanges stx) #[]))]
+
+partial def identifiersIn (stx : Syntax) : Array Syntax :=
+  if stx.isIdent then #[stx]
+  else stx.getArgs.foldl (fun acc child => acc ++ identifiersIn child) #[]
+
+/-- The registered audit commands use literal `getId` names, without namespace
+resolution. Other elaborators with similar spelling confer no provenance. -/
+def addAuditReferences (trees : Array InfoTree) (fileMap : FileMap)
+    (refs : Server.ModuleRefs) : Server.ModuleRefs := Id.run do
+  let mut result := refs
+  for tree in trees do
+    result := tree.foldInfo (fun ctx info found => Id.run do
+      let .ofCommandInfo ci := info | return found
+      unless Server.getModuleContainingDecl? ctx.env ci.elaborator == some `AxiomAudit do
+        return found
+      let ids := if ci.stx.isOfKind `Jaune.AxiomAudit.«command#expect_axioms_[_,,]» then
+          identifiersIn ci.stx
+        else if ci.stx.isOfKind `Jaune.AxiomAudit.unionAxiomsOfModules then
+          -- The first identifier denotes a module prefix, not a constant.
+          identifiersIn ci.stx[2]
+        else #[]
+      let mut found := found
+      for id in ids do
+        let name := id.getId
+        unless ctx.env.contains name do continue
+        let .original _ start _ stop := id.getHeadInfo | continue
+        let ref : Server.Reference := {
+          ident := .const ((Server.getModuleContainingDecl? ctx.env name).getD ctx.env.header.mainModule).toString name.toString
+          range := ⟨fileMap.utf8PosToLspPos start, fileMap.utf8PosToLspPos stop⟩
+          stx := id, ci := ctx, info := info, isBinder := false }
+        found := found.addRef ref
+      return found) result
+  return result
+
 end NamingReferences
 
