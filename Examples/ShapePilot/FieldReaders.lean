@@ -76,55 +76,63 @@ def Spec.fieldRead (s : Spec) : Expr → Option Expr
   | .app (.const n _) x => if n == s.proj then some x else none
   | _ => none
 
-abbrev ScanM := StateT (Std.HashSet Expr × Array Found) Id
+structure ScanState where
+  visited : Std.HashSet Expr := {}
+  found : Array Found
+  exhausted : Bool := false
+
+abbrev ScanM := StateT ScanState Id
 
 def mark (k : Nat) (read : Bool) : ScanM Unit :=
-  modify fun (v, fs) => (v, fs.modify k fun f =>
-    if read then { f with reads := true } else { f with copies := true })
+  modify fun st => { st with found := st.found.modify k fun f =>
+    if read then { f with reads := true } else { f with copies := true } }
 
-/-- One pass over an expression for every spec at once. -/
-partial def scan (specs : Array Spec) (e : Expr) : ScanM Unit := do
-  if (← get).1.contains e then return
-  modify fun (v, fs) => (v.insert e, fs)
-  match e with
-  | .app .. =>
-    let fn := e.getAppFn
-    let args := e.getAppArgs
-    if let .const n _ := fn then
-      scan specs fn
-      for h : k in [0:specs.size] do
-        let s := specs[k]
-        if n == s.struct ++ `casesOn || n == s.struct ++ `recOn || n == s.struct ++ `rec then
-          let minor := if n == s.struct ++ `rec then s.numParams + 1 else s.numParams + 2
-          if h : minor < args.size then
-            let (depth, body) := stripLams s.numFields args[minor]
-            if depth < s.numFields || body.hasLooseBVar (s.numFields - 1 - s.index) then
-              mark k true
-      for h : j in [0:args.size] do
-        let a := args[j]
-        let mut copied : Option Expr := none
+/-- One pass over an expression for every spec at once. `depth` bounds the
+nesting walked; running out is recorded and fails the walk. -/
+def scan (specs : Array Spec) : Nat → Expr → ScanM Unit
+  | 0, _ => modify fun st => { st with exhausted := true }
+  | depth + 1, e => do
+    if (← get).visited.contains e then return
+    modify fun st => { st with visited := st.visited.insert e }
+    match e with
+    | .app .. =>
+      let fn := e.getAppFn
+      let args := e.getAppArgs
+      if let .const n _ := fn then
+        scan specs depth fn
         for h : k in [0:specs.size] do
           let s := specs[k]
-          if n == s.ctor && args.size == s.numParams + s.numFields &&
-              j == s.numParams + s.index then
-            if let some x := s.fieldRead a then
-              mark k false
-              copied := some x
-        scan specs (copied.getD a)
-    else
-      scan specs fn
-      args.forM (scan specs)
-  | .const n _ =>
-    for h : k in [0:specs.size] do
-      if n == specs[k].proj then mark k true
-  | .proj n i x =>
-    for h : k in [0:specs.size] do
-      if n == specs[k].struct && i == specs[k].index then mark k true
-    scan specs x
-  | .lam _ t b _ | .forallE _ t b _ => scan specs t; scan specs b
-  | .letE _ t v b _ => scan specs t; scan specs v; scan specs b
-  | .mdata _ x => scan specs x
-  | _ => pure ()
+          if n == s.struct ++ `casesOn || n == s.struct ++ `recOn || n == s.struct ++ `rec then
+            let minor := if n == s.struct ++ `rec then s.numParams + 1 else s.numParams + 2
+            if h : minor < args.size then
+              let (stripped, body) := stripLams s.numFields args[minor]
+              if stripped < s.numFields || body.hasLooseBVar (s.numFields - 1 - s.index) then
+                mark k true
+        for h : j in [0:args.size] do
+          let a := args[j]
+          let mut copied : Option Expr := none
+          for h : k in [0:specs.size] do
+            let s := specs[k]
+            if n == s.ctor && args.size == s.numParams + s.numFields &&
+                j == s.numParams + s.index then
+              if let some x := s.fieldRead a then
+                mark k false
+                copied := some x
+          scan specs depth (copied.getD a)
+      else
+        scan specs depth fn
+        for a in args do scan specs depth a
+    | .const n _ =>
+      for h : k in [0:specs.size] do
+        if n == specs[k].proj then mark k true
+    | .proj n i x =>
+      for h : k in [0:specs.size] do
+        if n == specs[k].struct && i == specs[k].index then mark k true
+      scan specs depth x
+    | .lam _ t b _ | .forallE _ t b _ => do scan specs depth t; scan specs depth b
+    | .letE _ t v b _ => do scan specs depth t; scan specs depth v; scan specs depth b
+    | .mdata _ x => scan specs depth x
+    | _ => pure ()
 
 def lastComponent : Name → String
   | .str _ s => s
@@ -166,24 +174,25 @@ def walk (ts : List Target) : CoreM (List Row) := do
   let mut generated : Array Nat := specs.map fun _ => 0
   for (n, c) in env.constants.map₁.toList do
     let some idx := env.getModuleIdxFor? n | continue
-    let modName := env.header.moduleNames[idx.toNat]!
+    let some modName := env.header.moduleNames[idx.toNat]? | continue
     unless walkedRoots.contains modName.getRoot do continue
     let action : ScanM Unit := do
-      scan specs c.type
-      if let some v := c.value? then scan specs v
-    let ((), (_, found)) := Id.run (action.run ({}, specs.map fun _ => {}))
+      scan specs 100000 c.type
+      if let some v := c.value? then scan specs 100000 v
+    let ((), st) := Id.run (action.run { found := specs.map fun _ => {} })
+    if st.exhausted then throwError "walk depth exhausted in {n}"
     for h : k in [0:specs.size] do
-      let f : Found := found[k]!
+      let f : Found := st.found.getD k {}
       if f.reads then
         if generatedFor specs[k] n then generated := generated.modify k (· + 1)
         else readers := readers.modify k (·.push n)
       else if f.copies then
         copiers := copiers.modify k (·.push n)
   let sortNames (a : Array Name) := (a.qsort Name.lt).toList
-  return (List.range specs.size).map fun k =>
-    { target := s!"{specs[k]!.struct}.{specs[k]!.proj.getString!}",
-      readers := sortNames readers[k]!, copiers := sortNames copiers[k]!,
-      generated := generated[k]! }
+  return ((specs.zip readers).zip (copiers.zip generated)).toList.map
+    fun ((s, r), (c, g)) =>
+      { target := s!"{s.struct}.{lastComponent s.proj}", readers := sortNames r,
+        copiers := sortNames c, generated := g }
 
 -- Print the walk and fix its verdict: no reader of any of the seven fields,
 -- and readers of each control field.
