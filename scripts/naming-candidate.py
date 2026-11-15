@@ -306,8 +306,10 @@ def capture(args):
     initial = bind_headers(source_before, json.loads(header_output.read_bytes()))
     if args.reuse is not None:
         prior = json.loads((Path(args.reuse) / 'source-before.json').read_bytes())
-        if prior['files'] != source_before['files']:
-            raise ValueError('reuse refused: the prior capture saw different candidate bytes')
+        def lean_inputs(files):  # Exports depend on Lean sources and configuration only.
+            return {p: h for p, h in files.items() if p.endswith('.lean') or p in CONFIG}
+        if lean_inputs(prior['files']) != lean_inputs(source_before['files']):
+            raise ValueError('reuse refused: the prior capture saw different Lean sources or configuration')
     if inventory(root, source_dirs) != source_before:
         raise ValueError('candidate changed during header discovery')
     selected = closure(initial['modules'], args.module)
