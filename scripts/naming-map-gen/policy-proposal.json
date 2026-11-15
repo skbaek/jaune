@@ -1,0 +1,13 @@
+{
+  "note": "Proposal only (goal jaune-shape-and-names-v1, jsn-u2). Not applied to scripts/naming-map.json or docs/NAMING.md: those belong to the master. Every added retired token is a private short form that the execution/adapter rows of this map rename away; with the final map applied, the token census of K1-K8, A and R15 names has no residual retired token (residual_retired.py).",
+  "retired_tokens_add": [
+    "Inst", "InstType", "Instrs", "BLTs", "Precomp",
+    "Ex", "B64", "B32s", "B4L", "B8L", "B4", "Opts", "Req", "Val",
+    "BNF", "BNF2", "BNF12", "BNP", "BNP2", "BNP12",
+    "BLSF", "BLSF2", "BLSF12", "BLSP", "BLSP2", "BLSP12", "BLSJ2",
+    "Txs", "txs", "txr", "Txr"
+  ],
+  "retired_tokens_caveat": "`check-naming-map.py` tokenizes `BLTs` as BL+Ts and `NTBs` as NT+Bs, so a retired `BLTs`/`NTBs` is not matched inside a longer name. The lint's tokenizer needs the same acronym-aware splitting that scripts/naming-map-gen/naming_rules.py uses (KNOWN).",
+  "allowed_abbreviations_add": ["Fp12", "Bn254", "Bls12", "eip", "Msm", "OOG", "Rlp"],
+  "source_vocabulary_not_renamed": "FIPS 180-4 (SHA256.FIPS: Ch, Maj, Sigma0, sigma0, K, H0), FIPS 202 (Keccak.FIPS: theta, rho, pi, chi, iota, RC, Rnd), RFC 7693 (Blake2.Spec: G, F, R1-R4, iv, sigma), RIPEMD-160 paper (rL, rR, sL, sR, K, Kp, fp), RFC 9380 (iso11, iso3, Sgn0, hEff, swu) and py-ecc/EELS pairing names (twist, linefunc, Frob, miller) are named by their standards (rule 1) and need source bindings in the N3 policy, not map rows."
+}

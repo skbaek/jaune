@@ -1605,46 +1605,6 @@
       "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Ninst` -> `NextOp` (Appendix B opcode class names) [B]"
     },
     {
-      "old": "Jaune.State.set_bal",
-      "new": "Jaune.State.set_balance",
-      "kind": "declaration",
-      "layer": "execution",
-      "rule": "1, 6, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `bal` -> `balance` (execution-apis AccountProof `balance`; `bal` no longer also means block access list) [B]"
-    },
-    {
-      "old": "Jaune.State.setStor_bal",
-      "new": "Jaune.State.setStorage_balance",
-      "kind": "declaration",
-      "layer": "execution",
-      "rule": "1, 6, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Stor` -> `Storage` (Yellow Paper account storage; execution-apis `storageHash`; EIP-1153 vocabulary) [B]; `bal` -> `balance` (execution-apis AccountProof `balance`; `bal` no longer also means block access list) [B]"
-    },
-    {
-      "old": "Jaune.State.setCode_bal",
-      "new": "Jaune.State.setCode_balance",
-      "kind": "declaration",
-      "layer": "execution",
-      "rule": "1, 6, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `bal` -> `balance` (execution-apis AccountProof `balance`; `bal` no longer also means block access list) [B]"
-    },
-    {
-      "old": "Jaune.genericCreate_prepared_bal",
-      "new": "Jaune.genericCreate_prepared_balance",
-      "kind": "declaration",
-      "layer": "execution",
-      "rule": "1, 6, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `bal` -> `balance` (execution-apis AccountProof `balance`; `bal` no longer also means block access list) [B]"
-    },
-    {
-      "old": "Jaune.genericCreate_prepared_getStor",
-      "new": "Jaune.genericCreate_prepared_getStorage",
-      "kind": "declaration",
-      "layer": "execution",
-      "rule": "1, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Stor` -> `Storage` (Yellow Paper account storage; execution-apis `storageHash`; EIP-1153 vocabulary) [B]"
-    },
-    {
       "old": "Jaune.Inst.toOpString",
       "new": "Jaune.Op.toOpString",
       "kind": "declaration",
@@ -1836,20 +1796,12 @@
       "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Ninst` -> `NextOp` (Appendix B opcode class names) [B]"
     },
     {
-      "old": "Jaune.State.setBal_get_stor",
-      "new": "Jaune.State.setBal_get_storage",
-      "kind": "declaration",
-      "layer": "execution",
-      "rule": "1, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `stor` -> `storage` (Yellow Paper account storage) [B]"
-    },
-    {
-      "old": "Jaune.getStor_addBal",
-      "new": "Jaune.getStorage_addBal",
-      "kind": "declaration",
-      "layer": "execution",
-      "rule": "1, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Stor` -> `Storage` (Yellow Paper account storage; execution-apis `storageHash`; EIP-1153 vocabulary) [B]"
+      "old": "Jaune.FixtureException.blockInvalidBalHash",
+      "new": "Jaune.FixtureException.blockInvalidBlockAccessListHash",
+      "kind": "constructor",
+      "layer": "adapter",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `blockInvalidBalHash` -> `blockInvalidBlockAccessListHash` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
     },
     {
       "old": "Jaune.FixtureException.txType3TxBlobCountExceeded",
@@ -2001,7 +1953,7 @@
       "kind": "declaration",
       "layer": "execution",
       "rule": "4, 6, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Bal` -> `BlockAccessList` (EIP-7928; `bal` no longer means two things (rule 6)) [B]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalRules` -> `BlockAccessListRules` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
     },
     {
       "old": "Jaune.BalRules.itemCost",
@@ -2009,7 +1961,7 @@
       "kind": "field",
       "layer": "execution",
       "rule": "4, 6, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Bal` -> `BlockAccessList` (EIP-7928; `bal` no longer means two things (rule 6)) [B]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalRules` -> `BlockAccessListRules` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
     },
     {
       "old": "Jaune.ForkRules.op",
@@ -2081,7 +2033,7 @@
       "kind": "declaration",
       "layer": "execution",
       "rule": "4, 6, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Bal` -> `BlockAccessList` (EIP-7928; `bal` no longer means two things (rule 6)) [B]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalRules` -> `BlockAccessListRules` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
     },
     {
       "old": "Jaune.ForkRules.balValid",
@@ -2097,7 +2049,7 @@
       "kind": "declaration",
       "layer": "execution",
       "rule": "4, 6, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Bal` -> `BlockAccessList` (EIP-7928; `bal` no longer means two things (rule 6)) [B]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `instDecidableBalValid` -> `instDecidableBlockAccessListValid` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
     },
     {
       "old": "Jaune.ForkRules.Valid.bal",
@@ -2241,7 +2193,7 @@
       "kind": "declaration",
       "layer": "execution",
       "rule": "4, 6, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Bal` -> `BlockAccessList` (EIP-7928; `bal` no longer means two things (rule 6)) [B]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `amsterdamBalRules` -> `amsterdamBlockAccessListRules` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
     },
     {
       "old": "Jaune.RuleDefect.zeroBalItemCost",
@@ -2249,7 +2201,7 @@
       "kind": "constructor",
       "layer": "execution",
       "rule": "4, 6, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Bal` -> `BlockAccessList` (EIP-7928; `bal` no longer means two things (rule 6)) [B]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `zeroBalItemCost` -> `zeroBlockAccessListItemCost` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
     },
     {
       "old": "Jaune.RuleDefect.balHeaderMismatch",
@@ -2257,7 +2209,7 @@
       "kind": "constructor",
       "layer": "execution",
       "rule": "4, 6, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `bal` -> `blockAccessList` (EIP-7928; `bal` no longer means two things (rule 6)) [B]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balHeaderMismatch` -> `blockAccessListHeaderMismatch` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
     },
     {
       "old": "Jaune.ForkRules.postBalDefect?",
@@ -2273,7 +2225,7 @@
       "kind": "declaration",
       "layer": "execution",
       "rule": "4, 6, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Bal` -> `BlockAccessList` (EIP-7928; `bal` no longer means two things (rule 6)) [B]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `postBalDefect?` -> `postBlockAccessListDefect?` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
     },
     {
       "old": "Jaune.B256.keccak",
@@ -4338,30 +4290,6 @@
       "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `stor` -> `storage` (Yellow Paper account storage) [B]"
     },
     {
-      "old": "Jaune.State.getElem?_setStor_ne",
-      "new": "Jaune.State.getElem?_setStorage_ne",
-      "kind": "declaration",
-      "layer": "execution",
-      "rule": "1, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Stor` -> `Storage` (Yellow Paper account storage; execution-apis `storageHash`; EIP-1153 vocabulary) [B]"
-    },
-    {
-      "old": "Jaune.State.getElem?_setStor_self_of_exists",
-      "new": "Jaune.State.getElem?_setStorage_self_of_exists",
-      "kind": "declaration",
-      "layer": "execution",
-      "rule": "1, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Stor` -> `Storage` (Yellow Paper account storage; execution-apis `storageHash`; EIP-1153 vocabulary) [B]"
-    },
-    {
-      "old": "Jaune.State.Canonical.setStor",
-      "new": "Jaune.State.Canonical.setStorage",
-      "kind": "declaration",
-      "layer": "execution",
-      "rule": "1, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Stor` -> `Storage` (Yellow Paper account storage; execution-apis `storageHash`; EIP-1153 vocabulary) [B]"
-    },
-    {
       "old": "Jaune.Tra.Canonical",
       "new": "Jaune.TransientStorage.Canonical",
       "kind": "declaration",
@@ -4520,6 +4448,24 @@
       "layer": "execution",
       "rule": "4, 7",
       "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Linst` -> `HaltOp` (Appendix B opcode class names) [B]"
+    },
+    {
+      "old": "Jaune.nonspawn_balReadAccount",
+      "new": "Jaune.nonspawn_blockAccessListReadAccount",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balReadAccount` -> `blockAccessListReadAccount` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.nonspawn_balReadStorage",
+      "new": "Jaune.nonspawn_blockAccessListReadStorage",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balReadStorage` -> `blockAccessListReadStorage` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
     },
     {
       "old": "Jaune.executePrecomp_modexp_ok_selected_cost",
@@ -5513,6 +5459,213 @@
       "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Txs` -> `Transactions` (execution-apis block.yaml `transactions`) [B]"
     },
     {
+      "old": "Jaune.T8n.balPipelineWithdrawalRequestsAddress",
+      "new": "Jaune.T8n.blockAccessListPipelineWithdrawalRequestsAddress",
+      "kind": "declaration",
+      "layer": "adapter",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balPipelineWithdrawalRequestsAddress` -> `blockAccessListPipelineWithdrawalRequestsAddress` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.T8n.balPipelineConsolidationRequestsAddress",
+      "new": "Jaune.T8n.blockAccessListPipelineConsolidationRequestsAddress",
+      "kind": "declaration",
+      "layer": "adapter",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balPipelineConsolidationRequestsAddress` -> `blockAccessListPipelineConsolidationRequestsAddress` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.T8n.balPipelineBuilderDepositRequestsAddress",
+      "new": "Jaune.T8n.blockAccessListPipelineBuilderDepositRequestsAddress",
+      "kind": "declaration",
+      "layer": "adapter",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balPipelineBuilderDepositRequestsAddress` -> `blockAccessListPipelineBuilderDepositRequestsAddress` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.T8n.balPipelineBuilderExitRequestsAddress",
+      "new": "Jaune.T8n.blockAccessListPipelineBuilderExitRequestsAddress",
+      "kind": "declaration",
+      "layer": "adapter",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balPipelineBuilderExitRequestsAddress` -> `blockAccessListPipelineBuilderExitRequestsAddress` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.T8n.balPipelineHelper",
+      "new": "Jaune.T8n.blockAccessListPipelineHelper",
+      "kind": "declaration",
+      "layer": "adapter",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balPipelineHelper` -> `blockAccessListPipelineHelper` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.T8n.balPipelineBeneficiary",
+      "new": "Jaune.T8n.blockAccessListPipelineBeneficiary",
+      "kind": "declaration",
+      "layer": "adapter",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balPipelineBeneficiary` -> `blockAccessListPipelineBeneficiary` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.T8n.balPipelineBytes",
+      "new": "Jaune.T8n.blockAccessListPipelineBytes",
+      "kind": "declaration",
+      "layer": "adapter",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balPipelineBytes` -> `blockAccessListPipelineBytes` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.T8n.balPipelineToggleCode",
+      "new": "Jaune.T8n.blockAccessListPipelineToggleCode",
+      "kind": "declaration",
+      "layer": "adapter",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balPipelineToggleCode` -> `blockAccessListPipelineToggleCode` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.T8n.balPipelineStopCode",
+      "new": "Jaune.T8n.blockAccessListPipelineStopCode",
+      "kind": "declaration",
+      "layer": "adapter",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balPipelineStopCode` -> `blockAccessListPipelineStopCode` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.T8n.balPipelineCallCode",
+      "new": "Jaune.T8n.blockAccessListPipelineCallCode",
+      "kind": "declaration",
+      "layer": "adapter",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balPipelineCallCode` -> `blockAccessListPipelineCallCode` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.T8n.balPipelineForwardCode",
+      "new": "Jaune.T8n.blockAccessListPipelineForwardCode",
+      "kind": "declaration",
+      "layer": "adapter",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balPipelineForwardCode` -> `blockAccessListPipelineForwardCode` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.T8n.balPipelineToggleState",
+      "new": "Jaune.T8n.blockAccessListPipelineToggleState",
+      "kind": "declaration",
+      "layer": "adapter",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balPipelineToggleState` -> `blockAccessListPipelineToggleState` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.T8n.balPipelineOneCallState",
+      "new": "Jaune.T8n.blockAccessListPipelineOneCallState",
+      "kind": "declaration",
+      "layer": "adapter",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balPipelineOneCallState` -> `blockAccessListPipelineOneCallState` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.T8n.balPipelineForwardState",
+      "new": "Jaune.T8n.blockAccessListPipelineForwardState",
+      "kind": "declaration",
+      "layer": "adapter",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balPipelineForwardState` -> `blockAccessListPipelineForwardState` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.T8n.balPipelineHelperNoNet",
+      "new": "Jaune.T8n.blockAccessListPipelineHelperNoNet",
+      "kind": "declaration",
+      "layer": "adapter",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balPipelineHelperNoNet` -> `blockAccessListPipelineHelperNoNet` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.T8n.balPipelineHelperOneWrite",
+      "new": "Jaune.T8n.blockAccessListPipelineHelperOneWrite",
+      "kind": "declaration",
+      "layer": "adapter",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balPipelineHelperOneWrite` -> `blockAccessListPipelineHelperOneWrite` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.T8n.balPipelineBalances",
+      "new": "Jaune.T8n.blockAccessListPipelineBalances",
+      "kind": "declaration",
+      "layer": "adapter",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balPipelineBalances` -> `blockAccessListPipelineBalances` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.T8n.balPipelineRequestNetApplyBody",
+      "new": "Jaune.T8n.blockAccessListPipelineRequestNetApplyBody",
+      "kind": "declaration",
+      "layer": "adapter",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balPipelineRequestNetApplyBody` -> `blockAccessListPipelineRequestNetApplyBody` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.T8n.balPipelineRequestOneWriteApplyBody",
+      "new": "Jaune.T8n.blockAccessListPipelineRequestOneWriteApplyBody",
+      "kind": "declaration",
+      "layer": "adapter",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balPipelineRequestOneWriteApplyBody` -> `blockAccessListPipelineRequestOneWriteApplyBody` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.T8n.balPipelineRequestNetT8n",
+      "new": "Jaune.T8n.blockAccessListPipelineRequestNetT8n",
+      "kind": "declaration",
+      "layer": "adapter",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balPipelineRequestNetT8n` -> `blockAccessListPipelineRequestNetT8n` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.T8n.balPipelineRequestOneWriteT8n",
+      "new": "Jaune.T8n.blockAccessListPipelineRequestOneWriteT8n",
+      "kind": "declaration",
+      "layer": "adapter",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balPipelineRequestOneWriteT8n` -> `blockAccessListPipelineRequestOneWriteT8n` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.T8n.balPipelineForwardApplyBody",
+      "new": "Jaune.T8n.blockAccessListPipelineForwardApplyBody",
+      "kind": "declaration",
+      "layer": "adapter",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balPipelineForwardApplyBody` -> `blockAccessListPipelineForwardApplyBody` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.T8n.balPipelineForwardT8n",
+      "new": "Jaune.T8n.blockAccessListPipelineForwardT8n",
+      "kind": "declaration",
+      "layer": "adapter",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balPipelineForwardT8n` -> `blockAccessListPipelineForwardT8n` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
       "old": "Jaune.T8n.Opts",
       "new": "Jaune.T8n.Options",
       "kind": "declaration",
@@ -5684,6 +5837,361 @@
       "source": "execution-apis receipt.yaml `logsBloom` [B]"
     },
     {
+      "old": "Jaune.BalAccount",
+      "new": "Jaune.BlockAccessListAccount",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalAccount` -> `BlockAccessListAccount` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalAccount.storageChanges",
+      "new": "Jaune.BlockAccessListAccount.storageChanges",
+      "kind": "field",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalAccount` -> `BlockAccessListAccount` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalAccount.storageReads",
+      "new": "Jaune.BlockAccessListAccount.storageReads",
+      "kind": "field",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalAccount` -> `BlockAccessListAccount` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalAccount.balanceChanges",
+      "new": "Jaune.BlockAccessListAccount.balanceChanges",
+      "kind": "field",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalAccount` -> `BlockAccessListAccount` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalAccount.nonceChanges",
+      "new": "Jaune.BlockAccessListAccount.nonceChanges",
+      "kind": "field",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalAccount` -> `BlockAccessListAccount` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalAccount.codeChanges",
+      "new": "Jaune.BlockAccessListAccount.codeChanges",
+      "kind": "field",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalAccount` -> `BlockAccessListAccount` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalIndexStartAccount",
+      "new": "Jaune.BlockAccessListIndexStartAccount",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalIndexStartAccount` -> `BlockAccessListIndexStartAccount` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.BalIndexStartAccount.balance",
+      "new": "Jaune.BlockAccessListIndexStartAccount.balance",
+      "kind": "field",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalIndexStartAccount` -> `BlockAccessListIndexStartAccount` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.BalIndexStartAccount.nonce",
+      "new": "Jaune.BlockAccessListIndexStartAccount.nonce",
+      "kind": "field",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalIndexStartAccount` -> `BlockAccessListIndexStartAccount` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.BalIndexStartAccount.code",
+      "new": "Jaune.BlockAccessListIndexStartAccount.code",
+      "kind": "field",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalIndexStartAccount` -> `BlockAccessListIndexStartAccount` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.BalBuilder",
+      "new": "Jaune.BlockAccessListBuilder",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalBuilder` -> `BlockAccessListBuilder` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalBuilder.accounts",
+      "new": "Jaune.BlockAccessListBuilder.accounts",
+      "kind": "field",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalBuilder` -> `BlockAccessListBuilder` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalBuilder.indexStartAccounts",
+      "new": "Jaune.BlockAccessListBuilder.indexStartAccounts",
+      "kind": "field",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalBuilder` -> `BlockAccessListBuilder` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalBuilder.indexStartStorage",
+      "new": "Jaune.BlockAccessListBuilder.indexStartStorage",
+      "kind": "field",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalBuilder` -> `BlockAccessListBuilder` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalAccount.upsert",
+      "new": "Jaune.BlockAccessListAccount.upsert",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalAccount` -> `BlockAccessListAccount` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.BalAccount.addStorageWrite",
+      "new": "Jaune.BlockAccessListAccount.addStorageWrite",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalAccount` -> `BlockAccessListAccount` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalAccount.addStorageRead",
+      "new": "Jaune.BlockAccessListAccount.addStorageRead",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalAccount` -> `BlockAccessListAccount` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalAccount.removeStorageWrite",
+      "new": "Jaune.BlockAccessListAccount.removeStorageWrite",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalAccount` -> `BlockAccessListAccount` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalAccount.addBalanceChange",
+      "new": "Jaune.BlockAccessListAccount.addBalanceChange",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalAccount` -> `BlockAccessListAccount` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalAccount.removeBalanceChange",
+      "new": "Jaune.BlockAccessListAccount.removeBalanceChange",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalAccount` -> `BlockAccessListAccount` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalAccount.addNonceChange",
+      "new": "Jaune.BlockAccessListAccount.addNonceChange",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalAccount` -> `BlockAccessListAccount` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalAccount.removeNonceChange",
+      "new": "Jaune.BlockAccessListAccount.removeNonceChange",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalAccount` -> `BlockAccessListAccount` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalAccount.addCodeChange",
+      "new": "Jaune.BlockAccessListAccount.addCodeChange",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalAccount` -> `BlockAccessListAccount` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalAccount.removeCodeChange",
+      "new": "Jaune.BlockAccessListAccount.removeCodeChange",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalAccount` -> `BlockAccessListAccount` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalBuilder.ensure",
+      "new": "Jaune.BlockAccessListBuilder.ensure",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalBuilder` -> `BlockAccessListBuilder` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalBuilder.modify",
+      "new": "Jaune.BlockAccessListBuilder.modify",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalBuilder` -> `BlockAccessListBuilder` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalBuilder.startAccount",
+      "new": "Jaune.BlockAccessListBuilder.startAccount",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalBuilder` -> `BlockAccessListBuilder` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.BalBuilder.startStorage",
+      "new": "Jaune.BlockAccessListBuilder.startStorage",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalBuilder` -> `BlockAccessListBuilder` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.BalBuilder.incorporate",
+      "new": "Jaune.BlockAccessListBuilder.incorporate",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalBuilder` -> `BlockAccessListBuilder` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalAccountChanges",
+      "new": "Jaune.BlockAccessListAccountChanges",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalAccountChanges` -> `BlockAccessListAccountChanges` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalAccountChanges.address",
+      "new": "Jaune.BlockAccessListAccountChanges.address",
+      "kind": "field",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalAccountChanges` -> `BlockAccessListAccountChanges` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalAccountChanges.storageChanges",
+      "new": "Jaune.BlockAccessListAccountChanges.storageChanges",
+      "kind": "field",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalAccountChanges` -> `BlockAccessListAccountChanges` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalAccountChanges.storageReads",
+      "new": "Jaune.BlockAccessListAccountChanges.storageReads",
+      "kind": "field",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalAccountChanges` -> `BlockAccessListAccountChanges` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalAccountChanges.balanceChanges",
+      "new": "Jaune.BlockAccessListAccountChanges.balanceChanges",
+      "kind": "field",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalAccountChanges` -> `BlockAccessListAccountChanges` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalAccountChanges.nonceChanges",
+      "new": "Jaune.BlockAccessListAccountChanges.nonceChanges",
+      "kind": "field",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalAccountChanges` -> `BlockAccessListAccountChanges` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalAccountChanges.codeChanges",
+      "new": "Jaune.BlockAccessListAccountChanges.codeChanges",
+      "kind": "field",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalAccountChanges` -> `BlockAccessListAccountChanges` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.BalBuilder.build",
+      "new": "Jaune.BlockAccessListBuilder.build",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalBuilder` -> `BlockAccessListBuilder` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
+      "old": "Jaune.natBLT",
+      "new": "Jaune.natRlpItem",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "1",
+      "source": "follows `BLT` -> `Rlp.Item` [M]"
+    },
+    {
+      "old": "Jaune.BalAccountChanges.toBLT",
+      "new": "Jaune.BlockAccessListAccountChanges.toRlpItem",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "1, 4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalAccountChanges` -> `BlockAccessListAccountChanges` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]; `BLT` -> `RlpItem` (the RLP definition speaks of items (Yellow Paper Appendix B)) [B]"
+    },
+    {
+      "old": "Jaune.guardBalHi",
+      "new": "Jaune.guardBlockAccessListHi",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `guardBalHi` -> `guardBlockAccessListHi` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.guardBalLo",
+      "new": "Jaune.guardBlockAccessListLo",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `guardBalLo` -> `guardBlockAccessListLo` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.guardBalLo'",
+      "new": "Jaune.guardBlockAccessListLo'",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `guardBalLo'` -> `guardBlockAccessListLo'` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.BlockOutput.bal",
+      "new": "Jaune.BlockOutput.blockAccessListBuilder",
+      "kind": "field",
+      "layer": "execution",
+      "rule": "4, 6",
+      "source": "EIP-7928 block access list; `bal` is retired (rule 6); the field holds the `BalBuilder` (the sibling field `blockAccessList` holds the built list), so it takes the builder name [M]",
+      "notes": "field of a reshaped record (`BlockOutput`, W2); only the leaf changes"
+    },
+    {
       "old": "Jaune.calculateIntrinsicCost",
       "new": "Jaune.Transaction.intrinsicGas",
       "kind": "declaration",
@@ -5795,6 +6303,14 @@
       "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Tx` -> `Transaction` (plain word (`tx` stays the binder); execution-apis transaction.yaml; EIP-2718 `Transaction`) [B]"
     },
     {
+      "old": "Jaune.BalBuilder.incorporateSystem",
+      "new": "Jaune.BlockAccessListBuilder.incorporateSystem",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BalBuilder` -> `BlockAccessListBuilder` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+    },
+    {
       "old": "Jaune.getLast256BlockHashes",
       "new": "Jaune.BlockChain.recentBlockHashes",
       "kind": "declaration",
@@ -5802,46 +6318,6 @@
       "rule": "4, 7",
       "source": "Appendix B proposal [B]",
       "notes": "depth change (new namespace member); the apply tool refuses namespace-depth changes today"
-    },
-    {
-      "old": "Jaune.getLast256BlockHashes_eq",
-      "new": "Jaune.BlockChain.recentBlockHashes_eq",
-      "kind": "declaration",
-      "layer": "execution",
-      "rule": "1, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `getLast256BlockHashes` -> `BlockChain.recentBlockHashes` (follows `getLast256BlockHashes` -> `BlockChain.recentBlockHashes`) [B]"
-    },
-    {
-      "old": "Jaune.getLast256BlockHashes_getD_lt",
-      "new": "Jaune.BlockChain.recentBlockHashes_getD_lt",
-      "kind": "declaration",
-      "layer": "execution",
-      "rule": "1, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `getLast256BlockHashes` -> `BlockChain.recentBlockHashes` (follows `getLast256BlockHashes` -> `BlockChain.recentBlockHashes`) [B]"
-    },
-    {
-      "old": "Jaune.getLast256BlockHashes_getD_last",
-      "new": "Jaune.BlockChain.recentBlockHashes_getD_last",
-      "kind": "declaration",
-      "layer": "execution",
-      "rule": "1, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `getLast256BlockHashes` -> `BlockChain.recentBlockHashes` (follows `getLast256BlockHashes` -> `BlockChain.recentBlockHashes`) [B]"
-    },
-    {
-      "old": "Jaune.getLast256BlockHashes_window",
-      "new": "Jaune.BlockChain.recentBlockHashes_window",
-      "kind": "declaration",
-      "layer": "execution",
-      "rule": "1, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `getLast256BlockHashes` -> `BlockChain.recentBlockHashes` (follows `getLast256BlockHashes` -> `BlockChain.recentBlockHashes`) [B]"
-    },
-    {
-      "old": "Jaune.getLast256BlockHashes_of_mem_retained",
-      "new": "Jaune.BlockChain.recentBlockHashes_of_mem_retained",
-      "kind": "declaration",
-      "layer": "execution",
-      "rule": "1, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `getLast256BlockHashes` -> `BlockChain.recentBlockHashes` (follows `getLast256BlockHashes` -> `BlockChain.recentBlockHashes`) [B]"
     },
     {
       "old": "Jaune.BLT.toExWithdrawal",
@@ -5938,6 +6414,60 @@
       "layer": "execution",
       "rule": "4, 7",
       "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Tx` -> `Transaction` (plain word (`tx` stays the binder); execution-apis transaction.yaml; EIP-2718 `Transaction`) [B]"
+    },
+    {
+      "old": "Jaune.guardBalHash",
+      "new": "Jaune.guardBlockAccessListHash",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `guardBalHash` -> `guardBlockAccessListHash` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.balGuardA",
+      "new": "Jaune.blockAccessListGuardA",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balGuardA` -> `blockAccessListGuardA` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.balGuardB",
+      "new": "Jaune.blockAccessListGuardB",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balGuardB` -> `blockAccessListGuardB` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.balGuardPre",
+      "new": "Jaune.blockAccessListGuardPre",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balGuardPre` -> `blockAccessListGuardPre` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.balGuardView",
+      "new": "Jaune.blockAccessListGuardView",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balGuardView` -> `blockAccessListGuardView` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
+    },
+    {
+      "old": "Jaune.balGuardList",
+      "new": "Jaune.blockAccessListGuardList",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 6, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `balGuardList` -> `blockAccessListGuardList` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]",
+      "notes": "private declaration"
     },
     {
       "old": "Jaune.Acct.mk.injEq",

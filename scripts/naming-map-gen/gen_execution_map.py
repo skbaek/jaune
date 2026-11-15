@@ -80,8 +80,22 @@ def tables_for(mod):
     return tokens, lower
 
 
+def bal_part(part, applied):
+    new = part
+    for rx, repl in T.BAL_PATTERNS:
+        new = rx.sub(repl, new)
+    if new != part:
+        applied.append((part, (new, '4, 6', T.BAL_SOURCE, 'M')))
+    return new
+
+
+def has_bal(name):
+    return any(rx.search(part) for seg in name.split('.') for part in seg.split('_') for rx, _ in T.BAL_PATTERNS)
+
+
 def rename_part(part, tokens, lower, applied):
     out = []
+    part = bal_part(part, applied)
     if any(v in part for v in T.VERBATIM_PARTS):
         return part
     is_instance = part.startswith('inst') and len(part) > 4 and part[4].isupper()
@@ -118,23 +132,33 @@ def kept_root(name, tokens):
 
 
 OUT_DEF_PARTS = set()
+OUT_DEF_FULL = set()
 
 
 def init_out_parts():
     """Leaf names of reshaped definitions (survey families R*, K9): a theorem or
     instance that embeds one is named at that definition's cut."""
     kept, out = set(), set()
+    kept_full, out_full = set(), set()
     for r in csv.DictReader(open(HERE / 'survey-families.tsv'), delimiter='\t'):
         fam = r['family'].split()[0]
         leaf = strip(r['name']).split('.')[-1]
         (kept if fam in T.IN_FAMILIES else out).add(leaf)
+        (kept_full if fam in T.IN_FAMILIES else out_full).add(strip(r['name']))
+    OUT_DEF_FULL.update(out_full - kept_full)
+    kept_roots = {n.split('.')[0] for n in kept_full}
+    OUT_DEF_FULL.update({n.split('.')[0] for n in out_full} - kept_roots - T.KEPT_TYPES)
     for leaf in out - kept:
-        if len(leaf) >= 8 and any(ch.isupper() for ch in leaf[1:]) and leaf not in T.EXPLICIT_LEAVES:
+        if len(leaf) >= 5 and any(ch.isupper() for ch in leaf[1:]) and leaf not in T.EXPLICIT_LEAVES:
             OUT_DEF_PARTS.add(leaf)
 
 
 def has_out_token(name, mod):
     module_keys = set(T.MODULE_TOKENS.get(mod, {}))
+    stripped = strip(name)
+    for i, ch in enumerate(stripped):
+        if ch == '_' and stripped[:i] in OUT_DEF_FULL:
+            return True
     for seg in name.split('.'):
         if seg in T.OUT_SEGMENTS:
             return True
@@ -153,7 +177,8 @@ def derive(c, fam):
     mod = c['mod']
     tokens, lower = tables_for(mod)
     f = fam.split()[0]
-    kept = kept_root(old, tokens)
+    bal = has_bal(old)
+    kept = kept_root(old, tokens) or bal
     free = f.startswith('F') and not kept
     full = (mod in T.EXTRA_IN_MODULES or f in T.IN_FAMILIES or f == 'N' or kept) and not free
     if free or (has_out_token(old, mod) and not kept):

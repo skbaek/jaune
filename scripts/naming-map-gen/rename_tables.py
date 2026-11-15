@@ -122,7 +122,7 @@ OUT_SEGMENTS = {
     'FrameEntry', 'Fueled', 'Meta', 'Mach', 'Sevm', 'Devm', 'Benv', 'Tenv', 'Evm', 'Msg',
 }
 # Wire-type namespaces: their codecs are K2 even where the survey's line ranges say otherwise.
-WIRE_ROOTS = {'Receipt', 'Header', 'Block', 'Withdrawal', 'Log', 'Tx', 'TxType', 'Auth', 'AccessList',
+WIRE_ROOTS = {'BlockAccessList', 'Receipt', 'Header', 'Block', 'Withdrawal', 'Log', 'Tx', 'TxType', 'Auth', 'AccessList',
               'Fork', 'ForkRules', 'HeaderOptionals'}
 # Modules the survey sorted whole (classify.py WHOLE), for constants it did not list.
 MODULE_FAMILY = {
@@ -165,6 +165,8 @@ for old, new, eip in [('zero', 'legacy', 'Legacy transaction'), ('one', 'eip2930
                       ('four', 'eip7702', 'EIP-7702 transaction')]:
     explicit('TxType.' + old, 'TransactionType.' + new, '1',
              f'{_EIP_API} schema title "{eip}"', 'B', 'constructor')
+explicit('BlockOutput.bal', 'BlockOutput.blockAccessListBuilder', '4, 6', 'EIP-7928 block access list; `bal` is retired (rule 6); the field holds the `BalBuilder` (the sibling field `blockAccessList` holds the built list), so it takes the builder name', 'M', 'field of a reshaped record (`BlockOutput`, W2); only the leaf changes')
+explicit('natBLT', 'natRlpItem', '1', 'follows `BLT` -> `Rlp.Item`', 'M')
 explicit('Acct.withBal', 'Account.withBalance', '1', 'follows `Acct.bal` -> `Account.balance` (execution-apis AccountProof `balance`)', 'B')
 explicit('Tx.isTypeThree', 'Transaction.isEip4844', '1, 7', f'{_EIP_API} schema title "EIP-4844 transaction"', 'M',
          'follows the constructor rename `TxType.three` -> `eip4844`')
@@ -326,3 +328,16 @@ INSTANCE_TOKENS = {
 }
 
 EXPLICIT_LEAVES = {old.split('.')[-1] for old in EXPLICIT}
+
+# Block access list (EIP-7928; EELS `BlockAccessListBuilder`, `AccountData`,
+# `AccountChanges`) names.  Master directive (2026-11-16): all `Bal*`/`bal*`
+# declarations of the block access list are kept-family names and get whole
+# words.  `Bal` in `getBal`/`setBal`/`addBal`/`subBal`/`withBal` and the `_bal`
+# theorem suffixes means balance and is NOT matched here.
+import re as _re
+BAL_PATTERNS = [
+    (_re.compile(r'(?<![A-Za-z])bal(?=(Read|Pipeline|Guard|Valid|Header))'), 'blockAccessList'),
+    (_re.compile(r'Bal(?=(Rules|Account|IndexStart|Builder|Valid|ItemCost|HeaderMismatch|Defect|Hi|Lo|Hash|Read))'), 'BlockAccessList'),
+]
+BAL_SOURCE = ('EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), '
+              '`AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)')
