@@ -46,9 +46,9 @@ PROTOCOL_TOKENS = {
     "uint64": "pyspec uint64", "uint8": "pyspec uint8", "uint16": "pyspec uint16",
     "uint32": "pyspec uint32", "uint128": "pyspec uint128", "uint256": "pyspec uint256",
     "sha256": "SHA-256", "hash32": "SSZ Hash32", "bytes32": "SSZ Bytes32",
-    "ceil32": "pyspec ceil", "x04": "hex byte 0x04 (EIP-7685 request type literal)",
+    "ceil32": "pyspec ceil",
     "b0": "hex byte 0xB0 (EIP-8282 builder prefix literal)",
-    "b1": None, "eth1": "pyspec eth1_data (Eth1)",
+    "eth1": "pyspec eth1_data (Eth1)",
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -63,13 +63,13 @@ EXPAND = {
     "csub": "common substep", "rel": "relation", "proj": "projection", "jp": "join point",
     "inv": "invariant", "ctrl": "control", "arr": "array", "eqs": "equalities",
     "excl": "exclusive", "reg": "registration", "sat": "saturation", "expo": "exposure",
-    "src": "source", "wf": "well formed", "vlen": "validators length",
+    "src": "source", "wf": "withdrawals frame", "vlen": "validators length",
     # protocol words
     "addr": "address", "adr": "address", "amt": "amount", "att": "attestation", "bal": "balance",
     "bld": "builder", "cred": "credential", "creds": "credentials", "dep": "deposit",
     "eb": "effective balance", "ep": "epoch", "hdr": "header", "pk": "pubkey", "sig": "signature",
     "st": "state", "env": "environment", "ver": "version", "wc": "withdrawal credentials",
-    "wds": "withdrawals", "pend": "pending", "pay": "payment", "sv": "slash validator",
+    "wds": "withdrawals", "pend": "pending", "pay": "payment", "sv": "ssz vector",
     "recs": "records", "fin": "finalized", "pew": "payload expected withdrawals",
     "act": "activation balance", "acc": "accumulator", "opt": "optional", "qty": "quantity",
     "tr": "transition", "ex": "exit request", "pw": "pending withdrawal", "fc": "fork choice",
@@ -84,11 +84,11 @@ EXPAND = {
     "mp": "mainnet preset", "ind": "induction",
     "tx": None,  # lower-case tx is allowed; capital Tx is expanded in the generator
     "gs": "minimal gloas state", "sm": "minimal gloas state", "pm": "minimal preset",
-    "xr": "exit request", "wq": "withdrawal queue", "bq": "builders queues eq", "qe": "queues eq",
+    "xr": "exit request", "wq": "withdrawal queue", "bq": "builders and queues equal", "qe": "queues equal",
     "cx": "coefficient x", "cy": "coefficient y",
-    "req": "request", "reqs": "requests", "fs": "finalized slot", "fe": "finalized epoch",
+    "req": "request", "reqs": "requests", "fs": "finalized and slot kept", "fe": "finalized epoch",
     "fna": "finalized not ahead", "s1": "selector1", "s2": "selector2", "s3": "selector3",
-    "s4": "selector4", "cur": "current", "cmd": "command", "el": "element", "err": "error",
+    "s4": "selector4", "cur": "current", "prev": "previous", "x04": "exited have no pending", "cmd": "command", "el": "element", "err": "error",
     "fn": "function", "hi": "high", "lo": "low", "jp2": "join point2", "jp3": "join point3",
     "pref": "prefix", "ops": "operations", "mono": "monotone", "val": "value", "vec": "vector",
     "ws": "whitespace", "dict": "dictionary", "exec": "execution", "seq": "sequence",
@@ -136,8 +136,8 @@ PART_OVERRIDE = {
     "l8": "eightLeaves", "p": "parseToOption", "q": "quotedScalar", "sc": "plainScalar",
     "processSlot_eqF": "processSlot_eqForkIndexed",
     # joint / fork-indexed variants
-    "FinalizedNotAheadF": "FinalizedNotAheadForkIndexed", "FinSlotF": "FinalizedSlotForkIndexed",
-    "finSlotF": "finalizedSlotForkIndexed", "FinEpF": "FinalizedEpochForkIndexed",
+    "FinalizedNotAheadF": "FinalizedNotAheadForkIndexed", "FinSlotF": "FinalizedCheckpointAndSlotKeptForkIndexed",
+    "finSlotF": "finalizedCheckpointAndSlotKeptForkIndexed", "FinEpF": "FinalizedEpochForkIndexed",
     "finEpF": "finalizedEpochForkIndexed",
     "processSlotH": "processSlotAbstractedHashes", "processSlotHF": "processSlotAbstractedHashesForkIndexed",
     "getCurrentEpochF": "getCurrentEpochForkIndexed",
@@ -175,7 +175,7 @@ PART_OVERRIDE = {
     "pendW": "pendingWithdrawalBalance", "pendP": "pendingPaymentBalance",
     "PayStepP": "PaymentStep", "AttPay": "AttestationPayment", "PayEntryStep": "PaymentEntryStep",
     "OpsRel": "OperationsRelation", "opsRel": "operationsRelation", "WQ": "WithdrawalQueue",
-    "BQ": "BuildersQueuesEq", "QE": "QueuesEq", "BIdW": "BuilderIdentityWithdrawableEpoch",
+    "BQ": "BuildersAndQueuesEqual", "QE": "QueuesEqual", "BIdW": "BuilderIdentityWithdrawableEpoch",
     "WFrame": "WithdrawalsFrame", "wFrame": "withdrawalsFrame", "VLen": "ValidatorsLength",
     "vLen": "validatorsLength", "PayKeep": "PaymentKeep", "BPresAt": "BuilderPreservationAt",
     "DepInv": "DepositInvariant", "RegInv": "RegistrationInvariant", "DepositSlotInv": "DepositSlotInvariant",
@@ -269,3 +269,28 @@ TACTIC_KEYWORDS = {
     "loop_csub": "loop_common_substep", "csub_of": "common_substep_of",
     "csub_close": "common_substep_close",
 }
+
+
+# Meaning audit after the cross-family N2 review (hydrogen-review.md): each entry below was
+# checked against the definition it names.
+PART_OVERRIDE.update({
+    "balBytes": "blockAccessListBytes",             # bytes of payload.block_access_list, not a balance (rule 6)
+    "q0": "mapToCurveOutput0", "q1": "mapToCurveOutput1",   # RFC 9380 J.10.1 map_to_curve outputs
+    "g1m0": "g1SetupMonomial0", "g1m1": "g1SetupMonomial1",  # KZG setup monomial[0], monomial[1]
+    "g2m0": "g2SetupMonomial0", "g2m1": "g2SetupMonomial1",
+    "vBytes": "kzgValueOfBytes", "vOf": "kzgValueOfExcept",  # they build a KzgV
+    "I3": "PendingBalanceReferencesExited",         # PendLe and G3-03 and G3-04, conjoined
+    "c64": "u64Checked", "n64": "u64Literal",       # one u64 spelling for the helper family
+    "findIdx": "findIndex", "bal": "balances",      # commonSubstep_{set,modify}_bal act on `balances`
+    "b256GoAt": "u256GoAt", "b256Eq": "u256Eq", "b256OfBytes": "bytes32OfBytes",
+    "elField": "executionLayerField", "dep": "depositRequest",
+})
+SEGMENT_OVERRIDE.update({
+    "b256_toBytes_toB256": "bytes_toU256_toBytes",  # (Bytes.toB256 l).toBytes = l
+})
+
+# FinSlot: `s'.finalized_checkpoint = s.finalized_checkpoint ∧ s'.slot = s.slot`; the slot is the
+# state's, not part of the checkpoint record, so the true name keeps both.  `_fs` suffix: finalizedAndSlotKept.
+PART_OVERRIDE.update({
+    "FinSlot": "FinalizedCheckpointAndSlotKept", "finSlot": "finalizedCheckpointAndSlotKept",
+})
