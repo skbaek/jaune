@@ -115,6 +115,11 @@ class NamingMapTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "retired token"):
             MODULE.validate_map(data)
 
+    def test_compound_retired_tokens_match_at_word_boundaries(self):
+        for name in ("Jaune.txsRootValue", "Jaune.NTBsValue", "Jaune.XStepRun"):
+            self.assertTrue(MODULE.find_retired_tokens(name, self.base_data["retired_tokens"]))
+        self.assertEqual(MODULE.find_retired_tokens("Jaune.balance", ["bal"]), [])
+
     def test_invalid_kind_layer_rule_fails(self):
         data = dict(self.base_data)
         data["entries"] = [_sample_entry(kind="alias")]

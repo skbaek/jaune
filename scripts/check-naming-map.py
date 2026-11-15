@@ -30,15 +30,15 @@ def tokenize_identifier(qualified_name):
 
 def find_retired_tokens(qualified_name, retired_tokens):
     """Return retired tokens appearing as identifier tokens in qualified_name."""
-    retired = set(retired_tokens)
     hits = []
+    patterns = {token: tokenize_identifier(token) for token in retired_tokens}
     for segment in qualified_name.split("."):
-        if segment in retired:
-            hits.append(segment)
-            continue
-        for token in tokenize_identifier(segment):
-            if token in retired:
-                hits.append(token)
+        tokens = tokenize_identifier(segment)
+        for retired, pattern in patterns.items():
+            if segment == retired or (pattern and any(
+                    tokens[i:i + len(pattern)] == pattern
+                    for i in range(len(tokens) - len(pattern) + 1))):
+                hits.append(retired)
     return hits
 
 

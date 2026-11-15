@@ -156,3 +156,61 @@ bytes. `--output FRESH_DIRECTORY` retains the raw compiler outputs, reference
 bundles, maps and plan. This is a tool control, not the goal's real Jaune pilot
 or the N4 fidelity checker. The focused Python controls are in
 `scripts/tests/test_naming_apply.py`.
+
+## 5. Retired names, whole words and source spellings
+
+`scripts/check-naming.py` checks the compiler's declaration inventory, including
+field and constructor definitions from the reference table (these are absent
+from the declaration table alone). Private names are checked using their
+user-written namespace, after removing the compiler's module/counter prefix.
+Local variables, comments and strings are not declaration names. It uses the
+canonical map's retired tokens directly, including compound tokens inside
+longer camelCase or snake_case names. A registered source cannot exempt a
+retired token.
+
+The checker requires a reviewed JSON policy; it never guesses a dictionary
+from the current identifiers or silently accepts an unknown token. The policy
+has `schema_version: 1`, `words` (distinct lowercase whole English words),
+`sources` and `bindings`. Each source is an object with a tree-relative `path`,
+the exact file's `sha256`, and a nonempty `citation`. Each binding is keyed by
+the full Lean name and contains `rule` (`"1"`, `"2"` or `"3"`), a `source`
+key, its original `spelling`, and `style` (`"verbatim"`, `"lowerCamel"` or
+`"upperCamel"`). The spelling must occur as an exact identifier in the pinned
+source bytes and transliterate to the last component of the bound name.
+Bindings cover that component only; a namespace needs its own binding or
+whole words. Map rows whose primary rule is 1–3 require a matching binding.
+Unbound components must consist of policy words, map-approved abbreviations
+or numeric indices. Unsupported characters fail rather than disappear.
+
+Source membership is a lexical check, not a claim that the cited source is
+authoritative or the identifier means the same thing. Those are review inputs
+under the naming rules. The policy must classify unchanged source-derived
+names as well as renamed ones; the map alone cannot identify every pyspec
+name. At this tooling checkpoint no production policy is registered. Building
+that complete reviewed vocabulary and source inventory remains WN-a/WN-b
+work; no whole-tree N3 result is claimed. The development controls use clearly
+synthetic policy/source files. Policy additions must not be used to exempt a
+retired token or disguise a private contraction as an English word.
+
+With current compiler bundles for every file, run:
+
+```sh
+python3 scripts/check-naming.py --tree . --policy POLICY.json --source-root SOURCE_ROOT --root Jaune --root JauneConsensus --file Jaune/FILE.lean FILE.references.json
+```
+
+Repeat `--file` for every Lean file under both roots. Missing, extra or duplicate
+files fail. Source bytes must equal their bundle's bytes. Whole-tree runs also
+reject unused bindings. Selected-file and selected-root diagnostic runs are
+explicitly labelled; only exactly the `Jaune` and `JauneConsensus` root set
+receives the `whole-tree` scope label. Reports bind files, bundles, policy and
+map by SHA-256. Exit 0 means no naming findings in that scope, 1 means naming
+findings, and 2 means an unusable input or incomplete coverage. This lint does
+not establish N2's semantic naming correctness or N4's rename fidelity.
+
+`python3 scripts/check-naming-lint-tool.py [--output FRESH_DIRECTORY]` elaborates
+a small fixture, confirms field/constructor coverage, then independently
+reintroduces `bal` in execution and `Ctx` in consensus. Both mutations still
+elaborate and fail the retired-name control. Restoring the baseline bytes is
+the restoration evidence; it is not recompiled. The command needs the built
+reference exporter and host Lean admission. The ordinary Python unit suite
+does not launch Lean.
