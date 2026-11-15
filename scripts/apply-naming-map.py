@@ -550,6 +550,8 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
                             for r in syntax_rows(index, 'commands', 6) if r[0] < r[1])
         starts_q = [c[0] for c in commands_q]
     for a, b, name in quoted:
+        if a >= b:
+            continue  # A missing (zero-width) identifier inside a quotation.
         start, end = char_span(offsets, a, b, text)
         comps = components(text, start, end)
         spelling = text[start:end]
