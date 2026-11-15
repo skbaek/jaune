@@ -1,5 +1,6 @@
 import Jaune.TraceJson
 import Jaune.TraceTransaction
+import Jaune.Adapter.Io
 
 /-! Standalone message or signed-transaction tracing. Inputs state their scope;
 transaction mode uses the proof-carrying public-pipeline driver. -/

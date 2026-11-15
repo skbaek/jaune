@@ -9,8 +9,6 @@ namespace Jaune
 
 open Jaune
 
-
-
 abbrev altBn128Prime : Nat :=
   21888242871839275222246405745257275088696311157297823662689037894645226208583
 
@@ -611,7 +609,6 @@ instance {F} [Zero F] [DecidableEq F] [HAdd F F F] [HSub F F F]
 def BNP.toBytes (p : BNP) : Bytes :=
   p.x.val.toBytes.pack 32 ++ p.y.val.toBytes.pack 32
 
-
 -- def twist(pt: Optimized_Point3D[FQP]) -> Optimized_Point3D[FQ12]:
 --
 -- An `F_p^2` element is stored with its leading zeros trimmed, so a coordinate
@@ -633,14 +630,6 @@ def twist (p : BNP2) : BNP12 :=
   let ny : BNF12 := ⟨[y0, 0, 0, 0, 0, 0, y1 - (y0 * 9)]⟩
   let w : BNF12 := ⟨[1, 0]⟩
   ⟨nx * (w ^ 2), ny * (w ^ 3)⟩
-
--- Trimming is representational, not semantic: a coordinate written with its
--- leading zero and the same coordinate with that zero trimmed away twist to
--- the same point.
-#guard twist ⟨⟨trimZero [0, 5]⟩, ⟨trimZero [0, 7]⟩⟩
-        = twist ⟨⟨[0, 5]⟩, ⟨[0, 7]⟩⟩
-#guard twist ⟨⟨[]⟩, ⟨[]⟩⟩ = twist ⟨⟨[0, 0]⟩, ⟨[0, 0]⟩⟩
-#guard trimZero [(0 : BNF), 5] = [(5 : BNF)]
 
 def pseudoBinaryEncoding : List Int :=
   [
@@ -944,15 +933,5 @@ def verify (msgHash r s qx qy : Nat) : Bool :=
       else p.x.val % curveOrder = r
 
 end secp256r1
-
--- The base point is on the curve, and multiplying it by the stated group order
--- reaches infinity: a transcription error in any of the six curve literals
--- would have to survive both.
-#guard secp256r1.generator.isOnCurve
-#guard EllipticCurve.mulBy secp256r1.generator secp256r1.curveOrder
-  = secp256r1.infinity
-#guard EllipticCurve.mulBy secp256r1.generator (secp256r1.curveOrder + 1)
-  = secp256r1.generator
-#guard secp256r1.coeffA.val + 3 = secp256r1.prime
 
 end Jaune

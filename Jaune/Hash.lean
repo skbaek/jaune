@@ -4,8 +4,6 @@ namespace Jaune
 
 open Jaune
 
-
-
 namespace RIPEMD160
 
 ------------------------------ RIPEMD-160 ------------------------------
@@ -151,16 +149,9 @@ def run (data : Bytes) : Bytes := do
     processChunks initDigest data (len <<< 3) (len >>> 29) (data.length / 64)
   List.foldr (fun x acc => x.toBytes.reverse ++ acc) [] digest.toList
 
--- On a full 64-byte chunk the length-indexed reader agrees, word for word,
--- with the list transcription it replaced.
-#guard (Bytes.toChunk ((List.range 64).map Nat.toUInt8)).toList
-        = Bytes.toUInt32Rev ((List.range 64).map Nat.toUInt8)
-
 end RIPEMD160
 
 def Bytes.ripemd160 : Bytes → Bytes := RIPEMD160.run
-
-
 
 ------------------------------SHA256------------------------------
 
@@ -284,8 +275,6 @@ def run (data : Bytes) : B256 :=
 end SHA256
 
 def Bytes.sha256 : Bytes → B256 := SHA256.run
-
-
 
 ------------------------------KECCAK------------------------------
 

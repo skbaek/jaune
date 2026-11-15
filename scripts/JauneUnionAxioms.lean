@@ -6,6 +6,22 @@ import Jaune.ChainStore
 import Jaune.FixtureTransition
 import Jaune.FixtureException
 import Jaune.T8n
+-- Executable checks relocated out of the specification modules (`Jaune/Check/`).
+import Jaune.Check.BLS
+import Jaune.Check.Basic
+import Jaune.Check.Blake2Spec
+import Jaune.Check.EC
+import Jaune.Check.Execution
+import Jaune.Check.Fork
+import Jaune.Check.Hash
+import Jaune.Check.KeccakSpec
+import Jaune.Check.Machine
+import Jaune.Check.Precompiles
+import Jaune.Check.RIPEMD160Spec
+import Jaune.Check.RlpEval
+import Jaune.Check.Sufficiency
+import Jaune.Check.Transaction
+import Jaune.Check.Types
 -- Standalone proof facts, outside the production umbrella.
 import Jaune.StaticcallEffects
 -- Standalone tracer modules, outside the production umbrella.

@@ -258,19 +258,4 @@ end
 theorem BLTs.toBytes_eq_toBytesS (rs : List BLT) : BLTs.toBytes rs = BLTs.toBytesS rs := by
   rw [BLTs.toBytes_eq_wrapS, BLTs.toBytesJoin_eq_toBytesJoinS, BLTs.toBytesS]
 
-/-! ### Controls
-
-The build fails here if a twin stops being kernel-evaluable or stops matching
-the public codec on a long-form item (length of length, nested list). -/
-
-example : Bytes.toBLT? [0xf8, 0x02, 0x81, 0xff] = some (.list [.bytes [0xff]]) := by
-  rw [Bytes.toBLT?_eq_toBLTS]; decide +kernel
-
-example : Bytes.toBLT? [0xc4, 0xc3, 0x82, 0x01, 0xaa] =
-    some (.list [.list [.bytes [0x01, 0xaa]]]) := by
-  rw [Bytes.toBLT?_eq_toBLTS]; decide +kernel
-
-example : (BLT.bytes (List.replicate 56 0)).toBytes = 0xb8 :: 0x38 :: List.replicate 56 0 := by
-  rw [BLT.toBytes_eq_toBytesS]; decide +kernel
-
 end Jaune

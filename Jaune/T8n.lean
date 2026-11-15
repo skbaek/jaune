@@ -32,6 +32,7 @@
 
 import Jaune.Transaction
 import Jaune.FixtureException
+import Jaune.Adapter.Io
 
 open Jaune
 
