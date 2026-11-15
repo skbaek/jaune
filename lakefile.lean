@@ -83,3 +83,12 @@ lean_exe «jaune-consensus-kzg-vectors» where
 /-- Timing probe for the consensus state transition. Not a default target. -/
 lean_exe «jaune-consensus-transition-bench» where
   root := `ConsensusTransitionBench
+
+/-- jsn-s6d experiment (disposable branch `wsl/jsn-s6d`, never lands): word theorems over
+`B256` and over `BitVec 256`, and a runtime comparison. Not a default target. -/
+lean_lib «Experiments» where
+  globs := #[.submodules `Experiments]
+
+/-- jsn-s6d runtime comparison of the two word representations. Not a default target. -/
+lean_exe «s6d-bench» where
+  root := `Experiments.S6d.Bench
