@@ -245,6 +245,25 @@ with the same executable inputs.
 | `scripts/check-mainnet.sh --lane amsterdam --dir for_amsterdam/amsterdam/<subtree> --suite amsterdam` | one `eip*` subtree of the release corpus, all-PASS, count-checked against the manifest | manifest-selected subtree | 0.2 s – 110 s (`eip8037_*` is the slow one) |
 | `scripts/check-mainnet.sh --suite transitions` | fork-transition validity | 16 files / 115 cases | Historical: 18.0 s on the 2026-09-21 corpus; not a v21 measurement |
 
+### Naming-tool development checks
+
+These checks cover the migration tooling; they do not certify a repository-wide
+rename or replace the destination axiom audit.
+
+| command | proves | cost and admission |
+|---|---|---|
+| `python3 scripts/check-naming-map.py` | map schema, one-to-one names, nonempty naming sources and retired-token rule | light; sub-second |
+| `python3 -B -m unittest discover -s scripts/tests -p test_naming_apply.py` | conservative planning, unresolved-use reports, shared fields, UTF-16 positions, changed source/map/index and tampered-plan refusals, no writes on preflight refusal | light; 14 controls, sub-second on WSL (2026-11-15) |
+| owned build of `jaune-naming-references`, then `python3 scripts/check-naming-tool.py [--output FRESH_DIRECTORY]` | real compiler references drive the shared-field rename; both versions elaborate with guards and simp proofs; independent refusal controls bite; inverse application restores byte-identical source | one synthetic file elaborated twice; ~3.3 s on WSL (2026-11-15); Lean admission required, no build inside the gate |
+
+The exporter is an optional tooling target, not part of the production import
+closure. It fails on import or elaboration errors before emitting a bundle.
+The Python gate needs the current built exporter and current imports and takes
+no host hold itself. Its scratch tree is fresh; `--output` must not exist.
+The ordinary unit suite remains lock-free and does not run this elaborating
+check. Usage, limits and the explicit selected-file scope are in
+[`docs/NAMING.md`](../docs/NAMING.md#4-compiler-resolved-apply-tooling).
+
 ### Medium — before a commit or push candidate
 
 The standalone tracer also has a cheap native gate, `python3 scripts/check-trace.py`

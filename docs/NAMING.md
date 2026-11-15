@@ -109,3 +109,50 @@ Validation invariants enforced by `scripts/check-naming-map.py`:
    and no duplicate `new` names.
 4. No `new` identifier segment introduces a token from `retired_tokens` (exact
    camelCase/snake_case token match).
+
+## 4. Compiler-resolved apply tooling
+
+Build the optional `jaune-naming-references` target with the host's owned-build
+launcher. It is a metaprogram, outside the specification import closure. With
+the selected source's imports current, export its references:
+
+```sh
+lake env .lake/build/bin/jaune-naming-references Jaune/Machine.lean Jaune.Machine .lake/naming/Machine.references.json
+python3 scripts/apply-naming-map.py plan --tree . --map scripts/naming-map.json --file Jaune/Machine.lean .lake/naming/Machine.references.json > plan.json
+python3 scripts/apply-naming-map.py apply --tree . --map scripts/naming-map.json --plan plan.json
+```
+
+The export elaborates one file and needs the host's Lean resource admission;
+it never builds imports. Keep the import-build receipt with the export. The
+bundle contains the exact elaborated source and compiler references, including
+locals (the ordinary `.ilean` deliberately omits them). A source mismatch is a
+refusal. Planning and applying are light Python operations.
+
+Repeat `--file SOURCE REFERENCES_JSON` for every selected source in the tree.
+The report states that explicit scope: it is not evidence for unselected
+files. The tool resolves shared field names by declaration identity. It keeps
+UTF-16 source positions, qualified references, local variables and other
+structures' fields distinct. It reports every affected token it cannot resolve,
+including tactic labels or namespace syntax absent from the compiler index.
+Any unresolved token prevents application; exit 1 means an unresolved plan,
+exit 2 a setup/input refusal. No spelling-based global replacement is used.
+Namespace-depth changes and module relocation are currently refused and need
+separate tooling before the full migration. Every renamed descendant needs its
+own map row; a parent rename never silently skips a qualified descendant.
+
+Before applying, the tool rechecks all selected source and bundle digests, the
+map digest, and the entire recomputed edit plan. It validates all files before
+writing the first. Filesystem I/O failures can still interrupt a multi-file
+write, as in an editor: retain the plan and a Git checkpoint. A successful
+application still requires elaboration and the N4 fidelity check; it is not a
+type/value or attribute-preservation verdict.
+
+`python3 scripts/check-naming-tool.py` exercises a synthetic shared-field
+fixture end to end: compiler export, six transaction-field edits with four
+message-field references preserved, elaboration of both versions (including
+record literals, updates, projections, guards and `simp` proofs), independent
+tampered-plan and stale-source refusals, and an inverse rename restoring exact
+bytes. `--output FRESH_DIRECTORY` retains the raw compiler outputs, reference
+bundles, maps and plan. This is a tool control, not the goal's real Jaune pilot
+or the N4 fidelity checker. The focused Python controls are in
+`scripts/tests/test_naming_apply.py`.

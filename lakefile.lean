@@ -83,3 +83,14 @@ lean_exe «jaune-consensus-kzg-vectors» where
 /-- Timing probe for the consensus state transition. Not a default target. -/
 lean_exe «jaune-consensus-transition-bench» where
   root := `ConsensusTransitionBench
+
+/-- Compiler reference export for checked migrations; not a default target. -/
+lean_exe «jaune-naming-references» where
+  srcDir := "scripts"
+  root := `NamingReferences
+  supportInterpreter := true
+
+/-- Synthetic compiler-driven naming controls; outside production imports. -/
+lean_lib «NamingToolTests» where
+  srcDir := "scripts/tests/naming"
+  roots := #[`Pilot]
