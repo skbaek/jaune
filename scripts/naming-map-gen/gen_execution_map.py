@@ -218,7 +218,10 @@ def derive(c, fam):
             if c['kind'] == 'thm' and i == n - 1:
                 parts = []
                 for part in seg.split('_'):
-                    if part in T.GAS_LEAVES:
+                    if part in T.PART_RENAMES:
+                        parts.append(T.PART_RENAMES[part])
+                        applied.append((part, (T.PART_RENAMES[part], '5', f'follows the predicate rename (`{part}`)', 'M')))
+                    elif part in T.GAS_LEAVES:
                         parts.append(T.GAS_LEAVES[part])
                         applied.append((part, (T.GAS_LEAVES[part], '1, 7', f'follows `{part}` -> `Gas.{T.GAS_LEAVES[part]}`', 'B')))
                     else:
@@ -331,8 +334,18 @@ def main(argv=None):
     if args.out:
         out = [{k: v for k, v in e.items() if not k.startswith('_')} for e in entries]
         base = json.load(open(args.out))
-        base['entries'] = out
-        json.dump(base, open(args.out, 'w'), indent=2, ensure_ascii=False)
+        kept = [e for e in base['entries'] if e.get('layer') == 'consensus']
+        # Keep the order of rows already in the map (consensus first); new rows go last.
+        mine = {(e['old'], e['layer']): e for e in out}
+        ordered = []
+        for e in base['entries']:
+            key = (e['old'], e['layer'])
+            if e.get('layer') == 'consensus':
+                ordered.append(e)
+            elif key in mine:
+                ordered.append(mine.pop(key))
+        base['entries'] = ordered + list(mine.values())
+        json.dump(base, open(args.out, 'w'), indent=2)
         open(args.out, 'a').write('\n')
 
 

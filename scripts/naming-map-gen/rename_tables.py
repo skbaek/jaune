@@ -40,8 +40,11 @@ TOKENS = {
     'B32s': ('UInt32s', '5', 'whole word: a list of 32-bit words', 'M'),
     'B4L': ('Nibbles', '5', 'whole word: a list of 4-bit nibbles', 'M'),
     'B4': ('Nibble', '5', 'whole word: a 4-bit value', 'M'),
-    'Opts': ('Options', '5', 'whole word', 'M'),
-    'Req': ('Request', '5', 'whole word', 'M'),
+    'Opts': ('Options', '5', 'whole word: command-line options', 'M'),
+    'Req': ('Required', '5', 'whole word: `natReq` reads a required natural field (audit: not `Request`)', 'M'),
+    'bexp': ('exp', '1', 'EVM opcode EXP: word exponentiation modulo 2^256', 'M'),
+    'mulr': ('mulRounded', '5', '`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)', 'M'),
+    'smin': ('signedMin', '5', 'the minimum two\'s-complement value, 0x80...0', 'M'),
     'Val': ('Value', '5', 'whole word', 'M'),
     # curve standards' vocabulary (Appendix A, curves row): Fp, Fp2, G1, G2
     'BNF': ('Bn254Fp', '1', 'EIP-196/197 alt_bn128 base field F_p; curve-standard `Fp`', 'M'),
@@ -49,13 +52,13 @@ TOKENS = {
     'BNF12': ('Bn254Fp12', '1', 'EIP-197 F_p^12; curve-standard `Fp12`', 'M'),
     'BNP': ('Bn254G1', '1', 'EIP-197 `G_1`', 'M'),
     'BNP2': ('Bn254G2', '1', 'EIP-197 `G_2`', 'M'),
-    'BNP12': ('Bn254Fp12Point', '4', 'a point of the curve over F_p^12 (pairing intermediate)', 'M'),
+    'BNP12': ('Bn254Fp12Pair', '4', 'an (x, y) pair over F_p^12; it is both the twisted curve point and `linefunc`\'s (numerator, denominator) result, so a name true of both uses (review B4)', 'M'),
     'BLSF': ('Bls12Fp', '1', 'EIP-2537 BLS12-381 base field; curve-standard `Fp`', 'M'),
     'BLSF2': ('Bls12Fp2', '1', 'EIP-2537; curve-standard `Fp2`', 'M'),
     'BLSF12': ('Bls12Fp12', '1', 'curve-standard `Fp12`', 'M'),
     'BLSP': ('Bls12G1', '1', 'EIP-2537 `G1`', 'M'),
     'BLSP2': ('Bls12G2', '1', 'EIP-2537 `G2`', 'M'),
-    'BLSP12': ('Bls12Fp12Point', '4', 'a point of the curve over F_p^12 (pairing intermediate)', 'M'),
+    'BLSP12': ('Bls12Fp12Pair', '4', 'an (x, y) pair over F_p^12; also `blsLinefunc`\'s (numerator, denominator) result (review B4)', 'M'),
     'BLSJ2': ('Bls12G2Jacobian', '4', 'a G2 point in Jacobian coordinates', 'M'),
 }
 
@@ -82,9 +85,6 @@ MODULE_TOKENS = {
     'Jaune.T8n': {
         'Bal': ('BlockAccessList', '4, 6', 'EIP-7928; `bal` is retired (rule 6)', 'M'),
         'bal': ('blockAccessList', '4, 6', 'EIP-7928; `bal` is retired (rule 6)', 'M'),
-    },
-    'Jaune.RIPEMD160Spec': {
-        'Msg': ('Message', '5', 'whole word (RIPEMD-160 test messages)', 'M'),
     },
 }
 MODULE_LOWER_HEAD = {}
@@ -167,6 +167,14 @@ for old, new, eip in [('zero', 'legacy', 'Legacy transaction'), ('one', 'eip2930
              f'{_EIP_API} schema title "{eip}"', 'B', 'constructor')
 explicit('BlockOutput.bal', 'BlockOutput.blockAccessListBuilder', '4, 6', 'EIP-7928 block access list; `bal` is retired (rule 6); the field holds the `BalBuilder` (the sibling field `blockAccessList` holds the built list), so it takes the builder name', 'M', 'field of a reshaped record (`BlockOutput`, W2); only the leaf changes')
 explicit('natBLT', 'natRlpItem', '1', 'follows `BLT` -> `Rlp.Item`', 'M')
+explicit('RIPEMD160.Spec.mMsg', 'RIPEMD160.Spec.mMessageDigest', '5', 'the RIPEMD-160 paper\'s test message "message digest" (audit: not a bare `Message`)', 'M')
+explicit('RIPEMD160.Spec.dMsg', 'RIPEMD160.Spec.dMessageDigest', '5', 'the digest of the test message "message digest"', 'M')
+explicit('B256.Nof', 'U256.AddNoOverflow', '5', 'predicate: the sum of two words stays below 2^256 (review S2); Prop-valued defs are UpperCamelCase', 'M')
+explicit('B256.Nofm', 'U256.MulNoOverflow', '5', 'predicate: the product of two words stays below 2^256 (review S2)', 'M')
+explicit('B256.Slt', 'U256.SignedLt', '1', 'EVM SLT: two\'s-complement less-than (review S2); Prop-valued defs are UpperCamelCase', 'M')
+explicit('B256.Sgt', 'U256.SignedGt', '1', 'EVM SGT: two\'s-complement greater-than (review S2)', 'M')
+explicit('instDecidableSlt', 'instDecidableSignedLt', '7', 'auto name Lean derives from `Decidable (U256.SignedLt ..)`', 'M')
+explicit('instDecidableSgt', 'instDecidableSignedGt', '7', 'auto name Lean derives from `Decidable (U256.SignedGt ..)`', 'M')
 explicit('Acct.withBal', 'Account.withBalance', '1', 'follows `Acct.bal` -> `Account.balance` (execution-apis AccountProof `balance`)', 'B')
 explicit('Tx.isTypeThree', 'Transaction.isEip4844', '1, 7', f'{_EIP_API} schema title "EIP-4844 transaction"', 'M',
          'follows the constructor rename `TxType.three` -> `eip4844`')
@@ -241,15 +249,24 @@ explicit('Dead', 'State.isDead', '1, 7', 'EIP-161 (dead account: nonexistent or 
          'depth change (new namespace member)')
 explicit('instDecidableDead', 'instDecidableIsDead', '7', 'auto name Lean derives from `Decidable (State.isDead w a)`', 'M', 'authored instance; the name is Lean-generated')
 explicit('Acct.Empty', 'Account.isEmpty', '1, 7', 'EIP-161 (empty account)', 'B')
-explicit('initCodeCost', 'Gas.initcodeCost', '1, 7', 'EIP-3860 `initcode_cost`', 'M', 'depth change (new namespace member)')
+explicit('initCodeCost', 'initcodeCost', '1', 'EIP-3860 `initcode_cost(initcode)`: a function of the initcode, so it stays out of the `Gas` constants (review B7); `gasInitCodeWordCost` is the constant `INITCODE_WORD_COST`', 'M')
 
 # -- fork rules (Appendix B, decision-listed) -----------------------------------------
-for old, new, why in [('txr', 'txRules', 'rule 4'), ('sys', 'systemCalls', 'rule 4'), ('settle', 'settlement', 'rule 4'),
-                      ('op', 'opcodes', 'rule 4'), ('pow', 'proofOfWork', 'rules 4 and 6: `pow` also means power'),
-                      ('bal', 'blockAccessList', 'rules 4 and 6: `bal` no longer means two things')]:
-    explicit('ForkRules.' + old, 'ForkRules.' + new, '4, 6', f'Appendix B ForkRules fields ({why}); EIP-7928 for the block access list', 'B')
-explicit('ForkRules.balValid', 'ForkRules.blockAccessListValid', '4, 6', 'follows `ForkRules.bal` -> `blockAccessList`', 'M')
+# Each field is named for the record it holds (review B9: one real source per row).
+for old, new, rule, src in [
+    ('txr', 'transactionRules', '4', 'holds a `TxRules` (now `TransactionRules`: max type, calldata floor, warm coinbase; EIP-1559/2930/4844/7623 transaction-format rules); `tx` already names the `TransactionLimits` field, and `txRules` read as a limit (review S5; Appendix B proposed `txRules`)'),
+    ('sys', 'systemCalls', '4', 'holds a `SystemCallRules`: which system calls run (EIP-4788 beacon roots, EIP-2935 history storage; `SYSTEM_ADDRESS`)'),
+    ('settle', 'settlement', '4', 'holds a `SettlementRules`: refund quotient (EIP-3529), selfdestruct (EIP-6780), touched-account sweep (EIP-161)'),
+    ('op', 'opcodes', '4', 'holds an `OpcodeRules`: which opcodes exist at the fork (EIP-145 shifts, EIP-1153, EIP-3855 PUSH0, EIP-5656 MCOPY, ...)'),
+    ('pow', 'proofOfWork', '4, 6', 'holds a `PowRules`: block reward and difficulty-bomb delay (EIP-649/1234/2384; ends at Paris, EIP-3675); `pow` also means power (rule 6)'),
+    ('bal', 'blockAccessListRules', '4, 6', 'holds a `BalRules` (now `BlockAccessListRules`: item cost, EIP-7928); `bal` also meant balance (rule 6); the `Rules` suffix keeps the field from reading as a block access list payload (review S5; Appendix B proposed `blockAccessList`)'),
+]:
+    explicit('ForkRules.' + old, 'ForkRules.' + new, rule, src, 'M' if old in ('txr', 'bal') else 'B')
+explicit('ForkRules.balValid', 'ForkRules.blockAccessListRulesValid', '4, 6', 'follows `ForkRules.bal` -> `blockAccessListRules`', 'M')
+explicit('ForkRules.Valid.bal', 'ForkRules.Valid.blockAccessListRules', '4, 6', 'follows `ForkRules.bal` -> `blockAccessListRules`', 'M')
+explicit('ForkRules.Valid.bal_iff_header', 'ForkRules.Valid.blockAccessListRules_iff_header', '4, 6', 'follows `ForkRules.bal` -> `blockAccessListRules`', 'M')
 explicit('ForkRules.isPrecomp', 'ForkRules.isPrecompile', '1', 'Appendix B `isPrecomp` -> `isPrecompile`', 'B')
+explicit('instDecidableBalValid', 'instDecidableBlockAccessListRulesValid', '7', 'auto name Lean derives from `Decidable (ForkRules.blockAccessListRulesValid ..)`', 'M')
 explicit('instDecidableIsPrecomp', 'instDecidableIsPrecompile', '1, 7', 'follows `ForkRules.isPrecomp` -> `isPrecompile`', 'B')
 explicit('ForkRules.postBalDefect?', 'ForkRules.postBlockAccessListDefect?', '4, 6', 'follows `ForkRules.bal` -> `blockAccessList`', 'M')
 
@@ -287,8 +304,8 @@ _GAS = [
     ('gasColdSload', 'coldSloadCost', '1', 'EIP-2929 `COLD_SLOAD_COST` (verified)'),
     ('gasColdAccountAccess', 'coldAccountAccessCost', '1', 'EIP-2929 `COLD_ACCOUNT_ACCESS_COST` (verified)'),
     ('gasWarmAccess', 'warmStorageReadCost', '1', 'EIP-2929 `WARM_STORAGE_READ_COST` (verified)'),
-    ('gasStorageSet', 'sstoreSetGas', '1', 'EIP-2929 `SSTORE_SET_GAS` (verified)'),
-    ('gasStorageUpdate', 'sstoreResetGas', '1', 'EIP-2929 `SSTORE_RESET_GAS` (verified; 5000)'),
+    ('gasStorageSet', 'sstoreSetGas', '1', 'EIP-2200 `SSTORE_SET_GAS` = 20000, unchanged by EIP-2929 (verified in both texts)'),
+    ('gasStorageUpdate', 'sreset', '1', 'Yellow Paper G_sreset = 5000; EIP-2200 `SSTORE_RESET_GAS` = 5000. EIP-2929 redefines `SSTORE_RESET_GAS` as 5000 - COLD_SLOAD_COST = 2900, which is how Jaune charges it (`sreset - coldSloadCost`), so the EIP name is not used for this gross value (review B1)'),
     ('gasInitCodeWordCost', 'initcodeWordCost', '1', 'EIP-3860 `INITCODE_WORD_COST` (verified)'),
     ('standardCallDataTokenCost', 'standardTokenCost', '1', 'EIP-7623 `STANDARD_TOKEN_COST` (verified)'),
     ('floorCalldataCost', 'totalCostFloorPerToken', '1', 'EIP-7623 `TOTAL_COST_FLOOR_PER_TOKEN` (verified)'),
@@ -299,8 +316,8 @@ _GAS = [
     ('gasPerBlob', 'perBlob', '1', 'EIP-4844 `GAS_PER_BLOB` (verified)'),
     ('gHashopcode', 'hashOpcodeGas', '1', 'EIP-4844 `HASH_OPCODE_GAS` (verified; the BLOBHASH cost)'),
     ('gasEcrecover', 'ecrecover', '1', _YP + ' (ECRECOVER precompile cost 3000)'),
-    ('gasP256Verify', 'p256Verify', '3', 'EIP-7951 P256VERIFY precompile cost; no EIP constant name'),
-    ('gasBlake2PerRound', 'blake2PerRound', '1', 'EIP-152 BLAKE2 F precompile: one gas per round'),
+    ('gasP256Verify', 'p256Verify', '3', 'EIP-7951: P256VERIFY costs 6900 gas (verified); the EIP names no constant'),
+    ('gasBlake2PerRound', 'gfround', '1', 'EIP-152 `GFROUND` = 1 gas per round (verified)'),
 ]
 GAS_LEAVES = {}
 for old, new, rule, src in _GAS:
@@ -313,7 +330,7 @@ RELOCATE = {
     'calculateIntrinsicCost': 'Transaction.intrinsicGas',
     'getLast256BlockHashes': 'BlockChain.recentBlockHashes',
     'Dead': 'State.isDead',
-    'initCodeCost': 'Gas.initcodeCost',
+    'initCodeCost': 'initcodeCost',
 }
 
 # Parts spelled by an EIP verbatim keep their tokens (rule 1 beats rule 5 when the
@@ -341,3 +358,16 @@ BAL_PATTERNS = [
 ]
 BAL_SOURCE = ('EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), '
               '`AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)')
+
+# Raw-name rows (declarations outside the `Jaune` namespace, in `Main.lean`).
+def explicit_raw(old, new, rule, source, status, notes=''):
+    EXPLICIT[old] = (new, rule, source, status, notes)
+
+
+for old, new, why in [('net', 'network', 'the `--network` selection'), ('testIdx', 'testIndex', 'the `--test-idx`-style case index'),
+                      ('incls', 'includes', 'the include filters (`--name`)'), ('excls', 'excludes', 'the exclude filters')]:
+    explicit_raw('FixtureOpts.' + old, 'FixtureOptions.' + new, '5', f'whole word: {why} (review S1)', 'M', 'field')
+
+# Snake-case parts of theorem names built from renamed predicates.
+PART_RENAMES = {'nof': 'add_no_overflow', 'nofm': 'mul_no_overflow'}
+EXPLICIT_LEAVES = {old.split('.')[-1] for old in EXPLICIT}

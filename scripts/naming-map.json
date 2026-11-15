@@ -13519,15 +13519,16 @@
       "kind": "declaration",
       "layer": "adapter",
       "rule": "5, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word) [M]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word: command-line options) [M]"
     },
     {
       "old": "FixtureOpts.excls",
-      "new": "FixtureOptions.excls",
+      "new": "FixtureOptions.excludes",
       "kind": "field",
       "layer": "adapter",
-      "rule": "5, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word) [M]"
+      "rule": "5",
+      "source": "whole word: the exclude filters (review S1) [M]",
+      "notes": "field"
     },
     {
       "old": "FixtureOpts.identityClosure",
@@ -13535,23 +13536,25 @@
       "kind": "field",
       "layer": "adapter",
       "rule": "5, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word) [M]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word: command-line options) [M]"
     },
     {
       "old": "FixtureOpts.incls",
-      "new": "FixtureOptions.incls",
+      "new": "FixtureOptions.includes",
       "kind": "field",
       "layer": "adapter",
-      "rule": "5, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word) [M]"
+      "rule": "5",
+      "source": "whole word: the include filters (`--name`) (review S1) [M]",
+      "notes": "field"
     },
     {
       "old": "FixtureOpts.net",
-      "new": "FixtureOptions.net",
+      "new": "FixtureOptions.network",
       "kind": "field",
       "layer": "adapter",
-      "rule": "5, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word) [M]"
+      "rule": "5",
+      "source": "whole word: the `--network` selection (review S1) [M]",
+      "notes": "field"
     },
     {
       "old": "FixtureOpts.paths",
@@ -13559,15 +13562,16 @@
       "kind": "field",
       "layer": "adapter",
       "rule": "5, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word) [M]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word: command-line options) [M]"
     },
     {
       "old": "FixtureOpts.testIdx",
-      "new": "FixtureOptions.testIdx",
+      "new": "FixtureOptions.testIndex",
       "kind": "field",
       "layer": "adapter",
-      "rule": "5, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word) [M]"
+      "rule": "5",
+      "source": "whole word: the `--test-idx`-style case index (review S1) [M]",
+      "notes": "field"
     },
     {
       "old": "Hex.toIoQuantityB256",
@@ -14243,11 +14247,11 @@
     },
     {
       "old": "Jaune.B128.smin",
-      "new": "Jaune.U128.smin",
+      "new": "Jaune.U128.signedMin",
       "kind": "declaration",
       "layer": "execution",
-      "rule": "3, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B128` -> `U128` (one-to-one with `B256`->`U256`; alloy `U128`) [B]"
+      "rule": "3, 5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B128` -> `U128` (one-to-one with `B256`->`U256`; alloy `U128`) [B]; `smin` -> `signedMin` (the minimum two's-complement value, 0x80...0) [M]"
     },
     {
       "old": "Jaune.B128.sub",
@@ -14459,19 +14463,19 @@
     },
     {
       "old": "Jaune.B256.Nof",
-      "new": "Jaune.U256.Nof",
+      "new": "Jaune.U256.AddNoOverflow",
       "kind": "declaration",
       "layer": "execution",
-      "rule": "3, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]"
+      "rule": "5",
+      "source": "predicate: the sum of two words stays below 2^256 (review S2); Prop-valued defs are UpperCamelCase [M]"
     },
     {
       "old": "Jaune.B256.Nofm",
-      "new": "Jaune.U256.Nofm",
+      "new": "Jaune.U256.MulNoOverflow",
       "kind": "declaration",
       "layer": "execution",
-      "rule": "3, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]"
+      "rule": "5",
+      "source": "predicate: the product of two words stays below 2^256 (review S2) [M]"
     },
     {
       "old": "Jaune.B256.RPowGuards",
@@ -14491,19 +14495,19 @@
     },
     {
       "old": "Jaune.B256.Sgt",
-      "new": "Jaune.U256.Sgt",
+      "new": "Jaune.U256.SignedGt",
       "kind": "declaration",
       "layer": "execution",
-      "rule": "3, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]"
+      "rule": "1",
+      "source": "EVM SGT: two's-complement greater-than (review S2) [M]"
     },
     {
       "old": "Jaune.B256.Slt",
-      "new": "Jaune.U256.Slt",
+      "new": "Jaune.U256.SignedLt",
       "kind": "declaration",
       "layer": "execution",
-      "rule": "3, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]"
+      "rule": "1",
+      "source": "EVM SLT: two's-complement less-than (review S2); Prop-valued defs are UpperCamelCase [M]"
     },
     {
       "old": "Jaune.B256.abs",
@@ -14539,11 +14543,11 @@
     },
     {
       "old": "Jaune.B256.add_lt_iff_not_nof",
-      "new": "Jaune.U256.add_lt_iff_not_nof",
+      "new": "Jaune.U256.add_lt_iff_not_add_no_overflow",
       "kind": "declaration",
       "layer": "execution",
-      "rule": "3, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]"
+      "rule": "3, 5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]; `nof` -> `add_no_overflow` (follows the predicate rename (`nof`)) [M]"
     },
     {
       "old": "Jaune.B256.add_lt_iff_overflow",
@@ -14587,27 +14591,27 @@
     },
     {
       "old": "Jaune.B256.bexp",
-      "new": "Jaune.U256.bexp",
+      "new": "Jaune.U256.exp",
       "kind": "declaration",
       "layer": "execution",
-      "rule": "3, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]"
+      "rule": "1, 3, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]; `bexp` -> `exp` (EVM opcode EXP: word exponentiation modulo 2^256) [M]"
     },
     {
       "old": "Jaune.B256.bexp_eq",
-      "new": "Jaune.U256.bexp_eq",
+      "new": "Jaune.U256.exp_eq",
       "kind": "declaration",
       "layer": "execution",
-      "rule": "3, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]"
+      "rule": "1, 3, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]; `bexp` -> `exp` (EVM opcode EXP: word exponentiation modulo 2^256) [M]"
     },
     {
       "old": "Jaune.B256.bexp_zero",
-      "new": "Jaune.U256.bexp_zero",
+      "new": "Jaune.U256.exp_zero",
       "kind": "declaration",
       "layer": "execution",
-      "rule": "3, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]"
+      "rule": "1, 3, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]; `bexp` -> `exp` (EVM opcode EXP: word exponentiation modulo 2^256) [M]"
     },
     {
       "old": "Jaune.B256.bytecount",
@@ -14987,11 +14991,11 @@
     },
     {
       "old": "Jaune.B256.mul_div_eq_iff_nofm",
-      "new": "Jaune.U256.mul_div_eq_iff_nofm",
+      "new": "Jaune.U256.mul_div_eq_iff_mul_no_overflow",
       "kind": "declaration",
       "layer": "execution",
-      "rule": "3, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]"
+      "rule": "3, 5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]; `nofm` -> `mul_no_overflow` (follows the predicate rename (`nofm`)) [M]"
     },
     {
       "old": "Jaune.B256.mulmod",
@@ -15003,11 +15007,11 @@
     },
     {
       "old": "Jaune.B256.mulr",
-      "new": "Jaune.U256.mulr",
+      "new": "Jaune.U256.mulRounded",
       "kind": "declaration",
       "layer": "execution",
-      "rule": "3, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]"
+      "rule": "3, 5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]; `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
     },
     {
       "old": "Jaune.B256.neg",
@@ -15027,11 +15031,11 @@
     },
     {
       "old": "Jaune.B256.nofm_iff_le_div",
-      "new": "Jaune.U256.nofm_iff_le_div",
+      "new": "Jaune.U256.mul_no_overflow_iff_le_div",
       "kind": "declaration",
       "layer": "execution",
-      "rule": "3, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]"
+      "rule": "3, 5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]; `nofm` -> `mul_no_overflow` (follows the predicate rename (`nofm`)) [M]"
     },
     {
       "old": "Jaune.B256.not_le",
@@ -15147,11 +15151,11 @@
     },
     {
       "old": "Jaune.B256.smin",
-      "new": "Jaune.U256.smin",
+      "new": "Jaune.U256.signedMin",
       "kind": "declaration",
       "layer": "execution",
-      "rule": "3, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]"
+      "rule": "3, 5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]; `smin` -> `signedMin` (the minimum two's-complement value, 0x80...0) [M]"
     },
     {
       "old": "Jaune.B256.smod",
@@ -15267,11 +15271,11 @@
     },
     {
       "old": "Jaune.B256.toNat_add_eq_of_nof",
-      "new": "Jaune.U256.toNat_add_eq_of_nof",
+      "new": "Jaune.U256.toNat_add_eq_of_add_no_overflow",
       "kind": "declaration",
       "layer": "execution",
-      "rule": "3, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]"
+      "rule": "3, 5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]; `nof` -> `add_no_overflow` (follows the predicate rename (`nof`)) [M]"
     },
     {
       "old": "Jaune.B256.toNat_add_toB256_of_lt",
@@ -15347,19 +15351,19 @@
     },
     {
       "old": "Jaune.B256.toNat_mul_div_of_nofm",
-      "new": "Jaune.U256.toNat_mul_div_of_nofm",
+      "new": "Jaune.U256.toNat_mul_div_of_mul_no_overflow",
       "kind": "declaration",
       "layer": "execution",
-      "rule": "3, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]"
+      "rule": "3, 5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]; `nofm` -> `mul_no_overflow` (follows the predicate rename (`nofm`)) [M]"
     },
     {
       "old": "Jaune.B256.toNat_mul_eq_of_nofm",
-      "new": "Jaune.U256.toNat_mul_eq_of_nofm",
+      "new": "Jaune.U256.toNat_mul_eq_of_mul_no_overflow",
       "kind": "declaration",
       "layer": "execution",
-      "rule": "3, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]"
+      "rule": "3, 5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]; `nofm` -> `mul_no_overflow` (follows the predicate rename (`nofm`)) [M]"
     },
     {
       "old": "Jaune.B256.toNat_mul_mod",
@@ -15379,11 +15383,11 @@
     },
     {
       "old": "Jaune.B256.toNat_mulr",
-      "new": "Jaune.U256.toNat_mulr",
+      "new": "Jaune.U256.toNat_mulRounded",
       "kind": "declaration",
       "layer": "execution",
-      "rule": "3, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]"
+      "rule": "3, 5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]; `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
     },
     {
       "old": "Jaune.B256.toNat_ne_zero",
@@ -15627,11 +15631,11 @@
     },
     {
       "old": "Jaune.BLSP.toBLSP12",
-      "new": "Jaune.Bls12G1.toBls12Fp12Point",
+      "new": "Jaune.Bls12G1.toBls12Fp12Pair",
       "kind": "declaration",
       "layer": "execution",
       "rule": "1, 4, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BLSP` -> `Bls12G1` (EIP-2537 `G1`) [M]; `BLSP12` -> `Bls12Fp12Point` (a point of the curve over F_p^12 (pairing intermediate)) [M]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BLSP` -> `Bls12G1` (EIP-2537 `G1`) [M]; `BLSP12` -> `Bls12Fp12Pair` (an (x, y) pair over F_p^12; also `blsLinefunc`'s (numerator, denominator) result (review B4)) [M]"
     },
     {
       "old": "Jaune.BLSP.toBytes",
@@ -15643,11 +15647,11 @@
     },
     {
       "old": "Jaune.BLSP12",
-      "new": "Jaune.Bls12Fp12Point",
+      "new": "Jaune.Bls12Fp12Pair",
       "kind": "declaration",
       "layer": "execution",
       "rule": "4, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BLSP12` -> `Bls12Fp12Point` (a point of the curve over F_p^12 (pairing intermediate)) [M]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BLSP12` -> `Bls12Fp12Pair` (an (x, y) pair over F_p^12; also `blsLinefunc`'s (numerator, denominator) result (review B4)) [M]"
     },
     {
       "old": "Jaune.BLSP2",
@@ -16021,11 +16025,11 @@
     },
     {
       "old": "Jaune.BNP.toBNP12",
-      "new": "Jaune.Bn254G1.toBn254Fp12Point",
+      "new": "Jaune.Bn254G1.toBn254Fp12Pair",
       "kind": "declaration",
       "layer": "execution",
       "rule": "1, 4, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BNP` -> `Bn254G1` (EIP-197 `G_1`) [M]; `BNP12` -> `Bn254Fp12Point` (a point of the curve over F_p^12 (pairing intermediate)) [M]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BNP` -> `Bn254G1` (EIP-197 `G_1`) [M]; `BNP12` -> `Bn254Fp12Pair` (an (x, y) pair over F_p^12; it is both the twisted curve point and `linefunc`'s (numerator, denominator) result, so a name true of both uses (review B4)) [M]"
     },
     {
       "old": "Jaune.BNP.toBytes",
@@ -16037,11 +16041,11 @@
     },
     {
       "old": "Jaune.BNP12",
-      "new": "Jaune.Bn254Fp12Point",
+      "new": "Jaune.Bn254Fp12Pair",
       "kind": "declaration",
       "layer": "execution",
       "rule": "4, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BNP12` -> `Bn254Fp12Point` (a point of the curve over F_p^12 (pairing intermediate)) [M]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `BNP12` -> `Bn254Fp12Pair` (an (x, y) pair over F_p^12; it is both the twisted curve point and `linefunc`'s (numerator, denominator) result, so a name true of both uses (review B4)) [M]"
     },
     {
       "old": "Jaune.BNP2",
@@ -16935,35 +16939,35 @@
     },
     {
       "old": "Jaune.ForkRules.Valid.bal",
-      "new": "Jaune.ForkRules.Valid.blockAccessList",
+      "new": "Jaune.ForkRules.Valid.blockAccessListRules",
       "kind": "declaration",
       "layer": "execution",
-      "rule": "4, 6, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `bal` -> `blockAccessList` (EIP-7928; `bal` no longer means two things (rule 6)) [B]"
+      "rule": "4, 6",
+      "source": "follows `ForkRules.bal` -> `blockAccessListRules` [M]"
     },
     {
       "old": "Jaune.ForkRules.Valid.bal_iff_header",
-      "new": "Jaune.ForkRules.Valid.blockAccessList_iff_header",
+      "new": "Jaune.ForkRules.Valid.blockAccessListRules_iff_header",
       "kind": "declaration",
       "layer": "execution",
-      "rule": "4, 6, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `bal` -> `blockAccessList` (EIP-7928; `bal` no longer means two things (rule 6)) [B]"
+      "rule": "4, 6",
+      "source": "follows `ForkRules.bal` -> `blockAccessListRules` [M]"
     },
     {
       "old": "Jaune.ForkRules.bal",
-      "new": "Jaune.ForkRules.blockAccessList",
+      "new": "Jaune.ForkRules.blockAccessListRules",
       "kind": "field",
       "layer": "execution",
       "rule": "4, 6",
-      "source": "Appendix B ForkRules fields (rules 4 and 6: `bal` no longer means two things); EIP-7928 for the block access list [B]"
+      "source": "holds a `BalRules` (now `BlockAccessListRules`: item cost, EIP-7928); `bal` also meant balance (rule 6); the `Rules` suffix keeps the field from reading as a block access list payload (review S5; Appendix B proposed `blockAccessList`) [M]"
     },
     {
       "old": "Jaune.ForkRules.balValid",
-      "new": "Jaune.ForkRules.blockAccessListValid",
+      "new": "Jaune.ForkRules.blockAccessListRulesValid",
       "kind": "declaration",
       "layer": "execution",
       "rule": "4, 6",
-      "source": "follows `ForkRules.bal` -> `blockAccessList` [M]"
+      "source": "follows `ForkRules.bal` -> `blockAccessListRules` [M]"
     },
     {
       "old": "Jaune.ForkRules.isPrecomp",
@@ -16978,8 +16982,8 @@
       "new": "Jaune.ForkRules.opcodes",
       "kind": "field",
       "layer": "execution",
-      "rule": "4, 6",
-      "source": "Appendix B ForkRules fields (rule 4); EIP-7928 for the block access list [B]"
+      "rule": "4",
+      "source": "holds an `OpcodeRules`: which opcodes exist at the fork (EIP-145 shifts, EIP-1153, EIP-3855 PUSH0, EIP-5656 MCOPY, ...) [B]"
     },
     {
       "old": "Jaune.ForkRules.postBalDefect?",
@@ -17003,31 +17007,31 @@
       "kind": "field",
       "layer": "execution",
       "rule": "4, 6",
-      "source": "Appendix B ForkRules fields (rules 4 and 6: `pow` also means power); EIP-7928 for the block access list [B]"
+      "source": "holds a `PowRules`: block reward and difficulty-bomb delay (EIP-649/1234/2384; ends at Paris, EIP-3675); `pow` also means power (rule 6) [B]"
     },
     {
       "old": "Jaune.ForkRules.settle",
       "new": "Jaune.ForkRules.settlement",
       "kind": "field",
       "layer": "execution",
-      "rule": "4, 6",
-      "source": "Appendix B ForkRules fields (rule 4); EIP-7928 for the block access list [B]"
+      "rule": "4",
+      "source": "holds a `SettlementRules`: refund quotient (EIP-3529), selfdestruct (EIP-6780), touched-account sweep (EIP-161) [B]"
     },
     {
       "old": "Jaune.ForkRules.sys",
       "new": "Jaune.ForkRules.systemCalls",
       "kind": "field",
       "layer": "execution",
-      "rule": "4, 6",
-      "source": "Appendix B ForkRules fields (rule 4); EIP-7928 for the block access list [B]"
+      "rule": "4",
+      "source": "holds a `SystemCallRules`: which system calls run (EIP-4788 beacon roots, EIP-2935 history storage; `SYSTEM_ADDRESS`) [B]"
     },
     {
       "old": "Jaune.ForkRules.txr",
-      "new": "Jaune.ForkRules.txRules",
+      "new": "Jaune.ForkRules.transactionRules",
       "kind": "field",
       "layer": "execution",
-      "rule": "4, 6",
-      "source": "Appendix B ForkRules fields (rule 4); EIP-7928 for the block access list [B]"
+      "rule": "4",
+      "source": "holds a `TxRules` (now `TransactionRules`: max type, calldata floor, warm coinbase; EIP-1559/2930/4844/7623 transaction-format rules); `tx` already names the `TransactionLimits` field, and `txRules` read as a limit (review S5; Appendix B proposed `txRules`) [M]"
     },
     {
       "old": "Jaune.GasSchedule.gasWarmAccess_le_access_cost",
@@ -18113,21 +18117,19 @@
     },
     {
       "old": "Jaune.RIPEMD160.Spec.dMsg",
-      "new": "Jaune.RIPEMD160.Spec.dMessage",
+      "new": "Jaune.RIPEMD160.Spec.dMessageDigest",
       "kind": "declaration",
       "layer": "execution",
-      "rule": "5, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Msg` -> `Message` (whole word (RIPEMD-160 test messages)) [M]",
-      "notes": "private declaration"
+      "rule": "5",
+      "source": "the digest of the test message \"message digest\" [M]"
     },
     {
       "old": "Jaune.RIPEMD160.Spec.mMsg",
-      "new": "Jaune.RIPEMD160.Spec.mMessage",
+      "new": "Jaune.RIPEMD160.Spec.mMessageDigest",
       "kind": "declaration",
       "layer": "execution",
-      "rule": "5, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Msg` -> `Message` (whole word (RIPEMD-160 test messages)) [M]",
-      "notes": "private declaration"
+      "rule": "5",
+      "source": "the RIPEMD-160 paper's test message \"message digest\" (audit: not a bare `Message`) [M]"
     },
     {
       "old": "Jaune.Receipt.bloom",
@@ -19121,7 +19123,7 @@
       "kind": "declaration",
       "layer": "adapter",
       "rule": "5, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word) [M]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word: command-line options) [M]"
     },
     {
       "old": "Jaune.T8n.Opts.chainId",
@@ -19129,7 +19131,7 @@
       "kind": "field",
       "layer": "adapter",
       "rule": "5, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word) [M]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word: command-line options) [M]"
     },
     {
       "old": "Jaune.T8n.Opts.forkLabel",
@@ -19137,7 +19139,7 @@
       "kind": "field",
       "layer": "adapter",
       "rule": "5, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word) [M]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word: command-line options) [M]"
     },
     {
       "old": "Jaune.T8n.Opts.forks",
@@ -19145,7 +19147,7 @@
       "kind": "field",
       "layer": "adapter",
       "rule": "5, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word) [M]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word: command-line options) [M]"
     },
     {
       "old": "Jaune.T8n.Opts.info",
@@ -19153,7 +19155,7 @@
       "kind": "field",
       "layer": "adapter",
       "rule": "5, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word) [M]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word: command-line options) [M]"
     },
     {
       "old": "Jaune.T8n.Opts.inputAlloc",
@@ -19161,7 +19163,7 @@
       "kind": "field",
       "layer": "adapter",
       "rule": "5, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word) [M]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word: command-line options) [M]"
     },
     {
       "old": "Jaune.T8n.Opts.inputEnv",
@@ -19169,7 +19171,7 @@
       "kind": "field",
       "layer": "adapter",
       "rule": "5, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word) [M]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word: command-line options) [M]"
     },
     {
       "old": "Jaune.T8n.Opts.inputTxs",
@@ -19177,7 +19179,7 @@
       "kind": "field",
       "layer": "adapter",
       "rule": "1, 5, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word) [M]; `Txs` -> `Transactions` (execution-apis block.yaml `transactions`) [B]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word: command-line options) [M]; `Txs` -> `Transactions` (execution-apis block.yaml `transactions`) [B]"
     },
     {
       "old": "Jaune.T8n.Opts.outputAlloc",
@@ -19185,7 +19187,7 @@
       "kind": "field",
       "layer": "adapter",
       "rule": "5, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word) [M]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word: command-line options) [M]"
     },
     {
       "old": "Jaune.T8n.Opts.outputBasedir",
@@ -19193,7 +19195,7 @@
       "kind": "field",
       "layer": "adapter",
       "rule": "5, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word) [M]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word: command-line options) [M]"
     },
     {
       "old": "Jaune.T8n.Opts.outputBody",
@@ -19201,7 +19203,7 @@
       "kind": "field",
       "layer": "adapter",
       "rule": "5, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word) [M]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word: command-line options) [M]"
     },
     {
       "old": "Jaune.T8n.Opts.outputResult",
@@ -19209,7 +19211,7 @@
       "kind": "field",
       "layer": "adapter",
       "rule": "5, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word) [M]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word: command-line options) [M]"
     },
     {
       "old": "Jaune.T8n.Opts.reward",
@@ -19217,7 +19219,7 @@
       "kind": "field",
       "layer": "adapter",
       "rule": "5, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word) [M]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word: command-line options) [M]"
     },
     {
       "old": "Jaune.T8n.Opts.stateTest",
@@ -19225,7 +19227,7 @@
       "kind": "field",
       "layer": "adapter",
       "rule": "5, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word) [M]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word: command-line options) [M]"
     },
     {
       "old": "Jaune.T8n.TxParse",
@@ -19564,11 +19566,11 @@
     },
     {
       "old": "Jaune.T8n.natReq",
-      "new": "Jaune.T8n.natRequest",
+      "new": "Jaune.T8n.natRequired",
       "kind": "declaration",
       "layer": "adapter",
       "rule": "5, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Req` -> `Request` (whole word) [M]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Req` -> `Required` (whole word: `natReq` reads a required natural field (audit: not `Request`)) [M]"
     },
     {
       "old": "Jaune.T8n.parseOpts",
@@ -19576,7 +19578,7 @@
       "kind": "declaration",
       "layer": "adapter",
       "rule": "5, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word) [M]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word: command-line options) [M]"
     },
     {
       "old": "Jaune.T8n.readAdr",
@@ -20983,11 +20985,11 @@
     },
     {
       "old": "Jaune.gasBlake2PerRound",
-      "new": "Jaune.Gas.blake2PerRound",
+      "new": "Jaune.Gas.gfround",
       "kind": "declaration",
       "layer": "execution",
       "rule": "1",
-      "source": "EIP-152 BLAKE2 F precompile: one gas per round [B]",
+      "source": "EIP-152 `GFROUND` = 1 gas per round (verified) [B]",
       "notes": "depth change (new `Gas` namespace member)"
     },
     {
@@ -21077,7 +21079,7 @@
       "kind": "declaration",
       "layer": "execution",
       "rule": "3",
-      "source": "EIP-7951 P256VERIFY precompile cost; no EIP constant name [M]",
+      "source": "EIP-7951: P256VERIFY costs 6900 gas (verified); the EIP names no constant [M]",
       "notes": "depth change (new `Gas` namespace member)"
     },
     {
@@ -21121,16 +21123,16 @@
       "kind": "declaration",
       "layer": "execution",
       "rule": "1",
-      "source": "EIP-2929 `SSTORE_SET_GAS` (verified) [B]",
+      "source": "EIP-2200 `SSTORE_SET_GAS` = 20000, unchanged by EIP-2929 (verified in both texts) [B]",
       "notes": "depth change (new `Gas` namespace member)"
     },
     {
       "old": "Jaune.gasStorageUpdate",
-      "new": "Jaune.Gas.sstoreResetGas",
+      "new": "Jaune.Gas.sreset",
       "kind": "declaration",
       "layer": "execution",
       "rule": "1",
-      "source": "EIP-2929 `SSTORE_RESET_GAS` (verified; 5000) [B]",
+      "source": "Yellow Paper G_sreset = 5000; EIP-2200 `SSTORE_RESET_GAS` = 5000. EIP-2929 redefines `SSTORE_RESET_GAS` as 5000 - COLD_SLOAD_COST = 2900, which is how Jaune charges it (`sreset - coldSloadCost`), so the EIP name is not used for this gross value (review B1) [B]",
       "notes": "depth change (new `Gas` namespace member)"
     },
     {
@@ -21214,12 +21216,11 @@
     },
     {
       "old": "Jaune.initCodeCost",
-      "new": "Jaune.Gas.initcodeCost",
+      "new": "Jaune.initcodeCost",
       "kind": "declaration",
       "layer": "execution",
-      "rule": "1, 7",
-      "source": "EIP-3860 `initcode_cost` [M]",
-      "notes": "depth change (new namespace member)"
+      "rule": "1",
+      "source": "EIP-3860 `initcode_cost(initcode)`: a function of the initcode, so it stays out of the `Gas` constants (review B7); `gasInitCodeWordCost` is the constant `INITCODE_WORD_COST` [M]"
     },
     {
       "old": "Jaune.instComplementB128",
@@ -21239,11 +21240,11 @@
     },
     {
       "old": "Jaune.instDecidableBalValid",
-      "new": "Jaune.instDecidableBlockAccessListValid",
+      "new": "Jaune.instDecidableBlockAccessListRulesValid",
       "kind": "declaration",
       "layer": "execution",
-      "rule": "4, 6, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `instDecidableBalValid` -> `instDecidableBlockAccessListValid` (EIP-7928 block access list; EELS `BlockAccessListBuilder` (`BalBuilder`), `AccountData` (`BalAccount`), `AccountChanges` (`BalAccountChanges`); `bal` is retired (rule 6: it also meant balance)) [M]"
+      "rule": "7",
+      "source": "auto name Lean derives from `Decidable (ForkRules.blockAccessListRulesValid ..)` [M]"
     },
     {
       "old": "Jaune.instDecidableDead",
@@ -22214,7 +22215,7 @@
       "kind": "declaration",
       "layer": "adapter",
       "rule": "5, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word) [M]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Opts` -> `Options` (whole word: command-line options) [M]"
     },
     {
       "old": "processFakeExpVector",
@@ -22231,6 +22232,238 @@
       "layer": "adapter",
       "rule": "1, 7",
       "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `FakeExp` -> `FakeExponential` (EIP-4844 `fake_exponential`) [B]"
+    },
+    {
+      "old": "Jaune.instDecidableSlt",
+      "new": "Jaune.instDecidableSignedLt",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "7",
+      "source": "auto name Lean derives from `Decidable (U256.SignedLt ..)` [M]"
+    },
+    {
+      "old": "Jaune.instDecidableSgt",
+      "new": "Jaune.instDecidableSignedGt",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "7",
+      "source": "auto name Lean derives from `Decidable (U256.SignedGt ..)` [M]"
+    },
+    {
+      "old": "Jaune.UInt64.smin",
+      "new": "Jaune.UInt64.signedMin",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `smin` -> `signedMin` (the minimum two's-complement value, 0x80...0) [M]"
+    },
+    {
+      "old": "Jaune.mulr",
+      "new": "Jaune.mulRounded",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
+    },
+    {
+      "old": "Jaune.mulrResidue",
+      "new": "Jaune.mulRoundedResidue",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
+    },
+    {
+      "old": "Jaune.mulr_eq",
+      "new": "Jaune.mulRounded_eq",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
+    },
+    {
+      "old": "Jaune.mulrResidue_lt",
+      "new": "Jaune.mulRoundedResidue_lt",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
+    },
+    {
+      "old": "Jaune.mulr_decomposition",
+      "new": "Jaune.mulRounded_decomposition",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
+    },
+    {
+      "old": "Jaune.mulr_scaled_le",
+      "new": "Jaune.mulRounded_scaled_le",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
+    },
+    {
+      "old": "Jaune.mulr_scaled_lt_add_scale",
+      "new": "Jaune.mulRounded_scaled_lt_add_scale",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
+    },
+    {
+      "old": "Jaune.mulr_scaled_lower",
+      "new": "Jaune.mulRounded_scaled_lower",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
+    },
+    {
+      "old": "Jaune.div_le_mulr",
+      "new": "Jaune.div_le_mulRounded",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
+    },
+    {
+      "old": "Jaune.mulr_le_ceilDiv",
+      "new": "Jaune.mulRounded_le_ceilDiv",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
+    },
+    {
+      "old": "Jaune.mulr_le_mulr_right",
+      "new": "Jaune.mulRounded_le_mulRounded_right",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
+    },
+    {
+      "old": "Jaune.mulr_le_mulr_left",
+      "new": "Jaune.mulRounded_le_mulRounded_left",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
+    },
+    {
+      "old": "Jaune.mulr_le_mulr_offset",
+      "new": "Jaune.mulRounded_le_mulRounded_offset",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
+    },
+    {
+      "old": "Jaune.mulr_half_up_upper",
+      "new": "Jaune.mulRounded_half_up_upper",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
+    },
+    {
+      "old": "Jaune.mulr_half_up_lower",
+      "new": "Jaune.mulRounded_half_up_lower",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
+    },
+    {
+      "old": "Jaune.mulrChain",
+      "new": "Jaune.mulRoundedChain",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
+    },
+    {
+      "old": "Jaune.mulrChainResidue",
+      "new": "Jaune.mulRoundedChainResidue",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
+    },
+    {
+      "old": "Jaune.mulrChainOffset",
+      "new": "Jaune.mulRoundedChainOffset",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
+    },
+    {
+      "old": "Jaune.mulrChain_telescope",
+      "new": "Jaune.mulRoundedChain_telescope",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
+    },
+    {
+      "old": "Jaune.mulrChain_scaled_upper",
+      "new": "Jaune.mulRoundedChain_scaled_upper",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
+    },
+    {
+      "old": "Jaune.mulrChain_scaled_lower",
+      "new": "Jaune.mulRoundedChain_scaled_lower",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
+    },
+    {
+      "old": "Jaune.mulrChain_floor_le",
+      "new": "Jaune.mulRoundedChain_floor_le",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
+    },
+    {
+      "old": "Jaune.mulrChain_half_up_upper",
+      "new": "Jaune.mulRoundedChain_half_up_upper",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
+    },
+    {
+      "old": "Jaune.mulrChain_half_up_lower",
+      "new": "Jaune.mulRoundedChain_half_up_lower",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
+    },
+    {
+      "old": "Jaune.rpowLoop_eq_mulrChain",
+      "new": "Jaune.rpowLoop_eq_mulRoundedChain",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
+    },
+    {
+      "old": "Jaune.scale_le_mulr",
+      "new": "Jaune.scale_le_mulRounded",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "5, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
     }
   ]
 }
