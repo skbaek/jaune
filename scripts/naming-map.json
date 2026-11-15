@@ -1799,57 +1799,57 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.FinSlot",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.FinalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.FinalizedCheckpointAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: FinSlot>FinalizedSlot, Inv>Invariant"
+      "notes": "parts: FinSlot>FinalizedCheckpointAndSlotKept, Inv>Invariant"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.FinSlot.finEp",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.FinalizedSlot.finalizedEpoch",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.FinalizedCheckpointAndSlotKept.finalizedEpoch",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: FinSlot>FinalizedSlot, Inv>Invariant, finEp>finalizedEpoch"
+      "notes": "parts: FinSlot>FinalizedCheckpointAndSlotKept, Inv>Invariant, finEp>finalizedEpoch"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.FinSlot.fna",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.FinalizedSlot.finalizedNotAhead",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.FinalizedCheckpointAndSlotKept.finalizedNotAhead",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: FinSlot>FinalizedSlot, Inv>Invariant, fna>finalizedNotAhead"
+      "notes": "parts: FinSlot>FinalizedCheckpointAndSlotKept, Inv>Invariant, fna>finalizedNotAhead"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.FinSlotF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.FinalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.FinalizedCheckpointAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: FinSlotF>FinalizedSlotForkIndexed, Inv>Invariant"
+      "notes": "parts: FinSlotF>FinalizedCheckpointAndSlotKeptForkIndexed, Inv>Invariant"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.FinSlotF.finEp",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.FinalizedSlotForkIndexed.finalizedEpoch",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.FinalizedCheckpointAndSlotKeptForkIndexed.finalizedEpoch",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: FinSlotF>FinalizedSlotForkIndexed, Inv>Invariant, finEp>finalizedEpoch"
+      "notes": "parts: FinSlotF>FinalizedCheckpointAndSlotKeptForkIndexed, Inv>Invariant, finEp>finalizedEpoch"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.FinSlotF.fna",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.FinalizedSlotForkIndexed.finalizedNotAhead",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.FinalizedCheckpointAndSlotKeptForkIndexed.finalizedNotAhead",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: FinSlotF>FinalizedSlotForkIndexed, Inv>Invariant, fna>finalizedNotAhead"
+      "notes": "parts: FinSlotF>FinalizedCheckpointAndSlotKeptForkIndexed, Inv>Invariant, fna>finalizedNotAhead"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.FinalizedNotAhead",
@@ -2150,12 +2150,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.addBuilderToRegistry_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.addBuilderToRegistry_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.addBuilderToRegistry_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.addBuilderToRegistry_post",
@@ -2168,21 +2168,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.addValidatorToRegistry_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.addValidatorToRegistry_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.addValidatorToRegistry_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.addValidatorToRegistry_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.addValidatorToRegistry_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.addValidatorToRegistry_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.addValidatorToRegistry_invFrame",
@@ -2222,12 +2222,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.applyDeposit_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.applyDeposit_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.applyDeposit_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.applyParentPrefix_core",
@@ -2240,12 +2240,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.applyParentPrefix_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.applyParentPrefix_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.applyParentPrefix_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.applyParentPrefix_split",
@@ -2258,12 +2258,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.applyParentSuffix_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.applyParentSuffix_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.applyParentSuffix_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.applyParentSuffix_post",
@@ -2276,21 +2276,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.applyPendingDeposit_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.applyPendingDeposit_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.applyPendingDeposit_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.applyPendingDeposit_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.applyPendingDeposit_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.applyPendingDeposit_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.applyPendingDeposit_invFrame",
@@ -2312,21 +2312,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.applySignedBlock_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.applySignedBlock_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.applySignedBlock_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.applyWithdrawals_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.applyWithdrawals_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.applyWithdrawals_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.applyWithdrawals_qe",
@@ -2501,21 +2501,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.computeConsolidationEpochAndUpdateChurn_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.computeConsolidationEpochAndUpdateChurn_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.computeConsolidationEpochAndUpdateChurn_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.computeConsolidationEpochAndUpdateChurn_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.computeConsolidationEpochAndUpdateChurn_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.computeConsolidationEpochAndUpdateChurn_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.computeConsolidationEpochAndUpdateChurn_invFrame",
@@ -2537,21 +2537,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.computeExitEpochAndUpdateChurn_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.computeExitEpochAndUpdateChurn_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.computeExitEpochAndUpdateChurn_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.computeExitEpochAndUpdateChurn_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.computeExitEpochAndUpdateChurn_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.computeExitEpochAndUpdateChurn_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.computeExitEpochAndUpdateChurn_invFrame",
@@ -2627,21 +2627,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.decreaseBalance_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.decreaseBalance_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.decreaseBalance_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.decreaseBalance_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.decreaseBalance_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.decreaseBalance_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.decreaseBalance_invFrame",
@@ -2870,21 +2870,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.finSlot",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.finalizedCheckpointAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, finSlot>finalizedSlot"
+      "notes": "parts: Inv>Invariant, finSlot>finalizedCheckpointAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.finSlotF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.finalizedCheckpointAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, finSlotF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, finSlotF>finalizedCheckpointAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.finalizes_lt",
@@ -2906,12 +2906,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.foldlM_onboard_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.foldlM_onboard_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.foldlM_onboard_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.foldlM_pend",
@@ -3014,21 +3014,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.increaseBalance_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.increaseBalance_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.increaseBalance_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.increaseBalance_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.increaseBalance_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.increaseBalance_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.increaseBalance_invFrame",
@@ -3050,21 +3050,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.initiateValidatorExit_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.initiateValidatorExit_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.initiateValidatorExit_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.initiateValidatorExit_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.initiateValidatorExit_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.initiateValidatorExit_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.initiateValidatorExit_invFrame",
@@ -3221,12 +3221,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.onboardBuilderDeposit_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.onboardBuilderDeposit_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.onboardBuilderDeposit_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.onboardBuilderDeposit_post",
@@ -3239,12 +3239,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.onboardBuildersFromPendingDeposits_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.onboardBuildersFromPendingDeposits_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.onboardBuildersFromPendingDeposits_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.onboard_post",
@@ -3518,21 +3518,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processAttestation_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processAttestation_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processAttestation_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processAttestation_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processAttestation_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processAttestation_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processAttestation_ops",
@@ -3572,21 +3572,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processAttesterSlashing_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processAttesterSlashing_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processAttesterSlashing_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processAttesterSlashing_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processAttesterSlashing_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processAttesterSlashing_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processAttesterSlashing_ops",
@@ -3608,21 +3608,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processBlockHeader_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processBlockHeader_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processBlockHeader_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processBlockHeader_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processBlockHeader_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processBlockHeader_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processBlockHeader_lt",
@@ -3653,21 +3653,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processBlock_finSlot",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processBlock_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processBlock_finalizedCheckpointAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, finSlot>finalizedSlot"
+      "notes": "parts: Inv>Invariant, finSlot>finalizedCheckpointAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processBlock_finSlotF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processBlock_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processBlock_finalizedCheckpointAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, finSlotF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, finSlotF>finalizedCheckpointAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processBlock_finalizedNotAhead",
@@ -3788,21 +3788,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processBlsToExecutionChange_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processBlsToExecutionChange_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processBlsToExecutionChange_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processBlsToExecutionChange_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processBlsToExecutionChange_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processBlsToExecutionChange_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processBlsToExecutionChange_ops",
@@ -3824,21 +3824,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processBuilderDepositRequest_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processBuilderDepositRequest_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processBuilderDepositRequest_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processBuilderExitRequest_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processBuilderExitRequest_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processBuilderExitRequest_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processBuilderPendingPayments_core",
@@ -3851,12 +3851,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processBuilderPendingPayments_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processBuilderPendingPayments_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processBuilderPendingPayments_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processConsolidationRequest_core",
@@ -3869,21 +3869,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processConsolidationRequest_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processConsolidationRequest_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processConsolidationRequest_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processConsolidationRequest_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processConsolidationRequest_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processConsolidationRequest_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processConsolidationRequest_invFrame",
@@ -3896,39 +3896,39 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processDepositRequest_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processDepositRequest_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processDepositRequest_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processDeposit_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processDeposit_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processDeposit_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processEffectiveBalanceUpdates_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processEffectiveBalanceUpdates_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processEffectiveBalanceUpdates_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processEffectiveBalanceUpdates_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processEffectiveBalanceUpdates_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processEffectiveBalanceUpdates_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processEffectiveBalanceUpdates_invFrame",
@@ -3968,21 +3968,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processEth1DataReset_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processEth1DataReset_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processEth1DataReset_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processEth1DataReset_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processEth1DataReset_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processEth1DataReset_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processEth1DataReset_invFrame",
@@ -3995,21 +3995,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processEth1Data_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processEth1Data_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processEth1Data_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processEth1Data_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processEth1Data_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processEth1Data_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processEth1Data_invFrame",
@@ -4031,12 +4031,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processExecutionPayloadBid_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processExecutionPayloadBid_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processExecutionPayloadBid_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processExecutionPayloadBid_post",
@@ -4058,30 +4058,30 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processExecutionPayload_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processExecutionPayload_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processExecutionPayload_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processHistoricalSummariesUpdate_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processHistoricalSummariesUpdate_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processHistoricalSummariesUpdate_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processHistoricalSummariesUpdate_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processHistoricalSummariesUpdate_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processHistoricalSummariesUpdate_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processHistoricalSummariesUpdate_invFrame",
@@ -4094,21 +4094,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processInactivityUpdates_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processInactivityUpdates_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processInactivityUpdates_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processInactivityUpdates_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processInactivityUpdates_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processInactivityUpdates_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processInactivityUpdates_invFrame",
@@ -4157,21 +4157,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processOperations_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processOperations_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processOperations_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processOperations_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processOperations_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processOperations_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processOperations_ops",
@@ -4202,30 +4202,30 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processParentExecutionPayload_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processParentExecutionPayload_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processParentExecutionPayload_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processParticipationFlagUpdates_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processParticipationFlagUpdates_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processParticipationFlagUpdates_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processParticipationFlagUpdates_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processParticipationFlagUpdates_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processParticipationFlagUpdates_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processParticipationFlagUpdates_invFrame",
@@ -4247,12 +4247,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processPayloadAttestation_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processPayloadAttestation_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processPayloadAttestation_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processPayloadAttestation_ops",
@@ -4274,21 +4274,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processPendingConsolidations_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processPendingConsolidations_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processPendingConsolidations_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processPendingConsolidations_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processPendingConsolidations_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processPendingConsolidations_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processPendingConsolidations_invFrame",
@@ -4301,21 +4301,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processPendingDeposits_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processPendingDeposits_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processPendingDeposits_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processPendingDeposits_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processPendingDeposits_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processPendingDeposits_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processPendingDeposits_invFrame",
@@ -4328,21 +4328,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processProposerLookahead_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processProposerLookahead_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processProposerLookahead_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processProposerLookahead_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processProposerLookahead_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processProposerLookahead_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processProposerLookahead_invFrame",
@@ -4364,21 +4364,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processProposerSlashing_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processProposerSlashing_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processProposerSlashing_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processProposerSlashing_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processProposerSlashing_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processProposerSlashing_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processProposerSlashing_ops",
@@ -4400,12 +4400,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processPtcWindow_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processPtcWindow_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processPtcWindow_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processPtcWindow_invFrame",
@@ -4418,21 +4418,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processRandaoMixesReset_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processRandaoMixesReset_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processRandaoMixesReset_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processRandaoMixesReset_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processRandaoMixesReset_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processRandaoMixesReset_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processRandaoMixesReset_invFrame",
@@ -4445,21 +4445,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processRandao_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processRandao_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processRandao_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processRandao_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processRandao_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processRandao_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processRandao_invFrame",
@@ -4481,39 +4481,39 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processRegistryUpdatesDeneb_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processRegistryUpdatesDeneb_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processRegistryUpdatesDeneb_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processRegistryUpdatesElectra_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processRegistryUpdatesElectra_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processRegistryUpdatesElectra_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processRegistryUpdates_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processRegistryUpdates_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processRegistryUpdates_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processRegistryUpdates_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processRegistryUpdates_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processRegistryUpdates_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processRegistryUpdates_invFrame",
@@ -4526,21 +4526,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processRewardsAndPenalties_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processRewardsAndPenalties_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processRewardsAndPenalties_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processRewardsAndPenalties_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processRewardsAndPenalties_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processRewardsAndPenalties_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processRewardsAndPenalties_invFrame",
@@ -4553,21 +4553,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processSlashingsReset_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processSlashingsReset_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processSlashingsReset_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processSlashingsReset_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processSlashingsReset_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processSlashingsReset_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processSlashingsReset_invFrame",
@@ -4580,21 +4580,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processSlashings_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processSlashings_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processSlashings_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processSlashings_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processSlashings_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processSlashings_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processSlashings_invFrame",
@@ -4634,21 +4634,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processSlot_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processSlot_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processSlot_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processSlot_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processSlot_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processSlot_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processSlot_invFrame",
@@ -4769,21 +4769,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processSyncAggregate_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processSyncAggregate_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processSyncAggregate_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processSyncAggregate_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processSyncAggregate_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processSyncAggregate_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processSyncAggregate_invFrame",
@@ -4805,21 +4805,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processSyncCommitteeUpdates_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processSyncCommitteeUpdates_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processSyncCommitteeUpdates_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processSyncCommitteeUpdates_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processSyncCommitteeUpdates_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processSyncCommitteeUpdates_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processSyncCommitteeUpdates_invFrame",
@@ -4841,21 +4841,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processVoluntaryExit_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processVoluntaryExit_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processVoluntaryExit_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processVoluntaryExit_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processVoluntaryExit_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processVoluntaryExit_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processVoluntaryExit_ops",
@@ -4886,21 +4886,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processWithdrawalRequest_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processWithdrawalRequest_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processWithdrawalRequest_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processWithdrawalRequest_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processWithdrawalRequest_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processWithdrawalRequest_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processWithdrawalRequest_invFrame",
@@ -4922,21 +4922,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processWithdrawals_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processWithdrawals_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processWithdrawals_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processWithdrawals_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.processWithdrawals_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.processWithdrawals_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.processWithdrawals_inRange",
@@ -5030,21 +5030,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.queueExcessActiveBalance_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.queueExcessActiveBalance_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.queueExcessActiveBalance_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.queueExcessActiveBalance_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.queueExcessActiveBalance_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.queueExcessActiveBalance_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.queueExcessActiveBalance_invFrame",
@@ -5210,93 +5210,93 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.setConsolidationBalanceToConsume_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.setConsolidationBalanceToConsume_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.setConsolidationBalanceToConsume_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.setDepositBalanceToConsume_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.setDepositBalanceToConsume_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.setDepositBalanceToConsume_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.setDepositRequestsStartIndex_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.setDepositRequestsStartIndex_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.setDepositRequestsStartIndex_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.setEarliestConsolidationEpoch_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.setEarliestConsolidationEpoch_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.setEarliestConsolidationEpoch_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.setEarliestExitEpoch_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.setEarliestExitEpoch_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.setEarliestExitEpoch_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.setExitBalanceToConsume_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.setExitBalanceToConsume_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.setExitBalanceToConsume_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.setPendingConsolidations_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.setPendingConsolidations_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.setPendingConsolidations_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.setPendingDeposits_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.setPendingDeposits_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.setPendingDeposits_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.setPendingPartialWithdrawals_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.setPendingPartialWithdrawals_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.setPendingPartialWithdrawals_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.setProposerLookahead_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.setProposerLookahead_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.setProposerLookahead_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.settleBuilderPayment_core",
@@ -5309,12 +5309,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.settleBuilderPayment_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.settleBuilderPayment_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.settleBuilderPayment_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.settle_refs_pend",
@@ -5354,21 +5354,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.slashValidator_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.slashValidator_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.slashValidator_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.slashValidator_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.slashValidator_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.slashValidator_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.slashValidator_vlen",
@@ -5552,21 +5552,21 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.switchToCompoundingValidator_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.switchToCompoundingValidator_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.switchToCompoundingValidator_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.switchToCompoundingValidator_fsF",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.switchToCompoundingValidator_finalizedSlotForkIndexed",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.switchToCompoundingValidator_finalizedAndSlotKeptForkIndexed",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fsF>finalizedSlotForkIndexed"
+      "notes": "parts: Inv>Invariant, fsF>finalizedAndSlotKeptForkIndexed"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.switchToCompoundingValidator_invFrame",
@@ -5588,12 +5588,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.updateNextWithdrawalBuilderIndex_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.updateNextWithdrawalBuilderIndex_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.updateNextWithdrawalBuilderIndex_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.updateNextWithdrawalBuilderIndex_inRange",
@@ -5642,12 +5642,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.updateNextWithdrawalIndex_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.updateNextWithdrawalIndex_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.updateNextWithdrawalIndex_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.updateNextWithdrawalIndex_vlen",
@@ -5687,12 +5687,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.updateNextWithdrawalValidatorIndex_fs",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.updateNextWithdrawalValidatorIndex_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.updateNextWithdrawalValidatorIndex_finalizedAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, fs>finalizedSlot"
+      "notes": "parts: Inv>Invariant, fs>finalizedAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.updateNextWithdrawalValidatorIndex_vlen",
@@ -5723,12 +5723,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.upgradeToGloas_finSlot",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.upgradeToGloas_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.upgradeToGloas_finalizedCheckpointAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, finSlot>finalizedSlot"
+      "notes": "parts: Inv>Invariant, finSlot>finalizedCheckpointAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.upgradeToGloas_finalizedNotAhead",
@@ -5750,12 +5750,12 @@
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.upgradedState_finSlot",
-      "new": "JauneConsensus.Facts.Gloas.Invariant.upgradedState_finalizedSlot",
+      "new": "JauneConsensus.Facts.Gloas.Invariant.upgradedState_finalizedCheckpointAndSlotKept",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: Inv>Invariant, finSlot>finalizedSlot"
+      "notes": "parts: Inv>Invariant, finSlot>finalizedCheckpointAndSlotKept"
     },
     {
       "old": "JauneConsensus.Facts.Gloas.Inv.vLen",

@@ -86,7 +86,7 @@ EXPAND = {
     "gs": "minimal gloas state", "sm": "minimal gloas state", "pm": "minimal preset",
     "xr": "exit request", "wq": "withdrawal queue", "bq": "builders and queues equal", "qe": "queues equal",
     "cx": "coefficient x", "cy": "coefficient y",
-    "req": "request", "reqs": "requests", "fs": "finalized slot", "fe": "finalized epoch",
+    "req": "request", "reqs": "requests", "fs": "finalized and slot kept", "fe": "finalized epoch",
     "fna": "finalized not ahead", "s1": "selector1", "s2": "selector2", "s3": "selector3",
     "s4": "selector4", "cur": "current", "prev": "previous", "x04": "exited have no pending", "cmd": "command", "el": "element", "err": "error",
     "fn": "function", "hi": "high", "lo": "low", "jp2": "join point2", "jp3": "join point3",
@@ -136,8 +136,8 @@ PART_OVERRIDE = {
     "l8": "eightLeaves", "p": "parseToOption", "q": "quotedScalar", "sc": "plainScalar",
     "processSlot_eqF": "processSlot_eqForkIndexed",
     # joint / fork-indexed variants
-    "FinalizedNotAheadF": "FinalizedNotAheadForkIndexed", "FinSlotF": "FinalizedSlotForkIndexed",
-    "finSlotF": "finalizedSlotForkIndexed", "FinEpF": "FinalizedEpochForkIndexed",
+    "FinalizedNotAheadF": "FinalizedNotAheadForkIndexed", "FinSlotF": "FinalizedCheckpointAndSlotKeptForkIndexed",
+    "finSlotF": "finalizedCheckpointAndSlotKeptForkIndexed", "FinEpF": "FinalizedEpochForkIndexed",
     "finEpF": "finalizedEpochForkIndexed",
     "processSlotH": "processSlotAbstractedHashes", "processSlotHF": "processSlotAbstractedHashesForkIndexed",
     "getCurrentEpochF": "getCurrentEpochForkIndexed",
@@ -287,4 +287,10 @@ PART_OVERRIDE.update({
 })
 SEGMENT_OVERRIDE.update({
     "b256_toBytes_toB256": "bytes_toU256_toBytes",  # (Bytes.toB256 l).toBytes = l
+})
+
+# FinSlot: `s'.finalized_checkpoint = s.finalized_checkpoint ∧ s'.slot = s.slot`; the slot is the
+# state's, not part of the checkpoint record, so the true name keeps both.  `_fs` suffix: finalizedAndSlotKept.
+PART_OVERRIDE.update({
+    "FinSlot": "FinalizedCheckpointAndSlotKept", "finSlot": "finalizedCheckpointAndSlotKept",
 })
