@@ -404,8 +404,11 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
                     continue
         if const is None or not renamer.renames(const):
             if const is not None and universe is not None and const in universe.compiler_named:
-                last = split_name(const)[-1]
-                hit = next((w for w in candidates if w in last), None)
+                last = MAP.tokenize_identifier(split_name(const)[-1])
+                renamed_words = {t for w in candidates for t in [w] if MAP.tokenize_identifier(w)}
+                hit = next((w for w in renamed_words
+                            if any(last[i:i + len(MAP.tokenize_identifier(w))] == MAP.tokenize_identifier(w)
+                                   for i in range(len(last)))), None)
                 if hit:
                     problems.append({'start': start, 'end': end, 'reason':
                         f'reference to compiler-named {const}, whose name Lean derives from '
