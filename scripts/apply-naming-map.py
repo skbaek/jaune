@@ -569,14 +569,31 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
             continue
         const = next(iter(found))
         add_cover(comps, ('const', const))
-        if renamer.renames(const) and renamer(const) != const:
-            try:
-                renamed = replacement(spelling, const, renamer(const), renamer)
-            except ValueError as error:
-                problems.append({'start': start, 'end': end, 'reason': str(error)})
+        target = renamer(const)
+        scope_ns, scope_opens = commands_q[i][2], commands_q[i][3]
+        new_ns = renamer.scope(scope_ns) if scope_ns != '[anonymous]' else scope_ns
+        after_lookup = universe.lookup('after', index_module, renamer)
+        try:
+            renamed = replacement(spelling, const, target, renamer) if target != const else spelling
+        except ValueError as error:
+            problems.append({'start': start, 'end': end, 'reason': str(error)})
+            continue
+        # Pre-resolution happens in the quoting scope after the rename too:
+        # the new spelling must not be captured (execution `U256` inside
+        # `namespace JauneConsensus`).
+        if resolve(after_lookup, renamed, new_ns, renamed_opens(scope_opens, renamer)) != {target}:
+            parts = split_name(target)
+            for k in range(len(split_name(renamed)) + 1, len(parts) + 1):
+                candidate = '.'.join(parts[-k:])
+                if resolve(after_lookup, candidate, new_ns, renamed_opens(scope_opens, renamer)) == {target}:
+                    renamed = candidate
+                    break
+            else:
+                problems.append({'start': start, 'end': end, 'reason':
+                                 f'name capture in quotation: {renamed!r} would not pre-resolve to {target}'})
                 continue
-            if renamed != spelling:
-                add_edit(start, end, spelling, renamed, const)
+        if renamed != spelling:
+            add_edit(start, end, spelling, renamed, const)
     reasons = []
     for a, b, reason in syntax_rows(index, 'unresolved_syntax', 3):
         reasons.append((*char_span(offsets, a, b, text), reason))

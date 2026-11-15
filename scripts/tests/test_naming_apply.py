@@ -413,6 +413,20 @@ class NamingApplyTests(unittest.TestCase):
         self.assertEqual(problems, [])
         self.assertEqual([e['new'] for e in edits], ['gasLimit := gas'])
 
+    def test_quotation_identifier_is_renamed_without_capture(self):
+        row = entry('J.B256', 'J.U256')
+        renamer = M.MAP.Renamer([row])
+        universe = M.Universe({'J.B256', 'C.U256'}, renamer)
+        text = 'namespace C\nopen J\nmacro "m" : term => `((0 : B256))\nend C\n'
+        index = index_for(text, [])
+        q = text.index('B256')
+        cmd = text.index('macro'), text.index('\nend C')
+        self.syntax(text, index, commands=[(*cmd, 'macro', 'C', [['simple', 'J', []]], [False] * 3)],
+                    quotation_identifiers=[(q, q + 4, 'B256')])
+        edits, problems = M.plan_file(text, index, [row], renamer, universe)
+        self.assertEqual(problems, [])
+        self.assertEqual([e['new'] for e in edits], ['J.U256'])
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
