@@ -52,7 +52,7 @@ def main():
                         m = re.match(r"    (\w+): ", line)
                         if m:
                             add(m.group(1), f"{rel}:{n}", "field")
-                            fields.setdefault(cur_class, set()).add(m.group(1))
+                            fields.setdefault(cur_class, {}).setdefault(m.group(1), f"{rel}:{n}")
                     m = re.match(r"([A-Z][A-Z0-9_]+) ?[:=]", line)
                     if m:
                         add(m.group(1), f"{rel}:{n}", "const")
@@ -66,7 +66,7 @@ def main():
                 m = re.match(r"([A-Za-z_][A-Za-z0-9_]*):", line)
                 if m:
                     add(m.group(1), f"{rel}:{n}", "config")
-    json.dump({"api": api, "fields": {k: sorted(v) for k, v in fields.items()}}, sys.stdout, indent=0, sort_keys=True)
+    json.dump({"api": api, "fields": fields}, sys.stdout, indent=0, sort_keys=True)
 
 
 main()

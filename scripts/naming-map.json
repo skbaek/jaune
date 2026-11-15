@@ -10529,12 +10529,12 @@
     },
     {
       "old": "JauneConsensus.GJointState.exec",
-      "new": "JauneConsensus.GloasJointState.exec",
+      "new": "JauneConsensus.GloasJointState.execution",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: GJointState>GloasJointState"
+      "notes": "parts: GJointState>GloasJointState, exec>execution"
     },
     {
       "old": "JauneConsensus.GJointState.gloas",
@@ -11104,13 +11104,40 @@
       "notes": "parts: DC>CollectionMonad"
     },
     {
-      "old": "JauneConsensus.Harness.DataCollection.Dict.del",
-      "new": "JauneConsensus.Harness.DataCollection.Dict.delete",
+      "old": "JauneConsensus.Harness.DataCollection.Dict",
+      "new": "JauneConsensus.Harness.DataCollection.Dictionary",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: del>delete"
+      "notes": "parts: Dict>Dictionary"
+    },
+    {
+      "old": "JauneConsensus.Harness.DataCollection.Dict.del",
+      "new": "JauneConsensus.Harness.DataCollection.Dictionary.delete",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: Dict>Dictionary, del>delete"
+    },
+    {
+      "old": "JauneConsensus.Harness.DataCollection.Dict.get?",
+      "new": "JauneConsensus.Harness.DataCollection.Dictionary.get?",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: Dict>Dictionary"
+    },
+    {
+      "old": "JauneConsensus.Harness.DataCollection.Dict.put",
+      "new": "JauneConsensus.Harness.DataCollection.Dictionary.put",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: Dict>Dictionary"
     },
     {
       "old": "JauneConsensus.Harness.DataCollection.Test.cfg",
@@ -11464,13 +11491,22 @@
       "notes": "parts: beaconSha>beaconSha256"
     },
     {
-      "old": "JauneConsensus.Harness.PairSpec.execSha",
-      "new": "JauneConsensus.Harness.PairSpec.execSha256",
+      "old": "JauneConsensus.Harness.PairSpec.execFile",
+      "new": "JauneConsensus.Harness.PairSpec.executionFile",
       "kind": "field",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: execSha>execSha256"
+      "notes": "parts: execFile>executionFile"
+    },
+    {
+      "old": "JauneConsensus.Harness.PairSpec.execSha",
+      "new": "JauneConsensus.Harness.PairSpec.executionSha256",
+      "kind": "field",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: execSha>executionSha256"
     },
     {
       "old": "JauneConsensus.Harness.RPError",
@@ -11609,12 +11645,12 @@
     },
     {
       "old": "JauneConsensus.Harness.Yaml.YVal.seq",
-      "new": "JauneConsensus.Harness.Yaml.YamlValue.seq",
+      "new": "JauneConsensus.Harness.Yaml.YamlValue.sequence",
       "kind": "constructor",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: YVal>YamlValue"
+      "notes": "parts: YVal>YamlValue, seq>sequence"
     },
     {
       "old": "JauneConsensus.Harness.Yaml.ch",
@@ -11642,6 +11678,15 @@
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
       "notes": "parts: isSpaceOrNl>isSpaceOrNewline"
+    },
+    {
+      "old": "JauneConsensus.Harness.Yaml.seqItems",
+      "new": "JauneConsensus.Harness.Yaml.sequenceItems",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: seqItems>sequenceItems"
     },
     {
       "old": "JauneConsensus.Harness.Yaml.singleQ",
@@ -11986,6 +12031,15 @@
       "notes": "parts: optStr>optionalString"
     },
     {
+      "old": "JauneConsensus.Harness.parseExecHashes",
+      "new": "JauneConsensus.Harness.parseExecutionHashes",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: parseExecHashes>parseExecutionHashes"
+    },
+    {
       "old": "JauneConsensus.Harness.parseGossipMeta",
       "new": "JauneConsensus.Harness.parseGossipMetadata",
       "kind": "declaration",
@@ -12119,6 +12173,15 @@
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
       "notes": "parts: dstK1>dstExpandMessageXmd"
+    },
+    {
+      "old": "JauneConsensus.JointState.exec",
+      "new": "JauneConsensus.JointState.execution",
+      "kind": "field",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: exec>execution"
     },
     {
       "old": "JauneConsensus.L",
@@ -12427,6 +12490,15 @@
       "notes": "parts: c64>uint64Constant"
     },
     {
+      "old": "JauneConsensus.clearCofactorG2Ref",
+      "new": "JauneConsensus.clearCofactorG2Reference",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: clearCofactorG2Ref>clearCofactorG2Reference"
+    },
+    {
       "old": "JauneConsensus.computeCellsAndKzgProofsM",
       "new": "JauneConsensus.computeCellsAndKzgProofsFallible",
       "kind": "declaration",
@@ -12452,6 +12524,42 @@
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
       "notes": "parts: indep>independent"
+    },
+    {
+      "old": "JauneConsensus.deserializeSeq",
+      "new": "JauneConsensus.deserializeSequence",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: deserializeSeq>deserializeSequence"
+    },
+    {
+      "old": "JauneConsensus.deserializeSeqFast",
+      "new": "JauneConsensus.deserializeSequenceFast",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: deserializeSeqFast>deserializeSequenceFast"
+    },
+    {
+      "old": "JauneConsensus.deserializeSeqFast_eq",
+      "new": "JauneConsensus.deserializeSequenceFast_eq",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: deserializeSeqFast>deserializeSequenceFast"
+    },
+    {
+      "old": "JauneConsensus.deserializeSeqWith",
+      "new": "JauneConsensus.deserializeSequenceWith",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: deserializeSeqWith>deserializeSequenceWith"
     },
     {
       "old": "JauneConsensus.engineVerdictG",
@@ -12491,21 +12599,21 @@
     },
     {
       "old": "JauneConsensus.f2Coeffs",
-      "new": "JauneConsensus.f2Coefficients",
+      "new": "JauneConsensus.fp2Coefficients",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: f2Coeffs>f2Coefficients"
+      "notes": "parts: f2Coeffs>fp2Coefficients"
     },
     {
       "old": "JauneConsensus.f2Frob",
-      "new": "JauneConsensus.f2Frobenius",
+      "new": "JauneConsensus.fp2Frobenius",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: f2Frob>f2Frobenius"
+      "notes": "parts: f2Frob>fp2Frobenius"
     },
     {
       "old": "JauneConsensus.fk20H",
@@ -12859,6 +12967,15 @@
       "notes": "parts: n64>u64Literal; private or repeated name declared in modules: Helpers, Shuffle"
     },
     {
+      "old": "JauneConsensus.pairingCheckRef",
+      "new": "JauneConsensus.pairingCheckReference",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: pairingCheckRef>pairingCheckReference"
+    },
+    {
       "old": "JauneConsensus.payloadHeaderG",
       "new": "JauneConsensus.payloadHeaderGloas",
       "kind": "declaration",
@@ -12947,6 +13064,51 @@
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
       "notes": "parts: rootsOfUnityExtendedBrp>rootsOfUnityExtendedBitReversal"
+    },
+    {
+      "old": "JauneConsensus.seqChunkCount",
+      "new": "JauneConsensus.sequenceChunkCount",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: seqChunkCount>sequenceChunkCount"
+    },
+    {
+      "old": "JauneConsensus.seqParts",
+      "new": "JauneConsensus.sequenceParts",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: seqParts>sequenceParts"
+    },
+    {
+      "old": "JauneConsensus.seqRootDepth",
+      "new": "JauneConsensus.sequenceRootDepth",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: seqRootDepth>sequenceRootDepth"
+    },
+    {
+      "old": "JauneConsensus.serializeSeq",
+      "new": "JauneConsensus.serializeSequence",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: serializeSeq>serializeSequence"
+    },
+    {
+      "old": "JauneConsensus.serializeSeq_eq",
+      "new": "JauneConsensus.serializeSequence_eq",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: serializeSeq>serializeSequence"
     },
     {
       "old": "JauneConsensus.shiftVals",
@@ -13148,12 +13310,12 @@
     },
     {
       "old": "YVal.asSeq",
-      "new": "YamlValue.asSeq",
+      "new": "YamlValue.asSequence",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: YVal>YamlValue"
+      "notes": "parts: YVal>YamlValue, asSeq>asSequence"
     },
     {
       "old": "YVal.expectKeys",
@@ -13217,6 +13379,15 @@
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
       "notes": "parts: YVal>YamlValue"
+    },
+    {
+      "old": "blockSeq",
+      "new": "blockSequence",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: blockSeq>blockSequence"
     },
     {
       "old": "p",

@@ -59,8 +59,8 @@ class Namer:
                 e = pe(last)
                 return f"{e['at']} ({last}, {pname} key)" if e else None
             cls = pe(pname)
-            if cls and "class" in cls["kinds"] and last in self.fields.get(pname, ()):
-                return f"{pe(last)['at']} ({pname}.{last}, field)"
+            if cls and "class" in cls["kinds"] and last in self.fields.get(pname, {}):
+                return f"{self.fields[pname][last]} ({last}, field of {pname})"
             return None
         if parent not in self.SPEC_NAMESPACES:
             return None
