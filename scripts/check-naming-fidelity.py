@@ -34,14 +34,28 @@ class Mismatch(ValueError):
     pass
 
 
+def merge_constants(existing, roots, incoming, incoming_roots):
+    """Union compiler-registered equation copies, never authored collisions."""
+    overlap = existing.keys() & incoming.keys()
+    for name in sorted(overlap):
+        origin = existing[name].get('equation_origin')
+        if (name in roots or name in incoming_roots or origin is None or
+                origin != incoming[name].get('equation_origin') or
+                existing[name] != incoming[name]):
+            raise ValueError(f'duplicate constants without identical generated-equation provenance: {name}')
+    existing.update(incoming)
+    return overlap
+
+
 def read_exports(paths):
     constants, roots, guards, attributes, modules, receipts = {}, set(), [], [], {}, []
     checks = []
+    coalesced = set()
     version = None
     for path in paths:
         raw = Path(path).read_bytes()
         data = json.loads(raw)
-        if data['schema_version'] not in (3, 4, 5) or data['index']['version'] != 5:
+        if data['schema_version'] not in (3, 4, 5, 6) or data['index']['version'] != 5:
             raise ValueError('unsupported fidelity/index schema')
         if version is not None and version != data['lean_version']:
             raise ValueError('mixed Lean versions')
@@ -50,10 +64,14 @@ def read_exports(paths):
         if module in modules:
             raise ValueError(f'duplicate module {module}')
         modules[module] = data['index']['directImports']
-        overlap = constants.keys() & data['constants'].keys()
-        if overlap:
-            raise ValueError(f'duplicate constants: {sorted(overlap)}')
-        constants.update(data['constants'])
+        for name, constant in data['constants'].items():
+            if data['schema_version'] >= 6:
+                origin = constant['equation_origin']
+                if origin is not None and not (isinstance(origin, list) and len(origin) == 2 and
+                                               origin[0] == 'name' and isinstance(origin[1], str) and origin[1]):
+                    raise ValueError(f'{name}: invalid equation provenance')
+            elif 'equation_origin' in constant:
+                raise ValueError('equation provenance requires schema 6')
         command_checks = data['checked_commands'] if data['schema_version'] >= 5 else []
         failure_scopes = [(row['start'], row['end']) for row in command_checks
                           if row['expected_failure_scope']]
@@ -85,6 +103,7 @@ def read_exports(paths):
         missing = names - data['constants'].keys()
         if missing:
             raise ValueError(f'{module}: authored definitions missing from kernel export: {sorted(missing)}')
+        coalesced |= merge_constants(constants, roots, data['constants'], names)
         roots.update(names)
 
         def syntax(value, literal_names=False):
@@ -111,7 +130,8 @@ def read_exports(paths):
     if not modules:
         raise ValueError('no exported modules')
     return dict(constants=constants, roots=roots, guards=guards, attributes=attributes,
-                modules=modules, receipts=receipts, version=version, checks=checks)
+                modules=modules, receipts=receipts, version=version, checks=checks,
+                coalesced_equations=sorted(coalesced))
 
 
 class Comparison:
@@ -223,7 +243,9 @@ def check(before, after, mapping):
     # Imports are reported, not silently treated as a proof about their contents.
     result = Comparison(before, after, renames).run()
     result.update(before=before['receipts'], after=after['receipts'],
-                  before_imports=before['modules'], after_imports=after['modules'])
+                  before_imports=before['modules'], after_imports=after['modules'],
+                  before_coalesced_equations=before.get('coalesced_equations', []),
+                  after_coalesced_equations=after.get('coalesced_equations', []))
     return result
 
 

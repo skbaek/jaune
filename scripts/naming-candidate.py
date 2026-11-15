@@ -145,16 +145,18 @@ def read_environments(paths, modules, selected):
     result = {}
     for root, members in environments(modules, selected).items():
         merged = dict(constants={}, roots=set(), guards=[], attributes=[],
-                      modules={}, receipts=[], checks=[], version=None)
+                      modules={}, receipts=[], checks=[], version=None, coalesced_equations=[])
         for member in members:
             data = bundles[member]
             if merged['version'] is not None and merged['version'] != data['version']:
                 raise ValueError('mixed Lean versions in capture environment')
             merged['version'] = data['version']
-            overlap = merged['constants'].keys() & data['constants'].keys()
-            if overlap:
-                raise ValueError(f'{root}: duplicate constants in one import environment: {sorted(overlap)}')
-            merged['constants'].update(data['constants'])
+            try:
+                overlap = FIDELITY.merge_constants(merged['constants'], merged['roots'],
+                                                   data['constants'], data['roots'])
+            except ValueError as error:
+                raise ValueError(f'{root}: duplicate constants in one import environment: {error}') from error
+            merged['coalesced_equations'] = sorted(set(merged['coalesced_equations']) | overlap)
             merged['roots'].update(data['roots'])
             merged['modules'].update(data['modules'])
             for field in ('guards', 'attributes', 'receipts', 'checks'):
@@ -278,7 +280,7 @@ def capture(args):
             target = out / (module + '.export.json')
             run(root, out, module + '-export', ['lake', 'env', str(exporter), path, module, str(target)])
             data = json.loads(target.read_bytes())
-            if (data['schema_version'] != 5 or data['imports'] != discovery[module]['imports'] or
+            if (data['schema_version'] != 6 or data['imports'] != discovery[module]['imports'] or
                 data['index']['module'] != module or
                 data['index']['directImports'] != discovery[module]['direct_imports'] or
                 data['lean_version'] != discovery[module]['lean_version'] or
@@ -338,7 +340,7 @@ def read_snapshot(path):
         if not export.resolve().is_relative_to(path.parent.resolve()) or file_sha(export) != record['sha256']:
             raise ValueError('export missing, outside snapshot, or digest changed')
         raw = json.loads(export.read_bytes())
-        if (raw['schema_version'] not in (4, 5) or raw['index']['module'] != module or
+        if (raw['schema_version'] not in (4, 5, 6) or raw['index']['module'] != module or
             sha(raw['source'].encode()) != candidate['modules'][module]['sha256'] or
             [entry[0] for entry in raw['index']['directImports']] != candidate['modules'][module]['imports']):
             raise ValueError('export source does not match candidate inventory')

@@ -294,9 +294,11 @@ unsafe def main (args : List String) : IO UInt32 := do
     let some info := kernel.find? c.name
       | throw <| IO.userError s!"constant absent from checked kernel environment: {c.name}"
     let data ← IO.ofExcept (constantJson info)
+    let equationOrigin := (Meta.eqnsExt.getState env).mapInv.find? info.name
     constants := (info.name.toString, Json.mkObj [
-      ("kernel", data), ("attributes", attributesJson env info.name)]) :: constants
-  let json := Json.mkObj [("schema_version", toJson (5 : Nat)),
+      ("kernel", data), ("attributes", attributesJson env info.name),
+      ("equation_origin", toJson (equationOrigin.map nameRef))]) :: constants
+  let json := Json.mkObj [("schema_version", toJson (6 : Nat)),
     ("lean_version", toJson Lean.versionString), ("imports", imports), ("source", toJson input),
     ("index", toJson index), ("constants", Json.mkObj constants),
     ("guards", toJson guards), ("attribute_syntax", toJson attrs), ("checked_commands", toJson checksJson)]

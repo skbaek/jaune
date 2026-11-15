@@ -338,7 +338,7 @@ Other hash commands (such as `#guard_expr`) are refused. The `#[...]` array
 notation is not a hash command.
 
 The low-level comparator's verdict remains `exported-modules`. It can compare
-archived schema-3 and schema-4 exports as well as schema 5, but neither a list
+archived schema-3, schema-4 and schema-5 exports as well as schema 6, but neither a list
 of bundles nor an import list alone binds a candidate. Schema 4 introduced
 records of the transitive
 imports actually loaded by the frontend, with the logical paths of each
@@ -399,7 +399,14 @@ Schema 2 captures remain readable as all-producer captures. Fidelity is checked
 separately for each maximal selected root and its transitive local imports.
 Independent executables can each define `main`; their kernel constants and
 checked commands are never pooled into one global namespace. A duplicate
-constant within a single import environment still refuses. Shared dependency
+authored constant within a single import environment still refuses. Schema 6
+adds each local equation theorem's parent from Lean's equation registry. Copies
+of a generated equation may coalesce only when neither is authored, both have
+the same recorded parent, and their complete kernel and attribute records are
+identical. Spelling or matching bytes without compiler provenance do not
+suffice; older exports retain the conservative refusal. The parent reference
+is itself compared under the map, and verdicts list the equations coalesced
+on each side. Conflicting copies still refuse. Shared dependency
 objects are parsed once and reused across environments. The verdict reports
 each environment rather than summing overlapping dependency counts. Moving a
 check between independent environments fails comparison. Environment-root or

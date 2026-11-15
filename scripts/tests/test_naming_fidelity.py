@@ -1,5 +1,8 @@
 import importlib.util
+import copy
+import json
 from pathlib import Path
+import tempfile
 import unittest
 
 ROOT = Path(__file__).parents[2]
@@ -35,6 +38,63 @@ class NamingFidelityTests(unittest.TestCase):
         self.before['guards'] = [ref('N.old')]
         self.after['guards'] = [ref('N.new')]
         self.assertEqual(self.run_check()['status'], 'OK')
+
+    def test_identical_registered_equations_coalesce(self):
+        equation = constant()
+        equation['equation_origin'] = ref('N.parent')
+        existing = {'N.parent.eq_1': equation}
+        self.assertEqual(CHECK.merge_constants(existing, set(), copy.deepcopy(existing), set()),
+                         {'N.parent.eq_1'})
+        self.assertEqual(len(existing), 1)
+
+    def test_equal_bytes_without_provenance_do_not_coalesce(self):
+        existing = {'N.parent.eq_1': constant()}
+        with self.assertRaisesRegex(ValueError, 'duplicate constants'):
+            CHECK.merge_constants(existing, set(), copy.deepcopy(existing), set())
+
+    def test_authored_or_changed_equation_copies_refuse(self):
+        equation = constant()
+        equation['equation_origin'] = ref('N.parent')
+        for authored_before, authored_after in [(True, False), (False, True)]:
+            with self.assertRaisesRegex(ValueError, 'duplicate constants'):
+                CHECK.merge_constants({'eq': copy.deepcopy(equation)}, {'eq'} if authored_before else set(),
+                                      {'eq': copy.deepcopy(equation)}, {'eq'} if authored_after else set())
+        for field, value in [('equation_origin', ref('Other.parent')), ('attributes', {'simp': True}),
+                             ('kernel', {'type': 'different'})]:
+            changed = copy.deepcopy(equation)
+            changed[field] = value
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'duplicate constants'):
+                CHECK.merge_constants({'eq': equation}, set(), {'eq': changed}, set())
+
+    def test_equation_parent_is_compared_under_map(self):
+        left, right = constant(), constant()
+        left['equation_origin'], right['equation_origin'] = ref('N.old'), ref('N.new')
+        self.before['constants']['N.old.eq_1'] = left
+        self.after['constants']['N.new.eq_7'] = right
+        self.assertEqual(self.run_check()['generated_constants'], 1)
+        right['equation_origin'] = ref('Other.parent')
+        with self.assertRaises(CHECK.Mismatch):
+            self.run_check()
+
+    def test_provenance_requires_new_schema_and_valid_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'export.json'
+            c = constant()
+            c['equation_origin'] = ref('N.parent')
+            data = dict(schema_version=6, lean_version='fixture', source='',
+                        index=dict(version=5, module='Fixture', directImports=[], decls={}, references={}),
+                        constants={'eq': c}, checked_commands=[], guards=[], attribute_syntax=[])
+            path.write_text(json.dumps(data))
+            self.assertEqual(CHECK.read_exports([path])['constants']['eq']['equation_origin'], ref('N.parent'))
+            data['schema_version'] = 5
+            path.write_text(json.dumps(data))
+            with self.assertRaisesRegex(ValueError, 'requires schema 6'):
+                CHECK.read_exports([path])
+            data['schema_version'] = 6
+            c['equation_origin'] = ['guessed', 'N.parent']
+            path.write_text(json.dumps(data))
+            with self.assertRaisesRegex(ValueError, 'invalid equation provenance'):
+                CHECK.read_exports([path])
 
     def test_type_body_and_attribute_changes_fail(self):
         for key in ('type', 'payload'):
