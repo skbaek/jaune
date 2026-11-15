@@ -536,7 +536,7 @@ private def chargeAuthBaseAmsterdam (state : StateGasRules) (msg : Msg)
     .ok ⟨devm, delegationSetFor.insert authority,
       (eoaDelegationMarker ++ target.toBytes).toByteArray⟩
 
-private def applyValidatedDelegationAmsterdam (state : StateGasRules)
+def applyValidatedDelegationAmsterdam (state : StateGasRules)
     (msg : Msg) (authority target : Adr) (devm : Devm)
     (paidWrites delegationSetFor : AdrSet) :
     Except (EvmError × Devm) AmsterdamDelegationResult := do
@@ -610,7 +610,7 @@ private def preparedTopLevelMsg (msg : Msg) (devm : Devm) : Msg :=
     accessedStorageKeys := devm.accessedStorageKeys
   }
 
-private def resolveTopLevelCallAmsterdam (msg : Msg) (devm : Devm) :
+def resolveTopLevelCallAmsterdam (msg : Msg) (devm : Devm) :
     Except (EvmError × Devm) (Msg × Devm) := do
   let ⟨delegated, codeAddress, accessCost⟩ :=
     msg.benv.stat.rules.delegationCost devm msg.currentTarget
