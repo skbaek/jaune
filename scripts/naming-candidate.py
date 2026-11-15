@@ -192,7 +192,8 @@ def capture(args):
                    for m in selected}
     local_built = bind_artifacts(local_paths)
     tool_sources = {p: initial['files'].get(p) for p in
-                    ('scripts/NamingFidelity.lean', 'scripts/check-naming-fidelity.py',
+                    ('scripts/NamingFidelity.lean', 'scripts/NamingReferencesCore.lean',
+                     'scripts/check-naming-fidelity.py',
                      'scripts/naming-candidate.py', 'scripts/check-naming-map.py',
                      'scripts/apply-naming-map.py')}
     run(root, out, 'admit', argv(args.admit_command))

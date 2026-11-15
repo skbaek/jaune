@@ -1,4 +1,4 @@
-import Lean
+import NamingReferencesCore
 
 /-! Export kernel expressions and effective attributes for rename fidelity.
 This optional metaprogram is outside the specification import closure.
@@ -236,6 +236,7 @@ unsafe def main (args : List String) : IO UInt32 := do
   let env := result.commandState.env
   let trees := result.commandState.infoState.trees.toArray
   let refs := Lean.Server.findModuleRefs inputCtx.fileMap trees (localVars := true)
+  let refs := NamingReferences.addCaseReferences trees inputCtx.fileMap refs
   let (references, decls) ← refs.toLspModuleRefs
   let index : Lean.Server.Ilean := {
     module := moduleName.toName

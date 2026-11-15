@@ -84,6 +84,11 @@ lean_exe «jaune-consensus-kzg-vectors» where
 lean_exe «jaune-consensus-transition-bench» where
   root := `ConsensusTransitionBench
 
+/-- Shared compiler provenance for both migration exporters; optional tooling. -/
+lean_lib «NamingReferenceCore» where
+  srcDir := "scripts"
+  roots := #[`NamingReferencesCore]
+
 /-- Compiler reference export for checked migrations; not a default target. -/
 lean_exe «jaune-naming-references» where
   srcDir := "scripts"

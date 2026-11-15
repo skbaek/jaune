@@ -147,6 +147,42 @@ write, as in an editor: retain the plan and a Git checkpoint. A successful
 application still requires elaboration and the N4 fidelity check; it is not a
 type/value or attribute-preservation verdict.
 
+### Whole Lean tree planning
+
+`naming-tree.py` adds complete source accounting around the same semantic
+planner. Run `needs` first to discover which modules contain candidate tokens,
+then capture those roots with `naming-candidate.py capture` (section 6):
+
+```sh
+python3 scripts/naming-tree.py needs --tree CHECKOUT --map MAP.json --source-dir . --source-dir scripts --source-dir scripts/tests/naming
+python3 scripts/naming-tree.py plan --tree CHECKOUT --snapshot CAPTURE/snapshot.json --map MAP.json
+python3 scripts/naming-tree.py apply --tree CHECKOUT --plan PLAN.json --map MAP.json
+```
+
+Save the plan outside the checkout or in an ignored directory. It binds every
+tracked/unignored input to the snapshot and lists every Lean source, including
+`lakefile.lean`. A file containing an affected identifier needs compiler
+references; missing exports produce unresolved entries and prevent applying
+any file. An unexported file with no candidate identifiers remains explicitly
+accounted for by its source digest. This is a lexical absence check, not an
+inferred semantic reference. The selected-file planner's handling of comments,
+strings and unresolved syntax still applies. Non-Lean documents and external
+policy/source files remain separate migration obligations.
+
+Before writing, application recomputes the whole plan, checks the map, snapshot,
+tool sources, complete file inventory and current imported artifact digests.
+A newly added file, a change to an unindexed file, a stale import or an edited
+plan refuses before the first write. Source identity is the captured bytes,
+not Git HEAD alone; committing identical bytes does not invalidate a plan.
+Successful application is still followed by an owned build and N4 comparison.
+Namespace syntax, depth changes, module/relocation rows and other unresolved
+constructs remain refusals; whole-tree accounting does not waive them.
+
+The exporters share `NamingReferencesCore` so candidate captures retain the
+same constructor-case provenance as standalone reference exports. The optional
+core library is outside production imports. Whole-tree preflight controls are
+in `scripts/tests/test_naming_tree.py`.
+
 `python3 scripts/check-naming-tool.py` exercises a synthetic shared-field
 fixture end to end: compiler export, six transaction-field edits with four
 message-field references preserved, elaboration of both versions (including
