@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "lint_roots": [
+    "Jaune",
+    "JauneConsensus"
+  ],
+  "policy": "scripts/naming-policy.json",
+  "policy_generator": "python3 scripts/naming-census.py vocabulary --output scripts/naming-policy.json",
+  "policy_status": "draft vocabulary generated from the repository prose (Markdown and Lean comments, code spans removed, at least two occurrences, retired tokens excluded); no source bindings registered yet, so pyspec/EIP spellings outside the vocabulary are reported as unregistered. Report mode only: not a gate verdict until reviewed.",
+  "census": "python3 scripts/naming-census.py census --snapshot CAPTURE/snapshot.json --output FRESH_DIRECTORY",
+  "out_of_scope": "macro/syntax/notation keywords and compiler-named declarations (anonymous instances, syntax kinds) are not declarations by spelling and are not linted (master decision 2026-11-16)",
+  "excluded_sources": [
+    {
+      "path": "scripts/flatten-pilot.lean",
+      "sha256": "849622ceaa3351862d68718c5a2ab1e65a3fe62de3755d40ba5b586b533500ae",
+      "status": "historical-non-elaborating",
+      "reason": "Step-1 flatten pilot outside every library root; its reproduction claims in report-flatten-design.md, report-restructure.md and report-integrity-design.md are historical. It no longer elaborates against current error types and opcodes (2026-11-15 census), so no compiler export exists and no rename can be planned or verified for it. Whole-tree plans account for it explicitly as excluded, with its affected-token count; its bytes stay unchanged.",
+      "decision": "pending (master/user): retire the file, update it to current definitions, or keep it excluded"
+    }
+  ]
+}

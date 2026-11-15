@@ -54,10 +54,17 @@ def declarations(text, index):
     module = index['module']
     positions = APPLY.Positions(text)
     names = {}
+    compiler_named = set()
     for name, loc in index['decls'].items():
         if len(loc) != 8:
             raise ValueError('unsupported declaration location')
-        APPLY.span(positions, loc[4:])
+        a, b = APPLY.span(positions, loc[4:])
+        # Lean names anonymous instances and syntax/macro kinds itself; their
+        # ranges spell a keyword, not the name. They follow other names (or are
+        # notation keywords, out of N3 scope) and are not linted.
+        if not spelled(text, a, b, user_name(name, module)):
+            compiler_named.add(name)
+            continue
         names[user_name(name, module)] = loc[4:]
     for key, info in index['references'].items():
         const = json.loads(key).get('c')
@@ -68,8 +75,18 @@ def declarations(text, index):
             start, end = APPLY.span(positions, loc)
             if const['n'].endswith('._example') and text[start:end] == 'example' and not info['usages']:
                 continue  # Lean gives anonymous examples a navigation-only pseudo-name.
+            if const['n'] in compiler_named or not spelled(text, start, end, user_name(const['n'], module)):
+                continue
             names[user_name(const['n'], module)] = loc[:4]
     return names
+
+
+def spelled(text, a, b, name):
+    spans = APPLY.components(text, a, b)
+    if spans is None:
+        return False
+    parts = [text[x:y] for x, y in spans]
+    return APPLY.split_name(name)[-len(parts):] == parts
 
 
 def transliterate(name, style):
@@ -232,6 +249,8 @@ def main(argv=None):
     parser.add_argument('--source-root', type=Path, required=True)
     parser.add_argument('--file', nargs=2, action='append', default=[], metavar=('SOURCE', 'BUNDLE'))
     parser.add_argument('--root', action='append', default=[], help='require exact .lean coverage of this tree-relative root')
+    parser.add_argument('--report', action='store_true',
+                        help='report mode: naming findings exit 0 (setup and coverage failures still exit 2)')
     args = parser.parse_args(argv)
     try:
         map_raw, policy_raw = args.map.read_bytes(), args.policy.read_bytes()
@@ -242,8 +261,9 @@ def main(argv=None):
     except (OSError, ValueError, KeyError, TypeError) as error:
         print(f'SETUP — naming lint: {error}', file=sys.stderr)
         return 2
+    result['mode'] = 'report' if args.report else 'gate'
     print(json.dumps(result, indent=2))
-    return 1 if result['problems'] else 0
+    return 1 if result['problems'] and not args.report else 0
 
 
 if __name__ == '__main__':

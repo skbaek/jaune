@@ -268,7 +268,68 @@ def char_span(offsets, a, b, text):
     return offsets[a], offsets[b]
 
 
-def plan_file(text, index, entries, renamer=None):
+class Universe:
+    """Constant names visible for capture checks: one set before and one after
+    renaming, plus the current module's private names under their user names."""
+
+    def __init__(self, names, renamer):
+        self.before = set(names)
+        self.after = {renamer(name) for name in self.before}
+        self.private = {}
+        for side, names in (('before', self.before), ('after', self.after)):
+            for name in names:
+                split = MAP.split_private(name) if name.startswith('_private.') else None
+                if split:
+                    self.private.setdefault((side, split[0]), {})[split[2]] = name
+
+    def lookup(self, side, module, renamer=None):
+        names = self.before if side == 'before' else self.after
+        target = module if side == 'before' or renamer is None else renamer.module(module)
+        return names, self.private.get((side, target), {})
+
+
+def resolve(lookup, spelling, ns, opens):
+    """Lean's global constant resolution (ResolveName.resolveGlobalName) over a
+    known name set: the innermost enclosing namespace wins, then an exact
+    qualified name, then the root name together with every open declaration.
+    Aliases, projections and local scopes are not modelled; callers first check
+    that the result reproduces the compiler's own answer before relying on it."""
+    names, private = lookup
+    def has(name):
+        return name if name in names else private.get(name)
+    if spelling.startswith('_root_.'):
+        found = has(spelling[len('_root_.'):])
+        return {found} if found else set()
+    parts = split_name(spelling)
+    scope = [] if ns in ('', '[anonymous]') else ns.split('.')
+    for i in range(len(scope), 0, -1):
+        found = has('.'.join(scope[:i] + parts))
+        if found:
+            return {found}
+    if len(parts) > 1 and has(spelling):
+        return {has(spelling)}
+    result = {has(spelling)} - {None}
+    for row in opens:
+        if row[0] == 'simple':
+            if spelling not in row[2]:
+                found = has(row[1] + '.' + spelling)
+                if found:
+                    result.add(found)
+        elif row[1] == spelling:
+            result.add(row[2])
+        elif spelling.startswith(row[1] + '.'):
+            found = has(row[2] + spelling[len(row[1]):])
+            if found:
+                result.add(found)
+    return result
+
+
+def renamed_opens(opens, renamer):
+    return [[row[0], renamer.namespace(row[1]), row[2]] if row[0] == 'simple'
+            else [row[0], row[1], renamer(row[2])] for row in opens]
+
+
+def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
     if index.get('version') != 5:
         raise ValueError('requires Lean ilean format 5')
     renamer = renamer or MAP.Renamer(entries)
@@ -276,7 +337,7 @@ def plan_file(text, index, entries, renamer=None):
     positions = Positions(text)
     offsets = byte_offsets(text)
     # (start, end, const, component spans, local)
-    references = []
+    references, definitions = [], set()
     for key, info in index['references'].items():
         ident = json.loads(key)
         const = ident.get('c', {}).get('n')
@@ -286,6 +347,8 @@ def plan_file(text, index, entries, renamer=None):
         for location in locations:
             start, end = span(positions, location)
             references.append((start, end, const, components(text, start, end), 'f' in ident))
+            if location is info['definition']:
+                definitions.add((start, end))
     edits, problems, cover = {}, [], {}
 
     def add_cover(spans, what):
@@ -320,6 +383,51 @@ def plan_file(text, index, entries, renamer=None):
             continue
         if renamed != spelling:
             add_edit(start, end, spelling, renamed, const)
+    # Name capture: after renaming, every lexically resolved reference must
+    # still resolve to its (renamed) constant in the scope it elaborated in.
+    # A spelling that would be captured (or become ambiguous) is qualified
+    # with more components of its target; failing that, it is unresolved.
+    commands = sorted((*char_span(offsets, r[0], r[1], text), r[3], r[4])
+                      for r in syntax_rows(index, 'commands', 6) if r[0] < r[1])
+    if universe is not None and commands:
+        module = index['module']
+        before = universe.lookup('before', module)
+        after = universe.lookup('after', module, renamer)
+        starts = [c[0] for c in commands]
+        checked = unverifiable = requalified = 0
+        for start, end, const, comps, local in references:
+            if (local or const is None or comps is None or (start, end) in definitions or
+                    text.startswith('.', start) or (start > 0 and text[start - 1] == '.')):
+                continue
+            i = bisect.bisect_right(starts, start) - 1
+            if i < 0 or not (commands[i][0] <= start and end <= commands[i][1]):
+                continue
+            _, _, ns, opens = commands[i]
+            spelling = text[start:end]
+            if resolve(before, spelling, ns, opens) != {const}:
+                unverifiable += 1  # Outside the modelled resolution; build and N4 decide.
+                continue
+            target = renamer(const)
+            current = edits[start, end]['new'] if (start, end) in edits else spelling
+            new_ns, new_opens = renamer.namespace(ns) if ns != '[anonymous]' else ns, renamed_opens(opens, renamer)
+            checked += 1
+            if resolve(after, current, new_ns, new_opens) == {target}:
+                continue
+            parts = split_name(target)
+            for k in range(len(split_name(current)) + 1, len(parts) + 1):
+                candidate = '.'.join(parts[-k:])
+                if resolve(after, candidate, new_ns, new_opens) == {target}:
+                    edits[start, end] = {'start': start, 'end': end, 'old': spelling, 'new': candidate,
+                                         'declaration': const}
+                    requalified += 1
+                    break
+            else:
+                problems.append({'start': start, 'end': end, 'reason':
+                                 f'name capture: {current!r} would not resolve uniquely to {target} '
+                                 f'in namespace {new_ns}; no qualification resolves'})
+        if stats is not None:
+            stats.update(capture_checked=checked, capture_unverifiable=unverifiable,
+                         capture_requalified=requalified)
     # Namespace syntax: `namespace`, `end`, `open`, `export` resolved by the exporter.
     for a, b, kind, full, reason in syntax_rows(index, 'namespaces', 5):
         start, end = char_span(offsets, a, b, text)

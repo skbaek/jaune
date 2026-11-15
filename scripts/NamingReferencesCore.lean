@@ -331,6 +331,9 @@ def scopeRows (env : Environment) (commands : Array Syntax) : Array Json × Arra
   let mut commandRows := #[]
   for cmd in commands do
     let top := stack.back?.getD {}
+    -- `open X in cmd` elaborates `cmd` with X opened as well.
+    let top := if cmd.isOfKind ``Lean.Parser.Command.in && cmd[0].isOfKind ``Lean.Parser.Command.open
+      then (openDecl env top cmd[0][1]).1 else top
     if let some (a, b) := byteRange? cmd then
       commandRows := commandRows.push (toJson #[toJson a, toJson b, toJson cmd.getKind.toString,
         toJson top.ns.toString, toJson (top.opens.toArray.reverse.map openJson),

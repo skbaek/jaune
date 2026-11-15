@@ -239,6 +239,36 @@ class NamingTreeTests(unittest.TestCase):
                 self.assertEqual((fixture.root / 'Src.lean').read_bytes(),
                                  fixture.files['Src.lean'].encode())
 
+    def test_registered_exclusion_is_accounted_not_omitted(self):
+        import hashlib
+        text = 'def legacy := A.a\n'
+        inventory = dict(schema_version=1, lint_roots=[], policy='', excluded_sources=[dict(
+            path='Old.lean', sha256=hashlib.sha256(text.encode()).hexdigest(), status='historical-non-elaborating',
+            reason='fixture', decision='fixture')])
+        files = {'A.lean': 'def a := 1\n', 'Old.lean': text, 'lakefile.lean': '',
+                 'scripts/naming-inventory.json': json.dumps(inventory)}
+        (self.directory / 'excl').mkdir()
+        fixture = TreeFixture(self.directory / 'excl' / 'x', {k: v for k, v in files.items() if '/' not in k}, {})
+        (fixture.root / 'scripts').mkdir()
+        (fixture.root / 'scripts/naming-inventory.json').write_text(files['scripts/naming-inventory.json'])
+        fixture.candidate = TREE.CANDIDATE.inventory(fixture.root, ['.'])
+        fixture.source = copy.deepcopy(fixture.candidate)
+        for name, row in fixture.candidate['modules'].items():
+            row.update(imports=[], is_module=False)
+        fixture.export('A', decls={}, commands=[], eof=[0, '[anonymous]', []])
+        row = dict(old='A.a', new='A.b', kind='declaration', layer='execution', rule='4', source='x')
+        plan = fixture.plan([row])
+        old = next(r for r in plan['files'] if r['path'] == 'Old.lean')
+        self.assertEqual((old['excluded'], old['excluded_tokens'], old['unresolved']),
+                         ('historical-non-elaborating', 1, []))
+        (fixture.root / 'Old.lean').write_text(text + '-- edited\n')
+        fixture.candidate = TREE.CANDIDATE.inventory(fixture.root, ['.'])
+        fixture.source = copy.deepcopy(fixture.candidate)
+        for name, r in fixture.candidate['modules'].items():
+            r.update(imports=[], is_module=False)
+        plan = fixture.plan([row])
+        self.assertEqual(plan['status'], 'unresolved')
+
 
 class TreeFixture:
     """A git checkout plus a schema-3 capture whose exports carry syntax rows."""

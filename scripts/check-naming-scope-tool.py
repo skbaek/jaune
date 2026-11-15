@@ -10,8 +10,10 @@ renamed files elaborate and N4 compares both modules together, including the
 module of every authored constant. A guard moved by hand is still compared as
 an expression. Controls: a body change, a guard change and an unrecorded move
 fail N4 after successful elaboration; a planned relocation into a target that
-does not import a needed module is reported unresolved. The namespace-only
-inverse restores exact bytes.
+does not import a needed module is reported unresolved. A reference that a
+bare new name would let another namespace's `U256` capture is qualified
+(`ScopeA.U256`). The namespace-only inverse restores the original bytes up to
+that kept qualification.
 """
 import argparse
 import copy
@@ -63,6 +65,16 @@ def moved (n : Nat) : Nat := n * 3
 #guard moved 2 == 6
 
 end ScopeA
+
+namespace ScopeC
+open ScopeA
+structure U256 where
+  w : Nat
+-- After the rename a bare `U256` here would denote `ScopeC.U256`.
+def pick (x : B256) : Nat := x.toNat
+open ScopeA in
+def pickIn (x : B256) : Nat := x.toNat
+end ScopeC
 '''
 
 SCOPE_B = '''import Lean
@@ -111,7 +123,10 @@ class Run:
                     source_dirs=['.'], head='synthetic')
 
     def plan(self, rows, exports):
-        bundles = {m: {k: json.loads(p.read_bytes())[k] for k in ('source', 'index')} for m, p in exports.items()}
+        bundles = {}
+        for m, p in exports.items():
+            data = json.loads(p.read_bytes())
+            bundles[m] = dict(source=data['source'], index=data['index'], names=sorted(data['constants']))
         records, moves = TREE.plan_sources(self.directory, self.candidate(), bundles, mapping(rows))
         return records, moves
 
@@ -142,7 +157,8 @@ def run(directory, exporter):
     r.apply(records, moves)
     a, b = (directory / 'ScopeA.lean').read_text(), (directory / 'ScopeB.lean').read_text()
     expected_a = ['namespace U256', 'end U256', 'open U256 in', 'export U256 (ofNat)', 'to : U256',
-                  'Tx.mk (gasLimit := g)', '(mkTx 5).gasLimit', 'ScopeA.U256.ofNat 2', 'x.toNat']
+                  'Tx.mk (gasLimit := g)', '(mkTx 5).gasLimit', 'ScopeA.U256.ofNat 2', 'x.toNat',
+                  'def pick (x : ScopeA.U256)', 'def pickIn (x : ScopeA.U256)']
     if [e for e in expected_a if e not in a] or 'B256' in a or 'def moved' in a:
         raise ValueError(f'namespace or relocation edits wrong:\n{a}')
     if '/-- A declaration that moves to `ScopeB`' not in b or 'namespace ScopeA\n/--' not in b:
@@ -191,11 +207,14 @@ def run(directory, exporter):
     inverse = [(b_, a_, k, extra) for a_, b_, k, extra in rows]
     records, moves = r.plan(inverse, forward)
     r.apply(records, moves)
-    if (directory / 'ScopeA.lean').read_text() != SCOPE_A:
-        raise ValueError('namespace inverse did not restore exact bytes')
+    # Capture qualification is kept by the inverse (it stays unambiguous).
+    qualified = SCOPE_A.replace('def pick (x : B256)', 'def pick (x : ScopeA.B256)').replace(
+        'def pickIn (x : B256)', 'def pickIn (x : ScopeA.B256)')
+    if (directory / 'ScopeA.lean').read_text() != qualified:
+        raise ValueError('namespace inverse did not restore the original bytes up to capture qualification')
     return dict(status='OK', authored_constants=verdict['authored_constants'],
                 generated_constants=verdict['generated_constants'], guards=verdict['guards'],
-                controls=controls, inverse_identical=True)
+                controls=controls, inverse_identical_up_to_capture_qualification=True)
 
 
 def main():

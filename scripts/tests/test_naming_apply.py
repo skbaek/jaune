@@ -318,6 +318,34 @@ class NamingApplyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'whole-tree'):
             self.plan()
 
+    def test_name_capture_is_qualified_not_assumed(self):
+        # Execution B256 -> U256 inside a namespace that has its own U256.
+        row = entry('J.B256', 'J.U256')
+        row['kind'] = 'namespace'
+        renamer = M.MAP.Renamer([row])
+        universe = M.Universe({'J.B256', 'C.U256', 'J.w', 'C.y'}, renamer)
+        text = 'namespace C\nopen J\ndef x : B256 := y\nend C\n'
+        index = index_for(text, [('B256', 'J.B256', 0, False), ('y', 'C.y', 0, False)])
+        index['module'] = 'Pilot'
+        cmd = text.index('def x'), text.index('\nend C')
+        self.syntax(text, index, commands=[(*cmd, 'declaration', 'C', [['simple', 'J', []]], [False] * 3)])
+        stats = {}
+        edits, problems = M.plan_file(text, index, [row], renamer, universe, stats)
+        self.assertEqual(problems, [])
+        self.assertEqual([e['new'] for e in edits], ['J.U256'])
+        self.assertEqual(stats['capture_requalified'], 1)
+        # An unchanged reference captured by a newly introduced name is requalified too.
+        text = 'namespace J\nopen C\ndef z : U256 := w\nend J\n'
+        index = index_for(text, [('U256', 'C.U256', 0, False), ('w', 'J.w', 0, False)])
+        index['module'] = 'Pilot'
+        cmd = text.index('def z'), text.index('\nend J')
+        self.syntax(text, index, commands=[(*cmd, 'declaration', 'J', [['simple', 'C', []]], [False] * 3)])
+        edits, problems = M.plan_file(text, index, [row], renamer, universe, stats)
+        self.assertEqual([e['new'] for e in edits], ['C.U256'])
+        # Without the capture universe the planner would have kept the captured spelling.
+        edits, _ = M.plan_file(text, index, [row], renamer)
+        self.assertEqual(edits, [])
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

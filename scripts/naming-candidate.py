@@ -240,6 +240,23 @@ def run(root, out, label, command):
     return receipt
 
 
+def parallel(jobs, calls):
+    """Run independent exporter commands, at most `jobs` at once; every receipt
+    is kept and the first failure (in input order) is raised after all finish."""
+    from concurrent.futures import ThreadPoolExecutor
+    def attempt(call):
+        try:
+            return run(*call), None
+        except ValueError as error:
+            return None, error
+    with ThreadPoolExecutor(max_workers=max(1, jobs)) as pool:
+        results = list(pool.map(attempt, calls))
+    for _, error in results:
+        if error is not None:
+            raise error
+    return [receipt for receipt, _ in results]
+
+
 def capture(args):
     root, out = args.root.resolve(), args.output.resolve()
     if out.is_relative_to(root):
@@ -293,10 +310,12 @@ def capture(args):
     run(root, out, 'admit', argv(args.admit_command))
     try:
         imports, discovery, exports = {}, {}, {}
+        # Independent elaborations; the caller's admission covers `--jobs` of them.
+        parallel(args.jobs, [(root, out, module + '-imports',
+                              ['lake', 'env', str(exporter), '--imports', initial['modules'][module]['path'],
+                               module, str(out / (module + '.imports.json'))]) for module in selected])
         for module in selected:
-            path = initial['modules'][module]['path']
             target = out / (module + '.imports.json')
-            run(root, out, module + '-imports', ['lake', 'env', str(exporter), '--imports', path, module, str(target)])
             data = json.loads(target.read_bytes())
             direct = [entry[0] for entry in data['direct_imports']]
             if data['module'] != module or direct != initial['modules'][module]['imports']:
@@ -315,10 +334,11 @@ def capture(args):
         for name in producers:
             if name in bound and bound[name] != local_built[name]:
                 raise ValueError(f'local artifact changed after build: {name}')
+        parallel(args.jobs, [(root, out, module + '-export',
+                              ['lake', 'env', str(exporter), initial['modules'][module]['path'], module,
+                               str(out / (module + '.export.json'))]) for module in selected])
         for module in selected:
-            path = initial['modules'][module]['path']
             target = out / (module + '.export.json')
-            run(root, out, module + '-export', ['lake', 'env', str(exporter), path, module, str(target)])
             data = json.loads(target.read_bytes())
             if (data['schema_version'] != 6 or data['imports'] != discovery[module]['imports'] or
                 data['index']['module'] != module or
@@ -331,7 +351,7 @@ def capture(args):
             raise ValueError('import artifacts changed during export')
         if inventory(root, source_dirs) != source_before or file_sha(exporter) != exporter_hash:
             raise ValueError('candidate or exporter changed during export')
-        result = dict(schema_version=3, status='OK', scope='local-import-closure',
+        result = dict(schema_version=3, status='OK', scope='local-import-closure', jobs=args.jobs,
                       candidate=initial, roots=args.module, selected=selected, build=build, tool_build=tool_build,
                       source_only=source_only, producers=producers,
                       headers_sha256=file_sha(header_output),
@@ -474,6 +494,8 @@ def main():
     cap.add_argument('--admit-command', required=True)
     cap.add_argument('--release-command', required=True)
     cap.add_argument('--output', type=Path, required=True)
+    cap.add_argument('--jobs', type=int, default=1,
+                     help='concurrent exporter processes; size the admission command for them')
     comp = commands.add_parser('compare')
     comp.add_argument('--before', type=Path, required=True)
     comp.add_argument('--after', type=Path, required=True)

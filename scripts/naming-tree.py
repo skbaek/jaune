@@ -138,6 +138,17 @@ def plan_sources(root, candidate, bundles, mapping):
     renamer = MAP.Renamer(mapping['entries'])
     affected = renamer.words()
     records, texts = [], {}
+    universe = APPLY.Universe(universe_names(bundles), renamer)
+    excluded = {}
+    if 'scripts/naming-inventory.json' in candidate['files']:
+        raw = APPLY.safe_path(root, 'scripts/naming-inventory.json').read_bytes()
+        if APPLY.digest(raw) != candidate['files']['scripts/naming-inventory.json']:
+            raise ValueError('naming inventory changed during planning')
+        inventory = json.loads(raw)
+        if inventory.get('schema_version') != 1:
+            raise ValueError('unsupported naming inventory')
+        excluded = {row['path']: row for row in inventory['excluded_sources']}
+    capture = dict(capture_checked=0, capture_unverifiable=0, capture_requalified=0)
     for relative in sorted(candidate['files']):
         if not relative.endswith('.lean'):
             continue
@@ -148,10 +159,25 @@ def plan_sources(root, candidate, bundles, mapping):
         texts[relative] = text
         module = by_path.get(relative)
         bundle = bundles.get(module)
+        exclusion = excluded.get(relative)
+        if exclusion is not None:
+            # A registered, digest-pinned exclusion is accounted for, not omitted.
+            if exclusion['sha256'] != APPLY.digest(raw):
+                problems = [dict(start=0, end=0, reason='registered naming exclusion digest differs; re-review it')]
+            else:
+                problems = []
+            records.append(dict(path=relative, sha256=APPLY.digest(raw), module=module, indexed=False,
+                                excluded=exclusion['status'], excluded_tokens=len(occurrences(text, affected)),
+                                edits=[], unresolved=problems))
+            continue
         if bundle is not None:
             if bundle['source'] != text or bundle['index']['module'] != module:
                 raise ValueError(f'{relative}: compiler bundle source/module mismatch')
-            edits, problems = APPLY.plan_file(text, bundle['index'], mapping['entries'], renamer)
+            stats = {}
+            edits, problems = APPLY.plan_file(text, bundle['index'], mapping['entries'], renamer,
+                                              universe, stats)
+            for key, value in stats.items():
+                capture[key] += value
         else:
             edits = []
             problems = [dict(start=a, end=b, reason=f'affected token {word!r} has no compiler export')
@@ -159,6 +185,7 @@ def plan_sources(root, candidate, bundles, mapping):
         records.append(dict(path=relative, sha256=APPLY.digest(raw), module=module,
                             indexed=bundle is not None, edits=edits, unresolved=problems))
     by_record = {row['path']: row for row in records}
+    plan_sources.capture = capture
     moves = plan_modules(candidate, texts, by_record, renamer)
     plan_relocations(candidate, texts, by_record, bundles, mapping, renamer)
     for row in records:
@@ -168,6 +195,18 @@ def plan_sources(root, candidate, bundles, mapping):
                 row['unresolved'].append(dict(start=right['start'], end=left['end'],
                                               reason='overlapping rename and relocation edits'))
     return records, moves
+
+
+def universe_names(bundles):
+    """Every exported module's constants plus every constant any export references."""
+    names = set()
+    for bundle in bundles.values():
+        names.update(bundle.get('names', []))
+        for key in bundle['index']['references']:
+            const = json.loads(key).get('c')
+            if const:
+                names.add(const['n'])
+    return names
 
 
 def source_dir(candidate, path):
@@ -381,6 +420,7 @@ def build_plan(root, snapshot_path, map_path):
     for module, row in snapshot['exports'].items():
         data = json.loads((snapshot_path.parent / row['path']).read_bytes())
         bundles[module] = {key: data[key] for key in ('source', 'index')}
+        bundles[module]['names'] = sorted(data.get('constants', {}))
     records, moves = plan_sources(root, snapshot['candidate'], bundles, mapping)
     current_inventory(root, snapshot['candidate'])
     tools = {name: CANDIDATE.file_sha(ROOT / 'scripts' / name) for name in
@@ -390,7 +430,7 @@ def build_plan(root, snapshot_path, map_path):
                 snapshot=str(snapshot_path), snapshot_sha256=CANDIDATE.file_sha(snapshot_path),
                 map_sha256=CANDIDATE.file_sha(map_path), tool_sources=tools,
                 inventory_sha256=APPLY.digest(CANDIDATE.FIDELITY.encoded(snapshot['candidate']).encode()),
-                files=records, moves=moves,
+                files=records, moves=moves, name_capture=plan_sources.capture,
                 status='unresolved' if any(r['unresolved'] for r in records) else 'planned')
 
 
