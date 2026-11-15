@@ -74,6 +74,22 @@ class NamingTreeTests(unittest.TestCase):
         self.assertEqual(TREE.apply_plan(self.root, plan, self.map), 1)
         self.assertEqual((self.root / 'Indexed.lean').read_text(), 'def client := Old.renamed\n')
 
+    def test_standalone_capture_requires_exact_producer_partition(self):
+        data = json.loads(self.snapshot.read_text())
+        data.update(schema_version=3, source_only=['Indexed'], producers=[])
+        self.snapshot.write_text(json.dumps(data))
+        self.assertEqual(self.plan()['status'], 'planned')
+        data['source_only'] = []
+        self.snapshot.write_text(json.dumps(data))
+        with self.assertRaisesRegex(ValueError, 'producer artifact inventory'):
+            self.plan()
+        data['source_only'] = ['Indexed']
+        data['local_built'] = {'Indexed': {}}
+        self.snapshot.write_text(json.dumps(data))
+        with self.assertRaisesRegex(ValueError, 'producer artifact inventory'):
+            self.plan()
+        self.assertEqual((self.root / 'Indexed.lean').read_text(), self.source)
+
     def test_missing_affected_export_is_reported_and_cannot_apply(self):
         (self.root / 'Other.lean').write_text('def other := Old.value\n')
         self.make_snapshot()

@@ -355,7 +355,16 @@ python3 scripts/naming-candidate.py capture --root CHECKOUT --source-dir . --sou
 python3 scripts/naming-candidate.py compare --before BEFORE/snapshot.json --after AFTER/snapshot.json --map MAP.json
 ```
 
-Repeat `--module` for multiple roots. The source directories describe Lean's
+Repeat `--module` for multiple roots. For a standalone file that has no Lake
+module target, also pass `--source-only MODULE`. This is allowed only for an
+explicit root that no inventoried local source imports. Its imports still need
+owned builds and artifact binding; its own source is fully elaborated by the
+exporter, including checked commands. It produces no `.olean` for other files
+to import. An imported local module cannot use this option to bypass its build.
+If every selected module is such a leaf, capture records that no producer build
+was needed; it never calls the build prefix with an empty target list.
+
+The source directories describe Lean's
 module layout; the longest matching directory wins. Every tracked or unignored
 Lean source must be inventoried, including sources outside the selected roots.
 Lean's own parser reads every header in one batch, including unchanged sources
@@ -369,7 +378,7 @@ All three command arguments are nonempty JSON argv arrays, never shell text.
 The build prefix is the host's authorized owned-build invocation, ending just
 before its targets (for Creme, through the `--` separator). Capture first builds
 `jaune-naming-fidelity`, then uses an admitted compiler header pass to determine
-the graph. It builds all selected local dependency modules through the same
+the graph. It builds all selected producer modules through the same
 prefix. It has no bare Lake build default. After that build succeeds, it takes
 admission again, discovers imports, hashes their artifacts, exports the source
 closure, checks that source/tool/artifact bytes stayed fixed, and releases in a
@@ -384,6 +393,18 @@ Local imports must resolve to the artifacts just built in that checkout;
 uninventoried or shadowed local imports fail. Optional artifact parts cannot
 appear or disappear unnoticed. The logical module path is retained before
 following file symlinks, matching Lean's loading of separately cached parts.
+
+Snapshot schema 3 records the standalone roots and producer set explicitly.
+Schema 2 captures remain readable as all-producer captures. Fidelity is checked
+separately for each maximal selected root and its transitive local imports.
+Independent executables can each define `main`; their kernel constants and
+checked commands are never pooled into one global namespace. A duplicate
+constant within a single import environment still refuses. Shared dependency
+objects are parsed once and reused across environments. The verdict reports
+each environment rather than summing overlapping dependency counts. Moving a
+check between independent environments fails comparison. Environment-root or
+standalone-classification changes require explicit relocation support and
+currently refuse.
 
 Comparison checks both old and new graphs. Every changed Lean source and every
 transitively affected local importer must be exported, even when the importer's

@@ -20,8 +20,9 @@ def snapshot(graph, roots):
     return dict(candidate=dict(head='fixture', source_dirs=['.'], modules=graph,
                                files={r['path']: r['sha256'] for r in graph.values()}),
                 roots=roots, selected=selected, tool_sources={}, artifacts={},
-                fidelity=dict(constants={}, roots=set(), guards=[], attributes=[],
-                              modules={}, receipts=[], version='fixture'))
+                fidelity={root: dict(constants={}, roots=set(), guards=[], attributes=[],
+                                     modules={}, receipts=[], version='fixture')
+                          for root in CHECK.environments(graph, selected)})
 
 
 EMPTY = dict(schema_version=1, entries=[], retired_tokens=[], allowed_abbreviations=[])
@@ -54,6 +55,64 @@ class CandidateTests(unittest.TestCase):
 
     def test_closed_identity_passes(self):
         self.assertEqual(self.check()['scope'], 'candidate-affected-local-closure')
+
+    def test_source_only_requires_explicit_unimported_roots(self):
+        self.assertEqual(CHECK.build_modules(self.graph, ['Client'], ['Client']), ['Dep'])
+        with self.assertRaisesRegex(ValueError, 'explicit capture roots'):
+            CHECK.build_modules(self.graph, ['Client'], ['Untouched'])
+        with self.assertRaisesRegex(ValueError, 'imported by a local source'):
+            CHECK.build_modules(self.graph, ['Dep'], ['Dep'])
+        self.assertEqual(CHECK.build_modules(self.graph, ['Untouched'], ['Untouched']), [])
+
+    def test_independent_environments_keep_shared_dependencies(self):
+        graph = {**self.graph, 'OtherClient': module('OtherClient.lean', 'd', ['Dep'])}
+        self.assertEqual(CHECK.environments(graph, CHECK.closure(graph, ['Client', 'OtherClient'])),
+                         {'Client': ['Dep', 'Client'], 'OtherClient': ['Dep', 'OtherClient']})
+
+    def test_source_only_classification_cannot_change_in_comparison(self):
+        self.after['source_only'] = ['Client']
+        with self.assertRaisesRegex(ValueError, 'classification changed'):
+            self.check()
+
+    def test_environment_omission_cannot_hide_checks(self):
+        self.after['fidelity'] = {}
+        with self.assertRaisesRegex(ValueError, 'environment roots changed'):
+            self.check()
+
+    def test_duplicate_main_is_separate_but_imported_collisions_refuse(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            graph = {'One': module('One.lean', 'one'), 'Two': module('Two.lean', 'two')}
+            paths = {}
+            for name, value in [('One', 1), ('Two', 2)]:
+                path = directory / (name + '.json')
+                data = dict(schema_version=5, lean_version='fixture', source='def main := 0\n',
+                            index=dict(version=5, module=name, directImports=[], decls={'main': {}}, references={}),
+                            constants={'main': {'value': value}}, guards=[['lit', value]],
+                            attribute_syntax=[], checked_commands=[])
+                path.write_text(json.dumps(data))
+                paths[name] = path
+            envs = CHECK.read_environments(paths, graph, ['One', 'Two'])
+            self.assertEqual(set(envs), {'One', 'Two'})
+            self.assertEqual(envs['One']['constants']['main']['value'], 1)
+            self.assertEqual(envs['Two']['constants']['main']['value'], 2)
+            before = snapshot(graph, ['One', 'Two'])
+            before['fidelity'] = envs
+            after = copy.deepcopy(before)
+            self.assertEqual(CHECK.compare(before, after, EMPTY)['status'], 'OK')
+            after['fidelity']['Two']['constants']['main']['value'] = 3
+            with self.assertRaises(CHECK.FIDELITY.Mismatch):
+                CHECK.compare(before, after, EMPTY)
+            # A global multiset would miss swapping checks between executable
+            # environments; each environment must retain its own commands.
+            after = copy.deepcopy(before)
+            after['fidelity']['One']['guards'], after['fidelity']['Two']['guards'] = (
+                after['fidelity']['Two']['guards'], after['fidelity']['One']['guards'])
+            with self.assertRaises(CHECK.FIDELITY.Mismatch):
+                CHECK.compare(before, after, EMPTY)
+            graph['Two']['imports'] = ['One']
+            with self.assertRaisesRegex(ValueError, 'duplicate constants in one import environment'):
+                CHECK.read_environments(paths, graph, ['One', 'Two'])
 
     def test_dependency_cannot_be_missing_from_closure(self):
         self.assertEqual(CHECK.closure(self.graph, ['Client']), ['Dep', 'Client'])

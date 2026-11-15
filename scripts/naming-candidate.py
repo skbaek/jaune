@@ -120,6 +120,51 @@ def closure(modules, roots):
     return order
 
 
+def build_modules(modules, roots, source_only):
+    """Only explicit, globally unimported roots may omit a producer artifact."""
+    leaves = set(source_only)
+    if not leaves <= set(roots):
+        raise ValueError('source-only modules must be explicit capture roots')
+    imported = {name for row in modules.values() for name in row['imports']}
+    if leaves & imported:
+        raise ValueError(f'source-only root is imported by a local source: {sorted(leaves & imported)}')
+    return [m for m in closure(modules, roots) if m not in leaves]
+
+
+def environments(modules, selected):
+    """Maximal source environments, each with its own local import closure."""
+    selected = set(selected)
+    imported = {name for m in selected for name in modules[m]['imports']}
+    return {root: closure(modules, [root]) for root in sorted(selected - imported)}
+
+
+def read_environments(paths, modules, selected):
+    # Parse each module once. Merged environments share the kernel objects of
+    # common dependencies, rather than duplicating those graphs per executable.
+    bundles = {m: FIDELITY.read_exports([path]) for m, path in paths.items()}
+    result = {}
+    for root, members in environments(modules, selected).items():
+        merged = dict(constants={}, roots=set(), guards=[], attributes=[],
+                      modules={}, receipts=[], checks=[], version=None)
+        for member in members:
+            data = bundles[member]
+            if merged['version'] is not None and merged['version'] != data['version']:
+                raise ValueError('mixed Lean versions in capture environment')
+            merged['version'] = data['version']
+            overlap = merged['constants'].keys() & data['constants'].keys()
+            if overlap:
+                raise ValueError(f'{root}: duplicate constants in one import environment: {sorted(overlap)}')
+            merged['constants'].update(data['constants'])
+            merged['roots'].update(data['roots'])
+            merged['modules'].update(data['modules'])
+            for field in ('guards', 'attributes', 'receipts', 'checks'):
+                merged[field].extend(data[field])
+        result[root] = merged
+    if not result:
+        raise ValueError('no captured source environments')
+    return result
+
+
 def artifact_parts(olean):
     return {part: str(Path(olean).with_suffix('.' + part).absolute())
             if Path(olean).with_suffix('.' + part).is_file() else None for part in PARTS}
@@ -183,13 +228,20 @@ def capture(args):
     selected = closure(initial['modules'], args.module)
     if any(initial['modules'][m]['is_module'] for m in selected):
         raise ValueError('module-system visibility is not yet supported by fidelity exports')
-    build = run(root, out, 'build', argv(args.build_prefix) + selected)
+    source_only = sorted(set(args.source_only))
+    producers = build_modules(initial['modules'], args.module, source_only)
+    if producers:
+        build = run(root, out, 'build', argv(args.build_prefix) + producers)
+    else:
+        # An empty target list would accidentally build the package defaults.
+        build = dict(exit=0, argv=[], skipped='no local producer modules')
+        save(out / 'build.command.json', build)
     if inventory(root, source_dirs) != source_before or file_sha(exporter) != exporter_hash:
         raise ValueError('candidate or exporter changed during build')
     # Bind local producer artifacts immediately after the successful owned
     # build, before loading an environment or starting an exporter.
     local_paths = {m: artifact_parts(root / '.lake/build/lib/lean' / (m.replace('.', '/') + '.olean'))
-                   for m in selected}
+                   for m in producers}
     local_built = bind_artifacts(local_paths)
     tool_sources = {p: initial['files'].get(p) for p in
                     ('scripts/NamingFidelity.lean', 'scripts/NamingReferencesCore.lean',
@@ -212,13 +264,13 @@ def capture(args):
                 if name in imports and imports[name] != parts:
                     raise ValueError(f'inconsistent import resolution: {name}')
                 if name in initial['modules']:
-                    if name not in selected or parts != local_paths[name]:
+                    if name not in local_paths or parts != local_paths[name]:
                         raise ValueError(f'local import escaped the built source closure: {name}')
                 elif parts['olean'] and Path(parts['olean']).absolute().is_relative_to(root / '.lake/build'):
                     raise ValueError(f'uninventoried local import: {name}')
                 imports[name] = parts
         bound = bind_artifacts(imports)
-        for name in selected:
+        for name in producers:
             if name in bound and bound[name] != local_built[name]:
                 raise ValueError(f'local artifact changed after build: {name}')
         for module in selected:
@@ -237,13 +289,15 @@ def capture(args):
             raise ValueError('import artifacts changed during export')
         if inventory(root, source_dirs) != source_before or file_sha(exporter) != exporter_hash:
             raise ValueError('candidate or exporter changed during export')
-        result = dict(schema_version=2, status='OK', scope='local-import-closure',
+        result = dict(schema_version=3, status='OK', scope='local-import-closure',
                       candidate=initial, roots=args.module, selected=selected, build=build, tool_build=tool_build,
+                      source_only=source_only, producers=producers,
                       headers_sha256=file_sha(header_output),
                       exporter_sha256=exporter_hash, tool_sources=tool_sources,
                       artifacts=bound, local_built=local_built, exports=exports)
         # Validate the assembled bundle before advertising success.
-        FIDELITY.read_exports([out / record['path'] for record in exports.values()])
+        read_environments({m: out / row['path'] for m, row in exports.items()},
+                          initial['modules'], selected)
     finally:
         run(root, out, 'release', argv(args.release_command))
     save(out / 'snapshot.json', result)
@@ -253,7 +307,7 @@ def capture(args):
 def read_snapshot(path):
     path = Path(path)
     data = json.loads(path.read_bytes())
-    if data['schema_version'] != 2 or data['status'] != 'OK' or data['build']['exit'] != 0:
+    if data['schema_version'] not in (2, 3) or data['status'] != 'OK' or data['build']['exit'] != 0:
         raise ValueError('not a successful candidate capture')
     candidate = data['candidate']
     header_path = path.parent / 'headers.json'
@@ -265,7 +319,14 @@ def read_snapshot(path):
     selected = closure(candidate['modules'], data['roots'])
     if selected != data['selected'] or set(selected) != data['exports'].keys():
         raise ValueError('incomplete candidate export closure')
-    exports = []
+    if data['schema_version'] == 2 and data.get('source_only'):
+        raise ValueError('schema 2 does not support source-only roots')
+    source_only = data['source_only'] if data['schema_version'] == 3 else []
+    producers = build_modules(candidate['modules'], data['roots'], source_only)
+    if data['schema_version'] == 3 and (producers != data['producers'] or
+                                       set(producers) != data['local_built'].keys()):
+        raise ValueError('producer artifact inventory differs from required build closure')
+    exports = {}
     for module, row in candidate['modules'].items():
         if candidate['files'].get(row['path']) != row['sha256']:
             raise ValueError('module source digest differs from candidate file inventory')
@@ -286,13 +347,14 @@ def read_snapshot(path):
             if parts != {part: item['path'] if item else None for part, item in bound.items()}:
                 raise ValueError('export import binding differs from snapshot')
             if name in candidate['modules']:
-                if name not in selected or bound != data['local_built'][name]:
+                if name not in producers or bound != data['local_built'][name]:
                     raise ValueError('import is outside built local closure')
-        exports.append(export)
-    data['fidelity'] = FIDELITY.read_exports(exports)
+        exports[module] = export
+    data['fidelity'] = read_environments(exports, candidate['modules'], selected)
     if any(candidate['modules'][m]['is_module'] for m in selected):
         raise ValueError('module-system visibility is not yet supported by fidelity exports')
-    if data['fidelity']['version'] != json.loads(header_path.read_bytes())['lean_version']:
+    if any(env['version'] != json.loads(header_path.read_bytes())['lean_version']
+           for env in data['fidelity'].values()):
         raise ValueError('compiler header and export Lean versions differ')
     return data
 
@@ -335,7 +397,13 @@ def compare(before, after, mapping):
                            if name not in side['candidate']['modules']})
     if boundaries[0] != boundaries[1]:
         raise ValueError('external import artifact boundary changed')
-    result = FIDELITY.check(before['fidelity'], after['fidelity'], mapping)
+    if before.get('source_only', []) != after.get('source_only', []):
+        raise ValueError('source-only root classification changed between candidates')
+    if before['fidelity'].keys() != after['fidelity'].keys():
+        raise ValueError('capture environment roots changed; relocation support is required')
+    results = {root: FIDELITY.check(env, after['fidelity'][root], mapping)
+               for root, env in before['fidelity'].items()}
+    result = dict(status='OK', environments=results)
     result.update(scope='candidate-affected-local-closure',
                   before_candidate=left['head'], after_candidate=right['head'],
                   before_inventory_sha256=sha(FIDELITY.encoded(left).encode()),
@@ -351,6 +419,8 @@ def main():
     cap.add_argument('--root', type=Path, required=True)
     cap.add_argument('--source-dir', action='append', required=True)
     cap.add_argument('--module', action='append', required=True)
+    cap.add_argument('--source-only', action='append', default=[],
+                     help='explicit standalone leaf root: elaborate source, build only its imports')
     cap.add_argument('--build-prefix', required=True)
     cap.add_argument('--admit-command', required=True)
     cap.add_argument('--release-command', required=True)
