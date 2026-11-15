@@ -28,7 +28,11 @@ def main():
             e["kinds"].append(kind)
 
     for root in map(Path, sys.argv[1:]):
-        for md in sorted((root / "specs").rglob("*.md"), key=lambda p: ("_features" in p.parts, str(p))):
+        spec_files = list((root / "specs").rglob("*.md"))
+        for extra in ("ssz", "sync"):
+            if (root / extra).exists():
+                spec_files += list((root / extra).rglob("*.md"))
+        for md in sorted(spec_files, key=lambda p: ("_features" in p.parts, str(p))):
             rel = f"{root.name}/{md.relative_to(root)}"
             in_code = in_class = False
             for n, line in enumerate(md.read_text().split("\n"), 1):
@@ -53,6 +57,8 @@ def main():
                         if m:
                             add(m.group(1), f"{rel}:{n}", "field")
                             fields.setdefault(cur_class, {}).setdefault(m.group(1), f"{rel}:{n}")
+                    for km in re.finditer(r'\["([A-Z][A-Z0-9_]+)"\]', line):
+                        add(km.group(1), f"{rel}:{n}", "config")
                     m = re.match(r"([A-Z][A-Z0-9_]+) ?[:=]", line)
                     if m:
                         add(m.group(1), f"{rel}:{n}", "const")
@@ -63,7 +69,7 @@ def main():
         for y in sorted(list((root / "presets").rglob("*.yaml")) + list((root / "configs").glob("*.yaml"))):
             rel = f"{root.name}/{y.relative_to(root)}"
             for n, line in enumerate(y.read_text().split("\n"), 1):
-                m = re.match(r"([A-Za-z_][A-Za-z0-9_]*):", line)
+                m = re.match(r"\s*(?:- )?([A-Za-z_][A-Za-z0-9_]*):", line)
                 if m:
                     add(m.group(1), f"{rel}:{n}", "config")
     json.dump({"api": api, "fields": fields}, sys.stdout, indent=0, sort_keys=True)

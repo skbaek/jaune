@@ -97,6 +97,15 @@
       "notes": "parts: B256>Bytes32"
     },
     {
+      "old": "JauneConsensus.BLOB_KZG_COMMITMENTS_FIELD_INDEX",
+      "new": "JauneConsensus.blobKzgCommitmentsFieldIndex",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: BLOB>blobKzgCommitmentsFieldIndex"
+    },
+    {
       "old": "JauneConsensus.CFork",
       "new": "JauneConsensus.ConsensusFork",
       "kind": "declaration",
@@ -446,6 +455,15 @@
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
       "notes": "parts: EngineRejectG>EngineRejectGloas"
+    },
+    {
+      "old": "JauneConsensus.FINALIZED_CHECKPOINT_FIELD_INDEX",
+      "new": "JauneConsensus.finalizedCheckpointFieldIndex",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: FINALIZED>finalizedCheckpointFieldIndex"
     },
     {
       "old": "JauneConsensus.Facts.AddrStable",
@@ -10492,6 +10510,15 @@
       "notes": "parts: q1>quotientOne"
     },
     {
+      "old": "JauneConsensus.G2_POINT_AT_INFINITY_BYTES",
+      "new": "JauneConsensus.g2PointAtInfinityBytes",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: G2>g2PointAtInfinityBytes"
+    },
+    {
       "old": "JauneConsensus.GBlock",
       "new": "JauneConsensus.GloasBlock",
       "kind": "declaration",
@@ -10636,6 +10663,24 @@
       "notes": "parts: Gated>ForkField"
     },
     {
+      "old": "JauneConsensus.Gloas.BLOCK_HASH_GINDEX_CAPELLA",
+      "new": "JauneConsensus.Gloas.blockHashGindexCapella",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: BLOCK>blockHashGindexCapella"
+    },
+    {
+      "old": "JauneConsensus.Gloas.BLOCK_HASH_GINDEX_DENEB",
+      "new": "JauneConsensus.Gloas.blockHashGindexDeneb",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: BLOCK>blockHashGindexDeneb"
+    },
+    {
       "old": "JauneConsensus.Gloas.EnvelopeChecksB",
       "new": "JauneConsensus.Gloas.EnvelopeChecksWithBls",
       "kind": "declaration",
@@ -10771,6 +10816,15 @@
       "notes": "parts: balBytes>balanceBytes"
     },
     {
+      "old": "JauneConsensus.Gloas.FINALIZED_CHECKPOINT_FIELD_INDEX",
+      "new": "JauneConsensus.Gloas.finalizedCheckpointFieldIndex",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: FINALIZED>finalizedCheckpointFieldIndex"
+    },
+    {
       "old": "JauneConsensus.Gloas.FcrView",
       "new": "JauneConsensus.Gloas.FastConfirmationView",
       "kind": "declaration",
@@ -10868,6 +10922,15 @@
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
       "notes": "parts: ProgressiveListS>ProgressiveListOnSpine"
+    },
+    {
+      "old": "JauneConsensus.Gloas.SIGNED_EXECUTION_PAYLOAD_BID_FIELD_INDEX",
+      "new": "JauneConsensus.Gloas.signedExecutionPayloadBidFieldIndex",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: SIGNED>signedExecutionPayloadBidFieldIndex"
     },
     {
       "old": "JauneConsensus.Gloas.applyParentPrefix_ctx",
@@ -10994,6 +11057,15 @@
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
       "notes": "parts: GloasSlotsFn>GloasSlotsFunction"
+    },
+    {
+      "old": "JauneConsensus.Gossip.BLOB_KZG_COMMITMENTS_GINDEX",
+      "new": "JauneConsensus.Gossip.blobKzgCommitmentsGindex",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: BLOB>blobKzgCommitmentsGindex"
     },
     {
       "old": "JauneConsensus.Gossip.GM",
@@ -12407,6 +12479,15 @@
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
       "notes": "parts: ProgressiveListS>ProgressiveListOnSpine"
+    },
+    {
+      "old": "JauneConsensus.SAMPLING_FUEL",
+      "new": "JauneConsensus.samplingFuel",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: SAMPLING>samplingFuel"
     },
     {
       "old": "JauneConsensus.U64.lit",

@@ -38,6 +38,7 @@ class Namer:
         self.api = api
         self.token_hits = collections.Counter()
         self.part_cache = {}
+        self.upper_renamed = set()
 
     # ----- spec classification -------------------------------------------------------------
     # The namespaces that hold the spec port itself (functions and types of the pyspec).
@@ -55,7 +56,7 @@ class Namer:
         pe = lambda n: self.api.get(n)
         if kind == "field":
             pname = parent.rpartition(".")[2]
-            if pname in ("Config", "Preset") and last == last.upper():
+            if pname in ("Config", "Preset", "BlobScheduleEntry", "GasLimitScheduleEntry") and last == last.upper():
                 e = pe(last)
                 return f"{e['at']} ({last}, {pname} key)" if e else None
             cls = pe(pname)
@@ -121,8 +122,15 @@ class Namer:
         new = [self.rename_segment(s) for s in segs[:-1]]
         if q in D.LAST_OVERRIDE:
             new.append(D.LAST_OVERRIDE[q])
+        elif spec_last:
+            new.append(segs[-1])
+        elif re.fullmatch(r"[A-Z][A-Z0-9]*(_[A-Z0-9]+)*", segs[-1]) and "_" in segs[-1]:
+            # Jaune-own constant spelled like a pyspec constant: rule 7 gives it lowerCamel
+            words = [w.lower() for w in segs[-1].split("_")]
+            self.upper_renamed.add(segs[-1])
+            new.append(self.rename_segment(words[0] + "".join(w[0].upper() + w[1:] for w in words[1:])))
         else:
-            new.append(segs[-1] if spec_last else self.rename_segment(segs[-1]))
+            new.append(self.rename_segment(segs[-1]))
         return ".".join(new)
 
 
