@@ -33,6 +33,11 @@ partial def usesCasesOn (ctx : MetavarContext) (goal : MVarId) (name : Name)
     | some e => e.getUsedConstants.contains (mkCasesOnName name) ||
         (e.collectMVars {}).result.any fun child => usesCasesOn ctx child name (goal :: seen)
 
+partial def forallBinderNames : Expr → List Name
+  | .forallE n _ b _ => n.eraseMacroScopes :: forallBinderNames b
+  | .mdata _ e => forallBinderNames e
+  | _ => []
+
 /-- Constructors whose `casesOn` minor premise leads to `target`. The minor's
 position in the eliminator application is the compiler's own constructor
 identity; the goal's type need not mention the constructor. -/
@@ -44,13 +49,29 @@ partial def minorCtors (env : Environment) (ctx : MetavarContext) (target : MVar
     let args := e.getAppArgs
     let mut found : Array Name := #[]
     if let .const n _ := fn then
+      let reaches := fun (arg : Expr) => (arg.collectMVars {}).result.any (descends ctx · target)
       if isCasesOnRecursor env n then
         if let some (.inductInfo ind) := env.find? n.getPrefix then
           let first := ind.numParams + 1 + ind.numIndices + 1
           for i in [0:ind.ctors.length] do
             if let some minor := args[first + i]? then
-              if (minor.collectMVars {}).result.any (descends ctx · target) then
+              if reaches minor then
                 found := found.push ind.ctors[i]!
+      else if let some (.recInfo r) := env.find? n then
+        -- `induction` with the default recursor: minors follow the motives.
+        let first := r.numParams + r.numMotives
+        for i in [0:r.rules.length] do
+          if let some minor := args[first + i]? then
+            if reaches minor then
+              found := found.push r.rules[i]!.ctor
+      else if let some info := env.find? n then
+        -- A custom eliminator (`@[induction_eliminator]`): the goal is named by
+        -- the eliminator's own minor binder, not by any constructor.
+        let binders := forallBinderNames info.type
+        for h : j in [0:args.size] do
+          if let some binder := binders[j]? then
+            if reaches args[j] then
+              found := found.push (n ++ binder)
     unless fn.isConst do found := found ++ (← minorCtors env ctx target fn)
     for arg in args do found := found ++ (← minorCtors env ctx target arg)
     return found
@@ -73,8 +94,11 @@ partial def minorCtors (env : Environment) (ctx : MetavarContext) (target : MVar
 def caseOrigins (ctx : ContextInfo) (t : TacticInfo) : Array CaseOrigin := Id.run do
   -- Explicit/custom eliminators and inline alternatives have different naming
   -- contracts. Leave them unresolved unless a separate resolver supports them.
-  unless privateToUserName t.elaborator == `Lean.Elab.Tactic.evalCases &&
-      t.stx.isOfKind ``Lean.Parser.Tactic.cases && t.stx[2].isNone && t.stx[3].isNone do
+  let ordinaryCases := privateToUserName t.elaborator == `Lean.Elab.Tactic.evalCases &&
+      t.stx.isOfKind ``Lean.Parser.Tactic.cases && t.stx[2].isNone && t.stx[3].isNone
+  let ordinaryInduction := privateToUserName t.elaborator == `Lean.Elab.Tactic.evalInduction &&
+      t.stx.isOfKind ``Lean.Parser.Tactic.induction && t.stx[2].isNone && t.stx[4].isNone
+  unless ordinaryCases || ordinaryInduction do
     return #[]
   let some parent := ctx.parentDecl? | return #[]
   let mut result := #[]
@@ -166,11 +190,6 @@ def caseReferences (trees : Array InfoTree) (fileMap : FileMap)
 def addCaseReferences (trees : Array InfoTree) (fileMap : FileMap)
     (refs : Server.ModuleRefs) : Server.ModuleRefs :=
   (caseReferences trees fileMap refs).1
-
-partial def forallBinderNames : Expr → List Name
-  | .forallE n _ b _ => n.eraseMacroScopes :: forallBinderNames b
-  | .mdata _ e => forallBinderNames e
-  | _ => []
 
 partial def syntaxNodes (kind : SyntaxNodeKind) (stx : Syntax) : Array Syntax :=
   let below := stx.getArgs.foldl (fun acc child => acc ++ syntaxNodes kind child) #[]

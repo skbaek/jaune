@@ -48,16 +48,26 @@ def SyntaxProbe.punned (syntaxProbeGas : Nat) : SyntaxProbe.Tx := { syntaxProbeG
 inductive SyntaxProbe.Op where
   | syntaxProbeGas
   | stop
+  | zero
 
 def SyntaxProbe.cost : SyntaxProbe.Op → Nat → Option Nat
   | .syntaxProbeGas, n => some (n + 1)
   | .stop, _ => none
+  | .zero, n => some n
 
 theorem SyntaxProbe.cost_le (o : SyntaxProbe.Op) (n m : Nat)
     (h : SyntaxProbe.cost o n = some m) : m ≤ n + 1 := by
   cases o <;> simp only [SyntaxProbe.cost] at h
   case stop => cases h
   case syntaxProbeGas => simp at h; omega
+  case zero => simp at h; omega
+
+-- `induction` names its goals by the eliminator's minors (`Nat.recAux`): this
+-- `zero` is not the renamed `Op.zero`.
+theorem SyntaxProbe.natInd (n : Nat) : n + 0 = n := by
+  induction n
+  case zero => rfl
+  case succ k ih => rfl
 '''
 
 # A lifted `(← e)` discriminant is one local reference spanning the whole
@@ -81,7 +91,8 @@ def run(directory, exporter):
         dict(old=a, new=b, kind=kind, layer='execution', rule='4',
              source='Synthetic parser and literal-audit provenance control')
         for a, b, kind in [('SyntaxProbe.syntaxProbeGas', 'SyntaxProbe.syntaxProbeAmount', 'declaration'),
-                           ('SyntaxProbe.Tx.syntaxProbeGas', 'SyntaxProbe.Tx.syntaxProbeLimit', 'field')]])
+                           ('SyntaxProbe.Tx.syntaxProbeGas', 'SyntaxProbe.Tx.syntaxProbeLimit', 'field'),
+                           ('SyntaxProbe.Op.zero', 'SyntaxProbe.Op.nothing', 'constructor')]])
     map_path = directory / 'map.json'
     save(map_path, mapping)
 
@@ -110,7 +121,9 @@ def run(directory, exporter):
                 'SyntaxProbe.Tx.mk (syntaxProbeLimit := n)' not in renamed or
                 '| .syntaxProbeGas, n =>' not in renamed or
                 'case syntaxProbeGas => simp at h; omega' not in renamed or
-                '{ syntaxProbeLimit := syntaxProbeGas }' not in renamed):
+                '{ syntaxProbeLimit := syntaxProbeGas }' not in renamed or
+                'case nothing => simp at h; omega' not in renamed or '| .nothing, n =>' not in renamed or
+                '  case zero => rfl' not in renamed):
             raise ValueError('lifted, named-argument or constructor-case provenance changed incorrectly')
         after = export('after')
         verdict = CHECK.check(CHECK.read_exports([before]), CHECK.read_exports([after]), mapping)
