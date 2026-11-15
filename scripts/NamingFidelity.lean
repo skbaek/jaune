@@ -119,22 +119,31 @@ def unsupportedCommand (s : Syntax) : Bool :=
 
 def guardJson (trees : Array InfoTree) (term : Syntax) : IO Json := do
   let mut candidates : Array Json := #[]
+  let mut provenance : Array Json := #[]
   for tree in trees do
     let found ← tree.collectTermInfoM fun ctx info => do
-      if info.stx.getPos? != term.getPos? || info.stx.getTailPos? != term.getTailPos? then
+      -- Macro-generated branches can inherit the entire guard span. Only the
+      -- original syntax node denotes the complete guarded expression.
+      if info.stx != term then
         return none
       ctx.runMetaM info.lctx do
         let e ← instantiateMVars info.expr
         let type ← Meta.inferType e
-        if type != mkConst ``Bool then return none
+        let tag ← if type == mkConst ``Bool then pure "guardBool"
+          else if ← Meta.isProp e then pure "guardProp"
+          else return none
         match exprJson [] e with
-        | .ok json => return some json
+        | .ok json => return some (node tag #[json], Json.mkObj [
+            ("syntax_kind", toJson info.stx.getKind.toString),
+            ("exact_syntax", toJson (info.stx == term)),
+            ("elaborator", toJson info.elaborator.toString)])
         | .error message => throwError "guard export: {message}"
-    candidates := candidates ++ found.toArray
+    candidates := candidates ++ (found.map Prod.fst).toArray
+    provenance := provenance ++ (found.map Prod.snd).toArray
   let some first := candidates[0]?
-    | throw <| IO.userError "guard has no closed Bool expression in compiler information"
+    | throw <| IO.userError s!"guard has no closed Bool/Prop expression at byte range {reprStr (term.getPos?.map (·.byteIdx))}..{reprStr (term.getTailPos?.map (·.byteIdx))}"
   unless candidates.all (· == first) do
-    throw <| IO.userError "ambiguous guard expression in compiler information"
+    throw <| IO.userError s!"ambiguous guard expression at byte range {reprStr (term.getPos?.map (·.byteIdx))}..{reprStr (term.getTailPos?.map (·.byteIdx))}; {candidates.size} candidates: {toJson candidates}; provenance: {toJson provenance}"
   return first
 
 end NamingFidelity
@@ -167,14 +176,6 @@ unsafe def main (args : List String) : IO UInt32 := do
     module := moduleName.toName
     directImports := Lean.Server.collectImports header
     references, decls }
-  let kernel := env.toKernelEnv
-  let mut constants : List (String × Json) := []
-  for c in (← env.getLocalConstantInfos) do
-    let some info := kernel.find? c.name
-      | throw <| IO.userError s!"constant absent from checked kernel environment: {c.name}"
-    let data ← IO.ofExcept (constantJson info)
-    constants := (info.name.toString, Json.mkObj [
-      ("kernel", data), ("attributes", attributesJson env info.name)]) :: constants
   let mut terms : Array Syntax := #[]
   let mut attrs : Array Json := #[]
   for command in result.commands do
@@ -195,7 +196,15 @@ unsafe def main (args : List String) : IO UInt32 := do
     for term in expanded do
       unless terms.contains term do terms := terms.push term
   let guards ← terms.mapM (guardJson trees)
-  let json := Json.mkObj [("schema_version", toJson (2 : Nat)),
+  let kernel := env.toKernelEnv
+  let mut constants : List (String × Json) := []
+  for c in (← env.getLocalConstantInfos) do
+    let some info := kernel.find? c.name
+      | throw <| IO.userError s!"constant absent from checked kernel environment: {c.name}"
+    let data ← IO.ofExcept (constantJson info)
+    constants := (info.name.toString, Json.mkObj [
+      ("kernel", data), ("attributes", attributesJson env info.name)]) :: constants
+  let json := Json.mkObj [("schema_version", toJson (3 : Nat)),
     ("lean_version", toJson Lean.versionString), ("source", toJson input),
     ("index", toJson index), ("constants", Json.mkObj constants),
     ("guards", toJson guards), ("attribute_syntax", toJson attrs)]

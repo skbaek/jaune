@@ -254,10 +254,16 @@ free text. It is deliberately stronger than comparing only final attribute
 flags. Local/scoped attribute commands are currently refused because their
 scope histories need a separate comparison.
 
-Guards are compared as a multiset of elaborated closed Boolean expressions,
+Guards are compared as a multiset of elaborated closed Boolean or proposition
+expressions,
 so moving a guard to another exported module preserves it, while changing or
-dropping it fails. Parsed and expanded command information is inspected;
-ambiguous or unavailable guard information fails closed. Other hash commands
+dropping it fails. Parsed and expanded command information is inspected.
+The original syntax node selects the complete guard; macro-generated branches
+that share its source span do not substitute for it.
+Proposition guards retain the proposition before Lean inserts its Bool coercion,
+with a distinct tag from Boolean guards. Both still execute through Lean's
+original guard elaborator. Ambiguous or unavailable information fails closed.
+Other hash commands
 (such as `#guard_expr`) are currently refused. The `#[...]` array notation is
 not a hash command.
 

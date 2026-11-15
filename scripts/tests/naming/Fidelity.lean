@@ -24,6 +24,8 @@ def update (t : Tx) : Tx := { t with gas := t.gas + 1 }
 
 example : transaction.gas = 11 := by simp [transaction]
 #guard transaction.gas == 11
+#guard transaction.gas = 11
+#guard (some transaction.gas : Option Nat) matches some _
 #guard message.gas == 17
 
 end Fidelity
