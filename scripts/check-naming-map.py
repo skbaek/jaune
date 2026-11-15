@@ -16,7 +16,8 @@ VALID_RULES = frozenset({"1", "2", "3", "4", "5", "6", "7"})
 REQUIRED_FIELDS = ("old", "new", "kind", "layer", "rule", "source")
 OPTIONAL_FIELDS = ("notes", "from_module", "to_module")
 ALLOWED_ENTRY_FIELDS = frozenset(REQUIRED_FIELDS + OPTIONAL_FIELDS)
-TOKEN_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z0-9]|$)|[A-Z]?[a-z0-9]+")
+# An acronym with a plural `s` (`BLTs`, `NTBs`) is the acronym and `s`, not `BL` + `Ts`.
+TOKEN_RE = re.compile(r"[A-Z]{2,}(?=s(?:[A-Z0-9_]|$))|[A-Z]+(?=[A-Z][a-z0-9]|$)|[A-Z]?[a-z0-9]+")
 
 
 def tokenize_identifier(qualified_name):
@@ -178,6 +179,19 @@ class Renamer:
             prefix = ".".join(parts[:i])
             if prefix in self.namespaces:
                 return ".".join([self.namespaces[prefix]] + parts[i:])
+        return name
+
+    def scope(self, name):
+        """A namespace as `namespace`/`open` syntax and lexical resolution see it:
+        a namespace row, or else the exact row of the declaration that bears
+        the namespace's name (the `B256` namespace follows the `B256` type)."""
+        parts = name.split(".")
+        for i in range(len(parts), 0, -1):
+            prefix = ".".join(parts[:i])
+            if prefix in self.namespaces:
+                return ".".join([self.namespaces[prefix]] + parts[i:])
+            if prefix in self.exact and prefix not in self.relocations:
+                return ".".join([self.exact[prefix]] + parts[i:])
         return name
 
     def explain(self, name):

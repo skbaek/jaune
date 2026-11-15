@@ -140,7 +140,7 @@ def validate_policy(policy, source_root):
     return set(words)
 
 
-TOKEN = re.compile(r'[A-Z]+(?=[A-Z][a-z]|[0-9]|$)|[A-Z]?[a-z]+|[0-9]+')
+TOKEN = re.compile(r'[A-Z]{2,}(?=s(?:[A-Z0-9_]|$))|[A-Z]+(?=[A-Z][a-z]|[0-9]|$)|[A-Z]?[a-z]+|[0-9]+')
 
 
 def unknown_words(segment, words, abbreviations):
@@ -166,7 +166,9 @@ def unknown_words(segment, words, abbreviations):
                 i += len(match)
             else:
                 token = tokens[i]
-                if not token.isdigit() and token.lower() not in words:
+                # The plural `s` of an acronym (`EIPs`) is not a word of its own.
+                plural = token == 's' and i > 0 and tokens[i - 1].isupper()
+                if not token.isdigit() and not plural and token.lower() not in words:
                     unknown.append(token)
                 i += 1
     return unknown

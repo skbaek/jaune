@@ -36,6 +36,11 @@ class NamingMapTests(unittest.TestCase):
         shutil.copy(ROOT / "scripts" / "naming-map.json", self.map_path)
         self.base_data = json.loads(self.map_path.read_text(encoding="utf-8"))
 
+    def test_plural_acronym_tokens(self):
+        self.assertEqual(MODULE.tokenize_identifier("BLTs"), ["BLT", "s"])
+        self.assertEqual(MODULE.find_retired_tokens("Jaune.Rlp.BLTs", ["BLT"]), ["BLT"])
+        self.assertEqual(MODULE.find_retired_tokens("Jaune.toNTBsHash", ["NTBs"]), ["NTBs"])
+
     def test_tracked_map_passes(self):
         entries, retired = MODULE.check_file(ROOT / "scripts" / "naming-map.json")
         self.assertGreaterEqual(entries, 0)

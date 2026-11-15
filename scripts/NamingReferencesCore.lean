@@ -218,6 +218,28 @@ def namedArgumentRows (env : Environment) (trees : Array InfoTree)
         rows := rows.push (toJson row)
   return rows
 
+/-- Constructor argument binders `| c (x : T)`: the constructor identifier's
+range (its compiler definition reference names the constructor) and each
+binder identifier. A binder's name is the constructor's parameter name, used
+by named arguments `c (x := e)`. -/
+def constructorBinderRows (commands : Array Syntax) : Array Json := Id.run do
+  let mut rows := #[]
+  for command in commands do
+    for ctor in syntaxNodes ``Lean.Parser.Command.ctor command do
+      let some id := ctor.getArgs.find? (·.isIdent) | continue
+      let some (ca, cb) := byteRange? id | continue
+      let sig := ctor.getArgs.back?.getD .missing
+      for binder in sig[0].getArgs do
+        unless binder.isOfKind ``Lean.Parser.Term.explicitBinder ||
+            binder.isOfKind ``Lean.Parser.Term.implicitBinder ||
+            binder.isOfKind ``Lean.Parser.Term.strictImplicitBinder do continue
+        for name in binder[1].getArgs do
+          if name.isIdent then
+            if let some (a, b) := byteRange? name then
+              rows := rows.push (toJson #[toJson ca, toJson cb, toJson a, toJson b,
+                toJson name.getId.eraseMacroScopes.toString])
+  return rows
+
 structure Frame where
   ns : Name := .anonymous
   opens : List OpenDecl := []
@@ -374,7 +396,8 @@ def syntaxExtras (env : Environment) (header : Syntax) (trees : Array InfoTree)
   let (namespaces, commandRows, eof) := scopeRows env commands
   [("named_arguments", toJson (namedArgumentRows env trees commands)),
    ("namespaces", toJson namespaces), ("commands", toJson commandRows), ("eof_scope", eof),
-   ("imports", toJson (importRows header)), ("unresolved_syntax", toJson caseRows)]
+   ("imports", toJson (importRows header)), ("unresolved_syntax", toJson caseRows),
+   ("constructor_binders", toJson (constructorBinderRows commands))]
 
 partial def identifiersIn (stx : Syntax) : Array Syntax :=
   if stx.isIdent then #[stx]

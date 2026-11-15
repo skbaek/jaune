@@ -346,6 +346,61 @@ class NamingApplyTests(unittest.TestCase):
         edits, _ = M.plan_file(text, index, [row], renamer)
         self.assertEqual(edits, [])
 
+    def test_constructor_binder_path_rows(self):
+        text = 'inductive T where\n  | three (receiver : Nat) (h : receiver = receiver)\ndef v := T.three (receiver := 1) rfl\n'
+        index = index_for(text, [('three', 'Pilot.T.three', 0, True), ('T.three', 'Pilot.T.three', 0, False)])
+        def lsp(i):
+            return [text.count('\n', 0, i), i - text.rfind('\n', 0, i) - 1]
+        binder = text.index('receiver')
+        uses = [text.index('receiver', binder + 1), text.index('receiver = receiver') + 11]
+        index['references'][json.dumps({'f': {'m': 'Pilot', 'i': '_uniq.r'}})] = dict(
+            definition=lsp(binder) + lsp(binder + 8), usages=[lsp(u) + lsp(u + 8) for u in uses])
+        named = text.index('(receiver := 1)') + 1
+        ctor = text.index('three')
+        self.syntax(text, index,
+                    named_arguments=[(named, named + 8, 'Pilot.T.three', 'receiver', None, None)],
+                    constructor_binders=[(ctor, ctor + 5, binder, binder + 8, 'receiver')])
+        rows = [entry('Pilot.T.three.receiver', 'Pilot.T.three.to')]
+        edits, problems = M.plan_file(text, index, rows)
+        self.assertEqual(problems, [])
+        for edit in reversed(edits):
+            text = text[:edit['start']] + edit['new'] + text[edit['end']:]
+        self.assertEqual(text, 'inductive T where\n  | three (to : Nat) (h : to = to)\ndef v := T.three (to := 1) rfl\n')
+
+    def test_declaration_row_renames_its_namespace_syntax(self):
+        text = 'namespace B256\ndef toNat := 0\ndef keep := 1\nend B256\n'
+        index = index_for(text, [('toNat', 'Pilot.B256.toNat', 0, True), ('keep', 'Pilot.B256.keep', 0, True)])
+        rows = [(0, 1, 'namespace'), (1, 1, 'namespace')]
+        b1, b2 = text.index('B256'), text.rindex('B256')
+        self.syntax(text, index, namespaces=[(b1, b1 + 4, 'namespace', 'Pilot.B256', ''),
+                                             (b2, b2 + 4, 'namespace', 'Pilot.B256', '')])
+        mapping = [entry('Pilot.B256', 'Pilot.U256'), entry('Pilot.B256.toNat', 'Pilot.U256.toNat')]
+        edits, problems = M.plan_file(text, index, mapping)
+        self.assertEqual([e['new'] for e in edits], ['U256', 'U256'])
+        # `keep` would silently move to the renamed namespace without its row.
+        self.assertEqual(len(problems), 1)
+        self.assertIn('needs a map row under the new namespace', problems[0]['reason'])
+        mapping.append(entry('Pilot.B256.keep', 'Pilot.U256.keep'))
+        _, problems = M.plan_file(text, index, mapping)
+        self.assertEqual(problems, [])
+
+    def test_compiler_named_definition_and_references(self):
+        text = 'instance : Inhabited Adr := x\ndef y := instInhabitedAdr\n'
+        index = index_for(text, [('instance', 'Pilot.instInhabitedAdr', 0, True),
+                                 ('Adr', 'Pilot.Adr', 0, False),
+                                 ('instInhabitedAdr', 'Pilot.instInhabitedAdr', 0, False)])
+        renamer = M.MAP.Renamer([entry('Pilot.Adr', 'Pilot.Address')])
+        universe = M.Universe({'Pilot.Adr', 'Pilot.instInhabitedAdr'}, renamer, {'Pilot.instInhabitedAdr'})
+        edits, problems = M.plan_file(text, index, [entry('Pilot.Adr', 'Pilot.Address')], renamer, universe)
+        self.assertEqual([e['new'] for e in edits], ['Address'])
+        self.assertEqual(len(problems), 1)
+        self.assertIn('compiler-named', problems[0]['reason'])
+        # An explicit row for the instance is a plain rename of its references.
+        rows = [entry('Pilot.Adr', 'Pilot.Address'), entry('Pilot.instInhabitedAdr', 'Pilot.instInhabitedAddress')]
+        edits, problems = M.plan_file(text, index, rows, None, universe)
+        self.assertEqual(problems, [])
+        self.assertEqual([e['new'] for e in edits], ['Address', 'instInhabitedAddress'])
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

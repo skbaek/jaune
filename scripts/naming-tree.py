@@ -138,7 +138,7 @@ def plan_sources(root, candidate, bundles, mapping):
     renamer = MAP.Renamer(mapping['entries'])
     affected = renamer.words()
     records, texts = [], {}
-    universe = APPLY.Universe(universe_names(bundles), renamer)
+    universe = APPLY.Universe(universe_names(bundles), renamer, compiler_named(bundles))
     excluded = {}
     if 'scripts/naming-inventory.json' in candidate['files']:
         raw = APPLY.safe_path(root, 'scripts/naming-inventory.json').read_bytes()
@@ -209,6 +209,21 @@ def universe_names(bundles):
     return names
 
 
+def compiler_named(bundles):
+    """Declarations whose definition range spells a keyword, not their name."""
+    result = set()
+    for bundle in bundles.values():
+        positions = APPLY.Positions(bundle['source'])
+        for name, loc in bundle['index']['decls'].items():
+            a, b = APPLY.span(positions, loc[4:] if len(loc) == 8 else loc)
+            spans = APPLY.components(bundle['source'], a, b)
+            private = MAP.split_private(name) if name.startswith('_private.') else None
+            parts = APPLY.split_name(private[2] if private else name)
+            if spans is None or parts[-len(spans):] != [bundle['source'][x:y] for x, y in spans]:
+                result.add(name)
+    return result
+
+
 def source_dir(candidate, path):
     dirs = sorted(candidate['source_dirs'], key=lambda d: len(Path(d).parts), reverse=True)
     for directory in dirs:
@@ -259,7 +274,7 @@ def plan_modules(candidate, texts, records, renamer):
 def render_open(row, renamer):
     kind = row[0]
     if kind == 'simple':
-        ns, hidden = renamer.namespace(row[1]), row[2]
+        ns, hidden = renamer.scope(row[1]), row[2]
         return f'open {ns}' + (' hiding ' + ' '.join(hidden) if hidden else '')
     alias, declaration = row[1], renamer(row[2])
     prefix, _, last = declaration.rpartition('.')
@@ -399,7 +414,7 @@ def plan_relocations(candidate, texts, records, bundles, mapping, renamer):
         cut = end + 1 if text.startswith('\n', end) else end
         record['edits'].append(dict(start=start, end=cut, old=text[start:cut], new='',
                                     declaration=f'relocation {sorted(names)} -> {target}'))
-        ns = renamer.namespace(command[3]) if command[3] != '[anonymous]' else ''
+        ns = renamer.scope(command[3]) if command[3] != '[anonymous]' else ''
         lines = ['', 'section'] + [render_open(row, renamer) for row in command[4]]
         lines += ([f'namespace {ns}'] if ns else []) + [moved] + ([f'end {ns}'] if ns else []) + ['end', '']
         target_text = texts[target_record['path']]

@@ -234,7 +234,7 @@ def replacement(spelling, old, new, renamer=None, type_directed=False):
             raise ValueError(f'unsupported qualified leading-dot spelling {spelling!r}')
         return ('.' if leading_dot else '') + '.'.join(new_parts[-len(parts):])
     context = '.'.join(old_parts[:-len(parts)])
-    renamed = renamer.namespace(context) if renamer is not None and context else context
+    renamed = renamer.scope(context) if renamer is not None and context else context
     prefix = renamed.split('.') if renamed else []
     if new_parts[:len(prefix)] != prefix or len(new_parts) == len(prefix):
         raise ValueError(f'rename {old} -> {new} leaves the namespace {context or "<root>"!r} '
@@ -272,7 +272,8 @@ class Universe:
     """Constant names visible for capture checks: one set before and one after
     renaming, plus the current module's private names under their user names."""
 
-    def __init__(self, names, renamer):
+    def __init__(self, names, renamer, compiler_named=()):
+        self.compiler_named = set(compiler_named)
         self.before = set(names)
         self.after = {renamer(name) for name in self.before}
         self.private = {}
@@ -325,7 +326,7 @@ def resolve(lookup, spelling, ns, opens):
 
 
 def renamed_opens(opens, renamer):
-    return [[row[0], renamer.namespace(row[1]), row[2]] if row[0] == 'simple'
+    return [[row[0], renamer.scope(row[1]), row[2]] if row[0] == 'simple'
             else [row[0], row[1], renamer(row[2])] for row in opens]
 
 
@@ -337,7 +338,7 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
     positions = Positions(text)
     offsets = byte_offsets(text)
     # (start, end, const, component spans, local)
-    references, definitions = [], set()
+    references, definitions, local_uses = [], set(), {}
     for key, info in index['references'].items():
         ident = json.loads(key)
         const = ident.get('c', {}).get('n')
@@ -349,6 +350,8 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
             references.append((start, end, const, components(text, start, end), 'f' in ident))
             if location is info['definition']:
                 definitions.add((start, end))
+        if 'f' in ident and info['definition'] is not None:
+            local_uses[span(positions, info['definition'])] = [span(positions, u) for u in info['usages']]
     edits, problems, cover = {}, [], {}
 
     def add_cover(spans, what):
@@ -367,12 +370,34 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
             # A local variable denotes its first component only; any further
             # components are projections with their own references.
             add_cover(comps[:1] if local else comps, ('local', None) if local else ('const', const))
+        spelling = text[start:end]
+        if const is not None and (start, end) in definitions and comps is not None:
+            parts, name_parts = split_name(spelling.lstrip('.')), split_name(const)
+            private = MAP.split_private(const) if const.startswith('_private.') else None
+            if private:
+                name_parts = split_name(private[2])
+            if parts != name_parts[-len(parts):]:
+                continue  # Compiler-named (an anonymous instance): nothing spelled.
+            context = '.'.join(name_parts[:-len(parts)])
+            if context and renamer.scope(context) != context:
+                target = renamer(private[2] if private else const)
+                if not target.startswith(renamer.scope(context) + '.'):
+                    problems.append({'start': start, 'end': end, 'reason':
+                        f'declaration {const} inside renamed namespace {context} -> '
+                        f'{renamer.scope(context)} needs a map row under the new namespace'})
+                    continue
         if const is None or not renamer.renames(const):
+            if const is not None and universe is not None and const in universe.compiler_named:
+                last = split_name(const)[-1]
+                hit = next((w for w in candidates if w in last), None)
+                if hit:
+                    problems.append({'start': start, 'end': end, 'reason':
+                        f'reference to compiler-named {const}, whose name Lean derives from '
+                        f'renamed {hit!r}: name it explicitly or add its map row'})
             continue
         new = renamer(const)
         if new == const:
             continue  # A relocation that keeps its name changes no spelling.
-        spelling = text[start:end]
         try:
             if comps is None:
                 raise ValueError(f'compound reference range {spelling!r} for renamed {const}')
@@ -409,7 +434,7 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
                 continue
             target = renamer(const)
             current = edits[start, end]['new'] if (start, end) in edits else spelling
-            new_ns, new_opens = renamer.namespace(ns) if ns != '[anonymous]' else ns, renamed_opens(opens, renamer)
+            new_ns, new_opens = renamer.scope(ns) if ns != '[anonymous]' else ns, renamed_opens(opens, renamer)
             checked += 1
             if resolve(after, current, new_ns, new_opens) == {target}:
                 continue
@@ -442,7 +467,7 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
             add_cover(comps, ('unresolved', f'{kind} syntax: {reason}'))
             continue
         add_cover(comps, ('namespace', full))
-        new = renamer.namespace(full)
+        new = renamer.scope(full)
         if new != full:
             try:
                 renamed = replacement(spelling, full, new, renamer)
@@ -461,6 +486,10 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
             add_cover(comps, ('unresolved', reason))
             continue
         add_cover(comps, ('binder', function))
+        binder_key = f'{function}.{param}'
+        if binder_key in renamer.exact:
+            add_edit(start, end, param, split_name(renamer(binder_key))[-1], binder_key)
+            continue
         if field is not None and renamer.renames(field):
             new_field = renamer(field)
             parent = field.rsplit('.', 1)[0]
@@ -469,6 +498,26 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
                                  'reason': f'field {field} -> {new_field} leaves its structure'})
                 continue
             add_edit(start, end, param, new_field.rsplit('.', 1)[1], field)
+    definition_at = {(r[0], r[1]): r[2] for r in references if r[2] and (r[0], r[1]) in definitions}
+    metadata = index.get('naming_syntax') or {}
+    for ca, cb, a, b, name in (metadata.get('constructor_binders', []) if metadata.get('version') == 2 else []):
+        cstart, cend = char_span(offsets, ca, cb, text)
+        start, end = char_span(offsets, a, b, text)
+        comps = components(text, start, end)
+        ctor = definition_at.get((cstart, cend))
+        if comps is None or text[start:end] != name:
+            raise ValueError('constructor binder range does not match its name')
+        if ctor is None:
+            add_cover(comps, ('unresolved', 'constructor binder without a constructor definition reference'))
+            continue
+        add_cover(comps, ('binder', ctor))
+        key = f'{ctor}.{name}'
+        if key in renamer.exact:
+            add_edit(start, end, name, split_name(renamer(key))[-1], key)
+            # Later binders or the result type may use it: the same local
+            # variable's uses (same compiler identity) are renamed with it.
+            for use in local_uses.get((start, end), []):
+                add_edit(*use, name, split_name(renamer(key))[-1], key)
     reasons = []
     for a, b, reason in syntax_rows(index, 'unresolved_syntax', 3):
         reasons.append((*char_span(offsets, a, b, text), reason))
@@ -482,7 +531,8 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
         for start, end, const, _, local in shaped[lo:hi]:
             if (start < edit['end'] and edit['start'] < end and
                     (local or const is None or not renamer.renames(const)) and
-                    not (start == edit['start'] and end == edit['end'] and const == edit['declaration'])):
+                    not (start == edit['start'] and end == edit['end'] and
+                         (const == edit['declaration'] or (local and edit['declaration'] in renamer.exact)))):
                 problems.append({'start': edit['start'], 'end': edit['end'],
                                  'reason': 'edit overlaps an unchanged compiler reference'})
                 break
