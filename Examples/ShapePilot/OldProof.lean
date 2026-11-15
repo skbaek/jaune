@@ -12,7 +12,7 @@ theorem old_call_survival (parent child out : Devm) (index size : Nat)
     (ran : Jaune.Resume.run (.call parent index size) (.ok child) = .ok out) :
     out.world = parent.world ∧
     (Dynamic.ofLegacy out).substate =
-      (Dynamic.ofLegacy parent).substate.keepTouch (Dynamic.ofLegacy child).trail := by
+      (Dynamic.ofLegacy parent).substate.keepTouch (Trail.ofFailedLegacy child) := by
   simp only [Jaune.Resume.run, liftToExecution, bind, Except.bind,
     failed, ↓reduceIte, Devm.push_def, Except.assert] at ran
   simp only [incorporateChildOnError, Devm.setMach, Devm.setMeta, Devm.setWorld,
