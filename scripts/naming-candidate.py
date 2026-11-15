@@ -366,7 +366,7 @@ def capture(args):
     return dict(status='OK', snapshot=str(out / 'snapshot.json'), modules=len(selected))
 
 
-def read_snapshot(path):
+def read_snapshot(path, fidelity=True):
     path = Path(path)
     data = json.loads(path.read_bytes())
     if data['schema_version'] not in (2, 3) or data['status'] != 'OK' or data['build']['exit'] != 0:
@@ -412,6 +412,10 @@ def read_snapshot(path):
                 if name not in producers or bound != data['local_built'][name]:
                     raise ValueError('import is outside built local closure')
         exports[module] = export
+    if not fidelity:
+        # Planning needs bound sources and references, not kernel graphs.
+        data['export_paths'] = exports
+        return data
     data['module_bundles'] = read_bundles(exports)
     data['fidelity'] = read_environments(exports, candidate['modules'], selected, data['module_bundles'])
     if any(candidate['modules'][m]['is_module'] for m in selected):

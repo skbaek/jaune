@@ -426,9 +426,8 @@ def plan_relocations(candidate, texts, records, bundles, mapping, renamer):
 def build_plan(root, snapshot_path, map_path):
     snapshot_path = Path(snapshot_path).resolve(strict=True)
     mapping = read_map(map_path)
-    snapshot = CANDIDATE.read_snapshot(snapshot_path)
-    snapshot.pop('fidelity')  # The apply plan needs references, not retained kernel graphs.
-    snapshot.pop('module_bundles')
+    snapshot = CANDIDATE.read_snapshot(snapshot_path, fidelity=False)
+    snapshot.pop('export_paths')
     current_inventory(root, snapshot['candidate'])
     current_artifacts(snapshot)
     bundles = {}
