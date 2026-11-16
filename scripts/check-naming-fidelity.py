@@ -428,9 +428,10 @@ class Comparison:
     def respell_message(self, text, path):
         """A `#guard_msgs` expected text with every whole qualified-name token
         respelled by the map, under the names-only rule of `respell` (master
-        decision 2026-11-16, G0a). A token denotes the before constants whose
-        names it ends with (component-wise); all of them must give one
-        respelling (an unrenamed one keeps the token), or it is ambiguous."""
+        decision 2026-11-16, G0a). A token that still ends some constant name
+        after the rename (or a local variable's) stays; a stale token denotes
+        the before constants whose names it ends with (component-wise), and
+        all of them must give one respelling, or it is ambiguous."""
         if not hasattr(self, '_suffixes'):
             self._suffixes = {}
             for name in self.left:
@@ -441,8 +442,20 @@ class Comparison:
                 for k in range(1, len(parts) + 1):
                     self._suffixes.setdefault('.'.join(parts[-k:]), set()).add(base)
 
+        if not hasattr(self, '_after_suffixes'):
+            self._after_suffixes = set()
+            for name in self.right:
+                base = name.rsplit('@', 1)[0]
+                private = MAP.split_private(base)
+                parts = APPLY.split_name(private[2] if private else base)
+                self._after_suffixes.update('.'.join(parts[-k:]) for k in range(1, len(parts) + 1))
+
         def one(match):
             token = match.group(0)
+            if token in self._after_suffixes:
+                # Still a name after the rename (a local such as `y`, an
+                # unrenamed constant): kept as written.
+                return token
             spellings = set()
             for decl in self._suffixes.get(token, ()):
                 spellings.add(self.respell(token, decl, path))
