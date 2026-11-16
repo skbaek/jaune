@@ -42,21 +42,21 @@ open JauneConsensus
 
 section NegativeControls
 
-private def repVec {α : Type} (x : α) (n : Nat) : SszVector α n :=
+private def replicateVector {α : Type} (x : α) (n : Nat) : SszVector α n :=
   ⟨Array.replicate n x, Array.size_replicate⟩
 
 private def emptySsz {α : Type} (n : Nat) : SszList α n :=
   ⟨#[], Nat.zero_le n⟩
 
-private def zeroBv (n : Nat) : Bitvector n :=
+private def zeroBitvector (n : Nat) : Bitvector n :=
   ⟨Array.replicate n false, Array.size_replicate⟩
 
-private def zeroPubkey : BLSPubkey := repVec 0 48
-private def zeroSig : BLSSignature := repVec 0 96
-private def zeroVer : Version := repVec 0 4
+private def zeroPubkey : BLSPubkey := replicateVector 0 48
+private def zeroSignature : BLSSignature := replicateVector 0 96
+private def zeroVersion : Version := replicateVector 0 4
 
 private def zeroFork : Fork :=
-  { previous_version := zeroVer, current_version := zeroVer, epoch := U64.zero }
+  { previous_version := zeroVersion, current_version := zeroVersion, epoch := U64.zero }
 
 private def zeroHeader : BeaconBlockHeader :=
   { slot := U64.zero, proposer_index := U64.zero,
@@ -69,7 +69,7 @@ private def zeroCheckpoint : Checkpoint :=
   { epoch := U64.zero, root := 0 }
 
 private def zeroSyncCommittee : SyncCommittee Preset.minimal :=
-  { pubkeys := repVec zeroPubkey Preset.minimal.SYNC_COMMITTEE_SIZE,
+  { pubkeys := replicateVector zeroPubkey Preset.minimal.SYNC_COMMITTEE_SIZE,
     aggregate_pubkey := zeroPubkey }
 
 private def zeroPayloadHeader : ExecutionPayloadHeader Preset.minimal :=
@@ -77,7 +77,7 @@ private def zeroPayloadHeader : ExecutionPayloadHeader Preset.minimal :=
     fee_recipient := 0,
     state_root := 0,
     receipts_root := 0,
-    logs_bloom := repVec 0 Preset.minimal.BYTES_PER_LOGS_BLOOM,
+    logs_bloom := replicateVector 0 Preset.minimal.BYTES_PER_LOGS_BLOOM,
     prev_randao := 0,
     block_number := U64.zero,
     gas_limit := U64.zero,
@@ -92,14 +92,14 @@ private def zeroPayloadHeader : ExecutionPayloadHeader Preset.minimal :=
     excess_blob_gas := U64.zero }
 
 /-- Base empty `BeaconState Preset.minimal .electra` satisfying `CorpusAnchorInv`. -/
-def ctrlBaseState : BeaconState Preset.minimal .electra :=
+def controlBaseState : BeaconState Preset.minimal .electra :=
   { genesis_time := U64.zero,
     genesis_validators_root := 0,
     slot := U64.zero,
     fork := zeroFork,
     latest_block_header := zeroHeader,
-    block_roots := repVec 0 Preset.minimal.SLOTS_PER_HISTORICAL_ROOT,
-    state_roots := repVec 0 Preset.minimal.SLOTS_PER_HISTORICAL_ROOT,
+    block_roots := replicateVector 0 Preset.minimal.SLOTS_PER_HISTORICAL_ROOT,
+    state_roots := replicateVector 0 Preset.minimal.SLOTS_PER_HISTORICAL_ROOT,
     historical_roots := emptySsz Preset.minimal.HISTORICAL_ROOTS_LIMIT,
     eth1_data := zeroEth1Data,
     eth1_data_votes := emptySsz
@@ -107,11 +107,11 @@ def ctrlBaseState : BeaconState Preset.minimal .electra :=
     eth1_deposit_index := U64.zero,
     validators := emptySsz Preset.minimal.VALIDATOR_REGISTRY_LIMIT,
     balances := emptySsz Preset.minimal.VALIDATOR_REGISTRY_LIMIT,
-    randao_mixes := repVec 0 Preset.minimal.EPOCHS_PER_HISTORICAL_VECTOR,
-    slashings := repVec U64.zero Preset.minimal.EPOCHS_PER_SLASHINGS_VECTOR,
+    randao_mixes := replicateVector 0 Preset.minimal.EPOCHS_PER_HISTORICAL_VECTOR,
+    slashings := replicateVector U64.zero Preset.minimal.EPOCHS_PER_SLASHINGS_VECTOR,
     previous_epoch_participation := emptySsz Preset.minimal.VALIDATOR_REGISTRY_LIMIT,
     current_epoch_participation := emptySsz Preset.minimal.VALIDATOR_REGISTRY_LIMIT,
-    justification_bits := zeroBv JUSTIFICATION_BITS_LENGTH,
+    justification_bits := zeroBitvector JUSTIFICATION_BITS_LENGTH,
     previous_justified_checkpoint := zeroCheckpoint,
     current_justified_checkpoint := zeroCheckpoint,
     finalized_checkpoint := { epoch := U64.one, root := 0 },
@@ -135,10 +135,10 @@ def ctrlBaseState : BeaconState Preset.minimal .electra :=
 
 /-- Unslashed withdrawable validator with `32 ETH` effective balance (`exit_epoch = 0`,
 `withdrawable_epoch = 0`). -/
-def ctrlValidator : Validator :=
+def controlValidator : Validator :=
   { pubkey := zeroPubkey,
     withdrawal_credentials := 0,
-    effective_balance := U64.lit 32000000000,
+    effective_balance := U64.literal 32000000000,
     slashed := false,
     activation_eligibility_epoch := U64.zero,
     activation_epoch := U64.zero,
@@ -146,21 +146,21 @@ def ctrlValidator : Validator :=
     withdrawable_epoch := U64.zero }
 
 /-- Finalized `GENESIS_SLOT` pending deposit of `32 ETH`. -/
-def ctrlDeposit : PendingDeposit :=
+def controlDeposit : PendingDeposit :=
   { pubkey := zeroPubkey,
     withdrawal_credentials := 0,
-    amount := U64.lit 32000000000,
-    signature := zeroSig,
+    amount := U64.literal 32000000000,
+    signature := zeroSignature,
     slot := GENESIS_SLOT }
 
 /-! ### Control 1: `PendingConsolidationsDistinct` is load-bearing for `C-S9` -/
 
 /-- Closed state satisfying `AnchorInv` and `BalancesMatchValidators`, but with a self-consolidation
 `⟨0, 0⟩` violating `PendingConsolidationsDistinct`. -/
-def s_pc_self : BeaconState Preset.minimal .electra :=
-  { ctrlBaseState with
-    validators := ⟨#[ctrlValidator], by decide⟩,
-    balances := ⟨#[U64.lit 32000000000], by decide⟩,
+def stateSelfConsolidation : BeaconState Preset.minimal .electra :=
+  { controlBaseState with
+    validators := ⟨#[controlValidator], by decide⟩,
+    balances := ⟨#[U64.literal 32000000000], by decide⟩,
     pending_consolidations := ⟨#[{ source_index := U64.zero, target_index := U64.zero }], by decide⟩ }
 
 /-- **`PendingConsolidationsDistinct` negative control (`C-S9`):**
@@ -170,23 +170,23 @@ dequeues `⟨0, 0⟩`, and leaves `balances[0] = 32_000_000_000`, falsifying bot
 source-debit clause (`b' = bal - amount`) and target-credit clause (`tb' = tb + amount`) of
 `consolidation_balance_moved`. -/
 theorem pendingConsolidationsDistinct_negative_control :
-    AnchorInv s_pc_self ∧
-    BalancesMatchValidators s_pc_self ∧
-    ¬ PendingConsolidationsDistinct s_pc_self ∧
+    AnchorInv stateSelfConsolidation ∧
+    BalancesMatchValidators stateSelfConsolidation ∧
+    ¬ PendingConsolidationsDistinct stateSelfConsolidation ∧
     ∃ s_pc',
-      processPendingConsolidations Config.minimal s_pc_self = .ok s_pc' ∧
+      processPendingConsolidations Config.minimal stateSelfConsolidation = .ok s_pc' ∧
       pendingConsolidationsList s_pc' = [] ∧
-      s_pc'.balances.toArray[(U64.zero).toNat]? = some (U64.lit 32000000000) ∧
+      s_pc'.balances.toArray[(U64.zero).toNat]? = some (U64.literal 32000000000) ∧
       (¬ ∃ b', s_pc'.balances.toArray[(U64.zero).toNat]? = some b' ∧
-          b'.toNat = (U64.lit 32000000000).toNat -
-            (if U64.lit 32000000000 < ctrlValidator.effective_balance
-             then U64.lit 32000000000 else ctrlValidator.effective_balance).toNat) ∧
+          b'.toNat = (U64.literal 32000000000).toNat -
+            (if U64.literal 32000000000 < controlValidator.effective_balance
+             then U64.literal 32000000000 else controlValidator.effective_balance).toNat) ∧
       (¬ ∃ tb tb',
-          s_pc_self.balances.toArray[(U64.zero).toNat]? = some tb ∧
+          stateSelfConsolidation.balances.toArray[(U64.zero).toNat]? = some tb ∧
           s_pc'.balances.toArray[(U64.zero).toNat]? = some tb' ∧
           tb'.toNat = tb.toNat +
-            (if U64.lit 32000000000 < ctrlValidator.effective_balance
-             then U64.lit 32000000000 else ctrlValidator.effective_balance).toNat) := by
+            (if U64.literal 32000000000 < controlValidator.effective_balance
+             then U64.literal 32000000000 else controlValidator.effective_balance).toNat) := by
   refine ⟨⟨?_, ?_⟩, ?_, ?_, ?_⟩
   · intro l hl p hp
     have hl_eq : l = emptySsz Preset.minimal.PENDING_PARTIAL_WITHDRAWALS_LIMIT :=
@@ -194,35 +194,35 @@ theorem pendingConsolidationsDistinct_negative_control :
     subst hl_eq
     nomatch hp
   · intro v hv hff
-    have hv_eq : v = ctrlValidator := by
-      simpa [s_pc_self] using hv
+    have hv_eq : v = controlValidator := by
+      simpa [stateSelfConsolidation] using hv
     subst hv_eq
     exact absurd hff (by decide)
   · unfold BalancesMatchValidators; decide
   · intro hpcd
     have hmem : ({ source_index := U64.zero, target_index := U64.zero } : PendingConsolidation) ∈
-        pendingConsolidationsList s_pc_self := by
+        pendingConsolidationsList stateSelfConsolidation := by
       rw [pendingConsolidationsList_eq_get rfl]
       exact List.Mem.head _
     exact hpcd _ hmem rfl
   · have hproc : ∃ s_pc',
-        processPendingConsolidations Config.minimal s_pc_self = .ok s_pc' ∧
+        processPendingConsolidations Config.minimal stateSelfConsolidation = .ok s_pc' ∧
         pendingConsolidationsList s_pc' = [] ∧
-        s_pc'.balances.toArray[(U64.zero).toNat]? = some (U64.lit 32000000000) :=
+        s_pc'.balances.toArray[(U64.zero).toNat]? = some (U64.literal 32000000000) :=
       ⟨_, rfl, by rw [pendingConsolidationsList_eq_get rfl]; rfl, rfl⟩
     obtain ⟨s_pc', hp, hpcl, hbal0⟩ := hproc
     refine ⟨s_pc', hp, hpcl, hbal0, ?_, ?_⟩
     · rintro ⟨b', hb', hsub⟩
       rw [hbal0] at hb'
-      have hb'_eq : b' = U64.lit 32000000000 := (Option.some.inj hb').symm
+      have hb'_eq : b' = U64.literal 32000000000 := (Option.some.inj hb').symm
       subst hb'_eq
       exact absurd hsub (by decide)
     · rintro ⟨tb, tb', htb, htb', hadd⟩
-      have htb0 : s_pc_self.balances.toArray[(U64.zero).toNat]? = some (U64.lit 32000000000) := rfl
+      have htb0 : stateSelfConsolidation.balances.toArray[(U64.zero).toNat]? = some (U64.literal 32000000000) := rfl
       rw [htb0] at htb
       rw [hbal0] at htb'
-      have htb_eq : tb = U64.lit 32000000000 := (Option.some.inj htb).symm
-      have htb'_eq : tb' = U64.lit 32000000000 := (Option.some.inj htb').symm
+      have htb_eq : tb = U64.literal 32000000000 := (Option.some.inj htb).symm
+      have htb'_eq : tb' = U64.literal 32000000000 := (Option.some.inj htb').symm
       subst htb_eq; subst htb'_eq
       exact absurd hadd (by decide)
 
@@ -230,16 +230,16 @@ theorem pendingConsolidationsDistinct_negative_control :
 
 /-- Closed state satisfying `AnchorInv` and `PendingConsolidationsDistinct`, but with
 `validators = #[]` and `balances = #[99_000_000_000]` (`balances.size = 1 > 0 = validators.size`). -/
-def s_bm_over : BeaconState Preset.minimal .electra :=
-  { ctrlBaseState with
+def stateBalancesMatchValidatorsOver : BeaconState Preset.minimal .electra :=
+  { controlBaseState with
     validators := emptySsz Preset.minimal.VALIDATOR_REGISTRY_LIMIT,
-    balances := ⟨#[U64.lit 99000000000], by decide⟩,
-    pending_deposits := ⟨#[ctrlDeposit], by decide⟩ }
+    balances := ⟨#[U64.literal 99000000000], by decide⟩,
+    pending_deposits := ⟨#[controlDeposit], by decide⟩ }
 
-private theorem isValidDepositSignature_ctrlDeposit :
-    isValidDepositSignature { cfg := Config.minimal, blsActive := false }
-      ctrlDeposit.pubkey ctrlDeposit.withdrawal_credentials ctrlDeposit.amount
-      ctrlDeposit.signature = .ok true := by
+private theorem isValidDepositSignature_controlDeposit :
+    isValidDepositSignature { config := Config.minimal, blsActive := false }
+      controlDeposit.pubkey controlDeposit.withdrawal_credentials controlDeposit.amount
+      controlDeposit.signature = .ok true := by
   have hver : versionOf Config.minimal.GENESIS_FORK_VERSION =
       .ok ⟨#[0x00, 0x00, 0x00, 0x01], by decide⟩ := rfl
   unfold isValidDepositSignature computeDomainDefault
@@ -255,15 +255,15 @@ but `setOrAppendList` overwrites `balances[0]` instead of pushing, leaving
 and falsifying the `D-S9` new-validator balance-append clause of
 `applyPendingDeposit_newValidator_credit`. -/
 theorem balancesMatchValidators_over_negative_control :
-    AnchorInv s_bm_over ∧
-    PendingConsolidationsDistinct s_bm_over ∧
-    ¬ BalancesMatchValidators s_bm_over ∧
+    AnchorInv stateBalancesMatchValidatorsOver ∧
+    PendingConsolidationsDistinct stateBalancesMatchValidatorsOver ∧
+    ¬ BalancesMatchValidators stateBalancesMatchValidatorsOver ∧
     ∃ s_bm',
-      processPendingDeposits { cfg := Config.minimal, blsActive := false } s_bm_over = .ok s_bm' ∧
+      processPendingDeposits { config := Config.minimal, blsActive := false } stateBalancesMatchValidatorsOver = .ok s_bm' ∧
       pendingDepositsList s_bm' = [] ∧
       s_bm'.validators.toArray.size = 1 ∧
-      s_bm'.balances.toArray = #[ctrlDeposit.amount] ∧
-      s_bm'.balances.toArray ≠ s_bm_over.balances.toArray.push ctrlDeposit.amount := by
+      s_bm'.balances.toArray = #[controlDeposit.amount] ∧
+      s_bm'.balances.toArray ≠ stateBalancesMatchValidatorsOver.balances.toArray.push controlDeposit.amount := by
   refine ⟨⟨?_, ?_⟩, ?_, ?_, ?_⟩
   · intro l hl p hp
     have hl_eq : l = emptySsz Preset.minimal.PENDING_PARTIAL_WITHDRAWALS_LIMIT :=
@@ -271,77 +271,77 @@ theorem balancesMatchValidators_over_negative_control :
     subst hl_eq
     nomatch hp
   · intro v hv
-    simp [s_bm_over, emptySsz] at hv
+    simp [stateBalancesMatchValidatorsOver, emptySsz] at hv
   · intro pc hpc
     rw [pendingConsolidationsList_eq_get rfl] at hpc
     nomatch hpc
   · unfold BalancesMatchValidators; decide
-  · have hfind : findValidatorIndex s_bm_over ctrlDeposit.pubkey = none := by
+  · have hfind : findValidatorIndex stateBalancesMatchValidatorsOver controlDeposit.pubkey = none := by
       unfold findValidatorIndex
-      simp [s_bm_over, emptySsz]
+      simp [stateBalancesMatchValidatorsOver, emptySsz]
     have happly :
-        applyPendingDeposit { cfg := Config.minimal, blsActive := false } s_bm_over ctrlDeposit =
-          addValidatorToRegistry s_bm_over ctrlDeposit.pubkey ctrlDeposit.withdrawal_credentials
-            ctrlDeposit.amount := by
+        applyPendingDeposit { config := Config.minimal, blsActive := false } stateBalancesMatchValidatorsOver controlDeposit =
+          addValidatorToRegistry stateBalancesMatchValidatorsOver controlDeposit.pubkey controlDeposit.withdrawal_credentials
+            controlDeposit.amount := by
       rw [applyPendingDeposit_eq]
       unfold classifyPendingDeposit
       rw [hfind]
       dsimp only
-      rw [isValidDepositSignature_ctrlDeposit]
+      rw [isValidDepositSignature_controlDeposit]
       rfl
     have hstep :
-        pendingDepositsLoop { cfg := Config.minimal, blsActive := false }
-          U64.one (U64.lit 64000000000) (U64.lit 8) U64.zero [ctrlDeposit]
-          (U64.zero, 0, #[], false, s_bm_over) =
+        pendingDepositsLoop { config := Config.minimal, blsActive := false }
+          U64.one (U64.literal 64000000000) (U64.literal 8) U64.zero [controlDeposit]
+          (U64.zero, 0, #[], false, stateBalancesMatchValidatorsOver) =
         (do
-          let st ← addValidatorToRegistry s_bm_over ctrlDeposit.pubkey
-            ctrlDeposit.withdrawal_credentials ctrlDeposit.amount
-          pure (ctrlDeposit.amount, 1, #[], false, st)) := by
+          let st ← addValidatorToRegistry stateBalancesMatchValidatorsOver controlDeposit.pubkey
+            controlDeposit.withdrawal_credentials controlDeposit.amount
+          pure (controlDeposit.amount, 1, #[], false, st)) := by
       unfold pendingDepositsLoop pendingDepositStep
       dsimp only
       rw [hfind]
       dsimp only
-      have hc1 : (!CFork.electra.atLeast .fulu && decide (ctrlDeposit.slot > GENESIS_SLOT) &&
-          decide (s_bm_over.eth1_deposit_index < U64.zero)) = false := by decide
-      have hc2 : ¬ (ctrlDeposit.slot > U64.lit 8) := by decide
+      have hc1 : (!ConsensusFork.electra.atLeast .fulu && decide (controlDeposit.slot > GENESIS_SLOT) &&
+          decide (stateBalancesMatchValidatorsOver.eth1_deposit_index < U64.zero)) = false := by decide
+      have hc2 : ¬ (controlDeposit.slot > U64.literal 8) := by decide
       have hc3 : ¬ (0 ≥ Preset.minimal.MAX_PENDING_DEPOSITS_PER_EPOCH) := by decide
       rw [hc1]
       simp only [Bool.false_eq_true, ite_false, hc2, hc3, pure_bind]
-      have hadd : U64.zero.add? ctrlDeposit.amount "process_pending_deposits" =
-          .ok ctrlDeposit.amount := rfl
+      have hadd : U64.zero.add? controlDeposit.amount "process_pending_deposits" =
+          .ok controlDeposit.amount := rfl
       rw [hadd, ok_bind']
-      have hc4 : decide (ctrlDeposit.amount > U64.lit 64000000000) = false := by decide
+      have hc4 : decide (controlDeposit.amount > U64.literal 64000000000) = false := by decide
       rw [hc4]
       simp only [Bool.false_eq_true, ite_false]
       rw [happly]
       rfl
     have hreg : ∃ s_reg,
-        addValidatorToRegistry s_bm_over ctrlDeposit.pubkey ctrlDeposit.withdrawal_credentials
-          ctrlDeposit.amount = .ok s_reg ∧
+        addValidatorToRegistry stateBalancesMatchValidatorsOver controlDeposit.pubkey controlDeposit.withdrawal_credentials
+          controlDeposit.amount = .ok s_reg ∧
         s_reg.validators.toArray.size = 1 ∧
-        s_reg.balances.toArray = #[ctrlDeposit.amount] :=
+        s_reg.balances.toArray = #[controlDeposit.amount] :=
       ⟨_, rfl, rfl, rfl⟩
     obtain ⟨s_reg, hreg_eq, hv_sz, hb_eq⟩ := hreg
     have hproc :
-        processPendingDeposits { cfg := Config.minimal, blsActive := false } s_bm_over =
+        processPendingDeposits { config := Config.minimal, blsActive := false } stateBalancesMatchValidatorsOver =
           (do
             let st ← s_reg.setPendingDeposits (emptySsz Preset.minimal.PENDING_DEPOSITS_LIMIT)
             st.setDepositBalanceToConsume U64.zero) := by
       rw [processPendingDeposits_eq]
-      have he0 : getCurrentEpoch s_bm_over = .ok U64.zero := rfl
+      have he0 : getCurrentEpoch stateBalancesMatchValidatorsOver = .ok U64.zero := rfl
       have hne : U64.zero.add? U64.one "process_pending_deposits" = .ok U64.one := rfl
-      have hdb : s_bm_over.depositBalanceToConsume = .ok U64.zero := rfl
-      have hcl : getActivationExitChurnLimit Config.minimal s_bm_over =
-          .ok (U64.lit 64000000000) := rfl
-      have hav : U64.zero.add? (U64.lit 64000000000) "process_pending_deposits" =
-          .ok (U64.lit 64000000000) := rfl
-      have hfs : computeStartSlotAtEpoch Preset.minimal s_bm_over.finalized_checkpoint.epoch =
-          .ok (U64.lit 8) := rfl
-      have hrs : s_bm_over.depositRequestsStartIndex = .ok U64.zero := rfl
-      have hpd : s_bm_over.pendingDeposits = .ok ⟨#[ctrlDeposit], by decide⟩ := rfl
+      have hdb : stateBalancesMatchValidatorsOver.depositBalanceToConsume = .ok U64.zero := rfl
+      have hcl : getActivationExitChurnLimit Config.minimal stateBalancesMatchValidatorsOver =
+          .ok (U64.literal 64000000000) := rfl
+      have hav : U64.zero.add? (U64.literal 64000000000) "process_pending_deposits" =
+          .ok (U64.literal 64000000000) := rfl
+      have hfs : computeStartSlotAtEpoch Preset.minimal stateBalancesMatchValidatorsOver.finalized_checkpoint.epoch =
+          .ok (U64.literal 8) := rfl
+      have hrs : stateBalancesMatchValidatorsOver.depositRequestsStartIndex = .ok U64.zero := rfl
+      have hpd : stateBalancesMatchValidatorsOver.pendingDeposits = .ok ⟨#[controlDeposit], by decide⟩ := rfl
       rw [he0, ok_bind', hne, ok_bind', hdb, ok_bind', hcl, ok_bind', hav, ok_bind',
           hfs, ok_bind', hrs, ok_bind', hpd, ok_bind']
-      have hlist : (#[ctrlDeposit]).toList = [ctrlDeposit] := rfl
+      have hlist : (#[controlDeposit]).toList = [controlDeposit] := rfl
       rw [hlist, hstep, hreg_eq]
       rfl
     have hout : ∃ s_bm',
@@ -363,11 +363,11 @@ theorem balancesMatchValidators_over_negative_control :
 
 /-- Closed state satisfying `AnchorInv` and `PendingConsolidationsDistinct`, but with
 `validators = #[ctrlValidator]` and `balances = #[]` (`balances.size = 0 < 1 = validators.size`). -/
-def s_bm_under : BeaconState Preset.minimal .electra :=
-  { ctrlBaseState with
-    validators := ⟨#[ctrlValidator], by decide⟩,
+def stateBalancesMatchValidatorsUnder : BeaconState Preset.minimal .electra :=
+  { controlBaseState with
+    validators := ⟨#[controlValidator], by decide⟩,
     balances := emptySsz Preset.minimal.VALIDATOR_REGISTRY_LIMIT,
-    pending_deposits := ⟨#[ctrlDeposit], by decide⟩,
+    pending_deposits := ⟨#[controlDeposit], by decide⟩,
     pending_consolidations := ⟨#[{ source_index := U64.zero, target_index := U64.one }], by decide⟩ }
 
 /-- **`BalancesMatchValidators` step-blocking control (`balances.size < validators.size`):**
@@ -376,12 +376,12 @@ def s_bm_under : BeaconState Preset.minimal .electra :=
 `processPendingConsolidations`, and `applyPendingDepositOutcome ... (.topUp U64.zero)` (crediting a
 top-up deposit for validator `0`) to fail with out-of-bounds balance reads. -/
 theorem balancesMatchValidators_under_blocks_step :
-    AnchorInv s_bm_under ∧
-    PendingConsolidationsDistinct s_bm_under ∧
-    ¬ BalancesMatchValidators s_bm_under ∧
-    (∃ e, processEffectiveBalanceUpdates Config.minimal s_bm_under = .error e) ∧
-    (∃ e, processPendingConsolidations Config.minimal s_bm_under = .error e) ∧
-    (∃ e, applyPendingDepositOutcome s_bm_under ctrlDeposit (.topUp U64.zero) = .error e) := by
+    AnchorInv stateBalancesMatchValidatorsUnder ∧
+    PendingConsolidationsDistinct stateBalancesMatchValidatorsUnder ∧
+    ¬ BalancesMatchValidators stateBalancesMatchValidatorsUnder ∧
+    (∃ e, processEffectiveBalanceUpdates Config.minimal stateBalancesMatchValidatorsUnder = .error e) ∧
+    (∃ e, processPendingConsolidations Config.minimal stateBalancesMatchValidatorsUnder = .error e) ∧
+    (∃ e, applyPendingDepositOutcome stateBalancesMatchValidatorsUnder controlDeposit (.topUp U64.zero) = .error e) := by
   refine ⟨⟨?_, ?_⟩, ?_, ?_, ⟨_, rfl⟩, ⟨_, rfl⟩, ⟨_, rfl⟩⟩
   · intro l hl p hp
     have hl_eq : l = emptySsz Preset.minimal.PENDING_PARTIAL_WITHDRAWALS_LIMIT :=
@@ -389,8 +389,8 @@ theorem balancesMatchValidators_under_blocks_step :
     subst hl_eq
     nomatch hp
   · intro v hv hff
-    have hv_eq : v = ctrlValidator := by
-      simpa [s_bm_under] using hv
+    have hv_eq : v = controlValidator := by
+      simpa [stateBalancesMatchValidatorsUnder] using hv
     subst hv_eq
     exact absurd hff (by decide)
   · intro pc hpc

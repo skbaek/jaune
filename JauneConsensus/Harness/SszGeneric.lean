@@ -22,17 +22,17 @@ open Jaune Yaml
 
 /-- Reading a YAML node as an SSZ value. -/
 class FromYaml (α : Type) where
-  fromYaml : YVal → Res α
+  fromYaml : YamlValue → Yaml.Result α
 
 export FromYaml (fromYaml)
 
 /-- A decimal natural, plain or quoted (the vectors quote integers wider than 64 bits). -/
-def natOf (y : YVal) : Res Nat :=
+def natOf (y : YamlValue) : Yaml.Result Nat :=
   match y with
   | .scalar _ true => y.asQuotedNat
   | _ => y.asNat
 
-instance : FromYaml Bool := ⟨YVal.asBool⟩
+instance : FromYaml Bool := ⟨YamlValue.asBool⟩
 
 instance : FromYaml U64 where
   fromYaml y := do
@@ -46,12 +46,12 @@ instance {n : Nat} : FromYaml (UIntN n) where
 
 instance {α : Type} {n : Nat} [FromYaml α] : FromYaml (SszVector α n) where
   fromYaml y := do
-    let xs := (← (← y.asSeq).mapM fromYaml).toArray
+    let xs := (← (← y.asSequence).mapM fromYaml).toArray
     if h : xs.size = n then pure ⟨xs, h⟩ else throw (.shape "vector of the wrong length")
 
 instance {α : Type} {n : Nat} [FromYaml α] : FromYaml (SszList α n) where
   fromYaml y := do
-    let xs := (← (← y.asSeq).mapM fromYaml).toArray
+    let xs := (← (← y.asSequence).mapM fromYaml).toArray
     if h : xs.size ≤ n then pure ⟨xs, h⟩ else throw (.shape "list beyond its limit")
 
 instance : FromYaml UInt8 where
@@ -71,20 +71,20 @@ instance (priority := high) {n : Nat} : FromYaml (SszVector UInt8 n) where
     let bs := (← y.asHex).toArray
     if h : bs.size = n then pure ⟨bs, h⟩ else throw (.shape "byte vector of the wrong length")
 
-instance : FromYaml B256 where
+instance : FromYaml Jaune.U256 where
   fromYaml y := do
     let bs ← y.asHex
-    if bs.length = 32 then pure (Bytes.toB256 bs) else throw (.shape "expected 32 bytes")
+    if bs.length = 32 then pure (Bytes.toU256 bs) else throw (.shape "expected 32 bytes")
 
-instance : FromYaml Adr where
+instance : FromYaml Address where
   fromYaml y := do
-    match Bytes.toAdr? (← y.asHex) with
+    match Bytes.toAddress? (← y.asHex) with
     | some a => pure a
     | none => throw (.shape "expected 20 bytes")
 
 /-- Bitfields are given as their SSZ bytes. -/
-def fromSszHex {α : Type} [Ssz α] (y : YVal) : Res α := do
-  match (deserialize (← y.asHex) : M α) with
+def fromSszHex {α : Type} [Ssz α] (y : YamlValue) : Yaml.Result α := do
+  match (deserialize (← y.asHex) : Fallible α) with
   | .ok v => pure v
   | .error _ => throw (.shape "undecodable SSZ bytes")
 
@@ -92,30 +92,30 @@ instance {n : Nat} : FromYaml (Bitvector n) := ⟨fromSszHex⟩
 instance {n : Nat} : FromYaml (Bitlist n) := ⟨fromSszHex⟩
 
 /-- `ProgressiveList[T]`: a sequence, as a list without limit. -/
-instance {s : Spine} {α : Type} [FromYaml α] : FromYaml (ProgressiveListS s α) where
-  fromYaml y := do pure ⟨(← (← y.asSeq).mapM fromYaml).toArray⟩
+instance {s : Spine} {α : Type} [FromYaml α] : FromYaml (ProgressiveListOnSpine s α) where
+  fromYaml y := do pure ⟨(← (← y.asSequence).mapM fromYaml).toArray⟩
 
 /-- `ProgressiveList[Byte]` is given as `0x`-prefixed bytes ("JSON mapping"), like `ByteList`. -/
 instance : FromYaml ProgressiveByteList where
   fromYaml y := do pure ⟨⟨(← y.asHex).toArray⟩⟩
 
-instance {s : Spine} : FromYaml (ProgressiveBitlistS s) := ⟨fromSszHex⟩
+instance {s : Spine} : FromYaml (ProgressiveBitlistOnSpine s) := ⟨fromSszHex⟩
 
 /-- Reading one container field from a mapping. A fork-gated field that is absent at the
 case's fork must be absent from the mapping. -/
 class FromYamlField (α : Type) where
-  readField : YVal → String → Res α
+  readField : YamlValue → String → Yaml.Result α
 
 instance (priority := low) {α : Type} [FromYaml α] : FromYamlField α where
   readField y k := y.field k >>= fromYaml
 
-instance instFromYamlFieldGated {α : Type} [h : FromYamlField α] :
-    {c : Bool} → FromYamlField (Gated c α)
+instance instFromYamlFieldForkField {α : Type} [h : FromYamlField α] :
+    {c : Bool} → FromYamlField (ForkField c α)
   | true => h
   | false => ⟨fun y k => if (y.get? k).isSome then throw (.shape s!"field {k} present before its fork") else pure ()⟩
 
 /-- Every key of the mapping names a field (absent gated fields are checked per field). -/
-def checkFieldKeys (y : YVal) (known : List String) : Res Unit :=
+def checkFieldKeys (y : YamlValue) (known : List String) : Yaml.Result Unit :=
   match y with
   | .map kvs =>
     if kvs.all fun kv => known.contains kv.1 then pure () else throw (.shape "unknown field in mapping")
@@ -171,7 +171,7 @@ def CaseFail.render : CaseFail → String
 
 /-- The two checks of one SSZ type. -/
 structure TypeChecks where
-  valid : Bytes → YVal → B256 → Except CaseFail Unit
+  valid : Bytes → YamlValue → Jaune.U256 → Except CaseFail Unit
   invalid : Bytes → Except CaseFail Unit
 
 /-- The checks for a type with SSZ, YAML and equality instances (not specialized per type: the
@@ -180,17 +180,17 @@ codec made one generated C function of 72,000 lines). Equality is `BEq` (derived
 field by field for containers), which is what the comparison runs. -/
 @[nospecialize, noinline] def TypeChecks.of (α : Type) [Ssz α] [FromYaml α] [BEq α] : TypeChecks where
   valid ser value root := do
-    let v ← match (deserialize ser : M α) with
+    let v ← match (deserialize ser : Fallible α) with
       | .ok v => pure v
       | .error r => throw (.decode r)
-    let y ← match (fromYaml value : Res α) with
+    let y ← match (fromYaml value : Yaml.Result α) with
       | .ok y => pure y
       | .error e => throw (.yaml e)
     if !(v == y) then throw .valueMismatch
     if serialize y ≠ ser then throw .reserialize
     if hashTreeRoot v ≠ root then throw .rootMismatch
   invalid ser :=
-    match (deserialize ser : M α) with
+    match (deserialize ser : Fallible α) with
     | .ok _ => throw .acceptedInvalid
     | .error _ => pure ()
 

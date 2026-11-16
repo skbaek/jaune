@@ -15,7 +15,7 @@ namespace JauneConsensus
 
 /-- The processing context: configuration and the harness switches. -/
 structure Ctx where
-  cfg : Config
+  config : Config
   /-- pyspec `bls.bls_active`. -/
   blsActive : Bool := true
   /-- The mocked `execution_engine.verify_and_notify_new_payload` verdict. -/

@@ -134,7 +134,7 @@ inductive Exec.Deriv.ParentStep : Exec.Deriv → Exec.Deriv → Prop
         ⟨pc, sevm, pre, out, .cont hstep next⟩
   | doneOk {pc pc' : Nat} {sevm : Sevm} {pre post : Devm}
       {frame : Jaune.Frame} {resume : Resume}
-      {settled : Except (EvmError × State × AdrSet × Tra) Devm}
+      {settled : Except (EvmError × State × AdrSet × TransientStorage) Devm}
       {out : Execution}
       (hstep : Evm.step ⟨pc, sevm, pre⟩ = .spawn frame resume pc')
       (henter : frame.enter = .done settled)

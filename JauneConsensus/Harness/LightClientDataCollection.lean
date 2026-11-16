@@ -39,7 +39,7 @@ A missing dictionary key or an unbound local in the helper is a failure.
 -/
 
 namespace JauneConsensus.Harness.DataCollection
-open Jaune (Bytes B256)
+open Jaune (Bytes U256)
 open JauneConsensus
 open Yaml
 
@@ -47,15 +47,15 @@ open Yaml
 
 /-- An insertion-ordered dictionary: assignment to an existing key keeps its position, deletion
 then reinsertion appends (Python `dict`). -/
-abbrev Dict (κ α : Type) := List (κ × α)
+abbrev Dictionary (κ α : Type) := List (κ × α)
 
-def Dict.get? {κ α : Type} [BEq κ] (d : Dict κ α) (k : κ) : Option α :=
+def Dictionary.get? {κ α : Type} [BEq κ] (d : Dictionary κ α) (k : κ) : Option α :=
   (List.find? (fun (e : κ × α) => e.1 == k) d).map (·.2)
 
-def Dict.put {κ α : Type} [BEq κ] (d : Dict κ α) (k : κ) (v : α) : Dict κ α :=
+def Dictionary.put {κ α : Type} [BEq κ] (d : Dictionary κ α) (k : κ) (v : α) : Dictionary κ α :=
   if d.any (·.1 == k) then d.map (fun e => if e.1 == k then (k, v) else e) else d ++ [(k, v)]
 
-def Dict.del {κ α : Type} [BEq κ] (d : Dict κ α) (k : κ) : Dict κ α := d.filter (·.1 != k)
+def Dictionary.delete {κ α : Type} [BEq κ] (d : Dictionary κ α) (k : κ) : Dictionary κ α := d.filter (·.1 != k)
 
 /-! ## State of the collection -/
 
@@ -65,10 +65,10 @@ structure BlockID where
   root : Root
   deriving BEq
 
-variable {P : Preset} {f : CFork}
+variable {P : Preset} {f : ConsensusFork}
 
 /-- `CachedLightClientData`. -/
-structure Cached (P : Preset) (f : CFork) where
+structure Cached (P : Preset) (f : ConsensusFork) where
   currentSyncCommitteeBranch : List Root
   nextSyncCommitteeBranch : List Root
   finalizedSlot : Slot
@@ -77,66 +77,66 @@ structure Cached (P : Preset) (f : CFork) where
   latestSignatureSlot : Slot
 
 /-- `LightClientDataCollectionTest` with its `LightClientDataStore` (cache and DB) flattened. -/
-structure Test (P : Preset) (f : CFork) where
-  cfg : Config
-  ctx : Ctx
-  blocks : Dict Root (SignedBeaconBlock P f)
-  finalizedBlockRoots : Dict Nat Root
-  states : Dict Root (BeaconState P f)
-  finalizedCheckpointStates : Dict Root (BeaconState P f)
+structure Test (P : Preset) (f : ConsensusFork) where
+  config : Config
+  context : Ctx
+  blocks : Dictionary Root (SignedBeaconBlock P f)
+  finalizedBlockRoots : Dictionary Nat Root
+  states : Dictionary Root (BeaconState P f)
+  finalizedCheckpointStates : Dictionary Root (BeaconState P f)
   /-- The `states` wrappers rebound by an in-place advance (see the module note). -/
-  advanced : Dict Root (BeaconState P f)
+  advanced : Dictionary Root (BeaconState P f)
   /-- State roots whose `finalized_checkpoint_states` entry is the `states` wrapper. -/
   aliased : List Root
   latestFinalizedEpoch : Epoch
   latestFinalizedBid : BlockID
   historicalTailSlot : Slot
   -- `lc_data_store.cache`
-  cacheData : Dict BlockID (Cached P f)
+  cacheData : Dictionary BlockID (Cached P f)
   latest : Option (LightClientFinalityUpdate P f)
   tailSlot : Slot
   -- `lc_data_store.db`
-  headers : Dict Root (LightClientHeader P)
-  currentBranches : Dict Nat (List Root)
-  syncCommittees : Dict Nat (Option (SyncCommittee P))
-  bestUpdates : Dict Nat (LightClientUpdate P f)
+  headers : Dictionary Root (LightClientHeader P)
+  currentBranches : Dictionary Nat (List Root)
+  syncCommittees : Dictionary Nat (Option (SyncCommittee P))
+  bestUpdates : Dictionary Nat (LightClientUpdate P f)
 
 /-- The collection monad: the test state, failing with a reason. -/
-abbrev DC (P : Preset) (f : CFork) := StateT (Test P f) (Except String)
+abbrev CollectionMonad (P : Preset) (f : ConsensusFork) := StateT (Test P f) (Except String)
 
 /-- Run a specification computation, its rejection a failure. -/
-def lift {α : Type} (x : M α) (what : String) : DC P f α :=
+def lift {α : Type} (x : Fallible α) (what : String) : CollectionMonad P f α :=
   match x with
   | .ok v => pure v
   | .error e => throw s!"{what}: rejected: {repr e}"
 
-def cfgOf : DC P f Config := do pure (← get).cfg
+def configOf : CollectionMonad P f Config := do pure (← get).config
 
 /-- A key that must be present (`KeyError` otherwise). -/
-def need {κ α : Type} [BEq κ] [ToString κ] (d : Dict κ α) (k : κ) (what : String) : DC P f α :=
+def need {κ α : Type} [BEq κ] [ToString κ] (d : Dictionary κ α) (k : κ) (what : String) : CollectionMonad P f α :=
   match d.get? k with
   | some v => pure v
   | none => throw s!"KeyError: {what}[{k}]"
 
-def toVec {n : Nat} (xs : List Root) (what : String) : DC P f (SszVector Bytes32 n) :=
+def toVector {n : Nat} (xs : List Root) (what : String) : CollectionMonad P f (SszVector Bytes32 n) :=
   lift (SszVector.ofArray xs.toArray what) what
 
 /-! ## Slot helpers -/
 
-def periodAt (slot : Slot) : DC P f U64 :=
+def periodAt (slot : Slot) : CollectionMonad P f U64 :=
   lift (computeSyncCommitteePeriodAtSlot P slot) "compute_sync_committee_period_at_slot"
 
-def startSlotAtEpoch (epoch : Epoch) : DC P f Slot :=
+def startSlotAtEpoch (epoch : Epoch) : CollectionMonad P f Slot :=
   lift (computeStartSlotAtEpoch P epoch) "compute_start_slot_at_epoch"
 
 /-- `compute_start_slot_at_sync_committee_period` (`helpers/light_client.py`). -/
-def startSlotAtPeriod (period : U64) : DC P f Slot := do
-  startSlotAtEpoch (← lift (do U64.mul? period (← c64 P.EPOCHS_PER_SYNC_COMMITTEE_PERIOD))
+def startSlotAtPeriod (period : U64) : CollectionMonad P f Slot := do
+  startSlotAtEpoch (← lift (do U64.mul? period (← u64Checked P.EPOCHS_PER_SYNC_COMMITTEE_PERIOD))
     "sync_committee_period * EPOCHS_PER_SYNC_COMMITTEE_PERIOD")
 
 /-- `_next_epoch_boundary_slot`. -/
-def nextEpochBoundarySlot (slot : Slot) : DC P f Slot := do
-  let s ← lift (do U64.sub? (← U64.add? slot (← c64 P.SLOTS_PER_EPOCH)) U64.one)
+def nextEpochBoundarySlot (slot : Slot) : CollectionMonad P f Slot := do
+  let s ← lift (do U64.sub? (← U64.add? slot (← u64Checked P.SLOTS_PER_EPOCH)) U64.one)
     "slot + SLOTS_PER_EPOCH - 1"
   startSlotAtEpoch (← lift (computeEpochAtSlot P s) "compute_epoch_at_slot")
 
@@ -153,14 +153,14 @@ def stateToBlockId (state : BeaconState P f) : BlockID :=
 /-- `latest_current_sync_committee_gindex`, `latest_next_sync_committee_gindex`,
 `latest_finalized_root_gindex` and `latest_normalize_merkle_branch` (`helpers/light_client.py`)
 for the case fork. -/
-def latestNormalize (f : CFork) (branch : List Root) (electraGindex : Nat) : List Root :=
+def latestNormalize (f : ConsensusFork) (branch : List Root) (electraGindex : Nat) : List Root :=
   if f.atLeast .electra then normalizeMerkleBranch branch electraGindex else branch
 
 /-! ## History access -/
 
 /-- `get_ancestor_of_block_id`: `None` on a missing block (`KeyError`). Parent slots strictly
 decrease, so the walk is bounded by the number of blocks (fuel). -/
-def getAncestorOfBlockId (bid : BlockID) (slot : Slot) : DC P f (Option BlockID) := do
+def getAncestorOfBlockId (bid : BlockID) (slot : Slot) : CollectionMonad P f (Option BlockID) := do
   let t ← get
   let some b := t.blocks.get? bid.root | return none
   let mut block := b
@@ -172,7 +172,7 @@ def getAncestorOfBlockId (bid : BlockID) (slot : Slot) : DC P f (Option BlockID)
   throw "get_ancestor_of_block_id: walk bound"
 
 /-- `_block_id_at_finalized_slot`. -/
-def blockIdAtFinalizedSlot (slot : Slot) : DC P f (Option BlockID) := do
+def blockIdAtFinalizedSlot (slot : Slot) : CollectionMonad P f (Option BlockID) := do
   let t ← get
   let mut s := slot
   for _ in [0:slot.toNat + 2] do
@@ -183,10 +183,10 @@ def blockIdAtFinalizedSlot (slot : Slot) : DC P f (Option BlockID) := do
   throw "_block_id_at_finalized_slot: walk bound"
 
 /-- `_get_current_sync_committee_for_finalized_period`. -/
-def currentSyncCommitteeForFinalizedPeriod (period : U64) : DC P f (Option (SyncCommittee P)) := do
+def currentSyncCommitteeForFinalizedPeriod (period : U64) : CollectionMonad P f (Option (SyncCommittee P)) := do
   let t ← get
   let lowSlot := maxSlot t.historicalTailSlot
-    (← startSlotAtEpoch (← lift (U64.ofNat? t.cfg.ALTAIR_FORK_EPOCH) "ALTAIR_FORK_EPOCH"))
+    (← startSlotAtEpoch (← lift (U64.ofNat? t.config.ALTAIR_FORK_EPOCH) "ALTAIR_FORK_EPOCH"))
   if period < (← periodAt lowSlot) then return none
   let periodStartSlot ← startSlotAtPeriod period
   let syncCommitteeSlot := maxSlot periodStartSlot lowSlot
@@ -199,7 +199,7 @@ def currentSyncCommitteeForFinalizedPeriod (period : U64) : DC P f (Option (Sync
     -- `transition_to`, i.e. `process_slots`; the wrapper is rebound, and so is the aliased
     -- `states` entry
     let root := block.message.state_root
-    let post ← lift (processSlotsWith (processEpoch t.ctx) state syncCommitteeSlot)
+    let post ← lift (processSlotsWith (processEpoch t.context) state syncCommitteeSlot)
       "transition_across_forks"
     modify fun t => { t with
       finalizedCheckpointStates := t.finalizedCheckpointStates.put root post,
@@ -209,13 +209,13 @@ def currentSyncCommitteeForFinalizedPeriod (period : U64) : DC P f (Option (Sync
   pure (some state.current_sync_committee)
 
 /-- `_light_client_header_for_block_id`. -/
-def headerForBlockId (bid : BlockID) : DC P f (LightClientHeader P) := do
+def headerForBlockId (bid : BlockID) : CollectionMonad P f (LightClientHeader P) := do
   let t ← get
   let block ← need t.blocks bid.root "blocks"
-  lift (blockToLightClientHeader t.cfg block) "block_to_light_client_header"
+  lift (blockToLightClientHeader t.config block) "block_to_light_client_header"
 
 /-- `_get_light_client_data`. -/
-def getLightClientData (bid : BlockID) : DC P f (Cached P f) := do
+def getLightClientData (bid : BlockID) : CollectionMonad P f (Cached P f) := do
   match (← get).cacheData.get? bid with
   | some d => pure d
   | none => throw "Trying to get light client data that was not cached"
@@ -223,10 +223,10 @@ def getLightClientData (bid : BlockID) : DC P f (Cached P f) := do
 /-- `_cache_lc_data`. -/
 def cacheLcData (state : BeaconState P f) (bid : BlockID)
     (currentPeriodBestUpdate : Option (LightClientUpdate P f)) (latestSignatureSlot : Slot) :
-    DC P f Unit := do
-  let cfg ← cfgOf
+    CollectionMonad P f Unit := do
+  let cfg ← configOf
   let tree := state.proofTree
-  let proof (g : M Nat) (what : String) : DC P f (List Root) := do
+  let proof (g : Fallible Nat) (what : String) : CollectionMonad P f (List Root) := do
     lift (do computeMerkleProof tree (← g)) s!"compute_merkle_proof ({what})"
   let cached : Cached P f :=
     { currentSyncCommitteeBranch := latestNormalize f
@@ -247,7 +247,7 @@ def cacheLcData (state : BeaconState P f) (bid : BlockID)
 
 /-- `_create_lc_finality_update_from_lc_data`. -/
 def createLcFinalityUpdateFromLcData (attestedBid : BlockID) (signatureSlot : Slot)
-    (syncAggregate : SyncAggregate P) : DC P f (LightClientFinalityUpdate P f) := do
+    (syncAggregate : SyncAggregate P) : CollectionMonad P f (LightClientFinalityUpdate P f) := do
   let attestedHeader ← headerForBlockId attestedBid
   let attestedData ← getLightClientData attestedBid
   let some finalizedBid ← blockIdAtFinalizedSlot attestedData.finalizedSlot
@@ -260,25 +260,25 @@ def createLcFinalityUpdateFromLcData (attestedBid : BlockID) (signatureSlot : Sl
     if finalizedBid.slot == GENESIS_SLOT then pure defaultLightClientHeader
     else headerForBlockId finalizedBid
   pure { attested_header := attestedHeader, finalized_header := finalizedHeader,
-         finality_branch := ← toVec attestedData.finalityBranch "FinalityBranch",
+         finality_branch := ← toVector attestedData.finalityBranch "FinalityBranch",
          sync_aggregate := syncAggregate, signature_slot := signatureSlot }
 
 /-- `_create_lc_update_from_lc_data`. -/
 def createLcUpdateFromLcData (attestedBid : BlockID) (signatureSlot : Slot)
     (syncAggregate : SyncAggregate P) (nextSyncCommittee : SyncCommittee P) :
-    DC P f (LightClientUpdate P f) := do
+    CollectionMonad P f (LightClientUpdate P f) := do
   let fu ← createLcFinalityUpdateFromLcData attestedBid signatureSlot syncAggregate
   let attestedData ← getLightClientData attestedBid
   pure { attested_header := fu.attested_header, next_sync_committee := nextSyncCommittee,
          next_sync_committee_branch :=
-           ← toVec attestedData.nextSyncCommitteeBranch "NextSyncCommitteeBranch",
+           ← toVector attestedData.nextSyncCommitteeBranch "NextSyncCommitteeBranch",
          finalized_header := fu.finalized_header, finality_branch := fu.finality_branch,
          sync_aggregate := fu.sync_aggregate, signature_slot := fu.signature_slot }
 
 /-- `_create_lc_update`: the update a block's sync aggregate gives its parent, and the best one
 of the period so far, cached for the block. -/
 def createLcUpdate (state : BeaconState P f) (block : SignedBeaconBlock P f) (parentBid : BlockID) :
-    DC P f Unit := do
+    CollectionMonad P f Unit := do
   -- Verify attested block (parent) is recent enough and that state is available
   let attestedBid := parentBid
   let attestedSlot := attestedBid.slot
@@ -313,28 +313,28 @@ def createLcUpdate (state : BeaconState P f) (block : SignedBeaconBlock P f) (pa
   cacheLcData state (blockToBlockId block) best latestSignatureSlot
 
 /-- `_create_lc_bootstrap`. -/
-def createLcBootstrap (bid : BlockID) : DC P f Unit := do
+def createLcBootstrap (bid : BlockID) : CollectionMonad P f Unit := do
   let t ← get
   let block ← need t.blocks bid.root "blocks"
   let period ← periodAt bid.slot
   if (t.syncCommittees.get? period.toNat).isNone then
     let sc ← currentSyncCommitteeForFinalizedPeriod period
     modify fun t => { t with syncCommittees := t.syncCommittees.put period.toNat sc }
-  let header ← lift (blockToLightClientHeader t.cfg block) "block_to_light_client_header"
+  let header ← lift (blockToLightClientHeader t.config block) "block_to_light_client_header"
   modify fun t => { t with headers := t.headers.put bid.root header }
   let branch := (← getLightClientData bid).currentSyncCommitteeBranch
   modify fun t => { t with currentBranches := t.currentBranches.put bid.slot.toNat branch }
 
 /-- `_process_new_block_for_light_client` (the case fork is post-Altair). -/
 def processNewBlockForLightClient (state : BeaconState P f) (block : SignedBeaconBlock P f)
-    (parentBid : BlockID) : DC P f Unit := do
+    (parentBid : BlockID) : CollectionMonad P f Unit := do
   if block.message.slot < (← get).tailSlot then return
   createLcUpdate state block parentBid
 
 /-- The second half of `_process_head_change_for_light_client`: the new
 `cache.latest`, `None` wherever the helper resets it. -/
 def latestFinalityUpdate (headBid : BlockID) (lowSlot : Slot) :
-    DC P f (Option (LightClientFinalityUpdate P f)) := do
+    CollectionMonad P f (Option (LightClientFinalityUpdate P f)) := do
   let headData ← getLightClientData headBid
   let signatureSlot := headData.latestSignatureSlot
   if signatureSlot ≤ lowSlot then return none
@@ -347,7 +347,7 @@ def latestFinalityUpdate (headBid : BlockID) (lowSlot : Slot) :
   some <$> createLcFinalityUpdateFromLcData attestedBid signatureSlot syncAggregate
 
 /-- `_process_head_change_for_light_client`. -/
-def processHeadChangeForLightClient (headBid oldFinalizedBid : BlockID) : DC P f Unit := do
+def processHeadChangeForLightClient (headBid oldFinalizedBid : BlockID) : CollectionMonad P f Unit := do
   let t ← get
   if headBid.slot < t.tailSlot then return
   -- Commit best light client data for non-finalized periods
@@ -359,7 +359,7 @@ def processHeadChangeForLightClient (headBid oldFinalizedBid : BlockID) : DC P f
   for k in [0:headPeriod.toNat + 1 - lowPeriod.toNat] do
     let period ← lift (U64.ofNat? (headPeriod.toNat - k)) "period"
     let periodEndSlot ← lift (do U64.sub? (← computeStartSlotAtEpoch P (← U64.mul?
-      (← U64.add? period U64.one) (← c64 P.EPOCHS_PER_SYNC_COMMITTEE_PERIOD))) U64.one)
+      (← U64.add? period U64.one) (← u64Checked P.EPOCHS_PER_SYNC_COMMITTEE_PERIOD))) U64.one)
       "compute_start_slot_at_sync_committee_period(period + 1) - 1"
     let some b ← getAncestorOfBlockId bid periodEndSlot | break
     bid := b
@@ -368,15 +368,15 @@ def processHeadChangeForLightClient (headBid oldFinalizedBid : BlockID) : DC P f
     match best with
     | some u =>
       if bitCount u.sync_aggregate.sync_committee_bits < P.MIN_SYNC_COMMITTEE_PARTICIPANTS then
-        modify fun t => { t with bestUpdates := t.bestUpdates.del period.toNat }
+        modify fun t => { t with bestUpdates := t.bestUpdates.delete period.toNat }
       else modify fun t => { t with bestUpdates := t.bestUpdates.put period.toNat u }
-    | none => modify fun t => { t with bestUpdates := t.bestUpdates.del period.toNat }
+    | none => modify fun t => { t with bestUpdates := t.bestUpdates.delete period.toNat }
   -- Update latest light client data
   let latest ← latestFinalityUpdate headBid lowSlot
   modify fun t => { t with latest := latest }
 
 /-- `_process_finalization_for_light_client`. -/
-def processFinalizationForLightClient (finalizedBid oldFinalizedBid : BlockID) : DC P f Unit := do
+def processFinalizationForLightClient (finalizedBid oldFinalizedBid : BlockID) : CollectionMonad P f Unit := do
   let finalizedSlot := finalizedBid.slot
   if finalizedSlot < (← get).tailSlot then return
   -- Cache `LightClientBootstrap` for newly finalized epoch boundary blocks
@@ -390,7 +390,7 @@ def processFinalizationForLightClient (finalizedBid oldFinalizedBid : BlockID) :
     if lowSlot ≤ bid.slot then createLcBootstrap bid
     boundarySlot ← nextEpochBoundarySlot bid.slot
     if boundarySlot.toNat < P.SLOTS_PER_EPOCH then break
-    boundarySlot ← lift (do U64.sub? boundarySlot (← c64 P.SLOTS_PER_EPOCH))
+    boundarySlot ← lift (do U64.sub? boundarySlot (← u64Checked P.SLOTS_PER_EPOCH))
       "boundary_slot - SLOTS_PER_EPOCH"
   -- Prune light client data that is no longer referable by future updates
   modify fun t => { t with cacheData := t.cacheData.filter (fun e => !(e.1.slot < finalizedBid.slot)) }
@@ -398,7 +398,7 @@ def processFinalizationForLightClient (finalizedBid oldFinalizedBid : BlockID) :
 /-! ## Serving light client data -/
 
 /-- `get_light_client_bootstrap`. -/
-def getLightClientBootstrap (blockRoot : Root) : DC P f (Option (LightClientBootstrap P f)) := do
+def getLightClientBootstrap (blockRoot : Root) : CollectionMonad P f (Option (LightClientBootstrap P f)) := do
   let t ← get
   let some header := t.headers.get? blockRoot | return none
   let slot := header.beacon.slot
@@ -407,7 +407,7 @@ def getLightClientBootstrap (blockRoot : Root) : DC P f (Option (LightClientBoot
     | throw "LightClientBootstrap(current_sync_committee=None)"
   let branch ← need t.currentBranches slot.toNat "current_branches"
   pure (some { header, current_sync_committee := sc,
-               current_sync_committee_branch := ← toVec branch "CurrentSyncCommitteeBranch" })
+               current_sync_committee_branch := ← toVector branch "CurrentSyncCommitteeBranch" })
 
 /-- `get_light_client_optimistic_update`. -/
 def optimisticOf (u : LightClientFinalityUpdate P f) : LightClientOptimisticUpdate P :=
@@ -418,15 +418,15 @@ def optimisticOf (u : LightClientFinalityUpdate P f) : LightClientOptimisticUpda
 
 /-- `setup_lc_data_collection_test`. -/
 def setup (cfg : Config) (ctx : Ctx) (state : BeaconState P f) : Except String (Test P f) := do
-  let run {α : Type} (x : M α) (what : String) : Except String α :=
+  let run {α : Type} (x : Fallible α) (what : String) : Except String α :=
     x.mapError fun e => s!"{what}: rejected: {repr e}"
-  let spe ← run (c64 P.SLOTS_PER_EPOCH) "SLOTS_PER_EPOCH"
+  let spe ← run (u64Checked P.SLOTS_PER_EPOCH) "SLOTS_PER_EPOCH"
   if (← run (U64.mod? state.slot spe) "slot % SLOTS_PER_EPOCH") != U64.zero then
     throw "initial_state is not epoch aligned"
   let altairStart ← run (do computeStartSlotAtEpoch P (← U64.ofNat? cfg.ALTAIR_FORK_EPOCH))
     "ALTAIR_FORK_EPOCH"
   let t0 : Test P f :=
-    { cfg, ctx, blocks := [], finalizedBlockRoots := [], states := [],
+    { config := cfg, context := ctx, blocks := [], finalizedBlockRoots := [], states := [],
       finalizedCheckpointStates := [], advanced := [], aliased := [],
       latestFinalizedEpoch := state.finalized_checkpoint.epoch,
       latestFinalizedBid := { slot := ← run (computeStartSlotAtEpoch P state.finalized_checkpoint.epoch)
@@ -441,42 +441,42 @@ def setup (cfg : Config) (ctx : Ctx) (state : BeaconState P f) : Except String (
   let genesisBlock : SignedBeaconBlock P f :=
     { message := { slot := U64.zero, proposer_index := U64.zero, parent_root := zeroRoot,
                    state_root := stateRoot, body := defaultBeaconBlockBody },
-      signature := zeroBytesVec 96 }
+      signature := zeroBytesVector 96 }
   let t1 := { t0 with blocks := t0.blocks.put bid.root genesisBlock,
                       finalizedBlockRoots := t0.finalizedBlockRoots.put bid.slot.toNat bid.root,
                       states := t0.states.put stateRoot state,
                       finalizedCheckpointStates := t0.finalizedCheckpointStates.put stateRoot state }
-  let go : DC P f Unit := do
+  let go : CollectionMonad P f Unit := do
     cacheLcData state bid none GENESIS_SLOT
     createLcBootstrap bid
   (·.2) <$> go.run t1
 
 /-- `add_new_block`, given the imported block: its parent's post-state is the state the
 generator built on. -/
-def addNewBlock (block : SignedBeaconBlock P f) : DC P f Unit := do
+def addNewBlock (block : SignedBeaconBlock P f) : CollectionMonad P f Unit := do
   let t ← get
   let parent ← need t.blocks block.message.parent_root "blocks"
   let state ← need t.states parent.message.state_root "states"
   let parentBid := stateToBlockId state
-  let ctx := t.ctx
+  let ctx := t.context
   let post ← lift (stateTransitionWith (processEpoch ctx) (processBlock ctx) ctx.blsActive state
     block) "state_transition"
   let bid := blockToBlockId block
   modify fun t => { t with blocks := t.blocks.put bid.root block,
                            states := t.states.put block.message.state_root post,
-                           advanced := t.advanced.del block.message.state_root,
+                           advanced := t.advanced.delete block.message.state_root,
                            aliased := t.aliased.filter (· != block.message.state_root) }
   processNewBlockForLightClient post block parentBid
 
 /-- `test.states[root]`: the wrapper's current data (rebound by an in-place advance). -/
-def stateView (root : Root) : DC P f (BeaconState P f) := do
+def stateView (root : Root) : CollectionMonad P f (BeaconState P f) := do
   let t ← get
   match t.advanced.get? root with
   | some s => pure s
   | none => need t.states root "states"
 
 /-- `select_new_head`, up to the checks. -/
-def selectNewHead (headBid : BlockID) : DC P f Unit := do
+def selectNewHead (headBid : BlockID) : CollectionMonad P f Unit := do
   let oldFinalizedBid := (← get).latestFinalizedBid
   processHeadChangeForLightClient headBid oldFinalizedBid
   -- Process finalization
@@ -494,7 +494,7 @@ def selectNewHead (headBid : BlockID) : DC P f Unit := do
     if !((← get).latestFinalizedBid.slot < bid.slot) then break
     modify fun t => { t with finalizedBlockRoots := t.finalizedBlockRoots.put bid.slot.toNat bid.root }
     let finalizedEpoch ← lift (do computeEpochAtSlot P (← U64.sub?
-      (← U64.add? bid.slot (← c64 P.SLOTS_PER_EPOCH)) U64.one)) "compute_epoch_at_slot"
+      (← U64.add? bid.slot (← u64Checked P.SLOTS_PER_EPOCH)) U64.one)) "compute_epoch_at_slot"
     if oldFinalizedEpoch != some finalizedEpoch then
       let state ← stateView block.message.state_root
       modify fun t => { t with
@@ -519,15 +519,15 @@ def selectNewHead (headBid : BlockID) : DC P f Unit := do
 /-! ## Checks -/
 
 /-- The case files, Snappy-decoded, by name without the extension. -/
-abbrev Files := Dict String Bytes
+abbrev Files := Dictionary String Bytes
 
-private def y {α : Type} (x : Res α) : Except String α := x.mapError toString
+private def yamlResult {α : Type} (x : Result α) : Except String α := x.mapError toString
 
-private def root32 (v : YVal) : Except String B256 := do
-  let bs ← y v.asHex
-  if bs.length = 32 then pure (Jaune.Bytes.toB256 bs) else throw "expected 32 bytes"
+private def root32 (v : YamlValue) : Except String Jaune.U256 := do
+  let bs ← yamlResult v.asHex
+  if bs.length = 32 then pure (Jaune.Bytes.toU256 bs) else throw "expected 32 bytes"
 
-private def scalarText (v : YVal) (what : String) : Except String String :=
+private def scalarText (v : YamlValue) (what : String) : Except String String :=
   match v with
   | .scalar s _ => pure s
   | _ => throw s!"{what}: expected a scalar"
@@ -535,97 +535,97 @@ private def scalarText (v : YVal) (what : String) : Except String String :=
 /-- Check one encoded object (`_encode_lc_object`): its `fork_digest` is the case fork's digest
 at the epoch of `slot`, its file name is `{prefix}_{slot}_{hash_tree_root}`, and the file holds
 exactly its serialization. -/
-def checkObject {α : Type} [Ssz α] (cfg : Config) (f : CFork) (gvr : Root) (files : Files)
-    (pre : String) (obj : α) (slot : Slot) (entry : YVal) : Except String Unit := do
-  y (entry.expectKeys ["fork_digest", "data"])
-  let digest ← y ((entry.field "fork_digest").bind YVal.asHex)
-  let expected ← (do computeForkDigest cfg f gvr (← computeEpochAtSlot P slot) : M Bytes).mapError
+def checkObject {α : Type} [Ssz α] (cfg : Config) (f : ConsensusFork) (gvr : Root) (files : Files)
+    (pre : String) (obj : α) (slot : Slot) (entry : YamlValue) : Except String Unit := do
+  yamlResult (entry.expectKeys ["fork_digest", "data"])
+  let digest ← yamlResult ((entry.field "fork_digest").bind YamlValue.asHex)
+  let expected ← (do computeForkDigest cfg f gvr (← computeEpochAtSlot P slot) : Fallible Bytes).mapError
     fun e => s!"{pre}: compute_fork_digest: {repr e}"
   if digest != expected then throw s!"{pre}: fork_digest {digest} != {expected}"
-  let name ← scalarText (← y (entry.field "data")) s!"{pre}.data"
+  let name ← scalarText (← yamlResult (entry.field "data")) s!"{pre}.data"
   let want := s!"{pre}_{slot.toNat}_0x{(hashTreeRoot obj).toHex}"
   if name.toLower != want.toLower then throw s!"{pre}: file {name}, computed object is {want}"
   let some bytes := files.get? name | throw s!"{pre}: no file {name}.ssz_snappy"
   if bytes != serialize obj then throw s!"{pre}: {name} differs from the computed object"
 
 /-- The checks of a `new_head` step against the collected data. -/
-def checkHead (files : Files) (gvr : Root) (headBid : BlockID) (checks : YVal) : DC P f Unit := do
+def checkHead (files : Files) (gvr : Root) (headBid : BlockID) (checks : YamlValue) : CollectionMonad P f Unit := do
   let t ← get
-  let ex {α : Type} (x : Except String α) : DC P f α := match x with
+  let ex {α : Type} (x : Except String α) : CollectionMonad P f α := match x with
     | .ok v => pure v
     | .error e => throw e
-  let obj {α : Type} [Ssz α] (pre : String) (o : α) (slot : Slot) (v : YVal) : DC P f Unit :=
-    ex (checkObject (P := P) t.cfg f gvr files pre o slot v)
+  let obj {α : Type} [Ssz α] (pre : String) (o : α) (slot : Slot) (v : YamlValue) : CollectionMonad P f Unit :=
+    ex (checkObject (P := P) t.config f gvr files pre o slot v)
   let finality := t.latest
   let keys := ["latest_finalized_checkpoint", "bootstraps", "best_updates"] ++
     (if finality.isSome then ["latest_finality_update", "latest_optimistic_update"] else [])
-  ex (y (checks.expectKeys keys))
+  ex (yamlResult (checks.expectKeys keys))
   -- latest_finalized_checkpoint
-  let lfc ← ex (y (checks.field "latest_finalized_checkpoint"))
-  ex (y (lfc.expectKeys ["epoch", "root"]))
-  let epoch ← ex (y ((lfc.field "epoch").bind YVal.asNat))
-  let root ← ex (root32 (← ex (y (lfc.field "root"))))
+  let lfc ← ex (yamlResult (checks.field "latest_finalized_checkpoint"))
+  ex (yamlResult (lfc.expectKeys ["epoch", "root"]))
+  let epoch ← ex (yamlResult ((lfc.field "epoch").bind YamlValue.asNat))
+  let root ← ex (root32 (← ex (yamlResult (lfc.field "root"))))
   if epoch != t.latestFinalizedEpoch.toNat then
     throw s!"latest_finalized_checkpoint.epoch {epoch} != {t.latestFinalizedEpoch.toNat}"
   if root != t.latestFinalizedBid.root then throw "latest_finalized_checkpoint.root differs"
   -- bootstraps, one per finalized checkpoint state in insertion order
-  let entries ← ex (y ((checks.field "bootstraps").bind YVal.asSeq))
+  let entries ← ex (yamlResult ((checks.field "bootstraps").bind YamlValue.asSequence))
   if entries.length != t.finalizedCheckpointStates.length then
     throw s!"bootstraps: {entries.length} entries, {t.finalizedCheckpointStates.length} collected"
   for (e, (_, state)) in entries.zip t.finalizedCheckpointStates do
     let bid := stateToBlockId state
     let bootstrap ← getLightClientBootstrap bid.root
-    ex (y (e.expectKeys (["block_root"] ++ if bootstrap.isSome then ["bootstrap"] else [])))
-    if (← ex (root32 (← ex (y (e.field "block_root"))))) != bid.root then
+    ex (yamlResult (e.expectKeys (["block_root"] ++ if bootstrap.isSome then ["bootstrap"] else [])))
+    if (← ex (root32 (← ex (yamlResult (e.field "block_root"))))) != bid.root then
       throw "bootstraps: block_root differs"
     if let some b := bootstrap then
-      obj "bootstrap" b b.header.beacon.slot (← ex (y (e.field "bootstrap")))
+      obj "bootstrap" b b.header.beacon.slot (← ex (yamlResult (e.field "bootstrap")))
   -- best_updates, one per period from the tail's to the head's
   let lowPeriod ← periodAt t.tailSlot
   let headPeriod ← periodAt headBid.slot
-  let ups ← ex (y ((checks.field "best_updates").bind YVal.asSeq))
+  let ups ← ex (yamlResult ((checks.field "best_updates").bind YamlValue.asSequence))
   let periods := (List.range (headPeriod.toNat + 1)).drop lowPeriod.toNat
   if ups.length != periods.length then
     throw s!"best_updates: {ups.length} entries for {periods.length} periods"
   for (e, period) in ups.zip periods do
     let u := t.bestUpdates.get? period
-    ex (y (e.expectKeys (["period"] ++ if u.isSome then ["update"] else [])))
-    if (← ex (y ((e.field "period").bind YVal.asNat))) != period then
+    ex (yamlResult (e.expectKeys (["period"] ++ if u.isSome then ["update"] else [])))
+    if (← ex (yamlResult ((e.field "period").bind YamlValue.asNat))) != period then
       throw s!"best_updates: period differs at {period}"
     if let some u := u then
-      obj "update" u u.attested_header.beacon.slot (← ex (y (e.field "update")))
+      obj "update" u u.attested_header.beacon.slot (← ex (yamlResult (e.field "update")))
   -- latest finality and optimistic updates
   if let some fu := finality then
     obj "finality_update" fu fu.attested_header.beacon.slot
-      (← ex (y (checks.field "latest_finality_update")))
+      (← ex (yamlResult (checks.field "latest_finality_update")))
     obj "optimistic_update" (optimisticOf fu) fu.attested_header.beacon.slot
-      (← ex (y (checks.field "latest_optimistic_update")))
+      (← ex (yamlResult (checks.field "latest_optimistic_update")))
 
 /-- Run the steps. -/
-def runSteps (files : Files) (gvr : Root) (steps : List YVal) : DC P f Unit := do
-  let ex {α : Type} (x : Except String α) : DC P f α := match x with
+def runSteps (files : Files) (gvr : Root) (steps : List YamlValue) : CollectionMonad P f Unit := do
+  let ex {α : Type} (x : Except String α) : CollectionMonad P f α := match x with
     | .ok v => pure v
     | .error e => throw e
   for (st, i) in steps.zip (List.range steps.length) do
     match st with
     | .map [("new_block", nb)] =>
-      let name ← ex (scalarText (← ex (y (nb.field "data"))) "new_block.data")
+      let name ← ex (scalarText (← ex (yamlResult (nb.field "data"))) "new_block.data")
       let some bytes := files.get? name | throw s!"step {i}: no file {name}"
-      let block : SignedBeaconBlock P f ← match (deserialize bytes : M (SignedBeaconBlock P f)) with
+      let block : SignedBeaconBlock P f ← match (deserialize bytes : Fallible (SignedBeaconBlock P f)) with
         | .ok b => pure b
         | .error e => throw s!"step {i}: {name} does not decode: {repr e}"
       let t ← get
-      ex (checkObject (P := P) t.cfg f gvr files "block" block block.message.slot nb)
+      ex (checkObject (P := P) t.config f gvr files "block" block block.message.slot nb)
       try addNewBlock block catch e => throw s!"step {i} (new_block {name}): {e}"
     | .map [("new_head", nh)] =>
-      ex (y (nh.expectKeys ["head_block_root", "checks"]))
-      let root ← ex (root32 (← ex (y (nh.field "head_block_root"))))
+      ex (yamlResult (nh.expectKeys ["head_block_root", "checks"]))
+      let root ← ex (root32 (← ex (yamlResult (nh.field "head_block_root"))))
       let block ← need (← get).blocks root "blocks"
       let headBid := blockToBlockId block
       if headBid.root != root then throw s!"step {i}: head block root differs"
       try
         selectNewHead headBid
-        checkHead files gvr headBid (← ex (y (nh.field "checks")))
+        checkHead files gvr headBid (← ex (yamlResult (nh.field "checks")))
       catch e => throw s!"step {i} (new_head {root}): {e}"
     | _ => throw s!"step {i}: unknown step"
 
@@ -635,24 +635,24 @@ namespace JauneConsensus.Harness
 open Yaml
 
 /-- `light_client/data_collection`. -/
-def lightClientDataCollection (P : Preset) (f : CFork) (cfg : Config) (c : Case) :
+def lightClientDataCollection (P : Preset) (f : ConsensusFork) (cfg : Config) (c : Case) :
     IO (Except String Unit) := do
   let mut files : DataCollection.Files := []
   for name in c.files do
     if name.endsWith ".ssz_snappy" then
-      match Snappy.decompress (← IO.FS.readBinFile (c.dir / name)) with
+      match Snappy.decompress (← IO.FS.readBinFile (c.directory / name)) with
       | .ok b => files := files ++ [((name.dropEnd ".ssz_snappy".length).toString, b.toList)]
       | .error e => return .error s!"{name}: snappy: {e}"
     else if name != "steps.yaml" && name != "config.yaml" then
       return .error s!"unexpected file {name}"
-  let stepsDoc := (parse (← IO.FS.readBinFile (c.dir / "steps.yaml"))).mapError
+  let stepsDoc := (parse (← IO.FS.readBinFile (c.directory / "steps.yaml"))).mapError
     (s!"steps.yaml: " ++ toString ·)
   pure do
-    let steps ← (stepsDoc.bind fun v => v.asSeq.mapError toString)
+    let steps ← (stepsDoc.bind fun v => v.asSequence.mapError toString)
     let some initial := files.lookup "initial_state" | throw "no initial_state"
-    let state : BeaconState P f ← (deserialize initial : M (BeaconState P f)).mapError
+    let state : BeaconState P f ← (deserialize initial : Fallible (BeaconState P f)).mapError
       fun e => s!"initial_state: decode rejected: {repr e}"
-    let t ← DataCollection.setup cfg { cfg } state
+    let t ← DataCollection.setup cfg { config := cfg } state
     let _ ← (DataCollection.runSteps files state.genesis_validators_root steps).run t
 
 end JauneConsensus.Harness

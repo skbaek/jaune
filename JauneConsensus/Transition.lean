@@ -19,10 +19,10 @@ namespace JauneConsensus
 
 open Jaune
 
-variable {P : Preset} {f : CFork}
+variable {P : Preset} {f : ConsensusFork}
 
 /-- `process_slot(state)`. -/
-def processSlot (state : BeaconState P f) : M (BeaconState P f) := do
+def processSlot (state : BeaconState P f) : Fallible (BeaconState P f) := do
   let slotsPerHistoricalRoot ← u64 P.SLOTS_PER_HISTORICAL_ROOT "SLOTS_PER_HISTORICAL_ROOT"
   let i := (← state.slot.mod? slotsPerHistoricalRoot "process_slot: slot % SLOTS_PER_HISTORICAL_ROOT").toNat
   -- Cache state root
@@ -31,7 +31,7 @@ def processSlot (state : BeaconState P f) : M (BeaconState P f) := do
     state_roots := ← state.state_roots.set i previousStateRoot "process_slot: state_roots" }
   -- Cache latest block header state root
   let state :=
-    if B256.beq state.latest_block_header.state_root (0 : B256) then
+    if Bytes32.beq state.latest_block_header.state_root (0 : Jaune.U256) then
       { state with latest_block_header :=
           { state.latest_block_header with state_root := previousStateRoot } }
     else state
@@ -42,8 +42,8 @@ def processSlot (state : BeaconState P f) : M (BeaconState P f) := do
 
 /-- `process_slots(state, slot)`, with `process_epoch` given as `processEpoch`. The loop runs
 `slot - state.slot` times: each iteration advances `state.slot` by one. -/
-def processSlotsWith (processEpoch : BeaconState P f → M (BeaconState P f))
-    (state : BeaconState P f) (slot : Slot) : M (BeaconState P f) := do
+def processSlotsWith (processEpoch : BeaconState P f → Fallible (BeaconState P f))
+    (state : BeaconState P f) (slot : Slot) : Fallible (BeaconState P f) := do
   require (decide (state.slot < slot)) "process_slots: state.slot < slot"
   let slotsPerEpoch ← u64 P.SLOTS_PER_EPOCH "SLOTS_PER_EPOCH"
   let mut state := state
@@ -58,7 +58,7 @@ def processSlotsWith (processEpoch : BeaconState P f → M (BeaconState P f))
 
 /-- `verify_block_signature(state, signed_block)` under the BLS switch `bls`. -/
 def verifyBlockSignature (bls : Bool) (state : BeaconState P f) (signedBlock : SignedBeaconBlock P f) :
-    M Bool := do
+    Fallible Bool := do
   let proposer ← state.validators.get signedBlock.message.proposer_index.toNat
     "verify_block_signature: state.validators[proposer_index]"
   let signingRoot := computeSigningRoot signedBlock.message (← getDomain state DOMAIN_BEACON_PROPOSER)
@@ -66,10 +66,10 @@ def verifyBlockSignature (bls : Bool) (state : BeaconState P f) (signedBlock : S
 
 /-- `state_transition(state, signed_block, validate_result)`, with `process_epoch` and
 `process_block` given. -/
-def stateTransitionWith (processEpoch : BeaconState P f → M (BeaconState P f))
-    (processBlock : BeaconState P f → BeaconBlock P f → M (BeaconState P f))
+def stateTransitionWith (processEpoch : BeaconState P f → Fallible (BeaconState P f))
+    (processBlock : BeaconState P f → BeaconBlock P f → Fallible (BeaconState P f))
     (bls : Bool) (state : BeaconState P f) (signedBlock : SignedBeaconBlock P f)
-    (validateResult : Bool := true) : M (BeaconState P f) := do
+    (validateResult : Bool := true) : Fallible (BeaconState P f) := do
   let block := signedBlock.message
   -- Process slots (including those with no blocks) since block
   let state ← processSlotsWith processEpoch state block.slot
@@ -80,7 +80,7 @@ def stateTransitionWith (processEpoch : BeaconState P f → M (BeaconState P f))
   let state ← processBlock state block
   -- Verify state root
   if validateResult then
-    require (B256.beq block.state_root (Ssz.hashTreeRoot state)) "state_transition: block.state_root"
+    require (Bytes32.beq block.state_root (Ssz.hashTreeRoot state)) "state_transition: block.state_root"
   pure state
 
 end JauneConsensus

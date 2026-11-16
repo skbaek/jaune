@@ -39,7 +39,7 @@ variable {P : Preset}
 /-- `process_slot(state)` (Gloas, beacon-chain.md:1605): cache the state root and the block root,
 then `state.execution_payload_availability[(state.slot + 1) % SLOTS_PER_HISTORICAL_ROOT] =
 False`. -/
-def processSlot (state : BeaconState P) : M (BeaconState P) := do
+def processSlot (state : BeaconState P) : Fallible (BeaconState P) := do
   let slotsPerHistoricalRoot ← u64 P.SLOTS_PER_HISTORICAL_ROOT "SLOTS_PER_HISTORICAL_ROOT"
   let i := (← state.slot.mod? slotsPerHistoricalRoot
     "process_slot: slot % SLOTS_PER_HISTORICAL_ROOT").toNat
@@ -49,7 +49,7 @@ def processSlot (state : BeaconState P) : M (BeaconState P) := do
     state_roots := ← state.state_roots.set i previousStateRoot "process_slot: state_roots" }
   -- Cache latest block header state root
   let state :=
-    if B256.beq state.latest_block_header.state_root (0 : B256) then
+    if Bytes32.beq state.latest_block_header.state_root (0 : Jaune.U256) then
       { state with latest_block_header :=
           { state.latest_block_header with state_root := previousStateRoot } }
     else state
@@ -66,8 +66,8 @@ def processSlot (state : BeaconState P) : M (BeaconState P) := do
 
 /-- `process_slots(state, slot)`, with `process_epoch` given as `processEpoch`. The loop runs
 `slot - state.slot` times: each iteration advances `state.slot` by one. -/
-def processSlotsWith (processEpoch : BeaconState P → M (BeaconState P))
-    (state : BeaconState P) (slot : Slot) : M (BeaconState P) := do
+def processSlotsWith (processEpoch : BeaconState P → Fallible (BeaconState P))
+    (state : BeaconState P) (slot : Slot) : Fallible (BeaconState P) := do
   require (decide (state.slot < slot)) "process_slots: state.slot < slot"
   let slotsPerEpoch ← u64 P.SLOTS_PER_EPOCH "SLOTS_PER_EPOCH"
   let mut state := state
@@ -81,12 +81,12 @@ def processSlotsWith (processEpoch : BeaconState P → M (BeaconState P))
   pure state
 
 /-- `process_slots(state, slot)` with the Gloas `process_epoch`. -/
-def processSlots (ctx : Ctx) (state : BeaconState P) (slot : Slot) : M (BeaconState P) :=
+def processSlots (ctx : Ctx) (state : BeaconState P) (slot : Slot) : Fallible (BeaconState P) :=
   processSlotsWith (processEpoch ctx) state slot
 
 /-- `verify_block_signature(state, signed_block)` under the BLS switch `bls`. -/
 def verifyBlockSignature (bls : Bool) (state : BeaconState P) (signedBlock : SignedBeaconBlock P) :
-    M Bool := do
+    Fallible Bool := do
   let proposer ← state.validators.get signedBlock.message.proposer_index.toNat
     "verify_block_signature: state.validators[proposer_index]"
   let signingRoot := computeSigningRoot signedBlock.message (← getDomain state DOMAIN_BEACON_PROPOSER)
@@ -94,9 +94,9 @@ def verifyBlockSignature (bls : Bool) (state : BeaconState P) (signedBlock : Sig
 
 /-- The tail of `state_transition` after `process_slots`: verify the signature, process the
 block, verify the state root (the two checks under `validate_result`). -/
-def applySignedBlockWith (processBlock : BeaconState P → BeaconBlock P → M (BeaconState P))
+def applySignedBlockWith (processBlock : BeaconState P → BeaconBlock P → Fallible (BeaconState P))
     (bls : Bool) (state : BeaconState P) (signedBlock : SignedBeaconBlock P)
-    (validateResult : Bool := true) : M (BeaconState P) := do
+    (validateResult : Bool := true) : Fallible (BeaconState P) := do
   let block := signedBlock.message
   -- Verify signature
   if validateResult then
@@ -105,15 +105,15 @@ def applySignedBlockWith (processBlock : BeaconState P → BeaconBlock P → M (
   let state ← processBlock state block
   -- Verify state root
   if validateResult then
-    require (B256.beq block.state_root (Ssz.hashTreeRoot state)) "state_transition: block.state_root"
+    require (Bytes32.beq block.state_root (Ssz.hashTreeRoot state)) "state_transition: block.state_root"
   pure state
 
 /-- `state_transition(state, signed_block, validate_result)`, with `process_epoch` and
 `process_block` given. -/
-def stateTransitionWith (processEpoch : BeaconState P → M (BeaconState P))
-    (processBlock : BeaconState P → BeaconBlock P → M (BeaconState P))
+def stateTransitionWith (processEpoch : BeaconState P → Fallible (BeaconState P))
+    (processBlock : BeaconState P → BeaconBlock P → Fallible (BeaconState P))
     (bls : Bool) (state : BeaconState P) (signedBlock : SignedBeaconBlock P)
-    (validateResult : Bool := true) : M (BeaconState P) := do
+    (validateResult : Bool := true) : Fallible (BeaconState P) := do
   -- Process slots (including those with no blocks) since block
   let state ← processSlotsWith processEpoch state signedBlock.message.slot
   applySignedBlockWith processBlock bls state signedBlock validateResult
@@ -121,7 +121,7 @@ def stateTransitionWith (processEpoch : BeaconState P → M (BeaconState P))
 /-- `state_transition(state, signed_block, validate_result)` (Gloas); the BLS switch is
 `ctx.blsActive`. -/
 def stateTransition (ctx : Ctx) (state : BeaconState P) (signedBlock : SignedBeaconBlock P)
-    (validateResult : Bool := true) : M (BeaconState P) :=
+    (validateResult : Bool := true) : Fallible (BeaconState P) :=
   stateTransitionWith (processEpoch ctx) (processBlock ctx) ctx.blsActive state signedBlock
     validateResult
 
@@ -140,7 +140,7 @@ theorem stateTransition_eq (ctx : Ctx) (state : BeaconState P) (signedBlock : Si
 generators' block at the fork slot (`_state_transition_and_sign_block_at_slot` after `do_fork`).
 The signature and state-root checks apply. -/
 def processBlockAtSlot (ctx : Ctx) (state : BeaconState P) (signedBlock : SignedBeaconBlock P) :
-    M (BeaconState P) := do
+    Fallible (BeaconState P) := do
   require (signedBlock.message.slot == state.slot) "process_block_at_slot: block.slot == state.slot"
   applySignedBlockWith (processBlock ctx) ctx.blsActive state signedBlock
 
@@ -151,8 +151,8 @@ def processBlockAtSlot (ctx : Ctx) (state : BeaconState P) (signedBlock : Signed
 then `upgrade_to_gloas`. The state must then be at the fork epoch's first slot (fork.md,
 "Upgrading the state"). The same configuration carries on to the Gloas blocks, where
 `get_ptc` reads `GLOAS_FORK_EPOCH`. -/
-def crossFromFulu (ctx : Ctx) (pre : JauneConsensus.BeaconState P .fulu) : M (BeaconState P) := do
-  let forkSlot ← computeStartSlotAtEpoch P (← U64.ofNat? ctx.cfg.GLOAS_FORK_EPOCH "GLOAS_FORK_EPOCH")
+def crossFromFulu (ctx : Ctx) (pre : JauneConsensus.BeaconState P .fulu) : Fallible (BeaconState P) := do
+  let forkSlot ← computeStartSlotAtEpoch P (← U64.ofNat? ctx.config.GLOAS_FORK_EPOCH "GLOAS_FORK_EPOCH")
   let pre ← if pre.slot < forkSlot then JauneConsensus.processSlots ctx pre forkSlot else pure pre
   require (pre.slot == forkSlot)
     "upgrade_to_gloas: state.slot == compute_start_slot_at_epoch(GLOAS_FORK_EPOCH)"

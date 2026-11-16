@@ -25,161 +25,161 @@ guarded `B256` bridges; no word theorem hides multiplication or addition wrap.
 
 /-- A scale- and offset-parametric rounded product.  Floor is `c = 0`; the
 Maker half-up instance is `c = s / 2`. -/
-def mulr (s c z x : Nat) : Nat := (z * x + c) / s
+def mulRounded (s c z x : Nat) : Nat := (z * x + c) / s
 
 /-- The residue left by a rounded product. -/
-def mulrResidue (s c z x : Nat) : Nat := (z * x + c) % s
+def mulRoundedResidue (s c z x : Nat) : Nat := (z * x + c) % s
 
-theorem mulr_eq (s c z x : Nat) : mulr s c z x = (z * x + c) / s := rfl
+theorem mulRounded_eq (s c z x : Nat) : mulRounded s c z x = (z * x + c) / s := rfl
 
-theorem mulrResidue_lt {s : Nat} (hs : s ≠ 0) (c z x : Nat) :
-    mulrResidue s c z x < s :=
+theorem mulRoundedResidue_lt {s : Nat} (hs : s ≠ 0) (c z x : Nat) :
+    mulRoundedResidue s c z x < s :=
   Nat.mod_lt _ (Nat.pos_of_ne_zero hs)
 
 /-- The exact one-step division algorithm, in additive `Nat` form. -/
-theorem mulr_decomposition (s c z x : Nat) :
-    s * mulr s c z x + mulrResidue s c z x = z * x + c := by
+theorem mulRounded_decomposition (s c z x : Nat) :
+    s * mulRounded s c z x + mulRoundedResidue s c z x = z * x + c := by
   exact Nat.div_add_mod (z * x + c) s
 
-theorem mulr_scaled_le (s c z x : Nat) : s * mulr s c z x ≤ z * x + c :=
+theorem mulRounded_scaled_le (s c z x : Nat) : s * mulRounded s c z x ≤ z * x + c :=
   Nat.mul_div_le _ _
 
-theorem mulr_scaled_lt_add_scale {s : Nat} (hs : s ≠ 0) (c z x : Nat) :
-    z * x + c < s * (mulr s c z x + 1) := by
+theorem mulRounded_scaled_lt_add_scale {s : Nat} (hs : s ≠ 0) (c z x : Nat) :
+    z * x + c < s * (mulRounded s c z x + 1) := by
   have h := Nat.lt_div_mul_add (a := z * x + c) (b := s) (Nat.pos_of_ne_zero hs)
-  simpa [mulr, Nat.mul_add, Nat.mul_comm] using h
+  simpa [mulRounded, Nat.mul_add, Nat.mul_comm] using h
 
 /-- The general lower half of the per-step error band. -/
-theorem mulr_scaled_lower {s c : Nat} (hs : s ≠ 0) (z x : Nat) :
-    z * x ≤ s * mulr s c z x + (s - 1 - c) := by
-  have h := mulr_scaled_lt_add_scale hs c z x
+theorem mulRounded_scaled_lower {s c : Nat} (hs : s ≠ 0) (z x : Nat) :
+    z * x ≤ s * mulRounded s c z x + (s - 1 - c) := by
+  have h := mulRounded_scaled_lt_add_scale hs c z x
   rw [Nat.mul_add, Nat.mul_one] at h
   omega
 
-theorem div_le_mulr (s c z x : Nat) : z * x / s ≤ mulr s c z x :=
+theorem div_le_mulRounded (s c z x : Nat) : z * x / s ≤ mulRounded s c z x :=
   Nat.div_le_div_right (Nat.le_add_right _ _)
 
-theorem mulr_le_ceilDiv {s c : Nat} (hs : s ≠ 0) (hc : c < s) (z x : Nat) :
-    mulr s c z x ≤ ceilDiv (z * x) s := by
-  rw [mulr, ceilDiv_eq_add_sub_one_div hs]
+theorem mulRounded_le_ceilDiv {s c : Nat} (hs : s ≠ 0) (hc : c < s) (z x : Nat) :
+    mulRounded s c z x ≤ ceilDiv (z * x) s := by
+  rw [mulRounded, ceilDiv_eq_add_sub_one_div hs]
   apply Nat.div_le_div_right
   omega
 
-theorem mulr_le_mulr_right {z z' : Nat} (h : z ≤ z') (s c x : Nat) :
-    mulr s c z x ≤ mulr s c z' x :=
+theorem mulRounded_le_mulRounded_right {z z' : Nat} (h : z ≤ z') (s c x : Nat) :
+    mulRounded s c z x ≤ mulRounded s c z' x :=
   Nat.div_le_div_right (Nat.add_le_add_right (Nat.mul_le_mul_right x h) c)
 
-theorem mulr_le_mulr_left {x x' : Nat} (h : x ≤ x') (s c z : Nat) :
-    mulr s c z x ≤ mulr s c z x' :=
+theorem mulRounded_le_mulRounded_left {x x' : Nat} (h : x ≤ x') (s c z : Nat) :
+    mulRounded s c z x ≤ mulRounded s c z x' :=
   Nat.div_le_div_right (Nat.add_le_add_right (Nat.mul_le_mul_left z h) c)
 
-theorem mulr_le_mulr_offset {c c' : Nat} (h : c ≤ c') (s z x : Nat) :
-    mulr s c z x ≤ mulr s c' z x :=
+theorem mulRounded_le_mulRounded_offset {c c' : Nat} (h : c ≤ c') (s z x : Nat) :
+    mulRounded s c z x ≤ mulRounded s c' z x :=
   Nat.div_le_div_right (Nat.add_le_add_left h (z * x))
 
 /-- The half-up step can overshoot by at most `s / 2`. -/
-theorem mulr_half_up_upper (s z x : Nat) :
-    s * mulr s (s / 2) z x ≤ z * x + s / 2 :=
-  mulr_scaled_le _ _ _ _
+theorem mulRounded_half_up_upper (s z x : Nat) :
+    s * mulRounded s (s / 2) z x ≤ z * x + s / 2 :=
+  mulRounded_scaled_le _ _ _ _
 
 /-- The half-up step can undershoot by at most `ceilDiv s 2 - 1`. -/
-theorem mulr_half_up_lower {s : Nat} (hs : s ≠ 0) (z x : Nat) :
-    z * x ≤ s * mulr s (s / 2) z x + (ceilDiv s 2 - 1) := by
-  have h := mulr_scaled_lower (c := s / 2) hs z x
+theorem mulRounded_half_up_lower {s : Nat} (hs : s ≠ 0) (z x : Nat) :
+    z * x ≤ s * mulRounded s (s / 2) z x + (ceilDiv s 2 - 1) := by
+  have h := mulRounded_scaled_lower (c := s / 2) hs z x
   rw [ceilDiv_eq_add_sub_one_div (by decide : (2 : Nat) ≠ 0)]
   omega
 
 /-! ## B2 — an exact telescope over a factor list -/
 
-def mulrChain (s c : Nat) : Nat → List Nat → Nat
+def mulRoundedChain (s c : Nat) : Nat → List Nat → Nat
   | z, [] => z
-  | z, x :: xs => mulrChain s c (mulr s c z x) xs
+  | z, x :: xs => mulRoundedChain s c (mulRounded s c z x) xs
 
 /-- The weighted sum of the residues generated by `mulrChain`. -/
-def mulrChainResidue (s c : Nat) : Nat → List Nat → Nat
+def mulRoundedChainResidue (s c : Nat) : Nat → List Nat → Nat
   | _, [] => 0
   | z, x :: xs =>
-      mulrResidue s c z x * xs.prod +
-        s * mulrChainResidue s c (mulr s c z x) xs
+      mulRoundedResidue s c z x * xs.prod +
+        s * mulRoundedChainResidue s c (mulRounded s c z x) xs
 
 /-- The common weight of the per-step offset in the chain telescope. -/
-def mulrChainOffset (s : Nat) : List Nat → Nat
+def mulRoundedChainOffset (s : Nat) : List Nat → Nat
   | [] => 0
-  | _ :: xs => xs.prod + s * mulrChainOffset s xs
+  | _ :: xs => xs.prod + s * mulRoundedChainOffset s xs
 
 /-- Exact residue telescope.  It is deliberately additive: no truncated
 subtraction discards information needed by an invariant. -/
-theorem mulrChain_telescope (s c z : Nat) (xs : List Nat) :
-    s ^ xs.length * mulrChain s c z xs + mulrChainResidue s c z xs =
-      z * xs.prod + c * mulrChainOffset s xs := by
+theorem mulRoundedChain_telescope (s c z : Nat) (xs : List Nat) :
+    s ^ xs.length * mulRoundedChain s c z xs + mulRoundedChainResidue s c z xs =
+      z * xs.prod + c * mulRoundedChainOffset s xs := by
   induction xs generalizing z with
-  | nil => simp [mulrChain, mulrChainResidue, mulrChainOffset]
+  | nil => simp [mulRoundedChain, mulRoundedChainResidue, mulRoundedChainOffset]
   | cons x xs ih =>
-      rw [mulrChain, mulrChainResidue, mulrChainOffset, List.length_cons,
+      rw [mulRoundedChain, mulRoundedChainResidue, mulRoundedChainOffset, List.length_cons,
         List.prod_cons, pow_succ]
       calc
-        s ^ xs.length * s * mulrChain s c (mulr s c z x) xs +
-              (mulrResidue s c z x * xs.prod +
-                s * mulrChainResidue s c (mulr s c z x) xs) =
-            s * (s ^ xs.length * mulrChain s c (mulr s c z x) xs +
-              mulrChainResidue s c (mulr s c z x) xs) +
-                mulrResidue s c z x * xs.prod := by
+        s ^ xs.length * s * mulRoundedChain s c (mulRounded s c z x) xs +
+              (mulRoundedResidue s c z x * xs.prod +
+                s * mulRoundedChainResidue s c (mulRounded s c z x) xs) =
+            s * (s ^ xs.length * mulRoundedChain s c (mulRounded s c z x) xs +
+              mulRoundedChainResidue s c (mulRounded s c z x) xs) +
+                mulRoundedResidue s c z x * xs.prod := by
                   simp only [Nat.mul_add, Nat.mul_assoc]
                   ac_rfl
-        _ = s * (mulr s c z x * xs.prod + c * mulrChainOffset s xs) +
-              mulrResidue s c z x * xs.prod := by rw [ih]
-        _ = (s * mulr s c z x + mulrResidue s c z x) * xs.prod +
-              c * (s * mulrChainOffset s xs) := by
+        _ = s * (mulRounded s c z x * xs.prod + c * mulRoundedChainOffset s xs) +
+              mulRoundedResidue s c z x * xs.prod := by rw [ih]
+        _ = (s * mulRounded s c z x + mulRoundedResidue s c z x) * xs.prod +
+              c * (s * mulRoundedChainOffset s xs) := by
                 simp only [Nat.mul_add, Nat.add_mul, Nat.mul_assoc]
                 ac_rfl
-        _ = (z * x + c) * xs.prod + c * (s * mulrChainOffset s xs) := by
-              rw [mulr_decomposition]
-        _ = z * (x * xs.prod) + c * (xs.prod + s * mulrChainOffset s xs) := by
+        _ = (z * x + c) * xs.prod + c * (s * mulRoundedChainOffset s xs) := by
+              rw [mulRounded_decomposition]
+        _ = z * (x * xs.prod) + c * (xs.prod + s * mulRoundedChainOffset s xs) := by
               simp only [Nat.mul_add, Nat.add_mul, Nat.mul_assoc]
               ac_rfl
 
-theorem mulrChain_scaled_upper (s c z : Nat) (xs : List Nat) :
-    s ^ xs.length * mulrChain s c z xs ≤
-      z * xs.prod + c * mulrChainOffset s xs := by
-  have h := mulrChain_telescope s c z xs
+theorem mulRoundedChain_scaled_upper (s c z : Nat) (xs : List Nat) :
+    s ^ xs.length * mulRoundedChain s c z xs ≤
+      z * xs.prod + c * mulRoundedChainOffset s xs := by
+  have h := mulRoundedChain_telescope s c z xs
   omega
 
-theorem mulrChain_scaled_lower {s c : Nat} (hs : s ≠ 0)
+theorem mulRoundedChain_scaled_lower {s c : Nat} (hs : s ≠ 0)
     (z : Nat) (xs : List Nat) :
-    z * xs.prod ≤ s ^ xs.length * mulrChain s c z xs +
-      (s - 1 - c) * mulrChainOffset s xs := by
+    z * xs.prod ≤ s ^ xs.length * mulRoundedChain s c z xs +
+      (s - 1 - c) * mulRoundedChainOffset s xs := by
   induction xs generalizing z with
-  | nil => simp [mulrChain, mulrChainOffset]
+  | nil => simp [mulRoundedChain, mulRoundedChainOffset]
   | cons x xs ih =>
-      rw [mulrChain, mulrChainOffset, List.length_cons, List.prod_cons, pow_succ]
+      rw [mulRoundedChain, mulRoundedChainOffset, List.length_cons, List.prod_cons, pow_succ]
       calc
         z * (x * xs.prod) = (z * x) * xs.prod := (Nat.mul_assoc _ _ _).symm
-        _ ≤ (s * mulr s c z x + (s - 1 - c)) * xs.prod :=
-          Nat.mul_le_mul_right xs.prod (mulr_scaled_lower hs z x)
-        _ = s * (mulr s c z x * xs.prod) + (s - 1 - c) * xs.prod := by
+        _ ≤ (s * mulRounded s c z x + (s - 1 - c)) * xs.prod :=
+          Nat.mul_le_mul_right xs.prod (mulRounded_scaled_lower hs z x)
+        _ = s * (mulRounded s c z x * xs.prod) + (s - 1 - c) * xs.prod := by
           simp only [Nat.add_mul, Nat.mul_assoc]
-        _ ≤ s * (s ^ xs.length * mulrChain s c (mulr s c z x) xs +
-              (s - 1 - c) * mulrChainOffset s xs) +
+        _ ≤ s * (s ^ xs.length * mulRoundedChain s c (mulRounded s c z x) xs +
+              (s - 1 - c) * mulRoundedChainOffset s xs) +
                 (s - 1 - c) * xs.prod :=
-          Nat.add_le_add_right (Nat.mul_le_mul_left s (ih (mulr s c z x))) _
-        _ = s ^ xs.length * s * mulrChain s c (mulr s c z x) xs +
-              (s - 1 - c) * (xs.prod + s * mulrChainOffset s xs) := by
+          Nat.add_le_add_right (Nat.mul_le_mul_left s (ih (mulRounded s c z x))) _
+        _ = s ^ xs.length * s * mulRoundedChain s c (mulRounded s c z x) xs +
+              (s - 1 - c) * (xs.prod + s * mulRoundedChainOffset s xs) := by
                 simp only [Nat.mul_add, Nat.mul_assoc]
                 ac_rfl
 
-theorem mulrChain_floor_le (s z : Nat) (xs : List Nat) :
-    s ^ xs.length * mulrChain s 0 z xs ≤ z * xs.prod := by
-  simpa using mulrChain_scaled_upper s 0 z xs
+theorem mulRoundedChain_floor_le (s z : Nat) (xs : List Nat) :
+    s ^ xs.length * mulRoundedChain s 0 z xs ≤ z * xs.prod := by
+  simpa using mulRoundedChain_scaled_upper s 0 z xs
 
-theorem mulrChain_half_up_upper (s z : Nat) (xs : List Nat) :
-    s ^ xs.length * mulrChain s (s / 2) z xs ≤
-      z * xs.prod + (s / 2) * mulrChainOffset s xs :=
-  mulrChain_scaled_upper _ _ _ _
+theorem mulRoundedChain_half_up_upper (s z : Nat) (xs : List Nat) :
+    s ^ xs.length * mulRoundedChain s (s / 2) z xs ≤
+      z * xs.prod + (s / 2) * mulRoundedChainOffset s xs :=
+  mulRoundedChain_scaled_upper _ _ _ _
 
-theorem mulrChain_half_up_lower {s : Nat} (hs : s ≠ 0) (z : Nat) (xs : List Nat) :
-    z * xs.prod ≤ s ^ xs.length * mulrChain s (s / 2) z xs +
-      (ceilDiv s 2 - 1) * mulrChainOffset s xs := by
-  have h := mulrChain_scaled_lower (c := s / 2) hs z xs
+theorem mulRoundedChain_half_up_lower {s : Nat} (hs : s ≠ 0) (z : Nat) (xs : List Nat) :
+    z * xs.prod ≤ s ^ xs.length * mulRoundedChain s (s / 2) z xs +
+      (ceilDiv s 2 - 1) * mulRoundedChainOffset s xs := by
+  have h := mulRoundedChain_scaled_lower (c := s / 2) hs z xs
   have hcoeff : s - 1 - s / 2 = ceilDiv s 2 - 1 := by
     rw [ceilDiv_eq_add_sub_one_div (by decide : (2 : Nat) ≠ 0)]
     omega
@@ -191,8 +191,8 @@ theorem mulrChain_half_up_lower {s : Nat} (hs : s ≠ 0) (z : Nat) (xs : List Na
 def rpowLoop (s c z x n : Nat) : Nat :=
   if h : n = 0 then z
   else
-    let xx := mulr s c x x
-    let zx := if n % 2 = 1 then mulr s c z xx else z
+    let xx := mulRounded s c x x
+    let zx := if n % 2 = 1 then mulRounded s c z xx else z
     rpowLoop s c zx xx (n / 2)
 termination_by n
 decreasing_by omega
@@ -218,7 +218,7 @@ def RoundTree.eval (s x initial : Nat) : RoundTree → Nat
   | .scale => s
   | .base => x
   | .initial => initial
-  | .mul c l r => mulr s c (l.eval s x initial) (r.eval s x initial)
+  | .mul c l r => mulRounded s c (l.eval s x initial) (r.eval s x initial)
 
 def rpowTreeLoop (c : Nat) (z x : RoundTree) (n : Nat) : RoundTree :=
   if h : n = 0 then z
@@ -338,7 +338,7 @@ def RoundTree.lowerError (s x initial : Nat) : RoundTree → Nat
 theorem RoundTree.scaled_mul (s x initial c : Nat) (l r : RoundTree) :
     (RoundTree.mul c l r).scaled s x initial =
       s ^ (l.nodes + r.nodes) *
-        (s * mulr s c (l.eval s x initial) (r.eval s x initial)) := by
+        (s * mulRounded s c (l.eval s x initial) (r.eval s x initial)) := by
   simp only [RoundTree.scaled, RoundTree.nodes, RoundTree.eval, pow_succ]
   ac_rfl
 
@@ -363,11 +363,11 @@ theorem RoundTree.scaled_le_ideal_add_upper {s x initial : Nat} (t : RoundTree)
       have hleft := ihl
       have hright := ihr
       have hproduct := Nat.mul_le_mul hleft hright
-      have hlocal := mulr_scaled_le s c (l.eval s x initial) (r.eval s x initial)
+      have hlocal := mulRounded_scaled_le s c (l.eval s x initial) (r.eval s x initial)
       calc
         (RoundTree.mul c l r).scaled s x initial =
             s ^ (l.nodes + r.nodes) *
-              (s * mulr s c (l.eval s x initial) (r.eval s x initial)) :=
+              (s * mulRounded s c (l.eval s x initial) (r.eval s x initial)) :=
           RoundTree.scaled_mul _ _ _ _ _ _
         _ ≤ s ^ (l.nodes + r.nodes) *
               (l.eval s x initial * r.eval s x initial + c) :=
@@ -402,7 +402,7 @@ theorem RoundTree.ideal_le_scaled_add_lower {s x initial : Nat} (t : RoundTree)
       have hleft := ihl
       have hright := ihr
       have hproduct := Nat.mul_le_mul hleft hright
-      have hlocal := mulr_scaled_lower (c := c) hs
+      have hlocal := mulRounded_scaled_lower (c := c) hs
         (l.eval s x initial) (r.eval s x initial)
       have hlocal' :
           l.scaled s x initial * r.scaled s x initial ≤
@@ -439,7 +439,7 @@ theorem RoundTree.ideal_le_scaled_add_lower {s x initial : Nat} (t : RoundTree)
 def RoundTree.exactUnder (s x initial : Nat) : RoundTree → Nat
   | .scale | .base | .initial => 0
   | .mul c l r =>
-      mulrResidue s c (l.eval s x initial) (r.eval s x initial) *
+      mulRoundedResidue s c (l.eval s x initial) (r.eval s x initial) *
           s ^ (l.nodes + r.nodes) +
         l.scaled s x initial * r.exactUnder s x initial +
         r.scaled s x initial * l.exactUnder s x initial +
@@ -468,11 +468,11 @@ theorem RoundTree.exact_telescope (s x initial : Nat) (t : RoundTree) :
   | initial => simp [RoundTree.scaled, RoundTree.nodes, RoundTree.eval,
       RoundTree.exactUnder, RoundTree.exactOver]
   | mul c l r ihl ihr =>
-      have hlocal := mulr_decomposition s c
+      have hlocal := mulRounded_decomposition s c
         (l.eval s x initial) (r.eval s x initial)
       have hlocal' :
           (RoundTree.mul c l r).scaled s x initial +
-              mulrResidue s c (l.eval s x initial) (r.eval s x initial) *
+              mulRoundedResidue s c (l.eval s x initial) (r.eval s x initial) *
                 s ^ (l.nodes + r.nodes) =
             l.scaled s x initial * r.scaled s x initial +
               c * s ^ (l.nodes + r.nodes) := by
@@ -480,13 +480,13 @@ theorem RoundTree.exact_telescope (s x initial : Nat) (t : RoundTree) :
         have h := congrArg (fun value => s ^ (l.nodes + r.nodes) * value) hlocal
         simpa only [Nat.mul_add, Nat.mul_assoc,
           Nat.mul_comm (s ^ (l.nodes + r.nodes))
-            (mulrResidue s c (l.eval s x initial) (r.eval s x initial)),
+            (mulRoundedResidue s c (l.eval s x initial) (r.eval s x initial)),
           Nat.mul_comm (s ^ (l.nodes + r.nodes)) c] using h
       calc
         (RoundTree.mul c l r).scaled s x initial +
               (RoundTree.mul c l r).exactUnder s x initial =
             ((RoundTree.mul c l r).scaled s x initial +
-              mulrResidue s c (l.eval s x initial) (r.eval s x initial) *
+              mulRoundedResidue s c (l.eval s x initial) (r.eval s x initial) *
                 s ^ (l.nodes + r.nodes)) +
               (l.scaled s x initial * r.exactUnder s x initial +
                 r.scaled s x initial * l.exactUnder s x initial +
@@ -637,9 +637,9 @@ theorem RoundTree.eval_zero_of_baseCount_pos {s initial : Nat} (t : RoundTree)
       simp only [RoundTree.baseCount] at hbase
       rcases Nat.eq_zero_or_pos l.baseCount with hzero | hpos
       · have hrpos : 0 < r.baseCount := by omega
-        rw [RoundTree.eval, ihr hr hrpos, mulr, Nat.mul_zero, Nat.zero_add,
+        rw [RoundTree.eval, ihr hr hrpos, mulRounded, Nat.mul_zero, Nat.zero_add,
           Nat.div_eq_of_lt hc]
-      · rw [RoundTree.eval, ihl hl hpos, mulr, Nat.zero_mul, Nat.zero_add,
+      · rw [RoundTree.eval, ihl hl hpos, mulRounded, Nat.zero_mul, Nat.zero_add,
           Nat.div_eq_of_lt hc]
 
 theorem rpowTree_eval_of_valid_offset {s c x initial n : Nat} (hc : c < s) :
@@ -742,25 +742,25 @@ Squarings update the next factor; set bits append that factor to the B2 chain. -
 def rpowLoopFactors (s c x n : Nat) : List Nat :=
   if h : n = 0 then []
   else
-    let xx := mulr s c x x
+    let xx := mulRounded s c x x
     let tail := rpowLoopFactors s c xx (n / 2)
     if n % 2 = 1 then xx :: tail else tail
 termination_by n
 decreasing_by omega
 
-theorem rpowLoop_eq_mulrChain (s c z x n : Nat) :
-    rpowLoop s c z x n = mulrChain s c z (rpowLoopFactors s c x n) := by
+theorem rpowLoop_eq_mulRoundedChain (s c z x n : Nat) :
+    rpowLoop s c z x n = mulRoundedChain s c z (rpowLoopFactors s c x n) := by
   induction n using Nat.strong_induction_on generalizing z x with
   | h n ih =>
       rw [rpowLoop, rpowLoopFactors]
       split
       · rfl
       · by_cases hbit : n % 2 = 1
-        · simp only [hbit, ite_eq_left, mulrChain]
+        · simp only [hbit, ite_eq_left, mulRoundedChain]
           exact ih (n / 2) (by omega)
-            (mulr s c z (mulr s c x x)) (mulr s c x x)
+            (mulRounded s c z (mulRounded s c x x)) (mulRounded s c x x)
         · simp only [hbit, ite_false]
-          exact ih (n / 2) (by omega) z (mulr s c x x)
+          exact ih (n / 2) (by omega) z (mulRounded s c x x)
 
 theorem rpowLoopFactors_length (s c x n : Nat) :
     (rpowLoopFactors s c x n).length = binaryWeight n := by
@@ -773,32 +773,32 @@ theorem rpowLoopFactors_length (s c x n : Nat) :
         · simp only [hbit, ite_eq_left, List.length_cons]
           rw [ih (n / 2) (by omega)]
         · simp only [hbit, ite_false]
-          simpa using ih (n / 2) (by omega) (mulr s c x x)
+          simpa using ih (n / 2) (by omega) (mulRounded s c x x)
 
 /-- B2's exact additive telescope instantiated on the binary loop's dynamic
 factor chain.  Its scale exponent is exactly the population count. -/
 theorem rpowLoop_factor_telescope (s c z x n : Nat) :
     s ^ binaryWeight n * rpowLoop s c z x n +
-        mulrChainResidue s c z (rpowLoopFactors s c x n) =
+        mulRoundedChainResidue s c z (rpowLoopFactors s c x n) =
       z * (rpowLoopFactors s c x n).prod +
-        c * mulrChainOffset s (rpowLoopFactors s c x n) := by
-  rw [rpowLoop_eq_mulrChain, ← rpowLoopFactors_length s c x n]
-  exact mulrChain_telescope s c z (rpowLoopFactors s c x n)
+        c * mulRoundedChainOffset s (rpowLoopFactors s c x n) := by
+  rw [rpowLoop_eq_mulRoundedChain, ← rpowLoopFactors_length s c x n]
+  exact mulRoundedChain_telescope s c z (rpowLoopFactors s c x n)
 
 theorem rpowLoop_factor_scaled_upper (s c z x n : Nat) :
     s ^ binaryWeight n * rpowLoop s c z x n ≤
       z * (rpowLoopFactors s c x n).prod +
-        c * mulrChainOffset s (rpowLoopFactors s c x n) := by
-  rw [rpowLoop_eq_mulrChain, ← rpowLoopFactors_length s c x n]
-  exact mulrChain_scaled_upper s c z (rpowLoopFactors s c x n)
+        c * mulRoundedChainOffset s (rpowLoopFactors s c x n) := by
+  rw [rpowLoop_eq_mulRoundedChain, ← rpowLoopFactors_length s c x n]
+  exact mulRoundedChain_scaled_upper s c z (rpowLoopFactors s c x n)
 
 theorem rpowLoop_factor_scaled_lower {s : Nat} (hs : s ≠ 0)
     (c z x n : Nat) :
     z * (rpowLoopFactors s c x n).prod ≤
       s ^ binaryWeight n * rpowLoop s c z x n +
-        (s - 1 - c) * mulrChainOffset s (rpowLoopFactors s c x n) := by
-  rw [rpowLoop_eq_mulrChain, ← rpowLoopFactors_length s c x n]
-  exact mulrChain_scaled_lower hs z (rpowLoopFactors s c x n)
+        (s - 1 - c) * mulRoundedChainOffset s (rpowLoopFactors s c x n) := by
+  rw [rpowLoop_eq_mulRoundedChain, ← rpowLoopFactors_length s c x n]
+  exact mulRoundedChain_scaled_lower hs z (rpowLoopFactors s c x n)
 
 theorem rpowLoopOps_eq_depth_add_factor_count (s c x n : Nat) :
     rpowLoopOps n = binaryDepth n + (rpowLoopFactors s c x n).length := by
@@ -806,9 +806,9 @@ theorem rpowLoopOps_eq_depth_add_factor_count (s c x n : Nat) :
 
 /-! ### Degenerate cases and monotonicity -/
 
-theorem scale_le_mulr {s z x : Nat} (hs : s ≠ 0) (hz : s ≤ z) (hx : s ≤ x)
-    (c : Nat) : s ≤ mulr s c z x := by
-  rw [mulr, Nat.le_div_iff_mul_le (Nat.pos_of_ne_zero hs)]
+theorem scale_le_mulRounded {s z x : Nat} (hs : s ≠ 0) (hz : s ≤ z) (hx : s ≤ x)
+    (c : Nat) : s ≤ mulRounded s c z x := by
+  rw [mulRounded, Nat.le_div_iff_mul_le (Nat.pos_of_ne_zero hs)]
   exact Nat.le_trans (Nat.mul_le_mul hz hx) (Nat.le_add_right _ c)
 
 theorem RoundTree.scale_le_eval_of_no_initial {s x initial : Nat} (t : RoundTree)
@@ -820,7 +820,7 @@ theorem RoundTree.scale_le_eval_of_no_initial {s x initial : Nat} (t : RoundTree
   | initial => simp [RoundTree.initialCount] at hno
   | mul c l r ihl ihr =>
       simp only [RoundTree.initialCount, Nat.add_eq_zero_iff] at hno
-      exact scale_le_mulr hs (ihl hno.1) (ihr hno.2) c
+      exact scale_le_mulRounded hs (ihl hno.1) (ihr hno.2) c
 
 theorem rpow_base_preserved {s x : Nat} (hs : s ≠ 0) (hx : s ≤ x) (c n : Nat) :
     s ≤ rpow s c x n := by
@@ -835,8 +835,8 @@ theorem RoundTree.eval_mono_base {s x x' initial : Nat} (h : x ≤ x') (t : Roun
   | base => exact h
   | initial => exact Nat.le_refl _
   | mul c l r ihl ihr =>
-      exact Nat.le_trans (mulr_le_mulr_right ihl s c _)
-        (mulr_le_mulr_left ihr s c _)
+      exact Nat.le_trans (mulRounded_le_mulRounded_right ihl s c _)
+        (mulRounded_le_mulRounded_left ihr s c _)
 
 theorem rpow_le_rpow_base {x x' : Nat} (h : x ≤ x') (s c n : Nat) :
     rpow s c x n ≤ rpow s c x' n := by
@@ -861,7 +861,7 @@ theorem rpow_zero_succ (s c n : Nat) :
 def segmentIndexFrom (s c x : Nat) : Nat → List Nat → Nat
   | chi, [] => chi
   | chi, n :: ns =>
-      segmentIndexFrom s c x (mulr s 0 chi (rpow s c x n)) ns
+      segmentIndexFrom s c x (mulRounded s 0 chi (rpow s c x n)) ns
 
 /-- Compose separately rounded elapsed-time segments onto an index.  The rpow
 inside a segment uses `c`; composition onto the index uses floor. -/
@@ -1107,8 +1107,8 @@ theorem segmentIndex_drift_le {s c : Nat} (hc : c < s)
       (Nat.le_max_right _ _)
 
 theorem le_floor_compose {s factor : Nat} (hs : s ≠ 0) (hfactor : s ≤ factor)
-    (chi : Nat) : chi ≤ mulr s 0 chi factor := by
-  rw [mulr, Nat.add_zero, Nat.le_div_iff_mul_le (Nat.pos_of_ne_zero hs)]
+    (chi : Nat) : chi ≤ mulRounded s 0 chi factor := by
+  rw [mulRounded, Nat.add_zero, Nat.le_div_iff_mul_le (Nat.pos_of_ne_zero hs)]
   exact Nat.mul_le_mul_left chi hfactor
 
 theorem segmentIndexFrom_mono {s c x : Nat} (hs : s ≠ 0) (hx : s ≤ x)
@@ -1118,7 +1118,7 @@ theorem segmentIndexFrom_mono {s c x : Nat} (hs : s ≠ 0) (hx : s ≤ x)
   | cons n ns ih =>
       exact Nat.le_trans
         (le_floor_compose hs (rpow_base_preserved hs hx c n) chi)
-        (ih (mulr s 0 chi (rpow s c x n)))
+        (ih (mulRounded s 0 chi (rpow s c x n)))
 
 theorem segmentIndex_mono {s c x : Nat} (hs : s ≠ 0) (hx : s ≤ x)
     (chi : Nat) (parts : List Nat) : chi ≤ segmentIndex s c x chi parts :=
@@ -1132,121 +1132,121 @@ theorem Nat.div_add_div_le_add_div (a b d : Nat) :
 
 /-! ## B6 — guarded word-level loop bridges -/
 
-def B256.mulr (s c z x : B256) : B256 := (z * x + c) / s
+def U256.mulRounded (s c z x : U256) : U256 := (z * x + c) / s
 
-theorem B256.toNat_mulr {s c z x : B256} (hs : s ≠ 0)
-    (hmul : B256.Nofm z x) (hadd : B256.Nof (z * x) c) :
-    (B256.mulr s c z x).toNat =
-      Jaune.mulr s.toNat c.toNat z.toNat x.toNat := by
-  rw [B256.mulr, B256.toNat_div hs,
-    B256.toNat_add_eq_of_nof _ _ hadd, B256.toNat_mul_eq_of_nofm hmul]
+theorem U256.toNat_mulRounded {s c z x : U256} (hs : s ≠ 0)
+    (hmul : U256.MulNoOverflow z x) (hadd : U256.AddNoOverflow (z * x) c) :
+    (U256.mulRounded s c z x).toNat =
+      Jaune.mulRounded s.toNat c.toNat z.toNat x.toNat := by
+  rw [U256.mulRounded, U256.toNat_div hs,
+    U256.toNat_add_eq_of_add_no_overflow _ _ hadd, U256.toNat_mul_eq_of_mul_no_overflow hmul]
   rfl
 
 /-- The reference's multiplication check is exactly the no-overflow
 predicate, not merely a sufficient guard. -/
-theorem B256.mul_div_eq_iff_nofm {x y : B256} (hy : y ≠ 0) :
-    (x * y) / y = x ↔ B256.Nofm x y := by
+theorem U256.mul_div_eq_iff_mul_no_overflow {x y : U256} (hy : y ≠ 0) :
+    (x * y) / y = x ↔ U256.MulNoOverflow x y := by
   constructor
   · intro h
-    have hnat := congrArg B256.toNat h
-    rw [B256.toNat_div hy] at hnat
+    have hnat := congrArg U256.toNat h
+    rw [U256.toNat_div hy] at hnat
     have hfloor := Nat.mul_div_le (x * y).toNat y.toNat
     rw [hnat, Nat.mul_comm] at hfloor
-    exact Nat.lt_of_le_of_lt hfloor (B256.toNat_lt (x * y))
+    exact Nat.lt_of_le_of_lt hfloor (U256.toNat_lt (x * y))
   · intro h
-    apply B256.toNat_inj
-    rw [B256.toNat_div hy, B256.toNat_mul_eq_of_nofm h]
-    exact Nat.mul_div_cancel x.toNat (B256.toNat_pos hy)
+    apply U256.toNat_inj
+    rw [U256.toNat_div hy, U256.toNat_mul_eq_of_mul_no_overflow h]
+    exact Nat.mul_div_cancel x.toNat (U256.toNat_pos hy)
 
 /-- Addition wraps exactly when the reference's `sum < addend` check fires. -/
-theorem B256.add_lt_iff_overflow (x y : B256) :
+theorem U256.add_lt_iff_overflow (x y : U256) :
     x + y < x ↔ 2 ^ 256 ≤ x.toNat + y.toNat := by
-  rw [B256.lt_iff_toNat_lt_toNat, B256.toNat_add]
+  rw [U256.lt_iff_toNat_lt_toNat, U256.toNat_add]
   by_cases h : x.toNat + y.toNat < 2 ^ 256
   · rw [Nat.lo_eq_of_lt h]
     apply iff_of_false <;> omega
   · rw [_root_.not_lt] at h
     apply iff_of_true _ h
-    have hx := B256.toNat_lt x
-    have hy := B256.toNat_lt y
+    have hx := U256.toNat_lt x
+    have hy := U256.toNat_lt y
     rw [Nat.lo, Nat.add_mod_eq_add_sub hx hy h]
     omega
 
-theorem B256.add_lt_iff_not_nof (x y : B256) :
-    x + y < x ↔ ¬B256.Nof x y := by
-  rw [B256.add_lt_iff_overflow, B256.Nof, _root_.not_lt]
+theorem U256.add_lt_iff_not_add_no_overflow (x y : U256) :
+    x + y < x ↔ ¬U256.AddNoOverflow x y := by
+  rw [U256.add_lt_iff_overflow, U256.AddNoOverflow, _root_.not_lt]
 
-def B256.rpowLoop (s c z x : B256) (n : Nat) : B256 :=
+def U256.rpowLoop (s c z x : U256) (n : Nat) : U256 :=
   if h : n = 0 then z
   else
-    let xx := B256.mulr s c x x
-    let zx := if n % 2 = 1 then B256.mulr s c z xx else z
-    B256.rpowLoop s c zx xx (n / 2)
+    let xx := U256.mulRounded s c x x
+    let zx := if n % 2 = 1 then U256.mulRounded s c z xx else z
+    U256.rpowLoop s c zx xx (n / 2)
 termination_by n
 decreasing_by omega
 
-def B256.rpow (s c x : B256) (n : Nat) : B256 :=
+def U256.rpow (s c x : U256) (n : Nat) : U256 :=
   if x = 0 then
     if n = 0 then s else 0
   else if n = 0 then s
-  else B256.rpowLoop s c (if n % 2 = 1 then x else s) x (n / 2)
+  else U256.rpowLoop s c (if n % 2 = 1 then x else s) x (n / 2)
 
 /-- Every multiplication and subsequent offset addition performed by a word
 loop state is untruncated. -/
-def B256.RPowLoopGuards (s c z x : B256) (n : Nat) : Prop :=
+def U256.RPowLoopGuards (s c z x : U256) (n : Nat) : Prop :=
   if h : n = 0 then True
   else
-    let xx := B256.mulr s c x x
-    let zx := if n % 2 = 1 then B256.mulr s c z xx else z
-    B256.Nofm x x ∧ B256.Nof (x * x) c ∧
-      (if n % 2 = 1 then B256.Nofm z xx ∧ B256.Nof (z * xx) c else True) ∧
-      B256.RPowLoopGuards s c zx xx (n / 2)
+    let xx := U256.mulRounded s c x x
+    let zx := if n % 2 = 1 then U256.mulRounded s c z xx else z
+    U256.MulNoOverflow x x ∧ U256.AddNoOverflow (x * x) c ∧
+      (if n % 2 = 1 then U256.MulNoOverflow z xx ∧ U256.AddNoOverflow (z * xx) c else True) ∧
+      U256.RPowLoopGuards s c zx xx (n / 2)
 termination_by n
 decreasing_by omega
 
-def B256.RPowGuards (s c x : B256) (n : Nat) : Prop :=
+def U256.RPowGuards (s c x : U256) (n : Nat) : Prop :=
   if x = 0 then True
   else if n = 0 then True
-  else B256.RPowLoopGuards s c (if n % 2 = 1 then x else s) x (n / 2)
+  else U256.RPowLoopGuards s c (if n % 2 = 1 then x else s) x (n / 2)
 
-theorem B256.toNat_rpowLoop {s c z x : B256} (hs : s ≠ 0) (n : Nat)
-    (hguards : B256.RPowLoopGuards s c z x n) :
-    (B256.rpowLoop s c z x n).toNat =
+theorem U256.toNat_rpowLoop {s c z x : U256} (hs : s ≠ 0) (n : Nat)
+    (hguards : U256.RPowLoopGuards s c z x n) :
+    (U256.rpowLoop s c z x n).toNat =
       Jaune.rpowLoop s.toNat c.toNat z.toNat x.toNat n := by
   induction n using Nat.strong_induction_on generalizing z x with
   | h n ih =>
       by_cases hn : n = 0
-      · rw [B256.rpowLoop, Jaune.rpowLoop, dite_eq_left hn, dite_eq_left hn]
-      · rw [B256.RPowLoopGuards, dite_eq_right hn] at hguards
+      · rw [U256.rpowLoop, Jaune.rpowLoop, dite_eq_left hn, dite_eq_left hn]
+      · rw [U256.RPowLoopGuards, dite_eq_right hn] at hguards
         rcases hguards with ⟨hxxMul, hxxAdd, hzx, hnext⟩
-        have hxx := B256.toNat_mulr hs hxxMul hxxAdd
-        rw [B256.rpowLoop, Jaune.rpowLoop, dite_eq_right hn, dite_eq_right hn]
+        have hxx := U256.toNat_mulRounded hs hxxMul hxxAdd
+        rw [U256.rpowLoop, Jaune.rpowLoop, dite_eq_right hn, dite_eq_right hn]
         by_cases hbit : n % 2 = 1
         · simp only [hbit, ite_eq_left] at hzx hnext ⊢
           rcases hzx with ⟨hzxMul, hzxAdd⟩
-          have hzxNat := B256.toNat_mulr hs hzxMul hzxAdd
+          have hzxNat := U256.toNat_mulRounded hs hzxMul hzxAdd
           simpa only [hxx, hzxNat] using
             ih (n / 2) (by omega)
-              (z := B256.mulr s c z (B256.mulr s c x x))
-              (x := B256.mulr s c x x) hnext
+              (z := U256.mulRounded s c z (U256.mulRounded s c x x))
+              (x := U256.mulRounded s c x x) hnext
         · simp only [hbit, ite_false] at hzx hnext ⊢
           simpa only [hxx] using
-            ih (n / 2) (by omega) (z := z) (x := B256.mulr s c x x) hnext
+            ih (n / 2) (by omega) (z := z) (x := U256.mulRounded s c x x) hnext
 
-theorem B256.toNat_rpow {s c x : B256} (hs : s ≠ 0) (n : Nat)
-    (hguards : B256.RPowGuards s c x n) :
-    (B256.rpow s c x n).toNat = Jaune.rpow s.toNat c.toNat x.toNat n := by
-  rw [B256.rpow, Jaune.rpow]
+theorem U256.toNat_rpow {s c x : U256} (hs : s ≠ 0) (n : Nat)
+    (hguards : U256.RPowGuards s c x n) :
+    (U256.rpow s c x n).toNat = Jaune.rpow s.toNat c.toNat x.toNat n := by
+  rw [U256.rpow, Jaune.rpow]
   by_cases hx : x = 0
   · subst x
-    cases n <;> simp only [B256.toNat_zero, ite_eq_left, Nat.succ_ne_zero, ite_false]
-  · have hxNat : x.toNat ≠ 0 := B256.toNat_ne_zero hx
+    cases n <;> simp only [U256.toNat_zero, ite_eq_left, Nat.succ_ne_zero, ite_false]
+  · have hxNat : x.toNat ≠ 0 := U256.toNat_ne_zero hx
     rw [ite_eq_right hx, ite_eq_right hxNat]
     by_cases hn : n = 0
     · rw [ite_eq_left hn, ite_eq_left hn]
     · rw [ite_eq_right hn, ite_eq_right hn]
-      rw [B256.RPowGuards, ite_eq_right hx, ite_eq_right hn] at hguards
+      rw [U256.RPowGuards, ite_eq_right hx, ite_eq_right hn] at hguards
       simpa only [apply_ite] using
-        B256.toNat_rpowLoop hs (n / 2) hguards
+        U256.toNat_rpowLoop hs (n / 2) hguards
 
 end Jaune

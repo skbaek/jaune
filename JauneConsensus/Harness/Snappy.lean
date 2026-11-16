@@ -152,7 +152,7 @@ private def ok? (src : List UInt8) (want : List UInt8) : Bool :=
   match decompress (bytes src) with
   | .ok out => out.toList == want
   | .error _ => false
-private def err? (src : List UInt8) (e : Error) : Bool :=
+private def error? (src : List UInt8) (e : Error) : Bool :=
   match decompress (bytes src) with
   | .ok _ => false
   | .error e' => e' == e
@@ -174,14 +174,14 @@ private def err? (src : List UInt8) (e : Error) : Bool :=
 -- two-byte varint preamble: 200 = 0xc8 0x01, then literal of 200 via m = 60 (one byte, 199)
 #guard ok? ([0xc8, 0x01, 0xf0, 199] ++ List.replicate 200 (9 : UInt8)) (List.replicate 200 9)
 -- rejections
-#guard err? [] .preamble
-#guard err? [0x80, 0x80, 0x80, 0x80, 0x80, 0x01] .preamble
-#guard err? [0x03, 0x08, 0x61, 0x62] (.truncated 1)
-#guard err? [0x04, 0x08, 0x61, 0x62, 0x63] (.short 4 3)
-#guard err? [0x02, 0x08, 0x61, 0x62, 0x63] (.overrun 1 2)
-#guard err? [0x08, 0x00, 0x61, 0x0d, 0x00] (.offset 3 0 1)
-#guard err? [0x08, 0x00, 0x61, 0x0d, 0x02] (.offset 3 2 1)
-#guard err? [0x08, 0x00, 0x61, 0x0d] (.truncated 4)
+#guard error? [] .preamble
+#guard error? [0x80, 0x80, 0x80, 0x80, 0x80, 0x01] .preamble
+#guard error? [0x03, 0x08, 0x61, 0x62] (.truncated 1)
+#guard error? [0x04, 0x08, 0x61, 0x62, 0x63] (.short 4 3)
+#guard error? [0x02, 0x08, 0x61, 0x62, 0x63] (.overrun 1 2)
+#guard error? [0x08, 0x00, 0x61, 0x0d, 0x00] (.offset 3 0 1)
+#guard error? [0x08, 0x00, 0x61, 0x0d, 0x02] (.offset 3 2 1)
+#guard error? [0x08, 0x00, 0x61, 0x0d] (.truncated 4)
 -- a framing-format stream identifier is not a valid raw block
 #guard (decompress (bytes [0xff, 0x06, 0x00, 0x00, 0x73, 0x4e, 0x61, 0x50, 0x70, 0x59])).toBool == false
 

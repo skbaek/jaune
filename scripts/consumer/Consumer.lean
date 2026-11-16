@@ -7,18 +7,18 @@ open Jaune
 
 def outOfGas {pc : Nat} {env : Sevm} {pre : Devm}
     (bytes : Bytes) (width : bytes.length ≤ 32)
-    (decoded : Jaune.Ninst.At env.code pc (.push bytes width))
+    (decoded : Jaune.NextOp.At env.code pc (.push bytes width))
     (gas : pre.gasLeft < SymbolicPush.cost bytes)
-    (hgate : bytes ≠ [] ∨ env.benvStat.rules.op.push0) :
+    (hgate : bytes ≠ [] ∨ env.benvStat.rules.opcodes.push0) :
     Jaune.Exec pc env pre (.error ⟨.halt (.outOfGas .none), pre⟩) :=
   .halt ((Jaune.Evm.step_next decoded).trans
     (SymbolicPush.step_outOfGas ⟨pc, env, pre⟩ bytes width gas hgate))
 
 theorem interpreter_outOfGas {pc : Nat} {env : Sevm} {pre : Devm}
     (bytes : Bytes) (width : bytes.length ≤ 32)
-    (decoded : Jaune.Ninst.At env.code pc (.push bytes width))
+    (decoded : Jaune.NextOp.At env.code pc (.push bytes width))
     (gas : pre.gasLeft < SymbolicPush.cost bytes)
-    (hgate : bytes ≠ [] ∨ env.benvStat.rules.op.push0) :
+    (hgate : bytes ≠ [] ∨ env.benvStat.rules.opcodes.push0) :
     exec ⟨pc, env, pre⟩ = .error ⟨.halt (.outOfGas .none), pre⟩ :=
   (Jaune.exec_iff_exec_eq _ _ _ _).mp ⟨outOfGas bytes width decoded gas hgate⟩
 

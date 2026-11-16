@@ -49,7 +49,7 @@ def DOMAIN_BLS_TO_EXECUTION_CHANGE : DomainType := #v[0x0A, 0x00, 0x00, 0x00]
 
 /-- `Version(bytes)`: a four-byte value (a config `*_FORK_VERSION`). Rejects any other length,
 as the SSZ type would. -/
-def versionOf (bs : Bytes) : M Version :=
+def versionOf (bs : Bytes) : Fallible Version :=
   if h : bs.toArray.size = 4 then pure ⟨bs.toArray, h⟩
   else throw (.assert s!"Version: {bs.length} bytes")
 
@@ -65,11 +65,11 @@ def computeForkDataRoot (currentVersion : Version) (genesisValidatorsRoot : Root
 def computeDomain (domainType : DomainType) (forkVersion : Version) (genesisValidatorsRoot : Root) :
     Domain :=
   let forkDataRoot := computeForkDataRoot forkVersion genesisValidatorsRoot
-  B256.ofBytes (domainType.toList ++ forkDataRoot.toBytes.take 28)
+  Bytes32.ofBytes (domainType.toList ++ forkDataRoot.toBytes.take 28)
 
 /-- `compute_domain(domain_type)` with the defaults: `GENESIS_FORK_VERSION` and `Root()`. -/
-def computeDomainDefault (cfg : Config) (domainType : DomainType) : M Domain := do
-  pure (computeDomain domainType (← versionOf cfg.GENESIS_FORK_VERSION) (0 : B256))
+def computeDomainDefault (cfg : Config) (domainType : DomainType) : Fallible Domain := do
+  pure (computeDomain domainType (← versionOf cfg.GENESIS_FORK_VERSION) (0 : Jaune.U256))
 
 /-- `compute_signing_root(ssz_object, domain)`. -/
 def computeSigningRoot {α : Type} [Ssz α] (sszObject : α) (domain : Domain) : Root :=
@@ -89,8 +89,8 @@ def getDomainAt (fork : Fork) (genesisValidatorsRoot : Root) (domainType : Domai
 
 /-- `get_domain(state, domain_type, epoch=None)` for any fork's `BeaconState`: `epoch` defaults
 to `get_current_epoch(state) = compute_epoch_at_slot(state.slot)`. -/
-def getDomain {P : Preset} {f : CFork} (state : BeaconState P f) (domainType : DomainType)
-    (epoch : Option Epoch := none) : M Domain := do
+def getDomain {P : Preset} {f : ConsensusFork} (state : BeaconState P f) (domainType : DomainType)
+    (epoch : Option Epoch := none) : Fallible Domain := do
   let e ← match epoch with
     | some e => pure e
     | none => computeEpochAtSlot P state.slot
@@ -128,6 +128,6 @@ def blsEthFastAggregateVerify (active : Bool) (pubkeys : List BLSPubkey) (messag
     signature.toArray.toList
 
 -- `compute_signing_root` of a `Root` equals its `ByRoot` form.
-#guard computeSigningRoot (7 : B256) (9 : B256) == computeSigningRootOfRoot 7 9
+#guard computeSigningRoot (7 : Jaune.U256) (9 : Jaune.U256) == computeSigningRootOfRoot 7 9
 
 end JauneConsensus

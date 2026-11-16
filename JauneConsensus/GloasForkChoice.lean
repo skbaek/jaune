@@ -31,7 +31,7 @@ of a walk is a distinct `(root, payload_status)`).
 
 namespace JauneConsensus.Gloas
 
-open Jaune (Bytes B256)
+open Jaune (Bytes U256)
 
 variable {P : Preset}
 
@@ -68,11 +68,11 @@ structure ForkChoiceNode where
   deriving DecidableEq, BEq
 
 /-- The order keying sets of nodes: by root, then by payload status. -/
-def ForkChoiceNode.cmp (a b : ForkChoiceNode) : Ordering :=
+def ForkChoiceNode.compareByRootThenStatus (a b : ForkChoiceNode) : Ordering :=
   (compare a.root b.root).then (compare a.payload_status.toNat b.payload_status.toNat)
 
 /-- A set of nodes (the spec's `Sequence[ForkChoiceNode]` where only membership is read). -/
-abbrev NodeSet := Std.TreeSet ForkChoiceNode ForkChoiceNode.cmp
+abbrev NodeSet := Std.TreeSet ForkChoiceNode ForkChoiceNode.compareByRootThenStatus
 
 /-- `LatestMessage` (Gloas): the slot instead of the epoch, and `payload_present`. -/
 structure LatestMessage where
@@ -95,7 +95,7 @@ structure Store (P : Preset) where
   blocks : RootMap (BeaconBlock P)
   block_states : RootMap (BeaconState P)
   block_timeliness : RootMap (Array Bool)
-  checkpoint_states : Std.TreeMap Checkpoint (BeaconState P) Checkpoint.cmp
+  checkpoint_states : Std.TreeMap Checkpoint (BeaconState P) Checkpoint.compareByEpochThenRoot
   latest_messages : Std.TreeMap Nat LatestMessage compare
   unrealized_justifications : RootMap Checkpoint
   payloads : RootMap (ExecutionPayloadEnvelope P)
@@ -105,21 +105,21 @@ structure Store (P : Preset) where
 /-- The Gloas state transition the handlers call: `process_slots(state, slot)` and
 `state_transition(state, signed_block, validate_result)`. -/
 structure Transition (P : Preset) where
-  processSlots : Ctx → BeaconState P → Slot → M (BeaconState P)
-  stateTransition : Ctx → BeaconState P → SignedBeaconBlock P → Bool → M (BeaconState P)
+  processSlots : Ctx → BeaconState P → Slot → Fallible (BeaconState P)
+  stateTransition : Ctx → BeaconState P → SignedBeaconBlock P → Bool → Fallible (BeaconState P)
 
 /-- The implementation-dependent oracle `retrieve_column_sidecars_and_kzg_commitments`
 (`specs/gloas/fork-choice.md`, `is_data_available`): the column sidecars to sample and the
 block's KZG commitments, or a rejection when they are not available. -/
 structure DataOracle (P : Preset) where
   retrieveColumnSidecarsAndKzgCommitments :
-    Root → M (List (DataColumnSidecar P) × List KZGCommitment)
+    Root → Fallible (List (DataColumnSidecar P) × List KZGCommitment)
 
 /-! ## The store and time -/
 
 /-- `get_forkchoice_store(anchor_state, anchor_block)` (Gloas). -/
 def getForkchoiceStore (cfg : Config) (anchorState : BeaconState P)
-    (anchorBlock : BeaconBlock P) : M (Store P) := do
+    (anchorBlock : BeaconBlock P) : Fallible (Store P) := do
   let site := "get_forkchoice_store"
   require (anchorBlock.state_root == Ssz.hashTreeRoot anchorState) s!"{site}: anchor state root"
   let anchorRoot : Root := Ssz.hashTreeRoot anchorBlock
@@ -140,7 +140,7 @@ def getForkchoiceStore (cfg : Config) (anchorState : BeaconState P)
     blocks := (∅ : RootMap _).insert anchorRoot anchorBlock
     block_states := (∅ : RootMap _).insert anchorRoot anchorState
     block_timeliness := (∅ : RootMap _).insert anchorRoot #[true, true]
-    checkpoint_states := (∅ : Std.TreeMap Checkpoint _ Checkpoint.cmp).insert justifiedCheckpoint
+    checkpoint_states := (∅ : Std.TreeMap Checkpoint _ Checkpoint.compareByEpochThenRoot).insert justifiedCheckpoint
       anchorState
     latest_messages := ∅
     unrealized_justifications := (∅ : RootMap _).insert anchorRoot justifiedCheckpoint
@@ -149,28 +149,28 @@ def getForkchoiceStore (cfg : Config) (anchorState : BeaconState P)
     payload_data_availability_vote := (∅ : RootMap _).insert anchorRoot noVotes }
 
 /-- `get_current_slot(store)`. -/
-def getCurrentSlot (cfg : Config) (store : Store P) : M Slot :=
+def getCurrentSlot (cfg : Config) (store : Store P) : Fallible Slot :=
   computeSlotAtTimeMs cfg store.genesis_time_ms store.time_ms
 
 /-- `get_time_into_slot_ms(store)`. -/
-def getTimeIntoSlotMs (cfg : Config) (store : Store P) : M U64 := do
+def getTimeIntoSlotMs (cfg : Config) (store : Store P) : Fallible U64 := do
   store.time_ms.sub? (← computeTimeAtSlotMs cfg store.genesis_time_ms (← getCurrentSlot cfg store))
     "get_time_into_slot_ms"
 
 /-- `get_current_store_epoch(store)`. -/
-def getCurrentStoreEpoch (cfg : Config) (store : Store P) : M Epoch := do
+def getCurrentStoreEpoch (cfg : Config) (store : Store P) : Fallible Epoch := do
   computeEpochAtSlot P (← getCurrentSlot cfg store)
 
 /-- `get_attestation_due_ms()` (Gloas: `ATTESTATION_DUE_BPS_GLOAS`). -/
-def getAttestationDueMs (cfg : Config) : M U64 := do
+def getAttestationDueMs (cfg : Config) : Fallible U64 := do
   getSlotComponentDurationMs cfg (← u64 cfg.ATTESTATION_DUE_BPS_GLOAS "ATTESTATION_DUE_BPS_GLOAS")
 
 /-- `get_payload_due_ms()`. -/
-def getPayloadDueMs (cfg : Config) : M U64 := do
+def getPayloadDueMs (cfg : Config) : Fallible U64 := do
   getSlotComponentDurationMs cfg (← u64 cfg.PAYLOAD_DUE_BPS "PAYLOAD_DUE_BPS")
 
 /-- `get_payload_attestation_due_ms()`. -/
-def getPayloadAttestationDueMs (cfg : Config) : M U64 := do
+def getPayloadAttestationDueMs (cfg : Config) : Fallible U64 := do
   getSlotComponentDurationMs cfg (← u64 cfg.PAYLOAD_ATTESTATION_DUE_BPS "PAYLOAD_ATTESTATION_DUE_BPS")
 
 /-! ## Payload status helpers -/
@@ -183,7 +183,7 @@ private def countVotes (votes : Array (Option Bool)) (want : Bool) : Nat :=
   votes.foldl (fun n v => match v with | some b => if b == want then n + 1 else n | none => n) 0
 
 /-- `payload_timeliness(store, root, timely)`. -/
-def payloadTimeliness (store : Store P) (root : Root) (timely : Bool) : M Bool := do
+def payloadTimeliness (store : Store P) (root : Root) (timely : Bool) : Fallible Bool := do
   -- The beacon block root must be known
   require (store.payload_timeliness_vote.contains root) "payload_timeliness: root known"
   -- If the payload is not locally available, the payload
@@ -193,7 +193,7 @@ def payloadTimeliness (store : Store P) (root : Root) (timely : Bool) : M Bool :
   pure (countVotes votes timely > PAYLOAD_TIMELY_THRESHOLD P)
 
 /-- `payload_data_availability(store, root, available)`. -/
-def payloadDataAvailability (store : Store P) (root : Root) (available : Bool) : M Bool := do
+def payloadDataAvailability (store : Store P) (root : Root) (available : Bool) : Fallible Bool := do
   -- The beacon block root must be known
   require (store.payload_data_availability_vote.contains root)
     "payload_data_availability: root known"
@@ -205,7 +205,7 @@ def payloadDataAvailability (store : Store P) (root : Root) (available : Bool) :
 
 /-- `get_parent_payload_status(store, block)`: `FULL` when the block's bid builds on the parent's
 committed payload hash. -/
-def getParentPayloadStatus (store : Store P) (block : BeaconBlock P) : M PayloadStatus := do
+def getParentPayloadStatus (store : Store P) (block : BeaconBlock P) : Fallible PayloadStatus := do
   let parent ← lookup store.blocks block.parent_root
     "get_parent_payload_status: store.blocks[block.parent_root]"
   let parentBlockHash := block.body.signed_execution_payload_bid.message.parent_block_hash
@@ -213,13 +213,13 @@ def getParentPayloadStatus (store : Store P) (block : BeaconBlock P) : M Payload
   pure (if parentBlockHash == messageBlockHash then .full else .empty)
 
 /-- `is_parent_node_full(store, block)`. -/
-def isParentNodeFull (store : Store P) (block : BeaconBlock P) : M Bool := do
+def isParentNodeFull (store : Store P) (block : BeaconBlock P) : Fallible Bool := do
   pure ((← getParentPayloadStatus store block) == .full)
 
 /-! ## Block tree helpers -/
 
 /-- `get_ancestor` with an explicit bound on the number of parent steps. -/
-def getAncestorFuel (store : Store P) : Nat → ForkChoiceNode → Slot → M ForkChoiceNode
+def getAncestorFuel (store : Store P) : Nat → ForkChoiceNode → Slot → Fallible ForkChoiceNode
   | 0, _, _ => throw (.assert "get_ancestor: parent chain longer than the store")
   | fuel + 1, node, slot => do
     let block ← lookup store.blocks node.root "get_ancestor: store.blocks[node.root]"
@@ -231,12 +231,12 @@ def getAncestorFuel (store : Store P) : Nat → ForkChoiceNode → Slot → M Fo
 
 /-- `get_ancestor(store, node, slot)` (Gloas): the ancestor node at `slot`, with the payload status
 its child on the chain builds on. -/
-def getAncestor (store : Store P) (node : ForkChoiceNode) (slot : Slot) : M ForkChoiceNode :=
+def getAncestor (store : Store P) (node : ForkChoiceNode) (slot : Slot) : Fallible ForkChoiceNode :=
   getAncestorFuel store (store.blocks.size + 1) node slot
 
 /-- `is_ancestor(store, node, ancestor)` (Gloas): a `PENDING` ancestor matches either payload
 status. -/
-def isAncestor (store : Store P) (node ancestor : ForkChoiceNode) : M Bool := do
+def isAncestor (store : Store P) (node ancestor : ForkChoiceNode) : Fallible Bool := do
   let ancestorBlock ← lookup store.blocks ancestor.root "is_ancestor: store.blocks[ancestor.root]"
   let nodeAncestor ← getAncestor store node ancestorBlock.slot
   if nodeAncestor.root != ancestor.root then return false
@@ -244,13 +244,13 @@ def isAncestor (store : Store P) (node ancestor : ForkChoiceNode) : M Bool := do
     ancestor.payload_status == .pending)
 
 /-- `get_checkpoint_block(store, root, epoch)` (Gloas). -/
-def getCheckpointBlock (store : Store P) (root : Root) (epoch : Epoch) : M Root := do
+def getCheckpointBlock (store : Store P) (root : Root) (epoch : Epoch) : Fallible Root := do
   let epochFirstSlot ← computeStartSlotAtEpoch P epoch
   pure (← getAncestor store { root, payload_status := .pending } epochFirstSlot).root
 
 /-- `get_supported_node(store, message)` (Gloas): a message from a later slot than its block
 supports the block's `FULL` or `EMPTY` node, otherwise its `PENDING` node. -/
-def getSupportedNode (store : Store P) (message : LatestMessage) : M ForkChoiceNode := do
+def getSupportedNode (store : Store P) (message : LatestMessage) : Fallible ForkChoiceNode := do
   let block ← lookup store.blocks message.root "get_supported_node: store.blocks[message.root]"
   let payloadStatus : PayloadStatus :=
     if block.slot < message.slot then
@@ -260,7 +260,7 @@ def getSupportedNode (store : Store P) (message : LatestMessage) : M ForkChoiceN
 
 /-- The unslashed members of `get_active_validator_indices(state, get_current_epoch(state))`, in
 index order. -/
-def unslashedActiveIndices (state : BeaconState P) (site : String) : M (Array ValidatorIndex) := do
+def unslashedActiveIndices (state : BeaconState P) (site : String) : Fallible (Array ValidatorIndex) := do
   let active ← getActiveValidatorIndices state (← getCurrentEpoch state)
   let mut out : Array ValidatorIndex := #[]
   for i in active do
@@ -269,17 +269,17 @@ def unslashedActiveIndices (state : BeaconState P) (site : String) : M (Array Va
   pure out
 
 /-- `calculate_committee_fraction(state, committee_percent)`. -/
-def calculateCommitteeFraction (state : BeaconState P) (committeePercent : U64) : M Gwei := do
+def calculateCommitteeFraction (state : BeaconState P) (committeePercent : U64) : Fallible Gwei := do
   let site := "calculate_committee_fraction"
   let totalBalance ← getTotalBalance state (← unslashedActiveIndices state site)
-  let committeeWeight ← totalBalance.div? (← c64 P.SLOTS_PER_EPOCH) site
-  (← committeeWeight.mul? committeePercent site).div? (← c64 100) site
+  let committeeWeight ← totalBalance.div? (← u64Checked P.SLOTS_PER_EPOCH) site
+  (← committeeWeight.mul? committeePercent site).div? (← u64Checked 100) site
 
 /-- `get_attestation_score(store, node, state)`: in index order, the effective balances (at
 `state`) of its unslashed active validators whose non-equivocating latest message supports a
 descendant of `node`. -/
 def getAttestationScore (store : Store P) (node : ForkChoiceNode) (state : BeaconState P) :
-    M Gwei := do
+    Fallible Gwei := do
   let site := "get_attestation_score"
   let mut score := U64.zero
   for i in ← unslashedActiveIndices state site do
@@ -293,29 +293,29 @@ def getAttestationScore (store : Store P) (node : ForkChoiceNode) (state : Beaco
   pure score
 
 /-- `compute_proposer_score(state)`. -/
-def computeProposerScore (cfg : Config) (state : BeaconState P) : M Gwei := do
+def computeProposerScore (cfg : Config) (state : BeaconState P) : Fallible Gwei := do
   calculateCommitteeFraction state (← u64 cfg.PROPOSER_SCORE_BOOST "PROPOSER_SCORE_BOOST")
 
 /-- `store.checkpoint_states[store.justified_checkpoint]`. -/
-def justifiedCheckpointState (store : Store P) (site : String) : M (BeaconState P) :=
+def justifiedCheckpointState (store : Store P) (site : String) : Fallible (BeaconState P) :=
   lookup store.checkpoint_states store.justified_checkpoint
     s!"{site}: store.checkpoint_states[store.justified_checkpoint]"
 
 /-- `get_proposer_score(store)`. -/
-def getProposerScore (cfg : Config) (store : Store P) : M Gwei := do
+def getProposerScore (cfg : Config) (store : Store P) : Fallible Gwei := do
   computeProposerScore cfg (← justifiedCheckpointState store "get_proposer_score")
 
 /-! ## Proposer head and re-org helpers -/
 
 /-- `is_head_late(store, head_root)` (Gloas): the attestation-deadline timeliness. -/
-def isHeadLate (store : Store P) (headRoot : Root) : M Bool := do
+def isHeadLate (store : Store P) (headRoot : Root) : Fallible Bool := do
   let t ← lookup store.block_timeliness headRoot "is_head_late: store.block_timeliness"
   pure !(← getAt t ATTESTATION_TIMELINESS_INDEX "is_head_late: block_timeliness[root]")
 
 /-- `is_head_weak(store, head_root)` (Gloas): the attestation score of the head's `PENDING` node
 at the justified state plus the justified-state effective balances of the equivocating members of
 the head slot's committees, against the head threshold. -/
-def isHeadWeak (cfg : Config) (store : Store P) (headRoot : Root) : M Bool := do
+def isHeadWeak (cfg : Config) (store : Store P) (headRoot : Root) : Fallible Bool := do
   let site := "is_head_weak"
   -- Calculate weight threshold for weak head
   let justifiedState ← justifiedCheckpointState store site
@@ -339,7 +339,7 @@ def isHeadWeak (cfg : Config) (store : Store P) (headRoot : Root) : M Bool := do
 
 /-- `is_parent_strong(store, root)` (Gloas): the attestation score of the parent's `PENDING`
 node. -/
-def isParentStrong (cfg : Config) (store : Store P) (root : Root) : M Bool := do
+def isParentStrong (cfg : Config) (store : Store P) (root : Root) : Fallible Bool := do
   let site := "is_parent_strong"
   let justifiedState ← justifiedCheckpointState store site
   let parentThreshold ← calculateCommitteeFraction justifiedState
@@ -350,25 +350,25 @@ def isParentStrong (cfg : Config) (store : Store P) (root : Root) : M Bool := do
   pure (parentWeight > parentThreshold)
 
 /-- `is_ffg_competitive(store, head_root, parent_root)`. -/
-def isFfgCompetitive (store : Store P) (headRoot parentRoot : Root) : M Bool := do
+def isFfgCompetitive (store : Store P) (headRoot parentRoot : Root) : Fallible Bool := do
   let site := "is_ffg_competitive: store.unrealized_justifications"
   pure ((← lookup store.unrealized_justifications headRoot site) ==
     (← lookup store.unrealized_justifications parentRoot site))
 
 /-- `is_finalization_ok(store, slot)`. -/
-def isFinalizationOk (cfg : Config) (store : Store P) (slot : Slot) : M Bool := do
+def isFinalizationOk (cfg : Config) (store : Store P) (slot : Slot) : Fallible Bool := do
   let epochsSinceFinalization ← (← computeEpochAtSlot P slot).sub?
     store.finalized_checkpoint.epoch "is_finalization_ok"
   pure (epochsSinceFinalization ≤
     (← u64 cfg.REORG_MAX_EPOCHS_SINCE_FINALIZATION "REORG_MAX_EPOCHS_SINCE_FINALIZATION"))
 
 /-- `is_proposing_on_time(store)`. -/
-def isProposingOnTime (cfg : Config) (store : Store P) : M Bool := do
+def isProposingOnTime (cfg : Config) (store : Store P) : Fallible Bool := do
   pure ((← getTimeIntoSlotMs cfg store) ≤ (← getProposerReorgCutoffMs cfg))
 
 /-- `is_proposer_equivocation(store, root)`: more than one stored block has `root`'s proposer
 and slot. -/
-def isProposerEquivocation (store : Store P) (root : Root) : M Bool := do
+def isProposerEquivocation (store : Store P) (root : Root) : Fallible Bool := do
   let block ← lookup store.blocks root "is_proposer_equivocation: store.blocks[root]"
   let matching := store.blocks.toList.filter fun (_, b) =>
     b.proposer_index == block.proposer_index && b.slot == block.slot
@@ -379,7 +379,7 @@ def isProposerEquivocation (store : Store P) (root : Root) : M Bool := do
 /-- `is_previous_slot_payload_decision(store, node)`: a `FULL` or `EMPTY` node of a block from the
 previous slot. -/
 def isPreviousSlotPayloadDecision (cfg : Config) (store : Store P) (node : ForkChoiceNode) :
-    M Bool := do
+    Fallible Bool := do
   let site := "is_previous_slot_payload_decision"
   let block ← lookup store.blocks node.root s!"{site}: store.blocks[node.root]"
   let isPreviousSlot := (← block.slot.add? U64.one site) == (← getCurrentSlot cfg store)
@@ -387,7 +387,7 @@ def isPreviousSlotPayloadDecision (cfg : Config) (store : Store P) (node : ForkC
   pure (isPreviousSlot && isPayloadDecision)
 
 /-- `should_build_on_full(store, head, slot)` (called by a proposer; no handler reads it). -/
-def shouldBuildOnFull (store : Store P) (head : ForkChoiceNode) (slot : Slot) : M Bool := do
+def shouldBuildOnFull (store : Store P) (head : ForkChoiceNode) (slot : Slot) : Fallible Bool := do
   let site := "should_build_on_full"
   require (head.payload_status != .pending) s!"{site}: head not pending"
   let block ← lookup store.blocks head.root s!"{site}: store.blocks[head.root]"
@@ -399,7 +399,7 @@ def shouldBuildOnFull (store : Store P) (head : ForkChoiceNode) (slot : Slot) : 
 
 /-- `should_extend_payload(store, root)`: the `or` is evaluated left to right with short
 circuit. -/
-def shouldExtendPayload (cfg : Config) (store : Store P) (root : Root) : M Bool := do
+def shouldExtendPayload (cfg : Config) (store : Store P) (root : Root) : Fallible Bool := do
   let site := "should_extend_payload"
   let block ← lookup store.blocks root s!"{site}: store.blocks[root]"
   require ((← block.slot.add? U64.one site) == (← getCurrentSlot cfg store)) s!"{site}: previous slot"
@@ -414,7 +414,7 @@ def shouldExtendPayload (cfg : Config) (store : Store P) (root : Root) : M Bool 
   isParentNodeFull store proposerBlock
 
 /-- `get_payload_status_tiebreaker(store, node)`. -/
-def getPayloadStatusTiebreaker (cfg : Config) (store : Store P) (node : ForkChoiceNode) : M Nat := do
+def getPayloadStatusTiebreaker (cfg : Config) (store : Store P) (node : ForkChoiceNode) : Fallible Nat := do
   if ← isPreviousSlotPayloadDecision cfg store node then
     -- To decide on a payload from the previous slot, choose
     -- between FULL and EMPTY based on `should_extend_payload`
@@ -426,7 +426,7 @@ def getPayloadStatusTiebreaker (cfg : Config) (store : Store P) (node : ForkChoi
 
 /-- `should_apply_proposer_boost(store)`. The comprehension reads `block_timeliness` first for
 each stored block, as the Python's `and` does. -/
-def shouldApplyProposerBoost (cfg : Config) (store : Store P) : M Bool := do
+def shouldApplyProposerBoost (cfg : Config) (store : Store P) : Fallible Bool := do
   let site := "should_apply_proposer_boost"
   if store.proposer_boost_root == zeroRoot then return false
   let block ← lookup store.blocks store.proposer_boost_root s!"{site}: store.blocks[boost]"
@@ -449,7 +449,7 @@ def shouldApplyProposerBoost (cfg : Config) (store : Store P) : M Bool := do
   pure (equivocations == 0)
 
 /-- `get_weight(store, node)` (Gloas). -/
-def getWeight (cfg : Config) (store : Store P) (node : ForkChoiceNode) : M Gwei := do
+def getWeight (cfg : Config) (store : Store P) (node : ForkChoiceNode) : Fallible Gwei := do
   let site := "get_weight"
   if ← isPreviousSlotPayloadDecision cfg store node then return U64.zero
   let state ← justifiedCheckpointState store site
@@ -467,7 +467,7 @@ def getWeight (cfg : Config) (store : Store P) (node : ForkChoiceNode) : M Gwei 
   attestationScore.add? proposerScore site
 
 /-- `get_voting_source(store, block_root)`. -/
-def getVotingSource (cfg : Config) (store : Store P) (blockRoot : Root) : M Checkpoint := do
+def getVotingSource (cfg : Config) (store : Store P) (blockRoot : Root) : Fallible Checkpoint := do
   let site := "get_voting_source"
   let block ← lookup store.blocks blockRoot s!"{site}: store.blocks[block_root]"
   let currentEpoch ← getCurrentStoreEpoch cfg store
@@ -483,7 +483,7 @@ def getVotingSource (cfg : Config) (store : Store P) (blockRoot : Root) : M Chec
 /-- `get_node_children(store, node)` (Gloas): a `PENDING` node's `EMPTY` child and, once its
 payload is verified, its `FULL` child; an `EMPTY` or `FULL` node's children are the `PENDING`
 nodes of the blocks built on it with that parent payload status, in key order. -/
-def getNodeChildren (store : Store P) (node : ForkChoiceNode) : M (List ForkChoiceNode) := do
+def getNodeChildren (store : Store P) (node : ForkChoiceNode) : Fallible (List ForkChoiceNode) := do
   if node.payload_status == .pending then
     let empty : ForkChoiceNode := { root := node.root, payload_status := .empty }
     if isPayloadVerified store node.root then
@@ -497,7 +497,7 @@ def getNodeChildren (store : Store P) (node : ForkChoiceNode) : M (List ForkChoi
   pure out.toList
 
 /-- `filter_node_tree(store, node)`, returning the viable nodes of the subtree as a set. -/
-def filterNodeTree (cfg : Config) (store : Store P) : Nat → ForkChoiceNode → M NodeSet
+def filterNodeTree (cfg : Config) (store : Store P) : Nat → ForkChoiceNode → Fallible NodeSet
   | 0, _ => throw (.assert "filter_node_tree: node tree deeper than the store")
   | fuel + 1, node => do
   let site := "filter_node_tree"
@@ -518,7 +518,7 @@ def filterNodeTree (cfg : Config) (store : Store P) : Nat → ForkChoiceNode →
   let correctJustified ←
     if store.justified_checkpoint.epoch == GENESIS_EPOCH then pure true
     else if votingSource.epoch == store.justified_checkpoint.epoch then pure true
-    else do pure ((← votingSource.epoch.add? (← c64 2) site) ≥ currentEpoch)
+    else do pure ((← votingSource.epoch.add? (← u64Checked 2) site) ≥ currentEpoch)
   let finalizedCheckpointBlock ← getCheckpointBlock store node.root store.finalized_checkpoint.epoch
   let correctFinalized :=
     store.finalized_checkpoint.epoch == GENESIS_EPOCH ||
@@ -533,7 +533,7 @@ def filterNodeTree (cfg : Config) (store : Store P) : Nat → ForkChoiceNode →
 def nodeFuel (store : Store P) : Nat := 3 * store.blocks.size + 1
 
 /-- `get_filtered_node_tree(store)` (Gloas): from the justified root's `PENDING` node. -/
-def getFilteredNodeTree (cfg : Config) (store : Store P) : M NodeSet := do
+def getFilteredNodeTree (cfg : Config) (store : Store P) : Fallible NodeSet := do
   let base : ForkChoiceNode := { root := store.justified_checkpoint.root, payload_status := .pending }
   filterNodeTree cfg store (nodeFuel store) base
 
@@ -541,7 +541,7 @@ def getFilteredNodeTree (cfg : Config) (store : Store P) : M NodeSet := do
 filtered node tree, children compared by `(get_weight, root, get_payload_status_tiebreaker)`; the
 keys of a node's children are distinct, so the maximum is unique. With no viable node, the
 justified root's `EMPTY` node. -/
-def getHead (cfg : Config) (store : Store P) : M ForkChoiceNode := do
+def getHead (cfg : Config) (store : Store P) : Fallible ForkChoiceNode := do
   -- Get filtered node tree that only includes viable branches
   let nodes ← getFilteredNodeTree cfg store
   -- Return empty node if there are no viable nodes
@@ -586,13 +586,13 @@ def updateUnrealizedCheckpoints (store : Store P)
     { store with unrealized_finalized_checkpoint := unrealizedFinalized } else store
 
 /-- `get_latest_message_epoch(latest_message)` (Gloas): the epoch of the message's slot. -/
-def getLatestMessageEpoch (P : Preset) (latestMessage : LatestMessage) : M Epoch :=
+def getLatestMessageEpoch (P : Preset) (latestMessage : LatestMessage) : Fallible Epoch :=
   computeEpochAtSlot P latestMessage.slot
 
 /-- `is_valid_dependent_root(store, root, dependent_slot)` (read by gossip validation; no
 handler reads it). -/
 def isValidDependentRoot (cfg : Config) (store : Store P) (root : Root) (dependentSlot : Slot) :
-    M Bool := do
+    Fallible Bool := do
   if root == (← getHead cfg store).root then return true
   for (_, block) in store.blocks do
     if block.parent_root == root then
@@ -602,7 +602,7 @@ def isValidDependentRoot (cfg : Config) (store : Store P) (root : Root) (depende
 /-- `get_proposer_head(store, head_node, slot)` (Gloas): the re-org target keeps the parent's
 payload status. Every condition is computed before they are combined. -/
 def getProposerHead (cfg : Config) (store : Store P) (headNode : ForkChoiceNode) (slot : Slot) :
-    M ForkChoiceNode := do
+    Fallible ForkChoiceNode := do
   let site := "get_proposer_head"
   let headBlock ← lookup store.blocks headNode.root s!"{site}: store.blocks[head_node.root]"
   let parentRoot := headBlock.parent_root
@@ -640,7 +640,7 @@ def getProposerHead (cfg : Config) (store : Store P) (headNode : ForkChoiceNode)
 /-! ## Pull-up tip and tick handlers -/
 
 /-- `compute_pulled_up_tip(store, block_root)`. -/
-def computePulledUpTip (cfg : Config) (store : Store P) (blockRoot : Root) : M (Store P) := do
+def computePulledUpTip (cfg : Config) (store : Store P) (blockRoot : Root) : Fallible (Store P) := do
   let site := "compute_pulled_up_tip"
   let state ← lookup store.block_states blockRoot s!"{site}: store.block_states"
   -- Pull up the post-state of the block to the next epoch boundary
@@ -658,7 +658,7 @@ def computePulledUpTip (cfg : Config) (store : Store P) (blockRoot : Root) : M (
   else pure store
 
 /-- `on_tick_per_slot(store, time_ms)`. -/
-def onTickPerSlot (cfg : Config) (store : Store P) (timeMs : U64) : M (Store P) := do
+def onTickPerSlot (cfg : Config) (store : Store P) (timeMs : U64) : Fallible (Store P) := do
   let previousSlot ← getCurrentSlot cfg store
   -- Update store time
   let store := { store with time_ms := timeMs }
@@ -674,7 +674,7 @@ def onTickPerSlot (cfg : Config) (store : Store P) (timeMs : U64) : M (Store P) 
   pure store
 
 /-- `on_tick(store, time_ms)`: the catch-up loop runs at most `tick_slot - current_slot` times. -/
-def onTick (cfg : Config) (store : Store P) (timeMs : U64) : M (Store P) := do
+def onTick (cfg : Config) (store : Store P) (timeMs : U64) : Fallible (Store P) := do
   let site := "on_tick"
   let tickSlot ← computeSlotAtTimeMs cfg store.genesis_time_ms timeMs
   let bound := tickSlot.toNat - (← getCurrentSlot cfg store).toNat
@@ -692,7 +692,7 @@ def onTick (cfg : Config) (store : Store P) (timeMs : U64) : M (Store P) := do
 
 /-- `validate_target_epoch_against_current_time(store, attestation)`. -/
 def validateTargetEpochAgainstCurrentTime (cfg : Config) (store : Store P)
-    (attestation : Attestation P) : M Unit := do
+    (attestation : Attestation P) : Fallible Unit := do
   let target := attestation.data.target
   let currentEpoch ← getCurrentStoreEpoch cfg store
   let previousEpoch ← saturatingSubU64 currentEpoch U64.one
@@ -703,7 +703,7 @@ def validateTargetEpochAgainstCurrentTime (cfg : Config) (store : Store P)
 /-- `validate_on_attestation(store, attestation, is_from_block)` (Gloas: the committee index is
 the payload vote, `1` only for an earlier block whose payload is verified). -/
 def validateOnAttestation (cfg : Config) (store : Store P) (attestation : Attestation P)
-    (isFromBlock : Bool) : M Unit := do
+    (isFromBlock : Bool) : Fallible Unit := do
   let site := "validate_on_attestation"
   let target := attestation.data.target
   -- If the given attestation is not from a beacon block message, we have to check the target epoch scope.
@@ -735,7 +735,7 @@ def validateOnAttestation (cfg : Config) (store : Store P) (attestation : Attest
 
 /-- `store_target_checkpoint_state(store, target)`. -/
 def storeTargetCheckpointState (tr : Transition P) (ctx : Ctx) (store : Store P)
-    (target : Checkpoint) : M (Store P) := do
+    (target : Checkpoint) : Fallible (Store P) := do
   -- Store target checkpoint state if not yet seen
   if store.checkpoint_states.contains target then return store
   let baseState ← lookup store.block_states target.root
@@ -765,8 +765,8 @@ def updateLatestMessages (store : Store P) (attestingIndices : Array ValidatorIn
 
 /-- `on_attestation(store, attestation, is_from_block)`. -/
 def onAttestation (tr : Transition P) (ctx : Ctx) (store : Store P) (attestation : Attestation P)
-    (isFromBlock : Bool := false) : M (Store P) := do
-  validateOnAttestation ctx.cfg store attestation isFromBlock
+    (isFromBlock : Bool := false) : Fallible (Store P) := do
+  validateOnAttestation ctx.config store attestation isFromBlock
   let store ← storeTargetCheckpointState tr ctx store attestation.data.target
   -- Get state at the `target` to fully validate attestation
   let targetState ← lookup store.checkpoint_states attestation.data.target
@@ -779,7 +779,7 @@ def onAttestation (tr : Transition P) (ctx : Ctx) (store : Store P) (attestation
 
 /-- `on_attester_slashing(store, attester_slashing)`. -/
 def onAttesterSlashing (ctx : Ctx) (store : Store P) (attesterSlashing : AttesterSlashing) :
-    M (Store P) := do
+    Fallible (Store P) := do
   let site := "on_attester_slashing"
   let attestation1 := attesterSlashing.attestation_1
   let attestation2 := attesterSlashing.attestation_2
@@ -803,7 +803,7 @@ def emptySignature : BLSSignature := ⟨Array.replicate 96 0, by simp⟩
 every position its validator holds in the slot's PTC. A message for another slot than its
 block's leaves the store unchanged. -/
 def onPayloadAttestationMessage (ctx : Ctx) (store : Store P)
-    (ptcMessage : PayloadAttestationMessage) (isFromBlock : Bool := false) : M (Store P) := do
+    (ptcMessage : PayloadAttestationMessage) (isFromBlock : Bool := false) : Fallible (Store P) := do
   let site := "on_payload_attestation_message"
   let data := ptcMessage.data
   -- PTC attestation must be for a known block.
@@ -812,7 +812,7 @@ def onPayloadAttestationMessage (ctx : Ctx) (store : Store P)
   -- PTC votes can only change the vote for their assigned beacon block, return early otherwise
   if data.slot != state.slot then return store
   -- Get all positions of the attester in the PTC
-  let ptc ← getPtc ctx.cfg state data.slot
+  let ptc ← getPtc ctx.config state data.slot
   let mut ptcIndices : Array Nat := #[]
   let mut ptcIndex := 0
   for validatorIndex in ptc.toArray do
@@ -823,7 +823,7 @@ def onPayloadAttestationMessage (ctx : Ctx) (store : Store P)
   -- Verify the signature and check that its for the current slot if it is coming from the wire
   if !isFromBlock then
     -- Check that the attestation is for the current slot
-    require (data.slot == (← getCurrentSlot ctx.cfg store)) s!"{site}: current slot"
+    require (data.slot == (← getCurrentSlot ctx.config store)) s!"{site}: current slot"
     -- Verify the signature
     let indexed : IndexedPayloadAttestation P := {
       attesting_indices := ← SszList.ofArray #[ptcMessage.validator_index] site
@@ -849,11 +849,11 @@ def onPayloadAttestationMessage (ctx : Ctx) (store : Store P)
 /-- `notify_ptc_messages(store, state, payload_attestations)`: each block-carried payload
 attestation as one message per attesting index, from the block (no signature check). -/
 def notifyPtcMessages (ctx : Ctx) (store : Store P) (state : BeaconState P)
-    (payloadAttestations : Array (PayloadAttestation P)) : M (Store P) := do
+    (payloadAttestations : Array (PayloadAttestation P)) : Fallible (Store P) := do
   if state.slot.toNat == 0 then return store
   let mut store := store
   for payloadAttestation in payloadAttestations do
-    let indexed ← getIndexedPayloadAttestation ctx.cfg state payloadAttestation
+    let indexed ← getIndexedPayloadAttestation ctx.config state payloadAttestation
     for idx in indexed.attesting_indices.toArray do
       store ← onPayloadAttestationMessage ctx store
         { validator_index := idx, data := payloadAttestation.data, signature := emptySignature }
@@ -877,17 +877,17 @@ def verifyDataColumnSidecar (sidecar : DataColumnSidecar P) (kzgCommitments : Li
 /-- `verify_data_column_sidecar_kzg_proofs(sidecar, kzg_commitments)`
 (`specs/gloas/p2p-interface.md`). -/
 def verifyDataColumnSidecarKzgProofs (sidecar : DataColumnSidecar P)
-    (kzgCommitments : List KZGCommitment) : M Bool := do
+    (kzgCommitments : List KZGCommitment) : Fallible Bool := do
   -- The column index also represents the cell index
   let cellIndices := List.replicate sidecar.column.toArray.size sidecar.index.toNat
   -- Batch verify that the cells match the corresponding commitments and proofs
-  verifyCellKzgProofBatchM (kzgCommitments.map (·.toArray.toList)) cellIndices
+  verifyCellKzgProofBatchFallible (kzgCommitments.map (·.toArray.toList)) cellIndices
     (sidecar.column.toArray.toList.map (·.toArray.toList))
     (sidecar.kzg_proofs.toArray.toList.map (·.toArray.toList))
 
 /-- `is_data_available(beacon_block_root)` (Gloas): `all(...)` over the retrieved sidecars,
 stopping at the first that fails. -/
-def isDataAvailable (oracle : DataOracle P) (beaconBlockRoot : Root) : M Bool := do
+def isDataAvailable (oracle : DataOracle P) (beaconBlockRoot : Root) : Fallible Bool := do
   let (columnSidecars, kzgCommitments) ←
     oracle.retrieveColumnSidecarsAndKzgCommitments beaconBlockRoot
   for sidecar in columnSidecars do
@@ -899,7 +899,7 @@ def isDataAvailable (oracle : DataOracle P) (beaconBlockRoot : Root) : M Bool :=
 whose blob data is available, verified against the block's post-state (with
 `ctx.executionValid` as the engine's verdict) and stored. -/
 def onExecutionPayloadEnvelope (ctx : Ctx) (oracle : DataOracle P) (store : Store P)
-    (signedEnvelope : SignedExecutionPayloadEnvelope P) : M (Store P) := do
+    (signedEnvelope : SignedExecutionPayloadEnvelope P) : Fallible (Store P) := do
   let site := "on_execution_payload_envelope"
   let envelope := signedEnvelope.message
   -- The corresponding beacon block root needs to be known
@@ -908,7 +908,7 @@ def onExecutionPayloadEnvelope (ctx : Ctx) (oracle : DataOracle P) (store : Stor
   require (← isDataAvailable oracle envelope.beacon_block_root) s!"{site}: is_data_available"
   let state ← lookup store.block_states envelope.beacon_block_root s!"{site}: store.block_states"
   -- Verify the execution payload envelope
-  verifyExecutionPayloadEnvelopeB ctx.blsActive ctx.cfg (fun _ => ctx.executionValid) state
+  verifyExecutionPayloadEnvelopeWithBls ctx.blsActive ctx.config (fun _ => ctx.executionValid) state
     signedEnvelope
   -- Add execution payload envelope to the store
   pure { store with payloads := store.payloads.insert envelope.beacon_block_root envelope }
@@ -917,7 +917,7 @@ def onExecutionPayloadEnvelope (ctx : Ctx) (oracle : DataOracle P) (store : Stor
 
 /-- `record_block_timeliness(store, root)` (Gloas): timeliness against the attestation and the
 PTC deadlines. -/
-def recordBlockTimeliness (cfg : Config) (store : Store P) (root : Root) : M (Store P) := do
+def recordBlockTimeliness (cfg : Config) (store : Store P) (root : Root) : Fallible (Store P) := do
   let block ← lookup store.blocks root "record_block_timeliness: store.blocks[root]"
   let timeIntoSlotMs ← getTimeIntoSlotMs cfg store
   let attestationThresholdMs ← getAttestationDueMs cfg
@@ -928,14 +928,14 @@ def recordBlockTimeliness (cfg : Config) (store : Store P) (root : Root) : M (St
   pure { store with block_timeliness := store.block_timeliness.insert root timeliness }
 
 /-- `get_shuffling_dependent_root(store, root, epoch)` (Gloas). -/
-def getShufflingDependentRoot (store : Store P) (root : Root) (epoch : Epoch) : M Root := do
+def getShufflingDependentRoot (store : Store P) (root : Root) (epoch : Epoch) : Fallible Root := do
   let node : ForkChoiceNode := { root, payload_status := .pending }
   let dependentSlot ← computeShufflingDependentSlot P epoch
   pure (← getAncestor store node dependentSlot).root
 
 /-- `update_proposer_boost_root(store, head, root)` (Gloas: attestation-deadline timeliness). -/
 def updateProposerBoostRoot (cfg : Config) (store : Store P) (head root : Root) :
-    M (Store P) := do
+    Fallible (Store P) := do
   let isFirstBlock := store.proposer_boost_root == zeroRoot
   let t ← lookup store.block_timeliness root "update_proposer_boost_root: block_timeliness"
   let isTimely ← getAt t ATTESTATION_TIMELINESS_INDEX "update_proposer_boost_root: block_timeliness[root]"
@@ -953,8 +953,8 @@ def updateProposerBoostRoot (cfg : Config) (store : Store P) (head root : Root) 
 that payload verified; blob availability moves to the envelope; the block's payload attestations
 reach the store as PTC messages. A known block returns the store unchanged. -/
 def onBlock (tr : Transition P) (ctx : Ctx) (store : Store P) (signedBlock : SignedBeaconBlock P) :
-    M (Store P) := do
-  let cfg := ctx.cfg
+    Fallible (Store P) := do
+  let cfg := ctx.config
   let site := "on_block"
   let block := signedBlock.message
   let blockRoot : Root := Ssz.hashTreeRoot block
