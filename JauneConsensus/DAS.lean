@@ -11,18 +11,18 @@ group with probability at least `1/128`).
 -/
 
 namespace JauneConsensus
-open Jaune (Bytes U256)
+open Jaune (Bytes B256)
 
 /-- `UINT256_MAX` (`specs/fulu/das-core.md`). -/
 def UINT256_MAX : U256 := UIntN.max
 
 /-- `get_custody_groups(node_id, custody_group_count)` (Fulu). -/
-def getCustodyGroups (cfg : Config) (nodeId : U256) (custodyGroupCount : U64) : Fallible (Array U64) := do
+def getCustodyGroups (cfg : Config) (nodeId : U256) (custodyGroupCount : U64) : M (Array U64) := do
   let groups := cfg.NUMBER_OF_CUSTODY_GROUPS
   require (custodyGroupCount.toNat ≤ groups) "get_custody_groups: count <= NUMBER_OF_CUSTODY_GROUPS"
   if custodyGroupCount.toNat == groups then
     return ← (List.range groups).toArray.mapM fun i => U64.ofNat? i "CustodyIndex"
-  let rec loop : Nat → U256 → Array U64 → Fallible (Array U64)
+  let rec loop : Nat → U256 → Array U64 → M (Array U64)
     | 0, _, _ => throw (.assert "get_custody_groups: iteration fuel exhausted")
     | fuel + 1, currentId, acc => do
       if acc.size ≥ custodyGroupCount.toNat then return acc
@@ -39,7 +39,7 @@ def getCustodyGroups (cfg : Config) (nodeId : U256) (custodyGroupCount : U64) : 
 
 /-- `compute_columns_for_custody_group(custody_group)` (Fulu). -/
 def computeColumnsForCustodyGroup (cfg : Config) (P : Preset) (custodyGroup : U64) :
-    Fallible (Array U64) := do
+    M (Array U64) := do
   let groups := cfg.NUMBER_OF_CUSTODY_GROUPS
   require (custodyGroup.toNat < groups) "compute_columns_for_custody_group: group < NUMBER_OF_CUSTODY_GROUPS"
   let perGroup := P.NUMBER_OF_COLUMNS / groups

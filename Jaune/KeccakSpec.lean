@@ -252,7 +252,7 @@ def word (d : Bytes) (i : Nat) : UInt64 :=
 
 /-- Keccak-256 as a 256-bit word: the 32-byte digest read big-endian, digest
 byte 0 most significant (the Ethereum convention for hash words). -/
-def keccak256 (M : Bytes) : U256 :=
+def keccak256 (M : Bytes) : B256 :=
   let d := keccak256Digest M
   ⟨⟨word d 0, word d 1⟩, ⟨word d 2, word d 3⟩⟩
 
@@ -614,7 +614,7 @@ theorem run_cons8 (wc : Fin 17) (b0 b1 b2 b3 b4 b5 b6 b7 : UInt8) (bs : Bytes)
 
 /-- The body of `KECCAK.Bytes.run`'s final case, restated so that it can be
 named: fewer than eight bytes remain. -/
-def runTail (wc : Fin 17) (bs : Bytes) (ws : Vector UInt64 25) : U256 :=
+def runTail (wc : Fin 17) (bs : Bytes) (ws : Vector UInt64 25) : B256 :=
   let us : Vector UInt8 8 :=
     ⟨((bs ++ [(1 : UInt8)]).takeD 8 (0 : UInt8)).toArray, by simp⟩
   let t : UInt64 :=
@@ -721,7 +721,7 @@ def absorb (S : State) (P : List Bool) : State :=
 
 /-- The 256-bit word squeezed from a state: the first 256 bits, as bytes
 (Appendix B.1), read big-endian. -/
-def out (T : State) : U256 :=
+def out (T : State) : B256 :=
   let d := b2h (T.toList.take 256)
   ⟨⟨word d 0, word d 1⟩, ⟨word d 2, word d 3⟩⟩
 

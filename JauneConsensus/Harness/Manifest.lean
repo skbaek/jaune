@@ -93,7 +93,7 @@ def inventoryFile : String := "inventory-v1.7.0-beta.4.json"
 
 /-- The default extraction of a preset's tarball under `$HOME`: the general tarball comes from the
 general-only provenance entry (`v1.6.1`), the others from the pinned release. -/
-def defaultVectorsDirectory (preset : String) : String :=
+def defaultVectorsDir (preset : String) : String :=
   if preset == "general" then "consensus-spec-tests-v1.6.1" else "consensus-spec-tests-v1.7.0-beta.4"
 
 /-- The goal's scope (`scripts/consensus-vector-inventory.py`, `in_scope`): every `general` case;
@@ -108,7 +108,7 @@ private def field (j : Json) (k : String) : Except ManifestError Json :=
   | .ok v => .ok v
   | .error _ => .error (.field s!"missing field {k}")
 
-private def getString (j : Json) (k : String) : Except ManifestError String := do
+private def str (j : Json) (k : String) : Except ManifestError String := do
   match (← field j k).getStr? with
   | .ok s => .ok s
   | .error _ => .error (.field s!"field {k} is not a string")
@@ -118,13 +118,13 @@ private def nat (j : Json) (k : String) : Except ManifestError Nat := do
   | .ok n => .ok n
   | .error _ => .error (.field s!"field {k} is not a natural number")
 
-private def objectEntries (j : Json) (what : String) : Except ManifestError (List (String × Json)) :=
+private def objEntries (j : Json) (what : String) : Except ManifestError (List (String × Json)) :=
   match j with
   | .obj o => .ok o.toArray.toList
   | _ => .error (.field s!"{what} is not an object")
 
 private def suiteRecord (j : Json) : Except ManifestError SuiteRecord := do
-  let bls ← (← objectEntries (← field j "bls_setting") "bls_setting").mapM fun (k, v) =>
+  let bls ← (← objEntries (← field j "bls_setting") "bls_setting").mapM fun (k, v) =>
     match v.getNat? with
     | .ok n => .ok (k, n)
     | .error _ => .error (.field s!"bls_setting {k} is not a natural number")
@@ -135,8 +135,8 @@ private def suiteRecord (j : Json) : Except ManifestError SuiteRecord := do
     | _ => .error (.field "config_overrides is not an array")
   pure {
     cases := ← nat j "cases"
-    namesSha256 := ← getString j "names_sha256"
-    filesSha256 := ← getString j "files_sha256"
+    namesSha256 := ← str j "names_sha256"
+    filesSha256 := ← str j "files_sha256"
     blsSetting := bls
     configOverrides := overrides }
 
@@ -155,26 +155,26 @@ count, and an in-scope inventory suite with no record (or the reverse). -/
 def Manifest.load (provenanceText inventoryText : String) : Except ManifestError Manifest := do
   let prov ← (Json.parse provenanceText).mapError ManifestError.json
   let inv ← (Json.parse inventoryText).mapError ManifestError.json
-  let release ← getString prov "release"
-  let tagCommit ← getString prov "tag_commit"
-  if (← getString inv "release") != release then throw (.mismatch "inventory release differs from the pin")
-  if (← getString inv "tag_commit") != tagCommit then
+  let release ← str prov "release"
+  let tagCommit ← str prov "tag_commit"
+  if (← str inv "release") != release then throw (.mismatch "inventory release differs from the pin")
+  if (← str inv "tag_commit") != tagCommit then
     throw (.mismatch "inventory tag commit differs from the pin")
   match (← field inv "pinned").getBool? with
   | .ok true => pure ()
   | _ => throw (.mismatch "inventory was not produced from digest-checked tarballs")
   let tarballs ← field prov "tarballs"
   let general ← field prov "general"
-  let generalRelease ← getString general "release"
-  let generalTag ← getString general "tag_commit"
+  let generalRelease ← str general "release"
+  let generalTag ← str general "tag_commit"
   let invGeneral ← field inv "general_release"
-  if (← getString invGeneral "release") != generalRelease || (← getString invGeneral "tag_commit") != generalTag then
+  if (← str invGeneral "release") != generalRelease || (← str invGeneral "tag_commit") != generalTag then
     throw (.mismatch "inventory general release differs from the pin's general entry")
   let generalTarballs ← field general "tarballs"
   let mut suites := []
   for preset in presets do
     let _ ← field (if preset == "general" then generalTarballs else tarballs) preset
-    let recs ← objectEntries (← field (← field inv "suites") preset) s!"suites.{preset}"
+    let recs ← objEntries (← field (← field inv "suites") preset) s!"suites.{preset}"
     for (name, j) in recs do
       let some k := SuiteKey.parse? name | throw (.mismatch s!"bad suite key {preset}/{name}")
       if !inScope preset k.fork k.runner then
@@ -185,12 +185,12 @@ def Manifest.load (provenanceText inventoryText : String) : Except ManifestError
         throw (.mismatch s!"{preset}/{name}: suite record says {r.cases} cases, inventory {n}")
       suites := (preset, k, r, n) :: suites
     -- every in-scope inventory suite has a record
-    let forks ← objectEntries (← field (← field (← field inv "presets") preset) "forks") "forks"
+    let forks ← objEntries (← field (← field (← field inv "presets") preset) "forks") "forks"
     for (fork, rs) in forks do
-      for (runner, hs) in ← objectEntries rs "runners" do
+      for (runner, hs) in ← objEntries rs "runners" do
         if inScope preset fork runner then
-          for (handler, ss) in ← objectEntries hs "handlers" do
-            for (suite, _) in ← objectEntries ss "suites" do
+          for (handler, ss) in ← objEntries hs "handlers" do
+            for (suite, _) in ← objEntries ss "suites" do
               let k : SuiteKey := ⟨fork, runner, handler, suite⟩
               if !suites.any (fun (p, k', _) => p == preset && k' == k) then
                 throw (.mismatch s!"in-scope inventory suite {preset}/{k.render} has no record")

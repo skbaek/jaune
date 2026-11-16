@@ -16,8 +16,8 @@ open Jaune
 variable {P : Preset}
 
 /-- Reading a fork-gated field when the fork fact is known. -/
-private theorem ForkField.read_get {c : Bool} (h : c = true) (x : ForkField c α) (site : String) :
-    ForkField.read x site = .ok (ForkField.get h x) := by
+private theorem Gated.read_get {c : Bool} (h : c = true) (x : Gated c α) (site : String) :
+    Gated.read x site = .ok (Gated.get h x) := by
   cases c with
   | true => rfl
   | false => cases h
@@ -45,7 +45,7 @@ private theorem mapError_ok' {ε δ α} {f : ε → δ} {a : α} :
     (Except.ok a).mapError f = .ok a := rfl
 
 /-- `ofBlock` reads the body's execution requests, which exist at Electra and later. -/
-theorem NewPayloadRequest.ofBlock_ok {f : ConsensusFork} {h : f.atLeast .electra = true}
+theorem NewPayloadRequest.ofBlock_ok {f : CFork} {h : f.atLeast .electra = true}
     (block : BeaconBlock P f) :
     NewPayloadRequest.ofBlock block = .ok
       { executionPayload := block.body.execution_payload
@@ -53,14 +53,14 @@ theorem NewPayloadRequest.ofBlock_ok {f : ConsensusFork} {h : f.atLeast .electra
           block.body.blob_kzg_commitments.toArray.toList.map fun c =>
             kzgCommitmentToVersionedHash c.toArray.toList
         parentBeaconBlockRoot := block.parent_root
-        executionRequests := getExecutionRequestsList (ForkField.get h block.body.execution_requests) } := by
+        executionRequests := getExecutionRequestsList (Gated.get h block.body.execution_requests) } := by
   unfold NewPayloadRequest.ofBlock
-  rw [ForkField.read_get h]
+  rw [Gated.read_get h]
   rfl
 
 /-- The engine accepts a payload exactly when every check passes, in the
 definition's order. -/
-theorem engineVerdict_ok_iff {cfg : ChainConfig} {cf : ConsensusFork} {exec : BlockChain}
+theorem engineVerdict_ok_iff {cfg : ChainConfig} {cf : CFork} {exec : BlockChain}
     {req : NewPayloadRequest P} {post : BlockChain} :
     engineVerdict cfg cf exec req = .ok post ↔
       req.executionPayload.txBytes.any List.isEmpty = false ∧
@@ -70,10 +70,10 @@ theorem engineVerdict_ok_iff {cfg : ChainConfig} {cf : ConsensusFork} {exec : Bl
       ∃ f, cfg.forkAt (payloadToBlock req).header.number
             (payloadToBlock req).header.timestamp = .ok f ∧
         f.consensusFork? = some cf ∧
-        checkBlockRlpSize f.ruleSet.block (payloadToBlock req).toRlpItem.toBytes.length = .ok () ∧
+        checkBlockRlpSize f.ruleSet.block (payloadToBlock req).toBLT.toBytes.length = .ok () ∧
         stateTransitionScheduledE cfg f exec (payloadToBlock req) = .ok (.ok post) ∧
         ∃ st bout, applyBody (initBenv f exec (payloadToBlock req).header)
-            (payloadToBlock req).transactions (payloadToBlock req).ommers (payloadToBlock req).withdrawals =
+            (payloadToBlock req).txs (payloadToBlock req).ommers (payloadToBlock req).wds =
             .ok (st, bout) ∧
           bout.requests = req.executionRequests := by
   constructor
@@ -120,7 +120,7 @@ theorem engineVerdict_ok_iff {cfg : ChainConfig} {cf : ConsensusFork} {exec : Bl
               bne_eq_false_eq.mp (eq_false_of_not_true hc4)
             obtain ⟨_, hsize, h⟩ := Except.bind_eq_ok h
             have hsize' : checkBlockRlpSize f.ruleSet.block
-                (payloadToBlock req).toRlpItem.toBytes.length = .ok () :=
+                (payloadToBlock req).toBLT.toBytes.length = .ok () :=
               Except.mapError_eq_ok_iff.mp hsize
             cases hs : stateTransitionScheduledE cfg f exec (payloadToBlock req) with
             | error e =>
@@ -137,8 +137,8 @@ theorem engineVerdict_ok_iff {cfg : ChainConfig} {cf : ConsensusFork} {exec : Bl
                 simp only [hs, pure_bind] at h
                 obtain ⟨p, hp, h⟩ := Except.bind_eq_ok h
                 have hbody : applyBody (initBenv f exec (payloadToBlock req).header)
-                    (payloadToBlock req).transactions (payloadToBlock req).ommers
-                    (payloadToBlock req).withdrawals = .ok p :=
+                    (payloadToBlock req).txs (payloadToBlock req).ommers
+                    (payloadToBlock req).wds = .ok p :=
                   Except.mapError_eq_ok_iff.mp hp
                 obtain ⟨st, bout⟩ := p
                 dsimp only at h
@@ -175,23 +175,23 @@ theorem engineVerdict_ok_iff {cfg : ChainConfig} {cf : ConsensusFork} {exec : Bl
     rfl
 
 /-- An accepted payload's body run produces the payload's own requests. -/
-theorem engineVerdict_requests {cfg : ChainConfig} {cf : ConsensusFork} {exec : BlockChain}
+theorem engineVerdict_requests {cfg : ChainConfig} {cf : CFork} {exec : BlockChain}
     {req : NewPayloadRequest P} {post : BlockChain}
     (h : engineVerdict cfg cf exec req = .ok post) :
     ∃ f p, applyBody (initBenv f exec (payloadToBlock req).header)
-      (payloadToBlock req).transactions (payloadToBlock req).ommers (payloadToBlock req).withdrawals = .ok p ∧
+      (payloadToBlock req).txs (payloadToBlock req).ommers (payloadToBlock req).wds = .ok p ∧
       p.2.requests = req.executionRequests := by
   rw [engineVerdict_ok_iff] at h
   obtain ⟨_, _, _, _, f, _, _, _, _, st, bout, hbody, hreq⟩ := h
   exact ⟨f, (st, bout), hbody, hreq⟩
 
 /-- If the body runs to different requests at the resolved fork, the engine refuses. -/
-theorem engineVerdict_rejects_of_requests_ne {cfg : ChainConfig} {cf : ConsensusFork} {exec : BlockChain}
+theorem engineVerdict_rejects_of_requests_ne {cfg : ChainConfig} {cf : CFork} {exec : BlockChain}
     {req : NewPayloadRequest P} {f : Jaune.Fork} {st : State} {bout : BlockOutput}
     (hfork : cfg.forkAt (payloadToBlock req).header.number
       (payloadToBlock req).header.timestamp = .ok f)
-    (hbody : applyBody (initBenv f exec (payloadToBlock req).header) (payloadToBlock req).transactions
-      (payloadToBlock req).ommers (payloadToBlock req).withdrawals = .ok (st, bout))
+    (hbody : applyBody (initBenv f exec (payloadToBlock req).header) (payloadToBlock req).txs
+      (payloadToBlock req).ommers (payloadToBlock req).wds = .ok (st, bout))
     (hne : bout.requests ≠ req.executionRequests) :
     ∃ e, engineVerdict cfg cf exec req = .error e := by
   cases hverdict : engineVerdict cfg cf exec req with
@@ -210,12 +210,12 @@ theorem engineVerdict_rejects_of_requests_ne {cfg : ChainConfig} {cf : Consensus
   | error e => exact ⟨e, rfl⟩
 
 /-- The converted block carries the payload's withdrawals. -/
-theorem payloadToBlock_withdrawals (req : NewPayloadRequest P) :
-    (payloadToBlock req).withdrawals = req.executionPayload.executionWithdrawals := rfl
+theorem payloadToBlock_wds (req : NewPayloadRequest P) :
+    (payloadToBlock req).wds = req.executionPayload.executionWithdrawals := rfl
 
 /-- A joint transition succeeds exactly when the payload request builds, the
 engine accepts it, and the beacon side (with a passing engine verdict) succeeds. -/
-theorem jointTransitionAt_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool} {f : ConsensusFork}
+theorem jointTransitionAt_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool} {f : CFork}
     {beacon : BeaconState P f} {exec : BlockChain} {sb : SignedBeaconBlock P f} {atSlot : Bool}
     {beacon' : BeaconState P f} {exec' : BlockChain} :
     jointTransitionAt cfg ccfg bls beacon exec sb atSlot = .ok (beacon', exec') ↔
@@ -224,11 +224,11 @@ theorem jointTransitionAt_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool
         ((if atSlot then
             (do require (← verifyBlockSignature bls beacon sb)
                   "state_transition: verify_block_signature"
-                let s ← processBlock { config := ccfg, blsActive := bls } beacon sb.message
-                require (Bytes32.beq sb.message.state_root (Ssz.hashTreeRoot s))
+                let s ← processBlock { cfg := ccfg, blsActive := bls } beacon sb.message
+                require (B256.beq sb.message.state_root (Ssz.hashTreeRoot s))
                   "state_transition: block.state_root"
                 pure s)
-          else stateTransition { config := ccfg, blsActive := bls } beacon sb) = .ok beacon') := by
+          else stateTransition { cfg := ccfg, blsActive := bls } beacon sb) = .ok beacon') := by
   constructor
   · intro h
     unfold jointTransitionAt at h
@@ -256,7 +256,7 @@ theorem jointTransitionAt_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool
         have hsigv : sigv = true := require_eq_ok_iff.mp hsigreq
         obtain ⟨s, hproc, h⟩ := Except.bind_eq_ok h
         obtain ⟨_, hbeqreq, h⟩ := Except.bind_eq_ok h
-        have hbeqv : Bytes32.beq sb.message.state_root (Ssz.hashTreeRoot s) = true :=
+        have hbeqv : B256.beq sb.message.state_root (Ssz.hashTreeRoot s) = true :=
           require_eq_ok_iff.mp hbeqreq
         obtain ⟨bv, hbv, h⟩ := Except.bind_eq_ok h
         have hbv' : Except.ok s = Except.ok bv := hbv
@@ -282,7 +282,7 @@ theorem jointTransitionAt_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool
       have hsigv : sigv = true := require_eq_ok_iff.mp hsigreq
       obtain ⟨s, hproc, hT⟩ := Except.bind_eq_ok hT
       obtain ⟨_, hbeqreq, hT⟩ := Except.bind_eq_ok hT
-      have hbeqv : Bytes32.beq sb.message.state_root (Ssz.hashTreeRoot s) = true :=
+      have hbeqv : B256.beq sb.message.state_root (Ssz.hashTreeRoot s) = true :=
         require_eq_ok_iff.mp hbeqreq
       have hs_eq : s = beacon' := by
         have h' : Except.ok s = Except.ok beacon' := hT
@@ -305,7 +305,7 @@ theorem jointStep_electra_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool
       sb.message.slot.toNat < fuluForkSlot (P := P) ccfg ∧
       ∃ req beacon' exec', NewPayloadRequest.ofBlock sb.message = .ok req ∧
         engineVerdict cfg .electra exec req = .ok exec' ∧
-        stateTransition { config := ccfg, blsActive := bls } beacon sb = .ok beacon' ∧
+        stateTransition { cfg := ccfg, blsActive := bls } beacon sb = .ok beacon' ∧
         s' = ⟨.electra, beacon', exec'⟩ := by
   constructor
   · intro h
@@ -343,7 +343,7 @@ theorem jointStep_fulu_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     jointStep cfg ccfg bls ⟨.fulu, beacon, exec⟩ ⟨.fulu, sb⟩ = .ok s' ↔
       ∃ req beacon' exec', NewPayloadRequest.ofBlock sb.message = .ok req ∧
         engineVerdict cfg .fulu exec req = .ok exec' ∧
-        stateTransition { config := ccfg, blsActive := bls } beacon sb = .ok beacon' ∧
+        stateTransition { cfg := ccfg, blsActive := bls } beacon sb = .ok beacon' ∧
         s' = ⟨.fulu, beacon', exec'⟩ := by
   constructor
   · intro h
@@ -377,7 +377,7 @@ theorem jointStep_cross_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
         ∃ req forkSlot beacon1 beacon2 beacon' exec',
         U64.ofNat? (fuluForkSlot (P := P) ccfg) "joint step: Fulu fork slot" = .ok forkSlot ∧
         ((if beacon.slot < forkSlot then
-            processSlots { config := ccfg, blsActive := bls } beacon forkSlot
+            processSlots { cfg := ccfg, blsActive := bls } beacon forkSlot
           else pure beacon) = .ok beacon1) ∧
         upgradeToFulu ccfg beacon1 = .ok beacon2 ∧
         NewPayloadRequest.ofBlock sb.message = .ok req ∧
@@ -385,11 +385,11 @@ theorem jointStep_cross_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
         ((if sb.message.slot == beacon2.slot then
             (do require (← verifyBlockSignature bls beacon2 sb)
                   "state_transition: verify_block_signature"
-                let s ← processBlock { config := ccfg, blsActive := bls } beacon2 sb.message
-                require (Bytes32.beq sb.message.state_root (Ssz.hashTreeRoot s))
+                let s ← processBlock { cfg := ccfg, blsActive := bls } beacon2 sb.message
+                require (B256.beq sb.message.state_root (Ssz.hashTreeRoot s))
                   "state_transition: block.state_root"
                 pure s)
-          else stateTransition { config := ccfg, blsActive := bls } beacon2 sb) = .ok beacon') ∧
+          else stateTransition { cfg := ccfg, blsActive := bls } beacon2 sb) = .ok beacon') ∧
         s' = ⟨.fulu, beacon', exec'⟩ := by
   constructor
   · intro h
@@ -411,7 +411,7 @@ theorem jointStep_cross_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
       rw [jointTransitionAt_ok_iff] at hjt
       obtain ⟨req, hreq, hverdict, hbeacon⟩ := hjt
       have hps_if : ((if beacon.slot < forkSlot then
-          processSlots { config := ccfg, blsActive := bls } beacon forkSlot
+          processSlots { cfg := ccfg, blsActive := bls } beacon forkSlot
         else pure beacon) = .ok beacon1) := by
         rw [ite_eq_left hlt]; exact hps
       exact ⟨hslot.1, hslot.2, req, forkSlot, beacon1, beacon2, beacon', exec', hforkSlot,
@@ -427,7 +427,7 @@ theorem jointStep_cross_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
       rw [jointTransitionAt_ok_iff] at hjt
       obtain ⟨req, hreq, hverdict, hbeacon⟩ := hjt
       have hps_if : ((if beacon.slot < forkSlot then
-          processSlots { config := ccfg, blsActive := bls } beacon forkSlot
+          processSlots { cfg := ccfg, blsActive := bls } beacon forkSlot
         else pure beacon) = .ok beacon1) := by
         rw [ite_eq_right hlt]; exact hps
       exact ⟨hslot.1, hslot.2, req, forkSlot, beacon1, beacon2, beacon', exec', hforkSlot,

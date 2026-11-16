@@ -32,14 +32,14 @@ variable {P : Preset}
 
 /-- `ExecutionRequests.empty()`: every list empty. -/
 def ExecutionRequests.empty : ExecutionRequests :=
-  { deposits := ProgressiveListOnSpine.empty, withdrawals := ProgressiveListOnSpine.empty,
-    consolidations := ProgressiveListOnSpine.empty, builder_deposits := ProgressiveListOnSpine.empty,
-    builder_exits := ProgressiveListOnSpine.empty }
+  { deposits := ProgressiveListS.empty, withdrawals := ProgressiveListS.empty,
+    consolidations := ProgressiveListS.empty, builder_deposits := ProgressiveListS.empty,
+    builder_exits := ProgressiveListS.empty }
 
 /-! ## Header, RANDAO, eth1 data (phase0) -/
 
 /-- `process_block_header(state, block)` (phase0). -/
-def processBlockHeader (state : BeaconState P) (block : BeaconBlock P) : Fallible (BeaconState P) := do
+def processBlockHeader (state : BeaconState P) (block : BeaconBlock P) : M (BeaconState P) := do
   let site := "process_block_header"
   require (block.slot == state.slot) s!"{site}: block.slot == state.slot"
   require (state.latest_block_header.slot < block.slot) s!"{site}: newer block"
@@ -47,7 +47,7 @@ def processBlockHeader (state : BeaconState P) (block : BeaconBlock P) : Fallibl
   require (block.parent_root == Ssz.hashTreeRoot state.latest_block_header) s!"{site}: parent root"
   let state := { state with latest_block_header :=
     { slot := block.slot, proposer_index := block.proposer_index, parent_root := block.parent_root,
-      state_root := Jaune.Bytes.toU256 (List.replicate 32 0),
+      state_root := Jaune.Bytes.toB256 (List.replicate 32 0),
       body_root := Ssz.hashTreeRoot block.body } }
   let proposer ← state.validators.get block.proposer_index.toNat site
   require (!proposer.slashed) s!"{site}: proposer not slashed"
@@ -55,18 +55,18 @@ def processBlockHeader (state : BeaconState P) (block : BeaconBlock P) : Fallibl
 
 /-- `process_randao(state, body)` (phase0). -/
 def processRandao (ctx : Ctx) (state : BeaconState P) (body : BeaconBlockBody P) :
-    Fallible (BeaconState P) := do
+    M (BeaconState P) := do
   let site := "process_randao"
   let epoch ← getCurrentEpoch state
   let proposer ← state.validators.get (← getBeaconProposerIndex state).toNat site
   let root := computeSigningRoot epoch (← getDomain state DOMAIN_RANDAO (some epoch))
   require (blsVerify ctx.blsActive proposer.pubkey root body.randao_reveal) s!"{site}: bls.Verify"
-  let mix := xor (← getRandaoMix state epoch) (hash (vectorBytes body.randao_reveal))
-  let i ← epoch.mod? (← u64Checked P.EPOCHS_PER_HISTORICAL_VECTOR) site
+  let mix := xor (← getRandaoMix state epoch) (hash (vbytes body.randao_reveal))
+  let i ← epoch.mod? (← c64 P.EPOCHS_PER_HISTORICAL_VECTOR) site
   pure { state with randao_mixes := ← state.randao_mixes.set i.toNat mix site }
 
 /-- `process_eth1_data(state, body)` (phase0). -/
-def processEth1Data (state : BeaconState P) (body : BeaconBlockBody P) : Fallible (BeaconState P) := do
+def processEth1Data (state : BeaconState P) (body : BeaconBlockBody P) : M (BeaconState P) := do
   let votes ← state.eth1_data_votes.push body.eth1_data "process_eth1_data"
   let state := { state with eth1_data_votes := votes }
   let count := (votes.toArray.filter (· == body.eth1_data)).size
@@ -80,7 +80,7 @@ def processEth1Data (state : BeaconState P) (body : BeaconBlockBody P) : Fallibl
 The participant key is computed only when the signature is verified (`bls_active`); a key that
 does not decode fails the verification. -/
 def processSyncAggregate (ctx : Ctx) (state : BeaconState P) (sa : SyncAggregate P) :
-    Fallible (BeaconState P) := do
+    M (BeaconState P) := do
   let site := "process_sync_aggregate"
   let pubkeys := state.current_sync_committee.pubkeys.toArray
   let bits := sa.sync_committee_bits.bits
@@ -88,35 +88,35 @@ def processSyncAggregate (ctx : Ctx) (state : BeaconState P) (sa : SyncAggregate
   let participantPubkeys : List Bytes ←
     if participants == P.SYNC_COMMITTEE_SIZE then
       -- All members participated - use precomputed aggregate key
-      pure [vectorBytes state.current_sync_committee.aggregate_pubkey]
+      pure [vbytes state.current_sync_committee.aggregate_pubkey]
     else if participants > P.SYNC_COMMITTEE_SIZE / 2 then do
       -- More than half participated - subtract non-participant keys
-      let nonPart := ((pubkeys.zip bits).filter (fun (_, b) => !b)).toList.map (vectorBytes ·.1)
+      let nonPart := ((pubkeys.zip bits).filter (fun (_, b) => !b)).toList.map (vbytes ·.1)
       -- `eth_aggregate_pubkeys` is `bls.AggregatePKs`, which from `v1.7.0-beta.4` pyspec computes
       -- whatever the BLS switch (`eth_consensus_specs/utils/bls.py`)
-      let nonAgg ← ethAggregatePubkeysFallible nonPart
+      let nonAgg ← ethAggregatePubkeysM nonPart
       let full ← liftCrypto s!"{site}: bls.bytes48_to_G1(aggregate_pubkey)"
-        (pubkeyToPoint (vectorBytes state.current_sync_committee.aggregate_pubkey))
+        (pubkeyToPoint (vbytes state.current_sync_committee.aggregate_pubkey))
       let nonP ← liftCrypto s!"{site}: bls.bytes48_to_G1(non_participant_aggregate)"
         (pubkeyToPoint nonAgg)
       pure [g1Compress (full + -nonP)]
     else
       -- Less than half participated - aggregate participant keys
-      pure (((pubkeys.zip bits).filter (·.2)).toList.map (vectorBytes ·.1))
+      pure (((pubkeys.zip bits).filter (·.2)).toList.map (vbytes ·.1))
   let prevSlot ← (if U64.one < state.slot then state.slot else U64.one).sub? U64.one site
   let domain ← getDomain state DOMAIN_SYNC_COMMITTEE (some (← computeEpochAtSlot P prevSlot))
   let root := computeSigningRoot (← getBlockRootAtSlot state prevSlot) domain
   let verified := !ctx.blsActive ||
-    ethFastAggregateVerify participantPubkeys root.toBytes (vectorBytes sa.sync_committee_signature)
+    ethFastAggregateVerify participantPubkeys root.toBytes (vbytes sa.sync_committee_signature)
   require verified s!"{site}: eth_fast_aggregate_verify"
   let totalActiveIncrements ← (← getTotalActiveBalance state).div?
-    (← u64Checked P.EFFECTIVE_BALANCE_INCREMENT) site
+    (← c64 P.EFFECTIVE_BALANCE_INCREMENT) site
   let totalBaseRewards ← (← getBaseRewardPerIncrement state).mul? totalActiveIncrements site
-  let maxParticipant ← (← (← totalBaseRewards.mul? (← u64Checked SYNC_REWARD_WEIGHT) site).div?
-    (← u64Checked WEIGHT_DENOMINATOR) site).div? (← u64Checked P.SLOTS_PER_EPOCH) site
-  let participantReward ← maxParticipant.div? (← u64Checked P.SYNC_COMMITTEE_SIZE) site
-  let proposerReward ← (← participantReward.mul? (← u64Checked PROPOSER_WEIGHT) site).div?
-    (← u64Checked (WEIGHT_DENOMINATOR - PROPOSER_WEIGHT)) site
+  let maxParticipant ← (← (← totalBaseRewards.mul? (← c64 SYNC_REWARD_WEIGHT) site).div?
+    (← c64 WEIGHT_DENOMINATOR) site).div? (← c64 P.SLOTS_PER_EPOCH) site
+  let participantReward ← maxParticipant.div? (← c64 P.SYNC_COMMITTEE_SIZE) site
+  let proposerReward ← (← participantReward.mul? (← c64 PROPOSER_WEIGHT) site).div?
+    (← c64 (WEIGHT_DENOMINATOR - PROPOSER_WEIGHT)) site
   let allPubkeys := state.validators.toArray.map (·.pubkey)
   let mut committeeIndices := #[]
   for pk in pubkeys do
@@ -136,7 +136,7 @@ def processSyncAggregate (ctx : Ctx) (state : BeaconState P) (sa : SyncAggregate
 
 /-- `verify_execution_payload_bid_signature(state, signed_bid)` (Gloas, :2146). -/
 def verifyExecutionPayloadBidSignature (ctx : Ctx) (state : BeaconState P)
-    (signedBid : SignedExecutionPayloadBid) : Fallible Bool := do
+    (signedBid : SignedExecutionPayloadBid) : M Bool := do
   let builder ← state.builders.get signedBid.message.builder_index.toNat
     "verify_execution_payload_bid_signature"
   let root := computeSigningRoot signedBid.message (← getDomain state DOMAIN_BEACON_BUILDER)
@@ -144,17 +144,17 @@ def verifyExecutionPayloadBidSignature (ctx : Ctx) (state : BeaconState P)
 
 /-- `can_builder_cover_bid(state, builder_index, bid_amount)` (Gloas, :1181). -/
 def canBuilderCoverBid (state : BeaconState P) (builderIndex : BuilderIndex) (bidAmount : Gwei) :
-    Fallible Bool := do
+    M Bool := do
   let site := "can_builder_cover_bid"
   let builderBalance := (← state.builders.get builderIndex.toNat site).balance
   let pending ← getPendingBalanceToWithdrawForBuilder state builderIndex
-  let minBalance ← (← u64Checked P.MIN_DEPOSIT_AMOUNT).add? pending site
+  let minBalance ← (← c64 P.MIN_DEPOSIT_AMOUNT).add? pending site
   if builderBalance < minBalance then return false
   pure (bidAmount ≤ (← builderBalance.sub? minBalance site))
 
 /-- `process_execution_payload_bid(state, signed_bid)` (Gloas, :2159). -/
 def processExecutionPayloadBid (ctx : Ctx) (state : BeaconState P)
-    (signedBid : SignedExecutionPayloadBid) : Fallible (BeaconState P) := do
+    (signedBid : SignedExecutionPayloadBid) : M (BeaconState P) := do
   let site := "process_execution_payload_bid"
   let bid := signedBid.message
   let builderIndex := bid.builder_index
@@ -175,7 +175,7 @@ def processExecutionPayloadBid (ctx : Ctx) (state : BeaconState P)
     -- Verify that the bid signature is valid
     require (← verifyExecutionPayloadBidSignature ctx state signedBid) s!"{site}: bid signature"
   -- Verify commitments are under limit
-  let maxBlobs := (← getBlobParameters ctx.config (← getCurrentEpoch state)).maxBlobsPerBlock
+  let maxBlobs := (← getBlobParameters ctx.cfg (← getCurrentEpoch state)).maxBlobsPerBlock
   require (bid.blob_kzg_commitments.length ≤ maxBlobs.toNat) s!"{site}: blob commitments"
   -- Verify that the bid is for the current slot
   require (bid.slot == state.slot) s!"{site}: bid.slot == state.slot"
@@ -193,7 +193,7 @@ def processExecutionPayloadBid (ctx : Ctx) (state : BeaconState P)
         { weight := U64.zero
           withdrawal := { fee_recipient := bid.fee_recipient, amount, builder_index := builderIndex }
           proposer_index := ← getBeaconProposerIndex state }
-      let spe ← u64Checked P.SLOTS_PER_EPOCH
+      let spe ← c64 P.SLOTS_PER_EPOCH
       let i ← spe.add? (← bid.slot.mod? spe site) site
       pure { state with builder_pending_payments :=
         ← state.builder_pending_payments.set i.toNat pendingPayment site }
@@ -207,7 +207,7 @@ def processExecutionPayloadBid (ctx : Ctx) (state : BeaconState P)
 caps, the parent's builder payment, the parent's execution requests (each through its own
 processing call, at the child's slot), then payload availability and the latest block hash. -/
 def applyParentExecutionPayload (ctx : Ctx) (state : BeaconState P) (requests : ExecutionRequests) :
-    Fallible (BeaconState P) := do
+    M (BeaconState P) := do
   let site := "apply_parent_execution_payload"
   let parentBid := state.latest_execution_payload_bid
   let parentSlot := state.latest_block_header.slot
@@ -222,7 +222,7 @@ def applyParentExecutionPayload (ctx : Ctx) (state : BeaconState P) (requests : 
     s!"{site}: len(requests.builder_exits) <= MAX_BUILDER_EXIT_REQUESTS_PER_PAYLOAD"
   -- Settle the builder payment before the requests so that a builder exit request is rejected
   -- while the payment is pending
-  let spe ← u64Checked P.SLOTS_PER_EPOCH
+  let spe ← c64 P.SLOTS_PER_EPOCH
   let mut state := state
   if parentEpoch == (← getCurrentEpoch state) then
     let paymentIndex ← spe.add? (← parentSlot.mod? spe site) site
@@ -239,12 +239,12 @@ def applyParentExecutionPayload (ctx : Ctx) (state : BeaconState P) (requests : 
     state := { state with builder_pending_withdrawals := state.builder_pending_withdrawals.push w }
   -- Process execution requests from parent's payload, at state.slot (the child's slot)
   for op in requests.deposits.toArray do state := processDepositRequest state op
-  for op in requests.withdrawals.toArray do state ← processWithdrawalRequest ctx.config state op
-  for op in requests.consolidations.toArray do state ← processConsolidationRequest ctx.config state op
+  for op in requests.withdrawals.toArray do state ← processWithdrawalRequest ctx.cfg state op
+  for op in requests.consolidations.toArray do state ← processConsolidationRequest ctx.cfg state op
   for op in requests.builder_deposits.toArray do state ← processBuilderDepositRequest ctx state op
-  for op in requests.builder_exits.toArray do state ← processBuilderExitRequest ctx.config state op
+  for op in requests.builder_exits.toArray do state ← processBuilderExitRequest ctx.cfg state op
   -- Update parent payload availability and latest block hash
-  let i ← parentSlot.mod? (← u64Checked P.SLOTS_PER_HISTORICAL_ROOT) site
+  let i ← parentSlot.mod? (← c64 P.SLOTS_PER_HISTORICAL_ROOT) site
   pure { state with
     execution_payload_availability := ← state.execution_payload_availability.set i.toNat true site
     latest_block_hash := parentBid.block_hash }
@@ -253,7 +253,7 @@ def applyParentExecutionPayload (ctx : Ctx) (state : BeaconState P) (requests : 
 does not build on the parent bid's block hash) must carry no requests; a FULL parent's requests
 must match the parent bid's `execution_requests_root` and are applied. -/
 def processParentExecutionPayload (ctx : Ctx) (state : BeaconState P) (block : BeaconBlock P) :
-    Fallible (BeaconState P) := do
+    M (BeaconState P) := do
   let site := "process_parent_execution_payload"
   let bid := block.body.signed_execution_payload_bid.message
   let parentBid := state.latest_execution_payload_bid
@@ -271,7 +271,7 @@ def processParentExecutionPayload (ctx : Ctx) (state : BeaconState P) (block : B
 
 /-- `process_operations(state, body, parent_slot)` (Gloas, :2220). -/
 def processOperations (ctx : Ctx) (state : BeaconState P) (body : BeaconBlockBody P)
-    (parentSlot : Slot) : Fallible (BeaconState P) := do
+    (parentSlot : Slot) : M (BeaconState P) := do
   let site := "process_operations"
   require (body.deposits.length == 0) s!"{site}: len(body.deposits) == 0"
   -- [New in Gloas:EIP7688]
@@ -299,7 +299,7 @@ def processOperations (ctx : Ctx) (state : BeaconState P) (body : BeaconBlockBod
 
 /-- `process_block(state, block)` (Gloas, :1754), in the spec's order. -/
 def processBlock (ctx : Ctx) (state : BeaconState P) (block : BeaconBlock P) :
-    Fallible (BeaconState P) := do
+    M (BeaconState P) := do
   -- [New in Gloas:EIP7732]
   let parentSlot := state.latest_block_header.slot
   let state ← processParentExecutionPayload ctx state block

@@ -1,7 +1,7 @@
 -- Timing probe for the consensus BLS primitives. Inputs depend on the command line so
 -- that no measured value is a closed term the compiler could hoist to initialisation.
 import JauneConsensus.Crypto.KZGCells
-import JauneConsensus.Crypto.BLSSignature
+import JauneConsensus.Crypto.BLSSig
 
 open Jaune JauneConsensus
 
@@ -16,8 +16,8 @@ def timeIt {α β} (label : String) (f : α → β) (x : α) (show? : β → Str
 
 def main (args : List String) : IO Unit := do
   let k := args.length + 1
-  let p : Bls12G1 := blsG1Generator.mulBy k
-  let q : Bls12G2 := blsG2Generator.mulBy k
+  let p : BLSP := blsG1Generator.mulBy k
+  let q : BLSP2 := blsG2Generator.mulBy k
   -- KZG pieces (one repetition; setup decode is forced first).
   let t0 ← IO.monoMsNow
   let some lag := kzgSetupG1Lagrange.toOption | IO.println "setup failed"
@@ -41,27 +41,27 @@ def main (args : List String) : IO Unit := do
   | .error e => IO.println e
   timeIt "FK20 table (64 G1 FFTs of 128, once per process)" (fun (_ : Nat) => fk20Table.get) k
     (fun r => toString (r.toOption.map (·.size)))
-  timeIt "fk20H (direct MSMs, reference)" fk20Points scal (fun r => toString (r.toOption.map (·.size)))
-  timeIt "fk20HFft (Toeplitz in frequency domain)" fk20PointsFft scal (fun r => toString (r.toOption.map (·.size)))
-  IO.println s!"fk20HFft = fk20H on this polynomial: {decide ((fk20PointsFft scal).toOption = (fk20Points scal).toOption)}"
+  timeIt "fk20H (direct MSMs, reference)" fk20H scal (fun r => toString (r.toOption.map (·.size)))
+  timeIt "fk20HFft (Toeplitz in frequency domain)" fk20HFft scal (fun r => toString (r.toOption.map (·.size)))
+  IO.println s!"fk20HFft = fk20H on this polynomial: {decide ((fk20HFft scal).toOption = (fk20H scal).toOption)}"
   timeIt "computeCellsAndKzgProofsPolynomialcoeff (FFT cells + FK20), one blob"
     computeCellsAndKzgProofsPolynomialcoeff scal (fun r => toString (r.toOption.map (·.2.size)))
   timeIt "cellsFromCoeff (FFT), one blob" cellsFromCoeff scal (fun r => toString (r.toOption.map (·.size)))
   let _ := mono
   let reps := 1
   for _ in List.range reps do
-    timeIt "pairing (full)" (fun (qp : Bls12G2 × Bls12G1) => blsPairing qp.1 qp.2) (q, p)
+    timeIt "pairing (full)" (fun (qp : BLSP2 × BLSP) => blsPairing qp.1 qp.2) (q, p)
       (fun r => toString (r.map (·.val.length)))
-    timeIt "pairing (reference: blsPairingRef)" (fun (qp : Bls12G2 × Bls12G1) => blsPairingRef qp.1 qp.2) (q, p)
+    timeIt "pairing (reference: blsPairingRef)" (fun (qp : BLSP2 × BLSP) => blsPairingRef qp.1 qp.2) (q, p)
       (fun r => toString (r.map (·.val.length)))
-    timeIt "miller loop only (reference)" (fun (qp : Bls12G2 × Bls12G1) => blsPairingRef qp.1 qp.2 false) (q, p)
+    timeIt "miller loop only (reference)" (fun (qp : BLSP2 × BLSP) => blsPairingRef qp.1 qp.2 false) (q, p)
       (fun r => toString (r.map (·.val.length)))
-    timeIt "miller loop only" (fun (qp : Bls12G2 × Bls12G1) => blsPairing qp.1 qp.2 false) (q, p)
+    timeIt "miller loop only" (fun (qp : BLSP2 × BLSP) => blsPairing qp.1 qp.2 false) (q, p)
       (fun r => toString (r.map (·.val.length)))
     match blsPairing q p false with
     | some f =>
       timeIt "final exponentiation only"
-        (fun (g : Bls12Fp12) => g ^ ((blsPrime ^ 12 - 1) / blsCurveOrder)) f
+        (fun (g : BLSF12) => g ^ ((blsPrime ^ 12 - 1) / blsCurveOrder)) f
         (fun r => toString r.val.length)
       timeIt "final exponentiation, easy/hard split" blsFinalExpFast f
         (fun r => toString r.val.length)
@@ -72,17 +72,17 @@ def main (args : List String) : IO Unit := do
       (fun (m : Bytes) => hashToPoint m) (List.replicate 32 k.toUInt8)
       (fun r => toString (r.toOption.map (·.x.val.length)))
     timeIt "G2 decompress" signatureToPoint (g2Compress q) (fun r => toString r.toOption.isSome)
-    let u : Bls12Fp2 := Bls12Fp2.mk (k + 12345) (k + 678)
+    let u : BLSF2 := BLSF2.mk (k + 12345) (k + 678)
     timeIt "map_to_curve G2 (swu + iso, no cofactor)"
       (fun t => isoMapG2 (optimizedSwuG2 t)) u (fun r => toString r.x.val)
     timeIt "clear_cofactor G2 (mulBy hEffG2)"
-      (fun (t : Bls12G2) => t.mulBy BLSConst.hEffG2) (isoMapG2 (optimizedSwuG2 u))
+      (fun (t : BLSP2) => t.mulBy BLSConst.hEffG2) (isoMapG2 (optimizedSwuG2 u))
       (fun r => toString r.x.val)
     timeIt "blsMapFp2ToG2 (EIP-2537 map incl. cofactor)" blsMapFp2ToG2 u
       (fun r => toString r.x.val)
-    timeIt "G2 subgroup check (mulBy r)" (fun (t : Bls12G2) => t.mulBy blsCurveOrder) q
+    timeIt "G2 subgroup check (mulBy r)" (fun (t : BLSP2) => t.mulBy blsCurveOrder) q
       (fun r => toString r.x.val)
     timeIt "G2 subgroup check, psi endomorphism (consensus)" g2SubgroupCheckFast q
       (fun r => toString r)
-    timeIt "G1 subgroup check (mulBy r)" (fun (t : Bls12G1) => t.mulBy blsCurveOrder) p
+    timeIt "G1 subgroup check (mulBy r)" (fun (t : BLSP) => t.mulBy blsCurveOrder) p
       (fun r => toString r.x.val)

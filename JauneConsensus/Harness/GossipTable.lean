@@ -51,7 +51,7 @@ private def storeFree (dir : String) : Option GossipHandler :=
   | none => none
 
 /-- The Store-dependent row for a handler directory (`GossipStoreCases.lean`). -/
-private def storeDependent (dir : String) : Option GossipHandler :=
+private def storeDep (dir : String) : Option GossipHandler :=
   match gossipTopics.find? (·.1 == dir) with
   | some (_, topic, pfx, _) => some (storeGossipHandler topic pfx topic)
   | none => none
@@ -66,20 +66,20 @@ def gossipHandlers : String → Option GossipHandler
   | "gossip_sync_committee_contribution_and_proof" =>
     storeFree "gossip_sync_committee_contribution_and_proof"
   -- M6 (Store-dependent; Electra and Fulu, and Gloas)
-  | "gossip_beacon_block" => storeDependent "gossip_beacon_block"
-  | "gossip_beacon_attestation" => storeDependent "gossip_beacon_attestation"
-  | "gossip_beacon_aggregate_and_proof" => storeDependent "gossip_beacon_aggregate_and_proof"
-  | "gossip_blob_sidecar" => storeDependent "gossip_blob_sidecar"
-  | "gossip_data_column_sidecar" => storeDependent "gossip_data_column_sidecar"
-  | "gossip_partial_data_column_sidecar" => storeDependent "gossip_partial_data_column_sidecar"
-  | "gossip_execution_payload_envelope" => storeDependent "gossip_execution_payload_envelope"
-  | "gossip_payload_attestation_message" => storeDependent "gossip_payload_attestation_message"
+  | "gossip_beacon_block" => storeDep "gossip_beacon_block"
+  | "gossip_beacon_attestation" => storeDep "gossip_beacon_attestation"
+  | "gossip_beacon_aggregate_and_proof" => storeDep "gossip_beacon_aggregate_and_proof"
+  | "gossip_blob_sidecar" => storeDep "gossip_blob_sidecar"
+  | "gossip_data_column_sidecar" => storeDep "gossip_data_column_sidecar"
+  | "gossip_partial_data_column_sidecar" => storeDep "gossip_partial_data_column_sidecar"
+  | "gossip_execution_payload_envelope" => storeDep "gossip_execution_payload_envelope"
+  | "gossip_payload_attestation_message" => storeDep "gossip_payload_attestation_message"
   -- A bid case interleaves `proposer_preferences_`, `execution_payload_envelope_` and
   -- `execution_payload_bid_` messages (the bid reads what they put in `Seen`), so the driver's
   -- single-prefix check is off (empty prefix) and the handler checks the three prefixes itself.
   | "gossip_execution_payload_bid" =>
     some (storeGossipHandler "execution_payload_bid" "" "execution_payload_bid")
-  | "gossip_proposer_preferences" => storeDependent "gossip_proposer_preferences"
+  | "gossip_proposer_preferences" => storeDep "gossip_proposer_preferences"
   | _ => none
 
 #guard (gossipHandlers "gossip_voluntary_exit").map (·.filePrefix) == some "voluntary_exit_"

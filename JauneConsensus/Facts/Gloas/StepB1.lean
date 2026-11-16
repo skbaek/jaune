@@ -1,6 +1,6 @@
-import JauneConsensus.Facts.Gloas.StepExitAuthorization
+import JauneConsensus.Facts.Gloas.StepB3
 import JauneConsensus.Facts.Gloas.FinalizedNotAhead
-import JauneConsensus.Facts.Gloas.StepBalanceFlow
+import JauneConsensus.Facts.Gloas.StepB5
 
 /-!
 # B1 over one Gloas joint step (goal `eip8282-gloas-cross-layer-v1`, MBS)
@@ -57,17 +57,17 @@ theorem getLast?_of_traceLast {σ : Type} {tr : List σ} (h : tr ≠ []) (d : σ
   | cons x xs => simp [traceLast, List.getLast?_cons]
 
 /-- The suffix of a scan from its `k`-th state folds to the scan's last state. -/
-theorem scanFallible_ok_drop {σ α : Type} {f : σ → α → Fallible σ} :
-    ∀ (xs : List α) {s : σ} {tr : List σ} (k : Nat) {m : σ}, scanFallible f s xs = .ok tr →
+theorem scanM_ok_drop {σ α : Type} {f : σ → α → M σ} :
+    ∀ (xs : List α) {s : σ} {tr : List σ} (k : Nat) {m : σ}, scanM f s xs = .ok tr →
       tr[k]? = some m → (xs.drop k).foldlM f m = .ok (traceLast s tr)
   | xs, s, tr, 0, m, h, hk => by
-    rw [scanFallible_ok_head h] at hk; cases hk
-    simpa using scanFallible_ok_foldlM h
+    rw [scanM_ok_head h] at hk; cases hk
+    simpa using scanM_ok_foldlM h
   | [], s, tr, k + 1, m, h, hk => by
-    simp only [scanFallible, pure, Except.pure, Except.ok.injEq] at h
+    simp only [scanM, pure, Except.pure, Except.ok.injEq] at h
     subst h; simp at hk
   | a :: xs, s, tr, k + 1, m, h, hk => by
-    simp only [scanFallible, bind, Except.bind] at h
+    simp only [scanM, bind, Except.bind] at h
     split at h
     · cases h
     · rename_i s' hs'
@@ -77,10 +77,10 @@ theorem scanFallible_ok_drop {σ α : Type} {f : σ → α → Fallible σ} :
         simp only [pure, Except.pure, Except.ok.injEq] at h
         subst h
         simp only [List.getElem?_cons_succ] at hk
-        have := scanFallible_ok_drop xs k hrest hk
+        have := scanM_ok_drop xs k hrest hk
         simp only [List.drop_succ_cons]
         rw [this]
-        have hne := scanFallible_ok_ne_nil hrest
+        have hne := scanM_ok_ne_nil hrest
         congr 1
         cases rest with
         | nil => exact absurd rfl hne
@@ -89,10 +89,10 @@ theorem scanFallible_ok_drop {σ α : Type} {f : σ → α → Fallible σ} :
 /-! ## Exits keep pubkeys -/
 
 /-- A builder exit request keeps every slot's pubkey (it writes only `withdrawable_epoch`). -/
-theorem exitRequest_pubkeys {cfg : Config} {m m' : Gloas.BeaconState P}
+theorem exitReq_pubkeys {cfg : Config} {m m' : Gloas.BeaconState P}
     {r : Gloas.BuilderExitRequest} (h : Gloas.processBuilderExitRequest cfg m r = .ok m') (j : Nat) :
     (m'.builders.toArray[j]?).map (·.pubkey) = (m.builders.toArray[j]?).map (·.pubkey) := by
-  rcases (Invariant.exitRequest_cases h).2 with heq | ⟨i, b, w, hb, hb', _, _, _, _, hoth⟩
+  rcases (Inv.exitReq_cases h).2 with heq | ⟨i, b, w, hb, hb', _, _, _, _, hoth⟩
   · rw [heq]
   · by_cases hji : j = i
     · subst hji; rw [hb, hb']; rfl
@@ -107,7 +107,7 @@ keep every pubkey, so the pubkey at `i` changed inside the deposit loop, at some
 theorem processBlock_builderCreated_trace {ctx : Ctx} {st post : Gloas.BeaconState P}
     {b : Gloas.SignedBeaconBlock P} (h : Gloas.processBlock ctx st b.message = .ok post) {i : Nat}
     (hcr : BuilderCreated st post i) :
-    ∃ trD k r m m', builderDepositTrace ctx.config ctx.blsActive st b = .ok trD ∧
+    ∃ trD k r m m', builderDepositTrace ctx.cfg ctx.blsActive st b = .ok trD ∧
       (blockBuilderDeposits b)[k]? = some r ∧ trD[k]? = some m ∧ trD[k + 1]? = some m' ∧
       Gloas.processBuilderDepositRequest ctx m r = .ok m' ∧ BuilderCreated m m' i := by
   obtain ⟨mid, hmid, -, hmap⟩ := processBlock_after_parent ctx st b.message post h
@@ -126,20 +126,20 @@ theorem processBlock_builderCreated_trace {ctx : Ctx} {st post : Gloas.BeaconSta
   case false =>
   have hsuf := hFull hflag
   obtain ⟨s0, h0, hsD⟩ := builderDepositTrace_scan hD
-  rw [← Gloas.processBuilderDepositRequest_context] at hsD
+  rw [← Gloas.processBuilderDepositRequest_ctx] at hsD
   obtain ⟨trD', hD', hsE, -⟩ := builderExitTrace_ok hE
   rw [hD] at hD'; cases hD'
-  have hneD := scanFallible_ok_ne_nil hsD
-  have hneE := scanFallible_ok_ne_nil hsE
+  have hneD := scanM_ok_ne_nil hsD
+  have hneE := scanM_ok_ne_nil hsE
   -- the exit loop keeps the pubkeys
-  have hE0 : trE[0]? = some (traceLast st trD) := scanFallible_ok_head hsE
+  have hE0 : trE[0]? = some (traceLast st trD) := scanM_ok_head hsE
   have hpkE : ∀ (k : Nat) (x : Gloas.BeaconState P), trE[k]? = some x →
       ∀ j : Nat, (x.builders.toArray[j]?).map (fun c : Gloas.Builder => c.pubkey) =
         ((traceLast st trD).builders.toArray[j]?).map (fun c : Gloas.Builder => c.pubkey) :=
-    scanFallible_invariant (fun x : Gloas.BeaconState P => ∀ j : Nat,
+    scanM_inv (fun x : Gloas.BeaconState P => ∀ j : Nat,
         (x.builders.toArray[j]?).map (fun c : Gloas.Builder => c.pubkey) =
         ((traceLast st trD).builders.toArray[j]?).map (fun c : Gloas.Builder => c.pubkey))
-      (fun x _ y hI hy j => (exitRequest_pubkeys hy j).trans (hI j)) _ (fun _ => rfl) hsE
+      (fun x _ y hI hy j => (exitReq_pubkeys hy j).trans (hI j)) _ (fun _ => rfl) hsE
   have hmidb : mid.builders = (traceLast st trE).builders := by
     rw [applyParentSuffix_builders hsuf]
   have hlastE : trE[trE.length - 1]? = some (traceLast st trE) := by
@@ -156,12 +156,12 @@ theorem processBlock_builderCreated_trace {ctx : Ctx} {st post : Gloas.BeaconSta
         (x.builders.toArray[i]?).map (fun c : Gloas.Builder => c.pubkey))
       trD s0 (traceLast st trD) h0 (getLast?_of_traceLast hneD st) hne'
   have hk : k < (blockBuilderDeposits b).length := by
-    have hl := scanFallible_ok_length hsD
+    have hl := scanM_ok_length hsD
     have := (List.getElem?_eq_some_iff.mp hm').1
     omega
   obtain ⟨r, hr⟩ : ∃ r, (blockBuilderDeposits b)[k]? = some r :=
     ⟨_, List.getElem?_eq_getElem hk⟩
-  obtain ⟨m1, m1', hm1, hm1', hcall⟩ := scanFallible_ok_step hsD k r hr
+  obtain ⟨m1, m1', hm1, hm1', hcall⟩ := scanM_ok_step hsD k r hr
   rw [hm] at hm1; cases hm1
   rw [hm'] at hm1'; cases hm1'
   refine ⟨trD, k, r, m, m', hD, hr, hm, hm', hcall, ?_, hmm⟩
@@ -196,23 +196,23 @@ deposit-trace position `k` of the block's `parent_execution_requests`:
 * **register then top-up**: after the remaining deposits (the last deposit-trace state), builder
   `i` is that record with balance `req.amount + Σ amounts of the later 0xB0 deposits for its
   pubkey`. Needs `2 ≤ SLOTS_PER_EPOCH`. -/
-theorem GloasStepView.registration (hspe : 2 ≤ P.SLOTS_PER_EPOCH)
+theorem GStepView.registration (hspe : 2 ≤ P.SLOTS_PER_EPOCH)
     {cfg : ChainConfig} {ccfg : Config}
     {preB postB : Gloas.BeaconState P} {preExec postExec : BlockChain}
     {preParent postParent : ParentPayload P} {b : Gloas.SignedBeaconBlock P}
     {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)}
-    (V : GloasStepView cfg ccfg true preB preExec preParent b env? postB postExec postParent)
+    (V : GStepView cfg ccfg true preB preExec preParent b env? postB postExec postParent)
     {i : Nat} (created : BuilderCreated V.postSlots postB i) :
     ∃ (k : Nat) (req : Gloas.BuilderDepositRequest) (trD : List (Gloas.BeaconState P))
       (m m' : Gloas.BeaconState P) (dom : Domain) (addr : ExecutionAddress) (e : Epoch) (bal : U64),
       (blockBuilderDeposits b)[k]? = some req ∧
       builderDepositTrace ccfg true V.postSlots b = .ok trD ∧ trD[k]? = some m ∧ trD[k + 1]? = some m' ∧
-      Gloas.processBuilderDepositRequest (gloasContext ccfg true) m req = .ok m' ∧
+      Gloas.processBuilderDepositRequest (gloasCtx ccfg true) m req = .ok m' ∧
       classifyBuilderDeposit ccfg true m req = .ok (.register i req.amount) ∧
       req.withdrawal_credentials.toBytes.head? = some 0xB0 ∧
       builderDepositDomain ccfg = some dom ∧
       blsVerify true req.pubkey (computeSigningRoot (builderDepositMessage req) dom) req.signature = true ∧
-      Jaune.Bytes.toAddress? (req.withdrawal_credentials.toBytes.drop 12) = some addr ∧
+      Jaune.Bytes.toAdr? (req.withdrawal_credentials.toBytes.drop 12) = some addr ∧
       computeEpochAtSlot P m.slot = .ok e ∧
       m'.builders.toArray[i]? = some (freshBuilder req.pubkey addr req.amount e) ∧
       (traceLast V.postSlots trD).builders.toArray[i]? =
@@ -225,17 +225,17 @@ theorem GloasStepView.registration (hspe : 2 ≤ P.SLOTS_PER_EPOCH)
   obtain ⟨trD, k, req, m, m', hD, hr, hm, hm', hcall, hcr⟩ :=
     processBlock_builderCreated_trace hpb created
   obtain ⟨hpre, -, ⟨dom, hdom, hv⟩, hcl, addr, e, haddr, he, hat⟩ :=
-    processBuilderDepositRequest_created (ctx := gloasContext ccfg true) rfl hcall hcr
+    processBuilderDepositRequest_created (ctx := gloasCtx ccfg true) rfl hcall hcr
   obtain ⟨s0, -, hsD⟩ := builderDepositTrace_scan hD
-  rw [← Gloas.processBuilderDepositRequest_context] at hsD
-  have hrest := scanFallible_ok_drop _ (k + 1) hsD hm'
-  have hfirst : trD[0]? = some s0 := scanFallible_ok_head hsD
+  rw [← Gloas.processBuilderDepositRequest_ctx] at hsD
+  have hrest := scanM_ok_drop _ (k + 1) hsD hm'
+  have hfirst : trD[0]? = some s0 := scanM_ok_head hsD
   obtain ⟨addr', e', bal, haddr', he', hat1, hat2, hbal⟩ :=
-    register_then_topUp hspe (ctx := gloasContext ccfg true) hcl hcall hrest
+    register_then_topUp hspe (ctx := gloasCtx ccfg true) hcl hcall hrest
   rw [haddr] at haddr'; cases haddr'
   rw [he] at he'; cases he'
   have htl : traceLast s0 trD = traceLast V.postSlots trD :=
-    traceLast_ne_nil (scanFallible_ok_ne_nil hsD) s0 V.postSlots
+    traceLast_ne_nil (scanM_ok_ne_nil hsD) s0 V.postSlots
   rw [htl] at hat2
   exact ⟨k, req, trD, m, m', dom, addr, e, bal, hr, hD, hm, hm', hcall, hcl, hpre, hdom, hv, haddr,
     he, hat, hat2, hbal⟩
@@ -248,14 +248,14 @@ state are exactly `upgrade_to_gloas`'s (`upgraded.builders`, the onboarding of
 `FAR_FUTURE_EPOCH` with the pubkey of the same slot of `upgraded`, the registry keeps its length,
 and the first block creates no record: every builder record after the crossing is one of the
 onboarding's. -/
-theorem jointStepGloas_crossing_onboarding {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+theorem jointStepG_crossing_onboarding {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {beacon : BeaconState P .fulu} {exec : BlockChain} {b : Gloas.SignedBeaconBlock P}
-    {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)} {s' : GloasJointState P}
-    (h : jointStepGloas cfg ccfg bls (.pre ⟨.fulu, beacon, exec⟩) (.gloas b) env? = .ok s') :
+    {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)} {s' : GJointState P}
+    (h : jointStepG cfg ccfg bls (.pre ⟨.fulu, beacon, exec⟩) (.gloas b) env? = .ok s') :
     ∃ (atFork : BeaconState P .fulu) (upgraded postSlots post : Gloas.BeaconState P)
       (parent' : ParentPayload P),
-      Gloas.upgradeToGloas (gloasContext ccfg bls) atFork = .ok upgraded ∧
-      Gloas.crossFromFulu (gloasContext ccfg bls) beacon = .ok upgraded ∧
+      Gloas.upgradeToGloas (gloasCtx ccfg bls) atFork = .ok upgraded ∧
+      Gloas.crossFromFulu (gloasCtx ccfg bls) beacon = .ok upgraded ∧
       s' = .gloas post exec parent' ∧
       postSlots.builders = upgraded.builders ∧ BuildersFar upgraded ∧ BuildersFar post ∧
       post.builders.toArray.size = upgraded.builders.toArray.size ∧
@@ -263,7 +263,7 @@ theorem jointStepGloas_crossing_onboarding {cfg : ChainConfig} {ccfg : Config} {
         (upgraded.builders.toArray[j]?).map (fun c : Gloas.Builder => c.pubkey)) ∧
       (∀ i, ¬ BuilderCreated postSlots post i) := by
   obtain ⟨upgraded, postSlots, post, parent', hup, _, _, hs, hbs, _, _, _, hfp, hpk, _, hnc⟩ :=
-    jointStepGloas_crossing_noExit h
+    jointStepG_crossing_noExit h
   obtain ⟨atFork, hat⟩ := crossFromFulu_upgrade hup
   obtain ⟨hfar, _⟩ := upgradeToGloas_builders hat
   refine ⟨atFork, upgraded, postSlots, post, parent', hat, hup, hs, hbs, hfar, hfp,
@@ -276,50 +276,50 @@ theorem jointStepGloas_crossing_onboarding {cfg : ChainConfig} {ccfg : Config} {
 
 section PostState
 
-open Invariant
+open Inv
 
 /-- The parent prefix (the payment settlement and the validator request loops) keeps the triple
 `I3`, from G3-05, G3-03, G3-04, G3-08 and LatestBidBuilderActive (the prefix half of
 `parent_I3`). -/
-theorem prefix_PendingBalanceReferencesExited {ctx : Ctx} {s a : Gloas.BeaconState P} {r : Gloas.ExecutionRequests}
+theorem prefix_I3 {ctx : Ctx} {s a : Gloas.BeaconState P} {r : Gloas.ExecutionRequests}
     (hA : LatestBidBuilderActive s)
     (ha : Gloas.applyParentPrefix ctx s r = .ok a)
-    (g5 : PendingCovered s) (g3 : PendingReferencesInRange s) (g4 : ExitedHaveNoPending s)
-    (g8 : LatestBidCoherence s) : PendingBalanceReferencesExited a := by
+    (g5 : PendingCovered s) (g3 : PendingRefsInRange s) (g4 : ExitedHaveNoPending s)
+    (g8 : LatestBidCoherence s) : I3 a := by
   obtain ⟨x, fx, hx⟩ := applyParentPrefix_split ha
-  have px : PendingBalanceReferencesExited x := by
+  have px : I3 x := by
     rcases hx with ⟨idx, hset⟩ | ⟨hv, rfl, hc1, hc2⟩ | rfl
-    · obtain ⟨hb, hr, hp⟩ := settle_references_pendingBalance hset
-      refine ⟨fun i c hc => ?_, hr g3, exitedHaveNoPending_of hb (fun i => (hp i).le) g4⟩
-      rw [hb] at hc; rw [hp]; exact pendingBalanceLe_of_covered g5 i c hc
+    · obtain ⟨hb, hr, hp⟩ := settle_refs_pend hset
+      refine ⟨fun i c hc => ?_, hr g3, x04_of hb (fun i => (hp i).le) g4⟩
+      rw [hb] at hc; rw [hp]; exact pendLe_of_covered g5 i c hc
     · obtain ⟨b, hb, hfar⟩ := hA hv
       have hnone : bidIndex s = none := by
         simp only [bidIndex, g8.1, hc1, hc2, ↓reduceIte]
       have hnl : ¬ BidLive s := by
         rintro ⟨_, _, hk, _⟩; rw [hnone] at hk; cases hk
-      refine ⟨fun i c hc => ?_, references_transfer (s := s) (s' := directAppend s) (le_refl _)
+      refine ⟨fun i c hc => ?_, refs_transfer (s := s) (s' := directAppend s) (le_refl _)
         (fun w hw => ?_) (fun j p hj hne => Or.inl ⟨p, hj, hne, rfl⟩) g3, fun i c hc hne => ?_⟩
       · change s.builders.toArray[i]? = some c at hc
-        rw [directAppend_pendingBalance]
+        rw [directAppend_pend]
         have := g5 i c hc
-        rw [exposure_of_not_live hnl] at this
+        rw [expo_of_not_live hnl] at this
         exact this
-      · simp only [directAppend, ProgressiveListOnSpine.push, Array.toList_push, List.mem_append,
+      · simp only [directAppend, ProgressiveListS.push, Array.toList_push, List.mem_append,
           List.mem_singleton] at hw
         rcases hw with hw | rfl
         · exact Or.inl hw
         · exact Or.inr (Array.getElem?_eq_some_iff.mp hb).1
       · change s.builders.toArray[i]? = some c at hc
-        rw [directAppend_pendingBalance]
+        rw [directAppend_pend]
         have h0 := g4 i c hc hne
         by_cases hi : s.latest_execution_payload_bid.builder_index.toNat = i
         · subst hi; rw [hb] at hc; cases hc; exact absurd hfar hne
-        · have : withdrawalAmount i (bidWithdrawal s.latest_execution_payload_bid) = 0 := by
-            unfold withdrawalAmount bidWithdrawal; rw [if_neg hi]
+        · have : wAmt i (bidWithdrawal s.latest_execution_payload_bid) = 0 := by
+            unfold wAmt bidWithdrawal; rw [if_neg hi]
           omega
-    · exact ⟨pendingBalanceLe_of_covered g5, g3, g4⟩
-  exact ⟨pendingBalanceLe_of_equalities fx.1 fx.2.2.1 fx.2.1 px.1, references_of_invariant fx px.2.1,
-    exitedHaveNoPending_of_equalities fx.1 fx.2.2.1 fx.2.1 px.2.2⟩
+    · exact ⟨pendLe_of_covered g5, g3, g4⟩
+  exact ⟨pendLe_of_eqs fx.1 fx.2.2.1 fx.2.1 px.1, refs_of_inv fx px.2.1,
+    x04_of_eqs fx.1 fx.2.2.1 fx.2.1 px.2.2⟩
 
 /-- **The exit loop keeps a not-yet-active builder.** If builder `i` is `R` at the start of an exit
 loop and the finalized checkpoint is not after `R.deposit_epoch`, no request of the loop
@@ -328,16 +328,16 @@ no request moves the checkpoint), so every state of the loop has `R` at `i`, wit
 finalized checkpoint, slot and builder withdrawals. -/
 theorem exitLoop_keeps {cfg : Config} {i : Nat} {R : Gloas.Builder}
     (rs : List Gloas.BuilderExitRequest) {x0 : Gloas.BeaconState P} {tr : List (Gloas.BeaconState P)}
-    (h : scanFallible (Gloas.processBuilderExitRequest cfg) x0 rs = .ok tr)
+    (h : scanM (Gloas.processBuilderExitRequest cfg) x0 rs = .ok tr)
     (hR : x0.builders.toArray[i]? = some R)
     (hfin : x0.finalized_checkpoint.epoch.toNat ≤ R.deposit_epoch.toNat) :
     ∀ (k : Nat) (x : Gloas.BeaconState P), tr[k]? = some x →
-      x.builders.toArray[i]? = some R ∧ FinalizedCheckpointAndSlotKept x0 x ∧
+      x.builders.toArray[i]? = some R ∧ FinSlot x0 x ∧
         x.builder_pending_withdrawals = x0.builder_pending_withdrawals := by
-  refine scanFallible_invariant (fun x : Gloas.BeaconState P => x.builders.toArray[i]? = some R ∧ FinalizedCheckpointAndSlotKept x0 x ∧
+  refine scanM_inv (fun x : Gloas.BeaconState P => x.builders.toArray[i]? = some R ∧ FinSlot x0 x ∧
       x.builder_pending_withdrawals = x0.builder_pending_withdrawals)
-    (fun x a y ⟨hx, hfx, hwx⟩ hy => ?_) rs ⟨hR, finalizedCheckpointAndSlotKept.refl _, rfl⟩ h
-  refine ⟨?_, finalizedCheckpointAndSlotKept.trans hfx (processBuilderExitRequest_finalizedAndSlotKept _ _ _ _ hy),
+    (fun x a y ⟨hx, hfx, hwx⟩ hy => ?_) rs ⟨hR, finSlot.refl _, rfl⟩ h
+  refine ⟨?_, finSlot.trans hfx (processBuilderExitRequest_fs _ _ _ _ hy),
     ((processBuilderExitRequest_frame hy).2.2.2.2.1).trans hwx⟩
   have h0 := hy
   rw [processBuilderExitRequest_eq] at h0
@@ -349,7 +349,7 @@ theorem exitLoop_keeps {cfg : Config} {i : Nat} {R : Gloas.Builder}
     by_cases hij : i = j
     · subst hij
       exfalso
-      rcases classifyBuilderExit_invariant hco with ⟨-, hc⟩ | ⟨i', b0, bi, -, hb0, -, hcase⟩
+      rcases classifyBuilderExit_inv hco with ⟨-, hc⟩ | ⟨i', b0, bi, -, hb0, -, hcase⟩
       · cases hc
       · rcases hcase with ⟨-, hc⟩ | ⟨-, -, hc⟩ | ⟨⟨hlt, -⟩, -, p, -, hp⟩
         · cases hc
@@ -372,7 +372,7 @@ theorem expected_routed_fresh (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {s2 : Gloas.Beaco
     {ex : Gloas.ExpectedWithdrawals} (hex : Gloas.getExpectedWithdrawals s2 = .ok ex)
     {i : Nat} {R : Gloas.Builder}
     (hR : s2.builders.toArray[i]? = some R) (hfar : R.withdrawable_epoch = FAR_FUTURE_EPOCH)
-    (hp : pendingWithdrawalBalance s2.builder_pending_withdrawals.toArray.toList i = 0)
+    (hp : pendW s2.builder_pending_withdrawals.toArray.toList i = 0)
     (hrefs : ∀ w ∈ s2.builder_pending_withdrawals.toArray.toList, w.builder_index.toNat < 2 ^ 40)
     (hvb : s2.validators.toArray.size ≤ 2 ^ 40) (hbb : s2.builders.toArray.size ≤ 2 ^ 40)
     {bi : U64} (hbiN : bi.toNat = i) : routedSum bi ex.withdrawals.toList = 0 := by
@@ -382,7 +382,7 @@ theorem expected_routed_fresh (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {s2 : Gloas.Beaco
   have r1 : routedSum bi bw.toList = 0 := by
     obtain ⟨-, hr⟩ := routed_builderWithdrawals e1 hrefs (bi := bi) (by omega)
     rw [hr, hbiN]
-    have := pendingWithdrawalBalance_take_drop s2.builder_pending_withdrawals.toArray.toList bw.size i
+    have := pendW_take_drop s2.builder_pending_withdrawals.toArray.toList bw.size i
     omega
   have r2 := routedSum_validatorPhase (getPendingPartialWithdrawals_inRange _ _ _ _ e2) hvb bi
   have r4 := routedSum_validatorPhase (getValidatorsSweepWithdrawals_inRange _ _ _ _ e4) hvb bi
@@ -409,7 +409,7 @@ balance included (`expected_routed_fresh`). -/
 theorem withdrawals_keep_fresh (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {s2 s3 : Gloas.BeaconState P}
     (h : Gloas.processWithdrawals s2 = .ok s3) {i : Nat} {R : Gloas.Builder}
     (hR : s2.builders.toArray[i]? = some R) (hfar : R.withdrawable_epoch = FAR_FUTURE_EPOCH)
-    (hp : pendingWithdrawalBalance s2.builder_pending_withdrawals.toArray.toList i = 0)
+    (hp : pendW s2.builder_pending_withdrawals.toArray.toList i = 0)
     (hrefs : ∀ w ∈ s2.builder_pending_withdrawals.toArray.toList, w.builder_index.toNat < 2 ^ 40)
     (hvb : s2.validators.toArray.size ≤ 2 ^ 40) (hbb : s2.builders.toArray.size ≤ 2 ^ 40) :
     s3.builders.toArray[i]? = some R := by
@@ -439,15 +439,15 @@ finalized checkpoint at or before it), so no exit request of the payload initiat
 nothing pending (`pend = 0` at its registration, by G3-03 for an appended slot and G3-04 for a
 reused one, and the later phases before the withdrawals add no pending withdrawal); and it is not
 withdrawable, so the builders sweep skips it. -/
-theorem GloasStepView.fresh_survives (hspe : 2 ≤ P.SLOTS_PER_EPOCH)
+theorem GStepView.fresh_survives (hspe : 2 ≤ P.SLOTS_PER_EPOCH)
     (quorumPositive : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_INCREMENT)
     {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {preB postB : Gloas.BeaconState P} {preExec postExec : BlockChain}
     {preParent postParent : ParentPayload P} {b : Gloas.SignedBeaconBlock P}
     {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)}
-    (V : GloasStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent)
+    (V : GStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent)
     (fna : FinalizedNotAhead preB)
-    (g5 : PendingCovered preB) (g3 : PendingReferencesInRange preB) (g4 : ExitedHaveNoPending preB)
+    (g5 : PendingCovered preB) (g3 : PendingRefsInRange preB) (g4 : ExitedHaveNoPending preB)
     (g7 : NoLiveWeightOnLatestBid preB) (g8 : LatestBidCoherence preB) (fe : FutureEmpty preB)
     (hA : LatestBidBuilderActive preB)
     (validatorsBound : postB.validators.toArray.size ≤ 2 ^ 40)
@@ -466,24 +466,24 @@ theorem GloasStepView.fresh_survives (hspe : 2 ≤ P.SLOTS_PER_EPOCH)
   -- the post-slots state
   have fnaS := processSlots_finalizedNotAhead V.slots fna
   have hs := processSlots_pendingCovered quorumPositive (by omega) V.slots ⟨g5, g7, fe⟩
-  have g3' := processSlots_pendingReferencesInRange quorumPositive V.slots g3
+  have g3' := processSlots_pendingRefsInRange quorumPositive V.slots g3
   have g4' := processSlots_exitedHaveNoPending quorumPositive V.slots g4
   have g8' := processSlots_latestBidCoherence V.slots g8
   have hA' := processSlots_latestBidBuilderActive V.slots hA
   -- the deposit trace starts at the parent prefix
   rcases builderDepositTrace_ok hD with ⟨hnil, -, -⟩ | ⟨s0, h0pre, hsD⟩
   · rw [hnil] at hr; simp at hr
-  have f0 : FinalizedCheckpointAndSlotKept S s0 := applyParentPrefix_finalizedAndSlotKept _ _ _ _ h0pre
-  have i0 : PendingBalanceReferencesExited s0 := prefix_PendingBalanceReferencesExited hA' h0pre hs.1 g3' g4' g8'
-  have trI := scanFallible_invariant (fun x : Gloas.BeaconState P => FinalizedCheckpointAndSlotKept S x ∧ PendingBalanceReferencesExited x ∧
+  have f0 : FinSlot S s0 := applyParentPrefix_fs _ _ _ _ h0pre
+  have i0 : I3 s0 := prefix_I3 hA' h0pre hs.1 g3' g4' g8'
+  have trI := scanM_inv (fun x : Gloas.BeaconState P => FinSlot S x ∧ I3 x ∧
       x.builder_pending_withdrawals = s0.builder_pending_withdrawals)
-    (fun x a y ⟨hfx, hIx, hwx⟩ hy => ⟨finalizedCheckpointAndSlotKept.trans hfx (processBuilderDepositRequest_finalizedAndSlotKept _ _ _ _ hy),
-      depositRequest_PendingBalanceReferencesExited hspe hy hIx, ((processBuilderDepositRequest_frame hy).2.2.2.2.1).trans hwx⟩)
+    (fun x a y ⟨hfx, hIx, hwx⟩ hy => ⟨finSlot.trans hfx (processBuilderDepositRequest_fs _ _ _ _ hy),
+      depReq_I3 hspe hy hIx, ((processBuilderDepositRequest_frame hy).2.2.2.2.1).trans hwx⟩)
     _ ⟨f0, i0, rfl⟩ hsD
   obtain ⟨fm, Im, wm⟩ := trI k m hm
   -- the fresh slot has nothing pending at its registration
-  have hpm : pendingBalance m i = 0 := by
-    rcases classifyBuilderDeposit_invariant hcl with ⟨-, hc⟩ | ⟨-, _, _, _, _, hc⟩ |
+  have hpm : pend m i = 0 := by
+    rcases classifyBuilderDeposit_inv hcl with ⟨-, hc⟩ | ⟨-, _, _, _, _, hc⟩ |
         ⟨-, -, -, -, ⟨-, hc⟩ | ⟨-, -, idx, -, hidx, hc⟩⟩
     · cases hc
     · cases hc
@@ -491,17 +491,17 @@ theorem GloasStepView.fresh_survives (hspe : 2 ≤ P.SLOTS_PER_EPOCH)
     · cases hc
       obtain ⟨ep, hep, hcase⟩ := getIndexForNewBuilder_spec hidx
       rcases hcase with hsz | ⟨b0, hb0, hwe, -⟩
-      · exact pendingBalance_zero_of_ge Im.2.1 (by omega)
+      · exact pend_zero_of_ge Im.2.1 (by omega)
       · refine Im.2.2 _ b0 hb0 ?_
         intro hf
         have hwe' : b0.withdrawable_epoch.toNat ≤ ep.toNat := hwe
         rw [hf, getCurrentEpoch_toNat hep] at hwe'
         have := epoch_lt_far hspe m
         omega
-  have hpWm : pendingWithdrawalBalance m.builder_pending_withdrawals.toArray.toList i = 0 := by
-    unfold pendingBalance at hpm; omega
+  have hpWm : pendW m.builder_pending_withdrawals.toArray.toList i = 0 := by
+    unfold pend at hpm; omega
   -- the last deposit-trace state
-  have hneD := scanFallible_ok_ne_nil hsD
+  have hneD := scanM_ok_ne_nil hsD
   have hlastD : trD[trD.length - 1]? = some (traceLast S trD) := by
     rw [← List.getLast?_eq_getElem?]; exact getLast?_of_traceLast hneD S
   obtain ⟨fL, -, wL⟩ := trI _ _ hlastD
@@ -519,7 +519,7 @@ theorem GloasStepView.fresh_survives (hspe : 2 ≤ P.SLOTS_PER_EPOCH)
   change builderDepositTrace ccfg bls S b = _ at hD'
   rw [hD] at hD'; cases hD'
   have exK := exitLoop_keeps _ hsE hat2 hfin
-  have hneE := scanFallible_ok_ne_nil hsE
+  have hneE := scanM_ok_ne_nil hsE
   have hlastE : trE[trE.length - 1]? = some (traceLast S trE) := by
     rw [← List.getLast?_eq_getElem?]; exact getLast?_of_traceLast hneE S
   obtain ⟨hRE, -, wE⟩ := exK _ _ hlastE
@@ -542,8 +542,8 @@ theorem GloasStepView.fresh_survives (hspe : 2 ≤ P.SLOTS_PER_EPOCH)
   have hw2 : s2.builder_pending_withdrawals = m.builder_pending_withdrawals := by
     rw [e2w, hw1, wE, wL, wm]
   -- the refs of the withdrawals state, from `parent_I3`
-  obtain ⟨-, r1, -⟩ := parent_PendingBalanceReferencesExited hspe hA' h1 hs.1 g3' g4' g8'
-  have w3 := processWithdrawals_withdrawalsFrame _ _ h3
+  obtain ⟨-, r1, -⟩ := parent_I3 hspe hA' h1 hs.1 g3' g4' g8'
+  have w3 := processWithdrawals_wFrame _ _ h3
   have b4 := processExecutionPayloadBid_post h4
   have c := afterBid_core h5 h6 h7 h8
   have hpost : postB.builders = s3.builders := by rw [c.1, b4.2.2.2.2.1]
@@ -553,9 +553,9 @@ theorem GloasStepView.fresh_survives (hspe : 2 ≤ P.SLOTS_PER_EPOCH)
     omega
   have vb2 : s2.validators.toArray.size ≤ 2 ^ 40 := by
     have va : postB.validators.toArray.size = s3.validators.toArray.size :=
-      afterWithdrawals_validatorsLength h4 h5 h6 h7 h8
+      afterWithdrawals_vlen h4 h5 h6 h7 h8
     have vb' : s3.validators.toArray.size = s2.validators.toArray.size :=
-      processWithdrawals_validatorsLength _ _ h3
+      processWithdrawals_vlen _ _ h3
     omega
   have hrefs : ∀ w ∈ s2.builder_pending_withdrawals.toArray.toList,
       w.builder_index.toNat < 2 ^ 40 := fun w hw => by
@@ -563,7 +563,7 @@ theorem GloasStepView.fresh_survives (hspe : 2 ≤ P.SLOTS_PER_EPOCH)
     have := r1.1 w hw
     rw [← e2b] at this
     omega
-  have hp2 : pendingWithdrawalBalance s2.builder_pending_withdrawals.toArray.toList i = 0 := by rw [hw2]; exact hpWm
+  have hp2 : pendW s2.builder_pending_withdrawals.toArray.toList i = 0 := by rw [hw2]; exact hpWm
   refine ⟨by rw [hpost]; exact withdrawals_keep_fresh hspe h3 hR2 hfar hp2 hrefs vb2 bb2, ?_⟩
   have hsw : stepWithdrawals ccfg bls V.postSlots b.message =
       (if s2.latest_block_hash != s2.latest_execution_payload_bid.block_hash then pure []
@@ -583,15 +583,15 @@ builder freshly registered at `i` is, at the step's post-state `postB`, the fres
 `trD[k]`'s slot, `withdrawable_epoch = FAR_FUTURE_EPOCH`) with balance `bal`, where
 `bal = req.amount + Σ amounts of the later 0xB0 deposits for its pubkey`; and the step's
 withdrawals route nothing to it (`GStepView.fresh_survives`). -/
-theorem GloasStepView.registration_post (hspe : 2 ≤ P.SLOTS_PER_EPOCH)
+theorem GStepView.registration_post (hspe : 2 ≤ P.SLOTS_PER_EPOCH)
     (quorumPositive : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_INCREMENT)
     {cfg : ChainConfig} {ccfg : Config}
     {preB postB : Gloas.BeaconState P} {preExec postExec : BlockChain}
     {preParent postParent : ParentPayload P} {b : Gloas.SignedBeaconBlock P}
     {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)}
-    (V : GloasStepView cfg ccfg true preB preExec preParent b env? postB postExec postParent)
+    (V : GStepView cfg ccfg true preB preExec preParent b env? postB postExec postParent)
     (fna : FinalizedNotAhead preB)
-    (g5 : PendingCovered preB) (g3 : PendingReferencesInRange preB) (g4 : ExitedHaveNoPending preB)
+    (g5 : PendingCovered preB) (g3 : PendingRefsInRange preB) (g4 : ExitedHaveNoPending preB)
     (g7 : NoLiveWeightOnLatestBid preB) (g8 : LatestBidCoherence preB) (fe : FutureEmpty preB)
     (hA : LatestBidBuilderActive preB)
     (validatorsBound : postB.validators.toArray.size ≤ 2 ^ 40)
@@ -601,12 +601,12 @@ theorem GloasStepView.registration_post (hspe : 2 ≤ P.SLOTS_PER_EPOCH)
       (m m' : Gloas.BeaconState P) (dom : Domain) (addr : ExecutionAddress) (e : Epoch) (bal : U64),
       (blockBuilderDeposits b)[k]? = some req ∧
       builderDepositTrace ccfg true V.postSlots b = .ok trD ∧ trD[k]? = some m ∧ trD[k + 1]? = some m' ∧
-      Gloas.processBuilderDepositRequest (gloasContext ccfg true) m req = .ok m' ∧
+      Gloas.processBuilderDepositRequest (gloasCtx ccfg true) m req = .ok m' ∧
       classifyBuilderDeposit ccfg true m req = .ok (.register i req.amount) ∧
       req.withdrawal_credentials.toBytes.head? = some 0xB0 ∧
       builderDepositDomain ccfg = some dom ∧
       blsVerify true req.pubkey (computeSigningRoot (builderDepositMessage req) dom) req.signature = true ∧
-      Jaune.Bytes.toAddress? (req.withdrawal_credentials.toBytes.drop 12) = some addr ∧
+      Jaune.Bytes.toAdr? (req.withdrawal_credentials.toBytes.drop 12) = some addr ∧
       computeEpochAtSlot P m.slot = .ok e ∧
       m'.builders.toArray[i]? = some (freshBuilder req.pubkey addr req.amount e) ∧
       (traceLast V.postSlots trD).builders.toArray[i]? =

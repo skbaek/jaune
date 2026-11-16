@@ -40,7 +40,7 @@ private def decodeBenv (input : Json) (fork : Fork) (rules : ForkRules) : IO Ben
       coinbase := env.coinbase
       number := env.number
       baseFeePerGas := env.baseFeePerGas
-      time := env.timestamp.toU256
+      time := env.timestamp.toB256
       prevRandao := env.prevRandao
       excessBlobGas := env.excessBlobGas
       parentBeaconBlockRoot := env.parentBeaconBlockRoot
@@ -55,30 +55,30 @@ private def decodeMessage (input : Json) (benv : Benv) (rules : ForkRules) : IO 
   let kind ← stringField j "kind"
   if kind != "call" && kind != "create" then
     throw (IO.userError "message.kind must be call or create")
-  let caller ← T8n.readAddress "caller" (← required j "caller")
-  let address ← T8n.readAddress "address" (← required j "address")
+  let caller ← T8n.readAdr "caller" (← required j "caller")
+  let address ← T8n.readAdr "address" (← required j "address")
   let origin ← match j.find? "origin" with
     | none => pure caller
-    | some value => T8n.readAddress "origin" value
-  let gas ← T8n.natRequired j "gas"
+    | some value => T8n.readAdr "origin" value
+  let gas ← T8n.natReq j "gas"
   let value ← T8n.natOr j "value" 0
   if value ≥ 2^256 then throw (IO.userError "message.value exceeds uint256")
   let data ← byteString j "input"
   let mut accessed : AdrSet := .emptyWithCapacity
   if let some values := j.find? "accessedAddresses" then
     for value in (← IO.ofExcept values.getArr?) do
-      accessed := accessed.insert (← T8n.readAddress "accessedAddresses" value)
+      accessed := accessed.insert (← T8n.readAdr "accessedAddresses" value)
   let mut keys : KeySet := .emptyWithCapacity
   if let some values := j.find? "accessedStorageKeys" then
     for value in (← IO.ofExcept values.getArr?) do
       T8n.requireKnownFields "accessedStorageKeys entry" value ["address", "key"]
-      let address ← T8n.readAddress "address" (← required value "address")
-      let key ← T8n.readU256 "key" (← required value "key")
+      let address ← T8n.readAdr "address" (← required value "address")
+      let key ← T8n.readB256 "key" (← required value "key")
       keys := keys.insert (address, key)
   let mut hashes := []
   if let some values := j.find? "blobVersionedHashes" then
     for value in (← IO.ofExcept values.getArr?) do
-      hashes := hashes ++ [← T8n.readU256 "blobVersionedHashes" value]
+      hashes := hashes ++ [← T8n.readB256 "blobVersionedHashes" value]
   let stateGas ← T8n.natOr j "stateGas" 0
   if rules.stateGas.isNone && stateGas != 0 then
     throw (IO.userError "stateGas requires a fork with state gas")
@@ -91,7 +91,7 @@ private def decodeMessage (input : Json) (benv : Benv) (rules : ForkRules) : IO 
     target := if kind == "call" then some address else none
     currentTarget := address
     gas := gas
-    value := value.toU256
+    value := value.toB256
     data := if kind == "call" then data else []
     codeAddress := if kind == "call" then some address else none
     code := if kind == "call" then benv.state.getCode address else ⟨data.toArray⟩
@@ -107,7 +107,7 @@ private def decodeMessage (input : Json) (benv : Benv) (rules : ForkRules) : IO 
 
 private inductive Input where
   | message (msg : Msg)
-  | transaction (benv : Benv) (tx : Transaction)
+  | transaction (benv : Benv) (tx : Tx)
 
 private def writeRow (cfg : TraceJson.Config) (handle : IO.FS.Handle) (row : Json) : IO Unit := do
   let line := row.compress ++ "\n"
@@ -132,7 +132,7 @@ def run (inputPath outputPath : String) : IO Unit := do
   let selected : Input ← match input.find? "message", input.find? "transaction" with
     | some _, none => Input.message <$> decodeMessage input benv rules
     | none, some value =>
-      match T8n.decodeTransaction value with
+      match T8n.decodeTx value with
       | .ok tx => pure (.transaction benv tx)
       | .error error => throw (IO.userError ("transaction: " ++ error.render))
     | _, _ => throw (IO.userError "supply exactly one of message or transaction")
@@ -168,7 +168,7 @@ def run (inputPath outputPath : String) : IO Unit := do
       let current ← state.get
       if current.started && !current.closed then throw (IO.userError "transaction frame did not close")
       let identity := [("scope", Json.str "transaction"), ("transactionIndex", toJson (0 : Nat)),
-        ("transactionHash", Json.str (T8n.hexU256 (T8n.txHash tx))),
+        ("transactionHash", Json.str (T8n.hexB256 (T8n.txHash tx))),
         ("authorizationRefund", toJson current.rootRefund),
         ("gasUsedScope", Json.str "transaction gas after intrinsic charge and settlement")]
       match result.value with
@@ -181,7 +181,7 @@ def run (inputPath outputPath : String) : IO Unit := do
         if output.returnData.length > cfg.maxDataBytes then
           throw (IO.userError "trace: output exceeds maxDataBytes")
         writeRow cfg trace (Json.mkObj [
-          ("stateRoot", Json.str (T8n.hexU256 postState.root)),
+          ("stateRoot", Json.str (T8n.hexB256 postState.root)),
           ("output", Json.str (T8n.hexBytes output.returnData)),
           ("gasUsed", Json.str (T8n.hexQuantity bout.cumulativeGasUsed)),
           ("pass", Json.bool output.error.isNone)])

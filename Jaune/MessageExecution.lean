@@ -31,11 +31,11 @@ address is not a precompile under the active fork.  Unlike the convenient
 `disablePrecompiles` adapter below, this is the bridge used by ordinary
 messages whose precompile switch remains enabled. -/
 theorem frameEnter_eq_run_afterTransfer_of_notPrecompile
-    (msg : Msg) (afterTransfer : Benv) (codeAddress : Address)
+    (msg : Msg) (afterTransfer : Benv) (codeAddress : Adr)
     (hentry : msg.benvAfterTransfer = .ok afterTransfer)
     (hcode : msg.codeAddress = some codeAddress)
     (hnotPrecompile :
-      ¬ afterTransfer.stat.rules.isPrecompile codeAddress) :
+      ¬ afterTransfer.stat.rules.isPrecomp codeAddress) :
     (Frame.ofCall msg).enter =
       .run (initEvm (msg.withBenv afterTransfer)) := by
   have hcode' :
@@ -53,11 +53,11 @@ theorem frameEnter_eq_run_afterTransfer_of_notPrecompile
 /-- The corresponding `processMessage` bridge for an ordinary non-precompile
 entry after value transfer. -/
 theorem processMessage_eq_settle_exec_afterTransfer_of_notPrecompile
-    (msg : Msg) (afterTransfer : Benv) (codeAddress : Address)
+    (msg : Msg) (afterTransfer : Benv) (codeAddress : Adr)
     (hentry : msg.benvAfterTransfer = .ok afterTransfer)
     (hcode : msg.codeAddress = some codeAddress)
     (hnotPrecompile :
-      ¬ afterTransfer.stat.rules.isPrecompile codeAddress) :
+      ¬ afterTransfer.stat.rules.isPrecomp codeAddress) :
     processMessage msg =
       (Frame.ofCall msg).settle
         (exec (initEvm (msg.withBenv afterTransfer))) :=
@@ -111,10 +111,10 @@ theorem processMessage_eq_settle_exec_afterTransfer
 that address is not a precompile.  This covers normal transaction messages
 with `disablePrecompiles = false`; the flag is deliberately not a premise. -/
 theorem executeCode_enter_of_codeAddress_not_precompile
-    (msg : Msg) (benv : Benv) (codeAddress : Address)
+    (msg : Msg) (benv : Benv) (codeAddress : Adr)
     (hcodeAddress : msg.codeAddress = some codeAddress)
     (hnotPrecompile :
-      decide (benv.stat.rules.isPrecompile codeAddress) = false) :
+      decide (benv.stat.rules.isPrecomp codeAddress) = false) :
     executeCode.enter (msg.withBenv benv) =
       .inl (initEvm (msg.withBenv benv)) := by
   unfold executeCode.enter
@@ -175,7 +175,7 @@ theorem processMessage_clean_of_exec_afterTransfer
     (msg : Msg) (afterTransfer : Benv) (post : Devm)
     (hentry : msg.benvAfterTransfer = .ok afterTransfer)
     (hdisable : msg.disablePrecompiles = true)
-    (hsweep : msg.benv.stat.rules.settlement.touchedSweep = false)
+    (hsweep : msg.benv.stat.rules.settle.touchedSweep = false)
     (hexec : exec (initEvm (msg.withBenv afterTransfer)) = .ok post)
     (herror : post.error = none) :
     processMessage msg = .ok post := by
@@ -190,7 +190,7 @@ theorem processMessage_clean_of_exec
     (msg : Msg) (post : Devm)
     (hentry : msg.benvAfterTransfer = .ok msg.benv)
     (hdisable : msg.disablePrecompiles = true)
-    (hsweep : msg.benv.stat.rules.settlement.touchedSweep = false)
+    (hsweep : msg.benv.stat.rules.settle.touchedSweep = false)
     (hexec : exec (initEvm msg) = .ok post)
     (herror : post.error = none) :
     processMessage msg = .ok post := by
@@ -208,7 +208,7 @@ theorem processMessage_revert_of_exec_afterTransfer
     (hentry : msg.benvAfterTransfer = .ok afterTransfer)
     (hdisable : msg.disablePrecompiles = true)
     (hgas : msg.benv.stat.rules.stateGas = none)
-    (hsweep : msg.benv.stat.rules.settlement.touchedSweep = false)
+    (hsweep : msg.benv.stat.rules.settle.touchedSweep = false)
     (hexec : exec (initEvm (msg.withBenv afterTransfer)) =
       .error (.revert, raw)) :
     processMessage msg = .ok (settledRevert msg raw) := by
@@ -225,7 +225,7 @@ theorem processMessage_revert_of_exec_afterTransfer_of_noCodeAddress
     (hentry : msg.benvAfterTransfer = .ok afterTransfer)
     (hcodeAddress : msg.codeAddress = .none)
     (hgas : msg.benv.stat.rules.stateGas = none)
-    (hsweep : msg.benv.stat.rules.settlement.touchedSweep = false)
+    (hsweep : msg.benv.stat.rules.settle.touchedSweep = false)
     (hexec : exec (initEvm (msg.withBenv afterTransfer)) =
       .error (.revert, raw)) :
     processMessage msg = .ok (settledRevert msg raw) := by
@@ -242,7 +242,7 @@ theorem processMessage_clean_of_exec_afterTransfer_of_codeEntry
     (hentry : msg.benvAfterTransfer = .ok benv)
     (hcodeEntry : executeCode.enter (msg.withBenv benv) =
       .inl (initEvm (msg.withBenv benv)))
-    (hsweep : msg.benv.stat.rules.settlement.touchedSweep = false)
+    (hsweep : msg.benv.stat.rules.settle.touchedSweep = false)
     (hexec : exec (initEvm (msg.withBenv benv)) = .ok post)
     (herror : post.error = none) :
     processMessage msg = .ok post := by
@@ -258,7 +258,7 @@ theorem processMessage_revert_of_exec
     (hentry : msg.benvAfterTransfer = .ok msg.benv)
     (hdisable : msg.disablePrecompiles = true)
     (hgas : msg.benv.stat.rules.stateGas = none)
-    (hsweep : msg.benv.stat.rules.settlement.touchedSweep = false)
+    (hsweep : msg.benv.stat.rules.settle.touchedSweep = false)
     (hexec : exec (initEvm msg) = .error (.revert, raw)) :
     processMessage msg = .ok (settledRevert msg raw) := by
   have hself : msg.withBenv msg.benv = msg := by
@@ -276,7 +276,7 @@ theorem processMessage_halt_of_exec_afterTransfer
     (hentry : msg.benvAfterTransfer = .ok afterTransfer)
     (hdisable : msg.disablePrecompiles = true)
     (hgas : msg.benv.stat.rules.stateGas = none)
-    (hsweep : msg.benv.stat.rules.settlement.touchedSweep = false)
+    (hsweep : msg.benv.stat.rules.settle.touchedSweep = false)
     (hexec : exec (initEvm (msg.withBenv afterTransfer)) =
       .error (.halt reason, raw)) :
     processMessage msg = .ok (settledHalt msg reason raw) := by
@@ -292,7 +292,7 @@ theorem processMessage_halt_of_exec
     (hentry : msg.benvAfterTransfer = .ok msg.benv)
     (hdisable : msg.disablePrecompiles = true)
     (hgas : msg.benv.stat.rules.stateGas = none)
-    (hsweep : msg.benv.stat.rules.settlement.touchedSweep = false)
+    (hsweep : msg.benv.stat.rules.settle.touchedSweep = false)
     (hexec : exec (initEvm msg) = .error (.halt reason, raw)) :
     processMessage msg = .ok (settledHalt msg reason raw) := by
   have hself : msg.withBenv msg.benv = msg := by

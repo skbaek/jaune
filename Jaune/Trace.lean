@@ -28,7 +28,7 @@ inductive Event where
   | entered (context : Context) (frame : Frame) (entry : FrameEntry)
   | exited (context : Context) (raw : Option Execution)
   | settled (context : Context) (frame : Frame)
-      (result : Except (EvmError × State × AdrSet × TransientStorage) Devm)
+      (result : Except (EvmError × State × AdrSet × Tra) Devm)
   | resumed (parent : Context) (childFrame : Nat) (raw : Execution)
 
 abbrev Sink (m : Type → Type) := Event → m Unit
@@ -146,7 +146,7 @@ theorem exec_erasure {evm : Evm} (result : ExecutionResult evm) :
     result.value = Jaune.exec evm := result.erases
 
 structure FrameResult (frame : Frame) where
-  value : Except (EvmError × State × AdrSet × TransientStorage) Devm
+  value : Except (EvmError × State × AdrSet × Tra) Devm
   nextFrame : Nat
   erases : value = Jaune.runFrame frame
 
