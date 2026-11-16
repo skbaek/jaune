@@ -602,6 +602,28 @@ and a justified comparison. Local/scoped attribute histories remain unsupported.
 Other hash commands (such as `#guard_expr`) are refused. The `#[...]` array
 notation is not a hash command.
 
+Derived text (master decisions 2026-11-16). A deriving handler writes names
+into string literals: `deriving Repr` prints each constructor's fully
+qualified name and each structure field's label, and nests a field's value by
+the label's width. A constant is *derived* when the exported compiler data
+says so: an instance with no source declaration range whose value is `C.mk T`
+for `C` in Repr/ToJson/FromJson, where `T` is declared in the same module by a
+command whose deriving clause names `C` (or a `deriving instance` command
+names both), plus that instance's auxiliaries by name prefix (no range
+either). A hand-written instance, anonymous or not, has a range and is never
+derived. In a derived constant, and only there, a string literal that is
+exactly an old fully qualified constant name the map renames is compared as
+its new name; in a derived Repr only, a literal that is exactly the old label
+of a field of `T` whose field row changes the leaf is compared as the new
+label, and the `Std.Format.nest` width of that field (label length + 4)
+follows it. Every respelling is listed in the verdict
+(`derived_literals_respelled`). Any other literal change fails, a hand-written
+literal is compared as written, and other handlers' unqualified keys
+(ToJson/FromJson) stay literal; the tree derives no ToJson/FromJson at G0a.
+Derived Repr text of a renamed type therefore changes what `repr` prints;
+user-visible output is held byte-identical by the catalogue (t8n, cli, golden
+messages, trace, fixture lanes), not by N4.
+
 The low-level comparator's verdict remains `exported-modules`. It can compare
 archived schema-3 to schema-6 exports as well as schema 7 (the candidate
 workflow below requires schema 7), but neither a list
