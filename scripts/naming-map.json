@@ -400,6 +400,15 @@
     {
       "old": "JauneConsensus.Ctx",
       "new": "JauneConsensus.Context",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: Ctx>Context"
+    },
+    {
+      "old": "JauneConsensus.Ctx",
+      "new": "JauneConsensus.Context",
       "kind": "module",
       "layer": "consensus",
       "rule": "5, 4",
@@ -477,6 +486,15 @@
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
       "notes": "parts: AddrStable>AddressStable"
+    },
+    {
+      "old": "JauneConsensus.Facts.AnchorInv",
+      "new": "JauneConsensus.Facts.AnchorInvariant",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: AnchorInv>AnchorInvariant"
     },
     {
       "old": "JauneConsensus.Facts.AnchorInv",

@@ -218,7 +218,10 @@ def main():
         n = ".".join(namer.rename_segment(s) for s in rel.parts)
         mod_rows.append((m, n))
         if m != n:
-            entries[m] = {"old": m, "new": n, "kind": "module", "layer": "consensus", "_mods": [], "_spec": None}
+            # Modules and constants are separate name spaces: a module may share its name with a
+            # declaration (`JauneConsensus.Ctx` is both), so the module row has its own key.
+            entries["module " + m] = {"old": m, "new": n, "kind": "module", "layer": "consensus",
+                                      "_mods": [], "_spec": None}
 
     json.dump({"stats": {"/".join(k): v for k, v in stats.items()}}, sys.stderr)
     sys.stderr.write("\n")
@@ -285,9 +288,9 @@ def part_pairs(old, new):
 
 def finalize(entries, namer, rows, kept):
     out = []
-    for old in sorted(entries):
-        e = entries[old]
-        new = e["new"]
+    for key in sorted(entries):
+        e = entries[key]
+        old, new = e["old"], e["new"]
         pairs = part_pairs(old, new) if e["kind"] != "module" else part_pairs(old, new)
         low = old.lower()
         if "b256" in low:
@@ -318,11 +321,12 @@ def check(out, kept, tree):
     import check_naming_map_shim as shim
     data = json.load(open(tree / "scripts" / "naming-map.json"))
     retired = data["retired_tokens"]
-    news = collections.Counter(e["new"] for e in out)
-    olds = {e["old"] for e in out}
-    for n, c in news.items():
+    # Module and constant names are separate name spaces (check-naming-map.py).
+    news = collections.Counter((e["kind"] == "module", e["new"]) for e in out)
+    olds = {e["old"] for e in out if e["kind"] != "module"}
+    for (is_module, n), c in news.items():
         if c > 1:
-            problems.append(f"duplicate new name {n}")
+            problems.append(f"duplicate new {'module ' if is_module else ''}name {n}")
     existing = set()
     for items in kept.values():
         for mod, line, kind, q, new, cite in items:
