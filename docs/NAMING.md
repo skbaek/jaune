@@ -340,6 +340,31 @@ reported as usual. Relocation rows of dependency modules are refused for a
 consumer. The plan records `consumer` and the bound dependency captures, and
 apply recomputes with them.
 
+Consumer declarations inside renamed dependency namespaces: a consumer may
+author declarations inside a namespace the map renames (Blanc's
+`Jaune.Ninst.RunWith` under Jaune's `Jaune.Ninst`). They follow that
+namespace, but never by silent inference: `naming-tree.py consumer-map --tree
+CONSUMER --snapshot CAPTURE/snapshot.json --map MAP.json --dependency-snapshot
+DEP/snapshot.json --output FILE` writes one explicit row per such declaration
+(the new namespace prefix, the consumer's own last component; layer and rule
+of the cited dependency row; the source names that row), refusing private
+names, declarations in two modules and any collision with an existing or
+renamed name. `plan --consumer-map FILE` rederives the rows from the same
+capture and map and refuses a file that differs, so the file is reviewable
+and part of the migration kit but cannot be hand-edited into the plan. The
+plan records its path, digest and row count.
+
+A consumer's reviewed sites live outside its tree: `plan --sites FILE` takes
+the same schema as `scripts/naming-sites.json` and binds the file's digest in
+the plan (apply recomputes with it). An external file may also decide
+`replace`, with `new`, for a token the compiler index gives no reference at
+all (a name literal such as `` `Jaune.gCallStipend `` or a spelling in an
+unelaborated simp discharger); the replacement becomes a plan edit. `replace`
+on a token reported for any other reason is itself unresolved, so it cannot
+hide a map gap. A compound (parenthesized) reference range whose inner
+identifiers carry their own references is decided `unchanged`: the plan
+already respells the identifiers inside it.
+
 Module rows move the file within its source directory and rewrite every import
 whose lexed position matches Lean's header parse of that file (a mismatch
 refuses). A namespace that shares the module's name (`namespace M` in `M.lean`)

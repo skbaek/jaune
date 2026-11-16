@@ -132,7 +132,7 @@ def current_artifacts(snapshot):
             raise ValueError(f'{field} changed since capture; re-export current imports')
 
 
-def plan_sources(root, candidate, bundles, mapping, consumer=False, extra_names=()):
+def plan_sources(root, candidate, bundles, mapping, consumer=False, extra_names=(), sites=None):
     """Pure planning over an already-validated source inventory and bundles.
 
     `consumer`: the map renames a dependency's names (a project that requires
@@ -202,7 +202,7 @@ def plan_sources(root, candidate, bundles, mapping, consumer=False, extra_names=
             if right['start'] < left['end']:
                 row['unresolved'].append(dict(start=right['start'], end=left['end'],
                                               reason='overlapping rename and relocation edits'))
-    apply_reviewed_sites(root, candidate, texts, by_record)
+    apply_reviewed_sites(root, candidate, texts, by_record, sites)
     return records, moves
 
 
@@ -210,7 +210,7 @@ REVIEWED_SITES = 'scripts/naming-sites.json'
 SITE_KEYS = {'path', 'line', 'column', 'token', 'sha256', 'decision', 'reason'}
 
 
-def apply_reviewed_sites(root, candidate, texts, by_record):
+def apply_reviewed_sites(root, candidate, texts, by_record, sites=None):
     """Registered, reviewed decisions for individual unresolved tokens.
 
     `scripts/naming-sites.json` lists sites the tool cannot resolve (a local
@@ -220,18 +220,31 @@ def apply_reviewed_sites(root, candidate, texts, by_record):
     leaves `unresolved` for the record's `reviewed` list, kept in the plan. A
     site whose file bytes differ, or that matches no unresolved token, is
     itself unresolved: the list never silently goes stale, and any unlisted
-    use still fails the plan."""
-    if REVIEWED_SITES not in candidate['files']:
+    use still fails the plan.
+
+    `sites` (raw bytes) is an explicit reviewed-sites file from outside the
+    tree, for a consumer whose own repository carries no such file; the plan
+    binds its digest. Its sites may also decide `replace` (with `new`) for a
+    token the compiler index gives no reference at all (a name literal
+    `` `Jaune.gCallStipend `` or an unelaborated spelling): the recorded
+    replacement becomes an edit of the plan."""
+    if sites is not None:
+        raw = sites
+    elif REVIEWED_SITES not in candidate['files']:
         return
-    raw = APPLY.safe_path(root, REVIEWED_SITES).read_bytes()
-    if APPLY.digest(raw) != candidate['files'][REVIEWED_SITES]:
-        raise ValueError('reviewed naming sites changed during planning')
+    else:
+        raw = APPLY.safe_path(root, REVIEWED_SITES).read_bytes()
+        if APPLY.digest(raw) != candidate['files'][REVIEWED_SITES]:
+            raise ValueError('reviewed naming sites changed during planning')
     data = json.loads(raw)
     if data.get('schema_version') != 1 or not isinstance(data.get('sites'), list):
         raise ValueError('unsupported reviewed naming sites')
     seen = set()
     for site in data['sites']:
-        if (not isinstance(site, dict) or set(site) != SITE_KEYS or site['decision'] != 'unchanged' or
+        replace = isinstance(site, dict) and site.get('decision') == 'replace' and sites is not None
+        if (not isinstance(site, dict) or set(site) != (SITE_KEYS | {'new'} if replace else SITE_KEYS) or
+                site['decision'] not in ('unchanged', 'replace') or (site['decision'] == 'replace') != replace or
+                (replace and (not isinstance(site['new'], str) or not site['new'] or site['new'] == site['token'])) or
                 not isinstance(site['reason'], str) or not site['reason'].strip() or
                 type(site['line']) is not int or type(site['column']) is not int):
             raise ValueError(f'invalid reviewed naming site: {site!r}')
@@ -259,10 +272,23 @@ def apply_reviewed_sites(root, candidate, texts, by_record):
                 f'reviewed naming site {site["line"]}:{site["column"]} {site["token"]!r} matches no '
                 'unresolved token; remove or re-review it')))
             continue
+        if replace and any(p['reason'] != f'unresolved token {site["token"]!r}' for p in matched):
+            record['unresolved'].append(dict(start=start, end=end, reason=(
+                f'reviewed naming site {site["line"]}:{site["column"]} {site["token"]!r} decides replace, '
+                'which only a token without any compiler reference admits')))
+            continue
         record['unresolved'] = [p for p in record['unresolved'] if p not in matched]
         record.setdefault('reviewed', []).append(dict(
             start=start, end=end, token=site['token'], decision=site['decision'], reason=site['reason'],
-            reported=sorted({p['reason'] for p in matched})))
+            reported=sorted({p['reason'] for p in matched}), **({'new': site['new']} if replace else {})))
+        if replace:
+            if any(e['start'] < end and start < e['end'] for e in record['edits']):
+                record['unresolved'].append(dict(start=start, end=end,
+                                                 reason='reviewed replacement overlaps a planned edit'))
+                continue
+            record['edits'].append(dict(start=start, end=end, old=site['token'], new=site['new'],
+                                        declaration='reviewed site replacement'))
+            record['edits'].sort(key=lambda e: (e['start'], e['end']))
 
 
 def universe_names(bundles):
@@ -543,11 +569,55 @@ def dependency_names(snapshot, dependency_path):
     return names, record
 
 
-def build_plan(root, snapshot_path, map_path, consumer=False, dependencies=()):
-    snapshot_path = Path(snapshot_path).resolve(strict=True)
-    mapping = read_map(map_path)
-    if consumer != bool(dependencies):
-        raise ValueError('a consumer plan needs --dependency-snapshot, and only a consumer takes one')
+def consumer_rows(bundles, mapping, universe_before):
+    """Derived rows for consumer declarations authored inside a dependency
+    namespace the map renames (`Jaune.Ninst.RunWith` declared in Blanc follows
+    `Jaune.Ninst` -> `Jaune.NextOp`). The consumer keeps its own last
+    components; only the renamed namespace prefix changes. One row per
+    declaration, one-to-one, refused on any collision."""
+    renamer = MAP.Renamer(mapping['entries'])
+    by_old = {row['old']: row for row in mapping['entries']}
+    rows, problems = {}, []
+    for module, bundle in sorted(bundles.items()):
+        for name in sorted(bundle['index']['decls']):
+            if name.startswith('_private.') or renamer.renames(name) or '.' not in name:
+                continue
+            parent, _, last = name.rpartition('.')
+            scope = renamer.scope(parent)
+            if scope == parent:
+                continue
+            parts = parent.split('.')
+            prefix = next(('.'.join(parts[:i]) for i in range(len(parts), 0, -1)
+                           if '.'.join(parts[:i]) in by_old), None)
+            if prefix is None:
+                problems.append(f'{name}: namespace {parent} renamed without a row to cite')
+                continue
+            source = by_old[prefix]
+            row = dict(old=name, new=f'{scope}.{last}', kind='declaration', layer=source['layer'],
+                       rule=source['rule'],
+                       source=f'consumer declaration (module {module}) inside the renamed dependency namespace '
+                              f'{parent} -> {scope}; follows map row {prefix} -> {source["new"]}')
+            if name in rows and rows[name] != row:
+                problems.append(f'{name}: declared in two consumer modules')
+            rows[name] = row
+    news = {}
+    for row in rows.values():
+        if row['new'] in universe_before or row['new'] in news or row['new'] in {r['new'] for r in mapping['entries']}:
+            problems.append(f'{row["old"]}: derived name {row["new"]} collides with an existing or renamed name')
+        news[row['new']] = row['old']
+    if problems:
+        raise ValueError('consumer rows cannot be derived: ' + '; '.join(problems[:10]))
+    return [rows[name] for name in sorted(rows)]
+
+
+def consumer_map_document(rows, map_path):
+    return dict(schema_version=1, retired_tokens=[], allowed_abbreviations=[],
+                description=('Derived by naming-tree.py consumer-map: consumer declarations authored inside '
+                             'dependency namespaces renamed by the map with sha256 ' + CANDIDATE.file_sha(map_path)),
+                entries=rows)
+
+
+def load_inputs(root, snapshot_path, map_path, consumer, dependencies):
     snapshot = CANDIDATE.read_snapshot(snapshot_path, fidelity=False)
     snapshot.pop('export_paths')
     current_inventory(root, snapshot['candidate'])
@@ -562,7 +632,43 @@ def build_plan(root, snapshot_path, map_path, consumer=False, dependencies=()):
         names, record = dependency_names(snapshot, dependency)
         extra |= names
         dependency_records.append(record)
-    records, moves = plan_sources(root, snapshot['candidate'], bundles, mapping, consumer, extra)
+    return snapshot, bundles, extra, dependency_records
+
+
+def derive_consumer_map(root, snapshot_path, map_path, dependencies):
+    snapshot_path = Path(snapshot_path).resolve(strict=True)
+    mapping = read_map(map_path)
+    _, bundles, extra, _ = load_inputs(root, snapshot_path, map_path, True, dependencies)
+    rows = consumer_rows(bundles, mapping, universe_names(bundles) | extra)
+    document = consumer_map_document(rows, map_path)
+    CANDIDATE.FIDELITY.MAP.validate_map(document)
+    return document
+
+
+def build_plan(root, snapshot_path, map_path, consumer=False, dependencies=(), consumer_map=None, sites=None):
+    snapshot_path = Path(snapshot_path).resolve(strict=True)
+    mapping = read_map(map_path)
+    if consumer != bool(dependencies):
+        raise ValueError('a consumer plan needs --dependency-snapshot, and only a consumer takes one')
+    if consumer_map is not None and not consumer:
+        raise ValueError('--consumer-map is only for a consumer plan')
+    snapshot, bundles, extra, dependency_records = load_inputs(root, snapshot_path, map_path, consumer, dependencies)
+    consumer_record = {}
+    if consumer_map is not None:
+        consumer_map = Path(consumer_map).resolve(strict=True)
+        document = json.loads(consumer_map.read_bytes())
+        expected = consumer_map_document(consumer_rows(bundles, mapping, universe_names(bundles) | extra), map_path)
+        if document != expected:
+            raise ValueError('consumer map is not the tool\'s derivation for this capture and map; regenerate it')
+        mapping = dict(mapping, entries=mapping['entries'] + document['entries'])
+        consumer_record = dict(consumer_map=dict(path=str(consumer_map), sha256=CANDIDATE.file_sha(consumer_map),
+                                                 rows=len(document['entries'])))
+    sites_raw = None
+    if sites is not None:
+        sites = Path(sites).resolve(strict=True)
+        sites_raw = sites.read_bytes()
+        consumer_record['sites'] = dict(path=str(sites), sha256=APPLY.digest(sites_raw))
+    records, moves = plan_sources(root, snapshot['candidate'], bundles, mapping, consumer, extra, sites_raw)
     current_inventory(root, snapshot['candidate'])
     tools = {name: CANDIDATE.file_sha(ROOT / 'scripts' / name) for name in
              ('naming-tree.py', 'naming-candidate.py', 'apply-naming-map.py',
@@ -573,6 +679,7 @@ def build_plan(root, snapshot_path, map_path, consumer=False, dependencies=()):
                 inventory_sha256=APPLY.digest(CANDIDATE.FIDELITY.encoded(snapshot['candidate']).encode()),
                 files=records, moves=moves, name_capture=plan_sources.capture,
                 **(dict(consumer=True, dependencies=dependency_records) if consumer else {}),
+                **consumer_record,
                 status='unresolved' if any(r['unresolved'] for r in records) else 'planned')
 
 
@@ -583,7 +690,8 @@ def apply_plan(root, plan, map_path):
     if CANDIDATE.file_sha(map_path) != plan['map_sha256']:
         raise ValueError('rename map changed since planning')
     expected = build_plan(root, Path(plan['snapshot']), map_path, plan.get('consumer', False),
-                          [row['snapshot'] for row in plan.get('dependencies', [])])
+                          [row['snapshot'] for row in plan.get('dependencies', [])],
+                          (plan.get('consumer_map') or {}).get('path'), (plan.get('sites') or {}).get('path'))
     if expected != plan:
         raise ValueError('snapshot, tools or plan changed since planning')
     pending, moves = prepare_writes(root, plan['files'], plan.get('moves', []))
@@ -627,14 +735,22 @@ def write(pending, moves):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
-    for command in ('needs', 'plan', 'apply'):
+    for command in ('needs', 'plan', 'apply', 'consumer-map'):
         p = commands.add_parser(command)
         p.add_argument('--tree', type=Path, required=True)
         p.add_argument('--map', type=Path, required=True)
         if command == 'needs':
             p.add_argument('--source-dir', action='append', required=True)
+        elif command == 'consumer-map':
+            p.add_argument('--snapshot', type=Path, required=True)
+            p.add_argument('--dependency-snapshot', type=Path, action='append', required=True)
+            p.add_argument('--output', type=Path, required=True)
         elif command == 'plan':
             p.add_argument('--snapshot', type=Path, required=True)
+            p.add_argument('--consumer-map', type=Path,
+                           help='rows written by consumer-map; the plan rederives and requires them byte-equal')
+            p.add_argument('--sites', type=Path,
+                           help='reviewed sites outside the tree (a consumer); digest bound in the plan')
             p.add_argument('--consumer', action='store_true',
                            help='the tree requires the renamed project as a package (Blanc)')
             p.add_argument('--dependency-snapshot', type=Path, action='append', default=[],
@@ -647,7 +763,14 @@ def main():
         if args.command == 'needs':
             result = needs(root, args.source_dir, read_map(args.map))
         elif args.command == 'plan':
-            result = build_plan(root, args.snapshot, args.map, args.consumer, args.dependency_snapshot)
+            result = build_plan(root, args.snapshot, args.map, args.consumer, args.dependency_snapshot,
+                                args.consumer_map, args.sites)
+        elif args.command == 'consumer-map':
+            document = derive_consumer_map(root, args.snapshot, args.map, args.dependency_snapshot)
+            if args.output.exists():
+                raise ValueError(f'{args.output} exists; consumer-map never overwrites')
+            args.output.write_text(json.dumps(document, indent=1, ensure_ascii=False) + '\n')
+            result = dict(status='OK', rows=len(document['entries']), output=str(args.output))
         else:
             result = dict(status='applied', files_changed=apply_plan(
                 root, json.loads(args.plan.read_bytes()), args.map))

@@ -325,7 +325,7 @@ class NamingTreeTests(unittest.TestCase):
 
 
 
-    def consumer(self, client, refs, dep_decls, entries, consumer=True, dependency=True):
+    def consumer(self, client, refs, dep_decls, entries, consumer=True, dependency=True, client_decls=None):
         """A dependency package fixture (Dep.lean with its own whole-tree capture)
         and a consumer tree importing it, as Blanc imports Jaune."""
         base = self.directory / f'consumer{len(list(self.directory.iterdir()))}'
@@ -337,7 +337,7 @@ class NamingTreeTests(unittest.TestCase):
         dep.plan([])  # writes the dependency's snapshot
         files = {'B.lean': client, 'lakefile.lean': '', '.gitignore': '/.lake\n'}
         fixture = TreeFixture(base / 'consumer', files, imports={'B': ['Dep']})
-        fixture.export('B', decls={}, commands=[(0, len(client.encode()), 'declaration', '[anonymous]',
+        fixture.export('B', decls=client_decls or {}, full=True, commands=[(0, len(client.encode()), 'declaration', '[anonymous]',
                                                 [['simple', 'Dep', []], ['simple', 'Q', []]], [False] * 3)],
                        eof=[0, '[anonymous]', []], refs=refs)
         package = base / 'consumer/repo/.lake/packages/dep'
@@ -373,6 +373,87 @@ class NamingTreeTests(unittest.TestCase):
             self.consumer(client, refs, ['Dep.Val', 'Q.Thing'], [row], consumer=False, dependency=False)
         with self.assertRaisesRegex(ValueError, 'needs --dependency-snapshot'):
             self.consumer(client, refs, ['Dep.Val', 'Q.Thing'], [row], dependency=False)
+
+    def test_consumer_declarations_in_a_renamed_dependency_namespace_get_derived_rows(self):
+        client = 'import Dep\ndef Dep.Val.extra := 1\ndef b := Dep.Val.extra\n'
+        at = client.index('Dep.Val.extra')
+        use = client.index('Dep.Val.extra', at + 1)
+        decls = {'Dep.Val.extra': (at - 4, at + 18, at)}
+        refs = [('Dep.Val.extra', 'B', use, use + 13)]
+        row = dict(old='Dep.Val', new='Dep.Thing', kind='declaration', layer='execution', rule='4', source='x')
+        fixture, plan = self.consumer(client, refs, ['Dep.Val', 'Q.Thing'], [row], client_decls=decls)
+        # Without the consumer map the declaration and its use are reported.
+        self.assertEqual(plan['status'], 'unresolved', plan)
+        snapshot = fixture.capture / 'snapshot.json'
+        dep = fixture.directory.parent / 'dep/capture/snapshot.json'
+        document = TREE.derive_consumer_map(fixture.root, snapshot, fixture.map, [dep])
+        self.assertEqual([(r['old'], r['new']) for r in document['entries']], [('Dep.Val.extra', 'Dep.Thing.extra')])
+        path = fixture.directory / 'consumer-map.json'
+        path.write_text(json.dumps(document))
+        plan = TREE.build_plan(fixture.root, snapshot, fixture.map, True, [dep], path)
+        self.assertEqual(plan['status'], 'planned', plan)
+        self.assertEqual(plan['consumer_map']['rows'], 1)
+        self.assertEqual(TREE.apply_plan(fixture.root, plan, fixture.map), 1)
+        self.assertEqual((fixture.root / 'B.lean').read_text(),
+                         'import Dep\ndef Dep.Thing.extra := 1\ndef b := Dep.Thing.extra\n')
+        # A consumer map that is not the tool's derivation is refused.
+        fixture2, _ = self.consumer(client, refs, ['Dep.Val', 'Q.Thing'], [row], client_decls=decls)
+        edited = dict(document, entries=[dict(document['entries'][0], new='Dep.Thing.other')])
+        path2 = fixture2.directory / 'consumer-map.json'
+        path2.write_text(json.dumps(edited))
+        with self.assertRaisesRegex(ValueError, "not the tool's derivation"):
+            TREE.build_plan(fixture2.root, fixture2.capture / 'snapshot.json', fixture2.map, True,
+                            [fixture2.directory.parent / 'dep/capture/snapshot.json'], path2)
+
+    def test_external_reviewed_sites_replace_only_tokens_without_references(self):
+        # `Dep.Val` spelled in a name literal (no compiler reference) and as a real reference.
+        client = 'import Dep\ndef n := `Dep.Val\ndef b := Dep.Val\n'
+        use = client.index('Dep.Val', client.index('def b'))
+        refs = [('Dep.Val', 'Dep', use, use + 7)]
+        row = dict(old='Dep.Val', new='Dep.Thing', kind='declaration', layer='execution', rule='4', source='x')
+        fixture, plan = self.consumer(client, refs, ['Dep.Val', 'Q.Thing'], [row])
+        self.assertEqual([u['reason'] for f in plan['files'] for u in f['unresolved']], ["unresolved token 'Val'"])
+        record = next(f for f in plan['files'] if f['path'] == 'B.lean')
+        column = client.index('Val') - client.index('def n') + 1
+        def sites(name, decision='replace', token='Val', col=column):
+            data = dict(path='B.lean', line=2, column=col, token=token, sha256=record['sha256'],
+                        decision=decision, reason='name literal of the renamed Dep.Val')
+            if decision == 'replace':
+                data['new'] = 'Thing'
+            path = fixture.directory / f'sites-{name}.json'
+            path.write_text(json.dumps(dict(schema_version=1, sites=[data])))
+            return path
+        snapshot = fixture.capture / 'snapshot.json'
+        dep = fixture.directory.parent / 'dep/capture/snapshot.json'
+        # The registered-file form never admits replace; an external file does.
+        good = sites('good')
+        plan = TREE.build_plan(fixture.root, snapshot, fixture.map, True, [dep], None, good)
+        self.assertEqual(plan['status'], 'planned', plan)
+        self.assertEqual(plan['sites']['sha256'], TREE.CANDIDATE.file_sha(good))
+        # A replace aimed at a token that does have a compiler reference matches no unresolved token.
+        bad = sites('bad', col=client.index('Dep.Val', client.index('def b')) - client.index('def b') + 5)
+        bad_data = json.loads(bad.read_text())
+        bad_data['sites'][0]['line'] = 3
+        bad.write_text(json.dumps(bad_data))
+        refused = TREE.build_plan(fixture.root, snapshot, fixture.map, True, [dep], None, bad)
+        self.assertEqual(refused['status'], 'unresolved')
+        TREE.apply_plan(fixture.root, plan, fixture.map)
+        self.assertEqual((fixture.root / 'B.lean').read_text(), 'import Dep\ndef n := `Dep.Thing\ndef b := Dep.Thing\n')
+        # Replace is refused on a token the tool reported for a compiler-backed reason (a descendant).
+        client = 'import Dep\ndef c := Dep.Val.other\n'
+        at = client.index('Dep.Val.other')
+        fixture, plan = self.consumer(client, [('Dep.Val.other', 'Dep', at, at + 13)], ['Dep.Val', 'Q.Thing'], [row])
+        record = next(f for f in plan['files'] if f['path'] == 'B.lean')
+        self.assertEqual([u['reason'] for u in record['unresolved']],
+                         ['descendant of renamed declaration needs its own map row'])
+        path = fixture.directory / 'sites-descendant.json'
+        path.write_text(json.dumps(dict(schema_version=1, sites=[dict(
+            path='B.lean', line=2, column=at - client.index('def c') + 5, token='Val', sha256=record['sha256'],
+            decision='replace', new='Thing', reason='would hide a map gap')])))
+        refused = TREE.build_plan(fixture.root, fixture.capture / 'snapshot.json', fixture.map, True,
+                                  [fixture.directory.parent / 'dep/capture/snapshot.json'], None, path)
+        reasons = [u['reason'] for f in refused['files'] for u in f['unresolved']]
+        self.assertTrue(any('only a token without any compiler reference' in r for r in reasons), reasons)
 
     def test_consumer_capture_sees_dependency_constants_it_never_references(self):
         # `Dep.Val` -> `Dep.Thing`; the consumer never mentions `Q.Thing`, but with
@@ -427,14 +508,15 @@ class TreeFixture:
         line = text.count('\n', 0, i)
         return [line, len(text[text.rfind('\n', 0, i) + 1:i].encode('utf-16-le')) // 2]
 
-    def export(self, module, decls, commands, eof, refs=(), namespaces=()):
+    def export(self, module, decls, commands, eof, refs=(), namespaces=(), full=False):
         text = self.files[module + '.lean']
+        width = (lambda name: len(name)) if full else (lambda name: len(name.split('.')[-1]))
         def b(i):
             return len(text[:i].encode())
         references = {}
         for name, (start, end, selection) in decls.items():
             references[json.dumps({'c': {'m': module, 'n': name}})] = dict(
-                definition=self.lsp(text, selection) + self.lsp(text, selection + len(name.split('.')[-1])),
+                definition=self.lsp(text, selection) + self.lsp(text, selection + width(name)),
                 usages=[])
         for name, owner, start, end in refs:
             references.setdefault(json.dumps({'c': {'m': owner, 'n': name}}),
@@ -443,7 +525,7 @@ class TreeFixture:
         index = dict(version=5, module=module, directImports=self.headers['modules'][module]['direct_imports'],
                      references=references,
                      decls={name: self.lsp(text, start) + self.lsp(text, end) +
-                            self.lsp(text, sel) + self.lsp(text, sel + len(name.split('.')[-1]))
+                            self.lsp(text, sel) + self.lsp(text, sel + width(name))
                             for name, (start, end, sel) in decls.items()},
                      naming_syntax=dict(version=2, literal_ranges=[], named_arguments=[],
                                         namespaces=[[b(x), b(y), *rest] for x, y, *rest in namespaces],
