@@ -594,6 +594,15 @@ toolchain, Lake manifest and Lake configuration must agree. Changing
 source-directory layout or build configuration
 requires explicit relocation support and is currently refused.
 
+`--inventory scripts/naming-inventory.json` lets a registered, digest-pinned
+exclusion that both candidates hold byte-identical (the historical
+`flatten-pilot.lean`) stand in for an affected importer that cannot be
+exported; the verdict lists it under `excluded_importers`. Identifiers inside
+elaborated syntax quotations (`Lean.Syntax.ident`) that pre-resolve to
+declarations are compared by those declarations under the map, not by their
+spelling, so a capture qualification (`B256` -> `Jaune.U256`) inside a macro
+is not a difference; without pre-resolution the spelling is compared.
+
 A successful result is labelled `candidate-affected-local-closure`, with both
 candidate inventory digests. The Git HEAD alone is not the input identity: a
 capture may describe an uncommitted control candidate. The source graph and
