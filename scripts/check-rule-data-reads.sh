@@ -13,7 +13,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ALLOW="$ROOT/scripts/rule-data-allow.txt"
 
-NAMES='gasColdAccountAccess|gasCallValue|gasCreate'
+# The three repriced globals, as the G0a rename spells them (`Gas.` namespace;
+# every source spelling is qualified, and the left boundary excludes record
+# fields such as `pragueGas.callValue` and `rules.gas.callValue`), and their
+# former names (gasColdAccountAccess, gasCallValue, gasCreate), which comments
+# still mention and which no new code may reintroduce.
+NAMES='Gas\.coldAccountAccessCost|Gas\.callValue|Gas\.create|gasColdAccountAccess|gasCallValue|gasCreate'
 
 if [ ! -f "$ALLOW" ]; then
   printf '%s\n' "SETUP — rule-data: missing allowlist $ALLOW" >&2
@@ -78,4 +83,4 @@ fi
 
 count="$(printf '%s\n' "$found" | grep -c . || true)"
 rows="$(printf '%s\n' "$allowed" | grep -c . || true)"
-printf 'OK — rule-data: all %s occurrence(s) of {gasColdAccountAccess, gasCallValue, gasCreate} under Jaune/ and in Main.lean match one of %s allowlist row(s); no interpreter site reads a repriced global instead of the selected rules.gas\n' "$count" "$rows"
+printf 'OK — rule-data: all %s occurrence(s) of {Gas.coldAccountAccessCost, Gas.callValue, Gas.create} under Jaune/ and in Main.lean match one of %s allowlist row(s); no interpreter site reads a repriced global instead of the selected rules.gas\n' "$count" "$rows"
