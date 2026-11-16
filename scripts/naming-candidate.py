@@ -349,23 +349,30 @@ def prior_index(directory):
     return index
 
 
-def prior_output(index, label, target):
-    """The prior's output for `label` if its command succeeded and its output
-    re-serializes byte-identically (so relocating paths changes nothing else)."""
+def prior_output(index, label, target, root, parse=True):
+    """The prior's output for `label` if its command succeeded. A prior from
+    another root must re-serialize byte-identically (so relocating its paths
+    changes nothing else); one from this root is copied verbatim, and is
+    parsed only when `parse` asks for its contents."""
     directory = index['directory']
     receipt, log, output = (directory / (label + '.command.json'), directory / (label + '.log'),
                             directory / target.name)
     if not (receipt.is_file() and log.is_file() and output.is_file()):
         return None
     receipt = json.loads(receipt.read_bytes())
+    if receipt.get('exit') != 0:
+        return None
+    same_root = Path(index['root']) == Path(root)
+    if same_root and not parse:
+        return receipt, None, log, output
     raw = output.read_bytes()
     try:
         data = json.loads(raw)
     except ValueError:
         return None
-    if receipt.get('exit') != 0 or compact(data).encode() != raw.rstrip(b'\n'):
+    if not same_root and compact(data).encode() != raw.rstrip(b'\n'):
         return None
-    return receipt, data, log
+    return receipt, data, log, output
 
 
 def relocate_parts(parts, old_root, new_root):
@@ -376,11 +383,14 @@ def relocate_parts(parts, old_root, new_root):
     return {part: move(path) for part, path in parts.items()}
 
 
-def install_reused(index, receipt, data, log, root, out, label, command, target):
-    old_root = index['root']
-    data = dict(data, imports={name: relocate_parts(parts, old_root, root)
-                               for name, parts in data['imports'].items()})
-    target.write_text(compact(data))
+def install_reused(index, receipt, data, log, output, root, out, label, command, target):
+    import shutil
+    if Path(index['root']) == Path(root):
+        shutil.copyfile(output, target)
+    else:
+        data = dict(data, imports={name: relocate_parts(parts, index['root'], root)
+                                   for name, parts in data['imports'].items()})
+        target.write_text(compact(data))
     (out / (label + '.log')).write_bytes(log.read_bytes())
     new = dict(argv=command, cwd=str(root), exit=0, log_sha256=receipt['log_sha256'],
                reused_from=str(index['directory']), seconds=receipt.get('seconds'))
@@ -519,7 +529,7 @@ def capture(args):
                 row['sha256'] != initial['modules'][module]['sha256'] or
                 index['exporter_sha256'] != exporter_hash or index['config'] != config):
             return None
-        found = prior_output(index, module + '-imports', out / (module + '.imports.json'))
+        found = prior_output(index, module + '-imports', out / (module + '.imports.json'), root)
         if found is None or found[1].get('module') != module:
             return None
         for name, parts in found[1]['imports'].items():
@@ -592,21 +602,34 @@ def capture(args):
             artifacts={name: artifact_identity(parts) for name, parts in bound.items()},
             modules={m: dict(path=initial['modules'][m]['path'], sha256=initial['modules'][m]['sha256'],
                              key=keys[m]) for m in selected}))
-        fresh = []
+        fresh, candidates = [], []
         for module in selected:
             label, target = module + '-export', out / (module + '.export.json')
             command = ['lake', 'env', str(exporter), initial['modules'][module]['path'], module, str(target)]
-            for index in indexes:
-                row = index['modules'].get(module)
-                found = prior_output(index, label, target) if row and row['key'] == keys[module] else None
-                if found is not None:
-                    install_reused(index, *found, root, out, label, command, target)
-                    provenance[module]['export'] = dict(reused_from=str(index['directory']))
-                    break
+            matching = [index for index in indexes if (index['modules'].get(module) or {}).get('key') == keys[module]]
+            if matching:
+                candidates.append((module, label, target, command, matching))
             else:
                 provenance[module]['export'] = 'elaborated'
                 fresh.append((root, out, label, command))
-        parallel(args.jobs, fresh, indexes)
+        # Start the exporters first: installing reused outputs (reading and,
+        # across roots, re-serializing them) must not delay the long pole.
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=1) as background:
+            running = background.submit(parallel, args.jobs, fresh, indexes)
+            late = []
+            for module, label, target, command, matching in candidates:
+                for index in matching:
+                    found = prior_output(index, label, target, root, parse=False)
+                    if found is not None:
+                        install_reused(index, *found, root, out, label, command, target)
+                        provenance[module]['export'] = dict(reused_from=str(index['directory']))
+                        break
+                else:
+                    provenance[module]['export'] = 'elaborated'
+                    late.append((root, out, label, command))
+            running.result()
+        parallel(args.jobs, late, indexes)
         for module in selected:
             target = out / (module + '.export.json')
             data = json.loads(target.read_bytes())

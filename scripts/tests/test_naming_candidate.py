@@ -582,6 +582,17 @@ class IncrementalCaptureTests(unittest.TestCase):
                 self.assertEqual((warm / f'{m}.{kind}.json').read_bytes(), (fresh / f'{m}.{kind}.json').read_bytes())
         self.assertNotIn(str(self.root), (warm / 'C.export.json').read_text())
 
+    def test_prior_output_that_does_not_round_trip_is_elaborated(self):
+        """Across roots a reused output is re-serialized; one whose bytes are
+        not the exporter's own serialization is elaborated instead (late)."""
+        cold, _, _ = self.capture()
+        text = (cold / 'D.export.json').read_text()
+        (cold / 'D.export.json').write_text(text.replace('{', '{ ', 1))
+        other = self._candidate(self.tmp / 'other')
+        _, ran, snapshot = self.capture([cold], root=other)
+        self.assertEqual(ran, ['export D'])
+        self.assertEqual(snapshot['provenance']['D'], dict(imports=dict(reused_from=str(cold)), export='elaborated'))
+
     def test_complete_capture_without_reuse_index_is_a_prior(self):
         cold, _, _ = self.capture()
         (cold / 'reuse-index.json').unlink()
