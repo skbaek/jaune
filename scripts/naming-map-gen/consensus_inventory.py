@@ -25,6 +25,10 @@ END = re.compile(r"^end(?:\s+(\S+))?\s*$")
 NAME = re.compile(r"^([A-Za-z_Ͱ-Ͽᴀ-ᶿ℀-⅏][A-Za-z0-9_'!?Ͱ-Ͽᴀ-ᶿ₀-ₜ.]*)")
 FIELD = re.compile(r"^(\s+)(?:\(|\{|\[)?([A-Za-z_][A-Za-z0-9_'!?]*(?:\s+[A-Za-z_][A-Za-z0-9_'!?]*)*)\s*(?::|:=)")
 CTOR = re.compile(r"^(\s*)\|\s+([A-Za-z_][A-Za-z0-9_'!?.]*)")
+# Further constructors on the same line: `| a | b | c` (a constructor without arguments).
+CTOR_MORE = re.compile(r"\|\s+([A-Za-z_][A-Za-z0-9_'!?.]*)")
+# `mutual ... end` opens a scope whose bare `end` must not close an enclosing section.
+MUTUAL = re.compile(r"^mutual\s*$")
 
 
 def strip_comments(text):
@@ -72,6 +76,10 @@ def scan(path):
             ns.extend(comps)
             cur = None
             continue
+        if MUTUAL.match(line):
+            stack.append(("mutual", None))
+            cur = None
+            continue
         m = SEC.match(line)
         if m:
             stack.append(("sec", [m.group(1)] if m.group(1) else None))
@@ -114,7 +122,15 @@ def scan(path):
             if kw in ("inductive", "class inductive"):
                 m = CTOR.match(line)
                 if m:
-                    rows.append((mod, lineno, "constructor", q + "." + m.group(2), m.group(2)))
+                    # `| a | b | c`: every constructor on the line (arguments, if any, follow
+                    # the last one; a `|` inside parentheses is not a constructor bar).
+                    depth, flat = 0, []
+                    for ch in line:
+                        depth += ch in "([{"
+                        depth -= ch in ")]}"
+                        flat.append(ch if depth == 0 else " ")
+                    for name in CTOR_MORE.findall("".join(flat)):
+                        rows.append((mod, lineno, "constructor", q + "." + name, name))
             else:
                 if not in_fields:
                     if line.rstrip().endswith("where"):

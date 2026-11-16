@@ -10577,6 +10577,15 @@
       "notes": "parts: GJointState>GloasJointState"
     },
     {
+      "old": "JauneConsensus.GJointState.gloas.injEq",
+      "new": "JauneConsensus.GloasJointState.gloas.injEq",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: GJointState>GloasJointState"
+    },
+    {
       "old": "JauneConsensus.GJointState.gloas?",
       "new": "JauneConsensus.GloasJointState.gloas?",
       "kind": "declaration",
@@ -11279,8 +11288,35 @@
       "notes": "parts: FcMode>ForkChoiceMode"
     },
     {
+      "old": "JauneConsensus.Harness.FcMode.compliance",
+      "new": "JauneConsensus.Harness.ForkChoiceMode.compliance",
+      "kind": "constructor",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: FcMode>ForkChoiceMode"
+    },
+    {
+      "old": "JauneConsensus.Harness.FcMode.fastConfirmation",
+      "new": "JauneConsensus.Harness.ForkChoiceMode.fastConfirmation",
+      "kind": "constructor",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: FcMode>ForkChoiceMode"
+    },
+    {
       "old": "JauneConsensus.Harness.FcMode.forkChoice",
       "new": "JauneConsensus.Harness.ForkChoiceMode.forkChoice",
+      "kind": "constructor",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: FcMode>ForkChoiceMode"
+    },
+    {
+      "old": "JauneConsensus.Harness.FcMode.sync",
+      "new": "JauneConsensus.Harness.ForkChoiceMode.sync",
       "kind": "constructor",
       "layer": "consensus",
       "rule": "5, 4",
@@ -11684,6 +11720,15 @@
       "notes": "parts: err?>error?"
     },
     {
+      "old": "JauneConsensus.Harness.Yaml.Line.col",
+      "new": "JauneConsensus.Harness.Yaml.Line.column",
+      "kind": "field",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: col>column"
+    },
+    {
       "old": "JauneConsensus.Harness.Yaml.Res",
       "new": "JauneConsensus.Harness.Yaml.Result",
       "kind": "declaration",
@@ -11695,6 +11740,114 @@
     {
       "old": "JauneConsensus.Harness.Yaml.YVal",
       "new": "JauneConsensus.Harness.Yaml.YamlValue",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: YVal>YamlValue"
+    },
+    {
+      "old": "JauneConsensus.Harness.Yaml.YVal.asBool",
+      "new": "JauneConsensus.Harness.Yaml.YamlValue.asBool",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: YVal>YamlValue"
+    },
+    {
+      "old": "JauneConsensus.Harness.Yaml.YVal.asHex",
+      "new": "JauneConsensus.Harness.Yaml.YamlValue.asHex",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: YVal>YamlValue"
+    },
+    {
+      "old": "JauneConsensus.Harness.Yaml.YVal.asNat",
+      "new": "JauneConsensus.Harness.Yaml.YamlValue.asNat",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: YVal>YamlValue"
+    },
+    {
+      "old": "JauneConsensus.Harness.Yaml.YVal.asQuotedNat",
+      "new": "JauneConsensus.Harness.Yaml.YamlValue.asQuotedNat",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: YVal>YamlValue"
+    },
+    {
+      "old": "JauneConsensus.Harness.Yaml.YVal.asSeq",
+      "new": "JauneConsensus.Harness.Yaml.YamlValue.asSequence",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: YVal>YamlValue, asSeq>asSequence"
+    },
+    {
+      "old": "JauneConsensus.Harness.Yaml.YVal.expectKeys",
+      "new": "JauneConsensus.Harness.Yaml.YamlValue.expectKeys",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: YVal>YamlValue"
+    },
+    {
+      "old": "JauneConsensus.Harness.Yaml.YVal.field",
+      "new": "JauneConsensus.Harness.Yaml.YamlValue.field",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: YVal>YamlValue"
+    },
+    {
+      "old": "JauneConsensus.Harness.Yaml.YVal.get?",
+      "new": "JauneConsensus.Harness.Yaml.YamlValue.get?",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: YVal>YamlValue"
+    },
+    {
+      "old": "JauneConsensus.Harness.Yaml.YVal.hexBytes",
+      "new": "JauneConsensus.Harness.Yaml.YamlValue.hexBytes",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: YVal>YamlValue"
+    },
+    {
+      "old": "JauneConsensus.Harness.Yaml.YVal.hexVal",
+      "new": "JauneConsensus.Harness.Yaml.YamlValue.hexValue",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: YVal>YamlValue, hexVal>hexValue"
+    },
+    {
+      "old": "JauneConsensus.Harness.Yaml.YVal.isNull",
+      "new": "JauneConsensus.Harness.Yaml.YamlValue.isNull",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: YVal>YamlValue"
+    },
+    {
+      "old": "JauneConsensus.Harness.Yaml.YVal.keys",
+      "new": "JauneConsensus.Harness.Yaml.YamlValue.keys",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
@@ -11729,6 +11882,15 @@
       "notes": "parts: YVal>YamlValue, seq>sequence"
     },
     {
+      "old": "JauneConsensus.Harness.Yaml.blockSeq",
+      "new": "JauneConsensus.Harness.Yaml.blockSequence",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: blockSeq>blockSequence"
+    },
+    {
       "old": "JauneConsensus.Harness.Yaml.ch",
       "new": "JauneConsensus.Harness.Yaml.charByte",
       "kind": "declaration",
@@ -11754,6 +11916,33 @@
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
       "notes": "parts: isSpaceOrNl>isSpaceOrNewline"
+    },
+    {
+      "old": "JauneConsensus.Harness.Yaml.p",
+      "new": "JauneConsensus.Harness.Yaml.parseToOption",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: p>parseToOption"
+    },
+    {
+      "old": "JauneConsensus.Harness.Yaml.q",
+      "new": "JauneConsensus.Harness.Yaml.quotedScalar",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: q>quotedScalar"
+    },
+    {
+      "old": "JauneConsensus.Harness.Yaml.sc",
+      "new": "JauneConsensus.Harness.Yaml.plainScalar",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: sc>plainScalar"
     },
     {
       "old": "JauneConsensus.Harness.Yaml.seqItems",
@@ -13347,159 +13536,6 @@
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
       "notes": "parts: zeroRootVec>zeroRootVector"
-    },
-    {
-      "old": "Line.col",
-      "new": "Line.column",
-      "kind": "field",
-      "layer": "consensus",
-      "rule": "5, 4",
-      "source": "Plain English (rule 4)",
-      "notes": "parts: col>column"
-    },
-    {
-      "old": "YVal.asBool",
-      "new": "YamlValue.asBool",
-      "kind": "declaration",
-      "layer": "consensus",
-      "rule": "5, 4",
-      "source": "Plain English (rule 4)",
-      "notes": "parts: YVal>YamlValue"
-    },
-    {
-      "old": "YVal.asHex",
-      "new": "YamlValue.asHex",
-      "kind": "declaration",
-      "layer": "consensus",
-      "rule": "5, 4",
-      "source": "Plain English (rule 4)",
-      "notes": "parts: YVal>YamlValue"
-    },
-    {
-      "old": "YVal.asNat",
-      "new": "YamlValue.asNat",
-      "kind": "declaration",
-      "layer": "consensus",
-      "rule": "5, 4",
-      "source": "Plain English (rule 4)",
-      "notes": "parts: YVal>YamlValue"
-    },
-    {
-      "old": "YVal.asQuotedNat",
-      "new": "YamlValue.asQuotedNat",
-      "kind": "declaration",
-      "layer": "consensus",
-      "rule": "5, 4",
-      "source": "Plain English (rule 4)",
-      "notes": "parts: YVal>YamlValue"
-    },
-    {
-      "old": "YVal.asSeq",
-      "new": "YamlValue.asSequence",
-      "kind": "declaration",
-      "layer": "consensus",
-      "rule": "5, 4",
-      "source": "Plain English (rule 4)",
-      "notes": "parts: YVal>YamlValue, asSeq>asSequence"
-    },
-    {
-      "old": "YVal.expectKeys",
-      "new": "YamlValue.expectKeys",
-      "kind": "declaration",
-      "layer": "consensus",
-      "rule": "5, 4",
-      "source": "Plain English (rule 4)",
-      "notes": "parts: YVal>YamlValue"
-    },
-    {
-      "old": "YVal.field",
-      "new": "YamlValue.field",
-      "kind": "declaration",
-      "layer": "consensus",
-      "rule": "5, 4",
-      "source": "Plain English (rule 4)",
-      "notes": "parts: YVal>YamlValue"
-    },
-    {
-      "old": "YVal.get?",
-      "new": "YamlValue.get?",
-      "kind": "declaration",
-      "layer": "consensus",
-      "rule": "5, 4",
-      "source": "Plain English (rule 4)",
-      "notes": "parts: YVal>YamlValue"
-    },
-    {
-      "old": "YVal.hexBytes",
-      "new": "YamlValue.hexBytes",
-      "kind": "declaration",
-      "layer": "consensus",
-      "rule": "5, 4",
-      "source": "Plain English (rule 4)",
-      "notes": "parts: YVal>YamlValue"
-    },
-    {
-      "old": "YVal.hexVal",
-      "new": "YamlValue.hexValue",
-      "kind": "declaration",
-      "layer": "consensus",
-      "rule": "5, 4",
-      "source": "Plain English (rule 4)",
-      "notes": "parts: YVal>YamlValue, hexVal>hexValue"
-    },
-    {
-      "old": "YVal.isNull",
-      "new": "YamlValue.isNull",
-      "kind": "declaration",
-      "layer": "consensus",
-      "rule": "5, 4",
-      "source": "Plain English (rule 4)",
-      "notes": "parts: YVal>YamlValue"
-    },
-    {
-      "old": "YVal.keys",
-      "new": "YamlValue.keys",
-      "kind": "declaration",
-      "layer": "consensus",
-      "rule": "5, 4",
-      "source": "Plain English (rule 4)",
-      "notes": "parts: YVal>YamlValue"
-    },
-    {
-      "old": "blockSeq",
-      "new": "blockSequence",
-      "kind": "declaration",
-      "layer": "consensus",
-      "rule": "5, 4",
-      "source": "Plain English (rule 4)",
-      "notes": "parts: blockSeq>blockSequence"
-    },
-    {
-      "old": "p",
-      "new": "parseToOption",
-      "kind": "declaration",
-      "layer": "consensus",
-      "rule": "5, 4",
-      "source": "Plain English (rule 4)",
-      "notes": "parts: p>parseToOption"
-    },
-    {
-      "old": "q",
-      "new": "quotedScalar",
-      "kind": "declaration",
-      "layer": "consensus",
-      "rule": "5, 4",
-      "source": "Plain English (rule 4)",
-      "notes": "parts: q>quotedScalar"
-    },
-    {
-      "old": "sc",
-      "new": "plainScalar",
-      "kind": "declaration",
-      "layer": "consensus",
-      "rule": "5, 4",
-      "source": "Plain English (rule 4)",
-      "notes": "parts: sc>plainScalar"
     },
     {
       "old": "Adr.toGateHex",
@@ -21276,14 +21312,6 @@
       "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Adr` -> `Address` (opcode ADDRESS; execution-apis base-types.yaml `address`) [B]"
     },
     {
-      "old": "Jaune.instDecidableEqAdr._aux_1",
-      "new": "Jaune.instDecidableEqAddress._aux_1",
-      "kind": "declaration",
-      "layer": "execution",
-      "rule": "1, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Adr` -> `Address` (opcode ADDRESS; execution-apis base-types.yaml `address`) [B]"
-    },
-    {
       "old": "Jaune.instDecidableEqBLT",
       "new": "Jaune.instDecidableEqItem",
       "kind": "declaration",
@@ -22468,6 +22496,24 @@
       "layer": "execution",
       "rule": "5, 7",
       "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `mulr` -> `mulRounded` (`(z * x + c) / s`: multiply, add the rounding constant, rescale (the Maker `rmul` pattern)) [M]"
+    },
+    {
+      "old": "Jaune.Rinst.balanceCore_machMetaResultGas",
+      "new": "Jaune.PlainOp.balanceCore_resultGasLe",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "4, 7",
+      "source": "follows `Rinst` -> `PlainOp`; leaf in plain words (the gas left by `balanceCore` is at most the gas before), since `machMetaResultGas` keeps the retired `Mach`/`Meta` tokens until its W3 cut [M]",
+      "notes": "G0a map gap (jsn-u9): spelled qualified descendant of a renamed type"
+    },
+    {
+      "old": "Jaune.T8n.TxParseError.render",
+      "new": "Jaune.T8n.TransactionParseError.render",
+      "kind": "declaration",
+      "layer": "adapter",
+      "rule": "7",
+      "source": "follows `TxParseError` -> `TransactionParseError` (rule 7: descendants follow their definitions) [B]",
+      "notes": "G0a map gap (jsn-u9): spelled qualified descendant of a renamed type"
     }
   ]
 }

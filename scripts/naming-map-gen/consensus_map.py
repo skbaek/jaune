@@ -201,6 +201,15 @@ def main():
                 raise SystemExit(f"conflicting renames for {old}: {e['new']} vs {new}")
             e["_mods"].append(f"{mod.replace('JauneConsensus.', '')}:{line}")
 
+    # Compiler-generated constants that source spells by name (`GJointState.gloas.injEq` in a
+    # `simp` set) are not in the textual inventory; the apply tool needs a row for each spelled
+    # descendant of a renamed declaration. Unspelled generated names get no row (N4 matches them).
+    for q in D.SPELLED_GENERATED:
+        new = namer.rename_qualified(q, True)
+        if new != q:
+            entries[q] = {"old": q, "new": new, "kind": "declaration", "layer": "consensus",
+                          "_mods": [], "_spec": None}
+
     # modules
     mod_rows = []
     for path in sorted((tree / "JauneConsensus").rglob("*.lean")):
@@ -256,8 +265,10 @@ def main():
             raise SystemExit("refusing to write the map with problems")
         mp = Path(args.map or tree / "scripts" / "naming-map.json")
         data = json.load(open(mp))
-        data["entries"] = [e for e in data["entries"] if e.get("layer") != "consensus"] + out
-        data["entries"].sort(key=lambda e: (e["old"], e["layer"]))
+        # Consensus rows first, sorted by `old`; the other layers keep their order
+        # (gen_execution_map.py --out likewise keeps the order of rows it does not own).
+        data["entries"] = sorted(out, key=lambda e: (e["old"], e["layer"])) + [
+            e for e in data["entries"] if e.get("layer") != "consensus"]
         json.dump(data, open(mp, "w"), indent=2)
         open(mp, "a").write("\n")
         print(f"wrote {len(out)} consensus rows to {mp}", file=sys.stderr)

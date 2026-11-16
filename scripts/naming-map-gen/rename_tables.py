@@ -236,6 +236,17 @@ for d in '0123456789ABCDEF':
 explicit('hp', 'hexPrefix', '1', 'Yellow Paper Appendix C hex-prefix encoding `HP`', 'B', 'from memory in Appendix B; source not yet re-verified')
 explicit('hpAux', 'hexPrefixAux', '1, 7', 'follows `hp` -> `hexPrefix`', 'B')
 
+# -- qualified descendants spelled in source (G0a whole-tree plan) ---------------------
+# A renamed type's spelled descendant needs its own row. These two were left for their
+# cut by token; `machMeta` keeps retired tokens (`Mach`, `Meta`) until W3, so the
+# theorem's leaf says what it states in plain words instead.
+explicit('Rinst.balanceCore_machMetaResultGas', 'PlainOp.balanceCore_resultGasLe', '4, 7',
+         'follows `Rinst` -> `PlainOp`; leaf in plain words (the gas left by `balanceCore` is at most the gas before), since `machMetaResultGas` keeps the retired `Mach`/`Meta` tokens until its W3 cut', 'M',
+         'G0a map gap (jsn-u9): spelled qualified descendant of a renamed type')
+explicit('T8n.TxParseError.render', 'T8n.TransactionParseError.render', '7',
+         'follows `TxParseError` -> `TransactionParseError` (rule 7: descendants follow their definitions)', 'B',
+         'G0a map gap (jsn-u9): spelled qualified descendant of a renamed type')
+
 # -- namespace moves of accepted functions (Appendix B) ----------------------------
 explicit('calculateIntrinsicCost', 'Transaction.intrinsicGas', '1, 7', 'Yellow Paper intrinsic gas g_0; rule 7 namespaces replace verb prefixes', 'B',
          'depth change (new namespace member); the apply tool refuses namespace-depth changes today')

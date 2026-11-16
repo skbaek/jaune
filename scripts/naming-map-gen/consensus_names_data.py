@@ -294,3 +294,10 @@ SEGMENT_OVERRIDE.update({
 PART_OVERRIDE.update({
     "FinSlot": "FinalizedCheckpointAndSlotKept", "finSlot": "finalizedCheckpointAndSlotKept",
 })
+
+
+# Compiler-generated constants spelled by name in JauneConsensus sources (consensus_map.py gives
+# each a row when its parent is renamed; the last component is Lean's and is kept).
+SPELLED_GENERATED = [
+    "JauneConsensus.GJointState.gloas.injEq",  # Facts/JointGloas.lean, `simp only [...]`
+]

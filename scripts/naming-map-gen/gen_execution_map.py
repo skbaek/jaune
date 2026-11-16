@@ -267,6 +267,10 @@ def build(rows):
         if old in seen_old:
             continue
         seen_old.add(old)
+        # Auxiliary constants Lean names itself (`instDecidableEqAdr._aux_1`) are not map
+        # rows: no source spells them, and N4 matches generated constants by graph.
+        if any(seg.startswith('_') for seg in old.split('.')):
+            continue
         note_private = '' if old == c['name'] else ''
         if old in T.EXPLICIT:
             new, rule, source, status, notes = T.EXPLICIT[old]
