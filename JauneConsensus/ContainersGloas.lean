@@ -148,7 +148,7 @@ ssz_progressive_container ExecutionPayloadBid [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
   slot : Slot
   value : Gwei
   execution_payment : Gwei
-  blob_kzg_commitments : (ProgressiveListRightSpine KZGCommitment)
+  blob_kzg_commitments : (ProgressiveListR KZGCommitment)
   execution_requests_root : Root
 
 /-- `specs/gloas/beacon-chain.md` -/
@@ -175,8 +175,8 @@ ssz_progressive_container ExecutionPayload (P : Preset)
   extra_data : (SszList UInt8 P.MAX_EXTRA_DATA_BYTES)
   base_fee_per_gas : U256
   block_hash : Hash32
-  transactions : (ProgressiveListRightSpine Transaction)
-  withdrawals : (ProgressiveListRightSpine Withdrawal)
+  transactions : (ProgressiveListR Transaction)
+  withdrawals : (ProgressiveListR Withdrawal)
   blob_gas_used : U64
   excess_blob_gas : U64
   block_access_list : BlockAccessList
@@ -185,11 +185,11 @@ ssz_progressive_container ExecutionPayload (P : Preset)
 /-- `specs/gloas/beacon-chain.md` (EIP-7688; EIP-8282 `builder_deposits`, `builder_exits`):
 `ACTIVE_FIELDS = active_fields(width=5)`. -/
 ssz_progressive_container ExecutionRequests [1, 1, 1, 1, 1] spine .successorRight where
-  deposits : (ProgressiveListRightSpine DepositRequest)
-  withdrawals : (ProgressiveListRightSpine WithdrawalRequest)
-  consolidations : (ProgressiveListRightSpine ConsolidationRequest)
-  builder_deposits : (ProgressiveListRightSpine BuilderDepositRequest)
-  builder_exits : (ProgressiveListRightSpine BuilderExitRequest)
+  deposits : (ProgressiveListR DepositRequest)
+  withdrawals : (ProgressiveListR WithdrawalRequest)
+  consolidations : (ProgressiveListR ConsolidationRequest)
+  builder_deposits : (ProgressiveListR BuilderDepositRequest)
+  builder_exits : (ProgressiveListR BuilderExitRequest)
 
 /-- `specs/gloas/beacon-chain.md`: `ACTIVE_FIELDS = active_fields(width=5)`. -/
 ssz_progressive_container ExecutionPayloadEnvelope (P : Preset) [1, 1, 1, 1, 1] spine .successorRight where
@@ -207,14 +207,14 @@ ssz_container SignedExecutionPayloadEnvelope (P : Preset) where
 /-- `specs/gloas/beacon-chain.md` (EIP-7688): `ACTIVE_FIELDS = active_fields(width=4)`;
 `aggregation_bits` is `AggregationBits(ProgressiveBitList)`. -/
 ssz_progressive_container Attestation (P : Preset) [1, 1, 1, 1] spine .successorRight where
-  aggregation_bits : ProgressiveBitlistRightSpine
+  aggregation_bits : ProgressiveBitlistR
   data : AttestationData
   signature : BLSSignature
   committee_bits : (Bitvector P.MAX_COMMITTEES_PER_SLOT)
 
 /-- `specs/gloas/beacon-chain.md` (EIP-7688): `ACTIVE_FIELDS = active_fields(width=3)`. -/
 ssz_progressive_container IndexedAttestation [1, 1, 1] spine .successorRight where
-  attesting_indices : (ProgressiveListRightSpine ValidatorIndex)
+  attesting_indices : (ProgressiveListR ValidatorIndex)
   data : AttestationData
   signature : BLSSignature
 
@@ -242,15 +242,15 @@ ssz_progressive_container BeaconBlockBody (P : Preset)
   randao_reveal : BLSSignature
   eth1_data : Eth1Data
   graffiti : Bytes32
-  proposer_slashings : (ProgressiveListRightSpine ProposerSlashing)
-  attester_slashings : (ProgressiveListRightSpine AttesterSlashing)
-  attestations : (ProgressiveListRightSpine (Attestation P))
-  deposits : (ProgressiveListRightSpine Deposit)
-  voluntary_exits : (ProgressiveListRightSpine SignedVoluntaryExit)
+  proposer_slashings : (ProgressiveListR ProposerSlashing)
+  attester_slashings : (ProgressiveListR AttesterSlashing)
+  attestations : (ProgressiveListR (Attestation P))
+  deposits : (ProgressiveListR Deposit)
+  voluntary_exits : (ProgressiveListR SignedVoluntaryExit)
   sync_aggregate : (SyncAggregate P)
-  bls_to_execution_changes : (ProgressiveListRightSpine SignedBLSToExecutionChange)
+  bls_to_execution_changes : (ProgressiveListR SignedBLSToExecutionChange)
   signed_execution_payload_bid : SignedExecutionPayloadBid
-  payload_attestations : (ProgressiveListRightSpine (PayloadAttestation P))
+  payload_attestations : (ProgressiveListR (PayloadAttestation P))
   parent_execution_requests : ExecutionRequests
 
 /-- `specs/phase0/beacon-chain.md`, with Gloas's body. -/
@@ -283,17 +283,17 @@ ssz_progressive_container BeaconState (P : Preset)
   eth1_data : Eth1Data
   eth1_data_votes : (SszList Eth1Data (P.EPOCHS_PER_ETH1_VOTING_PERIOD * P.SLOTS_PER_EPOCH))
   eth1_deposit_index : U64
-  validators : (ProgressiveListRightSpine Validator)
-  balances : (ProgressiveListRightSpine Gwei)
+  validators : (ProgressiveListR Validator)
+  balances : (ProgressiveListR Gwei)
   randao_mixes : (SszVector Bytes32 P.EPOCHS_PER_HISTORICAL_VECTOR)
   slashings : (SszVector Gwei P.EPOCHS_PER_SLASHINGS_VECTOR)
-  previous_epoch_participation : (ProgressiveListRightSpine ParticipationFlags)
-  current_epoch_participation : (ProgressiveListRightSpine ParticipationFlags)
+  previous_epoch_participation : (ProgressiveListR ParticipationFlags)
+  current_epoch_participation : (ProgressiveListR ParticipationFlags)
   justification_bits : (Bitvector JUSTIFICATION_BITS_LENGTH)
   previous_justified_checkpoint : Checkpoint
   current_justified_checkpoint : Checkpoint
   finalized_checkpoint : Checkpoint
-  inactivity_scores : (ProgressiveListRightSpine U64)
+  inactivity_scores : (ProgressiveListR U64)
   current_sync_committee : (SyncCommittee P)
   next_sync_committee : (SyncCommittee P)
   latest_block_hash : Hash32
@@ -306,17 +306,17 @@ ssz_progressive_container BeaconState (P : Preset)
   earliest_exit_epoch : Epoch
   consolidation_balance_to_consume : Gwei
   earliest_consolidation_epoch : Epoch
-  pending_deposits : (ProgressiveListRightSpine PendingDeposit)
-  pending_partial_withdrawals : (ProgressiveListRightSpine PendingPartialWithdrawal)
-  pending_consolidations : (ProgressiveListRightSpine PendingConsolidation)
+  pending_deposits : (ProgressiveListR PendingDeposit)
+  pending_partial_withdrawals : (ProgressiveListR PendingPartialWithdrawal)
+  pending_consolidations : (ProgressiveListR PendingConsolidation)
   proposer_lookahead : (SszVector ValidatorIndex ((P.MIN_SEED_LOOKAHEAD + 1) * P.SLOTS_PER_EPOCH))
-  builders : (ProgressiveListRightSpine Builder)
+  builders : (ProgressiveListR Builder)
   next_withdrawal_builder_index : BuilderIndex
   execution_payload_availability : (ExecutionPayloadAvailability P)
   builder_pending_payments : (SszVector BuilderPendingPayment (2 * P.SLOTS_PER_EPOCH))
-  builder_pending_withdrawals : (ProgressiveListRightSpine BuilderPendingWithdrawal)
+  builder_pending_withdrawals : (ProgressiveListR BuilderPendingWithdrawal)
   latest_execution_payload_bid : ExecutionPayloadBid
-  payload_expected_withdrawals : (ProgressiveListRightSpine Withdrawal)
+  payload_expected_withdrawals : (ProgressiveListR Withdrawal)
   ptc_window : (PayloadTimelinessCommitteeWindow P)
 
 /-- `specs/gloas/beacon-chain.md` (EIP-7688): `ACTIVE_FIELDS = active_fields(width=4)`;
@@ -335,8 +335,8 @@ ssz_progressive_container NewPayloadRequest (P : Preset) [1, 1, 1, 1] spine .suc
 `signed_block_header` and `kzg_commitments_inclusion_proof` are removed (EIP-7732). -/
 ssz_container DataColumnSidecar (P : Preset) where
   index : ColumnIndex
-  column : (ProgressiveListRightSpine (Cell P))
-  kzg_proofs : (ProgressiveListRightSpine KZGProof)
+  column : (ProgressiveListR (Cell P))
+  kzg_proofs : (ProgressiveListR KZGProof)
   slot : Slot
   beacon_block_root : Root
 
@@ -356,14 +356,14 @@ ssz_container SignedProposerPreferences where
 /-- `specs/gloas/partial-columns/p2p-interface.md`: `CellsBitList` is a `ProgressiveBitList`;
 `header` is removed. -/
 ssz_container PartialDataColumnSidecar (P : Preset) where
-  cells_present_bitmap : ProgressiveBitlistRightSpine
-  partial_column : (ProgressiveListRightSpine (Cell P))
-  kzg_proofs : (ProgressiveListRightSpine KZGProof)
+  cells_present_bitmap : ProgressiveBitlistR
+  partial_column : (ProgressiveListR (Cell P))
+  kzg_proofs : (ProgressiveListR KZGProof)
 
 /-- `specs/gloas/partial-columns/p2p-interface.md` -/
 ssz_container PartialDataColumnPartsMetadata where
-  available : ProgressiveBitlistRightSpine
-  requests : ProgressiveBitlistRightSpine
+  available : ProgressiveBitlistR
+  requests : ProgressiveBitlistR
 
 /-- `specs/gloas/partial-columns/p2p-interface.md` -/
 ssz_container PartialDataColumnGroupID where

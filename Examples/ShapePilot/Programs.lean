@@ -8,8 +8,8 @@ namespace Examples.ShapePilot
 
 open Jaune
 
-def parentAddress : Address := 0x1000
-def childAddress : Address := 0x20
+def parentAddress : Adr := 0x1000
+def childAddress : Adr := 0x20
 
 /-- Write slot zero and a log, then revert with the byte 0xAA. -/
 def revertingChild : ByteArray := ⟨#[
@@ -37,7 +37,7 @@ def creatingParent : ByteArray := ⟨#[
 def message (fork : Fork) (code : ByteArray) (gas stateGas : Nat)
     (extraState : State := .empty) : Msg :=
   let state := (extraState.set parentAddress
-    { nonce := 1, balance := 0, storage := .empty, code := code })
+    { nonce := 1, bal := 0, stor := .empty, code := code })
   { (default : Msg) with
     benv := { (default : Benv) with
       state := state
@@ -58,7 +58,7 @@ def callMessage : Msg :=
 def createMessage : Msg :=
   message .amsterdam creatingParent 13000 amsterdamStateGasRules.newAccount
 
-def newAddress : Address := computeContractAddress parentAddress 1
+def newAddress : Adr := computeContractAddress parentAddress 1
 
 /-- Inspect a finite prefix up to the first spawned frame. No child is skipped. -/
 def firstSpawn : Nat → Evm → Option (Frame × Resume × Nat)
@@ -89,11 +89,11 @@ def observeCall : Option CallObservation := do
   let .ok caller := processMessage callMessage | none
   pure {
     isCall := !frame.isCreate
-    codeAddress := frame.inner.codeAddress.map Address.toNat
+    codeAddress := frame.inner.codeAddress.map Adr.toNat
     childOutput := child.output
     childSlot := (child.getStorVal childAddress 0).toNat
     childLogs := child.logs.length
-    callerStack := caller.stack.map U256.toNat
+    callerStack := caller.stack.map B256.toNat
     callerOutputWindow := (caller.memory.read 0 1).1
     callerReturnData := caller.returnData
     settledSlot := (caller.getStorVal childAddress 0).toNat
@@ -122,7 +122,7 @@ def observeCreate : Option CreateObservation := do
   let .ok caller := processMessage createMessage | none
   pure {
     isCreate := frame.isCreate
-    codeAddress := frame.inner.codeAddress.map Address.toNat
+    codeAddress := frame.inner.codeAddress.map Adr.toNat
     output := child.output
     depositOutOfGas := match processCreateMessage.chargeCodeGas amsterdamRules child with
       | .error (.halt (.outOfGas _), _) => true
@@ -130,7 +130,7 @@ def observeCreate : Option CreateObservation := do
     initcodeGasLeft := child.gasLeft
     initcodeStateGasLeft := child.stateGasLeft
     childNonce := (child.state.get newAddress).nonce.toNat
-    callerStack := caller.stack.map U256.toNat
+    callerStack := caller.stack.map B256.toNat
     creatorNonce := (caller.state.get parentAddress).nonce.toNat
     destinationWarm := caller.accessedAddresses.contains newAddress
     deployedNonce := (caller.state.get newAddress).nonce.toNat

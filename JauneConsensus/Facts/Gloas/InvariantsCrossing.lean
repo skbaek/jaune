@@ -11,7 +11,7 @@ payload header (value `0`, `L.block_hash = latest_block_hash`), and a registry b
 G3-02 is a relation between two Gloas states and has no crossing obligation.
 -/
 
-namespace JauneConsensus.Facts.Gloas.Invariant
+namespace JauneConsensus.Facts.Gloas.Inv
 
 open JauneConsensus JauneConsensus.Facts JauneConsensus.Facts.Gloas
 
@@ -22,7 +22,7 @@ local instance : LawfulBEq BLSPubkey where
   rfl := pubkey_beq_iff.mpr rfl
 
 /-- `add_builder_to_registry` writes one record with the given pubkey and nothing else. -/
-theorem addBuilderToRegistry_post {st st' : GloasState P} {pk : BLSPubkey} {v : U8}
+theorem addBuilderToRegistry_post {st st' : GSt P} {pk : BLSPubkey} {v : U8}
     {addr : ExecutionAddress} {amt : Gwei} {slot : Slot}
     (h : JauneConsensus.Gloas.addBuilderToRegistry st pk v addr amt slot = .ok st') :
     st' = { st with builders := st'.builders } ∧
@@ -34,11 +34,11 @@ theorem addBuilderToRegistry_post {st st' : GloasState P} {pk : BLSPubkey} {v : 
   obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨bs, hbs, h⟩ := bind_eq_ok_iff.mp h
   cases h
-  obtain ⟨h1, h2, h3⟩ := progressiveList_setOrAppend_ok hbs
+  obtain ⟨h1, h2, h3⟩ := pl_setOrAppend_ok hbs
   exact ⟨rfl, idx.toNat, _, h2, rfl, h1, h3⟩
 
 /-- A fresh pubkey written at one index keeps the pubkeys unique. -/
-theorem pubkeysUnique_of_fresh {m m' : GloasState P} {pk : BLSPubkey} {i : Nat}
+theorem pubkeysUnique_of_fresh {m m' : GSt P} {pk : BLSPubkey} {i : Nat}
     {b' : JauneConsensus.Gloas.Builder} (hnot : ∀ b ∈ m.builders.toArray, b.pubkey ≠ pk)
     (hb' : m'.builders.toArray[i]? = some b') (hpk : b'.pubkey = pk)
     (hoth : ∀ j, j ≠ i → m'.builders.toArray[j]? = m.builders.toArray[j]?)
@@ -63,21 +63,21 @@ theorem pubkeysUnique_of_fresh {m m' : GloasState P} {pk : BLSPubkey} {i : Nat}
       rw [hoth q hqi] at hq
       exact hu p q bp bq hpq hp hq
 
-theorem pubkey_of_set {xs ys : ProgressiveListRightSpine JauneConsensus.Gloas.Builder} {i : Nat}
+theorem pk_of_set {xs ys : ProgressiveListR JauneConsensus.Gloas.Builder} {i : Nat}
     {v b0 : JauneConsensus.Gloas.Builder} {site site' : String} (hget : xs.get i site = .ok b0)
     (hset : xs.set i v site' = .ok ys) (hv : v.pubkey = b0.pubkey) :
     ∀ (j : Nat) (c : JauneConsensus.Gloas.Builder), xs.toArray[j]? = some c →
       ∃ c', ys.toArray[j]? = some c' ∧ c'.pubkey = c.pubkey := by
-  obtain ⟨_, h2, h3⟩ := progressiveList_set_ok hset
+  obtain ⟨_, h2, h3⟩ := pl_set_ok hset
   intro j c hc
   by_cases hj : j = i
   · subst hj
-    rw [progressiveList_get_ok.mp hget] at hc; cases hc
+    rw [pl_get_ok.mp hget] at hc; cases hc
     exact ⟨v, h2, hv⟩
   · exact ⟨c, by rw [h3 j hj]; exact hc, rfl⟩
 
 /-- One onboarding step keeps everything but the registry, and keeps the pubkeys unique. -/
-theorem onboardBuilderDeposit_post {ctx : Ctx} {vpks : Array BLSPubkey} {st st' : GloasState P}
+theorem onboardBuilderDeposit_post {ctx : Ctx} {vpks : Array BLSPubkey} {st st' : GSt P}
     {q q' : Array PendingDeposit} {d : PendingDeposit}
     (h : JauneConsensus.Gloas.onboardBuilderDeposit ctx vpks (st, q) d = .ok (st', q')) :
     st' = { st with builders := st'.builders } ∧ (BuilderPubkeysUnique st → BuilderPubkeysUnique st') := by
@@ -104,29 +104,29 @@ theorem onboardBuilderDeposit_post {ctx : Ctx} {vpks : Array BLSPubkey} {st st' 
        rw [Array.idxOf?_eq_none_iff] at hnone
        exact hnone (by rw [← e]; exact Array.mem_map_of_mem hb))
     | (rename_i hget _ _ _ hset
-       exact ⟨rfl, pubkeysUnique_of_pubkey (progressiveList_set_ok hset).1 (pubkey_of_set hget hset rfl)⟩)
+       exact ⟨rfl, pubkeysUnique_of_pk (pl_set_ok hset).1 (pk_of_set hget hset rfl)⟩)
 
-theorem foldlM_invariant {α β : Type} (I : β → Prop) (f : β → α → Fallible β)
+theorem foldlM_inv {α β : Type} (I : β → Prop) (f : β → α → M β)
     (hf : ∀ x a y, I x → f x a = .ok y → I y) :
     ∀ (l : List α) (init out : β), l.foldlM f init = .ok out → I init → I out
   | [], init, out, h, hI => by cases h; exact hI
   | a :: l, init, out, h, hI => by
     rw [List.foldlM_cons] at h
     obtain ⟨y, hy, h⟩ := bind_eq_ok_iff.mp h
-    exact foldlM_invariant I f hf l y out h (hf _ _ _ hI hy)
+    exact foldlM_inv I f hf l y out h (hf _ _ _ hI hy)
 
 /-- Onboarding keeps every field the invariants read but the registry, and keeps the pubkeys
 unique. -/
-theorem onboard_post {ctx : Ctx} {st post : GloasState P}
+theorem onboard_post {ctx : Ctx} {st post : GSt P}
     (h : JauneConsensus.Gloas.onboardBuildersFromPendingDeposits ctx st = .ok post) :
-    InvariantFrame st { post with builders := st.builders } ∧
+    InvFrame st { post with builders := st.builders } ∧
       (BuilderPubkeysUnique st → BuilderPubkeysUnique post) := by
   unfold JauneConsensus.Gloas.onboardBuildersFromPendingDeposits at h
   obtain ⟨r, hr, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨st1, q1⟩ := r
   cases h
   rw [← Array.foldlM_toList] at hr
-  have hI := foldlM_invariant (fun r : GloasState P × Array PendingDeposit =>
+  have hI := foldlM_inv (fun r : GSt P × Array PendingDeposit =>
       r.1 = { st with builders := r.1.builders } ∧ (BuilderPubkeysUnique st → BuilderPubkeysUnique r.1))
     _ (fun x a y hI hy => by
       obtain ⟨x1, x2⟩ := x
@@ -142,10 +142,10 @@ theorem onboard_post {ctx : Ctx} {st post : GloasState P}
 /-- **The crossing.** Every G3 state invariant (and the auxiliary ones) holds on
 `upgrade_to_gloas`'s output. Needs `0 < SLOTS_PER_EPOCH` (G3-07's window index is then inside
 the payments vector). -/
-theorem upgradeToGloas_invariant (hspe : 0 < P.SLOTS_PER_EPOCH) {ctx : Ctx}
-    {pre : JauneConsensus.BeaconState P .fulu} {post : GloasState P}
+theorem upgradeToGloas_inv (hspe : 0 < P.SLOTS_PER_EPOCH) {ctx : Ctx}
+    {pre : JauneConsensus.BeaconState P .fulu} {post : GSt P}
     (h : JauneConsensus.Gloas.upgradeToGloas ctx pre = .ok post) :
-    BuilderPubkeysUnique post ∧ PendingReferencesInRange post ∧ ExitedHaveNoPending post ∧
+    BuilderPubkeysUnique post ∧ PendingRefsInRange post ∧ ExitedHaveNoPending post ∧
       PendingCovered post ∧ NextBuilderIndexInRange post ∧ NoLiveWeightOnLatestBid post ∧
       LatestBidCoherence post ∧ LatestBidBuilderActive post ∧ FutureEmpty post := by
   unfold JauneConsensus.Gloas.upgradeToGloas at h
@@ -165,10 +165,10 @@ theorem upgradeToGloas_invariant (hspe : 0 < P.SLOTS_PER_EPOCH) {ctx : Ctx}
   have hPk : ∀ k, k < 2 * P.SLOTS_PER_EPOCH → post.builder_pending_payments.toArray[k]? =
       some JauneConsensus.Gloas.BuilderPendingPayment.empty := by
     intro k hk; rw [hPa]; simp [hk]
-  have hpend : ∀ i, pendingBalance post i = 0 := by
-    intro i; unfold pendingBalance; rw [hWe, hPa]; simp [pendingWithdrawalBalance, pendingPaymentBalance, withdrawalAmount_empty]
+  have hpend : ∀ i, pend post i = 0 := by
+    intro i; unfold pend; rw [hWe, hPa]; simp [pendW, pendP, wAmt_empty]
   have hval : post.latest_execution_payload_bid.value = U64.zero := by rw [hL]
-  refine ⟨hu (fun _ _ _ _ _ hi => by simp [ProgressiveListOnSpine.empty] at hi), ⟨?_, ?_⟩, ?_, ?_, ?_, ?_,
+  refine ⟨hu (fun _ _ _ _ _ hi => by simp [ProgressiveListS.empty] at hi), ⟨?_, ?_⟩, ?_, ?_, ?_, ?_,
     ⟨?_, ?_, ?_⟩, ?_, ?_, ?_⟩
   · intro w hw; rw [hWe] at hw; cases hw
   · intro p hp hne
@@ -178,8 +178,8 @@ theorem upgradeToGloas_invariant (hspe : 0 < P.SLOTS_PER_EPOCH) {ctx : Ctx}
   · intro i _ _ _; exact hpend i
   · intro i b _
     rw [hpend]
-    have : exposure post i = 0 := by
-      unfold exposure; rw [if_neg]; rintro ⟨_, hv, _⟩; rw [hval] at hv; exact absurd hv (by decide)
+    have : expo post i = 0 := by
+      unfold expo; rw [if_neg]; rintro ⟨_, hv, _⟩; rw [hval] at hv; exact absurd hv (by decide)
     omega
   · intro _; rw [hN]; show 0 < _; omega
   · intro k hk
@@ -203,10 +203,10 @@ theorem upgradeToGloas_invariant (hspe : 0 < P.SLOTS_PER_EPOCH) {ctx : Ctx}
     exact hPk _ (by omega)
 
 /-- **The crossing as the generators drive it** (`crossFromFulu`). -/
-theorem crossFromFulu_invariant (hspe : 0 < P.SLOTS_PER_EPOCH) {ctx : Ctx}
-    {pre : JauneConsensus.BeaconState P .fulu} {post : GloasState P}
+theorem crossFromFulu_inv (hspe : 0 < P.SLOTS_PER_EPOCH) {ctx : Ctx}
+    {pre : JauneConsensus.BeaconState P .fulu} {post : GSt P}
     (h : JauneConsensus.Gloas.crossFromFulu ctx pre = .ok post) :
-    BuilderPubkeysUnique post ∧ PendingReferencesInRange post ∧ ExitedHaveNoPending post ∧
+    BuilderPubkeysUnique post ∧ PendingRefsInRange post ∧ ExitedHaveNoPending post ∧
       PendingCovered post ∧ NextBuilderIndexInRange post ∧ NoLiveWeightOnLatestBid post ∧
       LatestBidCoherence post ∧ LatestBidBuilderActive post ∧ FutureEmpty post := by
   unfold JauneConsensus.Gloas.crossFromFulu at h
@@ -216,9 +216,9 @@ theorem crossFromFulu_invariant (hspe : 0 < P.SLOTS_PER_EPOCH) {ctx : Ctx}
   split at h
   · obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
     obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
-    exact upgradeToGloas_invariant hspe h
+    exact upgradeToGloas_inv hspe h
   · obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
     obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
-    exact upgradeToGloas_invariant hspe h
+    exact upgradeToGloas_inv hspe h
 
-end JauneConsensus.Facts.Gloas.Invariant
+end JauneConsensus.Facts.Gloas.Inv

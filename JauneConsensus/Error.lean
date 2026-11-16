@@ -62,10 +62,10 @@ inductive Reject where
 
 /-- The consensus-layer monad: a computation that either yields a value or rejects with a
 typed reason. -/
-abbrev Fallible := Except Reject
+abbrev M := Except Reject
 
 /-- pyspec `assert cond`. -/
-@[inline] def require (cond : Bool) (site : String) : Fallible Unit :=
+@[inline] def require (cond : Bool) (site : String) : M Unit :=
   if cond then pure () else throw (.assert site)
 
 /-- A `require` succeeds iff its condition holds. -/
@@ -81,7 +81,7 @@ theorem exists_unit_iff {p : Unit → Prop} : (∃ u : Unit, p u) ↔ p () :=
 
 /-- A read at `i` of an array, rejecting with `Reject.index` when out of range (pyspec
 `seq[i]`, which raises `IndexError`). -/
-@[inline] def getAt {α : Type} (xs : Array α) (i : Nat) (site : String) : Fallible α :=
+@[inline] def getAt {α : Type} (xs : Array α) (i : Nat) (site : String) : M α :=
   match xs[i]? with
   | some x => pure x
   | none => throw (.index site i xs.size)

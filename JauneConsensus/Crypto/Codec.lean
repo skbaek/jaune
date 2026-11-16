@@ -23,26 +23,26 @@ open Jaune
 
 /-- The identity of `E` and `E'` in Jaune's affine representation. `(0, 0)` is on
 neither curve (`0 ≠ 4`, `0 ≠ 4(1 + I)`), so the sentinel is unambiguous. -/
-def g1Identity : Bls12G1 := ⟨0, 0⟩
-def g2Identity : Bls12G2 := ⟨0, 0⟩
+def g1Identity : BLSP := ⟨0, 0⟩
+def g2Identity : BLSP2 := ⟨0, 0⟩
 
 /-- Coefficients `(c0, c1)` of `c0 + c1 * I` (the pairing-friendly-curves draft's
 `(x_0, x_1)`). -/
-def fp2Coefficients (x : Bls12Fp2) : Nat × Nat :=
-  let cs := List.takeRightV 2 x.val (0 : Bls12Fp)
+def f2Coeffs (x : BLSF2) : Nat × Nat :=
+  let cs := List.takeRightV 2 x.val (0 : BLSF)
   (cs[1].val, cs[0].val)
 
 /-- `sign_GF_p(y)`: 1 if `y > (p - 1) / 2`, else 0 (draft C, notation). -/
 def signFp (y : Nat) : Bool := y > (blsPrime - 1) / 2
 
 /-- `sign_GF_p^2(y')`: `sign_GF_p(y'_0)` if `y'_1 = 0`, else `sign_GF_p(y'_1)`. -/
-def signFp2 (y : Bls12Fp2) : Bool :=
-  let (y0, y1) := fp2Coefficients y
+def signFp2 (y : BLSF2) : Bool :=
+  let (y0, y1) := f2Coeffs y
   if y1 = 0 then signFp y0 else signFp y1
 
 /-- C.1 with compression for a point on `E`: `point_to_octets_E1`, the consensus
 `point_to_pubkey` (48 bytes). -/
-def g1Compress (p : Bls12G1) : Bytes :=
+def g1Compress (p : BLSP) : Bytes :=
   if p = g1Identity then
     -- C_bit = 1, I_bit = 1, S_bit = 0; x_string = I2OSP(0, 48)
     (0xc0 : UInt8) :: List.replicate 47 0
@@ -55,12 +55,12 @@ def g1Compress (p : Bls12G1) : Bytes :=
 
 /-- C.1 with compression for a point on `E'`: `point_to_octets_E2`, the consensus
 `point_to_signature` (96 bytes). `x_string = I2OSP(x_1, 48) || I2OSP(x_0, 48)`. -/
-def g2Compress (p : Bls12G2) : Bytes :=
+def g2Compress (p : BLSP2) : Bytes :=
   if p = g2Identity then
     (0xc0 : UInt8) :: List.replicate 95 0
   else
     let mByte : Nat := 0x80 + (if signFp2 p.y then 0x20 else 0)
-    let (x0, x1) := fp2Coefficients p.x
+    let (x0, x1) := f2Coeffs p.x
     let xString := i2osp x1 48 ++ i2osp x0 48
     match xString with
     | b :: rest => (b ||| mByte.toUInt8) :: rest
@@ -74,11 +74,11 @@ It differs from draft C.2 on one input class only: a compressed string with
 Those are 3-torsion points of `E`, so no consumer can tell the difference: every
 consensus use of a decoded public key passes through `KeyValidate`, whose subgroup
 check rejects them (`r` is prime and not 3). -/
-def pubkeyToPoint (pk : Bytes) : Except String Bls12G1 :=
+def pubkeyToPoint (pk : Bytes) : Except String BLSP :=
   (decompressG1 pk).mapError fun _ => "invalid compressed G1 point"
 
 /-- `octets_to_point_E2` for compressed input (96 bytes): draft C.2 on `E'`. -/
-def signatureToPoint (sig : Bytes) : Except String Bls12G2 := do
+def signatureToPoint (sig : Bytes) : Except String BLSP2 := do
   -- 2. C_bit = 1 requires 96 bytes on E'.
   if sig.length ≠ 96 then throw "compressed G2 point must be 96 bytes"
   let b0 ← match sig.head? with
@@ -101,7 +101,7 @@ def signatureToPoint (sig : Bytes) : Except String Bls12G2 := do
   let x1 := os2ip (s.take 48)
   let x0 := os2ip (s.drop 48)
   if x0 ≥ blsPrime ∨ x1 ≥ blsPrime then throw "G2 x coordinate not in field"
-  let x := Bls12Fp2.mk x0 x1
+  let x := BLSF2.mk x0 x1
   -- 7. y2 = x^3 + 4(u + 1); INVALID if not square, else y = sqrt(y2).
   let y2 := x ^ 3 + blsB2
   let (isRoot, y) := sqrtDivisionFQ2 y2 1
@@ -110,32 +110,32 @@ def signatureToPoint (sig : Bytes) : Except String Bls12G2 := do
   return ⟨x, if signFp2 y = sBit then y else -y⟩
 
 /-- `subgroup_check_E1`: the naive check `r * P = identity` (draft section 1.3). -/
-def g1SubgroupCheck (p : Bls12G1) : Bool := p.mulBy blsCurveOrder = g1Identity
+def g1SubgroupCheck (p : BLSP) : Bool := p.mulBy blsCurveOrder = g1Identity
 
 /-- `subgroup_check_E2` by the naive check `r * P = identity`; the reference for
 `g2SubgroupCheck`. -/
-def g2SubgroupCheckNaive (p : Bls12G2) : Bool := p.mulBy blsCurveOrder = g2Identity
+def g2SubgroupCheckNaive (p : BLSP2) : Bool := p.mulBy blsCurveOrder = g2Identity
 
 /-- `subgroup_check_E2`: the endomorphism test `psi(P) = [t] P` (G2Subgroup.lean),
 which draft-04 Appendix A permits in place of the naive check. -/
-def g2SubgroupCheck (p : Bls12G2) : Bool := g2SubgroupCheckFast p
+def g2SubgroupCheck (p : BLSP2) : Bool := g2SubgroupCheckFast p
 
 /-- Pairing-product check: `prod_i e(P_i, Q_i) = 1` in `GT`, computed as Jaune's
 `verifyKzgProofImpl` does (the shape of EIP-4844's `pairing_check`): the product
 of the Miller loops, then one final exponentiation (Jaune's `blsFinalExpFast`;
 `pairingCheckRef` is the same check on Jaune's reference pairing). A pair with a point
 off its curve fails the check. -/
-def pairingCheck (pairs : List (Bls12G1 × Bls12G2)) : Bool :=
+def pairingCheck (pairs : List (BLSP × BLSP2)) : Bool :=
   let loops := pairs.mapM fun (p, q) => blsPairing q p (finalExp := false)
   match loops with
-  | some fs => blsFinalExpFast (fs.foldl (· * ·) (1 : Bls12Fp12)) = 1
+  | some fs => blsFinalExpFast (fs.foldl (· * ·) (1 : BLSF12)) = 1
   | none => false
 
 /-- `pairingCheck` on Jaune's reference pairing (`blsPairingRef`, plain final power). -/
-def pairingCheckReference (pairs : List (Bls12G1 × Bls12G2)) : Bool :=
+def pairingCheckRef (pairs : List (BLSP × BLSP2)) : Bool :=
   let loops := pairs.mapM fun (p, q) => blsPairingRef q p (finalExp := false)
   match loops with
-  | some fs => fs.foldl (· * ·) (1 : Bls12Fp12) ^ blsFinalExponent = 1
+  | some fs => fs.foldl (· * ·) (1 : BLSF12) ^ blsFinalExponent = 1
   | none => false
 
 end JauneConsensus

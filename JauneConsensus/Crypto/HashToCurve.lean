@@ -63,41 +63,41 @@ def expandMessageXmd (msg dst : Bytes) (lenInBytes : Nat) : Except String Bytes 
 
 /-- `L` for BLS12381G2_XMD:SHA-256_SSWU_RO_ (RFC 9380 section 8.8.2):
 `ceil((ceil(log2(p)) + k) / 8)` with `k` = 128, which is 64. -/
-def hashToFieldLength : Nat := 64
+def hashToFieldL : Nat := 64
 
 /-- RFC 9380 section 5.2, `hash_to_field(msg, count)` for `F = GF(p^2)`, `m` = 2,
 `L` = 64, `expand_message` = `expand_message_xmd` with SHA-256. Each output is
 `e_0 + e_1 * I`. -/
-def hashToFieldFp2 (msg dst : Bytes) (count : Nat) : Except String (List Bls12Fp2) := do
+def hashToFieldFp2 (msg dst : Bytes) (count : Nat) : Except String (List BLSF2) := do
   let m := 2
   -- 1. len_in_bytes = count * m * L
-  let lenInBytes := count * m * hashToFieldLength
+  let lenInBytes := count * m * hashToFieldL
   -- 2. uniform_bytes = expand_message(msg, DST, len_in_bytes)
   let uniformBytes ← expandMessageXmd msg dst lenInBytes
   -- 3.-8. u_i = (e_0, e_1), e_j = OS2IP(substr(uniform_bytes, L * (j + i * m), L)) mod p
   let e (i j : Nat) : Nat :=
-    let elmOffset := hashToFieldLength * (j + i * m)
-    os2ip ((uniformBytes.drop elmOffset).take hashToFieldLength) % blsPrime
+    let elmOffset := hashToFieldL * (j + i * m)
+    os2ip ((uniformBytes.drop elmOffset).take hashToFieldL) % blsPrime
   -- 9. return (u_0, ..., u_(count - 1))
-  return (List.range count).map fun i => Bls12Fp2.mk (e i 0) (e i 1)
+  return (List.range count).map fun i => BLSF2.mk (e i 0) (e i 1)
 
 /-- `map_to_curve` for the suite (RFC 9380 section 6.6.3): the simplified SWU map
 onto the 3-isogenous curve `E'`, then the isogeny map onto `E` (Appendix E.3),
 both Jaune's. No cofactor clearing here; `hashToG2` clears once, after adding
 the two mapped points. -/
-def mapToCurveG2 (u : Bls12Fp2) : Bls12G2 := isoMapG2 (optimizedSwuG2 u)
+def mapToCurveG2 (u : BLSF2) : BLSP2 := isoMapG2 (optimizedSwuG2 u)
 
 /-- `clear_cofactor` for the suite as section 8.8.2 defines it: scalar multiplication by
 `h_eff`. The reference for `clearCofactorG2`. -/
-def clearCofactorG2Reference (q : Bls12G2) : Bls12G2 := q.mulBy BLSConst.hEffG2
+def clearCofactorG2Ref (q : BLSP2) : BLSP2 := q.mulBy BLSConst.hEffG2
 
 /-- `clear_cofactor_bls12381_g2(P)` (RFC 9380 Appendix G.3, after Budroni and Pintore): the
 same point `h_eff * P` from two 64-bit scalar multiplications and the endomorphism `psi`
 (`g2Psi`, whose constants are G.3's `c1`, `c2`; `psi2` is `psi` applied twice). Differential
 `#guard`s against `clearCofactorG2Ref` in HashToCurveVectors.lean. -/
-def clearCofactorG2 (p : Bls12G2) : Bls12G2 :=
+def clearCofactorG2 (p : BLSP2) : BLSP2 :=
   -- c1 = -0xd201000000010000, so c1 * X = -(|c1| * X)
-  let mulC1 (x : Bls12G2) : Bls12G2 := -(x.mulBy blsAteLoopCount)
+  let mulC1 (x : BLSP2) : BLSP2 := -(x.mulBy blsAteLoopCount)
   let t1 := mulC1 p                       -- 1. t1 = c1 * P
   let t2 := g2Psi p                       -- 2. t2 = psi(P)
   let t3 := p + p                         -- 3. t3 = 2 * P
@@ -118,7 +118,7 @@ Clearing the cofactor of each mapped point and then adding (which
 distributes over addition: `h * Q0 + h * Q1 = h * (Q0 + Q1)`. Clearing once after
 the addition, as the RFC writes it, is a cost choice: one 636-bit scalar
 multiplication instead of two. -/
-def hashToG2 (msg dst : Bytes) : Except String Bls12G2 := do
+def hashToG2 (msg dst : Bytes) : Except String BLSP2 := do
   -- 1. u = hash_to_field(msg, 2)
   match ← hashToFieldFp2 msg dst 2 with
   | [u0, u1] =>

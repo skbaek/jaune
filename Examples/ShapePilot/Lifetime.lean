@@ -7,7 +7,7 @@ namespace Examples.ShapePilot.Prototype
 open Jaune
 
 @[ext] structure Machine where
-  stack : List U256
+  stack : List B256
   memory : Mem
   gasLeft : Nat
   stateGas : StateGasMeter
@@ -94,7 +94,7 @@ end Frame
 
 inductive ReturnTarget where
   | call (outputIndex outputSize : Nat)
-  | create (address : Address)
+  | create (address : Adr)
 
 /-- Opcode preparation supplies the saved caller and the charge to refund.
 The latter is zero for the one-dimensional rules and uncharged creations. -/
@@ -123,9 +123,9 @@ def returnedMeter (c : Continuation) (parent : Machine) (r : Frame.Result) : Mac
 `resume`; this function merely describes the successful return. -/
 def returnedMachine (c : Continuation) (parent : Machine) (r : Frame.Result) : Machine :=
   let m := returnedMeter c parent r
-  let value : U256 := if r.failed then 0 else match c.target with
+  let value : B256 := if r.failed then 0 else match c.target with
     | .call .. => 1
-    | .create address => address.toU256
+    | .create address => address.toB256
   let memory := match c.target with
     | .call index size => parent.memory.write index (r.output.take size)
     | .create _ => parent.memory

@@ -1,4 +1,4 @@
-import JauneConsensus.Facts.Gloas.StepBalanceFlow
+import JauneConsensus.Facts.Gloas.StepB5
 
 /-!
 # Frames of the first Gloas block and of `payload_expected_withdrawals` (goal `eip8282-gloas-cross-layer-v1`, G3c)
@@ -22,19 +22,19 @@ import JauneConsensus.Facts.Gloas.StepBalanceFlow
 
 namespace JauneConsensus.Facts.Gloas
 
-open Jaune JauneConsensus JauneConsensus.Facts JauneConsensus.Facts.Gloas.Invariant
+open Jaune JauneConsensus JauneConsensus.Facts JauneConsensus.Facts.Gloas.Inv
 
 variable {P : Preset}
 
 /-! ## The frame of `payload_expected_withdrawals` -/
 
 /-- `payload_expected_withdrawals` is unchanged. -/
-def PayloadExpectedWithdrawalsEq (s s' : GloasState P) : Prop :=
+def PewEq (s s' : GSt P) : Prop :=
   s'.payload_expected_withdrawals = s.payload_expected_withdrawals
 
 /-- `PewEq` as a step relation. -/
-def payloadExpectedWithdrawalsEq : StepRelation (GloasState P) where
-  relation := PayloadExpectedWithdrawalsEq
+def pewEq : StepRel (GSt P) where
+  R := PewEq
   refl _ := rfl
   trans h₁ h₂ := Eq.trans h₂ h₁
 
@@ -42,158 +42,158 @@ section PewGen
 
 local macro_rules
   | `(tactic| gstep_close) =>
-    `(tactic| exact (show PayloadExpectedWithdrawalsEq _ _ from rfl))
+    `(tactic| exact (show PewEq _ _ from rfl))
 
-theorem increaseBalance_payloadExpectedWithdrawals (s : GloasState P) (i : ValidatorIndex) (d : Gwei) :
-    Ok (JauneConsensus.Gloas.increaseBalance s i d) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem increaseBalance_pew (s : GSt P) (i : ValidatorIndex) (d : Gwei) :
+    Ok (JauneConsensus.Gloas.increaseBalance s i d) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.increaseBalance; gvcg
 
-theorem decreaseBalance_payloadExpectedWithdrawals (s : GloasState P) (i : ValidatorIndex) (d : Gwei) :
-    Ok (JauneConsensus.Gloas.decreaseBalance s i d) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem decreaseBalance_pew (s : GSt P) (i : ValidatorIndex) (d : Gwei) :
+    Ok (JauneConsensus.Gloas.decreaseBalance s i d) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.decreaseBalance; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (increaseBalance_payloadExpectedWithdrawals _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (increaseBalance_pew _ _ _) $h; exact hh))
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (decreaseBalance_payloadExpectedWithdrawals _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (decreaseBalance_pew _ _ _) $h; exact hh))
 
-theorem computeExitEpochAndUpdateChurn_payloadExpectedWithdrawals (cfg : Config) (s : GloasState P) (b : Gwei) :
+theorem computeExitEpochAndUpdateChurn_pew (cfg : Config) (s : GSt P) (b : Gwei) :
     Ok (JauneConsensus.Gloas.computeExitEpochAndUpdateChurn cfg s b)
-      (fun p => payloadExpectedWithdrawalsEq.relation s p.1) := by
+      (fun p => pewEq.R s p.1) := by
   unfold JauneConsensus.Gloas.computeExitEpochAndUpdateChurn; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (computeExitEpochAndUpdateChurn_payloadExpectedWithdrawals _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (computeExitEpochAndUpdateChurn_pew _ _ _) $h; exact hh))
 
-theorem initiateValidatorExit_payloadExpectedWithdrawals (cfg : Config) (s : GloasState P) (i : ValidatorIndex) :
-    Ok (JauneConsensus.Gloas.initiateValidatorExit cfg s i) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem initiateValidatorExit_pew (cfg : Config) (s : GSt P) (i : ValidatorIndex) :
+    Ok (JauneConsensus.Gloas.initiateValidatorExit cfg s i) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.initiateValidatorExit; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (initiateValidatorExit_payloadExpectedWithdrawals _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (initiateValidatorExit_pew _ _ _) $h; exact hh))
 
-theorem addValidatorToRegistry_payloadExpectedWithdrawals (s : GloasState P) (pk : BLSPubkey) (wc : Bytes32)
+theorem addValidatorToRegistry_pew (s : GSt P) (pk : BLSPubkey) (wc : Bytes32)
     (amount : Gwei) :
-    Ok (JauneConsensus.Gloas.addValidatorToRegistry s pk wc amount) (payloadExpectedWithdrawalsEq.relation s) := by
+    Ok (JauneConsensus.Gloas.addValidatorToRegistry s pk wc amount) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.addValidatorToRegistry; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (addValidatorToRegistry_payloadExpectedWithdrawals _ _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (addValidatorToRegistry_pew _ _ _ _) $h; exact hh))
 
-theorem applyPendingDeposit_payloadExpectedWithdrawals (ctx : Ctx) (s : GloasState P) (d : PendingDeposit) :
-    Ok (JauneConsensus.Gloas.applyPendingDeposit ctx s d) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem applyPendingDeposit_pew (ctx : Ctx) (s : GSt P) (d : PendingDeposit) :
+    Ok (JauneConsensus.Gloas.applyPendingDeposit ctx s d) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.applyPendingDeposit; gvcg
-  · exact addValidatorToRegistry_payloadExpectedWithdrawals _ _ _ _
-  · exact increaseBalance_payloadExpectedWithdrawals _ _ _
+  · exact addValidatorToRegistry_pew _ _ _ _
+  · exact increaseBalance_pew _ _ _
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (applyPendingDeposit_payloadExpectedWithdrawals _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (applyPendingDeposit_pew _ _ _) $h; exact hh))
 
-theorem processInactivityUpdates_payloadExpectedWithdrawals (cfg : Config) (s : GloasState P) :
-    Ok (JauneConsensus.Gloas.processInactivityUpdates cfg s) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem processInactivityUpdates_pew (cfg : Config) (s : GSt P) :
+    Ok (JauneConsensus.Gloas.processInactivityUpdates cfg s) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processInactivityUpdates; gvcg
 
-theorem processRewardsAndPenalties_payloadExpectedWithdrawals (cfg : Config) (s : GloasState P) :
-    Ok (JauneConsensus.Gloas.processRewardsAndPenalties cfg s) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem processRewardsAndPenalties_pew (cfg : Config) (s : GSt P) :
+    Ok (JauneConsensus.Gloas.processRewardsAndPenalties cfg s) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processRewardsAndPenalties; gvcg
 
-theorem processRegistryUpdates_payloadExpectedWithdrawals (cfg : Config) (s : GloasState P) :
-    Ok (JauneConsensus.Gloas.processRegistryUpdates cfg s) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem processRegistryUpdates_pew (cfg : Config) (s : GSt P) :
+    Ok (JauneConsensus.Gloas.processRegistryUpdates cfg s) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processRegistryUpdates; gvcg
 
-theorem processSlashings_payloadExpectedWithdrawals (cfg : Config) (s : GloasState P) :
-    Ok (JauneConsensus.Gloas.processSlashings cfg s) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem processSlashings_pew (cfg : Config) (s : GSt P) :
+    Ok (JauneConsensus.Gloas.processSlashings cfg s) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processSlashings; gvcg
 
-theorem processEth1DataReset_payloadExpectedWithdrawals (cfg : Config) (s : GloasState P) :
-    Ok (JauneConsensus.Gloas.processEth1DataReset cfg s) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem processEth1DataReset_pew (cfg : Config) (s : GSt P) :
+    Ok (JauneConsensus.Gloas.processEth1DataReset cfg s) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processEth1DataReset; gvcg
 
 section PendingDeposits
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (refine StepRelation.forIn_array_relation _ (fun x => x.2.2.2.2) ?_ _ _ $h; intro _ _; gvcg))
+    `(tactic| (refine StepRel.forIn_array_rel _ (fun x => x.2.2.2.2) ?_ _ _ $h; intro _ _; gvcg))
 
-theorem processPendingDeposits_payloadExpectedWithdrawals (ctx : Ctx) (s : GloasState P) :
-    Ok (JauneConsensus.Gloas.processPendingDeposits ctx s) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem processPendingDeposits_pew (ctx : Ctx) (s : GSt P) :
+    Ok (JauneConsensus.Gloas.processPendingDeposits ctx s) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processPendingDeposits; gvcg
 
 end PendingDeposits
 
-theorem processPendingConsolidations_payloadExpectedWithdrawals (cfg : Config) (s : GloasState P) :
-    Ok (JauneConsensus.Gloas.processPendingConsolidations cfg s) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem processPendingConsolidations_pew (cfg : Config) (s : GSt P) :
+    Ok (JauneConsensus.Gloas.processPendingConsolidations cfg s) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processPendingConsolidations; gvcg
 
-theorem processEffectiveBalanceUpdates_payloadExpectedWithdrawals (cfg : Config) (s : GloasState P) :
-    Ok (JauneConsensus.Gloas.processEffectiveBalanceUpdates cfg s) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem processEffectiveBalanceUpdates_pew (cfg : Config) (s : GSt P) :
+    Ok (JauneConsensus.Gloas.processEffectiveBalanceUpdates cfg s) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processEffectiveBalanceUpdates; gvcg
 
-theorem processSlashingsReset_payloadExpectedWithdrawals (cfg : Config) (s : GloasState P) :
-    Ok (JauneConsensus.Gloas.processSlashingsReset cfg s) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem processSlashingsReset_pew (cfg : Config) (s : GSt P) :
+    Ok (JauneConsensus.Gloas.processSlashingsReset cfg s) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processSlashingsReset; gvcg
 
-theorem processRandaoMixesReset_payloadExpectedWithdrawals (cfg : Config) (s : GloasState P) :
-    Ok (JauneConsensus.Gloas.processRandaoMixesReset cfg s) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem processRandaoMixesReset_pew (cfg : Config) (s : GSt P) :
+    Ok (JauneConsensus.Gloas.processRandaoMixesReset cfg s) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processRandaoMixesReset; gvcg
 
-theorem processHistoricalSummariesUpdate_payloadExpectedWithdrawals (cfg : Config) (s : GloasState P) :
-    Ok (JauneConsensus.Gloas.processHistoricalSummariesUpdate cfg s) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem processHistoricalSummariesUpdate_pew (cfg : Config) (s : GSt P) :
+    Ok (JauneConsensus.Gloas.processHistoricalSummariesUpdate cfg s) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processHistoricalSummariesUpdate; gvcg
 
-theorem processParticipationFlagUpdates_payloadExpectedWithdrawals (cfg : Config) (s : GloasState P) :
-    Ok (JauneConsensus.Gloas.processParticipationFlagUpdates cfg s) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem processParticipationFlagUpdates_pew (cfg : Config) (s : GSt P) :
+    Ok (JauneConsensus.Gloas.processParticipationFlagUpdates cfg s) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processParticipationFlagUpdates; gvcg
 
-theorem processSyncCommitteeUpdates_payloadExpectedWithdrawals (ctx : Ctx) (s : GloasState P) :
-    Ok (JauneConsensus.Gloas.processSyncCommitteeUpdates ctx s) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem processSyncCommitteeUpdates_pew (ctx : Ctx) (s : GSt P) :
+    Ok (JauneConsensus.Gloas.processSyncCommitteeUpdates ctx s) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processSyncCommitteeUpdates; gvcg
 
-theorem processProposerLookahead_payloadExpectedWithdrawals (cfg : Config) (s : GloasState P) :
-    Ok (JauneConsensus.Gloas.processProposerLookahead cfg s) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem processProposerLookahead_pew (cfg : Config) (s : GSt P) :
+    Ok (JauneConsensus.Gloas.processProposerLookahead cfg s) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processProposerLookahead; gvcg
 
-theorem processPtcWindow_payloadExpectedWithdrawals (cfg : Config) (s : GloasState P) :
-    Ok (JauneConsensus.Gloas.processPtcWindow cfg s) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem processPtcWindow_pew (cfg : Config) (s : GSt P) :
+    Ok (JauneConsensus.Gloas.processPtcWindow cfg s) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processPtcWindow; gvcg
 
-theorem processRandao_payloadExpectedWithdrawals (ctx : Ctx) (s : GloasState P)
+theorem processRandao_pew (ctx : Ctx) (s : GSt P)
     (body : JauneConsensus.Gloas.BeaconBlockBody P) :
-    Ok (JauneConsensus.Gloas.processRandao ctx s body) (payloadExpectedWithdrawalsEq.relation s) := by
+    Ok (JauneConsensus.Gloas.processRandao ctx s body) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processRandao; gvcg
 
-theorem processEth1Data_payloadExpectedWithdrawals (s : GloasState P) (body : JauneConsensus.Gloas.BeaconBlockBody P) :
-    Ok (JauneConsensus.Gloas.processEth1Data s body) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem processEth1Data_pew (s : GSt P) (body : JauneConsensus.Gloas.BeaconBlockBody P) :
+    Ok (JauneConsensus.Gloas.processEth1Data s body) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processEth1Data; gvcg
 
 set_option maxHeartbeats 2000000 in
-theorem processSyncAggregate_payloadExpectedWithdrawals (ctx : Ctx) (s : GloasState P) (sa : SyncAggregate P) :
-    Ok (JauneConsensus.Gloas.processSyncAggregate ctx s sa) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem processSyncAggregate_pew (ctx : Ctx) (s : GSt P) (sa : SyncAggregate P) :
+    Ok (JauneConsensus.Gloas.processSyncAggregate ctx s sa) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processSyncAggregate; gvcg
 
-theorem weighJustificationAndFinalization_payloadExpectedWithdrawals (s : GloasState P) (t p c : Gwei) :
-    Ok (JauneConsensus.Gloas.weighJustificationAndFinalization s t p c) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem weighJustificationAndFinalization_pew (s : GSt P) (t p c : Gwei) :
+    Ok (JauneConsensus.Gloas.weighJustificationAndFinalization s t p c) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.weighJustificationAndFinalization; jvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (weighJustificationAndFinalization_payloadExpectedWithdrawals _ _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (weighJustificationAndFinalization_pew _ _ _ _) $h; exact hh))
 
-theorem processJustificationAndFinalization_payloadExpectedWithdrawals (cfg : Config) (s : GloasState P) :
-    Ok (JauneConsensus.Gloas.processJustificationAndFinalization cfg s) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem processJustificationAndFinalization_pew (cfg : Config) (s : GSt P) :
+    Ok (JauneConsensus.Gloas.processJustificationAndFinalization cfg s) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processJustificationAndFinalization; gvcg
-  all_goals exact weighJustificationAndFinalization_payloadExpectedWithdrawals _ _ _ _
+  all_goals exact weighJustificationAndFinalization_pew _ _ _ _
 
-theorem processSlotAbstractedHashes_payloadExpectedWithdrawals (h₁ : GloasState P → Root) (h₂ : BeaconBlockHeader → Root) (s : GloasState P) :
-    Ok (Invariant.processSlotAbstractedHashes h₁ h₂ s) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem processSlotH_pew (h₁ : GSt P → Root) (h₂ : BeaconBlockHeader → Root) (s : GSt P) :
+    Ok (Inv.processSlotH h₁ h₂ s) (pewEq.R s) := by
   intro s' h
-  unfold Invariant.processSlotAbstractedHashes at h
+  unfold Inv.processSlotH at h
   obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
@@ -202,109 +202,109 @@ theorem processSlotAbstractedHashes_payloadExpectedWithdrawals (h₁ : GloasStat
   obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
   cases h
-  show PayloadExpectedWithdrawalsEq _ _
+  show PewEq _ _
   split <;> rfl
 
-theorem processSlot_payloadExpectedWithdrawals (s : GloasState P) :
-    Ok (JauneConsensus.Gloas.processSlot s) (payloadExpectedWithdrawalsEq.relation s) := by
-  rw [Invariant.processSlot_eq]; exact processSlotAbstractedHashes_payloadExpectedWithdrawals _ _ s
+theorem processSlot_pew (s : GSt P) :
+    Ok (JauneConsensus.Gloas.processSlot s) (pewEq.R s) := by
+  rw [Inv.processSlot_eq]; exact processSlotH_pew _ _ s
 
 
-theorem processBuilderPendingPayments_payloadExpectedWithdrawals (cfg : Config) (s : GloasState P) :
-    Ok (JauneConsensus.Gloas.processBuilderPendingPayments cfg s) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem processBuilderPendingPayments_pew (cfg : Config) (s : GSt P) :
+    Ok (JauneConsensus.Gloas.processBuilderPendingPayments cfg s) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processBuilderPendingPayments; gvcg
 
-theorem updateNextWithdrawalBuilderIndex_payloadExpectedWithdrawals (s : GloasState P) (n : U64) :
-    Ok (JauneConsensus.Gloas.updateNextWithdrawalBuilderIndex s n) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem updateNextWithdrawalBuilderIndex_pew (s : GSt P) (n : U64) :
+    Ok (JauneConsensus.Gloas.updateNextWithdrawalBuilderIndex s n) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.updateNextWithdrawalBuilderIndex; gvcg
 
-theorem updateNextWithdrawalValidatorIndex_payloadExpectedWithdrawals (s : GloasState P) (ws : Array Withdrawal) :
-    Ok (JauneConsensus.Gloas.updateNextWithdrawalValidatorIndex s ws) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem updateNextWithdrawalValidatorIndex_pew (s : GSt P) (ws : Array Withdrawal) :
+    Ok (JauneConsensus.Gloas.updateNextWithdrawalValidatorIndex s ws) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.updateNextWithdrawalValidatorIndex; gvcg
 
-theorem slashValidator_payloadExpectedWithdrawals (cfg : Config) (s : GloasState P) (i : ValidatorIndex)
+theorem slashValidator_pew (cfg : Config) (s : GSt P) (i : ValidatorIndex)
     (wb : Option ValidatorIndex) :
-    Ok (JauneConsensus.Gloas.slashValidator cfg s i wb) (payloadExpectedWithdrawalsEq.relation s) := by
+    Ok (JauneConsensus.Gloas.slashValidator cfg s i wb) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.slashValidator; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (slashValidator_payloadExpectedWithdrawals _ _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (slashValidator_pew _ _ _ _) $h; exact hh))
 
-theorem processProposerSlashing_payloadExpectedWithdrawals (ctx : Ctx) (s : GloasState P) (ps : ProposerSlashing) :
-    Ok (JauneConsensus.Gloas.processProposerSlashing ctx s ps) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem processProposerSlashing_pew (ctx : Ctx) (s : GSt P) (ps : ProposerSlashing) :
+    Ok (JauneConsensus.Gloas.processProposerSlashing ctx s ps) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processProposerSlashing; gvcg
-  all_goals exact slashValidator_payloadExpectedWithdrawals _ _ _ _
+  all_goals exact slashValidator_pew _ _ _ _
 
-theorem processAttesterSlashing_payloadExpectedWithdrawals (ctx : Ctx) (s : GloasState P)
+theorem processAttesterSlashing_pew (ctx : Ctx) (s : GSt P)
     (as : JauneConsensus.Gloas.AttesterSlashing) :
-    Ok (JauneConsensus.Gloas.processAttesterSlashing ctx s as) (payloadExpectedWithdrawalsEq.relation s) := by
+    Ok (JauneConsensus.Gloas.processAttesterSlashing ctx s as) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processAttesterSlashing; gvcg
 
-theorem processVoluntaryExit_payloadExpectedWithdrawals (ctx : Ctx) (s : GloasState P) (sve : SignedVoluntaryExit) :
-    Ok (JauneConsensus.Gloas.processVoluntaryExit ctx s sve) (payloadExpectedWithdrawalsEq.relation s) := by
+theorem processVoluntaryExit_pew (ctx : Ctx) (s : GSt P) (sve : SignedVoluntaryExit) :
+    Ok (JauneConsensus.Gloas.processVoluntaryExit ctx s sve) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processVoluntaryExit; gvcg
-  all_goals exact initiateValidatorExit_payloadExpectedWithdrawals _ _ _
+  all_goals exact initiateValidatorExit_pew _ _ _
 
-theorem processBlsToExecutionChange_payloadExpectedWithdrawals (ctx : Ctx) (s : GloasState P)
+theorem processBlsToExecutionChange_pew (ctx : Ctx) (s : GSt P)
     (sac : SignedBLSToExecutionChange) :
-    Ok (JauneConsensus.Gloas.processBlsToExecutionChange ctx s sac) (payloadExpectedWithdrawalsEq.relation s) := by
+    Ok (JauneConsensus.Gloas.processBlsToExecutionChange ctx s sac) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processBlsToExecutionChange; gvcg
 
 set_option maxHeartbeats 1000000 in
-theorem processPayloadAttestation_payloadExpectedWithdrawals (ctx : Ctx) (s : GloasState P)
+theorem processPayloadAttestation_pew (ctx : Ctx) (s : GSt P)
     (pa : JauneConsensus.Gloas.PayloadAttestation P) :
-    Ok (JauneConsensus.Gloas.processPayloadAttestation ctx s pa) (payloadExpectedWithdrawalsEq.relation s) := by
+    Ok (JauneConsensus.Gloas.processPayloadAttestation ctx s pa) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processPayloadAttestation; gvcg
 
 section Attestation
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (increaseBalance_payloadExpectedWithdrawals _ _ _) $h; exact (show PayloadExpectedWithdrawalsEq _ _ from Eq.trans hh (by split <;> rfl))))
+    `(tactic| (have hh := StepRel.of_ok (increaseBalance_pew _ _ _) $h; exact (show PewEq _ _ from Eq.trans hh (by split <;> rfl))))
 
 set_option maxHeartbeats 2000000 in
-theorem processAttestation_payloadExpectedWithdrawals (ctx : Ctx) (s : GloasState P)
+theorem processAttestation_pew (ctx : Ctx) (s : GSt P)
     (a : JauneConsensus.Gloas.Attestation P) (ps : Slot) :
-    Ok (JauneConsensus.Gloas.processAttestation ctx s a ps) (payloadExpectedWithdrawalsEq.relation s) := by
+    Ok (JauneConsensus.Gloas.processAttestation ctx s a ps) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processAttestation; gvcg
 
 end Attestation
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processProposerSlashing_payloadExpectedWithdrawals _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processProposerSlashing_pew _ _ _) $h; exact hh))
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processAttesterSlashing_payloadExpectedWithdrawals _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processAttesterSlashing_pew _ _ _) $h; exact hh))
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processAttestation_payloadExpectedWithdrawals _ _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processAttestation_pew _ _ _ _) $h; exact hh))
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processVoluntaryExit_payloadExpectedWithdrawals _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processVoluntaryExit_pew _ _ _) $h; exact hh))
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processBlsToExecutionChange_payloadExpectedWithdrawals _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processBlsToExecutionChange_pew _ _ _) $h; exact hh))
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processPayloadAttestation_payloadExpectedWithdrawals _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processPayloadAttestation_pew _ _ _) $h; exact hh))
 
-theorem processOperations_payloadExpectedWithdrawals (ctx : Ctx) (s : GloasState P)
+theorem processOperations_pew (ctx : Ctx) (s : GSt P)
     (body : JauneConsensus.Gloas.BeaconBlockBody P) (ps : Slot) :
-    Ok (JauneConsensus.Gloas.processOperations ctx s body ps) (payloadExpectedWithdrawalsEq.relation s) := by
+    Ok (JauneConsensus.Gloas.processOperations ctx s body ps) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processOperations; gvcg
 
 section BidFrame
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (exact StepRelation.of_ok (Q := StepRelation.relation payloadExpectedWithdrawalsEq _) (by gvcg) $h))
+    `(tactic| (exact StepRel.of_ok (Q := StepRel.R pewEq _) (by gvcg) $h))
 
 set_option maxHeartbeats 1000000 in
-theorem processExecutionPayloadBid_payloadExpectedWithdrawals (ctx : Ctx) (s : GloasState P)
+theorem processExecutionPayloadBid_pew (ctx : Ctx) (s : GSt P)
     (sb : JauneConsensus.Gloas.SignedExecutionPayloadBid) :
-    Ok (JauneConsensus.Gloas.processExecutionPayloadBid ctx s sb) (payloadExpectedWithdrawalsEq.relation s) := by
+    Ok (JauneConsensus.Gloas.processExecutionPayloadBid ctx s sb) (pewEq.R s) := by
   unfold JauneConsensus.Gloas.processExecutionPayloadBid; gvcg
 
 end BidFrame
@@ -314,8 +314,8 @@ end PewGen
 /-! ## Slots -/
 
 /-- `process_epoch` keeps `payload_expected_withdrawals`. -/
-theorem processEpoch_payloadExpectedWithdrawals {ctx : Ctx} {s s' : GloasState P}
-    (h : JauneConsensus.Gloas.processEpoch ctx s = .ok s') : PayloadExpectedWithdrawalsEq s s' := by
+theorem processEpoch_pew {ctx : Ctx} {s s' : GSt P}
+    (h : JauneConsensus.Gloas.processEpoch ctx s = .ok s') : PewEq s s' := by
   unfold JauneConsensus.Gloas.processEpoch at h
   obtain ⟨x1, h1, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨x2, h2, h⟩ := bind_eq_ok_iff.mp h
@@ -333,30 +333,30 @@ theorem processEpoch_payloadExpectedWithdrawals {ctx : Ctx} {s s' : GloasState P
   obtain ⟨x14, h14, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨x15, h15, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨x16, h16, h⟩ := bind_eq_ok_iff.mp h
-  have f1 := processJustificationAndFinalization_payloadExpectedWithdrawals _ _ _ h1
-  have f2 := processInactivityUpdates_payloadExpectedWithdrawals _ _ _ h2
-  have f3 := processRewardsAndPenalties_payloadExpectedWithdrawals _ _ _ h3
-  have f4 := processRegistryUpdates_payloadExpectedWithdrawals _ _ _ h4
-  have f5 := processSlashings_payloadExpectedWithdrawals _ _ _ h5
-  have f6 := processEth1DataReset_payloadExpectedWithdrawals _ _ _ h6
-  have f7 := processPendingDeposits_payloadExpectedWithdrawals _ _ _ h7
-  have f8 := processPendingConsolidations_payloadExpectedWithdrawals _ _ _ h8
-  have f9 := processBuilderPendingPayments_payloadExpectedWithdrawals _ _ _ h9
-  have f10 := processEffectiveBalanceUpdates_payloadExpectedWithdrawals _ _ _ h10
-  have f11 := processSlashingsReset_payloadExpectedWithdrawals _ _ _ h11
-  have f12 := processRandaoMixesReset_payloadExpectedWithdrawals _ _ _ h12
-  have f13 := processHistoricalSummariesUpdate_payloadExpectedWithdrawals _ _ _ h13
-  have f14 := processParticipationFlagUpdates_payloadExpectedWithdrawals _ _ _ h14
-  have f15 := processSyncCommitteeUpdates_payloadExpectedWithdrawals _ _ _ h15
-  have f16 := processProposerLookahead_payloadExpectedWithdrawals _ _ _ h16
-  have f17 := processPtcWindow_payloadExpectedWithdrawals _ _ _ h
-  exact payloadExpectedWithdrawalsEq.trans f1 (payloadExpectedWithdrawalsEq.trans f2 (payloadExpectedWithdrawalsEq.trans f3 (payloadExpectedWithdrawalsEq.trans f4 (payloadExpectedWithdrawalsEq.trans f5
-    (payloadExpectedWithdrawalsEq.trans f6 (payloadExpectedWithdrawalsEq.trans f7 (payloadExpectedWithdrawalsEq.trans f8 (payloadExpectedWithdrawalsEq.trans f9 (payloadExpectedWithdrawalsEq.trans f10
-    (payloadExpectedWithdrawalsEq.trans f11 (payloadExpectedWithdrawalsEq.trans f12 (payloadExpectedWithdrawalsEq.trans f13 (payloadExpectedWithdrawalsEq.trans f14 (payloadExpectedWithdrawalsEq.trans f15
-    (payloadExpectedWithdrawalsEq.trans f16 f17)))))))))))))))
+  have f1 := processJustificationAndFinalization_pew _ _ _ h1
+  have f2 := processInactivityUpdates_pew _ _ _ h2
+  have f3 := processRewardsAndPenalties_pew _ _ _ h3
+  have f4 := processRegistryUpdates_pew _ _ _ h4
+  have f5 := processSlashings_pew _ _ _ h5
+  have f6 := processEth1DataReset_pew _ _ _ h6
+  have f7 := processPendingDeposits_pew _ _ _ h7
+  have f8 := processPendingConsolidations_pew _ _ _ h8
+  have f9 := processBuilderPendingPayments_pew _ _ _ h9
+  have f10 := processEffectiveBalanceUpdates_pew _ _ _ h10
+  have f11 := processSlashingsReset_pew _ _ _ h11
+  have f12 := processRandaoMixesReset_pew _ _ _ h12
+  have f13 := processHistoricalSummariesUpdate_pew _ _ _ h13
+  have f14 := processParticipationFlagUpdates_pew _ _ _ h14
+  have f15 := processSyncCommitteeUpdates_pew _ _ _ h15
+  have f16 := processProposerLookahead_pew _ _ _ h16
+  have f17 := processPtcWindow_pew _ _ _ h
+  exact pewEq.trans f1 (pewEq.trans f2 (pewEq.trans f3 (pewEq.trans f4 (pewEq.trans f5
+    (pewEq.trans f6 (pewEq.trans f7 (pewEq.trans f8 (pewEq.trans f9 (pewEq.trans f10
+    (pewEq.trans f11 (pewEq.trans f12 (pewEq.trans f13 (pewEq.trans f14 (pewEq.trans f15
+    (pewEq.trans f16 f17)))))))))))))))
 
 /-- **Gloas `process_slots` keeps `payload_expected_withdrawals`.** -/
-theorem processSlots_payloadExpectedWithdrawals {ctx : Ctx} {s s' : GloasState P} {slot : U64}
+theorem processSlots_pew {ctx : Ctx} {s s' : GSt P} {slot : U64}
     (h : JauneConsensus.Gloas.processSlots ctx s slot = .ok s') :
     s'.payload_expected_withdrawals = s.payload_expected_withdrawals := by
   unfold JauneConsensus.Gloas.processSlots JauneConsensus.Gloas.processSlotsWith at h
@@ -364,19 +364,19 @@ theorem processSlots_payloadExpectedWithdrawals {ctx : Ctx} {s s' : GloasState P
   obtain ⟨spe, hspe, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨out, hout, h⟩ := bind_eq_ok_iff.mp h
   cases h
-  refine range_forIn_invariant (fun m : GloasState P => m.payload_expected_withdrawals =
+  refine range_forIn_inv (fun m : GSt P => m.payload_expected_withdrawals =
     s.payload_expected_withdrawals) (fun a b x hb hx => ?_) hout rfl
   obtain ⟨st1, h1, hx⟩ := bind_eq_ok_iff.mp hx
   obtain ⟨next, hn, hx⟩ := bind_eq_ok_iff.mp hx
   obtain ⟨r, hr, hx⟩ := bind_eq_ok_iff.mp hx
   have f1 : st1.payload_expected_withdrawals = b.payload_expected_withdrawals :=
-    processSlot_payloadExpectedWithdrawals _ _ h1
+    processSlot_pew _ _ h1
   simp only [] at hx
   split at hx
   · obtain ⟨st2, he, hx⟩ := bind_eq_ok_iff.mp hx
     cases hx
     have f2 : st2.payload_expected_withdrawals = st1.payload_expected_withdrawals :=
-      processEpoch_payloadExpectedWithdrawals he
+      processEpoch_pew he
     show st2.payload_expected_withdrawals = _
     rw [f2, f1, hb]
   · cases hx
@@ -384,18 +384,18 @@ theorem processSlots_payloadExpectedWithdrawals {ctx : Ctx} {s s' : GloasState P
     rw [f1, hb]
 
 /-- The crossing's slots function keeps `payload_expected_withdrawals`. -/
-theorem crossingSlots_payloadExpectedWithdrawals {ctx : Ctx} {s s' : GloasState P} {slot : U64}
+theorem crossingSlots_pew {ctx : Ctx} {s s' : GSt P} {slot : U64}
     (h : crossingSlots ctx s slot = .ok s') :
     s'.payload_expected_withdrawals = s.payload_expected_withdrawals := by
   unfold crossingSlots at h
   split at h
   · cases h; rfl
-  · exact processSlots_payloadExpectedWithdrawals h
+  · exact processSlots_pew h
 
 /-! ## The block -/
 
 /-- The block phases after the withdrawals keep `payload_expected_withdrawals`. -/
-theorem afterWithdrawals_payloadExpectedWithdrawals {ctx : Ctx} {s3 s4 s5 s6 s7 s' : GloasState P}
+theorem afterWithdrawals_pew {ctx : Ctx} {s3 s4 s5 s6 s7 s' : GSt P}
     {blk : JauneConsensus.Gloas.BeaconBlock P} {ps : Slot}
     (h4 : JauneConsensus.Gloas.processExecutionPayloadBid ctx s3
       blk.body.signed_execution_payload_bid = .ok s4)
@@ -404,13 +404,13 @@ theorem afterWithdrawals_payloadExpectedWithdrawals {ctx : Ctx} {s3 s4 s5 s6 s7 
     (h7 : JauneConsensus.Gloas.processOperations ctx s6 blk.body ps = .ok s7)
     (h8 : JauneConsensus.Gloas.processSyncAggregate ctx s7 blk.body.sync_aggregate = .ok s') :
     s'.payload_expected_withdrawals = s3.payload_expected_withdrawals :=
-  payloadExpectedWithdrawalsEq.trans (processExecutionPayloadBid_payloadExpectedWithdrawals _ _ _ _ h4) (payloadExpectedWithdrawalsEq.trans
-    (processRandao_payloadExpectedWithdrawals _ _ _ _ h5) (payloadExpectedWithdrawalsEq.trans (processEth1Data_payloadExpectedWithdrawals _ _ _ h6)
-    (payloadExpectedWithdrawalsEq.trans (processOperations_payloadExpectedWithdrawals _ _ _ _ _ h7) (processSyncAggregate_payloadExpectedWithdrawals _ _ _ _ h8))))
+  pewEq.trans (processExecutionPayloadBid_pew _ _ _ _ h4) (pewEq.trans
+    (processRandao_pew _ _ _ _ h5) (pewEq.trans (processEth1Data_pew _ _ _ h6)
+    (pewEq.trans (processOperations_pew _ _ _ _ _ h7) (processSyncAggregate_pew _ _ _ _ h8))))
 
 /-- `process_withdrawals` past its early return writes `payload_expected_withdrawals` to the
 expected withdrawals. -/
-theorem processWithdrawals_payloadExpectedWithdrawals_full {s s' : GloasState P}
+theorem processWithdrawals_pew_full {s s' : GSt P}
     (hc : (s.latest_block_hash != s.latest_execution_payload_bid.block_hash) = false)
     (h : JauneConsensus.Gloas.processWithdrawals s = .ok s') :
     ∃ ex, JauneConsensus.Gloas.getExpectedWithdrawals s = .ok ex ∧
@@ -421,8 +421,8 @@ theorem processWithdrawals_payloadExpectedWithdrawals_full {s s' : GloasState P}
   obtain ⟨t1, h1, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨t2, h2, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨t6, h6, h⟩ := bind_eq_ok_iff.mp h
-  have q6 := updateNextWithdrawalBuilderIndex_payloadExpectedWithdrawals _ _ _ h6
-  have q7 := updateNextWithdrawalValidatorIndex_payloadExpectedWithdrawals _ _ _ h
+  have q6 := updateNextWithdrawalBuilderIndex_pew _ _ _ h6
+  have q7 := updateNextWithdrawalValidatorIndex_pew _ _ _ h
   refine ⟨ex, hex, ?_⟩
   have e : s'.payload_expected_withdrawals = t6.payload_expected_withdrawals := q7
   rw [e, show t6.payload_expected_withdrawals = _ from q6]
@@ -432,18 +432,18 @@ theorem processWithdrawals_payloadExpectedWithdrawals_full {s s' : GloasState P}
 (`parentFull = false`), `process_withdrawals` returns early: the step withdraws nothing and the
 field is unchanged. After a FULL one, the field is exactly the step's expected withdrawals. No
 other phase writes it. -/
-theorem processBlock_payloadExpectedWithdrawals {ccfg : Config} {bls : Bool} {st post : GloasState P}
+theorem processBlock_payloadExpectedWithdrawals {ccfg : Config} {bls : Bool} {st post : GSt P}
     {blk : JauneConsensus.Gloas.BeaconBlock P}
-    (h : JauneConsensus.Gloas.processBlock (gloasContext ccfg bls) st blk = .ok post) :
+    (h : JauneConsensus.Gloas.processBlock (gloasCtx ccfg bls) st blk = .ok post) :
     (parentFull st blk = false →
       post.payload_expected_withdrawals = st.payload_expected_withdrawals ∧
         stepWithdrawals ccfg bls st blk = .ok []) ∧
     (parentFull st blk = true → ∃ ws, stepWithdrawals ccfg bls st blk = .ok ws ∧
       post.payload_expected_withdrawals.toArray.toList = ws) := by
   obtain ⟨s1, s2, s3, s4, s5, s6, s7, h1, h2, h3, h4, h5, h6, h7, h8⟩ := processBlock_phases h
-  have hpost := afterWithdrawals_payloadExpectedWithdrawals h4 h5 h6 h7 h8
+  have hpost := afterWithdrawals_pew h4 h5 h6 h7 h8
   obtain ⟨_, _, hm2⟩ := processBlockHeader_post h2
-  have w3 := processWithdrawals_withdrawalsFrame _ _ h3
+  have w3 := processWithdrawals_wFrame _ _ h3
   have b4 := processExecutionPayloadBid_post h4
   have hsw : stepWithdrawals ccfg bls st blk =
       (if s2.latest_block_hash != s2.latest_execution_payload_bid.block_hash then pure []
@@ -461,7 +461,7 @@ theorem processBlock_payloadExpectedWithdrawals {ccfg : Config} {bls : Bool} {st
           rw [hpar, heq, hm2]
           exact beq_self_eq_true _
         rw [this] at hE; cases hE
-      rw [processWithdrawalsGloas_early_return s2 hne] at h3
+      rw [processWithdrawalsG_early_return s2 hne] at h3
       cases h3
       refine ⟨by rw [hpost, hm2], ?_⟩
       rw [hsw]
@@ -477,7 +477,7 @@ theorem processBlock_payloadExpectedWithdrawals {ccfg : Config} {bls : Bool} {st
     · obtain ⟨-, -, hL, hK, -, -⟩ := parentFull_frame ha hd he hs
       have hc : (s2.latest_block_hash != s2.latest_execution_payload_bid.block_hash) = false := by
         rw [hm2]; simp only [hL, hK, bne_self_eq_false]
-      obtain ⟨ex, hex, hw⟩ := processWithdrawals_payloadExpectedWithdrawals_full hc h3
+      obtain ⟨ex, hex, hw⟩ := processWithdrawals_pew_full hc h3
       refine ⟨ex.withdrawals.toList, ?_, by rw [hpost, hw]⟩
       rw [hsw, hc]
       simp [hex, bind, Except.bind, pure, Except.pure]
@@ -492,8 +492,8 @@ variable {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
 /-- **`payload_expected_withdrawals` across a Gloas joint step** (G3-11's ledger form): across an
 EMPTY settlement the step withdraws nothing and the field is the pre-state's; otherwise (FULL,
 over a delivered or a landed payload) it is exactly the step's expected withdrawals. -/
-theorem GloasStepView.payloadExpectedWithdrawals
-    (V : GloasStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent) :
+theorem GStepView.payloadExpectedWithdrawals
+    (V : GStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent) :
     (parentFull V.postSlots b.message = false →
       postB.payload_expected_withdrawals = preB.payload_expected_withdrawals ∧
         stepWithdrawals ccfg bls V.postSlots b.message = .ok []) ∧
@@ -503,11 +503,11 @@ theorem GloasStepView.payloadExpectedWithdrawals
   obtain ⟨hE, hF⟩ := processBlock_payloadExpectedWithdrawals V.processBlock
   refine ⟨fun h => ?_, hF⟩
   obtain ⟨e, hw⟩ := hE h
-  exact ⟨e.trans (processSlots_payloadExpectedWithdrawals V.slots), hw⟩
+  exact ⟨e.trans (processSlots_pew V.slots), hw⟩
 
 /-- The EMPTY case by the settlement: an `.empty` settlement keeps the field. -/
-theorem GloasStepView.payloadExpectedWithdrawals_empty
-    (V : GloasStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent)
+theorem GStepView.payloadExpectedWithdrawals_empty
+    (V : GStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent)
     (hs : V.settle = .empty) :
     postB.payload_expected_withdrawals = preB.payload_expected_withdrawals ∧
       stepWithdrawals ccfg bls V.postSlots b.message = .ok [] := by
@@ -522,20 +522,20 @@ end View
 /-! ## The first Gloas block: builders and pending builder withdrawals -/
 
 /-- No pending builder withdrawal, every payment empty, and `L` pays nothing. -/
-def CrossingClean (m : GloasState P) : Prop :=
+def CrossClean (m : GSt P) : Prop :=
   m.builder_pending_withdrawals.toArray.toList = [] ∧
     (∀ p ∈ m.builder_pending_payments.toArray.toList,
       p = JauneConsensus.Gloas.BuilderPendingPayment.empty) ∧
     m.latest_execution_payload_bid.value = U64.zero
 
-theorem crossClean_of_invariant {s s' : GloasState P} (h : InvariantFrame s s') (hc : CrossingClean s) :
-    CrossingClean s' := by
-  unfold CrossingClean; rw [h.2.2.1, h.2.1, h.2.2.2.1]; exact hc
+theorem crossClean_of_inv {s s' : GSt P} (h : InvFrame s s') (hc : CrossClean s) :
+    CrossClean s' := by
+  unfold CrossClean; rw [h.2.2.1, h.2.1, h.2.2.2.1]; exact hc
 
 /-- `upgrade_to_gloas`'s state is clean. -/
 theorem upgradeToGloas_crossClean {ctx : Ctx} {pre : JauneConsensus.BeaconState P .fulu}
-    {post : GloasState P} (h : JauneConsensus.Gloas.upgradeToGloas ctx pre = .ok post) :
-    CrossingClean post := by
+    {post : GSt P} (h : JauneConsensus.Gloas.upgradeToGloas ctx pre = .ok post) :
+    CrossClean post := by
   unfold JauneConsensus.Gloas.upgradeToGloas at h
   obtain ⟨p0, hp0, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨ptc, _, h⟩ := bind_eq_ok_iff.mp h
@@ -557,9 +557,9 @@ theorem upgradeToGloas_crossClean {ctx : Ctx} {pre : JauneConsensus.BeaconState 
 /-- The epoch rotation keeps a clean state clean (the quorum is positive, so no empty payment is
 appended). -/
 theorem rotation_crossClean (hq : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_INCREMENT)
-    {cfg : Config} {a b : GloasState P}
-    (h : JauneConsensus.Gloas.processBuilderPendingPayments cfg a = .ok b) (hc : CrossingClean a) :
-    CrossingClean b := by
+    {cfg : Config} {a b : GSt P}
+    (h : JauneConsensus.Gloas.processBuilderPendingPayments cfg a = .ok b) (hc : CrossClean a) :
+    CrossClean b := by
   obtain ⟨-, q, hqh, hW, hP⟩ := processBuilderPendingPayments_frame h
   have hq0 := quorum_pos hq hqh
   have hL : b.latest_execution_payload_bid = a.latest_execution_payload_bid :=
@@ -586,40 +586,40 @@ theorem rotation_crossClean (hq : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_
 
 /-- Gloas `process_slots` keeps a clean state clean, and keeps the builders. -/
 theorem processSlots_crossClean (hq : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_INCREMENT)
-    {ctx : Ctx} {s s' : GloasState P} {slot : U64}
-    (h : JauneConsensus.Gloas.processSlots ctx s slot = .ok s') (hc : CrossingClean s) :
-    CrossingClean s' ∧ s'.builders = s.builders := by
-  refine processSlots_induction (ctx := ctx) (fun m => CrossingClean m ∧ m.builders = s.builders)
+    {ctx : Ctx} {s s' : GSt P} {slot : U64}
+    (h : JauneConsensus.Gloas.processSlots ctx s slot = .ok s') (hc : CrossClean s) :
+    CrossClean s' ∧ s'.builders = s.builders := by
+  refine processSlots_ind (ctx := ctx) (fun m => CrossClean m ∧ m.builders = s.builders)
     (fun st st1 st2 next hI f1 _ hcs => ?_) h ⟨hc, rfl⟩
-  have hb := (slotIteration_core f1 hcs).1
+  have hb := (slotIter_core f1 hcs).1
   refine ⟨?_, hb.trans hI.2⟩
-  have c1 := crossClean_of_invariant f1 hI.1
-  show CrossingClean st2
+  have c1 := crossClean_of_inv f1 hI.1
+  show CrossClean st2
   rcases hcs with ⟨rfl, _⟩ | ⟨_, he⟩
   · exact c1
   · obtain ⟨a, b, fa, hb', fb⟩ := processEpoch_phases he
-    exact crossClean_of_invariant fb (rotation_crossClean hq hb' (crossClean_of_invariant fa c1))
+    exact crossClean_of_inv fb (rotation_crossClean hq hb' (crossClean_of_inv fa c1))
 
 /-- The crossing's slots function keeps a clean state clean, and keeps the builders. -/
 theorem crossingSlots_crossClean (hq : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_INCREMENT)
-    {ctx : Ctx} {s s' : GloasState P} {slot : U64}
-    (h : crossingSlots ctx s slot = .ok s') (hc : CrossingClean s) :
-    CrossingClean s' ∧ s'.builders = s.builders := by
+    {ctx : Ctx} {s s' : GSt P} {slot : U64}
+    (h : crossingSlots ctx s slot = .ok s') (hc : CrossClean s) :
+    CrossClean s' ∧ s'.builders = s.builders := by
   unfold crossingSlots at h
   split at h
   · cases h; exact ⟨hc, rfl⟩
   · exact processSlots_crossClean hq h hc
 
-theorem progressiveList_ext {s : Spine} {α : Type} {a b : ProgressiveListOnSpine s α}
+theorem pl_ext {s : Spine} {α : Type} {a b : ProgressiveListS s α}
     (h : a.toArray = b.toArray) : a = b := by
   cases a; cases b; cases h; rfl
 
 /-- The parent settlement of a block with empty requests, from a clean state, keeps the builders
 and appends no pending builder withdrawal. -/
-theorem parent_crossClean {ctx : Ctx} {s s1 : GloasState P} {blk : JauneConsensus.Gloas.BeaconBlock P}
+theorem parent_crossClean {ctx : Ctx} {s s1 : GSt P} {blk : JauneConsensus.Gloas.BeaconBlock P}
     (h1 : JauneConsensus.Gloas.processParentExecutionPayload ctx s blk = .ok s1)
     (hr : blk.body.parent_execution_requests = JauneConsensus.Gloas.ExecutionRequests.empty)
-    (hc : CrossingClean s) :
+    (hc : CrossClean s) :
     s1.builders = s.builders ∧ s1.builder_pending_withdrawals.toArray.toList = [] := by
   rcases processParentExecutionPayload_cases h1 with ⟨hs1, -⟩ | ⟨-, a, d, e, ha, hd, he, hs⟩
   · subst hs1; exact ⟨rfl, hc.1⟩
@@ -649,7 +649,7 @@ Premises: the config bounds `quorumPositive` and `slotsPerEpoch`, and the post-s
 theorem crossing_builders_eq
     (quorumPositive : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_INCREMENT)
     (slotsPerEpoch : 2 ≤ P.SLOTS_PER_EPOCH)
-    {ctx : Ctx} {atFork : JauneConsensus.BeaconState P .fulu} {upgraded postSlots post : GloasState P}
+    {ctx : Ctx} {atFork : JauneConsensus.BeaconState P .fulu} {upgraded postSlots post : GSt P}
     {slot : Slot} {blk : JauneConsensus.Gloas.BeaconBlock P}
     (hup : JauneConsensus.Gloas.upgradeToGloas ctx atFork = .ok upgraded)
     (h0 : crossingSlots ctx upgraded slot = .ok postSlots)
@@ -670,17 +670,17 @@ theorem crossing_builders_eq
   have b4 := processExecutionPayloadBid_post h4
   have c := afterBid_core h5 h6 h7 h8
   have hpostb : post.builders = s3.builders := by rw [c.1, b4.2.2.2.2.1]
-  have w3 := processWithdrawals_withdrawalsFrame _ _ h3
+  have w3 := processWithdrawals_wFrame _ _ h3
   -- pending builder withdrawals
   have hwpost : post.builder_pending_withdrawals.toArray.toList = [] := by
-    obtain ⟨⟨k, hk⟩, -⟩ := processWithdrawals_withdrawalQueue h3
-    have o7 := processOperations_operations _ _ _ _ _ h7
+    obtain ⟨⟨k, hk⟩, -⟩ := processWithdrawals_wq h3
+    have o7 := processOperations_ops _ _ _ _ _ h7
     have e8 : post.builder_pending_withdrawals = s7.builder_pending_withdrawals :=
-      (processSyncAggregate_invariantFrame _ _ _ _ h8).2.2.1
+      (processSyncAggregate_invFrame _ _ _ _ h8).2.2.1
     have e6 : s6.builder_pending_withdrawals = s4.builder_pending_withdrawals :=
-      ((processEth1Data_invariantFrame _ _ _ h6).2.2.1).trans (processRandao_invariantFrame _ _ _ _ h5).2.2.1
+      ((processEth1Data_invFrame _ _ _ h6).2.2.1).trans (processRandao_invFrame _ _ _ _ h5).2.2.1
     rw [e8, o7.2.1, e6, b4.2.2.2.2.2.2.2.2.2.1, hk, hw2, List.drop_nil]
-  refine ⟨?_, by rw [hw0]; exact progressiveList_ext (Array.toList_inj.mp (by rw [hwpost]; rfl))⟩
+  refine ⟨?_, by rw [hw0]; exact pl_ext (Array.toList_inj.mp (by rw [hwpost]; rfl))⟩
   rw [hpostb, ← hb2]
   -- the withdrawals debit no builder
   have hfar2 : BuildersFar s2 := by intro i x hx; rw [hb2] at hx; exact hfar0 i x hx
@@ -688,7 +688,7 @@ theorem crossing_builders_eq
   · obtain ⟨ex, t, hex, ht, hs3⟩ := processWithdrawals_full hcw h3
     rw [hs3]
     have vb : s2.validators.toArray.size ≤ 2 ^ 40 := by
-      rw [← processWithdrawals_validatorsLength _ _ h3, ← afterWithdrawals_validatorsLength h4 h5 h6 h7 h8]
+      rw [← processWithdrawals_vlen _ _ h3, ← afterWithdrawals_vlen h4 h5 h6 h7 h8]
       exact validatorsBound
     have bsz : t.builders.toArray.size = s2.builders.toArray.size := by
       rw [← hs3]; exact w3.2.2.2.2.2.1
@@ -718,10 +718,10 @@ theorem crossing_builders_eq
       have hswl : sw.toList = [] := by
         rw [← Array.length_toList] at hsw0; exact List.eq_nil_of_length_eq_zero hsw0
       simp only [Array.toList_append, routedSum_append, hswl] at rb rp rv ⊢
-      simp [routedSum, pendingWithdrawalBalance] at rb
+      simp [routedSum, pendW] at rb
       simp only [routedSum] at rp rv
       simp [routedSum, rp, rv, rb]
-    apply progressiveList_ext
+    apply pl_ext
     apply Array.ext_getElem?
     intro i
     cases hb : s2.builders.toArray[i]? with
@@ -743,7 +743,7 @@ theorem crossing_builders_eq
       rw [this]
   · have hne : s2.latest_block_hash ≠ s2.latest_execution_payload_bid.block_hash := by
       simpa using hcw
-    rw [processWithdrawalsGloas_early_return s2 hne] at h3
+    rw [processWithdrawalsG_early_return s2 hne] at h3
     cases h3
     rfl
 

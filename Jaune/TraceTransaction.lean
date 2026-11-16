@@ -11,7 +11,7 @@ namespace Jaune.TraceTransaction
 open Jaune
 
 def preparedFrame (frame : Frame) (prepared : Devm) :
-    Except (EvmError × State × AdrSet × TransientStorage) Devm :=
+    Except (EvmError × State × AdrSet × Tra) Devm :=
   match frame.inner.benvAfterTransfer with
   | .error e => frame.settleMsg (.error e)
   | .ok benv =>
@@ -24,8 +24,8 @@ def preparedFrame (frame : Frame) (prepared : Devm) :
       match inner.codeAddress with
       | none => exec evm
       | some adr =>
-        if !inner.disablePrecompiles && inner.benv.stat.rules.isPrecompile adr then
-          executePrecompile evm adr
+        if !inner.disablePrecompiles && inner.benv.stat.rules.isPrecomp adr then
+          executePrecomp evm adr
         else exec evm
     frame.settle raw
 
@@ -43,8 +43,8 @@ def preparedEntry (frame : Frame) (prepared : Devm) : FrameEntry :=
     match inner.codeAddress with
     | none => .run evm
     | some adr =>
-      if !inner.disablePrecompiles && inner.benv.stat.rules.isPrecompile adr then
-        .done (frame.settle (executePrecompile evm adr))
+      if !inner.disablePrecompiles && inner.benv.stat.rules.isPrecomp adr then
+        .done (frame.settle (executePrecomp evm adr))
       else .run evm
 
 theorem preparedFrame_eq (frame : Frame) (prepared : Devm) :
@@ -161,7 +161,7 @@ theorem runTopLevelAmsterdam_erasure {state : StateGasRules} {msg : Msg}
 /-- Shared rendering of the pre-Amsterdam settled message result. The
 transaction's authorization refund is separate from the frame-local counter. -/
 def legacyOutput (authorizationRefund : Nat)
-    (result : Except (EvmError × State × AdrSet × TransientStorage) Devm) :
+    (result : Except (EvmError × State × AdrSet × Tra) Devm) :
     Except EvmError (State × MsgCallOutput) := do
   let evm ← Except.bimap Prod.fst id result
   let refund ←
@@ -257,18 +257,18 @@ def runMessage {m : Type → Type} [Monad m] (sink : Trace.Sink m)
 structure PreparedTransaction where
   benv : Benv
   bout : BlockOutput
-  sender : Address
+  sender : Adr
   effectiveGasPrice : Nat
   txBlobGasUsed : Nat
   calldataFloorGasCost : Nat
   msg : Msg
 
-def prepareTransaction (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat) :
+def prepareTransaction (benv : Benv) (bout : BlockOutput) (tx : Tx) (index : Nat) :
     Except TransitionError PreparedTransaction := do
   let benv := benv.beginTransaction
   let bout ← .ok {bout with
-    transactionsTrie := bout.transactionsTrie.insert (Rlp.Item.bytes index.toBytes).toBytes tx}
-  let validationSender : Address ← recoverValidationSender benv tx
+    transactionsTrie := bout.transactionsTrie.insert (BLT.bytes index.toBytes).toBytes tx}
+  let validationSender : Adr ← recoverValidationSender benv tx
   let ⟨intrinsicGas, calldataFloorGasCost⟩ ←
     Except.mapError TransitionError.transaction
       (validateTransaction benv.stat.rules tx validationSender)
@@ -279,18 +279,18 @@ def prepareTransaction (benv : Benv) (bout : BlockOutput) (tx : Transaction) (in
     txBlobGasUsed
   ⟩ ← checkTransaction benv bout tx
   let blobGasFee :=
-    if tx.isEip4844
+    if tx.isTypeThree
     then calculateDataFee benv.stat.rules.blob benv.stat.excessBlobGas tx
     else 0
-  let effectiveGasFee := tx.gasLimit * effectiveGasPrice
-  let allocation := allocateEvmGas benv.stat.rules tx.gasLimit intrinsicGas
+  let effectiveGasFee := tx.gas * effectiveGasPrice
+  let allocation := allocateEvmGas benv.stat.rules tx.gas intrinsicGas
   let state : State := benv.state.incrNonce sender
-  let state ← (state.subBal sender (effectiveGasFee + blobGasFee).toU256).toExcept
+  let state ← (state.subBal sender (effectiveGasFee + blobGasFee).toB256).toExcept
     (TransitionError.internal (.invariant (.text "balance underflow")))
   -- EIP-3651 (Shanghai) warms the coinbase; before it only the access list is
   -- pre-warmed.
   let preaccessedAddresses : AdrSet :=
-    if benv.stat.rules.transactionRules.warmCoinbase then
+    if benv.stat.rules.txr.warmCoinbase then
     .ofList (benv.stat.coinbase :: tx.accessList.map Prod.fst)
     else .ofList (tx.accessList.map Prod.fst)
   let preaccessedStorageKeys : KeySet :=
@@ -305,7 +305,7 @@ def prepareTransaction (benv : Benv) (bout : BlockOutput) (tx : Transaction) (in
       accessListAddresses := preaccessedAddresses
       accessListStorageKeys := preaccessedStorageKeys
       blobVersionedHashes := blobVersionedHashes
-      auths := tx.authorizationList
+      auths := tx.auths
       indexInBlock := index
       txHash := getTxHash tx
     }
@@ -313,7 +313,7 @@ def prepareTransaction (benv : Benv) (bout : BlockOutput) (tx : Transaction) (in
   let msg ← prepareMessage {benv with state := state} tenv tx
   pure ⟨benv, bout, sender, effectiveGasPrice, txBlobGasUsed, calldataFloorGasCost, msg⟩
 
-def finishTransaction (prepared : PreparedTransaction) (tx : Transaction) (index : Nat)
+def finishTransaction (prepared : PreparedTransaction) (tx : Tx) (index : Nat)
     (state : State) (txOutput : MsgCallOutput) :
     Except TransitionError (State × BlockOutput) := do
   let benv := prepared.benv
@@ -326,19 +326,19 @@ def finishTransaction (prepared : PreparedTransaction) (tx : Transaction) (index
     (Int.toNat? txOutput.refundCounter).toExcept
       (TransitionError.internal (.invariant (.text "refund counter is negative")))
   let settlement :=
-    settleTransactionGas benv.stat.rules tx.gasLimit calldataFloorGasCost
+    settleTransactionGas benv.stat.rules tx.gas calldataFloorGasCost
       txOutput.gasLeft txOutput.stateGasLeft refundCounter txOutput.stateGasUsed
   let gasRefundAmount : Nat :=
     settlement.gasLeft * effectiveGasPrice
   let priorityFeePerGas := effectiveGasPrice - benv.stat.baseFeePerGas
   let transactionFee := settlement.gasUsed * priorityFeePerGas
-  let state := state.addBal sender gasRefundAmount.toU256
+  let state := state.addBal sender gasRefundAmount.toB256
   let storageWrites :=
-    if (state.get sender).isEmpty then txOutput.storageWrites.eraseAddress sender
+    if (state.get sender).Empty then txOutput.storageWrites.eraseAddress sender
     else txOutput.storageWrites
-  let state := state.addBal benv.stat.coinbase transactionFee.toU256
+  let state := state.addBal benv.stat.coinbase transactionFee.toB256
   let storageWrites :=
-    if (state.get benv.stat.coinbase).isEmpty then storageWrites.eraseAddress benv.stat.coinbase
+    if (state.get benv.stat.coinbase).Empty then storageWrites.eraseAddress benv.stat.coinbase
     else storageWrites
   let storageWrites := txOutput.accountsToDelete.toList.foldl
     (fun writes a => writes.eraseAddress a) storageWrites
@@ -350,7 +350,7 @@ def finishTransaction (prepared : PreparedTransaction) (tx : Transaction) (index
   let bout ← .ok (bout.withGasSettlement settlement txBlobGasUsed)
   let receipt :=
     makeReceipt tx txOutput.error bout.cumulativeGasUsed txOutput.logs
-  let receiptKey : Bytes := Rlp.Item.toBytes <| .bytes index.toBytes
+  let receiptKey : Bytes := BLT.toBytes <| .bytes index.toBytes
   let bout ← .ok {bout with
     receiptKeys := bout.receiptKeys ++ [receiptKey]
     receiptsTrie := bout.receiptsTrie.insert receiptKey receipt
@@ -360,15 +360,15 @@ def finishTransaction (prepared : PreparedTransaction) (tx : Transaction) (index
   -- changes, plus reads and the transaction-level ones --
   -- the sender (`check_transaction`, `update_sender_state`, the refund) and
   -- the coinbase (`disburse_gas_fees` credits it even a zero fee).
-  let bal := match benv.stat.rules.blockAccessListRules with
-    | none => bout.blockAccessListBuilder
-    | some _ => bout.blockAccessListBuilder.incorporate (index + 1) benv.state state
+  let bal := match benv.stat.rules.bal with
+    | none => bout.bal
+    | some _ => bout.bal.incorporate (index + 1) benv.state state
         (sender :: benv.stat.coinbase :: txOutput.accountReads.toList)
         txOutput.storageReads.toList storageWrites.toList
-  .ok ⟨state, {bout with blockAccessListBuilder := bal}⟩
+  .ok ⟨state, {bout with bal := bal}⟩
 
 /-- The local preparation/settlement split is exactly the public pipeline. -/
-theorem processTransaction_eq (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat) :
+theorem processTransaction_eq (benv : Benv) (bout : BlockOutput) (tx : Tx) (index : Nat) :
     Jaune.processTransaction benv bout tx index = (do
       let prepared ← prepareTransaction benv bout tx index
       let ⟨state, output⟩ ← Except.mapError TransitionError.vm (Jaune.processMessageCall prepared.msg)
@@ -379,7 +379,7 @@ theorem processTransaction_eq (benv : Benv) (bout : BlockOutput) (tx : Transacti
 
 /-- Transaction result plus the observed message output needed by a trace
 summary. A validation/preparation rejection can have no message output. -/
-structure TransactionResult (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat)
+structure TransactionResult (benv : Benv) (bout : BlockOutput) (tx : Tx) (index : Nat)
     extends Certified (Jaune.processTransaction benv bout tx index) where
   messageOutput : Option MsgCallOutput
 
@@ -388,7 +388,7 @@ Validation, fee/nonce preparation, message execution, gas/receipt settlement,
 SELFDESTRUCT and block-access bookkeeping are connected to the public pipeline
 by the certificate. The original transaction executor is never run a second time. -/
 def runTransaction {m : Type → Type} [Monad m] (sink : Trace.Sink m)
-    (authorizationRefund : Nat → m Unit) (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat) (runId : String) :
+    (authorizationRefund : Nat → m Unit) (benv : Benv) (bout : BlockOutput) (tx : Tx) (index : Nat) (runId : String) :
     m (TransactionResult benv bout tx index) := do
   match hprep : prepareTransaction benv bout tx index with
   | .error error =>
@@ -415,13 +415,13 @@ def runTransaction {m : Type → Type} [Monad m] (sink : Trace.Sink m)
         rfl }
 
 /-- Universal execution projection of the actual transaction trace driver. -/
-theorem runTransaction_erasure {benv : Benv} {bout : BlockOutput} {tx : Transaction} {index : Nat}
+theorem runTransaction_erasure {benv : Benv} {bout : BlockOutput} {tx : Tx} {index : Nat}
     (result : TransactionResult benv bout tx index) :
     result.value = Jaune.processTransaction benv bout tx index := result.erases
 
 theorem runTransaction_id_erasure (sink : Trace.Sink Id)
     (authorizationRefund : Nat → Id Unit) (benv : Benv)
-    (bout : BlockOutput) (tx : Transaction) (index : Nat) (runId : String) :
+    (bout : BlockOutput) (tx : Tx) (index : Nat) (runId : String) :
     (runTransaction sink authorizationRefund benv bout tx index runId).value =
       Jaune.processTransaction benv bout tx index :=
   (runTransaction sink authorizationRefund benv bout tx index runId).erases
@@ -433,7 +433,7 @@ these checks pin that `processTransaction` sweeps the touched accounts its
 message call reports: an account holding only storage is erased under Gray
 Glacier and kept under Prague. -/
 
-private def sweepGuardAdr : Address := 0x2000
+private def sweepGuardAdr : Adr := 0x2000
 
 private def sweepGuardSurvives (fork : Fork) : Bool :=
   let state := State.setStorVal .empty sweepGuardAdr 1 1
@@ -442,15 +442,15 @@ private def sweepGuardSurvives (fork : Fork) : Bool :=
     stat := { (default : BenvStat) with fork := fork, origState := state } }
   let prepared : PreparedTransaction :=
     ⟨benv, .init, 0x5000, 0, 0, 0, default⟩
-  let tx : Transaction := {
+  let tx : Tx := {
     nonce := 0
-    gasLimit := 0
+    gas := 0
     value := 0
     data := []
     v := 27
     r := []
     s := []
-    type := .legacy 0 (some 0) }
+    type := .zero 0 (some 0) }
   let out : MsgCallOutput := {
     gasLeft := 0
     refundCounter := 0

@@ -12,23 +12,23 @@ open Jaune
 abbrev code (a b : UInt8) : ByteArray := ⟨#[0x60, a, 0x60, b, 0x00]⟩
 
 theorem first (a b : UInt8) :
-    Jaune.NextOp.At (code a b) 0 (.push [a] (by simp)) := by
-  simp [Jaune.NextOp.At, code, ByteArray.getOp,
+    Jaune.Ninst.At (code a b) 0 (.push [a] (by simp)) := by
+  simp [Jaune.Ninst.At, code, ByteArray.getInst,
     ← ByteArray.size_data, ByteArray.getElem_eq_getElem_data,
-    UInt8.toOpClass, UInt8.highs, UInt8.lows, ByteArray.sliceD, UInt8.toHaltOp]
+    UInt8.toInstType, UInt8.highs, UInt8.lows, ByteArray.sliceD, UInt8.toLinst]
   rfl
 
 theorem second (a b : UInt8) :
-    Jaune.NextOp.At (code a b) 2 (.push [b] (by simp)) := by
-  simp [Jaune.NextOp.At, code, ByteArray.getOp,
+    Jaune.Ninst.At (code a b) 2 (.push [b] (by simp)) := by
+  simp [Jaune.Ninst.At, code, ByteArray.getInst,
     ← ByteArray.size_data, ByteArray.getElem_eq_getElem_data,
-    UInt8.toOpClass, UInt8.highs, UInt8.lows, ByteArray.sliceD, UInt8.toHaltOp]
+    UInt8.toInstType, UInt8.highs, UInt8.lows, ByteArray.sliceD, UInt8.toLinst]
   rfl
 
-theorem last (a b : UInt8) : Jaune.HaltOp.At (code a b) 4 .stop := by
-  simp [Jaune.HaltOp.At, code, ByteArray.getOp,
+theorem last (a b : UInt8) : Jaune.Linst.At (code a b) 4 .stop := by
+  simp [Jaune.Linst.At, code, ByteArray.getInst,
     ← ByteArray.size_data, ByteArray.getElem_eq_getElem_data,
-    UInt8.toOpClass, UInt8.highs, UInt8.lows, UInt8.toHaltOp]
+    UInt8.toInstType, UInt8.highs, UInt8.lows, UInt8.toLinst]
   rfl
 
 def initial (base : Devm) : Devm :=
@@ -42,18 +42,18 @@ def execution (env : Sevm) (base : Devm) (a b : UInt8) :
     Jaune.Exec 0 { env with code := code a b } (initial base)
       (.ok (finalState base a b)) := by
   apply SymbolicPush.prepend [a] (by simp) (first a b)
-  · simp [SymbolicPush.cost, initial, Devm.gasLeft, Devm.setMach, Gas.veryLow]
+  · simp [SymbolicPush.cost, initial, Devm.gasLeft, Devm.setMach, gVerylow]
   · simp [initial, Devm.stack, Devm.setMach]
   · exact Or.inl (by simp)
   apply SymbolicPush.prepend [b] (by simp) (second a b)
   · simp [SymbolicPush.cost, SymbolicPush.post, initial, Devm.gasLeft,
-      Devm.setMach, Gas.veryLow]
+      Devm.setMach, gVerylow]
   · simp [SymbolicPush.post, initial, Devm.stack, Devm.setMach]
   · exact Or.inl (by simp)
   exact .halt (Jaune.Evm.step_last (devm := finalState base a b) (l := .stop) (last a b))
 
 theorem final_stack (base : Devm) (a b : UInt8) :
-    (finalState base a b).stack = [Bytes.toU256 [b], Bytes.toU256 [a]] := rfl
+    (finalState base a b).stack = [Bytes.toB256 [b], Bytes.toB256 [a]] := rfl
 
 theorem final_gas (base : Devm) (a b : UInt8) :
     (finalState base a b).gasLeft = 0 := rfl

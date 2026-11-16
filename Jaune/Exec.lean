@@ -78,13 +78,13 @@ lemma Exec.halt_inv {pc sevm devm exn ex}
 
 /-- A `Linst` at the program counter settles the whole derivation. -/
 lemma Exec.last_inv {pc sevm devm exn l}
-    (cr : Exec pc sevm devm exn) (h : HaltOp.At sevm.code pc l) :
+    (cr : Exec pc sevm devm exn) (h : Linst.At sevm.code pc l) :
     exn = l.run sevm devm :=
   cr.halt_inv (Evm.step_last h)
 
 /-- A nonterminal instruction together with any required child derivation. -/
-def NextOp.Run (sevm : Sevm) (devm : Devm) (n : NextOp) (devm' : Devm) : Prop :=
-  ∃ xl : Xlot, xl.Filled ∧ ∃ pc, NextOp.StepRun pc sevm devm n xl (.ok devm')
+def Ninst.Run (sevm : Sevm) (devm : Devm) (n : Ninst) (devm' : Devm) : Prop :=
+  ∃ xl : Xlot, xl.Filled ∧ ∃ pc, Ninst.StepRun pc sevm devm n xl (.ok devm')
 
 /- The residue of the fuel-bounded (`Fueled`) reasoning layer.  With
    sufficiency proved in Jaune, fuel never reaches a Blanc statement: these
@@ -114,8 +114,8 @@ frame always sits strictly below its parent, and entering a frame preserves
 the frame's own depth. -/
 
 lemma genericCall.step_spawn_depth
-    {sevm : Sevm} {devm : Devm} {gas : Nat} {value : U256}
-    {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
+    {sevm : Sevm} {devm : Devm} {gas : Nat} {value : B256}
+    {caller target codeAddress : Adr} {shouldTransferValue isStaticcall : Bool}
     {inputIndex inputSize outputIndex outputSize : Nat} {code : ByteArray}
     {disablePrecompiles : Bool} {f : Frame} {rsm : Resume}
     (hs : genericCall.step sevm devm gas value caller target codeAddress
@@ -131,7 +131,7 @@ lemma genericCall.step_spawn_depth
   all_goals omega
 
 lemma genericCreate.step_spawn_depth
-    {sevm : Sevm} {devm : Devm} {endowment : U256} {newAddress : Address}
+    {sevm : Sevm} {devm : Devm} {endowment : B256} {newAddress : Adr}
     {memoryIndex memorySize : Nat} {f : Frame} {rsm : Resume}
     (hs : genericCreate.step sevm devm endowment newAddress memoryIndex
       memorySize = .spawn f rsm) :
@@ -148,8 +148,8 @@ lemma genericCreate.step_spawn_depth
 
 lemma genericCallAmsterdam.step_spawn_depth
     {sevm : Sevm} {state : StateGasRules} {devm : Devm}
-    {gas reservoir : Nat} {value : U256}
-    {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
+    {gas reservoir : Nat} {value : B256}
+    {caller target codeAddress : Adr} {shouldTransferValue isStaticcall : Bool}
     {inputIndex inputSize outputIndex outputSize : Nat} {code : ByteArray}
     {disablePrecompiles newAccountCharged insufficientBalance : Bool}
     {f : Frame} {rsm : Resume}
@@ -167,8 +167,8 @@ lemma genericCallAmsterdam.step_spawn_depth
   all_goals omega
 
 lemma genericCreateAmsterdam.step_spawn_depth
-    {sevm : Sevm} {state : StateGasRules} {devm : Devm} {endowment : U256}
-    {newAddress : Address} {memoryIndex memorySize : Nat} {f : Frame} {rsm : Resume}
+    {sevm : Sevm} {state : StateGasRules} {devm : Devm} {endowment : B256}
+    {newAddress : Adr} {memoryIndex memorySize : Nat} {f : Frame} {rsm : Resume}
     (hs : genericCreateAmsterdam.step sevm state devm endowment newAddress
       memoryIndex memorySize = .spawn f rsm) :
     f.inner.depth < sevm.depth := by
@@ -182,12 +182,12 @@ lemma genericCreateAmsterdam.step_spawn_depth
       createMsg, not_or] at *
   all_goals omega
 
-lemma MessageOp.step_spawn_depth {sevm : Sevm} {devm : Devm} {x : MessageOp}
+lemma Xinst.step_spawn_depth {sevm : Sevm} {devm : Devm} {x : Xinst}
     {f : Frame} {rsm : Resume}
-    (hs : MessageOp.step sevm devm x = .spawn f rsm) :
+    (hs : Xinst.step sevm devm x = .spawn f rsm) :
     f.inner.depth < sevm.depth := by
   cases x <;>
-    simp only [MessageOp.step, Bind.bind, Except.bind, Except.assert,
+    simp only [Xinst.step, Bind.bind, Except.bind, Except.assert,
       Pure.pure, Except.pure] at hs <;>
     repeat' split at hs
   all_goals simp only [XStep.ofExcept, reduceCtorEq] at hs
@@ -200,8 +200,8 @@ lemma MessageOp.step_spawn_depth {sevm : Sevm} {devm : Devm} {x : MessageOp}
 
 /-- A CALL-family spawn hands the parent's block statics to the child frame. -/
 lemma genericCall.step_spawn_benvStat
-    {sevm : Sevm} {devm : Devm} {gas : Nat} {value : U256}
-    {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
+    {sevm : Sevm} {devm : Devm} {gas : Nat} {value : B256}
+    {caller target codeAddress : Adr} {shouldTransferValue isStaticcall : Bool}
     {inputIndex inputSize outputIndex outputSize : Nat} {code : ByteArray}
     {disablePrecompiles : Bool} {f : Frame} {rsm : Resume}
     (hs : genericCall.step sevm devm gas value caller target codeAddress
@@ -217,7 +217,7 @@ lemma genericCall.step_spawn_benvStat
 
 /-- A CREATE-family spawn hands the parent's block statics to the child frame. -/
 lemma genericCreate.step_spawn_benvStat
-    {sevm : Sevm} {devm : Devm} {endowment : U256} {newAddress : Address}
+    {sevm : Sevm} {devm : Devm} {endowment : B256} {newAddress : Adr}
     {memoryIndex memorySize : Nat} {f : Frame} {rsm : Resume}
     (hs : genericCreate.step sevm devm endowment newAddress memoryIndex memorySize
       = .spawn f rsm) :
@@ -232,8 +232,8 @@ lemma genericCreate.step_spawn_benvStat
 /-- An Amsterdam CALL-family spawn hands the parent's block statics to the child. -/
 lemma genericCallAmsterdam.step_spawn_benvStat
     {sevm : Sevm} {state : StateGasRules} {devm : Devm}
-    {gas reservoir : Nat} {value : U256}
-    {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
+    {gas reservoir : Nat} {value : B256}
+    {caller target codeAddress : Adr} {shouldTransferValue isStaticcall : Bool}
     {inputIndex inputSize outputIndex outputSize : Nat} {code : ByteArray}
     {disablePrecompiles newAccountCharged insufficientBalance : Bool}
     {f : Frame} {rsm : Resume}
@@ -251,8 +251,8 @@ lemma genericCallAmsterdam.step_spawn_benvStat
 
 /-- An Amsterdam CREATE-family spawn hands the parent's block statics to the child. -/
 lemma genericCreateAmsterdam.step_spawn_benvStat
-    {sevm : Sevm} {state : StateGasRules} {devm : Devm} {endowment : U256}
-    {newAddress : Address} {memoryIndex memorySize : Nat} {f : Frame} {rsm : Resume}
+    {sevm : Sevm} {state : StateGasRules} {devm : Devm} {endowment : B256}
+    {newAddress : Adr} {memoryIndex memorySize : Nat} {f : Frame} {rsm : Resume}
     (hs : genericCreateAmsterdam.step sevm state devm endowment newAddress
       memoryIndex memorySize = .spawn f rsm) :
     f.inner.benv.stat = sevm.benvStat := by
@@ -264,11 +264,11 @@ lemma genericCreateAmsterdam.step_spawn_benvStat
   all_goals rfl
 
 /-- Every spawning instruction hands the parent's block statics to the child. -/
-lemma MessageOp.step_spawn_benvStat {sevm : Sevm} {devm : Devm} {x : MessageOp}
-    {f : Frame} {rsm : Resume} (hs : MessageOp.step sevm devm x = .spawn f rsm) :
+lemma Xinst.step_spawn_benvStat {sevm : Sevm} {devm : Devm} {x : Xinst}
+    {f : Frame} {rsm : Resume} (hs : Xinst.step sevm devm x = .spawn f rsm) :
     f.inner.benv.stat = sevm.benvStat := by
   cases x <;>
-    simp only [MessageOp.step, Bind.bind, Except.bind, Except.assert,
+    simp only [Xinst.step, Bind.bind, Except.bind, Except.assert,
       Pure.pure, Except.pure] at hs <;>
     repeat' split at hs
   all_goals simp only [XStep.ofExcept, reduceCtorEq] at hs
@@ -279,11 +279,11 @@ lemma MessageOp.step_spawn_benvStat {sevm : Sevm} {devm : Devm} {x : MessageOp}
       | exact genericCreateAmsterdam.step_spawn_benvStat hs
       | exact genericCallAmsterdam.step_spawn_benvStat hs
 
-lemma NextOp.step_spawn_depth {evm : Evm} {n : NextOp}
+lemma Ninst.step_spawn_depth {evm : Evm} {n : Ninst}
     {f : Frame} {rsm : Resume} {pc' : Nat}
-    (h : NextOp.step evm n = .spawn f rsm pc') : f.inner.depth < evm.sta.depth := by
-  obtain ⟨x, _, hx⟩ := NextOp.step_spawn_inv h
-  exact MessageOp.step_spawn_depth hx
+    (h : Ninst.step evm n = .spawn f rsm pc') : f.inner.depth < evm.sta.depth := by
+  obtain ⟨x, _, hx⟩ := Ninst.step_spawn_inv h
+  exact Xinst.step_spawn_depth hx
 
 /-- A spawned child frame sits strictly below its parent's depth. -/
 lemma Step.spawn_depth_lt {pc : Nat} {sevm : Sevm} {devm : Devm}
@@ -294,9 +294,9 @@ lemma Step.spawn_depth_lt {pc : Nat} {sevm : Sevm} {devm : Devm}
   split at hs
   · cases hs
   · rename_i n hgi
-    rcases n with r | x | ⟨xs, hxs⟩ | a | a | a <;> simp only [NextOp.step] at hs
+    rcases n with r | x | ⟨xs, hxs⟩ | a | a | a <;> simp only [Ninst.step] at hs
     · cases Step.ofExecution_ne_spawn hs
-    · exact MessageOp.step_spawn_depth (XStep.toStep_spawn hs)
+    · exact Xinst.step_spawn_depth (XStep.toStep_spawn hs)
     · split at hs <;> cases Step.ofExecution_ne_spawn hs
     · cases Step.ofExecution_ne_spawn hs
     · cases Step.ofExecution_ne_spawn hs
@@ -426,7 +426,7 @@ lemma Xlot.filled_exec (evm : Evm) : Xlot.Filled (.some ⟨evm, exec evm⟩) :=
     (Fueled.ext (execFueled_run_sufficientFuel evm))
 
 lemma of_runFrame {f : Frame}
-    {r : Except (EvmError × State × AdrSet × TransientStorage) Devm}
+    {r : Except (EvmError × State × AdrSet × Tra) Devm}
     (eq : runFrame f = r) :
     ∃ xl : Xlot, xl.Filled ∧ RunFrame f xl r := by
   unfold runFrame at eq
@@ -441,13 +441,13 @@ lemma of_runFrame {f : Frame}
     exact ⟨exec evm, rfl, eq.symm⟩
 
 lemma of_processMessage (msg : Msg)
-    (ex : Except (EvmError × State × AdrSet × TransientStorage) Devm)
+    (ex : Except (EvmError × State × AdrSet × Tra) Devm)
     (eq : processMessage msg = ex) :
     ∃ xl : Xlot, xl.Filled ∧ ProcessMessage msg xl ex :=
   of_runFrame eq
 
 lemma of_processCreateMessage (msg : Msg)
-    (ex : Except (EvmError × State × AdrSet × TransientStorage) Devm)
+    (ex : Except (EvmError × State × AdrSet × Tra) Devm)
     (eq : processCreateMessage msg = ex) :
     ∃ xl : Xlot,
       xl.Filled ∧

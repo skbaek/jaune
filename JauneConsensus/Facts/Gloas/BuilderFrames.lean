@@ -73,7 +73,7 @@ theorem processBuilderExitRequest_frame {cfg : Config} {m m' : JauneConsensus.Gl
 
 theorem processDepositRequest_builderFrame (m : JauneConsensus.Gloas.BeaconState P)
     (dr : DepositRequest) :
-    builderFrame.relation m (JauneConsensus.Gloas.processDepositRequest m dr) := ⟨rfl, rfl, rfl⟩
+    builderFrame.R m (JauneConsensus.Gloas.processDepositRequest m dr) := ⟨rfl, rfl, rfl⟩
 
 /-- **B3/B7.** `process_deposit_request` keeps the builders. -/
 theorem processDepositRequest_builders (m : JauneConsensus.Gloas.BeaconState P)
@@ -82,7 +82,7 @@ theorem processDepositRequest_builders (m : JauneConsensus.Gloas.BeaconState P)
 
 theorem processVoluntaryExit_builderFrame (ctx : Ctx) (s : JauneConsensus.Gloas.BeaconState P)
     (sve : SignedVoluntaryExit) :
-    Ok (JauneConsensus.Gloas.processVoluntaryExit ctx s sve) (builderFrame.relation s) := by
+    Ok (JauneConsensus.Gloas.processVoluntaryExit ctx s sve) (builderFrame.R s) := by
   unfold JauneConsensus.Gloas.processVoluntaryExit; gvcg
   all_goals exact initiateValidatorExit_builderFrame _ _ _
 
@@ -94,7 +94,7 @@ theorem processVoluntaryExit_builders {ctx : Ctx} {m m' : JauneConsensus.Gloas.B
 
 theorem processBlsToExecutionChange_builderFrame (ctx : Ctx)
     (s : JauneConsensus.Gloas.BeaconState P) (sac : SignedBLSToExecutionChange) :
-    Ok (JauneConsensus.Gloas.processBlsToExecutionChange ctx s sac) (builderFrame.relation s) := by
+    Ok (JauneConsensus.Gloas.processBlsToExecutionChange ctx s sac) (builderFrame.R s) := by
   unfold JauneConsensus.Gloas.processBlsToExecutionChange; gvcg
 
 /-- **B3/B7.** `process_bls_to_execution_change` keeps the builders. -/
@@ -106,23 +106,23 @@ theorem processBlsToExecutionChange_builders {ctx : Ctx} {m m' : JauneConsensus.
 
 theorem addValidatorToRegistry_builderFrame (s : JauneConsensus.Gloas.BeaconState P)
     (pk : BLSPubkey) (wc : Bytes32) (amount : Gwei) :
-    Ok (JauneConsensus.Gloas.addValidatorToRegistry s pk wc amount) (builderFrame.relation s) := by
+    Ok (JauneConsensus.Gloas.addValidatorToRegistry s pk wc amount) (builderFrame.R s) := by
   unfold JauneConsensus.Gloas.addValidatorToRegistry; gvcg
 
 macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (addValidatorToRegistry_builderFrame _ _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (addValidatorToRegistry_builderFrame _ _ _ _) $h; exact hh))
 
 theorem applyPendingDeposit_builderFrame (ctx : Ctx) (s : JauneConsensus.Gloas.BeaconState P)
     (d : PendingDeposit) :
-    Ok (JauneConsensus.Gloas.applyPendingDeposit ctx s d) (builderFrame.relation s) := by
+    Ok (JauneConsensus.Gloas.applyPendingDeposit ctx s d) (builderFrame.R s) := by
   unfold JauneConsensus.Gloas.applyPendingDeposit; gvcg
   · exact addValidatorToRegistry_builderFrame _ _ _ _
   · exact increaseBalance_builderFrame _ _ _
 
 macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (applyPendingDeposit_builderFrame _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (applyPendingDeposit_builderFrame _ _ _) $h; exact hh))
 
 section PendingDeposits
 
@@ -131,10 +131,10 @@ mutable variables before it, as in `process_pending_deposits`). Local: elsewhere
 tried, and fail noisily, on every loop. -/
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (refine StepRelation.forIn_array_relation _ (fun x => x.2.2.2.2) ?_ _ _ $h; intro _ _; gvcg))
+    `(tactic| (refine StepRel.forIn_array_rel _ (fun x => x.2.2.2.2) ?_ _ _ $h; intro _ _; gvcg))
 
 theorem processPendingDeposits_builderFrame (ctx : Ctx) (s : JauneConsensus.Gloas.BeaconState P) :
-    Ok (JauneConsensus.Gloas.processPendingDeposits ctx s) (builderFrame.relation s) := by
+    Ok (JauneConsensus.Gloas.processPendingDeposits ctx s) (builderFrame.R s) := by
   unfold JauneConsensus.Gloas.processPendingDeposits; gvcg
 
 end PendingDeposits
@@ -155,8 +155,8 @@ def PaymentsCleared (s s' : JauneConsensus.Gloas.BeaconState P) : Prop :=
       s'.builder_pending_payments.toArray[j]? = some JauneConsensus.Gloas.BuilderPendingPayment.empty
 
 /-- `PaymentsCleared` as a step relation. -/
-def paymentsCleared : StepRelation (JauneConsensus.Gloas.BeaconState P) where
-  relation := PaymentsCleared
+def paymentsCleared : StepRel (JauneConsensus.Gloas.BeaconState P) where
+  R := PaymentsCleared
   refl _ := ⟨rfl, rfl, fun _ => Or.inl rfl⟩
   trans {a b c} h₁ h₂ := by
     refine ⟨h₂.1.trans h₁.1, h₂.2.1.trans h₁.2.1, fun j => ?_⟩
@@ -187,17 +187,17 @@ macro_rules
     `(tactic| exact (show PaymentsCleared _ _ from ⟨rfl, rfl, fun _ => Or.inl rfl⟩))
 macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (increaseBalance_builderFrame _ _ _) $h; exact paymentsCleared_of_frame hh))
+    `(tactic| (have hh := StepRel.of_ok (increaseBalance_builderFrame _ _ _) $h; exact paymentsCleared_of_frame hh))
 macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (decreaseBalance_builderFrame _ _ _) $h; exact paymentsCleared_of_frame hh))
+    `(tactic| (have hh := StepRel.of_ok (decreaseBalance_builderFrame _ _ _) $h; exact paymentsCleared_of_frame hh))
 macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (initiateValidatorExit_builderFrame _ _ _) $h; exact paymentsCleared_of_frame hh))
+    `(tactic| (have hh := StepRel.of_ok (initiateValidatorExit_builderFrame _ _ _) $h; exact paymentsCleared_of_frame hh))
 
 theorem slashValidator_paymentsCleared (cfg : Config) (s : JauneConsensus.Gloas.BeaconState P)
     (i : ValidatorIndex) (wb : Option ValidatorIndex) :
-    Ok (JauneConsensus.Gloas.slashValidator cfg s i wb) (paymentsCleared.relation s) := by
+    Ok (JauneConsensus.Gloas.slashValidator cfg s i wb) (paymentsCleared.R s) := by
   unfold JauneConsensus.Gloas.slashValidator; gvcg
   all_goals
     apply ok_pure
@@ -223,7 +223,7 @@ theorem slashValidator_builders {cfg : Config} {m m' : JauneConsensus.Gloas.Beac
 
 /-! ## Builder payment mutators (B7) -/
 
-theorem sszVector_set_ok {α : Type} {n : Nat} {xs ys : SszVector α n} {i : Nat} {v : α}
+theorem sv_set_ok {α : Type} {n : Nat} {xs ys : SszVector α n} {i : Nat} {v : α}
     {site : String} (h : xs.set i v site = .ok ys) :
     ys.toArray[i]? = some v ∧ ∀ j, j ≠ i → ys.toArray[j]? = xs.toArray[j]? := by
   unfold SszVector.set at h
@@ -260,10 +260,10 @@ theorem settleBuilderPayment_frame {m m' : JauneConsensus.Gloas.BeaconState P} {
   cases h
   by_cases hz : U64.zero < p.withdrawal.amount
   · rw [if_pos hz] at hv ⊢
-    obtain ⟨h1, h2⟩ := sszVector_set_ok hv
+    obtain ⟨h1, h2⟩ := sv_set_ok hv
     exact ⟨rfl, p, hp', fun _ => rfl, fun hn => absurd hz hn, h1, h2⟩
   · rw [if_neg hz] at hv ⊢
-    obtain ⟨h1, h2⟩ := sszVector_set_ok hv
+    obtain ⟨h1, h2⟩ := sv_set_ok hv
     exact ⟨rfl, p, hp', fun hn => absurd hn hz, fun _ => rfl, h1, h2⟩
 
 /-- The direct append of `apply_parent_execution_payload` (CL:1803-1812, parent older than the
@@ -291,7 +291,7 @@ theorem directAppend_frame (m : JauneConsensus.Gloas.BeaconState P) :
 /-! ## `process_builder_pending_payments` (B7) -/
 
 theorem forIn_list_pure_yield {α β : Type} (l : List α) (init : β)
-    (body : α → β → Fallible (ForInStep β)) (g : β → α → β)
+    (body : α → β → M (ForInStep β)) (g : β → α → β)
     (hb : ∀ a b, body a b = .ok (.yield (g b a))) : forIn l init body = .ok (l.foldl g init) := by
   induction l generalizing init with
   | nil => rfl
@@ -300,7 +300,7 @@ theorem forIn_list_pure_yield {α β : Type} (l : List α) (init : β)
     exact ih (g init a)
 
 theorem foldl_push_filter_toList {s : Spine} {α γ : Type} (C : α → Prop) [DecidablePred C]
-    (f : α → γ) (l : List α) (init : ProgressiveListOnSpine s γ) :
+    (f : α → γ) (l : List α) (init : ProgressiveListS s γ) :
     (l.foldl (fun w p => if C p then w.push (f p) else w) init).toArray.toList =
       init.toArray.toList ++ (l.filter (fun p => decide (C p))).map f := by
   induction l generalizing init with
@@ -308,7 +308,7 @@ theorem foldl_push_filter_toList {s : Spine} {α γ : Type} (C : α → Prop) [D
   | cons a l ih =>
     by_cases hc : C a
     · rw [List.foldl_cons, if_pos hc, ih]
-      simp [ProgressiveListOnSpine.push, List.filter_cons, hc]
+      simp [ProgressiveListS.push, List.filter_cons, hc]
     · simp only [List.foldl_cons, hc, ↓reduceIte, ih, List.filter_cons, decide_false,
         Bool.false_eq_true]
 
@@ -351,31 +351,31 @@ theorem processBuilderPendingPayments_frame {cfg : Config}
 /-- **B7 mutant (separation)**: `process_builder_deposit_request` that also credits validator 0
 with the request's amount. -/
 def processBuilderDepositRequestCredit (ctx : Ctx) (state : JauneConsensus.Gloas.BeaconState P)
-    (request : JauneConsensus.Gloas.BuilderDepositRequest) : Fallible (JauneConsensus.Gloas.BeaconState P) := do
+    (request : JauneConsensus.Gloas.BuilderDepositRequest) : M (JauneConsensus.Gloas.BeaconState P) := do
   let state ← JauneConsensus.Gloas.processBuilderDepositRequest ctx state request
   JauneConsensus.Gloas.increaseBalance state U64.zero request.amount
 
 /-- The B7 separation control state: one validator balance (zero), no builders. -/
-def controlBalanceState (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
+def ctrlBalState (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
     JauneConsensus.Gloas.BeaconState Preset.minimal :=
   { s with slot := U64.zero, builders := ⟨#[]⟩, balances := ⟨#[U64.zero]⟩ }
 
 /-- **B7 separation control.** The real `process_builder_deposit_request` keeps the validator
 balances (`processBuilderDepositRequest_frame`); the crediting mutant changes them on a closed
 state. -/
-theorem separationConservation_separation_control (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
-    (∀ m', JauneConsensus.Gloas.processBuilderDepositRequest { config := Config.minimal }
-      (controlBalanceState s) controlPrefixRequest = .ok m' → m'.balances = (controlBalanceState s).balances) ∧
-    ∃ s', processBuilderDepositRequestCredit { config := Config.minimal } (controlBalanceState s)
-      controlPrefixRequest = .ok s' ∧ s'.balances ≠ (controlBalanceState s).balances := by
+theorem b7_separation_control (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
+    (∀ m', JauneConsensus.Gloas.processBuilderDepositRequest { cfg := Config.minimal }
+      (ctrlBalState s) ctrlPrefixRequest = .ok m' → m'.balances = (ctrlBalState s).balances) ∧
+    ∃ s', processBuilderDepositRequestCredit { cfg := Config.minimal } (ctrlBalState s)
+      ctrlPrefixRequest = .ok s' ∧ s'.balances ≠ (ctrlBalState s).balances := by
   refine ⟨fun m' h => (processBuilderDepositRequest_frame h).2.1, ?_⟩
-  refine ⟨{ controlBalanceState s with balances := ⟨#[U64.one]⟩ }, ?_, ?_⟩
+  refine ⟨{ ctrlBalState s with balances := ⟨#[U64.one]⟩ }, ?_, ?_⟩
   · unfold processBuilderDepositRequestCredit
     rw [processBuilderDepositRequest_ignores_prefix (by decide)]
     with_unfolding_all rfl
   · intro h
-    have h2 := congrArg (fun l : ProgressiveListRightSpine Gwei => l.toArray[0]?) h
-    simp [controlBalanceState] at h2
+    have h2 := congrArg (fun l : ProgressiveListR Gwei => l.toArray[0]?) h
+    simp [ctrlBalState] at h2
     exact absurd (congrArg U64.toNat h2) (by decide)
 
 /-- The total builder balance. -/
@@ -389,7 +389,7 @@ def builderWithdrawalTotal (ws : Array Withdrawal) : Nat :=
 
 /-- **B7 mutant (conservation)**: `apply_withdrawals` that skips the builder deduction. -/
 def applyWithdrawalsSkipBuilder (state : JauneConsensus.Gloas.BeaconState P)
-    (withdrawals : Array Withdrawal) : Fallible (JauneConsensus.Gloas.BeaconState P) := do
+    (withdrawals : Array Withdrawal) : M (JauneConsensus.Gloas.BeaconState P) := do
   let mut state := state
   for withdrawal in withdrawals do
     if JauneConsensus.Gloas.isBuilderIndex withdrawal.validator_index then
@@ -399,38 +399,38 @@ def applyWithdrawalsSkipBuilder (state : JauneConsensus.Gloas.BeaconState P)
   pure state
 
 /-- One builder with balance 10. -/
-def controlRichBuilder : JauneConsensus.Gloas.Builder :=
-  { controlBuilder with balance := U64.literal 10 }
+def ctrlRichBuilder : JauneConsensus.Gloas.Builder :=
+  { ctrlBuilder with balance := U64.lit 10 }
 
 /-- The B7 conservation control state. -/
-def controlWithdrawState (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
+def ctrlWithdrawState (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
     JauneConsensus.Gloas.BeaconState Preset.minimal :=
-  { s with builders := ⟨#[controlRichBuilder]⟩ }
+  { s with builders := ⟨#[ctrlRichBuilder]⟩ }
 
 /-- One builder withdrawal of 3 for builder 0 (`validator_index = 0 | BUILDER_INDEX_FLAG`). -/
-def controlBuilderWithdrawals : Array Withdrawal :=
-  #[{ index := U64.zero, validator_index := U64.literal (2 ^ 40), address := JauneConsensus.Gloas.zeroAddress,
-      amount := U64.literal 3 }]
+def ctrlBuilderWithdrawals : Array Withdrawal :=
+  #[{ index := U64.zero, validator_index := U64.lit (2 ^ 40), address := JauneConsensus.Gloas.zeroAddress,
+      amount := U64.lit 3 }]
 
 /-- **B7 conservation control.** On a closed state with one builder (balance 10) and one builder
 withdrawal of 3, the real `apply_withdrawals` conserves builder balance
 (`post + withdrawn = pre`, 7 + 3 = 10); the mutant that skips the builder deduction does not
 (10 + 3 ≠ 10). -/
-theorem separationConservation_conservation_control (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
-    (∃ s', JauneConsensus.Gloas.applyWithdrawals (controlWithdrawState s) controlBuilderWithdrawals = .ok s' ∧
-      totalBuilderBalance s' + builderWithdrawalTotal controlBuilderWithdrawals =
-        totalBuilderBalance (controlWithdrawState s)) ∧
-    (∃ s', applyWithdrawalsSkipBuilder (controlWithdrawState s) controlBuilderWithdrawals = .ok s' ∧
-      totalBuilderBalance s' + builderWithdrawalTotal controlBuilderWithdrawals ≠
-        totalBuilderBalance (controlWithdrawState s)) := by
-  have hpre : totalBuilderBalance (controlWithdrawState s) = 10 := by with_unfolding_all rfl
-  have hw : builderWithdrawalTotal controlBuilderWithdrawals = 3 := by with_unfolding_all rfl
-  have hpost : totalBuilderBalance { controlWithdrawState s with
-      builders := ⟨#[{ controlRichBuilder with balance := U64.literal 7 }]⟩ } = 7 := by
+theorem b7_conservation_control (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
+    (∃ s', JauneConsensus.Gloas.applyWithdrawals (ctrlWithdrawState s) ctrlBuilderWithdrawals = .ok s' ∧
+      totalBuilderBalance s' + builderWithdrawalTotal ctrlBuilderWithdrawals =
+        totalBuilderBalance (ctrlWithdrawState s)) ∧
+    (∃ s', applyWithdrawalsSkipBuilder (ctrlWithdrawState s) ctrlBuilderWithdrawals = .ok s' ∧
+      totalBuilderBalance s' + builderWithdrawalTotal ctrlBuilderWithdrawals ≠
+        totalBuilderBalance (ctrlWithdrawState s)) := by
+  have hpre : totalBuilderBalance (ctrlWithdrawState s) = 10 := by with_unfolding_all rfl
+  have hw : builderWithdrawalTotal ctrlBuilderWithdrawals = 3 := by with_unfolding_all rfl
+  have hpost : totalBuilderBalance { ctrlWithdrawState s with
+      builders := ⟨#[{ ctrlRichBuilder with balance := U64.lit 7 }]⟩ } = 7 := by
     with_unfolding_all rfl
-  refine ⟨⟨{ controlWithdrawState s with
-      builders := ⟨#[{ controlRichBuilder with balance := U64.literal 7 }]⟩ }, ?_, ?_⟩,
-    ⟨controlWithdrawState s, ?_, ?_⟩⟩
+  refine ⟨⟨{ ctrlWithdrawState s with
+      builders := ⟨#[{ ctrlRichBuilder with balance := U64.lit 7 }]⟩ }, ?_, ?_⟩,
+    ⟨ctrlWithdrawState s, ?_, ?_⟩⟩
   · with_unfolding_all rfl
   · rw [hpost, hpre, hw]
   · with_unfolding_all rfl
@@ -463,11 +463,11 @@ theorem processBuilderDepositRequest_at {ctx : Ctx} {st st' : JauneConsensus.Glo
     st'.slot = st.slot ∧ st.builders.toArray.size ≤ st'.builders.toArray.size ∧
     (st'.builders.toArray[i]? = st.builders.toArray[i]? ∨
      (∃ c c' reset, st.builders.toArray[i]? = some c ∧ st'.builders.toArray[i]? = some c' ∧
-        classifyBuilderDeposit ctx.config ctx.blsActive st r = .ok (.topUp i r.amount reset) ∧
+        classifyBuilderDeposit ctx.cfg ctx.blsActive st r = .ok (.topUp i r.amount reset) ∧
         c'.pubkey = c.pubkey ∧ c'.balance.toNat = c.balance.toNat + r.amount.toNat ∧
         (reset = false → c'.withdrawable_epoch = c.withdrawable_epoch) ∧
         (reset = true ↔ c.withdrawable_epoch ≠ FAR_FUTURE_EPOCH ∧ c.balance = U64.zero)) ∨
-     (∃ addr e, classifyBuilderDeposit ctx.config ctx.blsActive st r = .ok (.register i r.amount) ∧
+     (∃ addr e, classifyBuilderDeposit ctx.cfg ctx.blsActive st r = .ok (.register i r.amount) ∧
         computeEpochAtSlot P st.slot = .ok e ∧
         st'.builders.toArray[i]? = some (freshBuilder r.pubkey addr r.amount e) ∧
         (∀ x ∈ st.builders.toArray, x.pubkey ≠ r.pubkey) ∧
@@ -551,7 +551,7 @@ theorem processBuilderExitRequest_at {cfg : Config} {st st' : JauneConsensus.Glo
 
 /-! ## The builder-deposit and builder-exit loops (B3 writers, B1 register-then-top-up) -/
 
-theorem foldlM_snoc_ok {α β : Type} {f : β → α → Fallible β} {l : List α} {s0 st st' : β} {x : α}
+theorem foldlM_snoc_ok {α β : Type} {f : β → α → M β} {l : List α} {s0 st st' : β} {x : α}
     (hl : l.foldlM f s0 = .ok st) (hx : f st x = .ok st') : (l ++ [x]).foldlM f s0 = .ok st' := by
   rw [List.foldlM_append, hl]
   show List.foldlM f st [x] = .ok st'
@@ -564,7 +564,7 @@ def TopUpResetIn (ctx : Ctx) (s0 : JauneConsensus.Gloas.BeaconState P)
     (rs : List JauneConsensus.Gloas.BuilderDepositRequest) (i : Nat) : Prop :=
   ∃ pre r post st, rs = pre ++ r :: post ∧
     pre.foldlM (JauneConsensus.Gloas.processBuilderDepositRequest ctx) s0 = .ok st ∧
-    classifyBuilderDeposit ctx.config ctx.blsActive st r = .ok (.topUp i r.amount true)
+    classifyBuilderDeposit ctx.cfg ctx.blsActive st r = .ok (.topUp i r.amount true)
 
 theorem TopUpResetIn.snoc {ctx : Ctx} {s0 : JauneConsensus.Gloas.BeaconState P}
     {L : List JauneConsensus.Gloas.BuilderDepositRequest} {i : Nat} (h : TopUpResetIn ctx s0 L i)
@@ -575,7 +575,7 @@ theorem TopUpResetIn.snoc {ctx : Ctx} {s0 : JauneConsensus.Gloas.BeaconState P}
 /-- The slot-`i` invariant of the deposit loop: builder `i` keeps its pubkey and
 `withdrawable_epoch`, or a reset top-up of `i` happened, or `i` holds a different (fresh) builder
 with `withdrawable_epoch = FAR_FUTURE_EPOCH`. -/
-def DepositSlotInvariant (ctx : Ctx) (s0 : JauneConsensus.Gloas.BeaconState P)
+def DepositSlotInv (ctx : Ctx) (s0 : JauneConsensus.Gloas.BeaconState P)
     (L : List JauneConsensus.Gloas.BuilderDepositRequest) (i : Nat) (b : JauneConsensus.Gloas.Builder)
     (x : JauneConsensus.Gloas.BeaconState P) : Prop :=
   x.slot = s0.slot ∧ ∃ c, x.builders.toArray[i]? = some c ∧
@@ -583,14 +583,14 @@ def DepositSlotInvariant (ctx : Ctx) (s0 : JauneConsensus.Gloas.BeaconState P)
       TopUpResetIn ctx s0 L i ∨
       (c.pubkey ≠ b.pubkey ∧ c.withdrawable_epoch = FAR_FUTURE_EPOCH))
 
-theorem depositSlotInvariant_step (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Ctx}
+theorem depositSlotInv_step (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Ctx}
     {s0 st st' : JauneConsensus.Gloas.BeaconState P}
     {pre : List JauneConsensus.Gloas.BuilderDepositRequest} {r : JauneConsensus.Gloas.BuilderDepositRequest}
     {i : Nat} {b : JauneConsensus.Gloas.Builder}
     (hpre : pre.foldlM (JauneConsensus.Gloas.processBuilderDepositRequest ctx) s0 = .ok st)
-    (hinv : DepositSlotInvariant ctx s0 pre i b st)
+    (hinv : DepositSlotInv ctx s0 pre i b st)
     (h : JauneConsensus.Gloas.processBuilderDepositRequest ctx st r = .ok st') :
-    DepositSlotInvariant ctx s0 (pre ++ [r]) i b st' := by
+    DepositSlotInv ctx s0 (pre ++ [r]) i b st' := by
   obtain ⟨hsl, c, hc, hcase⟩ := hinv
   obtain ⟨hsl', _, hat⟩ := processBuilderDepositRequest_at h i
   refine ⟨hsl'.trans hsl, ?_⟩
@@ -621,13 +621,13 @@ theorem depositSlotInvariant_step (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Ctx}
     · rw [h2] at hwle
       exact absurd hwle (not_far_le_epoch hspe he)
 
-theorem depositSlotInvariant_loop (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Ctx}
+theorem depositSlotInv_loop (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Ctx}
     {s0 s1 : JauneConsensus.Gloas.BeaconState P} {i : Nat} {b : JauneConsensus.Gloas.Builder} :
     ∀ (rest pre : List JauneConsensus.Gloas.BuilderDepositRequest) (st : JauneConsensus.Gloas.BeaconState P),
       pre.foldlM (JauneConsensus.Gloas.processBuilderDepositRequest ctx) s0 = .ok st →
-      DepositSlotInvariant ctx s0 pre i b st →
+      DepositSlotInv ctx s0 pre i b st →
       rest.foldlM (JauneConsensus.Gloas.processBuilderDepositRequest ctx) st = .ok s1 →
-      DepositSlotInvariant ctx s0 (pre ++ rest) i b s1 := by
+      DepositSlotInv ctx s0 (pre ++ rest) i b s1 := by
   intro rest
   induction rest with
   | nil =>
@@ -638,7 +638,7 @@ theorem depositSlotInvariant_loop (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Ctx}
     intro pre st hpre hinv h
     rw [List.foldlM_cons] at h
     obtain ⟨st', h1, h2⟩ := bind_eq_ok_iff.mp h
-    have := ih (pre ++ [r]) st' (foldlM_snoc_ok hpre h1) (depositSlotInvariant_step hspe hpre hinv h1) h2
+    have := ih (pre ++ [r]) st' (foldlM_snoc_ok hpre h1) (depositSlotInv_step hspe hpre hinv h1) h2
     simpa using this
 
 /-- **B3, the deposit loop.** Across a list of builder deposits, builder slot `i` keeps its pubkey
@@ -649,8 +649,8 @@ theorem builderDeposits_slot (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Ctx}
     {s0 s1 : JauneConsensus.Gloas.BeaconState P} {rs : List JauneConsensus.Gloas.BuilderDepositRequest}
     (h : rs.foldlM (JauneConsensus.Gloas.processBuilderDepositRequest ctx) s0 = .ok s1)
     {i : Nat} {b : JauneConsensus.Gloas.Builder} (hb : s0.builders.toArray[i]? = some b) :
-    DepositSlotInvariant ctx s0 rs i b s1 := by
-  have := depositSlotInvariant_loop hspe rs [] s0 rfl ⟨rfl, b, hb, Or.inl ⟨rfl, rfl⟩⟩ h
+    DepositSlotInv ctx s0 rs i b s1 := by
+  have := depositSlotInv_loop hspe rs [] s0 rfl ⟨rfl, b, hb, Or.inl ⟨rfl, rfl⟩⟩ h
   simpa using this
 
 /-- A builder exit in the list `es`, reached from `s1` through the exits before it, is classified
@@ -668,20 +668,20 @@ theorem ExitInitiateIn.snoc {cfg : Config} {s1 : JauneConsensus.Gloas.BeaconStat
   exact ⟨pre, r, post ++ [x], st, by simp, h1, h2⟩
 
 /-- The slot-`i` invariant of the exit loop. -/
-def ExitSlotInvariant (cfg : Config) (s1 : JauneConsensus.Gloas.BeaconState P)
+def ExitSlotInv (cfg : Config) (s1 : JauneConsensus.Gloas.BeaconState P)
     (L : List JauneConsensus.Gloas.BuilderExitRequest) (i : Nat) (c : JauneConsensus.Gloas.Builder)
     (x : JauneConsensus.Gloas.BeaconState P) : Prop :=
   x.slot = s1.slot ∧ ∃ c', x.builders.toArray[i]? = some c' ∧ c'.pubkey = c.pubkey ∧
     (c'.withdrawable_epoch = c.withdrawable_epoch ∨
       (c.withdrawable_epoch = FAR_FUTURE_EPOCH ∧ ExitInitiateIn cfg s1 L i))
 
-theorem exitSlotInvariant_loop {cfg : Config} {s1 s2 : JauneConsensus.Gloas.BeaconState P} {i : Nat}
+theorem exitSlotInv_loop {cfg : Config} {s1 s2 : JauneConsensus.Gloas.BeaconState P} {i : Nat}
     {c : JauneConsensus.Gloas.Builder} :
     ∀ (rest pre : List JauneConsensus.Gloas.BuilderExitRequest) (st : JauneConsensus.Gloas.BeaconState P),
       pre.foldlM (JauneConsensus.Gloas.processBuilderExitRequest cfg) s1 = .ok st →
-      ExitSlotInvariant cfg s1 pre i c st →
+      ExitSlotInv cfg s1 pre i c st →
       rest.foldlM (JauneConsensus.Gloas.processBuilderExitRequest cfg) st = .ok s2 →
-      ExitSlotInvariant cfg s1 (pre ++ rest) i c s2 := by
+      ExitSlotInv cfg s1 (pre ++ rest) i c s2 := by
   intro rest
   induction rest with
   | nil =>
@@ -692,7 +692,7 @@ theorem exitSlotInvariant_loop {cfg : Config} {s1 s2 : JauneConsensus.Gloas.Beac
     intro pre st hpre hinv h
     rw [List.foldlM_cons] at h
     obtain ⟨st', h1, h2⟩ := bind_eq_ok_iff.mp h
-    have hstep : ExitSlotInvariant cfg s1 (pre ++ [r]) i c st' := by
+    have hstep : ExitSlotInv cfg s1 (pre ++ [r]) i c st' := by
       obtain ⟨hsl, c', hc', hpk, hcase⟩ := hinv
       obtain ⟨hsl', _, hat⟩ := processBuilderExitRequest_at h1 i
       refine ⟨hsl'.trans hsl, ?_⟩
@@ -717,14 +717,14 @@ theorem builderExits_slot {cfg : Config} {s1 s2 : JauneConsensus.Gloas.BeaconSta
     {es : List JauneConsensus.Gloas.BuilderExitRequest}
     (h : es.foldlM (JauneConsensus.Gloas.processBuilderExitRequest cfg) s1 = .ok s2)
     {i : Nat} {c : JauneConsensus.Gloas.Builder} (hc : s1.builders.toArray[i]? = some c) :
-    ExitSlotInvariant cfg s1 es i c s2 := by
-  have := exitSlotInvariant_loop es [] s1 rfl ⟨rfl, c, hc, rfl, Or.inl rfl⟩ h
+    ExitSlotInv cfg s1 es i c s2 := by
+  have := exitSlotInv_loop es [] s1 rfl ⟨rfl, c, hc, rfl, Or.inl rfl⟩ h
   simpa using this
 
 
 /-! ## B1: same-payload register then top-up -/
 
-theorem firstMatch_of_first {bs : ProgressiveListRightSpine JauneConsensus.Gloas.Builder} {pk : BLSPubkey}
+theorem firstMatch_of_first {bs : ProgressiveListR JauneConsensus.Gloas.Builder} {pk : BLSPubkey}
     {i : Nat} {b : JauneConsensus.Gloas.Builder} (hb : bs.toArray[i]? = some b) (hpk : b.pubkey = pk)
     (hfirst : ∀ j, j < i → ∀ b', bs.toArray[j]? = some b' → b'.pubkey ≠ pk) :
     firstMatch bs pk = some i := by
@@ -742,18 +742,18 @@ theorem firstMatch_of_first {bs : ProgressiveListRightSpine JauneConsensus.Gloas
 
 /-- The register-then-top-up invariant: slot `i` holds the fresh record with an accumulated
 balance, and no earlier slot carries its pubkey. -/
-def RegistrationInvariant (m : JauneConsensus.Gloas.BeaconState P) (i : Nat) (fresh : JauneConsensus.Gloas.Builder)
+def RegInv (m : JauneConsensus.Gloas.BeaconState P) (i : Nat) (fresh : JauneConsensus.Gloas.Builder)
     (acc : Nat) (x : JauneConsensus.Gloas.BeaconState P) : Prop :=
   x.slot = m.slot ∧ (∃ bal : U64, x.builders.toArray[i]? = some { fresh with balance := bal } ∧
       bal.toNat = acc) ∧
     ∀ j, j < i → ∀ b', x.builders.toArray[j]? = some b' → b'.pubkey ≠ fresh.pubkey
 
-theorem registrationInvariant_step (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Ctx}
+theorem regInv_step (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Ctx}
     {m x x' : JauneConsensus.Gloas.BeaconState P} {i : Nat} {fresh : JauneConsensus.Gloas.Builder}
     (hfar : fresh.withdrawable_epoch = FAR_FUTURE_EPOCH) {acc : Nat}
-    {r' : JauneConsensus.Gloas.BuilderDepositRequest} (hinv : RegistrationInvariant m i fresh acc x)
+    {r' : JauneConsensus.Gloas.BuilderDepositRequest} (hinv : RegInv m i fresh acc x)
     (h : JauneConsensus.Gloas.processBuilderDepositRequest ctx x r' = .ok x') :
-    RegistrationInvariant m i fresh (acc + if (r'.pubkey == fresh.pubkey &&
+    RegInv m i fresh (acc + if (r'.pubkey == fresh.pubkey &&
       JauneConsensus.Gloas.isBuilderWithdrawalCredential r'.withdrawal_credentials) = true
       then r'.amount.toNat else 0) x' := by
   obtain ⟨hsl, ⟨bal, hbi, hbal⟩, hfirst⟩ := hinv
@@ -774,7 +774,7 @@ theorem registrationInvariant_step (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Ctx}
       intro hpk
       exact hall _ (Array.mem_of_getElem? hbi) hpk.symm
   refine ⟨hslot.trans hsl, ?_, hfirst'⟩
-  rcases classifyBuilderDeposit_invariant hco with ⟨hp, rfl⟩ | ⟨hp, j, c, hfmj, hc, rfl⟩ |
+  rcases classifyBuilderDeposit_inv hco with ⟨hp, rfl⟩ | ⟨hp, j, c, hfmj, hc, rfl⟩ |
     ⟨hp, hfmn, _, _, ⟨_, rfl⟩ | ⟨_, _, idx, _, _, rfl⟩⟩
   · rw [hpre rfl]
     refine ⟨bal, hbi, ?_⟩
@@ -833,12 +833,12 @@ theorem registrationInvariant_step (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Ctx}
       simp only [hfar] at hwle
       exact absurd hwle (not_far_le_epoch hspe he)
 
-theorem registrationInvariant_loop (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Ctx} {m s2 : JauneConsensus.Gloas.BeaconState P}
+theorem regInv_loop (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Ctx} {m s2 : JauneConsensus.Gloas.BeaconState P}
     {i : Nat} {fresh : JauneConsensus.Gloas.Builder} (hfar : fresh.withdrawable_epoch = FAR_FUTURE_EPOCH) :
     ∀ (rest : List JauneConsensus.Gloas.BuilderDepositRequest) (x : JauneConsensus.Gloas.BeaconState P)
-      (acc : Nat), RegistrationInvariant m i fresh acc x →
+      (acc : Nat), RegInv m i fresh acc x →
       rest.foldlM (JauneConsensus.Gloas.processBuilderDepositRequest ctx) x = .ok s2 →
-      RegistrationInvariant m i fresh (acc + ((rest.filter (fun r' => r'.pubkey == fresh.pubkey &&
+      RegInv m i fresh (acc + ((rest.filter (fun r' => r'.pubkey == fresh.pubkey &&
         JauneConsensus.Gloas.isBuilderWithdrawalCredential r'.withdrawal_credentials)).map
           (·.amount.toNat)).sum) s2 := by
   intro rest
@@ -848,7 +848,7 @@ theorem registrationInvariant_loop (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Ctx} 
     intro x acc hinv h
     rw [List.foldlM_cons] at h
     obtain ⟨x', h1, h2⟩ := bind_eq_ok_iff.mp h
-    have := ih x' _ (registrationInvariant_step hspe hfar hinv h1) h2
+    have := ih x' _ (regInv_step hspe hfar hinv h1) h2
     by_cases hc : (r'.pubkey == fresh.pubkey &&
         JauneConsensus.Gloas.isBuilderWithdrawalCredential r'.withdrawal_credentials) = true
     · simp only [hc, ↓reduceIte] at this
@@ -864,10 +864,10 @@ reset, no reuse of the slot, no change to any other field. Needs `2 <= SLOTS_PER
 theorem register_then_topUp (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Ctx}
     {m m1 m2 : JauneConsensus.Gloas.BeaconState P} {r : JauneConsensus.Gloas.BuilderDepositRequest}
     {rs : List JauneConsensus.Gloas.BuilderDepositRequest} {i : Nat} {a : U64}
-    (hc : classifyBuilderDeposit ctx.config ctx.blsActive m r = .ok (.register i a))
+    (hc : classifyBuilderDeposit ctx.cfg ctx.blsActive m r = .ok (.register i a))
     (h1 : JauneConsensus.Gloas.processBuilderDepositRequest ctx m r = .ok m1)
     (h2 : rs.foldlM (JauneConsensus.Gloas.processBuilderDepositRequest ctx) m1 = .ok m2) :
-    ∃ addr e bal, Jaune.Bytes.toAddress? (r.withdrawal_credentials.toBytes.drop 12) = some addr ∧
+    ∃ addr e bal, Jaune.Bytes.toAdr? (r.withdrawal_credentials.toBytes.drop 12) = some addr ∧
       computeEpochAtSlot P m.slot = .ok e ∧
       m1.builders.toArray[i]? = some (freshBuilder r.pubkey addr r.amount e) ∧
       m2.builders.toArray[i]? = some { freshBuilder r.pubkey addr r.amount e with balance := bal } ∧
@@ -880,11 +880,11 @@ theorem register_then_topUp (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Ctx}
   obtain ⟨_, _, _, hreg⟩ := classifyBuilderDeposit_effect hc h1
   obtain ⟨addr, e, haddr, he, hat, _, hne, _⟩ := hreg i r.amount rfl
   have hslot : m1.slot = m.slot := by rw [(processBuilderDepositRequest_frame h1).2.2.2.2.2]
-  have hinv : RegistrationInvariant m i (freshBuilder r.pubkey addr r.amount e) r.amount.toNat m1 := by
+  have hinv : RegInv m i (freshBuilder r.pubkey addr r.amount e) r.amount.toNat m1 := by
     refine ⟨hslot, ⟨r.amount, by rw [hat]; rfl, rfl⟩, fun j hj b' hb' => ?_⟩
     rw [hne j (Nat.ne_of_lt hj)] at hb'
     exact hall b' (Array.mem_of_getElem? hb')
-  obtain ⟨_, ⟨bal, hbal2, hbaln⟩, _⟩ := registrationInvariant_loop hspe rfl rs m1 _ hinv h2
+  obtain ⟨_, ⟨bal, hbal2, hbaln⟩, _⟩ := regInv_loop hspe rfl rs m1 _ hinv h2
   exact ⟨addr, e, bal, haddr, he, hat, hbal2, hbaln⟩
 
 
@@ -892,47 +892,47 @@ theorem register_then_topUp (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Ctx}
 
 theorem queueExcessActiveBalance_builderFrame (s : JauneConsensus.Gloas.BeaconState P)
     (i : ValidatorIndex) :
-    Ok (JauneConsensus.Gloas.queueExcessActiveBalance s i) (builderFrame.relation s) := by
+    Ok (JauneConsensus.Gloas.queueExcessActiveBalance s i) (builderFrame.R s) := by
   unfold JauneConsensus.Gloas.queueExcessActiveBalance; gvcg
 
 macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (queueExcessActiveBalance_builderFrame _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (queueExcessActiveBalance_builderFrame _ _) $h; exact hh))
 
 theorem switchToCompoundingValidator_builderFrame (s : JauneConsensus.Gloas.BeaconState P)
     (i : ValidatorIndex) :
-    Ok (JauneConsensus.Gloas.switchToCompoundingValidator s i) (builderFrame.relation s) := by
+    Ok (JauneConsensus.Gloas.switchToCompoundingValidator s i) (builderFrame.R s) := by
   unfold JauneConsensus.Gloas.switchToCompoundingValidator; gvcg
-  all_goals exact StepRelation.ok_rebase builderFrame ⟨rfl, rfl, rfl⟩ (queueExcessActiveBalance_builderFrame _ _)
+  all_goals exact StepRel.ok_rebase builderFrame ⟨rfl, rfl, rfl⟩ (queueExcessActiveBalance_builderFrame _ _)
 
 macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (switchToCompoundingValidator_builderFrame _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (switchToCompoundingValidator_builderFrame _ _) $h; exact hh))
 
 theorem computeConsolidationEpochAndUpdateChurn_builderFrame (cfg : Config)
     (s : JauneConsensus.Gloas.BeaconState P) (b : Gwei) :
     Ok (JauneConsensus.Gloas.computeConsolidationEpochAndUpdateChurn cfg s b)
-      (fun p => builderFrame.relation s p.1) := by
+      (fun p => builderFrame.R s p.1) := by
   unfold JauneConsensus.Gloas.computeConsolidationEpochAndUpdateChurn; gvcg
 
 macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (computeConsolidationEpochAndUpdateChurn_builderFrame _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (computeConsolidationEpochAndUpdateChurn_builderFrame _ _ _) $h; exact hh))
 
 theorem processWithdrawalRequest_builderFrame (cfg : Config) (s : JauneConsensus.Gloas.BeaconState P)
     (wr : WithdrawalRequest) :
-    Ok (JauneConsensus.Gloas.processWithdrawalRequest cfg s wr) (builderFrame.relation s) := by
+    Ok (JauneConsensus.Gloas.processWithdrawalRequest cfg s wr) (builderFrame.R s) := by
   unfold JauneConsensus.Gloas.processWithdrawalRequest; gvcg
   all_goals exact initiateValidatorExit_builderFrame _ _ _
 
 theorem processConsolidationRequest_builderFrame (cfg : Config)
     (s : JauneConsensus.Gloas.BeaconState P) (cr : ConsolidationRequest) :
-    Ok (JauneConsensus.Gloas.processConsolidationRequest cfg s cr) (builderFrame.relation s) := by
+    Ok (JauneConsensus.Gloas.processConsolidationRequest cfg s cr) (builderFrame.R s) := by
   unfold JauneConsensus.Gloas.processConsolidationRequest; gvcg
   all_goals exact switchToCompoundingValidator_builderFrame _ _
 
 theorem forIn_list_bind_yield {α β : Type} (l : List α) (init : β)
-    (body : α → β → Fallible (ForInStep β)) (f : β → α → Fallible β)
+    (body : α → β → M (ForInStep β)) (f : β → α → M β)
     (hb : ∀ a b, body a b = (f b a >>= fun c => pure (.yield c))) :
     forIn l init body = l.foldlM f init := by
   induction l generalizing init with
@@ -946,8 +946,8 @@ theorem forIn_list_bind_yield {α β : Type} (l : List α) (init : β)
 /-- The settlement half of `apply_parent_execution_payload` (CL:1776-1812), continued by `k`. -/
 def settleThen (ctx : Ctx) (state : JauneConsensus.Gloas.BeaconState P)
     (requests : JauneConsensus.Gloas.ExecutionRequests)
-    (k : JauneConsensus.Gloas.BeaconState P → Fallible (JauneConsensus.Gloas.BeaconState P)) :
-    Fallible (JauneConsensus.Gloas.BeaconState P) := do
+    (k : JauneConsensus.Gloas.BeaconState P → M (JauneConsensus.Gloas.BeaconState P)) :
+    M (JauneConsensus.Gloas.BeaconState P) := do
   let site := "apply_parent_execution_payload"
   let parentBid := state.latest_execution_payload_bid
   let parentSlot := state.latest_block_header.slot
@@ -960,7 +960,7 @@ def settleThen (ctx : Ctx) (state : JauneConsensus.Gloas.BeaconState P)
     s!"{site}: len(requests.builder_deposits) <= MAX_BUILDER_DEPOSIT_REQUESTS_PER_PAYLOAD"
   require (requests.builder_exits.length ≤ P.MAX_BUILDER_EXIT_REQUESTS_PER_PAYLOAD)
     s!"{site}: len(requests.builder_exits) <= MAX_BUILDER_EXIT_REQUESTS_PER_PAYLOAD"
-  let spe ← u64Checked P.SLOTS_PER_EPOCH
+  let spe ← c64 P.SLOTS_PER_EPOCH
   let mut state := state
   if parentEpoch == (← JauneConsensus.Gloas.getCurrentEpoch state) then
     let paymentIndex ← spe.add? (← parentSlot.mod? spe site) site
@@ -978,19 +978,19 @@ def settleThen (ctx : Ctx) (state : JauneConsensus.Gloas.BeaconState P)
 /-- The request half of `apply_parent_execution_payload` (CL:1813-1831). -/
 def applyRequests (ctx : Ctx) (parentBid : JauneConsensus.Gloas.ExecutionPayloadBid)
     (parentSlot : Slot) (state : JauneConsensus.Gloas.BeaconState P)
-    (requests : JauneConsensus.Gloas.ExecutionRequests) : Fallible (JauneConsensus.Gloas.BeaconState P) := do
+    (requests : JauneConsensus.Gloas.ExecutionRequests) : M (JauneConsensus.Gloas.BeaconState P) := do
   let site := "apply_parent_execution_payload"
   let mut state := state
   for op in requests.deposits.toArray do state := JauneConsensus.Gloas.processDepositRequest state op
   for op in requests.withdrawals.toArray do
-    state ← JauneConsensus.Gloas.processWithdrawalRequest ctx.config state op
+    state ← JauneConsensus.Gloas.processWithdrawalRequest ctx.cfg state op
   for op in requests.consolidations.toArray do
-    state ← JauneConsensus.Gloas.processConsolidationRequest ctx.config state op
+    state ← JauneConsensus.Gloas.processConsolidationRequest ctx.cfg state op
   for op in requests.builder_deposits.toArray do
     state ← JauneConsensus.Gloas.processBuilderDepositRequest ctx state op
   for op in requests.builder_exits.toArray do
-    state ← JauneConsensus.Gloas.processBuilderExitRequest ctx.config state op
-  let i ← parentSlot.mod? (← u64Checked P.SLOTS_PER_HISTORICAL_ROOT) site
+    state ← JauneConsensus.Gloas.processBuilderExitRequest ctx.cfg state op
+  let i ← parentSlot.mod? (← c64 P.SLOTS_PER_HISTORICAL_ROOT) site
   pure { state with
     execution_payload_availability := ← state.execution_payload_availability.set i.toNat true site
     latest_block_hash := parentBid.block_hash }
@@ -1005,16 +1005,16 @@ theorem applyParentExecutionPayload_eq (ctx : Ctx) (s : JauneConsensus.Gloas.Bea
 
 macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processWithdrawalRequest_builderFrame _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processWithdrawalRequest_builderFrame _ _ _) $h; exact hh))
 macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processConsolidationRequest_builderFrame _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processConsolidationRequest_builderFrame _ _ _) $h; exact hh))
 
 /-- The settlement keeps the builders (`settle_builder_payment` and the direct append touch only
 the builder queues). -/
 theorem settleThen_ok {ctx : Ctx} {s post : JauneConsensus.Gloas.BeaconState P}
     {requests : JauneConsensus.Gloas.ExecutionRequests}
-    {k : JauneConsensus.Gloas.BeaconState P → Fallible (JauneConsensus.Gloas.BeaconState P)}
+    {k : JauneConsensus.Gloas.BeaconState P → M (JauneConsensus.Gloas.BeaconState P)}
     (h : settleThen ctx s requests k = .ok post) :
     ∃ x, x.builders = s.builders ∧ k x = .ok post := by
   unfold settleThen at h
@@ -1050,7 +1050,7 @@ theorem applyRequests_ok {ctx : Ctx} {pb : JauneConsensus.Gloas.ExecutionPayload
       requests.builder_deposits.toArray.toList.foldlM
         (JauneConsensus.Gloas.processBuilderDepositRequest ctx) s0 = .ok s1 ∧
       requests.builder_exits.toArray.toList.foldlM
-        (JauneConsensus.Gloas.processBuilderExitRequest ctx.config) s1 = .ok s2 ∧
+        (JauneConsensus.Gloas.processBuilderExitRequest ctx.cfg) s1 = .ok s2 ∧
       post.builders = s2.builders := by
   unfold applyRequests at h
   obtain ⟨d, hd, h⟩ := bind_eq_ok_iff.mp h
@@ -1063,16 +1063,16 @@ theorem applyRequests_ok {ctx : Ctx} {pb : JauneConsensus.Gloas.ExecutionPayload
   obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
   cases h
   have fd : BuilderFrame x d :=
-    StepRelation.forIn_array_relation builderFrame id (fun _ _ => by gvcg) _ _ hd
+    StepRel.forIn_array_rel builderFrame id (fun _ _ => by gvcg) _ _ hd
   have fw : BuilderFrame d w :=
-    StepRelation.forIn_array_relation builderFrame id (fun _ _ => by gvcg) _ _ hw
+    StepRel.forIn_array_rel builderFrame id (fun _ _ => by gvcg) _ _ hw
   have fc : BuilderFrame w c :=
-    StepRelation.forIn_array_relation builderFrame id (fun _ _ => by gvcg) _ _ hc
+    StepRel.forIn_array_rel builderFrame id (fun _ _ => by gvcg) _ _ hc
   rw [← Array.forIn_toList,
     forIn_list_bind_yield _ _ _ (fun st op => JauneConsensus.Gloas.processBuilderDepositRequest ctx st op)
       (fun _ _ => rfl)] at hs1
   rw [← Array.forIn_toList,
-    forIn_list_bind_yield _ _ _ (fun st op => JauneConsensus.Gloas.processBuilderExitRequest ctx.config st op)
+    forIn_list_bind_yield _ _ _ (fun st op => JauneConsensus.Gloas.processBuilderExitRequest ctx.cfg st op)
       (fun _ _ => rfl)] at hs2
   exact ⟨c, s1, s2, fc.1.trans (fw.1.trans fd.1), hs1, hs2, rfl⟩
 
@@ -1090,7 +1090,7 @@ theorem applyParentExecutionPayload_withdrawableEpoch (hspe : 2 ≤ P.SLOTS_PER_
     ∃ s0 s1 : JauneConsensus.Gloas.BeaconState P, s0.builders = pre.builders ∧
       requests.builder_deposits.toArray.toList.foldlM
         (JauneConsensus.Gloas.processBuilderDepositRequest ctx) s0 = .ok s1 ∧
-      ((ExitInitiated pre post i ∧ ExitInitiateIn ctx.config s1 requests.builder_exits.toArray.toList i) ∨
+      ((ExitInitiated pre post i ∧ ExitInitiateIn ctx.cfg s1 requests.builder_exits.toArray.toList i) ∨
         TopUpResetIn ctx s0 requests.builder_deposits.toArray.toList i ∨
         BuilderCreated pre post i) := by
   rw [applyParentExecutionPayload_eq] at h
@@ -1122,8 +1122,8 @@ theorem applyParentExecutionPayload_withdrawableEpoch (hspe : 2 ≤ P.SLOTS_PER_
 def BuildersEq (s s' : JauneConsensus.Gloas.BeaconState P) : Prop := s'.builders = s.builders
 
 /-- `BuildersEq` as a step relation. -/
-def buildersEq : StepRelation (JauneConsensus.Gloas.BeaconState P) where
-  relation := BuildersEq
+def buildersEq : StepRel (JauneConsensus.Gloas.BeaconState P) where
+  R := BuildersEq
   refl _ := rfl
   trans h₁ h₂ := Eq.trans h₂ h₁
 
@@ -1131,32 +1131,32 @@ macro_rules
   | `(tactic| gstep_close) => `(tactic| exact (show BuildersEq _ _ from rfl))
 macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (increaseBalance_builderFrame _ _ _) $h; exact (show BuildersEq _ _ from hh.1)))
+    `(tactic| (have hh := StepRel.of_ok (increaseBalance_builderFrame _ _ _) $h; exact (show BuildersEq _ _ from hh.1)))
 macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (decreaseBalance_builderFrame _ _ _) $h; exact (show BuildersEq _ _ from hh.1)))
+    `(tactic| (have hh := StepRel.of_ok (decreaseBalance_builderFrame _ _ _) $h; exact (show BuildersEq _ _ from hh.1)))
 macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (initiateValidatorExit_builderFrame _ _ _) $h; exact (show BuildersEq _ _ from hh.1)))
+    `(tactic| (have hh := StepRel.of_ok (initiateValidatorExit_builderFrame _ _ _) $h; exact (show BuildersEq _ _ from hh.1)))
 macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (slashValidator_paymentsCleared _ _ _ _) $h; exact (show BuildersEq _ _ from hh.1)))
+    `(tactic| (have hh := StepRel.of_ok (slashValidator_paymentsCleared _ _ _ _) $h; exact (show BuildersEq _ _ from hh.1)))
 macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processVoluntaryExit_builderFrame _ _ _) $h; exact (show BuildersEq _ _ from hh.1)))
+    `(tactic| (have hh := StepRel.of_ok (processVoluntaryExit_builderFrame _ _ _) $h; exact (show BuildersEq _ _ from hh.1)))
 macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processBlsToExecutionChange_builderFrame _ _ _) $h; exact (show BuildersEq _ _ from hh.1)))
+    `(tactic| (have hh := StepRel.of_ok (processBlsToExecutionChange_builderFrame _ _ _) $h; exact (show BuildersEq _ _ from hh.1)))
 
 theorem processProposerSlashing_buildersEq (ctx : Ctx) (s : JauneConsensus.Gloas.BeaconState P)
     (ps : ProposerSlashing) :
-    Ok (JauneConsensus.Gloas.processProposerSlashing ctx s ps) (buildersEq.relation s) := by
+    Ok (JauneConsensus.Gloas.processProposerSlashing ctx s ps) (buildersEq.R s) := by
   unfold JauneConsensus.Gloas.processProposerSlashing; gvcg
   all_goals exact fun x hx => (slashValidator_paymentsCleared _ _ _ _ x hx).1
 
 theorem processAttesterSlashing_buildersEq (ctx : Ctx) (s : JauneConsensus.Gloas.BeaconState P)
     (as : JauneConsensus.Gloas.AttesterSlashing) :
-    Ok (JauneConsensus.Gloas.processAttesterSlashing ctx s as) (buildersEq.relation s) := by
+    Ok (JauneConsensus.Gloas.processAttesterSlashing ctx s as) (buildersEq.R s) := by
   unfold JauneConsensus.Gloas.processAttesterSlashing; gvcg
 
 section AttestationFrame
@@ -1165,58 +1165,58 @@ section AttestationFrame
 participation): the leaf rule closes the `if` by cases. Local to this section. -/
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (increaseBalance_builderFrame _ _ _) $h; exact (show BuildersEq _ _ from hh.1.trans (by split <;> rfl))))
+    `(tactic| (have hh := StepRel.of_ok (increaseBalance_builderFrame _ _ _) $h; exact (show BuildersEq _ _ from hh.1.trans (by split <;> rfl))))
 
 set_option maxHeartbeats 2000000 in
 theorem processAttestation_buildersEq (ctx : Ctx) (s : JauneConsensus.Gloas.BeaconState P)
     (a : JauneConsensus.Gloas.Attestation P) (ps : Slot) :
-    Ok (JauneConsensus.Gloas.processAttestation ctx s a ps) (buildersEq.relation s) := by
+    Ok (JauneConsensus.Gloas.processAttestation ctx s a ps) (buildersEq.R s) := by
   unfold JauneConsensus.Gloas.processAttestation; gvcg
 
 end AttestationFrame
 
 theorem processPayloadAttestation_buildersEq (ctx : Ctx) (s : JauneConsensus.Gloas.BeaconState P)
     (pa : JauneConsensus.Gloas.PayloadAttestation P) :
-    Ok (JauneConsensus.Gloas.processPayloadAttestation ctx s pa) (buildersEq.relation s) := by
+    Ok (JauneConsensus.Gloas.processPayloadAttestation ctx s pa) (buildersEq.R s) := by
   unfold JauneConsensus.Gloas.processPayloadAttestation; gvcg
 
 macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processProposerSlashing_buildersEq _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processProposerSlashing_buildersEq _ _ _) $h; exact hh))
 macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processAttesterSlashing_buildersEq _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processAttesterSlashing_buildersEq _ _ _) $h; exact hh))
 macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processAttestation_buildersEq _ _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processAttestation_buildersEq _ _ _ _) $h; exact hh))
 macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processPayloadAttestation_buildersEq _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processPayloadAttestation_buildersEq _ _ _) $h; exact hh))
 
 theorem processOperations_buildersEq (ctx : Ctx) (s : JauneConsensus.Gloas.BeaconState P)
     (body : JauneConsensus.Gloas.BeaconBlockBody P) (ps : Slot) :
-    Ok (JauneConsensus.Gloas.processOperations ctx s body ps) (buildersEq.relation s) := by
+    Ok (JauneConsensus.Gloas.processOperations ctx s body ps) (buildersEq.R s) := by
   unfold JauneConsensus.Gloas.processOperations; gvcg
 
 theorem processBlockHeader_buildersEq (s : JauneConsensus.Gloas.BeaconState P)
     (blk : JauneConsensus.Gloas.BeaconBlock P) :
-    Ok (JauneConsensus.Gloas.processBlockHeader s blk) (buildersEq.relation s) := by
+    Ok (JauneConsensus.Gloas.processBlockHeader s blk) (buildersEq.R s) := by
   unfold JauneConsensus.Gloas.processBlockHeader; gvcg
 
 theorem processRandao_buildersEq (ctx : Ctx) (s : JauneConsensus.Gloas.BeaconState P)
     (body : JauneConsensus.Gloas.BeaconBlockBody P) :
-    Ok (JauneConsensus.Gloas.processRandao ctx s body) (buildersEq.relation s) := by
+    Ok (JauneConsensus.Gloas.processRandao ctx s body) (buildersEq.R s) := by
   unfold JauneConsensus.Gloas.processRandao; gvcg
 
 theorem processEth1Data_buildersEq (s : JauneConsensus.Gloas.BeaconState P)
     (body : JauneConsensus.Gloas.BeaconBlockBody P) :
-    Ok (JauneConsensus.Gloas.processEth1Data s body) (buildersEq.relation s) := by
+    Ok (JauneConsensus.Gloas.processEth1Data s body) (buildersEq.R s) := by
   unfold JauneConsensus.Gloas.processEth1Data; gvcg
 
 set_option maxHeartbeats 2000000 in
 theorem processSyncAggregate_buildersEq (ctx : Ctx) (s : JauneConsensus.Gloas.BeaconState P)
     (sa : SyncAggregate P) :
-    Ok (JauneConsensus.Gloas.processSyncAggregate ctx s sa) (buildersEq.relation s) := by
+    Ok (JauneConsensus.Gloas.processSyncAggregate ctx s sa) (buildersEq.R s) := by
   unfold JauneConsensus.Gloas.processSyncAggregate; gvcg
 
 section BidFrame
@@ -1225,11 +1225,11 @@ section BidFrame
 proved on the spot by the generator. Local to this section. -/
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (exact StepRelation.of_ok (Q := StepRelation.relation buildersEq _) (by gvcg) $h))
+    `(tactic| (exact StepRel.of_ok (Q := StepRel.R buildersEq _) (by gvcg) $h))
 
 theorem processExecutionPayloadBid_buildersEq (ctx : Ctx) (s : JauneConsensus.Gloas.BeaconState P)
     (sb : JauneConsensus.Gloas.SignedExecutionPayloadBid) :
-    Ok (JauneConsensus.Gloas.processExecutionPayloadBid ctx s sb) (buildersEq.relation s) := by
+    Ok (JauneConsensus.Gloas.processExecutionPayloadBid ctx s sb) (buildersEq.R s) := by
   unfold JauneConsensus.Gloas.processExecutionPayloadBid; gvcg
 
 end BidFrame
@@ -1239,35 +1239,35 @@ end BidFrame
 
 /-- Same number of builders, and each keeps its pubkey and `withdrawable_epoch` (balances may
 change). -/
-def BuildersPubkeyWithdrawableEpoch (s s' : JauneConsensus.Gloas.BeaconState P) : Prop :=
+def BuildersPkWe (s s' : JauneConsensus.Gloas.BeaconState P) : Prop :=
   s'.builders.toArray.size = s.builders.toArray.size ∧
     ∀ j : Nat, (s'.builders.toArray[j]?).map (fun b => (b.pubkey, b.withdrawable_epoch)) =
       (s.builders.toArray[j]?).map (fun b => (b.pubkey, b.withdrawable_epoch))
 
 /-- `BuildersPkWe` as a step relation. -/
-def pubkeyWithdrawableEpoch : StepRelation (JauneConsensus.Gloas.BeaconState P) where
-  relation := BuildersPubkeyWithdrawableEpoch
+def pkWe : StepRel (JauneConsensus.Gloas.BeaconState P) where
+  R := BuildersPkWe
   refl _ := ⟨rfl, fun _ => rfl⟩
   trans h₁ h₂ := ⟨h₂.1.trans h₁.1, fun j => (h₂.2 j).trans (h₁.2 j)⟩
 
-theorem pubkeyWithdrawableEpoch_of_eq {s s' : JauneConsensus.Gloas.BeaconState P} (h : s'.builders = s.builders) :
-    BuildersPubkeyWithdrawableEpoch s s' := ⟨by rw [h], fun j => by rw [h]⟩
+theorem pkWe_of_eq {s s' : JauneConsensus.Gloas.BeaconState P} (h : s'.builders = s.builders) :
+    BuildersPkWe s s' := ⟨by rw [h], fun j => by rw [h]⟩
 
-theorem pubkeyWithdrawableEpoch_of_modify {s : JauneConsensus.Gloas.BeaconState P} {i : Nat}
-    {g : JauneConsensus.Gloas.Builder → Fallible JauneConsensus.Gloas.Builder} {site : String}
-    {ys : ProgressiveListRightSpine JauneConsensus.Gloas.Builder}
+theorem pkWe_of_modify {s : JauneConsensus.Gloas.BeaconState P} {i : Nat}
+    {g : JauneConsensus.Gloas.Builder → M JauneConsensus.Gloas.Builder} {site : String}
+    {ys : ProgressiveListR JauneConsensus.Gloas.Builder}
     (h : s.builders.modify i g site = .ok ys)
     (hg : ∀ b b', g b = .ok b' → b'.pubkey = b.pubkey ∧ b'.withdrawable_epoch = b.withdrawable_epoch) :
-    BuildersPubkeyWithdrawableEpoch s { s with builders := ys } := by
-  unfold ProgressiveListOnSpine.modify at h
+    BuildersPkWe s { s with builders := ys } := by
+  unfold ProgressiveListS.modify at h
   obtain ⟨v, hv, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨v', hv', h⟩ := bind_eq_ok_iff.mp h
-  obtain ⟨h1, h2, h3⟩ := progressiveList_set_ok h
+  obtain ⟨h1, h2, h3⟩ := pl_set_ok h
   refine ⟨h1, fun j => ?_⟩
   by_cases hj : j = i
   · subst hj
     show (ys.toArray[j]?).map _ = _
-    rw [h2, progressiveList_get_ok.mp hv]
+    rw [h2, pl_get_ok.mp hv]
     obtain ⟨e1, e2⟩ := hg v v' hv'
     simp [e1, e2]
   · show (ys.toArray[j]?).map _ = _
@@ -1276,79 +1276,79 @@ theorem pubkeyWithdrawableEpoch_of_modify {s : JauneConsensus.Gloas.BeaconState 
 section WithdrawalsFrame
 
 local macro_rules
-  | `(tactic| gstep_close) => `(tactic| exact (show BuildersPubkeyWithdrawableEpoch _ _ from ⟨rfl, fun _ => rfl⟩))
+  | `(tactic| gstep_close) => `(tactic| exact (show BuildersPkWe _ _ from ⟨rfl, fun _ => rfl⟩))
 local macro_rules
   | `(tactic| gstep_close) =>
-    `(tactic| exact pubkeyWithdrawableEpoch_of_modify (by assumption) (fun b b' hb => by
+    `(tactic| exact pkWe_of_modify (by assumption) (fun b b' hb => by
       obtain ⟨_, _, hb⟩ := bind_eq_ok_iff.mp hb; cases hb; exact ⟨rfl, rfl⟩))
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (decreaseBalance_builderFrame _ _ _) $h; exact pubkeyWithdrawableEpoch_of_eq hh.1))
+    `(tactic| (have hh := StepRel.of_ok (decreaseBalance_builderFrame _ _ _) $h; exact pkWe_of_eq hh.1))
 
-theorem applyWithdrawals_pubkeyWithdrawableEpoch (s : JauneConsensus.Gloas.BeaconState P) (ws : Array Withdrawal) :
-    Ok (JauneConsensus.Gloas.applyWithdrawals s ws) (pubkeyWithdrawableEpoch.relation s) := by
+theorem applyWithdrawals_pkWe (s : JauneConsensus.Gloas.BeaconState P) (ws : Array Withdrawal) :
+    Ok (JauneConsensus.Gloas.applyWithdrawals s ws) (pkWe.R s) := by
   unfold JauneConsensus.Gloas.applyWithdrawals; gvcg
 
-theorem updateNextWithdrawalIndex_pubkeyWithdrawableEpoch (s : JauneConsensus.Gloas.BeaconState P) (ws : Array Withdrawal) :
-    Ok (JauneConsensus.Gloas.updateNextWithdrawalIndex s ws) (pubkeyWithdrawableEpoch.relation s) := by
+theorem updateNextWithdrawalIndex_pkWe (s : JauneConsensus.Gloas.BeaconState P) (ws : Array Withdrawal) :
+    Ok (JauneConsensus.Gloas.updateNextWithdrawalIndex s ws) (pkWe.R s) := by
   unfold JauneConsensus.Gloas.updateNextWithdrawalIndex; gvcg
 
-theorem updateNextWithdrawalBuilderIndex_pubkeyWithdrawableEpoch (s : JauneConsensus.Gloas.BeaconState P) (n : U64) :
-    Ok (JauneConsensus.Gloas.updateNextWithdrawalBuilderIndex s n) (pubkeyWithdrawableEpoch.relation s) := by
+theorem updateNextWithdrawalBuilderIndex_pkWe (s : JauneConsensus.Gloas.BeaconState P) (n : U64) :
+    Ok (JauneConsensus.Gloas.updateNextWithdrawalBuilderIndex s n) (pkWe.R s) := by
   unfold JauneConsensus.Gloas.updateNextWithdrawalBuilderIndex; gvcg
 
-theorem updateNextWithdrawalValidatorIndex_pubkeyWithdrawableEpoch (s : JauneConsensus.Gloas.BeaconState P)
+theorem updateNextWithdrawalValidatorIndex_pkWe (s : JauneConsensus.Gloas.BeaconState P)
     (ws : Array Withdrawal) :
-    Ok (JauneConsensus.Gloas.updateNextWithdrawalValidatorIndex s ws) (pubkeyWithdrawableEpoch.relation s) := by
+    Ok (JauneConsensus.Gloas.updateNextWithdrawalValidatorIndex s ws) (pkWe.R s) := by
   unfold JauneConsensus.Gloas.updateNextWithdrawalValidatorIndex; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (applyWithdrawals_pubkeyWithdrawableEpoch _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (applyWithdrawals_pkWe _ _) $h; exact hh))
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (updateNextWithdrawalIndex_pubkeyWithdrawableEpoch _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (updateNextWithdrawalIndex_pkWe _ _) $h; exact hh))
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (updateNextWithdrawalBuilderIndex_pubkeyWithdrawableEpoch _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (updateNextWithdrawalBuilderIndex_pkWe _ _) $h; exact hh))
 
 /-- `process_withdrawals` (Gloas, CL:2042) keeps every builder's pubkey and
 `withdrawable_epoch` (it debits balances only). -/
-theorem processWithdrawals_pubkeyWithdrawableEpoch (s : JauneConsensus.Gloas.BeaconState P) :
-    Ok (JauneConsensus.Gloas.processWithdrawals s) (pubkeyWithdrawableEpoch.relation s) := by
+theorem processWithdrawals_pkWe (s : JauneConsensus.Gloas.BeaconState P) :
+    Ok (JauneConsensus.Gloas.processWithdrawals s) (pkWe.R s) := by
   unfold JauneConsensus.Gloas.processWithdrawals; gvcg
-  all_goals exact StepRelation.ok_rebase pubkeyWithdrawableEpoch (by first | exact pubkeyWithdrawableEpoch.refl _ | exact ⟨rfl, fun _ => rfl⟩) (updateNextWithdrawalValidatorIndex_pubkeyWithdrawableEpoch _ _)
+  all_goals exact StepRel.ok_rebase pkWe (by first | exact pkWe.refl _ | exact ⟨rfl, fun _ => rfl⟩) (updateNextWithdrawalValidatorIndex_pkWe _ _)
 
 end WithdrawalsFrame
 
 
 /-! ## B3: `withdrawableEpoch_writers` over one Gloas block -/
 
-theorem ok_imp {α : Type} {c : Fallible α} {Q Q' : α → Prop} (h : Ok c Q) (hq : ∀ a, Q a → Q' a) :
+theorem ok_imp {α : Type} {c : M α} {Q Q' : α → Prop} (h : Ok c Q) (hq : ∀ a, Q a → Q' a) :
     Ok c Q' := fun a ha => hq a (h a ha)
 
 section BlockWriters
 
 local macro_rules
-  | `(tactic| gstep_close) => `(tactic| exact (show BuildersPubkeyWithdrawableEpoch _ _ from ⟨rfl, fun _ => rfl⟩))
+  | `(tactic| gstep_close) => `(tactic| exact (show BuildersPkWe _ _ from ⟨rfl, fun _ => rfl⟩))
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processBlockHeader_buildersEq _ _) $h; exact pubkeyWithdrawableEpoch_of_eq hh))
+    `(tactic| (have hh := StepRel.of_ok (processBlockHeader_buildersEq _ _) $h; exact pkWe_of_eq hh))
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processWithdrawals_pubkeyWithdrawableEpoch _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processWithdrawals_pkWe _) $h; exact hh))
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processExecutionPayloadBid_buildersEq _ _ _) $h; exact pubkeyWithdrawableEpoch_of_eq hh))
+    `(tactic| (have hh := StepRel.of_ok (processExecutionPayloadBid_buildersEq _ _ _) $h; exact pkWe_of_eq hh))
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processRandao_buildersEq _ _ _) $h; exact pubkeyWithdrawableEpoch_of_eq hh))
+    `(tactic| (have hh := StepRel.of_ok (processRandao_buildersEq _ _ _) $h; exact pkWe_of_eq hh))
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processEth1Data_buildersEq _ _) $h; exact pubkeyWithdrawableEpoch_of_eq hh))
+    `(tactic| (have hh := StepRel.of_ok (processEth1Data_buildersEq _ _) $h; exact pkWe_of_eq hh))
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processOperations_buildersEq _ _ _ _) $h; exact pubkeyWithdrawableEpoch_of_eq hh))
+    `(tactic| (have hh := StepRel.of_ok (processOperations_buildersEq _ _ _ _) $h; exact pkWe_of_eq hh))
 
 /-- After the parent execution payload, the rest of `process_block` keeps every builder's pubkey
 and `withdrawable_epoch`. -/
@@ -1356,14 +1356,14 @@ theorem processBlock_after_parent (ctx : Ctx) (pre : JauneConsensus.Gloas.Beacon
     (block : JauneConsensus.Gloas.BeaconBlock P) :
     Ok (JauneConsensus.Gloas.processBlock ctx pre block) (fun post => ∃ mid,
       JauneConsensus.Gloas.processParentExecutionPayload ctx pre block = .ok mid ∧
-      BuildersPubkeyWithdrawableEpoch mid post) := by
+      BuildersPkWe mid post) := by
   unfold JauneConsensus.Gloas.processBlock
   try simp only []
   apply ok_bind
   intro mid hmid
-  refine ok_imp (Q := pubkeyWithdrawableEpoch.relation mid) ?_ (fun q hq => ⟨mid, hmid, hq⟩)
+  refine ok_imp (Q := pkWe.R mid) ?_ (fun q hq => ⟨mid, hmid, hq⟩)
   gvcg
-  all_goals exact fun x hx => pubkeyWithdrawableEpoch_of_eq (processSyncAggregate_buildersEq _ _ _ x hx)
+  all_goals exact fun x hx => pkWe_of_eq (processSyncAggregate_buildersEq _ _ _ x hx)
 
 end BlockWriters
 
@@ -1386,7 +1386,7 @@ theorem withdrawableEpoch_writers (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Ctx}
       block.body.parent_execution_requests.builder_deposits.toArray.toList.foldlM
         (JauneConsensus.Gloas.processBuilderDepositRequest ctx) s0 = .ok s1 ∧
       ((ExitInitiated pre post i ∧
-          ExitInitiateIn ctx.config s1 block.body.parent_execution_requests.builder_exits.toArray.toList i) ∨
+          ExitInitiateIn ctx.cfg s1 block.body.parent_execution_requests.builder_exits.toArray.toList i) ∨
         TopUpResetIn ctx s0 block.body.parent_execution_requests.builder_deposits.toArray.toList i ∨
         BuilderCreated pre post i) := by
   obtain ⟨mid, hmid, hsz, hmap⟩ := processBlock_after_parent ctx pre block post h

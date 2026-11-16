@@ -21,49 +21,49 @@ abbrev blsPrime : Nat := bls12Prime
 abbrev blsCurveOrder : Nat :=
   52435875175126190479447740508185965837690552500527637822603658699938581184513
 
-abbrev Bls12Fp : Type := FinField blsPrime
+abbrev BLSF : Type := FinField blsPrime
 
 -- Curve is y^2 = x^3 + 4 (py_ecc.bls12_381.bls12_381_curve.b)
-abbrev Bls12G1 : Type := EllipticCurve Bls12Fp (0 : Bls12Fp) (4 : Bls12Fp)
+abbrev BLSP : Type := EllipticCurve BLSF (0 : BLSF) (4 : BLSF)
 
 -- GaloisField stores polynomial coefficients from highest degree to the
 -- constant coefficient.  Thus [c1, c0] represents c0 + c1*u, while the
 -- EIP-2537 codec exposes the py_ecc order c0 || c1.  The modulus is
 -- u^2 + 1, matching py_ecc's FQ2_MODULUS_COEFFS = (1, 0).
-abbrev Bls12Fp2 : Type := GaloisField blsPrime [1, 0, 1]
+abbrev BLSF2 : Type := GaloisField blsPrime [1, 0, 1]
 
-def Bls12Fp2.mk (c0 c1 : Nat) : Bls12Fp2 :=
+def BLSF2.mk (c0 c1 : Nat) : BLSF2 :=
   ⟨trimZero [FinField.ofNat c1, FinField.ofNat c0]⟩
 
-def blsB2 : Bls12Fp2 := Bls12Fp2.mk 4 4
+def blsB2 : BLSF2 := BLSF2.mk 4 4
 
-abbrev Bls12G2 : Type := EllipticCurve Bls12Fp2 (0 : Bls12Fp2) blsB2
+abbrev BLSP2 : Type := EllipticCurve BLSF2 (0 : BLSF2) blsB2
 
 -- def g1_to_bytes(g1_point : Point3D[FQ]) -> Bytes:
-def Bls12G1.toBytes (p : Bls12G1) : Bytes :=
+def BLSP.toBytes (p : BLSP) : Bytes :=
   p.x.val.toBytes.pack 64 ++ p.y.val.toBytes.pack 64
 
 -- `takeRightV` is `takeRightD` with its width in the type: the same
 -- left-padding, which restores exactly the leading zeros `trimZero` removed,
 -- but now the pair of coefficient reads is total rather than conventionally
 -- safe.
-def Bls12Fp2.toBytes (x : Bls12Fp2) : Bytes :=
-  let cs := List.takeRightV 2 x.val (0 : Bls12Fp)
+def BLSF2.toBytes (x : BLSF2) : Bytes :=
+  let cs := List.takeRightV 2 x.val (0 : BLSF)
   let c1 := cs[0]
   let c0 := cs[1]
   c0.val.toBytes.pack 64 ++ c1.val.toBytes.pack 64
 
-def Bls12G2.toBytes (p : Bls12G2) : Bytes :=
+def BLSP2.toBytes (p : BLSP2) : Bytes :=
   p.x.toBytes ++ p.y.toBytes
 
-def g1MsmSum (pairs : List (Bls12G1 × Nat)) : Bls12G1 :=
-  let rec aux (acc : Bls12G1) : List (Bls12G1 × Nat) → Bls12G1
+def g1MsmSum (pairs : List (BLSP × Nat)) : BLSP :=
+  let rec aux (acc : BLSP) : List (BLSP × Nat) → BLSP
     | [] => acc
     | (p, s) :: ps => aux (acc + p.mulBy s) ps
   aux ⟨0, 0⟩ pairs
 
-def g2MsmSum (pairs : List (Bls12G2 × Nat)) : Bls12G2 :=
-  let rec aux (acc : Bls12G2) : List (Bls12G2 × Nat) → Bls12G2
+def g2MsmSum (pairs : List (BLSP2 × Nat)) : BLSP2 :=
+  let rec aux (acc : BLSP2) : List (BLSP2 × Nat) → BLSP2
     | [] => acc
     | (p, s) :: ps => aux (acc + p.mulBy s) ps
   aux ⟨0, 0⟩ pairs
@@ -74,7 +74,7 @@ def blsG1GenX : Nat :=
 def blsG1GenY : Nat :=
   1339506544944476473020471379941921221584933875938349620426543736416511423956333506472724655353366534992391756441569
 
-def blsG1Generator : Bls12G1 := ⟨FinField.ofNat blsG1GenX, FinField.ofNat blsG1GenY⟩
+def blsG1Generator : BLSP := ⟨FinField.ofNat blsG1GenX, FinField.ofNat blsG1GenY⟩
 
 -- py_ecc.bls12_381.bls12_381_curve.double(G1) (== add(G1, G1) == multiply(G1,
 -- 2), confirmed against the local venv), pinned here as an independent
@@ -84,12 +84,12 @@ def blsG1GenDoubleX : Nat :=
 def blsG1GenDoubleY : Nat :=
   3450209970729243429733164009999191867485184320918914219895632678707687208996709678363578245114137957452475385814312
 
-def blsG1GenDouble : Bls12G1 := ⟨FinField.ofNat blsG1GenDoubleX, FinField.ofNat blsG1GenDoubleY⟩
+def blsG1GenDouble : BLSP := ⟨FinField.ofNat blsG1GenDoubleX, FinField.ofNat blsG1GenDoubleY⟩
 
 #guard blsG1Generator.isOnCurve
 #guard blsG1Generator.double = blsG1GenDouble
 #guard (blsG1Generator + blsG1Generator) = blsG1GenDouble
-#guard Bls12G1.toBytes (⟨0, 0⟩ : Bls12G1) = List.replicate 128 (0 : UInt8)
+#guard BLSP.toBytes (⟨0, 0⟩ : BLSP) = List.replicate 128 (0 : UInt8)
 #guard (blsG1Generator.mulBy blsCurveOrder) = ⟨0, 0⟩
 
 -- py_ecc.bls12_381.bls12_381_curve.G2.  Its FQ2 coefficients are in the
@@ -103,11 +103,11 @@ def blsG2GenY0 : Nat :=
 def blsG2GenY1 : Nat :=
   927553665492332455747201965776037880757740193453592970025027978793976877002675564980949289727957565575433344219582
 
-def blsG2Generator : Bls12G2 :=
-  ⟨Bls12Fp2.mk blsG2GenX0 blsG2GenX1, Bls12Fp2.mk blsG2GenY0 blsG2GenY1⟩
+def blsG2Generator : BLSP2 :=
+  ⟨BLSF2.mk blsG2GenX0 blsG2GenX1, BLSF2.mk blsG2GenY0 blsG2GenY1⟩
 
 #guard blsG2Generator.isOnCurve
-#guard Bls12G2.toBytes (⟨0, 0⟩ : Bls12G2) = List.replicate 256 (0 : UInt8)
+#guard BLSP2.toBytes (⟨0, 0⟩ : BLSP2) = List.replicate 256 (0 : UInt8)
 #guard (blsG2Generator.mulBy blsCurveOrder) = ⟨0, 0⟩
 
 -- Pairing machinery, ported from py_ecc's non-optimized
@@ -123,15 +123,15 @@ def blsAteLoopCount : Nat := 15132376222941642752
 def blsLogAteLoopCount : Nat := 62
 
 -- def cast_point_to_fq12(pt: Point2D[FQ]) -> Point2D[FQ12]:
-def Bls12G1.toBls12Fp12Pair : Bls12G1 → Bls12Fp12Pair
+def BLSP.toBLSP12 : BLSP → BLSP12
   | ⟨x, y⟩ => ⟨⟨trimZero [x]⟩, ⟨trimZero [y]⟩⟩
 
 -- def twist(pt: Point2D[FQP]) -> Point2D[FQ12]:
 -- Unlike the BN254 twist in EC.lean (which multiplies by w^2 / w^3),
 -- py_ecc's BLS12-381 twist divides the coordinates by w^2 / w^3.
-def blsTwist (p : Bls12G2) : Bls12Fp12Pair :=
-  let xs := List.takeRightV 2 p.x.val (0 : Bls12Fp)
-  let ys := List.takeRightV 2 p.y.val (0 : Bls12Fp)
+def blsTwist (p : BLSP2) : BLSP12 :=
+  let xs := List.takeRightV 2 p.x.val (0 : BLSF)
+  let ys := List.takeRightV 2 p.y.val (0 : BLSF)
   let x1 := xs[0]
   let x0 := xs[1]
   let y1 := ys[0]
@@ -139,18 +139,18 @@ def blsTwist (p : Bls12G2) : Bls12Fp12Pair :=
   -- Field isomorphism from Z[p] / u^2 + 1 to Z[p] / u^2 - 2*u + 2:
   -- xcoeffs = [_x.coeffs[0] - _x.coeffs[1], _x.coeffs[1]], embedded
   -- into FQ12 at degrees 0 and 6 (w^6 = u).
-  let nx : Bls12Fp12 := ⟨trimZero [x1, 0, 0, 0, 0, 0, x0 - x1]⟩
-  let ny : Bls12Fp12 := ⟨trimZero [y1, 0, 0, 0, 0, 0, y0 - y1]⟩
-  let w : Bls12Fp12 := ⟨[1, 0]⟩
+  let nx : BLSF12 := ⟨trimZero [x1, 0, 0, 0, 0, 0, x0 - x1]⟩
+  let ny : BLSF12 := ⟨trimZero [y1, 0, 0, 0, 0, 0, y0 - y1]⟩
+  let w : BLSF12 := ⟨[1, 0]⟩
   ⟨nx / (w ^ 2), ny / (w ^ 3)⟩
 
 -- def linefunc(P1, P2, T) -> Field:
 -- Duplicated from EC.lean's BN254 `linefunc` (numerator/denominator
 -- form, avoiding per-line division) rather than generalizing it.
-def blsLinefunc : Bls12Fp12Pair → Bls12Fp12Pair → Bls12Fp12Pair → Bls12Fp12Pair
+def blsLinefunc : BLSP12 → BLSP12 → BLSP12 → BLSP12
   | ⟨x1, y1⟩, ⟨x2, y2⟩, ⟨xt, yt⟩ =>
-    let mNumerator : Bls12Fp12 := y2 - y1
-    let mDenominator : Bls12Fp12 := x2 - x1
+    let mNumerator : BLSF12 := y2 - y1
+    let mDenominator : BLSF12 := x2 - x1
     if mDenominator ≠ 0
     then
       ⟨
@@ -172,10 +172,10 @@ def blsLinefunc : Bls12Fp12Pair → Bls12Fp12Pair → Bls12Fp12Pair → Bls12Fp1
 -- Iterates the bits of ate_loop_count from bit log_ate_loop_count down
 -- to bit 0; unlike the BN254 loop there are no negative pseudo-binary
 -- digits and no Frobenius tail lines.
-def blsMillerLoop (q p : Bls12Fp12Pair) (finalExp : Bool := true) : Option Bls12Fp12 := do
-  let mut r : Bls12Fp12Pair := q
-  let mut fNum : Bls12Fp12 := 1
-  let mut fDen : Bls12Fp12 := 1
+def blsMillerLoop (q p : BLSP12) (finalExp : Bool := true) : Option BLSF12 := do
+  let mut r : BLSP12 := q
+  let mut fNum : BLSF12 := 1
+  let mut fDen : BLSF12 := 1
   -- for i in range(log_ate_loop_count, -1, -1):
   for i in (List.range (blsLogAteLoopCount + 1)).reverse do
     let ⟨_n, _d⟩ := blsLinefunc r r p
@@ -198,12 +198,12 @@ def blsMillerLoop (q p : Bls12Fp12Pair) (finalExp : Bool := true) : Option Bls12
 -- def pairing(Q: Point2D[FQ2], P: Point2D[FQ]) -> FQ12:
 -- The reference pairing: py_ecc's non-optimized loop above, with the plain final power.
 -- `blsPairing` below is the fast form; `Jaune/BLSGuards.lean` checks they agree.
-def blsPairingRef (q : Bls12G2) (p : Bls12G1) (finalExp : Bool := true) : Option Bls12Fp12 := do
+def blsPairingRef (q : BLSP2) (p : BLSP) (finalExp : Bool := true) : Option BLSF12 := do
   guard q.isOnCurve
   guard p.isOnCurve
   if p = ⟨0, 0⟩ ∨ q = ⟨0, 0⟩ then
     return 1
-  blsMillerLoop (blsTwist q) (p.toBls12Fp12Pair) finalExp
+  blsMillerLoop (blsTwist q) (p.toBLSP12) finalExp
 
 -- ---------------------------------------------------------------------------
 -- Fast final exponentiation.
@@ -245,33 +245,33 @@ theorem blsHardDigits_sum :
 theorem blsHardDigits_lt : ∀ d ∈ blsHardDigits, d < blsPrime := by decide
 
 /-- The coefficients `c_0, ..., c_11` of `sum c_i w^i`, low degree first. -/
-def f12Coeffs (x : Bls12Fp12) : List Bls12Fp :=
-  (List.takeRightV 12 x.val (0 : Bls12Fp)).toList.reverse
+def f12Coeffs (x : BLSF12) : List BLSF :=
+  (List.takeRightV 12 x.val (0 : BLSF)).toList.reverse
 
 /-- `c * x` for `c` in `Fp`. -/
-def f12Scale (c : Bls12Fp) (x : Bls12Fp12) : Bls12Fp12 :=
+def f12Scale (c : BLSF) (x : BLSF12) : BLSF12 :=
   if c = 0 then 0 else ⟨x.val.map (c * ·)⟩
 
 /-- `w^p`, and its powers `(w^p)^i` for `i < 12`. -/
-def blsFrobW : Bls12Fp12 := (⟨[1, 0]⟩ : Bls12Fp12) ^ blsPrime
+def blsFrobW : BLSF12 := (⟨[1, 0]⟩ : BLSF12) ^ blsPrime
 
-def blsFrobWPowers : List Bls12Fp12 :=
+def blsFrobWPowers : List BLSF12 :=
   (List.range 12).map fun i => blsFrobW ^ i
 
 /-- The Frobenius `x ↦ x^p` on `Fp12`. -/
-def f12Frob (x : Bls12Fp12) : Bls12Fp12 :=
+def f12Frob (x : BLSF12) : BLSF12 :=
   ((f12Coeffs x).zip blsFrobWPowers).foldl (fun acc (c, g) => acc + f12Scale c g) 0
 
 /-- `frob^k`. -/
-def f12FrobN : Nat → Bls12Fp12 → Bls12Fp12
+def f12FrobN : Nat → BLSF12 → BLSF12
   | 0, x => x
   | k + 1, x => f12FrobN k (f12Frob x)
 
 /-- Simultaneous exponentiation `prod_i b_i ^ e_i` for four bases (Straus, 16-entry
 table indexed by the bits of the four exponents at one position). -/
-def f12MultiPow4 (b0 b1 b2 b3 : Bls12Fp12) (e0 e1 e2 e3 : Nat) : Bls12Fp12 :=
+def f12MultiPow4 (b0 b1 b2 b3 : BLSF12) (e0 e1 e2 e3 : Nat) : BLSF12 :=
   -- table[j] = prod over set bits k of j of b_k
-  let table : Array Bls12Fp12 := (List.range 16).toArray.map fun j =>
+  let table : Array BLSF12 := (List.range 16).toArray.map fun j =>
     (if j.testBit 0 then b0 else 1) * (if j.testBit 1 then b1 else 1) *
     (if j.testBit 2 then b2 else 1) * (if j.testBit 3 then b3 else 1)
   let n := max (max e0.log2 e1.log2) (max e2.log2 e3.log2) + 1
@@ -284,7 +284,7 @@ def f12MultiPow4 (b0 b1 b2 b3 : Bls12Fp12) (e0 e1 e2 e3 : Nat) : Bls12Fp12 :=
     | none => sq) 1   -- unreachable: j < 16
 
 /-- `f ^ ((p^12 - 1) / r)` by the easy/hard split. -/
-def blsFinalExpFast (f : Bls12Fp12) : Bls12Fp12 :=
+def blsFinalExpFast (f : BLSF12) : BLSF12 :=
   -- easy part: g = (f^(p^6) / f)^(p^2 + 1)
   let t := f12FrobN 6 f / f
   let g := f12FrobN 2 t * t
@@ -316,18 +316,18 @@ def blsFinalExpFast (f : Bls12Fp12) : Bls12Fp12 :=
 -- ---------------------------------------------------------------------------
 
 /-- An `Fp12` element from `(degree, coefficient)` pairs (absent degrees are zero). -/
-def blsF12OfCoeffs (cs : List (Nat × Bls12Fp)) : Bls12Fp12 :=
+def blsF12OfCoeffs (cs : List (Nat × BLSF)) : BLSF12 :=
   ⟨trimZero ((List.range 12).reverse.map fun d =>
     cs.foldl (fun acc (e, c) => if e = d then acc + c else acc) 0)⟩
 
 /-- The `(c0, c1)` coefficients of `c0 + c1 i` in `Fp2`. -/
-def blsF2Coeffs (a : Bls12Fp2) : Bls12Fp × Bls12Fp :=
-  let cs := List.takeRightV 2 a.val (0 : Bls12Fp)
+def blsF2Coeffs (a : BLSF2) : BLSF × BLSF :=
+  let cs := List.takeRightV 2 a.val (0 : BLSF)
   (cs[1], cs[0])
 
 /-- `e(a) - x_P e(b) w^2 + y_P e(c) w^3`, where `e` embeds `Fp2` in `Fp12` as `blsTwist`
 does (`c0 + c1 i ↦ (c0 - c1) + c1 w^6`). -/
-def blsLineOf (a b c : Bls12Fp2) (p : Bls12G1) : Bls12Fp12 :=
+def blsLineOf (a b c : BLSF2) (p : BLSP) : BLSF12 :=
   let (a0, a1) := blsF2Coeffs a
   let (b0, b1) := blsF2Coeffs b
   let (c0, c1) := blsF2Coeffs c
@@ -335,12 +335,12 @@ def blsLineOf (a b c : Bls12Fp2) (p : Bls12G1) : Bls12Fp12 :=
     (3, p.y * (c0 - c1)), (9, p.y * c1)]
 
 /-- Jacobian points of the twist `E'(Fp2)` (Jaune's `EllipticCurve.Jacobian`). -/
-abbrev Bls12G2Jacobian : Type := EllipticCurve.JacobianPoint Bls12Fp2
+abbrev BLSJ2 : Type := EllipticCurve.JacobianPoint BLSF2
 
 /-- The tangent at `T = (X, Y, Z)` (affine `(X/Z^2, Y/Z^3)`) evaluated at `p` and scaled:
 with `λ = 3X^2 / (2YZ)`, the scaled line `(λ x_T - y_T) - λ x_P w^2 + y_P w^3` times
 `2 Y Z^3` (in `Fp2`) is `(3X^3 - 2Y^2) - 3X^2 Z^2 x_P w^2 + 2Y Z^3 y_P w^3`. -/
-def blsLineDblJ (t : Bls12G2Jacobian) (p : Bls12G1) : Bls12Fp12 :=
+def blsLineDblJ (t : BLSJ2) (p : BLSP) : BLSF12 :=
   let x2 := t.x * t.x
   let z2 := t.z * t.z
   blsLineOf (3 * x2 * t.x - 2 * (t.y * t.y)) (3 * x2 * z2) (2 * t.y * z2 * t.z) p
@@ -349,7 +349,7 @@ def blsLineDblJ (t : Bls12G2Jacobian) (p : Bls12G1) : Bls12Fp12 :=
 `N = y_Q Z^3 - Y`, `D = Z (x_Q Z^2 - X)`, `λ = N / D`, the scaled line times `D Z^3` is
 `(N X Z - Y D) - N Z^3 x_P w^2 + D Z^3 y_P w^3`. When `x_Q Z^2 = X` it is the tangent
 (`N = 0`) or the vertical line `x_P w^2 - x_T` times `Z^2`: `x_P Z^2 w^2 - X`. -/
-def blsLineAddJ (t : Bls12G2Jacobian) (q : Bls12G2) (p : Bls12G1) : Bls12Fp12 :=
+def blsLineAddJ (t : BLSJ2) (q : BLSP2) (p : BLSP) : BLSF12 :=
   let z2 := t.z * t.z
   let z3 := z2 * t.z
   let n := q.y * z3 - t.y
@@ -367,9 +367,9 @@ def blsLineAddJ (t : Bls12G2Jacobian) (q : Bls12G2) (p : Bls12G1) : Bls12Fp12 :=
 /-- The Miller loop of the reference (same bits, same order), with `T` in Jacobian
 coordinates on the twist and lines evaluated directly at `P` (no final exponentiation and
 no division anywhere). -/
-def blsMillerLoopFast (q : Bls12G2) (p : Bls12G1) : Bls12Fp12 := Id.run do
-  let mut t : Bls12G2Jacobian := EllipticCurve.Jacobian.ofAffine q
-  let mut f : Bls12Fp12 := 1
+def blsMillerLoopFast (q : BLSP2) (p : BLSP) : BLSF12 := Id.run do
+  let mut t : BLSJ2 := EllipticCurve.Jacobian.ofAffine q
+  let mut f : BLSF12 := 1
   for i in (List.range (blsLogAteLoopCount + 1)).reverse do
     f := f * f * blsLineDblJ t p
     t := EllipticCurve.Jacobian.double t
@@ -382,7 +382,7 @@ def blsMillerLoopFast (q : Bls12G2) (p : Bls12G1) : Bls12Fp12 := Id.run do
 -- `finalExp` holds (differential guards in `Jaune/BLSGuards.lean`). With `finalExp :=
 -- false` it returns the Miller value, which differs from the reference's by a factor the
 -- final exponentiation removes.
-def blsPairing (q : Bls12G2) (p : Bls12G1) (finalExp : Bool := true) : Option Bls12Fp12 := do
+def blsPairing (q : BLSP2) (p : BLSP) (finalExp : Bool := true) : Option BLSF12 := do
   guard q.isOnCurve
   guard p.isOnCurve
   if p = ⟨0, 0⟩ ∨ q = ⟨0, 0⟩ then
@@ -393,7 +393,7 @@ def blsPairing (q : Bls12G2) (p : Bls12G1) (finalExp : Bool := true) : Option Bl
 -- py_ecc checks `is_on_curve(G12, b12)` for the twisted generator;
 -- b12 = b = 4, so the G1 embedding must land on the same curve.
 #guard (blsTwist blsG2Generator).isOnCurve
-#guard (Bls12G1.toBls12Fp12Pair blsG1Generator).isOnCurve
+#guard (BLSP.toBLSP12 blsG1Generator).isOnCurve
 
 -- The bilinearity sanity check on `blsPairing` lives in `Jaune/BLSGuards.lean`,
 -- outside the `Jaune` library root. It evaluates four full pairings during
@@ -412,15 +412,15 @@ def blsPairing (q : Bls12G2) (p : Bls12G1) (finalExp : Bool := true) : Option Bl
 -- ---------------------------------------------------------------------------
 
 -- Fp/Fp2 conversions from the generated Nat / (c0, c1) constants.
-def blsToF (n : Nat) : Bls12Fp := FinField.ofNat n
-def blsToF2 : Nat × Nat → Bls12Fp2 := fun (c0, c1) => Bls12Fp2.mk c0 c1
+def blsToF (n : Nat) : BLSF := FinField.ofNat n
+def blsToF2 : Nat × Nat → BLSF2 := fun (c0, c1) => BLSF2.mk c0 c1
 
 -- RFC 9380 sgn0 (py_ecc convention).  Fp: parity of the value.
-def blsSgn0F (x : Bls12Fp) : Nat := x.val % 2
+def blsSgn0F (x : BLSF) : Nat := x.val % 2
 
 -- Fp2: sign_0 or (zero_0 and sign_1), coeffs in (c0, c1) order.
-def blsSgn0F2 (x : Bls12Fp2) : Nat :=
-  let cs := List.takeRightV 2 x.val (0 : Bls12Fp)
+def blsSgn0F2 (x : BLSF2) : Nat :=
+  let cs := List.takeRightV 2 x.val (0 : BLSF)
   let c1 := cs[0]
   let c0 := cs[1]
   if c0.val % 2 = 1 then 1
@@ -428,30 +428,30 @@ def blsSgn0F2 (x : Bls12Fp2) : Nat :=
 
 -- Trimming leading zeros is representational: the padded coefficient reads
 -- give the same answer for a trimmed element and its full-width spelling.
-#guard Bls12Fp2.toBytes ⟨trimZero [0, 5]⟩ = Bls12Fp2.toBytes ⟨[0, 5]⟩
+#guard BLSF2.toBytes ⟨trimZero [0, 5]⟩ = BLSF2.toBytes ⟨[0, 5]⟩
 #guard blsSgn0F2 ⟨trimZero [0, 5]⟩ = blsSgn0F2 ⟨[0, 5]⟩
 #guard blsSgn0F2 ⟨[]⟩ = blsSgn0F2 ⟨[0, 0]⟩
 
 -- Horner evaluation of a polynomial given its coefficients low degree first.
-def blsHornerF (coeffs : List Bls12Fp) (x : Bls12Fp) : Bls12Fp :=
+def blsHornerF (coeffs : List BLSF) (x : BLSF) : BLSF :=
   coeffs.foldr (fun c acc => acc * x + c) 0
-def blsHornerF2 (coeffs : List Bls12Fp2) (x : Bls12Fp2) : Bls12Fp2 :=
+def blsHornerF2 (coeffs : List BLSF2) (x : BLSF2) : BLSF2 :=
   coeffs.foldr (fun c acc => acc * x + c) 0
 
 -- Isogeny-map coefficient tables, converted once from BLSConst.
-def iso11XNumF : List Bls12Fp := BLSConst.iso11XNum.map blsToF
-def iso11XDenF : List Bls12Fp := BLSConst.iso11XDen.map blsToF
-def iso11YNumF : List Bls12Fp := BLSConst.iso11YNum.map blsToF
-def iso11YDenF : List Bls12Fp := BLSConst.iso11YDen.map blsToF
-def iso3XNumF2 : List Bls12Fp2 := BLSConst.iso3XNum.map blsToF2
-def iso3XDenF2 : List Bls12Fp2 := BLSConst.iso3XDen.map blsToF2
-def iso3YNumF2 : List Bls12Fp2 := BLSConst.iso3YNum.map blsToF2
-def iso3YDenF2 : List Bls12Fp2 := BLSConst.iso3YDen.map blsToF2
+def iso11XNumF : List BLSF := BLSConst.iso11XNum.map blsToF
+def iso11XDenF : List BLSF := BLSConst.iso11XDen.map blsToF
+def iso11YNumF : List BLSF := BLSConst.iso11YNum.map blsToF
+def iso11YDenF : List BLSF := BLSConst.iso11YDen.map blsToF
+def iso3XNumF2 : List BLSF2 := BLSConst.iso3XNum.map blsToF2
+def iso3XDenF2 : List BLSF2 := BLSConst.iso3XDen.map blsToF2
+def iso3YNumF2 : List BLSF2 := BLSConst.iso3YNum.map blsToF2
+def iso3YDenF2 : List BLSF2 := BLSConst.iso3YDen.map blsToF2
 
 -- def optimized_swu_G1(t: FQ) -> (numerator, y, denominator)
 -- Returned here as the affine point (x = numerator / denominator, y) on the
 -- 11-isogenous curve.
-def optimizedSwuG1 (t : Bls12Fp) : Bls12Fp × Bls12Fp :=
+def optimizedSwuG1 (t : BLSF) : BLSF × BLSF :=
   let a := blsToF BLSConst.iso11A
   let b := blsToF BLSConst.iso11B
   let z := blsToF BLSConst.iso11Z
@@ -474,7 +474,7 @@ def optimizedSwuG1 (t : Bls12Fp) : Bls12Fp × Bls12Fp :=
   (numerator / denominator, y2)
 
 -- def iso_map_G1(x, y, z) evaluated affinely (z = 1).
-def isoMapG1 : Bls12Fp × Bls12Fp → Bls12G1
+def isoMapG1 : BLSF × BLSF → BLSP
   | (x, y) =>
     let xNum := blsHornerF iso11XNumF x
     let xDen := blsHornerF iso11XDenF x
@@ -483,15 +483,15 @@ def isoMapG1 : Bls12Fp × Bls12Fp → Bls12G1
     ⟨xNum / xDen, y * yNum / yDen⟩
 
 -- def map_to_curve_G1(u); then clear_cofactor_G1 (multiply by H_EFF_G1).
-def blsMapFpToG1 (fp : Bls12Fp) : Bls12G1 :=
+def blsMapFpToG1 (fp : BLSF) : BLSP :=
   (isoMapG1 (optimizedSwuG1 fp)).mulBy BLSConst.hEffG1
 
 -- def sqrt_division_FQ2(u, v) -> (is_valid_root, result)
-def sqrtDivisionFQ2 (u v : Bls12Fp2) : Bool × Bls12Fp2 :=
+def sqrtDivisionFQ2 (u v : BLSF2) : Bool × BLSF2 :=
   let temp1 := u * v ^ 7
   let temp2 := temp1 * v ^ 8
   let gamma := temp2 ^ BLSConst.pMinus9Div16 * temp1
-  let rec go : List Bls12Fp2 → Bool × Bls12Fp2
+  let rec go : List BLSF2 → Bool × BLSF2
     | [] => (false, gamma)
     | root :: rest =>
       let cand := root * gamma
@@ -501,7 +501,7 @@ def sqrtDivisionFQ2 (u v : Bls12Fp2) : Bool × Bls12Fp2 :=
 -- def optimized_swu_G2(t: FQ2) -> (numerator, y, denominator)
 -- Returned as the affine point (numerator / denominator, y) on the
 -- 3-isogenous curve.
-def optimizedSwuG2 (t : Bls12Fp2) : Bls12Fp2 × Bls12Fp2 :=
+def optimizedSwuG2 (t : BLSF2) : BLSF2 × BLSF2 :=
   let a := blsToF2 BLSConst.iso3A
   let b := blsToF2 BLSConst.iso3B
   let z := blsToF2 BLSConst.iso3Z
@@ -517,7 +517,7 @@ def optimizedSwuG2 (t : Bls12Fp2) : Bls12Fp2 × Bls12Fp2 :=
   let sqrtCand := sqrtCand0 * t ^ 3
   let u := zt2 ^ 3 * u0
   -- First eta making (eta * sqrtCand)^2 * v - u = 0.
-  let etaMatch : Option Bls12Fp2 :=
+  let etaMatch : Option BLSF2 :=
     (BLSConst.etas.map blsToF2).foldl
       (fun acc eta =>
         match acc with
@@ -527,7 +527,7 @@ def optimizedSwuG2 (t : Bls12Fp2) : Bls12Fp2 × Bls12Fp2 :=
           if esc ^ 2 * v - u = 0 then some esc else none)
       none
   let numerator := if success then numerator0 else numerator0 * zt2
-  let y1 : Bls12Fp2 :=
+  let y1 : BLSF2 :=
     if success then sqrtCand0
     else match etaMatch with
          | some esc => esc
@@ -536,7 +536,7 @@ def optimizedSwuG2 (t : Bls12Fp2) : Bls12Fp2 × Bls12Fp2 :=
   (numerator / denominator, y2)
 
 -- def iso_map_G2(x, y, z) evaluated affinely (z = 1).
-def isoMapG2 : Bls12Fp2 × Bls12Fp2 → Bls12G2
+def isoMapG2 : BLSF2 × BLSF2 → BLSP2
   | (x, y) =>
     let xNum := blsHornerF2 iso3XNumF2 x
     let xDen := blsHornerF2 iso3XDenF2 x
@@ -545,7 +545,7 @@ def isoMapG2 : Bls12Fp2 × Bls12Fp2 → Bls12G2
     ⟨xNum / xDen, y * yNum / yDen⟩
 
 -- def map_to_curve_G2(u); then clear_cofactor_G2 (multiply by H_EFF_G2).
-def blsMapFp2ToG2 (fp2 : Bls12Fp2) : Bls12G2 :=
+def blsMapFp2ToG2 (fp2 : BLSF2) : BLSP2 :=
   (isoMapG2 (optimizedSwuG2 fp2)).mulBy BLSConst.hEffG2
 
 -- Correctness #guards: the first positive vector of each official EIP-2537
@@ -555,23 +555,23 @@ def blsMapFp2ToG2 (fp2 : Bls12Fp2) : Bls12G2 :=
 #guard
   blsMapFpToG1 (blsToF 0x156c8a6a2c184569d69a76be144b5cdc5141d2d2ca4fe341f011e25e3969c55ad9e9b9ce2eb833c81a908e5fa4ac5f03)
     = (⟨FinField.ofNat 0x184bb665c37ff561a89ec2122dd343f20e0f4cbcaec84e3c3052ea81d1834e192c426074b02ed3dca4e7676ce4ce48ba,
-        FinField.ofNat 0x04407b8d35af4dacc809927071fc0405218f1401a6d15af775810e4e460064bcc9468beeba82fdc751be70476c888bf3⟩ : Bls12G1)
+        FinField.ofNat 0x04407b8d35af4dacc809927071fc0405218f1401a6d15af775810e4e460064bcc9468beeba82fdc751be70476c888bf3⟩ : BLSP)
 #guard
   let g1 := blsMapFpToG1 (blsToF 0x156c8a6a2c184569d69a76be144b5cdc5141d2d2ca4fe341f011e25e3969c55ad9e9b9ce2eb833c81a908e5fa4ac5f03)
   g1.isOnCurve ∧ g1.mulBy blsCurveOrder = ⟨0, 0⟩
 -- map_fp2_to_G2_bls.json[0]:
 #guard
-  blsMapFp2ToG2 (Bls12Fp2.mk
+  blsMapFp2ToG2 (BLSF2.mk
       0x07355d25caf6e7f2f0cb2812ca0e513bd026ed09dda65b177500fa31714e09ea0ded3a078b526bed3307f804d4b93b04
       0x02829ce3c021339ccb5caf3e187f6370e1e2a311dec9b75363117063ab2015603ff52c3d3b98f19c2f65575e99e8b78c)
-    = (⟨Bls12Fp2.mk
+    = (⟨BLSF2.mk
         0x00e7f4568a82b4b7dc1f14c6aaa055edf51502319c723c4dc2688c7fe5944c213f510328082396515734b6612c4e7bb7
         0x126b855e9e69b1f691f816e48ac6977664d24d99f8724868a184186469ddfd4617367e94527d4b74fc86413483afb35b,
-        Bls12Fp2.mk
+        BLSF2.mk
         0x0caead0fd7b6176c01436833c79d305c78be307da5f6af6c133c47311def6ff1e0babf57a0fb5539fce7ee12407b0a42
-        0x1498aadcf7ae2b345243e281ae076df6de84455d766ab6fcdaad71fab60abb2e8b980a440043cd305db09d283c895e3d⟩ : Bls12G2)
+        0x1498aadcf7ae2b345243e281ae076df6de84455d766ab6fcdaad71fab60abb2e8b980a440043cd305db09d283c895e3d⟩ : BLSP2)
 #guard
-  let g2 := blsMapFp2ToG2 (Bls12Fp2.mk
+  let g2 := blsMapFp2ToG2 (BLSF2.mk
       0x07355d25caf6e7f2f0cb2812ca0e513bd026ed09dda65b177500fa31714e09ea0ded3a078b526bed3307f804d4b93b04
       0x02829ce3c021339ccb5caf3e187f6370e1e2a311dec9b75363117063ab2015603ff52c3d3b98f19c2f65575e99e8b78c)
   g2.isOnCurve ∧ g2.mulBy blsCurveOrder = ⟨0, 0⟩
@@ -598,21 +598,21 @@ def blsG1PointAtInfinity : Bytes := (0xc0 : UInt8) :: List.replicate 47 (0 : UIn
 def blsTwoPow381 : Nat := 2 ^ 381
 
 -- Decompressed KZG_SETUP_G2_MONOMIAL_1 (kzg.py:71) as an affine G2 point.
-def kzgSetupG2Monomial1P : Bls12G2 :=
+def kzgSetupG2Monomial1P : BLSP2 :=
   let ((x0, x1), (y0, y1)) := BLSConst.kzgSetupG2Monomial1
-  ⟨Bls12Fp2.mk x0 x1, Bls12Fp2.mk y0 y1⟩
+  ⟨BLSF2.mk x0 x1, BLSF2.mk y0 y1⟩
 
 #guard kzgSetupG2Monomial1P.isOnCurve
 #guard kzgSetupG2Monomial1P.mulBy blsCurveOrder = ⟨0, 0⟩
 
 -- def verify_kzg_proof_impl(commitment, z, y, proof) -> bool.
 -- Verify P - y = Q * (X - z) via a two-pairing pairing_check.
-def verifyKzgProofImpl (commitment : Bls12G1) (z y : Nat) (proof : Bls12G1) : Bool :=
+def verifyKzgProofImpl (commitment : BLSP) (z y : Nat) (proof : BLSP) : Bool :=
   -- X_minus_z = KZG_SETUP_G2_MONOMIAL_1 + G2 * ((BLS_MODULUS - z) % BLS_MODULUS)
-  let xMinusZ : Bls12G2 :=
+  let xMinusZ : BLSP2 :=
     kzgSetupG2Monomial1P + blsG2Generator.mulBy ((blsModulus - z) % blsModulus)
   -- P_minus_y = commitment + G1 * ((BLS_MODULUS - y) % BLS_MODULUS)
-  let pMinusY : Bls12G1 :=
+  let pMinusY : BLSP :=
     commitment + blsG1Generator.mulBy ((blsModulus - y) % blsModulus)
   -- pairing_check[((P_minus_y, -G2), (proof, X_minus_z))]: the product of the
   -- two Miller loops, final-exponentiated (`blsFinalExpFast`), must equal 1.

@@ -31,12 +31,12 @@ inductive Verdict
   | fail (why : String)
   deriving BEq, Repr
 
-private def readYaml (c : Case) (f : String) : IO (Except YamlError YamlValue) := do
-  pure (parse (← IO.FS.readBinFile (c.directory / f)))
+private def readYaml (c : Case) (f : String) : IO (Except YamlError YVal) := do
+  pure (parse (← IO.FS.readBinFile (c.dir / f)))
 
 /-- A `Bytes32` read from a vector: exactly 32 bytes. -/
-def bytes32OfBytes (bs : List UInt8) : Except YamlError Jaune.U256 :=
-  if bs.length == 32 then .ok (Bytes32.ofBytes bs)
+def b256OfBytes (bs : List UInt8) : Except YamlError B256 :=
+  if bs.length == 32 then .ok (B256.ofBytes bs)
   else .error (.shape s!"expected 32 bytes, got {bs.length}")
 
 /-- `shuffling/core` (`tests/formats/shuffling/README.md`): for every `i < count`,
@@ -50,9 +50,9 @@ def shufflingCore (c : Case) : IO Verdict := do
   let r : Except YamlError Verdict := do
     let v ← doc
     v.expectKeys ["seed", "count", "mapping"]
-    let seed ← bytes32OfBytes (← (← v.field "seed").asHex)
+    let seed ← b256OfBytes (← (← v.field "seed").asHex)
     let count ← (← v.field "count").asNat
-    let mapping ← (← (← v.field "mapping").asSequence).mapM YamlValue.asNat
+    let mapping ← (← (← v.field "mapping").asSeq).mapM YVal.asNat
     if mapping.length != count then
       return .fail s!"mapping has {mapping.length} entries, count is {count}"
     let toU64 (n : Nat) : Except YamlError U64 :=
@@ -80,7 +80,7 @@ def sszGenericCase (c : Case) : IO Verdict := do
   if c.files != want then return .fail s!"unexpected files {c.files}"
   let some checks := typeOfCaseAll c.key.handler c.name
     | return .fail (CaseFail.unknownType c.name).render
-  let ser ← match Snappy.decompress (← IO.FS.readBinFile (c.directory / "serialized.ssz_snappy")) with
+  let ser ← match Snappy.decompress (← IO.FS.readBinFile (c.dir / "serialized.ssz_snappy")) with
     | .ok b => pure b.toList
     | .error e => return .fail (CaseFail.snappy e).render
   let r : Except CaseFail Unit ←
@@ -91,9 +91,9 @@ def sszGenericCase (c : Case) : IO Verdict := do
         let value ← value.mapError CaseFail.yaml
         let metaV ← metaY.mapError CaseFail.yaml
         metaV.expectKeys ["root"] |>.mapError CaseFail.yaml
-        let rootBytes ← ((metaV.field "root").bind YamlValue.asHex).mapError CaseFail.yaml
+        let rootBytes ← ((metaV.field "root").bind YVal.asHex).mapError CaseFail.yaml
         if rootBytes.length != 32 then throw (CaseFail.yaml (.shape "root is not 32 bytes"))
-        checks.valid ser value (Bytes.toU256 rootBytes)
+        checks.valid ser value (Bytes.toB256 rootBytes)
     else pure (checks.invalid ser)
   match r with
   | .ok () => pure .pass
@@ -106,10 +106,10 @@ def sszStaticCase (c : Case) : IO Verdict := do
   if c.files != ["roots.yaml", "serialized.ssz_snappy", "value.yaml"] then
     return .fail s!"unexpected files {c.files}"
   let some P := Preset.ofName? c.preset | return .fail s!"no preset {c.preset}"
-  let some f := ConsensusFork.ofName? c.key.fork | return .fail s!"no fork {c.key.fork}"
+  let some f := CFork.ofName? c.key.fork | return .fail s!"no fork {c.key.fork}"
   let some checks := sszStaticChecks P f c.key.handler
     | return .fail (CaseFail.unknownType c.key.handler).render
-  let ser ← match Snappy.decompress (← IO.FS.readBinFile (c.directory / "serialized.ssz_snappy")) with
+  let ser ← match Snappy.decompress (← IO.FS.readBinFile (c.dir / "serialized.ssz_snappy")) with
     | .ok b => pure b.toList
     | .error e => return .fail (CaseFail.snappy e).render
   let value ← readYaml c "value.yaml"
@@ -118,9 +118,9 @@ def sszStaticCase (c : Case) : IO Verdict := do
     let value ← value.mapError CaseFail.yaml
     let roots ← roots.mapError CaseFail.yaml
     roots.expectKeys ["root"] |>.mapError CaseFail.yaml
-    let rootBytes ← ((roots.field "root").bind YamlValue.asHex).mapError CaseFail.yaml
+    let rootBytes ← ((roots.field "root").bind YVal.asHex).mapError CaseFail.yaml
     if rootBytes.length != 32 then throw (CaseFail.yaml (.shape "root is not 32 bytes"))
-    checks.valid ser value (Bytes.toU256 rootBytes)
+    checks.valid ser value (Bytes.toB256 rootBytes)
   match r with
   | .ok () => pure .pass
   | .error e => pure (.fail e.render)
@@ -133,9 +133,9 @@ def blsAggregatePubkeys (c : Case) : IO Verdict := do
   let r : Except YamlError Verdict := do
     let v ← doc
     v.expectKeys ["input", "output"]
-    let pks ← (← (← v.field "input").asSequence).mapM YamlValue.asHex
+    let pks ← (← (← v.field "input").asSeq).mapM YVal.asHex
     let out ← v.field "output"
-    let got := ethAggregatePubkeysFallible pks
+    let got := ethAggregatePubkeysM pks
     if out.isNull then
       match got with
       | .error _ => pure .pass
@@ -158,7 +158,7 @@ def blsFastAggregateVerify (c : Case) : IO Verdict := do
     v.expectKeys ["input", "output"]
     let i ← v.field "input"
     i.expectKeys ["pubkeys", "message", "signature"]
-    let pks ← (← (← i.field "pubkeys").asSequence).mapM YamlValue.asHex
+    let pks ← (← (← i.field "pubkeys").asSeq).mapM YVal.asHex
     let msg ← (← i.field "message").asHex
     let sig ← (← i.field "signature").asHex
     let want ← (← v.field "output").asBool
@@ -280,7 +280,7 @@ def snappyScan (cs : List Case) : IO (Nat × List String) := do
     for f in c.files do
       if f.endsWith ".ssz_snappy" then
         n := n + 1
-        match Snappy.decompress (← IO.FS.readBinFile (c.directory / f)) with
+        match Snappy.decompress (← IO.FS.readBinFile (c.dir / f)) with
         | .ok _ => pure ()
         | .error e => bad := s!"{c.render}/{f}: {e}" :: bad
   pure (n, bad.reverse)
@@ -292,7 +292,7 @@ def yamlScan (cs : List Case) : IO (Nat × List String) := do
     for f in c.files do
       if f.endsWith ".yaml" then
         n := n + 1
-        match parse (← IO.FS.readBinFile (c.directory / f)) with
+        match parse (← IO.FS.readBinFile (c.dir / f)) with
         | .ok _ => pure ()
         | .error e => bad := s!"{c.render}/{f}: {e}" :: bad
   pure (n, bad.reverse)
@@ -327,10 +327,10 @@ def snappyUintOracle (cs : List Case) : IO (Nat × List String) := do
     | none => bad := s!"{c.render}: unparsed case name" :: bad
     | some bits =>
     n := n + 1
-    let dec := Snappy.decompress (← IO.FS.readBinFile (c.directory / "serialized.ssz_snappy"))
+    let dec := Snappy.decompress (← IO.FS.readBinFile (c.dir / "serialized.ssz_snappy"))
     -- integers wider than 64 bits are quoted strings in the vectors
-    let val := (parse (← IO.FS.readBinFile (c.directory / "value.yaml"))).bind
-      (if bits > 64 then YamlValue.asQuotedNat else YamlValue.asNat)
+    let val := (parse (← IO.FS.readBinFile (c.dir / "value.yaml"))).bind
+      (if bits > 64 then YVal.asQuotedNat else YVal.asNat)
     match dec, val with
     | .ok out, .ok v =>
       if out.toList != JauneConsensus.uintToBytes (bits / 8) v || v ≥ 2 ^ bits then

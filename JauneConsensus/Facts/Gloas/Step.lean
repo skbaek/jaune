@@ -1,4 +1,4 @@
-import JauneConsensus.Facts.AnchorInvariant
+import JauneConsensus.Facts.AnchorInv
 import JauneConsensus.GloasEpoch
 
 /-!
@@ -33,60 +33,60 @@ namespace JauneConsensus.Facts.Gloas
 open JauneConsensus JauneConsensus.Facts
 
 /-- A step relation on states: reflexive and transitive. -/
-structure StepRelation (σ : Type) where
-  relation : σ → σ → Prop
-  refl : ∀ s, relation s s
-  trans : ∀ {a b c}, relation a b → relation b c → relation a c
+structure StepRel (σ : Type) where
+  R : σ → σ → Prop
+  refl : ∀ s, R s s
+  trans : ∀ {a b c}, R a b → R b c → R a c
 
-namespace StepRelation
+namespace StepRel
 
-variable {σ : Type} (rel : StepRelation σ)
+variable {σ : Type} (rel : StepRel σ)
 
 /-- Rebase: if every result of `c` is related (through `f`) to `s₁`, and `s₁` is related to `s`,
 every result is related to `s`. -/
-theorem ok_rebase {α : Type} {s s₁ : σ} {c : Fallible α} {f : α → σ} (h₁ : rel.relation s s₁)
-    (h : Ok c (fun r => rel.relation s₁ (f r))) : Ok c (fun r => rel.relation s (f r)) :=
+theorem ok_rebase {α : Type} {s s₁ : σ} {c : M α} {f : α → σ} (h₁ : rel.R s s₁)
+    (h : Ok c (fun r => rel.R s₁ (f r))) : Ok c (fun r => rel.R s (f r)) :=
   fun a ha => rel.trans h₁ (h a ha)
 
 /-- A `for` loop over a list whose body relates its state (through `proj`) to the next one
 relates the initial state to the final one. -/
 theorem ok_forIn_list {α β : Type} (proj : β → σ) {xs : List α} {init : β}
-    {body : α → β → Fallible (ForInStep β)}
-    (hb : ∀ a b, Ok (body a b) (fun r => rel.relation (proj b) (proj r.value))) :
-    Ok (forIn xs init body) (fun out => rel.relation (proj init) (proj out)) :=
-  fun out h => list_forIn_relation (fun a b => rel.relation (proj a) (proj b)) (fun _ => rel.refl _)
+    {body : α → β → M (ForInStep β)}
+    (hb : ∀ a b, Ok (body a b) (fun r => rel.R (proj b) (proj r.value))) :
+    Ok (forIn xs init body) (fun out => rel.R (proj init) (proj out)) :=
+  fun out h => list_forIn_rel (fun a b => rel.R (proj a) (proj b)) (fun _ => rel.refl _)
     (fun _ _ _ h₁ h₂ => rel.trans h₁ h₂) body (fun a b r hr => hb a b r hr) xs init out h
 
 /-- The array form of `ok_forIn_list`. -/
 theorem ok_forIn_array {α β : Type} (proj : β → σ) {xs : Array α} {init : β}
-    {body : α → β → Fallible (ForInStep β)}
-    (hb : ∀ a b, Ok (body a b) (fun r => rel.relation (proj b) (proj r.value))) :
-    Ok (forIn xs init body) (fun out => rel.relation (proj init) (proj out)) :=
-  fun out h => array_forIn_relation (fun a b => rel.relation (proj a) (proj b)) (fun _ => rel.refl _)
+    {body : α → β → M (ForInStep β)}
+    (hb : ∀ a b, Ok (body a b) (fun r => rel.R (proj b) (proj r.value))) :
+    Ok (forIn xs init body) (fun out => rel.R (proj init) (proj out)) :=
+  fun out h => array_forIn_rel (fun a b => rel.R (proj a) (proj b)) (fun _ => rel.refl _)
     (fun _ _ _ h₁ h₂ => rel.trans h₁ h₂) body (fun a b r hr => hb a b r hr) xs init out h
 
 /-- `ok_forIn_list` applied to a run: the form the loop rules of `gstep_of` use, so that the
 loop state's type comes from `proj` rather than from the goal. -/
-theorem forIn_list_relation {α β : Type} (proj : β → σ) {xs : List α} {body : α → β → Fallible (ForInStep β)}
-    (hb : ∀ a b, Ok (body a b) (fun r => rel.relation (proj b) (proj r.value))) (init out : β)
-    (h : forIn xs init body = .ok out) : rel.relation (proj init) (proj out) :=
+theorem forIn_list_rel {α β : Type} (proj : β → σ) {xs : List α} {body : α → β → M (ForInStep β)}
+    (hb : ∀ a b, Ok (body a b) (fun r => rel.R (proj b) (proj r.value))) (init out : β)
+    (h : forIn xs init body = .ok out) : rel.R (proj init) (proj out) :=
   rel.ok_forIn_list proj hb out h
 
 /-- `ok_forIn_array` applied to a run. -/
-theorem forIn_array_relation {α β : Type} (proj : β → σ) {xs : Array α} {body : α → β → Fallible (ForInStep β)}
-    (hb : ∀ a b, Ok (body a b) (fun r => rel.relation (proj b) (proj r.value))) (init out : β)
-    (h : forIn xs init body = .ok out) : rel.relation (proj init) (proj out) :=
+theorem forIn_array_rel {α β : Type} (proj : β → σ) {xs : Array α} {body : α → β → M (ForInStep β)}
+    (hb : ∀ a b, Ok (body a b) (fun r => rel.R (proj b) (proj r.value))) (init out : β)
+    (h : forIn xs init body = .ok out) : rel.R (proj init) (proj out) :=
   rel.ok_forIn_array proj hb out h
 
 /-- The relation lemma of a sub-step, in the form `gstep_of` consumes. -/
-theorem of_ok {α : Type} {c : Fallible α} {Q : α → Prop} {x : α} (h : Ok c Q) (hx : c = .ok x) : Q x :=
+theorem of_ok {α : Type} {c : M α} {Q : α → Prop} {x : α} (h : Ok c Q) (hx : c = .ok x) : Q x :=
   h x hx
 
-end StepRelation
+end StepRel
 
 /-- Close `rel.R s s'` at a `pure`. Extensible by `macro_rules`. -/
 syntax "gstep_close" : tactic
-macro_rules | `(tactic| gstep_close) => `(tactic| exact StepRelation.refl _ _)
+macro_rules | `(tactic| gstep_close) => `(tactic| exact StepRel.refl _ _)
 
 /-- Prove `rel.R s (f x)` from `h : c = .ok x`. Extensible by `macro_rules`. -/
 syntax "gstep_of " term : tactic
@@ -95,7 +95,7 @@ syntax "gstep_of " term : tactic
 `gstep_of h`. Extensible by `macro_rules`: a relation whose `R` the generator's `dsimp` unfolds
 registers a rule naming its `StepRel` explicitly. -/
 syntax "gstep_rebase " term : tactic
-macro_rules | `(tactic| gstep_rebase $h) => `(tactic| refine StepRelation.ok_rebase _ (by gstep_of $h) ?_)
+macro_rules | `(tactic| gstep_rebase $h) => `(tactic| refine StepRel.ok_rebase _ (by gstep_of $h) ?_)
 
 /-- One generator step on a goal `Ok c Q`. -/
 syntax "gstep" : tactic
@@ -118,17 +118,17 @@ macro_rules | `(tactic| gstep) => `(tactic| first
 /-- Loops: the loop state is the step's state (`proj = id`). -/
 macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (refine StepRelation.forIn_list_relation _ id ?_ _ _ $h; intro _ _; gvcg))
+    `(tactic| (refine StepRel.forIn_list_rel _ id ?_ _ _ $h; intro _ _; gvcg))
 macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (refine StepRelation.forIn_array_relation _ id ?_ _ _ $h; intro _ _; gvcg))
+    `(tactic| (refine StepRel.forIn_array_rel _ id ?_ _ _ $h; intro _ _; gvcg))
 
 /-- Loops whose state pairs the step's state with a counter or accumulator (`proj = Prod.fst`). -/
 macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (refine StepRelation.forIn_list_relation _ Prod.fst ?_ _ _ $h; intro _ _; gvcg))
+    `(tactic| (refine StepRel.forIn_list_rel _ Prod.fst ?_ _ _ $h; intro _ _; gvcg))
 macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (refine StepRelation.forIn_array_relation _ Prod.fst ?_ _ _ $h; intro _ _; gvcg))
+    `(tactic| (refine StepRel.forIn_array_rel _ Prod.fst ?_ _ _ $h; intro _ _; gvcg))
 
 end JauneConsensus.Facts.Gloas

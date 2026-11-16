@@ -27,7 +27,7 @@ theorem old_call_survival (parent child out : Devm) (index size : Nat)
 
 /-- Amsterdam additionally needs the child-settlement invariant: in
 particular, the old incorporation adds its refund counter to the parent's. -/
-theorem old_create_survival (parent child out : Devm) (address : Address)
+theorem old_create_survival (parent child out : Devm) (address : Adr)
     (state : StateGasRules) (charged : Bool)
     (failed : child.error.isSome = true)
     (rolledBack : child.world = parent.world)

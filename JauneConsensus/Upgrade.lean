@@ -19,12 +19,12 @@ variable {P : Preset}
 /-- `UNSET_DEPOSIT_REQUESTS_START_INDEX = uint64(2**64 - 1)` (`specs/electra/beacon-chain.md`). -/
 def UNSET_DEPOSIT_REQUESTS_START_INDEX : U64 := U64.max
 
-private theorem electra_atLeast_electra : ConsensusFork.electra.atLeast .electra = true := by decide
-private theorem fulu_atLeast_fulu : ConsensusFork.fulu.atLeast .fulu = true := by decide
-private theorem fulu_atLeast_electra : ConsensusFork.fulu.atLeast .electra = true := by decide
+private theorem electra_atLeast_electra : CFork.electra.atLeast .electra = true := by decide
+private theorem fulu_atLeast_fulu : CFork.fulu.atLeast .fulu = true := by decide
+private theorem fulu_atLeast_electra : CFork.fulu.atLeast .electra = true := by decide
 
 /-- `upgrade_to_electra(pre)`. -/
-def upgradeToElectra (cfg : Config) (pre : BeaconState P .deneb) : Fallible (BeaconState P .electra) := do
+def upgradeToElectra (cfg : Config) (pre : BeaconState P .deneb) : M (BeaconState P .electra) := do
   let site := "upgrade_to_electra"
   let epoch ← getCurrentEpoch pre
   let mut earliestExitEpoch ← computeActivationExitEpoch P (← getCurrentEpoch pre)
@@ -68,17 +68,17 @@ def upgradeToElectra (cfg : Config) (pre : BeaconState P .deneb) : Fallible (Bea
     next_withdrawal_validator_index := pre.next_withdrawal_validator_index
     historical_summaries := pre.historical_summaries
     -- [New in Electra:EIP6110]
-    deposit_requests_start_index := ForkField.mk h UNSET_DEPOSIT_REQUESTS_START_INDEX
+    deposit_requests_start_index := Gated.mk h UNSET_DEPOSIT_REQUESTS_START_INDEX
     -- [New in Electra:EIP7251]
-    deposit_balance_to_consume := ForkField.mk h U64.zero
-    exit_balance_to_consume := ForkField.mk h U64.zero
-    earliest_exit_epoch := ForkField.mk h earliestExitEpoch
-    consolidation_balance_to_consume := ForkField.mk h U64.zero
+    deposit_balance_to_consume := Gated.mk h U64.zero
+    exit_balance_to_consume := Gated.mk h U64.zero
+    earliest_exit_epoch := Gated.mk h earliestExitEpoch
+    consolidation_balance_to_consume := Gated.mk h U64.zero
     earliest_consolidation_epoch :=
-      ForkField.mk h (← computeActivationExitEpoch P (← getCurrentEpoch pre))
-    pending_deposits := ForkField.mk h SszList.empty
-    pending_partial_withdrawals := ForkField.mk h SszList.empty
-    pending_consolidations := ForkField.mk h SszList.empty
+      Gated.mk h (← computeActivationExitEpoch P (← getCurrentEpoch pre))
+    pending_deposits := Gated.mk h SszList.empty
+    pending_partial_withdrawals := Gated.mk h SszList.empty
+    pending_consolidations := Gated.mk h SszList.empty
     proposer_lookahead := () }
   let post ← post.setExitBalanceToConsume (← getActivationExitChurnLimit cfg post)
   let post ← post.setConsolidationBalanceToConsume (← getConsolidationChurnLimit cfg post)
@@ -121,7 +121,7 @@ def upgradeToElectra (cfg : Config) (pre : BeaconState P .deneb) : Fallible (Bea
   pure post
 
 /-- `upgrade_to_fulu(pre)`. -/
-def upgradeToFulu (cfg : Config) (pre : BeaconState P .electra) : Fallible (BeaconState P .fulu) := do
+def upgradeToFulu (cfg : Config) (pre : BeaconState P .electra) : M (BeaconState P .fulu) := do
   let epoch ← getCurrentEpoch pre
   pure {
     genesis_time := pre.genesis_time
@@ -156,18 +156,18 @@ def upgradeToFulu (cfg : Config) (pre : BeaconState P .electra) : Fallible (Beac
     next_withdrawal_index := pre.next_withdrawal_index
     next_withdrawal_validator_index := pre.next_withdrawal_validator_index
     historical_summaries := pre.historical_summaries
-    deposit_requests_start_index := ForkField.mk fulu_atLeast_electra (← pre.depositRequestsStartIndex)
-    deposit_balance_to_consume := ForkField.mk fulu_atLeast_electra (← pre.depositBalanceToConsume)
-    exit_balance_to_consume := ForkField.mk fulu_atLeast_electra (← pre.exitBalanceToConsume)
-    earliest_exit_epoch := ForkField.mk fulu_atLeast_electra (← pre.earliestExitEpoch)
-    consolidation_balance_to_consume := ForkField.mk fulu_atLeast_electra (← pre.consolidationBalanceToConsume)
-    earliest_consolidation_epoch := ForkField.mk fulu_atLeast_electra (← pre.earliestConsolidationEpoch)
-    pending_deposits := ForkField.mk fulu_atLeast_electra (← pre.pendingDeposits)
-    pending_partial_withdrawals := ForkField.mk fulu_atLeast_electra (← pre.pendingPartialWithdrawals)
-    pending_consolidations := ForkField.mk fulu_atLeast_electra (← pre.pendingConsolidations)
+    deposit_requests_start_index := Gated.mk fulu_atLeast_electra (← pre.depositRequestsStartIndex)
+    deposit_balance_to_consume := Gated.mk fulu_atLeast_electra (← pre.depositBalanceToConsume)
+    exit_balance_to_consume := Gated.mk fulu_atLeast_electra (← pre.exitBalanceToConsume)
+    earliest_exit_epoch := Gated.mk fulu_atLeast_electra (← pre.earliestExitEpoch)
+    consolidation_balance_to_consume := Gated.mk fulu_atLeast_electra (← pre.consolidationBalanceToConsume)
+    earliest_consolidation_epoch := Gated.mk fulu_atLeast_electra (← pre.earliestConsolidationEpoch)
+    pending_deposits := Gated.mk fulu_atLeast_electra (← pre.pendingDeposits)
+    pending_partial_withdrawals := Gated.mk fulu_atLeast_electra (← pre.pendingPartialWithdrawals)
+    pending_consolidations := Gated.mk fulu_atLeast_electra (← pre.pendingConsolidations)
     -- [New in Fulu:EIP7917]
     proposer_lookahead :=
-      ForkField.mk fulu_atLeast_fulu (← SszVector.ofArray (← initializeProposerLookahead pre)
+      Gated.mk fulu_atLeast_fulu (← SszVector.ofArray (← initializeProposerLookahead pre)
         "upgrade_to_fulu: proposer_lookahead") }
 
 end JauneConsensus

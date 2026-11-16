@@ -9,7 +9,7 @@ each phase does to the two builder queues: the parent payload's settlement or di
 (`applyParentPrefix_split`), the withdrawals (`processWithdrawals_queues`).
 -/
 
-namespace JauneConsensus.Facts.Gloas.Invariant
+namespace JauneConsensus.Facts.Gloas.Inv
 
 open JauneConsensus JauneConsensus.Facts JauneConsensus.Facts.Gloas
 
@@ -17,23 +17,23 @@ variable {P : Preset}
 
 /-! ## Sums -/
 
-theorem pendingWithdrawalBalance_append (l m : List JauneConsensus.Gloas.BuilderPendingWithdrawal) (i : Nat) :
-    pendingWithdrawalBalance (l ++ m) i = pendingWithdrawalBalance l i + pendingWithdrawalBalance m i := by
-  simp [pendingWithdrawalBalance, List.map_append, List.sum_append]
+theorem pendW_append (l m : List JauneConsensus.Gloas.BuilderPendingWithdrawal) (i : Nat) :
+    pendW (l ++ m) i = pendW l i + pendW m i := by
+  simp [pendW, List.map_append, List.sum_append]
 
-theorem pendingWithdrawalBalance_cons (w : JauneConsensus.Gloas.BuilderPendingWithdrawal)
+theorem pendW_cons (w : JauneConsensus.Gloas.BuilderPendingWithdrawal)
     (l : List JauneConsensus.Gloas.BuilderPendingWithdrawal) (i : Nat) :
-    pendingWithdrawalBalance (w :: l) i = withdrawalAmount i w + pendingWithdrawalBalance l i := by
-  simp [pendingWithdrawalBalance]
+    pendW (w :: l) i = wAmt i w + pendW l i := by
+  simp [pendW]
 
-theorem pendingWithdrawalBalance_drop_le (l : List JauneConsensus.Gloas.BuilderPendingWithdrawal) (k i : Nat) :
-    pendingWithdrawalBalance (l.drop k) i ≤ pendingWithdrawalBalance l i := by
+theorem pendW_drop_le (l : List JauneConsensus.Gloas.BuilderPendingWithdrawal) (k i : Nat) :
+    pendW (l.drop k) i ≤ pendW l i := by
   conv => rhs; rw [← List.take_append_drop k l]
-  rw [pendingWithdrawalBalance_append]; omega
+  rw [pendW_append]; omega
 
-theorem pendingPaymentBalance_append (l m : List JauneConsensus.Gloas.BuilderPendingPayment) (i : Nat) :
-    pendingPaymentBalance (l ++ m) i = pendingPaymentBalance l i + pendingPaymentBalance m i := by
-  simp [pendingPaymentBalance, List.map_append, List.sum_append]
+theorem pendP_append (l m : List JauneConsensus.Gloas.BuilderPendingPayment) (i : Nat) :
+    pendP (l ++ m) i = pendP l i + pendP m i := by
+  simp [pendP, List.map_append, List.sum_append]
 
 theorem list_sum_set {α : Type} (f : α → Nat) :
     ∀ (l : List α) (k : Nat) (v : α) (x : α), l[k]? = some x →
@@ -50,24 +50,24 @@ theorem list_sum_set {α : Type} (f : α → Nat) :
     have := list_sum_set f l k v x h
     omega
 
-theorem pendingPaymentBalance_set (l : List JauneConsensus.Gloas.BuilderPendingPayment) (k : Nat)
+theorem pendP_set (l : List JauneConsensus.Gloas.BuilderPendingPayment) (k : Nat)
     (v x : JauneConsensus.Gloas.BuilderPendingPayment) (h : l[k]? = some x) (i : Nat) :
-    pendingPaymentBalance (l.set k v) i + withdrawalAmount i x.withdrawal = pendingPaymentBalance l i + withdrawalAmount i v.withdrawal :=
-  list_sum_set (fun p : JauneConsensus.Gloas.BuilderPendingPayment => withdrawalAmount i p.withdrawal) l k v x h
+    pendP (l.set k v) i + wAmt i x.withdrawal = pendP l i + wAmt i v.withdrawal :=
+  list_sum_set (fun p : JauneConsensus.Gloas.BuilderPendingPayment => wAmt i p.withdrawal) l k v x h
 
-theorem withdrawalAmount_empty (i : Nat) :
-    withdrawalAmount i JauneConsensus.Gloas.BuilderPendingPayment.empty.withdrawal = 0 := by
-  unfold withdrawalAmount; split <;> rfl
+theorem wAmt_empty (i : Nat) :
+    wAmt i JauneConsensus.Gloas.BuilderPendingPayment.empty.withdrawal = 0 := by
+  unfold wAmt; split <;> rfl
 
-theorem withdrawalAmount_le (i : Nat) (w : JauneConsensus.Gloas.BuilderPendingWithdrawal) :
-    withdrawalAmount i w ≤ w.amount.toNat := by
-  unfold withdrawalAmount; split <;> omega
+theorem wAmt_le (i : Nat) (w : JauneConsensus.Gloas.BuilderPendingWithdrawal) :
+    wAmt i w ≤ w.amount.toNat := by
+  unfold wAmt; split <;> omega
 
 /-- Changing one entry of a payments array. -/
-theorem pendingPaymentBalance_of_one {a b : Array JauneConsensus.Gloas.BuilderPendingPayment} {k : Nat}
+theorem pendP_of_one {a b : Array JauneConsensus.Gloas.BuilderPendingPayment} {k : Nat}
     {x v : JauneConsensus.Gloas.BuilderPendingPayment} (hx : a[k]? = some x) (hv : b[k]? = some v)
     (hoth : ∀ j, j ≠ k → b[j]? = a[j]?) (i : Nat) :
-    pendingPaymentBalance b.toList i + withdrawalAmount i x.withdrawal = pendingPaymentBalance a.toList i + withdrawalAmount i v.withdrawal := by
+    pendP b.toList i + wAmt i x.withdrawal = pendP a.toList i + wAmt i v.withdrawal := by
   have hk : k < a.size := (Array.getElem?_eq_some_iff.mp hx).1
   have hb : b = a.set k v hk := by
     apply Array.ext_getElem?
@@ -76,46 +76,46 @@ theorem pendingPaymentBalance_of_one {a b : Array JauneConsensus.Gloas.BuilderPe
     · subst hj; rw [hv]; simp
     · rw [hoth j hj, Array.getElem?_set_ne hk (Ne.symm hj)]
   rw [hb, Array.toList_set]
-  exact pendingPaymentBalance_set _ _ _ _ (by rw [Array.getElem?_toList]; exact hx) i
+  exact pendP_set _ _ _ _ (by rw [Array.getElem?_toList]; exact hx) i
 
 /-! ## The monadic read in `ℕ` -/
 
-theorem foldlM_pendingBalance {α : Type} (f : α → JauneConsensus.Gloas.BuilderPendingWithdrawal) (bi : U64)
+theorem foldlM_pend {α : Type} (f : α → JauneConsensus.Gloas.BuilderPendingWithdrawal) (bi : U64)
     (site : String) :
     ∀ (l : List α) (acc v : U64),
       l.foldlM (fun acc w => if (f w).builder_index == bi then acc.add? (f w).amount site
         else pure acc) acc = .ok v →
-      v.toNat = acc.toNat + (l.map (fun w => withdrawalAmount bi.toNat (f w))).sum
+      v.toNat = acc.toNat + (l.map (fun w => wAmt bi.toNat (f w))).sum
   | [], acc, v, h => by cases h; simp
   | w :: l, acc, v, h => by
     rw [List.foldlM_cons] at h
     obtain ⟨acc', ha, h⟩ := bind_eq_ok_iff.mp h
-    have ih := foldlM_pendingBalance f bi site l acc' v h
+    have ih := foldlM_pend f bi site l acc' v h
     simp only [List.map_cons, List.sum_cons]
     split at ha
     · rename_i hb
       have hb' := U64.beq_eq_true_iff.mp hb
       rw [ih, U64.toNat_add? ha]
-      unfold withdrawalAmount; rw [if_pos (by rw [hb'])]; omega
+      unfold wAmt; rw [if_pos (by rw [hb'])]; omega
     · rename_i hb
       cases ha
       rw [ih]
-      unfold withdrawalAmount
+      unfold wAmt
       rw [if_neg (fun e => hb (U64.beq_eq_true_iff.mpr (U64.ext_toNat e)))]
       omega
 
 /-- `get_pending_balance_to_withdraw_for_builder` returns `pend` (it never overflows when it
 succeeds). -/
-theorem getPendingBalance_toNat {s : GloasState P} {bi v : U64}
+theorem getPendingBalance_toNat {s : GSt P} {bi v : U64}
     (h : JauneConsensus.Gloas.getPendingBalanceToWithdrawForBuilder s bi = .ok v) :
-    v.toNat = pendingBalance s bi.toNat := by
+    v.toNat = pend s bi.toNat := by
   unfold JauneConsensus.Gloas.getPendingBalanceToWithdrawForBuilder at h
   obtain ⟨acc, ha, h⟩ := bind_eq_ok_iff.mp h
   rw [← Array.foldlM_toList] at ha h
-  have e1 := foldlM_pendingBalance id bi _ _ _ _ ha
-  have e2 := foldlM_pendingBalance (fun p : JauneConsensus.Gloas.BuilderPendingPayment => p.withdrawal) bi _ _ _ _ h
+  have e1 := foldlM_pend id bi _ _ _ _ ha
+  have e2 := foldlM_pend (fun p : JauneConsensus.Gloas.BuilderPendingPayment => p.withdrawal) bi _ _ _ _ h
   rw [e2, e1]
-  simp [pendingBalance, pendingWithdrawalBalance, pendingPaymentBalance, U64.toNat_zero]
+  simp [pend, pendW, pendP, U64.toNat_zero]
 
 /-! ## The validator requests keep `InvFrame` -/
 
@@ -123,52 +123,52 @@ section ValidatorRequests
 
 local macro_rules
   | `(tactic| gstep_close) =>
-    `(tactic| exact (show InvariantFrame _ _ from ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩))
+    `(tactic| exact (show InvFrame _ _ from ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩))
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (increaseBalance_invariantFrame _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (increaseBalance_invFrame _ _ _) $h; exact hh))
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (decreaseBalance_invariantFrame _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (decreaseBalance_invFrame _ _ _) $h; exact hh))
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (initiateValidatorExit_invariantFrame _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (initiateValidatorExit_invFrame _ _ _) $h; exact hh))
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (computeExitEpochAndUpdateChurn_invariantFrame _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (computeExitEpochAndUpdateChurn_invFrame _ _ _) $h; exact hh))
 
-theorem queueExcessActiveBalance_invariantFrame (s : GloasState P) (i : ValidatorIndex) :
-    Ok (JauneConsensus.Gloas.queueExcessActiveBalance s i) (invariantFrame.relation s) := by
+theorem queueExcessActiveBalance_invFrame (s : GSt P) (i : ValidatorIndex) :
+    Ok (JauneConsensus.Gloas.queueExcessActiveBalance s i) (invFrame.R s) := by
   unfold JauneConsensus.Gloas.queueExcessActiveBalance; gvcg
 
-theorem switchToCompoundingValidator_invariantFrame (s : GloasState P) (i : ValidatorIndex) :
-    Ok (JauneConsensus.Gloas.switchToCompoundingValidator s i) (invariantFrame.relation s) := by
+theorem switchToCompoundingValidator_invFrame (s : GSt P) (i : ValidatorIndex) :
+    Ok (JauneConsensus.Gloas.switchToCompoundingValidator s i) (invFrame.R s) := by
   unfold JauneConsensus.Gloas.switchToCompoundingValidator; gvcg
-  all_goals exact StepRelation.ok_rebase invariantFrame ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩ (queueExcessActiveBalance_invariantFrame _ _)
+  all_goals exact StepRel.ok_rebase invFrame ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩ (queueExcessActiveBalance_invFrame _ _)
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (switchToCompoundingValidator_invariantFrame _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (switchToCompoundingValidator_invFrame _ _) $h; exact hh))
 
-theorem computeConsolidationEpochAndUpdateChurn_invariantFrame (cfg : Config) (s : GloasState P) (b : Gwei) :
+theorem computeConsolidationEpochAndUpdateChurn_invFrame (cfg : Config) (s : GSt P) (b : Gwei) :
     Ok (JauneConsensus.Gloas.computeConsolidationEpochAndUpdateChurn cfg s b)
-      (fun p => invariantFrame.relation s p.1) := by
+      (fun p => invFrame.R s p.1) := by
   unfold JauneConsensus.Gloas.computeConsolidationEpochAndUpdateChurn; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (computeConsolidationEpochAndUpdateChurn_invariantFrame _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (computeConsolidationEpochAndUpdateChurn_invFrame _ _ _) $h; exact hh))
 
-theorem processWithdrawalRequest_invariantFrame (cfg : Config) (s : GloasState P) (wr : WithdrawalRequest) :
-    Ok (JauneConsensus.Gloas.processWithdrawalRequest cfg s wr) (invariantFrame.relation s) := by
+theorem processWithdrawalRequest_invFrame (cfg : Config) (s : GSt P) (wr : WithdrawalRequest) :
+    Ok (JauneConsensus.Gloas.processWithdrawalRequest cfg s wr) (invFrame.R s) := by
   unfold JauneConsensus.Gloas.processWithdrawalRequest; gvcg
-  all_goals exact initiateValidatorExit_invariantFrame _ _ _
+  all_goals exact initiateValidatorExit_invFrame _ _ _
 
-theorem processConsolidationRequest_invariantFrame (cfg : Config) (s : GloasState P)
+theorem processConsolidationRequest_invFrame (cfg : Config) (s : GSt P)
     (cr : ConsolidationRequest) :
-    Ok (JauneConsensus.Gloas.processConsolidationRequest cfg s cr) (invariantFrame.relation s) := by
+    Ok (JauneConsensus.Gloas.processConsolidationRequest cfg s cr) (invFrame.R s) := by
   unfold JauneConsensus.Gloas.processConsolidationRequest; gvcg
-  all_goals exact switchToCompoundingValidator_invariantFrame _ _
+  all_goals exact switchToCompoundingValidator_invFrame _ _
 
 end ValidatorRequests
 
@@ -176,15 +176,15 @@ end ValidatorRequests
 the direct append of `L`'s withdrawal (when `L`'s slot is neither in the current nor in the
 previous epoch and `L.value > 0`), or nothing; then the validator requests, which keep
 `InvFrame`. -/
-def PrefixSplit (s a : GloasState P) : Prop :=
-  ∃ x, InvariantFrame x a ∧
+def PrefixSplit (s a : GSt P) : Prop :=
+  ∃ x, InvFrame x a ∧
     ((∃ idx, JauneConsensus.Gloas.settleBuilderPayment s idx = .ok x) ∨
       (U64.zero < s.latest_execution_payload_bid.value ∧ x = directAppend s ∧
-        s.latest_block_header.slot.toNat / P.SLOTS_PER_EPOCH ≠ currentEpoch s ∧
-        s.latest_block_header.slot.toNat / P.SLOTS_PER_EPOCH + 1 ≠ currentEpoch s) ∨
+        s.latest_block_header.slot.toNat / P.SLOTS_PER_EPOCH ≠ curEpoch s ∧
+        s.latest_block_header.slot.toNat / P.SLOTS_PER_EPOCH + 1 ≠ curEpoch s) ∨
       x = s)
 
-theorem getPreviousEpoch_toNat {s : GloasState P} {cur prev : U64}
+theorem getPreviousEpoch_toNat {s : GSt P} {cur prev : U64}
     (hc : JauneConsensus.Gloas.getCurrentEpoch s = .ok cur)
     (hp : JauneConsensus.Gloas.getPreviousEpoch s = .ok prev) :
     (cur.toNat = 0 → prev.toNat = 0) ∧ (cur.toNat ≠ 0 → prev.toNat + 1 = cur.toNat) := by
@@ -216,15 +216,15 @@ section Prefix
 
 local macro_rules
   | `(tactic| gstep_close) =>
-    `(tactic| exact (show InvariantFrame _ _ from ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩))
+    `(tactic| exact (show InvFrame _ _ from ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩))
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processWithdrawalRequest_invariantFrame _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processWithdrawalRequest_invFrame _ _ _) $h; exact hh))
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processConsolidationRequest_invariantFrame _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processConsolidationRequest_invFrame _ _ _) $h; exact hh))
 
-theorem applyParentPrefix_split {ctx : Ctx} {s a : GloasState P} {r : JauneConsensus.Gloas.ExecutionRequests}
+theorem applyParentPrefix_split {ctx : Ctx} {s a : GSt P} {r : JauneConsensus.Gloas.ExecutionRequests}
     (h : JauneConsensus.Gloas.applyParentPrefix ctx s r = .ok a) : PrefixSplit s a := by
   revert a h
   show Ok (JauneConsensus.Gloas.applyParentPrefix ctx s r) (PrefixSplit s)
@@ -233,9 +233,9 @@ theorem applyParentPrefix_split {ctx : Ctx} {s a : GloasState P} {r : JauneConse
   all_goals
     apply ok_pure
     rename_i _ hl1 _ hl2 _ hl3
-    have hf := invariantFrame.trans (StepRelation.forIn_array_relation invariantFrame id (fun _ _ => by gvcg) _ _ hl1)
-      (invariantFrame.trans (StepRelation.forIn_array_relation invariantFrame id (fun _ _ => by gvcg) _ _ hl2)
-        (StepRelation.forIn_array_relation invariantFrame id (fun _ _ => by gvcg) _ _ hl3))
+    have hf := invFrame.trans (StepRel.forIn_array_rel invFrame id (fun _ _ => by gvcg) _ _ hl1)
+      (invFrame.trans (StepRel.forIn_array_rel invFrame id (fun _ _ => by gvcg) _ _ hl2)
+        (StepRel.forIn_array_rel invFrame id (fun _ _ => by gvcg) _ _ hl3))
     first
     | exact ⟨_, hf, Or.inl ⟨_, ‹JauneConsensus.Gloas.settleBuilderPayment s _ = _›⟩⟩
     | exact ⟨_, hf, Or.inr (Or.inr rfl)⟩
@@ -251,63 +251,63 @@ end Prefix
 /-! ## The withdrawals drop a prefix of the builder withdrawals -/
 
 /-- The builder withdrawals lose a prefix, and the payments are unchanged. -/
-def WithdrawalQueue (s s' : GloasState P) : Prop :=
+def WQ (s s' : GSt P) : Prop :=
   (∃ k, s'.builder_pending_withdrawals.toArray.toList =
     s.builder_pending_withdrawals.toArray.toList.drop k) ∧
     s'.builder_pending_payments = s.builder_pending_payments
 
-def withdrawalQueue : StepRelation (GloasState P) where
-  relation := WithdrawalQueue
+def wq : StepRel (GSt P) where
+  R := WQ
   refl _ := ⟨⟨0, rfl⟩, rfl⟩
   trans h₁ h₂ := by
     obtain ⟨⟨k1, e1⟩, p1⟩ := h₁
     obtain ⟨⟨k2, e2⟩, p2⟩ := h₂
     exact ⟨⟨k1 + k2, by rw [e2, e1, List.drop_drop]⟩, p2.trans p1⟩
 
-theorem withdrawalQueue_of_invariant {s s' : GloasState P} (h : InvariantFrame s s') : WithdrawalQueue s s' :=
+theorem wq_of_inv {s s' : GSt P} (h : InvFrame s s') : WQ s s' :=
   ⟨⟨0, by rw [h.2.2.1]; rfl⟩, h.2.1⟩
 
 section WQGen
 
 local macro_rules
-  | `(tactic| gstep_close) => `(tactic| exact (show WithdrawalQueue _ _ from ⟨⟨0, rfl⟩, rfl⟩))
+  | `(tactic| gstep_close) => `(tactic| exact (show WQ _ _ from ⟨⟨0, rfl⟩, rfl⟩))
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (decreaseBalance_invariantFrame _ _ _) $h; exact withdrawalQueue_of_invariant hh))
+    `(tactic| (have hh := StepRel.of_ok (decreaseBalance_invFrame _ _ _) $h; exact wq_of_inv hh))
 
-theorem applyWithdrawals_withdrawalQueue (s : GloasState P) (ws : Array Withdrawal) :
-    Ok (JauneConsensus.Gloas.applyWithdrawals s ws) (withdrawalQueue.relation s) := by
+theorem applyWithdrawals_wq (s : GSt P) (ws : Array Withdrawal) :
+    Ok (JauneConsensus.Gloas.applyWithdrawals s ws) (wq.R s) := by
   unfold JauneConsensus.Gloas.applyWithdrawals; gvcg
 
-theorem updateNextWithdrawalIndex_withdrawalQueue (s : GloasState P) (ws : Array Withdrawal) :
-    Ok (JauneConsensus.Gloas.updateNextWithdrawalIndex s ws) (withdrawalQueue.relation s) := by
+theorem updateNextWithdrawalIndex_wq (s : GSt P) (ws : Array Withdrawal) :
+    Ok (JauneConsensus.Gloas.updateNextWithdrawalIndex s ws) (wq.R s) := by
   unfold JauneConsensus.Gloas.updateNextWithdrawalIndex; gvcg
 
-theorem updateNextWithdrawalBuilderIndex_withdrawalQueue (s : GloasState P) (n : U64) :
-    Ok (JauneConsensus.Gloas.updateNextWithdrawalBuilderIndex s n) (withdrawalQueue.relation s) := by
+theorem updateNextWithdrawalBuilderIndex_wq (s : GSt P) (n : U64) :
+    Ok (JauneConsensus.Gloas.updateNextWithdrawalBuilderIndex s n) (wq.R s) := by
   unfold JauneConsensus.Gloas.updateNextWithdrawalBuilderIndex; gvcg
 
-theorem updateNextWithdrawalValidatorIndex_withdrawalQueue (s : GloasState P) (ws : Array Withdrawal) :
-    Ok (JauneConsensus.Gloas.updateNextWithdrawalValidatorIndex s ws) (withdrawalQueue.relation s) := by
+theorem updateNextWithdrawalValidatorIndex_wq (s : GSt P) (ws : Array Withdrawal) :
+    Ok (JauneConsensus.Gloas.updateNextWithdrawalValidatorIndex s ws) (wq.R s) := by
   unfold JauneConsensus.Gloas.updateNextWithdrawalValidatorIndex; gvcg
 
 end WQGen
 
 /-- **`process_withdrawals` and the builder queues.** -/
-theorem processWithdrawals_withdrawalQueue {s s' : GloasState P}
-    (h : JauneConsensus.Gloas.processWithdrawals s = .ok s') : WithdrawalQueue s s' := by
+theorem processWithdrawals_wq {s s' : GSt P}
+    (h : JauneConsensus.Gloas.processWithdrawals s = .ok s') : WQ s s' := by
   unfold JauneConsensus.Gloas.processWithdrawals at h
   split at h
-  · cases h; exact withdrawalQueue.refl _
+  · cases h; exact wq.refl _
   · obtain ⟨ex, _, h⟩ := bind_eq_ok_iff.mp h
     obtain ⟨t1, h1, h⟩ := bind_eq_ok_iff.mp h
     obtain ⟨t2, h2, h⟩ := bind_eq_ok_iff.mp h
     obtain ⟨t6, h6, h⟩ := bind_eq_ok_iff.mp h
-    have q1 := applyWithdrawals_withdrawalQueue _ _ _ h1
-    have q2 := updateNextWithdrawalIndex_withdrawalQueue _ _ _ h2
-    have q6 := updateNextWithdrawalBuilderIndex_withdrawalQueue _ _ _ h6
-    have q7 := updateNextWithdrawalValidatorIndex_withdrawalQueue _ _ _ h
-    have q5 : WithdrawalQueue t2 (JauneConsensus.Gloas.updatePendingPartialWithdrawals
+    have q1 := applyWithdrawals_wq _ _ _ h1
+    have q2 := updateNextWithdrawalIndex_wq _ _ _ h2
+    have q6 := updateNextWithdrawalBuilderIndex_wq _ _ _ h6
+    have q7 := updateNextWithdrawalValidatorIndex_wq _ _ _ h
+    have q5 : WQ t2 (JauneConsensus.Gloas.updatePendingPartialWithdrawals
         (JauneConsensus.Gloas.updateBuilderPendingWithdrawals
           (JauneConsensus.Gloas.updatePayloadExpectedWithdrawals t2 ex.withdrawals)
           ex.processed_builder_withdrawals_count)
@@ -315,8 +315,8 @@ theorem processWithdrawals_withdrawalQueue {s s' : GloasState P}
       refine ⟨⟨ex.processed_builder_withdrawals_count.toNat, ?_⟩, rfl⟩
       simp [JauneConsensus.Gloas.updatePendingPartialWithdrawals,
         JauneConsensus.Gloas.updateBuilderPendingWithdrawals,
-        JauneConsensus.Gloas.updatePayloadExpectedWithdrawals, ProgressiveListOnSpine.ofArray,
+        JauneConsensus.Gloas.updatePayloadExpectedWithdrawals, ProgressiveListS.ofArray,
         Array.toList_extract]
-    exact withdrawalQueue.trans q1 (withdrawalQueue.trans q2 (withdrawalQueue.trans q5 (withdrawalQueue.trans q6 q7)))
+    exact wq.trans q1 (wq.trans q2 (wq.trans q5 (wq.trans q6 q7)))
 
-end JauneConsensus.Facts.Gloas.Invariant
+end JauneConsensus.Facts.Gloas.Inv
