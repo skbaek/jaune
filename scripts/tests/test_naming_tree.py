@@ -405,6 +405,12 @@ class NamingTreeTests(unittest.TestCase):
             TREE.build_plan(fixture2.root, fixture2.capture / 'snapshot.json', fixture2.map, True,
                             [fixture2.directory.parent / 'dep/capture/snapshot.json'], path2)
 
+    def test_root_spelled_declaration_is_not_compiler_named(self):
+        text = 'def _root_.Q.extraJ := 1\ninstance : Inhabited Nat := ⟨0⟩\n'
+        index = dict(decls={'Q.extraJ': [0, 4, 0, 19, 0, 4, 0, 19], 'instInhabitedNat': [1, 0, 1, 8, 1, 0, 1, 8]})
+        named = TREE.compiler_named({'M': dict(source=text, index=index)})
+        self.assertEqual(named, {'instInhabitedNat'})
+
     def test_external_reviewed_sites_replace_only_tokens_without_references(self):
         # `Dep.Val` spelled in a name literal (no compiler reference) and as a real reference.
         client = 'import Dep\ndef n := `Dep.Val\ndef b := Dep.Val\n'

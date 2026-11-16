@@ -313,7 +313,10 @@ def compiler_named(bundles):
             spans = APPLY.components(bundle['source'], a, b)
             private = MAP.split_private(name) if name.startswith('_private.') else None
             parts = APPLY.split_name(private[2] if private else name)
-            if spans is None or parts[-len(spans):] != [bundle['source'][x:y] for x, y in spans]:
+            spelled = None if spans is None else [bundle['source'][x:y] for x, y in spans]
+            if spelled and spelled[0] == '_root_' and spelled[1:] == parts:
+                continue  # `def _root_.N.x` spells its full name; Lean does not derive it.
+            if spans is None or parts[-len(spans):] != spelled:
                 result.add(name)
     return result
 
