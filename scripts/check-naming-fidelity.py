@@ -224,6 +224,64 @@ def expansion_declarations(before, module, spelling):
                     found.add(name)
     return sorted(found)
 
+def code_text(text):
+    """`text` with comments, string literals and `«»`-escaped identifiers
+    blanked (same length): only Lean's own keywords and tokens remain, so a
+    commented-out or quoted `deriving Repr` is not a deriving clause."""
+    out, i = list(text), 0
+
+    def blank(a, b):
+        for k in range(a, min(b, len(out))):
+            if out[k] != '\n':
+                out[k] = ' '
+    while i < len(text):
+        if text.startswith('--', i):
+            end = text.find('\n', i)
+            end = len(text) if end < 0 else end
+            blank(i, end)
+            i = end
+        elif text.startswith('/-', i):
+            depth, j = 1, i + 2
+            while depth and j < len(text):
+                if text.startswith('/-', j):
+                    depth, j = depth + 1, j + 2
+                elif text.startswith('-/', j):
+                    depth, j = depth - 1, j + 2
+                else:
+                    j += 1
+            blank(i, j)
+            i = j
+        elif (text[i] == "'" and (i == 0 or not (text[i - 1].isalnum() or text[i - 1] in "_'?!")) and
+              re.match(r"'(\\.|[^\\'\n])'", text[i:i + 4])):
+            # A character literal (`'"'`) is skipped whole, never a string start.
+            i += len(re.match(r"'(\\.|[^\\'\n])'", text[i:i + 4]).group(0))
+        elif text[i] == '"':
+            j = i + 1
+            while j < len(text) and text[j] != '"':
+                j += 2 if text[j] == '\\' else 1
+            blank(i, j + 1)
+            i = j + 1
+        elif text[i] == '«':
+            j = text.find('»', i + 1)
+            j = len(text) if j < 0 else j + 1
+            blank(i, j)
+            i = j
+        else:
+            i += 1
+    return ''.join(out)
+
+
+SINGLE_BACKTICK = re.compile(r"(?<![`\w.'?!])`(?![`(\[])((?:«[^»]*»|[^\W\d][\w'?!]*)(?:\.(?:«[^»]*»|[^\W\d][\w'?!]*))*)")
+
+
+def single_backtick_literals(source):
+    """[(start, end, plain spelling)] of the single-backtick `Name` literals in
+    `source` (character offsets of the spelling, after the backtick), outside
+    comments and strings. Lean does not resolve these: they are data."""
+    code = code_text(source.replace('«', '\0').replace('»', '\1')).replace('\0', '«').replace('\1', '»')
+    return [(m.start(1), m.end(1), plain_spelling(m.group(1))) for m in SINGLE_BACKTICK.finditer(code)]
+
+
 # Classes whose deriving handlers write constructor and field names into string
 # literals (`deriving Repr` prints `Jaune.T.ctor` and `{ field := ... }`).
 DERIVING_CLASSES = {'Repr': 'Repr', 'Lean.ToJson': 'ToJson', 'Lean.FromJson': 'FromJson'}
@@ -266,10 +324,10 @@ def derived_constants(data, authored_ranges, byte_offsets, positions):
             continue
         a, b = APPLY.span(positions, decls[target][:4])
         start = byte_offsets[a]
-        text = [source_bytes[x:y].decode('utf-8', 'replace') for x, y, kind in commands if x <= start < y]
+        text = [code_text(source_bytes[x:y].decode('utf-8', 'replace')) for x, y, kind in commands if x <= start < y]
         clause = re.compile(r'\bderiving\b[^\n]*\b' + re.escape(cls) + r'\b')
         leaf = re.escape(target.split('.')[-1])
-        instance_cmd = [source_bytes[x:y].decode('utf-8', 'replace') for x, y, kind in commands
+        instance_cmd = [code_text(source_bytes[x:y].decode('utf-8', 'replace')) for x, y, kind in commands
                         if kind == 'Lean.Parser.Command.deriving']
         if (text and clause.search(text[0])) or any(
                 re.search(r'\b' + re.escape(cls) + r'\b', t) and re.search(r'\b' + leaf + r'\b', t)
@@ -292,7 +350,7 @@ def read_exports(paths):
     checks = []
     derived = {}
     dot_resolved = []
-    quotation_sites, module_sources, module_decls = {}, {}, {}
+    quotation_sites, module_sources, module_decls, module_commands = {}, {}, {}, {}
     item_modules = {key: [] for key in ITEMS}
     coalesced = set()
     version = None
@@ -357,6 +415,9 @@ def read_exports(paths):
                                    data['index'].get('naming_syntax', {}).get('quotation_identifiers', [])
                                    if a in char_of and b in char_of]
         module_sources[module] = data['source']
+        module_commands[module] = [(char_of[r[0]], char_of[r[1]]) for r in
+                                   data['index'].get('naming_syntax', {}).get('commands', [])
+                                   if r[0] in char_of and r[1] in char_of]
         module_decls[module] = {n: APPLY.span(positions, loc[:4]) for n, loc in data['index']['decls'].items()}
         data['constants'] = {n: quoted_identifiers(c) for n, c in data['constants'].items()}
         data['guards'] = [quoted_identifiers(g) for g in data['guards']]
@@ -377,10 +438,15 @@ def read_exports(paths):
             found = locations[s, e] - failed_names
             if not found and s > 0 and source_bytes[s - 1:s] == b'.':
                 found = locations[s - 1, e] - failed_names
-                if found and any(n.rsplit('.', 1)[-1] != ident[1] for n in found):
-                    raise ValueError(f'{module}: dot identifier .{ident[1]} resolves to {sorted(found)}')
                 if found:
                     dot_resolved.append(ident[1])
+            # Whichever range resolved it, a dot identifier names a constant
+            # with its own leaf (a constructor or a field); anything else is
+            # some other reference that happens to share the range.
+            if found and any(MAP.split_private(n)[2].rsplit('.', 1)[-1] != plain_spelling(ident[1])
+                             if MAP.split_private(n) else n.rsplit('.', 1)[-1] != plain_spelling(ident[1])
+                             for n in found):
+                raise ValueError(f'{module}: dot identifier .{ident[1]} resolves to {sorted(found)}')
             if len(found) > 1:
                 raise ValueError('ambiguous compiler reference in a dot identifier')
             name = ['name', next(iter(found))] if found else ['token', ident[1]]
@@ -430,7 +496,7 @@ def read_exports(paths):
                 coalesced_equations=sorted(coalesced), owners=owners, holders=holders,
                 item_modules=item_modules, schemas=schemas, derived=derived,
                 dot_identifiers_resolved=len(dot_resolved), quotation_sites=quotation_sites,
-                module_sources=module_sources, module_decls=module_decls)
+                module_sources=module_sources, module_decls=module_decls, module_commands=module_commands)
 
 
 class Comparison:
@@ -444,9 +510,15 @@ class Comparison:
         self.unhygienic_sites = {}
         self.reviewed = reviewed
         self.reviewed_used = reviewed_used if reviewed_used is not None else set()
+        # Reviewed records accepted in this comparison: each at one occurrence.
+        self.reviewed_here = set()
+        # The constants whose kernel terms are being compared (innermost last).
+        self.holders = []
+        self._unhygienic_bindings = {}
         if isinstance(mapping, dict):  # An exact old -> new table.
             mapping = MAP.Renamer([dict(old=a, new=b, kind='declaration') for a, b in mapping.items()])
         self.mapping = mapping
+        self._aux_modules = self.aux_module_table(mapping)
         self.left = dict(before['constants'])
         self.right = after['constants']
         self.respelled_literals = []
@@ -497,13 +569,17 @@ class Comparison:
                 if (isinstance(head, list) and head[:1] == ['const'] and isinstance(head[1], list) and
                         re.fullmatch(r'Lean\.Name\.mkStr[1-8]', head[1][1]) and
                         len(args) == int(head[1][1][-1]) and
-                        all(isinstance(a, list) and len(a) == 2 and a[0] == 'str' for a in args)):
+                        all(isinstance(a, list) and len(a) == 2 and a[0] == 'str' for a in args) and
+                        # Each argument must be one plain component: a
+                        # component holding a dot (`Name.mkStr1 "A.B"`) is not
+                        # the dotted name `A.B` and stays literal.
+                        all(a[1] and '.' not in a[1] and '«' not in a[1] for a in args)):
                     full = '.'.join(a[1] for a in args)
                     new_full = self.name(full) if full in known else full
                     why = 'name literal'
                     if new_full == full:
-                        new_full, why = self.namespace_literal(full), 'namespace literal'
-                    if new_full != full:
+                        new_full, why = self.namespace_literal(full, name), 'namespace literal'
+                    if new_full != full and '«' not in new_full and not self.data_literal(name, full, new_full):
                         parts = new_full.split('.')
                         if len(parts) <= 8:
                             self.respelled_literals.append([name, full, new_full, why])
@@ -521,12 +597,68 @@ class Comparison:
         scoped = self.mapping.scope(namespace)
         if scoped == namespace or namespace in self.mapping.exact:
             return None
-        if namespace in self.mapping.derived() or any(
-                namespace == ns or namespace.startswith(ns + '.') for ns in self.mapping.namespaces):
+        if any(namespace == ns or namespace.startswith(ns + '.') for ns in self.mapping.namespaces):
+            return scoped
+        if namespace in self.mapping.derived() and self.uniform_namespace(namespace):
             return scoped
         return None
 
-    def namespace_literal(self, full):
+    def uniform_namespace(self, namespace):
+        """A namespace the map renames only through its members (derived)
+        moves as a whole only when every authored declaration directly in it
+        moves to the new namespace with the same leaf, and a declaration
+        named like the namespace itself moves to the new name. Otherwise the
+        namespace was partly moved and nothing follows it without a row."""
+        if not hasattr(self, '_uniform'):
+            self._uniform = {}
+        if namespace not in self._uniform:
+            target = self.mapping.derived().get(namespace)
+            ok = target is not None
+            for root in self.before['roots'] if ok else ():
+                base = root.rsplit('@', 1)[0]
+                private = MAP.split_private(base)
+                user = private[2] if private else base
+                if user == namespace:
+                    ok = self.mapping(user) == target
+                elif '.' in user and user.rsplit('.', 1)[0] == namespace:
+                    ok = self.mapping(user) == f'{target}.{user.rsplit(".", 1)[1]}'
+                if not ok:
+                    break
+            self._uniform[namespace] = ok
+        return self._uniform[namespace]
+
+    def holder_module(self, holder):
+        owners = self.before.get('owners')
+        return None if owners is None or holder is None else owners.get(holder)
+
+    def data_literal(self, holder, full, new_full):
+        """Whether the module holding `holder` spells `full` as a single-backtick
+        `Name` literal that the applied plan did not respell to `new_full`.
+        Lean does not resolve such a literal: it is runtime data, compared as
+        written; only a plan edit at the literal itself admits its respelling.
+        A capture without module sources (archived fixtures) has none."""
+        sources = self.before.get('module_sources')
+        if sources is None:
+            return False
+        module = self.holder_module(holder)
+        source = sources.get(module) if module is not None else None
+        if source is None:
+            return True  # unknown provenance: fail closed
+        if not hasattr(self, '_data_literals'):
+            self._data_literals = {}
+        if module not in self._data_literals:
+            self._data_literals[module] = single_backtick_literals(source)
+        for start, end, spelling in self._data_literals[module]:
+            if spelling != full:
+                continue
+            respelled = any(start <= edit[1] and edit[2] <= end and
+                            plain_spelling(source[start:edit[1]] + edit[4] + source[edit[2]:end]) == new_full
+                            for edit in self.plan_edits if edit[0] == module)
+            if not respelled:
+                return True
+        return False
+
+    def namespace_literal(self, full, holder=None):
         """Rule D (master decision 2026-11-16): a Name literal that is exactly a
         namespace the map renames respells to its new namespace; one whose plain
         or private form is a generated, non-authored constant under such a
@@ -546,8 +678,12 @@ class Comparison:
             for key in self.left:
                 split = MAP.split_private(key) if key.startswith('_private.') else None
                 if split:
-                    self._private_users.setdefault(split[2], []).append(key)
-        forms = ([full] if full in self.left else []) + self._private_users.get(full, [])
+                    self._private_users.setdefault((split[0], split[2]), []).append(key)
+        # A private form counts only in the module that holds the literal:
+        # another module's private declaration says nothing about it.
+        module = self.holder_module(holder)
+        forms = ([full] if full in self.left else []) + (
+            self._private_users.get((module, full), []) if module is not None else [])
         if forms and all(form not in self.before['roots'] for form in forms):
             return f'{renamed}.{leaf}'
         return full
@@ -622,40 +758,68 @@ class Comparison:
         qualified new name is exactly the after spelling. Pre-resolution is
         still compared. Used records are counted; unused ones are stale."""
         decls = {d[1][1] for d in left[1] if d[0] == 'decl'}
+        holder = self.holders[-1] if self.holders else None
         for index, row in enumerate(self.reviewed or []):
-            if (path.startswith(f'constant {row["constant"]}.') and row['before'] == left[2] and
+            # Bound to the exact constant being compared (not one whose name
+            # it prefixes), to the module the record names, and to one
+            # occurrence in this comparison.
+            if (holder == row['constant'] and self.holder_module(holder) == row['module'] and
+                    row['before'] == left[2] and
                     row['after'] == right[2] and row['map_old'] in decls and
                     self.mapping(row['map_old']) == row['map_new'] == right[2]):
+                if index in self.reviewed_here:
+                    raise Mismatch(f'{path}: reviewed quotation {row["before"]!r} -> {row["after"]!r} of '
+                                   f'{row["constant"]} occurs more than once')
+                self.reviewed_here.add(index)
                 self.reviewed_used.add(index)
                 return True
         return False
 
-    def unhygienic_plan(self, module, spelling):
-        """([(new, (module, start, end))] edited, kept?) for the quoted-identifier
-        ranges of `spelling` in `module` (any module when unknown)."""
-        edited, kept = [], False
-        for mod, rows in (self.before.get('quotation_sites') or {}).items():
-            if module is not None and mod != module:
-                continue
-            for start, end, name in rows:
-                if name != spelling:
-                    continue
-                news = [e[4] for e in self.plan_index.get((mod, start, end), []) if e[3] == spelling]
-                if news:
-                    edited.extend((new, (mod, start, end)) for new in news)
-                else:
-                    kept = True
-        return edited, kept
+    def unhygienic_edited(self, module, spelling):
+        """Whether the applied plan edits any quoted-identifier range of
+        `spelling` in `module`."""
+        return any(name == spelling and any(e[3] == spelling for e in self.plan_index.get((module, a, b), []))
+                   for a, b, name in (self.before.get('quotation_sites') or {}).get(module, []))
 
-    def unhygienic_site(self, old, new):
-        """Rule E (master decision 2026-11-16): an unhygienic quoted respelling
-        must coincide with a plan edit at a quoted-identifier range of the same
-        spelling. Returns (module, start, end) or None."""
-        for module, rows in (self.before.get('quotation_sites') or {}).items():
-            for start, end, name in rows:
-                if name == old and (module, start, end, old, new) in self.plan_edits:
-                    return module, start, end
-        return None
+    def unhygienic_binding(self, holder):
+        """Bind each unhygienic quoted identifier of the before constant
+        `holder` to its own source range (rule E per site): the constant's
+        unhygienic identifiers, in kernel order, must be exactly the
+        quoted-identifier sequence of one command of its module (`[anonymous]`
+        as the empty name). Returns {id(node): (module, start, end)}; raises
+        when no command, or several with different plan edits, match."""
+        if holder in self._unhygienic_bindings:
+            return self._unhygienic_bindings[holder]
+        nodes = []
+
+        def walk(e):
+            if isinstance(e, list):
+                if len(e) == 4 and e[0] == 'unhygienicIdentifier':
+                    nodes.append(e)
+                    return
+                for x in e:
+                    walk(x)
+            elif isinstance(e, dict):
+                for v in e.values():
+                    walk(v)
+        walk(self.left.get(holder))
+        module = self.holder_module(holder)
+        sites = (self.before.get('quotation_sites') or {}).get(module, [])
+        spellings = [n[1] for n in nodes]
+        matches = []
+        for a, b in (self.before.get('module_commands') or {}).get(module, []):
+            inside = [(s, e, '' if n == '[anonymous]' else n) for s, e, n in sites if a <= s < b]
+            if [n for _, _, n in inside] == spellings:
+                matches.append(inside)
+        outcome = lambda inside: [tuple(sorted(e[4] for e in self.plan_index.get((module, s, t), [])
+                                               if e[3] == n)) for s, t, n in inside]
+        if not matches or any(outcome(m) != outcome(matches[0]) for m in matches[1:]):
+            raise Mismatch(f'constant {holder}: unhygienic quoted identifiers {spellings[:8]}... cannot be '
+                           f'bound to the quoted ranges of one command of {module} '
+                           f'({len(matches)} matching commands)')
+        binding = {id(node): (module, s, t) for node, (s, t, _) in zip(nodes, matches[0])}
+        self._unhygienic_bindings[holder] = binding
+        return binding
 
     def find(self, module):
         while self.parent.get(module, module) != module:
@@ -718,14 +882,13 @@ class Comparison:
             base, module = name.rsplit('@', 1)
             return f'{self.mapping(base)}@{self.module_of(base, module)}'
         mapped = self.mapping(name)
-        if '._aux_' in '.' + mapped:
+        if '._aux_' in '.' + mapped and self._aux_modules[1] is not None:
             # Lean names macro/elab auxiliaries after their module
             # (`_aux_<Module_with_underscores>___elabRules_...`): a module row
-            # renames that component too.
-            for old, new in self.mapping.modules.items():
-                mangled_old, mangled_new = old.replace('.', '_'), new.replace('.', '_')
-                mapped = re.sub(r'(^|\.)_aux_' + re.escape(mangled_old) + r'___',
-                                lambda m: m.group(1) + '_aux_' + mangled_new + '___', mapped)
+            # renames that component too, in one pass (a renamed module's
+            # new name is never renamed again).
+            table, pattern = self._aux_modules
+            mapped = pattern.sub(lambda m: m.group(1) + '_aux_' + table[m.group(2)] + '___', mapped)
         if (mapped == name and name in self.left and name not in self.before['roots'] and '.' in name
                 and not name.startswith('_private.')):
             # A compiler-named constant (a syntax kind `Ns.tacticFoo`) declared
@@ -733,7 +896,7 @@ class Comparison:
             # namespace) moves with the namespace syntax, without a row.
             parent, leaf = name.rsplit('.', 1)
             scoped = self.mapping.scope(parent)
-            if scoped != parent and parent in self.mapping.derived():
+            if scoped != parent and parent in self.mapping.derived() and self.uniform_namespace(parent):
                 return f'{scoped}.{leaf}'
         if mapped == name and name not in self.left:
             # A constant Lean realizes on demand and no export holds (a matcher
@@ -749,6 +912,25 @@ class Comparison:
                         return renamed
         return mapped
 
+    @staticmethod
+    def aux_module_table(mapping):
+        """({mangled old: mangled new}, pattern) for the module component of
+        `_aux_` names. Mangling (`.` -> `_`) must be injective over the map's
+        module rows on both sides, or the component cannot be read back."""
+        table = {}
+        for side in (mapping.modules.keys(), mapping.modules.values()):
+            seen = {}
+            for module in side:
+                mangled = module.replace('.', '_')
+                if seen.setdefault(mangled, module) != module:
+                    raise ValueError(f'module rows {seen[mangled]} and {module} mangle alike in _aux_ names')
+        for old, new in mapping.modules.items():
+            table[old.replace('.', '_')] = new.replace('.', '_')
+        if not table:
+            return table, None
+        alternatives = '|'.join(re.escape(k) for k in sorted(table, key=len, reverse=True))
+        return table, re.compile(r'(^|\.)_aux_(' + alternatives + r')___')
+
     def module_of(self, name, module):
         private = MAP.split_private(name)
         user = private[2] if private else name
@@ -763,26 +945,35 @@ class Comparison:
         if isinstance(left, list) and len(left) == 4 and left[0] == 'unhygienicIdentifier':
             if not (isinstance(right, list) and len(right) == 4 and right[0] == 'unhygienicIdentifier'):
                 raise Mismatch(f'{path}: unhygienic quoted identifier changed kind')
-            # What the applied plan did at this spelling's quoted ranges in the
-            # owning module decides: never edited -> unchanged; edited -> the
-            # names-only respelling, which must also be the plan's new text.
-            owner = (self.before.get('owners') or {}).get(path.split(' ', 1)[1].split('.kernel', 1)[0]
-                                                         if path.startswith('constant ') else None)
-            edited, kept = self.unhygienic_plan(owner, left[1])
-            allowed = set()
-            if kept or not edited:
-                allowed.add(left[1])
-            for new, site in edited:
-                if new != self.respell_message(left[1], path):
-                    raise Mismatch(f'{path}: plan respelled unhygienic {left[1]!r} to {new!r}, not its names-only respelling')
-                allowed.add(new)
-            if right[1] not in allowed:
-                raise Mismatch(f'{path}: unhygienic quoted spelling {left[1]!r} became {right[1]!r}, expected one of {sorted(allowed)}')
+            # What the applied plan did at this identifier's own quoted range
+            # decides (rule E per site): never edited -> unchanged; edited ->
+            # the plan's new text, which must also be the names-only
+            # respelling. A spelling the plan edits nowhere in the holder's
+            # module needs no binding: it stays as written.
+            holder = self.holders[-1] if self.holders else None
+            module = self.holder_module(holder)
+            expected, site = left[1], None
+            if module is not None and self.unhygienic_edited(module, left[1]):
+                site = self.unhygienic_binding(holder).get(id(left))
+                if site is None:
+                    raise Mismatch(f'{path}: unhygienic quoted identifier {left[1]!r} has no bound source range')
+                news = {e[4] for e in self.plan_index.get(site, []) if e[3] == left[1]}
+                if len(news) > 1:
+                    raise Mismatch(f'{path}: plan respells unhygienic {left[1]!r} at {site} ambiguously: {sorted(news)}')
+                if news:
+                    expected = news.pop()
+                    if expected != self.respell_message(left[1], path):
+                        raise Mismatch(f'{path}: plan respelled unhygienic {left[1]!r} to {expected!r}, '
+                                       f'not its names-only respelling')
+            elif module is None and self.plan_edits:
+                raise Mismatch(f'{path}: unhygienic quoted identifier {left[1]!r} outside a known module')
+            if right[1] != expected:
+                raise Mismatch(f'{path}: unhygienic quoted spelling {left[1]!r} became {right[1]!r}, '
+                               f'expected {expected!r} (its own quoted range {site})')
             if self.raw_marker(right[2], right[1]) != self.raw_marker(left[2], left[1]):
                 raise Mismatch(f'{path}: unhygienic quoted raw text {left[2]!r} became {right[2]!r}')
             if right[1] != left[1]:
-                site = next(site for new, site in edited if new == right[1])
-                self.unhygienic_sites.setdefault((left[1], right[1]), site)
+                self.unhygienic_sites.setdefault((left[1], right[1], site), site)
             self.compare(left[3], right[3], f'{path}.syntax')
             return
         if isinstance(left, list) and len(left) == 5 and left[0] == 'quotedIdentifier':
@@ -796,6 +987,9 @@ class Comparison:
                                f'expected {spelling!r} (Syntax.getId observes it)')
             if self.raw_marker(right[3], right[2]) != raw:
                 raise Mismatch(f'{path}: quoted raw text {left[3]!r} became {right[3]!r}')
+            if right[2] == left[2] and right[3] != left[3]:
+                # An unchanged spelling keeps its raw text, `«»` escapes included.
+                raise Mismatch(f'{path}: quoted raw text {left[3]!r} became {right[3]!r} under an unchanged spelling')
             self.compare(left[1], right[1], f'{path}.preresolved')
             self.compare(left[4], right[4], f'{path}.syntax')
             return
@@ -832,7 +1026,11 @@ class Comparison:
         if (a, b) in self.checked:
             return
         self.checked.add((a, b))
-        self.compare(self.left[a], self.right[b], f'constant {a}')
+        self.holders.append(a)
+        try:
+            self.compare(self.left[a], self.right[b], f'constant {a}')
+        finally:
+            self.holders.pop()
 
     GUARD_TOKEN = re.compile(r"(?<![\w.'?!])[A-Za-z_][\w'?!]*(?:\.[A-Za-z_][\w'?!]*)*")
 
@@ -896,7 +1094,9 @@ class Comparison:
         if len(value) == 4 and value[0] == 'unhygienicIdentifier':
             if coarse:  # bucketing only; the exact rule runs in compare()
                 return ['unhygienicIdentifier', self.normalize(value[3], side, coarse)]
-            spelling = self.respell_message(value[1], 'unhygienic') if side == 'before' else value[1]
+            # Outside a compared constant (guards, checks) no source range can
+            # bind it: the spelling is compared as written.
+            spelling = value[1]
             return ['unhygienicIdentifier', spelling, self.raw_marker(value[2], value[1]),
                     self.normalize(value[3], side, coarse)]
         if len(value) == 5 and value[0] == 'quotedIdentifier':
@@ -949,6 +1149,18 @@ class Comparison:
                     return f'_private.{self.mapping.module(private[0])}.{private[1]}.{renamed}'
                 return renamed
         return mapped
+
+    def save(self):
+        """Every piece of state a speculative `pair()` may change."""
+        return (self.pairs.copy(), self.reverse.copy(), self.checked.copy(), set(self.reviewed_used),
+                set(self.reviewed_here), dict(self.unhygienic_sites), list(self.respelled_literals))
+
+    def restore(self, saved):
+        (self.pairs, self.reverse, self.checked, used, here, sites, literals) = saved
+        # reviewed_used is shared with the caller across environments: restore in place.
+        self.reviewed_used.clear()
+        self.reviewed_used.update(used)
+        self.reviewed_here, self.unhygienic_sites, self.respelled_literals = here, sites, literals
 
     def fail(self, message):
         """Raise at the first mismatch, or with `collect` record every one and
@@ -1007,20 +1219,20 @@ class Comparison:
             same, same_error = self.preferred_generated(name), None
             if same in self.generated_right and same not in self.reverse:
                 candidates = [n for n in candidates if n != same]
-                saved = self.pairs.copy(), self.reverse.copy(), self.checked.copy()
+                saved = self.save()
                 try:
                     self.pair(name, same)
                     continue
                 except Mismatch as error:
                     same_error = error
-                    self.pairs, self.reverse, self.checked = saved
+                    self.restore(saved)
             for candidate in candidates:
-                saved = self.pairs.copy(), self.reverse.copy(), self.checked.copy()
+                saved = self.save()
                 try:
                     self.pair(name, candidate)
                     break
                 except Mismatch:
-                    self.pairs, self.reverse, self.checked = saved
+                    self.restore(saved)
             else:
                 self.fail(f'no verified generated-constant match for {name}' +
                                (f'; same-name comparison: {same_error}' if same_error else ''))
@@ -1086,7 +1298,7 @@ def check(before, after, mapping, reviewed=None, reviewed_used=None, collect=Fal
     result['unhygienic_respellings'] = [
         dict(old=old, new=new, module=site[0], range=[site[1], site[2]],
              expansion_declarations=expansion_declarations(before, site[0], old))
-        for (old, new), site in sorted(comparison.unhygienic_sites.items())]
+        for (old, new, _), site in sorted(comparison.unhygienic_sites.items(), key=lambda kv: (kv[0][0], kv[0][1], kv[1]))]
     result.update(before=before['receipts'], after=after['receipts'],
                   before_imports=before['modules'], after_imports=after['modules'],
                   before_dot_identifiers_resolved=before.get('dot_identifiers_resolved', 0),

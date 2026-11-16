@@ -543,6 +543,22 @@ def stale_quotations(records, used):
         raise FIDELITY.Mismatch(f'reviewed quotation records that occur nowhere (stale): {stale}')
 
 
+def plan_edits(plan_raw, map_raw, before_raw):
+    """The applied plan's edits as (module, start, end, old, new), bound to
+    the comparison: the plan must be a `planned` whole-tree plan made from
+    exactly this map and this before snapshot (by digest)."""
+    plan = json.loads(plan_raw)
+    if plan.get('status') != 'planned':
+        raise ValueError(f'plan status is {plan.get("status")!r}, not planned')
+    if plan.get('map_sha256') != sha(map_raw):
+        raise ValueError('plan was made from another map (map_sha256 differs)')
+    if plan.get('snapshot_sha256') != sha(before_raw):
+        raise ValueError('plan was made from another before snapshot (snapshot_sha256 differs)')
+    path_module = {row['path']: name for name, row in json.loads(before_raw)['candidate']['modules'].items()}
+    return {(path_module.get(f['path']), e['start'], e['end'], e['old'], e['new'])
+            for f in plan['files'] for e in f['edits']}
+
+
 def compare(before, after, mapping, inventory=None, reviewed=None, collect=False, plan_edits=None):
     left, right = before['candidate'], after['candidate']
     if left['source_dirs'] != right['source_dirs']:
@@ -679,15 +695,11 @@ def main():
                 raw = args.inventory.read_bytes()
                 inventory = (raw, json.loads(raw))
             reviewed = (args.reviewed_quotations.read_bytes(),) if args.reviewed_quotations else None
-            plan_edits = None
+            edits = None
             if args.plan:
-                plan = json.loads(args.plan.read_bytes())
-                path_module = {row['path']: name for name, row in
-                               json.loads(args.before.read_bytes())['candidate']['modules'].items()}
-                plan_edits = {(path_module.get(f['path']), e['start'], e['end'], e['old'], e['new'])
-                              for f in plan['files'] for e in f['edits']}
+                edits = plan_edits(args.plan.read_bytes(), args.map.read_bytes(), args.before.read_bytes())
             result = compare(read_snapshot(args.before), read_snapshot(args.after),
-                             json.loads(args.map.read_bytes()), inventory, reviewed, args.collect_all, plan_edits)
+                             json.loads(args.map.read_bytes()), inventory, reviewed, args.collect_all, edits)
             result['map_sha256'] = file_sha(args.map)
         print(json.dumps(result, indent=2))
         return 0

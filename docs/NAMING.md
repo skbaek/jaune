@@ -655,15 +655,22 @@ each with its controls in `scripts/tests/test_naming_fidelity.py`:
   in a derived-renamed namespace is refused by the planner without its row.
 - Rule E, unhygienic quotations (`local macro` without hygiene): an
   identifier with an empty pre-resolution list and a plain Name value is
-  resolved by spelling at each expansion site. Its before spelling is
-  decided by the applied plan (`compare --plan`) at the quoted-identifier
-  ranges of that spelling in the owning module: a spelling the plan never
-  edited there stays as written (a local `x8` equal to a renamed leaf); an
-  edited one must be the plan's new text, which must also be its names-only
-  respelling by the #guard_msgs stale-token rule; anything else fails. The verdict lists each site with the
+  resolved by spelling at each expansion site. Each such identifier is
+  bound to its own quoted range: the holding constant's unhygienic
+  identifiers, in kernel order, must be exactly the quoted-identifier
+  sequence of one command of its module (several matching commands must
+  agree on every plan outcome), and the applied plan (`compare --plan`) at
+  that range decides: never edited there -> unchanged (a local `x8` equal to
+  a renamed leaf); edited -> the plan's new text, which must also be its
+  names-only respelling by the #guard_msgs stale-token rule; anything else
+  fails. A spelling the plan edits nowhere in the module needs no binding and
+  stays as written. Outside a compared constant (guards, checks) the
+  spelling is compared as written. The verdict lists each site with the
   declarations that invoke the macro. Meaning at the expansion sites is
-  checked there: those declarations' own kernel terms are compared under the
-  map, which is why comparing the quotation's spelling suffices.
+  checked there: a definition's kernel value and a theorem's statement are
+  compared under the map. A theorem's proof is not exported (proof
+  irrelevance: which lemma a proof cites cannot change any statement or
+  value), and the after build re-checks it.
 - A quoted identifier pre-resolved to a declaration with projection fields
   (`coreFrame.trans`) respells its declaration part names-only and keeps the
   field components byte-identical; a changed field fails.
@@ -676,6 +683,44 @@ each with its controls in `scripts/tests/test_naming_fidelity.py`:
   against its renamed parent's auxiliary with the same suffix, so
   structurally identical matchers of different modules do not cross;
   equality and holder checks are unchanged.
+
+Landing-review hardening (jsn-u16, 2026-11-17, after the G0a cross-family
+review); each item has a control in `scripts/tests/test_naming_fidelity.py`
+or `test_naming_candidate.py` that fails without it:
+- A reviewed quotation record (`scripts/naming-quotations.json`) applies only
+  inside the exact constant it names (not one whose name it prefixes), only
+  when the record's `module` holds that constant, and at one occurrence per
+  comparison; a second occurrence fails.
+- A speculative generated-constant pairing that fails rolls back everything
+  it touched: pairs, checked pairs, reviewed records used, unhygienic sites
+  and listed respellings. A record used only by a failed pairing is stale.
+- The `_aux_` module component is rewritten in one pass over the map's module
+  rows (a chain `A -> B`, `B -> C` does not compose), and the `.` -> `_`
+  mangling must be injective over the old and over the new module names, or
+  the comparison is refused.
+- A `Name` literal is respelled only when every argument of `mkStrN` is one
+  plain component (no dot, no escape); `Name.mkStr1 "A.B"` is not the name
+  `A.B` and stays literal. A single-backtick literal (`` `A.B ``, outside
+  comments and strings) in the module that holds the constant is runtime
+  data Lean does not resolve: a literal it spells stays as written unless the
+  applied plan respelled that literal itself. Without a known holding module
+  the respelling is refused.
+- A namespace renamed only through its members (derived) carries
+  compiler-named constants (rule 4) and namespace literals (rule D) only when
+  every authored declaration directly in it moves to the new namespace with
+  the same leaf (and a declaration named like the namespace moves to the new
+  name); a member left behind stops it. A private form authorizes a namespace
+  literal only in the module that holds both.
+- A dot identifier's resolved constant must have the identifier's own leaf,
+  whether the reference was recorded over the identifier or over the range
+  starting at its dot.
+- A quoted identifier whose spelling does not change keeps its raw text byte
+  for byte (`«»` escapes included).
+- A deriving clause is read with comments, strings and `«»` identifiers
+  blanked: a commented-out or quoted `deriving Repr` is not provenance.
+- `compare --plan` accepts only a plan with status `planned` whose
+  `map_sha256` and `snapshot_sha256` are the digests of the compared map and
+  before snapshot.
 
 `naming-candidate.py compare --collect-all` reports every mismatch, in every
 environment, in one run instead of stopping at the first (normalization errors

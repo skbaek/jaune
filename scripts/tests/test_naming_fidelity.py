@@ -127,9 +127,12 @@ class NamingFidelityTests(unittest.TestCase):
             # A reviewed capture-qualified quotation is accepted only as recorded.
             record = dict(module='M', constant='N.m', before='B256', after='Jaune.U256', map_old='Jaune.B256',
                           map_new='Jaune.U256', decision='d', reason='r', precedent='p')
-            def reviewed(rec):
-                self.before = snapshot({'N.m': CHECK.quoted_identifiers(dict(kernel=ident('B256', ['B256'], 'Jaune.B256', scoped), attributes={}))}, ['N.m'])
-                self.after = snapshot({'N.m': CHECK.quoted_identifiers(dict(kernel=ident('Jaune.U256', ['Jaune', 'U256'], 'Jaune.U256', scoped), attributes={}))}, ['N.m'])
+            def reviewed(rec, holder='N.m', twice=False, module='M'):
+                one = lambda *a: ident(*a, scoped)
+                pair = lambda *a: ['app', one(*a), one(*a)] if twice else one(*a)
+                self.before = snapshot({holder: CHECK.quoted_identifiers(dict(kernel=pair('B256', ['B256'], 'Jaune.B256'), attributes={}))}, [holder])
+                self.after = snapshot({holder: CHECK.quoted_identifiers(dict(kernel=pair('Jaune.U256', ['Jaune', 'U256'], 'Jaune.U256'), attributes={}))}, [holder])
+                self.before['owners'] = {holder: module}
                 used = set()
                 verdict = CHECK.Comparison(self.before, self.after, self.renames, [rec], used).run()
                 return verdict['status'], used
@@ -139,6 +142,14 @@ class NamingFidelityTests(unittest.TestCase):
                         dict(record, after='Jaune.Other', map_new='Jaune.Other')):
                 with self.assertRaisesRegex(CHECK.Mismatch, 'quoted spelling'):
                     reviewed(bad)
+            # Control (finding 6): a record binds its own constant, not one its
+            # name prefixes; its module; and one occurrence.
+            with self.assertRaisesRegex(CHECK.Mismatch, 'quoted spelling'):
+                reviewed(dict(record, constant='N'), holder='N.m')
+            with self.assertRaisesRegex(CHECK.Mismatch, 'quoted spelling'):
+                reviewed(record, module='Elsewhere')
+            with self.assertRaisesRegex(CHECK.Mismatch, 'occurs more than once'):
+                reviewed(record, twice=True)
             # The same spelling resolving to another declaration fails too.
             with self.assertRaisesRegex(CHECK.Mismatch, 'reference'):
                 verdict(ident('B256', ['B256'], 'Jaune.B256', scoped),
@@ -158,6 +169,13 @@ class NamingFidelityTests(unittest.TestCase):
         with self.assertRaisesRegex(CHECK.Mismatch, 'raw text'):
             verdict(ident('Tx.receiver', ['Tx', 'receiver'], 'Jaune.Tx.receiver'),
                     ident('Tx.other', ['Tx', 'to'], 'Jaune.Tx.to'))
+        # Control (finding 11): an unchanged spelling keeps its raw escapes.
+        self.renames = CHECK.MAP.Renamer([dict(old='Jaune.B256', new='Jaune.U256', kind='declaration')])
+        self.assertEqual(verdict(ident('Tx.«to»', ['Tx', 'to'], 'Jaune.Tx.to'),
+                                 ident('Tx.«to»', ['Tx', 'to'], 'Jaune.Tx.to')), 'OK')
+        with self.assertRaisesRegex(CHECK.Mismatch, 'unchanged spelling'):
+            verdict(ident('«Tx».foo', ['Tx', 'foo'], 'Jaune.Tx.foo'),
+                    ident('Tx.foo', ['Tx', 'foo'], 'Jaune.Tx.foo'))
 
     def test_exact_rename_and_reference_mapping(self):
         self.before['guards'] = [ref('N.old')]
@@ -533,10 +551,11 @@ class NamingFidelityTests(unittest.TestCase):
             for p in ps:
                 e = ['app', e, ['str', p]]
             return e
-        def run(before_lits, after_lits):
+        def run(before_lits, after_lits, holder_module='M'):
             kernel = lambda lits: dict(kernel=['definition', 'safe', ['app', lit(*lits[0]), lit(*lits[1])]], attributes={})
             self.before = snapshot({'N.Inv.a': constant(), 'N.Inv.b': constant(2), '_private.M.0.N.Inv.tacticFoo': constant(7),
                                     'gen': kernel(before_lits)}, ['N.Inv.a', 'N.Inv.b'])
+            self.before['owners'] = {'gen': holder_module}
             self.after = snapshot({'N.Invariant.a': constant(), 'N.Invariant.b': constant(2),
                                    '_private.M.0.N.Invariant.tacticFoo': constant(7), 'gen': kernel(after_lits)},
                                   ['N.Invariant.a', 'N.Invariant.b'])
@@ -550,6 +569,11 @@ class NamingFidelityTests(unittest.TestCase):
         # Control: a literal under the renamed namespace that names no constant stays literal.
         with self.assertRaises(CHECK.Mismatch):
             run([('N', 'Inv'), ('N', 'Inv', 'zzz')], [('N', 'Invariant'), ('N', 'Invariant', 'zzz')])
+        # Control (finding 14): a private kind of module M says nothing about a
+        # literal held in module B.
+        with self.assertRaises(CHECK.Mismatch):
+            run([('N', 'Inv'), ('N', 'Inv', 'tacticFoo')], [('N', 'Invariant'), ('N', 'Invariant', 'tacticFoo')],
+                holder_module='B')
         # Control: an authored constant under the namespace is not moved by this path.
         self.before = snapshot({'N.Inv.a': constant(), 'N.Inv.b': constant(2), 'N.Inv.c': constant(3),
                                 'gen': dict(kernel=['definition', 'safe', lit('N', 'Inv', 'c')], attributes={})},
@@ -570,14 +594,17 @@ class NamingFidelityTests(unittest.TestCase):
             return app(c('Lean.Syntax.ident'), c('Lean.SourceInfo.none'), app(c("String.toRawSubstring'"), ['str', raw]),
                        val, app(c('List.nil'), c('Lean.Syntax.Preresolved')))
         rows = self.entries(('N.HdrEq', 'N.HeaderEq', 'declaration', {}))
-        def run(before, after, plan=True, hygienic=False):
+        def run(before, after, plan=True, hygienic=False, sites=None, edits=None):
             self.before = snapshot({'N.HdrEq': constant(), 'N.m': CHECK.quoted_identifiers(dict(kernel=ident(before), attributes={}))},
                                    ['N.HdrEq', 'N.m'])
             self.after = snapshot({'N.HeaderEq': constant(), 'N.m': CHECK.quoted_identifiers(dict(kernel=ident(after), attributes={}))},
                                   ['N.HeaderEq', 'N.m'])
-            self.before['quotation_sites'] = {'M': [(10, 15, 'HdrEq'), (20, 23, 'x13')]}
+            self.before['quotation_sites'] = {'M': sites or [(10, 15, 'HdrEq'), (20, 23, 'x13')]}
+            self.before['module_commands'] = {'M': [(0, 18), (18, 30), (30, 40)]}
             self.before['module_sources'] = {'M': ''}
-            edits = {('M', 10, 15, 'HdrEq', 'HeaderEq')} if plan else set()
+            self.before['owners'] = {'N.m': 'M', 'N.HdrEq': 'M'}
+            if edits is None:
+                edits = {('M', 10, 15, 'HdrEq', 'HeaderEq')} if plan else set()
             return CHECK.check(self.before | dict(version='v'), self.after | dict(version='v'),
                                dict(schema_version=1, retired_tokens=[], allowed_abbreviations=[], entries=[
                                    dict(old='N.HdrEq', new='N.HeaderEq', kind='declaration', layer='execution', rule='4', source='x')]),
@@ -597,6 +624,184 @@ class NamingFidelityTests(unittest.TestCase):
         # A spelling the plan never edited (a local that happens to equal a
         # renamed leaf) stays as written.
         self.assertEqual(run('HdrEq', 'HdrEq', plan=False)['status'], 'OK')
+        # Control (finding 15, per-site binding): the module quotes HdrEq in
+        # two commands and the plan edits only the first; the constant's
+        # identifier is the second command's, so its respelling fails (the
+        # module-pooled rule accepted it) and keeping it passes.
+        two = [(10, 15, 'HdrEq'), (32, 37, 'HdrEq')]
+        edit_first = {('M', 10, 15, 'HdrEq', 'HeaderEq')}
+        with self.assertRaisesRegex(CHECK.Mismatch, 'cannot be bound|unhygienic quoted spelling'):
+            run('HdrEq', 'HeaderEq', sites=two, edits=edit_first)
+        # Both commands match the one-identifier constant, with different
+        # plan outcomes: ambiguous, refused even when kept.
+        with self.assertRaisesRegex(CHECK.Mismatch, 'cannot be bound'):
+            run('HdrEq', 'HdrEq', sites=two, edits=edit_first)
+        # With a second identifier in the first command only the second
+        # command matches: kept passes, respelled fails.
+        three = [(10, 15, 'HdrEq'), (16, 17, 'y'), (32, 37, 'HdrEq')]
+        self.assertEqual(run('HdrEq', 'HdrEq', sites=three, edits=edit_first)['status'], 'OK')
+        with self.assertRaisesRegex(CHECK.Mismatch, 'unhygienic quoted spelling'):
+            run('HdrEq', 'HeaderEq', sites=three, edits=edit_first)
+        # ... and with the edit at the second command's range, respelled passes.
+        self.assertEqual(run('HdrEq', 'HeaderEq', sites=three,
+                             edits={('M', 32, 37, 'HdrEq', 'HeaderEq')})['status'], 'OK')
+
+    # --- G0a landing-review hardening (jsn-u16): each test fails on the
+    # checker before its fix and passes after it.
+
+    def lit_kernel(self, *parts):
+        e = ['const', ['name', f'Lean.Name.mkStr{len(parts)}'], []]
+        for part in parts:
+            e = ['app', e, ['str', part]]
+        return dict(kernel=['definition', 'safe', e], attributes={})
+
+    def test_derived_provenance_ignores_comments_and_strings(self):
+        # Finding 5: a commented-out or quoted deriving clause is not one.
+        value = ['app', ['app', ['const', ['name', 'Repr.mk'], []], ['const', ['name', 'N.S'], []]],
+                 ['const', ['name', 'N.instReprS.repr'], []]]
+        def derived(src):
+            d = dict(source=src, constants={'N.instReprS': dict(kernel=['definition', 'safe', value]),
+                                            'N.instReprS.repr': dict(kernel=['definition', 'safe', ['nat', 0]])},
+                     index=dict(decls={'N.S': [0, 10, 0, 11, 0, 10, 0, 11]},
+                                naming_syntax=dict(commands=[[0, len(src.encode()), 'Lean.Parser.Command.declaration']])))
+            positions = CHECK.APPLY.Positions(src)
+            offsets = [0]
+            for ch in src:
+                offsets.append(offsets[-1] + len(ch.encode()))
+            return CHECK.derived_constants(d, None, offsets, positions)
+        self.assertEqual(len(derived('structure S where\n  lbl : Nat\nderiving Repr\n')), 2)
+        for fake in ('-- deriving Repr', '/-- deriving Repr -/', '/- deriving Repr -/ deriving BEq',
+                     'deriving BEq -- , Repr', 'deriving BEq\n#eval "deriving Repr"'):
+            self.assertEqual(derived('structure S where\n  lbl : Nat\n' + fake + '\n'), {}, fake)
+
+    def test_reviewed_record_is_not_consumed_by_a_failed_speculation(self):
+        # Findings 6/13: a record accepted inside a failed speculative pairing
+        # is rolled back, so a record no successful comparison used is stale.
+        def c(n):
+            return ['const', ['name', n], []]
+        def app(f, *xs):
+            for x in xs:
+                f = ['app', f, x]
+            return f
+        def name(*parts):
+            return app(c(f'Lean.Name.mkStr{len(parts)}'), *[['str', x] for x in parts])
+        def ident(raw, decl):
+            pre = app(c('List.cons'), c('T'), app(c('Lean.Syntax.Preresolved.decl'), name(*decl.split('.')),
+                                                  app(c('List.nil'), c('String'))), app(c('List.nil'), c('T')))
+            return app(c('Lean.Syntax.ident'), c('Lean.SourceInfo.none'),
+                       app(c("String.toRawSubstring'"), ['str', raw]), name(*raw.split('.')), pre)
+        def gen(raw, decl, k):
+            return CHECK.quoted_identifiers(dict(kernel=['app', ident(raw, decl), ['nat', k]], attributes={}))
+        self.renames = CHECK.MAP.Renamer([dict(old='Jaune.B256', new='Jaune.U256', kind='declaration')])
+        self.before = snapshot({'N.r': constant(), 'g1': gen('B256', 'Jaune.B256', 1)}, ['N.r'])
+        self.after = snapshot({'N.r': constant(), 'g1': gen('Jaune.U256', 'Jaune.U256', 2),
+                               'g2': gen('U256', 'Jaune.U256', 1)}, ['N.r'])
+        self.before['owners'] = {'g1': 'M', 'N.r': 'M'}
+        record = dict(module='M', constant='g1', before='B256', after='Jaune.U256', map_old='Jaune.B256',
+                      map_new='Jaune.U256', decision='d', reason='r', precedent='p')
+        used = set()
+        # g1 tries its same-named image first: the record is accepted there,
+        # then the payload differs and the pairing is rolled back; g1 then
+        # matches g2 by the names-only respelling. (g1's image is left
+        # unmatched, so the run fails; the record must not count as used.)
+        comparison = CHECK.Comparison(self.before, self.after, self.renames, [record], used, collect=True)
+        with self.assertRaises(CHECK.Mismatch):
+            comparison.run()
+        self.assertEqual(comparison.pairs.get('g1'), 'g2')
+        self.assertEqual(used, set())
+        self.assertEqual(comparison.reviewed_here, set())
+
+    def test_aux_module_component_is_single_pass_and_injective(self):
+        # Finding 8: chained module rows do not compose, and mangling must be injective.
+        rows = self.entries(('A.M1', 'A.M2', 'module', {}), ('A.M2', 'A.M3', 'module', {}))
+        self.renames = rows
+        self.before = snapshot({'N._aux_A_M1___x': constant()}, ['N._aux_A_M1___x'])
+        self.after = snapshot({'N._aux_A_M2___x': constant()}, ['N._aux_A_M2___x'])
+        self.assertEqual(self.run_check()['status'], 'OK')
+        self.after = snapshot({'N._aux_A_M3___x': constant()}, ['N._aux_A_M3___x'])
+        with self.assertRaisesRegex(CHECK.Mismatch, 'authored constant set changed'):
+            self.run_check()
+        self.renames = self.entries(('A.B_C', 'A.X', 'module', {}), ('A_B.C', 'A.Y', 'module', {}))
+        with self.assertRaisesRegex(ValueError, 'mangle alike'):
+            self.run_check()
+
+    def test_name_literal_components_and_data_literals(self):
+        # Finding 9: a literal is respelled only as a name of plain
+        # components, and a single-backtick data literal only where the
+        # applied plan respelled it.
+        self.renames = self.entries(('N.old', 'N.new', 'declaration', {}))
+        def check(before, after, source=None, edits=None):
+            self.before = snapshot({'N.old': constant(), 'N.m': self.lit_kernel(*before)}, ['N.old', 'N.m'])
+            self.after = snapshot({'N.new': constant(), 'N.m': self.lit_kernel(*after)}, ['N.new', 'N.m'])
+            if source is not None:
+                self.before['module_sources'] = {'M': source}
+                self.before['owners'] = {'N.m': 'M', 'N.old': 'M'}
+            return CHECK.Comparison(self.before, self.after, self.renames, plan_edits=edits).run()
+        self.assertEqual(check(('N', 'old'), ('N', 'new'))['status'], 'OK')
+        # One component holding a dot is not the dotted name.
+        with self.assertRaises(CHECK.Mismatch):
+            check(('N.old',), ('N', 'new'))
+        with self.assertRaises(CHECK.Mismatch):
+            check(('N.old',), ('N.new',))
+        # A double-backtick literal (resolved by Lean) follows the rename.
+        self.assertEqual(check(('N', 'old'), ('N', 'new'), source='def m := ``old\n')['status'], 'OK')
+        # A single-backtick literal is data: unchanged unless the plan respelled it there.
+        src = 'def m := `N.old\n'
+        with self.assertRaises(CHECK.Mismatch):
+            check(('N', 'old'), ('N', 'new'), source=src)
+        self.assertEqual(check(('N', 'old'), ('N', 'old'), source=src)['status'], 'OK')
+        start = src.index('N.old')
+        self.assertEqual(check(('N', 'old'), ('N', 'new'), source=src,
+                               edits={('M', start + 2, start + 5, 'old', 'new')})['status'], 'OK')
+        # Backticks in comments and strings are not literals.
+        self.assertEqual(check(('N', 'old'), ('N', 'new'),
+                               source='/-- see `N.old` -/\ndef m := ``old -- `N.old\n#eval "`N.old"\n')['status'], 'OK')
+
+    def test_derived_namespace_moves_only_when_every_member_moves(self):
+        # Finding 10: an authored member left behind blocks the derived
+        # namespace from carrying compiler-named constants and literals.
+        rows = self.entries(('N.Inv.a', 'N.Invariant.a', 'declaration', {}),
+                            ('N.Inv.b', 'N.Invariant.b', 'declaration', {}))
+        def run(stay):
+            extra_b = {'N.Inv.c': constant(3)} if stay else {}
+            self.before = snapshot({'N.Inv.a': constant(), 'N.Inv.b': constant(2), 'N.Inv.tacticFoo': constant(7),
+                                    'gen': self.lit_kernel('N', 'Inv', 'tacticFoo'), **extra_b},
+                                   ['N.Inv.a', 'N.Inv.b', *extra_b])
+            self.after = snapshot({'N.Invariant.a': constant(), 'N.Invariant.b': constant(2),
+                                   'N.Invariant.tacticFoo': constant(7),
+                                   'gen': self.lit_kernel('N', 'Invariant', 'tacticFoo'), **extra_b},
+                                  ['N.Invariant.a', 'N.Invariant.b', *extra_b])
+            self.renames = rows
+            return self.run_check()
+        self.assertEqual(run(False)['status'], 'OK')
+        with self.assertRaises(CHECK.Mismatch):
+            run(True)
+        # The same holds for a literal naming the namespace itself (rule D).
+        rows_only = lambda stay: (snapshot({'N.Inv.a': constant(), 'N.Inv.b': constant(2), 'gen': self.lit_kernel('N', 'Inv'),
+                                            **({'N.Inv.c': constant(3)} if stay else {})},
+                                           ['N.Inv.a', 'N.Inv.b'] + (['N.Inv.c'] if stay else [])),
+                                  snapshot({'N.Invariant.a': constant(), 'N.Invariant.b': constant(2),
+                                            'gen': self.lit_kernel('N', 'Invariant'), **({'N.Inv.c': constant(3)} if stay else {})},
+                                           ['N.Invariant.a', 'N.Invariant.b'] + (['N.Inv.c'] if stay else [])))
+        self.before, self.after = rows_only(False)
+        self.assertEqual(self.run_check()['status'], 'OK')
+        self.before, self.after = rows_only(True)
+        with self.assertRaises(CHECK.Mismatch):
+            self.run_check()
+
+    def test_dot_identifier_leaf_is_checked_on_every_resolution(self):
+        # Finding 12: a reference recorded over the identifier's own range
+        # that names another leaf is refused, as for the shifted range.
+        with tempfile.TemporaryDirectory() as tmp:
+            data = self.dot_export('#guard x = .reg', 'reg')
+            start = '#guard x = .reg'.index('.reg')
+            data['index']['references'][json.dumps({'c': {'m': 'M', 'n': 'N.T.div'}})] = dict(
+                definition=None, usages=[[0, start + 1, 0, start + 4]])
+            data['constants']['N.T.div'] = dict(constant(2), equation_origin=None)
+            path = Path(tmp) / 'x.json'
+            path.write_text(json.dumps(data))
+            with self.assertRaisesRegex(ValueError, 'dot identifier'):
+                CHECK.read_exports([path])
 
     def test_module_named_auxiliaries_follow_module_rows(self):
         self.renames = self.entries(('N.old', 'N.new', 'declaration', {}), ('A.Mod', 'A.Module', 'module', {}))

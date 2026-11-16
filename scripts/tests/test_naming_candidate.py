@@ -433,5 +433,24 @@ class ReviewedQuotationTests(unittest.TestCase):
         with self.assertRaisesRegex(CHECK.FIDELITY.Mismatch, 'stale'):
             CHECK.stale_quotations([{'constant': 'a'}, {'constant': 'b'}], {0})
 
+
+class PlanBindingTests(unittest.TestCase):
+    def test_plan_is_bound_to_map_snapshot_and_status(self):
+        # Finding 15: --plan is accepted only for this map and this before
+        # snapshot, and only as a planned plan.
+        before = json.dumps(dict(candidate=dict(modules={'M': dict(path='M.lean')}))).encode()
+        mapping = b'{"entries": []}'
+        def plan(**over):
+            row = dict(status='planned', map_sha256=CHECK.sha(mapping), snapshot_sha256=CHECK.sha(before),
+                       files=[dict(path='M.lean', edits=[dict(start=1, end=4, old='abc', new='abd')])])
+            row.update(over)
+            return json.dumps(row).encode()
+        self.assertEqual(CHECK.plan_edits(plan(), mapping, before), {('M', 1, 4, 'abc', 'abd')})
+        for bad, message in ((dict(status='applied'), 'not planned'), (dict(map_sha256='0' * 64), 'another map'),
+                             (dict(snapshot_sha256='0' * 64), 'another before snapshot')):
+            with self.assertRaisesRegex(ValueError, message):
+                CHECK.plan_edits(plan(**bad), mapping, before)
+
+
 if __name__ == '__main__':
     unittest.main()
