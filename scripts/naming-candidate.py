@@ -57,6 +57,10 @@ def git(root, *args):
 
 def inventory(root, source_dirs):
     paths = git(root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard').decode().split('\0')
+    # A tracked file deleted in the working tree (a module row's move) is not
+    # part of the candidate; its replacement is an untracked file.
+    deleted = set(git(root, 'ls-files', '-z', '--deleted').decode().split('\0'))
+    paths = [p for p in paths if p not in deleted]
     files, modules = {}, {}
     dirs = sorted(set(source_dirs), key=lambda p: len(Path(p).parts), reverse=True)
     for relative in sorted(set(paths) - {''}):
