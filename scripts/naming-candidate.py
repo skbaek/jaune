@@ -194,6 +194,7 @@ def extend_items(merged, data):
     merged['receipts'].extend(data['receipts'])
     merged['schemas'] |= set(data.get('schemas', ()))
     merged.setdefault('derived', {}).update(data.get('derived', {}))
+    merged['dot_identifiers_resolved'] = merged.get('dot_identifiers_resolved', 0) + data.get('dot_identifiers_resolved', 0)
 
 
 def union_environment(bundles):

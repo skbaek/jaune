@@ -437,6 +437,95 @@ class NamingFidelityTests(unittest.TestCase):
         with self.assertRaises(CHECK.Mismatch):
             run('Other', 'Otherwise', 'N.Other')
 
+    def dot_export(self, source, ctor, ref_ctor=None):
+        """A one-module export whose checked command contains `.ctor` with the
+        compiler's reference recorded over the dot-inclusive range."""
+        start = source.index('.' + ctor)
+        ref = ref_ctor or ctor
+        refs = {json.dumps({'c': {'m': 'M', 'n': f'N.T.{ref}'}}): dict(definition=None, usages=[[0, start, 0, start + 1 + len(ctor)]])}
+        b = len(source[:start].encode())
+        syntax = ['syntax', 'Lean.Parser.Term.dotIdent', [['atom', '.'], ['ident', ctor, b + 1, b + 1 + len(ctor.encode())]]]
+        return dict(schema_version=7, lean_version='x', source=source,
+                    index=dict(version=5, module='M', directImports=[], references=refs, decls={}),
+                    constants={f'N.T.{ref}': dict(constant(), equation_origin=None)}, guards=[], attribute_syntax=[],
+                    checked_commands=[dict(syntax=syntax, literal_names=False, start=0, end=len(source.encode()),
+                                           expected_failure_scope=False)], imports={})
+
+    def test_dot_identifiers_resolve_over_the_dot(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            def read(data, label):
+                path = Path(tmp) / f'{label}.json'
+                path.write_text(json.dumps(data))
+                return CHECK.read_exports([path])
+            self.renames = self.entries(('N.T.reg', 'N.T.plain', 'constructor', {}))
+            self.before = read(self.dot_export('#guard x = .reg', 'reg'), 'b')
+            self.after = read(self.dot_export('#guard x = .plain', 'plain'), 'a')
+            self.assertEqual(self.before['checks'][0][2][1], ['name', 'N.T.reg'])
+            self.assertEqual(self.before['dot_identifiers_resolved'], 1)
+            self.assertEqual(self.run_check()['status'], 'OK')
+            # Control: a dot identifier naming a different constructor fails
+            # (both constructors exist on each side; only the check differs).
+            def both(source, ctor, label):
+                data = self.dot_export(source, ctor)
+                data['constants'] = {'N.T.reg' if 'b' in label else 'N.T.plain': dict(constant(1), equation_origin=None),
+                                     'N.T.div': dict(constant(2), equation_origin=None)}
+                return read(data, label)
+            self.before = both('#guard x = .reg', 'reg', 'b2')
+            self.after = read(dict(self.dot_export('#guard x = .div', 'div'),
+                                   constants={'N.T.plain': dict(constant(1), equation_origin=None),
+                                              'N.T.div': dict(constant(2), equation_origin=None)}), 'a2')
+            with self.assertRaises(CHECK.Mismatch):
+                self.run_check()
+            # Control: a shifted lookup that finds a different constant than the token refuses.
+            with self.assertRaisesRegex(ValueError, 'dot identifier'):
+                read(self.dot_export('#guard x = .reg', 'reg', ref_ctor='div'), 'bad')
+
+    def test_quoted_spelling_with_projection_fields(self):
+        def c(n):
+            return ['const', ['name', n], []]
+        def app(f, *xs):
+            for x in xs:
+                f = ['app', f, x]
+            return f
+        def name(*parts):
+            return app(c(f'Lean.Name.mkStr{len(parts)}'), *[['str', x] for x in parts])
+        def ident(raw, decl, fields):
+            pre = app(c('List.cons'), c('T'), app(c('Lean.Syntax.Preresolved.decl'), name(*decl.split('.')),
+                      app(c('List.cons'), c('String'), ['str', fields[0]], app(c('List.nil'), c('String')))),
+                      app(c('List.nil'), c('T')))
+            return app(c('Lean.Syntax.ident'), c('Lean.SourceInfo.none'),
+                       app(c("String.toRawSubstring'"), ['str', raw]), name(*raw.split('.')), pre)
+        self.renames = CHECK.MAP.Renamer([dict(old='N.Inv.core', new='N.Invariant.core', kind='declaration'),
+                                          dict(old='N.Inv.x', new='N.Invariant.x', kind='declaration')])
+        def verdict(before, after):
+            self.before = snapshot({'N.m': CHECK.quoted_identifiers(dict(kernel=before, attributes={}))}, ['N.m'])
+            self.after = snapshot({'N.m': CHECK.quoted_identifiers(dict(kernel=after, attributes={}))}, ['N.m'])
+            return self.run_check()['status']
+        self.assertEqual(verdict(ident('core.trans', 'N.Inv.core', ['trans']),
+                                 ident('core.trans', 'N.Invariant.core', ['trans'])), 'OK')
+        # Control: a changed field component fails.
+        with self.assertRaisesRegex(CHECK.Mismatch, 'quoted spelling'):
+            verdict(ident('core.trans', 'N.Inv.core', ['trans']), ident('core.symm', 'N.Invariant.core', ['symm']))
+
+    def test_generated_auxiliaries_prefer_their_renamed_parent(self):
+        same = dict(kernel=['definition', 'safe', ['nat', 1]], attributes={})
+        self.renames = self.entries(('N.a', 'N.z', 'declaration', {}), ('N.b', 'N.y', 'declaration', {}))
+        self.before = snapshot({'N.a': constant(), 'N.b': constant(2), 'N.a.match_1': same, 'N.b.match_1': same},
+                               ['N.a', 'N.b'])
+        self.after = snapshot({'N.z': constant(), 'N.y': constant(2), 'N.z.match_1': same, 'N.y.match_1': same},
+                              ['N.z', 'N.y'])
+        self.before['holders'] = {'N.a.match_1': {'A'}, 'N.b.match_1': {'B'}}
+        self.after['holders'] = {'N.z.match_1': {'A'}, 'N.y.match_1': {'B'}}
+        self.assertEqual(self.run_check()['status'], 'OK')
+        # Control: without the preference the identical matchers cross modules.
+        original = CHECK.Comparison.preferred_generated
+        try:
+            CHECK.Comparison.preferred_generated = lambda self, name: self.name(name)
+            with self.assertRaisesRegex(CHECK.Mismatch, 'generated constant'):
+                self.run_check()
+        finally:
+            CHECK.Comparison.preferred_generated = original
+
     def test_module_named_auxiliaries_follow_module_rows(self):
         self.renames = self.entries(('N.old', 'N.new', 'declaration', {}), ('A.Mod', 'A.Module', 'module', {}))
         aux = 'N._aux_A_Mod___elabRules_N_tac_1.go'

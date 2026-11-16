@@ -254,6 +254,7 @@ def read_exports(paths):
     owners, holders = {}, {}
     checks = []
     derived = {}
+    dot_resolved = []
     item_modules = {key: [] for key in ITEMS}
     coalesced = set()
     version = None
@@ -321,9 +322,33 @@ def read_exports(paths):
             owners.setdefault(name, module)
             holders.setdefault(name, set()).add(module)
 
+        source_bytes = data['source'].encode()
+
+        def dot_ident(value):
+            """An ident directly under `Lean.Parser.Term.dotIdent`: the compiler
+            records its reference over `.name` (from the dot), one byte before
+            the ident's own range. Resolve it there, and only there."""
+            ident = value[2][1]
+            s, e = ident[2], ident[3]
+            found = locations[s, e] - failed_names
+            if not found and s > 0 and source_bytes[s - 1:s] == b'.':
+                found = locations[s - 1, e] - failed_names
+                if found and any(n.rsplit('.', 1)[-1] != ident[1] for n in found):
+                    raise ValueError(f'{module}: dot identifier .{ident[1]} resolves to {sorted(found)}')
+                if found:
+                    dot_resolved.append(ident[1])
+            if len(found) > 1:
+                raise ValueError('ambiguous compiler reference in a dot identifier')
+            name = ['name', next(iter(found))] if found else ['token', ident[1]]
+            return [value[0], value[1], [syntax(value[2][0]), name]]
+
         def syntax(value, literal_names=False):
             if not isinstance(value, list):
                 return value
+            if (len(value) == 3 and value[:2] == ['syntax', 'Lean.Parser.Term.dotIdent'] and
+                    isinstance(value[2], list) and len(value[2]) == 2 and isinstance(value[2][1], list) and
+                    len(value[2][1]) == 4 and value[2][1][0] == 'ident' and not literal_names):
+                return dot_ident(value)
             if len(value) == 4 and value[0] == 'ident':
                 if literal_names:
                     # AxiomAudit reads these identifiers with getId, without
@@ -359,7 +384,8 @@ def read_exports(paths):
     return dict(constants=constants, roots=roots, guards=guards, attributes=attributes,
                 modules=modules, receipts=receipts, version=version, checks=checks,
                 coalesced_equations=sorted(coalesced), owners=owners, holders=holders,
-                item_modules=item_modules, schemas=schemas, derived=derived)
+                item_modules=item_modules, schemas=schemas, derived=derived,
+                dot_identifiers_resolved=len(dot_resolved))
 
 
 class Comparison:
@@ -535,8 +561,20 @@ class Comparison:
     def quoted(self, value, path):
         """Expected after-side spelling and raw marker of a before-side quotation."""
         decoded, spelling, raw = value[1], value[2], value[3]
-        decls = [d[1][1] for d in decoded if d[0] == 'decl']
-        expected = {self.respell(spelling, d, path) for d in decls}
+        expected = set()
+        for d in decoded:
+            if d[0] != 'decl':
+                continue
+            fields = d[2] if len(d) > 2 else []
+            tail = '.'.join(fields)
+            if fields and spelling.endswith('.' + tail) and spelling != tail:
+                # Pre-resolved with projections (`coreFrame.trans`): the
+                # declaration part respells names-only; the field components
+                # stay byte-identical (a renamed field therefore fails).
+                head = spelling[:-len(tail) - 1]
+                expected.add(self.respell(head, d[1][1], path) + '.' + tail)
+            else:
+                expected.add(self.respell(spelling, d[1][1], path))
         if len(expected) != 1:
             raise Mismatch(f'{path}: quoted spelling {spelling!r} respells ambiguously: {sorted(expected)}')
         return next(iter(expected)), self.raw_marker(raw, spelling)
@@ -740,6 +778,22 @@ class Comparison:
                 raise Mismatch(f'module {module}: direct imports changed: expected '
                                f'{[e[0] for e in expected]}, found {[e[0] for e in actual]}')
 
+    def preferred_generated(self, name):
+        mapped = self.name(name)
+        if mapped != name:
+            return mapped
+        private = MAP.split_private(name) if name.startswith('_private.') else None
+        user = private[2] if private else name
+        parts = user.split('.')
+        for i in range(len(parts) - 1, 0, -1):
+            parent = '.'.join(parts[:i])
+            if parent in self.mapping.exact and all(self.GENERATED_SUFFIX.match(x) for x in parts[i:]):
+                renamed = '.'.join([self.mapping(parent)] + parts[i:])
+                if private:
+                    return f'_private.{self.mapping.module(private[0])}.{private[1]}.{renamed}'
+                return renamed
+        return mapped
+
     def fail(self, message):
         """Raise at the first mismatch, or with `collect` record every one and
         raise them together at the end (the verdict fails either way)."""
@@ -775,16 +829,28 @@ class Comparison:
         # kernel/attribute graphs bijectively, including unreferenced nodes.
         buckets = defaultdict(list)
         for name in sorted(self.generated_right):
-            buckets[encoded(self.normalize(self.right[name], 'after', True))].append(name)
+            try:
+                buckets[encoded(self.normalize(self.right[name], 'after', True))].append(name)
+            except Mismatch as error:
+                self.fail(f'constant {name} (after): {error}')
         for name in sorted(self.generated_left):
             if name in self.pairs:
                 continue
-            key = encoded(self.normalize(self.left[name], 'before', True))
+            try:
+                key = encoded(self.normalize(self.left[name], 'before', True))
+            except Mismatch as error:
+                self.fail(f'constant {name}: {error}')
+                continue
             candidates = [n for n in buckets[key] if n not in self.reverse]
             # Try the same (mapped) name first: for a compiler-named declaration
-            # (an anonymous instance) its comparison explains a failure.
-            same, same_error = self.name(name), None
-            if same in self.generated_right and same not in self.reverse and same not in candidates:
+            # (an anonymous instance) its comparison explains a failure. A
+            # generated auxiliary (`P.match_5`) is tried first as its renamed
+            # parent's auxiliary with the same suffix: structurally identical
+            # matchers of different modules must not cross (a preference only;
+            # equality and holders are still checked).
+            same, same_error = self.preferred_generated(name), None
+            if same in self.generated_right and same not in self.reverse:
+                candidates = [n for n in candidates if n != same]
                 saved = self.pairs.copy(), self.reverse.copy(), self.checked.copy()
                 try:
                     self.pair(name, same)
@@ -826,8 +892,15 @@ class Comparison:
                     raise ValueError(f'{key}: module record does not match its items')
                 # The after side keeps its names; normalizing it only reduces a
                 # quoted identifier's raw text to its spelling marker.
-                return Counter(encoded([self.component(m, side), self.normalize(item, side)])
-                               for m, item in zip(owners, items))
+                counted = Counter()
+                for index, (m, item) in enumerate(zip(owners, items)):
+                    try:
+                        counted[encoded([self.component(m, side), self.normalize(item, side)])] += 1
+                    except Mismatch as error:
+                        if not self.collect:
+                            raise
+                        self.fail(f'{key}[{side} {index}, module {m}]: {error}')
+                return counted
             left, right = tagged(self.before, 'before'), tagged(self.after, 'after')
             if left != right:
                 where = sorted({json.loads(k)[0] or '<module unrecorded>' for k in (left - right) + (right - left)})
@@ -855,6 +928,8 @@ def check(before, after, mapping, reviewed=None, reviewed_used=None, collect=Fal
     result = Comparison(before, after, renames, reviewed, reviewed_used, collect).run()
     result.update(before=before['receipts'], after=after['receipts'],
                   before_imports=before['modules'], after_imports=after['modules'],
+                  before_dot_identifiers_resolved=before.get('dot_identifiers_resolved', 0),
+                  after_dot_identifiers_resolved=after.get('dot_identifiers_resolved', 0),
                   before_coalesced_equations=before.get('coalesced_equations', []),
                   after_coalesced_equations=after.get('coalesced_equations', []))
     return result

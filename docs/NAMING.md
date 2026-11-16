@@ -634,9 +634,22 @@ each with its controls in `scripts/tests/test_naming_fidelity.py`:
   path: the planner refuses an authored declaration inside a renamed namespace
   without its own row.
 
+- A quoted identifier pre-resolved to a declaration with projection fields
+  (`coreFrame.trans`) respells its declaration part names-only and keeps the
+  field components byte-identical; a changed field fails.
+- A dot identifier (`.reg`) directly under `Lean.Parser.Term.dotIdent` is
+  resolved by the compiler reference recorded over the range that starts one
+  byte earlier at its `.`; a shifted reference naming a different constant
+  than the token is refused. Verdicts count these resolutions
+  (`before/after_dot_identifiers_resolved`).
+- Pairing preference: a generated auxiliary (`P.match_5`) is first tried
+  against its renamed parent's auxiliary with the same suffix, so
+  structurally identical matchers of different modules do not cross;
+  equality and holder checks are unchanged.
+
 `naming-candidate.py compare --collect-all` reports every mismatch, in every
-environment, in one run instead of stopping at the first; the verdict still
-fails on any mismatch.
+environment, in one run instead of stopping at the first (normalization errors
+are recorded per item); the verdict still fails on any mismatch.
 
 The low-level comparator's verdict remains `exported-modules`. It can compare
 archived schema-3 to schema-6 exports as well as schema 7 (the candidate
