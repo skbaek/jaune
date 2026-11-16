@@ -239,6 +239,14 @@ Version-2 syntax metadata (both exporters) adds compiler-derived rows:
   the capture model below in the quoting command's scope and renames it; one
   without a unique resolution (typically a quoted local binder) is reported.
 
+Lean-generated constructor auxiliaries `C.injEq` and `C.inj` follow an
+exact row for the constructor `C` without a row of their own; authorable
+descendants such as `ext` still need rows.
+
+A wildcard alternative `| _ => ...` that Lean expands into the constructors it
+covers carries their references, but spells no name; a constructor rename
+leaves it unchanged.
+
 Numeric literals (`0x7f`) and import module names are not candidate
 identifiers. A namespace renamed only through its members (at least two rows
 agreeing on a rename of its last component, `Gloas.Inv` -> `Gloas.Invariant`)
@@ -308,6 +316,19 @@ not Git HEAD alone; committing identical bytes does not invalidate a plan.
 Successful application is still followed by an owned build and N4 comparison.
 Unresolved constructs remain refusals; whole-tree accounting does not waive
 them.
+
+A project that requires the renamed project as a Lake package (Blanc
+consuming Jaune) plans with `--consumer --dependency-snapshot DEP/snapshot.json`,
+where the dependency snapshot is the dependency's own whole-tree capture at the
+revision the consumer imports. Every consumer import from that package must be
+a captured module whose package source (`.lake/packages/...`) has the captured
+digest. The dependency's constants complete the capture universe, so a new
+name that would be captured by a dependency constant the consumer never
+mentions is still qualified. A module row naming a dependency module moves no
+file; the consumer's imports of it are rewritten and other spellings are
+reported as usual. Relocation rows of dependency modules are refused for a
+consumer. The plan records `consumer` and the bound dependency captures, and
+apply recomputes with them.
 
 Module rows move the file within its source directory and rewrite every import
 whose lexed position matches Lean's header parse of that file (a mismatch
@@ -567,6 +588,19 @@ The compiler header inventory is retained and bound to the source inventory.
 Hyphenated script filenames remain inventoried. Selected sources using Lean's
 `module` visibility system are currently refused because that visibility has
 not yet been added to the constant exporter.
+
+A Lake project that consumes Jaune as a package (Blanc) has no exporter
+target of its own. Pass `--tool-root JAUNE_TOOL_CHECKOUT --tool-build-prefix
+BUILD_ARGV_JSON`: the exporter (which imports only Lean) is built there with
+that checkout's owned-build prefix and runs in the candidate's `lake env`. The
+two `lean-toolchain` files must be byte-identical. The snapshot records
+`tool_root`, and its `tool_sources` digests are read from that checkout and
+rechecked after export.
+
+`--plan-only` captures for rename planning only: the bundles and imports are
+bound as usual, but the kernel-graph reader is not run, so forms N4 does not
+yet support (a `local`/`scoped` attribute command in a consumer) do not block
+planning. The snapshot records `purpose: plan`, and `compare` refuses it.
 
 All three command arguments are nonempty JSON argv arrays, never shell text.
 The build prefix is the host's authorized owned-build invocation, ending just

@@ -61,6 +61,28 @@ class NamingApplyTests(unittest.TestCase):
         self.assertEqual(problems, [])
         self.assertEqual(edits[0]['new'], '.gasOp')
 
+    def test_wildcard_alternative_spells_no_constructor(self):
+        # `cases r with | log k => ... | _ => rfl`: Lean attributes the covered
+        # constructors to the `_`; a constructor rename leaves the wildcard alone.
+        text = 'def f (r : Op) : Nat := by\n  cases r with\n  | gas => exact 1\n  | _ => exact 0\n'
+        index = index_for(text, [('gas', 'Pilot.Op.gas', 0, False), ('_', 'Pilot.Op.gas', 0, False)])
+        edits, problems = M.plan_file(text, index, [entry('Pilot.Op.gas', 'Pilot.Op.gasOp')])
+        self.assertEqual(problems, [])
+        self.assertEqual([(e['old'], e['new']) for e in edits], [('gas', 'gasOp')])
+
+    def test_generated_constructor_auxiliary_follows_its_constructor(self):
+        text = 'example := Op.gas.injEq\nexample := Op.gas.ext\n'
+        index = index_for(text, [('Op.gas.injEq', 'Pilot.Op.gas.injEq', 0, False),
+                                 ('Op.gas.ext', 'Pilot.Op.gas.ext', 0, False)])
+        edits, problems = M.plan_file(text, index, [entry('Pilot.Op.gas', 'Pilot.Op.gasOp')])
+        self.assertEqual([(e['old'], e['new']) for e in edits], [('Op.gas.injEq', 'Op.gasOp.injEq')])
+        # The capture model knows the generated auxiliary's new name.
+        universe = M.Universe({'Pilot.Op.gas', 'Pilot.Op.gas.injEq'}, M.MAP.Renamer([entry('Pilot.Op.gas', 'Pilot.Op.gasOp')]))
+        self.assertIn('Pilot.Op.gasOp.injEq', universe.after)
+        # An authorable descendant (`ext`) still needs its own row.
+        self.assertEqual([p['reason'] for p in problems],
+                         ['descendant of renamed declaration needs its own map row'])
+
     def test_unresolved_use_is_reported(self):
         text = 'def a (x : Tx) := x.gas\n'
         _, problems = M.plan_file(text, index_for(text, []), [entry()])

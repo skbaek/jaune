@@ -132,13 +132,17 @@ def current_artifacts(snapshot):
             raise ValueError(f'{field} changed since capture; re-export current imports')
 
 
-def plan_sources(root, candidate, bundles, mapping):
-    """Pure planning over an already-validated source inventory and bundles."""
+def plan_sources(root, candidate, bundles, mapping, consumer=False, extra_names=()):
+    """Pure planning over an already-validated source inventory and bundles.
+
+    `consumer`: the map renames a dependency's names (a project that requires
+    Jaune as a package); `extra_names` completes the capture universe with
+    the dependency's own constants."""
     by_path = {row['path']: name for name, row in candidate['modules'].items()}
     renamer = MAP.Renamer(mapping['entries'])
     affected = renamer.words()
     records, texts = [], {}
-    universe = APPLY.Universe(universe_names(bundles), renamer, compiler_named(bundles))
+    universe = APPLY.Universe(universe_names(bundles) | set(extra_names), renamer, compiler_named(bundles))
     excluded = {}
     if 'scripts/naming-inventory.json' in candidate['files']:
         raw = APPLY.safe_path(root, 'scripts/naming-inventory.json').read_bytes()
@@ -187,7 +191,10 @@ def plan_sources(root, candidate, bundles, mapping):
                             indexed=bundle is not None, edits=edits, unresolved=problems))
     by_record = {row['path']: row for row in records}
     plan_sources.capture = capture
-    moves = plan_modules(candidate, texts, by_record, renamer)
+    moves = plan_modules(candidate, texts, by_record, renamer, consumer)
+    if consumer and any(row['kind'] == 'relocation' and row['from_module'] not in candidate['modules']
+                        for row in mapping['entries']):
+        raise ValueError('relocation rows of dependency modules are not supported for a consumer')
     plan_relocations(candidate, texts, by_record, bundles, mapping, renamer)
     for row in records:
         row['edits'].sort(key=lambda e: (e['start'], e['end']))
@@ -233,16 +240,22 @@ def source_dir(candidate, path):
     raise ValueError(f'{path}: outside every source directory')
 
 
-def plan_modules(candidate, texts, records, renamer):
+def plan_modules(candidate, texts, records, renamer, consumer=False):
     """Module rows: move the file, rewrite every compiler-confirmed import, and
     report the old module name anywhere else in code (lakefile roots, audit
-    module prefixes, name literals)."""
+    module prefixes, name literals). For a consumer, a row naming a dependency
+    module moves no file here; only the consumer's imports and spellings of it
+    are handled."""
     moves = []
     if not renamer.modules:
         return moves
     modules = candidate['modules']
     targets = set()
     for old, new in sorted(renamer.modules.items()):
+        if old not in modules and consumer:
+            if new in modules:
+                raise ValueError(f'dependency module row targets a local module: {new}')
+            continue
         if old not in modules:
             raise ValueError(f'module row names an unknown module: {old}')
         path = modules[old]['path']
@@ -424,9 +437,51 @@ def plan_relocations(candidate, texts, records, bundles, mapping, renamer):
                                            new=insertion, declaration=f'relocation {sorted(names)} <- {source}'))
 
 
-def build_plan(root, snapshot_path, map_path):
+def dependency_names(snapshot, dependency_path):
+    """Constants of a dependency capture, bound to the dependency sources the
+    consumer actually imports: every consumer import from that package must be
+    a captured module whose package source has the captured digest."""
+    dependency_path = Path(dependency_path).resolve(strict=True)
+    data = CANDIDATE.read_snapshot(dependency_path, fidelity=False)
+    modules = data['candidate']['modules']
+    marker = '/.lake/build/lib/lean/'
+    package_roots, bound = set(), 0
+    for name, parts in snapshot['artifacts'].items():
+        if name in snapshot['candidate']['modules'] or name not in modules:
+            continue
+        olean = parts['olean']['path']
+        if marker not in olean:
+            raise ValueError(f'dependency artifact outside a Lake build tree: {name}')
+        package = olean[:olean.index(marker)]
+        source = Path(package) / modules[name]['path']
+        if not source.is_file() or CANDIDATE.file_sha(source) != modules[name]['sha256']:
+            raise ValueError(f'dependency capture does not match the imported package source: {name}')
+        package_roots.add(package)
+        bound += 1
+    if len(package_roots) != 1:
+        raise ValueError('dependency capture binds no single imported package')
+    package = package_roots.pop()
+    for name, parts in snapshot['artifacts'].items():
+        if parts['olean']['path'].startswith(package + '/') and name not in modules:
+            raise ValueError(f'consumer imports a package module the dependency capture lacks: {name}')
+    names = set()
+    for module, path in data['export_paths'].items():
+        export = json.loads(Path(path).read_bytes())
+        names.update(export.get('constants', {}))
+        for key in export['index']['references']:
+            const = json.loads(key).get('c')
+            if const:
+                names.add(const['n'])
+    record = dict(snapshot=str(dependency_path), snapshot_sha256=CANDIDATE.file_sha(dependency_path),
+                  package=package, bound_modules=bound, names=len(names))
+    return names, record
+
+
+def build_plan(root, snapshot_path, map_path, consumer=False, dependencies=()):
     snapshot_path = Path(snapshot_path).resolve(strict=True)
     mapping = read_map(map_path)
+    if consumer != bool(dependencies):
+        raise ValueError('a consumer plan needs --dependency-snapshot, and only a consumer takes one')
     snapshot = CANDIDATE.read_snapshot(snapshot_path, fidelity=False)
     snapshot.pop('export_paths')
     current_inventory(root, snapshot['candidate'])
@@ -436,7 +491,12 @@ def build_plan(root, snapshot_path, map_path):
         data = json.loads((snapshot_path.parent / row['path']).read_bytes())
         bundles[module] = {key: data[key] for key in ('source', 'index')}
         bundles[module]['names'] = sorted(data.get('constants', {}))
-    records, moves = plan_sources(root, snapshot['candidate'], bundles, mapping)
+    extra, dependency_records = set(), []
+    for dependency in dependencies:
+        names, record = dependency_names(snapshot, dependency)
+        extra |= names
+        dependency_records.append(record)
+    records, moves = plan_sources(root, snapshot['candidate'], bundles, mapping, consumer, extra)
     current_inventory(root, snapshot['candidate'])
     tools = {name: CANDIDATE.file_sha(ROOT / 'scripts' / name) for name in
              ('naming-tree.py', 'naming-candidate.py', 'apply-naming-map.py',
@@ -446,6 +506,7 @@ def build_plan(root, snapshot_path, map_path):
                 map_sha256=CANDIDATE.file_sha(map_path), tool_sources=tools,
                 inventory_sha256=APPLY.digest(CANDIDATE.FIDELITY.encoded(snapshot['candidate']).encode()),
                 files=records, moves=moves, name_capture=plan_sources.capture,
+                **(dict(consumer=True, dependencies=dependency_records) if consumer else {}),
                 status='unresolved' if any(r['unresolved'] for r in records) else 'planned')
 
 
@@ -455,7 +516,8 @@ def apply_plan(root, plan, map_path):
         raise ValueError('only a fully resolved whole-Lean-tree plan may be applied')
     if CANDIDATE.file_sha(map_path) != plan['map_sha256']:
         raise ValueError('rename map changed since planning')
-    expected = build_plan(root, Path(plan['snapshot']), map_path)
+    expected = build_plan(root, Path(plan['snapshot']), map_path, plan.get('consumer', False),
+                          [row['snapshot'] for row in plan.get('dependencies', [])])
     if expected != plan:
         raise ValueError('snapshot, tools or plan changed since planning')
     pending, moves = prepare_writes(root, plan['files'], plan.get('moves', []))
@@ -507,6 +569,10 @@ def main():
             p.add_argument('--source-dir', action='append', required=True)
         elif command == 'plan':
             p.add_argument('--snapshot', type=Path, required=True)
+            p.add_argument('--consumer', action='store_true',
+                           help='the tree requires the renamed project as a package (Blanc)')
+            p.add_argument('--dependency-snapshot', type=Path, action='append', default=[],
+                           help="the dependency's own whole-tree capture at the imported revision")
         else:
             p.add_argument('--plan', type=Path, required=True)
     args = parser.parse_args()
@@ -515,7 +581,7 @@ def main():
         if args.command == 'needs':
             result = needs(root, args.source_dir, read_map(args.map))
         elif args.command == 'plan':
-            result = build_plan(root, args.snapshot, args.map)
+            result = build_plan(root, args.snapshot, args.map, args.consumer, args.dependency_snapshot)
         else:
             result = dict(status='applied', files_changed=apply_plan(
                 root, json.loads(args.plan.read_bytes()), args.map))
