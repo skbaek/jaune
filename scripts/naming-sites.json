@@ -142,7 +142,7 @@
    "line": 525,
    "column": 51,
    "token": "list",
-   "sha256": "d0dd9115c08d963e5e905a868bb1cd796d2b16d25a4bd0941d6bcafee6be2982",
+   "sha256": "1d7f25970c7e5cbdc43bc73a01a22ee173f62fd40f31f5106f14cf94144d4c05",
    "decision": "unchanged",
    "reason": "name literal compared against a tactic binder spelling (`list.getId.eraseMacroScopes == `list`); it names no constant and renaming it would change behaviour"
   },

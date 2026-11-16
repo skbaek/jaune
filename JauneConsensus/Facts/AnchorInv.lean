@@ -680,12 +680,12 @@ theorem ok_pres_trans {f1 f2 f3 : CFork} {s : BeaconState P f1} {s1 : BeaconStat
 
 /-- `Pres` facts for a call `h : g … = .ok s'`; extended by `macro_rules` as mutators are proved. -/
 syntax "pres_of " ident : tactic
-macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact (increaseBalance_frame $h).pres)
-macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact (decreaseBalance_frame $h).pres)
-macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact (exitChurn_frame _ $h).pres)
-macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact (consolidationChurn_frame _ $h).pres)
-macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact (queueExcess_frame $h).pres)
-macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact (setPendingConsolidations_frame $h).pres)
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact Frame.pres (increaseBalance_frame $h))
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact Frame.pres (decreaseBalance_frame $h))
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact Frame.pres (exitChurn_frame _ $h))
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact Frame.pres (consolidationChurn_frame _ $h))
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact Frame.pres (queueExcess_frame $h))
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact Frame.pres (setPendingConsolidations_frame $h))
 macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact initiateValidatorExit_pres _ $h)
 macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact slashValidator_pres _ $h)
 macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact switchToCompoundingValidator_pres $h)
@@ -788,9 +788,9 @@ theorem setDepositRequestsStartIndex_frame {s s' : BeaconState P f} {x : U64}
   obtain ⟨g, _, h⟩ := bind_eq_ok_iff.mp h
   cases h; exact ⟨rfl, rfl⟩
 
-macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact (setPendingDeposits_frame $h).pres)
-macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact (setDepositBalanceToConsume_frame $h).pres)
-macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact (setDepositRequestsStartIndex_frame $h).pres)
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact Frame.pres (setPendingDeposits_frame $h))
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact Frame.pres (setDepositBalanceToConsume_frame $h))
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact Frame.pres (setDepositRequestsStartIndex_frame $h))
 
 theorem getValidatorFromDeposit_exitOk {P : Preset} {f : CFork} {pk : BLSPubkey} {wc : Bytes32} {amt : U64}
     {v : Validator} (h : getValidatorFromDeposit P f pk wc amt = .ok v) : ExitOk v := by
@@ -904,7 +904,7 @@ theorem forIn_frame {α : Type} {xs : Array α} {init out : BeaconState P f}
   exact hg a b b' h1
 
 macro_rules | `(tactic| pres_of $h) => `(tactic|
-    (forIn_guard $h array state; exact (forIn_frame (fun _ _ _ hh => decreaseBalance_frame hh) $h).pres))
+    (forIn_guard $h array state; exact Frame.pres (forIn_frame (fun _ _ _ hh => decreaseBalance_frame hh) $h)))
 
 /-- The pending queue rewritten to a slice of itself. -/
 theorem setPending_extract_pres {T s' : BeaconState P f}
@@ -1071,7 +1071,7 @@ theorem setProposerLookahead_frame {s s' : BeaconState P f}
   obtain ⟨g, _, h⟩ := bind_eq_ok_iff.mp h
   cases h; exact ⟨rfl, rfl⟩
 
-macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact (setProposerLookahead_frame $h).pres)
+macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact Frame.pres (setProposerLookahead_frame $h))
 
 theorem processBlockHeader_pres {blk : BeaconBlock P f} {s s' : BeaconState P f}
     (h : processBlockHeader s blk = .ok s') : Pres s s' := by
