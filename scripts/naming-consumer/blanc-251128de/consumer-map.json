@@ -2,7 +2,7 @@
  "schema_version": 1,
  "retired_tokens": [],
  "allowed_abbreviations": [],
- "description": "Derived by naming-tree.py consumer-map: consumer declarations authored inside dependency namespaces renamed by the map with sha256 f36c7c82cb24437889c68092ee0908d9ec6b0f7146ff4242ba713854483dbcf7",
+ "description": "Derived by naming-tree.py consumer-map: consumer declarations authored inside dependency namespaces renamed by the map with sha256 6dea531b8ed5764a22664cb8adfdba40a1c0be9ce6542293f57d01cb216ab1ee",
  "entries": [
   {
    "old": "Jaune.Ninst.Run.toRunWith",

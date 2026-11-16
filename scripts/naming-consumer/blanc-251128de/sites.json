@@ -1,6 +1,6 @@
 {
  "schema_version": 1,
- "description": "Reviewed sites of the Blanc copy plan (jaune-shape-and-names-v1, jsn-u10): Blanc 251128de bytes against Jaune 730aae65, map map-closed-46cd3868.json. Valid only for the listed file digests.",
+ "description": "Reviewed sites of the Blanc copy plan (jaune-shape-and-names-v1, jsn-u10): Blanc 251128de bytes against Jaune 730aae65, map map-784cff27.json. Valid only for the listed file digests.",
  "sites": [
   {
    "path": "Blanc/AbstractStackTransfer.lean",

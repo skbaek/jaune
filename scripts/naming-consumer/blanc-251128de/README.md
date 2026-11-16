@@ -2,7 +2,7 @@
 
 Inputs of the disposable Blanc-copy build (goal jaune-shape-and-names-v1, N1),
 for Blanc at `251128de` (pinned Jaune `730aae65`) and the G0a map at Jaune
-`46cd3868` (`scripts/naming-map.json`, sha256 f36c7c82…).
+`784cff27` (`scripts/naming-map.json`, sha256 6dea531b…).
 
 - `consumer-map.json`: written by `naming-tree.py consumer-map`; one row per
   Blanc declaration authored inside a Jaune namespace the map renames. `plan
