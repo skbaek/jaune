@@ -187,11 +187,73 @@ def spelled_name(source, a, b, name):
 
 ITEMS = ('guards', 'attributes', 'checks')
 
+# Classes whose deriving handlers write constructor and field names into string
+# literals (`deriving Repr` prints `Jaune.T.ctor` and `{ field := ... }`).
+DERIVING_CLASSES = {'Repr': 'Repr', 'Lean.ToJson': 'ToJson', 'Lean.FromJson': 'FromJson'}
+
+
+def _consts(e, found):
+    if isinstance(e, list):
+        if len(e) == 3 and e[0] == 'const' and isinstance(e[1], list) and e[1][:1] == ['name']:
+            found.append(e[1][1])
+        for x in e:
+            _consts(x, found)
+    return found
+
+
+def derived_constants(data, authored_ranges, byte_offsets, positions):
+    """Constants a deriving handler produced, from compiler data alone: an
+    instance with no source declaration range whose value is `C.mk T ...` for a
+    class C in DERIVING_CLASSES, where T is declared in this module by a
+    command whose deriving clause names C (or a `deriving instance C for T`
+    command names both), together with the instance's auxiliaries by name
+    prefix (`inst.repr`, `inst.repr.match_1`), also without a declaration
+    range. A hand-written instance, even an anonymous one, has a range (its
+    keyword) and is never derived. Returns {constant: (target type, class)}."""
+    decls = data['index']['decls']
+    commands = [(r[0], r[1], r[2]) for r in data['index'].get('naming_syntax', {}).get('commands', [])]
+    source_bytes = data['source'].encode()
+    roots = {}
+    for name, constant in data['constants'].items():
+        if name in decls:
+            continue
+        kernel = constant['kernel']
+        if not (isinstance(kernel, list) and kernel and kernel[0] == 'definition'):
+            continue
+        names = _consts(kernel[2], [])
+        if len(names) < 2 or not names[0].endswith('.mk') or names[0][:-3] not in DERIVING_CLASSES:
+            continue
+        cls = DERIVING_CLASSES[names[0][:-3]]
+        target = next((n for n in names[1:] if n in decls), None)
+        if target is None:
+            continue
+        a, b = APPLY.span(positions, decls[target][:4])
+        start = byte_offsets[a]
+        text = [source_bytes[x:y].decode('utf-8', 'replace') for x, y, kind in commands if x <= start < y]
+        clause = re.compile(r'\bderiving\b[^\n]*\b' + re.escape(cls) + r'\b')
+        leaf = re.escape(target.split('.')[-1])
+        instance_cmd = [source_bytes[x:y].decode('utf-8', 'replace') for x, y, kind in commands
+                        if kind == 'Lean.Parser.Command.deriving']
+        if (text and clause.search(text[0])) or any(
+                re.search(r'\b' + re.escape(cls) + r'\b', t) and re.search(r'\b' + leaf + r'\b', t)
+                for t in instance_cmd):
+            roots[name] = (target, cls)
+    derived = {}
+    for name in data['constants']:
+        if name in decls:
+            continue
+        for root, target in roots.items():
+            if name == root or name.startswith(root + '.'):
+                derived[name] = target
+    return derived
+
+
 
 def read_exports(paths):
     constants, roots, guards, attributes, modules, receipts = {}, set(), [], [], {}, []
     owners, holders = {}, {}
     checks = []
+    derived = {}
     item_modules = {key: [] for key in ITEMS}
     coalesced = set()
     version = None
@@ -250,6 +312,7 @@ def read_exports(paths):
         missing = names - data['constants'].keys()
         if missing:
             raise ValueError(f'{module}: authored definitions missing from kernel export: {sorted(missing)}')
+        derived.update(derived_constants(data, None, byte_offsets, positions))
         data['constants'] = {n: quoted_identifiers(c) for n, c in data['constants'].items()}
         data['guards'] = [quoted_identifiers(g) for g in data['guards']]
         coalesced |= merge_constants(constants, roots, data['constants'], names)
@@ -296,7 +359,7 @@ def read_exports(paths):
     return dict(constants=constants, roots=roots, guards=guards, attributes=attributes,
                 modules=modules, receipts=receipts, version=version, checks=checks,
                 coalesced_equations=sorted(coalesced), owners=owners, holders=holders,
-                item_modules=item_modules, schemas=schemas)
+                item_modules=item_modules, schemas=schemas, derived=derived)
 
 
 class Comparison:
@@ -305,8 +368,12 @@ class Comparison:
         if isinstance(mapping, dict):  # An exact old -> new table.
             mapping = MAP.Renamer([dict(old=a, new=b, kind='declaration') for a, b in mapping.items()])
         self.mapping = mapping
-        self.left = before['constants']
+        self.left = dict(before['constants'])
         self.right = after['constants']
+        self.respelled_literals = []
+        for name, (target, cls) in sorted((before.get('derived') or {}).items()):
+            if name in self.left:
+                self.left[name] = self.respell_derived(name, target, cls, self.left[name])
         self.generated_left = self.left.keys() - before['roots']
         self.generated_right = self.right.keys() - after['roots']
         self.pairs, self.reverse, self.checked = {}, {}, set()
@@ -318,6 +385,66 @@ class Comparison:
         for source, target in mapping.relocations.values():
             self.relocated_modules |= {mapping.module(source), target}
             self.join(mapping.module(source), target)
+
+    def respell_derived(self, name, target, cls, value):
+        """A deriving handler's output follows the rename (master decisions
+        2026-11-16): a string literal that is exactly an old fully qualified
+        constant name the map renames becomes its new name; a literal that is
+        exactly the old label of a field of the derived target structure,
+        whose field row changes the leaf, becomes the new label. Any other
+        literal is compared as written. Each respelling is recorded."""
+        mapping = self.mapping
+
+        def literal(text):
+            if '.' in text and mapping.renames(text) and text in self.before['constants']:
+                return mapping(text), 'qualified name'
+            field = f'{target}.{text}'
+            # Field labels follow the rename only in derived Repr text; a
+            # handler's unqualified keys (ToJson/FromJson) stay as written.
+            if cls == 'Repr' and field in mapping.exact:
+                old_leaf, new_leaf = text, mapping.exact[field].split('.')[-1]
+                if new_leaf != old_leaf:
+                    return new_leaf, 'field label'
+            return None, None
+
+        def renamed_field(body):
+            """The field row (old leaf, new leaf) of the derived target whose
+            projection `target.f` the nest body reads, when it changes the leaf."""
+            for const in _consts(body, []):
+                if const.startswith(target + '.') and const in mapping.exact:
+                    old_leaf, new_leaf = const.split('.')[-1], mapping.exact[const].split('.')[-1]
+                    if old_leaf != new_leaf:
+                        return old_leaf, new_leaf
+            return None
+
+        def walk(e):
+            if isinstance(e, list):
+                # `{ f := v }` in a derived Repr nests v by the label's width
+                # (`f := ` is len(f) + 4): it follows the label's respelling.
+                if (len(e) == 3 and e[0] == 'app' and isinstance(e[1], list) and len(e[1]) == 3 and
+                        e[1][0] == 'app' and e[1][1][:2] == ['const', ['name', 'Std.Format.nest']]):
+                    field = renamed_field(e[2]) if cls == 'Repr' else None
+                    if field is not None:
+                        width_old, width_new = len(field[0]) + 4, len(field[1]) + 4
+                        def width(x):
+                            if x == ['nat', width_old]:
+                                return ['nat', width_new]
+                            return [width(y) for y in x] if isinstance(x, list) else x
+                        indent = width(e[1][2])
+                        if indent != e[1][2]:
+                            self.respelled_literals.append([name, width_old, width_new, 'field label width'])
+                        return ['app', ['app', e[1][1], indent], walk(e[2])]
+                if len(e) == 2 and e[0] == 'str' and isinstance(e[1], str):
+                    new, why = literal(e[1])
+                    if new is not None:
+                        self.respelled_literals.append([name, e[1], new, why])
+                        return ['str', new]
+                    return e
+                return [walk(x) for x in e]
+            if isinstance(e, dict):
+                return {k: walk(v) for k, v in e.items()}
+            return e
+        return walk(value)
 
     def find(self, module):
         while self.parent.get(module, module) != module:
@@ -604,7 +731,8 @@ class Comparison:
         return dict(status='OK', scope='exported-modules',
                     authored_constants=len(self.before['roots']), generated_constants=len(self.generated_left),
                     guards=len(self.before['guards']), attribute_commands=len(self.before['attributes']),
-                    checked_commands=len(self.before.get('checks', [])))
+                    checked_commands=len(self.before.get('checks', [])),
+                    derived_literals_respelled=self.respelled_literals)
 
 
 def check(before, after, mapping):

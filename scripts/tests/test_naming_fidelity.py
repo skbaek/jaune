@@ -302,6 +302,72 @@ class NamingFidelityTests(unittest.TestCase):
         with self.assertRaises(CHECK.Mismatch):
             self.run_check()
 
+    def derived_repr(self, ctor, label, width, extra=' := '):
+        text = lambda t: ['app', ['const', ['name', 'Std.Format.text'], []], ['str', t]]
+        nest = ['app', ['app', ['const', ['name', 'Std.Format.nest'], []], ['nat', width]],
+                ['app', ['const', ['name', 'N.S.' + label], []], ['bvar', 0]]]
+        return dict(kernel=['definition', 'safe', ['app', text(ctor), ['app', text(label), ['app', text(extra), nest]]]],
+                    attributes={})
+
+    def test_derived_repr_text_follows_the_map_and_nothing_else(self):
+        rows = self.entries(('N.T.old', 'N.T.new', 'constructor', {}), ('N.S.lbl', 'N.S.label', 'field', {}))
+        def check(before_args, after_args, derived=True):
+            self.before = snapshot({'N.T.old': constant(), 'N.S.lbl': constant(2), 'inst.repr': self.derived_repr(*before_args)},
+                                   ['N.T.old', 'N.S.lbl'])
+            self.after = snapshot({'N.T.new': constant(), 'N.S.label': constant(2), 'inst.repr': self.derived_repr(*after_args)},
+                                  ['N.T.new', 'N.S.label'])
+            if derived:
+                self.before['derived'] = {'inst.repr': ('N.S', 'Repr')}
+            self.renames = rows
+            return self.run_check()
+        verdict = check(('N.T.old', 'lbl', 7), ('N.T.new', 'label', 9))
+        self.assertEqual(verdict['status'], 'OK')
+        self.assertEqual(sorted(r[3] for r in verdict['derived_literals_respelled']),
+                         ['field label', 'field label width', 'qualified name'])
+        # Control: any other change of derived text fails.
+        with self.assertRaises(CHECK.Mismatch):
+            check(('N.T.old', 'lbl', 7), ('N.T.new', 'label', 9, ' = '))
+        # Control: a label change that is not the field row's leaf change fails.
+        with self.assertRaises(CHECK.Mismatch):
+            check(('N.T.old', 'lbl', 7), ('N.T.new', 'labels', 10))
+        # Control: a width change without the label's respelling fails.
+        with self.assertRaises(CHECK.Mismatch):
+            check(('N.T.old', 'lbl', 7), ('N.T.new', 'label', 8))
+        # Control: the same literals outside a derived constant are compared as written.
+        with self.assertRaises(CHECK.Mismatch):
+            check(('N.T.old', 'lbl', 7), ('N.T.new', 'label', 9), derived=False)
+        # Control: an unqualified key of another handler (ToJson) stays literal.
+        self.before = snapshot({'N.T.old': constant(), 'N.S.lbl': constant(2), 'inst.repr': self.derived_repr('N.T.old', 'lbl', 7)},
+                               ['N.T.old', 'N.S.lbl'])
+        self.after = snapshot({'N.T.new': constant(), 'N.S.label': constant(2), 'inst.repr': self.derived_repr('N.T.new', 'label', 9)},
+                              ['N.T.new', 'N.S.label'])
+        self.before['derived'] = {'inst.repr': ('N.S', 'ToJson')}
+        with self.assertRaises(CHECK.Mismatch):
+            self.run_check()
+
+    def test_derived_provenance_needs_a_deriving_clause_and_no_declaration_range(self):
+        source = 'structure S where\n  lbl : Nat\nderiving Repr\n'
+        value = ['app', ['app', ['const', ['name', 'Repr.mk'], []], ['const', ['name', 'N.S'], []]],
+                 ['const', ['name', 'N.instReprS.repr'], []]]
+        def data(src, inst_range=False):
+            decls = {'N.S': [0, 10, 0, 11, 0, 10, 0, 11]}
+            if inst_range:
+                decls['N.instReprS'] = [2, 0, 2, 8, 2, 0, 2, 8]
+            return dict(source=src, constants={'N.instReprS': dict(kernel=['definition', 'safe', value]),
+                                               'N.instReprS.repr': dict(kernel=['definition', 'safe', ['nat', 0]])},
+                        index=dict(decls=decls, naming_syntax=dict(commands=[[0, len(src.encode()), 'Lean.Parser.Command.declaration']])))
+        def derived(d):
+            positions = CHECK.APPLY.Positions(d['source'])
+            offsets = [0]
+            for ch in d['source']:
+                offsets.append(offsets[-1] + len(ch.encode()))
+            return CHECK.derived_constants(d, None, offsets, positions)
+        self.assertEqual(derived(data(source)), {'N.instReprS': ('N.S', 'Repr'), 'N.instReprS.repr': ('N.S', 'Repr')})
+        # Control: without a deriving clause for the class, nothing is derived.
+        self.assertEqual(derived(data(source.replace('deriving Repr', 'deriving BEq'))), {})
+        # Control: an instance with a source declaration range (hand-written) is not derived.
+        self.assertEqual(derived(data(source, inst_range=True)), {})
+
     def test_generated_constants_keep_their_modules(self):
         self.before['constants']['gen'] = constant(5)
         self.after['constants']['gen2'] = constant(5)
