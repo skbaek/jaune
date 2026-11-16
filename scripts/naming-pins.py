@@ -14,6 +14,12 @@ row's note and every other byte stay. JSON manifests
 the map renames becomes its new name. Nothing is added, dropped or loosened:
 the row count is unchanged and only spellings the plan or map changed move.
 
+With `--guard-msgs --snapshot CAPTURE/snapshot.json`, each Lean FILE's
+`#guard_msgs` expected text (the doc comment right before it) is respelled
+exactly as N4 compares it (`check-naming-fidelity.py`, `respell_message`, over
+the before capture's constants): every whole qualified-name token, by the
+names-only rule. Golden text moves only this way, in the packet commit.
+
 Without `--write` the changes are only reported. Every change is listed with
 its file, row, old and new text and the map rows behind the plan edits that
 produced it. A quoted line found nowhere, or found more than once with
@@ -65,6 +71,8 @@ def main(argv=None):
     parser.add_argument('--plan', type=Path, required=True)
     parser.add_argument('--map', type=Path, required=True)
     parser.add_argument('--write', action='store_true')
+    parser.add_argument('--guard-msgs', action='store_true')
+    parser.add_argument('--snapshot', type=Path)
     parser.add_argument('files', nargs='+', type=Path)
     args = parser.parse_args(argv)
     try:
@@ -77,6 +85,8 @@ def main(argv=None):
         print(f'REFUSED — naming pins: {error}', file=sys.stderr)
         return 2
     cache = {}
+    if args.guard_msgs:
+        return guard_msgs(args, mapping, renamer)
 
     def lines_of(path):
         if path not in cache:
@@ -149,6 +159,37 @@ def main(argv=None):
     print(f'{"OK" if not reports else "REPORTED"} — naming pins: {len(changes)} row(s) carried, '
           f'{len(reports)} reported', file=sys.stderr)
     return 0 if not reports else 1
+
+
+def guard_msgs(args, mapping, renamer):
+    spec = importlib.util.spec_from_file_location('check_naming_fidelity', ROOT / 'scripts/check-naming-fidelity.py')
+    fidelity = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fidelity)
+    base = args.snapshot.parent
+    snapshot = json.loads(args.snapshot.read_bytes())
+    constants = {}
+    for row in snapshot['exports'].values():
+        constants.update(json.loads((base / row['path']).read_bytes()).get('constants', {}))
+    before = dict(constants=constants, roots=set(constants))
+    renamed = {renamer(name): value for name, value in constants.items()}
+    after = dict(constants=renamed, roots=set(renamed))
+    comparison = fidelity.Comparison(before, after, renamer)
+    golden = re.compile(r'(/--\n)(.*?)(-/\s*\n#guard_msgs\b)', re.S)
+    changes = []
+    for file in args.files:
+        text = (args.tree / file).read_text(encoding='utf-8')
+        def one(m):
+            new = comparison.respell_message(m.group(2) + '-/', 'guard_msgs')[:-2]
+            if new != m.group(2):
+                changes.append(dict(file=str(file), line=text.count('\n', 0, m.start(2)) + 1,
+                                    old=m.group(2), new=new))
+            return m.group(1) + new + m.group(3)
+        new_text = golden.sub(one, text)
+        if args.write and new_text != text:
+            (args.tree / file).write_text(new_text, encoding='utf-8')
+    print(json.dumps(dict(write=args.write, guard_msgs=changes), indent=1, ensure_ascii=False))
+    print(f'OK — naming pins: {len(changes)} #guard_msgs text(s) respelled', file=sys.stderr)
+    return 0
 
 
 if __name__ == '__main__':
