@@ -26,7 +26,7 @@ individual declarations one by one.
 
 | class | meaning | what it covers |
 |---|---|---|
-| **supported** | Intended entry point for a task in this guide. Exercised at this revision by a checked example, a gate or the fixture runner. | The eight canonical execution modules: `Jaune.ExecFrame`, `Jaune.Exec`, `Jaune.ExecDeriv`, `Jaune.ExecSettlement`, `Jaune.ExecChronology`, `Jaune.MessageExecution`, `Jaune.SymbolicPush`, `Jaune.SymbolicArith`. Also the entry-point families named in sections 3–5, such as `exec`, `processMessage`, `processTransaction`, the checked chain types, and `State`/`Stor` access, and the lemma families and modules named in section 6. |
+| **supported** | Intended entry point for a task in this guide. Exercised at this revision by a checked example, a gate or the fixture runner. | The eight canonical execution modules: `Jaune.ExecFrame`, `Jaune.Exec`, `Jaune.ExecDeriv`, `Jaune.ExecSettlement`, `Jaune.ExecChronology`, `Jaune.MessageExecution`, `Jaune.SymbolicPush`, `Jaune.SymbolicArith`. Also the entry-point families named in sections 3–5, such as `exec`, `processMessage`, `processTransaction`, the checked chain types, and `State`/`Storage` access, and the lemma families and modules named in section 6. |
 | **incidental** | Public only because Lean cannot hide it. It may be renamed, restated or removed in any commit, without notice. | Every other public declaration (section 6 lifts named families out of this class) in the `Jaune` library closure, such as interpreter internals in `Jaune.Machine`, `Jaune.Execution` and `Jaune.Sufficiency`, and helper lemmas in `Jaune.Basic` and `Jaune.Types`. Also the `Fueled` residue lemmas in `Jaune.Exec`. Runner-side modules outside `import Jaune` (`Jaune.T8n`, `Jaune.ChainStore`, `Jaune.FixtureException`, `Jaune.BLSGuards`, `Main`, `MemoryProbe`) are adapters, not proof surface. |
 | **experimental** | Implemented and gated, but expected to change as its upstream target moves. | The Amsterdam lane: `amsterdamRules`, the `StateGasRules` / `stateGas` dimension, `genericCallAmsterdam` / `genericCreateAmsterdam` and their lemmas, `executeCode.handleErrorAmsterdam`, and the `BlockAccessList` / `Bal*` family. Also the reusable axiom-audit command `#expect_axioms` (`scripts/AxiomAudit.lean`, library `Assurance`). |
 
@@ -60,8 +60,8 @@ The PUSH-only version is [`Examples/Execution.lean`](Examples/Execution.lean).
 **Imports.** `import Jaune.SymbolicPush` and/or `import Jaune.SymbolicArith`.
 Each imports `Jaune.Exec`.
 
-**Decoding.** The decode predicates are `Ninst.At`, `Linst.At`, `Jinst.At`,
-`Rinst.At` and `Xinst.At` (in `Jaune.ExecFrame`). Each says that
+**Decoding.** The decode predicates are `NextOp.At`, `HaltOp.At`, `JumpOp.At`,
+`PlainOp.At` and `MessageOp.At` (in `Jaune.ExecFrame`). Each says that
 `code.getInst pc` returns the named instruction. To turn a decode fact into the
 step equation that the `Exec` constructors take, use `Evm.step_next`,
 `Evm.step_last` or `Evm.step_jump`. The examples decode concrete bytecode
@@ -127,11 +127,11 @@ It has six constructors:
 Every premise other than a sub-derivation is an equation about a
 non-recursive function (`Evm.step`, `Frame.enter`, `Resume.run`,
 `Frame.settle`). Child results, settlement, gas and the resumed parent state
-all stay visible in the derivation. `Xlot.Filled` and `Ninst.Run` package an
+all stay visible in the derivation. `Xlot.Filled` and `NextOp.Run` package an
 optional child derivation for frame-level statements.
 
 **Inversion.** `Exec.halt_inv` says the root step's halt value is the outcome.
-`Exec.last_inv` does the same from a `Linst.At` decode. For a continuing step,
+`Exec.last_inv` does the same from a `HaltOp.At` decode. For a continuing step,
 use a six-way `cases`; `Examples.Arithmetic.next` shows the pattern. It lives
 in the example, not the library.
 
@@ -268,17 +268,17 @@ examples. The symbolic example proofs also unfold the `Devm` accessors
 
 | need | module | supported families |
 |---|---|---|
-| machine and world state | `Jaune.Machine` | `Evm`, `Sevm`, `Devm` (`mach` / `meta` / `world` and accessors such as `Devm.stack`, `Devm.gasLeft`, `Devm.state`, `Devm.getBal`), `Execution`, `Msg`, `Benv`, `Tenv`, `Header`, `Block`, `Tx`, `BlockChain`, `State` (`State.get`, `State.set`, `State.get_set_self`, `State.get_set_ne`, `State.bal`, `State.setBal`), `Stor.set`, `Stor.get_set_self`, `Stor.get_set_ne` |
-| account and instruction types | `Jaune.Types` | `Acct` (`nonce`, `bal`, `stor`, `code`), `Stor`, `Stor.get`, `Adr`, `Rinst`, `Linst`, `Jinst` |
+| machine and world state | `Jaune.Machine` | `Evm`, `Sevm`, `Devm` (`mach` / `meta` / `world` and accessors such as `Devm.stack`, `Devm.gasLeft`, `Devm.state`, `Devm.getBal`), `Execution`, `Msg`, `Benv`, `Tenv`, `Header`, `Block`, `Tx`, `BlockChain`, `State` (`State.get`, `State.set`, `State.get_set_self`, `State.get_set_ne`, `State.bal`, `State.setBal`), `Storage.set`, `Storage.get_set_self`, `Storage.get_set_ne` |
+| account and instruction types | `Jaune.Types` | `Account` (`nonce`, `bal`, `storage`, `code`), `Storage`, `Storage.get`, `Address`, `PlainOp`, `HaltOp`, `JumpOp` |
 | fork rules and schedules | `Jaune.Fork` | `Fork`, `Fork.rules?`, `Fork.supported`, `ForkRules`, `ForkCriterion`, `ChainConfig` (`forkAt`/`rulesAt` at a block number and timestamp), `mainnetChainConfig` |
-| words, bytes and RLP | `Jaune.Basic` | `Bytes`, `B256`, `Bytes.toB256`, `B256.toBytes`, `BLT`, `BLT.toBytes`, `Bytes.toBLT?` |
+| words, bytes and RLP | `Jaune.Basic` | `Bytes`, `U256`, `Bytes.toU256`, `U256.toBytes`, `Rlp.Item`, `Rlp.Item.toBytes`, `Bytes.toRlpItem?` |
 | hashes | `Jaune.Hash`, `Jaune.SHA256Spec`, `Jaune.KeccakSpec` | `Bytes.keccak`, `Bytes.sha256`, `Bytes.sha256_eq_fips`, `Bytes.keccak_eq_fips`, `ByteArray.keccak_eq_fips` |
 | state root | `Jaune.Transaction` | `State.root` |
 
-`Stor.get_set_ne` and `State.get_set_ne` take the same hypothesis orientation:
-*written key ≠ read key*. For `Stor.get_set_ne s h v : (s.set k v).get a = s.get a`,
+`Storage.get_set_ne` and `State.get_set_ne` take the same hypothesis orientation:
+*written key ≠ read key*. For `Storage.get_set_ne s h v : (s.set k v).get a = s.get a`,
 `h : k ≠ a`; for `State.get_set_ne w h ac`, `h : a ≠ b`, where `a` is written
-and `b` is read. `State.set` erases an account set to `Acct.nil`
+and `b` is read. `State.set` erases an account set to `Account.nil`
 (`State.getElem?_set`).
 
 [TRUSTED.md](TRUSTED.md) says exactly what `Bytes.sha256_eq_fips`,
@@ -313,16 +313,16 @@ public codec meant for concrete evidence gets a structural twin and a
 | a `Devm` update against an accessor | `Jaune.Machine`, `Jaune.DevmProjections` | `Devm.setMach_*`, `Devm.setMeta_*`, `Devm.setWorld_*`, `Devm.withOutput_*`, `Devm.setMach_setMach`, `Devm.getStorVal_setMach`, `Devm.getCode_setMach`; in `Jaune.DevmProjections` the `addLog`, `addAccessedAddress`, `addAccessedStorageKey`, `setTransVal`, `setStorVal`, `withRefundCounter`, `memWrite`, `memExtends`, `setCode`, `withGasLeft`, `withStack`, `withReturnData`, `incrNonce`, `setBal` rows and the storage read-after-write laws `Devm.setStorVal_getStorVal_self` / `_of_ne` | every symbolic instruction step is a nest of these updaters; downstream walks normalise each step with them |
 | gas and state-gas after an update | `Jaune.Sufficiency` | `Devm.<updater>_gasLeft`, `Devm.<updater>_stateGas` (stated on `.mach.stateGas`), `Devm.<updater>_gasMeasure` | the gas side of every step proof |
 | a frame relation weakened in one field | `Jaune.ExecFrame`, `Jaune.ExecFrameRel` | `Devm.Rels`, `Devm.Rel`, `Devm.Rels.eq`, `Devm.Burn`, `Devm.rel_refl`, `Devm.rel_trans`; `Devm.Rels.Le` (a literal names only the fields that differ), `Devm.Rel.mono`, `Devm.Rel.eq_refl`, `Devm.Rel.of_eq_le` | a new `Devm.Rels` field is repaired here, not at each consumer's literal |
-| word values and the order | `Jaune.Types` | `B256.toNat_toB256`, `B256.toNat_toB256_of_lt`, `B256.toNat_inj`, `B256.toNat_lt`, `B256.toNat_add`, `B256.toNat_sub_eq_of_le`, `B256.lt_iff_toNat_lt_toNat`, `B256.le_iff_toNat_le_toNat`, `B256.toNat_lt_toNat`, `B256.lt_of_toNat_lt_toNat` | the bridge from compiled words to `Nat` arithmetic |
-| comparison flags and literal arithmetic | `Jaune.WordFacts` | `B256.{eq,lt,gt}Check_{ne,eq}_zero_iff`, `B256.eq_of_eqCheck_ne_zero`, `B256.not_lt_of_ltCheck_eq_zero`, `B256.lt_of_{lt,gt}Check_ne_zero`, `B256.{lt,gt}Check_eq_zero_of_toNat_le`, `B256.{lt,gt}Check_ne_zero_of_toNat_lt`, `Nat.toB256_{add,mul}_toB256`, `Nat.toB256_sub_toB256`, `B256.toNat_add_toB256_of_lt` | a branch flag (`EQ`, `LT`, `GT`, `ISZERO` of `EQ`) is discharged by one citation |
-| multiplicative arithmetic | `Jaune.MulDiv` | floor/ceiling `a * b / d` bounds, rounding direction, monotonicity, round-trip loss, and the guarded `B256` bridges (`B256.toNat_mul_mod`, `B256.toNat_mul_eq_of_nofm`, `B256.toNat_div`, `B256.toNat_mulmod`, `B256.toNat_addmod`, …) | ratio pricing in token and vault contracts; every word statement is explicit about `% 2 ^ 256` or carries a no-overflow premise |
-| iterated rounded multiplication | `Jaune.RPow` | `mulr`, `rpow` and their error surface, with guarded `B256` bridges (`B256.toNat_mulr`, …) | Maker-shaped `rpow` loops; no word theorem hides wraparound |
+| word values and the order | `Jaune.Types` | `U256.toNat_toU256`, `U256.toNat_toU256_of_lt`, `U256.toNat_inj`, `U256.toNat_lt`, `U256.toNat_add`, `U256.toNat_sub_eq_of_le`, `U256.lt_iff_toNat_lt_toNat`, `U256.le_iff_toNat_le_toNat`, `U256.toNat_lt_toNat`, `U256.lt_of_toNat_lt_toNat` | the bridge from compiled words to `Nat` arithmetic |
+| comparison flags and literal arithmetic | `Jaune.WordFacts` | `U256.{eq,lt,gt}Check_{ne,eq}_zero_iff`, `U256.eq_of_eqCheck_ne_zero`, `U256.not_lt_of_ltCheck_eq_zero`, `U256.lt_of_{lt,gt}Check_ne_zero`, `U256.{lt,gt}Check_eq_zero_of_toNat_le`, `U256.{lt,gt}Check_ne_zero_of_toNat_lt`, `Nat.toB256_{add,mul}_toB256`, `Nat.toU256_sub_toU256`, `U256.toNat_add_toU256_of_lt` | a branch flag (`EQ`, `LT`, `GT`, `ISZERO` of `EQ`) is discharged by one citation |
+| multiplicative arithmetic | `Jaune.MulDiv` | floor/ceiling `a * b / d` bounds, rounding direction, monotonicity, round-trip loss, and the guarded `U256` bridges (`U256.toNat_mul_mod`, `U256.toNat_mul_eq_of_mul_no_overflow`, `U256.toNat_div`, `U256.toNat_mulmod`, `U256.toNat_addmod`, …) | ratio pricing in token and vault contracts; every word statement is explicit about `% 2 ^ 256` or carries a no-overflow premise |
+| iterated rounded multiplication | `Jaune.RPow` | `mulRounded`, `rpow` and their error surface, with guarded `U256` bridges (`U256.toNat_mulRounded`, …) | Maker-shaped `rpow` loops; no word theorem hides wraparound |
 | memory charged before a CALL | `Jaune.MemoryAccounting` | the `calculateMsgCallGas_*` bounds and the per-kind memory accounting facts | exact gas accounting across a call boundary; these facts do not bound arbitrary parent gas or complete the recursive memory/output invariant |
-| original-run STATICCALL stack and output-memory effects | `Jaune.StaticcallEffects` | `Ninst.staticcall_run_effects` | from the actual six-operand instruction run, on every fork including state gas: one status word replaces the operands; the output is a write of at most the requested byte count over both prepaid memory windows. No child-success or precompile premise; no gas or whole-world preservation claim |
-| excluding an interpreter child from an enabled native STATICCALL | `Jaune.NativePrecompile` | `Xinst.step_staticcall_not_run_of_precompile` | from the actual six-operand stack, `rules.stateGas = none`, enabled `rules.isPrecomp` and effective direct code designation, the actual `Xinst.step` spawn and `Frame.enter = .run child` equations imply `False`; native failure outcomes are included, with no native-success premise |
-| evaluating concrete RLP in the kernel | `Jaune.RlpEval` | `Bytes.toBLT?_eq_toBLTS`, `Bytes.toBLTDiff?_eq_toBLTDiffS`, `Bytes.toBLTs?_eq_toBLTsS`, `BLT.toBytes_eq_toBytesS`, `BLTs.toBytes_eq_toBytesS`, `Nat.toBytes_eq_toBytesS`, and `DecidableEq BLT` | see below |
+| original-run STATICCALL stack and output-memory effects | `Jaune.StaticcallEffects` | `NextOp.staticcall_run_effects` | from the actual six-operand instruction run, on every fork including state gas: one status word replaces the operands; the output is a write of at most the requested byte count over both prepaid memory windows. No child-success or precompile premise; no gas or whole-world preservation claim |
+| excluding an interpreter child from an enabled native STATICCALL | `Jaune.NativePrecompile` | `MessageOp.step_staticcall_not_run_of_precompile` | from the actual six-operand stack, `rules.stateGas = none`, enabled `rules.isPrecompile` and effective direct code designation, the actual `MessageOp.step` spawn and `Frame.enter = .run child` equations imply `False`; native failure outcomes are included, with no native-success premise |
+| evaluating concrete RLP in the kernel | `Jaune.RlpEval` | `Bytes.toRlpItem?_eq_toRlpItemS`, `Bytes.toRlpItemDiff?_eq_toRlpItemDiffS`, `Bytes.toRlpItems?_eq_toRlpItemsS`, `Rlp.Item.toBytes_eq_toBytesS`, `Rlp.Items.toBytes_eq_toBytesS`, `Nat.toBytes_eq_toBytesS`, and `DecidableEq Rlp.Item` | see below |
 
-**Native STATICCALL entry.** `Xinst.step_staticcall_not_run_of_precompile`
+**Native STATICCALL entry.** `MessageOp.step_staticcall_not_run_of_precompile`
 uses the selected fork's effective `delegatedCodeAddress = none`; it covers
 both flat access pricing and EIP2929 access warming. For Blanc's lifted
 `staticcall_spawn_not_run_of_precompile` wrapper, derive that effective-direct
@@ -331,15 +331,15 @@ actual spawn and entry equations. The lifted `StepRun` / `CallCodeH` code-resolu
 adapter stays in Blanc. The theorem does not construct a spawn or assert that
 native execution succeeds, and its `stateGas = none` premise remains explicit.
 
-**Concrete RLP.** `Bytes.toBLTDiff?` / `Bytes.toBLTs?`, `BLT.toBytes` and
+**Concrete RLP.** `Bytes.toRlpItemDiff?` / `Bytes.toRlpItems?`, `Rlp.Item.toBytes` and
 `Nat.toBytes` are compiled by well-founded recursion, so `decide +kernel`
 cannot evaluate them. `Jaune.RlpEval` restates each by structural recursion and
 proves it equal to the public definition on every input. A concrete decode or
 encode is then
 
 ```lean
-example : Bytes.toBLT? [0xc1, 0x01] = some (.list [.bytes [0x01]]) := by
-  rw [Bytes.toBLT?_eq_toBLTS]; decide +kernel
+example : Bytes.toRlpItem? [0xc1, 0x01] = some (.list [.bytes [0x01]]) := by
+  rw [Bytes.toRlpItem?_eq_toRlpItemS]; decide +kernel
 ```
 
 The public definitions and their equation lemmas are unchanged.

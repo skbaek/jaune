@@ -68,8 +68,15 @@ class Index:
             o, n = old.split('.'), new.split('.')
             for k in range(1, len(o) + 1):
                 spelling = '.'.join(o[-k:])
-                self.old.setdefault(spelling, {}).setdefault(
-                    '.'.join(n[-k:]) if len(n) >= k else None, set()).add(name)
+                # As the apply tool spells it: the unspelled prefix of the old
+                # name is the namespace the spelling resolves in; it is renamed
+                # by namespace rows, and the new name is spelled below it
+                # (`BLT` -> `Rlp.Item`, `gasCreate` -> `Gas.create` in `Jaune`).
+                context = '.'.join(o[:-k])
+                scope = renamer.scope(context).split('.') if context else []
+                replacement = ('.'.join(n[len(scope):]) if n[:len(scope)] == scope and len(n) > len(scope)
+                               else new)
+                self.old.setdefault(spelling, {}).setdefault(replacement, set()).add(name)
         self.after = after
         self.modules = dict(renamer.modules)
         self.constants = len(names)
@@ -106,7 +113,30 @@ def identifier_shaped(word):
     return bool(re.search(r"[A-Z]", word[1:]) or re.search(r"[\d_.]", word))
 
 
-def findings(text, index, all_code=False):
+def stale_span(word, start, index):
+    """(start, end, spelling, candidates) of the stale part of an identifier
+    token, or None: the whole token; else its longest stale identifier-shaped
+    leading components (`B256.lt_of_{lt,gt}Check`); else one stale
+    identifier-shaped component (`block.toBLT.toBytes`)."""
+    found = index.stale(word)
+    if found is not None:
+        return start, start + len(word), word, found
+    if '.' not in word:
+        return None
+    parts = word.split('.')
+    for i in range(len(parts) - 1, 0, -1):
+        head = '.'.join(parts[:i])
+        if identifier_shaped(head) and index.stale(head) is not None:
+            return start, start + len(head), head, index.stale(head)
+    offset = start
+    for part in parts:
+        if identifier_shaped(part) and index.stale(part) is not None:
+            return offset, offset + len(part), part, index.stale(part)
+        offset += len(part) + 1
+    return None
+
+
+def findings(text, index, all_code=False, path_key=None, keep=frozenset()):
     code = [(0, len(text))] if all_code else [(m.start(), m.end()) for m in CODE.finditer(text)]
     out = []
     taken = []
@@ -115,14 +145,21 @@ def findings(text, index, all_code=False):
             if any(a < m.end() and m.start() < b for a, b in taken):
                 continue
             word = m.group(0)
+            if '.' not in word and len(word) < 3:
+                continue  # one- and two-letter words (`p`, `M`, `P`) are variables in prose and code
+            if (path_key, word) in keep:
+                continue
             in_code = any(a <= m.start() < b for a, b in code)
             if not in_code and not identifier_shaped(word):
                 continue
-            candidates = index.stale(word)
-            if candidates is None:
+            span = stale_span(word, m.start(), index)
+            if span is None:
+                continue
+            start, end, word, candidates = span
+            if (path_key, word) in keep:
                 continue
             taken.append((m.start(), m.end()))
-            out.append(dict(start=m.start(), end=m.end(), old=word, line=text.count('\n', 0, m.start()) + 1,
+            out.append(dict(start=start, end=end, old=word, line=text.count('\n', 0, start) + 1,
                             in_code=in_code, candidates=sorted(c for c in candidates if c is not None),
                             unique=len(candidates) == 1 and None not in candidates,
                             rows=sorted({str(index.row(c)) for cs in candidates.values() for c in cs})))
@@ -136,19 +173,28 @@ def main(argv=None):
     parser.add_argument('--map', type=Path, required=True)
     parser.add_argument('--all-code', action='store_true',
                         help='treat each file as code throughout (allowlists, manifests, coverage tables)')
+    parser.add_argument('--keep', type=Path,
+                        help='registered JSON list of {file, spelling, reason}: a spelling that names an external '
+                             'interface rather than a renamed constant (the t8n input `txs`)')
     parser.add_argument('files', nargs='+', type=Path)
     args = parser.parse_args(argv)
     try:
         mapping = json.loads(args.map.read_bytes())
         MAP.validate_map(mapping)
         index = Index(args.snapshot, mapping)
+        keep = set()
+        if args.keep:
+            for row in json.loads(args.keep.read_bytes())['keep']:
+                if not row.get('reason', '').strip():
+                    raise ValueError(f'keep row without a reason: {row}')
+                keep.add((row['file'], row['spelling']))
     except (OSError, ValueError, KeyError) as error:
         print(f'REFUSED — naming docs: {error}', file=sys.stderr)
         return 2
     report, remaining, substituted, edits = [], 0, 0, []
     for path in args.files:
         text = path.read_text(encoding='utf-8')
-        found = findings(text, index, args.all_code)
+        found = findings(text, index, args.all_code, str(path), keep)
         if args.command == 'apply':
             for f in reversed(found):
                 if f['unique']:
@@ -157,7 +203,7 @@ def main(argv=None):
                     edits.append(dict(file=str(path), line=f['line'], old=f['old'], new=f['candidates'][0],
                                       rows=f['rows']))
             path.write_text(text, encoding='utf-8')
-            found = findings(text, index, args.all_code)
+            found = findings(text, index, args.all_code, str(path), keep)
         remaining += len(found)
         for f in found:
             report.append(dict(file=str(path), line=f['line'], old=f['old'], code=f['in_code'],

@@ -253,10 +253,10 @@ conformance tiers.
 ## The known exceptions
 
 **No `bv_decide` in the library.** `Jaune/Basic.lean`'s codec equation lemma
-`Bytes.toB256_pair` closed with `bv_decide` until the Lean 4.34 migration
+`Bytes.toU256_pair` closed with `bv_decide` until the Lean 4.34 migration
 (`10ed5a4`, 2026-09-20) rewrote its proof to plain `simp`; no declaration
 anywhere in the library uses `bv_decide` now, so there is nothing here for an
-axiom reading to qualify. `Bytes.toB256_pair` was never covered by Jaune's
+axiom reading to qualify. `Bytes.toU256_pair` was never covered by Jaune's
 from-scratch audit either way — it sits outside the canonical execution
 surface `scripts/ExecutionAxioms.lean` pins. `bv_decide` remains banned by
 project policy inside the protected-theorem cone regardless, because some
@@ -400,7 +400,7 @@ the corpus it runs over. The last eight rows are the consensus layer's
 
 | Primitive | Reference (standard, section) | Transcription source | Proved (theorem names) | Tested only (corpora) |
 |---|---|---|---|---|
-| `Keccak-256` (KECCAK256 opcode, not a precompile) | NIST FIPS 202 §3 (`Keccak-p[1600,24]`), §4 (sponge), §5.1-5.2 (`pad10*1`, `KECCAK[c]`), Appendix B.1; Ethereum's KEC is `KECCAK[512](M, 256)` without SHA-3 domain bits | Port of the SHA3IUF C implementation (`Jaune/Hash.lean:292-294`); independent transcription `Jaune/KeccakSpec.lean` | `Bytes.keccak_eq_fips`, `ByteArray.keccak_eq_fips` and `ByteArray.keccak_eq_fips_of_le` (`Jaune/KeccakSpec.lean`), via `Keccak.FIPS.f1600_eq_keccakP` and the older `KECCAK.f1600_eq` (kernel equals its in-file port); opcode-side `Rinst.runCore_keccak256_eq_reference` (`Jaune/Machine.lean:4962`) relates the opcode to `Bytes.keccak` | `KeccakSpec.lean` empty-string guard; `check-u256.sh` keccak/keccak_ba vectors vs pinned EELS (83 cases; they test the hash value, which the theorems now state); fixture suites |
+| `Keccak-256` (KECCAK256 opcode, not a precompile) | NIST FIPS 202 §3 (`Keccak-p[1600,24]`), §4 (sponge), §5.1-5.2 (`pad10*1`, `KECCAK[c]`), Appendix B.1; Ethereum's KEC is `KECCAK[512](M, 256)` without SHA-3 domain bits | Port of the SHA3IUF C implementation (`Jaune/Hash.lean:292-294`); independent transcription `Jaune/KeccakSpec.lean` | `Bytes.keccak_eq_fips`, `ByteArray.keccak_eq_fips` and `ByteArray.keccak_eq_fips_of_le` (`Jaune/KeccakSpec.lean`), via `Keccak.FIPS.f1600_eq_keccakP` and the older `KECCAK.f1600_eq` (kernel equals its in-file port); opcode-side `PlainOp.runCore_keccak256_eq_reference` (`Jaune/Machine.lean:4962`) relates the opcode to `Bytes.keccak` | `KeccakSpec.lean` empty-string guard; `check-u256.sh` keccak/keccak_ba vectors vs pinned EELS (83 cases; they test the hash value, which the theorems now state); fixture suites |
 | `SHA-256` (0x02) | NIST FIPS 180-4 §4.1.2, §4.2.2, §5.1.1, §5.2.1, §5.3.3, §6.2.2 | Port of Mosnier's C (`Jaune/Hash.lean:167-169`); independent transcription `Jaune/SHA256Spec.lean:14-16` | `Bytes.sha256_eq_fips` (`Jaune/SHA256Spec.lean:740`) | `scripts/vectors/sha256.json` (81 cases); `check-vectors.sh`; fixtures |
 | `RIPEMD-160` (0x03) | Dobbertin-Bosselaers-Preneel, FSE 1996 (Appendix A pseudo-code); ISO/IEC 10118-3:2004 (Dedicated Hash-Function 1); Yellow Paper Appendix E | Port of tiny-ripemd160 C (`Jaune/Hash.lean:13-14`); reference transcription `Jaune/RIPEMD160Spec.lean` | none (agreement shown by `#guard`s only) | `RIPEMD160Spec.lean` guards (8 published test values; kernel agreement on those plus 13 seam lengths); `scripts/vectors/ripemd160.json` (85 cases); fixtures |
 | `BLAKE2 F` (0x09) | RFC 7693 §3.2 (F), §3.1 (G), §2.6-2.7; EIP-152 (framing) | `bCompress` (`Jaune/Precompiles.lean:629`), source previously unstated; reference transcription `Jaune/Blake2Spec.lean` | none about values (`Blake2.roundVec_toArray`, `Blake2.roundsVec_toArray` relate the optimized rounds to the in-file readable rounds, not to the standard) | `Blake2Spec.lean` guards (EIP-152 vectors 4-7, four framing-failure classes, `BLAKE2b-512("abc")`, production agreement); `scripts/vectors/blake2F.json` (5 cases); fixtures |
@@ -424,7 +424,7 @@ the corpus it runs over. The last eight rows are the consensus layer's
 | BLS POP ciphersuite `BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_` (KeyValidate, CoreVerify, Aggregate, FastAggregateVerify, the `eth_*` wrappers) (consensus layer) | draft-irtf-cfrg-bls-signature-04 §§2.4 to 2.7 and §3.3; `specs/altair/bls.md` | the draft and the spec text | none; `#guard` vectors only | official `bls` vectors, including the infinity-pubkey case |
 | BLS12-381 fast paths (fast Miller loop, fast final exponentiation, psi subgroup test, psi cofactor clearing) (consensus layer) | `specs/deneb/polynomial-commitments.md` as used; RFC 9380 App. G for the clearing steps | Jaune `BLS.lean` and the consensus crypto modules | none; differential guards only | in-tree guard files (`JauneConsensus/Crypto/G2SubgroupVectors.lean`, KZG vector files), official `bls` and `kzg` vectors |
 | KZG for EIP-4844 (consensus layer) | `specs/deneb/polynomial-commitments.md` | the spec markdown | none | official `kzg` vectors, Deneb handlers; cross-checked against Jaune `verifyKzgProofImpl` |
-| EIP-7594 cells (`compute_cells`, proofs, recovery, batch verification) (consensus layer) | `specs/fulu/polynomial-commitments-sampling.md` | the spec markdown | none (`fk20H` reference vs `fk20HFft` fast path, differential) | official `kzg` vectors, Fulu handlers |
+| EIP-7594 cells (`compute_cells`, proofs, recovery, batch verification) (consensus layer) | `specs/fulu/polynomial-commitments-sampling.md` | the spec markdown | none (`fk20Points` reference vs `fk20PointsFft` fast path, differential) | official `kzg` vectors, Fulu handlers |
 | shuffling (`compute_shuffled_index`) (consensus layer) | `specs/phase0/beacon-chain.md` | pyspec | none | `shuffling` vectors on both presets |
 ## The consensus layer
 
@@ -510,7 +510,7 @@ mismatch. Contents are vouched for by the tarball digests together with
 handler without an implementation fails. Nothing is skipped. There is no
 expected-failure list. The `eip7805` feature fork is refused by name, and
 so is Gloas for every runner outside `gloasRunners`
-(`Harness/Discovery.lean`). `CFork.rules?` resolves Gloas to nothing, so
+(`Harness/Discovery.lean`). `ConsensusFork.rules?` resolves Gloas to nothing, so
 nothing falls back to Fulu; the admitted Gloas runners run the separate Gloas
 modules. Fork-choice vectors verify signatures unless `JAUNE_CONSENSUS_FC_BLS=0`
 (the catalogue records both modes). Caches live only in the harness, never
@@ -518,7 +518,7 @@ in the semantics.
 
 **Accepted divergences.** Each was checked against the code on the candidate.
 `compute_proposer_index` and both `get_next_sync_committee_indices` run for
-`SAMPLING_FUEL = 2 ^ 28` iterations (`Accessors.lean`, `EpochAccessors.lean`)
+`samplingFuel = 2 ^ 28` iterations (`Accessors.lean`, `EpochAccessors.lean`)
 and reject on exhaustion, where pyspec loops unbounded. Under a random-oracle
 reading of the hash the exhaustion probability is negligible, and the code
 says so at each site. `get_ancestor`, `filter_block_tree`, `get_head` and
@@ -535,8 +535,8 @@ need real BLS carry a `bls_setting` that keeps it on, so no vector reaches
 the flagged inputs.
 
 **What is only differential.** These fast paths have a kept reference and
-agree with it on tested inputs. Nothing more is claimed. `fk20H` (direct
-MSMs) is the reference for `fk20HFft` (Toeplitz products in the frequency
+agree with it on tested inputs. Nothing more is claimed. `fk20Points` (direct
+MSMs) is the reference for `fk20PointsFft` (Toeplitz products in the frequency
 domain) in `Crypto/KZGCells.lean`, beside `fftField` and `cosetFftField`.
 `g2SubgroupCheckFast` is the psi-based G2 subgroup test in
 `Crypto/G2Subgroup.lean`, pinned by differential guards. The fast Miller
@@ -544,7 +544,7 @@ loop and fast final exponentiation in `Jaune/BLS.lean` sit beside
 `blsPairingRef` and a square-and-multiply reference; the Frobenius map
 `x ↦ x^p` they use is checked by guards on Miller-loop values, not proved.
 `clearCofactorG2` (the ten-step RFC G.3 clearing) sits beside
-`clearCofactorG2Ref` (multiply by `hEffG2`) in `Crypto/HashToCurve.lean`.
+`clearCofactorG2Reference` (multiply by `hEffG2`) in `Crypto/HashToCurve.lean`.
 KZG and the EIP-7594 cell functions are checked against the official `kzg`
 vectors and against Jaune's own `verifyKzgProofImpl`. RFC 9380
 hash-to-curve and the signature ciphersuite are checked against RFC
@@ -616,7 +616,7 @@ As for SHA-256 below, the theorem does not excuse a reader from checking the
 right-hand side against the standard. `scripts/check-u256.sh`'s 83 keccak
 vectors test the hash value itself, which the theorems now state; they are
 kept unchanged for now. The opcode's call site is covered separately, by
-`Rinst.runCore_keccak256_eq_reference` and the fixture corpora.
+`PlainOp.runCore_keccak256_eq_reference` and the fixture corpora.
 
 **`Jaune.Bytes.sha256_eq_fips` in `Jaune/SHA256Spec.lean` is a stronger claim
 than `f1600_eq`, and the whole of the difference is the reference.** The

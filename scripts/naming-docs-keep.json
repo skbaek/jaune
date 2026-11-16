@@ -1,0 +1,7 @@
+{
+ "schema_version": 1,
+ "description": "Spellings in documents that look like an old name's trailing components but name an external interface, not a renamed constant (naming-docs.py --keep). Reviewed in context by jsn-u9 for G0a.",
+ "keep": [
+  {"file": "README.md", "spelling": "txs", "reason": "the t8n command's transaction-list input (`txs`), an ecosystem transition-tool interface name, not Jaune.Block.txs"}
+ ]
+}
