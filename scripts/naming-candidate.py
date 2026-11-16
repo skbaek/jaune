@@ -505,6 +505,7 @@ def capture(args):
                 hashes[path] = file_sha(path)
         return {part: hashes[path] if path else None for part, path in parts.items()}
     local_identity = {m: artifact_identity(parts) for m, parts in local_built.items()}
+    verdicts = {}
 
     def reusable_imports(index, module):
         """The prior's `--imports` output, relocated, iff every import it names
@@ -518,17 +519,23 @@ def capture(args):
         if found is None or found[1].get('module') != module:
             return None
         for name, parts in found[1]['imports'].items():
-            if name not in index['artifacts'] or set(parts) != set(PARTS) or parts['olean'] is None:
-                return None
-            parts = relocate_parts(parts, index['root'], root)
-            if name in initial['modules']:
-                if name not in local_paths or parts != local_paths[name] or \
-                        local_identity[name] != index['artifacts'][name]:
-                    return None
-            elif (lean_resolve(search_path, name) != parts['olean'] or artifact_parts(parts['olean']) != parts or
-                  identity(parts) != index['artifacts'][name]):
+            # Modules share most imports: decide each recorded binding once.
+            memo = (id(index), name, tuple(sorted(parts.items())))
+            if memo not in verdicts:
+                verdicts[memo] = import_still_bound(index, name, parts)
+            if not verdicts[memo]:
                 return None
         return found
+
+    def import_still_bound(index, name, parts):
+        if name not in index['artifacts'] or set(parts) != set(PARTS) or parts['olean'] is None:
+            return False
+        parts = relocate_parts(parts, index['root'], root)
+        if name in initial['modules']:
+            return (name in local_paths and parts == local_paths[name] and
+                    local_identity[name] == index['artifacts'][name])
+        return (lean_resolve(search_path, name) == parts['olean'] and artifact_parts(parts['olean']) == parts and
+                identity(parts) == index['artifacts'][name])
 
     run(root, out, 'admit', argv(args.admit_command))
     try:
