@@ -34,6 +34,79 @@ class Mismatch(ValueError):
     pass
 
 
+def _unwind(e):
+    args = []
+    while isinstance(e, list) and len(e) == 3 and e[0] == 'app':
+        args.append(e[2])
+        e = e[1]
+    head = e[1][1] if isinstance(e, list) and len(e) == 3 and e[0] == 'const' else None
+    return head, args[::-1]
+
+
+def _lit(e):
+    return e[1] if isinstance(e, list) and len(e) == 2 and e[0] == 'str' else None
+
+
+def _name(e):
+    """Decode an elaborated `Lean.Name` expression, or None."""
+    head, args = _unwind(e)
+    if head == 'Lean.Name.anonymous' and not args:
+        return []
+    if head in ('Lean.Name.mkStr', 'Lean.Name.str') and len(args) == 2:
+        prefix, part = _name(args[0]), _lit(args[1])
+        return None if prefix is None or part is None else prefix + [part]
+    if head and head.startswith('Lean.Name.mkStr') and head[len('Lean.Name.mkStr'):].isdigit():
+        parts = [_lit(a) for a in args]
+        return None if None in parts else parts
+    return None
+
+
+def _list(e):
+    head, args = _unwind(e)
+    if head == 'List.nil' and len(args) == 1:
+        return []
+    if head == 'List.cons' and len(args) == 3:
+        rest = _list(args[2])
+        return None if rest is None else [args[1]] + rest
+    return None
+
+
+def _preresolved(e):
+    head, args = _unwind(e)
+    if head == 'Lean.Syntax.Preresolved.decl' and len(args) == 2:
+        name, fields = _name(args[0]), _list(args[1])
+        if name is None or fields is None or None in [_lit(f) for f in fields]:
+            return None
+        return ['decl', ['name', '.'.join(name)], [_lit(f) for f in fields]]
+    if head == 'Lean.Syntax.Preresolved.namespace' and len(args) == 1:
+        name = _name(args[0])
+        return None if name is None else ['namespace', '.'.join(name)]
+    return None
+
+
+def quoted_identifiers(e):
+    """Canonical form of identifiers inside elaborated syntax quotations.
+
+    `Lean.Syntax.ident info raw val preresolved`: when the quotation
+    pre-resolved global declarations, expansion uses them; the quoted spelling
+    (`raw`, `val`) is then only spelling, which a rename (or a capture
+    qualification) may change. The declarations are compared under the map;
+    without pre-resolution the spelling itself is compared.
+    """
+    if isinstance(e, dict):
+        return {k: quoted_identifiers(v) for k, v in e.items()}
+    if not isinstance(e, list):
+        return e
+    if e and e[0] == 'app':
+        head, args = _unwind(e)
+        if head == 'Lean.Syntax.ident' and len(args) == 4:
+            items = _list(args[3])
+            decoded = None if items is None else [_preresolved(x) for x in items]
+            if decoded and None not in decoded and all(d[0] == 'decl' for d in decoded):
+                return ['quotedIdentifier', decoded]
+    return [quoted_identifiers(x) for x in e]
+
+
 def merge_constants(existing, roots, incoming, incoming_roots):
     """Union compiler-registered equation copies, never authored collisions."""
     overlap = existing.keys() & incoming.keys()
@@ -132,6 +205,8 @@ def read_exports(paths):
         missing = names - data['constants'].keys()
         if missing:
             raise ValueError(f'{module}: authored definitions missing from kernel export: {sorted(missing)}')
+        data['constants'] = {n: quoted_identifiers(c) for n, c in data['constants'].items()}
+        data['guards'] = [quoted_identifiers(g) for g in data['guards']]
         coalesced |= merge_constants(constants, roots, data['constants'], names)
         roots.update(names)
         for name in data['constants']:

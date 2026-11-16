@@ -91,6 +91,30 @@ class NamingFidelityTests(unittest.TestCase):
             result = self.run_check()
             self.assertEqual(result['generated_constants'], 1)
 
+    def test_quoted_identifier_compares_preresolution_not_spelling(self):
+        def c(n):
+            return ['const', ['name', n], []]
+        def app(f, *xs):
+            for x in xs:
+                f = ['app', f, x]
+            return f
+        def name(*parts):
+            return app(c(f'Lean.Name.mkStr{len(parts)}'), *[['str', x] for x in parts])
+        def ident(raw, parts, decl):
+            pre = app(c('List.cons'), c('T'), app(c('Lean.Syntax.Preresolved.decl'), name(*decl.split('.')),
+                                                  app(c('List.nil'), c('String'))), app(c('List.nil'), c('T')))
+            return app(c('Lean.Syntax.ident'), c('Lean.SourceInfo.none'), ['str', raw], name(*parts), pre)
+        before = dict(kernel=ident('B256', ['B256'], 'Jaune.B256'), attributes={})
+        after = dict(kernel=ident('Jaune.U256', ['Jaune', 'U256'], 'Jaune.U256'), attributes={})
+        self.before = snapshot({'N.m': CHECK.quoted_identifiers(before)}, ['N.m'])
+        self.after = snapshot({'N.m': CHECK.quoted_identifiers(after)}, ['N.m'])
+        self.renames = {'Jaune.B256': 'Jaune.U256'}
+        self.assertEqual(self.run_check()['status'], 'OK')
+        other = dict(kernel=ident('Jaune.U256', ['Jaune', 'U256'], 'JauneConsensus.U256'), attributes={})
+        self.after = snapshot({'N.m': CHECK.quoted_identifiers(other)}, ['N.m'])
+        with self.assertRaises(CHECK.Mismatch):
+            self.run_check()
+
     def test_exact_rename_and_reference_mapping(self):
         self.before['guards'] = [ref('N.old')]
         self.after['guards'] = [ref('N.new')]

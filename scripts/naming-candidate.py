@@ -472,7 +472,7 @@ def affected_modules(before, after):
         affected |= more
 
 
-def compare(before, after, mapping):
+def compare(before, after, mapping, inventory=None):
     left, right = before['candidate'], after['candidate']
     if left['source_dirs'] != right['source_dirs']:
         raise ValueError('module source layout changed; explicit relocation support is required')
@@ -488,8 +488,19 @@ def compare(before, after, mapping):
     if changed_lean - covered:
         raise ValueError(f'changed Lean sources outside exports: {sorted(changed_lean - covered)}')
     affected = affected_modules(left['modules'], right['modules'])
+    # A registered, digest-pinned exclusion (naming-inventory.json) that both
+    # candidates hold byte-identical is accounted for, not exported.
+    excluded = set()
+    if inventory is not None:
+        raw, rows = inventory
+        for side in (left, right):
+            if side['files'].get('scripts/naming-inventory.json') != sha(raw):
+                raise ValueError('naming inventory differs from a candidate\'s registered inventory')
+        for row in rows['excluded_sources']:
+            if left['files'].get(row['path']) == right['files'].get(row['path']) == row['sha256']:
+                excluded |= {m for m, r in left['modules'].items() if r['path'] == row['path']}
     for side in (before, after):
-        missing = (affected & side['candidate']['modules'].keys()) - set(side['selected'])
+        missing = (affected & side['candidate']['modules'].keys()) - set(side['selected']) - excluded
         if missing:
             raise ValueError(f'affected importers outside exports: {sorted(missing)}')
     boundaries = []
@@ -515,7 +526,8 @@ def compare(before, after, mapping):
                   before_candidate=left['head'], after_candidate=right['head'],
                   before_inventory_sha256=sha(FIDELITY.encoded(left).encode()),
                   after_inventory_sha256=sha(FIDELITY.encoded(right).encode()),
-                  affected_modules=sorted(affected))
+                  affected_modules=sorted(affected),
+                  excluded_importers=sorted(affected & excluded))
     return result
 
 
@@ -540,12 +552,19 @@ def main():
     comp.add_argument('--before', type=Path, required=True)
     comp.add_argument('--after', type=Path, required=True)
     comp.add_argument('--map', type=Path, required=True)
+    comp.add_argument('--inventory', type=Path,
+                      help='scripts/naming-inventory.json of both candidates: registered exclusions')
     args = parser.parse_args()
     try:
         if args.command == 'capture':
             result = capture(args)
         else:
-            result = compare(read_snapshot(args.before), read_snapshot(args.after), json.loads(args.map.read_bytes()))
+            inventory = None
+            if args.inventory:
+                raw = args.inventory.read_bytes()
+                inventory = (raw, json.loads(raw))
+            result = compare(read_snapshot(args.before), read_snapshot(args.after),
+                             json.loads(args.map.read_bytes()), inventory)
             result['map_sha256'] = file_sha(args.map)
         print(json.dumps(result, indent=2))
         return 0
