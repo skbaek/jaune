@@ -257,6 +257,28 @@ class CandidateTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'incomplete candidate export closure'):
                 CHECK.read_snapshot(path)
 
+    def test_plan_only_capture_is_refused_for_fidelity(self):
+        data = dict(schema_version=3, status='OK', build=dict(exit=0), purpose='plan',
+                    candidate=self.before['candidate'], roots=['Client'], selected=['Dep', 'Client'],
+                    exports={}, source_only=[], producers=['Dep', 'Client'], local_built={})
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'snapshot.json'
+            source = copy.deepcopy(data['candidate'])
+            headers = dict(schema_version=1, modules={})
+            for module, row in source['modules'].items():
+                imports = row.pop('imports')
+                headers['modules'][module] = dict(path=row['path'], is_module=row.pop('is_module'),
+                                                  direct_imports=[[name, False, False, False] for name in imports])
+            (path.parent / 'source-before.json').write_text(json.dumps(source))
+            (path.parent / 'headers.json').write_text(json.dumps(headers))
+            data['headers_sha256'] = CHECK.file_sha(path.parent / 'headers.json')
+            data['selected'] = CHECK.closure(data['candidate']['modules'], ['Client'])
+            data['exports'] = {}
+            path.write_text(json.dumps(data))
+            # Fidelity refuses it before reading anything else.
+            with self.assertRaisesRegex(ValueError, 'plan-only capture'):
+                CHECK.read_snapshot(path)
+
 
     def _tool_root_capture(self, tmp, toolchain, prefix=True):
         import argparse

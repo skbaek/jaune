@@ -409,10 +409,14 @@ def capture(args):
                       headers_sha256=file_sha(header_output),
                       exporter_sha256=exporter_hash, tool_sources=tool_sources,
                       **({} if tool_root == root else dict(tool_root=str(tool_root))),
+                      **(dict(purpose='plan') if args.plan_only else {}),
                       artifacts=bound, local_built=local_built, exports=exports)
-        # Validate the assembled bundle before advertising success.
-        read_environments({m: out / row['path'] for m, row in exports.items()},
-                          initial['modules'], selected)
+        # Validate the assembled bundle before advertising success. A plan-only
+        # capture (a consumer that is renamed but never fidelity-compared) skips
+        # the kernel-graph reader, which refuses forms N4 does not support yet.
+        if not args.plan_only:
+            read_environments({m: out / row['path'] for m, row in exports.items()},
+                              initial['modules'], selected)
     finally:
         run(root, out, 'release', argv(args.release_command))
     save(out / 'snapshot.json', result)
@@ -424,6 +428,8 @@ def read_snapshot(path, fidelity=True):
     data = json.loads(path.read_bytes())
     if data['schema_version'] not in (2, 3) or data['status'] != 'OK' or data['build']['exit'] != 0:
         raise ValueError('not a successful candidate capture')
+    if fidelity and data.get('purpose') == 'plan':
+        raise ValueError('plan-only capture cannot be used for fidelity comparison')
     candidate = data['candidate']
     header_path = path.parent / 'headers.json'
     if file_sha(header_path) != data['headers_sha256']:
@@ -569,6 +575,8 @@ def main():
                      help='Jaune checkout that builds the exporter, for a candidate consuming Jaune as a package')
     cap.add_argument('--tool-build-prefix',
                      help='owned-build argv prefix (JSON) run in --tool-root')
+    cap.add_argument('--plan-only', action='store_true',
+                     help='capture for rename planning only; the snapshot is refused by compare')
     cap.add_argument('--jobs', type=int, default=1,
                      help='concurrent exporter processes; size the admission command for them')
     comp = commands.add_parser('compare')

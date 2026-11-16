@@ -559,6 +559,11 @@ two `lean-toolchain` files must be byte-identical. The snapshot records
 `tool_root`, and its `tool_sources` digests are read from that checkout and
 rechecked after export.
 
+`--plan-only` captures for rename planning only: the bundles and imports are
+bound as usual, but the kernel-graph reader is not run, so forms N4 does not
+yet support (a `local`/`scoped` attribute command in a consumer) do not block
+planning. The snapshot records `purpose: plan`, and `compare` refuses it.
+
 All three command arguments are nonempty JSON argv arrays, never shell text.
 The build prefix is the host's authorized owned-build invocation, ending just
 before its targets (for Creme, through the `--` separator). Capture first builds
