@@ -23,7 +23,7 @@ variable {P : Preset}
 /-! ## Shared vocabulary -/
 
 /-- `builder_pubkeys.index(pubkey)` (CL:2338, 2373): the first builder with that pubkey. -/
-def firstMatch (builders : ProgressiveListRightSpine JauneConsensus.Gloas.Builder) (pk : BLSPubkey) :
+def firstMatch (builders : ProgressiveListR JauneConsensus.Gloas.Builder) (pk : BLSPubkey) :
     Option Nat :=
   builders.toArray.findIdx? (·.pubkey == pk)
 
@@ -72,12 +72,12 @@ inductive BuilderDepositOutcome
 /-- The classification of a builder deposit request: the reads and checks of
 `process_builder_deposit_request`, in its order, without its writes. -/
 def classifyBuilderDeposit (ccfg : Config) (bls : Bool) (m : JauneConsensus.Gloas.BeaconState P)
-    (r : JauneConsensus.Gloas.BuilderDepositRequest) : Fallible BuilderDepositOutcome := do
+    (r : JauneConsensus.Gloas.BuilderDepositRequest) : M BuilderDepositOutcome := do
   if !JauneConsensus.Gloas.isBuilderWithdrawalCredential r.withdrawal_credentials then
     return .ignoredPrefix
   match firstMatch m.builders r.pubkey with
   | none =>
-    if ← JauneConsensus.Gloas.isValidBuilderDepositSignature { config := ccfg, blsActive := bls } r then
+    if ← JauneConsensus.Gloas.isValidBuilderDepositSignature { cfg := ccfg, blsActive := bls } r then
       let _ ← JauneConsensus.Gloas.addressOfCredentials r.withdrawal_credentials
       return .register (← JauneConsensus.Gloas.getIndexForNewBuilder m).toNat r.amount
     else return .ignoredBadSignature
@@ -87,14 +87,14 @@ def classifyBuilderDeposit (ccfg : Config) (bls : Bool) (m : JauneConsensus.Gloa
 
 /-- The top-up branch of `process_builder_deposit_request` at index `i` (CL:2348-2361). -/
 def topUpBuilder (ccfg : Config) (m : JauneConsensus.Gloas.BeaconState P) (i : Nat)
-    (amount : Gwei) : Fallible (JauneConsensus.Gloas.BeaconState P) := do
+    (amount : Gwei) : M (JauneConsensus.Gloas.BeaconState P) := do
   let site := "process_builder_deposit_request"
   let builder ← m.builders.get i site
   let builder ← (if builder.withdrawable_epoch != FAR_FUTURE_EPOCH && builder.balance == U64.zero
     then do
       let epoch ← JauneConsensus.Gloas.getCurrentEpoch m
       pure { builder with
-        withdrawable_epoch := ← epoch.add? (← u64Checked ccfg.MIN_BUILDER_WITHDRAWABILITY_DELAY) site }
+        withdrawable_epoch := ← epoch.add? (← c64 ccfg.MIN_BUILDER_WITHDRAWABILITY_DELAY) site }
     else pure builder)
   let balance ← builder.balance.add? amount site
   pure { m with builders := ← m.builders.set i { builder with balance } site }
@@ -102,7 +102,7 @@ def topUpBuilder (ccfg : Config) (m : JauneConsensus.Gloas.BeaconState P) (i : N
 /-- The effect of a classified builder deposit request. -/
 def applyBuilderDepositOutcome (ccfg : Config) (m : JauneConsensus.Gloas.BeaconState P)
     (r : JauneConsensus.Gloas.BuilderDepositRequest) :
-    BuilderDepositOutcome → Fallible (JauneConsensus.Gloas.BeaconState P)
+    BuilderDepositOutcome → M (JauneConsensus.Gloas.BeaconState P)
   | .ignoredPrefix => pure m
   | .ignoredBadSignature => pure m
   | .topUp i _ _ => topUpBuilder ccfg m i r.amount
@@ -110,19 +110,19 @@ def applyBuilderDepositOutcome (ccfg : Config) (m : JauneConsensus.Gloas.BeaconS
     JauneConsensus.Gloas.addBuilderToRegistry m r.pubkey JauneConsensus.Gloas.PAYLOAD_BUILDER_VERSION
       (← JauneConsensus.Gloas.addressOfCredentials r.withdrawal_credentials) r.amount m.slot
 
-theorem isValidBuilderDepositSignature_context (ctx : Ctx)
+theorem isValidBuilderDepositSignature_ctx (ctx : Ctx)
     (r : JauneConsensus.Gloas.BuilderDepositRequest) :
     JauneConsensus.Gloas.isValidBuilderDepositSignature ctx r =
       JauneConsensus.Gloas.isValidBuilderDepositSignature
-        { config := ctx.config, blsActive := ctx.blsActive } r := rfl
+        { cfg := ctx.cfg, blsActive := ctx.blsActive } r := rfl
 
 /-- `process_builder_deposit_request` is its classification followed by its effect. -/
 theorem processBuilderDepositRequest_eq (ctx : Ctx) (m : JauneConsensus.Gloas.BeaconState P)
     (r : JauneConsensus.Gloas.BuilderDepositRequest) :
     JauneConsensus.Gloas.processBuilderDepositRequest ctx m r =
-      classifyBuilderDeposit ctx.config ctx.blsActive m r >>= applyBuilderDepositOutcome ctx.config m r := by
+      classifyBuilderDeposit ctx.cfg ctx.blsActive m r >>= applyBuilderDepositOutcome ctx.cfg m r := by
   unfold JauneConsensus.Gloas.processBuilderDepositRequest classifyBuilderDeposit
-  rw [isValidBuilderDepositSignature_context]
+  rw [isValidBuilderDepositSignature_ctx]
   by_cases hp : JauneConsensus.Gloas.isBuilderWithdrawalCredential r.withdrawal_credentials
   · simp only [hp, Bool.not_true, Bool.false_eq_true, if_false]
     cases hfm : firstMatch m.builders r.pubkey with
@@ -130,7 +130,7 @@ theorem processBuilderDepositRequest_eq (ctx : Ctx) (m : JauneConsensus.Gloas.Be
       unfold firstMatch at hfm
       rw [hfm]
       cases hv : JauneConsensus.Gloas.isValidBuilderDepositSignature
-          { config := ctx.config, blsActive := ctx.blsActive } r with
+          { cfg := ctx.cfg, blsActive := ctx.blsActive } r with
       | error e => rfl
       | ok v =>
         cases v with
@@ -159,7 +159,7 @@ theorem processBuilderDepositRequest_eq (ctx : Ctx) (m : JauneConsensus.Gloas.Be
           | error e => rfl
           | ok e =>
             dsimp only
-            cases u64Checked ctx.config.MIN_BUILDER_WITHDRAWABILITY_DELAY with
+            cases c64 ctx.cfg.MIN_BUILDER_WITHDRAWABILITY_DELAY with
             | error _ => rfl
             | ok d =>
               dsimp only
@@ -193,7 +193,7 @@ inductive BuilderExitOutcome
 /-- The classification of a builder exit request: the reads and checks of
 `process_builder_exit_request`, in its order, without its write. -/
 def classifyBuilderExit (_ccfg : Config) (m : JauneConsensus.Gloas.BeaconState P)
-    (r : JauneConsensus.Gloas.BuilderExitRequest) : Fallible BuilderExitOutcome := do
+    (r : JauneConsensus.Gloas.BuilderExitRequest) : M BuilderExitOutcome := do
   let some i := firstMatch m.builders r.pubkey | return .unknownPubkey
   let builderIndex ← U64.ofNat? i "BuilderIndex"
   let builder ← m.builders.get i "process_builder_exit_request"
@@ -208,7 +208,7 @@ def classifyBuilderExit (_ccfg : Config) (m : JauneConsensus.Gloas.BeaconState P
 /-- The effect of a classified builder exit request: only `initiate` writes. -/
 def applyBuilderExitOutcome (ccfg : Config) (m : JauneConsensus.Gloas.BeaconState P)
     (_r : JauneConsensus.Gloas.BuilderExitRequest) :
-    BuilderExitOutcome → Fallible (JauneConsensus.Gloas.BeaconState P)
+    BuilderExitOutcome → M (JauneConsensus.Gloas.BeaconState P)
   | .initiate i => do
     JauneConsensus.Gloas.initiateBuilderExit ccfg m (← U64.ofNat? i "BuilderIndex")
   | _ => pure m
@@ -251,18 +251,18 @@ theorem processBuilderExitRequest_eq (ccfg : Config) (m : JauneConsensus.Gloas.B
 
 /-! ## List and equality plumbing -/
 
-theorem progressiveList_get_ok {s : Spine} {α : Type} {xs : ProgressiveListOnSpine s α} {i : Nat} {site : String}
+theorem pl_get_ok {s : Spine} {α : Type} {xs : ProgressiveListS s α} {i : Nat} {site : String}
     {x : α} : xs.get i site = .ok x ↔ xs.toArray[i]? = some x := by
-  unfold ProgressiveListOnSpine.get getAt
+  unfold ProgressiveListS.get getAt
   cases h : xs.toArray[i]? with
   | none => constructor <;> intro hh <;> cases hh
   | some y => constructor <;> intro hh <;> cases hh <;> rfl
 
-theorem progressiveList_set_ok {s : Spine} {α : Type} {xs ys : ProgressiveListOnSpine s α} {i : Nat} {v : α}
+theorem pl_set_ok {s : Spine} {α : Type} {xs ys : ProgressiveListS s α} {i : Nat} {v : α}
     {site : String} (h : xs.set i v site = .ok ys) :
     ys.toArray.size = xs.toArray.size ∧ ys.toArray[i]? = some v ∧
       ∀ j, j ≠ i → ys.toArray[j]? = xs.toArray[j]? := by
-  unfold ProgressiveListOnSpine.set at h
+  unfold ProgressiveListS.set at h
   split at h
   · rename_i hi
     cases h
@@ -270,20 +270,20 @@ theorem progressiveList_set_ok {s : Spine} {α : Type} {xs ys : ProgressiveListO
     simp [Array.getElem?_set, Ne.symm hj]
   · cases h
 
-theorem progressiveList_setOrAppend_ok {s : Spine} {α : Type} {xs ys : ProgressiveListOnSpine s α} {idx : U64}
+theorem pl_setOrAppend_ok {s : Spine} {α : Type} {xs ys : ProgressiveListS s α} {idx : U64}
     {v : α} {site : String} (h : xs.setOrAppend idx v site = .ok ys) :
     xs.toArray.size ≤ ys.toArray.size ∧ ys.toArray[idx.toNat]? = some v ∧
       ∀ j, j ≠ idx.toNat → ys.toArray[j]? = xs.toArray[j]? := by
-  unfold ProgressiveListOnSpine.setOrAppend at h
+  unfold ProgressiveListS.setOrAppend at h
   split at h
   · rename_i hc
     have hc' : idx.toNat = xs.toArray.size := by
-      simpa [ProgressiveListOnSpine.length] using hc
+      simpa [ProgressiveListS.length] using hc
     cases h
-    refine ⟨by simp [ProgressiveListOnSpine.push], by simp [ProgressiveListOnSpine.push, hc'], fun j hj => ?_⟩
-    simp only [ProgressiveListOnSpine.push, Array.getElem?_push]
+    refine ⟨by simp [ProgressiveListS.push], by simp [ProgressiveListS.push, hc'], fun j hj => ?_⟩
+    simp only [ProgressiveListS.push, Array.getElem?_push]
     rw [if_neg (by omega)]
-  · obtain ⟨h1, h2, h3⟩ := progressiveList_set_ok h
+  · obtain ⟨h1, h2, h3⟩ := pl_set_ok h
     exact ⟨by omega, h2, h3⟩
 
 theorem pubkey_beq_iff {a b : BLSPubkey} : (a == b) = true ↔ a = b := by
@@ -297,7 +297,7 @@ theorem pubkey_beq_iff {a b : BLSPubkey} : (a == b) = true ↔ a = b := by
     rfl
   · intro h; rw [h]
 
-theorem firstMatch_none_iff {bs : ProgressiveListRightSpine JauneConsensus.Gloas.Builder} {pk : BLSPubkey} :
+theorem firstMatch_none_iff {bs : ProgressiveListR JauneConsensus.Gloas.Builder} {pk : BLSPubkey} :
     firstMatch bs pk = none ↔ ∀ b ∈ bs.toArray, b.pubkey ≠ pk := by
   unfold firstMatch
   rw [Array.findIdx?_eq_none_iff]
@@ -313,7 +313,7 @@ theorem firstMatch_none_iff {bs : ProgressiveListRightSpine JauneConsensus.Gloas
     | false => rfl
     | true => exact absurd (pubkey_beq_iff.mp hh) (h b hb)
 
-theorem firstMatch_some {bs : ProgressiveListRightSpine JauneConsensus.Gloas.Builder} {pk : BLSPubkey}
+theorem firstMatch_some {bs : ProgressiveListR JauneConsensus.Gloas.Builder} {pk : BLSPubkey}
     {i : Nat} (h : firstMatch bs pk = some i) :
     (∃ b, bs.toArray[i]? = some b ∧ b.pubkey = pk) ∧
       ∀ j, j < i → ∀ b', bs.toArray[j]? = some b' → b'.pubkey ≠ pk := by
@@ -348,7 +348,7 @@ theorem builderDepositDomain_eq_some {ccfg : Config} {dom : Domain} :
 
 theorem isValidBuilderDepositSignature_ok {ccfg : Config} {bls : Bool}
     {r : JauneConsensus.Gloas.BuilderDepositRequest} {v : Bool} :
-    JauneConsensus.Gloas.isValidBuilderDepositSignature { config := ccfg, blsActive := bls } r = .ok v ↔
+    JauneConsensus.Gloas.isValidBuilderDepositSignature { cfg := ccfg, blsActive := bls } r = .ok v ↔
       ∃ dom, builderDepositDomain ccfg = some dom ∧
         blsVerify bls r.pubkey (computeSigningRoot (builderDepositMessage r) dom) r.signature = v := by
   unfold JauneConsensus.Gloas.isValidBuilderDepositSignature
@@ -366,13 +366,13 @@ theorem isActiveBuilder_of_get {m : JauneConsensus.Gloas.BeaconState P} {bi : U6
       .ok (decide (b.deposit_epoch < m.finalized_checkpoint.epoch) &&
         b.withdrawable_epoch == FAR_FUTURE_EPOCH) := by
   unfold JauneConsensus.Gloas.isActiveBuilder
-  rw [show m.builders.get bi.toNat "is_active_builder" = .ok b from progressiveList_get_ok.mpr h]
+  rw [show m.builders.get bi.toNat "is_active_builder" = .ok b from pl_get_ok.mpr h]
   rfl
 
 /-! ## Inversions of the classifications -/
 
 /-- What a successful exit classification read and decided. -/
-theorem classifyBuilderExit_invariant {ccfg : Config} {m : JauneConsensus.Gloas.BeaconState P}
+theorem classifyBuilderExit_inv {ccfg : Config} {m : JauneConsensus.Gloas.BeaconState P}
     {r : JauneConsensus.Gloas.BuilderExitRequest} {o : BuilderExitOutcome}
     (hc : classifyBuilderExit ccfg m r = .ok o) :
     (firstMatch m.builders r.pubkey = none ∧ o = .unknownPubkey) ∨
@@ -399,7 +399,7 @@ theorem classifyBuilderExit_invariant {ccfg : Config} {m : JauneConsensus.Gloas.
     rw [hfm] at hc
     obtain ⟨bi, hbi, hc⟩ := bind_eq_ok_iff.mp hc
     obtain ⟨b, hg, hc⟩ := bind_eq_ok_iff.mp hc
-    have hb := progressiveList_get_ok.mp hg
+    have hb := pl_get_ok.mp hg
     have hbi' : bi.toNat = i := U64.toNat_ofNat? hbi
     obtain ⟨act, hact, hc⟩ := bind_eq_ok_iff.mp hc
     rw [isActiveBuilder_of_get (hbi' ▸ hb)] at hact
@@ -438,7 +438,7 @@ theorem classifyBuilderExit_invariant {ccfg : Config} {m : JauneConsensus.Gloas.
       exact Or.inl ⟨ha, rfl⟩
 
 /-- What a successful deposit classification read and decided. -/
-theorem classifyBuilderDeposit_invariant {ccfg : Config} {bls : Bool}
+theorem classifyBuilderDeposit_inv {ccfg : Config} {bls : Bool}
     {m : JauneConsensus.Gloas.BeaconState P} {r : JauneConsensus.Gloas.BuilderDepositRequest}
     {o : BuilderDepositOutcome} (hc : classifyBuilderDeposit ccfg bls m r = .ok o) :
     (JauneConsensus.Gloas.isBuilderWithdrawalCredential r.withdrawal_credentials = false ∧
@@ -483,7 +483,7 @@ theorem classifyBuilderDeposit_invariant {ccfg : Config} {bls : Bool}
       rw [hfm] at hc
       obtain ⟨b, hg, hc⟩ := bind_eq_ok_iff.mp hc
       cases hc
-      exact Or.inr (Or.inl ⟨rfl, i, b, rfl, progressiveList_get_ok.mp hg, rfl⟩)
+      exact Or.inr (Or.inl ⟨rfl, i, b, rfl, pl_get_ok.mp hg, rfl⟩)
 
 
 /-! ## Meaning of the exit classification (B4; shared with B3) -/
@@ -517,7 +517,7 @@ theorem classifyBuilderExit_meaning {ccfg : Config} {m : JauneConsensus.Gloas.Be
       JauneConsensus.Gloas.getPendingBalanceToWithdrawForBuilder m bi = .ok U64.zero) ∧
     (∀ i, o = .initiate i → ∀ j, j < i → ∀ b', m.builders.toArray[j]? = some b' →
       b'.pubkey ≠ r.pubkey) := by
-  rcases classifyBuilderExit_invariant hc with ⟨hfm, rfl⟩ | ⟨i, b, bi, hfm, hb, hbi, hcase⟩
+  rcases classifyBuilderExit_inv hc with ⟨hfm, rfl⟩ | ⟨i, b, bi, hfm, hb, hbi, hcase⟩
   · have hall := firstMatch_none_iff.mp hfm
     refine ⟨⟨fun _ => hall, fun _ => rfl⟩, ?_, ?_, ?_, ?_, ?_, ?_⟩
     · exact ⟨fun h => (by cases h), fun ⟨_, _, h, _⟩ => by rw [hfm] at h; cases h⟩
@@ -663,8 +663,8 @@ theorem classifyBuilderExit_effect {ccfg : Config} {m m' : JauneConsensus.Gloas.
     obtain ⟨bs, hbs, hp'⟩ := bind_eq_ok_iff.mp hp'
     cases hp'
     rw [hbn] at hg hbs
-    obtain ⟨h1, h2, h3⟩ := progressiveList_set_ok hbs
-    refine ⟨b, e, w, progressiveList_get_ok.mp hg, he, ?_, h2, h1, h3, rfl⟩
+    obtain ⟨h1, h2, h3⟩ := pl_set_ok hbs
+    refine ⟨b, e, w, pl_get_ok.mp hg, he, ?_, h2, h1, h3, rfl⟩
     rw [U64.toNat_add? hw, U64.toNat_ofNat? hd]
 
 /-! ## Meaning of the deposit classification (B1, B2) -/
@@ -696,7 +696,7 @@ theorem classifyBuilderDeposit_meaning {ccfg : Config} {bls : Bool}
         blsVerify bls r.pubkey (computeSigningRoot (builderDepositMessage r) dom) r.signature = true) ∧
       a = r.amount ∧
       ∃ idx, JauneConsensus.Gloas.getIndexForNewBuilder m = .ok idx ∧ idx.toNat = i) := by
-  rcases classifyBuilderDeposit_invariant hc with ⟨hp, rfl⟩ | ⟨hp, i, b, hfm, hb, rfl⟩ |
+  rcases classifyBuilderDeposit_inv hc with ⟨hp, rfl⟩ | ⟨hp, i, b, hfm, hb, rfl⟩ |
     ⟨hp, hfm, dom, hd, ⟨hv, rfl⟩ | ⟨hv, addr, idx, ha, hi, rfl⟩⟩
   · refine ⟨⟨fun _ => hp, fun _ => rfl⟩, fun _ _ _ => ⟨fun h => (by cases h), fun h => ?_⟩,
       ⟨fun h => (by cases h), fun h => ?_⟩, fun _ _ => ⟨fun h => (by cases h), fun h => ?_⟩⟩ <;>
@@ -733,7 +733,7 @@ theorem classifyBuilderDeposit_meaning {ccfg : Config} {bls : Bool}
 
 theorem addressOfCredentials_ok {wc : Bytes32} {addr : ExecutionAddress} :
     JauneConsensus.Gloas.addressOfCredentials wc = .ok addr ↔
-      Jaune.Bytes.toAddress? (wc.toBytes.drop 12) = some addr := by
+      Jaune.Bytes.toAdr? (wc.toBytes.drop 12) = some addr := by
   unfold JauneConsensus.Gloas.addressOfCredentials
   split
   · rename_i a ha
@@ -746,7 +746,7 @@ theorem addressOfCredentials_ok {wc : Bytes32} {addr : ExecutionAddress} :
 /-- The effect of a deposit classification (CL:2297-2361). -/
 theorem classifyBuilderDeposit_effect {ctx : Ctx} {m m' : JauneConsensus.Gloas.BeaconState P}
     {r : JauneConsensus.Gloas.BuilderDepositRequest} {o : BuilderDepositOutcome}
-    (hc : classifyBuilderDeposit ctx.config ctx.blsActive m r = .ok o)
+    (hc : classifyBuilderDeposit ctx.cfg ctx.blsActive m r = .ok o)
     (hp : JauneConsensus.Gloas.processBuilderDepositRequest ctx m r = .ok m') :
     (o = .ignoredPrefix → m' = m) ∧ (o = .ignoredBadSignature → m' = m) ∧
     (∀ i a reset, o = .topUp i a reset → ∃ b b', m.builders.toArray[i]? = some b ∧
@@ -757,26 +757,26 @@ theorem classifyBuilderDeposit_effect {ctx : Ctx} {m m' : JauneConsensus.Gloas.B
       b'.execution_address = b.execution_address ∧ b'.deposit_epoch = b.deposit_epoch ∧
       b'.balance.toNat = b.balance.toNat + a.toNat ∧
       (reset = true → ∃ e, JauneConsensus.Gloas.getCurrentEpoch m = .ok e ∧
-        b'.withdrawable_epoch.toNat = e.toNat + ctx.config.MIN_BUILDER_WITHDRAWABILITY_DELAY) ∧
+        b'.withdrawable_epoch.toNat = e.toNat + ctx.cfg.MIN_BUILDER_WITHDRAWABILITY_DELAY) ∧
       (reset = false → b'.withdrawable_epoch = b.withdrawable_epoch) ∧
       m' = { m with builders := m'.builders }) ∧
     (∀ i a, o = .register i a → ∃ addr e,
-      Jaune.Bytes.toAddress? (r.withdrawal_credentials.toBytes.drop 12) = some addr ∧
+      Jaune.Bytes.toAdr? (r.withdrawal_credentials.toBytes.drop 12) = some addr ∧
       computeEpochAtSlot P m.slot = .ok e ∧
       m'.builders.toArray[i]? = some (freshBuilder r.pubkey addr a e) ∧
       m.builders.toArray.size ≤ m'.builders.toArray.size ∧
       (∀ j, j ≠ i → m'.builders.toArray[j]? = m.builders.toArray[j]?) ∧
       m' = { m with builders := m'.builders }) := by
-  have hp' : applyBuilderDepositOutcome ctx.config m r o = .ok m' := by
+  have hp' : applyBuilderDepositOutcome ctx.cfg m r o = .ok m' := by
     rw [processBuilderDepositRequest_eq, hc] at hp; exact hp
   refine ⟨fun ho => by subst ho; cases hp'; rfl, fun ho => by subst ho; cases hp'; rfl,
     fun i a reset ho => ?_, fun i a ho => ?_⟩
   · subst ho
-    rcases classifyBuilderDeposit_invariant hc with ⟨_, h⟩ | ⟨_, i', b, _, hb, h⟩ |
+    rcases classifyBuilderDeposit_inv hc with ⟨_, h⟩ | ⟨_, i', b, _, hb, h⟩ |
       ⟨_, _, _, _, ⟨_, h⟩ | ⟨_, _, _, _, _, h⟩⟩ <;> cases h
     unfold applyBuilderDepositOutcome topUpBuilder at hp'
     obtain ⟨b1, hg, hp'⟩ := bind_eq_ok_iff.mp hp'
-    rw [progressiveList_get_ok.mp hg] at hb; cases hb
+    rw [pl_get_ok.mp hg] at hb; cases hb
     obtain ⟨b2, hX, hp'⟩ := bind_eq_ok_iff.mp hp'
     split at hX
     · rename_i hcond
@@ -787,8 +787,8 @@ theorem classifyBuilderDeposit_effect {ctx : Ctx} {m m' : JauneConsensus.Gloas.B
       obtain ⟨nb, hnb, hp'⟩ := bind_eq_ok_iff.mp hp'
       obtain ⟨bs, hbs, hp'⟩ := bind_eq_ok_iff.mp hp'
       cases hp'
-      obtain ⟨h1, h2, h3⟩ := progressiveList_set_ok hbs
-      refine ⟨b, _, progressiveList_get_ok.mp hg, h2, h1, h3, rfl, rfl, rfl, rfl, U64.toNat_add? hnb,
+      obtain ⟨h1, h2, h3⟩ := pl_set_ok hbs
+      refine ⟨b, _, pl_get_ok.mp hg, h2, h1, h3, rfl, rfl, rfl, rfl, U64.toNat_add? hnb,
         fun _ => ⟨e, he, ?_⟩, fun hf => ?_, rfl⟩
       · rw [U64.toNat_add? hw, U64.toNat_ofNat? hd]
       · rw [hcond] at hf; cases hf
@@ -798,13 +798,13 @@ theorem classifyBuilderDeposit_effect {ctx : Ctx} {m m' : JauneConsensus.Gloas.B
       obtain ⟨nb, hnb, hp'⟩ := bind_eq_ok_iff.mp hp'
       obtain ⟨bs, hbs, hp'⟩ := bind_eq_ok_iff.mp hp'
       cases hp'
-      obtain ⟨h1, h2, h3⟩ := progressiveList_set_ok hbs
-      refine ⟨b, _, progressiveList_get_ok.mp hg, h2, h1, h3, rfl, rfl, rfl, rfl, U64.toNat_add? hnb,
+      obtain ⟨h1, h2, h3⟩ := pl_set_ok hbs
+      refine ⟨b, _, pl_get_ok.mp hg, h2, h1, h3, rfl, rfl, rfl, rfl, U64.toNat_add? hnb,
         fun ht => ?_, fun _ => rfl, rfl⟩
       simp only [Bool.not_eq_true] at hcond
       rw [hcond] at ht; cases ht
   · subst ho
-    rcases classifyBuilderDeposit_invariant hc with ⟨_, h⟩ | ⟨_, _, _, _, _, h⟩ |
+    rcases classifyBuilderDeposit_inv hc with ⟨_, h⟩ | ⟨_, _, _, _, _, h⟩ |
       ⟨_, _, _, _, ⟨_, h⟩ | ⟨_, addr, idx, ha, hi, h⟩⟩ <;> cases h
     unfold applyBuilderDepositOutcome at hp'
     obtain ⟨addr', ha', hp'⟩ := bind_eq_ok_iff.mp hp'
@@ -815,25 +815,25 @@ theorem classifyBuilderDeposit_effect {ctx : Ctx} {m m' : JauneConsensus.Gloas.B
     obtain ⟨e, he, hp'⟩ := bind_eq_ok_iff.mp hp'
     obtain ⟨bs, hbs, hp'⟩ := bind_eq_ok_iff.mp hp'
     cases hp'
-    obtain ⟨h1, h2, h3⟩ := progressiveList_setOrAppend_ok hbs
+    obtain ⟨h1, h2, h3⟩ := pl_setOrAppend_ok hbs
     exact ⟨addr, e, addressOfCredentials_ok.mp ha, he, h2, h1, h3, rfl⟩
 
 /-- `classifyBuilderDeposit_bls_indep`: with the BLS switch off the classification equals the
 real (`bls = true`) one whenever the signature it would check verifies under the real BLS. -/
-theorem classifyBuilderDeposit_bls_independent {ccfg : Config} {m : JauneConsensus.Gloas.BeaconState P}
+theorem classifyBuilderDeposit_bls_indep {ccfg : Config} {m : JauneConsensus.Gloas.BeaconState P}
     {r : JauneConsensus.Gloas.BuilderDepositRequest}
     (hv : ∀ dom, builderDepositDomain ccfg = some dom →
       blsVerify true r.pubkey (computeSigningRoot (builderDepositMessage r) dom) r.signature = true) :
     classifyBuilderDeposit ccfg false m r = classifyBuilderDeposit ccfg true m r := by
-  have hs : JauneConsensus.Gloas.isValidBuilderDepositSignature { config := ccfg, blsActive := false } r =
-      JauneConsensus.Gloas.isValidBuilderDepositSignature { config := ccfg, blsActive := true } r := by
+  have hs : JauneConsensus.Gloas.isValidBuilderDepositSignature { cfg := ccfg, blsActive := false } r =
+      JauneConsensus.Gloas.isValidBuilderDepositSignature { cfg := ccfg, blsActive := true } r := by
     unfold JauneConsensus.Gloas.isValidBuilderDepositSignature
     cases hd : computeDomainDefault ccfg JauneConsensus.Gloas.DOMAIN_BUILDER_DEPOSIT with
     | error e => rfl
     | ok dom =>
       have h := hv dom (builderDepositDomain_eq_some.mpr hd)
       show pure true = (pure (blsVerify true r.pubkey
-        (computeSigningRoot (builderDepositMessage r) dom) r.signature) : Fallible Bool)
+        (computeSigningRoot (builderDepositMessage r) dom) r.signature) : M Bool)
       rw [h]
   unfold classifyBuilderDeposit
   rw [hs]
@@ -865,10 +865,10 @@ theorem processBuilderDepositRequest_created {ctx : Ctx} (hbls : ctx.blsActive =
     (hcr : BuilderCreated m m' i) :
     r.withdrawal_credentials.toBytes.head? = some 0xB0 ∧
     (∀ b ∈ m.builders.toArray, b.pubkey ≠ r.pubkey) ∧
-    (∃ dom, builderDepositDomain ctx.config = some dom ∧
+    (∃ dom, builderDepositDomain ctx.cfg = some dom ∧
       blsVerify true r.pubkey (computeSigningRoot (builderDepositMessage r) dom) r.signature = true) ∧
-    classifyBuilderDeposit ctx.config true m r = .ok (.register i r.amount) ∧
-    ∃ addr e, Jaune.Bytes.toAddress? (r.withdrawal_credentials.toBytes.drop 12) = some addr ∧
+    classifyBuilderDeposit ctx.cfg true m r = .ok (.register i r.amount) ∧
+    ∃ addr e, Jaune.Bytes.toAdr? (r.withdrawal_credentials.toBytes.drop 12) = some addr ∧
       computeEpochAtSlot P m.slot = .ok e ∧
       m'.builders.toArray[i]? = some (freshBuilder r.pubkey addr r.amount e) := by
   have h0 := h
@@ -972,37 +972,37 @@ theorem builderCreated_of_none_some {st st' : JauneConsensus.Gloas.BeaconState P
   simp
 
 /-- A 48-byte zero pubkey. -/
-def controlPubkey : BLSPubkey := ⟨Array.replicate 48 0, by simp⟩
+def ctrlPk : BLSPubkey := ⟨Array.replicate 48 0, by simp⟩
 
 /-- A 96-byte zero signature: its compression bit is clear (a corrupted signature). -/
-def controlSignature : BLSSignature := ⟨Array.replicate 96 0, by simp⟩
+def ctrlSig : BLSSignature := ⟨Array.replicate 96 0, by simp⟩
 
 /-- One registered builder: pubkey `ctrlPk`, execution address zero, deposited at epoch 0,
 not exiting. -/
-def controlBuilder : JauneConsensus.Gloas.Builder :=
-  freshBuilder controlPubkey JauneConsensus.Gloas.zeroAddress U64.zero U64.zero
+def ctrlBuilder : JauneConsensus.Gloas.Builder :=
+  freshBuilder ctrlPk JauneConsensus.Gloas.zeroAddress U64.zero U64.zero
 
 /-- The B3 control state: slot 0, finalized epoch 1 (so `ctrlBuilder` is active), one builder,
 no pending builder payments or withdrawals. -/
-def controlExitState (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
+def ctrlExitState (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
     JauneConsensus.Gloas.BeaconState Preset.minimal :=
   { s with
     slot := U64.zero
     finalized_checkpoint := { epoch := U64.one, root := s.finalized_checkpoint.root }
-    builders := ⟨#[controlBuilder]⟩
+    builders := ⟨#[ctrlBuilder]⟩
     builder_pending_payments :=
       ⟨Array.replicate 16 JauneConsensus.Gloas.BuilderPendingPayment.empty, by
         rw [Array.size_replicate]; rfl⟩
     builder_pending_withdrawals := ⟨#[]⟩ }
 
 /-- An exit request for `ctrlBuilder` from another address. -/
-def controlExitRequest : JauneConsensus.Gloas.BuilderExitRequest :=
-  { source_address := ⟨0, 0, 1⟩, pubkey := controlPubkey }
+def ctrlExitRequest : JauneConsensus.Gloas.BuilderExitRequest :=
+  { source_address := ⟨0, 0, 1⟩, pubkey := ctrlPk }
 
 /-- **B3 mutant**: `process_builder_exit_request` without the
 `builder.execution_address != request.source_address` check (CL:2378-2379). -/
 def processBuilderExitRequestNoSource (cfg : Config) (state : JauneConsensus.Gloas.BeaconState P)
-    (request : JauneConsensus.Gloas.BuilderExitRequest) : Fallible (JauneConsensus.Gloas.BeaconState P) := do
+    (request : JauneConsensus.Gloas.BuilderExitRequest) : M (JauneConsensus.Gloas.BeaconState P) := do
   let some i := state.builders.toArray.findIdx? (·.pubkey == request.pubkey) | return state
   let builderIndex ← U64.ofNat? i "BuilderIndex"
   let _builder ← state.builders.get i "process_builder_exit_request"
@@ -1011,36 +1011,36 @@ def processBuilderExitRequestNoSource (cfg : Config) (state : JauneConsensus.Glo
     return state
   JauneConsensus.Gloas.initiateBuilderExit cfg state builderIndex
 
-theorem controlExit_findIndex (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
-    (controlExitState s).builders.toArray.findIdx? (·.pubkey == controlExitRequest.pubkey) = some 0 := by
+theorem ctrlExit_findIdx (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
+    (ctrlExitState s).builders.toArray.findIdx? (·.pubkey == ctrlExitRequest.pubkey) = some 0 := by
   rw [Array.findIdx?_eq_some_iff_getElem]
-  exact ⟨by simp [controlExitState], pubkey_beq_iff.mpr rfl, fun j hj => absurd hj (Nat.not_lt_zero _)⟩
+  exact ⟨by simp [ctrlExitState], pubkey_beq_iff.mpr rfl, fun j hj => absurd hj (Nat.not_lt_zero _)⟩
 
-theorem controlExit_pendingBalanceZero (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
-    JauneConsensus.Gloas.getPendingBalanceToWithdrawForBuilder (controlExitState s) U64.zero =
+theorem ctrlExit_t1 (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
+    JauneConsensus.Gloas.getPendingBalanceToWithdrawForBuilder (ctrlExitState s) U64.zero =
       .ok U64.zero := rfl
-theorem controlExit_currentEpochZero (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
-    JauneConsensus.Gloas.getCurrentEpoch (controlExitState s) = .ok U64.zero := by
+theorem ctrlExit_t2 (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
+    JauneConsensus.Gloas.getCurrentEpoch (ctrlExitState s) = .ok U64.zero := by
   with_unfolding_all rfl
-theorem controlExit_initiateBuilderExit (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
-    JauneConsensus.Gloas.initiateBuilderExit Config.minimal (controlExitState s) U64.zero =
-      .ok { controlExitState s with
-      builders := ⟨#[{ controlBuilder with withdrawable_epoch := U64.literal 2 }]⟩ } := by
+theorem ctrlExit_t4 (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
+    JauneConsensus.Gloas.initiateBuilderExit Config.minimal (ctrlExitState s) U64.zero =
+      .ok { ctrlExitState s with
+      builders := ⟨#[{ ctrlBuilder with withdrawable_epoch := U64.lit 2 }]⟩ } := by
   with_unfolding_all rfl
 
 /-- **B3 control.** On the closed state, the real function classifies the request `wrongSource`
 and leaves the state unchanged; the mutant without the source check initiates the exit
 (`ExitInitiated` at builder 0). -/
-theorem exitAuthorization_control (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
-    classifyBuilderExit Config.minimal (controlExitState s) controlExitRequest = .ok .wrongSource ∧
-    JauneConsensus.Gloas.processBuilderExitRequest Config.minimal (controlExitState s) controlExitRequest =
-      .ok (controlExitState s) ∧
-    ¬ ExitInitiated (controlExitState s) (controlExitState s) 0 ∧
-    ∃ s', processBuilderExitRequestNoSource Config.minimal (controlExitState s) controlExitRequest =
-      .ok s' ∧ ExitInitiated (controlExitState s) s' 0 := by
-  have hc : classifyBuilderExit Config.minimal (controlExitState s) controlExitRequest = .ok .wrongSource := by
+theorem b3_control (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
+    classifyBuilderExit Config.minimal (ctrlExitState s) ctrlExitRequest = .ok .wrongSource ∧
+    JauneConsensus.Gloas.processBuilderExitRequest Config.minimal (ctrlExitState s) ctrlExitRequest =
+      .ok (ctrlExitState s) ∧
+    ¬ ExitInitiated (ctrlExitState s) (ctrlExitState s) 0 ∧
+    ∃ s', processBuilderExitRequestNoSource Config.minimal (ctrlExitState s) ctrlExitRequest =
+      .ok s' ∧ ExitInitiated (ctrlExitState s) s' 0 := by
+  have hc : classifyBuilderExit Config.minimal (ctrlExitState s) ctrlExitRequest = .ok .wrongSource := by
     unfold classifyBuilderExit firstMatch
-    rw [controlExit_findIndex]
+    rw [ctrlExit_findIdx]
     rfl
   refine ⟨hc, ?_, ?_, ?_⟩
   · rw [processBuilderExitRequest_eq, hc]
@@ -1048,43 +1048,43 @@ theorem exitAuthorization_control (s : JauneConsensus.Gloas.BeaconState Preset.m
   · rintro ⟨b, b', hb, hb', _, hfar, hne⟩
     rw [hb] at hb'; cases hb'
     exact hne hfar
-  · refine ⟨{ controlExitState s with
-      builders := ⟨#[{ controlBuilder with withdrawable_epoch := U64.literal 2 }]⟩ }, ?_, ?_⟩
+  · refine ⟨{ ctrlExitState s with
+      builders := ⟨#[{ ctrlBuilder with withdrawable_epoch := U64.lit 2 }]⟩ }, ?_, ?_⟩
     · unfold processBuilderExitRequestNoSource
-      rw [controlExit_findIndex]
+      rw [ctrlExit_findIdx]
       simp only [show U64.ofNat? 0 "BuilderIndex" = .ok U64.zero from rfl, bind, Except.bind,
-        show (controlExitState s).builders.get 0 "process_builder_exit_request" = .ok controlBuilder
+        show (ctrlExitState s).builders.get 0 "process_builder_exit_request" = .ok ctrlBuilder
           from rfl,
-        show JauneConsensus.Gloas.isActiveBuilder (controlExitState s) U64.zero = .ok true from rfl,
-        controlExit_pendingBalanceZero, controlExit_initiateBuilderExit, Bool.not_true, bne_self_eq_false, Bool.false_eq_true,
+        show JauneConsensus.Gloas.isActiveBuilder (ctrlExitState s) U64.zero = .ok true from rfl,
+        ctrlExit_t1, ctrlExit_t4, Bool.not_true, bne_self_eq_false, Bool.false_eq_true,
         ↓reduceIte]
-    · exact ⟨controlBuilder, { controlBuilder with withdrawable_epoch := U64.literal 2 }, rfl, rfl, rfl, rfl,
+    · exact ⟨ctrlBuilder, { ctrlBuilder with withdrawable_epoch := U64.lit 2 }, rfl, rfl, rfl, rfl,
       by decide⟩
 
 /-- The B1 control state: slot 0, no builders. -/
-def controlEmptyState (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
+def ctrlEmptyState (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
     JauneConsensus.Gloas.BeaconState Preset.minimal :=
   { s with slot := U64.zero, builders := ⟨#[]⟩ }
 
-theorem controlEmpty_findIndex (s : JauneConsensus.Gloas.BeaconState Preset.minimal) (pk : BLSPubkey) :
-    (controlEmptyState s).builders.toArray.findIdx? (·.pubkey == pk) = none := by
+theorem ctrlEmpty_findIdx (s : JauneConsensus.Gloas.BeaconState Preset.minimal) (pk : BLSPubkey) :
+    (ctrlEmptyState s).builders.toArray.findIdx? (·.pubkey == pk) = none := by
   rw [Array.findIdx?_eq_none_iff]
   intro x hx
-  simp [controlEmptyState] at hx
+  simp [ctrlEmptyState] at hx
 
 /-- A deposit with `0x00` credentials (not the builder prefix). -/
-def controlPrefixRequest : JauneConsensus.Gloas.BuilderDepositRequest :=
-  { pubkey := controlPubkey, withdrawal_credentials := 0, amount := U64.one, signature := controlSignature }
+def ctrlPrefixRequest : JauneConsensus.Gloas.BuilderDepositRequest :=
+  { pubkey := ctrlPk, withdrawal_credentials := 0, amount := U64.one, signature := ctrlSig }
 
 /-- A `0xB0` deposit for a new pubkey with a corrupted signature. -/
-def controlCorruptRequest : JauneConsensus.Gloas.BuilderDepositRequest :=
-  { pubkey := controlPubkey, withdrawal_credentials := Jaune.Bytes.toU256 (0xB0 :: List.replicate 31 0),
-    amount := U64.one, signature := controlSignature }
+def ctrlCorruptRequest : JauneConsensus.Gloas.BuilderDepositRequest :=
+  { pubkey := ctrlPk, withdrawal_credentials := Jaune.Bytes.toB256 (0xB0 :: List.replicate 31 0),
+    amount := U64.one, signature := ctrlSig }
 
 /-- **B1 mutant (prefix)**: `process_builder_deposit_request` without the credential-prefix check
 (CL:2336-2337). -/
 def processBuilderDepositRequestNoPrefix (ctx : Ctx) (state : JauneConsensus.Gloas.BeaconState P)
-    (request : JauneConsensus.Gloas.BuilderDepositRequest) : Fallible (JauneConsensus.Gloas.BeaconState P) := do
+    (request : JauneConsensus.Gloas.BuilderDepositRequest) : M (JauneConsensus.Gloas.BeaconState P) := do
   match state.builders.toArray.findIdx? (·.pubkey == request.pubkey) with
   | none =>
     if ← JauneConsensus.Gloas.isValidBuilderDepositSignature ctx request then
@@ -1093,13 +1093,13 @@ def processBuilderDepositRequestNoPrefix (ctx : Ctx) (state : JauneConsensus.Glo
         (← JauneConsensus.Gloas.addressOfCredentials request.withdrawal_credentials) request.amount
         state.slot
     else pure state
-  | some i => topUpBuilder ctx.config state i request.amount
+  | some i => topUpBuilder ctx.cfg state i request.amount
 
 /-- **B1 mutant (signature)**: `process_builder_deposit_request` without
 `is_valid_builder_deposit_signature` (CL:2340). -/
 def processBuilderDepositRequestNoSignature (ctx : Ctx)
     (state : JauneConsensus.Gloas.BeaconState P) (request : JauneConsensus.Gloas.BuilderDepositRequest) :
-    Fallible (JauneConsensus.Gloas.BeaconState P) := do
+    M (JauneConsensus.Gloas.BeaconState P) := do
   if !JauneConsensus.Gloas.isBuilderWithdrawalCredential request.withdrawal_credentials then
     return state
   match state.builders.toArray.findIdx? (·.pubkey == request.pubkey) with
@@ -1108,41 +1108,41 @@ def processBuilderDepositRequestNoSignature (ctx : Ctx)
       JauneConsensus.Gloas.PAYLOAD_BUILDER_VERSION
       (← JauneConsensus.Gloas.addressOfCredentials request.withdrawal_credentials) request.amount
       state.slot
-  | some i => topUpBuilder ctx.config state i request.amount
+  | some i => topUpBuilder ctx.cfg state i request.amount
 
 /-- **B1 prefix control.** A `0x00`-credential deposit for a new pubkey, with the BLS switch off so
 that the signature check passes: the real function ignores it; the mutant without the prefix
 check creates builder 0, whose credentials lack `0xB0`. -/
-theorem registrationAuthorization_prefix_control (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
-    JauneConsensus.Gloas.isBuilderWithdrawalCredential controlPrefixRequest.withdrawal_credentials = false ∧
-    JauneConsensus.Gloas.processBuilderDepositRequest { config := Config.minimal, blsActive := false }
-      (controlEmptyState s) controlPrefixRequest = .ok (controlEmptyState s) ∧
-    ∃ s', processBuilderDepositRequestNoPrefix { config := Config.minimal, blsActive := false }
-      (controlEmptyState s) controlPrefixRequest = .ok s' ∧ BuilderCreated (controlEmptyState s) s' 0 := by
+theorem b1_prefix_control (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
+    JauneConsensus.Gloas.isBuilderWithdrawalCredential ctrlPrefixRequest.withdrawal_credentials = false ∧
+    JauneConsensus.Gloas.processBuilderDepositRequest { cfg := Config.minimal, blsActive := false }
+      (ctrlEmptyState s) ctrlPrefixRequest = .ok (ctrlEmptyState s) ∧
+    ∃ s', processBuilderDepositRequestNoPrefix { cfg := Config.minimal, blsActive := false }
+      (ctrlEmptyState s) ctrlPrefixRequest = .ok s' ∧ BuilderCreated (ctrlEmptyState s) s' 0 := by
   have hp : JauneConsensus.Gloas.isBuilderWithdrawalCredential
-      controlPrefixRequest.withdrawal_credentials = false := by decide
+      ctrlPrefixRequest.withdrawal_credentials = false := by decide
   refine ⟨hp, processBuilderDepositRequest_ignores_prefix hp, ?_⟩
   unfold processBuilderDepositRequestNoPrefix
-  rw [controlEmpty_findIndex]
+  rw [ctrlEmpty_findIdx]
   refine ⟨_, rfl, ?_⟩
   exact builderCreated_of_none_some rfl rfl
 
 /-- **B1 signature control.** At `bls = true`, a `0xB0` deposit for a new pubkey with a corrupted
 signature: the real function ignores it (and the signature does not verify for any domain); the
 mutant without the signature check creates builder 0. -/
-theorem registrationAuthorization_signature_control (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
-    (∀ dom, blsVerify true controlCorruptRequest.pubkey
-      (computeSigningRoot (builderDepositMessage controlCorruptRequest) dom)
-      controlCorruptRequest.signature = false) ∧
-    (∀ m', JauneConsensus.Gloas.processBuilderDepositRequest { config := Config.minimal }
-      (controlEmptyState s) controlCorruptRequest = .ok m' → m' = controlEmptyState s) ∧
-    ∃ s', processBuilderDepositRequestNoSignature { config := Config.minimal }
-      (controlEmptyState s) controlCorruptRequest = .ok s' ∧ BuilderCreated (controlEmptyState s) s' 0 := by
+theorem b1_signature_control (s : JauneConsensus.Gloas.BeaconState Preset.minimal) :
+    (∀ dom, blsVerify true ctrlCorruptRequest.pubkey
+      (computeSigningRoot (builderDepositMessage ctrlCorruptRequest) dom)
+      ctrlCorruptRequest.signature = false) ∧
+    (∀ m', JauneConsensus.Gloas.processBuilderDepositRequest { cfg := Config.minimal }
+      (ctrlEmptyState s) ctrlCorruptRequest = .ok m' → m' = ctrlEmptyState s) ∧
+    ∃ s', processBuilderDepositRequestNoSignature { cfg := Config.minimal }
+      (ctrlEmptyState s) ctrlCorruptRequest = .ok s' ∧ BuilderCreated (ctrlEmptyState s) s' 0 := by
   refine ⟨fun dom => blsVerify_true_of_head_zero _ _ _ rfl,
     processBuilderDepositRequest_ignores_corrupted rfl
-      (fun b hb => by simp [controlEmptyState] at hb) rfl, ?_⟩
+      (fun b hb => by simp [ctrlEmptyState] at hb) rfl, ?_⟩
   unfold processBuilderDepositRequestNoSignature
-  rw [controlEmpty_findIndex]
+  rw [ctrlEmpty_findIdx]
   refine ⟨_, rfl, ?_⟩
   exact builderCreated_of_none_some rfl rfl
 
@@ -1150,7 +1150,7 @@ theorem registrationAuthorization_signature_control (s : JauneConsensus.Gloas.Be
 /-! ## `get_index_for_new_builder` (CL:2287-2295) -/
 
 theorem getIndexForNewBuilder_loop (C : JauneConsensus.Gloas.Builder → Bool)
-    (body : JauneConsensus.Gloas.Builder → Option U64 × Nat → Fallible (ForInStep (Option U64 × Nat)))
+    (body : JauneConsensus.Gloas.Builder → Option U64 × Nat → M (ForInStep (Option U64 × Nat)))
     (hbody : ∀ x s, (C x = true →
         body x s = (U64.ofNat? s.2 "BuilderIndex" >>= fun v => pure (.done (some v, s.2)))) ∧
       (C x = false → body x s = pure (.yield (none, s.2 + 1)))) :

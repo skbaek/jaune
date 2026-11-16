@@ -16,9 +16,9 @@ open Jaune
 /-- Subtraction in `Fp` on reduced values without the `Int` round trip of Jaune's
 `FinField.sub`: `(x + p - y) % p`. Equal to `FinField.sub` whenever `y ≤ p`
 (`fpSubFast_eq`), which holds for every value the field operations produce. -/
-def fpSubFast (x y : Bls12Fp) : Bls12Fp := ⟨(x.val + blsPrime - y.val) % blsPrime⟩
+def fpSubFast (x y : BLSF) : BLSF := ⟨(x.val + blsPrime - y.val) % blsPrime⟩
 
-theorem fpSubFast_eq (x y : Bls12Fp) (hy : y.val ≤ blsPrime) : fpSubFast x y = x - y := by
+theorem fpSubFast_eq (x y : BLSF) (hy : y.val ≤ blsPrime) : fpSubFast x y = x - y := by
   show fpSubFast x y = FinField.sub x y
   unfold fpSubFast FinField.sub
   congr 1
@@ -34,10 +34,10 @@ theorem fpSubFast_eq (x y : Bls12Fp) (hy : y.val ≤ blsPrime) : fpSubFast x y =
 instantiated with `fpSubFast`; `fpSubFast_eq` says this changes no result on reduced
 inputs, and the MSM guards compare against Jaune's `g1MsmSum`, which uses
 `FinField.sub`. -/
-local instance (priority := high) fpSubFastInst : HSub Bls12Fp Bls12Fp Bls12Fp := ⟨fpSubFast⟩
+local instance (priority := high) fpSubFastInst : HSub BLSF BLSF BLSF := ⟨fpSubFast⟩
 
 /-- Jacobian G1 points, Jaune's representation. -/
-abbrev G1Jacobian : Type := EllipticCurve.JacobianPoint Bls12Fp
+abbrev G1J : Type := EllipticCurve.JacobianPoint BLSF
 
 /-- Bit width of the scalars `g1Msm` reads: scalars are reduced mod `r` first, and
 `r < 2^255`. -/
@@ -49,9 +49,9 @@ def msmWindow (n : Nat) : Nat := max 1 (n.log2 - 3)
 
 /-- One window: bucket every point by its `c`-bit digit at window `w`, then sum
 `sum_d d * bucket_d` with the running-sum trick (two additions per bucket). -/
-def msmWindowSum (pairs : Array (Bls12G1 × Nat)) (c w : Nat) : G1Jacobian :=
+def msmWindowSum (pairs : Array (BLSP × Nat)) (c w : Nat) : G1J :=
   let mask := 2 ^ c - 1
-  let buckets : Array G1Jacobian := pairs.foldl
+  let buckets : Array G1J := pairs.foldl
     (fun bs (p, s) =>
       let d := (s >>> (w * c)) &&& mask
       if d = 0 then bs else bs.modify (d - 1) fun b => EllipticCurve.Jacobian.mixedAdd b p)
@@ -65,12 +65,12 @@ def msmWindowSum (pairs : Array (Bls12G1 × Nat)) (c w : Nat) : G1Jacobian :=
 
 /-- Bucket (Pippenger) MSM: `sum_i s_i * P_i` in G1. Lists of different lengths
 are zipped (the callers check lengths first, as `g1_lincomb` asserts). -/
-def g1Msm (points : Array Bls12G1) (scalars : Array Nat) : Bls12G1 :=
+def g1Msm (points : Array BLSP) (scalars : Array Nat) : BLSP :=
   let pairs := (points.zip scalars).map fun (p, s) => (p, s % blsCurveOrder)
   let c := msmWindow pairs.size
   let nWin := (msmScalarBits + c - 1) / c
   let acc := (List.range nWin).reverse.foldl
-    (fun (acc : G1Jacobian) w =>
+    (fun (acc : G1J) w =>
       let shifted := (List.range c).foldl (fun a _ => EllipticCurve.Jacobian.double a) acc
       EllipticCurve.Jacobian.add shifted (msmWindowSum pairs c w))
     EllipticCurve.Jacobian.infinity

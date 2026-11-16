@@ -22,7 +22,7 @@ uses.
 
 namespace JauneConsensus.Gloas
 
-open Jaune (Bytes U256)
+open Jaune (Bytes B256)
 
 variable {P : Preset}
 
@@ -53,12 +53,12 @@ def getFastConfirmationStore (store : Store P) : FastConfirmationStore P :=
 /-- The reads shared by one `on_fast_confirmation` call (see the module note): the processing
 context, the read-only fork-choice store, `get_head(store)` of it, and the optimistic-sync status
 `is_one_confirmed` consults. -/
-structure FastConfirmationView (P : Preset) where
-  context : Ctx
+structure FcrView (P : Preset) where
+  ctx : Ctx
   store : Store P
   head : ForkChoiceNode
   isValid : Root → Bool
-  transition : Transition P
+  tr : Transition P
 
 /-! ## Misc helpers -/
 
@@ -67,27 +67,27 @@ def getNodeForRoot (blockRoot : Root) : ForkChoiceNode :=
   { root := blockRoot, payload_status := .pending }
 
 /-- `get_block_slot(store, block_root)`. -/
-def getBlockSlot (store : Store P) (blockRoot : Root) : Fallible Slot := do
+def getBlockSlot (store : Store P) (blockRoot : Root) : M Slot := do
   pure (← lookup store.blocks blockRoot "get_block_slot: store.blocks[block_root]").slot
 
 /-- `get_block_epoch(store, block_root)`. -/
-def getBlockEpoch (store : Store P) (blockRoot : Root) : Fallible Epoch := do
+def getBlockEpoch (store : Store P) (blockRoot : Root) : M Epoch := do
   computeEpochAtSlot P (← lookup store.blocks blockRoot "get_block_epoch: store.blocks[block_root]").slot
 
 /-- `get_checkpoint_for_block(store, block_root, epoch)`. -/
-def getCheckpointForBlock (store : Store P) (blockRoot : Root) (epoch : Epoch) : Fallible Checkpoint := do
+def getCheckpointForBlock (store : Store P) (blockRoot : Root) (epoch : Epoch) : M Checkpoint := do
   pure { epoch, root := ← getCheckpointBlock store blockRoot epoch }
 
 /-- `get_current_target(store)`. -/
-def getCurrentTarget (v : FastConfirmationView P) : Fallible Checkpoint := do
-  let currentEpoch ← getCurrentStoreEpoch v.context.config v.store
+def getCurrentTarget (v : FcrView P) : M Checkpoint := do
+  let currentEpoch ← getCurrentStoreEpoch v.ctx.cfg v.store
   getCheckpointForBlock v.store v.head.root currentEpoch
 
 /-- `get_ancestor_roots(store, block_root, terminal_root)`: the ancestors of `block_root`,
 inclusive, down to `terminal_root`, exclusive, oldest first; empty when `terminal_root` is not on
 the chain. The `while` loop moves to a strictly lower slot each turn; its bound is the number of
 stored blocks plus one, and running out is a rejection. -/
-def getAncestorRoots (store : Store P) (blockRoot terminalRoot : Root) : Fallible (List Root) := do
+def getAncestorRoots (store : Store P) (blockRoot terminalRoot : Root) : M (List Root) := do
   let site := "get_ancestor_roots: store.blocks"
   let mut root := blockRoot
   let mut ancestorRoots : List Root := []
@@ -107,7 +107,7 @@ def getAncestorRoots (store : Store P) (blockRoot terminalRoot : Root) : Fallibl
 
 /-- `get_slot_committee(store, slot)`: every member of every committee of `slot`, shuffled from
 the head's post-state. -/
-def getSlotCommittee (v : FastConfirmationView P) (slot : Slot) : Fallible (Std.TreeSet Nat compare) := do
+def getSlotCommittee (v : FcrView P) (slot : Slot) : M (Std.TreeSet Nat compare) := do
   let shufflingSource ← lookup v.store.block_states v.head.root
     "get_slot_committee: store.block_states[head]"
   let committeesCount ← getCommitteeCountPerSlot shufflingSource (← computeEpochAtSlot P slot)
@@ -119,29 +119,29 @@ def getSlotCommittee (v : FastConfirmationView P) (slot : Slot) : Fallible (Std.
 
 /-- `get_pulled_up_head_state(store)`: the head's post-state, advanced to the start of the
 current store epoch when it is from an earlier epoch. -/
-def getPulledUpHeadState (v : FastConfirmationView P) : Fallible (BeaconState P) := do
+def getPulledUpHeadState (v : FcrView P) : M (BeaconState P) := do
   let headState ← lookup v.store.block_states v.head.root
     "get_pulled_up_head_state: store.block_states[head]"
-  let currentStoreEpoch ← getCurrentStoreEpoch v.context.config v.store
+  let currentStoreEpoch ← getCurrentStoreEpoch v.ctx.cfg v.store
   if (← getCurrentEpoch headState) < currentStoreEpoch then
-    v.transition.processSlots v.context headState (← computeStartSlotAtEpoch P currentStoreEpoch)
+    v.tr.processSlots v.ctx headState (← computeStartSlotAtEpoch P currentStoreEpoch)
   else pure headState
 
 /-- `get_previous_balance_source(fcr_store)`. -/
-def getPreviousBalanceSource (fcr : FastConfirmationStore P) : Fallible (BeaconState P) :=
+def getPreviousBalanceSource (fcr : FastConfirmationStore P) : M (BeaconState P) :=
   lookup fcr.store.checkpoint_states fcr.previous_epoch_observed_justified_checkpoint
     "get_previous_balance_source: store.checkpoint_states"
 
 /-- `get_current_balance_source(fcr_store)`. -/
-def getCurrentBalanceSource (fcr : FastConfirmationStore P) : Fallible (BeaconState P) :=
+def getCurrentBalanceSource (fcr : FastConfirmationStore P) : M (BeaconState P) :=
   lookup fcr.store.checkpoint_states fcr.current_epoch_observed_justified_checkpoint
     "get_current_balance_source: store.checkpoint_states"
 
 /-! ## LMD-GHOST helpers -/
 
 /-- The union of `get_slot_committee` over `range(start_slot, end_slot + 1)`. -/
-def committeesBetweenSlots (v : FastConfirmationView P) (startSlot endSlot : Slot) (site : String) :
-    Fallible (Std.TreeSet Nat compare) := do
+def committeesBetweenSlots (v : FcrView P) (startSlot endSlot : Slot) (site : String) :
+    M (Std.TreeSet Nat compare) := do
   let stop ← endSlot.add? U64.one site
   let mut out : Std.TreeSet Nat compare := ∅
   for slot in [startSlot.toNat:stop.toNat] do
@@ -152,8 +152,8 @@ def committeesBetweenSlots (v : FastConfirmationView P) (startSlot endSlot : Slo
 `balance_source` effective balances of the unslashed members, active at its epoch, of the
 committees of the slots in the range whose non-equivocating latest message supports `node`
 itself. -/
-def getNodeSupportBetweenSlots (v : FastConfirmationView P) (balanceSource : BeaconState P)
-    (node : ForkChoiceNode) (startSlot endSlot : Slot) : Fallible Gwei := do
+def getNodeSupportBetweenSlots (v : FcrView P) (balanceSource : BeaconState P)
+    (node : ForkChoiceNode) (startSlot endSlot : Slot) : M Gwei := do
   let site := "get_node_support_between_slots"
   let participants ← committeesBetweenSlots v startSlot endSlot site
   -- Keep validators that were active at the balance_source epoch, also filter out slashed ones
@@ -176,8 +176,8 @@ def getNodeSupportBetweenSlots (v : FastConfirmationView P) (balanceSource : Bea
 
 /-- `get_equivocation_score(store, balance_source, start_slot, end_slot)`: the `balance_source`
 effective balances of the equivocating committee members of the range active at its epoch. -/
-def getEquivocationScore (v : FastConfirmationView P) (balanceSource : BeaconState P)
-    (startSlot endSlot : Slot) : Fallible Gwei := do
+def getEquivocationScore (v : FcrView P) (balanceSource : BeaconState P)
+    (startSlot endSlot : Slot) : M Gwei := do
   let site := "get_equivocation_score"
   let committeeIndices ← committeesBetweenSlots v startSlot endSlot site
   let epoch ← getCurrentEpoch balanceSource
@@ -195,13 +195,13 @@ def getEquivocationScore (v : FastConfirmationView P) (balanceSource : BeaconSta
 /-- `compute_adversarial_weight(store, balance_source, start_slot, end_slot)`: the
 `CONFIRMATION_BYZANTINE_THRESHOLD` share of the range's estimated committee weight, less the
 weight that has already equivocated. -/
-def computeAdversarialWeight (v : FastConfirmationView P) (balanceSource : BeaconState P)
-    (startSlot endSlot : Slot) : Fallible Gwei := do
+def computeAdversarialWeight (v : FcrView P) (balanceSource : BeaconState P)
+    (startSlot endSlot : Slot) : M Gwei := do
   let site := "compute_adversarial_weight"
   let totalActiveBalance ← getTotalActiveBalance balanceSource
   let maximumWeight ← estimateCommitteeWeightBetweenSlots P totalActiveBalance startSlot endSlot
-  let maxAdversarialWeight ← (← maximumWeight.div? (← u64Checked 100) site).mul?
-    (← confirmationByzantineThreshold v.context.config) site
+  let maxAdversarialWeight ← (← maximumWeight.div? (← c64 100) site).mul?
+    (← confirmationByzantineThreshold v.ctx.cfg) site
   -- Discount total weight of equivocating validators
   let equivocationScore ← getEquivocationScore v balanceSource startSlot endSlot
   if maxAdversarialWeight > equivocationScore then
@@ -210,10 +210,10 @@ def computeAdversarialWeight (v : FastConfirmationView P) (balanceSource : Beaco
 
 /-- `get_adversarial_weight(store, balance_source, block_root)`: from the block's slot, or from
 the first slot of its epoch when it opens a new epoch, to the slot before the current one. -/
-def getAdversarialWeight (v : FastConfirmationView P) (balanceSource : BeaconState P) (blockRoot : Root) :
-    Fallible Gwei := do
+def getAdversarialWeight (v : FcrView P) (balanceSource : BeaconState P) (blockRoot : Root) :
+    M Gwei := do
   let site := "get_adversarial_weight"
-  let currentSlot ← getCurrentSlot v.context.config v.store
+  let currentSlot ← getCurrentSlot v.ctx.cfg v.store
   let block ← lookup v.store.blocks blockRoot s!"{site}: store.blocks[block_root]"
   let blockEpoch ← getBlockEpoch v.store blockRoot
   if blockEpoch > (← getBlockEpoch v.store block.parent_root) then
@@ -226,8 +226,8 @@ def getAdversarialWeight (v : FastConfirmationView P) (balanceSource : BeaconSta
 /-- `compute_empty_slot_support_discount(store, balance_source, block_root)`: the support the
 parent received from the committees of the empty slots before the block, less their adversarial
 weight. -/
-def computeEmptySlotSupportDiscount (v : FastConfirmationView P) (balanceSource : BeaconState P)
-    (blockRoot : Root) : Fallible Gwei := do
+def computeEmptySlotSupportDiscount (v : FcrView P) (balanceSource : BeaconState P)
+    (blockRoot : Root) : M Gwei := do
   let site := "compute_empty_slot_support_discount"
   let block ← lookup v.store.blocks blockRoot s!"{site}: store.blocks[block_root]"
   let parentBlock ← lookup v.store.blocks block.parent_root s!"{site}: store.blocks[parent_root]"
@@ -246,36 +246,36 @@ def computeEmptySlotSupportDiscount (v : FastConfirmationView P) (balanceSource 
   else pure U64.zero
 
 /-- `get_support_discount(store, balance_source, block_root)`. -/
-def getSupportDiscount (v : FastConfirmationView P) (balanceSource : BeaconState P) (blockRoot : Root) :
-    Fallible Gwei :=
+def getSupportDiscount (v : FcrView P) (balanceSource : BeaconState P) (blockRoot : Root) :
+    M Gwei :=
   computeEmptySlotSupportDiscount v balanceSource blockRoot
 
 /-- `compute_safety_threshold(store, block_root, balance_source)`:
 `(maximum_support + proposer_score - support_discount) // 2 + adversarial_weight`, computed as
 `(maximum_support + proposer_score + 2 * adversarial_weight - support_discount) // 2` under the
 spec's underflow guard. -/
-def computeSafetyThreshold (v : FastConfirmationView P) (blockRoot : Root) (balanceSource : BeaconState P) :
-    Fallible Gwei := do
+def computeSafetyThreshold (v : FcrView P) (blockRoot : Root) (balanceSource : BeaconState P) :
+    M Gwei := do
   let site := "compute_safety_threshold"
-  let currentSlot ← getCurrentSlot v.context.config v.store
+  let currentSlot ← getCurrentSlot v.ctx.cfg v.store
   let block ← lookup v.store.blocks blockRoot s!"{site}: store.blocks[block_root]"
   let parentBlock ← lookup v.store.blocks block.parent_root s!"{site}: store.blocks[parent_root]"
   let totalActiveBalance ← getTotalActiveBalance balanceSource
-  let proposerScore ← computeProposerScore v.context.config balanceSource
+  let proposerScore ← computeProposerScore v.ctx.cfg balanceSource
   let maximumSupport ← estimateCommitteeWeightBetweenSlots P totalActiveBalance
     (← parentBlock.slot.add? U64.one site) (← currentSlot.sub? U64.one site)
   let supportDiscount ← getSupportDiscount v balanceSource blockRoot
   let adversarialWeight ← getAdversarialWeight v balanceSource blockRoot
   let bound ← (← maximumSupport.add? proposerScore site).add?
-    (← (← u64Checked 2).mul? adversarialWeight site) site
+    (← (← c64 2).mul? adversarialWeight site) site
   if supportDiscount < bound then
-    (← bound.sub? supportDiscount site).div? (← u64Checked 2) site
+    (← bound.sub? supportDiscount site).div? (← c64 2) site
   else pure U64.zero
 
 /-- `is_one_confirmed(store, balance_source, block_root)`: the block's attestation score exceeds
 its safety threshold; `False` for a block whose payload is not `VALID` (see the module note). -/
-def isOneConfirmed (v : FastConfirmationView P) (balanceSource : BeaconState P) (blockRoot : Root) :
-    Fallible Bool := do
+def isOneConfirmed (v : FcrView P) (balanceSource : BeaconState P) (blockRoot : Root) :
+    M Bool := do
   if !v.isValid blockRoot then return false
   let support ← getAttestationScore v.store (getNodeForRoot blockRoot) balanceSource
   let safetyThreshold ← computeSafetyThreshold v blockRoot balanceSource
@@ -284,14 +284,14 @@ def isOneConfirmed (v : FastConfirmationView P) (balanceSource : BeaconState P) 
 /-- `is_confirmed_chain_safe(fcr_store, confirmed_root)`: every block of the confirmed chain from
 `current_epoch_observed_justified_checkpoint` (or from the first block of the previous epoch) is
 LMD-GHOST safe under the previous balance source. -/
-def isConfirmedChainSafe (fcr : FastConfirmationStore P) (v : FastConfirmationView P)
-    (confirmedRoot : Root) : Fallible Bool := do
+def isConfirmedChainSafe (fcr : FastConfirmationStore P) (v : FcrView P)
+    (confirmedRoot : Root) : M Bool := do
   let site := "is_confirmed_chain_safe"
   let store := v.store
   let observed := fcr.current_epoch_observed_justified_checkpoint
   -- Check if the confirmed_root has current_epoch_observed_justified_checkpoint in its chain
   if observed != (← getCheckpointForBlock store confirmedRoot observed.epoch) then return false
-  let currentEpoch ← getCurrentStoreEpoch v.context.config store
+  let currentEpoch ← getCurrentStoreEpoch v.ctx.cfg store
   let startRootExclusive ←
     if (← observed.epoch.add? U64.one site) ≥ currentEpoch then
       -- Exclude the justified checkpoint block if it is from the previous epoch
@@ -318,7 +318,7 @@ def isConfirmedChainSafe (fcr : FastConfirmationStore P) (v : FastConfirmationVi
 /-- `get_current_target_score(store)`: the pulled-up head state's effective balances of its
 unslashed active validators whose non-equivocating latest message has the current target as its
 checkpoint. -/
-def getCurrentTargetScore (v : FastConfirmationView P) : Fallible Gwei := do
+def getCurrentTargetScore (v : FcrView P) : M Gwei := do
   let site := "get_current_target_score"
   let target ← getCurrentTarget v
   let state ← getPulledUpHeadState v
@@ -335,9 +335,9 @@ def getCurrentTargetScore (v : FastConfirmationView P) : Fallible Gwei := do
   pure total
 
 /-- `compute_honest_ffg_support_for_current_target(store)`. -/
-def computeHonestFfgSupportForCurrentTarget (v : FastConfirmationView P) : Fallible Gwei := do
+def computeHonestFfgSupportForCurrentTarget (v : FcrView P) : M Gwei := do
   let site := "compute_honest_ffg_support_for_current_target"
-  let currentSlot ← getCurrentSlot v.context.config v.store
+  let currentSlot ← getCurrentSlot v.ctx.cfg v.store
   let currentEpoch ← computeEpochAtSlot P currentSlot
   let balanceSource ← getPulledUpHeadState v
   let totalActiveBalance ← getTotalActiveBalance balanceSource
@@ -350,8 +350,8 @@ def computeHonestFfgSupportForCurrentTarget (v : FastConfirmationView P) : Falli
     previousSlot
   -- Compute remaining honest FFG weight
   let remainingFfgWeight ← totalActiveBalance.sub? ffgWeightTillNow site
-  let remainingHonestFfgWeight ← (← remainingFfgWeight.div? (← u64Checked 100) site).mul?
-    (← (← u64Checked 100).sub? (← confirmationByzantineThreshold v.context.config) site) site
+  let remainingHonestFfgWeight ← (← remainingFfgWeight.div? (← c64 100) site).mul?
+    (← (← c64 100).sub? (← confirmationByzantineThreshold v.ctx.cfg) site) site
   -- Compute potential adversarial weight
   let adversarialWeight ← computeAdversarialWeight v balanceSource epochStart previousSlot
   -- Compute min honest FFG support
@@ -359,30 +359,30 @@ def computeHonestFfgSupportForCurrentTarget (v : FastConfirmationView P) : Falli
   minHonestFfgSupport.add? remainingHonestFfgWeight site
 
 /-- `will_no_conflicting_checkpoint_be_justified(store)`. -/
-def willNoConflictingCheckpointBeJustified (v : FastConfirmationView P) : Fallible Bool := do
+def willNoConflictingCheckpointBeJustified (v : FcrView P) : M Bool := do
   let site := "will_no_conflicting_checkpoint_be_justified"
   -- If the target is unrealized justified then no conflicting checkpoint can be justified
   if (← getCurrentTarget v) == v.store.unrealized_justified_checkpoint then return true
   let state ← getPulledUpHeadState v
   let totalActiveBalance ← getTotalActiveBalance state
   let honestFfgSupport ← computeHonestFfgSupportForCurrentTarget v
-  pure ((← (← u64Checked 3).mul? honestFfgSupport site) > (← (← u64Checked 1).mul? totalActiveBalance site))
+  pure ((← (← c64 3).mul? honestFfgSupport site) > (← (← c64 1).mul? totalActiveBalance site))
 
 /-- `will_current_target_be_justified(store)`. -/
-def willCurrentTargetBeJustified (v : FastConfirmationView P) : Fallible Bool := do
+def willCurrentTargetBeJustified (v : FcrView P) : M Bool := do
   let site := "will_current_target_be_justified"
   let state ← getPulledUpHeadState v
   let totalActiveBalance ← getTotalActiveBalance state
   let honestFfgSupport ← computeHonestFfgSupportForCurrentTarget v
-  pure ((← (← u64Checked 3).mul? honestFfgSupport site) ≥ (← (← u64Checked 2).mul? totalActiveBalance site))
+  pure ((← (← c64 3).mul? honestFfgSupport site) ≥ (← (← c64 2).mul? totalActiveBalance site))
 
 /-! ## The algorithm -/
 
 /-- `update_fast_confirmation_variables(fcr_store)`, with `get_head(store)` given as `v.head`. -/
-def updateFastConfirmationVariables (fcr : FastConfirmationStore P) (v : FastConfirmationView P) :
-    Fallible (FastConfirmationStore P) := do
+def updateFastConfirmationVariables (fcr : FastConfirmationStore P) (v : FcrView P) :
+    M (FastConfirmationStore P) := do
   let site := "update_fast_confirmation_variables"
-  let currentSlot ← getCurrentSlot v.context.config v.store
+  let currentSlot ← getCurrentSlot v.ctx.cfg v.store
   -- Update prev and curr slot head
   let fcr := { fcr with previous_slot_head := fcr.current_slot_head, current_slot_head := v.head.root }
   -- Update greatest unrealized justified checkpoint at the last slot of an epoch
@@ -399,20 +399,20 @@ def updateFastConfirmationVariables (fcr : FastConfirmationStore P) (v : FastCon
 /-- `find_latest_confirmed_descendant(fcr_store, latest_confirmed_root)`. The Python's `and`/`or`
 are evaluated left to right with short circuit, so each read happens exactly when the spec makes
 it. -/
-def findLatestConfirmedDescendant (fcr : FastConfirmationStore P) (v : FastConfirmationView P)
-    (latestConfirmedRoot : Root) : Fallible Root := do
+def findLatestConfirmedDescendant (fcr : FastConfirmationStore P) (v : FcrView P)
+    (latestConfirmedRoot : Root) : M Root := do
   let site := "find_latest_confirmed_descendant"
   let store := v.store
   let head := v.head.root
-  let currentSlot ← getCurrentSlot v.context.config store
-  let currentEpoch ← getCurrentStoreEpoch v.context.config store
-  let unrealizedOk (root : Root) : Fallible Bool := do
+  let currentSlot ← getCurrentSlot v.ctx.cfg store
+  let currentEpoch ← getCurrentStoreEpoch v.ctx.cfg store
+  let unrealizedOk (root : Root) : M Bool := do
     let j ← lookup store.unrealized_justifications root s!"{site}: store.unrealized_justifications"
     pure ((← j.epoch.add? U64.one site) ≥ currentEpoch)
   let mut confirmedRoot := latestConfirmedRoot
   let advanceFromPrevious ←
     if (← (← getBlockEpoch store confirmedRoot).add? U64.one site) == currentEpoch then
-      if (← (← getVotingSource v.context.config store fcr.previous_slot_head).epoch.add? (← u64Checked 2) site)
+      if (← (← getVotingSource v.ctx.cfg store fcr.previous_slot_head).epoch.add? (← c64 2) site)
           ≥ currentEpoch then
         if ← isStartSlotAtEpoch P currentSlot then pure true
         else if ← willNoConflictingCheckpointBeJustified v then
@@ -456,7 +456,7 @@ def findLatestConfirmedDescendant (fcr : FastConfirmationStore P) (v : FastConfi
     -- reorged out in either the current or next epoch.
     let confirm ←
       if (← getBlockEpoch store tentativeConfirmedRoot) == currentEpoch then pure true
-      else if (← (← getVotingSource v.context.config store tentativeConfirmedRoot).epoch.add? (← u64Checked 2) site)
+      else if (← (← getVotingSource v.ctx.cfg store tentativeConfirmedRoot).epoch.add? (← c64 2) site)
           ≥ currentEpoch then
         if ← isStartSlotAtEpoch P currentSlot then pure true
         else willNoConflictingCheckpointBeJustified v
@@ -465,12 +465,12 @@ def findLatestConfirmedDescendant (fcr : FastConfirmationStore P) (v : FastConfi
   pure confirmedRoot
 
 /-- `get_latest_confirmed(fcr_store)`. -/
-def getLatestConfirmed (fcr : FastConfirmationStore P) (v : FastConfirmationView P) : Fallible Root := do
+def getLatestConfirmed (fcr : FastConfirmationStore P) (v : FcrView P) : M Root := do
   let site := "get_latest_confirmed"
   let store := v.store
   let mut confirmedRoot := fcr.confirmed_root
-  let currentEpoch ← getCurrentStoreEpoch v.context.config store
-  let currentSlot ← getCurrentSlot v.context.config store
+  let currentEpoch ← getCurrentStoreEpoch v.ctx.cfg store
+  let currentSlot ← getCurrentSlot v.ctx.cfg store
   let head := v.head.root
   -- Revert to finalized block if the latest confirmed block's epoch is older than the previous
   -- epoch, if it does not belong to the canonical chain, or if the confirmed chain from the
@@ -502,19 +502,19 @@ def getLatestConfirmed (fcr : FastConfirmationStore P) (v : FastConfirmationView
   else pure confirmedRoot
 
 /-- `block_should_be_finalized(store, block_root)`. -/
-def blockShouldBeFinalized (cfg : Config) (store : Store P) (blockRoot : Root) : Fallible Bool := do
+def blockShouldBeFinalized (cfg : Config) (store : Store P) (blockRoot : Root) : M Bool := do
   let site := "block_should_be_finalized"
   let blockSlot ← getBlockSlot store blockRoot
   let nextCheckpointEpoch ← computeEpochAtSlot P
-    (← (← blockSlot.add? (← u64Checked P.SLOTS_PER_EPOCH) site).sub? U64.one site)
-  let earliestFinalitySlot ← computeStartSlotAtEpoch P (← nextCheckpointEpoch.add? (← u64Checked 2) site)
+    (← (← blockSlot.add? (← c64 P.SLOTS_PER_EPOCH) site).sub? U64.one site)
+  let earliestFinalitySlot ← computeStartSlotAtEpoch P (← nextCheckpointEpoch.add? (← c64 2) site)
   pure (earliestFinalitySlot ≤ (← getCurrentSlot cfg store))
 
 /-- `get_restart_resilient_confirmed_root(fcr_store)`, with the implementation-dependent
 `get_root_confirmed_before_restart()` given as `rootBeforeRestart`. Optional ("MAY"); no vector
 exercises it. -/
-def getRestartResilientConfirmedRoot (v : FastConfirmationView P) (fcr : FastConfirmationStore P)
-    (rootBeforeRestart : Root) : Fallible Root := do
+def getRestartResilientConfirmedRoot (v : FcrView P) (fcr : FastConfirmationStore P)
+    (rootBeforeRestart : Root) : M Root := do
   let store := v.store
   let rootBeforeRestartSlot ← getBlockSlot store rootBeforeRestart
   -- Recently confirmed block has advanced beyond the block confirmed before the restart
@@ -522,7 +522,7 @@ def getRestartResilientConfirmedRoot (v : FastConfirmationView P) (fcr : FastCon
     return fcr.confirmed_root
   -- If the block is old enough it either has been finalized already or finality has been
   -- delayed which makes block confirmed before restart unreliable
-  if ← blockShouldBeFinalized v.context.config store rootBeforeRestart then return fcr.confirmed_root
+  if ← blockShouldBeFinalized v.ctx.cfg store rootBeforeRestart then return fcr.confirmed_root
   -- If a block confirmed before the restart is not canonical, return the recently confirmed block
   if !(← isAncestor store v.head (getNodeForRoot rootBeforeRestart)) then return fcr.confirmed_root
   pure rootBeforeRestart
@@ -533,15 +533,15 @@ def getRestartResilientConfirmedRoot (v : FastConfirmationView P) (fcr : FastCon
 `fcr_store.confirmed_root = get_latest_confirmed(fcr_store)`. `get_head(store)` is computed once,
 as the first read `update_fast_confirmation_variables` makes, and shared (see the module note). -/
 def onFastConfirmation (tr : Transition P) (ctx : Ctx) (isValid : Root → Bool)
-    (fcr : FastConfirmationStore P) : Fallible (FastConfirmationStore P) := do
-  let head ← getHead ctx.config fcr.store
-  let v : FastConfirmationView P := { context := ctx, store := fcr.store, head := head, isValid := isValid, transition := tr }
+    (fcr : FastConfirmationStore P) : M (FastConfirmationStore P) := do
+  let head ← getHead ctx.cfg fcr.store
+  let v : FcrView P := { ctx, store := fcr.store, head, isValid, tr }
   let fcr ← updateFastConfirmationVariables fcr v
   pure { fcr with confirmed_root := ← getLatestConfirmed fcr v }
 
 /-- `get_safe_execution_block_hash(fcr_store)` (Gloas): only the parent payload of a confirmed
 beacon block is safe, so the confirmed block's bid's `parent_block_hash`. -/
-def getSafeExecutionBlockHash (fcr : FastConfirmationStore P) : Fallible Hash32 := do
+def getSafeExecutionBlockHash (fcr : FastConfirmationStore P) : M Hash32 := do
   let safeBlock ← lookup fcr.store.blocks fcr.confirmed_root
     "get_safe_execution_block_hash: store.blocks[confirmed_root]"
   pure safeBlock.body.signed_execution_payload_bid.message.parent_block_hash

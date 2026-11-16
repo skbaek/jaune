@@ -40,9 +40,9 @@ decreasing_by omega
 
 /-- `merkle_tree(leaves)`: the tree as an array indexed by generalized index (index 0 unused),
 twice the padded bottom layer long, zero chunks (`Bytes32()`) padding the bottom layer. -/
-def merkleTree (leaves : List Jaune.U256) : Fallible (Array Jaune.U256) := do
+def merkleTree (leaves : List B256) : M (Array B256) := do
   let bottomLength := getPowerOfTwoCeil leaves.length
-  let mut o : Array Jaune.U256 :=
+  let mut o : Array B256 :=
     (List.replicate bottomLength zeroChunk ++ leaves ++
       List.replicate (bottomLength - leaves.length) zeroChunk).toArray
   for j in List.range (bottomLength - 1) do
@@ -55,7 +55,7 @@ def merkleTree (leaves : List Jaune.U256) : Fallible (Array Jaune.U256) := do
 /-! ## Helpers for generalized indices -/
 
 /-- `get_generalized_index_length(index) = int(log2(index))`; `math.log2(0)` raises. -/
-def getGeneralizedIndexLength (index : GeneralizedIndex) : Fallible Nat :=
+def getGeneralizedIndexLength (index : GeneralizedIndex) : M Nat :=
   if index = 0 then throw (.assert "get_generalized_index_length: log2(0)")
   else pure index.log2
 
@@ -101,7 +101,7 @@ def getHelperIndices (indices : List GeneralizedIndex) : List GeneralizedIndex :
 /-! ## Verification -/
 
 /-- `calculate_merkle_root(leaf, proof, index)`. -/
-def calculateMerkleRoot (leaf : Jaune.U256) (proof : List Jaune.U256) (index : GeneralizedIndex) : Fallible Jaune.U256 := do
+def calculateMerkleRoot (leaf : B256) (proof : List B256) (index : GeneralizedIndex) : M B256 := do
   require (proof.length == (← getGeneralizedIndexLength index))
     "calculate_merkle_root: len(proof) == get_generalized_index_length(index)"
   let mut leaf := leaf
@@ -111,22 +111,22 @@ def calculateMerkleRoot (leaf : Jaune.U256) (proof : List Jaune.U256) (index : G
   pure leaf
 
 /-- `verify_merkle_proof(leaf, proof, index, root)`. -/
-def verifyMerkleProof (leaf : Jaune.U256) (proof : List Jaune.U256) (index : GeneralizedIndex) (root : Jaune.U256) :
-    Fallible Bool := do
-  pure (Bytes32.beq (← calculateMerkleRoot leaf proof index) root)
+def verifyMerkleProof (leaf : B256) (proof : List B256) (index : GeneralizedIndex) (root : B256) :
+    M Bool := do
+  pure (B256.beq (← calculateMerkleRoot leaf proof index) root)
 
 /-- A finite map from generalized indices to nodes, as an association list (the spec's
 `objects` dictionary). Later bindings shadow earlier ones, as `{**a, **b}` does. -/
-abbrev NodeMap := List (GeneralizedIndex × Jaune.U256)
+abbrev NodeMap := List (GeneralizedIndex × B256)
 
-def NodeMap.lookup (m : NodeMap) (k : GeneralizedIndex) : Option Jaune.U256 :=
-  (List.find? (fun (e : GeneralizedIndex × Jaune.U256) => e.1 == k) m).map (·.2)
+def NodeMap.lookup (m : NodeMap) (k : GeneralizedIndex) : Option B256 :=
+  (List.find? (fun (e : GeneralizedIndex × B256) => e.1 == k) m).map (·.2)
 
 /-- `calculate_multi_merkle_root(leaves, proof, indices)`. The key list grows while it is
 walked; a parent is added only when absent, so it grows by at most one entry per index below the
 largest key, which bounds the walk (fuel). -/
-def calculateMultiMerkleRoot (leaves proof : List Jaune.U256) (indices : List GeneralizedIndex) :
-    Fallible Jaune.U256 := do
+def calculateMultiMerkleRoot (leaves proof : List B256) (indices : List GeneralizedIndex) :
+    M B256 := do
   require (leaves.length == indices.length)
     "calculate_multi_merkle_root: len(leaves) == len(indices)"
   let helperIndices := getHelperIndices indices
@@ -136,7 +136,7 @@ def calculateMultiMerkleRoot (leaves proof : List Jaune.U256) (indices : List Ge
   let objects0 : NodeMap := (helperIndices.zip proof).reverse ++ (indices.zip leaves).reverse
   let keys0 := ((objects0.map (·.1)).eraseDups).mergeSort (fun a b => decide (b ≤ a))
   let maxKey := keys0.foldl max 0
-  let rec walk (fuel pos : Nat) (keys : Array Nat) (objects : NodeMap) : Fallible NodeMap :=
+  let rec walk (fuel pos : Nat) (keys : Array Nat) (objects : NodeMap) : M NodeMap :=
     match fuel with
     | 0 => throw (.assert "calculate_multi_merkle_root: walk bound")
     | fuel + 1 =>
@@ -156,28 +156,28 @@ def calculateMultiMerkleRoot (leaves proof : List Jaune.U256) (indices : List Ge
   | none => throw (.index "calculate_multi_merkle_root: objects[1]" 1 objects.length)
 
 /-- `verify_merkle_multiproof(leaves, proof, indices, root)`. -/
-def verifyMerkleMultiproof (leaves proof : List Jaune.U256) (indices : List GeneralizedIndex)
-    (root : Jaune.U256) : Fallible Bool := do
-  pure (Bytes32.beq (← calculateMultiMerkleRoot leaves proof indices) root)
+def verifyMerkleMultiproof (leaves proof : List B256) (indices : List GeneralizedIndex)
+    (root : B256) : M Bool := do
+  pure (B256.beq (← calculateMultiMerkleRoot leaves proof indices) root)
 
 /-! ## Building proofs over a tree of chunks -/
 
 /-- The chunk-level core of `compute_merkle_proof(object, index)`: the nodes at
 `get_branch_indices(index)` of `merkle_tree(leaves)`, in that order (leaf to root). An index
 outside the tree rejects. -/
-def computeMerkleProofOfLeaves (leaves : List Jaune.U256) (index : GeneralizedIndex) :
-    Fallible (List Jaune.U256) := do
+def computeMerkleProofOfLeaves (leaves : List B256) (index : GeneralizedIndex) :
+    M (List B256) := do
   let tree ← merkleTree leaves
   (getBranchIndices index).mapM fun i => getAt tree i "compute_merkle_proof: tree[i]"
 
 /-- The root of `merkle_tree(leaves)` (`o[1]`); it equals `merkleize(leaves)`. -/
-def merkleTreeRoot (leaves : List Jaune.U256) : Fallible Jaune.U256 := do
+def merkleTreeRoot (leaves : List B256) : M B256 := do
   getAt (← merkleTree leaves) 1 "merkle_tree: o[1]"
 
 /-! ## Tests: small hand trees -/
 
-private def leaf (k : Nat) : Jaune.U256 := (k + 1).toU256
-private def ok? {α} (x : Fallible α) : Option α := x.toOption
+private def L (k : Nat) : B256 := (k + 1).toB256
+private def ok? {α} (x : M α) : Option α := x.toOption
 
 #guard (List.range 10).map getPowerOfTwoCeil == [1, 1, 2, 4, 4, 8, 8, 8, 8, 16]
 #guard ok? (getGeneralizedIndexLength 1) == some 0 && ok? (getGeneralizedIndexLength 9) == some 3
@@ -193,48 +193,48 @@ private def ok? {α} (x : Fallible α) : Option α := x.toOption
 #guard getBranchIndices 1 == [] && getPathIndices 1 == []
 
 -- a 4-leaf tree by hand: root = H(H(l0, l1), H(l2, l3))
-private def fourLeaves : List Jaune.U256 := [leaf 0, leaf 1, leaf 2, leaf 3]
-private def leftNode : Jaune.U256 := hashPair (leaf 0) (leaf 1)
-private def rightNode : Jaune.U256 := hashPair (leaf 2) (leaf 3)
-private def fourLeafRoot : Jaune.U256 := hashPair leftNode rightNode
+private def l4 : List B256 := [L 0, L 1, L 2, L 3]
+private def n2 : B256 := hashPair (L 0) (L 1)
+private def n3 : B256 := hashPair (L 2) (L 3)
+private def r4 : B256 := hashPair n2 n3
 
-#guard (ok? (merkleTreeRoot fourLeaves)).map (Bytes32.beq fourLeafRoot) == some true
+#guard (ok? (merkleTreeRoot l4)).map (B256.beq r4) == some true
 -- the root equals the SSZ layer's merkleization of the same chunks
-#guard (ok? (merkleTreeRoot fourLeaves)).map (Bytes32.beq (merkleizeDepth fourLeaves 2)) == some true
+#guard (ok? (merkleTreeRoot l4)).map (B256.beq (merkleizeDepth l4 2)) == some true
 -- 3 leaves pad with a zero chunk
-#guard (ok? (merkleTreeRoot [leaf 0, leaf 1, leaf 2])).map
-  (Bytes32.beq (hashPair leftNode (hashPair (leaf 2) zeroChunk))) == some true
+#guard (ok? (merkleTreeRoot [L 0, L 1, L 2])).map
+  (B256.beq (hashPair n2 (hashPair (L 2) zeroChunk))) == some true
 -- proof of leaf 2 (index 6): [l3, n2]
-#guard (ok? (computeMerkleProofOfLeaves fourLeaves 6)).map (·.map U256.toBytes) ==
-  some [(leaf 3).toBytes, leftNode.toBytes]
-#guard ok? (verifyMerkleProof (leaf 2) [leaf 3, leftNode] 6 fourLeafRoot) == some true
-#guard ok? (verifyMerkleProof (leaf 2) [leftNode, leaf 3] 6 fourLeafRoot) == some false
-#guard (verifyMerkleProof (leaf 2) [leaf 3] 6 fourLeafRoot).toBool == false
+#guard (ok? (computeMerkleProofOfLeaves l4 6)).map (·.map B256.toBytes) ==
+  some [(L 3).toBytes, n2.toBytes]
+#guard ok? (verifyMerkleProof (L 2) [L 3, n2] 6 r4) == some true
+#guard ok? (verifyMerkleProof (L 2) [n2, L 3] 6 r4) == some false
+#guard (verifyMerkleProof (L 2) [L 3] 6 r4).toBool == false
 -- agreement with phase0's `is_valid_merkle_branch` (depth 2, position 2 is index 4 + 2)
 #guard (List.range 4).all fun p =>
-  match ok? (computeMerkleProofOfLeaves fourLeaves (4 + p)), fourLeaves[p]?, ok? (U64.ofNat? p) with
-  | some pr, some leaf, some pos => ok? (verifyMerkleProof leaf pr (4 + p) fourLeafRoot) == some true &&
-      ok? (isValidMerkleBranch leaf pr (U64.literal 2) pos fourLeafRoot) == some true
+  match ok? (computeMerkleProofOfLeaves l4 (4 + p)), l4[p]?, ok? (U64.ofNat? p) with
+  | some pr, some leaf, some pos => ok? (verifyMerkleProof leaf pr (4 + p) r4) == some true &&
+      ok? (isValidMerkleBranch leaf pr (U64.lit 2) pos r4) == some true
   | _, _, _ => false
 -- multiproof: leaves 0 and 1 (indices 4, 5) need only n3 (index 3)
 #guard getHelperIndices [4, 5] == [3]
-#guard ok? (verifyMerkleMultiproof [leaf 0, leaf 1] [rightNode] [4, 5] fourLeafRoot) == some true
-#guard ok? (verifyMerkleMultiproof [leaf 1, leaf 0] [rightNode] [4, 5] fourLeafRoot) == some false
+#guard ok? (verifyMerkleMultiproof [L 0, L 1] [n3] [4, 5] r4) == some true
+#guard ok? (verifyMerkleMultiproof [L 1, L 0] [n3] [4, 5] r4) == some false
 -- a single-item proof is a multiproof with one index
-#guard ok? (verifyMerkleMultiproof [leaf 2] [leaf 3, leftNode] [6] fourLeafRoot) == some true
+#guard ok? (verifyMerkleMultiproof [L 2] [L 3, n2] [6] r4) == some true
 -- the spec's 8-leaf example, built and verified
-private def eightLeaves : List Jaune.U256 := (List.range 8).map leaf
-#guard match ok? (merkleTree eightLeaves), ok? (merkleTreeRoot eightLeaves) with
+private def l8 : List B256 := (List.range 8).map L
+#guard match ok? (merkleTree l8), ok? (merkleTreeRoot l8) with
   | some t, some r =>
     let pr := [15, 6, 5].filterMap (fun i => t[i]?)
-    ok? (verifyMerkleMultiproof [leaf 0, leaf 1, leaf 6] pr [8, 9, 14] r) == some true
+    ok? (verifyMerkleMultiproof [L 0, L 1, L 6] pr [8, 9, 14] r) == some true
   | _, _ => false
-#guard (verifyMerkleMultiproof [leaf 0] [] [8, 9] fourLeafRoot).toBool == false
+#guard (verifyMerkleMultiproof [L 0] [] [8, 9] r4).toBool == false
 
 /-- `compute_merkle_branch_root(leaf, branch, depth, index)` (`specs/phase0/beacon-chain.md`);
 `branch[i]` out of range raises. -/
-def computeMerkleBranchRoot (leaf : Jaune.U256) (branch : List Jaune.U256) (depth index : Nat) :
-    Fallible Jaune.U256 := do
+def computeMerkleBranchRoot (leaf : B256) (branch : List B256) (depth index : Nat) :
+    M B256 := do
   let mut value := leaf
   for i in List.range depth do
     let b ← match branch[i]? with

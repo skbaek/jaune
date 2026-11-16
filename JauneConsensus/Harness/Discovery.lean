@@ -42,7 +42,7 @@ open Yaml
 
 /-! ## File kinds -/
 
-private def isHexDigest (s : String) : Bool :=
+private def isHex64 (s : String) : Bool :=
   s.length == 66 && s.startsWith "0x" &&
     (s.toList.drop 2).all (fun c => ('0' ≤ c && c ≤ '9') || ('a' ≤ c && c ≤ 'f'))
 
@@ -58,7 +58,7 @@ def normalizeName (name : String) : String :=
     else if name.endsWith ".yaml" then ((name.dropEnd 5).toString, ".yaml")
     else (name, "")
   let segs := (stem.splitOn "_").map fun s =>
-    if isDecimal s then "N" else if isHexDigest s then "0xH" else s
+    if isDecimal s then "N" else if isHex64 s then "0xH" else s
   "_".intercalate segs ++ ext
 
 /-- The file kinds each runner's cases may contain, from `tests/formats/<runner>/` at the pin and
@@ -167,8 +167,8 @@ neither is ever run as Fulu. Other directory names that are not `CFork`s (`phase
 ... where formats were introduced) are not refused here: the scope rule decides them. -/
 def forkRefusal? (f : String) (runner : Option String := none) : Option ForkRefusal :=
   if f == "eip7805" then some (.unknown f)
-  else match ConsensusFork.ofName? f with
-    | some c => match ConsensusFork.resolve f with
+  else match CFork.ofName? f with
+    | some c => match CFork.resolve f with
       | .error e =>
         if c == .gloas && runner.any gloasRunners.contains then none else some e
       | .ok _ => none
@@ -197,15 +197,15 @@ inductive Tier | smoke | full
   deriving BEq, Repr
 
 /-- A directory name used as a selection filter (a fork, runner, handler or suite name). -/
-abbrev DirectoryName := String
+abbrev DirName := String
 
 structure Selection where
   root : System.FilePath
   preset : String
-  fork : Option DirectoryName := none
-  runner : Option DirectoryName := none
-  handler : Option DirectoryName := none
-  suite : Option DirectoryName := none
+  fork : Option DirName := none
+  runner : Option DirName := none
+  handler : Option DirName := none
+  suite : Option DirName := none
   tier : Tier := .full
 
 /-- One discovered case: its suite and directory, with its sorted file names. -/
@@ -213,14 +213,14 @@ structure Case where
   preset : String
   key : SuiteKey
   name : String
-  directory : System.FilePath
+  dir : System.FilePath
   files : List String
 
 def Case.render (c : Case) : String := s!"{c.preset}/{c.key.render}/{c.name}"
 
 def Case.has (c : Case) (f : String) : Bool := c.files.contains f
 
-private def matches? (filter : Option DirectoryName) (v : String) : Bool :=
+private def matches? (filter : Option DirName) (v : String) : Bool :=
   match filter with
   | none => true
   | some f => f == v
@@ -229,7 +229,7 @@ private def sortStrings (xs : Array String) : List String := (xs.qsort (· < ·)
 
 /-- Sorted names of the subdirectories (`dirs = true`) or regular files of `p`; refuses the
 other kind when `strict`. -/
-def listDirectory (p : System.FilePath) (dirs : Bool) (strict : Bool) : IO (List String) := do
+def listDir (p : System.FilePath) (dirs : Bool) (strict : Bool) : IO (List String) := do
   let es ← p.readDir
   let mut out := #[]
   for e in es do
@@ -258,7 +258,7 @@ def checkCaseManifest (dir : System.FilePath) (label : String) (want : List (Str
 /-- The `bls_setting` of one case, as the manifest's histogram key. -/
 def blsSettingOf (c : Case) : IO String := do
   if !c.has "meta.yaml" then return "absent"
-  let bytes ← IO.FS.readBinFile (c.directory / "meta.yaml")
+  let bytes ← IO.FS.readBinFile (c.dir / "meta.yaml")
   match parse bytes with
   | .error e => throw (IO.userError s!"{c.render}/meta.yaml: {e}")
   | .ok v =>
@@ -291,14 +291,14 @@ def discover (m : Manifest) (sel : Selection) : IO (List Case) := do
   -- the in-scope part of the tree under the selection
   let base := sel.root / sel.preset / "tests" / casePresetOf sel.preset
   let mut onDisk : List SuiteKey := []
-  for fork in ← listDirectory base true true do
+  for fork in ← listDir base true true do
     if !matches? sel.fork fork then continue
-    for runner in ← listDirectory (base / fork) true true do
+    for runner in ← listDir (base / fork) true true do
       if !matches? sel.runner runner || !inScope sel.preset fork runner then continue
       if let some why := forkRefusal? fork (some runner) then throw (IO.userError (toString why))
-      for handler in ← listDirectory (base / fork / runner) true true do
+      for handler in ← listDir (base / fork / runner) true true do
         if !matches? sel.handler handler then continue
-        for suite in ← listDirectory (base / fork / runner / handler) true true do
+        for suite in ← listDir (base / fork / runner / handler) true true do
           if !matches? sel.suite suite then continue
           onDisk := ⟨fork, runner, handler, suite⟩ :: onDisk
   for (_, k, _, _) in wanted do
@@ -311,7 +311,7 @@ def discover (m : Manifest) (sel : Selection) : IO (List Case) := do
   let mut cases : Array Case := #[]
   for (_, k, r, invCount) in wanted do
     let sdir := base / k.fork / k.runner / k.handler / k.suite
-    let names ← listDirectory sdir true true
+    let names ← listDir sdir true true
     let label := s!"{sel.preset}/{k.render}"
     if names.length != r.cases || names.length != invCount then
       throw (IO.userError s!"refused: {label}: {names.length} cases on disk, manifest {r.cases}, inventory {invCount}")
@@ -321,7 +321,7 @@ def discover (m : Manifest) (sel : Selection) : IO (List Case) := do
     let mut paths : Array String := #[]
     let mut suiteCases : Array Case := #[]
     for n in names do
-      let files ← listDirectory (sdir / n) false true
+      let files ← listDir (sdir / n) false true
       for f in files do
         if f != "manifest.yaml" && !kinds.contains (normalizeName f) then
           throw (IO.userError s!"refused: {label}/{n}: unknown file {f} for runner {k.runner}")
@@ -332,7 +332,7 @@ def discover (m : Manifest) (sel : Selection) : IO (List Case) := do
           ("case", n)]
       let files := files.filter (· != "manifest.yaml")
       suiteCases := suiteCases.push
-        { preset := casePresetOf sel.preset, key := k, name := n, directory := sdir / n, files }
+        { preset := casePresetOf sel.preset, key := k, name := n, dir := sdir / n, files }
     if listDigest (sortStrings paths) != r.filesSha256 then
       throw (IO.userError s!"refused: {label}: file paths differ from the manifest (missing, extra or renamed file)")
     let bls ← suiteCases.toList.mapM blsSettingOf

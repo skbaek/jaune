@@ -13,7 +13,7 @@ theorem says the function is their bind-composition.
 
 namespace JauneConsensus.Facts
 
-variable {P : Preset} {f : ConsensusFork}
+variable {P : Preset} {f : CFork}
 
 /-- Why `process_withdrawal_request` ignored a request: one constructor per early
 return, in the code's order. The final partial gate
@@ -69,7 +69,7 @@ inductive WithdrawalOutcome where
 /-- Which outcome `process_withdrawal_request` gives `wr`, computed with the same
 reads and the same checked arithmetic as the function. Changes no state. -/
 def classifyWithdrawalRequest (cfg : Config) (state : BeaconState P f)
-    (wr : WithdrawalRequest) : Fallible WithdrawalOutcome := do
+    (wr : WithdrawalRequest) : M WithdrawalOutcome := do
   let site := "process_withdrawal_request"
   let amount := wr.amount
   let isFullExit := amount == FULL_EXIT_REQUEST_AMOUNT
@@ -83,13 +83,13 @@ def classifyWithdrawalRequest (cfg : Config) (state : BeaconState P f)
   let current ← getCurrentEpoch state
   if !isActiveValidator validator current then return .ignored .notActive
   if validator.exit_epoch != FAR_FUTURE_EPOCH then return .ignored .alreadyExiting
-  if current < (← U64.add? validator.activation_epoch (← u64Checked cfg.SHARD_COMMITTEE_PERIOD) site) then
+  if current < (← U64.add? validator.activation_epoch (← c64 cfg.SHARD_COMMITTEE_PERIOD) site) then
     return .ignored .tooEarly
   let pendingBalance ← getPendingBalanceToWithdraw state index
   if isFullExit then
     if pendingBalance == U64.zero then return .fullExit index
     return .ignored .fullExitPendingBalance
-  let minAct ← u64Checked P.MIN_ACTIVATION_BALANCE
+  let minAct ← c64 P.MIN_ACTIVATION_BALANCE
   let balance ← state.balances.get index.toNat site
   let sufficient := minAct ≤ validator.effective_balance
   let excess := (← U64.add? minAct pendingBalance site) < balance
@@ -105,13 +105,13 @@ def classifyWithdrawalRequest (cfg : Config) (state : BeaconState P f)
 /-- The state change of each outcome: `ignored` is the identity, `fullExit`
 initiates the exit, `partialWithdrawal` appends the pending entry. -/
 def applyWithdrawalOutcome (cfg : Config) (state : BeaconState P f) (_wr : WithdrawalRequest) :
-    WithdrawalOutcome → Fallible (BeaconState P f)
+    WithdrawalOutcome → M (BeaconState P f)
   | .ignored _ => pure state
   | .fullExit index => initiateValidatorExit cfg state index
   | .partialWithdrawal index toWithdraw => do
     let site := "process_withdrawal_request"
     let (state, exitQueueEpoch) ← computeExitEpochAndUpdateChurn cfg state toWithdraw
-    let withdrawable ← U64.add? exitQueueEpoch (← u64Checked cfg.MIN_VALIDATOR_WITHDRAWABILITY_DELAY) site
+    let withdrawable ← U64.add? exitQueueEpoch (← c64 cfg.MIN_VALIDATOR_WITHDRAWABILITY_DELAY) site
     let pending ← (← state.pendingPartialWithdrawals).push
       { validator_index := index, amount := toWithdraw, withdrawable_epoch := withdrawable } site
     state.setPendingPartialWithdrawals pending
@@ -123,16 +123,16 @@ private theorem bind_ok_cons {α β ε : Type} (a : α) (k : α → Except ε β
     Bind.bind (Except.ok a) k = k a := rfl
 
 /-- `bind` on an `error` result, as a rewrite. -/
-private theorem bind_error_cons {α β ε : Type} (e : ε) (k : α → Except ε β) :
+private theorem bind_err_cons {α β ε : Type} (e : ε) (k : α → Except ε β) :
     Bind.bind (Except.error e) k = Except.error e := rfl
 
 /-- Inversion for one `bind` layer: from a successful bind, the scrutinee
 succeeded and the continuation did too. -/
-private theorem bind_ok_invariant {α β ε : Type} {m : Except ε α} {f : α → Except ε β}
+private theorem bind_ok_inv {α β ε : Type} {m : Except ε α} {f : α → Except ε β}
     {y : β} (h : Bind.bind m f = .ok y) : ∃ a, m = .ok a ∧ f a = .ok y := by
   cases m with
   | ok a => exact ⟨a, rfl, h⟩
-  | error e => rw [bind_error_cons] at h; cases h
+  | error e => rw [bind_err_cons] at h; cases h
 
 /-- Equational characterization: the function is classify-then-apply. -/
 theorem processWithdrawalRequest_eq (cfg : Config) (state : BeaconState P f)
@@ -177,7 +177,7 @@ theorem processWithdrawalRequest_eq (cfg : Config) (state : BeaconState P f)
                   cases hb5 : (validator.exit_epoch != FAR_FUTURE_EPOCH) with
                   | true => rfl
                   | false =>
-                    cases h5a : u64Checked cfg.SHARD_COMMITTEE_PERIOD with
+                    cases h5a : c64 cfg.SHARD_COMMITTEE_PERIOD with
                     | error e => rfl
                     | ok period =>
                       simp only [bind_ok_cons]
@@ -200,7 +200,7 @@ theorem processWithdrawalRequest_eq (cfg : Config) (state : BeaconState P f)
                               | true => rfl
                               | false => rfl
                             | false =>
-                              cases h7 : u64Checked P.MIN_ACTIVATION_BALANCE with
+                              cases h7 : c64 P.MIN_ACTIVATION_BALANCE with
                               | error e => rfl
                               | ok minAct =>
                                 simp only [bind_ok_cons]
@@ -255,25 +255,25 @@ theorem classify_fullExit_or_partial_spec {cfg : Config} {state : BeaconState P 
   rcases ho with rfl | ⟨amt, rfl⟩
   · unfold classifyWithdrawalRequest at h
     dsimp only at h
-    obtain ⟨q1, h1ok, h1c⟩ := bind_ok_invariant h
+    obtain ⟨q1, h1ok, h1c⟩ := bind_ok_inv h
     by_cases hb1 : ((q1.length == P.PENDING_PARTIAL_WITHDRAWALS_LIMIT &&
       !(wr.amount == FULL_EXIT_REQUEST_AMOUNT)) = true)
     · rw [ite_eq_left hb1] at h1c
       cases h1c
     · rw [ite_eq_right hb1] at h1c
-      obtain ⟨v2, h2ok, h2c⟩ := bind_ok_invariant h1c
+      obtain ⟨v2, h2ok, h2c⟩ := bind_ok_inv h1c
       cases v2 with
       | none => cases h2c
       | some j =>
         dsimp only at h2c
-        obtain ⟨validator, h3ok, h3c⟩ := bind_ok_invariant h2c
+        obtain ⟨validator, h3ok, h3c⟩ := bind_ok_inv h2c
         by_cases hb3 : ((!(hasExecutionWithdrawalCredential validator &&
           validator.withdrawal_credentials.toBytes.drop 12 ==
             wr.source_address.toBytes)) = true)
         · rw [ite_eq_left hb3] at h3c
           cases h3c
         · rw [ite_eq_right hb3] at h3c
-          obtain ⟨current, h4ok, h4c⟩ := bind_ok_invariant h3c
+          obtain ⟨current, h4ok, h4c⟩ := bind_ok_inv h3c
           by_cases hb4 : ((!isActiveValidator validator current) = true)
           · rw [ite_eq_left hb4] at h4c
             cases h4c
@@ -282,13 +282,13 @@ theorem classify_fullExit_or_partial_spec {cfg : Config} {state : BeaconState P 
             · rw [ite_eq_left hb5] at h4c
               cases h4c
             · rw [ite_eq_right hb5] at h4c
-              obtain ⟨period, h5aok, h5ac⟩ := bind_ok_invariant h4c
-              obtain ⟨actSum, h5bok, h5bc⟩ := bind_ok_invariant h5ac
+              obtain ⟨period, h5aok, h5ac⟩ := bind_ok_inv h4c
+              obtain ⟨actSum, h5bok, h5bc⟩ := bind_ok_inv h5ac
               by_cases hc6 : (current < actSum)
               · rw [ite_eq_left hc6] at h5bc
                 cases h5bc
               · rw [ite_eq_right hc6] at h5bc
-                obtain ⟨pendingBalance, h6ok, h6c⟩ := bind_ok_invariant h5bc
+                obtain ⟨pendingBalance, h6ok, h6c⟩ := bind_ok_inv h5bc
                 by_cases hb7 : ((wr.amount == FULL_EXIT_REQUEST_AMOUNT) = true)
                 · rw [ite_eq_left hb7] at h6c
                   by_cases hb8 : ((pendingBalance == U64.zero) = true)
@@ -303,15 +303,15 @@ theorem classify_fullExit_or_partial_spec {cfg : Config} {state : BeaconState P 
                   · rw [ite_eq_right hb8] at h6c
                     cases h6c
                 · rw [ite_eq_right hb7] at h6c
-                  obtain ⟨minAct, h7ok, h7c⟩ := bind_ok_invariant h6c
-                  obtain ⟨balance, h8ok, h8c⟩ := bind_ok_invariant h7c
-                  obtain ⟨sum, h9ok, h9c⟩ := bind_ok_invariant h8c
+                  obtain ⟨minAct, h7ok, h7c⟩ := bind_ok_inv h6c
+                  obtain ⟨balance, h8ok, h8c⟩ := bind_ok_inv h7c
+                  obtain ⟨sum, h9ok, h9c⟩ := bind_ok_inv h8c
                   by_cases hg : ((hasCompoundingWithdrawalCredential validator &&
                     decide (minAct ≤ validator.effective_balance) &&
                     decide (sum < balance)) = true)
                   · rw [ite_eq_left hg] at h9c
-                    obtain ⟨sub1, h10ok, h10c⟩ := bind_ok_invariant h9c
-                    obtain ⟨avail, h11ok, h11c⟩ := bind_ok_invariant h10c
+                    obtain ⟨sub1, h10ok, h10c⟩ := bind_ok_inv h9c
+                    obtain ⟨avail, h11ok, h11c⟩ := bind_ok_inv h10c
                     cases h11c
                   · rw [ite_eq_right hg] at h9c
                     by_cases hr1 : ((!hasCompoundingWithdrawalCredential validator)
@@ -327,25 +327,25 @@ theorem classify_fullExit_or_partial_spec {cfg : Config} {state : BeaconState P 
                         cases h9c
   · unfold classifyWithdrawalRequest at h
     dsimp only at h
-    obtain ⟨q1, h1ok, h1c⟩ := bind_ok_invariant h
+    obtain ⟨q1, h1ok, h1c⟩ := bind_ok_inv h
     by_cases hb1 : ((q1.length == P.PENDING_PARTIAL_WITHDRAWALS_LIMIT &&
       !(wr.amount == FULL_EXIT_REQUEST_AMOUNT)) = true)
     · rw [ite_eq_left hb1] at h1c
       cases h1c
     · rw [ite_eq_right hb1] at h1c
-      obtain ⟨v2, h2ok, h2c⟩ := bind_ok_invariant h1c
+      obtain ⟨v2, h2ok, h2c⟩ := bind_ok_inv h1c
       cases v2 with
       | none => cases h2c
       | some j =>
         dsimp only at h2c
-        obtain ⟨validator, h3ok, h3c⟩ := bind_ok_invariant h2c
+        obtain ⟨validator, h3ok, h3c⟩ := bind_ok_inv h2c
         by_cases hb3 : ((!(hasExecutionWithdrawalCredential validator &&
           validator.withdrawal_credentials.toBytes.drop 12 ==
             wr.source_address.toBytes)) = true)
         · rw [ite_eq_left hb3] at h3c
           cases h3c
         · rw [ite_eq_right hb3] at h3c
-          obtain ⟨current, h4ok, h4c⟩ := bind_ok_invariant h3c
+          obtain ⟨current, h4ok, h4c⟩ := bind_ok_inv h3c
           by_cases hb4 : ((!isActiveValidator validator current) = true)
           · rw [ite_eq_left hb4] at h4c
             cases h4c
@@ -354,13 +354,13 @@ theorem classify_fullExit_or_partial_spec {cfg : Config} {state : BeaconState P 
             · rw [ite_eq_left hb5] at h4c
               cases h4c
             · rw [ite_eq_right hb5] at h4c
-              obtain ⟨period, h5aok, h5ac⟩ := bind_ok_invariant h4c
-              obtain ⟨actSum, h5bok, h5bc⟩ := bind_ok_invariant h5ac
+              obtain ⟨period, h5aok, h5ac⟩ := bind_ok_inv h4c
+              obtain ⟨actSum, h5bok, h5bc⟩ := bind_ok_inv h5ac
               by_cases hc6 : (current < actSum)
               · rw [ite_eq_left hc6] at h5bc
                 cases h5bc
               · rw [ite_eq_right hc6] at h5bc
-                obtain ⟨pendingBalance, h6ok, h6c⟩ := bind_ok_invariant h5bc
+                obtain ⟨pendingBalance, h6ok, h6c⟩ := bind_ok_inv h5bc
                 by_cases hb7 : ((wr.amount == FULL_EXIT_REQUEST_AMOUNT) = true)
                 · rw [ite_eq_left hb7] at h6c
                   by_cases hb8 : ((pendingBalance == U64.zero) = true)
@@ -369,15 +369,15 @@ theorem classify_fullExit_or_partial_spec {cfg : Config} {state : BeaconState P 
                   · rw [ite_eq_right hb8] at h6c
                     cases h6c
                 · rw [ite_eq_right hb7] at h6c
-                  obtain ⟨minAct, h7ok, h7c⟩ := bind_ok_invariant h6c
-                  obtain ⟨balance, h8ok, h8c⟩ := bind_ok_invariant h7c
-                  obtain ⟨sum, h9ok, h9c⟩ := bind_ok_invariant h8c
+                  obtain ⟨minAct, h7ok, h7c⟩ := bind_ok_inv h6c
+                  obtain ⟨balance, h8ok, h8c⟩ := bind_ok_inv h7c
+                  obtain ⟨sum, h9ok, h9c⟩ := bind_ok_inv h8c
                   by_cases hg : ((hasCompoundingWithdrawalCredential validator &&
                     decide (minAct ≤ validator.effective_balance) &&
                     decide (sum < balance)) = true)
                   · rw [ite_eq_left hg] at h9c
-                    obtain ⟨sub1, h10ok, h10c⟩ := bind_ok_invariant h9c
-                    obtain ⟨avail, h11ok, h11c⟩ := bind_ok_invariant h10c
+                    obtain ⟨sub1, h10ok, h10c⟩ := bind_ok_inv h9c
+                    obtain ⟨avail, h11ok, h11c⟩ := bind_ok_inv h10c
                     cases h11c
                     have hXY : (hasExecutionWithdrawalCredential validator &&
                       validator.withdrawal_credentials.toBytes.drop 12 ==
@@ -411,25 +411,25 @@ theorem classify_partial_amount {cfg : Config} {state : BeaconState P f}
       wr.amount ≠ U64.zero := by
   unfold classifyWithdrawalRequest at h
   dsimp only at h
-  obtain ⟨q1, h1ok, h1c⟩ := bind_ok_invariant h
+  obtain ⟨q1, h1ok, h1c⟩ := bind_ok_inv h
   by_cases hb1 : ((q1.length == P.PENDING_PARTIAL_WITHDRAWALS_LIMIT &&
     !(wr.amount == FULL_EXIT_REQUEST_AMOUNT)) = true)
   · rw [ite_eq_left hb1] at h1c
     cases h1c
   · rw [ite_eq_right hb1] at h1c
-    obtain ⟨v2, h2ok, h2c⟩ := bind_ok_invariant h1c
+    obtain ⟨v2, h2ok, h2c⟩ := bind_ok_inv h1c
     cases v2 with
     | none => cases h2c
     | some j =>
       dsimp only at h2c
-      obtain ⟨validator, h3ok, h3c⟩ := bind_ok_invariant h2c
+      obtain ⟨validator, h3ok, h3c⟩ := bind_ok_inv h2c
       by_cases hb3 : ((!(hasExecutionWithdrawalCredential validator &&
         validator.withdrawal_credentials.toBytes.drop 12 ==
           wr.source_address.toBytes)) = true)
       · rw [ite_eq_left hb3] at h3c
         cases h3c
       · rw [ite_eq_right hb3] at h3c
-        obtain ⟨current, h4ok, h4c⟩ := bind_ok_invariant h3c
+        obtain ⟨current, h4ok, h4c⟩ := bind_ok_inv h3c
         by_cases hb4 : ((!isActiveValidator validator current) = true)
         · rw [ite_eq_left hb4] at h4c
           cases h4c
@@ -438,13 +438,13 @@ theorem classify_partial_amount {cfg : Config} {state : BeaconState P f}
           · rw [ite_eq_left hb5] at h4c
             cases h4c
           · rw [ite_eq_right hb5] at h4c
-            obtain ⟨period, h5aok, h5ac⟩ := bind_ok_invariant h4c
-            obtain ⟨actSum, h5bok, h5bc⟩ := bind_ok_invariant h5ac
+            obtain ⟨period, h5aok, h5ac⟩ := bind_ok_inv h4c
+            obtain ⟨actSum, h5bok, h5bc⟩ := bind_ok_inv h5ac
             by_cases hc6 : (current < actSum)
             · rw [ite_eq_left hc6] at h5bc
               cases h5bc
             · rw [ite_eq_right hc6] at h5bc
-              obtain ⟨pendingBalance, h6ok, h6c⟩ := bind_ok_invariant h5bc
+              obtain ⟨pendingBalance, h6ok, h6c⟩ := bind_ok_inv h5bc
               by_cases hb7 : ((wr.amount == FULL_EXIT_REQUEST_AMOUNT) = true)
               · rw [ite_eq_left hb7] at h6c
                 by_cases hb8 : ((pendingBalance == U64.zero) = true)
@@ -453,15 +453,15 @@ theorem classify_partial_amount {cfg : Config} {state : BeaconState P f}
                 · rw [ite_eq_right hb8] at h6c
                   cases h6c
               · rw [ite_eq_right hb7] at h6c
-                obtain ⟨minAct, h7ok, h7c⟩ := bind_ok_invariant h6c
-                obtain ⟨balance, h8ok, h8c⟩ := bind_ok_invariant h7c
-                obtain ⟨sum, h9ok, h9c⟩ := bind_ok_invariant h8c
+                obtain ⟨minAct, h7ok, h7c⟩ := bind_ok_inv h6c
+                obtain ⟨balance, h8ok, h8c⟩ := bind_ok_inv h7c
+                obtain ⟨sum, h9ok, h9c⟩ := bind_ok_inv h8c
                 by_cases hg : ((hasCompoundingWithdrawalCredential validator &&
                   decide (minAct ≤ validator.effective_balance) &&
                   decide (sum < balance)) = true)
                 · rw [ite_eq_left hg] at h9c
-                  obtain ⟨sub1, h10ok, h10c⟩ := bind_ok_invariant h9c
-                  obtain ⟨avail, h11ok, h11c⟩ := bind_ok_invariant h10c
+                  obtain ⟨sub1, h10ok, h10c⟩ := bind_ok_inv h9c
+                  obtain ⟨avail, h11ok, h11c⟩ := bind_ok_inv h10c
                   cases h11c
                   refine ⟨balance, pendingBalance, h8ok, h6ok, ?_, ?_⟩
                   · have hMinAct : minAct.toNat = P.MIN_ACTIVATION_BALANCE :=
@@ -501,7 +501,7 @@ theorem classify_fullExit_iff {cfg : Config} {state : BeaconState P f}
         (∃ current, getCurrentEpoch state = .ok current ∧
           isActiveValidator v current = true ∧
           v.exit_epoch = FAR_FUTURE_EPOCH ∧
-          (∃ period, u64Checked cfg.SHARD_COMMITTEE_PERIOD = .ok period ∧
+          (∃ period, c64 cfg.SHARD_COMMITTEE_PERIOD = .ok period ∧
             (∃ actSum, U64.add? v.activation_epoch period
               "process_withdrawal_request" = .ok actSum ∧
               ¬ (current < actSum))))) ∧
@@ -510,25 +510,25 @@ theorem classify_fullExit_iff {cfg : Config} {state : BeaconState P f}
   · intro h
     unfold classifyWithdrawalRequest at h
     dsimp only at h
-    obtain ⟨q1, h1ok, h1c⟩ := bind_ok_invariant h
+    obtain ⟨q1, h1ok, h1c⟩ := bind_ok_inv h
     by_cases hb1 : ((q1.length == P.PENDING_PARTIAL_WITHDRAWALS_LIMIT &&
       !(wr.amount == FULL_EXIT_REQUEST_AMOUNT)) = true)
     · rw [ite_eq_left hb1] at h1c
       cases h1c
     · rw [ite_eq_right hb1] at h1c
-      obtain ⟨v2, h2ok, h2c⟩ := bind_ok_invariant h1c
+      obtain ⟨v2, h2ok, h2c⟩ := bind_ok_inv h1c
       cases v2 with
       | none => cases h2c
       | some j =>
         dsimp only at h2c
-        obtain ⟨validator, h3ok, h3c⟩ := bind_ok_invariant h2c
+        obtain ⟨validator, h3ok, h3c⟩ := bind_ok_inv h2c
         by_cases hb3 : ((!(hasExecutionWithdrawalCredential validator &&
           validator.withdrawal_credentials.toBytes.drop 12 ==
             wr.source_address.toBytes)) = true)
         · rw [ite_eq_left hb3] at h3c
           cases h3c
         · rw [ite_eq_right hb3] at h3c
-          obtain ⟨current, h4ok, h4c⟩ := bind_ok_invariant h3c
+          obtain ⟨current, h4ok, h4c⟩ := bind_ok_inv h3c
           by_cases hb4 : ((!isActiveValidator validator current) = true)
           · rw [ite_eq_left hb4] at h4c
             cases h4c
@@ -537,13 +537,13 @@ theorem classify_fullExit_iff {cfg : Config} {state : BeaconState P f}
             · rw [ite_eq_left hb5] at h4c
               cases h4c
             · rw [ite_eq_right hb5] at h4c
-              obtain ⟨period, h5aok, h5ac⟩ := bind_ok_invariant h4c
-              obtain ⟨actSum, h5bok, h5bc⟩ := bind_ok_invariant h5ac
+              obtain ⟨period, h5aok, h5ac⟩ := bind_ok_inv h4c
+              obtain ⟨actSum, h5bok, h5bc⟩ := bind_ok_inv h5ac
               by_cases hc6 : (current < actSum)
               · rw [ite_eq_left hc6] at h5bc
                 cases h5bc
               · rw [ite_eq_right hc6] at h5bc
-                obtain ⟨pendingBalance, h6ok, h6c⟩ := bind_ok_invariant h5bc
+                obtain ⟨pendingBalance, h6ok, h6c⟩ := bind_ok_inv h5bc
                 by_cases hb7 : ((wr.amount == FULL_EXIT_REQUEST_AMOUNT) = true)
                 · rw [ite_eq_left hb7] at h6c
                   by_cases hb8 : ((pendingBalance == U64.zero) = true)
@@ -577,15 +577,15 @@ theorem classify_fullExit_iff {cfg : Config} {state : BeaconState P f}
                   · rw [ite_eq_right hb8] at h6c
                     cases h6c
                 · rw [ite_eq_right hb7] at h6c
-                  obtain ⟨minAct, h7ok, h7c⟩ := bind_ok_invariant h6c
-                  obtain ⟨balance, h8ok, h8c⟩ := bind_ok_invariant h7c
-                  obtain ⟨sum, h9ok, h9c⟩ := bind_ok_invariant h8c
+                  obtain ⟨minAct, h7ok, h7c⟩ := bind_ok_inv h6c
+                  obtain ⟨balance, h8ok, h8c⟩ := bind_ok_inv h7c
+                  obtain ⟨sum, h9ok, h9c⟩ := bind_ok_inv h8c
                   by_cases hg : ((hasCompoundingWithdrawalCredential validator &&
                     decide (minAct ≤ validator.effective_balance) &&
                     decide (sum < balance)) = true)
                   · rw [ite_eq_left hg] at h9c
-                    obtain ⟨sub1, h10ok, h10c⟩ := bind_ok_invariant h9c
-                    obtain ⟨avail, h11ok, h11c⟩ := bind_ok_invariant h10c
+                    obtain ⟨sub1, h10ok, h10c⟩ := bind_ok_inv h9c
+                    obtain ⟨avail, h11ok, h11c⟩ := bind_ok_inv h10c
                     cases h11c
                   · rw [ite_eq_right hg] at h9c
                     by_cases hr1 : ((!hasCompoundingWithdrawalCredential

@@ -38,7 +38,7 @@ ordinary build fails on any mismatch.
 #expect_axioms Jaune.RunFrame.benvStat_eq [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.genericCall.step_spawn_benvStat [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.genericCreate.step_spawn_benvStat [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.MessageOp.step_spawn_benvStat [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Xinst.step_spawn_benvStat [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Exec [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Exec.halt [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Exec.cont [Classical.choice, Quot.sound, propext]

@@ -28,41 +28,41 @@ alternative check as well, for diagnostics.
 namespace JauneConsensus.Harness
 
 /-- A state transition at every preset and fork, under a processing context. -/
-abbrev StateStep := ∀ {P : Preset} {f : ConsensusFork}, Ctx → BeaconState P f → Fallible (BeaconState P f)
+abbrev StateStep := ∀ {P : Preset} {f : CFork}, Ctx → BeaconState P f → M (BeaconState P f)
 
 /-- A configuration-only step as a context step. -/
-def ofConfig (step : ∀ {P : Preset} {f : ConsensusFork}, Config → BeaconState P f → Fallible (BeaconState P f)) :
-    StateStep := fun ctx s => step ctx.config s
+def ofCfg (step : ∀ {P : Preset} {f : CFork}, Config → BeaconState P f → M (BeaconState P f)) :
+    StateStep := fun ctx s => step ctx.cfg s
 
 /-- The sub-transition of an `epoch_processing` handler (`process_<handler>`). -/
 def epochStep : String → Option StateStep
-  | "justification_and_finalization" => some (ofConfig processJustificationAndFinalization)
-  | "inactivity_updates" => some (ofConfig processInactivityUpdates)
-  | "rewards_and_penalties" => some (ofConfig processRewardsAndPenalties)
-  | "registry_updates" => some (ofConfig processRegistryUpdates)
-  | "slashings" => some (ofConfig processSlashings)
-  | "eth1_data_reset" => some (ofConfig processEth1DataReset)
+  | "justification_and_finalization" => some (ofCfg processJustificationAndFinalization)
+  | "inactivity_updates" => some (ofCfg processInactivityUpdates)
+  | "rewards_and_penalties" => some (ofCfg processRewardsAndPenalties)
+  | "registry_updates" => some (ofCfg processRegistryUpdates)
+  | "slashings" => some (ofCfg processSlashings)
+  | "eth1_data_reset" => some (ofCfg processEth1DataReset)
   | "pending_deposits" => some processPendingDeposits
-  | "pending_consolidations" => some (ofConfig processPendingConsolidations)
-  | "effective_balance_updates" => some (ofConfig processEffectiveBalanceUpdates)
-  | "slashings_reset" => some (ofConfig processSlashingsReset)
-  | "randao_mixes_reset" => some (ofConfig processRandaoMixesReset)
-  | "historical_summaries_update" => some (ofConfig processHistoricalSummariesUpdate)
-  | "participation_flag_updates" => some (ofConfig processParticipationFlagUpdates)
+  | "pending_consolidations" => some (ofCfg processPendingConsolidations)
+  | "effective_balance_updates" => some (ofCfg processEffectiveBalanceUpdates)
+  | "slashings_reset" => some (ofCfg processSlashingsReset)
+  | "randao_mixes_reset" => some (ofCfg processRandaoMixesReset)
+  | "historical_summaries_update" => some (ofCfg processHistoricalSummariesUpdate)
+  | "participation_flag_updates" => some (ofCfg processParticipationFlagUpdates)
   | "sync_committee_updates" => some processSyncCommitteeUpdates
-  | "proposer_lookahead" => some (ofConfig processProposerLookahead)
+  | "proposer_lookahead" => some (ofCfg processProposerLookahead)
   | _ => none
 
 /-- The whole `process_epoch`, once every sub-step exists. -/
 def fullEpoch? : Option StateStep := some processEpoch
 
 /-- Read and decode a `BeaconState` file of the case. -/
-def readState (P : Preset) (f : ConsensusFork) (c : Case) (file : String) :
+def readState (P : Preset) (f : CFork) (c : Case) (file : String) :
     IO (Except String (BeaconState P f)) := do
-  match Snappy.decompress (← IO.FS.readBinFile (c.directory / file)) with
+  match Snappy.decompress (← IO.FS.readBinFile (c.dir / file)) with
   | .error e => pure (.error s!"{file}: {e}")
   | .ok b =>
-    match (deserialize b.toList : Fallible (BeaconState P f)) with
+    match (deserialize b.toList : M (BeaconState P f)) with
     | .ok s => pure (.ok s)
     | .error r => pure (.error s!"{file}: does not decode: {repr r}")
 
@@ -71,7 +71,7 @@ def firstDiff (a b : List UInt8) : Nat :=
   ((a.zip b).findIdx? (fun (x, y) => x != y)).getD (min a.length b.length)
 
 /-- The fields of two states that differ, for diagnostics. -/
-def stateDiff {P : Preset} {f : ConsensusFork} (a b : BeaconState P f) : List String :=
+def stateDiff {P : Preset} {f : CFork} (a b : BeaconState P f) : List String :=
   let chk (name : String) (x : Bool) : List String := if x then [] else [name]
   chk "slot" (a.slot == b.slot) ++ chk "fork" (a.fork == b.fork) ++
   chk "latest_block_header" (a.latest_block_header == b.latest_block_header) ++
@@ -98,14 +98,14 @@ def stateDiff {P : Preset} {f : ConsensusFork} (a b : BeaconState P f) : List St
   chk "proposer_lookahead" (a.proposer_lookahead == b.proposer_lookahead)
 
 /-- Run `step` from `preFile` and compare with `postFile` (or expect a rejection). -/
-def checkTransition (P : Preset) (f : ConsensusFork) (ctx : Ctx) (c : Case) (step : StateStep)
+def checkTransition (P : Preset) (f : CFork) (ctx : Ctx) (c : Case) (step : StateStep)
     (preFile postFile : String) : IO (Option String) := do
   let pre ← match ← readState P f c preFile with
     | .ok s => pure s
     | .error e => return some e
   let got := step ctx pre
   if c.has postFile then
-    let want ← match Snappy.decompress (← IO.FS.readBinFile (c.directory / postFile)) with
+    let want ← match Snappy.decompress (← IO.FS.readBinFile (c.dir / postFile)) with
       | .ok b => pure b.toList
       | .error e => return some s!"{postFile}: {e}"
     match got with
@@ -113,7 +113,7 @@ def checkTransition (P : Preset) (f : ConsensusFork) (ctx : Ctx) (c : Case) (ste
     | .ok s =>
       let out := serialize s
       if out == want then return none
-      let fields := match (deserialize want : Fallible (BeaconState P f)) with
+      let fields := match (deserialize want : M (BeaconState P f)) with
         | .ok w => stateDiff s w
         | .error _ => ["(post does not decode)"]
       return some s!"{preFile} → state differs from {postFile} at byte {firstDiff out want} \
@@ -131,42 +131,42 @@ Gloas arms decode, step and compare that type. A Gloas case may carry a `config.
 base `Config` by the generated setters (`Config.applyOverrides`). -/
 
 /-- A Gloas state transition at every preset, under a processing context. -/
-abbrev GloasStep := ∀ {P : Preset}, Ctx → Gloas.BeaconState P → Fallible (Gloas.BeaconState P)
+abbrev GloasStep := ∀ {P : Preset}, Ctx → Gloas.BeaconState P → M (Gloas.BeaconState P)
 
 /-- A configuration-only Gloas step as a context step. -/
-def ofConfigGloas (step : ∀ {P : Preset}, Config → Gloas.BeaconState P → Fallible (Gloas.BeaconState P)) :
-    GloasStep := fun ctx s => step ctx.config s
+def ofCfgGloas (step : ∀ {P : Preset}, Config → Gloas.BeaconState P → M (Gloas.BeaconState P)) :
+    GloasStep := fun ctx s => step ctx.cfg s
 
 /-- The Gloas sub-transition of an `epoch_processing` handler. `pending_deposits_churn` is a
 Gloas test file of `process_pending_deposits` cases (`test_process_pending_deposits_churn.py`). -/
 def gloasEpochStep : String → Option GloasStep
-  | "justification_and_finalization" => some (ofConfigGloas Gloas.processJustificationAndFinalization)
-  | "inactivity_updates" => some (ofConfigGloas Gloas.processInactivityUpdates)
-  | "rewards_and_penalties" => some (ofConfigGloas Gloas.processRewardsAndPenalties)
-  | "registry_updates" => some (ofConfigGloas Gloas.processRegistryUpdates)
-  | "slashings" => some (ofConfigGloas Gloas.processSlashings)
-  | "eth1_data_reset" => some (ofConfigGloas Gloas.processEth1DataReset)
+  | "justification_and_finalization" => some (ofCfgGloas Gloas.processJustificationAndFinalization)
+  | "inactivity_updates" => some (ofCfgGloas Gloas.processInactivityUpdates)
+  | "rewards_and_penalties" => some (ofCfgGloas Gloas.processRewardsAndPenalties)
+  | "registry_updates" => some (ofCfgGloas Gloas.processRegistryUpdates)
+  | "slashings" => some (ofCfgGloas Gloas.processSlashings)
+  | "eth1_data_reset" => some (ofCfgGloas Gloas.processEth1DataReset)
   | "pending_deposits" => some Gloas.processPendingDeposits
   | "pending_deposits_churn" => some Gloas.processPendingDeposits
-  | "pending_consolidations" => some (ofConfigGloas Gloas.processPendingConsolidations)
-  | "builder_pending_payments" => some (ofConfigGloas Gloas.processBuilderPendingPayments)
-  | "effective_balance_updates" => some (ofConfigGloas Gloas.processEffectiveBalanceUpdates)
-  | "slashings_reset" => some (ofConfigGloas Gloas.processSlashingsReset)
-  | "randao_mixes_reset" => some (ofConfigGloas Gloas.processRandaoMixesReset)
-  | "historical_summaries_update" => some (ofConfigGloas Gloas.processHistoricalSummariesUpdate)
-  | "participation_flag_updates" => some (ofConfigGloas Gloas.processParticipationFlagUpdates)
+  | "pending_consolidations" => some (ofCfgGloas Gloas.processPendingConsolidations)
+  | "builder_pending_payments" => some (ofCfgGloas Gloas.processBuilderPendingPayments)
+  | "effective_balance_updates" => some (ofCfgGloas Gloas.processEffectiveBalanceUpdates)
+  | "slashings_reset" => some (ofCfgGloas Gloas.processSlashingsReset)
+  | "randao_mixes_reset" => some (ofCfgGloas Gloas.processRandaoMixesReset)
+  | "historical_summaries_update" => some (ofCfgGloas Gloas.processHistoricalSummariesUpdate)
+  | "participation_flag_updates" => some (ofCfgGloas Gloas.processParticipationFlagUpdates)
   | "sync_committee_updates" => some Gloas.processSyncCommitteeUpdates
-  | "proposer_lookahead" => some (ofConfigGloas Gloas.processProposerLookahead)
-  | "ptc_window" => some (ofConfigGloas Gloas.processPtcWindow)
+  | "proposer_lookahead" => some (ofCfgGloas Gloas.processProposerLookahead)
+  | "ptc_window" => some (ofCfgGloas Gloas.processPtcWindow)
   | _ => none
 
 /-- Read and decode a Gloas `BeaconState` file of the case. -/
 def readGloasState (P : Preset) (c : Case) (file : String) :
     IO (Except String (Gloas.BeaconState P)) := do
-  match Snappy.decompress (← IO.FS.readBinFile (c.directory / file)) with
+  match Snappy.decompress (← IO.FS.readBinFile (c.dir / file)) with
   | .error e => pure (.error s!"{file}: {e}")
   | .ok b =>
-    match (deserialize b.toList : Fallible (Gloas.BeaconState P)) with
+    match (deserialize b.toList : M (Gloas.BeaconState P)) with
     | .ok s => pure (.ok s)
     | .error r => pure (.error s!"{file}: does not decode: {repr r}")
 
@@ -203,7 +203,7 @@ def checkGloasTransition (P : Preset) (ctx : Ctx) (c : Case) (step : GloasStep)
     | .error e => return some e
   let got := step ctx pre
   if c.has postFile then
-    let want ← match Snappy.decompress (← IO.FS.readBinFile (c.directory / postFile)) with
+    let want ← match Snappy.decompress (← IO.FS.readBinFile (c.dir / postFile)) with
       | .ok b => pure b.toList
       | .error e => return some s!"{postFile}: {e}"
     match got with
@@ -211,7 +211,7 @@ def checkGloasTransition (P : Preset) (ctx : Ctx) (c : Case) (step : GloasStep)
     | .ok s =>
       let out := serialize s
       if out == want then return none
-      let fields := match (deserialize want : Fallible (Gloas.BeaconState P)) with
+      let fields := match (deserialize want : M (Gloas.BeaconState P)) with
         | .ok w => gloasStateDiff s w
         | .error _ => ["(post does not decode)"]
       return some s!"{preFile} → state differs from {postFile} at byte {firstDiff out want} \
@@ -225,7 +225,7 @@ def checkGloasTransition (P : Preset) (ctx : Ctx) (c : Case) (step : GloasStep)
 def gloasCaseConfig (c : Case) : IO (Except String Config) := do
   let some base := Config.ofPreset? c.preset | return .error s!"no configuration for {c.preset}"
   if !c.has "config.yaml" then return .ok base
-  let doc := Yaml.parse (← IO.FS.readBinFile (c.directory / "config.yaml"))
+  let doc := Yaml.parse (← IO.FS.readBinFile (c.dir / "config.yaml"))
   pure (((doc.mapError ConfigError.yaml).bind (base.applyOverrides ·)).mapError toString)
 
 /-- `epoch_processing/<handler>` at Gloas. -/
@@ -234,7 +234,7 @@ def gloasEpochProcessingCase (P : Preset) (c : Case) (alsoFullEpoch : Bool) :
   let cfg ← match ← gloasCaseConfig c with
     | .ok cfg => pure cfg
     | .error e => return some e
-  let ctx : Ctx := { config := cfg, blsActive := (← blsSettingOf c) != "2" }
+  let ctx : Ctx := { cfg, blsActive := (← blsSettingOf c) != "2" }
   let some step := gloasEpochStep c.key.handler
     | return some s!"UNIMPLEMENTED: process_{c.key.handler}"
   if let some why ← checkGloasTransition P ctx c step "pre.ssz_snappy" "post.ssz_snappy" then
@@ -248,13 +248,13 @@ def gloasEpochProcessingCase (P : Preset) (c : Case) (alsoFullEpoch : Bool) :
 /-- `epoch_processing/<handler>`: `none` when the case passes, otherwise why it fails. -/
 def epochProcessingCase (c : Case) (alsoFullEpoch : Bool := false) : IO (Option String) := do
   let some P := Preset.ofName? c.preset | return some s!"no preset {c.preset}"
-  let some f := ConsensusFork.ofName? c.key.fork | return some s!"no fork {c.key.fork}"
+  let some f := CFork.ofName? c.key.fork | return some s!"no fork {c.key.fork}"
   if f == .gloas then return ← gloasEpochProcessingCase P c alsoFullEpoch
   if !(f.atLeast .electra) then return some s!"fork {c.key.fork} is outside this handler"
   let some cfg := Config.ofPreset? c.preset | return some s!"no configuration for {c.preset}"
   if c.has "config.yaml" then return some "unexpected config.yaml"
   -- `bls_setting` 2 turns BLS verification off; 0, 1 or absent leave it on
-  let ctx : Ctx := { config := cfg, blsActive := (← blsSettingOf c) != "2" }
+  let ctx : Ctx := { cfg, blsActive := (← blsSettingOf c) != "2" }
   let some step := epochStep c.key.handler
     | return some s!"UNIMPLEMENTED: process_{c.key.handler}"
   if let some why ← checkTransition P f ctx c step "pre.ssz_snappy" "post.ssz_snappy" then
@@ -274,11 +274,11 @@ ssz_container DeltasFile (P : Preset) where
   penalties : (SszList Gwei P.VALIDATOR_REGISTRY_LIMIT)
 
 /-- The recorded `Deltas` file against a computed one. -/
-def checkDeltas (P : Preset) (c : Case) (file : String) (got : Fallible Deltas) : IO (Option String) := do
-  let bytes ← match Snappy.decompress (← IO.FS.readBinFile (c.directory / file)) with
+def checkDeltas (P : Preset) (c : Case) (file : String) (got : M Deltas) : IO (Option String) := do
+  let bytes ← match Snappy.decompress (← IO.FS.readBinFile (c.dir / file)) with
     | .ok b => pure b.toList
     | .error e => return some s!"{file}: {e}"
-  let expected ← match (deserialize bytes : Fallible (DeltasFile P)) with
+  let expected ← match (deserialize bytes : M (DeltasFile P)) with
     | .ok d => pure d
     | .error r => return some s!"{file}: does not decode: {repr r}"
   match got with
@@ -298,7 +298,7 @@ def gloasRewardsCase (P : Preset) (c : Case) : IO (Option String) := do
   let pre ← match ← readGloasState P c "pre.ssz_snappy" with
     | .ok s => pure s
     | .error e => return some e
-  let computed : List (String × Fallible Deltas) :=
+  let computed : List (String × M Deltas) :=
     [("source_deltas.ssz_snappy", Gloas.getFlagIndexDeltas pre TIMELY_SOURCE_FLAG_INDEX),
      ("target_deltas.ssz_snappy", Gloas.getFlagIndexDeltas pre TIMELY_TARGET_FLAG_INDEX),
      ("head_deltas.ssz_snappy", Gloas.getFlagIndexDeltas pre TIMELY_HEAD_FLAG_INDEX),
@@ -312,7 +312,7 @@ def gloasRewardsCase (P : Preset) (c : Case) : IO (Option String) := do
 must return exactly the recorded `Deltas`. -/
 def rewardsCase (c : Case) : IO (Option String) := do
   let some P := Preset.ofName? c.preset | return some s!"no preset {c.preset}"
-  let some f := ConsensusFork.ofName? c.key.fork | return some s!"no fork {c.key.fork}"
+  let some f := CFork.ofName? c.key.fork | return some s!"no fork {c.key.fork}"
   if f == .gloas then return ← gloasRewardsCase P c
   if !(f.atLeast .electra) then return some s!"fork {c.key.fork} is outside this handler"
   let some cfg := Config.ofPreset? c.preset | return some s!"no configuration for {c.preset}"
@@ -322,16 +322,16 @@ def rewardsCase (c : Case) : IO (Option String) := do
   let pre ← match ← readState P f c "pre.ssz_snappy" with
     | .ok s => pure s
     | .error e => return some e
-  let computed : List (String × Fallible Deltas) :=
+  let computed : List (String × M Deltas) :=
     [("source_deltas.ssz_snappy", getFlagIndexDeltas pre TIMELY_SOURCE_FLAG_INDEX),
      ("target_deltas.ssz_snappy", getFlagIndexDeltas pre TIMELY_TARGET_FLAG_INDEX),
      ("head_deltas.ssz_snappy", getFlagIndexDeltas pre TIMELY_HEAD_FLAG_INDEX),
      ("inactivity_penalty_deltas.ssz_snappy", getInactivityPenaltyDeltas cfg pre)]
   for (file, got) in computed do
-    let bytes ← match Snappy.decompress (← IO.FS.readBinFile (c.directory / file)) with
+    let bytes ← match Snappy.decompress (← IO.FS.readBinFile (c.dir / file)) with
       | .ok b => pure b.toList
       | .error e => return some s!"{file}: {e}"
-    let expected ← match (deserialize bytes : Fallible (DeltasFile P)) with
+    let expected ← match (deserialize bytes : M (DeltasFile P)) with
       | .ok d => pure d
       | .error r => return some s!"{file}: does not decode: {repr r}"
     match got with

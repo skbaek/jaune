@@ -4,35 +4,35 @@ namespace Jaune
 
 open Jaune
 
-inductive PrecompileResult
+inductive PrecompResult
 | error (reason : EvmError) (cost : Nat)
 | ok (cost : Nat) (output : Bytes)
 
-def PrecompileResult.chargeGas (cost : Nat) (evm : Evm)
-    (pr : Unit → PrecompileResult) : PrecompileResult :=
+def PrecompResult.chargeGas (cost : Nat) (evm : Evm)
+    (pr : Unit → PrecompResult) : PrecompResult :=
   if cost ≤ evm.dyna.gasLeft then pr () else .error (.halt (.outOfGas .none)) 0
 
-def executeEcrecover (evm : Evm) : PrecompileResult :=
+def executeEcrecover (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
-  PrecompileResult.chargeGas Gas.ecrecover evm fun () =>
-    let h := Bytes.toU256 <| data.sliceD 0 32 (0x00 : UInt8)
-    let v_opt := match (Bytes.toU256 <| data.sliceD 32 32 (0x00 : UInt8)) with
+  PrecompResult.chargeGas gasEcrecover evm fun () =>
+    let h := Bytes.toB256 <| data.sliceD 0 32 (0x00 : UInt8)
+    let v_opt := match (Bytes.toB256 <| data.sliceD 32 32 (0x00 : UInt8)) with
                  | 0x1B => some false
                  | 0x1C => some true
                  | _ => none
     match v_opt with
-    | none => .ok Gas.ecrecover []
+    | none => .ok gasEcrecover []
     | some v =>
-      let r := Bytes.toU256 <| data.sliceD 64 32 (0x00 : UInt8)
-      let s := Bytes.toU256 <| data.sliceD 96 32 (0x00 : UInt8)
+      let r := Bytes.toB256 <| data.sliceD 64 32 (0x00 : UInt8)
+      let s := Bytes.toB256 <| data.sliceD 96 32 (0x00 : UInt8)
       if r = 0 ∨ s = 0 ∨
-         r ≥ secp256k1.curveOrder.toU256 ∨
-         s ≥ secp256k1.curveOrder.toU256 then
-        .ok Gas.ecrecover []
+         r ≥ secp256k1.curveOrder.toB256 ∨
+         s ≥ secp256k1.curveOrder.toB256 then
+        .ok gasEcrecover []
       else
         match secp256k1.recover h v r s with
-        | .none => .ok Gas.ecrecover []
-        | some adr => .ok Gas.ecrecover adr.toU256.toBytes
+        | .none => .ok gasEcrecover []
+        | some adr => .ok gasEcrecover adr.toB256.toBytes
 
 /-- EIP-7951 `P256VERIFY`.
 
@@ -42,10 +42,10 @@ the same as a well-formed one.  And every rejection -- wrong input length,
 out-of-range component, off-curve key, bad signature -- returns empty output
 successfully rather than halting, so a caller distinguishes them only by the
 returned data size. -/
-def executeP256Verify (evm : Evm) : PrecompileResult :=
+def executeP256Verify (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
-  PrecompileResult.chargeGas Gas.p256Verify evm fun () =>
-    if data.length ≠ 160 then .ok Gas.p256Verify []
+  PrecompResult.chargeGas gasP256Verify evm fun () =>
+    if data.length ≠ 160 then .ok gasP256Verify []
     else
       let msgHash : Nat := Bytes.toNat <| data.sliceD 0 32 (0 : UInt8)
       let r : Nat := Bytes.toNat <| data.sliceD 32 32 (0 : UInt8)
@@ -53,27 +53,27 @@ def executeP256Verify (evm : Evm) : PrecompileResult :=
       let qx : Nat := Bytes.toNat <| data.sliceD 96 32 (0 : UInt8)
       let qy : Nat := Bytes.toNat <| data.sliceD 128 32 (0 : UInt8)
       if secp256r1.verify msgHash r s qx qy then
-        .ok Gas.p256Verify (1 : Nat).toU256.toBytes
+        .ok gasP256Verify (1 : Nat).toB256.toBytes
       else
-        .ok Gas.p256Verify []
+        .ok gasP256Verify []
 
-def executeSha256 (evm : Evm) : PrecompileResult :=
+def executeSha256 (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
   let cost : Nat := 60 + (12 * (ceilDiv data.length 32))
-  PrecompileResult.chargeGas cost evm fun () => .ok cost (Bytes.sha256 data).toBytes
+  PrecompResult.chargeGas cost evm fun () => .ok cost (Bytes.sha256 data).toBytes
 
-def executeRipemd160 (evm : Evm) : PrecompileResult :=
+def executeRipemd160 (evm : Evm) : PrecompResult :=
   let data : Bytes := evm.sta.data
   let cost : Nat := 600 + (120 * (ceilDiv data.length 32))
-  PrecompileResult.chargeGas cost evm fun () =>
+  PrecompResult.chargeGas cost evm fun () =>
     let hash : Bytes := data.ripemd160
-    let output : Bytes := U256.toBytes <| (Bytes.toU256 <| hash)
+    let output : Bytes := B256.toBytes <| (Bytes.toB256 <| hash)
     .ok cost output
 
-def executeId (evm : Evm) : PrecompileResult :=
+def executeId (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
   let cost := 15 + (3 * (ceilDiv data.length 32))
-  PrecompileResult.chargeGas cost evm fun () => .ok cost data
+  PrecompResult.chargeGas cost evm fun () => .ok cost data
 
 def Bytes.sliceToNat (data : Bytes) (start : Nat) (length : Nat) : Nat :=
   match data.drop start with
@@ -147,7 +147,7 @@ def modexpLengthsInBounds
   | some bound =>
     baseLength ≤ bound && expLength ≤ bound && modulusLength ≤ bound
 
-def executeModexp (evm : Evm) : PrecompileResult :=
+def executeModexp (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
   let m : ModexpRules := evm.sta.benvStat.rules.modexp
   let c : ModexpComplexity := evm.sta.benvStat.rules.modexpComplexity
@@ -159,7 +159,7 @@ def executeModexp (evm : Evm) : PrecompileResult :=
   else
   let expHead : Nat := Bytes.sliceToNat data (96 + baseLength) (min 32 expLength)
   let cost : Nat := modexpGasCost c m baseLength modulusLength expLength expHead
-  PrecompileResult.chargeGas cost evm fun () =>
+  PrecompResult.chargeGas cost evm fun () =>
     if baseLength = 0 ∧ modulusLength = 0 then .ok cost []
     else
       let base : Nat := Bytes.sliceToNat data 96 baseLength
@@ -222,10 +222,10 @@ def executeModexp (evm : Evm) : PrecompileResult :=
 #guard ¬ modexpLengthsInBounds osakaModexpRules 0 1025 0
 #guard ¬ modexpLengthsInBounds osakaModexpRules 0 0 1025
 
-def executeEcadd (evm : Evm) : PrecompileResult :=
+def executeEcadd (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
   let g : Nat := evm.sta.benvStat.rules.bn254.add
-  PrecompileResult.chargeGas g evm fun () =>
+  PrecompResult.chargeGas g evm fun () =>
     let x0 : Nat := Bytes.toNat <| data.sliceD 0 32 (0 : UInt8)
     let y0 : Nat := Bytes.toNat <| data.sliceD 32 32 (0 : UInt8)
     let x1 : Nat := Bytes.toNat <| data.sliceD 64 32 (0 : UInt8)
@@ -233,26 +233,26 @@ def executeEcadd (evm : Evm) : PrecompileResult :=
     if ¬ (x0 < altBn128Prime ∧ y0 < altBn128Prime ∧ x1 < altBn128Prime ∧ y1 < altBn128Prime) then
       .error (.halt (.outOfGas .none)) g
     else
-      match Bn254G1.mk? x0 y0 with
+      match BNP.mk? x0 y0 with
       | none => .error (.halt (.outOfGas .none)) g
       | some p0 =>
-        match Bn254G1.mk? x1 y1 with
+        match BNP.mk? x1 y1 with
         | none => .error (.halt (.outOfGas .none)) g
-        | some p1 => .ok g (Bn254G1.toBytes (p0 + p1))
+        | some p1 => .ok g (BNP.toBytes (p0 + p1))
 
-def executeEcmul (evm : Evm) : PrecompileResult :=
+def executeEcmul (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
   let g : Nat := evm.sta.benvStat.rules.bn254.mul
-  PrecompileResult.chargeGas g evm fun () =>
+  PrecompResult.chargeGas g evm fun () =>
     let x : Nat := Bytes.toNat <| data.sliceD 0 32 (0 : UInt8)
     let y : Nat := Bytes.toNat <| data.sliceD 32 32 (0 : UInt8)
     let n : Nat := Bytes.toNat <| data.sliceD 64 32 (0 : UInt8)
     if ¬ (x < altBn128Prime ∧ y < altBn128Prime) then
       .error (.halt (.outOfGas .none)) g
     else
-      match Bn254G1.mk? x y with
+      match BNP.mk? x y with
       | none => .error (.halt (.outOfGas .none)) g
-      | some p => .ok g (Bn254G1.toBytes (p * n))
+      | some p => .ok g (BNP.toBytes (p * n))
 
 def b2R1 : UInt64 := 32
 def b2R2 : UInt64 := 24
@@ -664,13 +664,13 @@ def bCompress (numRounds : Nat)
 #guard (readLeUInt64Words (List.replicate 213 (0x00 : UInt8)) 68 16).length = 16
 
 -- blake2f
-def executeBlake2F (evm : Evm) : PrecompileResult :=
+def executeBlake2F (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
   if data.length ≠ 213 then .error (.halt (.invalidParameter .none)) 0
   else
     let ⟨rounds, h, m, t0, t1, fn⟩ := getBlake2Parameters data
-    let cost := Gas.gfround * rounds
-    PrecompileResult.chargeGas cost evm fun () =>
+    let cost := gasBlake2PerRound * rounds
+    PrecompResult.chargeGas cost evm fun () =>
       match fn with
       | 0 =>
         match bCompress rounds h m t0 t1 false with
@@ -696,7 +696,7 @@ def ExceptionalHalt.isInvalidParameter : ExceptionalHalt → Bool
   | _ => false
 
 -- def bytes_to_fq(data : Bytes) -> FQ:
-def Bytes.toExceptBls12Fp (data : Bytes) : Except ExceptionalHalt Bls12Fp := do
+def Bytes.toExBLSF (data : Bytes) : Except ExceptionalHalt BLSF := do
   if data.length ≠ 64 then
     .error (.invalidParameter (.text "input should be 64 bytes long"))
   let x := Bytes.toNat data
@@ -705,12 +705,12 @@ def Bytes.toExceptBls12Fp (data : Bytes) : Except ExceptionalHalt Bls12Fp := do
   pure (FinField.ofNat x)
 
 -- def bytes_to_g1(data : Bytes) -> Point3D[FQ]:
-def Bytes.toExceptBls12G1 (data : Bytes) (subgroupCheck : Bool := false) :
-    Except ExceptionalHalt Bls12G1 := do
+def Bytes.toExBLSP (data : Bytes) (subgroupCheck : Bool := false) :
+    Except ExceptionalHalt BLSP := do
   if data.length ≠ 128 then
     .error (.invalidParameter (.text "input should be 128 bytes long"))
-  let x ← Bytes.toExceptBls12Fp (data.take 64)
-  let y ← Bytes.toExceptBls12Fp (data.drop 64)
+  let x ← Bytes.toExBLSF (data.take 64)
+  let y ← Bytes.toExBLSF (data.drop 64)
   let p ← (EllipticCurve.mk? x y).toExcept
     (.invalidParameter (.text "point is not on curve"))
   if subgroupCheck then
@@ -718,20 +718,20 @@ def Bytes.toExceptBls12G1 (data : Bytes) (subgroupCheck : Bool := false) :
       .error (.invalidParameter (.text "subgroup check failed"))
   pure p
 
-def Bytes.toExceptBls12Fp2 (data : Bytes) : Except ExceptionalHalt Bls12Fp2 := do
+def Bytes.toExBLSF2 (data : Bytes) : Except ExceptionalHalt BLSF2 := do
   if data.length ≠ 128 then
     .error (.invalidParameter (.text "input should be 128 bytes long"))
-  let c0 ← Bytes.toExceptBls12Fp (data.take 64)
-  let c1 ← Bytes.toExceptBls12Fp (data.drop 64)
+  let c0 ← Bytes.toExBLSF (data.take 64)
+  let c1 ← Bytes.toExBLSF (data.drop 64)
   pure ⟨trimZero [c1, c0]⟩
 
 -- def bytes_to_g2(data : Bytes) -> Point3D[FQ2]:
-def Bytes.toExceptBls12G2 (data : Bytes) (subgroupCheck : Bool := false) :
-    Except ExceptionalHalt Bls12G2 := do
+def Bytes.toExBLSP2 (data : Bytes) (subgroupCheck : Bool := false) :
+    Except ExceptionalHalt BLSP2 := do
   if data.length ≠ 256 then
     .error (.invalidParameter (.text "input should be 256 bytes long"))
-  let x ← Bytes.toExceptBls12Fp2 (data.take 128)
-  let y ← Bytes.toExceptBls12Fp2 (data.drop 128)
+  let x ← Bytes.toExBLSF2 (data.take 128)
+  let y ← Bytes.toExBLSF2 (data.drop 128)
   let p ← (EllipticCurve.mk? x y).toExcept
     (.invalidParameter (.text "point is not on curve"))
   if subgroupCheck then
@@ -739,14 +739,14 @@ def Bytes.toExceptBls12G2 (data : Bytes) (subgroupCheck : Bool := false) :
       .error (.invalidParameter (.text "subgroup check failed"))
   pure p
 
-#guard (Bytes.toExceptBls12G1 (Bls12G1.toBytes blsG1Generator)).toOption = some blsG1Generator
+#guard (Bytes.toExBLSP (BLSP.toBytes blsG1Generator)).toOption = some blsG1Generator
 #guard
-  (Bytes.toExceptBls12G1 (List.replicate 128 (0 : UInt8))).toOption = some (⟨0, 0⟩ : Bls12G1)
-#guard (Bytes.toExceptBls12G2 (Bls12G2.toBytes blsG2Generator)).toOption = some blsG2Generator
+  (Bytes.toExBLSP (List.replicate 128 (0 : UInt8))).toOption = some (⟨0, 0⟩ : BLSP)
+#guard (Bytes.toExBLSP2 (BLSP2.toBytes blsG2Generator)).toOption = some blsG2Generator
 
-def decodeG1MsmPairs (data : Bytes) : Except ExceptionalHalt (List (Bls12G1 × Nat)) :=
-  let rec aux (fuel : Nat) (acc : List (Bls12G1 × Nat)) (bs : Bytes) :
-      Except ExceptionalHalt (List (Bls12G1 × Nat)) :=
+def decodeG1MsmPairs (data : Bytes) : Except ExceptionalHalt (List (BLSP × Nat)) :=
+  let rec aux (fuel : Nat) (acc : List (BLSP × Nat)) (bs : Bytes) :
+      Except ExceptionalHalt (List (BLSP × Nat)) :=
     match fuel with
     | 0 => .ok acc.reverse
     | fuel' + 1 =>
@@ -754,14 +754,14 @@ def decodeG1MsmPairs (data : Bytes) : Except ExceptionalHalt (List (Bls12G1 × N
       else if bs.length < 160 then
         .error (.invalidParameter (.text "remaining bytes less than 160"))
       else do
-        let p ← Bytes.toExceptBls12G1 (bs.take 128) true
+        let p ← Bytes.toExBLSP (bs.take 128) true
         let s := Bytes.toNat ((bs.drop 128).take 32)
         aux fuel' ((p, s) :: acc) (bs.drop 160)
   aux data.length [] data
 
-def decodeG2MsmPairs (data : Bytes) : Except ExceptionalHalt (List (Bls12G2 × Nat)) :=
-  let rec aux (fuel : Nat) (acc : List (Bls12G2 × Nat)) (bs : Bytes) :
-      Except ExceptionalHalt (List (Bls12G2 × Nat)) :=
+def decodeG2MsmPairs (data : Bytes) : Except ExceptionalHalt (List (BLSP2 × Nat)) :=
+  let rec aux (fuel : Nat) (acc : List (BLSP2 × Nat)) (bs : Bytes) :
+      Except ExceptionalHalt (List (BLSP2 × Nat)) :=
     match fuel with
     | 0 => .ok acc.reverse
     | fuel' + 1 =>
@@ -769,14 +769,14 @@ def decodeG2MsmPairs (data : Bytes) : Except ExceptionalHalt (List (Bls12G2 × N
       else if bs.length < 288 then
         .error (.invalidParameter (.text "remaining bytes less than 288"))
       else do
-        let p ← Bytes.toExceptBls12G2 (bs.take 256) true
+        let p ← Bytes.toExBLSP2 (bs.take 256) true
         let s := Bytes.toNat ((bs.drop 256).take 32)
         aux fuel' ((p, s) :: acc) (bs.drop 288)
   aux data.length [] data
 
 -- def decompress_G1(z: G1Compressed) -> G1Uncompressed:
 -- 48-byte compressed G1 point with the (c_flag, b_flag, a_flag, x) bit layout.
-def decompressG1 (data : Bytes) : Except ExceptionalHalt Bls12G1 := do
+def decompressG1 (data : Bytes) : Except ExceptionalHalt BLSP := do
   if data.length ≠ 48 then
     .error (.invalidParameter (.text "compressed G1 should be 48 bytes"))
   let z := Bytes.toNat data
@@ -795,7 +795,7 @@ def decompressG1 (data : Bytes) : Except ExceptionalHalt Bls12G1 := do
     let x := z % blsTwoPow381
     if x ≥ blsPrime then
       .error (.invalidParameter (.text "x should be less than field modulus"))
-    let xf : Bls12Fp := FinField.ofNat x
+    let xf : BLSF := FinField.ofNat x
     -- Y^2 = X^3 + b, b = 4; y = (x^3 + b)^((p+1)/4).
     let rhs := xf ^ 3 + 4
     let y := rhs ^ blsPPlus1Div4
@@ -808,7 +808,7 @@ def decompressG1 (data : Bytes) : Except ExceptionalHalt Bls12G1 := do
 
 -- def validate_kzg_g1(b) followed by pubkey_to_G1: decode + KeyValidate
 -- (non-infinity, subgroup check), returning the decompressed point.
-def decodeKzgG1 (data : Bytes) : Except ExceptionalHalt Bls12G1 :=
+def decodeKzgG1 (data : Bytes) : Except ExceptionalHalt BLSP :=
   if data = blsG1PointAtInfinity then
     pure ⟨0, 0⟩
   else do
@@ -840,11 +840,11 @@ def verifyKzgProof (commitment z y proof : Bytes) :
 def gasPointEval : Nat := 50000
 
 -- def point_evaluation(evm : Evm) -> None:
-def executePointEval (evm : Evm) : PrecompileResult :=
+def executePointEval (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
   if data.length ≠ 192 then .error (.halt (.kzgProof .none)) 0
   else
-    PrecompileResult.chargeGas gasPointEval evm fun () =>
+    PrecompResult.chargeGas gasPointEval evm fun () =>
       let versionedHash := data.take 32
       let z := (data.drop 32).take 32
       let y := (data.drop 64).take 32
@@ -855,7 +855,7 @@ def executePointEval (evm : Evm) : PrecompileResult :=
       else
         match verifyKzgProof commitment z y proof with
         | .ok true =>
-          .ok gasPointEval ((4096 : Nat).toU256.toBytes ++ blsModulus.toU256.toBytes)
+          .ok gasPointEval ((4096 : Nat).toB256.toBytes ++ blsModulus.toB256.toBytes)
         | _ => .error (.halt (.kzgProof .none)) gasPointEval
 
 def gasBlsG1Add : Nat := 375
@@ -866,17 +866,17 @@ def gasBlsG2Mul : Nat := 22500
 def gasBlsG2Map : Nat := 23800
 
 -- bls12_g1_add
-def executeBls12G1Add (evm : Evm) : PrecompileResult :=
+def executeBls12G1Add (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
   if data.length ≠ 256 then .error (.halt (.invalidParameter .none)) 0
   else
-    PrecompileResult.chargeGas gasBlsG1Add evm fun () =>
-      match Bytes.toExceptBls12G1 (data.take 128), Bytes.toExceptBls12G1 (data.drop 128) with
-      | .ok p1, .ok p2 => .ok gasBlsG1Add (Bls12G1.toBytes (p1 + p2))
+    PrecompResult.chargeGas gasBlsG1Add evm fun () =>
+      match Bytes.toExBLSP (data.take 128), Bytes.toExBLSP (data.drop 128) with
+      | .ok p1, .ok p2 => .ok gasBlsG1Add (BLSP.toBytes (p1 + p2))
       | _, _ => .error (.halt (.outOfGas .none)) gasBlsG1Add
 
 -- bls12_g1_msm
-def executeBls12G1Msm (evm : Evm) : PrecompileResult :=
+def executeBls12G1Msm (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
   if data.length = 0 ∨ data.length % g1MsmLengthPerPair ≠ 0 then
     .error (.halt (.invalidParameter
@@ -885,23 +885,23 @@ def executeBls12G1Msm (evm : Evm) : PrecompileResult :=
     let k := data.length / g1MsmLengthPerPair
     let discount := List.getD g1KDiscount (k - 1) g1MaxDiscount
     let gasCost := (k * gasBlsG1Mul * discount) / 1000
-    PrecompileResult.chargeGas gasCost evm fun () =>
+    PrecompResult.chargeGas gasCost evm fun () =>
       match decodeG1MsmPairs data with
       | .ok pairs => .ok gasCost (g1MsmSum pairs).toBytes
       | .error _ => .error (.halt (.outOfGas .none)) gasCost
 
 -- bls12_g2_add
-def executeBls12G2Add (evm : Evm) : PrecompileResult :=
+def executeBls12G2Add (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
   if data.length ≠ 512 then .error (.halt (.invalidParameter .none)) 0
   else
-    PrecompileResult.chargeGas gasBlsG2Add evm fun () =>
-      match Bytes.toExceptBls12G2 (data.take 256), Bytes.toExceptBls12G2 (data.drop 256) with
-      | .ok p1, .ok p2 => .ok gasBlsG2Add (Bls12G2.toBytes (p1 + p2))
+    PrecompResult.chargeGas gasBlsG2Add evm fun () =>
+      match Bytes.toExBLSP2 (data.take 256), Bytes.toExBLSP2 (data.drop 256) with
+      | .ok p1, .ok p2 => .ok gasBlsG2Add (BLSP2.toBytes (p1 + p2))
       | _, _ => .error (.halt (.outOfGas .none)) gasBlsG2Add
 
 -- def bls12_g2_msm
-def executeBls12G2Msm (evm : Evm) : PrecompileResult :=
+def executeBls12G2Msm (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
   if data.length = 0 ∨ data.length % g2MsmLengthPerPair ≠ 0 then
     .error (.halt (.invalidParameter
@@ -910,23 +910,23 @@ def executeBls12G2Msm (evm : Evm) : PrecompileResult :=
     let k := data.length / g2MsmLengthPerPair
     let discount := List.getD g2KDiscount (k - 1) g2MaxDiscount
     let gasCost := (k * gasBlsG2Mul * discount) / 1000
-    PrecompileResult.chargeGas gasCost evm fun () =>
+    PrecompResult.chargeGas gasCost evm fun () =>
       match decodeG2MsmPairs data with
       | .ok pairs => .ok gasCost (g2MsmSum pairs).toBytes
       | .error _ => .error (.halt (.outOfGas .none)) gasCost
 
 -- def bls12_map_fp_to_g1(evm : Evm) -> None :
-def executeBls12MapFpToG1 (evm : Evm) : PrecompileResult :=
+def executeBls12MapFpToG1 (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
   if data.length ≠ 64 then .error (.halt (.invalidParameter .none)) 0
   else
-    PrecompileResult.chargeGas gasBlsG1Map evm fun () =>
-      match Bytes.toExceptBls12Fp data with
-      | .ok fp => .ok gasBlsG1Map (Bls12G1.toBytes (blsMapFpToG1 fp))
+    PrecompResult.chargeGas gasBlsG1Map evm fun () =>
+      match Bytes.toExBLSF data with
+      | .ok fp => .ok gasBlsG1Map (BLSP.toBytes (blsMapFpToG1 fp))
       | .error _ => .error (.halt (.outOfGas .none)) gasBlsG1Map
 
 -- def bytes_to_g1(data : Bytes) -> Point3D[FQ]:
-def Bytes.toExceptBn254G1 (data : Bytes) : Except ExceptionalHalt Bn254G1 := do
+def Bytes.toExBNP (data : Bytes) : Except ExceptionalHalt BNP := do
   if data.length ≠ 64 then
     .error (.invalidParameter (.text "input should be 64 bytes long"))
   let x := data.sliceToNat 0 32
@@ -939,7 +939,7 @@ def Bytes.toExceptBn254G1 (data : Bytes) : Except ExceptionalHalt Bn254G1 := do
     (.invalidParameter (.text "point is not on curve"))
 
 -- def bytes_to_g2(data : Bytes) -> Point3D[FQ2]:
-def Bytes.toExceptBn254G2 (data : Bytes) : Except ExceptionalHalt Bn254G2 := do
+def Bytes.toExBNP2 (data : Bytes) : Except ExceptionalHalt BNP2 := do
   if data.length ≠ 128 then
     .error (.invalidParameter (.text "input should be 128 bytes long"))
   let x0 := data.sliceToNat 0 32
@@ -953,10 +953,10 @@ def Bytes.toExceptBn254G2 (data : Bytes) : Except ExceptionalHalt Bn254G2 := do
     y1 ≥ altBn128Prime
   ) then
     .error (.invalidParameter (.text "invalid field element"))
-  (EllipticCurve.mk? (Bn254Fp2.mk x0 x1) (Bn254Fp2.mk y0 y1)).toExcept
+  (EllipticCurve.mk? (BNF2.mk x0 x1) (BNF2.mk y0 y1)).toExcept
     (.invalidParameter (.text "point is not on curve"))
 
-def catchWithOOGPrecompile {ξ} (cost : Nat) (cond : ExceptionalHalt → Bool) :
+def catchWithOOGPrecomp {ξ} (cost : Nat) (cond : ExceptionalHalt → Bool) :
   Except ExceptionalHalt ξ → Except (EvmError × Nat) ξ
   | .ok v => .ok v
   | .error e =>
@@ -964,35 +964,35 @@ def catchWithOOGPrecompile {ξ} (cost : Nat) (cond : ExceptionalHalt → Bool) :
     else .error ⟨.halt e, cost⟩
 
 -- def bls12_map_fp2_to_g2(evm : Evm) -> None :
-def executeBls12MapFp2ToG2 (evm : Evm) : PrecompileResult :=
+def executeBls12MapFp2ToG2 (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
   if data.length ≠ 128 then .error (.halt (.invalidParameter .none)) 0
   else
-    PrecompileResult.chargeGas gasBlsG2Map evm fun () =>
-      match Bytes.toExceptBls12Fp2 data with
-      | .ok fp2 => .ok gasBlsG2Map (Bls12G2.toBytes (blsMapFp2ToG2 fp2))
+    PrecompResult.chargeGas gasBlsG2Map evm fun () =>
+      match Bytes.toExBLSF2 data with
+      | .ok fp2 => .ok gasBlsG2Map (BLSP2.toBytes (blsMapFp2ToG2 fp2))
       | .error _ => .error (.halt (.outOfGas .none)) gasBlsG2Map
 
 def executeBls12PairingInner (data : Bytes) (cost : Nat) :
     Except (EvmError × Nat) (Nat × Bytes) := do
-  let mut result : Bls12Fp12 := 1
+  let mut result : BLSF12 := 1
   for i in List.range (data.length / 384) do
-    let p : Bls12G1 ←
-      catchWithOOGPrecompile cost ExceptionalHalt.isInvalidParameter <|
-        Bytes.toExceptBls12G1 (data.slice! (i * 384) 128) true
-    let q : Bls12G2 ←
-      catchWithOOGPrecompile cost ExceptionalHalt.isInvalidParameter <|
-        Bytes.toExceptBls12G2 (data.slice! (i * 384 + 128) 256) true
+    let p : BLSP ←
+      catchWithOOGPrecomp cost ExceptionalHalt.isInvalidParameter <|
+        Bytes.toExBLSP (data.slice! (i * 384) 128) true
+    let q : BLSP2 ←
+      catchWithOOGPrecomp cost ExceptionalHalt.isInvalidParameter <|
+        Bytes.toExBLSP2 (data.slice! (i * 384 + 128) 256) true
     let pairResult ← match blsPairing q p with
                      | some v => pure v
                      | none => throw ⟨.crypto (.value .none), cost⟩
     result := result * pairResult
   let output : Bytes :=
-    if result = 1 then (1 : Nat).toU256.toBytes else (0 : Nat).toU256.toBytes
+    if result = 1 then (1 : Nat).toB256.toBytes else (0 : Nat).toB256.toBytes
   pure (cost, output)
 
 -- def bls12_pairing(evm : Evm) -> None :
-def executeBls12Pairing (evm : Evm) : PrecompileResult :=
+def executeBls12Pairing (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
   if data.length = 0 ∨ data.length % 384 ≠ 0 then
     .error (.halt (.invalidParameter
@@ -1000,7 +1000,7 @@ def executeBls12Pairing (evm : Evm) : PrecompileResult :=
   else
     let k := data.length / 384
     let gasCost := (32600 * k + 37700)
-    PrecompileResult.chargeGas gasCost evm fun () =>
+    PrecompResult.chargeGas gasCost evm fun () =>
       match executeBls12PairingInner data gasCost with
       | .ok ⟨cost, output⟩ => .ok cost output
       | .error ⟨msg, cost⟩ => .error msg cost
@@ -1008,34 +1008,34 @@ def executeBls12Pairing (evm : Evm) : PrecompileResult :=
 def executePairingCheckInner (data : Bytes) (cost : Nat) :
     Except (EvmError × Nat) (Nat × Bytes) := do
   if data.length % 192 ≠ 0 then throw ⟨.halt (.outOfGas .none), cost⟩
-  let mut result : Bn254Fp12 := 1
+  let mut result : BNF12 := 1
   for i in List.range (data.length / 192) do
-    let p : Bn254G1 ←
-      catchWithOOGPrecompile cost ExceptionalHalt.isInvalidParameter <|
-        Bytes.toExceptBn254G1 (data.slice! (i * 192) 64)
-    let q : Bn254G2 ←
-      catchWithOOGPrecompile cost ExceptionalHalt.isInvalidParameter <|
-        Bytes.toExceptBn254G2 (data.slice! (i * 192 + 64) 128)
+    let p : BNP ←
+      catchWithOOGPrecomp cost ExceptionalHalt.isInvalidParameter <|
+        Bytes.toExBNP (data.slice! (i * 192) 64)
+    let q : BNP2 ←
+      catchWithOOGPrecomp cost ExceptionalHalt.isInvalidParameter <|
+        Bytes.toExBNP2 (data.slice! (i * 192 + 64) 128)
     if p * altBn128CurveOrder ≠ ⟨0, 0⟩ then throw ⟨.halt (.outOfGas .none), cost⟩
     if q * altBn128CurveOrder ≠ ⟨0, 0⟩ then throw ⟨.halt (.outOfGas .none), cost⟩
     let pairResult ← match pairing q p with
                      | some v => pure v
                      | none => throw ⟨.crypto (.value .none), cost⟩
     result := result * pairResult
-  let output : Bytes := if result = 1 then (1 : Nat).toU256.toBytes else (0 : Nat).toU256.toBytes
+  let output : Bytes := if result = 1 then (1 : Nat).toB256.toBytes else (0 : Nat).toB256.toBytes
   pure (cost, output)
 
-def executePairingCheck (evm : Evm) : PrecompileResult :=
+def executePairingCheck (evm : Evm) : PrecompResult :=
   let data := evm.sta.data
   let g := evm.sta.benvStat.rules.bn254
   let cost := (g.pairingPerPair * (data.length / 192)) + g.pairingBase
-  PrecompileResult.chargeGas cost evm fun () =>
+  PrecompResult.chargeGas cost evm fun () =>
     let inner := executePairingCheckInner data cost
     match inner with
     | .ok ⟨cost, output⟩ => .ok cost output
     | .error ⟨msg, cost⟩ => .error msg cost
 
-def precompileRun (evm : Evm) : Address → PrecompileResult
+def precompileRun (evm : Evm) : Adr → PrecompResult
   | 1 => executeEcrecover evm -- 0x1
   | 2 => executeSha256 evm -- 0x2
   | 3 => executeRipemd160 evm -- 0x3
@@ -1057,25 +1057,25 @@ def precompileRun (evm : Evm) : Address → PrecompileResult
   | n => .error (.internal (.invariant
       (.text s!"precompiled contract {n} does not exist"))) 0
 
-def applyPrecompileResult (evm : Evm) (res : PrecompileResult) : Execution :=
+def applyPrecompResult (evm : Evm) (res : PrecompResult) : Execution :=
   match res with
   | .error msg cost => .error ⟨msg, evm.dyna.withGasLeft (evm.dyna.gasLeft - cost)⟩
   | .ok cost output =>
     .ok <| (evm.dyna.withGasLeft (evm.dyna.gasLeft - cost)).withOutput output
 
-def executePrecompile (evm : Evm) (adr : Address) : Execution :=
-  applyPrecompileResult evm (precompileRun evm adr)
+def executePrecomp (evm : Evm) (adr : Adr) : Execution :=
+  applyPrecompResult evm (precompileRun evm adr)
 
 /-- Precompiles never touch the world: a `PrecompResult` carries only a cost
 and an output, and `applyPrecompResult` applies them with `withGasLeft` and
 `withOutput` on both channels. -/
-theorem applyPrecompileResult_canonical {evm : Evm} (h : evm.dyna.Canonical)
-    (res : PrecompileResult) : (applyPrecompileResult evm res).Canonical := by
-  unfold applyPrecompileResult
+theorem applyPrecompResult_canonical {evm : Evm} (h : evm.dyna.Canonical)
+    (res : PrecompResult) : (applyPrecompResult evm res).Canonical := by
+  unfold applyPrecompResult
   split <;> exact Devm.Canonical.of_world_eq h rfl
 
-theorem executePrecompile_canonical {evm : Evm} (h : evm.dyna.Canonical)
-    (adr : Address) : (executePrecompile evm adr).Canonical :=
-  applyPrecompileResult_canonical h (precompileRun evm adr)
+theorem executePrecomp_canonical {evm : Evm} (h : evm.dyna.Canonical)
+    (adr : Adr) : (executePrecomp evm adr).Canonical :=
+  applyPrecompResult_canonical h (precompileRun evm adr)
 
 end Jaune

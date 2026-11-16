@@ -43,7 +43,7 @@ inductive Spine where
   deriving DecidableEq, Repr
 
 /-- One spine node: the rest of the spine and this level's subtree, in the spine's order. -/
-@[inline] def Spine.node : Spine → Jaune.U256 → Jaune.U256 → Jaune.U256
+@[inline] def Spine.node : Spine → B256 → B256 → B256
   | .successorLeft, successor, subtree => hashPair successor subtree
   | .successorRight, successor, subtree => hashPair subtree successor
 
@@ -51,7 +51,7 @@ inductive Spine where
 chunk; otherwise the spine node of `merkleize_progressive(chunks[num_leaves:], num_leaves * 4)`
 and `merkleize(chunks[:num_leaves], num_leaves)`. Total by fuel (`chunks.length + 1` suffices,
 since every non-empty step consumes at least one chunk). -/
-def merkleizeProgressiveAux (s : Spine) : Nat → List Jaune.U256 → Nat → Jaune.U256
+def merkleizeProgressiveAux (s : Spine) : Nat → List B256 → Nat → B256
   | 0, _, _ => zeroChunk
   | _ + 1, [], _ => zeroChunk
   | fuel + 1, cs, numLeaves =>
@@ -59,40 +59,40 @@ def merkleizeProgressiveAux (s : Spine) : Nat → List Jaune.U256 → Nat → Ja
       (merkleizeDepth (cs.take numLeaves) (depthOf numLeaves))
 
 /-- `merkleize_progressive(chunks)` with the default `num_leaves=1`. -/
-def merkleizeProgressive (chunks : List Jaune.U256) (s : Spine := .successorLeft) : Jaune.U256 :=
+def merkleizeProgressive (chunks : List B256) (s : Spine := .successorLeft) : B256 :=
   merkleizeProgressiveAux s (chunks.length + 1) chunks 1
 
 /-- `mix_in_active_fields(root, active_fields)`: `hash(root, pack_bits(active_fields))`, with
 `active_fields` restricted to at most 256 bits ("Merkleization": `active_fields` is restricted
 to ≤ 256 bits), so `pack_bits` is one chunk. The bound is a proof obligation, so an overlong
 `active_fields` is rejected at elaboration. -/
-def mixInActiveFields (root : Jaune.U256) (activeFields : List Bool)
-    (_ : activeFields.length ≤ 256) : Jaune.U256 :=
+def mixInActiveFields (root : B256) (activeFields : List Bool)
+    (_ : activeFields.length ≤ 256) : B256 :=
   hashPair root (chunkOf (bitsToBytes activeFields))
 
 /-! ## `ProgressiveList[T]` -/
 
 /-- `ProgressiveList[T]`: an ordered homogeneous collection without limit, Merkleized along
 spine `s`. -/
-structure ProgressiveListOnSpine (s : Spine) (α : Type) where
+structure ProgressiveListS (s : Spine) (α : Type) where
   toArray : Array α
   deriving DecidableEq, BEq
 
 /-- `ProgressiveList[T]` at `v1.6.1` (`ssz_generic`). -/
-abbrev ProgressiveList (α : Type) := ProgressiveListOnSpine .successorLeft α
+abbrev ProgressiveList (α : Type) := ProgressiveListS .successorLeft α
 /-- `ProgressiveList[T]` of `eth-ssz-specs==0.1.0` (Gloas). -/
-abbrev ProgressiveListRightSpine (α : Type) := ProgressiveListOnSpine .successorRight α
+abbrev ProgressiveListR (α : Type) := ProgressiveListS .successorRight α
 
 /-- `ProgressiveList[T]` ("Merkleization": `mix_in_length(merkleize_progressive(pack(value)),
 len(value))` for basic `T`, with element roots otherwise). Decoding is that of a list with no
 limit. -/
-instance {s : Spine} {α : Type} [Ssz α] : Ssz (ProgressiveListOnSpine s α) where
+instance {s : Spine} {α : Type} [Ssz α] : Ssz (ProgressiveListS s α) where
   fixedSize? := none
-  serialize v := serializeParts (sequenceParts v.toArray.toList)
+  serialize v := serializeParts (seqParts v.toArray.toList)
   deserialize bs := do
     -- Every element occupies at least one byte or one offset, so the scope length bounds the
     -- count; no further limit applies.
-    let xs ← deserializeSequence (α := α) bs none bs.length
+    let xs ← deserializeSeq (α := α) bs none bs.length
     pure ⟨xs⟩
   hashTreeRoot v :=
     let xs := v.toArray.toList
@@ -103,7 +103,7 @@ instance {s : Spine} {α : Type} [Ssz α] : Ssz (ProgressiveListOnSpine s α) wh
 `ProgressiveList UInt8`, kept a distinct type because the vectors' JSON mapping gives a list of
 `byte` as `0x`-prefixed bytes and a list of `uint8` as a sequence of integers. -/
 structure ProgressiveByteList where
-  bytes : ProgressiveListRightSpine UInt8
+  bytes : ProgressiveListR UInt8
   deriving DecidableEq, BEq
 
 instance : Ssz ProgressiveByteList where
@@ -116,18 +116,18 @@ instance : Ssz ProgressiveByteList where
 
 /-- `ProgressiveBitlist`: an ordered collection of booleans without limit, Merkleized along
 spine `s`. -/
-structure ProgressiveBitlistOnSpine (s : Spine) where
+structure ProgressiveBitlistS (s : Spine) where
   bits : Array Bool
   deriving DecidableEq, BEq
 
 /-- `ProgressiveBitlist` at `v1.6.1` (`ssz_generic`). -/
-abbrev ProgressiveBitlist := ProgressiveBitlistOnSpine .successorLeft
+abbrev ProgressiveBitlist := ProgressiveBitlistS .successorLeft
 /-- `ProgressiveBitList` of `eth-ssz-specs==0.1.0` (Gloas `AggregationBits`, `CellsBitList`). -/
-abbrev ProgressiveBitlistRightSpine := ProgressiveBitlistOnSpine .successorRight
+abbrev ProgressiveBitlistR := ProgressiveBitlistS .successorRight
 
 /-- `ProgressiveBitlist` ("Serialization" as `Bitlist[N]`; "Merkleization":
 `mix_in_length(merkleize_progressive(pack_bits(value)), len(value))`). -/
-instance {s : Spine} : Ssz (ProgressiveBitlistOnSpine s) where
+instance {s : Spine} : Ssz (ProgressiveBitlistS s) where
   fixedSize? := none
   serialize v := bitsToBytes (v.bits.toList ++ [true])
   deserialize bs :=
@@ -145,7 +145,7 @@ instance {s : Spine} : Ssz (ProgressiveBitlistOnSpine s) where
 
 /-- The chunks of a progressive container: field roots at the positions of the `1` entries of
 `active_fields`, zero chunks at the `0` entries. -/
-def activeChunks : List Bool → List Jaune.U256 → List Jaune.U256
+def activeChunks : List Bool → List B256 → List B256
   | [], _ => []
   | true :: as, r :: rs => r :: activeChunks as rs
   | true :: as, [] => zeroChunk :: activeChunks as []
@@ -154,8 +154,8 @@ def activeChunks : List Bool → List Jaune.U256 → List Jaune.U256
 /-- `hash_tree_root` of a progressive container ("Merkleization":
 `mix_in_active_fields(merkleize_progressive(...), get_active_fields(value))`). The `≤ 256`-bit
 bound travels as a proof obligation, so an overlong `active_fields` is rejected at elaboration. -/
-def progressiveContainerRoot (activeFields : List Bool) (roots : List Jaune.U256)
-    (h : activeFields.length ≤ 256) (s : Spine := .successorLeft) : Jaune.U256 :=
+def progressiveContainerRoot (activeFields : List Bool) (roots : List B256)
+    (h : activeFields.length ≤ 256) (s : Spine := .successorLeft) : B256 :=
   mixInActiveFields (merkleizeProgressive (activeChunks activeFields roots) s) activeFields h
 
 /-- `ssz_progressive_container Name (P : Preset) ... [a₀, a₁, ...] where f₁ : T₁ ...`: a
@@ -198,7 +198,7 @@ macro_rules
         deriving DecidableEq, BEq
       /-- The roots of the fields, in order: the leaves `merkleize_progressive` places at the
       `1` positions of `active_fields`. -/
-      def $fieldRootsId $[{$ps : $pts}]* (x : $ty) : List Jaune.U256 := [$roots,*]
+      def $fieldRootsId $[{$ps : $pts}]* (x : $ty) : List B256 := [$roots,*]
       instance $[($ps : $pts)]* : Ssz $ty where
         fixedSize? := containerFixedSize [$[Ssz.fixedSize? $ts],*]
         serialize := fun x => serializeParts [$parts,*]
@@ -223,8 +223,8 @@ def serializeUnion (selector : Nat) (data : Bytes) : Bytes := leBytes 1 selector
 `1..127` ("Illegal types": a selector outside `uint8(1)` through `uint8(127)` is illegal) and
 name a declared option (`decodeOption` returns `none` otherwise); the rest of the scope is that
 option's data. An empty scope has no selector. -/
-def deserializeUnion {α : Type} (bs : Bytes) (decodeOption : UInt8 → Bytes → Option (Fallible α)) :
-    Fallible α :=
+def deserializeUnion {α : Type} (bs : Bytes) (decodeOption : UInt8 → Bytes → Option (M α)) :
+    M α :=
   match bs with
   | [] => throw (.decode (.offset "compatible union without a selector"))
   | sel :: data =>
@@ -235,7 +235,7 @@ def deserializeUnion {α : Type} (bs : Bytes) (decodeOption : UInt8 → Bytes �
       | none => throw (.decode (.selector sel))
 
 -- A selector outside `1..127`, or one no option declares, is rejected; a declared one decodes.
-private def unionProbe (sel : UInt8) (data : Bytes) : Option (Fallible Nat) :=
+private def unionProbe (sel : UInt8) (data : Bytes) : Option (M Nat) :=
   if sel = 1 then some (pure data.length) else none
 
 #guard ((deserializeUnion (α := Nat) [0] unionProbe).toOption.isNone)

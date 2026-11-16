@@ -56,7 +56,7 @@ namespace Jaune
 #guard blsPairing blsG2Generator blsG1Generator = blsPairingRef blsG2Generator blsG1Generator
 #guard
   let f1 := (blsPairing blsG2Generator blsG1Generator (finalExp := false)).getD 0
-  let f3 : Bls12Fp12 := ⟨[3, 0, 7, 0, 0, 1, 0, 0, 0, 0, 2, 9]⟩
+  let f3 : BLSF12 := ⟨[3, 0, 7, 0, 0, 1, 0, 0, 0, 0, 2, 9]⟩
   f12Frob f1 = f1 ^ blsPrime ∧ f12Frob f3 = f3 ^ blsPrime ∧
     blsFinalExpFast f3 = f3 ^ blsFinalExponent
 

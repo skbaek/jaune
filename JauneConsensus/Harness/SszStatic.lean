@@ -19,7 +19,7 @@ yaml_container ForkData [current_version, genesis_validators_root]
 yaml_container Checkpoint [epoch, root]
 yaml_container Validator [pubkey, withdrawal_credentials, effective_balance, slashed, activation_eligibility_epoch, activation_epoch, exit_epoch, withdrawable_epoch]
 yaml_container AttestationData [slot, index, beacon_block_root, source, target]
-yaml_container IndexedAttestation (P : Preset) (f : ConsensusFork) [attesting_indices, data, signature]
+yaml_container IndexedAttestation (P : Preset) (f : CFork) [attesting_indices, data, signature]
 yaml_container PendingAttestation (P : Preset) [aggregation_bits, data, inclusion_delay, proposer_index]
 yaml_container Eth1Data [deposit_root, deposit_count, block_hash]
 yaml_container HistoricalBatch (P : Preset) [block_roots, state_roots]
@@ -29,14 +29,14 @@ yaml_container BeaconBlockHeader [slot, proposer_index, parent_root, state_root,
 yaml_container SigningData [object_root, domain]
 yaml_container SignedBeaconBlockHeader [message, signature]
 yaml_container ProposerSlashing [signed_header_1, signed_header_2]
-yaml_container AttesterSlashing (P : Preset) (f : ConsensusFork) [attestation_1, attestation_2]
-yaml_container Attestation (P : Preset) (f : ConsensusFork) [aggregation_bits, data, signature, committee_bits]
+yaml_container AttesterSlashing (P : Preset) (f : CFork) [attestation_1, attestation_2]
+yaml_container Attestation (P : Preset) (f : CFork) [aggregation_bits, data, signature, committee_bits]
 yaml_container Deposit [proof, data]
 yaml_container VoluntaryExit [epoch, validator_index]
 yaml_container SignedVoluntaryExit [message, signature]
 yaml_container Eth1Block [timestamp, deposit_root, deposit_count]
-yaml_container AggregateAndProof (P : Preset) (f : ConsensusFork) [aggregator_index, aggregate, selection_proof]
-yaml_container SignedAggregateAndProof (P : Preset) (f : ConsensusFork) [message, signature]
+yaml_container AggregateAndProof (P : Preset) (f : CFork) [aggregator_index, aggregate, selection_proof]
+yaml_container SignedAggregateAndProof (P : Preset) (f : CFork) [message, signature]
 yaml_container SyncAggregate (P : Preset) [sync_committee_bits, sync_committee_signature]
 yaml_container SyncCommittee (P : Preset) [pubkeys, aggregate_pubkey]
 yaml_container SyncCommitteeMessage [slot, beacon_block_root, validator_index, signature]
@@ -61,14 +61,14 @@ yaml_container WithdrawalRequest [source_address, validator_pubkey, amount]
 yaml_container ConsolidationRequest [source_address, source_pubkey, target_pubkey]
 yaml_container ExecutionRequests (P : Preset) [deposits, withdrawals, consolidations]
 yaml_container SingleAttestation [committee_index, attester_index, data, signature]
-yaml_container BeaconBlockBody (P : Preset) (f : ConsensusFork) [randao_reveal, eth1_data, graffiti, proposer_slashings, attester_slashings, attestations, deposits, voluntary_exits, sync_aggregate, execution_payload, bls_to_execution_changes, blob_kzg_commitments, execution_requests]
-yaml_container BeaconBlock (P : Preset) (f : ConsensusFork) [slot, proposer_index, parent_root, state_root, body]
-yaml_container SignedBeaconBlock (P : Preset) (f : ConsensusFork) [message, signature]
-yaml_container BeaconState (P : Preset) (f : ConsensusFork) [genesis_time, genesis_validators_root, slot, fork, latest_block_header, block_roots, state_roots, historical_roots, eth1_data, eth1_data_votes, eth1_deposit_index, validators, balances, randao_mixes, slashings, previous_epoch_participation, current_epoch_participation, justification_bits, previous_justified_checkpoint, current_justified_checkpoint, finalized_checkpoint, inactivity_scores, current_sync_committee, next_sync_committee, latest_execution_payload_header, next_withdrawal_index, next_withdrawal_validator_index, historical_summaries, deposit_requests_start_index, deposit_balance_to_consume, exit_balance_to_consume, earliest_exit_epoch, consolidation_balance_to_consume, earliest_consolidation_epoch, pending_deposits, pending_partial_withdrawals, pending_consolidations, proposer_lookahead]
+yaml_container BeaconBlockBody (P : Preset) (f : CFork) [randao_reveal, eth1_data, graffiti, proposer_slashings, attester_slashings, attestations, deposits, voluntary_exits, sync_aggregate, execution_payload, bls_to_execution_changes, blob_kzg_commitments, execution_requests]
+yaml_container BeaconBlock (P : Preset) (f : CFork) [slot, proposer_index, parent_root, state_root, body]
+yaml_container SignedBeaconBlock (P : Preset) (f : CFork) [message, signature]
+yaml_container BeaconState (P : Preset) (f : CFork) [genesis_time, genesis_validators_root, slot, fork, latest_block_header, block_roots, state_roots, historical_roots, eth1_data, eth1_data_votes, eth1_deposit_index, validators, balances, randao_mixes, slashings, previous_epoch_participation, current_epoch_participation, justification_bits, previous_justified_checkpoint, current_justified_checkpoint, finalized_checkpoint, inactivity_scores, current_sync_committee, next_sync_committee, latest_execution_payload_header, next_withdrawal_index, next_withdrawal_validator_index, historical_summaries, deposit_requests_start_index, deposit_balance_to_consume, exit_balance_to_consume, earliest_exit_epoch, consolidation_balance_to_consume, earliest_consolidation_epoch, pending_deposits, pending_partial_withdrawals, pending_consolidations, proposer_lookahead]
 yaml_container LightClientHeader (P : Preset) [beacon, execution, execution_branch]
-yaml_container LightClientBootstrap (P : Preset) (f : ConsensusFork) [header, current_sync_committee, current_sync_committee_branch]
-yaml_container LightClientUpdate (P : Preset) (f : ConsensusFork) [attested_header, next_sync_committee, next_sync_committee_branch, finalized_header, finality_branch, sync_aggregate, signature_slot]
-yaml_container LightClientFinalityUpdate (P : Preset) (f : ConsensusFork) [attested_header, finalized_header, finality_branch, sync_aggregate, signature_slot]
+yaml_container LightClientBootstrap (P : Preset) (f : CFork) [header, current_sync_committee, current_sync_committee_branch]
+yaml_container LightClientUpdate (P : Preset) (f : CFork) [attested_header, next_sync_committee, next_sync_committee_branch, finalized_header, finality_branch, sync_aggregate, signature_slot]
+yaml_container LightClientFinalityUpdate (P : Preset) (f : CFork) [attested_header, finalized_header, finality_branch, sync_aggregate, signature_slot]
 yaml_container LightClientOptimisticUpdate (P : Preset) [attested_header, sync_aggregate, signature_slot]
 yaml_container DataColumnSidecar (P : Preset) [index, column, kzg_commitments, kzg_proofs, signed_block_header, kzg_commitments_inclusion_proof]
 yaml_container MatrixEntry (P : Preset) [cell, kzg_proof, column_index, row_index]
@@ -167,7 +167,7 @@ def gloasStaticChecks (P : Preset) (name : String) (unchanged : Option TypeCheck
 
 /-- The container type of an `ssz_static` handler at a preset and fork, Deneb to Fulu
 (`Containers.lean`). -/
-def sszStaticChecksPreGloas (P : Preset) (f : ConsensusFork) (name : String) : Option TypeChecks :=
+def sszStaticChecksPreGloas (P : Preset) (f : CFork) (name : String) : Option TypeChecks :=
   match name with
   | "Fork" => some (.of Fork)
   | "ForkData" => some (.of ForkData)
@@ -238,7 +238,7 @@ def sszStaticChecksPreGloas (P : Preset) (f : ConsensusFork) (name : String) : O
 
 /-- The container type of an `ssz_static` handler at a preset and fork. Gloas's unchanged
 containers are Fulu's. -/
-def sszStaticChecks (P : Preset) (f : ConsensusFork) (name : String) : Option TypeChecks :=
+def sszStaticChecks (P : Preset) (f : CFork) (name : String) : Option TypeChecks :=
   match f with
   | .gloas => gloasStaticChecks P name (sszStaticChecksPreGloas P .fulu name)
   | _ => sszStaticChecksPreGloas P f name

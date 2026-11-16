@@ -23,46 +23,46 @@ index.
 -/
 
 namespace JauneConsensus.Gloas
-open Jaune (Bytes U256)
+open Jaune (Bytes B256)
 open JauneConsensus
 
-variable {P : Preset} {f : ConsensusFork}
+variable {P : Preset} {f : CFork}
 
 /-- The field chunks of a progressive container, field `i` expanded into `sub`. -/
-def expandAt (roots : List Jaune.U256) (i : Nat) (sub : ProofTree) : List (Jaune.U256 × Option ProofTree) :=
+def expandAt (roots : List B256) (i : Nat) (sub : ProofTree) : List (B256 × Option ProofTree) :=
   roots.mapIdx fun j r => (r, if j = i then some sub else none)
 
 /-- The position of `finalized_checkpoint` among Gloas `BeaconState`'s fields (unchanged from
 phase0; `FINALIZED_ROOT_GINDEX_GLOAS = 735 = 2 * (22 * 16 + (20 - 5)) + 1`, field 20 lying in the
 third spine level, fields 5 to 20, at generalized index 22). -/
-def finalizedCheckpointFieldIndex : Nat := 20
+def FINALIZED_CHECKPOINT_FIELD_INDEX : Nat := 20
 
 /-- The position of `signed_execution_payload_bid` among Gloas `BeaconBlockBody`'s fields
 (`EXECUTION_BLOCK_HASH_GINDEX_GLOAS = 2856 = 2 * (2 * (22 * 16 + (10 - 5))) * 2`: field 10, its
 `message` (0), whose `parent_block_hash` is field 0 of a progressive container). -/
-def signedExecutionPayloadBidFieldIndex : Nat := 10
+def SIGNED_EXECUTION_PAYLOAD_BID_FIELD_INDEX : Nat := 10
 
-#guard FINALIZED_ROOT_GINDEX_GLOAS == 2 * (22 * 16 + (finalizedCheckpointFieldIndex - 5)) + 1
+#guard FINALIZED_ROOT_GINDEX_GLOAS == 2 * (22 * 16 + (FINALIZED_CHECKPOINT_FIELD_INDEX - 5)) + 1
 #guard EXECUTION_BLOCK_HASH_GINDEX_GLOAS ==
-  2 * (2 * (2 * (22 * 16 + (signedExecutionPayloadBidFieldIndex - 5)) + 0))
+  2 * (2 * (2 * (22 * 16 + (SIGNED_EXECUTION_PAYLOAD_BID_FIELD_INDEX - 5)) + 0))
 
 /-- A Gloas `BeaconState`'s proof tree, with `finalized_checkpoint` expanded (the sync committees
 are field leaves). -/
 def BeaconState.proofTree (s : BeaconState P) : ProofTree :=
-  .ofProgressive (expandAt s.fieldRoots finalizedCheckpointFieldIndex
+  .ofProgressive (expandAt s.fieldRoots FINALIZED_CHECKPOINT_FIELD_INDEX
     (.ofFields s.finalized_checkpoint.fieldRoots))
 
 /-- A Gloas `BeaconBlockBody`'s proof tree, with `signed_execution_payload_bid.message` expanded
 (the execution block hash of a light-client header). -/
 def BeaconBlockBody.proofTree (b : BeaconBlockBody P) : ProofTree :=
-  .ofProgressive (expandAt b.fieldRoots signedExecutionPayloadBidFieldIndex
+  .ofProgressive (expandAt b.fieldRoots SIGNED_EXECUTION_PAYLOAD_BID_FIELD_INDEX
     ((ProofTree.ofFields b.signed_execution_payload_bid.fieldRoots).expand 0
       (.ofProgressive (b.signed_execution_payload_bid.message.fieldRoots.map (·, none)))))
 
 /-! ## Full node -/
 
 /-- `block_to_light_client_header` (Gloas). -/
-def blockToLightClientHeader (block : SignedBeaconBlock P) : Fallible LightClientHeader := do
+def blockToLightClientHeader (block : SignedBeaconBlock P) : M LightClientHeader := do
   let branch ← computeMerkleProof block.message.body.proofTree EXECUTION_BLOCK_HASH_GINDEX_GLOAS
   pure { beacon := { slot := block.message.slot, proposer_index := block.message.proposer_index,
                      parent_root := block.message.parent_root,
@@ -77,7 +77,7 @@ def stateBlockHeader (state : BeaconState P) : BeaconBlockHeader :=
 
 /-- `create_light_client_bootstrap(state, block)` (Altair, Gloas types). -/
 def createLightClientBootstrap (cfg : Config) (state : BeaconState P) (block : SignedBeaconBlock P) :
-    Fallible (LightClientBootstrap P) := do
+    M (LightClientBootstrap P) := do
   let site := "create_light_client_bootstrap"
   require ((← computeEpochAtSlot P state.slot).toNat ≥ cfg.ALTAIR_FORK_EPOCH) s!"{site}: epoch"
   require (state.slot == state.latest_block_header.slot) s!"{site}: state.slot"
@@ -92,17 +92,17 @@ def createLightClientBootstrap (cfg : Config) (state : BeaconState P) (block : S
 /-- `LightClientUpdate()`. -/
 def defaultLightClientUpdate : LightClientUpdate P :=
   { attested_header := defaultLightClientHeader, next_sync_committee := defaultSyncCommittee,
-    next_sync_committee_branch := zeroRootVector _, finalized_header := defaultLightClientHeader,
-    finality_branch := zeroRootVector _,
+    next_sync_committee_branch := zeroRootVec _, finalized_header := defaultLightClientHeader,
+    finality_branch := zeroRootVec _,
     sync_aggregate := { sync_committee_bits := ⟨Array.replicate P.SYNC_COMMITTEE_SIZE false, by simp⟩,
-                        sync_committee_signature := zeroBytesVector 96 },
+                        sync_committee_signature := zeroBytesVec 96 },
     signature_slot := U64.zero }
 
 /-- `create_light_client_update(state, block, attested_state, attested_block, finalized_block)`
 (Altair, Gloas types). -/
 def createLightClientUpdate (cfg : Config) (state : BeaconState P) (block : SignedBeaconBlock P)
     (attestedState : BeaconState P) (attestedBlock : SignedBeaconBlock P)
-    (finalizedBlock : Option (SignedBeaconBlock P)) : Fallible (LightClientUpdate P) := do
+    (finalizedBlock : Option (SignedBeaconBlock P)) : M (LightClientUpdate P) := do
   let site := "create_light_client_update"
   require ((← computeEpochAtSlot P attestedState.slot).toNat ≥ cfg.ALTAIR_FORK_EPOCH)
     s!"{site}: epoch"
@@ -167,71 +167,71 @@ def capellaHeaderOf (e : ExecutionPayloadHeader P) : CapellaExecutionPayloadHead
 
 /-- `ExecutionBranch(data=...)`: a vector of exactly `floorlog2(EXECUTION_BLOCK_HASH_GINDEX_GLOAS)`
 roots. -/
-private def branchVector {n : Nat} (xs : List Bytes32) (what : String) : Fallible (SszVector Bytes32 n) :=
+private def branchVec {n : Nat} (xs : List Bytes32) (what : String) : M (SszVector Bytes32 n) :=
   SszVector.ofArray xs.toArray what
 
 /-- `upgrade_lc_header_to_gloas`. -/
 def upgradeLcHeaderToGloas (cfg : Config) (pre : JauneConsensus.LightClientHeader P) :
-    Fallible LightClientHeader := do
+    M LightClientHeader := do
   if pre == JauneConsensus.defaultLightClientHeader then return defaultLightClientHeader
   let epoch := (← computeEpochAtSlot P pre.beacon.slot).toNat
   let site := "upgrade_lc_header_to_gloas"
   let preBranch := pre.execution_branch.toArray.toList
   if epoch ≥ cfg.DENEB_FORK_EPOCH then
-    let proof ← computeMerkleProof (.ofFields pre.execution.fieldRoots) blockHashGindexDeneb
+    let proof ← computeMerkleProof (.ofFields pre.execution.fieldRoots) BLOCK_HASH_GINDEX_DENEB
     return { beacon := pre.beacon, execution_block_hash := pre.execution.block_hash,
-             execution_branch := ← branchVector (normalizeMerkleBranch (proof ++ preBranch)
+             execution_branch := ← branchVec (normalizeMerkleBranch (proof ++ preBranch)
                EXECUTION_BLOCK_HASH_GINDEX_GLOAS) site }
   if epoch ≥ cfg.CAPELLA_FORK_EPOCH then
     let executionHeader := capellaHeaderOf pre.execution
-    let proof ← computeMerkleProof (.ofFields executionHeader.fieldRoots) blockHashGindexCapella
+    let proof ← computeMerkleProof (.ofFields executionHeader.fieldRoots) BLOCK_HASH_GINDEX_CAPELLA
     return { beacon := pre.beacon, execution_block_hash := pre.execution.block_hash,
-             execution_branch := ← branchVector (normalizeMerkleBranch (proof ++ preBranch)
+             execution_branch := ← branchVec (normalizeMerkleBranch (proof ++ preBranch)
                EXECUTION_BLOCK_HASH_GINDEX_GLOAS) site }
   pure { beacon := pre.beacon, execution_block_hash := zeroRoot,
-         execution_branch := zeroRootVector _ }
+         execution_branch := zeroRootVec _ }
 
 /-- `upgrade_lc_bootstrap_to_gloas`. -/
 def upgradeLcBootstrapToGloas (cfg : Config) (pre : JauneConsensus.LightClientBootstrap P f) :
-    Fallible (LightClientBootstrap P) := do
+    M (LightClientBootstrap P) := do
   pure { header := ← upgradeLcHeaderToGloas cfg pre.header,
          current_sync_committee := pre.current_sync_committee,
-         current_sync_committee_branch := ← branchVector (normalizeMerkleBranch
+         current_sync_committee_branch := ← branchVec (normalizeMerkleBranch
            pre.current_sync_committee_branch.toArray.toList CURRENT_SYNC_COMMITTEE_GINDEX_GLOAS)
            "upgrade_lc_bootstrap_to_gloas" }
 
 /-- `upgrade_lc_update_to_gloas`. -/
 def upgradeLcUpdateToGloas (cfg : Config) (pre : JauneConsensus.LightClientUpdate P f) :
-    Fallible (LightClientUpdate P) := do
+    M (LightClientUpdate P) := do
   let site := "upgrade_lc_update_to_gloas"
   pure { attested_header := ← upgradeLcHeaderToGloas cfg pre.attested_header,
          next_sync_committee := pre.next_sync_committee,
-         next_sync_committee_branch := ← branchVector (normalizeMerkleBranch
+         next_sync_committee_branch := ← branchVec (normalizeMerkleBranch
            pre.next_sync_committee_branch.toArray.toList NEXT_SYNC_COMMITTEE_GINDEX_GLOAS) site,
          finalized_header := ← upgradeLcHeaderToGloas cfg pre.finalized_header,
-         finality_branch := ← branchVector (normalizeMerkleBranch
+         finality_branch := ← branchVec (normalizeMerkleBranch
            pre.finality_branch.toArray.toList FINALIZED_ROOT_GINDEX_GLOAS) site,
          sync_aggregate := pre.sync_aggregate, signature_slot := pre.signature_slot }
 
 /-- `upgrade_lc_finality_update_to_gloas`. -/
 def upgradeLcFinalityUpdateToGloas (cfg : Config)
-    (pre : JauneConsensus.LightClientFinalityUpdate P f) : Fallible (LightClientFinalityUpdate P) := do
+    (pre : JauneConsensus.LightClientFinalityUpdate P f) : M (LightClientFinalityUpdate P) := do
   pure { attested_header := ← upgradeLcHeaderToGloas cfg pre.attested_header,
          finalized_header := ← upgradeLcHeaderToGloas cfg pre.finalized_header,
-         finality_branch := ← branchVector (normalizeMerkleBranch
+         finality_branch := ← branchVec (normalizeMerkleBranch
            pre.finality_branch.toArray.toList FINALIZED_ROOT_GINDEX_GLOAS)
            "upgrade_lc_finality_update_to_gloas",
          sync_aggregate := pre.sync_aggregate, signature_slot := pre.signature_slot }
 
 /-- `upgrade_lc_optimistic_update_to_gloas`. -/
 def upgradeLcOptimisticUpdateToGloas (cfg : Config)
-    (pre : JauneConsensus.LightClientOptimisticUpdate P) : Fallible (LightClientOptimisticUpdate P) := do
+    (pre : JauneConsensus.LightClientOptimisticUpdate P) : M (LightClientOptimisticUpdate P) := do
   pure { attested_header := ← upgradeLcHeaderToGloas cfg pre.attested_header,
          sync_aggregate := pre.sync_aggregate, signature_slot := pre.signature_slot }
 
 /-- `upgrade_lc_store_to_gloas`. -/
 def upgradeLcStoreToGloas (cfg : Config) (pre : JauneConsensus.LightClientStore P f) :
-    Fallible (LightClientStore P) := do
+    M (LightClientStore P) := do
   let best ← match pre.best_valid_update with
     | none => pure none
     | some u => some <$> upgradeLcUpdateToGloas cfg u
@@ -245,9 +245,9 @@ def upgradeLcStoreToGloas (cfg : Config) (pre : JauneConsensus.LightClientStore 
 
 /-! ## Tests on hand values -/
 
-private def leaf (k : Nat) : Jaune.U256 := Jaune.Nat.toU256 (k + 1)
-private def ok? {α} (x : Fallible α) : Option α := x.toOption
-private def allActiveRoot (roots : List Jaune.U256) : Jaune.U256 :=
+private def L (k : Nat) : B256 := Jaune.Nat.toB256 (k + 1)
+private def ok? {α} (x : M α) : Option α := x.toOption
+private def allActiveRoot (roots : List B256) : B256 :=
   if h : roots.length ≤ 256 then
     progressiveContainerRoot (List.replicate roots.length true) roots (by simpa using h) .successorRight
   else zeroChunk
@@ -255,14 +255,14 @@ private def allActiveRoot (roots : List Jaune.U256) : Jaune.U256 :=
 -- the progressive tree's root is `progressiveContainerRoot` over the same chunks, for sizes that
 -- end inside each of the first three spine levels
 #guard [1, 3, 5, 6, 21, 22, 46].all fun n =>
-  let roots := (List.range n).map leaf
+  let roots := (List.range n).map L
   match ProofTree.ofProgressive (roots.map (·, none)) with
   | .node cs =>
-    (ok? (merkleTreeRoot (cs.map (·.1)))).map (Bytes32.beq · (allActiveRoot roots)) == some true
+    (ok? (merkleTreeRoot (cs.map (·.1)))).map (B256.beq · (allActiveRoot roots)) == some true
 -- a field proof verifies against that root at its generalized index: field 0 at 4, field 2 at
 -- `2 * 5 * 4 + 1` (level 1 at index 10, position 1), field 20 at `22 * 16 + 15`
 #guard [(0, 4), (2, 41), (20, 367), (22, 2945)].all fun (i, g) =>
-  let roots := (List.range 46).map leaf
+  let roots := (List.range 46).map L
   let t := ProofTree.ofProgressive (roots.map (·, none))
   match ok? (computeMerkleProof t g), roots[i]? with
   | some pr, some leaf => ok? (verifyMerkleProof leaf pr g (allActiveRoot roots)) == some true
