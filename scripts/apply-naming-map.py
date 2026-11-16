@@ -647,7 +647,7 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
             add_cover(comps, ('unresolved', 'projection inside a quotation whose field the word does not decide '
                                             '(constants ending in it rename differently or not at all)'))
             continue
-        if not found and in_scope:
+        if not found and in_scope and '.' not in spelling:
             # No constant of the universe (every exported and referenced name,
             # so every renamed one) resolves from the quoting scope, before or
             # after the rename: the identifier pre-resolves to no renamed
@@ -667,7 +667,8 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
             continue
         if len(found) != 1:
             add_cover(comps, ('unresolved', 'quotation identifier with no unique global resolution '
-                                            '(ambiguous, or outside the modelled scope)'))
+                                            '(ambiguous, a dotted spelling ending in projections, '
+                                            'or outside the modelled scope)'))
             continue
         const = next(iter(found))
         add_cover(comps, ('const', const))
