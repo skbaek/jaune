@@ -309,6 +309,19 @@ Successful application is still followed by an owned build and N4 comparison.
 Unresolved constructs remain refusals; whole-tree accounting does not waive
 them.
 
+A project that requires the renamed project as a Lake package (Blanc
+consuming Jaune) plans with `--consumer --dependency-snapshot DEP/snapshot.json`,
+where the dependency snapshot is the dependency's own whole-tree capture at the
+revision the consumer imports. Every consumer import from that package must be
+a captured module whose package source (`.lake/packages/...`) has the captured
+digest. The dependency's constants complete the capture universe, so a new
+name that would be captured by a dependency constant the consumer never
+mentions is still qualified. A module row naming a dependency module moves no
+file; the consumer's imports of it are rewritten and other spellings are
+reported as usual. Relocation rows of dependency modules are refused for a
+consumer. The plan records `consumer` and the bound dependency captures, and
+apply recomputes with them.
+
 Module rows move the file within its source directory and rewrite every import
 whose lexed position matches Lean's header parse of that file (a mismatch
 refuses). Any other spelling of the old module name in code (lakefile roots,
