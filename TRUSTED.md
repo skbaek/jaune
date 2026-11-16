@@ -299,7 +299,7 @@ the next section.
 Everything in this section is evidence of a different kind from everything
 above it. None of it is a theorem.
 
-**Historical proof-of-work boundary.** When `rules.pow` is present,
+**Historical proof-of-work boundary.** When `rules.proofOfWork` is present,
 Jaune checks the modeled header rules, including parentage, number and
 timestamp, gas bounds, fork-dependent field shape and calculated difficulty.
 It checks ommer limits, ancestry and headers and applies the modeled rewards.

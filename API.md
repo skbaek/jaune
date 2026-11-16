@@ -28,7 +28,7 @@ individual declarations one by one.
 |---|---|---|
 | **supported** | Intended entry point for a task in this guide. Exercised at this revision by a checked example, a gate or the fixture runner. | The eight canonical execution modules: `Jaune.ExecFrame`, `Jaune.Exec`, `Jaune.ExecDeriv`, `Jaune.ExecSettlement`, `Jaune.ExecChronology`, `Jaune.MessageExecution`, `Jaune.SymbolicPush`, `Jaune.SymbolicArith`. Also the entry-point families named in sections 3–5, such as `exec`, `processMessage`, `processTransaction`, the checked chain types, and `State`/`Storage` access, and the lemma families and modules named in section 6. |
 | **incidental** | Public only because Lean cannot hide it. It may be renamed, restated or removed in any commit, without notice. | Every other public declaration (section 6 lifts named families out of this class) in the `Jaune` library closure, such as interpreter internals in `Jaune.Machine`, `Jaune.Execution` and `Jaune.Sufficiency`, and helper lemmas in `Jaune.Basic` and `Jaune.Types`. Also the `Fueled` residue lemmas in `Jaune.Exec`. Runner-side modules outside `import Jaune` (`Jaune.T8n`, `Jaune.ChainStore`, `Jaune.FixtureException`, `Jaune.BLSGuards`, `Main`, `MemoryProbe`) are adapters, not proof surface. |
-| **experimental** | Implemented and gated, but expected to change as its upstream target moves. | The Amsterdam lane: `amsterdamRules`, the `StateGasRules` / `stateGas` dimension, `genericCallAmsterdam` / `genericCreateAmsterdam` and their lemmas, `executeCode.handleErrorAmsterdam`, and the `BlockAccessList` / `Bal*` family. Also the reusable axiom-audit command `#expect_axioms` (`scripts/AxiomAudit.lean`, library `Assurance`). |
+| **experimental** | Implemented and gated, but expected to change as its upstream target moves. | The Amsterdam lane: `amsterdamRules`, the `StateGasRules` / `stateGas` dimension, `genericCallAmsterdam` / `genericCreateAmsterdam` and their lemmas, `executeCode.handleErrorAmsterdam`, and the `BlockAccessList` / `BlockAccessList*` family. Also the reusable axiom-audit command `#expect_axioms` (`scripts/AxiomAudit.lean`, library `Assurance`). |
 
 A module's class applies to all of its declarations unless this guide says
 otherwise. `private` declarations are never API.
@@ -62,7 +62,7 @@ Each imports `Jaune.Exec`.
 
 **Decoding.** The decode predicates are `NextOp.At`, `HaltOp.At`, `JumpOp.At`,
 `PlainOp.At` and `MessageOp.At` (in `Jaune.ExecFrame`). Each says that
-`code.getInst pc` returns the named instruction. To turn a decode fact into the
+`code.getOp pc` returns the named instruction. To turn a decode fact into the
 step equation that the `Exec` constructors take, use `Evm.step_next`,
 `Evm.step_last` or `Evm.step_jump`. The examples decode concrete bytecode
 with one `simp` lemma list followed by `rfl`
@@ -268,8 +268,8 @@ examples. The symbolic example proofs also unfold the `Devm` accessors
 
 | need | module | supported families |
 |---|---|---|
-| machine and world state | `Jaune.Machine` | `Evm`, `Sevm`, `Devm` (`mach` / `meta` / `world` and accessors such as `Devm.stack`, `Devm.gasLeft`, `Devm.state`, `Devm.getBal`), `Execution`, `Msg`, `Benv`, `Tenv`, `Header`, `Block`, `Tx`, `BlockChain`, `State` (`State.get`, `State.set`, `State.get_set_self`, `State.get_set_ne`, `State.bal`, `State.setBal`), `Storage.set`, `Storage.get_set_self`, `Storage.get_set_ne` |
-| account and instruction types | `Jaune.Types` | `Account` (`nonce`, `bal`, `storage`, `code`), `Storage`, `Storage.get`, `Address`, `PlainOp`, `HaltOp`, `JumpOp` |
+| machine and world state | `Jaune.Machine` | `Evm`, `Sevm`, `Devm` (`mach` / `meta` / `world` and accessors such as `Devm.stack`, `Devm.gasLeft`, `Devm.state`, `Devm.getBal`), `Execution`, `Msg`, `Benv`, `Tenv`, `Header`, `Block`, `Transaction`, `BlockChain`, `State` (`State.get`, `State.set`, `State.get_set_self`, `State.get_set_ne`, `State.bal`, `State.setBal`), `Storage.set`, `Storage.get_set_self`, `Storage.get_set_ne` |
+| account and instruction types | `Jaune.Types` | `Account` (`nonce`, `balance`, `storage`, `code`), `Storage`, `Storage.get`, `Address`, `PlainOp`, `HaltOp`, `JumpOp` |
 | fork rules and schedules | `Jaune.Fork` | `Fork`, `Fork.rules?`, `Fork.supported`, `ForkRules`, `ForkCriterion`, `ChainConfig` (`forkAt`/`rulesAt` at a block number and timestamp), `mainnetChainConfig` |
 | words, bytes and RLP | `Jaune.Basic` | `Bytes`, `U256`, `Bytes.toU256`, `U256.toBytes`, `Rlp.Item`, `Rlp.Item.toBytes`, `Bytes.toRlpItem?` |
 | hashes | `Jaune.Hash`, `Jaune.SHA256Spec`, `Jaune.KeccakSpec` | `Bytes.keccak`, `Bytes.sha256`, `Bytes.sha256_eq_fips`, `Bytes.keccak_eq_fips`, `ByteArray.keccak_eq_fips` |
@@ -314,7 +314,7 @@ public codec meant for concrete evidence gets a structural twin and a
 | gas and state-gas after an update | `Jaune.Sufficiency` | `Devm.<updater>_gasLeft`, `Devm.<updater>_stateGas` (stated on `.mach.stateGas`), `Devm.<updater>_gasMeasure` | the gas side of every step proof |
 | a frame relation weakened in one field | `Jaune.ExecFrame`, `Jaune.ExecFrameRel` | `Devm.Rels`, `Devm.Rel`, `Devm.Rels.eq`, `Devm.Burn`, `Devm.rel_refl`, `Devm.rel_trans`; `Devm.Rels.Le` (a literal names only the fields that differ), `Devm.Rel.mono`, `Devm.Rel.eq_refl`, `Devm.Rel.of_eq_le` | a new `Devm.Rels` field is repaired here, not at each consumer's literal |
 | word values and the order | `Jaune.Types` | `U256.toNat_toU256`, `U256.toNat_toU256_of_lt`, `U256.toNat_inj`, `U256.toNat_lt`, `U256.toNat_add`, `U256.toNat_sub_eq_of_le`, `U256.lt_iff_toNat_lt_toNat`, `U256.le_iff_toNat_le_toNat`, `U256.toNat_lt_toNat`, `U256.lt_of_toNat_lt_toNat` | the bridge from compiled words to `Nat` arithmetic |
-| comparison flags and literal arithmetic | `Jaune.WordFacts` | `U256.{eq,lt,gt}Check_{ne,eq}_zero_iff`, `U256.eq_of_eqCheck_ne_zero`, `U256.not_lt_of_ltCheck_eq_zero`, `U256.lt_of_{lt,gt}Check_ne_zero`, `U256.{lt,gt}Check_eq_zero_of_toNat_le`, `U256.{lt,gt}Check_ne_zero_of_toNat_lt`, `Nat.toB256_{add,mul}_toB256`, `Nat.toU256_sub_toU256`, `U256.toNat_add_toU256_of_lt` | a branch flag (`EQ`, `LT`, `GT`, `ISZERO` of `EQ`) is discharged by one citation |
+| comparison flags and literal arithmetic | `Jaune.WordFacts` | `U256.{eq,lt,gt}Check_{ne,eq}_zero_iff`, `U256.eq_of_eqCheck_ne_zero`, `U256.not_lt_of_ltCheck_eq_zero`, `U256.lt_of_{lt,gt}Check_ne_zero`, `U256.{lt,gt}Check_eq_zero_of_toNat_le`, `U256.{lt,gt}Check_ne_zero_of_toNat_lt`, `Nat.toU256_{add,mul}_toU256`, `Nat.toU256_sub_toU256`, `U256.toNat_add_toU256_of_lt` | a branch flag (`EQ`, `LT`, `GT`, `ISZERO` of `EQ`) is discharged by one citation |
 | multiplicative arithmetic | `Jaune.MulDiv` | floor/ceiling `a * b / d` bounds, rounding direction, monotonicity, round-trip loss, and the guarded `U256` bridges (`U256.toNat_mul_mod`, `U256.toNat_mul_eq_of_mul_no_overflow`, `U256.toNat_div`, `U256.toNat_mulmod`, `U256.toNat_addmod`, …) | ratio pricing in token and vault contracts; every word statement is explicit about `% 2 ^ 256` or carries a no-overflow premise |
 | iterated rounded multiplication | `Jaune.RPow` | `mulRounded`, `rpow` and their error surface, with guarded `U256` bridges (`U256.toNat_mulRounded`, …) | Maker-shaped `rpow` loops; no word theorem hides wraparound |
 | memory charged before a CALL | `Jaune.MemoryAccounting` | the `calculateMsgCallGas_*` bounds and the per-kind memory accounting facts | exact gas accounting across a call boundary; these facts do not bound arbitrary parent gas or complete the recursive memory/output invariant |
@@ -411,7 +411,7 @@ sibling path or symlink.
   `Jaune.MessageExecution` (`processMessage_revert_of_exec*`,
   `processMessage_halt_of_exec*`) require both
   `msg.benv.stat.rules.stateGas = none` and
-  `msg.benv.stat.rules.settle.touchedSweep = false`, together with their
+  `msg.benv.stat.rules.settlement.touchedSweep = false`, together with their
   entry/transfer and execution premises. The usual forms require
   `msg.disablePrecompiles = true`; the REVERT variant
   `processMessage_revert_of_exec_afterTransfer_of_noCodeAddress` instead
