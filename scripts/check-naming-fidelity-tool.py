@@ -64,7 +64,10 @@ def run(directory, exporter):
         ('guard', renamed.replace(b'#guard message.gas == 17', b'#guard message.gas == 17 && true'), 'guards'),
         ('drop-guard', renamed.replace(b'#guard message.gas == 17\n', b''), 'guards'),
         ('move-guard', renamed.replace(b'#guard transaction.gasLimit == 11\n', b'').replace(
-            b'end Fidelity', b'#guard transaction.gasLimit == 11\nend Fidelity'), None)]
+            b'end Fidelity', b'#guard transaction.gasLimit == 11\nend Fidelity'), None),
+        # A module that no relocation row touches keeps its direct imports.
+        ('import', renamed.replace(b'import Lean\n', b'import Lean\nimport Lean.Data.Json\n'),
+         'direct imports changed')]
     records = []
     for label, content, expected in variants:
         source.write_bytes(content)
@@ -84,6 +87,8 @@ def run(directory, exporter):
         source.write_bytes(original)
         if source.read_bytes() != original:
             raise ValueError('restoration differs from green baseline')
+    # A guard moved to another module that no relocation row links fails
+    # (a move along a relocation row passes: check-naming-scope-tool.py).
     source.write_bytes(renamed.replace(b'#guard (3 : Nat) == 3\n', b''))
     moved = directory / 'guard-module-main.json'
     export(source, moved, exporter)
@@ -91,10 +96,18 @@ def run(directory, exporter):
     check_source.write_text('import Lean\n#guard (3 : Nat) == 3\n')
     check_bundle = directory / 'guard-module-check.json'
     export(check_source, check_bundle, exporter, module='FidelityCheck')
-    result = CHECK.check(CHECK.read_exports([before]), CHECK.read_exports([moved, check_bundle]), mapping)
+    try:
+        CHECK.check(CHECK.read_exports([before]), CHECK.read_exports([moved, check_bundle]), mapping)
+    except CHECK.Mismatch as error:
+        if "guards: " not in str(error) or "'Fidelity', 'FidelityCheck'" not in str(error):
+            raise ValueError(f'guard-module-move: wrong rejection: {error}') from error
+        result = dict(status='REGRESSION', rejection=str(error))
+    else:
+        raise ValueError('guard-module-move: a guard moved between unlinked modules escaped')
     save(directory / 'guard-module-verdict.json', result)
     records.append(dict(control='guard-module-move', status=result['status']))
     source.write_bytes(original)
+    records.extend(elaboration_controls(directory, exporter))
     array_source = directory / 'ArrayInput.lean'
     array_source.write_text('import Lean\ndef literal : Array Nat := #[1, 2]\n#guard literal.size == 2\n')
     array_bundle = directory / 'array.json'
@@ -115,6 +128,71 @@ def run(directory, exporter):
         raise ValueError('unsupported command was silently omitted')
     records.append(dict(control='unsupported-command', status='REFUSED'))
     return dict(status='OK', controls=records, restored_sha256=APPLY.digest(source.read_bytes()))
+
+
+ELAB_RENAMED = [(b'  | dot\n', b'  | point\n'), (b'`(Shape.dot)', b'`(Shape.point)')]
+
+
+def elaboration_controls(directory, exporter):
+    """Attributes per declaration, elaboration attributes beyond the first
+    tracked set, instance order and quoted spellings (FidelityElab.lean)."""
+    source = directory / 'FidelityElab.lean'
+    original = (ROOT / 'scripts/tests/naming/FidelityElab.lean').read_bytes()
+    source.write_bytes(original)
+    before = directory / 'elab-before.json'
+    export(source, before, exporter, module='FidelityElab')
+    mapping = dict(schema_version=1, retired_tokens=[], allowed_abbreviations=[], entries=[
+        dict(old='FidelityElab.Shape.dot', new='FidelityElab.Shape.point', kind='constructor',
+             layer='execution', rule='2', source='Synthetic constructor fidelity control')])
+    renamed = original
+    for old, new in ELAB_RENAMED:
+        if renamed.count(old) != 1:
+            raise ValueError(f'elaboration fixture drifted: {old!r}')
+        renamed = renamed.replace(old, new)
+    deprecated = b'@[deprecated "control" (since := "2026-11-16")] '
+    variants = [
+        ('elab-rename', renamed, None),
+        # Effective `match_pattern` (and its syntax) moved inside one `mutual` block.
+        ('mutual-match-pattern', renamed.replace(b'@[match_pattern] def boxed', b'def boxed').replace(
+            b'def other', b'@[match_pattern] def other'), 'match_pattern'),
+        # An attribute no effective record tracks: only its per-declaration syntax moves.
+        ('mutual-explicit-syntax', renamed.replace(deprecated + b'def plain', b'def plain').replace(
+            b'def other', deprecated + b'def other'), 'attributes: '),
+        # Default instance moved between two anonymous instances.
+        ('anonymous-default-instance', renamed.replace(b'@[default_instance] instance : Pick Nat',
+            b'instance : Pick Nat').replace(b'instance : Pick Bool', b'@[default_instance] instance : Pick Bool'),
+         'default_instance'),
+        # Untracked attribute syntax moved between anonymous instances.
+        ('anonymous-explicit-syntax', renamed.replace(deprecated + b'instance : Pick Int',
+            b'instance : Pick Int').replace(b'instance : Pick Bool', deprecated + b'instance : Pick Bool'),
+         'attributes: '),
+        # Equal-priority instances swapped: resolution tries the later first.
+        ('instance-order', renamed.replace(b'instance : Tag Nat := \xe2\x9f\xa81\xe2\x9f\xa9\ninstance : Tag Nat := \xe2\x9f\xa82\xe2\x9f\xa9',
+            b'instance : Tag Nat := \xe2\x9f\xa82\xe2\x9f\xa9\ninstance : Tag Nat := \xe2\x9f\xa81\xe2\x9f\xa9'), 'generated-constant match'),
+        # A qualification changes what `Syntax.getId` returns.
+        ('quoted-spelling', renamed.replace(b'`(Shape.point)', b'`(FidelityElab.Shape.point)'), 'quoted spelling')]
+    records = []
+    for label, content, expected in variants:
+        if content == renamed and expected is not None:
+            raise ValueError(f'{label}: mutation did not apply')
+        source.write_bytes(content)
+        after = directory / (label + '.json')
+        export(source, after, exporter, module='FidelityElab')
+        try:
+            result = CHECK.check(CHECK.read_exports([before]), CHECK.read_exports([after]), mapping)
+        except CHECK.Mismatch as error:
+            if expected is None or expected not in str(error):
+                raise ValueError(f'{label}: wrong rejection: {error}') from error
+            result = dict(status='REGRESSION', rejection=str(error))
+        else:
+            if expected is not None:
+                raise ValueError(f'{label}: mutation escaped the control')
+        save(directory / (label + '-verdict.json'), result)
+        records.append(dict(control=label, status=result['status']))
+        source.write_bytes(original)
+        if source.read_bytes() != original:
+            raise ValueError('restoration differs from green baseline')
+    return records
 
 
 def main():

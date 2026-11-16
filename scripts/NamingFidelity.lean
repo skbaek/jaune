@@ -66,7 +66,58 @@ def inlineJson (env : Environment) (n : Name) : Json :=
     | .inline => "inline" | .noinline => "noinline" | .macroInline => "macro_inline"
     | .inlineIfReduce => "inline_if_reduce" | .alwaysInline => "always_inline"
 
-def attributesJson (env : Environment) (n : Name) : Json := Id.run do
+/-- Effective attributes outside the first tracked set that change elaboration
+or compilation, gathered once per export from their extensions. Each entry is
+keyed by the declaration it applies to. Orders that resolution uses are kept:
+an instance's rank among this module's instances with the same discrimination
+keys (Lean tries equal-priority instances latest first), and a default
+instance's position in its class's list. -/
+structure Extra where
+  instanceRank : NameMap Nat := {}
+  defaultInstances : NameMap (Array Json) := {}
+  eliminators : NameMap (Array Json) := {}
+  ext : NameMap (Array Json) := {}
+  elaborators : NameMap (Array Json) := {}
+
+def pushAt (m : NameMap (Array Json)) (n : Name) (j : Json) : NameMap (Array Json) :=
+  m.insert n ((m.getD n #[]).push j)
+
+def keyedEntries {γ : Type} (env : Environment) (label : String) (attr : KeyedDeclsAttribute γ)
+    (acc : NameMap (Array Json)) : NameMap (Array Json) :=
+  let st := attr.ext.getState env
+  st.table.fold (fun acc key entries => entries.foldl (fun acc e =>
+    if st.erased.contains e.declName then acc
+    else pushAt acc e.declName (node label #[nameRef key])) acc) acc
+
+unsafe def extraAttributes (env : Environment) : Extra := Id.run do
+  let mut ranks : NameMap Nat := {}
+  let mut seen : Array (Array Meta.InstanceKey) := #[]
+  for entry in (Meta.instanceExtension.ext.getState env).newEntries.reverse do
+    let i := match entry with | .global i => i | .scoped _ i => i
+    if let some n := i.globalName? then
+      ranks := ranks.insert n (seen.filter (· == i.keys)).size
+      seen := seen.push i.keys
+  let mut defaults : NameMap (Array Json) := {}
+  for (cls, insts) in (Meta.defaultInstanceExtension.getState env).defaultInstances.toList do
+    for ((n, prio), i) in insts.reverse.zipIdx do
+      defaults := pushAt defaults n (node "default_instance" #[nameRef cls, toJson prio, toJson i])
+  let elims := (Meta.customEliminatorExt.getState env).map.fold (fun acc (induction, types) n =>
+    pushAt acc n (node "eliminator" #[toJson induction, toJson (types.map nameRef)])) {}
+  let extState := Meta.Ext.extExtension.getState env
+  let exts := extState.tree.foldValues (fun acc (t : Meta.Ext.ExtTheorem) =>
+    if extState.erased.contains t.declName then acc
+    else pushAt acc t.declName (node "ext" #[toJson t.priority])) {}
+  let elaborators := keyedEntries env "macro" Elab.macroAttribute <|
+    keyedEntries env "term_elab" Elab.Term.termElabAttribute <|
+    keyedEntries env "command_elab" Elab.Command.commandElabAttribute <|
+    keyedEntries env "tactic" Elab.Tactic.tacticElabAttribute {}
+  return { instanceRank := ranks, defaultInstances := defaults, eliminators := elims, ext := exts,
+           elaborators }
+
+def sortedJson (xs : Array Json) : Json :=
+  toJson (xs.qsort (fun a b => a.compress < b.compress))
+
+def attributesJson (env : Environment) (extra : Extra) (n : Name) : Json := Id.run do
   let simp := Meta.simpExtension.getState env
   let collect := fun (acc : Array Json) (t : Meta.SimpTheorem) =>
     match t.origin with
@@ -88,8 +139,22 @@ def attributesJson (env : Environment) (n : Name) : Json := Id.run do
     ("inline", inlineJson env n),
     ("reducibility", toJson (reprStr (getReducibilityStatusCore env n))),
     ("instance", toJson (inst.map fun i => node "instance" #[toJson i.priority,
-      toJson i.synthOrder, toJson (match i.attrKind with | .global => "global" | .local => "local" | .scoped => "scoped")])),
-    ("implemented_by", toJson ((Compiler.getImplementedBy? env n).map nameRef))]
+      toJson i.synthOrder, toJson (match i.attrKind with | .global => "global" | .local => "local" | .scoped => "scoped"),
+      toJson (extra.instanceRank.find? n)])),
+    ("implemented_by", toJson ((Compiler.getImplementedBy? env n).map nameRef)),
+    ("match_pattern", toJson (hasMatchPatternAttribute env n)),
+    ("default_instance", sortedJson (extra.defaultInstances.getD n #[])),
+    ("eliminator", sortedJson (extra.eliminators.getD n #[])),
+    ("ext", sortedJson (extra.ext.getD n #[])),
+    ("elaborator", sortedJson (extra.elaborators.getD n #[])),
+    ("elab_as_elim", toJson (Elab.Term.elabAsElim.hasTag env n)),
+    ("elab_without_expected_type", toJson (Elab.Term.hasElabWithoutExpectedType env n)),
+    ("specialize", toJson (Compiler.getSpecializationArgs? env n)),
+    ("nospecialize", toJson (Compiler.hasNospecializeAttribute env n)),
+    ("never_extract", toJson (hasNeverExtractAttribute env n)),
+    ("export", toJson ((getExportNameFor? env n).map (·.toString))),
+    ("protected", toJson (isProtected env n)),
+    ("noncomputable", toJson (isNoncomputable env n))]
 
 partial def syntaxJson : Syntax → Json
   | .missing => node "missing"
@@ -102,12 +167,44 @@ partial def guardTerms (s : Syntax) : Array Syntax :=
   if s.isOfKind ``Parser.Command.guardCmd then #[s[1]]
   else s.getArgs.foldl (fun acc child => acc ++ guardTerms child) #[]
 
--- Keep all explicit attribute syntax too: final extension state alone loses
--- local attributes that have gone out of scope and unfamiliar custom attrs.
-partial def attributeSyntax (s : Syntax) : Array Json :=
-  if s.isOfKind ``Parser.Term.attributes || s.isOfKind ``Parser.Command.attribute then
-    #[syntaxJson s]
-  else s.getArgs.foldl (fun acc child => acc ++ attributeSyntax child) #[]
+partial def attributeNodes (s : Syntax) : Array Syntax :=
+  if s.isOfKind ``Parser.Term.attributes || s.isOfKind ``Parser.Command.attribute then #[s]
+  else s.getArgs.foldl (fun acc child => acc ++ attributeNodes child) #[]
+
+def samePlace (a b : Syntax) : Bool :=
+  a.getPos? == b.getPos? && a.getTailPos? == b.getTailPos?
+
+/-- The declaration an attribute list on `decl` (a `declaration`'s second
+argument) attaches to: its `declId`, or, for a declaration Lean names itself
+(an anonymous `instance`), the keyword range Lean records as its definition. -/
+def declarationTarget (decl : Syntax) : Json :=
+  let id := decl.getArgs.findSome? fun a =>
+    if a.isOfKind ``Parser.Command.declId then some a
+    else a.getArgs.find? (·.isOfKind ``Parser.Command.declId)
+  match id with
+  | some id => syntaxJson id[0]
+  | none =>
+    match decl.getArgs.find? (fun a => a.isAtom && a.getAtomVal == "instance") with
+    | some kw => node "declTarget" #[toJson (kw.getPos?.map (·.byteIdx)), toJson (kw.getTailPos?.map (·.byteIdx))]
+    | none => node "anonymousDeclaration" #[toJson decl.getKind.toString]
+
+/-- Explicit attributes per declaration (a `mutual` block or two anonymous
+instances can no longer trade them), then any other attribute syntax of the
+command (`attribute [...]` commands, nested positions) with the command's
+declaration names. Never the declaration body. -/
+def commandAttributes (command : Syntax) : Array Json := Id.run do
+  let mut out : Array Json := #[]
+  let mut handled : Array Syntax := #[]
+  for decl in NamingReferences.syntaxNodes ``Parser.Command.declaration command do
+    let attrs := attributeNodes decl[0][1]
+    unless attrs.isEmpty do
+      handled := handled ++ attrs
+      out := out.push (node "declarationAttributes" #[declarationTarget decl[1], toJson (attrs.map syntaxJson)])
+  let rest := (attributeNodes command).filter fun a => !handled.any (samePlace a)
+  unless rest.isEmpty do
+    let ids := (NamingReferences.syntaxNodes ``Lean.Parser.Command.declId command).map (syntaxJson ·[0])
+    out := out.push (node "attributeCommand" #[toJson ids, toJson (rest.map syntaxJson)])
+  return out
 
 partial def firstAtom (s : Syntax) : Option String :=
   match s with
@@ -266,13 +363,10 @@ unsafe def main (args : List String) : IO UInt32 := do
   for command in result.commands do
     if unsupportedCommand command then
       throw <| IO.userError "unsupported hash command: command has no registered fidelity representation"
-    let explicit := attributeSyntax command
-    unless explicit.isEmpty do
-      -- The attributes and the declaration names they attach to, never the
-      -- declaration body: theorem proofs are not compared, and a proof edit
-      -- inside an attributed theorem is not an attribute change.
-      let ids := (NamingReferences.syntaxNodes ``Lean.Parser.Command.declId command).map (syntaxJson ·[0])
-      attrs := attrs.push (node "attributeCommand" #[toJson ids, toJson explicit])
+    -- The attributes and the declaration each attaches to, never the body:
+    -- theorem proofs are not compared, and a proof edit inside an attributed
+    -- theorem is not an attribute change.
+    attrs := attrs ++ commandAttributes command
     terms := terms ++ guardTerms command
   for tree in trees do
     let unsupported := tree.foldInfo (fun _ info found => found || match info with
@@ -296,6 +390,7 @@ unsafe def main (args : List String) : IO UInt32 := do
     ("end", toJson (command.getTailPos?.map (·.byteIdx))),
     ("expected_failure_scope", toJson (command.isOfKind ``Lean.guardMsgsCmd))]
   let kernel := env.toKernelEnv
+  let extra := extraAttributes env
   let mut constants : List (String × Json) := []
   for c in (← env.getLocalConstantInfos) do
     let some info := kernel.find? c.name
@@ -303,9 +398,9 @@ unsafe def main (args : List String) : IO UInt32 := do
     let data ← IO.ofExcept (constantJson info)
     let equationOrigin := (Meta.eqnsExt.getState env).mapInv.find? info.name
     constants := (info.name.toString, Json.mkObj [
-      ("kernel", data), ("attributes", attributesJson env info.name),
+      ("kernel", data), ("attributes", attributesJson env extra info.name),
       ("equation_origin", toJson (equationOrigin.map nameRef))]) :: constants
-  let json := Json.mkObj [("schema_version", toJson (6 : Nat)),
+  let json := Json.mkObj [("schema_version", toJson (7 : Nat)),
     ("lean_version", toJson Lean.versionString), ("imports", imports), ("source", toJson input),
     ("index", NamingReferences.indexJson index result.commands
       (NamingReferences.syntaxExtras env header.raw trees result.commands caseRows)), ("constants", Json.mkObj constants),

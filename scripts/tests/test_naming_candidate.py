@@ -28,6 +28,15 @@ def snapshot(graph, roots):
 EMPTY = dict(schema_version=1, entries=[], retired_tokens=[], allowed_abbreviations=[])
 
 
+def union_bundle(constants, owner, guards=(), imports=()):
+    """One module's comparator bundle, as `read_exports` returns it."""
+    return dict(constants=dict(constants), roots=set(constants), guards=list(guards), attributes=[],
+                modules={owner: [[i, False, False, False] for i in imports]}, receipts=[], checks=[],
+                version='fixture', coalesced_equations=[], owners={n: owner for n in constants},
+                holders={n: {owner} for n in constants},
+                item_modules=dict(guards=[owner] * len(guards), attributes=[], checks=[]))
+
+
 class CandidateTests(unittest.TestCase):
     def setUp(self):
         self.graph = {'Dep': module('Dep.lean', 'a'),
@@ -115,10 +124,7 @@ class CandidateTests(unittest.TestCase):
                 CHECK.read_environments(paths, graph, ['One', 'Two'])
 
     def test_relocation_to_a_new_root_compares_the_union(self):
-        def bundle(constants, owner, guards=()):
-            return dict(constants=constants, roots=set(constants), guards=list(guards), attributes=[],
-                        modules={owner: []}, receipts=[], checks=[], version='fixture',
-                        coalesced_equations=[], owners={n: owner for n in constants})
+        bundle = union_bundle
         value = dict(kernel=['definition', 1])
         before_graph = {'Spec': module('Spec.lean', 'a'), 'Main': module('Main.lean', 'b', ['Spec'])}
         after_graph = dict(before_graph, Spec=module('Spec.lean', 'c'), Tests=module('Tests.lean', 'd', ['Spec']))
@@ -143,6 +149,102 @@ class CandidateTests(unittest.TestCase):
         self.after['module_bundles']['Tests']['guards'] = [['g', 1]]
         with self.assertRaisesRegex(CHECK.FIDELITY.Mismatch, 'module Spec became Tests'):
             CHECK.compare(self.before, self.after, dict(EMPTY, entries=[dict(rows[0], old='J.f', new='J.f')]))
+
+    def union_case(self):
+        """Two independent executables over a shared module; a third root appears."""
+        value = dict(kernel=['definition', 1])
+        graph = {'Spec': module('Spec.lean', 'a'), 'Main': module('Main.lean', 'b', ['Spec']),
+                 'Tool': module('Tool.lean', 'c', ['Spec'])}
+        after_graph = dict(graph, Spec=module('Spec.lean', 'd'), Tests=module('Tests.lean', 'e', ['Spec']))
+        self.before = snapshot(graph, ['Main', 'Tool'])
+        self.after = snapshot(after_graph, ['Main', 'Tool', 'Tests'])
+        self.before['module_bundles'] = {
+            'Spec': union_bundle({'J.f': value, 'J.check': value}, 'Spec'),
+            'Main': union_bundle({'main': value}, 'Main', [['safety', 1]], imports=['Spec']),
+            'Tool': union_bundle({'main': dict(kernel=['definition', 2])}, 'Tool', imports=['Spec'])}
+        self.after['module_bundles'] = copy.deepcopy(self.before['module_bundles'])
+        self.after['module_bundles']['Spec'] = union_bundle({'J.f': value}, 'Spec')
+        self.after['module_bundles']['Tests'] = union_bundle({'J.check': value}, 'Tests', imports=['Spec'])
+        rows = [dict(old='J.check', new='J.check', kind='relocation', layer='execution', rule='4',
+                     source='fixture', from_module='Spec', to_module='Tests')]
+        return dict(EMPTY, entries=rows)
+
+    def test_union_keeps_checks_in_their_modules(self):
+        mapping = self.union_case()
+        self.assertEqual(CHECK.compare(self.before, self.after, mapping)['environments']['<union>']['status'], 'OK')
+        # A guard moved from one executable to an unrelated one, with no
+        # relocation row linking the modules, fails.
+        bundles = self.after['module_bundles']
+        bundles['Main'] = union_bundle({'main': dict(kernel=['definition', 1])}, 'Main', imports=['Spec'])
+        bundles['Tool'] = union_bundle({'main': dict(kernel=['definition', 2])}, 'Tool', [['safety', 1]],
+                                       imports=['Spec'])
+        with self.assertRaisesRegex(CHECK.FIDELITY.Mismatch, r"guards: .*modules \['Main', 'Tool'\]"):
+            CHECK.compare(self.before, self.after, mapping)
+        # Along a relocation row the same move is accepted.
+        bundles['Tool'] = union_bundle({'main': dict(kernel=['definition', 2])}, 'Tool', imports=['Spec'])
+        bundles['Tests'] = union_bundle({'J.check': dict(kernel=['definition', 1])}, 'Tests', [['safety', 1]],
+                                        imports=['Spec'])
+        bundles['Spec'] = union_bundle({'J.f': dict(kernel=['definition', 1])}, 'Spec', [['safety', 1]])
+        bundles['Tests']['guards'] = []
+        bundles['Tests']['item_modules']['guards'] = []
+        self.before['module_bundles']['Main'] = union_bundle(
+            {'main': dict(kernel=['definition', 1])}, 'Main', imports=['Spec'])
+        self.before['module_bundles']['Spec'] = union_bundle(
+            {'J.f': dict(kernel=['definition', 1]), 'J.check': dict(kernel=['definition', 1])}, 'Spec', [['safety', 1]])
+        bundles['Spec'] = union_bundle({'J.f': dict(kernel=['definition', 1])}, 'Spec')
+        bundles['Tests'] = union_bundle({'J.check': dict(kernel=['definition', 1])}, 'Tests', [['safety', 1]],
+                                        imports=['Spec'])
+        self.assertEqual(CHECK.compare(self.before, self.after, mapping)['environments']['<union>']['status'], 'OK')
+
+    def test_union_generated_constants_keep_their_module(self):
+        mapping = self.union_case()
+        instance = dict(kernel=['definition', 7])
+        self.before['module_bundles']['Main']['constants']['instTagNat'] = instance
+        self.before['module_bundles']['Main']['holders']['instTagNat'] = {'Main'}
+        self.after['module_bundles']['Main'] = copy.deepcopy(self.before['module_bundles']['Main'])
+        self.assertEqual(CHECK.compare(self.before, self.after, mapping)['environments']['<union>']['status'], 'OK')
+        del self.after['module_bundles']['Main']['constants']['instTagNat']
+        self.after['module_bundles']['Tool']['constants']['instTagNat'] = instance
+        with self.assertRaisesRegex(CHECK.FIDELITY.Mismatch, r"generated constant instTagNat.*\['Main'\] became \['Tool'\]"):
+            CHECK.compare(self.before, self.after, mapping)
+
+    def test_union_compares_direct_imports_of_unmoved_modules(self):
+        mapping = self.union_case()
+        self.after['module_bundles']['Tool']['modules']['Tool'] = [['Spec', False, False, False],
+                                                                   ['Extra', False, False, False]]
+        with self.assertRaisesRegex(CHECK.FIDELITY.Mismatch, 'module Tool: direct imports changed'):
+            CHECK.compare(self.before, self.after, mapping)
+        # A relocation module's imports may change with what moved into it.
+        self.after['module_bundles']['Tool']['modules']['Tool'] = [['Spec', False, False, False]]
+        self.after['module_bundles']['Tests']['modules']['Tests'].append(['Extra', False, False, False])
+        self.assertEqual(CHECK.compare(self.before, self.after, mapping)['environments']['<union>']['status'], 'OK')
+
+    def test_union_coalesces_identical_realized_copies(self):
+        realized = dict(kernel=['theorem', 1], equation_origin=None)
+        bundles = {'A': union_bundle({'J.f': dict(kernel=['definition', 1])}, 'A'),
+                   'B': union_bundle({'J.g': dict(kernel=['definition', 2])}, 'B')}
+        for name in ('A', 'B'):
+            bundles[name]['constants']['J.f.eq_1'] = realized
+            bundles[name]['holders']['J.f.eq_1'] = {name}
+        merged = CHECK.union_environment(bundles)
+        self.assertEqual(merged['coalesced_equations'], ['J.f.eq_1'])
+        self.assertEqual(merged['holders']['J.f.eq_1'], {'A', 'B'})
+        self.assertNotIn('J.f.eq_1@A', merged['constants'])
+        bundles['B']['constants']['J.f.eq_1'] = dict(realized, kernel=['theorem', 2])
+        merged = CHECK.union_environment(bundles)
+        self.assertIn('J.f.eq_1@A', merged['constants'])
+        self.assertIn('J.f.eq_1@B', merged['constants'])
+
+    def test_module_row_renaming_a_root_compares_environments_pairwise(self):
+        graph = {'Dep': module('Dep.lean', 'a'), 'OldMain': module('OldMain.lean', 'b', ['Dep'])}
+        after_graph = {'Dep': module('Dep.lean', 'a'), 'NewMain': module('NewMain.lean', 'b', ['Dep'])}
+        self.before = snapshot(graph, ['OldMain'])
+        self.after = snapshot(after_graph, ['NewMain'])
+        mapping = dict(EMPTY, entries=[dict(old='OldMain', new='NewMain', kind='module', layer='execution',
+                                            rule='4', source='fixture')])
+        self.before['candidate']['source_dirs'] = self.after['candidate']['source_dirs']
+        result = CHECK.compare(self.before, self.after, mapping)
+        self.assertEqual(set(result['environments']), {'OldMain'})
 
     def test_dependency_cannot_be_missing_from_closure(self):
         self.assertEqual(CHECK.closure(self.graph, ['Client']), ['Dep', 'Client'])

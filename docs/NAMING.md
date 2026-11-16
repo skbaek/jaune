@@ -462,21 +462,42 @@ not authored by spelling: its name follows other names and changes without a
 source edit, so it is matched by its kernel graph like a generated constant.
 Each authored constant must stay in its (module-renamed) module unless a
 relocation row moves it to the row's target; an unrecorded move fails
-comparison, as does a relocation row whose source module is wrong.
+comparison, as does a relocation row whose source module is wrong. A
+generated constant must stay in the modules that hold it (several, for a
+realized copy), up to module rows and relocation links (below).
 
 Effective attributes include simp direction/priority, unfolding entries,
 `csimp` and its replacement, inline settings, reducibility, instance priority/
-scope/synthesis order and `implemented_by`. Whole commands carrying explicit
-attributes are additionally compared with compiler-resolved identifiers; this
-catches unfamiliar explicit attributes without treating their arguments as
-free text. It is deliberately stronger than comparing only final attribute
-flags. Local/scoped attribute commands are currently refused because their
-scope histories need a separate comparison.
+scope/synthesis order and `implemented_by`. Schema 7 adds the attributes
+outside that set that change elaboration or compilation: `match_pattern`,
+`default_instance` (class, priority and position in the class's list),
+custom `induction`/`cases` eliminators, `ext` entries, elaborator and macro
+registrations (`macro`, `term_elab`, `command_elab`, `tactic`, with their
+syntax kinds), `elab_as_elim`, `elab_without_expected_type`, `specialize`,
+`nospecialize`, `never_extract`, `export`, and the `protected` and
+`noncomputable` modifiers. It also records instance order: each instance's
+rank among the module's instances with the same discrimination-tree keys.
+Lean tries equal-priority instances latest first, so swapping two anonymous
+instances whose kernel graphs differ fails comparison even though their
+compiler names swap with them.
+
+Explicit attribute syntax is additionally compared with compiler-resolved
+identifiers, keyed per declaration: the attribute list in each declaration's
+modifiers is recorded with that declaration's name, and for a declaration
+Lean names itself (an anonymous `instance`) with the name the index records at
+its keyword. An attribute moved between the declarations of one `mutual`
+block, or between two anonymous instances, fails even when no effective
+record tracks it. Other attribute syntax in a command (`attribute [...]`
+commands) is recorded with the command's declaration names. This catches
+unfamiliar explicit attributes without treating their arguments as free text,
+and is deliberately stronger than comparing only final attribute flags.
+Local/scoped attribute commands are currently refused because their scope
+histories need a separate comparison.
 
 Guards are compared as a multiset of elaborated closed Boolean or proposition
-expressions,
-so moving a guard to another exported module preserves it, while changing or
-dropping it fails. Parsed and expanded command information is inspected.
+expressions, each tagged with its module, so changing or dropping a guard
+fails, and so does moving it to another module unless a relocation row links
+the two modules (below). Parsed and expanded command information is inspected.
 The original syntax node selects the complete guard; macro-generated branches
 that share its source span do not substitute for it.
 Proposition guards retain the proposition before Lean inserts its Bool coercion,
@@ -494,6 +515,14 @@ are not misreported as successful Boolean guards or missing kernel constants.
 Changes to a checked expression, audit target, allowed set or message filter
 cannot disappear merely because the command creates no constant.
 
+Module scope: every guard, checked command and attribute record keeps the
+module it is in. Module rows rename modules; a relocation row links its two
+modules, so checks and generated constants may move between them and
+nowhere else. The direct imports of every module that no relocation row
+touches are compared under module rows; a relocation module's imports may
+change, and elsewhere only edges to relocation modules may be added or
+dropped (a user of the moved declaration imports its new module).
+
 This syntax check is deliberately stricter than expression equality: diagnostic
 text remains literal and changed spellings inside expected messages are not
 silently accepted. Those golden changes still need their reserved gate packet
@@ -502,7 +531,8 @@ Other hash commands (such as `#guard_expr`) are refused. The `#[...]` array
 notation is not a hash command.
 
 The low-level comparator's verdict remains `exported-modules`. It can compare
-archived schema-3, schema-4 and schema-5 exports as well as schema 6, but neither a list
+archived schema-3 to schema-6 exports as well as schema 7 (the candidate
+workflow below requires schema 7), but neither a list
 of bundles nor an import list alone binds a candidate. Schema 4 introduced
 records of the transitive
 imports actually loaded by the frontend, with the logical paths of each
@@ -578,12 +608,18 @@ each environment rather than summing overlapping dependency counts. With an
 unchanged root set, moving a check between independent environments fails
 comparison. A standalone-classification change still refuses.
 
-When relocation changes the set of maximal environment roots (a new test
-module that nothing imports), and only when the map has module or relocation
-rows, comparison uses the union of all exported modules as one scope: guards
-and checks are a single multiset, so a hand-moved guard is compared as an
-expression wherever it lands; a name defined in two independent modules is
-keyed per module. Otherwise each environment is still compared separately.
+Module rows may rename an environment root; each environment is then
+compared with its image. When relocation changes the set of maximal
+environment roots beyond that (a new test module that nothing imports), and
+only when the map has module or relocation rows, comparison uses all
+exported modules as one scope. That scope does not pool unrelated roots:
+every check stays tagged with its module, so a hand-moved guard is compared
+as an expression only where a relocation row links its old and new modules;
+a guard, `#eval` or axiom-audit command moved between unrelated roots fails,
+and so does a generated constant (an anonymous instance) moved between them.
+Identical non-authored copies of one name coalesce as within an import
+environment; any other name defined in two independent modules (each
+executable's `main`) is keyed per module.
 
 Comparison checks both old and new graphs. Every changed Lean source and every
 transitively affected local importer must be exported, even when the importer's
@@ -597,11 +633,22 @@ requires explicit relocation support and is currently refused.
 `--inventory scripts/naming-inventory.json` lets a registered, digest-pinned
 exclusion that both candidates hold byte-identical (the historical
 `flatten-pilot.lean`) stand in for an affected importer that cannot be
-exported; the verdict lists it under `excluded_importers`. Identifiers inside
-elaborated syntax quotations (`Lean.Syntax.ident`) that pre-resolve to
-declarations are compared by those declarations under the map, not by their
-spelling, so a capture qualification (`B256` -> `Jaune.U256`) inside a macro
-is not a difference; without pre-resolution the spelling is compared.
+exported; the verdict lists it under `excluded_importers`.
+
+Identifiers inside elaborated syntax quotations (`Lean.Syntax.ident`) that
+pre-resolve to declarations are compared twice. The pre-resolved declarations
+are compared under the map. The spelling is observable (`Syntax.getId`
+returns it), so it must be exactly the apply tool's names-only respelling of
+the old spelling under the map, at the depth the map implies; the raw text
+may differ from it only by `«»` escapes. A capture qualification inside a
+quotation (`B256` -> `Jaune.U256`) therefore fails comparison: it changes
+what a consumer that inspects the identifier sees. Such a site needs a
+separate, reviewed change (or a map that avoids the capture). Without
+pre-resolution the whole quotation is compared literally.
+
+Captures must come from the schema-7 exporter on both sides; `compare`
+refuses older exports (recapture with the current tooling). Planning reads
+only sources and references and still accepts schema 4 to 7.
 
 A successful result is labelled `candidate-affected-local-closure`, with both
 candidate inventory digests. The Git HEAD alone is not the input identity: a

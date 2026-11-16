@@ -91,7 +91,7 @@ class NamingFidelityTests(unittest.TestCase):
             result = self.run_check()
             self.assertEqual(result['generated_constants'], 1)
 
-    def test_quoted_identifier_compares_preresolution_not_spelling(self):
+    def test_quoted_identifier_compares_spelling_and_preresolution_under_map(self):
         def c(n):
             return ['const', ['name', n], []]
         def app(f, *xs):
@@ -100,20 +100,49 @@ class NamingFidelityTests(unittest.TestCase):
             return f
         def name(*parts):
             return app(c(f'Lean.Name.mkStr{len(parts)}'), *[['str', x] for x in parts])
-        def ident(raw, parts, decl):
+        def ident(raw, parts, decl, scoped=False):
             pre = app(c('List.cons'), c('T'), app(c('Lean.Syntax.Preresolved.decl'), name(*decl.split('.')),
                                                   app(c('List.nil'), c('String'))), app(c('List.nil'), c('T')))
-            return app(c('Lean.Syntax.ident'), c('Lean.SourceInfo.none'), ['str', raw], name(*parts), pre)
-        before = dict(kernel=ident('B256', ['B256'], 'Jaune.B256'), attributes={})
-        after = dict(kernel=ident('Jaune.U256', ['Jaune', 'U256'], 'Jaune.U256'), attributes={})
-        self.before = snapshot({'N.m': CHECK.quoted_identifiers(before)}, ['N.m'])
-        self.after = snapshot({'N.m': CHECK.quoted_identifiers(after)}, ['N.m'])
-        self.renames = {'Jaune.B256': 'Jaune.U256'}
+            val = name(*parts)
+            if scoped:
+                val = app(c('Lean.addMacroScope'), ['bvar', 0], val, ['bvar', 1])
+            return app(c('Lean.Syntax.ident'), c('Lean.SourceInfo.none'),
+                       app(c("String.toRawSubstring'"), ['str', raw]), val, pre)
+        def verdict(before, after):
+            self.before = snapshot({'N.m': CHECK.quoted_identifiers(dict(kernel=before, attributes={}))}, ['N.m'])
+            self.after = snapshot({'N.m': CHECK.quoted_identifiers(dict(kernel=after, attributes={}))}, ['N.m'])
+            return self.run_check()['status']
+        self.renames = CHECK.MAP.Renamer([dict(old='Jaune.B256', new='Jaune.U256', kind='declaration'),
+                                          dict(old='Jaune.Tx.receiver', new='Jaune.Tx.to', kind='field')])
+        for scoped in (False, True):
+            # The names-only respelling passes, at the spelled depth.
+            self.assertEqual(verdict(ident('B256', ['B256'], 'Jaune.B256', scoped),
+                                     ident('U256', ['U256'], 'Jaune.U256', scoped)), 'OK')
+            self.assertEqual(verdict(ident('Jaune.B256', ['Jaune', 'B256'], 'Jaune.B256', scoped),
+                                     ident('Jaune.U256', ['Jaune', 'U256'], 'Jaune.U256', scoped)), 'OK')
+            # A qualification changes what `Syntax.getId` returns.
+            with self.assertRaisesRegex(CHECK.Mismatch, 'quoted spelling'):
+                verdict(ident('B256', ['B256'], 'Jaune.B256', scoped),
+                        ident('Jaune.U256', ['Jaune', 'U256'], 'Jaune.U256', scoped))
+            # The same spelling resolving to another declaration fails too.
+            with self.assertRaisesRegex(CHECK.Mismatch, 'reference'):
+                verdict(ident('B256', ['B256'], 'Jaune.B256', scoped),
+                        ident('U256', ['U256'], 'JauneConsensus.U256', scoped))
+        # Quotations inside guards follow the same rule.
+        self.before = snapshot({'N.m': constant()}, ['N.m'],
+                               guards=[CHECK.quoted_identifiers(ident('B256', ['B256'], 'Jaune.B256'))])
+        self.after = snapshot({'N.m': constant()}, ['N.m'],
+                              guards=[CHECK.quoted_identifiers(ident('U256', ['U256'], 'Jaune.U256'))])
         self.assertEqual(self.run_check()['status'], 'OK')
-        other = dict(kernel=ident('Jaune.U256', ['Jaune', 'U256'], 'JauneConsensus.U256'), attributes={})
-        self.after = snapshot({'N.m': CHECK.quoted_identifiers(other)}, ['N.m'])
-        with self.assertRaises(CHECK.Mismatch):
+        self.after['guards'] = [CHECK.quoted_identifiers(ident('Jaune.U256', ['Jaune', 'U256'], 'Jaune.U256'))]
+        with self.assertRaisesRegex(CHECK.Mismatch, 'guards'):
             self.run_check()
+        # Keyword escapes in the raw text are spelling only.
+        self.assertEqual(verdict(ident('Tx.receiver', ['Tx', 'receiver'], 'Jaune.Tx.receiver'),
+                                 ident('Tx.«to»', ['Tx', 'to'], 'Jaune.Tx.to')), 'OK')
+        with self.assertRaisesRegex(CHECK.Mismatch, 'raw text'):
+            verdict(ident('Tx.receiver', ['Tx', 'receiver'], 'Jaune.Tx.receiver'),
+                    ident('Tx.other', ['Tx', 'to'], 'Jaune.Tx.to'))
 
     def test_exact_rename_and_reference_mapping(self):
         self.before['guards'] = [ref('N.old')]
@@ -236,6 +265,38 @@ class NamingFidelityTests(unittest.TestCase):
         self.assertEqual(self.run_check()['status'], 'OK')
         self.after['guards'].pop()
         with self.assertRaisesRegex(CHECK.Mismatch, 'guards'):
+            self.run_check()
+
+    def test_checks_stay_in_their_module_unless_a_relocation_row_links_it(self):
+        for key in ('guards', 'checks', 'attributes'):
+            self.setUp()
+            self.before[key], self.after[key] = [['nat', 1]], [['nat', 1]]
+            self.before['item_modules'] = {key: ['A']}
+            self.after['item_modules'] = {key: ['B']}
+            with self.assertRaisesRegex(CHECK.Mismatch, rf"{key}: .*modules \['A', 'B'\]"):
+                self.run_check()
+            self.renames = self.entries(('N.old', 'N.new', 'relocation', dict(from_module='A', to_module='B')))
+            self.assertEqual(self.run_check()['status'], 'OK')
+            # A module row renames the module the check stays in.
+            self.renames = self.entries(('N.old', 'N.new', 'declaration', {}), ('A', 'B', 'module', {}))
+            self.assertEqual(self.run_check()['status'], 'OK')
+
+    def test_generated_constants_keep_their_modules(self):
+        self.before['constants']['gen'] = constant(5)
+        self.after['constants']['gen2'] = constant(5)
+        self.before['holders'], self.after['holders'] = {'gen': {'A'}}, {'gen2': {'A'}}
+        self.assertEqual(self.run_check()['status'], 'OK')
+        self.after['holders'] = {'gen2': {'B'}}
+        with self.assertRaisesRegex(CHECK.Mismatch, "generated constant gen .*'A'.* became .*'B'"):
+            self.run_check()
+
+    def test_direct_imports_compare_under_module_rows(self):
+        self.before['modules'] = {'A': [['Dep', False, False, False]], 'Dep': []}
+        self.after['modules'] = {'A': [['NewDep', False, False, False]], 'NewDep': []}
+        self.renames = self.entries(('N.old', 'N.new', 'declaration', {}), ('Dep', 'NewDep', 'module', {}))
+        self.assertEqual(self.run_check()['status'], 'OK')
+        self.after['modules']['A'].append(['Other', False, False, False])
+        with self.assertRaisesRegex(CHECK.Mismatch, 'module A: direct imports changed'):
             self.run_check()
 
     def test_explicit_attribute_command_cannot_move_to_another_constant(self):
