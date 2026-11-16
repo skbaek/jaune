@@ -8,13 +8,13 @@ namespace NamingRealField
 
 open Jaune
 
-def transaction : Tx := {
-  nonce := 0, gas := 11, value := 0, data := [], v := 0, r := [], s := []
-  type := .zero 0 none }
+def transaction : Transaction := {
+  nonce := 0, gasLimit := 11, value := 0, data := [], v := 0, r := [], s := []
+  type := .legacy 0 none }
 
-def transactionGas (tx : Tx) : Nat := tx.gas
+def transactionGas (tx : Transaction) : Nat := tx.gasLimit
 def messageGas (msg : Msg) : Nat := msg.gas
-def updateTransaction (tx : Tx) : Tx := { tx with gas := tx.gas + 1 }
+def updateTransaction (tx : Transaction) : Transaction := { tx with gasLimit := tx.gasLimit + 1 }
 def updateMessage (msg : Msg) : Msg := { msg with gas := msg.gas + 2 }
 
 theorem transaction_update : transactionGas (updateTransaction transaction) = 12 := by

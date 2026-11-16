@@ -27,11 +27,11 @@ namespace JauneConsensus
 open Jaune
 
 /-- The ciphersuite's domain separation tag for `hash_to_point` (section 4.2.3). -/
-def blsSigDst : Bytes :=
+def blsSignatureDst : Bytes :=
   "BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_".toUTF8.toList
 
 /-- `hash_to_point` of the ciphersuite. -/
-def hashToPoint (message : Bytes) : Except String BLSP2 := hashToG2 message blsSigDst
+def hashToPoint (message : Bytes) : Except String Bls12G2 := hashToG2 message blsSignatureDst
 
 /-- `G2_POINT_AT_INFINITY` (specs/altair/bls.md). -/
 def g2PointAtInfinity : Bytes := (0xc0 : UInt8) :: List.replicate 95 0
@@ -95,7 +95,7 @@ def aggregateVerify (pks messages : List Bytes) (signature : Bytes) : Bool :=
     | .ok r =>
       if !g2SubgroupCheck r then false                        -- 3.
       else
-        let pairs : Option (List (BLSP × BLSP2)) :=           -- 5.-9.
+        let pairs : Option (List (Bls12G1 × Bls12G2)) :=           -- 5.-9.
           (pks.zip messages).mapM fun (pk, m) =>
             if !keyValidate pk then none                      -- 6.
             else match pubkeyToPoint pk, hashToPoint m with   -- 7.-8.

@@ -25,7 +25,7 @@ open Jaune
 /-- `UINT64_MAX = uint64(2**64 - 1)` -/
 def UINT64_MAX : U64 := U64.max
 /-- `UINT64_MAX_SQRT = uint64(4294967295)` -/
-def UINT64_MAX_SQRT : U64 := U64.lit 4294967295
+def UINT64_MAX_SQRT : U64 := U64.literal 4294967295
 /-- `GENESIS_SLOT = Slot(0)` -/
 def GENESIS_SLOT : U64 := U64.zero
 /-- `GENESIS_EPOCH = Epoch(0)` -/
@@ -43,30 +43,30 @@ def VERSIONED_HASH_VERSION_KZG : UInt8 := 0x01
 
 /-- A preset or config value as `uint64`. The generated records hold `Nat`; the spec types these
 variables `uint64` (or a `uint64` alias), so the conversion rejects a value outside the type. -/
-@[inline] def u64 (n : Nat) (site : String) : M U64 := U64.ofNat? n site
+@[inline] def u64 (n : Nat) (site : String) : Fallible U64 := U64.ofNat? n site
 
 /-! ## Math (`specs/phase0/beacon-chain.md`, "Math") -/
 
 /-- `integer_squareroot(n)`: the largest `x` with `x**2 <= n`. Newton iteration exactly as the
 spec writes it; terminates because `x` strictly decreases. -/
-def integerSquareroot (n : U64) : M U64 :=
+def integerSquareroot (n : U64) : Fallible U64 :=
   if n == UINT64_MAX then pure UINT64_MAX_SQRT else do
   let x := n
-  let y ← (← x.add? U64.one "integer_squareroot: x + 1").div? (U64.lit 2) "integer_squareroot"
+  let y ← (← x.add? U64.one "integer_squareroot: x + 1").div? (U64.literal 2) "integer_squareroot"
   loop x y
 where
-  loop (x y : U64) : M U64 :=
+  loop (x y : U64) : Fallible U64 :=
     if h : y < x then do
       let x' := y
       let q ← n.div? x' "integer_squareroot: n // x"
-      let y' ← (← x'.add? q "integer_squareroot: x + n // x").div? (U64.lit 2) "integer_squareroot"
+      let y' ← (← x'.add? q "integer_squareroot: x + n // x").div? (U64.literal 2) "integer_squareroot"
       loop x' y'
     else pure x
   termination_by x.toNat
   decreasing_by exact h
 
 /-- `xor(bytes_1, bytes_2)`: bytewise exclusive-or of two `Bytes32`. -/
-def xor (bytes1 bytes2 : B256) : B256 := B256.xor bytes1 bytes2
+def xor (bytes1 bytes2 : Jaune.U256) : Jaune.U256 := U256.xor bytes1 bytes2
 
 /-- `uint_to_bytes(uintN(n))`: the `width`-byte little-endian (`ENDIANNESS = 'little'`)
 encoding of `n` (`n < 256^width` where the caller's type guarantees it). -/
@@ -79,7 +79,7 @@ def bytesToUint (data : Bytes) : Nat :=
 
 /-- `bytes_to_uint64(data) = uint64(int.from_bytes(data, ENDIANNESS))`: rejects a value outside
 `uint64` (possible only when `data` is longer than eight bytes). -/
-def bytesToUint64 (data : Bytes) : M U64 := U64.ofNat? (bytesToUint data) "bytes_to_uint64"
+def bytesToUint64 (data : Bytes) : Fallible U64 := U64.ofNat? (bytesToUint data) "bytes_to_uint64"
 
 /-- `saturating_sub(a, b)` on Python `int`: `a - b if a > b else 0`. -/
 def saturatingSub (a b : Nat) : Nat := if a > b then a - b else 0
@@ -87,17 +87,17 @@ def saturatingSub (a b : Nat) : Nat := if a > b then a - b else 0
 /-! ## Crypto (`specs/phase0/beacon-chain.md`, "Crypto") -/
 
 /-- `hash(data)`: SHA-256. -/
-def hash (data : Bytes) : B256 := Bytes.sha256 data
+def hash (data : Bytes) : Jaune.U256 := Bytes.sha256 data
 
 /-- `hash(data)` as bytes (for slicing, as the spec does with `hash(...)[a:b]`). -/
 def hashBytes (data : Bytes) : Bytes := (hash data).toBytes
 
 /-- Big-endian bytes to `B256` (a `Bytes32` built from 32 bytes). -/
-def B256.ofBytes (bs : Bytes) : B256 :=
-  (bs.foldl (fun (n : Nat) (b : UInt8) => 256 * n + b.toNat) 0).toB256
+def Bytes32.ofBytes (bs : Bytes) : Jaune.U256 :=
+  (bs.foldl (fun (n : Nat) (b : UInt8) => 256 * n + b.toNat) 0).toU256
 
 /-- `Bytes32` equality. -/
-def B256.beq (a b : B256) : Bool := a.toBytes == b.toBytes
+def Bytes32.beq (a b : Jaune.U256) : Bool := a.toBytes == b.toBytes
 
 /-! ## Predicates -/
 
@@ -105,8 +105,8 @@ def B256.beq (a b : B256) : Bool := a.toBytes == b.toBytes
 at `v1.7.0-beta.4`): `False` unless `depth == len(branch)` (new in that release; before it a short
 `branch` raised `IndexError` and a long one had its tail ignored), then
 `compute_merkle_branch_root(leaf, branch, depth, index) == root`. -/
-def isValidMerkleBranch (leaf : B256) (branch : List B256) (depth index : U64) (root : B256) :
-    M Bool := do
+def isValidMerkleBranch (leaf : Jaune.U256) (branch : List Jaune.U256) (depth index : U64) (root : Jaune.U256) :
+    Fallible Bool := do
   if depth.toNat != branch.length then return false
   let br := branch.toArray
   let mut value := leaf
@@ -116,25 +116,25 @@ def isValidMerkleBranch (leaf : B256) (branch : List B256) (depth index : U64) (
       value := hash (b.toBytes ++ value.toBytes)
     else
       value := hash (value.toBytes ++ b.toBytes)
-  pure (B256.beq value root)
+  pure (Bytes32.beq value root)
 
 /-- `is_compounding_withdrawal_credential(withdrawal_credentials)`
 (`specs/electra/beacon-chain.md`): `withdrawal_credentials[:1] == COMPOUNDING_WITHDRAWAL_PREFIX`. -/
-def isCompoundingWithdrawalCredential (withdrawalCredentials : B256) : Bool :=
+def isCompoundingWithdrawalCredential (withdrawalCredentials : Jaune.U256) : Bool :=
   withdrawalCredentials.toBytes.take 1 == [COMPOUNDING_WITHDRAWAL_PREFIX]
 
 /-! ## Misc (`specs/phase0/beacon-chain.md`, "Misc") -/
 
 /-- `compute_epoch_at_slot(slot) = Epoch(slot // SLOTS_PER_EPOCH)`. -/
-def computeEpochAtSlot (P : Preset) (slot : U64) : M U64 := do
+def computeEpochAtSlot (P : Preset) (slot : U64) : Fallible U64 := do
   slot.div? (← u64 P.SLOTS_PER_EPOCH "SLOTS_PER_EPOCH") "compute_epoch_at_slot"
 
 /-- `compute_start_slot_at_epoch(epoch) = Slot(epoch * SLOTS_PER_EPOCH)`. -/
-def computeStartSlotAtEpoch (P : Preset) (epoch : U64) : M U64 := do
+def computeStartSlotAtEpoch (P : Preset) (epoch : U64) : Fallible U64 := do
   epoch.mul? (← u64 P.SLOTS_PER_EPOCH "SLOTS_PER_EPOCH") "compute_start_slot_at_epoch"
 
 /-- `compute_activation_exit_epoch(epoch) = Epoch(epoch + 1 + MAX_SEED_LOOKAHEAD)`. -/
-def computeActivationExitEpoch (P : Preset) (epoch : U64) : M U64 := do
+def computeActivationExitEpoch (P : Preset) (epoch : U64) : Fallible U64 := do
   let e ← epoch.add? U64.one "compute_activation_exit_epoch: epoch + 1"
   e.add? (← u64 P.MAX_SEED_LOOKAHEAD "MAX_SEED_LOOKAHEAD") "compute_activation_exit_epoch"
 
@@ -142,12 +142,12 @@ def computeActivationExitEpoch (P : Preset) (epoch : U64) : M U64 := do
 
 /-- `add_flag(flags, flag_index)`: `flag = ParticipationFlags(2**flag_index)`, which rejects when
 `flag_index ≥ 8`; then `flags | flag`. -/
-def addFlag (flags : U8) (flagIndex : Nat) : M U8 := do
+def addFlag (flags : U8) (flagIndex : Nat) : Fallible U8 := do
   let flag : U8 ← UIntN.ofNat? (2 ^ flagIndex) "add_flag: ParticipationFlags(2**flag_index)"
   UIntN.ofNat? (flags.toNat ||| flag.toNat) "add_flag: flags | flag"
 
 /-- `has_flag(flags, flag_index)`: `flags & flag == flag`. -/
-def hasFlag (flags : U8) (flagIndex : Nat) : M Bool := do
+def hasFlag (flags : U8) (flagIndex : Nat) : Fallible Bool := do
   let flag : U8 ← UIntN.ofNat? (2 ^ flagIndex) "has_flag: ParticipationFlags(2**flag_index)"
   pure (flags.toNat &&& flag.toNat == flag.toNat)
 
@@ -156,13 +156,13 @@ def hasFlag (flags : U8) (flagIndex : Nat) : M Bool := do
 /-- `kzg_commitment_to_versioned_hash(kzg_commitment)`:
 `VERSIONED_HASH_VERSION_KZG + hash(kzg_commitment)[1:]`. The commitment is the 48-byte
 `KZGCommitment`; its length is the SSZ type's guarantee. -/
-def kzgCommitmentToVersionedHash (kzgCommitment : Bytes) : B256 :=
-  B256.ofBytes (VERSIONED_HASH_VERSION_KZG :: (hashBytes kzgCommitment).drop 1)
+def kzgCommitmentToVersionedHash (kzgCommitment : Bytes) : Jaune.U256 :=
+  Bytes32.ofBytes (VERSIONED_HASH_VERSION_KZG :: (hashBytes kzgCommitment).drop 1)
 
 /-! ## Fulu misc (`specs/fulu/beacon-chain.md`, "Misc") -/
 
 /-- The zero root `Bytes32()` (also `Root()`). -/
-def zeroRoot : B256 := Bytes.toB256 (List.replicate 32 0)
+def zeroRoot : Jaune.U256 := Bytes.toU256 (List.replicate 32 0)
 
 /-- `BlobParameters(epoch, max_blobs_per_block)`. -/
 structure BlobParameters where
@@ -173,7 +173,7 @@ structure BlobParameters where
 /-- `get_blob_parameters(epoch)`: the latest `BLOB_SCHEDULE` entry (sorted by `EPOCH`,
 descending, stably, as Python's `sorted(..., reverse=True)`) whose `EPOCH` is at most `epoch`;
 otherwise Electra's parameters. Building `BlobParameters` types both fields `uint64`. -/
-def getBlobParameters (cfg : Config) (epoch : U64) : M BlobParameters := do
+def getBlobParameters (cfg : Config) (epoch : U64) : Fallible BlobParameters := do
   let sorted := cfg.BLOB_SCHEDULE.mergeSort (fun a b => decide (b.EPOCH ≤ a.EPOCH))
   match sorted.find? (fun e => decide (e.EPOCH ≤ epoch.toNat)) with
   | some e =>
@@ -185,44 +185,44 @@ def getBlobParameters (cfg : Config) (epoch : U64) : M BlobParameters := do
 /-! ## Tests -/
 
 -- Test literals; every one used below is under `2^64`, so `ofNat?` accepts it.
-private def n64 (n : Nat) : U64 :=
+private def u64Literal (n : Nat) : U64 :=
   match U64.ofNat? n with
   | .ok x => x
   | .error _ => U64.max
-private def sqrt? (n : Nat) : Option Nat := ((integerSquareroot (n64 n)).toOption).map (·.toNat)
+private def sqrt? (n : Nat) : Option Nat := ((integerSquareroot (u64Literal n)).toOption).map (·.toNat)
 
 #guard (List.range 50).all fun n => sqrt? n == some n.sqrt
 #guard sqrt? (2 ^ 64 - 1) == some 4294967295
 #guard sqrt? (2 ^ 64 - 2) == some 4294967295
 #guard sqrt? (2 ^ 32 * 2 ^ 32 - 2 ^ 33) == some (2 ^ 32 - 2)
 #guard sqrt? 1000000007 == some 31622
-#guard B256.beq (xor 0xff00 0x0ff0) 0xf0f0
+#guard Bytes32.beq (xor 0xff00 0x0ff0) 0xf0f0
 #guard bytesToUint [1, 2] == 0x0201
 #guard (bytesToUint64 (List.replicate 9 0xff)).toBool == false
 #guard ((bytesToUint64 (List.replicate 8 0xff)).toOption.map (·.toNat)) == some (2 ^ 64 - 1)
 #guard uintToBytes 4 0x01020304 == [4, 3, 2, 1]
 #guard saturatingSub 3 5 == 0 && saturatingSub 5 3 == 2
-#guard ((computeEpochAtSlot .mainnet (n64 65)).toOption.map (·.toNat)) == some 2
-#guard ((computeStartSlotAtEpoch .minimal (n64 3)).toOption.map (·.toNat)) == some 24
-#guard (computeStartSlotAtEpoch .mainnet (n64 (2 ^ 60))).toBool == false
-#guard ((computeActivationExitEpoch .mainnet (n64 10)).toOption.map (·.toNat)) == some 15
+#guard ((computeEpochAtSlot .mainnet (u64Literal 65)).toOption.map (·.toNat)) == some 2
+#guard ((computeStartSlotAtEpoch .minimal (u64Literal 3)).toOption.map (·.toNat)) == some 24
+#guard (computeStartSlotAtEpoch .mainnet (u64Literal (2 ^ 60))).toBool == false
+#guard ((computeActivationExitEpoch .mainnet (u64Literal 10)).toOption.map (·.toNat)) == some 15
 #guard (computeActivationExitEpoch .mainnet FAR_FUTURE_EPOCH).toBool == false
 #guard ((addFlag UIntN.zero 2).toOption.map (·.toNat)) == some 4
 #guard (addFlag UIntN.zero 8).toBool == false
 #guard (((addFlag UIntN.zero 1).toOption).bind (fun f => (hasFlag f 1).toOption)) == some true
 #guard (((addFlag UIntN.zero 1).toOption).bind (fun f => (hasFlag f 0).toOption)) == some false
-#guard isCompoundingWithdrawalCredential (B256.ofBytes (0x02 :: List.replicate 31 0))
-#guard !isCompoundingWithdrawalCredential (B256.ofBytes (0x01 :: List.replicate 31 0))
+#guard isCompoundingWithdrawalCredential (Bytes32.ofBytes (0x02 :: List.replicate 31 0))
+#guard !isCompoundingWithdrawalCredential (Bytes32.ofBytes (0x01 :: List.replicate 31 0))
 -- a depth-1 branch: root = hash(leaf ++ sibling) at index 0, hash(sibling ++ leaf) at index 1
-#guard (isValidMerkleBranch 1 [2] (n64 1) (n64 0) (hash ((1 : B256).toBytes ++ (2 : B256).toBytes))).toOption == some true
-#guard (isValidMerkleBranch 1 [2] (n64 1) (n64 1) (hash ((2 : B256).toBytes ++ (1 : B256).toBytes))).toOption == some true
-#guard (isValidMerkleBranch 1 [2] (n64 1) (n64 1) (hash ((1 : B256).toBytes ++ (2 : B256).toBytes))).toOption == some false
-#guard (isValidMerkleBranch 1 [] (n64 1) (n64 0) 0).toOption == some false
-#guard (isValidMerkleBranch 1 [2, 3] (n64 1) (n64 0) (hash ((1 : B256).toBytes ++ (2 : B256).toBytes))).toOption == some false
+#guard (isValidMerkleBranch 1 [2] (u64Literal 1) (u64Literal 0) (hash ((1 : Jaune.U256).toBytes ++ (2 : Jaune.U256).toBytes))).toOption == some true
+#guard (isValidMerkleBranch 1 [2] (u64Literal 1) (u64Literal 1) (hash ((2 : Jaune.U256).toBytes ++ (1 : Jaune.U256).toBytes))).toOption == some true
+#guard (isValidMerkleBranch 1 [2] (u64Literal 1) (u64Literal 1) (hash ((1 : Jaune.U256).toBytes ++ (2 : Jaune.U256).toBytes))).toOption == some false
+#guard (isValidMerkleBranch 1 [] (u64Literal 1) (u64Literal 0) 0).toOption == some false
+#guard (isValidMerkleBranch 1 [2, 3] (u64Literal 1) (u64Literal 0) (hash ((1 : Jaune.U256).toBytes ++ (2 : Jaune.U256).toBytes))).toOption == some false
 -- `get_blob_parameters` over the mainnet schedule (Fulu at 411392, BPO1 at 412672, BPO2 at 419072)
-#guard ((getBlobParameters .mainnet (n64 411392)).toOption.map (fun p => (p.epoch.toNat, p.maxBlobsPerBlock.toNat))) == some (364032, 9)
-#guard ((getBlobParameters .mainnet (n64 412672)).toOption.map (fun p => (p.epoch.toNat, p.maxBlobsPerBlock.toNat))) == some (412672, 15)
-#guard ((getBlobParameters .mainnet (n64 500000)).toOption.map (fun p => (p.epoch.toNat, p.maxBlobsPerBlock.toNat))) == some (419072, 21)
+#guard ((getBlobParameters .mainnet (u64Literal 411392)).toOption.map (fun p => (p.epoch.toNat, p.maxBlobsPerBlock.toNat))) == some (364032, 9)
+#guard ((getBlobParameters .mainnet (u64Literal 412672)).toOption.map (fun p => (p.epoch.toNat, p.maxBlobsPerBlock.toNat))) == some (412672, 15)
+#guard ((getBlobParameters .mainnet (u64Literal 500000)).toOption.map (fun p => (p.epoch.toNat, p.maxBlobsPerBlock.toNat))) == some (419072, 21)
 #guard (kzgCommitmentToVersionedHash (List.replicate 48 0)).toBytes.head? == some 0x01
 
 end JauneConsensus

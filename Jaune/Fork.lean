@@ -279,7 +279,7 @@ structure SettlementRules : Type where
 deriving DecidableEq, Repr
 
 /-- Transaction admission and intrinsic-cost switches that move before Prague. -/
-structure TxRules : Type where
+structure TransactionRules : Type where
   /-- The largest admitted EIP-2718 type: 0 before Berlin, 1 Berlin, 2 London,
   3 Cancun, 4 Prague. Monotone along the chain, so one number suffices. -/
   maxType : Nat
@@ -303,7 +303,7 @@ deriving DecidableEq, Repr
 
 /-- Proof-of-work consensus numbers (Byzantium .. Gray Glacier). `none` from
 Paris, where the seal leaves the execution layer. -/
-structure PowRules : Type where
+structure ProofOfWorkRules : Type where
   /-- `BLOCK_REWARD`, in wei: 3 ETH (Byzantium), 2 ETH (Constantinople on). -/
   blockReward : Nat
   /-- `BOMB_DELAY_BLOCKS`: 3M, 5M, 9M, 9.7M, 10.7M, 11.4M. -/
@@ -414,7 +414,7 @@ structure GasSchedule : Type where
   floorTokenCost : Nat
   /-- The intrinsic cost of one EIP-7702 authorisation tuple. Prague 25000;
   Amsterdam 7816. -/
-  perAuthIntrinsic : Nat
+  perAuthorizationIntrinsic : Nat
   /-- EIP-8038's additive code-reading surcharge at `EXTCODESIZE` and
   `EXTCODECOPY`. Prague 0; Amsterdam 100.
 
@@ -525,7 +525,7 @@ Amsterdam, where the pipeline records every state read and write, encodes the
 list, compares its hash to `header.blockAccessListHash`, and refuses a block
 whose item count exceeds `gasLimit / r.itemCost`. Nothing under `none`
 allocates the builder, which is the bridge Prague-stated proofs use. -/
-structure BalRules : Type where
+structure BlockAccessListRules : Type where
   /-- `GasCosts.BLOCK_ACCESS_LIST_ITEM`: the gas each address and each unique
   storage key of the list is deemed to cost, so that `gasLimit / itemCost`
   bounds the item count. Amsterdam 2000. -/
@@ -551,7 +551,7 @@ structure ForkRules : Type where
   /-- The `MODEXP` input bounds and gas schedule. -/
   modexp : ModexpRules
   /-- Which fork-gated opcodes are defined. -/
-  op : OpcodeRules
+  opcodes : OpcodeRules
   /-- The gas numbers a supported fork moves inside a shared formula. -/
   gas : GasSchedule
   /-- EIP-8037's state-gas dimension, or `none` for a fork that meters in one
@@ -573,30 +573,30 @@ structure ForkRules : Type where
   would be a consensus change. The receipt-derived deposit request (type 0) is
   deliberately absent -- it is parsed out of the block's logs rather than
   produced by a system call, so it is not one of these. -/
-  requests : List (UInt8 × Adr)
+  requests : List (UInt8 × Address)
   /-- EIP-7928's block-level access-list rules, or `none` for a fork whose
   header does not commit to one. Independent of `header.blockAccessListHash`
   in type but not in fact: `ForkRules.Valid` ties the two together, because a
   header field with nothing to compare against, or a computed list with no
   header to check it, would each be half a rule. -/
-  bal : Option BalRules
+  blockAccessListRules : Option BlockAccessListRules
   /-- The addresses at which a precompiled contract is active. -/
-  precompiles : List Adr
+  precompiles : List Address
   /-- Access-pricing shape (EIP-2929 switch): flat before Berlin. -/
   access : AccessSchedule
   /-- `SSTORE` shape: plain before Constantinople's rule set, net metering on. -/
   sstore : SstoreRules
   /-- Settlement numbers and switches (refund quotient, selfdestruct, sweep). -/
-  settle : SettlementRules
+  settlement : SettlementRules
   /-- Admission and intrinsic-cost switches (max type, nonzero price, floor,
   warm coinbase). -/
-  txr : TxRules
+  transactionRules : TransactionRules
   /-- Creation switches (init-code limit, 0xEF rejection). -/
   creation : CreationRules
   /-- Proof-of-work consensus numbers, `none` from Paris. -/
-  pow : Option PowRules
+  proofOfWork : Option ProofOfWorkRules
   /-- The pre-transaction system calls. -/
-  sys : SystemCallRules
+  systemCalls : SystemCallRules
   /-- alt_bn128 precompile prices. -/
   bn254 : Bn254Gas
   /-- `MODEXP` complexity function. -/
@@ -605,7 +605,7 @@ deriving DecidableEq
 
 /-- EIP-7702 code delegation activates with type-4 transaction admission. -/
 def ForkRules.delegationEnabled (rules : ForkRules) : Bool :=
-  decide (4 ≤ rules.txr.maxType)
+  decide (4 ≤ rules.transactionRules.maxType)
 
 /-- An address carries a precompile under these rules.
 
@@ -613,10 +613,10 @@ This replaces the former global `Adr.isPrecomp`, whose hard-wired `1 ≤ n ≤ 1
 range was a Prague fact stated at a use site. Precompile sets are not
 contiguous in general -- Osaka's P256VERIFY sits at 0x100 -- so the rule is
 carried as the activation set itself. -/
-abbrev ForkRules.isPrecomp (rules : ForkRules) (a : Adr) : Prop :=
+abbrev ForkRules.isPrecompile (rules : ForkRules) (a : Address) : Prop :=
   a ∈ rules.precompiles
 
-instance {rules : ForkRules} {a : Adr} : Decidable (rules.isPrecomp a) :=
+instance {rules : ForkRules} {a : Address} : Decidable (rules.isPrecompile a) :=
   List.instDecidableMemOfLawfulBEq _ _
 
 --------------- STRUCTURALLY USABLE RULE PARAMETERS ---------------
@@ -675,19 +675,19 @@ instance {g : GasSchedule} : Decidable g.Valid := by
 
 /-- The block-level access-list rules are usable: `itemCost` is the divisor of
 the item rule, so it must be positive. -/
-def BalRules.Valid (b : BalRules) : Prop := 0 < b.itemCost
+def BlockAccessListRules.Valid (b : BlockAccessListRules) : Prop := 0 < b.itemCost
 
-instance {b : BalRules} : Decidable b.Valid := by
-  unfold BalRules.Valid; infer_instance
+instance {b : BlockAccessListRules} : Decidable b.Valid := by
+  unfold BlockAccessListRules.Valid; infer_instance
 
 /-- A fork's optional access-list rules are usable: trivially when absent. -/
-def ForkRules.balValid (r : ForkRules) : Prop :=
-  match r.bal with
+def ForkRules.blockAccessListRulesValid (r : ForkRules) : Prop :=
+  match r.blockAccessListRules with
   | none => True
   | some b => b.Valid
 
-instance {r : ForkRules} : Decidable r.balValid := by
-  unfold ForkRules.balValid; cases r.bal <;> infer_instance
+instance {r : ForkRules} : Decidable r.blockAccessListRulesValid := by
+  unfold ForkRules.blockAccessListRulesValid; cases r.blockAccessListRules <;> infer_instance
 
 /-- A flat access schedule charges something for every family: the
 termination argument's need under the pre-Berlin shape. -/
@@ -720,11 +720,11 @@ in the interpreter -- `elasticityMultiplier`, `gasLimitAdjustmentFactor`,
 so its positivity is a closed fact proved next to it in `Jaune/Machine.lean`
 and not a hypothesis anything must carry. -/
 def ForkRules.Valid (r : ForkRules) : Prop :=
-  r.blob.Valid ∧ 0 < r.modexp.gasDivisor ∧ r.gas.Valid ∧ r.balValid
-    ∧ r.bal.isSome = r.header.blockAccessListHash
-    ∧ r.access.Valid ∧ 0 < r.settle.refundQuotient
-    ∧ (r.access = .eip2929 ↔ 1 ≤ r.txr.maxType)
-    ∧ (r.pow.isSome → r.header.parentBeaconBlockRoot = false)
+  r.blob.Valid ∧ 0 < r.modexp.gasDivisor ∧ r.gas.Valid ∧ r.blockAccessListRulesValid
+    ∧ r.blockAccessListRules.isSome = r.header.blockAccessListHash
+    ∧ r.access.Valid ∧ 0 < r.settlement.refundQuotient
+    ∧ (r.access = .eip2929 ↔ 1 ≤ r.transactionRules.maxType)
+    ∧ (r.proofOfWork.isSome → r.header.parentBeaconBlockRoot = false)
 
 instance {r : ForkRules} : Decidable r.Valid := by
   unfold ForkRules.Valid; infer_instance
@@ -738,22 +738,22 @@ theorem ForkRules.Valid.modexpGasDivisor_pos {r : ForkRules} (h : r.Valid) :
 
 theorem ForkRules.Valid.gas {r : ForkRules} (h : r.Valid) : r.gas.Valid := h.2.2.1
 
-theorem ForkRules.Valid.bal {r : ForkRules} (h : r.Valid) : r.balValid := h.2.2.2.1
+theorem ForkRules.Valid.blockAccessListRules {r : ForkRules} (h : r.Valid) : r.blockAccessListRulesValid := h.2.2.2.1
 
-theorem ForkRules.Valid.bal_iff_header {r : ForkRules} (h : r.Valid) :
-    r.bal.isSome = r.header.blockAccessListHash := h.2.2.2.2.1
+theorem ForkRules.Valid.blockAccessListRules_iff_header {r : ForkRules} (h : r.Valid) :
+    r.blockAccessListRules.isSome = r.header.blockAccessListHash := h.2.2.2.2.1
 
 theorem ForkRules.Valid.access {r : ForkRules} (h : r.Valid) :
     r.access.Valid := h.2.2.2.2.2.1
 
 theorem ForkRules.Valid.refundQuotient_pos {r : ForkRules} (h : r.Valid) :
-    0 < r.settle.refundQuotient := h.2.2.2.2.2.2.1
+    0 < r.settlement.refundQuotient := h.2.2.2.2.2.2.1
 
 theorem ForkRules.Valid.access_iff_type {r : ForkRules} (h : r.Valid) :
-    (r.access = .eip2929 ↔ 1 ≤ r.txr.maxType) := h.2.2.2.2.2.2.2.1
+    (r.access = .eip2929 ↔ 1 ≤ r.transactionRules.maxType) := h.2.2.2.2.2.2.2.1
 
 theorem ForkRules.Valid.pow_beacon {r : ForkRules} (h : r.Valid) :
-    (r.pow.isSome → r.header.parentBeaconBlockRoot = false) :=
+    (r.proofOfWork.isSome → r.header.parentBeaconBlockRoot = false) :=
   h.2.2.2.2.2.2.2.2
 
 /-- Prague's blob schedule (EIP-4844 as amended for Prague). -/
@@ -812,7 +812,7 @@ def pragueGasSchedule : GasSchedule := {
   txAccessListAddress := 2400
   txAccessListStorageKey := 1900
   floorTokenCost := 10
-  perAuthIntrinsic := 25000
+  perAuthorizationIntrinsic := 25000
   -- Additive with identity 0: EIP-8038 is not active, so the code-reading
   -- surcharge contributes nothing and the Prague formula is unchanged.
   codeReadSurcharge := 0
@@ -830,7 +830,7 @@ withdrawal contract, then the EIP-7251 consolidation contract.
 
 `Jaune/Machine.lean` states that these are the same two addresses, in the same
 order, that its `processGeneralPurposeRequests` fold has always called. -/
-def pragueRequests : List (UInt8 × Adr) := [
+def pragueRequests : List (UInt8 × Address) := [
   (1, 0x00000961Ef480Eb55e80D19ad83579A64c007002), -- EIP-7002 withdrawals
   (2, 0x0000BBdDc7CE488642fb579F8B00f3a590007251)  -- EIP-7251 consolidations
 ]
@@ -840,7 +840,7 @@ def pragueRequests : List (UInt8 × Adr) := [
 Written out rather than computed from a range so that the set stays readable
 against the specification's address table and so that later forks extend it by
 appending an address, not by widening a bound. -/
-def praguePrecompiles : List Adr := [
+def praguePrecompiles : List Address := [
   0x01, -- ECRECOVER
   0x02, -- SHA256
   0x03, -- RIPEMD160
@@ -951,15 +951,15 @@ def cancunBlobSchedule : BlobSchedule := {
 
 /-- The precompiles active at Byzantium through Petersburg: 0x01 .. 0x08
 (EIP-198 `MODEXP`, EIP-196/197 alt_bn128; no `BLAKE2F` yet). -/
-def byzantiumPrecompiles : List Adr := praguePrecompiles.take 8
+def byzantiumPrecompiles : List Address := praguePrecompiles.take 8
 
 /-- The precompiles active at Istanbul through Shanghai: 0x01 .. 0x09
 (EIP-152 `BLAKE2F` added). -/
-def istanbulPrecompiles : List Adr := praguePrecompiles.take 9
+def istanbulPrecompiles : List Address := praguePrecompiles.take 9
 
 /-- The precompiles active at Cancun: 0x01 .. 0x0a (EIP-4844
 point evaluation added). -/
-def cancunPrecompiles : List Adr := praguePrecompiles.take 10
+def cancunPrecompiles : List Address := praguePrecompiles.take 10
 
 /-- Byzantium/Petersburg `SSTORE`: plain SET/UPDATE, no net metering. -/
 def byzantiumSstore : SstoreRules := { netMetering := false, stipendSentry := false }
@@ -975,56 +975,56 @@ def istanbulSstore : SstoreRules := { netMetering := true, stipendSentry := true
 
 /-- Settlement before EIP-3529 (London): halved refunds, 24000 selfdestruct
 refund, EIP-161 sweep, and no erase on modification (the sweep does it). -/
-def byzantiumSettle : SettlementRules :=
+def byzantiumSettlement : SettlementRules :=
   { refundQuotient := 2, selfdestructRefund := 24000,
     selfdestructOnlyCreated := false, touchedSweep := true,
     eraseEmptyOnModify := false }
 
 /-- London (through Gray Glacier): EIP-3529 fifths, no selfdestruct refund. -/
-def londonSettle : SettlementRules :=
+def londonSettlement : SettlementRules :=
   { refundQuotient := 5, selfdestructRefund := 0,
     selfdestructOnlyCreated := false, touchedSweep := true,
     eraseEmptyOnModify := false }
 
 /-- Paris (through Shanghai): the touched sweep is gone, and `modify_state`
 erases an account it empties at once. -/
-def parisSettle : SettlementRules :=
+def parisSettlement : SettlementRules :=
   { refundQuotient := 5, selfdestructRefund := 0,
     selfdestructOnlyCreated := false, touchedSweep := false,
     eraseEmptyOnModify := true }
 
 /-- Cancun onwards: EIP-6780 same-transaction-only selfdestruct. -/
-def cancunSettle : SettlementRules :=
+def cancunSettlement : SettlementRules :=
   { refundQuotient := 5, selfdestructRefund := 0,
     selfdestructOnlyCreated := true, touchedSweep := false,
     eraseEmptyOnModify := true }
 
 /-- Byzantium through Petersburg admission: no typed transactions, 68-gas
 nonzero bytes. -/
-def byzantiumTxr : TxRules :=
+def byzantiumTransactionRules : TransactionRules :=
   { maxType := 0, dataNonZero := 68, calldataFloor := false,
     warmCoinbase := false }
 
 /-- Istanbul (through Berlin's eve): EIP-2028 reprices nonzero bytes to 16. -/
-def istanbulTxr : TxRules :=
+def istanbulTransactionRules : TransactionRules :=
   { maxType := 0, dataNonZero := 16, calldataFloor := false,
     warmCoinbase := false }
 
 /-- Berlin: EIP-2930 type-1 admission. -/
-def berlinTxr : TxRules :=
-  { istanbulTxr with maxType := 1 }
+def berlinTransactionRules : TransactionRules :=
+  { istanbulTransactionRules with maxType := 1 }
 
 /-- London (through Shanghai's eve): EIP-1559 type-2 admission. -/
-def londonTxr : TxRules :=
-  { istanbulTxr with maxType := 2 }
+def londonTransactionRules : TransactionRules :=
+  { istanbulTransactionRules with maxType := 2 }
 
 /-- Shanghai: EIP-3651 warms the coinbase. -/
-def shanghaiTxr : TxRules :=
-  { londonTxr with warmCoinbase := true }
+def shanghaiTransactionRules : TransactionRules :=
+  { londonTransactionRules with warmCoinbase := true }
 
 /-- Cancun: EIP-4844 type-3 admission. -/
-def cancunTxr : TxRules :=
-  { shanghaiTxr with maxType := 3 }
+def cancunTransactionRules : TransactionRules :=
+  { shanghaiTransactionRules with maxType := 3 }
 
 /-- Before London: no init-code limit, no 0xEF rejection. -/
 def byzantiumCreation : CreationRules :=
@@ -1039,11 +1039,11 @@ def shanghaiCreation : CreationRules :=
   { initCodeLimit := true, rejectEf := true }
 
 /-- No pre-transaction system calls before Cancun. -/
-def byzantiumSys : SystemCallRules :=
+def byzantiumSystemCalls : SystemCallRules :=
   { beaconRoots := false, historyStorage := false }
 
 /-- Cancun: EIP-4788 beacon-roots call. -/
-def cancunSys : SystemCallRules :=
+def cancunSystemCalls : SystemCallRules :=
   { beaconRoots := true, historyStorage := false }
 
 /-- alt_bn128 prices before EIP-1108 (Istanbul). -/
@@ -1058,11 +1058,11 @@ def istanbulBn254Gas : Bn254Gas :=
 value. The five existing literals carry exactly these fields. -/
 def pragueAccess : AccessSchedule := .eip2929
 def pragueSstore : SstoreRules := istanbulSstore
-def pragueSettle : SettlementRules := cancunSettle
-def pragueTxr : TxRules :=
+def pragueSettlement : SettlementRules := cancunSettlement
+def pragueTransactionRules : TransactionRules :=
   { maxType := 4, dataNonZero := 16, calldataFloor := true, warmCoinbase := true }
 def pragueCreation : CreationRules := shanghaiCreation
-def pragueSys : SystemCallRules := { beaconRoots := true, historyStorage := true }
+def pragueSystemCalls : SystemCallRules := { beaconRoots := true, historyStorage := true }
 def pragueBn254 : Bn254Gas := istanbulBn254Gas
 
 /-- The Prague rule set. -/
@@ -1073,22 +1073,22 @@ def pragueRules : ForkRules := {
   tx := pragueTransactionLimits
   block := pragueBlockLimits
   modexp := pragueModexpRules
-  op := pragueOpcodeRules
+  opcodes := pragueOpcodeRules
   gas := pragueGasSchedule
   -- Prague meters in one dimension, so there is no state-gas record to carry.
   stateGas := none
   header := pragueHeaderRules
   requests := pragueRequests
   -- No header commits to a block-level access list before Amsterdam.
-  bal := none
+  blockAccessListRules := none
   precompiles := praguePrecompiles
   access := pragueAccess
   sstore := pragueSstore
-  settle := pragueSettle
-  txr := pragueTxr
+  settlement := pragueSettlement
+  transactionRules := pragueTransactionRules
   creation := pragueCreation
-  pow := none
-  sys := pragueSys
+  proofOfWork := none
+  systemCalls := pragueSystemCalls
   bn254 := pragueBn254
   modexpComplexity := .eip2565
 }
@@ -1110,20 +1110,20 @@ def byzantiumRules : ForkRules := {
   tx := pragueTransactionLimits
   block := pragueBlockLimits
   modexp := eip198ModexpRules
-  op := byzantiumOpcodeRules
+  opcodes := byzantiumOpcodeRules
   gas := byzantiumGasSchedule
   stateGas := none
   header := preLondonHeaderRules
   requests := []
-  bal := none
+  blockAccessListRules := none
   precompiles := byzantiumPrecompiles
   access := .flat byzantiumAccessGas
   sstore := byzantiumSstore
-  settle := byzantiumSettle
-  txr := byzantiumTxr
+  settlement := byzantiumSettlement
+  transactionRules := byzantiumTransactionRules
   creation := byzantiumCreation
-  pow := some { blockReward := 3 * 10 ^ 18, bombDelay := 3000000 }
-  sys := byzantiumSys
+  proofOfWork := some { blockReward := 3 * 10 ^ 18, bombDelay := 3000000 }
+  systemCalls := byzantiumSystemCalls
   bn254 := byzantiumBn254Gas
   modexpComplexity := .eip198
 }
@@ -1134,8 +1134,8 @@ a fact of the source. -/
 def petersburgRules : ForkRules :=
   { byzantiumRules with
     fork := .petersburg
-    op := petersburgOpcodeRules
-    pow := some { blockReward := 2 * 10 ^ 18, bombDelay := 5000000 } }
+    opcodes := petersburgOpcodeRules
+    proofOfWork := some { blockReward := 2 * 10 ^ 18, bombDelay := 5000000 } }
 
 /-- Constantinople: Petersburg with EIP-1283 net metering. See
 `constantinopleSstore`: fixture-grounded only, no EELS differential. -/
@@ -1161,20 +1161,20 @@ def istanbulRules : ForkRules := {
   tx := pragueTransactionLimits
   block := pragueBlockLimits
   modexp := eip198ModexpRules
-  op := istanbulOpcodeRules
+  opcodes := istanbulOpcodeRules
   gas := byzantiumGasSchedule
   stateGas := none
   header := preLondonHeaderRules
   requests := []
-  bal := none
+  blockAccessListRules := none
   precompiles := istanbulPrecompiles
   access := .flat istanbulAccessGas
   sstore := istanbulSstore
-  settle := byzantiumSettle
-  txr := istanbulTxr
+  settlement := byzantiumSettlement
+  transactionRules := istanbulTransactionRules
   creation := byzantiumCreation
-  pow := some { blockReward := 2 * 10 ^ 18, bombDelay := 5000000 }
-  sys := byzantiumSys
+  proofOfWork := some { blockReward := 2 * 10 ^ 18, bombDelay := 5000000 }
+  systemCalls := byzantiumSystemCalls
   bn254 := istanbulBn254Gas
   modexpComplexity := .eip198
 }
@@ -1184,7 +1184,7 @@ record update, so "bomb only" is a fact of the source. -/
 def muirGlacierRules : ForkRules :=
   { istanbulRules with
     fork := .muirGlacier
-    pow := some { blockReward := 2 * 10 ^ 18, bombDelay := 9000000 } }
+    proofOfWork := some { blockReward := 2 * 10 ^ 18, bombDelay := 9000000 } }
 
 /-- Berlin: EIP-2929 access shape, EIP-2930 type-1 admission, EIP-2565
 complexity over Prague's `MODEXP` coefficients. -/
@@ -1194,7 +1194,7 @@ def berlinRules : ForkRules :=
     modexp := pragueModexpRules
     modexpComplexity := .eip2565
     access := .eip2929
-    txr := berlinTxr }
+    transactionRules := berlinTransactionRules }
 
 /-- London: EIP-1559 (header base fee, type-2 admission), EIP-3529 (fifths, no
 selfdestruct refund), EIP-3541 (0xEF rejection), EIP-3198 `BASEFEE`, and the
@@ -1202,25 +1202,25 @@ bomb moved to 9.7M. -/
 def londonRules : ForkRules :=
   { berlinRules with
     fork := .london
-    op := londonOpcodeRules
+    opcodes := londonOpcodeRules
     gas := pragueGasSchedule
     header := londonHeaderRules
-    settle := londonSettle
-    txr := londonTxr
+    settlement := londonSettlement
+    transactionRules := londonTransactionRules
     creation := londonCreation
-    pow := some { blockReward := 2 * 10 ^ 18, bombDelay := 9700000 } }
+    proofOfWork := some { blockReward := 2 * 10 ^ 18, bombDelay := 9700000 } }
 
 /-- Arrow Glacier: London with the bomb delay moved to 10.7M. -/
 def arrowGlacierRules : ForkRules :=
   { londonRules with
     fork := .arrowGlacier
-    pow := some { blockReward := 2 * 10 ^ 18, bombDelay := 10700000 } }
+    proofOfWork := some { blockReward := 2 * 10 ^ 18, bombDelay := 10700000 } }
 
 /-- Gray Glacier: Arrow Glacier with the bomb delay moved to 11.4M. -/
 def grayGlacierRules : ForkRules :=
   { arrowGlacierRules with
     fork := .grayGlacier
-    pow := some { blockReward := 2 * 10 ^ 18, bombDelay := 11400000 } }
+    proofOfWork := some { blockReward := 2 * 10 ^ 18, bombDelay := 11400000 } }
 
 /-- Paris: Gray Glacier without proof of work and without the touched sweep
 (EIP-161 gone); `PREVRANDAO` replaces `DIFFICULTY` at the use site (a later
@@ -1228,17 +1228,17 @@ unit). -/
 def parisRules : ForkRules :=
   { grayGlacierRules with
     fork := .paris
-    settle := parisSettle
-    pow := none }
+    settlement := parisSettlement
+    proofOfWork := none }
 
 /-- Shanghai: Paris with `PUSH0`, withdrawals, EIP-3651 warm coinbase and
 EIP-3860 init-code limits. -/
 def shanghaiRules : ForkRules :=
   { parisRules with
     fork := .shanghai
-    op := shanghaiOpcodeRules
+    opcodes := shanghaiOpcodeRules
     header := shanghaiHeaderRules
-    txr := shanghaiTxr
+    transactionRules := shanghaiTransactionRules
     creation := shanghaiCreation }
 
 /-- Cancun: Shanghai with the blob schedule live, blob and beacon header
@@ -1248,12 +1248,12 @@ def cancunRules : ForkRules :=
   { shanghaiRules with
     fork := .cancun
     blob := cancunBlobSchedule
-    op := cancunOpcodeRules
+    opcodes := cancunOpcodeRules
     header := cancunHeaderRules
     precompiles := cancunPrecompiles
-    settle := cancunSettle
-    txr := cancunTxr
-    sys := cancunSys }
+    settlement := cancunSettlement
+    transactionRules := cancunTransactionRules
+    systemCalls := cancunSystemCalls }
 
 instance : Inhabited ForkRules := ⟨pragueRules⟩
 
@@ -1310,7 +1310,7 @@ def osakaOpcodeRules : OpcodeRules :=
 It sits at 0x100 rather than continuing the run, which is exactly why the
 activation set is carried as a set: appending one address is the whole rule,
 and no bound anywhere has to learn about the gap. -/
-def osakaPrecompiles : List Adr := praguePrecompiles ++ [
+def osakaPrecompiles : List Address := praguePrecompiles ++ [
   0x100 -- P256VERIFY
 ]
 
@@ -1326,7 +1326,7 @@ def osakaRules : ForkRules := {
   tx := osakaTransactionLimits
   block := osakaBlockLimits
   modexp := osakaModexpRules
-  op := osakaOpcodeRules
+  opcodes := osakaOpcodeRules
   -- Osaka moves none of the three new categories: EIP-7939 is an opcode, and
   -- the repricings, the header fields, and the two extra request contracts are
   -- all Amsterdam's. Naming Prague's records rather than repeating them is
@@ -1335,15 +1335,15 @@ def osakaRules : ForkRules := {
   stateGas := none
   header := pragueHeaderRules
   requests := pragueRequests
-  bal := none
+  blockAccessListRules := none
   precompiles := osakaPrecompiles
   access := pragueAccess
   sstore := pragueSstore
-  settle := pragueSettle
-  txr := pragueTxr
+  settlement := pragueSettlement
+  transactionRules := pragueTransactionRules
   creation := pragueCreation
-  pow := none
-  sys := pragueSys
+  proofOfWork := none
+  systemCalls := pragueSystemCalls
   bn254 := pragueBn254
   modexpComplexity := .eip2565
 }
@@ -1413,7 +1413,7 @@ def amsterdamGasSchedule : GasSchedule := {
   txAccessListAddress := 2900
   txAccessListStorageKey := 2000
   floorTokenCost := 16
-  perAuthIntrinsic := 7816
+  perAuthorizationIntrinsic := 7816
   codeReadSurcharge := 100
 }
 
@@ -1467,14 +1467,14 @@ def amsterdamHeaderRules : HeaderRules :=
 followed by EIP-8282's builder deposit (type 3) and builder exit (type 4)
 contracts. The order is the pinned `process_general_purpose_requests`'s
 source-call order, which the constants gate checks. -/
-def amsterdamRequests : List (UInt8 × Adr) := pragueRequests ++ [
+def amsterdamRequests : List (UInt8 × Address) := pragueRequests ++ [
   (3, 0x0000BFF46984E3725691FA540A8C7589300D8282), -- EIP-8282 builder deposits
   (4, 0x000064D678505AD48F8CCB093BC65613800E8282)  -- EIP-8282 builder exits
 ]
 
 /-- Amsterdam's block-level access-list rules (EIP-7928):
 `GasCosts.BLOCK_ACCESS_LIST_ITEM = 2000`. -/
-def amsterdamBalRules : BalRules := { itemCost := 2000 }
+def amsterdamBlockAccessListRules : BlockAccessListRules := { itemCost := 2000 }
 
 /-- Amsterdam retains the execution cap and adds the EIP-8037 total cap. -/
 def amsterdamTransactionLimits : TransactionLimits :=
@@ -1508,12 +1508,12 @@ def amsterdamRules : ForkRules :=
     fork := .amsterdam
     code := amsterdamCodeLimits
     tx := amsterdamTransactionLimits
-    op := amsterdamOpcodeRules
+    opcodes := amsterdamOpcodeRules
     gas := amsterdamGasSchedule
     stateGas := some amsterdamStateGasRules
     header := amsterdamHeaderRules
     requests := amsterdamRequests
-    bal := some amsterdamBalRules }
+    blockAccessListRules := some amsterdamBlockAccessListRules }
 
 -- Every named rule set carries the structural witness, so no in-tree execution
 -- path ever needs to check it. `decide` is the whole proof: the predicates are
@@ -1897,10 +1897,10 @@ inductive RuleDefect : Type
   its parent. -/
   | callValueBelowStipend (callValue : Nat)
   /-- EIP-7928's item rule would divide by a zero item cost. -/
-  | zeroBalItemCost
+  | zeroBlockAccessListItemCost
   /-- The header commits to a block-level access list the rules cannot build,
   or the rules build one no header field is compared against. -/
-  | balHeaderMismatch (hasRules hasHeaderField : Bool)
+  | blockAccessListHeaderMismatch (hasRules hasHeaderField : Bool)
   /-- A flat access schedule charges nothing for some family, so a cold access
   at `BALANCE`, `EXTCODE*`, `SLOAD` or a `CALL` need charge nothing. -/
   | zeroFlatAccessPrice (g : FlatAccessGas)
@@ -1973,8 +1973,8 @@ def ChainContextError.render : ChainContextError → String
       | .callValueBelowStipend callValue =>
         s!"a value-bearing call costs {callValue}, below the 2300 stipend it \
            hands the child"
-      | .zeroBalItemCost => "the block-level access-list item cost is zero"
-      | .balHeaderMismatch hasRules hasHeaderField =>
+      | .zeroBlockAccessListItemCost => "the block-level access-list item cost is zero"
+      | .blockAccessListHeaderMismatch hasRules hasHeaderField =>
         s!"the rules {if hasRules then "carry" else "do not carry"} \
            block-level access-list rules, but the header \
            {if hasHeaderField then "commits" else "does not commit"} to one"
@@ -2046,7 +2046,7 @@ def SupportError.render : SupportError → String
   = "InvalidForkRulesError : the blob gas target 9 exceeds the ceiling 4"
 #guard ChainContextError.render (.invalidForkRules .zeroModexpGasDivisor)
   = "InvalidForkRulesError : the MODEXP gas divisor is zero"
-#guard ChainContextError.render (.invalidForkRules .zeroBalItemCost)
+#guard ChainContextError.render (.invalidForkRules .zeroBlockAccessListItemCost)
   = "InvalidForkRulesError : the block-level access-list item cost is zero"
 #guard ChainContextError.render (.invalidForkRules .zeroRefundQuotient)
   = "InvalidForkRulesError : the settlement refund quotient is zero"
@@ -2062,7 +2062,7 @@ def SupportError.render : SupportError → String
 #guard (ChainContextError.render
     (.invalidForkRules (.zeroFlatAccessPrice byzantiumAccessGas))).startsWith
   "InvalidForkRulesError : a flat access price is zero"
-#guard ChainContextError.render (.invalidForkRules (.balHeaderMismatch false true))
+#guard ChainContextError.render (.invalidForkRules (.blockAccessListHeaderMismatch false true))
   = "InvalidForkRulesError : the rules do not carry block-level access-list \
      rules, but the header commits to one"
 
@@ -2106,29 +2106,29 @@ def RulesLookupError.render : RulesLookupError → String
 /-- The post-block-list checks of `defect?`: the access shape, the refund
 divisor, type admission, and proof-of-work exclusivity, in `Valid` order.
 Split out so both `bal`-clean leaves of `defect?` share them. -/
-def ForkRules.postBalDefect? (r : ForkRules) : Option RuleDefect :=
+def ForkRules.postBlockAccessListDefect? (r : ForkRules) : Option RuleDefect :=
   match r.access with
   | .flat g =>
     if g.balance = 0 ∨ g.extCode = 0 ∨ g.extCodeHash = 0 ∨ g.sload = 0
         ∨ g.call = 0 then
       some (.zeroFlatAccessPrice g)
-    else if r.settle.refundQuotient = 0 then
+    else if r.settlement.refundQuotient = 0 then
       some .zeroRefundQuotient
-    else if 1 ≤ r.txr.maxType then
-      some (.accessTypeMismatch false r.txr.maxType)
+    else if 1 ≤ r.transactionRules.maxType then
+      some (.accessTypeMismatch false r.transactionRules.maxType)
     else
-      match r.pow, r.header.parentBeaconBlockRoot with
+      match r.proofOfWork, r.header.parentBeaconBlockRoot with
       | some _, true => some .powBeaconRootConflict
       | _, _ => none
   | .eip2929 =>
-    if r.settle.refundQuotient = 0 then
+    if r.settlement.refundQuotient = 0 then
       some .zeroRefundQuotient
-    else if 1 ≤ r.txr.maxType then
-      match r.pow, r.header.parentBeaconBlockRoot with
+    else if 1 ≤ r.transactionRules.maxType then
+      match r.proofOfWork, r.header.parentBeaconBlockRoot with
       | some _, true => some .powBeaconRootConflict
       | _, _ => none
     else
-      some (.accessTypeMismatch true r.txr.maxType)
+      some (.accessTypeMismatch true r.transactionRules.maxType)
 
 /-- The first structural premise a rule record fails, or `none` if it fails
 none. The order is the order the premises are stated in `ForkRules.Valid`, so
@@ -2149,39 +2149,39 @@ def ForkRules.defect? (r : ForkRules) : Option RuleDefect :=
   else if r.gas.callValue < 2300 then
     some (.callValueBelowStipend r.gas.callValue)
   else
-    match r.bal, r.header.blockAccessListHash with
+    match r.blockAccessListRules, r.header.blockAccessListHash with
     | some b, true =>
-      if b.itemCost = 0 then some .zeroBalItemCost else r.postBalDefect?
+      if b.itemCost = 0 then some .zeroBlockAccessListItemCost else r.postBlockAccessListDefect?
     | some b, false =>
-      if b.itemCost = 0 then some .zeroBalItemCost
-      else some (.balHeaderMismatch true false)
-    | none, true => some (.balHeaderMismatch false true)
-    | none, false => r.postBalDefect?
+      if b.itemCost = 0 then some .zeroBlockAccessListItemCost
+      else some (.blockAccessListHeaderMismatch true false)
+    | none, true => some (.blockAccessListHeaderMismatch false true)
+    | none, false => r.postBlockAccessListDefect?
 
 /-- `defect?` decides `Valid`: it answers `none` exactly on the valid records,
 so the check below neither over- nor under-reports. -/
-theorem ForkRules.postBalDefect?_eq_none_iff {r : ForkRules} :
-    r.postBalDefect? = none ↔
-      (r.access.Valid ∧ 0 < r.settle.refundQuotient
-        ∧ (r.access = .eip2929 ↔ 1 ≤ r.txr.maxType)
-        ∧ (r.pow.isSome → r.header.parentBeaconBlockRoot = false)) := by
+theorem ForkRules.postBlockAccessListDefect?_eq_none_iff {r : ForkRules} :
+    r.postBlockAccessListDefect? = none ↔
+      (r.access.Valid ∧ 0 < r.settlement.refundQuotient
+        ∧ (r.access = .eip2929 ↔ 1 ≤ r.transactionRules.maxType)
+        ∧ (r.proofOfWork.isSome → r.header.parentBeaconBlockRoot = false)) := by
   cases hac : r.access with
   | eip2929 =>
-    simp only [ForkRules.postBalDefect?, hac, AccessSchedule.Valid]
-    cases hpow : r.pow <;> cases hbeacon : r.header.parentBeaconBlockRoot <;>
+    simp only [ForkRules.postBlockAccessListDefect?, hac, AccessSchedule.Valid]
+    cases hpow : r.proofOfWork <;> cases hbeacon : r.header.parentBeaconBlockRoot <;>
       (repeat' split) <;> simp_all <;> omega
   | flat g =>
-    simp only [ForkRules.postBalDefect?, hac, AccessSchedule.Valid,
+    simp only [ForkRules.postBlockAccessListDefect?, hac, AccessSchedule.Valid,
       FlatAccessGas.Valid]
-    cases hpow : r.pow <;> cases hbeacon : r.header.parentBeaconBlockRoot <;>
+    cases hpow : r.proofOfWork <;> cases hbeacon : r.header.parentBeaconBlockRoot <;>
       (repeat' split) <;> simp_all <;> omega
 
 theorem ForkRules.defect?_eq_none_iff {r : ForkRules} :
     r.defect? = none ↔ r.Valid := by
   rw [ForkRules.defect?, ForkRules.Valid, BlobSchedule.Valid, GasSchedule.Valid,
-    ForkRules.balValid]
+    ForkRules.blockAccessListRulesValid]
   repeat' split
-  all_goals simp_all [BalRules.Valid, ForkRules.postBalDefect?_eq_none_iff]
+  all_goals simp_all [BlockAccessListRules.Valid, ForkRules.postBlockAccessListDefect?_eq_none_iff]
   -- Two `bal`-clean leaves remain as `tail ↔ early ∧ tail`: the tail is the
   -- helper's conjunction on both sides, and the early numbers are hypotheses.
   all_goals (
@@ -2207,12 +2207,12 @@ theorem ForkRules.defect?_eq_none_iff {r : ForkRules} :
 #guard ForkRules.defect? amsterdamRules = none
 -- The two EIP-7928 premises: a zero item cost, and a header/rules disagreement
 -- in either direction.
-#guard ForkRules.defect? { amsterdamRules with bal := some { itemCost := 0 } }
-  = some .zeroBalItemCost
-#guard ForkRules.defect? { amsterdamRules with bal := none }
-  = some (.balHeaderMismatch false true)
-#guard ForkRules.defect? { bpo2Rules with bal := some amsterdamBalRules }
-  = some (.balHeaderMismatch true false)
+#guard ForkRules.defect? { amsterdamRules with blockAccessListRules := some { itemCost := 0 } }
+  = some .zeroBlockAccessListItemCost
+#guard ForkRules.defect? { amsterdamRules with blockAccessListRules := none }
+  = some (.blockAccessListHeaderMismatch false true)
+#guard ForkRules.defect? { bpo2Rules with blockAccessListRules := some amsterdamBlockAccessListRules }
+  = some (.blockAccessListHeaderMismatch true false)
 -- Every named rule set is defect-free, including the twelve historical ones.
 #guard ForkRules.defect? byzantiumRules = none
 #guard ForkRules.defect? constantinopleRules = none
@@ -2232,29 +2232,29 @@ theorem ForkRules.defect?_eq_none_iff {r : ForkRules} :
 -- other direction, and proof of work beside a beacon root.
 #guard ¬ ({ istanbulRules with access := .eip2929 } : ForkRules).Valid
 #guard ¬ ({ istanbulRules with
-  settle := { istanbulRules.settle with refundQuotient := 0 } }
+  settlement := { istanbulRules.settlement with refundQuotient := 0 } }
   : ForkRules).Valid
 #guard ¬ ({ istanbulRules with
   access := .flat { istanbulAccessGas with sload := 0 } } : ForkRules).Valid
 #guard ¬ ({ cancunRules with
-  pow := some { blockReward := 2 * 10 ^ 18, bombDelay := 11400000 } }
+  proofOfWork := some { blockReward := 2 * 10 ^ 18, bombDelay := 11400000 } }
   : ForkRules).Valid
 #guard ForkRules.defect? { istanbulRules with access := .eip2929 }
   = some (.accessTypeMismatch true 0)
 #guard ForkRules.defect? { istanbulRules with
-  settle := { istanbulRules.settle with refundQuotient := 0 } }
+  settlement := { istanbulRules.settlement with refundQuotient := 0 } }
   = some .zeroRefundQuotient
 #guard ForkRules.defect? { istanbulRules with
   access := .flat { istanbulAccessGas with sload := 0 } }
   = some (.zeroFlatAccessPrice { istanbulAccessGas with sload := 0 })
 #guard ForkRules.defect? { byzantiumRules with
-  txr := { byzantiumTxr with maxType := 1 } }
+  transactionRules := { byzantiumTransactionRules with maxType := 1 } }
   = some (.accessTypeMismatch false 1)
 #guard ForkRules.defect? { berlinRules with
-  txr := { berlinRules.txr with maxType := 0 } }
+  transactionRules := { berlinRules.transactionRules with maxType := 0 } }
   = some (.accessTypeMismatch true 0)
 #guard ForkRules.defect? { cancunRules with
-  pow := some { blockReward := 2 * 10 ^ 18, bombDelay := 11400000 } }
+  proofOfWork := some { blockReward := 2 * 10 ^ 18, bombDelay := 11400000 } }
   = some .powBeaconRootConflict
 
 /-- A rule set together with the proof that its parameters are usable.
@@ -2864,7 +2864,7 @@ private def isEraL : RulesLookupError → Bool
 #guard pragueRules.modexp.flatComplexity = none
 #guard pragueRules.modexp.gasDivisor = 3
 #guard pragueRules.modexp.minGas = 200
-#guard pragueRules.op.clz = false
+#guard pragueRules.opcodes.clz = false
 
 -- The ten shared-formula gas numbers, pinned as literals here and tied to the
 -- global constants they came from by the `rfl` lemmas in `Jaune/Machine.lean`.
@@ -2878,7 +2878,7 @@ private def isEraL : RulesLookupError → Bool
 #guard pragueRules.gas.txAccessListAddress = 2400
 #guard pragueRules.gas.txAccessListStorageKey = 1900
 #guard pragueRules.gas.floorTokenCost = 10
-#guard pragueRules.gas.perAuthIntrinsic = 25000
+#guard pragueRules.gas.perAuthorizationIntrinsic = 25000
 #guard pragueRules.gas.codeReadSurcharge = 0
 
 -- The metering switch is off for every fork this build runs. Stated on Prague
@@ -2893,16 +2893,16 @@ private def isEraL : RulesLookupError → Bool
 #guard pragueRules.requests.length = 2
 #guard pragueRules.requests.map Prod.fst = [1, 2]
 #guard pragueRules.requests =
-  [(1, (0x00000961Ef480Eb55e80D19ad83579A64c007002 : Adr)),
-   (2, (0x0000BBdDc7CE488642fb579F8B00f3a590007251 : Adr))]
+  [(1, (0x00000961Ef480Eb55e80D19ad83579A64c007002 : Address)),
+   (2, (0x0000BBdDc7CE488642fb579F8B00f3a590007251 : Address))]
 
 -- Prague's precompile activation set is exactly 0x01 through 0x11, which is
 -- what the former `1 ≤ a.toNat ∧ a.toNat ≤ 17` range said.
 #guard pragueRules.precompiles.length = 17
-#guard (List.range' 1 17).all (fun n => pragueRules.isPrecomp (Nat.toAdr n))
-#guard ¬ pragueRules.isPrecomp (0x00 : Adr)
-#guard ¬ pragueRules.isPrecomp (0x12 : Adr)
-#guard ¬ pragueRules.isPrecomp (0x100 : Adr)
+#guard (List.range' 1 17).all (fun n => pragueRules.isPrecompile (Nat.toAddress n))
+#guard ¬ pragueRules.isPrecompile (0x00 : Address)
+#guard ¬ pragueRules.isPrecompile (0x12 : Address)
+#guard ¬ pragueRules.isPrecompile (0x100 : Address)
 
 -- Osaka shares the Prague blob target/max/update fraction, stated through the
 -- EIP-7892 blob-count product rather than assumed, and adds EIP-7918's reserve
@@ -2923,7 +2923,7 @@ private def isEraL : RulesLookupError → Bool
 #guard osakaRules.modexp.iterationCoeff = 2 * pragueRules.modexp.iterationCoeff
 #guard osakaRules.modexp.gasDivisor = 1
 #guard osakaRules.modexp.minGas = 500
-#guard osakaRules.op.clz = true
+#guard osakaRules.opcodes.clz = true
 
 -- Osaka moves none of the three new categories. Stated about the whole record
 -- rather than field by field, so a future edit that gives Osaka a gas, header,
@@ -2937,12 +2937,12 @@ private def isEraL : RulesLookupError → Bool
 -- precompile by widening a range.
 #guard osakaRules.precompiles.length = 18
 #guard osakaRules.precompiles.take 17 = pragueRules.precompiles
-#guard osakaRules.isPrecomp (0x100 : Adr)
-#guard ¬ pragueRules.isPrecomp (0x100 : Adr)
-#guard ¬ osakaRules.isPrecomp (0x12 : Adr)
-#guard ¬ osakaRules.isPrecomp (0xFF : Adr)
-#guard ¬ osakaRules.isPrecomp (0x101 : Adr)
-#guard (List.range' 1 17).all (fun n => osakaRules.isPrecomp (Nat.toAdr n))
+#guard osakaRules.isPrecompile (0x100 : Address)
+#guard ¬ pragueRules.isPrecompile (0x100 : Address)
+#guard ¬ osakaRules.isPrecompile (0x12 : Address)
+#guard ¬ osakaRules.isPrecompile (0xFF : Address)
+#guard ¬ osakaRules.isPrecompile (0x101 : Address)
+#guard (List.range' 1 17).all (fun n => osakaRules.isPrecompile (Nat.toAddress n))
 
 -- A BPO fork is Osaka with three different blob numbers. These two guards say
 -- exactly that, and they say it about the whole record: undoing the identity
@@ -2959,16 +2959,16 @@ private def isEraL : RulesLookupError → Bool
 -- The historical chain, undone predecessor by predecessor: each record is its
 -- predecessor with exactly the named fields moved, so no fork along the chain
 -- can silently acquire or lose a rule.
-#guard { petersburgRules with fork := .byzantium, op := byzantiumRules.op, pow := byzantiumRules.pow } = byzantiumRules
+#guard { petersburgRules with fork := .byzantium, opcodes := byzantiumRules.opcodes, proofOfWork := byzantiumRules.proofOfWork } = byzantiumRules
 #guard { constantinopleRules with fork := .petersburg, sstore := petersburgRules.sstore } = petersburgRules
-#guard { muirGlacierRules with fork := .istanbul, pow := istanbulRules.pow } = istanbulRules
-#guard { berlinRules with fork := .muirGlacier, modexp := muirGlacierRules.modexp, modexpComplexity := muirGlacierRules.modexpComplexity, access := muirGlacierRules.access, txr := muirGlacierRules.txr } = muirGlacierRules
-#guard { londonRules with fork := .berlin, op := berlinRules.op, gas := berlinRules.gas, header := berlinRules.header, settle := berlinRules.settle, txr := berlinRules.txr, creation := berlinRules.creation, pow := berlinRules.pow } = berlinRules
-#guard { arrowGlacierRules with fork := .london, pow := londonRules.pow } = londonRules
-#guard { grayGlacierRules with fork := .arrowGlacier, pow := arrowGlacierRules.pow } = arrowGlacierRules
-#guard { parisRules with fork := .grayGlacier, settle := grayGlacierRules.settle, pow := grayGlacierRules.pow } = grayGlacierRules
-#guard { shanghaiRules with fork := .paris, op := parisRules.op, header := parisRules.header, txr := parisRules.txr, creation := parisRules.creation } = parisRules
-#guard { cancunRules with fork := .shanghai, blob := shanghaiRules.blob, op := shanghaiRules.op, header := shanghaiRules.header, precompiles := shanghaiRules.precompiles, settle := shanghaiRules.settle, txr := shanghaiRules.txr, sys := shanghaiRules.sys } = shanghaiRules
+#guard { muirGlacierRules with fork := .istanbul, proofOfWork := istanbulRules.proofOfWork } = istanbulRules
+#guard { berlinRules with fork := .muirGlacier, modexp := muirGlacierRules.modexp, modexpComplexity := muirGlacierRules.modexpComplexity, access := muirGlacierRules.access, transactionRules := muirGlacierRules.transactionRules } = muirGlacierRules
+#guard { londonRules with fork := .berlin, opcodes := berlinRules.opcodes, gas := berlinRules.gas, header := berlinRules.header, settlement := berlinRules.settlement, transactionRules := berlinRules.transactionRules, creation := berlinRules.creation, proofOfWork := berlinRules.proofOfWork } = berlinRules
+#guard { arrowGlacierRules with fork := .london, proofOfWork := londonRules.proofOfWork } = londonRules
+#guard { grayGlacierRules with fork := .arrowGlacier, proofOfWork := arrowGlacierRules.proofOfWork } = arrowGlacierRules
+#guard { parisRules with fork := .grayGlacier, settlement := grayGlacierRules.settlement, proofOfWork := grayGlacierRules.proofOfWork } = grayGlacierRules
+#guard { shanghaiRules with fork := .paris, opcodes := parisRules.opcodes, header := parisRules.header, transactionRules := parisRules.transactionRules, creation := parisRules.creation } = parisRules
+#guard { cancunRules with fork := .shanghai, blob := shanghaiRules.blob, opcodes := shanghaiRules.opcodes, header := shanghaiRules.header, precompiles := shanghaiRules.precompiles, settlement := shanghaiRules.settlement, transactionRules := shanghaiRules.transactionRules, systemCalls := shanghaiRules.systemCalls } = shanghaiRules
 
 -- Each fork's record names it back.
 #guard byzantiumRules.fork = .byzantium
@@ -2994,21 +2994,21 @@ private def isEraL : RulesLookupError → Bool
 #guard parisRules.precompiles = istanbulRules.precompiles
 
 -- Proof of work: 3 ETH at Byzantium, 2 ETH through Gray Glacier, none after.
-#guard byzantiumRules.pow.map PowRules.blockReward = some (3 * 10 ^ 18)
-#guard petersburgRules.pow.map PowRules.blockReward = some (2 * 10 ^ 18)
-#guard istanbulRules.pow.map PowRules.bombDelay = some 5000000
-#guard muirGlacierRules.pow.map PowRules.bombDelay = some 9000000
-#guard berlinRules.pow.map PowRules.bombDelay = some 9000000
-#guard londonRules.pow.map PowRules.bombDelay = some 9700000
-#guard arrowGlacierRules.pow.map PowRules.bombDelay = some 10700000
-#guard grayGlacierRules.pow.map PowRules.bombDelay = some 11400000
-#guard parisRules.pow = none
-#guard shanghaiRules.pow = none
-#guard cancunRules.pow = none
+#guard byzantiumRules.proofOfWork.map ProofOfWorkRules.blockReward = some (3 * 10 ^ 18)
+#guard petersburgRules.proofOfWork.map ProofOfWorkRules.blockReward = some (2 * 10 ^ 18)
+#guard istanbulRules.proofOfWork.map ProofOfWorkRules.bombDelay = some 5000000
+#guard muirGlacierRules.proofOfWork.map ProofOfWorkRules.bombDelay = some 9000000
+#guard berlinRules.proofOfWork.map ProofOfWorkRules.bombDelay = some 9000000
+#guard londonRules.proofOfWork.map ProofOfWorkRules.bombDelay = some 9700000
+#guard arrowGlacierRules.proofOfWork.map ProofOfWorkRules.bombDelay = some 10700000
+#guard grayGlacierRules.proofOfWork.map ProofOfWorkRules.bombDelay = some 11400000
+#guard parisRules.proofOfWork = none
+#guard shanghaiRules.proofOfWork = none
+#guard cancunRules.proofOfWork = none
 
 -- Istanbul's shared-formula numbers, the full literal's live fields.
 #guard istanbulRules.gas.storageClearRefund = 15000
-#guard istanbulRules.txr.dataNonZero = 16
+#guard istanbulRules.transactionRules.dataNonZero = 16
 -- EIP-2200 is the EIP-2929 SSTORE formula with cold surcharge 0 and no-op
 -- price `SLOAD = 800`: set 20000, update 5000 - 0, restore refunds
 -- 20000 - 800 and 5000 - 0 - 800, as in EELS `istanbul/vm/instructions/storage.py`.
@@ -3031,28 +3031,28 @@ private def isEraL : RulesLookupError → Bool
 
 -- Settlement: halves then fifths, sweep until Paris, erase-on-modify from
 -- Paris, 6780 from Cancun.
-#guard byzantiumRules.settle.refundQuotient = 2
-#guard byzantiumRules.settle.selfdestructRefund = 24000
-#guard londonRules.settle.refundQuotient = 5
-#guard londonRules.settle.selfdestructRefund = 0
-#guard grayGlacierRules.settle.touchedSweep = true
-#guard parisRules.settle.touchedSweep = false
-#guard grayGlacierRules.settle.eraseEmptyOnModify = false
-#guard parisRules.settle.eraseEmptyOnModify = true
-#guard cancunRules.settle.selfdestructOnlyCreated = true
-#guard londonRules.settle.selfdestructOnlyCreated = false
+#guard byzantiumRules.settlement.refundQuotient = 2
+#guard byzantiumRules.settlement.selfdestructRefund = 24000
+#guard londonRules.settlement.refundQuotient = 5
+#guard londonRules.settlement.selfdestructRefund = 0
+#guard grayGlacierRules.settlement.touchedSweep = true
+#guard parisRules.settlement.touchedSweep = false
+#guard grayGlacierRules.settlement.eraseEmptyOnModify = false
+#guard parisRules.settlement.eraseEmptyOnModify = true
+#guard cancunRules.settlement.selfdestructOnlyCreated = true
+#guard londonRules.settlement.selfdestructOnlyCreated = false
 
 -- Admission: maxType 0/1/2/3/4 at Byzantium/Berlin/London/Cancun/Prague.
-#guard byzantiumRules.txr.maxType = 0
-#guard berlinRules.txr.maxType = 1
-#guard londonRules.txr.maxType = 2
-#guard cancunRules.txr.maxType = 3
-#guard pragueRules.txr.maxType = 4
-#guard byzantiumRules.txr.dataNonZero = 68
-#guard parisRules.txr.warmCoinbase = false
-#guard shanghaiRules.txr.warmCoinbase = true
-#guard cancunRules.txr.calldataFloor = false
-#guard pragueRules.txr.calldataFloor = true
+#guard byzantiumRules.transactionRules.maxType = 0
+#guard berlinRules.transactionRules.maxType = 1
+#guard londonRules.transactionRules.maxType = 2
+#guard cancunRules.transactionRules.maxType = 3
+#guard pragueRules.transactionRules.maxType = 4
+#guard byzantiumRules.transactionRules.dataNonZero = 68
+#guard parisRules.transactionRules.warmCoinbase = false
+#guard shanghaiRules.transactionRules.warmCoinbase = true
+#guard cancunRules.transactionRules.calldataFloor = false
+#guard pragueRules.transactionRules.calldataFloor = true
 
 -- Creation: 0xEF rejection at London, init-code limit at Shanghai.
 #guard berlinRules.creation.rejectEf = false
@@ -3061,20 +3061,20 @@ private def isEraL : RulesLookupError → Bool
 #guard shanghaiRules.creation.initCodeLimit = true
 
 -- Opcode availability along the chain.
-#guard byzantiumRules.op.shifts = false
-#guard petersburgRules.op.create2 = true
-#guard petersburgRules.op.extCodeHash = true
-#guard istanbulRules.op.chainId = true
-#guard istanbulRules.op.selfBalance = true
-#guard berlinRules.op.baseFee = false
-#guard londonRules.op.baseFee = true
-#guard parisRules.op.push0 = false
-#guard shanghaiRules.op.push0 = true
-#guard shanghaiRules.op.transient = false
-#guard cancunRules.op.transient = true
-#guard cancunRules.op.mcopy = true
-#guard cancunRules.op.blobHash = true
-#guard cancunRules.op.blobBaseFee = true
+#guard byzantiumRules.opcodes.shifts = false
+#guard petersburgRules.opcodes.create2 = true
+#guard petersburgRules.opcodes.extCodeHash = true
+#guard istanbulRules.opcodes.chainId = true
+#guard istanbulRules.opcodes.selfBalance = true
+#guard berlinRules.opcodes.baseFee = false
+#guard londonRules.opcodes.baseFee = true
+#guard parisRules.opcodes.push0 = false
+#guard shanghaiRules.opcodes.push0 = true
+#guard shanghaiRules.opcodes.transient = false
+#guard cancunRules.opcodes.transient = true
+#guard cancunRules.opcodes.mcopy = true
+#guard cancunRules.opcodes.blobHash = true
+#guard cancunRules.opcodes.blobBaseFee = true
 
 -- Header fields along the chain.
 #guard berlinRules.header.baseFee = false
@@ -3116,10 +3116,10 @@ private def isEraL : RulesLookupError → Bool
 #guard berlinRules.modexpComplexity = .eip2565
 
 -- System calls: beacon roots at Cancun, history storage at Prague.
-#guard shanghaiRules.sys.beaconRoots = false
-#guard cancunRules.sys.beaconRoots = true
-#guard cancunRules.sys.historyStorage = false
-#guard pragueRules.sys.historyStorage = true
+#guard shanghaiRules.systemCalls.beaconRoots = false
+#guard cancunRules.systemCalls.beaconRoots = true
+#guard cancunRules.systemCalls.historyStorage = false
+#guard pragueRules.systemCalls.historyStorage = true
 
 -- No request-producing system contracts before Prague.
 #guard byzantiumRules.requests = []
@@ -3139,26 +3139,26 @@ example : pragueRules =
     ⟨.prague, pragueBlobSchedule, pragueCodeLimits, pragueTransactionLimits,
      pragueBlockLimits, pragueModexpRules, pragueOpcodeRules, pragueGasSchedule,
      none, pragueHeaderRules, pragueRequests, none, praguePrecompiles,
-     pragueAccess, pragueSstore, pragueSettle, pragueTxr, pragueCreation,
-     none, pragueSys, pragueBn254, .eip2565⟩ := rfl
+     pragueAccess, pragueSstore, pragueSettlement, pragueTransactionRules, pragueCreation,
+     none, pragueSystemCalls, pragueBn254, .eip2565⟩ := rfl
 example : osakaRules =
     ⟨.osaka, osakaBlobSchedule, pragueCodeLimits, osakaTransactionLimits,
      osakaBlockLimits, osakaModexpRules, osakaOpcodeRules, pragueGasSchedule,
      none, pragueHeaderRules, pragueRequests, none, osakaPrecompiles,
-     pragueAccess, pragueSstore, pragueSettle, pragueTxr, pragueCreation,
-     none, pragueSys, pragueBn254, .eip2565⟩ := rfl
+     pragueAccess, pragueSstore, pragueSettlement, pragueTransactionRules, pragueCreation,
+     none, pragueSystemCalls, pragueBn254, .eip2565⟩ := rfl
 example : bpo1Rules =
     ⟨.bpo1, bpo1BlobSchedule, pragueCodeLimits, osakaTransactionLimits,
      osakaBlockLimits, osakaModexpRules, osakaOpcodeRules, pragueGasSchedule,
      none, pragueHeaderRules, pragueRequests, none, osakaPrecompiles,
-     pragueAccess, pragueSstore, pragueSettle, pragueTxr, pragueCreation,
-     none, pragueSys, pragueBn254, .eip2565⟩ := rfl
+     pragueAccess, pragueSstore, pragueSettlement, pragueTransactionRules, pragueCreation,
+     none, pragueSystemCalls, pragueBn254, .eip2565⟩ := rfl
 example : bpo2Rules =
     ⟨.bpo2, bpo2BlobSchedule, pragueCodeLimits, osakaTransactionLimits,
      osakaBlockLimits, osakaModexpRules, osakaOpcodeRules, pragueGasSchedule,
      none, pragueHeaderRules, pragueRequests, none, osakaPrecompiles,
-     pragueAccess, pragueSstore, pragueSettle, pragueTxr, pragueCreation,
-     none, pragueSys, pragueBn254, .eip2565⟩ := rfl
+     pragueAccess, pragueSstore, pragueSettlement, pragueTransactionRules, pragueCreation,
+     none, pragueSystemCalls, pragueBn254, .eip2565⟩ := rfl
 -- F1 for the twelve historical forks: the whole record, so a field added to
 -- `ForkRules` later cannot be inherited by any of them without being named.
 example : byzantiumRules =
@@ -3166,16 +3166,16 @@ example : byzantiumRules =
      pragueBlockLimits, eip198ModexpRules, byzantiumOpcodeRules,
      byzantiumGasSchedule, none, preLondonHeaderRules, [], none,
      byzantiumPrecompiles, AccessSchedule.flat byzantiumAccessGas,
-     byzantiumSstore, byzantiumSettle, byzantiumTxr, byzantiumCreation,
-     some ⟨3 * 10 ^ 18, 3000000⟩, byzantiumSys, byzantiumBn254Gas,
+     byzantiumSstore, byzantiumSettlement, byzantiumTransactionRules, byzantiumCreation,
+     some ⟨3 * 10 ^ 18, 3000000⟩, byzantiumSystemCalls, byzantiumBn254Gas,
      ModexpComplexity.eip198⟩ := rfl
 example : petersburgRules =
     ⟨.petersburg, pragueBlobSchedule, pragueCodeLimits, pragueTransactionLimits,
      pragueBlockLimits, eip198ModexpRules, petersburgOpcodeRules,
      byzantiumGasSchedule, none, preLondonHeaderRules, [], none,
      byzantiumPrecompiles, AccessSchedule.flat byzantiumAccessGas,
-     byzantiumSstore, byzantiumSettle, byzantiumTxr, byzantiumCreation,
-     some ⟨2 * 10 ^ 18, 5000000⟩, byzantiumSys, byzantiumBn254Gas,
+     byzantiumSstore, byzantiumSettlement, byzantiumTransactionRules, byzantiumCreation,
+     some ⟨2 * 10 ^ 18, 5000000⟩, byzantiumSystemCalls, byzantiumBn254Gas,
      ModexpComplexity.eip198⟩ := rfl
 example : constantinopleRules =
     ⟨.constantinople, pragueBlobSchedule, pragueCodeLimits,
@@ -3183,80 +3183,80 @@ example : constantinopleRules =
      petersburgOpcodeRules, byzantiumGasSchedule, none, preLondonHeaderRules,
      [], none, byzantiumPrecompiles,
      AccessSchedule.flat byzantiumAccessGas, constantinopleSstore,
-     byzantiumSettle, byzantiumTxr, byzantiumCreation,
-     some ⟨2 * 10 ^ 18, 5000000⟩, byzantiumSys, byzantiumBn254Gas,
+     byzantiumSettlement, byzantiumTransactionRules, byzantiumCreation,
+     some ⟨2 * 10 ^ 18, 5000000⟩, byzantiumSystemCalls, byzantiumBn254Gas,
      ModexpComplexity.eip198⟩ := rfl
 example : istanbulRules =
     ⟨.istanbul, pragueBlobSchedule, pragueCodeLimits, pragueTransactionLimits,
      pragueBlockLimits, eip198ModexpRules, istanbulOpcodeRules,
      byzantiumGasSchedule, none, preLondonHeaderRules, [], none,
      istanbulPrecompiles, AccessSchedule.flat istanbulAccessGas,
-     istanbulSstore, byzantiumSettle, istanbulTxr, byzantiumCreation,
-     some ⟨2 * 10 ^ 18, 5000000⟩, byzantiumSys, istanbulBn254Gas,
+     istanbulSstore, byzantiumSettlement, istanbulTransactionRules, byzantiumCreation,
+     some ⟨2 * 10 ^ 18, 5000000⟩, byzantiumSystemCalls, istanbulBn254Gas,
      ModexpComplexity.eip198⟩ := rfl
 example : muirGlacierRules =
     ⟨.muirGlacier, pragueBlobSchedule, pragueCodeLimits, pragueTransactionLimits,
      pragueBlockLimits, eip198ModexpRules, istanbulOpcodeRules,
      byzantiumGasSchedule, none, preLondonHeaderRules, [], none,
      istanbulPrecompiles, AccessSchedule.flat istanbulAccessGas,
-     istanbulSstore, byzantiumSettle, istanbulTxr, byzantiumCreation,
-     some ⟨2 * 10 ^ 18, 9000000⟩, byzantiumSys, istanbulBn254Gas,
+     istanbulSstore, byzantiumSettlement, istanbulTransactionRules, byzantiumCreation,
+     some ⟨2 * 10 ^ 18, 9000000⟩, byzantiumSystemCalls, istanbulBn254Gas,
      ModexpComplexity.eip198⟩ := rfl
 example : berlinRules =
     ⟨.berlin, pragueBlobSchedule, pragueCodeLimits, pragueTransactionLimits,
      pragueBlockLimits, pragueModexpRules, istanbulOpcodeRules,
      byzantiumGasSchedule, none, preLondonHeaderRules, [], none,
      istanbulPrecompiles, AccessSchedule.eip2929,
-     istanbulSstore, byzantiumSettle, berlinTxr, byzantiumCreation,
-     some ⟨2 * 10 ^ 18, 9000000⟩, byzantiumSys, istanbulBn254Gas,
+     istanbulSstore, byzantiumSettlement, berlinTransactionRules, byzantiumCreation,
+     some ⟨2 * 10 ^ 18, 9000000⟩, byzantiumSystemCalls, istanbulBn254Gas,
      ModexpComplexity.eip2565⟩ := rfl
 example : londonRules =
     ⟨.london, pragueBlobSchedule, pragueCodeLimits, pragueTransactionLimits,
      pragueBlockLimits, pragueModexpRules, londonOpcodeRules,
      pragueGasSchedule, none, londonHeaderRules, [], none,
      istanbulPrecompiles, AccessSchedule.eip2929,
-     istanbulSstore, londonSettle, londonTxr, londonCreation,
-     some ⟨2 * 10 ^ 18, 9700000⟩, byzantiumSys, istanbulBn254Gas,
+     istanbulSstore, londonSettlement, londonTransactionRules, londonCreation,
+     some ⟨2 * 10 ^ 18, 9700000⟩, byzantiumSystemCalls, istanbulBn254Gas,
      ModexpComplexity.eip2565⟩ := rfl
 example : arrowGlacierRules =
     ⟨.arrowGlacier, pragueBlobSchedule, pragueCodeLimits,
      pragueTransactionLimits, pragueBlockLimits, pragueModexpRules,
      londonOpcodeRules, pragueGasSchedule, none, londonHeaderRules, [], none,
      istanbulPrecompiles, AccessSchedule.eip2929,
-     istanbulSstore, londonSettle, londonTxr, londonCreation,
-     some ⟨2 * 10 ^ 18, 10700000⟩, byzantiumSys, istanbulBn254Gas,
+     istanbulSstore, londonSettlement, londonTransactionRules, londonCreation,
+     some ⟨2 * 10 ^ 18, 10700000⟩, byzantiumSystemCalls, istanbulBn254Gas,
      ModexpComplexity.eip2565⟩ := rfl
 example : grayGlacierRules =
     ⟨.grayGlacier, pragueBlobSchedule, pragueCodeLimits,
      pragueTransactionLimits, pragueBlockLimits, pragueModexpRules,
      londonOpcodeRules, pragueGasSchedule, none, londonHeaderRules, [], none,
      istanbulPrecompiles, AccessSchedule.eip2929,
-     istanbulSstore, londonSettle, londonTxr, londonCreation,
-     some ⟨2 * 10 ^ 18, 11400000⟩, byzantiumSys, istanbulBn254Gas,
+     istanbulSstore, londonSettlement, londonTransactionRules, londonCreation,
+     some ⟨2 * 10 ^ 18, 11400000⟩, byzantiumSystemCalls, istanbulBn254Gas,
      ModexpComplexity.eip2565⟩ := rfl
 example : parisRules =
     ⟨.paris, pragueBlobSchedule, pragueCodeLimits, pragueTransactionLimits,
      pragueBlockLimits, pragueModexpRules, londonOpcodeRules,
      pragueGasSchedule, none, londonHeaderRules, [], none,
      istanbulPrecompiles, AccessSchedule.eip2929,
-     istanbulSstore, parisSettle, londonTxr, londonCreation,
-     none, byzantiumSys, istanbulBn254Gas,
+     istanbulSstore, parisSettlement, londonTransactionRules, londonCreation,
+     none, byzantiumSystemCalls, istanbulBn254Gas,
      ModexpComplexity.eip2565⟩ := rfl
 example : shanghaiRules =
     ⟨.shanghai, pragueBlobSchedule, pragueCodeLimits, pragueTransactionLimits,
      pragueBlockLimits, pragueModexpRules, shanghaiOpcodeRules,
      pragueGasSchedule, none, shanghaiHeaderRules, [], none,
      istanbulPrecompiles, AccessSchedule.eip2929,
-     istanbulSstore, parisSettle, shanghaiTxr, shanghaiCreation,
-     none, byzantiumSys, istanbulBn254Gas,
+     istanbulSstore, parisSettlement, shanghaiTransactionRules, shanghaiCreation,
+     none, byzantiumSystemCalls, istanbulBn254Gas,
      ModexpComplexity.eip2565⟩ := rfl
 example : cancunRules =
     ⟨.cancun, cancunBlobSchedule, pragueCodeLimits, pragueTransactionLimits,
      pragueBlockLimits, pragueModexpRules, cancunOpcodeRules,
      pragueGasSchedule, none, cancunHeaderRules, [], none,
      cancunPrecompiles, AccessSchedule.eip2929,
-     istanbulSstore, cancunSettle, cancunTxr, shanghaiCreation,
-     none, cancunSys, istanbulBn254Gas,
+     istanbulSstore, cancunSettlement, cancunTransactionRules, shanghaiCreation,
+     none, cancunSystemCalls, istanbulBn254Gas,
      ModexpComplexity.eip2565⟩ := rfl
 
 -- The same fact stated field by field for the three new categories, so that a
@@ -3280,13 +3280,13 @@ example : cancunRules =
 #guard [Fork.prague, .osaka, .bpo1, .bpo2].all (fun f =>
   match f.rules? with
   | some r => r.gas == pragueGasSchedule && r.header == pragueHeaderRules
-      && r.requests == pragueRequests && r.stateGas == none && r.bal == none
+      && r.requests == pragueRequests && r.stateGas == none && r.blockAccessListRules == none
   | none => false)
 #guard amsterdamRules.gas ≠ pragueGasSchedule
 #guard amsterdamRules.header ≠ pragueHeaderRules
 #guard amsterdamRules.requests ≠ pragueRequests
 #guard amsterdamRules.stateGas ≠ none
-#guard amsterdamRules.bal ≠ none
+#guard amsterdamRules.blockAccessListRules ≠ none
 
 -- The three moving numbers, as blob counts times `GAS_PER_BLOB`, and the
 -- reserve base cost EIP-7918 introduced at Osaka and no BPO fork changes.
@@ -3323,7 +3323,7 @@ example : cancunRules =
 #guard amsterdamRules.gas.txAccessListAddress = 2900
 #guard amsterdamRules.gas.txAccessListStorageKey = 2000
 #guard amsterdamRules.gas.floorTokenCost = 16
-#guard amsterdamRules.gas.perAuthIntrinsic = 7816
+#guard amsterdamRules.gas.perAuthorizationIntrinsic = 7816
 #guard amsterdamRules.gas.codeReadSurcharge = 100
 
 -- The four derivations upstream states as sums and differences, checked as
@@ -3336,7 +3336,7 @@ example : cancunRules =
 #guard amsterdamGasSchedule.txAccessListAddress
   = amsterdamGasSchedule.coldAccountAccess - 100
 #guard amsterdamGasSchedule.txAccessListStorageKey = 2100 - 100
-#guard amsterdamGasSchedule.perAuthIntrinsic
+#guard amsterdamGasSchedule.perAuthorizationIntrinsic
   = 101 * amsterdamGasSchedule.floorTokenCost + 3000 + 3000 + 2 * 100
 
 -- The state-gas dimension: the ten fields, and the three costs derived from
@@ -3383,24 +3383,24 @@ example : cancunRules =
 -- for: it is the G1 "no silent inheritance" rule made executable.
 #guard { amsterdamRules with
   fork := .bpo2, code := pragueCodeLimits, tx := osakaTransactionLimits,
-  op := osakaOpcodeRules,
+  opcodes := osakaOpcodeRules,
   gas := pragueGasSchedule, stateGas := none, header := pragueHeaderRules,
-  requests := pragueRequests, bal := none } = bpo2Rules
+  requests := pragueRequests, blockAccessListRules := none } = bpo2Rules
 #guard { bpo2Rules with
   fork := .amsterdam, code := amsterdamCodeLimits, tx := amsterdamTransactionLimits,
-  op := amsterdamOpcodeRules,
+  opcodes := amsterdamOpcodeRules,
   gas := amsterdamGasSchedule, stateGas := some amsterdamStateGasRules,
   header := amsterdamHeaderRules, requests := amsterdamRequests,
-  bal := some amsterdamBalRules } = amsterdamRules
+  blockAccessListRules := some amsterdamBlockAccessListRules } = amsterdamRules
 -- The moved fields, one guard each, so a failure names the field.
 #guard amsterdamRules.fork = .amsterdam
 #guard amsterdamRules.code = amsterdamCodeLimits
-#guard amsterdamRules.op = amsterdamOpcodeRules
+#guard amsterdamRules.opcodes = amsterdamOpcodeRules
 #guard amsterdamRules.gas = amsterdamGasSchedule
 #guard amsterdamRules.stateGas = some amsterdamStateGasRules
 #guard amsterdamRules.header = amsterdamHeaderRules
 #guard amsterdamRules.requests = amsterdamRequests
-#guard amsterdamRules.bal = some amsterdamBalRules
+#guard amsterdamRules.blockAccessListRules = some amsterdamBlockAccessListRules
 -- The inherited fields and the distinct Amsterdam transaction limits.
 #guard amsterdamRules.blob = bpo2BlobSchedule
 #guard amsterdamRules.tx = amsterdamTransactionLimits
@@ -3419,9 +3419,9 @@ example : amsterdamRules =
     ⟨.amsterdam, bpo2BlobSchedule, amsterdamCodeLimits, amsterdamTransactionLimits,
      osakaBlockLimits, osakaModexpRules, amsterdamOpcodeRules,
      amsterdamGasSchedule, some amsterdamStateGasRules, amsterdamHeaderRules,
-     amsterdamRequests, some amsterdamBalRules, osakaPrecompiles,
-     pragueAccess, pragueSstore, pragueSettle, pragueTxr, pragueCreation,
-     none, pragueSys, pragueBn254, .eip2565⟩ := rfl
+     amsterdamRequests, some amsterdamBlockAccessListRules, osakaPrecompiles,
+     pragueAccess, pragueSstore, pragueSettlement, pragueTransactionRules, pragueCreation,
+     none, pragueSystemCalls, pragueBn254, .eip2565⟩ := rfl
 
 -- The block-level values themselves (EIP-7954, 7843, 8024, 7928, 8282), each
 -- of which goal B's vehicle guarded as *absent* (`header.blockAccessListHash =
@@ -3433,11 +3433,11 @@ example : amsterdamRules =
 #guard amsterdamRules.code.maxCodeSize = 0x10000
 #guard amsterdamRules.code.maxInitCodeSize = 131072
 #guard amsterdamRules.code.maxInitCodeSize = 2 * amsterdamRules.code.maxCodeSize
-#guard amsterdamRules.op.clz = true
-#guard amsterdamRules.op.slotnum = true
-#guard amsterdamRules.op.stackAccess = true
-#guard amsterdamRules.bal = some { itemCost := 2000 }
-#guard (amsterdamRules.bal.map BalRules.itemCost) = some 2000
+#guard amsterdamRules.opcodes.clz = true
+#guard amsterdamRules.opcodes.slotnum = true
+#guard amsterdamRules.opcodes.stackAccess = true
+#guard amsterdamRules.blockAccessListRules = some { itemCost := 2000 }
+#guard (amsterdamRules.blockAccessListRules.map BlockAccessListRules.itemCost) = some 2000
 -- The request list: Prague's two calls in Prague's order (goal A's guard,
 -- unchanged in meaning), followed by EIP-8282's two in the pinned
 -- `process_general_purpose_requests` source-call order.
@@ -3445,19 +3445,19 @@ example : amsterdamRules =
 #guard amsterdamRules.requests.take 2 = pragueRequests
 #guard amsterdamRules.requests.map Prod.fst = [1, 2, 3, 4]
 #guard amsterdamRules.requests =
-  [(1, (0x00000961Ef480Eb55e80D19ad83579A64c007002 : Adr)),
-   (2, (0x0000BBdDc7CE488642fb579F8B00f3a590007251 : Adr)),
-   (3, (0x0000BFF46984E3725691FA540A8C7589300D8282 : Adr)),
-   (4, (0x000064D678505AD48F8CCB093BC65613800E8282 : Adr))]
+  [(1, (0x00000961Ef480Eb55e80D19ad83579A64c007002 : Address)),
+   (2, (0x0000BBdDc7CE488642fb579F8B00f3a590007251 : Address)),
+   (3, (0x0000BFF46984E3725691FA540A8C7589300D8282 : Address)),
+   (4, (0x000064D678505AD48F8CCB093BC65613800E8282 : Address))]
 -- Only Amsterdam carries a block-level access list, and it is the only fork
 -- whose header commits to one: the `Valid` conjunct is checked on all nine.
 #guard Fork.supported.all (fun f =>
   match f.rules? with
-  | some r => r.bal.isSome == r.header.blockAccessListHash
+  | some r => r.blockAccessListRules.isSome == r.header.blockAccessListHash
   | none => false)
-#guard ¬ ({ amsterdamRules with bal := none } : ForkRules).Valid
-#guard ¬ ({ bpo2Rules with bal := some amsterdamBalRules } : ForkRules).Valid
-#guard ¬ ({ amsterdamRules with bal := some { itemCost := 0 } } : ForkRules).Valid
+#guard ¬ ({ amsterdamRules with blockAccessListRules := none } : ForkRules).Valid
+#guard ¬ ({ bpo2Rules with blockAccessListRules := some amsterdamBlockAccessListRules } : ForkRules).Valid
+#guard ¬ ({ amsterdamRules with blockAccessListRules := some { itemCost := 0 } } : ForkRules).Valid
 
 -- And the composed record is reachable through fork identity, which is what
 -- makes Amsterdam a supported fork rather than a metering vehicle. (Goal B
@@ -3890,8 +3890,8 @@ private def guardBpo2ToAmsterdam : ForkTransition := ⟨.bpo2, .amsterdam, .byTi
 -- The block-level access list: `bal = none` builds nothing (goal C's bridge
 -- lemma), so the last BPO2 block has an empty list and index zero, and the
 -- first Amsterdam block is the first to build and commit one.
-#guard bpo2Rules.bal = none
-#guard amsterdamRules.bal = some amsterdamBalRules
+#guard bpo2Rules.blockAccessListRules = none
+#guard amsterdamRules.blockAccessListRules = some amsterdamBlockAccessListRules
 -- Excess blob gas is carried across the boundary from the parent header under
 -- the block's own rules' blob schedule (`calculateExcessBlobGas rules.blob
 -- parent`); at this boundary that schedule does not move.

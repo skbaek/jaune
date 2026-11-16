@@ -42,13 +42,13 @@ inductive Fail where
   deriving Repr, BEq
 
 /-- A gossip validation: a gossip exception, a model exception (`M`), or success. -/
-abbrev GM := ExceptT Fail M
+abbrev Validation := ExceptT Fail Fallible
 
 /-- `raise GossipIgnore(reason)`. -/
-@[inline] def ignore {α : Type} (reason : String) : GM α := throw (.ignore reason)
+@[inline] def ignore {α : Type} (reason : String) : Validation α := throw (.ignore reason)
 
 /-- `raise GossipReject(reason)`. -/
-@[inline] def reject {α : Type} (reason : String) : GM α := throw (.reject reason)
+@[inline] def reject {α : Type} (reason : String) : Validation α := throw (.reject reason)
 
 /-- The verdict of one message, as the vectors' `expected` field names it. -/
 inductive Outcome where
@@ -59,7 +59,7 @@ inductive Outcome where
 
 /-- Run a validation that returns the updated cache. A model exception is returned as the outer
 `.error`; a gossip exception leaves the cache unchanged. -/
-def outcome {σ : Type} (seen : σ) (v : GM σ) : M (Outcome × σ) :=
+def outcome {σ : Type} (seen : σ) (v : Validation σ) : Fallible (Outcome × σ) :=
   match v.run with
   | .error r => .error r
   | .ok (.ok seen') => .ok (.valid, seen')
@@ -118,23 +118,23 @@ section Time
 variable (P : Preset) (cfg : Config) (genesisTimeMs : U64)
 
 /-- `is_future_slot(store, slot, current_time_ms)` (phase0). -/
-def isFutureSlot (slot : Slot) (currentTimeMs : U64) : M Bool := do
+def isFutureSlot (slot : Slot) (currentTimeMs : U64) : Fallible Bool := do
   let slotTimeMs ← computeTimeAtSlotMs cfg genesisTimeMs slot
-  pure ((← U64.add? currentTimeMs (← c64 cfg.MAXIMUM_GOSSIP_CLOCK_DISPARITY) "is_future_slot")
+  pure ((← U64.add? currentTimeMs (← u64Checked cfg.MAXIMUM_GOSSIP_CLOCK_DISPARITY) "is_future_slot")
     < slotTimeMs)
 
 /-- `is_future_epoch(store, epoch, current_time_ms)` (phase0). `epoch` may be a config value
 (`CAPELLA_FORK_EPOCH`), a Python `int`. -/
-def isFutureEpoch (epoch : Nat) (currentTimeMs : U64) : M Bool := do
-  let withDisparity ← U64.add? currentTimeMs (← c64 cfg.MAXIMUM_GOSSIP_CLOCK_DISPARITY)
+def isFutureEpoch (epoch : Nat) (currentTimeMs : U64) : Fallible Bool := do
+  let withDisparity ← U64.add? currentTimeMs (← u64Checked cfg.MAXIMUM_GOSSIP_CLOCK_DISPARITY)
     "is_future_epoch"
   let currentSlot ← computeSlotAtTimeMs cfg genesisTimeMs withDisparity
   pure ((← computeEpochAtSlot P currentSlot).toNat < epoch)
 
 /-- `is_within_slot_range(store, slot, slot_range, current_time_ms)` (phase0). -/
-def isWithinSlotRange (slot slotRange : U64) (currentTimeMs : U64) : M Bool := do
+def isWithinSlotRange (slot slotRange : U64) (currentTimeMs : U64) : Fallible Bool := do
   let site := "is_within_slot_range"
-  let disparity ← c64 cfg.MAXIMUM_GOSSIP_CLOCK_DISPARITY
+  let disparity ← u64Checked cfg.MAXIMUM_GOSSIP_CLOCK_DISPARITY
   let startTimeMs ← computeTimeAtSlotMs cfg genesisTimeMs slot
   if (← U64.add? currentTimeMs disparity site) < startTimeMs then return false
   let endSlot ← U64.add? (← U64.add? slot slotRange site) U64.one site
@@ -143,17 +143,17 @@ def isWithinSlotRange (slot slotRange : U64) (currentTimeMs : U64) : M Bool := d
   pure true
 
 /-- `is_current_slot(store, slot, current_time_ms)` (altair). -/
-def isCurrentSlot (slot : Slot) (currentTimeMs : U64) : M Bool :=
+def isCurrentSlot (slot : Slot) (currentTimeMs : U64) : Fallible Bool :=
   isWithinSlotRange cfg genesisTimeMs slot U64.zero currentTimeMs
 
 /-- `is_within_epoch(store, epoch, current_time_ms)` (deneb). -/
-def isWithinEpoch (epoch : Epoch) (currentTimeMs : U64) : M Bool := do
+def isWithinEpoch (epoch : Epoch) (currentTimeMs : U64) : Fallible Bool := do
   isWithinSlotRange cfg genesisTimeMs (← computeStartSlotAtEpoch P epoch)
-    (← c64 (P.SLOTS_PER_EPOCH - 1)) currentTimeMs
+    (← u64Checked (P.SLOTS_PER_EPOCH - 1)) currentTimeMs
 
 /-- `is_current_or_previous_epoch(store, epoch, current_time_ms)` (deneb). Both operands are
 evaluated, as in the spec. -/
-def isCurrentOrPreviousEpoch (epoch : Epoch) (currentTimeMs : U64) : M Bool := do
+def isCurrentOrPreviousEpoch (epoch : Epoch) (currentTimeMs : U64) : Fallible Bool := do
   let isCurrent ← isWithinEpoch P cfg genesisTimeMs epoch currentTimeMs
   let isPrevious ← isWithinEpoch P cfg genesisTimeMs
     (← U64.add? epoch U64.one "is_current_or_previous_epoch") currentTimeMs
@@ -161,16 +161,16 @@ def isCurrentOrPreviousEpoch (epoch : Epoch) (currentTimeMs : U64) : M Bool := d
 
 /-- `is_current_or_next_slot(store, slot, current_time_ms)` (gloas). `slot - 1` is `Slot`
 arithmetic and raises at slot 0. -/
-def isCurrentOrNextSlot (slot : Slot) (currentTimeMs : U64) : M Bool := do
+def isCurrentOrNextSlot (slot : Slot) (currentTimeMs : U64) : Fallible Bool := do
   let isCurrent ← isCurrentSlot cfg genesisTimeMs slot currentTimeMs
   let isNext ← isCurrentSlot cfg genesisTimeMs
     (← U64.sub? slot U64.one "is_current_or_next_slot") currentTimeMs
   pure (isCurrent || isNext)
 
 /-- `is_past_slot(store, slot, current_time_ms)` (gloas). -/
-def isPastSlot (slot : Slot) (currentTimeMs : U64) : M Bool := do
+def isPastSlot (slot : Slot) (currentTimeMs : U64) : Fallible Bool := do
   let slotTimeMs ← computeTimeAtSlotMs cfg genesisTimeMs slot
-  pure ((← U64.add? slotTimeMs (← c64 cfg.MAXIMUM_GOSSIP_CLOCK_DISPARITY) "is_past_slot")
+  pure ((← U64.add? slotTimeMs (← u64Checked cfg.MAXIMUM_GOSSIP_CLOCK_DISPARITY) "is_past_slot")
     < currentTimeMs)
 
 end Time
@@ -179,7 +179,7 @@ end Time
 
 /-- `is_non_strict_superset(seen_bits_set, new_bits)` (phase0). `zip(..., strict=True)` raises
 on a length mismatch. -/
-def isNonStrictSuperset (seenBitsSet : List (List Bool)) (newBits : List Bool) : M Bool := do
+def isNonStrictSuperset (seenBitsSet : List (List Bool)) (newBits : List Bool) : Fallible Bool := do
   for priorBits in seenBitsSet do
     if priorBits.length != newBits.length then
       throw (.assert "is_non_strict_superset: zip(strict=True)")
@@ -187,7 +187,7 @@ def isNonStrictSuperset (seenBitsSet : List (List Bool)) (newBits : List Bool) :
   pure false
 
 /-- `compute_fork_version(epoch)` (`specs/gloas/p2p-interface.md:225`). -/
-def computeForkVersion (cfg : Config) (epoch : Epoch) : M Version := do
+def computeForkVersion (cfg : Config) (epoch : Epoch) : Fallible Version := do
   let e := epoch.toNat
   versionOf <|
     if e ≥ cfg.GLOAS_FORK_EPOCH then cfg.GLOAS_FORK_VERSION
@@ -200,15 +200,15 @@ def computeForkVersion (cfg : Config) (epoch : Epoch) : M Version := do
     else cfg.GENESIS_FORK_VERSION
 
 /-- `compute_subnet_for_data_column_sidecar(column_index)` (fulu). -/
-def computeSubnetForDataColumnSidecar (cfg : Config) (columnIndex : ColumnIndex) : M U64 := do
-  U64.mod? columnIndex (← c64 cfg.DATA_COLUMN_SIDECAR_SUBNET_COUNT)
+def computeSubnetForDataColumnSidecar (cfg : Config) (columnIndex : ColumnIndex) : Fallible U64 := do
+  U64.mod? columnIndex (← u64Checked cfg.DATA_COLUMN_SIDECAR_SUBNET_COUNT)
     "compute_subnet_for_data_column_sidecar"
 
 /-- `is_gas_limit_target_compatible(parent_gas_limit, gas_limit, target_gas_limit)` (gloas).
 `parent_gas_limit - max_gas_limit_difference` and the sum are `Uint64` arithmetic. -/
-def isGasLimitTargetCompatible (parentGasLimit gasLimit targetGasLimit : U64) : M Bool := do
+def isGasLimitTargetCompatible (parentGasLimit gasLimit targetGasLimit : U64) : Fallible Bool := do
   let site := "is_gas_limit_target_compatible"
-  let maxDiff ← c64 (saturatingSub (parentGasLimit.toNat / 1024) 1)
+  let maxDiff ← u64Checked (saturatingSub (parentGasLimit.toNat / 1024) 1)
   let minGasLimit ← U64.sub? parentGasLimit maxDiff site
   let maxGasLimit ← U64.add? parentGasLimit maxDiff site
   if targetGasLimit < minGasLimit then return gasLimit.toNat == minGasLimit.toNat
@@ -216,20 +216,20 @@ def isGasLimitTargetCompatible (parentGasLimit gasLimit targetGasLimit : U64) : 
   pure (gasLimit.toNat == targetGasLimit.toNat)
 
 /-- `is_sync_committee_aggregator(signature)` (`specs/altair/validator.md`). -/
-def isSyncCommitteeAggregator (P : Preset) (signature : BLSSignature) : M Bool := do
+def isSyncCommitteeAggregator (P : Preset) (signature : BLSSignature) : Fallible Bool := do
   let modulo := max 1 (P.SYNC_COMMITTEE_SIZE / SYNC_COMMITTEE_SUBNET_COUNT /
     TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE)
   let v ← bytesToUint64 ((hashBytes signature.toArray.toList).take 8)
   pure (v.toNat % modulo == 0)
 
 /-- `compute_sync_committee_period(epoch)` (altair). -/
-def computeSyncCommitteePeriod (P : Preset) (epoch : Epoch) : M U64 := do
-  U64.div? epoch (← c64 P.EPOCHS_PER_SYNC_COMMITTEE_PERIOD) "compute_sync_committee_period"
+def computeSyncCommitteePeriod (P : Preset) (epoch : Epoch) : Fallible U64 := do
+  U64.div? epoch (← u64Checked P.EPOCHS_PER_SYNC_COMMITTEE_PERIOD) "compute_sync_committee_period"
 
 /-- The sync committee `get_sync_subcommittee_pubkeys` and `compute_subnets_for_sync_committee`
 read: the current one when `state.slot + 1` is in the current period, else the next. -/
 def syncCommitteeForNextSlot (P : Preset) (stateSlot : Slot) (current next : SyncCommittee P) :
-    M (SyncCommittee P) := do
+    Fallible (SyncCommittee P) := do
   let nextSlotEpoch ← computeEpochAtSlot P (← U64.add? stateSlot U64.one "state.slot + 1")
   let currentPeriod ← computeSyncCommitteePeriod P (← computeEpochAtSlot P stateSlot)
   if currentPeriod.toNat == (← computeSyncCommitteePeriod P nextSlotEpoch).toNat then pure current

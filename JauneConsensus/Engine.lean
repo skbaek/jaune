@@ -56,7 +56,7 @@ def getExecutionRequestsList (r : ExecutionRequests P) : ExecutionRequestsList :
 them. -/
 structure NewPayloadRequest (P : Preset) where
   executionPayload : ExecutionPayload P
-  versionedHashes : List B256
+  versionedHashes : List Jaune.U256
   parentBeaconBlockRoot : Root
   executionRequests : ExecutionRequestsList
 
@@ -65,22 +65,22 @@ structure NewPayloadRequest (P : Preset) where
 /-- A consensus `Withdrawal` as Jaune's execution `Withdrawal`. The execution layer carries the
 amount in Gwei as a word and multiplies it by `10^9` when crediting. -/
 def Withdrawal.toExecution (w : JauneConsensus.Withdrawal) : Jaune.Withdrawal :=
-  { globalIndex := w.index.toWord, validatorIndex := w.validator_index.toWord,
-    recipient := w.address, amount := w.amount.toNat.toB256 }
+  { index := w.index.toWord, validatorIndex := w.validator_index.toWord,
+    address := w.address, amount := w.amount.toNat.toU256 }
 
 /-- The trie key of the `i`-th entry of a block's transactions or withdrawals: `rlp(i)`. -/
-def blockTrieKey (i : Nat) : Bytes := (BLT.bytes i.toBytes).toBytes
+def blockTrieKey (i : Nat) : Bytes := (Rlp.Item.bytes i.toBytes).toBytes
 
 /-- The transactions root of a payload: the trie of its opaque transactions, keyed by
 `rlp(index)`. A transaction's payload bytes are its EIP-2718 encoding (the legacy RLP list, or
 the type byte followed by the typed payload), which is what the trie commits to. -/
-def transactionsRootOf (txs : List Bytes) : B256 :=
+def transactionsRootOf (txs : List Bytes) : Jaune.U256 :=
   trie <| Std.TreeMap.ofList (txs.putIndex.map fun (i, tx) => ((blockTrieKey i).toNibbles, tx)) _
 
 /-- The withdrawals root of a list of execution withdrawals, keyed by `rlp(index)`. -/
-def withdrawalsRootOf (wds : List Jaune.Withdrawal) : B256 :=
+def withdrawalsRootOf (wds : List Jaune.Withdrawal) : Jaune.U256 :=
   trie <| Std.TreeMap.ofList
-    (wds.putIndex.map fun (i, wd) => ((blockTrieKey i).toNibbles, wd.toBLT.toBytes)) _
+    (wds.putIndex.map fun (i, wd) => ((blockTrieKey i).toNibbles, wd.toRlpItem.toBytes)) _
 
 /-- The payload's transactions as byte strings. -/
 def ExecutionPayload.txBytes (payload : ExecutionPayload P) : List Bytes :=
@@ -100,9 +100,9 @@ def payloadHeader (payload : ExecutionPayload P) (parentBeaconRoot : Root)
     ommersHash := emptyOmmerHash
     coinbase := payload.fee_recipient
     stateRoot := payload.state_root
-    txsRoot := transactionsRootOf payload.txBytes
-    receiptRoot := payload.receipts_root
-    bloom := payload.logs_bloom.toArray.toList
+    transactionsRoot := transactionsRootOf payload.txBytes
+    receiptsRoot := payload.receipts_root
+    logsBloom := payload.logs_bloom.toArray.toList
     difficulty := 0
     number := payload.block_number.toNat
     gasLimit := payload.gas_limit.toNat
@@ -127,12 +127,12 @@ encoding: a legacy transaction is its RLP list (first byte `≥ 0xc0`), anything
 envelope. `none` for an envelope (or the empty string); for a legacy-shaped string, the strict
 legacy decode Jaune's block decoder applies to a list-shaped body item (`BLT.toExBlock` through
 `BLT.toExLegacyTx`), after reading the string as one RLP item. -/
-def legacyPayloadTx? (bs : Bytes) : Option (Except Jaune.DecodeError Tx) :=
+def legacyPayloadTransaction? (bs : Bytes) : Option (Except Jaune.DecodeError Jaune.Transaction) :=
   match bs with
   | b :: _ =>
     if 0xc0 ≤ b then
-      some <| match Bytes.toBLT? bs with
-        | some (.list ls) => BLT.toExLegacyTx ls
+      some <| match Bytes.toRlpItem? bs with
+        | some (.list ls) => Rlp.Item.toExceptLegacyTransaction ls
         | _ => .error <| Jaune.DecodeError.structure "legacy transaction"
             "expected one well-formed RLP list"
     else none
@@ -144,26 +144,26 @@ does); everything else stays undecoded bytes `.inl`, which the transition decode
 envelope (`decodeTx`). A legacy-shaped string that does not decode stays `.inl`, and the engine
 has already refused it at `blobVersionedHashesOf` (`EngineReject.transactionDecode`), before any
 block is run. -/
-def payloadTx (bs : Bytes) : Bytes ⊕ Tx :=
-  match legacyPayloadTx? bs with
+def payloadTransaction (bs : Bytes) : Bytes ⊕ Jaune.Transaction :=
+  match legacyPayloadTransaction? bs with
   | some (.ok tx) => .inr tx
   | _ => .inl bs
 
 /-- One payload transaction decoded as the execution layer decodes it: a legacy RLP list through
 the strict legacy decoder, a typed envelope through `Bytes.toExTx`. -/
-def payloadTxDecode (bs : Bytes) : Except TransitionError Tx :=
-  match legacyPayloadTx? bs with
+def payloadTransactionDecode (bs : Bytes) : Except TransitionError Jaune.Transaction :=
+  match legacyPayloadTransaction? bs with
   | some r => r.mapError .decode
-  | none => bs.toExTx
+  | none => bs.toExceptTransaction
 
 /-- The execution block a payload stands for: its header, its transactions as block-body slots
 (`payloadTx`: legacy transactions decoded, typed envelopes as undecoded bytes decoded by the
 transition itself), no ommers, and its withdrawals. -/
 def payloadToBlock (req : NewPayloadRequest P) : Block :=
   { header := payloadHeader req.executionPayload req.parentBeaconBlockRoot req.executionRequests
-    txs := req.executionPayload.txBytes.map payloadTx
+    transactions := req.executionPayload.txBytes.map payloadTransaction
     ommers := []
-    wds := req.executionPayload.executionWithdrawals }
+    withdrawals := req.executionPayload.executionWithdrawals }
 
 /-! ## The engine -/
 
@@ -196,16 +196,16 @@ inductive EngineReject where
 /-- The versioned hashes of a payload's blob transactions, in transaction order, each
 transaction's in its own order. Every transaction is decoded (`payloadTxDecode`), so one that
 does not decode refuses the payload; a legacy transaction decodes and carries none. -/
-def blobVersionedHashesOf (txs : List Bytes) : Except TransitionError (List B256) := do
-  let txs ← txs.mapM payloadTxDecode
+def blobVersionedHashesOf (txs : List Bytes) : Except TransitionError (List Jaune.U256) := do
+  let txs ← txs.mapM payloadTransactionDecode
   pure <| txs.flatMap fun tx => match tx.type with
-    | .three _ _ _ _ _ _ hashes => hashes
+    | .eip4844 _ _ _ _ _ _ hashes => hashes
     | _ => []
 
 /-- `verify_and_notify_new_payload`, with the engine's execution state the execution chain
 `exec` under configuration `cfg`, for a block of consensus fork `cf`. On success it returns the
 execution chain after the payload's block. -/
-def engineVerdict (cfg : ChainConfig) (cf : CFork) (exec : BlockChain)
+def engineVerdict (cfg : ChainConfig) (cf : ConsensusFork) (exec : BlockChain)
     (req : NewPayloadRequest P) : Except EngineReject BlockChain := do
   let payload := req.executionPayload
   if payload.txBytes.any List.isEmpty then throw .emptyTransaction
@@ -216,12 +216,12 @@ def engineVerdict (cfg : ChainConfig) (cf : CFork) (exec : BlockChain)
   (cfg.checkChainId exec).mapError .chainContext
   let f ← (cfg.forkAt blk.header.number blk.header.timestamp).mapError .forkLookup
   if f.consensusFork? != some cf then throw (.unpairedFork f)
-  (checkBlockRlpSize f.ruleSet.block blk.toBLT.toBytes.length).mapError .blockSize
+  (checkBlockRlpSize f.ruleSet.block blk.toRlpItem.toBytes.length).mapError .blockSize
   let post ← match stateTransitionScheduledE cfg f exec blk with
     | .error e => throw (.forkLookup e)
     | .ok (.error e) => throw (.transition e)
     | .ok (.ok post) => pure post
-  let (_, bout) ← (applyBody (initBenv f exec blk.header) blk.txs blk.ommers blk.wds).mapError .body
+  let (_, bout) ← (applyBody (initBenv f exec blk.header) blk.transactions blk.ommers blk.withdrawals).mapError .body
   if bout.requests != req.executionRequests then throw .requestsMismatch
   pure post
 
@@ -230,8 +230,8 @@ later): the payload, the commitments' versioned hashes, the block's parent root,
 body's execution requests as a list. The spec reads the parent root from
 `state.latest_block_header.parent_root`, which `process_block_header` has just set to
 `block.parent_root`. -/
-def NewPayloadRequest.ofBlock {f : CFork} (block : BeaconBlock P f) : M (NewPayloadRequest P) := do
-  let requests ← Gated.read block.body.execution_requests "NewPayloadRequest: execution_requests"
+def NewPayloadRequest.ofBlock {f : ConsensusFork} (block : BeaconBlock P f) : Fallible (NewPayloadRequest P) := do
+  let requests ← ForkField.read block.body.execution_requests "NewPayloadRequest: execution_requests"
   pure { executionPayload := block.body.execution_payload
          versionedHashes := block.body.blob_kzg_commitments.toArray.toList.map fun c =>
            kzgCommitmentToVersionedHash c.toArray.toList
@@ -246,19 +246,19 @@ block decoder does for a fixture block. -/
 
 /-- A legacy transaction's EIP-2718 bytes: the RLP list of nonce 0, gas price 1, gas 21000,
 recipient `0x11…11`, value 0, empty data, `v = 27`, `r = 1`, `s = 1`. -/
-def legacyTxExample : Bytes :=
+def legacyTransactionExample : Bytes :=
   [0xdf, 0x80, 0x01, 0x82, 0x52, 0x08, 0x94] ++ List.replicate 20 0x11 ++
     [0x80, 0x80, 0x1b, 0x01, 0x01]
 
 /-- A mainnet-preset request whose payload carries `legacyTxExample` and nothing else. -/
 def legacyPayloadExample : NewPayloadRequest Preset.mainnet :=
   { executionPayload :=
-      { parent_hash := zeroRoot, fee_recipient := (0 : Jaune.Adr), state_root := zeroRoot,
+      { parent_hash := zeroRoot, fee_recipient := (0 : Jaune.Address), state_root := zeroRoot,
         receipts_root := zeroRoot, logs_bloom := ⟨Array.replicate 256 0, Array.size_replicate⟩,
         prev_randao := zeroRoot, block_number := U64.zero, gas_limit := U64.zero,
         gas_used := U64.zero, timestamp := U64.zero, extra_data := ⟨#[], Nat.zero_le _⟩,
         base_fee_per_gas := UIntN.zero, block_hash := zeroRoot,
-        transactions := ⟨#[⟨legacyTxExample.toArray, by decide⟩], by decide⟩,
+        transactions := ⟨#[⟨legacyTransactionExample.toArray, by decide⟩], by decide⟩,
         withdrawals := ⟨#[], Nat.zero_le _⟩, blob_gas_used := U64.zero,
         excess_blob_gas := U64.zero }
     versionedHashes := []
@@ -266,6 +266,6 @@ def legacyPayloadExample : NewPayloadRequest Preset.mainnet :=
     executionRequests := [] }
 
 #guard blobVersionedHashesOf legacyPayloadExample.executionPayload.txBytes matches .ok []
-#guard (payloadToBlock legacyPayloadExample).txs matches [.inr _]
+#guard (payloadToBlock legacyPayloadExample).transactions matches [.inr _]
 
 end JauneConsensus

@@ -4,7 +4,7 @@ import Jaune.Exec
 
 namespace Jaune
 
-private theorem push_effects {pre post : Devm} {flag : B256} (h : pre.push flag = .ok post) :
+private theorem push_effects {pre post : Devm} {flag : U256} (h : pre.push flag = .ok post) :
     post.stack = flag :: pre.stack ∧ post.memory = pre.memory := by
   rw [Devm.push_def] at h
   by_cases room : pre.stack.length < 1024
@@ -27,7 +27,7 @@ private theorem charge_effects {pre post : Devm} {cost : Nat} (h : chargeGas cos
   · cases h
     exact ⟨rfl, rfl⟩
 
-private theorem delegation_effects (rules : ForkRules) (pre : Devm) (target : Adr) :
+private theorem delegation_effects (rules : ForkRules) (pre : Devm) (target : Address) :
     (rules.accessDelegation pre target).2.2.2.2.stack = pre.stack ∧
       (rules.accessDelegation pre target).2.2.2.2.memory = pre.memory := by
   unfold ForkRules.accessDelegation
@@ -37,13 +37,13 @@ private theorem delegation_effects (rules : ForkRules) (pre : Devm) (target : Ad
     split <;> exact ⟨rfl, rfl⟩
   · exact ⟨rfl, rfl⟩
 
-private theorem complete_delegation_effects (pre : Devm) (delegated : Bool) (target : Adr) :
+private theorem complete_delegation_effects (pre : Devm) (delegated : Bool) (target : Address) :
     (completeDelegationAccess pre delegated target).2.stack = pre.stack ∧
       (completeDelegationAccess pre delegated target).2.memory = pre.memory := by
   cases delegated <;> exact ⟨rfl, rfl⟩
 
 private theorem resume_call_effects {parent post : Devm} {oi os : Nat} (state : Option StateGasRules)
-    (charged : Bool) {raw : Except (EvmError × State × AdrSet × Tra) Devm}
+    (charged : Bool) {raw : Except (EvmError × State × AdrSet × TransientStorage) Devm}
     (h : (match state with
       | none => Resume.call parent oi os
       | some state => Resume.callAmsterdam state parent oi os charged).run raw = .ok post) :
@@ -78,8 +78,8 @@ private theorem resume_call_effects {parent post : Devm} {oi os : Nat} (state : 
           rw [memory]
           rfl
 
-private theorem generic_call_effects {sevm : Sevm} {pre post : Devm} {gas reservoir : Nat} {value : B256}
-    {caller target codeAddress : Adr} {transfer static : Bool} {ii size oi os : Nat}
+private theorem generic_call_effects {sevm : Sevm} {pre post : Devm} {gas reservoir : Nat} {value : U256}
+    {caller target codeAddress : Address} {transfer static : Bool} {ii size oi os : Nat}
     {code : ByteArray} {disable charged insufficient : Bool} {xl : Xlot} (state : Option StateGasRules)
     (h : XStep.Run (match state with
       | none => genericCall.step sevm pre gas value caller target codeAddress transfer static
@@ -115,10 +115,10 @@ private theorem generic_call_effects {sevm : Sevm} {pre post : Devm} {gas reserv
 
 /-- Every successful STATICCALL consumes its six operands, pushes one status word and writes only a bounded
 reply to the prepaid output window. The premise is the original instruction run, with no fork restriction. -/
-theorem Ninst.staticcall_run_effects {sevm : Sevm} {pre post : Devm}
-    {gas target ii size oi os : B256} {rest : List B256}
+theorem NextOp.staticcall_run_effects {sevm : Sevm} {pre post : Devm}
+    {gas target ii size oi os : U256} {rest : List U256}
     (stack : pre.stack = gas :: target :: ii :: size :: oi :: os :: rest)
-    (run : Ninst.Run sevm pre (.exec .staticcall) post) :
+    (run : NextOp.Run sevm pre (.message .staticcall) post) :
     (∃ flag, post.stack = flag :: rest) ∧
       ∃ bytes : Bytes, bytes.length ≤ os.toNat ∧
         post.memory = (pre.memory.extends [(ii.toNat, size.toNat), (oi.toNat, os.toNat)]).write oi.toNat bytes := by
@@ -126,7 +126,7 @@ theorem Ninst.staticcall_run_effects {sevm : Sevm} {pre post : Devm}
   rcases pre with ⟨⟨operands, memory, gasLeft, stateGasLeft⟩, metadata, world⟩
   change operands = _ at stack
   subst operands
-  simp only [Ninst.StepRun, Ninst.step_exec, XStep.run_toStep, Xinst.step] at run
+  simp only [NextOp.StepRun, NextOp.step_exec, XStep.run_toStep, MessageOp.step] at run
   cases stateGas : sevm.benvStat.rules.stateGas with
   | none =>
     simp only [stateGas, bind, Except.bind, Devm.popToNat_def, Devm.popToAdr_def,
@@ -141,8 +141,8 @@ theorem Ninst.staticcall_run_effects {sevm : Sevm} {pre post : Devm}
       obtain ⟨chargedStack, chargedMemory⟩ := charge_effects charge
       obtain ⟨delegatedStack, delegatedMemory⟩ := delegation_effects sevm.benvStat.rules
         (match sevm.benvStat.rules.access with
-        | .eip2929 => addAccessedAddress ⟨⟨rest, memory, gasLeft, stateGasLeft⟩, metadata, world⟩ target.toAdr
-        | .flat _ => ⟨⟨rest, memory, gasLeft, stateGasLeft⟩, metadata, world⟩) target.toAdr
+        | .eip2929 => addAccessedAddress ⟨⟨rest, memory, gasLeft, stateGasLeft⟩, metadata, world⟩ target.toAddress
+        | .flat _ => ⟨⟨rest, memory, gasLeft, stateGasLeft⟩, metadata, world⟩) target.toAddress
       have baseStack : charged.stack = rest := by
         apply chargedStack.trans
         apply delegatedStack.trans

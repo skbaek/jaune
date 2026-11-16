@@ -63,7 +63,7 @@ private def byte3 (n : Nat) : Bytes :=
 family and by the call's input-region size. Its counter is frame-local, so
 recursion ends at the EVM call-depth boundary rather than at the storage-counter
 branch used by the companion `d0g0v0` program. -/
-def recursiveCallCode (family : Family) (target : Adr) (inputSize : Nat) : ByteArray :=
+def recursiveCallCode (family : Family) (target : Address) (inputSize : Nat) : ByteArray :=
   Bytes.toByteArray <|
     [ 0x60, 0x01, 0x60, 0x00, 0x51, 0x01, 0x60, 0x00, 0x52,
       0x61, 0x04, 0x00, 0x60, 0x00, 0x51, 0x10, 0x60, 0x1b,
@@ -76,7 +76,7 @@ def recursiveCallCode (family : Family) (target : Adr) (inputSize : Nat) : ByteA
 
 /-- The original spelling, retained so the historical evidence records and the
 goal documents that name it still resolve. -/
-def recursiveStaticCallCode (target : Adr) (inputSize : Nat) : ByteArray :=
+def recursiveStaticCallCode (target : Address) (inputSize : Nat) : ByteArray :=
   recursiveCallCode .staticcall target inputSize
 
 /-- Number of `cbb…` frames exercised by `recursiveCallCode` from an initial
@@ -111,7 +111,7 @@ def ProbeError.render : ProbeError → String
   | .settledHalt => "execution ended with a settled halt"
 
 def probeMsg (family : Family) (depth inputSize : Nat) : Msg :=
-  let target : Adr := 0xcbbf5374fce5edbc8e2a8697c15331677e6ebf0b
+  let target : Address := 0xcbbf5374fce5edbc8e2a8697c15331677e6ebf0b
   let code := recursiveCallCode family target inputSize
   let state := State.setCode .empty target code
   let benv : Benv := {(default : Benv) with state := state}
@@ -128,14 +128,14 @@ def probeMsg (family : Family) (depth inputSize : Nat) : Msg :=
   }
 
 def run (family : Family) (depth inputSize : Nat) :
-    Except ProbeError (Nat × Nat × B256) :=
+    Except ProbeError (Nat × Nat × U256) :=
   match processMessage (probeMsg family depth inputSize) with
   | .error _ => .error .frameSettlement
   | .ok devm =>
     if devm.error.isSome then
       .error .settledHalt
     else
-      let success := Bytes.toB256 (devm.memory.data.sliceD 32 32 0)
+      let success := Bytes.toU256 (devm.memory.data.sliceD 32 32 0)
       .ok (devm.memory.size, devm.memory.data.size, success)
 
 private def parseFamily (text : String) : Option Family :=

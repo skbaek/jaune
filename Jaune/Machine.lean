@@ -32,77 +32,77 @@ verificaiton work. It should be considered a style contract between `jaune`
 and the projects which depend on it, including `blanc`.
 -/
 
-abbrev AccessList : Type := List (Adr × List B256)
+abbrev AccessList : Type := List (Address × List U256)
 
-abbrev State : Type := Std.TreeMap Adr Acct compare
+abbrev State : Type := Std.TreeMap Address Account compare
 
 -- class Authorization
-structure Auth : Type where
+structure Authorization : Type where
   -- EIP-7702 authorization chain IDs are uint256 values.  A value other than
   -- the execution chain ID (or zero) makes only this tuple inapplicable.
-  chainId : B256
-  address : Adr
+  chainId : U256
+  address : Address
   nonce : UInt64
   yParity : Nat
-  r : B256
-  s : B256
+  r : U256
+  s : U256
 
-inductive TxType : Type
+inductive TransactionType : Type
   -- Legacy (including EIP-155)
-  | zero
+  | legacy
     (gasPrice : Nat)
-    (receiver : Option Adr)
+    («to» : Option Address)
   -- EIP-2930
-  | one
+  | eip2930
     (chainId : UInt64)
     (gasPrice : Nat)
-    (receiver : Option Adr)
+    («to» : Option Address)
     (accessList : AccessList)
   -- EIP-1559
-  | two
+  | eip1559
     (chainId : UInt64)
-    (maxPriorityFee : Nat)
-    (maxFee : Nat)
-    (receiver : Option Adr)
+    (maxPriorityFeePerGas : Nat)
+    (maxFeePerGas : Nat)
+    («to» : Option Address)
     (accessList : AccessList)
   -- EIP-4844
-  | three
+  | eip4844
     (chainId : UInt64)
-    (maxPriorityFee : Nat)
-    (maxFee : Nat)
-    (receiver : Adr)
+    (maxPriorityFeePerGas : Nat)
+    (maxFeePerGas : Nat)
+    («to» : Address)
     (accessList : AccessList)
-    (maxBlobFee : Nat)
-    (blobHashes : List B256)
-  | four
+    (maxFeePerBlobGas : Nat)
+    (blobVersionedHashes : List U256)
+  | eip7702
     (chainId : UInt64)
-    (maxPriorityFee : Nat)
-    (maxFee : Nat)
-    (receiver : Adr)
+    (maxPriorityFeePerGas : Nat)
+    (maxFeePerGas : Nat)
+    («to» : Address)
     (accessList : AccessList)
-    (auths : List Auth)
+    (authorizationList : List Authorization)
 
 structure Withdrawal : Type where
-  (globalIndex : UInt64)
+  (index : UInt64)
   (validatorIndex : UInt64)
-  (recipient : Adr)
-  (amount : B256)
+  (address : Address)
+  (amount : U256)
 
 structure Header : Type where
-  parentHash : B256
-  ommersHash : B256
-  coinbase : Adr
-  stateRoot : B256
-  txsRoot : B256
-  receiptRoot : B256
-  bloom : Bytes
+  parentHash : U256
+  ommersHash : U256
+  coinbase : Address
+  stateRoot : U256
+  transactionsRoot : U256
+  receiptsRoot : U256
+  logsBloom : Bytes
   difficulty : Nat
   number : Nat
   gasLimit : Nat
   gasUsed : Nat
   timestamp : Nat
   extraData : Bytes
-  prevRandao : B256
+  prevRandao : U256
   nonce : UInt64
   /-- EIP-1559 (London). Like every field below it, optional in the sense
   `requestsHash` is: the field exists on the wire only at forks that define it,
@@ -110,21 +110,21 @@ structure Header : Type where
   such field", never "the field is zero". -/
   baseFeePerGas : Option Nat
   /-- EIP-4895 (Shanghai). -/
-  withdrawalsRoot : Option B256
+  withdrawalsRoot : Option U256
   /-- EIP-4844 (Cancun); present exactly when `excessBlobGas` is. -/
   blobGasUsed : Option Nat
   /-- EIP-4844 (Cancun). -/
   excessBlobGas : Option Nat
   /-- EIP-4788 (Cancun). -/
-  parentBeaconBlockRoot : Option B256
-  requestsHash : Option B256
+  parentBeaconBlockRoot : Option U256
+  requestsHash : Option U256
   /-- EIP-7928: the commitment to the block-level access list.
 
   Optional in the same sense `requestsHash` is: the field exists on the wire
   only at forks that define it, and `ForkRules.header.blockAccessListHash` is
   what says which those are. `none` is "this fork has no such field", never
   "the field is zero". -/
-  blockAccessListHash : Option B256
+  blockAccessListHash : Option U256
   /-- EIP-7843: the consensus slot number this block was produced for, which
   `SLOTNUM` pushes. Optional on the same terms. -/
   slotNumber : Option UInt64
@@ -148,53 +148,53 @@ disagrees with the rules it is being validated under.
 A header with every field through `parentBeaconBlockRoot` present encodes
 exactly as it did when those fields were mandatory: the nested matches on
 present fields reduce to the list the old code wrote literally. -/
-def Header.toBLT (header : Header) : BLT :=
-  BLT.list <| [
-    BLT.bytes header.parentHash.toBytes,
-    BLT.bytes header.ommersHash.toBytes,
-    BLT.bytes header.coinbase.toBytes,
-    BLT.bytes header.stateRoot.toBytes,
-    BLT.bytes header.txsRoot.toBytes,
-    BLT.bytes header.receiptRoot.toBytes,
-    BLT.bytes header.bloom,
-    BLT.bytes header.difficulty.toBytes,
-    BLT.bytes header.number.toBytes,
-    BLT.bytes header.gasLimit.toBytes,
-    BLT.bytes header.gasUsed.toBytes,
-    BLT.bytes header.timestamp.toBytes,
-    BLT.bytes header.extraData,
-    BLT.bytes header.prevRandao.toBytes,
-    BLT.bytes header.nonce.toBytes
+def Header.toRlpItem (header : Header) : Rlp.Item :=
+  Rlp.Item.list <| [
+    Rlp.Item.bytes header.parentHash.toBytes,
+    Rlp.Item.bytes header.ommersHash.toBytes,
+    Rlp.Item.bytes header.coinbase.toBytes,
+    Rlp.Item.bytes header.stateRoot.toBytes,
+    Rlp.Item.bytes header.transactionsRoot.toBytes,
+    Rlp.Item.bytes header.receiptsRoot.toBytes,
+    Rlp.Item.bytes header.logsBloom,
+    Rlp.Item.bytes header.difficulty.toBytes,
+    Rlp.Item.bytes header.number.toBytes,
+    Rlp.Item.bytes header.gasLimit.toBytes,
+    Rlp.Item.bytes header.gasUsed.toBytes,
+    Rlp.Item.bytes header.timestamp.toBytes,
+    Rlp.Item.bytes header.extraData,
+    Rlp.Item.bytes header.prevRandao.toBytes,
+    Rlp.Item.bytes header.nonce.toBytes
   ] ++
     match header.baseFeePerGas with
     | none => []
     | some baseFee =>
-      BLT.bytes baseFee.toBytes ::
+      Rlp.Item.bytes baseFee.toBytes ::
       match header.withdrawalsRoot with
       | none => []
       | some withdrawalsRoot =>
-        BLT.bytes withdrawalsRoot.toBytes ::
+        Rlp.Item.bytes withdrawalsRoot.toBytes ::
         match header.blobGasUsed, header.excessBlobGas,
             header.parentBeaconBlockRoot with
         | some blobGasUsed, some excessBlobGas, some parentBeaconBlockRoot =>
-          BLT.bytes blobGasUsed.toBytes ::
-          BLT.bytes excessBlobGas.toBytes ::
-          BLT.bytes parentBeaconBlockRoot.toBytes ::
+          Rlp.Item.bytes blobGasUsed.toBytes ::
+          Rlp.Item.bytes excessBlobGas.toBytes ::
+          Rlp.Item.bytes parentBeaconBlockRoot.toBytes ::
           match header.requestsHash with
           | none => []
           | some rh =>
-            BLT.bytes rh.toBytes ::
+            Rlp.Item.bytes rh.toBytes ::
               match header.blockAccessListHash with
               | none => []
               | some balHash =>
-                BLT.bytes balHash.toBytes ::
+                Rlp.Item.bytes balHash.toBytes ::
                   match header.slotNumber with
                   | none => []
                   -- A canonical scalar, like `number` and `gasLimit` above
                   -- and unlike `nonce`: upstream's `slot_number` is a `U64`
                   -- quantity, so it is encoded minimally and `toRlpB64`
                   -- decodes it that way.
-                  | some slot => [BLT.bytes slot.toNat.toBytes]
+                  | some slot => [Rlp.Item.bytes slot.toNat.toBytes]
         | _, _, _ => []
 
 /-- A header's identity: the keccak of its canonical RLP encoding.
@@ -203,69 +203,69 @@ This is the value a child block's `parentHash` names, the key a snapshot is
 stored under, and the value `BLOCKHASH` returns. It is written out inline at
 several older call sites; those keep their spelling, and this is the name the
 checked chain vocabulary states its results about. -/
-def Header.hash (header : Header) : B256 :=
-  (Header.toBLT header).toBytes.keccak
+def Header.hash (header : Header) : U256 :=
+  (Header.toRlpItem header).toBytes.keccak
 
-structure Tx : Type where
+structure Transaction : Type where
   (nonce : UInt64)
-  (gas : Nat)
+  (gasLimit : Nat)
     (value : Nat)
   (data : Bytes)
   (v : Nat)
   (r : Bytes)
   (s : Bytes)
-  (type : TxType)
+  (type : TransactionType)
 
 structure Block : Type where
   header : Header
-  txs : List (Bytes ⊕ Tx)
+  transactions : List (Bytes ⊕ Transaction)
   ommers : List Header
-  wds : List Withdrawal
+  withdrawals : List Withdrawal
 
 structure BlockChain : Type where
   blocks : List Block
   state : State
   chainId : UInt64
 
-def TxType.receiver? : TxType → Option Adr
-  | .zero _ receiver => receiver
-  | .one _ _ receiver _ => receiver
-  | .two _ _ _ receiver _ => receiver
-  | .three _ _ _ receiver _ _ _ => some receiver
-  | .four _ _ _ receiver _ _ => some receiver
+def TransactionType.to? : TransactionType → Option Address
+  | .legacy _ receiver => receiver
+  | .eip2930 _ _ receiver _ => receiver
+  | .eip1559 _ _ _ receiver _ => receiver
+  | .eip4844 _ _ _ receiver _ _ _ => some receiver
+  | .eip7702 _ _ _ receiver _ _ => some receiver
 
-def TxType.accessList : TxType → AccessList
-  | .zero _ _ => []
-  | .one _ _ _ al => al
-  | .two _ _ _ _ al => al
-  | .three _ _ _ _ al _ _ => al
-  | .four _ _ _ _ al _ => al
+def TransactionType.accessList : TransactionType → AccessList
+  | .legacy _ _ => []
+  | .eip2930 _ _ _ al => al
+  | .eip1559 _ _ _ _ al => al
+  | .eip4844 _ _ _ _ al _ _ => al
+  | .eip7702 _ _ _ _ al _ => al
 
 /-- EELS's transaction-type number: legacy is 0, each typed envelope its
 type byte. Unit U5 (S5) admission compares it against `rules.txr.maxType`. -/
-def TxType.index : TxType → Nat
-  | .zero _ _ => 0
-  | .one _ _ _ _ => 1
-  | .two _ _ _ _ _ => 2
-  | .three _ _ _ _ _ _ _ => 3
-  | .four _ _ _ _ _ _ => 4
+def TransactionType.index : TransactionType → Nat
+  | .legacy _ _ => 0
+  | .eip2930 _ _ _ _ => 1
+  | .eip1559 _ _ _ _ _ => 2
+  | .eip4844 _ _ _ _ _ _ _ => 3
+  | .eip7702 _ _ _ _ _ _ => 4
 
-def Tx.accessList (tx : Tx) : AccessList := tx.type.accessList
+def Transaction.accessList (tx : Transaction) : AccessList := tx.type.accessList
 
-def Tx.auths (tx : Tx) : List Auth :=
+def Transaction.authorizationList (tx : Transaction) : List Authorization :=
   match tx.type with
-  | .four _ _ _ _ _ auths => auths
+  | .eip7702 _ _ _ _ _ auths => auths
   | _ => []
 
 def Bytes.sig (bs : Bytes) : Bytes := List.dropWhile (· = 0) bs
 
-def AccessList.toBLT (al : AccessList) : BLT :=
-  let aux : Adr × List B256 → BLT
+def AccessList.toRlpItem (al : AccessList) : Rlp.Item :=
+  let aux : Address × List U256 → Rlp.Item
   | ⟨adr, words⟩ =>
-    .list [.bytes adr.toBytes, .list (words.map (.bytes ∘ B256.toBytes))]
+    .list [.bytes adr.toBytes, .list (words.map (.bytes ∘ U256.toBytes))]
   .list (al.map aux)
 
-def Auth.toBLT (auth : Auth) : BLT :=
+def Authorization.toRlpItem (auth : Authorization) : Rlp.Item :=
   .list [
     .bytes auth.chainId.toBytes.sig,
     .bytes <| auth.address.toBytes,
@@ -279,132 +279,132 @@ def Auth.toBLT (auth : Auth) : BLT :=
     .bytes auth.s.toBytes.sig,
   ]
 
-def Tx.toBLT (tx : Tx) : BLT :=
+def Transaction.toRlpItem (tx : Transaction) : Rlp.Item :=
   match tx.type with
-  | .zero gasPrice receiver =>
+  | .legacy gasPrice receiver =>
     .list [
       .bytes tx.nonce.toNat.toBytes,
       .bytes gasPrice.toBytes,
-      .bytes tx.gas.toBytes,
-      .bytes <| receiver.rec [] Adr.toBytes,
+      .bytes tx.gasLimit.toBytes,
+      .bytes <| receiver.rec [] Address.toBytes,
       .bytes tx.value.toBytes,
       .bytes tx.data,
       .bytes tx.v.toBytes,
       .bytes (trimZero tx.r),
       .bytes (trimZero tx.s),
     ]
-  | .one chainId gasPrice receiver accessList =>
+  | .eip2930 chainId gasPrice receiver accessList =>
     .list [
       .bytes chainId.toBytes.sig,
       .bytes tx.nonce.toNat.toBytes,
       .bytes gasPrice.toBytes,
-      .bytes tx.gas.toBytes,
-      .bytes <| receiver.rec [] Adr.toBytes,
+      .bytes tx.gasLimit.toBytes,
+      .bytes <| receiver.rec [] Address.toBytes,
       .bytes tx.value.toBytes,
       .bytes tx.data,
-      accessList.toBLT,
+      accessList.toRlpItem,
       .bytes tx.v.toBytes,
       .bytes (trimZero tx.r),
       .bytes (trimZero tx.s)
     ]
-  | .two chainId maxPriorityFee maxFee receiver accessList =>
+  | .eip1559 chainId maxPriorityFee maxFee receiver accessList =>
     .list [
       .bytes chainId.toBytes.sig,
       .bytes tx.nonce.toNat.toBytes,
       .bytes maxPriorityFee.toBytes,
       .bytes maxFee.toBytes,
-      .bytes tx.gas.toBytes,
-      .bytes <| receiver.rec [] Adr.toBytes,
+      .bytes tx.gasLimit.toBytes,
+      .bytes <| receiver.rec [] Address.toBytes,
       .bytes tx.value.toBytes,
       .bytes tx.data,
-      accessList.toBLT,
+      accessList.toRlpItem,
       .bytes tx.v.toBytes,
       .bytes (trimZero tx.r),
       .bytes (trimZero tx.s)
     ]
-  | .three chainId maxPriorityFee maxFee receiver accessList maxBlobFee blobHashes =>
+  | .eip4844 chainId maxPriorityFee maxFee receiver accessList maxBlobFee blobHashes =>
     .list [
       .bytes chainId.toBytes.sig,
       .bytes tx.nonce.toNat.toBytes,
       .bytes maxPriorityFee.toBytes,
       .bytes maxFee.toBytes,
-      .bytes tx.gas.toBytes,
+      .bytes tx.gasLimit.toBytes,
       .bytes receiver.toBytes,
       .bytes tx.value.toBytes,
       .bytes tx.data,
-      accessList.toBLT,
+      accessList.toRlpItem,
       .bytes maxBlobFee.toBytes,
-      .list <| blobHashes.map <| .bytes ∘ B256.toBytes,
+      .list <| blobHashes.map <| .bytes ∘ U256.toBytes,
       .bytes tx.v.toBytes,
       .bytes (trimZero tx.r),
       .bytes (trimZero tx.s)
     ]
-  | .four chainId maxPriorityFee maxFee receiver accessList auths =>
+  | .eip7702 chainId maxPriorityFee maxFee receiver accessList auths =>
     .list [
       .bytes chainId.toBytes.sig,
       .bytes tx.nonce.toNat.toBytes,
       .bytes maxPriorityFee.toBytes,
       .bytes maxFee.toBytes,
-      .bytes tx.gas.toBytes,
+      .bytes tx.gasLimit.toBytes,
       .bytes receiver.toBytes,
       .bytes tx.value.toBytes,
       .bytes tx.data,
-      accessList.toBLT,
-      .list <| auths.map <| Auth.toBLT,
+      accessList.toRlpItem,
+      .list <| auths.map <| Authorization.toRlpItem,
       .bytes tx.v.toBytes,
       .bytes (trimZero tx.r),
       .bytes (trimZero tx.s)
     ]
 
-def B8LOrTxToBLT : Bytes ⊕ Tx → BLT
-  | .inl bs => BLT.bytes bs
-  | .inr tx => tx.toBLT
+def BytesOrTransactionToRlpItem : Bytes ⊕ Transaction → Rlp.Item
+  | .inl bs => Rlp.Item.bytes bs
+  | .inr tx => tx.toRlpItem
 
-def Withdrawal.toBLT (wd : Withdrawal) : BLT :=
-  BLT.list [
-    BLT.bytes wd.globalIndex.toBytes.sig,
-    BLT.bytes wd.validatorIndex.toBytes.sig,
-    BLT.bytes wd.recipient.toBytes,
-    BLT.bytes wd.amount.toBytes.sig
+def Withdrawal.toRlpItem (wd : Withdrawal) : Rlp.Item :=
+  Rlp.Item.list [
+    Rlp.Item.bytes wd.index.toBytes.sig,
+    Rlp.Item.bytes wd.validatorIndex.toBytes.sig,
+    Rlp.Item.bytes wd.address.toBytes,
+    Rlp.Item.bytes wd.amount.toBytes.sig
   ]
 
-def Block.toBLT (block : Block) : BLT :=
-  let txBLTs : List BLT := block.txs.map B8LOrTxToBLT
+def Block.toRlpItem (block : Block) : Rlp.Item :=
+  let txBLTs : List Rlp.Item := block.transactions.map BytesOrTransactionToRlpItem
   .list [
-    Header.toBLT block.header,
+    Header.toRlpItem block.header,
     .list txBLTs,
-    .list <| block.ommers.map Header.toBLT,
-    .list <| block.wds.map Withdrawal.toBLT
+    .list <| block.ommers.map Header.toRlpItem,
+    .list <| block.withdrawals.map Withdrawal.toRlpItem
   ]
 
-def TxType.gasPrice (baseFee : Nat) : TxType → Nat
-  | .zero gp _ => gp
-  | .one _ gp _ _ => gp
-  | .two _ mpf mf _ _ => min mf (baseFee + mpf)
-  | .three _ mpf mf _ _ _ _ => min mf (baseFee + mpf)
-  | .four _ mpf mf _ _ _ => min mf (baseFee + mpf)
+def TransactionType.gasPrice (baseFee : Nat) : TransactionType → Nat
+  | .legacy gp _ => gp
+  | .eip2930 _ gp _ _ => gp
+  | .eip1559 _ mpf mf _ _ => min mf (baseFee + mpf)
+  | .eip4844 _ mpf mf _ _ _ _ => min mf (baseFee + mpf)
+  | .eip7702 _ mpf mf _ _ _ => min mf (baseFee + mpf)
 
-def TxType.blobHashes : TxType → List B256
-  | .zero _ _ => []
-  | .one _ _ _ _ => []
-  | .two _ _ _ _ _ => []
-  | .three _ _ _ _ _ _ bhs => bhs
-  | .four _ _ _ _ _ _ => []
+def TransactionType.blobVersionedHashes : TransactionType → List U256
+  | .legacy _ _ => []
+  | .eip2930 _ _ _ _ => []
+  | .eip1559 _ _ _ _ _ => []
+  | .eip4844 _ _ _ _ _ _ bhs => bhs
+  | .eip7702 _ _ _ _ _ _ => []
 
-def Tx.blobHashes (tx : Tx) : List B256 := tx.type.blobHashes
+def Transaction.blobVersionedHashes (tx : Transaction) : List U256 := tx.type.blobVersionedHashes
 
 -- nibbles-to-bytes maps
-abbrev NTB := Std.TreeMap (List UInt8) (List UInt8) (@List.compare _ ⟨UInt8.compareLows⟩)
+abbrev TrieBuilder := Std.TreeMap (List UInt8) (List UInt8) (@List.compare _ ⟨UInt8.compareLows⟩)
 
-def hpAux : Bytes → (Option UInt8 × Bytes)
+def hexPrefixAux : Bytes → (Option UInt8 × Bytes)
   | [] => ⟨none, []⟩
   | n :: ns =>
-    match hpAux ns with
+    match hexPrefixAux ns with
     | ⟨none, bs⟩ => ⟨some n, bs⟩
     | ⟨some m, bs⟩ => ⟨none, ((n <<< 4) ||| m.lows) :: bs⟩
 
-def hp (ns : Bytes) (t : Bool) : Bytes :=
-  match hpAux ns with
+def hexPrefix (ns : Bytes) (t : Bool) : Bytes :=
+  match hexPrefixAux ns with
   | ⟨none, bs⟩ => (cond t (0x20) 0) :: bs
   | ⟨some n, bs⟩ => ((cond t 0x30 0x10) ||| n.lows) :: bs
 
@@ -422,7 +422,7 @@ def commonPrefix (n : UInt8) (ns : Bytes) : List Bytes → Option Bytes
     | [] => none
     | (n' :: ns'') => commonPrefix n' ns'' nss
 
-def NTB.empty : NTB := Std.TreeMap.empty
+def TrieBuilder.empty : TrieBuilder := Std.TreeMap.empty
 
 def sansPrefix : Bytes → Bytes → Option Bytes
   | [], ns => some ns
@@ -430,47 +430,47 @@ def sansPrefix : Bytes → Bytes → Option Bytes
   | n :: ns, n' :: ns' =>
     if n = n' then sansPrefix ns ns' else none
 
-def insertSansPrefix (pfx : Bytes) (m : NTB) (ns : Bytes) (bs : Bytes) : Option NTB := do
+def insertSansPrefix (pfx : Bytes) (m : TrieBuilder) (ns : Bytes) (bs : Bytes) : Option TrieBuilder := do
   (m.insert · bs) <$> sansPrefix pfx ns
 
-def NTB.factor (m : NTB) : Option (Bytes × NTB) := do
+def TrieBuilder.factor (m : TrieBuilder) : Option (Bytes × TrieBuilder) := do
   let ((n :: ns) :: nss) ← some (m.toList.map Prod.fst) | none
   let pfx ← commonPrefix n ns nss
-  let m' ← Std.TreeMap.foldlM (insertSansPrefix pfx) NTB.empty m
+  let m' ← Std.TreeMap.foldlM (insertSansPrefix pfx) TrieBuilder.empty m
   some ⟨pfx, m'⟩
 
-structure NTBs : Type where
-  (x0 : NTB) (x1 : NTB) (x2 : NTB) (x3 : NTB)
-  (x4 : NTB) (x5 : NTB) (x6 : NTB) (x7 : NTB)
-  (x8 : NTB) (x9 : NTB) (xA : NTB) (xB : NTB)
-  (xC : NTB) (xD : NTB) (xE : NTB) (xF : NTB)
+structure TrieBranches : Type where
+  (child0 : TrieBuilder) (child1 : TrieBuilder) (child2 : TrieBuilder) (child3 : TrieBuilder)
+  (child4 : TrieBuilder) (child5 : TrieBuilder) (child6 : TrieBuilder) (child7 : TrieBuilder)
+  (child8 : TrieBuilder) (child9 : TrieBuilder) (childA : TrieBuilder) (childB : TrieBuilder)
+  (childC : TrieBuilder) (childD : TrieBuilder) (childE : TrieBuilder) (childF : TrieBuilder)
 
-def NTBs.empty : NTBs :=
+def TrieBranches.empty : TrieBranches :=
   ⟨ .empty, .empty, .empty, .empty,
     .empty, .empty, .empty, .empty,
     .empty, .empty, .empty, .empty,
     .empty, .empty, .empty, .empty ⟩
 
-def NTBs.update (js : NTBs) (f : NTB → NTB) (k : UInt8) : NTBs :=
+def TrieBranches.update (js : TrieBranches) (f : TrieBuilder → TrieBuilder) (k : UInt8) : TrieBranches :=
   match k.toBools with
-  | ⟨_, _, _, _, 0, 0, 0, 0⟩ => { js with x0 := f js.x0}
-  | ⟨_, _, _, _, 0, 0, 0, 1⟩ => { js with x1 := f js.x1}
-  | ⟨_, _, _, _, 0, 0, 1, 0⟩ => { js with x2 := f js.x2}
-  | ⟨_, _, _, _, 0, 0, 1, 1⟩ => { js with x3 := f js.x3}
-  | ⟨_, _, _, _, 0, 1, 0, 0⟩ => { js with x4 := f js.x4}
-  | ⟨_, _, _, _, 0, 1, 0, 1⟩ => { js with x5 := f js.x5}
-  | ⟨_, _, _, _, 0, 1, 1, 0⟩ => { js with x6 := f js.x6}
-  | ⟨_, _, _, _, 0, 1, 1, 1⟩ => { js with x7 := f js.x7}
-  | ⟨_, _, _, _, 1, 0, 0, 0⟩ => { js with x8 := f js.x8}
-  | ⟨_, _, _, _, 1, 0, 0, 1⟩ => { js with x9 := f js.x9}
-  | ⟨_, _, _, _, 1, 0, 1, 0⟩ => { js with xA := f js.xA}
-  | ⟨_, _, _, _, 1, 0, 1, 1⟩ => { js with xB := f js.xB}
-  | ⟨_, _, _, _, 1, 1, 0, 0⟩ => { js with xC := f js.xC}
-  | ⟨_, _, _, _, 1, 1, 0, 1⟩ => { js with xD := f js.xD}
-  | ⟨_, _, _, _, 1, 1, 1, 0⟩ => { js with xE := f js.xE}
-  | ⟨_, _, _, _, 1, 1, 1, 1⟩ => { js with xF := f js.xF}
+  | ⟨_, _, _, _, 0, 0, 0, 0⟩ => { js with child0 := f js.child0}
+  | ⟨_, _, _, _, 0, 0, 0, 1⟩ => { js with child1 := f js.child1}
+  | ⟨_, _, _, _, 0, 0, 1, 0⟩ => { js with child2 := f js.child2}
+  | ⟨_, _, _, _, 0, 0, 1, 1⟩ => { js with child3 := f js.child3}
+  | ⟨_, _, _, _, 0, 1, 0, 0⟩ => { js with child4 := f js.child4}
+  | ⟨_, _, _, _, 0, 1, 0, 1⟩ => { js with child5 := f js.child5}
+  | ⟨_, _, _, _, 0, 1, 1, 0⟩ => { js with child6 := f js.child6}
+  | ⟨_, _, _, _, 0, 1, 1, 1⟩ => { js with child7 := f js.child7}
+  | ⟨_, _, _, _, 1, 0, 0, 0⟩ => { js with child8 := f js.child8}
+  | ⟨_, _, _, _, 1, 0, 0, 1⟩ => { js with child9 := f js.child9}
+  | ⟨_, _, _, _, 1, 0, 1, 0⟩ => { js with childA := f js.childA}
+  | ⟨_, _, _, _, 1, 0, 1, 1⟩ => { js with childB := f js.childB}
+  | ⟨_, _, _, _, 1, 1, 0, 0⟩ => { js with childC := f js.childC}
+  | ⟨_, _, _, _, 1, 1, 0, 1⟩ => { js with childD := f js.childD}
+  | ⟨_, _, _, _, 1, 1, 1, 0⟩ => { js with childE := f js.childE}
+  | ⟨_, _, _, _, 1, 1, 1, 1⟩ => { js with childF := f js.childF}
 
-def NTBs.insert (js : NTBs) : Bytes → Bytes → NTBs
+def TrieBranches.insert (js : TrieBranches) : Bytes → Bytes → TrieBranches
   | [], _ => js
   | n :: ns, bs => js.update (Std.TreeMap.insert · ns bs) n
 
@@ -480,7 +480,7 @@ def Std.TreeMap.isSingleton {K V : Type} (cmp : K → K → Ordering)
 
 mutual
 
-  def nodeComp : Nat → NTB → BLT
+  def nodeComp : Nat → TrieBuilder → Rlp.Item
     | 0, _ => .bytes []
     | k + 1, j =>
       if j.isEmpty
@@ -490,49 +490,49 @@ mutual
            then r
            else .bytes <| r.toBytes.keccak.toBytes
 
-  def structComp : Nat → NTB → BLT
+  def structComp : Nat → TrieBuilder → Rlp.Item
     | 0, _ => .bytes []
     | k + 1, j =>
       if j.isEmpty
             then .bytes []       else if j.isSingleton
            then match j.toList with
-                | [(k, v)] => .list [.bytes (hp k 1), .bytes v]
+                | [(k, v)] => .list [.bytes (hexPrefix k 1), .bytes v]
                 | _ => .bytes []            else match j.factor with
                 | none =>
-                  let js := Std.TreeMap.foldl NTBs.insert NTBs.empty j
-                  .list [ nodeComp k js.x0, nodeComp k js.x1, nodeComp k js.x2,
-                          nodeComp k js.x3, nodeComp k js.x4, nodeComp k js.x5,
-                          nodeComp k js.x6, nodeComp k js.x7, nodeComp k js.x8,
-                          nodeComp k js.x9, nodeComp k js.xA, nodeComp k js.xB,
-                          nodeComp k js.xC, nodeComp k js.xD, nodeComp k js.xE,
-                          nodeComp k js.xF, .bytes (j.getD [] []) ]
-                | some (pfx, j') => .list [.bytes (hp pfx 0), nodeComp k j']
+                  let js := Std.TreeMap.foldl TrieBranches.insert TrieBranches.empty j
+                  .list [ nodeComp k js.child0, nodeComp k js.child1, nodeComp k js.child2,
+                          nodeComp k js.child3, nodeComp k js.child4, nodeComp k js.child5,
+                          nodeComp k js.child6, nodeComp k js.child7, nodeComp k js.child8,
+                          nodeComp k js.child9, nodeComp k js.childA, nodeComp k js.childB,
+                          nodeComp k js.childC, nodeComp k js.childD, nodeComp k js.childE,
+                          nodeComp k js.childF, .bytes (j.getD [] []) ]
+                | some (pfx, j') => .list [.bytes (hexPrefix pfx 0), nodeComp k j']
 
 end
 
-def NTB.maxKeyLength (j : NTB) : Nat :=
+def TrieBuilder.maxKeyLength (j : TrieBuilder) : Nat :=
   (j.toList.map (List.length ∘ Prod.fst)).maxD 0
 
-def collapse (j : NTB) : BLT := structComp (2 * (j.maxKeyLength + 1)) j
+def collapse (j : TrieBuilder) : Rlp.Item := structComp (2 * (j.maxKeyLength + 1)) j
 
-def trie (j : NTB) : B256 :=
+def trie (j : TrieBuilder) : U256 :=
   Bytes.keccak <| (collapse j).toBytes
 
-def B256.toBLT (w : B256) : BLT := .bytes w.toBytes
+def U256.toRlpItem (w : U256) : Rlp.Item := .bytes w.toBytes
 
-def Stor.toNTB (s : Stor) : NTB :=
-  let f : NTB → B256 → B256 → NTB :=
+def Storage.toTrieBuilder (s : Storage) : TrieBuilder :=
+  let f : TrieBuilder → U256 → U256 → TrieBuilder :=
     λ j k v =>
       j.insert
         k.keccak.toNibbles
-        ((BLT.toBytes <| .bytes <| Bytes.sig <| v.toBytes))
-  Std.TreeMap.foldl f NTB.empty s
+        ((Rlp.Item.toBytes <| .bytes <| Bytes.sig <| v.toBytes))
+  Std.TreeMap.foldl f TrieBuilder.empty s
 
-def B256.zerocount (x : B256) : Nat → Nat
+def U256.zerocount (x : U256) : Nat → Nat
   | 0 => 0
-  | k + 1 => if x = 0 then k + 1 else B256.zerocount (x >>> 8) k
+  | k + 1 => if x = 0 then k + 1 else U256.zerocount (x >>> 8) k
 
-def B256.bytecount (x : B256) : Nat := 32 - (B256.zerocount x 32)
+def U256.bytecount (x : U256) : Nat := 32 - (U256.zerocount x 32)
 
 /-- Leading zero bits of one 64-bit limb; 64 for zero. -/
 def UInt64.leadingZeros (x : UInt64) : Nat :=
@@ -542,70 +542,70 @@ def UInt64.leadingZeros (x : UInt64) : Nat :=
 
 This is EIP-7939's `256 - x.bit_length()` stated directly, and it is computed
 limb by limb so that a word is never widened to a bignum to be measured. -/
-def B256.leadingZeros (x : B256) : Nat :=
+def U256.leadingZeros (x : U256) : Nat :=
   if x.1.1 ≠ 0 then UInt64.leadingZeros x.1.1
   else if x.1.2 ≠ 0 then 64 + UInt64.leadingZeros x.1.2
   else if x.2.1 ≠ 0 then 128 + UInt64.leadingZeros x.2.1
   else 192 + UInt64.leadingZeros x.2.2
 
-def accountToKeyVal (pr : Adr × Acct) : Bytes × Bytes :=
+def accountToKeyValue (pr : Address × Account) : Bytes × Bytes :=
   let ad := pr.fst
   let ac := pr.snd
   ⟨
     ad.toBytes.keccak.toNibbles,
     let val' :=
-      BLT.toBytes <| .list [
+      Rlp.Item.toBytes <| .list [
         .bytes (ac.nonce.toBytes.sig),
-        .bytes (ac.bal.toBytes.sig),
-        B256.toBLT (trie ac.stor.toNTB),
-        B256.toBLT <| (Bytes.keccak ac.code.toList)
+        .bytes (ac.balance.toBytes.sig),
+        U256.toRlpItem (trie ac.storage.toTrieBuilder),
+        U256.toRlpItem <| (Bytes.keccak ac.code.toList)
       ]
     val'
   ⟩
 
 -- values --
 
-def gHigh : Nat := 10
-def gJumpdest : Nat := 1
-def txCreateCost : Nat := 32000
-def gasInitCodeWordCost : Nat := 2
-def gBase : Nat := 2
-def gasCopy : Nat := 3
-def gReturnDataCopy : Nat := 3
-def gMemory : Nat := 3
-def gKeccak256 : Nat := 30
-def gasKeccak256Word : Nat := 6
-def gVerylow : Nat := 3
-def gLow : Nat := 5
-def gMid : Nat := 8
-def gExp : Nat := 10
-def gExpbyte : Nat := 50
-def gasColdSload : Nat := 2100
-def gasStorageSet : Nat := 20000
-def rSClear : Nat := 4800
-def gBlockhash : Nat := 20
-def gasCodeDeposit : Nat := 200
-def gasCreate : Nat := 32000
-def gHashopcode : Nat := 3
-def gasPerBlob : Nat := 2 ^ 17
-def gasStorageUpdate := 5000
-def gasEcrecover : Nat := 3000
-def gasP256Verify : Nat := 6900
+def Gas.high : Nat := 10
+def Gas.jumpdest : Nat := 1
+def Gas.txCreate : Nat := 32000
+def Gas.initcodeWordCost : Nat := 2
+def Gas.base : Nat := 2
+def Gas.copy : Nat := 3
+def Gas.returnDataCopy : Nat := 3
+def Gas.memory : Nat := 3
+def Gas.keccak256 : Nat := 30
+def Gas.keccak256Word : Nat := 6
+def Gas.veryLow : Nat := 3
+def Gas.low : Nat := 5
+def Gas.mid : Nat := 8
+def Gas.exp : Nat := 10
+def Gas.expByte : Nat := 50
+def Gas.coldSloadCost : Nat := 2100
+def Gas.sstoreSetGas : Nat := 20000
+def Gas.storageClearRefund : Nat := 4800
+def Gas.blockhash : Nat := 20
+def Gas.codeDeposit : Nat := 200
+def Gas.create : Nat := 32000
+def Gas.hashOpcodeGas : Nat := 3
+def Gas.perBlob : Nat := 2 ^ 17
+def Gas.sreset := 5000
+def Gas.ecrecover : Nat := 3000
+def Gas.p256Verify : Nat := 6900
 -- `maxCodeSize` and `maxInitCodeSize` are fork rules, not global constants:
 -- see `ForkRules.code` in `Jaune/Fork.lean`.
-def gNewAccount : Nat := 25000
-def gasSelfDestructNewAccount : Nat := 25000
-def gasCallValue : Nat := 9000
-def gCallStipend : Nat := 2300
-def gasWarmAccess : Nat := 100
-def gasColdAccountAccess : Nat := 2600
-def gasSelfDestruct : Nat := 5000
-def gLog : Nat := 375
-def gLogdata : Nat := 8
-def gLogtopic : Nat := 375
-def depositContractAddress : Adr :=
+def Gas.newAccount : Nat := 25000
+def Gas.selfdestructNewAccount : Nat := 25000
+def Gas.callValue : Nat := 9000
+def Gas.callStipend : Nat := 2300
+def Gas.warmStorageReadCost : Nat := 100
+def Gas.coldAccountAccessCost : Nat := 2600
+def Gas.selfdestruct : Nat := 5000
+def Gas.log : Nat := 375
+def Gas.logData : Nat := 8
+def Gas.logTopic : Nat := 375
+def depositContractAddress : Address :=
   0x00000000219ab540356cbb839cbe05303d7705fa
-def depositEventSignatureHash : B256 :=
+def depositEventSignatureHash : U256 :=
   0x649bbc62d0e31342afea4e5cd82d4049e7e1ee912fc0889aa790803be39038c5
 def depositEventLength : Nat := 576
 def pubkeyOffset : Nat := 160
@@ -618,24 +618,24 @@ def amountSize : Nat := 8
 def indexSize : Nat := 8
 def signatureSize : Nat := 96
 def withdrawalCredentialsSize : Nat := 32
-def txAccessListAddressCost : Nat := 2400
-def txAccessListStorageKeyCost : Nat := 1900
-def floorCalldataCost : Nat := 10
-def standardCallDataTokenCost : Nat := 4
+def Gas.accessListAddressCost : Nat := 2400
+def Gas.accessListStorageKeyCost : Nat := 1900
+def Gas.totalCostFloorPerToken : Nat := 10
+def Gas.standardTokenCost : Nat := 4
 def depositRequestType : Bytes := [0]
 def withdrawalRequestType : Bytes := [1]
 def consolidationRequestType : Bytes := [2]
-def withdrawalRequestPredeployAddress : Adr := 0x00000961Ef480Eb55e80D19ad83579A64c007002
-def consolidationRequestPredeployAddress : Adr := 0x0000BBdDc7CE488642fb579F8B00f3a590007251
-def historyStorageAddress : Adr := 0x0000F90827F1C53a10cb7A02335B175320002935
-def emptyOmmerHash : B256 := (BLT.list []).toBytes.keccak
-def setCodeTxMagic : Bytes := [0x05]
-def beaconRootsAddress : Adr := 0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02
-def systemAddress : Adr := 0xfffffffffffffffffffffffffffffffffffffffe
+def withdrawalRequestPredeployAddress : Address := 0x00000961Ef480Eb55e80D19ad83579A64c007002
+def consolidationRequestPredeployAddress : Address := 0x0000BBdDc7CE488642fb579F8B00f3a590007251
+def historyStorageAddress : Address := 0x0000F90827F1C53a10cb7A02335B175320002935
+def emptyOmmerHash : U256 := (Rlp.Item.list []).toBytes.keccak
+def setCodeTransactionMagic : Bytes := [0x05]
+def beaconRootsAddress : Address := 0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02
+def systemAddress : Address := 0xfffffffffffffffffffffffffffffffffffffffe
 def systemTransactionGas : Nat := 30000000
 def versionedHashVersionKzg : UInt8 := 0x01
 def eoaDelegationMarker : Bytes := [0xEF, 0x01, 0x00]
-def gasBlake2PerRound : Nat := 1
+def Gas.gfround : Nat := 1
 def eoaDelegatedCodeLength : Nat := 23
 -- The blob target, ceiling, and base-fee update fraction are fork rules, not
 -- global constants: see `ForkRules.blob` in `Jaune/Fork.lean`.
@@ -658,11 +658,11 @@ theorem elasticityMultiplier_pos : 0 < elasticityMultiplier := by decide
 theorem gasLimitAdjustmentFactor_pos : 0 < gasLimitAdjustmentFactor := by decide
 theorem baseFeeMaxChangeDenominator_pos : 0 < baseFeeMaxChangeDenominator := by
   decide
-theorem gasPerBlob_pos : 0 < gasPerBlob := by decide
+theorem Gas.perBlob_pos : 0 < Gas.perBlob := by decide
 
-def perEmptyAccountCost := 25000
-def perAuthBaseCost := 12500
-def txBaseCost : Nat := 21000
+def Gas.perEmptyAccountCost := 25000
+def Gas.perAuthBaseCost := 12500
+def Gas.transaction : Nat := 21000
 
 /-! ### The rule-data bridge
 
@@ -691,23 +691,23 @@ so the record spells them out, and `rfl` here is what makes that duplication
 safe rather than a second source of truth. -/
 
 @[simp] theorem pragueRules_gas_coldAccountAccess :
-    pragueRules.gas.coldAccountAccess = gasColdAccountAccess := rfl
+    pragueRules.gas.coldAccountAccess = Gas.coldAccountAccessCost := rfl
 @[simp] theorem pragueRules_gas_callValue :
-    pragueRules.gas.callValue = gasCallValue := rfl
+    pragueRules.gas.callValue = Gas.callValue := rfl
 @[simp] theorem pragueRules_gas_createAccess :
-    pragueRules.gas.createAccess = gasCreate := rfl
+    pragueRules.gas.createAccess = Gas.create := rfl
 @[simp] theorem pragueRules_gas_storageClearRefund :
-    pragueRules.gas.storageClearRefund = rSClear := rfl
+    pragueRules.gas.storageClearRefund = Gas.storageClearRefund := rfl
 @[simp] theorem pragueRules_gas_txBase :
-    pragueRules.gas.txBase = txBaseCost := rfl
+    pragueRules.gas.txBase = Gas.transaction := rfl
 @[simp] theorem pragueRules_gas_txAccessListAddress :
-    pragueRules.gas.txAccessListAddress = txAccessListAddressCost := rfl
+    pragueRules.gas.txAccessListAddress = Gas.accessListAddressCost := rfl
 @[simp] theorem pragueRules_gas_txAccessListStorageKey :
-    pragueRules.gas.txAccessListStorageKey = txAccessListStorageKeyCost := rfl
+    pragueRules.gas.txAccessListStorageKey = Gas.accessListStorageKeyCost := rfl
 @[simp] theorem pragueRules_gas_floorTokenCost :
-    pragueRules.gas.floorTokenCost = floorCalldataCost := rfl
-@[simp] theorem pragueRules_gas_perAuthIntrinsic :
-    pragueRules.gas.perAuthIntrinsic = perEmptyAccountCost := rfl
+    pragueRules.gas.floorTokenCost = Gas.totalCostFloorPerToken := rfl
+@[simp] theorem pragueRules_gas_perAuthorizationIntrinsic :
+    pragueRules.gas.perAuthorizationIntrinsic = Gas.perEmptyAccountCost := rfl
 /-- The tenth field is additive with identity `0`, so the Prague formula is
 literally unchanged rather than merely equal to what it was. -/
 @[simp] theorem pragueRules_gas_codeReadSurcharge :
@@ -717,7 +717,7 @@ literally unchanged rather than merely equal to what it was. -/
 `CREATE`/`CREATE2` opcode base and the creation transaction's recipient cost.
 Stated so that the single field is justified rather than assumed -- EIP-8037
 moves both together, and if upstream ever separated them this would fail. -/
-@[simp] theorem txCreateCost_eq_gasCreate : txCreateCost = gasCreate := rfl
+@[simp] theorem Gas.txCreate_eq_create : Gas.txCreate = Gas.create := rfl
 
 /-- The request contracts the rule data names are the ones this module has
 always called, in the same order. -/
@@ -756,17 +756,17 @@ proof that those are not third copies of the numbers but the same two, which is
 what lets a Sufficiency obligation stated in terms of the globals be discharged
 from a `Valid` hypothesis. -/
 theorem gasSchedule_valid_iff (g : GasSchedule) :
-    g.Valid ↔ gasWarmAccess ≤ g.coldAccountAccess ∧ 0 < g.createAccess
-      ∧ gCallStipend ≤ g.callValue := Iff.rfl
+    g.Valid ↔ Gas.warmStorageReadCost ≤ g.coldAccountAccess ∧ 0 < g.createAccess
+      ∧ Gas.callStipend ≤ g.callValue := Iff.rfl
 
 theorem GasSchedule.Valid.warmAccess_le {g : GasSchedule} (h : g.Valid) :
-    gasWarmAccess ≤ g.coldAccountAccess := h.1
+    Gas.warmStorageReadCost ≤ g.coldAccountAccess := h.1
 
 theorem GasSchedule.Valid.createAccess_pos {g : GasSchedule} (h : g.Valid) :
     0 < g.createAccess := h.2.1
 
 theorem GasSchedule.Valid.stipend_le_callValue {g : GasSchedule} (h : g.Valid) :
-    gCallStipend ≤ g.callValue := h.2.2
+    Gas.callStipend ≤ g.callValue := h.2.2
 
 -- The whole supported chain shares Prague's schedule, so the bridge above
 -- serves every fork this build runs, not only Prague. Stated by `rfl` on the
@@ -819,30 +819,30 @@ def g2KDiscount : List Nat :=
     528, 528, 527, 526, 526, 525, 524, 524
   ]
 
-def initCodeCost (len : Nat) : Nat :=
-  gasInitCodeWordCost * (ceilDiv len 32)
+def initcodeCost (len : Nat) : Nat :=
+  Gas.initcodeWordCost * (ceilDiv len 32)
 
-instance : Hashable Adr := ⟨fun x => x.2.2⟩
+instance : Hashable Address := ⟨fun x => x.2.2⟩
 -- The storage-slot hash must depend on the key, not only the address: mix the
 -- address hash with all four 64-bit limbs of the B256 key (finding 3.9). A
 -- key-insensitive hash sent every same-address slot into one bucket.
-instance : Hashable (Adr × B256) :=
+instance : Hashable (Address × U256) :=
   ⟨λ x =>
     let k := x.2
     mixHash (hash x.1) (mixHash k.1.1 (mixHash k.1.2 (mixHash k.2.1 k.2.2)))⟩
 
-abbrev AdrSet : Type := @Std.HashSet Adr _ _
-abbrev KeySet : Type := @Std.HashSet (Adr × B256) _ _
+abbrev AdrSet : Type := @Std.HashSet Address _ _
+abbrev KeySet : Type := @Std.HashSet (Address × U256) _ _
 
 -- Regression for the key-sensitive hash above. These four keys share one
 -- address but each sets a different 64-bit limb, so the old address-only hash
 -- collided them into a single bucket.
-private def keyHashRegressionKeys : List (Adr × B256) :=
-  let a : Adr := (0x1234 : Adr)
-  [ (a, Nat.toB256 1),
-    (a, Nat.toB256 (2 ^ 64)),
-    (a, Nat.toB256 (2 ^ 128)),
-    (a, Nat.toB256 (2 ^ 192)) ]
+private def keyHashRegressionKeys : List (Address × U256) :=
+  let a : Address := (0x1234 : Address)
+  [ (a, Nat.toU256 1),
+    (a, Nat.toU256 (2 ^ 64)),
+    (a, Nat.toU256 (2 ^ 128)),
+    (a, Nat.toU256 (2 ^ 192)) ]
 
 -- distinct keys at one address must not all hash to the same value
 #guard (keyHashRegressionKeys.map (fun p => hash p)).eraseDups.length = 4
@@ -852,11 +852,11 @@ private def keyHashRegressionKeys : List (Adr × B256) :=
   let s : KeySet := .ofList keyHashRegressionKeys
   s.size = 4 && keyHashRegressionKeys.all s.contains
 
-abbrev Tra : Type := Std.TreeMap Adr Stor compare
+abbrev TransientStorage : Type := Std.TreeMap Address Storage compare
 
 def calculateMemoryGasCost (memSize : Nat) : Nat :=
   let memWordSize := ceilDiv memSize 32
-  let linearCost := gMemory * memWordSize
+  let linearCost := Gas.memory * memWordSize
   let quadraticCost := (memWordSize ^ 2) / 512
   linearCost + quadraticCost
 
@@ -867,8 +867,8 @@ structure Mem : Type where
 def Mem.empty : Mem := ⟨.empty, 0⟩
 
 structure Log : Type where
-  (address : Adr)
-  (topics : List B256)
+  (address : Address)
+  (topics : List U256)
   (data : Bytes)
 
 structure BenvStat : Type where
@@ -892,14 +892,14 @@ structure BenvStat : Type where
   chainId : UInt64
   origState : State
   blockGasLimit : Nat
-  blockHashes: List B256
-  coinbase : Adr
+  blockHashes: List U256
+  coinbase : Address
   number : Nat
   baseFeePerGas : Nat
-  time : B256
-  prevRandao : B256
+  time : U256
+  prevRandao : U256
   excessBlobGas : Nat
-  parentBeaconBlockRoot : B256
+  parentBeaconBlockRoot : U256
   /-- EIP-7843: the consensus slot number the header carries, which `SLOTNUM`
   pushes. Defaulted so that every existing `BenvStat` literal keeps
   elaborating; under rules without `op.slotnum` nothing reads it. -/
@@ -935,7 +935,7 @@ structure Benv : Type where
   storageWrites : KeySet := .emptyWithCapacity
 
 structure TenvStat : Type where
-  origin: Adr
+  origin: Address
   gasPrice: Nat
   gas: Nat
   /-- Amsterdam's state-gas reservoir beside the execution grant `gas`.
@@ -943,27 +943,27 @@ structure TenvStat : Type where
   stateGasReservoir : Nat := 0
   accessListAddresses: AdrSet
   accessListStorageKeys: KeySet
-  blobVersionedHashes: List B256
-  auths : List Auth
+  blobVersionedHashes: List U256
+  auths : List Authorization
   indexInBlock : Option Nat
-  txHash: Option B256
+  txHash: Option U256
 
 -- class TransactionEnvironment
 structure Tenv : Type where
-  transientStorage: Tra
+  transientStorage: TransientStorage
   stat : TenvStat
 
 -- class Message
 structure Msg : Type where
   benv: Benv
   tenv: Tenv
-  caller: Adr
-  target: Option Adr
-  currentTarget: Adr
+  caller: Address
+  target: Option Address
+  currentTarget: Address
   gas: Nat
-  value: B256
+  value: U256
   data: Bytes
-  codeAddress: Option Adr
+  codeAddress: Option Address
   code: ByteArray
   depth: Nat
   shouldTransferValue: Bool
@@ -1576,13 +1576,13 @@ def Bytes.toRlpFixed (name : String) (n : Nat) (xs : Bytes) :
 exact-width decoder, so this adds the precise reason rather than a check. Note
 these fields are *bytes*, not scalars: a root may legitimately begin with a zero
 byte, so the canonical-scalar rule must not be applied to them. -/
-def Bytes.toRlpHash (name : String) (xs : Bytes) : Except DecodeError B256 :=
-  xs.toB256?.toExcept
+def Bytes.toRlpHash (name : String) (xs : Bytes) : Except DecodeError U256 :=
+  xs.toU256?.toExcept
     (.fixedWidth (.text s!"{name} must be exactly 32 bytes, but is {xs.length}"))
 
 /-- A fixed-width 8-byte field, as a `UInt64`. Like `toRlpHash`, this is bytes
 rather than a scalar: the header nonce is eight bytes of zeroes, not empty. -/
-def Bytes.toRlpFixedB64 (name : String) (xs : Bytes) : Except DecodeError UInt64 :=
+def Bytes.toRlpFixedUInt64 (name : String) (xs : Bytes) : Except DecodeError UInt64 :=
   xs.toUInt64?.toExcept
     (.fixedWidth (.text s!"{name} must be exactly 8 bytes, but is {xs.length}"))
 
@@ -1611,24 +1611,24 @@ def Bytes.toRlpNat (name : String) (n : Nat) (xs : Bytes) :
 
 /-- A canonical 64-bit scalar: at most eight bytes, converted without
 truncation. -/
-def Bytes.toRlpB64 (name : String) (xs : Bytes) : Except DecodeError UInt64 := do
+def Bytes.toRlpUInt64 (name : String) (xs : Bytes) : Except DecodeError UInt64 := do
   let xs ← rlpScalarBytes .fieldOverflow64 name 8 xs
   .ok xs.toUInt64
 
 /-- A canonical 256-bit scalar: at most thirty-two bytes, converted without
 truncation. -/
-def Bytes.toRlpB256 (name : String) (xs : Bytes) : Except DecodeError B256 := do
+def Bytes.toRlpU256 (name : String) (xs : Bytes) : Except DecodeError U256 := do
   let xs ← rlpScalarBytes .fieldOverflow256 name 32 xs
-  .ok xs.toB256
+  .ok xs.toU256
 
 /-- An address field: exactly twenty bytes. -/
-def Bytes.toRlpAdr (name : String) (xs : Bytes) : Except DecodeError Adr :=
-  xs.toAdr?.toExcept
+def Bytes.toRlpAddress (name : String) (xs : Bytes) : Except DecodeError Address :=
+  xs.toAddress?.toExcept
     (.fixedWidth (.text s!"{name} must be exactly 20 bytes, but is {xs.length}"))
 
 /-- An optional contract-creation receiver: empty, or exactly twenty bytes. -/
 def Bytes.toRlpReceiver (name : String) (xs : Bytes) :
-    Except DecodeError (Option Adr) :=
+    Except DecodeError (Option Address) :=
   xs.toReceiver?.toExcept
     (.fixedWidth (.text s!"{name} must be empty or exactly 20 bytes, \
        but is {xs.length}"))
@@ -1752,9 +1752,9 @@ theorem Bytes.toRlpNat_eq_ok {name : String} {n : Nat} {xs : Bytes} {v : Nat}
   exact hv ▸ Bytes.toNat_lt_of_length_le (Bytes.canonicalScalar_iff.mp hc).1
 
 /-- The 256-bit scalar decoder accepts only canonical 32-byte-wide scalars. -/
-theorem Bytes.toRlpB256_eq_ok {name : String} {xs : Bytes} {v : B256}
-    (h : xs.toRlpB256 name = .ok v) : Bytes.CanonicalScalar 32 xs := by
-  unfold Bytes.toRlpB256 at h
+theorem Bytes.toRlpU256_eq_ok {name : String} {xs : Bytes} {v : U256}
+    (h : xs.toRlpU256 name = .ok v) : Bytes.CanonicalScalar 32 xs := by
+  unfold Bytes.toRlpU256 at h
   obtain ⟨zs, hz, _⟩ := Except.bind_eq_ok h
   exact (rlpScalarBytes_eq_ok hz).2
 
@@ -1781,7 +1781,7 @@ theorem Bytes.toRlpFixed_eq_ok {name : String} {n : Nat} {xs ys : Bytes}
 header's only `U64` scalars. Everything else in `Header` is already carried by
 a width-exact type. -/
 def Header.WireWellFormed (h : Header) : Prop :=
-  h.bloom.length = 256 ∧
+  h.logsBloom.length = 256 ∧
   h.difficulty < 2 ^ 256 ∧
   h.number < 2 ^ 256 ∧
   h.gasLimit < 2 ^ 256 ∧
@@ -1797,55 +1797,55 @@ instance (h : Header) : Decidable (Header.WireWellFormed h) := by
 /-- EIP-7702 authorisation tuples arrive inside type-4 transactions, so their
 fields are untrusted in exactly the way a transaction's are. `yParity` is the
 only one `BLT.toExAuth` reads as an unbounded scalar. -/
-def Auth.WireWellFormed (a : Auth) : Prop := a.yParity < 2 ^ 256
+def Authorization.WireWellFormed (a : Authorization) : Prop := a.yParity < 2 ^ 256
 
-instance (a : Auth) : Decidable (Auth.WireWellFormed a) := by
-  unfold Auth.WireWellFormed; infer_instance
+instance (a : Authorization) : Decidable (Authorization.WireWellFormed a) := by
+  unfold Authorization.WireWellFormed; infer_instance
 
 /-- The per-type half of transaction well-formedness: the fee scalars each
 envelope carries, and the recursive obligation on type-4 authorisations.
 Access-list and blob-hash material is already width-exact by type. -/
-def TxType.WireWellFormed : TxType → Prop
-  | .zero gasPrice _ => gasPrice < 2 ^ 256
-  | .one _ gasPrice _ _ => gasPrice < 2 ^ 256
-  | .two _ maxPriorityFee maxFee _ _ =>
+def TransactionType.WireWellFormed : TransactionType → Prop
+  | .legacy gasPrice _ => gasPrice < 2 ^ 256
+  | .eip2930 _ gasPrice _ _ => gasPrice < 2 ^ 256
+  | .eip1559 _ maxPriorityFee maxFee _ _ =>
     maxPriorityFee < 2 ^ 256 ∧ maxFee < 2 ^ 256
-  | .three _ maxPriorityFee maxFee _ _ maxBlobFee _ =>
+  | .eip4844 _ maxPriorityFee maxFee _ _ maxBlobFee _ =>
     maxPriorityFee < 2 ^ 256 ∧ maxFee < 2 ^ 256 ∧ maxBlobFee < 2 ^ 256
-  | .four _ maxPriorityFee maxFee _ _ auths =>
+  | .eip7702 _ maxPriorityFee maxFee _ _ auths =>
     maxPriorityFee < 2 ^ 256 ∧ maxFee < 2 ^ 256 ∧
-      ∀ a ∈ auths, Auth.WireWellFormed a
+      ∀ a ∈ auths, Authorization.WireWellFormed a
 
-instance (t : TxType) : Decidable (TxType.WireWellFormed t) := by
-  cases t <;> (unfold TxType.WireWellFormed; infer_instance)
+instance (t : TransactionType) : Decidable (TransactionType.WireWellFormed t) := by
+  cases t <;> (unfold TransactionType.WireWellFormed; infer_instance)
 
 /-- Whether a transaction is a legacy (untyped) one. A typed transaction's
 canonical block encoding is its envelope byte followed by its payload, never
 the legacy list, so this is the discriminator the checked ingress needs. -/
-def TxType.isLegacy : TxType → Bool
-  | .zero _ _ => true
+def TransactionType.isLegacy : TransactionType → Bool
+  | .legacy _ _ => true
   | _ => false
 
 /-- Wire well-formedness of a transaction: the `U256` scalars every envelope
 shares, canonical signature scalar bytes, and the per-type obligations.
 `nonce` is already a `UInt64` and `data` is unconstrained on the wire. -/
-def Tx.WireWellFormed (tx : Tx) : Prop :=
-  tx.gas < 2 ^ 256 ∧
+def Transaction.WireWellFormed (tx : Transaction) : Prop :=
+  tx.gasLimit < 2 ^ 256 ∧
   tx.value < 2 ^ 256 ∧
   tx.v < 2 ^ 256 ∧
   Bytes.CanonicalScalar 32 tx.r ∧
   Bytes.CanonicalScalar 32 tx.s ∧
   tx.type.WireWellFormed
 
-instance (tx : Tx) : Decidable (Tx.WireWellFormed tx) := by
-  unfold Tx.WireWellFormed; infer_instance
+instance (tx : Transaction) : Decidable (Transaction.WireWellFormed tx) := by
+  unfold Transaction.WireWellFormed; infer_instance
 
 /-- EIP-4895's withdrawal amount is a 64-bit Gwei scalar on the wire even
 though `Withdrawal.amount` stores 256 bits for balance arithmetic, so a
 decoded withdrawal always has its upper 192 bits clear. Design report §7 names
 this as the one place a semantic field is wider than its wire type. -/
 def Withdrawal.WireWellFormed (w : Withdrawal) : Prop :=
-  w.amount.1 = ((0, 0) : B128) ∧ w.amount.2.1 = (0 : UInt64)
+  w.amount.1 = ((0, 0) : U128) ∧ w.amount.2.1 = (0 : UInt64)
 
 instance (w : Withdrawal) : Decidable (Withdrawal.WireWellFormed w) := by
   unfold Withdrawal.WireWellFormed
@@ -1860,8 +1860,8 @@ instance (w : Withdrawal) : Decidable (Withdrawal.WireWellFormed w) := by
 what makes `Withdrawal.WireWellFormed` a genuine lift of
 `BLT.toExWithdrawal`, which reads the amount with the 64-bit scalar
 decoder and then widens it. -/
-theorem UInt64.toNat_toB256_high (x : UInt64) :
-    (x.toNat.toB256).1 = ((0, 0) : B128) ∧ (x.toNat.toB256).2.1 = (0 : UInt64) := by
+theorem UInt64.toNat_toU256_high (x : UInt64) :
+    (x.toNat.toU256).1 = ((0, 0) : U128) ∧ (x.toNat.toU256).2.1 = (0 : UInt64) := by
   have hx : x.toNat < 2 ^ 64 := x.toNat_lt
   have h128 : x.toNat >>> 128 = 0 := by
     rw [Nat.shiftRight_eq_div_pow]
@@ -1871,9 +1871,9 @@ theorem UInt64.toNat_toB256_high (x : UInt64) :
     rw [Nat.shiftRight_eq_div_pow]
     exact Nat.div_eq_of_lt hx
   constructor
-  · simp [Nat.toB256, h128, Nat.toB128]
+  · simp [Nat.toU256, h128, Nat.toU128]
     rfl
-  · simp [Nat.toB256, Nat.toB128, h64]
+  · simp [Nat.toU256, Nat.toU128, h64]
 
 /-- A transaction slot inside a block body. `BLT.toExBlock` turns a list
 item into a decoded legacy transaction and a byte-string item into opaque
@@ -1881,11 +1881,11 @@ typed-envelope bytes, so the two sides carry genuinely different obligations:
 the decoded side must be a well-formed legacy transaction, while typed bytes
 stay opaque until the existing decode point inside `applyBody`. Eagerly
 decoding them here would change which error wins (fixed decision 5). -/
-def TxEntry.WireWellFormed : Bytes ⊕ Tx → Prop
+def TxEntry.WireWellFormed : Bytes ⊕ Transaction → Prop
   | .inl _ => True
-  | .inr tx => Tx.WireWellFormed tx ∧ tx.type.isLegacy = true
+  | .inr tx => Transaction.WireWellFormed tx ∧ tx.type.isLegacy = true
 
-instance (e : Bytes ⊕ Tx) : Decidable (TxEntry.WireWellFormed e) := by
+instance (e : Bytes ⊕ Transaction) : Decidable (TxEntry.WireWellFormed e) := by
   cases e <;> (unfold TxEntry.WireWellFormed; infer_instance)
 
 /-- Structural canonicality of a decoded block: the header, every ommer
@@ -1895,8 +1895,8 @@ re-encoding obligation is carried separately, by `CanonicalBlock`. -/
 def Block.RlpCanonical (b : Block) : Prop :=
   b.header.WireWellFormed ∧
   (∀ o ∈ b.ommers, Header.WireWellFormed o) ∧
-  (∀ w ∈ b.wds, Withdrawal.WireWellFormed w) ∧
-  (∀ e ∈ b.txs, TxEntry.WireWellFormed e)
+  (∀ w ∈ b.withdrawals, Withdrawal.WireWellFormed w) ∧
+  (∀ e ∈ b.transactions, TxEntry.WireWellFormed e)
 
 instance (b : Block) : Decidable (Block.RlpCanonical b) := by
   unfold Block.RlpCanonical; infer_instance
@@ -1954,7 +1954,7 @@ def StateGasMeter.zero : StateGasMeter := ⟨0, 0, 0, 0⟩
 
 @[ext]
 structure Mach : Type where
-  stack : List B256
+  stack : List U256
   memory : Mem
   /-- Execution gas. Unchanged in name and in meaning by EIP-8037: `GAS` still
   pushes it, every existing charge still draws from it, and every Prague-stated
@@ -2004,7 +2004,7 @@ structure Meta : Type where
 @[ext]
 structure World : Type where
   state : State
-  transientStorage : Tra
+  transientStorage : TransientStorage
   /-- Explicit storage writes; implicit storage deletion removes keys here.
   This belongs to the rollback snapshot, unlike the read sets in Meta. -/
   storageWrites : KeySet := .emptyWithCapacity
@@ -2015,7 +2015,7 @@ structure Devm : Type where
   «meta» : Meta
   world : World
 
-def Devm.stack (devm : Devm) : List B256 := devm.mach.stack
+def Devm.stack (devm : Devm) : List U256 := devm.mach.stack
 def Devm.memory (devm : Devm) : Mem := devm.mach.memory
 def Devm.gasLeft (devm : Devm) : Nat := devm.mach.gasLeft
 def Devm.stateGas (devm : Devm) : StateGasMeter := devm.mach.stateGas
@@ -2030,7 +2030,7 @@ def Devm.accessedAddresses (devm : Devm) : AdrSet := devm.meta.accessedAddresses
 def Devm.accessedStorageKeys (devm : Devm) : KeySet := devm.meta.accessedStorageKeys
 def Devm.state (devm : Devm) : State := devm.world.state
 def Devm.createdAccounts (devm : Devm) : AdrSet := devm.meta.createdAccounts
-def Devm.transientStorage (devm : Devm) : Tra := devm.world.transientStorage
+def Devm.transientStorage (devm : Devm) : TransientStorage := devm.world.transientStorage
 
 def Devm.setMach (devm : Devm) (mach : Mach) : Devm :=
   { devm with mach := mach }
@@ -2042,13 +2042,13 @@ def Devm.setWorld (devm : Devm) (world : World) : Devm :=
   { devm with world := world }
 
 structure Sevm : Type where
-  caller : Adr
-  target : Option Adr
-  currentTarget : Adr
+  caller : Address
+  target : Option Address
+  currentTarget : Address
   gas : Nat
-  value : B256
+  value : U256
   data : Bytes
-  codeAddress : Option Adr
+  codeAddress : Option Address
   code : ByteArray
   depth : Nat
   shouldTransferValue : Bool
@@ -2074,7 +2074,7 @@ theorem Sevm.rules_valid (sevm : Sevm) : sevm.benvStat.rules.Valid :=
 theorem Evm.rules_valid (evm : Evm) : evm.sta.benvStat.rules.Valid :=
   BenvStat.rules_valid evm.sta.benvStat
 
-def Devm.withStack (devm : Devm) (stack : List B256) : Devm :=
+def Devm.withStack (devm : Devm) (stack : List U256) : Devm :=
   devm.setMach {devm.mach with stack := stack}
 
 def Devm.withMemory (devm : Devm) (memory : Mem) : Devm :=
@@ -2276,7 +2276,7 @@ def Devm.withState (devm : Devm) (state : State) : Devm :=
 def Devm.withStorageWrites (devm : Devm) (writes : KeySet) : Devm :=
   devm.setWorld {devm.world with storageWrites := writes}
 
-def Devm.withTransientStorage (devm : Devm) (transientStorage : Tra) : Devm :=
+def Devm.withTransientStorage (devm : Devm) (transientStorage : TransientStorage) : Devm :=
   devm.setWorld {devm.world with transientStorage := transientStorage}
 
 -- Precompile activation is a fork rule and lives with the rules:
@@ -2788,77 +2788,77 @@ byte. -/
 def ByteArray.byteD (code : ByteArray) (i : Nat) : UInt8 :=
   if h : i < code.size then code[i] else 0
 
-inductive Ninst : Type
-  | reg : Rinst → Ninst
-  | exec : Xinst → Ninst
-  | push : ∀ bs : Bytes, bs.length ≤ 32 → Ninst
+inductive NextOp : Type
+  | plain : PlainOp → NextOp
+  | message : MessageOp → NextOp
+  | push : ∀ bs : Bytes, bs.length ≤ 32 → NextOp
   /-- EIP-8024 `DUPN` (0xE6) with its one immediate byte, undecoded: decoding
   happens at execution, where a forbidden immediate is an exceptional halt. -/
-  | dupn : UInt8 → Ninst
+  | dupn : UInt8 → NextOp
   /-- EIP-8024 `SWAPN` (0xE7) with its immediate byte. -/
-  | swapn : UInt8 → Ninst
+  | swapn : UInt8 → NextOp
   /-- EIP-8024 `EXCHANGE` (0xE8) with its immediate byte. -/
-  | exchange : UInt8 → Ninst
+  | exchange : UInt8 → NextOp
 deriving DecidableEq
 
-def Ninst.toOpString : Ninst → String
-  | reg o => Rinst.toString o
-  | exec o => Xinst.toString o
+def NextOp.toOpString : NextOp → String
+  | plain o => PlainOp.toString o
+  | message o => MessageOp.toString o
   | push bs _ => "PUSH" ++ bs.length.repr
   | dupn _ => "DUPN"
   | swapn _ => "SWAPN"
   | exchange _ => "EXCHANGE"
 
-def Ninst.toString : Ninst → String
-  | reg o => Rinst.toString o
-  | exec o => Xinst.toString o
+def NextOp.toString : NextOp → String
+  | plain o => PlainOp.toString o
+  | message o => MessageOp.toString o
   | push [] _ => "PUSH0"
   | push bs _ => "PUSH" ++ bs.length.repr ++ " " ++ Bytes.toHex bs
   | dupn i => "DUPN " ++ Bytes.toHex [i]
   | swapn i => "SWAPN " ++ Bytes.toHex [i]
   | exchange i => "EXCHANGE " ++ Bytes.toHex [i]
 
-instance : ToString Ninst := ⟨Ninst.toString⟩
-instance : Repr Ninst := ⟨λ i _ => i.toString⟩
+instance : ToString NextOp := ⟨NextOp.toString⟩
+instance : Repr NextOp := ⟨λ i _ => i.toString⟩
 
-lemma Ninst.push_ext {xs ys : Bytes}
+lemma NextOp.push_ext {xs ys : Bytes}
     (le : xs.length ≤ 32) (le' : ys.length ≤ 32) (eq : xs = ys) :
-    Ninst.push xs le = Ninst.push ys le' := by
+    NextOp.push xs le = NextOp.push ys le' := by
   revert le le'; rw [eq]; simp
 
-inductive Inst : Type
-  | last : Linst → Inst
-  | next : Ninst → Inst
-  | jump : Jinst → Inst
+inductive Op : Type
+  | halt : HaltOp → Op
+  | next : NextOp → Op
+  | jump : JumpOp → Op
 
-inductive InstType
-  | R | X | J | L | P
+inductive OpClass
+  | plain | message | jump | halt | push
 deriving DecidableEq
 
-def UInt8.toInstType (b : UInt8) : InstType :=
+def UInt8.toOpClass (b : UInt8) : OpClass :=
   match b.highs with
-  | 0x00 => if b.lows = 0x00 then .L else .R
+  | 0x00 => if b.lows = 0x00 then .halt else .plain
   | 0x05 =>
     match b.lows with
-    | 0x06 => .J
-    | 0x07 => .J
-    | 0x0B => .J
-    | 0x0F => .P
-    | _ => .R
-  | 0x06 => .P
-  | 0x07 => .P
+    | 0x06 => .jump
+    | 0x07 => .jump
+    | 0x0B => .jump
+    | 0x0F => .push
+    | _ => .plain
+  | 0x06 => .push
+  | 0x07 => .push
   | 0x0F =>
     match b.lows with
-    | 0x03 => .L
-    | 0x0D => .L
-    | 0x0F => .L
-    | _ => .X
-  | _ => .R
+    | 0x03 => .halt
+    | 0x0D => .halt
+    | 0x0F => .halt
+    | _ => .message
+  | _ => .plain
 
-lemma Linst.toInstType_toUInt8 (l : Linst) : l.toUInt8.toInstType = .L := by
+lemma HaltOp.toOpClass_toUInt8 (l : HaltOp) : l.toUInt8.toOpClass = .halt := by
   cases l <;> rfl
 
-lemma Jinst.toInstType_toUInt8 (j : Jinst) : j.toUInt8.toInstType = .J := by
+lemma JumpOp.toOpClass_toUInt8 (j : JumpOp) : j.toUInt8.toOpClass = .jump := by
   cases j <;> rfl
 
 lemma UInt8.lt_of_highs_lt_highs (x y : UInt8) (lt : x.highs < y.highs) : x < y := by
@@ -2881,12 +2881,12 @@ lemma UInt8.lt_of_highs_lt_highs (x y : UInt8) (lt : x.highs < y.highs) : x < y 
   have le' : (y.toNat ↿ 4) ≤ y.toNat := Nat.hi_le _ _
   apply Nat.lt_of_lt_of_le lt' <| Nat.le_trans le le'
 
-lemma le_of_toInstType_eq_p (b : UInt8) (h : b.toInstType = .P) :
+lemma le_of_toOpClass_eq_p (b : UInt8) (h : b.toOpClass = .push) :
     b.toNat ≤ 127 := by
   apply Nat.le_of_lt_succ
   apply (@UInt8.lt_iff_toNat_lt b 0x80).mp
   apply UInt8.lt_of_highs_lt_highs
-  simp [UInt8.toInstType] at h; split at h
+  simp [UInt8.toOpClass] at h; split at h
   · split at h <;> cases h
   · rename (UInt8.highs _ =  _) => heq; rw [heq]
     apply (@UInt8.lt_iff_toNat_lt 5 8).mpr; simp
@@ -2897,12 +2897,12 @@ lemma le_of_toInstType_eq_p (b : UInt8) (h : b.toInstType = .P) :
   · split at h <;> cases h
   · cases h
 
-def ByteArray.getInst (code : ByteArray) (pc : Nat) : Option Inst :=
+def ByteArray.getOp (code : ByteArray) (pc : Nat) : Option Op :=
   if hpc : pc < code.size
   then
     let b : UInt8 := code[pc]
-    match h : b.toInstType with
-    | .R =>
+    match h : b.toOpClass with
+    | .plain =>
       -- EIP-8024's three stack-access instructions carry one immediate byte
       -- and are sized here, fork-independently, exactly as `push` is (D8):
       -- whether they are *defined* is `rules.op.stackAccess`, checked where
@@ -2911,21 +2911,21 @@ def ByteArray.getInst (code : ByteArray) (pc : Nat) : Option Inst :=
       | 0xE6 => some (.next (.dupn (code.byteD (pc + 1))))
       | 0xE7 => some (.next (.swapn (code.byteD (pc + 1))))
       | 0xE8 => some (.next (.exchange (code.byteD (pc + 1))))
-      | _ => b.toRinst <&> (.next ∘ .reg)
-    | .X => b.toXinst <&> (.next ∘ .exec)
-    | .J => b.toJinst <&> .jump
-    | .L => b.toLinst <&> .last
-    | .P =>
-      let le := le_of_toInstType_eq_p b h
+      | _ => b.toPlainOp <&> (.next ∘ .plain)
+    | .message => b.toMessageOp <&> (.next ∘ .message)
+    | .jump => b.toJumpOp <&> .jump
+    | .halt => b.toHaltOp <&> .halt
+    | .push =>
+      let le := le_of_toOpClass_eq_p b h
       let bs : Bytes := code.sliceD (pc + 1) (b.toNat - 95) 0
       let le' : bs.length ≤ 32 := by
         simp [bs, ByteArray.length_sliceD, le]
       some <| .next <| .push bs le'
   else
-    some (.last .stop)
+    some (.halt .stop)
 
-def Evm.getInst (evm : Evm) : Option Inst :=
-  ByteArray.getInst evm.sta.code evm.pc
+def Evm.getInst (evm : Evm) : Option Op :=
+  ByteArray.getOp evm.sta.code evm.pc
 
 -- The EIP-8024 decode tables at every boundary the jump-destination argument
 -- depends on (goal C, Appendix D), against the pinned `decode_single` and
@@ -2960,11 +2960,11 @@ def Evm.getInst (evm : Evm) : Option Inst :=
 #guard (List.range' 0x60 32).all fun x =>
   (decodeSingle x.toUInt8).isNone ∧ (decodePair x.toUInt8).isNone -- PUSH1–PUSH32
 -- Sizing and the zero-filled immediate, fork-independently.
-#guard ByteArray.getInst ⟨#[0xE6, 0x80]⟩ 0 matches some (.next (.dupn 0x80))
-#guard ByteArray.getInst ⟨#[0xE7, 0x00]⟩ 0 matches some (.next (.swapn 0x00))
-#guard ByteArray.getInst ⟨#[0xE8, 0xFF]⟩ 0 matches some (.next (.exchange 0xFF))
-#guard ByteArray.getInst ⟨#[0xE6]⟩ 0 matches some (.next (.dupn 0x00))
-#guard ByteArray.getInst ⟨#[0x4B]⟩ 0 matches some (.next (.reg .slotnum))
+#guard ByteArray.getOp ⟨#[0xE6, 0x80]⟩ 0 matches some (.next (.dupn 0x80))
+#guard ByteArray.getOp ⟨#[0xE7, 0x00]⟩ 0 matches some (.next (.swapn 0x00))
+#guard ByteArray.getOp ⟨#[0xE8, 0xFF]⟩ 0 matches some (.next (.exchange 0xFF))
+#guard ByteArray.getOp ⟨#[0xE6]⟩ 0 matches some (.next (.dupn 0x00))
+#guard ByteArray.getOp ⟨#[0x4B]⟩ 0 matches some (.next (.plain .slotnum))
 
 /-- EELS `taylor_exponential`'s accumulator loop as a *well-founded* recursion
 (P0.6 item 1): `fakeExpAux num den i numAcc` is the sum of the series continued
@@ -2975,9 +2975,9 @@ Termination is by the lexicographic measure `(num + 1 - i, numAcc)`: while
 zero denominator — excluded from the semantic domain by `BlobSchedule.Valid` —
 zeroes the accumulator immediately under `Nat` division) or `num < den * i`
 strictly shrinks a positive accumulator. -/
-def fakeExpAux (num den i numAcc : Nat) : Nat :=
+def fakeExponentialAux (num den i numAcc : Nat) : Nat :=
   if _h : numAcc = 0 then 0
-  else numAcc + fakeExpAux num den (i + 1) (numAcc * num / (den * i))
+  else numAcc + fakeExponentialAux num den (i + 1) (numAcc * num / (den * i))
 termination_by (num + 1 - i, numAcc)
 decreasing_by
   rcases Nat.lt_or_ge i (num + 1) with hi | hi
@@ -2996,49 +2996,49 @@ decreasing_by
         omega
       exact mul_lt_mul_of_pos_left hlt (Nat.pos_of_ne_zero _h)
 
-@[simp] theorem fakeExpAux_zero (num den i : Nat) :
-    fakeExpAux num den i 0 = 0 := by
-  unfold fakeExpAux
+@[simp] theorem fakeExponentialAux_zero (num den i : Nat) :
+    fakeExponentialAux num den i 0 = 0 := by
+  unfold fakeExponentialAux
   simp
 
 /-- The EELS recurrence equation — for *every* `Nat` numerator, including the
 U64 maximum; nothing here evaluates the series. -/
-theorem fakeExpAux_succ {numAcc : Nat} (h : numAcc ≠ 0) (num den i : Nat) :
-    fakeExpAux num den i numAcc
-      = numAcc + fakeExpAux num den (i + 1) (numAcc * num / (den * i)) := by
-  conv_lhs => unfold fakeExpAux
+theorem fakeExponentialAux_succ {numAcc : Nat} (h : numAcc ≠ 0) (num den i : Nat) :
+    fakeExponentialAux num den i numAcc
+      = numAcc + fakeExponentialAux num den (i + 1) (numAcc * num / (den * i)) := by
+  conv_lhs => unfold fakeExponentialAux
   simp [h]
 
 /-- The EELS accumulator recurrence as a predicate on candidate functions:
 `f i numAcc` plays the role of the series sum continued from `(i, numAcc)`. -/
-def FakeExpSpec (num den : Nat) (f : Nat → Nat → Nat) : Prop :=
+def FakeExponentialSpec (num den : Nat) (f : Nat → Nat → Nat) : Prop :=
   (∀ i, f i 0 = 0) ∧
   ∀ i numAcc, numAcc ≠ 0 →
     f i numAcc = numAcc + f (i + 1) (numAcc * num / (den * i))
 
 /-- `fakeExpAux` satisfies the recurrence. -/
-theorem fakeExpAux_spec (num den : Nat) :
-    FakeExpSpec num den (fakeExpAux num den) :=
-  ⟨fakeExpAux_zero num den,
-   fun i numAcc h => fakeExpAux_succ (numAcc := numAcc) h num den i⟩
+theorem fakeExponentialAux_spec (num den : Nat) :
+    FakeExponentialSpec num den (fakeExponentialAux num den) :=
+  ⟨fakeExponentialAux_zero num den,
+   fun i numAcc h => fakeExponentialAux_succ (numAcc := numAcc) h num den i⟩
 
 /-- Uniqueness: the recurrence has exactly one solution, so `fakeExpAux` is
 *the* EELS accumulator function. -/
-theorem fakeExpAux_spec_unique {num den : Nat} {f : Nat → Nat → Nat}
-    (hf : FakeExpSpec num den f) : f = fakeExpAux num den := by
+theorem fakeExponentialAux_spec_unique {num den : Nat} {f : Nat → Nat → Nat}
+    (hf : FakeExponentialSpec num den f) : f = fakeExponentialAux num den := by
   funext i numAcc
-  induction i, numAcc using fakeExpAux.induct num den with
-  | case1 i => rw [hf.1, fakeExpAux_zero]
-  | case2 i numAcc h ih => rw [hf.2 i numAcc h, ih, ← fakeExpAux_succ h]
+  induction i, numAcc using fakeExponentialAux.induct num den with
+  | case1 i => rw [hf.1, fakeExponentialAux_zero]
+  | case2 i numAcc h ih => rw [hf.2 i numAcc h, ih, ← fakeExponentialAux_succ h]
 
 /-- The pre-integrity fuelled worker as a *total* `Option`-valued reference:
 `none` exactly where the old implementation exhausted its guessed fuel bound.
 This is the only sanctioned old/new bridge; nothing executes it. -/
-def fakeExpAuxRef? (num den i : Nat) : Nat → Nat → Option Nat
+def fakeExponentialAuxRef? (num den i : Nat) : Nat → Nat → Option Nat
   | _, 0 => none
   | 0, _ => some 0
   | numAcc, fuel + 1 =>
-    (fakeExpAuxRef? num den (i + 1) (numAcc * num / (den * i)) fuel).map
+    (fakeExponentialAuxRef? num den (i + 1) (numAcc * num / (den * i)) fuel).map
       (numAcc + ·)
 
 /-- The accumulator sequence from `(i, numAcc)` reaches zero strictly before
@@ -3050,8 +3050,8 @@ def reachesZeroBeforeFuel (num den : Nat) : Nat → Nat → Nat → Bool
     reachesZeroBeforeFuel num den (i + 1) (numAcc * num / (den * i)) fuel
 
 /-- The reference worker answers exactly on `reachesZeroBeforeFuel`. -/
-theorem fakeExpAuxRef?_isSome (num den : Nat) :
-    ∀ fuel i numAcc, (fakeExpAuxRef? num den i numAcc fuel).isSome
+theorem fakeExponentialAuxRef?_isSome (num den : Nat) :
+    ∀ fuel i numAcc, (fakeExponentialAuxRef? num den i numAcc fuel).isSome
       = reachesZeroBeforeFuel num den i numAcc fuel := by
   intro fuel
   induction fuel with
@@ -3060,14 +3060,14 @@ theorem fakeExpAuxRef?_isSome (num den : Nat) :
     intro i numAcc
     cases numAcc with
     | zero => rfl
-    | succ n => simp [fakeExpAuxRef?, reachesZeroBeforeFuel, ih]
+    | succ n => simp [fakeExponentialAuxRef?, reachesZeroBeforeFuel, ih]
 
 /-- Wherever the old fuelled computation completed, it computed exactly the
 total well-founded value. -/
-theorem fakeExpAuxRef?_eq_some {num den : Nat} :
+theorem fakeExponentialAuxRef?_eq_some {num den : Nat} :
     ∀ {fuel i numAcc}, reachesZeroBeforeFuel num den i numAcc fuel = true →
-      fakeExpAuxRef? num den i numAcc fuel
-        = some (fakeExpAux num den i numAcc) := by
+      fakeExponentialAuxRef? num den i numAcc fuel
+        = some (fakeExponentialAux num den i numAcc) := by
   intro fuel
   induction fuel with
   | zero =>
@@ -3076,27 +3076,27 @@ theorem fakeExpAuxRef?_eq_some {num den : Nat} :
   | succ fuel ih =>
     intro i numAcc h
     cases numAcc with
-    | zero => simp [fakeExpAuxRef?]
+    | zero => simp [fakeExponentialAuxRef?]
     | succ n =>
-      rw [fakeExpAux_succ (Nat.succ_ne_zero n)]
-      simp only [fakeExpAuxRef?]
+      rw [fakeExponentialAux_succ (Nat.succ_ne_zero n)]
+      simp only [fakeExponentialAuxRef?]
       rw [ih (by simpa [reachesZeroBeforeFuel] using h)]
       rfl
 
 /-- EELS `taylor_exponential`: approximates `fac * e ^ (num / den)`. Total for
 every input; the semantic domain additionally demands a positive denominator
 through `BlobSchedule.Valid`. -/
-def fakeExp (fac num den : Nat) : Nat :=
-  fakeExpAux num den 1 (fac * den) / den
+def fakeExponential (fac num den : Nat) : Nat :=
+  fakeExponentialAux num den 1 (fac * den) / den
 
-def calculateBlobGasPrice (blob : BlobSchedule) (excessBlobGas : Nat) : Nat :=
-  fakeExp 1 excessBlobGas blob.baseFeeUpdateFraction
+def getBaseFeePerBlobGas (blob : BlobSchedule) (excessBlobGas : Nat) : Nat :=
+  fakeExponential 1 excessBlobGas blob.baseFeeUpdateFraction
 
 /-- The public EELS `calculate_blob_gas_price` equation, through the
 recurrence function rather than through evaluation (`MIN_BLOB_GASPRICE = 1`). -/
 theorem calculateBlobGasPrice_eq (blob : BlobSchedule) (excess : Nat) :
-    calculateBlobGasPrice blob excess
-      = fakeExpAux excess blob.baseFeeUpdateFraction 1
+    getBaseFeePerBlobGas blob excess
+      = fakeExponentialAux excess blob.baseFeeUpdateFraction 1
           (1 * blob.baseFeeUpdateFraction) / blob.baseFeeUpdateFraction := rfl
 
 /-- Under a validated schedule the denominator is positive and the price is
@@ -3105,19 +3105,19 @@ excess. Nothing here evaluates the series. -/
 theorem calculateBlobGasPrice_spec (blob : BlobSchedule) (hv : blob.Valid)
     (excess : Nat) :
     0 < blob.baseFeeUpdateFraction ∧
-    ∀ f, FakeExpSpec excess blob.baseFeeUpdateFraction f →
-      calculateBlobGasPrice blob excess
+    ∀ f, FakeExponentialSpec excess blob.baseFeeUpdateFraction f →
+      getBaseFeePerBlobGas blob excess
         = f 1 (1 * blob.baseFeeUpdateFraction) / blob.baseFeeUpdateFraction := by
   refine ⟨hv.1, fun f hf => ?_⟩
-  rw [calculateBlobGasPrice_eq, fakeExpAux_spec_unique hf]
+  rw [calculateBlobGasPrice_eq, fakeExponentialAux_spec_unique hf]
 
 /-- The U64-maximum numerator, pinned explicitly: the acceptance case the plan
 forbids executing is covered by the non-evaluating theorem above. -/
 theorem calculateBlobGasPrice_spec_u64max (blob : BlobSchedule)
     (hv : blob.Valid) :
     0 < blob.baseFeeUpdateFraction ∧
-    ∀ f, FakeExpSpec (2 ^ 64 - 1) blob.baseFeeUpdateFraction f →
-      calculateBlobGasPrice blob (2 ^ 64 - 1)
+    ∀ f, FakeExponentialSpec (2 ^ 64 - 1) blob.baseFeeUpdateFraction f →
+      getBaseFeePerBlobGas blob (2 ^ 64 - 1)
         = f 1 (1 * blob.baseFeeUpdateFraction) / blob.baseFeeUpdateFraction :=
   calculateBlobGasPrice_spec blob hv (2 ^ 64 - 1)
 
@@ -3127,8 +3127,8 @@ rejected before any price calculation), likewise pinned non-evaluatingly. -/
 theorem calculateBlobGasPrice_spec_corpusMax (blob : BlobSchedule)
     (hv : blob.Valid) :
     0 < blob.baseFeeUpdateFraction ∧
-    ∀ f, FakeExpSpec 0xfffffffffffe0000 blob.baseFeeUpdateFraction f →
-      calculateBlobGasPrice blob 0xfffffffffffe0000
+    ∀ f, FakeExponentialSpec 0xfffffffffffe0000 blob.baseFeeUpdateFraction f →
+      getBaseFeePerBlobGas blob 0xfffffffffffe0000
         = f 1 (1 * blob.baseFeeUpdateFraction) / blob.baseFeeUpdateFraction :=
   calculateBlobGasPrice_spec blob hv 0xfffffffffffe0000
 
@@ -3136,29 +3136,29 @@ theorem calculateBlobGasPrice_spec_corpusMax (blob : BlobSchedule)
 -- (execution-specs 4198b9c5…, byte-identical at the current-mainnet source
 -- commit 87aba1a3…). The committed differential grid is
 -- scripts/vectors/fake-exp.json, checked by scripts/check-fake-exp.sh.
-#guard fakeExp 1 0 5007716 = 1                    -- numerator zero
-#guard fakeExp 1 1 5007716 = 1
-#guard fakeExp 1 5007715 5007716 = 2
-#guard fakeExp 1 5007716 5007716 = 2              -- e^1
-#guard fakeExp 1 (3 * 5007716) 5007716 = 20       -- e^3
-#guard fakeExp 1 (10 * 5007716) 5007716 = 22026   -- e^10
-#guard fakeExp 2 5 1 = 287                        -- 2e^5
-#guard fakeExp 1 50 1 = 5184612586559446279969    -- e^50
+#guard fakeExponential 1 0 5007716 = 1                    -- numerator zero
+#guard fakeExponential 1 1 5007716 = 1
+#guard fakeExponential 1 5007715 5007716 = 2
+#guard fakeExponential 1 5007716 5007716 = 2              -- e^1
+#guard fakeExponential 1 (3 * 5007716) 5007716 = 20       -- e^3
+#guard fakeExponential 1 (10 * 5007716) 5007716 = 22026   -- e^10
+#guard fakeExponential 2 5 1 = 287                        -- 2e^5
+#guard fakeExponential 1 50 1 = 5184612586559446279969    -- e^50
 -- The maximum *feasible* corpus excess, 0xe760000 = 1851 blobs' worth of gas,
 -- against all three canonical fraction values (Prague and Osaka share one).
-#guard fakeExp 1 0xe760000 5007716 = 1098342643171911460576
-#guard fakeExp 1 0xe760000 8346193 = 4211562125831
-#guard fakeExp 1 0xe760000 11684671 = 1041019391
+#guard fakeExponential 1 0xe760000 5007716 = 1098342643171911460576
+#guard fakeExponential 1 0xe760000 8346193 = 4211562125831
+#guard fakeExponential 1 0xe760000 11684671 = 1041019391
 
-def Mach.push (x : B256) (mach : Mach) : Footprint.Outcome Mach Unit :=
+def Mach.push (x : U256) (mach : Mach) : Footprint.Outcome Mach Unit :=
   if mach.stack.length < 1024
   then .ok ⟨(), {mach with stack := x :: mach.stack}⟩
   else .error ⟨.halt (.stackOverflow .none), mach⟩
 
-def Devm.push (x : B256) (devm : Devm) : Execution :=
+def Devm.push (x : U256) (devm : Devm) : Execution :=
   liftMachExecution (Mach.push x) devm
 
-theorem Devm.push_def (x : B256) (devm : Devm) : Devm.push x devm = (do
+theorem Devm.push_def (x : U256) (devm : Devm) : Devm.push x devm = (do
     .assert
       (devm.stack.length < 1024)
       ⟨.halt (.stackOverflow .none), devm⟩
@@ -3168,12 +3168,12 @@ theorem Devm.push_def (x : B256) (devm : Devm) : Devm.push x devm = (do
     Footprint.liftOutcome, Devm.stack, Devm.setMach, Except.assert, bind, Except.bind]
   by_cases h : stack.length < 1024 <;> simp [h]
 
-def Mach.pop (mach : Mach) : Footprint.Outcome Mach B256 :=
+def Mach.pop (mach : Mach) : Footprint.Outcome Mach U256 :=
   match mach.stack with
   | [] => .error ⟨.halt (.stackUnderflow .none), mach⟩
   | x :: xs => .ok ⟨x, {mach with stack := xs}⟩
 
-def Devm.pop (devm : Devm) : Except (EvmError × Devm) (B256 × Devm) :=
+def Devm.pop (devm : Devm) : Except (EvmError × Devm) (U256 × Devm) :=
   liftMach Mach.pop devm
 
 theorem Devm.pop_def (devm : Devm) : Devm.pop devm = (do
@@ -3195,24 +3195,24 @@ def Devm.popToNat (devm : Devm) : Except (EvmError × Devm) (Nat × Devm) :=
   liftMach Mach.popToNat devm
 
 theorem Devm.popToNat_def (devm : Devm) :
-    devm.popToNat = (devm.pop <&> Prod.mapFst B256.toNat) := by
+    devm.popToNat = (devm.pop <&> Prod.mapFst U256.toNat) := by
   rcases devm with ⟨⟨stack, memory, gasLeft, stateGas⟩, view, world⟩
   cases stack <;> rfl
 
-def Mach.popToAdr (mach : Mach) : Footprint.Outcome Mach Adr :=
+def Mach.popToAdr (mach : Mach) : Footprint.Outcome Mach Address :=
   match mach.pop with
   | .error err => .error err
-  | .ok ⟨x, mach'⟩ => .ok ⟨x.toAdr, mach'⟩
+  | .ok ⟨x, mach'⟩ => .ok ⟨x.toAddress, mach'⟩
 
-def Devm.popToAdr (devm : Devm) : Except (EvmError × Devm) (Adr × Devm) :=
+def Devm.popToAdr (devm : Devm) : Except (EvmError × Devm) (Address × Devm) :=
   liftMach Mach.popToAdr devm
 
 theorem Devm.popToAdr_def (devm : Devm) :
-    devm.popToAdr = (devm.pop <&> Prod.mapFst B256.toAdr) := by
+    devm.popToAdr = (devm.pop <&> Prod.mapFst U256.toAddress) := by
   rcases devm with ⟨⟨stack, memory, gasLeft, stateGas⟩, view, world⟩
   cases stack <;> rfl
 
-def Mach.popN (mach : Mach) : Nat → Footprint.Outcome Mach (List B256)
+def Mach.popN (mach : Mach) : Nat → Footprint.Outcome Mach (List U256)
   | 0 => .ok ⟨[], mach⟩
   | n + 1 =>
     match mach.pop with
@@ -3223,7 +3223,7 @@ def Mach.popN (mach : Mach) : Nat → Footprint.Outcome Mach (List B256)
       | .ok ⟨xs, mach''⟩ => .ok ⟨x :: xs, mach''⟩
 
 def Devm.popN (devm : Devm) (n : Nat) :
-    Except (EvmError × Devm) (List B256 × Devm) :=
+    Except (EvmError × Devm) (List U256 × Devm) :=
   liftMach (Mach.popN · n) devm
 
 theorem Devm.popN_def (devm : Devm) (n : Nat) : devm.popN n =
@@ -3254,15 +3254,15 @@ theorem Devm.popN_def (devm : Devm) (n : Nat) : devm.popN n =
         simp only [Devm.popN, Mach.popN, Mach.pop, liftMach, Footprint.liftOutcome,
           Devm.pop_def, Devm.stack, Devm.setMach, bind, Except.bind, h]
 
-def Mach.pushItem (x : B256) (c : Nat) (mach : Mach) : Footprint.Outcome Mach Unit :=
+def Mach.pushItem (x : U256) (c : Nat) (mach : Mach) : Footprint.Outcome Mach Unit :=
   match Mach.chargeGas c mach with
   | .error err => .error err
   | .ok ⟨_, mach'⟩ => Mach.push x mach'
 
-def pushItem (x : B256) (c : Nat) (devm : Devm) : Execution :=
+def pushItem (x : U256) (c : Nat) (devm : Devm) : Execution :=
   liftMachExecution (Mach.pushItem x c) devm
 
-theorem pushItem_def (x : B256) (c : Nat) (devm : Devm) :
+theorem pushItem_def (x : U256) (c : Nat) (devm : Devm) :
     pushItem x c devm = (chargeGas c devm >>= Devm.push x) := by
   rcases devm with ⟨⟨stack, memory, gasLeft, stateGas⟩, view, world⟩
   simp only [pushItem, Mach.pushItem, Mach.chargeGas, Mach.push, chargeGas, Devm.push,
@@ -3272,8 +3272,8 @@ theorem pushItem_def (x : B256) (c : Nat) (devm : Devm) :
   | none => rfl
   | some gas => dsimp only
 
-def accessCost (x : Adr) (a : AdrSet) : Nat :=
-  if x ∈ a then gasWarmAccess else gasColdAccountAccess
+def accessCost (x : Address) (a : AdrSet) : Nat :=
+  if x ∈ a then Gas.warmStorageReadCost else Gas.coldAccountAccessCost
 
 /-- The warm/cold account-access cost under a *fork's own* schedule.
 
@@ -3284,21 +3284,21 @@ downstream, and widening its arity would move every one of those statements for
 a reason that has nothing to do with what they say. Instead the schedule-carrying
 form is the one the interpreter calls, `accessCost` stays exactly what it was,
 and the `rfl` lemma below says they are the same function at Prague. -/
-def GasSchedule.accessCost (gas : GasSchedule) (x : Adr) (a : AdrSet) : Nat :=
-  if x ∈ a then gasWarmAccess else gas.coldAccountAccess
+def GasSchedule.accessCost (gas : GasSchedule) (x : Address) (a : AdrSet) : Nat :=
+  if x ∈ a then Gas.warmStorageReadCost else gas.coldAccountAccess
 
-@[simp] theorem pragueGasSchedule_accessCost (x : Adr) (a : AdrSet) :
+@[simp] theorem pragueGasSchedule_accessCost (x : Address) (a : AdrSet) :
     pragueGasSchedule.accessCost x a = accessCost x a := rfl
 
-@[simp] theorem pragueRules_gas_accessCost (x : Adr) (a : AdrSet) :
+@[simp] theorem pragueRules_gas_accessCost (x : Address) (a : AdrSet) :
     pragueRules.gas.accessCost x a = accessCost x a := rfl
 
 /-- The warm cost is the floor at every schedule, because only the cold half
 moves. The Sufficiency family needs this, and needs it to hold of an arbitrary
 schedule rather than of Prague's. -/
 theorem GasSchedule.gasWarmAccess_le_accessCost (gas : GasSchedule)
-    (x : Adr) (a : AdrSet) (h : gasWarmAccess ≤ gas.coldAccountAccess) :
-    gasWarmAccess ≤ gas.accessCost x a := by
+    (x : Address) (a : AdrSet) (h : Gas.warmStorageReadCost ≤ gas.coldAccountAccess) :
+    Gas.warmStorageReadCost ≤ gas.accessCost x a := by
   unfold GasSchedule.accessCost
   split
   · exact Nat.le_refl _
@@ -3308,35 +3308,35 @@ theorem GasSchedule.gasWarmAccess_le_accessCost (gas : GasSchedule)
 `access_cost_pos` had at Prague, now stated of the schedule the interpreter
 actually reads. -/
 theorem GasSchedule.Valid.accessCost_pos {g : GasSchedule} (h : g.Valid)
-    (x : Adr) (a : AdrSet) : 0 < g.accessCost x a := by
+    (x : Address) (a : AdrSet) : 0 < g.accessCost x a := by
   unfold GasSchedule.accessCost
   have hw := h.warmAccess_le
-  unfold gasWarmAccess at *
+  unfold Gas.warmStorageReadCost at *
   split <;> omega
 
 theorem GasSchedule.Valid.warmAccess_le_accessCost {g : GasSchedule}
-    (h : g.Valid) (x : Adr) (a : AdrSet) : gasWarmAccess ≤ g.accessCost x a :=
+    (h : g.Valid) (x : Address) (a : AdrSet) : Gas.warmStorageReadCost ≤ g.accessCost x a :=
   g.gasWarmAccess_le_accessCost x a h.warmAccess_le
 
-def Meta.addAccessedAddress (view : Meta) (a : Adr) : Meta :=
+def Meta.addAccessedAddress (view : Meta) (a : Address) : Meta :=
   {view with accessedAddresses := view.accessedAddresses.insert a}
 
-def addAccessedAddress (devm : Devm) (a : Adr) : Devm :=
+def addAccessedAddress (devm : Devm) (a : Address) : Devm :=
   liftMachMetaPure (fun mach view => (mach, view.addAccessedAddress a)) devm
 
-def Meta.addAccessedStorageKey (view : Meta) (a : Adr) (k : B256) : Meta :=
+def Meta.addAccessedStorageKey (view : Meta) (a : Address) (k : U256) : Meta :=
   {view with accessedStorageKeys := view.accessedStorageKeys.insert ⟨a, k⟩}
 
-def addAccessedStorageKey (devm : Devm) (a : Adr) (k : B256) : Devm :=
+def addAccessedStorageKey (devm : Devm) (a : Address) (k : U256) : Devm :=
   liftMachMetaPure (fun mach view => (mach, view.addAccessedStorageKey a k)) devm
 
 /-- EIP-7928: record an account read (`state_tracker.get_account_optional`
 and every accessor built on it). -/
-def Meta.readAccount (view : Meta) (a : Adr) : Meta :=
+def Meta.readAccount (view : Meta) (a : Address) : Meta :=
   {view with accountReads := view.accountReads.insert a}
 
 /-- EIP-7928: record a storage read (`state_tracker.get_storage`). -/
-def Meta.readStorage (view : Meta) (a : Adr) (k : B256) : Meta :=
+def Meta.readStorage (view : Meta) (a : Address) (k : U256) : Meta :=
   {view with storageReads := view.storageReads.insert ⟨a, k⟩}
 
 /-- Record an account read for the block-level access list, under rules that
@@ -3345,120 +3345,120 @@ frame does can observe the read set (goal C, fixed decision 2). Placed at the
 interpreter sites where the pinned code calls a state accessor -- after the
 charge that precedes the access, so an out-of-gas frame records nothing the
 pinned frame would not. -/
-def Devm.balReadAccount (rules : ForkRules) (a : Adr) (devm : Devm) : Devm :=
+def Devm.balReadAccount (rules : ForkRules) (a : Address) (devm : Devm) : Devm :=
   -- The switch sits inside `setMeta` so that `mach` and `world` are preserved
   -- *definitionally* in both branches: every existing proof that reads through
   -- a meta-only update by `rfl` keeps doing so.
-  devm.setMeta (if rules.bal.isSome then devm.meta.readAccount a else devm.meta)
+  devm.setMeta (if rules.blockAccessListRules.isSome then devm.meta.readAccount a else devm.meta)
 
 /-- The storage-read twin of `Devm.balReadAccount`. -/
-def Devm.balReadStorage (rules : ForkRules) (a : Adr) (k : B256) (devm : Devm) :
+def Devm.balReadStorage (rules : ForkRules) (a : Address) (k : U256) (devm : Devm) :
     Devm :=
-  devm.setMeta (if rules.bal.isSome then devm.meta.readStorage a k else devm.meta)
+  devm.setMeta (if rules.blockAccessListRules.isSome then devm.meta.readStorage a k else devm.meta)
 
 -- The recorders touch `meta` and nothing else; every measure, machine field
 -- and world projection sees through them, and under `bal = none` they vanish.
-@[simp] theorem Devm.balReadAccount_mach (rules : ForkRules) (a : Adr) (devm : Devm) :
+@[simp] theorem Devm.balReadAccount_mach (rules : ForkRules) (a : Address) (devm : Devm) :
     (devm.balReadAccount rules a).mach = devm.mach := by
   rfl
-@[simp] theorem Devm.balReadAccount_world (rules : ForkRules) (a : Adr) (devm : Devm) :
+@[simp] theorem Devm.balReadAccount_world (rules : ForkRules) (a : Address) (devm : Devm) :
     (devm.balReadAccount rules a).world = devm.world := by
   rfl
-@[simp] theorem Devm.balReadAccount_gasLeft (rules : ForkRules) (a : Adr) (devm : Devm) :
+@[simp] theorem Devm.balReadAccount_gasLeft (rules : ForkRules) (a : Address) (devm : Devm) :
     (devm.balReadAccount rules a).gasLeft = devm.gasLeft := by
   rfl
-@[simp] theorem Devm.balReadAccount_gasMeasure (rules : ForkRules) (a : Adr) (devm : Devm) :
+@[simp] theorem Devm.balReadAccount_gasMeasure (rules : ForkRules) (a : Address) (devm : Devm) :
     (devm.balReadAccount rules a).gasMeasure = devm.gasMeasure := by
   rfl
-@[simp] theorem Devm.balReadAccount_stack (rules : ForkRules) (a : Adr) (devm : Devm) :
+@[simp] theorem Devm.balReadAccount_stack (rules : ForkRules) (a : Address) (devm : Devm) :
     (devm.balReadAccount rules a).stack = devm.stack := by
   rfl
-@[simp] theorem Devm.balReadAccount_state (rules : ForkRules) (a : Adr) (devm : Devm) :
+@[simp] theorem Devm.balReadAccount_state (rules : ForkRules) (a : Address) (devm : Devm) :
     (devm.balReadAccount rules a).state = devm.state := by
   rfl
-@[simp] theorem Devm.balReadAccount_stateGas (rules : ForkRules) (a : Adr) (devm : Devm) :
+@[simp] theorem Devm.balReadAccount_stateGas (rules : ForkRules) (a : Address) (devm : Devm) :
     (devm.balReadAccount rules a).stateGas = devm.stateGas := by
   rfl
-@[simp] theorem Devm.balReadAccount_stateGasLeft (rules : ForkRules) (a : Adr) (devm : Devm) :
+@[simp] theorem Devm.balReadAccount_stateGasLeft (rules : ForkRules) (a : Address) (devm : Devm) :
     (devm.balReadAccount rules a).stateGasLeft = devm.stateGasLeft := by
   rfl
-@[simp] theorem Devm.balReadAccount_accessedAddresses (rules : ForkRules) (a : Adr)
+@[simp] theorem Devm.balReadAccount_accessedAddresses (rules : ForkRules) (a : Address)
     (devm : Devm) :
     (devm.balReadAccount rules a).accessedAddresses = devm.accessedAddresses := by
   unfold Devm.balReadAccount Meta.readAccount; split <;> rfl
-@[simp] theorem Devm.balReadAccount_accessedStorageKeys (rules : ForkRules) (a : Adr)
+@[simp] theorem Devm.balReadAccount_accessedStorageKeys (rules : ForkRules) (a : Address)
     (devm : Devm) :
     (devm.balReadAccount rules a).accessedStorageKeys = devm.accessedStorageKeys := by
   unfold Devm.balReadAccount Meta.readAccount; split <;> rfl
-@[simp] theorem Devm.balReadAccount_createdAccounts (rules : ForkRules) (a : Adr)
+@[simp] theorem Devm.balReadAccount_createdAccounts (rules : ForkRules) (a : Address)
     (devm : Devm) :
     (devm.balReadAccount rules a).createdAccounts = devm.createdAccounts := by
   unfold Devm.balReadAccount Meta.readAccount; split <;> rfl
-@[simp] theorem Devm.balReadAccount_refundCounter (rules : ForkRules) (a : Adr)
+@[simp] theorem Devm.balReadAccount_refundCounter (rules : ForkRules) (a : Address)
     (devm : Devm) :
     (devm.balReadAccount rules a).refundCounter = devm.refundCounter := by
   unfold Devm.balReadAccount Meta.readAccount; split <;> rfl
-@[simp] theorem Devm.balReadAccount_logs (rules : ForkRules) (a : Adr) (devm : Devm) :
+@[simp] theorem Devm.balReadAccount_logs (rules : ForkRules) (a : Address) (devm : Devm) :
     (devm.balReadAccount rules a).logs = devm.logs := by
   unfold Devm.balReadAccount Meta.readAccount; split <;> rfl
-@[simp] theorem Devm.balReadAccount_transientStorage (rules : ForkRules) (a : Adr)
+@[simp] theorem Devm.balReadAccount_transientStorage (rules : ForkRules) (a : Address)
     (devm : Devm) :
     (devm.balReadAccount rules a).transientStorage = devm.transientStorage := by
   rfl
-theorem Devm.balReadAccount_none {rules : ForkRules} (h : rules.bal = none) (a : Adr)
+theorem Devm.balReadAccount_none {rules : ForkRules} (h : rules.blockAccessListRules = none) (a : Address)
     (devm : Devm) : devm.balReadAccount rules a = devm := by
   unfold Devm.balReadAccount; simp [h, Devm.setMeta]
 
-@[simp] theorem Devm.balReadStorage_mach (rules : ForkRules) (a : Adr) (k : B256)
+@[simp] theorem Devm.balReadStorage_mach (rules : ForkRules) (a : Address) (k : U256)
     (devm : Devm) : (devm.balReadStorage rules a k).mach = devm.mach := by
   rfl
-@[simp] theorem Devm.balReadStorage_world (rules : ForkRules) (a : Adr) (k : B256)
+@[simp] theorem Devm.balReadStorage_world (rules : ForkRules) (a : Address) (k : U256)
     (devm : Devm) : (devm.balReadStorage rules a k).world = devm.world := by
   rfl
-@[simp] theorem Devm.balReadStorage_gasLeft (rules : ForkRules) (a : Adr) (k : B256)
+@[simp] theorem Devm.balReadStorage_gasLeft (rules : ForkRules) (a : Address) (k : U256)
     (devm : Devm) : (devm.balReadStorage rules a k).gasLeft = devm.gasLeft := by
   rfl
-@[simp] theorem Devm.balReadStorage_gasMeasure (rules : ForkRules) (a : Adr) (k : B256)
+@[simp] theorem Devm.balReadStorage_gasMeasure (rules : ForkRules) (a : Address) (k : U256)
     (devm : Devm) : (devm.balReadStorage rules a k).gasMeasure = devm.gasMeasure := by
   rfl
-@[simp] theorem Devm.balReadStorage_stack (rules : ForkRules) (a : Adr) (k : B256)
+@[simp] theorem Devm.balReadStorage_stack (rules : ForkRules) (a : Address) (k : U256)
     (devm : Devm) : (devm.balReadStorage rules a k).stack = devm.stack := by
   rfl
-@[simp] theorem Devm.balReadStorage_state (rules : ForkRules) (a : Adr) (k : B256)
+@[simp] theorem Devm.balReadStorage_state (rules : ForkRules) (a : Address) (k : U256)
     (devm : Devm) : (devm.balReadStorage rules a k).state = devm.state := by
   rfl
-@[simp] theorem Devm.balReadStorage_stateGas (rules : ForkRules) (a : Adr) (k : B256)
+@[simp] theorem Devm.balReadStorage_stateGas (rules : ForkRules) (a : Address) (k : U256)
     (devm : Devm) : (devm.balReadStorage rules a k).stateGas = devm.stateGas := by
   rfl
-@[simp] theorem Devm.balReadStorage_stateGasLeft (rules : ForkRules) (a : Adr) (k : B256)
+@[simp] theorem Devm.balReadStorage_stateGasLeft (rules : ForkRules) (a : Address) (k : U256)
     (devm : Devm) : (devm.balReadStorage rules a k).stateGasLeft = devm.stateGasLeft := by
   rfl
-@[simp] theorem Devm.balReadStorage_accessedAddresses (rules : ForkRules) (a : Adr)
-    (k : B256) (devm : Devm) :
+@[simp] theorem Devm.balReadStorage_accessedAddresses (rules : ForkRules) (a : Address)
+    (k : U256) (devm : Devm) :
     (devm.balReadStorage rules a k).accessedAddresses = devm.accessedAddresses := by
   unfold Devm.balReadStorage Meta.readStorage; split <;> rfl
-@[simp] theorem Devm.balReadStorage_accessedStorageKeys (rules : ForkRules) (a : Adr)
-    (k : B256) (devm : Devm) :
+@[simp] theorem Devm.balReadStorage_accessedStorageKeys (rules : ForkRules) (a : Address)
+    (k : U256) (devm : Devm) :
     (devm.balReadStorage rules a k).accessedStorageKeys = devm.accessedStorageKeys := by
   unfold Devm.balReadStorage Meta.readStorage; split <;> rfl
-@[simp] theorem Devm.balReadStorage_createdAccounts (rules : ForkRules) (a : Adr)
-    (k : B256) (devm : Devm) :
+@[simp] theorem Devm.balReadStorage_createdAccounts (rules : ForkRules) (a : Address)
+    (k : U256) (devm : Devm) :
     (devm.balReadStorage rules a k).createdAccounts = devm.createdAccounts := by
   unfold Devm.balReadStorage Meta.readStorage; split <;> rfl
-@[simp] theorem Devm.balReadStorage_refundCounter (rules : ForkRules) (a : Adr)
-    (k : B256) (devm : Devm) :
+@[simp] theorem Devm.balReadStorage_refundCounter (rules : ForkRules) (a : Address)
+    (k : U256) (devm : Devm) :
     (devm.balReadStorage rules a k).refundCounter = devm.refundCounter := by
   unfold Devm.balReadStorage Meta.readStorage; split <;> rfl
-@[simp] theorem Devm.balReadStorage_transientStorage (rules : ForkRules) (a : Adr)
-    (k : B256) (devm : Devm) :
+@[simp] theorem Devm.balReadStorage_transientStorage (rules : ForkRules) (a : Address)
+    (k : U256) (devm : Devm) :
     (devm.balReadStorage rules a k).transientStorage = devm.transientStorage := by
   rfl
-theorem Devm.balReadStorage_none {rules : ForkRules} (h : rules.bal = none) (a : Adr)
-    (k : B256) (devm : Devm) : devm.balReadStorage rules a k = devm := by
+theorem Devm.balReadStorage_none {rules : ForkRules} (h : rules.blockAccessListRules = none) (a : Address)
+    (k : U256) (devm : Devm) : devm.balReadStorage rules a k = devm := by
   unfold Devm.balReadStorage; simp [h, Devm.setMeta]
 
 
-def addAccountToDelete (devm : Devm) (a : Adr) : Devm :=
+def addAccountToDelete (devm : Devm) (a : Address) : Devm :=
   devm.withAccountsToDelete (devm.accountsToDelete.insert a)
 
 /-- The `SELFDESTRUCT` refund hook (`REFUND_SELF_DESTRUCT`): 24000 before
@@ -3469,20 +3469,20 @@ is the identity there. -/
 def creditSelfdestructRefund (rules : ForkRules) (alreadyScheduled : Prop)
     [Decidable alreadyScheduled] (devm : Devm) : Devm :=
   if alreadyScheduled then devm
-  else devm.withRefundCounter (devm.refundCounter + rules.settle.selfdestructRefund)
+  else devm.withRefundCounter (devm.refundCounter + rules.settlement.selfdestructRefund)
 
 /-- Prague pays no selfdestruct refund and deletes only created accounts. -/
 @[simp] theorem pragueRules_settle_selfdestructRefund :
-    pragueRules.settle.selfdestructRefund = 0 := rfl
+    pragueRules.settlement.selfdestructRefund = 0 := rfl
 @[simp] theorem pragueRules_settle_selfdestructOnlyCreated :
-    pragueRules.settle.selfdestructOnlyCreated = true := rfl
+    pragueRules.settlement.selfdestructOnlyCreated = true := rfl
 
 /-- The hook preserves the refund-counter projection. -/
 theorem creditSelfdestructRefund_refundCounter {rules : ForkRules}
     {alreadyScheduled : Prop} [Decidable alreadyScheduled] {devm : Devm} :
     (creditSelfdestructRefund rules alreadyScheduled devm).refundCounter =
       if alreadyScheduled then devm.refundCounter
-      else devm.refundCounter + rules.settle.selfdestructRefund := by
+      else devm.refundCounter + rules.settlement.selfdestructRefund := by
   unfold creditSelfdestructRefund
   split
   · rfl
@@ -3509,7 +3509,7 @@ theorem creditSelfdestructRefund_ne_iff {rules : ForkRules}
     {alreadyScheduled : Prop} [Decidable alreadyScheduled] {devm : Devm} :
     (creditSelfdestructRefund rules alreadyScheduled devm).refundCounter ≠
         devm.refundCounter ↔
-      ¬alreadyScheduled ∧ rules.settle.selfdestructRefund ≠ 0 := by
+      ¬alreadyScheduled ∧ rules.settlement.selfdestructRefund ≠ 0 := by
   rw [creditSelfdestructRefund_refundCounter]
   by_cases hb : alreadyScheduled <;> simp [hb]
 
@@ -3523,14 +3523,14 @@ theorem creditSelfdestructRefund_nonneg_of_nonneg {rules : ForkRules}
   · exact h
   · exact add_nonneg h (by positivity)
 
-def addCreatedAccount (benv : Benv) (adr : Adr) : Benv :=
+def addCreatedAccount (benv : Benv) (adr : Address) : Benv :=
   {benv with createdAccounts := benv.createdAccounts.insert adr}
 
-def Acct.nil : Acct :=
+def Account.nil : Account :=
   {
     nonce := 0
-    bal := 0
-    stor := .empty
+    balance := 0
+    storage := .empty
     code := ByteArray.mk #[]
   }
 
@@ -3547,14 +3547,14 @@ without it, `whnf` inside a failing defeq check between concrete states runs
 `State.set` through the Bool test instead of stopping at the instance, as the
 old `rw`-built one did, and downstream proofs time out. The kernel ignores the
 attribute, so kernel evaluation (`decide +kernel`) is unaffected. -/
-@[irreducible] instance {stor : Stor} : Decidable (stor = .empty) :=
+@[irreducible] instance {stor : Storage} : Decidable (stor = .empty) :=
   decidable_of_iff (stor.isEmpty = true) Std.TreeMap.eq_empty_iff_isEmpty.symm
 
-theorem Acct.eq_nil_iff (ac : Acct) :
-    (ac.nonce == 0 && ac.bal == 0 && ac.stor.isEmpty && ac.code.size == 0) = true ↔
+theorem Account.eq_nil_iff (ac : Account) :
+    (ac.nonce == 0 && ac.balance == 0 && ac.storage.isEmpty && ac.code.size == 0) = true ↔
       ac = .nil := by
   rcases ac with ⟨n, b, s, ⟨c⟩⟩
-  simp only [Acct.nil, Bool.and_eq_true, beq_iff_eq, Acct.mk.injEq]
+  simp only [Account.nil, Bool.and_eq_true, beq_iff_eq, Account.mk.injEq]
   constructor
   · rintro ⟨⟨⟨hn, hb⟩, hs⟩, hc⟩
     refine ⟨hn, hb, Std.TreeMap.eq_empty_of_isEmpty hs, ?_⟩
@@ -3565,36 +3565,36 @@ theorem Acct.eq_nil_iff (ac : Acct) :
     refine ⟨⟨⟨hn, hb⟩, rfl⟩, ?_⟩
     rw [hc]; rfl
 
-@[irreducible] instance {ac : Acct} : Decidable (ac = .nil) :=
-  decidable_of_iff _ (Acct.eq_nil_iff ac)
+@[irreducible] instance {ac : Account} : Decidable (ac = .nil) :=
+  decidable_of_iff _ (Account.eq_nil_iff ac)
 
 -- Kernel reduction of both instances (a `rw`-built instance fails this).
-example : decide ({ Acct.nil with bal := 1 } = .nil) = false ∧
-    decide (Acct.nil = .nil) = true ∧ decide (Stor.empty = .empty) = true := by
+example : decide ({ Account.nil with balance := 1 } = .nil) = false ∧
+    decide (Account.nil = .nil) = true ∧ decide (Storage.empty = .empty) = true := by
   decide +kernel
 
-def State.get (w : State) (a : Adr) : Acct :=
+def State.get (w : State) (a : Address) : Account :=
   w.getD a .nil
 
 /-- Erasing convenience update: writing the default account removes the key. -/
-def State.set (w : State) (a : Adr) (ac : Acct) : State :=
+def State.set (w : State) (a : Address) (ac : Account) : State :=
   if ac = .nil then w.erase a else w.insert a ac
 
 /-- Store an account as present, including an explicitly empty account.
 Deletion is a separate operation, `destroyAccount`. -/
-def State.setPresent (w : State) (a : Adr) (ac : Acct) : State :=
+def State.setPresent (w : State) (a : Address) (ac : Account) : State :=
   w.insert a ac
 
-def Acct.Empty (a : Acct) : Prop :=
-  a.code.size = 0 ∧ a.nonce = 0 ∧ a.bal = 0
+def Account.isEmpty (a : Account) : Prop :=
+  a.code.size = 0 ∧ a.nonce = 0 ∧ a.balance = 0
 
-instance {a : Acct} : Decidable a.Empty := by
+instance {a : Account} : Decidable a.isEmpty := by
  apply instDecidableAnd
 
-def destroyAccount (w : State) (a : Adr) : State := w.erase a
+def destroyAccount (w : State) (a : Address) : State := w.erase a
 
 /-- Existence is trie membership, independently of the account's fields. -/
-abbrev AccountExists (wor : State) (adr : Adr) : Prop :=
+abbrev AccountExists (wor : State) (adr : Address) : Prop :=
   (wor[adr]?).isSome = true
 
 /-! ### EIP-161: touched accounts (Spurious Dragon through Gray Glacier)
@@ -3620,41 +3620,41 @@ empty beneficiary, which legacy `modify_state` keeps present and the touch
 hands to the sweep. -/
 
 /-- EELS `account_exists_and_is_empty`, over Jaune's notion of existence. -/
-def accountExistsAndIsEmpty (wor : State) (adr : Adr) : Prop :=
-  AccountExists wor adr ∧ (wor.get adr).Empty
+def accountExistsAndIsEmpty (wor : State) (adr : Address) : Prop :=
+  AccountExists wor adr ∧ (wor.get adr).isEmpty
 
-instance {wor : State} {adr : Adr} : Decidable (accountExistsAndIsEmpty wor adr) := by
+instance {wor : State} {adr : Address} : Decidable (accountExistsAndIsEmpty wor adr) := by
   unfold accountExistsAndIsEmpty; infer_instance
 
 /-- The RIPEMD-160 precompile's address, which EELS exempts from the rollback
 of a failed child's touches (mainnet block 2675119). -/
-def ripemd160Address : Adr := 0x03
+def ripemd160Address : Address := 0x03
 
 /-- Record `adr` as touched when the rules sweep, `cond` holds, and `adr`
 exists and is empty in the current state. Only `touchedAccounts` moves, so
 every other projection is definitionally unchanged. -/
-def Devm.recordTouch (rules : ForkRules) (cond : Bool) (adr : Adr) (devm : Devm) :
+def Devm.recordTouch (rules : ForkRules) (cond : Bool) (adr : Address) (devm : Devm) :
     Devm :=
   devm.setMeta {devm.meta with
     touchedAccounts :=
-      if rules.settle.touchedSweep && cond && decide (accountExistsAndIsEmpty devm.state adr)
+      if rules.settlement.touchedSweep && cond && decide (accountExistsAndIsEmpty devm.state adr)
       then devm.meta.touchedAccounts.insert adr
       else devm.meta.touchedAccounts}
 
 @[simp] theorem Devm.recordTouch_mach (devm : Devm) (rules : ForkRules) (cond : Bool)
-    (adr : Adr) : (devm.recordTouch rules cond adr).mach = devm.mach := rfl
+    (adr : Address) : (devm.recordTouch rules cond adr).mach = devm.mach := rfl
 @[simp] theorem Devm.recordTouch_world (devm : Devm) (rules : ForkRules) (cond : Bool)
-    (adr : Adr) : (devm.recordTouch rules cond adr).world = devm.world := rfl
+    (adr : Address) : (devm.recordTouch rules cond adr).world = devm.world := rfl
 @[simp] theorem Devm.recordTouch_state (devm : Devm) (rules : ForkRules) (cond : Bool)
-    (adr : Adr) : (devm.recordTouch rules cond adr).state = devm.state := rfl
+    (adr : Address) : (devm.recordTouch rules cond adr).state = devm.state := rfl
 @[simp] theorem Devm.recordTouch_error (devm : Devm) (rules : ForkRules) (cond : Bool)
-    (adr : Adr) : (devm.recordTouch rules cond adr).error = devm.error := rfl
+    (adr : Address) : (devm.recordTouch rules cond adr).error = devm.error := rfl
 @[simp] theorem Devm.recordTouch_output (devm : Devm) (rules : ForkRules) (cond : Bool)
-    (adr : Adr) : (devm.recordTouch rules cond adr).output = devm.output := rfl
+    (adr : Address) : (devm.recordTouch rules cond adr).output = devm.output := rfl
 
 /-- Under a rule set without the sweep, recording is the identity. -/
 @[simp] theorem Devm.recordTouch_of_not_touchedSweep {rules : ForkRules}
-    (h : rules.settle.touchedSweep = false) (cond : Bool) (adr : Adr) (devm : Devm) :
+    (h : rules.settlement.touchedSweep = false) (cond : Bool) (adr : Address) (devm : Devm) :
     devm.recordTouch rules cond adr = devm := by
   simp [Devm.recordTouch, h, Devm.setMeta]
 
@@ -3662,134 +3662,134 @@ def Devm.recordTouch (rules : ForkRules) (cond : Bool) (adr : Adr) (devm : Devm)
 exists and is empty. The identity unless the rules sweep. Each test reads only
 its own address, and erasing one account changes no other, so the order of
 `addresses` does not matter. -/
-def sweepTouchedAccounts (rules : ForkRules) (addresses : List Adr) (state : State) :
+def sweepTouchedAccounts (rules : ForkRules) (addresses : List Address) (state : State) :
     State :=
-  if rules.settle.touchedSweep then
+  if rules.settlement.touchedSweep then
     addresses.foldl (fun state adr =>
       if accountExistsAndIsEmpty state adr then destroyAccount state adr else state) state
   else state
 
 @[simp] theorem sweepTouchedAccounts_of_not_touchedSweep {rules : ForkRules}
-    (h : rules.settle.touchedSweep = false) (addresses : List Adr) (state : State) :
+    (h : rules.settlement.touchedSweep = false) (addresses : List Address) (state : State) :
     sweepTouchedAccounts rules addresses state = state := by
   simp [sweepTouchedAccounts, h]
 
 /-- Modern account-field mutation deletes an empty account, including its storage.
 Historical allocations and legacy beneficiary credits use `State.setPresent`;
 storage setters preserve an existing owner's presence. -/
-def Acct.clearIfEmpty (ac : Acct) : Acct :=
-  if ac.Empty then .nil else ac
+def Account.clearIfEmpty (ac : Account) : Account :=
+  if ac.isEmpty then .nil else ac
 
 /-- EELS `modify_state`: normalize after changing balance, nonce, or code. -/
-def State.setAccount (w : State) (a : Adr) (ac : Acct) : State :=
+def State.setAccount (w : State) (a : Address) (ac : Account) : State :=
   w.set a ac.clearIfEmpty
 
 /-- Storage deletion is not a collection of SSTORE-to-zero operations. -/
-def KeySet.eraseAddress (writes : KeySet) (a : Adr) : KeySet :=
+def KeySet.eraseAddress (writes : KeySet) (a : Address) : KeySet :=
   writes.filter fun key => key.1 != a
 
-def Benv.clearStorageWritesIfEmpty (benv : Benv) (a : Adr) : Benv :=
+def Benv.clearStorageWritesIfEmpty (benv : Benv) (a : Address) : Benv :=
   {benv with storageWrites :=
-    if (benv.state.get a).Empty then benv.storageWrites.eraseAddress a
+    if (benv.state.get a).isEmpty then benv.storageWrites.eraseAddress a
     else benv.storageWrites}
 
-def Devm.clearStorageWritesIfEmpty (devm : Devm) (a : Adr) : Devm :=
+def Devm.clearStorageWritesIfEmpty (devm : Devm) (a : Address) : Devm :=
   devm.withStorageWrites
-    (if (devm.state.get a).Empty then devm.world.storageWrites.eraseAddress a
+    (if (devm.state.get a).isEmpty then devm.world.storageWrites.eraseAddress a
      else devm.world.storageWrites)
 
-@[simp] theorem Acct.clearIfEmpty_bal (ac : Acct) :
-    ac.clearIfEmpty.bal = ac.bal := by
-  unfold Acct.clearIfEmpty
+@[simp] theorem Account.clearIfEmpty_balance (ac : Account) :
+    ac.clearIfEmpty.balance = ac.balance := by
+  unfold Account.clearIfEmpty
   split
   · rename_i h; exact h.2.2.symm
   · rfl
 
-@[simp] theorem Acct.clearIfEmpty_nonce (ac : Acct) :
+@[simp] theorem Account.clearIfEmpty_nonce (ac : Account) :
     ac.clearIfEmpty.nonce = ac.nonce := by
-  unfold Acct.clearIfEmpty
+  unfold Account.clearIfEmpty
   split
   · rename_i h; exact h.2.1.symm
   · rfl
 
-@[simp] theorem Acct.clearIfEmpty_code (ac : Acct) :
+@[simp] theorem Account.clearIfEmpty_code (ac : Account) :
     ac.clearIfEmpty.code = ac.code := by
-  unfold Acct.clearIfEmpty
+  unfold Account.clearIfEmpty
   split
   · rename_i h; exact (ByteArray.size_eq_zero_iff.mp h.1).symm
   · rfl
 
 /-- Storage is precisely the field lost when an empty account is deleted. -/
-theorem Acct.clearIfEmpty_stor (ac : Acct) :
-    ac.clearIfEmpty.stor = if ac.Empty then .empty else ac.stor := by
-  unfold Acct.clearIfEmpty
+theorem Account.clearIfEmpty_storage (ac : Account) :
+    ac.clearIfEmpty.storage = if ac.isEmpty then .empty else ac.storage := by
+  unfold Account.clearIfEmpty
   split <;> rfl
 
-def Tra.set (τ : Tra) (a : Adr) (s : Stor) : Tra :=
+def TransientStorage.set (τ : TransientStorage) (a : Address) (s : Storage) : TransientStorage :=
   if s.isEmpty then τ.erase a else τ.insert a s
 
-def State.setCode (ω : State) (a : Adr) (cd : ByteArray) : State :=
+def State.setCode (ω : State) (a : Address) (cd : ByteArray) : State :=
   let ac := ω.get a
   ω.setAccount a {ac with code := cd}
 
-def getOrigAcct (sevm : Sevm) (a : Adr) : Acct :=
+def getOrigAcct (sevm : Sevm) (a : Address) : Account :=
   sevm.benvStat.origState.get a
 
-def Devm.getAcct (devm : Devm) (a : Adr) : Acct :=
+def Devm.getAcct (devm : Devm) (a : Address) : Account :=
   devm.state.get a
 
-def Devm.getBal (devm : Devm) (a : Adr) : B256 := (devm.getAcct a).bal
-def Devm.getCode (devm : Devm) (a : Adr) : ByteArray := (devm.getAcct a).code
-def Devm.getStorVal (devm : Devm) (adr : Adr) (key : B256) : B256 :=
-  (devm.getAcct adr).stor.get key
-def Devm.getStor (devm : Devm) (adr : Adr) : Stor :=
-  (devm.getAcct adr).stor
+def Devm.getBal (devm : Devm) (a : Address) : U256 := (devm.getAcct a).balance
+def Devm.getCode (devm : Devm) (a : Address) : ByteArray := (devm.getAcct a).code
+def Devm.getStorVal (devm : Devm) (adr : Address) (key : U256) : U256 :=
+  (devm.getAcct adr).storage.get key
+def Devm.getStor (devm : Devm) (adr : Address) : Storage :=
+  (devm.getAcct adr).storage
 
 /-- Storage is a world field, so a machine write cannot move it. -/
-theorem Devm.getStorVal_setMach {devm : Devm} {m : Mach} {a : Adr} {k : B256} :
+theorem Devm.getStorVal_setMach {devm : Devm} {m : Mach} {a : Address} {k : U256} :
     (devm.setMach m).getStorVal a k = devm.getStorVal a k := rfl
 
 /-- Account code is a world field, so a machine write cannot move it. -/
-theorem Devm.getCode_setMach {devm : Devm} {m : Mach} {a : Adr} :
+theorem Devm.getCode_setMach {devm : Devm} {m : Mach} {a : Address} :
     (devm.setMach m).getCode a = devm.getCode a := rfl
 
-def Stor.set (s : Stor) (k v : B256) : Stor :=
+def Storage.set (s : Storage) (k v : U256) : Storage :=
   if v = 0 then s.erase k else s.insert k v
 
-def State.setStorVal (wor : State) (adr : Adr) (key val : B256) : State :=
-  let acct : Acct := wor.get adr
-  if AccountExists wor adr then wor.setPresent adr {acct with stor := acct.stor.set key val}
-  else wor.set adr {acct with stor := acct.stor.set key val}
+def State.setStorVal (wor : State) (adr : Address) (key val : U256) : State :=
+  let acct : Account := wor.get adr
+  if AccountExists wor adr then wor.setPresent adr {acct with storage := acct.storage.set key val}
+  else wor.set adr {acct with storage := acct.storage.set key val}
 
-def Benv.setStorVal (benv : Benv) (adr : Adr) (key val : B256) : Benv :=
+def Benv.setStorVal (benv : Benv) (adr : Address) (key val : U256) : Benv :=
   {benv with
     state := benv.state.setStorVal adr key val
     storageWrites := benv.storageWrites.insert (adr, key)}
 
-def Devm.setStorVal (devm : Devm) (adr : Adr) (key val : B256) : Devm :=
+def Devm.setStorVal (devm : Devm) (adr : Address) (key val : U256) : Devm :=
   (devm.withState (devm.state.setStorVal adr key val)).withStorageWrites
     (devm.world.storageWrites.insert (adr, key))
 
-def Tra.setStorVal (tra : Tra) (adr : Adr) (key val : B256) : Tra :=
-  let stor : Stor := tra.getD adr .empty
+def TransientStorage.setStorageValue (tra : TransientStorage) (adr : Address) (key val : U256) : TransientStorage :=
+  let stor : Storage := tra.getD adr .empty
   tra.set adr <| stor.set key val
 
-def Tenv.setTransVal (tenv : Tenv) (adr : Adr) (key val : B256) : Tenv :=
-  {tenv with transientStorage := tenv.transientStorage.setStorVal adr key val}
+def Tenv.setTransVal (tenv : Tenv) (adr : Address) (key val : U256) : Tenv :=
+  {tenv with transientStorage := tenv.transientStorage.setStorageValue adr key val}
 
-def Devm.setTransVal (devm : Devm) (adr : Adr) (key val : B256) : Devm :=
-  devm.withTransientStorage (devm.transientStorage.setStorVal adr key val)
+def Devm.setTransVal (devm : Devm) (adr : Address) (key val : U256) : Devm :=
+  devm.withTransientStorage (devm.transientStorage.setStorageValue adr key val)
 
-def getOrigStorVal (sevm : Sevm) (adr : Adr) (key : B256) : B256 :=
-  (getOrigAcct sevm adr).stor.get key
+def getOrigStorVal (sevm : Sevm) (adr : Address) (key : U256) : U256 :=
+  (getOrigAcct sevm adr).storage.get key
 
 /-- A created account's original storage is zero even when a storage-only
 pre-state account occupied its address. Otherwise read the transaction-start
 snapshot, which already includes earlier transactions' committed wipes. -/
-def Devm.getOrigStorVal (devm : Devm) (sevm : Sevm) (adr : Adr) (key : B256) : B256 :=
+def Devm.getOrigStorVal (devm : Devm) (sevm : Sevm) (adr : Address) (key : U256) : U256 :=
   if adr ∈ devm.createdAccounts then 0 else Jaune.getOrigStorVal sevm adr key
 
-def Devm.getTransVal (devm : Devm) (adr : Adr) (key : B256) : B256 :=
+def Devm.getTransVal (devm : Devm) (adr : Address) (key : U256) : U256 :=
   (devm.transientStorage.getD adr .empty).get key
 
 def memExtSize
@@ -3843,10 +3843,10 @@ def Mem.extends (μ : Mem) (pairs : List (Nat × Nat)) : Mem :=
 def Mem.read (μ : Mem) (index size : ℕ) : Bytes × Mem :=
   ⟨μ.data.sliceD index size 0, μ.extend index size⟩
 
-def Dead (w : State) (a : Adr) : Prop :=
+def State.isDead (w : State) (a : Address) : Prop :=
   match w[a]? with
   | none => True
-  | some x => x.Empty
+  | some x => x.isEmpty
 
 def Mach.memWrite (mach : Mach) (idx : Nat) (val : Bytes) : Mach :=
   {mach with memory := mach.memory.write idx val}
@@ -3863,7 +3863,7 @@ reader and recurses; for `n < 8` delegates directly to the existing list
 absorber on the bounded range-mapped reader sequence, reusing its exact
 padding. Only the full-eight-byte branch is newly implemented. -/
 private def keccakReadRun (read : Nat → UInt8) (pos n : Nat)
-    (wc : Fin 17) (ws : Vector UInt64 25) : B256 :=
+    (wc : Fin 17) (ws : Vector UInt64 25) : U256 :=
   if h : 7 < n then
     let b0 := read pos
     let b1 := read (pos + 1)
@@ -4038,37 +4038,37 @@ value move and at `SELFDESTRUCT`'s sweep, never for withdrawals, fee refunds or
 coinbase payments, which credit without a transfer. -/
 
 /-- `SYSTEM_ADDRESS`, the address every transfer log is emitted from. -/
-def transferLogAddress : Adr := 0xfffffffffffffffffffffffffffffffffffffffe
+def transferLogAddress : Address := 0xfffffffffffffffffffffffffffffffffffffffe
 
 /-- `TRANSFER_TOPIC`, `keccak256("Transfer(address,address,uint256)")`. Stated
 as the literal so that no site hashes; `transferTopic_keccak` below pins it to
 the hash. -/
-def transferTopic : B256 :=
+def transferTopic : U256 :=
   0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef
 
 /-- The log one non-zero ETH transfer between distinct accounts emits: the two
 addresses left-padded to words as the indexed topics, the amount as the data. -/
-def transferLog (sender recipient : Adr) (amount : B256) : Log :=
+def transferLog (sender recipient : Address) (amount : U256) : Log :=
   { address := transferLogAddress
-    topics := [transferTopic, sender.toB256, recipient.toB256]
+    topics := [transferTopic, sender.toU256, recipient.toU256]
     data := amount.toBytes }
 
 /-- `emit_transfer_log`, with both of upstream's guards folded in: a self
 transfer and a zero transfer emit nothing. -/
-def Devm.emitTransferLog (devm : Devm) (sender recipient : Adr) (amount : B256) :
+def Devm.emitTransferLog (devm : Devm) (sender recipient : Address) (amount : U256) :
     Devm :=
   if sender = recipient ∨ amount = 0 then devm
   else devm.addLog (transferLog sender recipient amount)
 
 #guard transferTopic = Bytes.keccak "Transfer(address,address,uint256)".toUTF8.toList
 
-def Mach.applyUnary (f : B256 → B256) (cost : Nat) (mach : Mach) :
+def Mach.applyUnary (f : U256 → U256) (cost : Nat) (mach : Mach) :
     Footprint.Outcome Mach Unit :=
   match mach.pop with
   | .error err => .error err
   | .ok ⟨x, mach'⟩ => Mach.pushItem (f x) cost mach'
 
-def Mach.applyBinary (f : B256 → B256 → B256) (cost : Nat) (mach : Mach) :
+def Mach.applyBinary (f : U256 → U256 → U256) (cost : Nat) (mach : Mach) :
     Footprint.Outcome Mach Unit :=
   match mach.pop with
   | .error err => .error err
@@ -4077,7 +4077,7 @@ def Mach.applyBinary (f : B256 → B256 → B256) (cost : Nat) (mach : Mach) :
     | .error err => .error err
     | .ok ⟨y, mach''⟩ => Mach.pushItem (f x y) cost mach''
 
-def Mach.applyTernary (f : B256 → B256 → B256 → B256) (cost : Nat)
+def Mach.applyTernary (f : U256 → U256 → U256 → U256) (cost : Nat)
     (mach : Mach) : Footprint.Outcome Mach Unit :=
   match mach.pop with
   | .error err => .error err
@@ -4089,18 +4089,18 @@ def Mach.applyTernary (f : B256 → B256 → B256 → B256) (cost : Nat)
       | .error err => .error err
       | .ok ⟨z, mach'''⟩ => Mach.pushItem (f x y z) cost mach'''
 
-def applyUnary (f : B256 → B256) (cost : Nat) (devm : Devm) : Execution :=
+def applyUnary (f : U256 → U256) (cost : Nat) (devm : Devm) : Execution :=
   liftMachExecution (Mach.applyUnary f cost) devm
 
-def applyBinary (f : B256 → B256 → B256)
+def applyBinary (f : U256 → U256 → U256)
   (cost : Nat) (devm : Devm) : Execution :=
   liftMachExecution (Mach.applyBinary f cost) devm
 
-def applyTernary (f : B256 → B256 → B256 → B256)
+def applyTernary (f : U256 → U256 → U256 → U256)
   (cost : Nat) (devm : Devm) : Execution :=
   liftMachExecution (Mach.applyTernary f cost) devm
 
-theorem applyUnary_def (f : B256 → B256) (cost : Nat) (devm : Devm) :
+theorem applyUnary_def (f : U256 → U256) (cost : Nat) (devm : Devm) :
     applyUnary f cost devm = (do
       let ⟨x, devm'⟩ ← devm.pop
       pushItem (f x) cost devm') := by
@@ -4124,7 +4124,7 @@ theorem applyUnary_def (f : B256 → B256) (cost : Nat) (devm : Devm) :
         liftMach, Footprint.toExecution, Footprint.liftOutcome, Devm.pop_def, Devm.stack,
         Devm.setMach, bind, Except.bind, h]
 
-theorem applyBinary_def (f : B256 → B256 → B256) (cost : Nat) (devm : Devm) :
+theorem applyBinary_def (f : U256 → U256 → U256) (cost : Nat) (devm : Devm) :
     applyBinary f cost devm = (do
       let ⟨x, devm'⟩ ← devm.pop
       let ⟨y, devm''⟩ ← devm'.pop
@@ -4171,7 +4171,7 @@ def List.exchange {ξ} (l : List ξ) (n m : Nat) : Option (List ξ) := do
 #guard List.exchange [1, 2, 3, 4] 0 4 = none
 #guard List.exchange ([] : List Nat) 0 0 = none
 
-def Evm.contract (evm : Evm) : Adr := evm.sta.currentTarget
+def Evm.contract (evm : Evm) : Address := evm.sta.currentTarget
 
 def assertDynamic (sevm : Sevm) (devm : Devm) : Except (EvmError × Devm) Unit :=
   Except.assert (!sevm.isStatic) ⟨.halt (.writeInStaticContext .none), devm⟩
@@ -4184,8 +4184,8 @@ Every other number here -- `gasStorageSet`, `gasStorageUpdate`, `gasColdSload`,
 `gasWarmAccess` -- is a legacy-only value the supported chain shares, and stays
 a global for that reason. `pragueRules_gas_storageClearRefund` below is the
 `rfl` proof that no Prague caller can tell the difference. -/
-def sstoreNewRefundCounter (gas : GasSchedule) (new_value : B256)
-    (original_value : B256) (current_value : B256) (rc : Int) : Int :=
+def sstoreNewRefundCounter (gas : GasSchedule) (new_value : U256)
+    (original_value : U256) (current_value : U256) (rc : Int) : Int :=
   if current_value ≠ new_value then
     let rc' :=
       if original_value ≠ 0 ∧ current_value ≠ 0 ∧ new_value = 0 then
@@ -4199,9 +4199,9 @@ def sstoreNewRefundCounter (gas : GasSchedule) (new_value : B256)
         rc'
     if original_value = new_value then
       if original_value = 0 then
-        rc'' + (gasStorageSet - gasWarmAccess)
+        rc'' + (Gas.sstoreSetGas - Gas.warmStorageReadCost)
       else
-        rc'' + (gasStorageUpdate - gasColdSload - gasWarmAccess)
+        rc'' + (Gas.sreset - Gas.coldSloadCost - Gas.warmStorageReadCost)
     else
       rc''
   else rc
@@ -4210,22 +4210,22 @@ def sstoreNewRefundCounter (gas : GasSchedule) (new_value : B256)
 whenever a currently non-zero slot is cleared. The original value does not
 affect this schedule, and restoring a cleared slot does not reverse a refund.
 The original-value parameter is retained for the shared refund interface. -/
-def sstoreLegacyRefundCounter (gas : GasSchedule) (new_value : B256)
-    (original_value : B256) (current_value : B256) (rc : Int) : Int :=
+def sstoreLegacyRefundCounter (gas : GasSchedule) (new_value : U256)
+    (original_value : U256) (current_value : U256) (rc : Int) : Int :=
   if current_value ≠ 0 ∧ new_value = 0 then
     rc + gas.storageClearRefund
   else rc
 
 /-- A no-change write refunds nothing under the legacy schedule. -/
-theorem sstoreLegacyRefundCounter_noop (gas : GasSchedule) (new_value : B256)
-    (original_value : B256) (rc : Int) :
+theorem sstoreLegacyRefundCounter_noop (gas : GasSchedule) (new_value : U256)
+    (original_value : U256) (rc : Int) :
     sstoreLegacyRefundCounter gas new_value original_value new_value rc = rc := by
   unfold sstoreLegacyRefundCounter
   simp
 
 /-- Clearing a non-zero slot to zero refunds the clear refund. -/
 theorem sstoreLegacyRefundCounter_clear (gas : GasSchedule)
-    (original_value current_value : B256) (rc : Int)
+    (original_value current_value : U256) (rc : Int)
     (horig : original_value ≠ 0) (hcurr : current_value ≠ 0) :
     sstoreLegacyRefundCounter gas 0 original_value current_value rc =
       rc + gas.storageClearRefund := by
@@ -4234,9 +4234,9 @@ theorem sstoreLegacyRefundCounter_clear (gas : GasSchedule)
 /-- Restoring a freshly set slot refunds the set premium: what the first
 change charged over the warm access. -/
 theorem sstoreNewRefundCounter_restore_set (gas : GasSchedule)
-    (current_value : B256) (rc : Int) (hcurr : current_value ≠ 0) :
+    (current_value : U256) (rc : Int) (hcurr : current_value ≠ 0) :
     sstoreNewRefundCounter gas 0 0 current_value rc =
-      rc + (gasStorageSet - gasWarmAccess) := by
+      rc + (Gas.sstoreSetGas - Gas.warmStorageReadCost) := by
   unfold sstoreNewRefundCounter
   simp [hcurr]
 
@@ -4247,29 +4247,29 @@ nothing changes. The legacy schedule (no net metering) pays SET/UPDATE and
 5000 for the no-op, likewise without any cold term: only the current and new
 values decide the legacy charge, independently of the original value. -/
 def sstoreRegimeGasCost (sstore : SstoreRules) (access : AccessSchedule)
-    (gasCost2 : Nat) (new_value original_value current_value : B256) : Nat :=
+    (gasCost2 : Nat) (new_value original_value current_value : U256) : Nat :=
   if sstore.netMetering then
     if original_value = current_value ∧ current_value ≠ new_value then
       if original_value = 0 then
-        gasCost2 + gasStorageSet
+        gasCost2 + Gas.sstoreSetGas
       else
         gasCost2 + match access with
-          | .flat _ => gasStorageUpdate
-          | .eip2929 => gasStorageUpdate - gasColdSload
+          | .flat _ => Gas.sreset
+          | .eip2929 => Gas.sreset - Gas.coldSloadCost
     else
       gasCost2 + match access with
         | .flat g => g.sload
-        | .eip2929 => gasWarmAccess
+        | .eip2929 => Gas.warmStorageReadCost
   else
-    if current_value = 0 ∧ new_value ≠ 0 then gasStorageSet
-    else gasStorageUpdate
+    if current_value = 0 ∧ new_value ≠ 0 then Gas.sstoreSetGas
+    else Gas.sreset
 
 /-- Every row of the pre-Berlin schedule is positive: the literals are, and
 the flat no-op price is positive on valid access schedules. The termination
 argument's need for the regimes the `none`-lane generalisation adds. -/
 theorem sstoreRegimeGasCost_pos (sstore : SstoreRules) {access : AccessSchedule}
     (hacc : access.Valid) (gasCost2 : Nat)
-    (new_value original_value current_value : B256) :
+    (new_value original_value current_value : U256) :
     0 < sstoreRegimeGasCost sstore access gasCost2 new_value original_value
       current_value := by
   cases access with
@@ -4279,12 +4279,12 @@ theorem sstoreRegimeGasCost_pos (sstore : SstoreRules) {access : AccessSchedule}
       exact hacc.2.2.2.1
     unfold sstoreRegimeGasCost
     dsimp only
-    unfold gasStorageSet gasStorageUpdate
+    unfold Gas.sstoreSetGas Gas.sreset
     split_ifs <;> omega
   | eip2929 =>
     unfold sstoreRegimeGasCost
     dsimp only
-    unfold gasStorageSet gasStorageUpdate gasWarmAccess gasColdSload
+    unfold Gas.sstoreSetGas Gas.sreset Gas.warmStorageReadCost Gas.coldSloadCost
     split_ifs <;> omega
 
 /-- The flat net-metered refund (EIP-1283 Constantinople, EIP-2200
@@ -4292,7 +4292,7 @@ Istanbul/Muir Glacier): `sstoreNewRefundCounter`'s shape with every access
 price read as the flat no-op price instead of the Berlin cold/warm pair --
 the restore terms refund the set/update premium over `sload`. -/
 def sstoreFlatRefundCounter (gas : GasSchedule) (sload : Nat)
-    (new_value : B256) (original_value : B256) (current_value : B256)
+    (new_value : U256) (original_value : U256) (current_value : U256)
     (rc : Int) : Int :=
   if current_value ≠ new_value then
     let rc' :=
@@ -4307,9 +4307,9 @@ def sstoreFlatRefundCounter (gas : GasSchedule) (sload : Nat)
         rc'
     if original_value = new_value then
       if original_value = 0 then
-        rc'' + (gasStorageSet - sload)
+        rc'' + (Gas.sstoreSetGas - sload)
       else
-        rc'' + (gasStorageUpdate - sload)
+        rc'' + (Gas.sreset - sload)
     else
       rc''
   else rc
@@ -4317,9 +4317,9 @@ def sstoreFlatRefundCounter (gas : GasSchedule) (sload : Nat)
 /-- Restoring a freshly set slot under flat net metering refunds the set
 premium over that fork's no-op price. -/
 theorem sstoreFlatRefundCounter_restore_set (gas : GasSchedule) (sload : Nat)
-    (current_value : B256) (rc : Int) (hcurr : current_value ≠ 0) :
+    (current_value : U256) (rc : Int) (hcurr : current_value ≠ 0) :
     sstoreFlatRefundCounter gas sload 0 0 current_value rc =
-      rc + (gasStorageSet - sload) := by
+      rc + (Gas.sstoreSetGas - sload) := by
   unfold sstoreFlatRefundCounter
   simp [hcurr]
 
@@ -4336,7 +4336,7 @@ refunds the `STORAGE_WRITE` the first change to it paid. The clear refund is
 
 Transcribed from `vm/instructions/storage.py`'s refund block, in its order. -/
 def sstoreAmsterdamRefundCounter (gas : GasSchedule) (state : StateGasRules)
-    (new_value original_value current_value : B256) (rc : Int) : Int :=
+    (new_value original_value current_value : U256) (rc : Int) : Int :=
   if current_value ≠ new_value then
     let rc' :=
       if original_value ≠ 0 ∧ current_value ≠ 0 ∧ new_value = 0 then
@@ -4360,8 +4360,8 @@ transaction. EIP-8038 re-derives the old `gasStorageSet` / `gasStorageUpdate`
 lattice as exactly these two terms, with the state creation moved out into the
 state dimension. -/
 def sstoreAmsterdamGasCost (state : StateGasRules)
-    (new_value original_value current_value : B256) (cold : Bool) : Nat :=
-  (if cold then gasColdSload else gasWarmAccess) +
+    (new_value original_value current_value : U256) (cold : Bool) : Nat :=
+  (if cold then Gas.coldSloadCost else Gas.warmStorageReadCost) +
     (if original_value = current_value ∧ current_value ≠ new_value then
       state.storageWrite
     else
@@ -4372,7 +4372,7 @@ zero slot, and nothing otherwise. The credit-back when such a slot is cleared
 again in the same transaction is a refund rather than a negative charge, so it
 goes through `creditStateGasRefund` at the site. -/
 def sstoreAmsterdamStateGas (state : StateGasRules)
-    (new_value original_value current_value : B256) : Nat :=
+    (new_value original_value current_value : U256) : Nat :=
   if original_value = current_value ∧ current_value ≠ new_value
       ∧ original_value = 0 then
     state.storageSet
@@ -4382,7 +4382,7 @@ def sstoreAmsterdamStateGas (state : StateGasRules)
 /-- Whether this `SSTORE` returns the slot to a zero original, which refills the
 `STORAGE_SET` an earlier set in the same transaction charged. -/
 def sstoreAmsterdamStateRefund (state : StateGasRules)
-    (new_value original_value current_value : B256) : Nat :=
+    (new_value original_value current_value : U256) : Nat :=
   if current_value ≠ new_value ∧ original_value = new_value
       ∧ original_value = 0 then
     state.storageSet
@@ -4400,25 +4400,25 @@ def sstoreAmsterdamStateRefund (state : StateGasRules)
     parameter rather than a `Sevm` one, because that is all this core reads and
     it has no other reason to see the frame. -/
 -- The read recorders are meta-only, so every state projection sees through them.
-@[simp] theorem Devm.balReadAccount_getAcct (rules : ForkRules) (a x : Adr) (devm : Devm) :
+@[simp] theorem Devm.balReadAccount_getAcct (rules : ForkRules) (a x : Address) (devm : Devm) :
     (devm.balReadAccount rules a).getAcct x = devm.getAcct x := rfl
-@[simp] theorem Devm.balReadAccount_getBal (rules : ForkRules) (a x : Adr) (devm : Devm) :
+@[simp] theorem Devm.balReadAccount_getBal (rules : ForkRules) (a x : Address) (devm : Devm) :
     (devm.balReadAccount rules a).getBal x = devm.getBal x := rfl
-@[simp] theorem Devm.balReadAccount_getCode (rules : ForkRules) (a x : Adr) (devm : Devm) :
+@[simp] theorem Devm.balReadAccount_getCode (rules : ForkRules) (a x : Address) (devm : Devm) :
     (devm.balReadAccount rules a).getCode x = devm.getCode x := rfl
-@[simp] theorem Devm.balReadAccount_getStorVal (rules : ForkRules) (a x : Adr) (k : B256)
+@[simp] theorem Devm.balReadAccount_getStorVal (rules : ForkRules) (a x : Address) (k : U256)
     (devm : Devm) : (devm.balReadAccount rules a).getStorVal x k = devm.getStorVal x k := rfl
-@[simp] theorem Devm.balReadStorage_getAcct (rules : ForkRules) (a x : Adr) (k : B256)
+@[simp] theorem Devm.balReadStorage_getAcct (rules : ForkRules) (a x : Address) (k : U256)
     (devm : Devm) : (devm.balReadStorage rules a k).getAcct x = devm.getAcct x := rfl
-@[simp] theorem Devm.balReadStorage_getStorVal (rules : ForkRules) (a x : Adr) (k k' : B256)
+@[simp] theorem Devm.balReadStorage_getStorVal (rules : ForkRules) (a x : Address) (k k' : U256)
     (devm : Devm) : (devm.balReadStorage rules a k).getStorVal x k' = devm.getStorVal x k' := rfl
 
-def Rinst.balanceCore (rules : ForkRules) (world : World) (mach : Mach)
+def PlainOp.balanceCore (rules : ForkRules) (world : World) (mach : Mach)
     (view : Meta) : Footprint.Outcome (Mach × Meta) Unit :=
   match mach.pop with
   | .error (err, mach') => .error (err, (mach', view))
   | .ok (x, mach') =>
-    let a := x.toAdr
+    let a := x.toAddress
     let warm := a ∈ view.accessedAddresses
     -- Before EIP-2929 the price is flat and the accessed set is untouched.
     let view' :=
@@ -4427,77 +4427,77 @@ def Rinst.balanceCore (rules : ForkRules) (world : World) (mach : Mach)
       | .flat _ => view
     let cost :=
       match rules.access with
-      | .eip2929 => if warm then gasWarmAccess else rules.gas.coldAccountAccess
+      | .eip2929 => if warm then Gas.warmStorageReadCost else rules.gas.coldAccountAccess
       | .flat g => g.balance
     match Mach.chargeGas cost mach' with
     | .error (err, mach'') => .error (err, (mach'', view'))
     | .ok (_, mach'') =>
       -- `environment.py` `balance`: `charge_gas` then `get_account(address)`;
       -- the read is recorded after the charge and before the push (EIP-7928).
-      let view'' := if rules.bal.isSome then view'.readAccount a else view'
-      match Mach.push (world.state.get a).bal mach'' with
+      let view'' := if rules.blockAccessListRules.isSome then view'.readAccount a else view'
+      match Mach.push (world.state.get a).balance mach'' with
       | .error (err, mach''') => .error (err, (mach''', view''))
       | .ok (_, mach''') => .ok ((), (mach''', view''))
 
-def Rinst.runCore
+def PlainOp.runCore
   (pc : Nat)
   (devm : Devm)
-  (sevm : Sevm) : Rinst → Execution
-  | .address => pushItem sevm.currentTarget.toB256 gBase devm
+  (sevm : Sevm) : PlainOp → Execution
+  | .address => pushItem sevm.currentTarget.toU256 Gas.base devm
   -- S8 (EIP-3198): availability first, the `CLZ` pattern.
   | .basefee =>
-    if sevm.benvStat.rules.op.baseFee then
-      pushItem sevm.benvStat.baseFeePerGas.toB256 gBase devm
+    if sevm.benvStat.rules.opcodes.baseFee then
+      pushItem sevm.benvStat.baseFeePerGas.toU256 Gas.base devm
     else
       .error ⟨.halt (.invalidOpcode .none), devm⟩
   -- S8 (EIP-4844): availability first, the `CLZ` pattern.
   | .blobhash =>
-    if sevm.benvStat.rules.op.blobHash then do
+    if sevm.benvStat.rules.opcodes.blobHash then do
       let ⟨x, devm⟩ ← devm.pop
-      let y : B256 := sevm.tenvStat.blobVersionedHashes.getD x.toNat 0
-      chargeGas gHashopcode devm >>= Devm.push y
+      let y : U256 := sevm.tenvStat.blobVersionedHashes.getD x.toNat 0
+      chargeGas Gas.hashOpcodeGas devm >>= Devm.push y
     else
       .error ⟨.halt (.invalidOpcode .none), devm⟩
   | .blobbasefee =>
-    if sevm.benvStat.rules.op.blobBaseFee then do
+    if sevm.benvStat.rules.opcodes.blobBaseFee then do
       let fee :=
-        calculateBlobGasPrice sevm.benvStat.rules.blob sevm.benvStat.excessBlobGas
-      pushItem fee.toB256 gBase devm
+        getBaseFeePerBlobGas sevm.benvStat.rules.blob sevm.benvStat.excessBlobGas
+      pushItem fee.toU256 Gas.base devm
     else
       .error ⟨.halt (.invalidOpcode .none), devm⟩
   | .balance =>
-    liftMachMetaWorldExecution (Rinst.balanceCore sevm.benvStat.rules) devm
-  | .origin => pushItem sevm.tenvStat.origin.toB256 gBase devm
-  | .caller => pushItem sevm.caller.toB256 gBase devm
-  | .callvalue => pushItem sevm.value gBase devm
+    liftMachMetaWorldExecution (PlainOp.balanceCore sevm.benvStat.rules) devm
+  | .origin => pushItem sevm.tenvStat.origin.toU256 Gas.base devm
+  | .caller => pushItem sevm.caller.toU256 Gas.base devm
+  | .callvalue => pushItem sevm.value Gas.base devm
   | .calldataload => do
     let ⟨start_index, devm⟩ ← devm.pop
-    let devm' ← chargeGas gVerylow devm
-    let value := Bytes.toB256 <| sevm.data.sliceD start_index.toNat 32 0
+    let devm' ← chargeGas Gas.veryLow devm
+    let value := Bytes.toU256 <| sevm.data.sliceD start_index.toNat 32 0
     devm'.push value
-  | .calldatasize => pushItem sevm.data.length.toB256 gBase devm
+  | .calldatasize => pushItem sevm.data.length.toU256 Gas.base devm
   | .calldatacopy => do
     let ⟨memory_start_index, devm⟩ ← devm.popToNat
     let ⟨data_start_index, devm⟩ ← devm.popToNat
     let ⟨size, devm⟩ ← devm.popToNat
     let words := ceilDiv size 32
-    let copy_gas_cost := gasCopy * words
+    let copy_gas_cost := Gas.copy * words
     let extend_memory_cost := devm.extCost [⟨memory_start_index, size⟩]
-    let devm ← chargeGas (gVerylow + copy_gas_cost + extend_memory_cost) devm
+    let devm ← chargeGas (Gas.veryLow + copy_gas_cost + extend_memory_cost) devm
     let value := sevm.data.sliceD data_start_index size 0
     .ok <| devm.memWrite memory_start_index value
-  | .codesize => pushItem sevm.code.size.toB256 gBase devm
+  | .codesize => pushItem sevm.code.size.toU256 Gas.base devm
   | .codecopy => do
     let ⟨memory_start_index, devm⟩ ← devm.popToNat
     let ⟨code_start_index, devm⟩ ← devm.popToNat
     let ⟨size, devm⟩ ← devm.popToNat
     let words := ceilDiv size 32
-    let copy_gas_cost := gasCopy * words
+    let copy_gas_cost := Gas.copy * words
     let extend_memory_cost := devm.extCost [⟨memory_start_index, size⟩]
-    let devm ← chargeGas (gVerylow + copy_gas_cost + extend_memory_cost) devm
-    let value := sevm.code.sliceD code_start_index size (Linst.toUInt8 .stop)
+    let devm ← chargeGas (Gas.veryLow + copy_gas_cost + extend_memory_cost) devm
+    let value := sevm.code.sliceD code_start_index size (HaltOp.toUInt8 .stop)
     .ok (devm.memWrite memory_start_index value)
-  | .gasprice => pushItem sevm.tenvStat.gasPrice.toB256 gBase devm
+  | .gasprice => pushItem sevm.tenvStat.gasPrice.toU256 Gas.base devm
   -- EIP-8038 adds a code-reading surcharge to `EXTCODESIZE` and `EXTCODECOPY`,
   -- and reprices the cold half of the access. Both arrive through `rules.gas`;
   -- the surcharge is *additive with identity zero*, so the Prague formula here
@@ -4509,14 +4509,14 @@ def Rinst.runCore
       match sevm.benvStat.rules.access with
       | .eip2929 =>
       if adr ∈ devm.accessedAddresses
-      then chargeGas (gasWarmAccess + gas.codeReadSurcharge) devm
+      then chargeGas (Gas.warmStorageReadCost + gas.codeReadSurcharge) devm
       else
         chargeGas (gas.coldAccountAccess + gas.codeReadSurcharge)
           (addAccessedAddress devm adr)
       | .flat g => chargeGas (g.extCode + gas.codeReadSurcharge) devm
     -- `get_account(address)` after the charge (EIP-7928).
     let devm := devm.balReadAccount sevm.benvStat.rules adr
-    let codesize := (devm.getCode adr).size.toB256
+    let codesize := (devm.getCode adr).size.toU256
     devm.push codesize
   | .extcodecopy => do
     let ⟨adr, devm⟩ ← devm.popToAdr
@@ -4524,7 +4524,7 @@ def Rinst.runCore
     let ⟨code_start_index, devm⟩ ← devm.popToNat
     let ⟨size, devm⟩ ← devm.popToNat
     let words := ceilDiv size 32
-    let copy_gas_cost := gasCopy * words
+    let copy_gas_cost := Gas.copy * words
     let extend_memory_cost := devm.extCost [⟨memory_start_index, size⟩]
     let gas := sevm.benvStat.rules.gas
     let devm ←
@@ -4533,7 +4533,7 @@ def Rinst.runCore
       if adr ∈ devm.accessedAddresses
       then
         chargeGas
-          (gasWarmAccess + gas.codeReadSurcharge + copy_gas_cost
+          (Gas.warmStorageReadCost + gas.codeReadSurcharge + copy_gas_cost
             + extend_memory_cost)
           devm
       else
@@ -4549,17 +4549,17 @@ def Rinst.runCore
     -- `get_account(address)` after the charge (EIP-7928).
     let devm := devm.balReadAccount sevm.benvStat.rules adr
     let code := devm.getCode adr
-    let value := code.sliceD code_start_index size (Linst.toUInt8 .stop)
+    let value := code.sliceD code_start_index size (HaltOp.toUInt8 .stop)
     .ok (devm.memWrite memory_start_index value)
-  | .returndatasize => pushItem devm.returnData.length.toB256 gBase devm
+  | .returndatasize => pushItem devm.returnData.length.toU256 Gas.base devm
   | .returndatacopy => do
     let ⟨memory_start_index, devm⟩ ← devm.popToNat
     let ⟨return_data_start_index, devm⟩ ← devm.popToNat
     let ⟨size, devm⟩ ← devm.popToNat
     let words := ceilDiv size 32
-    let copy_gas_cost := gReturnDataCopy * words
+    let copy_gas_cost := Gas.returnDataCopy * words
     let extend_memory_cost := devm.extCost [⟨memory_start_index, size⟩]
-    let devm ← chargeGas (gVerylow + copy_gas_cost + extend_memory_cost) devm
+    let devm ← chargeGas (Gas.veryLow + copy_gas_cost + extend_memory_cost) devm
     if (devm.returnData.length < return_data_start_index + size) then
       .error ⟨.halt (.outOfBoundsRead .none), devm⟩
     let value :=
@@ -4570,13 +4570,13 @@ def Rinst.runCore
   -- is a fact about those two arms rather than about reading code.
   -- S8 (EIP-1052): availability first, the `CLZ` pattern.
   | .extcodehash =>
-    if sevm.benvStat.rules.op.extCodeHash then do
+    if sevm.benvStat.rules.opcodes.extCodeHash then do
       let ⟨adr, devm⟩ ← devm.popToAdr
       let devm ←
         match sevm.benvStat.rules.access with
         | .eip2929 =>
         if adr ∈ devm.accessedAddresses then
-          chargeGas gasWarmAccess devm
+          chargeGas Gas.warmStorageReadCost devm
         else
           chargeGas sevm.benvStat.rules.gas.coldAccountAccess
             (addAccessedAddress devm adr)
@@ -4584,8 +4584,8 @@ def Rinst.runCore
       -- `get_account(address)` after the charge (EIP-7928).
       let devm := devm.balReadAccount sevm.benvStat.rules adr
       let account := devm.getAcct adr
-      let codehash : B256 :=
-        if account.Empty then 0
+      let codehash : U256 :=
+        if account.isEmpty then 0
         else ByteArray.keccak 0 account.code.size account.code
       devm.push codehash
     else
@@ -4594,111 +4594,111 @@ def Rinst.runCore
   -- on the current target -- recorded for EIP-7928 -- then the push.
   -- S8 (EIP-1884): availability first, the `CLZ` pattern.
   | .selfbalance =>
-    if sevm.benvStat.rules.op.selfBalance then do
-      let devm ← chargeGas gLow devm
+    if sevm.benvStat.rules.opcodes.selfBalance then do
+      let devm ← chargeGas Gas.low devm
       (devm.balReadAccount sevm.benvStat.rules sevm.currentTarget).push
         (devm.getBal sevm.currentTarget)
     else
       .error ⟨.halt (.invalidOpcode .none), devm⟩
   -- S8 (EIP-1344): availability first, the `CLZ` pattern.
   | .chainid =>
-    if sevm.benvStat.rules.op.chainId then
-      pushItem sevm.benvStat.chainId.toB256 gBase devm
+    if sevm.benvStat.rules.opcodes.chainId then
+      pushItem sevm.benvStat.chainId.toU256 Gas.base devm
     else
       .error ⟨.halt (.invalidOpcode .none), devm⟩
-  | .number => pushItem sevm.benvStat.number.toB256 gBase devm
-  | .timestamp => pushItem sevm.benvStat.time gBase devm
-  | .gaslimit => pushItem sevm.benvStat.blockGasLimit.toB256 gBase devm
-  | .prevrandao => pushItem sevm.benvStat.prevRandao gBase devm
-  | .coinbase => pushItem sevm.benvStat.coinbase.toB256 gBase devm
-  | .msize => pushItem devm.memory.size.toB256 gBase devm
+  | .number => pushItem sevm.benvStat.number.toU256 Gas.base devm
+  | .timestamp => pushItem sevm.benvStat.time Gas.base devm
+  | .gaslimit => pushItem sevm.benvStat.blockGasLimit.toU256 Gas.base devm
+  | .prevrandao => pushItem sevm.benvStat.prevRandao Gas.base devm
+  | .coinbase => pushItem sevm.benvStat.coinbase.toU256 Gas.base devm
+  | .msize => pushItem devm.memory.size.toU256 Gas.base devm
   | .mload => do
     let ⟨start_index, devm⟩ ← devm.popToNat
     let extend_memory_cost := devm.extCost [⟨start_index, 32⟩]
-    let devm ← chargeGas (gVerylow + extend_memory_cost) devm
+    let devm ← chargeGas (Gas.veryLow + extend_memory_cost) devm
     let ⟨value, devm⟩ := devm.memRead start_index 32
-    devm.push (Bytes.toB256 value)
+    devm.push (Bytes.toU256 value)
   | .mstore => do
     let ⟨start_index, devm⟩ ← devm.popToNat
     let ⟨value, devm⟩ ← devm.pop
     let extend_memory_cost := devm.extCost [⟨start_index, 32⟩]
-    let devm ← chargeGas (gVerylow + extend_memory_cost) devm
+    let devm ← chargeGas (Gas.veryLow + extend_memory_cost) devm
     .ok <| devm.memWrite start_index value.toBytes
   | .mstore8 => do
     let ⟨start_index, devm⟩ ← devm.popToNat
     let ⟨value, devm⟩ ← devm.pop
     let extend_memory_cost := devm.extCost [⟨start_index, 1⟩]
-    let devm ← chargeGas (gVerylow + extend_memory_cost) devm
+    let devm ← chargeGas (Gas.veryLow + extend_memory_cost) devm
     .ok <| devm.memWrite start_index [value.2.2.toUInt8]
   | .gas => do
-    let devm ← chargeGas gBase devm
-    devm.push devm.gasLeft.toB256
-  | .eq => applyBinary .eqCheck gVerylow devm
-  | .lt => applyBinary .ltCheck gVerylow devm
-  | .gt => applyBinary .gtCheck gVerylow devm
-  | .slt => applyBinary .sltCheck gVerylow devm
-  | .sgt => applyBinary .sgtCheck gVerylow devm
-  | .iszero => applyUnary (.eqCheck · 0) gVerylow devm
-  | .not => applyUnary (~~~ ·) gVerylow devm
-  | .and => applyBinary B256.and gVerylow devm
-  | .or => applyBinary B256.or gVerylow devm
-  | .xor => applyBinary B256.xor gVerylow devm
-  | .signextend => applyBinary B256.signext gLow devm
-  | .pop => (devm.pop <&> Prod.snd) >>= chargeGas gBase
+    let devm ← chargeGas Gas.base devm
+    devm.push devm.gasLeft.toU256
+  | .eq => applyBinary .eqCheck Gas.veryLow devm
+  | .lt => applyBinary .ltCheck Gas.veryLow devm
+  | .gt => applyBinary .gtCheck Gas.veryLow devm
+  | .slt => applyBinary .sltCheck Gas.veryLow devm
+  | .sgt => applyBinary .sgtCheck Gas.veryLow devm
+  | .iszero => applyUnary (.eqCheck · 0) Gas.veryLow devm
+  | .not => applyUnary (~~~ ·) Gas.veryLow devm
+  | .and => applyBinary U256.and Gas.veryLow devm
+  | .or => applyBinary U256.or Gas.veryLow devm
+  | .xor => applyBinary U256.xor Gas.veryLow devm
+  | .signextend => applyBinary U256.signext Gas.low devm
+  | .pop => (devm.pop <&> Prod.snd) >>= chargeGas Gas.base
   | .byte =>
-    applyBinary (λ x y => (List.getD y.toBytes x.toNat 0).toB256) gVerylow devm
+    applyBinary (λ x y => (List.getD y.toBytes x.toNat 0).toU256) Gas.veryLow devm
   -- S8 (EIP-145): the availability check comes before the pops, exactly as for
   -- `CLZ` below, so without the fork each byte is an undefined instruction
   -- whatever the stack holds.
   | .shl =>
-    if sevm.benvStat.rules.op.shifts then
-      applyBinary (fun x y => y <<< x.toNat) gVerylow devm
+    if sevm.benvStat.rules.opcodes.shifts then
+      applyBinary (fun x y => y <<< x.toNat) Gas.veryLow devm
     else
       .error ⟨.halt (.invalidOpcode .none), devm⟩
   | .shr =>
-    if sevm.benvStat.rules.op.shifts then
-      applyBinary (fun x y => y >>> x.toNat) gVerylow devm
+    if sevm.benvStat.rules.opcodes.shifts then
+      applyBinary (fun x y => y >>> x.toNat) Gas.veryLow devm
     else
       .error ⟨.halt (.invalidOpcode .none), devm⟩
   | .sar =>
-    if sevm.benvStat.rules.op.shifts then
-      applyBinary (fun x y => B256.arithShiftRight y x.toNat) gVerylow devm
+    if sevm.benvStat.rules.opcodes.shifts then
+      applyBinary (fun x y => U256.arithShiftRight y x.toNat) Gas.veryLow devm
     else
       .error ⟨.halt (.invalidOpcode .none), devm⟩
   | .clz =>
     -- The availability check comes before the pop, so under rules without
     -- EIP-7939 a `CLZ` byte behaves exactly like any other undefined opcode:
     -- an invalid instruction regardless of what the stack holds.
-    if sevm.benvStat.rules.op.clz then
-      applyUnary (fun x => (B256.leadingZeros x).toB256) gLow devm
+    if sevm.benvStat.rules.opcodes.clz then
+      applyUnary (fun x => (U256.leadingZeros x).toU256) Gas.low devm
     else
       .error ⟨.halt (.invalidOpcode .none), devm⟩
   | .keccak256 => do
     let ⟨memory_start_index, devm⟩ ← devm.popToNat
     let ⟨size, devm⟩ ← devm.popToNat
     let words := ceilDiv size 32
-    let word_gas_cost := gasKeccak256Word * words
+    let word_gas_cost := Gas.keccak256Word * words
     let extend_memory_cost := devm.extCost [⟨memory_start_index, size⟩]
-    let devm ← chargeGas (gKeccak256 + word_gas_cost + extend_memory_cost) devm
+    let devm ← chargeGas (Gas.keccak256 + word_gas_cost + extend_memory_cost) devm
     (devm.withMemory (devm.memory.extend memory_start_index size)).push
       (keccakReadRun (fun j => devm.memory.data.getD j 0) memory_start_index size 0
         (.replicate 25 0))
-  | .sub => applyBinary (· - ·) gVerylow devm
-  | .mul => applyBinary (· * ·) gLow devm
+  | .sub => applyBinary (· - ·) Gas.veryLow devm
+  | .mul => applyBinary (· * ·) Gas.low devm
   | .exp => do
     let ⟨base, devm⟩ ← devm.pop
     let ⟨exponent, devm⟩ ← devm.pop
-    let devm ← chargeGas (gExp + (gExpbyte * exponent.bytecount)) devm
-    devm.push (B256.bexp base exponent)
-  | .div => applyBinary (· / ·) gLow devm
-  | .sdiv => applyBinary B256.sdiv gLow devm
-  | .mod => applyBinary (· % ·) gLow devm
-  | .smod => applyBinary B256.smod gLow devm
-  | .add => applyBinary (· + ·) gVerylow devm
-  | .addmod => applyTernary B256.addmod gMid devm
-  | .mulmod => applyTernary B256.mulmod gMid devm
+    let devm ← chargeGas (Gas.exp + (Gas.expByte * exponent.bytecount)) devm
+    devm.push (U256.exp base exponent)
+  | .div => applyBinary (· / ·) Gas.low devm
+  | .sdiv => applyBinary U256.sdiv Gas.low devm
+  | .mod => applyBinary (· % ·) Gas.low devm
+  | .smod => applyBinary U256.smod Gas.low devm
+  | .add => applyBinary (· + ·) Gas.veryLow devm
+  | .addmod => applyTernary U256.addmod Gas.mid devm
+  | .mulmod => applyTernary U256.mulmod Gas.mid devm
   | .swap n => do
-    let devm ← chargeGas gVerylow devm
+    let devm ← chargeGas Gas.veryLow devm
     match List.swap devm.stack n with
     | none => .error ⟨.halt (.stackUnderflow .none), devm⟩
     | some stack => .ok (devm.withStack stack)
@@ -4707,12 +4707,12 @@ def Rinst.runCore
   -- The availability check comes first, exactly as for `CLZ`: under rules
   -- without EIP-7843 the byte is an undefined instruction.
   | .slotnum =>
-    if sevm.benvStat.rules.op.slotnum then
-      pushItem sevm.benvStat.slotNumber.toNat.toB256 gBase devm
+    if sevm.benvStat.rules.opcodes.slotnum then
+      pushItem sevm.benvStat.slotNumber.toNat.toU256 Gas.base devm
     else
       .error ⟨.halt (.invalidOpcode .none), devm⟩
   | .dup n => do
-    let devm ← chargeGas gVerylow devm
+    let devm ← chargeGas Gas.veryLow devm
     match devm.stack[n]? with
     | none => .error ⟨.halt (.stackUnderflow .none), devm⟩
     | some word => devm.push word
@@ -4723,9 +4723,9 @@ def Rinst.runCore
       match sevm.benvStat.rules.access with
       | .eip2929 =>
       if ⟨ct, key⟩ ∈ devm.accessedStorageKeys then
-        chargeGas gasWarmAccess devm
+        chargeGas Gas.warmStorageReadCost devm
       else
-        chargeGas gasColdSload
+        chargeGas Gas.coldSloadCost
           (addAccessedStorageKey devm ct key)
       | .flat g => chargeGas g.sload devm
     -- `get_storage` after the charge (EIP-7928).
@@ -4733,12 +4733,12 @@ def Rinst.runCore
     devm.push (devm.getStorVal ct key)
   -- S8 (EIP-1153): availability first, the `CLZ` pattern.
   | .tload =>
-    if sevm.benvStat.rules.op.transient then do
+    if sevm.benvStat.rules.opcodes.transient then do
       let ⟨key, devm⟩ ← devm.pop
-      pushItem (devm.getTransVal sevm.currentTarget key) gasWarmAccess devm
+      pushItem (devm.getTransVal sevm.currentTarget key) Gas.warmStorageReadCost devm
     else
       .error ⟨.halt (.invalidOpcode .none), devm⟩
-  | .pc => pushItem pc.toB256 gBase devm
+  | .pc => pushItem pc.toU256 Gas.base devm
   -- `vm/instructions/storage.py` `sstore`. The two shapes differ in more than
   -- numbers, so this is a `match` on the switch rather than a schedule read:
   -- Amsterdam moves the static check ahead of the pops, replaces the EIP-2200
@@ -4753,7 +4753,7 @@ def Rinst.runCore
         let ⟨key, devm⟩ ← devm.pop
         let ⟨new_value, devm⟩ ← devm.pop
         .assert
-          (gCallStipend < devm.gasLeft)
+          (Gas.callStipend < devm.gasLeft)
           ⟨.halt (.outOfGas .none), devm⟩
         let ct := sevm.currentTarget
         let original_value := devm.getOrigStorVal sevm ct key
@@ -4764,17 +4764,17 @@ def Rinst.runCore
         let ⟨devm, gasCost2⟩ ← .ok <|
           if ⟨ct, key⟩ ∉ devm.accessedStorageKeys then
             ( ⟨ addAccessedStorageKey devm ct key,
-                gasColdSload ⟩ : Devm × Nat )
+                Gas.coldSloadCost ⟩ : Devm × Nat )
           else
             ⟨devm, 0⟩
         let gasCost3 ← .ok <|
           if original_value = current_value ∧ current_value ≠ new_value then
             if original_value = 0 then
-              gasCost2 + gasStorageSet
+              gasCost2 + Gas.sstoreSetGas
             else
-              gasCost2 + (gasStorageUpdate - gasColdSload)
+              gasCost2 + (Gas.sreset - Gas.coldSloadCost)
           else
-            gasCost2 + gasWarmAccess
+            gasCost2 + Gas.warmStorageReadCost
         let devm ← .ok <| devm.withRefundCounter <|
           sstoreNewRefundCounter
             sevm.benvStat.rules.gas
@@ -4794,7 +4794,7 @@ def Rinst.runCore
         -- pre-Istanbul regimes skip the check without changing shape.
         .assert
           (sevm.benvStat.rules.sstore.stipendSentry →
-            gCallStipend < devm.gasLeft)
+            Gas.callStipend < devm.gasLeft)
           ⟨.halt (.outOfGas .none), devm⟩
         let ct := sevm.currentTarget
         let original_value := devm.getOrigStorVal sevm ct key
@@ -4808,9 +4808,9 @@ def Rinst.runCore
           match sevm.benvStat.rules.access with
           | .flat _ => (⟨devm, 0⟩ : Devm × Nat)
           | .eip2929 =>
-            if ((ct, key) : Adr × B256) ∉ devm.accessedStorageKeys then
+            if ((ct, key) : Address × U256) ∉ devm.accessedStorageKeys then
               ( ⟨ addAccessedStorageKey devm ct key,
-                  gasColdSload ⟩ : Devm × Nat )
+                  Gas.coldSloadCost ⟩ : Devm × Nat )
             else
               (⟨devm, 0⟩ : Devm × Nat)
         let gasCost3 ← .ok <|
@@ -4854,9 +4854,9 @@ def Rinst.runCore
       -- state and check it is affordable first: the access cost can now exceed
       -- the stipend, so the EIP-2200 sentry alone no longer suffices.
       let cold := ⟨ct, key⟩ ∉ devm.accessedStorageKeys
-      let accessGas := if cold then gasColdSload else gasWarmAccess
+      let accessGas := if cold then Gas.coldSloadCost else Gas.warmStorageReadCost
       .assert
-        (max accessGas (gCallStipend + 1) ≤ devm.gasLeft)
+        (max accessGas (Gas.callStipend + 1) ≤ devm.gasLeft)
         ⟨.halt (.outOfGas .none), devm⟩
       -- STATE ACCESS. Only now is the slot read, and only now is it warmed.
       let devm := if cold then addAccessedStorageKey devm ct key else devm
@@ -4891,12 +4891,12 @@ def Rinst.runCore
   -- S8 (EIP-1153): availability first, the `CLZ` pattern; the two metering
   -- shapes below are untouched.
   | .tstore =>
-    if sevm.benvStat.rules.op.transient then
+    if sevm.benvStat.rules.opcodes.transient then
       match sevm.benvStat.rules.stateGas with
       | none => do
         let ⟨key, devm⟩ ← devm.pop
         let ⟨new_value, devm⟩ ← devm.pop
-        let devm ← chargeGas gasWarmAccess devm
+        let devm ← chargeGas Gas.warmStorageReadCost devm
         assertDynamic sevm devm
         .ok (devm.setTransVal sevm.currentTarget key new_value)
       | some _ => do
@@ -4905,21 +4905,21 @@ def Rinst.runCore
         assertDynamic sevm devm
         let ⟨key, devm⟩ ← devm.pop
         let ⟨new_value, devm⟩ ← devm.pop
-        let devm ← chargeGas gasWarmAccess devm
+        let devm ← chargeGas Gas.warmStorageReadCost devm
         .ok (devm.setTransVal sevm.currentTarget key new_value)
     else
       .error ⟨.halt (.invalidOpcode .none), devm⟩
   -- S8 (EIP-5656): availability first, the `CLZ` pattern.
   | .mcopy =>
-    if sevm.benvStat.rules.op.mcopy then do
+    if sevm.benvStat.rules.opcodes.mcopy then do
       let ⟨destination, devm⟩ ← devm.popToNat
       let ⟨source, devm⟩ ← devm.popToNat
       let ⟨length, devm⟩ ← devm.popToNat
       let words := ceilDiv length 32
-      let copy_gas_cost := gasCopy * words
+      let copy_gas_cost := Gas.copy * words
       let extend_memory_cost :=
         devm.extCost [⟨source, length⟩, ⟨destination, length⟩]
-      let devm ← chargeGas (gVerylow + copy_gas_cost + extend_memory_cost) devm
+      let devm ← chargeGas (Gas.veryLow + copy_gas_cost + extend_memory_cost) devm
       let ⟨value, devm⟩ := devm.memRead source length
       .ok (devm.memWrite destination value)
     else
@@ -4931,7 +4931,7 @@ def Rinst.runCore
     let extend_memory_cost := devm.extCost [⟨memory_start_index, size⟩]
     let devm ←
       chargeGas
-        (gLog + (gLogdata * size) + (gLogtopic * n) + extend_memory_cost)
+        (Gas.log + (Gas.logData * size) + (Gas.logTopic * n) + extend_memory_cost)
         devm
     assertDynamic sevm devm
     let ⟨data, devm⟩ := devm.memRead memory_start_index size
@@ -4940,9 +4940,9 @@ def Rinst.runCore
   | .blockhash => do
     let ⟨blockNumberWord, devm⟩ ← devm.pop
     let blockNumber := blockNumberWord.toNat
-    let devm ← chargeGas gBlockhash devm
+    let devm ← chargeGas Gas.blockhash devm
     let maxBlockNumber := blockNumber + 256
-    let hash : B256 :=
+    let hash : U256 :=
       if sevm.benvStat.number ≤ blockNumber ∨ maxBlockNumber < sevm.benvStat.number
       then 0
       else
@@ -4951,7 +4951,7 @@ def Rinst.runCore
           0
     devm.push hash
 
-def Rinst.run (evm : Evm) := Rinst.runCore evm.pc evm.dyna evm.sta
+def PlainOp.run (evm : Evm) := PlainOp.runCore evm.pc evm.dyna evm.sta
 
 /-- Unconditional KECCAK compatibility: the indexed branch computes the entire
 `Execution` of the reference bind chain — both pops, word and extension gas,
@@ -4959,14 +4959,14 @@ the charge, memory extension, digest, and push — with no fork, stack, gas,
 well-formedness, or success premise. The right-hand side is exactly the former
 branch. Kept out of the simp set; existing proof bodies rewrite through it
 before destructuring the old branch. -/
-theorem Rinst.runCore_keccak256_eq_reference (pc : Nat) (devm : Devm) (sevm : Sevm) :
-    Rinst.runCore pc devm sevm .keccak256 = (do
+theorem PlainOp.runCore_keccak256_eq_reference (pc : Nat) (devm : Devm) (sevm : Sevm) :
+    PlainOp.runCore pc devm sevm .keccak256 = (do
       let ⟨memory_start_index, devm⟩ ← devm.popToNat
       let ⟨size, devm⟩ ← devm.popToNat
       let words := ceilDiv size 32
-      let word_gas_cost := gasKeccak256Word * words
+      let word_gas_cost := Gas.keccak256Word * words
       let extend_memory_cost := devm.extCost [⟨memory_start_index, size⟩]
-      let devm ← chargeGas (gKeccak256 + word_gas_cost + extend_memory_cost) devm
+      let devm ← chargeGas (Gas.keccak256 + word_gas_cost + extend_memory_cost) devm
       let ⟨arg, devm⟩ := devm.memRead memory_start_index size
       devm.push arg.keccak) := by
   have htail : ∀ (d3 : Devm) (start size : Nat),
@@ -4974,9 +4974,9 @@ theorem Rinst.runCore_keccak256_eq_reference (pc : Nat) (devm : Devm) (sevm : Se
         (keccakReadRun (fun j => d3.memory.data.getD j 0) start size 0 (.replicate 25 0)) =
       (d3.memRead start size).2.push (d3.memRead start size).1.keccak := by
     intro d3 start size
-    exact congrArg (fun p : B256 × Devm => p.2.push p.1)
+    exact congrArg (fun p : U256 × Devm => p.2.push p.1)
       (keccakReadRun_memRead_pair d3 start size)
-  simp only [Rinst.runCore]
+  simp only [PlainOp.runCore]
   simp only [htail]
 
 instance : Inhabited BenvStat := ⟨
@@ -5010,21 +5010,21 @@ instance : Inhabited Benv := ⟨
 -- input -- as the original value. Reusing the block prestate here is what made
 -- `SSTORE` charge a dirty-update 100 rather than a clean-update 2900, the
 -- 2,800-gas deficit of `extcodehashEmptySuicide`.
-private def origStateRegressionOrigVals : B256 × B256 :=
-  let a : Adr := (0x5678 : Adr)
-  let k : B256 := Nat.toB256 7
-  let prestate : State := State.setStorVal .empty a k (Nat.toB256 11)
+private def origStateRegressionOrigVals : U256 × U256 :=
+  let a : Address := (0x5678 : Address)
+  let k : U256 := Nat.toU256 7
+  let prestate : State := State.setStorVal .empty a k (Nat.toU256 11)
   let benv0 : Benv := {(default : Benv) with state := prestate}
   -- transaction 1: open the boundary, read the original value, write the slot
   let benv1 : Benv := benv0.beginTransaction
-  let orig1 : B256 := (benv1.stat.origState.get a).stor.get k
-  let benv1 : Benv := benv1.setStorVal a k (Nat.toB256 22)
+  let orig1 : U256 := (benv1.stat.origState.get a).storage.get k
+  let benv1 : Benv := benv1.setStorVal a k (Nat.toU256 22)
   -- transaction 2: open the boundary, read the original value
   let benv2 : Benv := benv1.beginTransaction
-  let orig2 : B256 := (benv2.stat.origState.get a).stor.get k
+  let orig2 : U256 := (benv2.stat.origState.get a).storage.get k
   ⟨orig1, orig2⟩
 
-#guard origStateRegressionOrigVals = ⟨Nat.toB256 11, Nat.toB256 22⟩
+#guard origStateRegressionOrigVals = ⟨Nat.toU256 11, Nat.toU256 22⟩
 
 -- The same slot, with the boundary opened only once per block, is the defect:
 -- the second transaction would have kept reading the block prestate value 11.
@@ -5129,34 +5129,34 @@ instance : Inhabited Evm := ⟨
 
 -- The counted quantity is `256 - x.bit_length()`, so every limb boundary and
 -- both extremes are pinned rather than left to the fixture corpus.
-#guard B256.leadingZeros (Nat.toB256 0) = 256
-#guard B256.leadingZeros (Nat.toB256 1) = 255
-#guard B256.leadingZeros (Nat.toB256 2) = 254
-#guard B256.leadingZeros (Nat.toB256 3) = 254
-#guard B256.leadingZeros (Nat.toB256 255) = 248
-#guard B256.leadingZeros (Nat.toB256 256) = 247
-#guard B256.leadingZeros (Nat.toB256 (2 ^ 63)) = 192
-#guard B256.leadingZeros (Nat.toB256 (2 ^ 64)) = 191
-#guard B256.leadingZeros (Nat.toB256 (2 ^ 127)) = 128
-#guard B256.leadingZeros (Nat.toB256 (2 ^ 128)) = 127
-#guard B256.leadingZeros (Nat.toB256 (2 ^ 191)) = 64
-#guard B256.leadingZeros (Nat.toB256 (2 ^ 192)) = 63
-#guard B256.leadingZeros (Nat.toB256 (2 ^ 255)) = 0
-#guard B256.leadingZeros B256.max = 0
+#guard U256.leadingZeros (Nat.toU256 0) = 256
+#guard U256.leadingZeros (Nat.toU256 1) = 255
+#guard U256.leadingZeros (Nat.toU256 2) = 254
+#guard U256.leadingZeros (Nat.toU256 3) = 254
+#guard U256.leadingZeros (Nat.toU256 255) = 248
+#guard U256.leadingZeros (Nat.toU256 256) = 247
+#guard U256.leadingZeros (Nat.toU256 (2 ^ 63)) = 192
+#guard U256.leadingZeros (Nat.toU256 (2 ^ 64)) = 191
+#guard U256.leadingZeros (Nat.toU256 (2 ^ 127)) = 128
+#guard U256.leadingZeros (Nat.toU256 (2 ^ 128)) = 127
+#guard U256.leadingZeros (Nat.toU256 (2 ^ 191)) = 64
+#guard U256.leadingZeros (Nat.toU256 (2 ^ 192)) = 63
+#guard U256.leadingZeros (Nat.toU256 (2 ^ 255)) = 0
+#guard U256.leadingZeros U256.max = 0
 -- A power of two and the all-ones word below it are the two words with the
 -- same bit length, so they must count the same number of leading zeros.
 #guard (List.range 256).all
-  (fun n => B256.leadingZeros (Nat.toB256 (2 ^ n)) = 255 - n)
+  (fun n => U256.leadingZeros (Nat.toU256 (2 ^ n)) = 255 - n)
 #guard (List.range 256).all
-  (fun n => B256.leadingZeros (Nat.toB256 (2 ^ (n + 1) - 1)) = 255 - n)
+  (fun n => U256.leadingZeros (Nat.toU256 (2 ^ (n + 1) - 1)) = 255 - n)
 
 private def guardSevmAt (fork : Fork) : Sevm :=
   { (default : Sevm) with
     benvStat := { (default : BenvStat) with fork := fork } }
 
-private def guardClz (fork : Fork) (gasLeft : Nat) (stack : List B256) :
+private def guardClz (fork : Fork) (gasLeft : Nat) (stack : List U256) :
     Execution :=
-  Rinst.runCore 0 (((default : Devm).withGasLeft gasLeft).withStack stack)
+  PlainOp.runCore 0 (((default : Devm).withGasLeft gasLeft).withStack stack)
     (guardSevmAt fork) .clz
 
 private def guardClzErr (e : Execution) : String :=
@@ -5166,17 +5166,17 @@ private def guardClzErr (e : Execution) : String :=
 
 -- Under Osaka the opcode pops one word, charges `LOW`, and pushes the count.
 #guard (guardClz .osaka 100 [0]).toOption.map Devm.stack
-  = some [Nat.toB256 256]
+  = some [Nat.toU256 256]
 #guard (guardClz .osaka 100 [1]).toOption.map Devm.stack
-  = some [Nat.toB256 255]
-#guard (guardClz .osaka 100 [B256.max]).toOption.map Devm.stack
-  = some [Nat.toB256 0]
-#guard (guardClz .osaka 100 [0]).toOption.map Devm.gasLeft = some (100 - gLow)
-#guard gLow = 5
+  = some [Nat.toU256 255]
+#guard (guardClz .osaka 100 [U256.max]).toOption.map Devm.stack
+  = some [Nat.toU256 0]
+#guard (guardClz .osaka 100 [0]).toOption.map Devm.gasLeft = some (100 - Gas.low)
+#guard Gas.low = 5
 
 -- The rest of the stack is untouched and only the top word is consumed.
 #guard (guardClz .osaka 100 [0, 7]).toOption.map Devm.stack
-  = some [Nat.toB256 256, Nat.toB256 7]
+  = some [Nat.toU256 256, Nat.toU256 7]
 
 -- Under Prague 0x1E is an unassigned byte, so it is an invalid instruction
 -- whatever the stack and gas hold -- not a stack or gas failure, and not a
@@ -5190,51 +5190,51 @@ private def guardClzErr (e : Execution) : String :=
 -- BPO2 the byte 0x4B is unassigned, so it is an invalid instruction whatever
 -- the stack and gas hold.
 private def guardSlotnum (fork : Fork) (slot : UInt64) (gasLeft : Nat)
-    (stack : List B256) : Execution :=
-  Rinst.runCore 0 (((default : Devm).withGasLeft gasLeft).withStack stack)
+    (stack : List U256) : Execution :=
+  PlainOp.runCore 0 (((default : Devm).withGasLeft gasLeft).withStack stack)
     { guardSevmAt fork with
       benvStat := { (default : BenvStat) with fork := fork, slotNumber := slot } }
     .slotnum
 
-#guard gBase = 2
+#guard Gas.base = 2
 #guard (guardSlotnum .amsterdam 12345 100 []).toOption.map Devm.stack
-  = some [Nat.toB256 12345]
+  = some [Nat.toU256 12345]
 #guard (guardSlotnum .amsterdam 12345 100 []).toOption.map Devm.gasLeft
-  = some (100 - gBase)
+  = some (100 - Gas.base)
 #guard (guardSlotnum .amsterdam (2 ^ 64 - 1) 100 [7]).toOption.map Devm.stack
-  = some [Nat.toB256 (2 ^ 64 - 1), Nat.toB256 7]
+  = some [Nat.toU256 (2 ^ 64 - 1), Nat.toU256 7]
 #guard (guardSlotnum .amsterdam 0 2 []).toOption.map Devm.gasLeft = some 0
 #guard guardClzErr (guardSlotnum .amsterdam 12345 1 []) = "OutOfGasError"
 #guard guardClzErr (guardSlotnum .bpo2 12345 100 []) = "InvalidOpcode"
 #guard guardClzErr (guardSlotnum .bpo2 12345 0 []) = "InvalidOpcode"
 #guard guardClzErr (guardSlotnum .prague 0 100 [1]) = "InvalidOpcode"
 -- `UInt8.toRinst` decodes 0x4B at every fork and round-trips its mnemonic.
-#guard (0x4B : UInt8).toRinst matches some .slotnum
-#guard ((0x4B : UInt8).toRinst.map Rinst.toString) = some "SLOTNUM"
-#guard (0x4B : UInt8).toInstType matches .R
+#guard (0x4B : UInt8).toPlainOp matches some .slotnum
+#guard ((0x4B : UInt8).toPlainOp.map PlainOp.toString) = some "SLOTNUM"
+#guard (0x4B : UInt8).toOpClass matches .plain
 
 -- Under Osaka the same two degenerate inputs reach the real failures instead.
 #guard guardClzErr (guardClz .osaka 100 []) = "StackUnderflowError"
-#guard guardClzErr (guardClz .osaka (gLow - 1) [0]) = "OutOfGasError"
-#guard (guardClz .osaka gLow [0]).toOption.map Devm.gasLeft = some 0
+#guard guardClzErr (guardClz .osaka (Gas.low - 1) [0]) = "OutOfGasError"
+#guard (guardClz .osaka Gas.low [0]).toOption.map Devm.gasLeft = some 0
 
 /-! Design S1: the access shape at the account- and slot-access arms. Under the
 flat (pre-EIP-2929) schedule each family charges its own fixed price and leaves
 the accessed sets untouched; under EIP-2929 the same arm charges the cold price
 and records the access. Each opcode gets a flat row and a Prague row on the same
 input, so an arm that ignored the shape fails one of the two. -/
-private def guardAccess (fork : Fork) (r : Rinst) (stack : List B256) :
+private def guardAccess (fork : Fork) (r : PlainOp) (stack : List U256) :
     Execution :=
-  Rinst.runCore 0 (((default : Devm).withGasLeft 10000).withStack stack)
+  PlainOp.runCore 0 (((default : Devm).withGasLeft 10000).withStack stack)
     (guardSevmAt fork) r
 
-private def guardAccessCharge (fork : Fork) (r : Rinst) (stack : List B256) :
+private def guardAccessCharge (fork : Fork) (r : PlainOp) (stack : List U256) :
     Option Nat :=
   (guardAccess fork r stack).toOption.map (10000 - ·.gasLeft)
 
-private def guardAccessWarmed (fork : Fork) (r : Rinst) (x : B256) : Option Bool :=
+private def guardAccessWarmed (fork : Fork) (r : PlainOp) (x : U256) : Option Bool :=
   (guardAccess fork r [x]).toOption.map fun d =>
-    decide (x.toAdr ∈ d.accessedAddresses) ||
+    decide (x.toAddress ∈ d.accessedAddresses) ||
       decide (((default : Sevm).currentTarget, x) ∈ d.accessedStorageKeys)
 
 #guard guardAccessCharge .byzantium .balance [0x1000] = some 400
@@ -5266,9 +5266,9 @@ private def guardAccessWarmed (fork : Fork) (r : Rinst) (x : B256) : Option Bool
 -- the byte is an invalid instruction whatever the stack and gas hold (not a
 -- stack or gas failure, and no gas is charged); under Prague, where all eleven
 -- flags are on, each runs its Prague body.
-private def guardRinst (fork : Fork) (gasLeft : Nat) (stack : List B256)
-    (r : Rinst) : Execution :=
-  Rinst.runCore 0 (((default : Devm).withGasLeft gasLeft).withStack stack)
+private def guardRinst (fork : Fork) (gasLeft : Nat) (stack : List U256)
+    (r : PlainOp) : Execution :=
+  PlainOp.runCore 0 (((default : Devm).withGasLeft gasLeft).withStack stack)
     (guardSevmAt fork) r
 
 -- EIP-145 shifts: Byzantium has none of them.
@@ -5279,13 +5279,13 @@ private def guardRinst (fork : Fork) (gasLeft : Nat) (stack : List B256)
 #guard guardClzErr (guardRinst .byzantium 0 [1, 7] .shl) = "InvalidOpcode"
 -- Under Prague each shifts: the top word is the shift amount.
 #guard (guardRinst .prague 100 [1, 7] .shl).toOption.map Devm.stack
-  = some [Nat.toB256 14]
+  = some [Nat.toU256 14]
 #guard (guardRinst .prague 100 [1, 7] .shr).toOption.map Devm.stack
-  = some [Nat.toB256 3]
+  = some [Nat.toU256 3]
 #guard (guardRinst .prague 100 [1, 7] .sar).toOption.map Devm.stack
-  = some [Nat.toB256 3]
+  = some [Nat.toU256 3]
 #guard (guardRinst .prague 100 [1, 7] .shl).toOption.map Devm.gasLeft
-  = some (100 - gVerylow)
+  = some (100 - Gas.veryLow)
 -- EIP-1052 `EXTCODEHASH`, EIP-1344 `CHAINID`, EIP-1884 `SELFBALANCE`,
 -- EIP-3198 `BASEFEE`: Constantinople/Istanbul/London each add theirs, so
 -- Byzantium has none and Prague has all.
@@ -5295,27 +5295,27 @@ private def guardRinst (fork : Fork) (gasLeft : Nat) (stack : List B256)
 #guard guardClzErr (guardRinst .byzantium 100 [] .selfbalance) = "InvalidOpcode"
 #guard guardClzErr (guardRinst .byzantium 100 [] .basefee) = "InvalidOpcode"
 #guard (guardRinst .prague 100000 [27] .extcodehash).toOption.map Devm.stack
-  = some [Nat.toB256 0]
+  = some [Nat.toU256 0]
 #guard (guardRinst .prague 100 [] .chainid).toOption.map Devm.stack
-  = some [Nat.toB256 0]
+  = some [Nat.toU256 0]
 #guard (guardRinst .prague 100 [] .selfbalance).toOption.map Devm.stack
-  = some [Nat.toB256 0]
+  = some [Nat.toU256 0]
 #guard (guardRinst .prague 100 [] .basefee).toOption.map Devm.stack
-  = some [Nat.toB256 0]
+  = some [Nat.toU256 0]
 -- EIP-4844 `BLOBHASH`/`BLOBBASEFEE`: Cancun only.
 #guard guardClzErr (guardRinst .shanghai 100 [5] .blobhash) = "InvalidOpcode"
 #guard guardClzErr (guardRinst .shanghai 100 [] .blobbasefee) = "InvalidOpcode"
 #guard (guardRinst .prague 100 [5] .blobhash).toOption.map Devm.stack
-  = some [Nat.toB256 0]
+  = some [Nat.toU256 0]
 #guard (guardRinst .prague 100 [5] .blobhash).toOption.map Devm.gasLeft
-  = some (100 - gHashopcode)
+  = some (100 - Gas.hashOpcodeGas)
 #guard (guardRinst .prague 100 [] .blobbasefee).toOption.isSome = true
 -- EIP-1153 transient storage and EIP-5656 `MCOPY`: Cancun only.
 #guard guardClzErr (guardRinst .shanghai 100 [7] .tload) = "InvalidOpcode"
 #guard guardClzErr (guardRinst .shanghai 100 [7, 8] .tstore) = "InvalidOpcode"
 #guard guardClzErr (guardRinst .shanghai 100 [0, 0, 0] .mcopy) = "InvalidOpcode"
 #guard (guardRinst .prague 100 [7] .tload).toOption.map Devm.stack
-  = some [Nat.toB256 0]
+  = some [Nat.toU256 0]
 #guard (guardRinst .prague 100 [7, 8] .tstore).toOption.map Devm.stack
   = some []
 #guard (guardRinst .prague 100000 [0, 0, 32] .mcopy).toOption.isSome = true
@@ -5338,7 +5338,7 @@ def noPushBefore (cd : ByteArray) : Nat → Nat → Bool
 def jumpable (cd : ByteArray) (k : Nat) : Bool :=
   if hk : k < cd.size
   then
-    if cd[k] = (Jinst.toUInt8 .jumpdest)
+    if cd[k] = (JumpOp.toUInt8 .jumpdest)
     then noPushBefore cd k 32
     else false
   else false
@@ -5567,25 +5567,25 @@ private lemma getD_replicate_shift (q j : Nat) (xs : List Bool) :
 
 The list has one flag for each byte: a `true` flag is an instruction start,
 and a `false` flag is a byte consumed as PUSH immediate data. -/
-def instStarts (cd : ByteArray) : List Bool :=
+def opStarts (cd : ByteArray) : List Bool :=
   scanStarts cd.data.toList 0
 
 /-- `instStarts` reads `cd.data.toList`, a projection, because `ByteArray.toList`'s
 index loop is quadratic under kernel reduction; the two lists are equal. -/
-private lemma instStarts_eq (cd : ByteArray) : instStarts cd = scanStarts cd.toList 0 := by
-  rw [instStarts, ByteArray.toList_eq_toList_data']
+private lemma instStarts_eq (cd : ByteArray) : opStarts cd = scanStarts cd.toList 0 := by
+  rw [opStarts, ByteArray.toList_eq_toList_data']
 
-def instStartAt (cd : ByteArray) (k : Nat) : Bool :=
-  (instStarts cd).getD k false
+def opStartAt (cd : ByteArray) (k : Nat) : Bool :=
+  (opStarts cd).getD k false
 
-private inductive Instrs : List UInt8 → Prop
-  | nil : Instrs []
+private inductive Ops : List UInt8 → Prop
+  | nil : Ops []
   | step (b : UInt8) (ys rest : List UInt8)
-      (hy : ys.length = pushWidth b) (hr : Instrs rest) :
-      Instrs ((b :: ys) ++ rest)
+      (hy : ys.length = pushWidth b) (hr : Ops rest) :
+      Ops ((b :: ys) ++ rest)
 
 private def ScanCover (xs : List UInt8) (k : Nat) : Prop :=
-  ∃ pre b ys rest, xs = pre ++ (b :: ys) ++ rest ∧ Instrs pre ∧
+  ∃ pre b ys rest, xs = pre ++ (b :: ys) ++ rest ∧ Ops pre ∧
     pre.length + 1 + ys.length = k ∧ ys.length < pushWidth b
 
 private lemma scanStarts_false_cover :
@@ -5611,11 +5611,11 @@ private lemma scanStarts_false_cover :
           rcases hc with ⟨pre, c, ys, rest, heq, hpre, hlen, hys⟩
           refine ⟨(b :: []) ++ pre, c, ys, rest, ?_, ?_, ?_, hys⟩
           · simp [heq, List.append_assoc]
-          · exact Instrs.step b [] pre (by simp [hq]) hpre
+          · exact Ops.step b [] pre (by simp [hq]) hpre
           · simp only [List.length_cons, List.length_nil, List.length_append]
             omega
         · by_cases hsmall : j < pushWidth b
-          · refine ⟨[], b, bs.take j, bs.drop j, ?_, Instrs.nil, ?_, ?_⟩
+          · refine ⟨[], b, bs.take j, bs.drop j, ?_, Ops.nil, ?_, ?_⟩
             · simp [List.take_append_drop]
             · simp [List.length_take_of_le (Nat.le_of_lt hj), Nat.add_comm]
             · rw [List.length_take_of_le (Nat.le_of_lt hj)]
@@ -5648,13 +5648,13 @@ private lemma scanStarts_false_cover :
                   rw [heq]
                 _ = (b :: bs.take (pushWidth b)) ++ pre ++ (c :: ys) ++ rest := by
                   simp [List.append_assoc]
-            · exact Instrs.step b (bs.take (pushWidth b)) pre htake hpre
+            · exact Ops.step b (bs.take (pushWidth b)) pre htake hpre
             · simp only [List.length_cons, List.length_append]
               omega
 
 private def ScanPrefix (xs : List UInt8) (rem k : Nat) : Prop :=
   ∃ ys pre rest, xs = ys ++ pre ++ rest ∧ ys.length = rem ∧
-    rem ≤ k ∧ k < xs.length ∧ pre.length = k - rem ∧ Instrs pre
+    rem ≤ k ∧ k < xs.length ∧ pre.length = k - rem ∧ Ops pre
 
 private lemma scanPrefix_cons_skip :
     ScanPrefix (b :: bs) (r + 1) (j + 1) ↔ ScanPrefix bs r j := by
@@ -5675,8 +5675,8 @@ private lemma scanPrefix_cons_skip :
       omega
     · omega
 
-private lemma instrs_cons_inv {b : UInt8} {xs : List UInt8} (h : Instrs (b :: xs)) :
-    ∃ ys rest, xs = ys ++ rest ∧ ys.length = pushWidth b ∧ Instrs rest := by
+private lemma instrs_cons_inv {b : UInt8} {xs : List UInt8} (h : Ops (b :: xs)) :
+    ∃ ys rest, xs = ys ++ rest ∧ ys.length = pushWidth b ∧ Ops rest := by
   cases h with
   | step b ys rest hy hr => exact ⟨ys, rest, rfl, hy, hr⟩
 
@@ -5694,7 +5694,7 @@ private lemma pushWidth_spec (b : UInt8) :
 private lemma noPushBefore_instrs {cd : ByteArray} {k : Nat}
     {pre rest : List UInt8}
     (hslice : List.Slice cd.toList k (pre ++ rest))
-    (hb : noPushBefore cd k 32 = true) (hpre : Instrs pre) :
+    (hb : noPushBefore cd k 32 = true) (hpre : Ops pre) :
     noPushBefore cd (k + pre.length) 32 = true ∧
       List.Slice cd.toList (k + pre.length) rest := by
   induction hpre generalizing k rest with
@@ -5740,7 +5740,7 @@ private lemma scanStarts_true_iff :
       cases rem with
       | zero =>
         cases k with
-        | zero => simp [scanStarts, ScanPrefix, Instrs.nil]
+        | zero => simp [scanStarts, ScanPrefix, Ops.nil]
         | succ j =>
           simp only [scanStarts, List.getD_cons_succ]
           have hbs : bs.length = n - 1 := by omega
@@ -5755,7 +5755,7 @@ private lemma scanStarts_true_iff :
             · simp [hpre]
               rw [hys]
               omega
-            · exact Instrs.step b ys pre hys hinst
+            · exact Ops.step b ys pre hys hinst
           · rintro ⟨ys, pre, rest, heq, hys, hqj, hbound, hpre, hinst⟩
             have hys0 : ys = [] := by simpa using hys
             subst ys
@@ -5791,12 +5791,12 @@ private lemma scanStarts_true_iff :
           rw [hi, scanPrefix_cons_skip]
 
 private lemma noPushBefore_of_scan_start {cd : ByteArray} {k : Nat}
-    (hk : k < cd.size) (hstart : instStartAt cd k = true) :
+    (hk : k < cd.size) (hstart : opStartAt cd k = true) :
     noPushBefore cd k 32 = true := by
   have hk' : k < cd.toList.length := by
     simpa [ByteArray.size_eq_length_toList'] using hk
   have hs : (scanStarts cd.toList 0).getD k false = true := by
-    simpa [instStartAt, instStarts_eq] using hstart
+    simpa [opStartAt, instStarts_eq] using hstart
   have hp := (scanStarts_true_iff cd.toList.length cd.toList rfl 0 k hk').mp hs
   rcases hp with ⟨ys, pre, rest, heq, hys, hzero, hbound, hpre, hinst⟩
   have hys0 : ys = [] := by simpa using hys
@@ -5811,17 +5811,17 @@ private lemma noPushBefore_of_scan_start {cd : ByteArray} {k : Nat}
 
 private lemma noPushBefore_iff_scan_start {cd : ByteArray} {k : Nat}
     (hk : k < cd.size) :
-    noPushBefore cd k 32 = true ↔ instStartAt cd k = true := by
+    noPushBefore cd k 32 = true ↔ opStartAt cd k = true := by
   constructor
   · intro hn
-    by_cases hstart : instStartAt cd k = true
+    by_cases hstart : opStartAt cd k = true
     · exact hstart
-    · have hstart' : instStartAt cd k = false := by
-        cases h : instStartAt cd k <;> simp_all
+    · have hstart' : opStartAt cd k = false := by
+        cases h : opStartAt cd k <;> simp_all
       have hk' : k < cd.toList.length := by
         simpa [ByteArray.size_eq_length_toList'] using hk
       have hs : (scanStarts cd.toList 0).getD k false = false := by
-        simpa [instStartAt, instStarts_eq] using hstart'
+        simpa [opStartAt, instStarts_eq] using hstart'
       have hc := scanStarts_false_cover cd.toList.length cd.toList rfl k hk' hs
       rcases hc with ⟨pre, b, ys, rest, heq, hpre, hlen, hys⟩
       have hslice : List.Slice cd.toList 0 (pre ++ ((b :: ys) ++ rest)) := by
@@ -5860,7 +5860,7 @@ private lemma noPushBefore_iff_scan_start {cd : ByteArray} {k : Nat}
 JUMPDEST at a start found by the linear scan. -/
 def jumpdestOk (cd : ByteArray) (k : Nat) : Bool :=
   if hk : k < cd.size then
-    decide (cd[k] = Jinst.toUInt8 .jumpdest ∧ instStartAt cd k = true)
+    decide (cd[k] = JumpOp.toUInt8 .jumpdest ∧ opStartAt cd k = true)
   else false
 
 theorem jumpable_eq_jumpdestOk (cd : ByteArray) (k : Nat) :
@@ -5950,14 +5950,14 @@ theorem pinnedJumpDestsFrom_eq_legacy (cd : ByteArray) (pc : Nat) :
 #guard (List.range 3).filter (jumpable ⟨#[0xE7, 0x5B, 0x5B]⟩) = [1, 2]
 #guard (List.range 3).filter (jumpable ⟨#[0x60, 0x5B, 0x5B]⟩) = [2]
 
-def Jinst.runCore (pc : Nat) (devm : Devm) (sevm : Sevm) :
-    Jinst → Except (EvmError × Devm) (Nat × Devm)
+def JumpOp.runCore (pc : Nat) (devm : Devm) (sevm : Sevm) :
+    JumpOp → Except (EvmError × Devm) (Nat × Devm)
   | .jumpdest => do
-    let devm' ← chargeGas gJumpdest devm
+    let devm' ← chargeGas Gas.jumpdest devm
     .ok ⟨pc + 1, devm'⟩
   | .jump => do
     let ⟨jump_dest, devm'⟩ ← devm.pop
-    let devm'' ← chargeGas gMid devm'
+    let devm'' ← chargeGas Gas.mid devm'
     .assert
       (jumpable sevm.code jump_dest.toNat)
       ⟨.halt (.invalidJumpDest .none), devm''⟩
@@ -5965,7 +5965,7 @@ def Jinst.runCore (pc : Nat) (devm : Devm) (sevm : Sevm) :
   | .jumpi => do
     let ⟨dest, devm'⟩ ← devm.pop
     let ⟨cond, devm''⟩ ← devm'.pop
-    let devm''' ← chargeGas gHigh devm''
+    let devm''' ← chargeGas Gas.high devm''
     let pc' : Nat ←
       if cond = 0
       then .ok <| pc + 1
@@ -5976,41 +5976,41 @@ def Jinst.runCore (pc : Nat) (devm : Devm) (sevm : Sevm) :
         .ok dest.toNat
     .ok ⟨pc', devm'''⟩
 
-def Jinst.run (evm : Evm) (j : Jinst) : Except (EvmError × Devm) (Nat × Devm) :=
-  Jinst.runCore evm.pc evm.dyna evm.sta j
+def JumpOp.run (evm : Evm) (j : JumpOp) : Except (EvmError × Devm) (Nat × Devm) :=
+  JumpOp.runCore evm.pc evm.dyna evm.sta j
 
-def State.bal (w : State) (a : Adr) : B256 := (w.get a).bal
+def State.bal (w : State) (a : Address) : U256 := (w.get a).balance
 
-def State.setBal (st : State) (adr : Adr) (val : B256) : State :=
-  st.setAccount adr <| (st.get adr).withBal val
+def State.setBal (st : State) (adr : Address) (val : U256) : State :=
+  st.setAccount adr <| (st.get adr).withBalance val
 
-def State.addBal (st : State) (adr : Adr) (val : B256) : State :=
+def State.addBal (st : State) (adr : Address) (val : U256) : State :=
   st.setBal adr <| (st.bal adr + val)
 
 
-def State.subBal (st : State) (adr : Adr) (val : B256) : Option State :=
+def State.subBal (st : State) (adr : Address) (val : U256) : Option State :=
   if st.bal adr < val
   then .none
   else st.setBal adr (st.bal adr - val)
 
-def Benv.setBal (benv : Benv) (adr : Adr) (val : B256) : Benv :=
+def Benv.setBal (benv : Benv) (adr : Address) (val : U256) : Benv :=
   ({benv with state := benv.state.setBal adr val} : Benv).clearStorageWritesIfEmpty adr
 
-def Benv.subBal (benv : Benv) (adr : Adr) (val : B256) : Option Benv := do
+def Benv.subBal (benv : Benv) (adr : Address) (val : U256) : Option Benv := do
   let wor ← benv.state.subBal adr val
   some <| (benv.withState wor).clearStorageWritesIfEmpty adr
 
-def Benv.addBal (benv : Benv) (adr : Adr) (val : B256) : Benv :=
+def Benv.addBal (benv : Benv) (adr : Address) (val : U256) : Benv :=
   (benv.withState (benv.state.addBal adr val)).clearStorageWritesIfEmpty adr
 
-def Devm.setBal (devm : Devm) (adr : Adr) (val : B256) : Devm :=
+def Devm.setBal (devm : Devm) (adr : Address) (val : U256) : Devm :=
   (devm.withState (devm.state.setBal adr val)).clearStorageWritesIfEmpty adr
 
-def Devm.subBal (devm : Devm) (adr : Adr) (val : B256) : Option Devm := do
+def Devm.subBal (devm : Devm) (adr : Address) (val : U256) : Option Devm := do
   let state ← devm.state.subBal adr val
   some <| (devm.withState state).clearStorageWritesIfEmpty adr
 
-def Devm.addBal (devm : Devm) (adr : Adr) (val : B256) : Devm :=
+def Devm.addBal (devm : Devm) (adr : Address) (val : U256) : Devm :=
   (devm.withState (devm.state.addBal adr val)).clearStorageWritesIfEmpty adr
 
 /-- `SELFDESTRUCT`'s beneficiary credit: EELS `set_account_balance`, then
@@ -6032,41 +6032,41 @@ credit is EELS's own explicit `destroy_account` of an emptied coinbase.
 The touch is recorded after the credit rather than after the donor's balance is
 zeroed: the donor has code or a nonzero nonce, so zeroing it cannot change
 whether the beneficiary exists and is empty. -/
-def Devm.creditBeneficiary (rules : ForkRules) (donee : Adr) (val : B256)
+def Devm.creditBeneficiary (rules : ForkRules) (donee : Address) (val : U256)
     (devm : Devm) : Devm :=
-  if rules.settle.eraseEmptyOnModify then devm.addBal donee val
+  if rules.settlement.eraseEmptyOnModify then devm.addBal donee val
   else
     (devm.withState (devm.state.setPresent donee
-      ((devm.state.get donee).withBal (devm.state.bal donee + val)))).recordTouch
+      ((devm.state.get donee).withBalance (devm.state.bal donee + val)))).recordTouch
       rules true donee
 
 /-- Under the erasing rules (Paris on) the beneficiary credit is `addBal`. -/
 @[simp] theorem Devm.creditBeneficiary_of_eraseEmptyOnModify {rules : ForkRules}
-    (h : rules.settle.eraseEmptyOnModify = true) (donee : Adr) (val : B256)
+    (h : rules.settlement.eraseEmptyOnModify = true) (donee : Address) (val : U256)
     (devm : Devm) : devm.creditBeneficiary rules donee val = devm.addBal donee val := by
   simp [Devm.creditBeneficiary, h]
 
 /-- The credit moves only the world and the touched set: the machine, and with
 it memory and gas, is unchanged. -/
-@[simp] theorem Devm.creditBeneficiary_mach (rules : ForkRules) (donee : Adr)
-    (val : B256) (devm : Devm) : (devm.creditBeneficiary rules donee val).mach = devm.mach := by
+@[simp] theorem Devm.creditBeneficiary_mach (rules : ForkRules) (donee : Address)
+    (val : U256) (devm : Devm) : (devm.creditBeneficiary rules donee val).mach = devm.mach := by
   unfold Devm.creditBeneficiary; split <;> rfl
 
-@[simp] theorem Devm.creditBeneficiary_output (rules : ForkRules) (donee : Adr)
-    (val : B256) (devm : Devm) :
+@[simp] theorem Devm.creditBeneficiary_output (rules : ForkRules) (donee : Address)
+    (val : U256) (devm : Devm) :
     (devm.creditBeneficiary rules donee val).output = devm.output := by
   unfold Devm.creditBeneficiary; split <;> rfl
 
-@[simp] theorem Devm.creditBeneficiary_memory (rules : ForkRules) (donee : Adr)
-    (val : B256) (devm : Devm) :
+@[simp] theorem Devm.creditBeneficiary_memory (rules : ForkRules) (donee : Address)
+    (val : U256) (devm : Devm) :
     (devm.creditBeneficiary rules donee val).memory = devm.memory := by
   unfold Devm.creditBeneficiary; split <;> rfl
 
 @[simp] theorem pragueRules_settle_eraseEmptyOnModify :
-    pragueRules.settle.eraseEmptyOnModify = true := rfl
+    pragueRules.settlement.eraseEmptyOnModify = true := rfl
 
-def Linst.run (sevm : Sevm) (devm : Devm) :
-    Linst → Except (EvmError × Devm) Devm
+def HaltOp.run (sevm : Sevm) (devm : Devm) :
+    HaltOp → Except (EvmError × Devm) Devm
   | .stop => .ok devm
   | .revert => do
     let ⟨memory_start_index, devm⟩ ← devm.popToNat
@@ -6100,20 +6100,20 @@ def Linst.run (sevm : Sevm) (devm : Devm) :
       -- (EIP-7928; the identity under this lane's `bal = none`).
       let devm := (devm.balReadAccount sevm.benvStat.rules donee).balReadAccount
         sevm.benvStat.rules donor
-      let donorBal ← .ok (devm.getAcct sevm.currentTarget).bal
+      let donorBal ← .ok (devm.getAcct sevm.currentTarget).balance
       let ⟨devm, gasCost2⟩ ← .ok <|
         match sevm.benvStat.rules.access with
         | .eip2929 =>
         if donee ∉ devm.accessedAddresses
           then
             ( ⟨ addAccessedAddress devm donee,
-                gasSelfDestruct + sevm.benvStat.rules.gas.coldAccountAccess ⟩ : Devm × Nat )
+                Gas.selfdestruct + sevm.benvStat.rules.gas.coldAccountAccess ⟩ : Devm × Nat )
           else
-            ⟨devm, gasSelfDestruct⟩
-        | .flat _ => (⟨devm, gasSelfDestruct⟩ : Devm × Nat)
+            ⟨devm, Gas.selfdestruct⟩
+        | .flat _ => (⟨devm, Gas.selfdestruct⟩ : Devm × Nat)
       let gasCost3 ← .ok <|
-        if (devm.getAcct donee).Empty ∧ donorBal ≠ 0 then
-          gasCost2 + gasSelfDestructNewAccount
+        if (devm.getAcct donee).isEmpty ∧ donorBal ≠ 0 then
+          gasCost2 + Gas.selfdestructNewAccount
         else
           gasCost2
       let devm ← chargeGas gasCost3 devm
@@ -6132,7 +6132,7 @@ def Linst.run (sevm : Sevm) (devm : Devm) :
       -- read is the `balReadAccount` above; the EIP-161 touch is in
       -- `creditBeneficiary`.
       if donor ∈ devm.createdAccounts ∨
-          sevm.benvStat.rules.settle.selfdestructOnlyCreated = false then
+          sevm.benvStat.rules.settlement.selfdestructOnlyCreated = false then
         .ok (creditSelfdestructRefund sevm.benvStat.rules
           (donor ∈ devm.accountsToDelete)
           (addAccountToDelete (devm.setBal donor 0) donor))
@@ -6145,7 +6145,7 @@ def Linst.run (sevm : Sevm) (devm : Devm) :
       -- GAS (state-independent), checked before the beneficiary is warmed.
       let cold := donee ∉ devm.accessedAddresses
       let gasCost :=
-        gasSelfDestruct +
+        Gas.selfdestruct +
           (if cold then sevm.benvStat.rules.gas.coldAccountAccess else 0)
       .assert (gasCost ≤ devm.gasLeft) ⟨.halt (.outOfGas .none), devm⟩
       -- STATE ACCESS: the beneficiary is warmed, then `is_account_alive` reads
@@ -6154,10 +6154,10 @@ def Linst.run (sevm : Sevm) (devm : Devm) :
       let devm := if cold then addAccessedAddress devm donee else devm
       let devm := (devm.balReadAccount sevm.benvStat.rules donee).balReadAccount
         sevm.benvStat.rules donor
-      let donorBal := (devm.getAcct donor).bal
+      let donorBal := (devm.getAcct donor).balance
       -- STATE GAS. A sweep that will create the beneficiary pays the account
       -- write and the creation. Execution gas before state gas.
-      let creating := (devm.getAcct donee).Empty ∧ donorBal ≠ 0
+      let creating := (devm.getAcct donee).isEmpty ∧ donorBal ≠ 0
       let devm ← chargeGas (gasCost + if creating then state.accountWrite else 0) devm
       let devm ← chargeStateGas (if creating then state.newAccount else 0) devm
       -- OPERATION: move the whole balance, log it, schedule the deletion.
@@ -6174,7 +6174,7 @@ def Linst.run (sevm : Sevm) (devm : Devm) :
 
 def calculateMsgCallGas
   (value gas gas_left memory_cost extra_gas : Nat)
-  (cs : Nat := gCallStipend) : Nat × Nat :=
+  (cs : Nat := Gas.callStipend) : Nat × Nat :=
   let call_stipend : Nat := if value = 0 then 0 else cs
   if gas_left < extra_gas + memory_cost
   then ⟨gas + extra_gas, gas + call_stipend⟩
@@ -6523,7 +6523,7 @@ theorem Mach.chargeGas_stateGas_eq (cost : Nat) (mach : Mach) :
   cases hs : safeSub mach.gasLeft cost <;>
     simp [Mach.chargeGas, hs, Footprint.StateGasEq]
 
-theorem Mach.push_stateGas_eq (x : B256) (mach : Mach) :
+theorem Mach.push_stateGas_eq (x : U256) (mach : Mach) :
     Footprint.StateGasEq mach (mach.push x) := by
   by_cases hs : mach.stack.length < 1024 <;>
     simp [Mach.push, hs, Footprint.StateGasEq]
@@ -6568,7 +6568,7 @@ theorem Mach.popN_stateGas_eq (mach : Mach) (n : Nat) :
         rw [hn] at hn'
         simpa [hp, hn, Footprint.StateGasEq] using hn'.trans hm
 
-theorem Mach.pushItem_stateGas_eq (x : B256) (cost : Nat) (mach : Mach) :
+theorem Mach.pushItem_stateGas_eq (x : U256) (cost : Nat) (mach : Mach) :
     Footprint.StateGasEq mach (mach.pushItem x cost) := by
   unfold Mach.pushItem
   cases hc : mach.chargeGas cost with
@@ -6584,7 +6584,7 @@ theorem Mach.pushItem_stateGas_eq (x : B256) (cost : Nat) (mach : Mach) :
     · simpa [hc, hpush, Footprint.StateGasEq] using hp.trans hm
     · simpa [hc, hpush, Footprint.StateGasEq] using hp.trans hm
 
-theorem Mach.applyUnary_stateGas_eq (f : B256 → B256) (cost : Nat) (mach : Mach) :
+theorem Mach.applyUnary_stateGas_eq (f : U256 → U256) (cost : Nat) (mach : Mach) :
     Footprint.StateGasEq mach (mach.applyUnary f cost) := by
   unfold Mach.applyUnary
   cases hp : mach.pop with
@@ -6600,7 +6600,7 @@ theorem Mach.applyUnary_stateGas_eq (f : B256 → B256) (cost : Nat) (mach : Mac
     · simpa [hp, hpush, Footprint.StateGasEq] using ho.trans hm
     · simpa [hp, hpush, Footprint.StateGasEq] using ho.trans hm
 
-theorem Mach.applyBinary_stateGas_eq (f : B256 → B256 → B256) (cost : Nat)
+theorem Mach.applyBinary_stateGas_eq (f : U256 → U256 → U256) (cost : Nat)
     (mach : Mach) :
     Footprint.StateGasEq mach (mach.applyBinary f cost) := by
   unfold Mach.applyBinary
@@ -6627,7 +6627,7 @@ theorem Mach.applyBinary_stateGas_eq (f : B256 → B256 → B256) (cost : Nat)
       · simpa [hp, hp2, hpush, Footprint.StateGasEq] using
           ho.trans (hm2.trans hm)
 
-theorem Mach.applyTernary_stateGas_eq (f : B256 → B256 → B256 → B256)
+theorem Mach.applyTernary_stateGas_eq (f : U256 → U256 → U256 → U256)
     (cost : Nat) (mach : Mach) :
     Footprint.StateGasEq mach (mach.applyTernary f cost) := by
   unfold Mach.applyTernary
@@ -6667,11 +6667,11 @@ theorem chargeGas_stateGasZero (cost : Nat) {devm : Devm}
     (h : devm.StateGasZero) : (chargeGas cost devm).StateGasZero :=
   liftMachExecution_stateGasZero h (Mach.chargeGas_stateGas_eq cost devm.mach)
 
-theorem Devm.push_stateGasZero (x : B256) {devm : Devm}
+theorem Devm.push_stateGasZero (x : U256) {devm : Devm}
     (h : devm.StateGasZero) : (devm.push x).StateGasZero :=
   liftMachExecution_stateGasZero h (Mach.push_stateGas_eq x devm.mach)
 
-theorem pushItem_stateGasZero (x : B256) (cost : Nat) {devm : Devm}
+theorem pushItem_stateGasZero (x : U256) (cost : Nat) {devm : Devm}
     (h : devm.StateGasZero) : (pushItem x cost devm).StateGasZero :=
   liftMachExecution_stateGasZero h
     (Mach.pushItem_stateGas_eq x cost devm.mach)
@@ -6692,18 +6692,18 @@ theorem Devm.popN_stateGasZero {devm : Devm} (h : devm.StateGasZero) (n : Nat) :
     (devm.popN n).StateGasZeroOn (fun a => a.2.StateGasZero) :=
   liftMach_stateGasZeroOn h (Mach.popN_stateGas_eq devm.mach n)
 
-theorem applyUnary_stateGasZero (f : B256 → B256) (cost : Nat) {devm : Devm}
+theorem applyUnary_stateGasZero (f : U256 → U256) (cost : Nat) {devm : Devm}
     (h : devm.StateGasZero) : (applyUnary f cost devm).StateGasZero :=
   liftMachExecution_stateGasZero h
     (Mach.applyUnary_stateGas_eq f cost devm.mach)
 
-theorem applyBinary_stateGasZero (f : B256 → B256 → B256) (cost : Nat)
+theorem applyBinary_stateGasZero (f : U256 → U256 → U256) (cost : Nat)
     {devm : Devm} (h : devm.StateGasZero) :
     (applyBinary f cost devm).StateGasZero :=
   liftMachExecution_stateGasZero h
     (Mach.applyBinary_stateGas_eq f cost devm.mach)
 
-theorem applyTernary_stateGasZero (f : B256 → B256 → B256 → B256) (cost : Nat)
+theorem applyTernary_stateGasZero (f : U256 → U256 → U256 → U256) (cost : Nat)
     {devm : Devm} (h : devm.StateGasZero) :
     (applyTernary f cost devm).StateGasZero :=
   liftMachExecution_stateGasZero h
@@ -6714,7 +6714,7 @@ theorem Devm.memRead_stateGasZero {devm : Devm} (index size : Nat)
     (devm.memRead index size).2.StateGasZero := h
 
 theorem Devm.subBal_stateGasZero {devm devm' : Devm}
-    (h : devm.StateGasZero) {adr : Adr} {value : B256}
+    (h : devm.StateGasZero) {adr : Address} {value : U256}
     (hs : devm.subBal adr value = some devm') : devm'.StateGasZero := by
   unfold Devm.subBal at hs
   cases hw : devm.state.subBal adr value with
@@ -6726,13 +6726,13 @@ theorem Devm.subBal_stateGasZero {devm devm' : Devm}
     exact h
 
 theorem Devm.addBal_stateGasZero {devm : Devm} (h : devm.StateGasZero)
-    (adr : Adr) (value : B256) : (devm.addBal adr value).StateGasZero := h
+    (adr : Address) (value : U256) : (devm.addBal adr value).StateGasZero := h
 
 theorem Devm.setBal_stateGasZero {devm : Devm} (h : devm.StateGasZero)
-    (adr : Adr) (value : B256) : (devm.setBal adr value).StateGasZero := h
+    (adr : Address) (value : U256) : (devm.setBal adr value).StateGasZero := h
 
 theorem Devm.creditBeneficiary_stateGasZero {devm : Devm} (h : devm.StateGasZero)
-    (rules : ForkRules) (adr : Adr) (value : B256) :
+    (rules : ForkRules) (adr : Address) (value : U256) :
     (devm.creditBeneficiary rules adr value).StateGasZero := by
   unfold Devm.creditBeneficiary
   split
@@ -6754,12 +6754,12 @@ theorem creditSelfdestructRefund_stateGasZero {rules : ForkRules}
   · exact Devm.withRefundCounter_stateGasZero h _
 
 theorem addAccountToDelete_stateGasZero {devm : Devm} (h : devm.StateGasZero)
-    (adr : Adr) : (addAccountToDelete devm adr).StateGasZero := h
+    (adr : Address) : (addAccountToDelete devm adr).StateGasZero := h
 
-theorem Rinst.balanceCore_stateGas_eq (rules : ForkRules) (world : World)
+theorem PlainOp.balanceCore_stateGas_eq (rules : ForkRules) (world : World)
     (mach : Mach) (view : Meta) :
-    Footprint.MachMetaStateGasEq mach (Rinst.balanceCore rules world mach view) := by
-  unfold Rinst.balanceCore
+    Footprint.MachMetaStateGasEq mach (PlainOp.balanceCore rules world mach view) := by
+  unfold PlainOp.balanceCore
   cases hp : mach.pop with
   | error e =>
     have hm := Mach.pop_stateGas_eq mach
@@ -6770,8 +6770,8 @@ theorem Rinst.balanceCore_stateGas_eq (rules : ForkRules) (world : World)
     rw [hp] at hm
     simp only []
     generalize (match rules.access with
-      | .eip2929 => if a.1.toAdr ∈ view.accessedAddresses
-          then gasWarmAccess else rules.gas.coldAccountAccess
+      | .eip2929 => if a.1.toAddress ∈ view.accessedAddresses
+          then Gas.warmStorageReadCost else rules.gas.coldAccountAccess
       | .flat g => g.balance) = cost
     cases hc : a.2.chargeGas cost with
     | error e =>
@@ -6781,27 +6781,27 @@ theorem Rinst.balanceCore_stateGas_eq (rules : ForkRules) (world : World)
     | ok b =>
       have hc' := Mach.chargeGas_stateGas_eq cost a.2
       rw [hc] at hc'
-      have hpush := Mach.push_stateGas_eq (world.state.get a.1.toAdr).bal b.2
-      cases hq : b.2.push (world.state.get a.1.toAdr).bal <;> rw [hq] at hpush
+      have hpush := Mach.push_stateGas_eq (world.state.get a.1.toAddress).balance b.2
+      cases hq : b.2.push (world.state.get a.1.toAddress).balance <;> rw [hq] at hpush
       · simpa [hp, hc, hq, Footprint.MachMetaStateGasEq] using
           hpush.trans (hc'.trans hm)
       · simpa [hp, hc, hq, Footprint.MachMetaStateGasEq] using
           hpush.trans (hc'.trans hm)
 
-theorem Rinst.balance_stateGasZero (rules : ForkRules) {devm : Devm}
+theorem PlainOp.balance_stateGasZero (rules : ForkRules) {devm : Devm}
     (h : devm.StateGasZero) :
-    (liftMachMetaWorldExecution (Rinst.balanceCore rules) devm).StateGasZero :=
+    (liftMachMetaWorldExecution (PlainOp.balanceCore rules) devm).StateGasZero :=
   liftMachMetaExecution_stateGasZero h
-    (Rinst.balanceCore_stateGas_eq rules devm.world devm.mach devm.meta)
+    (PlainOp.balanceCore_stateGas_eq rules devm.world devm.mach devm.meta)
 
 /-- Every register instruction preserves a zero meter when the state-gas
 switch is absent.  The switch hypothesis rules out only the `SSTORE`
 Amsterdam sibling; all other register operations are meter-blind. -/
-theorem Rinst.run_stateGasZero {evm : Evm} (h : evm.dyna.StateGasZero)
-    (hrules : evm.sta.benvStat.rules.stateGas = none) (r : Rinst) :
+theorem PlainOp.run_stateGasZero {evm : Evm} (h : evm.dyna.StateGasZero)
+    (hrules : evm.sta.benvStat.rules.stateGas = none) (r : PlainOp) :
     (r.run evm).StateGasZero := by
-  unfold Rinst.run
-  cases r <;> simp only [Rinst.runCore]
+  unfold PlainOp.run
+  cases r <;> simp only [PlainOp.runCore]
   case iszero | not => exact applyUnary_stateGasZero _ _ h
   case add | mul | sub | div | sdiv | mod | smod | signextend | lt | gt | slt |
       sgt | eq | and | or | xor | byte =>
@@ -6825,7 +6825,7 @@ theorem Rinst.run_stateGasZero {evm : Evm} (h : evm.dyna.StateGasZero)
     · exact Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h)
         fun d hd => Devm.push_stateGasZero _ hd
     · exact Except.stateGasZeroOn_error h
-  case balance => exact Rinst.balance_stateGasZero _ h
+  case balance => exact PlainOp.balance_stateGasZero _ h
   case mload =>
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) ?_
     rintro ⟨start, d1⟩ h1
@@ -7021,11 +7021,11 @@ theorem Rinst.run_stateGasZero {evm : Evm} (h : evm.dyna.StateGasZero)
     · exact Except.stateGasZeroOn_error hd
     · exact Except.stateGasZeroOn_ok hd
 
-theorem Jinst.run_stateGasZero {evm : Evm} (h : evm.dyna.StateGasZero)
-    (j : Jinst) :
+theorem JumpOp.run_stateGasZero {evm : Evm} (h : evm.dyna.StateGasZero)
+    (j : JumpOp) :
     (j.run evm).StateGasZeroOn (fun a => a.2.StateGasZero) := by
-  unfold Jinst.run
-  cases j <;> simp only [Jinst.runCore]
+  unfold JumpOp.run
+  cases j <;> simp only [JumpOp.runCore]
   case jumpdest =>
     refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h) ?_
     intro d hd
@@ -7051,10 +7051,10 @@ theorem Jinst.run_stateGasZero {evm : Evm} (h : evm.dyna.StateGasZero)
       intro _ _
       exact Except.stateGasZeroOn_ok hd3
 
-theorem Linst.run_stateGasZero {sevm : Sevm} {devm : Devm}
+theorem HaltOp.run_stateGasZero {sevm : Sevm} {devm : Devm}
     (h : devm.StateGasZero) (hrules : sevm.benvStat.rules.stateGas = none)
-    (l : Linst) : Execution.StateGasZero (l.run sevm devm) := by
-  cases l <;> simp only [Linst.run]
+    (l : HaltOp) : Execution.StateGasZero (l.run sevm devm) := by
+  cases l <;> simp only [HaltOp.run]
   case stop => exact h
   case revert =>
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero h) ?_
@@ -7134,57 +7134,57 @@ theorem incorporateChildOnSuccess_stateGasZero {parent child : Devm} {rd : Bytes
     (h : parent.StateGasZero) :
     (incorporateChildOnSuccess parent child rd).StateGasZero := h
 
-def computeContractAddress (sender : Adr) (nonce : UInt64) : Adr :=
+def computeContractAddress (sender : Address) (nonce : UInt64) : Address :=
   let LA : Bytes :=
-    BLT.toBytes <| .list [.bytes sender.toBytes, .bytes nonce.toBytes.sig]
-  (Bytes.keccak LA).toAdr
+    Rlp.Item.toBytes <| .list [.bytes sender.toBytes, .bytes nonce.toBytes.sig]
+  (Bytes.keccak LA).toAddress
 
 def create2NewAddress
-  (sender : Adr) (salt : B256) (initCode : Bytes): Adr :=
+  (sender : Address) (salt : U256) (initCode : Bytes): Address :=
   let LA : Bytes :=
     (0xFF : UInt8) :: (sender.toBytes ++ salt.toBytes ++ initCode.keccak.toBytes)
-  (Bytes.keccak LA).toAdr
+  (Bytes.keccak LA).toAddress
 
-def State.incrNonce (w : State) (a : Adr) : State :=
+def State.incrNonce (w : State) (a : Address) : State :=
   let ac := w.get a
-  let ac' : Acct := {ac with nonce := ac.nonce + 1}
+  let ac' : Account := {ac with nonce := ac.nonce + 1}
   w.setAccount a ac'
 
-def Msg.incrNonce (msg : Msg) (adr : Adr) : Msg :=
+def Msg.incrNonce (msg : Msg) (adr : Address) : Msg :=
   {
     msg with
     benv := ({msg.benv with state := msg.benv.state.incrNonce adr} : Benv)
       |>.clearStorageWritesIfEmpty adr
   }
 
-def Devm.incrNonce (devm : Devm) (adr : Adr) : Devm :=
+def Devm.incrNonce (devm : Devm) (adr : Address) : Devm :=
   (devm.withState (devm.state.incrNonce adr)).clearStorageWritesIfEmpty adr
 
-def Benv.incrNonce (benv : Benv) (adr : Adr) : Benv :=
+def Benv.incrNonce (benv : Benv) (adr : Address) : Benv :=
   ({benv with state := benv.state.incrNonce adr} : Benv).clearStorageWritesIfEmpty adr
 
-def State.setStor (w : State) (a : Adr) (s : Stor) : State :=
+def State.setStor (w : State) (a : Address) (s : Storage) : State :=
   let ac := (w.get a)
-  if AccountExists w a then w.setPresent a {ac with stor := s}
-  else w.set a {ac with stor := s}
+  if AccountExists w a then w.setPresent a {ac with storage := s}
+  else w.set a {ac with storage := s}
 
-def Benv.setStor (benv : Benv) (adr : Adr) (stor : Stor) : Benv :=
+def Benv.setStor (benv : Benv) (adr : Address) (stor : Storage) : Benv :=
   {benv with
     state := benv.state.setStor adr stor
     storageWrites := benv.storageWrites.eraseAddress adr}
 
-def Msg.setCode (msg : Msg) (adr : Adr) (code : ByteArray) : Msg :=
+def Msg.setCode (msg : Msg) (adr : Address) (code : ByteArray) : Msg :=
   {msg with benv :=
     ({msg.benv with state := msg.benv.state.setCode adr code} : Benv).clearStorageWritesIfEmpty adr}
 
-def Devm.setCode (devm : Devm) (adr : Adr) (code : ByteArray) : Devm :=
+def Devm.setCode (devm : Devm) (adr : Address) (code : ByteArray) : Devm :=
   (devm.withState (devm.state.setCode adr code)).clearStorageWritesIfEmpty adr
 
-def Devm.rollback (devm : Devm) (wor : State) (tra : Tra) : Devm :=
+def Devm.rollback (devm : Devm) (wor : State) (tra : TransientStorage) : Devm :=
   devm.setWorld {devm.world with state := wor, transientStorage := tra}
 
 def liftToExecution (devm : Devm)
-  (f : Except (EvmError × State × AdrSet × Tra) Devm) : Execution := do
+  (f : Except (EvmError × State × AdrSet × TransientStorage) Devm) : Execution := do
   match f with
   | .error ⟨err, state, createdAccounts, tra⟩ =>
     let devm' := (devm.withCreatedAccounts createdAccounts).setWorld
@@ -7222,147 +7222,147 @@ def liftToExecution (devm : Devm)
 useless for stating canonicality -- the whole point is to tell "absent" from
 "present and zero" apart. `Stor` is a `def` rather than an `abbrev`, so the
 `GetElem?` notation `s[k]?` does not apply to it; this is that notation. -/
-def Stor.find? (s : Stor) (k : B256) : Option B256 := Std.TreeMap.get? s k
+def Storage.find? (s : Storage) (k : U256) : Option U256 := Std.TreeMap.get? s k
 
-theorem Stor.find?_empty (k : B256) : Stor.empty.find? k = none := rfl
+theorem Storage.find?_empty (k : U256) : Storage.empty.find? k = none := rfl
 
-theorem Stor.find?_erase (s : Stor) (k a : B256) :
-    Stor.find? (s.erase k) a = if k = a then none else s.find? a := by
-  change (Std.TreeMap.erase (show Std.TreeMap B256 B256 compare from s) k)[a]? =
-    if k = a then none else (show Std.TreeMap B256 B256 compare from s)[a]?
+theorem Storage.find?_erase (s : Storage) (k a : U256) :
+    Storage.find? (s.erase k) a = if k = a then none else s.find? a := by
+  change (Std.TreeMap.erase (show Std.TreeMap U256 U256 compare from s) k)[a]? =
+    if k = a then none else (show Std.TreeMap U256 U256 compare from s)[a]?
   rw [Std.TreeMap.getElem?_erase]
   simp only [Std.compare_eq_iff_eq]
 
-theorem Stor.find?_insert (s : Stor) (k a v : B256) :
-    Stor.find? (s.insert k v) a = if k = a then some v else s.find? a := by
-  change (Std.TreeMap.insert (show Std.TreeMap B256 B256 compare from s) k v)[a]? =
-    if k = a then some v else (show Std.TreeMap B256 B256 compare from s)[a]?
+theorem Storage.find?_insert (s : Storage) (k a v : U256) :
+    Storage.find? (s.insert k v) a = if k = a then some v else s.find? a := by
+  change (Std.TreeMap.insert (show Std.TreeMap U256 U256 compare from s) k v)[a]? =
+    if k = a then some v else (show Std.TreeMap U256 U256 compare from s)[a]?
   rw [Std.TreeMap.getElem?_insert]
   simp only [Std.compare_eq_iff_eq]
 
 /-- The defining equation of `Stor.set`, as a lookup: writing zero *erases*. -/
-theorem Stor.find?_set (s : Stor) (k a v : B256) :
+theorem Storage.find?_set (s : Storage) (k a v : U256) :
     (s.set k v).find? a
       = if k = a then (if v = 0 then none else some v) else s.find? a := by
-  rw [Stor.set]; split <;> simp_all [Stor.find?_erase, Stor.find?_insert]
+  rw [Storage.set]; split <;> simp_all [Storage.find?_erase, Storage.find?_insert]
 
-theorem Stor.get_eq_getD_find? (s : Stor) (k : B256) :
+theorem Storage.get_eq_getD_find? (s : Storage) (k : U256) :
     s.get k = (s.find? k).getD 0 := by
   exact Std.TreeMap.getD_eq_getD_getElem?
 
-theorem Stor.get_set_self (s : Stor) (k v : B256) : (s.set k v).get k = v := by
-  rw [Stor.get_eq_getD_find?, Stor.find?_set, ite_eq_left rfl]
+theorem Storage.get_set_self (s : Storage) (k v : U256) : (s.set k v).get k = v := by
+  rw [Storage.get_eq_getD_find?, Storage.find?_set, ite_eq_left rfl]
   split <;> simp_all
 
-theorem Stor.get_set_ne (s : Stor) {k a : B256} (h : k ≠ a) (v : B256) :
+theorem Storage.get_set_ne (s : Storage) {k a : U256} (h : k ≠ a) (v : U256) :
     (s.set k v).get a = s.get a := by
-  rw [Stor.get_eq_getD_find?, Stor.get_eq_getD_find?, Stor.find?_set, ite_eq_right h]
+  rw [Storage.get_eq_getD_find?, Storage.get_eq_getD_find?, Storage.find?_set, ite_eq_right h]
 
 /-- A storage map is canonical when it stores no zero-valued slot.
 
 Stated as a finite traversal of the map's `toList`, so it is decidable by
 construction. -/
-def Stor.Canonical (s : Stor) : Prop := ∀ e ∈ s.toList, e.2 ≠ 0
+def Storage.Canonical (s : Storage) : Prop := ∀ e ∈ s.toList, e.2 ≠ 0
 
-instance {s : Stor} : Decidable (Stor.Canonical s) := List.decidableBAll _ _
+instance {s : Storage} : Decidable (Storage.Canonical s) := List.decidableBAll _ _
 
-theorem Stor.mem_toList_iff {s : Stor} {k v : B256} :
+theorem Storage.mem_toList_iff {s : Storage} {k v : U256} :
     (k, v) ∈ s.toList ↔ s.find? k = some v := by
   exact Std.TreeMap.mem_toList_iff_getElem?_eq_some
 
 /-- The lookup characterisation: the finite traversal and the pointwise
 statement semantic proofs use are the same property. -/
-theorem Stor.canonical_iff {s : Stor} :
-    Stor.Canonical s ↔ ∀ (k v : B256), s.find? k = some v → v ≠ 0 := by
+theorem Storage.canonical_iff {s : Storage} :
+    Storage.Canonical s ↔ ∀ (k v : U256), s.find? k = some v → v ≠ 0 := by
   constructor
-  · intro h k v hv; exact h (k, v) (Stor.mem_toList_iff.mpr hv)
-  · intro h e he; exact h e.1 e.2 (Stor.mem_toList_iff.mp (by simpa using he))
+  · intro h k v hv; exact h (k, v) (Storage.mem_toList_iff.mpr hv)
+  · intro h e he; exact h e.1 e.2 (Storage.mem_toList_iff.mp (by simpa using he))
 
-theorem Stor.canonical_empty : Stor.Canonical .empty := by
-  rw [Stor.canonical_iff]; intro k v hv; cases hv
+theorem Storage.canonical_empty : Storage.Canonical .empty := by
+  rw [Storage.canonical_iff]; intro k v hv; cases hv
 
-theorem Stor.Canonical.set {s : Stor} (h : Stor.Canonical s) (k v : B256) :
-    Stor.Canonical (s.set k v) := by
-  rw [Stor.canonical_iff] at h ⊢
-  intro a w hw; rw [Stor.find?_set] at hw
+theorem Storage.Canonical.set {s : Storage} (h : Storage.Canonical s) (k v : U256) :
+    Storage.Canonical (s.set k v) := by
+  rw [Storage.canonical_iff] at h ⊢
+  intro a w hw; rw [Storage.find?_set] at hw
   split at hw
   · split at hw
     · cases hw
     · cases hw; assumption
   · exact h a w hw
 
-theorem Stor.Canonical.erase {s : Stor} (h : Stor.Canonical s) (k : B256) :
-    Stor.Canonical (s.erase k) := by
-  apply (Stor.canonical_iff).mpr
-  intro a v hv; rw [Stor.find?_erase] at hv
+theorem Storage.Canonical.erase {s : Storage} (h : Storage.Canonical s) (k : U256) :
+    Storage.Canonical (s.erase k) := by
+  apply (Storage.canonical_iff).mpr
+  intro a v hv; rw [Storage.find?_erase] at hv
   split at hv
   · cases hv
-  · exact (Stor.canonical_iff.mp h) a v hv
+  · exact (Storage.canonical_iff.mp h) a v hv
 
 /-- On a canonical map, reading zero and being absent are the same thing.
 
 This is the property the trie commitment depends on, and the reason an
 explicitly stored zero slot is not merely redundant. -/
-theorem Stor.Canonical.get_eq_zero_iff {s : Stor} (h : Stor.Canonical s)
-    (k : B256) : s.get k = 0 ↔ s.find? k = none := by
-  rw [Stor.get_eq_getD_find?]
+theorem Storage.Canonical.get_eq_zero_iff {s : Storage} (h : Storage.Canonical s)
+    (k : U256) : s.get k = 0 ↔ s.find? k = none := by
+  rw [Storage.get_eq_getD_find?]
   cases hk : s.find? k with
   | none => simp
-  | some v => simp [Stor.canonical_iff.mp h k v hk]
+  | some v => simp [Storage.canonical_iff.mp h k v hk]
 
 /-- The canonical smart constructor for storage: fold the pairs through
 `Stor.set`, which drops the zero-valued ones instead of storing them. -/
-def Stor.ofList (l : List (B256 × B256)) : Stor :=
+def Storage.ofList (l : List (U256 × U256)) : Storage :=
   l.foldl (fun s e => s.set e.1 e.2) .empty
 
-theorem Stor.canonical_foldl (l : List (B256 × B256)) :
-    ∀ {s : Stor}, Stor.Canonical s →
-      Stor.Canonical (l.foldl (fun s e => s.set e.1 e.2) s) := by
+theorem Storage.canonical_foldl (l : List (U256 × U256)) :
+    ∀ {s : Storage}, Storage.Canonical s →
+      Storage.Canonical (l.foldl (fun s e => s.set e.1 e.2) s) := by
   induction l with
   | nil => intro s h; exact h
   | cons e l ih => intro s h; exact ih (h.set e.1 e.2)
 
 /-- Smart-constructor soundness: the result is canonical whatever it was
 given. -/
-theorem Stor.canonical_ofList (l : List (B256 × B256)) :
-    Stor.Canonical (Stor.ofList l) :=
-  Stor.canonical_foldl l Stor.canonical_empty
+theorem Storage.canonical_ofList (l : List (U256 × U256)) :
+    Storage.Canonical (Storage.ofList l) :=
+  Storage.canonical_foldl l Storage.canonical_empty
 
-theorem Stor.ofList_nil : Stor.ofList [] = .empty := rfl
+theorem Storage.ofList_nil : Storage.ofList [] = .empty := rfl
 
-theorem Stor.ofList_concat (l : List (B256 × B256)) (k v : B256) :
-    Stor.ofList (l ++ [(k, v)]) = (Stor.ofList l).set k v := by
-  rw [Stor.ofList, Stor.ofList, List.foldl_append, List.foldl_cons,
+theorem Storage.ofList_concat (l : List (U256 × U256)) (k v : U256) :
+    Storage.ofList (l ++ [(k, v)]) = (Storage.ofList l).set k v := by
+  rw [Storage.ofList, Storage.ofList, List.foldl_append, List.foldl_cons,
       List.foldl_nil]
 
 /-- Smart-constructor soundness, read side: the last value written for a key is
 the value read back, so canonicalisation never changes an EVM-level read. -/
-theorem Stor.get_ofList_concat (l : List (B256 × B256)) (k v : B256) :
-    (Stor.ofList (l ++ [(k, v)])).get k = v := by
-  rw [Stor.ofList_concat, Stor.get_set_self]
+theorem Storage.get_ofList_concat (l : List (U256 × U256)) (k v : U256) :
+    (Storage.ofList (l ++ [(k, v)])).get k = v := by
+  rw [Storage.ofList_concat, Storage.get_set_self]
 
-theorem State.get_eq_getD (w : State) (a : Adr) :
+theorem State.get_eq_getD (w : State) (a : Address) :
     w.get a = (w[a]?).getD .nil := by
   rw [State.get, Std.TreeMap.getD_eq_getD_getElem?]
 
 /-- The defining equation of `State.set`, as a lookup: writing `Acct.nil`
 *erases*. -/
-theorem State.getElem?_set (w : State) (a b : Adr) (ac : Acct) :
+theorem State.getElem?_set (w : State) (a b : Address) (ac : Account) :
     (w.set a ac)[b]?
       = if a = b then (if ac = .nil then none else some ac) else w[b]? := by
   rw [State.set]
   split <;> simp_all [Std.TreeMap.getElem?_erase, Std.TreeMap.getElem?_insert]
 
 /-- Presence-preserving insertion never identifies `some Acct.nil` with `none`. -/
-theorem State.getElem?_setPresent (w : State) (a b : Adr) (ac : Acct) :
+theorem State.getElem?_setPresent (w : State) (a b : Address) (ac : Account) :
     (w.setPresent a ac)[b]? = if a = b then some ac else w[b]? := by
   simp only [State.setPresent, Std.TreeMap.getElem?_insert, Std.compare_eq_iff_eq]
 
-theorem State.accountExists_setPresent (w : State) (a : Adr) (ac : Acct) :
+theorem State.accountExists_setPresent (w : State) (a : Address) (ac : Account) :
     AccountExists (w.setPresent a ac) a := by
   simp only [AccountExists, State.getElem?_setPresent, ite_true, Option.isSome_some]
 
-theorem State.getElem?_erase (w : State) (a b : Adr) :
+theorem State.getElem?_erase (w : State) (a b : Address) :
     (w.erase a)[b]? = if a = b then none else w[b]? := by
   simp [Std.TreeMap.getElem?_erase]
 
@@ -7370,26 +7370,26 @@ theorem State.getElem?_erase (w : State) (a b : Adr) :
 storage. Present empty accounts are valid historical state entries; their
 membership is observed separately from default-valued account reads. -/
 def State.Canonical (w : State) : Prop :=
-  ∀ e ∈ w.toList, Stor.Canonical e.2.stor
+  ∀ e ∈ w.toList, Storage.Canonical e.2.storage
 
 /-- The stronger sparse-account property used by the erasing constructors.
 It is separate from canonicality: historical prestates may store `Acct.nil`. -/
 def State.NoNil (w : State) : Prop :=
-  ∀ e ∈ w.toList, e.2 ≠ Acct.nil
+  ∀ e ∈ w.toList, e.2 ≠ Account.nil
 
 instance {w : State} : Decidable (State.NoNil w) := List.decidableBAll _ _
 
 instance {w : State} : Decidable (State.Canonical w) := List.decidableBAll _ _
 
-theorem State.mem_toList_iff {w : State} {a : Adr} {ac : Acct} :
+theorem State.mem_toList_iff {w : State} {a : Address} {ac : Account} :
     (a, ac) ∈ w.toList ↔ w[a]? = some ac :=
   Std.TreeMap.mem_toList_iff_getElem?_eq_some
 
 /-- The lookup characterisation for world states. -/
 theorem State.canonical_iff {w : State} :
     State.Canonical w
-      ↔ ∀ (a : Adr) (ac : Acct),
-          w[a]? = some ac → Stor.Canonical ac.stor := by
+      ↔ ∀ (a : Address) (ac : Account),
+          w[a]? = some ac → Storage.Canonical ac.storage := by
   constructor
   · intro h a ac hac; exact h (a, ac) (State.mem_toList_iff.mpr hac)
   · intro h e he; exact h e.1 e.2 (State.mem_toList_iff.mp (by simpa using he))
@@ -7397,14 +7397,14 @@ theorem State.canonical_iff {w : State} :
 theorem State.canonical_empty : State.Canonical .empty := by
   rw [State.canonical_iff]; intro a ac hac; simp at hac
 
-theorem Acct.canonical_nil_stor : Stor.Canonical Acct.nil.stor :=
-  Stor.canonical_empty
+theorem Account.canonical_nil_storage : Storage.Canonical Account.nil.storage :=
+  Storage.canonical_empty
 
 /-- `State.set` preserves canonicality **given its real premise**: the account
 being inserted must itself have canonical storage. Without that hypothesis the
 statement is false, and it is not weakened here to make it look primitive. -/
-theorem State.Canonical.set {w : State} (h : State.Canonical w) (a : Adr)
-    {ac : Acct} (hs : Stor.Canonical ac.stor) :
+theorem State.Canonical.set {w : State} (h : State.Canonical w) (a : Address)
+    {ac : Account} (hs : Storage.Canonical ac.storage) :
     State.Canonical (w.set a ac) := by
   rw [State.canonical_iff] at h ⊢
   intro b ac' hb; rw [State.getElem?_set] at hb
@@ -7414,8 +7414,8 @@ theorem State.Canonical.set {w : State} (h : State.Canonical w) (a : Adr)
     · cases hb; exact hs
   · exact h b ac' hb
 
-theorem State.Canonical.setPresent {w : State} (h : State.Canonical w) (a : Adr)
-    {ac : Acct} (hs : Stor.Canonical ac.stor) :
+theorem State.Canonical.setPresent {w : State} (h : State.Canonical w) (a : Address)
+    {ac : Account} (hs : Storage.Canonical ac.storage) :
     State.Canonical (w.setPresent a ac) := by
   rw [State.canonical_iff] at h ⊢
   intro b ac' hb
@@ -7424,7 +7424,7 @@ theorem State.Canonical.setPresent {w : State} (h : State.Canonical w) (a : Adr)
   · cases hb; exact hs
   · exact h b ac' hb
 
-theorem State.Canonical.erase {w : State} (h : State.Canonical w) (a : Adr) :
+theorem State.Canonical.erase {w : State} (h : State.Canonical w) (a : Address) :
     State.Canonical (w.erase a) := by
   rw [State.canonical_iff] at h ⊢
   intro b ac hb; rw [State.getElem?_erase] at hb
@@ -7433,7 +7433,7 @@ theorem State.Canonical.erase {w : State} (h : State.Canonical w) (a : Adr) :
   · exact h b ac hb
 
 theorem State.noNil_iff {w : State} :
-    State.NoNil w ↔ ∀ (a : Adr) (ac : Acct), w[a]? = some ac → ac ≠ Acct.nil := by
+    State.NoNil w ↔ ∀ (a : Address) (ac : Account), w[a]? = some ac → ac ≠ Account.nil := by
   constructor
   · intro h a ac hac; exact h (a, ac) (State.mem_toList_iff.mpr hac)
   · intro h e he; exact h e.1 e.2 (State.mem_toList_iff.mp (by simpa using he))
@@ -7441,8 +7441,8 @@ theorem State.noNil_iff {w : State} :
 /-- Canonicality with `NoNil` recovers the former sparse-state invariant. -/
 theorem State.canonical_noNil_iff {w : State} :
     State.Canonical w ∧ State.NoNil w ↔
-      ∀ (a : Adr) (ac : Acct), w[a]? = some ac →
-        ac ≠ Acct.nil ∧ Stor.Canonical ac.stor := by
+      ∀ (a : Address) (ac : Account), w[a]? = some ac →
+        ac ≠ Account.nil ∧ Storage.Canonical ac.storage := by
   constructor
   · rintro ⟨hc, hn⟩ a ac ha
     exact ⟨State.noNil_iff.mp hn a ac ha, State.canonical_iff.mp hc a ac ha⟩
@@ -7455,7 +7455,7 @@ theorem State.noNil_empty : State.NoNil .empty := by
   intro a ac ha
   cases ha
 
-theorem State.NoNil.set {w : State} (h : State.NoNil w) (a : Adr) (ac : Acct) :
+theorem State.NoNil.set {w : State} (h : State.NoNil w) (a : Address) (ac : Account) :
     State.NoNil (w.set a ac) := by
   rw [State.noNil_iff] at h ⊢
   intro b ac' hb
@@ -7469,7 +7469,7 @@ theorem State.NoNil.set {w : State} (h : State.NoNil w) (a : Adr) (ac : Acct) :
 /-- Default reads identify absence only with the explicit no-nil premise.
 Canonical storage alone permits present-empty historical accounts. -/
 theorem State.Canonical.get_eq_nil_iff {w : State} (_h : State.Canonical w)
-    (hnil : State.NoNil w) (a : Adr) : w.get a = .nil ↔ w[a]? = none := by
+    (hnil : State.NoNil w) (a : Address) : w.get a = .nil ↔ w[a]? = none := by
   rw [State.get_eq_getD]
   cases ha : w[a]? with
   | none => simp
@@ -7479,39 +7479,39 @@ theorem State.Canonical.get_eq_nil_iff {w : State} (_h : State.Canonical w)
 including an absent one, whose `Acct.nil` carries the empty map. This is what
 lets the derived mutators below discharge `State.Canonical.set`'s premise
 without assuming anything new. -/
-theorem State.Canonical.stor {w : State} (h : State.Canonical w) (a : Adr) :
-    Stor.Canonical (w.get a).stor := by
+theorem State.Canonical.storage {w : State} (h : State.Canonical w) (a : Address) :
+    Storage.Canonical (w.get a).storage := by
   rw [State.get_eq_getD]
   cases ha : w[a]? with
-  | none => exact Acct.canonical_nil_stor
+  | none => exact Account.canonical_nil_storage
   | some ac => exact State.canonical_iff.mp h a ac ha
 
-theorem State.get_set_self (w : State) (a : Adr) (ac : Acct) :
+theorem State.get_set_self (w : State) (a : Address) (ac : Account) :
     (w.set a ac).get a = ac := by
   rw [State.get_eq_getD, State.getElem?_set, ite_eq_left rfl]
   split <;> simp_all
 
-theorem State.get_set_ne (w : State) {a b : Adr} (h : a ≠ b) (ac : Acct) :
+theorem State.get_set_ne (w : State) {a b : Address} (h : a ≠ b) (ac : Account) :
     (w.set a ac).get b = w.get b := by
   rw [State.get_eq_getD, State.get_eq_getD, State.getElem?_set, ite_eq_right h]
 
-theorem State.get_setPresent_self (w : State) (a : Adr) (ac : Acct) :
+theorem State.get_setPresent_self (w : State) (a : Address) (ac : Account) :
     (w.setPresent a ac).get a = ac := by
   rw [State.get_eq_getD, State.getElem?_setPresent, ite_eq_left rfl]
   rfl
 
-theorem State.get_setPresent_ne (w : State) {a b : Adr} (h : a ≠ b) (ac : Acct) :
+theorem State.get_setPresent_ne (w : State) {a b : Address} (h : a ≠ b) (ac : Account) :
     (w.setPresent a ac).get b = w.get b := by
   rw [State.get_eq_getD, State.get_eq_getD, State.getElem?_setPresent, ite_eq_right h]
 
-theorem State.setStorVal_get_self (w : State) (a : Adr) (k v : B256) :
-    (w.setStorVal a k v).get a = {w.get a with stor := (w.get a).stor.set k v} := by
+theorem State.setStorVal_get_self (w : State) (a : Address) (k v : U256) :
+    (w.setStorVal a k v).get a = {w.get a with storage := (w.get a).storage.set k v} := by
   unfold State.setStorVal
   split
   · exact State.get_setPresent_self _ _ _
   · exact State.get_set_self _ _ _
 
-theorem State.setStorVal_get_ne (w : State) {a b : Adr} (h : a ≠ b) (k v : B256) :
+theorem State.setStorVal_get_ne (w : State) {a b : Address} (h : a ≠ b) (k v : U256) :
     (w.setStorVal a k v).get b = w.get b := by
   unfold State.setStorVal
   split
@@ -7519,14 +7519,14 @@ theorem State.setStorVal_get_ne (w : State) {a b : Adr} (h : a ≠ b) (k v : B25
   · exact State.get_set_ne _ h _
 
 /-- A storage write does not change membership or payload at another address. -/
-theorem State.getElem?_setStorVal_ne (w : State) {a b : Adr} (h : a ≠ b) (k v : B256) :
+theorem State.getElem?_setStorVal_ne (w : State) {a b : Address} (h : a ≠ b) (k v : U256) :
     (w.setStorVal a k v)[b]? = w[b]? := by
   unfold State.setStorVal
   split
   · rw [State.getElem?_setPresent, ite_eq_right h]
   · rw [State.getElem?_set, ite_eq_right h]
 
-theorem State.getElem?_setStor_ne (w : State) {a b : Adr} (h : a ≠ b) (stor : Stor) :
+theorem State.getElem?_setStor_ne (w : State) {a b : Address} (h : a ≠ b) (stor : Storage) :
     (w.setStor a stor)[b]? = w[b]? := by
   unfold State.setStor
   split
@@ -7534,31 +7534,31 @@ theorem State.getElem?_setStor_ne (w : State) {a b : Adr} (h : a ≠ b) (stor : 
   · rw [State.getElem?_set, ite_eq_right h]
 
 /-- Clearing storage never deletes an account that is already present. -/
-theorem State.getElem?_setStorVal_self_of_exists (w : State) (a : Adr) (k v : B256)
+theorem State.getElem?_setStorVal_self_of_exists (w : State) (a : Address) (k v : U256)
     (h : AccountExists w a) :
-    (w.setStorVal a k v)[a]? = some {w.get a with stor := (w.get a).stor.set k v} := by
+    (w.setStorVal a k v)[a]? = some {w.get a with storage := (w.get a).storage.set k v} := by
   rw [State.setStorVal, ite_eq_left h, State.getElem?_setPresent, ite_eq_left rfl]
 
-theorem State.getElem?_setStor_self_of_exists (w : State) (a : Adr) (stor : Stor)
+theorem State.getElem?_setStor_self_of_exists (w : State) (a : Address) (stor : Storage)
     (h : AccountExists w a) :
-    (w.setStor a stor)[a]? = some {w.get a with stor := stor} := by
+    (w.setStor a stor)[a]? = some {w.get a with storage := stor} := by
   rw [State.setStor, ite_eq_left h, State.getElem?_setPresent, ite_eq_left rfl]
 
-theorem State.setAccount_get_self (w : State) (a : Adr) (ac : Acct) :
+theorem State.setAccount_get_self (w : State) (a : Address) (ac : Account) :
     (w.setAccount a ac).get a = ac.clearIfEmpty :=
   State.get_set_self w a ac.clearIfEmpty
 
-theorem State.setAccount_get_ne (w : State) {a b : Adr} (h : a ≠ b) (ac : Acct) :
+theorem State.setAccount_get_ne (w : State) {a b : Address} (h : a ≠ b) (ac : Account) :
     (w.setAccount a ac).get b = w.get b :=
   State.get_set_ne w h ac.clearIfEmpty
 
-theorem State.Canonical.setAccount {w : State} (h : State.Canonical w) (a : Adr)
-    {ac : Acct} (hs : Stor.Canonical ac.stor) :
+theorem State.Canonical.setAccount {w : State} (h : State.Canonical w) (a : Address)
+    {ac : Account} (hs : Storage.Canonical ac.storage) :
     State.Canonical (w.setAccount a ac) := by
   apply h.set a
-  unfold Acct.clearIfEmpty
+  unfold Account.clearIfEmpty
   split
-  · exact Stor.canonical_empty
+  · exact Storage.canonical_empty
   · exact hs
 
 --------------- CANONICALITY OF THE PRIMITIVE MUTATORS ---------------
@@ -7568,56 +7568,56 @@ theorem State.Canonical.setAccount {w : State} (h : State.Canonical w) (a : Adr)
 -- storage argument comes from the caller and therefore carries a hypothesis.
 
 theorem State.Canonical.destroyAccount {w : State} (h : State.Canonical w)
-    (a : Adr) : State.Canonical (destroyAccount w a) :=
+    (a : Address) : State.Canonical (destroyAccount w a) :=
   h.erase a
 
-theorem State.Canonical.setCode {w : State} (h : State.Canonical w) (a : Adr)
+theorem State.Canonical.setCode {w : State} (h : State.Canonical w) (a : Address)
     (cd : ByteArray) : State.Canonical (w.setCode a cd) :=
-  h.setAccount a (h.stor a)
+  h.setAccount a (h.storage a)
 
-theorem State.Canonical.setBal {w : State} (h : State.Canonical w) (a : Adr)
-    (v : B256) : State.Canonical (w.setBal a v) :=
-  h.setAccount a (h.stor a)
+theorem State.Canonical.setBal {w : State} (h : State.Canonical w) (a : Address)
+    (v : U256) : State.Canonical (w.setBal a v) :=
+  h.setAccount a (h.storage a)
 
-theorem State.Canonical.addBal {w : State} (h : State.Canonical w) (a : Adr)
-    (v : B256) : State.Canonical (w.addBal a v) :=
+theorem State.Canonical.addBal {w : State} (h : State.Canonical w) (a : Address)
+    (v : U256) : State.Canonical (w.addBal a v) :=
   h.setBal a _
 
-theorem State.Canonical.subBal {w w' : State} (h : State.Canonical w) {a : Adr}
-    {v : B256} (hw : w.subBal a v = some w') : State.Canonical w' := by
+theorem State.Canonical.subBal {w w' : State} (h : State.Canonical w) {a : Address}
+    {v : U256} (hw : w.subBal a v = some w') : State.Canonical w' := by
   rw [State.subBal] at hw
   split at hw
   · cases hw
   · cases hw; exact h.setBal a _
 
-theorem State.Canonical.incrNonce {w : State} (h : State.Canonical w) (a : Adr) :
+theorem State.Canonical.incrNonce {w : State} (h : State.Canonical w) (a : Address) :
     State.Canonical (w.incrNonce a) :=
-  h.setAccount a (h.stor a)
+  h.setAccount a (h.storage a)
 
 /-- `State.setStor` carries its real premise: the storage map handed in must
 already be canonical. -/
-theorem State.Canonical.setStor {w : State} (h : State.Canonical w) (a : Adr)
-    {s : Stor} (hs : Stor.Canonical s) : State.Canonical (w.setStor a s) := by
+theorem State.Canonical.setStor {w : State} (h : State.Canonical w) (a : Address)
+    {s : Storage} (hs : Storage.Canonical s) : State.Canonical (w.setStor a s) := by
   unfold State.setStor
   split
   · exact h.setPresent a hs
   · exact h.set a hs
 
-theorem State.Canonical.setStorVal {w : State} (h : State.Canonical w) (a : Adr)
-    (k v : B256) : State.Canonical (w.setStorVal a k v) := by
+theorem State.Canonical.setStorVal {w : State} (h : State.Canonical w) (a : Address)
+    (k v : U256) : State.Canonical (w.setStorVal a k v) := by
   unfold State.setStorVal
   split
-  · exact h.setPresent a ((h.stor a).set k v)
-  · exact h.set a ((h.stor a).set k v)
+  · exact h.setPresent a ((h.storage a).set k v)
+  · exact h.set a ((h.storage a).set k v)
 
 /-- The canonical smart constructor for world states. Its premise is the honest
 one: the accounts handed in must have canonical storage, which `Stor.ofList`
 supplies for anything the fixture parser builds. -/
-def State.ofList (l : List (Adr × Acct)) : State :=
+def State.ofList (l : List (Address × Account)) : State :=
   l.foldl (fun w e => w.set e.1 e.2) .empty
 
-theorem State.canonical_foldl (l : List (Adr × Acct))
-    (hl : ∀ e ∈ l, Stor.Canonical e.2.stor) :
+theorem State.canonical_foldl (l : List (Address × Account))
+    (hl : ∀ e ∈ l, Storage.Canonical e.2.storage) :
     ∀ {w : State}, State.Canonical w →
       State.Canonical (l.foldl (fun w e => w.set e.1 e.2) w) := by
   induction l with
@@ -7627,23 +7627,23 @@ theorem State.canonical_foldl (l : List (Adr × Acct))
     exact ih (fun x hx => hl x (List.mem_cons_of_mem _ hx))
       (h.set e.1 (hl e List.mem_cons_self))
 
-theorem State.canonical_ofList {l : List (Adr × Acct)}
-    (hl : ∀ e ∈ l, Stor.Canonical e.2.stor) :
+theorem State.canonical_ofList {l : List (Address × Account)}
+    (hl : ∀ e ∈ l, Storage.Canonical e.2.storage) :
     State.Canonical (State.ofList l) :=
   State.canonical_foldl l hl State.canonical_empty
 
 theorem State.ofList_nil : State.ofList [] = .empty := rfl
 
-theorem State.ofList_concat (l : List (Adr × Acct)) (a : Adr) (ac : Acct) :
+theorem State.ofList_concat (l : List (Address × Account)) (a : Address) (ac : Account) :
     State.ofList (l ++ [(a, ac)]) = (State.ofList l).set a ac := by
   rw [State.ofList, State.ofList, List.foldl_append, List.foldl_cons,
       List.foldl_nil]
 
-theorem State.get_ofList_concat (l : List (Adr × Acct)) (a : Adr) (ac : Acct) :
+theorem State.get_ofList_concat (l : List (Address × Account)) (a : Address) (ac : Account) :
     (State.ofList (l ++ [(a, ac)])).get a = ac := by
   rw [State.ofList_concat, State.get_set_self]
 
-theorem State.noNil_ofList (l : List (Adr × Acct)) : State.NoNil (State.ofList l) := by
+theorem State.noNil_ofList (l : List (Address × Account)) : State.NoNil (State.ofList l) := by
   have hfold : ∀ {w : State}, State.NoNil w →
       State.NoNil (l.foldl (fun w e => w.set e.1 e.2) w) := by
     induction l with
@@ -7652,11 +7652,11 @@ theorem State.noNil_ofList (l : List (Adr × Acct)) : State.NoNil (State.ofList 
   exact hfold State.noNil_empty
 
 /-- Construct an allocation without dropping explicitly present empty accounts. -/
-def State.ofPresentList (l : List (Adr × Acct)) : State :=
+def State.ofPresentList (l : List (Address × Account)) : State :=
   l.foldl (fun w e => w.setPresent e.1 e.2) .empty
 
-theorem State.canonical_foldl_setPresent (l : List (Adr × Acct))
-    (hl : ∀ e ∈ l, Stor.Canonical e.2.stor) :
+theorem State.canonical_foldl_setPresent (l : List (Address × Account))
+    (hl : ∀ e ∈ l, Storage.Canonical e.2.storage) :
     ∀ {w : State}, State.Canonical w →
       State.Canonical (l.foldl (fun w e => w.setPresent e.1 e.2) w) := by
   induction l with
@@ -7666,17 +7666,17 @@ theorem State.canonical_foldl_setPresent (l : List (Adr × Acct))
     exact ih (fun x hx => hl x (List.mem_cons_of_mem _ hx))
       (h.setPresent e.1 (hl e List.mem_cons_self))
 
-theorem State.canonical_ofPresentList {l : List (Adr × Acct)}
-    (hl : ∀ e ∈ l, Stor.Canonical e.2.stor) :
+theorem State.canonical_ofPresentList {l : List (Address × Account)}
+    (hl : ∀ e ∈ l, Storage.Canonical e.2.storage) :
     State.Canonical (State.ofPresentList l) :=
   State.canonical_foldl_setPresent l hl State.canonical_empty
 
-theorem State.ofPresentList_concat (l : List (Adr × Acct)) (a : Adr) (ac : Acct) :
+theorem State.ofPresentList_concat (l : List (Address × Account)) (a : Address) (ac : Account) :
     State.ofPresentList (l ++ [(a, ac)]) = (State.ofPresentList l).setPresent a ac := by
   rw [State.ofPresentList, State.ofPresentList, List.foldl_append, List.foldl_cons,
       List.foldl_nil]
 
-theorem State.getElem?_ofPresentList_concat (l : List (Adr × Acct)) (a : Adr) (ac : Acct) :
+theorem State.getElem?_ofPresentList_concat (l : List (Address × Account)) (a : Address) (ac : Account) :
     (State.ofPresentList (l ++ [(a, ac)]))[a]? = some ac := by
   rw [State.ofPresentList_concat, State.getElem?_setPresent, ite_eq_left rfl]
 
@@ -7687,36 +7687,36 @@ theorem State.getElem?_ofPresentList_concat (l : List (Adr × Acct)) (a : Adr) (
 -- same shape. It is separate from `Stor.Canonical` because the default it
 -- erases is a different one.
 
-def Tra.Canonical (τ : Tra) : Prop :=
-  ∀ e ∈ τ.toList, e.2 ≠ Stor.empty ∧ Stor.Canonical e.2
+def TransientStorage.Canonical (τ : TransientStorage) : Prop :=
+  ∀ e ∈ τ.toList, e.2 ≠ Storage.empty ∧ Storage.Canonical e.2
 
-instance {τ : Tra} : Decidable (Tra.Canonical τ) := List.decidableBAll _ _
+instance {τ : TransientStorage} : Decidable (TransientStorage.Canonical τ) := List.decidableBAll _ _
 
-theorem Tra.mem_toList_iff {τ : Tra} {a : Adr} {s : Stor} :
+theorem TransientStorage.mem_toList_iff {τ : TransientStorage} {a : Address} {s : Storage} :
     (a, s) ∈ τ.toList ↔ τ[a]? = some s :=
   Std.TreeMap.mem_toList_iff_getElem?_eq_some
 
-theorem Tra.canonical_iff {τ : Tra} :
-    Tra.Canonical τ
-      ↔ ∀ (a : Adr) (s : Stor),
-          τ[a]? = some s → s ≠ Stor.empty ∧ Stor.Canonical s := by
+theorem TransientStorage.canonical_iff {τ : TransientStorage} :
+    TransientStorage.Canonical τ
+      ↔ ∀ (a : Address) (s : Storage),
+          τ[a]? = some s → s ≠ Storage.empty ∧ Storage.Canonical s := by
   constructor
-  · intro h a s hs; exact h (a, s) (Tra.mem_toList_iff.mpr hs)
-  · intro h e he; exact h e.1 e.2 (Tra.mem_toList_iff.mp (by simpa using he))
+  · intro h a s hs; exact h (a, s) (TransientStorage.mem_toList_iff.mpr hs)
+  · intro h e he; exact h e.1 e.2 (TransientStorage.mem_toList_iff.mp (by simpa using he))
 
-theorem Tra.canonical_empty : Tra.Canonical .empty := by
-  rw [Tra.canonical_iff]; intro a s hs; simp at hs
+theorem TransientStorage.canonical_empty : TransientStorage.Canonical .empty := by
+  rw [TransientStorage.canonical_iff]; intro a s hs; simp at hs
 
-theorem Tra.getElem?_set (τ : Tra) (a b : Adr) (s : Stor) :
+theorem TransientStorage.getElem?_set (τ : TransientStorage) (a b : Address) (s : Storage) :
     (τ.set a s)[b]?
       = if a = b then (if s.isEmpty then none else some s) else τ[b]? := by
-  rw [Tra.set]
+  rw [TransientStorage.set]
   split <;> simp_all [Std.TreeMap.getElem?_erase, Std.TreeMap.getElem?_insert]
 
-theorem Tra.Canonical.set {τ : Tra} (h : Tra.Canonical τ) (a : Adr) {s : Stor}
-    (hs : Stor.Canonical s) : Tra.Canonical (τ.set a s) := by
-  rw [Tra.canonical_iff] at h ⊢
-  intro b s' hb; rw [Tra.getElem?_set] at hb
+theorem TransientStorage.Canonical.set {τ : TransientStorage} (h : TransientStorage.Canonical τ) (a : Address) {s : Storage}
+    (hs : Storage.Canonical s) : TransientStorage.Canonical (τ.set a s) := by
+  rw [TransientStorage.canonical_iff] at h ⊢
+  intro b s' hb; rw [TransientStorage.getElem?_set] at hb
   split at hb
   · split at hb
     · cases hb
@@ -7727,15 +7727,15 @@ theorem Tra.Canonical.set {τ : Tra} (h : Tra.Canonical τ) (a : Adr) {s : Stor}
 
 /-- Every transient map *read* out of a canonical `Tra` is canonical, the
 absent case included. -/
-theorem Tra.Canonical.getD {τ : Tra} (h : Tra.Canonical τ) (a : Adr) :
-    Stor.Canonical (τ.getD a .empty) := by
+theorem TransientStorage.Canonical.getD {τ : TransientStorage} (h : TransientStorage.Canonical τ) (a : Address) :
+    Storage.Canonical (τ.getD a .empty) := by
   rw [Std.TreeMap.getD_eq_getD_getElem?]
   cases ha : τ[a]? with
-  | none => exact Stor.canonical_empty
-  | some s => exact (Tra.canonical_iff.mp h a s ha).2
+  | none => exact Storage.canonical_empty
+  | some s => exact (TransientStorage.canonical_iff.mp h a s ha).2
 
-theorem Tra.Canonical.setStorVal {τ : Tra} (h : Tra.Canonical τ) (a : Adr)
-    (k v : B256) : Tra.Canonical (τ.setStorVal a k v) :=
+theorem TransientStorage.Canonical.setStorageValue {τ : TransientStorage} (h : TransientStorage.Canonical τ) (a : Address)
+    (k v : U256) : TransientStorage.Canonical (τ.setStorageValue a k v) :=
   h.set a ((h.getD a).set k v)
 
 --------------- THE EXECUTION-STATE INVARIANT VOCABULARY ---------------
@@ -7762,7 +7762,7 @@ theorem Tra.Canonical.setStorVal {τ : Tra} (h : Tra.Canonical τ) (a : Adr)
 
 /-- A machine world -- current state and transient storage -- is canonical. -/
 def World.Canonical (w : World) : Prop :=
-  State.Canonical w.state ∧ Tra.Canonical w.transientStorage
+  State.Canonical w.state ∧ TransientStorage.Canonical w.transientStorage
 
 /-- The dynamic machine's world is canonical. -/
 def Devm.Canonical (devm : Devm) : Prop := World.Canonical devm.world
@@ -7775,7 +7775,7 @@ def BenvStat.Canonical (stat : BenvStat) : Prop := State.Canonical stat.origStat
 def Benv.Canonical (benv : Benv) : Prop :=
   State.Canonical benv.state ∧ BenvStat.Canonical benv.stat
 
-def Tenv.Canonical (tenv : Tenv) : Prop := Tra.Canonical tenv.transientStorage
+def Tenv.Canonical (tenv : Tenv) : Prop := TransientStorage.Canonical tenv.transientStorage
 
 /-- A message: the parent state and transient storage saved for rollback,
 together with the original state they were derived from. This is the carrier
@@ -7822,7 +7822,7 @@ instance {ch : BlockChain} : Decidable (BlockChain.Canonical ch) := by
 
 theorem Devm.canonical_iff {devm : Devm} :
     Devm.Canonical devm
-      ↔ State.Canonical devm.state ∧ Tra.Canonical devm.transientStorage :=
+      ↔ State.Canonical devm.state ∧ TransientStorage.Canonical devm.transientStorage :=
   Iff.rfl
 
 theorem Devm.Canonical.withState {devm : Devm} (h : Devm.Canonical devm)
@@ -7830,14 +7830,14 @@ theorem Devm.Canonical.withState {devm : Devm} (h : Devm.Canonical devm)
   ⟨hw, h.2⟩
 
 theorem Devm.Canonical.withTransientStorage {devm : Devm}
-    (h : Devm.Canonical devm) {τ : Tra} (hτ : Tra.Canonical τ) :
+    (h : Devm.Canonical devm) {τ : TransientStorage} (hτ : TransientStorage.Canonical τ) :
     Devm.Canonical (devm.withTransientStorage τ) :=
   ⟨h.1, hτ⟩
 
 /-- Restoring a saved parent state is canonical exactly when what was saved
 was. The current world is irrelevant, which is the point of a rollback. -/
-theorem Devm.canonical_rollback {devm : Devm} {w : State} {τ : Tra}
-    (hw : State.Canonical w) (hτ : Tra.Canonical τ) :
+theorem Devm.canonical_rollback {devm : Devm} {w : State} {τ : TransientStorage}
+    (hw : State.Canonical w) (hτ : TransientStorage.Canonical τ) :
     Devm.Canonical (devm.rollback w τ) :=
   ⟨hw, hτ⟩
 
@@ -7859,7 +7859,7 @@ shapes fails here.
 `gasWarmAccess` is a global on both sides on purpose: no fork moves it, so the
 warm rows say "still 100" rather than restating a rule that did not change. -/
 
-private def guardAdr : Adr := 0x1000
+private def guardAdr : Address := 0x1000
 private def guardCold : AdrSet := .emptyWithCapacity
 private def guardWarm : AdrSet := guardCold.insert guardAdr
 
@@ -7879,8 +7879,8 @@ private def amsterdamGas : GasSchedule := amsterdamRules.gas
 -- surcharge, which is `0` at Prague and 100 at Amsterdam.
 #guard pragueGas.coldAccountAccess + pragueGas.codeReadSurcharge = 2600
 #guard amsterdamGas.coldAccountAccess + amsterdamGas.codeReadSurcharge = 3100
-#guard gasWarmAccess + pragueGas.codeReadSurcharge = 100
-#guard gasWarmAccess + amsterdamGas.codeReadSurcharge = 200
+#guard Gas.warmStorageReadCost + pragueGas.codeReadSurcharge = 100
+#guard Gas.warmStorageReadCost + amsterdamGas.codeReadSurcharge = 200
 
 -- `EXTCODEHASH` takes the repriced access and no surcharge.
 #guard pragueGas.coldAccountAccess = 2600
@@ -7892,14 +7892,14 @@ private def amsterdamGas : GasSchedule := amsterdamRules.gas
 #guard amsterdamGas.callValue = 11300
 #guard pragueGas.createAccess = 32000
 #guard amsterdamGas.createAccess = 12000
-#guard pragueGas.callValue = gasCallValue
-#guard pragueGas.createAccess = gasCreate
+#guard pragueGas.callValue = Gas.callValue
+#guard pragueGas.createAccess = Gas.create
 
 -- The stipend a value-bearing call hands its child is covered by the surcharge
 -- at both shapes. This is the inequality the Sufficiency family needs, checked
 -- as data here so a repricing that broke it fails before any proof does.
-#guard gCallStipend < pragueGas.callValue
-#guard gCallStipend < amsterdamGas.callValue
+#guard Gas.callStipend < pragueGas.callValue
+#guard Gas.callStipend < amsterdamGas.callValue
 
 /-! ### Site table: `SSTORE` over the (original, current, new) lattice
 
@@ -7917,9 +7917,9 @@ private def amsterdamState : StateGasRules := amsterdamStateGasRules
 -- cold-load charge plus `gasStorageSet`; an update to a non-zero slot is the
 -- cold-load charge plus the difference; a change to an already-warm slot that
 -- is not the first this transaction costs the warm access alone.
-#guard gasColdSload + gasStorageSet = 22100
-#guard gasColdSload + (gasStorageUpdate - gasColdSload) = 5000
-#guard gasWarmAccess = 100
+#guard Gas.coldSloadCost + Gas.sstoreSetGas = 22100
+#guard Gas.coldSloadCost + (Gas.sreset - Gas.coldSloadCost) = 5000
+#guard Gas.warmStorageReadCost = 100
 
 -- Amsterdam: access plus `STORAGE_WRITE` on the slot's first change, and
 -- nothing but the access otherwise. EIP-8038 re-derives the lattice above as
@@ -7991,9 +7991,9 @@ storage the parent will be rolled back to or rebuilt from
 (`liftToExecution`), so both components must be canonical; a settled machine
 is obliged outright. -/
 def Except.CanonicalSettle {ρ : Type} :
-    Except (ρ × State × AdrSet × Tra) Devm → Prop
+    Except (ρ × State × AdrSet × TransientStorage) Devm → Prop
   | .ok devm => devm.Canonical
-  | .error e => State.Canonical e.2.1 ∧ Tra.Canonical e.2.2.2
+  | .error e => State.Canonical e.2.1 ∧ TransientStorage.Canonical e.2.2.2
 
 /-- Sequencing preserves canonicality: the compositional lemma the whole
 interpreter corpus threads through. Nothing about a particular operation is
@@ -8083,7 +8083,7 @@ theorem chargeGas_canonical {c : Nat} {devm : Devm} (h : devm.Canonical) :
     (chargeGas c devm).Canonical :=
   liftMachExecution_canonical h
 
-theorem Devm.push_canonical {x : B256} {devm : Devm} (h : devm.Canonical) :
+theorem Devm.push_canonical {x : U256} {devm : Devm} (h : devm.Canonical) :
     (devm.push x).Canonical :=
   liftMachExecution_canonical h
 
@@ -8103,19 +8103,19 @@ theorem Devm.popN_canonicalOn {devm : Devm} {n : Nat} (h : devm.Canonical) :
     (devm.popN n).CanonicalOn (fun a => a.2.Canonical) :=
   liftMach_canonicalOn h
 
-theorem pushItem_canonical {x : B256} {c : Nat} {devm : Devm}
+theorem pushItem_canonical {x : U256} {c : Nat} {devm : Devm}
     (h : devm.Canonical) : (pushItem x c devm).Canonical :=
   liftMachExecution_canonical h
 
-theorem applyUnary_canonical {f : B256 → B256} {c : Nat} {devm : Devm}
+theorem applyUnary_canonical {f : U256 → U256} {c : Nat} {devm : Devm}
     (h : devm.Canonical) : (applyUnary f c devm).Canonical :=
   liftMachExecution_canonical h
 
-theorem applyBinary_canonical {f : B256 → B256 → B256} {c : Nat} {devm : Devm}
+theorem applyBinary_canonical {f : U256 → U256 → U256} {c : Nat} {devm : Devm}
     (h : devm.Canonical) : (applyBinary f c devm).Canonical :=
   liftMachExecution_canonical h
 
-theorem applyTernary_canonical {f : B256 → B256 → B256 → B256} {c : Nat}
+theorem applyTernary_canonical {f : U256 → U256 → U256 → U256} {c : Nat}
     {devm : Devm} (h : devm.Canonical) : (applyTernary f c devm).Canonical :=
   liftMachExecution_canonical h
 
@@ -8137,23 +8137,23 @@ theorem Devm.addLog_canonical {devm : Devm} {log : Log}
     (h : devm.Canonical) : (devm.addLog log).Canonical :=
   liftMachMetaPure_canonical h
 
-theorem Devm.emitTransferLog_canonical {devm : Devm} {sender recipient : Adr}
-    {amount : B256} (h : devm.Canonical) :
+theorem Devm.emitTransferLog_canonical {devm : Devm} {sender recipient : Address}
+    {amount : U256} (h : devm.Canonical) :
     (devm.emitTransferLog sender recipient amount).Canonical := by
   unfold Devm.emitTransferLog
   split
   · exact h
   · exact Devm.addLog_canonical h
 
-theorem addAccessedAddress_canonical {devm : Devm} {a : Adr}
+theorem addAccessedAddress_canonical {devm : Devm} {a : Address}
     (h : devm.Canonical) : (addAccessedAddress devm a).Canonical :=
   h.of_world_eq rfl
 
-theorem addAccessedStorageKey_canonical {devm : Devm} {a : Adr} {k : B256}
+theorem addAccessedStorageKey_canonical {devm : Devm} {a : Address} {k : U256}
     (h : devm.Canonical) : (addAccessedStorageKey devm a k).Canonical :=
   h.of_world_eq rfl
 
-theorem addAccountToDelete_canonical {devm : Devm} {a : Adr}
+theorem addAccountToDelete_canonical {devm : Devm} {a : Address}
     (h : devm.Canonical) : (addAccountToDelete devm a).Canonical :=
   h.of_world_eq rfl
 
@@ -8180,33 +8180,33 @@ theorem assertDynamic_canonicalOn {sevm : Sevm} {devm : Devm}
 -- and transient-storage ladder.
 
 theorem Devm.Canonical.setStorVal {devm : Devm} (h : devm.Canonical)
-    (adr : Adr) (k v : B256) : (devm.setStorVal adr k v).Canonical :=
+    (adr : Address) (k v : U256) : (devm.setStorVal adr k v).Canonical :=
   h.withState (State.Canonical.setStorVal h.1 adr k v)
 
 theorem Devm.Canonical.setTransVal {devm : Devm} (h : devm.Canonical)
-    (adr : Adr) (k v : B256) : (devm.setTransVal adr k v).Canonical :=
-  h.withTransientStorage (Tra.Canonical.setStorVal h.2 adr k v)
+    (adr : Address) (k v : U256) : (devm.setTransVal adr k v).Canonical :=
+  h.withTransientStorage (TransientStorage.Canonical.setStorageValue h.2 adr k v)
 
 theorem Devm.Canonical.setBal {devm : Devm} (h : devm.Canonical)
-    (adr : Adr) (v : B256) : (devm.setBal adr v).Canonical :=
+    (adr : Address) (v : U256) : (devm.setBal adr v).Canonical :=
   h.withState (State.Canonical.setBal h.1 adr v)
 
 theorem Devm.Canonical.addBal {devm : Devm} (h : devm.Canonical)
-    (adr : Adr) (v : B256) : (devm.addBal adr v).Canonical :=
+    (adr : Address) (v : U256) : (devm.addBal adr v).Canonical :=
   h.withState (State.Canonical.addBal h.1 adr v)
 
 theorem Devm.Canonical.creditBeneficiary {devm : Devm} (h : devm.Canonical)
-    (rules : ForkRules) (adr : Adr) (v : B256) :
+    (rules : ForkRules) (adr : Address) (v : U256) :
     (devm.creditBeneficiary rules adr v).Canonical := by
   unfold Devm.creditBeneficiary
   split
   · exact h.addBal adr v
   · exact Devm.Canonical.of_world_eq
-      (h.withState (h.1.setPresent adr (ac := (devm.state.get adr).withBal (devm.state.bal adr + v))
-        (h.1.stor adr))) rfl
+      (h.withState (h.1.setPresent adr (ac := (devm.state.get adr).withBalance (devm.state.bal adr + v))
+        (h.1.storage adr))) rfl
 
 theorem Devm.Canonical.subBal {devm devm' : Devm} (h : devm.Canonical)
-    {adr : Adr} {v : B256} (hs : devm.subBal adr v = some devm') :
+    {adr : Address} {v : U256} (hs : devm.subBal adr v = some devm') :
     devm'.Canonical := by
   unfold Devm.subBal at hs
   cases hw : devm.state.subBal adr v with
@@ -8218,11 +8218,11 @@ theorem Devm.Canonical.subBal {devm devm' : Devm} (h : devm.Canonical)
     exact h.withState (State.Canonical.subBal h.1 hw)
 
 theorem Devm.Canonical.incrNonce {devm : Devm} (h : devm.Canonical)
-    (adr : Adr) : (devm.incrNonce adr).Canonical :=
+    (adr : Address) : (devm.incrNonce adr).Canonical :=
   h.withState (State.Canonical.incrNonce h.1 adr)
 
 theorem Devm.Canonical.setCode {devm : Devm} (h : devm.Canonical)
-    (adr : Adr) (cd : ByteArray) : (devm.setCode adr cd).Canonical :=
+    (adr : Address) (cd : ByteArray) : (devm.setCode adr cd).Canonical :=
   h.withState (State.Canonical.setCode h.1 adr cd)
 
 -- The block-environment and message mutators used by frame construction,
@@ -8233,15 +8233,15 @@ theorem Benv.Canonical.withState {benv : Benv} (h : benv.Canonical)
   ⟨hs, h.2⟩
 
 theorem Benv.Canonical.setBal {benv : Benv} (h : benv.Canonical)
-    (adr : Adr) (v : B256) : (benv.setBal adr v).Canonical :=
+    (adr : Address) (v : U256) : (benv.setBal adr v).Canonical :=
   ⟨State.Canonical.setBal h.1 adr v, h.2⟩
 
 theorem Benv.Canonical.addBal {benv : Benv} (h : benv.Canonical)
-    (adr : Adr) (v : B256) : (benv.addBal adr v).Canonical :=
+    (adr : Address) (v : U256) : (benv.addBal adr v).Canonical :=
   ⟨State.Canonical.addBal h.1 adr v, h.2⟩
 
 theorem Benv.Canonical.subBal {benv benv' : Benv} (h : benv.Canonical)
-    {adr : Adr} {v : B256} (hs : benv.subBal adr v = some benv') :
+    {adr : Address} {v : U256} (hs : benv.subBal adr v = some benv') :
     benv'.Canonical := by
   unfold Benv.subBal at hs
   cases hw : benv.state.subBal adr v with
@@ -8253,16 +8253,16 @@ theorem Benv.Canonical.subBal {benv benv' : Benv} (h : benv.Canonical)
     exact h.withState (State.Canonical.subBal h.1 hw)
 
 theorem Benv.Canonical.incrNonce {benv : Benv} (h : benv.Canonical)
-    (adr : Adr) : (benv.incrNonce adr).Canonical :=
+    (adr : Address) : (benv.incrNonce adr).Canonical :=
   ⟨State.Canonical.incrNonce h.1 adr, h.2⟩
 
 theorem Benv.Canonical.setStor {benv : Benv} (h : benv.Canonical)
-    (adr : Adr) {s : Stor} (hs : Stor.Canonical s) :
+    (adr : Address) {s : Storage} (hs : Storage.Canonical s) :
     (benv.setStor adr s).Canonical :=
   ⟨State.Canonical.setStor h.1 adr hs, h.2⟩
 
 theorem Benv.Canonical.setStorVal {benv : Benv} (h : benv.Canonical)
-    (adr : Adr) (k v : B256) : (benv.setStorVal adr k v).Canonical :=
+    (adr : Address) (k v : U256) : (benv.setStorVal adr k v).Canonical :=
   ⟨State.Canonical.setStorVal h.1 adr k v, h.2⟩
 
 /-- Opening a transaction saves the current state as the transaction-original
@@ -8272,23 +8272,23 @@ theorem Benv.Canonical.beginTransaction {benv : Benv} (h : benv.Canonical) :
   ⟨h.1, h.1⟩
 
 theorem Benv.Canonical.addCreatedAccount {benv : Benv} (h : benv.Canonical)
-    (adr : Adr) : (addCreatedAccount benv adr).Canonical :=
+    (adr : Address) : (addCreatedAccount benv adr).Canonical :=
   ⟨h.1, h.2⟩
 
 theorem Tenv.Canonical.setTransVal {tenv : Tenv} (h : tenv.Canonical)
-    (adr : Adr) (k v : B256) : (tenv.setTransVal adr k v).Canonical :=
-  Tra.Canonical.setStorVal h adr k v
+    (adr : Address) (k v : U256) : (tenv.setTransVal adr k v).Canonical :=
+  TransientStorage.Canonical.setStorageValue h adr k v
 
 theorem Msg.Canonical.withBenv {msg : Msg} (h : msg.Canonical)
     {benv : Benv} (hb : benv.Canonical) : (msg.withBenv benv).Canonical :=
   ⟨hb, h.2⟩
 
 theorem Msg.Canonical.incrNonce {msg : Msg} (h : msg.Canonical)
-    (adr : Adr) : (msg.incrNonce adr).Canonical :=
+    (adr : Address) : (msg.incrNonce adr).Canonical :=
   ⟨⟨State.Canonical.incrNonce h.1.1 adr, h.1.2⟩, h.2⟩
 
 theorem Msg.Canonical.setCode {msg : Msg} (h : msg.Canonical)
-    (adr : Adr) (cd : ByteArray) : (msg.setCode adr cd).Canonical :=
+    (adr : Address) (cd : ByteArray) : (msg.setCode adr cd).Canonical :=
   ⟨⟨State.Canonical.setCode h.1.1 adr cd, h.1.2⟩, h.2⟩
 
 -- Child incorporation and the settlement-to-execution bridge: the parent's
@@ -8339,8 +8339,8 @@ theorem Except.canonicalOn_bind_ok {ρ α β : Type} {P : β → Prop} {a : α}
 /-- Sequencing on the settlement carrier: the error channel passes through
 unchanged, an ok machine feeds the continuation. -/
 theorem Except.CanonicalSettle.bind {ρ : Type}
-    {x : Except (ρ × State × AdrSet × Tra) Devm}
-    {f : Devm → Except (ρ × State × AdrSet × Tra) Devm}
+    {x : Except (ρ × State × AdrSet × TransientStorage) Devm}
+    {f : Devm → Except (ρ × State × AdrSet × TransientStorage) Devm}
     (hx : x.CanonicalSettle) (hf : ∀ d, d.Canonical → (f d).CanonicalSettle) :
     (x >>= f).CanonicalSettle := by
   cases x with
@@ -8474,13 +8474,13 @@ theorem liftMachExecution_worldFrame {core : Mach → Footprint.Outcome Mach Uni
   Footprint.toExecution_worldFrame (liftMach_worldFrameOn h)
 
 theorem Devm.balReadAccount_worldFrame {pre devm : Devm} {rules : ForkRules}
-    {a : Adr} (h : pre.WorldFrame devm) :
+    {a : Address} (h : pre.WorldFrame devm) :
     pre.WorldFrame (devm.balReadAccount rules a) := by
   unfold Devm.balReadAccount
   split <;> exact h.keep rfl rfl rfl
 
 theorem Devm.balReadStorage_worldFrame {pre devm : Devm} {rules : ForkRules}
-    {a : Adr} {k : B256} (h : pre.WorldFrame devm) :
+    {a : Address} {k : U256} (h : pre.WorldFrame devm) :
     pre.WorldFrame (devm.balReadStorage rules a k) := by
   unfold Devm.balReadStorage
   split <;> exact h.keep rfl rfl rfl
@@ -8498,11 +8498,11 @@ theorem Devm.memRead_eq_worldFrame {pre devm d' : Devm} {i s : Nat}
 
 /-- `BALANCE`'s core warms one address and records one read: neither touches
 the deletion-relevant sets. -/
-theorem Rinst.balanceCore_worldFrame {rules : ForkRules} {pre devm : Devm}
+theorem PlainOp.balanceCore_worldFrame {rules : ForkRules} {pre devm : Devm}
     (h : pre.WorldFrame devm) :
-    (liftMachMetaWorldExecution (Rinst.balanceCore rules) devm).WorldFrame pre := by
+    (liftMachMetaWorldExecution (PlainOp.balanceCore rules) devm).WorldFrame pre := by
   simp only [liftMachMetaWorldExecution, liftMachMetaExecution, liftMachMeta,
-    Footprint.liftOutcome, Rinst.balanceCore]
+    Footprint.liftOutcome, PlainOp.balanceCore]
   have hv : ∀ v : Meta, v.accountsToDelete = devm.meta.accountsToDelete →
       v.createdAccounts = devm.meta.createdAccounts →
       ∀ m, pre.WorldFrame { mach := m, «meta» := v, world := devm.world } :=
@@ -8510,36 +8510,36 @@ theorem Rinst.balanceCore_worldFrame {rules : ForkRules} {pre devm : Devm}
   rcases hp : devm.mach.pop with ⟨err, m⟩ | ⟨⟨x, m⟩⟩
   · exact hv _ rfl rfl m
   have h1 : (match rules.access with
-      | .eip2929 => if x.toAdr ∈ devm.meta.accessedAddresses then devm.meta
-          else devm.meta.addAccessedAddress x.toAdr
+      | .eip2929 => if x.toAddress ∈ devm.meta.accessedAddresses then devm.meta
+          else devm.meta.addAccessedAddress x.toAddress
       | .flat _ => devm.meta).accountsToDelete =
         devm.meta.accountsToDelete ∧
       (match rules.access with
-      | .eip2929 => if x.toAdr ∈ devm.meta.accessedAddresses then devm.meta
-          else devm.meta.addAccessedAddress x.toAdr
+      | .eip2929 => if x.toAddress ∈ devm.meta.accessedAddresses then devm.meta
+          else devm.meta.addAccessedAddress x.toAddress
       | .flat _ => devm.meta).createdAccounts =
         devm.meta.createdAccounts := by
     split <;> (try split) <;> exact ⟨rfl, rfl⟩
   simp only
   rcases Mach.chargeGas (match rules.access with
-      | .eip2929 => if x.toAdr ∈ devm.meta.accessedAddresses then gasWarmAccess
+      | .eip2929 => if x.toAddress ∈ devm.meta.accessedAddresses then Gas.warmStorageReadCost
           else rules.gas.coldAccountAccess
       | .flat g => g.balance) m with ⟨err, m'⟩ | ⟨_, m'⟩
   · exact hv _ h1.1 h1.2 m'
   simp only
-  rcases Mach.push (devm.world.state.get x.toAdr).bal m' with ⟨err, m''⟩ | ⟨_, m''⟩ <;>
+  rcases Mach.push (devm.world.state.get x.toAddress).balance m' with ⟨err, m''⟩ | ⟨_, m''⟩ <;>
     exact hv _ (by split <;> exact h1.1) (by split <;> exact h1.2) m''
 
 /-- The world frame through every register-instruction arm but the two
 writers. -/
-theorem Rinst.runCore_worldFrame (pc : Nat) (sevm : Sevm) (devm : Devm)
-    (r : Rinst) (hs : r ≠ .sstore) (ht : r ≠ .tstore) :
-    (Rinst.runCore pc devm sevm r).WorldFrame devm := by
+theorem PlainOp.runCore_worldFrame (pc : Nat) (sevm : Sevm) (devm : Devm)
+    (r : PlainOp) (hs : r ≠ .sstore) (ht : r ≠ .tstore) :
+    (PlainOp.runCore pc devm sevm r).WorldFrame devm := by
   have h := Devm.WorldFrame.refl devm
-  cases r <;> simp only [Rinst.runCore]
+  cases r <;> simp only [PlainOp.runCore]
   case sstore => exact absurd rfl hs
   case tstore => exact absurd rfl ht
-  case balance => exact Rinst.balanceCore_worldFrame h
+  case balance => exact PlainOp.balanceCore_worldFrame h
   case mload =>
     refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) ?_
     rintro ⟨start, d1⟩ h1
@@ -8548,8 +8548,8 @@ theorem Rinst.runCore_worldFrame (pc : Nat) (sevm : Sevm) (devm : Devm)
     rcases hread : d2.memRead start 32 with ⟨val, d3⟩
     exact liftMachExecution_worldFrame (Devm.memRead_eq_worldFrame h2 hread)
   case keccak256 =>
-    have hbr := Rinst.runCore_keccak256_eq_reference pc devm sevm
-    show (Rinst.runCore pc devm sevm .keccak256).WorldFrame devm
+    have hbr := PlainOp.runCore_keccak256_eq_reference pc devm sevm
+    show (PlainOp.runCore pc devm sevm .keccak256).WorldFrame devm
     rw [hbr]
     refine Except.WorldFrameOn.bind (liftMach_worldFrameOn h) ?_
     rintro ⟨start, d1⟩ h1
@@ -8699,18 +8699,18 @@ theorem Rinst.runCore_worldFrame (pc : Nat) (sevm : Sevm) (devm : Devm)
     · exact hd
     · exact hd.keep rfl rfl rfl
 
-theorem Rinst.run_worldFrame (evm : Evm) (r : Rinst) (hs : r ≠ .sstore)
-    (ht : r ≠ .tstore) : (Rinst.run evm r).WorldFrame evm.dyna :=
-  Rinst.runCore_worldFrame evm.pc evm.sta evm.dyna r hs ht
+theorem PlainOp.run_worldFrame (evm : Evm) (r : PlainOp) (hs : r ≠ .sstore)
+    (ht : r ≠ .tstore) : (PlainOp.run evm r).WorldFrame evm.dyna :=
+  PlainOp.runCore_worldFrame evm.pc evm.sta evm.dyna r hs ht
 
 /-- Jump instructions keep the frame; the payload carries the new program
 counter beside the machine. -/
-theorem Jinst.runCore_worldFrame (pc : Nat) (sevm : Sevm) (devm : Devm)
-    (j : Jinst) :
-    (Jinst.runCore pc devm sevm j).WorldFrameOn devm
+theorem JumpOp.runCore_worldFrame (pc : Nat) (sevm : Sevm) (devm : Devm)
+    (j : JumpOp) :
+    (JumpOp.runCore pc devm sevm j).WorldFrameOn devm
       (fun a => devm.WorldFrame a.2) := by
   have h := Devm.WorldFrame.refl devm
-  cases j <;> simp only [Jinst.runCore]
+  cases j <;> simp only [JumpOp.runCore]
   case jumpdest =>
     exact Except.WorldFrameOn.bind (liftMachExecution_worldFrame h) fun d hd => hd
   case jump =>
@@ -8725,15 +8725,15 @@ theorem Jinst.runCore_worldFrame (pc : Nat) (sevm : Sevm) (devm : Devm)
     · exact hd
     · exact Except.WorldFrameOn.bind (Except.worldFrameOn_assert hd) fun _ _ => hd
 
-theorem Jinst.run_worldFrame (evm : Evm) (j : Jinst) :
-    (Jinst.run evm j).WorldFrameOn evm.dyna (fun a => evm.dyna.WorldFrame a.2) :=
-  Jinst.runCore_worldFrame evm.pc evm.sta evm.dyna j
+theorem JumpOp.run_worldFrame (evm : Evm) (j : JumpOp) :
+    (JumpOp.run evm j).WorldFrameOn evm.dyna (fun a => evm.dyna.WorldFrame a.2) :=
+  JumpOp.runCore_worldFrame evm.pc evm.sta evm.dyna j
 
 /-- The halting instructions other than `SELFDESTRUCT` keep the frame. -/
-theorem Linst.run_worldFrame (sevm : Sevm) (devm : Devm) (l : Linst)
-    (hl : l ≠ .selfdestruct) : Execution.WorldFrame devm (Linst.run sevm devm l) := by
+theorem HaltOp.run_worldFrame (sevm : Sevm) (devm : Devm) (l : HaltOp)
+    (hl : l ≠ .selfdestruct) : Execution.WorldFrame devm (HaltOp.run sevm devm l) := by
   have h := Devm.WorldFrame.refl devm
-  cases l <;> simp only [Linst.run]
+  cases l <;> simp only [HaltOp.run]
   case selfdestruct => exact absurd rfl hl
   case stop => exact h
   case revert | return_ =>
@@ -8746,12 +8746,12 @@ theorem Linst.run_worldFrame (sevm : Sevm) (devm : Devm) (l : Linst)
 /-- Canonicality through every register-instruction arm. Only `SSTORE` and
 `TSTORE` change the world, each through its named mutator, and are walked
 here; every other arm keeps the world frame (`Rinst.runCore_worldFrame`). -/
-theorem Rinst.runCore_canonical (pc : Nat) {devm : Devm} (sevm : Sevm)
-    (h : devm.Canonical) (r : Rinst) :
-    (Rinst.runCore pc devm sevm r).Canonical := by
+theorem PlainOp.runCore_canonical (pc : Nat) {devm : Devm} (sevm : Sevm)
+    (h : devm.Canonical) (r : PlainOp) :
+    (PlainOp.runCore pc devm sevm r).Canonical := by
   by_cases hs : r = .sstore
   · subst hs
-    simp only [Rinst.runCore]
+    simp only [PlainOp.runCore]
     split
     · -- The `none` arm: Prague first, then the pre-Berlin regimes.
       split
@@ -8809,7 +8809,7 @@ theorem Rinst.runCore_canonical (pc : Nat) {devm : Devm} (sevm : Sevm)
          exact Devm.Canonical.setStorVal hd' _ _ _)
   by_cases ht : r = .tstore
   · subst ht
-    simp only [Rinst.runCore]
+    simp only [PlainOp.runCore]
     split
     · -- Gate on: the two metering shapes below, as before.
       split
@@ -8829,15 +8829,15 @@ theorem Rinst.runCore_canonical (pc : Nat) {devm : Devm} (sevm : Sevm)
         exact Devm.Canonical.setTransVal hd _ _ _
     · -- Gate off: the undefined-opcode error keeps the machine.
       exact h
-  exact (Rinst.runCore_worldFrame pc sevm devm r hs ht).canonical h
+  exact (PlainOp.runCore_worldFrame pc sevm devm r hs ht).canonical h
 
-theorem Rinst.run_canonical {evm : Evm} (h : evm.dyna.Canonical) (r : Rinst) :
-    (Rinst.run evm r).Canonical :=
-  Rinst.runCore_canonical evm.pc evm.sta h r
+theorem PlainOp.run_canonical {evm : Evm} (h : evm.dyna.Canonical) (r : PlainOp) :
+    (PlainOp.run evm r).Canonical :=
+  PlainOp.runCore_canonical evm.pc evm.sta h r
 
 /-- Destroying any list of accounts preserves canonicality; transaction
 settlement folds `destroyAccount` over the accounts-to-delete set. -/
-theorem State.Canonical.foldl_destroyAccount {l : List Adr} {w : State}
+theorem State.Canonical.foldl_destroyAccount {l : List Address} {w : State}
     (h : w.Canonical) : (l.foldl Jaune.destroyAccount w).Canonical := by
   induction l generalizing w with
   | nil => exact h
@@ -8845,24 +8845,24 @@ theorem State.Canonical.foldl_destroyAccount {l : List Adr} {w : State}
 
 /-- Jump instructions never touch the world; the payload carries the new
 program counter beside the machine. -/
-theorem Jinst.runCore_canonicalOn (pc : Nat) {devm : Devm} (sevm : Sevm)
-    (h : devm.Canonical) (j : Jinst) :
-    (Jinst.runCore pc devm sevm j).CanonicalOn (fun a => a.2.Canonical) :=
-  (Jinst.runCore_worldFrame pc sevm devm j).canonicalOn h
+theorem JumpOp.runCore_canonicalOn (pc : Nat) {devm : Devm} (sevm : Sevm)
+    (h : devm.Canonical) (j : JumpOp) :
+    (JumpOp.runCore pc devm sevm j).CanonicalOn (fun a => a.2.Canonical) :=
+  (JumpOp.runCore_worldFrame pc sevm devm j).canonicalOn h
     fun _ ha => h.of_worldFrame ha
 
-theorem Jinst.run_canonicalOn {evm : Evm} (h : evm.dyna.Canonical) (j : Jinst) :
-    (Jinst.run evm j).CanonicalOn (fun a => a.2.Canonical) :=
-  Jinst.runCore_canonicalOn evm.pc evm.sta h j
+theorem JumpOp.run_canonicalOn {evm : Evm} (h : evm.dyna.Canonical) (j : JumpOp) :
+    (JumpOp.run evm j).CanonicalOn (fun a => a.2.Canonical) :=
+  JumpOp.runCore_canonicalOn evm.pc evm.sta h j
 
 /-- Canonicality through the halting instructions. `SELFDESTRUCT` is the one
 world-changing arm, and it factors through `subBal`/`addBal`/`setBal`. -/
-theorem Linst.run_canonical {sevm : Sevm} {devm : Devm}
-    (h : devm.Canonical) (l : Linst) :
-    Execution.Canonical (Linst.run sevm devm l) := by
+theorem HaltOp.run_canonical {sevm : Sevm} {devm : Devm}
+    (h : devm.Canonical) (l : HaltOp) :
+    Execution.Canonical (HaltOp.run sevm devm l) := by
   by_cases hl : l = .selfdestruct
   · subst hl
-    simp only [Linst.run]
+    simp only [HaltOp.run]
     split
     · -- Prague: the body it has always been.
       refine Except.CanonicalOn.bind (liftMach_canonicalOn h) fun a ha => ?_
@@ -8877,7 +8877,7 @@ theorem Linst.run_canonical {sevm : Sevm} {devm : Devm}
          -- The EIP-7928 read recorders are meta-only: read the balance through them.
          simp only [Devm.balReadAccount_getAcct]
          refine Except.CanonicalOn.bind (P := Devm.Canonical) ?_ fun d' hd' => ?_
-         · cases hs : d.subBal sevm.currentTarget (a.2.getAcct sevm.currentTarget).bal with
+         · cases hs : d.subBal sevm.currentTarget (a.2.getAcct sevm.currentTarget).balance with
            | none => exact hd
            | some d1 => exact Devm.Canonical.subBal hd hs
          · refine Except.canonicalOn_bind_ok ?_
@@ -8905,6 +8905,6 @@ theorem Linst.run_canonical {sevm : Sevm} {devm : Devm}
            · exact addAccountToDelete_canonical
                (Devm.emitTransferLog_canonical (Devm.Canonical.addBal hd2 a.1 _))
            · exact Devm.emitTransferLog_canonical (Devm.Canonical.addBal hd2 a.1 _))
-  exact (Linst.run_worldFrame sevm devm l hl).canonical h
+  exact (HaltOp.run_worldFrame sevm devm l hl).canonical h
 
 end Jaune

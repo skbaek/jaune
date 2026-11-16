@@ -22,18 +22,18 @@ returns the updated `Seen` when the message is valid. `ctx.blsActive` is pyspec'
 namespace JauneConsensus.Gossip
 open Jaune (Bytes)
 
-variable {P : Preset} {f : CFork} {Ext : Type}
+variable {P : Preset} {f : ConsensusFork} {Ext : Type}
 
 /-- `validate_voluntary_exit_gossip` (deneb). -/
 def validateVoluntaryExitGossip (ctx : Ctx) (seen : Seen Ext) (store : HeadView (BeaconState P f))
-    (signedVoluntaryExit : SignedVoluntaryExit) (currentTimeMs : U64) : GM (Seen Ext) := do
+    (signedVoluntaryExit : SignedVoluntaryExit) (currentTimeMs : U64) : Validation (Seen Ext) := do
   let voluntaryExit := signedVoluntaryExit.message
   let validatorIndex := voluntaryExit.validator_index
   -- [IGNORE] The voluntary exit is the first valid voluntary exit received for the validator
   if seen.voluntary_exit_indices.contains validatorIndex then
     ignore "already seen voluntary exit for this validator"
   -- [IGNORE] The voluntary exit epoch is not in the future
-  if ← isFutureEpoch P ctx.cfg store.genesisTimeMs voluntaryExit.epoch.toNat currentTimeMs then
+  if ← isFutureEpoch P ctx.config store.genesisTimeMs voluntaryExit.epoch.toNat currentTimeMs then
     ignore "voluntary exit epoch is in the future"
   let state := store.headState
   -- [REJECT] The validator index is valid
@@ -45,11 +45,11 @@ def validateVoluntaryExitGossip (ctx : Ctx) (seen : Seen Ext) (store : HeadView 
   -- [REJECT] The validator is active
   if !isActiveValidator validator currentEpoch then reject "validator is not active"
   -- [REJECT] The validator has been active long enough
-  if currentEpoch < (← U64.add? validator.activation_epoch (← c64 ctx.cfg.SHARD_COMMITTEE_PERIOD)
+  if currentEpoch < (← U64.add? validator.activation_epoch (← u64Checked ctx.config.SHARD_COMMITTEE_PERIOD)
       "validate_voluntary_exit_gossip") then
     reject "validator has not been active long enough"
   -- [Modified in Deneb:EIP7044] [REJECT] The signature is valid
-  let domain := computeDomain DOMAIN_VOLUNTARY_EXIT (← versionOf ctx.cfg.CAPELLA_FORK_VERSION)
+  let domain := computeDomain DOMAIN_VOLUNTARY_EXIT (← versionOf ctx.config.CAPELLA_FORK_VERSION)
     state.genesis_validators_root
   let signingRoot := computeSigningRoot voluntaryExit domain
   if !blsVerify ctx.blsActive validator.pubkey signingRoot signedVoluntaryExit.signature then
@@ -59,7 +59,7 @@ def validateVoluntaryExitGossip (ctx : Ctx) (seen : Seen Ext) (store : HeadView 
 
 /-- `validate_proposer_slashing_gossip` (phase0). -/
 def validateProposerSlashingGossip (ctx : Ctx) (seen : Seen Ext)
-    (store : HeadView (BeaconState P f)) (proposerSlashing : ProposerSlashing) : GM (Seen Ext) := do
+    (store : HeadView (BeaconState P f)) (proposerSlashing : ProposerSlashing) : Validation (Seen Ext) := do
   let header1 := proposerSlashing.signed_header_1.message
   let header2 := proposerSlashing.signed_header_2.message
   let proposerIndex := header1.proposer_index
@@ -98,7 +98,7 @@ def intersectIndices (a b : List ValidatorIndex) : List ValidatorIndex :=
 /-- `validate_attester_slashing_gossip` (phase0; Electra sizes). -/
 def validateAttesterSlashingGossip (ctx : Ctx) (seen : Seen Ext)
     (store : HeadView (BeaconState P f)) (attesterSlashing : AttesterSlashing P f) :
-    GM (Seen Ext) := do
+    Validation (Seen Ext) := do
   let attestation1 := attesterSlashing.attestation_1
   let attestation2 := attesterSlashing.attestation_2
   let indices1 := attestation1.attesting_indices.toArray.toList
@@ -139,14 +139,14 @@ def validateAttesterSlashingGossip (ctx : Ctx) (seen : Seen Ext)
 /-- `validate_bls_to_execution_change_gossip` (capella). -/
 def validateBlsToExecutionChangeGossip (ctx : Ctx) (seen : Seen Ext)
     (store : HeadView (BeaconState P f)) (signedChange : SignedBLSToExecutionChange)
-    (currentTimeMs : U64) : GM (Seen Ext) := do
+    (currentTimeMs : U64) : Validation (Seen Ext) := do
   let change := signedChange.message
   let validatorIndex := change.validator_index
   -- [IGNORE] This is the first valid bls_to_execution_change received for the validator
   if seen.bls_to_execution_change_indices.contains validatorIndex then
     ignore "already seen BLS to execution change for this validator"
   -- [IGNORE] The current epoch is at or after the Capella fork epoch
-  if ← isFutureEpoch P ctx.cfg store.genesisTimeMs ctx.cfg.CAPELLA_FORK_EPOCH currentTimeMs then
+  if ← isFutureEpoch P ctx.config store.genesisTimeMs ctx.config.CAPELLA_FORK_EPOCH currentTimeMs then
     ignore "current epoch is pre-capella"
   let state := store.headState
   -- [REJECT] The validator index is valid
@@ -162,7 +162,7 @@ def validateBlsToExecutionChangeGossip (ctx : Ctx) (seen : Seen Ext)
     reject "pubkey does not match validator withdrawal credentials"
   -- [REJECT] The signature is valid
   let domain := computeDomain DOMAIN_BLS_TO_EXECUTION_CHANGE
-    (← versionOf ctx.cfg.GENESIS_FORK_VERSION) state.genesis_validators_root
+    (← versionOf ctx.config.GENESIS_FORK_VERSION) state.genesis_validators_root
   let signingRoot := computeSigningRoot change domain
   if !blsVerify ctx.blsActive pubkey signingRoot signedChange.signature then
     reject "invalid BLS to execution change signature"
@@ -172,14 +172,14 @@ def validateBlsToExecutionChangeGossip (ctx : Ctx) (seen : Seen Ext)
 
 /-- `get_sync_subcommittee_pubkeys(state, subcommittee_index)` (altair). -/
 def getSyncSubcommitteePubkeys (state : BeaconState P f) (subcommitteeIndex : U64) :
-    M (List BLSPubkey) := do
+    Fallible (List BLSPubkey) := do
   let committee ← syncCommitteeForNextSlot P state.slot state.current_sync_committee
     state.next_sync_committee
   pure (subcommitteePubkeys P committee subcommitteeIndex)
 
 /-- `compute_subnets_for_sync_committee(state, validator_index)` (`specs/altair/validator.md`). -/
 def computeSubnetsForSyncCommittee (state : BeaconState P f) (validatorIndex : ValidatorIndex) :
-    M (List Nat) := do
+    Fallible (List Nat) := do
   let committee ← syncCommitteeForNextSlot P state.slot state.current_sync_committee
     state.next_sync_committee
   let target ← state.validators.get validatorIndex.toNat "compute_subnets_for_sync_committee"
@@ -188,7 +188,7 @@ def computeSubnetsForSyncCommittee (state : BeaconState P f) (validatorIndex : V
 /-- `validate_sync_committee_contribution_and_proof_gossip` (altair). -/
 def validateSyncCommitteeContributionAndProofGossip (ctx : Ctx) (seen : Seen Ext)
     (store : HeadView (BeaconState P f)) (signed : SignedContributionAndProof P)
-    (currentTimeMs : U64) : GM (Seen Ext) := do
+    (currentTimeMs : U64) : Validation (Seen Ext) := do
   let contributionAndProof := signed.message
   let contribution := contributionAndProof.contribution
   -- [IGNORE] A valid contribution with equal slot, beacon_block_root and subcommittee_index whose
@@ -205,7 +205,7 @@ def validateSyncCommitteeContributionAndProofGossip (ctx : Ctx) (seen : Seen Ext
   if seen.sync_contribution_aggregator_slots.contains aggregatorKey then
     ignore "already seen contribution from this aggregator"
   -- [IGNORE] The contribution's slot is for the current slot
-  if !(← isCurrentSlot ctx.cfg store.genesisTimeMs contribution.slot currentTimeMs) then
+  if !(← isCurrentSlot ctx.config store.genesisTimeMs contribution.slot currentTimeMs) then
     ignore "contribution is not for the current slot"
   -- [REJECT] The subcommittee index is in the allowed range
   if contribution.subcommittee_index.toNat ≥ SYNC_COMMITTEE_SUBNET_COUNT then
@@ -253,13 +253,13 @@ def validateSyncCommitteeContributionAndProofGossip (ctx : Ctx) (seen : Seen Ext
 /-- `validate_sync_committee_message_gossip` (altair). -/
 def validateSyncCommitteeMessageGossip (ctx : Ctx) (seen : Seen Ext)
     (store : HeadView (BeaconState P f)) (message : SyncCommitteeMessage) (currentTimeMs : U64)
-    (subnetId : U64) : GM (Seen Ext) := do
+    (subnetId : U64) : Validation (Seen Ext) := do
   -- [IGNORE] No other valid sync committee message for the slot, validator and subnet
   let messageKey := (message.slot, message.validator_index, subnetId)
   if seen.sync_message_validator_slots.contains messageKey then
     ignore "already seen message from this validator for this slot and subnet"
   -- [IGNORE] The message's slot is for the current slot
-  if !(← isCurrentSlot ctx.cfg store.genesisTimeMs message.slot currentTimeMs) then
+  if !(← isCurrentSlot ctx.config store.genesisTimeMs message.slot currentTimeMs) then
     ignore "message is not for the current slot"
   let state := store.headState
   -- [REJECT] The validator index is valid

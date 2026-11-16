@@ -42,7 +42,7 @@ def offsetsOf : List (Sum Bytes Nat) → List Nat
   | .inr o :: rest => o :: offsetsOf rest
 
 /-- Replace each offset by its cut variable part, in order. -/
-def fillVariable : List (Sum Bytes Nat) → List Bytes → M (List Bytes)
+def fillVariable : List (Sum Bytes Nat) → List Bytes → Fallible (List Bytes)
   | [], [] => pure []
   | .inl b :: rest, vs => do pure (b :: (← fillVariable rest vs))
   | .inr _ :: rest, v :: vs => do pure (v :: (← fillVariable rest vs))
@@ -51,7 +51,7 @@ def fillVariable : List (Sum Bytes Nat) → List Bytes → M (List Bytes)
 /-- Split a container scope into its field scopes ("Deserialization"): the scope holds the
 whole fixed part; the first offset equals the fixed part's length; offsets are non-decreasing
 and within the scope; a container with no variable-size field has no extra bytes. -/
-def splitContainer (bs : Bytes) (sizes : List (Option Nat)) : M (List Bytes) := do
+def splitContainer (bs : Bytes) (sizes : List (Option Nat)) : Fallible (List Bytes) := do
   let scope := bs.length
   let fixedLen := fixedPartLength sizes
   if scope < fixedLen then throw (.decode (.length fixedLen scope))
@@ -67,7 +67,7 @@ def splitContainer (bs : Bytes) (sizes : List (Option Nat)) : M (List Bytes) := 
     fillVariable items parts
 
 /-- The decoder state over the remaining field scopes. -/
-abbrev FieldDecoder := StateT (List Bytes) M
+abbrev FieldDecoder := StateT (List Bytes) Fallible
 
 /-- Decode the next field from its scope. -/
 def nextField {α : Type} [Ssz α] : FieldDecoder α := do
@@ -75,14 +75,14 @@ def nextField {α : Type} [Ssz α] : FieldDecoder α := do
   | [] => throw (.decode (.offset "missing field"))
   | b :: rest =>
     set rest
-    StateT.lift (deserialize b : M α)
+    StateT.lift (deserialize b : Fallible α)
 
 /-- The Merkle leaf of a field, or none for an absent fork-gated field. -/
-@[inline] def fieldRoot? {α : Type} [Ssz α] (x : α) : Option B256 :=
+@[inline] def fieldRoot? {α : Type} [Ssz α] (x : α) : Option Jaune.U256 :=
   if Ssz.present α then some (hashTreeRoot x) else none
 
 /-- `merkleize` of the present fields' roots (a container's `hash_tree_root`). -/
-def containerRoot (roots : List (Option B256)) : B256 :=
+def containerRoot (roots : List (Option Jaune.U256)) : Jaune.U256 :=
   let rs := roots.filterMap id
   merkleizeDepth rs (depthOf rs.length)
 
@@ -117,7 +117,7 @@ macro_rules
         deriving DecidableEq, BEq
       /-- The Merkle leaves of the fields, in order (`none` for an absent fork-gated field):
       the chunks `hash_tree_root` merkleizes and `compute_merkle_proof` builds proofs over. -/
-      def $fieldRootsId $[{$ps : $pts}]* (x : $ty) : List (Option B256) := [$roots,*]
+      def $fieldRootsId $[{$ps : $pts}]* (x : $ty) : List (Option Jaune.U256) := [$roots,*]
       instance $[($ps : $pts)]* : Ssz $ty where
         fixedSize? := containerFixedSize [$[Ssz.fixedSize? $ts],*]
         serialize := fun x => serializeParts [$parts,*]

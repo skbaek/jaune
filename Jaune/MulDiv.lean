@@ -40,60 +40,60 @@ Mathlib's `Nat.ceilDiv_eq_add_pred_div`, `ceilDiv_zero` and
 /-! ## Word-level bridges -/
 
 /-- No-overflow predicate for `B256` multiplication, mirroring `B256.Nof`. -/
-def B256.Nofm (xs ys : B256) : Prop := xs.toNat * ys.toNat < 2 ^ 256
+def U256.MulNoOverflow (xs ys : U256) : Prop := xs.toNat * ys.toNat < 2 ^ 256
 
-theorem B256.toNat_ne_zero {z : B256} (h : z ≠ 0) : z.toNat ≠ 0 := by
+theorem U256.toNat_ne_zero {z : U256} (h : z ≠ 0) : z.toNat ≠ 0 := by
   intro hz
-  exact h (B256.toNat_inj z 0 (by rw [hz, B256.toNat_zero]))
+  exact h (U256.toNat_inj z 0 (by rw [hz, U256.toNat_zero]))
 
-theorem B256.toNat_pos {z : B256} (h : z ≠ 0) : 0 < z.toNat :=
-  Nat.pos_of_ne_zero (B256.toNat_ne_zero h)
+theorem U256.toNat_pos {z : U256} (h : z ≠ 0) : 0 < z.toNat :=
+  Nat.pos_of_ne_zero (U256.toNat_ne_zero h)
 
-theorem B256.toNat_one : (1 : B256).toNat = 1 := rfl
+theorem U256.toNat_one : (1 : U256).toNat = 1 := rfl
 
 /-- The discharge route for the multiplication guard: the check compiled code
 actually performs, against the largest representable word. -/
-theorem B256.nofm_iff_le_div {y : B256} (hy : y ≠ 0) (x : B256) :
-    B256.Nofm x y ↔ x.toNat ≤ (2 ^ 256 - 1) / y.toNat := by
+theorem U256.mul_no_overflow_iff_le_div {y : U256} (hy : y ≠ 0) (x : U256) :
+    U256.MulNoOverflow x y ↔ x.toNat ≤ (2 ^ 256 - 1) / y.toNat := by
   have hpos : 0 < 2 ^ 256 := Nat.two_pow_pos 256
-  rw [B256.Nofm, Nat.le_div_iff_mul_le (B256.toNat_pos hy)]
+  rw [U256.MulNoOverflow, Nat.le_div_iff_mul_le (U256.toNat_pos hy)]
   omega
 
 /-- The full-width product, truncated: the multiplication a word actually does.
 This is the `%`-spelling of the existing `B256.toNat_mul`, whose `↾ 256` is the
 same function; it is stated here because the `Nat` lemmas below are written
 with `%`. -/
-theorem B256.toNat_mul_mod (x y : B256) :
+theorem U256.toNat_mul_mod (x y : U256) :
     (x * y).toNat = x.toNat * y.toNat % 2 ^ 256 :=
-  B256.toNat_mul x y
+  U256.toNat_mul x y
 
 /-- The untruncated product, available exactly when it does not overflow. -/
-theorem B256.toNat_mul_eq_of_nofm {x y : B256} (h : B256.Nofm x y) :
+theorem U256.toNat_mul_eq_of_mul_no_overflow {x y : U256} (h : U256.MulNoOverflow x y) :
     (x * y).toNat = x.toNat * y.toNat := by
-  rw [B256.toNat_mul, Nat.lo_eq_of_lt h]
+  rw [U256.toNat_mul, Nat.lo_eq_of_lt h]
 
 /-- The `div` half of the div/mod pair. The `mod` half is the pre-existing
 `B256.toNat_mod`. Neither truncates: both results are bounded by an operand. -/
-theorem B256.toNat_div {x y : B256} (h : y ≠ 0) :
+theorem U256.toNat_div {x y : U256} (h : y ≠ 0) :
     (x / y).toNat = x.toNat / y.toNat := by
-  show (B256.divMod x y).fst.toNat = _
-  rw [B256.divMod, ite_eq_right h]
-  exact B256.toNat_toB256_of_lt
-    (Nat.lt_of_le_of_lt (Nat.div_le_self _ _) (B256.toNat_lt x))
+  show (U256.divMod x y).fst.toNat = _
+  rw [U256.divMod, ite_eq_right h]
+  exact U256.toNat_toU256_of_lt
+    (Nat.lt_of_le_of_lt (Nat.div_le_self _ _) (U256.toNat_lt x))
 
 /-- `mulmod` computes the full-width product modulo `z`, with no intermediate
 truncation: the identity that makes it usable as an exact-arithmetic primitive. -/
-theorem B256.toNat_mulmod {x y z : B256} (h : z ≠ 0) :
-    (B256.mulmod x y z).toNat = x.toNat * y.toNat % z.toNat := by
-  rw [B256.mulmod, ite_eq_right h]
-  exact B256.toNat_toB256_of_lt
-    (Nat.lt_trans (Nat.mod_lt _ (B256.toNat_pos h)) (B256.toNat_lt z))
+theorem U256.toNat_mulmod {x y z : U256} (h : z ≠ 0) :
+    (U256.mulmod x y z).toNat = x.toNat * y.toNat % z.toNat := by
+  rw [U256.mulmod, ite_eq_right h]
+  exact U256.toNat_toU256_of_lt
+    (Nat.lt_trans (Nat.mod_lt _ (U256.toNat_pos h)) (U256.toNat_lt z))
 
-theorem B256.toNat_addmod {x y z : B256} (h : z ≠ 0) :
-    (B256.addmod x y z).toNat = (x.toNat + y.toNat) % z.toNat := by
-  rw [B256.addmod, ite_eq_right h]
-  exact B256.toNat_toB256_of_lt
-    (Nat.lt_trans (Nat.mod_lt _ (B256.toNat_pos h)) (B256.toNat_lt z))
+theorem U256.toNat_addmod {x y z : U256} (h : z ≠ 0) :
+    (U256.addmod x y z).toNat = (x.toNat + y.toNat) % z.toNat := by
+  rw [U256.addmod, ite_eq_right h]
+  exact U256.toNat_toU256_of_lt
+    (Nat.lt_trans (Nat.mod_lt _ (U256.toNat_pos h)) (U256.toNat_lt z))
 
 /-! ## A1 — the defining bounds of floor and ceiling division -/
 
@@ -378,9 +378,9 @@ theorem Nat.mul_add_div_add_le {o : Nat} (ho : o ≠ 0) (x s t e : Nat) :
 /-- The bridge the compiled code actually crosses: a `mulDiv` at word level is
 the `Nat`-level one, provided the product does not wrap. The quotient itself
 cannot overflow, so `Nofm` is the only guard needed. -/
-theorem B256.toNat_mul_div_of_nofm {x y z : B256} (h : B256.Nofm x y) (hz : z ≠ 0) :
+theorem U256.toNat_mul_div_of_mul_no_overflow {x y z : U256} (h : U256.MulNoOverflow x y) (hz : z ≠ 0) :
     (x * y / z).toNat = x.toNat * y.toNat / z.toNat := by
-  rw [B256.toNat_div hz, B256.toNat_mul_eq_of_nofm h]
+  rw [U256.toNat_div hz, U256.toNat_mul_eq_of_mul_no_overflow h]
 
 /-! ## Cross-denominator comparison -/
 
