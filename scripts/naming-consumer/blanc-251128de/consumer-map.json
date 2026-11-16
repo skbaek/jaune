@@ -1,0 +1,128 @@
+{
+ "schema_version": 1,
+ "retired_tokens": [],
+ "allowed_abbreviations": [],
+ "description": "Derived by naming-tree.py consumer-map: consumer declarations authored inside dependency namespaces renamed by the map with sha256 f36c7c82cb24437889c68092ee0908d9ec6b0f7146ff4242ba713854483dbcf7",
+ "entries": [
+  {
+   "old": "Jaune.Ninst.Run.toRunWith",
+   "new": "Jaune.NextOp.Run.toRunWith",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4, 7",
+   "source": "consumer declaration (module Blanc.LadderSem) inside the renamed dependency namespace Jaune.Ninst.Run -> Jaune.NextOp.Run; follows map row Jaune.Ninst.Run -> Jaune.NextOp.Run"
+  },
+  {
+   "old": "Jaune.Ninst.RunWith",
+   "new": "Jaune.NextOp.RunWith",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4, 7",
+   "source": "consumer declaration (module Blanc.LadderSem) inside the renamed dependency namespace Jaune.Ninst -> Jaune.NextOp; follows map row Jaune.Ninst -> Jaune.NextOp"
+  },
+  {
+   "old": "Jaune.Ninst.RunWith.mono",
+   "new": "Jaune.NextOp.RunWith.mono",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4, 7",
+   "source": "consumer declaration (module Blanc.LadderSem) inside the renamed dependency namespace Jaune.Ninst.RunWith -> Jaune.NextOp.RunWith; follows map row Jaune.Ninst -> Jaune.NextOp"
+  },
+  {
+   "old": "Jaune.Ninst.RunWith.toRun",
+   "new": "Jaune.NextOp.RunWith.toRun",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4, 7",
+   "source": "consumer declaration (module Blanc.LadderSem) inside the renamed dependency namespace Jaune.Ninst.RunWith -> Jaune.NextOp.RunWith; follows map row Jaune.Ninst -> Jaune.NextOp"
+  },
+  {
+   "old": "Jaune.Ninst.balSilent",
+   "new": "Jaune.NextOp.balSilent",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4, 7",
+   "source": "consumer declaration (module Blanc.Lift.BalSilent) inside the renamed dependency namespace Jaune.Ninst -> Jaune.NextOp; follows map row Jaune.Ninst -> Jaune.NextOp"
+  },
+  {
+   "old": "Jaune.Ninst.logSilent",
+   "new": "Jaune.NextOp.logSilent",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4, 7",
+   "source": "consumer declaration (module Blanc.Lift.LogSilent) inside the renamed dependency namespace Jaune.Ninst -> Jaune.NextOp; follows map row Jaune.Ninst -> Jaune.NextOp"
+  },
+  {
+   "old": "Jaune.Ninst.quiet",
+   "new": "Jaune.NextOp.quiet",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4, 7",
+   "source": "consumer declaration (module Blanc.Lift.Quiet) inside the renamed dependency namespace Jaune.Ninst -> Jaune.NextOp; follows map row Jaune.Ninst -> Jaune.NextOp"
+  },
+  {
+   "old": "Jaune.Ninst.stateSilent",
+   "new": "Jaune.NextOp.stateSilent",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4, 7",
+   "source": "consumer declaration (module Blanc.Lift.Silent) inside the renamed dependency namespace Jaune.Ninst -> Jaune.NextOp; follows map row Jaune.Ninst -> Jaune.NextOp"
+  },
+  {
+   "old": "Jaune.Ninst.writesStor",
+   "new": "Jaune.NextOp.writesStor",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4, 7",
+   "source": "consumer declaration (module Blanc.Lift.WriteSite) inside the renamed dependency namespace Jaune.Ninst -> Jaune.NextOp; follows map row Jaune.Ninst -> Jaune.NextOp"
+  },
+  {
+   "old": "JauneConsensus.GJointState.IsGloas",
+   "new": "JauneConsensus.GloasJointState.IsGloas",
+   "kind": "declaration",
+   "layer": "consensus",
+   "rule": "5, 4",
+   "source": "consumer declaration (module Blanc.Composition.BuilderRequestJointG) inside the renamed dependency namespace JauneConsensus.GJointState -> JauneConsensus.GloasJointState; follows map row JauneConsensus.GJointState -> JauneConsensus.GloasJointState"
+  },
+  {
+   "old": "JauneConsensus.GJointState.builderAt",
+   "new": "JauneConsensus.GloasJointState.builderAt",
+   "kind": "declaration",
+   "layer": "consensus",
+   "rule": "5, 4",
+   "source": "consumer declaration (module Blanc.Composition.BuilderRequestJointGExitAuth) inside the renamed dependency namespace JauneConsensus.GJointState -> JauneConsensus.GloasJointState; follows map row JauneConsensus.GJointState -> JauneConsensus.GloasJointState"
+  },
+  {
+   "old": "JauneConsensus.GJointState.builderCount",
+   "new": "JauneConsensus.GloasJointState.builderCount",
+   "kind": "declaration",
+   "layer": "consensus",
+   "rule": "5, 4",
+   "source": "consumer declaration (module Blanc.Composition.BuilderRequestJointG) inside the renamed dependency namespace JauneConsensus.GJointState -> JauneConsensus.GloasJointState; follows map row JauneConsensus.GJointState -> JauneConsensus.GloasJointState"
+  },
+  {
+   "old": "JauneConsensus.GJointState.builderQueue",
+   "new": "JauneConsensus.GloasJointState.builderQueue",
+   "kind": "declaration",
+   "layer": "consensus",
+   "rule": "5, 4",
+   "source": "consumer declaration (module Blanc.Composition.BuilderRequestJointGChargeOnce) inside the renamed dependency namespace JauneConsensus.GJointState -> JauneConsensus.GloasJointState; follows map row JauneConsensus.GJointState -> JauneConsensus.GloasJointState"
+  },
+  {
+   "old": "JauneConsensus.GJointState.totalBuilders",
+   "new": "JauneConsensus.GloasJointState.totalBuilders",
+   "kind": "declaration",
+   "layer": "consensus",
+   "rule": "5, 4",
+   "source": "consumer declaration (module Blanc.Composition.BuilderRequestJointGConservation) inside the renamed dependency namespace JauneConsensus.GJointState -> JauneConsensus.GloasJointState; follows map row JauneConsensus.GJointState -> JauneConsensus.GloasJointState"
+  },
+  {
+   "old": "JauneConsensus.GJointState.validatorCount",
+   "new": "JauneConsensus.GloasJointState.validatorCount",
+   "kind": "declaration",
+   "layer": "consensus",
+   "rule": "5, 4",
+   "source": "consumer declaration (module Blanc.Composition.BuilderRequestJointG) inside the renamed dependency namespace JauneConsensus.GJointState -> JauneConsensus.GloasJointState; follows map row JauneConsensus.GJointState -> JauneConsensus.GloasJointState"
+  }
+ ]
+}

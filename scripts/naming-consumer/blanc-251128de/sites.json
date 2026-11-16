@@ -1,0 +1,2895 @@
+{
+ "schema_version": 1,
+ "description": "Reviewed sites of the Blanc copy plan (jaune-shape-and-names-v1, jsn-u10): Blanc 251128de bytes against Jaune 730aae65, map map-closed-46cd3868.json. Valid only for the listed file digests.",
+ "sites": [
+  {
+   "path": "Blanc/AbstractStackTransfer.lean",
+   "line": 405,
+   "column": 6,
+   "token": "q",
+   "sha256": "461aced52b0ae1dd4fc4969e713ed40f9b61d9bcc17477bf178bc306482291d2",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/AbstractStackTransfer.lean",
+   "line": 474,
+   "column": 10,
+   "token": "q",
+   "sha256": "461aced52b0ae1dd4fc4969e713ed40f9b61d9bcc17477bf178bc306482291d2",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/AddressSlot.lean",
+   "line": 15,
+   "column": 18,
+   "token": "Ninst",
+   "sha256": "53ec58ac598f849a8cfe00a1537e008217d6d65913ff842f33423f72054605cd",
+   "decision": "unchanged",
+   "reason": "the second token of `open Jaune.Ninst Ninst`: it opens Blanc.Ninst as well as Jaune.Ninst; the explicit Jaune.Ninst token is renamed by the plan, and Ninst still resolves to Blanc.Ninst"
+  },
+  {
+   "path": "Blanc/AddressSlotProofs.lean",
+   "line": 15,
+   "column": 18,
+   "token": "Ninst",
+   "sha256": "463650bffef00dc9aff7ceb4a6939bef5088a2f55647805b4ba4a76108e6c95f",
+   "decision": "unchanged",
+   "reason": "the second token of `open Jaune.Ninst Ninst`: it opens Blanc.Ninst as well as Jaune.Ninst; the explicit Jaune.Ninst token is renamed by the plan, and Ninst still resolves to Blanc.Ninst"
+  },
+  {
+   "path": "Blanc/CallSpawnExact.lean",
+   "line": 242,
+   "column": 18,
+   "token": "Ninst",
+   "sha256": "aee59b2d20df4bd565d4abd9dc668d1a37648e6c616d1559b7761978aba65ac3",
+   "decision": "unchanged",
+   "reason": "the second token of `open Jaune.Ninst Ninst`: it opens Blanc.Ninst as well as Jaune.Ninst; the explicit Jaune.Ninst token is renamed by the plan, and Ninst still resolves to Blanc.Ninst"
+  },
+  {
+   "path": "Blanc/CommonCore.lean",
+   "line": 143,
+   "column": 18,
+   "token": "Ninst",
+   "sha256": "a41b10e248cc91403c4eb3f0d13b07ac0bc6fca6594c1c430565fc087a1d8581",
+   "decision": "unchanged",
+   "reason": "the second token of `open Jaune.Ninst Ninst`: it opens Blanc.Ninst as well as Jaune.Ninst; the explicit Jaune.Ninst token is renamed by the plan, and Ninst still resolves to Blanc.Ninst"
+  },
+  {
+   "path": "Blanc/CommonCore.lean",
+   "line": 1896,
+   "column": 13,
+   "token": "p",
+   "sha256": "a41b10e248cc91403c4eb3f0d13b07ac0bc6fca6594c1c430565fc087a1d8581",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/CommonProofs/Balance.lean",
+   "line": 1778,
+   "column": 27,
+   "token": "(B256.max : B256)",
+   "sha256": "34fbd3f728a43d4d89d3e962abdeb1d44d360f699ea5fa2b4dae32de145526e2",
+   "decision": "unchanged",
+   "reason": "compound (parenthesized) reference range for renamed Jaune.B256.max; the identifiers inside it carry their own references, which the plan already respells"
+  },
+  {
+   "path": "Blanc/CommonProofs/Balance.lean",
+   "line": 1789,
+   "column": 14,
+   "token": "(B256.max : B256)",
+   "sha256": "34fbd3f728a43d4d89d3e962abdeb1d44d360f699ea5fa2b4dae32de145526e2",
+   "decision": "unchanged",
+   "reason": "compound (parenthesized) reference range for renamed Jaune.B256.max; the identifiers inside it carry their own references, which the plan already respells"
+  },
+  {
+   "path": "Blanc/CommonProofs/Balance.lean",
+   "line": 10,
+   "column": 18,
+   "token": "Ninst",
+   "sha256": "34fbd3f728a43d4d89d3e962abdeb1d44d360f699ea5fa2b4dae32de145526e2",
+   "decision": "unchanged",
+   "reason": "the second token of `open Jaune.Ninst Ninst`: it opens Blanc.Ninst as well as Jaune.Ninst; the explicit Jaune.Ninst token is renamed by the plan, and Ninst still resolves to Blanc.Ninst"
+  },
+  {
+   "path": "Blanc/CommonProofs/Balance.lean",
+   "line": 1656,
+   "column": 16,
+   "token": "q",
+   "sha256": "34fbd3f728a43d4d89d3e962abdeb1d44d360f699ea5fa2b4dae32de145526e2",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/CommonProofs/Balance.lean",
+   "line": 1660,
+   "column": 6,
+   "token": "q",
+   "sha256": "34fbd3f728a43d4d89d3e962abdeb1d44d360f699ea5fa2b4dae32de145526e2",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/CommonProofs/Balance.lean",
+   "line": 1661,
+   "column": 6,
+   "token": "q",
+   "sha256": "34fbd3f728a43d4d89d3e962abdeb1d44d360f699ea5fa2b4dae32de145526e2",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/CommonProofs/Balance.lean",
+   "line": 1663,
+   "column": 10,
+   "token": "q",
+   "sha256": "34fbd3f728a43d4d89d3e962abdeb1d44d360f699ea5fa2b4dae32de145526e2",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/CommonProofs/Balance.lean",
+   "line": 1671,
+   "column": 8,
+   "token": "q",
+   "sha256": "34fbd3f728a43d4d89d3e962abdeb1d44d360f699ea5fa2b4dae32de145526e2",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/CommonProofs/Balance.lean",
+   "line": 1674,
+   "column": 36,
+   "token": "q",
+   "sha256": "34fbd3f728a43d4d89d3e962abdeb1d44d360f699ea5fa2b4dae32de145526e2",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/CommonProofs/Balance.lean",
+   "line": 1683,
+   "column": 8,
+   "token": "q",
+   "sha256": "34fbd3f728a43d4d89d3e962abdeb1d44d360f699ea5fa2b4dae32de145526e2",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/CommonProofs/Balance.lean",
+   "line": 1685,
+   "column": 36,
+   "token": "q",
+   "sha256": "34fbd3f728a43d4d89d3e962abdeb1d44d360f699ea5fa2b4dae32de145526e2",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/CommonProofs/Base.lean",
+   "line": 11,
+   "column": 18,
+   "token": "Ninst",
+   "sha256": "8e100b9e04637ff0f510c06c965dc151bbbf3e9c28e4090bcbdaa01cc0ba5814",
+   "decision": "unchanged",
+   "reason": "the second token of `open Jaune.Ninst Ninst`: it opens Blanc.Ninst as well as Jaune.Ninst; the explicit Jaune.Ninst token is renamed by the plan, and Ninst still resolves to Blanc.Ninst"
+  },
+  {
+   "path": "Blanc/CommonProofs/Frames.lean",
+   "line": 8,
+   "column": 18,
+   "token": "Ninst",
+   "sha256": "9dabb12681e1ba392bc7ccb3023c094dafe25ad7a60fb4df57153609c4b49958",
+   "decision": "unchanged",
+   "reason": "the second token of `open Jaune.Ninst Ninst`: it opens Blanc.Ninst as well as Jaune.Ninst; the explicit Jaune.Ninst token is renamed by the plan, and Ninst still resolves to Blanc.Ninst"
+  },
+  {
+   "path": "Blanc/CommonProofs/Hinv.lean",
+   "line": 8,
+   "column": 18,
+   "token": "Ninst",
+   "sha256": "c33d93db2ff0f8f3c6a8882f393eb23cff4e88b75edfbc93647d646e16355c9f",
+   "decision": "unchanged",
+   "reason": "the second token of `open Jaune.Ninst Ninst`: it opens Blanc.Ninst as well as Jaune.Ninst; the explicit Jaune.Ninst token is renamed by the plan, and Ninst still resolves to Blanc.Ninst"
+  },
+  {
+   "path": "Blanc/CommonProofs/MemImage.lean",
+   "line": 10,
+   "column": 18,
+   "token": "Ninst",
+   "sha256": "6a25fc3106d3653e6af61c1a82ff84adbba1f3b2b1184ec02ac8a2a2e9254650",
+   "decision": "unchanged",
+   "reason": "the second token of `open Jaune.Ninst Ninst`: it opens Blanc.Ninst as well as Jaune.Ninst; the explicit Jaune.Ninst token is renamed by the plan, and Ninst still resolves to Blanc.Ninst"
+  },
+  {
+   "path": "Blanc/CommonProofs/Messages.lean",
+   "line": 8,
+   "column": 18,
+   "token": "Ninst",
+   "sha256": "f79b7e52f6cb751fde289c13b9f01d2adf92e59d48920fd224d0cad05fc451e4",
+   "decision": "unchanged",
+   "reason": "the second token of `open Jaune.Ninst Ninst`: it opens Blanc.Ninst as well as Jaune.Ninst; the explicit Jaune.Ninst token is renamed by the plan, and Ninst still resolves to Blanc.Ninst"
+  },
+  {
+   "path": "Blanc/CommonProofs/NoDel.lean",
+   "line": 8,
+   "column": 18,
+   "token": "Ninst",
+   "sha256": "b7bb18f7f8f4fabd93427a76149c98a43a16927f39216a7942b793eb2fc0d3bd",
+   "decision": "unchanged",
+   "reason": "the second token of `open Jaune.Ninst Ninst`: it opens Blanc.Ninst as well as Jaune.Ninst; the explicit Jaune.Ninst token is renamed by the plan, and Ninst still resolves to Blanc.Ninst"
+  },
+  {
+   "path": "Blanc/CommonProofs/Walk.lean",
+   "line": 9,
+   "column": 18,
+   "token": "Ninst",
+   "sha256": "7fcd96fb56faeef1fc677bb1761e17bb6be776d549f641f6c38985c6574498ee",
+   "decision": "unchanged",
+   "reason": "the second token of `open Jaune.Ninst Ninst`: it opens Blanc.Ninst as well as Jaune.Ninst; the explicit Jaune.Ninst token is renamed by the plan, and Ninst still resolves to Blanc.Ninst"
+  },
+  {
+   "path": "Blanc/CommonProofs/Walk.lean",
+   "line": 22,
+   "column": 81,
+   "token": "hx",
+   "sha256": "7fcd96fb56faeef1fc677bb1761e17bb6be776d549f641f6c38985c6574498ee",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/CommonProofs/Walk.lean",
+   "line": 23,
+   "column": 21,
+   "token": "hx",
+   "sha256": "7fcd96fb56faeef1fc677bb1761e17bb6be776d549f641f6c38985c6574498ee",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/CommonProofs/Walk.lean",
+   "line": 30,
+   "column": 86,
+   "token": "hx",
+   "sha256": "7fcd96fb56faeef1fc677bb1761e17bb6be776d549f641f6c38985c6574498ee",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/CommonProofs/Walk.lean",
+   "line": 31,
+   "column": 21,
+   "token": "hx",
+   "sha256": "7fcd96fb56faeef1fc677bb1761e17bb6be776d549f641f6c38985c6574498ee",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/CompiledFixedInvariance.lean",
+   "line": 159,
+   "column": 8,
+   "token": "q",
+   "sha256": "2376344e25a5bd19335767649f58dd71055dda0ea6d2bddb16f54c23ecffdde8",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/CompiledFixedInvariance.lean",
+   "line": 161,
+   "column": 10,
+   "token": "q",
+   "sha256": "2376344e25a5bd19335767649f58dd71055dda0ea6d2bddb16f54c23ecffdde8",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/CompiledFixedInvariance.lean",
+   "line": 162,
+   "column": 27,
+   "token": "q",
+   "sha256": "2376344e25a5bd19335767649f58dd71055dda0ea6d2bddb16f54c23ecffdde8",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/CompiledFixedInvariance.lean",
+   "line": 168,
+   "column": 12,
+   "token": "q",
+   "sha256": "2376344e25a5bd19335767649f58dd71055dda0ea6d2bddb16f54c23ecffdde8",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/CompiledFixedInvariance.lean",
+   "line": 169,
+   "column": 29,
+   "token": "q",
+   "sha256": "2376344e25a5bd19335767649f58dd71055dda0ea6d2bddb16f54c23ecffdde8",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/CompiledFixedInvariance.lean",
+   "line": 172,
+   "column": 12,
+   "token": "q",
+   "sha256": "2376344e25a5bd19335767649f58dd71055dda0ea6d2bddb16f54c23ecffdde8",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/CompiledFixedInvariance.lean",
+   "line": 173,
+   "column": 29,
+   "token": "q",
+   "sha256": "2376344e25a5bd19335767649f58dd71055dda0ea6d2bddb16f54c23ecffdde8",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/CompiledFixedInvariance.lean",
+   "line": 175,
+   "column": 12,
+   "token": "q",
+   "sha256": "2376344e25a5bd19335767649f58dd71055dda0ea6d2bddb16f54c23ecffdde8",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/CompiledFixedInvariance.lean",
+   "line": 176,
+   "column": 29,
+   "token": "q",
+   "sha256": "2376344e25a5bd19335767649f58dd71055dda0ea6d2bddb16f54c23ecffdde8",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/CompiledFixedInvariance.lean",
+   "line": 179,
+   "column": 12,
+   "token": "q",
+   "sha256": "2376344e25a5bd19335767649f58dd71055dda0ea6d2bddb16f54c23ecffdde8",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Composition/BuilderRequestApplicabilityTail.lean",
+   "line": 406,
+   "column": 107,
+   "token": "M",
+   "sha256": "c9d9206c790fb8a94277b6b2f1dd1c1e314ad158d87a17362de8d211ea38dc2f",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/Composition/BuilderRequestJointGAppends.lean",
+   "line": 68,
+   "column": 21,
+   "token": "q",
+   "sha256": "b012304310a786111301a3c114f879ffee96aba56efa7d5593e882108f6f5b76",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Composition/BuilderRequestJointGBalance.lean",
+   "line": 239,
+   "column": 15,
+   "token": "fnaJ",
+   "sha256": "67a675714c487ea3b433a60450b82f7d5264ca75bebf5a758fb05292c3e0ed10",
+   "decision": "unchanged",
+   "reason": "a Blanc declaration authored with an explicit _root_. prefix (so its definition range does not spell its suffix); Lean does not derive its name, and no row renames it"
+  },
+  {
+   "path": "Blanc/Composition/BuilderRequestJointGBalance.lean",
+   "line": 131,
+   "column": 15,
+   "token": "gInvJ",
+   "sha256": "67a675714c487ea3b433a60450b82f7d5264ca75bebf5a758fb05292c3e0ed10",
+   "decision": "unchanged",
+   "reason": "a Blanc declaration authored with an explicit _root_. prefix (so its definition range does not spell its suffix); Lean does not derive its name, and no row renames it"
+  },
+  {
+   "path": "Blanc/Composition/BuilderRequestJointGConservation.lean",
+   "line": 291,
+   "column": 11,
+   "token": "s1",
+   "sha256": "50b3b195910344f4f2fcdc0844c82092690bb83a26cd2b3116fb36549ab5e61e",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Composition/BuilderRequestJointGDebitOnce.lean",
+   "line": 349,
+   "column": 55,
+   "token": "withdrawal_prefix_zero",
+   "sha256": "66fe68ed964a401f72e756959927f2b42c4df21dcbc3a1a3d5d931843e033328",
+   "decision": "unchanged",
+   "reason": "a Blanc declaration authored with an explicit _root_. prefix (so its definition range does not spell its suffix); Lean does not derive its name, and no row renames it"
+  },
+  {
+   "path": "Blanc/Composition/BuilderRequestJointGDebitOnce.lean",
+   "line": 645,
+   "column": 13,
+   "token": "debitCursor_zero",
+   "sha256": "66fe68ed964a401f72e756959927f2b42c4df21dcbc3a1a3d5d931843e033328",
+   "decision": "unchanged",
+   "reason": "a Blanc declaration authored with an explicit _root_. prefix (so its definition range does not spell its suffix); Lean does not derive its name, and no row renames it"
+  },
+  {
+   "path": "Blanc/Composition/BuilderRequestJointGDebitOnce.lean",
+   "line": 922,
+   "column": 55,
+   "token": "slot_debits_le_one",
+   "sha256": "66fe68ed964a401f72e756959927f2b42c4df21dcbc3a1a3d5d931843e033328",
+   "decision": "unchanged",
+   "reason": "a Blanc declaration authored with an explicit _root_. prefix (so its definition range does not spell its suffix); Lean does not derive its name, and no row renames it"
+  },
+  {
+   "path": "Blanc/Composition/BuilderRequestJointGExitAuth.lean",
+   "line": 131,
+   "column": 21,
+   "token": "hp",
+   "sha256": "4857edb4a28536e9e9c40f6aac049da584c03ef80d2f74d480ad5fe1d388b758",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Composition/BuilderRequestJointGLedger.lean",
+   "line": 52,
+   "column": 19,
+   "token": "s3",
+   "sha256": "4dbe8f50e3748a24ea5d21ca68bfb49ae41a8cdbfa8336fb9b5fdf695df11f9f",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Composition/BuilderRequestJointGPaymentsBlock.lean",
+   "line": 480,
+   "column": 11,
+   "token": "s1",
+   "sha256": "d4c851c2419ed2f1d7012b40213461b43562e26a72a9762dfdb69b0235894f73",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Composition/BuilderRequestJointGPaymentsBlock.lean",
+   "line": 480,
+   "column": 15,
+   "token": "s2",
+   "sha256": "d4c851c2419ed2f1d7012b40213461b43562e26a72a9762dfdb69b0235894f73",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Composition/BuilderRequestJointGPaymentsBlock.lean",
+   "line": 480,
+   "column": 19,
+   "token": "s3",
+   "sha256": "d4c851c2419ed2f1d7012b40213461b43562e26a72a9762dfdb69b0235894f73",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Composition/BuilderRequestJointGPaymentsBlock.lean",
+   "line": 480,
+   "column": 23,
+   "token": "s4",
+   "sha256": "d4c851c2419ed2f1d7012b40213461b43562e26a72a9762dfdb69b0235894f73",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Composition/BuilderRequestJointGProvenance.lean",
+   "line": 528,
+   "column": 15,
+   "token": "gInvJ",
+   "sha256": "f97893d33a1a49a6dfe9583f7488fc8ed5eb18bd5dc68e87508f57055ec9460e",
+   "decision": "unchanged",
+   "reason": "a Blanc declaration authored with an explicit _root_. prefix (so its definition range does not spell its suffix); Lean does not derive its name, and no row renames it"
+  },
+  {
+   "path": "Blanc/Composition/BuilderRequestJointGRegistration.lean",
+   "line": 135,
+   "column": 21,
+   "token": "hp",
+   "sha256": "41cab304675c1b17cb9b98868b0f451c62a46bc90c9aeec3598b66ab9f2d1666",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Composition/ConsolidationRequestDrainInput.lean",
+   "line": 246,
+   "column": 6,
+   "token": "M",
+   "sha256": "562be67bf1ffbb7db89535bb806b6343f86db953f75f9a7a5f8f772c34a2b76a",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/Composition/ConsolidationRequestPublicHeadlines.lean",
+   "line": 106,
+   "column": 15,
+   "token": "(B256.max)",
+   "sha256": "c165a7a8b92de0fdcbb3d74336be91df9e484b35bdc560f3c58d38a39e8fe107",
+   "decision": "unchanged",
+   "reason": "compound (parenthesized) reference range for renamed Jaune.B256.max; the identifiers inside it carry their own references, which the plan already respells"
+  },
+  {
+   "path": "Blanc/Composition/Corpus/Proofs/RingJointRetention.lean",
+   "line": 847,
+   "column": 11,
+   "token": "s2",
+   "sha256": "b70d6cd1ed33677e46f506fb5d1188a75e370cbd3d54b603355880cfa0994593",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Composition/Corpus/Proofs/RingValue.lean",
+   "line": 28,
+   "column": 6,
+   "token": "p",
+   "sha256": "9012028378593fb116c6f5664356177f1c298ed21fbf54ec49ebe120590c1e86",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/Composition/Corpus/Proofs/RingValue.lean",
+   "line": 43,
+   "column": 6,
+   "token": "p",
+   "sha256": "9012028378593fb116c6f5664356177f1c298ed21fbf54ec49ebe120590c1e86",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/Composition/DepositPendingPass.lean",
+   "line": 334,
+   "column": 15,
+   "token": "st",
+   "sha256": "0af77359aabb234edb96996dcb3d06e5e3b938e8b2b5847a0c38038862ff3a52",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Composition/DepositPendingPass.lean",
+   "line": 337,
+   "column": 15,
+   "token": "st",
+   "sha256": "0af77359aabb234edb96996dcb3d06e5e3b938e8b2b5847a0c38038862ff3a52",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Composition/WithdrawalRequestFeeCounterexample.lean",
+   "line": 522,
+   "column": 7,
+   "token": "(Stor.empty)",
+   "sha256": "59e56e77bab182b3e52843e81da03e03ec9068244b12a73f86f0f9a4346da47b",
+   "decision": "unchanged",
+   "reason": "compound (parenthesized) reference range for renamed Jaune.Stor.empty; the identifiers inside it carry their own references, which the plan already respells"
+  },
+  {
+   "path": "Blanc/Composition/WithdrawalRequestFeeCounterexample.lean",
+   "line": 526,
+   "column": 37,
+   "token": "(Stor.empty)",
+   "sha256": "59e56e77bab182b3e52843e81da03e03ec9068244b12a73f86f0f9a4346da47b",
+   "decision": "unchanged",
+   "reason": "compound (parenthesized) reference range for renamed Jaune.Stor.empty; the identifiers inside it carry their own references, which the plan already respells"
+  },
+  {
+   "path": "Blanc/Composition/WithdrawalRequestFeeCounterexample.lean",
+   "line": 534,
+   "column": 7,
+   "token": "(Stor.empty)",
+   "sha256": "59e56e77bab182b3e52843e81da03e03ec9068244b12a73f86f0f9a4346da47b",
+   "decision": "unchanged",
+   "reason": "compound (parenthesized) reference range for renamed Jaune.Stor.empty; the identifiers inside it carry their own references, which the plan already respells"
+  },
+  {
+   "path": "Blanc/Composition/WithdrawalRequestFeeRefutation.lean",
+   "line": 1003,
+   "column": 17,
+   "token": "p",
+   "sha256": "1193fbcbb300b9843b3beac39f4052e03b274a7f13ad4184eb35689fe0c75d3e",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/Composition/WithdrawalRequestFeeRefutation.lean",
+   "line": 1005,
+   "column": 17,
+   "token": "p",
+   "sha256": "1193fbcbb300b9843b3beac39f4052e03b274a7f13ad4184eb35689fe0c75d3e",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/Composition/WithdrawalRequestFeeRefutation.lean",
+   "line": 1007,
+   "column": 17,
+   "token": "p",
+   "sha256": "1193fbcbb300b9843b3beac39f4052e03b274a7f13ad4184eb35689fe0c75d3e",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/Composition/WithdrawalRequestFeeRefutation.lean",
+   "line": 1009,
+   "column": 17,
+   "token": "p",
+   "sha256": "1193fbcbb300b9843b3beac39f4052e03b274a7f13ad4184eb35689fe0c75d3e",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/ConsensusSszDeposit.lean",
+   "line": 73,
+   "column": 48,
+   "token": "B256",
+   "sha256": "aaad94617464b1506e78921331b00b890473d735dc5d9f4296d254f63a334f95",
+   "decision": "replace",
+   "reason": "unelaborated spelling B256.length_toBytes (simp discharger) of the renamed Jaune.B256.length_toBytes -> Jaune.U256.length_toBytes; the compiler index records no reference there",
+   "new": "U256"
+  },
+  {
+   "path": "Blanc/ExecutionAccountingHistoryIn.lean",
+   "line": 241,
+   "column": 6,
+   "token": "bal",
+   "sha256": "3ba16559655a3feb51d93e11455c5522cc614690cd8d4698a46b45274db38445",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionAdmission.lean",
+   "line": 16,
+   "column": 18,
+   "token": "Ninst",
+   "sha256": "69eb459dc9eb8cba99315c0d17bf634252f02a6f6cc96a6e4882061320a8da85",
+   "decision": "unchanged",
+   "reason": "the second token of `open Jaune.Ninst Ninst`: it opens Blanc.Ninst as well as Jaune.Ninst; the explicit Jaune.Ninst token is renamed by the plan, and Ninst still resolves to Blanc.Ninst"
+  },
+  {
+   "path": "Blanc/ExecutionAdmissionSem.lean",
+   "line": 15,
+   "column": 18,
+   "token": "Ninst",
+   "sha256": "dd48a33d4500976ddfb9cb5e3d3c177b0bc97f02447640c46d9a0d7fd2051b81",
+   "decision": "unchanged",
+   "reason": "the second token of `open Jaune.Ninst Ninst`: it opens Blanc.Ninst as well as Jaune.Ninst; the explicit Jaune.Ninst token is renamed by the plan, and Ninst still resolves to Blanc.Ninst"
+  },
+  {
+   "path": "Blanc/ExecutionDeletionProvenance.lean",
+   "line": 941,
+   "column": 57,
+   "token": "R",
+   "sha256": "3162710b880d380bbac1b1429aa45f29b85de2a962c6a86f146ed1eae0e007d1",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/ExecutionDeletionProvenance.lean",
+   "line": 957,
+   "column": 57,
+   "token": "R",
+   "sha256": "3162710b880d380bbac1b1429aa45f29b85de2a962c6a86f146ed1eae0e007d1",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/ExecutionHistoricalAdmission.lean",
+   "line": 814,
+   "column": 6,
+   "token": "bal",
+   "sha256": "e60d3205fd81c56e1789eb83fa7ccbf3d18fc3376d8cd38bf62d6e6b1066f642",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionHistoryCellProvenance.lean",
+   "line": 376,
+   "column": 6,
+   "token": "bal",
+   "sha256": "cd12138fcb4aceaac85cbc7a8a61f52fc396e0a2aa7aa3361ca253903147e7dd",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionHistoryCellProvenance.lean",
+   "line": 405,
+   "column": 6,
+   "token": "bal",
+   "sha256": "cd12138fcb4aceaac85cbc7a8a61f52fc396e0a2aa7aa3361ca253903147e7dd",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionHistoryCommittedCell.lean",
+   "line": 115,
+   "column": 80,
+   "token": "bal",
+   "sha256": "4dfc8a8b62a41b415ec9569b67d5b095b1973e3c7ed747c0a61449f03f83f94f",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionHistoryCommittedCell.lean",
+   "line": 297,
+   "column": 80,
+   "token": "bal",
+   "sha256": "4dfc8a8b62a41b415ec9569b67d5b095b1973e3c7ed747c0a61449f03f83f94f",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionHistoryInCodeAt.lean",
+   "line": 90,
+   "column": 6,
+   "token": "bal",
+   "sha256": "bc8970a7fa075d7335475c6f0c3938d13215b968128a89ef8be1f86bbe95bb48",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionHistoryInCreateAvoid.lean",
+   "line": 473,
+   "column": 6,
+   "token": "bal",
+   "sha256": "d6e661553a5ad93c983463aa62c9d68a31a8b4b0e0942ed1ba772f63fa1300f5",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionHistoryInSystemCodeKeep.lean",
+   "line": 88,
+   "column": 6,
+   "token": "bal",
+   "sha256": "b51ba123a5cdc244e33088617e48529d5a7da06329337226eabe4bf3e6eb70f5",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionHistoryInSystemEnvironment.lean",
+   "line": 59,
+   "column": 22,
+   "token": "bal",
+   "sha256": "8e1957922610fe9a907fc97b20191bf47655d49e7615309a36703fbf2fb3024d",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionHistoryInSystemFrames.lean",
+   "line": 121,
+   "column": 6,
+   "token": "bal",
+   "sha256": "9c635ff0a6c4e5694cb93d70c1434801ecc4bcb83fd95c46fe0dc4f5b509f338",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionInCodeImage.lean",
+   "line": 127,
+   "column": 6,
+   "token": "bal",
+   "sha256": "372a568430d22f37a23a4436b76b1a20a1e4f1c633a9c211947d0b8d58a3d24e",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionInOwnCode.lean",
+   "line": 428,
+   "column": 6,
+   "token": "bal",
+   "sha256": "2b9b6cc3483360451eb6d8added508ff66ef1571a3c6a391ef6c7838b2ae0640",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionInOwnCode.lean",
+   "line": 755,
+   "column": 26,
+   "token": "R",
+   "sha256": "2b9b6cc3483360451eb6d8added508ff66ef1571a3c6a391ef6c7838b2ae0640",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/ExecutionInOwnCode.lean",
+   "line": 1139,
+   "column": 6,
+   "token": "bal",
+   "sha256": "2b9b6cc3483360451eb6d8added508ff66ef1571a3c6a391ef6c7838b2ae0640",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionInRawNodeOrigin.lean",
+   "line": 355,
+   "column": 46,
+   "token": "bal",
+   "sha256": "f37540a77f246c5918798881af53bafe22e7dc435dc7a6afe8c883d7e6684c80",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionInRawNodes.lean",
+   "line": 428,
+   "column": 46,
+   "token": "bal",
+   "sha256": "079274bc15e93553dbc01ebb1589fb3d25e8aa79a54187b5e128948f950eda98",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionInRawNodes.lean",
+   "line": 443,
+   "column": 46,
+   "token": "bal",
+   "sha256": "079274bc15e93553dbc01ebb1589fb3d25e8aa79a54187b5e128948f950eda98",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionInRootOwnCode.lean",
+   "line": 183,
+   "column": 46,
+   "token": "bal",
+   "sha256": "31be16661fa9cd10c04dbc1cc3707cf650aeaa22a824efd3bd7d72b5c44a57ae",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionMidHistoryIn.lean",
+   "line": 166,
+   "column": 6,
+   "token": "bal",
+   "sha256": "73c027481e94e1a3604fcd2af98492462da9d05fe01a6276fd9d699b23e807da",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionNoDelSafeHistory.lean",
+   "line": 711,
+   "column": 6,
+   "token": "bal",
+   "sha256": "a079086bebdbf7f49d83b3c08acae14f6eb0cce94b180f050499ad0ddde433c5",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionNoDelSafeHistory.lean",
+   "line": 1175,
+   "column": 6,
+   "token": "bal",
+   "sha256": "a079086bebdbf7f49d83b3c08acae14f6eb0cce94b180f050499ad0ddde433c5",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionNonceKeep.lean",
+   "line": 249,
+   "column": 6,
+   "token": "bal",
+   "sha256": "a93abd0de59ac0f6c4fccd56199f94005feb9b4121e261fd9431f2efa0bfc44c",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionRetainedNoDelHistory.lean",
+   "line": 63,
+   "column": 80,
+   "token": "bal",
+   "sha256": "7f024aed87a158429db9e350b504da5e5f5b43b37463b9f738f4a0796f329c1f",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionRewardCredits.lean",
+   "line": 282,
+   "column": 22,
+   "token": "bal",
+   "sha256": "cd60fac9dd05626e5945375ee288557193c233afe3583563b789a4153a4685ad",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionRewardCredits.lean",
+   "line": 445,
+   "column": 51,
+   "token": "P",
+   "sha256": "cd60fac9dd05626e5945375ee288557193c233afe3583563b789a4153a4685ad",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/ExecutionSenderRootCallers.lean",
+   "line": 50,
+   "column": 46,
+   "token": "bal",
+   "sha256": "cdfd8b5e527c76cb09a4f610e7de8436e58da87030fcf22d2977d24d07307157",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionSettledOwnCode.lean",
+   "line": 145,
+   "column": 26,
+   "token": "R",
+   "sha256": "25f4f788a6485e60a0fe3e8e7ee71e265dfc517f28b1b8b2a212341ce3f17af7",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/ExecutionStagedBodyStateTrace.lean",
+   "line": 124,
+   "column": 22,
+   "token": "bal",
+   "sha256": "a928938bca1f2fd3f11a4b1f930f8f14c037d40f09aea8baf94f0b4b4590dc44",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionStagedBodyTrace.lean",
+   "line": 170,
+   "column": 46,
+   "token": "bal",
+   "sha256": "a96383bbee52973bbb3719849678e27755aeef6af4d801b806d21b0139f08d74",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionStagedFrameEnv.lean",
+   "line": 54,
+   "column": 60,
+   "token": "bal",
+   "sha256": "318d7cdb5d265f79a1d8658d292d6faf4443fbfa38e7230d76bea90399482999",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionStagedFrameEnv.lean",
+   "line": 106,
+   "column": 60,
+   "token": "bal",
+   "sha256": "318d7cdb5d265f79a1d8658d292d6faf4443fbfa38e7230d76bea90399482999",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/ExecutionStagedFrameEnv.lean",
+   "line": 243,
+   "column": 60,
+   "token": "bal",
+   "sha256": "318d7cdb5d265f79a1d8658d292d6faf4443fbfa38e7230d76bea90399482999",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/JointGloasInvariants.lean",
+   "line": 492,
+   "column": 84,
+   "token": "SettlesEmpty",
+   "sha256": "44aee5029071b03224ddbbe7bfeded7e09cfc05eee5bb5bf292841eab39ebb6c",
+   "decision": "unchanged",
+   "reason": "a Blanc declaration authored with an explicit _root_. prefix (so its definition range does not spell its suffix); Lean does not derive its name, and no row renames it"
+  },
+  {
+   "path": "Blanc/JointGloasInvariants.lean",
+   "line": 493,
+   "column": 94,
+   "token": "SettlesEmpty",
+   "sha256": "44aee5029071b03224ddbbe7bfeded7e09cfc05eee5bb5bf292841eab39ebb6c",
+   "decision": "unchanged",
+   "reason": "a Blanc declaration authored with an explicit _root_. prefix (so its definition range does not spell its suffix); Lean does not derive its name, and no row renames it"
+  },
+  {
+   "path": "Blanc/JointGloasInvariants.lean",
+   "line": 523,
+   "column": 43,
+   "token": "SettlesEmpty",
+   "sha256": "44aee5029071b03224ddbbe7bfeded7e09cfc05eee5bb5bf292841eab39ebb6c",
+   "decision": "unchanged",
+   "reason": "a Blanc declaration authored with an explicit _root_. prefix (so its definition range does not spell its suffix); Lean does not derive its name, and no row renames it"
+  },
+  {
+   "path": "Blanc/LadderBase.lean",
+   "line": 755,
+   "column": 18,
+   "token": "Ninst",
+   "sha256": "23b6828b97b2d1b18989b0d879cb35a5009b7812488f57e3c939ea1b87ccaf6a",
+   "decision": "unchanged",
+   "reason": "the second token of `open Jaune.Ninst Ninst`: it opens Blanc.Ninst as well as Jaune.Ninst; the explicit Jaune.Ninst token is renamed by the plan, and Ninst still resolves to Blanc.Ninst"
+  },
+  {
+   "path": "Blanc/LadderBase.lean",
+   "line": 790,
+   "column": 36,
+   "token": "s4",
+   "sha256": "23b6828b97b2d1b18989b0d879cb35a5009b7812488f57e3c939ea1b87ccaf6a",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/LadderBase.lean",
+   "line": 799,
+   "column": 41,
+   "token": "hx",
+   "sha256": "23b6828b97b2d1b18989b0d879cb35a5009b7812488f57e3c939ea1b87ccaf6a",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/LadderBase.lean",
+   "line": 853,
+   "column": 36,
+   "token": "s2",
+   "sha256": "23b6828b97b2d1b18989b0d879cb35a5009b7812488f57e3c939ea1b87ccaf6a",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/LadderBase.lean",
+   "line": 865,
+   "column": 41,
+   "token": "hx",
+   "sha256": "23b6828b97b2d1b18989b0d879cb35a5009b7812488f57e3c939ea1b87ccaf6a",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/LadderBase.lean",
+   "line": 869,
+   "column": 40,
+   "token": "s3",
+   "sha256": "23b6828b97b2d1b18989b0d879cb35a5009b7812488f57e3c939ea1b87ccaf6a",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BeaconDeposit/Body.lean",
+   "line": 37,
+   "column": 26,
+   "token": "hx",
+   "sha256": "053056b572c03a86e9cadb38119551aa0ad81fca0bcc910e5b7dd3065f2feba4",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BeaconDeposit/Body.lean",
+   "line": 49,
+   "column": 20,
+   "token": "hx",
+   "sha256": "053056b572c03a86e9cadb38119551aa0ad81fca0bcc910e5b7dd3065f2feba4",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BeaconDeposit/Body.lean",
+   "line": 62,
+   "column": 20,
+   "token": "hx",
+   "sha256": "053056b572c03a86e9cadb38119551aa0ad81fca0bcc910e5b7dd3065f2feba4",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BeaconDeposit/Creation/Walk.lean",
+   "line": 450,
+   "column": 18,
+   "token": "hx",
+   "sha256": "a7cbab652037717de3a8ef22c3500fc25078caaaecdab8de33dbe80121df68bd",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BeaconDeposit/Erc165.lean",
+   "line": 47,
+   "column": 25,
+   "token": "gas",
+   "sha256": "5f9fe827cc26b8da9a880df0580c77ca34e7b9a96905fd797259c8bd02c3e391",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BeaconDeposit/Erc165.lean",
+   "line": 96,
+   "column": 8,
+   "token": "gas",
+   "sha256": "5f9fe827cc26b8da9a880df0580c77ca34e7b9a96905fd797259c8bd02c3e391",
+   "decision": "unchanged",
+   "reason": "case label of a goal named by a user hole (?gas, ?exec) or a consumer lemma binder; it names no constructor"
+  },
+  {
+   "path": "Blanc/Lift/BeaconDeposit/LogCodec.lean",
+   "line": 70,
+   "column": 56,
+   "token": "B256",
+   "sha256": "2c64243554b080f380d9ebed390d35206088c3a83b01d22018222c55994a6a90",
+   "decision": "replace",
+   "reason": "unelaborated spelling B256.length_toBytes (simp discharger) of the renamed Jaune.B256.length_toBytes -> Jaune.U256.length_toBytes; the compiler index records no reference there",
+   "new": "U256"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Delivery.lean",
+   "line": 1320,
+   "column": 22,
+   "token": "st",
+   "sha256": "22d1415317a70d0d7cae26acf284216c471138eba96afc2f5dcd8047116640a9",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Exit/Submission.lean",
+   "line": 251,
+   "column": 38,
+   "token": "M",
+   "sha256": "75ec253460f2481f7e099c89acea1d626d6dd17acf07e0b71568e85b53e3a9d1",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/FeeDomain.lean",
+   "line": 54,
+   "column": 32,
+   "token": "M",
+   "sha256": "6574079e3f4a36d9e8db183cbc34d8a588c589afd1bba354ed047e73a19c80ff",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/FeeDomain.lean",
+   "line": 57,
+   "column": 33,
+   "token": "M",
+   "sha256": "6574079e3f4a36d9e8db183cbc34d8a588c589afd1bba354ed047e73a19c80ff",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/FeeDomain.lean",
+   "line": 122,
+   "column": 87,
+   "token": "maxFee",
+   "sha256": "6574079e3f4a36d9e8db183cbc34d8a588c589afd1bba354ed047e73a19c80ff",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/FeeRead.lean",
+   "line": 60,
+   "column": 32,
+   "token": "M",
+   "sha256": "18326768b11574a8c772e4561f1878898c5e2b17e8fd8e43b049c5a50ea0cc37",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/FeeRead.lean",
+   "line": 60,
+   "column": 41,
+   "token": "M",
+   "sha256": "18326768b11574a8c772e4561f1878898c5e2b17e8fd8e43b049c5a50ea0cc37",
+   "decision": "unchanged",
+   "reason": "component of M.benv, a consumer name no row renames"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/FeeRead.lean",
+   "line": 63,
+   "column": 33,
+   "token": "M",
+   "sha256": "18326768b11574a8c772e4561f1878898c5e2b17e8fd8e43b049c5a50ea0cc37",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/FeeRead.lean",
+   "line": 63,
+   "column": 35,
+   "token": "M",
+   "sha256": "18326768b11574a8c772e4561f1878898c5e2b17e8fd8e43b049c5a50ea0cc37",
+   "decision": "unchanged",
+   "reason": "component of M.benv, a consumer name no row renames"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/FeeRead.lean",
+   "line": 236,
+   "column": 87,
+   "token": "maxFee",
+   "sha256": "18326768b11574a8c772e4561f1878898c5e2b17e8fd8e43b049c5a50ea0cc37",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Latch.lean",
+   "line": 67,
+   "column": 84,
+   "token": "M",
+   "sha256": "03b24227c1c5a6d58553aa7e1c0f7918e531f36877fe432937610a2d01c916aa",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Latch.lean",
+   "line": 181,
+   "column": 78,
+   "token": "M",
+   "sha256": "03b24227c1c5a6d58553aa7e1c0f7918e531f36877fe432937610a2d01c916aa",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Message.lean",
+   "line": 152,
+   "column": 32,
+   "token": "M",
+   "sha256": "e3b5a792deb8310195bf3c7862e54f7061880322ae7aef6ebbcc63732faa81d4",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Message.lean",
+   "line": 155,
+   "column": 33,
+   "token": "M",
+   "sha256": "e3b5a792deb8310195bf3c7862e54f7061880322ae7aef6ebbcc63732faa81d4",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Message.lean",
+   "line": 233,
+   "column": 42,
+   "token": "M",
+   "sha256": "e3b5a792deb8310195bf3c7862e54f7061880322ae7aef6ebbcc63732faa81d4",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Message.lean",
+   "line": 234,
+   "column": 42,
+   "token": "M",
+   "sha256": "e3b5a792deb8310195bf3c7862e54f7061880322ae7aef6ebbcc63732faa81d4",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Occurrence.lean",
+   "line": 755,
+   "column": 11,
+   "token": "y",
+   "sha256": "f21997607255c457430e2afd63ec93b4711c7e450baa8dcfdb4c1511c04524d4",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Revert.lean",
+   "line": 343,
+   "column": 32,
+   "token": "M",
+   "sha256": "9caa9a37edb9aba28901351071d6bd2a951c32efcca6cb7f0dd12f8bb45c8c39",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Revert.lean",
+   "line": 346,
+   "column": 33,
+   "token": "M",
+   "sha256": "9caa9a37edb9aba28901351071d6bd2a951c32efcca6cb7f0dd12f8bb45c8c39",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Surplus.lean",
+   "line": 31,
+   "column": 87,
+   "token": "maxFee",
+   "sha256": "b0c2da7d19675e0a909b9bf24c89f1535120043d1d08eef423ec10465498e532",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/SystemFrame.lean",
+   "line": 239,
+   "column": 99,
+   "token": "st",
+   "sha256": "c2c2aa68240ac9663f75768156084a035bd16974f77952376b184def41b03d7a",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/SystemFrame.lean",
+   "line": 345,
+   "column": 6,
+   "token": "st",
+   "sha256": "c2c2aa68240ac9663f75768156084a035bd16974f77952376b184def41b03d7a",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/SystemFrame.lean",
+   "line": 435,
+   "column": 6,
+   "token": "st",
+   "sha256": "c2c2aa68240ac9663f75768156084a035bd16974f77952376b184def41b03d7a",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Transaction.lean",
+   "line": 109,
+   "column": 61,
+   "token": "maxFee",
+   "sha256": "d2f9f50570a90322a64d5c65bb03ae7a6e8a8bcc793661ab40a5a09ff711944f",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Transaction.lean",
+   "line": 112,
+   "column": 87,
+   "token": "maxFee",
+   "sha256": "d2f9f50570a90322a64d5c65bb03ae7a6e8a8bcc793661ab40a5a09ff711944f",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Transaction.lean",
+   "line": 138,
+   "column": 49,
+   "token": "P",
+   "sha256": "d2f9f50570a90322a64d5c65bb03ae7a6e8a8bcc793661ab40a5a09ff711944f",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Transaction.lean",
+   "line": 138,
+   "column": 90,
+   "token": "P",
+   "sha256": "d2f9f50570a90322a64d5c65bb03ae7a6e8a8bcc793661ab40a5a09ff711944f",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Transaction.lean",
+   "line": 140,
+   "column": 29,
+   "token": "P",
+   "sha256": "d2f9f50570a90322a64d5c65bb03ae7a6e8a8bcc793661ab40a5a09ff711944f",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Transaction.lean",
+   "line": 140,
+   "column": 57,
+   "token": "P",
+   "sha256": "d2f9f50570a90322a64d5c65bb03ae7a6e8a8bcc793661ab40a5a09ff711944f",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Transaction.lean",
+   "line": 142,
+   "column": 45,
+   "token": "P",
+   "sha256": "d2f9f50570a90322a64d5c65bb03ae7a6e8a8bcc793661ab40a5a09ff711944f",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Transaction.lean",
+   "line": 143,
+   "column": 47,
+   "token": "P",
+   "sha256": "d2f9f50570a90322a64d5c65bb03ae7a6e8a8bcc793661ab40a5a09ff711944f",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Transaction.lean",
+   "line": 147,
+   "column": 44,
+   "token": "P",
+   "sha256": "d2f9f50570a90322a64d5c65bb03ae7a6e8a8bcc793661ab40a5a09ff711944f",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Transaction.lean",
+   "line": 189,
+   "column": 78,
+   "token": "P",
+   "sha256": "d2f9f50570a90322a64d5c65bb03ae7a6e8a8bcc793661ab40a5a09ff711944f",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Transaction.lean",
+   "line": 190,
+   "column": 95,
+   "token": "P",
+   "sha256": "d2f9f50570a90322a64d5c65bb03ae7a6e8a8bcc793661ab40a5a09ff711944f",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Transaction.lean",
+   "line": 191,
+   "column": 32,
+   "token": "P",
+   "sha256": "d2f9f50570a90322a64d5c65bb03ae7a6e8a8bcc793661ab40a5a09ff711944f",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Transaction.lean",
+   "line": 209,
+   "column": 66,
+   "token": "P",
+   "sha256": "d2f9f50570a90322a64d5c65bb03ae7a6e8a8bcc793661ab40a5a09ff711944f",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Transaction.lean",
+   "line": 218,
+   "column": 30,
+   "token": "M",
+   "sha256": "d2f9f50570a90322a64d5c65bb03ae7a6e8a8bcc793661ab40a5a09ff711944f",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Transaction.lean",
+   "line": 226,
+   "column": 44,
+   "token": "P",
+   "sha256": "d2f9f50570a90322a64d5c65bb03ae7a6e8a8bcc793661ab40a5a09ff711944f",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Transaction.lean",
+   "line": 227,
+   "column": 46,
+   "token": "P",
+   "sha256": "d2f9f50570a90322a64d5c65bb03ae7a6e8a8bcc793661ab40a5a09ff711944f",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Transaction.lean",
+   "line": 232,
+   "column": 71,
+   "token": "P",
+   "sha256": "d2f9f50570a90322a64d5c65bb03ae7a6e8a8bcc793661ab40a5a09ff711944f",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Transaction.lean",
+   "line": 317,
+   "column": 66,
+   "token": "P",
+   "sha256": "d2f9f50570a90322a64d5c65bb03ae7a6e8a8bcc793661ab40a5a09ff711944f",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Transaction.lean",
+   "line": 319,
+   "column": 24,
+   "token": "M",
+   "sha256": "d2f9f50570a90322a64d5c65bb03ae7a6e8a8bcc793661ab40a5a09ff711944f",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Transaction.lean",
+   "line": 326,
+   "column": 48,
+   "token": "P",
+   "sha256": "d2f9f50570a90322a64d5c65bb03ae7a6e8a8bcc793661ab40a5a09ff711944f",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Transaction.lean",
+   "line": 363,
+   "column": 66,
+   "token": "P",
+   "sha256": "d2f9f50570a90322a64d5c65bb03ae7a6e8a8bcc793661ab40a5a09ff711944f",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Transaction.lean",
+   "line": 365,
+   "column": 44,
+   "token": "P",
+   "sha256": "d2f9f50570a90322a64d5c65bb03ae7a6e8a8bcc793661ab40a5a09ff711944f",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Transaction.lean",
+   "line": 417,
+   "column": 84,
+   "token": "M",
+   "sha256": "d2f9f50570a90322a64d5c65bb03ae7a6e8a8bcc793661ab40a5a09ff711944f",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Transaction.lean",
+   "line": 472,
+   "column": 48,
+   "token": "P",
+   "sha256": "d2f9f50570a90322a64d5c65bb03ae7a6e8a8bcc793661ab40a5a09ff711944f",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/Transaction.lean",
+   "line": 485,
+   "column": 45,
+   "token": "P",
+   "sha256": "d2f9f50570a90322a64d5c65bb03ae7a6e8a8bcc793661ab40a5a09ff711944f",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/TransactionWitness.lean",
+   "line": 164,
+   "column": 35,
+   "token": "(Stor.empty)",
+   "sha256": "ffd34ed69631f84665b56ab36cc8471ae48125db0e3f990fe57a65968be9efc5",
+   "decision": "unchanged",
+   "reason": "compound (parenthesized) reference range for renamed Jaune.Stor.empty; the identifiers inside it carry their own references, which the plan already respells"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/TransactionWitness.lean",
+   "line": 189,
+   "column": 35,
+   "token": "(Stor.empty)",
+   "sha256": "ffd34ed69631f84665b56ab36cc8471ae48125db0e3f990fe57a65968be9efc5",
+   "decision": "unchanged",
+   "reason": "compound (parenthesized) reference range for renamed Jaune.Stor.empty; the identifiers inside it carry their own references, which the plan already respells"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/TransactionWitness.lean",
+   "line": 230,
+   "column": 33,
+   "token": "(Stor.empty)",
+   "sha256": "ffd34ed69631f84665b56ab36cc8471ae48125db0e3f990fe57a65968be9efc5",
+   "decision": "unchanged",
+   "reason": "compound (parenthesized) reference range for renamed Jaune.Stor.empty; the identifiers inside it carry their own references, which the plan already respells"
+  },
+  {
+   "path": "Blanc/Lift/BuilderRequest/TransactionWitness.lean",
+   "line": 254,
+   "column": 35,
+   "token": "(Stor.empty)",
+   "sha256": "ffd34ed69631f84665b56ab36cc8471ae48125db0e3f990fe57a65968be9efc5",
+   "decision": "unchanged",
+   "reason": "compound (parenthesized) reference range for renamed Jaune.Stor.empty; the identifiers inside it carry their own references, which the plan already respells"
+  },
+  {
+   "path": "Blanc/Lift/EcrecoverCall.lean",
+   "line": 428,
+   "column": 56,
+   "token": "q",
+   "sha256": "a76938d1dc4eb0e4ffbbb45728517be038729cbd68623c04f6e92ac135817e72",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/Lift/InvWalkLegacy.lean",
+   "line": 95,
+   "column": 41,
+   "token": "M",
+   "sha256": "752ce95c38395e0073e32773cf9b849f0a9fbab5fee458e190f0310d85345704",
+   "decision": "unchanged",
+   "reason": "bare name literal `M used as a binder or fresh user name; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/InvWalkLegacy.lean",
+   "line": 111,
+   "column": 41,
+   "token": "M",
+   "sha256": "752ce95c38395e0073e32773cf9b849f0a9fbab5fee458e190f0310d85345704",
+   "decision": "unchanged",
+   "reason": "bare name literal `M used as a binder or fresh user name; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/NodeWalkOrig.lean",
+   "line": 96,
+   "column": 18,
+   "token": "Devm.getOrigStorVal_withOrig_of_eq",
+   "sha256": "0610183fd5d0988267417c358bba2927d07972c5aa0c04bbaa07998b372a719d",
+   "decision": "unchanged",
+   "reason": "a Blanc declaration authored with an explicit _root_. prefix (so its definition range does not spell its suffix); Lean does not derive its name, and no row renames it"
+  },
+  {
+   "path": "Blanc/Lift/NodeWalkOrig.lean",
+   "line": 126,
+   "column": 27,
+   "token": "cfg",
+   "sha256": "0610183fd5d0988267417c358bba2927d07972c5aa0c04bbaa07998b372a719d",
+   "decision": "unchanged",
+   "reason": "component of PCfg.cfg, a consumer name no row renames"
+  },
+  {
+   "path": "Blanc/Lift/Reach.lean",
+   "line": 210,
+   "column": 23,
+   "token": "hx",
+   "sha256": "097a2060ea4b77d990c9c92fd16d9c03f2afa2f54f4fd3e2c5dd5b1d64822d3e",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/ReachWalkSstore.lean",
+   "line": 48,
+   "column": 23,
+   "token": "hx",
+   "sha256": "0207060903bfcfc814f309ed263f22b3f0b71c1e1b4e0505205e471a9f628932",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/RequestQueue/Occurrence.lean",
+   "line": 791,
+   "column": 11,
+   "token": "y",
+   "sha256": "0a75b9eaaae58690658f495874b3aa2cb634eea5f07a93a0a967aa1d2dc7e748",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/RequestSystem/Call.lean",
+   "line": 246,
+   "column": 78,
+   "token": "M",
+   "sha256": "5e08c39319bbd1b7cefc8fc5c43cffb4d65703e7e69e62284b2774828fc5af3a",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/Lift/RequestSystem/CoveredCall.lean",
+   "line": 75,
+   "column": 85,
+   "token": "M",
+   "sha256": "f0bb0f53c52c6d802960bdc47a1fb9215eeea582773a4da72addbad35fd76b66",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/Lift/RequestSystem/Output.lean",
+   "line": 76,
+   "column": 8,
+   "token": "M",
+   "sha256": "55edb593040e2fedeb38a2aa2af5ff4bc3ce0d82bcf1e8ad1d2673fd19efea5f",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/Lift/RequestSystem/Output.lean",
+   "line": 101,
+   "column": 66,
+   "token": "M",
+   "sha256": "55edb593040e2fedeb38a2aa2af5ff4bc3ce0d82bcf1e8ad1d2673fd19efea5f",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/Lift/RequestSystem/Path.lean",
+   "line": 592,
+   "column": 83,
+   "token": "M",
+   "sha256": "cfc9f7d0c2fbfc49c87a703ea7e2683ec3dca16dd95e710427f16cf2ecd726b9",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/Lift/RequestSystem/Path.lean",
+   "line": 596,
+   "column": 75,
+   "token": "M",
+   "sha256": "cfc9f7d0c2fbfc49c87a703ea7e2683ec3dca16dd95e710427f16cf2ecd726b9",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/Lift/RequestSystem/Path.lean",
+   "line": 611,
+   "column": 83,
+   "token": "M",
+   "sha256": "cfc9f7d0c2fbfc49c87a703ea7e2683ec3dca16dd95e710427f16cf2ecd726b9",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/Lift/RequestSystem/PathInv.lean",
+   "line": 416,
+   "column": 51,
+   "token": "M",
+   "sha256": "1500e1804a3d87c8cd6574ec0e1bb4ac85d5f5997ad37e6b363851faed0db805",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/Lift/Sound.lean",
+   "line": 409,
+   "column": 10,
+   "token": "y",
+   "sha256": "e11575ff3e02cb9a5886459b75103b2732940eee2a613d9349c5219c92be3a61",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/SystemCallAmsterdam.lean",
+   "line": 59,
+   "column": 24,
+   "token": "M",
+   "sha256": "382407556fe557b90dce423a6c2e4d400550b57d4a1f2bb546a9953d106ede46",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/SystemCallAmsterdam.lean",
+   "line": 59,
+   "column": 75,
+   "token": "M",
+   "sha256": "382407556fe557b90dce423a6c2e4d400550b57d4a1f2bb546a9953d106ede46",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/SystemCallAmsterdam.lean",
+   "line": 81,
+   "column": 21,
+   "token": "M",
+   "sha256": "382407556fe557b90dce423a6c2e4d400550b57d4a1f2bb546a9953d106ede46",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/SystemCallAmsterdam.lean",
+   "line": 82,
+   "column": 23,
+   "token": "M",
+   "sha256": "382407556fe557b90dce423a6c2e4d400550b57d4a1f2bb546a9953d106ede46",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/SystemCallAmsterdam.lean",
+   "line": 94,
+   "column": 68,
+   "token": "M",
+   "sha256": "382407556fe557b90dce423a6c2e4d400550b57d4a1f2bb546a9953d106ede46",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/SystemCallAmsterdam.lean",
+   "line": 95,
+   "column": 21,
+   "token": "M",
+   "sha256": "382407556fe557b90dce423a6c2e4d400550b57d4a1f2bb546a9953d106ede46",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/SystemCallAmsterdam.lean",
+   "line": 96,
+   "column": 25,
+   "token": "M",
+   "sha256": "382407556fe557b90dce423a6c2e4d400550b57d4a1f2bb546a9953d106ede46",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/SystemCallAmsterdam.lean",
+   "line": 97,
+   "column": 23,
+   "token": "M",
+   "sha256": "382407556fe557b90dce423a6c2e4d400550b57d4a1f2bb546a9953d106ede46",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/VyperCallee.lean",
+   "line": 381,
+   "column": 30,
+   "token": "s1",
+   "sha256": "93afe7740c05d3cd54cba497f9360c4ee1d7bfec032593a760c2045abe49b8ba",
+   "decision": "unchanged",
+   "reason": "bare name literal `s1 used as a binder or fresh user name; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/VyperCallee.lean",
+   "line": 384,
+   "column": 43,
+   "token": "s1",
+   "sha256": "93afe7740c05d3cd54cba497f9360c4ee1d7bfec032593a760c2045abe49b8ba",
+   "decision": "unchanged",
+   "reason": "bare name literal `s1 used as a binder or fresh user name; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/WithdrawalRequest/FloodWalk.lean",
+   "line": 710,
+   "column": 69,
+   "token": "gas",
+   "sha256": "e160f6b60d86a219cb970de4046c93dedcf3622ff9ae772ff56b652cb8fa2179",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/WithdrawalRequest/FloodWalk.lean",
+   "line": 710,
+   "column": 113,
+   "token": "exec",
+   "sha256": "e160f6b60d86a219cb970de4046c93dedcf3622ff9ae772ff56b652cb8fa2179",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/Lift/WithdrawalRequest/FloodWalk.lean",
+   "line": 711,
+   "column": 8,
+   "token": "gas",
+   "sha256": "e160f6b60d86a219cb970de4046c93dedcf3622ff9ae772ff56b652cb8fa2179",
+   "decision": "unchanged",
+   "reason": "case label of a goal named by a user hole (?gas, ?exec) or a consumer lemma binder; it names no constructor"
+  },
+  {
+   "path": "Blanc/Lift/WithdrawalRequest/FloodWalk.lean",
+   "line": 719,
+   "column": 8,
+   "token": "exec",
+   "sha256": "e160f6b60d86a219cb970de4046c93dedcf3622ff9ae772ff56b652cb8fa2179",
+   "decision": "unchanged",
+   "reason": "case label of a goal named by a user hole (?gas, ?exec) or a consumer lemma binder; it names no constructor"
+  },
+  {
+   "path": "Blanc/Lift/WithdrawalRequest/JointLatency.lean",
+   "line": 302,
+   "column": 50,
+   "token": "q",
+   "sha256": "1328f72eafd37a3bdc8cfd2e0d68167e187f8ff67319055172208fdeaf9b68b6",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/LockExclusion.lean",
+   "line": 896,
+   "column": 11,
+   "token": "L",
+   "sha256": "d5e03f2317cc95b41f725f37cbd18af56323dfeb0c9e84d05c188570c9276ef4",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/LockExclusion.lean",
+   "line": 896,
+   "column": 13,
+   "token": "P",
+   "sha256": "d5e03f2317cc95b41f725f37cbd18af56323dfeb0c9e84d05c188570c9276ef4",
+   "decision": "unchanged",
+   "reason": "local binder or variable (pattern, intro/obtain/rcases name, fun, auto-bound or section variable) for which the compiler index records no reference; it names no constant"
+  },
+  {
+   "path": "Blanc/MemoryImage.lean",
+   "line": 8,
+   "column": 18,
+   "token": "Ninst",
+   "sha256": "ef26ca394ca997ee78fbb5be0cf2cff7e348dec52b81965484e8b2983b5724c2",
+   "decision": "unchanged",
+   "reason": "the second token of `open Jaune.Ninst Ninst`: it opens Blanc.Ninst as well as Jaune.Ninst; the explicit Jaune.Ninst token is renamed by the plan, and Ninst still resolves to Blanc.Ninst"
+  },
+  {
+   "path": "Blanc/OwnerClosure.lean",
+   "line": 166,
+   "column": 26,
+   "token": "R",
+   "sha256": "56ea63bf58aae1b658189b80d3356ea25521b789a1a13d316fe33482951b3cbd",
+   "decision": "unchanged",
+   "reason": "named argument of a function reached through a local (generalized field notation); it names a function binder, which no row renames (only constructor-field binder paths are renamed)"
+  },
+  {
+   "path": "Blanc/ProofRecipeTactic.lean",
+   "line": 56,
+   "column": 34,
+   "token": "Xinst",
+   "sha256": "7385e0fe2a93bc5b216762b79e2dbf0251d7597f4f74485a5c9ed30ccfbab698",
+   "decision": "unchanged",
+   "reason": "component of the name literal `Blanc.Xinst.ShapeCovered, which no row renames (a consumer or unrenamed name)"
+  },
+  {
+   "path": "Blanc/ProofRecipeTactic.lean",
+   "line": 80,
+   "column": 29,
+   "token": "Ninst",
+   "sha256": "7385e0fe2a93bc5b216762b79e2dbf0251d7597f4f74485a5c9ed30ccfbab698",
+   "decision": "unchanged",
+   "reason": "component of the name literal `Blanc.Ninst.RunCompiled, which no row renames (a consumer or unrenamed name)"
+  },
+  {
+   "path": "Blanc/ProofRecipeTactic.lean",
+   "line": 83,
+   "column": 43,
+   "token": "Ninst",
+   "sha256": "7385e0fe2a93bc5b216762b79e2dbf0251d7597f4f74485a5c9ed30ccfbab698",
+   "decision": "unchanged",
+   "reason": "component of the name literal `Blanc.Ninst.extcodesize, which no row renames (a consumer or unrenamed name)"
+  },
+  {
+   "path": "Blanc/ProofRecipeTactic.lean",
+   "line": 85,
+   "column": 47,
+   "token": "Ninst",
+   "sha256": "7385e0fe2a93bc5b216762b79e2dbf0251d7597f4f74485a5c9ed30ccfbab698",
+   "decision": "unchanged",
+   "reason": "component of the name literal `Blanc.Ninst.extcodesize, which no row renames (a consumer or unrenamed name)"
+  },
+  {
+   "path": "Blanc/ProofRecipeTactic.lean",
+   "line": 141,
+   "column": 64,
+   "token": "p",
+   "sha256": "7385e0fe2a93bc5b216762b79e2dbf0251d7597f4f74485a5c9ed30ccfbab698",
+   "decision": "unchanged",
+   "reason": "component of the name literal `Blanc.Lift.Witness.CallPrep.p, which no row renames (a consumer or unrenamed name)"
+  },
+  {
+   "path": "Blanc/ProofRecipeTactic.lean",
+   "line": 152,
+   "column": 21,
+   "token": "B256",
+   "sha256": "7385e0fe2a93bc5b216762b79e2dbf0251d7597f4f74485a5c9ed30ccfbab698",
+   "decision": "replace",
+   "reason": "component of the name literal `Jaune.B256.bexp, which names the renamed constant Jaune.B256.bexp -> Jaune.U256.exp; name literals carry no compiler reference",
+   "new": "U256"
+  },
+  {
+   "path": "Blanc/ProofRecipeTactic.lean",
+   "line": 152,
+   "column": 26,
+   "token": "bexp",
+   "sha256": "7385e0fe2a93bc5b216762b79e2dbf0251d7597f4f74485a5c9ed30ccfbab698",
+   "decision": "replace",
+   "reason": "component of the name literal `Jaune.B256.bexp, which names the renamed constant Jaune.B256.bexp -> Jaune.U256.exp; name literals carry no compiler reference",
+   "new": "exp"
+  },
+  {
+   "path": "Blanc/StorageOnlySpec.lean",
+   "line": 206,
+   "column": 18,
+   "token": "Ninst",
+   "sha256": "40011ca4e8dabbe917a6a69098121a5a458004bb1746a126bb51df48ab39b0f1",
+   "decision": "unchanged",
+   "reason": "the second token of `open Jaune.Ninst Ninst`: it opens Blanc.Ninst as well as Jaune.Ninst; the explicit Jaune.Ninst token is renamed by the plan, and Ninst still resolves to Blanc.Ninst"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 8,
+   "column": 18,
+   "token": "Ninst",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the second token of `open Jaune.Ninst Ninst`: it opens Blanc.Ninst as well as Jaune.Ninst; the explicit Jaune.Ninst token is renamed by the plan, and Ninst still resolves to Blanc.Ninst"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 161,
+   "column": 61,
+   "token": "Inv",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "component of the name literal `Blanc.Line.Inv, which no row renames (a consumer or unrenamed name)"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 162,
+   "column": 57,
+   "token": "Ninst",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "component of the name literal `Blanc.Ninst.Inv, which no row renames (a consumer or unrenamed name)"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 162,
+   "column": 63,
+   "token": "Inv",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "component of the name literal `Blanc.Ninst.Inv, which no row renames (a consumer or unrenamed name)"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 163,
+   "column": 57,
+   "token": "Rinst",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "component of the name literal `Blanc.Rinst.Inv, which no row renames (a consumer or unrenamed name)"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 163,
+   "column": 63,
+   "token": "Inv",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "component of the name literal `Blanc.Rinst.Inv, which no row renames (a consumer or unrenamed name)"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 164,
+   "column": 61,
+   "token": "Inv",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "component of the name literal `Blanc.Func.Inv, which no row renames (a consumer or unrenamed name)"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 165,
+   "column": 57,
+   "token": "Linst",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "component of the name literal `Blanc.Linst.Inv, which no row renames (a consumer or unrenamed name)"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 165,
+   "column": 63,
+   "token": "Inv",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "component of the name literal `Blanc.Linst.Inv, which no row renames (a consumer or unrenamed name)"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 252,
+   "column": 41,
+   "token": "exec",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "component of the name literal `Jaune.exec, which no row renames (a consumer or unrenamed name)"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 257,
+   "column": 45,
+   "token": "setStorVal",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "component of the name literal `Jaune.Devm.setStorVal, which no row renames (a consumer or unrenamed name)"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 362,
+   "column": 8,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 364,
+   "column": 36,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 368,
+   "column": 16,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 372,
+   "column": 6,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 372,
+   "column": 22,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 374,
+   "column": 10,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 382,
+   "column": 8,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 382,
+   "column": 27,
+   "token": "p",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 385,
+   "column": 36,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 413,
+   "column": 50,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 414,
+   "column": 23,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 421,
+   "column": 6,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 427,
+   "column": 19,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 430,
+   "column": 19,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 436,
+   "column": 6,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 439,
+   "column": 8,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 472,
+   "column": 50,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 473,
+   "column": 23,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 480,
+   "column": 6,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 565,
+   "column": 8,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 567,
+   "column": 10,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 567,
+   "column": 40,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 571,
+   "column": 12,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 571,
+   "column": 48,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 572,
+   "column": 12,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 572,
+   "column": 48,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 573,
+   "column": 12,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 573,
+   "column": 50,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 574,
+   "column": 12,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 621,
+   "column": 9,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 621,
+   "column": 36,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 622,
+   "column": 13,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 624,
+   "column": 15,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 628,
+   "column": 6,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 630,
+   "column": 10,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 634,
+   "column": 18,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 635,
+   "column": 13,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 636,
+   "column": 13,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 638,
+   "column": 10,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 645,
+   "column": 6,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 648,
+   "column": 8,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 649,
+   "column": 8,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 651,
+   "column": 10,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 652,
+   "column": 52,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 654,
+   "column": 10,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 655,
+   "column": 51,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 659,
+   "column": 10,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 660,
+   "column": 52,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 664,
+   "column": 10,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 665,
+   "column": 10,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 666,
+   "column": 10,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 667,
+   "column": 10,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 668,
+   "column": 10,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 669,
+   "column": 10,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 670,
+   "column": 10,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 671,
+   "column": 10,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 672,
+   "column": 10,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 673,
+   "column": 10,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 674,
+   "column": 10,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 675,
+   "column": 10,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 676,
+   "column": 10,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 677,
+   "column": 10,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 678,
+   "column": 10,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 679,
+   "column": 10,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 680,
+   "column": 10,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 681,
+   "column": 10,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 682,
+   "column": 10,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 701,
+   "column": 6,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 724,
+   "column": 6,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 728,
+   "column": 6,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 735,
+   "column": 4,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 735,
+   "column": 8,
+   "token": "p",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 737,
+   "column": 22,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 739,
+   "column": 26,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 741,
+   "column": 28,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/Tactics.lean",
+   "line": 758,
+   "column": 36,
+   "token": "q",
+   "sha256": "ade7befdda7c80512a8a752afe7208784211ec9f2278d36579814c6cfa7b1f48",
+   "decision": "unchanged",
+   "reason": "the Qq quotation macro q(...)/~q(...); it names no constant"
+  },
+  {
+   "path": "Blanc/TransientInvariance.lean",
+   "line": 34,
+   "column": 18,
+   "token": "Ninst",
+   "sha256": "eef5b2e3129fb5f83bb27d912d7322cb7f3f411d696663b80df1890357a0da00",
+   "decision": "unchanged",
+   "reason": "the second token of `open Jaune.Ninst Ninst`: it opens Blanc.Ninst as well as Jaune.Ninst; the explicit Jaune.Ninst token is renamed by the plan, and Ninst still resolves to Blanc.Ninst"
+  },
+  {
+   "path": "Blanc/TransientSettlement.lean",
+   "line": 16,
+   "column": 18,
+   "token": "Ninst",
+   "sha256": "4db0aab18818e383dfd79326489835a6b08213773f669f8eeae642e34b38771d",
+   "decision": "unchanged",
+   "reason": "the second token of `open Jaune.Ninst Ninst`: it opens Blanc.Ninst as well as Jaune.Ninst; the explicit Jaune.Ninst token is renamed by the plan, and Ninst still resolves to Blanc.Ninst"
+  },
+  {
+   "path": "Blanc/WordArithmetic.lean",
+   "line": 18,
+   "column": 18,
+   "token": "Ninst",
+   "sha256": "97717e813737ade1f5d309ffe6c2a6cb926148fdd87419c729e1221b9f3c567f",
+   "decision": "unchanged",
+   "reason": "the second token of `open Jaune.Ninst Ninst`: it opens Blanc.Ninst as well as Jaune.Ninst; the explicit Jaune.Ninst token is renamed by the plan, and Ninst still resolves to Blanc.Ninst"
+  },
+  {
+   "path": "scripts/ClaimPinHash.lean",
+   "line": 653,
+   "column": 49,
+   "token": "gCallStipend",
+   "sha256": "282b4940272ba6bddb234247a567f705bf613273a9a974bd6c21be0494bc989f",
+   "decision": "replace",
+   "reason": "component of the name literal `Jaune.gCallStipend, which names the renamed constant Jaune.gCallStipend -> Jaune.Gas.callStipend; name literals carry no compiler reference",
+   "new": "Gas.callStipend"
+  },
+  {
+   "path": "scripts/ClaimPinHash.lean",
+   "line": 654,
+   "column": 49,
+   "token": "gCallStipend",
+   "sha256": "282b4940272ba6bddb234247a567f705bf613273a9a974bd6c21be0494bc989f",
+   "decision": "replace",
+   "reason": "component of the name literal `Jaune.gCallStipend, which names the renamed constant Jaune.gCallStipend -> Jaune.Gas.callStipend; name literals carry no compiler reference",
+   "new": "Gas.callStipend"
+  },
+  {
+   "path": "scripts/ClaimPinHash.lean",
+   "line": 655,
+   "column": 71,
+   "token": "gCallStipend",
+   "sha256": "282b4940272ba6bddb234247a567f705bf613273a9a974bd6c21be0494bc989f",
+   "decision": "replace",
+   "reason": "component of the name literal `Jaune.gCallStipend, which names the renamed constant Jaune.gCallStipend -> Jaune.Gas.callStipend; name literals carry no compiler reference",
+   "new": "Gas.callStipend"
+  },
+  {
+   "path": "scripts/ClaimPinHash.lean",
+   "line": 656,
+   "column": 37,
+   "token": "gCallStipend",
+   "sha256": "282b4940272ba6bddb234247a567f705bf613273a9a974bd6c21be0494bc989f",
+   "decision": "replace",
+   "reason": "component of the name literal `Jaune.gCallStipend, which names the renamed constant Jaune.gCallStipend -> Jaune.Gas.callStipend; name literals carry no compiler reference",
+   "new": "Gas.callStipend"
+  },
+  {
+   "path": "scripts/ClaimPinHash.lean",
+   "line": 658,
+   "column": 37,
+   "token": "gCallStipend",
+   "sha256": "282b4940272ba6bddb234247a567f705bf613273a9a974bd6c21be0494bc989f",
+   "decision": "replace",
+   "reason": "component of the name literal `Jaune.gCallStipend, which names the renamed constant Jaune.gCallStipend -> Jaune.Gas.callStipend; name literals carry no compiler reference",
+   "new": "Gas.callStipend"
+  },
+  {
+   "path": "scripts/ClaimPinHash.lean",
+   "line": 662,
+   "column": 40,
+   "token": "y",
+   "sha256": "282b4940272ba6bddb234247a567f705bf613273a9a974bd6c21be0494bc989f",
+   "decision": "unchanged",
+   "reason": "bare name literal `y used as a binder or fresh user name; it names no constant"
+  },
+  {
+   "path": "scripts/ClaimPinHash.lean",
+   "line": 662,
+   "column": 67,
+   "token": "y",
+   "sha256": "282b4940272ba6bddb234247a567f705bf613273a9a974bd6c21be0494bc989f",
+   "decision": "unchanged",
+   "reason": "bare name literal `y used as a binder or fresh user name; it names no constant"
+  },
+  {
+   "path": "scripts/ClaimPinHash.lean",
+   "line": 713,
+   "column": 67,
+   "token": "y",
+   "sha256": "282b4940272ba6bddb234247a567f705bf613273a9a974bd6c21be0494bc989f",
+   "decision": "unchanged",
+   "reason": "bare name literal `y used as a binder or fresh user name; it names no constant"
+  },
+  {
+   "path": "scripts/ClaimPinHash.lean",
+   "line": 719,
+   "column": 49,
+   "token": "y",
+   "sha256": "282b4940272ba6bddb234247a567f705bf613273a9a974bd6c21be0494bc989f",
+   "decision": "unchanged",
+   "reason": "bare name literal `y used as a binder or fresh user name; it names no constant"
+  },
+  {
+   "path": "scripts/ClaimPinHash.lean",
+   "line": 720,
+   "column": 26,
+   "token": "y",
+   "sha256": "282b4940272ba6bddb234247a567f705bf613273a9a974bd6c21be0494bc989f",
+   "decision": "unchanged",
+   "reason": "bare name literal `y used as a binder or fresh user name; it names no constant"
+  },
+  {
+   "path": "scripts/TransientSettlementRegression.lean",
+   "line": 14,
+   "column": 18,
+   "token": "Ninst",
+   "sha256": "a2e4b7ad75308f4da641d618ab5692113ffd98987d4a679cef79bc21e33bcd51",
+   "decision": "unchanged",
+   "reason": "the second token of `open Jaune.Ninst Ninst`: it opens Blanc.Ninst as well as Jaune.Ninst; the explicit Jaune.Ninst token is renamed by the plan, and Ninst still resolves to Blanc.Ninst"
+  }
+ ]
+}
