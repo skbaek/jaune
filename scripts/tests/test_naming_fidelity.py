@@ -281,6 +281,27 @@ class NamingFidelityTests(unittest.TestCase):
             self.renames = self.entries(('N.old', 'N.new', 'declaration', {}), ('A', 'B', 'module', {}))
             self.assertEqual(self.run_check()['status'], 'OK')
 
+    def guard(self, text):
+        return [['syntax', 'Lean.guardMsgsCmd', [
+            ['syntax', 'null', [['syntax', 'Lean.Parser.Command.docComment', [['atom', '/--'], ['atom', text]]]]],
+            ['atom', '#guard_msgs'], ['syntax', 'null', []], ['atom', 'in']]]]
+
+    def test_guard_msgs_text_compares_as_the_map_respelling(self):
+        self.before = snapshot({'N.Ninst.step': constant(), 'N.x': constant(2)}, ['N.Ninst.step', 'N.x'])
+        self.after = snapshot({'N.NextOp.step': constant(), 'N.x': constant(2)}, ['N.NextOp.step', 'N.x'])
+        self.renames = self.entries(('N.Ninst.step', 'N.NextOp.step', 'declaration', {}))
+        self.before['checks'] = self.guard('error: Ninst.step x =\n  x-/')
+        self.after['checks'] = self.guard('error: NextOp.step x =\n  x-/')
+        self.assertEqual(self.run_check()['status'], 'OK')
+        # Control: a change beyond the respelling fails.
+        self.after['checks'] = self.guard('error: NextOp.step x ≠\n  x-/')
+        with self.assertRaises(CHECK.Mismatch):
+            self.run_check()
+        # Control: an old name left unrenamed in the after text fails.
+        self.after['checks'] = self.guard('error: Ninst.step x =\n  x-/')
+        with self.assertRaises(CHECK.Mismatch):
+            self.run_check()
+
     def test_generated_constants_keep_their_modules(self):
         self.before['constants']['gen'] = constant(5)
         self.after['constants']['gen2'] = constant(5)

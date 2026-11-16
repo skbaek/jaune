@@ -592,7 +592,12 @@ dropped (a user of the moved declaration imports its new module).
 
 This syntax check is deliberately stricter than expression equality: diagnostic
 text remains literal and changed spellings inside expected messages are not
-silently accepted. Those golden changes still need their reserved gate packet
+silently accepted. The one respelling admitted is the map's own: a
+`#guard_msgs` expected text compares equal when it is exactly the before text
+with every whole qualified-name token respelled under the names-only rule of
+the quoted-spelling check (master decision 2026-11-16); a token several
+constants could denote must respell one way, and any other change, or an old
+name left unrenamed, fails. Those golden changes still need their reserved gate packet
 and a justified comparison. Local/scoped attribute histories remain unsupported.
 Other hash commands (such as `#guard_expr`) are refused. The `#[...]` array
 notation is not a hash command.

@@ -9,6 +9,7 @@ from collections import Counter, defaultdict
 import hashlib
 import importlib.util
 import json
+import re
 from pathlib import Path
 import sys
 
@@ -422,11 +423,52 @@ class Comparison:
         self.checked.add((a, b))
         self.compare(self.left[a], self.right[b], f'constant {a}')
 
+    GUARD_TOKEN = re.compile(r"(?<![\w.'?!])[A-Za-z_][\w'?!]*(?:\.[A-Za-z_][\w'?!]*)*")
+
+    def respell_message(self, text, path):
+        """A `#guard_msgs` expected text with every whole qualified-name token
+        respelled by the map, under the names-only rule of `respell` (master
+        decision 2026-11-16, G0a). A token denotes the before constants whose
+        names it ends with (component-wise); all of them must give one
+        respelling (an unrenamed one keeps the token), or it is ambiguous."""
+        if not hasattr(self, '_suffixes'):
+            self._suffixes = {}
+            for name in self.left:
+                base = name.rsplit('@', 1)[0]
+                private = MAP.split_private(base)
+                user = private[2] if private else base
+                parts = APPLY.split_name(user)
+                for k in range(1, len(parts) + 1):
+                    self._suffixes.setdefault('.'.join(parts[-k:]), set()).add(base)
+
+        def one(match):
+            token = match.group(0)
+            spellings = set()
+            for decl in self._suffixes.get(token, ()):
+                spellings.add(self.respell(token, decl, path))
+            if len(spellings) > 1:
+                raise Mismatch(f'{path}: #guard_msgs token {token!r} respells ambiguously: {sorted(spellings)}')
+            return spellings.pop() if spellings else token
+        return self.GUARD_TOKEN.sub(one, text)
+
     def normalize(self, value, side, coarse=False):
         if isinstance(value, dict):
             return {k: self.normalize(v, side, coarse) for k, v in value.items()}
         if not isinstance(value, list):
             return value
+        if (side == 'before' and len(value) == 3 and value[:2] == ['syntax', 'Lean.guardMsgsCmd'] and
+                isinstance(value[2], list) and value[2] and isinstance(value[2][0], list)):
+            # The expected messages are compared as the before text respelled
+            # by the map; anything beyond that respelling is a difference.
+            doc = value[2][0]
+            if (len(doc) == 3 and doc[:2] == ['syntax', 'null'] and len(doc[2]) == 1 and
+                    doc[2][0][:2] == ['syntax', 'Lean.Parser.Command.docComment'] and
+                    len(doc[2][0][2]) == 2 and doc[2][0][2][1][0] == 'atom'):
+                text = doc[2][0][2][1][1]
+                respelled = ['syntax', 'null', [['syntax', 'Lean.Parser.Command.docComment',
+                                                 [doc[2][0][2][0], ['atom', self.respell_message(text, 'guard_msgs')]]]]]
+                return ['syntax', 'Lean.guardMsgsCmd',
+                        [respelled] + [self.normalize(item, side, coarse) for item in value[2][1:]]]
         if len(value) == 5 and value[0] == 'quotedIdentifier':
             spelling, raw = (self.quoted(value, 'normalize') if side == 'before'
                              else (value[2], self.raw_marker(value[3], value[2])))
