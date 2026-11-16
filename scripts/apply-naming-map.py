@@ -238,6 +238,12 @@ def escape_keywords(spelling):
     return dot + '.'.join(f'«{p}»' if p in KEYWORDS else p for p in parts)
 
 
+def unescape(spelling):
+    """A binder spelled `«to»` (a keyword escaped, as the planner writes a new
+    name `to`) names the binder `to`."""
+    return spelling[1:-1] if spelling.startswith('«') and spelling.endswith('»') else spelling
+
+
 def split_name(name):
     return [part for part in IDENT_PART.findall(name)] if '«' in name else name.split('.')
 
@@ -651,7 +657,7 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
     for a, b, function, param, field, reason in syntax_rows(index, 'named_arguments', 6):
         start, end = char_span(offsets, a, b, text)
         comps = components(text, start, end)
-        if comps is None or text[start:end] != param:
+        if comps is None or unescape(text[start:end]) != param:
             raise ValueError('named argument range does not match its binder')
         if reason is not None:
             add_cover(comps, ('unresolved', reason))
@@ -659,7 +665,7 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
         add_cover(comps, ('binder', function))
         binder_key = f'{function}.{param}'
         if binder_key in renamer.exact:
-            add_edit(start, end, param, split_name(renamer(binder_key))[-1], binder_key)
+            add_edit(start, end, text[start:end], split_name(renamer(binder_key))[-1], binder_key)
             continue
         if field is not None and renamer.renames(field):
             new_field = renamer(field)
@@ -668,7 +674,7 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
                 problems.append({'start': start, 'end': end,
                                  'reason': f'field {field} -> {new_field} leaves its structure'})
                 continue
-            add_edit(start, end, param, new_field.rsplit('.', 1)[1], field)
+            add_edit(start, end, text[start:end], new_field.rsplit('.', 1)[1], field)
     definition_at = {(r[0], r[1]): r[2] for r in references if r[2] and (r[0], r[1]) in definitions}
     metadata = index.get('naming_syntax') or {}
     for ca, cb, a, b, name in (metadata.get('constructor_binders', []) if metadata.get('version') == 2 else []):
@@ -676,7 +682,7 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
         start, end = char_span(offsets, a, b, text)
         comps = components(text, start, end)
         ctor = definition_at.get((cstart, cend))
-        if comps is None or text[start:end] != name:
+        if comps is None or unescape(text[start:end]) != name:
             raise ValueError('constructor binder range does not match its name')
         if ctor is None:
             add_cover(comps, ('unresolved', 'constructor binder without a constructor definition reference'))
@@ -684,11 +690,11 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
         add_cover(comps, ('binder', ctor))
         key = f'{ctor}.{name}'
         if key in renamer.exact:
-            add_edit(start, end, name, split_name(renamer(key))[-1], key)
+            add_edit(start, end, text[start:end], split_name(renamer(key))[-1], key)
             # Later binders or the result type may use it: the same local
             # variable's uses (same compiler identity) are renamed with it.
             for use in local_uses.get((start, end), []):
-                add_edit(*use, name, split_name(renamer(key))[-1], key)
+                add_edit(*use, text[use[0]:use[1]], split_name(renamer(key))[-1], key)
     for a, b, name in (metadata.get('imports', []) if metadata.get('version') == 2 else []):
         start, end = char_span(offsets, a, b, text)
         add_cover(components(text, start, end) or [], ('module', name))  # Module rows edit imports.
