@@ -201,10 +201,10 @@ example (env : Sevm) (base : Devm) (a b : UInt8) :
 error: Type mismatch
   SymbolicArith.step_success evm SymbolicArith.Op.add x y rest stack gas room
 has type
-  NextOp.step evm (NextOp.plain SymbolicArith.Op.add.rinst) =
+  Ninst.step evm (Ninst.reg SymbolicArith.Op.add.rinst) =
     Step.cont (evm.pc + 1) (SymbolicArith.post SymbolicArith.Op.add x y rest evm.dyna)
 but is expected to have type
-  NextOp.step evm (NextOp.plain PlainOp.div) =
+  Ninst.step evm (Ninst.reg Rinst.div) =
     Step.cont (evm.pc + 1) (SymbolicArith.post SymbolicArith.Op.add x y rest evm.dyna)
 -/
 #guard_msgs in
