@@ -30,19 +30,42 @@ def run(directory, exporter):
     source = directory / 'Lint.lean'
     original = (ROOT / 'scripts/tests/naming/Lint.lean').read_bytes()
     source.write_bytes(original)
+    mapping = LINT.read_json(ROOT / 'scripts/naming-map.json')
+    # The production map is loaded on purpose: the lint mechanics are tested against the
+    # real rules. A map row whose new name the fixture declares under a source rule (1-3)
+    # needs a source binding; derive it from the fixture's compiler-indexed declarations
+    # onto the synthetic source, so the gate does not depend on how complete the
+    # production policy is.
+    probe = directory / 'declared.json'
+    TOOL.export(ROOT, source, probe, exporter)
+    declared = LINT.declarations(original.decode(), LINT.read_json(probe)['index'])
+    derived = {}
+    for entry in mapping['entries']:
+        rule = entry['rule'].split(',')[0].strip()
+        if entry['new'] in declared and rule in ('1', '2', '3'):
+            derived[entry['new']] = dict(rule=rule, source='fixture',
+                                         spelling=entry['new'].split('.')[-1], style='verbatim')
     # Synthetic authority, deliberately not the production vocabulary/registry.
-    upstream = b'SLOAD\neth1_data\n'
+    upstream = ('SLOAD\neth1_data\n' + ''.join(b['spelling'] + '\n' for b in derived.values())).encode()
     (directory / 'source.txt').write_bytes(upstream)
+    bindings = {
+        'Jaune.sload': dict(rule='1', source='fixture', spelling='SLOAD', style='lowerCamel'),
+        'JauneConsensus.Context.eth1_data': dict(rule='1', source='fixture', spelling='eth1_data', style='verbatim')}
     policy = dict(schema_version=1, words=['account', 'balance', 'gas', 'limit',
         'result', 'success', 'failed', 'context'], sources=dict(fixture=dict(
         path='source.txt', sha256=LINT.sha(upstream), citation='Synthetic source fixture')),
-        bindings={
-            'Jaune.sload': dict(rule='1', source='fixture', spelling='SLOAD', style='lowerCamel'),
-            'JauneConsensus.Context.eth1_data': dict(rule='1', source='fixture', spelling='eth1_data', style='verbatim')})
-    mapping = LINT.read_json(ROOT / 'scripts/naming-map.json')
+        bindings={**bindings, **derived})
     save(directory / 'policy.json', policy)
     save(directory / 'map.json', mapping)
     controls = []
+    # Without the derived bindings the baseline must fail at exactly those map rows.
+    unbound = dict(policy, bindings=bindings)
+    result = LINT.check(directory, mapping, unbound, directory, [('Lint.lean', str(probe))], [])
+    save(directory / 'unbound-lint.json', result)
+    missing = {p['name'] for p in result['problems'] if p['reason'] == 'map requires matching source binding'}
+    if not derived or result['status'] == 'OK' or missing != set(derived):
+        raise ValueError(f'unbound: derived bindings {sorted(derived)} did not bite: {result}')
+    controls.append(dict(control='unbound', status=result['status'], missing=sorted(missing)))
     for label, old, new in [('green', b'', b''), ('execution', b'gasLimit', b'bal'),
                             ('consensus', b'Context', b'Ctx')]:
         changed = original if not old else original.replace(old, new)
