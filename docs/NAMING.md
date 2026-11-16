@@ -249,6 +249,17 @@ Version-2 syntax metadata (both exporters) adds compiler-derived rows:
   constant of the universe whose last component is that word gets the same new
   last component (or none is renamed), and is otherwise reported.
 
+Local capture: a new spelling whose first component names a local binder in
+scope at the site (a `fun`/`have`/pattern binder from the compiler's local
+references, or a structure field that later fields see as a local) would
+resolve to that local (Blanc's `Gas` field before `Gas.callStipend`). The
+binder's scope is taken from its definition to the end of its top-level
+command, an over-approximation that can only add qualifications. The spelling
+is lengthened with the minimal prefix of its target that escapes every such
+name and still resolves uniquely (`Jaune.Gas.callStipend`); if none does, the
+site is unresolved. Plans list every qualified site under
+`name_capture.local_capture_qualified`.
+
 A definition spelled `def _root_.N.x` is compared as the full name and, when
 renamed, respelled as `_root_.` plus the full new name. A renamed
 declaration whose definition range spells its last component in any other

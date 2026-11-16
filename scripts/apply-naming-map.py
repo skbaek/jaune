@@ -556,6 +556,70 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
         if stats is not None:
             stats.update(capture_checked=checked, capture_unverifiable=unverifiable,
                          capture_requalified=requalified, capture_unverifiable_edited=unverifiable_edited)
+    # Local capture: a new spelling whose first component is the name of a
+    # local binder in scope at the site (a `fun`/`have`/pattern binder, or a
+    # structure field binder seen by later fields) would resolve to that local.
+    # Scope is taken from the compiler's local references and the declarations
+    # of the enclosing command: from the binder's definition to the end of its
+    # top-level command (an over-approximation; qualification preserves meaning,
+    # so it can only add qualifications). The spelling is lengthened with the
+    # minimal prefix of its target that escapes every such name.
+    local_commands = sorted((*char_span(offsets, r[0], r[1], text),)
+                            for r in syntax_rows(index, 'commands', 6) if r[0] < r[1])
+    if local_commands:
+        local_starts = [c[0] for c in local_commands]
+        def command_of(position):
+            i = bisect.bisect_right(local_starts, position) - 1
+            return i if i >= 0 and local_commands[i][0] <= position < local_commands[i][1] else None
+        binders = {}
+        for key, info in index['references'].items():
+            ident = json.loads(key)
+            definition = info['definition']
+            if definition is None:
+                continue
+            a, b = span(positions, definition)
+            if 'f' in ident:
+                name = text[a:b]
+            elif ident.get('c', {}).get('n') and ident['c'].get('m') == index_module:
+                name = split_name(ident['c']['n'])[-1]  # a field or other declaration of this command
+            else:
+                continue
+            i = command_of(a)
+            if i is not None and IDENT_PART.fullmatch(name or ''):
+                binders.setdefault(i, []).append((a, name))
+        sites = stats.setdefault('local_capture_sites', []) if stats is not None else []
+        for (start, end), edit in sorted(edits.items()):
+            new, const = edit['new'], edit['declaration']
+            if ' := ' in new or new.startswith(('.', '_root_.')) or (start > 0 and text[start - 1] == '.'):
+                continue
+            i = command_of(start)
+            captured = {name for a, name in binders.get(i, ()) if a < start} if i is not None else set()
+            if split_name(new)[0] not in captured:
+                continue
+            target = generated_rename(renamer, const) or renamer(const)
+            parts = split_name(target)
+            choice = None
+            for k in range(len(split_name(new)) + 1, len(parts) + 1):
+                candidate = '.'.join(parts[-k:])
+                if parts[-k] in captured:
+                    continue
+                if universe is not None:
+                    j = bisect.bisect_right([c[0] for c in commands], start) - 1 if commands else -1
+                    if j >= 0:
+                        ns, opens = commands[j][2], commands[j][3]
+                        new_ns = renamer.scope(ns) if ns != '[anonymous]' else ns
+                        if resolve(universe.lookup('after', index_module, renamer), candidate, new_ns,
+                                   renamed_opens(opens, renamer)) != {target}:
+                            continue
+                choice = escape_keywords(candidate)
+                break
+            if choice is None:
+                problems.append({'start': start, 'end': end, 'reason':
+                                 f'local capture: {new!r} would resolve to a local binder; no qualification of '
+                                 f'{target} escapes it'})
+                continue
+            edits[start, end] = dict(edit, new=choice)
+            sites.append(dict(start=start, end=end, old=edit['old'], captured=new, new=choice))
     # Namespace syntax: `namespace`, `end`, `open`, `export` resolved by the exporter.
     for a, b, kind, full, reason in syntax_rows(index, 'namespaces', 5):
         start, end = char_span(offsets, a, b, text)
