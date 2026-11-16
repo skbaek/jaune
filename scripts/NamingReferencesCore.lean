@@ -317,10 +317,21 @@ def openDecl (env : Environment) (frame : Frame) (decl : Syntax) : Frame × Arra
     rows := rows ++ resolveRow env frame "open" decl[0]
     if let [n] := ResolveName.resolveNamespace env frame.ns frame.opens decl[0].getId then
       frame := { frame with opens := .simple n (decl[2].getArgs.toList.map (·.getId)) :: frame.opens }
-  else if decl.isOfKind ``Lean.Parser.Command.openOnly ||
-      decl.isOfKind ``Lean.Parser.Command.openRenaming then
-    -- Their declaration identifiers carry compiler constant references.
+  else if decl.isOfKind ``Lean.Parser.Command.openOnly then
+    -- Their declaration identifiers carry compiler constant references; the
+    -- frame records the explicit aliases they introduce.
     rows := rows ++ resolveRow env frame "open" decl[0]
+    let nss := ResolveName.resolveNamespace env frame.ns frame.opens decl[0].getId
+    for id in decl[2].getArgs do
+      if let [d] := nss.filterMap (fun n => let c := n ++ id.getId; if env.contains c then some c else none) then
+        frame := { frame with opens := .explicit id.getId d :: frame.opens }
+  else if decl.isOfKind ``Lean.Parser.Command.openRenaming then
+    rows := rows ++ resolveRow env frame "open" decl[0]
+    if let [n] := ResolveName.resolveNamespace env frame.ns frame.opens decl[0].getId then
+      for item in decl[2].getSepArgs do
+        let c := n ++ item[0].getId
+        if env.contains c then
+          frame := { frame with opens := .explicit item[2].getId c :: frame.opens }
   return (frame, rows)
 
 def openDeclKinds : Array SyntaxNodeKind := #[``Lean.Parser.Command.openSimple,

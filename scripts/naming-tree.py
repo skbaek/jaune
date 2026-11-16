@@ -148,7 +148,8 @@ def plan_sources(root, candidate, bundles, mapping):
         if inventory.get('schema_version') != 1:
             raise ValueError('unsupported naming inventory')
         excluded = {row['path']: row for row in inventory['excluded_sources']}
-    capture = dict(capture_checked=0, capture_unverifiable=0, capture_requalified=0)
+    capture = dict(capture_checked=0, capture_unverifiable=0, capture_requalified=0,
+                   capture_unverifiable_edited=0)
     for relative in sorted(candidate['files']):
         if not relative.endswith('.lean'):
             continue

@@ -340,8 +340,17 @@ def resolve(lookup, spelling, ns, opens):
 
 
 def renamed_opens(opens, renamer):
-    return [[row[0], renamer.scope(row[1]), row[2]] if row[0] == 'simple'
-            else [row[0], row[1], renamer(row[2])] for row in opens]
+    result = []
+    for row in opens:
+        if row[0] == 'simple':
+            result.append([row[0], renamer.scope(row[1]), row[2]])
+        else:
+            # `open N (x)`: the alias is spelled as the declaration's last
+            # component, so the reference edit renames it with the declaration.
+            new = renamer(row[2])
+            alias = split_name(new)[-1] if row[1] == split_name(row[2])[-1] else row[1]
+            result.append([row[0], alias, new])
+    return result
 
 
 def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
@@ -442,7 +451,7 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
         before = universe.lookup('before', module)
         after = universe.lookup('after', module, renamer)
         starts = [c[0] for c in commands]
-        checked = unverifiable = requalified = 0
+        checked = unverifiable = requalified = unverifiable_edited = 0
         for start, end, const, comps, local in references:
             if (local or const is None or comps is None or (start, end) in definitions or
                     text.startswith('.', start) or (start > 0 and text[start - 1] == '.')):
@@ -454,6 +463,8 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
             spelling = text[start:end]
             if resolve(before, spelling, ns, opens) != {const}:
                 unverifiable += 1  # Outside the modelled resolution; build and N4 decide.
+                if (start, end) in edits:
+                    unverifiable_edited += 1
                 continue
             target = renamer(const)
             current = edits[start, end]['new'] if (start, end) in edits else spelling
@@ -475,7 +486,7 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
                                  f'in namespace {new_ns}; no qualification resolves'})
         if stats is not None:
             stats.update(capture_checked=checked, capture_unverifiable=unverifiable,
-                         capture_requalified=requalified)
+                         capture_requalified=requalified, capture_unverifiable_edited=unverifiable_edited)
     # Namespace syntax: `namespace`, `end`, `open`, `export` resolved by the exporter.
     for a, b, kind, full, reason in syntax_rows(index, 'namespaces', 5):
         start, end = char_span(offsets, a, b, text)

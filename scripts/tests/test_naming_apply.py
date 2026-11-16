@@ -427,6 +427,20 @@ class NamingApplyTests(unittest.TestCase):
         self.assertEqual(problems, [])
         self.assertEqual([e['new'] for e in edits], ['J.U256'])
 
+    def test_explicit_open_alias_is_captured_by_namespace(self):
+        # `open J (B256)` inside namespace C, which has its own U256: the
+        # namespace wins over the alias after renaming, so qualify.
+        row = entry('J.B256', 'J.U256')
+        renamer = M.MAP.Renamer([row])
+        universe = M.Universe({'J.B256', 'C.U256'}, renamer)
+        text = 'namespace C\nopen J (B256)\ndef x : B256 := 0\nend C\n'
+        index = index_for(text, [('B256', 'J.B256', 0, False), ('B256', 'J.B256', 1, False)])
+        cmd = text.index('def x'), text.index('\nend C')
+        self.syntax(text, index, commands=[(*cmd, 'declaration', 'C', [['explicit', 'B256', 'J.B256']], [False] * 3)])
+        edits, problems = M.plan_file(text, index, [row], renamer, universe)
+        self.assertEqual(problems, [])
+        self.assertEqual([e['new'] for e in edits], ['U256', 'J.U256'])
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
