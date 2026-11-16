@@ -463,6 +463,28 @@ class NamingApplyTests(unittest.TestCase):
         self.assertEqual(len(problems), 1)
         self.assertIn('name capture', problems[0]['reason'])
 
+    def test_quoted_projection_is_renamed_only_when_the_word_decides(self):
+        # `(e).pres` in a quotation resolves through e's type; with every known
+        # constant ending in `pres` renamed to `preservation`, the word decides.
+        row = entry('F.Frame.pres', 'F.Frame.preservation')
+        renamer = M.MAP.Renamer([row])
+        text = 'namespace C\nmacro "m" : term => `((f 0).pres)\nend C\n'
+        index = index_for(text, [])
+        q = text.index('pres')
+        cmd = text.index('macro'), text.index('\nend C')
+        def plan(names):
+            self.syntax(text, index, commands=[(*cmd, 'macro', 'C', [], [False] * 3)],
+                        quotation_identifiers=[(q, q + 4, 'pres')])
+            return M.plan_file(text, index, [row], renamer, M.Universe(names, renamer))
+        edits, problems = plan({'F.Frame.pres', 'C.f'})
+        self.assertEqual(problems, [])
+        self.assertEqual([e['new'] for e in edits], ['preservation'])
+        # Control: another constant ending in `pres` that is not renamed makes
+        # the projection undecidable from the word, so it is reported.
+        edits, problems = plan({'F.Frame.pres', 'G.Other.pres', 'C.f'})
+        self.assertEqual(edits, [])
+        self.assertIn('projection inside a quotation', problems[0]['reason'])
+
     def test_explicit_open_alias_is_captured_by_namespace(self):
         # `open J (B256)` inside namespace C, which has its own U256: the
         # namespace wins over the alias after renaming, so qualify.

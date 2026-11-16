@@ -225,6 +225,11 @@ SEGMENT_OVERRIDE = {
 # Exact qualified old name -> replacement of its last segment only (namespaces still follow the
 # generic rules).  For fixtures and fields whose short name has no token-wise expansion.
 LAST_OVERRIDE = {
+    # `cmp` -> `compare` would make each body's own `compare` call denote the declaration being
+    # defined (self-capture, found by the G0a build); name the order by what it compares.
+    "JauneConsensus.ForkChoiceNode.cmp": "compareByRoot",
+    "JauneConsensus.Gloas.ForkChoiceNode.cmp": "compareByRootThenStatus",
+    "JauneConsensus.Checkpoint.cmp": "compareByEpochThenRoot",
     "JauneConsensus.Harness.Run.opt": "optimisticStore",
     "JauneConsensus.Facts.Gloas.StepRel.R": "relation",
     "JauneConsensus.Facts.Gloas.Onboarding.OnboardingSpec.K": "kept",

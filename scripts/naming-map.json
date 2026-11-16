@@ -336,12 +336,12 @@
     },
     {
       "old": "JauneConsensus.Checkpoint.cmp",
-      "new": "JauneConsensus.Checkpoint.compare",
+      "new": "JauneConsensus.Checkpoint.compareByEpochThenRoot",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: cmp>compare"
+      "notes": "parts: cmp>compareByEpochThenRoot"
     },
     {
       "old": "JauneConsensus.CodecVectors.g1m0",
@@ -10479,12 +10479,12 @@
     },
     {
       "old": "JauneConsensus.ForkChoiceNode.cmp",
-      "new": "JauneConsensus.ForkChoiceNode.compare",
+      "new": "JauneConsensus.ForkChoiceNode.compareByRoot",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: cmp>compare"
+      "notes": "parts: cmp>compareByRoot"
     },
     {
       "old": "JauneConsensus.G1J",
@@ -10893,12 +10893,12 @@
     },
     {
       "old": "JauneConsensus.Gloas.ForkChoiceNode.cmp",
-      "new": "JauneConsensus.Gloas.ForkChoiceNode.compare",
+      "new": "JauneConsensus.Gloas.ForkChoiceNode.compareByRootThenStatus",
       "kind": "declaration",
       "layer": "consensus",
       "rule": "5, 4",
       "source": "Plain English (rule 4)",
-      "notes": "parts: cmp>compare"
+      "notes": "parts: cmp>compareByRootThenStatus"
     },
     {
       "old": "JauneConsensus.Gloas.GSeen",
