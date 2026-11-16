@@ -606,7 +606,7 @@ class Comparison:
     def uniform_namespace(self, namespace):
         """A namespace the map renames only through its members (derived)
         moves as a whole only when every authored declaration directly in it
-        moves to the new namespace with the same leaf, and a declaration
+        moves into the new namespace (its own row may rename its leaf), and a declaration
         named like the namespace itself moves to the new name. Otherwise the
         namespace was partly moved and nothing follows it without a row."""
         if not hasattr(self, '_uniform'):
@@ -621,7 +621,10 @@ class Comparison:
                 if user == namespace:
                     ok = self.mapping(user) == target
                 elif '.' in user and user.rsplit('.', 1)[0] == namespace:
-                    ok = self.mapping(user) == f'{target}.{user.rsplit(".", 1)[1]}'
+                    # Its own row may rename the leaf; it must move into the
+                    # new namespace (a member left behind, or moved elsewhere,
+                    # means the namespace was only partly moved).
+                    ok = self.mapping(user).rsplit('.', 1)[0] == target
                 if not ok:
                     break
             self._uniform[namespace] = ok

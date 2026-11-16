@@ -452,5 +452,17 @@ class PlanBindingTests(unittest.TestCase):
                 CHECK.plan_edits(plan(**bad), mapping, before)
 
 
+class UnionEnvironmentTests(unittest.TestCase):
+    def test_union_keeps_per_module_source_fields(self):
+        # Rule E binds unhygienic identifiers to command ranges: the union
+        # scope must carry each module's commands with its sources.
+        merged = CHECK.empty_environment()
+        CHECK.extend_items(merged, dict(guards=[], attributes=[], checks=[], receipts=[],
+                                        item_modules={k: [] for k in CHECK.FIDELITY.ITEMS},
+                                        quotation_sites={'M': [(1, 2, 'x')]}, module_sources={'M': 'src'},
+                                        module_decls={'M': {}}, module_commands={'M': [(0, 3)]}))
+        self.assertEqual(merged['module_commands'], {'M': [(0, 3)]})
+
+
 if __name__ == '__main__':
     unittest.main()

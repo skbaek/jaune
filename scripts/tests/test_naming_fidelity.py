@@ -776,6 +776,19 @@ class NamingFidelityTests(unittest.TestCase):
         self.assertEqual(run(False)['status'], 'OK')
         with self.assertRaises(CHECK.Mismatch):
             run(True)
+        # A member whose own row renames its leaf inside the new namespace
+        # still moves with it (the real Gloas.Inv -> Gloas.Invariant shape).
+        rows = self.entries(('N.Inv.a', 'N.Invariant.a', 'declaration', {}),
+                            ('N.Inv.b', 'N.Invariant.b', 'declaration', {}),
+                            ('N.Inv.c', 'N.Invariant.charlie', 'declaration', {}))
+        self.before = snapshot({'N.Inv.a': constant(), 'N.Inv.b': constant(2), 'N.Inv.c': constant(3),
+                                'N.Inv.tacticFoo': constant(7), 'gen': self.lit_kernel('N', 'Inv', 'tacticFoo')},
+                               ['N.Inv.a', 'N.Inv.b', 'N.Inv.c'])
+        self.after = snapshot({'N.Invariant.a': constant(), 'N.Invariant.b': constant(2), 'N.Invariant.charlie': constant(3),
+                               'N.Invariant.tacticFoo': constant(7), 'gen': self.lit_kernel('N', 'Invariant', 'tacticFoo')},
+                              ['N.Invariant.a', 'N.Invariant.b', 'N.Invariant.charlie'])
+        self.renames = rows
+        self.assertEqual(self.run_check()['status'], 'OK')
         # The same holds for a literal naming the namespace itself (rule D).
         rows_only = lambda stay: (snapshot({'N.Inv.a': constant(), 'N.Inv.b': constant(2), 'gen': self.lit_kernel('N', 'Inv'),
                                             **({'N.Inv.c': constant(3)} if stay else {})},

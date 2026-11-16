@@ -715,9 +715,9 @@ or `test_naming_candidate.py` that fails without it:
   the respelling is refused.
 - A namespace renamed only through its members (derived) carries
   compiler-named constants (rule 4) and namespace literals (rule D) only when
-  every authored declaration directly in it moves to the new namespace with
-  the same leaf (and a declaration named like the namespace moves to the new
-  name); a member left behind stops it. A private form authorizes a namespace
+  every authored declaration directly in it moves into the new namespace (its
+  own row may rename its leaf; a declaration named like the namespace moves to
+  the new name); a member left behind, or moved elsewhere, stops it. A private form authorizes a namespace
   literal only in the module that holds both.
 - A dot identifier's resolved constant must have the identifier's own leaf,
   whether the reference was recorded over the identifier or over the range

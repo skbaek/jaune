@@ -195,7 +195,7 @@ def extend_items(merged, data):
     merged['schemas'] |= set(data.get('schemas', ()))
     merged.setdefault('derived', {}).update(data.get('derived', {}))
     merged['dot_identifiers_resolved'] = merged.get('dot_identifiers_resolved', 0) + data.get('dot_identifiers_resolved', 0)
-    for field in ('quotation_sites', 'module_sources', 'module_decls'):
+    for field in ('quotation_sites', 'module_sources', 'module_decls', 'module_commands'):
         merged.setdefault(field, {}).update(data.get(field, {}))
 
 
