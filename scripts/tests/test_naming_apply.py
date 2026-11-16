@@ -61,6 +61,15 @@ class NamingApplyTests(unittest.TestCase):
         self.assertEqual(problems, [])
         self.assertEqual(edits[0]['new'], '.gasOp')
 
+    def test_wildcard_alternative_spells_no_constructor(self):
+        # `cases r with | log k => ... | _ => rfl`: Lean attributes the covered
+        # constructors to the `_`; a constructor rename leaves the wildcard alone.
+        text = 'def f (r : Op) : Nat := by\n  cases r with\n  | gas => exact 1\n  | _ => exact 0\n'
+        index = index_for(text, [('gas', 'Pilot.Op.gas', 0, False), ('_', 'Pilot.Op.gas', 0, False)])
+        edits, problems = M.plan_file(text, index, [entry('Pilot.Op.gas', 'Pilot.Op.gasOp')])
+        self.assertEqual(problems, [])
+        self.assertEqual([(e['old'], e['new']) for e in edits], [('gas', 'gasOp')])
+
     def test_unresolved_use_is_reported(self):
         text = 'def a (x : Tx) := x.gas\n'
         _, problems = M.plan_file(text, index_for(text, []), [entry()])

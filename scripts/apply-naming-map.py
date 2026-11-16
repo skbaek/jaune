@@ -417,6 +417,11 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
             # components are projections with their own references.
             add_cover(comps[:1] if local else comps, ('local', None) if local else ('const', const))
         spelling = text[start:end]
+        if spelling == '_':
+            # A wildcard alternative (`| _ => ...`) that the elaborator expanded
+            # into the constructors it covers carries their references, but it
+            # spells no name: renaming a constructor leaves it unchanged.
+            continue
         if const is not None and (start, end) in definitions and comps is not None:
             parts, name_parts = split_name(spelling.lstrip('.')), split_name(const)
             private = MAP.split_private(const) if const.startswith('_private.') else None
