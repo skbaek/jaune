@@ -34,7 +34,7 @@ MAP = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(MAP)
 
 IDENT = re.compile(r"(?<![\w.'?!/])[A-Za-z_][\w'?!]*(?:\.[A-Za-z_][\w'?!]*)*")
-PATH = re.compile(r"(?<![\w./])(?:[A-Za-z_]\w*/)+[A-Za-z_]\w*\.lean\b")
+PATH = re.compile(r"(?<![\w./])(?:[A-Za-z_]\w*/)*[A-Za-z_]\w*\.lean\b")
 CODE = re.compile(r'```.*?```|`[^`\n]+`', re.S)
 
 
@@ -79,6 +79,7 @@ class Index:
                 self.old.setdefault(spelling, {}).setdefault(replacement, set()).add(name)
         self.after = after
         self.modules = dict(renamer.modules)
+        self.unrenamed_modules = set(data['candidate']['modules']) - set(self.modules)
         self.constants = len(names)
 
     def row(self, name):
@@ -99,10 +100,19 @@ class Index:
         """None if not stale, else {candidate replacement: {old constant}}."""
         if spelling in self.modules:
             return {self.modules[spelling]: {'module ' + spelling}}
-        if spelling.endswith('.lean') and '/' in spelling:
+        if spelling.endswith('.lean'):
             module = spelling[:-5].replace('/', '.')
             if module in self.modules:
                 return {self.modules[module].replace('.', '/') + '.lean': {'module ' + module}}
+            if '/' not in spelling:
+                # A bare file name (`GloasOps.lean`): the renamed modules whose
+                # last component it is, when they agree, and no unrenamed module
+                # of that file name (the module set is the capture's).
+                stem = spelling[:-5]
+                hits = {old: new for old, new in self.modules.items() if old.split('.')[-1] == stem}
+                news = {new.split('.')[-1] + '.lean' for new in hits.values()}
+                if hits and len(news) == 1 and not any(m.split('.')[-1] == stem for m in self.unrenamed_modules):
+                    return {news.pop(): {'module ' + old for old in hits}}
             return None
         if spelling in self.old and spelling not in self.after:
             return self.old[spelling]
