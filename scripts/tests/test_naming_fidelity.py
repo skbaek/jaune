@@ -592,8 +592,11 @@ class NamingFidelityTests(unittest.TestCase):
         with self.assertRaises(CHECK.Mismatch):
             run('x13', 'x14')
         # Control: a respelling with no matching plan edit fails.
-        with self.assertRaisesRegex(CHECK.Mismatch, 'matches no plan edit'):
+        with self.assertRaisesRegex(CHECK.Mismatch, 'unhygienic quoted spelling'):
             run('HdrEq', 'HeaderEq', plan=False)
+        # A spelling the plan never edited (a local that happens to equal a
+        # renamed leaf) stays as written.
+        self.assertEqual(run('HdrEq', 'HdrEq', plan=False)['status'], 'OK')
 
     def test_module_named_auxiliaries_follow_module_rows(self):
         self.renames = self.entries(('N.old', 'N.new', 'declaration', {}), ('A.Mod', 'A.Module', 'module', {}))

@@ -656,11 +656,11 @@ each with its controls in `scripts/tests/test_naming_fidelity.py`:
 - Rule E, unhygienic quotations (`local macro` without hygiene): an
   identifier with an empty pre-resolution list and a plain Name value is
   resolved by spelling at each expansion site. Its before spelling is
-  respelled by the #guard_msgs stale-token rule (a spelling that still names
-  an after-side constant or a local stays; a stale one must respell
-  uniquely, names-only), and each respelling must coincide with an edit of
-  the applied plan (`compare --plan`) at a quoted-identifier range of that
-  spelling; otherwise it fails. The verdict lists each site with the
+  decided by the applied plan (`compare --plan`) at the quoted-identifier
+  ranges of that spelling in the owning module: a spelling the plan never
+  edited there stays as written (a local `x8` equal to a renamed leaf); an
+  edited one must be the plan's new text, which must also be its names-only
+  respelling by the #guard_msgs stale-token rule; anything else fails. The verdict lists each site with the
   declarations that invoke the macro. Meaning at the expansion sites is
   checked there: those declarations' own kernel terms are compared under the
   map, which is why comparing the quotation's spelling suffices.

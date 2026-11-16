@@ -438,6 +438,9 @@ class Comparison:
         self.before, self.after = before, after
         self.collect, self.problems = collect, []
         self.plan_edits = plan_edits or set()
+        self.plan_index = {}
+        for edit in self.plan_edits:
+            self.plan_index.setdefault(edit[:3], []).append(edit)
         self.unhygienic_sites = {}
         self.reviewed = reviewed
         self.reviewed_used = reviewed_used if reviewed_used is not None else set()
@@ -627,6 +630,23 @@ class Comparison:
                 return True
         return False
 
+    def unhygienic_plan(self, module, spelling):
+        """([(new, (module, start, end))] edited, kept?) for the quoted-identifier
+        ranges of `spelling` in `module` (any module when unknown)."""
+        edited, kept = [], False
+        for mod, rows in (self.before.get('quotation_sites') or {}).items():
+            if module is not None and mod != module:
+                continue
+            for start, end, name in rows:
+                if name != spelling:
+                    continue
+                news = [e[4] for e in self.plan_index.get((mod, start, end), []) if e[3] == spelling]
+                if news:
+                    edited.extend((new, (mod, start, end)) for new in news)
+                else:
+                    kept = True
+        return edited, kept
+
     def unhygienic_site(self, old, new):
         """Rule E (master decision 2026-11-16): an unhygienic quoted respelling
         must coincide with a plan edit at a quoted-identifier range of the same
@@ -743,17 +763,26 @@ class Comparison:
         if isinstance(left, list) and len(left) == 4 and left[0] == 'unhygienicIdentifier':
             if not (isinstance(right, list) and len(right) == 4 and right[0] == 'unhygienicIdentifier'):
                 raise Mismatch(f'{path}: unhygienic quoted identifier changed kind')
-            expected = self.respell_message(left[1], path)
-            if right[1] != expected:
-                raise Mismatch(f'{path}: unhygienic quoted spelling {left[1]!r} became {right[1]!r}, expected {expected!r}')
+            # What the applied plan did at this spelling's quoted ranges in the
+            # owning module decides: never edited -> unchanged; edited -> the
+            # names-only respelling, which must also be the plan's new text.
+            owner = (self.before.get('owners') or {}).get(path.split(' ', 1)[1].split('.kernel', 1)[0]
+                                                         if path.startswith('constant ') else None)
+            edited, kept = self.unhygienic_plan(owner, left[1])
+            allowed = set()
+            if kept or not edited:
+                allowed.add(left[1])
+            for new, site in edited:
+                if new != self.respell_message(left[1], path):
+                    raise Mismatch(f'{path}: plan respelled unhygienic {left[1]!r} to {new!r}, not its names-only respelling')
+                allowed.add(new)
+            if right[1] not in allowed:
+                raise Mismatch(f'{path}: unhygienic quoted spelling {left[1]!r} became {right[1]!r}, expected one of {sorted(allowed)}')
             if self.raw_marker(right[2], right[1]) != self.raw_marker(left[2], left[1]):
                 raise Mismatch(f'{path}: unhygienic quoted raw text {left[2]!r} became {right[2]!r}')
-            if expected != left[1]:
-                site = self.unhygienic_site(left[1], expected)
-                if site is None:
-                    raise Mismatch(f'{path}: unhygienic respelling {left[1]!r} -> {expected!r} matches no plan edit '
-                                   'at a quoted identifier range')
-                self.unhygienic_sites.setdefault((left[1], expected), site)
+            if right[1] != left[1]:
+                site = next(site for new, site in edited if new == right[1])
+                self.unhygienic_sites.setdefault((left[1], right[1]), site)
             self.compare(left[3], right[3], f'{path}.syntax')
             return
         if isinstance(left, list) and len(left) == 5 and left[0] == 'quotedIdentifier':
@@ -865,6 +894,8 @@ class Comparison:
                 return ['syntax', 'Lean.guardMsgsCmd',
                         [respelled] + [self.normalize(item, side, coarse) for item in value[2][1:]]]
         if len(value) == 4 and value[0] == 'unhygienicIdentifier':
+            if coarse:  # bucketing only; the exact rule runs in compare()
+                return ['unhygienicIdentifier', self.normalize(value[3], side, coarse)]
             spelling = self.respell_message(value[1], 'unhygienic') if side == 'before' else value[1]
             return ['unhygienicIdentifier', spelling, self.raw_marker(value[2], value[1]),
                     self.normalize(value[3], side, coarse)]
