@@ -80,7 +80,8 @@ def _preresolved(e):
         return ['decl', ['name', '.'.join(name)], [_lit(f) for f in fields]]
     if head == 'Lean.Syntax.Preresolved.namespace' and len(args) == 1:
         name = _name(args[0])
-        return None if name is None else ['namespace', '.'.join(name)]
+        # Namespaces renamed with their declaration compare under the map too.
+        return None if name is None else ['namespace', ['name', '.'.join(name)]]
     return None
 
 
@@ -102,7 +103,7 @@ def quoted_identifiers(e):
         if head == 'Lean.Syntax.ident' and len(args) == 4:
             items = _list(args[3])
             decoded = None if items is None else [_preresolved(x) for x in items]
-            if decoded and None not in decoded and all(d[0] == 'decl' for d in decoded):
+            if decoded and None not in decoded and any(d[0] == 'decl' for d in decoded):
                 return ['quotedIdentifier', decoded]
     return [quoted_identifiers(x) for x in e]
 

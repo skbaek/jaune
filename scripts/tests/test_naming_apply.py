@@ -365,7 +365,7 @@ class NamingApplyTests(unittest.TestCase):
         self.assertEqual(problems, [])
         for edit in reversed(edits):
             text = text[:edit['start']] + edit['new'] + text[edit['end']:]
-        self.assertEqual(text, 'inductive T where\n  | three (to : Nat) (h : to = to)\ndef v := T.three (to := 1) rfl\n')
+        self.assertEqual(text, 'inductive T where\n  | three («to» : Nat) (h : «to» = «to»)\ndef v := T.three («to» := 1) rfl\n')
 
     def test_declaration_row_renames_its_namespace_syntax(self):
         text = 'namespace B256\ndef toNat := 0\ndef keep := 1\nend B256\n'
@@ -440,6 +440,13 @@ class NamingApplyTests(unittest.TestCase):
         edits, problems = M.plan_file(text, index, [row], renamer, universe)
         self.assertEqual(problems, [])
         self.assertEqual([e['new'] for e in edits], ['U256', 'J.U256'])
+
+    def test_new_keyword_spelling_is_escaped(self):
+        text = 'def f (t : Tx) := t.receiver'
+        index = index_for(text, [('receiver', 'Pilot.Tx.receiver', 0, False), ('Tx', 'Pilot.Tx', 0, False)])
+        edits, problems = M.plan_file(text, index, [entry('Pilot.Tx.receiver', 'Pilot.Tx.to')])
+        self.assertEqual(problems, [])
+        self.assertEqual([e['new'] for e in edits], ['«to»'])
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

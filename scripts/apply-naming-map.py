@@ -222,6 +222,22 @@ def module_name(name):
                     for part in split_name(name))
 
 
+# Lean tokens that cannot be identifiers unescaped (a new name `to` must be
+# spelled `«to»`). The list covers command, term and tactic keywords a field or
+# binder rename can plausibly hit; the build still catches anything else.
+KEYWORDS = frozenset("""at by calc do else end export from fun have if import in let match
+mut namespace open show suffices then to universe variable where with deriving
+instance structure inductive class theorem lemma def abbrev example section
+private protected noncomputable partial unsafe macro syntax local scoped attribute
+set_option exact intro intros apply""".split())
+
+
+def escape_keywords(spelling):
+    dot = '.' if spelling.startswith('.') else ''
+    parts = split_name(spelling[len(dot):])
+    return dot + '.'.join(f'«{p}»' if p in KEYWORDS else p for p in parts)
+
+
 def split_name(name):
     return [part for part in IDENT_PART.findall(name)] if '«' in name else name.split('.')
 
@@ -384,6 +400,11 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
             cover.setdefault(item, []).append(what)
 
     def add_edit(start, end, spelling, renamed, declaration):
+        if ' := ' in renamed:
+            head, tail = renamed.split(' := ', 1)
+            renamed = escape_keywords(head) + ' := ' + tail
+        else:
+            renamed = escape_keywords(renamed)
         edit = {'start': start, 'end': end, 'old': spelling, 'new': renamed, 'declaration': declaration}
         previous = edits.get((start, end))
         if previous and previous['new'] != renamed:
